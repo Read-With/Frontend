@@ -254,8 +254,7 @@ const stylesheet = [
     style: {
       width: "mapData(weight, 1, 10, 1, 8)",
       "line-color": "mapData(positivity, -1, 1, #e57373, #81c784)",
-      "target-arrow-color": "#888",
-      "target-arrow-shape": "triangle",
+      "target-arrow-shape": null, // "target-arrow-shape" null로 설정
       "curve-style": "bezier",
       label: "data(label)",
       "font-size": 10,
