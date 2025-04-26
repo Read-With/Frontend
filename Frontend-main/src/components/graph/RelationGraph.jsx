@@ -34,6 +34,11 @@ export default function CharacterRelationGraph({ elements }) {
       cy.on("drag", "node", function (e) {
         const draggedNode = e.target;
 
+        // 드래그 중인 노드가 간선이 없으면 다른 노드들이 따라오지 않도록 함
+        if (draggedNode.connectedEdges().length === 0) {
+          return; // 간선이 없는 노드는 혼자 이동
+        }
+
         // 독립된(연결되지 않은) 노드들을 제외한 모든 노드 가져오기
         const allConnectedNodes = cy.nodes().filter((node) => {
           // 드래그 중인 노드는 제외
