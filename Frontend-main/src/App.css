@@ -1,0 +1,136 @@
+.App {
+  text-align: center;
+}
+
+.App-logo {
+  height: 40vmin;
+  pointer-events: none;
+}
+
+.spinner {
+  border: 4px solid #eef1f4;
+  border-top: 4px solid #6b83ee;
+  border-radius: 50%;
+  width: 36px;
+  height: 36px;
+  animation: spin 0.8s linear infinite;
+  margin: 0 auto;
+}
+.dark .spinner {
+  border: 4px solid #2d3141;
+  border-top: 4px solid #b1b7e3;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+
+  div{
+    box-sizing : border-box;
+  }
+  
+  .list {
+    padding-left: 24px;
+    padding-right: 12px;
+    padding-top: 8px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid #e0e3ea;
+    margin-bottom: 12px;
+    background: transparent;
+  }
+  .dark .list {
+    border-bottom: 1px solid #363b4a;
+  }
+  
+
+.book-card {
+  background: rgba(255,255,255,0.95);
+  border-radius: 18px;
+  box-shadow: 0 6px 30px rgba(44,62,80,0.10), 0 1.5px 6px rgba(0,0,0,0.04);
+  padding: 18px;
+  transition: transform 0.18s cubic-bezier(.2,.85,.5,1.15), box-shadow 0.18s;
+  margin-bottom: 24px;
+}
+.book-card:hover {
+  transform: scale(1.035) translateY(-2px);
+  box-shadow: 0 12px 32px rgba(44,62,80,0.14), 0 2px 8px rgba(0,0,0,0.07);
+  background: rgba(255,255,255,1);
+}
+.dark .book-card {
+  background: rgba(38,44,55,0.96);
+  box-shadow: 0 6px 24px rgba(20,28,44,0.18);
+}
+
+
+.home{
+  margin-top: auto;
+}
+
+.modal {
+  margin-top: 30px;
+  padding: 28px;
+  background: #fff;
+  border-radius: 22px;
+  box-shadow: 0 8px 32px rgba(44,62,80,0.13);
+  text-align: left;
+  min-width: 320px;
+  max-width: 440px;
+  font-size: 1.09rem;
+}
+.dark .modal {
+  background: #23232f;
+  color: #fafafc;
+  box-shadow: 0 8px 32px rgba(22,24,34,0.23);
+}
+
+
+@media (prefers-reduced-motion: no-preference) {
+  .App-logo {
+    animation: App-logo-spin infinite 20s linear;
+  }
+}
+
+.App-header {
+  background-color: #282c34;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  font-size: calc(10px + 2vmin);
+  color: white;
+}
+
+.App-link {
+  color: #61dafb;
+}
+
+.search-bar {
+  background: #f6f7fb;
+  border-radius: 12px;
+  padding: 14px 20px;
+  margin-bottom: 24px;
+  box-shadow: 0 2px 10px rgba(44,62,80,0.03);
+  border: none;
+  font-size: 1.05rem;
+}
+.search-bar:focus {
+  outline: 2px solid #97b6f7;
+  background: #fff;
+}
+.dark .search-bar {
+  background: #2a2d38;
+  color: #ddd;
+}
+
+
+@keyframes App-logo-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
