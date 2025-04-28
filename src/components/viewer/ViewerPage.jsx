@@ -14,15 +14,13 @@ const ViewerPage = ({ darkMode }) => {
   const navigate = useNavigate();
   const [reloadKey, setReloadKey] = useState(0);
   const [failCount, setFailCount] = useState(0);
-
-  // 상태 한 번씩만!
   const [progress, setProgress] = useState(0);
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
 
   const book = location.state?.book || {
     title: filename,
-    path: "/example.epub",
+    path: "/"+ filename,
   };
 
   const [showToolbar, setShowToolbar] = useState(false);

@@ -1,21 +1,21 @@
 import React from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate} from 'react-router-dom';
 import PageLayout from '../common/PageLayout';
+import { useEffect, useState } from 'react';
 
 const Library = ({ darkMode }) => {
+  const [books, setBooks] = useState([]);
   const navigate = useNavigate();
-
-  const books = [
-    {
-      title: 'example.epub',
-      path: '/example.epub',
-      cover: '/cover-placeholder.png',
-    },
-  ];
-
   const handleSelect = (book) => {
-    navigate(`/viewer/${encodeURIComponent(book.title)}`, { state: { book } });
+    navigate(`/viewer/${encodeURIComponent(book.filename)}`, { state: { book } });
   };
+  useEffect(() => {
+    fetch('/books.json')
+      .then(res => res.json())
+      .then(setBooks);
+  }, []);
+
+
 
   return (
     <PageLayout darkMode={darkMode}>

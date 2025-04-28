@@ -9,19 +9,12 @@ import ePub from 'epubjs';
 
 const EpubViewer = forwardRef(
   (
-    {
-      book,
-      onProgressChange,
-      onCurrentPageChange,
-      onTotalPagesChange,
-    },
+    { book, onProgressChange, onCurrentPageChange, onTotalPagesChange },
     ref
   ) => {
     const viewerRef = useRef(null);
     const bookRef = useRef(null);
     const renditionRef = useRef(null);
-
-    // 내부 상태값(로컬에서만 사용, 부모값과 혼동 X)
     const [loading, setLoading] = useState(false);
     const [reloading, setReloading] = useState(false);
     const [error, setError] = useState(null);
@@ -30,7 +23,10 @@ const EpubViewer = forwardRef(
     const [totalPagesLocal, setTotalPagesLocal] = useState(1);
     const [progressLocal, setProgressLocal] = useState(0);
 
-    const LOCAL_STORAGE_KEY = `readwith_${book?.path}_lastCFI`;
+    // 파일 경로: path 있으면 path, 없으면 filename 기반으로 생성
+    const epubPath = book.path || (book.filename ? "/" + book.filename : null);
+
+    const LOCAL_STORAGE_KEY = `readwith_${epubPath}_lastCFI`;
     const NEXT_PAGE_FLAG = `readwith_nextPagePending`;
     const PREV_PAGE_FLAG = `readwith_prevPagePending`;
 
@@ -184,8 +180,13 @@ const EpubViewer = forwardRef(
     }));
 
     useEffect(() => {
+      console.log('EpubViewer useEffect 진입!', book, epubPath, currentPath);
+
       const loadBook = async () => {
-        if (!book?.path || !viewerRef.current || book.path === currentPath) return;
+        if (!epubPath || !viewerRef.current || epubPath === currentPath) {
+          console.log('useEffect 조건 미충족', epubPath, viewerRef.current, epubPath, currentPath);
+          return;
+        }
 
         setLoading(true);
         setError(null);
@@ -194,7 +195,8 @@ const EpubViewer = forwardRef(
         viewerRef.current.innerHTML = '';
 
         try {
-          const response = await fetch(book.path);
+          console.log('epub fetch path:', epubPath);
+          const response = await fetch(epubPath);
           if (!response.ok) throw new Error();
 
           const blob = await response.blob();
@@ -257,7 +259,7 @@ const EpubViewer = forwardRef(
 
           bookRef.current = bookInstance;
           renditionRef.current = rendition;
-          setCurrentPath(book.path);
+          setCurrentPath(epubPath);
         } catch {
           setError(`EPUB 로드 오류`);
         } finally {
@@ -270,7 +272,7 @@ const EpubViewer = forwardRef(
       return () => {
         if (bookRef.current) bookRef.current.destroy();
       };
-    }, [book?.path, currentPath]);
+    }, [epubPath, currentPath]);
 
     return (
       <div className="w-full h-full relative flex items-center justify-center">
