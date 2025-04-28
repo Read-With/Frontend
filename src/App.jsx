@@ -5,6 +5,7 @@ import MainPage from './components/main/MainPage';
 import Library from './components/library/Library';
 import ViewerPage from './components/viewer/ViewerPage';
 import BookmarksPage from './components/viewer/BookmarksPage';
+import RelationGraphWrapper from './graph/RelationGraphWrapper'
 
 const AppContent = () => {
   const location = useLocation();
@@ -26,6 +27,8 @@ const AppContent = () => {
         <Route path="/library" element={<Library />} />
         <Route path="/viewer/:filename" element={<ViewerPage />} />
         <Route path="/viewer/:filename/bookmarks" element={<BookmarksPage />} /> 
+        <Route path="/viewer/:filename/relations" element={<RelationGraphWrapper />}/>
+          
       </Routes>
     </>
   );

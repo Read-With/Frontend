@@ -1,0 +1,92 @@
+{
+    "relations": [
+      {
+        "explanation": "Nick's father gave him advice, indicating a father-son relationship. \"my father gave me some advice\"",
+        "relation": ["father-son"],
+        "id1": 1.0,
+        "id2": 2.0,
+        "positivity": 0.9,
+        "weight": 0.9
+      },
+      {
+        "id1": 1.0,
+        "relation": ["admiration", "scorn", "neighbor"],
+        "explanation": "Nick says 'Only Gatsby, the man who gives his name to this book, was exempt from my reaction'. He also says 'Gatsby turned out all right at the end'. This indicates a complex relationship involving both scorn and admiration. The event text introduces Gatsby as a neighbor, but Nick doesn't know him yet, so the weight is decreased.",
+        "id2": 3.0,
+        "positivity": 0.6,
+        "weight": 0.4
+      },
+      {
+        "id1": 1.0,
+        "explanation": "The text mentions 'My family have been prominent...people'. This establishes a familial connection.",
+        "relation": ["family"],
+        "id2": 4.0,
+        "positivity": 0.7,
+        "weight": 0.6
+      },
+      {
+        "relation": ["family"],
+        "explanation": "The text states 'we’re descended from the Dukes of Buccleuch, but the actual founder of my line was my grandfather’s brother'. This indicates a familial connection.",
+        "id1": 1.0,
+        "id2": 5.0,
+        "positivity": 0.7,
+        "weight": 0.6
+      },
+      {
+        "explanation": "The text says 'when a young man at the office suggested that we take a house together'. This suggests a collegial or friendly relationship.",
+        "relation": ["colleague", "potential roommate"],
+        "id1": 1.0,
+        "id2": 6.0,
+        "positivity": 0.6,
+        "weight": 0.5
+      },
+      {
+        "id1": 1.0,
+        "explanation": "The text says 'some man, more recently arrived than I, stopped me on the road...I told him'. This indicates a brief interaction and giving directions.",
+        "relation": ["acquaintance"],
+        "id2": 7.0,
+        "positivity": 0.6,
+        "weight": 0.4
+      },
+      {
+        "relation": ["interest"],
+        "explanation": "The text mentions 'secrets that only Midas and Morgan and Maecenas knew' in the context of banking. This suggests Nick is interested in learning about these figures and their financial expertise, but it does not imply a direct relationship.",
+        "id1": 1.0,
+        "id2": 8.0,
+        "positivity": 0.2,
+        "weight": 0.1
+      },
+      {
+        "id1": 1.0,
+        "relation": ["interest"],
+        "explanation": "The text mentions 'secrets that only Midas and Morgan and Maecenas knew' in the context of banking. This suggests Nick is interested in learning about these figures and their financial expertise, but it does not imply a direct relationship.",
+        "id2": 9.0,
+        "positivity": 0.2,
+        "weight": 0.1
+      },
+      {
+        "id1": 1.0,
+        "explanation": "The text mentions 'secrets that only Midas and Morgan and Maecenas knew' in the context of banking. This suggests Nick is interested in learning about these figures and their financial expertise, but it does not imply a direct relationship.",
+        "relation": ["interest"],
+        "id2": 10.0,
+        "positivity": 0.2,
+        "weight": 0.1
+      },
+      {
+        "explanation": "The text says 'Daisy was my second cousin once removed'.",
+        "relation": ["family", "cousin"],
+        "id1": 1.0,
+        "id2": 12.0,
+        "positivity": 0.8,
+        "weight": 0.7
+      },
+      {
+        "relation": ["college acquaintance"],
+        "explanation": "The text says 'I’d known Tom in college. And just after the war I spent two days with them in Chicago'. The current event says 'I drove over to East Egg to see two old friends whom I scarcely knew at all.' This indicates that their relationship is not very strong.",
+        "id1": 1.0,
+        "id2": 11.0,
+        "positivity": 0.5,
+        "weight": 0.4
+      }
+    ]
+  }
