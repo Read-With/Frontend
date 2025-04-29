@@ -11,33 +11,54 @@ function RelationGraphMain({ elements }) {
   const [search, setSearch] = useState("");
   const [isDragging, setIsDragging] = useState(false);
   const [tooltip, setTooltip] = useState(null);
+  const [ripples, setRipples] = useState([]);
   const selectedEdgeIdRef = useRef(null);
   const selectedNodeIdRef = useRef(null);
+  const lastTapTimeRef = useRef(0);
+  const containerRef = useRef(null);
+  
+const handleClickContainer = () => {
+  if (!containerRef.current) return;
+  containerRef.current.classList.add('clicked');
+  setTimeout(() => {
+    containerRef.current.classList.remove('clicked');
+  }, 300); // 0.3초 후 제거
+};
+
+  const createRipple = (x, y) => {
+    const id = Date.now();
+    setRipples(prev => [...prev, { id, x, y }]);
+    setTimeout(() => {
+      setRipples(prev => prev.filter(r => r.id !== id));
+    }, 600);
+  };
 
   const tapNodeHandler = useCallback((evt) => {
     if (!cyRef.current) return;
     const node = evt.target;
     const cy = cyRef.current;
+    const now = Date.now();
 
-    selectedNodeIdRef.current = node.id();
-
-    setTooltip(null); // ⭐ 항상 초기화 후
-    setTimeout(() => {
+    if (now - lastTapTimeRef.current < 300) { // 더블 클릭
       const pos = node.renderedPosition();
-      setTooltip({
-        id: node.id(),
-        x: pos.x,
-        y: pos.y,
-        data: node.data(),
-      });
-    }, 0);
+      createRipple(pos.x, pos.y);
 
-    cy.nodes().addClass("faded");
-    cy.edges().addClass("faded");
-    node.removeClass("faded");
-    node.connectedEdges().removeClass("faded");
-    node.connectedEdges().connectedNodes().removeClass("faded");
+      selectedNodeIdRef.current = node.id();
 
+      setTooltip(null);
+      setTimeout(() => {
+        setTooltip({
+          id: node.id(),
+          x: pos.x,
+          y: pos.y,
+          data: node.data(),
+        });
+      }, 0);
+
+      lastTapTimeRef.current = 0; // 초기화
+    } else {
+      lastTapTimeRef.current = now; // 첫번째 클릭 기록
+    }
   }, []);
 
   const tapEdgeHandler = useCallback((evt) => {
@@ -45,20 +66,24 @@ function RelationGraphMain({ elements }) {
     const cy = cyRef.current;
     const edge = evt.target;
 
-    if (selectedEdgeIdRef.current === edge.id()) {
-      clearSelection();
-      return;
-    }
+    const pos = evt.renderedPosition;
+    createRipple(pos.x, pos.y);
 
-    selectedEdgeIdRef.current = edge.id();
-
+    // ⭐ 흐림 효과 적용
     cy.nodes().addClass("faded");
     cy.edges().addClass("faded");
 
     edge.removeClass("faded");
     edge.source().removeClass("faded");
     edge.target().removeClass("faded");
-  }, []);
+
+    if (selectedEdgeIdRef.current === edge.id()) {
+      clearSelection();
+      return;
+    }
+
+    selectedEdgeIdRef.current = edge.id();
+  }, [createRipple]);
 
   const tapBackgroundHandler = useCallback((evt) => {
     if (evt.target === cyRef.current) {
@@ -69,13 +94,14 @@ function RelationGraphMain({ elements }) {
   const clearSelection = useCallback(() => {
     if (cyRef.current) {
       const cy = cyRef.current;
+
       cy.nodes().removeClass("faded");
       cy.edges().removeClass("faded");
 
-      // ⭐ 이벤트 리셋 (초기화)
       cy.removeListener("tap", "node");
       cy.removeListener("tap", "edge");
       cy.removeListener("tap");
+
       cy.on("tap", "node", tapNodeHandler);
       cy.on("tap", "edge", tapEdgeHandler);
       cy.on("tap", tapBackgroundHandler);
@@ -91,13 +117,11 @@ function RelationGraphMain({ elements }) {
   }, [clearSelection]);
 
   const relationTypes = useMemo(() => 
-    Array.from(
-      new Set(
-        elements
-          .filter((el) => el.data?.label && el.data?.source)
-          .flatMap((el) => el.data.label.split(", "))
-      )
-    ),
+    Array.from(new Set(
+      elements
+        .filter(el => el.data?.label && el.data?.source)
+        .flatMap(el => el.data.label.split(", "))
+    )),
   [elements]);
 
   const { filteredElements, fitNodeIds } = useMemo(() => {
@@ -108,7 +132,7 @@ function RelationGraphMain({ elements }) {
         (el) =>
           !el.data.source &&
           (el.data.label?.toLowerCase().includes(search.toLowerCase()) ||
-            (el.data.names && el.data.names.some((n) =>
+            (el.data.names && el.data.names.some(n =>
               n.toLowerCase().includes(search.toLowerCase())
             )))
       );
@@ -121,12 +145,8 @@ function RelationGraphMain({ elements }) {
             (filterType === "all" ||
               (el.data.label && el.data.label.includes(filterType)))
         );
-        const relatedNodeIds = [
-          ...new Set(relatedEdges.flatMap((e) => [e.data.source, e.data.target]))
-        ];
-        const relatedNodes = elements.filter(
-          (el) => !el.data.source && relatedNodeIds.includes(el.data.id)
-        );
+        const relatedNodeIds = [...new Set(relatedEdges.flatMap(e => [e.data.source, e.data.target]))];
+        const relatedNodes = elements.filter(el => !el.data.source && relatedNodeIds.includes(el.data.id));
         filteredElements = [...relatedNodes, ...relatedEdges];
         fitNodeIds = relatedNodeIds;
       } else {
@@ -142,7 +162,6 @@ function RelationGraphMain({ elements }) {
         }
         return true;
       });
-      fitNodeIds = null;
     }
     return { filteredElements, fitNodeIds };
   }, [elements, search, filterType]);
@@ -151,19 +170,18 @@ function RelationGraphMain({ elements }) {
     {
       selector: "node",
       style: {
-        "background-color": (ele) => ele.data("main") ? "#1976d2" : "#90a4ae",
+        "background-color": ele => ele.data("main") ? "#1976d2" : "#90a4ae",
         label: "data(label)",
-        "font-size": (ele) => (ele.data("main") ? 8 : 6),
+        "font-size": ele => (ele.data("main") ? 8 : 6),
         "text-valign": "center",
         "text-halign": "center",
-        width: (ele) => (ele.data("main") ? 40 : 32),
-        height: (ele) => (ele.data("main") ? 40 : 32),
+        width: ele => (ele.data("main") ? 40 : 32),
+        height: ele => (ele.data("main") ? 40 : 32),
         color: "#fff",
         "text-outline-color": "#333",
         "text-outline-width": 1,
-        "z-index": (ele) => (ele.data("main") ? 10 : 1),
         cursor: "pointer",
-      },
+      }
     },
     {
       selector: "edge",
@@ -179,22 +197,17 @@ function RelationGraphMain({ elements }) {
         "text-background-opacity": 0.8,
         "text-background-padding": 2,
         opacity: "mapData(weight, 0, 1, 0.5, 1)",
-        "transition-property": "line-color, width, opacity",
-        "transition-duration": "0.3s",
         "target-arrow-shape": "none",
-        "z-index": 2,
         cursor: "pointer",
-      },
+      }
     },
     {
       selector: ".faded",
       style: {
         opacity: 0.25,
         "text-opacity": 0.12,
-        "transition-property": "opacity, text-opacity",
-        "transition-duration": "0.25s",
       }
-    },
+    }
   ], []);
 
   const layout = useMemo(() => ({
@@ -250,7 +263,7 @@ function RelationGraphMain({ elements }) {
   }, [clearSelection]);
 
   return (
-    <div className="graph-container" style={{ position: "relative", overflow: "auto", width: "100%", height: "100%", minWidth: "100%", minHeight: "100%" }}>
+    <div className="graph-container" style={{ position: "relative", overflow: "auto", width: "100%", height: "100%" }}>
       <GraphControls
         searchInput={searchInput}
         setSearchInput={setSearchInput}
@@ -265,11 +278,6 @@ function RelationGraphMain({ elements }) {
         search={search}
         setSearch={setSearch}
       />
-      {search && filteredElements.length === 0 && (
-        <div className="search-guide">
-          <span>검색 결과가 없습니다.</span>
-        </div>
-      )}
       <CytoscapeGraph
         ref={cyRef}
         elements={filteredElements}
@@ -286,6 +294,16 @@ function RelationGraphMain({ elements }) {
       {tooltip && (
         <GraphNodeTooltip nodeData={tooltip} onClose={handleCloseTooltip} />
       )}
+      {ripples.map((ripple) => (
+        <div
+          key={ripple.id}
+          className="ripple"
+          style={{
+            left: ripple.x,
+            top: ripple.y,
+          }}
+        />
+      ))}
       {isDragging && (
         <div className="drag-info">노드를 드래그해 연결관계 확인 가능<br />엣지를 클릭하면 관계 설명 확인</div>
       )}

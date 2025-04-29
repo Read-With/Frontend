@@ -119,6 +119,21 @@
   color: #222;
   animation: slide-in 0.25s;
 }
+.graph-container.clicked {
+  animation: click-flash 0.3s ease;
+}
+
+@keyframes click-flash {
+  0% {
+    background-color: #f7f9fc; /* 원래 배경 */
+  }
+  50% {
+    background-color: #e0e0e0; /* 💬 살짝 회색 깜빡임 */
+  }
+  100% {
+    background-color: #f7f9fc; /* 다시 원래 배경 */
+  }
+}
 
 @keyframes slide-in {
   from {
@@ -183,7 +198,6 @@
   animation: fadeIn 0.25s ease;
 }
 
-/* fadeIn 애니메이션 추가 */
 @keyframes fadeIn {
   from {
     opacity: 0;
@@ -223,15 +237,27 @@
   margin-top: 8px;
 }
 
-/* faded 처리 */
-.faded {
-  opacity: 0.25;
-  text-opacity: 0.12;
-  transition-property: opacity, text-opacity;
-  transition-duration: 0.25s;
+/* ripple 효과 */
+.ripple {
+  position: absolute;
+  width: 20px;
+  height: 20px;
+  background: rgba(25, 118, 210, 0.4);
+  border-radius: 50%;
+  transform: translate(-50%, -50%) scale(0.2);
+  animation: ripple-effect 0.6s ease-out forwards;
+  pointer-events: none;
+  z-index: 100;
 }
 
-/* 작은 화면 크기에서 반응형 */
+@keyframes ripple-effect {
+  to {
+    transform: translate(-50%, -50%) scale(5.5);
+    opacity: 0;
+  }
+}
+
+/* 반응형 디자인 */
 @media (max-width: 700px) {
   .side-panel {
     top: 45px;
