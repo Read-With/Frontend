@@ -23,10 +23,11 @@ const CytoscapeGraph = React.forwardRef(
       <CytoscapeComponent
         elements={CytoscapeComponent.normalizeElements(elements)}
         stylesheet={stylesheet}
+        userZoomingEnabled={false} 
         layout={layout}
         style={{
           width: "100%",
-          height: "calc(100vh - 120px)",
+          height: "100vh",
           overflow: "hidden",
         }}
         cy={cy => {

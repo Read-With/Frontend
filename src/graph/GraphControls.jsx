@@ -1,5 +1,5 @@
 import React from "react";
-import "./RelationGraph.css"
+import "./RelationGraph.css";
 
 function GraphControls({
   searchInput,
@@ -11,6 +11,9 @@ function GraphControls({
   relationTypes,
   search,
   setSearch,
+  onZoomIn,
+  onZoomOut,
+  zoomLevel, // ✨ 추가됨
 }) {
   return (
     <div className="graph-controls">
@@ -27,9 +30,7 @@ function GraphControls({
           value={searchInput}
           onChange={(e) => setSearchInput(e.target.value)}
         />
-        <button type="submit" className="search-btn">
-          검색
-        </button>
+        <button type="submit" className="search-btn">검색</button>
         {search && (
           <button
             type="button"
@@ -44,6 +45,17 @@ function GraphControls({
           </button>
         )}
       </form>
+
+      {/* Zoom 제어 버튼 */}
+      <div style={{ display: "flex", gap: "8px", marginTop: "8px", alignItems: "center" }}>
+        <button type="button" onClick={onZoomIn}>+</button>
+        <button type="button" onClick={onZoomOut}>-</button>
+        <span style={{ fontSize: "14px", fontWeight: "bold" }}>
+          Zoom: {zoomLevel}%
+        </span>
+      </div>
+
+      {/* 초기화 버튼 */}
       <button
         type="button"
         className="reset-btn"
@@ -52,6 +64,8 @@ function GraphControls({
       >
         초기화
       </button>
+
+      {/* 관계 필터 버튼 */}
       <div className="filter-group">
         <button
           className={filterType === "all" ? "active" : ""}

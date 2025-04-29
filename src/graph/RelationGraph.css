@@ -1,3 +1,5 @@
+
+
 /* 검색 관련 */
 .search-guide {
   width: 100%;
@@ -31,8 +33,7 @@
   position: relative;
   border: 1px solid #ddd;
   border-radius: 8px;
-  overflow: auto;
-  background: #f7f9fc;
+  overflow: hidden;
   min-height: 100%;
   min-width: 100%;
   transition: min-width 0.5s ease, min-height 0.5s ease;
