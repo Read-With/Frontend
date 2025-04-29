@@ -1,5 +1,3 @@
-
-
 /* 검색 관련 */
 .search-guide {
   width: 100%;
@@ -37,6 +35,22 @@
   min-height: 100%;
   min-width: 100%;
   transition: min-width 0.5s ease, min-height 0.5s ease;
+}
+
+.graph-container.clicked {
+  animation: click-flash 0.3s ease;
+}
+
+@keyframes click-flash {
+  0% {
+    background-color: #f7f9fc;
+  }
+  50% {
+    background-color: #e0e0e0;
+  }
+  100% {
+    background-color: #f7f9fc;
+  }
 }
 
 /* 그래프 컨트롤 */
@@ -119,21 +133,6 @@
   border: 1px solid #e3e6ef;
   color: #222;
   animation: slide-in 0.25s;
-}
-.graph-container.clicked {
-  animation: click-flash 0.3s ease;
-}
-
-@keyframes click-flash {
-  0% {
-    background-color: #f7f9fc; /* 원래 배경 */
-  }
-  50% {
-    background-color: #e0e0e0; /* 💬 살짝 회색 깜빡임 */
-  }
-  100% {
-    background-color: #f7f9fc; /* 다시 원래 배경 */
-  }
 }
 
 @keyframes slide-in {
@@ -315,4 +314,66 @@
     color: #777;
     margin-top: 7px;
   }
+}
+
+/* Edge Tooltip */
+.edge-tooltip {
+  position: fixed;
+  background: white;
+  border: 2px solid #4caf50;
+  border-radius: 8px;
+  padding: 15px;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.15);
+  font-size: 13px;
+  min-width: 260px;
+  max-width: 320px;
+  z-index: 9999;
+  pointer-events: auto;
+  transform: translate(-50%, -120%);
+}
+
+.relation-badge {
+  display: inline-block;
+  background: #4caf50;
+  color: white;
+  padding: 3px 8px;
+  border-radius: 4px;
+  margin: 3px;
+  font-size: 12px;
+}
+
+.meta-info {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid #eee;
+}
+
+.meta-info progress {
+  width: 80px;
+  height: 6px;
+  vertical-align: middle;
+  margin-left: 8px;
+}
+
+.explanation p {
+  margin: 8px 0 0 0;
+  color: #666;
+  line-height: 1.4;
+}
+
+/* highlighted 노드 강조 */
+node.highlighted {
+  border: 3px solid #4caf50 !important;
+  filter: drop-shadow(0 0 10px rgba(76, 175, 80, 0.5));
+}
+
+.edge-tooltip .close-btn {
+  position: absolute;
+  top: 6px;
+  right: 10px;
+  font-size: 18px;
+  background: none;
+  border: none;
+  color: #1976d2;
+  cursor: pointer;
 }

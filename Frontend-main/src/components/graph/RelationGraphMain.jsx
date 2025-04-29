@@ -8,6 +8,7 @@ import React, {
 import GraphControls from "./GraphControls";
 import CytoscapeGraph from "./CytoscapeGraph";
 import GraphNodeTooltip from "./GraphNodeTooltip";
+import EdgeTooltip from "./EdgeTooltip";
 import "./RelationGraph.css";
 
 function RelationGraphMain({ elements }) {
@@ -16,10 +17,11 @@ function RelationGraphMain({ elements }) {
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
   const [isDragging, setIsDragging] = useState(false);
-  const [tooltip, setTooltip] = useState(null);
+  const [tooltip, setTooltip] = useState(null); // 노드 툴팁
+  const [edgeTooltip, setEdgeTooltip] = useState(null); // 간선 툴팁
   const [ripples, setRipples] = useState([]);
-  const [zoomLevel, setZoomLevel] = useState(100); // 표시용 zoom (100%, 110%...)
-  const [baseZoom, setBaseZoom] = useState(1.0); // 실제 초기 zoom 배율
+  const [zoomLevel, setZoomLevel] = useState(100);
+  const [baseZoom, setBaseZoom] = useState(1.0);
   const selectedEdgeIdRef = useRef(null);
   const selectedNodeIdRef = useRef(null);
 
@@ -32,42 +34,60 @@ function RelationGraphMain({ elements }) {
     }, 600);
   };
 
-  // 노드 클릭(탭) 시 툴팁 바로 표시
+  // 노드 클릭 시 툴팁 표시
   const tapNodeHandler = useCallback((evt) => {
     if (!cyRef.current) return;
     const node = evt.target;
     const pos = node.renderedPosition();
     createRipple(pos.x, pos.y);
     selectedNodeIdRef.current = node.id();
+    setEdgeTooltip(null); // 간선 툴팁 닫기
     setTooltip(null);
     setTimeout(() => {
       setTooltip({ id: node.id(), x: pos.x, y: pos.y, data: node.data() });
     }, 0);
   }, []);
 
-  // 엣지 클릭(탭) 시
+  // 간선 클릭 시 툴팁 표시 (좌표 변환)
   const tapEdgeHandler = useCallback(
     (evt) => {
       if (!cyRef.current) return;
       const cy = cyRef.current;
       const edge = evt.target;
-      const pos = evt.renderedPosition;
-      createRipple(pos.x, pos.y);
-      cy.nodes().addClass("faded");
-      cy.edges().addClass("faded");
-      edge.removeClass("faded");
-      edge.source().removeClass("faded");
-      edge.target().removeClass("faded");
-      if (selectedEdgeIdRef.current === edge.id()) {
-        clearSelection();
-        return;
-      }
+      const container = document.querySelector(".graph-container");
+      const containerRect = container.getBoundingClientRect();
+
+      // Cytoscape의 midpoint는 그래프 내부 좌표계이므로, 화면 좌표로 변환
+      const pos = edge.midpoint();
+      const pan = cy.pan();
+      const zoom = cy.zoom();
+
+      // 절대 좌표 계산 (컨테이너 기준)
+      const absoluteX = pos.x * zoom + pan.x + containerRect.left;
+      const absoluteY = pos.y * zoom + pan.y + containerRect.top;
+
+      setTooltip(null);
+      setEdgeTooltip({
+        id: edge.id(),
+        x: absoluteX,
+        y: absoluteY,
+        data: edge.data(),
+      });
+
+      cy.batch(() => {
+        cy.nodes().addClass("faded");
+        cy.edges().addClass("faded");
+        edge.removeClass("faded");
+        edge.source().removeClass("faded").addClass("highlighted");
+        edge.target().removeClass("faded").addClass("highlighted");
+      });
+
       selectedEdgeIdRef.current = edge.id();
     },
     [createRipple]
   );
 
-  // 배경 클릭(탭) 시
+  // 배경 클릭 시 선택 해제
   const tapBackgroundHandler = useCallback((evt) => {
     if (evt.target === cyRef.current) {
       clearSelection();
@@ -88,6 +108,7 @@ function RelationGraphMain({ elements }) {
       cy.on("tap", tapBackgroundHandler);
     }
     setTooltip(null);
+    setEdgeTooltip(null);
     selectedEdgeIdRef.current = null;
     selectedNodeIdRef.current = null;
   }, [tapNodeHandler, tapEdgeHandler, tapBackgroundHandler]);
@@ -292,6 +313,9 @@ function RelationGraphMain({ elements }) {
       />
       {tooltip && (
         <GraphNodeTooltip nodeData={tooltip} onClose={handleCloseTooltip} />
+      )}
+      {edgeTooltip && (
+        <EdgeTooltip edgeData={edgeTooltip} onClose={handleCloseTooltip} />
       )}
       {ripples.map((ripple) => (
         <div
