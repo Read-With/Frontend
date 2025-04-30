@@ -7,7 +7,7 @@ import React, {
 } from "react";
 import GraphControls from "./GraphControls";
 import CytoscapeGraph from "./CytoscapeGraph";
-import GraphNodeTooltip from "./GraphNodeTooltip";
+import GraphNodeTooltip from "./NodeTooltip";
 import EdgeTooltip from "./EdgeTooltip";
 import "./RelationGraph.css";
 
@@ -16,7 +16,6 @@ function RelationGraphMain({ elements }) {
   const [filterType, setFilterType] = useState("all");
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
-  const [isDragging, setIsDragging] = useState(false);
   const [tooltip, setTooltip] = useState(null); // 노드 툴팁
   const [edgeTooltip, setEdgeTooltip] = useState(null); // 간선 툴팁
   const [ripples, setRipples] = useState([]);
