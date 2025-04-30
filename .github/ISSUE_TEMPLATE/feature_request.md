@@ -1,6 +1,6 @@
 ---
-name: 이슈 생성 템플릿
-about: Describe this issue template's purpose here.
+name: feature_request
+about: Suggest an idea for this project
 title: ''
 labels: ''
 assignees: ''
