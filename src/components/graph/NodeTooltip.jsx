@@ -1,11 +1,11 @@
 import React, { useEffect, useState } from "react";
 import "./RelationGraph.css";
 
-function GraphNodeTooltip({ nodeData, onClose }) {
+function NodeTooltip({ nodeData, onClose }) {
   const [containerRect, setContainerRect] = useState(null);
 
   useEffect(() => {
-    const container = document.querySelector('.graph-container');
+    const container = document.querySelector(".graph-container");
     if (container) {
       setContainerRect(container.getBoundingClientRect());
     }
@@ -13,12 +13,17 @@ function GraphNodeTooltip({ nodeData, onClose }) {
 
   if (!nodeData || !containerRect) return null;
 
-  const TOOLTIP_WIDTH = 240; 
+  const TOOLTIP_WIDTH = 240;
   const TOOLTIP_HEIGHT = 140;
   const PADDING = 200; // 항상 container 내부에 이만큼 여유 있게
 
   // container 위치/크기
-  const { left: containerLeft, top: containerTop, width: containerWidth, height: containerHeight } = containerRect;
+  const {
+    left: containerLeft,
+    top: containerTop,
+    width: containerWidth,
+    height: containerHeight,
+  } = containerRect;
 
   // 툴팁을 노드 기준 중앙에 위치시킴 (container 내부 좌표 기준)
   let localLeft = nodeData.x - TOOLTIP_WIDTH / 2;
@@ -74,4 +79,4 @@ function GraphNodeTooltip({ nodeData, onClose }) {
   );
 }
 
-export default GraphNodeTooltip;
+export default NodeTooltip;

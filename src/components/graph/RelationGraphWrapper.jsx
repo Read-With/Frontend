@@ -1,9 +1,9 @@
 import React from "react";
-import charactersData from "../data/characters.json";
-import relationsData from "../data/relation.json";
+import charactersData from "../../data/characters.json";
+import relationsData from "../../data/relation.json";
 import RelationGraphMain from "./RelationGraphMain";
 
-function CharacterRelationGraphWrapper() {
+function RelationGraphWrapper() {
   const nodes = charactersData.characters.map((char) => ({
     data: {
       id: String(char.id),
@@ -31,4 +31,4 @@ function CharacterRelationGraphWrapper() {
   return <RelationGraphMain elements={elements} />;
 }
 
-export default CharacterRelationGraphWrapper;
+export default RelationGraphWrapper;

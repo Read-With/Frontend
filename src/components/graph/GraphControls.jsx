@@ -13,7 +13,7 @@ function GraphControls({
   setSearch,
   onZoomIn,
   onZoomOut,
-  zoomLevel, // ✨ 추가됨
+  zoomFactor// ✨ 추가됨
 }) {
   return (
     <div className="graph-controls">
@@ -37,8 +37,7 @@ function GraphControls({
             className="search-btn"
             style={{ background: "#bbb" }}
             onClick={() => {
-              setSearch("");
-              setSearchInput("");
+              onReset();
             }}
           >
             전체보기
@@ -51,8 +50,8 @@ function GraphControls({
         <button type="button" onClick={onZoomIn}>+</button>
         <button type="button" onClick={onZoomOut}>-</button>
         <span style={{ fontSize: "14px", fontWeight: "bold" }}>
-          Zoom: {zoomLevel}%
-        </span>
+  Zoom: {Math.round(zoomFactor * 100)}%
+</span>
       </div>
 
       {/* 초기화 버튼 */}
