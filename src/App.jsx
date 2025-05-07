@@ -8,7 +8,7 @@ import BookmarksPage from './components/viewer/BookmarksPage';
 import RelationGraphWrapper from './components/graph/RelationGraphWrapper.jsx';
 import TimelineView from './components/viewer/timeline/TimelineView';
 import UploadPage from './components/main/UploadPage';
-import SearchPage from './components/main/SearchPage';
+import SearchPage from './pages/SearchPage';
 import ChatPage from './pages/ChatPage';
 
 const AppContent = () => {
