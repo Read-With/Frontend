@@ -36,7 +36,7 @@ const CytoscapeGraph = React.forwardRef(
         cy.zoomingEnabled(true);
         cy.userZoomingEnabled(true);
         cy.panningEnabled(true);
-        cy.minZoom(0.2);
+        cy.minZoom(0.05);
         cy.maxZoom(2.5);
 
         // 이벤트 핸들러 연결
@@ -65,11 +65,15 @@ const CytoscapeGraph = React.forwardRef(
         if (fitNodeIds && fitNodeIds.length > 0) {
           const nodesToFit = cy.nodes().filter(n => fitNodeIds.includes(n.id()));
           if (nodesToFit.length > 0) {
-            cy.fit(nodesToFit, 60);
+            cy.fit(nodesToFit, 120);
           }
         } else {
-          cy.fit(undefined, 60);
+          cy.fit(undefined, 120);
         }
+        // boundingBox를 이용해 그래프를 왼쪽에 맞춤
+        const bb = cy.elements().boundingBox();
+        const pan = cy.pan();
+        cy.pan({ x: pan.x - bb.x1, y: pan.y });
       }
     }, [elements, fitNodeIds, ref]);
 
@@ -80,7 +84,7 @@ const CytoscapeGraph = React.forwardRef(
       const rect = e.currentTarget.getBoundingClientRect();
       const x = e.clientX - rect.left;
       const y = e.clientY - rect.top;
-      const factor = e.deltaY > 0 ? 0.999 : 1.001;
+      const factor = e.deltaY > 0 ? 0.99995 : 1.000005;
       cy.zoom({
         level: cy.zoom() * factor,
         renderedPosition: { x, y },

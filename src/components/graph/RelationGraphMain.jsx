@@ -183,51 +183,45 @@ function RelationGraphMain({ elements }) {
       {
         selector: "node",
         style: {
-          "background-color": "#fff",
-          label: "data(label)",
-          "font-size": (ele) => (ele.data("main") && ele.data("label") === "Nick" ? 16 : 12),
-          "font-weight": (ele) => (ele.data("main") && ele.data("label") === "Nick" ? "bold" : "normal"),
-          "text-valign": "center",
+          "background-fit": "cover",
+          "background-image": "data(img)",
+          "background-color": "#eee",
+          "border-width": (ele) => ele.data("main") ? 2 : 1,
+          "border-color": "#5B7BA0",
+          "width": 48,
+          "height": 48,
+          "shape": "ellipse",
+          "label": "data(label)",
+          "text-valign": "bottom",
           "text-halign": "center",
-          width: (ele) => (ele.data("main") && ele.data("label") === "Nick" ? 48 : 36),
-          height: (ele) => (ele.data("main") && ele.data("label") === "Nick" ? 48 : 36),
-          color: "#444",
-          "text-outline-color": "#fff",
-          "text-outline-width": 0,
+          "font-size": 13,
+          "font-weight": (ele) => ele.data("main") ? 700 : 400,
+          "color": "#444",
+          "text-margin-y": 8,
           "text-background-color": "#fff",
-          "text-background-opacity": 0.5,
+          "text-background-opacity": 0.8,
           "text-background-shape": "roundrectangle",
           "text-background-padding": 2,
-          "text-shadow-blur": 4,
-          "text-shadow-color": "#8888",
-          "text-shadow-offset-x": 1,
-          "text-shadow-offset-y": 1,
-          cursor: "pointer",
-          "border-width": (ele) => (ele.data("main") && ele.data("label") === "Nick" ? 2 : 1),
-          "border-color": (ele) => ele.data("main") && ele.data("label") === "Nick" ? "#5B7BA0" : "#A0BCDA",
         },
       },
       {
         selector: "edge",
         style: {
-          width: "mapData(weight, 0, 1, 2, 7)",
+          width: "mapData(weight, 0, 1, 1.5, 4)",
           "line-color": (ele) => getRelationColor(ele.data("positivity")),
           "curve-style": "bezier",
           label: "data(label)",
-          "font-size": 10,
+          "font-size": 9,
           "text-rotation": "autorotate",
           color: "#42506b",
           "text-background-color": "#fff",
           "text-background-opacity": 0.8,
           "text-background-shape": "roundrectangle",
           "text-background-padding": 2,
-          "text-shadow-blur": 4,
-          "text-shadow-color": "#8888",
-          "text-shadow-offset-x": 1,
-          "text-shadow-offset-y": 1,
+          "text-outline-color": "#fff",
+          "text-outline-width": 2,
           opacity: "mapData(weight, 0, 1, 0.5, 1)",
-          "target-arrow-shape": "none",
-          cursor: "pointer",
+          "target-arrow-shape": "none"
         },
       },
       {
@@ -244,32 +238,23 @@ function RelationGraphMain({ elements }) {
   const layout = useMemo(
     () => ({
       name: "cose",
-      padding: 60,
+      padding: 40,
       nodeRepulsion: 12000,
       idealEdgeLength: 120,
       animate: false,
       fit: false,
       randomize: false,
+      nodeOverlap: 20,
+      avoidOverlap: true,
+      nodeSeparation: 50,
+      randomSeed: 42
     }),
     []
   );
 
   const handleReset = useCallback(() => {
-    setSearch("");
-    setSearchInput("");
-    clearSelection();
-    if (cyRef.current) {
-      const cy = cyRef.current;
-      cy.elements().unlock();
-      cy.resize();
-      const layoutInstance = cy.layout(layout);
-      layoutInstance.run();
-      cy.one("layoutstop", () => {
-        cy.fit(undefined, 60); // 전체 그래프를 한번 fit
-        cy.center(); // 중심 정렬
-      });
-    }
-  }, [clearSelection, layout]);
+    window.location.reload();
+  }, []);
 
   const handleSearch = useCallback(() => {
     setSearch(searchInput);
@@ -283,9 +268,9 @@ function RelationGraphMain({ elements }) {
   }, []);
 
   const handleClose = useCallback(() => {
-    // 뒤로 이동
-    navigate(-1);
-  }, [navigate]);
+    // 뒤로 이동이 아니라 해당 파일의 뷰어로 이동
+    navigate(`/viewer/${filename}`);
+  }, [navigate, filename]);
 
   useEffect(() => {
     if (!cyRef.current) return;
@@ -299,6 +284,20 @@ function RelationGraphMain({ elements }) {
       cy.removeListener("tap", tapBackgroundHandler);
     };
   }, [tapNodeHandler, tapEdgeHandler, tapBackgroundHandler]);
+
+  useEffect(() => {
+    if (cyRef.current) {
+      const cy = cyRef.current;
+      cy.elements().unlock();
+      cy.resize();
+      const layoutInstance = cy.layout(layout);
+      layoutInstance.run();
+      cy.one("layoutstop", () => {
+        cy.fit(undefined, 60);
+        cy.center();
+      });
+    }
+  }, [elements]);
 
   return (
     <div className="flex flex-col h-screen relative overflow-hidden">
@@ -331,17 +330,6 @@ function RelationGraphMain({ elements }) {
             targetNode={activeTooltip.targetNode}
           />
         )}
-
-        {/* 검색 컨트롤들 */}
-        <GraphControls
-          searchInput={searchInput}
-          setSearchInput={setSearchInput}
-          handleSearch={handleSearch}
-          handleReset={handleReset}
-          search={search}
-          setSearch={setSearch}
-          handleViewTimeline={handleViewTimeline}
-        />
 
         {/* 그래프 영역 */}
         <div className="graph-canvas-area w-full h-full">

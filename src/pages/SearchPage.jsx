@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 import './SearchPage.css';
 
@@ -35,6 +35,7 @@ const SearchPage = () => {
   const [sort, setSort] = useState('sim');
   const [currentPage, setCurrentPage] = useState(1);
   const [searched, setSearched] = useState(false); // 검색 실행 여부
+  const ref = useRef(null);
 
   // 네이버 API에서 특정 정렬만 받아오는 함수
   const fetchSortFromAPI = async (query, sortType) => {
@@ -162,6 +163,24 @@ const SearchPage = () => {
     }
     return <div className="pagination">{pages}</div>;
   };
+
+  useEffect(() => {
+    if (ref.current) {
+      const cy = ref.current;
+      cy.resize();
+      if (fitNodeIds && fitNodeIds.length > 0) {
+        const nodesToFit = cy.nodes().filter(n => fitNodeIds.includes(n.id()));
+        if (nodesToFit.length > 0) {
+          cy.fit(nodesToFit, 0);
+        }
+      } else {
+        cy.fit(undefined, 0);
+      }
+      // boundingBox를 이용해 그래프를 왼쪽 상단에 맞춤
+      const bb = cy.elements().boundingBox();
+      cy.pan({ x: -bb.x1, y: 0 });
+    }
+  }, [elements, fitNodeIds, ref]);
 
   return (
     <div className="search-outer">
