@@ -1,85 +1,61 @@
-import React, { useEffect, useRef } from 'react';
-import SearchBar from '../common/SearchBar';
-import BookList from './BookList';
-import LoadingSpinner from '../common/LoadingSpinner';
-import SortDropdown from '../common/SortDropdown';
-import Library from '../library/Library';
+import React from 'react';
+import { useNavigate } from 'react-router-dom';
 import PageLayout from '../common/PageLayout';
-import useBookSearch from '../../hooks/useBookSearch'; // hook 가져오기
+import './MainPage.css';
 
-const MainPage = ({ showLibrary, setSelectedBook, handleBookSelect, darkMode }) => {
-  const {
-    searchResults,
-    handleSearch,
-    loading,
-    errorMessage,
-    currentQuery,
-    currentPage,
-    hasMore,
-    sortOption,
-    handleSortChange,
-  } = useBookSearch();
-
-  const lastBookElementRef = useRef(null);
-
-  useEffect(() => {
-    if (loading || !currentQuery) return;
-
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (
-          entries[0].isIntersecting &&
-          hasMore &&
-          searchResults.length >= currentPage * 10
-        ) {
-          handleSearch(currentQuery, currentPage + 1, true);
-        }
-      },
-      { threshold: 1.0 }
-    );
-
-    const lastElement = lastBookElementRef.current;
-    if (lastElement) observer.observe(lastElement);
-
-    return () => {
-      if (lastElement) observer.unobserve(lastElement);
-    };
-  }, [searchResults, currentPage, loading, currentQuery, hasMore]);
+const MainPage = ({ darkMode }) => {
+  const navigate = useNavigate();
 
   return (
     <PageLayout darkMode={darkMode}>
-      {/* 본문 영역 */}
-      <div className="w-full mx-auto max-w-5xl bg-white rounded-xl shadow-xl my-6 p-6 flex flex-col">
-        {/* 헤더 + 검색창 */}
-        <div className="mb-6">
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">📚 책 검색</h1>
-          <SearchBar onSearch={handleSearch} />
+      <div style={{
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'flex-start',
+        gap: '3rem',
+        marginTop: '4.5rem',
+        flexWrap: 'wrap',
+        background: 'none',
+        boxShadow: 'none',
+        borderRadius: 0,
+        padding: 0,
+      }}>
+        {/* EPUB 업로드 카드 */}
+        <div
+          className="main-card"
+          onClick={() => navigate('/upload')}
+          style={{ cursor: 'pointer', minWidth: 320, maxWidth: 340 }}
+        >
+          <div style={{ fontSize: '3rem', color: '#4F6DDE', marginBottom: '1.2rem' }}>⬆️</div>
+          <h2 style={{ fontWeight: 700, fontSize: '1.45rem', marginBottom: '0.7rem', color: '#22336b' }}>EPUB 업로드</h2>
+          <p style={{ color: '#6b7280', fontSize: '1.08rem', lineHeight: 1.6, textAlign: 'center' }}>
+            새로운 EPUB 파일을 업로드하고 읽기 시작하세요
+          </p>
         </div>
-
-        {/* 정렬 옵션 */}
-        <div className="mb-4">
-          <SortDropdown value={sortOption} onChange={handleSortChange} />
+        {/* 내 서재 카드 */}
+        <div
+          className="main-card"
+          onClick={() => navigate('/library')}
+          style={{ cursor: 'pointer', minWidth: 320, maxWidth: 340 }}
+        >
+          <div style={{ fontSize: '3rem', color: '#4F6DDE', marginBottom: '1.2rem' }}>📘</div>
+          <h2 style={{ fontWeight: 700, fontSize: '1.45rem', marginBottom: '0.7rem', color: '#22336b' }}>내 서재</h2>
+          <p style={{ color: '#6b7280', fontSize: '1.08rem', lineHeight: 1.6, textAlign: 'center' }}>
+            저장된 책들을 관리하고 계속 읽으세요
+          </p>
         </div>
-
-        {/* 오류 메시지 */}
-        {errorMessage && (
-          <p className="text-center text-red-500 mb-4">{errorMessage}</p>
-        )}
-
-        {/* 콘텐츠 표시 */}
-        {showLibrary ? (
-          <Library onBookSelect={setSelectedBook} darkMode={darkMode} />
-        ) : (
-          <>
-            <BookList
-              books={searchResults}
-              onSelectBook={handleBookSelect}
-              darkMode={darkMode}
-              lastBookRef={lastBookElementRef}
-            />
-            {loading && <LoadingSpinner />}
-          </>
-        )}
+        {/* 책 검색 카드 */}
+        <div
+          className="main-card"
+          onClick={() => navigate('/search')}
+          style={{ cursor: 'pointer', minWidth: 320, maxWidth: 340 }}
+        >
+          <div style={{ fontSize: '3rem', color: '#4F6DDE', marginBottom: '1.2rem' }}>🔍</div>
+          <h2 style={{ fontWeight: 700, fontSize: '1.45rem', marginBottom: '0.7rem', color: '#22336b' }}>책 검색</h2>
+          <p style={{ color: '#6b7280', fontSize: '1.08rem', lineHeight: 1.6, textAlign: 'center' }}>
+            새로운 책을 검색하고 찾아보세요
+          </p>
+        </div>
       </div>
     </PageLayout>
   );

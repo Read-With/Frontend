@@ -1,82 +1,188 @@
-import React, { useEffect, useState } from "react";
+import React, { useState, useEffect, useRef } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
 import "./RelationGraph.css";
 
-function NodeTooltip({ nodeData, onClose }) {
-  const [containerRect, setContainerRect] = useState(null);
+function GraphNodeTooltip({ data, x, y, nodeCenter, onClose }) {
+  const navigate = useNavigate();
+  const { filename } = useParams();
+  const [position, setPosition] = useState({ x: 200, y: 200 });
+  const [showContent, setShowContent] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
+  const tooltipRef = useRef(null);
 
   useEffect(() => {
-    const container = document.querySelector(".graph-container");
-    if (container) {
-      setContainerRect(container.getBoundingClientRect());
-    }
+    setShowContent(true);
   }, []);
 
-  if (!nodeData || !containerRect) return null;
+  const handleMouseDown = (e) => {
+    if (e.target.closest('.tooltip-close-btn')) return;
+    setIsDragging(true);
+    const rect = tooltipRef.current.getBoundingClientRect();
+    setDragOffset({
+      x: e.clientX - rect.left,
+      y: e.clientY - rect.top
+    });
+  };
 
-  const TOOLTIP_WIDTH = 240;
-  const TOOLTIP_HEIGHT = 140;
-  const PADDING = 200; // 항상 container 내부에 이만큼 여유 있게
+  const handleMouseMove = (e) => {
+    if (!isDragging) return;
 
-  // container 위치/크기
-  const {
-    left: containerLeft,
-    top: containerTop,
-    width: containerWidth,
-    height: containerHeight,
-  } = containerRect;
+    const tooltipRect = tooltipRef.current.getBoundingClientRect();
+    const viewportWidth = Math.min(document.documentElement.clientWidth, window.innerWidth);
+    const viewportHeight = Math.min(document.documentElement.clientHeight, window.innerHeight);
+    const scrollX = window.pageXOffset || document.documentElement.scrollLeft;
+    const scrollY = window.pageYOffset || document.documentElement.scrollTop;
 
-  // 툴팁을 노드 기준 중앙에 위치시킴 (container 내부 좌표 기준)
-  let localLeft = nodeData.x - TOOLTIP_WIDTH / 2;
-  let localTop = nodeData.y - TOOLTIP_HEIGHT - 20;
+    let newX = e.clientX - dragOffset.x;
+    let newY = e.clientY - dragOffset.y;
 
-  // 좌우 보정 (container 안쪽에 PADDING 여유 보장)
-  if (localLeft < PADDING) {
-    localLeft = PADDING;
-  }
-  if (localLeft + TOOLTIP_WIDTH + PADDING > containerWidth) {
-    localLeft = containerWidth - TOOLTIP_WIDTH - PADDING;
-  }
+    // 페이지 영역을 벗어나지 않도록 제한
+    newX = Math.max(scrollX, Math.min(newX, viewportWidth + scrollX - tooltipRect.width));
+    newY = Math.max(scrollY, Math.min(newY, viewportHeight + scrollY - tooltipRect.height));
 
-  // 상하 보정 (container 안쪽에 PADDING 여유 보장)
-  if (localTop < PADDING) {
-    // 위로 공간 부족하면 아래로 배치
-    localTop = nodeData.y + 200;
-    if (localTop + TOOLTIP_HEIGHT + PADDING > containerHeight) {
-      localTop = containerHeight - TOOLTIP_HEIGHT - PADDING;
+    setPosition({ x: newX, y: newY });
+  };
+
+  const handleMouseUp = () => {
+    setIsDragging(false);
+  };
+
+  useEffect(() => {
+    if (isDragging) {
+      window.addEventListener('mousemove', handleMouseMove);
+      window.addEventListener('mouseup', handleMouseUp);
     }
-  } else {
-    if (localTop + TOOLTIP_HEIGHT + PADDING > containerHeight) {
-      localTop = containerHeight - TOOLTIP_HEIGHT - PADDING;
-    }
-  }
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isDragging]);
 
-  // 최종 화면 절대 좌표로 변환
-  const finalLeft = containerLeft + localLeft;
-  const finalTop = containerTop + localTop;
+  useEffect(() => {
+    if (x !== undefined && y !== undefined && tooltipRef.current) {
+      const tooltipRect = tooltipRef.current.getBoundingClientRect();
+      const viewportWidth = Math.min(document.documentElement.clientWidth, window.innerWidth);
+      const viewportHeight = Math.min(document.documentElement.clientHeight, window.innerHeight);
+      const scrollX = window.pageXOffset || document.documentElement.scrollLeft;
+      const scrollY = window.pageYOffset || document.documentElement.scrollTop;
+      
+      let newX = x;
+      let newY = y;
+
+      // 페이지 영역을 벗어나지 않도록 제한
+      newX = Math.max(scrollX, Math.min(newX, viewportWidth + scrollX - tooltipRect.width));
+      newY = Math.max(scrollY, Math.min(newY, viewportHeight + scrollY - tooltipRect.height));
+
+      setPosition({ x: newX, y: newY });
+    }
+  }, [x, y]);
+
+  const handleChatClick = () => {
+    if (data.label) {
+      navigate(`/viewer/${filename}/chat/${data.label}`);
+    }
+  };
 
   return (
     <div
-      className="node-tooltip"
-      style={{ left: finalLeft, top: finalTop }}
-      onClick={(e) => e.stopPropagation()}
+      ref={tooltipRef}
+      className="graph-node-tooltip"
+      style={{
+        position: 'fixed',
+        left: position.x,
+        top: position.y,
+        zIndex: 1000,
+        opacity: showContent ? 1 : 0,
+        transition: isDragging ? 'none' : 'opacity 0.3s ease-in-out',
+        cursor: isDragging ? 'grabbing' : 'grab'
+      }}
+      onMouseDown={handleMouseDown}
     >
-      <button className="close-btn" onClick={onClose} aria-label="닫기">
-        ×
-      </button>
-      <h2 className="node-tooltip-title">
-        {nodeData.data.label}
-        {nodeData.data.main && <span className="main-badge">주요 인물</span>}
-      </h2>
-      {nodeData.data.description && (
-        <p className="node-tooltip-description">{nodeData.data.description}</p>
-      )}
-      {nodeData.data.names && (
-        <div className="side-names">
-          <b>별칭:</b> {nodeData.data.names.join(", ")}
+      <div className="tooltip-content business-card">
+        <button onClick={onClose} className="tooltip-close-btn">&times;</button>
+        
+        <div className="business-card-header">
+          <div className="profile-image-placeholder">
+            <span>이미지</span>
+          </div>
+          <div className="business-card-title">
+            <h3>
+              {data.label}
+              {data.main && <span className="main-character-badge">주요 인물</span>}
+            </h3>
+            {data.names && data.names.length > 0 && (
+              <div className="alias-tags">
+                {data.names.map((name, index) => (
+                  <span key={index} className="alias-tag">{name}</span>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
-      )}
+
+        <div className="business-card-body">
+          {data.description && (
+            <div className="info-section">
+              <i className="info-icon description-icon">📝</i>
+              <div className="info-content">
+                <label>설명</label>
+                <p className="description-text">{data.description}</p>
+              </div>
+            </div>
+          )}
+          
+          {data.affiliation && (
+            <div className="info-section">
+              <i className="info-icon affiliation-icon">🏢</i>
+              <div className="info-content">
+                <label>소속</label>
+                <p>{data.affiliation}</p>
+              </div>
+            </div>
+          )}
+          
+          {data.role && (
+            <div className="info-section">
+              <i className="info-icon role-icon">💼</i>
+              <div className="info-content">
+                <label>역할</label>
+                <p>{data.role}</p>
+              </div>
+            </div>
+          )}
+
+          <div className="info-section">
+            <button 
+              className="epub-toolbar-btn epub-toolbar-btn--blue" 
+              style={{ 
+                width: '100%', 
+                marginTop: '10px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                backgroundColor: 'white',
+                color: '#6C8EFF',
+                transition: 'all 0.3s ease'
+              }}
+              onMouseOver={(e) => {
+                e.currentTarget.style.backgroundColor = '#6C8EFF';
+                e.currentTarget.style.color = 'white';
+              }}
+              onMouseOut={(e) => {
+                e.currentTarget.style.backgroundColor = 'white';
+                e.currentTarget.style.color = '#6C8EFF';
+              }}
+              onClick={handleChatClick}
+            >
+              <i className="info-icon" style={{ marginRight: '8px' }}>💬</i>
+              채팅하기
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
 
-export default NodeTooltip;
+export default GraphNodeTooltip; 

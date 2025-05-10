@@ -13,6 +13,8 @@ const ViewerLayout = ({
   onAddBookmark,
   onToggleBookmarkList,
   onSliderChange,
+  currentPage,
+  totalPages
 }) => {
   return (
     <div className="flex flex-col h-screen overflow-hidden">
@@ -42,6 +44,8 @@ const ViewerLayout = ({
         setProgress={setProgress}
         darkMode={darkMode}
         onSliderChange={onSliderChange}
+        currentPage={currentPage}
+        totalPages={totalPages}
       />
     </div>
   );

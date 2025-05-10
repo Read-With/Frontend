@@ -1,0 +1,534 @@
+#root, body, html {
+  width: 100% !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  box-sizing: border-box !important;
+}
+
+.graph-layout, .graph-container, .graph-canvas-area, .cy-container {
+  width: 100% !important;
+  min-width: 0 !important;
+  max-width: 100% !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  transform: none !important;
+  box-sizing: border-box !important;
+}
+
+.graph-page {
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  position: fixed;
+  top: 0;
+  left: 0;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.graph-tabs {
+  display: flex;
+  background: #f0f0f0;
+  padding: 0 16px;
+  height: 48px;
+  border-bottom: 1px solid #e0e0e0;
+  align-items: flex-end;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.graph-tab {
+  position: relative;
+  padding: 0 32px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  font-size: 16px;
+  color: #595959;
+  background: #e9e9e9;
+  cursor: pointer;
+  border: 1px solid #e0e0e0;
+  border-bottom: none;
+  border-radius: 12px 12px 0 0;
+  margin-right: 8px;
+  transition: background 0.2s, color 0.2s;
+  top: 4px;
+  z-index: 2;
+}
+
+.graph-tab.active {
+  background: #fff;
+  color: #1890ff;
+  font-weight: 600;
+  border-bottom: 1px solid #fff;
+  z-index: 3;
+}
+
+.graph-tab:hover,
+.graph-tab:focus {
+  background: #f5f5f5;
+  color: #1890ff;
+}
+
+.graph-layout {
+  flex: 1;
+  width: 100%;
+  height: calc(100vh - 20px);
+  padding: 0;
+  margin: 0;
+  overflow: hidden;
+  background-color: #fafafa;
+  position: relative;
+  display: block;
+  box-sizing: border-box;
+}
+
+.graph-container {
+  width: 100% !important;
+  height: 100% !important;
+  background: white;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  overflow: hidden;
+  position: relative !important;
+  left: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: none !important;
+  display: block !important;
+  float: none !important;
+  transform: none !important;
+  align-self: stretch !important;
+  box-sizing: border-box !important;
+}
+
+/* 그래프 컨트롤 스타일 */
+.graph-controls {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 10px;
+  padding: 12px 20px;
+  background: white;
+  border-bottom: 1px solid #eee;
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 1000;
+  min-height: 30px;
+}
+
+.graph-controls .left-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.graph-controls .right-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+  margin-right: 20px;
+}
+
+.graph-controls button {
+  padding: 6px 12px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  background: white;
+  color: #333;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.graph-controls button:hover {
+  background: #f5f5f5;
+  border-color: #ccc;
+}
+
+.graph-controls button.active {
+  background: #e6f3ff;
+  border-color: #1890ff;
+  color: #1890ff;
+}
+
+.graph-controls .search-box {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.graph-controls .search-box input {
+  padding: 6px 12px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 14px;
+  width: 200px;
+}
+
+.graph-controls .search-box input:focus {
+  outline: none;
+  border-color: #1890ff;
+}
+
+.graph-controls .search-box .search-button {
+  padding: 6px 16px;
+  border: 1px solid #1890ff;
+  border-radius: 4px;
+  height: 28px;
+  background: #1890ff;
+  color: white;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.2s;
+
+}
+
+.graph-controls .search-box .search-button:hover {
+  background: #40a9ff;
+  border-color: #40a9ff;
+}
+
+/* 노드 스타일 */
+.node {
+  width: 40px;
+  height: 40px;
+  background-color: #1976d2;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-weight: bold;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.node.main {
+  width: 60px;
+  height: 60px;
+  background-color: #1565c0;
+  z-index: 2;
+}
+
+.node:hover {
+  transform: scale(1.1);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+/* 간선 스타일 */
+.edge {
+  stroke: #666;
+  stroke-width: 2;
+  transition: all 0.3s ease;
+}
+
+.edge:hover {
+  stroke-width: 3;
+  filter: brightness(1.2);
+}
+
+/* 툴팁 스타일 */
+.node-tooltip,
+.edge-tooltip {
+  position: absolute;
+  background: white;
+  border-radius: 8px;
+  padding: 15px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  z-index: 1000;
+  min-width: 200px;
+  max-width: 300px;
+}
+
+.node-tooltip {
+  border-left: 4px solid #1976d2;
+}
+
+.edge-tooltip {
+  border-left: 4px solid #4caf50;
+}
+
+.tooltip-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.tooltip-title {
+  font-weight: bold;
+  font-size: 16px;
+  color: #333;
+}
+
+.tooltip-close {
+  cursor: pointer;
+  color: #666;
+  font-size: 18px;
+}
+
+.tooltip-content {
+  font-size: 14px;
+  color: #666;
+  line-height: 1.5;
+}
+
+/* 반응형 디자인 */
+@media (max-width: 1200px) {
+  .graph-layout {
+    height: calc(100vh - 28px);
+  }
+  
+  .graph-controls {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    padding: 4px 8px;
+  }
+  
+  .graph-controls button {
+    white-space: nowrap;
+    padding: 4px 8px;
+    font-size: 13px;
+  }
+  
+  .graph-controls .search-box input {
+    width: 150px;
+  }
+}
+
+/* 애니메이션 */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.node-tooltip,
+.edge-tooltip {
+  animation: fadeIn 0.3s ease-out;
+}
+
+/* Cytoscape 그래프 스타일 */
+.graph-canvas-area {
+  width: 100% !important;
+  height: 100%;
+  position: relative;
+  left: 0;
+  margin: 0;
+  padding: 0;
+  background: none;
+  display: block !important;
+  float: none !important;
+  transform: none !important;
+  align-self: stretch !important;
+  box-sizing: border-box !important;
+}
+
+/* 노드 스타일 */
+.cy-node {
+  width: 40px;
+  height: 40px;
+  background-color: #1976d2;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-weight: bold;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.cy-node.main {
+  width: 60px;
+  height: 60px;
+  background-color: #1565c0;
+  z-index: 2;
+}
+
+.cy-node:hover {
+  transform: scale(1.1);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+/* 간선 스타일 */
+.cy-edge {
+  stroke: #666;
+  stroke-width: 2;
+  transition: all 0.3s ease;
+}
+
+.cy-edge:hover {
+  stroke-width: 3;
+  filter: brightness(1.2);
+}
+
+/* Cytoscape 컨트롤 스타일 */
+.cy-controls {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  z-index: 1000;
+  display: flex;
+  gap: 10px;
+  background: white;
+  padding: 10px;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+/* Cytoscape 툴팁 스타일 */
+.cy-tooltip-container {
+  position: absolute;
+  z-index: 1000;
+  pointer-events: none;
+}
+
+.cy-tooltip-content {
+  background: white;
+  border-radius: 8px;
+  padding: 15px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  min-width: 200px;
+  max-width: 300px;
+  pointer-events: auto;
+}
+
+.cy-tooltip-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.cy-tooltip-title {
+  font-weight: bold;
+  font-size: 16px;
+  color: #333;
+}
+
+.cy-tooltip-close {
+  cursor: pointer;
+  color: #666;
+  font-size: 18px;
+}
+
+.cy-tooltip-body {
+  font-size: 14px;
+  color: #666;
+  line-height: 1.5;
+}
+
+/* Ant Design Pro 컴포넌트 스타일 오버라이드 */
+:global(.ant-pro-page-container) {
+  padding: 0 !important;
+  margin: 0 !important;
+  height: 100vh !important;
+  max-width: none !important;
+  background: none !important;
+}
+
+:global(.ant-pro-page-container-children-content) {
+  margin: 0 !important;
+  padding: 0 !important;
+  height: 100% !important;
+  max-width: none !important;
+  background: none !important;
+}
+
+:global(.ant-tabs) {
+  height: 100% !important;
+  max-width: none !important;
+  background: none !important;
+}
+
+:global(.ant-tabs-nav) {
+  margin: 0 !important;
+  padding: 0 8px !important;
+  height: 20px !important;
+  background: white !important;
+  position: sticky !important;
+  top: 0 !important;
+  z-index: 1 !important;
+  max-width: none !important;
+}
+
+:global(.ant-tabs-content-holder) {
+  height: calc(100% - 20px) !important;
+  max-width: none !important;
+  margin-top: 0 !important;
+  padding-top: 0 !important;
+}
+
+:global(.ant-tabs-content) {
+  height: 100% !important;
+  max-width: none !important;
+  padding-top: 0 !important;
+  margin-top: 0 !important;
+}
+
+:global(.ant-tabs-tabpane) {
+  height: 100% !important;
+  max-width: none !important;
+  padding: 0 !important;
+  margin: 0 !important;
+}
+
+:global(.ant-tabs-tab) {
+  padding: 0 8px !important;
+  margin: 0 !important;
+}
+
+:global(.ant-tabs-tab-btn) {
+  font-size: 12px !important;
+  line-height: 20px !important;
+}
+
+:global(.ant-tabs-ink-bar) {
+  height: 2px !important;
+}
+
+/* PageLayout 패딩 오버라이드 */
+:global(.page-layout) {
+  padding: 0 !important;
+  margin: 0 !important;
+}
+
+/* 추가적인 스타일 오버라이드 */
+:global(.ant-pro-page-container-children-content) > div {
+  padding: 0 !important;
+  margin: 0 !important;
+}
+
+:global(.ant-pro-page-container-children-content) > div > div {
+  padding: 0 !important;
+  margin: 0 !important;
+}
+
+.fade-in {
+  opacity: 1 !important;
+  transition: opacity 0.6s;
+}
+.fade-out {
+  opacity: 0 !important;
+  transition: opacity 0.6s;
+} 

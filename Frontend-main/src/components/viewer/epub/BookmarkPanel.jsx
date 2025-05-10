@@ -10,7 +10,7 @@ const BookmarkPanel = ({ bookmarks, onSelect }) => (
           onClick={() => {
             console.log("📌 북마크 클릭:", b.cfi);
             onSelect(b.cfi)}}
-          className="cursor-pointer hover:underline text-sm text-gray-800 dark:text-gray-200"
+          className="epub-bookmark-btn"
         >
           {new Date(b.createdAt).toLocaleString()}
         </li>

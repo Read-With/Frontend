@@ -1,9 +1,13 @@
 import React from "react";
 import charactersData from "../../data/characters.json";
-import relationsData from "../../data/relations.json";
+import relationsData from "../../data/relation.json";
 import RelationGraphMain from "./RelationGraphMain";
+import { useParams } from "react-router-dom";
 
 function RelationGraphWrapper() {
+  const { filename } = useParams();
+  if (!filename) return;
+
   const nodes = charactersData.characters.map((char) => ({
     data: {
       id: String(char.id),

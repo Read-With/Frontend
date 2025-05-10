@@ -4,11 +4,45 @@ import "./RelationGraph.css";
 
 export default function CharacterRelationGraph({ elements }) {
   const cyRef = useRef(null);
+  const containerRef = useRef(null);
   const [isDragging, setIsDragging] = useState(false);
+
+  useEffect(() => {
+    if (cyRef.current && containerRef.current) {
+      const cy = cyRef.current;
+      const container = containerRef.current;
+
+      // 기존 cytoscape wheel 이벤트 제거
+      cy.removeAllListeners('wheel');
+
+      // DOM에 직접 wheel 이벤트 등록
+      const handleWheel = (e) => {
+        e.preventDefault();
+        const rect = container.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const y = e.clientY - rect.top;
+        const factor = e.deltaY > 0 ? 0.96 : 1.04;
+        cy.zoom({
+          level: cy.zoom() * factor,
+          renderedPosition: { x, y }
+        });
+      };
+      container.addEventListener('wheel', handleWheel, { passive: false });
+
+      return () => {
+        container.removeEventListener('wheel', handleWheel);
+      };
+    }
+  }, [elements]);
 
   useEffect(() => {
     if (cyRef.current) {
       const cy = cyRef.current;
+      cy.zoomingEnabled(true);
+      cy.userZoomingEnabled(true);
+      cy.panningEnabled(true);
+      cy.minZoom(0.2);
+      cy.maxZoom(2.5);
 
       // 즉시 그래프 크기 조정
       cy.resize();
@@ -184,55 +218,47 @@ export default function CharacterRelationGraph({ elements }) {
     }
   }, []);
 
-  return (
-    <div className="graph-container">
-      {/* 컨트롤 버튼 부분 제거 */}
+  // 페이지 전체 스크롤 막기 (body + html 모두)
+  useEffect(() => {
+    const originalBody = document.body.style.overflow;
+    const originalHtml = document.documentElement.style.overflow;
+    document.body.style.overflow = "hidden";
+    document.documentElement.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = originalBody;
+      document.documentElement.style.overflow = originalHtml;
+    };
+  }, []);
 
+  // 그래프 영역에서만 브라우저 스크롤 막기
+  const handleWheel = (e) => {
+    e.preventDefault();
+  };
+
+  return (
+    <div
+      style={{
+        width: "100%",
+        height: "600px",
+        overflow: "hidden",
+        position: "relative",
+      }}
+      onWheel={handleWheel}
+    >
       <CytoscapeComponent
         elements={elements}
-        stylesheet={[
-          ...stylesheet,
-          // 드래그 중인 노드와 연결된 노드들의 스타일
-          {
-            selector: "node.dragging",
-            style: {
-              "border-width": 3,
-              "border-color": "#ff5722",
-            },
-          },
-          {
-            selector: "node.connected-to-dragging",
-            style: {
-              "border-width": 2,
-              "border-color": "#ff9800",
-            },
-          },
-        ]}
-        layout={{
-          name: "cose",
-          padding: 50, // 30에서 50으로 증가
-          nodeRepulsion: 10000, // 8000에서 10000으로 증가
-          idealEdgeLength: 150, // 100에서 150으로 증가
-          animate: true,
-          animationDuration: 500,
-          fit: true,
-          randomize: false,
-          gravity: 0.01, // 0.5에서 0.01로 감소하여 노드들이 덜 중앙에 모이도록
-        }}
-        style={{
-          width: "100%",
-          height: "calc(100vh - 80px)",
-        }}
         cy={(cy) => {
+          cy.zoomingEnabled(true);
+          cy.userZoomingEnabled(true);
+          cy.panningEnabled(true);
+          cy.minZoom(0.2);
+          cy.maxZoom(2.5);
           cyRef.current = cy;
         }}
+        className="cytoscape-graph"
+        style={{ width: "100%", height: "600px", background: "#f8fafc" }}
+        userZoomingEnabled={true}
       />
-
-      {isDragging && (
-        <div className="drag-info">
-          노드를 드래그하는 중... 연결된 노드들이 따라옵니다.
-        </div>
-      )}
     </div>
   );
 }
