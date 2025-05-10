@@ -1,8 +1,11 @@
 import React, { useEffect, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 
-const PageLayout = ({ children, darkMode }) => {
+const PageLayout = ({ children }) => {
   const [isMobile, setIsMobile] = useState(false);
   const [isTablet, setIsTablet] = useState(false);
+  const location = useLocation();
+  const isGraphPage = location.pathname.startsWith('/graph/');
 
   useEffect(() => {
     const handleResize = () => {
@@ -18,32 +21,17 @@ const PageLayout = ({ children, darkMode }) => {
 
   return (
     <div
+      className="page-layout"
       style={{
         fontFamily: "'Noto Serif KR', 'Georgia', serif",
-        backgroundColor: darkMode ? '#121212' : '#fafafa',
+        backgroundColor: '#fafafa',
         minHeight: '100vh',
-        padding: isMobile ? '1rem 0.5rem' : isTablet ? '1.5rem 1rem' : '2rem 1.5rem',
+        padding: isGraphPage ? '0' : (isMobile ? '1rem 0.5rem' : isTablet ? '1.5rem 1rem' : '2rem 1.5rem'),
         display: 'flex',
-        justifyContent: 'center',
+        flexDirection: 'column',
       }}
     >
-      <div
-  style={{
-    maxWidth: '1200px',  // PC 버전 최대 크기 고정
-    width: '100%',
-    margin: '0 auto',    // 좌우 자동 가운데 정렬
-    padding: isMobile ? '1rem' : isTablet ? '1.5rem' : '2rem',
-    borderRadius: isMobile ? '0.5rem' : isTablet ? '0.75rem' : '1rem',
-    backgroundColor: darkMode ? '#1e1e1e' : '#ffffff',
-    boxShadow: darkMode
-      ? '0 0 10px rgba(255,255,255,0.05)'
-      : isMobile
-      ? '0 1px 4px rgba(0,0,0,0.05)'
-      : '0 2px 12px rgba(0,0,0,0.1)',
-  }}
->
-        {children}
-      </div>
+      {children}
     </div>
   );
 };
