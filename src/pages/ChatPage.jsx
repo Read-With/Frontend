@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import './ChatPage.css';
+import charactersData from '../data/characters.json';
 
 function formatTime(dateStr) {
   const d = new Date(dateStr);
@@ -16,7 +17,7 @@ const RECOMMEND_MESSAGES = [
 ];
 
 function ChatPage() {
-  const { filename, node } = useParams();
+  const { filename, label } = useParams();
   const navigate = useNavigate();
   const [character, setCharacter] = useState(null);
   const [messages, setMessages] = useState([]);
@@ -26,12 +27,25 @@ function ChatPage() {
   const messagesEndRef = useRef(null);
 
   useEffect(() => {
-    // 임시 캐릭터 데이터 설정
-    setCharacter({
-      label: node,
-      description: '캐릭터 설명이 들어갈 자리입니다.'
-    });
-  }, [node]);
+    // characters.json에서 캐릭터 데이터 로드
+    const characterData = charactersData.characters.find(
+      char => char.common_name === label
+    );
+    
+    if (characterData) {
+      setCharacter({
+        label: characterData.common_name,
+        description: characterData.description,
+        names: characterData.names
+      });
+    } else {
+      // 캐릭터를 찾지 못한 경우
+      setCharacter({
+        label: label,
+        description: '캐릭터 정보를 찾을 수 없습니다.'
+      });
+    }
+  }, [label]);
 
   useEffect(() => {
     if (messagesEndRef.current) {
@@ -56,7 +70,7 @@ function ChatPage() {
     setTimeout(() => {
       const aiMessage = {
         id: Date.now() + 1,
-        text: '안녕하세요! 저는 ' + node + '입니다. 무엇을 도와드릴까요?',
+        text: '안녕하세요! 저는 ' + label + '입니다. 무엇을 도와드릴까요?',
         sender: 'ai',
         timestamp: new Date().toISOString()
       };

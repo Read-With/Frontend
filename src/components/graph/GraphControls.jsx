@@ -29,13 +29,6 @@ function GraphControls({
       <button type="submit" className="advanced-search-btn">
         검색
       </button>
-      <button
-        type="button"
-        className="advanced-fit-btn"
-        onClick={handleViewTimeline}
-      >
-        타임라인
-      </button>
       {search && (
         <button
           type="button"

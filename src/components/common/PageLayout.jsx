@@ -1,8 +1,11 @@
 import React, { useEffect, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 
-const PageLayout = ({ children, darkMode }) => {
+const PageLayout = ({ children }) => {
   const [isMobile, setIsMobile] = useState(false);
   const [isTablet, setIsTablet] = useState(false);
+  const location = useLocation();
+  const isGraphPage = location.pathname.startsWith('/graph/');
 
   useEffect(() => {
     const handleResize = () => {
@@ -18,16 +21,16 @@ const PageLayout = ({ children, darkMode }) => {
 
   return (
     <div
+      className="page-layout"
       style={{
         fontFamily: "'Noto Serif KR', 'Georgia', serif",
-        backgroundColor: darkMode ? '#121212' : '#fafafa',
+        backgroundColor: '#fafafa',
         minHeight: '100vh',
-        padding: isMobile ? '1rem 0.5rem' : isTablet ? '1.5rem 1rem' : '2rem 1.5rem',
+        padding: isGraphPage ? '0' : (isMobile ? '1rem 0.5rem' : isTablet ? '1.5rem 1rem' : '2rem 1.5rem'),
         display: 'flex',
-        justifyContent: 'center',
+        flexDirection: 'column',
       }}
     >
-      {/* 내부 흰색 상자 완전 제거, children만 렌더 */}
       {children}
     </div>
   );
