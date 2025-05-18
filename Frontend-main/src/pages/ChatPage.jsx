@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import "./ChatPage.css";
-import charactersData from "../data/Gatsby_01_characters.json";
+import charactersData from "../data/gatsby.epub/01_characters.json";
 
 function formatTime(dateStr) {
   const d = new Date(dateStr);

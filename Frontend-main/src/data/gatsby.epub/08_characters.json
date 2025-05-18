@@ -1,0 +1,81 @@
+{
+  "characters": [
+    {
+      "common_name": "Gatsby",
+      "description": "He is waiting for Daisy and is later questioned about the car accident. He recounts his past with Daisy and his experiences during the war.",
+      "main_character": true,
+      "id": 1.0,
+      "names": ["Jay Gatsby", "Gatsby"]
+    },
+    {
+      "names": ["I"],
+      "description": "He is the narrator who tries to advise Gatsby and offers him support. He recounts Gatsby's story and reflects on his own interactions with the other characters.",
+      "main_character": true,
+      "id": 2.0,
+      "common_name": "Nick"
+    },
+    {
+      "names": ["Daisy"],
+      "description": "She is the object of Gatsby's affection, and her past with him is revealed. She is married to Tom Buchanan and is involved in a complex relationship with both men.",
+      "main_character": true,
+      "id": 3.0,
+      "common_name": "Daisy"
+    },
+    {
+      "names": ["Tom", "Tom Buchanan"],
+      "description": "He is Daisy's husband, whose presence and wealth influenced Daisy's decision to marry him. He is mentioned in the context of Daisy's past and her ultimate decision.",
+      "main_character": false,
+      "id": 4.0,
+      "common_name": "Tom"
+    },
+    {
+      "names": ["Dan Cody"],
+      "description": "He is a figure from Gatsby's past, representing a significant part of Gatsby's youth and early experiences.",
+      "main_character": false,
+      "id": 5.0,
+      "common_name": "Dan Cody"
+    },
+    {
+      "common_name": "Jordan Baker",
+      "description": "She calls Nick from Hempstead and expresses her annoyance at his behavior the previous night. Their conversation is strained, and they do not make plans to meet.",
+      "main_character": false,
+      "id": 6.0,
+      "names": ["Jordan Baker"]
+    },
+    {
+      "common_name": "Myrtle Wilson",
+      "description": "She is deceased, and the circumstances surrounding her death are investigated. Her sister arrives drunk and faints upon hearing the news.",
+      "main_character": false,
+      "id": 7.0,
+      "names": ["Myrtle Wilson"]
+    },
+    {
+      "common_name": "George Wilson",
+      "description": "He is Myrtle's husband, grieving and in shock after her death. He suspects that the driver of the yellow car was responsible and seeks to find them.",
+      "main_character": false,
+      "id": 8.0,
+      "names": ["George Wilson", "Wilson"]
+    },
+    {
+      "names": ["Catherine"],
+      "description": "She is Myrtle's sister, who arrives drunk and faints upon hearing about her sister's death.",
+      "main_character": false,
+      "id": 9.0,
+      "common_name": "Catherine"
+    },
+    {
+      "common_name": "Michaelis",
+      "description": "He stays with George Wilson after Myrtle's death, trying to comfort him and distract him from his grief.",
+      "main_character": false,
+      "id": 10.0,
+      "names": ["Michaelis"]
+    },
+    {
+      "names": ["Gardener"],
+      "description": "He is the last of Gatsby's former servants and informs Gatsby about draining the pool.",
+      "main_character": false,
+      "id": 11.0,
+      "common_name": "Gardener"
+    }
+  ]
+}

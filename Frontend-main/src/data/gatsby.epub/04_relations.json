@@ -1,0 +1,52 @@
+{
+  "relations": [
+    {
+      "id1": 1.0,
+      "explanation": "Gatsby clarifies that Nick is just a friend and not a business connection.",
+      "relation": ["Friend"],
+      "id2": 2.0,
+      "positivity": 0.8,
+      "weight": 0.7
+    },
+    {
+      "relation": ["Influence", "Favor"],
+      "id1": 1.0,
+      "explanation": "There is no mention of the policeman in this text.",
+      "id2": 76.0,
+      "positivity": 0.7,
+      "weight": 0.8
+    },
+    {
+      "relation": ["Indirect Communication"],
+      "id1": 1.0,
+      "explanation": "The text mentions Gatsby communicating through Miss Baker, but this event doesn't significantly alter the existing indirect communication.",
+      "id2": 4.0,
+      "positivity": 0.5,
+      "weight": 0.6
+    },
+    {
+      "relation": ["Friend", "Acquaintance"],
+      "explanation": "Wolfshiem calls Gatsby a 'fine fellow' and a 'perfect gentleman'.",
+      "id1": 1.0,
+      "id2": 3.0,
+      "positivity": 0.7,
+      "weight": 0.8
+    },
+    {
+      "id1": 2.0,
+      "relation": ["Acquaintance"],
+      "explanation": "Nick and Wolfshiem are at the table together and Wolfshiem speaks about Gatsby to Nick.",
+      "id2": 3.0,
+      "positivity": 0.6,
+      "weight": 0.5
+    },
+    {
+      "relation": ["Friend"],
+      "explanation": "There is no mention of Rosy Rosenthal in this text.",
+      "id1": 3.0,
+      "id2": 78.0,
+      "positivity": 0.8,
+      "weight": 0.9
+    }
+  ]
+}
