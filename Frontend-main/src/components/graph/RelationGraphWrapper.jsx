@@ -1,6 +1,6 @@
 import React from "react";
-import charactersData from "../../data/characters.json";
-import relationsData from "../../data/relation.json";
+import charactersData from "../../data/gatsby.epub/01_characters.json";
+import relationsData from "../../data/gatsby.epub/01_relations.json";
 import RelationGraphMain from "./RelationGraphMain";
 import { useParams } from "react-router-dom";
 

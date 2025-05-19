@@ -1,23 +1,19 @@
-import React, { useRef, useState, useEffect } from 'react';
-import { useParams, useLocation, useNavigate } from 'react-router-dom';
-import ViewerLayout from './ViewerLayout';
-import EpubViewer from './epub/EpubViewer';
-import BookmarkPanel from './epub/BookmarkPanel';
+import React, { useRef, useState, useEffect } from "react";
+import { useParams, useLocation, useNavigate } from "react-router-dom";
+import ViewerLayout from "./ViewerLayout";
+import EpubViewer from "./epub/EpubViewer";
+import BookmarkPanel from "./epub/BookmarkPanel";
+import RelationGraphWrapper from "../graph/RelationGraphWrapper"; // 추가된 부분
 import { loadBookmarks, saveBookmarks } from "./epub/BookmarkManager";
-import { toast, ToastContainer } from 'react-toastify';
-import 'react-toastify/dist/ReactToastify.css';
+import { toast, ToastContainer } from "react-toastify";
+import "react-toastify/dist/ReactToastify.css";
 
 function parseCfiToChapterDetail(cfi) {
   const chapterMatch = cfi.match(/\[chapter-(\d+)\]/);
   const chapter = chapterMatch ? `${chapterMatch[1]}장` : null;
-
-  // [chapter-x]/숫+ 추출
   const pageMatch = cfi.match(/\[chapter-\d+\]\/(\d+)/);
   const page = pageMatch ? pageMatch[1] : null;
-
-  if (chapter && page) return `${chapter} ${page}`;
-  if (chapter) return chapter;
-  return cfi;
+  return chapter && page ? `${chapter} ${page}` : chapter || cfi;
 }
 
 const ViewerPage = ({ darkMode }) => {
@@ -33,24 +29,24 @@ const ViewerPage = ({ darkMode }) => {
 
   const book = location.state?.book || {
     title: filename,
-    path: "/"+ filename,
+    path: "/" + filename,
   };
 
   const [showToolbar, setShowToolbar] = useState(false);
-  const cleanFilename = filename.replace(/^\//, '').trim();
+  const cleanFilename = filename.replace(/^\//, "").trim();
   const [bookmarks, setBookmarks] = useState(loadBookmarks(cleanFilename));
   const [showBookmarkList, setShowBookmarkList] = useState(false);
 
   useEffect(() => {
     if (failCount >= 2) {
-      toast.info('🔄 계속 실패하면 브라우저 새로고침을 해주세요!');
+      toast.info("🔄 계속 실패하면 브라우저 새로고침을 해주세요!");
     }
   }, [failCount]);
 
   useEffect(() => {
-    document.body.style.overflow = 'hidden';
+    document.body.style.overflow = "hidden";
     return () => {
-      document.body.style.overflow = 'auto';
+      document.body.style.overflow = "auto";
     };
   }, []);
 
@@ -75,7 +71,7 @@ const ViewerPage = ({ darkMode }) => {
 
   const handleAddBookmark = async () => {
     if (!viewerRef.current) {
-      toast.error('❗ 페이지가 아직 준비되지 않았어요. 다시 불러옵니다...');
+      toast.error("❗ 페이지가 아직 준비되지 않았어요. 다시 불러옵니다...");
       setFailCount((cnt) => cnt + 1);
       return;
     }
@@ -83,14 +79,14 @@ const ViewerPage = ({ darkMode }) => {
     try {
       cfi = await viewerRef.current.getCurrentCfi?.();
     } catch (e) {
-      console.error('getCurrentCfi 에러:', e);
+      console.error("getCurrentCfi 에러:", e);
     }
     if (!cfi) {
-      toast.error('❗ 페이지 정보를 읽을 수 없습니다. 다시 불러옵니다...');
+      toast.error("❗ 페이지 정보를 읽을 수 없습니다. 다시 불러옵니다...");
       setFailCount((cnt) => cnt + 1);
       return;
     }
-    console.log('추가된 북마크 CFI:', cfi);
+    console.log("추가된 북마크 CFI:", cfi);
     setFailCount(0);
 
     const latestBookmarks = loadBookmarks(cleanFilename);
@@ -98,11 +94,11 @@ const ViewerPage = ({ darkMode }) => {
     let newBookmarks;
     if (isDuplicate) {
       newBookmarks = latestBookmarks.filter((b) => b.cfi !== cfi);
-      toast.info('❌ 북마크가 삭제되었습니다');
+      toast.info("❌ 북마크가 삭제되었습니다");
     } else {
       const newBookmark = { cfi, createdAt: new Date().toISOString() };
       newBookmarks = [newBookmark, ...latestBookmarks];
-      toast.success('✅ 북마크가 추가되었습니다');
+      toast.success("✅ 북마크가 추가되었습니다");
     }
     setBookmarks(newBookmarks);
     saveBookmarks(cleanFilename, newBookmarks);
@@ -126,12 +122,12 @@ const ViewerPage = ({ darkMode }) => {
 
   const handleDeleteBookmark = (cfi) => {
     if (!cleanFilename) {
-      toast.error('❗ 파일명이 없어 북마크를 삭제할 수 없습니다.');
+      toast.error("❗ 파일명이 없어 북마크를 삭제할 수 없습니다.");
       return;
     }
-    if (window.confirm('정말 삭제하시겠습니까?')) {
-      const newBookmarks = bookmarks.filter(b => b.cfi !== cfi);
-      console.log('BookmarksPage - 북마크 삭제:', cleanFilename, newBookmarks);
+    if (window.confirm("정말 삭제하시겠습니까?")) {
+      const newBookmarks = bookmarks.filter((b) => b.cfi !== cfi);
+      console.log("BookmarksPage - 북마크 삭제:", cleanFilename, newBookmarks);
       setBookmarks(newBookmarks);
       saveBookmarks(cleanFilename, newBookmarks);
     }
@@ -139,12 +135,12 @@ const ViewerPage = ({ darkMode }) => {
 
   const handleRemoveBookmark = (cfi) => {
     if (!cleanFilename) {
-      toast.error('❗ 파일명이 없어 북마크를 삭제할 수 없습니다.');
+      toast.error("❗ 파일명이 없어 북마크를 삭제할 수 없습니다.");
       return;
     }
-    if (window.confirm('정말 삭제하시겠습니까?')) {
+    if (window.confirm("정말 삭제하시겠습니까?")) {
       const newBookmarks = bookmarks.filter((b) => b.cfi !== cfi);
-      console.log('BookmarksPage - 북마크 삭제:', cleanFilename, newBookmarks);
+      console.log("BookmarksPage - 북마크 삭제:", cleanFilename, newBookmarks);
       setBookmarks(newBookmarks);
       saveBookmarks(cleanFilename, newBookmarks);
     }
@@ -156,43 +152,91 @@ const ViewerPage = ({ darkMode }) => {
       onMouseEnter={() => setShowToolbar(true)}
       onMouseLeave={() => setShowToolbar(false)}
     >
-      <ViewerLayout
-        showControls={showToolbar}
-        book={book}
-        darkMode={darkMode}
-        progress={progress}
-        setProgress={setProgress}
-        onPrev={handlePrevPage}
-        onNext={handleNextPage}
-        isBookmarked={false}
-        onToggleBookmarkList={onToggleBookmarkList}
-        onAddBookmark={handleAddBookmark}
-        onSliderChange={handleSliderChange}
-        currentPage={currentPage}
-        totalPages={totalPages}
+      {/* 좌우 분할 컨테이너 */}
+      <div
+        style={{
+          display: "flex",
+          height: "100vh",
+          width: "100vw",
+          position: "relative",
+        }}
       >
-        <EpubViewer
-          key={reloadKey}
-          ref={viewerRef}
-          book={book}
-          onProgressChange={setProgress}
-          onCurrentPageChange={setCurrentPage}
-          onTotalPagesChange={setTotalPages}
-        />
-        {showBookmarkList && (
-          <BookmarkPanel
-            bookmarks={bookmarks}
-            onSelect={handleBookmarkSelect}
+        {/* 왼쪽: EPUB 뷰어 영역 */}
+        <div
+          style={{
+            flex: 1,
+            minWidth: 0,
+            borderRight: "1px solid #e7eaf7",
+            position: "relative",
+            overflow: "hidden",
+          }}
+        >
+          <ViewerLayout
+            showControls={showToolbar}
+            book={book}
+            darkMode={darkMode}
+            progress={progress}
+            setProgress={setProgress}
+            onPrev={handlePrevPage}
+            onNext={handleNextPage}
+            isBookmarked={false}
+            onToggleBookmarkList={onToggleBookmarkList}
+            onAddBookmark={handleAddBookmark}
+            onSliderChange={handleSliderChange}
+            currentPage={currentPage}
+            totalPages={totalPages}
           >
-            {bookmarks.map((bm) => (
-              <span key={bm.cfi} style={{ fontSize: '0.98rem', color: '#4F6DDE', fontFamily: 'monospace' }}>
-                위치: {parseCfiToChapterDetail(bm.cfi)}
-              </span>
-            ))}
-          </BookmarkPanel>
-        )}
-      </ViewerLayout>
-      <ToastContainer position="bottom-center" autoClose={1500} hideProgressBar newestOnTop closeOnClick />
+            <EpubViewer
+              key={reloadKey}
+              ref={viewerRef}
+              book={book}
+              onProgressChange={setProgress}
+              onCurrentPageChange={setCurrentPage}
+              onTotalPagesChange={setTotalPages}
+            />
+            {showBookmarkList && (
+              <BookmarkPanel
+                bookmarks={bookmarks}
+                onSelect={handleBookmarkSelect}
+              >
+                {bookmarks.map((bm) => (
+                  <span
+                    key={bm.cfi}
+                    style={{
+                      fontSize: "0.98rem",
+                      color: "#4F6DDE",
+                      fontFamily: "monospace",
+                    }}
+                  >
+                    위치: {parseCfiToChapterDetail(bm.cfi)}
+                  </span>
+                ))}
+              </BookmarkPanel>
+            )}
+          </ViewerLayout>
+        </div>
+
+        {/* 오른쪽: Cytoscape 그래프 영역 */}
+        <div
+          style={{
+            flex: 1,
+            minWidth: 0,
+            background: "#f8fafc",
+            position: "relative",
+            overflow: "hidden", // 그래프 오버플로우 방지
+          }}
+        >
+          <RelationGraphWrapper /> {/* 실제 그래프 컴포넌트 */}
+        </div>
+      </div>
+
+      <ToastContainer
+        position="bottom-center"
+        autoClose={1500}
+        hideProgressBar
+        newestOnTop
+        closeOnClick
+      />
     </div>
   );
 };

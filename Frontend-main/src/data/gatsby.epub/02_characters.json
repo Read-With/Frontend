@@ -1,0 +1,88 @@
+{
+  "characters": [
+    {
+      "common_name": "Doctor T. J. Eckleburg",
+      "description": "A pair of enormous, blue eyes behind yellow spectacles overlooking the valley of ashes. They represent a faded sign and perhaps a forgotten moral presence.",
+      "main_character": false,
+      "id": 1.0,
+      "names": ["Doctor T. J. Eckleburg"]
+    },
+    {
+      "names": ["Tom Buchanan", "Tom"],
+      "description": "A wealthy and assertive man having an affair. He brings the narrator to meet his mistress and displays a possessive and sometimes violent nature.",
+      "main_character": true,
+      "id": 2.0,
+      "common_name": "Tom Buchanan"
+    },
+    {
+      "names": [],
+      "description": "An unnamed character who is taken to meet Tom Buchanan's mistress and observes the unfolding events. He seems somewhat passive and judgmental.",
+      "main_character": true,
+      "id": 3.0,
+      "common_name": "Narrator"
+    },
+    {
+      "common_name": "George Wilson",
+      "description": "A spiritless and anaemic garage owner, seemingly unaware of his wife's affair. He is desperate to buy a car from Tom and appears downtrodden.",
+      "main_character": false,
+      "id": 4.0,
+      "names": ["Wilson", "George B. Wilson", "George Wilson"]
+    },
+    {
+      "names": ["Mrs. Wilson", "Myrtle Wilson", "Myrtle"],
+      "description": "Tom Buchanan's mistress, a woman in her middle thirties with a strong vitality. She is married to George Wilson but desires a more luxurious life.",
+      "main_character": true,
+      "id": 5.0,
+      "common_name": "Myrtle Wilson"
+    },
+    {
+      "names": ["Italian child"],
+      "description": "A grey, scrawny child seen setting torpedoes on the railroad track. The child adds to the desolate atmosphere of the valley of ashes.",
+      "main_character": false,
+      "id": 6.0,
+      "common_name": "Italian child"
+    },
+    {
+      "names": ["Dog seller", "man"],
+      "description": "An old man selling puppies from a basket. He is encountered by Tom, Myrtle and the narrator where Myrtle purchases a dog from him.",
+      "main_character": false,
+      "id": 7.0,
+      "common_name": "Dog seller"
+    },
+    {
+      "names": ["Catherine"],
+      "description": "Myrtle Wilson's sister, a slender and worldly girl with red hair. She is visiting Myrtle and is very opinionated.",
+      "main_character": false,
+      "id": 8.0,
+      "common_name": "Catherine"
+    },
+    {
+      "names": ["Mr. McKee", "Chester"],
+      "description": "A pale and feminine photographer from the apartment below. He is in the \"artistic game\" and took a photograph of Myrtle's mother.",
+      "main_character": false,
+      "id": 9.0,
+      "common_name": "Mr. McKee"
+    },
+    {
+      "names": ["Mrs. McKee", "Lucille"],
+      "description": "Shrill, languid, handsome, and horrible, she is married to Mr. McKee. She proudly states that her husband has photographed her a hundred and twenty-seven times since they had been married.",
+      "main_character": false,
+      "id": 10.0,
+      "common_name": "Mrs. McKee"
+    },
+    {
+      "names": ["Elevator boy"],
+      "description": "A reluctant worker who is sent to get items for the dog. He is not very enthusiastic about his job.",
+      "main_character": false,
+      "id": 11.0,
+      "common_name": "Elevator boy"
+    },
+    {
+      "common_name": "Janitor",
+      "description": "A worker who is sent out to buy sandwiches. He is part of the lower orders.",
+      "main_character": false,
+      "id": 12.0,
+      "names": ["Janitor"]
+    }
+  ]
+}

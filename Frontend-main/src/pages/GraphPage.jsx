@@ -1,155 +1,133 @@
-import React, { useState, useMemo, useEffect } from 'react';
-import { PageContainer } from '@ant-design/pro-components';
-import { Button, message } from 'antd';
-import { useParams, useNavigate } from 'react-router-dom';
-import RelationGraphMain from '../components/graph/RelationGraphMain';
-import charactersData from '../data/characters.json';
-import relationsData from '../data/relation.json';
-import './GraphPage.css';
-import { FilterOutlined, DownloadOutlined, QuestionCircleOutlined, SearchOutlined, HistoryOutlined } from '@ant-design/icons';
-import { Spin } from 'antd';
-import { FaUndo } from 'react-icons/fa';
+import React, { useState, useMemo, useEffect } from "react";
+import { useParams, useNavigate } from "react-router-dom";
+import RelationGraphMain from "../components/graph/RelationGraphMain";
+import "./GraphPage.css";
+import { Spin, Select, Button } from "antd";
+import { SearchOutlined } from "@ant-design/icons";
+import { FaUndo } from "react-icons/fa";
 
-// 임시 데이터 (chapter2, chapter3만)
-const mockData = {
-  'gatsby.epub': {
-    chapter2: {
-      characters: [
-        { id: 1, common_name: 'Nick', main_character: true, description: '주인공', names: ['Nick', 'Nick Carraway'] },
-        { id: 2, common_name: 'Gatsby', main_character: true, description: '갯츠비', names: ['Gatsby', 'Jay Gatsby'] },
-        { id: 4, common_name: 'Tom', main_character: true, description: '톰', names: ['Tom', 'Tom Buchanan'] },
-      ],
-      relations: [
-        { id1: 1, id2: 2, relation: ['친구'], explanation: '갯츠비의 이웃', positivity: 0.8, weight: 0.9, chapter: 'chapter2' },
-        { id1: 2, id2: 4, relation: ['적대'], explanation: '라이벌', positivity: -0.7, weight: 0.8, chapter: 'chapter2' },
-      ]
-    },
-    chapter3: {
-      characters: [
-        { id: 1, common_name: 'Nick', main_character: true, description: '주인공', names: ['Nick', 'Nick Carraway'] },
-        { id: 2, common_name: 'Gatsby', main_character: true, description: '갯츠비', names: ['Gatsby', 'Jay Gatsby'] },
-        { id: 3, common_name: 'Daisy', main_character: true, description: '데이지', names: ['Daisy', 'Daisy Buchanan'] },
-        { id: 4, common_name: 'Tom', main_character: true, description: '톰', names: ['Tom', 'Tom Buchanan'] },
-      ],
-      relations: [
-        { id1: 1, id2: 2, relation: ['친구'], explanation: '갯츠비의 이웃', positivity: 0.8, weight: 0.9, chapter: 'chapter3' },
-        { id1: 2, id2: 3, relation: ['사랑'], explanation: '과거의 연인', positivity: 0.9, weight: 1.0, chapter: 'chapter3' },
-        { id1: 2, id2: 4, relation: ['적대'], explanation: '라이벌', positivity: -0.7, weight: 0.8, chapter: 'chapter3' },
-      ]
-    }
-  }
-};
+// 챕터 1-9까지 추가
+const chapters = [
+  { key: "chapter1", label: "Chapter 1" },
+  { key: "chapter2", label: "Chapter 2" },
+  { key: "chapter3", label: "Chapter 3" },
+  { key: "chapter4", label: "Chapter 4" },
+  { key: "chapter5", label: "Chapter 5" },
+  { key: "chapter6", label: "Chapter 6" },
+  { key: "chapter7", label: "Chapter 7" },
+  { key: "chapter8", label: "Chapter 8" },
+  { key: "chapter9", label: "Chapter 9" },
+];
 
 const GraphPage = () => {
   const { filename, chapter } = useParams();
   const navigate = useNavigate();
-  const currentChapter = chapter || 'chapter1';
+  const currentChapter = chapter || "chapter1";
   const [loading, setLoading] = useState(true);
-  const [graphData, setGraphData] = useState(null);
-  const [searchTerm, setSearchTerm] = useState('');
+  const [graphData, setGraphData] = useState({ characters: [], relations: [] });
+  const [searchTerm, setSearchTerm] = useState("");
   const [filteredElements, setFilteredElements] = useState(null);
   const [graphVisible, setGraphVisible] = useState(true);
+  const [availableBooks, setAvailableBooks] = useState(["Gatsby"]);
+  const [currentBook, setCurrentBook] = useState(filename || "Gatsby");
 
-  // 파일별 데이터 로딩
+  // 책 및 챕터별 데이터 동적 로딩
   useEffect(() => {
-    const loadGraphData = async () => {
+    const loadChapterData = async (bookName, chapterKey) => {
       try {
-        setLoading(true);
-        let data;
-        const filenameKey = filename ? filename.toLowerCase() : '';
-        if (currentChapter === 'chapter1') {
-          data = {
-            characters: charactersData.characters,
-            relations: relationsData.relations.map(rel => ({
-              ...rel,
-              chapter: 'chapter1'
-            }))
-          };
-        } else {
-          data = mockData[filenameKey]?.[currentChapter];
-        }
-        // 데이터가 없으면 빈 그래프로 대체
-        if (!data) {
-          data = { characters: [], relations: [] };
-        }
-        setGraphData(data);
+        const chapterNum = chapterKey.replace("chapter", "").padStart(2, "0");
+        console.log(`Loading ${bookName}/${chapterNum} data...`);
+
+        // data/Gatsby/01_characters.json 형식으로 임포트
+        const charactersData = await import(
+          `../data/${bookName}/${chapterNum}_characters.json`
+        );
+        const relationsData = await import(
+          `../data/${bookName}/${chapterNum}_relations.json`
+        );
+
+        return {
+          characters: charactersData.characters || [],
+          relations: (relationsData.relations || []).map((rel) => ({
+            ...rel,
+            chapter: chapterKey,
+            book: bookName,
+          })),
+        };
       } catch (error) {
-        console.error('Error loading graph data:', error);
-        message.error('그래프 데이터를 불러오는데 실패했습니다.');
-      } finally {
-        setLoading(false);
+        console.error(
+          `${bookName} 챕터 ${chapterKey} 데이터 로드 실패:`,
+          error
+        );
+        return { characters: [], relations: [] };
       }
     };
-    if (filename) {
-      loadGraphData();
-    }
-  }, [filename, currentChapter]);
+
+    const loadData = async () => {
+      setLoading(true);
+      const data = await loadChapterData(currentBook, currentChapter);
+      setGraphData(data);
+      setLoading(false);
+    };
+
+    loadData();
+  }, [currentBook, currentChapter]);
 
   useEffect(() => {
-    setGraphVisible(false); // 챕터 바뀔 때 숨김
-    const timeout = setTimeout(() => setGraphVisible(true), 0); // 바로 보임(트랜지션 적용)
+    setGraphVisible(false);
+    const timeout = setTimeout(() => setGraphVisible(true), 300);
     return () => clearTimeout(timeout);
-  }, [currentChapter]);
+  }, [currentBook, currentChapter]);
 
-  // 그래프 요소 생성
+  // 그래프 요소 생성 (존재하지 않는 노드 참조 간선은 제외)
   const elements = useMemo(() => {
     if (!graphData) return [];
-    const nodes = graphData.characters
-      .slice()
-      .sort((a, b) => a.id - b.id)
-      .map((char) => ({
-        data: {
-          id: String(char.id),
-          label: char.common_name,
-          main: char.main_character,
-          description: char.description,
-          names: char.names,
-        },
-      }));
+
+    // 노드 생성
+    const nodes = graphData.characters.map((char) => ({
+      data: {
+        id: String(char.id),
+        label: char.common_name,
+        main: char.main_character,
+        description: char.description || "",
+        names: char.names || [char.common_name],
+      },
+    }));
+
+    // 실제 존재하는 노드 id 집합
+    const validNodeIds = new Set(nodes.map((node) => node.data.id));
+
+    // 존재하는 노드만 연결하는 간선만 포함
     const edges = graphData.relations
-      .slice()
-      .sort((a, b) => (a.id1 - b.id1) || (a.id2 - b.id2))
-      .map((rel) => ({
+      .filter(
+        (rel) =>
+          validNodeIds.has(String(rel.id1)) && validNodeIds.has(String(rel.id2))
+      )
+      .map((rel, idx) => ({
         data: {
-          id: `e${rel.id1}-${rel.id2}`,
+          id: `e${rel.id1}-${rel.id2}-${idx}`,
           source: String(rel.id1),
           target: String(rel.id2),
-          label: rel.relation.join(", "),
-          explanation: rel.explanation,
-          positivity: rel.positivity,
-          weight: rel.weight,
+          label: Array.isArray(rel.relation)
+            ? rel.relation.join(", ")
+            : String(rel.relation || ""),
+          explanation: rel.explanation || "",
+          positivity: rel.positivity || 0,
+          weight: rel.weight || 0.5,
           chapter: rel.chapter,
         },
       }));
+
     return [...nodes, ...edges];
   }, [graphData]);
 
+  const handleBookChange = (book) => {
+    setCurrentBook(book);
+    navigate(`/graph/${book}/${currentChapter}`);
+  };
+
   const handleTabChange = (key) => {
-    navigate(`/graph/${filename}/${key}`);
-  };
-
-  const handleFilterClick = () => {
-    // Filter logic
-  };
-
-  const handleExportClick = () => {
-    // Export logic
-  };
-
-  const handleHelpClick = () => {
-    // Help logic
-  };
-
-  const handleNodeClick = (node) => {
-    // Node click logic
-  };
-
-  const handleEdgeClick = (edge) => {
-    // Edge click logic
-  };
-
-  const handleTimelineClick = () => {
-    navigate(`/viewer/${filename}/timeline`);
+    navigate(`/graph/${currentBook}/${key}`);
   };
 
   const handleSearch = () => {
@@ -157,75 +135,59 @@ const GraphPage = () => {
       setFilteredElements(elements);
       return;
     }
-
     const searchTermLower = searchTerm.toLowerCase();
-    // 1. 검색어에 해당하는 노드 찾기
-    const matchedNode = elements.find(element => {
-      if (element.data.label) {
-        const character = graphData.characters.find(char => String(char.id) === element.data.id);
-        if (!character) return false;
-        return character.names.some(name => name.toLowerCase().includes(searchTermLower));
-      }
-      return false;
-    });
-
+    const matchedNode = elements.find(
+      (element) =>
+        element.data.label &&
+        (element.data.label.toLowerCase().includes(searchTermLower) ||
+          element.data.names?.some((name) =>
+            name.toLowerCase().includes(searchTermLower)
+          ))
+    );
     if (!matchedNode) {
       setFilteredElements([]);
       return;
     }
-
-    // 2. 해당 노드와 연결된 간선 찾기
-    const connectedEdges = elements.filter(element => {
-      if (element.data.source && element.data.target) {
-        return element.data.source === matchedNode.data.id || element.data.target === matchedNode.data.id;
-      }
-      return false;
-    });
-
-    // 3. 연결된 노드들 찾기 (자기 자신 + 연결된 노드)
+    const connectedEdges = elements.filter(
+      (element) =>
+        element.data.source === matchedNode.data.id ||
+        element.data.target === matchedNode.data.id
+    );
     const connectedNodeIds = new Set([
       matchedNode.data.id,
-      ...connectedEdges.map(edge => edge.data.source),
-      ...connectedEdges.map(edge => edge.data.target)
+      ...connectedEdges.flatMap((edge) => [edge.data.source, edge.data.target]),
     ]);
-    const connectedNodes = elements.filter(element => {
-      return element.data.label && connectedNodeIds.has(element.data.id);
-    });
-
-    // 4. 최종적으로 해당 노드 + 연결된 노드 + 간선만 보여주기
+    const connectedNodes = elements.filter(
+      (element) => element.data.label && connectedNodeIds.has(element.data.id)
+    );
     setFilteredElements([...connectedNodes, ...connectedEdges]);
   };
 
   const handleKeyPress = (e) => {
-    if (e.key === 'Enter') {
-      handleSearch();
-    }
+    if (e.key === "Enter") handleSearch();
   };
 
   const handleReset = () => {
-    setSearchTerm('');
+    setSearchTerm("");
     setFilteredElements(null);
-    // RelationGraphMain에 ref로 resetGraph 등 전달 시 호출(예시)
-    // if (graphRef.current) graphRef.current.resetGraph();
   };
 
   return (
     <div className="graph-page">
       <div className="graph-tabs folder-tabs">
-        {[
-          { key: 'chapter1', label: 'Chapter 1' },
-          { key: 'chapter2', label: 'Chapter 2' },
-          { key: 'chapter3', label: 'Chapter 3' }
-        ].map(tab => (
+        {chapters.map((tab) => (
           <div
             key={tab.key}
-            className={`graph-tab folder-tab ${currentChapter === tab.key ? 'active' : ''}`}
+            className={`graph-tab folder-tab ${
+              currentChapter === tab.key ? "active" : ""
+            }`}
             onClick={() => handleTabChange(tab.key)}
           >
             {tab.label}
           </div>
         ))}
       </div>
+
       <div className="graph-layout">
         <div className="graph-container">
           <div className="graph-controls">
@@ -242,53 +204,45 @@ const GraphPage = () => {
                 <button onClick={handleSearch} className="search-button">
                   검색
                 </button>
-                <button
-                  type="button"
-                  className="ant-btn"
-                  style={{
-                    display: 'flex', alignItems: 'center', gap: 6,
-                    background: 'white',
-                    color: '#4F6DDE',
-                    border: '1px solid #ddd',
-                    borderRadius: 4,
-                    fontSize: 14,
-                    padding: '6px 12px',
-                    fontWeight: 500,
-                    cursor: 'pointer',
-                    transition: 'all 0.2s',
-                    marginLeft: 8
-                  }}
+                <Button
+                  icon={<FaUndo />}
                   onClick={handleReset}
-                  onMouseOver={e => { e.currentTarget.style.background = '#f5f5f5'; e.currentTarget.style.borderColor = '#ccc'; }}
-                  onMouseOut={e => { e.currentTarget.style.background = 'white'; e.currentTarget.style.borderColor = '#ddd'; }}
+                  style={{ marginLeft: 8 }}
                 >
-                  <FaUndo style={{ fontSize: 16 }} /> 초기화
-                </button>
+                  초기화
+                </Button>
               </div>
             </div>
           </div>
+
           {loading ? (
             <div className="loading-container">
               <Spin size="large" />
-              <p>Loading relationship data...</p>
+              <p>
+                {currentBook} - Chapter {currentChapter.replace("chapter", "")}{" "}
+                데이터 로딩 중...
+              </p>
             </div>
           ) : (
             <div
-              className={`graph-canvas-area w-full h-full${graphVisible ? ' fade-in' : ' fade-out'}`}
+              className="graph-canvas-area"
               style={{
-                transition: 'opacity 0.3s',
+                transition: "opacity 0.5s",
                 opacity: graphVisible ? 1 : 0,
-                width: '100%',
-                height: '100%',
-                position: 'relative'
+                width: "100%",
+                height: "calc(100vh - 150px)",
+                position: "relative",
               }}
             >
               <RelationGraphMain
                 elements={filteredElements || elements}
-                onNodeClick={handleNodeClick}
-                onEdgeClick={handleEdgeClick}
                 searchTerm={searchTerm}
               />
+              {elements.length === 0 && !loading && (
+                <div className="no-data-message">
+                  이 챕터에 대한 관계 데이터가 없습니다.
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -297,4 +251,4 @@ const GraphPage = () => {
   );
 };
 
-export default GraphPage; 
+export default GraphPage;

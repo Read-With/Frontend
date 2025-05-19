@@ -12,6 +12,7 @@
   "dependencies": {
     "@ant-design/pro-components": "^2.8.7",
     "axios": "^1.8.4",
+    "cytoscape-cose-bilkent": "^4.1.0",
     "epubjs": "^0.3.93",
     "react": "^19.0.0",
     "react-cytoscapejs": "^2.0.0",
