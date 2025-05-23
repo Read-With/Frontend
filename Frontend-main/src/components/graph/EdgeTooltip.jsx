@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
 import "./RelationGraph.css";
 
-function EdgeTooltip({ data, x, y, onClose, sourceNode, targetNode }) {
+function EdgeTooltip({ data, x, y, onClose, sourceNode, targetNode, inViewer = false, style }) {
   const [position, setPosition] = useState({ x: 200, y: 200 });
   const [showContent, setShowContent] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
+  const [hasDragged, setHasDragged] = useState(false);
   const tooltipRef = useRef(null);
 
   useEffect(() => {
@@ -39,6 +40,7 @@ function EdgeTooltip({ data, x, y, onClose, sourceNode, targetNode }) {
     newY = Math.max(scrollY, Math.min(newY, viewportHeight + scrollY - tooltipRect.height));
 
     setPosition({ x: newX, y: newY });
+    setHasDragged(true);
   };
 
   const handleMouseUp = () => {
@@ -49,15 +51,19 @@ function EdgeTooltip({ data, x, y, onClose, sourceNode, targetNode }) {
     if (isDragging) {
       window.addEventListener('mousemove', handleMouseMove);
       window.addEventListener('mouseup', handleMouseUp);
+      document.body.style.userSelect = 'none'; // 드래그 중 텍스트 선택 방지
+    } else {
+      document.body.style.userSelect = '';
     }
     return () => {
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
+      document.body.style.userSelect = '';
     };
   }, [isDragging]);
 
   useEffect(() => {
-    if (x !== undefined && y !== undefined && tooltipRef.current) {
+    if (x !== undefined && y !== undefined && tooltipRef.current && !isDragging && !hasDragged) {
       const tooltipRect = tooltipRef.current.getBoundingClientRect();
       const viewportWidth = Math.min(document.documentElement.clientWidth, window.innerWidth);
       const viewportHeight = Math.min(document.documentElement.clientHeight, window.innerHeight);
@@ -73,7 +79,7 @@ function EdgeTooltip({ data, x, y, onClose, sourceNode, targetNode }) {
 
       setPosition({ x: newX, y: newY });
     }
-  }, [x, y]);
+  }, [x, y, isDragging, hasDragged]);
 
   // positivity 값에 따른 색상과 텍스트 결정
   const getRelationStyle = (positivity) => {
@@ -85,6 +91,9 @@ function EdgeTooltip({ data, x, y, onClose, sourceNode, targetNode }) {
   };
 
   const relationStyle = getRelationStyle(data.positivity);
+  
+  // 뷰어 내에서 사용할 때는 z-index를 더 높게 설정
+  const zIndexValue = inViewer ? 10000 : 9999;
 
   return (
     <div
@@ -94,16 +103,17 @@ function EdgeTooltip({ data, x, y, onClose, sourceNode, targetNode }) {
         position: 'fixed',
         left: position.x,
         top: position.y,
-        zIndex: 1000,
+        zIndex: zIndexValue,
         opacity: showContent ? 1 : 0,
         transition: isDragging ? 'none' : 'opacity 0.3s ease-in-out',
-        cursor: isDragging ? 'grabbing' : 'grab'
+        cursor: isDragging ? 'grabbing' : 'grab',
+        width: '380px',
+        ...(style || {})
       }}
       onMouseDown={handleMouseDown}
     >
       <div className="edge-tooltip-content">
-        <button onClick={onClose} className="tooltip-close-btn">&times;</button>
-        
+        <button onClick={onClose} className="tooltip-close-btn" onMouseDown={e => e.stopPropagation()}>&times;</button>
         <div className="edge-tooltip-header">
           <div className="relation-tags">
             {data.label.split(', ').map((relation, index) => (

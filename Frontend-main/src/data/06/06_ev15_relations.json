@@ -1,0 +1,31 @@
+{
+    "title": "Gatsby tries to be a good host, but Mr. Sloane remains unimpressed.",
+    "start": 4656,
+    "end": 5011,
+    "text": "resting on his oars and looking up at the railed deck,\nthat yacht represented all the beauty and glamour in the world. I\nsuppose he smiled at Cody—he had probably discovered that people liked\nhim when he smiled. At any rate Cody asked him a few questions (one of\nthem elicited the brand new name) and found that he was quick and\nextravagantly ambitious. A",
+    "new_appearances": [],
+    "importance": {
+        "2": 0.06666666666666667,
+        "1": 1.0,
+        "3": 0.4666666666666667,
+        "4": 0.2,
+        "5": 0.13333333333333333,
+        "6": 0.06666666666666667,
+        "7": 0.2,
+        "8": 0.13333333333333333,
+        "9": 0.13333333333333333
+    },
+    "relations": [
+        {
+            "id1": 3.0,
+            "relation": [
+                "mentor",
+                "employer"
+            ],
+            "explanation": "Dan Cody ('Cody') asked him a few questions and found that he was quick and extravagantly ambitious.",
+            "id2": 1.0,
+            "positivity": 1.0,
+            "weight": 0.7
+        }
+    ]
+}

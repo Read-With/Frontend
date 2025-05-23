@@ -22,7 +22,7 @@ const ViewerProgressBar = ({
       background: darkMode ? 'rgba(34, 51, 107, 0.92)' : 'rgba(255,255,255,0.92)',
       borderRadius: 16,
       boxShadow: '0 2px 16px rgba(79,109,222,0.10)',
-      margin: '0.5rem auto 0.5rem auto',
+      margin: '0.5rem 0 0.5rem 1rem',
       maxWidth: 700,
     }}
   >

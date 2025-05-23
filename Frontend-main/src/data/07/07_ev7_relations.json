@@ -1,0 +1,50 @@
+{
+    "title": "Nick, Gatsby, Daisy, Tom, and Jordan gather in the salon. Tom is on the phone, and Pammy is introduced.",
+    "start": 1585,
+    "end": 2312,
+    "text": " and sisters. They used to run a small hotel.”\n\n“I see.”\n\nHe was calling up at Daisy’s request—would I come to lunch at her\nhouse tomorrow? Miss Baker would be there. Half an hour later Daisy\nherself telephoned and seemed relieved to find that I was\ncoming. Something was up. And yet I couldn’t believe that they would\nchoose this occasion for a scene—especially for the rather harrowing\nscene that Gatsby had outlined in the garden.\n\nThe next day was broiling, almost the last, certainly the warmest, of\nthe summer. As my train emerged from the tunnel into sunlight, only\nthe hot whistles of the National Biscuit Company broke the simmering\nhush at noon. The straw seats of the car hovered on the edge of\ncombustion; the woman",
+    "new_appearances": [
+        8,
+        12,
+        13
+    ],
+    "importance": {
+        "2": 0.6666666666666666,
+        "3": 0.16666666666666666,
+        "1": 1.0,
+        "4": 0.16666666666666666,
+        "5": 0.5,
+        "6": 0.16666666666666666,
+        "7": 0.3333333333333333,
+        "9": 0.16666666666666666,
+        "10": 0.16666666666666666,
+        "11": 0.16666666666666666,
+        "8": 0.16666666666666666,
+        "12": 0.16666666666666666,
+        "13": 0.16666666666666666
+    },
+    "relations": [
+        {
+            "explanation": "Gatsby's house lights are no longer on, marking the end of his extravagant parties. He fires his servants to prevent gossip about Daisy's visits.",
+            "relation": [
+                "employer",
+                "employee"
+            ],
+            "id1": 1.0,
+            "id2": 4.0,
+            "positivity": -0.5,
+            "weight": 0.7
+        },
+        {
+            "id1": 6.0,
+            "relation": [
+                "employer",
+                "employee"
+            ],
+            "explanation": "Wolfshiem wanted to do something for the people who are now Gatsby's servants.",
+            "id2": 4.0,
+            "positivity": 0.5,
+            "weight": 0.6
+        }
+    ]
+}

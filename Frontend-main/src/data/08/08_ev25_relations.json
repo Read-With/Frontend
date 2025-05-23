@@ -1,0 +1,53 @@
+{
+    "title": "Wilson's movements are traced to Port Roosevelt and Gad's Hill, where he bought a sandwich and coffee. He disappeared for three hours, possibly searching garages for a yellow car. ",
+    "start": 14772,
+    "end": 15265,
+    "text": "----------------------------------------------------------\n\nWhen I passed the ash-heaps on the train that morning I had crossed\ndeliberately to the other side of the car. I supposed there’d be a\ncurious crowd around there all day with little boys searching for dark\nspots in the dust, and some garrulous man telling over and over what\nhad happened, until it became less and less real even to him and he\ncould tell it no longer, and Myrtle Wilson’s tragic achievement was\nforgotten. Now I want ",
+    "new_appearances": [],
+    "importance": {
+        "2": 0.5833333333333334,
+        "1": 1.0,
+        "5": 0.08333333333333333,
+        "4": 0.25,
+        "3": 0.5833333333333334,
+        "11": 0.08333333333333333,
+        "6": 0.16666666666666666,
+        "7": 0.08333333333333333,
+        "8": 0.75,
+        "9": 0.08333333333333333,
+        "10": 0.8333333333333334
+    },
+    "relations": [
+        {
+            "explanation": "Nick thanks Gatsby for his hospitality, indicating a polite and somewhat formal relationship. Nick says 'I enjoyed breakfast, Gatsby.'",
+            "relation": [
+                "friendship"
+            ],
+            "id1": 2.0,
+            "id2": 1.0,
+            "positivity": 0.7,
+            "weight": 0.6
+        },
+        {
+            "explanation": "Gatsby desperately tries to hold onto the memory of Daisy, suggesting a strong romantic connection. There is no change in this event.",
+            "relation": [
+                "romantic"
+            ],
+            "id1": 1.0,
+            "id2": 3.0,
+            "positivity": 0.9,
+            "weight": 0.9
+        },
+        {
+            "relation": [
+                "annoyance",
+                "dislike"
+            ],
+            "explanation": "The conversation ends abruptly and Nick says 'I know I didn’t care. I couldn’t have talked to her across a tea-table that day if I never talked to her again', which indicates a negative shift in their relationship.",
+            "id1": 2.0,
+            "id2": 6.0,
+            "positivity": 0.2,
+            "weight": 0.7
+        }
+    ]
+}

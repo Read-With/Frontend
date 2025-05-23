@@ -1,0 +1,46 @@
+{
+    "title": "Tom suggests Gatsby look at the place, and they go to the veranda.",
+    "start": 2313,
+    "end": 2609,
+    "text": "next to me perspired delicately for a while into\nher white shirtwaist, and then, as her newspaper dampened under her\nfingers, lapsed despairingly into deep heat with a desolate cry. Her\npocketbook slapped to the floor.\n\n“Oh, my!” she gasped.\n\nI picked it up with a weary bend and handed it back t",
+    "new_appearances": [],
+    "importance": {
+        "2": 0.7142857142857143,
+        "3": 0.14285714285714285,
+        "1": 1.0,
+        "4": 0.14285714285714285,
+        "5": 0.42857142857142855,
+        "6": 0.14285714285714285,
+        "7": 0.2857142857142857,
+        "9": 0.14285714285714285,
+        "10": 0.14285714285714285,
+        "11": 0.14285714285714285,
+        "8": 0.2857142857142857,
+        "12": 0.14285714285714285,
+        "13": 0.14285714285714285
+    },
+    "relations": [
+        {
+            "explanation": "Gatsby's house lights are no longer on, marking the end of his extravagant parties. He fires his servants to prevent gossip about Daisy's visits.",
+            "id1": 1.0,
+            "relation": [
+                "employer",
+                "employee"
+            ],
+            "id2": 4.0,
+            "positivity": -0.5,
+            "weight": 0.7
+        },
+        {
+            "explanation": "Wolfshiem wanted to do something for the people who are now Gatsby's servants.",
+            "id1": 6.0,
+            "relation": [
+                "employer",
+                "employee"
+            ],
+            "id2": 4.0,
+            "positivity": 0.5,
+            "weight": 0.6
+        }
+    ]
+}

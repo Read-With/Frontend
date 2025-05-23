@@ -4,8 +4,14 @@ import { loadBookmarks, saveBookmarks } from './epub/BookmarkManager';
 
 const bookmarkColors = {
   normal: '#f4f7ff', // 연회색(이전 페이지와 통일)
-  important: '#ffe066', // 노랑
-  highlight: '#4F6DDE', // 파랑(이전 페이지와 통일)
+  important: '#fff3c2', // 노랑 (더 부드럽게)
+  highlight: '#e0e7ff', // 파랑(더 부드럽게)
+};
+
+const bookmarkBorders = {
+  normal: '#e7eaf7',
+  important: '#ffd600',
+  highlight: '#4F6DDE',
 };
 
 // 위치 정보 파싱 함수: 장 + 페이지까지만 표시
@@ -124,77 +130,191 @@ const BookmarksPage = () => {
     // ... 이하 생략
   };
 
+  // 북마크를 3개씩 그룹화하는 함수 (2개씩에서 3개씩으로 변경)
+  const getBookmarkGroups = () => {
+    const groups = [];
+    for (let i = 0; i < bookmarks.length; i += 3) {
+      groups.push([
+        bookmarks[i],
+        i + 1 < bookmarks.length ? bookmarks[i + 1] : null,
+        i + 2 < bookmarks.length ? bookmarks[i + 2] : null
+      ]);
+    }
+    return groups;
+  };
+
+  // 카드 너비 계산 (3개 기준)
+  const cardWidth = 'calc((100% - 2.4rem) / 3)'; // 1.2rem 간격 * 2 = 2.4rem
+
+  const renderBookmark = (bm, bIdx, isLast) => {
+    // 마지막 요소가 아닌 경우에만 오른쪽 여백 추가
+    const marginRight = isLast ? '0' : '1.2rem';
+    
+    if (!bm) return (
+      <div
+        style={{
+          flex: '0 0 calc(33.33% - 0.8rem)',
+          marginRight: marginRight,
+          visibility: 'hidden'
+        }}
+      />
+    );
+
   return (
-      <div style={{ maxWidth: 600, margin: '0 auto', marginTop: '2.5rem', background: '#fff', borderRadius: 20, boxShadow: '0 8px 32px rgba(79,109,222,0.18)', padding: '2.2rem 2rem 2rem 2rem', position: 'relative' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1.5px solid #e7eaf7', paddingBottom: '1.1rem', marginBottom: '2rem' }}>
-          <h2 style={{ fontSize: '1.35rem', fontWeight: 800, color: '#22336b', letterSpacing: '-1px' }}>📑 내 북마크 목록</h2>
-          <button
-            style={{ fontSize: '1.7rem', color: '#bfc8e6', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 700, borderRadius: 8, width: 36, height: 36, display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'background 0.18s, color 0.18s' }}
-            onClick={() => navigate(-1)}
-            aria-label="닫기"
-            onMouseOver={e => e.currentTarget.style.background = '#f4f7ff'}
-            onMouseOut={e => e.currentTarget.style.background = 'none'}
-          >
-            ×
-          </button>
-        </div>
-        <ul style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', padding: 0, margin: 0, listStyle: 'none' }}>
-          {bookmarks.length === 0 && (
-            <li style={{ color: '#bfc8e6', textAlign: 'center', padding: '3rem 0', fontWeight: 600, fontSize: '1.1rem' }}>저장된 북마크가 없습니다.</li>
-          )}
-          {bookmarks.map((bm, bIdx) => (
-            <li
+      <div
               key={bIdx}
               style={{
                 background: bookmarkColors[bm.color || 'normal'],
-                borderRadius: 16,
+          borderRadius: 12,
                 boxShadow: '0 2px 10px rgba(79,109,222,0.07)',
-                padding: '1.3rem 1.2rem',
+          padding: '1.2rem',
                 display: 'flex',
                 flexDirection: 'column',
                 gap: '0.7rem',
-                border: '1.5px solid #e7eaf7',
+          border: `1px solid ${bookmarkBorders[bm.color || 'normal']}`,
                 position: 'relative',
-                fontFamily: "'Pretendard', 'Noto Sans KR', 'Inter', 'Segoe UI', 'Arial', sans-serif"
+          fontFamily: "'Pretendard', 'Noto Sans KR', 'Inter', 'Segoe UI', 'Arial', sans-serif",
+          flex: '0 0 calc(33.33% - 0.8rem)',
+          marginRight: marginRight,
+          height: '100%',
+          maxWidth: 'calc(33.33% - 0.8rem)',
+          boxSizing: 'border-box',
+          overflow: 'hidden'
               }}
             >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '1.2rem', marginBottom: '0.2rem' }}>
-                <span style={{ fontSize: '0.98rem', color: '#6b7280' }}>{new Date(bm.createdAt).toLocaleString()}</span>
-                <span style={{ fontSize: '0.98rem', color: '#4F6DDE', fontFamily: 'monospace' }}>위치: {parseCfiToChapterPage(bm.cfi)}</span>
+        <div style={{ 
+          display: 'flex', 
+          alignItems: 'center', 
+          gap: '0.5rem', 
+          borderBottom: '1px solid rgba(0,0,0,0.05)', 
+          paddingBottom: '0.5rem' 
+        }}>
+          <div style={{ 
+            width: 24, 
+            height: 24, 
+            borderRadius: '50%', 
+            background: '#6C8EFF', 
+            display: 'flex', 
+            alignItems: 'center', 
+            justifyContent: 'center', 
+            color: 'white', 
+            fontSize: '0.8rem', 
+            fontWeight: 'bold' 
+          }}>
+            📑
+          </div>
+          <span style={{ 
+            fontSize: '0.85rem', 
+            color: '#22336b', 
+            fontWeight: 600, 
+            flex: 1, 
+            whiteSpace: 'nowrap', 
+            overflow: 'hidden', 
+            textOverflow: 'ellipsis' 
+          }}>
+            {parseCfiToChapterPage(bm.cfi)}
+          </span>
+          <span style={{ 
+            fontSize: '0.75rem', 
+            color: '#6b7280', 
+            whiteSpace: 'nowrap' 
+          }}>
+            {new Date(bm.createdAt).toLocaleDateString()}
+          </span>
               </div>
+
               {/* 메모 리스트 */}
-              <div>
+        <div style={{ flex: 1, minHeight: '80px' }}>
                 {(bm.memos && bm.memos.length > 0) ? (
-                  <ul style={{ display: 'flex', flexDirection: 'column', gap: '0.7rem', padding: 0, margin: 0, listStyle: 'none' }}>
+            <ul style={{ 
+              display: 'flex', 
+              flexDirection: 'column', 
+              gap: '0.5rem', 
+              padding: 0, 
+              margin: 0, 
+              listStyle: 'none', 
+              maxHeight: '120px', 
+              overflowY: 'auto' 
+            }}>
                     {bm.memos.map((m, mIdx) => (
-                      <li key={mIdx} style={{ display: 'flex', alignItems: 'center', gap: '0.7rem', background: '#f8f9fc', borderRadius: 8, padding: '0.3rem 0.7rem' }}>
+                <li key={mIdx} style={{ 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  gap: '0.5rem', 
+                  background: 'rgba(255,255,255,0.7)', 
+                  borderRadius: 6, 
+                  padding: '0.3rem 0.5rem',
+                  fontSize: '0.85rem'
+                }}>
                         {editingMemo.bIdx === bIdx && editingMemo.mIdx === mIdx ? (
                           <>
                             <input
                               value={editingMemo.text}
                               onChange={e => setEditingMemo((prev) => ({ ...prev, text: e.target.value }))}
-                              style={{ fontSize: '0.98rem', padding: '0.2rem 0.5rem', borderRadius: 6, border: '1.5px solid #e7eaf7', outline: 'none', flex: 1 }}
+                        style={{ 
+                          fontSize: '0.85rem', 
+                          padding: '0.2rem 0.5rem', 
+                          borderRadius: 6, 
+                          border: '1px solid #e7eaf7', 
+                          outline: 'none', 
+                          flex: 1 
+                        }}
                               autoFocus
                             />
                             <button
-                              style={{ fontSize: '0.95rem', color: '#4F6DDE', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 700 }}
+                        style={{ 
+                          fontSize: '0.8rem', 
+                          color: '#4F6DDE', 
+                          background: 'none', 
+                          border: 'none', 
+                          cursor: 'pointer', 
+                          fontWeight: 700 
+                        }}
                               onClick={handleEditMemoSave}
                             >저장</button>
                             <button
-                              style={{ fontSize: '0.95rem', color: '#bfc8e6', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 700 }}
+                        style={{ 
+                          fontSize: '0.8rem', 
+                          color: '#bfc8e6', 
+                          background: 'none', 
+                          border: 'none', 
+                          cursor: 'pointer', 
+                          fontWeight: 700 
+                        }}
                               onClick={() => setEditingMemo({})}
                             >취소</button>
                           </>
                         ) : (
                           <>
-                            <span style={{ fontSize: '0.98rem', color: '#22336b', fontWeight: 600 }}>{m.text}</span>
-                            <span style={{ fontSize: '0.93rem', color: '#bfc8e6' }}>{new Date(m.createdAt).toLocaleTimeString()}</span>
+                      <span style={{ 
+                        fontSize: '0.85rem', 
+                        color: '#22336b', 
+                        fontWeight: 500, 
+                        flex: 1,
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap'
+                      }}>{m.text}</span>
                             <button
-                              style={{ fontSize: '1.1rem', color: '#4F6DDE', background: 'none', border: 'none', cursor: 'pointer', marginLeft: 'auto' }}
+                        style={{ 
+                          fontSize: '0.9rem', 
+                          color: '#4F6DDE', 
+                          background: 'none', 
+                          border: 'none', 
+                          cursor: 'pointer', 
+                          padding: '0 0.2rem' 
+                        }}
                               onClick={() => handleEditMemo(bIdx, mIdx, m.text)}
                             >✏️</button>
                             <button
-                              style={{ fontSize: '1.1rem', color: '#f87171', background: 'none', border: 'none', cursor: 'pointer' }}
+                        style={{ 
+                          fontSize: '0.9rem', 
+                          color: '#f87171', 
+                          background: 'none', 
+                          border: 'none', 
+                          cursor: 'pointer', 
+                          padding: '0 0.2rem' 
+                        }}
                               onClick={() => handleDeleteMemo(bIdx, mIdx)}
                             >🗑</button>
                           </>
@@ -202,66 +322,227 @@ const BookmarksPage = () => {
                       </li>
                     ))}
                   </ul>
-                ) : null}
+          ) : (
+            <div style={{ 
+              fontSize: '0.85rem', 
+              color: '#94a3b8', 
+              fontStyle: 'italic', 
+              padding: '0.5rem 0' 
+            }}>
+              메모 없음
+            </div>
+          )}
               </div>
+
               {/* 새 메모 입력 */}
-              <div style={{ display: 'flex', gap: '0.7rem', marginTop: '0.2rem' }}>
+        <div style={{ display: 'flex', gap: '0.5rem' }}>
                 <input
                   type="text"
-                  style={{ fontSize: '0.98rem', padding: '0.2rem 0.7rem', borderRadius: 6, border: '1.5px solid #e7eaf7', outline: 'none', flex: 1, background: '#f8f9fc', transition: 'border 0.18s' }}
+            style={{ 
+              fontSize: '0.85rem', 
+              padding: '0.3rem 0.7rem', 
+              borderRadius: 6, 
+              border: '1px solid #e7eaf7', 
+              outline: 'none', 
+              flex: 1, 
+              background: 'white' 
+            }}
                   value={newMemo[bIdx] || ''}
                   onChange={e => setNewMemo(prev => ({ ...prev, [bIdx]: e.target.value }))}
                   placeholder="메모 추가"
                   onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleAddMemo(bIdx); } }}
                 />
                 <button
-                  style={{ fontSize: '0.98rem', background: '#6C8EFF', color: '#fff', border: 'none', borderRadius: 6, padding: '0.2rem 1.1rem', fontWeight: 700, cursor: 'pointer', boxShadow: '0 2px 8px rgba(79,109,222,0.07)', transition: 'background 0.18s' }}
+            style={{ 
+              fontSize: '0.85rem', 
+              background: '#6C8EFF', 
+              color: '#fff', 
+              border: 'none', 
+              borderRadius: 6, 
+              padding: '0.3rem 0.7rem', 
+              fontWeight: 600, 
+              cursor: 'pointer',
+              whiteSpace: 'nowrap'
+            }}
                   onClick={() => handleAddMemo(bIdx)}
-                  onMouseOver={e => e.currentTarget.style.background = '#5A7BFF'}
-                  onMouseOut={e => e.currentTarget.style.background = '#6C8EFF'}
                 >추가</button>
               </div>
-              {/* 오른쪽: 바로가기/색상/삭제 */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.7rem', marginTop: '0.5rem' }}>
-                <button
-                  style={{ background: '#6C8EFF', color: '#fff', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: '0.98rem', padding: '0.3rem 1.1rem', cursor: 'pointer', boxShadow: '0 2px 8px rgba(79,109,222,0.07)', transition: 'background 0.18s' }}
-                  onClick={() => navigate(`/viewer/${filename}`, { state: { cfi: bm.cfi } })}
-                  onMouseOver={e => e.currentTarget.style.background = '#5A7BFF'}
-                  onMouseOut={e => e.currentTarget.style.background = '#6C8EFF'}
-                >
-                  바로가기
-                </button>
-                {/* 색상 구분 */}
+
+        {/* 하단 액션 버튼 */}
+        <div style={{ 
+          display: 'flex', 
+          alignItems: 'center', 
+          justifyContent: 'space-between', 
+          borderTop: '1px solid rgba(0,0,0,0.05)', 
+          paddingTop: '0.5rem' 
+        }}>
                 <div style={{ display: 'flex', gap: '0.3rem' }}>
                   <button
                     title="일반"
-                    style={{ width: 22, height: 22, borderRadius: '50%', border: '2px solid #e7eaf7', background: bookmarkColors.normal, boxShadow: bm.color === 'normal' ? '0 0 0 2px #4F6DDE' : 'none', outline: 'none', cursor: 'pointer', opacity: bm.color === 'normal' ? 1 : 0.6, transition: 'box-shadow 0.18s, opacity 0.18s' }}
+              style={{ 
+                width: 18, 
+                height: 18, 
+                borderRadius: '50%', 
+                border: `1px solid ${bookmarkBorders.normal}`, 
+                background: bookmarkColors.normal, 
+                boxShadow: bm.color === 'normal' ? '0 0 0 2px #4F6DDE' : 'none', 
+                outline: 'none', 
+                cursor: 'pointer', 
+                opacity: bm.color === 'normal' ? 1 : 0.6 
+              }}
                     onClick={() => handleChangeColor(bIdx, 'normal')}
                   />
                   <button
                     title="중요"
-                    style={{ width: 22, height: 22, borderRadius: '50%', border: '2px solid #ffe066', background: bookmarkColors.important, boxShadow: bm.color === 'important' ? '0 0 0 2px #FFD600' : 'none', outline: 'none', cursor: 'pointer', opacity: bm.color === 'important' ? 1 : 0.6, transition: 'box-shadow 0.18s, opacity 0.18s' }}
+              style={{ 
+                width: 18, 
+                height: 18, 
+                borderRadius: '50%', 
+                border: `1px solid ${bookmarkBorders.important}`, 
+                background: bookmarkColors.important, 
+                boxShadow: bm.color === 'important' ? '0 0 0 2px #FFD600' : 'none', 
+                outline: 'none', 
+                cursor: 'pointer', 
+                opacity: bm.color === 'important' ? 1 : 0.6 
+              }}
                     onClick={() => handleChangeColor(bIdx, 'important')}
                   />
                   <button
                     title="강조"
-                    style={{ width: 22, height: 22, borderRadius: '50%', border: '2px solid #4F6DDE', background: bookmarkColors.highlight, boxShadow: bm.color === 'highlight' ? '0 0 0 2px #4F6DDE' : 'none', outline: 'none', cursor: 'pointer', opacity: bm.color === 'highlight' ? 1 : 0.6, transition: 'box-shadow 0.18s, opacity 0.18s' }}
+              style={{ 
+                width: 18, 
+                height: 18, 
+                borderRadius: '50%', 
+                border: `1px solid ${bookmarkBorders.highlight}`, 
+                background: bookmarkColors.highlight, 
+                boxShadow: bm.color === 'highlight' ? '0 0 0 2px #4F6DDE' : 'none', 
+                outline: 'none', 
+                cursor: 'pointer', 
+                opacity: bm.color === 'highlight' ? 1 : 0.6 
+              }}
                     onClick={() => handleChangeColor(bIdx, 'highlight')}
                   />
                 </div>
+          
+          <div style={{ display: 'flex', gap: '0.5rem' }}>
+            <button
+              style={{ 
+                background: '#6C8EFF', 
+                color: '#fff', 
+                border: 'none', 
+                borderRadius: 6, 
+                fontWeight: 600, 
+                fontSize: '0.85rem', 
+                padding: '0.3rem 0.7rem', 
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.3rem'
+              }}
+              onClick={() => navigate(`/viewer/${filename}`, { state: { cfi: bm.cfi } })}
+            >
+              <span style={{ fontSize: '0.7rem' }}>📖</span> 이동
+            </button>
                 <button
-                  style={{ background: '#f87171', color: '#fff', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: '0.98rem', padding: '0.3rem 1.1rem', cursor: 'pointer', boxShadow: '0 2px 8px rgba(79,109,222,0.07)', transition: 'background 0.18s' }}
+              style={{ 
+                background: '#f87171', 
+                color: '#fff', 
+                border: 'none', 
+                borderRadius: 6, 
+                fontWeight: 600, 
+                fontSize: '0.85rem', 
+                padding: '0.3rem 0.7rem', 
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.3rem'
+              }}
                   onClick={() => { if(window.confirm('정말 삭제하시겠습니까?')) handleDeleteBookmark(bm.cfi); }}
-                  onMouseOver={e => e.currentTarget.style.background = '#e53935'}
-                  onMouseOut={e => e.currentTarget.style.background = '#f87171'}
                 >
-                  삭제
+              <span style={{ fontSize: '0.7rem' }}>🗑</span> 삭제
                 </button>
               </div>
-            </li>
-          ))}
-        </ul>
+        </div>
       </div>
+    );
+  };
+
+  return (
+    <div style={{ padding: '2rem', maxWidth: '1200px', margin: '0 auto', fontFamily: "'Pretendard', 'Noto Sans KR', 'Inter', 'Segoe UI', 'Arial', sans-serif" }}>
+      <div style={{ marginBottom: '2rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <h1 style={{ margin: 0, fontSize: '1.8rem', color: '#22336b', fontWeight: 600 }}>북마크</h1>
+        <button
+          style={{
+            background: 'linear-gradient(135deg, #6C8EFF 0%, #5A7BFF 100%)',
+            color: 'white',
+            border: 'none',
+            padding: '0.6rem 1.2rem',
+            borderRadius: '0.5rem',
+            fontWeight: 500,
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.5rem',
+            boxShadow: '0 2px 8px rgba(108, 142, 255, 0.2)',
+            transition: 'all 0.2s ease',
+          }}
+          onClick={() => navigate(`/viewer/${cleanFilename}`)}
+        >
+          뷰어로 돌아가기
+        </button>
+      </div>
+
+      {/* 2행 2열에서 1행 3열로 변경 */}
+      {bookmarks.length === 0 ? (
+        <div style={{ 
+          textAlign: 'center', 
+          margin: '4rem 0', 
+          color: '#6b7280',
+          background: '#f8f9fc',
+          borderRadius: '1rem',
+          padding: '3rem',
+          boxShadow: '0 2px 8px rgba(0,0,0,0.05)'
+        }}>
+          <p style={{ fontSize: '1.1rem' }}>저장된 북마크가 없습니다.</p>
+          <p>책을 읽으면서 북마크를 추가해보세요!</p>
+          <button
+            style={{
+              background: '#6C8EFF',
+              color: 'white',
+              border: 'none',
+              padding: '0.6rem 1.2rem',
+              borderRadius: '0.5rem',
+              marginTop: '1rem',
+              fontWeight: 500,
+              cursor: 'pointer',
+            }}
+            onClick={() => navigate(`/viewer/${cleanFilename}`)}
+          >
+            뷰어로 돌아가기
+          </button>
+        </div>
+      ) : (
+        // 북마크 그룹(행)들
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.2rem' }}>
+          {getBookmarkGroups().map((group, gIdx) => (
+            <div key={gIdx} style={{ display: 'flex', gap: '1.2rem', minHeight: '200px' }}>
+              {group.map((bm, i) => 
+                bm ? renderBookmark(bm, gIdx * 3 + i, i === 2) : (
+                  <div 
+                    key={`empty-${i}`} 
+                    style={{ 
+                      flex: '0 0 calc(33.33% - 0.8rem)', 
+                      visibility: 'hidden',
+                      height: '100%' 
+                    }} 
+                  />
+                )
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
   );
 };
 

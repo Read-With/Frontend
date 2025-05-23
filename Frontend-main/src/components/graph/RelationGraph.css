@@ -106,7 +106,7 @@
   background: #fff;
   border-radius: 10px;
   box-shadow: 0 3px 18px #0001;
-  padding: 24px 20px 20px 20px;
+  padding: 20px 20px 20px 20px;
   z-index: 50;
   font-size: 15px;
   border: 1px solid #e3e6ef;
@@ -188,12 +188,12 @@
 }
 
 .node-tooltip .close-btn:hover {
-  color: #6c8eff;
+  color: #6C8EFF;
 }
 
 .node-tooltip .main-badge {
   display: inline-block;
-  background: #6c8eff;
+  background: #6C8EFF;
   color: #fff;
   font-size: 11px;
   border-radius: 6px;
@@ -321,10 +321,19 @@ node.highlighted {
   cursor: pointer;
 }
 
-html,
-body {
+html, body {
   overflow: auto !important;
   height: auto !important;
+}
+
+.graph-page-container {
+  width: 100vw;
+  height: 100vh;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background: #f4f7fb;
+  overflow: hidden;
 }
 
 .graph-page-bg {
@@ -333,7 +342,7 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 0;
+  padding: 2rem 0;
 }
 
 .graph-card {
@@ -341,19 +350,20 @@ body {
   border-radius: 16px;
   box-shadow: 0 2px 16px #0002, 0 1.5px 8px #1976d211;
   border: 1.5px solid #e3e6ef;
-  padding: 0 40px 0 40px;
+  padding: 2rem;
   min-width: 2000px;
   min-height: 700px;
-  max-width: 98vw;
-  max-height: 90vh;
+  max-width: 90vw;
+  max-height: 80vh;
   width: 2000px;
   height: 700px;
   display: flex;
-  flex-direction: row;
+  flex-direction: column;
   align-items: center;
   position: relative;
-  justify-content: flex-start;
+  justify-content: center;
   box-sizing: border-box;
+  margin: 3rem auto;
 }
 
 .graph-left-panel {
@@ -374,42 +384,56 @@ body {
 }
 
 .graph-canvas-area {
-  width: 100vw;
-  height: 100vh;
+  width: 100%;
+  height: 100%;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #f4f7fb;
+  background: #f8fafc;
   margin: 0;
-  padding: 0;
+  padding: 1rem 0.25rem 1rem 0.25rem;
   box-sizing: border-box;
+  flex: 1;
 }
 
 .graph-controls-area {
   width: 100%;
-  margin: 0;
+  margin: 0 0 1.5rem 0;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.search-container {
+  padding: 10px 20px;
+  background-color: white;
+  border-bottom: 1px solid #eaeaea;
+  z-index: 10;
   display: flex;
   justify-content: flex-start;
-  align-items: flex-start;
+  align-items: center;
 }
 
 .advanced-search-form {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 12px;
+  padding: 0.5rem;
   background: #fff;
   border-radius: 8px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+  margin: 0;
+  width: fit-content;
+  max-width: 400px;
 }
 
 .advanced-search-input {
-  width: 200px;
-  min-width: 120px;
-  max-width: 260px;
+  width: 180px;
+  min-width: 150px;
+  max-width: 220px;
   border: 1px solid #e3e6ef;
   border-radius: 6px;
-  padding: 8px 12px;
+  padding: 10px 12px;
   font-size: 14px;
   color: #42506b;
   background: #f8f9fc;
@@ -418,7 +442,7 @@ body {
 
 .advanced-search-input:focus {
   outline: none;
-  border-color: #6c8eff;
+  border-color: #6C8EFF;
   background: #fff;
   box-shadow: 0 0 0 2px rgba(108, 142, 255, 0.1);
 }
@@ -443,24 +467,61 @@ body {
 }
 
 .advanced-search-btn {
-  background: #6c8eff;
+  background: #6C8EFF;
   color: #fff;
   display: flex;
   align-items: center;
-  gap: 4px;
-  padding: 3px 10px;
+  justify-content: center;
+  gap: 6px;
+  padding: 0 14px;
   border: none;
   border-radius: 6px;
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 500;
   cursor: pointer;
   transition: all 0.2s;
   min-width: 50px;
+  height: 40px;
 }
 
 .advanced-search-btn:hover {
-  background: #5a7bff;
+  background: #5A7BFF;
   box-shadow: 0 2px 8px rgba(108, 142, 255, 0.2);
+  transform: translateY(-1px);
+}
+
+.advanced-search-btn:active {
+  transform: translateY(0);
+}
+
+.advanced-reset-btn {
+  background: #f8f9fc;
+  color: #42506b;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 0 14px;
+  border: 1px solid #e3e6ef;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  min-width: 50px;
+  margin-left: 8px;
+  height: 40px;
+}
+
+.advanced-reset-btn:hover {
+  background: #f1f3f9;
+  border-color: #d1d6e6;
+  box-shadow: 0 2px 8px rgba(66, 80, 107, 0.1);
+  transform: translateY(-1px);
+}
+
+.advanced-reset-btn:active {
+  transform: translateY(0);
 }
 
 .close-x-btn {
@@ -566,7 +627,7 @@ body {
 }
 
 .tooltip-arrow::after {
-  content: "";
+  content: '';
   position: absolute;
   top: -8px;
   left: 0;
@@ -602,8 +663,7 @@ body {
 }
 
 /* 타임라인, 북마크 등 다른 페이지에서는 스크롤 허용 */
-.timeline-view,
-.bookmarks-view {
+.timeline-view, .bookmarks-view {
   overflow-y: auto !important;
 }
 
@@ -628,7 +688,7 @@ body {
 
 .close-btn:hover {
   background-color: #f8f9fa;
-  color: #6c8eff;
+  color: #6C8EFF;
 }
 
 .close-btn svg {
@@ -648,7 +708,7 @@ body {
 
 .business-card-header {
   display: flex;
-  padding: 20px;
+  padding: 15px 20px;
   background: linear-gradient(135deg, #f8f9fb 0%, #f1f4f8 100%);
   border-bottom: 1px solid #eaedf2;
   gap: 20px;
@@ -656,8 +716,8 @@ body {
 }
 
 .profile-image-placeholder {
-  width: 60px;
-  height: 60px;
+  width: 50px;
+  height: 50px;
   background: linear-gradient(135deg, #e0e7ff 0%, #c7d2fe 100%);
   border-radius: 50%;
   display: flex;
@@ -668,12 +728,12 @@ body {
   margin-right: 16px;
   position: relative;
   overflow: hidden;
+  box-shadow: 0 2px 8px rgba(79, 70, 229, 0.15);
 }
 
-.profile-image-placeholder::after {
-  content: "👤";
-  font-size: 32px;
-  opacity: 0.7;
+.profile-image-placeholder span {
+  font-size: 28px;
+  opacity: 0.8;
 }
 
 .business-card-title {
@@ -707,8 +767,21 @@ body {
   box-shadow: 0 2px 4px rgba(79, 70, 229, 0.2);
 }
 
+.summary-badge {
+  display: inline-flex;
+  align-items: center;
+  background: linear-gradient(135deg, #6C8EFF 0%, #5A7BFF 100%);
+  color: white;
+  font-size: 11px;
+  font-weight: 500;
+  padding: 3px 8px;
+  border-radius: 12px;
+  margin-left: 8px;
+  box-shadow: 0 2px 4px rgba(108, 142, 255, 0.2);
+}
+
 .main-character-badge::before {
-  content: "⭐";
+  content: '⭐';
   margin-right: 4px;
   font-size: 10px;
 }
@@ -734,7 +807,8 @@ body {
 
 .business-card-body {
   padding: 20px;
-  max-height: 200px;
+  max-height: 350px;
+  overflow-y: auto;
 }
 
 .info-section {
@@ -871,7 +945,7 @@ body {
 }
 
 .direction-arrow::before {
-  content: "";
+  content: '';
   position: absolute;
   height: 2px;
   width: 24px;
@@ -881,7 +955,7 @@ body {
 }
 
 .direction-arrow::after {
-  content: "";
+  content: '';
   position: absolute;
   right: -4px;
   width: 8px;
@@ -915,7 +989,7 @@ body {
 }
 
 .weight-label::before {
-  content: "•";
+  content: '•';
   font-size: 20px;
   line-height: 1;
 }
@@ -1177,10 +1251,8 @@ body {
   flex-wrap: wrap;
 }
 
-.cy-node-label,
-.node-label {
-  font-family: "Pretendard", "Noto Sans KR", "Inter", "Segoe UI", "Arial",
-    sans-serif;
+.cy-node-label, .node-label {
+  font-family: 'Pretendard', 'Noto Sans KR', 'Inter', 'Segoe UI', 'Arial', sans-serif;
   font-weight: 600;
   font-size: 15px;
   letter-spacing: -0.5px;
@@ -1271,12 +1343,10 @@ body {
 }
 
 .profile-img {
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
+  width: 100%;
+  height: 100%;
   object-fit: cover;
-  background: #f3f4f6;
-  border: 1px solid #e5e7eb;
+  border-radius: 50%;
 }
 
 .quote-box {
@@ -1313,16 +1383,16 @@ body {
   min-width: 60px;
 }
 .epub-toolbar-btn--blue {
-  background: #6c8eff;
+  background: #6C8EFF;
   color: #fff;
-  border: 1.2px solid #6c8eff;
+  border: 1.2px solid #6C8EFF;
   box-shadow: 0 4px 16px rgba(108, 142, 255, 0.13);
 }
 .epub-toolbar-btn--purple {
   background: linear-gradient(100deg, #a259e6 0%, #7f6fff 60%, #6fa7ff 100%);
   color: #fff;
   border: 1.2px solid #a259e6;
-  box-shadow: 0 4px 16px rgba(162, 89, 230, 0.13);
+  box-shadow: 0 4px 16px rgba(162,89,230,0.13);
 }
 .epub-toolbar-btn--gray {
   background: #f8f9fc;
@@ -1334,16 +1404,16 @@ body {
   background: linear-gradient(100deg, #f87171 0%, #fca5a5 60%, #ffeaea 100%);
   color: #c82333;
   border: 1.2px solid #f87171;
-  box-shadow: 0 4px 16px rgba(248, 113, 113, 0.13);
+  box-shadow: 0 4px 16px rgba(248,113,113,0.13);
 }
 .epub-toolbar-btn:active {
   transform: scale(0.97);
 }
 .epub-toolbar-btn:focus {
-  box-shadow: 0 0 0 2px #6c8eff33;
+  box-shadow: 0 0 0 2px #6C8EFF33;
 }
 .epub-toolbar-btn--blue:hover {
-  background: #5a7bff;
+  background: #5A7BFF;
   color: #fff;
 }
 .epub-toolbar-btn--gray:hover {
@@ -1375,7 +1445,7 @@ body {
 .epub-bookmark-btn:hover {
   background: #e3e6ef;
   color: #22336b;
-  box-shadow: 0 2px 8px rgba(108, 142, 255, 0.1);
+  box-shadow: 0 2px 8px rgba(108, 142, 255, 0.10);
   text-decoration: none;
 }
 
@@ -1387,7 +1457,7 @@ body {
   color: #22336b;
   border: none;
   border-radius: 8px;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 2px 10px rgba(0,0,0,0.10);
   width: 40px;
   height: 40px;
   display: flex;
@@ -1401,7 +1471,7 @@ body {
 }
 .epub-close-btn:hover {
   background: #f8f9fa;
-  color: #6c8eff;
+  color: #6C8EFF;
   transform: scale(1.08);
 }
 
@@ -1413,8 +1483,273 @@ body {
   cursor: pointer;
 }
 
-/* 드래그 중인 노드 스타일 */
-node.dragging {
-  filter: drop-shadow(0 0 8px rgba(25, 118, 210, 0.3));
-  transition: filter 0.2s;
+/* 검색 컨테이너 */
+.search-container {
+  padding: 10px 20px;
+  background-color: white;
+  border-bottom: 1px solid #eaeaea;
+  z-index: 10;
+  display: flex;
+  justify-content: flex-start;
+}
+
+/* 챕터 선택 영역 - 파일 홀더 디자인 */
+.chapter-container {
+  padding: 0;
+  background-color: #f4f7fb;
+  z-index: 10;
+  overflow-x: auto;
+  border-bottom: 1px solid #e3e6ef;
+}
+
+.file-holder {
+  display: flex;
+  padding: 0 20px;
+}
+
+.file-tab {
+  position: relative;
+  min-width: 120px;
+  height: 40px;
+  margin-right: 5px;
+  background-color: #e3e6ef;
+  border-radius: 8px 8px 0 0;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.file-tab::before,
+.file-tab::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  width: 10px;
+  height: 10px;
+  background-color: #f4f7fb;
+  z-index: 1;
+}
+
+.file-tab::before {
+  left: -10px;
+  border-radius: 0 0 10px 0;
+  box-shadow: 5px 5px 0 5px #e3e6ef;
+}
+
+.file-tab::after {
+  right: -10px;
+  border-radius: 0 0 0 10px;
+  box-shadow: -5px 5px 0 5px #e3e6ef;
+}
+
+.file-tab.active {
+  background-color: #6C8EFF;
+  height: 45px;
+  margin-top: -5px;
+  z-index: 2;
+}
+
+.file-tab.active::before {
+  box-shadow: 5px 5px 0 5px #6C8EFF;
+}
+
+.file-tab.active::after {
+  box-shadow: -5px 5px 0 5px #6C8EFF;
+}
+
+.file-tab-content {
+  padding: 0 15px;
+  color: #42506b;
+  font-weight: 500;
+  font-size: 14px;
+  z-index: 2;
+  text-align: center;
+}
+
+.file-tab.active .file-tab-content {
+  color: white;
+}
+
+.chapter-number {
+  position: relative;
+  z-index: 2;
+}
+
+/* 그래프 노드 툴팁 크기 조정 */
+.graph-node-tooltip {
+  perspective: 1000px;
+  transform-style: preserve-3d;
+  width: 380px;
+  max-width: 90vw;
+  position: fixed;
+  z-index: 9999;
+}
+
+.graph-node-tooltip.flipped .tooltip-front {
+  transform: rotateY(180deg);
+}
+
+.graph-node-tooltip.flipped .tooltip-back {
+  transform: rotateY(0);
+}
+
+.tooltip-content.business-card {
+  width: 100%;
+  height: 100%;
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+  display: flex;
+  flex-direction: column;
+}
+
+.business-card-body {
+  max-height: 280px;
+  overflow-y: auto;
+  padding: 20px;
+  padding-right: 8px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  flex: 1;
+}
+
+/* 요약 텍스트 스타일 */
+.summary-text {
+  white-space: pre-wrap;
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.6;
+  color: #42506b;
+}
+
+/* 툴팁 앞면/뒷면 스타일 */
+.tooltip-front,
+.tooltip-back {
+  backface-visibility: hidden;
+  transition: transform 0.6s ease-in-out;
+  width: 100%;
+  height: 100%;
+  position: absolute;
+  top: 0;
+  left: 0;
+}
+
+/* 툴팁 액션 버튼 */
+.tooltip-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 20px;
+  padding-top: 15px;
+  border-top: 1px solid #f1f4f8;
+}
+
+.action-button {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: none;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.summary-btn {
+  background-color: #ffffff;
+  color: #42506b;
+  border: 1px solid #e3e6ef;
+  transition: all 0.2s ease;
+}
+
+.summary-btn:hover {
+  background-color: #f1f4f8;
+  box-shadow: 0 2px 8px rgba(66, 80, 107, 0.1);
+  transform: translateY(-1px);
+}
+
+.summary-btn:active {
+  transform: translateY(0);
+  box-shadow: 0 1px 4px rgba(66, 80, 107, 0.1);
+}
+
+.summary-btn svg {
+  color: #6b7280;
+}
+
+.chat-btn {
+  background: linear-gradient(135deg, #6C8EFF 0%, #5A7BFF 100%);
+  color: #ffffff;
+  box-shadow: 0 2px 8px rgba(108, 142, 255, 0.2);
+  font-weight: 600;
+  letter-spacing: 0.3px;
+}
+
+.chat-btn:hover {
+  background: linear-gradient(135deg, #5A7BFF 0%, #4A6BFF 100%);
+  color: #ffffff;
+  box-shadow: 0 2px 12px rgba(108, 142, 255, 0.3);
+  transform: translateY(-1px);
+}
+
+.chat-btn:active {
+  transform: translateY(0);
+  box-shadow: 0 1px 4px rgba(108, 142, 255, 0.2);
+}
+
+.chat-btn svg {
+  color: #ffffff;
+}
+
+.back-btn {
+  background-color: #f8f9fc;
+  color: #42506b;
+  border: 1px solid #e3e6ef;
+  transition: all 0.2s ease;
+}
+
+.back-btn:hover {
+  background-color: #f1f4f8;
+  box-shadow: 0 2px 8px rgba(66, 80, 107, 0.1);
+  transform: translateY(-1px);
+}
+
+.back-btn:active {
+  transform: translateY(0);
+  box-shadow: 0 1px 4px rgba(66, 80, 107, 0.1);
+}
+
+.back-btn svg {
+  color: #6b7280;
+}
+
+/* 스크롤바 스타일 */
+.business-card-body::-webkit-scrollbar {
+  width: 6px;
+}
+
+.business-card-body::-webkit-scrollbar-track {
+  background: #f1f4f8;
+  border-radius: 3px;
+}
+
+.business-card-body::-webkit-scrollbar-thumb {
+  background: #c7cad1;
+  border-radius: 3px;
+}
+
+.business-card-body::-webkit-scrollbar-thumb:hover {
+  background: #a0a4ad;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
 }

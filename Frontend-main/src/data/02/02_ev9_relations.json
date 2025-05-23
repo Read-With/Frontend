@@ -1,0 +1,120 @@
+{
+    "title": "The narrator gets drunk. Tom and Myrtle reappear.",
+    "start": 4936,
+    "end": 5226,
+    "text": "tely with the cement colour of the walls. A\nwhite ashen dust veiled his dark suit and his pale hair as it veiled\neverything in the vicinity—except his wife, who moved close to Tom.\n\n“I want to see you,” said Tom intently. “Get on the next train.”\n\n“All right.”\n\n“I’ll meet you by the newsst",
+    "new_appearances": [],
+    "importance": {
+        "1": 0.25,
+        "2": 1.0,
+        "3": 1.0,
+        "4": 0.125,
+        "5": 0.875,
+        "6": 0.125,
+        "7": 0.125,
+        "11": 0.125
+    },
+    "relations": [
+        {
+            "relation": [
+                "met"
+            ],
+            "id1": 3.0,
+            "explanation": "The narrator states 'I first met Tom Buchanan’s mistress'.",
+            "id2": 5.0,
+            "positivity": 0.5,
+            "weight": 0.75
+        },
+        {
+            "id1": 2.0,
+            "relation": [
+                "affair"
+            ],
+            "explanation": "The text mentions 'Tom Buchanan’s mistress'.",
+            "id2": 5.0,
+            "positivity": -0.8,
+            "weight": 0.9
+        },
+        {
+            "id1": 2.0,
+            "explanation": "The narrator describes Tom taking hold of his elbow and literally forcing him from the car, indicating a forceful interaction.",
+            "relation": [
+                "forced",
+                "company"
+            ],
+            "id2": 3.0,
+            "positivity": -0.6,
+            "weight": 0.8
+        },
+        {
+            "relation": [
+                "accompanied"
+            ],
+            "explanation": "The narrator says 'I followed him', indicating he is accompanying Tom.",
+            "id1": 3.0,
+            "id2": 2.0,
+            "positivity": 0.5,
+            "weight": 0.6
+        },
+        {
+            "id1": 3.0,
+            "explanation": "The narrator says 'George B. Wilson....and I followed Tom inside.'",
+            "relation": [
+                "followed"
+            ],
+            "id2": 4.0,
+            "positivity": 0.5,
+            "weight": 0.6
+        },
+        {
+            "explanation": "Tom slaps Wilson jovially on the shoulder and discusses business.",
+            "id1": 2.0,
+            "relation": [
+                "business"
+            ],
+            "id2": 4.0,
+            "positivity": 0.3,
+            "weight": 0.7
+        },
+        {
+            "relation": [
+                "wants to buy from"
+            ],
+            "id1": 4.0,
+            "explanation": "Wilson wants to buy a car from Tom and asks 'When are you going to sell me that car?'",
+            "id2": 2.0,
+            "positivity": 0.6,
+            "weight": 0.8
+        },
+        {
+            "explanation": "Tom responds coldly to Wilson's comment about the car, saying 'maybe I’d better sell it somewhere else after all.'",
+            "id1": 2.0,
+            "relation": [
+                "threatened"
+            ],
+            "id2": 4.0,
+            "positivity": -0.4,
+            "weight": 0.7
+        },
+        {
+            "relation": [
+                "met"
+            ],
+            "id1": 5.0,
+            "explanation": "Myrtle shakes hands with Tom, looking him flush in the eye.",
+            "id2": 2.0,
+            "positivity": 0.7,
+            "weight": 0.6
+        },
+        {
+            "id1": 5.0,
+            "relation": [
+                "disrespect"
+            ],
+            "explanation": "Myrtle walks 'through her husband as if he were a ghost'. She also speaks to him in a 'soft, coarse voice'.",
+            "id2": 4.0,
+            "positivity": -0.9,
+            "weight": 0.8
+        }
+    ]
+}

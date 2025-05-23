@@ -1,30 +1,17 @@
-// EpubViewerWrapper.jsx
 import React from "react";
 import { useParams } from "react-router-dom";
-import EpubViewer from "./EpubViewer";
+import EpubViewer from "./EpubViewer"; 
 
 const EpubViewerWrapper = () => {
   const { filename } = useParams();
 
-  // 상위 컨테이너에 flex 적용 확인
-  return (
-    <div
-      style={{
-        flex: 1,
-        height: "100vh",
-        borderRight: "1px solid #e7eaf7",
-        minWidth: 0, // 오버플로우 방지
-        position: "relative", // EPUB 뷰어 위치 기준
-      }}
-    >
-      <EpubViewer
-        book={{
-          path: `/${filename}`,
-          title: filename,
-        }}
-      />
-    </div>
-  );
+  // filename만 있을 때
+  const book = {
+    path: "/" + filename,   // public 폴더 기준 epub 파일 경로
+    title: filename,        // 필요시 제목 대신 파일명 사용
+  };
+
+  return <EpubViewer book={book} />;
 };
 
 export default EpubViewerWrapper;

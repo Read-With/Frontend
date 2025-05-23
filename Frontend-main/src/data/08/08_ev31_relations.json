@@ -1,0 +1,85 @@
+{
+    "title": "A new world, material without being real, where poor ghosts, breathing dreams like air, drifted fortuitously about. ",
+    "start": 16689,
+    "end": 16853,
+    "text": "nths ago his\nwife had come from the city with her face bruised and her nose\nswollen.\n\nBut when he heard himself say this, he flinched and began to cry “Oh,\nmy God!”",
+    "new_appearances": [],
+    "importance": {
+        "2": 0.3888888888888889,
+        "1": 1.0,
+        "5": 0.05555555555555555,
+        "4": 0.16666666666666666,
+        "3": 0.3888888888888889,
+        "11": 0.1111111111111111,
+        "6": 0.1111111111111111,
+        "7": 0.05555555555555555,
+        "8": 0.5,
+        "9": 0.05555555555555555,
+        "10": 0.5555555555555556
+    },
+    "relations": [
+        {
+            "id1": 2.0,
+            "explanation": "Nick thanks Gatsby for his hospitality, indicating a polite and somewhat formal relationship. Nick says 'I enjoyed breakfast, Gatsby.'",
+            "relation": [
+                "friendship"
+            ],
+            "id2": 1.0,
+            "positivity": 0.7,
+            "weight": 0.6
+        },
+        {
+            "relation": [
+                "romantic"
+            ],
+            "explanation": "Gatsby desperately tries to hold onto the memory of Daisy, suggesting a strong romantic connection. There is no change in this event.",
+            "id1": 1.0,
+            "id2": 3.0,
+            "positivity": 0.9,
+            "weight": 0.9
+        },
+        {
+            "id1": 2.0,
+            "relation": [
+                "annoyance",
+                "dislike"
+            ],
+            "explanation": "The conversation ends abruptly and Nick says 'I know I didn’t care. I couldn’t have talked to her across a tea-table that day if I never talked to her again', which indicates a negative shift in their relationship.",
+            "id2": 6.0,
+            "positivity": 0.2,
+            "weight": 0.7
+        },
+        {
+            "id1": 8.0,
+            "explanation": "George Wilson is rocking himself back and forth, indicating grief and distress over Myrtle's death.",
+            "relation": [
+                "grief",
+                "loss"
+            ],
+            "id2": 7.0,
+            "positivity": 0.1,
+            "weight": 0.8
+        },
+        {
+            "id1": 10.0,
+            "relation": [
+                "support",
+                "comfort"
+            ],
+            "explanation": "Michaelis stayed with George, trying to comfort him after Myrtle's death. The event indicates Michaelis stayed with Wilson until dawn, reinforcing their support.",
+            "id2": 8.0,
+            "positivity": 0.7,
+            "weight": 0.6
+        },
+        {
+            "relation": [
+                "abuse"
+            ],
+            "id1": 8.0,
+            "explanation": "George remembers his wife coming from the city with a bruised face and swollen nose, indicating abuse.",
+            "id2": 7.0,
+            "positivity": 0.05,
+            "weight": 0.9
+        }
+    ]
+}

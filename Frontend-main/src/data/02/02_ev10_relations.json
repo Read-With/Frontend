@@ -1,0 +1,147 @@
+{
+    "title": "Catherine and the McKees arrive. The narrator describes them.",
+    "start": 5227,
+    "end": 6064,
+    "text": "nd on the lower level.”\n\nShe nodded and moved away from him just as George Wilson emerged with\ntwo chairs from his office door.\n\nWe waited for her down the road and out of sight. It was a few days\nbefore the Fourth of July, and a grey, scrawny Italian child was\nsetting torpedoes in a row along the railroad track.\n\n“Terrible place, isn’t it,” said Tom, exchanging a frown with Doctor\nEckleburg.\n\n“Awful.”\n\n“It does her good to get away.”\n\n“Doesn’t her husband object?”\n\n“Wilson? He thinks she goes to see her sister in New York. He’s so\ndumb he doesn’t know he’s alive.”\n\nSo Tom Buchanan and his girl and I went up together to New York—or not\nquite together, for Mrs. Wilson sat discreetly in another car. Tom\ndeferred that much to the sensibilities of those East Eggers who might\nbe on the train.\n\nShe had changed her dress to a brown ",
+    "new_appearances": [
+        8,
+        9,
+        10
+    ],
+    "importance": {
+        "1": 0.2222222222222222,
+        "2": 1.0,
+        "3": 1.0,
+        "4": 0.1111111111111111,
+        "5": 0.8888888888888888,
+        "6": 0.1111111111111111,
+        "7": 0.1111111111111111,
+        "11": 0.1111111111111111,
+        "8": 0.1111111111111111,
+        "9": 0.1111111111111111,
+        "10": 0.1111111111111111
+    },
+    "relations": [
+        {
+            "explanation": "The narrator states 'I first met Tom Buchanan’s mistress'.",
+            "id1": 3.0,
+            "relation": [
+                "met"
+            ],
+            "id2": 5.0,
+            "positivity": 0.5,
+            "weight": 0.75
+        },
+        {
+            "explanation": "The text mentions 'Tom Buchanan’s mistress'.",
+            "id1": 2.0,
+            "relation": [
+                "affair"
+            ],
+            "id2": 5.0,
+            "positivity": -0.8,
+            "weight": 0.9
+        },
+        {
+            "id1": 2.0,
+            "explanation": "The narrator describes Tom taking hold of his elbow and literally forcing him from the car, indicating a forceful interaction.",
+            "relation": [
+                "forced",
+                "company"
+            ],
+            "id2": 3.0,
+            "positivity": -0.6,
+            "weight": 0.8
+        },
+        {
+            "explanation": "The narrator says 'I followed him', indicating he is accompanying Tom.",
+            "id1": 3.0,
+            "relation": [
+                "accompanied"
+            ],
+            "id2": 2.0,
+            "positivity": 0.5,
+            "weight": 0.6
+        },
+        {
+            "explanation": "The narrator says 'George B. Wilson....and I followed Tom inside.'",
+            "id1": 3.0,
+            "relation": [
+                "followed"
+            ],
+            "id2": 4.0,
+            "positivity": 0.5,
+            "weight": 0.6
+        },
+        {
+            "relation": [
+                "business"
+            ],
+            "id1": 2.0,
+            "explanation": "Tom slaps Wilson jovially on the shoulder and discusses business.",
+            "id2": 4.0,
+            "positivity": 0.3,
+            "weight": 0.7
+        },
+        {
+            "explanation": "Wilson wants to buy a car from Tom and asks 'When are you going to sell me that car?'",
+            "id1": 4.0,
+            "relation": [
+                "wants to buy from"
+            ],
+            "id2": 2.0,
+            "positivity": 0.6,
+            "weight": 0.8
+        },
+        {
+            "id1": 2.0,
+            "explanation": "Tom responds coldly to Wilson's comment about the car, saying 'maybe I’d better sell it somewhere else after all.'",
+            "relation": [
+                "threatened"
+            ],
+            "id2": 4.0,
+            "positivity": -0.4,
+            "weight": 0.7
+        },
+        {
+            "id1": 5.0,
+            "relation": [
+                "met"
+            ],
+            "explanation": "Myrtle shakes hands with Tom, looking him flush in the eye.",
+            "id2": 2.0,
+            "positivity": 0.7,
+            "weight": 0.6
+        },
+        {
+            "relation": [
+                "disrespect"
+            ],
+            "id1": 5.0,
+            "explanation": "Myrtle walks 'through her husband as if he were a ghost'. She also speaks to him in a 'soft, coarse voice'.",
+            "id2": 4.0,
+            "positivity": -0.9,
+            "weight": 0.8
+        },
+        {
+            "explanation": "Tom exchanges a frown with Doctor Eckleburg showing a negative sentiment.",
+            "id1": 2.0,
+            "relation": [
+                "disapproval"
+            ],
+            "id2": 1.0,
+            "positivity": -0.6,
+            "weight": 0.7
+        },
+        {
+            "id1": 2.0,
+            "explanation": "Tom refers to Wilson as 'dumb he doesn’t know he’s alive' showing a clear disrespect.",
+            "relation": [
+                "disrespect"
+            ],
+            "id2": 4.0,
+            "positivity": -0.9,
+            "weight": 0.8
+        }
+    ]
+}

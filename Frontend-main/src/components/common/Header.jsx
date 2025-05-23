@@ -1,26 +1,27 @@
 import React from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import './Header.css';
 
-const Header = () => {
-  const navigate = useNavigate();
-
-  return (
-    <header className="header">
-      <div className="container nav">
-        <a className="logo" onClick={() => navigate('/')}> 
-          <span role="img" aria-label="logo">📖</span>
-          <span>Readwith</span>
-        </a>
-        <nav>
-          <ul className="nav-links" style={{ alignItems: 'flex-end' }}>
-            <li><a className="nav-link" style={{ marginTop: '0.5rem' }} onClick={() => navigate('/')}>홈</a></li>
-            <li><a className="nav-link" style={{ marginTop: '0.5rem' }} onClick={() => navigate('/library')}>나의 서재</a></li>
-          </ul>
-        </nav>
+const Header = ({ userNickname }) => (
+  <div className="user-topbar">
+    <div className="user-topbar-left">
+      <div className="user-topbar-avatar" />
+      <Link to="/user/mypage" className="user-topbar-title-link">
+        <div className="user-topbar-title">Read With : __ {userNickname} __</div>
+      </Link>
+    </div>
+    
+    <div className="user-topbar-right">
+      <div className="user-topbar-nav">
+        <div className="user-topbar-tab">My Page</div>
+        <div className="user-topbar-tab">Settings</div>
       </div>
-    </header>
-  );
-};
+      <div className="user-topbar-search">
+        <input className="user-topbar-search-input" placeholder="Search in site" />
+        <span className="user-topbar-search-icon">🔍</span>
+      </div>
+    </div>
+  </div>
+);
 
-export default Header;
+export default Header; 

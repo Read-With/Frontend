@@ -1,0 +1,32 @@
+{
+    "title": "Wilson begins talking about the yellow car and reveals that Myrtle had come home with bruises. Michaelis tries to distract him. ",
+    "start": 10623,
+    "end": 11227,
+    "text": "nd\ndesperately as if to snatch only a wisp of air, to save a fragment of\nthe spot that she had made lovely for him. But it was all going by too\nfast now for his blurred eyes and he knew that he had lost that part\nof it, the freshest and the best, forever.\n\nIt was nine o’clock when we finished breakfast and went out on the\nporch. The night had made a sharp difference in the weather and there\nwas an autumn flavour in the air. The gardener, the last one of\nGatsby’s former servants, came to the foot of the steps.\n\n“I’m going to drain the pool today, Mr. Gatsby. Leaves’ll start\nfalling pretty soon, and",
+    "new_appearances": [],
+    "importance": {
+        "2": 0.5833333333333334,
+        "1": 1.0,
+        "5": 0.08333333333333333,
+        "4": 0.25,
+        "3": 0.5833333333333334,
+        "11": 0.08333333333333333,
+        "6": 0.16666666666666666,
+        "7": 0.08333333333333333,
+        "8": 0.25,
+        "9": 0.08333333333333333,
+        "10": 0.25
+    },
+    "relations": [
+        {
+            "id1": 1.0,
+            "explanation": "Gatsby desperately tries to hold onto the memory of Daisy, suggesting a strong romantic connection. The text mentions 'the spot that she had made lovely for him' and 'he knew that he had lost that part of it, the freshest and the best, forever.'",
+            "relation": [
+                "romantic"
+            ],
+            "id2": 3.0,
+            "positivity": 0.9,
+            "weight": 0.9
+        }
+    ]
+}

@@ -50,13 +50,18 @@ export default function CharacterRelationGraph({ elements }) {
       // 주요 인물 노드 찾기
       const mainCharacters = cy.nodes().filter((node) => node.data("main"));
 
-      // 모든 노드가 보이도록 뷰 조정
-      cy.fit(undefined, 30);
+      // 모든 노드가 보이도록 뷰 조정 (여백 추가)
+      cy.fit(undefined, 80);
 
       // 주요 인물이 있으면 중앙에 배치
       if (mainCharacters.length > 0) {
         cy.center(mainCharacters);
+      } else {
+        cy.center(); // 모든 노드의 중앙으로 뷰 조정
       }
+
+      // 그래프를 약간 축소하여 여백 확보
+      cy.zoom(cy.zoom() * 0.9);
 
       // 드래그 시작 이벤트
       cy.on("dragstart", "node", function () {

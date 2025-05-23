@@ -1,0 +1,45 @@
+{
+    "title": "Nick describes his family's history and his decision to move East to learn the bond business, financed by his father. He recounts finding a house in West Egg and his initial loneliness, which is alleviated when a man asks him for directions. Nick reflects on the promise of summer and his intention to become a 'well-rounded man.' He describes the unique geography of West and East Egg and his own modest house next to Gatsby's mansion. He mentions his upcoming dinner with Tom and Daisy Buchanan, whom he knows from college.",
+    "start": 920,
+    "end": 2801,
+    "text": "quently I have\nfeigned sleep, preoccupation, or a hostile levity when I realized by\nsome unmistakable sign that an intimate revelation was quivering on\nthe horizon; for the intimate revelations of young men, or at least\nthe terms in which they express them, are usually plagiaristic and\nmarred by obvious suppressions. Reserving judgements is a matter of\ninfinite hope. I am still a little afraid of missing something if I\nforget that, as my father snobbishly suggested, and I snobbishly\nrepeat, a sense of the fundamental decencies is parcelled out\nunequally at birth.\n\nAnd, after boasting this way of my tolerance, I come to the admission\nthat it has a limit. Conduct may be founded on the hard rock or the\nwet marshes, but after a certain point I don’t care what it’s founded\non. When I came back from the East last autumn I felt that I wanted\nthe world to be in uniform and at a sort of moral attention forever; I\nwanted no more riotous excursions with privileged glimpses into the\nhuman heart. Only Gatsby, the man who gives his name to this book, was\nexempt from my reaction—Gatsby, who represented everything for which I\nhave an unaffected scorn. If personality is an unbroken series of\nsuccessful gestures, then there was something gorgeous about him, some\nheightened sensitivity to the promises of life, as if he were related\nto one of those intricate machines that register earthquakes ten\nthousand miles away. This responsiveness had nothing to do with that\nflabby impressionability which is dignified under the name of the\n“creative temperament”—it was an extraordinary gift for hope, a\nromantic readiness such as I have never found in any other person and\nwhich it is not likely I shall ever find again. No—Gatsby turned out\nall right at the end; it is what preyed on Gatsby, what foul dust\nfloated in the wake of his dreams that temporarily closed out my\ninterest in ",
+    "new_appearances": [
+        3,
+        4,
+        5,
+        11,
+        12
+    ],
+    "importance": {
+        "1": 1.0,
+        "2": 1.0,
+        "3": 1.0,
+        "4": 1.0,
+        "5": 1.0,
+        "11": 1.0,
+        "12": 1.0
+    },
+    "relations": [
+        {
+            "relation": [
+                "father-son"
+            ],
+            "id1": 1.0,
+            "explanation": "Nick's father gave him advice, indicating a father-son relationship. \"my father gave me some advice\"",
+            "id2": 2.0,
+            "positivity": 0.9,
+            "weight": 0.9
+        },
+        {
+            "id1": 1.0,
+            "relation": [
+                "admiration",
+                "scorn"
+            ],
+            "explanation": "Nick says 'Only Gatsby, the man who gives his name to this book, was exempt from my reaction'. He also says 'Gatsby turned out all right at the end'. This indicates a complex relationship involving both scorn and admiration.",
+            "id2": 3.0,
+            "positivity": 0.6,
+            "weight": 0.7
+        }
+    ]
+}

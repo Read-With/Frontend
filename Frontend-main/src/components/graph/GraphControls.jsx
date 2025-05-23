@@ -1,5 +1,6 @@
 import React from "react";
 import "./RelationGraph.css";
+import { FaSearch, FaUndo } from "react-icons/fa";
 
 function GraphControls({
   searchInput,
@@ -14,6 +15,7 @@ function GraphControls({
   return (
     <form
       className="advanced-search-form"
+      style={{ margin: '0', maxWidth: '400px' }}
       onSubmit={(e) => {
         e.preventDefault();
         handleSearch(searchInput.trim());
@@ -21,23 +23,24 @@ function GraphControls({
     >
       <input
         className="advanced-search-input"
+        style={{ width: '180px' }}
         type="text"
         placeholder="인물 검색 (이름/별칭)"
         value={searchInput}
         onChange={(e) => setSearchInput(e.target.value)}
       />
       <button type="submit" className="advanced-search-btn">
-        검색
+        <FaSearch size={14} />
+        <span>검색</span>
       </button>
       {search && (
         <button
           type="button"
           className="advanced-reset-btn"
-          onClick={() => {
-            window.location.reload();
-          }}
+          onClick={handleReset}
         >
-          초기화
+          <FaUndo size={14} />
+          <span>초기화</span>
         </button>
       )}
     </form>

@@ -1,0 +1,26 @@
+{
+    "title": "Nick recounts advice from his father about reserving judgement, leading to both positive and negative social experiences. He reflects on his tolerance having limits, particularly towards the riotous excursions into the human heart. Nick expresses scorn for Gatsby, yet acknowledges something gorgeous about him, a heightened sensitivity and extraordinary gift for hope, but notes that something preyed on Gatsby and closed out Nick's interest in men's sorrows.",
+    "start": 0,
+    "end": 920,
+    "text": "                                  I\n\nIn my younger and more vulnerable years my father gave me some advice\nthat I’ve been turning over in my mind ever since.\n\n“Whenever you feel like criticizing anyone,” he told me, “just\nremember that all the people in this world haven’t had the advantages\nthat you’ve had.”\n\nHe didn’t say any more, but we’ve always been unusually communicative\nin a reserved way, and I understood that he meant a great deal more\nthan that. In consequence, I’m inclined to reserve all judgements, a\nhabit that has opened up many curious natures to me and also made me\nthe victim of not a few veteran bores. The abnormal mind is quick to\ndetect and attach itself to this quality when it appears in a normal\nperson, and so it came about that in college I was unjustly accused of\nbeing a politician, because I was privy to the secret griefs of wild,\nunknown men. Most of the confidences were unsought—fre",
+    "new_appearances": [
+        1,
+        2
+    ],
+    "importance": {
+        "1": 1.0,
+        "2": 1.0
+    },
+    "relations": [
+        {
+            "explanation": "Nick's father gave him advice, indicating a father-son relationship. \"my father gave me some advice\"",
+            "id1": 1.0,
+            "relation": [
+                "father-son"
+            ],
+            "id2": 2.0,
+            "positivity": 0.9,
+            "weight": 0.9
+        }
+    ]
+}

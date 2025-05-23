@@ -1,0 +1,321 @@
+{
+    "title": "Gatsby recalls a night five years before when he kissed Daisy and his life changed forever.",
+    "start": 12608,
+    "end": 13102,
+    "text": "ing\nI don’t know a soul here.”\n\n“Perhaps you know that lady.” Gatsby indicated a gorgeous, scarcely\nhuman orchid of a woman who sat in state under a white-plum tree. Tom\nand Daisy stared, with that peculiarly unreal feeling that accompanies\nthe recognition of a hitherto ghostly celebrity of the movies.\n\n“She’s lovely,” said Daisy.\n\n“The man bending over her is her director.”\n\nHe took them ceremoniously from group to group:\n\n“Mrs. Buchanan … and Mr. Buchanan—” After an instant’s hesitation ",
+    "new_appearances": [],
+    "importance": {
+        "2": 0.023255813953488372,
+        "1": 1.0,
+        "3": 0.16279069767441862,
+        "4": 0.06976744186046512,
+        "5": 0.5581395348837209,
+        "6": 0.023255813953488372,
+        "7": 0.4418604651162791,
+        "8": 0.16279069767441862,
+        "9": 0.16279069767441862,
+        "10": 0.4883720930232558,
+        "11": 0.046511627906976744,
+        "12": 0.046511627906976744,
+        "13": 0.046511627906976744,
+        "14": 0.023255813953488372,
+        "15": 0.046511627906976744
+    },
+    "relations": [
+        {
+            "explanation": "Tom was evidently perturbed at Daisy’s running around alone, for on\nthe following Saturday night he came with her to Gatsby’s\nparty.",
+            "id1": 7.0,
+            "relation": [
+                "marital conflict",
+                "jealousy",
+                "possessiveness"
+            ],
+            "id2": 10.0,
+            "positivity": -0.5,
+            "weight": 0.8
+        },
+        {
+            "explanation": "mostly I was in New York, trotting around with Jordan and trying to ingratiate myself with her senile aunt",
+            "id1": 5.0,
+            "relation": [
+                "friend",
+                "associate"
+            ],
+            "id2": 6.0,
+            "positivity": 0.6,
+            "weight": 0.4
+        },
+        {
+            "id1": 5.0,
+            "relation": [
+                "acquaintance"
+            ],
+            "explanation": "I hadn’t been there two minutes when somebody brought Tom Buchanan in for a drink.",
+            "id2": 7.0,
+            "positivity": 0.2,
+            "weight": 0.3
+        },
+        {
+            "explanation": "They were a party of three on horseback—Tom and a man named Sloane and\na pretty woman in a brown riding-habit, who had been there previously.",
+            "relation": [
+                "friend",
+                "associate"
+            ],
+            "id1": 7.0,
+            "id2": 8.0,
+            "positivity": 0.3,
+            "weight": 0.4
+        },
+        {
+            "relation": [
+                "friend",
+                "associate"
+            ],
+            "id1": 7.0,
+            "explanation": "They were a party of three on horseback—Tom and a man named Sloane and\na pretty woman in a brown riding-habit, who had been there previously.",
+            "id2": 9.0,
+            "positivity": 0.3,
+            "weight": 0.4
+        },
+        {
+            "explanation": "“I’m delighted to see you,” said Gatsby, standing on his porch. “I’m\ndelighted that you dropped in.”\n\nAs though they cared!",
+            "id1": 1.0,
+            "relation": [
+                "social"
+            ],
+            "id2": 7.0,
+            "positivity": 0.1,
+            "weight": 0.2
+        },
+        {
+            "id1": 1.0,
+            "explanation": "“I’m delighted to see you,” said Gatsby, standing on his porch. “I’m\ndelighted that you dropped in.”\n\nAs though they cared!",
+            "relation": [
+                "social"
+            ],
+            "id2": 8.0,
+            "positivity": 0.1,
+            "weight": 0.2
+        },
+        {
+            "id1": 1.0,
+            "explanation": "“I’m delighted to see you,” said Gatsby, standing on his porch. “I’m\ndelighted that you dropped in.”\n\nAs though they cared!",
+            "relation": [
+                "social"
+            ],
+            "id2": 9.0,
+            "positivity": 0.1,
+            "weight": 0.2
+        },
+        {
+            "id1": 1.0,
+            "explanation": "Moved by an irresistible impulse, Gatsby turned to Tom, who had accepted the introduction as a stranger.\n\nwe’ve met somewhere before, Mr. Buchanan.”\n\n“Oh, yes,” said Tom, gruffly polite, but obviously not remembering. “So we did. I remember very well.”\n\n“About two weeks ago.”\n\n“That’s right. You w",
+            "relation": [
+                "acquaintance"
+            ],
+            "id2": 7.0,
+            "positivity": 0.4,
+            "weight": 0.5
+        },
+        {
+            "explanation": "the woman said nothing either—until unexpectedly, after two highballs, she became cordial. “We’ll all come over to your next party, Mr. Gatsby,” she suggested. Gatsby replied “Certainly; I’d be delighted to have you.”",
+            "id1": 9.0,
+            "relation": [
+                "invited",
+                "social"
+            ],
+            "id2": 1.0,
+            "positivity": 0.7,
+            "weight": 0.6
+        },
+        {
+            "explanation": "“Be ver’ nice,” said Mr. Sloane, without gratitude. “Well—think ought to be starting home.”",
+            "relation": [
+                "disrespect"
+            ],
+            "id1": 8.0,
+            "id2": 1.0,
+            "positivity": -0.2,
+            "weight": 0.3
+        },
+        {
+            "id1": 9.0,
+            "explanation": "“You come to supper with me,” said the lady enthusiastically. “Both of you.” This included me.",
+            "relation": [
+                "invited"
+            ],
+            "id2": 5.0,
+            "positivity": 0.8,
+            "weight": 0.7
+        },
+        {
+            "id1": 9.0,
+            "relation": [
+                "invited"
+            ],
+            "explanation": "“You come to supper with me,” said the lady enthusiastically. “Both of you.”",
+            "id2": 8.0,
+            "positivity": 0.7,
+            "weight": 0.6
+        },
+        {
+            "explanation": "Gatsby looked at me questioningly. He wanted to go and he didn’t see that Mr. Sloane had determined he shouldn’t.",
+            "relation": [
+                "dislike"
+            ],
+            "id1": 1.0,
+            "id2": 8.0,
+            "positivity": -0.4,
+            "weight": 0.5
+        },
+        {
+            "id1": 8.0,
+            "explanation": "Mr. Sloane murmured something close to her ear. “We won’t be late if we start now,” she insisted aloud.",
+            "relation": [
+                "conspiracy"
+            ],
+            "id2": 9.0,
+            "positivity": 0.5,
+            "weight": 0.6
+        },
+        {
+            "relation": [
+                "marital conflict",
+                "jealousy"
+            ],
+            "explanation": "“My God, I believe the man’s coming,” said Tom. “Doesn’t he know she doesn’t want him?”\n\n“She says she does want him.”",
+            "id1": 7.0,
+            "id2": 10.0,
+            "positivity": -0.6,
+            "weight": 0.7
+        },
+        {
+            "explanation": "“Doesn’t he know she doesn’t want him?”\n\n“She says she does want him.”",
+            "id1": 10.0,
+            "relation": [
+                "romantic interest"
+            ],
+            "id2": 1.0,
+            "positivity": 0.7,
+            "weight": 0.8
+        },
+        {
+            "relation": [
+                "rivalry",
+                "dislike"
+            ],
+            "id1": 7.0,
+            "explanation": "“My God, I believe the man’s coming,” said Tom. “Doesn’t he know she doesn’t want him?”",
+            "id2": 1.0,
+            "positivity": -0.8,
+            "weight": 0.9
+        },
+        {
+            "id1": 7.0,
+            "explanation": "Tom and Gatsby shook hands",
+            "relation": [
+                "social",
+                "formal"
+            ],
+            "id2": 1.0,
+            "positivity": 0.2,
+            "weight": 0.3
+        },
+        {
+            "explanation": "while he remained with Cody he was in turn steward, mate, skipper, secretary, and even jailor, for Dan Cody sober knew what lavish doings Dan Cody drunk might soon be about, and he provided for such contingencies by reposing more and more trust in Gatsby. The arrangement lasted five years, during which the boat went three times around the Conti",
+            "relation": [
+                "mentor",
+                "employer",
+                "employee"
+            ],
+            "id1": 3.0,
+            "id2": 1.0,
+            "positivity": 1.0,
+            "weight": 0.9
+        },
+        {
+            "relation": [
+                "adversary",
+                "legal battle"
+            ],
+            "id1": 3.0,
+            "explanation": "from Cody that he inherited money—a legacy of twenty-five thousand dollars. He didn’t get it. He never understood the legal device that was used against him, but what remained of the millions went intact to Ella Kaye.",
+            "id2": 4.0,
+            "positivity": -0.8,
+            "weight": 0.7
+        },
+        {
+            "explanation": "Tom was evidently perturbed at Daisy’s running around alone, for on\nthe following Saturday night he came with her to Gatsby’s\nparty.",
+            "id1": 7.0,
+            "relation": [
+                "surveillance"
+            ],
+            "id2": 1.0,
+            "positivity": -0.6,
+            "weight": 0.5
+        },
+        {
+            "explanation": "Tom was evidently perturbed at Daisy’s running around alone, for on\nthe following Saturday night he came with her to Gatsby’s\nparty.",
+            "id1": 10.0,
+            "relation": [
+                "social"
+            ],
+            "id2": 1.0,
+            "positivity": 0.3,
+            "weight": 0.4
+        },
+        {
+            "explanation": "“These things excite me so,” she whispered. “If you want to kiss me any time during the evening, Nick, just let me know and I’ll be glad to arrange it for you. Just mention my name.",
+            "id1": 6.0,
+            "relation": [
+                "flirtation",
+                "romantic interest"
+            ],
+            "id2": 5.0,
+            "positivity": 0.9,
+            "weight": 0.7
+        },
+        {
+            "explanation": "Tom's arrogant eyes roamed the crowd. “We don’t go around very much,” he said",
+            "id1": 7.0,
+            "relation": [
+                "disapproval"
+            ],
+            "id2": 1.0,
+            "positivity": -0.3,
+            "weight": 0.4
+        },
+        {
+            "relation": [
+                "admiration"
+            ],
+            "id1": 10.0,
+            "explanation": "Gatsby indicated a gorgeous, scarcely human orchid of a woman who sat in state under a white-plum tree. Tom and Daisy stared...“She’s lovely,” said Daisy.",
+            "id2": 11.0,
+            "positivity": 0.8,
+            "weight": 0.6
+        },
+        {
+            "explanation": "Gatsby introduced 'Mrs. Buchanan … and Mr. Buchanan—' to other groups.",
+            "relation": [
+                "introduction",
+                "social"
+            ],
+            "id1": 1.0,
+            "id2": 10.0,
+            "positivity": 0.6,
+            "weight": 0.3
+        },
+        {
+            "explanation": "Gatsby introduced 'Mrs. Buchanan … and Mr. Buchanan—' to other groups.",
+            "id1": 1.0,
+            "relation": [
+                "introduction",
+                "social"
+            ],
+            "id2": 7.0,
+            "positivity": 0.6,
+            "weight": 0.3
+        }
+    ]
+}

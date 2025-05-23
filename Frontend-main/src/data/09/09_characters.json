@@ -1,0 +1,94 @@
+{
+    "characters": [
+        {
+            "names": [
+                "Gatsby"
+            ],
+            "description": "He is found dead in his house and the narrator feels responsible for him. He wanted the narrator to get somebody for him so he wouldn't be alone.",
+            "main_character": true,
+            "id": 1.0,
+            "common_name": "Gatsby"
+        },
+        {
+            "common_name": "Wilson",
+            "description": "He is found dead and someone refers to him as a 'madman'.  His suspicions of his wife are brought to light at the inquest.",
+            "main_character": false,
+            "id": 2.0,
+            "names": [
+                "Wilson"
+            ]
+        },
+        {
+            "names": [
+                "Michaelis"
+            ],
+            "description": "He gives testimony at the inquest regarding Wilson's suspicions of his wife.",
+            "main_character": false,
+            "id": 3.0,
+            "common_name": "Michaelis"
+        },
+        {
+            "names": [
+                "Catherine"
+            ],
+            "description": "She testifies that her sister was happy with her husband and had never met Gatsby. She convinces herself of her statements and cries.",
+            "main_character": false,
+            "id": 4.0,
+            "common_name": "Catherine"
+        },
+        {
+            "common_name": "Daisy",
+            "description": "She and Tom leave early that afternoon with baggage and leave no address. The narrator calls her after finding Gatsby.",
+            "main_character": true,
+            "id": 5.0,
+            "names": [
+                "Daisy"
+            ]
+        },
+        {
+            "names": [
+                "Tom"
+            ],
+            "description": "He and Daisy leave early that afternoon with baggage and leave no address.",
+            "main_character": false,
+            "id": 6.0,
+            "common_name": "Tom"
+        },
+        {
+            "names": [
+                "Meyer Wolfshiem"
+            ],
+            "description": "The narrator tries to contact him after Gatsby's death, but he is unavailable. He sends a letter expressing his shock and inability to get involved due to important business.",
+            "main_character": false,
+            "id": 7.0,
+            "common_name": "Meyer Wolfshiem"
+        },
+        {
+            "names": [
+                "Mr. Carraway"
+            ],
+            "description": "He feels responsible for Gatsby's death and tries to contact people for him. He reflects on the events following Gatsby's death and feels a sense of solidarity with him.",
+            "main_character": true,
+            "id": 8.0,
+            "common_name": "Narrator"
+        },
+        {
+            "common_name": "Dan Cody",
+            "description": "His picture is in Gatsby's desk, symbolizing a token of forgotten violence.",
+            "main_character": false,
+            "id": 9.0,
+            "names": [
+                "Dan Cody"
+            ]
+        },
+        {
+            "common_name": "Edgar",
+            "description": "Meyer Wolfshiem mentions to send a letter by Edgar.",
+            "main_character": false,
+            "id": 10.0,
+            "names": [
+                "Edgar"
+            ]
+        }
+    ]
+}

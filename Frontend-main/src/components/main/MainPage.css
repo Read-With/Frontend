@@ -1,3 +1,535 @@
+/* 메인 루트 */
+.main-root {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 80px 0 0 20px;
+  position: relative;
+  width: 1440px;
+  min-height: 100vh;
+  background: #fff;
+}
+
+/* Hero 섹션 */
+.main-hero-section {
+  display: flex;
+  flex-direction: row;
+  justify-content: center;
+  align-items: center;
+  padding: 60px 170px 60px 0px;
+  width: 1252px;
+  height: 520px;
+  isolation: isolate;
+}
+.main-hero-container {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  padding: 0;
+  gap: 24px;
+  width: 541px;
+  height: 228px;
+  z-index: 0;
+}
+.main-hero-title {
+  width: 541px;
+  height: 48px;
+  font-family: 'Roboto', sans-serif;
+  font-style: normal;
+  font-weight: 700;
+  font-size: 40px;
+  line-height: 48px;
+  color: #000;
+}
+.main-hero-description {
+  width: 541px;
+  height: 24px;
+  font-family: 'Roboto', sans-serif;
+  font-style: normal;
+  font-weight: 400;
+  font-size: 16px;
+  line-height: 24px;
+  color: #000;
+}
+.main-hero-buttons {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  padding: 0;
+  gap: 20px;
+  width: 420px;
+  height: 48px;
+}
+.main-btn-secondary {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  padding: 12px;
+  width: 200px;
+  height: 48px;
+  border: 1px solid #000;
+  border-radius: 8px;
+  background: #fff;
+  font-family: 'Roboto', sans-serif;
+  font-weight: 500;
+  font-size: 16px;
+  color: #000;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+.main-btn-secondary:hover {
+  background: #f5f5f5;
+}
+.main-btn-primary {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  padding: 12px;
+  width: 200px;
+  height: 48px;
+  background: #000;
+  border-radius: 8px;
+  font-family: 'Roboto', sans-serif;
+  font-weight: 500;
+  font-size: 16px;
+  color: #fff;
+  border: none;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+.main-btn-primary:hover {
+  background: #222;
+}
+.main-hero-tabs {
+  display: flex;
+  flex-direction: row;
+  justify-content: center;
+  align-items: center;
+  padding: 0;
+  gap: 12px;
+  width: 384px;
+  height: 36px;
+}
+.main-tab {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 8px;
+  gap: 4px;
+  width: 120px;
+  height: 36px;
+  background: rgba(217, 217, 217, 0.5);
+  border-radius: 6px;
+  font-family: 'Roboto', sans-serif;
+  font-weight: 400;
+  font-size: 14px;
+  color: #000;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+.main-tab:hover {
+  background: #e0e0e0;
+}
+.main-hero-image-container {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  padding: 0;
+  width: 541px;
+  height: 400px;
+  z-index: 1;
+}
+.main-hero-image {
+  width: 541px;
+  height: 400px;
+  background: rgba(217, 217, 217, 0.5);
+  border-radius: 12px;
+}
+
+/* 리스트 섹션 */
+.main-list-section {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: flex-start;
+  padding: 60px 60px 60px 0px;
+  gap: 60px;
+  isolation: isolate;
+  width: 1420px;
+  height: 552px;
+}
+.main-list-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 0;
+  gap: 24px;
+  width: 1360px;
+  height: 168px;
+  z-index: 0;
+}
+.main-list-title {
+  width: 520px;
+  height: 48px;
+  font-family: 'Roboto', sans-serif;
+  font-weight: 700;
+  font-size: 40px;
+  line-height: 48px;
+  text-align: center;
+  color: #000;
+}
+.main-list-description {
+  width: 520px;
+  height: 24px;
+  font-family: 'Roboto', sans-serif;
+  font-weight: 400;
+  font-size: 16px;
+  line-height: 24px;
+  text-align: center;
+  color: #000;
+}
+.main-list-buttons {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  padding: 0;
+  gap: 12px;
+  width: 240px;
+  height: 48px;
+}
+.main-list-list {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  padding: 0;
+  gap: 40px;
+  width: 1360px;
+  height: 204px;
+  z-index: 1;
+}
+.main-list-row {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  padding: 0;
+  gap: 40px;
+  width: 1360px;
+  height: 204px;
+}
+.main-list-item {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  padding: 12px 0;
+  gap: 20px;
+  width: 310px;
+  height: 204px;
+}
+.main-list-frame {
+  width: 100px;
+  height: 100px;
+  background: rgba(0, 0, 0, 0.05);
+  border-radius: 50px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+}
+.main-list-icon {
+  font-size: 62.5px;
+  color: #000;
+  line-height: 100px;
+  text-align: center;
+}
+.main-list-item-content {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  padding: 0;
+  gap: 8px;
+  width: 310px;
+  height: 60px;
+}
+.main-list-item-title {
+  width: 310px;
+  height: 28px;
+  font-family: 'Roboto', sans-serif;
+  font-size: 20px;
+  line-height: 28px;
+  text-align: center;
+  color: #000;
+}
+.main-list-item-subtitle {
+  width: 310px;
+  height: 24px;
+  font-family: 'Roboto', sans-serif;
+  font-size: 16px;
+  line-height: 24px;
+  text-align: center;
+  color: rgba(0,0,0,0.5);
+}
+
+/* 제품(추천 전자책) 섹션 */
+.main-products-section {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  padding: 60px;
+  gap: 60px;
+  isolation: isolate;
+  width: 1420px;
+  height: 768px;
+}
+.main-products-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 0;
+  gap: 24px;
+  width: 1300px;
+  height: 168px;
+  z-index: 0;
+}
+.main-products-title {
+  width: 520px;
+  height: 48px;
+  font-family: 'Roboto', sans-serif;
+  font-weight: 700;
+  font-size: 40px;
+  line-height: 48px;
+  text-align: center;
+  color: #000;
+}
+.main-products-description {
+  width: 520px;
+  height: 24px;
+  font-family: 'Roboto', sans-serif;
+  font-weight: 400;
+  font-size: 16px;
+  line-height: 24px;
+  text-align: center;
+  color: #000;
+}
+.main-products-buttons {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  padding: 0;
+  gap: 12px;
+  width: 240px;
+  height: 48px;
+}
+.main-products-list {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 0;
+  gap: 40px;
+  width: 1300px;
+  height: 420px;
+  z-index: 1;
+}
+.main-products-row {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  padding: 0;
+  gap: 40px;
+  width: 1300px;
+  height: 420px;
+}
+.main-products-card {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 0;
+  width: 406.67px;
+  height: 420px;
+  border: 1px solid rgba(0,0,0,0.1);
+  border-radius: 6px;
+}
+.main-products-image-container {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  padding: 0;
+  width: 406.67px;
+  height: 340px;
+  position: relative;
+}
+.main-products-image {
+  width: 406.67px;
+  height: 340px;
+  background: rgba(217, 217, 217, 0.5);
+  border-radius: 6px 6px 0 0;
+}
+.main-products-tag {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  padding: 4px 8px;
+  position: absolute;
+  width: 90px;
+  height: 24px;
+  left: 0;
+  top: 0;
+  background: rgba(0,0,0,0.05);
+  border-radius: 6px 0 0 0;
+  font-family: 'Roboto', sans-serif;
+  font-weight: 500;
+  font-size: 12px;
+  color: #000;
+}
+.main-products-text-content {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  padding: 12px;
+  gap: 4px;
+  width: 406.67px;
+  height: 80px;
+}
+.main-products-card-title {
+  width: 382.67px;
+  height: 24px;
+  font-family: 'Roboto', sans-serif;
+  font-size: 16px;
+  line-height: 24px;
+  color: #000;
+}
+.main-products-card-subtitle {
+  width: 382.67px;
+  height: 28px;
+  font-family: 'Roboto', sans-serif;
+  font-weight: 500;
+  font-size: 20px;
+  line-height: 28px;
+  color: #000;
+}
+
+/* 리뷰 섹션 */
+.main-reviews-section {
+  display: flex;
+  flex-direction: row;
+  justify-content: center;
+  align-items: center;
+  padding: 60px;
+  gap: 60px;
+  isolation: isolate;
+  width: 1420px;
+  height: 504px;
+}
+.main-reviews-container {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  padding: 0;
+  gap: 24px;
+  width: 620px;
+  height: 96px;
+  z-index: 0;
+}
+.main-reviews-title {
+  width: 620px;
+  height: 48px;
+  font-family: 'Roboto', sans-serif;
+  font-weight: 700;
+  font-size: 40px;
+  line-height: 48px;
+  color: #000;
+}
+.main-reviews-description {
+  width: 620px;
+  height: 24px;
+  font-family: 'Roboto', sans-serif;
+  font-weight: 400;
+  font-size: 16px;
+  line-height: 24px;
+  color: #000;
+}
+.main-reviews-list {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  padding: 20px 0;
+  gap: 40px;
+  width: 620px;
+  height: 384px;
+  z-index: 1;
+}
+.main-reviews-row {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  padding: 0;
+  gap: 40px;
+  width: 620px;
+  height: 152px;
+}
+.main-reviews-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 16px;
+  gap: 16px;
+  width: 240px;
+  height: 152px;
+  background: rgba(0,0,0,0.05);
+  border-radius: 6px;
+}
+.main-reviews-user {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  padding: 0;
+  gap: 4px;
+  width: 208px;
+  height: 32px;
+}
+.main-reviews-avatar {
+  width: 32px;
+  height: 32px;
+  background: rgba(0,0,0,0.1);
+  border-radius: 32px;
+}
+.main-reviews-username {
+  width: 105.74px;
+  height: 20px;
+  font-family: 'Roboto', sans-serif;
+  font-weight: 500;
+  font-size: 14px;
+  line-height: 20px;
+  color: #000;
+  margin-left: 8px;
+}
+.main-reviews-rating {
+  width: 58.26px;
+  height: 20px;
+  font-family: 'Roboto', sans-serif;
+  font-size: 16px;
+  color: #FFC700;
+  margin-left: 8px;
+}
+.main-reviews-card-title {
+  width: 208px;
+  height: 72px;
+  font-family: 'Roboto', sans-serif;
+  font-size: 16px;
+  line-height: 24px;
+  color: #000;
+  text-align: center;
+}
+
 .main-card {
   background: #fff;
   border-radius: 18px;
@@ -18,4 +550,127 @@
 .main-card:hover {
   box-shadow: 0 8px 32px rgba(79,109,222,0.13);
   transform: translateY(-4px) scale(1.03);
+}
+
+@media (max-width: 1200px) {
+  .main-root {
+    width: 100%;
+    padding-left: 0;
+  }
+  .main-hero-section,
+  .main-list-section,
+  .main-products-section,
+  .main-reviews-section {
+    width: 100%;
+    padding-left: 0;
+    padding-right: 0;
+    min-width: 0;
+  }
+  .main-hero-section {
+    flex-direction: column;
+    height: auto;
+    padding: 40px 0 0 0;
+    align-items: center;
+  }
+  .main-hero-container, .main-hero-image-container {
+    width: 90vw;
+    min-width: 0;
+    max-width: 600px;
+  }
+  .main-hero-image {
+    width: 100%;
+    height: 220px;
+  }
+  .main-list-section, .main-products-section, .main-reviews-section {
+    padding: 40px 0 0 0;
+    height: auto;
+  }
+  .main-list-row, .main-products-row, .main-reviews-row {
+    flex-wrap: wrap;
+    gap: 24px;
+    width: 100%;
+    justify-content: center;
+  }
+  .main-list-item, .main-products-card, .main-reviews-card {
+    width: 90vw;
+    max-width: 350px;
+    min-width: 220px;
+  }
+  .main-products-image-container, .main-products-image {
+    width: 100%;
+    height: 180px;
+    min-width: 0;
+  }
+}
+
+@media (max-width: 900px) {
+  .main-root {
+    width: 100vw;
+    min-width: 0;
+    padding: 40px 0 0 0;
+  }
+  .main-hero-title, .main-list-title, .main-products-title, .main-reviews-title {
+    font-size: 2rem;
+    width: 100%;
+    min-width: 0;
+  }
+  .main-hero-description, .main-list-description, .main-products-description, .main-reviews-description {
+    font-size: 1rem;
+    width: 100%;
+    min-width: 0;
+  }
+  .main-list-row, .main-products-row, .main-reviews-row {
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+  }
+  .main-list-item, .main-products-card, .main-reviews-card {
+    width: 95vw;
+    max-width: 400px;
+  }
+  .main-hero-container, .main-hero-image-container {
+    max-width: 95vw;
+    width: 95vw;
+  }
+}
+
+@media (max-width: 600px) {
+  .main-root {
+    padding: 16px 0 0 0;
+  }
+  .main-hero-title, .main-list-title, .main-products-title, .main-reviews-title {
+    font-size: 1.2rem;
+    line-height: 1.3;
+  }
+  .main-hero-description, .main-list-description, .main-products-description, .main-reviews-description {
+    font-size: 0.95rem;
+  }
+  .main-btn-primary, .main-btn-secondary {
+    width: 100%;
+    min-width: 0;
+    font-size: 1rem;
+    padding: 10px;
+    height: 40px;
+  }
+  .main-hero-tabs, .main-list-buttons, .main-products-buttons {
+    width: 100%;
+    min-width: 0;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .main-tab {
+    width: 100%;
+    min-width: 0;
+    font-size: 0.95rem;
+    height: 32px;
+  }
+  .main-list-item, .main-products-card, .main-reviews-card {
+    width: 98vw;
+    max-width: 98vw;
+    min-width: 0;
+    padding: 8px 0;
+  }
+  .main-products-image-container, .main-products-image {
+    height: 120px;
+  }
 } 

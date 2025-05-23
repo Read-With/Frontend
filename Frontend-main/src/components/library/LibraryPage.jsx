@@ -1,5 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import Header from '../common/Header';
+import UserProfile from '../common/UserProfile';
 import './LibraryPage.css';
 import { FaStar, FaRegStar } from 'react-icons/fa';
 import { FaSortAlphaDown, FaRegClock, FaSortAmountDown } from 'react-icons/fa';
@@ -39,13 +41,13 @@ const getProgress = (book) => {
   return progress ? parseInt(progress, 10) : 0;
 };
 
-const LibraryPage = ({ darkMode }) => {
+const LibraryPage = () => {
   const [books, setBooks] = useState([]);
   const [sort, setSort] = useState('title');
   const [showFav, setShowFav] = useState(false);
   const [favorites, setFavoritesState] = useState(getFavorites());
   const navigate = useNavigate();
-
+  
   useEffect(() => {
     fetch('/books.json')
       .then(res => res.json())
@@ -79,8 +81,16 @@ const LibraryPage = ({ darkMode }) => {
   const sortedBooks = sortBooks(filteredBooks, sort);
 
   return (
-    <div style={{ minHeight: '100vh', background: '#fafbfc' }}>
-      <div className="library-header-flex">
+    <div className="library-root">
+      {/* Top Bar - 항상 고정 */}
+      <Header userNickname="user Nickname" />
+      {/* Main Content */}
+      <div className="library-main">
+        {/* UserProfile 컴포넌트 추가 */}
+        <UserProfile userNickname="User's Nickname" onLogout={() => alert('로그아웃')} />
+        
+        {/* 라이브러리 헤더 섹션 */}
+        <div className="library-header-section">
         <div className="library-title">나의 서재</div>
         <div className="library-controls">
           <div className="library-sort-dropdown">
@@ -95,11 +105,14 @@ const LibraryPage = ({ darkMode }) => {
           </button>
         </div>
       </div>
-      {sortedBooks.length === 0 && (
+        
+        {/* 책 목록 섹션 */}
+        <div className="library-books-section">
+          {sortedBooks.length === 0 ? (
         <div className="library-empty">
           {showFav ? '즐겨찾기한 책이 없습니다.' : '책이 없습니다.'}
         </div>
-      )}
+          ) : (
       <div className="library-grid">
         {sortedBooks.map((book, idx) => {
           const progress = getProgress(book);
@@ -157,6 +170,9 @@ const LibraryPage = ({ darkMode }) => {
             </div>
           );
         })}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

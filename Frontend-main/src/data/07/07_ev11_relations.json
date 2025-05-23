@@ -1,0 +1,57 @@
+{
+    "title": "The group argues about going to town, and Daisy insists on having fun.",
+    "start": 3200,
+    "end": 3524,
+    "text": "d of the telephone bell out to Gatsby and me as we waited at\nthe door.\n\n“The master’s body?” roared the butler into the mouthpiece. “I’m\nsorry, madame, but we can’t furnish it—it’s far too hot to touch this\nnoon!”\n\nWhat he really said was: “Yes … Yes … I’ll see.”\n\nHe set down the receiver and came toward us, glistening sli",
+    "new_appearances": [],
+    "importance": {
+        "2": 0.5,
+        "3": 0.1,
+        "1": 1.0,
+        "4": 0.1,
+        "5": 0.6,
+        "6": 0.1,
+        "7": 0.4,
+        "9": 0.1,
+        "10": 0.1,
+        "11": 0.1,
+        "8": 0.5,
+        "12": 0.1,
+        "13": 0.1
+    },
+    "relations": [
+        {
+            "relation": [
+                "employer",
+                "employee"
+            ],
+            "id1": 1.0,
+            "explanation": "Gatsby's house lights are no longer on, marking the end of his extravagant parties. He fires his servants to prevent gossip about Daisy's visits.",
+            "id2": 4.0,
+            "positivity": -0.5,
+            "weight": 0.7
+        },
+        {
+            "explanation": "Wolfshiem wanted to do something for the people who are now Gatsby's servants.",
+            "id1": 6.0,
+            "relation": [
+                "employer",
+                "employee"
+            ],
+            "id2": 4.0,
+            "positivity": 0.5,
+            "weight": 0.6
+        },
+        {
+            "relation": [
+                "employee",
+                "employer"
+            ],
+            "explanation": "The butler answers the telephone.",
+            "id1": 3.0,
+            "id2": 1.0,
+            "positivity": 0.0,
+            "weight": 0.4
+        }
+    ]
+}

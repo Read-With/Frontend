@@ -1,0 +1,24 @@
+{
+    "relations": [
+        {
+            "explanation": "The narrator feels responsible for Gatsby's death because no one else is interested in him.",
+            "id1": 8.0,
+            "relation": [
+                "responsible"
+            ],
+            "id2": 1.0,
+            "positivity": -0.8,
+            "weight": 0.9
+        },
+        {
+            "id1": 8.0,
+            "explanation": "The narrator calls Daisy instinctively after finding Gatsby dead.",
+            "relation": [
+                "contacted"
+            ],
+            "id2": 5.0,
+            "positivity": 0.5,
+            "weight": 0.7
+        }
+    ]
+}

@@ -1,0 +1,72 @@
+{
+    "title": "Tom, Jordan, and Nick drive to Wilson's garage for gas, where they encounter a sick Wilson who suspects Myrtle is having an affair.",
+    "start": 4140,
+    "end": 4894,
+    "text": " husky, at the hall\ntelephone.\n\nGatsby stood in the centre of the crimson carpet and gazed around with\nfascinated eyes. Daisy watched him and laughed, her sweet, exciting\nlaugh; a tiny gust of powder rose from her bosom into the air.\n\n“The rumour is,” whispered Jordan, “that that’s Tom’s girl on the\ntelephone.”\n\nWe were silent. The voice in the hall rose high with annoyance: “Very\nwell, then, I won’t sell you the car at all … I’m under no obligations\nto you at all … and as for your bothering me about it at lunch time, I\nwon’t stand that at all!”\n\n“Holding down the receiver,” said Daisy cynically.\n\n“No, he’s not,” I assured her. “It’s a bona-fide deal. I happen to\nknow about it.”\n\nTom flung open the door, blocked out its space for a moment with ",
+    "new_appearances": [
+        14,
+        15
+    ],
+    "importance": {
+        "2": 0.5833333333333334,
+        "3": 0.08333333333333333,
+        "1": 1.0,
+        "4": 0.08333333333333333,
+        "5": 0.5833333333333334,
+        "6": 0.08333333333333333,
+        "7": 0.5,
+        "9": 0.08333333333333333,
+        "10": 0.08333333333333333,
+        "11": 0.08333333333333333,
+        "8": 0.6666666666666666,
+        "12": 0.08333333333333333,
+        "13": 0.08333333333333333,
+        "14": 0.08333333333333333,
+        "15": 0.08333333333333333
+    },
+    "relations": [
+        {
+            "id1": 1.0,
+            "explanation": "Gatsby's house lights are no longer on, marking the end of his extravagant parties. He fires his servants to prevent gossip about Daisy's visits.",
+            "relation": [
+                "employer",
+                "employee"
+            ],
+            "id2": 4.0,
+            "positivity": -0.5,
+            "weight": 0.7
+        },
+        {
+            "id1": 6.0,
+            "explanation": "Wolfshiem wanted to do something for the people who are now Gatsby's servants.",
+            "relation": [
+                "employer",
+                "employee"
+            ],
+            "id2": 4.0,
+            "positivity": 0.5,
+            "weight": 0.6
+        },
+        {
+            "explanation": "The butler announces the arrival of Gatsby and Nick and takes their hats.",
+            "relation": [
+                "employee",
+                "employer"
+            ],
+            "id1": 3.0,
+            "id2": 1.0,
+            "positivity": 0.0,
+            "weight": 0.4
+        },
+        {
+            "relation": [
+                "affair"
+            ],
+            "explanation": "Jordan whispers that the person on the telephone is 'Tom's girl'.",
+            "id1": 8.0,
+            "id2": 15.0,
+            "positivity": -0.8,
+            "weight": 0.9
+        }
+    ]
+}

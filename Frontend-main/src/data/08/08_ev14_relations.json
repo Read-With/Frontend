@@ -1,0 +1,28 @@
+{
+    "title": "Nick tries to call Gatsby's house but the line is busy. He makes a note of the three-fifty train and tries to think. ",
+    "start": 9136,
+    "end": 9321,
+    "text": "d—and loved me more even then, do you see?”\n\nSuddenly he came out with a curious remark.\n\n“In any case,” he said, “it was just personal.”\n\nWhat could you make of that, except to suspect",
+    "new_appearances": [],
+    "importance": {
+        "2": 0.5833333333333334,
+        "1": 1.0,
+        "5": 0.08333333333333333,
+        "4": 0.25,
+        "3": 0.5833333333333334,
+        "11": 0.08333333333333333,
+        "6": 0.16666666666666666
+    },
+    "relations": [
+        {
+            "id1": 1.0,
+            "explanation": "Gatsby states that Daisy might have loved Tom \"just for a minute, when they were first married\".",
+            "relation": [
+                "romantic"
+            ],
+            "id2": 3.0,
+            "positivity": 0.9,
+            "weight": 0.9
+        }
+    ]
+}

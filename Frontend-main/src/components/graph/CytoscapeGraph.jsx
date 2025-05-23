@@ -11,7 +11,8 @@ const CytoscapeGraph = React.forwardRef(
     tapNodeHandler,
     tapEdgeHandler,
     tapBackgroundHandler,
-    ripples = [] 
+    ripples = [],
+    style = {},
   }, ref) => {
     const cyRef = useRef(null);
 
@@ -62,23 +63,53 @@ const CytoscapeGraph = React.forwardRef(
       if (ref.current) {
         const cy = ref.current;
         cy.resize();
+        
+        // 노드 충돌 방지를 위한 레이아웃 실행
+        const layoutInstance = cy.layout(layout);
+        layoutInstance.run();
+        
+        // 레이아웃 완료 후 화면에 맞추기
+        cy.one("layoutstop", () => {
         if (fitNodeIds && fitNodeIds.length > 0) {
           const nodesToFit = cy.nodes().filter(n => fitNodeIds.includes(n.id()));
           if (nodesToFit.length > 0) {
-            cy.fit(nodesToFit, 120);
+            cy.fit(nodesToFit, 40);
           }
         } else {
-          cy.fit(undefined, 120);
+          cy.fit(undefined, 40);
         }
-        // boundingBox를 이용해 그래프를 왼쪽에 맞춤
+          
+          // 그래프를 중앙에 위치시키기
         const bb = cy.elements().boundingBox();
-        const pan = cy.pan();
-        cy.pan({ x: pan.x - bb.x1, y: pan.y });
+          const center = {
+            x: (bb.x1 + bb.x2) / 2,
+            y: (bb.y1 + bb.y2) / 2
+          };
+          
+          const containerCenter = {
+            x: cy.width() / 2,
+            y: cy.height() / 2
+          };
+          
+          cy.pan({
+            x: containerCenter.x - center.x,
+            y: containerCenter.y - center.y
+          });
+        });
       }
-    }, [elements, fitNodeIds, ref]);
+    }, [elements, fitNodeIds, ref, layout]);
+
+    // elements나 layout이 바뀔 때마다 강제로 fit/center 호출 (노드가 많아져도 항상 영역 안에 보이게)
+    useEffect(() => {
+      if (ref.current) {
+        const cy = ref.current;
+        cy.resize();
+        cy.fit(undefined, 40);
+        cy.center();
+      }
+    }, [elements, layout, ref]);
 
     const handleWheel = e => {
-      e.preventDefault();
       if (!cyRef.current) return;
       const cy = cyRef.current;
       const rect = e.currentTarget.getBoundingClientRect();
@@ -98,10 +129,10 @@ const CytoscapeGraph = React.forwardRef(
       <div
         className="graph-canvas-area"
         onWheel={handleWheel}
-        style={{ position: "relative", width: "100%", height: "100%" }}
+        style={{ position: "relative", width: "100%", height: "100%", ...style, overflow: 'hidden' }}
       >
         <CytoscapeComponent
-          elements={CytoscapeComponent.normalizeElements(elements)}
+          elements={elements}
           stylesheet={stylesheet}
           userZoomingEnabled={true}
           layout={layout}
@@ -110,10 +141,16 @@ const CytoscapeGraph = React.forwardRef(
             height: "100%",
             background: "#f8fafc",
             position: "relative",
+            ...style,
+            overflow: 'hidden',
           }}
           cy={cy => {
             cyRef.current = cy;
-            ref.current = cy;
+            if (typeof ref === 'function') {
+              ref(cy);
+            } else if (ref) {
+              ref.current = cy;
+            }
           }}
           className="cytoscape-graph"
         />

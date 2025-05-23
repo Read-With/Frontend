@@ -1,0 +1,60 @@
+{
+    "title": "Tom takes the narrator to meet Myrtle at Wilson's garage. Tom and Wilson discuss selling a car, and Myrtle appears.",
+    "start": 1409,
+    "end": 2683,
+    "text": "n, brood on over the solemn dumping ground.\n\nThe valley of ashes is bounded on one side by a small foul river, and,\nwhen the drawbridge is up to let barges through, the passengers on\nwaiting trains can stare at the dismal scene for as long as half an\nhour. There is always a halt there of at least a minute, and it was\nbecause of this that I first met Tom Buchanan’s mistress.\n\nThe fact that he had one was insisted upon wherever he was known. His\nacquaintances resented the fact that he turned up in popular cafés\nwith her and, leaving her at a table, sauntered about, chatting with\nwhomsoever he knew. Though I was curious to see her, I had no desire\nto meet her—but I did. I went up to New York with Tom on the train one\nafternoon, and when we stopped by the ash-heaps he jumped to his feet\nand, taking hold of my elbow, literally forced me from the car.\n\n“We’re getting off,” he insisted. “I want you to meet my girl.”\n\nI think he’d tanked up a good deal at luncheon, and his determination\nto have my company bordered on violence. The supercilious assumption\nwas that on Sunday afternoon I had nothing better to do.\n\nI followed him over a low whitewashed railroad fence, and we walked\nback a hundred yards along the road under Doctor Eckleburg’s\npersistent stare. The on",
+    "new_appearances": [
+        4,
+        5
+    ],
+    "importance": {
+        "1": 0.5,
+        "2": 1.0,
+        "3": 1.0,
+        "4": 0.5,
+        "5": 0.5
+    },
+    "relations": [
+        {
+            "explanation": "The narrator states 'I first met Tom Buchanan’s mistress'.",
+            "id1": 3.0,
+            "relation": [
+                "met"
+            ],
+            "id2": 5.0,
+            "positivity": 0.5,
+            "weight": 0.75
+        },
+        {
+            "explanation": "The text mentions 'Tom Buchanan’s mistress'.",
+            "relation": [
+                "affair"
+            ],
+            "id1": 2.0,
+            "id2": 5.0,
+            "positivity": -0.8,
+            "weight": 0.9
+        },
+        {
+            "relation": [
+                "forced",
+                "company"
+            ],
+            "id1": 2.0,
+            "explanation": "The narrator describes Tom taking hold of his elbow and literally forcing him from the car, indicating a forceful interaction.",
+            "id2": 3.0,
+            "positivity": -0.6,
+            "weight": 0.8
+        },
+        {
+            "id1": 3.0,
+            "explanation": "The narrator says 'I followed him', indicating he is accompanying Tom.",
+            "relation": [
+                "accompanied"
+            ],
+            "id2": 2.0,
+            "positivity": 0.5,
+            "weight": 0.6
+        }
+    ]
+}
