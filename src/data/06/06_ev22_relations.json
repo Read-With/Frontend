@@ -1,0 +1,46 @@
+{
+    "title": "Tom brings Daisy to Gatsby's party, creating an oppressive atmosphere.",
+    "start": 6714,
+    "end": 6999,
+    "text": "re with\nthe idea of exploding those first wild rumours about his antecedents,\nwhich weren’t even faintly true. Moreover he told it to me at a time\nof confusion, when I had reached the point of believing everything and\nnothing about him. So I take advantage of this short halt, while\nGa",
+    "new_appearances": [
+        10
+    ],
+    "importance": {
+        "2": 0.045454545454545456,
+        "1": 1.0,
+        "3": 0.3181818181818182,
+        "4": 0.13636363636363635,
+        "5": 0.4090909090909091,
+        "6": 0.045454545454545456,
+        "7": 0.45454545454545453,
+        "8": 0.3181818181818182,
+        "9": 0.3181818181818182,
+        "10": 0.045454545454545456
+    },
+    "relations": [
+        {
+            "id1": 3.0,
+            "explanation": "while he remained with Cody he was in turn steward, mate, skipper, secretary, and even jailor, for Dan Cody sober knew what lavish doings Dan Cody drunk might soon be about, and he provided for such contingencies by reposing more and more trust in Gatsby. The arrangement lasted five years, during which the boat went three times around the Conti",
+            "relation": [
+                "mentor",
+                "employer",
+                "employee"
+            ],
+            "id2": 1.0,
+            "positivity": 1.0,
+            "weight": 0.9
+        },
+        {
+            "explanation": "from Cody that he inherited money—a legacy of twenty-five thousand dollars. He didn’t get it. He never understood the legal device that was used against him, but what remained of the millions went intact to Ella Kaye.",
+            "relation": [
+                "adversary",
+                "legal battle"
+            ],
+            "id1": 3.0,
+            "id2": 4.0,
+            "positivity": -0.8,
+            "weight": 0.7
+        }
+    ]
+}

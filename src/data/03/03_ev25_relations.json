@@ -1,0 +1,127 @@
+{
+    "title": "Narrator's relationship with Jordan Baker",
+    "start": 8230,
+    "end": 8794,
+    "text": "ued Lucille sceptically; “It’s\nmore that he was a German spy during the war.”\n\nOne of the men nodded in confirmation.\n\n“I heard that from a man who knew all about him, grew up with him in\nGermany,” he assured us positively.\n\n“Oh, no,” said the first girl, “it couldn’t be that, because he was in\nthe American army during the war.” As our credulity switched back to\nher she leaned forward with enthusiasm. “You look at him sometimes\nwhen he thinks nobody’s looking at him. I’ll bet he killed a man.”\n\nShe narrowed her eyes and shivered. Lucille shivered. We all tur",
+    "new_appearances": [],
+    "importance": {
+        "3": 1.0,
+        "16": 0.3333333333333333,
+        "18": 0.06666666666666667,
+        "20": 0.06666666666666667,
+        "19": 0.06666666666666667,
+        "23": 0.13333333333333333,
+        "22": 0.13333333333333333,
+        "15": 0.06666666666666667,
+        "10": 0.13333333333333333,
+        "1": 0.6,
+        "21": 0.06666666666666667,
+        "2": 0.7333333333333333,
+        "5": 0.06666666666666667,
+        "4": 0.06666666666666667,
+        "6": 0.06666666666666667,
+        "7": 0.06666666666666667,
+        "8": 0.2,
+        "9": 0.06666666666666667,
+        "25": 0.06666666666666667,
+        "24": 0.06666666666666667,
+        "12": 0.13333333333333333,
+        "11": 0.06666666666666667,
+        "13": 0.06666666666666667
+    },
+    "relations": [
+        {
+            "id1": 2.0,
+            "explanation": "The girls leaning together confidentially and sharing rumors about Gatsby killing a man suggests a close, gossipy relationship. The phrase \"Somebody told me they thought he killed a man once\" indicates a shared interest in scandalous rumors about Gatsby.",
+            "relation": [
+                "shared rumor",
+                "gossip"
+            ],
+            "id2": 4.0,
+            "positivity": -0.2,
+            "weight": 0.5
+        },
+        {
+            "explanation": "The girls leaning together confidentially and sharing rumors about Gatsby killing a man suggests a close, gossipy relationship. The phrase \"Somebody told me they thought he killed a man once\" indicates a shared interest in scandalous rumors about Gatsby.",
+            "relation": [
+                "shared rumor",
+                "gossip"
+            ],
+            "id1": 2.0,
+            "id2": 5.0,
+            "positivity": -0.2,
+            "weight": 0.5
+        },
+        {
+            "explanation": "The girls leaning together confidentially and sharing rumors about Gatsby killing a man suggests a close, gossipy relationship. The phrase \"Somebody told me they thought he killed a man once\" indicates a shared interest in scandalous rumors about Gatsby.",
+            "id1": 4.0,
+            "relation": [
+                "shared rumor",
+                "gossip"
+            ],
+            "id2": 5.0,
+            "positivity": -0.2,
+            "weight": 0.5
+        },
+        {
+            "id1": 4.0,
+            "explanation": "The three Mr. Mumbles bent forward and listened eagerly to the rumors about Gatsby. This indicates they are interested in gossip about Gatsby.",
+            "relation": [
+                "interested in gossip"
+            ],
+            "id2": 6.0,
+            "positivity": 0.1,
+            "weight": 0.3
+        },
+        {
+            "explanation": "The three Mr. Mumbles bent forward and listened eagerly to the rumors about Gatsby. This indicates they are interested in gossip about Gatsby.",
+            "relation": [
+                "interested in gossip"
+            ],
+            "id1": 5.0,
+            "id2": 6.0,
+            "positivity": 0.1,
+            "weight": 0.3
+        },
+        {
+            "explanation": "The three Mr. Mumbles bent forward and listened eagerly to the rumors about Gatsby. This indicates they are interested in gossip about Gatsby.",
+            "relation": [
+                "interested in gossip"
+            ],
+            "id1": 2.0,
+            "id2": 6.0,
+            "positivity": 0.1,
+            "weight": 0.3
+        },
+        {
+            "relation": [
+                "subject of rumor"
+            ],
+            "id1": 1.0,
+            "explanation": "The girls are spreading rumors about Gatsby, suggesting a negative perception of him. The phrase \"It’s more that he was a German spy during the war\" and \"I'll bet he killed a man\" indicates a negative rumor.",
+            "id2": 4.0,
+            "positivity": -0.6,
+            "weight": 0.4
+        },
+        {
+            "relation": [
+                "subject of rumor"
+            ],
+            "id1": 1.0,
+            "explanation": "The girls are spreading rumors about Gatsby, suggesting a negative perception of him. The phrase \"It’s more that he was a German spy during the war\" and \"I'll bet he killed a man\" indicates a negative rumor.",
+            "id2": 5.0,
+            "positivity": -0.6,
+            "weight": 0.4
+        },
+        {
+            "relation": [
+                "subject of rumor"
+            ],
+            "explanation": "The Mr. Mumbles are listening to rumors about Gatsby, suggesting a negative perception of him. The phrase \"I heard that from a man who knew all about him, grew up with him in Germany,\" he assured us positively indicates a negative rumor.",
+            "id1": 1.0,
+            "id2": 6.0,
+            "positivity": -0.6,
+            "weight": 0.4
+        }
+    ]
+}

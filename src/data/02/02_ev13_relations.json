@@ -1,0 +1,164 @@
+{
+    "title": "Catherine tells the narrator about Gatsby and whispers about Tom and Myrtle's relationship.",
+    "start": 7216,
+    "end": 7813,
+    "text": " his hand and\ndrew one up, wriggling, by the back of the neck.\n\n“That’s no police dog,” said Tom.\n\n“No, it’s not exactly a police dog,” said the man with disappointment\nin his voice. “It’s more of an Airedale.” He passed his hand over the\nbrown washrag of a back. “Look at that coat. Some coat. That’s a dog\nthat’ll never bother you with catching cold.”\n\n“I think it’s cute,” said Mrs. Wilson enthusiastically. “How much is\nit?”\n\n“That dog?” He looked at it admiringly. “That dog will cost you ten\ndollars.”\n\nThe Airedale—undoubtedly there was an Airedale concerned in it\nsomewhere, though its fee",
+    "new_appearances": [],
+    "importance": {
+        "1": 0.16666666666666666,
+        "2": 1.0,
+        "3": 1.0,
+        "4": 0.08333333333333333,
+        "5": 0.9166666666666666,
+        "6": 0.08333333333333333,
+        "7": 0.08333333333333333,
+        "11": 0.08333333333333333,
+        "8": 0.25,
+        "9": 0.25,
+        "10": 0.25,
+        "12": 0.08333333333333333
+    },
+    "relations": [
+        {
+            "relation": [
+                "met"
+            ],
+            "id1": 3.0,
+            "explanation": "The narrator states 'I first met Tom Buchanan’s mistress'.",
+            "id2": 5.0,
+            "positivity": 0.5,
+            "weight": 0.75
+        },
+        {
+            "id1": 2.0,
+            "relation": [
+                "affair"
+            ],
+            "explanation": "The text mentions 'Tom Buchanan’s mistress'.",
+            "id2": 5.0,
+            "positivity": -0.8,
+            "weight": 0.9
+        },
+        {
+            "relation": [
+                "forced",
+                "company"
+            ],
+            "explanation": "The narrator describes Tom taking hold of his elbow and literally forcing him from the car, indicating a forceful interaction.",
+            "id1": 2.0,
+            "id2": 3.0,
+            "positivity": -0.6,
+            "weight": 0.8
+        },
+        {
+            "relation": [
+                "accompanied"
+            ],
+            "explanation": "The narrator says 'I followed him', indicating he is accompanying Tom.",
+            "id1": 3.0,
+            "id2": 2.0,
+            "positivity": 0.5,
+            "weight": 0.6
+        },
+        {
+            "relation": [
+                "followed"
+            ],
+            "explanation": "The narrator says 'George B. Wilson....and I followed Tom inside.'",
+            "id1": 3.0,
+            "id2": 4.0,
+            "positivity": 0.5,
+            "weight": 0.6
+        },
+        {
+            "id1": 2.0,
+            "relation": [
+                "business"
+            ],
+            "explanation": "Tom slaps Wilson jovially on the shoulder and discusses business.",
+            "id2": 4.0,
+            "positivity": 0.3,
+            "weight": 0.7
+        },
+        {
+            "id1": 4.0,
+            "relation": [
+                "wants to buy from"
+            ],
+            "explanation": "Wilson wants to buy a car from Tom and asks 'When are you going to sell me that car?'",
+            "id2": 2.0,
+            "positivity": 0.6,
+            "weight": 0.8
+        },
+        {
+            "relation": [
+                "threatened"
+            ],
+            "explanation": "Tom responds coldly to Wilson's comment about the car, saying 'maybe I’d better sell it somewhere else after all.'",
+            "id1": 2.0,
+            "id2": 4.0,
+            "positivity": -0.4,
+            "weight": 0.7
+        },
+        {
+            "relation": [
+                "met"
+            ],
+            "id1": 5.0,
+            "explanation": "Myrtle shakes hands with Tom, looking him flush in the eye.",
+            "id2": 2.0,
+            "positivity": 0.7,
+            "weight": 0.6
+        },
+        {
+            "id1": 5.0,
+            "relation": [
+                "disrespect"
+            ],
+            "explanation": "Myrtle walks 'through her husband as if he were a ghost'. She also speaks to him in a 'soft, coarse voice'.",
+            "id2": 4.0,
+            "positivity": -0.9,
+            "weight": 0.8
+        },
+        {
+            "explanation": "Tom exchanges a frown with Doctor Eckleburg showing a negative sentiment.",
+            "relation": [
+                "disapproval"
+            ],
+            "id1": 2.0,
+            "id2": 1.0,
+            "positivity": -0.6,
+            "weight": 0.7
+        },
+        {
+            "relation": [
+                "disrespect"
+            ],
+            "explanation": "Tom refers to Wilson as 'dumb he doesn’t know he’s alive' showing a clear disrespect.",
+            "id1": 2.0,
+            "id2": 4.0,
+            "positivity": -0.9,
+            "weight": 0.8
+        },
+        {
+            "relation": [
+                "customer"
+            ],
+            "id1": 5.0,
+            "explanation": "Mrs. Wilson asks the dog seller about the puppies, showing an interest in buying one: 'What kind are they?' asked Mrs. Wilson eagerly, as he came to the taxi-window.",
+            "id2": 7.0,
+            "positivity": 0.8,
+            "weight": 0.7
+        },
+        {
+            "id1": 5.0,
+            "explanation": "Mrs. Wilson says 'I think it’s cute' enthusiastically when referring to the dog.",
+            "relation": [
+                "wants to buy from"
+            ],
+            "id2": 7.0,
+            "positivity": 0.9,
+            "weight": 0.8
+        }
+    ]
+}

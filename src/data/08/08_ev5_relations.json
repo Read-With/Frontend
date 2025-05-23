@@ -1,0 +1,26 @@
+{
+    "title": "Gatsby recounts his love for Daisy, his ambitions fading as he fell deeper in love. He recalls a silent, intimate afternoon with Daisy before going abroad, cherishing the memory of their closeness before their impending separation. ",
+    "start": 3819,
+    "end": 4659,
+    "text": "her. As a matter of\nfact, he had no such facilities—he had no comfortable family standing\nbehind him, and he was liable at the whim of an impersonal government\nto be blown anywhere about the world.\n\nBut he didn’t despise himself and it didn’t turn out as he had\nimagined. He had intended, probably, to take what he could and go—but\nnow he found that he had committed himself to the following of a\ngrail. He knew that Daisy was extraordinary, but he didn’t realize\njust how extraordinary a “nice” girl could be. She vanished into her\nrich house, into her rich, full life, leaving Gatsby—nothing. He felt\nmarried to her, that was all.\n\nWhen they met again, two days later, it was Gatsby who was breathless,\nwho was, somehow, betrayed. Her porch was bright with the bought\nluxury of star-shine; the wicker of the settee squeaked fashionably as",
+    "new_appearances": [],
+    "importance": {
+        "2": 0.8,
+        "1": 1.0,
+        "5": 0.2,
+        "4": 0.2,
+        "3": 0.6
+    },
+    "relations": [
+        {
+            "explanation": "Gatsby felt married to Daisy after she left him, reinforcing their romantic connection.",
+            "id1": 1.0,
+            "relation": [
+                "romantic"
+            ],
+            "id2": 3.0,
+            "positivity": 0.8,
+            "weight": 0.8
+        }
+    ]
+}

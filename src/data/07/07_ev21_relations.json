@@ -1,0 +1,100 @@
+{
+    "title": "Tom questions Gatsby about being an Oxford man.",
+    "start": 6877,
+    "end": 7205,
+    "text": "ed out the door, just as Tom came back,\npreceding four gin rickeys that clicked full of ice.\n\nGatsby took up his drink.\n\n“They certainly look cool,” he said, with visible tension.\n\nWe drank in long, greedy swallows.\n\n“I read somewhere that the sun’s getting hotter every year,” said Tom\ngenially. “It seems that pretty soon the ",
+    "new_appearances": [],
+    "importance": {
+        "2": 0.8235294117647058,
+        "3": 0.058823529411764705,
+        "1": 1.0,
+        "4": 0.058823529411764705,
+        "5": 0.7647058823529411,
+        "6": 0.058823529411764705,
+        "7": 0.7647058823529411,
+        "9": 0.058823529411764705,
+        "10": 0.058823529411764705,
+        "11": 0.058823529411764705,
+        "8": 0.8823529411764706,
+        "12": 0.058823529411764705,
+        "13": 0.058823529411764705,
+        "14": 0.058823529411764705,
+        "15": 0.11764705882352941
+    },
+    "relations": [
+        {
+            "relation": [
+                "employer",
+                "employee"
+            ],
+            "explanation": "Gatsby's house lights are no longer on, marking the end of his extravagant parties. He fires his servants to prevent gossip about Daisy's visits.",
+            "id1": 1.0,
+            "id2": 4.0,
+            "positivity": -0.5,
+            "weight": 0.7
+        },
+        {
+            "explanation": "Wolfshiem wanted to do something for the people who are now Gatsby's servants.",
+            "relation": [
+                "employer",
+                "employee"
+            ],
+            "id1": 6.0,
+            "id2": 4.0,
+            "positivity": 0.5,
+            "weight": 0.6
+        },
+        {
+            "explanation": "The butler announces the arrival of Gatsby and Nick and takes their hats.",
+            "id1": 3.0,
+            "relation": [
+                "employee",
+                "employer"
+            ],
+            "id2": 1.0,
+            "positivity": 0.0,
+            "weight": 0.4
+        },
+        {
+            "explanation": "Jordan whispers that the person on the telephone is 'Tom's girl'.",
+            "relation": [
+                "affair"
+            ],
+            "id1": 8.0,
+            "id2": 15.0,
+            "positivity": -0.8,
+            "weight": 0.9
+        },
+        {
+            "relation": [
+                "lover"
+            ],
+            "explanation": "Daisy kisses Gatsby on the mouth and says 'You know I love you'",
+            "id1": 5.0,
+            "id2": 1.0,
+            "positivity": 0.9,
+            "weight": 0.9
+        },
+        {
+            "explanation": "Pammy rushed across the room and rooted shyly into her mother’s dress. Daisy says 'She looks like me. She’s got my hair and shape of the face.'",
+            "id1": 12.0,
+            "relation": [
+                "child",
+                "mother"
+            ],
+            "id2": 5.0,
+            "positivity": 0.9,
+            "weight": 0.8
+        },
+        {
+            "relation": [
+                "stranger"
+            ],
+            "explanation": "Gatsby kept looking at the child with surprise. I don’t think he had ever really believed in its existence before.",
+            "id1": 1.0,
+            "id2": 12.0,
+            "positivity": 0.2,
+            "weight": 0.6
+        }
+    ]
+}

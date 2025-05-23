@@ -1,0 +1,120 @@
+{
+    "title": "Tom insists Daisy and Gatsby go home together in Gatsby's car.",
+    "start": 9233,
+    "end": 9543,
+    "text": "t of the man,” she went on innocently.\n“You know the advertisement of the man—”\n\n“All right,” broke in Tom quickly, “I’m perfectly willing to go to\ntown. Come on—we’re all going to town.”\n\nHe got up, his eyes still flashing between Gatsby and his wife. No one\nmoved.\n\n“Come on!” His temper cracked a little. “W",
+    "new_appearances": [],
+    "importance": {
+        "2": 0.8695652173913043,
+        "3": 0.043478260869565216,
+        "1": 1.0,
+        "4": 0.043478260869565216,
+        "5": 0.8260869565217391,
+        "6": 0.043478260869565216,
+        "7": 0.8260869565217391,
+        "9": 0.043478260869565216,
+        "10": 0.043478260869565216,
+        "11": 0.043478260869565216,
+        "8": 0.9130434782608695,
+        "12": 0.043478260869565216,
+        "13": 0.043478260869565216,
+        "14": 0.043478260869565216,
+        "15": 0.08695652173913043
+    },
+    "relations": [
+        {
+            "id1": 1.0,
+            "explanation": "Gatsby's house lights are no longer on, marking the end of his extravagant parties. He fires his servants to prevent gossip about Daisy's visits.",
+            "relation": [
+                "employer",
+                "employee"
+            ],
+            "id2": 4.0,
+            "positivity": -0.5,
+            "weight": 0.7
+        },
+        {
+            "relation": [
+                "employer",
+                "employee"
+            ],
+            "explanation": "Wolfshiem wanted to do something for the people who are now Gatsby's servants.",
+            "id1": 6.0,
+            "id2": 4.0,
+            "positivity": 0.5,
+            "weight": 0.6
+        },
+        {
+            "relation": [
+                "employee",
+                "employer"
+            ],
+            "explanation": "The butler announces the arrival of Gatsby and Nick and takes their hats.",
+            "id1": 3.0,
+            "id2": 1.0,
+            "positivity": 0.0,
+            "weight": 0.4
+        },
+        {
+            "relation": [
+                "affair"
+            ],
+            "explanation": "Jordan whispers that the person on the telephone is 'Tom's girl'.",
+            "id1": 8.0,
+            "id2": 15.0,
+            "positivity": -0.8,
+            "weight": 0.9
+        },
+        {
+            "id1": 5.0,
+            "relation": [
+                "lover"
+            ],
+            "explanation": "Daisy kisses Gatsby on the mouth and says 'You know I love you'",
+            "id2": 1.0,
+            "positivity": 0.9,
+            "weight": 0.9
+        },
+        {
+            "id1": 12.0,
+            "explanation": "Pammy rushed across the room and rooted shyly into her mother’s dress. Daisy says 'She looks like me. She’s got my hair and shape of the face.'",
+            "relation": [
+                "child",
+                "mother"
+            ],
+            "id2": 5.0,
+            "positivity": 0.9,
+            "weight": 0.8
+        },
+        {
+            "explanation": "Gatsby kept looking at the child with surprise. I don’t think he had ever really believed in its existence before.",
+            "relation": [
+                "stranger"
+            ],
+            "id1": 1.0,
+            "id2": 12.0,
+            "positivity": 0.2,
+            "weight": 0.6
+        },
+        {
+            "explanation": "She had told him that she loved him, and Tom Buchanan saw.",
+            "id1": 8.0,
+            "relation": [
+                "rival"
+            ],
+            "id2": 1.0,
+            "positivity": -0.6,
+            "weight": 0.7
+        },
+        {
+            "id1": 8.0,
+            "relation": [
+                "spouse"
+            ],
+            "explanation": "She had told him that she loved him, and Tom Buchanan saw.",
+            "id2": 5.0,
+            "positivity": -0.4,
+            "weight": 0.8
+        }
+    ]
+}

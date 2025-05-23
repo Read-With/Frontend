@@ -1,0 +1,79 @@
+{
+    "title": "Tom speeds toward Astoria, worried about losing control of Daisy and Myrtle, and they meet up with Daisy and Gatsby.",
+    "start": 5115,
+    "end": 5425,
+    "text": "he got up and went over to Gatsby and\npulled his face down, kissing him on the mouth.\n\n“You know I love you,” she murmured.\n\n“You forget there’s a lady present,” said Jordan.\n\nDaisy looked around doubtfully.\n\n“You kiss Nick too.”\n\n“What a low, vulgar girl!”\n\n“I don’t care!” cried Daisy, and began to clog on t",
+    "new_appearances": [],
+    "importance": {
+        "2": 0.75,
+        "3": 0.08333333333333333,
+        "1": 1.0,
+        "4": 0.08333333333333333,
+        "5": 0.6666666666666666,
+        "6": 0.08333333333333333,
+        "7": 0.6666666666666666,
+        "9": 0.08333333333333333,
+        "10": 0.08333333333333333,
+        "11": 0.08333333333333333,
+        "8": 0.8333333333333334,
+        "12": 0.08333333333333333,
+        "13": 0.08333333333333333,
+        "14": 0.08333333333333333,
+        "15": 0.16666666666666666
+    },
+    "relations": [
+        {
+            "relation": [
+                "employer",
+                "employee"
+            ],
+            "id1": 1.0,
+            "explanation": "Gatsby's house lights are no longer on, marking the end of his extravagant parties. He fires his servants to prevent gossip about Daisy's visits.",
+            "id2": 4.0,
+            "positivity": -0.5,
+            "weight": 0.7
+        },
+        {
+            "id1": 6.0,
+            "relation": [
+                "employer",
+                "employee"
+            ],
+            "explanation": "Wolfshiem wanted to do something for the people who are now Gatsby's servants.",
+            "id2": 4.0,
+            "positivity": 0.5,
+            "weight": 0.6
+        },
+        {
+            "explanation": "The butler announces the arrival of Gatsby and Nick and takes their hats.",
+            "relation": [
+                "employee",
+                "employer"
+            ],
+            "id1": 3.0,
+            "id2": 1.0,
+            "positivity": 0.0,
+            "weight": 0.4
+        },
+        {
+            "id1": 8.0,
+            "relation": [
+                "affair"
+            ],
+            "explanation": "Jordan whispers that the person on the telephone is 'Tom's girl'.",
+            "id2": 15.0,
+            "positivity": -0.8,
+            "weight": 0.9
+        },
+        {
+            "id1": 5.0,
+            "relation": [
+                "lover"
+            ],
+            "explanation": "Daisy kisses Gatsby on the mouth and says 'You know I love you'",
+            "id2": 1.0,
+            "positivity": 0.9,
+            "weight": 0.9
+        }
+    ]
+}

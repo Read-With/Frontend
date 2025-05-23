@@ -1,0 +1,27 @@
+{
+    "title": "Nick thanks Gatsby for his hospitality and says goodbye. ",
+    "start": 7964,
+    "end": 8072,
+    "text": " at hand.\n\nThat force took shape in the middle of spring with the arrival of Tom\nBuchanan. There was a whole",
+    "new_appearances": [],
+    "importance": {
+        "2": 0.45454545454545453,
+        "1": 1.0,
+        "5": 0.09090909090909091,
+        "4": 0.2727272727272727,
+        "3": 0.5454545454545454,
+        "11": 0.09090909090909091
+    },
+    "relations": [
+        {
+            "explanation": "Gatsby kissed Daisy's \"curious and lovely mouth\", showing romantic affection. He was also \"overwhelmingly aware of the youth and mystery\" of Daisy. They had never been closer in their month of love, nor communicated more profoundly one with another, than when she brushed silent lips against his coat’s shoulder or when he touched the end of her fingers, gently, as though she were asleep.",
+            "id1": 1.0,
+            "relation": [
+                "romantic"
+            ],
+            "id2": 3.0,
+            "positivity": 0.9,
+            "weight": 0.9
+        }
+    ]
+}

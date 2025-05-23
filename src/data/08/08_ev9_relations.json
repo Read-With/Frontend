@@ -1,0 +1,27 @@
+{
+    "title": "Nick says goodbye to Gatsby, promising to call him. Gatsby hopes Daisy will call too. ",
+    "start": 7429,
+    "end": 7718,
+    "text": "the\nsad horns around the floor.\n\nThrough this twilight universe Daisy began to move again with the\nseason; suddenly she was again keeping half a dozen dates a day with\nhalf a dozen men, and drowsing asleep at dawn with the beads and\nchiffon of an evening-dress tangled among dying orchids ",
+    "new_appearances": [],
+    "importance": {
+        "2": 0.5555555555555556,
+        "1": 1.0,
+        "5": 0.1111111111111111,
+        "4": 0.3333333333333333,
+        "3": 0.6666666666666666,
+        "11": 0.1111111111111111
+    },
+    "relations": [
+        {
+            "relation": [
+                "romantic"
+            ],
+            "id1": 1.0,
+            "explanation": "Gatsby kissed Daisy's \"curious and lovely mouth\", showing romantic affection. He was also \"overwhelmingly aware of the youth and mystery\" of Daisy. They had never been closer in their month of love, nor communicated more profoundly one with another, than when she brushed silent lips against his coat’s shoulder or when he touched the end of her fingers, gently, as though she were asleep.",
+            "id2": 3.0,
+            "positivity": 0.9,
+            "weight": 0.9
+        }
+    ]
+}

@@ -1,0 +1,120 @@
+{
+    "title": "Gatsby plans to wait outside Daisy's house to protect her from Tom.",
+    "start": 12594,
+    "end": 12859,
+    "text": "alizing that Jordan and I must have known\nall along.\n\n“You think I’m pretty dumb, don’t you?” he suggested. “Perhaps I am,\nbut I have a—almost a second sight, sometimes, that tells me what to\ndo. Maybe you don’t believe that, but science—”\n\nHe paused. The immediate",
+    "new_appearances": [],
+    "importance": {
+        "2": 1.0,
+        "3": 0.037037037037037035,
+        "1": 0.9629629629629629,
+        "4": 0.037037037037037035,
+        "5": 0.8148148148148148,
+        "6": 0.07407407407407407,
+        "7": 0.8518518518518519,
+        "9": 0.037037037037037035,
+        "10": 0.037037037037037035,
+        "11": 0.037037037037037035,
+        "8": 1.0,
+        "12": 0.037037037037037035,
+        "13": 0.037037037037037035,
+        "14": 0.14814814814814814,
+        "15": 0.25925925925925924
+    },
+    "relations": [
+        {
+            "explanation": "Gatsby's house lights are no longer on, marking the end of his extravagant parties. He fires his servants to prevent gossip about Daisy's visits.",
+            "relation": [
+                "employer",
+                "employee"
+            ],
+            "id1": 1.0,
+            "id2": 4.0,
+            "positivity": -0.5,
+            "weight": 0.7
+        },
+        {
+            "explanation": "Wolfshiem wanted to do something for the people who are now Gatsby's servants.",
+            "relation": [
+                "employer",
+                "employee"
+            ],
+            "id1": 6.0,
+            "id2": 4.0,
+            "positivity": 0.5,
+            "weight": 0.6
+        },
+        {
+            "explanation": "The butler announces the arrival of Gatsby and Nick and takes their hats.",
+            "id1": 3.0,
+            "relation": [
+                "employee",
+                "employer"
+            ],
+            "id2": 1.0,
+            "positivity": 0.0,
+            "weight": 0.4
+        },
+        {
+            "relation": [
+                "affair"
+            ],
+            "explanation": "Jordan whispers that the person on the telephone is 'Tom's girl'.",
+            "id1": 8.0,
+            "id2": 15.0,
+            "positivity": -0.8,
+            "weight": 0.9
+        },
+        {
+            "relation": [
+                "lover"
+            ],
+            "explanation": "Daisy kisses Gatsby on the mouth and says 'You know I love you'",
+            "id1": 5.0,
+            "id2": 1.0,
+            "positivity": 0.9,
+            "weight": 0.9
+        },
+        {
+            "relation": [
+                "child",
+                "mother"
+            ],
+            "id1": 12.0,
+            "explanation": "Pammy rushed across the room and rooted shyly into her mother’s dress. Daisy says 'She looks like me. She’s got my hair and shape of the face.'",
+            "id2": 5.0,
+            "positivity": 0.9,
+            "weight": 0.8
+        },
+        {
+            "id1": 1.0,
+            "explanation": "Gatsby kept looking at the child with surprise. I don’t think he had ever really believed in its existence before.",
+            "relation": [
+                "stranger"
+            ],
+            "id2": 12.0,
+            "positivity": 0.2,
+            "weight": 0.6
+        },
+        {
+            "id1": 8.0,
+            "explanation": "She had told him that she loved him, and Tom Buchanan saw.",
+            "relation": [
+                "rival"
+            ],
+            "id2": 1.0,
+            "positivity": -0.6,
+            "weight": 0.7
+        },
+        {
+            "explanation": "She had told him that she loved him, and Tom Buchanan saw.",
+            "relation": [
+                "spouse"
+            ],
+            "id1": 8.0,
+            "id2": 5.0,
+            "positivity": -0.4,
+            "weight": 0.8
+        }
+    ]
+}

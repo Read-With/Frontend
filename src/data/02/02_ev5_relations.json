@@ -1,0 +1,68 @@
+{
+    "title": "Tom, Myrtle, and the narrator travel to New York. Myrtle buys magazines, perfume, and selects a taxi.",
+    "start": 3120,
+    "end": 3590,
+    "text": "bare; the only car visible was the\ndust-covered wreck of a Ford which crouched in a dim corner. It had\noccurred to me that this shadow of a garage must be a blind, and that\nsumptuous and romantic apartments were concealed overhead, when the\nproprietor himself appeared in the door of an office, wiping his hands\non a piece of waste. He was a blond, spiritless man, anaemic, and\nfaintly handsome. When he saw us a damp gleam of hope sprang into his\nlight blue eyes.\n\n“Hel",
+    "new_appearances": [],
+    "importance": {
+        "1": 0.5,
+        "2": 1.0,
+        "3": 1.0,
+        "4": 0.25,
+        "5": 0.75,
+        "6": 0.25
+    },
+    "relations": [
+        {
+            "explanation": "The narrator states 'I first met Tom Buchanan’s mistress'.",
+            "relation": [
+                "met"
+            ],
+            "id1": 3.0,
+            "id2": 5.0,
+            "positivity": 0.5,
+            "weight": 0.75
+        },
+        {
+            "id1": 2.0,
+            "explanation": "The text mentions 'Tom Buchanan’s mistress'.",
+            "relation": [
+                "affair"
+            ],
+            "id2": 5.0,
+            "positivity": -0.8,
+            "weight": 0.9
+        },
+        {
+            "id1": 2.0,
+            "relation": [
+                "forced",
+                "company"
+            ],
+            "explanation": "The narrator describes Tom taking hold of his elbow and literally forcing him from the car, indicating a forceful interaction.",
+            "id2": 3.0,
+            "positivity": -0.6,
+            "weight": 0.8
+        },
+        {
+            "explanation": "The narrator says 'I followed him', indicating he is accompanying Tom.",
+            "relation": [
+                "accompanied"
+            ],
+            "id1": 3.0,
+            "id2": 2.0,
+            "positivity": 0.5,
+            "weight": 0.6
+        },
+        {
+            "explanation": "The narrator says 'George B. Wilson....and I followed Tom inside.'",
+            "id1": 3.0,
+            "relation": [
+                "followed"
+            ],
+            "id2": 4.0,
+            "positivity": 0.5,
+            "weight": 0.6
+        }
+    ]
+}

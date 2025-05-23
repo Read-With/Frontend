@@ -1,0 +1,101 @@
+{
+    "title": "Myrtle insists on buying a dog from a street vendor.",
+    "start": 3591,
+    "end": 4059,
+    "text": "o, Wilson, old man,” said Tom, slapping him jovially on the\nshoulder. “How’s business?”\n\n“I can’t complain,” answered Wilson unconvincingly. “When are you\ngoing to sell me that car?”\n\n“Next week; I’ve got my man working on it now.”\n\n“Works pretty slow, don’t he?”\n\n“No, he doesn’t,” said Tom coldly. “And if you feel that way about it,\nmaybe I’d better sell it somewhere else after all.”\n\n“I don’t mean that,” explained Wilson quickly. “I just meant—”\n\nHis voice faded",
+    "new_appearances": [
+        7
+    ],
+    "importance": {
+        "1": 0.4,
+        "2": 1.0,
+        "3": 1.0,
+        "4": 0.2,
+        "5": 0.8,
+        "6": 0.2,
+        "7": 0.2
+    },
+    "relations": [
+        {
+            "relation": [
+                "met"
+            ],
+            "id1": 3.0,
+            "explanation": "The narrator states 'I first met Tom Buchanan’s mistress'.",
+            "id2": 5.0,
+            "positivity": 0.5,
+            "weight": 0.75
+        },
+        {
+            "id1": 2.0,
+            "relation": [
+                "affair"
+            ],
+            "explanation": "The text mentions 'Tom Buchanan’s mistress'.",
+            "id2": 5.0,
+            "positivity": -0.8,
+            "weight": 0.9
+        },
+        {
+            "id1": 2.0,
+            "explanation": "The narrator describes Tom taking hold of his elbow and literally forcing him from the car, indicating a forceful interaction.",
+            "relation": [
+                "forced",
+                "company"
+            ],
+            "id2": 3.0,
+            "positivity": -0.6,
+            "weight": 0.8
+        },
+        {
+            "explanation": "The narrator says 'I followed him', indicating he is accompanying Tom.",
+            "id1": 3.0,
+            "relation": [
+                "accompanied"
+            ],
+            "id2": 2.0,
+            "positivity": 0.5,
+            "weight": 0.6
+        },
+        {
+            "explanation": "The narrator says 'George B. Wilson....and I followed Tom inside.'",
+            "relation": [
+                "followed"
+            ],
+            "id1": 3.0,
+            "id2": 4.0,
+            "positivity": 0.5,
+            "weight": 0.6
+        },
+        {
+            "id1": 2.0,
+            "relation": [
+                "business"
+            ],
+            "explanation": "Tom slaps Wilson jovially on the shoulder and discusses business.",
+            "id2": 4.0,
+            "positivity": 0.3,
+            "weight": 0.7
+        },
+        {
+            "explanation": "Wilson wants to buy a car from Tom and asks 'When are you going to sell me that car?'",
+            "id1": 4.0,
+            "relation": [
+                "wants to buy from"
+            ],
+            "id2": 2.0,
+            "positivity": 0.6,
+            "weight": 0.8
+        },
+        {
+            "relation": [
+                "threatened"
+            ],
+            "explanation": "Tom responds coldly to Wilson's comment about the car, saying 'maybe I’d better sell it somewhere else after all.'",
+            "id1": 2.0,
+            "id2": 4.0,
+            "positivity": -0.4,
+            "weight": 0.7
+        }
+    ]
+}

@@ -1,0 +1,21 @@
+{
+    "title": "The rain stops, and a maid opens the windows of Gatsby's house. Nick prepares to return inside.",
+    "start": 5130,
+    "end": 5325,
+    "text": " to a damp mist, through which\noccasional thin drops swam like dew. Gatsby looked with vacant eyes\nthrough a copy of Clay’s Economics, starting at the Finnish tread that\nshook the kitchen floor, ",
+    "new_appearances": [
+        11
+    ],
+    "importance": {
+        "3": 0.2,
+        "1": 1.0,
+        "8": 0.04,
+        "2": 0.32,
+        "4": 0.04,
+        "6": 0.08,
+        "5": 0.12,
+        "7": 0.04,
+        "11": 0.04
+    },
+    "relations": []
+}

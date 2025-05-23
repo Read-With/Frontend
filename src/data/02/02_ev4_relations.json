@@ -1,0 +1,70 @@
+{
+    "title": "Tom, Myrtle, and the narrator wait outside the garage. They see an Italian child setting torpedoes on the railroad track, and Tom comments on Wilson's ignorance.",
+    "start": 2684,
+    "end": 3119,
+    "text": "y building in sight was a small block of\nyellow brick sitting on the edge of the waste land, a sort of compact\nMain Street ministering to it, and contiguous to absolutely nothing.\nOne of the three shops it contained was for rent and another was an\nall-night restaurant, approached by a trail of ashes; the third was a\ngarage—Repairs. George B. Wilson. Cars bought and sold.—and I followed\nTom inside.\n\nThe interior was unprosperous and",
+    "new_appearances": [
+        6
+    ],
+    "importance": {
+        "1": 0.6666666666666666,
+        "2": 1.0,
+        "3": 1.0,
+        "4": 0.3333333333333333,
+        "5": 0.6666666666666666,
+        "6": 0.3333333333333333
+    },
+    "relations": [
+        {
+            "explanation": "The narrator states 'I first met Tom Buchanan’s mistress'.",
+            "id1": 3.0,
+            "relation": [
+                "met"
+            ],
+            "id2": 5.0,
+            "positivity": 0.5,
+            "weight": 0.75
+        },
+        {
+            "id1": 2.0,
+            "explanation": "The text mentions 'Tom Buchanan’s mistress'.",
+            "relation": [
+                "affair"
+            ],
+            "id2": 5.0,
+            "positivity": -0.8,
+            "weight": 0.9
+        },
+        {
+            "explanation": "The narrator describes Tom taking hold of his elbow and literally forcing him from the car, indicating a forceful interaction.",
+            "relation": [
+                "forced",
+                "company"
+            ],
+            "id1": 2.0,
+            "id2": 3.0,
+            "positivity": -0.6,
+            "weight": 0.8
+        },
+        {
+            "relation": [
+                "accompanied"
+            ],
+            "explanation": "The narrator says 'I followed him', indicating he is accompanying Tom.",
+            "id1": 3.0,
+            "id2": 2.0,
+            "positivity": 0.5,
+            "weight": 0.6
+        },
+        {
+            "relation": [
+                "followed"
+            ],
+            "explanation": "The narrator says 'George B. Wilson....and I followed Tom inside.'",
+            "id1": 3.0,
+            "id2": 4.0,
+            "positivity": 0.5,
+            "weight": 0.6
+        }
+    ]
+}

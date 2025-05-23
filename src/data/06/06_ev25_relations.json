@@ -1,0 +1,117 @@
+{
+    "title": "Gatsby points out celebrities to Tom and Daisy, but Tom claims not to know anyone.",
+    "start": 7539,
+    "end": 7816,
+    "text": "efore.\n\nThey were a party of three on horseback—Tom and a man named Sloane and\na pretty woman in a brown riding-habit, who had been there previously.\n\n“I’m delighted to see you,” said Gatsby, standing on his porch. “I’m\ndelighted that you dropped in.”\n\nAs though they cared!\n\n“",
+    "new_appearances": [],
+    "importance": {
+        "2": 0.04,
+        "1": 1.0,
+        "3": 0.28,
+        "4": 0.12,
+        "5": 0.44,
+        "6": 0.04,
+        "7": 0.44,
+        "8": 0.28,
+        "9": 0.28,
+        "10": 0.16
+    },
+    "relations": [
+        {
+            "relation": [
+                "mentor",
+                "employer",
+                "employee"
+            ],
+            "explanation": "while he remained with Cody he was in turn steward, mate, skipper, secretary, and even jailor, for Dan Cody sober knew what lavish doings Dan Cody drunk might soon be about, and he provided for such contingencies by reposing more and more trust in Gatsby. The arrangement lasted five years, during which the boat went three times around the Conti",
+            "id1": 3.0,
+            "id2": 1.0,
+            "positivity": 1.0,
+            "weight": 0.9
+        },
+        {
+            "relation": [
+                "adversary",
+                "legal battle"
+            ],
+            "explanation": "from Cody that he inherited money—a legacy of twenty-five thousand dollars. He didn’t get it. He never understood the legal device that was used against him, but what remained of the millions went intact to Ella Kaye.",
+            "id1": 3.0,
+            "id2": 4.0,
+            "positivity": -0.8,
+            "weight": 0.7
+        },
+        {
+            "id1": 5.0,
+            "explanation": "mostly I was in New York, trotting around with Jordan and trying to ingratiate myself with her senile aunt",
+            "relation": [
+                "friend",
+                "associate"
+            ],
+            "id2": 6.0,
+            "positivity": 0.6,
+            "weight": 0.4
+        },
+        {
+            "explanation": "I hadn’t been there two minutes when somebody brought Tom Buchanan in for a drink.",
+            "id1": 5.0,
+            "relation": [
+                "acquaintance"
+            ],
+            "id2": 7.0,
+            "positivity": 0.2,
+            "weight": 0.3
+        },
+        {
+            "explanation": "They were a party of three on horseback—Tom and a man named Sloane and\na pretty woman in a brown riding-habit, who had been there previously.",
+            "id1": 7.0,
+            "relation": [
+                "friend",
+                "associate"
+            ],
+            "id2": 8.0,
+            "positivity": 0.3,
+            "weight": 0.4
+        },
+        {
+            "explanation": "They were a party of three on horseback—Tom and a man named Sloane and\na pretty woman in a brown riding-habit, who had been there previously.",
+            "id1": 7.0,
+            "relation": [
+                "friend",
+                "associate"
+            ],
+            "id2": 9.0,
+            "positivity": 0.3,
+            "weight": 0.4
+        },
+        {
+            "explanation": "“I’m delighted to see you,” said Gatsby, standing on his porch. “I’m\ndelighted that you dropped in.”\n\nAs though they cared!",
+            "id1": 1.0,
+            "relation": [
+                "social"
+            ],
+            "id2": 7.0,
+            "positivity": 0.1,
+            "weight": 0.2
+        },
+        {
+            "explanation": "“I’m delighted to see you,” said Gatsby, standing on his porch. “I’m\ndelighted that you dropped in.”\n\nAs though they cared!",
+            "id1": 1.0,
+            "relation": [
+                "social"
+            ],
+            "id2": 8.0,
+            "positivity": 0.1,
+            "weight": 0.2
+        },
+        {
+            "relation": [
+                "social"
+            ],
+            "explanation": "“I’m delighted to see you,” said Gatsby, standing on his porch. “I’m\ndelighted that you dropped in.”\n\nAs though they cared!",
+            "id1": 1.0,
+            "id2": 9.0,
+            "positivity": 0.1,
+            "weight": 0.2
+        }
+    ]
+}

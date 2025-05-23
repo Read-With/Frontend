@@ -1,0 +1,69 @@
+{
+    "title": "Myrtle jealously watches Jordan from the window as Tom's group drives away from Wilson's garage.",
+    "start": 4895,
+    "end": 5114,
+    "text": "is\nthick body, and hurried into the room.\n\n“Mr. Gatsby!” He put out his broad, flat hand with well-concealed\ndislike. “I’m glad to see you, sir … Nick …”\n\n“Make us a cold drink,” cried Daisy.\n\nAs he left the room again ",
+    "new_appearances": [],
+    "importance": {
+        "2": 0.6666666666666666,
+        "3": 0.08333333333333333,
+        "1": 1.0,
+        "4": 0.08333333333333333,
+        "5": 0.5833333333333334,
+        "6": 0.08333333333333333,
+        "7": 0.5833333333333334,
+        "9": 0.08333333333333333,
+        "10": 0.08333333333333333,
+        "11": 0.08333333333333333,
+        "8": 0.75,
+        "12": 0.08333333333333333,
+        "13": 0.08333333333333333,
+        "14": 0.08333333333333333,
+        "15": 0.16666666666666666
+    },
+    "relations": [
+        {
+            "explanation": "Gatsby's house lights are no longer on, marking the end of his extravagant parties. He fires his servants to prevent gossip about Daisy's visits.",
+            "relation": [
+                "employer",
+                "employee"
+            ],
+            "id1": 1.0,
+            "id2": 4.0,
+            "positivity": -0.5,
+            "weight": 0.7
+        },
+        {
+            "explanation": "Wolfshiem wanted to do something for the people who are now Gatsby's servants.",
+            "relation": [
+                "employer",
+                "employee"
+            ],
+            "id1": 6.0,
+            "id2": 4.0,
+            "positivity": 0.5,
+            "weight": 0.6
+        },
+        {
+            "explanation": "The butler announces the arrival of Gatsby and Nick and takes their hats.",
+            "id1": 3.0,
+            "relation": [
+                "employee",
+                "employer"
+            ],
+            "id2": 1.0,
+            "positivity": 0.0,
+            "weight": 0.4
+        },
+        {
+            "relation": [
+                "affair"
+            ],
+            "id1": 8.0,
+            "explanation": "Jordan whispers that the person on the telephone is 'Tom's girl'.",
+            "id2": 15.0,
+            "positivity": -0.8,
+            "weight": 0.9
+        }
+    ]
+}
