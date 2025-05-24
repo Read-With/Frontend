@@ -21,7 +21,7 @@ function getRelationColor(positivity) {
   return '#991b1b';
 }
 
-function RelationGraphMain({ elements, inViewer = false, fullScreen = false, onFullScreen, onExitFullScreen, currentEventJson, graphViewState, setGraphViewState }) {
+function RelationGraphMain({ elements, inViewer = false, fullScreen = false, onFullScreen, onExitFullScreen, graphViewState, setGraphViewState, chapterNum, eventNum, hideIsolated, maxEventNum }) {
   const cyRef = useRef(null);
   const hasCenteredRef = useRef(false); // 최초 1회만 중앙정렬
   const [searchInput, setSearchInput] = useState("");
@@ -34,6 +34,10 @@ function RelationGraphMain({ elements, inViewer = false, fullScreen = false, onF
   const { filename } = useParams();
   const prevElementsRef = useRef();
   const prevEventJsonRef = useRef();
+  const [isGraphLoading, setIsGraphLoading] = useState(true);
+  const prevChapterNum = useRef();
+  const prevEventNum = useRef();
+  const prevElementsStr = useRef();
 
   // gatsby.epub 단독 그래프 페이지에서만 간격을 더 넓게
   const isGraphPage = inViewer && fullScreen;
@@ -206,7 +210,7 @@ function RelationGraphMain({ elements, inViewer = false, fullScreen = false, onF
   }, [sortedElements, search]);
 
   // currentEventJson이 내용이 같으면 참조도 같게 useMemo로 캐싱
-  const stableEventJson = useMemo(() => currentEventJson ? JSON.stringify(currentEventJson) : '', [currentEventJson]);
+  const stableEventJson = useMemo(() => graphViewState ? JSON.stringify(graphViewState) : '', [graphViewState]);
 
   const stylesheet = useMemo(
     () => [
@@ -362,6 +366,88 @@ function RelationGraphMain({ elements, inViewer = false, fullScreen = false, onF
     navigate(`/viewer/${filename}`);
   }, [navigate, filename]);
 
+  const eventKey = `chapter_${chapterNum}_event_${eventNum}_hideIsolated_${hideIsolated}`;
+
+  // === graphViewState를 항상 localStorage에 저장 ===
+  useEffect(() => {
+    if (!cyRef.current) return;
+    const cy = cyRef.current;
+    // 저장 함수
+    const saveGraphState = () => {
+      const nodes = cy.nodes().map(n => ({
+        id: n.id(),
+        pos: n.position(),
+        data: n.data(),
+        classes: n.classes(),
+        selected: n.selected()
+      }));
+      const edges = cy.edges().map(e => ({
+        id: e.id(),
+        source: e.source().id(),
+        target: e.target().id(),
+        data: e.data(),
+        classes: e.classes(),
+        selected: e.selected()
+      }));
+      const state = {
+        pan: cy.pan(),
+        zoom: cy.zoom(),
+        nodes,
+        edges
+      };
+      try {
+        localStorage.setItem(`graph_${eventKey}`, JSON.stringify(state));
+      } catch (e) {}
+    };
+    // 최초 mount/업데이트 시 저장
+    saveGraphState();
+    // cleanup(언마운트/이벤트 변경 직전)에도 저장
+    return () => {
+      saveGraphState();
+    };
+  }, [filteredElements, chapterNum, eventNum, hideIsolated]);
+
+  // === graphViewState가 없을 때 localStorage에서 복원 ===
+  useEffect(() => {
+    if (!cyRef.current) return;
+    if (graphViewState) return; // 이미 상위에서 복원됨
+    const saved = localStorage.getItem(`graph_${eventKey}`);
+    if (saved) {
+      try {
+        const state = JSON.parse(saved);
+        const cy = cyRef.current;
+        cy.elements().remove();
+        cy.add([
+          ...(Array.isArray(state.nodes) ? state.nodes.map(n => ({
+            group: 'nodes',
+            data: n.data,
+            position: n.pos,
+            classes: n.classes
+          })) : []),
+          ...(Array.isArray(state.edges) ? state.edges.map(e => ({
+            group: 'edges',
+            data: e.data,
+            classes: e.classes
+          })) : [])
+        ]);
+        if (state.pan) cy.pan(state.pan);
+        if (state.zoom) cy.zoom(state.zoom);
+        // 복원 성공 시 layout을 절대 실행하지 않음
+        return;
+      } catch (e) {}
+    }
+    // 복원 실패 시에만 layout 실행 (기존 로직)
+    const cy = cyRef.current;
+    cy.elements().unlock();
+    cy.resize();
+    cy.elements().remove();
+    cy.add(filteredElements);
+    const currentLayout = cy.layout(search ? searchLayout : layout);
+    currentLayout.run();
+    cy.fit(undefined, 120);
+    cy.center();
+  }, [filteredElements, chapterNum, eventNum, hideIsolated, graphViewState]);
+
   // 그래프 데이터 준비
   useEffect(() => {
     const prevElements = prevElementsRef.current;
@@ -377,13 +463,14 @@ function RelationGraphMain({ elements, inViewer = false, fullScreen = false, onF
     if (cyRef.current) {
       const cy = cyRef.current;
 
-      if (isSameElements && graphViewState) {
+      // === graphViewState가 있으면 항상 복원 ===
+      if (graphViewState) {
         cy.elements().unlock();
         cy.resize();
         cy.elements().remove();
         cy.add(filteredElements);
-        cy.pan(graphViewState.pan);
-        cy.zoom(graphViewState.zoom);
+        if (graphViewState.pan) cy.pan(graphViewState.pan);
+        if (graphViewState.zoom) cy.zoom(graphViewState.zoom);
         if (Array.isArray(graphViewState.positions)) {
           graphViewState.positions.forEach(({ id, pos }) => {
             const node = cy.getElementById(id);
@@ -395,7 +482,7 @@ function RelationGraphMain({ elements, inViewer = false, fullScreen = false, onF
         return; // layout.run() 실행하지 않음!
       }
 
-      // 그래프가 다르거나, graphViewState가 없으면 기존대로 layout.run()
+      // === graphViewState가 없을 때만 layout 새로 실행 ===
       cy.elements().unlock();
       cy.resize();
       cy.elements().remove();
@@ -403,22 +490,13 @@ function RelationGraphMain({ elements, inViewer = false, fullScreen = false, onF
 
       const currentLayout = cy.layout(search ? searchLayout : layout);
       currentLayout.run();
-
-      if (search && fitNodeIds && fitNodeIds.length > 0) {
-        const nodesToFit = cy.nodes().filter(n => fitNodeIds.includes(n.id()));
-        if (nodesToFit.length > 0) {
-          cy.fit(nodesToFit, 60);
-          cy.center();
-        }
-      } else {
-        cy.fit(undefined, 30);
-        cy.center();
-      }
+      cy.fit(undefined, 120);
+      cy.center();
 
       prevElementsRef.current = filteredElements;
       prevEventJsonRef.current = stableEventJson;
     }
-  }, [filteredElements, search, searchLayout, layout, fitNodeIds, stableEventJson, graphViewState]);
+  }, [filteredElements, search, searchLayout, layout, stableEventJson, graphViewState]);
 
   // 최초 1회만 그래프 중앙정렬 (챕터 이동/새로고침 시)
   useEffect(() => {
@@ -429,27 +507,47 @@ function RelationGraphMain({ elements, inViewer = false, fullScreen = false, onF
       const centerX = cy.width() / 2;
       const centerY = cy.height() / 2;
       const radius = Math.min(centerX, centerY) * 0.6;
-      // 메인 인물 노드 찾기
-      const mainNode = nodes.find(n => n.data('main'));
+      const mainNodes = nodes.filter(n => n.data('main'));
       const otherNodes = nodes.filter(n => !n.data('main'));
-      if (mainNode) {
-        // 메인 인물은 중앙에
-        mainNode.position({ x: centerX, y: centerY });
-        // 나머지 노드는 원형 분산
-        otherNodes.forEach((node, i) => {
-          const angle = (2 * Math.PI * i) / otherNodes.length;
-          const x = centerX + radius * Math.cos(angle);
-          const y = centerY + radius * Math.sin(angle);
+      if (mainNodes.length > 0) {
+        // 메인 노드가 여러 개면 중앙 영역에 분산
+        mainNodes.forEach((node, i) => {
+          const angle = (2 * Math.PI * i) / mainNodes.length;
+          const x = centerX + (mainNodes.length === 1 ? 0 : radius * 0.25 * Math.cos(angle));
+          const y = centerY + (mainNodes.length === 1 ? 0 : radius * 0.25 * Math.sin(angle));
+          node.position({ x, y });
+        });
+        // 나머지 노드는 랜덤 배치
+        otherNodes.forEach((node) => {
+          const x = centerX + (Math.random() - 0.5) * radius * 2;
+          const y = centerY + (Math.random() - 0.5) * radius * 2;
           node.position({ x, y });
         });
       } else if (nodes.length === 1) {
         nodes[0].position({ x: centerX, y: centerY });
       } else if (nodes.length > 1) {
-        nodes.forEach((node, i) => {
-          const angle = (2 * Math.PI * i) / nodes.length;
+        // 메인 노드가 없을 때: 간선이 가장 많이 연결된 노드를 중앙에 배치
+        let maxDegree = -1;
+        let centerNode = null;
+        nodes.forEach((node) => {
+          const degree = node.connectedEdges().length;
+          if (degree > maxDegree) {
+            maxDegree = degree;
+            centerNode = node;
+          }
+        });
+        if (centerNode) {
+          centerNode.position({ x: centerX, y: centerY });
+        }
+        // 나머지 노드는 원형 분산
+        let i = 0;
+        nodes.forEach((node) => {
+          if (node === centerNode) return;
+          const angle = (2 * Math.PI * i) / (nodes.length - 1);
           const x = centerX + radius * Math.cos(angle);
           const y = centerY + radius * Math.sin(angle);
           node.position({ x, y });
+          i++;
         });
       }
       // layout 실행
@@ -540,80 +638,6 @@ function RelationGraphMain({ elements, inViewer = false, fullScreen = false, onF
       }, 0);
     }
   }, [fullScreen]);
-
-  // 언마운트 시 모든 노드/엣지/상태 저장
-  useEffect(() => {
-    return () => {
-      if (cyRef.current && setGraphViewState) {
-        const cy = cyRef.current;
-        const nodes = cy.nodes().map(n => ({
-          id: n.id(),
-          pos: n.position(),
-          data: n.data(),
-          classes: n.classes(),
-          selected: n.selected()
-        }));
-        const edges = cy.edges().map(e => ({
-          id: e.id(),
-          source: e.source().id(),
-          target: e.target().id(),
-          data: e.data(),
-          classes: e.classes(),
-          selected: e.selected()
-        }));
-        setGraphViewState({
-          pan: cy.pan(),
-          zoom: cy.zoom(),
-          nodes,
-          edges
-        });
-      }
-    };
-  }, [setGraphViewState]);
-
-  // 마운트 시 저장된 모든 노드/엣지/상태 복원
-  useEffect(() => {
-    if (!cyRef.current || !graphViewState) return;
-    const cy = cyRef.current;
-    // elements와 저장된 노드/엣지 id가 완전히 일치할 때만 복원
-    const elementNodeIds = new Set(filteredElements.filter(el => !el.data.source).map(el => el.data.id));
-    const elementEdgeIds = new Set(filteredElements.filter(el => el.data.source).map(el => el.data.id));
-    const savedNodeIds = Array.isArray(graphViewState.nodes) ? new Set(graphViewState.nodes.map(n => n.id)) : new Set();
-    const savedEdgeIds = Array.isArray(graphViewState.edges) ? new Set(graphViewState.edges.map(e => e.id)) : new Set();
-    const nodesMatch = elementNodeIds.size === savedNodeIds.size && [...elementNodeIds].every(id => savedNodeIds.has(id));
-    const edgesMatch = elementEdgeIds.size === savedEdgeIds.size && [...elementEdgeIds].every(id => savedEdgeIds.has(id));
-    if (nodesMatch && edgesMatch) {
-      cy.elements().remove();
-      cy.add([
-        ...(Array.isArray(graphViewState.nodes) ? graphViewState.nodes.map(n => ({
-          group: 'nodes',
-          data: n.data,
-          position: n.pos,
-          classes: n.classes
-        })) : []),
-        ...(Array.isArray(graphViewState.edges) ? graphViewState.edges.map(e => ({
-          group: 'edges',
-          data: e.data,
-          classes: e.classes
-        })) : [])
-      ]);
-      if (graphViewState.pan) cy.pan(graphViewState.pan);
-      if (graphViewState.zoom) cy.zoom(graphViewState.zoom);
-      // 선택 상태 복원
-      if (Array.isArray(graphViewState.nodes)) {
-        graphViewState.nodes.forEach(n => {
-          const node = cy.getElementById(n.id);
-          if (node && n.selected) node.select();
-        });
-      }
-      if (Array.isArray(graphViewState.edges)) {
-        graphViewState.edges.forEach(e => {
-          const edge = cy.getElementById(e.id);
-          if (edge && e.selected) edge.select();
-        });
-      }
-    }
-  }, [cyRef, graphViewState, filteredElements]);
 
   // ★★★ 노드 드래그 시 겹침 방지 로직 추가 ★★★
   useEffect(() => {
@@ -728,6 +752,198 @@ function RelationGraphMain({ elements, inViewer = false, fullScreen = false, onF
     }
   }, [filteredElements]);
 
+  // 모든 이벤트에 대해 localStorage에서 노드 위치 복원/저장
+  useEffect(() => {
+    if (!cyRef.current) return;
+    const cy = cyRef.current;
+    const storageKey = `fixed_graph_${chapterNum}_${eventNum}`; // 이벤트별로 저장
+    const saved = localStorage.getItem(storageKey);
+    if (saved) {
+      try {
+        const positions = JSON.parse(saved);
+        positions.forEach(({ id, pos }) => {
+          const node = cy.getElementById(id);
+          if (node) node.position(pos);
+        });
+        // fit으로 전체 그래프(노드+간선)가 영역 안에 오도록 보정
+        cy.fit(undefined); // padding 40px
+        // bounding box 중심이 컨테이너 중심에 오도록 pan 보정
+        const bb = cy.elements().boundingBox();
+        const graphCenter = {
+          x: (bb.x1 + bb.x2) / 2,
+          y: (bb.y1 + bb.y2) / 2
+        };
+        const containerCenter = {
+          x: cy.width() / 2,
+          y: cy.height() / 2
+        };
+        cy.pan({
+          x: containerCenter.x - graphCenter.x,
+          y: containerCenter.y - graphCenter.y
+        });
+        // fit 후 zoom을 0.98~1.0배로 미세하게 조정
+        const z = cy.zoom();
+        if (z > 1.05) cy.zoom(1.0);
+        else if (z < 0.95) cy.zoom(0.98);
+        return;
+      } catch (e) {}
+    }
+    // 저장된 위치가 없으면, 메인 노드가 중앙에 오고 나머지는 랜덤 배치 후 저장
+    const nodes = cy.nodes();
+    const centerX = cy.width() / 2;
+    const centerY = cy.height() / 2;
+    const radius = Math.min(centerX, centerY) * 0.6;
+    const mainNodes = nodes.filter(n => n.data('main'));
+    const otherNodes = nodes.filter(n => !n.data('main'));
+    if (mainNodes.length > 0) {
+      // 메인 노드가 여러 개면 중앙 영역에 분산
+      mainNodes.forEach((node, i) => {
+        const angle = (2 * Math.PI * i) / mainNodes.length;
+        const x = centerX + (mainNodes.length === 1 ? 0 : radius * 0.25 * Math.cos(angle));
+        const y = centerY + (mainNodes.length === 1 ? 0 : radius * 0.25 * Math.sin(angle));
+        node.position({ x, y });
+      });
+      // 나머지 노드는 랜덤 배치
+      otherNodes.forEach((node) => {
+        const x = centerX + (Math.random() - 0.5) * radius * 2;
+        const y = centerY + (Math.random() - 0.5) * radius * 2;
+        node.position({ x, y });
+      });
+    } else if (nodes.length === 1) {
+      nodes[0].position({ x: centerX, y: centerY });
+    } else if (nodes.length > 1) {
+      // 메인 노드가 없을 때: 간선이 가장 많이 연결된 노드를 중앙에 배치
+      let maxDegree = -1;
+      let centerNode = null;
+      nodes.forEach((node) => {
+        const degree = node.connectedEdges().length;
+        if (degree > maxDegree) {
+          maxDegree = degree;
+          centerNode = node;
+        }
+      });
+      if (centerNode) {
+        centerNode.position({ x: centerX, y: centerY });
+      }
+      // 나머지 노드는 원형 분산
+      let i = 0;
+      nodes.forEach((node) => {
+        if (node === centerNode) return;
+        const angle = (2 * Math.PI * i) / (nodes.length - 1);
+        const x = centerX + radius * Math.cos(angle);
+        const y = centerY + radius * Math.sin(angle);
+        node.position({ x, y });
+        i++;
+      });
+    }
+    // 충돌 방지 항상 적용
+    preventNodeOverlap(cy, 20);
+    // 모든 노드가 영역 안에 들어오도록 보정
+    clampNodePositionsToBounds(cy);
+    // 메인 노드(들) 중심이 그래프 영역 중앙에 오도록 pan 보정
+    function getMainNodesCenter(cy) {
+      const mainNodes = cy.nodes().filter(n => n.data('main'));
+      if (mainNodes.length === 0) return { x: centerX, y: centerY };
+      const sum = mainNodes.reduce((acc, n) => {
+        const pos = n.position();
+        acc.x += pos.x;
+        acc.y += pos.y;
+        return acc;
+      }, { x: 0, y: 0 });
+      return {
+        x: sum.x / mainNodes.length,
+        y: sum.y / mainNodes.length
+      };
+    }
+    const mainCenter = getMainNodesCenter(cy);
+    cy.pan({
+      x: centerX - mainCenter.x,
+      y: centerY - mainCenter.y
+    });
+    // fit으로 전체 그래프(노드+간선)가 영역 안에 오도록 보정
+    cy.fit(undefined); // padding 40px
+    // bounding box 중심이 컨테이너 중심에 오도록 pan 보정
+    const bb = cy.elements().boundingBox();
+    const graphCenter = {
+      x: (bb.x1 + bb.x2) / 2,
+      y: (bb.y1 + bb.y2) / 2
+    };
+    const containerCenter = {
+      x: cy.width() / 2,
+      y: cy.height() / 2
+    };
+    cy.pan({
+      x: containerCenter.x - graphCenter.x,
+      y: containerCenter.y - graphCenter.y
+    });
+    // fit 후 zoom을 0.98~1.0배로 미세하게 조정
+    const z = cy.zoom();
+    if (z > 1.05) cy.zoom(1.0);
+    else if (z < 0.95) cy.zoom(0.98);
+    // 저장
+    const positions = cy.nodes().map(n => ({
+      id: n.id(),
+      pos: n.position()
+    }));
+    localStorage.setItem(storageKey, JSON.stringify(positions));
+    // 저장 후에도 zoom, center 고정
+    cy.center();
+    cy.zoom(1.0);
+
+    // 마지막 이벤트일 때, zoom/pan을 챕터별로 저장 (zoom은 0.9배로 더 멀리)
+    if (typeof maxEventNum !== 'undefined' && eventNum === maxEventNum) {
+      const baseZoom = cy.zoom();
+      const fartherZoom = baseZoom * 0.7; // 10% 더 멀리
+      localStorage.setItem(`chapter_view_${chapterNum}`, JSON.stringify({
+        zoom: fartherZoom,
+        pan: cy.pan()
+      }));
+    } else {
+      // 마지막 이벤트가 아니면, 챕터별 zoom/pan을 불러와서 적용
+      const view = localStorage.getItem(`chapter_view_${chapterNum}`);
+      if (view) {
+        try {
+          const { zoom, pan } = JSON.parse(view);
+          cy.zoom(zoom);
+          cy.pan(pan);
+        } catch (e) {}
+      }
+    }
+  }, [filteredElements, chapterNum, eventNum, maxEventNum]);
+
+  // 모든 노드가 영역 안에 들어오도록 보정하는 함수
+  function clampNodePositionsToBounds(cy) {
+    const width = cy.width();
+    const height = cy.height();
+    cy.nodes().forEach((node) => {
+      const pos = node.position();
+      const size = node.data('main') ? 40 : 32; // 노드+여유 (간선까지 고려)
+      const minX = size;
+      const maxX = width - size;
+      const minY = size;
+      const maxY = height - size;
+      node.position({
+        x: Math.max(minX, Math.min(maxX, pos.x)),
+        y: Math.max(minY, Math.min(maxY, pos.y)),
+      });
+    });
+  }
+
+  useEffect(() => {
+    const elementsStr = JSON.stringify(elements);
+    const isSame =
+      prevChapterNum.current === chapterNum &&
+      prevEventNum.current === eventNum &&
+      prevElementsStr.current === elementsStr;
+
+    if (!isSame) {
+      setIsGraphLoading(true);
+    }
+    prevChapterNum.current = chapterNum;
+    prevEventNum.current = eventNum;
+    prevElementsStr.current = elementsStr;
+  }, [elements, chapterNum, eventNum]);
+
   if (fullScreen && inViewer) {
     return (
       <div className="graph-page-container" style={{
@@ -838,7 +1054,7 @@ function RelationGraphMain({ elements, inViewer = false, fullScreen = false, onF
               {/* 그래프 영역 */}
               <div className="graph-canvas-area w-full h-full" style={{ zIndex: 1, width: '100%', height: '100%', overflow: 'hidden', position: 'relative' }}>
                 {/* 로딩 중 표시 */}
-                {(!elements || elements.length === 0) && (
+                {isGraphLoading && (
                   <div style={{
                     position: 'absolute',
                     top: '50%',
@@ -945,7 +1161,7 @@ function RelationGraphMain({ elements, inViewer = false, fullScreen = false, onF
         {/* 그래프 영역 */}
         <div className="graph-canvas-area w-full h-full" style={{ zIndex: 1, width: '100%', height: '100%', overflow: 'hidden', position: 'relative' }}>
           {/* 로딩 중 표시 */}
-          {(!elements || elements.length === 0) && (
+          {isGraphLoading && (
             <div style={{
               position: 'absolute',
               top: '50%',

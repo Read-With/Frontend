@@ -232,14 +232,6 @@ const ViewerPage = ({ darkMode: initialDarkMode }) => {
   const [currentChapter, setCurrentChapter] = useState(1); // 현재 챕터 번호
   const [graphFullScreen, setGraphFullScreen] = useState(false);
   const [elements, setElements] = useState([]);
-  // prevWordIndex, prevElements를 useRef로 관리
-  const prevWordIndexRef = useRef(0);
-  const prevElementsRef = useRef([]);
-  const prevEventRef = useRef(null); // 추가
-  const maxChapter = 9; // data 폴더 기준
-  const [searchInput, setSearchInput] = useState('');
-  const [search, setSearch] = useState('');
-  const [hideIsolated, setHideIsolated] = useState(true);
   const [currentWordIndex, setCurrentWordIndex] = useState(0);
   const [currentPageWords, setCurrentPageWords] = useState(0);
   const [totalChapterWords, setTotalChapterWords] = useState(0);
@@ -249,6 +241,10 @@ const ViewerPage = ({ darkMode: initialDarkMode }) => {
   const [currentEvent, setCurrentEvent] = useState(null);
   const [prevEvent, setPrevEvent] = useState(null);
   const [graphViewState, setGraphViewState] = useState(null);
+  const [hideIsolated, setHideIsolated] = useState(true);
+  const maxChapter = 9; // data 폴더 기준
+  const [searchInput, setSearchInput] = useState('');
+  const [search, setSearch] = useState('');
 
   // location.state에서 book 정보를 가져오거나, 없으면 filename에서 생성
   const book = location.state?.book || {
@@ -406,36 +402,32 @@ const ViewerPage = ({ darkMode: initialDarkMode }) => {
   useEffect(() => {
     if (!isDataReady || !(currentEvent || prevEvent)) {
       setElements([]);
-      prevElementsRef.current = [];
-      prevWordIndexRef.current = 0;
-      prevEventRef.current = null;
       setGraphViewState(null);
       return;
     }
     const charactersData = getChapterFile(currentChapter, 'characters');
     const eventKey = currentEvent?.path || `chapter${currentChapter}_event`;
     // localStorage에서 이전 그래프 정보와 뷰 상태 불러오기
-    if (currentEvent === prevEventRef.current) {
+    if (currentEvent === prevEvent) {
       const saved = localStorage.getItem(`graph_${eventKey}`);
       if (saved) {
         const { elements: savedElements, graphViewState: savedViewState } = JSON.parse(saved);
         setElements(savedElements);
         setGraphViewState(savedViewState);
         console.log('[localStorage] 그래프 복원:', eventKey, savedViewState);
+        setLoading(false);
         return;
       }
     }
     // 새로 생성
     const newElements = filterIsolatedNodes(getElementsFromRelations(currentEvent?.relations, charactersData, null, currentEvent?.importance), hideIsolated);
     setElements(newElements);
-    prevElementsRef.current = newElements;
-    prevWordIndexRef.current = currentWordIndex;
-    prevEventRef.current = currentEvent;
     // graphViewState는 RelationGraphMain에서 setGraphViewState로 저장됨
     // localStorage에 저장
     localStorage.setItem(`graph_${eventKey}`, JSON.stringify({ elements: newElements, graphViewState }));
     console.log('[localStorage] 그래프 저장:', eventKey, graphViewState);
-  }, [isDataReady, currentEvent, prevEvent, currentChapter, hideIsolated, currentWordIndex]);
+    setLoading(false);
+  }, [isDataReady, currentEvent, prevEvent, currentChapter, hideIsolated]);
 
   // EpubViewer에서 페이지/스크롤 이동 시 CFI 받아와서 글자 인덱스 갱신
   const handleLocationChange = async () => {
@@ -1011,40 +1003,7 @@ const ViewerPage = ({ darkMode: initialDarkMode }) => {
                 })()}
                 {/* 그래프 본문 */}
                 <div style={{ flex: 1, width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', marginTop: 8 }}>
-                  {loading && showGraph && (
-                    <div style={{
-                      position: 'absolute',
-                      top: '50%',
-                      left: '50%',
-                      transform: 'translate(-50%, -50%)',
-                      textAlign: 'center',
-                      color: '#6C8EFF',
-                      fontSize: 20,
-                      fontWeight: 600,
-                      zIndex: 10,
-                      background: 'rgba(255,255,255,0.85)',
-                      padding: '32px 0',
-                      borderRadius: 16,
-                      boxShadow: '0 2px 8px rgba(108,142,255,0.07)',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      minWidth: 180
-                    }}>
-                      <span className="graph-loading-spinner" style={{
-                        width: 40,
-                        height: 40,
-                        border: '4px solid #e3e6ef',
-                        borderTop: '4px solid #6C8EFF',
-                        borderRadius: '50%',
-                        animation: 'spin 1s linear infinite',
-                        marginBottom: 16,
-                        display: 'inline-block',
-                      }} />
-                      그래프 로딩 중...
-                    </div>
-                  )}
+                  {/* 로딩이 끝난 후 데이터 준비 중 메시지 */}
                   {!loading && !isDataReady && (
                     <div style={{
                       position: 'absolute',
@@ -1064,6 +1023,7 @@ const ViewerPage = ({ darkMode: initialDarkMode }) => {
                       데이터를 준비하는 중...
                     </div>
                   )}
+                  {/* 데이터 없음 메시지 */}
                   {!loading && isDataReady && elements.length === 0 && (
                     <div style={{
                       position: 'absolute',
@@ -1083,6 +1043,7 @@ const ViewerPage = ({ darkMode: initialDarkMode }) => {
                       표시할 데이터가 없습니다
                     </div>
                   )}
+                  {/* 로딩이 끝나고 데이터가 준비됐을 때만 그래프 렌더링 */}
                   {!loading && isDataReady && elements.length > 0 && (
                     <RelationGraphMain 
                       elements={elements} 
@@ -1092,6 +1053,9 @@ const ViewerPage = ({ darkMode: initialDarkMode }) => {
                       style={{ width: '100%', height: '100%' }}
                       graphViewState={graphViewState}
                       setGraphViewState={setGraphViewState}
+                      chapterNum={currentChapter}
+                      eventNum={currentEvent?.eventNum}
+                      hideIsolated={hideIsolated}
                     />
                   )}
                 </div>
@@ -1106,9 +1070,17 @@ const ViewerPage = ({ darkMode: initialDarkMode }) => {
           ref={viewerRef}
           book={book}
           onProgressChange={setProgress}
-          onCurrentPageChange={setCurrentPage}
+          onCurrentPageChange={(page) => {
+            setLoading(true);
+            setElements([]);
+            setCurrentPage(page);
+          }}
           onTotalPagesChange={setTotalPages}
-          onCurrentChapterChange={setCurrentChapter}
+          onCurrentChapterChange={(chapter) => {
+            setLoading(true);
+            setElements([]);
+            setCurrentChapter(chapter);
+          }}
           settings={settings}
           onCurrentLineChange={(wordIndex, totalWords, currentEvent) => {
             console.log('[ViewerPage onCurrentLineChange] wordIndex:', wordIndex, 'currentEvent:', currentEvent);
