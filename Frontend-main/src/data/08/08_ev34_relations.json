@@ -1,0 +1,85 @@
+{
+    "title": "They find Gatsby dead in the pool. The gardener then finds Wilson's body in the grass. ",
+    "start": 17215,
+    "end": 17613,
+    "text": " beetles kept thudding against the dull light, and\nwhenever Michaelis heard a car go tearing along the road outside it\nsounded to him like the car that hadn’t stopped a few hours before.\nHe didn’t like to go into the garage, because the work bench was\nstained where the body had been lying, so he moved uncomfortably\naround the office—he knew every object in it before morning—and from\ntime to time",
+    "new_appearances": [],
+    "importance": {
+        "2": 0.38095238095238093,
+        "1": 1.0,
+        "5": 0.047619047619047616,
+        "4": 0.14285714285714285,
+        "3": 0.3333333333333333,
+        "11": 0.19047619047619047,
+        "6": 0.09523809523809523,
+        "7": 0.047619047619047616,
+        "8": 0.47619047619047616,
+        "9": 0.047619047619047616,
+        "10": 0.47619047619047616
+    },
+    "relations": [
+        {
+            "relation": [
+                "friendship"
+            ],
+            "explanation": "Nick thanks Gatsby for his hospitality, indicating a polite and somewhat formal relationship. Nick says 'I enjoyed breakfast, Gatsby.'",
+            "id1": 2.0,
+            "id2": 1.0,
+            "positivity": 0.7,
+            "weight": 0.6
+        },
+        {
+            "relation": [
+                "romantic"
+            ],
+            "id1": 1.0,
+            "explanation": "Gatsby desperately tries to hold onto the memory of Daisy, suggesting a strong romantic connection. There is no change in this event.",
+            "id2": 3.0,
+            "positivity": 0.9,
+            "weight": 0.9
+        },
+        {
+            "id1": 2.0,
+            "relation": [
+                "annoyance",
+                "dislike"
+            ],
+            "explanation": "The conversation ends abruptly and Nick says 'I know I didn’t care. I couldn’t have talked to her across a tea-table that day if I never talked to her again', which indicates a negative shift in their relationship.",
+            "id2": 6.0,
+            "positivity": 0.2,
+            "weight": 0.7
+        },
+        {
+            "id1": 8.0,
+            "relation": [
+                "grief",
+                "loss"
+            ],
+            "explanation": "George Wilson is rocking himself back and forth, indicating grief and distress over Myrtle's death.",
+            "id2": 7.0,
+            "positivity": 0.1,
+            "weight": 0.8
+        },
+        {
+            "explanation": "Michaelis stayed with George, trying to comfort him after Myrtle's death. The event indicates Michaelis stayed with Wilson until dawn, reinforcing their support.",
+            "relation": [
+                "support",
+                "comfort"
+            ],
+            "id1": 10.0,
+            "id2": 8.0,
+            "positivity": 0.7,
+            "weight": 0.6
+        },
+        {
+            "relation": [
+                "abuse"
+            ],
+            "explanation": "George remembers his wife coming from the city with a bruised face and swollen nose, indicating abuse.",
+            "id1": 8.0,
+            "id2": 7.0,
+            "positivity": 0.05,
+            "weight": 0.9
+        }
+    ]
+}

@@ -1,0 +1,143 @@
+{
+    "title": "Myrtle changes into a cream-colored chiffon dress and acts haughtier. Mrs. McKee compliments Myrtle's dress, and Mr. McKee suggests photographing her.",
+    "start": 6065,
+    "end": 6728,
+    "text": "igured muslin, which stretched\ntight over her rather wide hips as Tom helped her to the platform in\nNew York. At the newsstand she bought a copy of Town Tattle and a\nmoving-picture magazine, and in the station drugstore some cold cream\nand a small flask of perfume. Upstairs, in the solemn echoing drive\nshe let four taxicabs drive away before she selected a new one,\nlavender-coloured with grey upholstery, and in this we slid out from\nthe mass of the station into the glowing sunshine. But immediately she\nturned sharply from the window and, leaning forward, tapped on the\nfront glass.\n\n“I want to get one of those dogs,” she said earnestly. “I want to get\none ",
+    "new_appearances": [],
+    "importance": {
+        "1": 0.2,
+        "2": 1.0,
+        "3": 1.0,
+        "4": 0.1,
+        "5": 0.9,
+        "6": 0.1,
+        "7": 0.1,
+        "11": 0.1,
+        "8": 0.2,
+        "9": 0.2,
+        "10": 0.2
+    },
+    "relations": [
+        {
+            "id1": 3.0,
+            "explanation": "The narrator states 'I first met Tom Buchanan’s mistress'.",
+            "relation": [
+                "met"
+            ],
+            "id2": 5.0,
+            "positivity": 0.5,
+            "weight": 0.75
+        },
+        {
+            "relation": [
+                "affair"
+            ],
+            "explanation": "The text mentions 'Tom Buchanan’s mistress'.",
+            "id1": 2.0,
+            "id2": 5.0,
+            "positivity": -0.8,
+            "weight": 0.9
+        },
+        {
+            "explanation": "The narrator describes Tom taking hold of his elbow and literally forcing him from the car, indicating a forceful interaction.",
+            "id1": 2.0,
+            "relation": [
+                "forced",
+                "company"
+            ],
+            "id2": 3.0,
+            "positivity": -0.6,
+            "weight": 0.8
+        },
+        {
+            "id1": 3.0,
+            "explanation": "The narrator says 'I followed him', indicating he is accompanying Tom.",
+            "relation": [
+                "accompanied"
+            ],
+            "id2": 2.0,
+            "positivity": 0.5,
+            "weight": 0.6
+        },
+        {
+            "explanation": "The narrator says 'George B. Wilson....and I followed Tom inside.'",
+            "relation": [
+                "followed"
+            ],
+            "id1": 3.0,
+            "id2": 4.0,
+            "positivity": 0.5,
+            "weight": 0.6
+        },
+        {
+            "id1": 2.0,
+            "explanation": "Tom slaps Wilson jovially on the shoulder and discusses business.",
+            "relation": [
+                "business"
+            ],
+            "id2": 4.0,
+            "positivity": 0.3,
+            "weight": 0.7
+        },
+        {
+            "id1": 4.0,
+            "explanation": "Wilson wants to buy a car from Tom and asks 'When are you going to sell me that car?'",
+            "relation": [
+                "wants to buy from"
+            ],
+            "id2": 2.0,
+            "positivity": 0.6,
+            "weight": 0.8
+        },
+        {
+            "explanation": "Tom responds coldly to Wilson's comment about the car, saying 'maybe I’d better sell it somewhere else after all.'",
+            "relation": [
+                "threatened"
+            ],
+            "id1": 2.0,
+            "id2": 4.0,
+            "positivity": -0.4,
+            "weight": 0.7
+        },
+        {
+            "id1": 5.0,
+            "explanation": "Myrtle shakes hands with Tom, looking him flush in the eye.",
+            "relation": [
+                "met"
+            ],
+            "id2": 2.0,
+            "positivity": 0.7,
+            "weight": 0.6
+        },
+        {
+            "explanation": "Myrtle walks 'through her husband as if he were a ghost'. She also speaks to him in a 'soft, coarse voice'.",
+            "id1": 5.0,
+            "relation": [
+                "disrespect"
+            ],
+            "id2": 4.0,
+            "positivity": -0.9,
+            "weight": 0.8
+        },
+        {
+            "relation": [
+                "disapproval"
+            ],
+            "id1": 2.0,
+            "explanation": "Tom exchanges a frown with Doctor Eckleburg showing a negative sentiment.",
+            "id2": 1.0,
+            "positivity": -0.6,
+            "weight": 0.7
+        },
+        {
+            "id1": 2.0,
+            "explanation": "Tom refers to Wilson as 'dumb he doesn’t know he’s alive' showing a clear disrespect.",
+            "relation": [
+                "disrespect"
+            ],
+            "id2": 4.0,
+            "positivity": -0.9,
+            "weight": 0.8
+        }
+    ]
+}

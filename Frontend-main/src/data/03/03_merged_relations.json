@@ -1,0 +1,119 @@
+{
+    "relations": [
+        {
+            "explanation": "The girls leaning together confidentially and sharing rumors about Gatsby killing a man suggests a close, gossipy relationship. The phrase \"Somebody told me they thought he killed a man once\" indicates a shared interest in scandalous rumors about Gatsby.",
+            "id1": 2.0,
+            "relation": [
+                "shared rumor",
+                "gossip"
+            ],
+            "id2": 4.0,
+            "positivity": -0.2,
+            "weight": 0.5
+        },
+        {
+            "explanation": "The girls leaning together confidentially and sharing rumors about Gatsby killing a man suggests a close, gossipy relationship. The phrase \"Somebody told me they thought he killed a man once\" indicates a shared interest in scandalous rumors about Gatsby.",
+            "id1": 2.0,
+            "relation": [
+                "shared rumor",
+                "gossip"
+            ],
+            "id2": 5.0,
+            "positivity": -0.2,
+            "weight": 0.5
+        },
+        {
+            "id1": 4.0,
+            "relation": [
+                "shared rumor",
+                "gossip"
+            ],
+            "explanation": "The girls leaning together confidentially and sharing rumors about Gatsby killing a man suggests a close, gossipy relationship. The phrase \"Somebody told me they thought he killed a man once\" indicates a shared interest in scandalous rumors about Gatsby.",
+            "id2": 5.0,
+            "positivity": -0.2,
+            "weight": 0.5
+        },
+        {
+            "id1": 4.0,
+            "relation": [
+                "interested in gossip"
+            ],
+            "explanation": "The three Mr. Mumbles bent forward and listened eagerly to the rumors about Gatsby. This indicates they are interested in gossip about Gatsby.",
+            "id2": 6.0,
+            "positivity": 0.1,
+            "weight": 0.3
+        },
+        {
+            "id1": 5.0,
+            "relation": [
+                "interested in gossip"
+            ],
+            "explanation": "The three Mr. Mumbles bent forward and listened eagerly to the rumors about Gatsby. This indicates they are interested in gossip about Gatsby.",
+            "id2": 6.0,
+            "positivity": 0.1,
+            "weight": 0.3
+        },
+        {
+            "explanation": "The three Mr. Mumbles bent forward and listened eagerly to the rumors about Gatsby. This indicates they are interested in gossip about Gatsby.",
+            "id1": 2.0,
+            "relation": [
+                "interested in gossip"
+            ],
+            "id2": 6.0,
+            "positivity": 0.1,
+            "weight": 0.3
+        },
+        {
+            "explanation": "The girls are spreading rumors about Gatsby, suggesting a negative perception of him. The phrase \"It’s more that he was a German spy during the war\" and \"I'll bet he killed a man\" indicates a negative rumor.",
+            "relation": [
+                "subject of rumor"
+            ],
+            "id1": 1.0,
+            "id2": 4.0,
+            "positivity": -0.6,
+            "weight": 0.4
+        },
+        {
+            "relation": [
+                "subject of rumor"
+            ],
+            "id1": 1.0,
+            "explanation": "The girls are spreading rumors about Gatsby, suggesting a negative perception of him. The phrase \"It’s more that he was a German spy during the war\" and \"I'll bet he killed a man\" indicates a negative rumor.",
+            "id2": 5.0,
+            "positivity": -0.6,
+            "weight": 0.4
+        },
+        {
+            "id1": 1.0,
+            "relation": [
+                "subject of rumor"
+            ],
+            "explanation": "The Mr. Mumbles are listening to rumors about Gatsby, suggesting a negative perception of him. The phrase \"I heard that from a man who knew all about him, grew up with him in Germany,\" he assured us positively indicates a negative rumor.",
+            "id2": 6.0,
+            "positivity": -0.6,
+            "weight": 0.4
+        },
+        {
+            "id1": 2.0,
+            "relation": [
+                "invitation",
+                "friendship"
+            ],
+            "explanation": "Jordan invited the narrator to join her party. This suggests a friendly relationship.",
+            "id2": 3.0,
+            "positivity": 0.7,
+            "weight": 0.6
+        },
+        {
+            "relation": [
+                "unwanted pursuit",
+                "harassment"
+            ],
+            "id1": 2.0,
+            "explanation": "The undergraduate is persistent and given to violent innuendo toward Jordan, under the impression that she will eventually yield to him. This indicates a unwanted pursuit.",
+            "id2": 7.0,
+            "positivity": -0.8,
+            "weight": 0.7
+        }
+    ]
+}

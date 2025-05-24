@@ -1,0 +1,26 @@
+{
+    "title": "It's dawn on Long Island. Gatsby insists Daisy never loved Tom, claiming she was frightened by Tom's accusations. Gatsby reveals he went to Louisville after the war to revisit places he and Daisy had been. He felt he was leaving her behind, losing the best part of his life. ",
+    "start": 5912,
+    "end": 7016,
+    "text": " a deep memory\nfor the long parting the next day promised. They had never been closer\nin their month of love, nor communicated more profoundly one with\nanother, than when she brushed silent lips against his coat’s shoulder\nor when he touched the end of her fingers, gently, as though she were\nasleep.\n\n------------------------------------------------------------------------\n\nHe did extraordinarily well in the war. He was a captain before he\nwent to the front, and following the Argonne battles he got his\nmajority and the command of the divisional machine-guns. After the\narmistice he tried frantically to get home, but some complication or\nmisunderstanding sent him to Oxford instead. He was worried now—there\nwas a quality of nervous despair in Daisy’s letters. She didn’t see\nwhy he couldn’t come. She was feeling the pressure of the world\noutside, and she wanted to see him and feel his presence beside her\nand be reassured that she was doing the right thing after all.\n\nFor Daisy was young and her artificial world was redolent of orchids\nand pleasant, cheerful snobbery and orchestras which set t",
+    "new_appearances": [],
+    "importance": {
+        "2": 0.5714285714285714,
+        "1": 1.0,
+        "5": 0.14285714285714285,
+        "4": 0.42857142857142855,
+        "3": 0.7142857142857143
+    },
+    "relations": [
+        {
+            "explanation": "Gatsby kissed Daisy's \"curious and lovely mouth\", showing romantic affection. He was also \"overwhelmingly aware of the youth and mystery\" of Daisy. They had never been closer in their month of love, nor communicated more profoundly one with another, than when she brushed silent lips against his coat’s shoulder or when he touched the end of her fingers, gently, as though she were asleep.",
+            "relation": [
+                "romantic"
+            ],
+            "id1": 1.0,
+            "id2": 3.0,
+            "positivity": 0.9,
+            "weight": 0.9
+        }
+    ]
+}

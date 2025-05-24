@@ -1,0 +1,120 @@
+{
+    "title": "Myrtle runs out of the garage and is hit by a car.",
+    "start": 10150,
+    "end": 10346,
+    "text": "bbles with our feet. A silver curve of the moon\nhovered already in the western sky. Gatsby started to speak, changed\nhis mind, but not before Tom wheeled and faced him expectantly.\n\n“Have you got ",
+    "new_appearances": [],
+    "importance": {
+        "2": 0.9130434782608695,
+        "3": 0.043478260869565216,
+        "1": 1.0,
+        "4": 0.043478260869565216,
+        "5": 0.8260869565217391,
+        "6": 0.043478260869565216,
+        "7": 0.8695652173913043,
+        "9": 0.043478260869565216,
+        "10": 0.043478260869565216,
+        "11": 0.043478260869565216,
+        "8": 0.9565217391304348,
+        "12": 0.043478260869565216,
+        "13": 0.043478260869565216,
+        "14": 0.08695652173913043,
+        "15": 0.17391304347826086
+    },
+    "relations": [
+        {
+            "id1": 1.0,
+            "explanation": "Gatsby's house lights are no longer on, marking the end of his extravagant parties. He fires his servants to prevent gossip about Daisy's visits.",
+            "relation": [
+                "employer",
+                "employee"
+            ],
+            "id2": 4.0,
+            "positivity": -0.5,
+            "weight": 0.7
+        },
+        {
+            "relation": [
+                "employer",
+                "employee"
+            ],
+            "id1": 6.0,
+            "explanation": "Wolfshiem wanted to do something for the people who are now Gatsby's servants.",
+            "id2": 4.0,
+            "positivity": 0.5,
+            "weight": 0.6
+        },
+        {
+            "id1": 3.0,
+            "relation": [
+                "employee",
+                "employer"
+            ],
+            "explanation": "The butler announces the arrival of Gatsby and Nick and takes their hats.",
+            "id2": 1.0,
+            "positivity": 0.0,
+            "weight": 0.4
+        },
+        {
+            "id1": 8.0,
+            "relation": [
+                "affair"
+            ],
+            "explanation": "Jordan whispers that the person on the telephone is 'Tom's girl'.",
+            "id2": 15.0,
+            "positivity": -0.8,
+            "weight": 0.9
+        },
+        {
+            "explanation": "Daisy kisses Gatsby on the mouth and says 'You know I love you'",
+            "id1": 5.0,
+            "relation": [
+                "lover"
+            ],
+            "id2": 1.0,
+            "positivity": 0.9,
+            "weight": 0.9
+        },
+        {
+            "relation": [
+                "child",
+                "mother"
+            ],
+            "explanation": "Pammy rushed across the room and rooted shyly into her mother’s dress. Daisy says 'She looks like me. She’s got my hair and shape of the face.'",
+            "id1": 12.0,
+            "id2": 5.0,
+            "positivity": 0.9,
+            "weight": 0.8
+        },
+        {
+            "id1": 1.0,
+            "explanation": "Gatsby kept looking at the child with surprise. I don’t think he had ever really believed in its existence before.",
+            "relation": [
+                "stranger"
+            ],
+            "id2": 12.0,
+            "positivity": 0.2,
+            "weight": 0.6
+        },
+        {
+            "id1": 8.0,
+            "explanation": "She had told him that she loved him, and Tom Buchanan saw.",
+            "relation": [
+                "rival"
+            ],
+            "id2": 1.0,
+            "positivity": -0.6,
+            "weight": 0.7
+        },
+        {
+            "id1": 8.0,
+            "explanation": "She had told him that she loved him, and Tom Buchanan saw.",
+            "relation": [
+                "spouse"
+            ],
+            "id2": 5.0,
+            "positivity": -0.4,
+            "weight": 0.8
+        }
+    ]
+}

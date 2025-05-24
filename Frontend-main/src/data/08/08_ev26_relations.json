@@ -1,0 +1,53 @@
+{
+    "title": "By half-past two, Wilson was in West Egg, asking for directions to Gatsby's house. He knew Gatsby's name by then. ",
+    "start": 15265,
+    "end": 15428,
+    "text": "to go back a little and tell what happened at\nthe garage after we left there the night before.\n\nThey had difficulty in locating the sister, Catherine. She must hav",
+    "new_appearances": [],
+    "importance": {
+        "2": 0.5384615384615384,
+        "1": 1.0,
+        "5": 0.07692307692307693,
+        "4": 0.23076923076923078,
+        "3": 0.5384615384615384,
+        "11": 0.07692307692307693,
+        "6": 0.15384615384615385,
+        "7": 0.07692307692307693,
+        "8": 0.6923076923076923,
+        "9": 0.07692307692307693,
+        "10": 0.7692307692307693
+    },
+    "relations": [
+        {
+            "id1": 2.0,
+            "relation": [
+                "friendship"
+            ],
+            "explanation": "Nick thanks Gatsby for his hospitality, indicating a polite and somewhat formal relationship. Nick says 'I enjoyed breakfast, Gatsby.'",
+            "id2": 1.0,
+            "positivity": 0.7,
+            "weight": 0.6
+        },
+        {
+            "relation": [
+                "romantic"
+            ],
+            "id1": 1.0,
+            "explanation": "Gatsby desperately tries to hold onto the memory of Daisy, suggesting a strong romantic connection. There is no change in this event.",
+            "id2": 3.0,
+            "positivity": 0.9,
+            "weight": 0.9
+        },
+        {
+            "relation": [
+                "annoyance",
+                "dislike"
+            ],
+            "explanation": "The conversation ends abruptly and Nick says 'I know I didn’t care. I couldn’t have talked to her across a tea-table that day if I never talked to her again', which indicates a negative shift in their relationship.",
+            "id1": 2.0,
+            "id2": 6.0,
+            "positivity": 0.2,
+            "weight": 0.7
+        }
+    ]
+}

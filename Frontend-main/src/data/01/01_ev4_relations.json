@@ -1,0 +1,125 @@
+{
+    "title": "At dinner, Daisy objects to the candles. Tom expresses his pessimistic views on civilization and promotes a racist book. Daisy makes light of Tom's pronouncements. The butler interrupts with a phone call for Tom, who leaves the porch. Daisy shares a story about the butler's nose. Tom returns, and Daisy becomes animated, complimenting Nick. She excuses herself, and Miss Baker and Nick exchange glances. Miss Baker reveals that Tom has a woman in New York.",
+    "start": 5114,
+    "end": 7258,
+    "text": "d as I walked on I was lonely no longer. I was a guide,\na pathfinder, an original settler. He had casually conferred on me the\nfreedom of the neighbourhood.\n\nAnd so with the sunshine and the great bursts of leaves growing on the\ntrees, just as things grow in fast movies, I had that familiar\nconviction that life was beginning over again with the summer.\n\nThere was so much to read, for one thing, and so much fine health to\nbe pulled down out of the young breath-giving air. I bought a dozen\nvolumes on banking and credit and investment securities, and they\nstood on my shelf in red and gold like new money from the mint,\npromising to unfold the shining secrets that only Midas and Morgan and\nMaecenas knew. And I had the high intention of reading many other\nbooks besides. I was rather literary in college—one year I wrote a\nseries of very solemn and obvious editorials for the Yale News—and now\nI was going to bring back all such things into my life and become\nagain that most limited of all specialists, the “well-rounded man.”\nThis isn’t just an epigram—life is much more successfully looked at\nfrom a single window, after all.\n\nIt was a matter of chance that I should have rented a house in one of\nthe strangest communities in North America. It was on that slender\nriotous island which extends itself due east of New York—and where\nthere are, among other natural curiosities, two unusual formations of\nland. Twenty miles from the city a pair of enormous eggs, identical in\ncontour and separated only by a courtesy bay, jut out into the most\ndomesticated body of salt water in the Western hemisphere, the great\nwet barnyard of Long Island Sound. They are not perfect ovals—like the\negg in the Columbus story, they are both crushed flat at the contact\nend—but their physical resemblance must be a source of perpetual\nwonder to the gulls that fly overhead. To the wingless a more\ninteresting phenomenon is their dissimilarity in every particular\nexcept shape and size.\n\nI lived at West Egg, the—well, the less fashionable of the two, though\nthis is a most superficial tag to express the bizarre and not a little\nsinister contrast between the",
+    "new_appearances": [
+        15
+    ],
+    "importance": {
+        "1": 0.3333333333333333,
+        "2": 0.3333333333333333,
+        "3": 0.3333333333333333,
+        "4": 0.3333333333333333,
+        "5": 0.3333333333333333,
+        "11": 1.0,
+        "12": 1.0,
+        "13": 0.6666666666666666,
+        "14": 0.3333333333333333,
+        "15": 0.3333333333333333
+    },
+    "relations": [
+        {
+            "relation": [
+                "father-son"
+            ],
+            "explanation": "Nick's father gave him advice, indicating a father-son relationship. \"my father gave me some advice\"",
+            "id1": 1.0,
+            "id2": 2.0,
+            "positivity": 0.9,
+            "weight": 0.9
+        },
+        {
+            "explanation": "Nick says 'Only Gatsby, the man who gives his name to this book, was exempt from my reaction'. He also says 'Gatsby turned out all right at the end'. This indicates a complex relationship involving both scorn and admiration.",
+            "id1": 1.0,
+            "relation": [
+                "admiration",
+                "scorn"
+            ],
+            "id2": 3.0,
+            "positivity": 0.6,
+            "weight": 0.7
+        },
+        {
+            "id1": 1.0,
+            "explanation": "The text mentions 'My family have been prominent...people'. This establishes a familial connection.",
+            "relation": [
+                "family"
+            ],
+            "id2": 4.0,
+            "positivity": 0.7,
+            "weight": 0.6
+        },
+        {
+            "explanation": "The text states 'we’re descended from the Dukes of Buccleuch, but the actual founder of my line was my grandfather’s brother'. This indicates a familial connection.",
+            "relation": [
+                "family"
+            ],
+            "id1": 1.0,
+            "id2": 5.0,
+            "positivity": 0.7,
+            "weight": 0.6
+        },
+        {
+            "id1": 1.0,
+            "explanation": "The text says 'when a young man at the office suggested that we take a house together'. This suggests a collegial or friendly relationship.",
+            "relation": [
+                "colleague",
+                "potential roommate"
+            ],
+            "id2": 6.0,
+            "positivity": 0.6,
+            "weight": 0.5
+        },
+        {
+            "id1": 1.0,
+            "explanation": "The text says 'some man, more recently arrived than I, stopped me on the road...I told him'. This indicates a brief interaction and giving directions.",
+            "relation": [
+                "acquaintance"
+            ],
+            "id2": 7.0,
+            "positivity": 0.5,
+            "weight": 0.3
+        },
+        {
+            "relation": [
+                "acquaintance"
+            ],
+            "id1": 1.0,
+            "explanation": "The phrase 'He had casually conferred on me the freedom of the neighbourhood' suggests the man Nick met gave him a sense of belonging. This increases the weight and positivity.",
+            "id2": 7.0,
+            "positivity": 0.6,
+            "weight": 0.4
+        },
+        {
+            "explanation": "The text mentions 'secrets that only Midas and Morgan and Maecenas knew' in the context of banking. This suggests Nick is interested in learning about these figures and their financial expertise, but it does not imply a direct relationship.",
+            "id1": 1.0,
+            "relation": [
+                "interest"
+            ],
+            "id2": 8.0,
+            "positivity": 0.2,
+            "weight": 0.1
+        },
+        {
+            "relation": [
+                "interest"
+            ],
+            "explanation": "The text mentions 'secrets that only Midas and Morgan and Maecenas knew' in the context of banking. This suggests Nick is interested in learning about these figures and their financial expertise, but it does not imply a direct relationship.",
+            "id1": 1.0,
+            "id2": 9.0,
+            "positivity": 0.2,
+            "weight": 0.1
+        },
+        {
+            "id1": 1.0,
+            "relation": [
+                "interest"
+            ],
+            "explanation": "The text mentions 'secrets that only Midas and Morgan and Maecenas knew' in the context of banking. This suggests Nick is interested in learning about these figures and their financial expertise, but it does not imply a direct relationship.",
+            "id2": 10.0,
+            "positivity": 0.2,
+            "weight": 0.1
+        }
+    ]
+}

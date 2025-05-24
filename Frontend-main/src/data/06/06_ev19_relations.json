@@ -1,0 +1,32 @@
+{
+    "title": "Mr. Sloane tries to leave, but the woman insists on inviting Gatsby, who doesn't have a horse.",
+    "start": 5911,
+    "end": 6226,
+    "text": "merican life brought back to the Eastern seaboard the savage\nviolence of the frontier brothel and saloon. It was indirectly due to\nCody that Gatsby drank so little. Sometimes in the course of gay\nparties women used to rub champagne into his hair; for himself he\nformed the habit of letting liquor alone.\n\nAnd it was",
+    "new_appearances": [],
+    "importance": {
+        "2": 0.05263157894736842,
+        "1": 1.0,
+        "3": 0.3684210526315789,
+        "4": 0.15789473684210525,
+        "5": 0.3157894736842105,
+        "6": 0.05263157894736842,
+        "7": 0.3684210526315789,
+        "8": 0.2631578947368421,
+        "9": 0.2631578947368421
+    },
+    "relations": [
+        {
+            "relation": [
+                "mentor",
+                "employer",
+                "employee"
+            ],
+            "explanation": "while he remained with Cody he was in turn steward, mate, skipper, secretary, and even jailor, for Dan Cody sober knew what lavish doings Dan Cody drunk might soon be about, and he provided for such contingencies by reposing more and more trust in Gatsby. The arrangement lasted five years, during which the boat went three times around the Conti",
+            "id1": 3.0,
+            "id2": 1.0,
+            "positivity": 1.0,
+            "weight": 0.9
+        }
+    ]
+}

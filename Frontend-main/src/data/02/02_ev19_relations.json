@@ -1,0 +1,244 @@
+{
+    "title": "Myrtle tells the narrator about meeting Tom on the train.",
+    "start": 10407,
+    "end": 10803,
+    "text": "es, and I went out to buy some\nat the drugstore on the corner. When I came back they had both\ndisappeared, so I sat down discreetly in the living-room and read a\nchapter of Simon Called Peter—either it was terrible stuff or the\nwhisky distorted things, because it didn’t make any sense to me.\n\nJust as Tom and Myrtle (after the first drink Mrs. Wilson and I called\neach other by our first names) ",
+    "new_appearances": [],
+    "importance": {
+        "1": 0.1111111111111111,
+        "2": 0.8333333333333334,
+        "3": 1.0,
+        "4": 0.05555555555555555,
+        "5": 0.9444444444444444,
+        "6": 0.05555555555555555,
+        "7": 0.05555555555555555,
+        "11": 0.05555555555555555,
+        "8": 0.4444444444444444,
+        "9": 0.2222222222222222,
+        "10": 0.2777777777777778,
+        "12": 0.1111111111111111
+    },
+    "relations": [
+        {
+            "relation": [
+                "met"
+            ],
+            "explanation": "The narrator states 'I first met Tom Buchanan’s mistress'.",
+            "id1": 3.0,
+            "id2": 5.0,
+            "positivity": 0.5,
+            "weight": 0.75
+        },
+        {
+            "explanation": "The text mentions 'Tom Buchanan’s mistress'.",
+            "id1": 2.0,
+            "relation": [
+                "affair"
+            ],
+            "id2": 5.0,
+            "positivity": -0.8,
+            "weight": 0.9
+        },
+        {
+            "id1": 2.0,
+            "relation": [
+                "forced",
+                "company"
+            ],
+            "explanation": "The narrator describes Tom taking hold of his elbow and literally forcing him from the car, indicating a forceful interaction.",
+            "id2": 3.0,
+            "positivity": -0.6,
+            "weight": 0.8
+        },
+        {
+            "relation": [
+                "accompanied"
+            ],
+            "explanation": "The narrator says 'I followed him', indicating he is accompanying Tom.",
+            "id1": 3.0,
+            "id2": 2.0,
+            "positivity": 0.5,
+            "weight": 0.6
+        },
+        {
+            "id1": 3.0,
+            "explanation": "The narrator says 'George B. Wilson....and I followed Tom inside.'",
+            "relation": [
+                "followed"
+            ],
+            "id2": 4.0,
+            "positivity": 0.5,
+            "weight": 0.6
+        },
+        {
+            "relation": [
+                "business"
+            ],
+            "id1": 2.0,
+            "explanation": "Tom slaps Wilson jovially on the shoulder and discusses business.",
+            "id2": 4.0,
+            "positivity": 0.3,
+            "weight": 0.7
+        },
+        {
+            "relation": [
+                "wants to buy from"
+            ],
+            "id1": 4.0,
+            "explanation": "Wilson wants to buy a car from Tom and asks 'When are you going to sell me that car?'",
+            "id2": 2.0,
+            "positivity": 0.6,
+            "weight": 0.8
+        },
+        {
+            "id1": 2.0,
+            "relation": [
+                "threatened"
+            ],
+            "explanation": "Tom responds coldly to Wilson's comment about the car, saying 'maybe I’d better sell it somewhere else after all.'",
+            "id2": 4.0,
+            "positivity": -0.4,
+            "weight": 0.7
+        },
+        {
+            "explanation": "Myrtle shakes hands with Tom, looking him flush in the eye.",
+            "relation": [
+                "met"
+            ],
+            "id1": 5.0,
+            "id2": 2.0,
+            "positivity": 0.7,
+            "weight": 0.6
+        },
+        {
+            "explanation": "Myrtle walks 'through her husband as if he were a ghost'. She also speaks to him in a 'soft, coarse voice'.",
+            "relation": [
+                "disrespect"
+            ],
+            "id1": 5.0,
+            "id2": 4.0,
+            "positivity": -0.9,
+            "weight": 0.8
+        },
+        {
+            "explanation": "Tom exchanges a frown with Doctor Eckleburg showing a negative sentiment.",
+            "relation": [
+                "disapproval"
+            ],
+            "id1": 2.0,
+            "id2": 1.0,
+            "positivity": -0.6,
+            "weight": 0.7
+        },
+        {
+            "relation": [
+                "disrespect"
+            ],
+            "explanation": "Tom refers to Wilson as 'dumb he doesn’t know he’s alive' showing a clear disrespect.",
+            "id1": 2.0,
+            "id2": 4.0,
+            "positivity": -0.9,
+            "weight": 0.8
+        },
+        {
+            "relation": [
+                "customer"
+            ],
+            "id1": 5.0,
+            "explanation": "Mrs. Wilson asks the dog seller about the puppies, showing an interest in buying one: 'What kind are they?' asked Mrs. Wilson eagerly, as he came to the taxi-window.",
+            "id2": 7.0,
+            "positivity": 0.8,
+            "weight": 0.7
+        },
+        {
+            "id1": 5.0,
+            "explanation": "Mrs. Wilson says 'I think it’s cute' enthusiastically when referring to the dog.",
+            "relation": [
+                "wants to buy from"
+            ],
+            "id2": 7.0,
+            "positivity": 0.9,
+            "weight": 0.8
+        },
+        {
+            "id1": 5.0,
+            "explanation": "The text describes Mrs. Wilson fondling the weatherproof coat with rapture after purchasing the dog.",
+            "relation": [
+                "bought from"
+            ],
+            "id2": 7.0,
+            "positivity": 0.95,
+            "weight": 0.9
+        },
+        {
+            "relation": [
+                "insistence"
+            ],
+            "id1": 2.0,
+            "explanation": "Tom interposes and urges the narrator to come to the apartment, showing an insistence on the narrator's presence.",
+            "id2": 3.0,
+            "positivity": 0.6,
+            "weight": 0.7
+        },
+        {
+            "relation": [
+                "invitation"
+            ],
+            "explanation": "Myrtle urges the narrator to come to the apartment and says she will telephone her sister Catherine.",
+            "id1": 5.0,
+            "id2": 3.0,
+            "positivity": 0.7,
+            "weight": 0.7
+        },
+        {
+            "id1": 5.0,
+            "explanation": "Myrtle says 'I’ll telephone my sister Catherine'.",
+            "relation": [
+                "related"
+            ],
+            "id2": 8.0,
+            "positivity": 0.8,
+            "weight": 0.6
+        },
+        {
+            "relation": [
+                "invited"
+            ],
+            "id1": 5.0,
+            "explanation": "Myrtle announces 'I’m going to have the McKees come up'.",
+            "id2": 9.0,
+            "positivity": 0.7,
+            "weight": 0.7
+        },
+        {
+            "id1": 5.0,
+            "explanation": "Myrtle announces 'I’m going to have the McKees come up'.",
+            "relation": [
+                "invited"
+            ],
+            "id2": 10.0,
+            "positivity": 0.7,
+            "weight": 0.7
+        },
+        {
+            "relation": [
+                "service"
+            ],
+            "explanation": "The elevator boy went for items for the dog.",
+            "id1": 11.0,
+            "id2": 5.0,
+            "positivity": 0.6,
+            "weight": 0.7
+        },
+        {
+            "id1": 3.0,
+            "explanation": "The narrator mentions 'Mrs. Wilson and I called each other by our first names'.",
+            "relation": [
+                "familiarity"
+            ],
+            "id2": 5.0,
+            "positivity": 0.8,
+            "weight": 0.7
+        }
+    ]
+}

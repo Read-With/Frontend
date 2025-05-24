@@ -1,0 +1,43 @@
+{
+    "title": "Michaelis finds a new dog-leash in the drawer, and Wilson says Myrtle had it wrapped in tissue paper. Wilson then says that the man in the car killed Myrtle. ",
+    "start": 11912,
+    "end": 12547,
+    "text": " goodbye.”\n\nWe shook hands and I started away. Just before I reached the hedge I\nremembered something and turned around.\n\n“They’re a rotten crowd,” I shouted across the lawn. “You’re worth the\nwhole damn bunch put together.”\n\nI’ve always been glad I said that. It was the only compliment I ever\ngave him, because I disapproved of him from beginning to end. First he\nnodded politely, and then his face broke into that radiant and\nunderstanding smile, as if we’d been in ecstatic cahoots on that fact\nall the time. His gorgeous pink rag of a suit made a bright spot of\ncolour against the white steps, and I thought of the night when I\nfi",
+    "new_appearances": [],
+    "importance": {
+        "2": 0.5833333333333334,
+        "1": 1.0,
+        "5": 0.08333333333333333,
+        "4": 0.25,
+        "3": 0.5833333333333334,
+        "11": 0.08333333333333333,
+        "6": 0.16666666666666666,
+        "7": 0.08333333333333333,
+        "8": 0.4166666666666667,
+        "9": 0.08333333333333333,
+        "10": 0.4166666666666667
+    },
+    "relations": [
+        {
+            "relation": [
+                "romantic"
+            ],
+            "explanation": "Gatsby desperately tries to hold onto the memory of Daisy, suggesting a strong romantic connection. The text mentions 'the spot that she had made lovely for him' and 'he knew that he had lost that part of it, the freshest and the best, forever.' He also anxiously asks if Daisy will call him.",
+            "id1": 1.0,
+            "id2": 3.0,
+            "positivity": 0.9,
+            "weight": 0.9
+        },
+        {
+            "relation": [
+                "friendship",
+                "care"
+            ],
+            "explanation": "Nick says 'I didn’t want to leave Gatsby. I missed that train, and then another, before I could get myself away.' and 'You’re worth the whole damn bunch put together.' This suggests a strong bond and care for Gatsby. Gatsby responds with a 'radiant and understanding smile'.",
+            "id1": 2.0,
+            "id2": 1.0,
+            "positivity": 0.9,
+            "weight": 0.8
+        }
+    ]
+}

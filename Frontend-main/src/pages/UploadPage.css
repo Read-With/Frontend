@@ -1,0 +1,458 @@
+/* 업로드 페이지 스타일 */
+.upload-root {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  min-height: 100vh;
+  background: #fff;
+  width: 100vw;
+  padding: 0;
+  isolation: isolate;
+  position: relative;
+}
+
+/* 사이드바 컨테이너 */
+.sidebar-container {
+  width: 200px;
+  min-width: 200px;
+  position: relative;
+  z-index: 3;
+  margin-top: 40px; /* 헤더 높이만큼 */
+}
+
+.upload-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 0;
+  background: #fff;
+  margin-top: 40px; /* 헤더 높이만큼 */
+}
+
+/* UserProfile 컴포넌트를 위한 스타일 조정 */
+.upload-main .user-profile-section {
+  width: 90%;
+  max-width: 1200px;
+  margin: 0 auto 30px auto;
+  background: linear-gradient(135deg, #22336b 0%, #4F6DDE 100%);
+}
+
+/* 섹션 스타일 */
+.upload-section {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  padding: 40px 60px 20px;
+  gap: 30px;
+  isolation: isolate;
+  width: 100%;
+  max-width: 800px;
+  z-index: 2;
+  text-align: center;
+}
+
+.upload-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 0px;
+  gap: 24px;
+  width: 100%;
+  flex-grow: 1;
+  z-index: 0;
+}
+
+.upload-title {
+  width: 100%;
+  font-family: 'Roboto', sans-serif;
+  font-style: normal;
+  font-weight: 700;
+  font-size: 40px;
+  line-height: 48px;
+  text-align: center;
+  color: #000000;
+  margin: 0;
+}
+
+.upload-description {
+  width: 100%;
+  font-family: 'Roboto', sans-serif;
+  font-style: normal;
+  font-weight: 400;
+  font-size: 16px;
+  line-height: 24px;
+  text-align: center;
+  color: #000000;
+  margin: 0;
+}
+
+/* 버튼 컨테이너 */
+.upload-buttons {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  padding: 0px;
+  gap: 12px;
+  width: 100%;
+  margin-top: 30px;
+}
+
+/* 취소 버튼 */
+.upload-btn-secondary {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  padding: 12px;
+  width: 240px;
+  height: 48px;
+  border: 1px solid #000000;
+  border-radius: 8px;
+  background: transparent;
+  cursor: pointer;
+  flex: none;
+  order: 0;
+  flex-grow: 0;
+}
+
+.upload-btn-secondary .btn-title {
+  width: auto;
+  height: 24px;
+  font-family: 'Roboto', sans-serif;
+  font-style: normal;
+  font-weight: 500;
+  font-size: 16px;
+  line-height: 24px;
+  color: #000000;
+  text-align: center;
+}
+
+/* 업로드 버튼 */
+.upload-btn-primary {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  padding: 12px;
+  width: 240px;
+  height: 48px;
+  background: #000000;
+  border-radius: 8px;
+  border: none;
+  cursor: pointer;
+  flex: none;
+  order: 1;
+  flex-grow: 0;
+}
+
+.upload-btn-primary .btn-title {
+  width: auto;
+  height: 24px;
+  font-family: 'Roboto', sans-serif;
+  font-style: normal;
+  font-weight: 500;
+  font-size: 16px;
+  line-height: 24px;
+  color: #FFFFFF;
+  text-align: center;
+}
+
+.upload-btn-primary:disabled {
+  background: #999;
+  cursor: not-allowed;
+}
+
+/* 업로드 필드 스타일 */
+.upload-field {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  padding: 40px 56px;
+  gap: 24px;
+  width: 90%;
+  max-width: 800px;
+  border: 1px dashed rgba(0, 0, 0, 0.25);
+  border-radius: 10px;
+  margin: 0 auto 40px;
+  z-index: 3;
+  text-align: center;
+}
+
+/* 클라우드 아이콘 */
+.upload-cloud-icon {
+  width: 48px;
+  height: 48px;
+  margin: 0 auto;
+}
+
+/* 하단 컨텐츠 */
+.upload-bottom-content {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  padding: 0px;
+  gap: 24px;
+  width: 100%;
+  text-align: center;
+}
+
+/* 설명 컨테이너 */
+.upload-description-container {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  padding: 0px;
+  gap: 12px;
+  width: 100%;
+  text-align: center;
+}
+
+.upload-field-title {
+  width: 100%;
+  font-family: 'Helvetica', sans-serif;
+  font-style: normal;
+  font-weight: 400;
+  font-size: 13px;
+  line-height: 15px;
+  color: #000000;
+  margin: 0;
+  text-align: center;
+}
+
+.upload-field-subtitle {
+  width: 100%;
+  font-family: 'Helvetica', sans-serif;
+  font-style: normal;
+  font-weight: 400;
+  font-size: 12px;
+  line-height: 14px;
+  color: rgba(0, 0, 0, 0.4);
+  margin: 0;
+  text-align: center;
+}
+
+/* 파일 선택 버튼 */
+.upload-select-button {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  padding: 12px 16px;
+  gap: 10px;
+  width: 95px;
+  height: 35px;
+  background: #FBFDFE;
+  border: 1px solid rgba(15, 145, 210, 0.7);
+  border-radius: 5px;
+  cursor: pointer;
+  margin: 0 auto;
+}
+
+.upload-select-text {
+  width: auto;
+  height: 11px;
+  font-family: 'Helvetica', sans-serif;
+  font-style: normal;
+  font-weight: 400;
+  font-size: 10px;
+  line-height: 11px;
+  text-transform: uppercase;
+  color: #0F91D2;
+  text-align: center;
+}
+
+/* 선택된 파일 표시 */
+.selected-file {
+  margin-top: 15px;
+  font-family: 'Helvetica', sans-serif;
+  font-size: 14px;
+  color: #333;
+  text-align: center;
+  width: 100%;
+}
+
+.selected-file p {
+  margin: 5px 0;
+  text-align: center;
+}
+
+/* 업로드 진행률 표시 */
+.upload-progress {
+  width: 100%;
+  margin-top: 20px;
+  margin-bottom: 10px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.upload-progress-bar {
+  width: 100%;
+  height: 8px;
+  background-color: #f0f0f0;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.upload-progress-fill {
+  height: 100%;
+  background-color: #4CAF50;
+  border-radius: 4px;
+  transition: width 0.3s ease;
+}
+
+.upload-progress-text {
+  margin-top: 8px;
+  font-family: 'Helvetica', sans-serif;
+  font-size: 14px;
+  color: #333;
+  text-align: center;
+}
+
+/* 업로드 상태 메시지 */
+.upload-status-message {
+  position: fixed;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1000;
+  text-align: center;
+}
+
+.upload-status-content {
+  display: flex;
+  align-items: center;
+  padding: 16px 20px;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  background-color: white;
+  min-width: 300px;
+  max-width: 400px;
+  animation: slide-in 0.3s ease-out;
+}
+
+.upload-status-content.success {
+  border-left: 4px solid #4CAF50;
+}
+
+.upload-status-content.error {
+  border-left: 4px solid #FF5252;
+}
+
+@keyframes slide-in {
+  from {
+    transform: translateY(20px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.upload-status-icon {
+  margin-right: 15px;
+  flex-shrink: 0;
+}
+
+.upload-status-content p {
+  flex-grow: 1;
+  margin: 0;
+  font-family: 'Roboto', sans-serif;
+  font-size: 14px;
+  color: #333;
+  text-align: left;
+}
+
+.upload-status-close {
+  background: none;
+  border: none;
+  color: #999;
+  font-size: 16px;
+  cursor: pointer;
+  padding: 0;
+  margin-left: 10px;
+}
+
+.upload-status-close:hover {
+  color: #333;
+}
+
+/* 반응형 스타일 */
+@media (max-width: 1200px) {
+  .upload-root {
+    flex-direction: column;
+  }
+  
+  .upload-main {
+    margin-top: 40px;
+  }
+  
+  .upload-main .user-profile-section {
+    width: 95%;
+    padding: 40px 20px;
+  }
+  
+  .upload-section {
+    padding: 30px 20px;
+  }
+  
+  .upload-container {
+    gap: 16px;
+  }
+  
+  .upload-buttons {
+    flex-direction: column;
+    gap: 12px;
+  }
+  
+  .upload-btn-secondary,
+  .upload-btn-primary {
+    width: 100%;
+  }
+  
+  .upload-field {
+    padding: 30px 20px;
+  }
+  
+  .upload-status-message {
+    width: 95%;
+  }
+  
+  .upload-status-content {
+    width: 100%;
+  }
+}
+
+@media (max-width: 900px) {
+  .upload-section {
+    padding: 20px;
+  }
+  
+  .upload-field {
+    padding: 15px;
+    min-height: 200px;
+  }
+  
+  .upload-bottom-content {
+    width: 100%;
+  }
+  
+  .upload-description-container {
+    width: 100%;
+  }
+  
+  .upload-field-title,
+  .upload-field-subtitle {
+    width: 100%;
+    text-align: center;
+  }
+} 

@@ -1,0 +1,153 @@
+{
+    "title": "Jordan and Nick's moment in Central Park",
+    "start": 17551,
+    "end": 18128,
+    "text": "e?”\n\n“I’ve heard of it.”\n\n“It’s one of the most famous colleges in the world.”\n\n“Have you known Gatsby for a long time?” I inquired.\n\n“Several years,” he answered in a gratified way. “I made the pleasure\nof his acquaintance just after the war. But I knew I had discovered a\nman of fine breeding after I talked with him an hour. I said to\nmyself: ‘There’s the kind of man you’d like to take home and introduce\nto your mother and sister.’ ” He paused. “I see you’re looking at my\ncuff buttons.”\n\nI hadn’t been looking at them, but I did now. They were composed of\noddly familiar ",
+    "new_appearances": [],
+    "importance": {
+        "1": 1.0,
+        "5": 0.04,
+        "6": 0.04,
+        "7": 0.04,
+        "8": 0.04,
+        "9": 0.04,
+        "10": 0.04,
+        "11": 0.04,
+        "12": 0.04,
+        "13": 0.04,
+        "14": 0.04,
+        "15": 0.04,
+        "16": 0.04,
+        "17": 0.04,
+        "18": 0.04,
+        "19": 0.04,
+        "20": 0.04,
+        "21": 0.04,
+        "22": 0.04,
+        "23": 0.04,
+        "24": 0.04,
+        "25": 0.04,
+        "26": 0.04,
+        "27": 0.04,
+        "28": 0.04,
+        "29": 0.04,
+        "30": 0.04,
+        "31": 0.04,
+        "32": 0.04,
+        "33": 0.04,
+        "34": 0.04,
+        "35": 0.04,
+        "36": 0.04,
+        "37": 0.04,
+        "38": 0.04,
+        "39": 0.04,
+        "40": 0.04,
+        "41": 0.04,
+        "42": 0.04,
+        "43": 0.04,
+        "44": 0.04,
+        "45": 0.04,
+        "46": 0.04,
+        "47": 0.04,
+        "48": 0.04,
+        "49": 0.04,
+        "50": 0.04,
+        "51": 0.04,
+        "52": 0.04,
+        "53": 0.04,
+        "54": 0.04,
+        "55": 0.04,
+        "56": 0.04,
+        "57": 0.04,
+        "58": 0.04,
+        "59": 0.04,
+        "60": 0.04,
+        "61": 0.04,
+        "62": 0.04,
+        "63": 0.04,
+        "64": 0.04,
+        "65": 0.04,
+        "66": 0.04,
+        "67": 0.04,
+        "68": 0.04,
+        "69": 0.04,
+        "70": 0.04,
+        "71": 0.04,
+        "72": 0.04,
+        "73": 0.04,
+        "74": 0.04,
+        "2": 0.44,
+        "4": 0.52,
+        "80": 0.04,
+        "75": 0.04,
+        "76": 0.04,
+        "3": 0.24,
+        "77": 0.04,
+        "78": 0.04,
+        "79": 0.04
+    },
+    "relations": [
+        {
+            "id1": 1.0,
+            "explanation": "Gatsby clarifies that Nick is just a friend and not a business connection.",
+            "relation": [
+                "Friend"
+            ],
+            "id2": 2.0,
+            "positivity": 0.8,
+            "weight": 0.7
+        },
+        {
+            "relation": [
+                "Influence",
+                "Favor"
+            ],
+            "id1": 1.0,
+            "explanation": "There is no mention of the policeman in this text.",
+            "id2": 76.0,
+            "positivity": 0.7,
+            "weight": 0.8
+        },
+        {
+            "relation": [
+                "Indirect Communication"
+            ],
+            "id1": 1.0,
+            "explanation": "The text mentions Gatsby communicating through Miss Baker, but this event doesn't significantly alter the existing indirect communication.",
+            "id2": 4.0,
+            "positivity": 0.5,
+            "weight": 0.6
+        },
+        {
+            "relation": [
+                "Friend",
+                "Acquaintance"
+            ],
+            "explanation": "Wolfshiem calls Gatsby a 'fine fellow' and a 'perfect gentleman'.",
+            "id1": 1.0,
+            "id2": 3.0,
+            "positivity": 0.7,
+            "weight": 0.8
+        },
+        {
+            "id1": 2.0,
+            "relation": [
+                "Acquaintance"
+            ],
+            "explanation": "Nick and Wolfshiem are at the table together and Wolfshiem speaks about Gatsby to Nick.",
+            "id2": 3.0,
+            "positivity": 0.6,
+            "weight": 0.5
+        },
+        {
+            "relation": [
+                "Friend"
+            ],
+            "explanation": "There is no mention of Rosy Rosenthal in this text.",
+            "id1": 3.0,
+            "id2": 78.0,
+            "positivity": 0.8,
+            "weight": 0.9
+        }
+    ]
+}

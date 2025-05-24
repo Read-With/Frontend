@@ -1,0 +1,52 @@
+{
+    "title": "Michaelis tries to find a friend for Wilson to call, but Wilson has no friends. As dawn approaches, Michaelis is relieved. ",
+    "start": 13219,
+    "end": 13796,
+    "text": "y forehead. It was Jordan Baker; she often called me\nup at this hour because the uncertainty of her own movements between\nhotels and clubs and private houses made her hard to find in any other\nway. Usually her voice came over the wire as something fresh and cool,\nas if a divot from a green golf-links had come sailing in at the\noffice window, but this morning it seemed harsh and dry.\n\n“I’ve left Daisy’s house,” she said. “I’m at Hempstead, and I’m going\ndown to Southampton this afternoon.”\n\nProbably it had been tactful to leave Daisy’s house, but the act\nannoyed me, and h",
+    "new_appearances": [],
+    "importance": {
+        "2": 0.5833333333333334,
+        "1": 1.0,
+        "5": 0.08333333333333333,
+        "4": 0.25,
+        "3": 0.5833333333333334,
+        "11": 0.08333333333333333,
+        "6": 0.16666666666666666,
+        "7": 0.08333333333333333,
+        "8": 0.5833333333333334,
+        "9": 0.08333333333333333,
+        "10": 0.5833333333333334
+    },
+    "relations": [
+        {
+            "relation": [
+                "friendship"
+            ],
+            "id1": 2.0,
+            "explanation": "Nick thanks Gatsby for his hospitality, indicating a polite and somewhat formal relationship. Nick says 'I enjoyed breakfast, Gatsby.'",
+            "id2": 1.0,
+            "positivity": 0.7,
+            "weight": 0.6
+        },
+        {
+            "explanation": "Gatsby desperately tries to hold onto the memory of Daisy, suggesting a strong romantic connection. There is no change in this event.",
+            "id1": 1.0,
+            "relation": [
+                "romantic"
+            ],
+            "id2": 3.0,
+            "positivity": 0.9,
+            "weight": 0.9
+        },
+        {
+            "id1": 2.0,
+            "relation": [
+                "annoyance"
+            ],
+            "explanation": "Jordan calls Nick. Nick is annoyed by Jordan's decision to leave Daisy's house, indicating a strain in their relationship. The text mentions 'the act annoyed me'.",
+            "id2": 6.0,
+            "positivity": 0.2,
+            "weight": 0.4
+        }
+    ]
+}
