@@ -188,12 +188,12 @@
 }
 
 .node-tooltip .close-btn:hover {
-  color: #6C8EFF;
+  color: #6c8eff;
 }
 
 .node-tooltip .main-badge {
   display: inline-block;
-  background: #6C8EFF;
+  background: #6c8eff;
   color: #fff;
   font-size: 11px;
   border-radius: 6px;
@@ -321,7 +321,8 @@ node.highlighted {
   cursor: pointer;
 }
 
-html, body {
+html,
+body {
   overflow: auto !important;
   height: auto !important;
 }
@@ -442,7 +443,7 @@ html, body {
 
 .advanced-search-input:focus {
   outline: none;
-  border-color: #6C8EFF;
+  border-color: #6c8eff;
   background: #fff;
   box-shadow: 0 0 0 2px rgba(108, 142, 255, 0.1);
 }
@@ -467,7 +468,7 @@ html, body {
 }
 
 .advanced-search-btn {
-  background: #6C8EFF;
+  background: #6c8eff;
   color: #fff;
   display: flex;
   align-items: center;
@@ -485,7 +486,7 @@ html, body {
 }
 
 .advanced-search-btn:hover {
-  background: #5A7BFF;
+  background: #5a7bff;
   box-shadow: 0 2px 8px rgba(108, 142, 255, 0.2);
   transform: translateY(-1px);
 }
@@ -627,7 +628,7 @@ html, body {
 }
 
 .tooltip-arrow::after {
-  content: '';
+  content: "";
   position: absolute;
   top: -8px;
   left: 0;
@@ -663,7 +664,8 @@ html, body {
 }
 
 /* 타임라인, 북마크 등 다른 페이지에서는 스크롤 허용 */
-.timeline-view, .bookmarks-view {
+.timeline-view,
+.bookmarks-view {
   overflow-y: auto !important;
 }
 
@@ -688,7 +690,7 @@ html, body {
 
 .close-btn:hover {
   background-color: #f8f9fa;
-  color: #6C8EFF;
+  color: #6c8eff;
 }
 
 .close-btn svg {
@@ -770,7 +772,7 @@ html, body {
 .summary-badge {
   display: inline-flex;
   align-items: center;
-  background: linear-gradient(135deg, #6C8EFF 0%, #5A7BFF 100%);
+  background: linear-gradient(135deg, #6c8eff 0%, #5a7bff 100%);
   color: white;
   font-size: 11px;
   font-weight: 500;
@@ -781,7 +783,7 @@ html, body {
 }
 
 .main-character-badge::before {
-  content: '⭐';
+  content: "⭐";
   margin-right: 4px;
   font-size: 10px;
 }
@@ -891,6 +893,9 @@ html, body {
 .edge-tooltip-container {
   min-width: 300px;
   max-width: 400px;
+  pointer-events: auto !important; /* 이 줄 추가 */
+  position: absolute; /* 이 줄 추가 */
+  z-index: 10000; /* 이 줄 추가 */
 }
 
 .edge-tooltip-content {
@@ -945,7 +950,7 @@ html, body {
 }
 
 .direction-arrow::before {
-  content: '';
+  content: "";
   position: absolute;
   height: 2px;
   width: 24px;
@@ -955,7 +960,7 @@ html, body {
 }
 
 .direction-arrow::after {
-  content: '';
+  content: "";
   position: absolute;
   right: -4px;
   width: 8px;
@@ -989,7 +994,7 @@ html, body {
 }
 
 .weight-label::before {
-  content: '•';
+  content: "•";
   font-size: 20px;
   line-height: 1;
 }
@@ -1251,8 +1256,10 @@ html, body {
   flex-wrap: wrap;
 }
 
-.cy-node-label, .node-label {
-  font-family: 'Pretendard', 'Noto Sans KR', 'Inter', 'Segoe UI', 'Arial', sans-serif;
+.cy-node-label,
+.node-label {
+  font-family: "Pretendard", "Noto Sans KR", "Inter", "Segoe UI", "Arial",
+    sans-serif;
   font-weight: 600;
   font-size: 15px;
   letter-spacing: -0.5px;
@@ -1383,16 +1390,16 @@ html, body {
   min-width: 60px;
 }
 .epub-toolbar-btn--blue {
-  background: #6C8EFF;
+  background: #6c8eff;
   color: #fff;
-  border: 1.2px solid #6C8EFF;
+  border: 1.2px solid #6c8eff;
   box-shadow: 0 4px 16px rgba(108, 142, 255, 0.13);
 }
 .epub-toolbar-btn--purple {
   background: linear-gradient(100deg, #a259e6 0%, #7f6fff 60%, #6fa7ff 100%);
   color: #fff;
   border: 1.2px solid #a259e6;
-  box-shadow: 0 4px 16px rgba(162,89,230,0.13);
+  box-shadow: 0 4px 16px rgba(162, 89, 230, 0.13);
 }
 .epub-toolbar-btn--gray {
   background: #f8f9fc;
@@ -1404,16 +1411,16 @@ html, body {
   background: linear-gradient(100deg, #f87171 0%, #fca5a5 60%, #ffeaea 100%);
   color: #c82333;
   border: 1.2px solid #f87171;
-  box-shadow: 0 4px 16px rgba(248,113,113,0.13);
+  box-shadow: 0 4px 16px rgba(248, 113, 113, 0.13);
 }
 .epub-toolbar-btn:active {
   transform: scale(0.97);
 }
 .epub-toolbar-btn:focus {
-  box-shadow: 0 0 0 2px #6C8EFF33;
+  box-shadow: 0 0 0 2px #6c8eff33;
 }
 .epub-toolbar-btn--blue:hover {
-  background: #5A7BFF;
+  background: #5a7bff;
   color: #fff;
 }
 .epub-toolbar-btn--gray:hover {
@@ -1445,7 +1452,7 @@ html, body {
 .epub-bookmark-btn:hover {
   background: #e3e6ef;
   color: #22336b;
-  box-shadow: 0 2px 8px rgba(108, 142, 255, 0.10);
+  box-shadow: 0 2px 8px rgba(108, 142, 255, 0.1);
   text-decoration: none;
 }
 
@@ -1457,7 +1464,7 @@ html, body {
   color: #22336b;
   border: none;
   border-radius: 8px;
-  box-shadow: 0 2px 10px rgba(0,0,0,0.10);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
   width: 40px;
   height: 40px;
   display: flex;
@@ -1471,7 +1478,7 @@ html, body {
 }
 .epub-close-btn:hover {
   background: #f8f9fa;
-  color: #6C8EFF;
+  color: #6c8eff;
   transform: scale(1.08);
 }
 
@@ -1524,7 +1531,7 @@ html, body {
 
 .file-tab::before,
 .file-tab::after {
-  content: '';
+  content: "";
   position: absolute;
   bottom: 0;
   width: 10px;
@@ -1546,18 +1553,18 @@ html, body {
 }
 
 .file-tab.active {
-  background-color: #6C8EFF;
+  background-color: #6c8eff;
   height: 45px;
   margin-top: -5px;
   z-index: 2;
 }
 
 .file-tab.active::before {
-  box-shadow: 5px 5px 0 5px #6C8EFF;
+  box-shadow: 5px 5px 0 5px #6c8eff;
 }
 
 .file-tab.active::after {
-  box-shadow: -5px 5px 0 5px #6C8EFF;
+  box-shadow: -5px 5px 0 5px #6c8eff;
 }
 
 .file-tab-content {
@@ -1685,7 +1692,7 @@ html, body {
 }
 
 .chat-btn {
-  background: linear-gradient(135deg, #6C8EFF 0%, #5A7BFF 100%);
+  background: linear-gradient(135deg, #6c8eff 0%, #5a7bff 100%);
   color: #ffffff;
   box-shadow: 0 2px 8px rgba(108, 142, 255, 0.2);
   font-weight: 600;
@@ -1693,7 +1700,7 @@ html, body {
 }
 
 .chat-btn:hover {
-  background: linear-gradient(135deg, #5A7BFF 0%, #4A6BFF 100%);
+  background: linear-gradient(135deg, #5a7bff 0%, #4a6bff 100%);
   color: #ffffff;
   box-shadow: 0 2px 12px rgba(108, 142, 255, 0.3);
   transform: translateY(-1px);
@@ -1750,6 +1757,10 @@ html, body {
 }
 
 @keyframes spin {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
 }
