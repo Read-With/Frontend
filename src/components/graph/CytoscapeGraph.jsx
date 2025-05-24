@@ -13,6 +13,7 @@ const CytoscapeGraph = React.forwardRef(
     tapBackgroundHandler,
     ripples = [],
     style = {},
+    onLayoutReady,
   }, ref) => {
     const cyRef = useRef(null);
 
@@ -95,6 +96,7 @@ const CytoscapeGraph = React.forwardRef(
             x: containerCenter.x - center.x,
             y: containerCenter.y - center.y
           });
+          if (onLayoutReady) onLayoutReady();
         });
       }
     }, [elements, fitNodeIds, ref, layout]);

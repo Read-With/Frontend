@@ -1083,6 +1083,26 @@ function RelationGraphMain({ elements, inViewer = false, fullScreen = false, onF
                     로딩 중...
                   </div>
                 )}
+                {/* 그래프가 없을 때 안내문구 */}
+                {!isGraphLoading && (!elements || elements.length === 0) && (
+                  <div style={{
+                    position: 'absolute',
+                    top: '50%',
+                    left: '50%',
+                    transform: 'translate(-50%, -50%)',
+                    textAlign: 'center',
+                    color: '#6C8EFF',
+                    fontSize: 20,
+                    fontWeight: 600,
+                    zIndex: 10,
+                    background: 'rgba(255,255,255,0.85)',
+                    padding: '32px 0',
+                    borderRadius: 16,
+                    boxShadow: '0 2px 8px rgba(108,142,255,0.07)'
+                  }}>
+                    표시할 그래프가 없습니다
+                  </div>
+                )}
                 {elements && elements.length > 0 && (
                   <CytoscapeGraph
                     ref={cyRef}
@@ -1190,18 +1210,45 @@ function RelationGraphMain({ elements, inViewer = false, fullScreen = false, onF
               로딩 중...
             </div>
           )}
+          {/* 그래프가 없을 때 안내문구 */}
+          {!isGraphLoading && (!elements || elements.length === 0) && (
+            <div style={{
+              position: 'absolute',
+              top: '50%',
+              left: '50%',
+              transform: 'translate(-50%, -50%)',
+              textAlign: 'center',
+              color: '#6C8EFF',
+              fontSize: 20,
+              fontWeight: 600,
+              zIndex: 10,
+              background: 'rgba(255,255,255,0.85)',
+              padding: '32px 0',
+              borderRadius: 16,
+              boxShadow: '0 2px 8px rgba(108,142,255,0.07)'
+            }}>
+              표시할 그래프가 없습니다
+            </div>
+          )}
           {elements && elements.length > 0 && (
-            <CytoscapeGraph
-              ref={cyRef}
-              elements={filteredElements}
-              stylesheet={stylesheet}
-              layout={search ? searchLayout : layout}
-              tapNodeHandler={tapNodeHandler}
-              tapEdgeHandler={tapEdgeHandler}
-              tapBackgroundHandler={tapBackgroundHandler}
-              fitNodeIds={fitNodeIds}
-              style={{ width: '100%', height: '100%', overflow: 'hidden', position: 'relative' }}
-            />
+           <CytoscapeGraph
+           ref={cyRef}
+           elements={filteredElements}
+           stylesheet={stylesheet}
+           layout={search ? searchLayout : layout}
+           tapNodeHandler={tapNodeHandler}
+           tapEdgeHandler={tapEdgeHandler}
+           tapBackgroundHandler={tapBackgroundHandler}
+           fitNodeIds={fitNodeIds}
+           style={{ 
+             width: '100%', 
+             height: '100%', 
+             overflow: 'hidden', 
+             position: 'relative',
+             backgroundColor: '#f8fafc'
+           }}
+           onLayoutReady={() => setIsGraphLoading(false)}   // ★★★ 이 줄 추가 ★★★
+         />
           )}
         </div>
       </div>
