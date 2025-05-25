@@ -245,6 +245,7 @@ const ViewerPage = ({ darkMode: initialDarkMode }) => {
   const maxChapter = 9; // data 폴더 기준
   const [searchInput, setSearchInput] = useState('');
   const [search, setSearch] = useState('');
+  const [isReloading, setIsReloading] = useState(false);
 
   // location.state에서 book 정보를 가져오거나, 없으면 filename에서 생성
   const book = location.state?.book || {
@@ -259,6 +260,11 @@ const ViewerPage = ({ darkMode: initialDarkMode }) => {
   const cleanFilename = filename.trim();
   const [bookmarks, setBookmarks] = useState(loadBookmarks(cleanFilename));
   const [showBookmarkList, setShowBookmarkList] = useState(false);
+
+  // 이전 그래프 상태를 추적하기 위한 ref 추가
+  const prevElementsRef = useRef();
+  const prevChapterNumRef = useRef();
+  const prevEventNumRef = useRef();
 
   // 3. mount 시 localStorage에서 모드 복원
   useEffect(() => {
@@ -337,16 +343,16 @@ const ViewerPage = ({ darkMode: initialDarkMode }) => {
     const loadData = async () => {
       setIsDataReady(false);
       setLoading(true);
-      setElements([]); // 로딩 시작 시 그래프 데이터 즉시 비우기
+      // setElements([]); // 로딩 시작 시 그래프 데이터 즉시 비우기 제거
       try {
         // 챕터가 바뀔 때 단어 위치와 총 단어 수 초기화
         setCurrentWordIndex(0);
         setTotalChapterWords(0);
         const events = getEventsForChapter(currentChapter);
-        // 첫 번째 이벤트의 시작 위치로 currentWordIndex 설정
-        if (events && events.length > 0) {
-          setCurrentWordIndex(events[0].start);
-        }
+        // 첫 번째 이벤트의 시작 위치로 currentWordIndex 설정 (자동 선택 제거)
+        // if (events && events.length > 0) {
+        //   setCurrentWordIndex(events[0].start);
+        // }
         const charactersData = getChapterFile(currentChapter, 'characters');
         setIsDataReady(true);
       } catch (error) {
@@ -361,7 +367,7 @@ const ViewerPage = ({ darkMode: initialDarkMode }) => {
   // currentChapter가 바뀔 때 currentEvent를 null로 초기화
   useEffect(() => {
     setCurrentEvent(null);
-    setElements([]);
+    // setElements([]); // 제거: 기존 그래프가 계속 보이도록
   }, [currentChapter]);
 
   // 현재 이벤트 결정 useEffect 개선
@@ -372,62 +378,195 @@ const ViewerPage = ({ darkMode: initialDarkMode }) => {
       setCurrentEvent(null);
       return;
     }
-    // 디버그 로그 추가
-    console.log('[디버그][이벤트 탐색] currentChapter:', currentChapter);
-    console.log('[디버그][이벤트 탐색] currentWordIndex:', currentWordIndex);
-    console.log('[디버그][이벤트 탐색] events:', events.map(ev => ({start: ev.start, end: ev.end, eventNum: ev.eventNum})));
-    // currentWordIndex가 0이면 무조건 첫 이벤트
+    // currentWordIndex가 0이면 아무 이벤트도 선택하지 않음
     if (currentWordIndex === 0) {
-      setCurrentEvent(events[0]);
-      console.log('[이벤트 탐색] currentWordIndex:', currentWordIndex);
-      console.log('[이벤트 탐색] events:', events.map(ev => ({start: ev.start, end: ev.end, eventNum: ev.eventNum})));
-      console.log('[이벤트 탐색] 선택된 이벤트:', {start: events[0].start, end: events[0].end, eventNum: events[0].eventNum});
+      setCurrentEvent(null);
       return;
     }
     // start <= currentWordIndex < end 범위의 이벤트 찾기
     const eventIdx = events.findIndex(event => currentWordIndex >= event.start && currentWordIndex < event.end);
-    console.log('[이벤트 탐색] currentWordIndex:', currentWordIndex);
-    console.log('[이벤트 탐색] events:', events.map(ev => ({start: ev.start, end: ev.end, eventNum: ev.eventNum})));
     if (eventIdx !== -1) {
       setCurrentEvent(events[eventIdx]);
-      console.log('[이벤트 탐색] 선택된 이벤트:', {start: events[eventIdx].start, end: events[eventIdx].end, eventNum: events[eventIdx].eventNum});
     } else {
       // fallback: 마지막 이벤트
       setCurrentEvent(events[events.length - 1]);
-      console.log('[이벤트 탐색] 선택된 이벤트(마지막):', {start: events[events.length-1].start, end: events[events.length-1].end, eventNum: events[events.length-1].eventNum});
     }
   }, [isDataReady, currentChapter, currentWordIndex]);
 
-  // elements는 currentEvent가 바뀔 때만 생성
+  // === [추가] 챕터 전체 그래프(fullElements) 생성 ===
+  const fullElements = useMemo(() => {
+    const events = getEventsForChapter(currentChapter);
+    if (!events || !events.length) return [];
+    // 모든 relations/importance/new_appearances를 합침
+    let allRelations = [];
+    let allImportance = {};
+    let allNewAppearances = [];
+    const edgeSet = new Set(); // 중복 간선 방지용
+    events.forEach(ev => {
+      if (Array.isArray(ev.relations)) {
+        ev.relations.forEach(rel => {
+          const id1 = rel.id1 || rel.source;
+          const id2 = rel.id2 || rel.target;
+          const edgeKey = `${id1}-${id2}`;
+          if (!edgeSet.has(edgeKey)) {
+            allRelations.push(rel);
+            edgeSet.add(edgeKey);
+          }
+        });
+      }
+      if (ev.importance && typeof ev.importance === 'object') {
+        Object.entries(ev.importance).forEach(([k, v]) => { allImportance[k] = v; });
+      }
+      if (Array.isArray(ev.new_appearances)) allNewAppearances = allNewAppearances.concat(ev.new_appearances);
+    });
+    const charactersData = getChapterFile(currentChapter, 'characters');
+    return getElementsFromRelations(allRelations, charactersData, allNewAppearances, allImportance);
+  }, [currentChapter]);
+
+  // === [수정] elements: 현재 이벤트까지 등장한 노드/간선만 필터링 + position merge ===
   useEffect(() => {
     if (!isDataReady || !(currentEvent || prevEvent)) {
-      setElements([]);
       setGraphViewState(null);
       return;
     }
-    const charactersData = getChapterFile(currentChapter, 'characters');
-    const eventKey = currentEvent?.path || `chapter${currentChapter}_event`;
-    // localStorage에서 이전 그래프 정보와 뷰 상태 불러오기
-    if (currentEvent === prevEvent) {
-      const saved = localStorage.getItem(`graph_${eventKey}`);
-      if (saved) {
-        const { elements: savedElements, graphViewState: savedViewState } = JSON.parse(saved);
-        setElements(savedElements);
-        setGraphViewState(savedViewState);
-        console.log('[localStorage] 그래프 복원:', eventKey, savedViewState);
-        setLoading(false);
-        return;
+    // 등장 허용 eventNum 구하기
+    const events = getEventsForChapter(currentChapter);
+    if (!events || !events.length) return;
+    const maxEventNum = currentEvent?.eventNum || events[events.length - 1].eventNum;
+    // 등장 시점 기록
+    const nodeFirstEvent = {};
+    const edgeFirstEvent = {};
+    events.forEach(ev => {
+      // 노드: importance, new_appearances, relations의 id1/id2/source/target
+      if (ev.importance) {
+        Object.keys(ev.importance).forEach(id => {
+          if (nodeFirstEvent[id] === undefined) nodeFirstEvent[id] = ev.eventNum;
+        });
       }
+      if (Array.isArray(ev.new_appearances)) {
+        ev.new_appearances.forEach(id => {
+          if (nodeFirstEvent[id] === undefined) nodeFirstEvent[id] = ev.eventNum;
+        });
+      }
+      if (Array.isArray(ev.relations)) {
+        ev.relations.forEach(rel => {
+          const id1 = rel.id1 || rel.source;
+          const id2 = rel.id2 || rel.target;
+          if (id1 && nodeFirstEvent[id1] === undefined) nodeFirstEvent[id1] = ev.eventNum;
+          if (id2 && nodeFirstEvent[id2] === undefined) nodeFirstEvent[id2] = ev.eventNum;
+          // 간선: id1-id2 쌍
+          const edgeKey = `${id1}-${id2}`;
+          if (edgeFirstEvent[edgeKey] === undefined) edgeFirstEvent[edgeKey] = ev.eventNum;
+        });
+      }
+    });
+    // fullElements에서 현재 이벤트까지 등장한 노드/간선만 남김
+    const filtered = fullElements.filter(el => {
+      if (el.data.source && el.data.target) {
+        // 간선
+        const edgeKey = `${el.data.source}-${el.data.target}`;
+        return edgeFirstEvent[edgeKey] !== undefined && edgeFirstEvent[edgeKey] <= maxEventNum;
+      } else if (el.data.id) {
+        // 노드
+        return nodeFirstEvent[el.data.id] !== undefined && nodeFirstEvent[el.data.id] <= maxEventNum;
+      }
+      return false;
+    });
+    // === position merge ===
+    let nodePositions = {};
+    try {
+      const posStr = localStorage.getItem(`chapter_node_positions_${currentChapter}`);
+      if (posStr) nodePositions = JSON.parse(posStr);
+    } catch (e) {}
+    // id 기준 정렬 및 position merge
+    const sorted = filterIsolatedNodes(filtered, hideIsolated).slice().sort((a, b) => {
+      const aId = a.data?.id || (a.data?.source ? a.data?.source + '-' + a.data?.target : '');
+      const bId = b.data?.id || (b.data?.source ? b.data?.source + '-' + b.data?.target : '');
+      return aId.localeCompare(bId);
+    }).map(el => {
+      if (el.data.id && nodePositions[el.data.id]) {
+        return { ...el, position: nodePositions[el.data.id] };
+      }
+      return el;
+    });
+    setElements(sorted);
+  }, [isDataReady, currentEvent, prevEvent, currentChapter, hideIsolated, fullElements]);
+
+  // === [추가] 마지막 이벤트 등장 노드/간선 위치만 저장 및 이벤트별 적용 ===
+  // 마지막 이벤트에서 등장한 노드/간선 위치만 저장
+  useEffect(() => {
+    if (!isDataReady || !currentEvent || !graphViewState) return;
+    const events = getEventsForChapter(currentChapter);
+    if (!events || !events.length) return;
+    const isLastEvent = currentEvent.eventNum === events[events.length - 1].eventNum;
+    if (isLastEvent) {
+      // 마지막 이벤트에서 등장한 노드/간선 id만 추출
+      const lastNodes = new Set();
+      const lastEdges = new Set();
+      if (Array.isArray(currentEvent.relations)) {
+        currentEvent.relations.forEach(rel => {
+          const id1 = rel.id1 || rel.source;
+          const id2 = rel.id2 || rel.target;
+          if (id1) lastNodes.add(String(id1));
+          if (id2) lastNodes.add(String(id2));
+          lastEdges.add(`${id1}-${id2}`);
+        });
+      }
+      if (currentEvent.importance) {
+        Object.keys(currentEvent.importance).forEach(id => lastNodes.add(String(id)));
+      }
+      if (Array.isArray(currentEvent.new_appearances)) {
+        currentEvent.new_appearances.forEach(id => lastNodes.add(String(id)));
+      }
+      // graphViewState에서 해당 노드/간선 위치만 추출
+      const partialLayout = {};
+      Object.entries(graphViewState).forEach(([key, value]) => {
+        // key가 노드 id 또는 간선 id
+        if (lastNodes.has(key) || lastEdges.has(key)) {
+          partialLayout[key] = value;
+        }
+      });
+      try {
+        localStorage.setItem(`graph_partial_layout_chapter_${currentChapter}`, JSON.stringify(partialLayout));
+      } catch (e) {}
     }
-    // 새로 생성
-    const newElements = filterIsolatedNodes(getElementsFromRelations(currentEvent?.relations, charactersData, null, currentEvent?.importance), hideIsolated);
-    setElements(newElements);
-    // graphViewState는 RelationGraphMain에서 setGraphViewState로 저장됨
-    // localStorage에 저장
-    localStorage.setItem(`graph_${eventKey}`, JSON.stringify({ elements: newElements, graphViewState }));
-    console.log('[localStorage] 그래프 저장:', eventKey, graphViewState);
-    setLoading(false);
-  }, [isDataReady, currentEvent, prevEvent, currentChapter, hideIsolated]);
+  }, [isDataReady, currentEvent, currentChapter, graphViewState]);
+
+  // 각 이벤트 페이지에서 partialLayout을 merge해서 graphViewState로 적용
+  useEffect(() => {
+    if (!isDataReady || !currentEvent) return;
+    const partialLayoutStr = localStorage.getItem(`graph_partial_layout_chapter_${currentChapter}`);
+    if (!partialLayoutStr) return;
+    try {
+      const partialLayout = JSON.parse(partialLayoutStr);
+      // 현재 이벤트에 등장하는 노드/간선만 merge
+      const nodes = new Set();
+      const edges = new Set();
+      if (Array.isArray(currentEvent.relations)) {
+        currentEvent.relations.forEach(rel => {
+          const id1 = rel.id1 || rel.source;
+          const id2 = rel.id2 || rel.target;
+          if (id1) nodes.add(String(id1));
+          if (id2) nodes.add(String(id2));
+          edges.add(`${id1}-${id2}`);
+        });
+      }
+      if (currentEvent.importance) {
+        Object.keys(currentEvent.importance).forEach(id => nodes.add(String(id)));
+      }
+      if (Array.isArray(currentEvent.new_appearances)) {
+        currentEvent.new_appearances.forEach(id => nodes.add(String(id)));
+      }
+      // merge: partialLayout에 있는 위치만 우선 적용
+      const merged = {};
+      Object.entries(partialLayout).forEach(([key, value]) => {
+        if (nodes.has(key) || edges.has(key)) {
+          merged[key] = value;
+        }
+      });
+      setGraphViewState(merged);
+    } catch (e) {}
+  }, [isDataReady, currentEvent, currentChapter]);
 
   // EpubViewer에서 페이지/스크롤 이동 시 CFI 받아와서 글자 인덱스 갱신
   const handleLocationChange = async () => {
@@ -468,13 +607,13 @@ const ViewerPage = ({ darkMode: initialDarkMode }) => {
     return 0;
   };
 
-  // 챕터 진입 시 첫 이벤트만 표시
-  useEffect(() => {
-    const events = getEventsForChapter(currentChapter);
-    if (events && events.length) {
-      setCurrentWordIndex(events[0].start);
-    }
-  }, [currentChapter]);
+  // 챕터 진입 시 첫 이벤트만 표시 (자동 선택 제거)
+  // useEffect(() => {
+  //   const events = getEventsForChapter(currentChapter);
+  //   if (events && events.length) {
+  //     setCurrentWordIndex(events[0].start);
+  //   }
+  // }, [currentChapter]);
 
   const handlePrevPage = () => {
     if (viewerRef.current) viewerRef.current.prevPage();
@@ -689,6 +828,33 @@ const ViewerPage = ({ darkMode: initialDarkMode }) => {
   const handleFitView = () => {
     // Implementation of handleFitView
   };
+
+  useEffect(() => {
+    // 새로고침 시에만 isReloading true로 설정
+    if (performance && performance.getEntriesByType) {
+      const navEntries = performance.getEntriesByType('navigation');
+      if (navEntries.length > 0 && navEntries[0].type === 'reload') {
+        setIsReloading(true);
+      }
+    }
+  }, []);
+
+  // elements, chapterNum, eventNum이 바뀔 때마다 이전 값 저장
+  useEffect(() => {
+    prevElementsRef.current = elements;
+    prevChapterNumRef.current = currentChapter;
+    prevEventNumRef.current = currentEvent?.eventNum;
+  }, [elements, currentChapter, currentEvent]);
+
+  // elements가 이전과 완전히 같으면 로딩 메시지 안 보이게
+  const isSameElements = useMemo(() => {
+    if (!prevElementsRef.current || !elements) return false;
+    if (prevElementsRef.current.length !== elements.length) return false;
+    for (let i = 0; i < elements.length; i++) {
+      if (JSON.stringify(prevElementsRef.current[i]) !== JSON.stringify(elements[i])) return false;
+    }
+    return true;
+  }, [elements]);
 
   return (
     <div
@@ -1003,53 +1169,12 @@ const ViewerPage = ({ darkMode: initialDarkMode }) => {
                 })()}
                 {/* 그래프 본문 */}
                 <div style={{ flex: 1, width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', marginTop: 8 }}>
-                  {/* 로딩이 끝난 후 데이터 준비 중 메시지 */}
-                  {!loading && !isDataReady && (
-                    <div style={{
-                      position: 'absolute',
-                      top: '50%',
-                      left: '50%',
-                      transform: 'translate(-50%, -50%)',
-                      textAlign: 'center',
-                      color: '#6C8EFF',
-                      fontSize: 20,
-                      fontWeight: 600,
-                      zIndex: 10,
-                      background: 'rgba(255,255,255,0.85)',
-                      padding: '32px 0',
-                      borderRadius: 16,
-                      boxShadow: '0 2px 8px rgba(108,142,255,0.07)'
-                    }}>
-                      데이터를 준비하는 중...
-                    </div>
-                  )}
-                  {/* 데이터 없음 메시지 */}
-                  {!loading && isDataReady && elements.length === 0 && (
-                    <div style={{
-                      position: 'absolute',
-                      top: '50%',
-                      left: '50%',
-                      transform: 'translate(-50%, -50%)',
-                      textAlign: 'center',
-                      color: '#6C8EFF',
-                      fontSize: 20,
-                      fontWeight: 600,
-                      zIndex: 10,
-                      background: 'rgba(255,255,255,0.85)',
-                      padding: '32px 0',
-                      borderRadius: 16,
-                      boxShadow: '0 2px 8px rgba(108,142,255,0.07)'
-                    }}>
-                      표시할 데이터가 없습니다
-                    </div>
-                  )}
-                  {/* 로딩이 끝나고 데이터가 준비됐을 때만 그래프 렌더링 */}
-                  {!loading && isDataReady && elements.length > 0 && (
+                  {/* 로딩중 메시지 완전 제거, elements가 준비된 경우에만 그래프 렌더링 */}
+                  {elements.length > 0 && (
                     <RelationGraphMain 
                       elements={elements} 
                       inViewer={true} 
                       fullScreen={false}
-                      key={currentEvent?.path || `graph-${currentChapter}`}
                       style={{ width: '100%', height: '100%' }}
                       graphViewState={graphViewState}
                       setGraphViewState={setGraphViewState}

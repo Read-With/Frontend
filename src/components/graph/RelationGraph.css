@@ -394,6 +394,8 @@ html, body {
   padding: 1rem 0.25rem 1rem 0.25rem;
   box-sizing: border-box;
   flex: 1;
+  min-width: 0 !important;
+  min-height: 0 !important;
 }
 
 .graph-controls-area {

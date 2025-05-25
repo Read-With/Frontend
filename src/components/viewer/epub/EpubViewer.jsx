@@ -415,53 +415,19 @@ const EpubViewer = forwardRef(
                       localStorage.setItem(ACCUMULATED_WORDS_KEY, '0');
                       localStorage.setItem(NEXT_PAGE_WORDS_KEY, '0');
                       localStorage.setItem(CHAPTER_KEY, chapterNum.toString());
-                      
-                      // 현재 챕터의 첫 이벤트 정보 가져오기
-                      try {
-                        const events = getEventsForChapter(chapterNum);
-                        if (events && events.length > 0) {
-                          const firstEvent = events[0];
-                          wordPosition = firstEvent.start;
-                          accumulatedWords = firstEvent.start;
-                          localStorage.setItem(ACCUMULATED_WORDS_KEY, firstEvent.start.toString());
-                          console.log('📍', `chapter-${chapterNum} (${firstEvent.start}번째 단어)`);
-                        } else {
-                          console.log('📍', `chapter-${chapterNum} (0번째 단어)`);
-                        }
-                      } catch (error) {
-                        console.error('이벤트 로딩 오류:', error);
-                        console.log('📍', `chapter-${chapterNum} (0번째 단어)`);
-                      }
+                      console.log('📍', `chapter-${chapterNum} (0번째 단어)`);
                     }
                     // 챕터의 첫 페이지인 경우 단어 수 초기화
                     else if (pageNum === 1 && paragraphNum === 1 && charOffset === 0) {
-                      // 첫 페이지에서도 첫 이벤트 정보 가져오기
-                      try {
-                        const events = getEventsForChapter(chapterNum);
-                        if (events && events.length > 0) {
-                          const firstEvent = events[0];
-                          wordPosition = firstEvent.start;
-                          accumulatedWords = firstEvent.start;
-                          localStorage.setItem(ACCUMULATED_WORDS_KEY, firstEvent.start.toString());
-                          console.log('📍', `chapter-${chapterNum} (${firstEvent.start}번째 단어)`);
-                        } else {
-                          accumulatedWords = 0;
-                          wordPosition = 0;
-                          localStorage.setItem(ACCUMULATED_WORDS_KEY, '0');
-                          localStorage.setItem(NEXT_PAGE_WORDS_KEY, '0');
-                          console.log('📍', `chapter-${chapterNum} (0번째 단어)`);
-                        }
-                      } catch (error) {
-                        console.error('이벤트 로딩 오류:', error);
-                        accumulatedWords = 0;
-                        wordPosition = 0;
-                        localStorage.setItem(ACCUMULATED_WORDS_KEY, '0');
-                        localStorage.setItem(NEXT_PAGE_WORDS_KEY, '0');
-                        console.log('📍', `chapter-${chapterNum} (0번째 단어)`);
-                      }
-                    } 
+                      accumulatedWords = 0;
+                      wordPosition = 0;
+                      localStorage.setItem(ACCUMULATED_WORDS_KEY, '0');
+                      localStorage.setItem(NEXT_PAGE_WORDS_KEY, '0');
+                      console.log('📍', `chapter-${chapterNum} (0번째 단어)`);
+                    }
+                    
                     // 다음 페이지로 이동하면서 단어 수가 0이 되는 경우에만 이전 위치 유지
-                    else if (isNextPage && totalWordCount === 0 && prevWordPosition > 0) {
+                    if (isNextPage && totalWordCount === 0 && prevWordPosition > 0) {
                       wordPosition = prevWordPosition;
                       accumulatedWords = prevWordPosition;
                       localStorage.setItem(ACCUMULATED_WORDS_KEY, prevWordPosition.toString());
