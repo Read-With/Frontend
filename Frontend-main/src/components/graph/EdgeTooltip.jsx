@@ -328,7 +328,7 @@ function EdgeTooltip({
     labels: relationData.map((item) => `이벤트 ${item.event}`),
     datasets: [
       {
-        label: `${sourceNode} - ${targetNode} 관계 변화`,
+        label: `${sourceNode} - ${targetNode} 관계의 긍정도`,
         data: relationData.map((item) => item.positivity),
         borderColor: "#5B7BA0",
         backgroundColor: "rgba(91, 123, 160, 0.1)",
@@ -375,14 +375,12 @@ function EdgeTooltip({
             const dataIndex = context.dataIndex;
             const item = relationData[dataIndex];
             const labels = [
-              `가중치: ${(item.weight * 100).toFixed(1)}%`,
+              `가중치: ${item.weight.toFixed(1)}`, // 백분율 제거
               `설명: ${item.explanation.split("|")[0]}`,
             ];
-
             if (!item.hasRelation) {
               labels.push("(이전 관계 유지)");
             }
-
             return labels;
           },
         },
@@ -490,7 +488,7 @@ function EdgeTooltip({
                     {relationStyle.text}
                   </span>
                   <span className="weight-value">
-                    {Math.round(data.weight * 100)}%
+                    {data.positivity.toFixed(1)}
                   </span>
                 </div>
                 <div className="weight-steps">
