@@ -492,28 +492,15 @@ function EdgeTooltip({
                   </span>
                 </div>
                 <div className="weight-steps">
-                  {[0.2, 0.4, 0.6, 0.8, 1.0].map((step, index) => {
-                    const stepPercentage = data.weight * 100;
-                    const currentStepStart = step - 0.2;
-                    const currentStepPercentage = step * 100;
-
-                    let fillPercentage = 0;
-                    let isComplete = false;
-                    let isCurrent = false;
-
-                    if (stepPercentage >= currentStepPercentage) {
-                      fillPercentage = 100;
-                      isComplete = true;
-                    } else if (stepPercentage > currentStepPercentage - 20) {
-                      fillPercentage =
-                        ((stepPercentage - (currentStepPercentage - 20)) / 20) *
-                        100;
-                      isCurrent = true;
-                    }
+                  {[0, 1, 2, 3, 4].map((step) => {
+                    const stepValue = (step / 4) * 2 - 1; // -1 ~ 1 범위로 변환 (-1, -0.5, 0, 0.5, 1)
+                    const isComplete = data.positivity >= stepValue;
+                    const isCurrent =
+                      step === Math.round(((data.positivity + 1) / 2) * 4);
 
                     return (
                       <div
-                        key={index}
+                        key={step}
                         className={`weight-step ${
                           isComplete ? "complete" : ""
                         } ${isCurrent ? "current" : ""}`}
@@ -521,18 +508,17 @@ function EdgeTooltip({
                         <div
                           className="weight-fill"
                           style={{
-                            width: `${fillPercentage}%`,
                             backgroundColor: relationStyle.color,
-                            opacity: 0.4 + step * 0.6,
+                            width: isComplete ? "100%" : "0%",
                           }}
                         />
-                        {(isComplete ||
-                          (isCurrent && fillPercentage >= 50)) && (
-                          <div className="weight-dot" />
-                        )}
-                        <span className="step-label">
-                          {Math.round(step * 100)}%
-                        </span>
+                        <div className="step-label">
+                          {step === 0 && "매우 부정적"}
+                          {step === 1 && "부정적"}
+                          {step === 2 && "중립적"}
+                          {step === 3 && "긍정적"}
+                          {step === 4 && "매우 긍정적"}
+                        </div>
                       </div>
                     );
                   })}
