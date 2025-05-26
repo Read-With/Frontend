@@ -1,3 +1,4 @@
+// React와 필요한 라이브러리들을 import
 import React, { useState, useEffect, useRef } from "react";
 import { FaProjectDiagram, FaArrowLeft } from "react-icons/fa";
 import { Line } from "react-chartjs-2";
@@ -13,7 +14,7 @@ import {
 } from "chart.js";
 import "./RelationGraph.css";
 
-// Chart.js 컴포넌트 등록
+// Chart.js 컴포넌트 등록 (차트 사용을 위해 필요)
 ChartJS.register(
   CategoryScale,
   LinearScale,
@@ -25,32 +26,39 @@ ChartJS.register(
 );
 
 // JSON 파일들을 import.meta.glob으로 한 번에 가져오기
+// 모든 이벤트 관계 데이터 파일을 동적으로 로드
 const eventRelationModules = import.meta.glob(
   "/src/data/*/[0-9][0-9]_ev*_relations.json",
   { eager: true }
 );
 
+/**
+ * EdgeTooltip 컴포넌트
+ * 간선(관계) 클릭 시 표시되는 툴팁으로, 관계 정보와 변화 그래프를 보여줌
+ */
 function EdgeTooltip({
-  data,
-  x,
-  y,
-  onClose,
-  sourceNode,
-  targetNode,
-  inViewer = false,
-  style,
-  filename,
+  data, // 간선의 데이터 (positivity, weight, explanation 등)
+  x, // 툴팁 표시 x 좌표
+  y, // 툴팁 표시 y 좌표
+  onClose, // 툴팁 닫기 콜백 함수
+  sourceNode, // 관계의 시작 노드
+  targetNode, // 관계의 끝 노드
+  inViewer = false, // 뷰어 모드 여부
+  style, // 추가 스타일
+  filename, // 현재 파일명 (책 구분용)
 }) {
-  const [position, setPosition] = useState({ x: 200, y: 200 });
-  const [showContent, setShowContent] = useState(false);
-  const [isDragging, setIsDragging] = useState(false);
-  const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
-  const [hasDragged, setHasDragged] = useState(false);
-  const [isFlipped, setIsFlipped] = useState(false);
-  const [relationData, setRelationData] = useState([]);
-  const [isLoading, setIsLoading] = useState(false);
-  const tooltipRef = useRef(null);
+  // 상태 관리
+  const [position, setPosition] = useState({ x: 200, y: 200 }); // 툴팁 위치
+  const [showContent, setShowContent] = useState(false); // 컨텐츠 표시 여부
+  const [isDragging, setIsDragging] = useState(false); // 드래그 중 여부
+  const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 }); // 드래그 오프셋
+  const [hasDragged, setHasDragged] = useState(false); // 드래그 했는지 여부
+  const [isFlipped, setIsFlipped] = useState(false); // 앞/뒷면 전환 상태
+  const [relationData, setRelationData] = useState([]); // 관계 변화 데이터
+  const [isLoading, setIsLoading] = useState(false); // 로딩 상태
+  const tooltipRef = useRef(null); // 툴팁 DOM 참조
 
+  // 컴포넌트 마운트 시 초기화
   useEffect(() => {
     setShowContent(true);
     console.log("🔍 EdgeTooltip mounted");
@@ -58,14 +66,17 @@ function EdgeTooltip({
     console.log("eventRelationModules:", eventRelationModules);
   }, []);
 
-  // 관계 변화 데이터를 로드하는 함수
+  /**
+   * 관계 변화 데이터를 로드하는 함수
+   * 모든 이벤트에서 두 인물 간의 관계 변화를 추적
+   */
   const loadRelationData = () => {
     console.log("🔍 loadRelationData 호출됨");
     console.log("sourceNode:", sourceNode);
     console.log("targetNode:", targetNode);
     console.log("filename:", filename);
 
-    // ✅ DOM Element 객체에서 실제 ID 추출
+    // DOM Element 객체에서 실제 ID 추출
     let actualSourceNode = sourceNode;
     let actualTargetNode = targetNode;
 
@@ -79,25 +90,26 @@ function EdgeTooltip({
       console.log("🔧 Extracted targetNode ID:", actualTargetNode);
     }
 
-    // ✅ filename이 없을 때 기본값 설정
+    // filename이 없을 때 기본값 설정
     const actualFilename = filename || "gatsby.epub";
-
     console.log("Final values:", {
       actualSourceNode,
       actualTargetNode,
       actualFilename,
     });
 
+    // 필수 데이터 검증
     if (!actualSourceNode || !actualTargetNode) {
       console.log("❌ 필수 데이터 누락");
       return;
     }
 
     setIsLoading(true);
+
     try {
       const relationHistory = [];
 
-      // ✅ 수정: filename에서 숫자 2자리 추출 (예: '01', '02' 등)
+      // filename에서 숫자 2자리 추출 (예: '01', '02' 등)
       const match = actualFilename.match(/(\d{2})/);
       const bookNumber = match ? match[1] : "01";
       console.log("📖 bookNumber (수정됨):", bookNumber);
@@ -123,6 +135,7 @@ function EdgeTooltip({
 
       let lastPositivity = null; // 직전 이벤트의 긍정도 저장
 
+      // 각 이벤트에서 관계 데이터 추출
       relevantModules.forEach(([path, module]) => {
         // 파일명에서 이벤트 번호 추출
         const eventMatch = path.match(/_ev(\d+)_/);
@@ -179,6 +192,7 @@ function EdgeTooltip({
           }
         }
 
+        // 관계 히스토리에 추가
         const relationItem = {
           event: eventNum,
           positivity: currentPositivity,
@@ -202,12 +216,15 @@ function EdgeTooltip({
     }
   };
 
+  // 마우스 다운 이벤트 핸들러 (드래그 시작)
   const handleMouseDown = (e) => {
+    // 닫기 버튼이나 액션 버튼 클릭 시 드래그 방지
     if (
       e.target.closest(".tooltip-close-btn") ||
       e.target.closest(".action-button")
     )
       return;
+
     setIsDragging(true);
     const rect = tooltipRef.current.getBoundingClientRect();
     setDragOffset({
@@ -216,6 +233,7 @@ function EdgeTooltip({
     });
   };
 
+  // 마우스 이동 이벤트 핸들러 (드래그 중)
   const handleMouseMove = (e) => {
     if (!isDragging) return;
 
@@ -231,9 +249,11 @@ function EdgeTooltip({
     const scrollX = window.pageXOffset || document.documentElement.scrollLeft;
     const scrollY = window.pageYOffset || document.documentElement.scrollTop;
 
+    // 새로운 위치 계산
     let newX = e.clientX - dragOffset.x;
     let newY = e.clientY - dragOffset.y;
 
+    // 화면 경계 내로 제한
     newX = Math.max(
       scrollX,
       Math.min(newX, viewportWidth + scrollX - tooltipRect.width)
@@ -247,18 +267,21 @@ function EdgeTooltip({
     setHasDragged(true);
   };
 
+  // 마우스 업 이벤트 핸들러 (드래그 종료)
   const handleMouseUp = () => {
     setIsDragging(false);
   };
 
+  // 드래그 관련 이벤트 리스너 등록/해제
   useEffect(() => {
     if (isDragging) {
       window.addEventListener("mousemove", handleMouseMove);
       window.addEventListener("mouseup", handleMouseUp);
-      document.body.style.userSelect = "none";
+      document.body.style.userSelect = "none"; // 텍스트 선택 방지
     } else {
       document.body.style.userSelect = "";
     }
+
     return () => {
       window.removeEventListener("mousemove", handleMouseMove);
       window.removeEventListener("mouseup", handleMouseUp);
@@ -266,6 +289,7 @@ function EdgeTooltip({
     };
   }, [isDragging]);
 
+  // 초기 위치 설정 (props로 받은 x, y 좌표 기반)
   useEffect(() => {
     if (
       x !== undefined &&
@@ -289,6 +313,7 @@ function EdgeTooltip({
       let newX = x;
       let newY = y;
 
+      // 화면 경계 내로 제한
       newX = Math.max(
         scrollX,
         Math.min(newX, viewportWidth + scrollX - tooltipRect.width)
@@ -302,6 +327,11 @@ function EdgeTooltip({
     }
   }, [x, y, isDragging, hasDragged]);
 
+  /**
+   * positivity 값에 따른 관계 스타일 결정
+   * @param {number} positivity - 관계 긍정도 (-1 ~ 1)
+   * @returns {object} 색상과 텍스트 정보
+   */
   const getRelationStyle = (positivity) => {
     if (positivity > 0.6) return { color: "#15803d", text: "긍정적" };
     if (positivity > 0.3) return { color: "#059669", text: "우호적" };
@@ -312,15 +342,16 @@ function EdgeTooltip({
 
   const relationStyle = getRelationStyle(data.positivity);
 
+  // 관계 변화 그래프 버튼 클릭 핸들러
   const handleRelationGraphClick = () => {
     console.log("🎯 관계 변화 그래프 버튼 클릭됨");
     console.log("현재 isFlipped:", isFlipped);
 
     if (!isFlipped) {
       console.log("📊 데이터 로드 시작");
-      loadRelationData();
+      loadRelationData(); // 그래프 데이터 로드
     }
-    setIsFlipped(!isFlipped);
+    setIsFlipped(!isFlipped); // 앞/뒷면 전환
   };
 
   // 차트 데이터 구성
@@ -351,7 +382,7 @@ function EdgeTooltip({
     ],
   };
 
-  // 차트 옵션
+  // 차트 옵션 설정
   const chartOptions = {
     responsive: true,
     maintainAspectRatio: false,
@@ -375,7 +406,7 @@ function EdgeTooltip({
             const dataIndex = context.dataIndex;
             const item = relationData[dataIndex];
             const labels = [
-              `가중치: ${item.weight.toFixed(1)}`, // 백분율 제거
+              `가중치: ${item.weight.toFixed(1)}`, // 원본 값으로 표시
               `설명: ${item.explanation.split("|")[0]}`,
             ];
             if (!item.hasRelation) {
@@ -429,6 +460,7 @@ function EdgeTooltip({
     },
   };
 
+  // z-index 값 설정 (뷰어 모드에 따라 다르게)
   const zIndexValue = inViewer ? 10000 : 9999;
 
   console.log(
@@ -438,6 +470,7 @@ function EdgeTooltip({
     relationData.length
   );
 
+  // 툴팁 렌더링
   return (
     <div
       ref={tooltipRef}
@@ -457,6 +490,7 @@ function EdgeTooltip({
       onMouseDown={handleMouseDown}
     >
       <div className="edge-tooltip-content">
+        {/* 닫기 버튼 */}
         <button
           onClick={onClose}
           className="tooltip-close-btn"
@@ -466,8 +500,10 @@ function EdgeTooltip({
         </button>
 
         {!isFlipped ? (
+          // 앞면 - 기본 관계 정보 표시
           <>
             <div className="edge-tooltip-header">
+              {/* 관계 태그 표시 */}
               <div className="relation-tags">
                 {data.label.split(", ").map((relation, index) => (
                   <span
@@ -479,6 +515,8 @@ function EdgeTooltip({
                   </span>
                 ))}
               </div>
+
+              {/* 관계 긍정도 표시 */}
               <div className="relation-weight">
                 <div className="weight-header">
                   <span
@@ -488,9 +526,11 @@ function EdgeTooltip({
                     {relationStyle.text}
                   </span>
                   <span className="weight-value">
-                    {data.positivity.toFixed(1)}
+                    {data.positivity.toFixed(1)} {/* 원본 positivity 값 표시 */}
                   </span>
                 </div>
+
+                {/* 단계별 바 표시 (positivity 기반) */}
                 <div className="weight-steps">
                   {[0, 1, 2, 3, 4].map((step) => {
                     const stepValue = (step / 4) * 2 - 1; // -1 ~ 1 범위로 변환 (-1, -0.5, 0, 0.5, 1)
@@ -527,6 +567,7 @@ function EdgeTooltip({
             </div>
 
             <div className="edge-tooltip-body">
+              {/* 관계 설명 */}
               {data.explanation && (
                 <div className="relation-explanation">
                   <div
@@ -549,6 +590,7 @@ function EdgeTooltip({
                 {showContent.toString()}
               </div>
 
+              {/* 액션 버튼 */}
               <div className="tooltip-actions">
                 <button
                   className="action-button"
@@ -591,6 +633,7 @@ function EdgeTooltip({
             </div>
           </>
         ) : (
+          // 뒷면 - 관계 변화 그래프 표시
           <div className="relation-graph-view">
             <div className="relation-graph-header">
               <h3
@@ -639,6 +682,7 @@ function EdgeTooltip({
               )}
             </div>
 
+            {/* 뒤로 가기 버튼 */}
             <div className="tooltip-actions">
               <button
                 className="action-button back-btn"

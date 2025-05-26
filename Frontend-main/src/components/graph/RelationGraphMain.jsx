@@ -112,8 +112,8 @@ function RelationGraphMain({
       x: absoluteX,
       y: absoluteY,
       data: edge.data(),
-      sourceNode: edge.source().id(), // 실제 노드 ID (문자열/숫자)
-      targetNode: edge.target().id(), // 실제 노드 ID (문자열/숫자)
+      sourceNode: edge.source().id(), // 실제 노드 ID - EdgeTooltip에서 타입 체크 없이 바로 사용 가능
+      targetNode: edge.target().id(), // 실제 노드 ID - EdgeTooltip에서 타입 체크 없이 바로 사용 가능
     });
 
     cy.batch(() => {
@@ -900,6 +900,7 @@ function RelationGraphMain({
                 )}
                 {activeTooltip?.type === "edge" && (
                   <EdgeTooltip
+                    // key 제거 - React의 key 변경 시 컴포넌트가 재생성되어 사용자의 드래그/플립 상태가 리셋되는 것을 방지
                     data={activeTooltip.data}
                     x={activeTooltip.x}
                     y={activeTooltip.y}
@@ -1041,6 +1042,7 @@ function RelationGraphMain({
           )}
           {activeTooltip?.type === "edge" && (
             <EdgeTooltip
+              // key 제거 - React의 key 변경 시 컴포넌트가 재생성되어 사용자의 드래그/플립 상태가 리셋되는 것을 방지
               data={activeTooltip.data}
               x={activeTooltip.x}
               y={activeTooltip.y}
