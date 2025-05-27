@@ -16,6 +16,7 @@ const CytoscapeGraphDirect = ({
 }) => {
   const containerRef = useRef(null);
   const [ripples, setRipples] = useState([]);
+  const [isGraphVisible, setIsGraphVisible] = useState(false);
 
   // cy 인스턴스 최초 생성 및 container 변경 대응
   useEffect(() => {
@@ -52,6 +53,7 @@ const CytoscapeGraphDirect = ({
 
   // elements diff patch
   useEffect(() => {
+    setIsGraphVisible(false); // 로딩 시작 시 숨김
     const cy = externalCyRef?.current;
     if (!cy) return;
     cy.batch(() => {
@@ -115,6 +117,7 @@ const CytoscapeGraphDirect = ({
     // pan/zoom만 fit 적용 (노드 position은 그대로)
     setTimeout(() => {
       if (cy) cy.fit(undefined, 10);
+      setIsGraphVisible(true); // 모든 처리 끝나면 보이게
     }, 0);
   }, [elements, stylesheet, layout, fitNodeIds, externalCyRef, newNodeIds]);
 
@@ -152,7 +155,8 @@ const CytoscapeGraphDirect = ({
         ...style,
         position: "relative",
         overflow: "hidden",
-        zIndex: 1
+        zIndex: 1,
+        visibility: isGraphVisible ? "visible" : "hidden"
       }}
       className="graph-canvas-area"
       onClick={handleRipple}
