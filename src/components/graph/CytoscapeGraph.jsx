@@ -14,8 +14,10 @@ const CytoscapeGraph = React.forwardRef(
     ripples = [],
     style = {},
     onLayoutReady,
+    newNodeIds,
   }, ref) => {
     const cyRef = useRef(null);
+    const prevElementsRef = useRef([]);
 
     useEffect(() => {
       const originalBody = document.body.style.overflow;
@@ -63,11 +65,60 @@ const CytoscapeGraph = React.forwardRef(
     useEffect(() => {
       if (ref.current) {
         const cy = ref.current;
-        cy.resize();
         // layout, fit, center 등 자동 배치/화면 맞춤 완전 제거!
         if (onLayoutReady) onLayoutReady();
       }
     }, [elements, fitNodeIds, ref, layout]);
+
+    // 최초 마운트 시 cy가 준비된 후 elements가 있으면 반드시 전체 추가
+    useEffect(() => {
+      if (!cyRef.current) return;
+      const cy = cyRef.current;
+      if (elements && elements.length > 0 && cy.elements().length === 0) {
+        cy.add(elements);
+      }
+    }, [cyRef.current, elements]);
+
+    // elements diff patch
+    useEffect(() => {
+      if (!cyRef.current) return;
+      const cy = cyRef.current;
+      const prevElements = prevElementsRef.current;
+      if (prevElements.length === 0 && cy.elements().length === 0) {
+        // 최초 마운트: 전체 추가 (위에서 이미 처리)
+        prevElementsRef.current = elements;
+        return;
+      }
+      const prevNodeIds = new Set(prevElements.filter(el => el.data && !el.data.source).map(el => el.data.id));
+      const prevEdgeIds = new Set(prevElements.filter(el => el.data && el.data.source).map(el => el.data.id));
+      const currNodeIds = new Set(elements.filter(el => el.data && !el.data.source).map(el => el.data.id));
+      const currEdgeIds = new Set(elements.filter(el => el.data && el.data.source).map(el => el.data.id));
+      // 추가된 노드/엣지
+      const addedNodes = elements.filter(el => el.data && !el.data.source && !prevNodeIds.has(el.data.id));
+      const addedEdges = elements.filter(el => el.data && el.data.source && !prevEdgeIds.has(el.data.id));
+      // 삭제된 노드/엣지
+      const removedNodeIds = [...prevNodeIds].filter(id => !currNodeIds.has(id));
+      const removedEdgeIds = [...prevEdgeIds].filter(id => !currEdgeIds.has(id));
+      if (addedNodes.length > 0) cy.add(addedNodes);
+      if (addedEdges.length > 0) cy.add(addedEdges);
+      if (removedNodeIds.length > 0) cy.remove(removedNodeIds.map(id => `#${id}`));
+      if (removedEdgeIds.length > 0) cy.remove(removedEdgeIds.map(id => `#${id}`));
+      prevElementsRef.current = elements;
+    }, [elements]);
+
+    // 새로 추가된 노드에만 appear 클래스 부여
+    useEffect(() => {
+      if (cyRef.current && newNodeIds && newNodeIds.length > 0) {
+        const cy = cyRef.current;
+        newNodeIds.forEach(id => {
+          const node = cy.getElementById(id);
+          if (node && node.length > 0) {
+            node.addClass('appear');
+            setTimeout(() => node.removeClass('appear'), 800);
+          }
+        });
+      }
+    }, [newNodeIds]);
 
     const handleWheel = e => {
       if (!cyRef.current) return;
@@ -92,7 +143,7 @@ const CytoscapeGraph = React.forwardRef(
         style={{ position: "relative", width: "100%", height: "100%", ...style, overflow: 'hidden' }}
       >
         <CytoscapeComponent
-          elements={elements}
+          elements={[]}
           stylesheet={stylesheet}
           userZoomingEnabled={true}
           layout={{name:'preset'}}

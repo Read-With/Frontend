@@ -1,183 +1,137 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import RelationGraphMain from "./RelationGraphMain";
 import GraphControls from "./GraphControls";
 import "./RelationGraph.css";
 import { useNavigate, useParams } from "react-router-dom";
 import { FaTimes } from 'react-icons/fa';
 
-// 챕터별 파일 import.meta.glob context 생성
+// characters.json, 이벤트별 relations.json glob import
 const characterModules = import.meta.glob('../../data/*_characters.json', { eager: true });
-const relationModules = import.meta.glob('../../data/*_merged_relations.json', { eager: true });
-// 모든 챕터/이벤트 파일을 한 번에 glob으로 불러오기
-const allEventModules = import.meta.glob('../../data/*/chapter_*_event_*.json', { eager: true });
+const eventModules = import.meta.glob('../../data/*_ev*_relations.json', { eager: true });
 
-const getChapterFile = (chapter, type) => {
+const getChapterCharacters = (chapter) => {
   const num = String(chapter).padStart(2, '0');
-  if (type === 'characters') {
-    return characterModules[`../../data/${num}_characters.json`]?.default || [];
-  } else {
-    return relationModules[`../../data/${num}_merged_relations.json`]?.default || [];
-  }
-};
-
-// currentChapter의 초기값을 localStorage에서 불러오도록 함수 추가
-const getInitialChapter = () => {
-  const saved = localStorage.getItem('lastGraphChapter');
-  return saved ? Number(saved) : 1;
+  // characters.json 구조: { characters: [...] } 또는 [...]
+  const data = characterModules[`../../data/${num}_characters.json`]?.default;
+  if (!data) return [];
+  return Array.isArray(data) ? data : data.characters || [];
 };
 
 function RelationGraphWrapper() {
   const navigate = useNavigate();
   const { filename } = useParams();
-  const [currentChapter, setCurrentChapter] = useState(getInitialChapter);
+  const [currentChapter, setCurrentChapter] = useState(() => {
+    const saved = localStorage.getItem('lastGraphChapter');
+    return saved ? Number(saved) : 1;
+  });
   const [elements, setElements] = useState([]);
-  const [maxChapter, setMaxChapter] = useState(9); // data 폴더 기준
+  const [maxChapter, setMaxChapter] = useState(9);
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
   const [hideIsolated, setHideIsolated] = useState(true);
-  // 이벤트 상태 추가
   const [eventNum, setEventNum] = useState(1);
   const [maxEventNum, setMaxEventNum] = useState(0);
-  // 그래프 pan/zoom/노드 위치 상태를 상위에서 관리
   const [graphViewState, setGraphViewState] = useState(null);
+  const [newNodeIds, setNewNodeIds] = useState([]);
 
-  // 챕터 변경 시 데이터 불러오기
+  // === 1. 챕터별/이벤트별 모든 relations.json을 미리 누적 구조로 준비 ===
+  const allEventsDataRef = useRef({}); // { [chapterNum]: [ {nodes, edges} ... ] }
+  const allEventFilesRef = useRef({}); // { [chapterNum]: [파일경로, ...] }
+  const allCharactersRef = useRef({}); // { [chapterNum]: [캐릭터배열] }
+
+  // 챕터 변경 시, 해당 챕터의 모든 이벤트 relations.json 누적 준비
   useEffect(() => {
-    try {
-      // maxEventNum 계산 (이벤트별 파일 개수 기반, 정적 glob)
-      const num = String(currentChapter).padStart(2, '0');
-      const allKeys = Object.keys(allEventModules);
-      const filteredPaths = allKeys.filter(path => path.includes(`/data/${num}/chapter_${currentChapter}_event_`));
-      const maxEvent = filteredPaths.length > 0 ? filteredPaths.length : 1;
-      // --- 상태 점검용 로그 ---
-      console.log('[maxEventNum 계산] allEventModules keys:', allKeys);
-      console.log('[maxEventNum 계산] current num:', num, 'currentChapter:', currentChapter);
-      console.log('[maxEventNum 계산] filtered event paths:', filteredPaths);
-      console.log('[maxEventNum 계산] maxEvent:', maxEvent);
-      setMaxEventNum(maxEvent);
-      // eventNum이 maxEventNum보다 크면 자동 조정
-      setEventNum(prev => prev > maxEvent ? maxEvent : prev);
-
-      const charactersData = getChapterFile(currentChapter, 'characters');
-      const relationsData = getChapterFile(currentChapter, 'relations');
-      if (!charactersData || !relationsData) {
-        setElements([]);
-        return;
-      }
-      const safeId = v => {
-        if (v === undefined || v === null) return '';
-        if (typeof v === 'number') return String(Math.trunc(v));
-        if (typeof v === 'string' && v.match(/^[0-9]+\.0$/)) return v.split('.')[0];
-        return String(v).trim();
-      };
-      // localStorage에서 노드 위치 정보 읽기
-      const storageKey = `chapter_node_positions_${currentChapter}`;
-      let nodePositions = {};
-      try {
-        const posStr = localStorage.getItem(storageKey);
-        if (posStr) nodePositions = JSON.parse(posStr);
-      } catch (e) {}
-
-      // === 이벤트별 등장 id만 필터링 ===
-      // filteredNodes의 id 집합 구하기 (고립 노드 필터링 포함)
-      const allNodeIds = new Set((charactersData.characters || charactersData).map(char => safeId(char.id)));
-      const edgesRaw = (relationsData.relations || relationsData)
-        .map((rel, idx) => ({
-          data: {
-            id: `e${idx}`,
-            source: safeId(rel.id1 || rel.source),
-            target: safeId(rel.id2 || rel.target),
-            label: Array.isArray(rel.relation) ? rel.relation.join(", ") : rel.type,
-            explanation: rel.explanation,
-            positivity: rel.positivity,
-            weight: rel.weight,
-          },
-        }));
-      let filteredNodeIds = new Set();
-      if (hideIsolated) {
-        const connectedNodeIds = new Set();
-        edgesRaw.forEach(edge => {
-          connectedNodeIds.add(edge.data.source);
-          connectedNodeIds.add(edge.data.target);
+    const num = String(currentChapter).padStart(2, '0');
+    // 해당 챕터의 모든 이벤트 파일 경로 추출 및 정렬
+    const eventFiles = Object.keys(eventModules)
+      .filter(path => path.includes(`/${num}_ev`) && path.includes('_relations.json'))
+      .sort((a, b) => {
+        // evN에서 N만 추출해서 정렬
+        const getEvNum = p => parseInt((p.match(/_ev(\d+)_/) || [])[1] || (p.match(/_ev(\d+)\./) || [])[1] || '0', 10);
+        return getEvNum(a) - getEvNum(b);
+      });
+    allEventFilesRef.current[num] = eventFiles;
+    setMaxEventNum(eventFiles.length);
+    setEventNum(1);
+    // 캐릭터 정보 미리 저장
+    allCharactersRef.current[num] = getChapterCharacters(currentChapter);
+    // 누적 노드/엣지 준비
+    let accumulatedNodeIds = new Set();
+    let accumulatedEdgeIds = new Set();
+    let accumulatedNodes = [];
+    let accumulatedEdges = [];
+    const chapterEvents = [];
+    eventFiles.forEach((file, idx) => {
+      const data = eventModules[file].default || {};
+      // new_appearances: id 배열
+      const newNodeIds = Array.isArray(data.new_appearances) ? data.new_appearances.map(id => String(Math.trunc(id))) : [];
+      // relations: 엣지 배열
+      const newEdges = Array.isArray(data.relations) ? data.relations : [];
+      // 노드 상세정보 characters.json에서 찾아서 생성
+      const charList = allCharactersRef.current[num] || [];
+      const newNodes = newNodeIds
+        .filter(id => !accumulatedNodeIds.has(id))
+        .map(id => {
+          const char = charList.find(c => String(Math.trunc(c.id)) === id);
+          return {
+            data: {
+              id: id,
+              label: char?.common_name || char?.name || id,
+              main: char?.main_character,
+              description: char?.description,
+              names: char?.names,
+              img: char?.img,
+            },
+            // position: ... (필요시 위치 정보 추가)
+          };
         });
-        filteredNodeIds = new Set([...allNodeIds].filter(id => connectedNodeIds.has(id)));
-      } else {
-        filteredNodeIds = allNodeIds;
-      }
+      // 엣지 생성
+      const edges = newEdges
+        .filter(e => e.id1 != null && e.id2 != null)
+        .map((e, i) => {
+          const source = String(Math.trunc(e.id1));
+          const target = String(Math.trunc(e.id2));
+          const edgeId = `${source}_${target}_${i}`;
+          if (accumulatedEdgeIds.has(edgeId)) return null;
+          return {
+            data: {
+              id: edgeId,
+              source,
+              target,
+              label: Array.isArray(e.relation) ? e.relation.join(", ") : e.type,
+              explanation: e.explanation,
+              positivity: e.positivity,
+              weight: e.weight,
+            },
+          };
+        }).filter(Boolean);
+      // 누적
+      newNodes.forEach(n => accumulatedNodeIds.add(n.data.id));
+      edges.forEach(e => accumulatedEdgeIds.add(e.data.id));
+      accumulatedNodes = [...accumulatedNodes, ...newNodes];
+      accumulatedEdges = [...accumulatedEdges, ...edges];
+      // 이 시점의 누적 elements 저장
+      chapterEvents.push({
+        nodes: [...accumulatedNodes],
+        edges: [...accumulatedEdges],
+        newNodeIds: newNodes.map(n => n.data.id),
+      });
+    });
+    allEventsDataRef.current[num] = chapterEvents;
+    // 첫 이벤트로 초기화
+    setElements([...(chapterEvents[0]?.nodes || []), ...(chapterEvents[0]?.edges || [])]);
+    setNewNodeIds(chapterEvents[0]?.newNodeIds || []);
+  }, [currentChapter]);
 
-      // === 위치 정보가 있는 id만 노드로 렌더링 ===
-      const nodes = (charactersData.characters || charactersData)
-        .filter(char => {
-          const id = safeId(char.id);
-          return filteredNodeIds.has(id) && nodePositions[id];
-        })
-        .map(char => ({
-          data: {
-            id: safeId(char.id),
-            label: char.common_name || char.name,
-            main: char.main_character,
-            description: char.description,
-            names: char.names,
-            img: char.img,
-          },
-          position: nodePositions[safeId(char.id)]
-        }));
-
-      // === 간선도 source/target 모두 위치 정보가 있는 경우만 렌더링 ===
-      const edges = edgesRaw.filter(edge =>
-        nodePositions[edge.data.source] && nodePositions[edge.data.target]
-      );
-
-      // --- 마지막 이벤트일 때는 전체 노드+엣지 포함 ---
-      const safeEventNum = Math.min(eventNum, maxEvent);
-      if (safeEventNum === maxEvent) {
-        setElements([...nodes, ...edges]);
-      } else {
-        setElements([...nodes, ...edges]); // 위치 정보 없는 노드는 이미 필터링됨
-      }
-    } catch (e) {
-      setElements([]);
-    }
-  }, [currentChapter, hideIsolated, eventNum]);
-
-  // 웹페이지 스크롤 막기 (body, html 모두 + 강제 스크롤 방지)
+  // === 2. eventNum이 바뀔 때마다 해당 시점의 누적 elements로 setElements ===
   useEffect(() => {
-    const originalBodyOverflow = document.body.style.overflow;
-    const originalHtmlOverflow = document.documentElement.style.overflow;
-    const originalBodyHeight = document.body.style.height;
-    const originalHtmlHeight = document.documentElement.style.height;
-    document.body.style.overflow = 'hidden';
-    document.documentElement.style.overflow = 'hidden';
-    document.body.style.height = '100%';
-    document.documentElement.style.height = '100%';
-
-    // 강제로 스크롤 최상단 고정
-    window.scrollTo(0, 0);
-    const blockScroll = e => {
-      e.preventDefault();
-      window.scrollTo(0, 0);
-      return false;
-    };
-    window.addEventListener('scroll', blockScroll, { passive: false });
-    window.addEventListener('wheel', blockScroll, { passive: false });
-    window.addEventListener('touchmove', blockScroll, { passive: false });
-    window.addEventListener('keydown', e => {
-      if ([32, 33, 34, 35, 36, 37, 38, 39, 40].includes(e.keyCode)) {
-        blockScroll(e);
-      }
-    }, { passive: false });
-
-    return () => {
-      document.body.style.overflow = originalBodyOverflow;
-      document.documentElement.style.overflow = originalHtmlOverflow;
-      document.body.style.height = originalBodyHeight;
-      document.documentElement.style.height = originalHtmlHeight;
-      window.removeEventListener('scroll', blockScroll);
-      window.removeEventListener('wheel', blockScroll);
-      window.removeEventListener('touchmove', blockScroll);
-      // keydown 리스너는 별도 함수로 등록해야 제거 가능(여기선 생략)
-    };
-  }, []);
+    const num = String(currentChapter).padStart(2, '0');
+    const chapterEvents = allEventsDataRef.current[num] || [];
+    const idx = Math.max(0, Math.min(eventNum - 1, chapterEvents.length - 1));
+    const curr = chapterEvents[idx] || { nodes: [], edges: [], newNodeIds: [] };
+    setElements([...(curr.nodes || []), ...(curr.edges || [])]);
+    setNewNodeIds(curr.newNodeIds || []);
+  }, [eventNum, currentChapter]);
 
   // 챕터 변경 시 localStorage에 저장
   useEffect(() => {
@@ -340,6 +294,7 @@ function RelationGraphWrapper() {
             chapterNum={currentChapter}
             eventNum={Math.min(eventNum, maxEventNum)}
             maxEventNum={maxEventNum}
+            newNodeIds={newNodeIds}
           />
         ) : (
           <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, color: '#6C8EFF' }}>

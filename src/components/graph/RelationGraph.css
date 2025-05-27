@@ -394,7 +394,7 @@ html, body {
   padding: 0 !important;
   border: none !important;
   box-sizing: border-box;
-  background: #f8fafc;
+  background: transparent !important;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1757,4 +1757,59 @@ html, body {
 @keyframes spin {
   0% { transform: rotate(0deg); }
   100% { transform: rotate(360deg); }
+}
+
+.appear {
+  animation: fadeInScale 0.000001s cubic-bezier(0.22, 1, 0.36, 1);
+}
+@keyframes fadeInScale {
+  from { opacity: 0.999; transform: scale(0.999);}
+  to { opacity: 1; transform: scale(1);}
+}
+
+.cytoscape-node-appear {
+  animation: nodeAppear 0.7s cubic-bezier(0.23, 1, 0.32, 1);
+  box-shadow: 0 0 0 6px #6C8EFF55;
+  border: 2.5px solid #6C8EFF !important;
+}
+@keyframes nodeAppear {
+  0% {
+    transform: scale(0.2);
+    opacity: 0.2;
+    box-shadow: 0 0 0 20px #6C8EFF33;
+  }
+  60% {
+    transform: scale(1.15);
+    opacity: 1;
+    box-shadow: 0 0 0 10px #6C8EFF33;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+    box-shadow: 0 0 0 0 #6C8EFF00;
+  }
+}
+
+.cytoscape-ripple {
+  position: absolute;
+  border-radius: 50%;
+  background: rgba(108, 142, 255, 0.25);
+  pointer-events: none;
+  transform: scale(0);
+  animation: cytoscape-ripple-anim 0.7s cubic-bezier(0.23, 1, 0.32, 1) forwards;
+  z-index: 99999;
+}
+@keyframes cytoscape-ripple-anim {
+  to {
+    transform: scale(1.7);
+    opacity: 0;
+  }
+}
+
+.cytoscape-fade {
+  transition: opacity 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+  opacity: 1;
+}
+.cytoscape-fade-hidden {
+  opacity: 0;
 }

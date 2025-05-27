@@ -47,7 +47,6 @@ const loadSettings = () => {
     
     return loadedSettings;
   } catch (e) {
-    console.error('설정 불러오기 오류:', e);
     return defaultSettings;
   }
 };
@@ -75,24 +74,19 @@ const getChapterFile = (chapter, type) => {
     if (type === 'characters') {
       const filePath = `/src/data/${num}/${num}_characters.json`;
       const data = characterModules[filePath]?.default;
-      console.log('[characters] filePath:', filePath, 'data:', data);
       if (!data) {
-        console.warn(`캐릭터 파일을 찾을 수 없음: ${filePath}`);
         return [];
       }
       return data;
     } else {
       const filePath = `/src/data/${num}/${num}_merged_relations.json`;
       const data = relationModules[filePath]?.default;
-      console.log('[relations] filePath:', filePath, 'data:', data);
       if (!data) {
-        console.warn(`관계 파일을 찾을 수 없음: ${filePath}`);
         return [];
       }
       return data;
     }
   } catch (error) {
-    console.error(`파일 로딩 오류 (${type}):`, error);
     return [];
   }
 };
@@ -132,15 +126,9 @@ function getEventsForChapter(chapter) {
       })
       .filter(ev => ev.eventNum > 0)
       .sort((a, b) => a.eventNum - b.eventNum);
-    
-    console.log('filteredPaths:', events);
-    console.log('eventNums:', events.map(ev => ev.eventNum));
     const maxEvent = events.length > 0 ? Math.max(...events.map(ev => ev.eventNum)) : 1;
-    console.log('maxEvent:', maxEvent);
-    
     return events;
   } catch (error) {
-    console.error('이벤트 로딩 오류:', error);
     return [];
   }
 }
@@ -349,7 +337,6 @@ const ViewerPage = ({ darkMode: initialDarkMode }) => {
     const loadData = async () => {
       setIsDataReady(false);
       setLoading(true);
-      // setElements([]); // 로딩 시작 시 그래프 데이터 즉시 비우기 제거
       try {
         // 챕터가 바뀔 때 단어 위치와 총 단어 수 초기화
         setCurrentWordIndex(0);
@@ -373,10 +360,21 @@ const ViewerPage = ({ darkMode: initialDarkMode }) => {
   // currentChapter가 바뀔 때 currentEvent를 null로 초기화
   useEffect(() => {
     setCurrentEvent(null);
-    // setElements([]); // 제거: 기존 그래프가 계속 보이도록
   }, [currentChapter]);
 
-  // 현재 이벤트 결정 useEffect 개선
+  const prevWordIndexStackRef = useRef([]);
+  // currentWordIndex가 바뀔 때마다 스택에 push (0은 저장하지 않음)
+  useEffect(() => {
+    if (currentWordIndex > 0) {
+      prevWordIndexStackRef.current.push(currentWordIndex);
+      // 너무 길어지지 않게 최근 10개만 유지
+      if (prevWordIndexStackRef.current.length > 10) {
+        prevWordIndexStackRef.current = prevWordIndexStackRef.current.slice(-10);
+      }
+    }
+  }, [currentWordIndex]);
+
+  // 이벤트 결정 useEffect에서 0일 때 스택에서 0이 아닌 가장 최근 인덱스 사용
   useEffect(() => {
     if (!isDataReady) return;
     const events = getEventsForChapter(currentChapter);
@@ -384,17 +382,17 @@ const ViewerPage = ({ darkMode: initialDarkMode }) => {
       setCurrentEvent(null);
       return;
     }
-    // currentWordIndex가 0이면 아무 이벤트도 선택하지 않음
+    let wordIndexToUse = currentWordIndex;
     if (currentWordIndex === 0) {
-      setCurrentEvent(null);
-      return;
+      // 0이 아닌 가장 최근 인덱스 찾기
+      const stack = prevWordIndexStackRef.current;
+      const lastNonZero = [...stack].reverse().find(idx => idx > 0);
+      wordIndexToUse = lastNonZero !== undefined ? lastNonZero : events[0].start;
     }
-    // start <= currentWordIndex < end 범위의 이벤트 찾기
-    const eventIdx = events.findIndex(event => currentWordIndex >= event.start && currentWordIndex < event.end);
+    const eventIdx = events.findIndex(event => wordIndexToUse >= event.start && wordIndexToUse < event.end);
     if (eventIdx !== -1) {
       setCurrentEvent(events[eventIdx]);
     } else {
-      // fallback: 마지막 이벤트
       setCurrentEvent(events[events.length - 1]);
     }
   }, [isDataReady, currentChapter, currentWordIndex]);
@@ -496,6 +494,7 @@ const ViewerPage = ({ darkMode: initialDarkMode }) => {
       return el;
     });
     setElements(sorted);
+    setLoading(false); // elements가 실제 데이터로 채워진 직후에 로딩을 false로!
   }, [isDataReady, currentEvent, prevEvent, currentChapter, hideIsolated, fullElements]);
 
   // === [추가] 마지막 이벤트 등장 노드/간선 위치만 저장 및 이벤트별 적용 ===
@@ -869,15 +868,12 @@ const ViewerPage = ({ darkMode: initialDarkMode }) => {
     chapterNums.forEach((chapterNum) => {
       const storageKey = `chapter_node_positions_${chapterNum}`;
       if (localStorage.getItem(storageKey)) {
-        console.log(`[스킵] 챕터 ${chapterNum} 이미 저장됨`);
         return;
       }
-      console.log(`[시도] 챕터 ${chapterNum} 레이아웃 저장 시도`);
       // 1. merged_relations.json 전체 노드/엣지 생성
       const relationsData = getChapterFile(chapterNum, 'relations');
       const charactersData = getChapterFile(chapterNum, 'characters');
       if (!relationsData || !charactersData) {
-        console.log(`[실패] 챕터 ${chapterNum} 데이터 없음`);
         return;
       }
       let allRelations = relationsData.relations || relationsData;
@@ -885,7 +881,6 @@ const ViewerPage = ({ darkMode: initialDarkMode }) => {
       let allNewAppearances = relationsData.new_appearances || [];
       const elements = getElementsFromRelations(allRelations, charactersData, allNewAppearances, allImportance);
       if (!elements || elements.length === 0) {
-        console.log(`[실패] 챕터 ${chapterNum} elements 없음`);
         return;
       }
       // 2. Cytoscape 임시 인스턴스 생성 및 레이아웃 실행
@@ -904,10 +899,7 @@ const ViewerPage = ({ darkMode: initialDarkMode }) => {
         });
         try {
           localStorage.setItem(storageKey, JSON.stringify(layoutObj));
-          console.log(`[성공] 챕터 ${chapterNum} 위치 저장 완료`, layoutObj);
-        } catch (e) {
-          console.log(`[에러] 챕터 ${chapterNum} 저장 실패`, e);
-        }
+        } catch (e) {}
         cy.destroy();
       }, 100);
     });
@@ -937,313 +929,31 @@ const ViewerPage = ({ darkMode: initialDarkMode }) => {
         showGraph={showGraph}
         onToggleGraph={toggleGraph}
         rightSideContent={
-          showGraph && !graphFullScreen && (
-            <div 
-              className="h-full w-full flex items-center justify-center"
-              style={{ height: '100%', width: '100%', padding: 0, boxSizing: 'border-box', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-            >
-              <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'stretch', justifyContent: 'stretch', overflow: 'hidden' }}>
-                {/* 상단바: < 버튼 + 챕터 드롭다운 + 독립 인물 버튼 */}
-                <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', width: '100%', height: 40, marginBottom: 0, gap: 0, paddingLeft: 12, paddingTop: 0, justifyContent: 'flex-start' }}>
-                  {/* < 전체화면 버튼 */}
-                  <button
-                    onClick={() => navigate(`/user/graph/${filename}`)}
-                    style={{
-                      height: 32,
-                      width: 32,
-                      minWidth: 32,
-                      minHeight: 32,
-                      borderRadius: '8px',
-                      border: '1.5px solid #e3e6ef',
-                      background: '#fff',
-                      color: '#22336b',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      fontSize: 18,
-                      marginRight: 8,
-                      cursor: 'pointer',
-                      boxShadow: '0 2px 8px rgba(108,142,255,0.07)',
-                      transition: 'background 0.18s, color 0.18s, box-shadow 0.18s, transform 0.13s',
-                    }}
-                    title="그래프 전체화면"
-                  >
-                    {'<'}
-                  </button>
-                  {/* 챕터 드롭다운, 초기화, 독립 인물 버튼 */}
-                  <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                    <div className="chapter-dropdown-container">
-                      <select
-                        value={currentChapter}
-                        onChange={e => setCurrentChapter(Number(e.target.value))}
-                        style={{
-                          height: 32,
-                          padding: '2px 8px',
-                          borderRadius: 6,
-                          border: '1px solid #bfc8e2',
-                          fontSize: 14,
-                          background: '#f4f7fb',
-                          color: '#22336b',
-                          fontWeight: 500,
-                          outline: 'none',
-                          minWidth: 90,
-                          maxWidth: 180,
-                          cursor: 'pointer',
-                          lineHeight: '32px'
-                        }}
-                      >
-                        {Array.from({ length: maxChapter }, (_, i) => i + 1).map((chapter) => (
-                          <option key={chapter} value={chapter}>
-                            Chapter {chapter}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    {/* 초기화(새로고침) 버튼 */}
-                    <button
-                      onClick={() => window.location.reload()}
-                      title="초기화"
-                      style={{
-                        height: 32,
-                        width: 32,
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        borderRadius: 6,
-                        border: '1px solid #bfc8e2',
-                        background: '#f4f7fb',
-                        color: '#4F6DDE',
-                        fontSize: 18,
-                        margin: '0 4px',
-                        cursor: 'pointer',
-                        transition: 'background 0.18s',
-                        outline: 'none',
-                        boxShadow: 'none',
-                        padding: 0
-                      }}
-                    >
-                      <FaSyncAlt />
-                    </button>
-                    <button
-                      onClick={() => setHideIsolated(v => !v)}
-                      style={{
-                        height: 32,
-                        padding: '2px 12px',
-                        borderRadius: 6,
-                        border: '1px solid #bfc8e2',
-                        background: hideIsolated ? '#6C8EFF' : '#f4f7fb',
-                        color: hideIsolated ? '#fff' : '#22336b',
-                        fontWeight: 500,
-                        fontSize: 14,
-                        cursor: 'pointer',
-                        marginLeft: 6,
-                        lineHeight: '28px'
-                      }}
-                    >
-                      {hideIsolated ? '독립 인물 숨김' : '독립 인물 표시'}
-                    </button>
-                  </div>
-                  {/* 오른쪽: 인물 검색 폼 */}
-                  <div style={{ minWidth: 120, maxWidth: 320, flex: 1, display: 'flex', justifyContent: 'flex-end' }}>
-                    <GraphControls
-                      searchInput={searchInput}
-                      setSearchInput={setSearchInput}
-                      handleSearch={handleSearch}
-                      handleReset={handleReset}
-                      handleFitView={handleFitView}
-                      search={search}
-                      setSearch={setSearch}
-                      inputStyle={{ height: 32, fontSize: 14, padding: '2px 8px', borderRadius: 6 }}
-                      buttonStyle={{ height: 32, fontSize: 14, padding: '2px 10px', borderRadius: 6 }}
-                    />
-                  </div>
-                </div>
-                {/* 그래프 본문 위: event 슬라이드 UI */}
-                {(() => {
-                  const events = getEventsForChapter(currentChapter);
-                  
-                  if (!events.length) return null;
-
-                  // 현재 이벤트 인덱스 찾기 (현재 페이지의 마지막 글자 기준)
-                  let cur;
-                  
-                  // 1. 현재 페이지의 마지막 글자가 어떤 이벤트의 end보다 작은 경우
-                  const eventWithEndGreaterThanCurrent = events.findIndex(event => 
-                    currentWordIndex < event.end
-                  );
-                  
-                  if (eventWithEndGreaterThanCurrent !== -1) {
-                    cur = eventWithEndGreaterThanCurrent;
-                  } else {
-                    // 2. 현재 페이지의 마지막 글자가 마지막 이벤트의 end보다 큰 경우
-                    cur = events.length - 1;
-                  }
-
-                  const handlePrev = async () => {
-                    if (cur > 0) {
-                      const prevEvent = events[cur - 1];
-                      setCurrentWordIndex(prevEvent.start);
-                      if (viewerRef.current?.moveToProgress) {
-                        const progressValue = (prevEvent.start / 100) * 100;
-                        try {
-                          await viewerRef.current.moveToProgress(progressValue);
-                          setTimeout(() => {
-                            if (currentWordIndex !== prevEvent.start) {
-                              window.location.reload();
-                            }
-                          }, 500);
-                        } catch (e) {
-                          window.location.reload();
-                        }
-                      }
-                    }
-                  };
-                  
-                  const handleNext = async () => {
-                    if (cur < events.length - 1) {
-                      const nextEvent = events[cur + 1];
-                      setCurrentWordIndex(nextEvent.start);
-                      if (viewerRef.current?.moveToProgress) {
-                        const progressValue = (nextEvent.start / 100) * 100;
-                        try {
-                          await viewerRef.current.moveToProgress(progressValue);
-                          setTimeout(() => {
-                            if (currentWordIndex !== nextEvent.start) {
-                              window.location.reload();
-                            }
-                          }, 500);
-                        } catch (e) {
-                          window.location.reload();
-                        }
-                      }
-                    }
-                  };
-
-                  return (
-                    <div
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        gap: 24,
-                        width: '100%',
-                        minHeight: 48,
-                        background: 'linear-gradient(90deg, #f8fafc 60%, #e7edff 100%)',
-                        borderBottom: '1.5px solid #e5e7eb',
-                        margin: '8px 0 8px 0',
-                        padding: '8px 0',
-                        boxShadow: '0 2px 8px rgba(108,142,255,0.07)',
-                        borderRadius: 16,
-                      }}
-                    >
-                      <button
-                        onClick={handlePrev}
-                        disabled={cur <= 0}
-                        style={{
-                          width: 44,
-                          height: 44,
-                          borderRadius: '50%',
-                          border: 'none',
-                          background: 'linear-gradient(135deg, #6C8EFF 60%, #42a5f5 100%)',
-                          color: '#fff',
-                          fontSize: 24,
-                          fontWeight: 700,
-                          boxShadow: '0 2px 8px rgba(108,142,255,0.13)',
-                          cursor: cur <= 0 ? 'not-allowed' : 'pointer',
-                          opacity: cur <= 0 ? 0.5 : 1,
-                          transition: 'all 0.18s',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                        }}
-                        title="이전 이벤트"
-                      >&#8592;</button>
-                      <div style={{
-                        display: 'flex', 
-                        alignItems: 'center', 
-                        gap: 18, 
-                        minWidth: 60,
-                        transition: 'transform 0.3s cubic-bezier(.4,2,.6,1)',
-                      }}>
-                        {events.map((event, idx) => (
-                          <div
-                            key={idx}
-                            onClick={async () => {
-                              setCurrentWordIndex(event.start);
-                              if (viewerRef.current?.moveToProgress) {
-                                const progressValue = (event.start / 100) * 100;
-                                try {
-                                  await viewerRef.current.moveToProgress(progressValue);
-                                  setTimeout(() => {
-                                    if (currentWordIndex !== event.start) {
-                                      window.location.reload();
-                                    }
-                                  }, 500);
-                                } catch (e) {
-                                  window.location.reload();
-                                }
-                              }
-                            }}
-                            style={{
-                              width: idx === cur ? 22 : 14,
-                              height: idx === cur ? 22 : 14,
-                              borderRadius: '50%',
-                              background: idx === cur ? 'linear-gradient(135deg, #6C8EFF 60%, #42a5f5 100%)' : '#e3e6ef',
-                              boxShadow: idx === cur ? '0 2px 8px rgba(108,142,255,0.18)' : 'none',
-                              border: idx === cur ? '2.5px solid #6C8EFF' : '1.5px solid #e3e6ef',
-                              transition: 'all 0.28s cubic-bezier(.4,2,.6,1)',
-                              margin: '0 2px',
-                              cursor: 'pointer',
-                            }}
-                            title={`${event.title} (${event.start}~${event.end} 글자)`}
-                          />
-                        ))}
-                      </div>
-                      <button
-                        onClick={handleNext}
-                        disabled={cur >= events.length - 1}
-                        style={{
-                          width: 44,
-                          height: 44,
-                          borderRadius: '50%',
-                          border: 'none',
-                          background: 'linear-gradient(135deg, #6C8EFF 60%, #42a5f5 100%)',
-                          color: '#fff',
-                          fontSize: 24,
-                          fontWeight: 700,
-                          boxShadow: '0 2px 8px rgba(108,142,255,0.13)',
-                          cursor: cur >= events.length - 1 ? 'not-allowed' : 'pointer',
-                          opacity: cur >= events.length - 1 ? 0.5 : 1,
-                          transition: 'all 0.18s',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                        }}
-                        title="다음 이벤트"
-                      >&#8594;</button>
-                    </div>
-                  );
-                })()}
-                {/* 그래프 본문 */}
-                <div style={{ flex: 1, width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', marginTop: 8 }}>
-                  {/* 로딩중 메시지 완전 제거, elements가 준비된 경우에만 그래프 렌더링 */}
-                  {elements.length > 0 && (
-                    <RelationGraphMain 
-                      elements={elements} 
-                      inViewer={true} 
-                      fullScreen={false}
-                      style={{ width: '100%', height: '100%' }}
-                      graphViewState={graphViewState}
-                      setGraphViewState={setGraphViewState}
-                      chapterNum={currentChapter}
-                      eventNum={currentEvent?.eventNum}
-                      hideIsolated={hideIsolated}
-                    />
-                  )}
-                </div>
-              </div>
-            </div>
-          )
+          <GraphSplitArea
+            elements={elements}
+            currentChapter={currentChapter}
+            maxChapter={maxChapter}
+            hideIsolated={hideIsolated}
+            setHideIsolated={setHideIsolated}
+            searchInput={searchInput}
+            setSearchInput={setSearchInput}
+            handleSearch={handleSearch}
+            handleReset={handleReset}
+            handleFitView={handleFitView}
+            search={search}
+            setSearch={setSearch}
+            currentWordIndex={currentWordIndex}
+            viewerRef={viewerRef}
+            setCurrentWordIndex={setCurrentWordIndex}
+            graphViewState={graphViewState}
+            setGraphViewState={setGraphViewState}
+            loading={loading}
+            isDataReady={isDataReady}
+            showGraph={showGraph}
+            graphFullScreen={graphFullScreen}
+            navigate={navigate}
+            filename={filename}
+          />
         }
         pageMode={settings.pageMode}
       >
@@ -1308,7 +1018,6 @@ const ViewerPage = ({ darkMode: initialDarkMode }) => {
       {/* 전체화면 그래프는 별도 렌더링 */}
       {graphFullScreen && (
         <>
-          {console.log('전체화면 elements:', elements, 'currentChapter:', currentChapter, 'hideIsolated:', hideIsolated)}
           <div style={{ width: '100vw', height: '100vh', background: '#f4f7fb', overflow: 'hidden', display: 'flex', flexDirection: 'column', paddingTop: 0 }}>
             {/* 상단바: 챕터 파일탭, 인물 검색, 독립 인물 버튼, 닫기 버튼 */}
             <div style={{
@@ -1465,3 +1174,330 @@ const ViewerPage = ({ darkMode: initialDarkMode }) => {
 };
 
 export default ViewerPage;
+
+function GraphSplitArea({
+  elements,
+  currentChapter,
+  maxChapter,
+  hideIsolated,
+  setHideIsolated,
+  searchInput,
+  setSearchInput,
+  handleSearch,
+  handleReset,
+  handleFitView,
+  search,
+  setSearch,
+  currentWordIndex,
+  viewerRef,
+  setCurrentWordIndex,
+  graphViewState,
+  setGraphViewState,
+  loading,
+  isDataReady,
+  showGraph,
+  graphFullScreen,
+  navigate,
+  filename,
+}) {
+  // 내부 UI/로직은 기존과 동일하게 복사해서 사용
+  return (
+    <div 
+      className="h-full w-full flex items-center justify-center"
+      style={{ height: '100%', width: '100%', padding: 0, boxSizing: 'border-box', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+    >
+      <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'stretch', justifyContent: 'stretch', overflow: 'hidden' }}>
+        {/* 상단바: < 버튼 + 챕터 드롭다운 + 독립 인물 버튼 */}
+        <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', width: '100%', height: 40, marginBottom: 0, gap: 0, paddingLeft: 12, paddingTop: 0, justifyContent: 'flex-start' }}>
+          {/* < 전체화면 버튼 */}
+          <button
+            onClick={() => navigate(`/user/graph/${filename}`)}
+            style={{
+              height: 32,
+              width: 32,
+              minWidth: 32,
+              minHeight: 32,
+              borderRadius: '8px',
+              border: '1.5px solid #e3e6ef',
+              background: '#fff',
+              color: '#22336b',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: 18,
+              marginRight: 8,
+              cursor: 'pointer',
+              boxShadow: '0 2px 8px rgba(108,142,255,0.07)',
+              transition: 'background 0.18s, color 0.18s, box-shadow 0.18s, transform 0.13s',
+            }}
+            title="그래프 전체화면"
+          >
+            {'<'}
+          </button>
+          {/* 챕터 드롭다운, 초기화, 독립 인물 버튼 */}
+          <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <div className="chapter-dropdown-container">
+              <select
+                value={currentChapter}
+                onChange={e => setCurrentChapter(Number(e.target.value))}
+                style={{
+                  height: 32,
+                  padding: '2px 8px',
+                  borderRadius: 6,
+                  border: '1px solid #bfc8e2',
+                  fontSize: 14,
+                  background: '#f4f7fb',
+                  color: '#22336b',
+                  fontWeight: 500,
+                  outline: 'none',
+                  minWidth: 90,
+                  maxWidth: 180,
+                  cursor: 'pointer',
+                  lineHeight: '32px'
+                }}
+              >
+                {Array.from({ length: maxChapter }, (_, i) => i + 1).map((chapter) => (
+                  <option key={chapter} value={chapter}>
+                    Chapter {chapter}
+                  </option>
+                ))}
+              </select>
+            </div>
+            {/* 초기화(새로고침) 버튼 */}
+            <button
+              onClick={() => window.location.reload()}
+              title="초기화"
+              style={{
+                height: 32,
+                width: 32,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                borderRadius: 6,
+                border: '1px solid #bfc8e2',
+                background: '#f4f7fb',
+                color: '#4F6DDE',
+                fontSize: 18,
+                margin: '0 4px',
+                cursor: 'pointer',
+                transition: 'background 0.18s',
+                outline: 'none',
+                boxShadow: 'none',
+                padding: 0
+              }}
+            >
+              <FaSyncAlt />
+            </button>
+            <button
+              onClick={() => setHideIsolated(v => !v)}
+              style={{
+                height: 32,
+                padding: '2px 12px',
+                borderRadius: 6,
+                border: '1px solid #bfc8e2',
+                background: hideIsolated ? '#6C8EFF' : '#f4f7fb',
+                color: hideIsolated ? '#fff' : '#22336b',
+                fontWeight: 500,
+                fontSize: 14,
+                cursor: 'pointer',
+                marginLeft: 6,
+                lineHeight: '28px'
+              }}
+            >
+              {hideIsolated ? '독립 인물 숨김' : '독립 인물 표시'}
+            </button>
+          </div>
+          {/* 오른쪽: 인물 검색 폼 */}
+          <div style={{ minWidth: 120, maxWidth: 320, flex: 1, display: 'flex', justifyContent: 'flex-end' }}>
+            <GraphControls
+              searchInput={searchInput}
+              setSearchInput={setSearchInput}
+              handleSearch={handleSearch}
+              handleReset={handleReset}
+              handleFitView={handleFitView}
+              search={search}
+              setSearch={setSearch}
+              inputStyle={{ height: 32, fontSize: 14, padding: '2px 8px', borderRadius: 6 }}
+              buttonStyle={{ height: 32, fontSize: 14, padding: '2px 10px', borderRadius: 6 }}
+            />
+          </div>
+        </div>
+        {/* 그래프 본문 위: event 슬라이드 UI */}
+        {showGraph && !graphFullScreen && (() => {
+          const events = getEventsForChapter(currentChapter);
+          if (!events.length) return null;
+          let cur;
+          const eventWithEndGreaterThanCurrent = events.findIndex(event => currentWordIndex < event.end);
+          if (eventWithEndGreaterThanCurrent !== -1) {
+            cur = eventWithEndGreaterThanCurrent;
+          } else {
+            cur = events.length - 1;
+          }
+          const handlePrev = async () => {
+            if (cur > 0) {
+              const prevEvent = events[cur - 1];
+              setCurrentWordIndex(prevEvent.start);
+              if (viewerRef.current?.moveToProgress) {
+                const progressValue = (prevEvent.start / 100) * 100;
+                try {
+                  await viewerRef.current.moveToProgress(progressValue);
+                  setTimeout(() => {
+                    if (currentWordIndex !== prevEvent.start) {
+                      window.location.reload();
+                    }
+                  }, 500);
+                } catch (e) {
+                  window.location.reload();
+                }
+              }
+            }
+          };
+          const handleNext = async () => {
+            if (cur < events.length - 1) {
+              const nextEvent = events[cur + 1];
+              setCurrentWordIndex(nextEvent.start);
+              if (viewerRef.current?.moveToProgress) {
+                const progressValue = (nextEvent.start / 100) * 100;
+                try {
+                  await viewerRef.current.moveToProgress(progressValue);
+                  setTimeout(() => {
+                    if (currentWordIndex !== nextEvent.start) {
+                      window.location.reload();
+                    }
+                  }, 500);
+                } catch (e) {
+                  window.location.reload();
+                }
+              }
+            }
+          };
+          return (
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 24,
+                width: '100%',
+                minHeight: 48,
+                background: 'linear-gradient(90deg, #f8fafc 60%, #e7edff 100%)',
+                borderBottom: '1.5px solid #e5e7eb',
+                margin: '8px 0 8px 0',
+                padding: '8px 0',
+                boxShadow: '0 2px 8px rgba(108,142,255,0.07)',
+                borderRadius: 16,
+              }}
+            >
+              <button
+                onClick={handlePrev}
+                disabled={cur <= 0}
+                style={{
+                  width: 44,
+                  height: 44,
+                  borderRadius: '50%',
+                  border: 'none',
+                  background: 'linear-gradient(135deg, #6C8EFF 60%, #42a5f5 100%)',
+                  color: '#fff',
+                  fontSize: 24,
+                  fontWeight: 700,
+                  boxShadow: '0 2px 8px rgba(108,142,255,0.13)',
+                  cursor: cur <= 0 ? 'not-allowed' : 'pointer',
+                  opacity: cur <= 0 ? 0.5 : 1,
+                  transition: 'all 0.18s',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+                title="이전 이벤트"
+              >&#8592;</button>
+              <div style={{
+                display: 'flex', 
+                alignItems: 'center', 
+                gap: 18, 
+                minWidth: 60,
+                transition: 'transform 0.3s cubic-bezier(.4,2,.6,1)',
+              }}>
+                {events.map((event, idx) => (
+                  <div
+                    key={idx}
+                    onClick={async () => {
+                      setCurrentWordIndex(event.start);
+                      if (viewerRef.current?.moveToProgress) {
+                        const progressValue = (event.start / 100) * 100;
+                        try {
+                          await viewerRef.current.moveToProgress(progressValue);
+                          setTimeout(() => {
+                            if (currentWordIndex !== event.start) {
+                              window.location.reload();
+                            }
+                          }, 500);
+                        } catch (e) {
+                          window.location.reload();
+                        }
+                      }
+                    }}
+                    style={{
+                      width: idx === cur ? 22 : 14,
+                      height: idx === cur ? 22 : 14,
+                      borderRadius: '50%',
+                      background: idx === cur ? 'linear-gradient(135deg, #6C8EFF 60%, #42a5f5 100%)' : '#e3e6ef',
+                      boxShadow: idx === cur ? '0 2px 8px rgba(108,142,255,0.18)' : 'none',
+                      border: idx === cur ? '2.5px solid #6C8EFF' : '1.5px solid #e3e6ef',
+                      transition: 'all 0.28s cubic-bezier(.4,2,.6,1)',
+                      margin: '0 2px',
+                      cursor: 'pointer',
+                    }}
+                    title={`${event.title} (${event.start}~${event.end} 글자)`}
+                  />
+                ))}
+              </div>
+              <button
+                onClick={handleNext}
+                disabled={cur >= events.length - 1}
+                style={{
+                  width: 44,
+                  height: 44,
+                  borderRadius: '50%',
+                  border: 'none',
+                  background: 'linear-gradient(135deg, #6C8EFF 60%, #42a5f5 100%)',
+                  color: '#fff',
+                  fontSize: 24,
+                  fontWeight: 700,
+                  boxShadow: '0 2px 8px rgba(108,142,255,0.13)',
+                  cursor: cur >= events.length - 1 ? 'not-allowed' : 'pointer',
+                  opacity: cur >= events.length - 1 ? 0.5 : 1,
+                  transition: 'all 0.18s',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+                title="다음 이벤트"
+              >&#8594;</button>
+            </div>
+          );
+        })()}
+        {/* 그래프 본문 */}
+        <div style={{ flex: 1, width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', marginTop: 8 }}>
+          {/* 그래프 데이터가 준비된 후에만 그래프를 보여줌 */}
+          {showGraph && !graphFullScreen && (loading || !isDataReady ? (
+            <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'transparent' }}>
+              {/* 필요시 로딩 스피너 추가 가능 */}
+            </div>
+          ) : (
+            <RelationGraphMain 
+              elements={elements} 
+              inViewer={true} 
+              fullScreen={false}
+              style={{ width: '100%', height: '100%' }}
+              graphViewState={graphViewState}
+              setGraphViewState={setGraphViewState}
+              chapterNum={currentChapter}
+              eventNum={null}
+              hideIsolated={hideIsolated}
+            />
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
