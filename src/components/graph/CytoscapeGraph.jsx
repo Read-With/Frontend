@@ -64,36 +64,8 @@ const CytoscapeGraph = React.forwardRef(
       if (ref.current) {
         const cy = ref.current;
         cy.resize();
-        // 노드 충돌 방지를 위한 레이아웃 실행
-        const layoutInstance = cy.layout(layout);
-        layoutInstance.run();
-        // 레이아웃 완료 후 화면에 맞추기
-        cy.one("layoutstop", () => {
-          cy.resize();
-          if (fitNodeIds && fitNodeIds.length > 0) {
-            const nodesToFit = cy.nodes().filter(n => fitNodeIds.includes(n.id()));
-            if (nodesToFit.length > 0) {
-              cy.fit(nodesToFit, 40);
-            }
-          } else {
-            cy.fit(undefined, 40);
-          }
-          // 그래프를 중앙에 위치시키기
-          const bb = cy.elements().boundingBox();
-          const center = {
-            x: (bb.x1 + bb.x2) / 2,
-            y: (bb.y1 + bb.y2) / 2
-          };
-          const containerCenter = {
-            x: cy.width() / 2,
-            y: cy.height() / 2
-          };
-          cy.pan({
-            x: containerCenter.x - center.x,
-            y: containerCenter.y - center.y
-          });
-          if (onLayoutReady) onLayoutReady();
-        });
+        // layout, fit, center 등 자동 배치/화면 맞춤 완전 제거!
+        if (onLayoutReady) onLayoutReady();
       }
     }, [elements, fitNodeIds, ref, layout]);
 
@@ -123,7 +95,7 @@ const CytoscapeGraph = React.forwardRef(
           elements={elements}
           stylesheet={stylesheet}
           userZoomingEnabled={true}
-          layout={layout}
+          layout={{name:'preset'}}
           style={{
             width: "100%",
             height: "100%",

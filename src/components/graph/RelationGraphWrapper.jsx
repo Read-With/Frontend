@@ -8,6 +8,8 @@ import { FaTimes } from 'react-icons/fa';
 // 챕터별 파일 import.meta.glob context 생성
 const characterModules = import.meta.glob('../../data/*_characters.json', { eager: true });
 const relationModules = import.meta.glob('../../data/*_merged_relations.json', { eager: true });
+// 모든 챕터/이벤트 파일을 한 번에 glob으로 불러오기
+const allEventModules = import.meta.glob('../../data/*/chapter_*_event_*.json', { eager: true });
 
 const getChapterFile = (chapter, type) => {
   const num = String(chapter).padStart(2, '0');
@@ -33,12 +35,29 @@ function RelationGraphWrapper() {
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
   const [hideIsolated, setHideIsolated] = useState(true);
+  // 이벤트 상태 추가
+  const [eventNum, setEventNum] = useState(1);
+  const [maxEventNum, setMaxEventNum] = useState(0);
   // 그래프 pan/zoom/노드 위치 상태를 상위에서 관리
   const [graphViewState, setGraphViewState] = useState(null);
 
   // 챕터 변경 시 데이터 불러오기
   useEffect(() => {
     try {
+      // maxEventNum 계산 (이벤트별 파일 개수 기반, 정적 glob)
+      const num = String(currentChapter).padStart(2, '0');
+      const allKeys = Object.keys(allEventModules);
+      const filteredPaths = allKeys.filter(path => path.includes(`/data/${num}/chapter_${currentChapter}_event_`));
+      const maxEvent = filteredPaths.length > 0 ? filteredPaths.length : 1;
+      // --- 상태 점검용 로그 ---
+      console.log('[maxEventNum 계산] allEventModules keys:', allKeys);
+      console.log('[maxEventNum 계산] current num:', num, 'currentChapter:', currentChapter);
+      console.log('[maxEventNum 계산] filtered event paths:', filteredPaths);
+      console.log('[maxEventNum 계산] maxEvent:', maxEvent);
+      setMaxEventNum(maxEvent);
+      // eventNum이 maxEventNum보다 크면 자동 조정
+      setEventNum(prev => prev > maxEvent ? maxEvent : prev);
+
       const charactersData = getChapterFile(currentChapter, 'characters');
       const relationsData = getChapterFile(currentChapter, 'relations');
       if (!charactersData || !relationsData) {
@@ -51,50 +70,75 @@ function RelationGraphWrapper() {
         if (typeof v === 'string' && v.match(/^[0-9]+\.0$/)) return v.split('.')[0];
         return String(v).trim();
       };
-      const nodes = (charactersData.characters || charactersData).map((char) => ({
-    data: {
-          id: safeId(char.id),
-          label: char.common_name || char.name,
-      main: char.main_character,
-      description: char.description,
-      names: char.names,
-          img: char.img,
-    },
-  }));
-      const nodeIds = new Set((charactersData.characters || charactersData).map(char => safeId(char.id)));
-      const edges = (relationsData.relations || relationsData)
+      // localStorage에서 노드 위치 정보 읽기
+      const storageKey = `chapter_node_positions_${currentChapter}`;
+      let nodePositions = {};
+      try {
+        const posStr = localStorage.getItem(storageKey);
+        if (posStr) nodePositions = JSON.parse(posStr);
+      } catch (e) {}
+
+      // === 이벤트별 등장 id만 필터링 ===
+      // filteredNodes의 id 집합 구하기 (고립 노드 필터링 포함)
+      const allNodeIds = new Set((charactersData.characters || charactersData).map(char => safeId(char.id)));
+      const edgesRaw = (relationsData.relations || relationsData)
         .map((rel, idx) => ({
-    data: {
-      id: `e${idx}`,
+          data: {
+            id: `e${idx}`,
             source: safeId(rel.id1 || rel.source),
             target: safeId(rel.id2 || rel.target),
             label: Array.isArray(rel.relation) ? rel.relation.join(", ") : rel.type,
-      explanation: rel.explanation,
-      positivity: rel.positivity,
-      weight: rel.weight,
-    },
-        }))
-        .filter(edge =>
-          edge.data.source &&
-          edge.data.target &&
-          nodeIds.has(edge.data.source) &&
-          nodeIds.has(edge.data.target)
-        );
-      // 고립 노드 필터링
-      let filteredNodes = nodes;
+            explanation: rel.explanation,
+            positivity: rel.positivity,
+            weight: rel.weight,
+          },
+        }));
+      let filteredNodeIds = new Set();
       if (hideIsolated) {
         const connectedNodeIds = new Set();
-        edges.forEach(edge => {
+        edgesRaw.forEach(edge => {
           connectedNodeIds.add(edge.data.source);
           connectedNodeIds.add(edge.data.target);
         });
-        filteredNodes = nodes.filter(node => connectedNodeIds.has(node.data.id));
+        filteredNodeIds = new Set([...allNodeIds].filter(id => connectedNodeIds.has(id)));
+      } else {
+        filteredNodeIds = allNodeIds;
       }
-      setElements([...filteredNodes, ...edges]);
+
+      // === 위치 정보가 있는 id만 노드로 렌더링 ===
+      const nodes = (charactersData.characters || charactersData)
+        .filter(char => {
+          const id = safeId(char.id);
+          return filteredNodeIds.has(id) && nodePositions[id];
+        })
+        .map(char => ({
+          data: {
+            id: safeId(char.id),
+            label: char.common_name || char.name,
+            main: char.main_character,
+            description: char.description,
+            names: char.names,
+            img: char.img,
+          },
+          position: nodePositions[safeId(char.id)]
+        }));
+
+      // === 간선도 source/target 모두 위치 정보가 있는 경우만 렌더링 ===
+      const edges = edgesRaw.filter(edge =>
+        nodePositions[edge.data.source] && nodePositions[edge.data.target]
+      );
+
+      // --- 마지막 이벤트일 때는 전체 노드+엣지 포함 ---
+      const safeEventNum = Math.min(eventNum, maxEvent);
+      if (safeEventNum === maxEvent) {
+        setElements([...nodes, ...edges]);
+      } else {
+        setElements([...nodes, ...edges]); // 위치 정보 없는 노드는 이미 필터링됨
+      }
     } catch (e) {
       setElements([]);
     }
-  }, [currentChapter, hideIsolated]);
+  }, [currentChapter, hideIsolated, eventNum]);
 
   // 웹페이지 스크롤 막기 (body, html 모두 + 강제 스크롤 방지)
   useEffect(() => {
@@ -245,7 +289,7 @@ function RelationGraphWrapper() {
           {/* 닫기 버튼: 오른쪽 끝 */}
           <div style={{ flex: 1 }} />
           <button
-            onClick={() => navigate(`/viewer/${filename}`)}
+            onClick={() => navigate(`user/viewer/${filename}`)}
             style={{
               height: 32,
               width: 32,
@@ -285,14 +329,23 @@ function RelationGraphWrapper() {
         </div>
       </div>
       {/* 그래프 본문 */}
-      <div style={{ flex: 1, width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', marginTop: 8 }}>
-        <RelationGraphMain 
-          elements={elements} 
-          inViewer={true} 
-          fullScreen={false}
-          graphViewState={graphViewState}
-          setGraphViewState={setGraphViewState}
-        />
+      <div className="flex-1 relative overflow-hidden" style={{ width: '100%', height: '100%' }}>
+        {maxEventNum > 0 ? (
+          <RelationGraphMain 
+            elements={elements} 
+            inViewer={true} 
+            fullScreen={false}
+            graphViewState={graphViewState}
+            setGraphViewState={setGraphViewState}
+            chapterNum={currentChapter}
+            eventNum={Math.min(eventNum, maxEventNum)}
+            maxEventNum={maxEventNum}
+          />
+        ) : (
+          <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, color: '#6C8EFF' }}>
+            이벤트 정보를 불러오는 중...
+          </div>
+        )}
       </div>
     </div>
   );

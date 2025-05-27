@@ -10,6 +10,7 @@ import 'react-toastify/dist/ReactToastify.css';
 import RelationGraphMain from '../graph/RelationGraphMain';
 import GraphControls from '../graph/GraphControls';
 import { FaSyncAlt } from 'react-icons/fa';
+import cytoscape from 'cytoscape';
 
 // 반드시 파일 최상단에 위치!
 const eventRelationModules = import.meta.glob('/src/data/*/[0-9][0-9]_ev*_relations.json', { eager: true });
@@ -131,6 +132,11 @@ function getEventsForChapter(chapter) {
       })
       .filter(ev => ev.eventNum > 0)
       .sort((a, b) => a.eventNum - b.eventNum);
+    
+    console.log('filteredPaths:', events);
+    console.log('eventNums:', events.map(ev => ev.eventNum));
+    const maxEvent = events.length > 0 ? Math.max(...events.map(ev => ev.eventNum)) : 1;
+    console.log('maxEvent:', maxEvent);
     
     return events;
   } catch (error) {
@@ -855,6 +861,57 @@ const ViewerPage = ({ darkMode: initialDarkMode }) => {
     }
     return true;
   }, [elements]);
+
+  // === [디버깅용 로그 추가] 최초 진입 시 모든 챕터의 전체 노드 위치 미리 저장 ===
+  useEffect(() => {
+    // 챕터 번호 1~9 (data 폴더 기준)
+    const chapterNums = Array.from({ length: 9 }, (_, i) => i + 1);
+    chapterNums.forEach((chapterNum) => {
+      const storageKey = `chapter_node_positions_${chapterNum}`;
+      if (localStorage.getItem(storageKey)) {
+        console.log(`[스킵] 챕터 ${chapterNum} 이미 저장됨`);
+        return;
+      }
+      console.log(`[시도] 챕터 ${chapterNum} 레이아웃 저장 시도`);
+      // 1. merged_relations.json 전체 노드/엣지 생성
+      const relationsData = getChapterFile(chapterNum, 'relations');
+      const charactersData = getChapterFile(chapterNum, 'characters');
+      if (!relationsData || !charactersData) {
+        console.log(`[실패] 챕터 ${chapterNum} 데이터 없음`);
+        return;
+      }
+      let allRelations = relationsData.relations || relationsData;
+      let allImportance = relationsData.importance || {};
+      let allNewAppearances = relationsData.new_appearances || [];
+      const elements = getElementsFromRelations(allRelations, charactersData, allNewAppearances, allImportance);
+      if (!elements || elements.length === 0) {
+        console.log(`[실패] 챕터 ${chapterNum} elements 없음`);
+        return;
+      }
+      // 2. Cytoscape 임시 인스턴스 생성 및 레이아웃 실행
+      const cy = cytoscape({
+        elements,
+        style: [],
+        headless: true,
+      });
+      const layout = cy.layout({ name: 'cose', animate: false, fit: true, padding: 80 });
+      layout.run();
+      // headless 모드에서는 layoutstop 이벤트가 잘 안 오므로, setTimeout으로 우회
+      setTimeout(() => {
+        const layoutObj = {};
+        cy.nodes().forEach(node => {
+          layoutObj[node.id()] = node.position();
+        });
+        try {
+          localStorage.setItem(storageKey, JSON.stringify(layoutObj));
+          console.log(`[성공] 챕터 ${chapterNum} 위치 저장 완료`, layoutObj);
+        } catch (e) {
+          console.log(`[에러] 챕터 ${chapterNum} 저장 실패`, e);
+        }
+        cy.destroy();
+      }, 100);
+    });
+  }, []);
 
   return (
     <div

@@ -237,14 +237,14 @@ function RelationGraphMain({ elements, inViewer = false, fullScreen = false, onF
           "background-color": "#eee",
           "border-width": (ele) => ele.data("main") ? 2 : 1,
           "border-color": "#5B7BA0",
-          "width": inViewer ? (ele => ele.data("main") ? 68 : 54) : 36,
-          "height": inViewer ? (ele => ele.data("main") ? 68 : 54) : 36,
+          "width": inViewer ? (ele => ele.data("main") ? 32 : 24) : 16,
+          "height": inViewer ? (ele => ele.data("main") ? 32 : 24) : 16,
           "shape": "ellipse",
           "label": "data(label)",
           "text-valign": "bottom",
           "text-halign": "center",
-          "font-size": inViewer ? 14 : 12,
-          "font-weight": (ele) => ele.data("main") ? 700 : 400,
+          "font-size": inViewer ? 7 : 5,
+          "font-weight": (ele) => ele.data("main") ? 10 : 5,
           "color": "#444",
           "text-margin-y": inViewer ? 9 : 8,
           "text-background-color": "#fff",
@@ -259,16 +259,16 @@ function RelationGraphMain({ elements, inViewer = false, fullScreen = false, onF
           "background-color": "#eee",
           "border-width": (ele) => ele.data("main") ? 2 : 1,
           "border-color": "#5B7BA0",
-          "width": inViewer ? (ele => ele.data("main") ? 68 : 54) : 36,
-          "height": inViewer ? (ele => ele.data("main") ? 68 : 54) : 36,
+          "width": inViewer ? (ele => ele.data("main") ? 32 : 24) : 16,
+          "height": inViewer ? (ele => ele.data("main") ? 32 : 24) : 16,
           "shape": "ellipse",
           "label": "data(label)",
           "text-valign": "bottom",
           "text-halign": "center",
-          "font-size": inViewer ? 14 : 13,
-          "font-weight": (ele) => ele.data("main") ? 700 : 400,
+          "font-size": inViewer ? 4 : 3,
+          "font-weight": (ele) => ele.data("main") ? 10 : 5,
           "color": "#444",
-          "text-margin-y": inViewer ? 9 : 8,
+          "text-margin-y": inViewer ? 3 : 2,
           "text-background-color": "#fff",
           "text-background-opacity": 0.8,
           "text-background-shape": "roundrectangle",
@@ -282,7 +282,7 @@ function RelationGraphMain({ elements, inViewer = false, fullScreen = false, onF
           "line-color": (ele) => getRelationColor(ele.data("positivity")),
           "curve-style": "bezier",
           label: "data(label)",
-          "font-size": inViewer ? 13 : 11,
+          "font-size": inViewer ? 4 : 3,
           "text-rotation": "autorotate",
           color: "#42506b",
           "text-background-color": "#fff",
@@ -381,100 +381,9 @@ function RelationGraphMain({ elements, inViewer = false, fullScreen = false, onF
     navigate(`/viewer/${filename}`);
   }, [navigate, filename]);
 
-  const eventKey = `chapter_${chapterNum}_event_${eventNum}_hideIsolated_${hideIsolated}`;
-
-  // === graphViewState를 항상 localStorage에 저장 ===
-  useEffect(() => {
-    if (!cyRef.current) return;
-    const cy = cyRef.current;
-    // 저장 함수
-    const saveGraphState = () => {
-      const nodes = cy.nodes().map(n => ({
-        id: n.id(),
-        pos: n.position(),
-        data: n.data(),
-        classes: n.classes(),
-        selected: n.selected()
-      }));
-      const edges = cy.edges().map(e => ({
-        id: e.id(),
-        source: e.source().id(),
-        target: e.target().id(),
-        data: e.data(),
-        classes: e.classes(),
-        selected: e.selected()
-      }));
-      const state = {
-        pan: cy.pan(),
-        zoom: cy.zoom(),
-        nodes,
-        edges
-      };
-      try {
-        localStorage.setItem(`graph_${eventKey}`, JSON.stringify(state));
-      } catch (e) {}
-    };
-    // 최초 mount/업데이트 시 저장
-    saveGraphState();
-    // cleanup(언마운트/이벤트 변경 직전)에도 저장
-    return () => {
-      saveGraphState();
-    };
-  }, [filteredElements, chapterNum, eventNum, hideIsolated]);
-
-  // === graphViewState가 없을 때 localStorage에서 복원 ===
-  useEffect(() => {
-    if (!cyRef.current) return;
-    if (graphViewState) return; // 이미 상위에서 복원됨
-    const saved = localStorage.getItem(`graph_${eventKey}`);
-    if (saved) {
-      try {
-        const state = JSON.parse(saved);
-        const cy = cyRef.current;
-        cy.elements().remove();
-        cy.add([
-          ...(Array.isArray(state.nodes) ? state.nodes.map(n => ({
-            group: 'nodes',
-            data: n.data,
-            position: n.pos,
-            classes: n.classes
-          })) : []),
-          ...(Array.isArray(state.edges) ? state.edges.map(e => ({
-            group: 'edges',
-            data: e.data,
-            classes: e.classes
-          })) : [])
-        ]);
-        if (state.pan) cy.pan(state.pan);
-        if (state.zoom) cy.zoom(state.zoom);
-        // 복원 성공 시 layout을 절대 실행하지 않음
-        return;
-      } catch (e) {}
-    }
-    // 복원 실패 시에만 layout 실행 (기존 로직)
-    const cy = cyRef.current;
-    cy.elements().unlock();
-    cy.resize();
-    cy.elements().remove();
-    cy.add(filteredElements);
-    const currentLayout = cy.layout(search ? searchLayout : layout);
-    currentLayout.run();
-    cy.fit(undefined, 120);
-    cy.center();
-  }, [filteredElements, chapterNum, eventNum, hideIsolated, graphViewState]);
-
-  // === 첫 이벤트에서만 레이아웃 실행 및 위치 저장, 이후에는 위치만 적용 ===
+  // === 오직 chapter_node_positions_{chapterNum}만 사용하여 노드 위치 복원 (절대적 위치) ===
   useEffect(() => {
     if (!cyRef.current || !elements || elements.length === 0) return;
-    // === 완전히 같은 그래프면 아무것도 하지 않음 ===
-    const prevElements = prevElementsRef.current;
-    const isSameElements = prevElements &&
-      prevElements.length === elements.length &&
-      prevElements.every((el, i) => JSON.stringify(el) === JSON.stringify(elements[i]));
-    if (isSameElements) return;
-    const cy = cyRef.current;
-
-    // === localStorage에서 위치 누적 정보 불러오기 ===
     const storageKey = `chapter_node_positions_${chapterNum}`;
     let savedPositions = {};
     try {
@@ -482,63 +391,55 @@ function RelationGraphMain({ elements, inViewer = false, fullScreen = false, onF
       if (savedStr) savedPositions = JSON.parse(savedStr);
     } catch (e) {}
 
-    if (eventNum === 1) {
-      // 첫 이벤트: 레이아웃 실행 및 위치 저장
-      cy.elements().remove();
-      cy.add(elements);
-      cy.layout({ name: 'cose', animate: true, fit: true, padding: 80 }).run();
-      cy.one('layoutstop', () => {
-        const layout = {};
-        cy.nodes().forEach(node => {
-          layout[node.id()] = node.position();
-        });
-        try {
-          localStorage.setItem(storageKey, JSON.stringify(layout));
-        } catch (e) {}
-      });
-    } else {
-      // 이후 이벤트: 저장된 위치만 적용, 레이아웃/랜덤/fit/center 등 실행 X
-      cy.elements().remove();
-      cy.add(elements);
-      cy.nodes().forEach(node => {
-        if (savedPositions[node.id()]) {
-          node.position(savedPositions[node.id()]);
-        }
-      });
-      // 새로 등장한 노드만 위치 배치 및 위치 누적 저장
-      let updated = false;
-      const existingPositions = Object.values(savedPositions);
-      cy.nodes().forEach(node => {
-        if (!savedPositions[node.id()]) {
-          const centerX = cy.width() / 2;
-          const centerY = cy.height() / 2;
-          const radius = Math.min(centerX, centerY) * 0.7;
-          let angle = Math.random() * 2 * Math.PI;
-          let tryCount = 0;
-          let pos;
-          do {
-            pos = {
-              x: centerX + radius * Math.cos(angle + tryCount * 0.3),
-              y: centerY + radius * Math.sin(angle + tryCount * 0.3)
-            };
-            tryCount++;
-          } while (
-            existingPositions.some(ep => Math.hypot(ep.x - pos.x, ep.y - pos.y) < 140) && tryCount < 20
-          );
-          node.position(pos);
-          savedPositions[node.id()] = pos;
-          existingPositions.push(pos);
-          updated = true;
-        }
-      });
-      if (updated) {
-        try {
-          localStorage.setItem(storageKey, JSON.stringify(savedPositions));
-        } catch (e) {}
+    // 상태 점검용 로그
+    const savedKeys = Object.keys(savedPositions);
+    const elementNodeIds = elements.filter(el => el.data && !el.data.source).map(el => el.data.id);
+    const isLastEvent = eventNum === maxEventNum;
+    console.log('[상태점검] chapterNum:', chapterNum, 'eventNum:', eventNum, 'maxEventNum:', maxEventNum, 'isLastEvent:', isLastEvent);
+    console.log('[상태점검] elements.length:', elements.length, 'elements 노드 id:', elementNodeIds);
+
+    // localStorage의 key와 elements의 id 비교 로그
+    console.log('[localStorage 위치정보 key]', savedKeys);
+    console.log('[elements 노드 id]', elementNodeIds);
+    elementNodeIds.forEach(id => {
+      if (!savedKeys.includes(id)) {
+        console.warn(`[불일치] elements의 id(${id}, type:${typeof id})가 localStorage에 없음`);
       }
+    });
+
+    // 위치 정보 저장 시점 로그
+    if (isLastEvent) {
+      const positionsToSave = {};
+      cyRef.current.nodes().forEach(node => {
+        positionsToSave[node.id()] = node.position();
+      });
+      localStorage.setItem(storageKey, JSON.stringify(positionsToSave));
+      console.log(`[위치정보 저장] chapterNum=${chapterNum}, eventNum=${eventNum}, maxEventNum=${maxEventNum}, 저장된 노드 id:`, Object.keys(positionsToSave));
+      savedPositions = positionsToSave;
     }
-    prevElementsRef.current = elements;
-  }, [elements, eventNum, chapterNum]);
+
+    // 1. 위치 정보가 없는 노드는 숨기기(그래프에 추가하지 않음)
+    cyRef.current.elements().remove();
+    const nodeIdsWithPos = new Set(savedKeys);
+    const filteredElements = elements.filter(el => {
+      if (!el.data) return false;
+      if (!el.data.source) {
+        return nodeIdsWithPos.has(el.data.id);
+      } else {
+        return nodeIdsWithPos.has(el.data.source) && nodeIdsWithPos.has(el.data.target);
+      }
+    });
+    cyRef.current.add(filteredElements);
+    cyRef.current.nodes().forEach(node => {
+      const pos = savedPositions[node.id()];
+      if (pos) {
+        node.position(pos);
+        node.lock();
+      }
+    });
+    cyRef.current.pan({ x: 0, y: 0 });
+    cyRef.current.zoom(1);
+  }, [chapterNum, eventNum, elements, maxEventNum]);
 
   useEffect(() => {
     const elementsStr = JSON.stringify(elements);
@@ -556,6 +457,10 @@ function RelationGraphMain({ elements, inViewer = false, fullScreen = false, onF
     prevEventNum.current = eventNum;
     prevElementsStr.current = elementsStr;
   }, [elements, chapterNum, eventNum]);
+
+  useEffect(() => {
+    console.log('[상태점검] chapterNum:', chapterNum, 'eventNum:', eventNum, 'maxEventNum:', maxEventNum, 'isLastEvent:', eventNum === maxEventNum);
+  }, [chapterNum, eventNum, maxEventNum]);
 
   if (fullScreen && inViewer) {
     return (

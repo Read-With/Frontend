@@ -318,37 +318,6 @@ const ChapterGraph = ({ chapterNumber = 1, enableTooltips = true, inViewer = fal
     initialTemp: 200
   }), []);
 
-  // 줌 인
-  const handleZoomIn = () => {
-    if (cyRef.current) {
-      const cy = cyRef.current;
-      cy.zoom({
-        level: cy.zoom() * 1.2,
-        renderedPosition: { x: cy.width() / 2, y: cy.height() / 2 }
-      });
-    }
-  };
-
-  // 줌 아웃
-  const handleZoomOut = () => {
-    if (cyRef.current) {
-      const cy = cyRef.current;
-      cy.zoom({
-        level: cy.zoom() * 0.8,
-        renderedPosition: { x: cy.width() / 2, y: cy.height() / 2 }
-      });
-    }
-  };
-
-  // 화면에 맞추기
-  const handleFitToScreen = () => {
-    if (cyRef.current) {
-      const cy = cyRef.current;
-      cy.fit(undefined, 40);
-      cy.center();
-    }
-  };
-
   // 검색 초기화
   const handleReset = useCallback(() => {
     setSearch("");
@@ -359,8 +328,6 @@ const ChapterGraph = ({ chapterNumber = 1, enableTooltips = true, inViewer = fal
       const cy = cyRef.current;
       cy.elements().removeClass("faded");
       cy.elements().removeClass("highlighted");
-      cy.fit(undefined, 40);
-      cy.center();
     }
   }, []);
 
@@ -462,21 +429,21 @@ const ChapterGraph = ({ chapterNumber = 1, enableTooltips = true, inViewer = fal
         {/* 그래프 컨트롤 */}
         <div className="graph-controls absolute bottom-16 right-4 bg-white rounded-lg shadow-md p-2 flex flex-col">
           <button
-            onClick={handleZoomIn}
+            onClick={() => {}}
             className="p-2 hover:bg-gray-100 rounded-md"
             title="확대"
           >
             <FaPlus size={14} />
           </button>
           <button
-            onClick={handleZoomOut}
+            onClick={() => {}}
             className="p-2 hover:bg-gray-100 rounded-md"
             title="축소"
           >
             <FaMinus size={14} />
           </button>
           <button
-            onClick={handleFitToScreen}
+            onClick={() => {}}
             className="p-2 hover:bg-gray-100 rounded-md"
             title="화면에 맞추기"
           >
