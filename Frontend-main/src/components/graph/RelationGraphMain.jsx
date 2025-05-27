@@ -11,17 +11,26 @@ import CytoscapeGraph from "./CytoscapeGraph";
 import GraphNodeTooltip from "./NodeTooltip";
 import EdgeTooltip from "./EdgeTooltip";
 import "./RelationGraph.css";
-import { FaTimes, FaClock } from 'react-icons/fa';
+import { FaTimes, FaClock } from "react-icons/fa";
 
 function getRelationColor(positivity) {
-  if (positivity > 0.6) return '#15803d';
-  if (positivity > 0.3) return '#059669';
-  if (positivity > -0.3) return '#6b7280';
-  if (positivity > -0.6) return '#dc2626';
-  return '#991b1b';
+  if (positivity > 0.6) return "#15803d";
+  if (positivity > 0.3) return "#059669";
+  if (positivity > -0.3) return "#6b7280";
+  if (positivity > -0.6) return "#dc2626";
+  return "#991b1b";
 }
 
-function RelationGraphMain({ elements, inViewer = false, fullScreen = false, onFullScreen, onExitFullScreen, currentEventJson, graphViewState, setGraphViewState }) {
+function RelationGraphMain({
+  elements,
+  inViewer = false,
+  fullScreen = false,
+  onFullScreen,
+  onExitFullScreen,
+  currentEventJson,
+  graphViewState,
+  setGraphViewState,
+}) {
   const cyRef = useRef(null);
   const hasCenteredRef = useRef(false); // 최초 1회만 중앙정렬
   const [searchInput, setSearchInput] = useState("");
@@ -51,7 +60,7 @@ function RelationGraphMain({ elements, inViewer = false, fullScreen = false, onF
     const cy = cyRef.current;
     const pan = cy.pan();
     const zoom = cy.zoom();
-    const container = document.querySelector('.graph-canvas-area');
+    const container = document.querySelector(".graph-canvas-area");
     const containerRect = container.getBoundingClientRect();
     // 노드 중심의 화면 좌표 계산
     const nodeCenter = {
@@ -68,52 +77,56 @@ function RelationGraphMain({ elements, inViewer = false, fullScreen = false, onF
     const mouseX = evt.originalEvent?.clientX ?? nodeCenter.x;
     const mouseY = evt.originalEvent?.clientY ?? nodeCenter.y;
     setTimeout(() => {
-      setActiveTooltip({ type: 'node', id: node.id(), x: mouseX, y: mouseY, data: node.data(), nodeCenter });
+      setActiveTooltip({
+        type: "node",
+        id: node.id(),
+        x: mouseX,
+        y: mouseY,
+        data: node.data(),
+        nodeCenter,
+      });
     }, 0);
   }, []);
 
   // 간선 클릭 시 툴팁 표시 (좌표 변환)
-  const tapEdgeHandler = useCallback(
-    (evt) => {
-      if (!cyRef.current) return;
-      const cy = cyRef.current;
-      const edge = evt.target;
-      const container = document.querySelector(".graph-canvas-area");
-      const containerRect = container.getBoundingClientRect();
+  const tapEdgeHandler = useCallback((evt) => {
+    if (!cyRef.current) return;
+    const cy = cyRef.current;
+    const edge = evt.target;
+    const container = document.querySelector(".graph-canvas-area");
+    const containerRect = container.getBoundingClientRect();
 
-      // Cytoscape의 midpoint는 그래프 내부 좌표계이므로, 화면 좌표로 변환
-      const pos = edge.midpoint();
-      const pan = cy.pan();
-      const zoom = cy.zoom();
+    // Cytoscape의 midpoint는 그래프 내부 좌표계이므로, 화면 좌표로 변환
+    const pos = edge.midpoint();
+    const pan = cy.pan();
+    const zoom = cy.zoom();
 
-      // 절대 좌표 계산 (컨테이너 기준)
-      const absoluteX = pos.x * zoom + pan.x + containerRect.left;
-      const absoluteY = pos.y * zoom + pan.y + containerRect.top;
+    // 절대 좌표 계산 (컨테이너 기준)
+    const absoluteX = pos.x * zoom + pan.x + containerRect.left;
+    const absoluteY = pos.y * zoom + pan.y + containerRect.top;
 
-      setActiveTooltip(null);
-      setActiveTooltip({
-        type: 'edge',
-        id: edge.id(),
-        x: absoluteX,
-        y: absoluteY,
-        data: edge.data(),
-        sourceNode: edge.source(),
-        targetNode: edge.target(),
-      });
+    setActiveTooltip(null);
+    setActiveTooltip({
+      type: "edge",
+      id: edge.id(),
+      x: absoluteX,
+      y: absoluteY,
+      data: edge.data(),
+      sourceNode: edge.source().id(), // 실제 노드 ID - EdgeTooltip에서 타입 체크 없이 바로 사용 가능
+      targetNode: edge.target().id(), // 실제 노드 ID - EdgeTooltip에서 타입 체크 없이 바로 사용 가능
+    });
 
-      cy.batch(() => {
-        cy.nodes().addClass("faded");
-        cy.edges().addClass("faded");
-        edge.removeClass("faded");
-        edge.source().removeClass("faded").addClass("highlighted");
-        edge.target().removeClass("faded").addClass("highlighted");
-        // 나머지 노드/간선은 faded 유지
-      });
+    cy.batch(() => {
+      cy.nodes().addClass("faded");
+      cy.edges().addClass("faded");
+      edge.removeClass("faded");
+      edge.source().removeClass("faded").addClass("highlighted");
+      edge.target().removeClass("faded").addClass("highlighted");
+      // 나머지 노드/간선은 faded 유지
+    });
 
-      selectedEdgeIdRef.current = edge.id();
-    },
-    []
-  );
+    selectedEdgeIdRef.current = edge.id();
+  }, []);
 
   // 배경 클릭 시 선택 해제
   const tapBackgroundHandler = useCallback((evt) => {
@@ -148,8 +161,8 @@ function RelationGraphMain({ elements, inViewer = false, fullScreen = false, onF
   const sortedElements = useMemo(() => {
     if (!elements) return [];
     return [...elements].sort((a, b) => {
-      const aId = a.data?.id || '';
-      const bId = b.data?.id || '';
+      const aId = a.data?.id || "";
+      const bId = b.data?.id || "";
       return aId.localeCompare(bId);
     });
   }, [elements]);
@@ -168,31 +181,33 @@ function RelationGraphMain({ elements, inViewer = false, fullScreen = false, onF
                 n.toLowerCase().includes(search.toLowerCase())
               )))
       );
-      
+
       if (matchedNodes.length > 0) {
         // 모든 일치하는 노드와 관련된 엣지 찾기
-        const matchedNodeIds = matchedNodes.map(node => node.data.id);
-        
+        const matchedNodeIds = matchedNodes.map((node) => node.data.id);
+
         const relatedEdges = sortedElements.filter(
           (el) =>
             el.data.source &&
             (matchedNodeIds.includes(el.data.source) ||
-             matchedNodeIds.includes(el.data.target))
+              matchedNodeIds.includes(el.data.target))
         );
-        
+
         // 관련 노드 ID 수집
         const relatedNodeIds = [
           ...new Set(
             relatedEdges.flatMap((e) => [e.data.source, e.data.target])
           ),
         ];
-        
+
         // 모든 관련 노드 찾기
         const relatedNodes = sortedElements.filter(
-          (el) => !el.data.source && 
-                 (matchedNodeIds.includes(el.data.id) || relatedNodeIds.includes(el.data.id))
+          (el) =>
+            !el.data.source &&
+            (matchedNodeIds.includes(el.data.id) ||
+              relatedNodeIds.includes(el.data.id))
         );
-        
+
         filteredElements = [...relatedNodes, ...relatedEdges];
         fitNodeIds = [...matchedNodeIds, ...relatedNodeIds];
       } else {
@@ -206,7 +221,10 @@ function RelationGraphMain({ elements, inViewer = false, fullScreen = false, onF
   }, [sortedElements, search]);
 
   // currentEventJson이 내용이 같으면 참조도 같게 useMemo로 캐싱
-  const stableEventJson = useMemo(() => currentEventJson ? JSON.stringify(currentEventJson) : '', [currentEventJson]);
+  const stableEventJson = useMemo(
+    () => (currentEventJson ? JSON.stringify(currentEventJson) : ""),
+    [currentEventJson]
+  );
 
   const stylesheet = useMemo(
     () => [
@@ -216,17 +234,17 @@ function RelationGraphMain({ elements, inViewer = false, fullScreen = false, onF
           "background-image": "data(img)",
           "background-fit": "cover",
           "background-color": "#eee",
-          "border-width": (ele) => ele.data("main") ? 2 : 1,
+          "border-width": (ele) => (ele.data("main") ? 2 : 1),
           "border-color": "#5B7BA0",
-          "width": inViewer ? (ele => ele.data("main") ? 68 : 54) : 36,
-          "height": inViewer ? (ele => ele.data("main") ? 68 : 54) : 36,
-          "shape": "ellipse",
-          "label": "data(label)",
+          width: inViewer ? (ele) => (ele.data("main") ? 68 : 54) : 36,
+          height: inViewer ? (ele) => (ele.data("main") ? 68 : 54) : 36,
+          shape: "ellipse",
+          label: "data(label)",
           "text-valign": "bottom",
           "text-halign": "center",
           "font-size": inViewer ? 14 : 12,
-          "font-weight": (ele) => ele.data("main") ? 700 : 400,
-          "color": "#444",
+          "font-weight": (ele) => (ele.data("main") ? 700 : 400),
+          color: "#444",
           "text-margin-y": inViewer ? 9 : 8,
           "text-background-color": "#fff",
           "text-background-opacity": 0.8,
@@ -238,17 +256,17 @@ function RelationGraphMain({ elements, inViewer = false, fullScreen = false, onF
         selector: "node",
         style: {
           "background-color": "#eee",
-          "border-width": (ele) => ele.data("main") ? 2 : 1,
+          "border-width": (ele) => (ele.data("main") ? 2 : 1),
           "border-color": "#5B7BA0",
-          "width": inViewer ? (ele => ele.data("main") ? 68 : 54) : 36,
-          "height": inViewer ? (ele => ele.data("main") ? 68 : 54) : 36,
-          "shape": "ellipse",
-          "label": "data(label)",
+          width: inViewer ? (ele) => (ele.data("main") ? 68 : 54) : 36,
+          height: inViewer ? (ele) => (ele.data("main") ? 68 : 54) : 36,
+          shape: "ellipse",
+          label: "data(label)",
           "text-valign": "bottom",
           "text-halign": "center",
           "font-size": inViewer ? 14 : 13,
-          "font-weight": (ele) => ele.data("main") ? 700 : 400,
-          "color": "#444",
+          "font-weight": (ele) => (ele.data("main") ? 700 : 400),
+          color: "#444",
           "text-margin-y": inViewer ? 9 : 8,
           "text-background-color": "#fff",
           "text-background-opacity": 0.8,
@@ -259,7 +277,9 @@ function RelationGraphMain({ elements, inViewer = false, fullScreen = false, onF
       {
         selector: "edge",
         style: {
-          width: inViewer ? "mapData(weight, 0, 1, 1.8, 4.5)" : "mapData(weight, 0, 1, 1.5, 4)",
+          width: inViewer
+            ? "mapData(weight, 0, 1, 1.8, 4.5)"
+            : "mapData(weight, 0, 1, 1.5, 4)",
           "line-color": (ele) => getRelationColor(ele.data("positivity")),
           "curve-style": "bezier",
           label: "data(label)",
@@ -273,7 +293,7 @@ function RelationGraphMain({ elements, inViewer = false, fullScreen = false, onF
           "text-outline-color": "#fff",
           "text-outline-width": 2,
           opacity: "mapData(weight, 0, 1, 0.55, 1)",
-          "target-arrow-shape": "none"
+          "target-arrow-shape": "none",
         },
       },
       {
@@ -301,7 +321,7 @@ function RelationGraphMain({ elements, inViewer = false, fullScreen = false, onF
       nodeSeparation: inViewer ? 10 : 20,
       randomSeed: 42,
       gravity: 0.25,
-      componentSpacing: inViewer ? 90 : 120
+      componentSpacing: inViewer ? 90 : 120,
     }),
     [inViewer, isGraphPage]
   );
@@ -325,7 +345,7 @@ function RelationGraphMain({ elements, inViewer = false, fullScreen = false, onF
       refresh: 20,
       componentSpacing: 110,
       coolingFactor: 0.95,
-      initialTemp: 200
+      initialTemp: 200,
     }),
     [inViewer]
   );
@@ -333,7 +353,7 @@ function RelationGraphMain({ elements, inViewer = false, fullScreen = false, onF
   const handleReset = useCallback(() => {
     setSearch("");
     setSearchInput("");
-    
+
     // 그래프 초기화
     if (cyRef.current) {
       const cy = cyRef.current;
@@ -366,11 +386,13 @@ function RelationGraphMain({ elements, inViewer = false, fullScreen = false, onF
   useEffect(() => {
     const prevElements = prevElementsRef.current;
     const prevEventJson = prevEventJsonRef.current;
-    const isSameElements = prevElements &&
+    const isSameElements =
+      prevElements &&
       prevElements.length === filteredElements.length &&
-      prevElements.every((el, i) => JSON.stringify(el) === JSON.stringify(filteredElements[i]));
-    const isEventChanged = prevEventJson &&
-      prevEventJson !== stableEventJson;
+      prevElements.every(
+        (el, i) => JSON.stringify(el) === JSON.stringify(filteredElements[i])
+      );
+    const isEventChanged = prevEventJson && prevEventJson !== stableEventJson;
 
     if (!filteredElements || filteredElements.length === 0) return;
 
@@ -405,7 +427,9 @@ function RelationGraphMain({ elements, inViewer = false, fullScreen = false, onF
       currentLayout.run();
 
       if (search && fitNodeIds && fitNodeIds.length > 0) {
-        const nodesToFit = cy.nodes().filter(n => fitNodeIds.includes(n.id()));
+        const nodesToFit = cy
+          .nodes()
+          .filter((n) => fitNodeIds.includes(n.id()));
         if (nodesToFit.length > 0) {
           cy.fit(nodesToFit, 60);
           cy.center();
@@ -418,7 +442,15 @@ function RelationGraphMain({ elements, inViewer = false, fullScreen = false, onF
       prevElementsRef.current = filteredElements;
       prevEventJsonRef.current = stableEventJson;
     }
-  }, [filteredElements, search, searchLayout, layout, fitNodeIds, stableEventJson, graphViewState]);
+  }, [
+    filteredElements,
+    search,
+    searchLayout,
+    layout,
+    fitNodeIds,
+    stableEventJson,
+    graphViewState,
+  ]);
 
   // 최초 1회만 그래프 중앙정렬 (챕터 이동/새로고침 시)
   useEffect(() => {
@@ -430,8 +462,8 @@ function RelationGraphMain({ elements, inViewer = false, fullScreen = false, onF
       const centerY = cy.height() / 2;
       const radius = Math.min(centerX, centerY) * 0.6;
       // 메인 인물 노드 찾기
-      const mainNode = nodes.find(n => n.data('main'));
-      const otherNodes = nodes.filter(n => !n.data('main'));
+      const mainNode = nodes.find((n) => n.data("main"));
+      const otherNodes = nodes.filter((n) => !n.data("main"));
       if (mainNode) {
         // 메인 인물은 중앙에
         mainNode.position({ x: centerX, y: centerY });
@@ -501,9 +533,9 @@ function RelationGraphMain({ elements, inViewer = false, fullScreen = false, onF
         cy.fit(undefined, 30);
         cy.center();
         hasCenteredRef.current = true;
-        cy.off('layoutstop', onLayoutStop);
+        cy.off("layoutstop", onLayoutStop);
       };
-      cy.on('layoutstop', onLayoutStop);
+      cy.on("layoutstop", onLayoutStop);
     }
   }, [elements, inViewer, search, searchLayout, layout]);
 
@@ -546,26 +578,26 @@ function RelationGraphMain({ elements, inViewer = false, fullScreen = false, onF
     return () => {
       if (cyRef.current && setGraphViewState) {
         const cy = cyRef.current;
-        const nodes = cy.nodes().map(n => ({
+        const nodes = cy.nodes().map((n) => ({
           id: n.id(),
           pos: n.position(),
           data: n.data(),
           classes: n.classes(),
-          selected: n.selected()
+          selected: n.selected(),
         }));
-        const edges = cy.edges().map(e => ({
+        const edges = cy.edges().map((e) => ({
           id: e.id(),
           source: e.source().id(),
           target: e.target().id(),
           data: e.data(),
           classes: e.classes(),
-          selected: e.selected()
+          selected: e.selected(),
         }));
         setGraphViewState({
           pan: cy.pan(),
           zoom: cy.zoom(),
           nodes,
-          edges
+          edges,
         });
       }
     };
@@ -576,38 +608,54 @@ function RelationGraphMain({ elements, inViewer = false, fullScreen = false, onF
     if (!cyRef.current || !graphViewState) return;
     const cy = cyRef.current;
     // elements와 저장된 노드/엣지 id가 완전히 일치할 때만 복원
-    const elementNodeIds = new Set(filteredElements.filter(el => !el.data.source).map(el => el.data.id));
-    const elementEdgeIds = new Set(filteredElements.filter(el => el.data.source).map(el => el.data.id));
-    const savedNodeIds = Array.isArray(graphViewState.nodes) ? new Set(graphViewState.nodes.map(n => n.id)) : new Set();
-    const savedEdgeIds = Array.isArray(graphViewState.edges) ? new Set(graphViewState.edges.map(e => e.id)) : new Set();
-    const nodesMatch = elementNodeIds.size === savedNodeIds.size && [...elementNodeIds].every(id => savedNodeIds.has(id));
-    const edgesMatch = elementEdgeIds.size === savedEdgeIds.size && [...elementEdgeIds].every(id => savedEdgeIds.has(id));
+    const elementNodeIds = new Set(
+      filteredElements.filter((el) => !el.data.source).map((el) => el.data.id)
+    );
+    const elementEdgeIds = new Set(
+      filteredElements.filter((el) => el.data.source).map((el) => el.data.id)
+    );
+    const savedNodeIds = Array.isArray(graphViewState.nodes)
+      ? new Set(graphViewState.nodes.map((n) => n.id))
+      : new Set();
+    const savedEdgeIds = Array.isArray(graphViewState.edges)
+      ? new Set(graphViewState.edges.map((e) => e.id))
+      : new Set();
+    const nodesMatch =
+      elementNodeIds.size === savedNodeIds.size &&
+      [...elementNodeIds].every((id) => savedNodeIds.has(id));
+    const edgesMatch =
+      elementEdgeIds.size === savedEdgeIds.size &&
+      [...elementEdgeIds].every((id) => savedEdgeIds.has(id));
     if (nodesMatch && edgesMatch) {
       cy.elements().remove();
       cy.add([
-        ...(Array.isArray(graphViewState.nodes) ? graphViewState.nodes.map(n => ({
-          group: 'nodes',
-          data: n.data,
-          position: n.pos,
-          classes: n.classes
-        })) : []),
-        ...(Array.isArray(graphViewState.edges) ? graphViewState.edges.map(e => ({
-          group: 'edges',
-          data: e.data,
-          classes: e.classes
-        })) : [])
+        ...(Array.isArray(graphViewState.nodes)
+          ? graphViewState.nodes.map((n) => ({
+              group: "nodes",
+              data: n.data,
+              position: n.pos,
+              classes: n.classes,
+            }))
+          : []),
+        ...(Array.isArray(graphViewState.edges)
+          ? graphViewState.edges.map((e) => ({
+              group: "edges",
+              data: e.data,
+              classes: e.classes,
+            }))
+          : []),
       ]);
       if (graphViewState.pan) cy.pan(graphViewState.pan);
       if (graphViewState.zoom) cy.zoom(graphViewState.zoom);
       // 선택 상태 복원
       if (Array.isArray(graphViewState.nodes)) {
-        graphViewState.nodes.forEach(n => {
+        graphViewState.nodes.forEach((n) => {
           const node = cy.getElementById(n.id);
           if (node && n.selected) node.select();
         });
       }
       if (Array.isArray(graphViewState.edges)) {
-        graphViewState.edges.forEach(e => {
+        graphViewState.edges.forEach((e) => {
           const edge = cy.getElementById(e.id);
           if (edge && e.selected) edge.select();
         });
@@ -730,38 +778,43 @@ function RelationGraphMain({ elements, inViewer = false, fullScreen = false, onF
 
   if (fullScreen && inViewer) {
     return (
-      <div className="graph-page-container" style={{
-        width: '100vw',
-        height: '100vh',
-        display: 'flex',
-        justifyContent: 'center',
-        alignItems: 'center',
-        overflow: 'hidden',
-        position: 'fixed',
-        top: 0,
-        left: 0,
-        zIndex: 9999
-      }}>
-        {/* 상단바: > 버튼(복귀)만 왼쪽 끝에, 가운데 > 버튼은 완전히 제거 */}
-        <div style={{
-          position: 'absolute',
+      <div
+        className="graph-page-container"
+        style={{
+          width: "100vw",
+          height: "100vh",
+          display: "flex",
+          justifyContent: "center",
+          alignItems: "center",
+          overflow: "hidden",
+          position: "fixed",
           top: 0,
           left: 0,
-          width: '100vw',
-          height: 60,
-          display: 'flex',
-          flexDirection: 'row',
-          alignItems: 'center',
-          gap: 0,
-          paddingLeft: 12,
-          paddingRight: 90,
-          paddingTop: 0,
-          justifyContent: 'flex-start',
-          background: '#fff',
-          boxShadow: '0 2px 8px rgba(0,0,0,0.06)',
-          borderBottom: '1px solid #e5e7eb',
-          zIndex: 10001,
-        }}>
+          zIndex: 9999,
+        }}
+      >
+        {/* 상단바: > 버튼(복귀)만 왼쪽 끝에, 가운데 > 버튼은 완전히 제거 */}
+        <div
+          style={{
+            position: "absolute",
+            top: 0,
+            left: 0,
+            width: "100vw",
+            height: 60,
+            display: "flex",
+            flexDirection: "row",
+            alignItems: "center",
+            gap: 0,
+            paddingLeft: 12,
+            paddingRight: 90,
+            paddingTop: 0,
+            justifyContent: "flex-start",
+            background: "#fff",
+            boxShadow: "0 2px 8px rgba(0,0,0,0.06)",
+            borderBottom: "1px solid #e5e7eb",
+            zIndex: 10001,
+          }}
+        >
           {/* 눈에 띄는 복귀(>) 버튼 */}
           <button
             onClick={handleExitFullScreen}
@@ -771,32 +824,42 @@ function RelationGraphMain({ elements, inViewer = false, fullScreen = false, onF
               minWidth: 40,
               minHeight: 40,
               borderRadius: 12,
-              border: 'none',
-              background: 'linear-gradient(100deg, #4F6DDE 0%, #6fa7ff 100%)',
-              color: '#fff',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
+              border: "none",
+              background: "linear-gradient(100deg, #4F6DDE 0%, #6fa7ff 100%)",
+              color: "#fff",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
               fontSize: 22,
               marginRight: 18,
               marginLeft: 4,
-              cursor: 'pointer',
-              boxShadow: '0 4px 16px rgba(79,109,222,0.13)',
+              cursor: "pointer",
+              boxShadow: "0 4px 16px rgba(79,109,222,0.13)",
               fontWeight: 700,
-              outline: 'none',
-              transition: 'background 0.18s, color 0.18s, box-shadow 0.18s, transform 0.13s',
+              outline: "none",
+              transition:
+                "background 0.18s, color 0.18s, box-shadow 0.18s, transform 0.13s",
             }}
-            title='분할화면으로'
-            onMouseOver={e => e.currentTarget.style.background = 'linear-gradient(100deg, #6fa7ff 0%, #4F6DDE 100%)'}
-            onMouseOut={e => e.currentTarget.style.background = 'linear-gradient(100deg, #4F6DDE 0%, #6fa7ff 100%)'}
+            title="분할화면으로"
+            onMouseOver={(e) =>
+              (e.currentTarget.style.background =
+                "linear-gradient(100deg, #6fa7ff 0%, #4F6DDE 100%)")
+            }
+            onMouseOut={(e) =>
+              (e.currentTarget.style.background =
+                "linear-gradient(100deg, #4F6DDE 0%, #6fa7ff 100%)")
+            }
           >
-            {'>'}
+            {">"}
           </button>
           {/* 그래프 본문, 컨트롤, 툴팁 등만 렌더링 (재귀 X) */}
           <div className="flex-1 relative overflow-hidden w-full h-full">
             {/* 검색 폼 추가 */}
             {!inViewer && (
-              <div className="search-container" style={{ justifyContent: 'flex-start', paddingLeft: '20px' }}>
+              <div
+                className="search-container"
+                style={{ justifyContent: "flex-start", paddingLeft: "20px" }}
+              >
                 <GraphControls
                   searchInput={searchInput}
                   setSearchInput={setSearchInput}
@@ -808,10 +871,23 @@ function RelationGraphMain({ elements, inViewer = false, fullScreen = false, onF
                 />
               </div>
             )}
-            <div className="flex-1 relative overflow-hidden" style={{ width: '100%', height: '100%' }}>
+            <div
+              className="flex-1 relative overflow-hidden"
+              style={{ width: "100%", height: "100%" }}
+            >
               {/* 툴팁 렌더링 */}
-              <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none', zIndex: 9999 }}>
-                {activeTooltip?.type === 'node' && activeTooltip.data && (
+              <div
+                style={{
+                  position: "absolute",
+                  top: 0,
+                  left: 0,
+                  width: "100%",
+                  height: "100%",
+                  pointerEvents: "none",
+                  zIndex: 9999,
+                }}
+              >
+                {activeTooltip?.type === "node" && activeTooltip.data && (
                   <GraphNodeTooltip
                     key={`node-tooltip-${activeTooltip.id}`}
                     data={activeTooltip.data}
@@ -819,51 +895,66 @@ function RelationGraphMain({ elements, inViewer = false, fullScreen = false, onF
                     y={activeTooltip.y}
                     nodeCenter={activeTooltip.nodeCenter}
                     onClose={handleCloseTooltip}
-                    style={{ pointerEvents: 'auto' }}
+                    style={{ pointerEvents: "auto" }}
                   />
                 )}
-                {activeTooltip?.type === 'edge' && (
+                {activeTooltip?.type === "edge" && (
                   <EdgeTooltip
-                    key={`edge-tooltip-${activeTooltip.id}`}
+                    // key 제거 - React의 key 변경 시 컴포넌트가 재생성되어 사용자의 드래그/플립 상태가 리셋되는 것을 방지
                     data={activeTooltip.data}
                     x={activeTooltip.x}
                     y={activeTooltip.y}
                     onClose={handleCloseTooltip}
                     sourceNode={activeTooltip.sourceNode}
                     targetNode={activeTooltip.targetNode}
-                    style={{ pointerEvents: 'auto' }}
+                    inViewer={inViewer}
+                    filename={filename}
                   />
                 )}
               </div>
               {/* 그래프 영역 */}
-              <div className="graph-canvas-area w-full h-full" style={{ zIndex: 1, width: '100%', height: '100%', overflow: 'hidden', position: 'relative' }}>
+              <div
+                className="graph-canvas-area w-full h-full"
+                style={{
+                  zIndex: 1,
+                  width: "100%",
+                  height: "100%",
+                  overflow: "hidden",
+                  position: "relative",
+                }}
+              >
                 {/* 로딩 중 표시 */}
                 {(!elements || elements.length === 0) && (
-                  <div style={{
-                    position: 'absolute',
-                    top: '50%',
-                    left: '50%',
-                    transform: 'translate(-50%, -50%)',
-                    zIndex: 10000,
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    color: '#6C8EFF',
-                    fontSize: 22,
-                    fontWeight: 600,
-                    pointerEvents: 'none',
-                  }}>
-                    <span className="graph-loading-spinner" style={{
-                      width: 40,
-                      height: 40,
-                      border: '4px solid #e3e6ef',
-                      borderTop: '4px solid #6C8EFF',
-                      borderRadius: '50%',
-                      animation: 'spin 1s linear infinite',
-                      marginBottom: 12,
-                      display: 'inline-block',
-                    }} />
+                  <div
+                    style={{
+                      position: "absolute",
+                      top: "50%",
+                      left: "50%",
+                      transform: "translate(-50%, -50%)",
+                      zIndex: 10000,
+                      display: "flex",
+                      flexDirection: "column",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      color: "#6C8EFF",
+                      fontSize: 22,
+                      fontWeight: 600,
+                      pointerEvents: "none",
+                    }}
+                  >
+                    <span
+                      className="graph-loading-spinner"
+                      style={{
+                        width: 40,
+                        height: 40,
+                        border: "4px solid #e3e6ef",
+                        borderTop: "4px solid #6C8EFF",
+                        borderRadius: "50%",
+                        animation: "spin 1s linear infinite",
+                        marginBottom: 12,
+                        display: "inline-block",
+                      }}
+                    />
                     로딩 중...
                   </div>
                 )}
@@ -877,12 +968,12 @@ function RelationGraphMain({ elements, inViewer = false, fullScreen = false, onF
                     tapEdgeHandler={tapEdgeHandler}
                     tapBackgroundHandler={tapBackgroundHandler}
                     fitNodeIds={fitNodeIds}
-                    style={{ 
-                      width: '100%', 
-                      height: '100%', 
-                      overflow: 'hidden', 
-                      position: 'relative',
-                      backgroundColor: '#f8fafc' // 배경색 추가
+                    style={{
+                      width: "100%",
+                      height: "100%",
+                      overflow: "hidden",
+                      position: "relative",
+                      backgroundColor: "#f8fafc", // 배경색 추가
                     }}
                   />
                 )}
@@ -895,13 +986,21 @@ function RelationGraphMain({ elements, inViewer = false, fullScreen = false, onF
   }
 
   return (
-    <div className={`flex flex-col h-full w-full relative overflow-hidden ${fullScreen ? 'graph-container-wrapper' : ''}`} style={{ width: '100%', height: '100%' }}>
+    <div
+      className={`flex flex-col h-full w-full relative overflow-hidden ${
+        fullScreen ? "graph-container-wrapper" : ""
+      }`}
+      style={{ width: "100%", height: "100%" }}
+    >
       {/* < 버튼은 inViewer && !fullScreen일 때만 보임 */}
       {/* 기존 중앙 고정 < 버튼 완전히 제거 */}
 
       {/* 검색 폼 추가 */}
       {!inViewer && (
-        <div className="search-container" style={{ justifyContent: 'flex-start', paddingLeft: '20px' }}>
+        <div
+          className="search-container"
+          style={{ justifyContent: "flex-start", paddingLeft: "20px" }}
+        >
           <GraphControls
             searchInput={searchInput}
             setSearchInput={setSearchInput}
@@ -914,10 +1013,23 @@ function RelationGraphMain({ elements, inViewer = false, fullScreen = false, onF
         </div>
       )}
 
-      <div className="flex-1 relative overflow-hidden" style={{ width: '100%', height: '100%' }}>
+      <div
+        className="flex-1 relative overflow-hidden"
+        style={{ width: "100%", height: "100%" }}
+      >
         {/* 툴팁 렌더링 */}
-        <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none', zIndex: 9999 }}>
-          {activeTooltip?.type === 'node' && activeTooltip.data && (
+        <div
+          style={{
+            position: "absolute",
+            top: 0,
+            left: 0,
+            width: "100%",
+            height: "100%",
+            pointerEvents: "none",
+            zIndex: 9999,
+          }}
+        >
+          {activeTooltip?.type === "node" && activeTooltip.data && (
             <GraphNodeTooltip
               key={`node-tooltip-${activeTooltip.id}`}
               data={activeTooltip.data}
@@ -925,52 +1037,67 @@ function RelationGraphMain({ elements, inViewer = false, fullScreen = false, onF
               y={activeTooltip.y}
               nodeCenter={activeTooltip.nodeCenter}
               onClose={handleCloseTooltip}
-              style={{ pointerEvents: 'auto' }}
+              style={{ pointerEvents: "auto" }}
             />
           )}
-          {activeTooltip?.type === 'edge' && (
+          {activeTooltip?.type === "edge" && (
             <EdgeTooltip
-              key={`edge-tooltip-${activeTooltip.id}`}
+              // key 제거 - React의 key 변경 시 컴포넌트가 재생성되어 사용자의 드래그/플립 상태가 리셋되는 것을 방지
               data={activeTooltip.data}
               x={activeTooltip.x}
               y={activeTooltip.y}
               onClose={handleCloseTooltip}
               sourceNode={activeTooltip.sourceNode}
               targetNode={activeTooltip.targetNode}
-              style={{ pointerEvents: 'auto' }}
+              inViewer={inViewer}
+              filename={filename}
             />
           )}
         </div>
 
         {/* 그래프 영역 */}
-        <div className="graph-canvas-area w-full h-full" style={{ zIndex: 1, width: '100%', height: '100%', overflow: 'hidden', position: 'relative' }}>
+        <div
+          className="graph-canvas-area w-full h-full"
+          style={{
+            zIndex: 1,
+            width: "100%",
+            height: "100%",
+            overflow: "hidden",
+            position: "relative",
+          }}
+        >
           {/* 로딩 중 표시 */}
           {(!elements || elements.length === 0) && (
-            <div style={{
-              position: 'absolute',
-              top: '50%',
-              left: '50%',
-              transform: 'translate(-50%, -50%)',
-              zIndex: 10000,
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: '#6C8EFF',
-              fontSize: 22,
-              fontWeight: 600,
-              pointerEvents: 'none',
-            }}>
-              <span className="graph-loading-spinner" style={{
-                width: 40,
-                height: 40,
-                border: '4px solid #e3e6ef',
-                borderTop: '4px solid #6C8EFF',
-                borderRadius: '50%',
-                animation: 'spin 1s linear infinite',
-                marginBottom: 12,
-                display: 'inline-block',
-              }} />
+            <div
+              style={{
+                position: "absolute",
+                top: "50%",
+                left: "50%",
+                transform: "translate(-50%, -50%)",
+                zIndex: 10000,
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                justifyContent: "center",
+                color: "#6C8EFF",
+                fontSize: 22,
+                fontWeight: 600,
+                pointerEvents: "none",
+              }}
+            >
+              <span
+                className="graph-loading-spinner"
+                style={{
+                  width: 40,
+                  height: 40,
+                  border: "4px solid #e3e6ef",
+                  borderTop: "4px solid #6C8EFF",
+                  borderRadius: "50%",
+                  animation: "spin 1s linear infinite",
+                  marginBottom: 12,
+                  display: "inline-block",
+                }}
+              />
               로딩 중...
             </div>
           )}
@@ -984,7 +1111,12 @@ function RelationGraphMain({ elements, inViewer = false, fullScreen = false, onF
               tapEdgeHandler={tapEdgeHandler}
               tapBackgroundHandler={tapBackgroundHandler}
               fitNodeIds={fitNodeIds}
-              style={{ width: '100%', height: '100%', overflow: 'hidden', position: 'relative' }}
+              style={{
+                width: "100%",
+                height: "100%",
+                overflow: "hidden",
+                position: "relative",
+              }}
             />
           )}
         </div>
