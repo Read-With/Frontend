@@ -20,11 +20,11 @@ const eventRelationModules = import.meta.glob(
 // public/gatsby 폴더의 이미지 파일명 목록
 const gatsbyImages = [
   "Carraways.png",
-  "Father.png",
+  "father.png",
   "Gatsby.png",
-  "Great-Uncle.png",
+  "great-uncle.png",
   "Nick.png",
-  "Young man at the office.png",
+  "young man at the office.png",
 ];
 
 // public/gatsby 폴더 내 인물명 이미지(.png) 자동 매핑 함수 추가
@@ -35,14 +35,22 @@ function getNodeImagePath(node) {
     ""
   ).trim();
   if (!baseName) return undefined;
+  // 모두 소문자로 변환
   const candidates = [
     `${baseName}.png`,
     `${baseName.replace(/\s+/g, "_")}.png`,
     `${baseName.replace(/\s+/g, "-")}.png`,
     `${baseName.charAt(0).toUpperCase() + baseName.slice(1)}.png`,
   ];
-  const found = candidates.find((name) => gatsbyImages.includes(name));
-  return found ? `/gatsby/${found}` : undefined;
+  // 파일명 비교도 소문자로!
+  const found = candidates.find((candidate) =>
+    gatsbyImages.some((img) => img.toLowerCase() === candidate.toLowerCase())
+  );
+  return found
+    ? `/gatsby/${gatsbyImages.find(
+        (img) => img.toLowerCase() === found.toLowerCase()
+      )}`
+    : undefined;
 }
 
 // 기본 설정 값
