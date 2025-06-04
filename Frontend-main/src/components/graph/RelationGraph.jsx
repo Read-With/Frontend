@@ -8,7 +8,7 @@ const RelationGraph = ({ elements, inViewer = false }) => {
   const selectedEdgeIdRef = useRef(null);
   const selectedNodeIdRef = useRef(null);
 
-  // 툴팁 상태 업데이트를 useCallback으로 최적화
+  // 툴크 상태 업데이트를 useCallback으로 최적화
   const updateTooltip = useCallback((type, data, position) => {
     setActiveTooltip({ type, ...data, ...position });
   }, []);
@@ -121,8 +121,8 @@ const RelationGraph = ({ elements, inViewer = false }) => {
         "background-color": "#eee",
         "border-width": (ele) => ele.data("main") ? 2 : 1,
         "border-color": "#5B7BA0",
-        "width": inViewer ? (ele => ele.data("main") ? 32 : 24) : 16,
-        "height": inViewer ? (ele => ele.data("main") ? 32 : 24) : 16,
+        "width": 160,
+        "height": 160,
         "shape": "ellipse",
         "label": "data(label)",
         "text-valign": "bottom",
@@ -171,7 +171,7 @@ const RelationGraph = ({ elements, inViewer = false }) => {
     name: "cose",
     padding: 90,
     nodeRepulsion: 2000,
-    idealEdgeLength: 150,
+    idealEdgeLength: 80,
     animate: false,
     fit: true,
     randomize: false,

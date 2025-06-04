@@ -508,6 +508,45 @@ const CytoscapeGraph = React.memo(
         // ... 기존 깜빡임 코드 ...
       }
 
+      useEffect(() => {
+        console.log('=== [디버깅] stylesheet:', stylesheet);
+        console.log('=== [디버깅] layout:', layout);
+        console.log('=== [디버깅] elements 샘플:', elements && elements.slice ? elements.slice(0, 3) : elements);
+      }, [stylesheet, layout, elements]);
+
+      useEffect(() => {
+        if (cyRef.current) {
+          cyRef.current.nodes().forEach(node => {
+            console.log(
+              '[노드 크기]',
+              node.id(),
+              'width:', node.width(),
+              'height:', node.height()
+            );
+          });
+        }
+      }, [elements, stylesheet]);
+
+      useEffect(() => {
+        if (cyRef.current) {
+          cyRef.current.edges().forEach(edge => {
+            const src = edge.source();
+            const tgt = edge.target();
+            const dist = Math.sqrt(
+              Math.pow(src.position('x') - tgt.position('x'), 2) +
+              Math.pow(src.position('y') - tgt.position('y'), 2)
+            );
+            console.log(
+              '[간선 길이]',
+              edge.id(),
+              'source:', src.id(),
+              'target:', tgt.id(),
+              'distance:', dist
+            );
+          });
+        }
+      }, [elements, layout]);
+
       return (
         <GraphPortal>
           <div

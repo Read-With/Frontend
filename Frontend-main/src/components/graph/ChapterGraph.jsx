@@ -103,6 +103,7 @@ const ChapterGraph = ({ filename, chapterNumber = 1, eventNum = 1, enableTooltip
         }
       });
       setElementsWithPosition(elementsWithPos);
+      console.log('[디버그] elementsWithPosition', elementsWithPos);
       cy.destroy();
     }
   }, [elementsWithPosition, charactersData, relationsData]);
@@ -277,8 +278,8 @@ const ChapterGraph = ({ filename, chapterNumber = 1, eventNum = 1, enableTooltip
         "background-color": "#eee",
         "border-width": (ele) => ele.data("main") ? 2 : 1,
         "border-color": "#5B7BA0",
-        "width": inViewer ? (ele => ele.data("main") ? 32 : 24) : 16,
-        "height": inViewer ? (ele => ele.data("main") ? 32 : 24) : 16,
+        "width": 160,
+        "height": 160,
         "shape": "ellipse",
         "label": "data(label)",
         "text-valign": "bottom",
@@ -324,27 +325,17 @@ const ChapterGraph = ({ filename, chapterNumber = 1, eventNum = 1, enableTooltip
 
   // layout useMemo 의존성 최소화
   const layout = useMemo(() => ({
-    name: "cose",
-    padding: 90,
-    nodeRepulsion: 1800,
-    idealEdgeLength: 120,
-    animate: false,
+    name: "preset",
     fit: true,
-    randomize: false,
-    nodeOverlap: 12,
-    avoidOverlap: true,
-    nodeSeparation: 10,
-    randomSeed: 42,
-    gravity: 0.25,
-    componentSpacing: 90
+    padding: 90,
+    idealEdgeLength: 20,
   }), []);
 
   // 검색 결과에 따라 다른 레이아웃 옵션 적용
   const searchLayout = useMemo(() => ({
     name: "cose",
     padding: 120,
-    nodeRepulsion: 18000,
-    idealEdgeLength: 180,
+    nodeRepulsion: 1800,
     animate: true,
     animationDuration: 800,
     fit: true,

@@ -116,21 +116,24 @@ function RelationGraphWrapper(props) {
         names: char.names,
       },
     }));
-    const edges = (relationsData?.relations || []).map((rel, idx) => ({
-      data: {
-        id: `e${idx}`,
-        source: safeId(rel.id1),
-        target: safeId(rel.id2),
-        label: Array.isArray(rel.relation) ? rel.relation.join(", ") : rel.type,
-        explanation: rel.explanation,
-        positivity: rel.positivity,
-        weight: rel.weight,
-      },
-    }));
+    const edges = (relationsData?.relations || []).map((rel, idx) => {
+      const { id1, id2, relation, explanation, positivity, weight } = rel;
+      return {
+        data: {
+          id: `e${idx}`,
+          source: safeId(id1),
+          target: safeId(id2),
+          label: Array.isArray(relation) ? relation.join(", ") : rel.type,
+          explanation,
+          positivity,
+          weight: weight !== undefined ? Math.round(weight * 10) / 10 : 1,
+        }
+      };
+    });
 
     console.log('=== [디버깅] nodes:', nodes);
     console.log('=== [디버깅] edges:', edges);
-    console.log('=== [디버깅] elements:', [...nodes, ...edges]);
+    console.log('[디버그] elements:', [...nodes, ...edges]);
     setElements([...nodes, ...edges]);
   }, [bookName, currentChapter, eventNum]);
 

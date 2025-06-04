@@ -164,15 +164,23 @@ function RelationGraphMain({ elements, inViewer = false, fullScreen = false, onF
     clearSelection();
   }, [clearSelection]);
 
-  // elements/filteredElements를 id 기준으로 정렬해서 비교 및 전달
+  // elements(노드/간선) 배열을 main 노드가 먼저 오도록 정렬
   const sortedElements = useMemo(() => {
     if (!elements) return [];
-    return [...elements].sort((a, b) => {
-      // 노드는 id, 간선은 source+target+id 등으로 정렬
-      const aKey = a.data?.id || (a.data?.source + '-' + a.data?.target) || '';
-      const bKey = b.data?.id || (b.data?.source + '-' + b.data?.target) || '';
-      return aKey.localeCompare(bKey);
-    });
+    // 노드와 엣지 분리
+    const nodes = elements.filter(e => !e.data.source);
+    const edges = elements.filter(e => e.data.source);
+
+    // main 노드 먼저, 그 다음 나머지 노드
+    const mainNodes = nodes.filter(n => n.data.main);
+    const otherNodes = nodes.filter(n => !n.data.main);
+
+    // main 노드가 여러 개면 첫 번째만 맨 앞에, 나머지는 뒤에 붙임
+    const orderedNodes = mainNodes.length > 0
+      ? [mainNodes[0], ...otherNodes, ...mainNodes.slice(1)]
+      : nodes;
+
+    return [...orderedNodes, ...edges];
   }, [elements]);
 
   // filteredElements를 useMemo로 고정 (의존성 최소화)
@@ -238,18 +246,18 @@ function RelationGraphMain({ elements, inViewer = false, fullScreen = false, onF
         selector: 'node',
         style: {
           "background-color": "#eee",
-          "border-width": (ele) => ele.data("main") ? 2 : 1,
+          "border-width": 2,
           "border-color": "#5B7BA0",
-          "width": inViewer ? (ele => ele.data("main") ? 32 : 24) : 16,
-          "height": inViewer ? (ele => ele.data("main") ? 32 : 24) : 16,
+          "width": 50,
+          "height": 50,
           "shape": "ellipse",
           "label": "data(label)",
           "text-valign": "bottom",
           "text-halign": "center",
-          "font-size": inViewer ? 4 : 3,
-          "font-weight": (ele) => ele.data("main") ? 700 : 400,
+          "font-size": 12,
+          "font-weight": 100,
           "color": "#444",
-          "text-margin-y": inViewer ? 3 : 2,
+          "text-margin-y": 4,
           "text-background-color": "#fff",
           "text-background-opacity": 0.8,
           "text-background-shape": "roundrectangle",
@@ -260,11 +268,11 @@ function RelationGraphMain({ elements, inViewer = false, fullScreen = false, onF
       {
         selector: 'edge',
         style: {
-          width: inViewer ? "mapData(weight, 0, 1, 1.8, 4.5)" : "mapData(weight, 0, 1, 1.5, 4)",
+          width: 6,
           "line-color": (ele) => getRelationColor(ele.data("positivity")),
           "curve-style": "bezier",
           label: "data(label)",
-          "font-size": inViewer ? 4 : 3,
+          "font-size": 8,
           "text-rotation": "autorotate",
           color: "#42506b",
           "text-background-color": "#fff",
@@ -303,7 +311,7 @@ function RelationGraphMain({ elements, inViewer = false, fullScreen = false, onF
         }
       }
     ],
-    [inViewer]
+    []
   );
 
   // 노드 개수에 따라 spacingFactor 동적 조정
@@ -311,19 +319,19 @@ function RelationGraphMain({ elements, inViewer = false, fullScreen = false, onF
     return elements ? elements.filter(e => !e.data.source).length : 0;
   }, [elements]);
   const spacingFactor = useMemo(() => {
-    if (nodeCount >= 21) return 3;
-    if (nodeCount >= 11) return 2.5;
-    return 2;
+    if (nodeCount >= 21) return 2;
+    if (nodeCount >= 11) return 1.5;
+    return 1;
   }, [nodeCount]);
 
   const layout = useMemo(
     () => ({
       name: "circle",
-      padding: 100,
+      padding: 60,
       fit: true,
       avoidOverlap: true,
-      spacingFactor: 8,
-      radius: 600,
+      spacingFactor: 1,
+      radius: 100,
       startAngle: 0,
       animate: false,
     }), []);

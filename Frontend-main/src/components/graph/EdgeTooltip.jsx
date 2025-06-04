@@ -131,46 +131,64 @@ function EdgeTooltip({ data, x, y, onClose, sourceNode, targetNode, inViewer = f
               <span className="weight-label" style={{ color: relationStyle.color }}>
                 {relationStyle.text}
               </span>
-              <span className="weight-value">{Math.round(data.weight * 100)}%</span>
+              <span className="weight-value">{Math.round(data.weight * 10)}%</span>
             </div>
-            <div className="weight-steps">
-              {[0.2, 0.4, 0.6, 0.8, 1.0].map((step, index) => {
-                const stepPercentage = data.weight * 100;
-                const currentStepStart = step - 0.2;
-                const currentStepPercentage = step * 100;
-                
-                let fillPercentage = 0;
-                let isComplete = false;
-                let isCurrent = false;
-
-                if (stepPercentage >= currentStepPercentage) {
-                  fillPercentage = 100;
-                  isComplete = true;
-                } else if (stepPercentage > (currentStepPercentage - 20)) {
-                  fillPercentage = ((stepPercentage - (currentStepPercentage - 20)) / 20) * 100;
-                  isCurrent = true;
-                }
-                
-                return (
-                  <div 
-                    key={index}
-                    className={`weight-step ${isComplete ? 'complete' : ''} ${isCurrent ? 'current' : ''}`}
-                  >
-                    <div 
-                      className="weight-fill"
-                      style={{ 
-                        width: `${fillPercentage}%`,
-                        backgroundColor: relationStyle.color,
-                        opacity: 0.4 + (step * 0.6)
+            {/* 20% 단위 막대그래프 (5개, positivity 값에 따라 색칠) */}
+            <div style={{ display: 'flex', alignItems: 'flex-end', gap: 4, height: 28, margin: '12px 0 4px 0', justifyContent: 'center' }}>
+              {(() => {
+                let p = data.positivity ?? 0;
+                p = p * 100;
+                let remain = p;
+                return Array.from({ length: 5 }).map((_, i) => {
+                  let fill;
+                  if (remain >= 20) {
+                    fill = 1;
+                  } else if (remain > 0) {
+                    fill = remain / 20;
+                  } else {
+                    fill = 0;
+                  }
+                  remain -= 20;
+                  let background;
+                  if (fill === 1) background = relationStyle.color;
+                  else if (fill > 0) background = `linear-gradient(to right, ${relationStyle.color} ${fill * 100}%, #e5e7eb ${fill * 100}%)`;
+                  else background = '#e5e7eb';
+                  return (
+                    <div
+                      key={i}
+                      style={{
+                        width: 80,
+                        height: 24,
+                        borderRadius: 6,
+                        background,
+                        opacity: 1,
+                        transition: 'background 0.3s',
+                        border: '1.5px solid #e5e7eb',
+                        boxSizing: 'border-box',
+                        marginBottom: 0
                       }}
                     />
-                    {(isComplete || (isCurrent && fillPercentage >= 50)) && (
-                      <div className="weight-dot" />
-                    )}
-                    <span className="step-label">{Math.round(step * 100)}%</span>
-                  </div>
-                );
-              })}
+                  );
+                });
+              })()}
+            </div>
+            {/* 20, 40, 60, 80, 100% 라벨 */}
+            <div style={{ display: 'flex', justifyContent: 'center', gap: 4, marginBottom: 4 }}>
+              {[20, 40, 60, 80, 100].map((step, idx) => (
+                <span
+                  key={idx}
+                  style={{
+                    width: 80,
+                    textAlign: 'center',
+                    fontSize: 12,
+                    color: '#6b7280',
+                    display: 'inline-block',
+                    lineHeight: '1.2',
+                  }}
+                >
+                  {step}%
+                </span>
+              ))}
             </div>
           </div>
         </div>

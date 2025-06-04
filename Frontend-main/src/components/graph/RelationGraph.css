@@ -384,19 +384,19 @@ html, body {
 }
 
 .graph-canvas-area {
-  width: 600px !important;
-  height: 600px !important;
-  min-width: 600px !important;
-  min-height: 600px !important;
-  max-width: 600px !important;
-  max-height: 600px !important;
-  margin: 0 auto;
+  width: 1200px !important;
+  min-width: 1200px !important;
+  max-width: 100% !important;
+  height: 900px !important;
+  min-height: 900px !important;
+  max-height: none !important;
+  margin: 20px 0 0 30px;
   padding: 0 !important;
   border: none !important;
   box-sizing: border-box;
   background: transparent !important;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: center;
   flex: 1;
 }
