@@ -1,12 +1,36 @@
 import React, { useRef, useState, useMemo, useEffect, useCallback } from "react";
-import CytoscapeComponent from "react-cytoscapejs";
-import charactersData from "../../data/characters.json";
-import relationsData from "../../data/relation.json";
+import CytoscapeGraphDirect from "./CytoscapeGraphDirect";
 import GraphControls from "./GraphControls";
 import GraphNodeTooltip from "./NodeTooltip";
 import EdgeTooltip from "./EdgeTooltip";
 import "./RelationGraph.css";
 import { FaSearch, FaTimes, FaPlus, FaMinus, FaExpand } from 'react-icons/fa';
+import cytoscape from "cytoscape";
+
+// === glob import 패턴 추가: 작품명/챕터별 구조 반영 ===
+const characterModules = import.meta.glob('/src/data/*/c_chapter*_*.json', { eager: true });
+const relationModules = import.meta.glob('/src/data/*/chapter*_relationships_event_*.json', { eager: true });
+
+// === id 변환 함수 추가 ===
+const safeId = v => {
+  if (v === undefined || v === null) return '';
+  if (typeof v === 'number') return String(Math.trunc(v));
+  if (typeof v === 'string' && v.match(/^[0-9]+\.0$/)) return v.split('.')[0];
+  return String(v).trim();
+};
+
+// === 동적 경로 생성 함수 ===
+function getCharacterFile(book, chapter) {
+  const filePath = `/src/data/${book}/c_chapter${chapter}_0.json`;
+  const data = characterModules[filePath]?.default;
+  return data || { characters: [] };
+}
+
+function getRelationFile(book, chapter, eventNum) {
+  const filePath = `/src/data/${book}/chapter${chapter}_relationships_event_${eventNum}.json`;
+  const data = relationModules[filePath]?.default;
+  return data || { relations: [] };
+}
 
 function getRelationColor(positivity) {
   if (positivity > 0.6) return '#15803d';
@@ -16,7 +40,7 @@ function getRelationColor(positivity) {
   return '#991b1b';
 }
 
-const ChapterGraph = ({ chapterNumber = 1, enableTooltips = true, inViewer = false }) => {
+const ChapterGraph = ({ filename, chapterNumber = 1, eventNum = 1, enableTooltips = true, inViewer = false }) => {
   const cyRef = useRef(null);
   const prevElementsRef = useRef();
   const [activeTooltip, setActiveTooltip] = useState(null);
@@ -24,104 +48,132 @@ const ChapterGraph = ({ chapterNumber = 1, enableTooltips = true, inViewer = fal
   const [search, setSearch] = useState("");
   const selectedEdgeIdRef = useRef(null);
   const selectedNodeIdRef = useRef(null);
+  const [elementsWithPosition, setElementsWithPosition] = useState(null);
+  const [charactersData, setCharactersData] = useState({ characters: [] });
+  const [relationsData, setRelationsData] = useState({ relations: [] });
   
-  // 데이터 가공
-  const elements = React.useMemo(() => {
-    const nodes = charactersData.characters.map((char) => ({
-      data: {
-        id: String(char.id),
-        label: char.common_name,
-        main: char.main_character,
-        description: char.description,
-        names: char.names,
-      },
-    }));
+  useEffect(() => {
+    setCharactersData(getCharacterFile(filename, chapterNumber));
+    setRelationsData(getRelationFile(filename, chapterNumber, eventNum));
+  }, [filename, chapterNumber, eventNum]);
 
-    const edges = relationsData.relations.map((rel, idx) => ({
-      data: {
-        id: `e${idx}`,
-        source: String(rel.id1),
-        target: String(rel.id2),
-        label: rel.relation.join(", "),
-        explanation: rel.explanation,
-        positivity: rel.positivity,
-        weight: rel.weight,
-      },
-    }));
+  useEffect(() => {
+    // 최초 1회만 자동 배치
+    if (!elementsWithPosition) {
+      // 1. position 없이 elements 생성
+      const nodes = (charactersData.characters || []).map((char) => ({
+        data: {
+          id: safeId(char.id),
+          label: char.common_name,
+          main: char.main_character,
+          description: char.description,
+          names: char.names,
+        },
+      }));
+      const edges = (relationsData.relations || []).map((rel, idx) => ({
+        data: {
+          id: `e${idx}`,
+          source: safeId(rel.id1),
+          target: safeId(rel.id2),
+          label: Array.isArray(rel.relation) ? rel.relation.join(", ") : rel.type,
+          explanation: rel.explanation,
+          positivity: rel.positivity,
+          weight: rel.weight,
+        },
+      }));
+      const elements = [...nodes, ...edges];
 
-    return [...nodes, ...edges];
+      // 2. 임시 Cytoscape 인스턴스에서 자동 배치
+      const cy = cytoscape({
+        elements,
+        layout: { name: "cose" }, // 원하는 자동 배치 엔진
+        headless: true, // 실제 DOM에 그리지 않음
+      });
+      cy.layout({ name: "cose" }).run();
+
+      // 3. 배치가 끝난 후, 각 노드의 position을 읽어서 저장
+      const elementsWithPos = cy.elements().map(ele => {
+        if (ele.isNode()) {
+          return {
+            data: ele.data(),
+            position: ele.position(), // 자동 배치된 위치
+          };
+        } else {
+          return { data: ele.data() };
+        }
+      });
+      setElementsWithPosition(elementsWithPos);
+      cy.destroy();
+    }
+  }, [elementsWithPosition, charactersData, relationsData]);
+
+  // 툴팁 상태 업데이트를 useCallback으로 최적화
+  const updateTooltip = useCallback((type, data, position) => {
+    setActiveTooltip({ type, ...data, ...position });
   }, []);
 
-  // 노드 클릭 시 툴팁 표시
+  // 노드 클릭 핸들러 최적화
   const tapNodeHandler = useCallback((evt) => {
-    if (!cyRef.current || !enableTooltips) return;
+    if (!cyRef.current) return;
     const node = evt.target;
     const pos = node.renderedPosition();
     const cy = cyRef.current;
     const pan = cy.pan();
     const zoom = cy.zoom();
-    const container = evt.target.cy.container();
+    const container = document.querySelector('.graph-canvas-area');
     const containerRect = container.getBoundingClientRect();
     
-    // 노드 중심의 화면 좌표 계산
     const nodeCenter = {
       x: pos.x * zoom + pan.x + containerRect.left,
       y: pos.y * zoom + pan.y + containerRect.top,
     };
-    
+
     setActiveTooltip(null);
     cy.batch(() => {
       cy.nodes().addClass("faded");
       cy.edges().addClass("faded");
       node.removeClass("faded").addClass("highlighted");
     });
-    
-    // 마우스 포인터 위치를 툴팁에 넘김
+
     const mouseX = evt.originalEvent?.clientX ?? nodeCenter.x;
     const mouseY = evt.originalEvent?.clientY ?? nodeCenter.y;
     
     setTimeout(() => {
-      setActiveTooltip({ 
-        type: 'node', 
-        id: node.id(), 
-        x: mouseX, 
-        y: mouseY, 
-        data: node.data(), 
-        nodeCenter,
-        inViewer
+      updateTooltip('node', {
+        id: node.id(),
+        data: node.data(),
+        nodeCenter
+      }, {
+        x: mouseX,
+        y: mouseY
       });
     }, 0);
-    
-    selectedNodeIdRef.current = node.id();
-  }, [enableTooltips, inViewer]);
-  
-  // 엣지 클릭 이벤트 핸들러
+  }, [updateTooltip]);
+
+  // 간선 클릭 핸들러 최적화
   const tapEdgeHandler = useCallback((evt) => {
-    if (!cyRef.current || !enableTooltips) return;
+    if (!cyRef.current) return;
     const cy = cyRef.current;
     const edge = evt.target;
-    const container = evt.target.cy.container();
+    const container = document.querySelector(".graph-canvas-area");
     const containerRect = container.getBoundingClientRect();
 
-    // Cytoscape의 midpoint는 그래프 내부 좌표계이므로, 화면 좌표로 변환
     const pos = edge.midpoint();
     const pan = cy.pan();
     const zoom = cy.zoom();
 
-    // 절대 좌표 계산 (컨테이너 기준)
     const absoluteX = pos.x * zoom + pan.x + containerRect.left;
     const absoluteY = pos.y * zoom + pan.y + containerRect.top;
 
     setActiveTooltip(null);
-    setActiveTooltip({
-      type: 'edge',
+    updateTooltip('edge', {
       id: edge.id(),
-      x: absoluteX,
-      y: absoluteY,
       data: edge.data(),
       sourceNode: edge.source(),
-      targetNode: edge.target(),
-      inViewer
+      targetNode: edge.target()
+    }, {
+      x: absoluteX,
+      y: absoluteY
     });
 
     cy.batch(() => {
@@ -131,10 +183,10 @@ const ChapterGraph = ({ chapterNumber = 1, enableTooltips = true, inViewer = fal
       edge.source().removeClass("faded").addClass("highlighted");
       edge.target().removeClass("faded").addClass("highlighted");
     });
-    
+
     selectedEdgeIdRef.current = edge.id();
-  }, [enableTooltips, inViewer]);
-  
+  }, [updateTooltip]);
+
   // 배경 클릭 시 선택 해제
   const tapBackgroundHandler = useCallback((evt) => {
     if (evt.target === cyRef.current) {
@@ -146,10 +198,8 @@ const ChapterGraph = ({ chapterNumber = 1, enableTooltips = true, inViewer = fal
   const clearSelection = useCallback(() => {
     if (cyRef.current) {
       const cy = cyRef.current;
-      cy.nodes().removeClass("faded highlighted");
+      cy.nodes().removeClass("faded");
       cy.edges().removeClass("faded");
-      
-      // 이벤트 리스너 재설정
       cy.removeListener("tap", "node");
       cy.removeListener("tap", "edge");
       cy.removeListener("tap");
@@ -169,12 +219,12 @@ const ChapterGraph = ({ chapterNumber = 1, enableTooltips = true, inViewer = fal
 
   // 검색 기능
   const { filteredElements, fitNodeIds } = useMemo(() => {
-    let filteredElements = elements;
+    let filteredElements = elementsWithPosition;
     let fitNodeIds = null;
     
     if (search) {
       // 모든 일치하는 노드 찾기
-      const matchedNodes = elements.filter(
+      const matchedNodes = elementsWithPosition.filter(
         (el) =>
           !el.data.source &&
           (el.data.label?.toLowerCase().includes(search.toLowerCase()) ||
@@ -188,7 +238,7 @@ const ChapterGraph = ({ chapterNumber = 1, enableTooltips = true, inViewer = fal
         // 모든 일치하는 노드와 관련된 엣지 찾기
         const matchedNodeIds = matchedNodes.map(node => node.data.id);
         
-        const relatedEdges = elements.filter(
+        const relatedEdges = elementsWithPosition.filter(
           (el) =>
             el.data.source &&
             (matchedNodeIds.includes(el.data.source) ||
@@ -203,42 +253,40 @@ const ChapterGraph = ({ chapterNumber = 1, enableTooltips = true, inViewer = fal
         ];
         
         // 모든 관련 노드 찾기
-        const relatedNodes = elements.filter(
-          (el) => !el.data.source && 
-                 (matchedNodeIds.includes(el.data.id) || relatedNodeIds.includes(el.data.id))
+        filteredElements = elementsWithPosition.filter(
+          (el) =>
+            (el.data.source && relatedEdges.includes(el)) ||
+            (!el.data.source && (matchedNodeIds.includes(el.data.id) || relatedNodeIds.includes(el.data.id)))
         );
-        
-        filteredElements = [...relatedNodes, ...relatedEdges];
-        fitNodeIds = [...matchedNodeIds, ...relatedNodeIds];
+        fitNodeIds = matchedNodeIds;
       } else {
         filteredElements = [];
         fitNodeIds = [];
       }
     } else {
-      filteredElements = elements;
+      filteredElements = elementsWithPosition;
     }
     return { filteredElements, fitNodeIds };
-  }, [elements, search]);
+  }, [elementsWithPosition, search]);
 
-  // 스타일시트 정의
+  // 스타일시트 useMemo 의존성 최소화
   const stylesheet = useMemo(() => [
     {
       selector: "node",
       style: {
-        "background-fit": "cover",
-        "background-color": "#4F6DDE",
-        "border-width": (ele) => ele.data("main") ? 3 : 1,
-        "border-color": (ele) => ele.data("main") ? "#22336b" : "#5B7BA0",
-        "width": (ele) => ele.data("main") ? 40 : 35,
-        "height": (ele) => ele.data("main") ? 40 : 35,
+        "background-color": "#eee",
+        "border-width": (ele) => ele.data("main") ? 2 : 1,
+        "border-color": "#5B7BA0",
+        "width": inViewer ? (ele => ele.data("main") ? 32 : 24) : 16,
+        "height": inViewer ? (ele => ele.data("main") ? 32 : 24) : 16,
         "shape": "ellipse",
         "label": "data(label)",
         "text-valign": "bottom",
         "text-halign": "center",
-        "font-size": 11,
+        "font-size": inViewer ? 4 : 3,
         "font-weight": (ele) => ele.data("main") ? 700 : 400,
         "color": "#444",
-        "text-margin-y": 6,
+        "text-margin-y": inViewer ? 3 : 2,
         "text-background-color": "#fff",
         "text-background-opacity": 0.8,
         "text-background-shape": "roundrectangle",
@@ -248,53 +296,47 @@ const ChapterGraph = ({ chapterNumber = 1, enableTooltips = true, inViewer = fal
     {
       selector: "edge",
       style: {
-        width: "mapData(weight, 0, 1, 1.5, 3)",
-        "line-color": (ele) => getRelationColor(ele.data("positivity")),
+        width: inViewer ? "mapData(weight, 0, 1, 1.8, 4.5)" : "mapData(weight, 0, 1, 1.5, 4)",
+        "line-color": "#6b7280",
         "curve-style": "bezier",
-        "label": "data(label)",
-        "font-size": 9,
+        label: "data(label)",
+        "font-size": inViewer ? 4 : 3,
         "text-rotation": "autorotate",
-        "color": "#42506b",
+        color: "#42506b",
         "text-background-color": "#fff",
         "text-background-opacity": 0.8,
         "text-background-shape": "roundrectangle",
         "text-background-padding": 2,
-        opacity: "mapData(weight, 0, 1, 0.5, 1)",
+        "text-outline-color": "#fff",
+        "text-outline-width": 2,
+        opacity: "mapData(weight, 0, 1, 0.55, 1)",
         "target-arrow-shape": "none"
-      },
-    },
-    {
-      selector: ".highlighted",
-      style: {
-        "border-width": 3,
-        "border-color": "#ff5722",
-        "background-color": "#5D7DE5",
-        "z-index": 999,
       },
     },
     {
       selector: ".faded",
       style: {
         opacity: 0.25,
-        "text-opacity": 0.5,
+        "text-opacity": 0.12,
       },
     },
-  ], []);
+  ], [inViewer]);
 
-  // 레이아웃 정의
+  // layout useMemo 의존성 최소화
   const layout = useMemo(() => ({
     name: "cose",
-    padding: 50,
-    nodeRepulsion: 12000,
-    idealEdgeLength: 100,
+    padding: 90,
+    nodeRepulsion: 1800,
+    idealEdgeLength: 120,
     animate: false,
     fit: true,
     randomize: false,
+    nodeOverlap: 12,
     avoidOverlap: true,
-    nodeSeparation: 40,
+    nodeSeparation: 10,
     randomSeed: 42,
-    gravity: 0.4,
-    componentSpacing: 60
+    gravity: 0.25,
+    componentSpacing: 90
   }), []);
 
   // 검색 결과에 따라 다른 레이아웃 옵션 적용
@@ -318,37 +360,6 @@ const ChapterGraph = ({ chapterNumber = 1, enableTooltips = true, inViewer = fal
     initialTemp: 200
   }), []);
 
-  // 줌 인
-  const handleZoomIn = () => {
-    if (cyRef.current) {
-      const cy = cyRef.current;
-      cy.zoom({
-        level: cy.zoom() * 1.2,
-        renderedPosition: { x: cy.width() / 2, y: cy.height() / 2 }
-      });
-    }
-  };
-
-  // 줌 아웃
-  const handleZoomOut = () => {
-    if (cyRef.current) {
-      const cy = cyRef.current;
-      cy.zoom({
-        level: cy.zoom() * 0.8,
-        renderedPosition: { x: cy.width() / 2, y: cy.height() / 2 }
-      });
-    }
-  };
-
-  // 화면에 맞추기
-  const handleFitToScreen = () => {
-    if (cyRef.current) {
-      const cy = cyRef.current;
-      cy.fit(undefined, 40);
-      cy.center();
-    }
-  };
-
   // 검색 초기화
   const handleReset = useCallback(() => {
     setSearch("");
@@ -359,8 +370,6 @@ const ChapterGraph = ({ chapterNumber = 1, enableTooltips = true, inViewer = fal
       const cy = cyRef.current;
       cy.elements().removeClass("faded");
       cy.elements().removeClass("highlighted");
-      cy.fit(undefined, 40);
-      cy.center();
     }
   }, []);
 
@@ -428,6 +437,8 @@ const ChapterGraph = ({ chapterNumber = 1, enableTooltips = true, inViewer = fal
     prevElementsRef.current = filteredElements;
   }, [filteredElements, fitNodeIds, search, tapNodeHandler, tapEdgeHandler, tapBackgroundHandler, enableTooltips]);
 
+  if (!elementsWithPosition) return <div>로딩 중...</div>;
+
   return (
     <div className="chapter-graph h-full flex flex-col">
       <div className="chapter-title-bar p-3 bg-gray-100 border-b border-gray-200">
@@ -447,36 +458,35 @@ const ChapterGraph = ({ chapterNumber = 1, enableTooltips = true, inViewer = fal
       </div>
       
       <div className="graph-container flex-grow relative">
-        <CytoscapeComponent
+        <CytoscapeGraphDirect
           elements={filteredElements}
+          fitNodeIds={fitNodeIds}
+          cyRef={cyRef}
           stylesheet={stylesheet}
           layout={search ? searchLayout : layout}
-          cy={(cy) => { cyRef.current = cy; }}
-          style={{ 
-            width: '100%', 
-            height: 'calc(100% - 3rem)', 
-            paddingBottom: '1rem' 
-          }}
+          tapNodeHandler={tapNodeHandler}
+          tapEdgeHandler={tapEdgeHandler}
+          tapBackgroundHandler={tapBackgroundHandler}
         />
         
         {/* 그래프 컨트롤 */}
         <div className="graph-controls absolute bottom-16 right-4 bg-white rounded-lg shadow-md p-2 flex flex-col">
           <button
-            onClick={handleZoomIn}
+            onClick={() => {}}
             className="p-2 hover:bg-gray-100 rounded-md"
             title="확대"
           >
             <FaPlus size={14} />
           </button>
           <button
-            onClick={handleZoomOut}
+            onClick={() => {}}
             className="p-2 hover:bg-gray-100 rounded-md"
             title="축소"
           >
             <FaMinus size={14} />
           </button>
           <button
-            onClick={handleFitToScreen}
+            onClick={() => {}}
             className="p-2 hover:bg-gray-100 rounded-md"
             title="화면에 맞추기"
           >
@@ -519,4 +529,4 @@ const ChapterGraph = ({ chapterNumber = 1, enableTooltips = true, inViewer = fal
   );
 };
 
-export default ChapterGraph; 
+export default React.memo(ChapterGraph); 

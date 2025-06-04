@@ -1,0 +1,25 @@
+{
+    "relations": [
+        {
+            "relation": [
+                "Father-son"
+            ],
+            "id1": 1.0,
+            "id2": 2.0,
+            "positivity": 0.8,
+            "weight": 9.0,
+            "count": 1
+        },
+        {
+            "id1": 1.0,
+            "relation": [
+                "acquaintances",
+                "narrator"
+            ],
+            "id2": 3.0,
+            "positivity": 0.6,
+            "weight": 5.0,
+            "count": 1
+        }
+    ]
+}
