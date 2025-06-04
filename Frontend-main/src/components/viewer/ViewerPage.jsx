@@ -387,14 +387,13 @@ const ViewerPage = ({ darkMode: initialDarkMode }) => {
       const lastNonZero = [...stack].reverse().find(idx => idx > 0);
       wordIndexToUse = lastNonZero !== undefined ? lastNonZero : events[0].start;
     }
-    const eventIdx = events.findIndex(event => wordIndexToUse >= event.start && wordIndexToUse < event.end);
-    let matchedEvent = null;
-    if (eventIdx !== -1) {
-      matchedEvent = events[eventIdx];
+    // findIndex → find로 변경하여, 겹치는 이벤트가 여러 개여도 배열에서 먼저 나오는 이벤트만 매칭
+    const matchedEvent = events.find(event => wordIndexToUse >= event.start && wordIndexToUse < event.end);
+    if (matchedEvent) {
       setCurrentEvent(matchedEvent);
     } else {
-      matchedEvent = events[events.length - 1];
-      setCurrentEvent(matchedEvent);
+      const fallbackEvent = events[events.length - 1];
+      setCurrentEvent(fallbackEvent);
     }
     console.log('[ViewerPage 이벤트 매칭 디버그]', {
       wordIndex: wordIndexToUse,
