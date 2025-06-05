@@ -188,12 +188,12 @@
 }
 
 .node-tooltip .close-btn:hover {
-  color: #6c8eff;
+  color: #6C8EFF;
 }
 
 .node-tooltip .main-badge {
   display: inline-block;
-  background: #6c8eff;
+  background: #6C8EFF;
   color: #fff;
   font-size: 11px;
   border-radius: 6px;
@@ -321,8 +321,7 @@ node.highlighted {
   cursor: pointer;
 }
 
-html,
-body {
+html, body {
   overflow: auto !important;
   height: auto !important;
 }
@@ -385,15 +384,20 @@ body {
 }
 
 .graph-canvas-area {
-  width: 100%;
-  height: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: #f8fafc;
-  margin: 0;
-  padding: 1rem 0.25rem 1rem 0.25rem;
+  width: 1200px !important;
+  min-width: 1200px !important;
+  max-width: 100% !important;
+  height: 900px !important;
+  min-height: 900px !important;
+  max-height: none !important;
+  margin: 20px 0 0 30px;
+  padding: 0 !important;
+  border: none !important;
   box-sizing: border-box;
+  background: transparent !important;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
   flex: 1;
 }
 
@@ -443,7 +447,7 @@ body {
 
 .advanced-search-input:focus {
   outline: none;
-  border-color: #6c8eff;
+  border-color: #6C8EFF;
   background: #fff;
   box-shadow: 0 0 0 2px rgba(108, 142, 255, 0.1);
 }
@@ -468,7 +472,7 @@ body {
 }
 
 .advanced-search-btn {
-  background: #6c8eff;
+  background: #6C8EFF;
   color: #fff;
   display: flex;
   align-items: center;
@@ -486,7 +490,7 @@ body {
 }
 
 .advanced-search-btn:hover {
-  background: #5a7bff;
+  background: #5A7BFF;
   box-shadow: 0 2px 8px rgba(108, 142, 255, 0.2);
   transform: translateY(-1px);
 }
@@ -628,7 +632,7 @@ body {
 }
 
 .tooltip-arrow::after {
-  content: "";
+  content: '';
   position: absolute;
   top: -8px;
   left: 0;
@@ -664,8 +668,7 @@ body {
 }
 
 /* 타임라인, 북마크 등 다른 페이지에서는 스크롤 허용 */
-.timeline-view,
-.bookmarks-view {
+.timeline-view, .bookmarks-view {
   overflow-y: auto !important;
 }
 
@@ -690,7 +693,7 @@ body {
 
 .close-btn:hover {
   background-color: #f8f9fa;
-  color: #6c8eff;
+  color: #6C8EFF;
 }
 
 .close-btn svg {
@@ -772,7 +775,7 @@ body {
 .summary-badge {
   display: inline-flex;
   align-items: center;
-  background: linear-gradient(135deg, #6c8eff 0%, #5a7bff 100%);
+  background: linear-gradient(135deg, #6C8EFF 0%, #5A7BFF 100%);
   color: white;
   font-size: 11px;
   font-weight: 500;
@@ -783,7 +786,7 @@ body {
 }
 
 .main-character-badge::before {
-  content: "⭐";
+  content: '⭐';
   margin-right: 4px;
   font-size: 10px;
 }
@@ -893,9 +896,6 @@ body {
 .edge-tooltip-container {
   min-width: 300px;
   max-width: 400px;
-  pointer-events: auto !important; /* 이 줄 추가 */
-  position: absolute; /* 이 줄 추가 */
-  z-index: 10000; /* 이 줄 추가 */
 }
 
 .edge-tooltip-content {
@@ -950,7 +950,7 @@ body {
 }
 
 .direction-arrow::before {
-  content: "";
+  content: '';
   position: absolute;
   height: 2px;
   width: 24px;
@@ -960,7 +960,7 @@ body {
 }
 
 .direction-arrow::after {
-  content: "";
+  content: '';
   position: absolute;
   right: -4px;
   width: 8px;
@@ -994,7 +994,7 @@ body {
 }
 
 .weight-label::before {
-  content: "•";
+  content: '•';
   font-size: 20px;
   line-height: 1;
 }
@@ -1256,10 +1256,8 @@ body {
   flex-wrap: wrap;
 }
 
-.cy-node-label,
-.node-label {
-  font-family: "Pretendard", "Noto Sans KR", "Inter", "Segoe UI", "Arial",
-    sans-serif;
+.cy-node-label, .node-label {
+  font-family: 'Pretendard', 'Noto Sans KR', 'Inter', 'Segoe UI', 'Arial', sans-serif;
   font-weight: 600;
   font-size: 15px;
   letter-spacing: -0.5px;
@@ -1390,16 +1388,16 @@ body {
   min-width: 60px;
 }
 .epub-toolbar-btn--blue {
-  background: #6c8eff;
+  background: #6C8EFF;
   color: #fff;
-  border: 1.2px solid #6c8eff;
+  border: 1.2px solid #6C8EFF;
   box-shadow: 0 4px 16px rgba(108, 142, 255, 0.13);
 }
 .epub-toolbar-btn--purple {
   background: linear-gradient(100deg, #a259e6 0%, #7f6fff 60%, #6fa7ff 100%);
   color: #fff;
   border: 1.2px solid #a259e6;
-  box-shadow: 0 4px 16px rgba(162, 89, 230, 0.13);
+  box-shadow: 0 4px 16px rgba(162,89,230,0.13);
 }
 .epub-toolbar-btn--gray {
   background: #f8f9fc;
@@ -1411,16 +1409,16 @@ body {
   background: linear-gradient(100deg, #f87171 0%, #fca5a5 60%, #ffeaea 100%);
   color: #c82333;
   border: 1.2px solid #f87171;
-  box-shadow: 0 4px 16px rgba(248, 113, 113, 0.13);
+  box-shadow: 0 4px 16px rgba(248,113,113,0.13);
 }
 .epub-toolbar-btn:active {
   transform: scale(0.97);
 }
 .epub-toolbar-btn:focus {
-  box-shadow: 0 0 0 2px #6c8eff33;
+  box-shadow: 0 0 0 2px #6C8EFF33;
 }
 .epub-toolbar-btn--blue:hover {
-  background: #5a7bff;
+  background: #5A7BFF;
   color: #fff;
 }
 .epub-toolbar-btn--gray:hover {
@@ -1452,7 +1450,7 @@ body {
 .epub-bookmark-btn:hover {
   background: #e3e6ef;
   color: #22336b;
-  box-shadow: 0 2px 8px rgba(108, 142, 255, 0.1);
+  box-shadow: 0 2px 8px rgba(108, 142, 255, 0.10);
   text-decoration: none;
 }
 
@@ -1464,7 +1462,7 @@ body {
   color: #22336b;
   border: none;
   border-radius: 8px;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 2px 10px rgba(0,0,0,0.10);
   width: 40px;
   height: 40px;
   display: flex;
@@ -1478,7 +1476,7 @@ body {
 }
 .epub-close-btn:hover {
   background: #f8f9fa;
-  color: #6c8eff;
+  color: #6C8EFF;
   transform: scale(1.08);
 }
 
@@ -1531,7 +1529,7 @@ body {
 
 .file-tab::before,
 .file-tab::after {
-  content: "";
+  content: '';
   position: absolute;
   bottom: 0;
   width: 10px;
@@ -1553,18 +1551,18 @@ body {
 }
 
 .file-tab.active {
-  background-color: #6c8eff;
+  background-color: #6C8EFF;
   height: 45px;
   margin-top: -5px;
   z-index: 2;
 }
 
 .file-tab.active::before {
-  box-shadow: 5px 5px 0 5px #6c8eff;
+  box-shadow: 5px 5px 0 5px #6C8EFF;
 }
 
 .file-tab.active::after {
-  box-shadow: -5px 5px 0 5px #6c8eff;
+  box-shadow: -5px 5px 0 5px #6C8EFF;
 }
 
 .file-tab-content {
@@ -1692,7 +1690,7 @@ body {
 }
 
 .chat-btn {
-  background: linear-gradient(135deg, #6c8eff 0%, #5a7bff 100%);
+  background: linear-gradient(135deg, #6C8EFF 0%, #5A7BFF 100%);
   color: #ffffff;
   box-shadow: 0 2px 8px rgba(108, 142, 255, 0.2);
   font-weight: 600;
@@ -1700,7 +1698,7 @@ body {
 }
 
 .chat-btn:hover {
-  background: linear-gradient(135deg, #5a7bff 0%, #4a6bff 100%);
+  background: linear-gradient(135deg, #5A7BFF 0%, #4A6BFF 100%);
   color: #ffffff;
   box-shadow: 0 2px 12px rgba(108, 142, 255, 0.3);
   transform: translateY(-1px);
@@ -1757,10 +1755,80 @@ body {
 }
 
 @keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.appear {
+  animation: fadeInScale 0.000001s cubic-bezier(0.22, 1, 0.36, 1);
+}
+@keyframes fadeInScale {
+  from { opacity: 0.999; transform: scale(0.999);}
+  to { opacity: 1; transform: scale(1);}
+}
+
+.cytoscape-node-appear {
+  animation: nodeAppear 0.7s cubic-bezier(0.23, 1, 0.32, 1);
+  box-shadow: 0 0 0 6px #6C8EFF55;
+  border: 2.5px solid #6C8EFF !important;
+}
+@keyframes nodeAppear {
   0% {
-    transform: rotate(0deg);
+    transform: scale(0.2);
+    opacity: 0.2;
+    box-shadow: 0 0 0 20px #6C8EFF33;
+  }
+  60% {
+    transform: scale(1.15);
+    opacity: 1;
+    box-shadow: 0 0 0 10px #6C8EFF33;
   }
   100% {
-    transform: rotate(360deg);
+    transform: scale(1);
+    opacity: 1;
+    box-shadow: 0 0 0 0 #6C8EFF00;
+  }
+}
+
+.cytoscape-ripple {
+  position: absolute;
+  border-radius: 50%;
+  background: rgba(108, 142, 255, 0.25);
+  pointer-events: none;
+  transform: scale(0);
+  animation: cytoscape-ripple-anim 0.7s cubic-bezier(0.23, 1, 0.32, 1) forwards;
+  z-index: 99999;
+}
+@keyframes cytoscape-ripple-anim {
+  to {
+    transform: scale(1.7);
+    opacity: 0;
+  }
+}
+
+.cytoscape-fade {
+  transition: opacity 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+  opacity: 1;
+}
+.cytoscape-fade-hidden {
+  opacity: 0;
+}
+
+.node-highlight-effect {
+  position: absolute;
+  border-radius: 50%;
+  pointer-events: none;
+  z-index: 2;
+  animation: ripple-appear 0.8s ease-out;
+}
+
+@keyframes ripple-appear {
+  0% {
+    transform: scale(0.5);
+    opacity: 0.5;
+  }
+  100% {
+    transform: scale(2.2);
+    opacity: 0;
   }
 }

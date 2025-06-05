@@ -1,0 +1,322 @@
+{
+    "characters": [
+        {
+            "names": [
+                "Nick"
+            ],
+            "description": "The narrator of the story, a young man from the Midwest who moves to West Egg to learn the bond business. He is tolerant and reserved, but also feels uneasy about the superficiality and moral decay of the wealthy.",
+            "main_character": true,
+            "portrait_prompt": "A young man with an honest, open face, dressed in a simple but neat suit. He has a thoughtful expression and kind eyes. The background is a mix of the Midwest and the East Coast, reflecting his journey and inner conflict. The style is realistic with a touch of classic portraiture.",
+            "id": 1.0,
+            "common_name": "Nick Carraway"
+        },
+        {
+            "common_name": "Father",
+            "description": "Nick's father, who gave him the advice to reserve judgment. He represents traditional Midwestern values and provides a moral compass for Nick.",
+            "main_character": false,
+            "portrait_prompt": "A middle-aged man with a stern but kind face, dressed in a conservative suit. He has a wise and understanding expression. The background is a comfortable, well-kept home in the Midwest. The style is a classic portrait, emphasizing his respectability and traditional values.",
+            "id": 2.0,
+            "names": [
+                "Father"
+            ]
+        },
+        {
+            "names": [
+                "Gatsby",
+                "Mr. Gatsby"
+            ],
+            "portrait_prompt": "A handsome and charismatic man with a slightly enigmatic smile, dressed in an expensive suit. He exudes wealth and confidence, but there's a hint of sadness in his eyes. The background is his opulent mansion, with a focus on the lavish party atmosphere. The style is glamorous and slightly theatrical, reflecting his larger-than-life persona.",
+            "main_character": true,
+            "description": "A mysterious and wealthy man who lives in a mansion in West Egg. He is known for throwing lavish parties and represents the allure and illusion of the American Dream.",
+            "id": 3.0,
+            "common_name": "Gatsby"
+        },
+        {
+            "common_name": "Tom Buchanan",
+            "description": "Daisy's wealthy and arrogant husband, a former football player. He is powerful and aggressive, representing the established elite and their careless disregard for others.",
+            "main_character": true,
+            "portrait_prompt": "A sturdy, straw-haired man with a hard mouth and arrogant eyes, dressed in riding clothes. He has a powerful build and a domineering presence. The background is his lavish estate in East Egg, with a focus on symbols of wealth and power like polo ponies or a luxurious car. The style is realistic and imposing, emphasizing his physical strength and social dominance.",
+            "id": 4.0,
+            "names": [
+                "Tom"
+            ]
+        },
+        {
+            "common_name": "Daisy Buchanan",
+            "portrait_prompt": "A beautiful woman with a sad and lovely face, dressed in a white, flowing dress. She has bright eyes and a captivating smile, but there's a hint of sadness and disillusionment in her expression. The background is her elegant home in East Egg, with a focus on soft, romantic lighting and luxurious details. The style is dreamy and ethereal, reflecting her fragile beauty and inner turmoil.",
+            "main_character": true,
+            "description": "Nick's cousin and Tom's wife, a beautiful but shallow woman. She represents the allure and emptiness of wealth and the constraints placed on women in that era.",
+            "id": 5.0,
+            "names": [
+                "Daisy"
+            ]
+        },
+        {
+            "names": [
+                "Jordan Baker",
+                "Miss Baker",
+                "Jordan"
+            ],
+            "portrait_prompt": "A slender, small-breasted girl with an erect carriage and contemptuous expression, dressed in sporty attire. She has grey sun-strained eyes and a confident, independent demeanor. The background is a golf course or a glamorous sporting event, with a focus on her athletic prowess and social status. The style is sharp and modern, reflecting her independent spirit and unconventional lifestyle.",
+            "main_character": true,
+            "description": "A professional golfer and friend of Daisy. She is cynical and self-sufficient, representing the new woman of the 1920s and the shifting social norms.",
+            "id": 6.0,
+            "common_name": "Jordan Baker"
+        },
+        {
+            "common_name": "Great-Uncle",
+            "description": "Nick's great-uncle, who founded the family's hardware business. He is a symbol of the family's Midwestern roots and their connection to the American Dream.",
+            "main_character": false,
+            "portrait_prompt": "A stern-looking man with a hard-boiled expression, dressed in a business suit. He has a determined gaze and a no-nonsense attitude. The background is his hardware store or a portrait in Nick's father's office. The style is realistic and straightforward, reflecting his practical nature and entrepreneurial spirit.",
+            "id": 7.0,
+            "names": [
+                "Great-Uncle"
+            ]
+        },
+        {
+            "common_name": "Young Man at the Office",
+            "description": "A young man at Nick's office who suggests they take a house together. He represents the social connections and opportunities available in the bond business.",
+            "main_character": false,
+            "portrait_prompt": "A young man with a friendly face, dressed in a business suit. He has an eager and optimistic expression. The background is an office setting, with a focus on the bustling atmosphere and the promise of success. The style is realistic and slightly idealized, reflecting the aspirations of young professionals in the 1920s.",
+            "id": 8.0,
+            "names": [
+                "Young Man at the Office"
+            ]
+        },
+        {
+            "common_name": "Dog",
+            "portrait_prompt": "A small, scruffy dog with a curious expression. It is standing in a yard, looking around as if it is about to run away. The background is a suburban landscape, with a focus on the contrast between the natural world and the artificial environment. The style is whimsical and slightly melancholic, reflecting the dog's fleeting presence in Nick's life.",
+            "main_character": false,
+            "description": "Nick's dog, who runs away after a few days. It symbolizes Nick's initial loneliness and detachment in his new environment.",
+            "id": 9.0,
+            "names": [
+                "Dog"
+            ]
+        },
+        {
+            "common_name": "Finnish Woman",
+            "portrait_prompt": "An older woman with a kind but weathered face, dressed in a simple dress. She has a practical and hardworking demeanor. The background is Nick's kitchen, with a focus on the tools and ingredients of her trade. The style is realistic and empathetic, reflecting her humble existence and essential role in Nick's household.",
+            "main_character": false,
+            "description": "Nick's Finnish housekeeper, who makes his bed and cooks breakfast. She represents the immigrant experience and the hidden labor that supports the wealthy.",
+            "id": 10.0,
+            "names": [
+                "Finnish Woman"
+            ]
+        },
+        {
+            "names": [
+                "Man on the Road"
+            ],
+            "description": "A man who asks Nick for directions to West Egg village. He represents the new arrivals and the sense of community that Nick begins to feel.",
+            "main_character": false,
+            "portrait_prompt": "A man with a lost and helpless expression, dressed in casual attire. He has a bewildered gaze and a sense of disorientation. The background is a road in West Egg, with a focus on the unfamiliar surroundings and the sense of isolation. The style is realistic and slightly comical, reflecting his dependence on Nick's guidance.",
+            "id": 11.0,
+            "common_name": "Man on the Road"
+        },
+        {
+            "common_name": "Midas",
+            "portrait_prompt": "A regal figure with a golden touch, surrounded by treasures and riches. The style should be opulent and fantastical, inspired by classical mythology.",
+            "main_character": false,
+            "description": "Reference to King Midas, symbolizing wealth and the transformative power of money.",
+            "id": 12.0,
+            "names": [
+                "Midas"
+            ]
+        },
+        {
+            "common_name": "Morgan",
+            "portrait_prompt": "A powerful and imposing figure, dressed in formal attire, representing financial authority and control. The style should be realistic and authoritative, capturing the essence of a Gilded Age tycoon.",
+            "main_character": false,
+            "description": "Reference to J.P. Morgan, symbolizing immense financial power and influence.",
+            "id": 13.0,
+            "names": [
+                "Morgan"
+            ]
+        },
+        {
+            "common_name": "Maecenas",
+            "portrait_prompt": "An elegant and refined figure, surrounded by art and literature, representing the patronage of the arts. The style should be classical and sophisticated, inspired by Renaissance portraiture.",
+            "main_character": false,
+            "description": "Reference to Maecenas, a patron of the arts, symbolizing the connection between wealth and culture.",
+            "id": 14.0,
+            "names": [
+                "Maecenas"
+            ]
+        },
+        {
+            "common_name": "Columbus",
+            "description": "Reference to Christopher Columbus, symbolizing discovery and the idea of a new world.",
+            "main_character": false,
+            "portrait_prompt": "A historical figure with a determined gaze, standing on a ship and gazing towards the horizon, representing exploration and discovery. The style should be historical and adventurous, capturing the spirit of the Age of Exploration.",
+            "id": 15.0,
+            "names": [
+                "Columbus"
+            ]
+        },
+        {
+            "names": [
+                "Demaine"
+            ],
+            "description": "The oil man who previously owned Tom Buchanan's house, representing old wealth and the changing fortunes of the wealthy class.",
+            "main_character": false,
+            "portrait_prompt": "A wealthy-looking man with an air of success, dressed in a business suit. The background should suggest the oil industry and symbols of wealth. The style should be realistic and confident, reflecting his status as a successful businessman.",
+            "id": 16.0,
+            "common_name": "Demaine"
+        },
+        {
+            "common_name": "Baby",
+            "portrait_prompt": "A young child with a curious expression, dressed in a white dress. The background should be a nursery or a family home. The style should be innocent and endearing, capturing the essence of childhood.",
+            "main_character": false,
+            "description": "Daisy and Tom's daughter, representing the future generation and the complexities of family life.",
+            "id": 17.0,
+            "names": [
+                "Baby"
+            ]
+        },
+        {
+            "names": [
+                "Butler"
+            ],
+            "description": "Tom and Daisy's butler, representing the service class and the hidden labor that supports the wealthy. He had to give up being a silver polisher because it affected his nose.",
+            "main_character": false,
+            "portrait_prompt": "A formal and discreet figure, dressed in a butler's uniform. The background should be a dining room or a pantry, suggesting his role in the household. The style should be respectful and understated, reflecting his professional demeanor.",
+            "id": 18.0,
+            "common_name": "Butler"
+        },
+        {
+            "common_name": "Woman in New York",
+            "description": "Tom's mistress in New York, representing infidelity and the moral decay of the wealthy class.",
+            "main_character": false,
+            "portrait_prompt": "A glamorous and alluring woman, dressed in a stylish dress. The background should be a New York City setting, suggesting her sophisticated lifestyle. The style should be seductive and mysterious, reflecting her role in Tom's life.",
+            "id": 19.0,
+            "names": [
+                "Woman in New York"
+            ]
+        },
+        {
+            "common_name": "Nurse",
+            "description": "The nurse present at the birth of Daisy's daughter.",
+            "main_character": false,
+            "portrait_prompt": "A caring and professional figure, dressed in a nurse's uniform. The background should be a hospital or a birthing room, suggesting her role in healthcare. The style should be compassionate and supportive, reflecting her dedication to her patients.",
+            "id": 20.0,
+            "names": [
+                "Nurse"
+            ]
+        },
+        {
+            "common_name": "Goddard",
+            "description": "The author of 'The Rise of the Coloured Empires,' whose racist theories Tom espouses.",
+            "main_character": false,
+            "portrait_prompt": "A stern and intellectual figure, dressed in academic attire. The background should be a library or a study, suggesting his scholarly pursuits. The style should be authoritative and imposing, reflecting his role as an intellectual figure.",
+            "id": 21.0,
+            "names": [
+                "Goddard"
+            ]
+        },
+        {
+            "common_name": "Doctor T. J. Eckleburg",
+            "portrait_prompt": "A gigantic, faded billboard featuring a pair of blue eyes behind enormous yellow spectacles. The background is the desolate valley of ashes, with a bleak and industrial landscape. The style is surreal and haunting, capturing the sense of decay and moral emptiness.",
+            "main_character": false,
+            "description": "A billboard with a pair of enormous, spectacled eyes overlooking the valley of ashes. It symbolizes a loss of spiritual values and the haunting presence of the past.",
+            "id": 22.0,
+            "names": [
+                "Doctor T. J. Eckleburg"
+            ]
+        },
+        {
+            "names": [
+                "Wilson",
+                "old man"
+            ],
+            "description": "Myrtle's husband and the owner of a run-down garage in the valley of ashes. He is a spiritless, anaemic man who is unaware of his wife's affair and represents the plight of the working class.",
+            "main_character": true,
+            "portrait_prompt": "A blond, spiritless man with light blue eyes and a damp gleam of hope. He is wearing a dark suit covered in white ashen dust. The background is the unprosperous interior of his garage, with a dust-covered Ford in the corner. The style is realistic and melancholic, emphasizing his faded appearance and sense of despair.",
+            "id": 23.0,
+            "common_name": "George Wilson"
+        },
+        {
+            "common_name": "Myrtle Wilson",
+            "portrait_prompt": "A thickish woman in her middle thirties, wearing a cream-colored chiffon dress. She has a perceptible vitality and an affected, haughty demeanor. The background is the crowded apartment she shares with Tom in New York, with tapestried furniture and a smoky atmosphere. The style is theatrical and slightly grotesque, highlighting her exaggerated gestures and desperate attempts at sophistication.",
+            "main_character": true,
+            "description": "George's wife and Tom's mistress, a woman striving for a better life. She possesses a coarse vitality and desperately seeks to escape her circumstances, but ultimately meets a tragic end.",
+            "id": 24.0,
+            "names": [
+                "Mrs. Wilson",
+                "Myrtle"
+            ]
+        },
+        {
+            "names": [
+                "Italian Child"
+            ],
+            "portrait_prompt": "A young, scrawny child with a mischievous expression, setting off fireworks on railroad tracks. The background is a desolate area near train tracks. The style is realistic, capturing a sense of childish innocence in a bleak environment.",
+            "main_character": false,
+            "description": "A grey, scrawny child setting torpedoes on the railroad track. The child adds to the atmosphere of the valley of ashes.",
+            "id": 25.0,
+            "common_name": "Italian Child"
+        },
+        {
+            "common_name": "John D. Rockefeller",
+            "portrait_prompt": "An elderly man resembling John D. Rockefeller, holding a basket full of puppies. The style is realistic, with a touch of caricature.",
+            "main_character": false,
+            "description": "The old man bearing an absurd resemblance to John D. Rockefeller with puppies.",
+            "id": 26.0,
+            "names": [
+                "John D. Rockefeller"
+            ]
+        },
+        {
+            "names": [
+                "sister",
+                "Catherine"
+            ],
+            "description": "Myrtle's sister, a slender, worldly girl of about thirty. She is superficial and enjoys gossip, representing the shallow social circles of the time.",
+            "main_character": false,
+            "portrait_prompt": "A slender, worldly girl of about thirty, with a solid, sticky bob of red hair and a complexion powdered milky white. She is wearing numerous pottery bracelets. The background is the crowded apartment, with a focus on her fashionable attire and artificial appearance. The style is stylized and slightly cartoonish, emphasizing her exaggerated features and superficial personality.",
+            "id": 27.0,
+            "common_name": "Catherine"
+        },
+        {
+            "common_name": "Chester McKee",
+            "description": "A pale, feminine man from the flat below, who is a photographer. He represents the artistic aspirations and social climbing of the era.",
+            "main_character": false,
+            "portrait_prompt": "A pale, feminine man with a spot of lather on his cheekbone, wearing a suit. He has a respectful but slightly obsequious demeanor. The background is the crowded apartment, with a dim enlargement of Mrs. Wilson's mother on the wall. The style is realistic and slightly effeminate, capturing his artistic pretensions and social awkwardness.",
+            "id": 28.0,
+            "names": [
+                "Mr. McKee",
+                "Chester"
+            ]
+        },
+        {
+            "common_name": "Lucille McKee",
+            "portrait_prompt": "A shrill, languid, handsome, and horrible woman, dressed in a fashionable dress. She has an air of superiority and a condescending expression. The background is the crowded apartment, with a focus on her elaborate attire and affected mannerisms. The style is stylized and slightly grotesque, highlighting her superficiality and moral emptiness.",
+            "main_character": false,
+            "description": "Chester's wife, who is shrill, languid, handsome, and horrible. She is obsessed with her appearance and social status, representing the superficiality and moral decay of the wealthy class.",
+            "id": 29.0,
+            "names": [
+                "Mrs. McKee",
+                "Lucille"
+            ]
+        },
+        {
+            "names": [
+                "Mrs. Eberhardt"
+            ],
+            "description": "A woman who looks at people's feet in their own homes, highlighting the eccentricities and superficial concerns of the wealthy.",
+            "main_character": false,
+            "portrait_prompt": "A middle-aged woman with a scrutinizing gaze, kneeling to examine someone's feet. The background is a luxurious living room, with a focus on the extravagant details and superficial concerns of the wealthy. The style is realistic and slightly satirical, capturing the eccentricities and moral emptiness of the upper class.",
+            "id": 30.0,
+            "common_name": "Mrs. Eberhardt"
+        },
+        {
+            "common_name": "Elevator Boy",
+            "portrait_prompt": "A young, uniformed elevator operator with a bored expression, standing in an elevator. The style is realistic, capturing the mundane existence of service workers in a luxury setting.",
+            "main_character": false,
+            "description": "An elevator operator in the apartment building.",
+            "id": 31.0,
+            "names": [
+                "Elevator Boy"
+            ]
+        }
+    ]
+}

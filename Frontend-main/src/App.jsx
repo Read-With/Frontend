@@ -1,5 +1,5 @@
 import React from 'react';
-import { BrowserRouter as Router, Routes, Route, useLocation, Navigate, useParams } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, useLocation, Navigate, useParams, Outlet } from 'react-router-dom';
 import MainPage from './components/main/MainPage';
 import LibraryPage from './pages/LibraryPage';
 import ViewerPage from './components/viewer/ViewerPage';
@@ -10,8 +10,17 @@ import UploadPage from './pages/UploadPage';
 import ChatbotPage from './components/chatbot/ChatbotPage';
 import LoginPage from './pages/LoginPage';
 import UserPage from './pages/UserPage';
+import { RecoilRoot } from 'recoil';
+import CytoscapeGraphPortalProvider from './components/graph/CytoscapeGraphPortalProvider';
 
-// 본 프로젝트의 모든 주요 페이지는 반응형 웹앱(미디어 쿼리 적용)으로 구성되어 있습니다.
+// 그래프 컴포넌트를 유지하는 레이아웃
+const GraphLayout = () => {
+  return (
+    <div style={{ position: 'relative', width: '100%', height: '100%' }}>
+      <Outlet />
+    </div>
+  );
+};
 
 const AppContent = () => {
   const location = useLocation();
@@ -34,12 +43,14 @@ const AppContent = () => {
         <Route path="/viewer/:filename/bookmarks" element={<BookmarksPage />} />
         <Route path="/viewer/:filename/timeline" element={<TimelineView />} />
         <Route path="/viewer/:filename/relations" element={<RelationRedirect />} />
-        
-        {/* 새로 추가된 경로 */}
+        {/* /user/viewer/:filename 경로는 GraphLayout으로 감싸지 않고 ViewerPage만 렌더링 */}
         <Route path="/user/viewer/:filename" element={<ViewerPage />} />
-        <Route path="/user/graph/:filename" element={<RelationGraphWrapper />} />
-        <Route path="/user/chatbot/:filename" element={<ChatbotPage />} />
-        <Route path="/user/character-chat/:filename/:characterName" element={<ChatbotPage />} />
+        {/* 그래프 단독 페이지만 GraphLayout으로 감싸서 RelationGraphWrapper 렌더링 */}
+        <Route element={<GraphLayout />}>
+          <Route path="/user/graph/:filename" element={<RelationGraphWrapper />} />
+          <Route path="/user/chatbot/:filename" element={<ChatbotPage />} />
+          <Route path="/user/character-chat/:filename/:characterName" element={<ChatbotPage />} />
+        </Route>
       </Routes>
     </>
   );
@@ -57,9 +68,11 @@ const DummyPage = ({ title }) => (
 
 const App = () => {
   return (
-    <Router>
-      <AppContent />
-    </Router>
+    <RecoilRoot>
+      <Router>
+        <AppContent />
+      </Router>
+    </RecoilRoot>
   );
 };
 

@@ -8,7 +8,6 @@ const BookmarkPanel = ({ bookmarks, onSelect }) => (
         <li
           key={i}
           onClick={() => {
-            console.log("📌 북마크 클릭:", b.cfi);
             onSelect(b.cfi)}}
           className="epub-bookmark-btn"
         >
