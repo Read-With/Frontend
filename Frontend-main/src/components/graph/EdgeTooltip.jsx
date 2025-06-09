@@ -2,29 +2,132 @@ import React, { useState, useEffect, useRef } from "react";
 import { Line } from "react-chartjs-2";
 import "chart.js/auto";
 
-// 관계 변화 데이터 fetch 함수 (String 비교)
-async function fetchRelationTimeline(id1, id2, maxEventNum = 10) {
-  const timeline = [];
-  for (let i = 1; i <= maxEventNum; i++) {
-    try {
-      const url = `/data/gatsby/chapter1_relationships_event_${i}.json`;
-      const res = await fetch(url);
-      if (!res.ok) {
-        timeline.push(null);
-        continue;
+// === glob import: 반드시 src/data/gatsby 하위 전체 관계 파일 import ===
+const relationshipModules = import.meta.glob(
+  "/src/data/gatsby/chapter*_relationships_event_*.json",
+  { eager: true }
+);
+
+// 안전한 id 변환 함수: 1.0 → 1, "1.0" → 1, "1" → 1, 1 → 1, null/undefined → NaN
+const safeNum = (v) => {
+  if (v === undefined || v === null) return NaN;
+  if (typeof v === "number") return v;
+  if (typeof v === "string") return Number(v);
+  return Number(String(v));
+};
+
+// 챕터별 마지막 이벤트 번호 구하기 (glob import 기반)
+function getChapterLastEventNums(maxChapter = 10) {
+  const lastNums = [];
+  for (let chapter = 1; chapter <= maxChapter; chapter++) {
+    let last = 0;
+    for (let i = 1; i < 100; i++) {
+      const filePath = `/src/data/gatsby/chapter${chapter}_relationships_event_${i}.json`;
+      if (relationshipModules[filePath]) {
+        last = i;
+      } else {
+        break;
       }
-      const json = await res.json();
-      const found = json.relations.find(
-        (r) =>
-          (String(r.id1) === String(id1) && String(r.id2) === String(id2)) ||
-          (String(r.id1) === String(id2) && String(r.id2) === String(id1))
-      );
-      timeline.push(found ? found.positivity : null);
-    } catch {
-      timeline.push(null);
     }
+    lastNums.push(last);
   }
-  return timeline;
+  return lastNums;
+}
+
+// 관계 변화 데이터: 챕터별 마지막 이벤트 + 현재 챕터의 1~(eventNum-1)까지
+function fetchRelationTimelineMulti(
+  id1,
+  id2,
+  chapterNum,
+  eventNum,
+  maxChapter = 10
+) {
+  const lastEventNums = getChapterLastEventNums(maxChapter);
+  console.log("[fetchRelationTimelineMulti] lastEventNums:", lastEventNums);
+
+  const points = [];
+  const labelInfo = [];
+  // 이전 챕터: 각 챕터의 마지막 이벤트만
+  for (let ch = 1; ch < chapterNum; ch++) {
+    const lastEv = lastEventNums[ch - 1];
+    if (lastEv === 0) continue;
+    const filePath = `/src/data/gatsby/chapter${ch}_relationships_event_${lastEv}.json`;
+    const json = relationshipModules[filePath]?.default;
+    if (!json) {
+      console.warn(`[fetchRelationTimelineMulti] File not found:`, filePath);
+      points.push(0);
+      labelInfo.push(`챕터${ch} 마지막`);
+      continue;
+    }
+    const found = (json.relations || []).find((r) => {
+      const rid1 = safeNum(r.id1 ?? r.source);
+      const rid2 = safeNum(r.id2 ?? r.target);
+      return (
+        (rid1 === safeNum(id1) && rid2 === safeNum(id2)) ||
+        (rid1 === safeNum(id2) && rid2 === safeNum(id1))
+      );
+    });
+    if (found) {
+      console.log(
+        `[fetchRelationTimelineMulti] MATCH: ch${ch} lastEv${lastEv}`,
+        found
+      );
+    } else {
+      console.warn(
+        `[fetchRelationTimelineMulti] NO MATCH for ${id1},${id2} in file`,
+        filePath,
+        (json.relations || []).map((r) => ({
+          id1: r.id1 ?? r.source,
+          id2: r.id2 ?? r.target,
+        }))
+      );
+    }
+    points.push(found ? found.positivity : 0); // 없으면 0으로!
+    labelInfo.push(`챕터${ch} 마지막`);
+  }
+  // 현재 챕터: 1~(eventNum-1)까지, 단 eventNum이 1이면 1까지 보정
+  const lastEv = Math.max(1, eventNum - 1);
+  for (let i = 1; i <= lastEv; i++) {
+    const filePath = `/src/data/gatsby/chapter${chapterNum}_relationships_event_${i}.json`;
+    const json = relationshipModules[filePath]?.default;
+    if (!json) {
+      console.warn(`[fetchRelationTimelineMulti] File not found:`, filePath);
+      points.push(0);
+      labelInfo.push(`챕터${chapterNum} 이벤트${i}`);
+      continue;
+    }
+    const found = (json.relations || []).find((r) => {
+      const rid1 = safeNum(r.id1 ?? r.source);
+      const rid2 = safeNum(r.id2 ?? r.target);
+      return (
+        (rid1 === safeNum(id1) && rid2 === safeNum(id2)) ||
+        (rid1 === safeNum(id2) && rid2 === safeNum(id1))
+      );
+    });
+    if (found) {
+      console.log(
+        `[fetchRelationTimelineMulti] MATCH: ch${chapterNum} ev${i}`,
+        found
+      );
+    } else {
+      console.warn(
+        `[fetchRelationTimelineMulti] NO MATCH for ${id1},${id2} in file`,
+        filePath,
+        (json.relations || []).map((r) => ({
+          id1: r.id1 ?? r.source,
+          id2: r.id2 ?? r.target,
+        }))
+      );
+    }
+    points.push(found ? found.positivity : 0); // 없으면 0으로!
+    labelInfo.push(`챕터${chapterNum} 이벤트${i}`);
+  }
+  console.log(
+    "[fetchRelationTimelineMulti] Final timeline:",
+    points,
+    labelInfo
+  );
+  return { points, labelInfo };
 }
 
 function EdgeTooltip({
@@ -36,8 +139,11 @@ function EdgeTooltip({
   targetNode,
   inViewer = false,
   style,
-  maxEventNum = 10,
+  maxChapter,
+  chapterNum = 1,
+  eventNum = 1,
 }) {
+  const safeMaxChapter = maxChapter && !isNaN(maxChapter) ? maxChapter : 10;
   const [position, setPosition] = useState({ x: 200, y: 200 });
   const [showContent, setShowContent] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
@@ -48,22 +154,56 @@ function EdgeTooltip({
   // 뷰 모드: "info" | "chart"
   const [viewMode, setViewMode] = useState("info");
   const [timeline, setTimeline] = useState([]);
+  const [labels, setLabels] = useState([]);
   const [loading, setLoading] = useState(false);
 
-  // source/target을 String으로 변환
-  const id1 = String(data.source);
-  const id2 = String(data.target);
+  // source/target을 safeNum으로 변환
+  const id1 = safeNum(data.source);
+  const id2 = safeNum(data.target);
 
-  // 관계 변화 그래프 데이터 fetch
   useEffect(() => {
+    console.log(
+      "[EdgeTooltip] viewMode:",
+      viewMode,
+      "id1:",
+      id1,
+      "id2:",
+      id2,
+      "chapterNum:",
+      chapterNum,
+      "eventNum:",
+      eventNum,
+      "maxChapter:",
+      safeMaxChapter
+    );
     if (viewMode === "chart") {
       setLoading(true);
-      fetchRelationTimeline(id1, id2, maxEventNum).then((data) => {
-        setTimeline(data);
-        setLoading(false);
-      });
+      // import 방식은 동기이므로 바로 처리
+      const result = fetchRelationTimelineMulti(
+        id1,
+        id2,
+        chapterNum,
+        eventNum,
+        safeMaxChapter
+      );
+      setTimeline(result.points);
+      setLabels(result.labelInfo);
+      setLoading(false);
+      // 추가 로그
+      console.log(
+        "[EdgeTooltip] timeline:",
+        result.points,
+        "labels:",
+        result.labelInfo
+      );
+      console.log(
+        "[EdgeTooltip] timeline.length:",
+        result.points.length,
+        "labels.length:",
+        result.labelInfo.length
+      );
     }
-  }, [viewMode, id1, id2, maxEventNum]);
+  }, [viewMode, id1, id2, chapterNum, eventNum, safeMaxChapter]);
 
   useEffect(() => {
     setShowContent(true);
@@ -201,10 +341,22 @@ function EdgeTooltip({
         >
           &times;
         </button>
-
-        {/* === info 모드 === */}
         {viewMode === "info" && (
           <>
+            {/* === 현재 챕터/이벤트 번호 표시 === */}
+            <div
+              style={{
+                fontSize: 13,
+                color: "#64748b",
+                marginBottom: 6,
+                fontWeight: 600,
+                textAlign: "right",
+              }}
+            >
+              <span>
+                챕터: {chapterNum} / 이벤트: {eventNum}
+              </span>
+            </div>
             <div className="edge-tooltip-header">
               <div className="relation-tags">
                 {data.label.split(", ").map((relation, index) => (
@@ -347,8 +499,6 @@ function EdgeTooltip({
             </div>
           </>
         )}
-
-        {/* === chart 모드 === */}
         {viewMode === "chart" && (
           <div style={{ minHeight: 320 }}>
             <h3 style={{ margin: "0 0 18px 0", fontWeight: 700, fontSize: 18 }}>
@@ -358,16 +508,10 @@ function EdgeTooltip({
               <div style={{ textAlign: "center", marginTop: 60 }}>
                 불러오는 중...
               </div>
-            ) : timeline.every((v) => v === null) ? (
-              <div
-                style={{ textAlign: "center", marginTop: 60, color: "#64748b" }}
-              >
-                이 인물 쌍의 관계 변화 데이터가 없습니다.
-              </div>
             ) : (
               <Line
                 data={{
-                  labels: timeline.map((_, idx) => `이벤트 ${idx + 1}`),
+                  labels,
                   datasets: [
                     {
                       label: "관계 긍정도",
@@ -394,7 +538,7 @@ function EdgeTooltip({
               />
             )}
             <div style={{ fontSize: 13, color: "#64748b", marginTop: 16 }}>
-              x축: 이벤트 순서, y축: 관계 긍정도(-1~1)
+              x축: 챕터별 마지막/이벤트, y축: 관계 긍정도(-1~1, 데이터 없으면 0)
             </div>
             <div style={{ marginTop: 18, textAlign: "center" }}>
               <button
