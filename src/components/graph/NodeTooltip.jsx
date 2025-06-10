@@ -6,6 +6,18 @@ import "./RelationGraph.css";
 function GraphNodeTooltip({ data, x, y, nodeCenter, onClose, inViewer = false, style }) {
   const navigate = useNavigate();
   const { filename } = useParams();
+    
+  // 데이터가 중첩되어 있는 경우 처리
+  const nodeData = data.data || data;
+  console.log('NodeTooltip data structure:', {
+    id: nodeData.id,
+    label: nodeData.label,
+    description: nodeData.description,
+    main_character: nodeData.main_character,
+    names: nodeData.names,
+    portrait_prompt: nodeData.portrait_prompt
+  });
+
   const [position, setPosition] = useState({ x: 200, y: 200 });
   const [showContent, setShowContent] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
@@ -31,18 +43,8 @@ function GraphNodeTooltip({ data, x, y, nodeCenter, onClose, inViewer = false, s
   const handleMouseMove = (e) => {
     if (!isDragging) return;
 
-    const tooltipRect = tooltipRef.current.getBoundingClientRect();
-    const viewportWidth = Math.min(document.documentElement.clientWidth, window.innerWidth);
-    const viewportHeight = Math.min(document.documentElement.clientHeight, window.innerHeight);
-    const scrollX = window.pageXOffset || document.documentElement.scrollLeft;
-    const scrollY = window.pageYOffset || document.documentElement.scrollTop;
-
     let newX = e.clientX - dragOffset.x;
     let newY = e.clientY - dragOffset.y;
-
-    // 페이지 영역을 벗어나지 않도록 제한
-    newX = Math.max(scrollX, Math.min(newX, viewportWidth + scrollX - tooltipRect.width));
-    newY = Math.max(scrollY, Math.min(newY, viewportHeight + scrollY - tooltipRect.height));
 
     setPosition({ x: newX, y: newY });
   };
@@ -64,28 +66,15 @@ function GraphNodeTooltip({ data, x, y, nodeCenter, onClose, inViewer = false, s
 
   useEffect(() => {
     if (x !== undefined && y !== undefined && tooltipRef.current) {
-      const tooltipRect = tooltipRef.current.getBoundingClientRect();
-      const viewportWidth = Math.min(document.documentElement.clientWidth, window.innerWidth);
-      const viewportHeight = Math.min(document.documentElement.clientHeight, window.innerHeight);
-      const scrollX = window.pageXOffset || document.documentElement.scrollLeft;
-      const scrollY = window.pageYOffset || document.documentElement.scrollTop;
-      
-      let newX = x;
-      let newY = y;
-
-      // 페이지 영역을 벗어나지 않도록 제한
-      newX = Math.max(scrollX, Math.min(newX, viewportWidth + scrollX - tooltipRect.width));
-      newY = Math.max(scrollY, Math.min(newY, viewportHeight + scrollY - tooltipRect.height));
-
-      setPosition({ x: newX, y: newY });
+      setPosition({ x, y });
     }
   }, [x, y]);
 
   const handleChatClick = () => {
-    if (data.label) {
+    if (nodeData.label) {
       // 뷰어 내에서 사용하는 경우 현재 filename을 사용
       const bookFilename = filename || 'unknown';
-      navigate(`/user/character-chat/${bookFilename}/${data.label}`, { 
+      navigate(`/user/character-chat/${bookFilename}/${nodeData.label}`, { 
         state: { 
           book: { 
             title: bookFilename.replace('.epub', '').replace(/([A-Z])/g, ' $1').trim() 
@@ -101,13 +90,10 @@ function GraphNodeTooltip({ data, x, y, nodeCenter, onClose, inViewer = false, s
 
   // 요약 데이터 - 7줄 분량으로 설정
   const summaryData = {
-    summary: data.label ? 
-      `${data.label}은(는) ${data.description || '작품의 중요한 인물입니다.'}\n\n` +
+    summary: nodeData.label ? 
+      `${nodeData.label}은(는) ${nodeData.description || '작품의 중요한 인물입니다.'}\n\n` +
       `이 인물은 작품의 중심 서사를 이끌어가는 핵심적인 역할을 담당합니다.\n\n` +
       `주로 1장, 3장, 5장에서 중요한 장면에 등장하며, 작품의 주제를 표현합니다.\n\n` +
-      `다른 인물들과의 관계를 통해 작품의 갈등과 긴장감을 고조시킵니다.\n\n` +
-      `특히 주인공의 내적 성장에 중요한 영향을 미치는 인물입니다.\n\n` +
-      `독자들에게 작가의 메시지를 전달하는 매개체 역할을 합니다.\n\n` +
       `이 인물의 행동과 선택은 작품의 결말에 직접적인 영향을 미칩니다.`
       : '인물에 대한 요약 정보가 없습니다.'
   };
@@ -125,12 +111,17 @@ function GraphNodeTooltip({ data, x, y, nodeCenter, onClose, inViewer = false, s
         top: position.y,
         zIndex: zIndexValue,
         opacity: showContent ? 1 : 0,
-        transition: isDragging ? 'none' : 'opacity 0.3s ease-in-out, transform 0.6s ease-in-out',
+        transition: isDragging ? 'none' : 'opacity 0.3s, transform 0.6s',
         cursor: isDragging ? 'grabbing' : 'grab',
         transform: isFlipped ? 'rotateY(180deg)' : 'rotateY(0deg)',
         transformStyle: 'preserve-3d',
-        width: '380px',
-        height: '400px',
+        width: 500,
+        minHeight: 340,
+        background: '#fff',
+        borderRadius: 20,
+        boxShadow: '0 8px 32px rgba(79,109,222,0.13), 0 1.5px 8px rgba(0,0,0,0.04)',
+        padding: 0,
+        border: '1.5px solid #e5e7eb',
         ...(style || {})
       }}
       onMouseDown={handleMouseDown}
@@ -143,67 +134,68 @@ function GraphNodeTooltip({ data, x, y, nodeCenter, onClose, inViewer = false, s
           position: isFlipped ? 'absolute' : 'relative',
           width: '100%',
           height: '100%',
-          transform: isFlipped ? 'rotateY(180deg)' : 'rotateY(0deg)'
+          transform: isFlipped ? 'rotateY(180deg)' : 'rotateY(0deg)',
+          display: 'flex',
+          flexDirection: 'column',
+          padding: 0
         }}
       >
-        <button onClick={onClose} className="tooltip-close-btn">&times;</button>
-        
-        <div className="business-card-header">
-          <div className="profile-image-placeholder">
-            {data.img ? (
-              <img src={data.img} alt={data.label} className="profile-img" />
-            ) : (
-              <span>👤</span>
-            )}
-          </div>
-          <div className="business-card-title">
-            <h3>
-              {data.label}
-              {data.main && <span className="main-character-badge">주요 인물</span>}
-            </h3>
-            {data.names && data.names.length > 0 && (
-              <div className="alias-tags">
-                {data.names.map((name, index) => (
-                  <span key={index} className="alias-tag">{name}</span>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-
-        <div className="business-card-body">
-          {data.description && (
-            <div className="info-section" style={{ flex: 1 }}>
-              <i className="info-icon description-icon">📝</i>
-              <div className="info-content">
-                <label>설명</label>
-                <p className="description-text">{data.description}</p>
-              </div>
+        <button onClick={onClose} className="tooltip-close-btn" style={{ position: 'absolute', top: 18, right: 18, fontSize: 22, color: '#bfc8e2', background: 'none', border: 'none', cursor: 'pointer', zIndex: 2 }}>&times;</button>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'stretch', padding: '32px 0 0 0', borderTopLeftRadius: 20, borderTopRightRadius: 20, background: 'linear-gradient(90deg, #e3eafe 0%, #f8fafc 100%)' }}>
+          <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'flex-start', gap: 24, width: '100%' }}>
+            <div className="profile-image-placeholder" style={{ width: 100, height: 100, borderRadius: '50%', background: '#e6e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 16, marginLeft: 24, boxShadow: '0 2px 8px rgba(108,142,255,0.10)' }}>
+              {nodeData.img ? (
+                <img src={nodeData.img} alt={nodeData.common_name || nodeData.label} className="profile-img" style={{ width: 100, height: 100, borderRadius: '50%', objectFit: 'cover' }} />
+              ) : (
+                <span style={{ fontSize: 48, color: '#888' }}>👤</span>
+              )}
             </div>
-          )}
-
-          <div className="tooltip-actions">
-            <button 
-              className="action-button summary-btn"
-              onClick={handleSummaryClick}
-            >
-              <FaFileAlt size={14} />
-              요약글
-            </button>
-            <button 
-              className="action-button chat-btn"
-              onClick={handleChatClick}
-              style={{ color: '#ffffff' }}
-            >
-              <FaComments size={14} />
-              채팅하기
-            </button>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', justifyContent: 'center', minWidth: 0 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
+                <span style={{ fontWeight: 800, fontSize: 24, color: '#22336b', letterSpacing: 0.5, maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {nodeData.common_name || nodeData.label}
+                </span>
+                {nodeData.main_character && (
+                  <span style={{
+                    background: 'linear-gradient(90deg, #4F6DDE 0%, #6fa7ff 100%)',
+                    color: '#fff',
+                    borderRadius: 14,
+                    fontSize: 13,
+                    padding: '3px 12px',
+                    marginLeft: 2,
+                    fontWeight: 700,
+                    boxShadow: '0 2px 8px rgba(79,109,222,0.13)'
+                  }}>주요 인물</span>
+                )}
+              </div>
+              {nodeData.names && nodeData.names.length > 0 && (
+                <div style={{ marginTop: 2, marginBottom: 2, display: 'flex', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-start' }}>
+                  {nodeData.names.map((name, i) => (
+                    <span key={i} style={{
+                      background: '#f3f4f6',
+                      color: '#4b5563',
+                      borderRadius: 12,
+                      fontSize: 13,
+                      padding: '3px 12px',
+                      border: '1px solid #e5e7eb',
+                      fontWeight: 500
+                    }}>{name}</span>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         </div>
+        <hr style={{ margin: '18px 0 0 0', border: 0, borderTop: '1.5px solid #f0f2f8' }} />
+        <div className="business-card-description" style={{ color: '#333', fontSize: 16, minHeight: 56, margin: '22px 32px 0 32px', textAlign: 'left', lineHeight: 1.6, fontWeight: 400 }}>
+          {nodeData.description && nodeData.description.trim() ? nodeData.description : <span style={{ color: '#bbb' }}>설명 정보가 없습니다.</span>}
+        </div>
+        <hr style={{ margin: '18px 0 0 0', border: 0, borderTop: '1.5px solid #f0f2f8' }} />
+        <div style={{ flex: 1, marginBottom: 20 }} />
       </div>
 
       {/* 뒷면 - 요약 정보 */}
-      <div 
+      {/* <div 
         className="tooltip-content business-card tooltip-back"
         style={{
           backfaceVisibility: 'hidden',
@@ -217,15 +209,15 @@ function GraphNodeTooltip({ data, x, y, nodeCenter, onClose, inViewer = false, s
         
         <div className="business-card-header">
           <div className="profile-image-placeholder">
-            {data.img ? (
-              <img src={data.img} alt={data.label} className="profile-img" />
+            {nodeData.img ? (
+              <img src={nodeData.img} alt={nodeData.label} className="profile-img" />
             ) : (
               <span>👤</span>
             )}
           </div>
           <div className="business-card-title">
             <h3>
-              {data.label} <span className="summary-badge">요약</span>
+              {nodeData.label} <span className="summary-badge">요약</span>
             </h3>
           </div>
         </div>
@@ -256,7 +248,7 @@ function GraphNodeTooltip({ data, x, y, nodeCenter, onClose, inViewer = false, s
             </button>
           </div>
         </div>
-      </div>
+      </div> */}
     </div>
   );
 }

@@ -1,285 +1,312 @@
-import React, { useEffect, useRef, useState } from "react";
-import CytoscapeComponent from "react-cytoscapejs";
+import React, { useRef, useState, useMemo, useEffect, useCallback } from "react";
+import CytoscapeGraphDirect from "./CytoscapeGraphDirect";
+import GraphNodeTooltip from './NodeTooltip';
+import EdgeTooltip from './EdgeTooltip';
 import "./RelationGraph.css";
 
-export default function CharacterRelationGraph({ elements }) {
+// 간선 positivity 값에 따라 HSL 그라데이션 색상 반환
+function getRelationColor(positivity) {
+  // positivity: -1(빨강) ~ 0(회색) ~ 1(초록)
+  // H: 0(빨강) ~ 120(초록)
+  const h = 120 * (positivity + 1) / 2; // -1~1 → 0~120
+  return `hsl(${h}, 70%, 45%)`;
+}
+
+const RelationGraph = ({ elements, inViewer = false }) => {
   const cyRef = useRef(null);
-  const containerRef = useRef(null);
-  const [isDragging, setIsDragging] = useState(false);
+  const [activeTooltip, setActiveTooltip] = useState(null);
+  const selectedEdgeIdRef = useRef(null);
+  const selectedNodeIdRef = useRef(null);
+  const [isLayoutDone, setIsLayoutDone] = useState(false);
+  const [prevNodeCount, setPrevNodeCount] = useState(elements.filter(e => !e.data.source).length);
 
-  useEffect(() => {
-    if (cyRef.current && containerRef.current) {
+  // 툴크 상태 업데이트를 useCallback으로 최적화
+  const updateTooltip = useCallback((type, data, position) => {
+    setActiveTooltip((prev) => {
+      return { type, ...data, ...position };
+    });
+  }, []);
+
+  // 노드 클릭 핸들러 최적화
+  const tapNodeHandler = useCallback((evt) => {
+    if (!cyRef.current) return;
+    const node = evt.target;
+    const nodeData = node.data();
+    const pos = node.renderedPosition();
+    const cy = cyRef.current;
+    const pan = cy.pan();
+    const zoom = cy.zoom();
+    const container = document.querySelector('.graph-canvas-area');
+    const containerRect = container.getBoundingClientRect();
+    
+    const nodeCenter = {
+      x: pos.x * zoom + pan.x + containerRect.left,
+      y: pos.y * zoom + pan.y + containerRect.top,
+    };
+
+    setActiveTooltip(null);
+    cy.batch(() => {
+      cy.nodes().addClass("faded");
+      cy.edges().addClass("faded");
+      node.removeClass("faded").addClass("highlighted");
+    });
+
+    const mouseX = evt.originalEvent?.clientX ?? nodeCenter.x;
+    const mouseY = evt.originalEvent?.clientY ?? nodeCenter.y;
+    
+    // 데이터 복원
+    let names = nodeData.names;
+    if (typeof names === 'string') {
+      try { names = JSON.parse(names); } catch { names = [names]; }
+    }
+    let main = nodeData.main;
+    if (typeof main === 'string') main = main === 'true';
+    
+    setTimeout(() => {
+      updateTooltip('node', {
+        ...nodeData,
+        names,
+        main,
+        nodeCenter
+      }, {
+        x: mouseX,
+        y: mouseY
+      });
+    }, 0);
+  }, [updateTooltip]);
+
+  // 간선 클릭 핸들러 최적화
+  const tapEdgeHandler = useCallback((evt) => {
+    if (!cyRef.current) return;
+    const cy = cyRef.current;
+    const edge = evt.target;
+    const container = document.querySelector(".graph-canvas-area");
+    const containerRect = container.getBoundingClientRect();
+
+    const pos = edge.midpoint();
+    const pan = cy.pan();
+    const zoom = cy.zoom();
+
+    const absoluteX = pos.x * zoom + pan.x + containerRect.left;
+    const absoluteY = pos.y * zoom + pan.y + containerRect.top;
+
+    setActiveTooltip(null);
+    updateTooltip('edge', {
+      id: edge.id(),
+      data: edge.data(),
+      sourceNode: edge.source(),
+      targetNode: edge.target()
+    }, {
+      x: absoluteX,
+      y: absoluteY
+    });
+
+    cy.batch(() => {
+      cy.nodes().addClass("faded");
+      cy.edges().addClass("faded");
+      edge.removeClass("faded");
+      edge.source().removeClass("faded").addClass("highlighted");
+      edge.target().removeClass("faded").addClass("highlighted");
+    });
+
+    selectedEdgeIdRef.current = edge.id();
+  }, [updateTooltip]);
+
+  // 선택 해제
+  const clearSelection = useCallback(() => {
+    let changed = false;
+    if (cyRef.current) {
       const cy = cyRef.current;
-      const container = containerRef.current;
+      // faded/highlighted가 있는 경우에만 변경
+      if (
+        cy.nodes().some(n => n.hasClass("faded") || n.hasClass("highlighted")) ||
+        cy.edges().some(e => e.hasClass("faded")) ||
+        activeTooltip
+      ) {
+        changed = true;
+        cy.nodes().removeClass("faded highlighted");
+        cy.edges().removeClass("faded");
+      }
+      cy.removeListener("tap", "node");
+      cy.removeListener("tap", "edge");
+      cy.removeListener("tap");
+      cy.on("tap", "node", tapNodeHandler);
+      cy.on("tap", "edge", tapEdgeHandler);
+      cy.on("tap", tapBackgroundHandler);
+    }
+    if (changed) {
+      setActiveTooltip(null);
+      selectedEdgeIdRef.current = null;
+      selectedNodeIdRef.current = null;
+    }
+  }, [tapNodeHandler, tapEdgeHandler, activeTooltip]);
 
-      // 기존 cytoscape wheel 이벤트 제거
-      cy.removeAllListeners('wheel');
+  // 배경 클릭 시 선택 해제
+  const tapBackgroundHandler = useCallback((evt) => {
+    if (evt.target === cyRef.current) {
+      if (
+        !selectedNodeIdRef.current &&
+        !selectedEdgeIdRef.current &&
+        !activeTooltip
+      ) {
+        // 아무것도 선택된 게 없으면 아무 동작도 하지 않음
+        return;
+      }
+      clearSelection();
+    }
+  }, [activeTooltip, clearSelection]);
 
-      // DOM에 직접 wheel 이벤트 등록
-      const handleWheel = (e) => {
-        e.preventDefault();
-        const rect = container.getBoundingClientRect();
-        const x = e.clientX - rect.left;
-        const y = e.clientY - rect.top;
-        const factor = e.deltaY > 0 ? 0.96 : 1.04;
-        cy.zoom({
-          level: cy.zoom() * factor,
-          renderedPosition: { x, y }
-        });
-      };
-      container.addEventListener('wheel', handleWheel, { passive: false });
+  // 스타일시트 useMemo 의존성 최소화
+  const stylesheet = useMemo(() => [
+    {
+      selector: "node",
+      style: {
+        "background-color": "#eee",
+        "border-width": (ele) => ele.data("main") ? 2 : 1,
+        "border-color": "#5B7BA0",
+        "border-opacity": 1,
+        "width": inViewer ? (ele => ele.data("main") ? 56 : 48) : 40,
+        "height": inViewer ? (ele => ele.data("main") ? 56 : 48) : 40,
+        "shape": "ellipse",
+        "label": "data(label)",
+        "text-valign": "bottom",
+        "text-halign": "center",
+        "font-size": inViewer ? 15 : 12,
+        "font-weight": (ele) => ele.data("main") ? 700 : 400,
+        "color": "#444",
+        "text-margin-y": inViewer ? 3 : 2,
+        "text-background-color": "#fff",
+        "text-background-opacity": 0.8,
+        "text-background-shape": "roundrectangle",
+        "text-background-padding": 2,
+      },
+    },
+    {
+      selector: "edge",
+      style: {
+        width: inViewer ? "mapData(weight, 0, 1, 1.8, 4.5)" : "mapData(weight, 0, 1, 1.5, 4)",
+        "line-color": (ele) => getRelationColor(ele.data('positivity')),
+        "curve-style": "bezier",
+        label: "data(label)",
+        "font-size": inViewer ? 8 : 6,
+        "text-rotation": "autorotate",
+        color: "#42506b",
+        "text-background-color": "#fff",
+        "text-background-opacity": 0.8,
+        "text-background-shape": "roundrectangle",
+        "text-background-padding": 2,
+        "text-outline-color": "#fff",
+        "text-outline-width": 2,
+        opacity: "mapData(weight, 0, 1, 0.55, 1)",
+        "target-arrow-shape": "none"
+      },
+    },
+    {
+      selector: 'node.cytoscape-node-appear',
+      style: {
+        'border-color': '#22c55e',
+        'border-width': 16,
+        'border-opacity': 1,
+        'transition-property': 'border-width, border-color, border-opacity',
+        'transition-duration': '700ms',
+      }
+    },
+    {
+      selector: ".faded",
+      style: {
+        opacity: 0.25,
+        "text-opacity": 0.12,
+      },
+    },
+  ], [inViewer]);
 
-      return () => {
-        container.removeEventListener('wheel', handleWheel);
-      };
+  // layout: 최초 1회만 cose, 이후에는 preset
+  const layout = useMemo(() => {
+    if (isLayoutDone) {
+      return { name: 'preset' };
+    }
+    return {
+      name: 'cose',
+      padding: 90,
+      nodeRepulsion: 2000,
+      idealEdgeLength: 150,
+      animate: false,
+      fit: true,
+      randomize: false,
+      nodeOverlap: 12,
+      avoidOverlap: true,
+      nodeSeparation: 50,
+      randomSeed: 42,
+      gravity: 0.25,
+      componentSpacing: 90
+    };
+  }, [isLayoutDone]);
+
+  // 최초 1회만 레이아웃 실행 후 isLayoutDone을 true로
+  useEffect(() => {
+    if (!isLayoutDone && cyRef.current) {
+      const cy = cyRef.current;
+      const handler = () => setIsLayoutDone(true);
+      cy.on('layoutstop', handler);
+      return () => cy.off('layoutstop', handler);
+    }
+  }, [isLayoutDone]);
+
+  // 그래프가 바뀔 때마다 항상 중앙에 fit
+  useEffect(() => {
+    if (cyRef.current) {
+      cyRef.current.fit();
     }
   }, [elements]);
 
+
   useEffect(() => {
-    if (cyRef.current) {
-      const cy = cyRef.current;
-      cy.zoomingEnabled(true);
-      cy.userZoomingEnabled(true);
-      cy.panningEnabled(true);
-      cy.minZoom(0.2);
-      cy.maxZoom(2.5);
-
-      // 드래그 시작 이벤트
-      cy.on("dragstart", "node", function () {
-        setIsDragging(true);
-        this.addClass("dragging");
-      });
-
-      // 드래그 중 이벤트 - 모든 연결된 컴포넌트의 노드들이 따라오도록 함
-      cy.on("drag", "node", function (e) {
-        const draggedNode = e.target;
-
-        // 드래그 중인 노드가 간선이 없으면 다른 노드들이 따라오지 않도록 함
-        if (draggedNode.connectedEdges().length === 0) {
-          return; // 간선이 없는 노드는 혼자 이동
-        }
-
-        // 독립된(연결되지 않은) 노드들을 제외한 모든 노드 가져오기
-        const allConnectedNodes = cy.nodes().filter((node) => {
-          // 드래그 중인 노드는 제외
-          if (node.id() === draggedNode.id()) return false;
-
-          // 노드가 어떤 엣지와도 연결되어 있지 않으면 제외
-          if (node.connectedEdges().length === 0) return false;
-
-          // 그 외의 노드는 포함
-          return true;
-        });
-
-        // 드래그 중인 노드와 연결된 노드들 사이의 관계를 유지하면서 부드럽게 이동
-        allConnectedNodes.forEach((connectedNode) => {
-          // 드래그 중인 노드와의 거리에 따른 가중치 계산
-          // 거리가 가까울수록 더 많이 따라오게 함
-          const dx = draggedNode.position("x") - connectedNode.position("x");
-          const dy = draggedNode.position("y") - connectedNode.position("y");
-          const distance = Math.sqrt(dx * dx + dy * dy);
-
-          // 거리에 반비례하는 가중치 (최대 0.1, 최소 0.01)로 조정
-          const followFactor = Math.max(
-            0.01,
-            Math.min(0.1, 60 / (distance + 150))
-          );
-
-          // 새 위치 계산 (현재 위치 + 이동 거리의 일부)
-          const newX = connectedNode.position("x") + dx * followFactor;
-          const newY = connectedNode.position("y") + dy * followFactor;
-
-          // 노드 겹침 방지를 위한 충돌 감지
-          let finalX = newX;
-          let finalY = newY;
-
-          // 다른 모든 노드와의 충돌 확인
-          cy.nodes().forEach((otherNode) => {
-            if (otherNode.id() === connectedNode.id()) return;
-
-            const otherX = otherNode.position("x");
-            const otherY = otherNode.position("y");
-
-            // 두 노드 사이의 거리 계산
-            const nodeDx = finalX - otherX;
-            const nodeDy = finalY - otherY;
-            const nodeDistance = Math.sqrt(nodeDx * nodeDx + nodeDy * nodeDy);
-
-            // 최소 거리 (노드 크기 기반)
-            const size1 = connectedNode.data("main") ? 60 : 40;
-            const size2 = otherNode.data("main") ? 60 : 40;
-            const minDistance = (size1 + size2) / 2 + 50; // 여유 공간 50px로 증가
-
-            // 충돌이 감지되면 위치 조정
-            if (nodeDistance < minDistance && nodeDistance > 0) {
-              const pushFactor = (minDistance - nodeDistance) / nodeDistance;
-              finalX += nodeDx * pushFactor * 0.5;
-              finalY += nodeDy * pushFactor * 0.5;
-            }
-          });
-
-          // 연결된 노드 이동 (애니메이션 없이)
-          connectedNode.position({ x: finalX, y: finalY });
-        });
-      });
-
-      // 드래그 종료 이벤트
-      cy.on("dragfree", "node", function () {
-        setIsDragging(false);
-        this.removeClass("dragging");
-
-        // 드래그 종료 후 노드 위치 유지 (레이아웃 재실행하지 않음)
-        // 대신 노드 간 겹침 방지를 위한 간단한 조정만 수행
-
-        // 모든 노드 쌍에 대해 겹침 확인 및 조정
-        const nodes = cy.nodes();
-        const nodePositions = {};
-
-        // 현재 노드 위치 저장
-        nodes.forEach((node) => {
-          nodePositions[node.id()] = {
-            x: node.position("x"),
-            y: node.position("y"),
-          };
-        });
-
-        // 겹침 해결을 위한 반복 (최대 3회)
-        for (let iteration = 0; iteration < 3; iteration++) {
-          let moved = false;
-
-          nodes.forEach((node1) => {
-            nodes.forEach((node2) => {
-              if (node1.id() === node2.id()) return;
-
-              const pos1 = nodePositions[node1.id()];
-              const pos2 = nodePositions[node2.id()];
-              const dx = pos1.x - pos2.x;
-              const dy = pos1.y - pos2.y;
-              const distance = Math.sqrt(dx * dx + dy * dy);
-
-              // 최소 거리 (노드 크기 기반)
-              const size1 = node1.data("main") ? 60 : 40;
-              const size2 = node2.data("main") ? 60 : 40;
-              const minDistance = (size1 + size2) / 2 + 30; // 여유 공간 30px로 증가
-
-              // 충돌이 감지되면 위치 조정
-              if (distance < minDistance) {
-                moved = true;
-
-                // 충돌 방향으로 밀어내기
-                const pushFactor = (minDistance - distance) / distance;
-
-                // 각 노드를 반대 방향으로 밀어냄
-                nodePositions[node1.id()].x += dx * pushFactor * 0.5;
-                nodePositions[node1.id()].y += dy * pushFactor * 0.5;
-                nodePositions[node2.id()].x -= dx * pushFactor * 0.5;
-                nodePositions[node2.id()].y -= dy * pushFactor * 0.5;
-              }
-            });
-          });
-
-          // 더 이상 이동이 없으면 종료
-          if (!moved) break;
-        }
-
-        // 조정된 위치 적용
-        nodes.forEach((node) => {
-          const pos = nodePositions[node.id()];
-          node.position({ x: pos.x, y: pos.y });
-        });
-      });
-
-      // 창 크기 변경 시 그래프 크기 조정
-      const resizeGraph = () => {
-        cy.resize();
-        cy.fit();
-      };
-
-      window.addEventListener("resize", resizeGraph);
-
-      return () => {
-        window.removeEventListener("resize", resizeGraph);
-        cy.removeAllListeners(); // 이벤트 리스너 제거
-      };
+    const currentNodeCount = elements.filter(e => !e.data.source).length;
+    if (currentNodeCount > prevNodeCount) {
+      setIsLayoutDone(false); // 새 노드 등장 시 레이아웃 재실행
     }
-  }, []);
-
-  // 페이지 전체 스크롤 막기 (body + html 모두)
-  useEffect(() => {
-    const originalBody = document.body.style.overflow;
-    const originalHtml = document.documentElement.style.overflow;
-    document.body.style.overflow = "hidden";
-    document.documentElement.style.overflow = "hidden";
-    return () => {
-      document.body.style.overflow = originalBody;
-      document.documentElement.style.overflow = originalHtml;
-    };
-  }, []);
-
-  // 그래프 영역에서만 브라우저 스크롤 막기
-  const handleWheel = (e) => {
-    e.preventDefault();
-  };
+    setPrevNodeCount(currentNodeCount);
+  }, [elements]);
 
   return (
-    <div
-      style={{
-        width: "100%",
-        height: "600px",
-        overflow: "hidden",
-        position: "relative",
-      }}
-      onWheel={handleWheel}
-    >
-      <CytoscapeComponent
+    <div className="relation-graph-container" style={{ width: '100%', height: '100%', position: 'relative' }}>
+      {/* 툴팁 렌더링 */}
+      <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none', zIndex: 9999 }}>
+        {activeTooltip?.type === 'node' && (
+          <GraphNodeTooltip
+            key={`node-tooltip-${activeTooltip.id}`}
+            data={activeTooltip}
+            x={activeTooltip.x}
+            y={activeTooltip.y}
+            nodeCenter={activeTooltip.nodeCenter}
+            onClose={clearSelection}
+            style={{ pointerEvents: 'auto' }}
+          />
+        )}
+        {activeTooltip?.type === 'edge' && (
+          <EdgeTooltip
+            key={`edge-tooltip-${activeTooltip.id}`}
+            data={activeTooltip.data}
+            x={activeTooltip.x}
+            y={activeTooltip.y}
+            onClose={clearSelection}
+            sourceNode={activeTooltip.sourceNode}
+            targetNode={activeTooltip.targetNode}
+            style={{ pointerEvents: 'auto' }}
+          />
+        )}
+      </div>
+      <CytoscapeGraphDirect
         elements={elements}
-        cy={(cy) => {
-          cy.zoomingEnabled(true);
-          cy.userZoomingEnabled(true);
-          cy.panningEnabled(true);
-          cy.minZoom(0.2);
-          cy.maxZoom(2.5);
-          cyRef.current = cy;
-        }}
-        className="cytoscape-graph"
-        style={{ width: "100%", height: "600px", background: "#f8fafc" }}
-        userZoomingEnabled={true}
+        stylesheet={stylesheet}
+        layout={layout}
+        tapNodeHandler={tapNodeHandler}
+        tapEdgeHandler={tapEdgeHandler}
+        tapBackgroundHandler={tapBackgroundHandler}
+        cyRef={cyRef}
       />
     </div>
   );
-}
+};
 
-const stylesheet = [
-  {
-    selector: "node",
-    style: {
-      "background-color": (ele) => (ele.data("main") ? "#1976d2" : "#bdbdbd"),
-      label: "data(label)",
-      "font-size": 12,
-      "text-valign": "center",
-      "text-halign": "center",
-      width: (ele) => (ele.data("main") ? 60 : 40),
-      height: (ele) => (ele.data("main") ? 60 : 40),
-      color: "#fff",
-      "text-outline-color": "#222",
-      "text-outline-width": 2,
-      "z-index": (ele) => (ele.data("main") ? 10 : 1),
-    },
-  },
-  {
-    selector: "edge",
-    style: {
-      width: "mapData(weight, 1, 10, 1, 8)",
-      "line-color": "mapData(positivity, -1, 1, #e57373, #81c784)",
-      "target-arrow-shape": null, // "target-arrow-shape" null로 설정
-      "curve-style": "bezier",
-      label: "data(label)",
-      "font-size": 10,
-      "text-rotation": "autorotate",
-      color: "#333",
-      "text-background-color": "#fff",
-      "text-background-opacity": 0.7,
-      "text-background-padding": 2,
-    },
-  },
-];
+export default React.memo(RelationGraph);

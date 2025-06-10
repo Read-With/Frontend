@@ -30,11 +30,12 @@ const ChapterGraph = ({ chapterNumber = 1, enableTooltips = true, inViewer = fal
     const nodes = charactersData.characters.map((char) => ({
       data: {
         id: String(char.id),
-        label: char.common_name,
-        main: char.main_character,
+        common_name: char.common_name,
+        main_character: char.main_character,
         description: char.description,
         names: char.names,
-      },
+        portrait_prompt: char.portrait_prompt
+      }
     }));
 
     const edges = relationsData.relations.map((rel, idx) => ({
@@ -42,11 +43,11 @@ const ChapterGraph = ({ chapterNumber = 1, enableTooltips = true, inViewer = fal
         id: `e${idx}`,
         source: String(rel.id1),
         target: String(rel.id2),
-        label: rel.relation.join(", "),
-        explanation: rel.explanation,
+        relation: rel.relation,
         positivity: rel.positivity,
         weight: rel.weight,
-      },
+        count: rel.count
+      }
     }));
 
     return [...nodes, ...edges];

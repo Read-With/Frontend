@@ -69,11 +69,32 @@ const CytoscapeGraphDirect = ({
 
       // 추가: 새로 들어온 노드/엣지만 추가
       elements.forEach(e => {
+        const safeData = {
+          ...e.data,
+          names: Array.isArray(e.data.names)
+            ? JSON.stringify(e.data.names)
+            : (e.data.names ? JSON.stringify([e.data.names]) : '[]'),
+          main: typeof e.data.main === 'boolean'
+            ? String(e.data.main)
+            : (e.data.main === undefined ? 'false' : String(e.data.main)),
+          description: e.data.description || '',
+          portrait_prompt: e.data.portrait_prompt || ''
+        };
         if (!cy.getElementById(e.data.id).length) {
-          const ele = cy.add(e);
+          const ele = cy.add({
+            group: e.data.source ? 'edges' : 'nodes',
+            data: safeData,
+            position: e.position
+          });
           if (!e.data.source && newNodeIds && newNodeIds.includes(e.data.id)) {
             ele.addClass('cytoscape-node-appear');
             setTimeout(() => ele.removeClass('cytoscape-node-appear'), 700);
+          }
+        } else {
+          const ele = cy.getElementById(e.data.id);
+          ele.data(safeData);
+          if (e.position) {
+            ele.position(e.position);
           }
         }
       });
@@ -104,19 +125,8 @@ const CytoscapeGraphDirect = ({
         if (nodes.length > 0) cy.fit(nodes, 40);
       }
     });
-    // 노드 드래그 제어: grab에서 unlock, dragfree에서 lock
-    if (cy) {
-      cy.nodes().lock();
-      cy.on('grab', 'node', function(evt) {
-        evt.target.unlock();
-      });
-      cy.on('dragfree', 'node', function(evt) {
-        evt.target.lock();
-      });
-    }
     // pan/zoom만 fit 적용 (노드 position은 그대로)
     setTimeout(() => {
-      if (cy) cy.fit(undefined, 10);
       setIsGraphVisible(true); // 모든 처리 끝나면 보이게
     }, 0);
   }, [elements, stylesheet, layout, fitNodeIds, externalCyRef, newNodeIds]);

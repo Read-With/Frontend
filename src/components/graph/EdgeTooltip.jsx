@@ -26,18 +26,8 @@ function EdgeTooltip({ data, x, y, onClose, sourceNode, targetNode, inViewer = f
   const handleMouseMove = (e) => {
     if (!isDragging) return;
 
-    const tooltipRect = tooltipRef.current.getBoundingClientRect();
-    const viewportWidth = Math.min(document.documentElement.clientWidth, window.innerWidth);
-    const viewportHeight = Math.min(document.documentElement.clientHeight, window.innerHeight);
-    const scrollX = window.pageXOffset || document.documentElement.scrollLeft;
-    const scrollY = window.pageYOffset || document.documentElement.scrollTop;
-
     let newX = e.clientX - dragOffset.x;
     let newY = e.clientY - dragOffset.y;
-
-    // 페이지 영역을 벗어나지 않도록 제한
-    newX = Math.max(scrollX, Math.min(newX, viewportWidth + scrollX - tooltipRect.width));
-    newY = Math.max(scrollY, Math.min(newY, viewportHeight + scrollY - tooltipRect.height));
 
     setPosition({ x: newX, y: newY });
     setHasDragged(true);
@@ -64,20 +54,7 @@ function EdgeTooltip({ data, x, y, onClose, sourceNode, targetNode, inViewer = f
 
   useEffect(() => {
     if (x !== undefined && y !== undefined && tooltipRef.current && !isDragging && !hasDragged) {
-      const tooltipRect = tooltipRef.current.getBoundingClientRect();
-      const viewportWidth = Math.min(document.documentElement.clientWidth, window.innerWidth);
-      const viewportHeight = Math.min(document.documentElement.clientHeight, window.innerHeight);
-      const scrollX = window.pageXOffset || document.documentElement.scrollLeft;
-      const scrollY = window.pageYOffset || document.documentElement.scrollTop;
-      
-      let newX = x;
-      let newY = y;
-
-      // 페이지 영역을 벗어나지 않도록 제한
-      newX = Math.max(scrollX, Math.min(newX, viewportWidth + scrollX - tooltipRect.width));
-      newY = Math.max(scrollY, Math.min(newY, viewportHeight + scrollY - tooltipRect.height));
-
-      setPosition({ x: newX, y: newY });
+      setPosition({ x, y });
     }
   }, [x, y, isDragging, hasDragged]);
 

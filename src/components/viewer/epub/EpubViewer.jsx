@@ -8,7 +8,7 @@ import React, {
 import ePub from 'epubjs';
 
 // eventRelationModules import 수정 - 프로젝트 루트 기준
-const eventRelationModules = import.meta.glob('/src/data/*/[0-9][0-9]_ev*_relations.json', { eager: true });
+const eventRelationModules = import.meta.glob('/src/data/gatsby/c_chapter*_0.json', { eager: true });
 
 // getEventsForChapter 함수 정의
 function getEventsForChapter(chapter) {
@@ -31,6 +31,29 @@ function getEventsForChapter(chapter) {
     return [];
   }
 }
+
+// 글자 수를 정확하게 세는 함수 추가
+const countCharacters = (text, element) => {
+  if (!text) return 0;
+  
+  // 불필요한 요소 제외
+  if (element) {
+    // Project Gutenberg 관련 요소 제외
+    if (element.closest('.pg-boilerplate') || 
+        element.closest('.pgheader') ||
+        element.closest('.toc') ||
+        element.closest('.dedication') ||
+        element.closest('.epigraph')) {
+      return 0;
+    }
+  }
+
+  // 특수문자, 공백, 줄바꿈 제거
+  return text
+    .replace(/[\s\n\r\t]/g, '')  // 공백, 줄바꿈 등 제거
+    .replace(/[^\w\s가-힣]/g, '') // 특수기호 제거 (영문자, 숫자, 한글만 남김)
+    .length;
+};
 
 // 단어 수를 정확하게 세는 함수 추가
 function countWords(text) {
@@ -56,12 +79,12 @@ const EpubViewer = forwardRef(
     const [error, setError] = useState(null);
     const [currentPath, setCurrentPath] = useState(null);
 
-    // 챕터별 누적 단어 수를 저장할 Map 추가
-    const chapterWordCountsRef = useRef(new Map());
-    // 현재 페이지의 단어 수를 저장
-    const currentPageWordsRef = useRef(0);
-    // 현재까지의 누적 단어 수를 저장
-    const accumulatedWordsRef = useRef(0);
+    // 현재 챕터의 누적 글자 수를 저장
+    const currentChapterCharsRef = useRef(0);
+    // 현재 챕터 번호 저장
+    const currentChapterRef = useRef(1);
+    // 챕터별 페이지 글자 수를 저장하는 Map
+    const chapterPageCharsRef = useRef(new Map());
 
     const rawPath = book.path || book.filename;
     const epubPath = rawPath.startsWith('/') ? rawPath : '/' + rawPath;
@@ -70,8 +93,6 @@ const EpubViewer = forwardRef(
     const LOCAL_STORAGE_KEY = `readwith_${cleanPath}_lastCFI`;
     const NEXT_PAGE_FLAG = `readwith_nextPagePending`;
     const PREV_PAGE_FLAG = `readwith_prevPagePending`;
-    const ACCUMULATED_WORDS_KEY = `readwith_${cleanPath}_accumulatedWords`;
-    const NEXT_PAGE_WORDS_KEY = `readwith_${cleanPath}_nextPageWords`;
     const CHAPTER_KEY = `readwith_${cleanPath}_prevChapter`;
 
     // 페이지 모드와 그래프 표시 여부 확인
@@ -124,6 +145,48 @@ const EpubViewer = forwardRef(
       }
     };
 
+    // 페이지 이동 시 글자 수 계산 및 표시 함수
+    const updatePageCharCount = (direction = 'next') => {
+      const rendition = renditionRef.current;
+      if (!rendition) return;
+
+      const currentPage = rendition.getContents()[0];
+      if (!currentPage) return;
+
+      const text = currentPage.textContent;
+      const charCount = countCharacters(text, currentPage.document.body);
+      
+      // 현재 챕터 번호 가져오기
+      const currentChapter = currentChapterRef.current;
+      
+      // 현재 페이지의 CFI를 키로 사용
+      const currentCfi = rendition.currentLocation()?.start?.cfi;
+      if (!currentCfi) return;
+
+      // 이전 페이지의 글자 수 가져오기
+      const prevPageChars = chapterPageCharsRef.current.get(currentCfi) || 0;
+      
+      // 방향에 따라 누적 글자 수 업데이트
+      if (direction === 'next') {
+        currentChapterCharsRef.current += charCount;
+      } else {
+        currentChapterCharsRef.current -= prevPageChars;
+      }
+
+      // 현재 페이지의 글자 수 저장
+      chapterPageCharsRef.current.set(currentCfi, charCount);
+
+      console.log(`현재 챕터(${currentChapter}) 누적 글자 수: ${currentChapterCharsRef.current}자`);
+    };
+
+    // 챕터 변경 시 초기화 함수
+    const resetChapterCharCount = (chapter) => {
+      currentChapterCharsRef.current = 0;
+      currentChapterRef.current = chapter;
+      chapterPageCharsRef.current.clear();
+      console.log(`챕터 ${chapter} 시작 - 글자 수 초기화`);
+    };
+
     const safeNavigate = async (action, direction = 'next') => {
       if (!renditionRef.current || !bookRef.current) return;
 
@@ -158,6 +221,8 @@ const EpubViewer = forwardRef(
             const newCfi = location?.start?.cfi;
             if (newCfi && newCfi !== currentCfi) {
               setReloading(false);
+              // 페이지 이동 후 글자 수 업데이트
+              updatePageCharCount(direction);
               resolve();
             } else {
               console.warn('❗️relocated 됐지만 동일 CFI → fallback');
@@ -291,9 +356,8 @@ const EpubViewer = forwardRef(
           // TOC 정보 로드 및 챕터별 텍스트 저장
           const toc = bookInstance.navigation.toc;
           
-          // 챕터별 텍스트와 단어 배열 저장
+          // 챕터별 텍스트 저장
           const chapterTexts = new Map();
-          const chapterWords = new Map();
 
           // 각 챕터의 텍스트 로드
           for (const item of toc) {
@@ -303,13 +367,8 @@ const EpubViewer = forwardRef(
               const chapterCfi = item.cfi.replace(/!.*$/, '');
               const chapter = await bookInstance.get(chapterCfi);
               if (chapter) {
-                const text = chapter.textContent
-                  .replace(/\s+/g, ' ')
-                  .trim();
-                // 정확한 단어 수 계산
-                const wordCount = countWords(text);
+                const text = chapter.textContent;
                 chapterTexts.set(item.cfi, text);
-                chapterWords.set(item.cfi, wordCount);
               }
             } catch (e) {
               console.warn(`챕터 "${item.label}" 로드 실패:`, e);
@@ -334,10 +393,6 @@ const EpubViewer = forwardRef(
               'overflow-x': 'hidden'
             }
           });
-
-          // 단어 수 계산을 위한 변수들 초기화
-          let totalWordCount = 0;
-          let currentPageWordCount = 0;
 
           rendition.on('relocated', async (location) => {
             setLoading(false);
@@ -378,120 +433,57 @@ const EpubViewer = forwardRef(
                       return;
                     }
 
+                    // 챕터가 변경되었을 때 누적 글자 수 초기화
+                    if (chapterNum !== currentChapterRef.current) {
+                      currentChapterCharsRef.current = 0;
+                      currentChapterRef.current = chapterNum;
+                    }
+
                     // 현재 페이지의 모든 단락 가져오기
                     const paragraphs = visibleContent.querySelectorAll('p');
-                    let totalWordCount = 0;
+                    let pageCharCount = 0;
                     
-                    // 현재 단락까지의 단어 수만 계산
+                    // 현재 단락까지의 글자 수만 계산
                     for (let i = 0; i < paragraphs.length && i < paragraphNum; i++) {
                       const paragraph = paragraphs[i];
                       const paragraphText = paragraph.textContent;
-                      const wordsCount = countWords(paragraphText);
+                      const charCount = countCharacters(paragraphText, paragraph);
                       if (i + 1 === paragraphNum) {
-                        // 현재 단락인 경우 charOffset을 기준으로 단어 수 계산 (대략적)
-                        const approxWords = Math.ceil(charOffset / 10);
-                        totalWordCount += Math.min(approxWords, wordsCount);
+                        // 현재 단락인 경우 charOffset을 기준으로 글자 수 계산
+                        pageCharCount += Math.min(charOffset, charCount);
                       } else {
-                        totalWordCount += wordsCount;
+                        pageCharCount += charCount;
                       }
                     }
-                    
-                    // 로컬 스토리지에서 누적 단어 수 가져오기
-                    let accumulatedWords = parseInt(localStorage.getItem(ACCUMULATED_WORDS_KEY) || '0');
 
-                    // 현재 위치까지의 총 단어 수 계산
-                    let wordPosition = accumulatedWords;
+                    // 현재 페이지의 글자 수를 저장
+                    const pageKey = `${chapterNum}-${pageNum}`;
+                    chapterPageCharsRef.current.set(pageKey, pageCharCount);
 
-                    // 다음 페이지로 이동하는 경우에만 이전 단어 위치 확인
-                    const isNextPage = localStorage.getItem(NEXT_PAGE_FLAG) === 'true';
-                    const prevWordPosition = parseInt(localStorage.getItem(NEXT_PAGE_WORDS_KEY) || '0');
-
-                    // 챕터가 변경되었을 때 단어 수 초기화
-                    const prevChapter = parseInt(localStorage.getItem(CHAPTER_KEY) || '1');
-                    if (chapterNum !== prevChapter) {
-                      // 챕터 변경 시 초기화
-                      accumulatedWords = 0;
-                      wordPosition = 0;
-                      localStorage.setItem(ACCUMULATED_WORDS_KEY, '0');
-                      localStorage.setItem(NEXT_PAGE_WORDS_KEY, '0');
-                      localStorage.setItem(CHAPTER_KEY, chapterNum.toString());
-                      console.log('📍', `chapter-${chapterNum} (0번째 단어)`);
-                    }
-                    // 챕터의 첫 페이지인 경우 단어 수 초기화
-                    else if (pageNum === 1 && paragraphNum === 1 && charOffset === 0) {
-                      accumulatedWords = 0;
-                      wordPosition = 0;
-                      localStorage.setItem(ACCUMULATED_WORDS_KEY, '0');
-                      localStorage.setItem(NEXT_PAGE_WORDS_KEY, '0');
-                      console.log('📍', `chapter-${chapterNum} (0번째 단어)`);
-                    }
-                    
-                    // 다음 페이지로 이동하면서 단어 수가 0이 되는 경우에만 이전 위치 유지
-                    if (isNextPage && totalWordCount === 0 && prevWordPosition > 0) {
-                      wordPosition = prevWordPosition;
-                      accumulatedWords = prevWordPosition;
-                      localStorage.setItem(ACCUMULATED_WORDS_KEY, prevWordPosition.toString());
-                      console.log('📍', `chapter-${chapterNum} (${prevWordPosition}번째 단어)`);
-                    } else {
-                      // 현재 페이지의 단어 수 계산
-                      if (totalWordCount > 0) {
-                        wordPosition = totalWordCount;
-                        accumulatedWords = totalWordCount;
-                        
-                        // 다음 페이지를 위해 누적 단어 수 업데이트
-                        if (paragraphNum === paragraphs.length) {
-                          // 현재 페이지의 모든 단락의 단어 수 합산
-                          const pageTotalWords = Array.from(paragraphs).reduce((sum, p) => {
-                            return sum + countWords(p.textContent);
-                          }, 0);
-                          
-                          accumulatedWords = pageTotalWords;
-                          wordPosition = pageTotalWords;
-                        }
-                        localStorage.setItem(ACCUMULATED_WORDS_KEY, accumulatedWords.toString());
-                        console.log('📍', `chapter-${chapterNum} (${wordPosition}번째 단어)`);
-                      } else {
-                        // 단어 수가 0인 경우 이전 위치 유지
-                        wordPosition = prevWordPosition;
-                        accumulatedWords = prevWordPosition;
-                        localStorage.setItem(ACCUMULATED_WORDS_KEY, prevWordPosition.toString());
-                        console.log('📍', `chapter-${chapterNum} (${prevWordPosition}번째 단어)`);
+                    // 현재 챕터의 모든 페이지 글자 수를 누적
+                    currentChapterCharsRef.current = 0;
+                    for (const [key, chars] of chapterPageCharsRef.current) {
+                      if (key.startsWith(`${chapterNum}-`)) {
+                        currentChapterCharsRef.current += chars;
                       }
                     }
-                    
-                    // 다음 페이지를 위해 현재 단어 위치 저장
-                    if (wordPosition > 0) {
-                      localStorage.setItem(NEXT_PAGE_WORDS_KEY, wordPosition.toString());
-                    }
-                    
-                    // 다음 페이지 플래그 제거
-                    localStorage.removeItem(NEXT_PAGE_FLAG);
                     
                     // 이벤트 데이터 가져오기
                     try {
                       const events = getEventsForChapter(chapterNum);
-                      // 다음 페이지로 이동하면서 단어 수가 0이 되는 경우 이전 위치 사용
-                      const currentWordPosition = isNextPage && totalWordCount === 0 && prevWordPosition > 0 
-                        ? prevWordPosition 
-                        : wordPosition;
-                      // [수정] start <= currentWordPosition < end 조건으로 이벤트 탐색
-                      const currentEvent = events.find(event => currentWordPosition >= event.start && currentWordPosition < event.end);
-                      onCurrentLineChange?.(currentWordPosition, events.length, currentEvent || null);
-                      console.log('[EpubViewer onCurrentLineChange] wordIndex:', currentWordPosition, 'currentEvent:', currentEvent);
+                      const currentEvent = events.find(event => 
+                        currentChapterCharsRef.current >= event.start && 
+                        currentChapterCharsRef.current < event.end
+                      );
+                      onCurrentLineChange?.(currentChapterCharsRef.current, events.length, currentEvent || null);
                     } catch (error) {
-                      onCurrentLineChange?.(wordPosition, 0, null);
-                      console.log('[EpubViewer onCurrentLineChange] wordIndex:', wordPosition, 'currentEvent: null');
-                    }
-
-                    // relocated 이벤트 핸들러 내 chapterNum 추출 후
-                    if (onCurrentChapterChange) {
-                      onCurrentChapterChange(chapterNum);
+                      onCurrentLineChange?.(currentChapterCharsRef.current, 0, null);
                     }
                   }
                 }
               }
             } catch (error) {
-              console.error('단어 수 계산 중 오류:', error);
+              console.error('글자 수 계산 중 오류:', error);
             }
           });
 
@@ -539,8 +531,6 @@ const EpubViewer = forwardRef(
 
     // 앱이 처음 로드될 때 로컬 스토리지 초기화
     useEffect(() => {
-      localStorage.setItem(ACCUMULATED_WORDS_KEY, '0');
-      localStorage.setItem(NEXT_PAGE_WORDS_KEY, '0');
       localStorage.setItem(CHAPTER_KEY, '1');
     }, []);
 

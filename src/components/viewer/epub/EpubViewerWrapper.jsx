@@ -7,8 +7,9 @@ const EpubViewerWrapper = () => {
 
   // filename만 있을 때
   const book = {
-    path: "/" + filename,   // public 폴더 기준 epub 파일 경로
+    path: '/' + filename,   // public 폴더 기준 epub 파일 경로
     title: filename,        // 필요시 제목 대신 파일명 사용
+    filename: filename
   };
 
   return <EpubViewer book={book} />;
