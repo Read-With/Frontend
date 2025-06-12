@@ -35,18 +35,17 @@ function getEventsForChapter(chapter) {
         return matches;
       })
       .map(([path, mod]) => {
-        const eventNum = parseInt(path.match(/chapter(\d+)_events\.json$/)?.[1] || '0');
-        // 이벤트 데이터를 직접 반환
         const eventData = mod.default;
-        console.log('디버그 - 이벤트 매핑:', { 
-          path, 
-          eventNum,
-          eventData
-        });
-        return eventData;
+        if (!Array.isArray(eventData)) return [];
+        return eventData.map(event => ({
+          ...event,
+          event_id: event.event_id || 0, // event_id가 없는 경우 0으로 설정
+          eventNum: event.event_id || 0  // eventNum도 동일하게 설정
+        }));
       })
       .filter(ev => ev && ev.length > 0)
-      .flat(); // 배열을 평탄화
+      .flat()
+      .sort((a, b) => (a.event_id || 0) - (b.event_id || 0)); // event_id 기준으로 정렬
 
     console.log('디버그 - 최종 이벤트 목록:', JSON.stringify(events, null, 2));
     return events;
@@ -474,7 +473,7 @@ const EpubViewer = forwardRef(
                 // 현재 텍스트 수가 마지막 event의 end 값보다 크거나 같은 경우
                 if (currentChars >= lastEvent.end) {
                   console.log('디버그 - 마지막 이벤트 선택됨');
-                  currentEvent = { ...lastEvent, eventNum: lastEvent.event_id };
+                  currentEvent = { ...lastEvent, eventNum: lastEvent.event_id + 1 };
                 } else {
                   // 현재 텍스트 수가 속하는 event 찾기
                   for (let i = events.length - 1; i >= 0; i--) {
@@ -488,7 +487,7 @@ const EpubViewer = forwardRef(
 
                     if (currentChars >= event.start && currentChars < event.end) {
                       console.log(`디버그 - 이벤트 ${i} 선택됨`);
-                      currentEvent = { ...event, eventNum: event.event_id };
+                      currentEvent = { ...event, eventNum: event.event_id + 1 };
                       break;
                     }
                   }

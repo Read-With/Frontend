@@ -13,6 +13,7 @@ const CytoscapeGraphDirect = ({
   style = {},
   cyRef: externalCyRef,
   newNodeIds = [],
+  onLayoutComplete,
 }) => {
   const containerRef = useRef(null);
   const [ripples, setRipples] = useState([]);
@@ -53,9 +54,16 @@ const CytoscapeGraphDirect = ({
 
   // elements diff patch
   useEffect(() => {
-    setIsGraphVisible(false); // 로딩 시작 시 숨김
     const cy = externalCyRef?.current;
     if (!cy) return;
+
+    // elements가 없으면 그래프 초기화
+    if (!elements || elements.length === 0) {
+      cy.elements().remove();
+      setIsGraphVisible(false);
+      return;
+    }
+
     cy.batch(() => {
       // 기존 노드/엣지 id 집합
       const prevNodeIds = new Set(cy.nodes().map(n => n.id()));
@@ -69,6 +77,7 @@ const CytoscapeGraphDirect = ({
 
       // 추가: 새로 들어온 노드/엣지만 추가
       elements.forEach(e => {
+        if (!e.data) return; // data가 없는 경우 건너뛰기
         const safeData = {
           ...e.data,
           names: Array.isArray(e.data.names)
@@ -80,18 +89,16 @@ const CytoscapeGraphDirect = ({
           description: e.data.description || '',
           portrait_prompt: e.data.portrait_prompt || ''
         };
-        if (!cy.getElementById(e.data.id).length) {
-          const ele = cy.add({
+
+        // 노드 또는 엣지 추가/업데이트
+        const ele = cy.getElementById(e.data.id);
+        if (!ele.length) {
+          cy.add({
             group: e.data.source ? 'edges' : 'nodes',
             data: safeData,
             position: e.position
           });
-          if (!e.data.source && newNodeIds && newNodeIds.includes(e.data.id)) {
-            ele.addClass('cytoscape-node-appear');
-            setTimeout(() => ele.removeClass('cytoscape-node-appear'), 700);
-          }
         } else {
-          const ele = cy.getElementById(e.data.id);
           ele.data(safeData);
           if (e.position) {
             ele.position(e.position);
@@ -103,33 +110,29 @@ const CytoscapeGraphDirect = ({
       if (stylesheet) {
         cy.style(stylesheet);
       }
-      let needLayout = false;
-      if (layout && layout.name === 'preset') {
-        elements.forEach(e => {
-          if (e.position) {
-            const node = cy.getElementById(e.data.id);
-            if (node && (node.position('x') !== e.position.x || node.position('y') !== e.position.y)) {
-              needLayout = true;
-            }
-          }
+
+      // 레이아웃 적용
+      if (layout) {
+        const layoutInstance = cy.layout(layout);
+        layoutInstance.on('layoutstop', () => {
+          if (onLayoutComplete) onLayoutComplete();
         });
-        if (needLayout) {
-          cy.layout(layout).run();
-        }
-      } else if (layout) {
-        cy.layout(layout).run();
+        layoutInstance.run();
       }
+
       // fitNodeIds가 있으면 해당 노드에 맞춤
       if (fitNodeIds && fitNodeIds.length > 0) {
         const nodes = cy.nodes().filter(n => fitNodeIds.includes(n.id()));
         if (nodes.length > 0) cy.fit(nodes, 40);
+      } else {
+        // 전체 그래프에 맞춤
+        cy.fit(undefined, 40);
       }
     });
-    // pan/zoom만 fit 적용 (노드 position은 그대로)
-    setTimeout(() => {
-      setIsGraphVisible(true); // 모든 처리 끝나면 보이게
-    }, 0);
-  }, [elements, stylesheet, layout, fitNodeIds, externalCyRef, newNodeIds]);
+
+    // 모든 처리가 끝나면 즉시 보이게
+    setIsGraphVisible(true);
+  }, [elements, stylesheet, layout, fitNodeIds, externalCyRef, newNodeIds, onLayoutComplete]);
 
   // 크기 반응형
   useEffect(() => {

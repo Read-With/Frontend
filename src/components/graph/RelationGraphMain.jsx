@@ -34,7 +34,7 @@ function RelationGraphMain({ elements, inViewer = false, fullScreen = false, onF
   const { filename } = useParams();
   const prevElementsRef = useRef();
   const prevEventJsonRef = useRef();
-  const [isGraphLoading] = useState(false);
+  const [isGraphLoading, setIsGraphLoading] = useState(true);
   const prevChapterNum = useRef();
   const prevEventNum = useRef();
   const prevElementsStr = useRef();
@@ -385,21 +385,23 @@ function RelationGraphMain({ elements, inViewer = false, fullScreen = false, onF
 
   // 개선된 코드: chapterNum, eventNum이 바뀔 때만 로딩 오버레이 표시
   useEffect(() => {
-    const isChapterOrEventChanged =
-      prevChapterNum.current !== chapterNum ||
-      prevEventNum.current !== eventNum;
-
-    if (isChapterOrEventChanged) {
-      // setIsGraphLoading(true);
+    if (chapterNum !== prevChapterNum.current || eventNum !== prevEventNum.current) {
+      setIsGraphLoading(true);
+      prevChapterNum.current = chapterNum;
+      prevEventNum.current = eventNum;
     }
-    // 이전 값 저장
-    prevChapterNum.current = chapterNum;
-    prevEventNum.current = eventNum;
   }, [chapterNum, eventNum]);
 
   useEffect(() => {
     console.log('[상태점검] chapterNum:', chapterNum, 'eventNum:', eventNum, 'maxEventNum:', maxEventNum, 'isLastEvent:', eventNum === maxEventNum);
   }, [chapterNum, eventNum, maxEventNum]);
+
+  // elements가 변경될 때 로딩 상태 업데이트
+  useEffect(() => {
+    if (elements) {
+      setIsGraphLoading(false);
+    }
+  }, [elements]);
 
   // elements, stylesheet, layout, searchLayout, style useMemo 최적화
   const memoizedElements = useMemo(() => filteredElements, [filteredElements]);

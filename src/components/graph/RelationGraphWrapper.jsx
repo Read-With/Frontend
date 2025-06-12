@@ -29,10 +29,11 @@ function RelationGraphWrapper() {
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
   const [hideIsolated, setHideIsolated] = useState(true);
-  const [eventNum, setEventNum] = useState(1);
+  const [eventNum, setEventNum] = useState(0);
   const [maxEventNum, setMaxEventNum] = useState(0);
   const [graphViewState, setGraphViewState] = useState(null);
   const [newNodeIds, setNewNodeIds] = useState([]);
+  const [chapterEvents, setChapterEvents] = useState([]);
 
   // === 1. 챕터별/이벤트별 모든 relations.json을 미리 누적 구조로 준비 ===
   const allEventsDataRef = useRef({}); // { [chapterNum]: [ {nodes, edges} ... ] }
@@ -46,90 +47,143 @@ function RelationGraphWrapper() {
     const eventFiles = Object.keys(eventModules)
       .filter(path => path.includes(`/${num}_ev`) && path.includes('_relations.json'))
       .sort((a, b) => {
-        // evN에서 N만 추출해서 정렬
-        const getEvNum = p => parseInt((p.match(/_ev(\d+)_/) || [])[1] || (p.match(/_ev(\d+)\./) || [])[1] || '0', 10);
-        return getEvNum(a) - getEvNum(b);
+        const numA = parseInt(a.match(/_ev(\d+)_/)[1]);
+        const numB = parseInt(b.match(/_ev(\d+)_/)[1]);
+        return numA - numB;
       });
+
     allEventFilesRef.current[num] = eventFiles;
-    setMaxEventNum(eventFiles.length);
-    setEventNum(1);
+    setMaxEventNum(eventFiles.length + 1); // 이벤트 0을 포함하도록 +1
+
     // 캐릭터 정보 미리 저장
     allCharactersRef.current[num] = getChapterCharacters(currentChapter);
+
     // 누적 노드/엣지 준비
     let accumulatedNodeIds = new Set();
     let accumulatedEdgeIds = new Set();
     let accumulatedNodes = [];
     let accumulatedEdges = [];
     const chapterEvents = [];
-    eventFiles.forEach((file, idx) => {
-      const data = eventModules[file].default || {};
-      // new_appearances: id 배열
-      const newNodeIds = Array.isArray(data.new_appearances) ? data.new_appearances.map(id => String(Math.trunc(id))) : [];
-      // relations: 엣지 배열
-      const newEdges = Array.isArray(data.relations) ? data.relations : [];
-      // 노드 상세정보 characters.json에서 찾아서 생성
-      const charList = allCharactersRef.current[num] || [];
-      const newNodes = newNodeIds
-        .filter(id => !accumulatedNodeIds.has(id))
-        .map(id => {
-          const char = charList.find(c => String(Math.trunc(c.id)) === id);
-          return {
-            data: {
-              id: id,
-              label: char?.common_name || char?.name || id,
-              main: char?.main_character,
-              description: char?.description,
-              names: char?.names,
-              img: char?.img,
-            },
-            // position: ... (필요시 위치 정보 추가)
-          };
-        });
-      // 엣지 생성
-      const edges = newEdges
-        .filter(e => e.id1 != null && e.id2 != null)
-        .map((e, i) => {
-          const source = String(Math.trunc(e.id1));
-          const target = String(Math.trunc(e.id2));
-          const edgeId = `${source}_${target}_${i}`;
-          if (accumulatedEdgeIds.has(edgeId)) return null;
-          return {
-            data: {
-              id: edgeId,
-              source,
-              target,
-              label: Array.isArray(e.relation) ? e.relation.join(", ") : e.type,
-              explanation: e.explanation,
-              positivity: e.positivity,
-              weight: e.weight,
-            },
-          };
-        }).filter(Boolean);
-      // 누적
-      newNodes.forEach(n => accumulatedNodeIds.add(n.data.id));
-      edges.forEach(e => accumulatedEdgeIds.add(e.data.id));
-      accumulatedNodes = [...accumulatedNodes, ...newNodes];
-      accumulatedEdges = [...accumulatedEdges, ...edges];
-      // 이 시점의 누적 elements 저장
-      chapterEvents.push({
-        nodes: [...accumulatedNodes],
-        edges: [...accumulatedEdges],
-        newNodeIds: newNodes.map(n => n.data.id),
-      });
+
+    // 이벤트 0 추가 (초기 캐릭터 데이터)
+    const initialCharacters = allCharactersRef.current[num] || [];
+    const initialNodes = initialCharacters.map(char => ({
+      data: {
+        id: String(Math.trunc(char.id)),
+        label: char.common_name || char.name || String(char.id),
+        main: char.main_character,
+        description: char.description,
+        names: char.names,
+        img: char.img,
+      }
+    }));
+
+    // 초기 노드들을 accumulatedNodes에 추가
+    initialNodes.forEach(n => accumulatedNodeIds.add(n.data.id));
+    accumulatedNodes = [...accumulatedNodes, ...initialNodes];
+
+    chapterEvents.push({
+      eventNum: 0,
+      nodes: initialNodes,
+      edges: [],
+      newNodeIds: initialNodes.map(n => n.data.id)
     });
+
+    // 모든 이벤트 파일 처리
+    eventFiles.forEach((file, idx) => {
+      try {
+        const data = eventModules[file].default || {};
+        // new_appearances: id 배열
+        const newNodeIds = Array.isArray(data.new_appearances) ? data.new_appearances.map(id => String(Math.trunc(id))) : [];
+        // relations: 엣지 배열
+        const newEdges = Array.isArray(data.relations) ? data.relations : [];
+        // 노드 상세정보 characters.json에서 찾아서 생성
+        const charList = allCharactersRef.current[num] || [];
+        const newNodes = newNodeIds
+          .filter(id => !accumulatedNodeIds.has(id))
+          .map(id => {
+            const char = charList.find(c => String(Math.trunc(c.id)) === id);
+            return {
+              data: {
+                id: id,
+                label: char?.common_name || char?.name || id,
+                main: char?.main_character,
+                description: char?.description,
+                names: char?.names,
+                img: char?.img,
+              }
+            };
+          });
+
+        // 엣지 생성
+        const edges = newEdges
+          .filter(e => e.id1 != null && e.id2 != null)
+          .map((e, i) => {
+            const source = String(Math.trunc(e.id1));
+            const target = String(Math.trunc(e.id2));
+            const edgeId = `${source}_${target}_${i}`;
+            if (accumulatedEdgeIds.has(edgeId)) return null;
+            return {
+              data: {
+                id: edgeId,
+                source,
+                target,
+                label: Array.isArray(e.relation) ? e.relation.join(", ") : e.type,
+                explanation: e.explanation,
+                positivity: e.positivity,
+                weight: e.weight,
+              }
+            };
+          }).filter(Boolean);
+
+        // 누적
+        newNodes.forEach(n => accumulatedNodeIds.add(n.data.id));
+        edges.forEach(e => accumulatedEdgeIds.add(e.data.id));
+        accumulatedNodes = [...accumulatedNodes, ...newNodes];
+        accumulatedEdges = [...accumulatedEdges, ...edges];
+
+        // 이 시점의 누적 elements 저장
+        chapterEvents.push({
+          eventNum: idx,  // 0부터 시작하도록 수정
+          nodes: [...accumulatedNodes],
+          edges: [...accumulatedEdges],
+          newNodeIds: newNodes.map(n => n.data.id)
+        });
+      } catch (error) {
+        console.error(`Error processing event file ${file}:`, error);
+        // 오류 발생 시 빈 이벤트 추가
+        chapterEvents.push({
+          eventNum: idx,  // 0부터 시작하도록 수정
+          nodes: [...accumulatedNodes],
+          edges: [...accumulatedEdges],
+          newNodeIds: []
+        });
+      }
+    });
+
     allEventsDataRef.current[num] = chapterEvents;
+    setChapterEvents(chapterEvents);
+
     // 첫 이벤트로 초기화
-    setElements([...(chapterEvents[0]?.nodes || []), ...(chapterEvents[0]?.edges || [])]);
-    setNewNodeIds(chapterEvents[0]?.newNodeIds || []);
+    if (chapterEvents.length > 0) {
+      const initialElements = [...(chapterEvents[0]?.nodes || []), ...(chapterEvents[0]?.edges || [])];
+      setElements(initialElements);
+      setNewNodeIds(chapterEvents[0]?.newNodeIds || []);
+    } else {
+      setElements([]);
+      setNewNodeIds([]);
+    }
   }, [currentChapter]);
 
   // === 2. eventNum이 바뀔 때마다 해당 시점의 누적 elements로 setElements ===
   useEffect(() => {
     const num = String(currentChapter).padStart(2, '0');
     const chapterEvents = allEventsDataRef.current[num] || [];
-    const idx = Math.max(0, Math.min(eventNum - 1, chapterEvents.length - 1));
+    // eventNum이 0부터 시작하므로 그대로 인덱스로 사용
+    const idx = Math.max(0, Math.min(eventNum, chapterEvents.length - 1));
     const curr = chapterEvents[idx] || { nodes: [], edges: [], newNodeIds: [] };
-    setElements([...(curr.nodes || []), ...(curr.edges || [])]);
+    const elements = [...(curr.nodes || []), ...(curr.edges || [])];
+    setElements(elements);
     setNewNodeIds(curr.newNodeIds || []);
   }, [eventNum, currentChapter]);
 

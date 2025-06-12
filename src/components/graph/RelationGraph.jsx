@@ -3,6 +3,7 @@ import CytoscapeGraphDirect from "./CytoscapeGraphDirect";
 import GraphNodeTooltip from './NodeTooltip';
 import EdgeTooltip from './EdgeTooltip';
 import "./RelationGraph.css";
+import { calcGraphDiff } from './graphDiff';
 
 // 간선 positivity 값에 따라 HSL 그라데이션 색상 반환
 function getRelationColor(positivity) {
@@ -20,6 +21,17 @@ const RelationGraph = ({ elements, inViewer = false }) => {
   const [isLayoutDone, setIsLayoutDone] = useState(false);
   const [prevNodeCount, setPrevNodeCount] = useState(elements.filter(e => !e.data.source).length);
 
+  // elements가 변경될 때마다 isLayoutDone 초기화
+  useEffect(() => {
+    if (elements && elements.length > 0) {
+      const currentNodeCount = elements.filter(e => !e.data.source).length;
+      if (currentNodeCount !== prevNodeCount) {
+        setIsLayoutDone(false);
+        setPrevNodeCount(currentNodeCount);
+      }
+    }
+  }, [elements, prevNodeCount]);
+
   // 툴크 상태 업데이트를 useCallback으로 최적화
   const updateTooltip = useCallback((type, data, position) => {
     setActiveTooltip((prev) => {
@@ -32,6 +44,8 @@ const RelationGraph = ({ elements, inViewer = false }) => {
     if (!cyRef.current) return;
     const node = evt.target;
     const nodeData = node.data();
+    if (!nodeData) return; // 데이터가 없는 경우 건너뛰기
+
     const pos = node.renderedPosition();
     const cy = cyRef.current;
     const pan = cy.pan();
@@ -80,6 +94,9 @@ const RelationGraph = ({ elements, inViewer = false }) => {
     if (!cyRef.current) return;
     const cy = cyRef.current;
     const edge = evt.target;
+    const edgeData = edge.data();
+    if (!edgeData) return; // 데이터가 없는 경우 건너뛰기
+
     const container = document.querySelector(".graph-canvas-area");
     const containerRect = container.getBoundingClientRect();
 
@@ -93,7 +110,7 @@ const RelationGraph = ({ elements, inViewer = false }) => {
     setActiveTooltip(null);
     updateTooltip('edge', {
       id: edge.id(),
-      data: edge.data(),
+      data: edgeData,
       sourceNode: edge.source(),
       targetNode: edge.target()
     }, {
@@ -242,15 +259,10 @@ const RelationGraph = ({ elements, inViewer = false }) => {
     };
   }, [isLayoutDone]);
 
-  // 최초 1회만 레이아웃 실행 후 isLayoutDone을 true로
-  useEffect(() => {
-    if (!isLayoutDone && cyRef.current) {
-      const cy = cyRef.current;
-      const handler = () => setIsLayoutDone(true);
-      cy.on('layoutstop', handler);
-      return () => cy.off('layoutstop', handler);
-    }
-  }, [isLayoutDone]);
+  // layout 완료 핸들러
+  const handleLayoutComplete = useCallback(() => {
+    setIsLayoutDone(true);
+  }, []);
 
   // 그래프가 바뀔 때마다 항상 중앙에 fit
   useEffect(() => {
@@ -259,13 +271,35 @@ const RelationGraph = ({ elements, inViewer = false }) => {
     }
   }, [elements]);
 
-
   useEffect(() => {
-    const currentNodeCount = elements.filter(e => !e.data.source).length;
-    if (currentNodeCount > prevNodeCount) {
-      setIsLayoutDone(false); // 새 노드 등장 시 레이아웃 재실행
+    if (!cyRef.current) return; // cyRef.current가 null인 경우 처리
+    const prevElements = cyRef.current.elements().map(e => e.data());
+    if (!prevElements || !elements) return; // prevElements 또는 elements가 undefined인 경우 처리
+    const { added } = calcGraphDiff(prevElements, elements);
+    
+    if (added.length > 0) {
+      cyRef.current.batch(() => {
+        added.forEach(e => {
+          if (!e.data || !e.data.id) return; // 유효하지 않은 데이터는 건너뛰기
+          const safeData = {
+            ...e.data,
+            names: Array.isArray(e.data.names)
+              ? JSON.stringify(e.data.names)
+              : (e.data.names ? JSON.stringify([e.data.names]) : '[]'),
+            main: typeof e.data.main === 'boolean'
+              ? String(e.data.main)
+              : (e.data.main === undefined ? 'false' : String(e.data.main)),
+            description: e.data.description || '',
+            portrait_prompt: e.data.portrait_prompt || ''
+          };
+          cyRef.current.add({
+            group: e.data.source ? 'edges' : 'nodes',
+            data: safeData,
+            position: e.position
+          });
+        });
+      });
     }
-    setPrevNodeCount(currentNodeCount);
   }, [elements]);
 
   return (
@@ -304,6 +338,7 @@ const RelationGraph = ({ elements, inViewer = false }) => {
         tapEdgeHandler={tapEdgeHandler}
         tapBackgroundHandler={tapBackgroundHandler}
         cyRef={cyRef}
+        onLayoutComplete={handleLayoutComplete}
       />
     </div>
   );

@@ -1,54 +1,39 @@
 import React, { useEffect, useState } from 'react';
 import RelationGraph from './RelationGraph';
-import events from '../../data/gatsby/chapter1_events.json';
-import event1 from '../../data/gatsby/chapter1_relationships_event_1.json';
-import event2 from '../../data/gatsby/chapter1_relationships_event_2.json';
-import event3 from '../../data/gatsby/chapter1_relationships_event_3.json';
-import event4 from '../../data/gatsby/chapter1_relationships_event_4.json';
-import event5 from '../../data/gatsby/chapter1_relationships_event_5.json';
-import event6 from '../../data/gatsby/chapter1_relationships_event_6.json';
-import event7 from '../../data/gatsby/chapter1_relationships_event_7.json';
-import event8 from '../../data/gatsby/chapter1_relationships_event_8.json';
-import event9 from '../../data/gatsby/chapter1_relationships_event_9.json';
-import event10 from '../../data/gatsby/chapter1_relationships_event_10.json';
-import event11 from '../../data/gatsby/chapter1_relationships_event_11.json';
-import event12 from '../../data/gatsby/chapter1_relationships_event_12.json';
-import event13 from '../../data/gatsby/chapter1_relationships_event_13.json';
-import event14 from '../../data/gatsby/chapter1_relationships_event_14.json';
-import event15 from '../../data/gatsby/chapter1_relationships_event_15.json';
-import event16 from '../../data/gatsby/chapter1_relationships_event_16.json';
-import event17 from '../../data/gatsby/chapter1_relationships_event_17.json';
-import event18 from '../../data/gatsby/chapter1_relationships_event_18.json';
 import RelationGraphMain from './RelationGraphMain';
 
-const eventDataMap = {
-  "1": event1,
-  "2": event2,
-  "3": event3,
-  "4": event4,
-  "5": event5,
-  "6": event6,
-  "7": event7,
-  "8": event8,
-  "9": event9,
-  "10": event10,
-  "11": event11,
-  "12": event12,
-  "13": event13,
-  "14": event14,
-  "15": event15,
-  "16": event16,
-  "17": event17,
-  "18": event18,
-};
+// 이벤트 관계 데이터를 동적으로 가져오기
+const eventRelationModules = import.meta.glob('../../data/gatsby/chapter*_relationships_event_*.json', { eager: true });
+const charactersModules = import.meta.glob('../../data/gatsby/c_chapter*_0.json', { eager: true });
 
-function getChapterNumByPosition(position) {
-  return 1;
+function getEventData(chapter, eventId) {
+  const num = String(chapter);
+  const eventIdStr = String(eventId);
+  console.log('디버그 - getEventData 호출:', {
+    chapter,
+    num,
+    eventId,
+    eventIdStr,
+    availableFiles: Object.keys(eventRelationModules)
+  });
+  
+  const filePath = Object.keys(eventRelationModules).find(path => 
+    path.includes(`chapter${num}_relationships_event_${eventIdStr}.json`)
+  );
+  console.log('디버그 - 찾은 파일 경로:', filePath);
+  
+  const data = filePath ? eventRelationModules[filePath]?.default : null;
+  console.log('디버그 - 로드된 데이터:', data);
+  
+  return data;
 }
 
-function getEventIdByPosition(position) {
-  const event = events.find(e => position >= e.start && position < e.end);
-  return event ? event.event_id : null;
+function getCharactersData(chapter) {
+  const num = String(chapter);
+  const filePath = Object.keys(charactersModules).find(path => 
+    path.includes(`c_chapter${num}_0.json`)
+  );
+  return filePath ? charactersModules[filePath]?.default : null;
 }
 
 function convertRelationsToElements(relations, idToName, idToDesc, idToMain, idToNames) {
@@ -105,34 +90,45 @@ const GraphContainer = ({ currentPosition, currentEvent, ...props }) => {
     }
 
     try {
-      const eventId = currentEvent.event_id;
-      const eventData = eventDataMap[String(eventId)];
+      const eventId = currentEvent.event_id || 0;  // event_id가 없으면 0으로 설정
+      const chapter = currentEvent.chapter || 1;
+      
+      // 이벤트 데이터 가져오기 (event_id가 0이면 1번 파일 사용)
+      const eventData = getEventData(chapter, eventId === 0 ? 1 : eventId);
       if (!eventData) {
         setElements([]);
         setError('해당 eventId의 관계 데이터가 없습니다.');
         return;
       }
 
-      import('../../data/gatsby/c_chapter1_0.json').then(characters => {
-        const idToName = {};
-        const idToDesc = {};
-        const idToMain = {};
-        const idToNames = {};
-        (characters.characters || characters).forEach(char => {
-          const id = String(Math.trunc(char.id));
-          idToName[id] = char.common_name || char.name || (Array.isArray(char.names) ? char.names[0] : String(char.id));
-          idToDesc[id] = char.description || '';
-          idToMain[id] = char.main_character || false;
-          idToNames[id] = char.names || [];
-        });
-        const relations = eventData.relations || [];
-        const els = convertRelationsToElements(relations, idToName, idToDesc, idToMain, idToNames);
-        setElements(els);
-        setLoading(false);
+      // 캐릭터 데이터 가져오기
+      const characters = getCharactersData(chapter);
+      if (!characters) {
+        setElements([]);
+        setError('캐릭터 데이터를 찾을 수 없습니다.');
+        return;
+      }
+
+      const idToName = {};
+      const idToDesc = {};
+      const idToMain = {};
+      const idToNames = {};
+      
+      (characters.characters || characters).forEach(char => {
+        const id = String(Math.trunc(char.id));
+        idToName[id] = char.common_name || char.name || (Array.isArray(char.names) ? char.names[0] : String(char.id));
+        idToDesc[id] = char.description || '';
+        idToMain[id] = char.main_character || false;
+        idToNames[id] = char.names || [];
       });
+
+      const relations = eventData.relations || [];
+      const els = convertRelationsToElements(relations, idToName, idToDesc, idToMain, idToNames);
+      setElements(els);
+      setLoading(false);
     } catch (err) {
       setElements([]);
-      setError('파일 import 실패: ' + err);
+      setError('데이터 처리 중 오류 발생: ' + err);
     }
   }, [currentEvent]);
 

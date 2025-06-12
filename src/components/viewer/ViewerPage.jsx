@@ -107,36 +107,61 @@ const loadViewerMode = () => {
 
 //이번에 바꾼것임
 function getEventsForChapter(chapter) {
-  const num = String(chapter)
+  const num = String(chapter);
+  console.log('디버그 - getEventsForChapter 호출:', {
+    chapter,
+    num,
+    eventTextModules: Object.keys(eventTextModules),
+    eventRelationModules: Object.keys(eventRelationModules)
+  });
+
   // 1. 이벤트 본문 데이터 추출
   const textFilePath = Object.keys(eventTextModules).find(path => path.includes(`chapter${num}_events.json`));
+  console.log('디버그 - textFilePath:', textFilePath);
+  
   const textArray = textFilePath ? eventTextModules[textFilePath]?.default : [];
-  // 2. 각 event에 대해 event_id+1에 해당하는 관계 파일을 찾음
+  console.log('디버그 - textArray:', textArray);
+
+  // 2. 각 event에 대해 event_id에 해당하는 관계 파일을 찾음
   const eventsWithRelations = textArray.map(event => {
+    const eventId = event.event_id || 0; // event_id가 없으면 0으로 설정
     const relFilePath = Object.keys(eventRelationModules).find(path =>
-      path.includes(`chapter${num}_relationships_event_${event.event_id + 1}.json`)
+      path.includes(`chapter${num}_relationships_event_${eventId === 0 ? 1 : eventId}.json`)
     );
+    console.log('디버그 - event 관계 파일:', {
+      eventId,
+      relFilePath,
+      relations: relFilePath ? eventRelationModules[relFilePath]?.default : null
+    });
+
     const relations = relFilePath ? eventRelationModules[relFilePath]?.default?.relations || [] : [];
     return {
       ...event,
-      eventNum: (event.event_id ?? 0) + 1,
+      eventNum: eventId,
       relations,
     };
   });
+
+  console.log('디버그 - 최종 이벤트 목록:', eventsWithRelations);
   return eventsWithRelations;
 }
 
 function getElementsFromRelations(relations, characterData, _newAppearances, importance) {
   // 1. relation, importance에 등장하는 id 모두 수집 (newAppearances는 무시)
   const nodeIdSet = new Set();
-  if (Array.isArray(relations)) {
-    relations.forEach(rel => {
+  
+  // relations가 객체인 경우 relations.relations 배열을 사용
+  const relationsArray = relations?.relations || (Array.isArray(relations) ? relations : []);
+  
+  if (Array.isArray(relationsArray)) {
+    relationsArray.forEach(rel => {
       if (rel.id1 !== undefined) nodeIdSet.add(safeId(rel.id1));
       if (rel.id2 !== undefined) nodeIdSet.add(safeId(rel.id2));
       if (rel.source !== undefined) nodeIdSet.add(safeId(rel.source));
       if (rel.target !== undefined) nodeIdSet.add(safeId(rel.target));
     });
   }
+  
   if (importance && typeof importance === 'object') {
     Object.keys(importance).forEach(id => nodeIdSet.add(safeId(id)));
   }
@@ -165,7 +190,7 @@ function getElementsFromRelations(relations, characterData, _newAppearances, imp
   }
 
   // 3. 엣지 생성 (safeId 적용)
-  const edges = (relations || [])
+  const edges = relationsArray
     .filter(rel => {
       const source = safeId(rel.id1 || rel.source);
       const target = safeId(rel.id2 || rel.target);
@@ -227,8 +252,8 @@ const ViewerPage = ({ darkMode: initialDarkMode }) => {
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [settings, setSettings] = useState(() => loadSettings());
   const [darkMode, setDarkMode] = useState(initialDarkMode || settings.theme === 'dark');
-  const [showGraph, setShowGraph] = useState(settings.showGraph); // 설정에서 그래프 표시 여부 로드
-  const [currentChapter, setCurrentChapter] = useState(1); // 현재 챕터 번호
+  const [showGraph, setShowGraph] = useState(settings.showGraph);
+  const [currentChapter, setCurrentChapter] = useState(1);
   const [graphFullScreen, setGraphFullScreen] = useState(false);
   const [elements, setElements] = useState([]);
   const [currentCharIndex, setCurrentCharIndex] = useState(0);
@@ -241,10 +266,13 @@ const ViewerPage = ({ darkMode: initialDarkMode }) => {
   const [prevEvent, setPrevEvent] = useState(null);
   const [graphViewState, setGraphViewState] = useState(null);
   const [hideIsolated, setHideIsolated] = useState(true);
-  const maxChapter = 9; // data 폴더 기준
+  const [characterData, setCharacterData] = useState(null);
+  const [events, setEvents] = useState([]);
+  const [maxChapter, setMaxChapter] = useState(9); // data 폴더 기준
   const [searchInput, setSearchInput] = useState('');
   const [search, setSearch] = useState('');
   const [isReloading, setIsReloading] = useState(false);
+  const [eventNum, setEventNum] = useState(0);
 
   // location.state에서 book 정보를 가져오거나, 없으면 filename에서 생성
   const book = location.state?.book || {
@@ -338,26 +366,111 @@ const ViewerPage = ({ darkMode: initialDarkMode }) => {
   }, [currentPage]);
 
   // 데이터 로딩 상태 관리
-  useEffect(() => {
-    const loadData = async () => {
-      setIsDataReady(false);
+  const loadData = async () => {
+    try {
       setLoading(true);
-      try {
-        setCurrentCharIndex(0);
-        setTotalChapterWords(0);
-        const events = getEventsForChapter(currentChapter);
-        setEvents(events);
-        const charactersData = getChapterFile(currentChapter, 'characters');
-        setCharactersData(charactersData);
-        setIsDataReady(true);
-      } catch (error) {
-        toast.error('데이터를 불러오는 중 오류가 발생했습니다.');
-      } finally {
-        setLoading(false);
+      setIsDataReady(false);
+
+      // 이벤트 데이터 로드
+      const events = await getEventsForChapter(currentChapter);
+      console.log('디버그 - 로드된 이벤트:', events);
+      setEvents(events);
+
+      // 캐릭터 데이터 로드 - c_chapter1_0.json 사용
+      const characterFilePath = Object.keys(charactersModules).find(path => 
+        path.includes(`c_chapter${currentChapter}_0.json`)
+      );
+      if (!characterFilePath) {
+        throw new Error(`캐릭터 데이터 파일을 찾을 수 없습니다: chapter${currentChapter}`);
       }
-    };
-    loadData();
-  }, [currentChapter]);
+      const characterData = charactersModules[characterFilePath].default;
+      console.log('디버그 - 로드된 캐릭터 데이터:', characterData);
+      setCharacterData(characterData);
+
+      // 첫 번째 이벤트 설정
+      if (events && events.length > 0) {
+        const firstEvent = events[0]; // 첫 번째 이벤트 사용
+        console.log('디버그 - 첫 번째 이벤트:', firstEvent);
+        if (firstEvent) {
+          const eventId = firstEvent.event_id || 0;  // event_id가 없으면 0으로 설정
+          
+          // 이벤트 ID가 0이거나 없는 경우 (목차 등)
+          if (eventId === 0) {
+            setCurrentEvent({
+              ...firstEvent,
+              eventNum: 0,
+              name: "다음 페이지로 넘어가주세요"
+            });
+            
+            // 이벤트 ID가 0일 때는 1번 관계 파일 사용
+            const eventRelationFilePath = Object.keys(eventRelationModules).find(path => 
+              path.includes(`chapter${currentChapter}_relationships_event_1.json`)
+            );
+            if (!eventRelationFilePath) {
+              throw new Error(`이벤트 관계 데이터 파일을 찾을 수 없습니다: chapter${currentChapter} event1`);
+            }
+            const eventRelations = eventRelationModules[eventRelationFilePath].default;
+            console.log('디버그 - 로드된 관계 데이터 (event_id=0):', eventRelations);
+            const elements = getElementsFromRelations(eventRelations, characterData, [], 1);
+            console.log('디버그 - 생성된 elements (event_id=0):', elements);
+            setElements(elements);
+          } else {
+            setCurrentEvent({
+              ...firstEvent,
+              eventNum: eventId
+            });
+            
+            // 이벤트의 관계 데이터 로드
+            const eventRelationFilePath = Object.keys(eventRelationModules).find(path => 
+              path.includes(`chapter${currentChapter}_relationships_event_${eventId}.json`)
+            );
+            if (!eventRelationFilePath) {
+              throw new Error(`이벤트 관계 데이터 파일을 찾을 수 없습니다: chapter${currentChapter} event${eventId}`);
+            }
+            const eventRelations = eventRelationModules[eventRelationFilePath].default;
+            console.log('디버그 - 로드된 관계 데이터:', eventRelations);
+            const elements = getElementsFromRelations(eventRelations, characterData, [], eventId);
+            console.log('디버그 - 생성된 elements:', elements);
+            setElements(elements);
+          }
+        }
+      }
+
+      setIsDataReady(true);
+      setLoading(false);
+    } catch (error) {
+      console.error('데이터 로드 중 오류:', error);
+      setLoading(false);
+    }
+  };
+
+  // currentEvent가 변경될 때 관계 데이터 업데이트
+  useEffect(() => {
+    if (isDataReady && !loading && currentEvent) {
+      const eventId = currentEvent.event_id || 1;  // event_id가 없으면 1로 설정
+      const eventNum = currentEvent.eventNum || 1;  // eventNum이 없으면 1로 설정
+      
+      // 이벤트 관계 데이터 로드
+      const loadEventRelations = async () => {
+        try {
+          const eventRelationFilePath = Object.keys(eventRelationModules).find(path => 
+            path.includes(`chapter${currentChapter}_relationships_event_${eventId}.json`)
+          );
+          if (!eventRelationFilePath) {
+            console.warn(`이벤트 관계 데이터 파일을 찾을 수 없습니다: chapter${currentChapter} event${eventId}`);
+            return;
+          }
+          const eventRelations = eventRelationModules[eventRelationFilePath].default;
+          const elements = getElementsFromRelations(eventRelations, characterData, [], eventNum);
+          setElements(elements);
+        } catch (error) {
+          console.error('이벤트 관계 데이터 로드 중 오류:', error);
+        }
+      };
+
+      loadEventRelations();
+    }
+  }, [isDataReady, loading, currentEvent, currentChapter, characterData]);
 
   // currentChapter가 바뀔 때 currentEvent, prevEvent, elements 등도 초기화
   useEffect(() => {
@@ -368,9 +481,7 @@ const ViewerPage = ({ darkMode: initialDarkMode }) => {
 
   // === [추가] 챕터 전체 그래프(fullElements) 생성 ===
   const fullElements = useMemo(() => {
-    const events = getEventsForChapter(currentChapter);
-    const charactersData = getChapterFile(currentChapter, 'characters');
-    if (!events || !events.length || !charactersData || !charactersData.length) return [];
+    if (!events || !events.length || !characterData || !characterData.length) return [];
     // 모든 relations/importance/new_appearances를 합침
     let allRelations = [];
     let allImportance = {};
@@ -393,27 +504,29 @@ const ViewerPage = ({ darkMode: initialDarkMode }) => {
       }
       if (Array.isArray(ev.new_appearances)) allNewAppearances = allNewAppearances.concat(ev.new_appearances);
     });
-    return getElementsFromRelations(allRelations, charactersData, allNewAppearances, allImportance);
-  }, [currentChapter]);
+    return getElementsFromRelations(allRelations, characterData, allNewAppearances, allImportance);
+  }, [currentChapter, events, characterData]);
 
   // === [수정] elements: 데이터 준비/이벤트별 분리 ===
   // 1. 데이터 준비되면 fullElements를 보여줌
   useEffect(() => {
-    if (isDataReady && (!currentEvent && !prevEvent)) {
+    if (isDataReady && !currentEvent) {
       setElements(fullElements);
       setLoading(false);
     }
-  }, [isDataReady, currentEvent, prevEvent, fullElements]);
+  }, [isDataReady, currentEvent, fullElements]);
 
   // 2. currentEvent가 잡히면 이벤트별 필터링 그래프를 보여줌
   useEffect(() => {
-    if (!isDataReady || !currentEvent) return;
-    // 기존의 이벤트별 필터링 로직 복사
+    if (!currentEvent || !isDataReady) return;
+    
     const events = getEventsForChapter(currentChapter);
     if (!events || !events.length) return;
+    
     const maxEventNum = currentEvent?.eventNum || events[events.length - 1].eventNum;
     const nodeFirstEvent = {};
     const edgeFirstEvent = {};
+    
     events.forEach(ev => {
       if (ev.importance) {
         Object.keys(ev.importance).forEach(id => {
@@ -436,6 +549,7 @@ const ViewerPage = ({ darkMode: initialDarkMode }) => {
         });
       }
     });
+
     const filtered = fullElements.filter(el => {
       if (el.data.source && el.data.target) {
         const edgeKey = `${el.data.source}-${el.data.target}`;
@@ -445,11 +559,13 @@ const ViewerPage = ({ darkMode: initialDarkMode }) => {
       }
       return false;
     });
+
     let nodePositions = {};
     try {
       const posStr = localStorage.getItem(`chapter_node_positions_${currentChapter}`);
       if (posStr) nodePositions = JSON.parse(posStr);
     } catch (e) {}
+
     const sorted = filtered.slice().sort((a, b) => {
       const aId = a.data?.id || (a.data?.source ? a.data?.source + '-' + a.data?.target : '');
       const bId = b.data?.id || (b.data?.source ? b.data?.source + '-' + b.data?.target : '');
@@ -460,9 +576,10 @@ const ViewerPage = ({ darkMode: initialDarkMode }) => {
       }
       return el;
     });
+
     setElements(sorted);
     setLoading(false);
-  }, [isDataReady, currentEvent, currentChapter, hideIsolated, fullElements]);
+  }, [currentEvent, currentChapter, hideIsolated, fullElements, isDataReady]);
 
   // === [추가] 마지막 이벤트 등장 노드/간선 위치만 저장 및 이벤트별 적용 ===
   // 마지막 이벤트에서 등장한 노드/간선 위치만 저장
@@ -893,7 +1010,17 @@ const ViewerPage = ({ darkMode: initialDarkMode }) => {
     console.log('[디버그] currentEvent:', currentEvent);
     console.log('[디버그] fullElements:', fullElements);
     console.log('[디버그] isDataReady:', isDataReady, 'loading:', loading);
+    
+    // currentEvent가 변경될 때마다 eventNum 업데이트
+    if (currentEvent) {
+      setEventNum(currentEvent.event_id ?? 0);
+    }
   }, [currentEvent, fullElements, isDataReady, loading]);
+
+  // currentChapter가 변경될 때 데이터 다시 로드
+  useEffect(() => {
+    loadData();
+  }, [currentChapter]);
 
   return (
     <div
@@ -1191,7 +1318,7 @@ function GraphSplitArea({
             : 'scale(1)'
         }}>
           {currentEvent
-            ? `이벤트 ${currentEvent.eventNum ?? ''}${currentEvent.name ? `: ${currentEvent.name}` : ''}`
+            ? `이벤트 ${currentEvent.eventNum ?? 0}${currentEvent.name ? `: ${currentEvent.name}` : ''}`
             : '이벤트 정보 없음'}
         </span>
         {/* 전체 이벤트 중 현재 위치 프로그레스 바 */}
@@ -1208,7 +1335,7 @@ function GraphSplitArea({
             overflow: 'hidden'
           }}>
             <div style={{
-              width: `${(currentEvent.eventNum / events.length) * 100}%`,
+              width: `${((currentEvent.eventNum || 0) / (events.length + 1)) * 100}%`,
               height: '100%',
               background: 'linear-gradient(90deg, #4F6DDE 0%, #6fa7ff 100%)',
               borderRadius: 4,
