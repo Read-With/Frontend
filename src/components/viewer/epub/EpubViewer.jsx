@@ -48,11 +48,18 @@ const countCharacters = (text, element) => {
     }
   }
 
-  // 특수문자, 공백, 줄바꿈 제거
-  return text
+  // 특수문자, 공백, 줄바꿈 제거하고 영문자만 카운트
+  const cleanedText = text
     .replace(/[\s\n\r\t]/g, '')  // 공백, 줄바꿈 등 제거
-    .replace(/[^\w\s가-힣]/g, '') // 특수기호 제거 (영문자, 숫자, 한글만 남김)
-    .length;
+    .replace(/[^a-zA-Z]/g, '');  // 영문자만 남김
+
+  // 디버깅: 영문자만 남았는지 확인
+  if (cleanedText.length > 0) {
+    console.log('영문자만 남은 텍스트:', cleanedText);
+    console.log('영문자 개수:', cleanedText.length);
+  }
+
+  return cleanedText.length;
 };
 
 // 단어 수를 정확하게 세는 함수 추가
@@ -78,6 +85,7 @@ const EpubViewer = forwardRef(
     const [reloading, setReloading] = useState(false);
     const [error, setError] = useState(null);
     const [currentPath, setCurrentPath] = useState(null);
+    const [chapterCharCounts, setChapterCharCounts] = useState({});
 
     // 현재 챕터의 누적 글자 수를 저장
     const currentChapterCharsRef = useRef(0);
@@ -150,33 +158,43 @@ const EpubViewer = forwardRef(
       const rendition = renditionRef.current;
       if (!rendition) return;
 
-      const currentPage = rendition.getContents()[0];
-      if (!currentPage) return;
-
-      const text = currentPage.textContent;
-      const charCount = countCharacters(text, currentPage.document.body);
-      
-      // 현재 챕터 번호 가져오기
-      const currentChapter = currentChapterRef.current;
-      
-      // 현재 페이지의 CFI를 키로 사용
+      // 현재 CFI를 키로 사용
       const currentCfi = rendition.currentLocation()?.start?.cfi;
       if (!currentCfi) return;
 
-      // 이전 페이지의 글자 수 가져오기
-      const prevPageChars = chapterPageCharsRef.current.get(currentCfi) || 0;
-      
-      // 방향에 따라 누적 글자 수 업데이트
-      if (direction === 'next') {
-        currentChapterCharsRef.current += charCount;
-      } else {
-        currentChapterCharsRef.current -= prevPageChars;
+      // CFI에서 현재 단락 번호 추출
+      const paragraphMatch = currentCfi.match(/\[chapter-\d+\]\/(\d+)/);
+      const currentParagraphNum = paragraphMatch ? parseInt(paragraphMatch[1]) : 0;
+
+      // 현재 페이지의 내용만 가져오기
+      const contents = rendition.getContents();
+      if (!contents || contents.length === 0) return;
+
+      // 현재 페이지의 글자 수만 계산
+      let charCount = 0;
+      const currentPage = contents[0];
+      const paragraphs = currentPage.document.querySelectorAll('p');
+
+      // 현재 단락과 이전 단락들의 글자 수만 계산
+      for (let i = 0; i < paragraphs.length; i++) {
+        const paragraph = paragraphs[i];
+        const paragraphText = paragraph.textContent;
+        const paragraphChars = countCharacters(paragraphText, paragraph);
+        
+        // 현재 단락까지의 글자 수만 누적
+        if (i <= currentParagraphNum) {
+          charCount += paragraphChars;
+          console.log(`단락 ${i + 1}: ${paragraphChars}자 (누적: ${charCount}자)`);
+        }
       }
 
-      // 현재 페이지의 글자 수 저장
+      // 현재 페이지의 글자 수를 저장
       chapterPageCharsRef.current.set(currentCfi, charCount);
 
-      console.log(`현재 챕터(${currentChapter}) 누적 글자 수: ${currentChapterCharsRef.current}자`);
+      // 현재 페이지의 글자 수만 사용
+      currentChapterCharsRef.current = charCount;
+
+      console.log(`현재 챕터(${currentChapterRef.current}) CFI(${currentCfi}) 현재 페이지 글자 수: ${charCount}자`);
     };
 
     // 챕터 변경 시 초기화 함수
@@ -412,78 +430,26 @@ const EpubViewer = forwardRef(
             const chapterNum = chapterMatch ? parseInt(chapterMatch[1]) : 1;
             const paragraphNum = paragraphMatch ? parseInt(paragraphMatch[1]) : 1;
             const charOffset = paragraphMatch ? parseInt(paragraphMatch[2]) : 0;
-            
+
+            // 챕터가 변경되었을 때 초기화
+            if (chapterNum !== currentChapterRef.current) {
+              currentChapterRef.current = chapterNum;
+              chapterPageCharsRef.current.clear();
+            }
+
+            // 페이지 글자 수 업데이트
+            updatePageCharCount();
+
+            // 이벤트 데이터 가져오기
             try {
-              // 현재 페이지의 내용 가져오기
-              const currentLocation = await rendition.currentLocation();
-              const currentCfi = currentLocation?.start?.cfi;
-              
-              if (currentCfi) {
-                const contents = rendition.getContents();
-                
-                if (contents && contents.length > 0) {
-                  const content = contents[0];
-                  
-                  if (content.document) {
-                    // 현재 보이는 페이지의 내용만 가져오기
-                    const visibleContent = content.document.body;
-                    
-                    if (!visibleContent) {
-                      console.warn('페이지 내용을 찾을 수 없음');
-                      return;
-                    }
-
-                    // 챕터가 변경되었을 때 누적 글자 수 초기화
-                    if (chapterNum !== currentChapterRef.current) {
-                      currentChapterCharsRef.current = 0;
-                      currentChapterRef.current = chapterNum;
-                    }
-
-                    // 현재 페이지의 모든 단락 가져오기
-                    const paragraphs = visibleContent.querySelectorAll('p');
-                    let pageCharCount = 0;
-                    
-                    // 현재 단락까지의 글자 수만 계산
-                    for (let i = 0; i < paragraphs.length && i < paragraphNum; i++) {
-                      const paragraph = paragraphs[i];
-                      const paragraphText = paragraph.textContent;
-                      const charCount = countCharacters(paragraphText, paragraph);
-                      if (i + 1 === paragraphNum) {
-                        // 현재 단락인 경우 charOffset을 기준으로 글자 수 계산
-                        pageCharCount += Math.min(charOffset, charCount);
-                      } else {
-                        pageCharCount += charCount;
-                      }
-                    }
-
-                    // 현재 페이지의 글자 수를 저장
-                    const pageKey = `${chapterNum}-${pageNum}`;
-                    chapterPageCharsRef.current.set(pageKey, pageCharCount);
-
-                    // 현재 챕터의 모든 페이지 글자 수를 누적
-                    currentChapterCharsRef.current = 0;
-                    for (const [key, chars] of chapterPageCharsRef.current) {
-                      if (key.startsWith(`${chapterNum}-`)) {
-                        currentChapterCharsRef.current += chars;
-                      }
-                    }
-                    
-                    // 이벤트 데이터 가져오기
-                    try {
-                      const events = getEventsForChapter(chapterNum);
-                      const currentEvent = events.find(event => 
-                        currentChapterCharsRef.current >= event.start && 
-                        currentChapterCharsRef.current < event.end
-                      );
-                      onCurrentLineChange?.(currentChapterCharsRef.current, events.length, currentEvent || null);
-                    } catch (error) {
-                      onCurrentLineChange?.(currentChapterCharsRef.current, 0, null);
-                    }
-                  }
-                }
-              }
+              const events = getEventsForChapter(chapterNum);
+              const currentEvent = events.find(event => 
+                currentChapterCharsRef.current >= event.start && 
+                currentChapterCharsRef.current < event.end
+              );
+              onCurrentLineChange?.(currentChapterCharsRef.current, events.length, currentEvent || null);
             } catch (error) {
-              console.error('글자 수 계산 중 오류:', error);
+              onCurrentLineChange?.(currentChapterCharsRef.current, 0, null);
             }
           });
 

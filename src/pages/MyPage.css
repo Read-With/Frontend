@@ -1,0 +1,274 @@
+body, .mypage-root {
+  background: linear-gradient(120deg, #f8fbff 0%, #e9f0ff 100%);
+}
+.mypage-root {
+  min-height: 100vh;
+  width: 100vw;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+}
+.mypage-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-top: 48px;
+  gap: 10px;
+}
+.mypage-profile-section {
+  width: calc(100vw - 48px);
+  max-width: 700px;
+  margin: 0 auto 36px auto;
+  background: linear-gradient(120deg, #4F6DDE 0%, #6CA8FF 100%);
+  border-radius: 28px;
+  box-shadow: 0 8px 32px rgba(79,109,222,0.10);
+  display: flex;
+  align-items: center;
+  gap: 32px;
+  padding: 48px 32px;
+  position: relative;
+}
+.mypage-profile-avatar {
+  width: 96px;
+  height: 96px;
+  border-radius: 50%;
+  background: #e3e9f7;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 8px rgba(79,109,222,0.10);
+  font-size: 48px;
+}
+.mypage-profile-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.mypage-profile-title {
+  font-size: 2.1rem;
+  font-weight: 800;
+  color: #fff;
+  letter-spacing: -0.01em;
+}
+.mypage-profile-labels {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+.mypage-profile-label {
+  background: rgba(255,255,255,0.18);
+  color: #fff;
+  font-size: 0.95rem;
+  border-radius: 6px;
+  padding: 2px 10px;
+  font-weight: 500;
+}
+.mypage-profile-desc {
+  color: #eaf2ff;
+  font-size: 1.15rem;
+  font-weight: 400;
+}
+.mypage-library-section {
+  width: 100%;
+  max-width: 1100px;
+  background: #f4f7fb;
+  border-radius: 24px;
+  box-shadow: 0 4px 24px rgba(79,109,222,0.07);
+  margin: 0 auto 36px auto;
+  padding: 36px 32px 32px 32px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 18px;
+}
+.mypage-library-container .mypage-btn-primary {
+  margin: 0 auto 18px auto;
+  width: 180px;
+  font-size: 1.05rem;
+}
+.mypage-btn-primary {
+  background: linear-gradient(90deg, #4F6DDE 0%, #6CA8FF 100%);
+  box-shadow: 0 4px 16px rgba(79,109,222,0.13);
+  transition: transform 0.18s, box-shadow 0.18s, background 0.18s;
+  font-size: 1.15rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  border-radius: 999px;
+  color: #fff;
+  border: none;
+  padding: 16px 36px;
+  cursor: pointer;
+}
+.mypage-btn-primary:hover {
+  transform: scale(1.04);
+  background: linear-gradient(90deg, #6CA8FF 0%, #4F6DDE 100%);
+  box-shadow: 0 8px 32px rgba(79,109,222,0.18);
+}
+.mypage-library-list {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+.mypage-library-row {
+  display: flex;
+  gap: 24px;
+  justify-content: center;
+}
+.mypage-library-card {
+  background: #fff;
+  border-radius: 22px;
+  box-shadow: 0 2px 12px rgba(79,109,222,0.10);
+  width: 210px;
+  height: 250px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  transition: transform 0.18s, box-shadow 0.18s;
+  cursor: pointer;
+  position: relative;
+}
+.mypage-library-card:hover {
+  transform: translateY(-8px) scale(1.03);
+  box-shadow: 0 12px 32px rgba(79,109,222,0.18);
+}
+.mypage-library-image-container {
+  width: 100%;
+  height: 120px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  margin-top: 18px;
+}
+.mypage-library-image svg {
+  filter: drop-shadow(0 2px 8px #b0b8c1cc);
+}
+.mypage-library-image svg rect:first-child {
+  fill: url(#bookCardGrad);
+}
+.mypage-library-tag {
+  position: absolute;
+  top: 6px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: linear-gradient(90deg, #4F6DDE 0%, #6CA8FF 100%);
+  color: #fff;
+  font-size: 1.05rem;
+  border-radius: 8px;
+  padding: 2px 12px;
+  font-weight: 600;
+  box-shadow: 0 1px 4px rgba(79,109,222,0.10);
+}
+.mypage-library-text-content {
+  margin-top: 10px;
+  text-align: center;
+  width: 90%;
+}
+.mypage-library-card-title {
+  font-size: 1.08rem;
+  font-weight: 700;
+  color: #222;
+  margin-bottom: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.mypage-library-card-subtitle {
+  font-size: 0.98rem;
+  color: #6b7a90;
+  font-weight: 400;
+  line-height: 1.3;
+  white-space: normal;
+}
+@media (max-width: 900px) {
+  .mypage-profile-section {
+    flex-direction: column;
+    align-items: flex-start;
+    padding: 32px 16px;
+    gap: 18px;
+  }
+  .mypage-library-section {
+    padding: 24px 8px 18px 8px;
+  }
+  .mypage-library-row {
+    gap: 12px;
+  }
+  .mypage-library-card {
+    width: 150px;
+    height: 180px;
+  }
+}
+@media (max-width: 600px) {
+  .mypage-main, .mypage-library-section {
+    gap: 18px;
+  }
+  .mypage-profile-section {
+    flex-direction: column;
+    align-items: center;
+    padding: 18px 4px;
+    gap: 10px;
+    max-width: 98vw;
+    border-radius: 18px;
+  }
+  .mypage-profile-avatar {
+    width: 64px;
+    height: 64px;
+    font-size: 32px;
+  }
+  .mypage-profile-title {
+    font-size: 1.05rem;
+  }
+  .mypage-library-row {
+    flex-direction: column;
+    gap: 8px;
+    align-items: center;
+  }
+  .mypage-library-card {
+    width: 95vw;
+    max-width: 340px;
+    height: 120px;
+    min-height: 100px;
+    border-radius: 12px;
+    flex-direction: row;
+    gap: 0;
+    padding: 0 4px;
+  }
+  .mypage-library-image-container {
+    width: 80px;
+    height: 100%;
+    min-width: 80px;
+    margin-top: 0;
+    justify-content: flex-start;
+  }
+  .mypage-library-image svg {
+    width: 40px;
+    height: 40px;
+    font-size: 1.1rem;
+  }
+  .mypage-library-tag {
+    font-size: 0.75rem;
+    padding: 1px 8px;
+    border-radius: 6px;
+    top: 2px;
+  }
+  .mypage-library-text-content {
+    margin-top: 0;
+    width: 100%;
+    padding-left: 8px;
+    text-align: left;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+  }
+  .mypage-library-card-title {
+    font-size: 0.98rem;
+    margin-bottom: 0;
+  }
+  .mypage-library-card-subtitle {
+    font-size: 0.85rem;
+    line-height: 1.2;
+  }
+} 
