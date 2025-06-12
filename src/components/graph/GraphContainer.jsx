@@ -93,21 +93,26 @@ function convertRelationsToElements(relations, idToName, idToDesc, idToMain, idT
   return [...Object.values(nodes), ...edges];
 }
 
-const GraphContainer = ({ currentPosition, ...props }) => {
+const GraphContainer = ({ currentPosition, currentEvent, ...props }) => {
   const [elements, setElements] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    const eventId = getEventIdByPosition(currentPosition);
-    const chapterNum = getChapterNumByPosition(currentPosition);
+    if (!currentEvent) {
+      setElements([]);
+      return;
+    }
+
     try {
-      const eventData = eventDataMap[String(eventId + 1)];
+      const eventId = currentEvent.event_id;
+      const eventData = eventDataMap[String(eventId)];
       if (!eventData) {
         setElements([]);
         setError('해당 eventId의 관계 데이터가 없습니다.');
         return;
       }
+
       import('../../data/gatsby/c_chapter1_0.json').then(characters => {
         const idToName = {};
         const idToDesc = {};
@@ -129,7 +134,7 @@ const GraphContainer = ({ currentPosition, ...props }) => {
       setElements([]);
       setError('파일 import 실패: ' + err);
     }
-  }, [currentPosition]);
+  }, [currentEvent]);
 
   return (
     <RelationGraph

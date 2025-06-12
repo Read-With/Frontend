@@ -1219,7 +1219,7 @@ function GraphSplitArea({
       </div>
       {/* 그래프 본문 */}
       <div style={{ flex: 1, position: 'relative', minHeight: 0, minWidth: 0 }}>
-        <GraphContainer currentPosition={currentCharIndex} />
+        <GraphContainer currentPosition={currentCharIndex} currentEvent={currentEvent} />
       </div>
     </div>
   );
