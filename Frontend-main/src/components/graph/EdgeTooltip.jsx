@@ -85,7 +85,7 @@ function fetchRelationTimelineMulti(
     points.push(found ? found.positivity : 0); // 없으면 0으로!
     labelInfo.push(`챕터${ch} 마지막`);
   }
-  // 현재 챕터: 1~(eventNum)까지, 단 eventNum이 1이면 1까지 보정
+  // 현재 챕터: 1~(eventNum-1)까지, 단 eventNum이 1이면 1까지 보정
   const lastEv = Math.max(1, eventNum);
   for (let i = 1; i <= lastEv; i++) {
     const filePath = `/src/data/gatsby/chapter${chapterNum}_relationships_event_${i}.json`;
@@ -352,11 +352,7 @@ function EdgeTooltip({
                 fontWeight: 600,
                 textAlign: "right",
               }}
-            >
-              <span>
-                챕터: {chapterNum} / 이벤트: {eventNum}
-              </span>
-            </div>
+            ></div>
             <div className="edge-tooltip-header">
               <div className="relation-tags">
                 {data.label.split(", ").map((relation, index) => (
@@ -378,7 +374,7 @@ function EdgeTooltip({
                     {relationStyle.text}
                   </span>
                   <span className="weight-value">
-                    {Math.round(data.weight * 10)}%
+                    {data.positivity !== undefined ? data.positivity : "N/A"}
                   </span>
                 </div>
                 <div
