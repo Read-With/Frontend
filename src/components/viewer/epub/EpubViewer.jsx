@@ -12,47 +12,22 @@ const eventRelationModules = import.meta.glob('/src/data/gatsby/chapter*_events.
 
 // getEventsForChapter 함수 정의
 function getEventsForChapter(chapter) {
-  const num = String(chapter).padStart(2, '0');
-  console.log('디버그 - getEventsForChapter 호출:', {
-    chapter,
-    num,
-    eventRelationModules: Object.entries(eventRelationModules).map(([path, mod]) => ({
-      path,
-      hasDefault: !!mod.default,
-      defaultContent: JSON.stringify(mod.default, null, 2)
-    }))
+  const num = String(chapter);
+  // 1. 이벤트 본문 데이터 추출
+  const textFilePath = Object.keys(eventRelationModules).find(path => path.includes(`chapter${num}_events.json`));
+  const textArray = textFilePath ? eventRelationModules[textFilePath]?.default : [];
+
+  // 2. 각 event에 대해 event_id, eventNum, chapter 세팅
+  const eventsWithMeta = textArray.map(event => {
+    const eventId = (event.event_id === undefined || event.event_id === null) ? 0 : event.event_id;
+    return {
+      ...event,
+      event_id: eventId,
+      eventNum: eventId,
+      chapter: Number(chapter)
+    };
   });
-
-  try {
-    const events = Object.entries(eventRelationModules)
-      .filter(([path]) => {
-        const matches = path.includes(`chapter${chapter}_events.json`) || path.includes(`chapter${num}_events.json`);
-        console.log('디버그 - 경로 필터링:', { 
-          path, 
-          matches,
-          moduleContent: JSON.stringify(eventRelationModules[path]?.default, null, 2)
-        });
-        return matches;
-      })
-      .map(([path, mod]) => {
-        const eventData = mod.default;
-        if (!Array.isArray(eventData)) return [];
-        return eventData.map(event => ({
-          ...event,
-          event_id: event.event_id || 0, // event_id가 없는 경우 0으로 설정
-          eventNum: event.event_id || 0  // eventNum도 동일하게 설정
-        }));
-      })
-      .filter(ev => ev && ev.length > 0)
-      .flat()
-      .sort((a, b) => (a.event_id || 0) - (b.event_id || 0)); // event_id 기준으로 정렬
-
-    console.log('디버그 - 최종 이벤트 목록:', JSON.stringify(events, null, 2));
-    return events;
-  } catch (error) {
-    console.error('디버그 - getEventsForChapter 오류:', error);
-    return [];
-  }
+  return eventsWithMeta;
 }
 
 // 글자 수를 정확하게 세는 함수 추가
@@ -473,7 +448,7 @@ const EpubViewer = forwardRef(
                 // 현재 텍스트 수가 마지막 event의 end 값보다 크거나 같은 경우
                 if (currentChars >= lastEvent.end) {
                   console.log('디버그 - 마지막 이벤트 선택됨');
-                  currentEvent = { ...lastEvent, eventNum: lastEvent.event_id + 1 };
+                  currentEvent = { ...lastEvent, eventNum: lastEvent.event_id + 1, chapter: chapterNum };
                 } else {
                   // 현재 텍스트 수가 속하는 event 찾기
                   for (let i = events.length - 1; i >= 0; i--) {
@@ -487,7 +462,7 @@ const EpubViewer = forwardRef(
 
                     if (currentChars >= event.start && currentChars < event.end) {
                       console.log(`디버그 - 이벤트 ${i} 선택됨`);
-                      currentEvent = { ...event, eventNum: event.event_id + 1 };
+                      currentEvent = { ...event, eventNum: event.event_id + 1, chapter: chapterNum };
                       break;
                     }
                   }

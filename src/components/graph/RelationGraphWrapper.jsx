@@ -121,6 +121,7 @@ function RelationGraphWrapper() {
           .map((e, i) => {
             const source = String(Math.trunc(e.id1));
             const target = String(Math.trunc(e.id2));
+            // idx+1이 실제 event 파일 번호이므로, eventNum도 idx+1로 저장
             const edgeId = `${source}_${target}_${i}`;
             if (accumulatedEdgeIds.has(edgeId)) return null;
             return {
@@ -144,7 +145,7 @@ function RelationGraphWrapper() {
 
         // 이 시점의 누적 elements 저장
         chapterEvents.push({
-          eventNum: idx,  // 0부터 시작하도록 수정
+          eventNum: idx + 1,  // 0부터 시작이 아니라 실제 파일 번호와 맞추기 위해 idx+1
           nodes: [...accumulatedNodes],
           edges: [...accumulatedEdges],
           newNodeIds: newNodes.map(n => n.data.id)
@@ -153,7 +154,7 @@ function RelationGraphWrapper() {
         console.error(`Error processing event file ${file}:`, error);
         // 오류 발생 시 빈 이벤트 추가
         chapterEvents.push({
-          eventNum: idx,  // 0부터 시작하도록 수정
+          eventNum: idx + 1,  // 0부터 시작이 아니라 실제 파일 번호와 맞추기 위해 idx+1
           nodes: [...accumulatedNodes],
           edges: [...accumulatedEdges],
           newNodeIds: []

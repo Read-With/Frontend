@@ -108,41 +108,29 @@ const loadViewerMode = () => {
 //이번에 바꾼것임
 function getEventsForChapter(chapter) {
   const num = String(chapter);
-  console.log('디버그 - getEventsForChapter 호출:', {
-    chapter,
-    num,
-    eventTextModules: Object.keys(eventTextModules),
-    eventRelationModules: Object.keys(eventRelationModules)
-  });
 
   // 1. 이벤트 본문 데이터 추출
   const textFilePath = Object.keys(eventTextModules).find(path => path.includes(`chapter${num}_events.json`));
-  console.log('디버그 - textFilePath:', textFilePath);
-  
   const textArray = textFilePath ? eventTextModules[textFilePath]?.default : [];
-  console.log('디버그 - textArray:', textArray);
 
   // 2. 각 event에 대해 event_id에 해당하는 관계 파일을 찾음
   const eventsWithRelations = textArray.map(event => {
-    const eventId = event.event_id || 0; // event_id가 없으면 0으로 설정
+    // event_id가 undefined/null일 때만 0, 그 외에는 원래 값 사용
+    const eventId = (event.event_id === undefined || event.event_id === null) ? 0 : event.event_id;
+    const fileEventNum = eventId + 1;
     const relFilePath = Object.keys(eventRelationModules).find(path =>
-      path.includes(`chapter${num}_relationships_event_${eventId === 0 ? 1 : eventId}.json`)
+      path.includes(`chapter${num}_relationships_event_${fileEventNum}.json`)
     );
-    console.log('디버그 - event 관계 파일:', {
-      eventId,
-      relFilePath,
-      relations: relFilePath ? eventRelationModules[relFilePath]?.default : null
-    });
 
     const relations = relFilePath ? eventRelationModules[relFilePath]?.default?.relations || [] : [];
     return {
       ...event,
       eventNum: eventId,
+      event_id: eventId, // 명시적으로 세팅
       relations,
+      chapter: Number(chapter) // 반드시 추가!
     };
   });
-
-  console.log('디버그 - 최종 이벤트 목록:', eventsWithRelations);
   return eventsWithRelations;
 }
 
@@ -268,7 +256,7 @@ const ViewerPage = ({ darkMode: initialDarkMode }) => {
   const [hideIsolated, setHideIsolated] = useState(true);
   const [characterData, setCharacterData] = useState(null);
   const [events, setEvents] = useState([]);
-  const [maxChapter, setMaxChapter] = useState(9); // data 폴더 기준
+  const [maxChapter, setMaxChapter] = useState(1); // 자동 계산으로 초기값 1
   const [searchInput, setSearchInput] = useState('');
   const [search, setSearch] = useState('');
   const [isReloading, setIsReloading] = useState(false);
@@ -373,7 +361,6 @@ const ViewerPage = ({ darkMode: initialDarkMode }) => {
 
       // 이벤트 데이터 로드
       const events = await getEventsForChapter(currentChapter);
-      console.log('디버그 - 로드된 이벤트:', events);
       setEvents(events);
 
       // 캐릭터 데이터 로드 - c_chapter1_0.json 사용
@@ -384,55 +371,30 @@ const ViewerPage = ({ darkMode: initialDarkMode }) => {
         throw new Error(`캐릭터 데이터 파일을 찾을 수 없습니다: chapter${currentChapter}`);
       }
       const characterData = charactersModules[characterFilePath].default;
-      console.log('디버그 - 로드된 캐릭터 데이터:', characterData);
       setCharacterData(characterData);
 
       // 첫 번째 이벤트 설정
       if (events && events.length > 0) {
         const firstEvent = events[0]; // 첫 번째 이벤트 사용
-        console.log('디버그 - 첫 번째 이벤트:', firstEvent);
         if (firstEvent) {
           const eventId = firstEvent.event_id || 0;  // event_id가 없으면 0으로 설정
-          
-          // 이벤트 ID가 0이거나 없는 경우 (목차 등)
-          if (eventId === 0) {
-            setCurrentEvent({
-              ...firstEvent,
-              eventNum: 0,
-              name: "다음 페이지로 넘어가주세요"
-            });
-            
-            // 이벤트 ID가 0일 때는 1번 관계 파일 사용
-            const eventRelationFilePath = Object.keys(eventRelationModules).find(path => 
-              path.includes(`chapter${currentChapter}_relationships_event_1.json`)
-            );
-            if (!eventRelationFilePath) {
-              throw new Error(`이벤트 관계 데이터 파일을 찾을 수 없습니다: chapter${currentChapter} event1`);
-            }
-            const eventRelations = eventRelationModules[eventRelationFilePath].default;
-            console.log('디버그 - 로드된 관계 데이터 (event_id=0):', eventRelations);
-            const elements = getElementsFromRelations(eventRelations, characterData, [], 1);
-            console.log('디버그 - 생성된 elements (event_id=0):', elements);
-            setElements(elements);
-          } else {
-            setCurrentEvent({
-              ...firstEvent,
-              eventNum: eventId
-            });
-            
-            // 이벤트의 관계 데이터 로드
-            const eventRelationFilePath = Object.keys(eventRelationModules).find(path => 
-              path.includes(`chapter${currentChapter}_relationships_event_${eventId}.json`)
-            );
-            if (!eventRelationFilePath) {
-              throw new Error(`이벤트 관계 데이터 파일을 찾을 수 없습니다: chapter${currentChapter} event${eventId}`);
-            }
-            const eventRelations = eventRelationModules[eventRelationFilePath].default;
-            console.log('디버그 - 로드된 관계 데이터:', eventRelations);
-            const elements = getElementsFromRelations(eventRelations, characterData, [], eventId);
-            console.log('디버그 - 생성된 elements:', elements);
-            setElements(elements);
+          const fileEventNum = eventId + 1;
+          setCurrentEvent({
+            ...firstEvent,
+            eventNum: eventId,
+            chapter: currentChapter, // 반드시 마지막에 추가
+            name: eventId === 0 ? "다음 페이지로 넘어가주세요" : firstEvent.name
+          });
+          // 이벤트 관계 데이터 파일 찾기 (event_id + 1)
+          const eventRelationFilePath = Object.keys(eventRelationModules).find(path => 
+            path.includes(`chapter${currentChapter}_relationships_event_${fileEventNum}.json`)
+          );
+          if (!eventRelationFilePath) {
+            throw new Error(`이벤트 관계 데이터 파일을 찾을 수 없습니다: chapter${currentChapter} event${fileEventNum}`);
           }
+          const eventRelations = eventRelationModules[eventRelationFilePath].default;
+          const elements = getElementsFromRelations(eventRelations, characterData, [], fileEventNum);
+          setElements(elements);
         }
       }
 
@@ -447,27 +409,26 @@ const ViewerPage = ({ darkMode: initialDarkMode }) => {
   // currentEvent가 변경될 때 관계 데이터 업데이트
   useEffect(() => {
     if (isDataReady && !loading && currentEvent) {
-      const eventId = currentEvent.event_id || 1;  // event_id가 없으면 1로 설정
-      const eventNum = currentEvent.eventNum || 1;  // eventNum이 없으면 1로 설정
-      
-      // 이벤트 관계 데이터 로드
+      const eventId = currentEvent.event_id || 0;  // event_id가 없으면 0으로 설정
+      const eventNum = currentEvent.eventNum || 0;  // eventNum이 없으면 0으로 설정
+      const fileEventNum = eventId + 1;
+      // 이벤트 관계 데이터 로드 (event_id + 1)
       const loadEventRelations = async () => {
         try {
           const eventRelationFilePath = Object.keys(eventRelationModules).find(path => 
-            path.includes(`chapter${currentChapter}_relationships_event_${eventId}.json`)
+            path.includes(`chapter${currentChapter}_relationships_event_${fileEventNum}.json`)
           );
           if (!eventRelationFilePath) {
-            console.warn(`이벤트 관계 데이터 파일을 찾을 수 없습니다: chapter${currentChapter} event${eventId}`);
+            console.warn(`이벤트 관계 데이터 파일을 찾을 수 없습니다: chapter${currentChapter} event${fileEventNum}`);
             return;
           }
           const eventRelations = eventRelationModules[eventRelationFilePath].default;
-          const elements = getElementsFromRelations(eventRelations, characterData, [], eventNum);
+          const elements = getElementsFromRelations(eventRelations, characterData, [], fileEventNum);
           setElements(elements);
         } catch (error) {
           console.error('이벤트 관계 데이터 로드 중 오류:', error);
         }
       };
-
       loadEventRelations();
     }
   }, [isDataReady, loading, currentEvent, currentChapter, characterData]);
@@ -1006,11 +967,6 @@ const ViewerPage = ({ darkMode: initialDarkMode }) => {
   }, [elements]);
 
   useEffect(() => {
-    // 필요한 디버그 로그만 남김
-    console.log('[디버그] currentEvent:', currentEvent);
-    console.log('[디버그] fullElements:', fullElements);
-    console.log('[디버그] isDataReady:', isDataReady, 'loading:', loading);
-    
     // currentEvent가 변경될 때마다 eventNum 업데이트
     if (currentEvent) {
       setEventNum(currentEvent.event_id ?? 0);
@@ -1021,6 +977,20 @@ const ViewerPage = ({ darkMode: initialDarkMode }) => {
   useEffect(() => {
     loadData();
   }, [currentChapter]);
+
+  // maxChapter를 c_chapter*_0.json 파일의 개수(또는 최대 챕터 번호)로 자동 설정
+  useEffect(() => {
+    // charactersModules의 key에서 챕터 번호 추출
+    const chapterNums = Object.keys(charactersModules)
+      .map(key => {
+        const match = key.match(/c_chapter(\d+)_0\.json/);
+        return match ? parseInt(match[1], 10) : null;
+      })
+      .filter(num => num !== null);
+    if (chapterNums.length > 0) {
+      setMaxChapter(Math.max(...chapterNums));
+    }
+  }, []);
 
   return (
     <div
@@ -1095,6 +1065,7 @@ const ViewerPage = ({ darkMode: initialDarkMode }) => {
           onCurrentLineChange={(charIndex, totalEvents, currentEvent) => {
             setCurrentCharIndex(charIndex);
             setTotalChapterWords(totalEvents || 0);
+            console.log('setCurrentEvent 호출:', currentEvent);
             setCurrentEvent(currentEvent);
           }}
           onAllCfisReady={(_cfis, _ranges, offsets) => {}}

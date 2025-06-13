@@ -8,7 +8,9 @@ const charactersModules = import.meta.glob('../../data/gatsby/c_chapter*_0.json'
 
 function getEventData(chapter, eventId) {
   const num = String(chapter);
-  const eventIdStr = String(eventId);
+  // eventId에 1을 더해서 파일명을 찾음
+  const fileEventNum = Number(eventId) + 1;
+  const eventIdStr = String(fileEventNum);
   console.log('디버그 - getEventData 호출:', {
     chapter,
     num,
@@ -83,6 +85,12 @@ const GraphContainer = ({ currentPosition, currentEvent, ...props }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
+  // 디버깅: currentEvent 정보
+  console.log('[GraphContainer] currentEvent:', currentEvent);
+  if (currentEvent) {
+    console.log('[GraphContainer] eventNum:', currentEvent.eventNum, 'event_id:', currentEvent.event_id);
+  }
+
   useEffect(() => {
     if (!currentEvent) {
       setElements([]);
@@ -92,9 +100,18 @@ const GraphContainer = ({ currentPosition, currentEvent, ...props }) => {
     try {
       const eventId = currentEvent.event_id || 0;  // event_id가 없으면 0으로 설정
       const chapter = currentEvent.chapter || 1;
-      
-      // 이벤트 데이터 가져오기 (event_id가 0이면 1번 파일 사용)
-      const eventData = getEventData(chapter, eventId === 0 ? 1 : eventId);
+      // 디버깅: 현재 챕터/이벤트 정보 출력
+      console.log('[GraphContainer] useEffect - currentEvent:', currentEvent);
+      console.log('[GraphContainer] useEffect - chapter:', chapter, 'eventId:', eventId);
+      // 이벤트 데이터 가져오기 (event_id에 1을 더해서 파일 찾기)
+      const fileEventNum = Number(eventId) + 1;
+      const eventIdStr = String(fileEventNum);
+      const filePath = Object.keys(eventRelationModules).find(path => 
+        path.includes(`chapter${chapter}_relationships_event_${eventIdStr}.json`)
+      );
+      console.log('[GraphContainer] useEffect - 불러오는 파일명:', filePath);
+      const eventData = filePath ? eventRelationModules[filePath]?.default : null;
+      console.log('[GraphContainer] useEffect - eventData:', eventData);
       if (!eventData) {
         setElements([]);
         setError('해당 eventId의 관계 데이터가 없습니다.');
@@ -103,6 +120,7 @@ const GraphContainer = ({ currentPosition, currentEvent, ...props }) => {
 
       // 캐릭터 데이터 가져오기
       const characters = getCharactersData(chapter);
+      console.log('[GraphContainer] useEffect - characters:', characters);
       if (!characters) {
         setElements([]);
         setError('캐릭터 데이터를 찾을 수 없습니다.');
@@ -123,7 +141,9 @@ const GraphContainer = ({ currentPosition, currentEvent, ...props }) => {
       });
 
       const relations = eventData.relations || [];
+      console.log('[GraphContainer] useEffect - relations:', relations);
       const els = convertRelationsToElements(relations, idToName, idToDesc, idToMain, idToNames);
+      console.log('[GraphContainer] useEffect - elements:', els);
       setElements(els);
       setLoading(false);
     } catch (err) {
