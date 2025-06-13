@@ -1,12 +1,12 @@
 {
     "relations": [
         {
+            "id1": 1.0,
             "relation": [
                 "father",
-                "Father-son",
-                "son"
+                "son",
+                "father-son"
             ],
-            "id1": 1.0,
             "id2": 2.0,
             "positivity": 0.9,
             "weight": 9.0,
@@ -15,30 +15,28 @@
         {
             "id1": 1.0,
             "relation": [
-                "acquaintances",
-                "narrator"
+                "acquaintance",
+                "conflicted"
             ],
             "id2": 3.0,
-            "positivity": 0.6,
+            "positivity": 0.2,
+            "weight": 6.0,
+            "count": 1
+        },
+        {
+            "id1": 1.0,
+            "relation": [
+                "family"
+            ],
+            "id2": 7.0,
+            "positivity": 0.0,
             "weight": 5.0,
             "count": 1
         },
         {
-            "relation": [
-                "related to",
-                "great-uncle"
-            ],
-            "id1": 1.0,
-            "id2": 7.0,
-            "positivity": 0.0,
-            "weight": 3.0,
-            "count": 1
-        },
-        {
             "id1": 1.0,
             "relation": [
-                "colleagues",
-                "acquaintances"
+                "colleagues"
             ],
             "id2": 8.0,
             "positivity": 1.0,
@@ -46,14 +44,14 @@
             "count": 1
         },
         {
+            "id1": 1.0,
             "relation": [
                 "owner",
                 "pet"
             ],
-            "id1": 1.0,
             "id2": 9.0,
             "positivity": -0.2,
-            "weight": 2.0,
+            "weight": 3.0,
             "count": 1
         },
         {
@@ -71,42 +69,52 @@
             "id1": 1.0,
             "relation": [
                 "helped",
-                "guide"
+                "stranger"
             ],
             "id2": 11.0,
-            "positivity": 0.8,
-            "weight": 6.0,
+            "positivity": 0.7,
+            "weight": 3.0,
             "count": 1
         },
         {
             "id1": 1.0,
             "relation": [
-                "idolizes"
+                "inspired by"
             ],
             "id2": 12.0,
-            "positivity": 0.2,
-            "weight": 3.0,
+            "positivity": 0.3,
+            "weight": 2.0,
             "count": 1
         },
         {
             "relation": [
-                "idolizes"
+                "inspired by"
             ],
             "id1": 1.0,
             "id2": 13.0,
-            "positivity": 0.2,
-            "weight": 3.0,
+            "positivity": 0.3,
+            "weight": 2.0,
             "count": 1
         },
         {
-            "id1": 1.0,
             "relation": [
-                "idolizes"
+                "inspired by"
             ],
+            "id1": 1.0,
             "id2": 14.0,
-            "positivity": 0.2,
-            "weight": 3.0,
+            "positivity": 0.3,
+            "weight": 2.0,
             "count": 1
         }
+    ],
+    "new_appearances": [
+        7.0,
+        8.0,
+        9.0,
+        10.0,
+        11.0,
+        12.0,
+        13.0,
+        14.0
     ]
 }

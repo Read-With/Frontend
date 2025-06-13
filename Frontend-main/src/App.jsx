@@ -1,17 +1,14 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, useLocation, Navigate, useParams, Outlet } from 'react-router-dom';
-import MainPage from './components/main/MainPage';
-import LibraryPage from './pages/LibraryPage';
 import ViewerPage from './components/viewer/ViewerPage';
 import BookmarksPage from './components/viewer/BookmarksPage';
 import RelationGraphWrapper from './components/graph/RelationGraphWrapper.jsx';
 import TimelineView from './components/viewer/timeline/TimelineView';
-import UploadPage from './pages/UploadPage';
 import ChatbotPage from './components/chatbot/ChatbotPage';
-import LoginPage from './pages/LoginPage';
-import UserPage from './pages/UserPage';
+import MyPage from './pages/MyPage.jsx';
 import { RecoilRoot } from 'recoil';
-import CytoscapeGraphPortalProvider from './components/graph/CytoscapeGraphPortalProvider';
+import Header from './components/common/Header';
+import HomePage from './pages/HomePage';
 
 // 그래프 컴포넌트를 유지하는 레이아웃
 const GraphLayout = () => {
@@ -29,16 +26,11 @@ const AppContent = () => {
 
   return (
     <>
-      {/* {!hideHeader && <Header />} */}
+      {/* <Header userNickname="User's Nickname" /> */}
 
       <Routes>
-        <Route path="/" element={<MainPage />} />
-        <Route path="/signup" element={<DummyPage title="회원가입" />} />
-        <Route path="/login" element={<LoginPage />} />
-        <Route path="/user/myPage" element={<UserPage />} />
-        <Route path="/user/upload" element={<UploadPage />} />
-        <Route path="/user/library" element={<LibraryPage />} />
-        <Route path="/search" element={<DummyPage title="책 검색" />} />
+        <Route path="/" element={<HomePage />} />
+        <Route path="/mypage" element={<MyPage />} />
         <Route path="/viewer/:filename/*" element={<ViewerPage />} />
         <Route path="/viewer/:filename/bookmarks" element={<BookmarksPage />} />
         <Route path="/viewer/:filename/timeline" element={<TimelineView />} />
@@ -62,9 +54,6 @@ function RelationRedirect() {
   return <Navigate to={`/user/graph/${filename}`} replace />;
 }
 
-const DummyPage = ({ title }) => (
-  <div style={{ padding: '100px 0', textAlign: 'center', fontSize: 32 }}>{title} (준비중)</div>
-);
 
 const App = () => {
   return (

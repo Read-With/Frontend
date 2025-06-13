@@ -4,7 +4,6 @@ import React, {
   useMemo,
   useEffect,
   useCallback,
-  useContext,
 } from "react";
 import { useNavigate, useLocation, useParams } from "react-router-dom";
 import GraphControls from "./GraphControls";
@@ -13,8 +12,6 @@ import GraphNodeTooltip from "./NodeTooltip";
 import EdgeTooltip from "./EdgeTooltip";
 import "./RelationGraph.css";
 import { FaTimes, FaClock } from 'react-icons/fa';
-import { CytoscapeGraphContext } from "./CytoscapeGraphPortalProvider";
-import { calcGraphDiff } from "./graphDiff";
 
 function getRelationColor(positivity) {
   if (positivity > 0.6) return '#15803d';
@@ -24,7 +21,7 @@ function getRelationColor(positivity) {
   return '#991b1b';
 }
 
-function RelationGraphMain({ elements, inViewer = false, fullScreen = false, onFullScreen, onExitFullScreen, graphViewState, setGraphViewState, chapterNum, eventNum, hideIsolated, maxEventNum, newNodeIds, onEventChange, graphDiff: _graphDiff, prevElements: _prevElements, currentElements, diffNodes }) {
+function RelationGraphMain({ elements, inViewer = false, fullScreen = false, onFullScreen, onExitFullScreen, graphViewState, setGraphViewState, chapterNum, eventNum, hideIsolated, maxEventNum, newNodeIds }) {
   const cyRef = useRef(null);
   const hasCenteredRef = useRef(false); // 최초 1회만 중앙정렬
   const [searchInput, setSearchInput] = useState("");
@@ -35,10 +32,12 @@ function RelationGraphMain({ elements, inViewer = false, fullScreen = false, onF
   const navigate = useNavigate();
   const location = useLocation();
   const { filename } = useParams();
-  const prevElementsRef = useRef([]);
-  const updateTimeoutRef = useRef(null);
-  const { updateGraph, graphProps } = useContext(CytoscapeGraphContext);
-  const [graphDiff, setGraphDiff] = useState({ added: [], removed: [], updated: [] });
+  const prevElementsRef = useRef();
+  const prevEventJsonRef = useRef();
+  const [isGraphLoading, setIsGraphLoading] = useState(true);
+  const prevChapterNum = useRef();
+  const prevEventNum = useRef();
+  const prevElementsStr = useRef();
 
   // gatsby.epub 단독 그래프 페이지에서만 간격을 더 넓게
   const isGraphPage = inViewer && fullScreen;
@@ -48,19 +47,7 @@ function RelationGraphMain({ elements, inViewer = false, fullScreen = false, onF
     navigate(`/viewer/${filename}/timeline`, { state: location.state });
   };
 
-  // 이벤트 변경 핸들러를 useCallback으로 최적화
-  const handleEventChange = useCallback((num) => {
-    if (onEventChange) {
-      onEventChange(num);
-    }
-  }, [onEventChange]);
-
-  // 툴팁 상태 업데이트를 useCallback으로 최적화
-  const updateTooltip = useCallback((type, data, position) => {
-    setActiveTooltip({ type, ...data, ...position });
-  }, []);
-
-  // 노드 클릭 핸들러 최적화
+  // 노드 클릭 시 툴팁 표시
   const tapNodeHandler = useCallback((evt) => {
     if (!cyRef.current) return;
     const node = evt.target;
@@ -70,70 +57,67 @@ function RelationGraphMain({ elements, inViewer = false, fullScreen = false, onF
     const zoom = cy.zoom();
     const container = document.querySelector('.graph-canvas-area');
     const containerRect = container.getBoundingClientRect();
-    
+    // 노드 중심의 화면 좌표 계산
     const nodeCenter = {
       x: pos.x * zoom + pan.x + containerRect.left,
       y: pos.y * zoom + pan.y + containerRect.top,
     };
-
     setActiveTooltip(null);
     cy.batch(() => {
       cy.nodes().addClass("faded");
       cy.edges().addClass("faded");
       node.removeClass("faded").addClass("highlighted");
     });
-
+    // 마우스 포인터 위치를 툴팁에 넘김
     const mouseX = evt.originalEvent?.clientX ?? nodeCenter.x;
     const mouseY = evt.originalEvent?.clientY ?? nodeCenter.y;
-    
     setTimeout(() => {
-      updateTooltip('node', {
-        id: node.id(),
-        data: node.data(),
-        nodeCenter
-      }, {
-        x: mouseX,
-        y: mouseY
-      });
+      setActiveTooltip({ type: 'node', id: node.id(), x: mouseX, y: mouseY, data: node.data(), nodeCenter });
     }, 0);
-  }, [updateTooltip]);
+  }, []);
 
-  // 간선 클릭 핸들러 최적화
-  const tapEdgeHandler = useCallback((evt) => {
-    if (!cyRef.current) return;
-    const cy = cyRef.current;
-    const edge = evt.target;
-    const container = document.querySelector(".graph-canvas-area");
-    const containerRect = container.getBoundingClientRect();
+  // 간선 클릭 시 툴팁 표시 (좌표 변환)
+  const tapEdgeHandler = useCallback(
+    (evt) => {
+      if (!cyRef.current) return;
+      const cy = cyRef.current;
+      const edge = evt.target;
+      const container = document.querySelector(".graph-canvas-area");
+      const containerRect = container.getBoundingClientRect();
 
-    const pos = edge.midpoint();
-    const pan = cy.pan();
-    const zoom = cy.zoom();
+      // Cytoscape의 midpoint는 그래프 내부 좌표계이므로, 화면 좌표로 변환
+      const pos = edge.midpoint();
+      const pan = cy.pan();
+      const zoom = cy.zoom();
 
-    const absoluteX = pos.x * zoom + pan.x + containerRect.left;
-    const absoluteY = pos.y * zoom + pan.y + containerRect.top;
+      // 절대 좌표 계산 (컨테이너 기준)
+      const absoluteX = pos.x * zoom + pan.x + containerRect.left;
+      const absoluteY = pos.y * zoom + pan.y + containerRect.top;
 
-    setActiveTooltip(null);
-    updateTooltip('edge', {
-      id: edge.id(),
-      data: edge.data(),
-      sourceNode: edge.source(),
-      targetNode: edge.target()
-    }, {
-      x: absoluteX,
-      y: absoluteY
-    });
+      setActiveTooltip(null);
+      setActiveTooltip({
+        type: 'edge',
+        id: edge.id(),
+        x: absoluteX,
+        y: absoluteY,
+        data: edge.data(),
+        sourceNode: edge.source(),
+        targetNode: edge.target(),
+      });
 
-    cy.batch(() => {
-      cy.nodes().addClass("faded");
-      cy.edges().addClass("faded");
-      edge.removeClass("faded");
-      edge.source().removeClass("faded").addClass("highlighted");
-      edge.target().removeClass("faded").addClass("highlighted");
-    });
+      cy.batch(() => {
+        cy.nodes().addClass("faded");
+        cy.edges().addClass("faded");
+        edge.removeClass("faded");
+        edge.source().removeClass("faded").addClass("highlighted");
+        edge.target().removeClass("faded").addClass("highlighted");
+        // 나머지 노드/간선은 faded 유지
+      });
 
-    selectedEdgeIdRef.current = edge.id();
-  }, [updateTooltip]);
+      selectedEdgeIdRef.current = edge.id();
+    },
+    []
+  );
 
   // 배경 클릭 시 선택 해제
   const tapBackgroundHandler = useCallback((evt) => {
@@ -164,30 +148,20 @@ function RelationGraphMain({ elements, inViewer = false, fullScreen = false, onF
     clearSelection();
   }, [clearSelection]);
 
-  // elements(노드/간선) 배열을 main 노드가 먼저 오도록 정렬
+  // elements/filteredElements를 id 기준으로 정렬해서 비교 및 전달
   const sortedElements = useMemo(() => {
     if (!elements) return [];
-    // 노드와 엣지 분리
-    const nodes = elements.filter(e => !e.data.source);
-    const edges = elements.filter(e => e.data.source);
-
-    // main 노드 먼저, 그 다음 나머지 노드
-    const mainNodes = nodes.filter(n => n.data.main);
-    const otherNodes = nodes.filter(n => !n.data.main);
-
-    // main 노드가 여러 개면 첫 번째만 맨 앞에, 나머지는 뒤에 붙임
-    const orderedNodes = mainNodes.length > 0
-      ? [mainNodes[0], ...otherNodes, ...mainNodes.slice(1)]
-      : nodes;
-
-    return [...orderedNodes, ...edges];
+    return [...elements].sort((a, b) => {
+      const aId = a.data?.id || '';
+      const bId = b.data?.id || '';
+      return aId.localeCompare(bId);
+    });
   }, [elements]);
 
   // filteredElements를 useMemo로 고정 (의존성 최소화)
   const { filteredElements, fitNodeIds } = useMemo(() => {
     let filteredElements = sortedElements;
     let fitNodeIds = null;
-    
     if (search) {
       // 모든 일치하는 노드 찾기
       const matchedNodes = sortedElements.filter(
@@ -209,20 +183,24 @@ function RelationGraphMain({ elements, inViewer = false, fullScreen = false, onF
              matchedNodeIds.includes(el.data.target))
         );
         // 관련 노드 ID 수집
-        const relatedNodeIds = new Set();
-        relatedEdges.forEach(edge => {
-          relatedNodeIds.add(edge.data.source);
-          relatedNodeIds.add(edge.data.target);
-        });
-        // 필터링된 요소 생성
-        filteredElements = sortedElements.filter(
-          (el) =>
-            !el.data.source ||
-            relatedNodeIds.has(el.data.id) ||
-            matchedNodeIds.includes(el.data.id)
+        const relatedNodeIds = [
+          ...new Set(
+            relatedEdges.flatMap((e) => [e.data.source, e.data.target])
+          ),
+        ];
+        // 모든 관련 노드 찾기
+        const relatedNodes = sortedElements.filter(
+          (el) => !el.data.source && 
+                 (matchedNodeIds.includes(el.data.id) || relatedNodeIds.includes(el.data.id))
         );
-        fitNodeIds = Array.from(relatedNodeIds);
+        filteredElements = [...relatedNodes, ...relatedEdges];
+        fitNodeIds = [...matchedNodeIds, ...relatedNodeIds];
+      } else {
+        filteredElements = [];
+        fitNodeIds = [];
       }
+    } else {
+      filteredElements = sortedElements;
     }
     return { filteredElements, fitNodeIds };
   }, [sortedElements, search]);
@@ -234,45 +212,59 @@ function RelationGraphMain({ elements, inViewer = false, fullScreen = false, onF
   const stylesheet = useMemo(
     () => [
       {
-        selector: 'node.appear, edge.appear',
+        selector: "node[img]",
         style: {
-          opacity: 0,
-          'transition-property': 'opacity',
-          'transition-duration': '1s',
-          'transition-timing-function': 'ease'
-        }
-      },
-      {
-        selector: 'node',
-        style: {
+          "background-image": "data(img)",
+          "background-fit": "cover",
           "background-color": "#eee",
-          "border-width": 2,
+          "border-width": (ele) => ele.data("main") ? 2 : 1,
           "border-color": "#5B7BA0",
-          "width": 50,
-          "height": 50,
+          "width": inViewer ? (ele => ele.data("main") ? 32 : 24) : 16,
+          "height": inViewer ? (ele => ele.data("main") ? 32 : 24) : 16,
           "shape": "ellipse",
           "label": "data(label)",
           "text-valign": "bottom",
           "text-halign": "center",
-          "font-size": 12,
-          "font-weight": 100,
+          "font-size": inViewer ? 7 : 5,
+          "font-weight": (ele) => ele.data("main") ? 200 : 100,
           "color": "#444",
-          "text-margin-y": 4,
+          "text-margin-y": inViewer ? 9 : 8,
           "text-background-color": "#fff",
           "text-background-opacity": 0.8,
           "text-background-shape": "roundrectangle",
           "text-background-padding": 2,
-          opacity: 1
         },
       },
       {
-        selector: 'edge',
+        selector: "node",
         style: {
-          width: 6,
+          "background-color": "#eee",
+          "border-width": (ele) => ele.data("main") ? 2 : 1,
+          "border-color": "#5B7BA0",
+          "width": inViewer ? (ele => ele.data("main") ? 32 : 24) : 16,
+          "height": inViewer ? (ele => ele.data("main") ? 32 : 24) : 16,
+          "shape": "ellipse",
+          "label": "data(label)",
+          "text-valign": "bottom",
+          "text-halign": "center",
+          "font-size": inViewer ? 4 : 3,
+          "font-weight": (ele) => ele.data("main") ? 10 : 5,
+          "color": "#444",
+          "text-margin-y": inViewer ? 3 : 2,
+          "text-background-color": "#fff",
+          "text-background-opacity": 0.8,
+          "text-background-shape": "roundrectangle",
+          "text-background-padding": 2,
+        },
+      },
+      {
+        selector: "edge",
+        style: {
+          width: inViewer ? "mapData(weight, 0, 1, 1.8, 4.5)" : "mapData(weight, 0, 1, 1.5, 4)",
           "line-color": (ele) => getRelationColor(ele.data("positivity")),
           "curve-style": "bezier",
           label: "data(label)",
-          "font-size": 8,
+          "font-size": inViewer ? 4 : 3,
           "text-rotation": "autorotate",
           color: "#42506b",
           "text-background-color": "#fff",
@@ -281,7 +273,7 @@ function RelationGraphMain({ elements, inViewer = false, fullScreen = false, onF
           "text-background-padding": 2,
           "text-outline-color": "#fff",
           "text-outline-width": 2,
-          opacity: 1,
+          opacity: "mapData(weight, 0, 1, 0.55, 1)",
           "target-arrow-shape": "none"
         },
       },
@@ -292,60 +284,47 @@ function RelationGraphMain({ elements, inViewer = false, fullScreen = false, onF
           "text-opacity": 0.12,
         },
       },
-      {
-        selector: "node.blink",
-        style: {
-          'background-color': '#ffeb3b',
-          'transition-property': 'background-color',
-          'transition-duration': '0.5s',
-          'transition-timing-function': 'ease-in-out'
-        }
-      },
-      {
-        selector: "node[highlight]",
-        style: {
-          'background-color': '#ffeb3b',
-          'transition-property': 'background-color',
-          'transition-duration': '0.2s',
-          'transition-timing-function': 'ease-in-out'
-        }
-      }
-    ],
-    []
-  );
+    ], []); // 의존성 배열을 []로 고정
 
-  // 노드 개수에 따라 spacingFactor 동적 조정
-  const nodeCount = useMemo(() => {
-    return elements ? elements.filter(e => !e.data.source).length : 0;
-  }, [elements]);
-  const spacingFactor = useMemo(() => {
-    if (nodeCount >= 21) return 2;
-    if (nodeCount >= 11) return 1.5;
-    return 1;
-  }, [nodeCount]);
-
+  // layout useMemo 의존성 최소화
   const layout = useMemo(
     () => ({
-      name: "circle",
-      padding: 60,
-      fit: true,
-      avoidOverlap: true,
-      spacingFactor: 1,
-      radius: 100,
-      startAngle: 0,
+      name: "cose",
+      padding: 90,
+      nodeRepulsion: 1800,
+      idealEdgeLength: 120,
       animate: false,
+      fit: true,
+      randomize: false,
+      nodeOverlap: 12,
+      avoidOverlap: true,
+      nodeSeparation: 10,
+      randomSeed: 42,
+      gravity: 0.25,
+      componentSpacing: 90
     }), []);
 
+  // searchLayout useMemo 의존성 최소화
   const searchLayout = useMemo(
     () => ({
-      name: "circle",
-      padding: 120,
-      fit: true,
-      avoidOverlap: true,
-      spacingFactor: spacingFactor + 0.2,
+      name: "cose",
+      padding: 110,
+      nodeRepulsion: 2500,
+      idealEdgeLength: 135,
       animate: true,
       animationDuration: 800,
-    }), [spacingFactor]);
+      fit: true,
+      randomize: false,
+      nodeOverlap: 14,
+      avoidOverlap: true,
+      nodeSeparation: 11,
+      randomSeed: 42,
+      gravity: 0.3,
+      refresh: 20,
+      componentSpacing: 110,
+      coolingFactor: 0.95,
+      initialTemp: 200
+    }), []);
 
   const handleReset = useCallback(() => {
     setSearch("");
@@ -380,23 +359,49 @@ function RelationGraphMain({ elements, inViewer = false, fullScreen = false, onF
   }, [navigate, filename]);
 
   // === 오직 chapter_node_positions_{chapterNum}만 사용하여 노드 위치 복원 (절대적 위치) ===
-  // 이전 코드 제거
+  useEffect(() => {
+    if (!cyRef.current || !elements || elements.length === 0) return;
+    const cy = cyRef.current;
+    if (typeof cy.nodes !== 'function') return;
+    const storageKey = `chapter_node_positions_${chapterNum}`;
+    let savedPositions = {};
+    try {
+      const savedStr = localStorage.getItem(storageKey);
+      if (savedStr) savedPositions = JSON.parse(savedStr);
+    } catch (e) {}
+
+    // 전체 삭제/재생성 제거: 이미 존재하는 노드에만 position 적용
+    cy.nodes().forEach(node => {
+      const pos = savedPositions[node.id()];
+      if (pos) {
+        node.position(pos);
+        node.lock();
+      }
+    });
+    // pan/zoom 초기화는 제거 (그래프 전체 리셋 방지)
+    // cy.pan({ x: 0, y: 0 });
+    // cy.zoom(1);
+  }, [chapterNum, eventNum, elements, maxEventNum]);
 
   // 개선된 코드: chapterNum, eventNum이 바뀔 때만 로딩 오버레이 표시
   useEffect(() => {
-    const isChapterOrEventChanged =
-      prevElementsRef.current !== eventNum;
-
-    if (isChapterOrEventChanged) {
-      // setIsGraphLoading(true);
+    if (chapterNum !== prevChapterNum.current || eventNum !== prevEventNum.current) {
+      setIsGraphLoading(true);
+      prevChapterNum.current = chapterNum;
+      prevEventNum.current = eventNum;
     }
-    // 이전 값 저장
-    prevElementsRef.current = eventNum;
-  }, [eventNum]);
+  }, [chapterNum, eventNum]);
 
   useEffect(() => {
     console.log('[상태점검] chapterNum:', chapterNum, 'eventNum:', eventNum, 'maxEventNum:', maxEventNum, 'isLastEvent:', eventNum === maxEventNum);
   }, [chapterNum, eventNum, maxEventNum]);
+
+  // elements가 변경될 때 로딩 상태 업데이트
+  useEffect(() => {
+    if (elements) {
+      setIsGraphLoading(false);
+    }
+  }, [elements]);
 
   // elements, stylesheet, layout, searchLayout, style useMemo 최적화
   const memoizedElements = useMemo(() => filteredElements, [filteredElements]);
@@ -409,85 +414,6 @@ function RelationGraphMain({ elements, inViewer = false, fullScreen = false, onF
     position: 'relative',
     backgroundColor: '#f8fafc'
   }), []);
-
-  // id 배열을 elements 객체 배열로 변환하는 함수
-  function getElementsByIds(elements, ids, onlyNodes = false) {
-    if (!elements) return [];
-    if (!ids) return [];
-    const idSet = new Set(ids.map(String));
-    return elements.filter(e => {
-      const isNode = !e.data.source && !e.data.target;
-      if (onlyNodes && !isNode) return false;
-      return idSet.has(String(e.data.id));
-    });
-  }
-
-  // 커스텀 diff 계산: 이전 filteredElements에 없고 현재 filteredElements에만 있는 id는 무조건 ripple 대상으로 인식 (id 배열 반환)
-  function customGraphDiff(prevElements, currElements) {
-    prevElements = prevElements || [];
-    currElements = currElements || [];
-    const prevIds = new Set(prevElements.map(e => String(e.data && e.data.id)).filter(Boolean));
-    const currIds = new Set(currElements.map(e => String(e.data && e.data.id)).filter(Boolean));
-    // 추가: 현재에만 있는 id (숨겨진 노드가 다시 보이게 되는 경우도 포함)
-    const added = [...currIds].filter(id => !prevIds.has(id));
-    // 삭제: 이전에만 있고 현재에는 없는 id
-    const removed = [...prevIds].filter(id => !currIds.has(id));
-    // updated: added + removed
-    const updated = [...added, ...removed];
-    return { added, removed, updated };
-  }
-
-  // CytoscapeGraphDirect에 전달할 diff를 filteredElements(화면에 보이는 그래프) 객체 배열로 변환 (노드만)
-  const graphDiffForCytoscape = useMemo(() => {
-    // prevElements가 undefined라면 prevElementsRef.current를 fallback으로 사용
-    const prevElementsSource = typeof prevElements !== 'undefined' ? prevElements : prevElementsRef.current;
-    const prevElementsSafe = Array.isArray(prevElementsSource) ? prevElementsSource : [];
-    if (!prevElementsSafe || prevElementsSafe.length === 0) {
-      return { added: [], removed: [], updated: [] };
-    }
-    const diff = customGraphDiff(prevElementsSafe, filteredElements || []);
-    const added = getElementsByIds(filteredElements, diff.added, true);
-    const removed = getElementsByIds(prevElementsSafe, diff.removed, true);
-    const updated = [...added, ...removed];
-    console.log('[DIFF] graphDiffForCytoscape.added:', added);
-    return { added, removed, updated };
-  }, [filteredElements, prevElementsRef.current]);
-
-  // CytoscapeGraphPortalProvider를 통한 데이터 갱신
-  useEffect(() => {
-    updateGraph({
-      elements: memoizedElements,
-      stylesheet: memoizedStylesheet,
-      layout: memoizedLayout,
-      tapNodeHandler,
-      tapEdgeHandler,
-      tapBackgroundHandler,
-      fitNodeIds,
-      style: memoizedStyle,
-      cyRef,
-      newNodeIds,
-    });
-    // eslint-disable-next-line
-  }, [memoizedElements, memoizedStylesheet, memoizedLayout, tapNodeHandler, tapEdgeHandler, tapBackgroundHandler, fitNodeIds, memoizedStyle, cyRef, newNodeIds]);
-
-  // 컴포넌트 언마운트 시 타이머 정리
-  useEffect(() => {
-    return () => {
-      if (updateTimeoutRef.current) {
-        clearTimeout(updateTimeoutRef.current);
-      }
-    };
-  }, []);
-
-  useEffect(() => {
-    console.log('[Main] elements:', elements);
-  }, [elements]);
-
-  useEffect(() => {
-    console.log('[Main] graphProps:', graphProps);
-  }, [graphProps]);
-
-  console.log('[RelationGraphMain] diffNodes:', diffNodes);
 
   if (fullScreen && inViewer) {
     return (
@@ -596,24 +522,41 @@ function RelationGraphMain({ elements, inViewer = false, fullScreen = false, onF
                   />
                 )}
               </div>
-              {/* 그래프 영역: CytoscapeGraphDirect만 렌더링 */}
-              <CytoscapeGraphDirect
-                key={graphDiffForCytoscape.added.map(n => n.data.id).join(',')}
-                elements={filteredElements}
-                fitNodeIds={fitNodeIds}
-                cyRef={cyRef}
-                stylesheet={stylesheet}
-                layout={search ? searchLayout : layout}
-                tapNodeHandler={tapNodeHandler}
-                tapEdgeHandler={tapEdgeHandler}
-                tapBackgroundHandler={tapBackgroundHandler}
-                graphDiff={graphDiffForCytoscape}
-                prevElements={prevElementsRef.current}
-                currentElements={filteredElements}
-                chapterNum={chapterNum}
-                eventNum={eventNum}
-                diffNodes={diffNodes}
-              />
+              {/* 그래프 영역 */}
+              <div className="graph-canvas-area w-full h-full" ref={cyRef} style={{ zIndex: 1, width: '100%', height: '100%', minWidth: 0, minHeight: 0, overflow: 'hidden', position: 'relative' }}>
+                {/* 그래프가 없을 때 안내문구 */}
+                {!isGraphLoading && (!elements || elements.length === 0) && (
+                  <div style={{
+                    position: 'absolute',
+                    top: '50%',
+                    left: '50%',
+                    transform: 'translate(-50%, -50%)',
+                    textAlign: 'center',
+                    color: '#6C8EFF',
+                    fontSize: 20,
+                    fontWeight: 600,
+                    zIndex: 10,
+                    background: 'rgba(255,255,255,0.85)',
+                    padding: '32px 0',
+                    borderRadius: 16,
+                    boxShadow: '0 2px 8px rgba(108,142,255,0.07)'
+                  }}>
+                    표시할 그래프가 없습니다
+                  </div>
+                )}
+                <CytoscapeGraphDirect
+                  elements={memoizedElements}
+                  stylesheet={memoizedStylesheet}
+                  layout={memoizedLayout}
+                  tapNodeHandler={tapNodeHandler}
+                  tapEdgeHandler={tapEdgeHandler}
+                  tapBackgroundHandler={tapBackgroundHandler}
+                  fitNodeIds={fitNodeIds}
+                  style={memoizedStyle}
+                  cyRef={cyRef}
+                  newNodeIds={newNodeIds}
+                />
+              </div>
             </div>
           </div>
         </div>
@@ -641,7 +584,7 @@ function RelationGraphMain({ elements, inViewer = false, fullScreen = false, onF
         </div>
       )}
 
-      <div className="flex-1 relative overflow-hidden" style={{ width: '100vh', height: '200vh' }}>
+      <div className="flex-1 relative overflow-hidden" style={{ width: '100%', height: '100%' }}>
         {/* 툴팁 렌더링 */}
         <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none', zIndex: 9999 }}>
           {activeTooltip?.type === 'node' && activeTooltip.data && (
@@ -668,36 +611,45 @@ function RelationGraphMain({ elements, inViewer = false, fullScreen = false, onF
             />
           )}
         </div>
-        {/* 그래프 영역: CytoscapeGraphDirect만 렌더링 */}
-        <CytoscapeGraphDirect
-          key={graphDiffForCytoscape.added.map(n => n.data.id).join(',')}
-          elements={filteredElements}
-          fitNodeIds={fitNodeIds}
-          cyRef={cyRef}
-          stylesheet={stylesheet}
-          layout={search ? searchLayout : layout}
-          tapNodeHandler={tapNodeHandler}
-          tapEdgeHandler={tapEdgeHandler}
-          tapBackgroundHandler={tapBackgroundHandler}
-          graphDiff={graphDiffForCytoscape}
-          prevElements={prevElementsRef.current}
-          currentElements={filteredElements}
-          chapterNum={chapterNum}
-          eventNum={eventNum}
-          diffNodes={diffNodes}
-        />
+
+        {/* 그래프 영역 */}
+        <div className="graph-canvas-area w-full h-full" ref={cyRef} style={{ zIndex: 1, width: '100%', height: '100%', minWidth: 0, minHeight: 0, overflow: 'hidden', position: 'relative' }}>
+          {/* 그래프가 없을 때 안내문구 */}
+          {!isGraphLoading && (!elements || elements.length === 0) && (
+            <div style={{
+              position: 'absolute',
+              top: '50%',
+              left: '50%',
+              transform: 'translate(-50%, -50%)',
+              textAlign: 'center',
+              color: '#6C8EFF',
+              fontSize: 20,
+              fontWeight: 600,
+              zIndex: 10,
+              background: 'rgba(255,255,255,0.85)',
+              padding: '32px 0',
+              borderRadius: 16,
+              boxShadow: '0 2px 8px rgba(108,142,255,0.07)'
+            }}>
+              표시할 그래프가 없습니다
+            </div>
+          )}
+          <CytoscapeGraphDirect
+            elements={memoizedElements}
+            stylesheet={memoizedStylesheet}
+            layout={memoizedLayout}
+            tapNodeHandler={tapNodeHandler}
+            tapEdgeHandler={tapEdgeHandler}
+            tapBackgroundHandler={tapBackgroundHandler}
+            fitNodeIds={fitNodeIds}
+            style={memoizedStyle}
+            cyRef={cyRef}
+            newNodeIds={newNodeIds}
+          />
+        </div>
       </div>
     </div>
   );
 }
 
-export default React.memo(RelationGraphMain, (prevProps, nextProps) => {
-  return (
-    prevProps.elements === nextProps.elements &&
-    prevProps.newNodeIds === nextProps.newNodeIds &&
-    prevProps.graphViewState === nextProps.graphViewState &&
-    prevProps.chapterNum === nextProps.chapterNum &&
-    prevProps.eventNum === nextProps.eventNum &&
-    prevProps.hideIsolated === nextProps.hideIsolated
-  );
-});
+export default RelationGraphMain;

@@ -1,12 +1,12 @@
 {
     "relations": [
         {
+            "id1": 1.0,
             "relation": [
                 "father",
-                "Father-son",
-                "son"
+                "son",
+                "father-son"
             ],
-            "id1": 1.0,
             "id2": 2.0,
             "positivity": 0.9,
             "weight": 9.0,
@@ -15,31 +15,29 @@
         {
             "id1": 1.0,
             "relation": [
-                "narrator",
+                "acquaintance",
                 "neighbors",
-                "acquaintances"
+                "conflicted"
             ],
             "id2": 3.0,
-            "positivity": 0.3,
-            "weight": 3.5,
+            "positivity": 0.1,
+            "weight": 4.5,
             "count": 2
         },
         {
-            "relation": [
-                "related to",
-                "great-uncle"
-            ],
             "id1": 1.0,
+            "relation": [
+                "family"
+            ],
             "id2": 7.0,
             "positivity": 0.0,
-            "weight": 3.0,
+            "weight": 5.0,
             "count": 1
         },
         {
             "id1": 1.0,
             "relation": [
-                "colleagues",
-                "acquaintances"
+                "colleagues"
             ],
             "id2": 8.0,
             "positivity": 1.0,
@@ -47,14 +45,14 @@
             "count": 1
         },
         {
+            "id1": 1.0,
             "relation": [
                 "owner",
                 "pet"
             ],
-            "id1": 1.0,
             "id2": 9.0,
             "positivity": -0.2,
-            "weight": 2.0,
+            "weight": 3.0,
             "count": 1
         },
         {
@@ -72,41 +70,51 @@
             "id1": 1.0,
             "relation": [
                 "helped",
-                "guide"
+                "stranger"
             ],
             "id2": 11.0,
-            "positivity": 0.8,
-            "weight": 6.0,
+            "positivity": 0.7,
+            "weight": 3.0,
             "count": 1
         },
         {
             "id1": 1.0,
             "relation": [
-                "idolizes"
+                "inspired by"
             ],
             "id2": 12.0,
-            "positivity": 0.2,
-            "weight": 3.0,
+            "positivity": 0.3,
+            "weight": 2.0,
             "count": 1
         },
         {
             "relation": [
-                "idolizes"
+                "inspired by"
             ],
             "id1": 1.0,
             "id2": 13.0,
-            "positivity": 0.2,
-            "weight": 3.0,
+            "positivity": 0.3,
+            "weight": 2.0,
+            "count": 1
+        },
+        {
+            "relation": [
+                "inspired by"
+            ],
+            "id1": 1.0,
+            "id2": 14.0,
+            "positivity": 0.3,
+            "weight": 2.0,
             "count": 1
         },
         {
             "id1": 1.0,
             "relation": [
-                "idolizes"
+                "acquaintances"
             ],
-            "id2": 14.0,
-            "positivity": 0.2,
-            "weight": 3.0,
+            "id2": 4.0,
+            "positivity": 0.5,
+            "weight": 4.0,
             "count": 1
         },
         {
@@ -115,29 +123,13 @@
             ],
             "id1": 1.0,
             "id2": 5.0,
-            "positivity": 1.0,
-            "weight": 5.0,
-            "count": 1
-        },
-        {
-            "relation": [
-                "acquaintances"
-            ],
-            "id1": 1.0,
-            "id2": 4.0,
-            "positivity": 0.5,
-            "weight": 3.0,
-            "count": 1
-        },
-        {
-            "id1": 5.0,
-            "relation": [
-                "married"
-            ],
-            "id2": 4.0,
-            "positivity": 0.0,
-            "weight": 8.0,
+            "positivity": 0.7,
+            "weight": 6.0,
             "count": 1
         }
+    ],
+    "new_appearances": [
+        4.0,
+        5.0
     ]
 }

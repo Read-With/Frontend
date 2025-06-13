@@ -384,19 +384,19 @@ html, body {
 }
 
 .graph-canvas-area {
-  width: 1200px !important;
-  min-width: 1200px !important;
-  max-width: 100% !important;
-  height: 900px !important;
-  min-height: 900px !important;
-  max-height: none !important;
-  margin: 20px 0 0 30px;
+  width: 800px !important;
+  height: 700px !important;
+  min-width: 800px !important;
+  min-height: 700px !important;
+  max-width: 800px !important;
+  max-height: 700px !important;
+  margin: 0 auto;
   padding: 0 !important;
   border: none !important;
   box-sizing: border-box;
   background: transparent !important;
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: center;
   flex: 1;
 }
@@ -929,7 +929,7 @@ html, body {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 130px;
+  max-width: 100px;
 }
 
 .node-name.source {
@@ -1768,25 +1768,20 @@ html, body {
 }
 
 .cytoscape-node-appear {
-  animation: nodeAppear 0.7s cubic-bezier(0.23, 1, 0.32, 1);
-  box-shadow: 0 0 0 6px #6C8EFF55;
-  border: 2.5px solid #6C8EFF !important;
+  box-shadow: 0 0 0 0 rgba(34,197,94,0.7), 0 0 0 8px rgba(34,197,94,0.3);
+  animation: node-ripple 0.7s cubic-bezier(0.4,0,0.2,1);
+  z-index: 10000 !important;
 }
-@keyframes nodeAppear {
+
+@keyframes node-ripple {
   0% {
-    transform: scale(0.2);
-    opacity: 0.2;
-    box-shadow: 0 0 0 20px #6C8EFF33;
+    box-shadow: 0 0 0 0 rgba(34,197,94,0.7), 0 0 0 8px rgba(34,197,94,0.3);
   }
-  60% {
-    transform: scale(1.15);
-    opacity: 1;
-    box-shadow: 0 0 0 10px #6C8EFF33;
+  70% {
+    box-shadow: 0 0 0 16px rgba(34,197,94,0.0), 0 0 0 32px rgba(34,197,94,0.0);
   }
   100% {
-    transform: scale(1);
-    opacity: 1;
-    box-shadow: 0 0 0 0 #6C8EFF00;
+    box-shadow: 0 0 0 0 rgba(34,197,94,0.0), 0 0 0 0 rgba(34,197,94,0.0);
   }
 }
 
@@ -1812,23 +1807,4 @@ html, body {
 }
 .cytoscape-fade-hidden {
   opacity: 0;
-}
-
-.node-highlight-effect {
-  position: absolute;
-  border-radius: 50%;
-  pointer-events: none;
-  z-index: 2;
-  animation: ripple-appear 0.8s ease-out;
-}
-
-@keyframes ripple-appear {
-  0% {
-    transform: scale(0.5);
-    opacity: 0.5;
-  }
-  100% {
-    transform: scale(2.2);
-    opacity: 0;
-  }
 }
