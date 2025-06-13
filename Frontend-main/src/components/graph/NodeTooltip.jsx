@@ -213,21 +213,43 @@ function GraphNodeTooltip({
                 boxShadow: "0 2px 8px rgba(108,142,255,0.10)",
               }}
             >
-              {nodeData.img ? (
-                <img
-                  src={nodeData.img}
-                  alt={nodeData.common_name || nodeData.label}
-                  className="profile-img"
-                  style={{
-                    width: 100,
-                    height: 100,
-                    borderRadius: "50%",
-                    objectFit: "cover",
-                  }}
-                />
-              ) : (
-                <span style={{ fontSize: 48, color: "#888" }}>👤</span>
-              )}
+              <div
+                // 캐릭터 이미지 추가
+                className="profile-img"
+                style={{
+                  display: "flex",
+                  justifyContent: "center",
+                  alignItems: "center",
+                  width: 64,
+                  height: 64,
+                  margin: "0 auto 12px auto",
+                  borderRadius: "50%",
+                  background: "#f4f4f4",
+                }}
+              >
+                {nodeData.image ? (
+                  <img
+                    src={nodeData.image}
+                    alt={nodeData.label || "character"}
+                    style={{
+                      width: 100,
+                      height: 100,
+                      objectFit: "cover",
+                      borderRadius: "50%",
+                      border: "2px solid #e0e0e0",
+                      background: "#faf7f2",
+                      boxShadow: "0 2px 8px rgba(0,0,0,0.03)",
+                    }}
+                  />
+                ) : (
+                  // 이미지가 없을 때 기본 silhouette 아이콘
+                  <svg width="56" height="56" viewBox="0 0 56 56" fill="none">
+                    <circle cx="28" cy="28" r="28" fill="#e5e7eb" />
+                    <ellipse cx="28" cy="22" rx="12" ry="12" fill="#bdbdbd" />
+                    <ellipse cx="28" cy="44" rx="18" ry="10" fill="#bdbdbd" />
+                  </svg>
+                )}
+              </div>
             </div>
             <div
               style={{
