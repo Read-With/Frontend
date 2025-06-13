@@ -63,6 +63,7 @@ function convertRelationsToElements(
         description: idToDesc[id1] || "",
         main_character: idToMain[id1] || false,
         names: idToNames[id1] || [],
+        image: `/gatsby/${id1}.png`, // 이미지 경로 추가
       },
     };
     nodes[id2] = {
@@ -72,8 +73,18 @@ function convertRelationsToElements(
         description: idToDesc[id2] || "",
         main_character: idToMain[id2] || false,
         names: idToNames[id2] || [],
+        image: `/gatsby/${id2}.png`, // 이미지 경로 추가
       },
     };
+
+    // 디버깅용 로그
+    console.log("노드 생성 완료:", {
+      id1,
+      id2,
+      image1: `/gatsby/${id1}.png`,
+      image2: `/gatsby/${id2}.png`,
+    });
+
     let relationLabel = "";
     if (Array.isArray(rel.relation)) {
       relationLabel = rel.relation.join(", ");

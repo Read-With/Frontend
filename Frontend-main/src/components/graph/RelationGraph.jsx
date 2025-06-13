@@ -213,6 +213,32 @@ const RelationGraph = ({
   const stylesheet = useMemo(
     () => [
       {
+        selector: "node[image]", // image 데이터가 정의된 노드에만 적용
+        style: {
+          "background-color": "#eee",
+          "background-image": "data(image)", // 이 부분 추가
+          "background-fit": "cover", // 이 부분 추가
+          "background-clip": "node", // 원 내부로만 이미지 표시
+          "border-width": (ele) => (ele.data("main") ? 2 : 1),
+          "border-color": "#5B7BA0",
+          "border-opacity": 1,
+          width: inViewer ? (ele) => (ele.data("main") ? 56 : 48) : 40,
+          height: inViewer ? (ele) => (ele.data("main") ? 56 : 48) : 40,
+          shape: "ellipse",
+          label: "data(label)",
+          "text-valign": "bottom",
+          "text-halign": "center",
+          "font-size": inViewer ? 15 : 12,
+          "font-weight": (ele) => (ele.data("main") ? 700 : 400),
+          color: "#444",
+          "text-margin-y": inViewer ? 3 : 2,
+          "text-background-color": "#fff",
+          "text-background-opacity": 0.8,
+          "text-background-shape": "roundrectangle",
+          "text-background-padding": 2,
+        },
+      },
+      {
         selector: "node",
         style: {
           "background-color": "#eee",
@@ -299,6 +325,9 @@ const RelationGraph = ({
       componentSpacing: 90,
     };
   }, [isLayoutDone]);
+
+  // 노드 이미지
+  console.log("RelationGraph elements", elements);
 
   // layout 완료 핸들러
   const handleLayoutComplete = useCallback(() => {
