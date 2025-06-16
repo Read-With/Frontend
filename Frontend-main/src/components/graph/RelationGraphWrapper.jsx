@@ -87,15 +87,10 @@ function RelationGraphWrapper() {
       });
     }
     
-    console.log('캐릭터 데이터:', { idToName, idToDesc, idToMain, idToNames });
+
     const newElements = convertRelationsToElements(
       eventData?.relations || [],
       idToName, idToDesc, idToMain, idToNames
-    );
-    console.log('생성된 elements:', newElements);
-    console.log(
-      "elements 노드 data 목록:",
-      newElements.filter(e => !e.data.source && !e.data.target).map(e => e.data)
     );
     setElements(newElements);
     setNewNodeIds([]); // 필요시 새 노드 추출 로직 추가

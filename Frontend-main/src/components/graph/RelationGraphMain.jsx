@@ -23,6 +23,73 @@ function getRelationColor(positivity) {
   return `hsl(${h}, 70%, 45%)`;
 }
 
+const getNodeSize = () => {
+  if (typeof window !== 'undefined') {
+    const path = window.location.pathname;
+    if (path.includes('/user/viewer/')) return 40;
+    if (path.includes('/user/graph/')) return 80;
+  }
+  return 40; // 기본값
+};
+
+// 간선(엣지) 스타일도 라우트에 따라 다르게 반환
+const getEdgeStyle = () => {
+  if (typeof window !== 'undefined') {
+    const path = window.location.pathname;
+    if (path.includes('/user/viewer/')) {
+      return {
+        width: "mapData(weight, 0, 1, 1, 2.5)",
+        fontSize: 8,
+      };
+    }
+    if (path.includes('/user/graph/')) {
+      return {
+        width: "mapData(weight, 0, 5, 5, 10)",
+        fontSize: 15,
+      };
+    }
+  }
+  return {
+    width: "mapData(weight, 0, 1, 1, 2.5)",
+    fontSize: 8,
+  };
+};
+
+const getLayout = () => {
+  if (typeof window !== 'undefined') {
+    const path = window.location.pathname;
+    if (path.includes('/user/graph/')) {
+      return {
+        name: "cose",
+        padding: 200,
+        nodeRepulsion: 8000,
+        idealEdgeLength: 300,
+        animate: false,
+        fit: true,
+        randomize: false,
+        nodeOverlap: 32,
+        avoidOverlap: true,
+        nodeSeparation: 200,
+        componentSpacing: 200,
+      };
+    }
+  }
+  // 기본값
+  return {
+    name: "cose",
+    padding: 90,
+    nodeRepulsion: 2000,
+    idealEdgeLength: 150,
+    animate: false,
+    fit: true,
+    randomize: false,
+    nodeOverlap: 12,
+    avoidOverlap: true,
+    nodeSeparation: 50,
+    componentSpacing: 90,
+  };
+};
+
 function RelationGraphMain({ elements, inViewer = false, fullScreen = false, onFullScreen, onExitFullScreen, graphViewState, setGraphViewState, chapterNum, eventNum, hideIsolated, maxEventNum, newNodeIds }) {
   const cyRef = useRef(null);
   const hasCenteredRef = useRef(false); // 최초 1회만 중앙정렬
@@ -45,9 +112,9 @@ function RelationGraphMain({ elements, inViewer = false, fullScreen = false, onF
   const isGraphPage = inViewer && fullScreen;
 
   // 타임라인으로 이동하는 함수
-  const handleViewTimeline = () => {
-    navigate(`/viewer/${filename}/timeline`, { state: location.state });
-  };
+  // const handleViewTimeline = () => {
+  //   navigate(`/viewer/${filename}/timeline`, { state: location.state });
+  // };
 
   // 노드 클릭 시 툴팁 표시
   const tapNodeHandler = useCallback((evt) => {
@@ -166,27 +233,30 @@ function RelationGraphMain({ elements, inViewer = false, fullScreen = false, onF
   // currentEventJson이 내용이 같으면 참조도 같게 useMemo로 캐싱
   const stableEventJson = useMemo(() => graphViewState ? JSON.stringify(graphViewState) : '', [graphViewState]);
 
-  // 스타일시트 useMemo 의존성 최소화
+  const edgeStyle = getEdgeStyle();
+
   const stylesheet = useMemo(
     () => [
       {
         selector: "node[image]",
         style: {
+          "background-color": "#eee",
           "background-image": "data(image)",
           "background-fit": "cover",
-          "background-color": "#eee",
-          "border-width": (ele) => ele.data("main") ? 2 : 1,
+          "background-clip": "node",
+          "border-width": (ele) => (ele.data("main") ? 2 : 1),
           "border-color": "#5B7BA0",
-          "width": inViewer ? (ele => ele.data("main") ? 32 : 24) : 16,
-          "height": inViewer ? (ele => ele.data("main") ? 32 : 24) : 16,
-          "shape": "ellipse",
-          "label": "data(common_name)",
+          "border-opacity": 1,
+          width: getNodeSize(),
+          height: getNodeSize(),
+          shape: "ellipse",
+          label: "data(label)",
           "text-valign": "bottom",
           "text-halign": "center",
-          "font-size": inViewer ? 7 : 5,
-          "font-weight": (ele) => ele.data("main") ? 200 : 100,
-          "color": "#444",
-          "text-margin-y": inViewer ? 9 : 8,
+          "font-size": 12,
+          "font-weight": (ele) => (ele.data("main") ? 700 : 400),
+          color: "#444",
+          "text-margin-y": 2,
           "text-background-color": "#fff",
           "text-background-opacity": 0.8,
           "text-background-shape": "roundrectangle",
@@ -197,18 +267,19 @@ function RelationGraphMain({ elements, inViewer = false, fullScreen = false, onF
         selector: "node",
         style: {
           "background-color": "#eee",
-          "border-width": (ele) => ele.data("main") ? 2 : 1,
+          "border-width": (ele) => (ele.data("main") ? 2 : 1),
           "border-color": "#5B7BA0",
-          "width": inViewer ? (ele => ele.data("main") ? 32 : 24) : 16,
-          "height": inViewer ? (ele => ele.data("main") ? 32 : 24) : 16,
-          "shape": "ellipse",
-          "label": "data(common_name)",
+          "border-opacity": 1,
+          width: getNodeSize(),
+          height: getNodeSize(),
+          shape: "ellipse",
+          label: "data(label)",
           "text-valign": "bottom",
           "text-halign": "center",
-          "font-size": inViewer ? 7 : 5,
-          "font-weight": (ele) => ele.data("main") ? 200 : 100,
-          "color": "#444",
-          "text-margin-y": inViewer ? 9 : 8,
+          "font-size": 12,
+          "font-weight": (ele) => (ele.data("main") ? 700 : 400),
+          color: "#444",
+          "text-margin-y": 2,
           "text-background-color": "#fff",
           "text-background-opacity": 0.8,
           "text-background-shape": "roundrectangle",
@@ -218,11 +289,11 @@ function RelationGraphMain({ elements, inViewer = false, fullScreen = false, onF
       {
         selector: "edge",
         style: {
-          width: inViewer ? "mapData(weight, 0, 1, 1.8, 4.5)" : "mapData(weight, 0, 1, 1.5, 4)",
+          width: edgeStyle.width,
           "line-color": (ele) => getRelationColor(ele.data("positivity")),
           "curve-style": "bezier",
           label: "data(label)",
-          "font-size": inViewer ? 4 : 3,
+          "font-size": edgeStyle.fontSize,
           "text-rotation": "autorotate",
           color: "#42506b",
           "text-background-color": "#fff",
@@ -232,7 +303,17 @@ function RelationGraphMain({ elements, inViewer = false, fullScreen = false, onF
           "text-outline-color": "#fff",
           "text-outline-width": 2,
           opacity: "mapData(weight, 0, 1, 0.55, 1)",
-          "target-arrow-shape": "none"
+          "target-arrow-shape": "none",
+        },
+      },
+      {
+        selector: "node.cytoscape-node-appear",
+        style: {
+          "border-color": "#22c55e",
+          "border-width": 16,
+          "border-opacity": 1,
+          "transition-property": "border-width, border-color, border-opacity",
+          "transition-duration": "700ms",
         },
       },
       {
@@ -242,13 +323,12 @@ function RelationGraphMain({ elements, inViewer = false, fullScreen = false, onF
           "text-opacity": 0.12,
         },
       },
-    ], []); // 의존성 배열을 []로 고정
+    ],
+    []
+  );
+  //layout useMemo 의존성 최소화
 
-  // layout useMemo 의존성 최소화
-  const layout = DEFAULT_LAYOUT;
-
-  // searchLayout useMemo 의존성 최소화
-  const searchLayout = SEARCH_LAYOUT;
+  //searchLayout useMemo 의존성 최소화
 
   const handleReset = useCallback(() => {
     setSearch("");
@@ -283,29 +363,6 @@ function RelationGraphMain({ elements, inViewer = false, fullScreen = false, onF
   }, [navigate, filename]);
 
   // === 오직 chapter_node_positions_{chapterNum}만 사용하여 노드 위치 복원 (절대적 위치) ===
-  // useEffect(() => {
-  //   if (!cyRef.current || !elements || elements.length === 0) return;
-  //   const cy = cyRef.current;
-  //   if (typeof cy.nodes !== 'function') return;
-  //   const storageKey = `chapter_node_positions_${chapterNum}`;
-  //   let savedPositions = {};
-  //   try {
-  //     const savedStr = localStorage.getItem(storageKey);
-  //     if (savedStr) savedPositions = JSON.parse(savedStr);
-  //   } catch (e) {}
-  //
-  //   // 전체 삭제/재생성 제거: 이미 존재하는 노드에만 position 적용
-  //   cy.nodes().forEach(node => {
-  //     const pos = savedPositions[node.id()];
-  //     if (pos) {
-  //       node.position(pos);
-  //       node.lock();
-  //     }
-  //   });
-  //   // pan/zoom 초기화는 제거 (그래프 전체 리셋 방지)
-  //   // cy.pan({ x: 0, y: 0 });
-  //   // cy.zoom(1);
-  // }, [chapterNum, eventNum, elements, maxEventNum]);
 
   // 개선된 코드: chapterNum, eventNum이 바뀔 때만 로딩 오버레이 표시
   useEffect(() => {
@@ -330,7 +387,7 @@ function RelationGraphMain({ elements, inViewer = false, fullScreen = false, onF
   // elements, stylesheet, layout, searchLayout, style useMemo 최적화
   const memoizedElements = useMemo(() => filteredElements, [filteredElements]);
   const memoizedStylesheet = useMemo(() => stylesheet, [stylesheet]);
-  const memoizedLayout = useMemo(() => DEFAULT_LAYOUT, []); // 항상 cose 레이아웃만 사용
+  const memoizedLayout = useMemo(() => getLayout(), []); // 항상 cose 레이아웃만 사용
   const memoizedStyle = useMemo(() => ({
     width: '100%',
     height: '100%',

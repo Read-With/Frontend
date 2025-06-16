@@ -10,18 +10,48 @@ import GraphNodeTooltip from "./NodeTooltip";
 import EdgeTooltip from "./EdgeTooltip";
 import "./RelationGraph.css";
 import { calcGraphDiff } from "./graphDiff";
+import { DEFAULT_LAYOUT } from "./graphLayouts";
 
 // 간선 positivity 값에 따라 HSL 그라데이션 색상 반환
 function getRelationColor(positivity) {
-  // positivity: -1(빨강) ~ 0(회색) ~ 1(초록)
-  // H: 0(빨강) ~ 120(초록)
-  const h = (120 * (positivity + 1)) / 2; // -1~1 → 0~120
+  const h = (120 * (positivity + 1)) / 2;
   return `hsl(${h}, 70%, 45%)`;
 }
 
+const getNodeSize = () => {
+  if (typeof window !== 'undefined') {
+    const path = window.location.pathname;
+    if (path.includes('/user/viewer/')) return 40;
+    if (path.includes('/user/graph/')) return 80;
+  }
+  return 40; // 기본값
+};
+
+// 간선(엣지) 스타일도 라우트에 따라 다르게 반환
+const getEdgeStyle = () => {
+  if (typeof window !== 'undefined') {
+    const path = window.location.pathname;
+    if (path.includes('/user/viewer/')) {
+      return {
+        width: "mapData(weight, 0, 1, 1, 2.5)",
+        fontSize: 8,
+      };
+    }
+    if (path.includes('/user/graph/')) {
+      return {
+        width: "mapData(weight, 10, 10, 25, 60)",
+        fontSize: 20,
+      };
+    }
+  }
+  return {
+    width: "mapData(weight, 0, 1, 1, 2.5)",
+    fontSize: 20,
+  };
+};
+
 const RelationGraph = ({
   elements,
-  inViewer = false,
   chapterNum, // 관계 변화
   eventNum, // 관계 변화
 }) => {
@@ -45,44 +75,36 @@ const RelationGraph = ({
     }
   }, [elements, prevNodeCount]);
 
-  // 툴크 상태 업데이트를 useCallback으로 최적화
   const updateTooltip = useCallback((type, data, position) => {
     setActiveTooltip((prev) => {
       return { type, ...data, ...position };
     });
   }, []);
 
-  // 노드 클릭 핸들러 최적화
   const tapNodeHandler = useCallback(
     (evt) => {
       if (!cyRef.current) return;
       const node = evt.target;
       const nodeData = node.data();
-      if (!nodeData) return; // 데이터가 없는 경우 건너뛰기
-
+      if (!nodeData) return;
       const pos = node.renderedPosition();
       const cy = cyRef.current;
       const pan = cy.pan();
       const zoom = cy.zoom();
       const container = document.querySelector(".graph-canvas-area");
       const containerRect = container.getBoundingClientRect();
-
       const nodeCenter = {
         x: pos.x * zoom + pan.x + containerRect.left,
         y: pos.y * zoom + pan.y + containerRect.top,
       };
-
       setActiveTooltip(null);
       cy.batch(() => {
         cy.nodes().addClass("faded");
         cy.edges().addClass("faded");
         node.removeClass("faded").addClass("highlighted");
       });
-
       const mouseX = evt.originalEvent?.clientX ?? nodeCenter.x;
       const mouseY = evt.originalEvent?.clientY ?? nodeCenter.y;
-
-      // 데이터 복원
       let names = nodeData.names;
       if (typeof names === "string") {
         try {
@@ -93,7 +115,6 @@ const RelationGraph = ({
       }
       let main = nodeData.main;
       if (typeof main === "string") main = main === "true";
-
       setTimeout(() => {
         updateTooltip(
           "node",
@@ -113,25 +134,20 @@ const RelationGraph = ({
     [updateTooltip]
   );
 
-  // 간선 클릭 핸들러 최적화
   const tapEdgeHandler = useCallback(
     (evt) => {
       if (!cyRef.current) return;
       const cy = cyRef.current;
       const edge = evt.target;
       const edgeData = edge.data();
-      if (!edgeData) return; // 데이터가 없는 경우 건너뛰기
-
+      if (!edgeData) return;
       const container = document.querySelector(".graph-canvas-area");
       const containerRect = container.getBoundingClientRect();
-
       const pos = edge.midpoint();
       const pan = cy.pan();
       const zoom = cy.zoom();
-
       const absoluteX = pos.x * zoom + pan.x + containerRect.left;
       const absoluteY = pos.y * zoom + pan.y + containerRect.top;
-
       setActiveTooltip(null);
       updateTooltip(
         "edge",
@@ -146,7 +162,6 @@ const RelationGraph = ({
           y: absoluteY,
         }
       );
-
       cy.batch(() => {
         cy.nodes().addClass("faded");
         cy.edges().addClass("faded");
@@ -154,18 +169,15 @@ const RelationGraph = ({
         edge.source().removeClass("faded").addClass("highlighted");
         edge.target().removeClass("faded").addClass("highlighted");
       });
-
       selectedEdgeIdRef.current = edge.id();
     },
     [updateTooltip]
   );
 
-  // 선택 해제
   const clearSelection = useCallback(() => {
     let changed = false;
     if (cyRef.current) {
       const cy = cyRef.current;
-      // faded/highlighted가 있는 경우에만 변경
       if (
         cy
           .nodes()
@@ -191,7 +203,6 @@ const RelationGraph = ({
     }
   }, [tapNodeHandler, tapEdgeHandler, activeTooltip]);
 
-  // 배경 클릭 시 선택 해제
   const tapBackgroundHandler = useCallback(
     (evt) => {
       if (evt.target === cyRef.current) {
@@ -200,7 +211,6 @@ const RelationGraph = ({
           !selectedEdgeIdRef.current &&
           !activeTooltip
         ) {
-          // 아무것도 선택된 게 없으면 아무 동작도 하지 않음
           return;
         }
         clearSelection();
@@ -209,29 +219,31 @@ const RelationGraph = ({
     [activeTooltip, clearSelection]
   );
 
-  // 스타일시트 useMemo 의존성 최소화
+  const nodeSize = getNodeSize();
+  const edgeStyle = getEdgeStyle();
+
   const stylesheet = useMemo(
     () => [
       {
-        selector: "node[image]", // image 데이터가 정의된 노드에만 적용
+        selector: "node[image]",
         style: {
           "background-color": "#eee",
-          "background-image": "data(image)", // 이 부분 추가
-          "background-fit": "cover", // 이 부분 추가
-          "background-clip": "node", // 원 내부로만 이미지 표시
+          "background-image": "data(image)",
+          "background-fit": "cover",
+          "background-clip": "node",
           "border-width": (ele) => (ele.data("main") ? 2 : 1),
           "border-color": "#5B7BA0",
           "border-opacity": 1,
-          width: inViewer ? (ele) => (ele.data("main") ? 56 : 48) : 40,
-          height: inViewer ? (ele) => (ele.data("main") ? 56 : 48) : 40,
+          width: nodeSize,
+          height: nodeSize,
           shape: "ellipse",
           label: "data(label)",
           "text-valign": "bottom",
           "text-halign": "center",
-          "font-size": inViewer ? 15 : 12,
+          "font-size": 12,
           "font-weight": (ele) => (ele.data("main") ? 700 : 400),
           color: "#444",
-          "text-margin-y": inViewer ? 3 : 2,
+          "text-margin-y": 2,
           "text-background-color": "#fff",
           "text-background-opacity": 0.8,
           "text-background-shape": "roundrectangle",
@@ -245,16 +257,16 @@ const RelationGraph = ({
           "border-width": (ele) => (ele.data("main") ? 2 : 1),
           "border-color": "#5B7BA0",
           "border-opacity": 1,
-          width: inViewer ? (ele) => (ele.data("main") ? 56 : 48) : 40,
-          height: inViewer ? (ele) => (ele.data("main") ? 56 : 48) : 40,
+          width: nodeSize,
+          height: nodeSize,
           shape: "ellipse",
           label: "data(label)",
           "text-valign": "bottom",
           "text-halign": "center",
-          "font-size": inViewer ? 15 : 12,
+          "font-size": 12,
           "font-weight": (ele) => (ele.data("main") ? 700 : 400),
           color: "#444",
-          "text-margin-y": inViewer ? 3 : 2,
+          "text-margin-y": 2,
           "text-background-color": "#fff",
           "text-background-opacity": 0.8,
           "text-background-shape": "roundrectangle",
@@ -264,13 +276,11 @@ const RelationGraph = ({
       {
         selector: "edge",
         style: {
-          width: inViewer
-            ? "mapData(weight, 0, 1, 1.8, 4.5)"
-            : "mapData(weight, 0, 1, 1.5, 4)",
+          width: edgeStyle.width,
           "line-color": (ele) => getRelationColor(ele.data("positivity")),
           "curve-style": "bezier",
           label: "data(label)",
-          "font-size": inViewer ? 8 : 6,
+          "font-size": edgeStyle.fontSize,
           "text-rotation": "autorotate",
           color: "#42506b",
           "text-background-color": "#fff",
@@ -301,56 +311,32 @@ const RelationGraph = ({
         },
       },
     ],
-    [inViewer]
+    [nodeSize, edgeStyle]
   );
 
-  // layout: 최초 1회만 cose, 이후에는 preset
-  const layout = useMemo(() => {
-    if (isLayoutDone) {
-      return { name: "preset" };
-    }
-    return {
-      name: "cose",
-      padding: 90,
-      nodeRepulsion: 2000,
-      idealEdgeLength: 150,
-      animate: false,
-      fit: true,
-      randomize: false,
-      nodeOverlap: 12,
-      avoidOverlap: true,
-      nodeSeparation: 50,
-      randomSeed: 42,
-      gravity: 0.25,
-      componentSpacing: 90,
-    };
-  }, [isLayoutDone]);
-
-  // 노드 이미지
-  console.log("RelationGraph elements", elements);
+  const layout = DEFAULT_LAYOUT;
 
   // layout 완료 핸들러
   const handleLayoutComplete = useCallback(() => {
     setIsLayoutDone(true);
   }, []);
 
-  // 그래프가 바뀔 때마다 항상 중앙에 fit
+  // 그래프가 바뀔 때마다 항상 중앙에 center만 사용
   useEffect(() => {
     if (cyRef.current) {
-      cyRef.current.fit();
+      cyRef.current.center();
     }
   }, [elements]);
 
   useEffect(() => {
-    if (!cyRef.current) return; // cyRef.current가 null인 경우 처리
+    if (!cyRef.current) return;
     const prevElements = cyRef.current.elements().map((e) => e.data());
-    if (!prevElements || !elements) return; // prevElements 또는 elements가 undefined인 경우 처리
+    if (!prevElements || !elements) return;
     const { added } = calcGraphDiff(prevElements, elements);
-
     if (added.length > 0) {
       cyRef.current.batch(() => {
         added.forEach((e) => {
-          if (!e.data || !e.data.id) return; // 유효하지 않은 데이터는 건너뛰기
+          if (!e.data || !e.data.id) return;
           const safeData = {
             ...e.data,
             names: Array.isArray(e.data.names)
@@ -382,7 +368,7 @@ const RelationGraph = ({
       className="relation-graph-container"
       style={{ width: "100%", height: "100%", position: "relative" }}
     >
-      {/* 툴팁 렌더링 */}
+      {/* 툴크 렌더링 */}
       <div
         style={{
           position: "absolute",
@@ -415,8 +401,8 @@ const RelationGraph = ({
             sourceNode={activeTooltip.sourceNode}
             targetNode={activeTooltip.targetNode}
             style={{ pointerEvents: "auto" }}
-            chapterNum={chapterNum} // 관계 변화
-            eventNum={eventNum} // 관계 변화
+            chapterNum={chapterNum}
+            eventNum={eventNum}
           />
         )}
       </div>
