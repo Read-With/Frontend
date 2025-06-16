@@ -2,9 +2,9 @@ import React, { useState, useEffect, useRef } from "react";
 import { Line } from "react-chartjs-2";
 import "chart.js/auto";
 
-// === glob import: 반드시 src/data/gatsby 하위 전체 관계 파일 import ===
+// === glob import: 반드시 data/gatsby 하위 전체 관계 파일 import ===
 const relationshipModules = import.meta.glob(
-  "/src/data/gatsby/chapter*_relationships_event_*.json",
+  "../../data/gatsby/chapter*_relationships_event_*.json",
   { eager: true }
 );
 
@@ -22,7 +22,7 @@ function getChapterLastEventNums(maxChapter = 10) {
   for (let chapter = 1; chapter <= maxChapter; chapter++) {
     let last = 0;
     for (let i = 1; i < 100; i++) {
-      const filePath = `/src/data/gatsby/chapter${chapter}_relationships_event_${i}.json`;
+      const filePath = `../../data/gatsby/chapter${chapter}_relationships_event_${i}.json`;
       if (relationshipModules[filePath]) {
         last = i;
       } else {
@@ -51,7 +51,7 @@ function fetchRelationTimelineMulti(
   for (let ch = 1; ch < chapterNum; ch++) {
     const lastEv = lastEventNums[ch - 1];
     if (lastEv === 0) continue;
-    const filePath = `/src/data/gatsby/chapter${ch}_relationships_event_${lastEv}.json`;
+    const filePath = `../../data/gatsby/chapter${ch}_relationships_event_${lastEv}.json`;
     const json = relationshipModules[filePath]?.default;
     if (!json) {
       console.warn(`[fetchRelationTimelineMulti] File not found:`, filePath);
@@ -88,7 +88,7 @@ function fetchRelationTimelineMulti(
   // 현재 챕터: 1~(eventNum-1)까지, 단 eventNum이 1이면 1까지 보정
   const lastEv = Math.max(1, eventNum);
   for (let i = 1; i <= lastEv; i++) {
-    const filePath = `/src/data/gatsby/chapter${chapterNum}_relationships_event_${i}.json`;
+    const filePath = `../../data/gatsby/chapter${chapterNum}_relationships_event_${i}.json`;
     const json = relationshipModules[filePath]?.default;
     if (!json) {
       console.warn(`[fetchRelationTimelineMulti] File not found:`, filePath);

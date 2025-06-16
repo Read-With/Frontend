@@ -4,17 +4,20 @@ import GraphControls from "./GraphControls";
 import "./RelationGraph.css";
 import { useNavigate, useParams } from "react-router-dom";
 import { FaTimes } from 'react-icons/fa';
+import { convertRelationsToElements } from './graphElementUtils';
+import GraphNodeTooltip from "./NodeTooltip";
+import EdgeTooltip from "./EdgeTooltip";
 
 // characters.json, 이벤트별 relations.json glob import
-const characterModules = import.meta.glob('../../data/*_characters.json', { eager: true });
-const eventModules = import.meta.glob('../../data/*_ev*_relations.json', { eager: true });
+const characterModules = import.meta.glob('../../data/gatsby/c_chapter*_0.json', { eager: true });
+const eventModules = import.meta.glob('../../data/gatsby/chapter*_relationships_event_*.json', { eager: true });
 
 const getChapterCharacters = (chapter) => {
-  const num = String(chapter).padStart(2, '0');
-  // characters.json 구조: { characters: [...] } 또는 [...]
-  const data = characterModules[`../../data/${num}_characters.json`]?.default;
+  const num = String(chapter).padStart(1, '0');
+  // characters.json 구조: { characters: [...] }
+  const data = characterModules[`../../data/gatsby/c_chapter${num}_0.json`]?.default;
   if (!data) return [];
-  return Array.isArray(data) ? data : data.characters || [];
+  return data.characters || [];
 };
 
 function RelationGraphWrapper() {
@@ -40,153 +43,76 @@ function RelationGraphWrapper() {
   const allEventFilesRef = useRef({}); // { [chapterNum]: [파일경로, ...] }
   const allCharactersRef = useRef({}); // { [chapterNum]: [캐릭터배열] }
 
-  // 챕터 변경 시, 해당 챕터의 모든 이벤트 relations.json 누적 준비
+  // 챕터 변경 시 해당 챕터의 마지막 이벤트 번호를 찾아서 elements 세팅
   useEffect(() => {
-    const num = String(currentChapter).padStart(2, '0');
-    // 해당 챕터의 모든 이벤트 파일 경로 추출 및 정렬
-    const eventFiles = Object.keys(eventModules)
-      .filter(path => path.includes(`/${num}_ev`) && path.includes('_relations.json'))
-      .sort((a, b) => {
-        const numA = parseInt(a.match(/_ev(\d+)_/)[1]);
-        const numB = parseInt(b.match(/_ev(\d+)_/)[1]);
-        return numA - numB;
-      });
-
-    allEventFilesRef.current[num] = eventFiles;
-    setMaxEventNum(eventFiles.length + 1); // 이벤트 0을 포함하도록 +1
-
-    // 캐릭터 정보 미리 저장
-    allCharactersRef.current[num] = getChapterCharacters(currentChapter);
-
-    // 누적 노드/엣지 준비
-    let accumulatedNodeIds = new Set();
-    let accumulatedEdgeIds = new Set();
-    let accumulatedNodes = [];
-    let accumulatedEdges = [];
-    const chapterEvents = [];
-
-    // 이벤트 0 추가 (초기 캐릭터 데이터)
-    const initialCharacters = allCharactersRef.current[num] || [];
-    const initialNodes = initialCharacters.map(char => ({
-      data: {
-        id: String(Math.trunc(char.id)),
-        label: char.common_name || char.name || String(char.id),
-        main: char.main_character,
-        description: char.description,
-        names: char.names,
-        img: char.img,
-      }
-    }));
-
-    // 초기 노드들을 accumulatedNodes에 추가
-    initialNodes.forEach(n => accumulatedNodeIds.add(n.data.id));
-    accumulatedNodes = [...accumulatedNodes, ...initialNodes];
-
-    chapterEvents.push({
-      eventNum: 0,
-      nodes: initialNodes,
-      edges: [],
-      newNodeIds: initialNodes.map(n => n.data.id)
-    });
-
-    // 모든 이벤트 파일 처리
-    eventFiles.forEach((file, idx) => {
-      try {
-        const data = eventModules[file].default || {};
-        // new_appearances: id 배열
-        const newNodeIds = Array.isArray(data.new_appearances) ? data.new_appearances.map(id => String(Math.trunc(id))) : [];
-        // relations: 엣지 배열
-        const newEdges = Array.isArray(data.relations) ? data.relations : [];
-        // 노드 상세정보 characters.json에서 찾아서 생성
-        const charList = allCharactersRef.current[num] || [];
-        const newNodes = newNodeIds
-          .filter(id => !accumulatedNodeIds.has(id))
-          .map(id => {
-            const char = charList.find(c => String(Math.trunc(c.id)) === id);
-            return {
-              data: {
-                id: id,
-                label: char?.common_name || char?.name || id,
-                main: char?.main_character,
-                description: char?.description,
-                names: char?.names,
-                img: char?.img,
-              }
-            };
-          });
-
-        // 엣지 생성
-        const edges = newEdges
-          .filter(e => e.id1 != null && e.id2 != null)
-          .map((e, i) => {
-            const source = String(Math.trunc(e.id1));
-            const target = String(Math.trunc(e.id2));
-            // idx+1이 실제 event 파일 번호이므로, eventNum도 idx+1로 저장
-            const edgeId = `${source}_${target}_${i}`;
-            if (accumulatedEdgeIds.has(edgeId)) return null;
-            return {
-              data: {
-                id: edgeId,
-                source,
-                target,
-                label: Array.isArray(e.relation) ? e.relation.join(", ") : e.type,
-                explanation: e.explanation,
-                positivity: e.positivity,
-                weight: e.weight,
-              }
-            };
-          }).filter(Boolean);
-
-        // 누적
-        newNodes.forEach(n => accumulatedNodeIds.add(n.data.id));
-        edges.forEach(e => accumulatedEdgeIds.add(e.data.id));
-        accumulatedNodes = [...accumulatedNodes, ...newNodes];
-        accumulatedEdges = [...accumulatedEdges, ...edges];
-
-        // 이 시점의 누적 elements 저장
-        chapterEvents.push({
-          eventNum: idx + 1,  // 0부터 시작이 아니라 실제 파일 번호와 맞추기 위해 idx+1
-          nodes: [...accumulatedNodes],
-          edges: [...accumulatedEdges],
-          newNodeIds: newNodes.map(n => n.data.id)
-        });
-      } catch (error) {
-        console.error(`Error processing event file ${file}:`, error);
-        // 오류 발생 시 빈 이벤트 추가
-        chapterEvents.push({
-          eventNum: idx + 1,  // 0부터 시작이 아니라 실제 파일 번호와 맞추기 위해 idx+1
-          nodes: [...accumulatedNodes],
-          edges: [...accumulatedEdges],
-          newNodeIds: []
-        });
-      }
-    });
-
-    allEventsDataRef.current[num] = chapterEvents;
-    setChapterEvents(chapterEvents);
-
-    // 첫 이벤트로 초기화
-    if (chapterEvents.length > 0) {
-      const initialElements = [...(chapterEvents[0]?.nodes || []), ...(chapterEvents[0]?.edges || [])];
-      setElements(initialElements);
-      setNewNodeIds(chapterEvents[0]?.newNodeIds || []);
-    } else {
+    const num = String(currentChapter).padStart(1, '');
+    // 해당 챕터의 모든 이벤트 관계 파일 경로 추출
+    const eventFiles = Object.keys(eventModules).filter(path =>
+      path.includes(`chapter${currentChapter}_relationships_event_`)
+    );
+    if (eventFiles.length === 0) {
       setElements([]);
       setNewNodeIds([]);
+      return;
     }
+    // 파일명에서 이벤트 번호 추출, 가장 큰 값 찾기
+    const maxEventNum = Math.max(...eventFiles.map(path => {
+      const match = path.match(/event_(\d+)\.json$/);
+      return match ? Number(match[1]) : 0;
+    }));
+    setMaxEventNum(maxEventNum);
+    // 가장 마지막 이벤트 파일 경로
+    const lastEventFile = eventFiles.find(path => path.includes(`${maxEventNum}.json`));
+    const eventData = lastEventFile ? eventModules[lastEventFile]?.default : null;
+    if (!eventData) {
+      setElements([]);
+      setNewNodeIds([]);
+      return;
+    }
+    // 인물 데이터 로딩
+    const charFile = Object.keys(characterModules).find(path => path.includes(`c_chapter${currentChapter}_0.json`));
+    const charData = charFile ? characterModules[charFile]?.default : null;
+    
+    // elements 변환 (viewer와 동일하게 idToName에 common_name 우선)
+    let idToName = {}, idToDesc = {}, idToMain = {}, idToNames = {};
+    
+    // characters 배열이 있는 경우
+    if (charData?.characters && Array.isArray(charData.characters)) {
+      charData.characters.forEach(c => {
+        const id = String(c.id);
+        idToName[id] = c.common_name || c.name || id;
+        idToDesc[id] = c.description || '';
+        idToMain[id] = c.main_character || false;
+        idToNames[id] = Array.isArray(c.names) ? c.names : [];
+      });
+    }
+    
+    console.log('캐릭터 데이터:', { idToName, idToDesc, idToMain, idToNames });
+    const newElements = convertRelationsToElements(
+      eventData?.relations || [],
+      idToName, idToDesc, idToMain, idToNames
+    );
+    console.log('생성된 elements:', newElements);
+    console.log(
+      "elements 노드 data 목록:",
+      newElements.filter(e => !e.data.source && !e.data.target).map(e => e.data)
+    );
+    setElements(newElements);
+    setNewNodeIds([]); // 필요시 새 노드 추출 로직 추가
   }, [currentChapter]);
 
   // === 2. eventNum이 바뀔 때마다 해당 시점의 누적 elements로 setElements ===
-  useEffect(() => {
-    const num = String(currentChapter).padStart(2, '0');
-    const chapterEvents = allEventsDataRef.current[num] || [];
-    // eventNum이 0부터 시작하므로 그대로 인덱스로 사용
-    const idx = Math.max(0, Math.min(eventNum, chapterEvents.length - 1));
-    const curr = chapterEvents[idx] || { nodes: [], edges: [], newNodeIds: [] };
-    const elements = [...(curr.nodes || []), ...(curr.edges || [])];
-    setElements(elements);
-    setNewNodeIds(curr.newNodeIds || []);
-  }, [eventNum, currentChapter]);
+  // useEffect(() => {
+  //   if (eventNum == null) return;
+  //   const num = String(currentChapter).padStart(2, '0');
+  //   const chapterEvents = allEventsDataRef.current[num] || [];
+  //   // eventNum이 0부터 시작하므로 그대로 인덱스로 사용
+  //   const idx = Math.max(0, Math.min(eventNum, chapterEvents.length - 1));
+  //   const curr = chapterEvents[idx] || { nodes: [], edges: [], newNodeIds: [] };
+  //   const elements = [...(curr.nodes || []), ...(curr.edges || [])];
+  //   setElements(elements);
+  //   setNewNodeIds(curr.newNodeIds || []);
+  // }, [eventNum, currentChapter]);
 
   // 챕터 변경 시 localStorage에 저장
   useEffect(() => {
@@ -342,12 +268,13 @@ function RelationGraphWrapper() {
         {maxEventNum > 0 ? (
           <RelationGraphMain 
             elements={elements} 
-            inViewer={true} 
-            fullScreen={false}
+            inViewer={false}
+            fullScreen={true}
             graphViewState={graphViewState}
             setGraphViewState={setGraphViewState}
             chapterNum={currentChapter}
-            eventNum={Math.min(eventNum, maxEventNum)}
+            eventNum={eventNum} // 이벤트 번호는 null 또는 undefined로 전달
+            hideIsolated={hideIsolated}
             maxEventNum={maxEventNum}
             newNodeIds={newNodeIds}
           />

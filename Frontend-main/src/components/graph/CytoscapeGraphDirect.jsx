@@ -75,36 +75,11 @@ const CytoscapeGraphDirect = ({
       cy.nodes().forEach(n => { if (!nextNodeIds.has(n.id())) n.remove(); });
       cy.edges().forEach(e => { if (!nextEdgeIds.has(e.id())) e.remove(); });
 
-      // 추가: 새로 들어온 노드/엣지만 추가
-      elements.forEach(e => {
-        if (!e.data) return; // data가 없는 경우 건너뛰기
-        const safeData = {
-          ...e.data,
-          names: Array.isArray(e.data.names)
-            ? JSON.stringify(e.data.names)
-            : (e.data.names ? JSON.stringify([e.data.names]) : '[]'),
-          main: typeof e.data.main === 'boolean'
-            ? String(e.data.main)
-            : (e.data.main === undefined ? 'false' : String(e.data.main)),
-          description: e.data.description || '',
-          portrait_prompt: e.data.portrait_prompt || ''
-        };
-
-        // 노드 또는 엣지 추가/업데이트
-        const ele = cy.getElementById(e.data.id);
-        if (!ele.length) {
-          cy.add({
-            group: e.data.source ? 'edges' : 'nodes',
-            data: safeData,
-            position: e.position
-          });
-        } else {
-          ele.data(safeData);
-          if (e.position) {
-            ele.position(e.position);
-          }
-        }
-      });
+      // 추가: 새로 들어온 노드/엣지만 추가 (노드 먼저, 엣지 나중)
+      const nodes = elements.filter(e => !e.data.source && !e.data.target);
+      const edges = elements.filter(e => e.data.source && e.data.target);
+      cy.add(nodes);
+      cy.add(edges);
 
       // 스타일/레이아웃 적용
       if (stylesheet) {
@@ -156,14 +131,27 @@ const CytoscapeGraphDirect = ({
     }, 700);
   };
 
+  console.log(
+    "CytoscapeGraphDirect 전달 elements 노드 id:",
+    elements.filter(e => !e.data.source && !e.data.target).map(e => e.data.id)
+  );
+  console.log(
+    "CytoscapeGraphDirect 전달 elements 엣지:",
+    elements.filter(e => e.data.source && e.data.target).map(e => ({
+      id: e.data.id,
+      source: e.data.source,
+      target: e.data.target
+    }))
+  );
+
   return (
     <div
       ref={containerRef}
       style={{
         width: "100%",
         height: "100%",
-        minWidth: 600,
-        minHeight: 600,
+        // minWidth: 600,
+        // minHeight: 600,
         background: "#ffffff",
         ...style,
         position: "relative",

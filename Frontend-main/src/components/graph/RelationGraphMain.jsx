@@ -12,13 +12,15 @@ import GraphNodeTooltip from "./NodeTooltip";
 import EdgeTooltip from "./EdgeTooltip";
 import "./RelationGraph.css";
 import { FaTimes, FaClock } from 'react-icons/fa';
+import { filterGraphElements } from "./graphFilter";
+import { DEFAULT_LAYOUT, SEARCH_LAYOUT } from "./graphLayouts";
 
+// 간선 positivity 값에 따라 HSL 그라데이션 색상 반환
 function getRelationColor(positivity) {
-  if (positivity > 0.6) return '#15803d';
-  if (positivity > 0.3) return '#059669';
-  if (positivity > -0.3) return '#6b7280';
-  if (positivity > -0.6) return '#dc2626';
-  return '#991b1b';
+  // positivity: -1(빨강) ~ 0(회색) ~ 1(초록)
+  // H: 0(빨강) ~ 120(초록)
+  const h = (120 * (positivity + 1)) / 2; // -1~1 → 0~120
+  return `hsl(${h}, 70%, 45%)`;
 }
 
 function RelationGraphMain({ elements, inViewer = false, fullScreen = false, onFullScreen, onExitFullScreen, graphViewState, setGraphViewState, chapterNum, eventNum, hideIsolated, maxEventNum, newNodeIds }) {
@@ -159,51 +161,7 @@ function RelationGraphMain({ elements, inViewer = false, fullScreen = false, onF
   }, [elements]);
 
   // filteredElements를 useMemo로 고정 (의존성 최소화)
-  const { filteredElements, fitNodeIds } = useMemo(() => {
-    let filteredElements = sortedElements;
-    let fitNodeIds = null;
-    if (search) {
-      // 모든 일치하는 노드 찾기
-      const matchedNodes = sortedElements.filter(
-        (el) =>
-          !el.data.source &&
-          (el.data.label?.toLowerCase().includes(search.toLowerCase()) ||
-            (el.data.names &&
-              el.data.names.some((n) =>
-                n.toLowerCase().includes(search.toLowerCase())
-              )))
-      );
-      if (matchedNodes.length > 0) {
-        // 모든 일치하는 노드와 관련된 엣지 찾기
-        const matchedNodeIds = matchedNodes.map(node => node.data.id);
-        const relatedEdges = sortedElements.filter(
-          (el) =>
-            el.data.source &&
-            (matchedNodeIds.includes(el.data.source) ||
-             matchedNodeIds.includes(el.data.target))
-        );
-        // 관련 노드 ID 수집
-        const relatedNodeIds = [
-          ...new Set(
-            relatedEdges.flatMap((e) => [e.data.source, e.data.target])
-          ),
-        ];
-        // 모든 관련 노드 찾기
-        const relatedNodes = sortedElements.filter(
-          (el) => !el.data.source && 
-                 (matchedNodeIds.includes(el.data.id) || relatedNodeIds.includes(el.data.id))
-        );
-        filteredElements = [...relatedNodes, ...relatedEdges];
-        fitNodeIds = [...matchedNodeIds, ...relatedNodeIds];
-      } else {
-        filteredElements = [];
-        fitNodeIds = [];
-      }
-    } else {
-      filteredElements = sortedElements;
-    }
-    return { filteredElements, fitNodeIds };
-  }, [sortedElements, search]);
+  const { filteredElements, fitNodeIds } = useMemo(() => filterGraphElements(sortedElements, search), [sortedElements, search]);
 
   // currentEventJson이 내용이 같으면 참조도 같게 useMemo로 캐싱
   const stableEventJson = useMemo(() => graphViewState ? JSON.stringify(graphViewState) : '', [graphViewState]);
@@ -212,9 +170,9 @@ function RelationGraphMain({ elements, inViewer = false, fullScreen = false, onF
   const stylesheet = useMemo(
     () => [
       {
-        selector: "node[img]",
+        selector: "node[image]",
         style: {
-          "background-image": "data(img)",
+          "background-image": "data(image)",
           "background-fit": "cover",
           "background-color": "#eee",
           "border-width": (ele) => ele.data("main") ? 2 : 1,
@@ -222,7 +180,7 @@ function RelationGraphMain({ elements, inViewer = false, fullScreen = false, onF
           "width": inViewer ? (ele => ele.data("main") ? 32 : 24) : 16,
           "height": inViewer ? (ele => ele.data("main") ? 32 : 24) : 16,
           "shape": "ellipse",
-          "label": "data(label)",
+          "label": "data(common_name)",
           "text-valign": "bottom",
           "text-halign": "center",
           "font-size": inViewer ? 7 : 5,
@@ -244,13 +202,13 @@ function RelationGraphMain({ elements, inViewer = false, fullScreen = false, onF
           "width": inViewer ? (ele => ele.data("main") ? 32 : 24) : 16,
           "height": inViewer ? (ele => ele.data("main") ? 32 : 24) : 16,
           "shape": "ellipse",
-          "label": "data(label)",
+          "label": "data(common_name)",
           "text-valign": "bottom",
           "text-halign": "center",
-          "font-size": inViewer ? 4 : 3,
-          "font-weight": (ele) => ele.data("main") ? 10 : 5,
+          "font-size": inViewer ? 7 : 5,
+          "font-weight": (ele) => ele.data("main") ? 200 : 100,
           "color": "#444",
-          "text-margin-y": inViewer ? 3 : 2,
+          "text-margin-y": inViewer ? 9 : 8,
           "text-background-color": "#fff",
           "text-background-opacity": 0.8,
           "text-background-shape": "roundrectangle",
@@ -287,44 +245,10 @@ function RelationGraphMain({ elements, inViewer = false, fullScreen = false, onF
     ], []); // 의존성 배열을 []로 고정
 
   // layout useMemo 의존성 최소화
-  const layout = useMemo(
-    () => ({
-      name: "cose",
-      padding: 90,
-      nodeRepulsion: 1800,
-      idealEdgeLength: 120,
-      animate: false,
-      fit: true,
-      randomize: false,
-      nodeOverlap: 12,
-      avoidOverlap: true,
-      nodeSeparation: 10,
-      randomSeed: 42,
-      gravity: 0.25,
-      componentSpacing: 90
-    }), []);
+  const layout = DEFAULT_LAYOUT;
 
   // searchLayout useMemo 의존성 최소화
-  const searchLayout = useMemo(
-    () => ({
-      name: "cose",
-      padding: 110,
-      nodeRepulsion: 2500,
-      idealEdgeLength: 135,
-      animate: true,
-      animationDuration: 800,
-      fit: true,
-      randomize: false,
-      nodeOverlap: 14,
-      avoidOverlap: true,
-      nodeSeparation: 11,
-      randomSeed: 42,
-      gravity: 0.3,
-      refresh: 20,
-      componentSpacing: 110,
-      coolingFactor: 0.95,
-      initialTemp: 200
-    }), []);
+  const searchLayout = SEARCH_LAYOUT;
 
   const handleReset = useCallback(() => {
     setSearch("");
@@ -359,29 +283,29 @@ function RelationGraphMain({ elements, inViewer = false, fullScreen = false, onF
   }, [navigate, filename]);
 
   // === 오직 chapter_node_positions_{chapterNum}만 사용하여 노드 위치 복원 (절대적 위치) ===
-  useEffect(() => {
-    if (!cyRef.current || !elements || elements.length === 0) return;
-    const cy = cyRef.current;
-    if (typeof cy.nodes !== 'function') return;
-    const storageKey = `chapter_node_positions_${chapterNum}`;
-    let savedPositions = {};
-    try {
-      const savedStr = localStorage.getItem(storageKey);
-      if (savedStr) savedPositions = JSON.parse(savedStr);
-    } catch (e) {}
-
-    // 전체 삭제/재생성 제거: 이미 존재하는 노드에만 position 적용
-    cy.nodes().forEach(node => {
-      const pos = savedPositions[node.id()];
-      if (pos) {
-        node.position(pos);
-        node.lock();
-      }
-    });
-    // pan/zoom 초기화는 제거 (그래프 전체 리셋 방지)
-    // cy.pan({ x: 0, y: 0 });
-    // cy.zoom(1);
-  }, [chapterNum, eventNum, elements, maxEventNum]);
+  // useEffect(() => {
+  //   if (!cyRef.current || !elements || elements.length === 0) return;
+  //   const cy = cyRef.current;
+  //   if (typeof cy.nodes !== 'function') return;
+  //   const storageKey = `chapter_node_positions_${chapterNum}`;
+  //   let savedPositions = {};
+  //   try {
+  //     const savedStr = localStorage.getItem(storageKey);
+  //     if (savedStr) savedPositions = JSON.parse(savedStr);
+  //   } catch (e) {}
+  //
+  //   // 전체 삭제/재생성 제거: 이미 존재하는 노드에만 position 적용
+  //   cy.nodes().forEach(node => {
+  //     const pos = savedPositions[node.id()];
+  //     if (pos) {
+  //       node.position(pos);
+  //       node.lock();
+  //     }
+  //   });
+  //   // pan/zoom 초기화는 제거 (그래프 전체 리셋 방지)
+  //   // cy.pan({ x: 0, y: 0 });
+  //   // cy.zoom(1);
+  // }, [chapterNum, eventNum, elements, maxEventNum]);
 
   // 개선된 코드: chapterNum, eventNum이 바뀔 때만 로딩 오버레이 표시
   useEffect(() => {
@@ -406,7 +330,7 @@ function RelationGraphMain({ elements, inViewer = false, fullScreen = false, onF
   // elements, stylesheet, layout, searchLayout, style useMemo 최적화
   const memoizedElements = useMemo(() => filteredElements, [filteredElements]);
   const memoizedStylesheet = useMemo(() => stylesheet, [stylesheet]);
-  const memoizedLayout = useMemo(() => ({ name: 'preset' }), []);
+  const memoizedLayout = useMemo(() => DEFAULT_LAYOUT, []); // 항상 cose 레이아웃만 사용
   const memoizedStyle = useMemo(() => ({
     width: '100%',
     height: '100%',
@@ -414,6 +338,21 @@ function RelationGraphMain({ elements, inViewer = false, fullScreen = false, onF
     position: 'relative',
     backgroundColor: '#f8fafc'
   }), []);
+
+  console.log(
+    "elements 노드 id 목록:",
+    elements.filter(e => !e.data.source && !e.data.target).map(e => e.data.id)
+  );
+  console.log(
+    "elements 엣지 id 목록:",
+    elements.filter(e => e.data.source && e.data.target).map(e => ({
+      id: e.data.id,
+      source: e.data.source,
+      target: e.data.target
+    }))
+  );
+
+  console.log("filteredElements", filteredElements);
 
   if (fullScreen && inViewer) {
     return (
@@ -613,13 +552,13 @@ function RelationGraphMain({ elements, inViewer = false, fullScreen = false, onF
         </div>
 
         {/* 그래프 영역 */}
-        <div className="graph-canvas-area w-full h-full" ref={cyRef} style={{ zIndex: 1, width: '100%', height: '100%', minWidth: 0, minHeight: 0, overflow: 'hidden', position: 'relative' }}>
+        <div className="graph-canvas-area w-full h-full" ref={cyRef} style={{ zIndex: 1, width: '100%', height: '100%', minWidth: '2000px', minHeight: '1500px', overflow: 'hidden', position: 'relative' }}>
           {/* 그래프가 없을 때 안내문구 */}
           {!isGraphLoading && (!elements || elements.length === 0) && (
             <div style={{
               position: 'absolute',
-              top: '50%',
-              left: '50%',
+              top: '100%',
+              left: '100%',
               transform: 'translate(-50%, -50%)',
               textAlign: 'center',
               color: '#6C8EFF',

@@ -7,14 +7,18 @@ import React, {
 } from 'react';
 import ePub from 'epubjs';
 
-// eventRelationModules import 수정 - 프로젝트 루트 기준
-const eventRelationModules = import.meta.glob('/src/data/gatsby/chapter*_events.json', { eager: true });
+// glob import 경로를 상대경로로 수정
+const eventRelationModules = import.meta.glob('../../../data/gatsby/chapter*_events.json', { eager: true });
+console.log('eventRelationModules keys:', Object.keys(eventRelationModules));
 
 // getEventsForChapter 함수 정의
 function getEventsForChapter(chapter) {
   const num = String(chapter);
   // 1. 이벤트 본문 데이터 추출
   const textFilePath = Object.keys(eventRelationModules).find(path => path.includes(`chapter${num}_events.json`));
+  if (!textFilePath) {
+    console.warn('[getEventsForChapter] 파일을 찾을 수 없음:', `chapter${num}_events.json`, Object.keys(eventRelationModules));
+  }
   const textArray = textFilePath ? eventRelationModules[textFilePath]?.default : [];
 
   // 2. 각 event에 대해 event_id, eventNum, chapter 세팅
