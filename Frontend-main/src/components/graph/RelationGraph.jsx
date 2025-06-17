@@ -319,6 +319,9 @@ const RelationGraph = ({
     }
   }, [elements]);
 
+  // elements props 디버깅 로그 추가
+  console.log("[RelationGraph 디버그] elements:", elements);
+
   return (
     <div
       className="relation-graph-container"

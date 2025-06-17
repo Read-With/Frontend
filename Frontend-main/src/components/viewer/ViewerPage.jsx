@@ -309,6 +309,8 @@ const ViewerPage = ({ darkMode: initialDarkMode }) => {
   const [eventNum, setEventNum] = useState(0);
   const [isGraphLoading, setIsGraphLoading] = useState(false);
   const [showToolbar, setShowToolbar] = useState(false);
+  // 이전 currentEvent를 기억하는 ref 추가
+  const prevValidEventRef = useRef(null);
 
   // location.state에서 book 정보를 가져오거나, 없으면 filename에서 생성
   const book = location.state?.book || {
@@ -426,53 +428,53 @@ const ViewerPage = ({ darkMode: initialDarkMode }) => {
       const characterData = charactersModules[characterFilePath].default;
       setCharacterData(characterData);
 
-      // 첫 번째 이벤트 설정
-      if (events && events.length > 0) {
-        const firstEvent = events[0]; // 첫 번째 이벤트 사용
-        if (firstEvent) {
-          const eventId = firstEvent.event_id || 0; // event_id가 없으면 0으로 설정
-          const fileEventNum = eventId + 1;
-          // 이벤트 관계 데이터 파일 찾기 (event_id + 1)
-          const eventRelationFilePath = Object.keys(eventRelationModules).find(
-            (path) =>
-              path.includes(
-                `chapter${currentChapter}_relationships_event_${fileEventNum}.json`
-              )
-          );
-          if (!eventRelationFilePath) {
-            throw new Error(
-              `이벤트 관계 데이터 파일을 찾을 수 없습니다: chapter${currentChapter} event${fileEventNum}`
-            );
-          }
-          const eventRelations =
-            eventRelationModules[eventRelationFilePath].default;
-          const elements = getElementsFromRelations(
-            eventRelations,
-            characterData,
-            [],
-            fileEventNum
-          );
-          // 관계 데이터가 비어 있으면 안내 멘트로 currentEvent 설정
-          if (!elements || elements.length === 0) {
-            setCurrentEvent({
-              ...firstEvent,
-              eventNum: fileEventNum,
-              chapter: currentChapter,
-              name: "다음 페이지로 넘어가주세요",
+      // 전체 챕터의 관계 데이터를 바로 로드
+      const allRelations = [];
+      const allImportance = {};
+      const allNewAppearances = [];
+      const edgeSet = new Set(); // 중복 간선 방지용
+
+      // 각 이벤트의 관계 데이터를 수집
+      for (const ev of events) {
+        const eventId = ev.event_id || 0;
+        const fileEventNum = eventId + 1;
+        const eventRelationFilePath = Object.keys(eventRelationModules).find((path) =>
+          path.includes(`chapter${currentChapter}_relationships_event_${fileEventNum}.json`)
+        );
+
+        if (eventRelationFilePath) {
+          const eventRelations = eventRelationModules[eventRelationFilePath].default;
+          if (Array.isArray(eventRelations?.relations)) {
+            eventRelations.relations.forEach((rel) => {
+              const id1 = rel.id1 || rel.source;
+              const id2 = rel.id2 || rel.target;
+              const edgeKey = `${id1}-${id2}`;
+              if (!edgeSet.has(edgeKey)) {
+                allRelations.push(rel);
+                edgeSet.add(edgeKey);
+              }
             });
-            setElements([]);
-            return;
           }
-          setCurrentEvent({
-            ...firstEvent,
-            eventNum: fileEventNum,
-            chapter: currentChapter,
-            name: firstEvent.name,
-          });
-          setElements(elements);
+          if (eventRelations?.importance) {
+            Object.entries(eventRelations.importance).forEach(([k, v]) => {
+              allImportance[k] = v;
+            });
+          }
+        }
+
+        if (Array.isArray(ev.new_appearances)) {
+          allNewAppearances.push(...ev.new_appearances);
         }
       }
 
+      const elements = getElementsFromRelations(
+        allRelations,
+        characterData,
+        allNewAppearances,
+        allImportance
+      );
+
+      setElements(elements);
       setIsDataReady(true);
       setLoading(false);
     } catch (error) {
@@ -1152,6 +1154,23 @@ const ViewerPage = ({ darkMode: initialDarkMode }) => {
     }
   }, [isGraphLoading]);
 
+  // 1) events 데이터 확인
+  useEffect(() => {
+    console.log("[디버그] events 데이터:", events);
+  }, [events]);
+
+  // 2) currentEvent 상태 변화 확인
+  useEffect(() => {
+    console.log("[디버그] currentEvent 상태 변화:", currentEvent);
+  }, [currentEvent]);
+
+  // currentEvent가 null이 아닐 때만 이전 값 갱신
+  useEffect(() => {
+    if (currentEvent) {
+      prevValidEventRef.current = currentEvent;
+    }
+  }, [currentEvent]);
+
   return (
     <div
       className="h-screen"
@@ -1198,6 +1217,7 @@ const ViewerPage = ({ darkMode: initialDarkMode }) => {
               navigate={navigate}
               filename={filename}
               currentEvent={currentEvent}
+              prevValidEvent={prevValidEventRef.current}
               prevEvent={prevEvent}
               events={getEventsForChapter(currentChapter)}
               graphDiff={graphDiff}
@@ -1223,6 +1243,7 @@ const ViewerPage = ({ darkMode: initialDarkMode }) => {
           }}
           settings={settings}
           onCurrentLineChange={(charIndex, totalEvents, currentEvent) => {
+            console.log("[디버그] onCurrentLineChange 호출!", { charIndex, totalEvents, currentEvent });
             setCurrentCharIndex(charIndex);
             setTotalChapterWords(totalEvents || 0);
             setCurrentEvent(currentEvent);
@@ -1289,6 +1310,7 @@ function GraphSplitArea({
   navigate,
   filename,
   currentEvent,
+  prevValidEvent,
   prevEvent,
   events,
   graphDiff,
@@ -1500,16 +1522,14 @@ function GraphSplitArea({
             transition: "transform 0.3s, background 0.3s",
             transform:
               prevEvent &&
-              currentEvent &&
-              prevEvent.eventNum !== currentEvent.eventNum
+              (currentEvent || prevValidEvent) &&
+              prevEvent.eventNum !== (currentEvent || prevValidEvent).eventNum
                 ? "scale(1.12)"
                 : "scale(1)",
           }}
         >
-          {currentEvent
-            ? `이벤트 ${currentEvent.eventNum ?? 0}${
-                currentEvent.name ? `: ${currentEvent.name}` : ""
-              }`
+          {(currentEvent || prevValidEvent)
+            ? `이벤트 ${(currentEvent || prevValidEvent).eventNum ?? 0}${(currentEvent || prevValidEvent).name ? `: ${(currentEvent || prevValidEvent).name}` : ""}`
             : "이벤트 정보 없음"}
         </span>
         {/* 전체 이벤트 중 현재 위치 프로그레스 바 */}
@@ -1545,7 +1565,7 @@ function GraphSplitArea({
       <div style={{ flex: 1, position: "relative", minHeight: 0, minWidth: 0 }}>
         <GraphContainer
           currentPosition={currentCharIndex}
-          currentEvent={currentEvent}
+          currentEvent={currentEvent || prevValidEvent}
         />
       </div>
     </div>

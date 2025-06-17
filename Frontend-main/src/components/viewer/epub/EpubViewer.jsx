@@ -434,21 +434,33 @@ const EpubViewer = forwardRef(
 
               if (events && events.length > 0) {
                 const lastEvent = events[events.length - 1];
+                const firstEvent = events[0];
                 const currentChars = currentChapterCharsRef.current;
+                console.log('[EpubViewer 디버그] currentChars:', currentChars, 'lastEvent.end:', lastEvent.end, 'events[0].start:', firstEvent.start);
 
-                // 현재 텍스트 수가 마지막 event의 end 값보다 크거나 같은 경우
                 if (currentChars >= lastEvent.end) {
+                  console.log('[EpubViewer 디버그] 마지막 이벤트로 매칭');
                   currentEvent = { ...lastEvent, eventNum: lastEvent.event_id + 1, chapter: chapterNum };
+                } else if (currentChars < firstEvent.start) {
+                  console.log('[EpubViewer 디버그] 첫 이벤트로 강제 매칭');
+                  currentEvent = { ...firstEvent, eventNum: firstEvent.event_id + 1, chapter: chapterNum };
                 } else {
-                  // 현재 텍스트 수가 속하는 event 찾기
                   for (let i = events.length - 1; i >= 0; i--) {
                     const event = events[i];
-
                     if (currentChars >= event.start && currentChars < event.end) {
+                      console.log('[EpubViewer 디버그] 매칭된 이벤트:', event);
                       currentEvent = { ...event, eventNum: event.event_id + 1, chapter: chapterNum };
                       break;
                     }
                   }
+                  // 혹시라도 매칭이 안 되면 가장 가까운 이벤트로 fallback
+                  if (!currentEvent) {
+                    console.log('[EpubViewer 디버그] fallback: 첫 이벤트로 매칭');
+                    currentEvent = { ...firstEvent, eventNum: firstEvent.event_id + 1, chapter: chapterNum };
+                  }
+                }
+                if (!currentEvent) {
+                  console.log('[EpubViewer 디버그] 어떤 이벤트에도 매칭되지 않음');
                 }
               } else {
                 console.log('디버그 - 이벤트가 없음');
@@ -463,6 +475,10 @@ const EpubViewer = forwardRef(
           const savedCfi = localStorage.getItem(LOCAL_STORAGE_KEY);
           const displayTarget = savedCfi || bookInstance.locations.cfiFromLocation(0);
           await rendition.display(displayTarget);
+
+          // display 후 강제로 relocated 이벤트 트리거
+          const location = await rendition.currentLocation();
+          rendition.emit('relocated', location);
 
           if (localStorage.getItem(NEXT_PAGE_FLAG) === 'true') {
             localStorage.removeItem(NEXT_PAGE_FLAG);
