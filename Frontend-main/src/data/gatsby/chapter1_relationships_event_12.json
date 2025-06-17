@@ -3,283 +3,155 @@
         {
             "id1": 1.0,
             "relation": [
-                "father",
-                "son",
-                "father-son"
+                "narrator",
+                "acquaintances",
+                "neighbors"
             ],
             "id2": 2.0,
-            "positivity": 0.9,
-            "weight": 9.0,
-            "count": 2
-        },
-        {
-            "id1": 1.0,
-            "relation": [
-                "acquaintance",
-                "neighbors",
-                "neighbor",
-                "conflicted"
-            ],
-            "id2": 3.0,
-            "positivity": 0.3,
-            "weight": 4.33,
+            "positivity": 0.67,
+            "weight": 3.67,
             "count": 3
         },
         {
-            "id1": 1.0,
             "relation": [
-                "family"
-            ],
-            "id2": 7.0,
-            "positivity": 0.0,
-            "weight": 5.0,
-            "count": 1
-        },
-        {
-            "id1": 1.0,
-            "relation": [
-                "colleagues"
-            ],
-            "id2": 8.0,
-            "positivity": 1.0,
-            "weight": 4.0,
-            "count": 1
-        },
-        {
-            "id1": 1.0,
-            "relation": [
-                "owner",
-                "pet"
-            ],
-            "id2": 9.0,
-            "positivity": -0.2,
-            "weight": 3.0,
-            "count": 1
-        },
-        {
-            "id1": 1.0,
-            "relation": [
-                "employer",
-                "housekeeper"
-            ],
-            "id2": 10.0,
-            "positivity": 0.6,
-            "weight": 5.0,
-            "count": 1
-        },
-        {
-            "id1": 1.0,
-            "relation": [
-                "helped",
-                "stranger"
-            ],
-            "id2": 11.0,
-            "positivity": 0.7,
-            "weight": 3.0,
-            "count": 1
-        },
-        {
-            "id1": 1.0,
-            "relation": [
-                "inspired by"
-            ],
-            "id2": 12.0,
-            "positivity": 0.3,
-            "weight": 2.0,
-            "count": 1
-        },
-        {
-            "relation": [
-                "inspired by"
-            ],
-            "id1": 1.0,
-            "id2": 13.0,
-            "positivity": 0.3,
-            "weight": 2.0,
-            "count": 1
-        },
-        {
-            "relation": [
-                "inspired by"
-            ],
-            "id1": 1.0,
-            "id2": 14.0,
-            "positivity": 0.3,
-            "weight": 2.0,
-            "count": 1
-        },
-        {
-            "id1": 1.0,
-            "relation": [
-                "pushed",
+                "conversational partners",
+                "cousins",
                 "acquaintances",
-                "uneasy",
-                "friends"
+                "polite"
             ],
-            "id2": 4.0,
-            "positivity": 0.16,
-            "weight": 3.57,
+            "id1": 1.0,
+            "id2": 3.0,
+            "positivity": 0.55,
+            "weight": 4.14,
             "count": 7
         },
         {
             "relation": [
                 "acquaintances",
-                "cousins",
-                "conversationalists",
+                "knew socially",
+                "sharers of ideas",
+                "antagonistic",
+                "polite"
+            ],
+            "id1": 1.0,
+            "id2": 4.0,
+            "positivity": 0.21,
+            "weight": 3.57,
+            "count": 7
+        },
+        {
+            "relation": [
+                "married",
+                "antagonistic",
+                "dominant"
+            ],
+            "id1": 3.0,
+            "id2": 4.0,
+            "positivity": -0.19,
+            "weight": 7.56,
+            "count": 9
+        },
+        {
+            "id1": 1.0,
+            "relation": [
+                "introductions",
+                "acquaintances"
+            ],
+            "id2": 5.0,
+            "positivity": 0.27,
+            "weight": 2.0,
+            "count": 3
+        },
+        {
+            "relation": [
+                "confidantes",
+                "acquaintances",
                 "friends"
             ],
-            "id1": 1.0,
+            "id1": 3.0,
             "id2": 5.0,
-            "positivity": 0.62,
-            "weight": 4.5,
-            "count": 8
-        },
-        {
-            "relation": [
-                "spouses",
-                "tense",
-                "antagonistic",
-                "married"
-            ],
-            "id1": 4.0,
-            "id2": 5.0,
-            "positivity": 0.08,
-            "weight": 8.25,
-            "count": 8
-        },
-        {
-            "id1": 4.0,
-            "relation": [
-                "previous owner"
-            ],
-            "id2": 16.0,
-            "positivity": 0.0,
-            "weight": 2.0,
-            "count": 1
-        },
-        {
-            "id1": 1.0,
-            "relation": [
-                "enjoyed looking at",
-                "acquaintances",
-                "gazed at",
-                "observed"
-            ],
-            "id2": 6.0,
-            "positivity": 0.38,
-            "weight": 2.8,
+            "positivity": 0.28,
+            "weight": 4.0,
             "count": 5
         },
         {
-            "id1": 5.0,
+            "id1": 4.0,
             "relation": [
                 "acquaintances",
-                "friends"
+                "disapproval",
+                "interrupted"
             ],
-            "id2": 6.0,
-            "positivity": 0.52,
-            "weight": 4.33,
-            "count": 6
-        },
-        {
-            "id1": 5.0,
-            "relation": [
-                "mother",
-                "daughter"
-            ],
-            "id2": 17.0,
-            "positivity": 0.9,
-            "weight": 8.0,
-            "count": 1
-        },
-        {
-            "relation": [
-                "father",
-                "daughter"
-            ],
-            "id1": 4.0,
-            "id2": 17.0,
-            "positivity": 0.7,
-            "weight": 7.0,
-            "count": 1
-        },
-        {
-            "relation": [
-                "host",
-                "acquaintances",
-                "guest"
-            ],
-            "id1": 4.0,
-            "id2": 6.0,
-            "positivity": -0.15,
+            "id2": 5.0,
+            "positivity": -0.23,
             "weight": 2.0,
-            "count": 2
-        },
-        {
-            "id1": 6.0,
-            "relation": [
-                "knows"
-            ],
-            "id2": 3.0,
-            "positivity": 0.6,
-            "weight": 4.0,
-            "count": 1
+            "count": 3
         },
         {
             "relation": [
                 "mentioned"
             ],
-            "id1": 5.0,
-            "id2": 3.0,
-            "positivity": 0.3,
-            "weight": 1.0,
-            "count": 1
-        },
-        {
-            "relation": [
-                "influenced by"
-            ],
-            "id1": 4.0,
-            "id2": 21.0,
+            "id1": 3.0,
+            "id2": 2.0,
             "positivity": 0.6,
-            "weight": 5.0,
-            "count": 1
-        },
-        {
-            "relation": [
-                "employer",
-                "employee"
-            ],
-            "id1": 5.0,
-            "id2": 18.0,
-            "positivity": -0.2,
-            "weight": 3.0,
-            "count": 1
-        },
-        {
-            "id1": 4.0,
-            "relation": [
-                "employer",
-                "employee"
-            ],
-            "id2": 18.0,
-            "positivity": 0.0,
-            "weight": 3.0,
-            "count": 1
-        },
-        {
-            "id1": 4.0,
-            "relation": [
-                "lovers",
-                "affair"
-            ],
-            "id2": 19.0,
-            "positivity": -0.8,
-            "weight": 8.0,
+            "weight": 1.0,
             "count": 1
         }
     ],
-    "new_appearances": [
-        19.0
-    ]
+    "log": {
+        "event_index": 12,
+        "new_character_ids": [],
+        "new_relations": [],
+        "updated_relations": [
+            {
+                "id_pair": [
+                    1.0,
+                    3.0
+                ],
+                "weight_before": 4.33,
+                "weight_after": 4.14,
+                "positivity_before": 0.53,
+                "positivity_after": 0.55
+            },
+            {
+                "id_pair": [
+                    1.0,
+                    5.0
+                ],
+                "weight_before": 2.0,
+                "weight_after": 2.0,
+                "positivity_before": 0.35,
+                "positivity_after": 0.27
+            },
+            {
+                "id_pair": [
+                    3.0,
+                    5.0
+                ],
+                "weight_before": 4.0,
+                "weight_after": 4.0,
+                "positivity_before": 0.4,
+                "positivity_after": 0.28
+            },
+            {
+                "id_pair": [
+                    3.0,
+                    4.0
+                ],
+                "weight_before": 7.38,
+                "weight_after": 7.56,
+                "positivity_before": -0.11,
+                "positivity_after": -0.19
+            },
+            {
+                "id_pair": [
+                    4.0,
+                    5.0
+                ],
+                "weight_before": 2.0,
+                "weight_after": 2.0,
+                "positivity_before": -0.2,
+                "positivity_after": -0.23
+            }
+        ]
+    }
 }

@@ -1,0 +1,162 @@
+{
+    "characters": [
+        {
+            "names": [
+                "Nick"
+            ],
+            "description": "The narrator of the story, Nick is a young man from the Midwest who moves to West Egg to learn the bond business. He is tolerant and non-judgmental, which makes him a confidant to those around him.",
+            "main_character": true,
+            "portrait_prompt": "A young man in his early 20s, dressed in early 1920s business attire, standing on a lawn at night, looking towards a distant green light. He has a thoughtful, observant expression. The background includes a dark, quiet bay and a large mansion in the distance. The style is realistic, with a slightly melancholic tone, reminiscent of a vintage photograph with a touch of modern digital painting.",
+            "id": 1.0,
+            "common_name": "Nick Carraway"
+        },
+        {
+            "names": [
+                "Gatsby",
+                "Mr. Gatsby"
+            ],
+            "description": "Gatsby is a mysterious millionaire who lives in a lavish mansion in West Egg. He is known for throwing extravagant parties, but his true motivations remain hidden.",
+            "main_character": true,
+            "portrait_prompt": "A tall, handsome man in his early 30s, dressed in a white suit, standing on his lawn at night, looking out over the water with his arms outstretched. He has an expression of longing and hope. The background includes a dark bay and a distant green light. The style is romantic and slightly mysterious, reminiscent of a classic portrait with a touch of impressionism.",
+            "id": 2.0,
+            "common_name": "Jay Gatsby"
+        },
+        {
+            "names": [
+                "Daisy"
+            ],
+            "description": "Daisy is a beautiful, charming, but ultimately shallow woman. She is married to Tom Buchanan and is Nick's cousin.",
+            "main_character": true,
+            "portrait_prompt": "A beautiful woman in her early 20s with a sad, lovely face, dressed in a white flapper dress, sitting on a porch in the late afternoon. She has bright eyes and a bright, passionate mouth, but an underlying sadness in her expression. The background includes a sprawling lawn and a luxurious mansion. The style is elegant and slightly melancholic, reminiscent of a vintage fashion photograph with a touch of art deco.",
+            "id": 3.0,
+            "common_name": "Daisy Buchanan"
+        },
+        {
+            "common_name": "Tom Buchanan",
+            "description": "Tom is a wealthy and powerful man, married to Daisy Buchanan. He is arrogant, aggressive, and openly unfaithful.",
+            "main_character": true,
+            "portrait_prompt": "A sturdy, straw-haired man in his early 30s, dressed in riding clothes, standing on a porch with his legs apart, looking directly at the viewer with a supercilious expression. He has a hard mouth and arrogant eyes. The background includes a luxurious mansion and a sprawling lawn. The style is realistic and slightly menacing, reminiscent of a classic portrait with a touch of social realism.",
+            "id": 4.0,
+            "names": [
+                "Tom"
+            ]
+        },
+        {
+            "common_name": "Jordan Baker",
+            "description": "Jordan is a slender, athletic woman with a contemptuous expression. She is a professional golfer and a friend of Daisy Buchanan.",
+            "main_character": false,
+            "portrait_prompt": "A slender, small-breasted girl with an erect carriage, dressed in sporty attire, sitting on a couch with a contemptuous expression. She has grey, sun-strained eyes and a wan, charming, discontented face. The background includes a luxurious living room. The style is elegant and slightly aloof, reminiscent of a vintage photograph with a touch of modern digital painting.",
+            "id": 5.0,
+            "names": [
+                "Jordan",
+                "Miss Baker"
+            ]
+        },
+        {
+            "common_name": "Myrtle Wilson",
+            "description": "Myrtle is Tom Buchanan's mistress, a woman full of vitality but lacking in refinement. She seeks to improve her station through her affair with Tom.",
+            "main_character": false,
+            "portrait_prompt": "A woman in her middle thirties, faintly stout, dressed in a dark blue crêpe-de-chine dress with a spotted pattern. Her face lacks beauty, but she possesses a striking vitality. She stands in a small apartment, with tapestried furniture and an over-enlarged photograph on the wall. The style is realistic, capturing her coarse beauty and the tawdriness of her surroundings.",
+            "id": 6.0,
+            "names": [
+                "Myrtle",
+                "Mrs. Wilson"
+            ]
+        },
+        {
+            "names": [
+                "Wilson",
+                "George B. Wilson"
+            ],
+            "description": "George is Myrtle's husband, a spiritless and anaemic man who owns a garage in the valley of ashes. He is unaware of his wife's affair and yearns to improve his business.",
+            "main_character": false,
+            "portrait_prompt": "A blond, spiritless man, anaemic and faintly handsome, in his middle thirties, wearing a dark suit covered in ash. He stands in his unprosperous garage, with a dust-covered Ford in the background. His expression is hopeful yet defeated. The style is realistic, with a muted color palette to reflect the bleakness of his life.",
+            "id": 7.0,
+            "common_name": "George Wilson"
+        },
+        {
+            "names": [
+                "Catherine"
+            ],
+            "description": "Catherine is Myrtle Wilson's sister, a slender and worldly girl with a solid bob of red hair and milky white complexion. She is somewhat flamboyant and enjoys gossip.",
+            "main_character": false,
+            "portrait_prompt": "A slender girl of about thirty, with a solid, sticky bob of red hair, and a complexion powdered milky white. She wears numerous pottery bracelets. She is sitting in a crowded apartment. The style is reminiscent of a slightly surreal, vintage portrait.",
+            "id": 8.0,
+            "common_name": "Catherine"
+        },
+        {
+            "common_name": "Chester McKee",
+            "description": "Mr. McKee is a pale, feminine man from the flat below, who works as a photographer. He is artistic and somewhat effeminate.",
+            "main_character": false,
+            "portrait_prompt": "A pale, feminine man, freshly shaved with a white spot of lather on his cheekbone. He is holding a camera. The style is reminiscent of a slightly surreal, vintage portrait.",
+            "id": 9.0,
+            "names": [
+                "Mr. McKee",
+                "Chester"
+            ]
+        },
+        {
+            "names": [
+                "Mrs. McKee",
+                "Lucille"
+            ],
+            "portrait_prompt": "A shrill, languid, and handsome woman, sitting in a crowded apartment. She is wearing an elaborate dress. The style is reminiscent of a slightly surreal, vintage portrait.",
+            "main_character": false,
+            "description": "Mrs. McKee is shrill, languid, handsome, and horrible. She is proud of being photographed many times by her husband.",
+            "id": 10.0,
+            "common_name": "Lucille McKee"
+        },
+        {
+            "common_name": "Owl Eyes",
+            "description": "Owl Eyes is a stout, middle-aged, drunk man with enormous spectacles, found in Gatsby's library. He is impressed by the fact that Gatsby's books are real.",
+            "main_character": false,
+            "portrait_prompt": "A stout, middle-aged man, with enormous owl-eyed spectacles, sitting somewhat drunk on the edge of a great table, staring with unsteady concentration at the shelves of books. The style is realistic, with a slightly comical tone, reminiscent of a vintage photograph.",
+            "id": 11.0,
+            "names": [
+                "Owl Eyes"
+            ]
+        },
+        {
+            "names": [
+                "Mr. Wolfshiem",
+                "Meyer"
+            ],
+            "description": "Wolfshiem is a gambler and a business associate of Gatsby's, known for fixing the 1919 World Series. He is a shady character with connections to the criminal underworld.",
+            "main_character": false,
+            "portrait_prompt": "A small, flat-nosed Jewish man with large growths of hair in his nostrils, wearing a dark suit and a concerned expression. The background should be a dimly lit restaurant, possibly with presbyterian nymphs on the ceiling. The style should be realistic, with a focus on capturing his distinctive features and somewhat unsettling demeanor.",
+            "id": 12.0,
+            "common_name": "Meyer Wolfshiem"
+        },
+        {
+            "names": [
+                "Mr. Klipspringer",
+                "Ewing"
+            ],
+            "portrait_prompt": "An embarrassed, slightly worn young man with shell-rimmed glasses and scanty blond hair, wearing a 'sport shirt' open at the neck, sneakers, and duck trousers of a nebulous hue. He is sitting at a piano in a dimly lit music room. The style is reminiscent of a slightly surreal, vintage portrait.",
+            "main_character": false,
+            "description": "Klipspringer is a boarder at Gatsby's mansion, known for his musical talent. He is somewhat awkward and eager to please Gatsby.",
+            "id": 13.0,
+            "common_name": "Klipspringer"
+        },
+        {
+            "common_name": "Dan Cody",
+            "portrait_prompt": "A grey, florid man with a hard, empty face, dressed in yachting attire, standing on the deck of his yacht. The background includes a vast ocean and a clear sky. The style is realistic, reminiscent of a vintage photograph with a touch of impressionism.",
+            "main_character": false,
+            "description": "Dan Cody was a fifty-year-old millionaire who made his fortune in the Nevada silver fields. He took Gatsby under his wing and employed him for five years.",
+            "id": 14.0,
+            "names": [
+                "Cody"
+            ]
+        },
+        {
+            "names": [
+                "Ella Kaye"
+            ],
+            "description": "Ella Kaye is a newspaper woman who is responsible for Dan Cody's death. She inherits Cody's millions, leaving Gatsby with nothing.",
+            "main_character": false,
+            "portrait_prompt": "A cunning-looking woman in her late 40s, dressed in a sophisticated yet severe outfit, possibly with a hat and gloves. She exudes ambition and ruthlessness. The background is a luxurious study or the deck of a yacht. The style should be realistic, with a focus on capturing her sharp features and calculating gaze.",
+            "id": 15.0,
+            "common_name": "Ella Kaye"
+        }
+    ]
+}

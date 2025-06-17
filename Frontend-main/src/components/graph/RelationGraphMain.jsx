@@ -90,6 +90,8 @@ const getLayout = () => {
   };
 };
 
+const MAX_EDGE_LABEL_LENGTH = 12;
+
 function RelationGraphMain({ elements, inViewer = false, fullScreen = false, onFullScreen, onExitFullScreen, graphViewState, setGraphViewState, chapterNum, eventNum, hideIsolated, maxEventNum, newNodeIds }) {
   const cyRef = useRef(null);
   const hasCenteredRef = useRef(false); // 최초 1회만 중앙정렬
@@ -292,7 +294,10 @@ function RelationGraphMain({ elements, inViewer = false, fullScreen = false, onF
           width: edgeStyle.width,
           "line-color": (ele) => getRelationColor(ele.data("positivity")),
           "curve-style": "bezier",
-          label: "data(label)",
+          label: (ele) => {
+            const label = ele.data('label') || '';
+            return label.length > MAX_EDGE_LABEL_LENGTH ? label.slice(0, MAX_EDGE_LABEL_LENGTH) + '...' : label;
+          },
           "font-size": edgeStyle.fontSize,
           "text-rotation": "autorotate",
           color: "#42506b",

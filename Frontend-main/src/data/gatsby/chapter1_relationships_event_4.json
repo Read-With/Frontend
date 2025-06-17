@@ -3,142 +3,72 @@
         {
             "id1": 1.0,
             "relation": [
-                "father",
-                "son",
-                "father-son"
+                "narrator",
+                "acquaintances",
+                "neighbors"
             ],
             "id2": 2.0,
-            "positivity": 0.9,
-            "weight": 9.0,
-            "count": 2
-        },
-        {
-            "id1": 1.0,
-            "relation": [
-                "acquaintance",
-                "neighbors",
-                "conflicted"
-            ],
-            "id2": 3.0,
-            "positivity": 0.1,
+            "positivity": 0.65,
             "weight": 4.5,
             "count": 2
         },
         {
-            "id1": 1.0,
             "relation": [
-                "family"
+                "cousins"
             ],
-            "id2": 7.0,
-            "positivity": 0.0,
-            "weight": 5.0,
+            "id1": 1.0,
+            "id2": 3.0,
+            "positivity": 0.5,
+            "weight": 6.0,
             "count": 1
         },
         {
-            "id1": 1.0,
-            "relation": [
-                "colleagues"
-            ],
-            "id2": 8.0,
-            "positivity": 1.0,
-            "weight": 4.0,
-            "count": 1
-        },
-        {
-            "id1": 1.0,
-            "relation": [
-                "owner",
-                "pet"
-            ],
-            "id2": 9.0,
-            "positivity": -0.2,
-            "weight": 3.0,
-            "count": 1
-        },
-        {
-            "id1": 1.0,
-            "relation": [
-                "employer",
-                "housekeeper"
-            ],
-            "id2": 10.0,
-            "positivity": 0.6,
-            "weight": 5.0,
-            "count": 1
-        },
-        {
-            "id1": 1.0,
-            "relation": [
-                "helped",
-                "stranger"
-            ],
-            "id2": 11.0,
-            "positivity": 0.7,
-            "weight": 3.0,
-            "count": 1
-        },
-        {
-            "id1": 1.0,
-            "relation": [
-                "inspired by"
-            ],
-            "id2": 12.0,
-            "positivity": 0.3,
-            "weight": 2.0,
-            "count": 1
-        },
-        {
-            "relation": [
-                "inspired by"
-            ],
-            "id1": 1.0,
-            "id2": 13.0,
-            "positivity": 0.3,
-            "weight": 2.0,
-            "count": 1
-        },
-        {
-            "relation": [
-                "inspired by"
-            ],
-            "id1": 1.0,
-            "id2": 14.0,
-            "positivity": 0.3,
-            "weight": 2.0,
-            "count": 1
-        },
-        {
-            "id1": 1.0,
             "relation": [
                 "acquaintances",
-                "friends"
-            ],
-            "id2": 4.0,
-            "positivity": 0.55,
-            "weight": 4.0,
-            "count": 2
-        },
-        {
-            "relation": [
-                "cousins",
-                "friends"
+                "knew socially"
             ],
             "id1": 1.0,
-            "id2": 5.0,
-            "positivity": 0.65,
-            "weight": 5.5,
+            "id2": 4.0,
+            "positivity": 0.5,
+            "weight": 3.5,
             "count": 2
         },
         {
             "relation": [
                 "married"
             ],
-            "id1": 4.0,
-            "id2": 5.0,
-            "positivity": 0.2,
-            "weight": 8.0,
-            "count": 1
+            "id1": 3.0,
+            "id2": 4.0,
+            "positivity": 0.0,
+            "weight": 8.5,
+            "count": 2
         }
     ],
-    "new_appearances": []
+    "log": {
+        "event_index": 4,
+        "new_character_ids": [],
+        "new_relations": [],
+        "updated_relations": [
+            {
+                "id_pair": [
+                    1.0,
+                    4.0
+                ],
+                "weight_before": 4.0,
+                "weight_after": 3.5,
+                "positivity_before": 0.5,
+                "positivity_after": 0.5
+            },
+            {
+                "id_pair": [
+                    3.0,
+                    4.0
+                ],
+                "weight_before": 8.0,
+                "weight_after": 8.5,
+                "positivity_before": -0.2,
+                "positivity_after": 0.0
+            }
+        ]
+    }
 }

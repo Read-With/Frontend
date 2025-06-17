@@ -222,6 +222,8 @@ const RelationGraph = ({
   const nodeSize = getNodeSize();
   const edgeStyle = getEdgeStyle();
 
+  const MAX_EDGE_LABEL_LENGTH = 12;
+
   const stylesheet = useMemo(
     () => [
       {
@@ -240,7 +242,7 @@ const RelationGraph = ({
           label: "data(label)",
           "text-valign": "bottom",
           "text-halign": "center",
-          "font-size": 12,
+          "font-size": 20,
           "font-weight": (ele) => (ele.data("main") ? 700 : 400),
           color: "#444",
           "text-margin-y": 2,
@@ -263,7 +265,7 @@ const RelationGraph = ({
           label: "data(label)",
           "text-valign": "bottom",
           "text-halign": "center",
-          "font-size": 12,
+          "font-size": 20,
           "font-weight": (ele) => (ele.data("main") ? 700 : 400),
           color: "#444",
           "text-margin-y": 2,
@@ -279,7 +281,10 @@ const RelationGraph = ({
           width: edgeStyle.width,
           "line-color": (ele) => getRelationColor(ele.data("positivity")),
           "curve-style": "bezier",
-          label: "data(label)",
+          label: (ele) => {
+            const label = ele.data('label') || '';
+            return label.length > MAX_EDGE_LABEL_LENGTH ? label.slice(0, MAX_EDGE_LABEL_LENGTH) + '...' : label;
+          },
           "font-size": edgeStyle.fontSize,
           "text-rotation": "autorotate",
           color: "#42506b",

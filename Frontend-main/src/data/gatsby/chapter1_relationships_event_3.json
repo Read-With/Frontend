@@ -3,115 +3,31 @@
         {
             "id1": 1.0,
             "relation": [
-                "father",
-                "son",
-                "father-son"
+                "narrator",
+                "acquaintances",
+                "neighbors"
             ],
             "id2": 2.0,
-            "positivity": 0.9,
-            "weight": 9.0,
-            "count": 2
-        },
-        {
-            "id1": 1.0,
-            "relation": [
-                "acquaintance",
-                "neighbors",
-                "conflicted"
-            ],
-            "id2": 3.0,
-            "positivity": 0.1,
+            "positivity": 0.65,
             "weight": 4.5,
             "count": 2
         },
         {
-            "id1": 1.0,
             "relation": [
-                "family"
+                "cousins"
             ],
-            "id2": 7.0,
-            "positivity": 0.0,
-            "weight": 5.0,
-            "count": 1
-        },
-        {
             "id1": 1.0,
-            "relation": [
-                "colleagues"
-            ],
-            "id2": 8.0,
-            "positivity": 1.0,
-            "weight": 4.0,
-            "count": 1
-        },
-        {
-            "id1": 1.0,
-            "relation": [
-                "owner",
-                "pet"
-            ],
-            "id2": 9.0,
-            "positivity": -0.2,
-            "weight": 3.0,
-            "count": 1
-        },
-        {
-            "id1": 1.0,
-            "relation": [
-                "employer",
-                "housekeeper"
-            ],
-            "id2": 10.0,
-            "positivity": 0.6,
-            "weight": 5.0,
-            "count": 1
-        },
-        {
-            "id1": 1.0,
-            "relation": [
-                "helped",
-                "stranger"
-            ],
-            "id2": 11.0,
-            "positivity": 0.7,
-            "weight": 3.0,
-            "count": 1
-        },
-        {
-            "id1": 1.0,
-            "relation": [
-                "inspired by"
-            ],
-            "id2": 12.0,
-            "positivity": 0.3,
-            "weight": 2.0,
+            "id2": 3.0,
+            "positivity": 0.5,
+            "weight": 6.0,
             "count": 1
         },
         {
             "relation": [
-                "inspired by"
-            ],
-            "id1": 1.0,
-            "id2": 13.0,
-            "positivity": 0.3,
-            "weight": 2.0,
-            "count": 1
-        },
-        {
-            "relation": [
-                "inspired by"
-            ],
-            "id1": 1.0,
-            "id2": 14.0,
-            "positivity": 0.3,
-            "weight": 2.0,
-            "count": 1
-        },
-        {
-            "id1": 1.0,
-            "relation": [
+                "knew socially",
                 "acquaintances"
             ],
+            "id1": 1.0,
             "id2": 4.0,
             "positivity": 0.5,
             "weight": 4.0,
@@ -119,17 +35,46 @@
         },
         {
             "relation": [
-                "cousins"
+                "married"
             ],
-            "id1": 1.0,
-            "id2": 5.0,
-            "positivity": 0.7,
-            "weight": 6.0,
+            "id1": 3.0,
+            "id2": 4.0,
+            "positivity": -0.2,
+            "weight": 8.0,
             "count": 1
         }
     ],
-    "new_appearances": [
-        4.0,
-        5.0
-    ]
+    "log": {
+        "event_index": 3,
+        "new_character_ids": [
+            3.0,
+            4.0
+        ],
+        "new_relations": [
+            [
+                1.0,
+                3.0
+            ],
+            [
+                1.0,
+                4.0
+            ],
+            [
+                3.0,
+                4.0
+            ]
+        ],
+        "updated_relations": [
+            {
+                "id_pair": [
+                    1.0,
+                    2.0
+                ],
+                "weight_before": 6.0,
+                "weight_after": 4.5,
+                "positivity_before": 0.7,
+                "positivity_after": 0.65
+            }
+        ]
+    }
 }

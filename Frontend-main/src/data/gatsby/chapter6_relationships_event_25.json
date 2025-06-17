@@ -1,0 +1,615 @@
+{
+    "relations": [
+        {
+            "id1": 1.0,
+            "relation": [
+                "narrator",
+                "anxiety",
+                "guest",
+                "observer",
+                "observed",
+                "neighbors",
+                "host",
+                "acquaintances",
+                "friends",
+                "acquaintance",
+                "requestor",
+                "helper",
+                "mistrust",
+                "confidants",
+                "confidant",
+                "neighbor"
+            ],
+            "id2": 2.0,
+            "positivity": 0.55,
+            "weight": 3.97,
+            "count": 44
+        },
+        {
+            "relation": [
+                "conversational partners",
+                "acquaintance",
+                "invited guest",
+                "observer",
+                "observed",
+                "polite",
+                "had Nick watch over her",
+                "cousin",
+                "family",
+                "cousins",
+                "acquaintances",
+                "friendly",
+                "friends"
+            ],
+            "id1": 1.0,
+            "id2": 3.0,
+            "positivity": 0.53,
+            "weight": 4.21,
+            "count": 27
+        },
+        {
+            "relation": [
+                "antagonistic",
+                "forced acquaintance",
+                "knew socially",
+                "polite",
+                "neighbors",
+                "acquaintances",
+                "sharers of ideas",
+                "friend"
+            ],
+            "id1": 1.0,
+            "id2": 4.0,
+            "positivity": 0.27,
+            "weight": 3.49,
+            "count": 20
+        },
+        {
+            "relation": [
+                "married",
+                "avoidance",
+                "estranged",
+                "antagonistic",
+                "married to",
+                "strained",
+                "tense",
+                "unhappy",
+                "dominant",
+                "tension"
+            ],
+            "id1": 3.0,
+            "id2": 4.0,
+            "positivity": -0.1,
+            "weight": 7.71,
+            "count": 29
+        },
+        {
+            "id1": 1.0,
+            "relation": [
+                "invited guest",
+                "acquaintances",
+                "romantic interest",
+                "introductions",
+                "observer",
+                "observed",
+                "friends"
+            ],
+            "id2": 5.0,
+            "positivity": 0.45,
+            "weight": 3.15,
+            "count": 25
+        },
+        {
+            "relation": [
+                "acquaintances",
+                "confidantes",
+                "friend",
+                "friends"
+            ],
+            "id1": 3.0,
+            "id2": 5.0,
+            "positivity": 0.49,
+            "weight": 4.77,
+            "count": 13
+        },
+        {
+            "id1": 4.0,
+            "relation": [
+                "argument",
+                "acquaintances",
+                "disapproval",
+                "couple",
+                "marital conflict",
+                "interrupted"
+            ],
+            "id2": 5.0,
+            "positivity": -0.2,
+            "weight": 3.19,
+            "count": 10
+        },
+        {
+            "relation": [
+                "reunion",
+                "interest",
+                "awkwardness",
+                "admiration",
+                "past lovers",
+                "lovers",
+                "romantic",
+                "acquaintances",
+                "romantic interest",
+                "knows",
+                "longing",
+                "past acquaintance",
+                "mentioned",
+                "danced with",
+                "meeting",
+                "affection",
+                "emotional connection"
+            ],
+            "id1": 3.0,
+            "id2": 2.0,
+            "positivity": 0.63,
+            "weight": 5.58,
+            "count": 26
+        },
+        {
+            "relation": [
+                "acquaintance",
+                "transaction",
+                "cheating",
+                "mistress",
+                "antagonists",
+                "lovers",
+                "companions",
+                "extramarital affair",
+                "acquaintances",
+                "adulterous relationship",
+                "affair"
+            ],
+            "id1": 4.0,
+            "id2": 6.0,
+            "positivity": 0.22,
+            "weight": 6.64,
+            "count": 17
+        },
+        {
+            "relation": [
+                "married",
+                "unaware of affair"
+            ],
+            "id1": 6.0,
+            "id2": 7.0,
+            "positivity": -0.92,
+            "weight": 8.0,
+            "count": 6
+        },
+        {
+            "relation": [
+                "antagonistic",
+                "customer",
+                "deceptive",
+                "acquaintances"
+            ],
+            "id1": 4.0,
+            "id2": 7.0,
+            "positivity": -0.6,
+            "weight": 6.0,
+            "count": 2
+        },
+        {
+            "relation": [
+                "family",
+                "sisters",
+                "sister"
+            ],
+            "id1": 6.0,
+            "id2": 8.0,
+            "positivity": 0.72,
+            "weight": 8.0,
+            "count": 6
+        },
+        {
+            "relation": [
+                "observed",
+                "acquaintances",
+                "strangers"
+            ],
+            "id1": 1.0,
+            "id2": 6.0,
+            "positivity": 0.08,
+            "weight": 2.29,
+            "count": 7
+        },
+        {
+            "id1": 6.0,
+            "relation": [
+                "acquaintance",
+                "professional",
+                "acquaintances",
+                "professional interest"
+            ],
+            "id2": 9.0,
+            "positivity": 0.22,
+            "weight": 2.8,
+            "count": 5
+        },
+        {
+            "relation": [
+                "conversational partners",
+                "acquaintance",
+                "talking to",
+                "acquaintances"
+            ],
+            "id1": 8.0,
+            "id2": 1.0,
+            "positivity": 0.22,
+            "weight": 2.6,
+            "count": 5
+        },
+        {
+            "relation": [
+                "acquaintance",
+                "acquaintances"
+            ],
+            "id1": 9.0,
+            "id2": 1.0,
+            "positivity": 0.55,
+            "weight": 3.5,
+            "count": 2
+        },
+        {
+            "id1": 9.0,
+            "relation": [
+                "argumentative",
+                "married"
+            ],
+            "id2": 10.0,
+            "positivity": 0.42,
+            "weight": 8.1,
+            "count": 10
+        },
+        {
+            "id1": 6.0,
+            "relation": [
+                "acquaintances"
+            ],
+            "id2": 10.0,
+            "positivity": 0.5,
+            "weight": 3.0,
+            "count": 2
+        },
+        {
+            "id1": 4.0,
+            "relation": [
+                "acquaintances"
+            ],
+            "id2": 10.0,
+            "positivity": 0.2,
+            "weight": 3.0,
+            "count": 1
+        },
+        {
+            "relation": [
+                "acquaintances"
+            ],
+            "id1": 9.0,
+            "id2": 4.0,
+            "positivity": -0.2,
+            "weight": 3.0,
+            "count": 1
+        },
+        {
+            "relation": [
+                "acquaintances"
+            ],
+            "id1": 8.0,
+            "id2": 2.0,
+            "positivity": -0.3,
+            "weight": 2.0,
+            "count": 1
+        },
+        {
+            "id1": 10.0,
+            "relation": [
+                "acquaintances",
+                "friends"
+            ],
+            "id2": 8.0,
+            "positivity": 0.6,
+            "weight": 4.5,
+            "count": 2
+        },
+        {
+            "relation": [
+                "gossip about"
+            ],
+            "id1": 8.0,
+            "id2": 3.0,
+            "positivity": -0.2,
+            "weight": 3.0,
+            "count": 1
+        },
+        {
+            "relation": [
+                "talking to"
+            ],
+            "id1": 10.0,
+            "id2": 1.0,
+            "positivity": -0.1,
+            "weight": 1.0,
+            "count": 1
+        },
+        {
+            "relation": [
+                "antagonists"
+            ],
+            "id1": 6.0,
+            "id2": 3.0,
+            "positivity": -1.0,
+            "weight": 5.0,
+            "count": 1
+        },
+        {
+            "relation": [
+                "acquaintances"
+            ],
+            "id1": 0.0,
+            "id2": 0.0,
+            "positivity": 0.5,
+            "weight": 3.0,
+            "count": 1
+        },
+        {
+            "relation": [
+                "acquaintances"
+            ],
+            "id1": 5.0,
+            "id2": 10.0,
+            "positivity": 0.45,
+            "weight": 2.5,
+            "count": 2
+        },
+        {
+            "id1": 5.0,
+            "relation": [
+                "acquaintances"
+            ],
+            "id2": 9.0,
+            "positivity": 0.2,
+            "weight": 2.0,
+            "count": 1
+        },
+        {
+            "id1": 10.0,
+            "relation": [
+                "gossip",
+                "speculation"
+            ],
+            "id2": 2.0,
+            "positivity": -0.2,
+            "weight": 3.0,
+            "count": 1
+        },
+        {
+            "relation": [
+                "source",
+                "knows of",
+                "allies",
+                "distrust",
+                "acquaintances",
+                "intermediary",
+                "knows"
+            ],
+            "id1": 5.0,
+            "id2": 2.0,
+            "positivity": 0.39,
+            "weight": 3.4,
+            "count": 10
+        },
+        {
+            "relation": [
+                "acquaintances"
+            ],
+            "id1": 5.0,
+            "id2": 11.0,
+            "positivity": 0.5,
+            "weight": 3.0,
+            "count": 2
+        },
+        {
+            "id1": 1.0,
+            "relation": [
+                "acquaintances"
+            ],
+            "id2": 11.0,
+            "positivity": 0.5,
+            "weight": 3.0,
+            "count": 2
+        },
+        {
+            "relation": [
+                "met",
+                "colleagues"
+            ],
+            "id1": 1.0,
+            "id2": 1.0,
+            "positivity": 0.55,
+            "weight": 3.0,
+            "count": 2
+        },
+        {
+            "id1": 2.0,
+            "relation": [
+                "party host",
+                "guest"
+            ],
+            "id2": 11.0,
+            "positivity": 0.5,
+            "weight": 3.0,
+            "count": 2
+        },
+        {
+            "relation": [
+                "friend",
+                "authority"
+            ],
+            "id1": 2.0,
+            "id2": 0.0,
+            "positivity": 0.45,
+            "weight": 3.5,
+            "count": 2
+        },
+        {
+            "id1": 2.0,
+            "relation": [
+                "business partners",
+                "business associates",
+                "acquaintances",
+                "friends"
+            ],
+            "id2": 12.0,
+            "positivity": 0.52,
+            "weight": 6.4,
+            "count": 5
+        },
+        {
+            "id1": 1.0,
+            "relation": [
+                "conversational partners",
+                "acquaintances"
+            ],
+            "id2": 12.0,
+            "positivity": 0.33,
+            "weight": 3.0,
+            "count": 3
+        },
+        {
+            "id1": 2.0,
+            "relation": [
+                "uneasy",
+                "antagonists",
+                "suspicious of",
+                "acquaintances",
+                "suspects",
+                "rivals",
+                "social connection",
+                "antagonistic"
+            ],
+            "id2": 4.0,
+            "positivity": -0.33,
+            "weight": 4.11,
+            "count": 9
+        },
+        {
+            "relation": [
+                "host",
+                "performer",
+                "musician",
+                "patron",
+                "boarder",
+                "employee",
+                "employer"
+            ],
+            "id1": 2.0,
+            "id2": 13.0,
+            "positivity": 0.42,
+            "weight": 4.5,
+            "count": 4
+        },
+        {
+            "relation": [
+                "acquaintance"
+            ],
+            "id1": 2.0,
+            "id2": 16.0,
+            "positivity": 0.5,
+            "weight": 3.0,
+            "count": 1
+        },
+        {
+            "relation": [
+                "employment",
+                "mentee",
+                "mentor",
+                "employer",
+                "mentorship"
+            ],
+            "id1": 2.0,
+            "id2": 14.0,
+            "positivity": 0.73,
+            "weight": 7.0,
+            "count": 3
+        },
+        {
+            "relation": [
+                "employer"
+            ],
+            "id1": 14.0,
+            "id2": 0.0,
+            "positivity": 0.0,
+            "weight": 7.0,
+            "count": 1
+        },
+        {
+            "id1": 15.0,
+            "relation": [
+                "adversary",
+                "manipulator",
+                "antagonist"
+            ],
+            "id2": 14.0,
+            "positivity": -0.7,
+            "weight": 7.0,
+            "count": 2
+        },
+        {
+            "id1": 2.0,
+            "relation": [
+                "adversary",
+                "victim"
+            ],
+            "id2": 15.0,
+            "positivity": -0.8,
+            "weight": 8.0,
+            "count": 1
+        },
+        {
+            "relation": [
+                "disagreement"
+            ],
+            "id1": 3.0,
+            "id2": 9.0,
+            "positivity": -0.3,
+            "weight": 3.0,
+            "count": 1
+        }
+    ],
+    "log": {
+        "event_index": 25,
+        "new_character_ids": [],
+        "new_relations": [],
+        "updated_relations": [
+            {
+                "id_pair": [
+                    2.0,
+                    3.0
+                ],
+                "weight_before": 5.48,
+                "weight_after": 5.58,
+                "positivity_before": 0.62,
+                "positivity_after": 0.63
+            },
+            {
+                "id_pair": [
+                    3.0,
+                    4.0
+                ],
+                "weight_before": 7.74,
+                "weight_after": 7.71,
+                "positivity_before": -0.07,
+                "positivity_after": -0.1
+            }
+        ]
+    }
+}
