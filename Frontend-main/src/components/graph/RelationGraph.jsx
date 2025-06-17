@@ -63,6 +63,8 @@ const RelationGraph = ({
   const [prevNodeCount, setPrevNodeCount] = useState(
     elements.filter((e) => !e.data.source).length
   );
+  const [ripples, setRipples] = useState([]);
+  const prevNodeIdsRef = useRef([]);
 
   // elements가 변경될 때마다 isLayoutDone 초기화
   useEffect(() => {
@@ -319,8 +321,53 @@ const RelationGraph = ({
     }
   }, [elements]);
 
+  // elements가 변경될 때 새로 등장한 노드에 ripple 자동 적용
+  useEffect(() => {
+    if (!elements || elements.length === 0 || !cyRef.current) {
+      prevNodeIdsRef.current = [];
+      return;
+    }
+    const currentNodeIds = elements
+      .filter((e) => e.data && !e.data.source)
+      .map((e) => e.data.id);
+    const prevNodeIds = prevNodeIdsRef.current;
+    const newNodeIds = currentNodeIds.filter((id) => !prevNodeIds.includes(id));
+    prevNodeIdsRef.current = currentNodeIds;
+    // 새로 등장한 노드에 ripple
+    newNodeIds.forEach((id) => {
+      const node = cyRef.current.getElementById(id);
+      if (node && node.length > 0) {
+        const pos = node.renderedPosition();
+        const container = document.querySelector(".graph-canvas-area");
+        if (container && pos) {
+          const rect = container.getBoundingClientRect();
+          const x = pos.x + rect.left;
+          const y = pos.y + rect.top;
+          const rippleId = Date.now() + Math.random();
+          setRipples((prev) => [...prev, { id: rippleId, x: x - rect.left, y: y - rect.top }]);
+          setTimeout(() => {
+            setRipples((prev) => prev.filter((r) => r.id !== rippleId));
+          }, 700);
+        }
+      }
+    });
+  }, [elements]);
+
   // elements props 디버깅 로그 추가
   console.log("[RelationGraph 디버그] elements:", elements);
+
+  const handleCanvasClick = (e) => {
+    // 그래프 캔버스 영역에서만 ripple
+    const container = e.currentTarget;
+    const rect = container.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    const id = Date.now() + Math.random();
+    setRipples((prev) => [...prev, { id, x, y }]);
+    setTimeout(() => {
+      setRipples((prev) => prev.filter((r) => r.id !== id));
+    }, 700);
+  };
 
   return (
     <div
@@ -365,17 +412,35 @@ const RelationGraph = ({
           />
         )}
       </div>
-      <CytoscapeGraphUnified
-        elements={elements}
-        stylesheet={stylesheet}
-        layout={{ name: 'preset' }}
-        tapNodeHandler={tapNodeHandler}
-        tapEdgeHandler={tapEdgeHandler}
-        tapBackgroundHandler={tapBackgroundHandler}
-        cyRef={cyRef}
-        onLayoutComplete={handleLayoutComplete}
-        nodeSize={nodeSize}
-      />
+      <div
+        className="graph-canvas-area"
+        onClick={handleCanvasClick}
+        style={{ position: "relative", width: "100%", height: "100%" }}
+      >
+        <CytoscapeGraphUnified
+          elements={elements}
+          stylesheet={stylesheet}
+          layout={{ name: 'preset' }}
+          tapNodeHandler={tapNodeHandler}
+          tapEdgeHandler={tapEdgeHandler}
+          tapBackgroundHandler={tapBackgroundHandler}
+          cyRef={cyRef}
+          onLayoutComplete={handleLayoutComplete}
+          nodeSize={nodeSize}
+        />
+        {ripples.map((ripple) => (
+          <div
+            key={ripple.id}
+            className="cytoscape-ripple"
+            style={{
+              left: ripple.x - 60,
+              top: ripple.y - 60,
+              width: 120,
+              height: 120,
+            }}
+          />
+        ))}
+      </div>
     </div>
   );
 };
