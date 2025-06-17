@@ -87,9 +87,15 @@ function RelationGraphWrapper() {
       });
     }
     
+    // id1 혹은 id2가 0인 간선과 id1 === id2인 경우의 간선은 제외
+    const filteredRelations = (eventData?.relations || []).filter(rel => {
+      const id1 = Number(rel.id1);
+      const id2 = Number(rel.id2);
+      return id1 !== 0 && id2 !== 0 && id1 !== id2;
+    });
 
     const newElements = convertRelationsToElements(
-      eventData?.relations || [],
+      filteredRelations,
       idToName, idToDesc, idToMain, idToNames
     );
     setElements(newElements);

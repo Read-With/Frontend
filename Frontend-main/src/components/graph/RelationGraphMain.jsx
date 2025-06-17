@@ -27,7 +27,7 @@ const getNodeSize = () => {
   if (typeof window !== 'undefined') {
     const path = window.location.pathname;
     if (path.includes('/user/viewer/')) return 40;
-    if (path.includes('/user/graph/')) return 80;
+    if (path.includes('/user/graph/')) return 60;
   }
   return 40; // 기본값
 };
@@ -38,20 +38,20 @@ const getEdgeStyle = () => {
     const path = window.location.pathname;
     if (path.includes('/user/viewer/')) {
       return {
-        width: "mapData(weight, 0, 1, 1, 2.5)",
-        fontSize: 8,
+        width: "data(weight)",  // weight 값을 그대로 사용
+        fontSize: 10,
       };
     }
     if (path.includes('/user/graph/')) {
       return {
-        width: "mapData(weight, 0, 5, 5, 10)",
-        fontSize: 15,
+        width: "data(weight)",  // weight 값을 그대로 사용
+        fontSize: 20,
       };
     }
   }
   return {
-    width: "mapData(weight, 0, 1, 1, 2.5)",
-    fontSize: 8,
+    width: "data(weight)",  // weight 값을 그대로 사용
+    fontSize: 10,
   };
 };
 
@@ -67,7 +67,7 @@ const getLayout = () => {
         animate: false,
         fit: true,
         randomize: false,
-        nodeOverlap: 32,
+        nodeOverlap: 0,
         avoidOverlap: true,
         nodeSeparation: 200,
         componentSpacing: 200,
@@ -85,7 +85,7 @@ const getLayout = () => {
     randomize: false,
     nodeOverlap: 12,
     avoidOverlap: true,
-    nodeSeparation: 50,
+    nodeSeparation: 40,
     componentSpacing: 90,
   };
 };

@@ -404,16 +404,6 @@
             "relation": [
                 "acquaintances"
             ],
-            "id1": 0.0,
-            "id2": 0.0,
-            "positivity": 0.5,
-            "weight": 3.0,
-            "count": 1
-        },
-        {
-            "relation": [
-                "acquaintances"
-            ],
             "id1": 5.0,
             "id2": 10.0,
             "positivity": 0.45,
@@ -478,17 +468,6 @@
             "count": 2
         },
         {
-            "relation": [
-                "met",
-                "colleagues"
-            ],
-            "id1": 1.0,
-            "id2": 1.0,
-            "positivity": 0.55,
-            "weight": 3.0,
-            "count": 2
-        },
-        {
             "id1": 2.0,
             "relation": [
                 "party host",
@@ -497,17 +476,6 @@
             "id2": 11.0,
             "positivity": 0.5,
             "weight": 3.0,
-            "count": 2
-        },
-        {
-            "relation": [
-                "friend",
-                "authority"
-            ],
-            "id1": 2.0,
-            "id2": 0.0,
-            "positivity": 0.45,
-            "weight": 3.5,
             "count": 2
         },
         {
@@ -596,16 +564,6 @@
             "positivity": 0.72,
             "weight": 6.75,
             "count": 4
-        },
-        {
-            "relation": [
-                "employer"
-            ],
-            "id1": 14.0,
-            "id2": 0.0,
-            "positivity": 0.0,
-            "weight": 7.0,
-            "count": 1
         },
         {
             "id1": 15.0,

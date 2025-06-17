@@ -22,7 +22,7 @@ const getNodeSize = () => {
   if (typeof window !== 'undefined') {
     const path = window.location.pathname;
     if (path.includes('/user/viewer/')) return 40;
-    if (path.includes('/user/graph/')) return 80;
+    if (path.includes('/user/graph/')) return 60;
   }
   return 40; // 기본값
 };
@@ -33,19 +33,19 @@ const getEdgeStyle = () => {
     const path = window.location.pathname;
     if (path.includes('/user/viewer/')) {
       return {
-        width: "mapData(weight, 0, 1, 1, 2.5)",
-        fontSize: 8,
+        width: "data(weight)",
+        fontSize: 10,
       };
     }
     if (path.includes('/user/graph/')) {
       return {
-        width: "mapData(weight, 10, 10, 25, 60)",
+        width: "data(weight)",
         fontSize: 20,
       };
     }
   }
   return {
-    width: "mapData(weight, 0, 1, 1, 2.5)",
+    width: "data(weight)",
     fontSize: 20,
   };
 };

@@ -60,24 +60,26 @@ export function convertRelationsToElements(relations, idToName, idToDesc, idToMa
     if (rel.id1 && rel.id2) {
       const id1 = String(rel.id1);
       const id2 = String(rel.id2);
-      let relationLabel = "";
-      if (Array.isArray(rel.relation)) {
-        relationLabel = rel.relation.join(", ");
-      } else if (typeof rel.relation === "string") {
-        relationLabel = rel.relation;
-      }
-      edges.push({
-        data: {
-          id: `${id1}-${id2}`,
-          source: id1,
-          target: id2,
-          relation: relationLabel || "",
-          label: relationLabel || "",
-          weight: rel.weight || 1,
-          positivity: rel.positivity,
-          count: rel.count
+      if (id1 !== id2) { // 루프 간선 제외
+        let relationLabel = "";
+        if (Array.isArray(rel.relation)) {
+          relationLabel = rel.relation.join(", ");
+        } else if (typeof rel.relation === "string") {
+          relationLabel = rel.relation;
         }
-      });
+        edges.push({
+          data: {
+            id: `${id1}-${id2}`,
+            source: id1,
+            target: id2,
+            relation: relationLabel || "",
+            label: relationLabel || "",
+            weight: rel.weight || 1,
+            positivity: rel.positivity,
+            count: rel.count
+          }
+        });
+      }
     }
   });
   

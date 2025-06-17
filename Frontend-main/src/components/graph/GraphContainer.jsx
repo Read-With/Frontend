@@ -160,7 +160,11 @@ const GraphContainer = ({
         idToNames[id] = char.names || [];
       });
 
-      const relations = eventData.relations || [];
+      const relations = (eventData.relations || []).filter(rel => {
+        const id1 = Number(rel.id1);
+        const id2 = Number(rel.id2);
+        return id1 !== 0 && id2 !== 0 && id1 !== id2;
+      });
       const els = convertRelationsToElements(
         relations,
         idToName,

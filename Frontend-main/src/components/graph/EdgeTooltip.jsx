@@ -59,14 +59,20 @@ function fetchRelationTimelineMulti(
       labelInfo.push(`챕터${ch} 마지막`);
       continue;
     }
-    const found = (json.relations || []).find((r) => {
-      const rid1 = safeNum(r.id1 ?? r.source);
-      const rid2 = safeNum(r.id2 ?? r.target);
-      return (
-        (rid1 === safeNum(id1) && rid2 === safeNum(id2)) ||
-        (rid1 === safeNum(id2) && rid2 === safeNum(id1))
-      );
-    });
+    const found = (json.relations || [])
+      .filter(r => {
+        const rid1 = safeNum(r.id1 ?? r.source);
+        const rid2 = safeNum(r.id2 ?? r.target);
+        return rid1 !== 0 && rid2 !== 0 && rid1 !== rid2;
+      })
+      .find((r) => {
+        const rid1 = safeNum(r.id1 ?? r.source);
+        const rid2 = safeNum(r.id2 ?? r.target);
+        return (
+          (rid1 === safeNum(id1) && rid2 === safeNum(id2)) ||
+          (rid1 === safeNum(id2) && rid2 === safeNum(id1))
+        );
+      });
     if (found) {
       console.log(
         `[fetchRelationTimelineMulti] MATCH: ch${ch} lastEv${lastEv}`,
@@ -96,14 +102,20 @@ function fetchRelationTimelineMulti(
       labelInfo.push(`챕터${chapterNum} 이벤트${i}`);
       continue;
     }
-    const found = (json.relations || []).find((r) => {
-      const rid1 = safeNum(r.id1 ?? r.source);
-      const rid2 = safeNum(r.id2 ?? r.target);
-      return (
-        (rid1 === safeNum(id1) && rid2 === safeNum(id2)) ||
-        (rid1 === safeNum(id2) && rid2 === safeNum(id1))
-      );
-    });
+    const found = (json.relations || [])
+      .filter(r => {
+        const rid1 = safeNum(r.id1 ?? r.source);
+        const rid2 = safeNum(r.id2 ?? r.target);
+        return rid1 !== 0 && rid2 !== 0 && rid1 !== rid2;
+      })
+      .find((r) => {
+        const rid1 = safeNum(r.id1 ?? r.source);
+        const rid2 = safeNum(r.id2 ?? r.target);
+        return (
+          (rid1 === safeNum(id1) && rid2 === safeNum(id2)) ||
+          (rid1 === safeNum(id2) && rid2 === safeNum(id1))
+        );
+      });
     if (found) {
       console.log(
         `[fetchRelationTimelineMulti] MATCH: ch${chapterNum} ev${i}`,

@@ -387,16 +387,6 @@
             "relation": [
                 "acquaintances"
             ],
-            "id1": 0.0,
-            "id2": 0.0,
-            "positivity": 0.5,
-            "weight": 3.0,
-            "count": 1
-        },
-        {
-            "relation": [
-                "acquaintances"
-            ],
             "id1": 5.0,
             "id2": 10.0,
             "positivity": 0.45,
