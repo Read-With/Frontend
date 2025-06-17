@@ -81,6 +81,8 @@ const EpubViewer = forwardRef(
     const [error, setError] = useState(null);
     const [currentPath, setCurrentPath] = useState(null);
     const [chapterCharCounts, setChapterCharCounts] = useState({});
+    const [isNavigating, setIsNavigating] = useState(false);
+    const [navigationError, setNavigationError] = useState(null);
 
     // 현재 챕터의 누적 글자 수를 저장
     const currentChapterCharsRef = useRef(0);
@@ -194,52 +196,70 @@ const EpubViewer = forwardRef(
     };
 
     const safeNavigate = async (action, direction = 'next') => {
-      if (!renditionRef.current || !bookRef.current) return;
-
+      if (!renditionRef.current || !bookRef.current || isNavigating) return;
+      setIsNavigating(true);
+      setNavigationError(null);
       const rendition = renditionRef.current;
+      const book = bookRef.current;
+
+      let relocatedFired = false;
+      const relocatedHandler = () => {
+        relocatedFired = true;
+        setIsNavigating(false);
+        rendition.off('relocated', relocatedHandler);
+      };
+      rendition.on('relocated', relocatedHandler);
 
       try {
-        const currentLocation = await rendition.currentLocation?.();
-        const currentCfi = currentLocation?.start?.cfi;
+        const beforeLocation = await rendition.currentLocation();
+        const beforeCfi = beforeLocation?.start?.cfi;
+        const beforeSpinePos = beforeLocation?.start?.spinePos;
 
-        if (!currentCfi) {
-          await fallbackDisplay(direction);
-          return;
+        // next/prev 실행 결과 반환값 체크
+        const result = await action();
+
+        let waited = 0;
+        const maxWait = 1200;
+        const interval = 60;
+        while (!relocatedFired && waited < maxWait) {
+          await new Promise(res => setTimeout(res, interval));
+          waited += interval;
         }
 
-        let relocatedTriggered = false;
+        const afterLocation = await rendition.currentLocation();
+        const afterCfi = afterLocation?.start?.cfi;
+        const afterSpinePos = afterLocation?.start?.spinePos;
 
-        await new Promise((resolve, reject) => {
-          const timeout = setTimeout(() => {
-            if (!relocatedTriggered) {
-              fallbackDisplay(direction);
-              reject();
+        // relocated가 발생하지 않았거나, cfi가 그대로면 spine 직접 이동 시도
+        if ((!relocatedFired || beforeCfi === afterCfi) && afterCfi) {
+          // spine 직접 이동 (다음/이전 챕터)
+          let moved = false;
+          if (direction === 'next') {
+            const currSpine = book.spine.get(beforeSpinePos);
+            const nextSpine = book.spine.get(currSpine.index + 1);
+            if (nextSpine) {
+              await rendition.display(nextSpine.href);
+              moved = true;
             }
-          }, 700);
-
-          const onRelocated = (location) => {
-            if (relocatedTriggered) return;
-            relocatedTriggered = true;
-            clearTimeout(timeout);
-            rendition.off('relocated', onRelocated);
-
-            const newCfi = location?.start?.cfi;
-            if (newCfi && newCfi !== currentCfi) {
-              setReloading(false);
-              // 페이지 이동 후 글자 수 업데이트
-              updatePageCharCount(direction);
-              resolve();
-            } else {
-              fallbackDisplay(direction);
-              reject();
+          } else if (direction === 'prev') {
+            const currSpine = book.spine.get(beforeSpinePos);
+            const prevSpine = book.spine.get(currSpine.index - 1);
+            if (prevSpine) {
+              await rendition.display(prevSpine.href);
+              moved = true;
             }
-          };
-
-          rendition.on('relocated', onRelocated);
-          setReloading(true);
-          action(); // next() 또는 prev()
-        });
+          }
+          if (!moved) {
+            setNavigationError('이동할 수 없는 페이지입니다.');
+          }
+          rendition.emit('relocated', afterLocation);
+          setIsNavigating(false);
+          rendition.off('relocated', relocatedHandler);
+        }
       } catch {
+        setIsNavigating(false);
+        rendition.off('relocated', relocatedHandler);
+        setNavigationError('이동 중 오류가 발생했습니다.');
         await fallbackDisplay(direction);
       }
     };
@@ -335,6 +355,7 @@ const EpubViewer = forwardRef(
       },
       // 설정 적용 함수 추가
       applySettings: () => applySettings(),
+      isNavigating, // 외부에서 접근 가능하게 export
     }));
 
     useEffect(() => {
@@ -423,10 +444,10 @@ const EpubViewer = forwardRef(
               chapterPageCharsRef.current.clear();
             }
 
-            // 페이지 글자 수 업데이트
+            // 페이지 글자 수 업데이트 (항상 재계산)
             updatePageCharCount();
 
-            // 이벤트 데이터 가져오기
+            // 이벤트 데이터 가져오기 및 매칭 (항상 재계산)
             try {
               const events = getEventsForChapter(chapterNum);
 
@@ -525,6 +546,12 @@ const EpubViewer = forwardRef(
 
     return (
       <div className="w-full h-full relative flex items-center justify-center">
+        {/* 이동 실패 안내 메시지 */}
+        {navigationError && (
+          <div style={{ position: 'absolute', top: 16, left: '50%', transform: 'translateX(-50%)', zIndex: 1000, background: '#ffefef', color: '#d32f2f', padding: '8px 18px', borderRadius: 8, fontWeight: 600, fontSize: 16, boxShadow: '0 2px 8px rgba(0,0,0,0.08)' }}>
+            {navigationError}
+          </div>
+        )}
         <div className="flex flex-col items-center justify-center space-y-2 absolute inset-0 z-50 pointer-events-none">
           {!reloading && loading && (
             <p className="text-center text-base text-white bg-black bg-opacity-60 px-4 py-2 rounded">
