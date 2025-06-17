@@ -1787,16 +1787,16 @@ html, body {
 
 .cytoscape-ripple {
   position: absolute;
-  border-radius: 50%;
+  border-radius: 100%;
   background: rgba(108, 142, 255, 0.25);
   pointer-events: none;
   transform: scale(0);
-  animation: cytoscape-ripple-anim 0.7s cubic-bezier(0.23, 1, 0.32, 1) forwards;
+  animation: cytoscape-ripple-anim 1.05s cubic-bezier(0.23, 1, 0.32, 1) forwards;
   z-index: 99999;
 }
 @keyframes cytoscape-ripple-anim {
   to {
-    transform: scale(1.7);
+    transform: scale(2);
     opacity: 0;
   }
 }

@@ -92,6 +92,8 @@ function RelationGraphMain({ elements, inViewer = false, fullScreen = false, onF
   const prevChapterNum = useRef();
   const prevEventNum = useRef();
   const prevElementsStr = useRef();
+  const [ripples, setRipples] = useState([]);
+  const prevNodeIdsRef = useRef([]);
 
   // gatsby.epub 단독 그래프 페이지에서만 간격을 더 넓게
   const isGraphPage = inViewer && fullScreen;
@@ -346,6 +348,38 @@ function RelationGraphMain({ elements, inViewer = false, fullScreen = false, onF
     }
   }, [elements]);
 
+  // elements가 변경될 때 새로 등장한 노드에 ripple 자동 적용
+  useEffect(() => {
+    if (!elements || elements.length === 0 || !cyRef.current) {
+      prevNodeIdsRef.current = [];
+      return;
+    }
+    const currentNodeIds = elements
+      .filter((e) => e.data && !e.data.source)
+      .map((e) => e.data.id);
+    const prevNodeIds = prevNodeIdsRef.current;
+    const newNodeIds = currentNodeIds.filter((id) => !prevNodeIds.includes(id));
+    prevNodeIdsRef.current = currentNodeIds;
+    // 새로 등장한 노드에 ripple
+    newNodeIds.forEach((id) => {
+      const node = cyRef.current.getElementById(id);
+      if (node && node.length > 0) {
+        const pos = node.renderedPosition();
+        const container = document.querySelector(".graph-canvas-area");
+        if (container && pos) {
+          const rect = container.getBoundingClientRect();
+          const x = pos.x + rect.left;
+          const y = pos.y + rect.top;
+          const rippleId = Date.now() + Math.random();
+          setRipples((prev) => [...prev, { id: rippleId, x: x - rect.left, y: y - rect.top }]);
+          setTimeout(() => {
+            setRipples((prev) => prev.filter((r) => r.id !== rippleId));
+          }, 700);
+        }
+      }
+    });
+  }, [elements]);
+
   // elements, stylesheet, layout, searchLayout, style useMemo 최적화
   const memoizedElements = useMemo(() => filteredElements, [filteredElements]);
   const memoizedStylesheet = useMemo(() => stylesheet, [stylesheet]);
@@ -359,6 +393,18 @@ function RelationGraphMain({ elements, inViewer = false, fullScreen = false, onF
   }), []);
 
   const nodeSize = getNodeSize();
+
+  const handleCanvasClick = (e) => {
+    const container = e.currentTarget;
+    const rect = container.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    const id = Date.now() + Math.random();
+    setRipples((prev) => [...prev, { id, x, y }]);
+    setTimeout(() => {
+      setRipples((prev) => prev.filter((r) => r.id !== id));
+    }, 700);
+  };
 
   if (fullScreen && inViewer) {
     return (
@@ -468,27 +514,23 @@ function RelationGraphMain({ elements, inViewer = false, fullScreen = false, onF
                 )}
               </div>
               {/* 그래프 영역 */}
-              <div className="graph-canvas-area w-full h-full" ref={cyRef} style={{ zIndex: 1, width: '100%', height: '100%', minWidth: 0, minHeight: 0, overflow: 'hidden', position: 'relative' }}>
-                {/* 그래프가 없을 때 안내문구 */}
-                {!isGraphLoading && (!elements || elements.length === 0) && (
-                  <div style={{
-                    position: 'absolute',
-                    top: '50%',
-                    left: '50%',
-                    transform: 'translate(-50%, -50%)',
-                    textAlign: 'center',
-                    color: '#6C8EFF',
-                    fontSize: 20,
-                    fontWeight: 600,
-                    zIndex: 10,
-                    background: 'rgba(255,255,255,0.85)',
-                    padding: '32px 0',
-                    borderRadius: 16,
-                    boxShadow: '0 2px 8px rgba(108,142,255,0.07)'
-                  }}>
-                    표시할 그래프가 없습니다
-                  </div>
-                )}
+              <div
+                className="graph-canvas-area"
+                onClick={handleCanvasClick}
+                style={{ position: "relative", width: "100%", height: "100%" }}
+              >
+                {ripples.map((ripple) => (
+                  <div
+                    key={ripple.id}
+                    className="cytoscape-ripple"
+                    style={{
+                      left: ripple.x - 60,
+                      top: ripple.y - 60,
+                      width: 120,
+                      height: 120,
+                    }}
+                  />
+                ))}
                 <CytoscapeGraphUnified
                   elements={memoizedElements}
                   stylesheet={memoizedStylesheet}
@@ -559,27 +601,23 @@ function RelationGraphMain({ elements, inViewer = false, fullScreen = false, onF
         </div>
 
         {/* 그래프 영역 */}
-        <div className="graph-canvas-area w-full h-full" ref={cyRef} style={{ zIndex: 1, width: '100%', height: '100%', minWidth: '2000px', minHeight: '1500px', overflow: 'hidden', position: 'relative' }}>
-          {/* 그래프가 없을 때 안내문구 */}
-          {!isGraphLoading && (!elements || elements.length === 0) && (
-            <div style={{
-              position: 'absolute',
-              top: '100%',
-              left: '100%',
-              transform: 'translate(-50%, -50%)',
-              textAlign: 'center',
-              color: '#6C8EFF',
-              fontSize: 20,
-              fontWeight: 600,
-              zIndex: 10,
-              background: 'rgba(255,255,255,0.85)',
-              padding: '32px 0',
-              borderRadius: 16,
-              boxShadow: '0 2px 8px rgba(108,142,255,0.07)'
-            }}>
-              표시할 그래프가 없습니다
-            </div>
-          )}
+        <div
+          className="graph-canvas-area"
+          onClick={handleCanvasClick}
+          style={{ position: "relative", width: "100%", height: "100%" }}
+        >
+          {ripples.map((ripple) => (
+            <div
+              key={ripple.id}
+              className="cytoscape-ripple"
+              style={{
+                left: ripple.x - 60,
+                top: ripple.y - 60,
+                width: 120,
+                height: 120,
+              }}
+            />
+          ))}
           <CytoscapeGraphUnified
             elements={memoizedElements}
             stylesheet={memoizedStylesheet}
