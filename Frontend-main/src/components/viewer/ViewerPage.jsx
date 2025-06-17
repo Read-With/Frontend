@@ -307,6 +307,8 @@ const ViewerPage = ({ darkMode: initialDarkMode }) => {
   const [search, setSearch] = useState("");
   const [isReloading, setIsReloading] = useState(false);
   const [eventNum, setEventNum] = useState(0);
+  const [isGraphLoading, setIsGraphLoading] = useState(false);
+  const [showToolbar, setShowToolbar] = useState(false);
 
   // location.state에서 book 정보를 가져오거나, 없으면 filename에서 생성
   const book = location.state?.book || {
@@ -315,7 +317,6 @@ const ViewerPage = ({ darkMode: initialDarkMode }) => {
     filename: filename,
   };
 
-  const [showToolbar, setShowToolbar] = useState(false);
   // 파일명에서 경로 제거하고 순수 파일명만 추출 (북마크 저장용)
   const cleanFilename = filename.trim();
   const [bookmarks, setBookmarks] = useState(loadBookmarks(cleanFilename));
@@ -431,13 +432,6 @@ const ViewerPage = ({ darkMode: initialDarkMode }) => {
         if (firstEvent) {
           const eventId = firstEvent.event_id || 0; // event_id가 없으면 0으로 설정
           const fileEventNum = eventId + 1;
-          setCurrentEvent({
-            ...firstEvent,
-            eventNum: eventId,
-            chapter: currentChapter, // 반드시 마지막에 추가
-            name:
-              eventId === 0 ? "다음 페이지로 넘어가주세요" : firstEvent.name,
-          });
           // 이벤트 관계 데이터 파일 찾기 (event_id + 1)
           const eventRelationFilePath = Object.keys(eventRelationModules).find(
             (path) =>
@@ -458,6 +452,23 @@ const ViewerPage = ({ darkMode: initialDarkMode }) => {
             [],
             fileEventNum
           );
+          // 관계 데이터가 비어 있으면 안내 멘트로 currentEvent 설정
+          if (!elements || elements.length === 0) {
+            setCurrentEvent({
+              ...firstEvent,
+              eventNum: fileEventNum,
+              chapter: currentChapter,
+              name: "다음 페이지로 넘어가주세요",
+            });
+            setElements([]);
+            return;
+          }
+          setCurrentEvent({
+            ...firstEvent,
+            eventNum: fileEventNum,
+            chapter: currentChapter,
+            name: firstEvent.name,
+          });
           setElements(elements);
         }
       }
@@ -1126,6 +1137,20 @@ const ViewerPage = ({ darkMode: initialDarkMode }) => {
       setMaxChapter(Math.max(...chapterNums));
     }
   }, []);
+
+  // elements가 변경될 때 로딩 상태 업데이트
+  useEffect(() => {
+    if (elements) {
+      setIsGraphLoading(false);
+    }
+  }, [elements]);
+
+  // 그래프 로딩 중일 때도 공백으로 보이게 처리
+  useEffect(() => {
+    if (isGraphLoading) {
+      setElements([]);
+    }
+  }, [isGraphLoading]);
 
   return (
     <div

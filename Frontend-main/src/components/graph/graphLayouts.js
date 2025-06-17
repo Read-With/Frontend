@@ -2,23 +2,22 @@
 
 export const DEFAULT_LAYOUT = {
   name: "preset",
-  padding: 90,
-  nodeRepulsion: 1800,
-  idealEdgeLength: 120,
+  padding: 10,
+  nodeRepulsion: 10000,
+  idealEdgeLength: 400,
   animate: false,
   fit: true,
   randomize: false,
-  nodeOverlap: 0,
+  nodeOverlap: 800,
   avoidOverlap: true,
-  nodeSeparation: 20,
+  nodeSeparation: 400,
   randomSeed: 42,
-  gravity: 0.25,
-  componentSpacing: 90
+  componentSpacing: 400
 };
 
 export const SEARCH_LAYOUT = {
   name: "cose",
-  padding: 110,
+  padding: 5,
   nodeRepulsion: 2500,
   idealEdgeLength: 135,
   animate: true,

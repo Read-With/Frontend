@@ -18,11 +18,11 @@ function getRelationColor(positivity) {
   return `hsl(${h}, 70%, 45%)`;
 }
 
-const getNodeSize = () => {
+export const getNodeSize = () => {
   if (typeof window !== 'undefined') {
     const path = window.location.pathname;
     if (path.includes('/user/viewer/')) return 40;
-    if (path.includes('/user/graph/')) return 60;
+    if (path.includes('/user/graph/')) return 45;
   }
   return 40; // 기본값
 };
@@ -34,19 +34,19 @@ const getEdgeStyle = () => {
     if (path.includes('/user/viewer/')) {
       return {
         width: "data(weight)",
-        fontSize: 10,
+        fontSize: 8,
       };
     }
     if (path.includes('/user/graph/')) {
       return {
         width: "data(weight)",
-        fontSize: 20,
+        fontSize: 11,
       };
     }
   }
   return {
     width: "data(weight)",
-    fontSize: 20,
+    fontSize: 8,
   };
 };
 
@@ -222,7 +222,7 @@ const RelationGraph = ({
   const nodeSize = getNodeSize();
   const edgeStyle = getEdgeStyle();
 
-  const MAX_EDGE_LABEL_LENGTH = 12;
+  const MAX_EDGE_LABEL_LENGTH = 15;
 
   const stylesheet = useMemo(
     () => [
@@ -233,29 +233,6 @@ const RelationGraph = ({
           "background-image": "data(image)",
           "background-fit": "cover",
           "background-clip": "node",
-          "border-width": (ele) => (ele.data("main") ? 2 : 1),
-          "border-color": "#5B7BA0",
-          "border-opacity": 1,
-          width: nodeSize,
-          height: nodeSize,
-          shape: "ellipse",
-          label: "data(label)",
-          "text-valign": "bottom",
-          "text-halign": "center",
-          "font-size": 12,
-          "font-weight": (ele) => (ele.data("main") ? 700 : 400),
-          color: "#444",
-          "text-margin-y": 2,
-          "text-background-color": "#fff",
-          "text-background-opacity": 0.8,
-          "text-background-shape": "roundrectangle",
-          "text-background-padding": 2,
-        },
-      },
-      {
-        selector: "node",
-        style: {
-          "background-color": "#eee",
           "border-width": (ele) => (ele.data("main") ? 2 : 1),
           "border-color": "#5B7BA0",
           "border-opacity": 1,
@@ -394,6 +371,7 @@ const RelationGraph = ({
         tapBackgroundHandler={tapBackgroundHandler}
         cyRef={cyRef}
         onLayoutComplete={handleLayoutComplete}
+        nodeSize={nodeSize}
       />
     </div>
   );

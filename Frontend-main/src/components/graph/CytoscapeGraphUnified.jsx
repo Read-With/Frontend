@@ -14,6 +14,7 @@ const CytoscapeGraphUnified = ({
   cyRef: externalCyRef,
   newNodeIds = [],
   onLayoutComplete,
+  nodeSize = 40,
 }) => {
   const containerRef = useRef(null);
   const [isGraphVisible, setIsGraphVisible] = useState(false);
@@ -70,15 +71,33 @@ const CytoscapeGraphUnified = ({
       const nodes = elements.filter(e => !e.data.source && !e.data.target);
       const edges = elements.filter(e => e.data.source && e.data.target);
       
-      // 새로운 노드들에 대해 랜덤한 초기 위치 할당
+      // 새로운 노드들에 대해 랜덤한 초기 위치 할당 (겹침 완화)
+      const NODE_SIZE = nodeSize;
+      const MIN_DISTANCE = NODE_SIZE * 2.8; // 최소 거리(여유 포함)
+      // 이미 배정된 노드들의 위치를 배열에 저장
+      const placedPositions = nodes
+        .filter(node => prevNodeIds.has(node.data.id) && node.position)
+        .map(node => node.position);
       const newNodes = nodes.filter(node => !prevNodeIds.has(node.data.id));
       newNodes.forEach(node => {
-        const angle = Math.random() * 2 * Math.PI;
-        const radius = 100 + Math.random() * 100; // 100~200px 반경
-        node.position = {
-          x: Math.cos(angle) * radius,
-          y: Math.sin(angle) * radius
-        };
+        let found = false;
+        let x, y;
+        let attempts = 0;
+        const maxAttempts = 100;
+        while (!found && attempts < maxAttempts) {
+          const angle = Math.random() * 2 * Math.PI;
+          const radius = 100 + Math.random() * 100;
+          x = Math.cos(angle) * radius;
+          y = Math.sin(angle) * radius;
+          found = placedPositions.every(pos => {
+            const dx = x - pos.x;
+            const dy = y - pos.y;
+            return Math.sqrt(dx * dx + dy * dy) > MIN_DISTANCE;
+          });
+          attempts++;
+        }
+        node.position = { x, y };
+        placedPositions.push({ x, y });
       });
       
       cy.add(nodes);
@@ -104,7 +123,7 @@ const CytoscapeGraphUnified = ({
       }
     });
     setIsGraphVisible(true);
-  }, [elements, stylesheet, layout, fitNodeIds, externalCyRef, newNodeIds, onLayoutComplete]);
+  }, [elements, stylesheet, layout, fitNodeIds, externalCyRef, newNodeIds, onLayoutComplete, nodeSize]);
 
   // 크기 반응형
   useEffect(() => {

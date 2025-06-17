@@ -13,7 +13,7 @@ import EdgeTooltip from "./EdgeTooltip";
 import "./RelationGraph.css";
 import { FaTimes, FaClock } from 'react-icons/fa';
 import { filterGraphElements } from "./graphFilter";
-import { DEFAULT_LAYOUT, SEARCH_LAYOUT } from "./graphLayouts";
+import { DEFAULT_LAYOUT } from "./graphLayouts";
 
 // 간선 positivity 값에 따라 HSL 그라데이션 색상 반환
 function getRelationColor(positivity) {
@@ -23,11 +23,11 @@ function getRelationColor(positivity) {
   return `hsl(${h}, 70%, 45%)`;
 }
 
-const getNodeSize = () => {
+export const getNodeSize = () => {
   if (typeof window !== 'undefined') {
     const path = window.location.pathname;
     if (path.includes('/user/viewer/')) return 40;
-    if (path.includes('/user/graph/')) return 60;
+    if (path.includes('/user/graph/')) return 45;
   }
   return 40; // 기본값
 };
@@ -39,58 +39,41 @@ const getEdgeStyle = () => {
     if (path.includes('/user/viewer/')) {
       return {
         width: "data(weight)",  // weight 값을 그대로 사용
-        fontSize: 10,
+        fontSize: 9,
       };
     }
     if (path.includes('/user/graph/')) {
       return {
         width: "data(weight)",  // weight 값을 그대로 사용
-        fontSize: 20,
+        fontSize: 11,
       };
     }
   }
   return {
     width: "data(weight)",  // weight 값을 그대로 사용
-    fontSize: 10,
+    fontSize: 9,
   };
 };
 
-const getLayout = () => {
+const MAX_EDGE_LABEL_LENGTH = 15;
+
+const getWideLayout = () => {
   if (typeof window !== 'undefined') {
     const path = window.location.pathname;
     if (path.includes('/user/graph/')) {
+      // 퍼짐을 극대화한 레이아웃
       return {
-        name: "cose",
-        padding: 200,
-        nodeRepulsion: 8000,
+        ...DEFAULT_LAYOUT,
+        randomSeed: 22,
+        nodeRepulsion: 1000,
         idealEdgeLength: 300,
-        animate: false,
-        fit: true,
-        randomize: false,
-        nodeOverlap: 0,
-        avoidOverlap: true,
-        nodeSeparation: 200,
-        componentSpacing: 200,
+        componentSpacing: 400,
+        nodeOverlap: 400,
       };
     }
   }
-  // 기본값
-  return {
-    name: "cose",
-    padding: 90,
-    nodeRepulsion: 2000,
-    idealEdgeLength: 150,
-    animate: false,
-    fit: true,
-    randomize: false,
-    nodeOverlap: 12,
-    avoidOverlap: true,
-    nodeSeparation: 40,
-    componentSpacing: 90,
-  };
+  return DEFAULT_LAYOUT;
 };
-
-const MAX_EDGE_LABEL_LENGTH = 12;
 
 function RelationGraphMain({ elements, inViewer = false, fullScreen = false, onFullScreen, onExitFullScreen, graphViewState, setGraphViewState, chapterNum, eventNum, hideIsolated, maxEventNum, newNodeIds }) {
   const cyRef = useRef(null);
@@ -255,31 +238,8 @@ function RelationGraphMain({ elements, inViewer = false, fullScreen = false, onF
           label: "data(label)",
           "text-valign": "bottom",
           "text-halign": "center",
-          "font-size": 8,
-          "font-weight": (ele) => (ele.data("main") ? 700 : 400),
-          color: "#444",
-          "text-margin-y": 2,
-          "text-background-color": "#fff",
-          "text-background-opacity": 0.8,
-          "text-background-shape": "roundrectangle",
-          "text-background-padding": 2,
-        },
-      },
-      {
-        selector: "node",
-        style: {
-          "background-color": "#eee",
-          "border-width": (ele) => (ele.data("main") ? 2 : 1),
-          "border-color": "#5B7BA0",
-          "border-opacity": 1,
-          width: getNodeSize(),
-          height: getNodeSize(),
-          shape: "ellipse",
-          label: "data(label)",
-          "text-valign": "bottom",
-          "text-halign": "center",
-          "font-size": 8,
-          "font-weight": (ele) => (ele.data("main") ? 700 : 400),
+          "font-size": 6,
+          "font-weight": (ele) => (ele.data("main") ? 600 : 400),
           color: "#444",
           "text-margin-y": 2,
           "text-background-color": "#fff",
@@ -389,7 +349,7 @@ function RelationGraphMain({ elements, inViewer = false, fullScreen = false, onF
   // elements, stylesheet, layout, searchLayout, style useMemo 최적화
   const memoizedElements = useMemo(() => filteredElements, [filteredElements]);
   const memoizedStylesheet = useMemo(() => stylesheet, [stylesheet]);
-  const memoizedLayout = useMemo(() => ({ name: 'preset' }), []);
+  const memoizedLayout = useMemo(() => getWideLayout(), []);
   const memoizedStyle = useMemo(() => ({
     width: '100%',
     height: '100%',
@@ -398,20 +358,7 @@ function RelationGraphMain({ elements, inViewer = false, fullScreen = false, onF
     backgroundColor: '#f8fafc'
   }), []);
 
-  console.log(
-    "elements 노드 id 목록:",
-    elements.filter(e => !e.data.source && !e.data.target).map(e => e.data.id)
-  );
-  console.log(
-    "elements 엣지 id 목록:",
-    elements.filter(e => e.data.source && e.data.target).map(e => ({
-      id: e.data.id,
-      source: e.data.source,
-      target: e.data.target
-    }))
-  );
-
-  console.log("filteredElements", filteredElements);
+  const nodeSize = getNodeSize();
 
   if (fullScreen && inViewer) {
     return (
@@ -545,7 +492,7 @@ function RelationGraphMain({ elements, inViewer = false, fullScreen = false, onF
                 <CytoscapeGraphUnified
                   elements={memoizedElements}
                   stylesheet={memoizedStylesheet}
-                  layout={{ name: 'preset' }}
+                  layout={memoizedLayout}
                   tapNodeHandler={tapNodeHandler}
                   tapEdgeHandler={tapEdgeHandler}
                   tapBackgroundHandler={tapBackgroundHandler}
@@ -553,6 +500,7 @@ function RelationGraphMain({ elements, inViewer = false, fullScreen = false, onF
                   style={memoizedStyle}
                   cyRef={cyRef}
                   newNodeIds={newNodeIds}
+                  nodeSize={nodeSize}
                 />
               </div>
             </div>
@@ -635,7 +583,7 @@ function RelationGraphMain({ elements, inViewer = false, fullScreen = false, onF
           <CytoscapeGraphUnified
             elements={memoizedElements}
             stylesheet={memoizedStylesheet}
-            layout={{ name: 'preset' }}
+            layout={memoizedLayout}
             tapNodeHandler={tapNodeHandler}
             tapEdgeHandler={tapEdgeHandler}
             tapBackgroundHandler={tapBackgroundHandler}
@@ -643,6 +591,7 @@ function RelationGraphMain({ elements, inViewer = false, fullScreen = false, onF
             style={memoizedStyle}
             cyRef={cyRef}
             newNodeIds={newNodeIds}
+            nodeSize={nodeSize}
           />
         </div>
       </div>
