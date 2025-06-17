@@ -1200,7 +1200,6 @@ const ViewerPage = ({ darkMode: initialDarkMode }) => {
           onCurrentLineChange={(charIndex, totalEvents, currentEvent) => {
             setCurrentCharIndex(charIndex);
             setTotalChapterWords(totalEvents || 0);
-            console.log("setCurrentEvent 호출:", currentEvent);
             setCurrentEvent(currentEvent);
           }}
           onAllCfisReady={(_cfis, _ranges, offsets) => {}}

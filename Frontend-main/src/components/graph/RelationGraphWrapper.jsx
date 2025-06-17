@@ -96,6 +96,8 @@ function RelationGraphWrapper() {
     setNewNodeIds([]); // 필요시 새 노드 추출 로직 추가
   }, [currentChapter]);
 
+
+  
   // === 2. eventNum이 바뀔 때마다 해당 시점의 누적 elements로 setElements ===
   // useEffect(() => {
   //   if (eventNum == null) return;
@@ -261,18 +263,24 @@ function RelationGraphWrapper() {
       {/* 그래프 본문 */}
       <div className="flex-1 relative overflow-hidden" style={{ width: '100%', height: '100%' }}>
         {maxEventNum > 0 ? (
-          <RelationGraphMain 
-            elements={elements} 
-            inViewer={false}
-            fullScreen={true}
-            graphViewState={graphViewState}
-            setGraphViewState={setGraphViewState}
-            chapterNum={currentChapter}
-            eventNum={eventNum} // 이벤트 번호는 null 또는 undefined로 전달
-            hideIsolated={hideIsolated}
-            maxEventNum={maxEventNum}
-            newNodeIds={newNodeIds}
-          />
+          elements.length > 0 ? (
+            <RelationGraphMain 
+              elements={elements} 
+              inViewer={false}
+              fullScreen={true}
+              graphViewState={graphViewState}
+              setGraphViewState={setGraphViewState}
+              chapterNum={currentChapter}
+              eventNum={eventNum} // 이벤트 번호는 null 또는 undefined로 전달
+              hideIsolated={hideIsolated}
+              maxEventNum={maxEventNum}
+              newNodeIds={newNodeIds}
+            />
+          ) : (
+            <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, color: '#6C8EFF' }}>
+              그래프 데이터를 불러오는 중...
+            </div>
+          )
         ) : (
           <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, color: '#6C8EFF' }}>
             이벤트 정보를 불러오는 중...

@@ -1,5 +1,5 @@
 import React, { useState, useCallback, createContext } from "react";
-import CytoscapeGraphDirect from "./CytoscapeGraphDirect";
+import CytoscapeGraphUnified from "./CytoscapeGraphUnified";
 // import { createPortal } from "react-dom";
 
 export const CytoscapeGraphContext = createContext();
@@ -25,7 +25,7 @@ export default function CytoscapeGraphPortalProvider({ children }) {
   return (
     <CytoscapeGraphContext.Provider value={{ graphProps, updateGraph }}>
       {children}
-      <CytoscapeGraphDirect {...graphProps} />
+      <CytoscapeGraphUnified {...graphProps} />
     </CytoscapeGraphContext.Provider>
   );
 } 

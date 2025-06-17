@@ -7,7 +7,7 @@ import React, {
 } from "react";
 import { useNavigate, useLocation, useParams } from "react-router-dom";
 import GraphControls from "./GraphControls";
-import CytoscapeGraphDirect from "./CytoscapeGraphDirect";
+import CytoscapeGraphUnified from "./CytoscapeGraphUnified";
 import GraphNodeTooltip from "./NodeTooltip";
 import EdgeTooltip from "./EdgeTooltip";
 import "./RelationGraph.css";
@@ -255,7 +255,7 @@ function RelationGraphMain({ elements, inViewer = false, fullScreen = false, onF
           label: "data(label)",
           "text-valign": "bottom",
           "text-halign": "center",
-          "font-size": 12,
+          "font-size": 8,
           "font-weight": (ele) => (ele.data("main") ? 700 : 400),
           color: "#444",
           "text-margin-y": 2,
@@ -278,7 +278,7 @@ function RelationGraphMain({ elements, inViewer = false, fullScreen = false, onF
           label: "data(label)",
           "text-valign": "bottom",
           "text-halign": "center",
-          "font-size": 12,
+          "font-size": 8,
           "font-weight": (ele) => (ele.data("main") ? 700 : 400),
           color: "#444",
           "text-margin-y": 2,
@@ -331,9 +331,6 @@ function RelationGraphMain({ elements, inViewer = false, fullScreen = false, onF
     ],
     []
   );
-  //layout useMemo 의존성 최소화
-
-  //searchLayout useMemo 의존성 최소화
 
   const handleReset = useCallback(() => {
     setSearch("");
@@ -364,7 +361,7 @@ function RelationGraphMain({ elements, inViewer = false, fullScreen = false, onF
 
   const handleClose = useCallback(() => {
     // 뒤로 이동이 아니라 해당 파일의 뷰어로 이동
-    navigate(`/viewer/${filename}`);
+    navigate(`user/viewer/${filename}`);
   }, [navigate, filename]);
 
   // === 오직 chapter_node_positions_{chapterNum}만 사용하여 노드 위치 복원 (절대적 위치) ===
@@ -392,7 +389,7 @@ function RelationGraphMain({ elements, inViewer = false, fullScreen = false, onF
   // elements, stylesheet, layout, searchLayout, style useMemo 최적화
   const memoizedElements = useMemo(() => filteredElements, [filteredElements]);
   const memoizedStylesheet = useMemo(() => stylesheet, [stylesheet]);
-  const memoizedLayout = useMemo(() => getLayout(), []); // 항상 cose 레이아웃만 사용
+  const memoizedLayout = useMemo(() => ({ name: 'preset' }), []);
   const memoizedStyle = useMemo(() => ({
     width: '100%',
     height: '100%',
@@ -545,10 +542,10 @@ function RelationGraphMain({ elements, inViewer = false, fullScreen = false, onF
                     표시할 그래프가 없습니다
                   </div>
                 )}
-                <CytoscapeGraphDirect
+                <CytoscapeGraphUnified
                   elements={memoizedElements}
                   stylesheet={memoizedStylesheet}
-                  layout={memoizedLayout}
+                  layout={{ name: 'preset' }}
                   tapNodeHandler={tapNodeHandler}
                   tapEdgeHandler={tapEdgeHandler}
                   tapBackgroundHandler={tapBackgroundHandler}
@@ -635,10 +632,10 @@ function RelationGraphMain({ elements, inViewer = false, fullScreen = false, onF
               표시할 그래프가 없습니다
             </div>
           )}
-          <CytoscapeGraphDirect
+          <CytoscapeGraphUnified
             elements={memoizedElements}
             stylesheet={memoizedStylesheet}
-            layout={memoizedLayout}
+            layout={{ name: 'preset' }}
             tapNodeHandler={tapNodeHandler}
             tapEdgeHandler={tapEdgeHandler}
             tapBackgroundHandler={tapBackgroundHandler}

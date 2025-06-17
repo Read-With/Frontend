@@ -1,7 +1,7 @@
 // cytoscape 레이아웃 공통 상수
 
 export const DEFAULT_LAYOUT = {
-  name: "cose",
+  name: "preset",
   padding: 90,
   nodeRepulsion: 1800,
   idealEdgeLength: 120,

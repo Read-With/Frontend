@@ -5,7 +5,7 @@ import React, {
   useEffect,
   useCallback,
 } from "react";
-import CytoscapeGraphDirect from "./CytoscapeGraphDirect";
+import CytoscapeGraphUnified from "./CytoscapeGraphUnified";
 import GraphNodeTooltip from "./NodeTooltip";
 import EdgeTooltip from "./EdgeTooltip";
 import "./RelationGraph.css";
@@ -242,7 +242,7 @@ const RelationGraph = ({
           label: "data(label)",
           "text-valign": "bottom",
           "text-halign": "center",
-          "font-size": 20,
+          "font-size": 12,
           "font-weight": (ele) => (ele.data("main") ? 700 : 400),
           color: "#444",
           "text-margin-y": 2,
@@ -265,7 +265,7 @@ const RelationGraph = ({
           label: "data(label)",
           "text-valign": "bottom",
           "text-halign": "center",
-          "font-size": 20,
+          "font-size": 12,
           "font-weight": (ele) => (ele.data("main") ? 700 : 400),
           color: "#444",
           "text-margin-y": 2,
@@ -339,32 +339,6 @@ const RelationGraph = ({
     if (!prevElements || !elements) return;
     const { added } = calcGraphDiff(prevElements, elements);
     if (added.length > 0) {
-      cyRef.current.batch(() => {
-        added.forEach((e) => {
-          if (!e.data || !e.data.id) return;
-          const safeData = {
-            ...e.data,
-            names: Array.isArray(e.data.names)
-              ? JSON.stringify(e.data.names)
-              : e.data.names
-              ? JSON.stringify([e.data.names])
-              : "[]",
-            main:
-              typeof e.data.main === "boolean"
-                ? String(e.data.main)
-                : e.data.main === undefined
-                ? "false"
-                : String(e.data.main),
-            description: e.data.description || "",
-            portrait_prompt: e.data.portrait_prompt || "",
-          };
-          cyRef.current.add({
-            group: e.data.source ? "edges" : "nodes",
-            data: safeData,
-            position: e.position,
-          });
-        });
-      });
     }
   }, [elements]);
 
@@ -411,10 +385,10 @@ const RelationGraph = ({
           />
         )}
       </div>
-      <CytoscapeGraphDirect
+      <CytoscapeGraphUnified
         elements={elements}
         stylesheet={stylesheet}
-        layout={layout}
+        layout={{ name: 'preset' }}
         tapNodeHandler={tapNodeHandler}
         tapEdgeHandler={tapEdgeHandler}
         tapBackgroundHandler={tapBackgroundHandler}

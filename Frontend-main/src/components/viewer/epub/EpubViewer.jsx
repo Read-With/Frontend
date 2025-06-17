@@ -9,7 +9,6 @@ import ePub from 'epubjs';
 
 // glob import 경로를 상대경로로 수정
 const eventRelationModules = import.meta.glob('../../../data/gatsby/chapter*_events.json', { eager: true });
-console.log('eventRelationModules keys:', Object.keys(eventRelationModules));
 
 // getEventsForChapter 함수 정의
 function getEventsForChapter(chapter) {
@@ -430,11 +429,6 @@ const EpubViewer = forwardRef(
             // 이벤트 데이터 가져오기
             try {
               const events = getEventsForChapter(chapterNum);
-              console.log('디버그 - 가져온 이벤트:', {
-                chapterNum,
-                eventsCount: events?.length,
-                events
-              });
 
               let currentEvent = null;
 
@@ -442,30 +436,15 @@ const EpubViewer = forwardRef(
                 const lastEvent = events[events.length - 1];
                 const currentChars = currentChapterCharsRef.current;
 
-                console.log('디버그 - 현재 상태:', {
-                  currentChars,
-                  lastEventEnd: lastEvent.end,
-                  eventsCount: events.length,
-                  chapterNum
-                });
-
                 // 현재 텍스트 수가 마지막 event의 end 값보다 크거나 같은 경우
                 if (currentChars >= lastEvent.end) {
-                  console.log('디버그 - 마지막 이벤트 선택됨');
                   currentEvent = { ...lastEvent, eventNum: lastEvent.event_id + 1, chapter: chapterNum };
                 } else {
                   // 현재 텍스트 수가 속하는 event 찾기
                   for (let i = events.length - 1; i >= 0; i--) {
                     const event = events[i];
-                    console.log(`디버그 - 이벤트 ${i} 검사:`, {
-                      start: event.start,
-                      end: event.end,
-                      currentChars,
-                      isInRange: currentChars >= event.start && currentChars < event.end
-                    });
 
                     if (currentChars >= event.start && currentChars < event.end) {
-                      console.log(`디버그 - 이벤트 ${i} 선택됨`);
                       currentEvent = { ...event, eventNum: event.event_id + 1, chapter: chapterNum };
                       break;
                     }
@@ -474,8 +453,6 @@ const EpubViewer = forwardRef(
               } else {
                 console.log('디버그 - 이벤트가 없음');
               }
-
-              console.log('디버그 - 최종 선택된 이벤트:', currentEvent);
               onCurrentLineChange?.(currentChapterCharsRef.current, events.length, currentEvent || null);
             } catch (error) {
               console.error('디버그 - 이벤트 처리 중 오류:', error);
