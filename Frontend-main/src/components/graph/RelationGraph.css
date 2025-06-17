@@ -894,8 +894,8 @@ html, body {
 
 /* Edge Tooltip 스타일 */
 .edge-tooltip-container {
-  min-width: 300px;
-  max-width: 400px;
+  min-width: 400px;
+  max-width: 600px;
 }
 
 .edge-tooltip-content {
@@ -1377,7 +1377,7 @@ html, body {
   font-size: 14px;
   font-weight: 500;
   padding: 8px 16px;
-  border-radius: 8px;
+  border-radius: 2px;
   border: 1.2px solid #e3e6ef;
   background: #f8f9fc;
   color: #42506b;
@@ -1807,4 +1807,29 @@ html, body {
 }
 .cytoscape-fade-hidden {
   opacity: 0;
+}
+
+.edge-tooltip-flip {
+  perspective: 1200px;
+}
+.edge-tooltip-flip-inner {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  transition: transform 0.6s cubic-bezier(0.4,0,0.2,1);
+  transform-style: preserve-3d;
+}
+.edge-tooltip-flip.flipped .edge-tooltip-flip-inner {
+  transform: rotateY(180deg);
+}
+.edge-tooltip-front, .edge-tooltip-back {
+  backface-visibility: hidden;
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  top: 0;
+  left: 0;
+}
+.edge-tooltip-back {
+  transform: rotateY(180deg);
 }

@@ -136,11 +136,7 @@ const GraphContainer = ({
       const eventId = currentEvent.event_id || 0; // event_id가 없으면 0으로 설정
       const chapter = currentEvent.chapter || 1;
       // 디버깅: 현재 챕터/이벤트 정보 출력
-      console.log("[GraphContainer 디버그] useEffect 내부:", {
-        eventId,
-        chapter,
-        currentEvent,
-      });
+      console.log("[GraphContainer 디버그] useEffect 내부:", { eventId, chapter, currentEvent });
       // 이벤트 데이터 가져오기 (event_id에 1을 더해서 파일 찾기)
       const fileEventNum = Number(eventId) + 1;
       const eventIdStr = String(fileEventNum);
@@ -185,7 +181,7 @@ const GraphContainer = ({
         idToNames[id] = char.names || [];
       });
 
-      const relations = (eventData.relations || []).filter((rel) => {
+      const relations = (eventData.relations || []).filter(rel => {
         const id1 = Number(rel.id1);
         const id2 = Number(rel.id2);
         return id1 !== 0 && id2 !== 0 && id1 !== id2;
@@ -209,16 +205,8 @@ const GraphContainer = ({
   return (
     <RelationGraph
       elements={elements}
-      chapterNum={
-        currentEvent && currentEvent.chapter !== undefined
-          ? currentEvent.chapter
-          : currentChapter
-      }
-      eventNum={
-        currentEvent && currentEvent.eventNum !== undefined
-          ? currentEvent.eventNum
-          : 1
-      }
+      chapterNum={currentChapter} // 관계 변화
+      eventNum={currentEvent ? Math.max(1, currentEvent.eventNum) : 1}
       {...props}
     />
   );

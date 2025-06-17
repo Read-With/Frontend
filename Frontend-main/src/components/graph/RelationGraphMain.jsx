@@ -27,7 +27,7 @@ export const getNodeSize = () => {
   if (typeof window !== 'undefined') {
     const path = window.location.pathname;
     if (path.includes('/user/viewer/')) return 40;
-    if (path.includes('/user/graph/')) return 45;
+    if (path.includes('/user/graph/')) return 42;
   }
   return 40; // 기본값
 };
@@ -65,9 +65,9 @@ const getWideLayout = () => {
       return {
         ...DEFAULT_LAYOUT,
         randomSeed: 22,
-        nodeRepulsion: 1000,
-        idealEdgeLength: 300,
-        componentSpacing: 400,
+        nodeRepulsion: 1500,
+        idealEdgeLength: 400,
+        componentSpacing: 500,
         nodeOverlap: 400,
       };
     }
@@ -322,9 +322,8 @@ function RelationGraphMain({ elements, inViewer = false, fullScreen = false, onF
   }, []);
 
   const handleClose = useCallback(() => {
-    // 뒤로 이동이 아니라 해당 파일의 뷰어로 이동
-    navigate(`user/viewer/${filename}`);
-  }, [navigate, filename]);
+    window.location.href = `/user/viewer/${filename}`;
+  }, [filename]);
 
   // === 오직 chapter_node_positions_{chapterNum}만 사용하여 노드 위치 복원 (절대적 위치) ===
 

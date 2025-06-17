@@ -250,7 +250,7 @@ const ViewerToolbar = ({
           </div>
           <div>
             <button
-              onClick={() => navigate('/user/library')}
+              onClick={() => navigate('/mypage')}
               className="epub-toolbar-btn epub-close-btn"
               aria-label="닫기"
               style={{

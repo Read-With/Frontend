@@ -5,8 +5,6 @@ import "./RelationGraph.css";
 import { useNavigate, useParams } from "react-router-dom";
 import { FaTimes } from 'react-icons/fa';
 import { convertRelationsToElements } from './graphElementUtils';
-import GraphNodeTooltip from "./NodeTooltip";
-import EdgeTooltip from "./EdgeTooltip";
 
 // characters.json, 이벤트별 relations.json glob import
 const characterModules = import.meta.glob('../../data/gatsby/c_chapter*_0.json', { eager: true });
@@ -227,7 +225,7 @@ function RelationGraphWrapper() {
           {/* 닫기 버튼: 오른쪽 끝 */}
           <div style={{ flex: 1 }} />
           <button
-            onClick={() => navigate(`user/viewer/${filename}`)}
+            onClick={() => navigate(`/user/viewer/${filename}`)}
             style={{
               height: 32,
               width: 32,

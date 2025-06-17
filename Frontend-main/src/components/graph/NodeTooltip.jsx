@@ -1,7 +1,31 @@
 import React, { useState, useEffect, useRef } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useLocation } from "react-router-dom";
 import { FaFileAlt, FaComments, FaArrowLeft } from "react-icons/fa";
 import "./RelationGraph.css";
+
+// === glob import: 반드시 data/gatsby 하위 전체 관계 파일 import ===
+const relationshipModules = import.meta.glob(
+  "../../data/gatsby/chapter*_relationships_event_*.json",
+  { eager: true }
+);
+
+// 챕터별 마지막 이벤트 번호 구하기
+function getChapterLastEventNums(maxChapter = 10) {
+  const lastNums = [];
+  for (let chapter = 1; chapter <= maxChapter; chapter++) {
+    let last = 0;
+    for (let i = 1; i < 100; i++) {
+      const filePath = `../../data/gatsby/chapter${chapter}_relationships_event_${i}.json`;
+      if (relationshipModules[filePath]) {
+        last = i;
+      } else {
+        break;
+      }
+    }
+    lastNums.push(last);
+  }
+  return lastNums;
+}
 
 function GraphNodeTooltip({
   data,
@@ -11,12 +35,64 @@ function GraphNodeTooltip({
   onClose,
   inViewer = false,
   style,
+  chapterNum,
+  eventNum,
+  maxChapter = 10
 }) {
   const navigate = useNavigate();
   const { filename } = useParams();
+  const location = useLocation();
+  const isGraphPage = location.pathname.includes('/user/graph/');
 
   // 데이터가 중첩되어 있는 경우 처리
-  const nodeData = data.data || data;
+  const [nodeData, setNodeData] = useState(data.data || data);
+  const [position, setPosition] = useState({ x: 200, y: 200 });
+  const [showContent, setShowContent] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
+  const [isFlipped, setIsFlipped] = useState(false);
+  const tooltipRef = useRef(null);
+  const cardContainerRef = useRef(null);
+
+  // 페이지 타입에 따른 노드 데이터 업데이트
+  useEffect(() => {
+    if (!data) return;
+
+    if (isGraphPage) {
+      // 그래프 페이지: 선택된 챕터의 마지막 이벤트 정보 사용
+      const lastEventNums = getChapterLastEventNums(maxChapter);
+      const currentLastEvent = lastEventNums[chapterNum - 1];
+      
+      if (currentLastEvent > 0) {
+        const filePath = `../../data/gatsby/chapter${chapterNum}_relationships_event_${currentLastEvent}.json`;
+        const json = relationshipModules[filePath]?.default;
+        
+        if (json) {
+          // 마지막 이벤트에서 해당 노드 정보 찾기
+          const nodeId = data.id;
+          const nodeInfo = json.nodes?.find(n => n.id === nodeId);
+          if (nodeInfo) {
+            setNodeData(prev => ({ ...prev, ...nodeInfo }));
+          }
+        }
+      }
+    } else {
+      // 뷰어 페이지: 현재 이벤트의 노드 정보 사용
+      if (chapterNum && eventNum) {
+        const filePath = `../../data/gatsby/chapter${chapterNum}_relationships_event_${eventNum}.json`;
+        const json = relationshipModules[filePath]?.default;
+        
+        if (json) {
+          const nodeId = data.id;
+          const nodeInfo = json.nodes?.find(n => n.id === nodeId);
+          if (nodeInfo) {
+            setNodeData(prev => ({ ...prev, ...nodeInfo }));
+          }
+        }
+      }
+    }
+  }, [isGraphPage, chapterNum, eventNum, maxChapter, data]);
+
   console.log("NodeTooltip data structure:", {
     id: nodeData.id,
     label: nodeData.label,
@@ -27,14 +103,6 @@ function GraphNodeTooltip({
   });
 
   console.log("NodeTooltip data structure:", data);
-
-  const [position, setPosition] = useState({ x: 200, y: 200 });
-  const [showContent, setShowContent] = useState(false);
-  const [isDragging, setIsDragging] = useState(false);
-  const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
-  const [isFlipped, setIsFlipped] = useState(false);
-  const tooltipRef = useRef(null);
-  const cardContainerRef = useRef(null);
 
   useEffect(() => {
     setShowContent(true);
@@ -300,7 +368,7 @@ function GraphNodeTooltip({
                   </span>
                 )}
               </div>
-              {nodeData.names && nodeData.names.length > 0 && (
+              {nodeData.names && Array.isArray(nodeData.names) && nodeData.names.length > 0 && (
                 <div
                   style={{
                     marginTop: 2,
@@ -311,22 +379,24 @@ function GraphNodeTooltip({
                     justifyContent: "flex-start",
                   }}
                 >
-                  {nodeData.names.map((name, i) => (
-                    <span
-                      key={i}
-                      style={{
-                        background: "#f3f4f6",
-                        color: "#4b5563",
-                        borderRadius: 12,
-                        fontSize: 13,
-                        padding: "3px 12px",
-                        border: "1px solid #e5e7eb",
-                        fontWeight: 500,
-                      }}
-                    >
-                      {name}
-                    </span>
-                  ))}
+                  {nodeData.names
+                    .filter(name => name !== nodeData.common_name)
+                    .map((name, i) => (
+                      <span
+                        key={i}
+                        style={{
+                          background: "#f3f4f6",
+                          color: "#4b5563",
+                          borderRadius: 12,
+                          fontSize: 13,
+                          padding: "3px 12px",
+                          border: "1px solid #e5e7eb",
+                          fontWeight: 500,
+                        }}
+                      >
+                        {name}
+                      </span>
+                    ))}
                 </div>
               )}
             </div>
