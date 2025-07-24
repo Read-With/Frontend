@@ -430,6 +430,34 @@ const EpubViewer = forwardRef(
             onProgressChange?.(Math.round((locIdx / totalPages) * 100));
             localStorage.setItem(LOCAL_STORAGE_KEY, cfi);
 
+            // 전체 대비 현재 위치(%) 콘솔 출력
+            if (bookInstance.locations && typeof bookInstance.locations.percentageFromCfi === 'function') {
+              const percent = bookInstance.locations.percentageFromCfi(cfi);
+              const percentDisplay = (percent * 100).toFixed(2);
+              console.log(`[EPUB] 현재 위치: ${percentDisplay}% (CFI: ${cfi})`);
+
+              // 전체 글자수 및 챕터별 글자수, 현재 챕터 번호 추출
+              const path = window.location.pathname;
+              const fileName = path.split('/').pop();
+              const bookId = fileName.replace('.epub', '');
+              const totalLength = Number(localStorage.getItem(`totalLength_${bookId}`)) || 0;
+              const chapterLengths = JSON.parse(localStorage.getItem(`chapterLengths_${bookId}`) || '{}');
+              const chapterMatch = cfi.match(/\[chapter-(\d+)\]/);
+              const chapterNum = chapterMatch ? parseInt(chapterMatch[1]) : 1;
+
+              // 이전 챕터까지의 글자수 합
+              let prevChaptersSum = 0;
+              if (chapterNum > 1) {
+                for (let i = 1; i < chapterNum; i++) {
+                  prevChaptersSum += Number(chapterLengths[i] || 0);
+                }
+              }
+
+              // 현재까지 읽은 글자수
+              const currentCharCount = Math.max(0, Math.round(percent * totalLength) - prevChaptersSum);
+              console.log(`[EPUB] 현재까지 읽은 글자수: ${currentCharCount} (이전 챕터 합: ${prevChaptersSum})`);
+            }
+
             // CFI에서 장 번호와 단락 정보 추출
             const chapterMatch = cfi.match(/\[chapter-(\d+)\]/);
             const paragraphMatch = cfi.match(/\/(\d+)\/1:(\d+)\)$/);
@@ -542,6 +570,41 @@ const EpubViewer = forwardRef(
     // 앱이 처음 로드될 때 로컬 스토리지 초기화
     useEffect(() => {
       localStorage.setItem(CHAPTER_KEY, '1');
+    }, []);
+
+    // --- 전체 epub 글자수 및 챕터별 글자수 계산 후 localStorage 저장 useEffect ---
+    useEffect(() => {
+      // 1. 책 id 추출 (예: /user/viewer/gatsby.epub → gatsby)
+      const path = window.location.pathname;
+      const fileName = path.split('/').pop();
+      if (!fileName || !fileName.endsWith('.epub')) return;
+      const bookId = fileName.replace('.epub', '');
+
+      // 2. 모든 책의 이벤트 파일을 glob import 후, bookId로 필터링
+      const allEventModules = import.meta.glob('/src/data/*/chapter*_events.json');
+      const modules = Object.entries(allEventModules)
+        .filter(([path]) => path.includes(`/src/data/${bookId}/`))
+        .map(([, mod]) => mod);
+
+      const importAll = async () => {
+        const chapters = await Promise.all(modules.map(fn => fn()));
+        // 3. 각 챕터의 마지막 event의 end값 추출
+        const lastEnds = chapters.map(events => {
+          const arr = events.default || events;
+          return arr[arr.length - 1]?.end || 0;
+        });
+        // 4. 전체 합산
+        const totalLength = lastEnds.reduce((sum, end) => sum + end, 0);
+        // 5. 챕터별 글자수 객체 생성 (1번 챕터부터)
+        const chapterLengths = {};
+        lastEnds.forEach((end, idx) => {
+          chapterLengths[idx + 1] = end;
+        });
+        // 6. localStorage에 저장
+        localStorage.setItem(`totalLength_${bookId}`, totalLength);
+        localStorage.setItem(`chapterLengths_${bookId}`, JSON.stringify(chapterLengths));
+      };
+      importAll();
     }, []);
 
     return (
