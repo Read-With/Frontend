@@ -40,7 +40,6 @@ function parseCfiToChapterFullDetail(cfi) {
 
 const BookmarksPage = () => {
   const { filename } = useParams();
-  console.log('filename:', filename);
   const navigate = useNavigate();
   const cleanFilename = filename ? filename.replace(/^\//, '') : null;
   const [bookmarks, setBookmarks] = useState(() => loadBookmarks(cleanFilename));
@@ -49,7 +48,6 @@ const BookmarksPage = () => {
 
   // 실시간 동기화: localStorage 변경 감지 (filename 기반 key)
   useEffect(() => {
-    console.log('북마크 불러오기 시 cleanFilename:', cleanFilename);
     if (!cleanFilename) return;
     const key = `bookmarks_${cleanFilename}`;
     const handleStorage = (e) => {
@@ -126,7 +124,6 @@ const BookmarksPage = () => {
   };
 
   const handleAddBookmark = () => {
-    console.log('북마크 추가 시 cleanFilename:', cleanFilename);
     // ... 이하 생략
   };
 

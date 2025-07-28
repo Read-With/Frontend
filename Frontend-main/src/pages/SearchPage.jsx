@@ -105,7 +105,6 @@ const SearchPage = () => {
       setError('검색 중 오류가 발생했습니다.');
       setSearchResults([]);
       setTotal(0);
-      console.error('검색 오류:', err);
     } finally {
       setLoading(false);
     }

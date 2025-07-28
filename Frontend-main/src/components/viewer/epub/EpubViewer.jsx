@@ -16,7 +16,7 @@ function getEventsForChapter(chapter) {
   // 1. 이벤트 본문 데이터 추출
   const textFilePath = Object.keys(eventRelationModules).find(path => path.includes(`chapter${num}_events.json`));
   if (!textFilePath) {
-    console.warn('[getEventsForChapter] 파일을 찾을 수 없음:', `chapter${num}_events.json`, Object.keys(eventRelationModules));
+    // 파일을 찾을 수 없음
   }
   const textArray = textFilePath ? eventRelationModules[textFilePath]?.default : [];
 
@@ -338,7 +338,7 @@ const EpubViewer = forwardRef(
           const lastCfi = book.locations.cfiFromPercentage(1.0);
           await rendition.display(lastCfi || book.spine.last()?.href);
         } catch (e) {
-          console.error("❌ 마지막 페이지 이동 실패", e);
+          // 마지막 페이지 이동 실패
         }
       },
       moveToProgress: async (percentage) => {
@@ -396,7 +396,7 @@ const EpubViewer = forwardRef(
                 chapterTexts.set(item.cfi, text);
               }
             } catch (e) {
-              console.warn(`챕터 "${item.label}" 로드 실패:`, e);
+              // 챕터 로드 실패
             }
           }
 
@@ -434,7 +434,6 @@ const EpubViewer = forwardRef(
             if (bookInstance.locations && typeof bookInstance.locations.percentageFromCfi === 'function') {
               const percent = bookInstance.locations.percentageFromCfi(cfi);
               const percentDisplay = (percent * 100).toFixed(2);
-              console.log(`[EPUB] 현재 위치: ${percentDisplay}% (CFI: ${cfi})`);
 
               // 전체 글자수 및 챕터별 글자수, 현재 챕터 번호 추출
               const path = window.location.pathname;
@@ -455,7 +454,6 @@ const EpubViewer = forwardRef(
 
               // 현재까지 읽은 글자수
               const currentCharCount = Math.max(0, Math.round(percent * totalLength) - prevChaptersSum);
-              console.log(`[EPUB] 현재까지 읽은 글자수: ${currentCharCount} (이전 챕터 합: ${prevChaptersSum})`);
             }
 
             // CFI에서 장 번호와 단락 정보 추출
@@ -485,38 +483,29 @@ const EpubViewer = forwardRef(
                 const lastEvent = events[events.length - 1];
                 const firstEvent = events[0];
                 const currentChars = currentChapterCharsRef.current;
-                console.log('[EpubViewer 디버그] currentChars:', currentChars, 'lastEvent.end:', lastEvent.end, 'events[0].start:', firstEvent.start);
 
                 if (currentChars >= lastEvent.end) {
-                  console.log('[EpubViewer 디버그] 마지막 이벤트로 매칭');
                   currentEvent = { ...lastEvent, eventNum: lastEvent.event_id + 1, chapter: chapterNum };
                 } else if (currentChars < firstEvent.start) {
-                  console.log('[EpubViewer 디버그] 첫 이벤트로 강제 매칭');
                   currentEvent = { ...firstEvent, eventNum: firstEvent.event_id + 1, chapter: chapterNum };
                 } else {
                   for (let i = events.length - 1; i >= 0; i--) {
                     const event = events[i];
                     if (currentChars >= event.start && currentChars < event.end) {
-                      console.log('[EpubViewer 디버그] 매칭된 이벤트:', event);
                       currentEvent = { ...event, eventNum: event.event_id + 1, chapter: chapterNum };
                       break;
                     }
                   }
                   // 혹시라도 매칭이 안 되면 가장 가까운 이벤트로 fallback
                   if (!currentEvent) {
-                    console.log('[EpubViewer 디버그] fallback: 첫 이벤트로 매칭');
                     currentEvent = { ...firstEvent, eventNum: firstEvent.event_id + 1, chapter: chapterNum };
                   }
                 }
-                if (!currentEvent) {
-                  console.log('[EpubViewer 디버그] 어떤 이벤트에도 매칭되지 않음');
-                }
               } else {
-                console.log('디버그 - 이벤트가 없음');
+                // 이벤트가 없음
               }
               onCurrentLineChange?.(currentChapterCharsRef.current, events.length, currentEvent || null);
             } catch (error) {
-              console.error('디버그 - 이벤트 처리 중 오류:', error);
               onCurrentLineChange?.(currentChapterCharsRef.current, 0, null);
             }
           });
@@ -547,7 +536,6 @@ const EpubViewer = forwardRef(
             applySettings();
           }
         } catch (e) {
-          console.error(e);
           setError("EPUB 로드 오류");
         } finally {
           setLoading(false);

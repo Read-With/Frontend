@@ -43,7 +43,6 @@ function fetchRelationTimelineMulti(
   maxChapter = 10
 ) {
   const lastEventNums = getChapterLastEventNums(maxChapter);
-  console.log("[fetchRelationTimelineMulti] lastEventNums:", lastEventNums);
 
   const points = [];
   const labelInfo = [];
@@ -54,7 +53,6 @@ function fetchRelationTimelineMulti(
     const filePath = `../../data/gatsby/chapter${ch}_relationships_event_${lastEv}.json`;
     const json = relationshipModules[filePath]?.default;
     if (!json) {
-      console.warn(`[fetchRelationTimelineMulti] File not found:`, filePath);
       points.push(0);
       labelInfo.push(`챕터${ch} 마지막`);
       continue;
@@ -74,19 +72,9 @@ function fetchRelationTimelineMulti(
         );
       });
     if (found) {
-      console.log(
-        `[fetchRelationTimelineMulti] MATCH: ch${ch} lastEv${lastEv}`,
-        found
-      );
+      // MATCH found
     } else {
-      console.warn(
-        `[fetchRelationTimelineMulti] NO MATCH for ${id1},${id2} in file`,
-        filePath,
-        (json.relations || []).map((r) => ({
-          id1: r.id1 ?? r.source,
-          id2: r.id2 ?? r.target,
-        }))
-      );
+      // NO MATCH
     }
     points.push(found ? found.positivity : 0); // 없으면 0으로!
     labelInfo.push(`챕터${ch} 마지막`);
@@ -97,7 +85,6 @@ function fetchRelationTimelineMulti(
     const filePath = `../../data/gatsby/chapter${chapterNum}_relationships_event_${i}.json`;
     const json = relationshipModules[filePath]?.default;
     if (!json) {
-      console.warn(`[fetchRelationTimelineMulti] File not found:`, filePath);
       points.push(0);
       labelInfo.push(`챕터${chapterNum} 이벤트${i}`);
       continue;
@@ -117,28 +104,14 @@ function fetchRelationTimelineMulti(
         );
       });
     if (found) {
-      console.log(
-        `[fetchRelationTimelineMulti] MATCH: ch${chapterNum} ev${i}`,
-        found
-      );
+      // MATCH found
     } else {
-      console.warn(
-        `[fetchRelationTimelineMulti] NO MATCH for ${id1},${id2} in file`,
-        filePath,
-        (json.relations || []).map((r) => ({
-          id1: r.id1 ?? r.source,
-          id2: r.id2 ?? r.target,
-        }))
-      );
+      // NO MATCH
     }
     points.push(found ? found.positivity : 0); // 없으면 0으로!
     labelInfo.push(`챕터${chapterNum} 이벤트${i}`);
   }
-  console.log(
-    "[fetchRelationTimelineMulti] Final timeline:",
-    points,
-    labelInfo
-  );
+  // Final timeline
   return { points, labelInfo };
 }
 
@@ -174,20 +147,6 @@ function EdgeTooltip({
   const id2 = safeNum(data.target);
 
   useEffect(() => {
-    console.log(
-      "[EdgeTooltip] viewMode:",
-      viewMode,
-      "id1:",
-      id1,
-      "id2:",
-      id2,
-      "chapterNum:",
-      chapterNum,
-      "eventNum:",
-      eventNum,
-      "maxChapter:",
-      safeMaxChapter
-    );
     if (viewMode === "chart") {
       setLoading(true);
       // import 방식은 동기이므로 바로 처리
@@ -201,19 +160,7 @@ function EdgeTooltip({
       setTimeline(result.points);
       setLabels(result.labelInfo);
       setLoading(false);
-      // 추가 로그
-      console.log(
-        "[EdgeTooltip] timeline:",
-        result.points,
-        "labels:",
-        result.labelInfo
-      );
-      console.log(
-        "[EdgeTooltip] timeline.length:",
-        result.points.length,
-        "labels.length:",
-        result.labelInfo.length
-      );
+            // 추가 로그
     }
   }, [viewMode, id1, id2, chapterNum, eventNum, safeMaxChapter]);
 

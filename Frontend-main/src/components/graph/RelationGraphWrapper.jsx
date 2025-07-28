@@ -3,7 +3,7 @@ import RelationGraphMain from "./RelationGraphMain";
 import GraphControls from "./GraphControls";
 import "./RelationGraph.css";
 import { useNavigate, useParams } from "react-router-dom";
-import { FaTimes } from 'react-icons/fa';
+import { FaTimes, FaBars, FaChevronLeft } from 'react-icons/fa';
 import { convertRelationsToElements } from './graphElementUtils';
 
 // characters.json, 이벤트별 relations.json glob import
@@ -35,6 +35,7 @@ function RelationGraphWrapper() {
   const [graphViewState, setGraphViewState] = useState(null);
   const [newNodeIds, setNewNodeIds] = useState([]);
   const [chapterEvents, setChapterEvents] = useState([]);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true); // 사이드바 열림/닫힘 상태
 
   // === 1. 챕터별/이벤트별 모든 relations.json을 미리 누적 구조로 준비 ===
   const allEventsDataRef = useRef({}); // { [chapterNum]: [ {nodes, edges} ... ] }
@@ -86,210 +87,341 @@ function RelationGraphWrapper() {
     }
     
     // id1 혹은 id2가 0인 간선과 id1 === id2인 경우의 간선은 제외
-    const filteredRelations = (eventData?.relations || []).filter(rel => {
-      const id1 = Number(rel.id1);
-      const id2 = Number(rel.id2);
-      return id1 !== 0 && id2 !== 0 && id1 !== id2;
-    });
-
-    const newElements = convertRelationsToElements(
+    const filteredRelations = eventData.relations?.filter(rel => {
+      return rel.id1 !== 0 && rel.id2 !== 0 && rel.id1 !== rel.id2;
+    }) || [];
+    
+    const convertedElements = convertRelationsToElements(
       filteredRelations,
-      idToName, idToDesc, idToMain, idToNames
+      idToName,
+      idToDesc,
+      idToMain,
+      idToNames
     );
-    setElements(newElements);
-    setNewNodeIds([]); // 필요시 새 노드 추출 로직 추가
+    
+    setElements(convertedElements);
+    setNewNodeIds(convertedElements.filter(el => el.data?.isNew).map(el => el.data.id));
+    
+    // localStorage에 현재 챕터 저장
+    localStorage.setItem('lastGraphChapter', currentChapter.toString());
   }, [currentChapter]);
 
+  // 사이드바 토글 함수
+  const toggleSidebar = () => {
+    setIsSidebarOpen(!isSidebarOpen);
+  };
 
-  
-  // === 2. eventNum이 바뀔 때마다 해당 시점의 누적 elements로 setElements ===
-  // useEffect(() => {
-  //   if (eventNum == null) return;
-  //   const num = String(currentChapter).padStart(2, '0');
-  //   const chapterEvents = allEventsDataRef.current[num] || [];
-  //   // eventNum이 0부터 시작하므로 그대로 인덱스로 사용
-  //   const idx = Math.max(0, Math.min(eventNum, chapterEvents.length - 1));
-  //   const curr = chapterEvents[idx] || { nodes: [], edges: [], newNodeIds: [] };
-  //   const elements = [...(curr.nodes || []), ...(curr.edges || [])];
-  //   setElements(elements);
-  //   setNewNodeIds(curr.newNodeIds || []);
-  // }, [eventNum, currentChapter]);
-
-  // 챕터 변경 시 localStorage에 저장
-  useEffect(() => {
-    localStorage.setItem('lastGraphChapter', String(currentChapter));
-  }, [currentChapter]);
-
-  // 챕터별 graphViewState를 localStorage에 저장/복원
-  useEffect(() => {
-    // 마운트 시 복원
-    const saved = localStorage.getItem(`graphViewState_chapter${currentChapter}`);
-    if (saved) {
-      setGraphViewState(JSON.parse(saved));
-    } else {
-      setGraphViewState(null);
-    }
-  }, [currentChapter]);
-
-  useEffect(() => {
-    return () => {
-      if (graphViewState) {
-        localStorage.setItem(`graphViewState_chapter${currentChapter}`, JSON.stringify(graphViewState));
-      }
-    };
-  }, [graphViewState, currentChapter]);
+  // 챕터 선택 함수
+  const handleChapterSelect = (chapter) => {
+    setCurrentChapter(chapter);
+  };
 
   return (
-    <div style={{ width: '100vw', height: '100vh', background: '#f4f7fb', overflow: 'hidden', display: 'flex', flexDirection: 'column', paddingTop: 12 }}>
-      {/* 상단바: 챕터 파일탭, 인물 검색, 독립 인물 버튼, 닫기 버튼 */}
-      <div style={{
-        width: '100vw',
-        background: '#fff',
-        boxShadow: '0 2px 8px rgba(0,0,0,0.06)',
-        borderBottom: '1px solid #e5e7eb',
-        zIndex: 10001,
-        display: 'flex',
-        flexDirection: 'column',
-        paddingTop: 0,
-        paddingLeft: 0,
-        paddingRight: 0,
-      }}
-      onWheel={e => e.preventDefault()}
-      >
-        {/* 첫 번째 행: 챕터 파일탭 + 독립 인물 버튼 + 닫기 버튼 */}
-        <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 8, paddingLeft: 12, paddingTop: 0, height: 36, width: '100%' }}>
-          <div style={{
+    <div style={{ width: '100vw', height: '100vh', background: '#f4f7fb', overflow: 'hidden', display: 'flex' }}>
+              {/* 사이드바 */}
+        <div 
+          style={{
+            width: isSidebarOpen ? '240px' : '60px',
+            height: '100vh',
+            background: '#fff',
+            borderRight: '1px solid #e5e7eb',
+            boxShadow: '2px 0 8px rgba(0,0,0,0.06)',
+            transition: 'width 0.4s cubic-bezier(0.4, 0, 0.2, 1)',
             display: 'flex',
-            flexDirection: 'row',
-            alignItems: 'flex-end',
-            gap: 0,
-            overflowX: 'auto',
-            maxWidth: '90vw',
-            paddingBottom: 6,
-            scrollbarWidth: 'thin',
-            scrollbarColor: '#bfc8e2 #f4f7fb',
+            flexDirection: 'column',
+            zIndex: 1000,
+          }}
+        >
+        {/* 사이드바 헤더 */}
+        <div style={{
+          height: '64px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          padding: '0 16px',
+          borderBottom: '1px solid #e5e7eb',
+          background: '#f8f9fc',
+        }}>
+          <span style={{
+            fontSize: '20px',
+            fontWeight: '600',
+            color: '#22336b',
+            textAlign: 'left',
+            opacity: isSidebarOpen ? 1 : 0,
+            transform: isSidebarOpen ? 'translateX(0)' : 'translateX(-20px)',
+            transition: isSidebarOpen 
+              ? 'all 0.4s cubic-bezier(0.4, 0, 0.2, 1) 0.2s' 
+              : 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+            whiteSpace: 'nowrap',
+            overflow: 'hidden',
+            width: isSidebarOpen ? 'auto' : '0px',
+            display: 'inline-block',
+            minWidth: isSidebarOpen ? 'auto' : '0px',
           }}>
-            {Array.from({ length: maxChapter }, (_, i) => i + 1).map((chapter) => (
-              <button
-                key={chapter}
-                onClick={() => setCurrentChapter(chapter)}
-                style={{
-                  height: 45,
-                  minWidth: 90,
-                  padding: '0 15px',
-                  borderTopLeftRadius: 12,
-                  borderTopRightRadius: 12,
-                  borderBottomLeftRadius: 0,
-                  borderBottomRightRadius: 0,
-                  borderTop: currentChapter === chapter ? '2.5px solid #6C8EFF' : '1.5px solid #bfc8e2',
-                  borderRight: chapter === maxChapter ? (currentChapter === chapter ? '2.5px solid #6C8EFF' : '1.5px solid #bfc8e2') : 'none',
-                  borderBottom: currentChapter === chapter ? 'none' : '1.5px solid #bfc8e2',
-                  borderLeft: chapter === 1 ? (currentChapter === chapter ? '2.5px solid #6C8EFF' : '1.5px solid #bfc8e2') : 'none',
-                  background: currentChapter === chapter ? '#fff' : '#e7edff',
-                  color: currentChapter === chapter ? '#22336b' : '#6C8EFF',
-                  fontWeight: currentChapter === chapter ? 700 : 500,
-                  fontSize: 12,
-                  cursor: 'pointer',
-                  marginRight: 10,
-                  marginLeft: chapter === 1 ? 0 : 0,
-                  marginBottom: currentChapter === chapter ? -2 : 0,
-                  boxShadow: currentChapter === chapter ? '0 4px 16px rgba(108,142,255,0.10)' : 'none',
-                  zIndex: currentChapter === chapter ? 2 : 1,
-                  transition: 'all 0.18s',
-                  position: 'relative',
-                  outline: 'none',
-                }}
-              >
-                {`Chapter ${chapter}`}
-              </button>
-            ))}
-          </div>
+            챕터 선택
+          </span>
           <button
-            onClick={() => setHideIsolated(v => !v)}
+            onClick={toggleSidebar}
             style={{
-              height: 32,
-              padding: '2px 12px',
-              borderRadius: 6,
-              border: '1px solid #bfc8e2',
-              background: hideIsolated ? '#6C8EFF' : '#f4f7fb',
-              color: hideIsolated ? '#fff' : '#22336b',
-              fontWeight: 500,
-              fontSize: 14,
-              cursor: 'pointer',
-              marginLeft: 6,
-              lineHeight: '28px'
-            }}
-          >
-            {hideIsolated ? '독립 인물 숨김' : '독립 인물 표시'}
-          </button>
-          {/* 닫기 버튼: 오른쪽 끝 */}
-          <div style={{ flex: 1 }} />
-          <button
-            onClick={() => navigate(`/user/viewer/${filename}`)}
-            style={{
-              height: 32,
-              width: 32,
-              minWidth: 32,
-              minHeight: 32,
-              borderRadius: 8,
-              border: '1.5px solid #e3e6ef',
+              width: '32px',
+              height: '32px',
+              borderRadius: '6px',
+              border: '1px solid #e3e6ef',
               background: '#fff',
-              color: '#22336b',
+              color: '#6C8EFF',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              fontSize: 18,
-              marginRight: 32,
               cursor: 'pointer',
-              boxShadow: '0 2px 8px rgba(108,142,255,0.07)',
-              transition: 'background 0.18s, color 0.18s, box-shadow 0.18s, transform 0.13s',
+              transition: 'all 0.18s',
+              outline: 'none',
             }}
-            title="그래프 닫기"
+            title={isSidebarOpen ? '사이드바 접기' : '사이드바 펼치기'}
           >
-            <FaTimes />
+            {isSidebarOpen ? <FaChevronLeft /> : <FaBars />}
           </button>
         </div>
-        {/* 두 번째 행: 인물 검색 폼 */}
-        <div style={{ width: '100%', height: 54, display: 'flex', flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-start', paddingLeft: 12, paddingTop: 0, paddingBottom: 0, background: '#fff' }}>
-          <GraphControls
-            searchInput={searchInput}
-            setSearchInput={setSearchInput}
-            handleSearch={() => setSearch(searchInput)}
-            handleReset={() => { setSearchInput(""); setSearch(""); }}
-            handleFitView={() => {}}
-            search={search}
-            setSearch={setSearch}
-            inputStyle={{ height: 32, fontSize: 14, padding: '2px 8px', borderRadius: 6 }}
-            buttonStyle={{ height: 32, fontSize: 14, padding: '2px 10px', borderRadius: 6 }}
-          />
+
+        {/* 챕터 목록 */}
+        <div style={{
+          flex: 1,
+          padding: '16px 0',
+          overflowY: 'auto',
+        }}>
+          {Array.from({ length: maxChapter }, (_, i) => i + 1).map((chapter) => (
+            <button
+              key={chapter}
+              onClick={() => handleChapterSelect(chapter)}
+              style={{
+                width: '100%',
+                height: '48px',
+                padding: '0 16px',
+                border: 'none',
+                background: currentChapter === chapter ? '#EEF2FF' : 'transparent',
+                color: currentChapter === chapter ? '#22336b' : '#6C8EFF',
+                fontSize: '14px',
+                fontWeight: currentChapter === chapter ? '600' : '500',
+                textAlign: 'left',
+                cursor: 'pointer',
+                transition: 'all 0.18s',
+                borderLeft: currentChapter === chapter ? '4px solid #6C8EFF' : '4px solid transparent',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: isSidebarOpen ? 'flex-start' : 'center',
+                position: 'relative',
+              }}
+              title={!isSidebarOpen ? `Chapter ${chapter}` : ''}
+            >
+                              <span style={{
+                  width: '24px',
+                  height: '24px',
+                  borderRadius: '50%',
+                  background: currentChapter === chapter ? '#6C8EFF' : '#e3e6ef',
+                  color: currentChapter === chapter ? '#fff' : '#6C8EFF',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: '12px',
+                  fontWeight: '600',
+                  marginRight: '12px',
+                  transition: 'all 0.3s ease',
+                  flexShrink: 0,
+                  minWidth: '24px',
+                  minHeight: '24px',
+                }}>
+                  {chapter}
+                </span>
+                <span style={{
+                  opacity: isSidebarOpen ? 1 : 0,
+                  transform: isSidebarOpen ? 'translateX(0)' : 'translateX(-30px)',
+                  whiteSpace: 'nowrap',
+                  overflow: 'hidden',
+                  width: isSidebarOpen ? 'auto' : '0px',
+                  transition: isSidebarOpen 
+                    ? 'all 0.4s cubic-bezier(0.4, 0, 0.2, 1) 0.2s' 
+                    : 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                  display: 'inline-block',
+                  minWidth: isSidebarOpen ? 'auto' : '0px',
+                }}>
+                  Chapter {chapter}
+                </span>
+            </button>
+          ))}
         </div>
       </div>
-      {/* 그래프 본문 */}
-      <div className="flex-1 relative overflow-hidden" style={{ width: '100%', height: '100%' }}>
-        {maxEventNum > 0 ? (
-          elements.length > 0 ? (
-            <RelationGraphMain 
-              elements={elements} 
-              inViewer={false}
-              fullScreen={true}
-              graphViewState={graphViewState}
-              setGraphViewState={setGraphViewState}
-              chapterNum={currentChapter}
-              eventNum={eventNum} // 이벤트 번호는 null 또는 undefined로 전달
-              hideIsolated={hideIsolated}
-              maxEventNum={maxEventNum}
-              newNodeIds={newNodeIds}
-            />
+
+      {/* 메인 콘텐츠 영역 */}
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+        {/* 상단바: 검색, 독립 인물 버튼, 닫기 버튼 */}
+        <div style={{
+          width: '100%',
+          background: '#fff',
+          boxShadow: '0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.04)',
+          zIndex: 10001,
+          display: 'flex',
+          flexDirection: 'column',
+          paddingTop: 0,
+          paddingLeft: 0,
+          paddingRight: 0,
+        }}
+        onWheel={e => e.preventDefault()}
+        >
+          {/* 상단바: 독립 인물 버튼 + 검색 + 닫기 버튼 */}
+          <div style={{ 
+            display: 'flex', 
+            flexDirection: 'row', 
+            alignItems: 'center', 
+            justifyContent: 'space-between', 
+            gap: 12, 
+            paddingLeft: 16, 
+            paddingRight: 16, 
+            paddingTop: 0, 
+            paddingBottom: 0,
+            height: 64, 
+            width: '100%',
+            background: '#fff',
+          }}>
+            {/* 왼쪽 영역: 검색 컨트롤 + 독립 인물 토글 */}
+            <div style={{ 
+              display: 'flex', 
+              flexDirection: 'row', 
+              alignItems: 'center', 
+              gap: 12,
+              flex: 1,
+            }}>
+              <GraphControls
+                searchInput={searchInput}
+                setSearchInput={setSearchInput}
+                handleSearch={() => setSearch(searchInput)}
+                handleReset={() => { setSearchInput(""); setSearch(""); }}
+                handleFitView={() => {}}
+                search={search}
+                setSearch={setSearch}
+                inputStyle={{ 
+                  height: 36, 
+                  fontSize: 14, 
+                  padding: '8px 12px', 
+                  borderRadius: 8,
+                  border: '1.5px solid #e3e6ef',
+                  background: '#f8f9fc',
+                  color: '#22336b',
+                  fontWeight: 500,
+                  outline: 'none',
+                  transition: 'all 0.2s ease',
+                  minWidth: '200px',
+                }}
+                buttonStyle={{ 
+                  height: 36, 
+                  fontSize: 13, 
+                  padding: '8px 16px', 
+                  borderRadius: 8,
+                  border: '1.5px solid #6C8EFF',
+                  background: '#6C8EFF',
+                  color: '#fff',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease',
+                  outline: 'none',
+                }}
+              />
+              
+              <button
+                onClick={() => setHideIsolated(!hideIsolated)}
+                style={{
+                  height: 36,
+                  padding: '0 16px',
+                  borderRadius: 8,
+                  border: '1.5px solid #e3e6ef',
+                  background: hideIsolated ? '#f8f9fc' : '#EEF2FF',
+                  color: hideIsolated ? '#6C8EFF' : '#22336b',
+                  fontSize: 13,
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease',
+                  outline: 'none',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  boxShadow: hideIsolated ? 'none' : '0 2px 8px rgba(108,142,255,0.15)',
+                }}
+                title={hideIsolated ? '독립 인물을 표시합니다' : '독립 인물을 숨깁니다'}
+              >
+                <div style={{
+                  width: 8,
+                  height: 8,
+                  borderRadius: '50%',
+                  background: hideIsolated ? '#6C8EFF' : '#22336b',
+                  opacity: hideIsolated ? 0.6 : 1,
+                }} />
+                {hideIsolated ? '독립 인물 표시' : '독립 인물 숨기기'}
+              </button>
+            </div>
+            
+            {/* 오른쪽 영역: 뷰어로 돌아가기 */}
+            <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <button
+                onClick={() => navigate(`/user/viewer/${filename}`)}
+                style={{
+                  height: 36,
+                  width: 36,
+                  borderRadius: 8,
+                  border: '1.5px solid #e3e6ef',
+                  background: '#fff',
+                  color: '#22336b',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease',
+                  outline: 'none',
+                  fontSize: 14,
+                  boxShadow: '0 2px 4px rgba(0,0,0,0.05)',
+                }}
+                title="뷰어로 돌아가기"
+                onMouseEnter={(e) => {
+                  e.target.style.background = '#f8f9fc';
+                  e.target.style.color = '#6C8EFF';
+                  e.target.style.transform = 'scale(1.05)';
+                }}
+                onMouseLeave={(e) => {
+                  e.target.style.background = '#fff';
+                  e.target.style.color = '#22336b';
+                  e.target.style.transform = 'scale(1)';
+                }}
+              >
+                <FaTimes />
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* 그래프 본문 */}
+        <div className="flex-1 relative overflow-hidden" style={{ width: '100%', height: '100%' }}>
+          {maxEventNum > 0 ? (
+            elements.length > 0 ? (
+              <RelationGraphMain 
+                elements={elements} 
+                inViewer={false}
+                fullScreen={true}
+                graphViewState={graphViewState}
+                setGraphViewState={setGraphViewState}
+                chapterNum={currentChapter}
+                eventNum={eventNum}
+                hideIsolated={hideIsolated}
+                maxEventNum={maxEventNum}
+                newNodeIds={newNodeIds}
+              />
+            ) : (
+              <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, color: '#6C8EFF' }}>
+                그래프 데이터를 불러오는 중...
+              </div>
+            )
           ) : (
             <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, color: '#6C8EFF' }}>
-              그래프 데이터를 불러오는 중...
+              이벤트 정보를 불러오는 중...
             </div>
-          )
-        ) : (
-          <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, color: '#6C8EFF' }}>
-            이벤트 정보를 불러오는 중...
-          </div>
-        )}
+          )}
+        </div>
       </div>
     </div>
   );

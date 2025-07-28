@@ -398,7 +398,7 @@ const ViewerPage = ({ darkMode: initialDarkMode }) => {
             }
           }
         } catch (e) {
-          console.error("챕터 정보 읽기 오류:", e);
+          // 챕터 정보 읽기 오류 처리
         }
       }
     };
@@ -478,7 +478,6 @@ const ViewerPage = ({ darkMode: initialDarkMode }) => {
       setIsDataReady(true);
       setLoading(false);
     } catch (error) {
-      console.error("데이터 로드 중 오류:", error);
       setLoading(false);
     }
   };
@@ -499,9 +498,6 @@ const ViewerPage = ({ darkMode: initialDarkMode }) => {
               )
           );
           if (!eventRelationFilePath) {
-            console.warn(
-              `이벤트 관계 데이터 파일을 찾을 수 없습니다: chapter${currentChapter} event${fileEventNum}`
-            );
             return;
           }
           const eventRelations =
@@ -514,7 +510,7 @@ const ViewerPage = ({ darkMode: initialDarkMode }) => {
           );
           setElements(elements);
         } catch (error) {
-          console.error("이벤트 관계 데이터 로드 중 오류:", error);
+          // 이벤트 관계 데이터 로드 중 오류 처리
         }
       };
       loadEventRelations();
@@ -759,7 +755,7 @@ const ViewerPage = ({ darkMode: initialDarkMode }) => {
         // 챕터 번호만 업데이트
         setCurrentChapter(chapterNum);
       } catch (e) {
-        console.error("위치 계산 오류:", e);
+        // 위치 계산 오류 처리
       }
     }
   };
@@ -803,7 +799,7 @@ const ViewerPage = ({ darkMode: initialDarkMode }) => {
     try {
       cfi = await viewerRef.current.getCurrentCfi?.();
     } catch (e) {
-      console.error("getCurrentCfi 에러:", e);
+      // getCurrentCfi 에러 처리
     }
     if (!cfi) {
       toast.error("❗ 페이지 정보를 읽을 수 없습니다. 다시 불러옵니다...");
@@ -965,7 +961,7 @@ const ViewerPage = ({ darkMode: initialDarkMode }) => {
         JSON.stringify(updatedSettings)
       );
     } catch (e) {
-      console.error("설정 저장 오류:", e);
+      // 설정 저장 오류 처리
     }
 
     // EPUB 뷰어 다시 로드
@@ -983,7 +979,7 @@ const ViewerPage = ({ darkMode: initialDarkMode }) => {
         // 즉시 뷰어 다시 로드
         setReloadKey((prev) => prev + 1);
       } catch (e) {
-        console.error("설정 적용 오류:", e);
+        // 설정 적용 오류 처리
         // 에러 발생 시에도 뷰어 다시 로드
         setReloadKey((prev) => prev + 1);
       }
@@ -1156,12 +1152,12 @@ const ViewerPage = ({ darkMode: initialDarkMode }) => {
 
   // 1) events 데이터 확인
   useEffect(() => {
-    console.log("[디버그] events 데이터:", events);
+    // events 데이터 디버그
   }, [events]);
 
   // 2) currentEvent 상태 변화 확인
   useEffect(() => {
-    console.log("[디버그] currentEvent 상태 변화:", currentEvent);
+    // currentEvent 상태 변화 디버그
   }, [currentEvent]);
 
   // currentEvent가 null이 아닐 때만 이전 값 갱신
@@ -1243,7 +1239,6 @@ const ViewerPage = ({ darkMode: initialDarkMode }) => {
           }}
           settings={settings}
           onCurrentLineChange={(charIndex, totalEvents, currentEvent) => {
-            console.log("[디버그] onCurrentLineChange 호출!", { charIndex, totalEvents, currentEvent });
             setCurrentCharIndex(charIndex);
             setTotalChapterWords(totalEvents || 0);
             setCurrentEvent(currentEvent);

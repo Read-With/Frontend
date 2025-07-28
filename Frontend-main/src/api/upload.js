@@ -26,13 +26,12 @@ export const uploadEpubFile = async (file, onProgress) => {
           onProgress(percentCompleted);
         }
         
-        console.log(`업로드 진행률: ${percentCompleted}%`);
+        // 업로드 진행률 로그
       }
     });
     
     return response.data;
   } catch (error) {
-    console.error('파일 업로드 중 오류 발생:', error);
     throw error;
   }
 };
@@ -47,7 +46,6 @@ export const getEpubMetadata = async (fileId) => {
     const response = await axios.get(`/api/upload/epub/${fileId}/metadata`);
     return response.data;
   } catch (error) {
-    console.error('메타데이터 가져오기 중 오류 발생:', error);
     throw error;
   }
 }; 
