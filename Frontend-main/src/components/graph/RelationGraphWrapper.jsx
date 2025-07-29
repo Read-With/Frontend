@@ -137,29 +137,12 @@ function RelationGraphWrapper() {
           height: '64px',
           display: 'flex',
           alignItems: 'center',
-          justifyContent: 'space-between',
+          justifyContent: 'flex-start',
+          gap: '12px',
           padding: '0 16px',
           borderBottom: '1px solid #e5e7eb',
           background: '#f8f9fc',
         }}>
-          <span style={{
-            fontSize: '20px',
-            fontWeight: '600',
-            color: '#22336b',
-            textAlign: 'left',
-            opacity: isSidebarOpen ? 1 : 0,
-            transform: isSidebarOpen ? 'translateX(0)' : 'translateX(-20px)',
-            transition: isSidebarOpen 
-              ? 'all 0.4s cubic-bezier(0.4, 0, 0.2, 1) 0.2s' 
-              : 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-            whiteSpace: 'nowrap',
-            overflow: 'hidden',
-            width: isSidebarOpen ? 'auto' : '0px',
-            display: 'inline-block',
-            minWidth: isSidebarOpen ? 'auto' : '0px',
-          }}>
-            챕터 선택
-          </span>
           <button
             onClick={toggleSidebar}
             style={{
@@ -180,6 +163,24 @@ function RelationGraphWrapper() {
           >
             {isSidebarOpen ? <FaChevronLeft /> : <FaBars />}
           </button>
+          <span style={{
+            fontSize: '20px',
+            fontWeight: '600',
+            color: '#22336b',
+            textAlign: 'left',
+            opacity: isSidebarOpen ? 1 : 0,
+            transform: isSidebarOpen ? 'translateX(0)' : 'translateX(-20px)',
+            transition: isSidebarOpen 
+              ? 'all 0.4s cubic-bezier(0.4, 0, 0.2, 1) 0.2s' 
+              : 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+            whiteSpace: 'nowrap',
+            overflow: 'hidden',
+            width: isSidebarOpen ? 'auto' : '0px',
+            display: 'inline-block',
+            minWidth: isSidebarOpen ? 'auto' : '0px',
+          }}>
+            챕터 선택
+          </span>
         </div>
 
         {/* 챕터 목록 */}
@@ -357,8 +358,17 @@ function RelationGraphWrapper() {
               </button>
             </div>
             
-            {/* 오른쪽 영역: 뷰어로 돌아가기 */}
-            <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            {/* 중앙 영역: 여백 */}
+            <div style={{ flex: 1 }} />
+            
+            {/* 오른쪽 영역: 뷰어로 돌아가기 (상대적으로 왼쪽으로 이동) */}
+            <div style={{ 
+              display: 'flex', 
+              flexDirection: 'row', 
+              alignItems: 'center', 
+              gap: 8,
+              marginRight: '28px',
+            }}>
               <button
                 onClick={() => navigate(`/user/viewer/${filename}`)}
                 style={{

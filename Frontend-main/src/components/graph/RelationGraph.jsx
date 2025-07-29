@@ -353,15 +353,10 @@ const RelationGraph = ({
     });
   }, [elements]);
 
-  // elements props 디버깅
+  // elements props 디버깅 로그 추가
+  console.log("[RelationGraph 디버그] elements:", elements);
 
   const handleCanvasClick = (e) => {
-    // 툴팁이 활성화된 상태에서 캔버스 클릭 시 툴팁 닫기
-    if (activeTooltip) {
-      clearSelection();
-      return;
-    }
-    
     // 그래프 캔버스 영역에서만 ripple
     const container = e.currentTarget;
     const rect = container.getBoundingClientRect();

@@ -93,7 +93,16 @@ function GraphNodeTooltip({
     }
   }, [isGraphPage, chapterNum, eventNum, maxChapter, data]);
 
-  // NodeTooltip data structure 디버그
+  console.log("NodeTooltip data structure:", {
+    id: nodeData.id,
+    label: nodeData.label,
+    description: nodeData.description,
+    main_character: nodeData.main_character,
+    names: nodeData.names,
+    portrait_prompt: nodeData.portrait_prompt,
+  });
+
+  console.log("NodeTooltip data structure:", data);
 
   useEffect(() => {
     setShowContent(true);
