@@ -118,20 +118,20 @@ function RelationGraphWrapper() {
 
   return (
     <div style={{ width: '100vw', height: '100vh', background: '#f4f7fb', overflow: 'hidden', display: 'flex' }}>
-              {/* 사이드바 */}
-        <div 
-          style={{
-            width: isSidebarOpen ? '240px' : '60px',
-            height: '100vh',
-            background: '#fff',
-            borderRight: '1px solid #e5e7eb',
-            boxShadow: '2px 0 8px rgba(0,0,0,0.06)',
-            transition: 'width 0.4s cubic-bezier(0.4, 0, 0.2, 1)',
-            display: 'flex',
-            flexDirection: 'column',
-            zIndex: 1000,
-          }}
-        >
+      {/* 사이드바 */}
+      <div 
+        style={{
+          width: isSidebarOpen ? '240px' : '60px',
+          height: '100vh',
+          background: '#fff',
+          borderRight: '1px solid #e5e7eb',
+          boxShadow: '2px 0 8px rgba(0,0,0,0.06)',
+          transition: 'width 0.4s cubic-bezier(0.4, 0, 0.2, 1)',
+          display: 'flex',
+          flexDirection: 'column',
+          zIndex: 1000,
+        }}
+      >
         {/* 사이드바 헤더 */}
         <div style={{
           height: '64px',
@@ -420,6 +420,7 @@ function RelationGraphWrapper() {
                 hideIsolated={hideIsolated}
                 maxEventNum={maxEventNum}
                 newNodeIds={newNodeIds}
+                maxChapter={maxChapter}
               />
             ) : (
               <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, color: '#6C8EFF' }}>

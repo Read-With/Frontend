@@ -6,13 +6,12 @@ import React, {
   useCallback,
 } from "react";
 import { useNavigate, useLocation, useParams } from "react-router-dom";
-import GraphControls from "./GraphControls";
 import CytoscapeGraphUnified from "./CytoscapeGraphUnified";
 import GraphNodeTooltip from "./NodeTooltip";
 import EdgeTooltip from "./EdgeTooltip";
+import ViewerEdgeTooltip from "./ViewerEdgeTooltip";
+import GraphSidebar from "./GraphSidebar";
 import "./RelationGraph.css";
-import { FaTimes, FaClock } from 'react-icons/fa';
-import { filterGraphElements } from "./graphFilter";
 import { DEFAULT_LAYOUT } from "./graphLayouts";
 
 // 간선 positivity 값에 따라 HSL 그라데이션 색상 반환
@@ -75,11 +74,9 @@ const getWideLayout = () => {
   return DEFAULT_LAYOUT;
 };
 
-function RelationGraphMain({ elements, inViewer = false, fullScreen = false, onFullScreen, onExitFullScreen, graphViewState, setGraphViewState, chapterNum, eventNum, hideIsolated, maxEventNum, newNodeIds }) {
+function RelationGraphMain({ elements, inViewer = false, fullScreen = false, onFullScreen, onExitFullScreen, graphViewState, setGraphViewState, chapterNum, eventNum, hideIsolated, maxEventNum, newNodeIds, maxChapter }) {
   const cyRef = useRef(null);
   const hasCenteredRef = useRef(false); // 최초 1회만 중앙정렬
-  const [searchInput, setSearchInput] = useState("");
-  const [search, setSearch] = useState("");
   const [activeTooltip, setActiveTooltip] = useState(null); // 하나의 툴팁만 관리
   const selectedEdgeIdRef = useRef(null);
   const selectedNodeIdRef = useRef(null);
@@ -97,6 +94,9 @@ function RelationGraphMain({ elements, inViewer = false, fullScreen = false, onF
 
   // gatsby.epub 단독 그래프 페이지에서만 간격을 더 넓게
   const isGraphPage = inViewer && fullScreen;
+  
+  // 그래프 단독 페이지 여부 확인
+  const isStandaloneGraphPage = !inViewer;
 
   // 타임라인으로 이동하는 함수
   // const handleViewTimeline = () => {
@@ -141,13 +141,11 @@ function RelationGraphMain({ elements, inViewer = false, fullScreen = false, onF
       
       // 엣지 데이터 확인
       if (!edge || !edge.data()) {
-        console.log('Edge data not found');
         return;
       }
       
       const container = document.querySelector(".graph-canvas-area");
       if (!container) {
-        console.log('Container not found');
         return;
       }
       
@@ -161,8 +159,6 @@ function RelationGraphMain({ elements, inViewer = false, fullScreen = false, onF
       // 절대 좌표 계산 (컨테이너 기준)
       const absoluteX = pos.x * zoom + pan.x + containerRect.left;
       const absoluteY = pos.y * zoom + pan.y + containerRect.top;
-
-      console.log('Edge clicked:', edge.id(), 'at position:', { x: absoluteX, y: absoluteY });
 
       setActiveTooltip(null);
       setActiveTooltip({
@@ -236,13 +232,9 @@ function RelationGraphMain({ elements, inViewer = false, fullScreen = false, onF
       return { filteredElements: [], fitNodeIds: [] };
     }
     
-    // search가 있으면 필터링, 없으면 모든 요소 반환
-    if (search && search.trim()) {
-      return filterGraphElements(sortedElements, search);
-    } else {
-      return { filteredElements: sortedElements, fitNodeIds: [] };
-    }
-  }, [sortedElements, search]);
+    // 모든 요소 반환 (검색은 RelationGraphWrapper에서 처리)
+    return { filteredElements: sortedElements, fitNodeIds: [] };
+  }, [sortedElements]);
 
   // currentEventJson이 내용이 같으면 참조도 같게 useMemo로 캐싱
   const stableEventJson = useMemo(() => graphViewState ? JSON.stringify(graphViewState) : '', [graphViewState]);
@@ -323,36 +315,9 @@ function RelationGraphMain({ elements, inViewer = false, fullScreen = false, onF
     []
   );
 
-  const handleReset = useCallback(() => {
-    setSearch("");
-    setSearchInput("");
-    
-    // 그래프 초기화
-    if (cyRef.current) {
-      const cy = cyRef.current;
-      cy.elements().removeClass("faded");
-      cy.elements().removeClass("highlighted");
-      cy.fit(undefined, 15);
-      cy.center();
-    }
-  }, [setSearch, setSearchInput]);
 
-  const handleSearch = useCallback(() => {
-    if (searchInput.trim()) {
-      setSearch(searchInput.trim());
-    }
-  }, [searchInput]);
 
-  const handleFitView = useCallback(() => {
-    if (cyRef.current) {
-      cyRef.current.fit();
-      cyRef.current.center();
-    }
-  }, []);
 
-  const handleClose = useCallback(() => {
-    window.location.href = `/user/viewer/${filename}`;
-  }, [filename]);
 
   // === 오직 chapter_node_positions_{chapterNum}만 사용하여 노드 위치 복원 (절대적 위치) ===
 
@@ -365,9 +330,7 @@ function RelationGraphMain({ elements, inViewer = false, fullScreen = false, onF
     }
   }, [chapterNum, eventNum]);
 
-  useEffect(() => {
-    console.log('[상태점검] chapterNum:', chapterNum, 'eventNum:', eventNum, 'maxEventNum:', maxEventNum, 'isLastEvent:', eventNum === maxEventNum);
-  }, [chapterNum, eventNum, maxEventNum]);
+
 
   // elements가 변경될 때 로딩 상태 업데이트
   useEffect(() => {
@@ -448,88 +411,25 @@ function RelationGraphMain({ elements, inViewer = false, fullScreen = false, onF
         left: 0,
         zIndex: 9999
       }}>
-        {/* 상단바: > 버튼(복귀)만 왼쪽 끝에, 가운데 > 버튼은 완전히 제거 */}
-        <div style={{
-          position: 'absolute',
-          top: 0,
-          left: 0,
-          width: '100vw',
-          height: 60,
-          display: 'flex',
-          flexDirection: 'row',
-          alignItems: 'center',
-          gap: 0,
-          paddingLeft: 12,
-          paddingRight: 90,
-          paddingTop: 0,
-          justifyContent: 'flex-start',
-          background: '#fff',
-          boxShadow: '0 2px 8px rgba(0,0,0,0.06)',
-          borderBottom: '1px solid #e5e7eb',
-          zIndex: 10001,
-        }}>
-          {/* 눈에 띄는 복귀(>) 버튼 */}
-          <button
-            onClick={handleExitFullScreen}
-            style={{
-              height: 40,
-              width: 40,
-              minWidth: 40,
-              minHeight: 40,
-              borderRadius: 12,
-              border: 'none',
-              background: 'linear-gradient(100deg, #4F6DDE 0%, #6fa7ff 100%)',
-              color: '#fff',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontSize: 22,
-              marginRight: 18,
-              marginLeft: 4,
-              cursor: 'pointer',
-              boxShadow: '0 4px 16px rgba(79,109,222,0.13)',
-              fontWeight: 700,
-              outline: 'none',
-              transition: 'background 0.18s, color 0.18s, box-shadow 0.18s, transform 0.13s',
-            }}
-            title='분할화면으로'
-            onMouseOver={e => e.currentTarget.style.background = 'linear-gradient(100deg, #6fa7ff 0%, #4F6DDE 100%)'}
-            onMouseOut={e => e.currentTarget.style.background = 'linear-gradient(100deg, #4F6DDE 0%, #6fa7ff 100%)'}
-          >
-            {'>'}
-          </button>
-          {/* 그래프 본문, 컨트롤, 툴팁 등만 렌더링 (재귀 X) */}
-          <div className="flex-1 relative overflow-hidden w-full h-full">
-            {/* 검색 폼 추가 */}
-            {!inViewer && (
-              <div className="search-container" style={{ justifyContent: 'flex-start', paddingLeft: '20px' }}>
-                <GraphControls
-                  searchInput={searchInput}
-                  setSearchInput={setSearchInput}
-                  handleSearch={handleSearch}
-                  handleReset={handleReset}
-                  handleFitView={handleFitView}
-                  search={search}
-                  setSearch={setSearch}
+        {/* 그래프 본문만 렌더링 (상단바는 RelationGraphWrapper에서 처리) */}
+        <div className="flex-1 relative overflow-hidden w-full h-full">
+          <div className="flex-1 relative overflow-hidden" style={{ width: '100%', height: '100%' }}>
+            {/* 툴팁 렌더링 */}
+            <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none', zIndex: 9999 }}>
+              {activeTooltip?.type === 'node' && activeTooltip.data && (
+                <GraphNodeTooltip
+                  key={`node-tooltip-${activeTooltip.id}`}
+                  data={activeTooltip.data}
+                  x={activeTooltip.x}
+                  y={activeTooltip.y}
+                  nodeCenter={activeTooltip.nodeCenter}
+                  onClose={handleCloseTooltip}
+                  style={{ pointerEvents: 'auto' }}
                 />
-              </div>
-            )}
-            <div className="flex-1 relative overflow-hidden" style={{ width: '100%', height: '100%' }}>
-              {/* 툴팁 렌더링 */}
-              <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none', zIndex: 9999 }}>
-                {activeTooltip?.type === 'node' && activeTooltip.data && (
-                  <GraphNodeTooltip
-                    key={`node-tooltip-${activeTooltip.id}`}
-                    data={activeTooltip.data}
-                    x={activeTooltip.x}
-                    y={activeTooltip.y}
-                    nodeCenter={activeTooltip.nodeCenter}
-                    onClose={handleCloseTooltip}
-                    style={{ pointerEvents: 'auto' }}
-                  />
-                )}
-                {activeTooltip?.type === 'edge' && activeTooltip.data && (
-                  <EdgeTooltip
+              )}
+              {activeTooltip?.type === 'edge' && activeTooltip.data && (
+                inViewer ? (
+                  <ViewerEdgeTooltip
                     key={`edge-tooltip-${activeTooltip.id}`}
                     data={activeTooltip.data}
                     x={activeTooltip.x}
@@ -539,43 +439,54 @@ function RelationGraphMain({ elements, inViewer = false, fullScreen = false, onF
                     targetNode={activeTooltip.targetNode}
                     chapterNum={chapterNum}
                     eventNum={eventNum}
+                    style={{ pointerEvents: 'auto' }}
+                  />
+                ) : (
+                  <EdgeTooltip
+                    key={`edge-tooltip-${activeTooltip.id}`}
+                    data={activeTooltip.data}
+                    x={activeTooltip.x}
+                    y={activeTooltip.y}
+                    onClose={handleCloseTooltip}
+                    sourceNode={activeTooltip.sourceNode}
+                    targetNode={activeTooltip.targetNode}
                     maxChapter={10}
                     style={{ pointerEvents: 'auto' }}
                   />
-                )}
-              </div>
-              {/* 그래프 영역 */}
-              <div
-                className="graph-canvas-area"
-                onClick={handleCanvasClick}
-                style={{ position: "relative", width: "100%", height: "100%" }}
-              >
-                {ripples.map((ripple) => (
-                  <div
-                    key={ripple.id}
-                    className="cytoscape-ripple"
-                    style={{
-                      left: ripple.x - 60,
-                      top: ripple.y - 60,
-                      width: 120,
-                      height: 120,
-                    }}
-                  />
-                ))}
-                <CytoscapeGraphUnified
-                  elements={memoizedElements}
-                  stylesheet={memoizedStylesheet}
-                  layout={memoizedLayout}
-                  tapNodeHandler={tapNodeHandler}
-                  tapEdgeHandler={tapEdgeHandler}
-                  tapBackgroundHandler={tapBackgroundHandler}
-                  fitNodeIds={fitNodeIds}
-                  style={memoizedStyle}
-                  cyRef={cyRef}
-                  newNodeIds={newNodeIds}
-                  nodeSize={nodeSize}
+                )
+              )}
+            </div>
+            {/* 그래프 영역 */}
+            <div
+              className="graph-canvas-area"
+              onClick={handleCanvasClick}
+              style={{ position: "relative", width: "100%", height: "100%" }}
+            >
+              {ripples.map((ripple) => (
+                <div
+                  key={ripple.id}
+                  className="cytoscape-ripple"
+                  style={{
+                    left: ripple.x - 60,
+                    top: ripple.y - 60,
+                    width: 120,
+                    height: 120,
+                  }}
                 />
-              </div>
+              ))}
+              <CytoscapeGraphUnified
+                elements={memoizedElements}
+                stylesheet={memoizedStylesheet}
+                layout={memoizedLayout}
+                tapNodeHandler={tapNodeHandler}
+                tapEdgeHandler={tapEdgeHandler}
+                tapBackgroundHandler={tapBackgroundHandler}
+                fitNodeIds={fitNodeIds}
+                style={memoizedStyle}
+                cyRef={cyRef}
+                newNodeIds={newNodeIds}
+                nodeSize={nodeSize}
+              />
             </div>
           </div>
         </div>
@@ -588,51 +499,51 @@ function RelationGraphMain({ elements, inViewer = false, fullScreen = false, onF
       {/* < 버튼은 inViewer && !fullScreen일 때만 보임 */}
       {/* 기존 중앙 고정 < 버튼 완전히 제거 */}
 
-      {/* 검색 폼 추가 */}
-      {!inViewer && (
-        <div className="search-container" style={{ justifyContent: 'flex-start', paddingLeft: '20px' }}>
-          <GraphControls
-            searchInput={searchInput}
-            setSearchInput={setSearchInput}
-            handleSearch={handleSearch}
-            handleReset={handleReset}
-            handleFitView={handleFitView}
-            search={search}
-            setSearch={setSearch}
-          />
-        </div>
-      )}
-
       <div className="flex-1 relative overflow-hidden" style={{ width: '100%', height: '100%' }}>
-        {/* 툴팁 렌더링 */}
-        <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none', zIndex: 9999 }}>
-          {activeTooltip?.type === 'node' && activeTooltip.data && (
-            <GraphNodeTooltip
-              key={`node-tooltip-${activeTooltip.id}`}
-              data={activeTooltip.data}
-              x={activeTooltip.x}
-              y={activeTooltip.y}
-              nodeCenter={activeTooltip.nodeCenter}
-              onClose={handleCloseTooltip}
-              style={{ pointerEvents: 'auto' }}
-            />
-          )}
-          {activeTooltip?.type === 'edge' && activeTooltip.data && (
-            <EdgeTooltip
-              key={`edge-tooltip-${activeTooltip.id}`}
-              data={activeTooltip.data}
-              x={activeTooltip.x}
-              y={activeTooltip.y}
-              onClose={handleCloseTooltip}
-              sourceNode={activeTooltip.sourceNode}
-              targetNode={activeTooltip.targetNode}
-              chapterNum={chapterNum}
-              eventNum={eventNum}
-              maxChapter={10}
-              style={{ pointerEvents: 'auto' }}
-            />
-          )}
-        </div>
+        {/* 툴팁 렌더링 - 그래프 단독 페이지가 아닐 때만 */}
+        {!isStandaloneGraphPage && (
+          <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none', zIndex: 9999 }}>
+            {activeTooltip?.type === 'node' && activeTooltip.data && (
+              <GraphNodeTooltip
+                key={`node-tooltip-${activeTooltip.id}`}
+                data={activeTooltip.data}
+                x={activeTooltip.x}
+                y={activeTooltip.y}
+                nodeCenter={activeTooltip.nodeCenter}
+                onClose={handleCloseTooltip}
+                style={{ pointerEvents: 'auto' }}
+              />
+            )}
+            {activeTooltip?.type === 'edge' && activeTooltip.data && (
+              inViewer ? (
+                <ViewerEdgeTooltip
+                  key={`edge-tooltip-${activeTooltip.id}`}
+                  data={activeTooltip.data}
+                  x={activeTooltip.x}
+                  y={activeTooltip.y}
+                  onClose={handleCloseTooltip}
+                  sourceNode={activeTooltip.sourceNode}
+                  targetNode={activeTooltip.targetNode}
+                  chapterNum={chapterNum}
+                  eventNum={eventNum}
+                  style={{ pointerEvents: 'auto' }}
+                />
+              ) : (
+                <EdgeTooltip
+                  key={`edge-tooltip-${activeTooltip.id}`}
+                  data={activeTooltip.data}
+                  x={activeTooltip.x}
+                  y={activeTooltip.y}
+                  onClose={handleCloseTooltip}
+                  sourceNode={activeTooltip.sourceNode}
+                  targetNode={activeTooltip.targetNode}
+                  maxChapter={10}
+                  style={{ pointerEvents: 'auto' }}
+                />
+              )
+            )}
+          </div>
+        )}
 
         {/* 그래프 영역 */}
         <div
@@ -667,6 +578,17 @@ function RelationGraphMain({ elements, inViewer = false, fullScreen = false, onF
           />
         </div>
       </div>
+
+      {/* 그래프 단독 페이지에서 슬라이드바 렌더링 */}
+      {isStandaloneGraphPage && (
+        <GraphSidebar
+          activeTooltip={activeTooltip}
+          onClose={handleCloseTooltip}
+          chapterNum={chapterNum}
+          eventNum={eventNum}
+          maxChapter={maxChapter}
+        />
+      )}
     </div>
   );
 }

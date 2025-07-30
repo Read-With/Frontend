@@ -8,6 +8,7 @@ import React, {
 import CytoscapeGraphUnified from "./CytoscapeGraphUnified";
 import GraphNodeTooltip from "./NodeTooltip";
 import EdgeTooltip from "./EdgeTooltip";
+import ViewerEdgeTooltip from "./ViewerEdgeTooltip";
 import "./RelationGraph.css";
 import { calcGraphDiff } from "./graphDiff";
 import { DEFAULT_LAYOUT } from "./graphLayouts";
@@ -353,8 +354,7 @@ const RelationGraph = ({
     });
   }, [elements]);
 
-  // elements props 디버깅 로그 추가
-  console.log("[RelationGraph 디버그] elements:", elements);
+
 
   const handleCanvasClick = (e) => {
     // 그래프 캔버스 영역에서만 ripple
@@ -398,7 +398,7 @@ const RelationGraph = ({
           />
         )}
         {activeTooltip?.type === "edge" && (
-          <EdgeTooltip
+          <ViewerEdgeTooltip
             key={`edge-tooltip-${activeTooltip.id}`}
             data={activeTooltip.data}
             x={activeTooltip.x}

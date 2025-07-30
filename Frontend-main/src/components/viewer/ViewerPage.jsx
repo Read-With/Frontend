@@ -151,7 +151,13 @@ function getEventsForChapter(chapter) {
       chapter: Number(chapter), // 반드시 추가!
     };
   });
-  return eventsWithRelations;
+  
+  // 3. 현재 챕터의 이벤트만 필터링 (이전 챕터의 마지막 이벤트 제외)
+  const currentChapterEvents = eventsWithRelations.filter(event => {
+    return event.chapter === Number(chapter);
+  });
+  
+  return currentChapterEvents;
 }
 
 function getElementsFromRelations(
@@ -482,46 +488,18 @@ const ViewerPage = ({ darkMode: initialDarkMode }) => {
     }
   };
 
-  // currentEvent가 변경될 때 관계 데이터 업데이트
-  useEffect(() => {
-    if (isDataReady && !loading && currentEvent) {
-      const eventId = currentEvent.event_id || 0; // event_id가 없으면 0으로 설정
-      const eventNum = currentEvent.eventNum || 0; // eventNum이 없으면 0으로 설정
-      const fileEventNum = eventId + 1;
-      // 이벤트 관계 데이터 로드 (event_id + 1)
-      const loadEventRelations = async () => {
-        try {
-          const eventRelationFilePath = Object.keys(eventRelationModules).find(
-            (path) =>
-              path.includes(
-                `chapter${currentChapter}_relationships_event_${fileEventNum}.json`
-              )
-          );
-          if (!eventRelationFilePath) {
-            return;
-          }
-          const eventRelations =
-            eventRelationModules[eventRelationFilePath].default;
-          const elements = getElementsFromRelations(
-            eventRelations,
-            characterData,
-            [],
-            fileEventNum
-          );
-          setElements(elements);
-        } catch (error) {
-          // 이벤트 관계 데이터 로드 중 오류 처리
-        }
-      };
-      loadEventRelations();
-    }
-  }, [isDataReady, loading, currentEvent, currentChapter, characterData]);
+
 
   // currentChapter가 바뀔 때 currentEvent, prevEvent, elements 등도 초기화
   useEffect(() => {
     setCurrentEvent(null);
     setPrevEvent(null);
     setElements([]); // 그래프도 초기화
+  }, [currentChapter]);
+
+  // Load data when currentChapter changes
+  useEffect(() => {
+    loadData();
   }, [currentChapter]);
 
   // === [추가] 챕터 전체 그래프(fullElements) 생성 ===
@@ -553,12 +531,13 @@ const ViewerPage = ({ darkMode: initialDarkMode }) => {
       if (Array.isArray(ev.new_appearances))
         allNewAppearances = allNewAppearances.concat(ev.new_appearances);
     });
-    return getElementsFromRelations(
+    const generatedElements = getElementsFromRelations(
       allRelations,
       characterData,
       allNewAppearances,
       allImportance
     );
+    return generatedElements;
   }, [currentChapter, events, characterData]);
 
   // === [수정] elements: 데이터 준비/이벤트별 분리 ===
@@ -574,11 +553,12 @@ const ViewerPage = ({ darkMode: initialDarkMode }) => {
   useEffect(() => {
     if (!currentEvent || !isDataReady) return;
 
-    const events = getEventsForChapter(currentChapter);
+    // Use the events state directly instead of re-calling getEventsForChapter
     if (!events || !events.length) return;
 
     const maxEventNum =
       currentEvent?.eventNum || events[events.length - 1].eventNum;
+    
     const nodeFirstEvent = {};
     const edgeFirstEvent = {};
 
@@ -1561,6 +1541,7 @@ function GraphSplitArea({
         <GraphContainer
           currentPosition={currentCharIndex}
           currentEvent={currentEvent || prevValidEvent}
+          currentChapter={currentChapter}
         />
       </div>
     </div>

@@ -30,7 +30,13 @@ function getEventsForChapter(chapter) {
       chapter: Number(chapter)
     };
   });
-  return eventsWithMeta;
+  
+  // 3. 현재 챕터의 이벤트만 필터링 (이전 챕터의 마지막 이벤트 제외)
+  const currentChapterEvents = eventsWithMeta.filter(event => {
+    return event.chapter === Number(chapter);
+  });
+  
+  return currentChapterEvents;
 }
 
 // 글자 수를 정확하게 세는 함수 추가
