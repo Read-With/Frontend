@@ -68,10 +68,23 @@ function fetchRelationTimelineMulti(
       .find((r) => {
         const rid1 = safeNum(r.id1 ?? r.source);
         const rid2 = safeNum(r.id2 ?? r.target);
-        return (
-          (rid1 === safeNum(id1) && rid2 === safeNum(id2)) ||
-          (rid1 === safeNum(id2) && rid2 === safeNum(id1))
+        const sid1 = safeNum(id1);
+        const sid2 = safeNum(id2);
+        
+        const match = (
+          (rid1 === sid1 && rid2 === sid2) ||
+          (rid1 === sid2 && rid2 === sid1)
         );
+        
+        // 디버깅 로그 추가
+        console.log(`🔍 매칭 시도:`, {
+          filePath,
+          searchingFor: { id1, id2, sid1, sid2 },
+          currentRelation: { rid1, rid2 },
+          match
+        });
+        
+        return match;
       });
     if (found) {
       console.log(
@@ -91,8 +104,9 @@ function fetchRelationTimelineMulti(
     points.push(found ? found.positivity : 0); // 없으면 0으로!
     labelInfo.push(`챕터${ch} 마지막`);
   }
-  // 현재 챕터: 1~(eventNum-1)까지, 단 eventNum이 1이면 1까지 보정
-  const lastEv = Math.max(1, eventNum);
+  // 현재 챕터: 1부터 마지막 이벤트까지 모두 포함
+  const currentChapterLastEvent = lastEventNums[chapterNum - 1];
+  const lastEv = Math.max(1, currentChapterLastEvent);
   for (let i = 1; i <= lastEv; i++) {
     const filePath = `../../data/gatsby/chapter${chapterNum}_relationships_event_${i}.json`;
     const json = relationshipModules[filePath]?.default;
@@ -111,10 +125,23 @@ function fetchRelationTimelineMulti(
       .find((r) => {
         const rid1 = safeNum(r.id1 ?? r.source);
         const rid2 = safeNum(r.id2 ?? r.target);
-        return (
-          (rid1 === safeNum(id1) && rid2 === safeNum(id2)) ||
-          (rid1 === safeNum(id2) && rid2 === safeNum(id1))
+        const sid1 = safeNum(id1);
+        const sid2 = safeNum(id2);
+        
+        const match = (
+          (rid1 === sid1 && rid2 === sid2) ||
+          (rid1 === sid2 && rid2 === sid1)
         );
+        
+        // 디버깅 로그 추가
+        console.log(`🔍 매칭 시도:`, {
+          filePath,
+          searchingFor: { id1, id2, sid1, sid2 },
+          currentRelation: { rid1, rid2 },
+          match
+        });
+        
+        return match;
       });
     if (found) {
       console.log(

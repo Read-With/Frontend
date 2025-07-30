@@ -537,6 +537,9 @@ function RelationGraphMain({ elements, inViewer = false, fullScreen = false, onF
                     onClose={handleCloseTooltip}
                     sourceNode={activeTooltip.sourceNode}
                     targetNode={activeTooltip.targetNode}
+                    chapterNum={chapterNum}
+                    eventNum={eventNum}
+                    maxChapter={10}
                     style={{ pointerEvents: 'auto' }}
                   />
                 )}
@@ -623,6 +626,9 @@ function RelationGraphMain({ elements, inViewer = false, fullScreen = false, onF
               onClose={handleCloseTooltip}
               sourceNode={activeTooltip.sourceNode}
               targetNode={activeTooltip.targetNode}
+              chapterNum={chapterNum}
+              eventNum={eventNum}
+              maxChapter={10}
               style={{ pointerEvents: 'auto' }}
             />
           )}
