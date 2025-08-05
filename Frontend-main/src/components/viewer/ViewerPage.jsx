@@ -327,8 +327,7 @@ const ViewerPage = ({ darkMode: initialDarkMode }) => {
   const [characterData, setCharacterData] = useState(null);
   const [events, setEvents] = useState([]);
   const [maxChapter, setMaxChapter] = useState(1); // 자동 계산으로 초기값 1
-  const [searchInput, setSearchInput] = useState("");
-  const [search, setSearch] = useState("");
+
   const [isReloading, setIsReloading] = useState(false);
   const [eventNum, setEventNum] = useState(0);
   const [isGraphLoading, setIsGraphLoading] = useState(false);
@@ -986,13 +985,7 @@ const ViewerPage = ({ darkMode: initialDarkMode }) => {
     saveCurrent();
   };
 
-  const handleSearch = () => {
-    // Implementation of handleSearch
-  };
 
-  const handleReset = () => {
-    // Implementation of handleReset
-  };
 
   const handleFitView = () => {
     // Implementation of handleFitView
@@ -1197,13 +1190,7 @@ const ViewerPage = ({ darkMode: initialDarkMode }) => {
               setHideIsolated={setHideIsolated}
               edgeLabelVisible={edgeLabelVisible}
               setEdgeLabelVisible={setEdgeLabelVisible}
-              searchInput={searchInput}
-              setSearchInput={setSearchInput}
-              handleSearch={handleSearch}
-              handleReset={handleReset}
               handleFitView={handleFitView}
-              search={search}
-              setSearch={setSearch}
               currentChapter={currentChapter}
               maxChapter={maxChapter}
               loading={loading}
@@ -1291,13 +1278,7 @@ function GraphSplitArea({
   setHideIsolated,
   edgeLabelVisible,
   setEdgeLabelVisible,
-  searchInput,
-  setSearchInput,
-  handleSearch,
-  handleReset,
   handleFitView,
-  search,
-  setSearch,
   currentChapter,
   maxChapter,
   loading,
@@ -1330,7 +1311,7 @@ function GraphSplitArea({
         padding: 0,
       }}
     >
-      {/* 상단바: < 버튼 + 챕터 드롭다운 + 독립 인물 버튼 + 검색 등 */}
+      {/* 상단바 1: 전체화면 버튼 + 챕터 드롭다운 + 이벤트 정보 + 프로그레스 바 */}
       <div
         style={{
           height: 40,
@@ -1342,55 +1323,57 @@ function GraphSplitArea({
           marginBottom: 0,
           gap: 0,
           paddingLeft: 12,
+          paddingRight: 12,
           paddingTop: 0,
-          justifyContent: "flex-start",
+          justifyContent: "space-between",
         }}
       >
-        {/* < 전체화면 버튼 */}
-        <button
-          onClick={() => navigate(`/user/graph/${filename}`)}
-          style={{
-            height: 32,
-            width: 32,
-            minWidth: 32,
-            minHeight: 32,
-            borderRadius: "8px",
-            border: "1.5px solid #e3e6ef",
-            background: "#fff",
-            color: "#22336b",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            fontSize: 18,
-            marginRight: 8,
-            cursor: "pointer",
-            boxShadow: "0 2px 8px rgba(108,142,255,0.07)",
-            transition:
-              "background 0.18s, color 0.18s, box-shadow 0.18s, transform 0.13s",
-          }}
-          title="그래프 전체화면"
-        >
-          {"<"}
-        </button>
-        {/* 챕터 드롭다운, 초기화, 독립 인물 버튼 */}
+        {/* 왼쪽 그룹: 전체화면 버튼 + 챕터 드롭다운 */}
         <div
           style={{
             display: "flex",
             flexDirection: "row",
             alignItems: "center",
-            gap: 8,
+            gap: 4,
           }}
         >
+          {/* < 전체화면 버튼 */}
+          <button
+            onClick={() => navigate(`/user/graph/${filename}`)}
+            style={{
+              height: 28,
+              width: 28,
+              minWidth: 28,
+              minHeight: 28,
+              borderRadius: "6px",
+              border: "1.5px solid #e3e6ef",
+              background: "#fff",
+              color: "#22336b",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              fontSize: 16,
+              marginRight: 4,
+              cursor: "pointer",
+              boxShadow: "0 2px 8px rgba(108,142,255,0.07)",
+              transition:
+                "background 0.18s, color 0.18s, box-shadow 0.18s, transform 0.13s",
+            }}
+            title="그래프 전체화면"
+          >
+            {"<"}
+          </button>
+          {/* 챕터 드롭다운 */}
           <div className="chapter-dropdown-container">
             <select
               value={currentChapter}
               onChange={(e) => setCurrentChapter(Number(e.target.value))}
               style={{
-                height: 32,
-                padding: "2px 8px",
+                height: 28,
+                padding: "2px 6px",
                 borderRadius: 6,
                 border: "1px solid #bfc8e2",
-                fontSize: 14,
+                fontSize: 12,
                 background: "#f4f7fb",
                 color: "#22336b",
                 fontWeight: 500,
@@ -1398,7 +1381,7 @@ function GraphSplitArea({
                 minWidth: 90,
                 maxWidth: 180,
                 cursor: "pointer",
-                lineHeight: "32px",
+                lineHeight: "24px",
               }}
             >
               {Array.from({ length: maxChapter }, (_, i) => i + 1).map(
@@ -1415,8 +1398,8 @@ function GraphSplitArea({
             onClick={() => window.location.reload()}
             title="초기화"
             style={{
-              height: 32,
-              width: 32,
+              height: 28,
+              width: 28,
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
@@ -1424,7 +1407,7 @@ function GraphSplitArea({
               border: "1px solid #bfc8e2",
               background: "#f4f7fb",
               color: "#4F6DDE",
-              fontSize: 18,
+              fontSize: 16,
               margin: "0 4px",
               cursor: "pointer",
               transition: "background 0.18s",
@@ -1435,133 +1418,148 @@ function GraphSplitArea({
           >
             <FaSyncAlt />
           </button>
+        </div>
+
+        {/* 중간 그룹: 이벤트 정보 표시 + 프로그레스 바 */}
+        <div
+          style={{
+            display: "flex",
+            flexDirection: "row",
+            alignItems: "center",
+            gap: 16,
+            flex: 1,
+            justifyContent: "center",
+          }}
+        >
+          {/* 이벤트 정보 표시 */}
+          <span
+            style={{
+              display: "inline-block",
+              padding: "4px 22px",
+              borderRadius: 24,
+              background: "#4F6DDE",
+              color: "#fff",
+              boxShadow: "0 2px 8px rgba(79,109,222,0.13)",
+              fontSize: 16,
+              fontWeight: 700,
+              letterSpacing: 1,
+              transition: "transform 0.3s, background 0.3s",
+              transform:
+                prevEvent &&
+                (currentEvent || prevValidEvent) &&
+                prevEvent.eventNum !== (currentEvent || prevValidEvent).eventNum
+                  ? "scale(1.12)"
+                  : "scale(1)",
+            }}
+          >
+            {(currentEvent || prevValidEvent)
+              ? `이벤트 ${(currentEvent || prevValidEvent).eventNum ?? 0}${(currentEvent || prevValidEvent).name ? `: ${(currentEvent || prevValidEvent).name}` : ""}`
+              : "이벤트 정보 없음"}
+          </span>
+          
+          {/* 프로그레스 바 */}
+          {events && currentEvent && (
+            <div
+              style={{
+                width: 180,
+                height: 8,
+                background: "#e3e6ef",
+                borderRadius: 4,
+                overflow: "hidden",
+              }}
+            >
+              <div
+                style={{
+                  width: `${
+                    ((currentEvent.eventNum || 0) / (events.length + 1)) * 100
+                  }%`,
+                  height: "100%",
+                  background: "linear-gradient(90deg, #4F6DDE 0%, #6fa7ff 100%)",
+                  borderRadius: 4,
+                  transition: "width 0.4s cubic-bezier(.4,2,.6,1)",
+                }}
+              />
+            </div>
+          )}
+        </div>
+
+
+      </div>
+      
+      {/* 상단바 2: 인물 검색 기능 + 독립 인물 숨김, 라벨 스위치 토글 */}
+      <div
+        style={{
+          height: 40,
+          flexShrink: 0,
+          display: "flex",
+          flexDirection: "row",
+          alignItems: "center",
+          width: "100%",
+          marginBottom: 0,
+          gap: 0,
+          paddingLeft: 6,
+          paddingRight: 6,
+          paddingTop: 0,
+          justifyContent: "space-between",
+          borderBottom: "1px solid #e3e6ef",
+        }}
+      >
+        {/* 왼쪽 그룹: 인물 검색 기능 */}
+        <div
+          style={{
+            minWidth: 80,
+            maxWidth: 160,
+            display: "flex",
+            justifyContent: "flex-start",
+            maxHeight: 28,
+          }}
+        >
+          <GraphControls
+            onSearchSubmit={(searchTerm) => {
+              // 검색어를 받아서 그래프 필터링 로직을 여기서 처리
+              console.log("검색어:", searchTerm);
+              // TODO: 그래프 필터링 로직 구현
+            }}
+          />
+        </div>
+
+        {/* 오른쪽 그룹: 독립 인물 숨김, 라벨 스위치 토글 */}
+        <div
+          style={{
+            display: "flex",
+            flexDirection: "row",
+            alignItems: "center",
+            gap: 8,
+          }}
+        >
+          {/* 독립 인물 버튼 */}
           <button
             onClick={() => setHideIsolated((v) => !v)}
             style={{
-              height: 32,
+              height: 28,
               padding: "2px 12px",
               borderRadius: 6,
               border: "1px solid #bfc8e2",
               background: hideIsolated ? "#6C8EFF" : "#f4f7fb",
               color: hideIsolated ? "#fff" : "#22336b",
               fontWeight: 500,
-              fontSize: 14,
+              fontSize: 13,
               cursor: "pointer",
               marginLeft: 6,
-              lineHeight: "28px",
+              lineHeight: "24px",
             }}
           >
             {hideIsolated ? "독립 인물 숨김" : "독립 인물 표시"}
           </button>
+          
+          {/* 엣지 라벨 토글 */}
           <EdgeLabelToggle
             isVisible={edgeLabelVisible}
             onToggle={() => setEdgeLabelVisible(!edgeLabelVisible)}
           />
         </div>
-        {/* 오른쪽: 인물 검색 폼 */}
-        <div
-          style={{
-            minWidth: 120,
-            maxWidth: 320,
-            flex: 1,
-            display: "flex",
-            justifyContent: "flex-end",
-          }}
-        >
-          <GraphControls
-            searchInput={searchInput}
-            setSearchInput={setSearchInput}
-            handleSearch={handleSearch}
-            handleReset={handleReset}
-            handleFitView={handleFitView}
-            search={search}
-            setSearch={setSearch}
-            inputStyle={{
-              height: 32,
-              fontSize: 14,
-              padding: "2px 8px",
-              borderRadius: 6,
-            }}
-            buttonStyle={{
-              height: 32,
-              fontSize: 14,
-              padding: "2px 10px",
-              borderRadius: 6,
-            }}
-          />
-        </div>
       </div>
-      {/* [이벤트 전환 UX] 상단바와 그래프 영역 사이에 추가 */}
-      <div
-        style={{
-          width: "100%",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          height: 48,
-          background: "linear-gradient(90deg, #e3eafe 0%, #f8fafc 100%)",
-          borderBottom: "1.5px solid #e3e6ef",
-          position: "relative",
-          zIndex: 2,
-          fontWeight: 600,
-          fontSize: 18,
-          letterSpacing: 1,
-          transition: "background 0.3s",
-        }}
-      >
-        <span
-          style={{
-            display: "inline-block",
-            padding: "6px 22px",
-            borderRadius: 24,
-            background: "#4F6DDE",
-            color: "#fff",
-            boxShadow: "0 2px 8px rgba(79,109,222,0.13)",
-            fontSize: 18,
-            fontWeight: 700,
-            letterSpacing: 1,
-            transition: "transform 0.3s, background 0.3s",
-            transform:
-              prevEvent &&
-              (currentEvent || prevValidEvent) &&
-              prevEvent.eventNum !== (currentEvent || prevValidEvent).eventNum
-                ? "scale(1.12)"
-                : "scale(1)",
-          }}
-        >
-          {(currentEvent || prevValidEvent)
-            ? `이벤트 ${(currentEvent || prevValidEvent).eventNum ?? 0}${(currentEvent || prevValidEvent).name ? `: ${(currentEvent || prevValidEvent).name}` : ""}`
-            : "이벤트 정보 없음"}
-        </span>
-        {/* 전체 이벤트 중 현재 위치 프로그레스 바 */}
-        {events && currentEvent && (
-          <div
-            style={{
-              position: "absolute",
-              right: 32,
-              top: "50%",
-              transform: "translateY(-50%)",
-              width: 180,
-              height: 8,
-              background: "#e3e6ef",
-              borderRadius: 4,
-              overflow: "hidden",
-            }}
-          >
-            <div
-              style={{
-                width: `${
-                  ((currentEvent.eventNum || 0) / (events.length + 1)) * 100
-                }%`,
-                height: "100%",
-                background: "linear-gradient(90deg, #4F6DDE 0%, #6fa7ff 100%)",
-                borderRadius: 4,
-                transition: "width 0.4s cubic-bezier(.4,2,.6,1)",
-              }}
-            />
-          </div>
-        )}
-      </div>
+      
       {/* 그래프 본문 */}
       <div style={{ flex: 1, position: "relative", minHeight: 0, minWidth: 0 }}>
         <GraphContainer

@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
 import RelationGraphMain from "./RelationGraphMain";
-import GraphControls from "./GraphControls";
 import EdgeLabelToggle from "../common/EdgeLabelToggle";
 import "./RelationGraph.css";
 import { useNavigate, useParams } from "react-router-dom";
@@ -28,8 +27,6 @@ function RelationGraphWrapper() {
   });
   const [elements, setElements] = useState([]);
   const [maxChapter, setMaxChapter] = useState(9);
-  const [searchInput, setSearchInput] = useState("");
-  const [search, setSearch] = useState("");
   const [hideIsolated, setHideIsolated] = useState(true);
   const [eventNum, setEventNum] = useState(0);
   const [maxEventNum, setMaxEventNum] = useState(0);
@@ -292,41 +289,6 @@ function RelationGraphWrapper() {
               gap: 12,
               flex: 1,
             }}>
-              <GraphControls
-                searchInput={searchInput}
-                setSearchInput={setSearchInput}
-                handleSearch={() => setSearch(searchInput)}
-                handleReset={() => { setSearchInput(""); setSearch(""); }}
-                handleFitView={() => {}}
-                search={search}
-                setSearch={setSearch}
-                inputStyle={{ 
-                  height: 36, 
-                  fontSize: 14, 
-                  padding: '8px 12px', 
-                  borderRadius: 8,
-                  border: '1.5px solid #e3e6ef',
-                  background: '#f8f9fc',
-                  color: '#22336b',
-                  fontWeight: 500,
-                  outline: 'none',
-                  transition: 'all 0.2s ease',
-                  minWidth: '200px',
-                }}
-                buttonStyle={{ 
-                  height: 36, 
-                  fontSize: 13, 
-                  padding: '8px 16px', 
-                  borderRadius: 8,
-                  border: '1.5px solid #6C8EFF',
-                  background: '#6C8EFF',
-                  color: '#fff',
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                  transition: 'all 0.2s ease',
-                  outline: 'none',
-                }}
-              />
               
               <button
                 onClick={() => setHideIsolated(!hideIsolated)}
