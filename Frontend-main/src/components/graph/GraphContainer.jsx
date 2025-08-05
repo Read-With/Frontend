@@ -70,7 +70,13 @@ function convertRelationsToElements(
 
     let relationLabel = "";
     if (Array.isArray(rel.relation)) {
-      relationLabel = rel.relation.join(", ");
+      if (rel.relation.length === 1) {
+        // 1개인 경우: 최초의 관계 (첫 번째 요소)
+        relationLabel = rel.relation[0] || "";
+      } else if (rel.relation.length > 1) {
+        // 여러개인 경우: 가장 최근에 추가된 관계 (마지막 요소)
+        relationLabel = rel.relation[rel.relation.length - 1] || "";
+      }
     } else if (typeof rel.relation === "string") {
       relationLabel = rel.relation;
     }
@@ -94,6 +100,7 @@ const GraphContainer = ({
   currentPosition,
   currentEvent, // 관계 변화
   currentChapter, // 관계 변화
+  edgeLabelVisible = true,
   ...props
 }) => {
   const [elements, setElements] = useState([]);
@@ -177,6 +184,7 @@ const GraphContainer = ({
       elements={elements}
       chapterNum={currentChapter} // 관계 변화
       eventNum={currentEvent ? Math.max(1, currentEvent.eventNum) : 1}
+      edgeLabelVisible={edgeLabelVisible}
       {...props}
     />
   );

@@ -55,6 +55,7 @@ const RelationGraph = ({
   elements,
   chapterNum, // 관계 변화
   eventNum, // 관계 변화
+  edgeLabelVisible = true,
 }) => {
   const cyRef = useRef(null);
   const [activeTooltip, setActiveTooltip] = useState(null);
@@ -263,6 +264,7 @@ const RelationGraph = ({
           "curve-style": "bezier",
           label: (ele) => {
             const label = ele.data('label') || '';
+            if (!edgeLabelVisible) return '';
             return label.length > MAX_EDGE_LABEL_LENGTH ? label.slice(0, MAX_EDGE_LABEL_LENGTH) + '...' : label;
           },
           "font-size": edgeStyle.fontSize,
@@ -296,7 +298,7 @@ const RelationGraph = ({
         },
       },
     ],
-    [nodeSize, edgeStyle]
+    [nodeSize, edgeStyle, edgeLabelVisible]
   );
 
   const layout = DEFAULT_LAYOUT;

@@ -74,7 +74,7 @@ const getWideLayout = () => {
   return DEFAULT_LAYOUT;
 };
 
-function RelationGraphMain({ elements, inViewer = false, fullScreen = false, onFullScreen, onExitFullScreen, graphViewState, setGraphViewState, chapterNum, eventNum, hideIsolated, maxEventNum, newNodeIds, maxChapter }) {
+function RelationGraphMain({ elements, inViewer = false, fullScreen = false, onFullScreen, onExitFullScreen, graphViewState, setGraphViewState, chapterNum, eventNum, hideIsolated, maxEventNum, newNodeIds, maxChapter, edgeLabelVisible = true }) {
   const cyRef = useRef(null);
   const hasCenteredRef = useRef(false); // 최초 1회만 중앙정렬
   const [activeTooltip, setActiveTooltip] = useState(null); // 하나의 툴팁만 관리
@@ -277,6 +277,7 @@ function RelationGraphMain({ elements, inViewer = false, fullScreen = false, onF
           "curve-style": "bezier",
           label: (ele) => {
             const label = ele.data('label') || '';
+            if (!edgeLabelVisible) return '';
             return label.length > MAX_EDGE_LABEL_LENGTH ? label.slice(0, MAX_EDGE_LABEL_LENGTH) + '...' : label;
           },
           "font-size": edgeStyle.fontSize,
@@ -312,7 +313,7 @@ function RelationGraphMain({ elements, inViewer = false, fullScreen = false, onF
         },
       },
     ],
-    []
+    [edgeLabelVisible]
   );
 
 

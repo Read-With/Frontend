@@ -13,6 +13,7 @@ import { FaSyncAlt } from "react-icons/fa";
 import cytoscape from "cytoscape";
 import CytoscapeGraphPortalProvider from "../graph/CytoscapeGraphPortalProvider";
 import GraphContainer from "../graph/GraphContainer";
+import EdgeLabelToggle from "../common/EdgeLabelToggle";
 
 const eventRelationModules = import.meta.glob(
   "../../data/gatsby/chapter*_relationships_event_*.json",
@@ -228,17 +229,33 @@ function getElementsFromRelations(
       const target = safeId(rel.id2 || rel.target);
       return nodeIdSet.has(source) && nodeIdSet.has(target);
     })
-    .map((rel, idx) => ({
-      data: {
-        id: `e${idx}`,
-        source: safeId(rel.id1 || rel.source),
-        target: safeId(rel.id2 || rel.target),
-        label: Array.isArray(rel.relation) ? rel.relation.join(", ") : rel.type,
-        explanation: rel.explanation,
-        positivity: rel.positivity,
-        weight: rel.weight,
-      },
-    }));
+    .map((rel, idx) => {
+      // 간선 라벨 로직: 1개인 경우 최초 관계, 여러개인 경우 최근 관계
+      let label = "";
+      if (Array.isArray(rel.relation)) {
+        if (rel.relation.length === 1) {
+          // 1개인 경우: 최초의 관계 (첫 번째 요소)
+          label = rel.relation[0] || "";
+        } else if (rel.relation.length > 1) {
+          // 여러개인 경우: 가장 최근에 추가된 관계 (마지막 요소)
+          label = rel.relation[rel.relation.length - 1] || "";
+        }
+      } else {
+        label = rel.type || "";
+      }
+      
+      return {
+        data: {
+          id: `e${idx}`,
+          source: safeId(rel.id1 || rel.source),
+          target: safeId(rel.id2 || rel.target),
+          label: label,
+          explanation: rel.explanation,
+          positivity: rel.positivity,
+          weight: rel.weight,
+        },
+      };
+    });
 
   return [...nodes, ...edges];
 }
@@ -306,6 +323,7 @@ const ViewerPage = ({ darkMode: initialDarkMode }) => {
   const [prevEvent, setPrevEvent] = useState(null);
   const [graphViewState, setGraphViewState] = useState(null);
   const [hideIsolated, setHideIsolated] = useState(true);
+  const [edgeLabelVisible, setEdgeLabelVisible] = useState(true);
   const [characterData, setCharacterData] = useState(null);
   const [events, setEvents] = useState([]);
   const [maxChapter, setMaxChapter] = useState(1); // 자동 계산으로 초기값 1
@@ -1177,6 +1195,8 @@ const ViewerPage = ({ darkMode: initialDarkMode }) => {
               currentCharIndex={currentCharIndex}
               hideIsolated={hideIsolated}
               setHideIsolated={setHideIsolated}
+              edgeLabelVisible={edgeLabelVisible}
+              setEdgeLabelVisible={setEdgeLabelVisible}
               searchInput={searchInput}
               setSearchInput={setSearchInput}
               handleSearch={handleSearch}
@@ -1269,6 +1289,8 @@ function GraphSplitArea({
   currentCharIndex,
   hideIsolated,
   setHideIsolated,
+  edgeLabelVisible,
+  setEdgeLabelVisible,
   searchInput,
   setSearchInput,
   handleSearch,
@@ -1431,6 +1453,10 @@ function GraphSplitArea({
           >
             {hideIsolated ? "독립 인물 숨김" : "독립 인물 표시"}
           </button>
+          <EdgeLabelToggle
+            isVisible={edgeLabelVisible}
+            onToggle={() => setEdgeLabelVisible(!edgeLabelVisible)}
+          />
         </div>
         {/* 오른쪽: 인물 검색 폼 */}
         <div
@@ -1542,6 +1568,7 @@ function GraphSplitArea({
           currentPosition={currentCharIndex}
           currentEvent={currentEvent || prevValidEvent}
           currentChapter={currentChapter}
+          edgeLabelVisible={edgeLabelVisible}
         />
       </div>
     </div>

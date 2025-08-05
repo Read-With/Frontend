@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import RelationGraphMain from "./RelationGraphMain";
 import GraphControls from "./GraphControls";
+import EdgeLabelToggle from "../common/EdgeLabelToggle";
 import "./RelationGraph.css";
 import { useNavigate, useParams } from "react-router-dom";
 import { FaTimes, FaBars, FaChevronLeft } from 'react-icons/fa';
@@ -36,6 +37,7 @@ function RelationGraphWrapper() {
   const [newNodeIds, setNewNodeIds] = useState([]);
   const [chapterEvents, setChapterEvents] = useState([]);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true); // 사이드바 열림/닫힘 상태
+  const [edgeLabelVisible, setEdgeLabelVisible] = useState(true); // 간선 라벨 가시성 상태
 
   // === 1. 챕터별/이벤트별 모든 relations.json을 미리 누적 구조로 준비 ===
   const allEventsDataRef = useRef({}); // { [chapterNum]: [ {nodes, edges} ... ] }
@@ -356,6 +358,11 @@ function RelationGraphWrapper() {
                 }} />
                 {hideIsolated ? '독립 인물 표시' : '독립 인물 숨기기'}
               </button>
+              
+              <EdgeLabelToggle
+                isVisible={edgeLabelVisible}
+                onToggle={() => setEdgeLabelVisible(!edgeLabelVisible)}
+              />
             </div>
             
             {/* 중앙 영역: 여백 */}
@@ -421,6 +428,7 @@ function RelationGraphWrapper() {
                 maxEventNum={maxEventNum}
                 newNodeIds={newNodeIds}
                 maxChapter={maxChapter}
+                edgeLabelVisible={edgeLabelVisible}
               />
             ) : (
               <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, color: '#6C8EFF' }}>

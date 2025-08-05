@@ -63,7 +63,13 @@ export function convertRelationsToElements(relations, idToName, idToDesc, idToMa
       if (id1 !== id2) { // 루프 간선 제외
         let relationLabel = "";
         if (Array.isArray(rel.relation)) {
-          relationLabel = rel.relation.join(", ");
+          if (rel.relation.length === 1) {
+            // 1개인 경우: 최초의 관계 (첫 번째 요소)
+            relationLabel = rel.relation[0] || "";
+          } else if (rel.relation.length > 1) {
+            // 여러개인 경우: 가장 최근에 추가된 관계 (마지막 요소)
+            relationLabel = rel.relation[rel.relation.length - 1] || "";
+          }
         } else if (typeof rel.relation === "string") {
           relationLabel = rel.relation;
         }
