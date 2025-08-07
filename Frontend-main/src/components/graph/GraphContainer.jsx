@@ -185,6 +185,7 @@ const GraphContainer = ({
       chapterNum={currentChapter} // 관계 변화
       eventNum={currentEvent ? Math.max(1, currentEvent.eventNum) : 1}
       edgeLabelVisible={edgeLabelVisible}
+      maxChapter={10}
       {...props}
     />
   );

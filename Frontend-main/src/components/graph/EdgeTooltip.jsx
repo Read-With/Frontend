@@ -34,6 +34,12 @@ function getChapterLastEventNums(maxChapter = 10) {
   return lastNums;
 }
 
+// 전체 챕터에서 최대 이벤트 수 계산
+function getMaxEventCount(maxChapter = 10) {
+  const lastEventNums = getChapterLastEventNums(maxChapter);
+  return Math.max(...lastEventNums, 1); // 최소값 1 보장
+}
+
 // 관계 변화 데이터: 그래프 단독 페이지용
 function fetchRelationTimelineMulti(
   id1,
@@ -121,7 +127,7 @@ function fetchRelationTimelineMulti(
           });
         
         points.push(found ? found.positivity : 0);
-        labelInfo.push(`챕터${ch} 이벤트${i}`);
+        labelInfo.push(`E${i}`);
       }
     }
   }
@@ -170,8 +176,22 @@ function EdgeTooltip({
         eventNum,
         safeMaxChapter
       );
-      setTimeline(result.points);
-      setLabels(result.labelInfo);
+      
+      // 이벤트가 1개일 때 가운데에 위치하도록 패딩 추가
+      if (result.points.length === 1) {
+        const paddedLabels = Array(11).fill('').map((_, index) => 
+          index === 5 ? result.labelInfo[0] : ''
+        );
+        const paddedTimeline = Array(11).fill(null).map((_, index) => 
+          index === 5 ? result.points[0] : null
+        );
+        setTimeline(paddedTimeline);
+        setLabels(paddedLabels);
+      } else {
+        setTimeline(result.points);
+        setLabels(result.labelInfo);
+      }
+      
       setLoading(false);
     }
   }, [viewMode, id1, id2, chapterNum, eventNum, safeMaxChapter]);
@@ -518,7 +538,12 @@ function EdgeTooltip({
                   불러오는 중...
                 </div>
               ) : (
-                <div style={{ flex: 1, padding: '10px 0' }}>
+                <div style={{ 
+                  flex: 1, 
+                  padding: '10px 0',
+                  height: '800px',
+                  overflowY: 'auto'
+                }}>
                   <Line
                     data={{
                       labels,
@@ -535,21 +560,31 @@ function EdgeTooltip({
                       ],
                     }}
                     options={{
+                      responsive: true,
+                      maintainAspectRatio: false,
                       scales: {
                         y: {
                           min: -1,
                           max: 1,
                           title: { display: true, text: "긍정도" },
                         },
-                        x: { title: { display: true, text: "이벤트 순서" } },
+                        x: {
+                          title: { display: true, text: "이벤트 순서" },
+                          min: 0,
+                          max: getMaxEventCount(safeMaxChapter),
+                          ticks: {
+                              stepSize: 1
+                          }
+                        },
                       },
                       plugins: { legend: { display: false } },
                     }}
+                    style={{ height: '200px' }}
                   />
                 </div>
               )}
               <div style={{ fontSize: 13, color: "#64748b", marginTop: 10, marginBottom: 10, textAlign: "center" }}>
-                x축: 챕터별 마지막/이벤트, y축: 관계 긍정도(-1~1, 데이터 없으면 0)
+                x축: 챕터별 마지막/이벤트, y축: 관계 긍정도(-1~1)
               </div>
               <div style={{ marginTop: 'auto', paddingTop: 20, paddingBottom: 20, textAlign: "center" }}>
                 <button

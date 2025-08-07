@@ -16,6 +16,30 @@ const safeNum = (v) => {
   return Number(String(v));
 };
 
+// 챕터별 마지막 이벤트 번호 구하기 (glob import 기반)
+function getChapterLastEventNums(maxChapter = 10) {
+  const lastNums = [];
+  for (let chapter = 1; chapter <= maxChapter; chapter++) {
+    let last = 0;
+    for (let i = 1; i < 100; i++) {
+      const filePath = `../../data/gatsby/chapter${chapter}_relationships_event_${i}.json`;
+      if (relationshipModules[filePath]) {
+        last = i;
+      } else {
+        break;
+      }
+    }
+    lastNums.push(last);
+  }
+  return lastNums;
+}
+
+// 전체 챕터에서 최대 이벤트 수 계산
+function getMaxEventCount(maxChapter = 10) {
+  const lastEventNums = getChapterLastEventNums(maxChapter);
+  return Math.max(...lastEventNums, 1); // 최소값 1 보장
+}
+
 // 관계 변화 데이터: 뷰어 페이지 전용
 function fetchRelationTimelineMulti(
   id1,
@@ -103,7 +127,7 @@ function fetchRelationTimelineMulti(
       });
     
     points.push(found ? found.positivity : 0);
-    labelInfo.push(`이벤트 ${i}`);
+    labelInfo.push(`E${i}`);
   }
   
   return { points, labelInfo };
@@ -119,6 +143,7 @@ function ViewerEdgeTooltip({
   style,
   chapterNum = 1,
   eventNum = 1,
+  maxChapter = 10,
 }) {
   const [position, setPosition] = useState({ x: 200, y: 200 });
   const [showContent, setShowContent] = useState(false);
@@ -148,8 +173,22 @@ function ViewerEdgeTooltip({
         chapterNum,
         eventNum
       );
-      setTimeline(result.points);
-      setLabels(result.labelInfo);
+      
+      // 이벤트가 1개일 때 가운데에 위치하도록 패딩 추가
+      if (result.points.length === 1) {
+        const paddedLabels = Array(11).fill('').map((_, index) => 
+          index === 5 ? result.labelInfo[0] : ''
+        );
+        const paddedTimeline = Array(11).fill(null).map((_, index) => 
+          index === 5 ? result.points[0] : null
+        );
+        setTimeline(paddedTimeline);
+        setLabels(paddedLabels);
+      } else {
+        setTimeline(result.points);
+        setLabels(result.labelInfo);
+      }
+      
       setNoRelation(result.noRelation || false);
       setLoading(false);
     }
@@ -315,7 +354,7 @@ function ViewerEdgeTooltip({
               {noRelation ? (
                 <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                   <div style={{ textAlign: "center", color: "#64748b", fontSize: 16 }}>
-                    아직 관계 형성이 이뤄지지 않았습니다
+                    관계 형성이 이뤄지지 않았습니다
                   </div>
                 </div>
               ) : (
@@ -325,9 +364,9 @@ function ViewerEdgeTooltip({
                   alignItems: 'center', 
                   justifyContent: 'center',
                   flex: 1,
-                  padding: '20px 0'
+                  padding: '20px 6px'
                 }}>
-                  <div className="edge-tooltip-header" style={{ background: '#fff', borderBottom: 'none', padding: '20px 30px', width: '100%' }}>
+                  <div className="edge-tooltip-header" style={{ background: '#fff', borderBottom: 'none', padding: '20px 6px', width: '100%' }}>
                     <div className="relation-tags" style={{ display: 'flex', flexWrap: 'wrap', gap: '8px 10px', marginBottom: '10px' }}>
                       {(() => {
                         const uniqueRelations = [];
@@ -462,7 +501,7 @@ function ViewerEdgeTooltip({
                       display: 'flex', 
                       alignItems: 'center', 
                       justifyContent: 'center',
-                      padding: '20px 30px',
+                      padding: '20px 6px',
                       width: '100%'
                     }}>
                       <div className="relation-explanation">
@@ -484,7 +523,7 @@ function ViewerEdgeTooltip({
               )}
               <div
                 className="edge-tooltip-actions"
-                style={{ marginTop: 'auto', paddingTop: 20, paddingBottom: 20, textAlign: "center" }}
+                style={{ marginTop: 'auto', paddingTop: 20, paddingBottom: 6, textAlign: "center" }}
               >
                 <button
                   className="relation-change-chart-btn edge-tooltip-animated-btn"
@@ -529,20 +568,22 @@ function ViewerEdgeTooltip({
               ) : noRelation ? (
                 <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
                   <div style={{ textAlign: "center", color: "#64748b", fontSize: 16 }}>
-                    아직 관계 형성이 이뤄지지 않았습니다
+                    관계 형성이 이뤄지지 않았습니다
                   </div>
                 </div>
               ) : (
                 <div style={{ 
                   flex: 1, 
-                  padding: '10px 30px',
+                  padding: '10px 6px',
                   display: 'flex',
-                  alignItems: timeline.length === 1 ? 'center' : 'flex-start',
-                  justifyContent: timeline.length === 1 ? 'center' : 'flex-start'
+                  alignItems: 'flex-start',
+                  justifyContent: 'flex-start',
+                  height: '800px',
+                  overflowY: 'auto'
                 }}>
                   <div style={{ 
-                    width: timeline.length === 1 ? '200px' : '100%',
-                    height: timeline.length === 1 ? '150px' : 'auto'
+                    width: '100%',
+                    height: '100%'
                   }}>
                     <Line
                       data={{
@@ -560,24 +601,34 @@ function ViewerEdgeTooltip({
                         ],
                       }}
                       options={{
+                        responsive: true,
+                        maintainAspectRatio: false,
                         scales: {
                           y: {
                             min: -1,
                             max: 1,
                             title: { display: true, text: "긍정도" },
                           },
-                          x: { title: { display: true, text: "이벤트 순서" } },
+                          x: {
+                                                          title: { display: true, text: "이벤트 순서" },
+                              min: 0,
+                              max: getMaxEventCount(maxChapter),
+                              ticks: {
+                                  stepSize: 1
+                              }
+                          },
                         },
                         plugins: { legend: { display: false } },
                       }}
+                      style={{ height: '200px' }}
                     />
                   </div>
                 </div>
               )}
-              <div style={{ fontSize: 13, color: "#64748b", marginTop: 10, marginBottom: 10, textAlign: "center", padding: '0 30px' }}>
+              {/* <div style={{ fontSize: 13, color: "#64748b", marginTop: 10, marginBottom: 10, textAlign: "center", padding: '0 30px' }}>
                 x축: 챕터별 마지막/이벤트, y축: 관계 긍정도(-1~1, 데이터 없으면 0)
-              </div>
-              <div style={{ marginTop: 'auto', paddingTop: 20, paddingBottom: 20, paddingLeft: 30, paddingRight: 30, textAlign: "center" }}>
+              </div> */}
+              <div style={{ marginTop: 'auto', paddingTop: 20, paddingBottom: 6, paddingLeft: 6, paddingRight: 6, textAlign: "center" }}>
                 <button
                   style={{
                     background: '#fff',

@@ -34,6 +34,12 @@ function getChapterLastEventNums(maxChapter = 10) {
   return lastNums;
 }
 
+// 전체 챕터에서 최대 이벤트 수 계산
+function getMaxEventCount(maxChapter = 10) {
+  const lastEventNums = getChapterLastEventNums(maxChapter);
+  return Math.max(...lastEventNums, 1); // 최소값 1 보장
+}
+
 // 관계 변화 데이터: 그래프 단독 페이지용
 function fetchRelationTimelineMulti(
   id1,
@@ -129,7 +135,7 @@ function fetchRelationTimelineMulti(
       
       if (!json) {
         points.push(0);
-        labelInfo.push(`챕터${chapterNum} 이벤트${i}`);
+        labelInfo.push(`E${i}`);
         continue;
       }
       
@@ -154,7 +160,7 @@ function fetchRelationTimelineMulti(
         });
       
       points.push(found ? found.positivity : 0);
-      labelInfo.push(`챕터${chapterNum} 이벤트${i}`);
+      labelInfo.push(`E${i}`);
     }
   }
   
@@ -167,6 +173,7 @@ function GraphSidebar({
   chapterNum = 1,
   eventNum = 1,
   maxChapter = 10,
+  hasNoRelations = false,
 }) {
   const [viewMode, setViewMode] = useState("info");
   const [timeline, setTimeline] = useState([]);
@@ -187,8 +194,22 @@ function GraphSidebar({
         eventNum,
         maxChapter
       );
-      setTimeline(result.points);
-      setLabels(result.labelInfo);
+      
+      // 이벤트가 1개일 때 가운데에 위치하도록 패딩 추가
+      if (result.points.length === 1) {
+        const paddedLabels = Array(11).fill('').map((_, index) => 
+          index === 5 ? result.labelInfo[0] : ''
+        );
+        const paddedTimeline = Array(11).fill(null).map((_, index) => 
+          index === 5 ? result.points[0] : null
+        );
+        setTimeline(paddedTimeline);
+        setLabels(paddedLabels);
+      } else {
+        setTimeline(result.points);
+        setLabels(result.labelInfo);
+      }
+      
       setLoading(false);
     }
   }, [viewMode, id1, id2, chapterNum, eventNum, maxChapter, activeTooltip]);
@@ -204,8 +225,105 @@ function GraphSidebar({
     return { color, text: "부정적" };
   };
 
-  if (!activeTooltip) return null;
+  // 관계가 없을 때 안내 메시지 표시 (activeTooltip이 없어도 표시)
+  if (hasNoRelations) {
+    return (
+      <div
+        style={{
+          position: "fixed",
+          top: 0,
+          right: 0,
+          width: "440px",
+          height: "100vh",
+          background: "#fff",
+          borderLeft: "1px solid #e5e7eb",
+          boxShadow: "-8px 0 32px rgba(0,0,0,0.15)",
+          zIndex: 1000,
+          overflow: "hidden",
+          display: "flex",
+          flexDirection: "column",
+          animation: "slideIn 0.4s cubic-bezier(0.4, 0, 0.2, 1)",
+        }}
+      >
+        {/* 헤더 */}
+        <div
+          style={{
+            height: "70px",
+            borderBottom: "1px solid #e5e7eb",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            padding: "0 24px",
+            background: "#f8fafc",
+          }}
+        >
+          <h3 style={{ 
+            margin: 0, 
+            fontSize: "20px", 
+            fontWeight: 700, 
+            color: "#374151",
+            letterSpacing: "0.5px"
+          }}>
+            관계 정보
+          </h3>
+          <button
+            onClick={onClose}
+            style={{
+              background: "none",
+              border: "none",
+              fontSize: "24px",
+              cursor: "pointer",
+              color: "#6b7280",
+              padding: "4px",
+              borderRadius: "4px",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+            onMouseOver={(e) => e.currentTarget.style.color = "#374151"}
+            onMouseOut={(e) => e.currentTarget.style.color = "#6b7280"}
+          >
+            ×
+          </button>
+        </div>
 
+        {/* 안내 메시지 */}
+        <div style={{
+          flex: 1,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '40px 24px',
+          flexDirection: 'column',
+          gap: '16px'
+        }}>
+          <div style={{
+            fontSize: '20px',
+            color: '#6C8EFF',
+            fontWeight: '600',
+            textAlign: 'center'
+          }}>
+            관계가 없습니다
+          </div>
+          <div style={{
+            fontSize: '14px',
+            color: '#64748b',
+            textAlign: 'center',
+            maxWidth: '300px',
+            lineHeight: '1.5'
+          }}>
+            현재 챕터에서 선택한 이벤트에는<br />
+            등장 인물 간의 관계 정보가 없습니다.
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // activeTooltip이 없어도 hasNoRelations가 true면 사이드바를 표시
+  if (!activeTooltip && !hasNoRelations) return null;
+
+  // activeTooltip이 없고 hasNoRelations가 true인 경우는 이미 위에서 처리됨
   const data = activeTooltip.data;
   const relationStyle = getRelationStyle(data.positivity);
 
@@ -289,11 +407,13 @@ function GraphSidebar({
             timeline={timeline}
             labels={labels}
             loading={loading}
+            maxChapter={maxChapter}
+            hasNoRelations={hasNoRelations}
           />
         )}
       </div>
 
-      <style jsx>{`
+      <style jsx="true">{`
         @keyframes slideIn {
           from {
             transform: translateX(100%);
@@ -362,7 +482,7 @@ function NodeInfo({ data }) {
 }
 
 // 엣지 정보 컴포넌트
-function EdgeInfo({ data, relationStyle, viewMode, setViewMode, timeline, labels, loading }) {
+function EdgeInfo({ data, relationStyle, viewMode, setViewMode, timeline, labels, loading, maxChapter = 10, hasNoRelations = false }) {
   return (
     <div>
       {viewMode === "info" ? (
@@ -595,15 +715,50 @@ function EdgeInfo({ data, relationStyle, viewMode, setViewMode, timeline, labels
             }}>
               불러오는 중...
             </div>
-          ) : (
+          ) : (timeline.length === 0 || hasNoRelations) ? (
             <div style={{ 
-              height: "330px", 
+              height: "400px", 
               marginBottom: "24px",
               background: "#fff",
               borderRadius: "12px",
               padding: "12px",
               boxShadow: "0 4px 8px rgba(0,0,0,0.1)",
-              border: "1px solid #e5e7eb"
+              border: "1px solid #e5e7eb",
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              flexDirection: 'column',
+              gap: '16px'
+            }}>
+              <div style={{
+                fontSize: '20px',
+                color: '#6C8EFF',
+                fontWeight: '600',
+                textAlign: 'center'
+              }}>
+                관계가 없습니다
+              </div>
+              <div style={{
+                fontSize: '14px',
+                color: '#64748b',
+                textAlign: 'center',
+                maxWidth: '300px',
+                lineHeight: '1.5'
+              }}>
+                현재 챕터에서 선택한 이벤트에는<br />
+                등장 인물 간의 관계 정보가 없습니다.
+              </div>
+            </div>
+          ) : (
+            <div style={{ 
+              height: "400px", 
+              marginBottom: "24px",
+              background: "#fff",
+              borderRadius: "12px",
+              padding: "12px",
+              boxShadow: "0 4px 8px rgba(0,0,0,0.1)",
+              border: "1px solid #e5e7eb",
+              overflowY: 'auto'
             }}>
               <Line
                 data={{
@@ -622,7 +777,7 @@ function EdgeInfo({ data, relationStyle, viewMode, setViewMode, timeline, labels
                         // Chart.js에서 라벨을 가져오는 방법 수정
                         const label = context.chart.data.labels[context.dataIndex] || '';
                         // 현재 챕터의 이벤트는 파란색, 이전 챕터는 회색
-                        if (label.includes('이벤트')) {
+                        if (label.startsWith('E')) {
                           return "#2563eb"; // 파란색 (현재 챕터)
                         } else {
                           return "#9ca3af"; // 회색 (이전 챕터)
@@ -652,11 +807,16 @@ function EdgeInfo({ data, relationStyle, viewMode, setViewMode, timeline, labels
                         drawBorder: false,
                       }
                     },
-                    x: { 
-                      title: { 
-                        display: true, 
+                    x: {
+                      title: {
+                        display: true,
                         text: "이벤트 순서",
                         font: { weight: 'bold' }
+                      },
+                      min: 0,
+                      max: getMaxEventCount(maxChapter),
+                      ticks: {
+                        stepSize: 1
                       },
                       grid: {
                         color: 'rgba(0,0,0,0.1)',
@@ -676,6 +836,7 @@ function EdgeInfo({ data, relationStyle, viewMode, setViewMode, timeline, labels
                     }
                   },
                 }}
+                style={{ height: '150px' }}
               />
             </div>
           )}

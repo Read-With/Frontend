@@ -56,6 +56,7 @@ const RelationGraph = ({
   chapterNum, // 관계 변화
   eventNum, // 관계 변화
   edgeLabelVisible = true,
+  maxChapter = 10,
 }) => {
   const cyRef = useRef(null);
   const [activeTooltip, setActiveTooltip] = useState(null);
@@ -67,6 +68,7 @@ const RelationGraph = ({
   );
   const [ripples, setRipples] = useState([]);
   const prevNodeIdsRef = useRef([]);
+  const prevEdgeIdsRef = useRef([]);
 
   // elements가 변경될 때마다 isLayoutDone 초기화
   useEffect(() => {
@@ -103,17 +105,20 @@ const RelationGraph = ({
       };
       setActiveTooltip(null);
       cy.batch(() => {
+        // 모든 노드에서 highlighted 클래스 제거 (이전 선택 해제)
+        cy.nodes().removeClass("highlighted");
+        cy.edges().removeClass("highlighted");
+        
         // 모든 노드와 엣지에 faded 클래스 추가
         cy.nodes().addClass("faded");
         cy.edges().addClass("faded");
         
-        // 클릭된 노드 강조 (파란색 테두리)
+        // 클릭된 노드만 강조 (파란색 테두리)
         node.removeClass("faded").addClass("highlighted");
         
-        // 연결된 노드들과 간선들 faded 제거
+        // 연결된 간선들과 노드들 faded 제거
         const connectedEdges = node.connectedEdges();
         const connectedNodes = node.neighborhood().nodes();
-        
         connectedEdges.removeClass("faded");
         connectedNodes.removeClass("faded");
       });
@@ -144,6 +149,7 @@ const RelationGraph = ({
           }
         );
       }, 0);
+      selectedNodeIdRef.current = node.id();
     },
     [updateTooltip]
   );
@@ -177,11 +183,17 @@ const RelationGraph = ({
         }
       );
       cy.batch(() => {
+        // 모든 노드에서 highlighted 클래스 제거 (이전 선택 해제)
+        cy.nodes().removeClass("highlighted");
+        cy.edges().removeClass("highlighted");
+        
         cy.nodes().addClass("faded");
         cy.edges().addClass("faded");
         edge.removeClass("faded");
+        // 연결된 노드들만 강조
         edge.source().removeClass("faded").addClass("highlighted");
         edge.target().removeClass("faded").addClass("highlighted");
+        // 나머지 노드/간선은 faded 유지
       });
       selectedEdgeIdRef.current = edge.id();
     },
@@ -343,37 +355,142 @@ const RelationGraph = ({
     }
   }, [elements]);
 
-  // elements가 변경될 때 새로 등장한 노드에 ripple 자동 적용
+  // elements가 변경될 때 새로 등장한 노드와 간선에 선택 효과 적용
   useEffect(() => {
     if (!elements || elements.length === 0 || !cyRef.current) {
       prevNodeIdsRef.current = [];
       return;
     }
+    
+    // 새로 추가된 노드들 찾기
     const currentNodeIds = elements
       .filter((e) => e.data && !e.data.source)
       .map((e) => e.data.id);
     const prevNodeIds = prevNodeIdsRef.current;
     const newNodeIds = currentNodeIds.filter((id) => !prevNodeIds.includes(id));
     prevNodeIdsRef.current = currentNodeIds;
-    // 새로 등장한 노드에 ripple
-    newNodeIds.forEach((id) => {
-      const node = cyRef.current.getElementById(id);
-      if (node && node.length > 0) {
-        const pos = node.renderedPosition();
-        const container = document.querySelector(".graph-canvas-area");
-        if (container && pos) {
-          const rect = container.getBoundingClientRect();
-          const x = pos.x + rect.left;
-          const y = pos.y + rect.top;
-          const rippleId = Date.now() + Math.random();
-          setRipples((prev) => [...prev, { id: rippleId, x: x - rect.left, y: y - rect.top }]);
-          setTimeout(() => {
-            setRipples((prev) => prev.filter((r) => r.id !== rippleId));
-          }, 700);
+    
+    // 새로 추가된 간선들 찾기
+    const currentEdgeIds = elements
+      .filter((e) => e.data && e.data.source)
+      .map((e) => e.data.id);
+    const prevEdgeIds = prevEdgeIdsRef.current || [];
+    const newEdgeIds = currentEdgeIds.filter((id) => !prevEdgeIds.includes(id));
+    prevEdgeIdsRef.current = currentEdgeIds;
+    
+    // 현재 선택된 노드나 간선이 있는지 확인
+    const hasSelection = selectedNodeIdRef.current || selectedEdgeIdRef.current || activeTooltip;
+    
+    if (hasSelection) {
+      // 선택된 노드가 있는 경우
+      if (selectedNodeIdRef.current) {
+        const selectedNode = cyRef.current.getElementById(selectedNodeIdRef.current);
+        if (selectedNode && selectedNode.length > 0) {
+          cyRef.current.batch(() => {
+            // 새로 추가된 노드들에 대해 연결 여부 확인
+            newNodeIds.forEach((id) => {
+              const newNode = cyRef.current.getElementById(id);
+              if (newNode && newNode.length > 0) {
+                const connectedEdges = selectedNode.connectedEdges().intersection(newNode.connectedEdges());
+                if (connectedEdges.length > 0) {
+                  // 연결된 노드: faded 제거, highlighted 유지
+                  newNode.removeClass("faded");
+                  const connectedNodes = selectedNode.neighborhood().nodes();
+                  if (connectedNodes.has(newNode)) {
+                    newNode.addClass("highlighted");
+                  }
+                } else {
+                  // 비연결 노드: faded 적용
+                  newNode.addClass("faded");
+                }
+              }
+            });
+            
+            // 새로 추가된 간선들에 대해 연결 여부 확인
+            newEdgeIds.forEach((id) => {
+              const newEdge = cyRef.current.getElementById(id);
+              if (newEdge && newEdge.length > 0) {
+                const sourceNode = newEdge.source();
+                const targetNode = newEdge.target();
+                
+                if (sourceNode.same(selectedNode) || targetNode.same(selectedNode)) {
+                  // 선택된 노드와 연결된 간선: faded 제거
+                  newEdge.removeClass("faded");
+                } else {
+                  // 비연결 간선: faded 적용
+                  newEdge.addClass("faded");
+                }
+              }
+            });
+          });
         }
       }
-    });
-  }, [elements]);
+      
+      // 선택된 간선이 있는 경우
+      if (selectedEdgeIdRef.current) {
+        const selectedEdge = cyRef.current.getElementById(selectedEdgeIdRef.current);
+        if (selectedEdge && selectedEdge.length > 0) {
+          cyRef.current.batch(() => {
+            // 새로 추가된 노드들에 대해 연결 여부 확인
+            newNodeIds.forEach((id) => {
+              const newNode = cyRef.current.getElementById(id);
+              if (newNode && newNode.length > 0) {
+                const sourceNode = selectedEdge.source();
+                const targetNode = selectedEdge.target();
+                
+                if (newNode.same(sourceNode) || newNode.same(targetNode)) {
+                  // 선택된 간선의 소스/타겟 노드: faded 제거, highlighted 유지
+                  newNode.removeClass("faded").addClass("highlighted");
+                } else {
+                  // 비연결 노드: faded 적용
+                  newNode.addClass("faded");
+                }
+              }
+            });
+            
+            // 새로 추가된 간선들에 대해 연결 여부 확인
+            newEdgeIds.forEach((id) => {
+              const newEdge = cyRef.current.getElementById(id);
+              if (newEdge && newEdge.length > 0) {
+                const selectedSource = selectedEdge.source();
+                const selectedTarget = selectedEdge.target();
+                const newSource = newEdge.source();
+                const newTarget = newEdge.target();
+                
+                if (newSource.same(selectedSource) || newSource.same(selectedTarget) ||
+                    newTarget.same(selectedSource) || newTarget.same(selectedTarget)) {
+                  // 선택된 간선과 연결된 간선: faded 제거
+                  newEdge.removeClass("faded");
+                } else {
+                  // 비연결 간선: faded 적용
+                  newEdge.addClass("faded");
+                }
+              }
+            });
+          });
+        }
+      }
+    } else {
+      // 선택이 없는 경우: 새로 등장한 노드에 ripple 효과만 적용
+      newNodeIds.forEach((id) => {
+        const node = cyRef.current.getElementById(id);
+        if (node && node.length > 0) {
+          const pos = node.renderedPosition();
+          const container = document.querySelector(".graph-canvas-area");
+          if (container && pos) {
+            const rect = container.getBoundingClientRect();
+            const x = pos.x + rect.left;
+            const y = pos.y + rect.top;
+            const rippleId = Date.now() + Math.random();
+            setRipples((prev) => [...prev, { id: rippleId, x: x - rect.left, y: y - rect.top }]);
+            setTimeout(() => {
+              setRipples((prev) => prev.filter((r) => r.id !== rippleId));
+            }, 700);
+          }
+        }
+      });
+    }
+  }, [elements, activeTooltip]);
 
 
 
@@ -430,6 +547,7 @@ const RelationGraph = ({
             style={{ pointerEvents: "auto" }}
             chapterNum={chapterNum}
             eventNum={eventNum}
+            maxChapter={maxChapter}
           />
         )}
       </div>
