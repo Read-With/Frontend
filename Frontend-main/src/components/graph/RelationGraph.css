@@ -1731,3 +1731,20 @@ html, body {
 .edge-tooltip-back {
   transform: rotateY(180deg);
 }
+
+/* 노드 튕김 효과 */
+.bounce-effect {
+  animation: bounce 0.3s ease-out;
+}
+
+@keyframes bounce {
+  0% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.1);
+  }
+  100% {
+    transform: scale(1);
+  }
+}

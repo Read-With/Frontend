@@ -64,10 +64,12 @@ const getWideLayout = () => {
       return {
         ...DEFAULT_LAYOUT,
         randomSeed: 22,
-        nodeRepulsion: 1500,
+        nodeRepulsion: 2000,
         idealEdgeLength: 400,
         componentSpacing: 500,
-        nodeOverlap: 400,
+        nodeOverlap: 0,
+        avoidOverlap: true,
+        nodeSeparation: 60,
       };
     }
   }
@@ -120,9 +122,19 @@ function RelationGraphMain({ elements, inViewer = false, fullScreen = false, onF
     };
     setActiveTooltip(null);
     cy.batch(() => {
+      // 모든 노드와 엣지에 faded 클래스 추가
       cy.nodes().addClass("faded");
       cy.edges().addClass("faded");
+      
+      // 클릭된 노드 강조 (파란색 테두리)
       node.removeClass("faded").addClass("highlighted");
+      
+      // 연결된 노드들과 간선들 faded 제거
+      const connectedEdges = node.connectedEdges();
+      const connectedNodes = node.neighborhood().nodes();
+      
+      connectedEdges.removeClass("faded");
+      connectedNodes.removeClass("faded");
     });
     // 마우스 포인터 위치를 툴팁에 넘김
     const mouseX = evt.originalEvent?.clientX ?? nodeCenter.x;
@@ -310,6 +322,15 @@ function RelationGraphMain({ elements, inViewer = false, fullScreen = false, onF
         style: {
           opacity: 0.25,
           "text-opacity": 0.12,
+        },
+      },
+      {
+        selector: ".highlighted",
+        style: {
+          "border-color": "#3b82f6",
+          "border-width": 2,
+          "border-opacity": 1,
+          "border-style": "solid",
         },
       },
     ],

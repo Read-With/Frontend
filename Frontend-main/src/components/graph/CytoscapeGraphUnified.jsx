@@ -46,8 +46,67 @@ const CytoscapeGraphUnified = ({
     if (tapNodeHandler) cy.on("tap", "node", tapNodeHandler);
     if (tapEdgeHandler) cy.on("tap", "edge", tapEdgeHandler);
     if (tapBackgroundHandler) cy.on("tap", tapBackgroundHandler);
+    
+    // 사용자가 노드 드래그 후 놓았을 때만 겹침 감지 및 조정
+    cy.on('dragfreeon', 'node', () => {
+      // 드래그 완료 후 즉시 겹침 확인
+      setTimeout(() => {
+        detectAndResolveOverlap(cy);
+      }, 10);
+    });
+    
     return () => {};
   }, [containerRef.current, stylesheet, tapNodeHandler, tapEdgeHandler, tapBackgroundHandler, externalCyRef]);
+
+  // 노드 겹침 감지 및 자동 조정 함수
+  const detectAndResolveOverlap = (cy) => {
+    const nodes = cy.nodes();
+    const NODE_SIZE = nodeSize;
+    const MIN_DISTANCE = NODE_SIZE * 1.0;
+    let hasOverlap = false;
+    
+    // 모든 노드 쌍을 검사하여 겹침 감지
+    for (let i = 0; i < nodes.length; i++) {
+      for (let j = i + 1; j < nodes.length; j++) {
+        const node1 = nodes[i];
+        const node2 = nodes[j];
+        const pos1 = node1.position();
+        const pos2 = node2.position();
+        
+        const dx = pos1.x - pos2.x;
+        const dy = pos1.y - pos2.y;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+        
+        if (distance < MIN_DISTANCE) {
+          hasOverlap = true;
+          // 겹침 해결: 두 노드를 서로 멀리 밀어냄
+          const angle = Math.atan2(dy, dx);
+          const pushDistance = MIN_DISTANCE - distance + 20; // 여유 거리 증가
+          
+          const newX1 = pos1.x + Math.cos(angle) * pushDistance * 0.5;
+          const newY1 = pos1.y + Math.sin(angle) * pushDistance * 0.5;
+          const newX2 = pos2.x - Math.cos(angle) * pushDistance * 0.5;
+          const newY2 = pos2.y - Math.sin(angle) * pushDistance * 0.5;
+          
+          // 위치 변경을 즉시 적용 (애니메이션 없이)
+          node1.position({ x: newX1, y: newY1 });
+          node2.position({ x: newX2, y: newY2 });
+          
+          // 시각적 피드백을 위한 임시 스타일 적용
+          node1.addClass('bounce-effect');
+          node2.addClass('bounce-effect');
+          
+          // 300ms 후 스타일 제거
+          setTimeout(() => {
+            node1.removeClass('bounce-effect');
+            node2.removeClass('bounce-effect');
+          }, 300);
+        }
+      }
+    }
+    
+    return hasOverlap;
+  };
 
   // elements diff patch 및 스타일/레이아웃 적용
   useEffect(() => {
@@ -100,20 +159,28 @@ const CytoscapeGraphUnified = ({
         placedPositions.push({ x, y });
       });
       
-      cy.add(nodes);
-      cy.add(edges);
-      // 반드시 preset 레이아웃 실행
-      cy.layout({ name: 'preset' }).run();
-      // 스타일 적용
-      if (stylesheet) cy.style(stylesheet);
-      // 레이아웃 적용
-      if (layout && layout.name !== 'preset') {
-        const layoutInstance = cy.layout(layout);
-        layoutInstance.on('layoutstop', () => {
-          if (onLayoutComplete) onLayoutComplete();
-        });
-        layoutInstance.run();
-      }
+             cy.add(nodes);
+       cy.add(edges);
+       // 반드시 preset 레이아웃 실행
+       cy.layout({ name: 'preset' }).run();
+       // 스타일 적용
+       if (stylesheet) cy.style(stylesheet);
+       // 레이아웃 적용
+       if (layout && layout.name !== 'preset') {
+         const layoutInstance = cy.layout(layout);
+         layoutInstance.on('layoutstop', () => {
+           // 노드 추가 후 즉시 겹침 확인
+           detectAndResolveOverlap(cy);
+           if (onLayoutComplete) onLayoutComplete();
+         });
+         layoutInstance.run();
+       } else {
+         // preset 레이아웃의 경우에도 즉시 겹침 확인
+         setTimeout(() => {
+           detectAndResolveOverlap(cy);
+           if (onLayoutComplete) onLayoutComplete();
+         }, 100);
+       }
       // fit
       if (fitNodeIds && fitNodeIds.length > 0) {
         const nodes = cy.nodes().filter(n => fitNodeIds.includes(n.id()));
@@ -133,6 +200,8 @@ const CytoscapeGraphUnified = ({
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
   }, [externalCyRef]);
+
+
 
   return (
     <div

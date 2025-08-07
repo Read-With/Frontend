@@ -308,6 +308,8 @@ function RelationGraphWrapper() {
                   alignItems: 'center',
                   gap: 6,
                   boxShadow: hideIsolated ? 'none' : '0 2px 8px rgba(108,142,255,0.15)',
+                  minWidth: '140px',
+                  justifyContent: 'center',
                 }}
                 title={hideIsolated ? '독립 인물을 표시합니다' : '독립 인물을 숨깁니다'}
               >

@@ -103,9 +103,19 @@ const RelationGraph = ({
       };
       setActiveTooltip(null);
       cy.batch(() => {
+        // 모든 노드와 엣지에 faded 클래스 추가
         cy.nodes().addClass("faded");
         cy.edges().addClass("faded");
+        
+        // 클릭된 노드 강조 (파란색 테두리)
         node.removeClass("faded").addClass("highlighted");
+        
+        // 연결된 노드들과 간선들 faded 제거
+        const connectedEdges = node.connectedEdges();
+        const connectedNodes = node.neighborhood().nodes();
+        
+        connectedEdges.removeClass("faded");
+        connectedNodes.removeClass("faded");
       });
       const mouseX = evt.originalEvent?.clientX ?? nodeCenter.x;
       const mouseY = evt.originalEvent?.clientY ?? nodeCenter.y;
@@ -295,6 +305,15 @@ const RelationGraph = ({
         style: {
           opacity: 0.25,
           "text-opacity": 0.12,
+        },
+      },
+      {
+        selector: ".highlighted",
+        style: {
+          "border-color": "#3b82f6",
+          "border-width": 2,
+          "border-opacity": 1,
+          "border-style": "solid",
         },
       },
     ],

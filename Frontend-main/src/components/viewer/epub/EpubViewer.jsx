@@ -318,19 +318,72 @@ const EpubViewer = forwardRef(
       }
     };
 
-    useImperativeHandle(ref, () => ({
-      prevPage: () => safeNavigate(() => renditionRef.current.prev(), 'prev'),
-      nextPage: () => safeNavigate(() => renditionRef.current.next(), 'next'),
-      getCurrentCfi: async () => {
-        if (!renditionRef.current?.currentLocation) return null;
-        const location = await renditionRef.current.currentLocation();
-        return location?.start?.cfi || null;
+         useImperativeHandle(ref, () => ({
+       prevPage: () => safeNavigate(() => renditionRef.current.prev(), 'prev'),
+       nextPage: () => safeNavigate(() => renditionRef.current.next(), 'next'),
+       getCurrentCfi: async () => {
+         if (!renditionRef.current?.currentLocation) return null;
+         const location = await renditionRef.current.currentLocation();
+         return location?.start?.cfi || null;
+       },
+       book: bookRef.current, // book 객체 노출
+      display: async (spineIndex) => {
+        if (renditionRef.current && typeof spineIndex === 'number') {
+          try {
+            await renditionRef.current.display(spineIndex);
+            return true;
+          } catch (error) {
+            return false;
+          }
+        } else {
+          return false;
+        }
       },
-      displayAt: (cfi) => {
+      
+      currentLocation: async () => {
+        if (renditionRef.current) {
+          try {
+            const location = await renditionRef.current.currentLocation();
+            return location;
+          } catch (error) {
+            return null;
+          }
+        } else {
+          return null;
+        }
+      },
+      
+      displayAt: async (cfi) => {
         if (renditionRef.current && cfi) {
-          setTimeout(() => {
-            renditionRef.current.display(cfi);
-          }, 0);
+          try {
+            // 1. 먼저 CFI를 직접 사용해서 시도
+            await renditionRef.current.display(cfi);
+            
+            // 이동 후 현재 위치 확인
+            const currentLocation = await renditionRef.current.currentLocation();
+            const currentCfi = currentLocation?.start?.cfi;
+            
+            // CFI에서 챕터 번호 추출하여 이동이 실제로 되었는지 확인
+            const targetChapterMatch = cfi.match(/\[chapter-(\d+)\]/);
+            const currentChapterMatch = currentCfi?.match(/\[chapter-(\d+)\]/);
+            
+            if (targetChapterMatch && currentChapterMatch) {
+              const targetChapter = parseInt(targetChapterMatch[1]);
+              const currentChapter = parseInt(currentChapterMatch[1]);
+              
+              if (targetChapter === currentChapter) {
+                return true;
+              } else {
+                throw new Error(`이동 실패: 목표 챕터 ${targetChapter}, 현재 챕터 ${currentChapter}`);
+              }
+            } else {
+              return true;
+            }
+          } catch (error) {
+            return false;
+          }
+        } else {
+          return false;
         }
       },
       showLastPage: async () => {
@@ -389,10 +442,73 @@ const EpubViewer = forwardRef(
           
           // 챕터별 텍스트 저장
           const chapterTexts = new Map();
+          
+          // 챕터별 CFI 매핑 저장
+          const chapterCfiMap = new Map();
 
-          // 각 챕터의 텍스트 로드
-          for (const item of toc) {
-            if (!item.cfi) continue;
+                     // 각 챕터의 텍스트 로드
+           for (const item of toc) {
+             if (!item.cfi) continue;
+             
+             // 챕터 번호 추출 (더 정확한 방법)
+             let chapterNum = null;
+             
+             // 1. CFI에서 직접 챕터 번호 추출 (가장 정확)
+             const cfiMatch = item.cfi.match(/\[chapter-(\d+)\]/);
+             if (cfiMatch) {
+               chapterNum = parseInt(cfiMatch[1]);
+             }
+             
+             // 2. "Chapter 1", "CHAPTER 1" 형식
+             if (!chapterNum) {
+               const chapterMatch = item.label?.match(/Chapter\s+(\d+)/i);
+               if (chapterMatch) {
+                 chapterNum = parseInt(chapterMatch[1]);
+               }
+             }
+             
+             // 3. "1장", "1 장" 형식
+             if (!chapterNum) {
+               const koreanMatch = item.label?.match(/(\d+)\s*장/i);
+               if (koreanMatch) {
+                 chapterNum = parseInt(koreanMatch[1]);
+               }
+             }
+             
+             // 4. "1", "2" 등 숫자만 있는 경우
+             if (!chapterNum) {
+               const numberMatch = item.label?.match(/^(\d+)$/);
+               if (numberMatch) {
+                 chapterNum = parseInt(numberMatch[1]);
+               }
+             }
+             
+             // 5. "Chapter I", "Chapter II" 등 로마 숫자
+             if (!chapterNum) {
+               const romanMatch = item.label?.match(/Chapter\s+([IVX]+)/i);
+               if (romanMatch) {
+                 const romanNum = romanMatch[1];
+                 // 간단한 로마 숫자 변환 (I=1, II=2, III=3, IV=4, V=5, VI=6, VII=7, VIII=8, IX=9)
+                 const romanToNum = { 'I': 1, 'II': 2, 'III': 3, 'IV': 4, 'V': 5, 'VI': 6, 'VII': 7, 'VIII': 8, 'IX': 9 };
+                 chapterNum = romanToNum[romanNum];
+               }
+             }
+             
+             // 6. spine 인덱스를 챕터 번호로 사용 (최후의 수단)
+             if (!chapterNum) {
+               // spine에서 해당 항목의 인덱스 찾기
+               for (let i = 0; i < bookInstance.spine.length; i++) {
+                 const spineItem = bookInstance.spine.get(i);
+                 if (spineItem && spineItem.href && item.cfi.includes(spineItem.href)) {
+                   chapterNum = i + 1; // 1부터 시작하는 챕터 번호
+                   break;
+                 }
+               }
+             }
+             
+             if (chapterNum) {
+               chapterCfiMap.set(chapterNum, item.cfi);
+             }
             
             try {
               const chapterCfi = item.cfi.replace(/!.*$/, '');
@@ -405,6 +521,9 @@ const EpubViewer = forwardRef(
               // 챕터 로드 실패
             }
           }
+          
+          // 챕터 CFI 매핑을 전역으로 저장
+          window.chapterCfiMap = chapterCfiMap;
 
           const rendition = bookInstance.renderTo(viewerRef.current, {
             width: '100%',
@@ -435,6 +554,27 @@ const EpubViewer = forwardRef(
             onCurrentPageChange?.(pageNum);
             onProgressChange?.(Math.round((locIdx / totalPages) * 100));
             localStorage.setItem(LOCAL_STORAGE_KEY, cfi);
+            
+                         // 현재 챕터 감지 및 업데이트
+             let currentChapter = 1;
+             
+             // 1. CFI에서 직접 챕터 번호 추출 (가장 확실한 방법)
+             const cfiMatch = cfi?.match(/\[chapter-(\d+)\]/);
+             if (cfiMatch) {
+               currentChapter = parseInt(cfiMatch[1]);
+             } else if (window.chapterCfiMap) {
+               // 2. chapterCfiMap을 사용한 감지
+               
+               for (const [chapterNum, chapterCfi] of window.chapterCfiMap) {
+                 if (cfi && cfi.includes(chapterCfi)) {
+                   currentChapter = chapterNum;
+                   break;
+                 }
+               }
+             }
+             
+             // 전역에 현재 챕터 정보 저장
+             window.currentChapter = currentChapter;
 
             // 전체 대비 현재 위치(%) 콘솔 출력
             if (bookInstance.locations && typeof bookInstance.locations.percentageFromCfi === 'function') {
