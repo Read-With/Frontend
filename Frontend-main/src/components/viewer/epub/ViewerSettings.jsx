@@ -7,7 +7,6 @@ const loadSettings = () => {
     const settings = localStorage.getItem('epub_viewer_settings');
     return settings ? JSON.parse(settings) : null;
   } catch (e) {
-    console.error('설정 불러오기 오류:', e);
     return null;
   }
 };
@@ -16,7 +15,7 @@ const saveSettings = (settings) => {
   try {
     localStorage.setItem('epub_viewer_settings', JSON.stringify(settings));
   } catch (e) {
-    console.error('설정 저장 오류:', e);
+    // 설정 저장 오류 처리
   }
 };
 

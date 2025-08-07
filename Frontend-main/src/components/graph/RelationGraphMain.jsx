@@ -6,13 +6,12 @@ import React, {
   useCallback,
 } from "react";
 import { useNavigate, useLocation, useParams } from "react-router-dom";
-import GraphControls from "./GraphControls";
 import CytoscapeGraphUnified from "./CytoscapeGraphUnified";
 import GraphNodeTooltip from "./NodeTooltip";
 import EdgeTooltip from "./EdgeTooltip";
+import ViewerEdgeTooltip from "./ViewerEdgeTooltip";
+import GraphSidebar from "./GraphSidebar";
 import "./RelationGraph.css";
-import { FaTimes, FaClock } from 'react-icons/fa';
-import { filterGraphElements } from "./graphFilter";
 import { DEFAULT_LAYOUT } from "./graphLayouts";
 
 // 간선 positivity 값에 따라 HSL 그라데이션 색상 반환
@@ -65,21 +64,21 @@ const getWideLayout = () => {
       return {
         ...DEFAULT_LAYOUT,
         randomSeed: 22,
-        nodeRepulsion: 1500,
+        nodeRepulsion: 2000,
         idealEdgeLength: 400,
         componentSpacing: 500,
-        nodeOverlap: 400,
+        nodeOverlap: 0,
+        avoidOverlap: true,
+        nodeSeparation: 60,
       };
     }
   }
   return DEFAULT_LAYOUT;
 };
 
-function RelationGraphMain({ elements, inViewer = false, fullScreen = false, onFullScreen, onExitFullScreen, graphViewState, setGraphViewState, chapterNum, eventNum, hideIsolated, maxEventNum, newNodeIds }) {
+function RelationGraphMain({ elements, inViewer = false, fullScreen = false, onFullScreen, onExitFullScreen, graphViewState, setGraphViewState, chapterNum, eventNum, hideIsolated, maxEventNum, newNodeIds, maxChapter, edgeLabelVisible = true }) {
   const cyRef = useRef(null);
   const hasCenteredRef = useRef(false); // 최초 1회만 중앙정렬
-  const [searchInput, setSearchInput] = useState("");
-  const [search, setSearch] = useState("");
   const [activeTooltip, setActiveTooltip] = useState(null); // 하나의 툴팁만 관리
   const selectedEdgeIdRef = useRef(null);
   const selectedNodeIdRef = useRef(null);
@@ -94,9 +93,13 @@ function RelationGraphMain({ elements, inViewer = false, fullScreen = false, onF
   const prevElementsStr = useRef();
   const [ripples, setRipples] = useState([]);
   const prevNodeIdsRef = useRef([]);
+  const prevEdgeIdsRef = useRef([]);
 
   // gatsby.epub 단독 그래프 페이지에서만 간격을 더 넓게
   const isGraphPage = inViewer && fullScreen;
+  
+  // 그래프 단독 페이지 여부 확인
+  const isStandaloneGraphPage = !inViewer;
 
   // 타임라인으로 이동하는 함수
   // const handleViewTimeline = () => {
@@ -120,9 +123,22 @@ function RelationGraphMain({ elements, inViewer = false, fullScreen = false, onF
     };
     setActiveTooltip(null);
     cy.batch(() => {
+      // 모든 노드에서 highlighted 클래스 제거 (이전 선택 해제)
+      cy.nodes().removeClass("highlighted");
+      cy.edges().removeClass("highlighted");
+      
+      // 모든 노드와 엣지에 faded 클래스 추가
       cy.nodes().addClass("faded");
       cy.edges().addClass("faded");
+      
+      // 클릭된 노드만 강조 (파란색 테두리)
       node.removeClass("faded").addClass("highlighted");
+      
+      // 연결된 간선들과 노드들 faded 제거
+      const connectedEdges = node.connectedEdges();
+      const connectedNodes = node.neighborhood().nodes();
+      connectedEdges.removeClass("faded");
+      connectedNodes.removeClass("faded");
     });
     // 마우스 포인터 위치를 툴팁에 넘김
     const mouseX = evt.originalEvent?.clientX ?? nodeCenter.x;
@@ -130,6 +146,7 @@ function RelationGraphMain({ elements, inViewer = false, fullScreen = false, onF
     setTimeout(() => {
       setActiveTooltip({ type: 'node', id: node.id(), x: mouseX, y: mouseY, data: node.data(), nodeCenter });
     }, 0);
+    selectedNodeIdRef.current = node.id();
   }, []);
 
   // 간선 클릭 시 툴팁 표시 (좌표 변환)
@@ -138,7 +155,17 @@ function RelationGraphMain({ elements, inViewer = false, fullScreen = false, onF
       if (!cyRef.current) return;
       const cy = cyRef.current;
       const edge = evt.target;
+      
+      // 엣지 데이터 확인
+      if (!edge || !edge.data()) {
+        return;
+      }
+      
       const container = document.querySelector(".graph-canvas-area");
+      if (!container) {
+        return;
+      }
+      
       const containerRect = container.getBoundingClientRect();
 
       // Cytoscape의 midpoint는 그래프 내부 좌표계이므로, 화면 좌표로 변환
@@ -162,9 +189,14 @@ function RelationGraphMain({ elements, inViewer = false, fullScreen = false, onF
       });
 
       cy.batch(() => {
+        // 모든 노드에서 highlighted 클래스 제거 (이전 선택 해제)
+        cy.nodes().removeClass("highlighted");
+        cy.edges().removeClass("highlighted");
+        
         cy.nodes().addClass("faded");
         cy.edges().addClass("faded");
         edge.removeClass("faded");
+        // 연결된 노드들만 강조
         edge.source().removeClass("faded").addClass("highlighted");
         edge.target().removeClass("faded").addClass("highlighted");
         // 나머지 노드/간선은 faded 유지
@@ -188,6 +220,7 @@ function RelationGraphMain({ elements, inViewer = false, fullScreen = false, onF
       const cy = cyRef.current;
       cy.nodes().removeClass("faded");
       cy.edges().removeClass("faded");
+      cy.nodes().removeClass("highlighted");
       cy.removeListener("tap", "node");
       cy.removeListener("tap", "edge");
       cy.removeListener("tap");
@@ -215,7 +248,15 @@ function RelationGraphMain({ elements, inViewer = false, fullScreen = false, onF
   }, [elements]);
 
   // filteredElements를 useMemo로 고정 (의존성 최소화)
-  const { filteredElements, fitNodeIds } = useMemo(() => filterGraphElements(sortedElements, search), [sortedElements, search]);
+  const { filteredElements, fitNodeIds } = useMemo(() => {
+    // 엣지들이 제대로 포함되도록 안전한 필터링
+    if (!sortedElements || sortedElements.length === 0) {
+      return { filteredElements: [], fitNodeIds: [] };
+    }
+    
+    // 모든 요소 반환 (검색은 RelationGraphWrapper에서 처리)
+    return { filteredElements: sortedElements, fitNodeIds: [] };
+  }, [sortedElements]);
 
   // currentEventJson이 내용이 같으면 참조도 같게 useMemo로 캐싱
   const stableEventJson = useMemo(() => graphViewState ? JSON.stringify(graphViewState) : '', [graphViewState]);
@@ -258,6 +299,7 @@ function RelationGraphMain({ elements, inViewer = false, fullScreen = false, onF
           "curve-style": "bezier",
           label: (ele) => {
             const label = ele.data('label') || '';
+            if (!edgeLabelVisible) return '';
             return label.length > MAX_EDGE_LABEL_LENGTH ? label.slice(0, MAX_EDGE_LABEL_LENGTH) + '...' : label;
           },
           "font-size": edgeStyle.fontSize,
@@ -271,6 +313,8 @@ function RelationGraphMain({ elements, inViewer = false, fullScreen = false, onF
           "text-outline-width": 2,
           opacity: "mapData(weight, 0, 1, 0.55, 1)",
           "target-arrow-shape": "none",
+          "line-style": "solid",
+          "border-width": 0,
         },
       },
       {
@@ -290,40 +334,22 @@ function RelationGraphMain({ elements, inViewer = false, fullScreen = false, onF
           "text-opacity": 0.12,
         },
       },
+      {
+        selector: ".highlighted",
+        style: {
+          "border-color": "#3b82f6",
+          "border-width": 2,
+          "border-opacity": 1,
+          "border-style": "solid",
+        },
+      },
     ],
-    []
+    [edgeLabelVisible]
   );
 
-  const handleReset = useCallback(() => {
-    setSearch("");
-    setSearchInput("");
-    
-    // 그래프 초기화
-    if (cyRef.current) {
-      const cy = cyRef.current;
-      cy.elements().removeClass("faded");
-      cy.elements().removeClass("highlighted");
-      cy.fit(undefined, 15);
-      cy.center();
-    }
-  }, [setSearch, setSearchInput]);
 
-  const handleSearch = useCallback(() => {
-    if (searchInput.trim()) {
-      setSearch(searchInput.trim());
-    }
-  }, [searchInput]);
 
-  const handleFitView = useCallback(() => {
-    if (cyRef.current) {
-      cyRef.current.fit();
-      cyRef.current.center();
-    }
-  }, []);
 
-  const handleClose = useCallback(() => {
-    window.location.href = `/user/viewer/${filename}`;
-  }, [filename]);
 
   // === 오직 chapter_node_positions_{chapterNum}만 사용하여 노드 위치 복원 (절대적 위치) ===
 
@@ -336,9 +362,7 @@ function RelationGraphMain({ elements, inViewer = false, fullScreen = false, onF
     }
   }, [chapterNum, eventNum]);
 
-  useEffect(() => {
-    console.log('[상태점검] chapterNum:', chapterNum, 'eventNum:', eventNum, 'maxEventNum:', maxEventNum, 'isLastEvent:', eventNum === maxEventNum);
-  }, [chapterNum, eventNum, maxEventNum]);
+
 
   // elements가 변경될 때 로딩 상태 업데이트
   useEffect(() => {
@@ -347,37 +371,142 @@ function RelationGraphMain({ elements, inViewer = false, fullScreen = false, onF
     }
   }, [elements]);
 
-  // elements가 변경될 때 새로 등장한 노드에 ripple 자동 적용
+  // elements가 변경될 때 새로 등장한 노드와 간선에 선택 효과 적용
   useEffect(() => {
     if (!elements || elements.length === 0 || !cyRef.current) {
       prevNodeIdsRef.current = [];
       return;
     }
+    
+    // 새로 추가된 노드들 찾기
     const currentNodeIds = elements
       .filter((e) => e.data && !e.data.source)
       .map((e) => e.data.id);
     const prevNodeIds = prevNodeIdsRef.current;
     const newNodeIds = currentNodeIds.filter((id) => !prevNodeIds.includes(id));
     prevNodeIdsRef.current = currentNodeIds;
-    // 새로 등장한 노드에 ripple
-    newNodeIds.forEach((id) => {
-      const node = cyRef.current.getElementById(id);
-      if (node && node.length > 0) {
-        const pos = node.renderedPosition();
-        const container = document.querySelector(".graph-canvas-area");
-        if (container && pos) {
-          const rect = container.getBoundingClientRect();
-          const x = pos.x + rect.left;
-          const y = pos.y + rect.top;
-          const rippleId = Date.now() + Math.random();
-          setRipples((prev) => [...prev, { id: rippleId, x: x - rect.left, y: y - rect.top }]);
-          setTimeout(() => {
-            setRipples((prev) => prev.filter((r) => r.id !== rippleId));
-          }, 700);
+    
+    // 새로 추가된 간선들 찾기
+    const currentEdgeIds = elements
+      .filter((e) => e.data && e.data.source)
+      .map((e) => e.data.id);
+    const prevEdgeIds = prevEdgeIdsRef.current || [];
+    const newEdgeIds = currentEdgeIds.filter((id) => !prevEdgeIds.includes(id));
+    prevEdgeIdsRef.current = currentEdgeIds;
+    
+    // 현재 선택된 노드나 간선이 있는지 확인
+    const hasSelection = selectedNodeIdRef.current || selectedEdgeIdRef.current || activeTooltip;
+    
+    if (hasSelection) {
+      // 선택된 노드가 있는 경우
+      if (selectedNodeIdRef.current) {
+        const selectedNode = cyRef.current.getElementById(selectedNodeIdRef.current);
+        if (selectedNode && selectedNode.length > 0) {
+          cyRef.current.batch(() => {
+            // 새로 추가된 노드들에 대해 연결 여부 확인
+            newNodeIds.forEach((id) => {
+              const newNode = cyRef.current.getElementById(id);
+              if (newNode && newNode.length > 0) {
+                const connectedEdges = selectedNode.connectedEdges().intersection(newNode.connectedEdges());
+                if (connectedEdges.length > 0) {
+                  // 연결된 노드: faded 제거, highlighted 유지
+                  newNode.removeClass("faded");
+                  const connectedNodes = selectedNode.neighborhood().nodes();
+                  if (connectedNodes.has(newNode)) {
+                    newNode.addClass("highlighted");
+                  }
+                } else {
+                  // 비연결 노드: faded 적용
+                  newNode.addClass("faded");
+                }
+              }
+            });
+            
+            // 새로 추가된 간선들에 대해 연결 여부 확인
+            newEdgeIds.forEach((id) => {
+              const newEdge = cyRef.current.getElementById(id);
+              if (newEdge && newEdge.length > 0) {
+                const sourceNode = newEdge.source();
+                const targetNode = newEdge.target();
+                
+                if (sourceNode.same(selectedNode) || targetNode.same(selectedNode)) {
+                  // 선택된 노드와 연결된 간선: faded 제거
+                  newEdge.removeClass("faded");
+                } else {
+                  // 비연결 간선: faded 적용
+                  newEdge.addClass("faded");
+                }
+              }
+            });
+          });
         }
       }
-    });
-  }, [elements]);
+      
+      // 선택된 간선이 있는 경우
+      if (selectedEdgeIdRef.current) {
+        const selectedEdge = cyRef.current.getElementById(selectedEdgeIdRef.current);
+        if (selectedEdge && selectedEdge.length > 0) {
+          cyRef.current.batch(() => {
+            // 새로 추가된 노드들에 대해 연결 여부 확인
+            newNodeIds.forEach((id) => {
+              const newNode = cyRef.current.getElementById(id);
+              if (newNode && newNode.length > 0) {
+                const sourceNode = selectedEdge.source();
+                const targetNode = selectedEdge.target();
+                
+                if (newNode.same(sourceNode) || newNode.same(targetNode)) {
+                  // 선택된 간선의 소스/타겟 노드: faded 제거, highlighted 유지
+                  newNode.removeClass("faded").addClass("highlighted");
+                } else {
+                  // 비연결 노드: faded 적용
+                  newNode.addClass("faded");
+                }
+              }
+            });
+            
+            // 새로 추가된 간선들에 대해 연결 여부 확인
+            newEdgeIds.forEach((id) => {
+              const newEdge = cyRef.current.getElementById(id);
+              if (newEdge && newEdge.length > 0) {
+                const selectedSource = selectedEdge.source();
+                const selectedTarget = selectedEdge.target();
+                const newSource = newEdge.source();
+                const newTarget = newEdge.target();
+                
+                if (newSource.same(selectedSource) || newSource.same(selectedTarget) ||
+                    newTarget.same(selectedSource) || newTarget.same(selectedTarget)) {
+                  // 선택된 간선과 연결된 간선: faded 제거
+                  newEdge.removeClass("faded");
+                } else {
+                  // 비연결 간선: faded 적용
+                  newEdge.addClass("faded");
+                }
+              }
+            });
+          });
+        }
+      }
+    } else {
+      // 선택이 없는 경우: 새로 등장한 노드에 ripple 효과만 적용
+      newNodeIds.forEach((id) => {
+        const node = cyRef.current.getElementById(id);
+        if (node && node.length > 0) {
+          const pos = node.renderedPosition();
+          const container = document.querySelector(".graph-canvas-area");
+          if (container && pos) {
+            const rect = container.getBoundingClientRect();
+            const x = pos.x + rect.left;
+            const y = pos.y + rect.top;
+            const rippleId = Date.now() + Math.random();
+            setRipples((prev) => [...prev, { id: rippleId, x: x - rect.left, y: y - rect.top }]);
+            setTimeout(() => {
+              setRipples((prev) => prev.filter((r) => r.id !== rippleId));
+            }, 700);
+          }
+        }
+      });
+    }
+  }, [elements, activeTooltip]);
 
   // elements, stylesheet, layout, searchLayout, style useMemo 최적화
   const memoizedElements = useMemo(() => filteredElements, [filteredElements]);
@@ -419,87 +548,37 @@ function RelationGraphMain({ elements, inViewer = false, fullScreen = false, onF
         left: 0,
         zIndex: 9999
       }}>
-        {/* 상단바: > 버튼(복귀)만 왼쪽 끝에, 가운데 > 버튼은 완전히 제거 */}
-        <div style={{
-          position: 'absolute',
-          top: 0,
-          left: 0,
-          width: '100vw',
-          height: 60,
-          display: 'flex',
-          flexDirection: 'row',
-          alignItems: 'center',
-          gap: 0,
-          paddingLeft: 12,
-          paddingRight: 90,
-          paddingTop: 0,
-          justifyContent: 'flex-start',
-          background: '#fff',
-          boxShadow: '0 2px 8px rgba(0,0,0,0.06)',
-          borderBottom: '1px solid #e5e7eb',
-          zIndex: 10001,
-        }}>
-          {/* 눈에 띄는 복귀(>) 버튼 */}
-          <button
-            onClick={handleExitFullScreen}
-            style={{
-              height: 40,
-              width: 40,
-              minWidth: 40,
-              minHeight: 40,
-              borderRadius: 12,
-              border: 'none',
-              background: 'linear-gradient(100deg, #4F6DDE 0%, #6fa7ff 100%)',
-              color: '#fff',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontSize: 22,
-              marginRight: 18,
-              marginLeft: 4,
-              cursor: 'pointer',
-              boxShadow: '0 4px 16px rgba(79,109,222,0.13)',
-              fontWeight: 700,
-              outline: 'none',
-              transition: 'background 0.18s, color 0.18s, box-shadow 0.18s, transform 0.13s',
-            }}
-            title='분할화면으로'
-            onMouseOver={e => e.currentTarget.style.background = 'linear-gradient(100deg, #6fa7ff 0%, #4F6DDE 100%)'}
-            onMouseOut={e => e.currentTarget.style.background = 'linear-gradient(100deg, #4F6DDE 0%, #6fa7ff 100%)'}
-          >
-            {'>'}
-          </button>
-          {/* 그래프 본문, 컨트롤, 툴팁 등만 렌더링 (재귀 X) */}
-          <div className="flex-1 relative overflow-hidden w-full h-full">
-            {/* 검색 폼 추가 */}
-            {!inViewer && (
-              <div className="search-container" style={{ justifyContent: 'flex-start', paddingLeft: '20px' }}>
-                <GraphControls
-                  searchInput={searchInput}
-                  setSearchInput={setSearchInput}
-                  handleSearch={handleSearch}
-                  handleReset={handleReset}
-                  handleFitView={handleFitView}
-                  search={search}
-                  setSearch={setSearch}
+        {/* 그래프 본문만 렌더링 (상단바는 RelationGraphWrapper에서 처리) */}
+        <div className="flex-1 relative overflow-hidden w-full h-full">
+          <div className="flex-1 relative overflow-hidden" style={{ width: '100%', height: '100%' }}>
+            {/* 툴팁 렌더링 */}
+            <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none', zIndex: 9999 }}>
+              {activeTooltip?.type === 'node' && activeTooltip.data && (
+                <GraphNodeTooltip
+                  key={`node-tooltip-${activeTooltip.id}`}
+                  data={activeTooltip.data}
+                  x={activeTooltip.x}
+                  y={activeTooltip.y}
+                  nodeCenter={activeTooltip.nodeCenter}
+                  onClose={handleCloseTooltip}
+                  style={{ pointerEvents: 'auto' }}
                 />
-              </div>
-            )}
-            <div className="flex-1 relative overflow-hidden" style={{ width: '100%', height: '100%' }}>
-              {/* 툴팁 렌더링 */}
-              <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none', zIndex: 9999 }}>
-                {activeTooltip?.type === 'node' && activeTooltip.data && (
-                  <GraphNodeTooltip
-                    key={`node-tooltip-${activeTooltip.id}`}
+              )}
+              {activeTooltip?.type === 'edge' && activeTooltip.data && (
+                inViewer ? (
+                  <ViewerEdgeTooltip
+                    key={`edge-tooltip-${activeTooltip.id}`}
                     data={activeTooltip.data}
                     x={activeTooltip.x}
                     y={activeTooltip.y}
-                    nodeCenter={activeTooltip.nodeCenter}
                     onClose={handleCloseTooltip}
+                    sourceNode={activeTooltip.sourceNode}
+                    targetNode={activeTooltip.targetNode}
+                    chapterNum={chapterNum}
+                    eventNum={eventNum}
                     style={{ pointerEvents: 'auto' }}
                   />
-                )}
-                {activeTooltip?.type === 'edge' && (
+                ) : (
                   <EdgeTooltip
                     key={`edge-tooltip-${activeTooltip.id}`}
                     data={activeTooltip.data}
@@ -508,43 +587,77 @@ function RelationGraphMain({ elements, inViewer = false, fullScreen = false, onF
                     onClose={handleCloseTooltip}
                     sourceNode={activeTooltip.sourceNode}
                     targetNode={activeTooltip.targetNode}
+                    maxChapter={10}
                     style={{ pointerEvents: 'auto' }}
                   />
-                )}
-              </div>
-              {/* 그래프 영역 */}
-              <div
-                className="graph-canvas-area"
-                onClick={handleCanvasClick}
-                style={{ position: "relative", width: "100%", height: "100%" }}
-              >
-                {ripples.map((ripple) => (
-                  <div
-                    key={ripple.id}
-                    className="cytoscape-ripple"
-                    style={{
-                      left: ripple.x - 60,
-                      top: ripple.y - 60,
-                      width: 120,
-                      height: 120,
-                    }}
-                  />
-                ))}
-                <CytoscapeGraphUnified
-                  elements={memoizedElements}
-                  stylesheet={memoizedStylesheet}
-                  layout={memoizedLayout}
-                  tapNodeHandler={tapNodeHandler}
-                  tapEdgeHandler={tapEdgeHandler}
-                  tapBackgroundHandler={tapBackgroundHandler}
-                  fitNodeIds={fitNodeIds}
-                  style={memoizedStyle}
-                  cyRef={cyRef}
-                  newNodeIds={newNodeIds}
-                  nodeSize={nodeSize}
-                />
-              </div>
+                )
+              )}
             </div>
+                         {/* 그래프 영역 */}
+             <div
+               className="graph-canvas-area"
+               onClick={handleCanvasClick}
+               style={{ position: "relative", width: "100%", height: "100%" }}
+             >
+               {memoizedElements.length === 0 ? (
+                 <div style={{ 
+                   width: '100%', 
+                   height: '100%', 
+                   display: 'flex', 
+                   alignItems: 'center', 
+                   justifyContent: 'center',
+                   flexDirection: 'column',
+                   gap: '16px'
+                 }}>
+                   <div style={{
+                     fontSize: '20px',
+                     color: '#6C8EFF',
+                     fontWeight: '600',
+                     textAlign: 'center'
+                   }}>
+                     관계가 없습니다
+                   </div>
+                   <div style={{
+                     fontSize: '14px',
+                     color: '#64748b',
+                     textAlign: 'center',
+                     maxWidth: '300px',
+                     lineHeight: '1.5'
+                   }}>
+                     현재 챕터에서 선택한 이벤트에는<br />
+                     등장 인물 간의 관계 정보가 없습니다.
+                   </div>
+                 </div>
+               ) : (
+                 <>
+                   {ripples.map((ripple) => (
+                     <div
+                       key={ripple.id}
+                       className="cytoscape-ripple"
+                       style={{
+                         left: ripple.x - 60,
+                         top: ripple.y - 60,
+                         width: 120,
+                         height: 120,
+                       }}
+                     />
+                   ))}
+                   <CytoscapeGraphUnified
+                     elements={memoizedElements}
+                     stylesheet={memoizedStylesheet}
+                     layout={memoizedLayout}
+                     tapNodeHandler={tapNodeHandler}
+                     tapEdgeHandler={tapEdgeHandler}
+                     tapBackgroundHandler={tapBackgroundHandler}
+                     fitNodeIds={fitNodeIds}
+                     style={memoizedStyle}
+                     cyRef={cyRef}
+                     newNodeIds={newNodeIds}
+                     nodeSize={nodeSize}
+                   />
+                 </>
+               )}
+             </div>
           </div>
         </div>
       </div>
@@ -556,48 +669,52 @@ function RelationGraphMain({ elements, inViewer = false, fullScreen = false, onF
       {/* < 버튼은 inViewer && !fullScreen일 때만 보임 */}
       {/* 기존 중앙 고정 < 버튼 완전히 제거 */}
 
-      {/* 검색 폼 추가 */}
-      {!inViewer && (
-        <div className="search-container" style={{ justifyContent: 'flex-start', paddingLeft: '20px' }}>
-          <GraphControls
-            searchInput={searchInput}
-            setSearchInput={setSearchInput}
-            handleSearch={handleSearch}
-            handleReset={handleReset}
-            handleFitView={handleFitView}
-            search={search}
-            setSearch={setSearch}
-          />
-        </div>
-      )}
-
       <div className="flex-1 relative overflow-hidden" style={{ width: '100%', height: '100%' }}>
-        {/* 툴팁 렌더링 */}
-        <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none', zIndex: 9999 }}>
-          {activeTooltip?.type === 'node' && activeTooltip.data && (
-            <GraphNodeTooltip
-              key={`node-tooltip-${activeTooltip.id}`}
-              data={activeTooltip.data}
-              x={activeTooltip.x}
-              y={activeTooltip.y}
-              nodeCenter={activeTooltip.nodeCenter}
-              onClose={handleCloseTooltip}
-              style={{ pointerEvents: 'auto' }}
-            />
-          )}
-          {activeTooltip?.type === 'edge' && (
-            <EdgeTooltip
-              key={`edge-tooltip-${activeTooltip.id}`}
-              data={activeTooltip.data}
-              x={activeTooltip.x}
-              y={activeTooltip.y}
-              onClose={handleCloseTooltip}
-              sourceNode={activeTooltip.sourceNode}
-              targetNode={activeTooltip.targetNode}
-              style={{ pointerEvents: 'auto' }}
-            />
-          )}
-        </div>
+        {/* 툴팁 렌더링 - 그래프 단독 페이지가 아닐 때만 */}
+        {!isStandaloneGraphPage && (
+          <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none', zIndex: 9999 }}>
+            {activeTooltip?.type === 'node' && activeTooltip.data && (
+              <GraphNodeTooltip
+                key={`node-tooltip-${activeTooltip.id}`}
+                data={activeTooltip.data}
+                x={activeTooltip.x}
+                y={activeTooltip.y}
+                nodeCenter={activeTooltip.nodeCenter}
+                onClose={handleCloseTooltip}
+                style={{ pointerEvents: 'auto' }}
+              />
+            )}
+            {activeTooltip?.type === 'edge' && activeTooltip.data && (
+              inViewer ? (
+                <ViewerEdgeTooltip
+                  key={`edge-tooltip-${activeTooltip.id}`}
+                  data={activeTooltip.data}
+                  x={activeTooltip.x}
+                  y={activeTooltip.y}
+                  onClose={handleCloseTooltip}
+                  sourceNode={activeTooltip.sourceNode}
+                  targetNode={activeTooltip.targetNode}
+                  chapterNum={chapterNum}
+                  eventNum={eventNum}
+                  maxChapter={maxChapter}
+                  style={{ pointerEvents: 'auto' }}
+                />
+              ) : (
+                <EdgeTooltip
+                  key={`edge-tooltip-${activeTooltip.id}`}
+                  data={activeTooltip.data}
+                  x={activeTooltip.x}
+                  y={activeTooltip.y}
+                  onClose={handleCloseTooltip}
+                  sourceNode={activeTooltip.sourceNode}
+                  targetNode={activeTooltip.targetNode}
+                  maxChapter={10}
+                  style={{ pointerEvents: 'auto' }}
+                />
+              )
+            )}
+          </div>
+        )}
 
         {/* 그래프 영역 */}
         <div
@@ -605,33 +722,78 @@ function RelationGraphMain({ elements, inViewer = false, fullScreen = false, onF
           onClick={handleCanvasClick}
           style={{ position: "relative", width: "100%", height: "100%" }}
         >
-          {ripples.map((ripple) => (
-            <div
-              key={ripple.id}
-              className="cytoscape-ripple"
-              style={{
-                left: ripple.x - 60,
-                top: ripple.y - 60,
-                width: 120,
-                height: 120,
-              }}
-            />
-          ))}
-          <CytoscapeGraphUnified
-            elements={memoizedElements}
-            stylesheet={memoizedStylesheet}
-            layout={memoizedLayout}
-            tapNodeHandler={tapNodeHandler}
-            tapEdgeHandler={tapEdgeHandler}
-            tapBackgroundHandler={tapBackgroundHandler}
-            fitNodeIds={fitNodeIds}
-            style={memoizedStyle}
-            cyRef={cyRef}
-            newNodeIds={newNodeIds}
-            nodeSize={nodeSize}
-          />
+          {memoizedElements.length === 0 ? (
+            <div style={{ 
+              width: '100%', 
+              height: '100%', 
+              display: 'flex', 
+              alignItems: 'center', 
+              justifyContent: 'center',
+              flexDirection: 'column',
+              gap: '16px'
+            }}>
+              <div style={{
+                fontSize: '20px',
+                color: '#6C8EFF',
+                fontWeight: '600',
+                textAlign: 'center'
+              }}>
+                관계가 없습니다
+              </div>
+              <div style={{
+                fontSize: '14px',
+                color: '#64748b',
+                textAlign: 'center',
+                maxWidth: '300px',
+                lineHeight: '1.5'
+              }}>
+                현재 챕터에서 선택한 이벤트에는<br />
+                등장 인물 간의 관계 정보가 없습니다.
+              </div>
+            </div>
+          ) : (
+            <>
+              {ripples.map((ripple) => (
+                <div
+                  key={ripple.id}
+                  className="cytoscape-ripple"
+                  style={{
+                    left: ripple.x - 60,
+                    top: ripple.y - 60,
+                    width: 120,
+                    height: 120,
+                  }}
+                />
+              ))}
+              <CytoscapeGraphUnified
+                elements={memoizedElements}
+                stylesheet={memoizedStylesheet}
+                layout={memoizedLayout}
+                tapNodeHandler={tapNodeHandler}
+                tapEdgeHandler={tapEdgeHandler}
+                tapBackgroundHandler={tapBackgroundHandler}
+                fitNodeIds={fitNodeIds}
+                style={memoizedStyle}
+                cyRef={cyRef}
+                newNodeIds={newNodeIds}
+                nodeSize={nodeSize}
+              />
+            </>
+          )}
         </div>
       </div>
+
+             {/* 그래프 단독 페이지에서 슬라이드바 렌더링 */}
+       {isStandaloneGraphPage && (
+         <GraphSidebar
+           activeTooltip={activeTooltip}
+           onClose={handleCloseTooltip}
+           chapterNum={chapterNum}
+           eventNum={eventNum}
+           maxChapter={maxChapter}
+           hasNoRelations={!memoizedElements || memoizedElements.length === 0}
+         />
+       )}
     </div>
   );
 }

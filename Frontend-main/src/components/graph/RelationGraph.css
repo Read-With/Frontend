@@ -401,6 +401,12 @@ html, body {
   flex: 1;
 }
 
+/* 그래프 단독 페이지에서 슬라이드바가 열려있을 때 그래프 영역 조정 */
+.graph-page-container .graph-canvas-area {
+  width: calc(100% - 400px) !important;
+  max-width: calc(100% - 400px) !important;
+}
+
 .graph-controls-area {
   width: 100%;
   margin: 0 0 1.5rem 0;
@@ -419,115 +425,7 @@ html, body {
   align-items: center;
 }
 
-.advanced-search-form {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 0.5rem;
-  background: #fff;
-  border-radius: 8px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
-  margin: 0;
-  width: fit-content;
-  max-width: 400px;
-}
 
-.advanced-search-input {
-  width: 180px;
-  min-width: 150px;
-  max-width: 220px;
-  border: 1px solid #e3e6ef;
-  border-radius: 6px;
-  padding: 10px 12px;
-  font-size: 14px;
-  color: #42506b;
-  background: #f8f9fc;
-  transition: all 0.2s;
-}
-
-.advanced-search-input:focus {
-  outline: none;
-  border-color: #6C8EFF;
-  background: #fff;
-  box-shadow: 0 0 0 2px rgba(108, 142, 255, 0.1);
-}
-
-.graph-controls .ant-btn.advanced-search-btn {
-  height: 16px !important;
-  min-height: 16px !important;
-  max-height: 16px !important;
-  padding: 0 6px !important;
-  font-size: 11px !important;
-  line-height: 1 !important;
-  border-width: 1px !important;
-  box-sizing: border-box !important;
-  overflow: hidden !important;
-  display: flex !important;
-  align-items: center !important;
-}
-
-.graph-controls .advanced-search-btn .material-icons {
-  font-size: 13px !important;
-  line-height: 1 !important;
-}
-
-.advanced-search-btn {
-  background: #6C8EFF;
-  color: #fff;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  padding: 0 14px;
-  border: none;
-  border-radius: 6px;
-  font-size: 14px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.2s;
-  min-width: 50px;
-  height: 40px;
-}
-
-.advanced-search-btn:hover {
-  background: #5A7BFF;
-  box-shadow: 0 2px 8px rgba(108, 142, 255, 0.2);
-  transform: translateY(-1px);
-}
-
-.advanced-search-btn:active {
-  transform: translateY(0);
-}
-
-.advanced-reset-btn {
-  background: #f8f9fc;
-  color: #42506b;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  padding: 0 14px;
-  border: 1px solid #e3e6ef;
-  border-radius: 6px;
-  font-size: 14px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.2s;
-  min-width: 50px;
-  margin-left: 8px;
-  height: 40px;
-}
-
-.advanced-reset-btn:hover {
-  background: #f1f3f9;
-  border-color: #d1d6e6;
-  box-shadow: 0 2px 8px rgba(66, 80, 107, 0.1);
-  transform: translateY(-1px);
-}
-
-.advanced-reset-btn:active {
-  transform: translateY(0);
-}
 
 .close-x-btn {
   position: absolute;
@@ -1832,4 +1730,21 @@ html, body {
 }
 .edge-tooltip-back {
   transform: rotateY(180deg);
+}
+
+/* 노드 튕김 효과 */
+.bounce-effect {
+  animation: bounce 0.3s ease-out;
+}
+
+@keyframes bounce {
+  0% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.1);
+  }
+  100% {
+    transform: scale(1);
+  }
 }

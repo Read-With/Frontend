@@ -17,21 +17,12 @@ function getEventData(chapter, eventId) {
   // eventId에 1을 더해서 파일명을 찾음
   const fileEventNum = Number(eventId) + 1;
   const eventIdStr = String(fileEventNum);
-  console.log("디버그 - getEventData 호출:", {
-    chapter,
-    num,
-    eventId,
-    eventIdStr,
-    availableFiles: Object.keys(eventRelationModules),
-  });
 
   const filePath = Object.keys(eventRelationModules).find((path) =>
     path.includes(`chapter${num}_relationships_event_${eventIdStr}.json`)
   );
-  console.log("디버그 - 찾은 파일 경로:", filePath);
 
   const data = filePath ? eventRelationModules[filePath]?.default : null;
-  console.log("디버그 - 로드된 데이터:", data);
 
   return data;
 }
@@ -79,7 +70,13 @@ function convertRelationsToElements(
 
     let relationLabel = "";
     if (Array.isArray(rel.relation)) {
-      relationLabel = rel.relation.join(", ");
+      if (rel.relation.length === 1) {
+        // 1개인 경우: 최초의 관계 (첫 번째 요소)
+        relationLabel = rel.relation[0] || "";
+      } else if (rel.relation.length > 1) {
+        // 여러개인 경우: 가장 최근에 추가된 관계 (마지막 요소)
+        relationLabel = rel.relation[rel.relation.length - 1] || "";
+      }
     } else if (typeof rel.relation === "string") {
       relationLabel = rel.relation;
     }
@@ -103,28 +100,14 @@ const GraphContainer = ({
   currentPosition,
   currentEvent, // 관계 변화
   currentChapter, // 관계 변화
+  edgeLabelVisible = true,
   ...props
 }) => {
   const [elements, setElements] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
-  // 디버깅: currentEvent, currentChapter, elements, error 상태 변화 로그
-  useEffect(() => {
-    console.log("[GraphContainer 디버그] currentEvent:", currentEvent);
-  }, [currentEvent]);
 
-  useEffect(() => {
-    console.log("[GraphContainer 디버그] currentChapter:", currentChapter);
-  }, [currentChapter]);
-
-  useEffect(() => {
-    console.log("[GraphContainer 디버그] elements:", elements);
-  }, [elements]);
-
-  useEffect(() => {
-    console.log("[GraphContainer 디버그] error:", error);
-  }, [error]);
 
   useEffect(() => {
     if (!currentEvent) {
@@ -135,8 +118,6 @@ const GraphContainer = ({
     try {
       const eventId = currentEvent.event_id || 0; // event_id가 없으면 0으로 설정
       const chapter = currentEvent.chapter || 1;
-      // 디버깅: 현재 챕터/이벤트 정보 출력
-      console.log("[GraphContainer 디버그] useEffect 내부:", { eventId, chapter, currentEvent });
       // 이벤트 데이터 가져오기 (event_id에 1을 더해서 파일 찾기)
       const fileEventNum = Number(eventId) + 1;
       const eventIdStr = String(fileEventNum);
@@ -145,11 +126,9 @@ const GraphContainer = ({
           `chapter${chapter}_relationships_event_${eventIdStr}.json`
         )
       );
-      console.log("[GraphContainer 디버그] 찾은 파일 경로:", filePath);
       const eventData = filePath
         ? eventRelationModules[filePath]?.default
         : null;
-      console.log("[GraphContainer 디버그] 로드된 eventData:", eventData);
       if (!eventData) {
         setElements([]);
         setError("해당 eventId의 관계 데이터가 없습니다.");
@@ -158,7 +137,6 @@ const GraphContainer = ({
 
       // 캐릭터 데이터 가져오기
       const characters = getCharactersData(chapter);
-      console.log("[GraphContainer 디버그] 로드된 characters:", characters);
       if (!characters) {
         setElements([]);
         setError("캐릭터 데이터를 찾을 수 없습니다.");
@@ -193,7 +171,6 @@ const GraphContainer = ({
         idToMain,
         idToNames
       );
-      console.log("[GraphContainer 디버그] 생성된 elements:", els);
       setElements(els);
       setLoading(false);
     } catch (err) {
@@ -207,6 +184,8 @@ const GraphContainer = ({
       elements={elements}
       chapterNum={currentChapter} // 관계 변화
       eventNum={currentEvent ? Math.max(1, currentEvent.eventNum) : 1}
+      edgeLabelVisible={edgeLabelVisible}
+      maxChapter={10}
       {...props}
     />
   );

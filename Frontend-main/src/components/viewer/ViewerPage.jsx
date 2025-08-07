@@ -13,6 +13,8 @@ import { FaSyncAlt } from "react-icons/fa";
 import cytoscape from "cytoscape";
 import CytoscapeGraphPortalProvider from "../graph/CytoscapeGraphPortalProvider";
 import GraphContainer from "../graph/GraphContainer";
+import EdgeLabelToggle from "../common/EdgeLabelToggle";
+import ViewerTopBar from "./ViewerTopBar";
 
 const eventRelationModules = import.meta.glob(
   "../../data/gatsby/chapter*_relationships_event_*.json",
@@ -151,7 +153,13 @@ function getEventsForChapter(chapter) {
       chapter: Number(chapter), // 반드시 추가!
     };
   });
-  return eventsWithRelations;
+  
+  // 3. 현재 챕터의 이벤트만 필터링 (이전 챕터의 마지막 이벤트 제외)
+  const currentChapterEvents = eventsWithRelations.filter(event => {
+    return event.chapter === Number(chapter);
+  });
+  
+  return currentChapterEvents;
 }
 
 function getElementsFromRelations(
@@ -222,17 +230,33 @@ function getElementsFromRelations(
       const target = safeId(rel.id2 || rel.target);
       return nodeIdSet.has(source) && nodeIdSet.has(target);
     })
-    .map((rel, idx) => ({
-      data: {
-        id: `e${idx}`,
-        source: safeId(rel.id1 || rel.source),
-        target: safeId(rel.id2 || rel.target),
-        label: Array.isArray(rel.relation) ? rel.relation.join(", ") : rel.type,
-        explanation: rel.explanation,
-        positivity: rel.positivity,
-        weight: rel.weight,
-      },
-    }));
+    .map((rel, idx) => {
+      // 간선 라벨 로직: 1개인 경우 최초 관계, 여러개인 경우 최근 관계
+      let label = "";
+      if (Array.isArray(rel.relation)) {
+        if (rel.relation.length === 1) {
+          // 1개인 경우: 최초의 관계 (첫 번째 요소)
+          label = rel.relation[0] || "";
+        } else if (rel.relation.length > 1) {
+          // 여러개인 경우: 가장 최근에 추가된 관계 (마지막 요소)
+          label = rel.relation[rel.relation.length - 1] || "";
+        }
+      } else {
+        label = rel.type || "";
+      }
+      
+      return {
+        data: {
+          id: `e${idx}`,
+          source: safeId(rel.id1 || rel.source),
+          target: safeId(rel.id2 || rel.target),
+          label: label,
+          explanation: rel.explanation,
+          positivity: rel.positivity,
+          weight: rel.weight,
+        },
+      };
+    });
 
   return [...nodes, ...edges];
 }
@@ -300,11 +324,11 @@ const ViewerPage = ({ darkMode: initialDarkMode }) => {
   const [prevEvent, setPrevEvent] = useState(null);
   const [graphViewState, setGraphViewState] = useState(null);
   const [hideIsolated, setHideIsolated] = useState(true);
+  const [edgeLabelVisible, setEdgeLabelVisible] = useState(true);
   const [characterData, setCharacterData] = useState(null);
   const [events, setEvents] = useState([]);
   const [maxChapter, setMaxChapter] = useState(1); // 자동 계산으로 초기값 1
-  const [searchInput, setSearchInput] = useState("");
-  const [search, setSearch] = useState("");
+
   const [isReloading, setIsReloading] = useState(false);
   const [eventNum, setEventNum] = useState(0);
   const [isGraphLoading, setIsGraphLoading] = useState(false);
@@ -398,7 +422,7 @@ const ViewerPage = ({ darkMode: initialDarkMode }) => {
             }
           }
         } catch (e) {
-          console.error("챕터 정보 읽기 오류:", e);
+          // 챕터 정보 읽기 오류 처리
         }
       }
     };
@@ -478,54 +502,22 @@ const ViewerPage = ({ darkMode: initialDarkMode }) => {
       setIsDataReady(true);
       setLoading(false);
     } catch (error) {
-      console.error("데이터 로드 중 오류:", error);
       setLoading(false);
     }
   };
 
-  // currentEvent가 변경될 때 관계 데이터 업데이트
-  useEffect(() => {
-    if (isDataReady && !loading && currentEvent) {
-      const eventId = currentEvent.event_id || 0; // event_id가 없으면 0으로 설정
-      const eventNum = currentEvent.eventNum || 0; // eventNum이 없으면 0으로 설정
-      const fileEventNum = eventId + 1;
-      // 이벤트 관계 데이터 로드 (event_id + 1)
-      const loadEventRelations = async () => {
-        try {
-          const eventRelationFilePath = Object.keys(eventRelationModules).find(
-            (path) =>
-              path.includes(
-                `chapter${currentChapter}_relationships_event_${fileEventNum}.json`
-              )
-          );
-          if (!eventRelationFilePath) {
-            console.warn(
-              `이벤트 관계 데이터 파일을 찾을 수 없습니다: chapter${currentChapter} event${fileEventNum}`
-            );
-            return;
-          }
-          const eventRelations =
-            eventRelationModules[eventRelationFilePath].default;
-          const elements = getElementsFromRelations(
-            eventRelations,
-            characterData,
-            [],
-            fileEventNum
-          );
-          setElements(elements);
-        } catch (error) {
-          console.error("이벤트 관계 데이터 로드 중 오류:", error);
-        }
-      };
-      loadEventRelations();
-    }
-  }, [isDataReady, loading, currentEvent, currentChapter, characterData]);
+
 
   // currentChapter가 바뀔 때 currentEvent, prevEvent, elements 등도 초기화
   useEffect(() => {
     setCurrentEvent(null);
     setPrevEvent(null);
     setElements([]); // 그래프도 초기화
+  }, [currentChapter]);
+
+  // Load data when currentChapter changes
+  useEffect(() => {
+    loadData();
   }, [currentChapter]);
 
   // === [추가] 챕터 전체 그래프(fullElements) 생성 ===
@@ -557,12 +549,13 @@ const ViewerPage = ({ darkMode: initialDarkMode }) => {
       if (Array.isArray(ev.new_appearances))
         allNewAppearances = allNewAppearances.concat(ev.new_appearances);
     });
-    return getElementsFromRelations(
+    const generatedElements = getElementsFromRelations(
       allRelations,
       characterData,
       allNewAppearances,
       allImportance
     );
+    return generatedElements;
   }, [currentChapter, events, characterData]);
 
   // === [수정] elements: 데이터 준비/이벤트별 분리 ===
@@ -578,11 +571,12 @@ const ViewerPage = ({ darkMode: initialDarkMode }) => {
   useEffect(() => {
     if (!currentEvent || !isDataReady) return;
 
-    const events = getEventsForChapter(currentChapter);
+    // Use the events state directly instead of re-calling getEventsForChapter
     if (!events || !events.length) return;
 
     const maxEventNum =
       currentEvent?.eventNum || events[events.length - 1].eventNum;
+    
     const nodeFirstEvent = {};
     const edgeFirstEvent = {};
 
@@ -759,7 +753,7 @@ const ViewerPage = ({ darkMode: initialDarkMode }) => {
         // 챕터 번호만 업데이트
         setCurrentChapter(chapterNum);
       } catch (e) {
-        console.error("위치 계산 오류:", e);
+        // 위치 계산 오류 처리
       }
     }
   };
@@ -803,7 +797,7 @@ const ViewerPage = ({ darkMode: initialDarkMode }) => {
     try {
       cfi = await viewerRef.current.getCurrentCfi?.();
     } catch (e) {
-      console.error("getCurrentCfi 에러:", e);
+      // getCurrentCfi 에러 처리
     }
     if (!cfi) {
       toast.error("❗ 페이지 정보를 읽을 수 없습니다. 다시 불러옵니다...");
@@ -965,7 +959,7 @@ const ViewerPage = ({ darkMode: initialDarkMode }) => {
         JSON.stringify(updatedSettings)
       );
     } catch (e) {
-      console.error("설정 저장 오류:", e);
+      // 설정 저장 오류 처리
     }
 
     // EPUB 뷰어 다시 로드
@@ -983,7 +977,7 @@ const ViewerPage = ({ darkMode: initialDarkMode }) => {
         // 즉시 뷰어 다시 로드
         setReloadKey((prev) => prev + 1);
       } catch (e) {
-        console.error("설정 적용 오류:", e);
+        // 설정 적용 오류 처리
         // 에러 발생 시에도 뷰어 다시 로드
         setReloadKey((prev) => prev + 1);
       }
@@ -992,13 +986,7 @@ const ViewerPage = ({ darkMode: initialDarkMode }) => {
     saveCurrent();
   };
 
-  const handleSearch = () => {
-    // Implementation of handleSearch
-  };
 
-  const handleReset = () => {
-    // Implementation of handleReset
-  };
 
   const handleFitView = () => {
     // Implementation of handleFitView
@@ -1156,12 +1144,12 @@ const ViewerPage = ({ darkMode: initialDarkMode }) => {
 
   // 1) events 데이터 확인
   useEffect(() => {
-    console.log("[디버그] events 데이터:", events);
+    // events 데이터 디버그
   }, [events]);
 
   // 2) currentEvent 상태 변화 확인
   useEffect(() => {
-    console.log("[디버그] currentEvent 상태 변화:", currentEvent);
+    // currentEvent 상태 변화 디버그
   }, [currentEvent]);
 
   // currentEvent가 null이 아닐 때만 이전 값 갱신
@@ -1195,35 +1183,39 @@ const ViewerPage = ({ darkMode: initialDarkMode }) => {
         showGraph={showGraph}
         onToggleGraph={toggleGraph}
         pageMode={settings.pageMode}
+        graphFullScreen={graphFullScreen}
         rightSideContent={
           <CytoscapeGraphPortalProvider>
-            <GraphSplitArea
-              currentCharIndex={currentCharIndex}
-              hideIsolated={hideIsolated}
-              setHideIsolated={setHideIsolated}
-              searchInput={searchInput}
-              setSearchInput={setSearchInput}
-              handleSearch={handleSearch}
-              handleReset={handleReset}
-              handleFitView={handleFitView}
-              search={search}
-              setSearch={setSearch}
-              currentChapter={currentChapter}
-              maxChapter={maxChapter}
-              loading={loading}
-              isDataReady={isDataReady}
-              showGraph={showGraph}
-              graphFullScreen={graphFullScreen}
-              navigate={navigate}
-              filename={filename}
-              currentEvent={currentEvent}
-              prevValidEvent={prevValidEventRef.current}
-              prevEvent={prevEvent}
-              events={getEventsForChapter(currentChapter)}
-              graphDiff={graphDiff}
-              prevElements={prevElementsRef.current}
-              currentElements={elements}
-            />
+                         <GraphSplitArea
+               currentCharIndex={currentCharIndex}
+               hideIsolated={hideIsolated}
+               setHideIsolated={setHideIsolated}
+               edgeLabelVisible={edgeLabelVisible}
+               setEdgeLabelVisible={setEdgeLabelVisible}
+               handleFitView={handleFitView}
+               currentChapter={currentChapter}
+               setCurrentChapter={setCurrentChapter}
+               maxChapter={maxChapter}
+               loading={loading}
+               isDataReady={isDataReady}
+               showGraph={showGraph}
+               graphFullScreen={graphFullScreen}
+               setGraphFullScreen={setGraphFullScreen}
+               navigate={navigate}
+               filename={filename}
+               book={book}
+               viewerRef={viewerRef}
+               currentEvent={currentEvent}
+               prevValidEvent={prevValidEventRef.current}
+               prevEvent={prevEvent}
+               events={getEventsForChapter(currentChapter)}
+               graphDiff={graphDiff}
+               prevElements={prevElementsRef.current}
+               currentElements={elements}
+               onSearchSubmit={(searchTerm) => {
+             
+               }}
+             />
           </CytoscapeGraphPortalProvider>
         }
       >
@@ -1243,7 +1235,6 @@ const ViewerPage = ({ darkMode: initialDarkMode }) => {
           }}
           settings={settings}
           onCurrentLineChange={(charIndex, totalEvents, currentEvent) => {
-            console.log("[디버그] onCurrentLineChange 호출!", { charIndex, totalEvents, currentEvent });
             setCurrentCharIndex(charIndex);
             setTotalChapterWords(totalEvents || 0);
             setCurrentEvent(currentEvent);
@@ -1294,21 +1285,21 @@ function GraphSplitArea({
   currentCharIndex,
   hideIsolated,
   setHideIsolated,
-  searchInput,
-  setSearchInput,
-  handleSearch,
-  handleReset,
+  edgeLabelVisible,
+  setEdgeLabelVisible,
   handleFitView,
-  search,
-  setSearch,
   currentChapter,
+  setCurrentChapter,
   maxChapter,
   loading,
   isDataReady,
   showGraph,
   graphFullScreen,
+  setGraphFullScreen,
   navigate,
   filename,
+  book,
+  viewerRef,
   currentEvent,
   prevValidEvent,
   prevEvent,
@@ -1316,6 +1307,7 @@ function GraphSplitArea({
   graphDiff,
   prevElements,
   currentElements,
+  onSearchSubmit,
 }) {
   return (
     <div
@@ -1333,239 +1325,34 @@ function GraphSplitArea({
         padding: 0,
       }}
     >
-      {/* 상단바: < 버튼 + 챕터 드롭다운 + 독립 인물 버튼 + 검색 등 */}
-      <div
-        style={{
-          height: 40,
-          flexShrink: 0,
-          display: "flex",
-          flexDirection: "row",
-          alignItems: "center",
-          width: "100%",
-          marginBottom: 0,
-          gap: 0,
-          paddingLeft: 12,
-          paddingTop: 0,
-          justifyContent: "flex-start",
-        }}
-      >
-        {/* < 전체화면 버튼 */}
-        <button
-          onClick={() => navigate(`/user/graph/${filename}`)}
-          style={{
-            height: 32,
-            width: 32,
-            minWidth: 32,
-            minHeight: 32,
-            borderRadius: "8px",
-            border: "1.5px solid #e3e6ef",
-            background: "#fff",
-            color: "#22336b",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            fontSize: 18,
-            marginRight: 8,
-            cursor: "pointer",
-            boxShadow: "0 2px 8px rgba(108,142,255,0.07)",
-            transition:
-              "background 0.18s, color 0.18s, box-shadow 0.18s, transform 0.13s",
-          }}
-          title="그래프 전체화면"
-        >
-          {"<"}
-        </button>
-        {/* 챕터 드롭다운, 초기화, 독립 인물 버튼 */}
-        <div
-          style={{
-            display: "flex",
-            flexDirection: "row",
-            alignItems: "center",
-            gap: 8,
-          }}
-        >
-          <div className="chapter-dropdown-container">
-            <select
-              value={currentChapter}
-              onChange={(e) => setCurrentChapter(Number(e.target.value))}
-              style={{
-                height: 32,
-                padding: "2px 8px",
-                borderRadius: 6,
-                border: "1px solid #bfc8e2",
-                fontSize: 14,
-                background: "#f4f7fb",
-                color: "#22336b",
-                fontWeight: 500,
-                outline: "none",
-                minWidth: 90,
-                maxWidth: 180,
-                cursor: "pointer",
-                lineHeight: "32px",
-              }}
-            >
-              {Array.from({ length: maxChapter }, (_, i) => i + 1).map(
-                (chapter) => (
-                  <option key={chapter} value={chapter}>
-                    Chapter {chapter}
-                  </option>
-                )
-              )}
-            </select>
-          </div>
-          {/* 초기화(새로고침) 버튼 */}
-          <button
-            onClick={() => window.location.reload()}
-            title="초기화"
-            style={{
-              height: 32,
-              width: 32,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              borderRadius: 6,
-              border: "1px solid #bfc8e2",
-              background: "#f4f7fb",
-              color: "#4F6DDE",
-              fontSize: 18,
-              margin: "0 4px",
-              cursor: "pointer",
-              transition: "background 0.18s",
-              outline: "none",
-              boxShadow: "none",
-              padding: 0,
-            }}
-          >
-            <FaSyncAlt />
-          </button>
-          <button
-            onClick={() => setHideIsolated((v) => !v)}
-            style={{
-              height: 32,
-              padding: "2px 12px",
-              borderRadius: 6,
-              border: "1px solid #bfc8e2",
-              background: hideIsolated ? "#6C8EFF" : "#f4f7fb",
-              color: hideIsolated ? "#fff" : "#22336b",
-              fontWeight: 500,
-              fontSize: 14,
-              cursor: "pointer",
-              marginLeft: 6,
-              lineHeight: "28px",
-            }}
-          >
-            {hideIsolated ? "독립 인물 숨김" : "독립 인물 표시"}
-          </button>
-        </div>
-        {/* 오른쪽: 인물 검색 폼 */}
-        <div
-          style={{
-            minWidth: 120,
-            maxWidth: 320,
-            flex: 1,
-            display: "flex",
-            justifyContent: "flex-end",
-          }}
-        >
-          <GraphControls
-            searchInput={searchInput}
-            setSearchInput={setSearchInput}
-            handleSearch={handleSearch}
-            handleReset={handleReset}
-            handleFitView={handleFitView}
-            search={search}
-            setSearch={setSearch}
-            inputStyle={{
-              height: 32,
-              fontSize: 14,
-              padding: "2px 8px",
-              borderRadius: 6,
-            }}
-            buttonStyle={{
-              height: 32,
-              fontSize: 14,
-              padding: "2px 10px",
-              borderRadius: 6,
-            }}
-          />
-        </div>
-      </div>
-      {/* [이벤트 전환 UX] 상단바와 그래프 영역 사이에 추가 */}
-      <div
-        style={{
-          width: "100%",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          height: 48,
-          background: "linear-gradient(90deg, #e3eafe 0%, #f8fafc 100%)",
-          borderBottom: "1.5px solid #e3e6ef",
-          position: "relative",
-          zIndex: 2,
-          fontWeight: 600,
-          fontSize: 18,
-          letterSpacing: 1,
-          transition: "background 0.3s",
-        }}
-      >
-        <span
-          style={{
-            display: "inline-block",
-            padding: "6px 22px",
-            borderRadius: 24,
-            background: "#4F6DDE",
-            color: "#fff",
-            boxShadow: "0 2px 8px rgba(79,109,222,0.13)",
-            fontSize: 18,
-            fontWeight: 700,
-            letterSpacing: 1,
-            transition: "transform 0.3s, background 0.3s",
-            transform:
-              prevEvent &&
-              (currentEvent || prevValidEvent) &&
-              prevEvent.eventNum !== (currentEvent || prevValidEvent).eventNum
-                ? "scale(1.12)"
-                : "scale(1)",
-          }}
-        >
-          {(currentEvent || prevValidEvent)
-            ? `이벤트 ${(currentEvent || prevValidEvent).eventNum ?? 0}${(currentEvent || prevValidEvent).name ? `: ${(currentEvent || prevValidEvent).name}` : ""}`
-            : "이벤트 정보 없음"}
-        </span>
-        {/* 전체 이벤트 중 현재 위치 프로그레스 바 */}
-        {events && currentEvent && (
-          <div
-            style={{
-              position: "absolute",
-              right: 32,
-              top: "50%",
-              transform: "translateY(-50%)",
-              width: 180,
-              height: 8,
-              background: "#e3e6ef",
-              borderRadius: 4,
-              overflow: "hidden",
-            }}
-          >
-            <div
-              style={{
-                width: `${
-                  ((currentEvent.eventNum || 0) / (events.length + 1)) * 100
-                }%`,
-                height: "100%",
-                background: "linear-gradient(90deg, #4F6DDE 0%, #6fa7ff 100%)",
-                borderRadius: 4,
-                transition: "width 0.4s cubic-bezier(.4,2,.6,1)",
-              }}
-            />
-          </div>
-        )}
-      </div>
+      <ViewerTopBar
+        navigate={navigate}
+        filename={filename}
+        currentChapter={currentChapter}
+        setCurrentChapter={setCurrentChapter}
+        maxChapter={maxChapter}
+        book={book}
+        viewerRef={viewerRef}
+        currentEvent={currentEvent}
+        prevValidEvent={prevValidEvent}
+        prevEvent={prevEvent}
+        events={events}
+        graphFullScreen={graphFullScreen}
+        setGraphFullScreen={setGraphFullScreen}
+        edgeLabelVisible={edgeLabelVisible}
+        setEdgeLabelVisible={setEdgeLabelVisible}
+        hideIsolated={hideIsolated}
+        setHideIsolated={setHideIsolated}
+        onSearchSubmit={onSearchSubmit}
+      />
+      
       {/* 그래프 본문 */}
       <div style={{ flex: 1, position: "relative", minHeight: 0, minWidth: 0 }}>
         <GraphContainer
           currentPosition={currentCharIndex}
           currentEvent={currentEvent || prevValidEvent}
+          currentChapter={currentChapter}
+          edgeLabelVisible={edgeLabelVisible}
         />
       </div>
     </div>

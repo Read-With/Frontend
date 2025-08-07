@@ -18,7 +18,6 @@ const UploadPage = () => {
   // 로그아웃 핸들러
   const handleLogout = () => {
     // 로그아웃 로직 구현
-    console.log('로그아웃 처리');
     // navigate('/login'); // 로그인 페이지로 이동
   };
 
@@ -67,7 +66,6 @@ const UploadPage = () => {
       }, 3000);
       
     } catch (error) {
-      console.error('파일 업로드 실패:', error);
       setUploadStatus('error');
       setErrorMessage(error.response?.data?.message || '파일 업로드 중 오류가 발생했습니다.');
     } finally {

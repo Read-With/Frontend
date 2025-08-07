@@ -2,15 +2,15 @@
 
 export const DEFAULT_LAYOUT = {
   name: "preset",
-  padding: 10,
-  nodeRepulsion: 10000,
+  padding: 20,
+  nodeRepulsion: 15000,
   idealEdgeLength: 400,
   animate: false,
   fit: true,
   randomize: false,
-  nodeOverlap: 800,
+  nodeOverlap: 0,
   avoidOverlap: true,
-  nodeSeparation: 400,
+  nodeSeparation: 50,
   randomSeed: 42,
   componentSpacing: 400
 };

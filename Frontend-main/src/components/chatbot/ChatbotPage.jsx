@@ -228,8 +228,6 @@ const ChatbotPage = () => {
       
       setMessages(prevMessages => [...prevMessages, botMessage]);
     } catch (error) {
-      console.error('챗봇 응답 생성 오류:', error);
-      
       const errorMessage = {
         id: Date.now() + 1,
         text: '죄송합니다. 응답을 생성하는 중에 오류가 발생했습니다.',
