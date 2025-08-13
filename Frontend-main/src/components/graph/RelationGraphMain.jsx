@@ -54,7 +54,7 @@ const getEdgeStyle = () => {
   };
 };
 
-const MAX_EDGE_LABEL_LENGTH = 15;
+// MAX_EDGE_LABEL_LENGTH 제거됨 - 길이 제한 없음
 
 const getWideLayout = () => {
   if (typeof window !== 'undefined') {
@@ -171,12 +171,29 @@ function RelationGraphMain({
   // 간선 클릭 시 툴팁 표시 (좌표 변환)
   const tapEdgeHandler = useCallback(
     (evt) => {
-      if (!cyRef.current) return;
+      // 디버깅: 간선 클릭 이벤트 (필요시 주석 해제)
+      // console.log('=== 간선 클릭 이벤트 발생! ===');
+      // console.log('evt:', evt);
+      // console.log('evt.target:', evt.target);
+      
+      if (!cyRef.current) {
+        // console.log('cyRef.current가 없음');
+        return;
+      }
       const cy = cyRef.current;
       const edge = evt.target;
       
+      // 디버깅: 간선 클릭 시 데이터 확인 (필요시 주석 해제)
+      // console.log('=== 간선 클릭 디버깅 ===');
+      // console.log('클릭된 간선:', edge);
+      // console.log('간선 데이터:', edge?.data());
+      // console.log('간선 relation:', edge?.data()?.relation);
+      // console.log('간선 label:', edge?.data()?.label);
+      // console.log('========================');
+      
       // 엣지 데이터 확인
       if (!edge || !edge.data()) {
+        // console.log('엣지 데이터가 없음');
         return;
       }
       
@@ -316,7 +333,7 @@ function RelationGraphMain({
           label: (ele) => {
             const label = ele.data('label') || '';
             if (!edgeLabelVisible) return '';
-            return label.length > MAX_EDGE_LABEL_LENGTH ? label.slice(0, MAX_EDGE_LABEL_LENGTH) + '...' : label;
+            return label; // 길이 제한 제거
           },
           "font-size": edgeStyle.fontSize,
           "text-rotation": "autorotate",
@@ -331,6 +348,7 @@ function RelationGraphMain({
           "target-arrow-shape": "none",
           "line-style": "solid",
           "border-width": 0,
+          events: "yes", // 클릭 이벤트 활성화
         },
       },
       {

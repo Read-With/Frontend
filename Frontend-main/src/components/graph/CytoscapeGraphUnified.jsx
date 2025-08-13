@@ -53,7 +53,14 @@ const CytoscapeGraphUnified = ({
     const cy = cyInstance;
     cy.off("tap");
     if (tapNodeHandler) cy.on("tap", "node", tapNodeHandler);
-    if (tapEdgeHandler) cy.on("tap", "edge", tapEdgeHandler);
+    if (tapEdgeHandler) {
+      // 디버깅: 간선 클릭 이벤트 등록 (필요시 주석 해제)
+      // console.log('=== 간선 클릭 이벤트 등록 ===');
+      // console.log('tapEdgeHandler:', tapEdgeHandler);
+      cy.on("tap", "edge", tapEdgeHandler);
+      // console.log('간선 클릭 이벤트 등록 완료');
+      // console.log('========================');
+    }
     if (tapBackgroundHandler) cy.on("tap", tapBackgroundHandler);
     
     // 사용자가 노드 드래그 후 놓았을 때만 겹침 감지 및 조정
@@ -75,7 +82,7 @@ const CytoscapeGraphUnified = ({
     // 드래그 완료 후 애니메이션 복원
     cy.on('dragfree', 'node', (evt) => {
       const node = evt.target;
-      node.style('transition-property', 'all');
+      node.style('transition-property', 'position');
     });
     
     return () => {};
@@ -135,6 +142,15 @@ const CytoscapeGraphUnified = ({
   useEffect(() => {
     const cy = externalCyRef?.current;
     if (!cy) return;
+    
+    // 디버깅: 간선 데이터 확인 (필요시 주석 해제)
+    // console.log('=== CytoscapeGraphUnified elements 디버깅 ===');
+    // console.log('전체 elements:', elements);
+    // const edges = elements?.filter(el => el.data.source && el.data.target) || [];
+    // console.log('간선 개수:', edges.length);
+    // console.log('간선 데이터:', edges);
+    // console.log('==========================================');
+    
     if (!elements || elements.length === 0) {
       cy.elements().remove();
       setIsGraphVisible(false);
