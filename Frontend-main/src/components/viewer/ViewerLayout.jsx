@@ -39,18 +39,26 @@ const ViewerLayout = ({
 
   return (
     <div className="flex flex-col h-screen overflow-hidden">
-      {/* 상단 Toolbar */}
-      <ViewerToolbar
-        showControls={showControls}
-        onPrev={onPrev}
-        onNext={onNext}
-        onAddBookmark={onAddBookmark}
-        onToggleBookmarkList={onToggleBookmarkList}
-        onOpenSettings={onOpenSettings}
-        onToggleGraph={onToggleGraph}
-        showGraph={showGraph}
-        pageMode={pageMode}
-      />
+      {/* 상단 Toolbar - 파란색 상단바 (그래프 전체화면일 때 투명하게 숨김) */}
+      <div style={{
+        opacity: graphFullScreen ? 0 : 1,
+        visibility: graphFullScreen ? 'hidden' : 'visible',
+        transition: 'opacity 0.3s ease, visibility 0.3s ease',
+        height: graphFullScreen ? '60px' : 'auto', // 전체화면일 때 높이 유지
+        flexShrink: 0,
+      }}>
+        <ViewerToolbar
+          showControls={showControls}
+          onPrev={onPrev}
+          onNext={onNext}
+          onAddBookmark={onAddBookmark}
+          onToggleBookmarkList={onToggleBookmarkList}
+          onOpenSettings={onOpenSettings}
+          onToggleGraph={onToggleGraph}
+          showGraph={showGraph}
+          pageMode={pageMode}
+        />
+      </div>
 
       {/* 본문 영역 - 좌우로 나눔 */}
       <div
@@ -104,16 +112,24 @@ const ViewerLayout = ({
         )}
       </div>
 
-      {/* 하단 ProgressBar 반드시 추가! */}
-      <ViewerProgressBar
-        showControls={showControls}
-        progress={progress}
-        setProgress={setProgress}
-        darkMode={darkMode}
-        onSliderChange={onSliderChange}
-        currentPage={currentPage}
-        totalPages={totalPages}
-      />
+      {/* 하단 ProgressBar - 파란색 하단바 (그래프 전체화면일 때 투명하게 숨김) */}
+      <div style={{
+        opacity: graphFullScreen ? 0 : 1,
+        visibility: graphFullScreen ? 'hidden' : 'visible',
+        transition: 'opacity 0.3s ease, visibility 0.3s ease',
+        height: graphFullScreen ? '80px' : 'auto', // 전체화면일 때 높이 유지 (ProgressBar 높이 + 마진)
+        flexShrink: 0,
+      }}>
+        <ViewerProgressBar
+          showControls={showControls}
+          progress={progress}
+          setProgress={setProgress}
+          darkMode={darkMode}
+          onSliderChange={onSliderChange}
+          currentPage={currentPage}
+          totalPages={totalPages}
+        />
+      </div>
     </div>
   );
 };
