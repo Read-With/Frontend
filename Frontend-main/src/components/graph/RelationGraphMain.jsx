@@ -76,7 +76,26 @@ const getWideLayout = () => {
   return DEFAULT_LAYOUT;
 };
 
-function RelationGraphMain({ elements, inViewer = false, fullScreen = false, onFullScreen, onExitFullScreen, graphViewState, setGraphViewState, chapterNum, eventNum, hideIsolated, maxEventNum, newNodeIds, maxChapter, edgeLabelVisible = true }) {
+function RelationGraphMain({ 
+  elements, 
+  inViewer = false, 
+  fullScreen = false, 
+  onFullScreen, 
+  onExitFullScreen, 
+  graphViewState, 
+  setGraphViewState, 
+  chapterNum, 
+  eventNum, 
+  hideIsolated, 
+  maxEventNum, 
+  newNodeIds, 
+  maxChapter, 
+  edgeLabelVisible = true,
+  fitNodeIds = [],
+  searchTerm = "",
+  isSearchActive = false,
+  filteredElements = null, // 검색된 요소들 (null이면 elements 사용)
+}) {
   const cyRef = useRef(null);
   const hasCenteredRef = useRef(false); // 최초 1회만 중앙정렬
   const [activeTooltip, setActiveTooltip] = useState(null); // 하나의 툴팁만 관리
@@ -221,17 +240,11 @@ function RelationGraphMain({ elements, inViewer = false, fullScreen = false, onF
       cy.nodes().removeClass("faded");
       cy.edges().removeClass("faded");
       cy.nodes().removeClass("highlighted");
-      cy.removeListener("tap", "node");
-      cy.removeListener("tap", "edge");
-      cy.removeListener("tap");
-      cy.on("tap", "node", tapNodeHandler);
-      cy.on("tap", "edge", tapEdgeHandler);
-      cy.on("tap", tapBackgroundHandler);
     }
     setActiveTooltip(null);
     selectedEdgeIdRef.current = null;
     selectedNodeIdRef.current = null;
-  }, [tapNodeHandler, tapEdgeHandler, tapBackgroundHandler]);
+  }, []);
 
   const handleCloseTooltip = useCallback(() => {
     clearSelection();
@@ -247,16 +260,13 @@ function RelationGraphMain({ elements, inViewer = false, fullScreen = false, onF
     });
   }, [elements]);
 
-  // filteredElements를 useMemo로 고정 (의존성 최소화)
-  const { filteredElements, fitNodeIds } = useMemo(() => {
-    // 엣지들이 제대로 포함되도록 안전한 필터링
-    if (!sortedElements || sortedElements.length === 0) {
-      return { filteredElements: [], fitNodeIds: [] };
+  // 검색된 요소들 또는 원래 요소들 사용
+  const finalElements = useMemo(() => {
+    if (filteredElements && filteredElements.length > 0) {
+      return filteredElements;
     }
-    
-    // 모든 요소 반환 (검색은 RelationGraphWrapper에서 처리)
-    return { filteredElements: sortedElements, fitNodeIds: [] };
-  }, [sortedElements]);
+    return sortedElements;
+  }, [filteredElements, sortedElements]);
 
   // currentEventJson이 내용이 같으면 참조도 같게 useMemo로 캐싱
   const stableEventJson = useMemo(() => graphViewState ? JSON.stringify(graphViewState) : '', [graphViewState]);
@@ -509,7 +519,7 @@ function RelationGraphMain({ elements, inViewer = false, fullScreen = false, onF
   }, [elements, activeTooltip]);
 
   // elements, stylesheet, layout, searchLayout, style useMemo 최적화
-  const memoizedElements = useMemo(() => filteredElements, [filteredElements]);
+  const memoizedElements = useMemo(() => finalElements, [finalElements]);
   const memoizedStylesheet = useMemo(() => stylesheet, [stylesheet]);
   const memoizedLayout = useMemo(() => getWideLayout(), []);
   const memoizedStyle = useMemo(() => ({
@@ -654,6 +664,8 @@ function RelationGraphMain({ elements, inViewer = false, fullScreen = false, onF
                      cyRef={cyRef}
                      newNodeIds={newNodeIds}
                      nodeSize={nodeSize}
+                     searchTerm={searchTerm}
+                     isSearchActive={isSearchActive}
                    />
                  </>
                )}
@@ -777,6 +789,8 @@ function RelationGraphMain({ elements, inViewer = false, fullScreen = false, onF
                 cyRef={cyRef}
                 newNodeIds={newNodeIds}
                 nodeSize={nodeSize}
+                searchTerm={searchTerm}
+                isSearchActive={isSearchActive}
               />
             </>
           )}

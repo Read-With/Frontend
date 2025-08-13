@@ -6,6 +6,7 @@ import "./RelationGraph.css";
 import { useNavigate, useParams } from "react-router-dom";
 import { FaTimes, FaBars, FaChevronLeft } from 'react-icons/fa';
 import { convertRelationsToElements } from './graphElementUtils';
+import { filterGraphElements } from './graphFilter';
 
 // characters.json, 이벤트별 relations.json glob import
 const characterModules = import.meta.glob('../../data/gatsby/c_chapter*_0.json', { eager: true });
@@ -22,6 +23,8 @@ const getChapterCharacters = (chapter) => {
 function RelationGraphWrapper() {
   const navigate = useNavigate();
   const { filename } = useParams();
+  
+
   const [currentChapter, setCurrentChapter] = useState(() => {
     const saved = localStorage.getItem('lastGraphChapter');
     return saved ? Number(saved) : 1;
@@ -36,6 +39,12 @@ function RelationGraphWrapper() {
   const [chapterEvents, setChapterEvents] = useState([]);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true); // 사이드바 열림/닫힘 상태
   const [edgeLabelVisible, setEdgeLabelVisible] = useState(true); // 간선 라벨 가시성 상태
+  
+  // 검색 관련 상태 추가
+  const [searchTerm, setSearchTerm] = useState("");
+  const [filteredElements, setFilteredElements] = useState([]);
+  const [fitNodeIds, setFitNodeIds] = useState([]);
+  const [isSearchActive, setIsSearchActive] = useState(false);
 
   // === 1. 챕터별/이벤트별 모든 relations.json을 미리 누적 구조로 준비 ===
   const allEventsDataRef = useRef({}); // { [chapterNum]: [ {nodes, edges} ... ] }
@@ -118,9 +127,48 @@ function RelationGraphWrapper() {
 
   // 검색 제출 함수
   const handleSearchSubmit = (searchTerm) => {
-    console.log('Search submitted:', searchTerm);
-    // 여기에 검색 로직을 구현할 수 있습니다
+    setSearchTerm(searchTerm);
+    setIsSearchActive(!!searchTerm.trim());
+    
+    if (searchTerm.trim()) {
+      const { filteredElements: filtered, fitNodeIds: fitIds } = filterGraphElements(elements, searchTerm);
+      setFilteredElements(filtered);
+      setFitNodeIds(fitIds);
+      
+      if (filtered.length > 0) {
+        // 검색 결과가 있을 때만 처리
+      }
+    } else {
+      // 검색어가 비어있으면 모든 요소 표시
+      setFilteredElements(elements);
+      setFitNodeIds([]);
+      setIsSearchActive(false);
+    }
   };
+
+  // 검색 초기화 함수
+  const clearSearch = () => {
+    setSearchTerm("");
+    setFilteredElements(elements);
+    setFitNodeIds([]);
+    setIsSearchActive(false);
+  };
+
+  // elements가 변경될 때 검색 결과도 업데이트
+  useEffect(() => {
+    if (isSearchActive && searchTerm.trim()) {
+      const { filteredElements: filtered, fitNodeIds: fitIds } = filterGraphElements(elements, searchTerm);
+      if (filtered.length > 0) {
+        setFilteredElements(filtered);
+        setFitNodeIds(fitIds);
+      } else {
+        setFilteredElements(elements);
+        setFitNodeIds([]);
+      }
+    } else if (!isSearchActive) {
+      setFilteredElements(elements);
+    }
+  }, [elements]); // searchTerm, isSearchActive 제거
 
   return (
     <div style={{ width: '100vw', height: '100vh', background: '#f4f7fb', overflow: 'hidden', display: 'flex' }}>
@@ -301,6 +349,10 @@ function RelationGraphWrapper() {
               <GraphControls
                 onSearchSubmit={handleSearchSubmit}
                 isFullScreen={true}
+                searchTerm={searchTerm}
+                isSearchActive={isSearchActive}
+                clearSearch={clearSearch}
+                elements={elements}
               />
               
               {/* 간선 라벨 스위치 토글 */}
@@ -396,7 +448,7 @@ function RelationGraphWrapper() {
           {maxEventNum > 0 ? (
             elements.length > 0 ? (
               <RelationGraphMain 
-                elements={elements} 
+                elements={isSearchActive && filteredElements.length > 0 ? filteredElements : elements} 
                 inViewer={false}
                 fullScreen={true}
                 graphViewState={graphViewState}
@@ -408,6 +460,10 @@ function RelationGraphWrapper() {
                 newNodeIds={newNodeIds}
                 maxChapter={maxChapter}
                 edgeLabelVisible={edgeLabelVisible}
+                fitNodeIds={fitNodeIds}
+                searchTerm={searchTerm}
+                isSearchActive={isSearchActive}
+                filteredElements={filteredElements}
               />
             ) : (
               <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, color: '#6C8EFF' }}>

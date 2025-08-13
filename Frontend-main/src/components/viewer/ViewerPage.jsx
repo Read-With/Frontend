@@ -9,12 +9,13 @@ import { toast, ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import RelationGraphMain from "../graph/RelationGraphMain";
 import GraphControls from "../graph/GraphControls";
-import { FaSyncAlt } from "react-icons/fa";
+
 import cytoscape from "cytoscape";
 import CytoscapeGraphPortalProvider from "../graph/CytoscapeGraphPortalProvider";
 import GraphContainer from "../graph/GraphContainer";
 import EdgeLabelToggle from "../common/EdgeLabelToggle";
 import ViewerTopBar from "./ViewerTopBar";
+
 
 const eventRelationModules = import.meta.glob(
   "../../data/gatsby/chapter*_relationships_event_*.json",
@@ -312,27 +313,30 @@ const ViewerPage = ({ darkMode: initialDarkMode }) => {
   );
   const [currentChapter, setCurrentChapter] = useState(1);
   
-  // localStorage에서 저장된 모드를 확인하여 초기 상태 설정
-  const getInitialViewerMode = () => {
-    try {
-      const mode = localStorage.getItem("viewer_mode");
-      if (mode === "graph") {
-        return { showGraph: true, graphFullScreen: true };
-      } else if (mode === "split") {
-        return { showGraph: true, graphFullScreen: false };
-      } else if (mode === "viewer") {
-        return { showGraph: false, graphFullScreen: false };
-      }
-      // 저장된 모드가 없으면 기본값 (분할 화면)
-      return { showGraph: true, graphFullScreen: false };
-    } catch (e) {
-      return { showGraph: true, graphFullScreen: false };
+  // 3. localStorage에서 저장된 모드를 확인하여 초기 상태 설정
+  const [graphFullScreen, setGraphFullScreen] = useState(() => {
+    const saved = localStorage.getItem("viewer_mode");
+    if (saved === "graph") {
+      return true;
+    } else if (saved === "split") {
+      return false;
+    } else if (saved === "viewer") {
+      return false;
     }
-  };
+    return false; // 기본값
+  });
+  const [showGraph, setShowGraph] = useState(() => {
+    const saved = localStorage.getItem("viewer_mode");
+    if (saved === "graph" || saved === "split") {
+      return true;
+    } else if (saved === "viewer") {
+      return false;
+    }
+    return settings.showGraph; // 기본값
+  });
   
-  const initialMode = getInitialViewerMode();
-  const [graphFullScreen, setGraphFullScreen] = useState(initialMode.graphFullScreen);
-  const [showGraph, setShowGraph] = useState(initialMode.showGraph);
+  // 검색 관련 상태 추가
+
   const [elements, setElements] = useState([]);
   const [currentCharIndex, setCurrentCharIndex] = useState(0);
   const [currentPageWords, setCurrentPageWords] = useState(0);
@@ -613,6 +617,8 @@ const ViewerPage = ({ darkMode: initialDarkMode }) => {
       }
     });
 
+
+
     const filtered = fullElements.filter((el) => {
       if (el.data.source && el.data.target) {
         const edgeKey = `${el.data.source}-${el.data.target}`;
@@ -628,6 +634,8 @@ const ViewerPage = ({ darkMode: initialDarkMode }) => {
       }
       return false;
     });
+
+
 
     let nodePositions = {};
     try {
@@ -1164,6 +1172,9 @@ const ViewerPage = ({ darkMode: initialDarkMode }) => {
     }
   }, [currentEvent]);
 
+  // 검색 처리 함수
+
+
   return (
     <div
       className="h-screen"
@@ -1217,9 +1228,6 @@ const ViewerPage = ({ darkMode: initialDarkMode }) => {
                graphDiff={graphDiff}
                prevElements={prevElementsRef.current}
                currentElements={elements}
-               onSearchSubmit={(searchTerm) => {
-             
-               }}
              />
           </CytoscapeGraphPortalProvider>
         }
@@ -1312,8 +1320,19 @@ function GraphSplitArea({
   graphDiff,
   prevElements,
   currentElements,
-  onSearchSubmit,
 }) {
+  const graphContainerRef = React.useRef(null);
+  const [searchState, setSearchState] = React.useState({
+    searchTerm: "",
+    isSearchActive: false,
+    filteredElements: [],
+    fitNodeIds: []
+  });
+
+  const handleSearchStateChange = React.useCallback((newState) => {
+    setSearchState(newState);
+  }, []);
+
   return (
     <div
       className="h-full w-full flex flex-col"
@@ -1348,16 +1367,21 @@ function GraphSplitArea({
         setEdgeLabelVisible={setEdgeLabelVisible}
         hideIsolated={hideIsolated}
         setHideIsolated={setHideIsolated}
-        onSearchSubmit={onSearchSubmit}
+        onSearchSubmit={(searchTerm) => graphContainerRef.current?.handleSearchSubmit(searchTerm)}
+        searchTerm={searchState.searchTerm}
+        isSearchActive={searchState.isSearchActive}
+        clearSearch={() => graphContainerRef.current?.clearSearch()}
       />
       
       {/* 그래프 본문 */}
       <div style={{ flex: 1, position: "relative", minHeight: 0, minWidth: 0 }}>
         <GraphContainer
+          ref={graphContainerRef}
           currentPosition={currentCharIndex}
           currentEvent={currentEvent || prevValidEvent}
           currentChapter={currentChapter}
           edgeLabelVisible={edgeLabelVisible}
+          onSearchStateChange={handleSearchStateChange}
         />
       </div>
     </div>

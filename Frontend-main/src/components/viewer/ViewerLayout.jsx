@@ -22,9 +22,7 @@ const ViewerLayout = ({
   pageMode,
   graphFullScreen
 }) => {
-  console.log('ViewerLayout render - graphFullScreen:', graphFullScreen, 'showGraph:', showGraph);
-  console.log('EPUB viewer class:', `${showGraph && !graphFullScreen ? 'w-1/2' : graphFullScreen ? 'w-0' : 'w-full'}`);
-  console.log('Graph area class:', `${graphFullScreen ? 'w-full' : 'w-1/2'}`);
+
   // 그래프 표시 상태가 변경될 때 창 크기 변경 이벤트 발생시키기
   useEffect(() => {
     // 창 크기 변경 이벤트를 발생시켜 EPUB 뷰어가 크기를 재조정하도록 함

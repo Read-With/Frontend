@@ -15,6 +15,8 @@ const CytoscapeGraphUnified = ({
   newNodeIds = [],
   onLayoutComplete,
   nodeSize = 40,
+  searchTerm = "",
+  isSearchActive = false,
 }) => {
   const containerRef = useRef(null);
   const [isGraphVisible, setIsGraphVisible] = useState(false);
@@ -31,8 +33,15 @@ const CytoscapeGraphUnified = ({
         layout: { name: "preset" },
         userZoomingEnabled: true,
         userPanningEnabled: true,
-        minZoom: 0.05,
-        maxZoom: 2.5,
+        minZoom: 0.3,
+        maxZoom: 1.8,
+        wheelSensitivity: 1,
+        autoungrabify: false,
+        autolock: false,
+        autounselectify: false,
+        selectionType: 'single',
+        touchTapThreshold: 8,
+        desktopTapThreshold: 4,
       });
       if (externalCyRef) externalCyRef.current = cyInstance;
     } else {
@@ -52,7 +61,21 @@ const CytoscapeGraphUnified = ({
       // 드래그 완료 후 즉시 겹침 확인
       setTimeout(() => {
         detectAndResolveOverlap(cy);
-      }, 10);
+      }, 50);
+    });
+
+    // 드래그 감도 조정
+    cy.on('drag', 'node', (evt) => {
+      const node = evt.target;
+      const pos = node.position();
+      // 드래그 중 부드러운 이동을 위한 애니메이션 비활성화
+      node.style('transition-property', 'none');
+    });
+
+    // 드래그 완료 후 애니메이션 복원
+    cy.on('dragfree', 'node', (evt) => {
+      const node = evt.target;
+      node.style('transition-property', 'all');
     });
     
     return () => {};
@@ -167,11 +190,17 @@ const CytoscapeGraphUnified = ({
        if (stylesheet) cy.style(stylesheet);
        // 레이아웃 적용
        if (layout && layout.name !== 'preset') {
-         const layoutInstance = cy.layout(layout);
+         const layoutInstance = cy.layout({
+           ...layout,
+           animationDuration: 800,
+           animationEasing: 'ease-out'
+         });
          layoutInstance.on('layoutstop', () => {
            // 노드 추가 후 즉시 겹침 확인
-           detectAndResolveOverlap(cy);
-           if (onLayoutComplete) onLayoutComplete();
+           setTimeout(() => {
+             detectAndResolveOverlap(cy);
+             if (onLayoutComplete) onLayoutComplete();
+           }, 200);
          });
          layoutInstance.run();
        } else {
@@ -179,18 +208,42 @@ const CytoscapeGraphUnified = ({
          setTimeout(() => {
            detectAndResolveOverlap(cy);
            if (onLayoutComplete) onLayoutComplete();
-         }, 100);
+         }, 150);
        }
       // fit
       if (fitNodeIds && fitNodeIds.length > 0) {
         const nodes = cy.nodes().filter(n => fitNodeIds.includes(n.id()));
-        if (nodes.length > 0) cy.fit(nodes, 40);
+        if (nodes.length > 0) {
+          cy.fit(nodes, 60);
+          
+          // 검색된 노드들을 하이라이트
+          cy.nodes().removeClass('search-highlight');
+          nodes.addClass('search-highlight');
+          
+          // 검색된 노드들의 크기를 약간 키움
+          cy.nodes().style('width', nodeSize);
+          cy.nodes().style('height', nodeSize);
+          nodes.style('width', nodeSize * 1.2);
+          nodes.style('height', nodeSize * 1.2);
+        }
       } else {
-        cy.fit(undefined, 40);
+        cy.fit(undefined, 60);
+        // 검색이 비활성화되면 하이라이트 제거
+        if (!isSearchActive) {
+          cy.nodes().removeClass('search-highlight');
+          // 노드 크기도 원래대로 되돌림
+          cy.nodes().style('width', nodeSize);
+          cy.nodes().style('height', nodeSize);
+        }
+      }
+      
+      // 검색 결과가 없을 때 메시지 표시
+      if (isSearchActive && (!fitNodeIds || fitNodeIds.length === 0)) {
+        // 검색 결과가 없음을 표시하는 로직
       }
     });
     setIsGraphVisible(true);
-  }, [elements, stylesheet, layout, fitNodeIds, externalCyRef, newNodeIds, onLayoutComplete, nodeSize]);
+  }, [elements, stylesheet, layout, fitNodeIds, externalCyRef, newNodeIds, onLayoutComplete, nodeSize, isSearchActive]);
 
   // 크기 반응형
   useEffect(() => {
@@ -217,7 +270,41 @@ const CytoscapeGraphUnified = ({
         visibility: isGraphVisible ? "visible" : "hidden"
       }}
       className="graph-canvas-area"
-    />
+    >
+      {/* 검색 결과가 없을 때 메시지 */}
+      {isSearchActive && searchTerm && (!fitNodeIds || fitNodeIds.length === 0) && (
+        <div style={{
+          position: 'absolute',
+          top: '50%',
+          left: '50%',
+          transform: 'translate(-50%, -50%)',
+          background: 'rgba(255, 255, 255, 0.95)',
+          padding: '20px 30px',
+          borderRadius: '12px',
+          boxShadow: '0 4px 20px rgba(0, 0, 0, 0.1)',
+          border: '1px solid #e3e6ef',
+          zIndex: 1000,
+          textAlign: 'center',
+          maxWidth: '300px'
+        }}>
+          <div style={{
+            fontSize: '18px',
+            fontWeight: '600',
+            color: '#64748b',
+            marginBottom: '8px'
+          }}>
+            검색 결과가 없습니다
+          </div>
+          <div style={{
+            fontSize: '14px',
+            color: '#94a3b8',
+            lineHeight: '1.4'
+          }}>
+            "{searchTerm}"와 일치하는 인물을 찾을 수 없습니다.
+          </div>
+        </div>
+      )}
+    </div>
   );
 };
 
