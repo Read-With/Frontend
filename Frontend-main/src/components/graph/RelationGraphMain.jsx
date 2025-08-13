@@ -26,7 +26,7 @@ export const getNodeSize = () => {
   if (typeof window !== 'undefined') {
     const path = window.location.pathname;
     if (path.includes('/user/viewer/')) return 40;
-    if (path.includes('/user/graph/')) return 42;
+    if (path.includes('/user/graph/')) return 40;
   }
   return 40; // 기본값
 };
@@ -291,7 +291,13 @@ function RelationGraphMain({
           label: "data(label)",
           "text-valign": "bottom",
           "text-halign": "center",
-          "font-size": 6,
+          "font-size": (ele) => {
+            if (typeof window !== 'undefined') {
+              const path = window.location.pathname;
+              if (path.includes('/user/graph/')) return 8;
+            }
+            return 6;
+          },
           "font-weight": (ele) => (ele.data("main") ? 600 : 400),
           color: "#444",
           "text-margin-y": 2,

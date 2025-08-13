@@ -36,6 +36,7 @@ const ViewerTopBar = ({
   // 이벤트 정보 실시간 업데이트
   React.useEffect(() => {
     const eventToShow = currentEvent || prevValidEvent;
+    
     if (eventToShow) {
       setCurrentEventInfo({
         eventNum: eventToShow.eventNum ?? 0,
@@ -43,9 +44,19 @@ const ViewerTopBar = ({
       });
       
       // 프로그레스 바 너비 실시간 계산
-      if (events && eventToShow) {
-        const progressWidth = `${((eventToShow.eventNum || 0) / (events.length + 1)) * 100}%`;
+      if (events && eventToShow && events.length > 0) {
+        const currentEventIndex = events.findIndex(e => e.eventNum === eventToShow.eventNum);
+        const progressPercentage = currentEventIndex >= 0 
+          ? Math.min(((currentEventIndex + 1) / events.length) * 100, 100)
+          : 0;
+        const progressWidth = `${progressPercentage}%`;
         setCurrentProgressWidth(progressWidth);
+      } else if (eventToShow && eventToShow.eventNum) {
+        // events가 없지만 eventNum이 있는 경우
+        const progressWidth = `${Math.min((eventToShow.eventNum / 20) * 100, 100)}%`;
+        setCurrentProgressWidth(progressWidth);
+      } else {
+        setCurrentProgressWidth("0%");
       }
     }
   }, [currentEvent, prevValidEvent, events]);
@@ -81,6 +92,7 @@ const ViewerTopBar = ({
           paddingRight: 12,
           paddingTop: 0,
           justifyContent: "space-between", // space-between 유지
+          borderBottom: graphFullScreen ? "1px solid #e3e6ef" : "none", // 전체화면일 때만 하단 테두리
         }}
       >
         {/* 왼쪽 영역: < 버튼 + 초기화 (분할화면일 때) */}
@@ -136,6 +148,7 @@ const ViewerTopBar = ({
               searchTerm={searchTerm}
               isSearchActive={isSearchActive}
               clearSearch={clearSearch}
+              elements={elements}
             />
           )}
           
@@ -146,6 +159,7 @@ const ViewerTopBar = ({
               searchTerm={searchTerm}
               isSearchActive={isSearchActive}
               clearSearch={clearSearch}
+              elements={elements}
             />
           )}
         </div>
@@ -468,11 +482,11 @@ const ViewerTopBar = ({
             >
               <div
                 style={{
-                  width: `${currentEventInfo?.progress || 0}%`,
+                  width: currentProgressWidth,
                   height: "100%",
                   background: "linear-gradient(90deg, #4F6DDE 0%, #6fa7ff 100%)",
                   borderRadius: 3,
-                  transition: "width 0.3s ease",
+                  transition: "width 0.4s cubic-bezier(.4,2,.6,1)",
                 }}
               />
             </div>

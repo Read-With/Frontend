@@ -348,7 +348,6 @@ function RelationGraphWrapper() {
               {/* 그래프 검색 기능 */}
               <GraphControls
                 onSearchSubmit={handleSearchSubmit}
-                isFullScreen={true}
                 searchTerm={searchTerm}
                 isSearchActive={isSearchActive}
                 clearSearch={clearSearch}

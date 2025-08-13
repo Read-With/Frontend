@@ -6,6 +6,7 @@ const GraphControls = ({
   searchTerm = "", // 현재 검색어
   isSearchActive = false, // 검색 활성화 상태
   clearSearch = () => {}, // 검색 초기화 함수
+  elements = [], // 그래프 요소들 (검색 제안용)
 }) => {
   // 내부 상태 관리
   const [searchInput, setSearchInput] = useState(searchTerm);
@@ -24,17 +25,58 @@ const GraphControls = ({
     setSearch(searchTerm);
   }, [searchTerm]);
 
-  // 검색 제안 생성 (elements 의존성 제거)
+  // 검색 제안 생성 (2글자 이상일 때만)
   useEffect(() => {
-    if (searchInput.trim()) {
-      // 검색 제안 기능을 일시적으로 비활성화
-      setSuggestions([]);
-      setShowSuggestions(false);
+    if (searchInput.trim().length >= 2 && elements.length > 0) {
+      const searchLower = searchInput.toLowerCase();
+      const characterNodes = elements.filter(el => !el.data.source);
+      
+      const matches = characterNodes
+        .filter(node => {
+          const label = node.data.label?.toLowerCase() || '';
+          const names = node.data.names || [];
+          const commonName = node.data.common_name?.toLowerCase() || '';
+          
+          const nameMatches = names.some(name => 
+            name.toLowerCase().includes(searchLower)
+          );
+          const commonNameMatches = commonName.includes(searchLower);
+          
+          return label.includes(searchLower) || nameMatches || commonNameMatches;
+        })
+        .map(node => {
+          const searchLower = searchInput.toLowerCase();
+          const label = node.data.label?.toLowerCase() || '';
+          const names = node.data.names || [];
+          const commonName = node.data.common_name?.toLowerCase() || '';
+          
+          let matchType = 'none';
+          if (label.includes(searchLower)) {
+            matchType = 'label';
+          } else if (names.some(name => name.toLowerCase().includes(searchLower))) {
+            matchType = 'names';
+          } else if (commonName.includes(searchLower)) {
+            matchType = 'common_name';
+          }
+          
+          return {
+            id: node.data.id,
+            label: node.data.label,
+            names: node.data.names || [],
+            common_name: node.data.common_name,
+            matchType: matchType
+          };
+        })
+        .slice(0, 8); // 최대 8개 제안
+
+      setSuggestions(matches);
+      setShowSuggestions(matches.length > 0);
+      setSelectedIndex(-1);
     } else {
       setSuggestions([]);
       setShowSuggestions(false);
     }
-  }, [searchInput]);
+  }, [searchInput, elements]);
 
   // 외부 클릭 시 드롭다운 닫기
   useEffect(() => {
@@ -51,32 +93,36 @@ const GraphControls = ({
 
   // 키보드 네비게이션
   const handleKeyDown = (e) => {
-    if (!showSuggestions) return;
-
     switch (e.key) {
       case 'ArrowDown':
-        e.preventDefault();
-        setSelectedIndex(prev => 
-          prev < suggestions.length - 1 ? prev + 1 : 0
-        );
+        if (showSuggestions) {
+          e.preventDefault();
+          setSelectedIndex(prev => 
+            prev < suggestions.length - 1 ? prev + 1 : 0
+          );
+        }
         break;
       case 'ArrowUp':
-        e.preventDefault();
-        setSelectedIndex(prev => 
-          prev > 0 ? prev - 1 : suggestions.length - 1
-        );
+        if (showSuggestions) {
+          e.preventDefault();
+          setSelectedIndex(prev => 
+            prev > 0 ? prev - 1 : suggestions.length - 1
+          );
+        }
         break;
       case 'Enter':
         e.preventDefault();
-        if (selectedIndex >= 0 && suggestions[selectedIndex]) {
+        if (showSuggestions && selectedIndex >= 0 && suggestions[selectedIndex]) {
           selectSuggestion(suggestions[selectedIndex]);
         } else {
           handleSearch();
         }
         break;
       case 'Escape':
-        setShowSuggestions(false);
-        setSelectedIndex(-1);
+        if (showSuggestions) {
+          setShowSuggestions(false);
+          setSelectedIndex(-1);
+        }
         break;
     }
   };
@@ -93,9 +139,11 @@ const GraphControls = ({
   // 내부 검색 처리 함수
   const handleSearch = () => {
     const trimmedSearch = searchInput.trim();
-    setSearch(trimmedSearch);
-    setShowSuggestions(false);
-    onSearchSubmit(trimmedSearch);
+    if (trimmedSearch.length >= 2) {
+      setSearch(trimmedSearch);
+      setShowSuggestions(false);
+      onSearchSubmit(trimmedSearch);
+    }
   };
 
   // 검색 초기화 함수
@@ -136,10 +184,26 @@ const GraphControls = ({
     fontWeight: '500',
     cursor: 'pointer',
     transition: 'all 0.2s',
-    width: '76px', // 고정된 너비 설정
+    width: '80px', // 고정된 너비 설정
     height: '28px',
     padding: '0 12px',
     flexShrink: 0, // 크기 고정
+  };
+
+  // 검색 버튼 스타일 (파란색)
+  const searchButtonStyle = {
+    ...defaultButtonStyle,
+    background: '#6C8EFF',
+    color: '#fff',
+  };
+
+  // 초기화 버튼 스타일 (회색)
+  const resetButtonStyle = {
+    ...defaultButtonStyle,
+    background: '#f8f9fc',
+    color: '#6c757d',
+    border: '1px solid #e3e6ef',
+    width: '80px', // 초기화 버튼만 80px로 변경
   };
 
   const formStyle = {
@@ -163,25 +227,38 @@ const GraphControls = ({
     right: '0',
     background: '#fff',
     border: '1px solid #e3e6ef',
-    borderRadius: '6px',
-    boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
+    borderRadius: '8px',
+    boxShadow: '0 8px 24px rgba(0, 0, 0, 0.12)',
     zIndex: 1000,
-    maxHeight: '200px',
+    maxHeight: '240px',
     overflowY: 'auto',
-    marginTop: '2px'
+    marginTop: '4px',
+    minWidth: '280px'
   };
 
   const suggestionItemStyle = (isSelected) => ({
-    padding: '8px 12px',
+    padding: '10px 14px',
     cursor: 'pointer',
-    fontSize: '12px',
-    borderBottom: '1px solid #f0f0f0',
+    fontSize: '13px',
+    borderBottom: '1px solid #f5f5f5',
     background: isSelected ? '#f0f7ff' : 'transparent',
     color: isSelected ? '#6C8EFF' : '#42506b',
     display: 'flex',
     flexDirection: 'column',
-    gap: '2px'
+    gap: '3px',
+    transition: 'all 0.15s ease',
+    '&:hover': {
+      background: isSelected ? '#f0f7ff' : '#f8f9fc'
+    }
   });
+
+  const noResultsStyle = {
+    padding: '12px 14px',
+    fontSize: '13px',
+    color: '#6c757d',
+    textAlign: 'center',
+    fontStyle: 'italic'
+  };
 
   const highlightText = (text, searchTerm) => {
     if (!searchTerm) return text;
@@ -229,16 +306,26 @@ const GraphControls = ({
         />
         <button 
           type="submit" 
-          style={defaultButtonStyle}
+          style={isSearchActive ? resetButtonStyle : searchButtonStyle}
           onClick={isSearchActive ? handleClearSearch : handleSearch}
           onMouseEnter={(e) => {
-            e.target.style.background = '#5A7BFF';
-            e.target.style.boxShadow = '0 2px 8px rgba(108, 142, 255, 0.2)';
+            if (isSearchActive) {
+              e.target.style.background = '#e9ecef';
+              e.target.style.boxShadow = '0 2px 8px rgba(108, 142, 255, 0.1)';
+            } else {
+              e.target.style.background = '#5A7BFF';
+              e.target.style.boxShadow = '0 2px 8px rgba(108, 142, 255, 0.2)';
+            }
             e.target.style.transform = 'translateY(-1px)';
           }}
           onMouseLeave={(e) => {
-            e.target.style.background = '#6C8EFF';
-            e.target.style.boxShadow = 'none';
+            if (isSearchActive) {
+              e.target.style.background = '#f8f9fc';
+              e.target.style.boxShadow = 'none';
+            } else {
+              e.target.style.background = '#6C8EFF';
+              e.target.style.boxShadow = 'none';
+            }
             e.target.style.transform = 'translateY(0)';
           }}
           onMouseDown={(e) => {
@@ -256,40 +343,46 @@ const GraphControls = ({
       {showSuggestions && (
         <div style={dropdownStyle}>
           {suggestions.length > 0 ? (
-            suggestions.map((suggestion, index) => (
-              <div
-                key={suggestion.id}
-                style={suggestionItemStyle(index === selectedIndex)}
-                onClick={() => selectSuggestion(suggestion)}
-                onMouseEnter={() => setSelectedIndex(index)}
-              >
-                <div style={{ fontWeight: '500' }}>
-                  {highlightText(suggestion.label, searchInput)}
-                </div>
-                {suggestion.names.length > 0 && (
-                  <div style={{ fontSize: '11px', color: '#666' }}>
-                    별칭: {suggestion.names.join(', ')}
-                  </div>
-                )}
-                {suggestion.common_name && (
-                  <div style={{ fontSize: '11px', color: '#666' }}>
-                    공통 이름: {suggestion.common_name}
-                  </div>
-                )}
-                <div style={{ fontSize: '10px', color: '#999' }}>
-                  {suggestion.matchType === 'label' ? '이름 일치' : 
-                   suggestion.matchType === 'names' ? '별칭 일치' : '공통 이름 일치'}
-                </div>
+            <>
+              <div style={{ 
+                padding: '8px 14px', 
+                fontSize: '11px', 
+                color: '#6c757d', 
+                background: '#f8f9fc',
+                borderBottom: '1px solid #e3e6ef',
+                fontWeight: '500'
+              }}>
+                검색 결과 ({suggestions.length}개)
               </div>
-            ))
+              {suggestions.map((suggestion, index) => (
+                <div
+                  key={suggestion.id}
+                  style={suggestionItemStyle(index === selectedIndex)}
+                  onClick={() => selectSuggestion(suggestion)}
+                  onMouseEnter={() => setSelectedIndex(index)}
+                >
+                  <div style={{ fontWeight: '600', fontSize: '14px' }}>
+                    {highlightText(suggestion.label, searchInput)}
+                  </div>
+                  {suggestion.names.length > 0 && (
+                    <div style={{ fontSize: '12px', color: '#6c757d' }}>
+                      별칭: {suggestion.names.join(', ')}
+                    </div>
+                  )}
+                  {suggestion.common_name && (
+                    <div style={{ fontSize: '12px', color: '#6c757d' }}>
+                      공통 이름: {suggestion.common_name}
+                    </div>
+                  )}
+                  <div style={{ fontSize: '10px', color: '#999' }}>
+                    {suggestion.matchType === 'label' ? '이름 일치' : 
+                     suggestion.matchType === 'names' ? '별칭 일치' : '공통 이름 일치'}
+                  </div>
+                </div>
+              ))}
+            </>
           ) : (
-            <div style={{
-              padding: '16px 12px',
-              textAlign: 'center',
-              color: '#666',
-              fontSize: '12px',
-              borderBottom: '1px solid #f0f0f0'
-            }}>
+            <div style={noResultsStyle}>
               <div style={{ marginBottom: '4px', fontWeight: '500' }}>
                 검색 결과가 없습니다
               </div>
