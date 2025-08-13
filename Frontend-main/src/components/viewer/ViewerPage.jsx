@@ -310,9 +310,29 @@ const ViewerPage = ({ darkMode: initialDarkMode }) => {
   const [darkMode, setDarkMode] = useState(
     initialDarkMode || settings.theme === "dark"
   );
-  const [showGraph, setShowGraph] = useState(settings.showGraph);
   const [currentChapter, setCurrentChapter] = useState(1);
-  const [graphFullScreen, setGraphFullScreen] = useState(false);
+  
+  // localStorage에서 저장된 모드를 확인하여 초기 상태 설정
+  const getInitialViewerMode = () => {
+    try {
+      const mode = localStorage.getItem("viewer_mode");
+      if (mode === "graph") {
+        return { showGraph: true, graphFullScreen: true };
+      } else if (mode === "split") {
+        return { showGraph: true, graphFullScreen: false };
+      } else if (mode === "viewer") {
+        return { showGraph: false, graphFullScreen: false };
+      }
+      // 저장된 모드가 없으면 기본값 (분할 화면)
+      return { showGraph: true, graphFullScreen: false };
+    } catch (e) {
+      return { showGraph: true, graphFullScreen: false };
+    }
+  };
+  
+  const initialMode = getInitialViewerMode();
+  const [graphFullScreen, setGraphFullScreen] = useState(initialMode.graphFullScreen);
+  const [showGraph, setShowGraph] = useState(initialMode.showGraph);
   const [elements, setElements] = useState([]);
   const [currentCharIndex, setCurrentCharIndex] = useState(0);
   const [currentPageWords, setCurrentPageWords] = useState(0);
@@ -357,21 +377,6 @@ const ViewerPage = ({ darkMode: initialDarkMode }) => {
     removed: [],
     updated: [],
   });
-
-  // 3. mount 시 localStorage에서 모드 복원
-  useEffect(() => {
-    const mode = loadViewerMode();
-    if (mode === "split") {
-      setShowGraph(true);
-      setGraphFullScreen(false);
-    } else if (mode === "graph") {
-      setShowGraph(true);
-      setGraphFullScreen(true);
-    } else if (mode === "viewer") {
-      setShowGraph(false);
-      setGraphFullScreen(false);
-    }
-  }, []);
 
   // 4. showGraph/graphFullScreen 상태 변경 시 localStorage에 저장
   useEffect(() => {

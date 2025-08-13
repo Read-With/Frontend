@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import RelationGraphMain from "./RelationGraphMain";
 import EdgeLabelToggle from "../common/EdgeLabelToggle";
+import GraphControls from "./GraphControls";
 import "./RelationGraph.css";
 import { useNavigate, useParams } from "react-router-dom";
 import { FaTimes, FaBars, FaChevronLeft } from 'react-icons/fa';
@@ -115,6 +116,12 @@ function RelationGraphWrapper() {
     setCurrentChapter(chapter);
   };
 
+  // 검색 제출 함수
+  const handleSearchSubmit = (searchTerm) => {
+    console.log('Search submitted:', searchTerm);
+    // 여기에 검색 로직을 구현할 수 있습니다
+  };
+
   return (
     <div style={{ width: '100vw', height: '100vh', background: '#f4f7fb', overflow: 'hidden', display: 'flex' }}>
       {/* 사이드바 */}
@@ -133,7 +140,7 @@ function RelationGraphWrapper() {
       >
         {/* 사이드바 헤더 */}
         <div style={{
-          height: '64px',
+          height: '54px',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'flex-start',
@@ -277,7 +284,7 @@ function RelationGraphWrapper() {
             paddingRight: 16, 
             paddingTop: 0, 
             paddingBottom: 0,
-            height: 64, 
+            height: 54, 
             width: '100%',
             background: '#fff',
           }}>
@@ -290,6 +297,19 @@ function RelationGraphWrapper() {
               flex: 1,
             }}>
               
+              {/* 그래프 검색 기능 */}
+              <GraphControls
+                onSearchSubmit={handleSearchSubmit}
+                isFullScreen={true}
+              />
+              
+              {/* 간선 라벨 스위치 토글 */}
+              <EdgeLabelToggle
+                isVisible={edgeLabelVisible}
+                onToggle={() => setEdgeLabelVisible(!edgeLabelVisible)}
+              />
+              
+              {/* 독립 인물 버튼 */}
               <button
                 onClick={() => setHideIsolated(!hideIsolated)}
                 style={{
@@ -322,11 +342,6 @@ function RelationGraphWrapper() {
                 }} />
                 {hideIsolated ? '독립 인물 표시' : '독립 인물 숨기기'}
               </button>
-              
-              <EdgeLabelToggle
-                isVisible={edgeLabelVisible}
-                onToggle={() => setEdgeLabelVisible(!edgeLabelVisible)}
-              />
             </div>
             
             {/* 중앙 영역: 여백 */}
