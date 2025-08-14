@@ -22,9 +22,7 @@ const ViewerLayout = ({
   pageMode,
   graphFullScreen
 }) => {
-  console.log('ViewerLayout render - graphFullScreen:', graphFullScreen, 'showGraph:', showGraph);
-  console.log('EPUB viewer class:', `${showGraph && !graphFullScreen ? 'w-1/2' : graphFullScreen ? 'w-0' : 'w-full'}`);
-  console.log('Graph area class:', `${graphFullScreen ? 'w-full' : 'w-1/2'}`);
+
   // 그래프 표시 상태가 변경될 때 창 크기 변경 이벤트 발생시키기
   useEffect(() => {
     // 창 크기 변경 이벤트를 발생시켜 EPUB 뷰어가 크기를 재조정하도록 함
@@ -39,18 +37,26 @@ const ViewerLayout = ({
 
   return (
     <div className="flex flex-col h-screen overflow-hidden">
-      {/* 상단 Toolbar */}
-      <ViewerToolbar
-        showControls={showControls}
-        onPrev={onPrev}
-        onNext={onNext}
-        onAddBookmark={onAddBookmark}
-        onToggleBookmarkList={onToggleBookmarkList}
-        onOpenSettings={onOpenSettings}
-        onToggleGraph={onToggleGraph}
-        showGraph={showGraph}
-        pageMode={pageMode}
-      />
+      {/* 상단 Toolbar - 파란색 상단바 (그래프 전체화면일 때 투명하게 숨김) */}
+      <div style={{
+        opacity: graphFullScreen ? 0 : 1,
+        visibility: graphFullScreen ? 'hidden' : 'visible',
+        transition: 'opacity 0.3s ease, visibility 0.3s ease',
+        height: graphFullScreen ? '60px' : 'auto', // 전체화면일 때 높이 유지
+        flexShrink: 0,
+      }}>
+        <ViewerToolbar
+          showControls={showControls}
+          onPrev={onPrev}
+          onNext={onNext}
+          onAddBookmark={onAddBookmark}
+          onToggleBookmarkList={onToggleBookmarkList}
+          onOpenSettings={onOpenSettings}
+          onToggleGraph={onToggleGraph}
+          showGraph={showGraph}
+          pageMode={pageMode}
+        />
+      </div>
 
       {/* 본문 영역 - 좌우로 나눔 */}
       <div
@@ -104,16 +110,24 @@ const ViewerLayout = ({
         )}
       </div>
 
-      {/* 하단 ProgressBar 반드시 추가! */}
-      <ViewerProgressBar
-        showControls={showControls}
-        progress={progress}
-        setProgress={setProgress}
-        darkMode={darkMode}
-        onSliderChange={onSliderChange}
-        currentPage={currentPage}
-        totalPages={totalPages}
-      />
+      {/* 하단 ProgressBar - 파란색 하단바 (그래프 전체화면일 때 투명하게 숨김) */}
+      <div style={{
+        opacity: graphFullScreen ? 0 : 1,
+        visibility: graphFullScreen ? 'hidden' : 'visible',
+        transition: 'opacity 0.3s ease, visibility 0.3s ease',
+        height: graphFullScreen ? '80px' : 'auto', // 전체화면일 때 높이 유지 (ProgressBar 높이 + 마진)
+        flexShrink: 0,
+      }}>
+        <ViewerProgressBar
+          showControls={showControls}
+          progress={progress}
+          setProgress={setProgress}
+          darkMode={darkMode}
+          onSliderChange={onSliderChange}
+          currentPage={currentPage}
+          totalPages={totalPages}
+        />
+      </div>
     </div>
   );
 };

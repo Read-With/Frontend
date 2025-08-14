@@ -61,25 +61,25 @@ export function convertRelationsToElements(relations, idToName, idToDesc, idToMa
       const id1 = String(rel.id1);
       const id2 = String(rel.id2);
       if (id1 !== id2) { // 루프 간선 제외
+        // relation 배열을 그대로 유지하고, label에는 첫 번째 요소만 사용
+        let relationArray = [];
         let relationLabel = "";
+        
         if (Array.isArray(rel.relation)) {
-          if (rel.relation.length === 1) {
-            // 1개인 경우: 최초의 관계 (첫 번째 요소)
-            relationLabel = rel.relation[0] || "";
-          } else if (rel.relation.length > 1) {
-            // 여러개인 경우: 가장 최근에 추가된 관계 (마지막 요소)
-            relationLabel = rel.relation[rel.relation.length - 1] || "";
-          }
+          relationArray = rel.relation;
+          relationLabel = rel.relation[0] || "";
         } else if (typeof rel.relation === "string") {
+          relationArray = [rel.relation];
           relationLabel = rel.relation;
         }
+        
         edges.push({
           data: {
             id: `${id1}-${id2}`,
             source: id1,
             target: id2,
-            relation: relationLabel || "",
-            label: relationLabel || "",
+            relation: relationArray, // 전체 배열 유지
+            label: relationLabel || "", // 라벨에는 첫 번째 요소만
             weight: rel.weight || 1,
             positivity: rel.positivity,
             count: rel.count

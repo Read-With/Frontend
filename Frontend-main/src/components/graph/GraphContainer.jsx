@@ -1,6 +1,7 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, forwardRef, useImperativeHandle } from "react";
 import RelationGraph from "./RelationGraph";
 import RelationGraphMain from "./RelationGraphMain";
+import { filterGraphElements } from "./graphFilter";
 
 // 이벤트 관계 데이터를 동적으로 가져오기
 const eventRelationModules = import.meta.glob(
@@ -68,25 +69,25 @@ function convertRelationsToElements(
       },
     };
 
+    // relation 배열을 그대로 유지하고, label에는 첫 번째 요소만 사용
+    let relationArray = [];
     let relationLabel = "";
+    
     if (Array.isArray(rel.relation)) {
-      if (rel.relation.length === 1) {
-        // 1개인 경우: 최초의 관계 (첫 번째 요소)
-        relationLabel = rel.relation[0] || "";
-      } else if (rel.relation.length > 1) {
-        // 여러개인 경우: 가장 최근에 추가된 관계 (마지막 요소)
-        relationLabel = rel.relation[rel.relation.length - 1] || "";
-      }
+      relationArray = rel.relation;
+      relationLabel = rel.relation[0] || "";
     } else if (typeof rel.relation === "string") {
+      relationArray = [rel.relation];
       relationLabel = rel.relation;
     }
+    
     edges.push({
       data: {
         id: `${id1}-${id2}`,
         source: id1,
         target: id2,
-        relation: relationLabel || "",
-        label: relationLabel || "",
+        relation: relationArray, // 전체 배열 유지
+        label: relationLabel || "", // 라벨에는 첫 번째 요소만
         weight: rel.weight || 1,
         positivity: rel.positivity,
         count: rel.count,
@@ -96,16 +97,21 @@ function convertRelationsToElements(
   return [...Object.values(nodes), ...edges];
 }
 
-const GraphContainer = ({
+const GraphContainer = forwardRef(({
   currentPosition,
   currentEvent, // 관계 변화
   currentChapter, // 관계 변화
   edgeLabelVisible = true,
+  onSearchStateChange,
   ...props
-}) => {
+}, ref) => {
   const [elements, setElements] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [filteredElements, setFilteredElements] = useState([]);
+  const [fitNodeIds, setFitNodeIds] = useState([]);
+  const [isSearchActive, setIsSearchActive] = useState(false);
 
 
 
@@ -179,16 +185,89 @@ const GraphContainer = ({
     }
   }, [currentEvent]);
 
+  // 검색 처리 함수
+  const handleSearchSubmit = (searchTerm) => {
+    setSearchTerm(searchTerm);
+    setIsSearchActive(!!searchTerm.trim());
+    
+    if (searchTerm.trim()) {
+      const { filteredElements: filtered, fitNodeIds: fitIds } = filterGraphElements(elements, searchTerm, null);
+      
+
+      
+      setFilteredElements(filtered);
+      setFitNodeIds(fitIds);
+    } else {
+      setFilteredElements(elements);
+      setFitNodeIds([]);
+      setIsSearchActive(false);
+    }
+  };
+
+  // 검색 초기화 함수
+  const clearSearch = () => {
+    setSearchTerm("");
+    setFilteredElements(elements);
+    setFitNodeIds([]);
+    setIsSearchActive(false);
+  };
+
+  // elements가 변경될 때 검색 결과도 업데이트
+  useEffect(() => {
+    if (isSearchActive && searchTerm.trim()) {
+      const { filteredElements: filtered, fitNodeIds: fitIds } = filterGraphElements(elements, searchTerm, null);
+      if (filtered.length > 0) {
+        setFilteredElements(filtered);
+        setFitNodeIds(fitIds);
+      } else {
+        setFilteredElements(elements);
+        setFitNodeIds([]);
+      }
+    } else if (!isSearchActive) {
+      setFilteredElements(elements);
+    }
+  }, [elements, isSearchActive, searchTerm]);
+
+  const finalElements = isSearchActive && filteredElements.length > 0 ? filteredElements : elements;
+  
+
+  
+  // ref를 통해 외부에서 접근할 수 있는 함수들 노출
+  useImperativeHandle(ref, () => ({
+    handleSearchSubmit,
+    clearSearch,
+    searchTerm,
+    isSearchActive
+  }));
+
+  // 검색 상태가 변경될 때 상위로 전달
+  useEffect(() => {
+    if (onSearchStateChange) {
+      onSearchStateChange({
+        searchTerm,
+        isSearchActive,
+        filteredElements,
+        fitNodeIds
+      });
+    }
+  }, [searchTerm, isSearchActive, filteredElements, fitNodeIds, onSearchStateChange]);
+
   return (
     <RelationGraph
-      elements={elements}
+      elements={finalElements}
       chapterNum={currentChapter} // 관계 변화
       eventNum={currentEvent ? Math.max(1, currentEvent.eventNum) : 1}
       edgeLabelVisible={edgeLabelVisible}
       maxChapter={10}
+      fitNodeIds={fitNodeIds}
+      searchTerm={searchTerm}
+      isSearchActive={isSearchActive}
+      filteredElements={filteredElements}
+      onSearchSubmit={handleSearchSubmit}
+      clearSearch={clearSearch}
       {...props}
     />
   );
-};
+});
 
 export default GraphContainer;

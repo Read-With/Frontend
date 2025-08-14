@@ -145,6 +145,7 @@ function ViewerEdgeTooltip({
   eventNum = 1,
   maxChapter = 10,
 }) {
+  // 디버깅 로그 제거됨
   const [position, setPosition] = useState({ x: 200, y: 200 });
   const [showContent, setShowContent] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
@@ -367,28 +368,15 @@ function ViewerEdgeTooltip({
                   padding: '20px 6px'
                 }}>
                   <div className="edge-tooltip-header" style={{ background: '#fff', borderBottom: 'none', padding: '20px 6px', width: '100%' }}>
-                    <div className="relation-tags" style={{ display: 'flex', flexWrap: 'wrap', gap: '8px 10px', marginBottom: '10px' }}>
-                      {(() => {
-                        const uniqueRelations = [];
-                        const seen = new Set();
-                        const relArr = Array.isArray(data.relation)
-                          ? data.relation
-                          : (typeof data.label === 'string' ? data.label.split(',').map(s => s.trim()).filter(Boolean) : []);
-                        for (const rel of relArr) {
-                          if (rel.includes(' ')) {
-                            if (!seen.has(rel)) {
-                              uniqueRelations.push(rel);
-                              seen.add(rel);
-                            }
-                            continue;
-                          }
-                          const base = rel.length > 3 ? rel.slice(0, -1) : rel;
-                          if (![...seen].some(s => s.startsWith(base))) {
-                            uniqueRelations.push(rel);
-                            seen.add(rel);
-                          }
-                        }
-                        return uniqueRelations.map((relation, index) => (
+                                         <div className="relation-tags" style={{ display: 'flex', flexWrap: 'wrap', gap: '8px 10px', marginBottom: '10px' }}>
+                       {(() => {
+                         const relArr = Array.isArray(data.relation)
+                           ? data.relation
+                           : (typeof data.label === 'string' ? data.label.split(',').map(s => s.trim()).filter(Boolean) : []);
+                         
+                                                   // 디버깅 로그 제거됨
+                         
+                         return relArr.map((relation, index) => (
                           <span
                             key={index}
                             className="relation-tag"

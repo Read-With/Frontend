@@ -8,6 +8,27 @@
   font-weight: 500;
 }
 
+/* 검색 하이라이트 스타일 */
+.search-highlight {
+  background-color: #FFD700 !important;
+  border-color: #FFA500 !important;
+  border-width: 3px !important;
+  box-shadow: 0 0 15px rgba(255, 215, 0, 0.6) !important;
+  animation: search-pulse 2s infinite;
+}
+
+@keyframes search-pulse {
+  0% {
+    box-shadow: 0 0 15px rgba(255, 215, 0, 0.6);
+  }
+  50% {
+    box-shadow: 0 0 25px rgba(255, 215, 0, 0.8);
+  }
+  100% {
+    box-shadow: 0 0 15px rgba(255, 215, 0, 0.6);
+  }
+}
+
 .search-btn {
   background: #1976d2;
   color: #fff;
@@ -34,7 +55,17 @@
   overflow: hidden;
   min-height: 100%;
   min-width: 100%;
-  transition: min-width 0.5s ease, min-height 0.5s ease;
+  transition: min-width 0.3s ease, min-height 0.3s ease;
+}
+
+/* 그래프 캔버스 영역 - 부드러운 이동을 위한 설정 */
+.graph-canvas-area {
+  transition: all 0.2s ease-out;
+}
+
+/* 노드 드래그 시 부드러운 이동 */
+.graph-canvas-area .cytoscape-container {
+  transition: transform 0.15s ease-out;
 }
 
 .graph-container.clicked {
@@ -195,7 +226,7 @@
   display: inline-block;
   background: #6C8EFF;
   color: #fff;
-  font-size: 11px;
+  font-size: 9px;
   border-radius: 6px;
   padding: 2px 6px;
   margin-left: 8px;
