@@ -54,6 +54,38 @@ function GraphNodeTooltip({
   const tooltipRef = useRef(null);
   const cardContainerRef = useRef(null);
 
+  // 뷰포트 경계 체크 및 위치 조정 함수
+  const adjustPositionToViewport = (x, y) => {
+    if (!tooltipRef.current) return { x, y };
+
+    const tooltipRect = tooltipRef.current.getBoundingClientRect();
+    const viewportWidth = Math.min(
+      document.documentElement.clientWidth,
+      window.innerWidth
+    );
+    const viewportHeight = Math.min(
+      document.documentElement.clientHeight,
+      window.innerHeight
+    );
+    const scrollX = window.pageXOffset || document.documentElement.scrollLeft;
+    const scrollY = window.pageYOffset || document.documentElement.scrollTop;
+
+    let newX = x;
+    let newY = y;
+
+    // 뷰포트 경계 체크 및 조정
+    newX = Math.max(
+      scrollX,
+      Math.min(newX, viewportWidth + scrollX - tooltipRect.width)
+    );
+    newY = Math.max(
+      scrollY,
+      Math.min(newY, viewportHeight + scrollY - tooltipRect.height)
+    );
+
+    return { x: newX, y: newY };
+  };
+
   // 페이지 타입에 따른 노드 데이터 업데이트
   useEffect(() => {
     if (!data) return;
@@ -119,7 +151,9 @@ function GraphNodeTooltip({
     let newX = e.clientX - dragOffset.x;
     let newY = e.clientY - dragOffset.y;
 
-    setPosition({ x: newX, y: newY });
+    // 뷰포트 경계 체크 및 조정
+    const adjustedPosition = adjustPositionToViewport(newX, newY);
+    setPosition(adjustedPosition);
   };
 
   const handleMouseUp = () => {
@@ -139,9 +173,20 @@ function GraphNodeTooltip({
 
   useEffect(() => {
     if (x !== undefined && y !== undefined && tooltipRef.current) {
-      setPosition({ x, y });
+      const adjustedPosition = adjustPositionToViewport(x, y);
+      setPosition(adjustedPosition);
     }
   }, [x, y]);
+
+  // 초기 위치 설정 시에도 뷰포트 경계 체크
+  useEffect(() => {
+    if (tooltipRef.current && position.x === 200 && position.y === 200) {
+      const adjustedPosition = adjustPositionToViewport(position.x, position.y);
+      if (adjustedPosition.x !== position.x || adjustedPosition.y !== position.y) {
+        setPosition(adjustedPosition);
+      }
+    }
+  }, [position.x, position.y]);
 
   const handleChatClick = () => {
     if (nodeData.label) {

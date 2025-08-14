@@ -353,9 +353,60 @@ function ViewerEdgeTooltip({
           {viewMode === "info" && (
             <div style={{ minHeight: '100%', display: 'flex', flexDirection: 'column' }}>
               {noRelation ? (
-                <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <div style={{ textAlign: "center", color: "#64748b", fontSize: 16 }}>
-                    관계 형성이 이뤄지지 않았습니다
+                <div style={{ 
+                  flex: 1, 
+                  display: 'flex', 
+                  flexDirection: 'column',
+                  justifyContent: 'center',
+                  alignItems: 'center',
+                  minHeight: '100%',
+                  padding: '20px'
+                }}>
+                  <div style={{ 
+                    flex: 1,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}>
+                    <div style={{ 
+                      textAlign: "center", 
+                      color: "#64748b", 
+                      fontSize: 16,
+                      maxWidth: '280px',
+                      lineHeight: '1.5'
+                    }}>
+                      관계 형성이 이뤄지지 않았습니다
+                    </div>
+                  </div>
+                  <div
+                    className="edge-tooltip-actions"
+                    style={{ marginTop: 'auto', paddingTop: 20, paddingBottom: 6, textAlign: "center" }}
+                  >
+                    <button
+                      className="relation-change-chart-btn edge-tooltip-animated-btn"
+                      style={{
+                        background: '#2563eb',
+                        color: '#fff',
+                        border: 'none',
+                        borderRadius: 8,
+                        padding: '8px 22px',
+                        fontWeight: 600,
+                        fontSize: 15,
+                        cursor: 'pointer',
+                        boxShadow: '0 2px 8px rgba(79,109,222,0.13)',
+                        transition: 'background 0.18s, color 0.18s, box-shadow 0.18s, transform 0.13s',
+                        margin: '0 auto',
+                        display: 'inline-block',
+                      }}
+                      onClick={() => setViewMode("chart")}
+                      onMouseOver={e => e.currentTarget.style.background = '#3b82f6'}
+                      onMouseOut={e => e.currentTarget.style.background = '#2563eb'}
+                      onMouseDown={e => e.currentTarget.style.transform = 'scale(0.97)'}
+                      onMouseUp={e => e.currentTarget.style.transform = 'scale(1)'}
+                      onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}
+                    >
+                      관계 변화 그래프
+                    </button>
                   </div>
                 </div>
               ) : (
@@ -509,36 +560,6 @@ function ViewerEdgeTooltip({
                   )}
                 </div>
               )}
-              <div
-                className="edge-tooltip-actions"
-                style={{ marginTop: 'auto', paddingTop: 20, paddingBottom: 6, textAlign: "center" }}
-              >
-                <button
-                  className="relation-change-chart-btn edge-tooltip-animated-btn"
-                  style={{
-                    background: '#2563eb',
-                    color: '#fff',
-                    border: 'none',
-                    borderRadius: 8,
-                    padding: '8px 22px',
-                    fontWeight: 600,
-                    fontSize: 15,
-                    cursor: 'pointer',
-                    boxShadow: '0 2px 8px rgba(79,109,222,0.13)',
-                    transition: 'background 0.18s, color 0.18s, box-shadow 0.18s, transform 0.13s',
-                    margin: '0 auto',
-                    display: 'inline-block',
-                  }}
-                  onClick={() => setViewMode("chart")}
-                  onMouseOver={e => e.currentTarget.style.background = '#3b82f6'}
-                  onMouseOut={e => e.currentTarget.style.background = '#2563eb'}
-                  onMouseDown={e => e.currentTarget.style.transform = 'scale(0.97)'}
-                  onMouseUp={e => e.currentTarget.style.transform = 'scale(1)'}
-                  onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}
-                >
-                  관계 변화 그래프
-                </button>
-              </div>
             </div>
           )}
         </div>
@@ -554,9 +575,56 @@ function ViewerEdgeTooltip({
                   불러오는 중...
                 </div>
               ) : noRelation ? (
-                <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
-                  <div style={{ textAlign: "center", color: "#64748b", fontSize: 16 }}>
-                    관계 형성이 이뤄지지 않았습니다
+                <div style={{ 
+                  flex: 1, 
+                  display: 'flex', 
+                  flexDirection: 'column',
+                  justifyContent: 'center',
+                  alignItems: 'center', 
+                  padding: '20px',
+                  minHeight: '100%'
+                }}>
+                  <div style={{ 
+                    flex: 1,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}>
+                    <div style={{ 
+                      textAlign: "center", 
+                      color: "#64748b", 
+                      fontSize: 16,
+                      maxWidth: '280px',
+                      lineHeight: '1.5'
+                    }}>
+                      관계 형성이 이뤄지지 않았습니다
+                    </div>
+                  </div>
+                  <div style={{ marginTop: 'auto', paddingTop: 20, paddingBottom: 6, paddingLeft: 6, paddingRight: 6, textAlign: "center" }}>
+                    <button
+                      style={{
+                        background: '#fff',
+                        color: '#2563eb',
+                        border: '1.5px solid #2563eb',
+                        borderRadius: 8,
+                        padding: '8px 22px',
+                        fontWeight: 600,
+                        fontSize: 15,
+                        cursor: 'pointer',
+                        boxShadow: '0 2px 8px rgba(79,109,222,0.13)',
+                        transition: 'background 0.18s, color 0.18s, box-shadow 0.18s, transform 0.13s',
+                        margin: '0 auto',
+                        display: 'inline-block',
+                      }}
+                      onClick={() => setViewMode("info")}
+                      onMouseOver={e => e.currentTarget.style.background = '#e3eafe'}
+                      onMouseOut={e => e.currentTarget.style.background = '#fff'}
+                      onMouseDown={e => e.currentTarget.style.transform = 'scale(0.97)'}
+                      onMouseUp={e => e.currentTarget.style.transform = 'scale(1)'}
+                      onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}
+                    >
+                      간선 정보로 돌아가기
+                    </button>
                   </div>
                 </div>
               ) : (
@@ -616,32 +684,6 @@ function ViewerEdgeTooltip({
               {/* <div style={{ fontSize: 13, color: "#64748b", marginTop: 10, marginBottom: 10, textAlign: "center", padding: '0 30px' }}>
                 x축: 챕터별 마지막/이벤트, y축: 관계 긍정도(-1~1, 데이터 없으면 0)
               </div> */}
-              <div style={{ marginTop: 'auto', paddingTop: 20, paddingBottom: 6, paddingLeft: 6, paddingRight: 6, textAlign: "center" }}>
-                <button
-                  style={{
-                    background: '#fff',
-                    color: '#2563eb',
-                    border: '1.5px solid #2563eb',
-                    borderRadius: 8,
-                    padding: '8px 22px',
-                    fontWeight: 600,
-                    fontSize: 15,
-                    cursor: 'pointer',
-                    boxShadow: '0 2px 8px rgba(79,109,222,0.13)',
-                    transition: 'background 0.18s, color 0.18s, box-shadow 0.18s, transform 0.13s',
-                    margin: '0 auto',
-                    display: 'inline-block',
-                  }}
-                  onClick={() => setViewMode("info")}
-                  onMouseOver={e => e.currentTarget.style.background = '#e3eafe'}
-                  onMouseOut={e => e.currentTarget.style.background = '#fff'}
-                  onMouseDown={e => e.currentTarget.style.transform = 'scale(0.97)'}
-                  onMouseUp={e => e.currentTarget.style.transform = 'scale(1)'}
-                  onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}
-                >
-                  간선 정보로 돌아가기
-                </button>
-              </div>
             </div>
           )}
         </div>
