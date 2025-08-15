@@ -532,6 +532,10 @@ const RelationGraph = ({
             y={activeTooltip.y}
             nodeCenter={activeTooltip.nodeCenter}
             onClose={clearSelection}
+            inViewer={true}
+            chapterNum={chapterNum}
+            eventNum={eventNum}
+            maxChapter={maxChapter}
             style={{ pointerEvents: "auto" }}
           />
         )}

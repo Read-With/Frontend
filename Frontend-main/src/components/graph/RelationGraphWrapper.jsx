@@ -69,6 +69,8 @@ function RelationGraphWrapper() {
       return match ? Number(match[1]) : 0;
     }));
     setMaxEventNum(maxEventNum);
+    // 현재 챕터의 마지막 이벤트 번호를 eventNum으로 설정
+    setEventNum(maxEventNum);
     // 가장 마지막 이벤트 파일 경로
     const lastEventFile = eventFiles.find(path => path.includes(`${maxEventNum}.json`));
     const eventData = lastEventFile ? eventModules[lastEventFile]?.default : null;

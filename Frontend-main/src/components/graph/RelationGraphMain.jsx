@@ -595,6 +595,10 @@ function RelationGraphMain({
                   y={activeTooltip.y}
                   nodeCenter={activeTooltip.nodeCenter}
                   onClose={handleCloseTooltip}
+                  inViewer={inViewer}
+                  chapterNum={chapterNum}
+                  eventNum={eventNum}
+                  maxChapter={maxChapter}
                   style={{ pointerEvents: 'auto' }}
                 />
               )}
@@ -717,6 +721,10 @@ function RelationGraphMain({
                 y={activeTooltip.y}
                 nodeCenter={activeTooltip.nodeCenter}
                 onClose={handleCloseTooltip}
+                inViewer={inViewer}
+                chapterNum={chapterNum}
+                eventNum={eventNum}
+                maxChapter={maxChapter}
                 style={{ pointerEvents: 'auto' }}
               />
             )}

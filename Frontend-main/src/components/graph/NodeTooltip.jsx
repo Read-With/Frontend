@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useNavigate, useParams, useLocation } from "react-router-dom";
 import { FaFileAlt, FaComments, FaArrowLeft } from "react-icons/fa";
 import "./RelationGraph.css";
@@ -39,9 +39,19 @@ function GraphNodeTooltip({
   eventNum,
   maxChapter = 10
 }) {
+  console.log("=== GraphNodeTooltip props ===");
+  console.log("data:", data);
+  console.log("chapterNum:", chapterNum);
+  console.log("eventNum:", eventNum);
+  console.log("maxChapter:", maxChapter);
+  console.log("inViewer:", inViewer);
+  console.log("=== props 끝 ===");
+
   const navigate = useNavigate();
   const { filename } = useParams();
   const location = useLocation();
+  
+  // 그래프 단독 페이지 여부 판단 (URL 경로로 판단)
   const isGraphPage = location.pathname.includes('/user/graph/');
 
   // 데이터가 중첩되어 있는 경우 처리
@@ -51,8 +61,8 @@ function GraphNodeTooltip({
   const [isDragging, setIsDragging] = useState(false);
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
   const [isFlipped, setIsFlipped] = useState(false);
+  const [isNodeAppeared, setIsNodeAppeared] = useState(false); // 노드 등장 여부 - 기본값을 false로 설정
   const tooltipRef = useRef(null);
-  const cardContainerRef = useRef(null);
 
   // 뷰포트 경계 체크 및 위치 조정 함수
   const adjustPositionToViewport = (x, y) => {
@@ -86,47 +96,89 @@ function GraphNodeTooltip({
     return { x: newX, y: newY };
   };
 
-  // 페이지 타입에 따른 노드 데이터 업데이트
-  useEffect(() => {
-    if (!data) return;
-
-    if (isGraphPage) {
-      // 그래프 페이지: 선택된 챕터의 마지막 이벤트 정보 사용
-      const lastEventNums = getChapterLastEventNums(maxChapter);
-      const currentLastEvent = lastEventNums[chapterNum - 1];
-      
-      if (currentLastEvent > 0) {
-        const filePath = `../../data/gatsby/chapter${chapterNum}_relationships_event_${currentLastEvent}.json`;
-        const json = relationshipModules[filePath]?.default;
-        
-        if (json) {
-          // 마지막 이벤트에서 해당 노드 정보 찾기
-          const nodeId = data.id;
-          const nodeInfo = json.nodes?.find(n => n.id === nodeId);
-          if (nodeInfo) {
-            setNodeData(prev => ({ ...prev, ...nodeInfo }));
-          }
-        }
-      }
-    } else {
-      // 뷰어 페이지: 현재 이벤트의 노드 정보 사용
-      if (chapterNum && eventNum) {
-        const filePath = `../../data/gatsby/chapter${chapterNum}_relationships_event_${eventNum}.json`;
-        const json = relationshipModules[filePath]?.default;
-        
-        if (json) {
-          const nodeId = data.id;
-          const nodeInfo = json.nodes?.find(n => n.id === nodeId);
-          if (nodeInfo) {
-            setNodeData(prev => ({ ...prev, ...nodeInfo }));
-          }
-        }
-      }
+  // 노드 등장 여부 확인 함수
+  const checkNodeAppearance = useCallback(() => {
+    console.log("=== checkNodeAppearance 시작 ===");
+    console.log("data:", data);
+    console.log("chapterNum:", chapterNum);
+    console.log("eventNum:", eventNum);
+    console.log("isGraphPage:", isGraphPage);
+    console.log("maxChapter:", maxChapter);
+    
+    // 기본값을 false로 설정
+    setIsNodeAppeared(false);
+    
+    if (!data) {
+      console.log("data가 없음 - isNodeAppeared를 false로 설정");
+      return;
     }
-  }, [isGraphPage, chapterNum, eventNum, maxChapter, data]);
+    
+    if (!chapterNum || chapterNum <= 0) {
+      console.log("chapterNum이 없거나 0 이하 - isNodeAppeared를 false로 설정");
+      return;
+    }
 
+    let targetEventNum = eventNum;
+    
+    // 그래프 단독 페이지이거나 eventNum이 0인 경우: 해당 챕터의 마지막 이벤트 사용
+    if (isGraphPage || !eventNum || eventNum === 0) {
+      const lastEventNums = getChapterLastEventNums(maxChapter);
+      targetEventNum = lastEventNums[chapterNum - 1] || 1;
+      console.log("targetEventNum 계산됨:", targetEventNum);
+    }
 
+    // JSON 파일 경로 생성
+    const filePath = `../../data/gatsby/chapter${chapterNum}_relationships_event_${targetEventNum}.json`;
+    console.log("찾는 파일 경로:", filePath);
+    const json = relationshipModules[filePath]?.default;
+    console.log("JSON 데이터:", json);
 
+    // 노드 ID를 문자열로 변환하여 비교
+    const nodeId = String(data.id);
+    console.log("찾는 노드 ID:", nodeId);
+    // relations 기반 등장 여부 판별
+    if (!json || !json.relations) {
+      console.log("JSON 파일이 없거나 relations가 없음 - isNodeAppeared를 false로 설정");
+      setNodeData({ id: data.id, label: data.label });
+      setIsNodeAppeared(false);
+      return;
+    }
+    const appeared = json.relations.some(
+      rel => String(rel.id1) === nodeId || String(rel.id2) === nodeId
+    );
+    if (appeared) {
+      console.log("노드가 relations에 등장함");
+      setIsNodeAppeared(true);
+    } else {
+      console.log("노드가 relations에 등장하지 않음");
+      setNodeData({ id: data.id, label: data.label });
+      setIsNodeAppeared(false);
+    }
+    console.log("=== checkNodeAppeared 끝 ===");
+  }, [data, chapterNum, eventNum, isGraphPage, maxChapter]);
+
+  // 노드 등장 여부 확인
+  useEffect(() => {
+    console.log("=== useEffect 호출됨 ===");
+    console.log("의존성 변경됨:", { 
+      dataId: data?.id, 
+      chapterNum, 
+      eventNum, 
+      isGraphPage, 
+      maxChapter 
+    });
+    console.log("checkNodeAppearance 함수 호출 전");
+    checkNodeAppearance();
+    console.log("checkNodeAppearance 함수 호출 후");
+  }, [data?.id, chapterNum, eventNum, isGraphPage, maxChapter]);
+
+  // 컴포넌트 마운트 시에도 한 번 실행
+  useEffect(() => {
+    console.log("=== 컴포넌트 마운트 시 checkNodeAppearance 실행 ===");
+    checkNodeAppearance();
+  }, []);
+
+  // 툴팁 초기화
   useEffect(() => {
     setShowContent(true);
   }, []);
@@ -223,6 +275,126 @@ function GraphNodeTooltip({
 
   // 뷰어 내에서 사용할 때는 z-index를 더 높게 설정
   const zIndexValue = inViewer ? 10000 : 9999;
+
+  console.log("=== 렌더링 시작 ===");
+  console.log("isNodeAppeared:", isNodeAppeared);
+  console.log("nodeData:", nodeData);
+  console.log("=== 렌더링 끝 ===");
+
+  // 노드가 현재 챕터/이벤트에서 등장하지 않는 경우 등장하지 않음 메시지 표시
+  if (!isNodeAppeared) {
+    return (
+      <div
+        ref={tooltipRef}
+        className="graph-node-tooltip"
+        style={{
+          position: "fixed",
+          left: position.x,
+          top: position.y,
+          zIndex: zIndexValue,
+          opacity: showContent ? 1 : 0,
+          transition: isDragging ? "none" : "opacity 0.3s",
+          cursor: isDragging ? "grabbing" : "grab",
+          width: 400,
+          minHeight: 200,
+          background: "#fff",
+          borderRadius: 20,
+          boxShadow:
+            "0 8px 32px rgba(79,109,222,0.13), 0 1.5px 8px rgba(0,0,0,0.04)",
+          padding: 0,
+          border: "1.5px solid #e5e7eb",
+          ...(style || {}),
+        }}
+        onMouseDown={handleMouseDown}
+      >
+        <button
+          onClick={onClose}
+          className="tooltip-close-btn"
+          style={{
+            position: "absolute",
+            top: 18,
+            right: 18,
+            fontSize: 22,
+            color: "#bfc8e2",
+            background: "none",
+            border: "none",
+            cursor: "pointer",
+            zIndex: 2,
+          }}
+        >
+          &times;
+        </button>
+        
+        <div
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: "40px 30px",
+            textAlign: "center",
+            minHeight: "200px",
+          }}
+        >
+          <div
+            style={{
+              width: 80,
+              height: 80,
+              borderRadius: "50%",
+              background: "#f3f4f6",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              marginBottom: 20,
+              border: "2px solid #e5e7eb",
+            }}
+          >
+            <svg width="40" height="40" viewBox="0 0 40 40" fill="none">
+              <circle cx="20" cy="20" r="20" fill="#d1d5db" />
+              <ellipse cx="20" cy="16" rx="8" ry="8" fill="#9ca3af" />
+              <ellipse cx="20" cy="32" rx="12" ry="6" fill="#9ca3af" />
+            </svg>
+          </div>
+          
+          <h3
+            style={{
+              fontSize: 20,
+              fontWeight: 700,
+              color: "#374151",
+              marginBottom: 8,
+            }}
+          >
+            {nodeData.common_name || nodeData.label}
+          </h3>
+          
+          <p
+            style={{
+              fontSize: 16,
+              color: "#6b7280",
+              lineHeight: 1.5,
+              marginBottom: 0,
+            }}
+          >
+            아직 등장하지 않은 인물입니다
+          </p>
+          
+          <p
+            style={{
+              fontSize: 14,
+              color: "#9ca3af",
+              lineHeight: 1.4,
+              marginTop: 8,
+            }}
+          >
+            {isGraphPage 
+              ? `챕터 ${chapterNum}에서는 등장하지 않습니다`
+              : `챕터 ${chapterNum} 이벤트 ${eventNum || '현재'}에서는 등장하지 않습니다`
+            }
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div
@@ -472,62 +644,6 @@ function GraphNodeTooltip({
         />
         <div style={{ flex: 1, marginBottom: 20 }} />
       </div>
-
-      {/* 뒷면 - 요약 정보 */}
-      {/* <div 
-        className="tooltip-content business-card tooltip-back"
-        style={{
-          backfaceVisibility: 'hidden',
-          position: isFlipped ? 'relative' : 'absolute',
-          width: '100%',
-          height: '100%',
-          transform: 'rotateY(180deg)'
-        }}
-      >
-        <button onClick={onClose} className="tooltip-close-btn">&times;</button>
-        
-        <div className="business-card-header">
-          <div className="profile-image-placeholder">
-            {nodeData.img ? (
-              <img src={nodeData.img} alt={nodeData.label} className="profile-img" />
-            ) : (
-              <span>👤</span>
-            )}
-          </div>
-          <div className="business-card-title">
-            <h3>
-              {nodeData.label} <span className="summary-badge">요약</span>
-            </h3>
-          </div>
-        </div>
-
-        <div className="business-card-body">
-          <div className="info-section" style={{ flex: 1 }}>
-            <i className="info-icon description-icon">📄</i>
-            <div className="info-content">
-              <p className="summary-text">{summaryData.summary}</p>
-            </div>
-          </div>
-
-          <div className="tooltip-actions">
-            <button 
-              className="action-button back-btn"
-              onClick={handleSummaryClick}
-            >
-              <FaArrowLeft size={14} />
-              돌아가기
-            </button>
-            <button 
-              className="action-button chat-btn"
-              onClick={handleChatClick}
-              style={{ color: '#ffffff' }}
-            >
-              <FaComments size={14} />
-              채팅하기
-            </button>
-          </div>
-        </div>
-      </div> */}
     </div>
   );
 }
