@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import PropTypes from 'prop-types';
 import BookCard from './BookCard';
 import LoadingSpinner from '../common/LoadingSpinner';
@@ -7,27 +7,6 @@ import { theme } from '../../styles/theme';
 // 그리드 레이아웃 사용으로 chunk 함수 제거
 
 const BookLibrary = ({ books, loading, error, onRetry }) => {
-  // 화면 크기에 따른 컬럼 수 계산
-  const [screenWidth, setScreenWidth] = useState(window.innerWidth);
-  
-  useEffect(() => {
-    const handleResize = () => {
-      setScreenWidth(window.innerWidth);
-    };
-    
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, []);
-  
-  // 화면 크기에 따른 최대 컬럼 수 결정
-  const getMaxColumns = () => {
-    if (screenWidth < 600) return 1; // 모바일: 1개
-    if (screenWidth < 900) return 2; // 태블릿: 2개
-    if (screenWidth < 1200) return 3; // 작은 데스크톱: 3개
-    return 6; // 큰 데스크톱: 최대 6개
-  };
-  
-  const maxColumns = getMaxColumns();
   const sectionStyle = {
     width: '100%',
     maxWidth: '1100px',
@@ -118,14 +97,13 @@ const BookLibrary = ({ books, loading, error, onRetry }) => {
     );
   }
 
-  // 화면 크기에 따른 동적 그리드 레이아웃
-  const cardWidth = screenWidth < 600 ? 'minmax(250px, 1fr)' : '200px';
+  // 왼쪽 정렬 그리드 레이아웃
   const gridStyle = {
     display: 'grid',
-    gridTemplateColumns: `repeat(${maxColumns}, ${cardWidth})`,
+    gridTemplateColumns: 'repeat(auto-fill, 200px)',
     gap: theme.spacing.md,
     width: '100%',
-    justifyContent: screenWidth < 600 ? 'center' : 'start', // 모바일에서는 중앙, 그 외엔 왼쪽 정렬
+    justifyContent: 'flex-start',
     justifyItems: 'center'
   };
 

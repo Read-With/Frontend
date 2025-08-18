@@ -175,3 +175,165 @@
   min-width: 100% !important;
   width: 100% !important;
 }
+
+/* ========================================
+   생동감 있는 로딩 애니메이션
+======================================== */
+
+/* 페이드 인 애니메이션 */
+@keyframes fade-in {
+  from { 
+    opacity: 0; 
+    transform: translateY(-10px); 
+  }
+  to { 
+    opacity: 1; 
+    transform: translateY(0); 
+  }
+}
+
+/* 슬라이드 업 애니메이션 */
+@keyframes slide-up {
+  from { 
+    opacity: 0; 
+    transform: translateY(30px); 
+  }
+  to { 
+    opacity: 1; 
+    transform: translateY(0); 
+  }
+}
+
+/* 진행률 바 애니메이션 */
+@keyframes progress-bar {
+  0% { 
+    transform: translateX(-100%); 
+  }
+  50% { 
+    transform: translateX(0%); 
+  }
+  100% { 
+    transform: translateX(100%); 
+  }
+}
+
+/* 지연된 페이드 인 */
+@keyframes fade-in-delayed {
+  0%, 60% { 
+    opacity: 0; 
+    transform: translateY(10px); 
+  }
+  100% { 
+    opacity: 1; 
+    transform: translateY(0); 
+  }
+}
+
+/* 흔들림 애니메이션 (에러용) */
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  10%, 30%, 50%, 70%, 90% { transform: translateX(-5px); }
+  20%, 40%, 60%, 80% { transform: translateX(5px); }
+}
+
+/* 맥박 애니메이션 강화 */
+@keyframes enhanced-pulse {
+  0%, 100% { 
+    opacity: 1; 
+    transform: scale(1); 
+  }
+  50% { 
+    opacity: 0.7; 
+    transform: scale(1.05); 
+  }
+}
+
+/* 회전 링 애니메이션 */
+@keyframes spin-ring {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* CSS 클래스 적용 */
+.animate-fade-in {
+  animation: fade-in 0.6s ease-out;
+}
+
+.animate-slide-up {
+  animation: slide-up 0.8s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.animate-progress-bar {
+  animation: progress-bar 2s ease-in-out infinite;
+}
+
+.animate-fade-in-delayed {
+  animation: fade-in-delayed 2s ease-out infinite;
+}
+
+.animate-shake {
+  animation: shake 0.6s ease-in-out;
+}
+
+.animate-enhanced-pulse {
+  animation: enhanced-pulse 1.5s ease-in-out infinite;
+}
+
+/* 향상된 스피너 */
+.animate-spin-enhanced {
+  animation: spin-ring 1s linear infinite;
+}
+
+/* 플로팅 업 애니메이션 (업로드용) */
+@keyframes float-up {
+  0% { 
+    opacity: 0; 
+    transform: translateY(20px) scale(0.8); 
+  }
+  50% { 
+    opacity: 1; 
+    transform: translateY(-10px) scale(1); 
+  }
+  100% { 
+    opacity: 0; 
+    transform: translateY(-40px) scale(0.8); 
+  }
+}
+
+.animate-float-up {
+  animation: float-up 1.5s ease-in-out infinite;
+}
+
+/* 성공 체크마크 애니메이션 */
+@keyframes check-mark {
+  0% { 
+    transform: scale(0) rotate(45deg); 
+    opacity: 0; 
+  }
+  50% { 
+    transform: scale(1.2) rotate(45deg); 
+    opacity: 1; 
+  }
+  100% { 
+    transform: scale(1) rotate(45deg); 
+    opacity: 1; 
+  }
+}
+
+.animate-check-mark {
+  animation: check-mark 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+/* 로딩 스케일 애니메이션 */
+@keyframes loading-scale {
+  0%, 100% { 
+    transform: scale(1); 
+  }
+  50% { 
+    transform: scale(1.1); 
+  }
+}
+
+.animate-loading-scale {
+  animation: loading-scale 2s ease-in-out infinite;
+}

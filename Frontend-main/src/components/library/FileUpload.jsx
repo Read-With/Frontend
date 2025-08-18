@@ -209,17 +209,211 @@ const FileUpload = ({ onUploadSuccess, onClose }) => {
             )}
           </>
                   ) : (
-          <div style={{ textAlign: 'center' }}>
-            <p style={{ 
-              fontSize: '16px',
-              fontWeight: 500,
-              color: '#333',
-              marginBottom: '8px'
+          <div style={{ textAlign: 'center', padding: '20px 0' }}>
+            {/* 생동감 있는 업로드 애니메이션 */}
+            <div className="relative mb-8">
+              {/* 메인 업로드 아이콘 */}
+              <div style={{ width: '96px', height: '96px', margin: '0 auto 16px', position: 'relative' }}>
+                <div style={{
+                  position: 'absolute',
+                  inset: '0',
+                  border: '4px solid #dbeafe',
+                  borderRadius: '50%',
+                  animation: 'spin-ring 2s linear infinite'
+                }}>
+                  <div style={{
+                    width: '100%',
+                    height: '100%',
+                    borderTop: '4px solid #2563eb',
+                    borderRadius: '50%'
+                  }}></div>
+                </div>
+                
+                {/* 중앙 파일 아이콘 */}
+                <div style={{
+                  position: 'absolute',
+                  inset: '0',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}>
+                  <div style={{
+                    width: '40px',
+                    height: '48px',
+                    backgroundColor: '#2563eb',
+                    borderRadius: '4px',
+                    position: 'relative',
+                    animation: 'enhanced-pulse 1.5s ease-in-out infinite'
+                  }}>
+                    <div style={{
+                      position: 'absolute',
+                      top: '0',
+                      right: '0',
+                      width: '12px',
+                      height: '12px',
+                      backgroundColor: 'white'
+                    }}></div>
+                    <div style={{
+                      position: 'absolute',
+                      top: '12px',
+                      right: '12px',
+                      width: '12px',
+                      height: '12px',
+                      backgroundColor: '#2563eb',
+                      transform: 'rotate(45deg)'
+                    }}></div>
+                    
+                    {/* 파일 내용 라인들 */}
+                    <div style={{
+                      position: 'absolute',
+                      top: '24px',
+                      left: '4px',
+                      right: '4px',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '4px'
+                    }}>
+                      {[0, 1, 2, 3].map((i) => (
+                        <div
+                          key={i}
+                          style={{
+                            height: '2px',
+                            backgroundColor: 'white',
+                            borderRadius: '1px',
+                            width: `${80 - i * 10}%`,
+                            animation: `enhanced-pulse 1.5s ease-in-out infinite ${i * 0.2}s`
+                          }}
+                        ></div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+              
+              {/* 업로드 메시지 */}
+              <div style={{ marginBottom: '24px' }}>
+                <p style={{
+                  fontSize: '18px',
+                  fontWeight: '600',
+                  color: '#374151',
+                  marginBottom: '8px'
+                }}>
+                  파일을 업로드하고 있습니다...
+                </p>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}>
+                  {[0, 1, 2].map((i) => (
+                    <div
+                      key={i}
+                      style={{
+                        width: '8px',
+                        height: '8px',
+                        backgroundColor: '#2563eb',
+                        borderRadius: '50%',
+                        animation: `bounce 1s ease-in-out infinite ${i * 0.2}s`
+                      }}
+                    ></div>
+                  ))}
+                </div>
+              </div>
+            </div>
+            
+            {/* 개선된 진행률 바 */}
+            <div style={{ position: 'relative', marginBottom: '16px' }}>
+              <div style={{
+                width: '100%',
+                height: '12px',
+                backgroundColor: '#f3f4f6',
+                borderRadius: '6px',
+                overflow: 'hidden',
+                boxShadow: 'inset 0 1px 2px rgba(0, 0, 0, 0.1)'
+              }}>
+                <div style={{
+                  height: '100%',
+                  background: 'linear-gradient(90deg, #60a5fa, #2563eb, #1d4ed8)',
+                  width: `${uploadProgress}%`,
+                  borderRadius: '6px',
+                  transition: 'width 0.5s ease-out',
+                  position: 'relative'
+                }}>
+                  {/* 진행률 바 내 애니메이션 */}
+                  <div style={{
+                    position: 'absolute',
+                    inset: '0',
+                    background: 'rgba(255, 255, 255, 0.2)',
+                    borderRadius: '6px',
+                    animation: 'enhanced-pulse 1s ease-in-out infinite'
+                  }}></div>
+                  <div style={{
+                    position: 'absolute',
+                    right: '0',
+                    top: '0',
+                    width: '16px',
+                    height: '100%',
+                    background: 'rgba(255, 255, 255, 0.3)',
+                    borderRadius: '6px',
+                    transform: uploadProgress > 95 ? 'scale(1.2)' : 'scale(1)',
+                    transition: 'transform 0.3s ease'
+                  }}></div>
+                </div>
+              </div>
+              
+              {/* 진행률 텍스트 */}
+              <div style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                marginTop: '8px'
+              }}>
+                <span style={{ fontSize: '14px', color: '#6b7280' }}>업로드 중...</span>
+                <span style={{ fontSize: '18px', fontWeight: 'bold', color: '#2563eb' }}>
+                  {Math.round(uploadProgress)}%
+                </span>
+              </div>
+            </div>
+            
+            {/* 업로드 단계 표시 */}
+            <div style={{
+              display: 'flex',
+              justifyContent: 'center',
+              gap: '32px',
+              marginTop: '24px'
             }}>
-              업로드 중... ({Math.round(uploadProgress)}%)
-            </p>
-            <div style={progressBarStyle}>
-              <div style={progressFillStyle} />
+              {[
+                { step: 1, label: '파일 읽기', threshold: 25 },
+                { step: 2, label: '처리 중', threshold: 50 },
+                { step: 3, label: '분석 중', threshold: 75 },
+                { step: 4, label: '완료', threshold: 100 }
+              ].map(({ step, label, threshold }) => (
+                <div key={step} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                  <div style={{
+                    width: '32px',
+                    height: '32px',
+                    borderRadius: '50%',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: '14px',
+                    fontWeight: 'bold',
+                    backgroundColor: uploadProgress >= threshold ? '#10b981' : 
+                                   uploadProgress >= threshold - 25 ? '#2563eb' : '#e5e7eb',
+                    color: uploadProgress >= threshold - 25 ? 'white' : '#9ca3af',
+                    transform: uploadProgress >= threshold ? 'scale(1.1)' : 'scale(1)',
+                    transition: 'all 0.5s ease',
+                    animation: uploadProgress >= threshold - 25 && uploadProgress < threshold ? 'enhanced-pulse 1s ease-in-out infinite' : 'none'
+                  }}>
+                    {uploadProgress >= threshold ? '✓' : step}
+                  </div>
+                  <span style={{
+                    fontSize: '12px',
+                    marginTop: '4px',
+                    color: uploadProgress >= threshold ? '#10b981' : '#9ca3af',
+                    fontWeight: uploadProgress >= threshold ? '600' : 'normal',
+                    transition: 'color 0.3s ease'
+                  }}>
+                    {label}
+                  </span>
+                </div>
+              ))}
             </div>
           </div>
         )}

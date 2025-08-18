@@ -1,32 +1,19 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import PropTypes from 'prop-types';
 import { useNavigate } from 'react-router-dom';
 import { theme } from '../../styles/theme';
 
 const BookCard = ({ book }) => {
   const navigate = useNavigate();
-  const [isHovered, setIsHovered] = useState(false);
-  const [screenWidth, setScreenWidth] = useState(window.innerWidth);
-  
-  useEffect(() => {
-    const handleResize = () => {
-      setScreenWidth(window.innerWidth);
-    };
-    
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, []);
 
-  // 화면 크기에 따른 동적 크기
-  const isMobile = screenWidth < 600;
-  
   const cardStyle = {
     background: theme.colors.background.card,
     border: `1.5px solid ${theme.colors.border}`,
     borderRadius: theme.borderRadius.md,
     boxShadow: theme.boxShadow.sm,
-    width: isMobile ? '250px' : '200px', // 모바일에서 더 큰 크기
-    height: isMobile ? '360px' : '320px',
+    width: '100%',
+    maxWidth: '200px',
+    minHeight: '320px',
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
@@ -129,7 +116,7 @@ const BookCard = ({ book }) => {
     transition: `transform ${theme.transitions.default}`
   };
 
-  // 이미 위에서 선언됨
+  const [isHovered, setIsHovered] = React.useState(false);
 
   const handleReadClick = (e) => {
     e.stopPropagation();
