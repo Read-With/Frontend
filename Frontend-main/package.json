@@ -17,6 +17,7 @@
     "cytoscape-cose-bilkent": "^4.1.0",
     "epubjs": "^0.3.93",
     "framer-motion": "^12.15.0",
+    "prop-types": "^15.8.1",
     "react": "^19.0.0",
     "react-chartjs-2": "^5.3.0",
     "react-cytoscapejs": "^2.0.0",
