@@ -1,19 +1,33 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import PropTypes from 'prop-types';
 import BookCard from './BookCard';
 import LoadingSpinner from '../common/LoadingSpinner';
 import { theme } from '../../styles/theme';
 
-// 배열을 지정된 크기로 청크 분할하는 유틸리티 함수
-const chunk = (arr, size) => {
-  const result = [];
-  for (let i = 0; i < arr.length; i += size) {
-    result.push(arr.slice(i, i + size));
-  }
-  return result;
-};
+// 그리드 레이아웃 사용으로 chunk 함수 제거
 
 const BookLibrary = ({ books, loading, error, onRetry }) => {
+  // 화면 크기에 따른 컬럼 수 계산
+  const [screenWidth, setScreenWidth] = useState(window.innerWidth);
+  
+  useEffect(() => {
+    const handleResize = () => {
+      setScreenWidth(window.innerWidth);
+    };
+    
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+  
+  // 화면 크기에 따른 최대 컬럼 수 결정
+  const getMaxColumns = () => {
+    if (screenWidth < 600) return 1; // 모바일: 1개
+    if (screenWidth < 900) return 2; // 태블릿: 2개
+    if (screenWidth < 1200) return 3; // 작은 데스크톱: 3개
+    return 6; // 큰 데스크톱: 최대 6개
+  };
+  
+  const maxColumns = getMaxColumns();
   const sectionStyle = {
     width: '100%',
     maxWidth: '1100px',
@@ -28,18 +42,7 @@ const BookLibrary = ({ books, loading, error, onRetry }) => {
     gap: '18px'
   };
 
-  const listStyle = {
-    width: '100%',
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '18px'
-  };
-
-  const rowStyle = {
-    display: 'flex',
-    gap: theme.spacing.md,
-    justifyContent: 'center'
-  };
+  // 그리드 레이아웃으로 변경하여 불필요한 스타일 제거
 
   const errorStyle = {
     color: 'red',
@@ -102,29 +105,38 @@ const BookLibrary = ({ books, loading, error, onRetry }) => {
     return (
       <div style={sectionStyle}>
         <div style={emptyStateStyle}>
-          <div style={{ fontSize: theme.fontSize.xl, marginBottom: theme.spacing.sm }}>
-            아직 등록된 책이 없습니다
+          <div style={{ fontSize: '48px', marginBottom: '16px' }}>📚</div>
+          <div style={{ fontSize: theme.fontSize.xl, marginBottom: theme.spacing.sm, fontWeight: 600 }}>
+            아직 책이 없네요!
           </div>
-          <div>새로운 책을 추가해보세요!</div>
+          <div style={{ fontSize: theme.fontSize.base, color: theme.colors.text.secondary, lineHeight: '1.5' }}>
+            우측 하단의 + 버튼을 눌러서<br />
+            첫 번째 책을 추가해보세요
+          </div>
         </div>
       </div>
     );
   }
 
-  const rows = chunk(books, 2);
+  // 화면 크기에 따른 동적 그리드 레이아웃
+  const cardWidth = screenWidth < 600 ? 'minmax(250px, 1fr)' : '200px';
+  const gridStyle = {
+    display: 'grid',
+    gridTemplateColumns: `repeat(${maxColumns}, ${cardWidth})`,
+    gap: theme.spacing.md,
+    width: '100%',
+    justifyContent: screenWidth < 600 ? 'center' : 'start', // 모바일에서는 중앙, 그 외엔 왼쪽 정렬
+    justifyItems: 'center'
+  };
 
   return (
     <div style={sectionStyle}>
-      <div style={listStyle}>
-        {rows.map((row, index) => (
-          <div key={index} style={rowStyle}>
-            {row.map((book) => (
-              <BookCard 
-                key={`${book.title}-${book.filename}`} 
-                book={book} 
-              />
-            ))}
-          </div>
+      <div style={gridStyle}>
+        {books.map((book) => (
+          <BookCard 
+            key={`${book.title}-${book.filename}`} 
+            book={book} 
+          />
         ))}
       </div>
     </div>

@@ -26,9 +26,9 @@ export const useBooks = () => {
       try {
         const stored = localStorage.getItem('uploadedBooks');
         if (stored) {
-          const allBooks = JSON.parse(stored);
-          // 기본 책들과 업로드된 책들 분리 (중복 방지)
-          uploadedBooks = allBooks.filter(book => 
+          uploadedBooks = JSON.parse(stored);
+          // 기본 책과 중복되지 않는지 확인
+          uploadedBooks = uploadedBooks.filter(book => 
             !defaultBooks.some(defaultBook => defaultBook.filename === book.filename)
           );
         }
@@ -60,9 +60,13 @@ export const useBooks = () => {
   const addBook = (newBook) => {
     setBooks(prevBooks => {
       const updatedBooks = [...prevBooks, newBook];
-      // 로컬 스토리지에 저장 (실제 환경에서는 서버로 전송)
+      
+      // 업로드된 책들만 로컬 스토리지에 저장
       try {
-        localStorage.setItem('uploadedBooks', JSON.stringify(updatedBooks));
+        const uploadedOnly = updatedBooks.filter(book => 
+          !['gatsby.epub', 'alice.epub'].includes(book.filename)
+        );
+        localStorage.setItem('uploadedBooks', JSON.stringify(uploadedOnly));
       } catch (err) {
         console.warn('로컬 스토리지 저장 실패:', err);
       }
@@ -74,8 +78,13 @@ export const useBooks = () => {
   const removeBook = (filename) => {
     setBooks(prevBooks => {
       const updatedBooks = prevBooks.filter(book => book.filename !== filename);
+      
+      // 업로드된 책들만 로컬 스토리지에 저장
       try {
-        localStorage.setItem('uploadedBooks', JSON.stringify(updatedBooks));
+        const uploadedOnly = updatedBooks.filter(book => 
+          !['gatsby.epub', 'alice.epub'].includes(book.filename)
+        );
+        localStorage.setItem('uploadedBooks', JSON.stringify(uploadedOnly));
       } catch (err) {
         console.warn('로컬 스토리지 저장 실패:', err);
       }
