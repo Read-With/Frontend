@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { FaSearch, FaUndo } from "react-icons/fa";
+import { buildSuggestions, highlightParts } from "../../utils/search";
 
 const GraphControls = ({
   onSearchSubmit = () => {}, // 부모 컴포넌트에 검색 결과를 전달하는 콜백
@@ -27,55 +28,10 @@ const GraphControls = ({
 
   // 검색 제안 생성 (2글자 이상일 때만)
   useEffect(() => {
-    if (searchInput.trim().length >= 2 && elements.length > 0) {
-      const searchLower = searchInput.toLowerCase();
-      const characterNodes = elements.filter(el => !el.data.source);
-      
-      const matches = characterNodes
-        .filter(node => {
-          const label = node.data.label?.toLowerCase() || '';
-          const names = node.data.names || [];
-          const commonName = node.data.common_name?.toLowerCase() || '';
-          
-          const nameMatches = names.some(name => 
-            name.toLowerCase().includes(searchLower)
-          );
-          const commonNameMatches = commonName.includes(searchLower);
-          
-          return label.includes(searchLower) || nameMatches || commonNameMatches;
-        })
-        .map(node => {
-          const searchLower = searchInput.toLowerCase();
-          const label = node.data.label?.toLowerCase() || '';
-          const names = node.data.names || [];
-          const commonName = node.data.common_name?.toLowerCase() || '';
-          
-          let matchType = 'none';
-          if (label.includes(searchLower)) {
-            matchType = 'label';
-          } else if (names.some(name => name.toLowerCase().includes(searchLower))) {
-            matchType = 'names';
-          } else if (commonName.includes(searchLower)) {
-            matchType = 'common_name';
-          }
-          
-          return {
-            id: node.data.id,
-            label: node.data.label,
-            names: node.data.names || [],
-            common_name: node.data.common_name,
-            matchType: matchType
-          };
-        })
-        .slice(0, 8); // 최대 8개 제안
-
-      setSuggestions(matches);
-      setShowSuggestions(matches.length > 0);
-      setSelectedIndex(-1);
-    } else {
-      setSuggestions([]);
-      setShowSuggestions(false);
-    }
+    const matches = buildSuggestions(elements, searchInput);
+    setSuggestions(matches);
+    setShowSuggestions(matches.length > 0);
+    setSelectedIndex(-1);
   }, [searchInput, elements]);
 
   // 외부 클릭 시 드롭다운 닫기
@@ -260,16 +216,14 @@ const GraphControls = ({
     fontStyle: 'italic'
   };
 
-  const highlightText = (text, searchTerm) => {
-    if (!searchTerm) return text;
-    const regex = new RegExp(`(${searchTerm})`, 'gi');
-    const parts = text.split(regex);
-    return parts.map((part, index) => 
-      regex.test(part) ? (
-        <span key={index} style={{ fontWeight: 'bold', color: '#6C8EFF' }}>
-          {part}
-        </span>
-      ) : part
+  const highlightText = (text, term) => {
+    const parts = highlightParts(text, term);
+    return parts.map((part, index) =>
+      part.toLowerCase && term && part.toLowerCase() === term.toLowerCase() ? (
+        <span key={index} style={{ fontWeight: 'bold', color: '#6C8EFF' }}>{part}</span>
+      ) : (
+        <span key={index}>{part}</span>
+      )
     );
   };
 
