@@ -1,6 +1,7 @@
 import React, { useEffect, useState, forwardRef, useImperativeHandle } from "react";
 import RelationGraph from "./RelationGraph";
 import { filterGraphElements } from "../../utils/graphFilter";
+import { convertRelationsToElements } from "../../utils/graphElementUtils";
 
 // 이벤트 관계 데이터를 동적으로 가져오기
 const eventRelationModules = import.meta.glob(
@@ -35,66 +36,7 @@ function getCharactersData(chapter) {
   return filePath ? charactersModules[filePath]?.default : null;
 }
 
-function convertRelationsToElements(
-  relations,
-  idToName,
-  idToDesc,
-  idToMain,
-  idToNames
-) {
-  const nodes = {};
-  const edges = [];
-  relations.forEach((rel) => {
-    const id1 = String(rel.id1);
-    const id2 = String(rel.id2);
-    nodes[id1] = {
-      data: {
-        id: id1,
-        label: idToName[id1] || id1,
-        description: idToDesc[id1] || "",
-        main_character: idToMain[id1] || false,
-        names: idToNames[id1] || [],
-        image: `/gatsby/${id1}.png`, // 이미지 경로 추가
-      },
-    };
-    nodes[id2] = {
-      data: {
-        id: id2,
-        label: idToName[id2] || id2,
-        description: idToDesc[id2] || "",
-        main_character: idToMain[id2] || false,
-        names: idToNames[id2] || [],
-        image: `/gatsby/${id2}.png`, // 이미지 경로 추가
-      },
-    };
-
-    // relation 배열을 그대로 유지하고, label에는 첫 번째 요소만 사용
-    let relationArray = [];
-    let relationLabel = "";
-    
-    if (Array.isArray(rel.relation)) {
-      relationArray = rel.relation;
-      relationLabel = rel.relation[0] || "";
-    } else if (typeof rel.relation === "string") {
-      relationArray = [rel.relation];
-      relationLabel = rel.relation;
-    }
-    
-    edges.push({
-      data: {
-        id: `${id1}-${id2}`,
-        source: id1,
-        target: id2,
-        relation: relationArray, // 전체 배열 유지
-        label: relationLabel || "", // 라벨에는 첫 번째 요소만
-        weight: rel.weight || 1,
-        positivity: rel.positivity,
-        count: rel.count,
-      },
-    });
-  });
-  return [...Object.values(nodes), ...edges];
-}
+// 변환 로직은 공용 유틸을 사용 (기존 기능 유지)
 
 const GraphContainer = forwardRef(({
   currentPosition,

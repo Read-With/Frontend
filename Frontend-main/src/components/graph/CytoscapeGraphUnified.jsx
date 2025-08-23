@@ -1,6 +1,8 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState, useCallback, createContext } from "react";
 import cytoscape from "cytoscape";
 import "./RelationGraph.css";
+
+export const CytoscapeGraphContext = createContext();
 
 const CytoscapeGraphUnified = ({
   elements,
@@ -325,3 +327,28 @@ const CytoscapeGraphUnified = ({
 };
 
 export default CytoscapeGraphUnified; 
+
+export function CytoscapeGraphPortalProvider({ children }) {
+  const [graphProps, setGraphProps] = useState({
+    elements: [],
+    stylesheet: [],
+    layout: { name: "preset" },
+    tapNodeHandler: undefined,
+    tapEdgeHandler: undefined,
+    tapBackgroundHandler: undefined,
+    fitNodeIds: undefined,
+    style: {},
+    newNodeIds: [],
+  });
+
+  const updateGraph = useCallback((newProps) => {
+    setGraphProps((prev) => ({ ...prev, ...newProps }));
+  }, []);
+
+  return (
+    <CytoscapeGraphContext.Provider value={{ graphProps, updateGraph }}>
+      {children}
+      <CytoscapeGraphUnified {...graphProps} />
+    </CytoscapeGraphContext.Provider>
+  );
+}

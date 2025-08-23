@@ -12,46 +12,14 @@ import UnifiedEdgeTooltip from "./tooltip/UnifiedEdgeTooltip";
 import GraphSidebar from "./GraphSidebar";
 import "./RelationGraph.css";
 import { DEFAULT_LAYOUT } from "../../utils/graphLayouts";
+import { getNodeSize as getNodeSizeUtil, getEdgeStyle as getEdgeStyleUtil, getRelationColor } from "../../utils/graphStyles";
+import useGraphInteractions from "../../hooks/useGraphInteractions";
 
-// 간선 positivity 값에 따라 HSL 그라데이션 색상 반환
-function getRelationColor(positivity) {
-  // positivity: -1(빨강) ~ 0(회색) ~ 1(초록)
-  // H: 0(빨강) ~ 120(초록)
-  const h = (120 * (positivity + 1)) / 2; // -1~1 → 0~120
-  return `hsl(${h}, 70%, 45%)`;
-}
+// getRelationColor는 공용 유틸 사용
 
-export const getNodeSize = () => {
-  if (typeof window !== 'undefined') {
-    const path = window.location.pathname;
-    if (path.includes('/user/viewer/')) return 40;
-    if (path.includes('/user/graph/')) return 40;
-  }
-  return 40; // 기본값
-};
-
-// 간선(엣지) 스타일도 라우트에 따라 다르게 반환
-const getEdgeStyle = () => {
-  if (typeof window !== 'undefined') {
-    const path = window.location.pathname;
-    if (path.includes('/user/viewer/')) {
-      return {
-        width: "data(weight)",  // weight 값을 그대로 사용
-        fontSize: 9,
-      };
-    }
-    if (path.includes('/user/graph/')) {
-      return {
-        width: "data(weight)",  // weight 값을 그대로 사용
-        fontSize: 11,
-      };
-    }
-  }
-  return {
-    width: "data(weight)",  // weight 값을 그대로 사용
-    fontSize: 9,
-  };
-};
+// 공용 유틸 사용(기능 유지): RelationGraphMain는 standalone/graph 컨텍스트 우선
+const getNodeSize = () => getNodeSizeUtil('graph');
+const getEdgeStyle = () => getEdgeStyleUtil('graph');
 
 // MAX_EDGE_LABEL_LENGTH 제거됨 - 길이 제한 없음
 
@@ -124,95 +92,15 @@ function RelationGraphMain({
   //   navigate(`/viewer/${filename}/timeline`, { state: location.state });
   // };
 
-  // 노드 클릭 시 툴팁 표시
-  const tapNodeHandler = useCallback((evt) => {
-    if (!cyRef.current) return;
-    const node = evt.target;
-    const pos = node.renderedPosition();
-    const cy = cyRef.current;
-    const pan = cy.pan();
-    const zoom = cy.zoom();
-    const container = document.querySelector('.graph-canvas-area');
-    const containerRect = container.getBoundingClientRect();
-    // 노드 중심의 화면 좌표 계산
-    const nodeCenter = {
-      x: pos.x * zoom + pan.x + containerRect.left,
-      y: pos.y * zoom + pan.y + containerRect.top,
-    };
-    setActiveTooltip(null);
-    cy.batch(() => {
-      // 모든 노드에서 highlighted 클래스 제거 (이전 선택 해제)
-      cy.nodes().removeClass("highlighted");
-      cy.edges().removeClass("highlighted");
-      
-      // 모든 노드와 엣지에 faded 클래스 추가
-      cy.nodes().addClass("faded");
-      cy.edges().addClass("faded");
-      
-      // 클릭된 노드만 강조 (파란색 테두리)
-      node.removeClass("faded").addClass("highlighted");
-      
-      // 연결된 간선들과 노드들 faded 제거
-      const connectedEdges = node.connectedEdges();
-      const connectedNodes = node.neighborhood().nodes();
-      connectedEdges.removeClass("faded");
-      connectedNodes.removeClass("faded");
-    });
-    // 마우스 포인터 위치를 툴팁에 넘김
-    const mouseX = evt.originalEvent?.clientX ?? nodeCenter.x;
-    const mouseY = evt.originalEvent?.clientY ?? nodeCenter.y;
-    setTimeout(() => {
+  const { tapNodeHandler, tapEdgeHandler, tapBackgroundHandler, clearSelection } = useGraphInteractions({
+    cyRef,
+    selectedNodeIdRef,
+    selectedEdgeIdRef,
+    activeTooltip,
+    onShowNodeTooltip: ({ node, nodeCenter, mouseX, mouseY }) => {
       setActiveTooltip({ type: 'node', id: node.id(), x: mouseX, y: mouseY, data: node.data(), nodeCenter });
-    }, 0);
-    selectedNodeIdRef.current = node.id();
-  }, []);
-
-  // 간선 클릭 시 툴팁 표시 (좌표 변환)
-  const tapEdgeHandler = useCallback(
-    (evt) => {
-      // 디버깅: 간선 클릭 이벤트 (필요시 주석 해제)
-      // console.log('=== 간선 클릭 이벤트 발생! ===');
-      // console.log('evt:', evt);
-      // console.log('evt.target:', evt.target);
-      
-      if (!cyRef.current) {
-        // console.log('cyRef.current가 없음');
-        return;
-      }
-      const cy = cyRef.current;
-      const edge = evt.target;
-      
-      // 디버깅: 간선 클릭 시 데이터 확인 (필요시 주석 해제)
-      // console.log('=== 간선 클릭 디버깅 ===');
-      // console.log('클릭된 간선:', edge);
-      // console.log('간선 데이터:', edge?.data());
-      // console.log('간선 relation:', edge?.data()?.relation);
-      // console.log('간선 label:', edge?.data()?.label);
-      // console.log('========================');
-      
-      // 엣지 데이터 확인
-      if (!edge || !edge.data()) {
-        // console.log('엣지 데이터가 없음');
-        return;
-      }
-      
-      const container = document.querySelector(".graph-canvas-area");
-      if (!container) {
-        return;
-      }
-      
-      const containerRect = container.getBoundingClientRect();
-
-      // Cytoscape의 midpoint는 그래프 내부 좌표계이므로, 화면 좌표로 변환
-      const pos = edge.midpoint();
-      const pan = cy.pan();
-      const zoom = cy.zoom();
-
-      // 절대 좌표 계산 (컨테이너 기준)
-      const absoluteX = pos.x * zoom + pan.x + containerRect.left;
-      const absoluteY = pos.y * zoom + pan.y + containerRect.top;
-
-      setActiveTooltip(null);
+    },
+    onShowEdgeTooltip: ({ edge, absoluteX, absoluteY }) => {
       setActiveTooltip({
         type: 'edge',
         id: edge.id(),
@@ -222,45 +110,8 @@ function RelationGraphMain({
         sourceNode: edge.source(),
         targetNode: edge.target(),
       });
-
-      cy.batch(() => {
-        // 모든 노드에서 highlighted 클래스 제거 (이전 선택 해제)
-        cy.nodes().removeClass("highlighted");
-        cy.edges().removeClass("highlighted");
-        
-        cy.nodes().addClass("faded");
-        cy.edges().addClass("faded");
-        edge.removeClass("faded");
-        // 연결된 노드들만 강조
-        edge.source().removeClass("faded").addClass("highlighted");
-        edge.target().removeClass("faded").addClass("highlighted");
-        // 나머지 노드/간선은 faded 유지
-      });
-
-      selectedEdgeIdRef.current = edge.id();
     },
-    []
-  );
-
-  // 배경 클릭 시 선택 해제
-  const tapBackgroundHandler = useCallback((evt) => {
-    if (evt.target === cyRef.current) {
-      clearSelection();
-    }
-  }, []);
-
-  // 선택 해제
-  const clearSelection = useCallback(() => {
-    if (cyRef.current) {
-      const cy = cyRef.current;
-      cy.nodes().removeClass("faded");
-      cy.edges().removeClass("faded");
-      cy.nodes().removeClass("highlighted");
-    }
-    setActiveTooltip(null);
-    selectedEdgeIdRef.current = null;
-    selectedNodeIdRef.current = null;
-  }, []);
+  });
 
   const handleCloseTooltip = useCallback(() => {
     clearSelection();

@@ -8,7 +8,7 @@ import { loadBookmarks, saveBookmarks } from "./bookmark/BookmarkManager";
 import { toast, ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import cytoscape from "cytoscape";
-import CytoscapeGraphPortalProvider from "../graph/CytoscapeGraphPortalProvider";
+import { CytoscapeGraphPortalProvider } from "../graph/CytoscapeGraphUnified";
 import GraphContainer from "../graph/GraphContainer";
 import ViewerTopBar from "./ViewerTopBar";
 
