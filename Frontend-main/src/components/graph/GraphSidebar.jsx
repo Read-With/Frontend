@@ -3,7 +3,7 @@ import { Line } from "react-chartjs-2";
 import "chart.js/auto";
 import useRelationTimeline from "../../hooks/useRelationTimeline";
 import { safeNum } from "../../utils/relationUtils";
-import { getRelationStyle } from "../../utils/relationStyle";
+import { getRelationStyle } from "../../utils/relationStyles";
 
 function GraphSidebar({
   activeTooltip,

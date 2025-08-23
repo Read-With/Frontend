@@ -4,15 +4,19 @@
  * @returns {object} color와 text를 포함한 객체
  */
 export function getRelationStyle(positivity) {
+  // 입력 가드 및 범위 클램프
+  const value = typeof positivity === 'number' && !Number.isNaN(positivity)
+    ? Math.max(-1, Math.min(1, positivity))
+    : 0;
   // 색상: RelationGraphMain.jsx 방식(HSL 그라데이션)
-  const h = (120 * (positivity + 1)) / 2; // -1~1 → 0~120
+  const h = (120 * (value + 1)) / 2; // -1~1 → 0~120
   const color = `hsl(${h}, 70%, 45%)`;
   
   // 텍스트 분류는 기존 방식 유지
-  if (positivity > 0.6) return { color, text: "긍정적" };
-  if (positivity > 0.3) return { color, text: "우호적" };
-  if (positivity > -0.3) return { color, text: "중립적" };
-  if (positivity > -0.6) return { color, text: "비우호적" };
+  if (value > 0.6) return { color, text: "긍정적" };
+  if (value > 0.3) return { color, text: "우호적" };
+  if (value > -0.3) return { color, text: "중립적" };
+  if (value > -0.6) return { color, text: "비우호적" };
   return { color, text: "부정적" };
 }
 
