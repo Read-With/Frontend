@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import PropTypes from 'prop-types';
 import { useNavigate } from 'react-router-dom';
-import { theme } from '../styles/theme';
+import { theme } from '../components/common/theme';
 
 const HomeButton = ({ onClick, children, variant = 'primary' }) => {
   const [isHovered, setIsHovered] = useState(false);
@@ -119,7 +119,6 @@ export default function HomePage() {
       <div style={featuresStyle}>
         <div style={featureStyle}>EPUB 리더</div>
         <div style={featureStyle}>관계 분석</div>
-        <div style={featureStyle}>챗봇</div>
         <div style={featureStyle}>타임라인</div>
       </div>
 

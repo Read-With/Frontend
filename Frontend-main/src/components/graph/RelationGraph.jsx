@@ -6,12 +6,11 @@ import React, {
   useCallback,
 } from "react";
 import CytoscapeGraphUnified from "./CytoscapeGraphUnified";
-import GraphNodeTooltip from "./NodeTooltip";
-import EdgeTooltip from "./EdgeTooltip";
-import ViewerEdgeTooltip from "./ViewerEdgeTooltip";
+import GraphNodeTooltip from "./tooltip/NodeTooltip";
+import UnifiedEdgeTooltip from "./tooltip/UnifiedEdgeTooltip";
 import "./RelationGraph.css";
-import { calcGraphDiff } from "./graphDiff";
-import { DEFAULT_LAYOUT } from "./graphLayouts";
+import { calcGraphDiff } from "../../utils/graphDiff";
+import { DEFAULT_LAYOUT } from "../../utils/graphLayouts";
 
 // 간선 positivity 값에 따라 HSL 그라데이션 색상 반환
 function getRelationColor(positivity) {
@@ -540,7 +539,7 @@ const RelationGraph = ({
           />
         )}
         {activeTooltip?.type === "edge" && (
-          <ViewerEdgeTooltip
+          <UnifiedEdgeTooltip
             key={`edge-tooltip-${activeTooltip.id}`}
             data={activeTooltip.data}
             x={activeTooltip.x}
@@ -548,10 +547,11 @@ const RelationGraph = ({
             onClose={clearSelection}
             sourceNode={activeTooltip.sourceNode}
             targetNode={activeTooltip.targetNode}
-            style={{ pointerEvents: "auto" }}
+            mode="viewer"
             chapterNum={chapterNum}
             eventNum={eventNum}
             maxChapter={maxChapter}
+            style={{ pointerEvents: "auto" }}
           />
         )}
       </div>

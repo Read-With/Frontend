@@ -4,7 +4,7 @@ import BookLibrary from '../components/library/BookLibrary';
 import FileUpload from '../components/library/FileUpload';
 import { useBooks } from '../hooks/useBooks';
 import { useUserProfile } from '../hooks/useUserProfile';
-import { theme } from '../styles/theme';
+import { theme } from '../components/common/theme';
 
 export default function MyPage() {
   const { books, loading, error, retryFetch, addBook } = useBooks();

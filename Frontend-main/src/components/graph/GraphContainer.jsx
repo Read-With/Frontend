@@ -1,7 +1,6 @@
 import React, { useEffect, useState, forwardRef, useImperativeHandle } from "react";
 import RelationGraph from "./RelationGraph";
-import RelationGraphMain from "./RelationGraphMain";
-import { filterGraphElements } from "./graphFilter";
+import { filterGraphElements } from "../../utils/graphFilter";
 
 // 이벤트 관계 데이터를 동적으로 가져오기
 const eventRelationModules = import.meta.glob(

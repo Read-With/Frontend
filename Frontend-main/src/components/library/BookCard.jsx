@@ -1,7 +1,7 @@
 import React from 'react';
 import PropTypes from 'prop-types';
 import { useNavigate } from 'react-router-dom';
-import { theme } from '../../styles/theme';
+import { theme } from '../common/theme';
 
 const BookCard = ({ book }) => {
   const navigate = useNavigate();

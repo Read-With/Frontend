@@ -596,8 +596,8 @@ html, body {
   left: 0;
 }
 
-/* 타임라인, 북마크 등 다른 페이지에서는 스크롤 허용 */
-.timeline-view, .bookmarks-view {
+/* 북마크 등 다른 페이지에서는 스크롤 허용 */
+.bookmarks-view {
   overflow-y: auto !important;
 }
 

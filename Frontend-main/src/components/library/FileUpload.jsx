@@ -1,7 +1,7 @@
 import React, { useRef, useState } from 'react';
 import PropTypes from 'prop-types';
 import { useFileUpload } from '../../hooks/useFileUpload';
-import { theme } from '../../styles/theme';
+import { theme } from '../common/theme';
 
 const FileUpload = ({ onUploadSuccess, onClose }) => {
   const [dragActive, setDragActive] = useState(false);

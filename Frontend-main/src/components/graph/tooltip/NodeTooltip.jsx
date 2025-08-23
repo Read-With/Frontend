@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useNavigate, useParams, useLocation } from "react-router-dom";
-import { FaFileAlt, FaComments, FaArrowLeft } from "react-icons/fa";
-import "./RelationGraph.css";
+import "../RelationGraph.css";  
 
 // === glob import: 반드시 data/gatsby 하위 전체 관계 파일 import ===
 const relationshipModules = import.meta.glob(
@@ -240,22 +239,7 @@ function GraphNodeTooltip({
     }
   }, [position.x, position.y]);
 
-  const handleChatClick = () => {
-    if (nodeData.label) {
-      // 뷰어 내에서 사용하는 경우 현재 filename을 사용
-      const bookFilename = filename || "unknown";
-      navigate(`/user/character-chat/${bookFilename}/${nodeData.label}`, {
-        state: {
-          book: {
-            title: bookFilename
-              .replace(".epub", "")
-              .replace(/([A-Z])/g, " $1")
-              .trim(),
-          },
-        },
-      });
-    }
-  };
+
 
   const handleSummaryClick = () => {
     setIsFlipped(!isFlipped);

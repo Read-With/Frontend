@@ -2,20 +2,15 @@ import React, { useRef, useState, useEffect, useMemo } from "react";
 import { useParams, useLocation, useNavigate } from "react-router-dom";
 import ViewerLayout from "./ViewerLayout";
 import EpubViewer from "./epub/EpubViewer";
-import BookmarkPanel from "./epub/BookmarkPanel";
+import BookmarkPanel from "./bookmark/BookmarkPanel";
 import ViewerSettings from "./epub/ViewerSettings";
-import { loadBookmarks, saveBookmarks } from "./epub/BookmarkManager";
+import { loadBookmarks, saveBookmarks } from "./bookmark/BookmarkManager";
 import { toast, ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
-import RelationGraphMain from "../graph/RelationGraphMain";
-import GraphControls from "../graph/GraphControls";
-
 import cytoscape from "cytoscape";
 import CytoscapeGraphPortalProvider from "../graph/CytoscapeGraphPortalProvider";
 import GraphContainer from "../graph/GraphContainer";
-import EdgeLabelToggle from "../common/EdgeLabelToggle";
 import ViewerTopBar from "./ViewerTopBar";
-
 
 const eventRelationModules = import.meta.glob(
   "../../data/gatsby/chapter*_relationships_event_*.json",
@@ -295,6 +290,101 @@ function filterIsolatedNodes(elements, hideIsolated) {
 
 const loading = false;
 const isDataReady = true;
+
+// GraphSplitArea 컴포넌트를 ViewerPage 함수 전에 정의
+function GraphSplitArea({
+  currentCharIndex,
+  hideIsolated,
+  setHideIsolated,
+  edgeLabelVisible,
+  setEdgeLabelVisible,
+  handleFitView,
+  currentChapter,
+  setCurrentChapter,
+  maxChapter,
+  loading,
+  isDataReady,
+  showGraph,
+  graphFullScreen,
+  setGraphFullScreen,
+  navigate,
+  filename,
+  book,
+  viewerRef,
+  currentEvent,
+  prevValidEvent,
+  prevEvent,
+  events,
+  graphDiff,
+  prevElements,
+  currentElements,
+}) {
+  const graphContainerRef = React.useRef(null);
+  const [searchState, setSearchState] = React.useState({
+    searchTerm: "",
+    isSearchActive: false,
+    filteredElements: [],
+    fitNodeIds: []
+  });
+
+  const handleSearchStateChange = React.useCallback((newState) => {
+    setSearchState(newState);
+  }, []);
+
+  return (
+    <div
+      className="h-full w-full flex flex-col"
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        height: "100%",
+        minHeight: 0,
+        width: "100%",
+        overflow: "hidden",
+        alignItems: "stretch",
+        justifyContent: "stretch",
+        boxSizing: "border-box",
+        padding: 0,
+      }}
+    >
+      <ViewerTopBar
+        navigate={navigate}
+        filename={filename}
+        currentChapter={currentChapter}
+        setCurrentChapter={setCurrentChapter}
+        maxChapter={maxChapter}
+        book={book}
+        viewerRef={viewerRef}
+        currentEvent={currentEvent}
+        prevValidEvent={prevValidEvent}
+        prevEvent={prevEvent}
+        events={events}
+        graphFullScreen={graphFullScreen}
+        setGraphFullScreen={setGraphFullScreen}
+        edgeLabelVisible={edgeLabelVisible}
+        setEdgeLabelVisible={setEdgeLabelVisible}
+        hideIsolated={hideIsolated}
+        setHideIsolated={setHideIsolated}
+        onSearchSubmit={(searchTerm) => graphContainerRef.current?.handleSearchSubmit(searchTerm)}
+        searchTerm={searchState.searchTerm}
+        isSearchActive={searchState.isSearchActive}
+        clearSearch={() => graphContainerRef.current?.clearSearch()}
+      />
+      
+      {/* 그래프 본문 */}
+      <div style={{ flex: 1, position: "relative", minHeight: 0, minWidth: 0 }}>
+        <GraphContainer
+          ref={graphContainerRef}
+          currentPosition={currentCharIndex}
+          currentEvent={currentEvent || prevValidEvent}
+          currentChapter={currentChapter}
+          edgeLabelVisible={edgeLabelVisible}
+          onSearchStateChange={handleSearchStateChange}
+        />
+      </div>
+    </div>
+  );
+}
 
 const ViewerPage = ({ darkMode: initialDarkMode }) => {
   const { filename } = useParams();
@@ -1293,97 +1383,3 @@ const ViewerPage = ({ darkMode: initialDarkMode }) => {
 };
 
 export default ViewerPage;
-
-function GraphSplitArea({
-  currentCharIndex,
-  hideIsolated,
-  setHideIsolated,
-  edgeLabelVisible,
-  setEdgeLabelVisible,
-  handleFitView,
-  currentChapter,
-  setCurrentChapter,
-  maxChapter,
-  loading,
-  isDataReady,
-  showGraph,
-  graphFullScreen,
-  setGraphFullScreen,
-  navigate,
-  filename,
-  book,
-  viewerRef,
-  currentEvent,
-  prevValidEvent,
-  prevEvent,
-  events,
-  graphDiff,
-  prevElements,
-  currentElements,
-}) {
-  const graphContainerRef = React.useRef(null);
-  const [searchState, setSearchState] = React.useState({
-    searchTerm: "",
-    isSearchActive: false,
-    filteredElements: [],
-    fitNodeIds: []
-  });
-
-  const handleSearchStateChange = React.useCallback((newState) => {
-    setSearchState(newState);
-  }, []);
-
-  return (
-    <div
-      className="h-full w-full flex flex-col"
-      style={{
-        display: "flex",
-        flexDirection: "column",
-        height: "100%",
-        minHeight: 0,
-        width: "100%",
-        overflow: "hidden",
-        alignItems: "stretch",
-        justifyContent: "stretch",
-        boxSizing: "border-box",
-        padding: 0,
-      }}
-    >
-      <ViewerTopBar
-        navigate={navigate}
-        filename={filename}
-        currentChapter={currentChapter}
-        setCurrentChapter={setCurrentChapter}
-        maxChapter={maxChapter}
-        book={book}
-        viewerRef={viewerRef}
-        currentEvent={currentEvent}
-        prevValidEvent={prevValidEvent}
-        prevEvent={prevEvent}
-        events={events}
-        graphFullScreen={graphFullScreen}
-        setGraphFullScreen={setGraphFullScreen}
-        edgeLabelVisible={edgeLabelVisible}
-        setEdgeLabelVisible={setEdgeLabelVisible}
-        hideIsolated={hideIsolated}
-        setHideIsolated={setHideIsolated}
-        onSearchSubmit={(searchTerm) => graphContainerRef.current?.handleSearchSubmit(searchTerm)}
-        searchTerm={searchState.searchTerm}
-        isSearchActive={searchState.isSearchActive}
-        clearSearch={() => graphContainerRef.current?.clearSearch()}
-      />
-      
-      {/* 그래프 본문 */}
-      <div style={{ flex: 1, position: "relative", minHeight: 0, minWidth: 0 }}>
-        <GraphContainer
-          ref={graphContainerRef}
-          currentPosition={currentCharIndex}
-          currentEvent={currentEvent || prevValidEvent}
-          currentChapter={currentChapter}
-          edgeLabelVisible={edgeLabelVisible}
-          onSearchStateChange={handleSearchStateChange}
-        />
-      </div>
-    </div>
-  );
-}

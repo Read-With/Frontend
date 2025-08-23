@@ -7,12 +7,11 @@ import React, {
 } from "react";
 import { useNavigate, useLocation, useParams } from "react-router-dom";
 import CytoscapeGraphUnified from "./CytoscapeGraphUnified";
-import GraphNodeTooltip from "./NodeTooltip";
-import EdgeTooltip from "./EdgeTooltip";
-import ViewerEdgeTooltip from "./ViewerEdgeTooltip";
+import GraphNodeTooltip from "./tooltip/NodeTooltip";
+import UnifiedEdgeTooltip from "./tooltip/UnifiedEdgeTooltip";
 import GraphSidebar from "./GraphSidebar";
 import "./RelationGraph.css";
-import { DEFAULT_LAYOUT } from "./graphLayouts";
+import { DEFAULT_LAYOUT } from "../../utils/graphLayouts";
 
 // 간선 positivity 값에 따라 HSL 그라데이션 색상 반환
 function getRelationColor(positivity) {
@@ -729,33 +728,20 @@ function RelationGraphMain({
               />
             )}
             {activeTooltip?.type === 'edge' && activeTooltip.data && (
-              inViewer ? (
-                <ViewerEdgeTooltip
-                  key={`edge-tooltip-${activeTooltip.id}`}
-                  data={activeTooltip.data}
-                  x={activeTooltip.x}
-                  y={activeTooltip.y}
-                  onClose={handleCloseTooltip}
-                  sourceNode={activeTooltip.sourceNode}
-                  targetNode={activeTooltip.targetNode}
-                  chapterNum={chapterNum}
-                  eventNum={eventNum}
-                  maxChapter={maxChapter}
-                  style={{ pointerEvents: 'auto' }}
-                />
-              ) : (
-                <EdgeTooltip
-                  key={`edge-tooltip-${activeTooltip.id}`}
-                  data={activeTooltip.data}
-                  x={activeTooltip.x}
-                  y={activeTooltip.y}
-                  onClose={handleCloseTooltip}
-                  sourceNode={activeTooltip.sourceNode}
-                  targetNode={activeTooltip.targetNode}
-                  maxChapter={10}
-                  style={{ pointerEvents: 'auto' }}
-                />
-              )
+              <UnifiedEdgeTooltip
+                key={`edge-tooltip-${activeTooltip.id}`}
+                data={activeTooltip.data}
+                x={activeTooltip.x}
+                y={activeTooltip.y}
+                onClose={handleCloseTooltip}
+                sourceNode={activeTooltip.sourceNode}
+                targetNode={activeTooltip.targetNode}
+                mode={inViewer ? 'viewer' : 'standalone'}
+                chapterNum={chapterNum}
+                eventNum={eventNum}
+                maxChapter={inViewer ? maxChapter : 10}
+                style={{ pointerEvents: 'auto' }}
+              />
             )}
           </div>
         )}

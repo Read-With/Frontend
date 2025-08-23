@@ -1,6 +1,5 @@
 import React, { useState, useCallback, createContext } from "react";
 import CytoscapeGraphUnified from "./CytoscapeGraphUnified";
-// import { createPortal } from "react-dom";
 
 export const CytoscapeGraphContext = createContext();
 

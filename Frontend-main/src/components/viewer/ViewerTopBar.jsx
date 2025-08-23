@@ -1,6 +1,6 @@
 import React from 'react';
 import GraphControls from '../graph/GraphControls';
-import EdgeLabelToggle from '../common/EdgeLabelToggle';
+import EdgeLabelToggle from '../graph/tooltip/EdgeLabelToggle';
 
 const ViewerTopBar = ({
   // 상단바 1 props

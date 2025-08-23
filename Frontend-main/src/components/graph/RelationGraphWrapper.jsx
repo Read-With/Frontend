@@ -1,12 +1,12 @@
 import React, { useState, useEffect, useRef } from "react";
 import RelationGraphMain from "./RelationGraphMain";
-import EdgeLabelToggle from "../common/EdgeLabelToggle";
+import EdgeLabelToggle from "./tooltip/EdgeLabelToggle";
 import GraphControls from "./GraphControls";
 import "./RelationGraph.css";
 import { useNavigate, useParams } from "react-router-dom";
 import { FaTimes, FaBars, FaChevronLeft } from 'react-icons/fa';
-import { convertRelationsToElements } from './graphElementUtils';
-import { filterGraphElements } from './graphFilter';
+import { convertRelationsToElements } from '../../utils/graphElementUtils';
+import { filterGraphElements } from '../../utils/graphFilter';
 
 // characters.json, 이벤트별 relations.json glob import
 const characterModules = import.meta.glob('../../data/gatsby/c_chapter*_0.json', { eager: true });

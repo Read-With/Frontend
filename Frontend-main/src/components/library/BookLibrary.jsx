@@ -2,7 +2,7 @@ import React from 'react';
 import PropTypes from 'prop-types';
 import BookCard from './BookCard';
 import LoadingSpinner from '../common/LoadingSpinner';
-import { theme } from '../../styles/theme';
+import { theme } from '../common/theme';
 
 // 그리드 레이아웃 사용으로 chunk 함수 제거
 
