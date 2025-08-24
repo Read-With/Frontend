@@ -1,8 +1,8 @@
-/**
- * positivity 값에 따른 색상과 텍스트를 결정하는 함수
- * @param {number} positivity - -1~1 사이의 긍정도 값
- * @returns {object} color와 text를 포함한 객체
- */
+// [관계 그래프에서 긍정도에 따른 색상/라벨 변환과 툴팁 UI 스타일링]
+// 1. getRelationStyle(positivity) → 관계의 긍정도(-1 ~ 1)에 따라 **색상(HSL 그라데이션)과 텍스트(긍정적/우호적/중립적/비우호적/부정적)**을 결정
+// 2. getRelationLabels(relation, label) → 관계 데이터가 배열이면 그대로 반환, 문자열이면 ,로 분리해 라벨 배열로 변환
+// 3. tooltipStyles → 관계 툴팁(카드) UI의 기본 CSS 스타일 세트 정의 (컨테이너, 플립 카드(front/back), 헤더, 관계 태그, 프로그레스바, 버튼 등)
+
 export function getRelationStyle(positivity) {
   // 입력 가드 및 범위 클램프
   const value = typeof positivity === 'number' && !Number.isNaN(positivity)

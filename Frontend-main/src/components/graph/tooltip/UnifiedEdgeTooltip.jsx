@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { Line } from "react-chartjs-2";
 import "chart.js/auto";
 import { useTooltipPosition } from "../../../hooks/useTooltipPosition";
+import { useClickOutside } from "../../../hooks/useClickOutside";
 import { useRelationData } from "../../../hooks/useRelationData";
 import { getRelationStyle, getRelationLabels, tooltipStyles } from "../../../utils/relationStyles";
 import "../RelationGraph.css";
@@ -50,6 +51,24 @@ function UnifiedEdgeTooltip({
     handleMouseDown,
   } = useTooltipPosition(x, y);
 
+  // 외부 클릭 감지 훅 - 툴팁 외부 클릭 시 닫기
+  const clickOutsideRef = useClickOutside(() => {
+    if (onClose) onClose();
+  }, true);
+
+  // ref 병합 함수
+  const mergeRefs = useCallback((...refs) => {
+    return (element) => {
+      refs.forEach(ref => {
+        if (typeof ref === 'function') {
+          ref(element);
+        } else if (ref != null) {
+          ref.current = element;
+        }
+      });
+    };
+  }, []);
+
   // 뷰 모드: "info" | "chart"
   const [viewMode, setViewMode] = useState("info");
 
@@ -94,7 +113,7 @@ function UnifiedEdgeTooltip({
 
   return (
     <div
-      ref={tooltipRef}
+      ref={mergeRefs(tooltipRef, clickOutsideRef)}
       className={`edge-tooltip-container edge-tooltip-flip${viewMode === 'chart' ? ' flipped' : ''}`}
       style={{
         ...tooltipStyles.container,

@@ -380,6 +380,7 @@ function GraphSplitArea({
           currentChapter={currentChapter}
           edgeLabelVisible={edgeLabelVisible}
           onSearchStateChange={handleSearchStateChange}
+          filename={filename}
         />
       </div>
     </div>

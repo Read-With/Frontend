@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
-import { getChapterLastEventNums, getEventDataByIndex, getMaxEventCount } from "../utils/graphData";
+import { getChapterLastEventNums, getEventDataByIndex, getMaxEventCount, getFolderKeyFromFilename } from "../utils/graphData";
 import { normalizeRelation, isValidRelation, safeNum, isSamePair } from "../utils/relationUtils";
 
 // Build timeline for a pair (id1,id2) across chapters up to current chapter/event
-export default function useRelationTimeline({ id1, id2, chapterNum, eventNum, maxChapter = 10 }) {
+export default function useRelationTimeline({ id1, id2, chapterNum, eventNum, maxChapter = 10, filename }) {
   const [points, setPoints] = useState([]);
   const [labels, setLabels] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -11,7 +11,8 @@ export default function useRelationTimeline({ id1, id2, chapterNum, eventNum, ma
   const sid1 = safeNum(id1);
   const sid2 = safeNum(id2);
 
-  const lastEventNums = useMemo(() => getChapterLastEventNums(maxChapter), [maxChapter]);
+  const folderKey = getFolderKeyFromFilename(filename);
+  const lastEventNums = useMemo(() => getChapterLastEventNums(folderKey, maxChapter), [folderKey, maxChapter]);
 
   useEffect(() => {
     if (!Number.isFinite(sid1) || !Number.isFinite(sid2)) {
@@ -26,7 +27,7 @@ export default function useRelationTimeline({ id1, id2, chapterNum, eventNum, ma
     for (let ch = 1; ch <= chapterNum; ch++) {
       const lastEv = lastEventNums[ch - 1] || 0;
       for (let e = 1; e <= lastEv; e++) {
-        const json = getEventDataByIndex(ch, e);
+        const json = getEventDataByIndex(folderKey, ch, e);
         if (!json) continue;
         const found = (json.relations || [])
           .map(normalizeRelation)
@@ -47,7 +48,7 @@ export default function useRelationTimeline({ id1, id2, chapterNum, eventNum, ma
       // previous chapters: use last snapshot
       for (let ch = firstAppearance.chapter; ch < chapterNum; ch++) {
         const lastEv = lastEventNums[ch - 1] || 0;
-        const json = getEventDataByIndex(ch, lastEv);
+        const json = getEventDataByIndex(folderKey, ch, lastEv);
         if (!json) {
           nextPoints.push(0);
           nextLabels.push(`챕터${ch}`);
@@ -64,7 +65,7 @@ export default function useRelationTimeline({ id1, id2, chapterNum, eventNum, ma
       // current chapter: all events
       const currentLastEv = lastEventNums[chapterNum - 1] || 0;
       for (let e = 1; e <= currentLastEv; e++) {
-        const json = getEventDataByIndex(chapterNum, e);
+        const json = getEventDataByIndex(folderKey, chapterNum, e);
         if (!json) {
           nextPoints.push(0);
           nextLabels.push(`E${e}`);
@@ -93,7 +94,7 @@ export default function useRelationTimeline({ id1, id2, chapterNum, eventNum, ma
     setLoading(false);
   }, [sid1, sid2, chapterNum, eventNum, maxChapter, lastEventNums]);
 
-  return { points, labels, loading, maxEventCount: getMaxEventCount(maxChapter) };
+  return { points, labels, loading, maxEventCount: getMaxEventCount(folderKey, maxChapter) };
 }
 
 

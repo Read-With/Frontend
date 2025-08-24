@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useRef } from "react";
 import { FaSearch, FaUndo } from "react-icons/fa";
-import { buildSuggestions, highlightParts } from "../../utils/search";
+import { highlightText } from "../../utils/search.jsx";
+import { useSearchSuggestions } from "../../hooks/useSearchSuggestions";
+import { useClickOutside } from "../../hooks/useClickOutside";
 
 const GraphControls = ({
   onSearchSubmit = () => {}, // 부모 컴포넌트에 검색 결과를 전달하는 콜백
@@ -12,13 +14,27 @@ const GraphControls = ({
   // 내부 상태 관리
   const [searchInput, setSearchInput] = useState(searchTerm);
   const [search, setSearch] = useState(searchTerm);
-  const [showSuggestions, setShowSuggestions] = useState(false);
-  const [suggestions, setSuggestions] = useState([]);
-  const [selectedIndex, setSelectedIndex] = useState(-1);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   
   const inputRef = useRef(null);
-  const dropdownRef = useRef(null);
+  
+  // 외부 클릭 감지를 위한 훅 사용
+  const dropdownRef = useClickOutside(() => {
+    setShowSuggestions(false);
+    setIsDropdownOpen(false);
+  });
+
+  // 검색 제안 관리를 useSearchSuggestions 훅으로 처리
+  const {
+    suggestions,
+    showSuggestions,
+    selectedIndex,
+    selectSuggestion,
+    handleKeyDown,
+    closeSuggestions,
+    setShowSuggestions,
+    setSelectedIndex
+  } = useSearchSuggestions(elements, searchInput);
 
   // 외부 searchTerm이 변경되면 내부 상태도 업데이트
   useEffect(() => {
@@ -26,78 +42,13 @@ const GraphControls = ({
     setSearch(searchTerm);
   }, [searchTerm]);
 
-  // 검색 제안 생성 (2글자 이상일 때만)
-  useEffect(() => {
-    const matches = buildSuggestions(elements, searchInput);
-    setSuggestions(matches);
-    setShowSuggestions(matches.length > 0);
-    setSelectedIndex(-1);
-  }, [searchInput, elements]);
 
-  // 외부 클릭 시 드롭다운 닫기
-  useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
-        setShowSuggestions(false);
-        setIsDropdownOpen(false);
-      }
-    };
-
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
-
-  // 키보드 네비게이션
-  const handleKeyDown = (e) => {
-    switch (e.key) {
-      case 'ArrowDown':
-        if (showSuggestions) {
-          e.preventDefault();
-          setSelectedIndex(prev => 
-            prev < suggestions.length - 1 ? prev + 1 : 0
-          );
-        }
-        break;
-      case 'ArrowUp':
-        if (showSuggestions) {
-          e.preventDefault();
-          setSelectedIndex(prev => 
-            prev > 0 ? prev - 1 : suggestions.length - 1
-          );
-        }
-        break;
-      case 'Enter':
-        e.preventDefault();
-        if (showSuggestions && selectedIndex >= 0 && suggestions[selectedIndex]) {
-          selectSuggestion(suggestions[selectedIndex]);
-        } else {
-          handleSearch();
-        }
-        break;
-      case 'Escape':
-        if (showSuggestions) {
-          setShowSuggestions(false);
-          setSelectedIndex(-1);
-        }
-        break;
-    }
-  };
-
-  // 제안 선택
-  const selectSuggestion = (suggestion) => {
-    setSearchInput(suggestion.label);
-    setSearch(suggestion.label);
-    setShowSuggestions(false);
-    setSelectedIndex(-1);
-    onSearchSubmit(suggestion.label);
-  };
 
   // 내부 검색 처리 함수
   const handleSearch = () => {
     const trimmedSearch = searchInput.trim();
     if (trimmedSearch.length >= 2) {
       setSearch(trimmedSearch);
-      setShowSuggestions(false);
       onSearchSubmit(trimmedSearch);
     }
   };
@@ -106,8 +57,6 @@ const GraphControls = ({
   const handleClearSearch = () => {
     setSearchInput("");
     setSearch("");
-    setShowSuggestions(false);
-    setSelectedIndex(-1);
     clearSearch();
   };
 
@@ -216,16 +165,7 @@ const GraphControls = ({
     fontStyle: 'italic'
   };
 
-  const highlightText = (text, term) => {
-    const parts = highlightParts(text, term);
-    return parts.map((part, index) =>
-      part.toLowerCase && term && part.toLowerCase() === term.toLowerCase() ? (
-        <span key={index} style={{ fontWeight: 'bold', color: '#6C8EFF' }}>{part}</span>
-      ) : (
-        <span key={index}>{part}</span>
-      )
-    );
-  };
+
 
   return (
     <div ref={dropdownRef} style={{ position: 'relative' }}>
@@ -243,7 +183,7 @@ const GraphControls = ({
           placeholder="인물 검색 (이름/별칭)"
           value={searchInput}
           onChange={(e) => setSearchInput(e.target.value)}
-          onKeyDown={handleKeyDown}
+          onKeyDown={(e) => handleKeyDown(e, onSearchSubmit)}
           onFocus={(e) => {
             e.target.style.borderColor = '#6C8EFF';
             e.target.style.background = '#fff';
@@ -312,7 +252,7 @@ const GraphControls = ({
                 <div
                   key={suggestion.id}
                   style={suggestionItemStyle(index === selectedIndex)}
-                  onClick={() => selectSuggestion(suggestion)}
+                  onClick={() => selectSuggestion(suggestion, onSearchSubmit)}
                   onMouseEnter={() => setSelectedIndex(index)}
                 >
                   <div style={{ fontWeight: '600', fontSize: '14px' }}>

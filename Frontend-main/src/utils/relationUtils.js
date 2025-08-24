@@ -1,4 +1,9 @@
-// Utilities for normalizing and validating relation records
+// [ 관계 데이터(노드 쌍, 속성 등)를 정규화·검증하고 동일한 관계인지 비교 ]
+// 1. safeNum → 값이 숫자/문자열/기타일 때 안전하게 숫자로 변환
+// 2. normalizeRelation → 다양한 형태의 원본 관계 객체(raw)를 표준화된 형태 {id1, id2, positivity, weight, count, relation[], label, explanation} 으로 변환
+// 3. isValidRelation → 정규화된 관계가 유효한지 검사 (숫자 여부, 0 여부, 자기 자신과의 관계 여부 체크)
+// 4. isSamePair → 두 노드 쌍(a, b)이 주어진 관계(rel)의 id1/id2와 동일한 관계인지(순서 무시) 판별
+
 
 export function safeNum(value) {
   if (value === undefined || value === null) return NaN;
@@ -38,6 +43,60 @@ export function isSamePair(rel, a, b) {
   const s1 = safeNum(a);
   const s2 = safeNum(b);
   return (r1 === s1 && r2 === s2) || (r1 === s2 && r2 === s1);
+}
+
+/**
+ * 관계 데이터를 정규화하고 유효성을 검사하여 처리
+ * @param {Array} relations - 원본 관계 데이터 배열
+ * @returns {Array} 처리된 관계 데이터 배열
+ */
+export function processRelations(relations) {
+  return (relations || [])
+    .map(normalizeRelation)
+    .filter(isValidRelation)
+    .map(r => ({
+      id1: r.id1,
+      id2: r.id2,
+      positivity: r.positivity,
+      relation: r.relation,
+      weight: r.weight,
+      count: r.count,
+    }));
+}
+
+/**
+ * 관계 태그 배열을 중복 제거하여 처리
+ * @param {Array|string} relation - 관계 데이터 (배열 또는 문자열)
+ * @param {string} label - 백업용 라벨 문자열
+ * @returns {Array} 중복이 제거된 관계 태그 배열
+ */
+export function processRelationTags(relation, label) {
+  const relArr = Array.isArray(relation)
+    ? relation
+    : (typeof label === 'string' ? label.split(',').map(s => s.trim()).filter(Boolean) : []);
+  
+  const uniqueRelations = [];
+  const seen = new Set();
+  
+  for (const rel of relArr) {
+    if (rel.includes(' ')) {
+      // 공백이 포함된 관계는 완전히 동일한 경우만 중복 제거
+      if (!seen.has(rel)) {
+        uniqueRelations.push(rel);
+        seen.add(rel);
+      }
+      continue;
+    }
+    
+    // 공백이 없는 관계는 접두사 기반 중복 제거
+    const base = rel.length > 3 ? rel.slice(0, -1) : rel;
+    if (![...seen].some(s => s.startsWith(base))) {
+      uniqueRelations.push(rel);
+      seen.add(rel);
+    }
+  }
+  
+  return uniqueRelations;
 }
 
 

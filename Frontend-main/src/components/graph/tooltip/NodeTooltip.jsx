@@ -1,30 +1,17 @@
-import React, { useState, useEffect, useRef, useCallback } from "react";
-import { useNavigate, useParams, useLocation } from "react-router-dom";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
+import { useParams, useLocation } from "react-router-dom";
+import { processRelations, processRelationTags } from "../../../utils/relationUtils";
+import { highlightText } from "../../../utils/search";
+import { getChapterLastEventNums, getFolderKeyFromFilename } from "../../../utils/graphData";
+import { useTooltipPosition } from "../../../hooks/useTooltipPosition";
+import { useClickOutside } from "../../../hooks/useClickOutside";
 import "../RelationGraph.css";  
 
 // === glob import: 반드시 data/gatsby 하위 전체 관계 파일 import ===
 const relationshipModules = import.meta.glob(
-  "../../data/gatsby/chapter*_relationships_event_*.json",
+  "/src/data/gatsby/chapter*_relationships_event_*.json",
   { eager: true }
 );
-
-// 챕터별 마지막 이벤트 번호 구하기
-function getChapterLastEventNums(maxChapter = 10) {
-  const lastNums = [];
-  for (let chapter = 1; chapter <= maxChapter; chapter++) {
-    let last = 0;
-    for (let i = 1; i < 100; i++) {
-      const filePath = `../../data/gatsby/chapter${chapter}_relationships_event_${i}.json`;
-      if (relationshipModules[filePath]) {
-        last = i;
-      } else {
-        break;
-      }
-    }
-    lastNums.push(last);
-  }
-  return lastNums;
-}
 
 function GraphNodeTooltip({
   data,
@@ -36,17 +23,10 @@ function GraphNodeTooltip({
   style,
   chapterNum,
   eventNum,
-  maxChapter = 10
+  maxChapter = 10,
+  searchTerm = "", // 검색어 prop 추가
+  elements = [] // 현재 로드된 elements 추가
 }) {
-  console.log("=== GraphNodeTooltip props ===");
-  console.log("data:", data);
-  console.log("chapterNum:", chapterNum);
-  console.log("eventNum:", eventNum);
-  console.log("maxChapter:", maxChapter);
-  console.log("inViewer:", inViewer);
-  console.log("=== props 끝 ===");
-
-  const navigate = useNavigate();
   const { filename } = useParams();
   const location = useLocation();
   
@@ -54,222 +34,214 @@ function GraphNodeTooltip({
   const isGraphPage = location.pathname.includes('/user/graph/');
 
   // 데이터가 중첩되어 있는 경우 처리
-  const [nodeData, setNodeData] = useState(data.data || data);
-  const [position, setPosition] = useState({ x: 200, y: 200 });
-  const [showContent, setShowContent] = useState(false);
-  const [isDragging, setIsDragging] = useState(false);
-  const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
+  const [nodeData, setNodeData] = useState(() => {
+    // data가 직접 노드 데이터인 경우
+    if (data && (data.id || data.label)) {
+      return data;
+    }
+    // data.data가 있는 경우 (중첩된 구조)
+    if (data && data.data) {
+      return data.data;
+    }
+    // 기본값
+    return { id: data?.id, label: data?.label };
+  });
   const [isFlipped, setIsFlipped] = useState(false);
-  const [isNodeAppeared, setIsNodeAppeared] = useState(false); // 노드 등장 여부 - 기본값을 false로 설정
-  const tooltipRef = useRef(null);
+  const [isNodeAppeared, setIsNodeAppeared] = useState(false);
+  const [error, setError] = useState(null);
 
-  // 뷰포트 경계 체크 및 위치 조정 함수
-  const adjustPositionToViewport = (x, y) => {
-    if (!tooltipRef.current) return { x, y };
+  // useTooltipPosition 훅 사용
+  const { position, showContent, isDragging, tooltipRef, handleMouseDown } = useTooltipPosition(x, y);
 
-    const tooltipRect = tooltipRef.current.getBoundingClientRect();
-    const viewportWidth = Math.min(
-      document.documentElement.clientWidth,
-      window.innerWidth
-    );
-    const viewportHeight = Math.min(
-      document.documentElement.clientHeight,
-      window.innerHeight
-    );
-    const scrollX = window.pageXOffset || document.documentElement.scrollLeft;
-    const scrollY = window.pageYOffset || document.documentElement.scrollTop;
+  // 외부 클릭 감지 훅 - 툴팁 외부 클릭 시 닫기
+  const clickOutsideRef = useClickOutside(() => {
+    if (onClose) onClose();
+  }, true);
 
-    let newX = x;
-    let newY = y;
-
-    // 뷰포트 경계 체크 및 조정
-    newX = Math.max(
-      scrollX,
-      Math.min(newX, viewportWidth + scrollX - tooltipRect.width)
-    );
-    newY = Math.max(
-      scrollY,
-      Math.min(newY, viewportHeight + scrollY - tooltipRect.height)
-    );
-
-    return { x: newX, y: newY };
-  };
+  // ref 병합 함수
+  const mergeRefs = useCallback((...refs) => {
+    return (element) => {
+      refs.forEach(ref => {
+        if (typeof ref === 'function') {
+          ref(element);
+        } else if (ref != null) {
+          ref.current = element;
+        }
+      });
+    };
+  }, []);
 
   // 노드 등장 여부 확인 함수
   const checkNodeAppearance = useCallback(() => {
-    console.log("=== checkNodeAppearance 시작 ===");
-    console.log("data:", data);
-    console.log("chapterNum:", chapterNum);
-    console.log("eventNum:", eventNum);
-    console.log("isGraphPage:", isGraphPage);
-    console.log("maxChapter:", maxChapter);
-    
-    // 기본값을 false로 설정
-    setIsNodeAppeared(false);
-    
-    if (!data) {
-      console.log("data가 없음 - isNodeAppeared를 false로 설정");
-      return;
-    }
-    
-    if (!chapterNum || chapterNum <= 0) {
-      console.log("chapterNum이 없거나 0 이하 - isNodeAppeared를 false로 설정");
-      return;
-    }
-
-    let targetEventNum = eventNum;
-    
-    // 그래프 단독 페이지이거나 eventNum이 0인 경우: 해당 챕터의 마지막 이벤트 사용
-    if (isGraphPage || !eventNum || eventNum === 0) {
-      const lastEventNums = getChapterLastEventNums(maxChapter);
-      targetEventNum = lastEventNums[chapterNum - 1] || 1;
-      console.log("targetEventNum 계산됨:", targetEventNum);
-    }
-
-    // JSON 파일 경로 생성
-    const filePath = `../../data/gatsby/chapter${chapterNum}_relationships_event_${targetEventNum}.json`;
-    console.log("찾는 파일 경로:", filePath);
-    const json = relationshipModules[filePath]?.default;
-    console.log("JSON 데이터:", json);
-
-    // 노드 ID를 문자열로 변환하여 비교
-    const nodeId = String(data.id);
-    console.log("찾는 노드 ID:", nodeId);
-    // relations 기반 등장 여부 판별
-    if (!json || !json.relations) {
-      console.log("JSON 파일이 없거나 relations가 없음 - isNodeAppeared를 false로 설정");
-      setNodeData({ id: data.id, label: data.label });
+    try {
       setIsNodeAppeared(false);
-      return;
-    }
-    const appeared = json.relations.some(
-      rel => String(rel.id1) === nodeId || String(rel.id2) === nodeId
-    );
-    if (appeared) {
-      console.log("노드가 relations에 등장함");
-      setIsNodeAppeared(true);
-    } else {
-      console.log("노드가 relations에 등장하지 않음");
-      setNodeData({ id: data.id, label: data.label });
+      setError(null);
+      
+      if (!data || !chapterNum || chapterNum <= 0) {
+        // data가 직접 노드 데이터인 경우
+        if (data && (data.id || data.label)) {
+          setNodeData(data);
+        } else if (data && data.data) {
+          setNodeData(data.data);
+        } else {
+          setNodeData({ id: data?.id, label: data?.label });
+        }
+        return;
+      }
+
+      let targetEventNum = eventNum;
+      
+      // 그래프 단독 페이지이거나 eventNum이 0인 경우: 해당 챕터의 마지막 이벤트 사용
+      if (isGraphPage || !eventNum || eventNum === 0) {
+        const folderKey = getFolderKeyFromFilename(filename || 'gatsby');
+        const lastEventNums = getChapterLastEventNums(folderKey);
+        targetEventNum = lastEventNums[chapterNum - 1] || 1;
+      }
+
+      // JSON 파일 경로 생성
+      const filePath = `/src/data/gatsby/chapter${chapterNum}_relationships_event_${targetEventNum}.json`;
+      const json = relationshipModules[filePath]?.default;
+
+      // 노드 ID를 문자열로 변환하여 비교
+      const nodeId = String(data.id || data.data?.id);
+      
+      // relations 기반 등장 여부 판별
+      if (!json || !json.relations) {
+        // 대안: elements에서 노드 등장 여부 확인
+        if (elements && elements.length > 0) {
+          const nodeId = String(data.id || data.data?.id);
+          const appeared = elements.some(element => {
+            if (element.data && element.data.source) return false; // edge는 제외
+            return String(element.data?.id) === nodeId;
+          });
+          setIsNodeAppeared(appeared);
+        } else {
+          setIsNodeAppeared(false);
+        }
+        
+        // data가 직접 노드 데이터인 경우
+        if (data && (data.id || data.label)) {
+          setNodeData(data);
+        } else if (data && data.data) {
+          setNodeData(data.data);
+        } else {
+          setNodeData({ id: data?.id, label: data?.label });
+        }
+        return;
+      }
+      
+      // processRelations 유틸리티 사용
+      const processedRelations = processRelations(json.relations);
+      
+      // 더 정확한 ID 비교를 위해 숫자로 변환하여 비교
+      const nodeIdNum = parseFloat(nodeId);
+      
+      const appeared = processedRelations.some(rel => {
+        const id1Num = parseFloat(rel.id1);
+        const id2Num = parseFloat(rel.id2);
+        const match = id1Num === nodeIdNum || id2Num === nodeIdNum;
+        return match;
+      });
+      
+      setIsNodeAppeared(appeared);
+    } catch (err) {
+      setError(err.message);
       setIsNodeAppeared(false);
     }
-    console.log("=== checkNodeAppeared 끝 ===");
-  }, [data, chapterNum, eventNum, isGraphPage, maxChapter]);
+  }, [data, chapterNum, eventNum, isGraphPage, maxChapter, filename, elements]);
 
   // 노드 등장 여부 확인
   useEffect(() => {
-    console.log("=== useEffect 호출됨 ===");
-    console.log("의존성 변경됨:", { 
-      dataId: data?.id, 
-      chapterNum, 
-      eventNum, 
-      isGraphPage, 
-      maxChapter 
-    });
-    console.log("checkNodeAppearance 함수 호출 전");
     checkNodeAppearance();
-    console.log("checkNodeAppearance 함수 호출 후");
-  }, [data?.id, chapterNum, eventNum, isGraphPage, maxChapter]);
+  }, [data, chapterNum, eventNum, isGraphPage, maxChapter, filename, elements]);
 
   // 컴포넌트 마운트 시에도 한 번 실행
   useEffect(() => {
-    console.log("=== 컴포넌트 마운트 시 checkNodeAppearance 실행 ===");
     checkNodeAppearance();
   }, []);
 
-  // 툴팁 초기화
-  useEffect(() => {
-    setShowContent(true);
-  }, []);
-
-  const handleMouseDown = (e) => {
-    if (
-      e.target.closest(".tooltip-close-btn") ||
-      e.target.closest(".action-button")
-    )
-      return;
-    setIsDragging(true);
-    const rect = tooltipRef.current.getBoundingClientRect();
-    setDragOffset({
-      x: e.clientX - rect.left,
-      y: e.clientY - rect.top,
-    });
-  };
-
-  const handleMouseMove = (e) => {
-    if (!isDragging) return;
-
-    let newX = e.clientX - dragOffset.x;
-    let newY = e.clientY - dragOffset.y;
-
-    // 뷰포트 경계 체크 및 조정
-    const adjustedPosition = adjustPositionToViewport(newX, newY);
-    setPosition(adjustedPosition);
-  };
-
-  const handleMouseUp = () => {
-    setIsDragging(false);
-  };
-
-  useEffect(() => {
-    if (isDragging) {
-      window.addEventListener("mousemove", handleMouseMove);
-      window.addEventListener("mouseup", handleMouseUp);
-    }
-    return () => {
-      window.removeEventListener("mousemove", handleMouseMove);
-      window.removeEventListener("mouseup", handleMouseUp);
-    };
-  }, [isDragging]);
-
-  useEffect(() => {
-    if (x !== undefined && y !== undefined && tooltipRef.current) {
-      const adjustedPosition = adjustPositionToViewport(x, y);
-      setPosition(adjustedPosition);
-    }
-  }, [x, y]);
-
-  // 초기 위치 설정 시에도 뷰포트 경계 체크
-  useEffect(() => {
-    if (tooltipRef.current && position.x === 200 && position.y === 200) {
-      const adjustedPosition = adjustPositionToViewport(position.x, position.y);
-      if (adjustedPosition.x !== position.x || adjustedPosition.y !== position.y) {
-        setPosition(adjustedPosition);
-      }
-    }
-  }, [position.x, position.y]);
-
-
-
-  const handleSummaryClick = () => {
+  const handleSummaryClick = useCallback(() => {
     setIsFlipped(!isFlipped);
-  };
+  }, [isFlipped]);
+
+  // 메모이제이션된 데이터 처리
+  const processedNodeData = useMemo(() => {
+    if (!nodeData) return null;
+    
+    return {
+      ...nodeData,
+      names: processRelationTags(nodeData.names || [], nodeData.common_name),
+      displayName: nodeData.common_name || nodeData.label || "Unknown",
+      hasImage: !!nodeData.image,
+      isMainCharacter: !!nodeData.main_character,
+      hasDescription: !!(nodeData.description && nodeData.description.trim())
+    };
+  }, [nodeData]);
 
   // 요약 데이터 - 7줄 분량으로 설정
-  const summaryData = {
-    summary: nodeData.label
-      ? `${nodeData.label}은(는) ${
-          nodeData.description || "작품의 중요한 인물입니다."
+  const summaryData = useMemo(() => ({
+    summary: processedNodeData?.label
+      ? `${processedNodeData.label}은(는) ${
+          processedNodeData.description || "작품의 중요한 인물입니다."
         }\n\n` +
         `이 인물은 작품의 중심 서사를 이끌어가는 핵심적인 역할을 담당합니다.\n\n` +
         `주로 1장, 3장, 5장에서 중요한 장면에 등장하며, 작품의 주제를 표현합니다.\n\n` +
         `이 인물의 행동과 선택은 작품의 결말에 직접적인 영향을 미칩니다.`
       : "인물에 대한 요약 정보가 없습니다.",
-  };
+  }), [processedNodeData]);
 
   // 뷰어 내에서 사용할 때는 z-index를 더 높게 설정
   const zIndexValue = inViewer ? 10000 : 9999;
 
-  console.log("=== 렌더링 시작 ===");
-  console.log("isNodeAppeared:", isNodeAppeared);
-  console.log("nodeData:", nodeData);
-  console.log("=== 렌더링 끝 ===");
+  // 에러가 있는 경우 에러 메시지 표시
+  if (error) {
+    return (
+      <div
+        ref={tooltipRef}
+        className="graph-node-tooltip error"
+        style={{
+          position: "fixed",
+          left: position.x,
+          top: position.y,
+          zIndex: zIndexValue,
+          width: 300,
+          minHeight: 150,
+          background: "#fff",
+          borderRadius: 12,
+          boxShadow: "0 4px 16px rgba(0,0,0,0.1)",
+          padding: "20px",
+          border: "1px solid #ffcdd2",
+          animation: "scaleIn 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
+          ...(style || {}),
+        }}
+      >
+        <div style={{ textAlign: "center", color: "#d32f2f" }}>
+          <h4 style={{ margin: "0 0 10px 0" }}>오류가 발생했습니다</h4>
+          <p style={{ margin: 0, fontSize: "14px" }}>{error}</p>
+          <button
+            onClick={onClose}
+            style={{
+              marginTop: "15px",
+              padding: "8px 16px",
+              background: "#d32f2f",
+              color: "white",
+              border: "none",
+              borderRadius: "6px",
+              cursor: "pointer"
+            }}
+          >
+            닫기
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   // 노드가 현재 챕터/이벤트에서 등장하지 않는 경우 등장하지 않음 메시지 표시
   if (!isNodeAppeared) {
     return (
       <div
-        ref={tooltipRef}
+        ref={mergeRefs(tooltipRef, clickOutsideRef)}
         className="graph-node-tooltip"
         style={{
           position: "fixed",
@@ -279,14 +251,15 @@ function GraphNodeTooltip({
           opacity: showContent ? 1 : 0,
           transition: isDragging ? "none" : "opacity 0.3s",
           cursor: isDragging ? "grabbing" : "grab",
-          width: 400,
-          minHeight: 200,
+          width: 300,
+          minHeight: 150,
           background: "#fff",
           borderRadius: 20,
           boxShadow:
             "0 8px 32px rgba(79,109,222,0.13), 0 1.5px 8px rgba(0,0,0,0.04)",
           padding: 0,
           border: "1.5px solid #e5e7eb",
+          animation: "scaleIn 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
           ...(style || {}),
         }}
         onMouseDown={handleMouseDown}
@@ -348,7 +321,7 @@ function GraphNodeTooltip({
               marginBottom: 8,
             }}
           >
-            {nodeData.common_name || nodeData.label}
+            {searchTerm ? highlightText(processedNodeData?.displayName || "", searchTerm) : processedNodeData?.displayName}
           </h3>
           
           <p
@@ -382,7 +355,7 @@ function GraphNodeTooltip({
 
   return (
     <div
-      ref={tooltipRef}
+      ref={mergeRefs(tooltipRef, clickOutsideRef)}
       className={`graph-node-tooltip ${isFlipped ? "flipped" : ""}`}
       style={{
         position: "fixed",
@@ -402,6 +375,7 @@ function GraphNodeTooltip({
           "0 8px 32px rgba(79,109,222,0.13), 0 1.5px 8px rgba(0,0,0,0.04)",
         padding: 0,
         border: "1.5px solid #e5e7eb",
+        animation: "fadeIn 0.4s ease-out",
         ...(style || {}),
       }}
       onMouseDown={handleMouseDown}
@@ -474,7 +448,6 @@ function GraphNodeTooltip({
               }}
             >
               <div
-                // 캐릭터 이미지 추가
                 className="profile-img"
                 style={{
                   display: "flex",
@@ -487,10 +460,10 @@ function GraphNodeTooltip({
                   background: "#f4f4f4",
                 }}
               >
-                {nodeData.image ? (
+                {processedNodeData?.hasImage ? (
                   <img
-                    src={nodeData.image}
-                    alt={nodeData.label || "character"}
+                    src={processedNodeData.image}
+                    alt={processedNodeData.displayName || "character"}
                     style={{
                       width: 100,
                       height: 100,
@@ -500,15 +473,24 @@ function GraphNodeTooltip({
                       background: "#faf7f2",
                       boxShadow: "0 2px 8px rgba(0,0,0,0.03)",
                     }}
+                    onError={(e) => {
+                      e.target.style.display = 'none';
+                      e.target.nextSibling.style.display = 'block';
+                    }}
                   />
-                ) : (
-                  // 이미지가 없을 때 기본 silhouette 아이콘
-                  <svg width="56" height="56" viewBox="0 0 56 56" fill="none">
-                    <circle cx="28" cy="28" r="28" fill="#e5e7eb" />
-                    <ellipse cx="28" cy="22" rx="12" ry="12" fill="#bdbdbd" />
-                    <ellipse cx="28" cy="44" rx="18" ry="10" fill="#bdbdbd" />
-                  </svg>
-                )}
+                ) : null}
+                {/* 이미지가 없을 때 기본 silhouette 아이콘 */}
+                <svg 
+                  width="56" 
+                  height="56" 
+                  viewBox="0 0 56 56" 
+                  fill="none"
+                  style={{ display: processedNodeData?.hasImage ? 'none' : 'block' }}
+                >
+                  <circle cx="28" cy="28" r="28" fill="#e5e7eb" />
+                  <ellipse cx="28" cy="22" rx="12" ry="12" fill="#bdbdbd" />
+                  <ellipse cx="28" cy="44" rx="18" ry="10" fill="#bdbdbd" />
+                </svg>
               </div>
             </div>
             <div
@@ -540,9 +522,9 @@ function GraphNodeTooltip({
                     whiteSpace: "nowrap",
                   }}
                 >
-                  {nodeData.common_name || nodeData.label}
+                  {searchTerm ? highlightText(processedNodeData?.displayName || "", searchTerm) : processedNodeData?.displayName}
                 </span>
-                {nodeData.main_character && (
+                {processedNodeData?.isMainCharacter && (
                   <span
                     style={{
                       background:
@@ -560,7 +542,7 @@ function GraphNodeTooltip({
                   </span>
                 )}
               </div>
-              {nodeData.names && Array.isArray(nodeData.names) && nodeData.names.length > 0 && (
+              {processedNodeData?.names && processedNodeData.names.length > 0 && (
                 <div
                   style={{
                     marginTop: 2,
@@ -571,8 +553,8 @@ function GraphNodeTooltip({
                     justifyContent: "flex-start",
                   }}
                 >
-                  {nodeData.names
-                    .filter(name => name !== nodeData.common_name)
+                  {processedNodeData.names
+                    .filter(name => name !== processedNodeData.common_name)
                     .map((name, i) => (
                       <span
                         key={i}
@@ -586,7 +568,7 @@ function GraphNodeTooltip({
                           fontWeight: 500,
                         }}
                       >
-                        {name}
+                        {searchTerm ? highlightText(name, searchTerm) : name}
                       </span>
                     ))}
                 </div>
@@ -613,8 +595,8 @@ function GraphNodeTooltip({
             fontWeight: 400,
           }}
         >
-          {nodeData.description && nodeData.description.trim() ? (
-            nodeData.description
+          {processedNodeData?.hasDescription ? (
+            searchTerm ? highlightText(processedNodeData.description, searchTerm) : processedNodeData.description
           ) : (
             <span style={{ color: "#bbb" }}>설명 정보가 없습니다.</span>
           )}
@@ -632,4 +614,4 @@ function GraphNodeTooltip({
   );
 }
 
-export default GraphNodeTooltip;
+export default React.memo(GraphNodeTooltip);

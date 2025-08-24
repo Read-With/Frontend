@@ -9,23 +9,24 @@ import CytoscapeGraphUnified from "./CytoscapeGraphUnified";
 import GraphNodeTooltip from "./tooltip/NodeTooltip";
 import UnifiedEdgeTooltip from "./tooltip/UnifiedEdgeTooltip";
 import "./RelationGraph.css";
-import { calcGraphDiff } from "../../utils/graphDiff";
-import { DEFAULT_LAYOUT } from "../../utils/graphLayouts";
+import { calcGraphDiff } from "../../utils/graphDataUtils.js";
+import { DEFAULT_LAYOUT } from "../../utils/graphStyles";
 import { getNodeSize as getNodeSizeUtil, getEdgeStyle as getEdgeStyleUtil, getRelationColor } from "../../utils/graphStyles";
 import useGraphInteractions from "../../hooks/useGraphInteractions";
 
 // getRelationColor는 공용 유틸 사용
 
-// 공용 유틸 사용(기능 유지): RelationGraph는 viewer 컨텍스트로 동작
+// 공용 유틸 사용(기능 유지): ViewerRelationGraph는 viewer 컨텍스트로 동작
 const getNodeSize = () => getNodeSizeUtil('viewer');
 const getEdgeStyle = () => getEdgeStyleUtil('viewer');
 
-const RelationGraph = ({
+const ViewerRelationGraph = ({
   elements,
   chapterNum, // 관계 변화
   eventNum, // 관계 변화
   edgeLabelVisible = true,
   maxChapter = 10,
+  filename, // filename prop 추가
 }) => {
   const cyRef = useRef(null);
   const [activeTooltip, setActiveTooltip] = useState(null);
@@ -50,42 +51,56 @@ const RelationGraph = ({
     }
   }, [elements, prevNodeCount]);
 
+  const onShowNodeTooltip = useCallback(({ node, nodeCenter, mouseX, mouseY }) => {
+    const nodeData = node.data();
+    let names = nodeData.names;
+    if (typeof names === "string") {
+      try { names = JSON.parse(names); } catch { names = [names]; }
+    }
+    let main = nodeData.main;
+    if (typeof main === "string") main = main === "true";
+    setActiveTooltip({
+      type: "node",
+      ...nodeData,
+      names,
+      main,
+      nodeCenter,
+      x: mouseX,
+      y: mouseY,
+    });
+  }, []);
+
+  const onShowEdgeTooltip = useCallback(({ edge, absoluteX, absoluteY }) => {
+    setActiveTooltip({
+      type: "edge",
+      id: edge.id(),
+      data: edge.data(),
+      sourceNode: edge.source(),
+      targetNode: edge.target(),
+      x: absoluteX,
+      y: absoluteY,
+    });
+  }, []);
+
+  const onClearTooltip = useCallback(() => {
+    setActiveTooltip(null);
+  }, []);
+
   const { tapNodeHandler, tapEdgeHandler, tapBackgroundHandler, clearSelection } = useGraphInteractions({
     cyRef,
     selectedNodeIdRef,
     selectedEdgeIdRef,
-    activeTooltip,
     strictBackgroundClear: true,
-    onShowNodeTooltip: ({ node, nodeCenter, mouseX, mouseY }) => {
-      const nodeData = node.data();
-      let names = nodeData.names;
-      if (typeof names === "string") {
-        try { names = JSON.parse(names); } catch { names = [names]; }
-      }
-      let main = nodeData.main;
-      if (typeof main === "string") main = main === "true";
-      setActiveTooltip({
-        type: "node",
-        ...nodeData,
-        names,
-        main,
-        nodeCenter,
-        x: mouseX,
-        y: mouseY,
-      });
-    },
-    onShowEdgeTooltip: ({ edge, absoluteX, absoluteY }) => {
-      setActiveTooltip({
-        type: "edge",
-        id: edge.id(),
-        data: edge.data(),
-        sourceNode: edge.source(),
-        targetNode: edge.target(),
-        x: absoluteX,
-        y: absoluteY,
-      });
-    },
+    onClearTooltip,
+    onShowNodeTooltip,
+    onShowEdgeTooltip,
   });
+
+  // 툴팁 닫기 함수 - activeTooltip도 함께 초기화
+  const handleCloseTooltip = useCallback(() => {
+    setActiveTooltip(null);
+    clearSelection();
+  }, [clearSelection]);
 
   const nodeSize = getNodeSize();
   const edgeStyle = getEdgeStyle();
@@ -334,8 +349,6 @@ const RelationGraph = ({
     }
   }, [elements, activeTooltip]);
 
-
-
   const handleCanvasClick = (e) => {
     // 그래프 캔버스 영역에서만 ripple
     const container = e.currentTarget;
@@ -354,7 +367,7 @@ const RelationGraph = ({
       className="relation-graph-container"
       style={{ width: "100%", height: "100%", position: "relative" }}
     >
-      {/* 툴크 렌더링 */}
+      {/* 툴팁 렌더링 */}
       <div
         style={{
           position: "absolute",
@@ -373,11 +386,13 @@ const RelationGraph = ({
             x={activeTooltip.x}
             y={activeTooltip.y}
             nodeCenter={activeTooltip.nodeCenter}
-            onClose={clearSelection}
+            onClose={handleCloseTooltip}
             inViewer={true}
             chapterNum={chapterNum}
             eventNum={eventNum}
             maxChapter={maxChapter}
+            filename={filename}
+            elements={elements}
             style={{ pointerEvents: "auto" }}
           />
         )}
@@ -387,13 +402,14 @@ const RelationGraph = ({
             data={activeTooltip.data}
             x={activeTooltip.x}
             y={activeTooltip.y}
-            onClose={clearSelection}
+            onClose={handleCloseTooltip}
             sourceNode={activeTooltip.sourceNode}
             targetNode={activeTooltip.targetNode}
             mode="viewer"
             chapterNum={chapterNum}
             eventNum={eventNum}
             maxChapter={maxChapter}
+            filename={filename}
             style={{ pointerEvents: "auto" }}
           />
         )}
@@ -431,4 +447,4 @@ const RelationGraph = ({
   );
 };
 
-export default React.memo(RelationGraph);
+export default React.memo(ViewerRelationGraph);

@@ -1,30 +1,21 @@
 import React, { useState, useEffect, useRef } from "react";
-import RelationGraphMain from "./RelationGraphMain";
+import StandaloneRelationGraph from "./RelationGraph_Graphpage";
 import EdgeLabelToggle from "./tooltip/EdgeLabelToggle";
 import GraphControls from "./GraphControls";
 import "./RelationGraph.css";
 import { useNavigate, useParams } from "react-router-dom";
 import { FaTimes, FaBars, FaChevronLeft } from 'react-icons/fa';
-import { convertRelationsToElements } from '../../utils/graphElementUtils';
-import { filterGraphElements } from '../../utils/graphFilter';
 
-// characters.json, 이벤트별 relations.json glob import
-const characterModules = import.meta.glob('../../data/gatsby/c_chapter*_0.json', { eager: true });
-const eventModules = import.meta.glob('../../data/gatsby/chapter*_relationships_event_*.json', { eager: true });
-
-const getChapterCharacters = (chapter) => {
-  const num = String(chapter).padStart(1, '0');
-  // characters.json 구조: { characters: [...] }
-  const data = characterModules[`../../data/gatsby/c_chapter${num}_0.json`]?.default;
-  if (!data) return [];
-  return data.characters || [];
-};
+import { convertRelationsToElements, calcGraphDiff } from '../../utils/graphDataUtils.js';
+import { filterGraphElements } from '../../utils/search.jsx';
+import { getCharactersData, getEventDataByIndex, getLastEventIndexForChapter,getFolderKeyFromFilename} from '../../utils/graphData';
+import { normalizeRelation, isValidRelation } from '../../utils/relationUtils';
+import { DEFAULT_LAYOUT, SEARCH_LAYOUT } from '../../utils/graphStyles';
 
 function RelationGraphWrapper() {
   const navigate = useNavigate();
   const { filename } = useParams();
   
-
   const [currentChapter, setCurrentChapter] = useState(() => {
     const saved = localStorage.getItem('lastGraphChapter');
     return saved ? Number(saved) : 1;
@@ -37,56 +28,53 @@ function RelationGraphWrapper() {
   const [graphViewState, setGraphViewState] = useState(null);
   const [newNodeIds, setNewNodeIds] = useState([]);
   const [chapterEvents, setChapterEvents] = useState([]);
-  const [isSidebarOpen, setIsSidebarOpen] = useState(true); // 사이드바 열림/닫힘 상태
-  const [edgeLabelVisible, setEdgeLabelVisible] = useState(true); // 간선 라벨 가시성 상태
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [edgeLabelVisible, setEdgeLabelVisible] = useState(true);
   
-  // 검색 관련 상태 추가
+  // 검색 관련 상태
   const [searchTerm, setSearchTerm] = useState("");
   const [filteredElements, setFilteredElements] = useState([]);
   const [fitNodeIds, setFitNodeIds] = useState([]);
   const [isSearchActive, setIsSearchActive] = useState(false);
 
-  // === 1. 챕터별/이벤트별 모든 relations.json을 미리 누적 구조로 준비 ===
-  const allEventsDataRef = useRef({}); // { [chapterNum]: [ {nodes, edges} ... ] }
-  const allEventFilesRef = useRef({}); // { [chapterNum]: [파일경로, ...] }
-  const allCharactersRef = useRef({}); // { [chapterNum]: [캐릭터배열] }
+  // 레이아웃 상태
+  const [currentLayout, setCurrentLayout] = useState(DEFAULT_LAYOUT);
+
+  // 이전 elements 참조 (diff 계산용)
+  const prevElementsRef = useRef([]);
 
   // 챕터 변경 시 해당 챕터의 마지막 이벤트 번호를 찾아서 elements 세팅
   useEffect(() => {
-    const num = String(currentChapter).padStart(1, '');
-    // 해당 챕터의 모든 이벤트 관계 파일 경로 추출
-    const eventFiles = Object.keys(eventModules).filter(path =>
-      path.includes(`chapter${currentChapter}_relationships_event_`)
-    );
-    if (eventFiles.length === 0) {
+    // filename을 기반으로 folderKey 결정
+    const folderKey = getFolderKeyFromFilename(filename);
+    
+    // graphData.js를 사용하여 데이터 로드
+    const lastEventIndex = getLastEventIndexForChapter(folderKey, currentChapter);
+    if (lastEventIndex === 0) {
       setElements([]);
       setNewNodeIds([]);
+      setMaxEventNum(0);
+      setEventNum(0);
       return;
     }
-    // 파일명에서 이벤트 번호 추출, 가장 큰 값 찾기
-    const maxEventNum = Math.max(...eventFiles.map(path => {
-      const match = path.match(/event_(\d+)\.json$/);
-      return match ? Number(match[1]) : 0;
-    }));
-    setMaxEventNum(maxEventNum);
-    // 현재 챕터의 마지막 이벤트 번호를 eventNum으로 설정
-    setEventNum(maxEventNum);
-    // 가장 마지막 이벤트 파일 경로
-    const lastEventFile = eventFiles.find(path => path.includes(`${maxEventNum}.json`));
-    const eventData = lastEventFile ? eventModules[lastEventFile]?.default : null;
+
+    setMaxEventNum(lastEventIndex);
+    setEventNum(lastEventIndex);
+
+    // 마지막 이벤트 데이터 로드
+    const eventData = getEventDataByIndex(folderKey, currentChapter, lastEventIndex);
     if (!eventData) {
       setElements([]);
       setNewNodeIds([]);
       return;
     }
-    // 인물 데이터 로딩
-    const charFile = Object.keys(characterModules).find(path => path.includes(`c_chapter${currentChapter}_0.json`));
-    const charData = charFile ? characterModules[charFile]?.default : null;
+
+    // 캐릭터 데이터 로드
+    const charData = getCharactersData(folderKey, currentChapter);
     
     // elements 변환 (viewer와 동일하게 idToName에 common_name 우선)
     let idToName = {}, idToDesc = {}, idToMain = {}, idToNames = {};
     
-    // characters 배열이 있는 경우
     if (charData?.characters && Array.isArray(charData.characters)) {
       charData.characters.forEach(c => {
         const id = String(c.id);
@@ -97,25 +85,38 @@ function RelationGraphWrapper() {
       });
     }
     
-    // id1 혹은 id2가 0인 간선과 id1 === id2인 경우의 간선은 제외
-    const filteredRelations = eventData.relations?.filter(rel => {
-      return rel.id1 !== 0 && rel.id2 !== 0 && rel.id1 !== rel.id2;
-    }) || [];
+    // relationUtils.js를 사용하여 관계 데이터 정규화 및 검증
+    const normalizedRelations = (eventData.relations || [])
+      .map(rel => normalizeRelation(rel))
+      .filter(rel => isValidRelation(rel));
     
     const convertedElements = convertRelationsToElements(
-      filteredRelations,
+      normalizedRelations,
       idToName,
       idToDesc,
       idToMain,
       idToNames
     );
     
+    // graphDiff.js를 사용하여 변경사항 계산
+    const diff = calcGraphDiff(prevElementsRef.current, convertedElements);
+    prevElementsRef.current = convertedElements;
+    
     setElements(convertedElements);
-    setNewNodeIds(convertedElements.filter(el => el.data?.isNew).map(el => el.data.id));
+    setNewNodeIds(diff.added.filter(el => !el.data?.source).map(el => el.data.id));
     
     // localStorage에 현재 챕터 저장
     localStorage.setItem('lastGraphChapter', currentChapter.toString());
   }, [currentChapter]);
+
+  // 검색 상태에 따른 레이아웃 변경
+  useEffect(() => {
+    if (isSearchActive && filteredElements.length > 0) {
+      setCurrentLayout(SEARCH_LAYOUT);
+    } else {
+      setCurrentLayout(DEFAULT_LAYOUT);
+    }
+  }, [isSearchActive, filteredElements.length]);
 
   // 사이드바 토글 함수
   const toggleSidebar = () => {
@@ -136,12 +137,7 @@ function RelationGraphWrapper() {
       const { filteredElements: filtered, fitNodeIds: fitIds } = filterGraphElements(elements, searchTerm);
       setFilteredElements(filtered);
       setFitNodeIds(fitIds);
-      
-      if (filtered.length > 0) {
-        // 검색 결과가 있을 때만 처리
-      }
     } else {
-      // 검색어가 비어있으면 모든 요소 표시
       setFilteredElements(elements);
       setFitNodeIds([]);
       setIsSearchActive(false);
@@ -170,7 +166,7 @@ function RelationGraphWrapper() {
     } else if (!isSearchActive) {
       setFilteredElements(elements);
     }
-  }, [elements]); // searchTerm, isSearchActive 제거
+  }, [elements]);
 
   return (
     <div style={{ width: '100vw', height: '100vh', background: '#f4f7fb', overflow: 'hidden', display: 'flex' }}>
@@ -269,39 +265,39 @@ function RelationGraphWrapper() {
               }}
               title={!isSidebarOpen ? `Chapter ${chapter}` : ''}
             >
-                              <span style={{
-                  width: '24px',
-                  height: '24px',
-                  borderRadius: '50%',
-                  background: currentChapter === chapter ? '#6C8EFF' : '#e3e6ef',
-                  color: currentChapter === chapter ? '#fff' : '#6C8EFF',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontSize: '12px',
-                  fontWeight: '600',
-                  marginRight: '12px',
-                  transition: 'all 0.3s ease',
-                  flexShrink: 0,
-                  minWidth: '24px',
-                  minHeight: '24px',
-                }}>
-                  {chapter}
-                </span>
-                <span style={{
-                  opacity: isSidebarOpen ? 1 : 0,
-                  transform: isSidebarOpen ? 'translateX(0)' : 'translateX(-30px)',
-                  whiteSpace: 'nowrap',
-                  overflow: 'hidden',
-                  width: isSidebarOpen ? 'auto' : '0px',
-                  transition: isSidebarOpen 
-                    ? 'all 0.4s cubic-bezier(0.4, 0, 0.2, 1) 0.2s' 
-                    : 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-                  display: 'inline-block',
-                  minWidth: isSidebarOpen ? 'auto' : '0px',
-                }}>
-                  Chapter {chapter}
-                </span>
+              <span style={{
+                width: '24px',
+                height: '24px',
+                borderRadius: '50%',
+                background: currentChapter === chapter ? '#6C8EFF' : '#e3e6ef',
+                color: currentChapter === chapter ? '#fff' : '#6C8EFF',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: '12px',
+                fontWeight: '600',
+                marginRight: '12px',
+                transition: 'all 0.3s ease',
+                flexShrink: 0,
+                minWidth: '24px',
+                minHeight: '24px',
+              }}>
+                {chapter}
+              </span>
+              <span style={{
+                opacity: isSidebarOpen ? 1 : 0,
+                transform: isSidebarOpen ? 'translateX(0)' : 'translateX(-30px)',
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                width: isSidebarOpen ? 'auto' : '0px',
+                transition: isSidebarOpen 
+                  ? 'all 0.4s cubic-bezier(0.4, 0, 0.2, 1) 0.2s' 
+                  : 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                display: 'inline-block',
+                minWidth: isSidebarOpen ? 'auto' : '0px',
+              }}>
+                Chapter {chapter}
+              </span>
             </button>
           ))}
         </div>
@@ -448,7 +444,7 @@ function RelationGraphWrapper() {
         <div className="flex-1 relative overflow-hidden" style={{ width: '100%', height: '100%' }}>
           {maxEventNum > 0 ? (
             elements.length > 0 ? (
-              <RelationGraphMain 
+              <StandaloneRelationGraph 
                 elements={isSearchActive && filteredElements.length > 0 ? filteredElements : elements} 
                 inViewer={false}
                 fullScreen={true}
@@ -465,6 +461,7 @@ function RelationGraphWrapper() {
                 searchTerm={searchTerm}
                 isSearchActive={isSearchActive}
                 filteredElements={filteredElements}
+                layout={currentLayout}
               />
             ) : (
               <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, color: '#6C8EFF' }}>

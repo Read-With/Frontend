@@ -1,9 +1,18 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { Line } from "react-chartjs-2";
 import "chart.js/auto";
 import useRelationTimeline from "../../hooks/useRelationTimeline";
-import { safeNum } from "../../utils/relationUtils";
+import { safeNum, processRelationTags } from "../../utils/relationUtils";
 import { getRelationStyle } from "../../utils/relationStyles";
+import { getSlideInAnimation } from "../../utils/animations";
+import { processRelations } from "../../utils/relationUtils";
+import { getChapterLastEventNums, getFolderKeyFromFilename } from "../../utils/graphData";
+
+// === glob import: 반드시 data/gatsby 하위 전체 관계 파일 import ===
+const relationshipModules = import.meta.glob(
+  "/src/data/gatsby/chapter*_relationships_event_*.json",
+  { eager: true }
+);
 
 function GraphSidebar({
   activeTooltip,
@@ -12,20 +21,91 @@ function GraphSidebar({
   eventNum = 1,
   maxChapter = 10,
   hasNoRelations = false,
+  filename,
+  elements = [], // 현재 로드된 elements 추가
 }) {
+  console.log("=== GraphSidebar 렌더링 ===");
+  console.log("activeTooltip:", activeTooltip);
+  console.log("hasNoRelations:", hasNoRelations);
+  
   const [viewMode, setViewMode] = useState("info");
+  const [isNodeAppeared, setIsNodeAppeared] = useState(false);
+  const [error, setError] = useState(null);
 
   // source/target을 safeNum으로 변환
   const id1 = safeNum(activeTooltip?.data?.source);
   const id2 = safeNum(activeTooltip?.data?.target);
 
-  const { points: timeline, labels, loading, maxEventCount } = useRelationTimeline({ id1, id2, chapterNum, eventNum, maxChapter });
+  const { points: timeline, labels, loading, maxEventCount } = useRelationTimeline({ id1, id2, chapterNum, eventNum, maxChapter, filename });
+
+  // 노드 등장 여부 확인 함수
+  const checkNodeAppearance = useCallback(() => {
+    try {
+      setIsNodeAppeared(false);
+      setError(null);
+      
+      if (!activeTooltip || !chapterNum || chapterNum <= 0) {
+        return;
+      }
+
+      // 노드 데이터 가져오기
+      const nodeData = activeTooltip.data;
+      if (!nodeData || !nodeData.id) {
+        return;
+      }
+
+      // JSON 파일 경로 생성
+      const filePath = `/src/data/gatsby/chapter${chapterNum}_relationships_event_${eventNum}.json`;
+      const json = relationshipModules[filePath]?.default;
+
+      // 노드 ID를 문자열로 변환하여 비교
+      const nodeId = String(nodeData.id);
+      
+      // relations 기반 등장 여부 판별
+      if (!json || !json.relations) {
+        // 대안: elements에서 노드 등장 여부 확인
+        if (elements && elements.length > 0) {
+          const appeared = elements.some(element => {
+            if (element.data && element.data.source) return false; // edge는 제외
+            return String(element.data?.id) === nodeId;
+          });
+          setIsNodeAppeared(appeared);
+        } else {
+          setIsNodeAppeared(false);
+        }
+        return;
+      }
+      
+      // processRelations 유틸리티 사용
+      const processedRelations = processRelations(json.relations);
+      
+      // 더 정확한 ID 비교를 위해 숫자로 변환하여 비교
+      const nodeIdNum = parseFloat(nodeId);
+      
+      const appeared = processedRelations.some(rel => {
+        const id1Num = parseFloat(rel.id1);
+        const id2Num = parseFloat(rel.id2);
+        const match = id1Num === nodeIdNum || id2Num === nodeIdNum;
+        return match;
+      });
+      
+      setIsNodeAppeared(appeared);
+    } catch (err) {
+      setError(err.message);
+      setIsNodeAppeared(false);
+    }
+  }, [activeTooltip, chapterNum, eventNum, elements]);
+
+  // 노드 등장 여부 확인
+  useEffect(() => {
+    checkNodeAppearance();
+  }, [checkNodeAppearance]);
 
   // positivity 값에 따른 색상과 텍스트 결정
   
 
   // 관계가 없을 때 안내 메시지 표시 (activeTooltip이 없어도 표시)
-  if (hasNoRelations) {
+  if (hasNoRelations && !activeTooltip) {
     return (
       <div
         style={{
@@ -119,8 +199,8 @@ function GraphSidebar({
     );
   }
 
-  // activeTooltip이 없어도 hasNoRelations가 true면 사이드바를 표시
-  if (!activeTooltip && !hasNoRelations) return null;
+  // activeTooltip이 없으면 사이드바를 표시하지 않음
+  if (!activeTooltip) return null;
 
   // activeTooltip이 없고 hasNoRelations가 true인 경우는 이미 위에서 처리됨
   const data = activeTooltip.data;
@@ -196,7 +276,12 @@ function GraphSidebar({
         background: "#fff",
       }}>
         {activeTooltip.type === "node" ? (
-          <NodeInfo data={data} />
+          <NodeInfo 
+            data={data} 
+            isNodeAppeared={isNodeAppeared}
+            error={error}
+            chapterNum={chapterNum}
+          />
         ) : (
           <EdgeInfo 
             data={data} 
@@ -213,23 +298,109 @@ function GraphSidebar({
       </div>
 
       <style jsx="true">{`
-        @keyframes slideIn {
-          from {
-            transform: translateX(100%);
-            opacity: 0;
-          }
-          to {
-            transform: translateX(0);
-            opacity: 1;
-          }
-        }
+        ${getSlideInAnimation('right', 0.4)}
       `}</style>
     </div>
   );
 }
 
 // 노드 정보 컴포넌트
-function NodeInfo({ data }) {
+function NodeInfo({ data, isNodeAppeared, error, chapterNum }) {
+  // 노드가 등장하지 않는 경우의 메시지
+  if (!isNodeAppeared && !error) {
+    return (
+      <div>
+        {/* 아직 등장하지 않음 메시지 */}
+        <div style={{ 
+          background: "#fef2f2", 
+          padding: "20px", 
+          borderRadius: "12px",
+          marginBottom: "24px",
+          border: "1px solid #fecaca",
+          textAlign: "center"
+        }}>
+          <div style={{ 
+            fontSize: "18px", 
+            color: "#dc2626", 
+            fontWeight: 700,
+            marginBottom: "12px"
+          }}>
+            아직 등장하지 않았습니다
+          </div>
+          <div style={{ 
+            fontSize: "14px", 
+            color: "#7f1d1d", 
+            lineHeight: 1.6
+          }}>
+            {chapterNum}장에서는 이 인물이 등장하지 않습니다.<br />
+            이후 챕터에서 등장할 예정입니다.
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // 에러가 있는 경우
+  if (error) {
+    return (
+      <div>
+        <div style={{ 
+          marginBottom: "24px",
+          padding: "20px",
+          background: "#f8fafc",
+          borderRadius: "12px",
+          border: "1px solid #e5e7eb",
+        }}>
+          <h4 style={{ 
+            margin: "0 0 12px 0", 
+            fontSize: "18px", 
+            fontWeight: 700,
+            color: "#374151"
+          }}>
+            {data.label}
+          </h4>
+          {data.description && (
+            <p style={{ 
+              margin: "0 0 16px 0", 
+              fontSize: "14px", 
+              color: "#6b7280", 
+              lineHeight: 1.6,
+            }}>
+              {data.description}
+            </p>
+          )}
+        </div>
+        
+        {/* 에러 메시지 */}
+        <div style={{ 
+          background: "#fef2f2", 
+          padding: "16px 20px", 
+          borderRadius: "12px",
+          marginBottom: "24px",
+          border: "1px solid #fecaca",
+          textAlign: "center"
+        }}>
+          <div style={{ 
+            fontSize: "16px", 
+            color: "#dc2626", 
+            fontWeight: 600,
+            marginBottom: "8px"
+          }}>
+            정보를 불러올 수 없습니다
+          </div>
+          <div style={{ 
+            fontSize: "14px", 
+            color: "#7f1d1d", 
+            lineHeight: 1.5
+          }}>
+            {error}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // 노드가 등장하는 경우 (기존 정보 표시)
   return (
     <div>
       <div style={{ 
@@ -300,45 +471,24 @@ function EdgeInfo({ data, relationStyle, viewMode, setViewMode, timeline, labels
               관계 유형
             </h4>
             <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
-              {(() => {
-                const uniqueRelations = [];
-                const seen = new Set();
-                const relArr = Array.isArray(data.relation)
-                  ? data.relation
-                  : (typeof data.label === 'string' ? data.label.split(',').map(s => s.trim()).filter(Boolean) : []);
-                for (const rel of relArr) {
-                  if (rel.includes(' ')) {
-                    if (!seen.has(rel)) {
-                      uniqueRelations.push(rel);
-                      seen.add(rel);
-                    }
-                    continue;
-                  }
-                  const base = rel.length > 3 ? rel.slice(0, -1) : rel;
-                  if (![...seen].some(s => s.startsWith(base))) {
-                    uniqueRelations.push(rel);
-                    seen.add(rel);
-                  }
-                }
-                return uniqueRelations.map((relation, index) => (
-                                     <span
-                     key={index}
-                     style={{
-                       background: '#e5e7eb',
-                       color: '#374151',
-                       borderRadius: '20px',
-                       padding: '6px 12px',
-                       fontSize: '12px',
-                       fontWeight: 600,
-                       cursor: 'default',
-                     }}
-                     onMouseOver={e => e.currentTarget.style.background = '#d1d5db'}
-                     onMouseOut={e => e.currentTarget.style.background = '#e5e7eb'}
-                   >
-                     {relation}
-                   </span>
-                ));
-              })()}
+              {processRelationTags(data.relation, data.label).map((relation, index) => (
+                <span
+                  key={index}
+                  style={{
+                    background: '#e5e7eb',
+                    color: '#374151',
+                    borderRadius: '20px',
+                    padding: '6px 12px',
+                    fontSize: '12px',
+                    fontWeight: 600,
+                    cursor: 'default',
+                  }}
+                  onMouseOver={e => e.currentTarget.style.background = '#d1d5db'}
+                  onMouseOut={e => e.currentTarget.style.background = '#e5e7eb'}
+                >
+                  {relation}
+                </span>
+              ))}
             </div>
           </div>
 

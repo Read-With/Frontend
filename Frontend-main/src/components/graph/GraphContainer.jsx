@@ -1,11 +1,9 @@
 import React, { useEffect, useState, forwardRef, useImperativeHandle, useMemo } from "react";
-import RelationGraph from "./RelationGraph";
-import { filterGraphElements } from "../../utils/graphFilter";
-import { convertRelationsToElements } from "../../utils/graphElementUtils";
-import { getEventData, getCharactersData } from "../../utils/graphData";
-import { normalizeRelation, isValidRelation } from "../../utils/relationUtils";
-
-// 변환 로직은 공용 유틸을 사용 (기존 기능 유지)
+import ViewerRelationGraph from "./RelationGraph_Viewerpage";
+import { convertRelationsToElements } from "../../utils/graphDataUtils.js";
+import { getEventData, getCharactersData, createCharacterMaps, getFolderKeyFromFilename } from "../../utils/graphData";
+import { processRelations } from "../../utils/relationUtils";
+import { useGraphSearch } from "../../hooks/useGraphSearch";
 
 const GraphContainer = forwardRef(({
   currentPosition,
@@ -13,15 +11,23 @@ const GraphContainer = forwardRef(({
   currentChapter, // 관계 변화
   edgeLabelVisible = true,
   onSearchStateChange,
+  filename, // filename prop 추가
   ...props
 }, ref) => {
   const [elements, setElements] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  const [searchTerm, setSearchTerm] = useState("");
-  const [filteredElements, setFilteredElements] = useState([]);
-  const [fitNodeIds, setFitNodeIds] = useState([]);
-  const [isSearchActive, setIsSearchActive] = useState(false);
+
+  // 검색 상태 관리를 useGraphSearch 훅으로 처리
+  const {
+    searchTerm,
+    isSearchActive,
+    filteredElements,
+    fitNodeIds,
+    finalElements,
+    handleSearchSubmit,
+    clearSearch
+  } = useGraphSearch(elements, onSearchStateChange);
 
 
 
@@ -35,8 +41,12 @@ const GraphContainer = forwardRef(({
       setLoading(true);
       const eventId = currentEvent.event_id || 0; // event_id가 없으면 0으로 설정
       const chapter = currentEvent.chapter || 1;
+      
+      // filename을 기반으로 folderKey 결정
+      const folderKey = getFolderKeyFromFilename(filename);
+      
       // 이벤트 데이터 가져오기 (event_id에 1을 더해서 파일 찾기)
-      const eventData = getEventData(chapter, eventId);
+      const eventData = getEventData(folderKey, chapter, eventId);
       if (!eventData) {
         setElements([]);
         setError("해당 eventId의 관계 데이터가 없습니다.");
@@ -45,7 +55,7 @@ const GraphContainer = forwardRef(({
       }
 
       // 캐릭터 데이터 가져오기
-      const characters = getCharactersData(chapter);
+      const characters = getCharactersData(folderKey, chapter);
       if (!characters) {
         setElements([]);
         setError("캐릭터 데이터를 찾을 수 없습니다.");
@@ -53,33 +63,11 @@ const GraphContainer = forwardRef(({
         return;
       }
 
-      const idToName = {};
-      const idToDesc = {};
-      const idToMain = {};
-      const idToNames = {};
+      // 캐릭터 데이터 매핑 생성
+      const { idToName, idToDesc, idToMain, idToNames } = createCharacterMaps(characters);
 
-      (characters.characters || characters).forEach((char) => {
-        const id = String(Math.trunc(char.id));
-        idToName[id] =
-          char.common_name ||
-          char.name ||
-          (Array.isArray(char.names) ? char.names[0] : String(char.id));
-        idToDesc[id] = char.description || "";
-        idToMain[id] = char.main_character || false;
-        idToNames[id] = char.names || [];
-      });
-
-      const relations = (eventData.relations || [])
-        .map(normalizeRelation)
-        .filter(isValidRelation)
-        .map(r => ({
-          id1: r.id1,
-          id2: r.id2,
-          positivity: r.positivity,
-          relation: r.relation,
-          weight: r.weight,
-          count: r.count,
-        }));
+      // 관계 데이터 처리
+      const relations = processRelations(eventData.relations);
       const els = convertRelationsToElements(
         relations,
         idToName,
@@ -100,66 +88,13 @@ const GraphContainer = forwardRef(({
   const characterMaps = useMemo(() => {
     if (!currentEvent) return null;
     const chapter = currentEvent.chapter || 1;
-    const characters = getCharactersData(chapter);
+    const folderKey = getFolderKeyFromFilename(filename);
+    const characters = getCharactersData(folderKey, chapter);
     if (!characters) return null;
-    const idToName = {};
-    const idToDesc = {};
-    const idToMain = {};
-    const idToNames = {};
-    (characters.characters || characters).forEach((char) => {
-      const id = String(Math.trunc(char.id));
-      idToName[id] = char.common_name || char.name || (Array.isArray(char.names) ? char.names[0] : String(char.id));
-      idToDesc[id] = char.description || "";
-      idToMain[id] = char.main_character || false;
-      idToNames[id] = char.names || [];
-    });
-    return { idToName, idToDesc, idToMain, idToNames };
-  }, [currentEvent]);
+    return createCharacterMaps(characters);
+  }, [currentEvent, filename]);
 
-  // 검색 처리 함수
-  const handleSearchSubmit = (searchTerm) => {
-    setSearchTerm(searchTerm);
-    setIsSearchActive(!!searchTerm.trim());
-    
-    if (searchTerm.trim()) {
-      const { filteredElements: filtered, fitNodeIds: fitIds } = filterGraphElements(elements, searchTerm, null);
-      
 
-      
-      setFilteredElements(filtered);
-      setFitNodeIds(fitIds);
-    } else {
-      setFilteredElements(elements);
-      setFitNodeIds([]);
-      setIsSearchActive(false);
-    }
-  };
-
-  // 검색 초기화 함수
-  const clearSearch = () => {
-    setSearchTerm("");
-    setFilteredElements(elements);
-    setFitNodeIds([]);
-    setIsSearchActive(false);
-  };
-
-  // elements가 변경될 때 검색 결과도 업데이트
-  useEffect(() => {
-    if (isSearchActive && searchTerm.trim()) {
-      const { filteredElements: filtered, fitNodeIds: fitIds } = filterGraphElements(elements, searchTerm, null);
-      if (filtered.length > 0) {
-        setFilteredElements(filtered);
-        setFitNodeIds(fitIds);
-      } else {
-        setFilteredElements(elements);
-        setFitNodeIds([]);
-      }
-    } else if (!isSearchActive) {
-      setFilteredElements(elements);
-    }
-  }, [elements, isSearchActive, searchTerm]);
-
-  const finalElements = isSearchActive && filteredElements.length > 0 ? filteredElements : elements;
   
 
   
@@ -171,25 +106,16 @@ const GraphContainer = forwardRef(({
     isSearchActive
   }));
 
-  // 검색 상태가 변경될 때 상위로 전달
-  useEffect(() => {
-    if (onSearchStateChange) {
-      onSearchStateChange({
-        searchTerm,
-        isSearchActive,
-        filteredElements,
-        fitNodeIds
-      });
-    }
-  }, [searchTerm, isSearchActive, filteredElements, fitNodeIds, onSearchStateChange]);
+
 
   return (
-    <RelationGraph
+    <ViewerRelationGraph
       elements={finalElements}
       chapterNum={currentChapter} // 관계 변화
       eventNum={currentEvent ? Math.max(1, currentEvent.eventNum) : 1}
       edgeLabelVisible={edgeLabelVisible}
       maxChapter={10}
+      filename={filename}
       fitNodeIds={fitNodeIds}
       searchTerm={searchTerm}
       isSearchActive={isSearchActive}
