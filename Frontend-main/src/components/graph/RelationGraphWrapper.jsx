@@ -7,10 +7,10 @@ import { useNavigate, useParams } from "react-router-dom";
 import { FaTimes, FaBars, FaChevronLeft } from 'react-icons/fa';
 
 import { convertRelationsToElements, calcGraphDiff } from '../../utils/graphDataUtils.js';
-import { filterGraphElements } from '../../utils/search.jsx';
 import { getCharactersData, getEventDataByIndex, getLastEventIndexForChapter,getFolderKeyFromFilename} from '../../utils/graphData';
 import { normalizeRelation, isValidRelation } from '../../utils/relationUtils';
 import { DEFAULT_LAYOUT, SEARCH_LAYOUT } from '../../utils/graphStyles';
+import { useGraphSearch } from '../../hooks/useGraphSearch';
 
 function RelationGraphWrapper() {
   const navigate = useNavigate();
@@ -30,12 +30,24 @@ function RelationGraphWrapper() {
   const [chapterEvents, setChapterEvents] = useState([]);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [edgeLabelVisible, setEdgeLabelVisible] = useState(true);
+  const [currentChapterData, setCurrentChapterData] = useState(null);
   
-  // 검색 관련 상태
-  const [searchTerm, setSearchTerm] = useState("");
-  const [filteredElements, setFilteredElements] = useState([]);
-  const [fitNodeIds, setFitNodeIds] = useState([]);
-  const [isSearchActive, setIsSearchActive] = useState(false);
+  // 검색 관련 상태를 useGraphSearch 훅으로 관리
+  const {
+    searchTerm,
+    isSearchActive,
+    filteredElements,
+    fitNodeIds,
+    handleSearchSubmit,
+    clearSearch
+  } = useGraphSearch(elements, (searchState) => {
+    // 검색 상태 변경 시 레이아웃 업데이트
+    if (searchState.isSearchActive && searchState.filteredElements.length > 0) {
+      setCurrentLayout(SEARCH_LAYOUT);
+    } else {
+      setCurrentLayout(DEFAULT_LAYOUT);
+    }
+  }, currentChapterData);
 
   // 레이아웃 상태
   const [currentLayout, setCurrentLayout] = useState(DEFAULT_LAYOUT);
@@ -71,6 +83,9 @@ function RelationGraphWrapper() {
 
     // 캐릭터 데이터 로드
     const charData = getCharactersData(folderKey, currentChapter);
+    
+    // 현재 챕터 데이터 저장 (검색 필터링용)
+    setCurrentChapterData(charData);
     
     // elements 변환 (viewer와 동일하게 idToName에 common_name 우선)
     let idToName = {}, idToDesc = {}, idToMain = {}, idToNames = {};
@@ -109,14 +124,7 @@ function RelationGraphWrapper() {
     localStorage.setItem('lastGraphChapter', currentChapter.toString());
   }, [currentChapter]);
 
-  // 검색 상태에 따른 레이아웃 변경
-  useEffect(() => {
-    if (isSearchActive && filteredElements.length > 0) {
-      setCurrentLayout(SEARCH_LAYOUT);
-    } else {
-      setCurrentLayout(DEFAULT_LAYOUT);
-    }
-  }, [isSearchActive, filteredElements.length]);
+
 
   // 사이드바 토글 함수
   const toggleSidebar = () => {
@@ -128,45 +136,7 @@ function RelationGraphWrapper() {
     setCurrentChapter(chapter);
   };
 
-  // 검색 제출 함수
-  const handleSearchSubmit = (searchTerm) => {
-    setSearchTerm(searchTerm);
-    setIsSearchActive(!!searchTerm.trim());
-    
-    if (searchTerm.trim()) {
-      const { filteredElements: filtered, fitNodeIds: fitIds } = filterGraphElements(elements, searchTerm);
-      setFilteredElements(filtered);
-      setFitNodeIds(fitIds);
-    } else {
-      setFilteredElements(elements);
-      setFitNodeIds([]);
-      setIsSearchActive(false);
-    }
-  };
 
-  // 검색 초기화 함수
-  const clearSearch = () => {
-    setSearchTerm("");
-    setFilteredElements(elements);
-    setFitNodeIds([]);
-    setIsSearchActive(false);
-  };
-
-  // elements가 변경될 때 검색 결과도 업데이트
-  useEffect(() => {
-    if (isSearchActive && searchTerm.trim()) {
-      const { filteredElements: filtered, fitNodeIds: fitIds } = filterGraphElements(elements, searchTerm);
-      if (filtered.length > 0) {
-        setFilteredElements(filtered);
-        setFitNodeIds(fitIds);
-      } else {
-        setFilteredElements(elements);
-        setFitNodeIds([]);
-      }
-    } else if (!isSearchActive) {
-      setFilteredElements(elements);
-    }
-  }, [elements]);
 
   return (
     <div style={{ width: '100vw', height: '100vh', background: '#f4f7fb', overflow: 'hidden', display: 'flex' }}>

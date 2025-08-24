@@ -277,6 +277,6 @@ export function useRelationData(mode, id1, id2, chapterNum, eventNum, maxChapter
     loading,
     noRelation,
     fetchData,
-    getMaxEventCount,
+    getMaxEventCount: () => getMaxEventCount(maxChapter),
   };
 }

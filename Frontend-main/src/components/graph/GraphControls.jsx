@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { FaSearch, FaUndo } from "react-icons/fa";
 import { highlightText } from "../../utils/search.jsx";
-import { useSearchSuggestions } from "../../hooks/useSearchSuggestions";
+import { useGraphSearch } from "../../hooks/useGraphSearch";
 import { useClickOutside } from "../../hooks/useClickOutside";
 
 const GraphControls = ({
@@ -24,8 +24,9 @@ const GraphControls = ({
     setIsDropdownOpen(false);
   });
 
-  // 검색 제안 관리를 useSearchSuggestions 훅으로 처리
+  // 검색 제안 관리를 useGraphSearch 훅으로 처리
   const {
+    searchTerm: graphSearchTerm,
     suggestions,
     showSuggestions,
     selectedIndex,
@@ -33,14 +34,16 @@ const GraphControls = ({
     handleKeyDown,
     closeSuggestions,
     setShowSuggestions,
-    setSelectedIndex
-  } = useSearchSuggestions(elements, searchInput);
+    setSelectedIndex,
+    setSearchTerm: setGraphSearchTerm
+  } = useGraphSearch(elements, null);
 
   // 외부 searchTerm이 변경되면 내부 상태도 업데이트
   useEffect(() => {
     setSearchInput(searchTerm);
     setSearch(searchTerm);
-  }, [searchTerm]);
+    setGraphSearchTerm(searchTerm);
+  }, [searchTerm, setGraphSearchTerm]);
 
 
 
@@ -182,7 +185,10 @@ const GraphControls = ({
           type="text"
           placeholder="인물 검색 (이름/별칭)"
           value={searchInput}
-          onChange={(e) => setSearchInput(e.target.value)}
+          onChange={(e) => {
+            setSearchInput(e.target.value);
+            setGraphSearchTerm(e.target.value);
+          }}
           onKeyDown={(e) => handleKeyDown(e, onSearchSubmit)}
           onFocus={(e) => {
             e.target.style.borderColor = '#6C8EFF';

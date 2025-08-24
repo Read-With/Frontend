@@ -27,9 +27,7 @@ export default function useGraphInteractions({
 
   // 선택 상태만 초기화하는 함수 (툴팁은 유지)
   const clearSelectionOnly = useCallback(() => {
-    console.log("=== clearSelectionOnly 호출됨 ===");
     if (!cyRef?.current) {
-      console.warn("cyRef.current가 없습니다");
       return;
     }
     const cy = cyRef.current;
@@ -40,35 +38,23 @@ export default function useGraphInteractions({
 
   // 툴팁을 포함한 모든 상태를 초기화하는 함수
   const clearAll = useCallback(() => {
-    console.log("=== clearAll 호출됨 ===");
     clearSelectionOnly();
-    console.log("onClearTooltipRef.current:", !!onClearTooltipRef.current);
     if (onClearTooltipRef.current) {
-      console.log("툴팁 초기화 콜백 실행");
       onClearTooltipRef.current();
     }
   }, [clearSelectionOnly]);
 
   const tapNodeHandler = useCallback(
     (evt) => {
-      console.log("=== tapNodeHandler 호출됨 ===");
-      console.log("evt:", evt);
-      console.log("evt.target:", evt.target);
       if (!cyRef?.current) {
-        console.warn("cyRef.current가 없습니다");
         return;
       }
       const cy = cyRef.current;
       const node = evt.target;
       const nodeData = node?.data?.();
-      console.log("node:", node);
-      console.log("nodeData:", nodeData);
       if (!node || !nodeData) {
-        console.warn("node 또는 nodeData가 없습니다");
         return;
       }
-
-      console.log("노드 클릭됨:", node.id(), nodeData);
 
       const pos = node.renderedPosition();
       const pan = cy.pan();
@@ -110,17 +96,9 @@ export default function useGraphInteractions({
       const mouseX = evt.originalEvent?.clientX ?? nodeCenter.x;
       const mouseY = evt.originalEvent?.clientY ?? nodeCenter.y;
 
-      console.log("=== 툴팁 콜백 실행 준비 ===");
-      console.log("onShowNodeTooltipRef.current:", !!onShowNodeTooltipRef.current);
-      console.log("mouseX:", mouseX, "mouseY:", mouseY);
-      console.log("nodeCenter:", nodeCenter);
-
       // 컴포넌트별 툴팁 생성 로직 실행
       if (onShowNodeTooltipRef.current) {
-        console.log("툴팁 콜백 실행");
         onShowNodeTooltipRef.current({ node, evt, nodeCenter, mouseX, mouseY });
-      } else {
-        console.warn("onShowNodeTooltip 콜백이 등록되지 않았습니다");
       }
       
       if (selectedNodeIdRef) selectedNodeIdRef.current = node.id();
@@ -130,20 +108,15 @@ export default function useGraphInteractions({
 
   const tapEdgeHandler = useCallback(
     (evt) => {
-      console.log("=== tapEdgeHandler 호출됨 ===");
       if (!cyRef?.current) {
-        console.warn("cyRef.current가 없습니다");
         return;
       }
       const cy = cyRef.current;
       const edge = evt.target;
       const edgeData = edge?.data?.();
       if (!edge || !edgeData) {
-        console.warn("edge 또는 edgeData가 없습니다");
         return;
       }
-
-      console.log("간선 클릭됨:", edge.id(), edgeData);
 
       const container = document.querySelector('.graph-canvas-area');
       const containerRect = container?.getBoundingClientRect?.() || { left: 0, top: 0 };
@@ -153,16 +126,9 @@ export default function useGraphInteractions({
       const absoluteX = pos.x * zoom + pan.x + containerRect.left;
       const absoluteY = pos.y * zoom + pan.y + containerRect.top;
 
-      console.log("=== 간선 툴팁 콜백 실행 준비 ===");
-      console.log("onShowEdgeTooltipRef.current:", !!onShowEdgeTooltipRef.current);
-      console.log("absoluteX:", absoluteX, "absoluteY:", absoluteY);
-
       // 컴포넌트별 툴팁 생성 로직 실행
       if (onShowEdgeTooltipRef.current) {
-        console.log("간선 툴팁 콜백 실행");
         onShowEdgeTooltipRef.current({ edge, evt, absoluteX, absoluteY });
-      } else {
-        console.warn("onShowEdgeTooltip 콜백이 등록되지 않았습니다");
       }
 
       cy.batch(() => {

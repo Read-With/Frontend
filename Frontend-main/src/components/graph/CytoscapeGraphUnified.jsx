@@ -85,26 +85,17 @@ const CytoscapeGraphUnified = ({
     const cy = externalCyRef?.current;
     if (!cy || handlersRegisteredRef.current) return;
     
-    console.log("=== Cytoscape 이벤트 핸들러 등록 ===");
-    console.log("tapNodeHandler:", !!tapNodeHandler);
-    console.log("tapEdgeHandler:", !!tapEdgeHandler);
-    console.log("tapBackgroundHandler:", !!tapBackgroundHandler);
-    
     if (tapNodeHandler) {
-      console.log("노드 클릭 이벤트 등록");
       cy.on("tap", "node", tapNodeHandler);
     }
     if (tapEdgeHandler) {
-      console.log("간선 클릭 이벤트 등록");
       cy.on("tap", "edge", tapEdgeHandler);
     }
     if (tapBackgroundHandler) {
-      console.log("배경 클릭 이벤트 등록");
       cy.on("tap", tapBackgroundHandler);
     }
     
     handlersRegisteredRef.current = true;
-    console.log("=== Cytoscape 이벤트 핸들러 등록 완료 ===");
   }, [externalCyRef, tapNodeHandler, tapEdgeHandler, tapBackgroundHandler]);
 
 
@@ -115,12 +106,7 @@ const CytoscapeGraphUnified = ({
     if (!cy) return;
     
     // 디버깅: 간선 데이터 확인 (필요시 주석 해제)
-    // console.log('=== CytoscapeGraphUnified elements 디버깅 ===');
-    // console.log('전체 elements:', elements);
-    // const edges = elements?.filter(el => el.data.source && el.data.target) || [];
-    // console.log('간선 개수:', edges.length);
-    // console.log('간선 데이터:', edges);
-    // console.log('==========================================');
+
     
     if (!elements || elements.length === 0) {
       cy.elements().remove();

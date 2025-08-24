@@ -54,7 +54,7 @@ const getEventsForChapter = (chapter) => {
     eventsCache.set(chapterNum, currentChapterEvents);
     return currentChapterEvents;
   } catch (error) {
-    console.warn(`Failed to load events for chapter ${chapterNum}:`, error);
+
     eventsCache.set(chapterNum, []);
     return [];
   }

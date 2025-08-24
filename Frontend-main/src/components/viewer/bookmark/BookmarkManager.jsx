@@ -13,7 +13,7 @@ export const saveBookmarks = (bookId, bookmarks) => {
     localStorage.setItem(`bookmarks_${bookId}`, JSON.stringify(bookmarks));
     return true;
   } catch (error) {
-    console.error('북마크 저장 실패:', error);
+
     return false;
   }
 };
@@ -24,7 +24,7 @@ export const loadBookmarks = (bookId) => {
     const stored = localStorage.getItem(`bookmarks_${bookId}`);
     return stored ? JSON.parse(stored) : [];
   } catch (error) {
-    console.error('북마크 로드 실패:', error);
+
     return [];
   }
 };
@@ -59,7 +59,7 @@ export const removeBookmark = (bookId, index) => {
     }
     return { success: false, message: '유효하지 않은 북마크입니다.' };
   } catch (error) {
-    console.error('북마크 삭제 실패:', error);
+
     return { success: false, message: '북마크 삭제에 실패했습니다.' };
   }
 };
@@ -70,7 +70,7 @@ export const clearAllBookmarks = (bookId) => {
     localStorage.removeItem(`bookmarks_${bookId}`);
     return { success: true, bookmarks: [] };
   } catch (error) {
-    console.error('북마크 전체 삭제 실패:', error);
+
     return { success: false, message: '북마크 삭제에 실패했습니다.' };
   }
 };

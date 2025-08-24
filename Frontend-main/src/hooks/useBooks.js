@@ -33,7 +33,7 @@ export const useBooks = () => {
           );
         }
       } catch (err) {
-        console.warn('로컬 스토리지 읽기 실패:', err);
+
       }
       
       // 기본 책들과 업로드된 책들 합치기
@@ -42,7 +42,7 @@ export const useBooks = () => {
       
     } catch (err) {
       setError(err.message || '책 정보를 불러올 수 없습니다.');
-      console.error('Books fetch error:', err);
+
     } finally {
       setLoading(false);
     }
@@ -68,7 +68,7 @@ export const useBooks = () => {
         );
         localStorage.setItem('uploadedBooks', JSON.stringify(uploadedOnly));
       } catch (err) {
-        console.warn('로컬 스토리지 저장 실패:', err);
+
       }
       return updatedBooks;
     });
@@ -86,7 +86,7 @@ export const useBooks = () => {
         );
         localStorage.setItem('uploadedBooks', JSON.stringify(uploadedOnly));
       } catch (err) {
-        console.warn('로컬 스토리지 저장 실패:', err);
+
       }
       return updatedBooks;
     });

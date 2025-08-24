@@ -327,8 +327,16 @@ function GraphSplitArea({
     fitNodeIds: []
   });
 
+  // elements 상태 추가
+  const [elements, setElements] = React.useState([]);
+
   const handleSearchStateChange = React.useCallback((newState) => {
     setSearchState(newState);
+  }, []);
+
+  // GraphContainer에서 elements 업데이트
+  const handleElementsUpdate = React.useCallback((newElements) => {
+    setElements(newElements);
   }, []);
 
   return (
@@ -369,6 +377,7 @@ function GraphSplitArea({
         searchTerm={searchState.searchTerm}
         isSearchActive={searchState.isSearchActive}
         clearSearch={() => graphContainerRef.current?.clearSearch()}
+        elements={elements}
       />
       
       {/* 그래프 본문 */}
@@ -380,6 +389,7 @@ function GraphSplitArea({
           currentChapter={currentChapter}
           edgeLabelVisible={edgeLabelVisible}
           onSearchStateChange={handleSearchStateChange}
+          onElementsUpdate={handleElementsUpdate}
           filename={filename}
         />
       </div>

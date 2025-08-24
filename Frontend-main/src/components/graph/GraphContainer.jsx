@@ -11,12 +11,16 @@ const GraphContainer = forwardRef(({
   currentChapter, // 관계 변화
   edgeLabelVisible = true,
   onSearchStateChange,
+  onElementsUpdate, // elements 업데이트 콜백 추가
   filename, // filename prop 추가
   ...props
 }, ref) => {
   const [elements, setElements] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+
+  // 현재 챕터의 캐릭터 데이터 상태
+  const [currentChapterData, setCurrentChapterData] = useState(null);
 
   // 검색 상태 관리를 useGraphSearch 훅으로 처리
   const {
@@ -27,7 +31,7 @@ const GraphContainer = forwardRef(({
     finalElements,
     handleSearchSubmit,
     clearSearch
-  } = useGraphSearch(elements, onSearchStateChange);
+  } = useGraphSearch(elements, onSearchStateChange, currentChapterData);
 
 
 
@@ -63,6 +67,9 @@ const GraphContainer = forwardRef(({
         return;
       }
 
+      // 현재 챕터 데이터 저장 (검색 필터링용)
+      setCurrentChapterData(characters);
+
       // 캐릭터 데이터 매핑 생성
       const { idToName, idToDesc, idToMain, idToNames } = createCharacterMaps(characters);
 
@@ -76,6 +83,12 @@ const GraphContainer = forwardRef(({
         idToNames
       );
       setElements(els);
+      
+      // 부모 컴포넌트에 elements 업데이트 알림
+      if (onElementsUpdate) {
+        onElementsUpdate(els);
+      }
+      
       setLoading(false);
     } catch (err) {
       setElements([]);

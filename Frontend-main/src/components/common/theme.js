@@ -1,6 +1,3 @@
-/**
- * 디자인 시스템 테마 설정
- */
 export const theme = {
   colors: {
     primary: '#4F6DDE',

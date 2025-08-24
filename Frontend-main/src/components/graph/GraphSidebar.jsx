@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { Line } from "react-chartjs-2";
 import "chart.js/auto";
-import useRelationTimeline from "../../hooks/useRelationTimeline";
+import { useRelationData } from "../../hooks/useRelationData";
 import { safeNum, processRelationTags } from "../../utils/relationUtils";
 import { getRelationStyle } from "../../utils/relationStyles";
 import { getSlideInAnimation } from "../../utils/animations";
@@ -24,9 +24,7 @@ function GraphSidebar({
   filename,
   elements = [], // 현재 로드된 elements 추가
 }) {
-  console.log("=== GraphSidebar 렌더링 ===");
-  console.log("activeTooltip:", activeTooltip);
-  console.log("hasNoRelations:", hasNoRelations);
+
   
   const [viewMode, setViewMode] = useState("info");
   const [isNodeAppeared, setIsNodeAppeared] = useState(false);
@@ -36,7 +34,7 @@ function GraphSidebar({
   const id1 = safeNum(activeTooltip?.data?.source);
   const id2 = safeNum(activeTooltip?.data?.target);
 
-  const { points: timeline, labels, loading, maxEventCount } = useRelationTimeline({ id1, id2, chapterNum, eventNum, maxChapter, filename });
+  const { timeline, labels, loading, fetchData, getMaxEventCount } = useRelationData('standalone', id1, id2, chapterNum, eventNum, maxChapter);
 
   // 노드 등장 여부 확인 함수
   const checkNodeAppearance = useCallback(() => {
@@ -100,6 +98,13 @@ function GraphSidebar({
   useEffect(() => {
     checkNodeAppearance();
   }, [checkNodeAppearance]);
+
+  // 관계 데이터 가져오기
+  useEffect(() => {
+    if (activeTooltip && id1 && id2) {
+      fetchData();
+    }
+  }, [activeTooltip, id1, id2, chapterNum, eventNum, maxChapter, fetchData]);
 
   // positivity 값에 따른 색상과 텍스트 결정
   

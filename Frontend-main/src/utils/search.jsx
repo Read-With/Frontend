@@ -15,13 +15,24 @@ export function escapeRegExp(s) {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-export function buildSuggestions(elements, query) {
+export function buildSuggestions(elements, query, currentChapterData = null) {
   const trimmed = (query ?? '').trim();
   if (trimmed.length < 2) return [];
   const searchLower = trimmed.toLowerCase();
   const characterNodes = Array.isArray(elements) ? elements.filter(el => !el.data.source) : [];
 
-  const matches = characterNodes
+  // 현재 챕터의 캐릭터 데이터가 있는 경우, 해당 챕터에 존재하는 인물만 필터링
+  let filteredNodes = characterNodes;
+  if (currentChapterData && currentChapterData.characters) {
+    const chapterCharacterIds = new Set(
+      currentChapterData.characters.map(char => String(char.id))
+    );
+    filteredNodes = characterNodes.filter(node => 
+      chapterCharacterIds.has(node.data.id)
+    );
+  }
+
+  const matches = filteredNodes
     .filter(node => nodeMatchesQuery(node, searchLower))
     .map(node => {
       const label = node.data.label?.toLowerCase() || '';
@@ -56,16 +67,48 @@ export function nodeMatchesQuery(node, searchLower) {
   );
 }
 
-export function filterGraphElements(elements, searchTerm) {
+export function filterGraphElements(elements, searchTerm, currentChapterData = null) {
   if (!searchTerm || searchTerm.trim().length < 2) return elements;
   const searchLower = searchTerm.toLowerCase();
-  const matchingNodes = elements.filter(el => !el.data.source && nodeMatchesQuery(el, searchLower));
+  
+  // 현재 챕터의 캐릭터 데이터가 있는 경우, 해당 챕터에 존재하는 인물만 필터링
+  let matchingNodes;
+  if (currentChapterData && currentChapterData.characters) {
+    const chapterCharacterIds = new Set(
+      currentChapterData.characters.map(char => String(char.id))
+    );
+    matchingNodes = elements.filter(el => 
+      !el.data.source && 
+      nodeMatchesQuery(el, searchLower) && 
+      chapterCharacterIds.has(el.data.id)
+    );
+  } else {
+    // 챕터 데이터가 없는 경우 기존 로직 사용
+    matchingNodes = elements.filter(el => !el.data.source && nodeMatchesQuery(el, searchLower));
+  }
+  
   const matchingNodeIds = new Set(matchingNodes.map(node => node.data.id));
+  
+  // 검색된 인물과 연결된 모든 간선 찾기
   const connectedEdges = elements.filter(el => 
     el.data.source && 
     (matchingNodeIds.has(el.data.source) || matchingNodeIds.has(el.data.target))
   );
-  return [...matchingNodes, ...connectedEdges];
+  
+  // 연결된 간선의 source와 target 노드들도 포함
+  const connectedNodeIds = new Set();
+  connectedEdges.forEach(edge => {
+    connectedNodeIds.add(edge.data.source);
+    connectedNodeIds.add(edge.data.target);
+  });
+  
+  // 검색된 노드와 연결된 모든 노드들 추가
+  const allConnectedNodes = elements.filter(el => 
+    !el.data.source && 
+    connectedNodeIds.has(el.data.id)
+  );
+  
+  return [...allConnectedNodes, ...connectedEdges];
 }
 
 /**

@@ -89,8 +89,7 @@ function StandaloneRelationGraph({
 
   // activeTooltip 상태 변화 감지
   useEffect(() => {
-    console.log("=== activeTooltip 상태 변화 ===");
-    console.log("activeTooltip:", activeTooltip);
+    // activeTooltip 상태 변화 처리
   }, [activeTooltip]);
 
   const { tapNodeHandler, tapEdgeHandler, tapBackgroundHandler, clearSelection, clearSelectionOnly, clearAll } = useGraphInteractions({
@@ -102,13 +101,8 @@ function StandaloneRelationGraph({
       setActiveTooltip(null);
     },
     onShowNodeTooltip: ({ node, nodeCenter, mouseX, mouseY }) => {
-      console.log("=== onShowNodeTooltip 콜백 호출됨 ===");
-      console.log("node:", node.id(), node.data());
-      console.log("mouseX:", mouseX, "mouseY:", mouseY);
       const tooltipData = { type: 'node', id: node.id(), x: mouseX, y: mouseY, data: node.data(), nodeCenter };
-      console.log("설정할 activeTooltip:", tooltipData);
       setActiveTooltip(tooltipData);
-      console.log("setActiveTooltip 호출 완료");
     },
     onShowEdgeTooltip: ({ edge, absoluteX, absoluteY }) => {
       setActiveTooltip({
@@ -457,14 +451,7 @@ function StandaloneRelationGraph({
           <div className="flex-1 relative overflow-hidden" style={{ width: '100%', height: '100%' }}>
                       {/* 툴팁 렌더링 */}
           <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none', zIndex: 9999 }}>
-            {(() => {
-              console.log("=== 툴팁 렌더링 조건 확인 ===");
-              console.log("activeTooltip:", activeTooltip);
-              console.log("activeTooltip?.type:", activeTooltip?.type);
-              console.log("activeTooltip?.data:", activeTooltip?.data);
-              console.log("조건 만족:", activeTooltip?.type === 'node' && activeTooltip.data);
-              return null;
-            })()}
+
             {activeTooltip?.type === 'node' && activeTooltip.data && (
                 <GraphNodeTooltip
                   key={`node-tooltip-${activeTooltip.id}`}
@@ -593,15 +580,7 @@ function StandaloneRelationGraph({
         {/* 툴팁 렌더링 - 그래프 단독 페이지가 아닐 때만 */}
         {!isStandaloneGraphPage && (
           <>
-            {(() => {
-              console.log("=== 툴팁 렌더링 조건 확인 ===");
-              console.log("isStandaloneGraphPage:", isStandaloneGraphPage);
-              console.log("activeTooltip:", activeTooltip);
-              console.log("activeTooltip?.type:", activeTooltip?.type);
-              console.log("activeTooltip?.data:", activeTooltip?.data);
-              console.log("조건 만족:", activeTooltip?.type === 'node' && activeTooltip.data);
-              return null;
-            })()}
+
             <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none', zIndex: 9999 }}>
                 {activeTooltip?.type === 'node' && activeTooltip.data && (
                   <GraphNodeTooltip
@@ -711,10 +690,7 @@ function StandaloneRelationGraph({
              {/* 그래프 단독 페이지에서 슬라이드바 렌더링 */}
        {isStandaloneGraphPage && (
          <>
-           {console.log("=== GraphSidebar 렌더링 조건 확인 ===")}
-           {console.log("isStandaloneGraphPage:", isStandaloneGraphPage)}
-           {console.log("activeTooltip:", activeTooltip)}
-           {console.log("hasNoRelations:", !memoizedElements || memoizedElements.length === 0)}
+
            <GraphSidebar
              activeTooltip={activeTooltip}
              onClose={handleCloseTooltip}
