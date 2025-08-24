@@ -1,5 +1,13 @@
 import { useState } from 'react';
 
+// 파일 검증 상수들
+export const FILE_CONSTRAINTS = {
+  MAX_SIZE: 50 * 1024 * 1024, // 50MB
+  ALLOWED_TYPES: ['application/epub+zip', 'application/epub'],
+  ALLOWED_EXTENSIONS: ['.epub'],
+  ACCEPT_ATTRIBUTE: '.epub,application/epub+zip'
+};
+
 /**
  * 파일 업로드를 관리하는 커스텀 훅
  */
@@ -10,17 +18,14 @@ export const useFileUpload = () => {
 
   // EPUB 파일인지 검증
   const validateEpubFile = (file) => {
-    const allowedTypes = ['application/epub+zip', 'application/epub'];
-    const allowedExtensions = ['.epub'];
-    
     // MIME 타입 체크
-    if (!allowedTypes.includes(file.type) && !file.name.toLowerCase().endsWith('.epub')) {
+    if (!FILE_CONSTRAINTS.ALLOWED_TYPES.includes(file.type) && 
+        !file.name.toLowerCase().endsWith('.epub')) {
       return { valid: false, error: 'EPUB 파일만 업로드 가능합니다.' };
     }
     
-    // 파일 크기 체크 (50MB 제한)
-    const maxSize = 50 * 1024 * 1024; // 50MB
-    if (file.size > maxSize) {
+    // 파일 크기 체크
+    if (file.size > FILE_CONSTRAINTS.MAX_SIZE) {
       return { valid: false, error: '파일 크기는 50MB를 초과할 수 없습니다.' };
     }
     

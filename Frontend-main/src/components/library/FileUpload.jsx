@@ -1,6 +1,6 @@
 import React, { useRef, useState } from 'react';
 import PropTypes from 'prop-types';
-import { useFileUpload } from '../../hooks/useFileUpload';
+import { useFileUpload, FILE_CONSTRAINTS } from '../../hooks/useFileUpload';
 import { theme } from '../common/theme';
 
 const FileUpload = ({ onUploadSuccess, onClose }) => {
@@ -178,7 +178,7 @@ const FileUpload = ({ onUploadSuccess, onClose }) => {
                 }}>
                   파일을 드래그하거나 클릭해서 업로드하세요<br/>
                   <small style={{ fontSize: '12px', color: '#999' }}>
-                    최대 50MB, .epub 파일만 지원됩니다
+                    최대 {Math.round(FILE_CONSTRAINTS.MAX_SIZE / (1024 * 1024))}MB, .epub 파일만 지원됩니다
                   </small>
                 </p>
               </div>
@@ -186,7 +186,7 @@ const FileUpload = ({ onUploadSuccess, onClose }) => {
             <input
               ref={inputRef}
               type="file"
-              accept=".epub,application/epub+zip"
+              accept={FILE_CONSTRAINTS.ACCEPT_ATTRIBUTE}
               style={{ display: 'none' }}
               onChange={handleChange}
             />
