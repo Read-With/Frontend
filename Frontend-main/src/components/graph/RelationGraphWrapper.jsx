@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect } from "react";
 import StandaloneRelationGraph from "./RelationGraph_Graphpage";
 import EdgeLabelToggle from "./tooltip/EdgeLabelToggle";
 import GraphControls from "./GraphControls";
@@ -6,11 +6,9 @@ import "./RelationGraph.css";
 import { useNavigate, useParams } from "react-router-dom";
 import { FaTimes, FaBars, FaChevronLeft } from 'react-icons/fa';
 
-import { convertRelationsToElements, calcGraphDiff } from '../../utils/graphDataUtils.js';
-import { getCharactersData, getEventDataByIndex, getLastEventIndexForChapter, getFolderKeyFromFilename, getDetectedMaxChapter } from '../../utils/graphData';
-import { normalizeRelation, isValidRelation } from '../../utils/relationUtils';
 import { DEFAULT_LAYOUT, SEARCH_LAYOUT } from '../../utils/graphStyles';
 import { useGraphSearch } from '../../hooks/useGraphSearch.jsx';
+import { useGraphDataLoader } from '../../hooks/useGraphDataLoader.js';
 
 function RelationGraphWrapper() {
   const navigate = useNavigate();
@@ -20,17 +18,22 @@ function RelationGraphWrapper() {
     const saved = localStorage.getItem('lastGraphChapter');
     return saved ? Number(saved) : 1;
   });
-  const [elements, setElements] = useState([]);
-  const [maxChapter, setMaxChapter] = useState(1);
   const [hideIsolated, setHideIsolated] = useState(true);
-  const [eventNum, setEventNum] = useState(0);
-  const [maxEventNum, setMaxEventNum] = useState(0);
   const [graphViewState, setGraphViewState] = useState(null);
-  const [newNodeIds, setNewNodeIds] = useState([]);
-  const [chapterEvents, setChapterEvents] = useState([]);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [edgeLabelVisible, setEdgeLabelVisible] = useState(true);
-  const [currentChapterData, setCurrentChapterData] = useState(null);
+  
+  // 통합 데이터 로딩 훅 사용
+  const {
+    elements,
+    newNodeIds,
+    currentChapterData,
+    maxEventNum,
+    eventNum,
+    maxChapter,
+    loading,
+    error
+  } = useGraphDataLoader(filename, currentChapter);
   
   // 검색 관련 상태를 useGraphSearch 훅으로 관리
   const {
@@ -52,98 +55,8 @@ function RelationGraphWrapper() {
   // 레이아웃 상태
   const [currentLayout, setCurrentLayout] = useState(DEFAULT_LAYOUT);
 
-  // 이전 elements 참조 (diff 계산용)
-  const prevElementsRef = useRef([]);
-
-  // maxChapter를 동적으로 설정
+  // 챕터 변경 시 localStorage에 저장
   useEffect(() => {
-    const folderKey = getFolderKeyFromFilename(filename);
-    const detectedMaxChapter = getDetectedMaxChapter(folderKey);
-    setMaxChapter(detectedMaxChapter);
-  }, [filename]);
-
-  // 챕터 변경 시 해당 챕터의 마지막 이벤트 번호를 찾아서 elements 세팅
-  useEffect(() => {
-    console.log('RelationGraphWrapper: Chapter changed to', currentChapter);
-    
-    // filename을 기반으로 folderKey 결정
-    const folderKey = getFolderKeyFromFilename(filename);
-    console.log('RelationGraphWrapper: folderKey', folderKey);
-    
-    // graphData.js를 사용하여 데이터 로드
-    const lastEventIndex = getLastEventIndexForChapter(folderKey, currentChapter);
-    console.log('RelationGraphWrapper: lastEventIndex', lastEventIndex);
-    
-    if (lastEventIndex === 0) {
-      console.log('RelationGraphWrapper: No events found for chapter', currentChapter);
-      setElements([]);
-      setNewNodeIds([]);
-      setMaxEventNum(0);
-      setEventNum(0);
-      return;
-    }
-
-    setMaxEventNum(lastEventIndex);
-    setEventNum(lastEventIndex);
-
-    // 마지막 이벤트 데이터 로드
-    const eventData = getEventDataByIndex(folderKey, currentChapter, lastEventIndex);
-    console.log('RelationGraphWrapper: eventData', eventData ? 'loaded' : 'not found');
-    
-    if (!eventData) {
-      console.log('RelationGraphWrapper: No event data found');
-      setElements([]);
-      setNewNodeIds([]);
-      return;
-    }
-
-    // 캐릭터 데이터 로드
-    const charData = getCharactersData(folderKey, currentChapter);
-    console.log('RelationGraphWrapper: charData', charData ? 'loaded' : 'not found');
-    
-    // 현재 챕터 데이터 저장 (검색 필터링용)
-    setCurrentChapterData(charData);
-    
-    // elements 변환 (viewer와 동일하게 idToName에 common_name 우선)
-    let idToName = {}, idToDesc = {}, idToMain = {}, idToNames = {};
-    
-    if (charData?.characters && Array.isArray(charData.characters)) {
-      charData.characters.forEach(c => {
-        const id = String(c.id);
-        idToName[id] = c.common_name || c.name || id;
-        idToDesc[id] = c.description || '';
-        idToMain[id] = c.main_character || false;
-        idToNames[id] = Array.isArray(c.names) ? c.names : [];
-      });
-    }
-    
-    console.log('RelationGraphWrapper: idToName mapping created', Object.keys(idToName).length, 'characters');
-    
-    // relationUtils.js를 사용하여 관계 데이터 정규화 및 검증
-    const normalizedRelations = (eventData.relations || [])
-      .map(rel => normalizeRelation(rel))
-      .filter(rel => isValidRelation(rel));
-    
-    console.log('RelationGraphWrapper: normalizedRelations', normalizedRelations.length, 'relations');
-    
-    const convertedElements = convertRelationsToElements(
-      normalizedRelations,
-      idToName,
-      idToDesc,
-      idToMain,
-      idToNames
-    );
-    
-    console.log('RelationGraphWrapper: convertedElements', convertedElements.length, 'elements');
-    
-    // graphDiff.js를 사용하여 변경사항 계산
-    const diff = calcGraphDiff(prevElementsRef.current, convertedElements);
-    prevElementsRef.current = convertedElements;
-    
-    setElements(convertedElements);
-    setNewNodeIds(diff.added.filter(el => !el.data?.source).map(el => el.data.id));
-    
-    // localStorage에 현재 챕터 저장
     localStorage.setItem('lastGraphChapter', currentChapter.toString());
   }, [currentChapter]);
 
@@ -422,32 +335,34 @@ function RelationGraphWrapper() {
 
         {/* 그래프 본문 */}
         <div className="flex-1 relative overflow-hidden" style={{ width: '100%', height: '100%' }}>
-          {maxEventNum > 0 ? (
-            elements.length > 0 ? (
-              <StandaloneRelationGraph 
-                elements={elements} 
-                inViewer={false}
-                fullScreen={true}
-                graphViewState={graphViewState}
-                setGraphViewState={setGraphViewState}
-                chapterNum={currentChapter}
-                eventNum={eventNum}
-                hideIsolated={hideIsolated}
-                maxEventNum={maxEventNum}
-                newNodeIds={newNodeIds}
-                maxChapter={maxChapter}
-                edgeLabelVisible={edgeLabelVisible}
-                fitNodeIds={fitNodeIds}
-                searchTerm={searchTerm}
-                isSearchActive={isSearchActive}
-                filteredElements={filteredElements}
-                layout={currentLayout}
-              />
-            ) : (
-              <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, color: '#6C8EFF' }}>
-                그래프 데이터를 불러오는 중...
-              </div>
-            )
+          {loading ? (
+            <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, color: '#6C8EFF' }}>
+              그래프 데이터를 불러오는 중...
+            </div>
+          ) : error ? (
+            <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, color: '#ef4444', textAlign: 'center', padding: '20px' }}>
+              {error}
+            </div>
+          ) : maxEventNum > 0 && elements.length > 0 ? (
+            <StandaloneRelationGraph 
+              elements={elements} 
+              inViewer={false}
+              fullScreen={true}
+              graphViewState={graphViewState}
+              setGraphViewState={setGraphViewState}
+              chapterNum={currentChapter}
+              eventNum={eventNum}
+              hideIsolated={hideIsolated}
+              maxEventNum={maxEventNum}
+              newNodeIds={newNodeIds}
+              maxChapter={maxChapter}
+              edgeLabelVisible={edgeLabelVisible}
+              fitNodeIds={fitNodeIds}
+              searchTerm={searchTerm}
+              isSearchActive={isSearchActive}
+              filteredElements={filteredElements}
+              layout={currentLayout}
+            />
           ) : (
             <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, color: '#6C8EFF' }}>
               이벤트 정보를 불러오는 중...

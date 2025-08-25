@@ -1,8 +1,58 @@
 // 그래프 데이터 처리 통합 유틸리티
+import { getCharactersData, createCharacterMaps } from './graphData';
+import { normalizeRelation, isValidRelation } from './relationUtils';
 
 // 공통 헬퍼 함수들
 const validateElements = (elements) => elements?.filter(e => e && e.id) || [];
 const createElementMap = (elements) => new Map(elements.map(e => [e.id, e]));
+
+/**
+ * 공통 데이터 로딩 함수 - GraphContainer와 RelationGraphWrapper에서 공통으로 사용
+ * @param {string} folderKey - 폴더 키
+ * @param {number} chapter - 챕터 번호
+ * @param {number} eventIndex - 이벤트 인덱스
+ * @param {Function} getEventDataFunc - 이벤트 데이터 가져오는 함수 (getEventData 또는 getEventDataByIndex)
+ * @returns {object} 로딩된 데이터
+ */
+export function loadGraphData(folderKey, chapter, eventIndex, getEventDataFunc) {
+  // 이벤트 데이터 로드
+  const eventData = getEventDataFunc(folderKey, chapter, eventIndex);
+  
+  if (!eventData) {
+    throw new Error('이벤트 데이터를 찾을 수 없습니다.');
+  }
+
+  // 캐릭터 데이터 로드
+  const charData = getCharactersData(folderKey, chapter);
+  
+  if (!charData) {
+    throw new Error('캐릭터 데이터를 찾을 수 없습니다.');
+  }
+
+  // 캐릭터 매핑 생성
+  const { idToName, idToDesc, idToMain, idToNames } = createCharacterMaps(charData);
+
+  // 관계 데이터 처리
+  const normalizedRelations = (eventData.relations || [])
+    .map(rel => normalizeRelation(rel))
+    .filter(rel => isValidRelation(rel));
+
+  // 요소 변환
+  const convertedElements = convertRelationsToElements(
+    normalizedRelations,
+    idToName,
+    idToDesc,
+    idToMain,
+    idToNames
+  );
+
+  return {
+    elements: convertedElements,
+    charData,
+    eventData,
+    normalizedRelations
+  };
+}
 
 /**
  * 관계 데이터를 그래프 요소로 변환
@@ -99,10 +149,6 @@ export function convertRelationsToElements(relations, idToName, idToDesc, idToMa
     ...nodes.sort((a, b) => a.data.id.localeCompare(b.data.id)),
     ...edges.sort((a, b) => a.data.id.localeCompare(b.data.id))
   ];
-  
-  console.log('convertRelationsToElements: Created', nodes.length, 'nodes and', edges.length, 'edges');
-  console.log('convertRelationsToElements: Sample node', nodes[0]);
-  console.log('convertRelationsToElements: Sample edge', edges[0]);
   
   return result;
 }

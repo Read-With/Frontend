@@ -1,8 +1,7 @@
 import React, { useEffect, useState, forwardRef, useImperativeHandle, useMemo, useCallback, useRef } from "react";
 import ViewerRelationGraph from "./RelationGraph_Viewerpage";
-import { convertRelationsToElements } from "../../utils/graphDataUtils.js";
-import { getEventData, getCharactersData, createCharacterMaps, getFolderKeyFromFilename, getDetectedMaxChapter } from "../../utils/graphData";
-import { processRelations } from "../../utils/relationUtils";
+import { loadGraphData } from "../../utils/graphDataUtils.js";
+import { getEventData, getFolderKeyFromFilename, getDetectedMaxChapter } from "../../utils/graphData";
 import { useGraphSearch } from "../../hooks/useGraphSearch.jsx";
 
 const GraphContainer = forwardRef(({
@@ -82,46 +81,19 @@ const GraphContainer = forwardRef(({
 
     try {
       setLoading(true);
+      setError(null);
+      
       const eventId = currentEvent.event_id || 0; // event_id가 없으면 0으로 설정
       const chapter = currentEvent.chapter || 1;
       
       // filename을 기반으로 folderKey 결정
       const folderKey = getFolderKeyFromFilename(filename);
       
-      // 이벤트 데이터 가져오기 (event_id에 1을 더해서 파일 찾기)
-      const eventData = getEventData(folderKey, chapter, eventId);
-      if (!eventData) {
-        setElements([]);
-        setError("해당 eventId의 관계 데이터가 없습니다.");
-        setLoading(false);
-        return;
-      }
-
-      // 캐릭터 데이터 가져오기
-      const characters = getCharactersData(folderKey, chapter);
-      if (!characters) {
-        setElements([]);
-        setError("캐릭터 데이터를 찾을 수 없습니다.");
-        setLoading(false);
-        return;
-      }
-
-      // 현재 챕터 데이터 저장 (검색 필터링용)
-      setCurrentChapterData(characters);
-
-      // 캐릭터 데이터 매핑 생성
-      const { idToName, idToDesc, idToMain, idToNames } = createCharacterMaps(characters);
-
-      // 관계 데이터 처리
-      const relations = processRelations(eventData.relations);
-      const els = convertRelationsToElements(
-        relations,
-        idToName,
-        idToDesc,
-        idToMain,
-        idToNames
-      );
+      // 공통 데이터 로딩 함수 사용
+      const { elements: els, charData } = loadGraphData(folderKey, chapter, eventId, getEventData);
+      
       setElements(els);
+      setCurrentChapterData(charData);
       
       // 부모 컴포넌트에 elements 업데이트 알림
       if (onElementsUpdate) {
@@ -131,20 +103,12 @@ const GraphContainer = forwardRef(({
       setLoading(false);
     } catch (err) {
       setElements([]);
-      setError("데이터 처리 중 오류 발생: " + err);
+      setError("데이터 처리 중 오류 발생: " + err.message);
       setLoading(false);
     }
-  }, [currentEvent]);
+  }, [currentEvent, filename, onElementsUpdate]);
 
-  // Memoize character id maps by chapter
-  const characterMaps = useMemo(() => {
-    if (!currentEvent) return null;
-    const chapter = currentEvent.chapter || 1;
-    const folderKey = getFolderKeyFromFilename(filename);
-    const characters = getCharactersData(folderKey, chapter);
-    if (!characters) return null;
-    return createCharacterMaps(characters);
-  }, [currentEvent, filename]);
+
 
   // 검색된 요소들 또는 원래 요소들 사용
   const finalElements = useMemo(() => {
