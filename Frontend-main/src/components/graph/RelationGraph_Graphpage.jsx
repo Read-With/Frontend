@@ -245,9 +245,6 @@ function StandaloneRelationGraph({
   );
 
 
-
-
-
   // === 오직 chapter_node_positions_{chapterNum}만 사용하여 노드 위치 복원 (절대적 위치) ===
 
   // 개선된 코드: chapterNum, eventNum이 바뀔 때만 로딩 오버레이 표시

@@ -289,54 +289,47 @@ function RelationGraphWrapper() {
           boxShadow: '0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.04)',
           zIndex: 10001,
           display: 'flex',
-          flexDirection: 'column',
-          paddingTop: 0,
-          paddingLeft: 0,
-          paddingRight: 0,
+          flexDirection: 'row',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 12,
+          paddingLeft: 16,
+          paddingRight: 16,
+          height: 54,
+          flexWrap: 'nowrap',
+          overflow: 'hidden',
         }}
         onWheel={e => e.preventDefault()}
         >
-          {/* 상단바: 독립 인물 버튼 + 검색 + 닫기 버튼 */}
+          {/* 왼쪽 영역: 검색 컨트롤 + 독립 인물 토글 */}
           <div style={{ 
             display: 'flex', 
             flexDirection: 'row', 
             alignItems: 'center', 
-            justifyContent: 'space-between', 
-            gap: 12, 
-            paddingLeft: 16, 
-            paddingRight: 16, 
-            paddingTop: 0, 
-            paddingBottom: 0,
-            height: 54, 
-            width: '100%',
-            background: '#fff',
+            gap: 12,
+            flex: 1,
+            minWidth: 0,
+            overflow: 'hidden',
+            flexWrap: 'nowrap',
           }}>
-            {/* 왼쪽 영역: 검색 컨트롤 + 독립 인물 토글 */}
-            <div style={{ 
-              display: 'flex', 
-              flexDirection: 'row', 
-              alignItems: 'center', 
-              gap: 12,
-              flex: 1,
-            }}>
-              
-              {/* 그래프 검색 기능 */}
-              <GraphControls
-                elements={elements}
-                currentChapterData={currentChapterData}
-                searchTerm={searchTerm}
-                isSearchActive={isSearchActive}
-                onSearchSubmit={handleSearchSubmit}
-                onClearSearch={clearSearch}
-              />
-              
-              {/* 간선 라벨 스위치 토글 */}
-              <EdgeLabelToggle
-                isVisible={edgeLabelVisible}
-                onToggle={() => setEdgeLabelVisible(!edgeLabelVisible)}
-              />
-              
-              {/* 독립 인물 버튼 */}
+            
+            {/* 그래프 검색 기능 */}
+            <GraphControls
+              elements={elements}
+              currentChapterData={currentChapterData}
+              searchTerm={searchTerm}
+              isSearchActive={isSearchActive}
+              onSearchSubmit={handleSearchSubmit}
+              onClearSearch={clearSearch}
+            />
+            
+            {/* 간선 라벨 스위치 토글 */}
+            <EdgeLabelToggle
+              isVisible={edgeLabelVisible}
+              onToggle={() => setEdgeLabelVisible(!edgeLabelVisible)}
+            />
+            
+                          {/* 독립 인물 버튼 */}
               <button
                 onClick={() => setHideIsolated(!hideIsolated)}
                 style={{
@@ -360,61 +353,58 @@ function RelationGraphWrapper() {
                 }}
                 title={hideIsolated ? '독립 인물을 표시합니다' : '독립 인물을 숨깁니다'}
               >
-                <div style={{
-                  width: 8,
-                  height: 8,
-                  borderRadius: '50%',
-                  background: hideIsolated ? '#6C8EFF' : '#22336b',
-                  opacity: hideIsolated ? 0.6 : 1,
-                }} />
-                {hideIsolated ? '독립 인물 표시' : '독립 인물 숨기기'}
-              </button>
-            </div>
-            
-            {/* 중앙 영역: 여백 */}
-            <div style={{ flex: 1 }} />
-            
-            {/* 오른쪽 영역: 뷰어로 돌아가기 (상대적으로 왼쪽으로 이동) */}
-            <div style={{ 
-              display: 'flex', 
-              flexDirection: 'row', 
-              alignItems: 'center', 
-              gap: 8,
-              marginRight: '28px',
-            }}>
-              <button
-                onClick={() => navigate(`/user/viewer/${filename}`)}
-                style={{
-                  height: 36,
-                  width: 36,
-                  borderRadius: 8,
-                  border: '1.5px solid #e3e6ef',
-                  background: '#fff',
-                  color: '#22336b',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  cursor: 'pointer',
-                  transition: 'all 0.2s ease',
-                  outline: 'none',
-                  fontSize: 14,
-                  boxShadow: '0 2px 4px rgba(0,0,0,0.05)',
-                }}
-                title="뷰어로 돌아가기"
-                onMouseEnter={(e) => {
-                  e.target.style.background = '#f8f9fc';
-                  e.target.style.color = '#6C8EFF';
-                  e.target.style.transform = 'scale(1.05)';
-                }}
-                onMouseLeave={(e) => {
-                  e.target.style.background = '#fff';
-                  e.target.style.color = '#22336b';
-                  e.target.style.transform = 'scale(1)';
-                }}
-              >
-                <FaTimes />
-              </button>
-            </div>
+              <div style={{
+                width: 8,
+                height: 8,
+                borderRadius: '50%',
+                background: hideIsolated ? '#6C8EFF' : '#22336b',
+                opacity: hideIsolated ? 0.6 : 1,
+              }} />
+              {hideIsolated ? '독립 인물 표시' : '독립 인물 숨기기'}
+            </button>
+          </div>
+          
+          {/* 오른쪽 영역: 뷰어로 돌아가기 */}
+          <div style={{ 
+            display: 'flex', 
+            flexDirection: 'row', 
+            alignItems: 'center', 
+            gap: 8,
+            flexShrink: 0,
+            marginRight: '20px',
+          }}>
+            <button
+              onClick={() => navigate(`/user/viewer/${filename}`)}
+              style={{
+                height: 36,
+                width: 36,
+                borderRadius: 8,
+                border: '1.5px solid #e3e6ef',
+                background: '#fff',
+                color: '#22336b',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                cursor: 'pointer',
+                transition: 'all 0.2s ease',
+                outline: 'none',
+                fontSize: 14,
+                boxShadow: '0 2px 4px rgba(0,0,0,0.05)',
+              }}
+              title="뷰어로 돌아가기"
+              onMouseEnter={(e) => {
+                e.target.style.background = '#f8f9fc';
+                e.target.style.color = '#6C8EFF';
+                e.target.style.transform = 'scale(1.05)';
+              }}
+              onMouseLeave={(e) => {
+                e.target.style.background = '#fff';
+                e.target.style.color = '#22336b';
+                e.target.style.transform = 'scale(1)';
+              }}
+            >
+              <FaTimes />
+            </button>
           </div>
         </div>
 
