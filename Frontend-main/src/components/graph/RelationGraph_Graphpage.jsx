@@ -19,23 +19,7 @@ const getNodeSize = () => getNodeSizeUtil('graph');
 const getEdgeStyle = () => getEdgeStyleUtil('graph');
 
 const getWideLayout = () => {
-  if (typeof window !== 'undefined') {
-    const path = window.location.pathname;
-    if (path.includes('/user/graph/')) {
-      // 퍼짐을 극대화한 레이아웃
-      return {
-        ...DEFAULT_LAYOUT,
-        randomSeed: 22,
-        nodeRepulsion: 2000,
-        idealEdgeLength: 400,
-        componentSpacing: 500,
-        nodeOverlap: 0,
-        avoidOverlap: true,
-        nodeSeparation: 60,
-      };
-    }
-  }
-  return DEFAULT_LAYOUT;
+  return { name: 'preset' };
 };
 
 function StandaloneRelationGraph({ 
@@ -142,11 +126,13 @@ function StandaloneRelationGraph({
 
   // 검색된 요소들 또는 원래 요소들 사용
   const finalElements = useMemo(() => {
-    if (filteredElements && filteredElements.length > 0) {
+    // 검색이 활성화되어 있고 필터된 요소가 있으면 사용
+    if (isSearchActive && filteredElements && filteredElements.length > 0) {
       return filteredElements;
     }
+    // 그렇지 않으면 원본 elements 사용
     return sortedElements;
-  }, [filteredElements, sortedElements]);
+  }, [isSearchActive, filteredElements, sortedElements]);
 
   // currentEventJson이 내용이 같으면 참조도 같게 useMemo로 캐싱
   const stableEventJson = useMemo(() => graphViewState ? JSON.stringify(graphViewState) : '', [graphViewState]);
@@ -416,6 +402,21 @@ function StandaloneRelationGraph({
 
   const nodeSize = getNodeSize();
 
+  // 디버깅을 위한 로그 추가
+  useEffect(() => {
+    console.log('StandaloneRelationGraph Debug:', {
+      elements: elements?.length,
+      finalElements: finalElements?.length,
+      memoizedElements: memoizedElements?.length,
+      sortedElements: sortedElements?.length,
+      isSearchActive,
+      filteredElements: filteredElements?.length,
+      chapterNum,
+      eventNum,
+      maxChapter
+    });
+  }, [elements, finalElements, memoizedElements, sortedElements, isSearchActive, filteredElements, chapterNum, eventNum, maxChapter]);
+
   const handleCanvasClick = (e) => {
     // 리플 효과만 처리
     const container = e.currentTarget;
@@ -547,7 +548,7 @@ function StandaloneRelationGraph({
                      />
                    ))}
                    <CytoscapeGraphUnified
-                     elements={sortedElements}
+                     elements={finalElements}
                      stylesheet={memoizedStylesheet}
                      layout={memoizedLayout}
                      tapNodeHandler={tapNodeHandler}
@@ -561,6 +562,9 @@ function StandaloneRelationGraph({
                      searchTerm={searchTerm}
                      isSearchActive={isSearchActive}
                      filteredElements={filteredElements}
+                     onLayoutComplete={() => {
+                       console.log('Layout completed for fullScreen mode');
+                     }}
                    />
                  </>
                )}
@@ -668,7 +672,7 @@ function StandaloneRelationGraph({
                 />
               ))}
               <CytoscapeGraphUnified
-                elements={sortedElements}
+                elements={finalElements}
                 stylesheet={memoizedStylesheet}
                 layout={memoizedLayout}
                 tapNodeHandler={tapNodeHandler}
@@ -682,6 +686,9 @@ function StandaloneRelationGraph({
                 searchTerm={searchTerm}
                 isSearchActive={isSearchActive}
                 filteredElements={filteredElements}
+                onLayoutComplete={() => {
+                  console.log('Layout completed for normal mode');
+                }}
               />
             </>
           )}

@@ -29,9 +29,14 @@ const CytoscapeGraphUnified = ({
 
   // Cytoscape 인스턴스 생성
   useEffect(() => {
-    if (!containerRef.current) return;
+    console.log('CytoscapeGraphUnified: Creating Cytoscape instance');
+    if (!containerRef.current) {
+      console.log('CytoscapeGraphUnified: No container ref');
+      return;
+    }
     let cyInstance = externalCyRef?.current;
     if (!cyInstance || typeof cyInstance.container !== 'function') {
+      console.log('CytoscapeGraphUnified: Creating new Cytoscape instance');
       cyInstance = cytoscape({
         container: containerRef.current,
         elements: [],
@@ -50,7 +55,9 @@ const CytoscapeGraphUnified = ({
         desktopTapThreshold: 4,
       });
       if (externalCyRef) externalCyRef.current = cyInstance;
+      console.log('CytoscapeGraphUnified: Cytoscape instance created successfully');
     } else {
+      console.log('CytoscapeGraphUnified: Using existing Cytoscape instance');
       if (cyInstance.container() !== containerRef.current) {
         cyInstance.mount(containerRef.current);
       }
@@ -80,7 +87,7 @@ const CytoscapeGraphUnified = ({
     });
     
     return () => {};
-  }, [containerRef.current, stylesheet, externalCyRef]);
+  }, []); // 의존성 배열을 빈 배열로 변경하여 한 번만 실행
 
   // 이벤트 핸들러 등록 (한 번만)
   useEffect(() => {
@@ -104,29 +111,44 @@ const CytoscapeGraphUnified = ({
 
   // elements diff patch 및 스타일/레이아웃 적용
   useEffect(() => {
+    console.log('CytoscapeGraphUnified: Elements update effect triggered');
     const cy = externalCyRef?.current;
-    if (!cy) return;
+    if (!cy) {
+      console.log('CytoscapeGraphUnified: No Cytoscape instance available');
+      return;
+    }
+    
+    console.log('CytoscapeGraphUnified: Processing elements', elements?.length || 0);
     
     // 디버깅: 간선 데이터 확인 (필요시 주석 해제)
 
     
     if (!elements || elements.length === 0) {
+      console.log('CytoscapeGraphUnified: No elements to render, clearing graph');
       cy.elements().remove();
       setIsGraphVisible(false);
       return;
     }
+    
+    console.log('CytoscapeGraphUnified: Starting batch update');
     cy.batch(() => {
       // 기존 노드/엣지 id 집합
       const prevNodeIds = new Set(cy.nodes().map(n => n.id()));
       const prevEdgeIds = new Set(cy.edges().map(e => e.id()));
       const nextNodeIds = new Set(elements.filter(e => !e.data.source).map(e => e.data.id));
       const nextEdgeIds = new Set(elements.filter(e => e.data.source).map(e => e.data.id));
+      
+      console.log('CytoscapeGraphUnified: Current nodes', prevNodeIds.size, 'edges', prevEdgeIds.size);
+      console.log('CytoscapeGraphUnified: New nodes', nextNodeIds.size, 'edges', nextEdgeIds.size);
+      
       // 삭제
       cy.nodes().forEach(n => { if (!nextNodeIds.has(n.id())) n.remove(); });
       cy.edges().forEach(e => { if (!nextEdgeIds.has(e.id())) e.remove(); });
       // 추가
       const nodes = elements.filter(e => !e.data.source && !e.data.target);
       const edges = elements.filter(e => e.data.source && e.data.target);
+      
+      console.log('CytoscapeGraphUnified: Adding nodes', nodes.length, 'edges', edges.length);
       
       // 새로운 노드들에 대해 랜덤한 초기 위치 할당 (겹침 완화)
       const NODE_SIZE = nodeSize;
@@ -157,34 +179,37 @@ const CytoscapeGraphUnified = ({
         placedPositions.push({ x, y });
       });
       
-             cy.add(nodes);
-       cy.add(edges);
-       // 반드시 preset 레이아웃 실행
-       cy.layout({ name: 'preset' }).run();
-       // 스타일 적용
-       if (stylesheet) cy.style(stylesheet);
-       // 레이아웃 적용
-       if (layout && layout.name !== 'preset') {
-         const layoutInstance = cy.layout({
-           ...layout,
-           animationDuration: 800,
-           animationEasing: 'ease-out'
-         });
-         layoutInstance.on('layoutstop', () => {
-           // 노드 추가 후 즉시 겹침 확인
-           setTimeout(() => {
-             detectAndResolveOverlap(cy, nodeSize);
-             if (onLayoutComplete) onLayoutComplete();
-           }, 200);
-         });
-         layoutInstance.run();
-       } else {
-         // preset 레이아웃의 경우에도 즉시 겹침 확인
-         setTimeout(() => {
-           detectAndResolveOverlap(cy, nodeSize);
-           if (onLayoutComplete) onLayoutComplete();
-         }, 150);
-       }
+      cy.add(nodes);
+      cy.add(edges);
+      console.log('CytoscapeGraphUnified: Elements added to graph');
+      
+      // 반드시 preset 레이아웃 실행
+      cy.layout({ name: 'preset' }).run();
+      // 스타일 적용
+      if (stylesheet) cy.style(stylesheet);
+      // 레이아웃 적용
+      if (layout && layout.name !== 'preset') {
+        console.log('CytoscapeGraphUnified: Applying layout', layout.name);
+        const layoutInstance = cy.layout({
+          ...layout,
+          animationDuration: 800,
+          animationEasing: 'ease-out'
+        });
+        layoutInstance.on('layoutstop', () => {
+          // 노드 추가 후 즉시 겹침 확인
+          setTimeout(() => {
+            detectAndResolveOverlap(cy, nodeSize);
+            if (onLayoutComplete) onLayoutComplete();
+          }, 200);
+        });
+        layoutInstance.run();
+      } else {
+        // preset 레이아웃의 경우에도 즉시 겹침 확인
+        setTimeout(() => {
+          detectAndResolveOverlap(cy, nodeSize);
+          if (onLayoutComplete) onLayoutComplete();
+        }, 150);
+      }
       // fit
       if (fitNodeIds && fitNodeIds.length > 0) {
         const nodes = cy.nodes().filter(n => fitNodeIds.includes(n.id()));
@@ -221,7 +246,8 @@ const CytoscapeGraphUnified = ({
       }
     });
     setIsGraphVisible(true);
-  }, [elements, stylesheet, layout, fitNodeIds, externalCyRef, newNodeIds, onLayoutComplete, nodeSize, isSearchActive, filteredElements]);
+    console.log('CytoscapeGraphUnified: Graph update completed, isGraphVisible set to true');
+  }, [elements, stylesheet, layout, fitNodeIds, nodeSize, isSearchActive, filteredElements]); // 의존성 배열 최적화
 
   // 크기 반응형
   useEffect(() => {
@@ -245,10 +271,31 @@ const CytoscapeGraphUnified = ({
         position: "relative",
         overflow: "hidden",
         zIndex: 1,
-        visibility: isGraphVisible ? "visible" : "hidden"
+        visibility: isGraphVisible ? "visible" : "hidden",
+        minHeight: "400px", // 최소 높이 추가
+        minWidth: "400px",  // 최소 너비 추가
       }}
       className="graph-canvas-area"
     >
+      {/* 디버깅용 정보 표시 */}
+      {process.env.NODE_ENV === 'development' && (
+        <div style={{
+          position: 'absolute',
+          top: '10px',
+          left: '10px',
+          background: 'rgba(0,0,0,0.7)',
+          color: 'white',
+          padding: '5px',
+          fontSize: '12px',
+          zIndex: 1000,
+          borderRadius: '4px'
+        }}>
+          Elements: {elements?.length || 0}<br/>
+          Visible: {isGraphVisible ? 'Yes' : 'No'}<br/>
+          Size: {containerRef.current?.offsetWidth || 0} x {containerRef.current?.offsetHeight || 0}
+        </div>
+      )}
+      
       {/* 검색 결과가 없을 때 메시지 */}
       {shouldShowNoSearchResults(isSearchActive, searchTerm, fitNodeIds) && (
         (() => {

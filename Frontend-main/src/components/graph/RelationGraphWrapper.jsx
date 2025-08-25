@@ -64,12 +64,18 @@ function RelationGraphWrapper() {
 
   // 챕터 변경 시 해당 챕터의 마지막 이벤트 번호를 찾아서 elements 세팅
   useEffect(() => {
+    console.log('RelationGraphWrapper: Chapter changed to', currentChapter);
+    
     // filename을 기반으로 folderKey 결정
     const folderKey = getFolderKeyFromFilename(filename);
+    console.log('RelationGraphWrapper: folderKey', folderKey);
     
     // graphData.js를 사용하여 데이터 로드
     const lastEventIndex = getLastEventIndexForChapter(folderKey, currentChapter);
+    console.log('RelationGraphWrapper: lastEventIndex', lastEventIndex);
+    
     if (lastEventIndex === 0) {
+      console.log('RelationGraphWrapper: No events found for chapter', currentChapter);
       setElements([]);
       setNewNodeIds([]);
       setMaxEventNum(0);
@@ -82,7 +88,10 @@ function RelationGraphWrapper() {
 
     // 마지막 이벤트 데이터 로드
     const eventData = getEventDataByIndex(folderKey, currentChapter, lastEventIndex);
+    console.log('RelationGraphWrapper: eventData', eventData ? 'loaded' : 'not found');
+    
     if (!eventData) {
+      console.log('RelationGraphWrapper: No event data found');
       setElements([]);
       setNewNodeIds([]);
       return;
@@ -90,6 +99,7 @@ function RelationGraphWrapper() {
 
     // 캐릭터 데이터 로드
     const charData = getCharactersData(folderKey, currentChapter);
+    console.log('RelationGraphWrapper: charData', charData ? 'loaded' : 'not found');
     
     // 현재 챕터 데이터 저장 (검색 필터링용)
     setCurrentChapterData(charData);
@@ -107,10 +117,14 @@ function RelationGraphWrapper() {
       });
     }
     
+    console.log('RelationGraphWrapper: idToName mapping created', Object.keys(idToName).length, 'characters');
+    
     // relationUtils.js를 사용하여 관계 데이터 정규화 및 검증
     const normalizedRelations = (eventData.relations || [])
       .map(rel => normalizeRelation(rel))
       .filter(rel => isValidRelation(rel));
+    
+    console.log('RelationGraphWrapper: normalizedRelations', normalizedRelations.length, 'relations');
     
     const convertedElements = convertRelationsToElements(
       normalizedRelations,
@@ -119,6 +133,8 @@ function RelationGraphWrapper() {
       idToMain,
       idToNames
     );
+    
+    console.log('RelationGraphWrapper: convertedElements', convertedElements.length, 'elements');
     
     // graphDiff.js를 사용하여 변경사항 계산
     const diff = calcGraphDiff(prevElementsRef.current, convertedElements);

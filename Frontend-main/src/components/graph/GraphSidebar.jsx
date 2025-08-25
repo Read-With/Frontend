@@ -152,51 +152,9 @@ function GraphSidebar({
     );
   }
 
-  // 툴팁이 없을 때 기본 안내
+  // 툴팁이 없을 때는 아무것도 표시하지 않음
   if (!activeTooltip) {
-    return (
-      <div
-        style={{
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
-          justifyContent: "center",
-          height: "100%",
-          padding: "40px 20px",
-          textAlign: "center",
-          color: "#6b7280",
-        }}
-      >
-        <div
-          style={{
-            fontSize: 48,
-            marginBottom: 16,
-            opacity: 0.5,
-          }}
-        >
-          👆
-        </div>
-        <h3
-          style={{
-            fontSize: 18,
-            fontWeight: 600,
-            marginBottom: 8,
-            color: "#374151",
-          }}
-        >
-          노드를 클릭하세요
-        </h3>
-        <p
-          style={{
-            fontSize: 14,
-            lineHeight: 1.5,
-            maxWidth: 280,
-          }}
-        >
-          그래프에서 인물이나 관계를 클릭하면 자세한 정보를 확인할 수 있습니다.
-        </p>
-      </div>
-    );
+    return null;
   }
 
   // 노드 툴팁 렌더링

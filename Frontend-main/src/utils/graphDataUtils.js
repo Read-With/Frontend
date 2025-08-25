@@ -95,10 +95,16 @@ export function convertRelationsToElements(relations, idToName, idToDesc, idToMa
     }
   });
   
-  return [
+  const result = [
     ...nodes.sort((a, b) => a.data.id.localeCompare(b.data.id)),
     ...edges.sort((a, b) => a.data.id.localeCompare(b.data.id))
   ];
+  
+  console.log('convertRelationsToElements: Created', nodes.length, 'nodes and', edges.length, 'edges');
+  console.log('convertRelationsToElements: Sample node', nodes[0]);
+  console.log('convertRelationsToElements: Sample edge', edges[0]);
+  
+  return result;
 }
 
 /**
