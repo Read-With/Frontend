@@ -20,7 +20,7 @@ export const SEARCH_LAYOUT = {
   nodeRepulsion: 2500,
   idealEdgeLength: 135,
   animate: true,
-  animationDuration: 800,
+  animationDuration: 200,
   fit: true,
   randomize: false,
   nodeOverlap: 0,
@@ -28,10 +28,10 @@ export const SEARCH_LAYOUT = {
   nodeSeparation: 20,
   randomSeed: 42,
   gravity: 0.3,
-  refresh: 20,
+  refresh: 10,
   componentSpacing: 110,
-  coolingFactor: 0.95,
-  initialTemp: 200
+  coolingFactor: 0.8,
+  initialTemp: 100
 };
 
 // [페이지 위치와 관계 값에 따라 그래프 스타일 조절]

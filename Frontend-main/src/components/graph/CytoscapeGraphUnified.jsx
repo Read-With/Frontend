@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState, useCallback, createContext } from "
 import cytoscape from "cytoscape";
 import "./RelationGraph.css";
 import { detectAndResolveOverlap } from "../../utils/graphDataUtils.js";
+import { applySearchFadeEffect, shouldShowNoSearchResults, getNoSearchResultsMessage } from "../../utils/searchUtils.js";
 
 export const CytoscapeGraphContext = createContext();
 
@@ -9,10 +10,10 @@ const CytoscapeGraphUnified = ({
   elements,
   stylesheet,
   layout,
-  tapNodeHandler,
+  tapNodeHandler,  
   tapEdgeHandler,
   tapBackgroundHandler,
-  fitNodeIds,
+  fitNodeIds, 
   style = {},
   cyRef: externalCyRef,
   newNodeIds = [],
@@ -20,6 +21,7 @@ const CytoscapeGraphUnified = ({
   nodeSize = 40,
   searchTerm = "",
   isSearchActive = false,
+  filteredElements = [],
 }) => {
   const containerRef = useRef(null);
   const [isGraphVisible, setIsGraphVisible] = useState(false);
@@ -210,13 +212,16 @@ const CytoscapeGraphUnified = ({
         }
       }
       
+      // 검색 상태에 따라 페이드 효과 적용 (유틸리티 함수 사용)
+      applySearchFadeEffect(cy, filteredElements, isSearchActive);
+      
       // 검색 결과가 없을 때 메시지 표시
       if (isSearchActive && (!fitNodeIds || fitNodeIds.length === 0)) {
         // 검색 결과가 없음을 표시하는 로직
       }
     });
     setIsGraphVisible(true);
-  }, [elements, stylesheet, layout, fitNodeIds, externalCyRef, newNodeIds, onLayoutComplete, nodeSize, isSearchActive]);
+  }, [elements, stylesheet, layout, fitNodeIds, externalCyRef, newNodeIds, onLayoutComplete, nodeSize, isSearchActive, filteredElements]);
 
   // 크기 반응형
   useEffect(() => {
@@ -245,37 +250,42 @@ const CytoscapeGraphUnified = ({
       className="graph-canvas-area"
     >
       {/* 검색 결과가 없을 때 메시지 */}
-      {isSearchActive && searchTerm && (!fitNodeIds || fitNodeIds.length === 0) && (
-        <div style={{
-          position: 'absolute',
-          top: '50%',
-          left: '50%',
-          transform: 'translate(-50%, -50%)',
-          background: 'rgba(255, 255, 255, 0.95)',
-          padding: '20px 30px',
-          borderRadius: '12px',
-          boxShadow: '0 4px 20px rgba(0, 0, 0, 0.1)',
-          border: '1px solid #e3e6ef',
-          zIndex: 1000,
-          textAlign: 'center',
-          maxWidth: '300px'
-        }}>
-          <div style={{
-            fontSize: '18px',
-            fontWeight: '600',
-            color: '#64748b',
-            marginBottom: '8px'
-          }}>
-            검색 결과가 없습니다
-          </div>
-          <div style={{
-            fontSize: '14px',
-            color: '#94a3b8',
-            lineHeight: '1.4'
-          }}>
-            "{searchTerm}"와 일치하는 인물을 찾을 수 없습니다.
-          </div>
-        </div>
+      {shouldShowNoSearchResults(isSearchActive, searchTerm, fitNodeIds) && (
+        (() => {
+          const message = getNoSearchResultsMessage(searchTerm);
+          return (
+            <div style={{
+              position: 'absolute',
+              top: '50%',
+              left: '50%',
+              transform: 'translate(-50%, -50%)',
+              background: 'rgba(255, 255, 255, 0.95)',
+              padding: '20px 30px',
+              borderRadius: '12px',
+              boxShadow: '0 4px 20px rgba(0, 0, 0, 0.1)',
+              border: '1px solid #e3e6ef',
+              zIndex: 1000,
+              textAlign: 'center',
+              maxWidth: '300px'
+            }}>
+              <div style={{
+                fontSize: '18px',
+                fontWeight: '600',
+                color: '#64748b',
+                marginBottom: '8px'
+              }}>
+                {message.title}
+              </div>
+              <div style={{
+                fontSize: '14px',
+                color: '#94a3b8',
+                lineHeight: '1.4'
+              }}>
+                {message.description}
+              </div>
+            </div>
+          );
+        })()
       )}
     </div>
   );

@@ -91,6 +91,8 @@ const ViewerRelationGraph = ({
     selectedNodeIdRef,
     selectedEdgeIdRef,
     strictBackgroundClear: true,
+    isSearchActive: false, // ViewerPage에서는 검색 기능이 없으므로 false
+    filteredElements: [], // ViewerPage에서는 빈 배열
     onClearTooltip,
     onShowNodeTooltip,
     onShowEdgeTooltip,

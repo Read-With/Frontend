@@ -28,6 +28,7 @@ const ViewerTopBar = ({
   isSearchActive,
   clearSearch,
   elements = [], // 그래프 요소들 (검색 제안용)
+  currentChapterData = null, // 현재 챕터의 캐릭터 데이터
 }) => {
   // 현재 이벤트 정보를 실시간으로 추적
   const [currentEventInfo, setCurrentEventInfo] = React.useState(null);
@@ -147,8 +148,9 @@ const ViewerTopBar = ({
               onSearchSubmit={onSearchSubmit}
               searchTerm={searchTerm}
               isSearchActive={isSearchActive}
-              clearSearch={clearSearch}
+              onClearSearch={clearSearch}
               elements={elements}
+              currentChapterData={currentChapterData}
             />
           )}
           
@@ -158,8 +160,9 @@ const ViewerTopBar = ({
               onSearchSubmit={onSearchSubmit}
               searchTerm={searchTerm}
               isSearchActive={isSearchActive}
-              clearSearch={clearSearch}
+              onClearSearch={clearSearch}
               elements={elements}
+              currentChapterData={currentChapterData}
             />
           )}
         </div>

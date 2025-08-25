@@ -1,17 +1,11 @@
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { useParams, useLocation } from "react-router-dom";
 import { processRelations, processRelationTags } from "../../../utils/relationUtils";
-import { highlightText } from "../../../utils/search";
-import { getChapterLastEventNums, getFolderKeyFromFilename } from "../../../utils/graphData";
+import { highlightText } from "../../../hooks/useGraphSearch.jsx";
+import { getChapterLastEventNums, getFolderKeyFromFilename, getEventDataByIndex } from "../../../utils/graphData";
 import { useTooltipPosition } from "../../../hooks/useTooltipPosition";
 import { useClickOutside } from "../../../hooks/useClickOutside";
 import "../RelationGraph.css";  
-
-// === glob import: 반드시 data/gatsby 하위 전체 관계 파일 import ===
-const relationshipModules = import.meta.glob(
-  "/src/data/gatsby/chapter*_relationships_event_*.json",
-  { eager: true }
-);
 
 function GraphNodeTooltip({
   data,
@@ -25,7 +19,9 @@ function GraphNodeTooltip({
   eventNum,
   maxChapter = 10,
   searchTerm = "", // 검색어 prop 추가
-  elements = [] // 현재 로드된 elements 추가
+  elements = [], // 현재 로드된 elements 추가
+  isSearchActive = false, // 검색 상태 추가
+  filteredElements = [], // 검색된 요소들 추가
 }) {
   const { filename } = useParams();
   const location = useLocation();
@@ -98,9 +94,9 @@ function GraphNodeTooltip({
         targetEventNum = lastEventNums[chapterNum - 1] || 1;
       }
 
-      // JSON 파일 경로 생성
-      const filePath = `/src/data/gatsby/chapter${chapterNum}_relationships_event_${targetEventNum}.json`;
-      const json = relationshipModules[filePath]?.default;
+      // graphData.js의 함수를 사용하여 데이터 가져오기
+      const folderKey = getFolderKeyFromFilename(filename || 'gatsby');
+      const json = getEventDataByIndex(folderKey, chapterNum, targetEventNum);
 
       // 노드 ID를 문자열로 변환하여 비교
       const nodeId = String(data.id || data.data?.id);
@@ -601,6 +597,43 @@ function GraphNodeTooltip({
             <span style={{ color: "#bbb" }}>설명 정보가 없습니다.</span>
           )}
         </div>
+        
+        {/* 검색 상태에서 연결 정보 표시 */}
+        {isSearchActive && filteredElements.length > 0 && (
+          <div
+            style={{
+              margin: "16px 32px 0 32px",
+              padding: "12px 16px",
+              background: "#f8f9fc",
+              borderRadius: "8px",
+              border: "1px solid #e3e6ef",
+            }}
+          >
+            <div
+              style={{
+                fontSize: 14,
+                fontWeight: 600,
+                color: "#6C8EFF",
+                marginBottom: "8px",
+              }}
+            >
+              🔍 검색 결과 연결 정보
+            </div>
+            <div
+              style={{
+                fontSize: 13,
+                color: "#42506b",
+                lineHeight: 1.4,
+              }}
+            >
+              이 인물과 연결된 {filteredElements.filter(el => 
+                el.data.source && 
+                (el.data.source === processedNodeData?.id || el.data.target === processedNodeData?.id)
+              ).length}개의 관계가 검색 결과에 포함되어 있습니다.
+            </div>
+          </div>
+        )}
+        
         <hr
           style={{
             margin: "18px 0 0 0",

@@ -7,10 +7,10 @@ import { useNavigate, useParams } from "react-router-dom";
 import { FaTimes, FaBars, FaChevronLeft } from 'react-icons/fa';
 
 import { convertRelationsToElements, calcGraphDiff } from '../../utils/graphDataUtils.js';
-import { getCharactersData, getEventDataByIndex, getLastEventIndexForChapter,getFolderKeyFromFilename} from '../../utils/graphData';
+import { getCharactersData, getEventDataByIndex, getLastEventIndexForChapter, getFolderKeyFromFilename, getDetectedMaxChapter } from '../../utils/graphData';
 import { normalizeRelation, isValidRelation } from '../../utils/relationUtils';
 import { DEFAULT_LAYOUT, SEARCH_LAYOUT } from '../../utils/graphStyles';
-import { useGraphSearch } from '../../hooks/useGraphSearch';
+import { useGraphSearch } from '../../hooks/useGraphSearch.jsx';
 
 function RelationGraphWrapper() {
   const navigate = useNavigate();
@@ -21,7 +21,7 @@ function RelationGraphWrapper() {
     return saved ? Number(saved) : 1;
   });
   const [elements, setElements] = useState([]);
-  const [maxChapter, setMaxChapter] = useState(9);
+  const [maxChapter, setMaxChapter] = useState(1);
   const [hideIsolated, setHideIsolated] = useState(true);
   const [eventNum, setEventNum] = useState(0);
   const [maxEventNum, setMaxEventNum] = useState(0);
@@ -54,6 +54,13 @@ function RelationGraphWrapper() {
 
   // 이전 elements 참조 (diff 계산용)
   const prevElementsRef = useRef([]);
+
+  // maxChapter를 동적으로 설정
+  useEffect(() => {
+    const folderKey = getFolderKeyFromFilename(filename);
+    const detectedMaxChapter = getDetectedMaxChapter(folderKey);
+    setMaxChapter(detectedMaxChapter);
+  }, [filename]);
 
   // 챕터 변경 시 해당 챕터의 마지막 이벤트 번호를 찾아서 elements 세팅
   useEffect(() => {
@@ -315,11 +322,12 @@ function RelationGraphWrapper() {
               
               {/* 그래프 검색 기능 */}
               <GraphControls
-                onSearchSubmit={handleSearchSubmit}
+                elements={elements}
+                currentChapterData={currentChapterData}
                 searchTerm={searchTerm}
                 isSearchActive={isSearchActive}
-                clearSearch={clearSearch}
-                elements={elements}
+                onSearchSubmit={handleSearchSubmit}
+                onClearSearch={clearSearch}
               />
               
               {/* 간선 라벨 스위치 토글 */}
@@ -415,7 +423,7 @@ function RelationGraphWrapper() {
           {maxEventNum > 0 ? (
             elements.length > 0 ? (
               <StandaloneRelationGraph 
-                elements={isSearchActive && filteredElements.length > 0 ? filteredElements : elements} 
+                elements={elements} 
                 inViewer={false}
                 fullScreen={true}
                 graphViewState={graphViewState}

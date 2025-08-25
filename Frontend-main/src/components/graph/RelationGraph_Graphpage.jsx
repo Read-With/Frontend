@@ -97,6 +97,8 @@ function StandaloneRelationGraph({
     selectedNodeIdRef,
     selectedEdgeIdRef,
     strictBackgroundClear: true,
+    isSearchActive,
+    filteredElements,
     onClearTooltip: () => {
       setActiveTooltip(null);
     },
@@ -225,8 +227,8 @@ function StandaloneRelationGraph({
       {
         selector: ".faded",
         style: {
-          opacity: 0.25,
-          "text-opacity": 0.12,
+          opacity: isSearchActive ? 0.05 : 0.25, // 검색 상태에서는 더 투명하게
+          "text-opacity": isSearchActive ? 0.02 : 0.12, // 검색 상태에서는 더 투명하게
         },
       },
       {
@@ -239,7 +241,7 @@ function StandaloneRelationGraph({
         },
       },
     ],
-    [edgeLabelVisible]
+    [edgeLabelVisible, isSearchActive]
   );
 
 
@@ -548,7 +550,7 @@ function StandaloneRelationGraph({
                      />
                    ))}
                    <CytoscapeGraphUnified
-                     elements={memoizedElements}
+                     elements={sortedElements}
                      stylesheet={memoizedStylesheet}
                      layout={memoizedLayout}
                      tapNodeHandler={tapNodeHandler}
@@ -561,6 +563,7 @@ function StandaloneRelationGraph({
                      nodeSize={nodeSize}
                      searchTerm={searchTerm}
                      isSearchActive={isSearchActive}
+                     filteredElements={filteredElements}
                    />
                  </>
                )}
@@ -668,7 +671,7 @@ function StandaloneRelationGraph({
                 />
               ))}
               <CytoscapeGraphUnified
-                elements={memoizedElements}
+                elements={sortedElements}
                 stylesheet={memoizedStylesheet}
                 layout={memoizedLayout}
                 tapNodeHandler={tapNodeHandler}
@@ -681,6 +684,7 @@ function StandaloneRelationGraph({
                 nodeSize={nodeSize}
                 searchTerm={searchTerm}
                 isSearchActive={isSearchActive}
+                filteredElements={filteredElements}
               />
             </>
           )}
@@ -700,6 +704,9 @@ function StandaloneRelationGraph({
              hasNoRelations={!memoizedElements || memoizedElements.length === 0}
              filename={filename}
              elements={finalElements}
+             isSearchActive={isSearchActive}
+             filteredElements={filteredElements}
+             searchTerm={searchTerm}
            />
          </>
        )}

@@ -1,91 +1,70 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
+import { safeNum } from '../utils/relationUtils';
+import { 
+  getChapterLastEventNums, 
+  getEventDataByIndex,
+  getMaxEventCount as getMaxEventCountFromGraphData,
+  getFolderKeyFromFilename
+} from '../utils/graphData';
 
-// === glob import: 반드시 data/gatsby 하위 전체 관계 파일 import ===
-const relationshipModules = import.meta.glob(
-  "../data/gatsby/chapter*_relationships_event_*.json",
-  { eager: true }
-);
+// 상수 정의
+const MIN_POSITIVITY = 1;
 
-// 안전한 id 변환 함수: 1.0 → 1, "1.0" → 1, "1" → 1, 1 → 1, null/undefined → NaN
-const safeNum = (v) => {
-  if (v === undefined || v === null) return NaN;
-  if (typeof v === "number") return v;
-  if (typeof v === "string") return Number(v);
-  return Number(String(v));
-};
-
-// 챕터별 마지막 이벤트 번호 구하기 (glob import 기반)
-function getChapterLastEventNums(maxChapter = 10) {
-  const lastNums = [];
-  for (let chapter = 1; chapter <= maxChapter; chapter++) {
-    let last = 0;
-    for (let i = 1; i < 100; i++) {
-      const filePath = `../data/gatsby/chapter${chapter}_relationships_event_${i}.json`;
-      if (relationshipModules[filePath]) {
-        last = i;
-      } else {
-        break;
-      }
-    }
-    lastNums.push(last);
-  }
-  return lastNums;
+// 관계 찾기 유틸리티 함수
+function findRelation(relations, id1, id2) {
+  if (!Array.isArray(relations)) return null;
+  
+  const sid1 = safeNum(id1);
+  const sid2 = safeNum(id2);
+  
+  return relations
+    .filter(r => {
+      const rid1 = safeNum(r.id1 ?? r.source);
+      const rid2 = safeNum(r.id2 ?? r.target);
+      return rid1 !== 0 && rid2 !== 0 && rid1 !== rid2;
+    })
+    .find(r => {
+      const rid1 = safeNum(r.id1 ?? r.source);
+      const rid2 = safeNum(r.id2 ?? r.target);
+      
+      return (
+        (rid1 === sid1 && rid2 === sid2) ||
+        (rid1 === sid2 && rid2 === sid1)
+      );
+    });
 }
 
-// 전체 챕터에서 최대 이벤트 수 계산
-function getMaxEventCount(maxChapter = 10) {
-  const lastEventNums = getChapterLastEventNums(maxChapter);
-  return Math.max(...lastEventNums, 1); // 최소값 1 보장
+// 전체 챕터에서 최대 이벤트 수 계산 (graphData.js 함수 활용)
+function getMaxEventCount(folderKey, maxChapter = 10) {
+  const lastEventNums = getChapterLastEventNums(folderKey);
+  
+  if (maxChapter >= lastEventNums.length) {
+    return getMaxEventCountFromGraphData(folderKey);
+  }
+  
+  const limitedEventNums = lastEventNums.slice(0, maxChapter);
+  return Math.max(...limitedEventNums, MIN_POSITIVITY);
 }
 
 // 관계 변화 데이터: 그래프 단독 페이지용 (전체 챕터)
-function fetchRelationTimelineStandalone(
-  id1,
-  id2,
-  chapterNum,
-  eventNum,
-  maxChapter = 10
-) {
-  const lastEventNums = getChapterLastEventNums(maxChapter);
-
+function fetchRelationTimelineStandalone(id1, id2, chapterNum, eventNum, maxChapter, folderKey) {
+  const lastEventNums = getChapterLastEventNums(folderKey).slice(0, maxChapter);
   const points = [];
   const labelInfo = [];
   
-  // 그래프 단독 페이지: 전체 챕터에서 처음 등장한 시점부터 현재 이벤트까지
+  // 처음 등장한 시점 찾기
   let firstAppearance = null;
-  for (let ch = 1; ch <= chapterNum; ch++) {
+  for (let ch = 1; ch <= chapterNum && !firstAppearance; ch++) {
     const lastEv = lastEventNums[ch - 1];
-    for (let i = 1; i <= lastEv; i++) {
-      const filePath = `../data/gatsby/chapter${ch}_relationships_event_${i}.json`;
-      const json = relationshipModules[filePath]?.default;
+    for (let i = 1; i <= lastEv && !firstAppearance; i++) {
+      const json = getEventDataByIndex(folderKey, ch, i);
       if (!json) continue;
       
-      const found = (json.relations || [])
-        .filter(r => {
-          const rid1 = safeNum(r.id1 ?? r.source);
-          const rid2 = safeNum(r.id2 ?? r.target);
-          return rid1 !== 0 && rid2 !== 0 && rid1 !== rid2;
-        })
-        .find((r) => {
-          const rid1 = safeNum(r.id1 ?? r.source);
-          const rid2 = safeNum(r.id2 ?? r.target);
-          const sid1 = safeNum(id1);
-          const sid2 = safeNum(id2);
-          
-          const match = (
-            (rid1 === sid1 && rid2 === sid2) ||
-            (rid1 === sid2 && rid2 === sid1)
-          );
-          
-          return match;
-        });
-      
+      const found = findRelation(json.relations, id1, id2);
       if (found) {
         firstAppearance = { chapter: ch, event: i };
-        break;
       }
     }
-    if (firstAppearance) break;
   }
   
   // 처음 등장한 시점부터 현재 이벤트까지 데이터 수집
@@ -95,8 +74,7 @@ function fetchRelationTimelineStandalone(
       const startEv = ch === firstAppearance.chapter ? firstAppearance.event : 1;
       
       for (let i = startEv; i <= lastEv; i++) {
-        const filePath = `../data/gatsby/chapter${ch}_relationships_event_${i}.json`;
-        const json = relationshipModules[filePath]?.default;
+        const json = getEventDataByIndex(folderKey, ch, i);
         
         if (!json) {
           points.push(0);
@@ -104,26 +82,7 @@ function fetchRelationTimelineStandalone(
           continue;
         }
         
-        const found = (json.relations || [])
-          .filter(r => {
-            const rid1 = safeNum(r.id1 ?? r.source);
-            const rid2 = safeNum(r.id2 ?? r.target);
-            return rid1 !== 0 && rid2 !== 0 && rid1 !== rid2;
-          })
-          .find((r) => {
-            const rid1 = safeNum(r.id1 ?? r.source);
-            const rid2 = safeNum(r.id2 ?? r.target);
-            const sid1 = safeNum(id1);
-            const sid2 = safeNum(id2);
-            
-            const match = (
-              (rid1 === sid1 && rid2 === sid2) ||
-              (rid1 === sid2 && rid2 === sid1)
-            );
-            
-            return match;
-          });
-        
+        const found = findRelation(json.relations, id1, id2);
         points.push(found ? found.positivity : 0);
         labelInfo.push(`E${i}`);
       }
@@ -134,64 +93,30 @@ function fetchRelationTimelineStandalone(
 }
 
 // 관계 변화 데이터: 뷰어 페이지 전용 (현재 챕터만)
-function fetchRelationTimelineViewer(
-  id1,
-  id2,
-  chapterNum,
-  eventNum
-) {
+function fetchRelationTimelineViewer(id1, id2, chapterNum, eventNum, folderKey) {
   const points = [];
   const labelInfo = [];
   
-  // 뷰어 모드: 현재 챕터에서 처음 등장한 시점부터 현재 이벤트까지
-  let firstAppearanceInChapter = null;
-  
   // 현재 챕터에서 처음 등장한 시점 찾기
-  for (let i = 1; i <= eventNum; i++) {
-    const filePath = `../data/gatsby/chapter${chapterNum}_relationships_event_${i}.json`;
-    const json = relationshipModules[filePath]?.default;
+  let firstAppearanceInChapter = null;
+  for (let i = 1; i <= eventNum && !firstAppearanceInChapter; i++) {
+    const json = getEventDataByIndex(folderKey, chapterNum, i);
     if (!json) continue;
     
-    const found = (json.relations || [])
-      .filter(r => {
-        const rid1 = safeNum(r.id1 ?? r.source);
-        const rid2 = safeNum(r.id2 ?? r.target);
-        return rid1 !== 0 && rid2 !== 0 && rid1 !== rid2;
-      })
-      .find((r) => {
-        const rid1 = safeNum(r.id1 ?? r.source);
-        const rid2 = safeNum(r.id2 ?? r.target);
-        const sid1 = safeNum(id1);
-        const sid2 = safeNum(id2);
-        
-        const match = (
-          (rid1 === sid1 && rid2 === sid2) ||
-          (rid1 === sid2 && rid2 === sid1)
-        );
-        
-        return match;
-      });
-    
+    const found = findRelation(json.relations, id1, id2);
     if (found) {
       firstAppearanceInChapter = i;
-      break;
     }
   }
   
   // 관계가 현재 챕터에서 전혀 등장하지 않은 경우
   if (!firstAppearanceInChapter) {
-    return { 
-      points: [], 
-      labelInfo: [],
-      noRelation: true 
-    };
+    return { points: [], labelInfo: [], noRelation: true };
   }
   
   // 현재 챕터에서 처음 등장한 시점부터 현재 이벤트까지 데이터 수집
-  const startEvent = firstAppearanceInChapter;
-  for (let i = startEvent; i <= eventNum; i++) {
-    const filePath = `../data/gatsby/chapter${chapterNum}_relationships_event_${i}.json`;
-    const json = relationshipModules[filePath]?.default;
+  for (let i = firstAppearanceInChapter; i <= eventNum; i++) {
+    const json = getEventDataByIndex(folderKey, chapterNum, i);
     
     if (!json) {
       points.push(0);
@@ -199,31 +124,26 @@ function fetchRelationTimelineViewer(
       continue;
     }
     
-    const found = (json.relations || [])
-      .filter(r => {
-        const rid1 = safeNum(r.id1 ?? r.source);
-        const rid2 = safeNum(r.id2 ?? r.target);
-        return rid1 !== 0 && rid2 !== 0 && rid1 !== rid2;
-      })
-      .find((r) => {
-        const rid1 = safeNum(r.id1 ?? r.source);
-        const rid2 = safeNum(r.id2 ?? r.target);
-        const sid1 = safeNum(id1);
-        const sid2 = safeNum(id2);
-        
-        const match = (
-          (rid1 === sid1 && rid2 === sid2) ||
-          (rid1 === sid2 && rid2 === sid1)
-        );
-        
-        return match;
-      });
-    
+    const found = findRelation(json.relations, id1, id2);
     points.push(found ? found.positivity : 0);
     labelInfo.push(`E${i}`);
   }
   
   return { points, labelInfo };
+}
+
+// 단일 이벤트 패딩 함수
+function padSingleEvent(points, labels) {
+  if (points.length !== 1) return { points, labels };
+  
+  const paddedLabels = Array(11).fill('').map((_, index) => 
+    index === 5 ? labels[0] : ''
+  );
+  const paddedTimeline = Array(11).fill(null).map((_, index) => 
+    index === 5 ? points[0] : null
+  );
+  
+  return { points: paddedTimeline, labels: paddedLabels };
 }
 
 /**
@@ -234,42 +154,35 @@ function fetchRelationTimelineViewer(
  * @param {number} chapterNum - 현재 챕터 번호
  * @param {number} eventNum - 현재 이벤트 번호
  * @param {number} maxChapter - 최대 챕터 수 (standalone 모드에서만 사용)
+ * @param {string} filename - 파일명 (예: "gatsby.epub", "alice.epub")
  * @returns {object} 차트 데이터와 로딩 상태
  */
-export function useRelationData(mode, id1, id2, chapterNum, eventNum, maxChapter = 10) {
+export function useRelationData(mode, id1, id2, chapterNum, eventNum, maxChapter = 10, filename) {
   const [timeline, setTimeline] = useState([]);
   const [labels, setLabels] = useState([]);
   const [loading, setLoading] = useState(false);
   const [noRelation, setNoRelation] = useState(false);
 
-  const fetchData = () => {
+  // filename을 기반으로 folderKey 결정
+  const folderKey = useMemo(() => getFolderKeyFromFilename(filename), [filename]);
+
+  // 메모이제이션된 최대 이벤트 수
+  const maxEventCount = useMemo(() => getMaxEventCount(folderKey, maxChapter), [folderKey, maxChapter]);
+
+  const fetchData = useCallback(() => {
     setLoading(true);
     
-    let result;
-    if (mode === 'viewer') {
-      result = fetchRelationTimelineViewer(id1, id2, chapterNum, eventNum);
-    } else {
-      result = fetchRelationTimelineStandalone(id1, id2, chapterNum, eventNum, maxChapter);
-    }
+    const result = mode === 'viewer' 
+      ? fetchRelationTimelineViewer(id1, id2, chapterNum, eventNum, folderKey)
+      : fetchRelationTimelineStandalone(id1, id2, chapterNum, eventNum, maxChapter, folderKey);
     
-    // 이벤트가 1개일 때 가운데에 위치하도록 패딩 추가
-    if (result.points.length === 1) {
-      const paddedLabels = Array(11).fill('').map((_, index) => 
-        index === 5 ? result.labelInfo[0] : ''
-      );
-      const paddedTimeline = Array(11).fill(null).map((_, index) => 
-        index === 5 ? result.points[0] : null
-      );
-      setTimeline(paddedTimeline);
-      setLabels(paddedLabels);
-    } else {
-      setTimeline(result.points);
-      setLabels(result.labelInfo);
-    }
+    const { points, labels } = padSingleEvent(result.points, result.labelInfo);
     
+    setTimeline(points);
+    setLabels(labels);
     setNoRelation(result.noRelation || false);
     setLoading(false);
-  };
+  }, [mode, id1, id2, chapterNum, eventNum, maxChapter, folderKey]);
 
   return {
     timeline,
@@ -277,6 +190,6 @@ export function useRelationData(mode, id1, id2, chapterNum, eventNum, maxChapter
     loading,
     noRelation,
     fetchData,
-    getMaxEventCount: () => getMaxEventCount(maxChapter),
+    getMaxEventCount: () => maxEventCount,
   };
 }

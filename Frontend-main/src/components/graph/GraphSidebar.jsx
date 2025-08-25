@@ -1,18 +1,13 @@
-import React, { useState, useEffect, useCallback, useMemo } from "react";
-import { Line } from "react-chartjs-2";
-import "chart.js/auto";
+import React, { useState, useEffect, useCallback } from "react";
+import { useParams } from "react-router-dom";
 import { useRelationData } from "../../hooks/useRelationData";
-import { safeNum, processRelationTags } from "../../utils/relationUtils";
-import { getRelationStyle } from "../../utils/relationStyles";
+import { safeNum } from "../../utils/relationUtils";
 import { getSlideInAnimation } from "../../utils/animations";
 import { processRelations } from "../../utils/relationUtils";
-import { getChapterLastEventNums, getFolderKeyFromFilename } from "../../utils/graphData";
-
-// === glob import: 반드시 data/gatsby 하위 전체 관계 파일 import ===
-const relationshipModules = import.meta.glob(
-  "/src/data/gatsby/chapter*_relationships_event_*.json",
-  { eager: true }
-);
+import { getFolderKeyFromFilename, getEventDataByIndex } from "../../utils/graphData";
+// 기존 툴팁 컴포넌트들 import
+import GraphNodeTooltip from "./tooltip/NodeTooltip";
+import UnifiedEdgeTooltip from "./tooltip/UnifiedEdgeTooltip";
 
 function GraphSidebar({
   activeTooltip,
@@ -23,10 +18,14 @@ function GraphSidebar({
   hasNoRelations = false,
   filename,
   elements = [], // 현재 로드된 elements 추가
+  isSearchActive = false, // 검색 상태 추가
+  filteredElements = [], // 검색된 요소들 추가
+  searchTerm = "", // 검색어 추가
 }) {
+  const { filename: urlFilename } = useParams();
+  const actualFilename = filename || urlFilename;
 
   
-  const [viewMode, setViewMode] = useState("info");
   const [isNodeAppeared, setIsNodeAppeared] = useState(false);
   const [error, setError] = useState(null);
 
@@ -34,7 +33,7 @@ function GraphSidebar({
   const id1 = safeNum(activeTooltip?.data?.source);
   const id2 = safeNum(activeTooltip?.data?.target);
 
-  const { timeline, labels, loading, fetchData, getMaxEventCount } = useRelationData('standalone', id1, id2, chapterNum, eventNum, maxChapter);
+  const { fetchData } = useRelationData('standalone', id1, id2, chapterNum, eventNum, maxChapter, actualFilename);
 
   // 노드 등장 여부 확인 함수
   const checkNodeAppearance = useCallback(() => {
@@ -52,9 +51,9 @@ function GraphSidebar({
         return;
       }
 
-      // JSON 파일 경로 생성
-      const filePath = `/src/data/gatsby/chapter${chapterNum}_relationships_event_${eventNum}.json`;
-      const json = relationshipModules[filePath]?.default;
+      // graphData.js의 함수를 사용하여 데이터 가져오기
+      const folderKey = getFolderKeyFromFilename(actualFilename);
+      const json = getEventDataByIndex(folderKey, chapterNum, eventNum);
 
       // 노드 ID를 문자열로 변환하여 비교
       const nodeId = String(nodeData.id);
@@ -92,7 +91,7 @@ function GraphSidebar({
       setError(err.message);
       setIsNodeAppeared(false);
     }
-  }, [activeTooltip, chapterNum, eventNum, elements]);
+  }, [activeTooltip, chapterNum, eventNum, elements, actualFilename]);
 
   // 노드 등장 여부 확인
   useEffect(() => {
@@ -106,733 +105,139 @@ function GraphSidebar({
     }
   }, [activeTooltip, id1, id2, chapterNum, eventNum, maxChapter, fetchData]);
 
-  // positivity 값에 따른 색상과 텍스트 결정
-  
-
   // 관계가 없을 때 안내 메시지 표시 (activeTooltip이 없어도 표시)
-  if (hasNoRelations && !activeTooltip) {
+  if (hasNoRelations) {
     return (
       <div
         style={{
-          position: "fixed",
-          top: 0,
-          right: 0,
-          width: "440px",
-          height: "100vh",
-          background: "#fff",
-          borderLeft: "1px solid #e5e7eb",
-          boxShadow: "-8px 0 32px rgba(0,0,0,0.15)",
-          zIndex: 1000,
-          overflow: "hidden",
           display: "flex",
           flexDirection: "column",
-          animation: "slideIn 0.4s cubic-bezier(0.4, 0, 0.2, 1)",
+          alignItems: "center",
+          justifyContent: "center",
+          height: "100%",
+          padding: "40px 20px",
+          textAlign: "center",
+          color: "#6b7280",
         }}
       >
-        {/* 헤더 */}
         <div
           style={{
-            height: "70px",
-            borderBottom: "1px solid #e5e7eb",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            padding: "0 24px",
-            background: "#f8fafc",
+            fontSize: 48,
+            marginBottom: 16,
+            opacity: 0.5,
           }}
         >
-          <h3 style={{ 
-            margin: 0, 
-            fontSize: "20px", 
-            fontWeight: 700, 
+          📊
+        </div>
+        <h3
+          style={{
+            fontSize: 18,
+            fontWeight: 600,
+            marginBottom: 8,
             color: "#374151",
-            letterSpacing: "0.5px"
-          }}>
-            관계 정보
-          </h3>
-          <button
-            onClick={onClose}
-            style={{
-              background: "none",
-              border: "none",
-              fontSize: "24px",
-              cursor: "pointer",
-              color: "#6b7280",
-              padding: "4px",
-              borderRadius: "4px",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-            }}
-            onMouseOver={(e) => e.currentTarget.style.color = "#374151"}
-            onMouseOut={(e) => e.currentTarget.style.color = "#6b7280"}
-          >
-            ×
-          </button>
-        </div>
-
-        {/* 안내 메시지 */}
-        <div style={{
-          flex: 1,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          padding: '40px 24px',
-          flexDirection: 'column',
-          gap: '16px'
-        }}>
-          <div style={{
-            fontSize: '20px',
-            color: '#6C8EFF',
-            fontWeight: '600',
-            textAlign: 'center'
-          }}>
-            관계가 없습니다
-          </div>
-          <div style={{
-            fontSize: '14px',
-            color: '#64748b',
-            textAlign: 'center',
-            maxWidth: '300px',
-            lineHeight: '1.5'
-          }}>
-            현재 챕터에서 선택한 이벤트에는<br />
-            등장 인물 간의 관계 정보가 없습니다.
-          </div>
-        </div>
+          }}
+        >
+          관계 데이터가 없습니다
+        </h3>
+        <p
+          style={{
+            fontSize: 14,
+            lineHeight: 1.5,
+            maxWidth: 280,
+          }}
+        >
+          현재 챕터와 이벤트에서 인물 간의 관계 정보가 없습니다.
+        </p>
       </div>
     );
   }
 
-  // activeTooltip이 없으면 사이드바를 표시하지 않음
-  if (!activeTooltip) return null;
-
-  // activeTooltip이 없고 hasNoRelations가 true인 경우는 이미 위에서 처리됨
-  const data = activeTooltip.data;
-  const relationStyle = getRelationStyle(data.positivity);
-
-  return (
-    <div
-      style={{
-        position: "fixed",
-        top: 0,
-        right: 0,
-        width: "440px",
-        height: "100vh",
-        background: "#fff",
-        borderLeft: "1px solid #e5e7eb",
-        boxShadow: "-8px 0 32px rgba(0,0,0,0.15)",
-        zIndex: 1000,
-        overflow: "hidden",
-        display: "flex",
-        flexDirection: "column",
-        animation: "slideIn 0.4s cubic-bezier(0.4, 0, 0.2, 1)",
-      }}
-    >
-      {/* 헤더 */}
+  // 툴팁이 없을 때 기본 안내
+  if (!activeTooltip) {
+    return (
       <div
         style={{
-          height: "70px",
-          borderBottom: "1px solid #e5e7eb",
           display: "flex",
+          flexDirection: "column",
           alignItems: "center",
-          justifyContent: "space-between",
-          padding: "0 24px",
-          background: "#f8fafc",
+          justifyContent: "center",
+          height: "100%",
+          padding: "40px 20px",
+          textAlign: "center",
+          color: "#6b7280",
         }}
       >
-        <h3 style={{ 
-          margin: 0, 
-          fontSize: "20px", 
-          fontWeight: 700, 
-          color: "#374151",
-          letterSpacing: "0.5px"
-        }}>
-          {activeTooltip.type === "node" ? "인물 정보" : "관계 정보"}
+        <div
+          style={{
+            fontSize: 48,
+            marginBottom: 16,
+            opacity: 0.5,
+          }}
+        >
+          👆
+        </div>
+        <h3
+          style={{
+            fontSize: 18,
+            fontWeight: 600,
+            marginBottom: 8,
+            color: "#374151",
+          }}
+        >
+          노드를 클릭하세요
         </h3>
-                 <button
-           onClick={onClose}
-           style={{
-             background: "#fff",
-             border: "1px solid #e5e7eb",
-             fontSize: "18px",
-             cursor: "pointer",
-             color: "#6b7280",
-             padding: "8px",
-             borderRadius: "50%",
-             width: "36px",
-             height: "36px",
-             display: "flex",
-             alignItems: "center",
-             justifyContent: "center",
-           }}
-           onMouseOver={e => e.currentTarget.style.background = '#f3f4f6'}
-           onMouseOut={e => e.currentTarget.style.background = '#fff'}
-         >
-           ×
-         </button>
-      </div>
-
-      {/* 내용 */}
-      <div style={{ 
-        flex: 1, 
-        overflow: "auto", 
-        padding: "24px",
-        background: "#fff",
-      }}>
-        {activeTooltip.type === "node" ? (
-          <NodeInfo 
-            data={data} 
-            isNodeAppeared={isNodeAppeared}
-            error={error}
-            chapterNum={chapterNum}
-          />
-        ) : (
-          <EdgeInfo 
-            data={data} 
-            relationStyle={relationStyle}
-            viewMode={viewMode}
-            setViewMode={setViewMode}
-            timeline={timeline}
-            labels={labels}
-            loading={loading}
-            maxChapter={maxChapter}
-            hasNoRelations={hasNoRelations}
-          />
-        )}
-      </div>
-
-      <style jsx="true">{`
-        ${getSlideInAnimation('right', 0.4)}
-      `}</style>
-    </div>
-  );
-}
-
-// 노드 정보 컴포넌트
-function NodeInfo({ data, isNodeAppeared, error, chapterNum }) {
-  // 노드가 등장하지 않는 경우의 메시지
-  if (!isNodeAppeared && !error) {
-    return (
-      <div>
-        {/* 아직 등장하지 않음 메시지 */}
-        <div style={{ 
-          background: "#fef2f2", 
-          padding: "20px", 
-          borderRadius: "12px",
-          marginBottom: "24px",
-          border: "1px solid #fecaca",
-          textAlign: "center"
-        }}>
-          <div style={{ 
-            fontSize: "18px", 
-            color: "#dc2626", 
-            fontWeight: 700,
-            marginBottom: "12px"
-          }}>
-            아직 등장하지 않았습니다
-          </div>
-          <div style={{ 
-            fontSize: "14px", 
-            color: "#7f1d1d", 
-            lineHeight: 1.6
-          }}>
-            {chapterNum}장에서는 이 인물이 등장하지 않습니다.<br />
-            이후 챕터에서 등장할 예정입니다.
-          </div>
-        </div>
+        <p
+          style={{
+            fontSize: 14,
+            lineHeight: 1.5,
+            maxWidth: 280,
+          }}
+        >
+          그래프에서 인물이나 관계를 클릭하면 자세한 정보를 확인할 수 있습니다.
+        </p>
       </div>
     );
   }
 
-  // 에러가 있는 경우
-  if (error) {
+  // 노드 툴팁 렌더링
+  if (activeTooltip.type === "node") {
     return (
-      <div>
-        <div style={{ 
-          marginBottom: "24px",
-          padding: "20px",
-          background: "#f8fafc",
-          borderRadius: "12px",
-          border: "1px solid #e5e7eb",
-        }}>
-          <h4 style={{ 
-            margin: "0 0 12px 0", 
-            fontSize: "18px", 
-            fontWeight: 700,
-            color: "#374151"
-          }}>
-            {data.label}
-          </h4>
-          {data.description && (
-            <p style={{ 
-              margin: "0 0 16px 0", 
-              fontSize: "14px", 
-              color: "#6b7280", 
-              lineHeight: 1.6,
-            }}>
-              {data.description}
-            </p>
-          )}
-        </div>
-        
-        {/* 에러 메시지 */}
-        <div style={{ 
-          background: "#fef2f2", 
-          padding: "16px 20px", 
-          borderRadius: "12px",
-          marginBottom: "24px",
-          border: "1px solid #fecaca",
-          textAlign: "center"
-        }}>
-          <div style={{ 
-            fontSize: "16px", 
-            color: "#dc2626", 
-            fontWeight: 600,
-            marginBottom: "8px"
-          }}>
-            정보를 불러올 수 없습니다
-          </div>
-          <div style={{ 
-            fontSize: "14px", 
-            color: "#7f1d1d", 
-            lineHeight: 1.5
-          }}>
-            {error}
-          </div>
-        </div>
-      </div>
+      <GraphNodeTooltip
+        data={activeTooltip.data}
+        x={activeTooltip.x}
+        y={activeTooltip.y}
+        nodeCenter={activeTooltip.nodeCenter}
+        onClose={onClose}
+        inViewer={false}
+        chapterNum={chapterNum}
+        eventNum={eventNum}
+        maxChapter={maxChapter}
+        elements={elements}
+        isSearchActive={isSearchActive}
+        filteredElements={filteredElements}
+        searchTerm={searchTerm}
+      />
     );
   }
 
-  // 노드가 등장하는 경우 (기존 정보 표시)
-  return (
-    <div>
-      <div style={{ 
-        marginBottom: "24px",
-        padding: "20px",
-        background: "#f8fafc",
-        borderRadius: "12px",
-        border: "1px solid #e5e7eb",
-      }}>
-        <h4 style={{ 
-          margin: "0 0 12px 0", 
-          fontSize: "18px", 
-          fontWeight: 700,
-          color: "#374151"
-        }}>
-          {data.label}
-        </h4>
-        {data.description && (
-          <p style={{ 
-            margin: 0, 
-            fontSize: "14px", 
-            color: "#6b7280", 
-            lineHeight: 1.6,
-          }}>
-            {data.description}
-          </p>
-        )}
-      </div>
-      
-      {data.main && (
-        <div style={{ 
-          background: "#fef3c7", 
-          padding: "12px 16px", 
-          borderRadius: "12px",
-          marginBottom: "24px",
-          border: "1px solid #fde68a"
-        }}>
-          <span style={{ 
-            fontSize: "14px", 
-            color: "#92400e", 
-            fontWeight: 600,
-          }}>
-            주요 인물
-          </span>
-        </div>
-      )}
-    </div>
-  );
-}
+  // 간선 툴팁 렌더링
+  if (activeTooltip.type === "edge") {
+    return (
+      <UnifiedEdgeTooltip
+        data={activeTooltip.data}
+        x={activeTooltip.x}
+        y={activeTooltip.y}
+        onClose={onClose}
+        inViewer={false}
+        chapterNum={chapterNum}
+        eventNum={eventNum}
+        maxChapter={maxChapter}
+        elements={elements}
+      />
+    );
+  }
 
-// 엣지 정보 컴포넌트
-function EdgeInfo({ data, relationStyle, viewMode, setViewMode, timeline, labels, loading, maxChapter = 10, hasNoRelations = false }) {
-  return (
-    <div>
-      {viewMode === "info" ? (
-        <div>
-          {/* 관계 태그 */}
-          <div style={{ marginBottom: "24px" }}>
-            <h4 style={{ 
-              margin: "0 0 12px 0", 
-              fontSize: "16px", 
-              fontWeight: 700, 
-              color: "#374151",
-              display: "flex",
-              alignItems: "center",
-              gap: "8px"
-            }}>
-              관계 유형
-            </h4>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
-              {processRelationTags(data.relation, data.label).map((relation, index) => (
-                <span
-                  key={index}
-                  style={{
-                    background: '#e5e7eb',
-                    color: '#374151',
-                    borderRadius: '20px',
-                    padding: '6px 12px',
-                    fontSize: '12px',
-                    fontWeight: 600,
-                    cursor: 'default',
-                  }}
-                  onMouseOver={e => e.currentTarget.style.background = '#d1d5db'}
-                  onMouseOut={e => e.currentTarget.style.background = '#e5e7eb'}
-                >
-                  {relation}
-                </span>
-              ))}
-            </div>
-          </div>
-
-          {/* 관계 긍정도 */}
-          <div style={{ marginBottom: "24px" }}>
-            <h4 style={{ 
-              margin: "0 0 12px 0", 
-              fontSize: "16px", 
-              fontWeight: 700, 
-              color: "#374151",
-              display: "flex",
-              alignItems: "center",
-              gap: "8px"
-            }}>
-              관계 긍정도
-            </h4>
-            <div style={{ 
-              background: "#f8fafc",
-              padding: "16px",
-              borderRadius: "12px",
-              border: "1px solid #e5e7eb"
-            }}>
-              <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "12px" }}>
-                <span style={{ 
-                  color: relationStyle.color, 
-                  fontWeight: 700, 
-                  fontSize: "16px",
-                }}>
-                  {relationStyle.text}
-                </span>
-                <span style={{ 
-                  color: "#6b7280", 
-                  fontSize: "14px",
-                  fontWeight: 600,
-                  background: "#e5e7eb",
-                  padding: "4px 8px",
-                  borderRadius: "6px"
-                }}>
-                  {data.positivity !== undefined ? `${Math.round(data.positivity * 100)}%` : "N/A"}
-                </span>
-              </div>
-              <div style={{ display: "flex", gap: "4px", height: "24px" }}>
-                {(() => {
-                  let p = Math.abs(data.positivity ?? 0);
-                  p = p * 100;
-                  let remain = p;
-                  return Array.from({ length: 5 }).map((_, i) => {
-                    let fill;
-                    if (remain >= 20) {
-                      fill = 1;
-                    } else if (remain > 0) {
-                      fill = remain / 20;
-                    } else {
-                      fill = 0;
-                    }
-                    remain -= 20;
-                    let background;
-                    if (fill === 1) background = relationStyle.color;
-                    else if (fill > 0)
-                      background = `linear-gradient(to right, ${relationStyle.color} ${fill * 100}%, #e5e7eb ${fill * 100}%)`;
-                    else background = "#e5e7eb";
-                    return (
-                      <div
-                        key={i}
-                        style={{
-                          flex: 1,
-                          height: "100%",
-                          borderRadius: "6px",
-                          background,
-                          border: "1px solid #e5e7eb",
-                          transition: "all 0.3s ease",
-                        }}
-                      />
-                    );
-                  });
-                })()}
-              </div>
-            </div>
-          </div>
-
-          {/* 설명 */}
-          {data.explanation && (
-            <div style={{ marginBottom: "24px" }}>
-              <h4 style={{ 
-                margin: "0 0 12px 0", 
-                fontSize: "16px", 
-                fontWeight: 700, 
-                color: "#374151",
-                display: "flex",
-                alignItems: "center",
-                gap: "8px"
-              }}>
-                관계 설명
-              </h4>
-              <div style={{ 
-                borderLeft: `4px solid ${relationStyle.color}`, 
-                paddingLeft: "16px",
-                background: "#f8fafc",
-                padding: "16px",
-                borderRadius: "12px",
-                border: "1px solid #e5e7eb"
-              }}>
-                <strong style={{ 
-                  display: "block", 
-                  marginBottom: "8px", 
-                  fontSize: "15px",
-                  color: "#374151",
-                  fontWeight: 600
-                }}>
-                  {data.explanation.split("|")[0]}
-                </strong>
-                {data.explanation.split("|")[1] && (
-                  <p style={{ 
-                    margin: 0, 
-                    fontSize: "14px", 
-                    color: "#6b7280", 
-                    lineHeight: 1.6 
-                  }}>
-                    {data.explanation.split("|")[1]}
-                  </p>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* 그래프 보기 버튼 */}
-                     <button
-             onClick={() => setViewMode("chart")}
-             style={{
-               background: '#2563eb',
-               color: '#fff',
-               border: 'none',
-               borderRadius: '12px',
-               padding: '16px 24px',
-               fontWeight: 700,
-               fontSize: '15px',
-               cursor: 'pointer',
-               width: '100%',
-               marginTop: '24px',
-               boxShadow: '0 4px 16px rgba(37, 99, 235, 0.2)',
-             }}
-             onMouseOver={e => e.currentTarget.style.background = '#3b82f6'}
-             onMouseOut={e => e.currentTarget.style.background = '#2563eb'}
-           >
-             관계 변화 그래프 보기
-           </button>
-        </div>
-      ) : (
-        <div>
-          <h4 style={{ 
-            margin: "0 0 24px 0", 
-            fontSize: "18px", 
-            fontWeight: 700, 
-            color: "#374151", 
-            textAlign: "center",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            gap: "8px"
-          }}>
-            관계 변화 그래프
-          </h4>
-          
-          {loading ? (
-            <div style={{ 
-              textAlign: "center", 
-              padding: "60px 0",
-              background: "#f8fafc",
-              borderRadius: "12px",
-              color: "#6b7280",
-              fontWeight: 600,
-              border: "1px solid #e5e7eb"
-            }}>
-              불러오는 중...
-            </div>
-          ) : (timeline.length === 0 || hasNoRelations) ? (
-            <div style={{ 
-              height: "400px", 
-              marginBottom: "24px",
-              background: "#fff",
-              borderRadius: "12px",
-              padding: "12px",
-              boxShadow: "0 4px 8px rgba(0,0,0,0.1)",
-              border: "1px solid #e5e7eb",
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              flexDirection: 'column',
-              gap: '16px'
-            }}>
-              <div style={{
-                fontSize: '20px',
-                color: '#6C8EFF',
-                fontWeight: '600',
-                textAlign: 'center'
-              }}>
-                관계가 없습니다
-              </div>
-              <div style={{
-                fontSize: '14px',
-                color: '#64748b',
-                textAlign: 'center',
-                maxWidth: '300px',
-                lineHeight: '1.5'
-              }}>
-                현재 챕터에서 선택한 이벤트에는<br />
-                등장 인물 간의 관계 정보가 없습니다.
-              </div>
-            </div>
-          ) : (
-            <div style={{ 
-              height: "400px", 
-              marginBottom: "24px",
-              background: "#fff",
-              borderRadius: "12px",
-              padding: "12px",
-              boxShadow: "0 4px 8px rgba(0,0,0,0.1)",
-              border: "1px solid #e5e7eb",
-              overflowY: 'auto'
-            }}>
-              <Line
-                data={{
-                  labels,
-                  datasets: [
-                    {
-                      label: "관계 긍정도",
-                      data: timeline,
-                      borderColor: "#2563eb",
-                      backgroundColor: "rgba(37, 99, 235, 0.1)",
-                      fill: true,
-                      tension: 0.4,
-                      spanGaps: true,
-                      borderWidth: 3,
-                      pointBackgroundColor: (context) => {
-                        // Chart.js에서 라벨을 가져오는 방법 수정
-                        const label = context.chart.data.labels[context.dataIndex] || '';
-                        // 현재 챕터의 이벤트는 파란색, 이전 챕터는 회색
-                        if (label.startsWith('E')) {
-                          return "#2563eb"; // 파란색 (현재 챕터)
-                        } else {
-                          return "#9ca3af"; // 회색 (이전 챕터)
-                        }
-                      },
-                      pointBorderColor: "#fff",
-                      pointBorderWidth: 2,
-                      pointRadius: 6,
-                      pointHoverRadius: 8,
-                    },
-                  ],
-                }}
-                options={{
-                  responsive: true,
-                  maintainAspectRatio: false,
-                  scales: {
-                    y: {
-                      min: -1,
-                      max: 1,
-                      title: { 
-                        display: true, 
-                        text: "긍정도",
-                        font: { weight: 'bold' }
-                      },
-                      grid: {
-                        color: 'rgba(0,0,0,0.1)',
-                        drawBorder: false,
-                      }
-                    },
-                    x: {
-                      title: {
-                        display: true,
-                        text: "이벤트 순서",
-                        font: { weight: 'bold' }
-                      },
-                      min: 0,
-                      max: maxEventCount,
-                      ticks: {
-                        stepSize: 1
-                      },
-                      grid: {
-                        color: 'rgba(0,0,0,0.1)',
-                        drawBorder: false,
-                      }
-                    },
-                  },
-                  plugins: { 
-                    legend: { display: false },
-                    tooltip: {
-                      backgroundColor: 'rgba(37, 99, 235, 0.9)',
-                      titleColor: '#fff',
-                      bodyColor: '#fff',
-                      borderColor: '#2563eb',
-                      borderWidth: 1,
-                      cornerRadius: 8,
-                    }
-                  },
-                }}
-                style={{ height: '150px' }}
-              />
-            </div>
-          )}
-          
-                     <div style={{ 
-             fontSize: "12px", 
-             color: "#64748b", 
-             textAlign: "center", 
-             marginBottom: "24px",
-             background: "#f8fafc",
-             padding: "12px",
-             borderRadius: "8px",
-             border: "1px solid #e5e7eb"
-           }}>
-             <div style={{ fontSize: "11px", lineHeight: "1.4" }}>
-               x축: 챕터별 이벤트, y축: 관계 긍정도(-1~1)
-             </div>
-           </div>
-          
-                                           <button
-              onClick={() => setViewMode("info")}
-              style={{
-                background: '#2563eb',
-                color: '#fff',
-                border: 'none',
-                borderRadius: '12px',
-                padding: '16px 24px',
-                fontWeight: 700,
-                fontSize: '15px',
-                cursor: 'pointer',
-                width: '100%',
-                boxShadow: '0 4px 16px rgba(37, 99, 235, 0.2)',
-              }}
-              onMouseOver={e => e.currentTarget.style.background = '#3b82f6'}
-              onMouseOut={e => e.currentTarget.style.background = '#2563eb'}
-            >
-              관계 정보로 돌아가기
-            </button>
-        </div>
-      )}
-    </div>
-  );
+  return null;
 }
 
 export default GraphSidebar; 

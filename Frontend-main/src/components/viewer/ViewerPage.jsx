@@ -324,19 +324,40 @@ function GraphSplitArea({
     searchTerm: "",
     isSearchActive: false,
     filteredElements: [],
-    fitNodeIds: []
+    fitNodeIds: [],
+    currentChapterData: null
   });
 
   // elements 상태 추가
   const [elements, setElements] = React.useState([]);
 
   const handleSearchStateChange = React.useCallback((newState) => {
-    setSearchState(newState);
+    setSearchState(prevState => {
+      // 이전 상태와 비교하여 실제로 변경되었을 때만 업데이트
+      if (JSON.stringify(prevState) !== JSON.stringify(newState)) {
+        return newState;
+      }
+      return prevState;
+    });
   }, []);
 
   // GraphContainer에서 elements 업데이트
   const handleElementsUpdate = React.useCallback((newElements) => {
     setElements(newElements);
+  }, []);
+
+  // 검색 제출 함수
+  const handleSearchSubmit = React.useCallback((searchTerm) => {
+    if (graphContainerRef.current && graphContainerRef.current.handleSearchSubmit) {
+      graphContainerRef.current.handleSearchSubmit(searchTerm);
+    }
+  }, []);
+
+  // 검색 초기화 함수
+  const handleClearSearch = React.useCallback(() => {
+    if (graphContainerRef.current && graphContainerRef.current.clearSearch) {
+      graphContainerRef.current.clearSearch();
+    }
   }, []);
 
   return (
@@ -373,11 +394,12 @@ function GraphSplitArea({
         setEdgeLabelVisible={setEdgeLabelVisible}
         hideIsolated={hideIsolated}
         setHideIsolated={setHideIsolated}
-        onSearchSubmit={(searchTerm) => graphContainerRef.current?.handleSearchSubmit(searchTerm)}
         searchTerm={searchState.searchTerm}
         isSearchActive={searchState.isSearchActive}
-        clearSearch={() => graphContainerRef.current?.clearSearch()}
         elements={elements}
+        onSearchSubmit={handleSearchSubmit}
+        clearSearch={handleClearSearch}
+        currentChapterData={searchState.currentChapterData}
       />
       
       {/* 그래프 본문 */}

@@ -1,4 +1,5 @@
 import { useCallback, useRef, useEffect } from "react";
+import { applySearchHighlight } from '../utils/searchUtils.js';
 
 export default function useGraphInteractions({
   cyRef,
@@ -8,6 +9,8 @@ export default function useGraphInteractions({
   selectedNodeIdRef,
   selectedEdgeIdRef,
   strictBackgroundClear = false,
+  isSearchActive = false, // 검색 상태 추가
+  filteredElements = [], // 검색된 요소들 추가
 }) {
   const onShowNodeTooltipRef = useRef(onShowNodeTooltip);
   const onShowEdgeTooltipRef = useRef(onShowEdgeTooltip);
@@ -74,9 +77,17 @@ export default function useGraphInteractions({
         cy.edges().removeClass("highlighted");
         cy.nodes().addClass("faded");
         cy.edges().addClass("faded");
-        node.removeClass("faded").addClass("highlighted");
-        node.connectedEdges().removeClass("faded");
-        node.neighborhood().nodes().removeClass("faded");
+        
+        // 검색 상태에서 노드 클릭 시 검색 결과에 포함된 요소들만 하이라이트
+        if (isSearchActive && filteredElements.length > 0) {
+          // 노드 클릭 하이라이트 효과 적용 (페이드 효과는 CytoscapeGraphUnified에서 처리)
+          applySearchHighlight(cy, node, filteredElements);
+        } else {
+          // 일반 상태에서는 기존 로직 사용
+          node.removeClass("faded").addClass("highlighted");
+          node.connectedEdges().removeClass("faded");
+          node.neighborhood().nodes().removeClass("faded");
+        }
         
         // 드래그 상태 관리
         if (isSameNode) {
@@ -103,7 +114,7 @@ export default function useGraphInteractions({
       
       if (selectedNodeIdRef) selectedNodeIdRef.current = node.id();
     },
-    [cyRef, selectedNodeIdRef]
+    [cyRef, selectedNodeIdRef, isSearchActive, filteredElements]
   );
 
   const tapEdgeHandler = useCallback(
@@ -175,10 +186,6 @@ export default function useGraphInteractions({
     [cyRef, clearSelectionOnly, strictBackgroundClear, selectedNodeIdRef, selectedEdgeIdRef]
   );
 
-
-
-
-
   const clearSelectionAndRebind = useCallback(() => {
     clearSelectionOnly();
     if (selectedNodeIdRef) selectedNodeIdRef.current = null;
@@ -194,5 +201,3 @@ export default function useGraphInteractions({
     clearAll,
   };
 }
-
-

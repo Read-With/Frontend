@@ -1,18 +1,13 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { Line } from "react-chartjs-2";
 import "chart.js/auto";
+import { useParams } from "react-router-dom";
 import { useTooltipPosition } from "../../../hooks/useTooltipPosition";
 import { useClickOutside } from "../../../hooks/useClickOutside";
 import { useRelationData } from "../../../hooks/useRelationData";
 import { getRelationStyle, getRelationLabels, tooltipStyles } from "../../../utils/relationStyles";
+import { safeNum } from "../../../utils/relationUtils";
 import "../RelationGraph.css";
-// 안전한 id 변환 함수
-const safeNum = (v) => {
-  if (v === undefined || v === null) return NaN;
-  if (typeof v === "number") return v;
-  if (typeof v === "string") return Number(v);
-  return Number(String(v));
-};
 
 /**
  * 통합 간선 툴팁 컴포넌트
@@ -42,6 +37,8 @@ function UnifiedEdgeTooltip({
   eventNum = 1,
   maxChapter = 10,
 }) {
+  const { filename } = useParams();
+
   // 위치 및 드래그 관리
   const {
     position,
@@ -84,7 +81,7 @@ function UnifiedEdgeTooltip({
     noRelation,
     fetchData,
     getMaxEventCount,
-  } = useRelationData(mode, id1, id2, chapterNum, eventNum, maxChapter);
+  } = useRelationData(mode, id1, id2, chapterNum, eventNum, maxChapter, filename);
 
   // 차트 모드일 때 데이터 가져오기
   useEffect(() => {
@@ -433,7 +430,7 @@ function UnifiedEdgeTooltip({
                           x: {
                             title: { display: true, text: "이벤트 순서" },
                             min: 0,
-                            max: getMaxEventCount(safeMaxChapter),
+                            max: getMaxEventCount(),
                             ticks: {
                                 stepSize: 1
                             }

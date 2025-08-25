@@ -1,9 +1,9 @@
-import React, { useEffect, useState, forwardRef, useImperativeHandle, useMemo } from "react";
+import React, { useEffect, useState, forwardRef, useImperativeHandle, useMemo, useCallback, useRef } from "react";
 import ViewerRelationGraph from "./RelationGraph_Viewerpage";
 import { convertRelationsToElements } from "../../utils/graphDataUtils.js";
-import { getEventData, getCharactersData, createCharacterMaps, getFolderKeyFromFilename } from "../../utils/graphData";
+import { getEventData, getCharactersData, createCharacterMaps, getFolderKeyFromFilename, getDetectedMaxChapter } from "../../utils/graphData";
 import { processRelations } from "../../utils/relationUtils";
-import { useGraphSearch } from "../../hooks/useGraphSearch";
+import { useGraphSearch } from "../../hooks/useGraphSearch.jsx";
 
 const GraphContainer = forwardRef(({
   currentPosition,
@@ -13,6 +13,12 @@ const GraphContainer = forwardRef(({
   onSearchStateChange,
   onElementsUpdate, // elements 업데이트 콜백 추가
   filename, // filename prop 추가
+  // 검색 관련 props 추가
+  searchTerm = "",
+  isSearchActive = false,
+  filteredElements = [],
+  fitNodeIds = [],
+
   ...props
 }, ref) => {
   const [elements, setElements] = useState([]);
@@ -21,19 +27,52 @@ const GraphContainer = forwardRef(({
 
   // 현재 챕터의 캐릭터 데이터 상태
   const [currentChapterData, setCurrentChapterData] = useState(null);
+  const currentChapterDataRef = useRef(currentChapterData);
+  
+  // currentChapterData가 변경될 때 ref 업데이트
+  useEffect(() => {
+    currentChapterDataRef.current = currentChapterData;
+  }, [currentChapterData]);
 
-  // 검색 상태 관리를 useGraphSearch 훅으로 처리
+  // 검색 상태 변경 콜백을 useCallback으로 메모이제이션
+  const handleSearchStateChange = useCallback((searchState) => {
+    if (onSearchStateChange) {
+      onSearchStateChange({
+        ...searchState,
+        currentChapterData: currentChapterDataRef.current
+      });
+    }
+  }, [onSearchStateChange]); // currentChapterData 의존성 제거
+
+  // useGraphSearch 훅을 사용하여 검색 기능 구현
   const {
-    searchTerm,
-    isSearchActive,
-    filteredElements,
-    fitNodeIds,
-    finalElements,
+    searchTerm: internalSearchTerm,
+    isSearchActive: internalIsSearchActive,
+    filteredElements: internalFilteredElements,
+    fitNodeIds: internalFitNodeIds,
     handleSearchSubmit,
     clearSearch
-  } = useGraphSearch(elements, onSearchStateChange, currentChapterData);
+  } = useGraphSearch(elements, handleSearchStateChange, currentChapterData);
 
+  // 부모에서 전달받은 검색 상태와 내부 검색 상태 동기화
+  useEffect(() => {
+    if (searchTerm !== internalSearchTerm) {
+      if (searchTerm) {
+        handleSearchSubmit(searchTerm);
+      } else {
+        clearSearch();
+      }
+    }
+  }, [searchTerm]); // internalSearchTerm, handleSearchSubmit, clearSearch 의존성 제거
 
+  // 검색 상태를 부모 컴포넌트로 전달하는 함수들
+  const handleSearchSubmitWrapper = useCallback((term) => {
+    handleSearchSubmit(term);
+  }, [handleSearchSubmit]);
+
+  const clearSearchWrapper = useCallback(() => {
+    clearSearch();
+  }, [clearSearch]);
 
   useEffect(() => {
     if (!currentEvent) {
@@ -107,19 +146,21 @@ const GraphContainer = forwardRef(({
     return createCharacterMaps(characters);
   }, [currentEvent, filename]);
 
-
-  
-
+  // 검색된 요소들 또는 원래 요소들 사용
+  const finalElements = useMemo(() => {
+    if (internalIsSearchActive && internalFilteredElements && internalFilteredElements.length > 0) {
+      return internalFilteredElements;
+    }
+    return elements;
+  }, [internalIsSearchActive, internalFilteredElements, elements]);
   
   // ref를 통해 외부에서 접근할 수 있는 함수들 노출
   useImperativeHandle(ref, () => ({
-    handleSearchSubmit,
-    clearSearch,
-    searchTerm,
-    isSearchActive
-  }));
-
-
+    searchTerm: internalSearchTerm,
+    isSearchActive: internalIsSearchActive,
+    handleSearchSubmit: handleSearchSubmitWrapper,
+    clearSearch: clearSearchWrapper
+  }), [internalSearchTerm, internalIsSearchActive, handleSearchSubmitWrapper, clearSearchWrapper]);
 
   return (
     <ViewerRelationGraph
@@ -127,14 +168,13 @@ const GraphContainer = forwardRef(({
       chapterNum={currentChapter} // 관계 변화
       eventNum={currentEvent ? Math.max(1, currentEvent.eventNum) : 1}
       edgeLabelVisible={edgeLabelVisible}
-      maxChapter={10}
+      maxChapter={getDetectedMaxChapter(getFolderKeyFromFilename(filename))}
       filename={filename}
-      fitNodeIds={fitNodeIds}
-      searchTerm={searchTerm}
-      isSearchActive={isSearchActive}
-      filteredElements={filteredElements}
-      onSearchSubmit={handleSearchSubmit}
-      clearSearch={clearSearch}
+      fitNodeIds={internalFitNodeIds}
+      searchTerm={internalSearchTerm}
+      isSearchActive={internalIsSearchActive}
+      filteredElements={internalFilteredElements}
+
       {...props}
     />
   );
