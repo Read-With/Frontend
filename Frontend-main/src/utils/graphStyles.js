@@ -34,6 +34,11 @@ export const SEARCH_LAYOUT = {
   initialTemp: 100
 };
 
+// [와이드 레이아웃 설정]
+export const getWideLayout = () => {
+  return { name: 'preset' };
+};
+
 // [페이지 위치와 관계 값에 따라 그래프 스타일 조절]
 export const getNodeSize = (context = 'default') => {
   if (typeof window !== 'undefined') {

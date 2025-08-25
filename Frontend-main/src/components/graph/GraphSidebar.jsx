@@ -3,7 +3,6 @@ import { useParams } from "react-router-dom";
 import { useRelationData } from "../../hooks/useRelationData";
 import { useGraphDataLoader } from "../../hooks/useGraphDataLoader";
 import { safeNum } from "../../utils/relationUtils";
-import { getSlideInAnimation } from "../../utils/animations";
 import { processRelations } from "../../utils/relationUtils";
 import { getFolderKeyFromFilename, getEventDataByIndex } from "../../utils/graphData";
 import GraphNodeTooltip from "./tooltip/NodeTooltip";

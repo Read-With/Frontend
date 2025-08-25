@@ -11,16 +11,12 @@ import GraphNodeTooltip from "./tooltip/NodeTooltip";
 import UnifiedEdgeTooltip from "./tooltip/UnifiedEdgeTooltip";
 import GraphSidebar from "./GraphSidebar";
 import "./RelationGraph.css";
-import { DEFAULT_LAYOUT } from "../../utils/graphStyles";
-import { getNodeSize as getNodeSizeUtil, getEdgeStyle as getEdgeStyleUtil, getRelationColor } from "../../utils/graphStyles";
+import { DEFAULT_LAYOUT, createGraphStylesheet, getNodeSize as getNodeSizeUtil, getEdgeStyle as getEdgeStyleUtil, getRelationColor, getWideLayout } from "../../utils/graphStyles";
+import { applySearchHighlight } from "../../utils/searchUtils";
 import useGraphInteractions from "../../hooks/useGraphInteractions";
 
 const getNodeSize = () => getNodeSizeUtil('graph');
 const getEdgeStyle = () => getEdgeStyleUtil('graph');
-
-const getWideLayout = () => {
-  return { name: 'preset' };
-};
 
 function StandaloneRelationGraph({ 
   elements, 
@@ -65,11 +61,6 @@ function StandaloneRelationGraph({
   
   // 그래프 단독 페이지 여부 확인
   const isStandaloneGraphPage = !inViewer;
-
-  // 타임라인으로 이동하는 함수
-  // const handleViewTimeline = () => {
-  //   navigate(`/viewer/${filename}/timeline`, { state: location.state });
-  // };
 
   // activeTooltip 상태 변화 감지
   useEffect(() => {
@@ -137,99 +128,14 @@ function StandaloneRelationGraph({
   // currentEventJson이 내용이 같으면 참조도 같게 useMemo로 캐싱
   const stableEventJson = useMemo(() => graphViewState ? JSON.stringify(graphViewState) : '', [graphViewState]);
 
+  const nodeSize = getNodeSize();
   const edgeStyle = getEdgeStyle();
 
+  // utils의 createGraphStylesheet 함수 사용
   const stylesheet = useMemo(
-    () => [
-      {
-        selector: "node[image]",
-        style: {
-          "background-color": "#eee",
-          "background-image": "data(image)",
-          "background-fit": "cover",
-          "background-clip": "node",
-          "border-width": (ele) => (ele.data("main") ? 2 : 1),
-          "border-color": "#5B7BA0",
-          "border-opacity": 1,
-          width: getNodeSize(),
-          height: getNodeSize(),
-          shape: "ellipse",
-          label: "data(label)",
-          "text-valign": "bottom",
-          "text-halign": "center",
-          "font-size": (ele) => {
-            if (typeof window !== 'undefined') {
-              const path = window.location.pathname;
-              if (path.includes('/user/graph/')) return 8;
-            }
-            return 6;
-          },
-          "font-weight": (ele) => (ele.data("main") ? 600 : 400),
-          color: "#444",
-          "text-margin-y": 2,
-          "text-background-color": "#fff",
-          "text-background-opacity": 0.8,
-          "text-background-shape": "roundrectangle",
-          "text-background-padding": 2,
-        },
-      },
-      {
-        selector: "edge",
-        style: {
-          width: edgeStyle.width,
-          "line-color": (ele) => getRelationColor(ele.data("positivity")),
-          "curve-style": "bezier",
-          label: (ele) => {
-            const label = ele.data('label') || '';
-            if (!edgeLabelVisible) return '';
-            return label; // 길이 제한 제거
-          },
-          "font-size": edgeStyle.fontSize,
-          "text-rotation": "autorotate",
-          color: "#42506b",
-          "text-background-color": "#fff",
-          "text-background-opacity": 0.8,
-          "text-background-shape": "roundrectangle",
-          "text-background-padding": 2,
-          "text-outline-color": "#fff",
-          "text-outline-width": 2,
-          opacity: "mapData(weight, 0, 1, 0.55, 1)",
-          "target-arrow-shape": "none",
-          "line-style": "solid",
-          "border-width": 0,
-          events: "yes", // 클릭 이벤트 활성화
-        },
-      },
-      {
-        selector: "node.cytoscape-node-appear",
-        style: {
-          "border-color": "#22c55e",
-          "border-width": 16,
-          "border-opacity": 1,
-          "transition-property": "border-width, border-color, border-opacity",
-          "transition-duration": "700ms",
-        },
-      },
-      {
-        selector: ".faded",
-        style: {
-          opacity: isSearchActive ? 0.05 : 0.25, // 검색 상태에서는 더 투명하게
-          "text-opacity": isSearchActive ? 0.02 : 0.12, // 검색 상태에서는 더 투명하게
-        },
-      },
-      {
-        selector: ".highlighted",
-        style: {
-          "border-color": "#3b82f6",
-          "border-width": 2,
-          "border-opacity": 1,
-          "border-style": "solid",
-        },
-      },
-    ],
-    [edgeLabelVisible, isSearchActive]
+    () => createGraphStylesheet(nodeSize, edgeStyle, edgeLabelVisible, 15),
+    [nodeSize, edgeStyle, edgeLabelVisible]
   );
-
 
   // === 오직 chapter_node_positions_{chapterNum}만 사용하여 노드 위치 복원 (절대적 위치) ===
 
@@ -241,8 +147,6 @@ function StandaloneRelationGraph({
       prevEventNum.current = eventNum;
     }
   }, [chapterNum, eventNum]);
-
-
 
   // elements가 변경될 때 로딩 상태 업데이트
   useEffect(() => {
@@ -283,41 +187,41 @@ function StandaloneRelationGraph({
         const selectedNode = cyRef.current.getElementById(selectedNodeIdRef.current);
         if (selectedNode && selectedNode.length > 0) {
           cyRef.current.batch(() => {
-            // 새로 추가된 노드들에 대해 연결 여부 확인
-            newNodeIds.forEach((id) => {
-              const newNode = cyRef.current.getElementById(id);
-              if (newNode && newNode.length > 0) {
-                const connectedEdges = selectedNode.connectedEdges().intersection(newNode.connectedEdges());
-                if (connectedEdges.length > 0) {
-                  // 연결된 노드: faded 제거, highlighted 유지
-                  newNode.removeClass("faded");
-                  const connectedNodes = selectedNode.neighborhood().nodes();
-                  if (connectedNodes.has(newNode)) {
-                    newNode.addClass("highlighted");
+            // utils의 applySearchHighlight 함수 활용
+            if (isSearchActive && filteredElements && filteredElements.length > 0) {
+              applySearchHighlight(cyRef.current, selectedNode, filteredElements);
+            } else {
+              // 일반 상태에서는 기존 로직 사용
+              newNodeIds.forEach((id) => {
+                const newNode = cyRef.current.getElementById(id);
+                if (newNode && newNode.length > 0) {
+                  const connectedEdges = selectedNode.connectedEdges().intersection(newNode.connectedEdges());
+                  if (connectedEdges.length > 0) {
+                    newNode.removeClass("faded");
+                    const connectedNodes = selectedNode.neighborhood().nodes();
+                    if (connectedNodes.has(newNode)) {
+                      newNode.addClass("highlighted");
+                    }
+                  } else {
+                    newNode.addClass("faded");
                   }
-                } else {
-                  // 비연결 노드: faded 적용
-                  newNode.addClass("faded");
                 }
-              }
-            });
-            
-            // 새로 추가된 간선들에 대해 연결 여부 확인
-            newEdgeIds.forEach((id) => {
-              const newEdge = cyRef.current.getElementById(id);
-              if (newEdge && newEdge.length > 0) {
-                const sourceNode = newEdge.source();
-                const targetNode = newEdge.target();
-                
-                if (sourceNode.same(selectedNode) || targetNode.same(selectedNode)) {
-                  // 선택된 노드와 연결된 간선: faded 제거
-                  newEdge.removeClass("faded");
-                } else {
-                  // 비연결 간선: faded 적용
-                  newEdge.addClass("faded");
+              });
+              
+              newEdgeIds.forEach((id) => {
+                const newEdge = cyRef.current.getElementById(id);
+                if (newEdge && newEdge.length > 0) {
+                  const sourceNode = newEdge.source();
+                  const targetNode = newEdge.target();
+                  
+                  if (sourceNode.same(selectedNode) || targetNode.same(selectedNode)) {
+                    newEdge.removeClass("faded");
+                  } else {
+                    newEdge.addClass("faded");
+                  }
                 }
-              }
-            });
+              });
+            }
           });
         }
       }
@@ -327,7 +231,6 @@ function StandaloneRelationGraph({
         const selectedEdge = cyRef.current.getElementById(selectedEdgeIdRef.current);
         if (selectedEdge && selectedEdge.length > 0) {
           cyRef.current.batch(() => {
-            // 새로 추가된 노드들에 대해 연결 여부 확인
             newNodeIds.forEach((id) => {
               const newNode = cyRef.current.getElementById(id);
               if (newNode && newNode.length > 0) {
@@ -335,16 +238,13 @@ function StandaloneRelationGraph({
                 const targetNode = selectedEdge.target();
                 
                 if (newNode.same(sourceNode) || newNode.same(targetNode)) {
-                  // 선택된 간선의 소스/타겟 노드: faded 제거, highlighted 유지
                   newNode.removeClass("faded").addClass("highlighted");
                 } else {
-                  // 비연결 노드: faded 적용
                   newNode.addClass("faded");
                 }
               }
             });
             
-            // 새로 추가된 간선들에 대해 연결 여부 확인
             newEdgeIds.forEach((id) => {
               const newEdge = cyRef.current.getElementById(id);
               if (newEdge && newEdge.length > 0) {
@@ -355,10 +255,8 @@ function StandaloneRelationGraph({
                 
                 if (newSource.same(selectedSource) || newSource.same(selectedTarget) ||
                     newTarget.same(selectedSource) || newTarget.same(selectedTarget)) {
-                  // 선택된 간선과 연결된 간선: faded 제거
                   newEdge.removeClass("faded");
                 } else {
-                  // 비연결 간선: faded 적용
                   newEdge.addClass("faded");
                 }
               }
@@ -386,7 +284,7 @@ function StandaloneRelationGraph({
         }
       });
     }
-  }, [elements, activeTooltip]);
+  }, [elements, activeTooltip, isSearchActive, filteredElements]);
 
   // elements, stylesheet, layout, searchLayout, style useMemo 최적화
   const memoizedElements = useMemo(() => finalElements, [finalElements]);
@@ -399,8 +297,6 @@ function StandaloneRelationGraph({
     position: 'relative',
     backgroundColor: '#f8fafc'
   }), []);
-
-  const nodeSize = getNodeSize();
 
   // 디버깅을 위한 로그 추가
   useEffect(() => {
