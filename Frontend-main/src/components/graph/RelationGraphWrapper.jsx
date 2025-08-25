@@ -39,7 +39,7 @@ function RelationGraphWrapper() {
     filteredElements,
     fitNodeIds,
     handleSearchSubmit,
-    clearSearch
+    clearSearch,
   } = useGraphSearch(elements, (searchState) => {
     // 검색 상태 변경 시 레이아웃 업데이트
     if (searchState.isSearchActive && searchState.filteredElements.length > 0) {
@@ -147,8 +147,6 @@ function RelationGraphWrapper() {
     localStorage.setItem('lastGraphChapter', currentChapter.toString());
   }, [currentChapter]);
 
-
-
   // 사이드바 토글 함수
   const toggleSidebar = () => {
     setIsSidebarOpen(!isSidebarOpen);
@@ -158,8 +156,6 @@ function RelationGraphWrapper() {
   const handleChapterSelect = (chapter) => {
     setCurrentChapter(chapter);
   };
-
-
 
   return (
     <div style={{ width: '100vw', height: '100vh', background: '#f4f7fb', overflow: 'hidden', display: 'flex' }}>
@@ -313,7 +309,7 @@ function RelationGraphWrapper() {
           paddingRight: 16,
           height: 54,
           flexWrap: 'nowrap',
-          overflow: 'hidden',
+          overflow: 'visible', // hidden에서 visible로 변경
         }}
         onWheel={e => e.preventDefault()}
         >
@@ -325,11 +321,11 @@ function RelationGraphWrapper() {
             gap: 12,
             flex: 1,
             minWidth: 0,
-            overflow: 'hidden',
+            overflow: 'visible', // hidden에서 visible로 변경
             flexWrap: 'nowrap',
           }}>
             
-            {/* 그래프 검색 기능 */}
+            {/* 그래프 검색 기능 - viewer 페이지와 동일하게 props 전달 */}
             <GraphControls
               elements={elements}
               currentChapterData={currentChapterData}
@@ -345,30 +341,30 @@ function RelationGraphWrapper() {
               onToggle={() => setEdgeLabelVisible(!edgeLabelVisible)}
             />
             
-                          {/* 독립 인물 버튼 */}
-              <button
-                onClick={() => setHideIsolated(!hideIsolated)}
-                style={{
-                  height: 36,
-                  padding: '0 16px',
-                  borderRadius: 8,
-                  border: '1.5px solid #e3e6ef',
-                  background: hideIsolated ? '#f8f9fc' : '#EEF2FF',
-                  color: hideIsolated ? '#6C8EFF' : '#22336b',
-                  fontSize: 13,
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                  transition: 'all 0.2s ease',
-                  outline: 'none',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 6,
-                  boxShadow: hideIsolated ? 'none' : '0 2px 8px rgba(108,142,255,0.15)',
-                  minWidth: '140px',
-                  justifyContent: 'center',
-                }}
-                title={hideIsolated ? '독립 인물을 표시합니다' : '독립 인물을 숨깁니다'}
-              >
+            {/* 독립 인물 버튼 */}
+            <button
+              onClick={() => setHideIsolated(!hideIsolated)}
+              style={{
+                height: 36,
+                padding: '0 16px',
+                borderRadius: 8,
+                border: '1.5px solid #e3e6ef',
+                background: hideIsolated ? '#f8f9fc' : '#EEF2FF',
+                color: hideIsolated ? '#6C8EFF' : '#22336b',
+                fontSize: 13,
+                fontWeight: 600,
+                cursor: 'pointer',
+                transition: 'all 0.2s ease',
+                outline: 'none',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+                boxShadow: hideIsolated ? 'none' : '0 2px 8px rgba(108,142,255,0.15)',
+                minWidth: '140px',
+                justifyContent: 'center',
+              }}
+              title={hideIsolated ? '독립 인물을 표시합니다' : '독립 인물을 숨깁니다'}
+            >
               <div style={{
                 width: 8,
                 height: 8,

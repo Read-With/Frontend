@@ -277,24 +277,7 @@ const CytoscapeGraphUnified = ({
       }}
       className="graph-canvas-area"
     >
-      {/* 디버깅용 정보 표시 */}
-      {process.env.NODE_ENV === 'development' && (
-        <div style={{
-          position: 'absolute',
-          top: '10px',
-          left: '10px',
-          background: 'rgba(0,0,0,0.7)',
-          color: 'white',
-          padding: '5px',
-          fontSize: '12px',
-          zIndex: 1000,
-          borderRadius: '4px'
-        }}>
-          Elements: {elements?.length || 0}<br/>
-          Visible: {isGraphVisible ? 'Yes' : 'No'}<br/>
-          Size: {containerRef.current?.offsetWidth || 0} x {containerRef.current?.offsetHeight || 0}
-        </div>
-      )}
+
       
       {/* 검색 결과가 없을 때 메시지 */}
       {shouldShowNoSearchResults(isSearchActive, searchTerm, fitNodeIds) && (

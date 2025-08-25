@@ -1,8 +1,8 @@
 import React, { useRef, useState, useEffect } from "react";
 import { FaSearch, FaUndo } from "react-icons/fa";
 import { useClickOutside } from "../../hooks/useClickOutside";
-import { useGraphSearch, highlightText } from "../../hooks/useGraphSearch.jsx";
-import { shouldShowNoSearchResults, getNoSearchResultsMessage } from "../../utils/searchUtils.jsx";
+import { highlightText } from "../../hooks/useGraphSearch.jsx";
+import { buildSuggestions } from "../../utils/searchUtils.jsx";
 
 const GraphControls = ({
   elements = [], // 그래프 요소들 (검색 제안용)
@@ -14,49 +14,85 @@ const GraphControls = ({
 }) => {
   const inputRef = useRef(null);
   
-  // useGraphSearch 훅을 내부 검색 제안 생성용으로만 사용
-  const {
-    suggestions,
-    showSuggestions,
-    selectedIndex,
-    selectSuggestion,
-    handleKeyDown: graphSearchKeyDown,
-    closeSuggestions,
-    setShowSuggestions,
-    setSelectedIndex,
-    setSearchTerm: setInternalSearchTerm
-  } = useGraphSearch(elements, null, currentChapterData);
-  
-  // 부모의 searchTerm과 useGraphSearch 내부 상태 동기화
-  useEffect(() => {
-    setInternalSearchTerm(searchTerm);
-  }, [searchTerm, setInternalSearchTerm]);
-  
-  // 검색 처리 함수
-  const handleSearch = () => {
-    if (searchTerm.trim().length >= 2) {
-      onSearchSubmit(searchTerm);
-    }
-  };
-  
-  // 검색 초기화 함수
-  const handleClearSearch = () => {
-    setInternalSearchTerm("");
-    onClearSearch();
-  };
-
-  // 입력값 변경 처리 함수 - 디바운싱 적용
+  // 로컬 검색어 상태
   const [inputValue, setInputValue] = useState(searchTerm);
+  
+  // 검색 제안 상태 직접 관리
+  const [suggestions, setSuggestions] = useState([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [selectedIndex, setSelectedIndex] = useState(-1);
   
   // 부모의 searchTerm과 동기화
   useEffect(() => {
     setInputValue(searchTerm);
   }, [searchTerm]);
 
+  // 검색 제안 생성 (2글자 이상일 때만)
+  useEffect(() => {
+    console.log('GraphControls: 검색 제안 생성 시도', {
+      inputValue,
+      inputValueLength: inputValue.trim().length,
+      elementsLength: elements.length,
+      currentChapterData: currentChapterData ? '있음' : '없음'
+    });
+    
+    // elements 데이터 구조 상세 분석
+    if (elements.length > 0) {
+      const firstElement = elements[0];
+      console.log('GraphControls: 첫 번째 element 구조', {
+        hasData: !!firstElement.data,
+        dataKeys: firstElement.data ? Object.keys(firstElement.data) : [],
+        isNode: !firstElement.data?.source,
+        isEdge: !!firstElement.data?.source,
+        label: firstElement.data?.label,
+        names: firstElement.data?.names,
+        common_name: firstElement.data?.common_name
+      });
+      
+      // 노드만 필터링해서 확인
+      const nodes = elements.filter(el => !el.data?.source);
+      console.log('GraphControls: 노드 개수', nodes.length);
+      if (nodes.length > 0) {
+        console.log('GraphControls: 첫 번째 노드', nodes[0].data);
+      }
+    }
+    
+    const matches = buildSuggestions(elements, inputValue, currentChapterData);
+    console.log('GraphControls: 검색 제안 결과', {
+      matchesLength: matches.length,
+      matches: matches.slice(0, 3) // 처음 3개만 로그
+    });
+    
+    setSuggestions(matches);
+    // 조건 완화: 검색어가 2글자 이상이면 드롭다운 표시 (결과가 없어도)
+    const shouldShow = inputValue.trim().length >= 2;
+    console.log('GraphControls: 드롭다운 표시 여부', {
+      shouldShow,
+      matchesLength: matches.length,
+      inputValueLength: inputValue.trim().length
+    });
+    setShowSuggestions(shouldShow);
+    setSelectedIndex(-1);
+  }, [inputValue, elements, currentChapterData]);
+  
+  // 검색 처리 함수
+  const handleSearch = () => {
+    if (inputValue.trim().length >= 2) {
+      onSearchSubmit(inputValue);
+    }
+  };
+  
+  // 검색 초기화 함수
+  const handleClearSearch = () => {
+    setInputValue("");
+    setShowSuggestions(false);
+    setSelectedIndex(-1);
+    onClearSearch();
+  };
+
   const handleInputChange = (e) => {
     const value = e.target.value;
-    setInputValue(value); // 로컬 상태 업데이트
-    setInternalSearchTerm(value); // useGraphSearch 내부 상태 업데이트
+    setInputValue(value);
   };
 
   // 검색 실행 함수 (엔터키나 검색 버튼 클릭 시)
@@ -66,33 +102,54 @@ const GraphControls = ({
     }
   };
   
-  // 키보드 이벤트 처리 (useGraphSearch 훅 사용)
+  // 키보드 이벤트 처리
   const handleKeyDown = (e) => {
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      executeSearch();
-      return;
+    switch (e.key) {
+      case 'ArrowDown':
+        if (showSuggestions && suggestions && suggestions.length > 0) {
+          e.preventDefault();
+          setSelectedIndex(prev => 
+            prev < suggestions.length - 1 ? prev + 1 : 0
+          );
+        }
+        break;
+      case 'ArrowUp':
+        if (showSuggestions && suggestions && suggestions.length > 0) {
+          e.preventDefault();
+          setSelectedIndex(prev => 
+            prev > 0 ? prev - 1 : suggestions.length - 1
+          );
+        }
+        break;
+      case 'Enter':
+        e.preventDefault();
+        if (showSuggestions && selectedIndex >= 0 && suggestions && suggestions[selectedIndex]) {
+          handleSelectSuggestion(suggestions[selectedIndex]);
+        } else {
+          executeSearch();
+        }
+        break;
+      case 'Escape':
+        if (showSuggestions) {
+          setShowSuggestions(false);
+          setSelectedIndex(-1);
+        }
+        break;
     }
-    
-    graphSearchKeyDown(e, (selectedTerm) => {
-      setInputValue(selectedTerm);
-      onSearchSubmit(selectedTerm);
-    });
   };
   
   // 외부 클릭 감지를 위한 훅 사용
   const dropdownRef = useClickOutside(() => {
-    closeSuggestions();
+    setShowSuggestions(false);
+    setSelectedIndex(-1);
   });
 
-  // 제안 선택 함수 (useGraphSearch 훅의 selectSuggestion 사용)
+  // 제안 선택 함수
   const handleSelectSuggestion = (suggestion) => {
     setInputValue(suggestion.label);
     onSearchSubmit(suggestion.label);
-    selectSuggestion(suggestion, (selectedTerm) => {
-      setInputValue(selectedTerm);
-      onSearchSubmit(selectedTerm);
-    });
+    setShowSuggestions(false);
+    setSelectedIndex(-1);
   };
 
   // 기본 스타일 정의
@@ -162,10 +219,13 @@ const GraphControls = ({
     border: '1px solid #e3e6ef',
     borderRadius: '6px',
     boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)',
-    zIndex: 1000,
+    zIndex: 9999,
     maxHeight: '300px',
     overflowY: 'auto',
     marginTop: '4px',
+    minWidth: '200px',
+    width: '100%',
+    display: 'block',
   };
 
   const suggestionItemStyle = (isSelected) => ({
@@ -188,7 +248,13 @@ const GraphControls = ({
   };
 
   return (
-    <div ref={dropdownRef} style={{ position: 'relative' }}>
+    <div ref={dropdownRef} style={{ 
+      position: 'relative', 
+      display: 'inline-block',
+      width: 'auto',
+      minWidth: '200px',
+      zIndex: 99999 // 컨테이너에도 높은 z-index 추가
+    }}>
       <form
         style={formStyle}
         onSubmit={(e) => {
@@ -208,7 +274,14 @@ const GraphControls = ({
             e.target.style.borderColor = '#6C8EFF';
             e.target.style.background = '#fff';
             e.target.style.boxShadow = '0 0 0 2px rgba(108, 142, 255, 0.1)';
-            if (suggestions.length > 0) {
+            console.log('GraphControls: 포커스 이벤트', {
+              suggestionsLength: suggestions.length,
+              inputValueLength: inputValue.trim().length,
+              showSuggestions
+            });
+            // 조건 완화: 검색어가 2글자 이상이면 드롭다운 표시
+            if (inputValue.trim().length >= 2) {
+              console.log('GraphControls: 포커스 시 드롭다운 표시');
               setShowSuggestions(true);
             }
           }}
@@ -247,10 +320,15 @@ const GraphControls = ({
         </button>
       </form>
 
-      {/* 검색 제안 드롭다운 */}
-      {showSuggestions && (
-        <div style={dropdownStyle}>
-          {suggestions.length > 0 ? (
+             {/* 검색 제안 드롭다운 */}
+       {showSuggestions && (
+         <div style={dropdownStyle}>
+           {console.log('GraphControls: 드롭다운 렌더링', { 
+             showSuggestions, 
+             suggestionsLength: suggestions.length,
+             selectedIndex 
+           })}
+           {suggestions.length > 0 ? (
             <>
               <div style={{ 
                 padding: '8px 14px', 
@@ -291,42 +369,10 @@ const GraphControls = ({
                 검색 결과가 없습니다
               </div>
               <div style={{ fontSize: '11px', color: '#999' }}>
-                "{inputValue}"와 일치하는 인물을 찾을 수 없습니다
+                다른 검색어를 입력해보세요
               </div>
             </div>
           )}
-        </div>
-      )}
-
-      {/* 검색 결과 없음 메시지 */}
-      {shouldShowNoSearchResults(isSearchActive, inputValue, [], suggestions) && (
-        <div style={{
-          position: 'absolute',
-          top: '100%',
-          left: '0',
-          right: '0',
-          background: '#fff',
-          border: '1px solid #e3e6ef',
-          borderRadius: '6px',
-          boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)',
-          zIndex: 1000,
-          marginTop: '4px',
-          padding: '16px 14px',
-          textAlign: 'center'
-        }}>
-          {(() => {
-            const message = getNoSearchResultsMessage(inputValue);
-            return (
-              <>
-                <div style={{ marginBottom: '4px', fontWeight: '500', color: '#6c757d' }}>
-                  {message.title}
-                </div>
-                <div style={{ fontSize: '11px', color: '#999' }}>
-                  {message.description}
-                </div>
-              </>
-            );
-          })()}
         </div>
       )}
     </div>

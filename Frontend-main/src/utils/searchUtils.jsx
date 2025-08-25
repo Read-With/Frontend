@@ -34,15 +34,26 @@ export function buildSuggestions(elements, query, currentChapterData = null) {
   const searchLower = trimmed.toLowerCase();
   const characterNodes = Array.isArray(elements) ? elements.filter(el => !el.data.source) : [];
 
+  console.log('buildSuggestions: 입력 데이터', {
+    query: trimmed,
+    searchLower,
+    elementsLength: elements.length,
+    characterNodesLength: characterNodes.length,
+    hasCurrentChapterData: !!currentChapterData
+  });
+
   // 현재 챕터의 캐릭터 데이터가 있는 경우, 해당 챕터에 존재하는 인물만 필터링
   let filteredNodes = characterNodes;
   if (currentChapterData && currentChapterData.characters) {
     const chapterCharacterIds = new Set(
       currentChapterData.characters.map(char => String(char.id))
     );
+    console.log('buildSuggestions: 챕터 캐릭터 ID들', Array.from(chapterCharacterIds));
+    
     filteredNodes = characterNodes.filter(node => 
       chapterCharacterIds.has(node.data.id)
     );
+    console.log('buildSuggestions: 챕터 필터링 후 노드 수', filteredNodes.length);
   }
 
   const matches = filteredNodes
@@ -64,6 +75,11 @@ export function buildSuggestions(elements, query, currentChapterData = null) {
       };
     })
     .slice(0, 8);
+
+  console.log('buildSuggestions: 최종 결과', {
+    matchesLength: matches.length,
+    matches: matches.slice(0, 3)
+  });
 
   return matches;
 }
