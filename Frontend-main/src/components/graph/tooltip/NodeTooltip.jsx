@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { useParams, useLocation } from "react-router-dom";
 import { processRelations, processRelationTags } from "../../../utils/relationUtils";
-import { highlightText } from "../../../hooks/useGraphSearch.jsx";
+import { highlightText } from "../../../utils/searchUtils.jsx";
 import { getChapterLastEventNums, getFolderKeyFromFilename, getEventDataByIndex } from "../../../utils/graphData";
 import { useTooltipPosition } from "../../../hooks/useTooltipPosition";
 import { useClickOutside } from "../../../hooks/useClickOutside";

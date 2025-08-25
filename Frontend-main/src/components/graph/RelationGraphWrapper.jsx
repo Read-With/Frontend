@@ -23,7 +23,6 @@ function RelationGraphWrapper() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [edgeLabelVisible, setEdgeLabelVisible] = useState(true);
   
-  // 통합 데이터 로딩 훅 사용
   const {
     elements,
     newNodeIds,
@@ -35,7 +34,9 @@ function RelationGraphWrapper() {
     error
   } = useGraphDataLoader(filename, currentChapter);
   
-  // 검색 관련 상태를 useGraphSearch 훅으로 관리
+  // 레이아웃 상태
+  const [currentLayout, setCurrentLayout] = useState(DEFAULT_LAYOUT);
+
   const {
     searchTerm,
     isSearchActive,
@@ -44,16 +45,12 @@ function RelationGraphWrapper() {
     handleSearchSubmit,
     clearSearch,
   } = useGraphSearch(elements, (searchState) => {
-    // 검색 상태 변경 시 레이아웃 업데이트
     if (searchState.isSearchActive && searchState.filteredElements.length > 0) {
       setCurrentLayout(SEARCH_LAYOUT);
     } else {
       setCurrentLayout(DEFAULT_LAYOUT);
     }
   }, currentChapterData);
-
-  // 레이아웃 상태
-  const [currentLayout, setCurrentLayout] = useState(DEFAULT_LAYOUT);
 
   // 챕터 변경 시 localStorage에 저장
   useEffect(() => {

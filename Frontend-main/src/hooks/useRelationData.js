@@ -1,21 +1,17 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { safeNum } from '../utils/relationUtils';
+import { safeNum, isSamePair } from '../utils/relationUtils';
 import { 
   getChapterLastEventNums, 
   getEventDataByIndex,
-  getMaxEventCount as getMaxEventCountFromGraphData,
+  getMaxEventCount,
+  getDetectedMaxChapter,
   getFolderKeyFromFilename
 } from '../utils/graphData';
 
-// 상수 정의
 const MIN_POSITIVITY = 1;
 
-// 관계 찾기 유틸리티 함수
 function findRelation(relations, id1, id2) {
   if (!Array.isArray(relations)) return null;
-  
-  const sid1 = safeNum(id1);
-  const sid2 = safeNum(id2);
   
   return relations
     .filter(r => {
@@ -23,32 +19,27 @@ function findRelation(relations, id1, id2) {
       const rid2 = safeNum(r.id2 ?? r.target);
       return rid1 !== 0 && rid2 !== 0 && rid1 !== rid2;
     })
-    .find(r => {
-      const rid1 = safeNum(r.id1 ?? r.source);
-      const rid2 = safeNum(r.id2 ?? r.target);
-      
-      return (
-        (rid1 === sid1 && rid2 === sid2) ||
-        (rid1 === sid2 && rid2 === sid1)
-      );
-    });
+    .find(r => isSamePair(r, id1, id2));
 }
 
-// 전체 챕터에서 최대 이벤트 수 계산 (graphData.js 함수 활용)
-function getMaxEventCount(folderKey, maxChapter = 10) {
+function getMaxEventCountLimited(folderKey, maxChapter) {
+  const detectedMaxChapter = getDetectedMaxChapter(folderKey);
+  const actualMaxChapter = maxChapter || detectedMaxChapter;
+  
   const lastEventNums = getChapterLastEventNums(folderKey);
   
-  if (maxChapter >= lastEventNums.length) {
-    return getMaxEventCountFromGraphData(folderKey);
+  if (actualMaxChapter >= lastEventNums.length) {
+    return getMaxEventCount(folderKey);
   }
   
-  const limitedEventNums = lastEventNums.slice(0, maxChapter);
+  const limitedEventNums = lastEventNums.slice(0, actualMaxChapter);
   return Math.max(...limitedEventNums, MIN_POSITIVITY);
 }
 
-// 관계 변화 데이터: 그래프 단독 페이지용 (전체 챕터)
 function fetchRelationTimelineStandalone(id1, id2, chapterNum, eventNum, maxChapter, folderKey) {
-  const lastEventNums = getChapterLastEventNums(folderKey).slice(0, maxChapter);
+  const detectedMaxChapter = getDetectedMaxChapter(folderKey);
+  const actualMaxChapter = maxChapter || detectedMaxChapter;
+  const lastEventNums = getChapterLastEventNums(folderKey).slice(0, actualMaxChapter);
   const points = [];
   const labelInfo = [];
   
@@ -153,11 +144,11 @@ function padSingleEvent(points, labels) {
  * @param {number} id2 - 두 번째 노드 ID
  * @param {number} chapterNum - 현재 챕터 번호
  * @param {number} eventNum - 현재 이벤트 번호
- * @param {number} maxChapter - 최대 챕터 수 (standalone 모드에서만 사용)
+ * @param {number} maxChapter - 최대 챕터 수 (standalone 모드에서만 사용, 없으면 자동 감지)
  * @param {string} filename - 파일명 (예: "gatsby.epub", "alice.epub")
  * @returns {object} 차트 데이터와 로딩 상태
  */
-export function useRelationData(mode, id1, id2, chapterNum, eventNum, maxChapter = 10, filename) {
+export function useRelationData(mode, id1, id2, chapterNum, eventNum, maxChapter, filename) {
   const [timeline, setTimeline] = useState([]);
   const [labels, setLabels] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -167,7 +158,7 @@ export function useRelationData(mode, id1, id2, chapterNum, eventNum, maxChapter
   const folderKey = useMemo(() => getFolderKeyFromFilename(filename), [filename]);
 
   // 메모이제이션된 최대 이벤트 수
-  const maxEventCount = useMemo(() => getMaxEventCount(folderKey, maxChapter), [folderKey, maxChapter]);
+  const maxEventCount = useMemo(() => getMaxEventCountLimited(folderKey, maxChapter), [folderKey, maxChapter]);
 
   const fetchData = useCallback(() => {
     setLoading(true);

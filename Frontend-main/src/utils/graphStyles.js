@@ -75,4 +75,84 @@ export const getRelationColor = (positivity) => {
   return `hsl(${h}, 70%, 45%)`;
 };
 
+// [공통 스타일시트 생성 함수]
+export const createGraphStylesheet = (nodeSize, edgeStyle, edgeLabelVisible, maxEdgeLabelLength = 15) => [
+  {
+    selector: "node[image]",
+    style: {
+      "background-color": "#eee",
+      "background-image": "data(image)",
+      "background-fit": "cover",
+      "background-clip": "node",
+      "border-width": (ele) => (ele.data("main") ? 2 : 1),
+      "border-color": "#5B7BA0",
+      "border-opacity": 1,
+      width: nodeSize,
+      height: nodeSize,
+      shape: "ellipse",
+      label: "data(label)",
+      "text-valign": "bottom",
+      "text-halign": "center",
+      "font-size": 12,
+      "font-weight": (ele) => (ele.data("main") ? 700 : 400),
+      color: "#444",
+      "text-margin-y": 2,
+      "text-background-color": "#fff",
+      "text-background-opacity": 0.8,
+      "text-background-shape": "roundrectangle",
+      "text-background-padding": 2,
+    },
+  },
+  {
+    selector: "edge",
+    style: {
+      width: edgeStyle.width,
+      "line-color": (ele) => getRelationColor(ele.data("positivity")),
+      "curve-style": "bezier",
+      label: (ele) => {
+        const label = ele.data('label') || '';
+        if (!edgeLabelVisible) return '';
+        return label.length > maxEdgeLabelLength ? label.slice(0, maxEdgeLabelLength) + '...' : label;
+      },
+      "font-size": edgeStyle.fontSize,
+      "text-rotation": "autorotate",
+      color: "#42506b",
+      "text-background-color": "#fff",
+      "text-background-opacity": 0.8,
+      "text-background-shape": "roundrectangle",
+      "text-background-padding": 2,
+      "text-outline-color": "#fff",
+      "text-outline-width": 2,
+      opacity: "mapData(weight, 0, 1, 0.55, 1)",
+      "target-arrow-shape": "none",
+    },
+  },
+  {
+    selector: "node.cytoscape-node-appear",
+    style: {
+      "border-color": "#22c55e",
+      "border-width": 16,
+      "border-opacity": 1,
+      "transition-property": "border-width, border-color, border-opacity",
+      "transition-duration": "700ms",
+    },
+  },
+  {
+    selector: ".faded",
+    style: {
+      opacity: 0.25,
+      "text-opacity": 0.12,
+    },
+  },
+  {
+    selector: ".highlighted",
+    style: {
+      "border-color": "#3b82f6",
+      "border-width": 2,
+      "border-opacity": 1,
+      "border-style": "solid",
+    },
+  },
+];
+
 

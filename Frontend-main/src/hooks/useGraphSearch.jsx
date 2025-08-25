@@ -2,8 +2,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { 
   buildSuggestions, 
-  filterGraphElements, 
-  highlightText 
+  filterGraphElements
 } from '../utils/searchUtils.jsx';
 
 /**
@@ -33,18 +32,11 @@ export function useGraphSearch(elements, onSearchStateChange = null, currentChap
 
   // 검색 처리 함수
   const handleSearchSubmit = useCallback((searchTerm) => {
-    console.log('🔍 검색 요청:', searchTerm);
     setSearchTerm(searchTerm);
     setIsSearchActive(!!searchTerm.trim());
     
     if (searchTerm.trim() && elements) {
       const filtered = filterGraphElements(elements, searchTerm, currentChapterData);
-      console.log('📊 검색 결과:', { 
-        searchTerm, 
-        totalElements: elements.length, 
-        filteredElements: filtered?.length || 0,
-        fitNodeIds: filtered ? filtered.filter(el => !el.data.source).length : 0
-      });
       setFilteredElements(filtered || []);
       setFitNodeIds(filtered ? filtered.filter(el => !el.data.source).map(el => el.data.id) : []);
     } else {
@@ -56,7 +48,6 @@ export function useGraphSearch(elements, onSearchStateChange = null, currentChap
 
   // 검색 초기화 함수
   const clearSearch = useCallback(() => {
-    console.log('🔄 검색 초기화 요청');
     setSearchTerm("");
     setFilteredElements([]);
     setFitNodeIds([]);
@@ -163,5 +154,4 @@ export function useGraphSearch(elements, onSearchStateChange = null, currentChap
   };
 }
 
-// highlightText 함수를 다시 export (기존 import 호환성을 위해)
-export { highlightText };
+

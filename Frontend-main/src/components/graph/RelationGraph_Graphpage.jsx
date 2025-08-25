@@ -614,7 +614,7 @@ function StandaloneRelationGraph({
                     mode={inViewer ? 'viewer' : 'standalone'}
                     chapterNum={chapterNum}
                     eventNum={eventNum}
-                    maxChapter={inViewer ? maxChapter : 10}
+                    maxChapter={maxChapter}
                     style={{ pointerEvents: 'auto' }}
                   />
                 )}

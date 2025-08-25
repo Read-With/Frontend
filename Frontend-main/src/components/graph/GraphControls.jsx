@@ -1,8 +1,7 @@
 import React, { useRef, useState, useEffect } from "react";
 import { FaSearch, FaUndo } from "react-icons/fa";
 import { useClickOutside } from "../../hooks/useClickOutside";
-import { highlightText } from "../../hooks/useGraphSearch.jsx";
-import { buildSuggestions } from "../../utils/searchUtils.jsx";
+import { highlightText, buildSuggestions } from "../../utils/searchUtils.jsx";
 
 const GraphControls = ({
   elements = [], // 그래프 요소들 (검색 제안용)
@@ -29,48 +28,9 @@ const GraphControls = ({
 
   // 검색 제안 생성 (2글자 이상일 때만)
   useEffect(() => {
-    console.log('GraphControls: 검색 제안 생성 시도', {
-      inputValue,
-      inputValueLength: inputValue.trim().length,
-      elementsLength: elements.length,
-      currentChapterData: currentChapterData ? '있음' : '없음'
-    });
-    
-    // elements 데이터 구조 상세 분석
-    if (elements.length > 0) {
-      const firstElement = elements[0];
-      console.log('GraphControls: 첫 번째 element 구조', {
-        hasData: !!firstElement.data,
-        dataKeys: firstElement.data ? Object.keys(firstElement.data) : [],
-        isNode: !firstElement.data?.source,
-        isEdge: !!firstElement.data?.source,
-        label: firstElement.data?.label,
-        names: firstElement.data?.names,
-        common_name: firstElement.data?.common_name
-      });
-      
-      // 노드만 필터링해서 확인
-      const nodes = elements.filter(el => !el.data?.source);
-      console.log('GraphControls: 노드 개수', nodes.length);
-      if (nodes.length > 0) {
-        console.log('GraphControls: 첫 번째 노드', nodes[0].data);
-      }
-    }
-    
     const matches = buildSuggestions(elements, inputValue, currentChapterData);
-    console.log('GraphControls: 검색 제안 결과', {
-      matchesLength: matches.length,
-      matches: matches.slice(0, 3) // 처음 3개만 로그
-    });
-    
     setSuggestions(matches);
-    // 조건 완화: 검색어가 2글자 이상이면 드롭다운 표시 (결과가 없어도)
     const shouldShow = inputValue.trim().length >= 2;
-    console.log('GraphControls: 드롭다운 표시 여부', {
-      shouldShow,
-      matchesLength: matches.length,
-      inputValueLength: inputValue.trim().length
-    });
     setShowSuggestions(shouldShow);
     setSelectedIndex(-1);
   }, [inputValue, elements, currentChapterData]);
@@ -274,14 +234,7 @@ const GraphControls = ({
             e.target.style.borderColor = '#6C8EFF';
             e.target.style.background = '#fff';
             e.target.style.boxShadow = '0 0 0 2px rgba(108, 142, 255, 0.1)';
-            console.log('GraphControls: 포커스 이벤트', {
-              suggestionsLength: suggestions.length,
-              inputValueLength: inputValue.trim().length,
-              showSuggestions
-            });
-            // 조건 완화: 검색어가 2글자 이상이면 드롭다운 표시
             if (inputValue.trim().length >= 2) {
-              console.log('GraphControls: 포커스 시 드롭다운 표시');
               setShowSuggestions(true);
             }
           }}
@@ -323,11 +276,6 @@ const GraphControls = ({
              {/* 검색 제안 드롭다운 */}
        {showSuggestions && (
          <div style={dropdownStyle}>
-           {console.log('GraphControls: 드롭다운 렌더링', { 
-             showSuggestions, 
-             suggestionsLength: suggestions.length,
-             selectedIndex 
-           })}
            {suggestions.length > 0 ? (
             <>
               <div style={{ 

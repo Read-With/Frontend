@@ -1,20 +1,20 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { useParams } from "react-router-dom";
 import { useRelationData } from "../../hooks/useRelationData";
+import { useGraphDataLoader } from "../../hooks/useGraphDataLoader";
 import { safeNum } from "../../utils/relationUtils";
 import { getSlideInAnimation } from "../../utils/animations";
 import { processRelations } from "../../utils/relationUtils";
 import { getFolderKeyFromFilename, getEventDataByIndex } from "../../utils/graphData";
-// 기존 툴팁 컴포넌트들 import
 import GraphNodeTooltip from "./tooltip/NodeTooltip";
 import UnifiedEdgeTooltip from "./tooltip/UnifiedEdgeTooltip";
 
 function GraphSidebar({
   activeTooltip,
   onClose,
-  chapterNum = 1,
-  eventNum = 1,
-  maxChapter = 10,
+  chapterNum,
+  eventNum,
+  maxChapter,
   hasNoRelations = false,
   filename,
   elements = [], // 현재 로드된 elements 추가
@@ -25,6 +25,17 @@ function GraphSidebar({
   const { filename: urlFilename } = useParams();
   const actualFilename = filename || urlFilename;
 
+  // useGraphDataLoader를 사용하여 동적으로 감지된 값들 가져오기
+  const {
+    maxChapter: detectedMaxChapter,
+    eventNum: detectedEventNum,
+    maxEventNum: detectedMaxEventNum
+  } = useGraphDataLoader(actualFilename, chapterNum || 1);
+
+  // 동적으로 감지된 값들을 우선 사용, 없으면 props 값 사용
+  const actualMaxChapter = detectedMaxChapter || maxChapter;
+  const actualEventNum = detectedEventNum || eventNum;
+  const actualChapterNum = chapterNum || 1;
   
   const [isNodeAppeared, setIsNodeAppeared] = useState(false);
   const [error, setError] = useState(null);
@@ -33,7 +44,7 @@ function GraphSidebar({
   const id1 = safeNum(activeTooltip?.data?.source);
   const id2 = safeNum(activeTooltip?.data?.target);
 
-  const { fetchData } = useRelationData('standalone', id1, id2, chapterNum, eventNum, maxChapter, actualFilename);
+  const { fetchData } = useRelationData('standalone', id1, id2, actualChapterNum, actualEventNum, actualMaxChapter, actualFilename);
 
   // 노드 등장 여부 확인 함수
   const checkNodeAppearance = useCallback(() => {
@@ -41,7 +52,7 @@ function GraphSidebar({
       setIsNodeAppeared(false);
       setError(null);
       
-      if (!activeTooltip || !chapterNum || chapterNum <= 0) {
+      if (!activeTooltip || !actualChapterNum || actualChapterNum <= 0) {
         return;
       }
 
@@ -53,7 +64,7 @@ function GraphSidebar({
 
       // graphData.js의 함수를 사용하여 데이터 가져오기
       const folderKey = getFolderKeyFromFilename(actualFilename);
-      const json = getEventDataByIndex(folderKey, chapterNum, eventNum);
+      const json = getEventDataByIndex(folderKey, actualChapterNum, actualEventNum);
 
       // 노드 ID를 문자열로 변환하여 비교
       const nodeId = String(nodeData.id);
@@ -91,7 +102,7 @@ function GraphSidebar({
       setError(err.message);
       setIsNodeAppeared(false);
     }
-  }, [activeTooltip, chapterNum, eventNum, elements, actualFilename]);
+  }, [activeTooltip, actualChapterNum, actualEventNum, elements, actualFilename]);
 
   // 노드 등장 여부 확인
   useEffect(() => {
@@ -103,7 +114,7 @@ function GraphSidebar({
     if (activeTooltip && id1 && id2) {
       fetchData();
     }
-  }, [activeTooltip, id1, id2, chapterNum, eventNum, maxChapter, fetchData]);
+  }, [activeTooltip, id1, id2, actualChapterNum, actualEventNum, actualMaxChapter, fetchData]);
 
   // 관계가 없을 때 안내 메시지 표시 (activeTooltip이 없어도 표시)
   if (hasNoRelations) {
@@ -167,9 +178,9 @@ function GraphSidebar({
         nodeCenter={activeTooltip.nodeCenter}
         onClose={onClose}
         inViewer={false}
-        chapterNum={chapterNum}
-        eventNum={eventNum}
-        maxChapter={maxChapter}
+        chapterNum={actualChapterNum}
+        eventNum={actualEventNum}
+        maxChapter={actualMaxChapter}
         elements={elements}
         isSearchActive={isSearchActive}
         filteredElements={filteredElements}
@@ -187,9 +198,9 @@ function GraphSidebar({
         y={activeTooltip.y}
         onClose={onClose}
         inViewer={false}
-        chapterNum={chapterNum}
-        eventNum={eventNum}
-        maxChapter={maxChapter}
+        chapterNum={actualChapterNum}
+        eventNum={actualEventNum}
+        maxChapter={actualMaxChapter}
         elements={elements}
       />
     );

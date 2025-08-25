@@ -10,23 +10,19 @@ import GraphNodeTooltip from "./tooltip/NodeTooltip";
 import UnifiedEdgeTooltip from "./tooltip/UnifiedEdgeTooltip";
 import "./RelationGraph.css";
 import { calcGraphDiff } from "../../utils/graphDataUtils.js";
-import { DEFAULT_LAYOUT } from "../../utils/graphStyles";
-import { getNodeSize as getNodeSizeUtil, getEdgeStyle as getEdgeStyleUtil, getRelationColor } from "../../utils/graphStyles";
+import { DEFAULT_LAYOUT, getNodeSize, getEdgeStyle, createGraphStylesheet } from "../../utils/graphStyles";
 import useGraphInteractions from "../../hooks/useGraphInteractions";
 
-// getRelationColor는 공용 유틸 사용
-
-// 공용 유틸 사용(기능 유지): ViewerRelationGraph는 viewer 컨텍스트로 동작
-const getNodeSize = () => getNodeSizeUtil('viewer');
-const getEdgeStyle = () => getEdgeStyleUtil('viewer');
+// 상수 정의
+const MAX_EDGE_LABEL_LENGTH = 15;
 
 const ViewerRelationGraph = ({
   elements,
-  chapterNum, // 관계 변화
-  eventNum, // 관계 변화
+  chapterNum,
+  eventNum,
   edgeLabelVisible = true,
-  maxChapter = 10,
-  filename, // filename prop 추가
+  maxChapter,
+  filename,
 }) => {
   const cyRef = useRef(null);
   const [activeTooltip, setActiveTooltip] = useState(null);
@@ -91,109 +87,26 @@ const ViewerRelationGraph = ({
     selectedNodeIdRef,
     selectedEdgeIdRef,
     strictBackgroundClear: true,
-    isSearchActive: false, // ViewerPage에서는 검색 기능이 없으므로 false
-    filteredElements: [], // ViewerPage에서는 빈 배열
+    isSearchActive: false,
+    filteredElements: [],
     onClearTooltip,
     onShowNodeTooltip,
     onShowEdgeTooltip,
   });
 
-  // 툴팁 닫기 함수 - activeTooltip도 함께 초기화
   const handleCloseTooltip = useCallback(() => {
     setActiveTooltip(null);
     clearSelection();
   }, [clearSelection]);
 
-  const nodeSize = getNodeSize();
-  const edgeStyle = getEdgeStyle();
-
-  const MAX_EDGE_LABEL_LENGTH = 15;
+  const nodeSize = getNodeSize('viewer');
+  const edgeStyle = getEdgeStyle('viewer');
 
   const stylesheet = useMemo(
-    () => [
-      {
-        selector: "node[image]",
-        style: {
-          "background-color": "#eee",
-          "background-image": "data(image)",
-          "background-fit": "cover",
-          "background-clip": "node",
-          "border-width": (ele) => (ele.data("main") ? 2 : 1),
-          "border-color": "#5B7BA0",
-          "border-opacity": 1,
-          width: nodeSize,
-          height: nodeSize,
-          shape: "ellipse",
-          label: "data(label)",
-          "text-valign": "bottom",
-          "text-halign": "center",
-          "font-size": 12,
-          "font-weight": (ele) => (ele.data("main") ? 700 : 400),
-          color: "#444",
-          "text-margin-y": 2,
-          "text-background-color": "#fff",
-          "text-background-opacity": 0.8,
-          "text-background-shape": "roundrectangle",
-          "text-background-padding": 2,
-        },
-      },
-      {
-        selector: "edge",
-        style: {
-          width: edgeStyle.width,
-          "line-color": (ele) => getRelationColor(ele.data("positivity")),
-          "curve-style": "bezier",
-          label: (ele) => {
-            const label = ele.data('label') || '';
-            if (!edgeLabelVisible) return '';
-            return label.length > MAX_EDGE_LABEL_LENGTH ? label.slice(0, MAX_EDGE_LABEL_LENGTH) + '...' : label;
-          },
-          "font-size": edgeStyle.fontSize,
-          "text-rotation": "autorotate",
-          color: "#42506b",
-          "text-background-color": "#fff",
-          "text-background-opacity": 0.8,
-          "text-background-shape": "roundrectangle",
-          "text-background-padding": 2,
-          "text-outline-color": "#fff",
-          "text-outline-width": 2,
-          opacity: "mapData(weight, 0, 1, 0.55, 1)",
-          "target-arrow-shape": "none",
-        },
-      },
-      {
-        selector: "node.cytoscape-node-appear",
-        style: {
-          "border-color": "#22c55e",
-          "border-width": 16,
-          "border-opacity": 1,
-          "transition-property": "border-width, border-color, border-opacity",
-          "transition-duration": "700ms",
-        },
-      },
-      {
-        selector: ".faded",
-        style: {
-          opacity: 0.25,
-          "text-opacity": 0.12,
-        },
-      },
-      {
-        selector: ".highlighted",
-        style: {
-          "border-color": "#3b82f6",
-          "border-width": 2,
-          "border-opacity": 1,
-          "border-style": "solid",
-        },
-      },
-    ],
+    () => createGraphStylesheet(nodeSize, edgeStyle, edgeLabelVisible, MAX_EDGE_LABEL_LENGTH),
     [nodeSize, edgeStyle, edgeLabelVisible]
   );
 
-  const layout = DEFAULT_LAYOUT;
-
-  // layout 완료 핸들러
   const handleLayoutComplete = useCallback(() => {
     setIsLayoutDone(true);
   }, []);
@@ -211,6 +124,7 @@ const ViewerRelationGraph = ({
     if (!prevElements || !elements) return;
     const { added } = calcGraphDiff(prevElements, elements);
     if (added.length > 0) {
+      // 추가된 요소들에 대한 처리 (필요시 구현)
     }
   }, [elements]);
 
