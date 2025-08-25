@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState, useCallback, createContext } from "
 import cytoscape from "cytoscape";
 import "./RelationGraph.css";
 import { detectAndResolveOverlap } from "../../utils/graphDataUtils.js";
-import { applySearchFadeEffect, shouldShowNoSearchResults, getNoSearchResultsMessage } from "../../utils/searchUtils.js";
+import { applySearchFadeEffect, shouldShowNoSearchResults, getNoSearchResultsMessage } from "../../utils/searchUtils.jsx";
 
 export const CytoscapeGraphContext = createContext();
 

@@ -1,5 +1,5 @@
 import { useCallback, useRef, useEffect } from "react";
-import { applySearchHighlight } from '../utils/searchUtils.js';
+import { applySearchHighlight } from '../utils/searchUtils.jsx';
 
 export default function useGraphInteractions({
   cyRef,

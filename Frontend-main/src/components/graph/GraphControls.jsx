@@ -2,7 +2,7 @@ import React, { useRef, useState, useEffect } from "react";
 import { FaSearch, FaUndo } from "react-icons/fa";
 import { useClickOutside } from "../../hooks/useClickOutside";
 import { useGraphSearch, highlightText } from "../../hooks/useGraphSearch.jsx";
-import { shouldShowNoSearchResults, getNoSearchResultsMessage } from "../../utils/searchUtils.js";
+import { shouldShowNoSearchResults, getNoSearchResultsMessage } from "../../utils/searchUtils.jsx";
 
 const GraphControls = ({
   elements = [], // 그래프 요소들 (검색 제안용)
