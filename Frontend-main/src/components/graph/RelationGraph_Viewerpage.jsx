@@ -6,7 +6,7 @@ import React, {
   useCallback,
 } from "react";
 import CytoscapeGraphUnified from "./CytoscapeGraphUnified";
-import GraphNodeTooltip from "./tooltip/NodeTooltip";
+import UnifiedNodeInfo from "./UnifiedNodeInfo";
 import UnifiedEdgeTooltip from "./tooltip/UnifiedEdgeTooltip";
 import "./RelationGraph.css";
 import { calcGraphDiff } from "../../utils/graphDataUtils.js";
@@ -296,8 +296,9 @@ const ViewerRelationGraph = ({
         }}
       >
         {activeTooltip?.type === "node" && (
-          <GraphNodeTooltip
+          <UnifiedNodeInfo
             key={`node-tooltip-${activeTooltip.id}`}
+            displayMode="tooltip"
             data={activeTooltip}
             x={activeTooltip.x}
             y={activeTooltip.y}

@@ -7,7 +7,7 @@ import React, {
 } from "react";
 import { useNavigate, useLocation, useParams } from "react-router-dom";
 import CytoscapeGraphUnified from "./CytoscapeGraphUnified";
-import GraphNodeTooltip from "./tooltip/NodeTooltip";
+import UnifiedNodeInfo from "./UnifiedNodeInfo";
 import UnifiedEdgeTooltip from "./tooltip/UnifiedEdgeTooltip";
 import GraphSidebar from "./GraphSidebar";
 import "./RelationGraph.css";
@@ -64,8 +64,32 @@ function StandaloneRelationGraph({
 
   // activeTooltip 상태 변화 감지
   useEffect(() => {
-    // activeTooltip 상태 변화 처리
+    console.log('activeTooltip changed:', activeTooltip);
   }, [activeTooltip]);
+
+  const onShowNodeTooltip = useCallback(({ node, nodeCenter, mouseX, mouseY }) => {
+    console.log('onShowNodeTooltip called with:', { node: node.id(), data: node.data() });
+    const tooltipData = { type: 'node', id: node.id(), x: mouseX, y: mouseY, data: node.data(), nodeCenter };
+    console.log('Setting activeTooltip to:', tooltipData);
+    setActiveTooltip(tooltipData);
+  }, []);
+
+  const onShowEdgeTooltip = useCallback(({ edge, absoluteX, absoluteY }) => {
+    setActiveTooltip({
+      type: 'edge',
+      id: edge.id(),
+      x: absoluteX,
+      y: absoluteY,
+      data: edge.data(),
+      sourceNode: edge.source(),
+      targetNode: edge.target(),
+    });
+  }, []);
+
+  const onClearTooltip = useCallback(() => {
+    console.log('onClearTooltip called - clearing activeTooltip');
+    setActiveTooltip(null);
+  }, []);
 
   const { tapNodeHandler, tapEdgeHandler, tapBackgroundHandler, clearSelection, clearSelectionOnly, clearAll } = useGraphInteractions({
     cyRef,
@@ -74,27 +98,13 @@ function StandaloneRelationGraph({
     strictBackgroundClear: true,
     isSearchActive,
     filteredElements,
-    onClearTooltip: () => {
-      setActiveTooltip(null);
-    },
-    onShowNodeTooltip: ({ node, nodeCenter, mouseX, mouseY }) => {
-      const tooltipData = { type: 'node', id: node.id(), x: mouseX, y: mouseY, data: node.data(), nodeCenter };
-      setActiveTooltip(tooltipData);
-    },
-    onShowEdgeTooltip: ({ edge, absoluteX, absoluteY }) => {
-      setActiveTooltip({
-        type: 'edge',
-        id: edge.id(),
-        x: absoluteX,
-        y: absoluteY,
-        data: edge.data(),
-        sourceNode: edge.source(),
-        targetNode: edge.target(),
-      });
-    },
+    onClearTooltip,
+    onShowNodeTooltip,
+    onShowEdgeTooltip,
   });
 
   const handleCloseTooltip = useCallback(() => {
+    console.log('handleCloseTooltip called');
     setActiveTooltip(null);
     if (isStandaloneGraphPage) {
       // 그래프 단독 페이지에서는 선택 상태만 초기화 (사이드바 닫기)
@@ -298,23 +308,10 @@ function StandaloneRelationGraph({
     backgroundColor: '#f8fafc'
   }), []);
 
-  // 디버깅을 위한 로그 추가
-  useEffect(() => {
-    console.log('StandaloneRelationGraph Debug:', {
-      elements: elements?.length,
-      finalElements: finalElements?.length,
-      memoizedElements: memoizedElements?.length,
-      sortedElements: sortedElements?.length,
-      isSearchActive,
-      filteredElements: filteredElements?.length,
-      chapterNum,
-      eventNum,
-      maxChapter
-    });
-  }, [elements, finalElements, memoizedElements, sortedElements, isSearchActive, filteredElements, chapterNum, eventNum, maxChapter]);
+
 
   const handleCanvasClick = (e) => {
-    // 리플 효과만 처리
+    // 리플 효과 처리
     const container = e.currentTarget;
     const rect = container.getBoundingClientRect();
     const x = e.clientX - rect.left;
@@ -325,7 +322,16 @@ function StandaloneRelationGraph({
       setRipples((prev) => prev.filter((r) => r.id !== id));
     }, 700);
 
-    // 툴팁 닫기는 로직은 useGraphInteractions의 tapBackgroundHandler에서 처리
+    // 그래프 온리 페이지에서 슬라이드바가 열려있을 때 닫기
+    // 노드 클릭 시에는 툴팁을 닫지 않음 (노드 클릭은 tapNodeHandler에서 처리됨)
+    if (isStandaloneGraphPage && activeTooltip) {
+      // 노드나 엣지가 아닌 배경 영역을 클릭했을 때만 툴팁 닫기
+      const target = e.target;
+      if (target === container || target.classList.contains('graph-canvas-area')) {
+        console.log('Background clicked - closing tooltip');
+        handleCloseTooltip();
+      }
+    }
   };
 
   if (fullScreen && inViewer) {
@@ -345,55 +351,6 @@ function StandaloneRelationGraph({
         {/* 그래프 본문만 렌더링 (상단바는 RelationGraphWrapper에서 처리) */}
         <div className="flex-1 relative overflow-hidden w-full h-full">
           <div className="flex-1 relative overflow-hidden" style={{ width: '100%', height: '100%' }}>
-                      {/* 툴팁 렌더링 */}
-          <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none', zIndex: 9999 }}>
-
-            {activeTooltip?.type === 'node' && activeTooltip.data && (
-                <GraphNodeTooltip
-                  key={`node-tooltip-${activeTooltip.id}`}
-                  data={activeTooltip.data}
-                  x={activeTooltip.x}
-                  y={activeTooltip.y}
-                  nodeCenter={activeTooltip.nodeCenter}
-                  onClose={handleCloseTooltip}
-                  inViewer={inViewer}
-                  chapterNum={chapterNum}
-                  eventNum={eventNum}
-                  maxChapter={maxChapter}
-                  elements={finalElements}
-                  style={{ pointerEvents: 'auto' }}
-                />
-              )}
-              {activeTooltip?.type === 'edge' && activeTooltip.data && (
-                inViewer ? (
-                  <UnifiedEdgeTooltip
-                    key={`edge-tooltip-${activeTooltip.id}`}
-                    data={activeTooltip.data}
-                    x={activeTooltip.x}
-                    y={activeTooltip.y}
-                    onClose={handleCloseTooltip}
-                    sourceNode={activeTooltip.sourceNode}
-                    targetNode={activeTooltip.targetNode}
-                    chapterNum={chapterNum}
-                    eventNum={eventNum}
-                    style={{ pointerEvents: 'auto' }}
-                  />
-                ) : (
-                  <UnifiedEdgeTooltip
-                    key={`edge-tooltip-${activeTooltip.id}`}
-                    data={activeTooltip.data}
-                    x={activeTooltip.x}
-                    y={activeTooltip.y}
-                    onClose={handleCloseTooltip}
-                    sourceNode={activeTooltip.sourceNode}
-                    targetNode={activeTooltip.targetNode}
-                    chapterNum={chapterNum}
-                    eventNum={eventNum}
-                    style={{ pointerEvents: 'auto' }}
-                  />
-                )
-              )}
-            </div>
                          {/* 그래프 영역 */}
              <div
                className="graph-canvas-area"
@@ -459,7 +416,7 @@ function StandaloneRelationGraph({
                      isSearchActive={isSearchActive}
                      filteredElements={filteredElements}
                      onLayoutComplete={() => {
-                       console.log('Layout completed for fullScreen mode');
+                       // 레이아웃 완료 처리
                      }}
                    />
                  </>
@@ -477,46 +434,6 @@ function StandaloneRelationGraph({
       {/* 기존 중앙 고정 < 버튼 완전히 제거 */}
 
       <div className="flex-1 relative overflow-hidden" style={{ width: '100%', height: '100%' }}>
-        {/* 툴팁 렌더링 - 그래프 단독 페이지가 아닐 때만 */}
-        {!isStandaloneGraphPage && (
-          <>
-
-            <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none', zIndex: 9999 }}>
-                {activeTooltip?.type === 'node' && activeTooltip.data && (
-                  <GraphNodeTooltip
-                    key={`node-tooltip-${activeTooltip.id}`}
-                    data={activeTooltip.data}
-                    x={activeTooltip.x}
-                    y={activeTooltip.y}
-                    nodeCenter={activeTooltip.nodeCenter}
-                    onClose={handleCloseTooltip}
-                    inViewer={inViewer}
-                    chapterNum={chapterNum}
-                    eventNum={eventNum}
-                    maxChapter={maxChapter}
-                    elements={finalElements}
-                    style={{ pointerEvents: 'auto' }}
-                  />
-                )}
-                {activeTooltip?.type === 'edge' && activeTooltip.data && (
-                  <UnifiedEdgeTooltip
-                    key={`edge-tooltip-${activeTooltip.id}`}
-                    data={activeTooltip.data}
-                    x={activeTooltip.x}
-                    y={activeTooltip.y}
-                    onClose={handleCloseTooltip}
-                    sourceNode={activeTooltip.sourceNode}
-                    targetNode={activeTooltip.targetNode}
-                    mode={inViewer ? 'viewer' : 'standalone'}
-                    chapterNum={chapterNum}
-                    eventNum={eventNum}
-                    maxChapter={maxChapter}
-                    style={{ pointerEvents: 'auto' }}
-                  />
-                )}
-              </div>
-          </>
-        )}
 
         {/* 그래프 영역 */}
         <div
@@ -583,7 +500,7 @@ function StandaloneRelationGraph({
                 isSearchActive={isSearchActive}
                 filteredElements={filteredElements}
                 onLayoutComplete={() => {
-                  console.log('Layout completed for normal mode');
+                  // 레이아웃 완료 처리
                 }}
               />
             </>
@@ -594,7 +511,7 @@ function StandaloneRelationGraph({
              {/* 그래프 단독 페이지에서 슬라이드바 렌더링 */}
        {isStandaloneGraphPage && (
          <>
-
+           {console.log('Rendering GraphSidebar with activeTooltip:', activeTooltip)}
            <GraphSidebar
              activeTooltip={activeTooltip}
              onClose={handleCloseTooltip}

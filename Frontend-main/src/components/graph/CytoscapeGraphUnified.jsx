@@ -29,14 +29,11 @@ const CytoscapeGraphUnified = ({
 
   // Cytoscape 인스턴스 생성
   useEffect(() => {
-    console.log('CytoscapeGraphUnified: Creating Cytoscape instance');
     if (!containerRef.current) {
-      console.log('CytoscapeGraphUnified: No container ref');
       return;
     }
     let cyInstance = externalCyRef?.current;
     if (!cyInstance || typeof cyInstance.container !== 'function') {
-      console.log('CytoscapeGraphUnified: Creating new Cytoscape instance');
       cyInstance = cytoscape({
         container: containerRef.current,
         elements: [],
@@ -55,9 +52,7 @@ const CytoscapeGraphUnified = ({
         desktopTapThreshold: 4,
       });
       if (externalCyRef) externalCyRef.current = cyInstance;
-      console.log('CytoscapeGraphUnified: Cytoscape instance created successfully');
     } else {
-      console.log('CytoscapeGraphUnified: Using existing Cytoscape instance');
       if (cyInstance.container() !== containerRef.current) {
         cyInstance.mount(containerRef.current);
       }
@@ -111,26 +106,19 @@ const CytoscapeGraphUnified = ({
 
   // elements diff patch 및 스타일/레이아웃 적용
   useEffect(() => {
-    console.log('CytoscapeGraphUnified: Elements update effect triggered');
     const cy = externalCyRef?.current;
     if (!cy) {
-      console.log('CytoscapeGraphUnified: No Cytoscape instance available');
       return;
     }
-    
-    console.log('CytoscapeGraphUnified: Processing elements', elements?.length || 0);
     
     // 디버깅: 간선 데이터 확인 (필요시 주석 해제)
 
     
     if (!elements || elements.length === 0) {
-      console.log('CytoscapeGraphUnified: No elements to render, clearing graph');
       cy.elements().remove();
       setIsGraphVisible(false);
       return;
     }
-    
-    console.log('CytoscapeGraphUnified: Starting batch update');
     cy.batch(() => {
       // 기존 노드/엣지 id 집합
       const prevNodeIds = new Set(cy.nodes().map(n => n.id()));
@@ -138,17 +126,12 @@ const CytoscapeGraphUnified = ({
       const nextNodeIds = new Set(elements.filter(e => !e.data.source).map(e => e.data.id));
       const nextEdgeIds = new Set(elements.filter(e => e.data.source).map(e => e.data.id));
       
-      console.log('CytoscapeGraphUnified: Current nodes', prevNodeIds.size, 'edges', prevEdgeIds.size);
-      console.log('CytoscapeGraphUnified: New nodes', nextNodeIds.size, 'edges', nextEdgeIds.size);
-      
       // 삭제
       cy.nodes().forEach(n => { if (!nextNodeIds.has(n.id())) n.remove(); });
       cy.edges().forEach(e => { if (!nextEdgeIds.has(e.id())) e.remove(); });
       // 추가
       const nodes = elements.filter(e => !e.data.source && !e.data.target);
       const edges = elements.filter(e => e.data.source && e.data.target);
-      
-      console.log('CytoscapeGraphUnified: Adding nodes', nodes.length, 'edges', edges.length);
       
       // 새로운 노드들에 대해 랜덤한 초기 위치 할당 (겹침 완화)
       const NODE_SIZE = nodeSize;
@@ -181,7 +164,6 @@ const CytoscapeGraphUnified = ({
       
       cy.add(nodes);
       cy.add(edges);
-      console.log('CytoscapeGraphUnified: Elements added to graph');
       
       // 반드시 preset 레이아웃 실행
       cy.layout({ name: 'preset' }).run();
@@ -189,7 +171,6 @@ const CytoscapeGraphUnified = ({
       if (stylesheet) cy.style(stylesheet);
       // 레이아웃 적용
       if (layout && layout.name !== 'preset') {
-        console.log('CytoscapeGraphUnified: Applying layout', layout.name);
         const layoutInstance = cy.layout({
           ...layout,
           animationDuration: 800,
@@ -238,7 +219,10 @@ const CytoscapeGraphUnified = ({
       }
       
       // 검색 상태에 따라 페이드 효과 적용 (유틸리티 함수 사용)
-      applySearchFadeEffect(cy, filteredElements, isSearchActive);
+      // 그래프 온리 페이지에서는 검색이 비활성화되어 있어도 페이드 효과를 적용하지 않음
+      if (isSearchActive || filteredElements.length > 0) {
+        applySearchFadeEffect(cy, filteredElements, isSearchActive);
+      }
       
       // 검색 결과가 없을 때 메시지 표시
       if (isSearchActive && (!fitNodeIds || fitNodeIds.length === 0)) {
@@ -246,7 +230,6 @@ const CytoscapeGraphUnified = ({
       }
     });
     setIsGraphVisible(true);
-    console.log('CytoscapeGraphUnified: Graph update completed, isGraphVisible set to true');
   }, [elements, stylesheet, layout, fitNodeIds, nodeSize, isSearchActive, filteredElements]); // 의존성 배열 최적화
 
   // 크기 반응형

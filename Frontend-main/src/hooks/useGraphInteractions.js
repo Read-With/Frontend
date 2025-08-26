@@ -36,7 +36,7 @@ export default function useGraphInteractions({
     const cy = cyRef.current;
     cy.nodes().removeClass("faded highlighted");
     cy.edges().removeClass("faded");
-    cy.nodes().ungrabify(); // 모든 노드를 드래그 불가능하게 만들기
+    // 드래그 기능은 유지 (그래프 온리 페이지에서 사용자가 그래프를 자유롭게 조작할 수 있도록)
   }, [cyRef]);
 
   // 툴팁을 포함한 모든 상태를 초기화하는 함수
@@ -87,21 +87,7 @@ export default function useGraphInteractions({
           node.removeClass("faded").addClass("highlighted");
           node.connectedEdges().removeClass("faded");
           node.neighborhood().nodes().removeClass("faded");
-        }
-        
-        // 드래그 상태 관리
-        if (isSameNode) {
-          // 같은 노드를 다시 클릭한 경우: 드래그 토글
-          if (node.grabbable()) {
-            node.ungrabify(); // 드래그 비활성화
-          } else {
-            node.grabify(); // 드래그 활성화
-          }
-        } else {
-          // 다른 노드를 클릭한 경우: 이전 노드 드래그 비활성화, 새 노드 드래그 활성화
-          cy.nodes().ungrabify(); // 모든 노드를 드래그 불가능하게 만들기
-          node.grabify(); // 클릭된 노드만 드래그 가능하게 만들기
-        }
+        } 
       });
 
       const mouseX = evt.originalEvent?.clientX ?? nodeCenter.x;
@@ -114,7 +100,7 @@ export default function useGraphInteractions({
       
       if (selectedNodeIdRef) selectedNodeIdRef.current = node.id();
     },
-    [cyRef, selectedNodeIdRef, isSearchActive, filteredElements]
+    [cyRef, selectedNodeIdRef, isSearchActive, filteredElements, onShowNodeTooltipRef]
   );
 
   const tapEdgeHandler = useCallback(
@@ -166,7 +152,12 @@ export default function useGraphInteractions({
           const hasSelection = !!(selectedNodeIdRef?.current || selectedEdgeIdRef?.current);
           if (!hasSelection) return;
         }
-        clearSelectionOnly();
+        // 그래프 온리 페이지에서는 툴팁을 유지하고 선택 상태만 초기화
+        if (cyRef?.current) {
+          const cy = cyRef.current;
+          cy.nodes().removeClass("faded highlighted");
+          cy.edges().removeClass("faded");
+        }
         return;
       }
 
@@ -179,11 +170,16 @@ export default function useGraphInteractions({
             const hasSelection = !!(selectedNodeIdRef?.current || selectedEdgeIdRef?.current);
             if (!hasSelection) return;
           }
-          clearSelectionOnly();
+          // 그래프 온리 페이지에서는 툴팁을 유지하고 선택 상태만 초기화
+          if (cyRef?.current) {
+            const cy = cyRef.current;
+            cy.nodes().removeClass("faded highlighted");
+            cy.edges().removeClass("faded");
+          }
         }
       }
     },
-    [cyRef, clearSelectionOnly, strictBackgroundClear, selectedNodeIdRef, selectedEdgeIdRef]
+    [cyRef, strictBackgroundClear, selectedNodeIdRef, selectedEdgeIdRef]
   );
 
   const clearSelectionAndRebind = useCallback(() => {
