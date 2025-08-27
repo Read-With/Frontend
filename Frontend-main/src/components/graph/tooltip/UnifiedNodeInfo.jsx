@@ -79,6 +79,7 @@ function UnifiedNodeInfo({
   const [isFlipped, setIsFlipped] = useState(false);
   const [isNodeAppeared, setIsNodeAppeared] = useState(false);
   const [error, setError] = useState(null);
+  const [showSummary, setShowSummary] = useState(false);
 
   // 툴팁 모드에서만 위치 관리 훅 사용
   const { position, showContent, isDragging, tooltipRef, handleMouseDown } = useTooltipPosition(x, y);
@@ -828,7 +829,7 @@ function UnifiedNodeInfo({
                 e.currentTarget.style.outline = 'none';
               }}
             >
-              ×
+              닫기
             </button>
           </div>
         </div>
@@ -987,7 +988,7 @@ function UnifiedNodeInfo({
                   margin: '0 0 16px 0',
                   letterSpacing: '-0.025em',
                 }}>
-                  🔍 검색 결과 연결 정보
+                  검색 결과 연결 정보
                 </h4>
                 <div style={{
                   background: '#f8f9fc',
@@ -1016,23 +1017,200 @@ function UnifiedNodeInfo({
               className="sidebar-card"
               style={{
                 background: '#fff',
-                borderRadius: '12px',
-                padding: '24px',
+                borderRadius: '16px',
+                padding: '28px',
                 marginBottom: '24px',
                 border: '1px solid #e5e7eb',
-                boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
+                boxShadow: '0 2px 8px rgba(0,0,0,0.06), 0 1px 3px rgba(0,0,0,0.1)',
+                position: 'relative',
+                overflow: 'hidden',
               }}
             >
-              <p style={{
-                margin: 0,
-                fontSize: '14px',
-                lineHeight: '1.6',
-                color: '#374151',
-                letterSpacing: '-0.01em',
-                whiteSpace: 'pre-wrap',
-              }}>
-                {summaryData.summary}
-              </p>
+              {!showSummary ? (
+                <div style={{
+                  textAlign: 'center',
+                  padding: '32px 20px',
+                  position: 'relative',
+                }}>
+                  {/* 배경 장식 요소 */}
+                  <div style={{
+                    position: 'absolute',
+                    top: '-20px',
+                    right: '-20px',
+                    width: '80px',
+                    height: '80px',
+                    background: 'linear-gradient(135deg, rgba(79,109,222,0.05) 0%, rgba(111,167,255,0.05) 100%)',
+                    borderRadius: '50%',
+                    zIndex: 0,
+                  }} />
+                  <div style={{
+                    position: 'absolute',
+                    bottom: '-30px',
+                    left: '-30px',
+                    width: '100px',
+                    height: '100px',
+                    background: 'linear-gradient(135deg, rgba(79,109,222,0.03) 0%, rgba(111,167,255,0.03) 100%)',
+                    borderRadius: '50%',
+                    zIndex: 0,
+                  }} />
+                  
+                  <div style={{
+                    position: 'relative',
+                    zIndex: 1,
+                  }}>
+                    <h4 style={{
+                      fontSize: '18px',
+                      fontWeight: '700',
+                      color: '#111827',
+                      margin: '0 0 12px 0',
+                      letterSpacing: '-0.025em',
+                    }}>
+                      스포일러 주의
+                    </h4>
+                    
+                    <p style={{
+                      fontSize: '15px',
+                      color: '#6b7280',
+                      margin: '0 0 28px 0',
+                      lineHeight: '1.6',
+                      maxWidth: '280px',
+                      marginLeft: 'auto',
+                      marginRight: 'auto',
+                    }}>
+                      이 인물의 상세한 요약 정보를 확인하시겠습니까?
+                    </p>
+                    
+                    <div style={{
+                      display: 'flex',
+                      gap: '12px',
+                      justifyContent: 'center',
+                      flexWrap: 'wrap',
+                    }}>
+                      <button
+                        onClick={() => setShowSummary(true)}
+                        style={{
+                          background: 'linear-gradient(135deg, #4F6DDE 0%, #6fa7ff 100%)',
+                          color: '#fff',
+                          border: 'none',
+                          borderRadius: '12px',
+                          padding: '14px 28px',
+                          fontSize: '15px',
+                          fontWeight: '600',
+                          cursor: 'pointer',
+                          transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                          boxShadow: '0 4px 12px rgba(79,109,222,0.25)',
+                          position: 'relative',
+                          overflow: 'hidden',
+                        }}
+                        onMouseOver={(e) => {
+                          e.currentTarget.style.transform = 'translateY(-2px)';
+                          e.currentTarget.style.boxShadow = '0 8px 20px rgba(79,109,222,0.35)';
+                        }}
+                        onMouseOut={(e) => {
+                          e.currentTarget.style.transform = 'translateY(0)';
+                          e.currentTarget.style.boxShadow = '0 4px 12px rgba(79,109,222,0.25)';
+                        }}
+                      >
+                        <span style={{ position: 'relative', zIndex: 1 }}>
+                          요약 정보 보기
+                        </span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div style={{
+                  position: 'relative',
+                }}>
+                  {/* 헤더 섹션 */}
+                  <div style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    marginBottom: '24px',
+                    paddingBottom: '16px',
+                    borderBottom: '2px solid #f3f4f6',
+                  }}>
+                    <div style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '12px',
+                    }}>
+                      <h4 style={{
+                        fontSize: '18px',
+                        fontWeight: '700',
+                        color: '#111827',
+                        margin: 0,
+                        letterSpacing: '-0.025em',
+                      }}>
+                        인물 요약
+                      </h4>
+                    </div>
+                    
+                    <button
+                      onClick={() => setShowSummary(false)}
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        fontSize: '18px',
+                        color: '#6b7280',
+                        cursor: 'pointer',
+                        padding: '8px',
+                        borderRadius: '8px',
+                        transition: 'all 0.2s ease',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        width: '36px',
+                        height: '36px',
+                      }}
+                      onMouseOver={(e) => {
+                        e.currentTarget.style.background = '#f3f4f6';
+                        e.currentTarget.style.color = '#374151';
+                        e.currentTarget.style.transform = 'scale(1.1)';
+                      }}
+                      onMouseOut={(e) => {
+                        e.currentTarget.style.background = 'none';
+                        e.currentTarget.style.color = '#6b7280';
+                        e.currentTarget.style.transform = 'scale(1)';
+                      }}
+                    >
+                      닫기
+                    </button>
+                  </div>
+                  
+                  {/* 요약 내용 */}
+                  <div style={{
+                    background: 'linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)',
+                    borderRadius: '12px',
+                    padding: '20px',
+                    border: '1px solid #e2e8f0',
+                    position: 'relative',
+                  }}>
+                    <div style={{
+                      position: 'absolute',
+                      top: '0',
+                      left: '0',
+                      right: '0',
+                      height: '4px',
+                      background: 'linear-gradient(90deg, #4F6DDE 0%, #6fa7ff 100%)',
+                      borderRadius: '12px 12px 0 0',
+                    }} />
+                    
+                    <p style={{
+                      margin: 0,
+                      fontSize: '15px',
+                      lineHeight: '1.7',
+                      color: '#374151',
+                      letterSpacing: '-0.01em',
+                      whiteSpace: 'pre-wrap',
+                      textAlign: 'justify',
+                    }}>
+                      {summaryData.summary}
+                    </p>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>
