@@ -602,9 +602,9 @@ function UnifiedEdgeTooltip({
                   display: 'flex', 
                   flexDirection: 'column',
                   justifyContent: 'center',
-                  alignItems: 'center',
-                  minHeight: '100%',
-                  padding: '20px'
+                  alignItems: 'center', 
+                  padding: '20px',
+                  minHeight: '100%'
                 }}>
                   <div style={{ 
                     flex: 1,

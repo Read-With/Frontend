@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { useParams, useLocation } from "react-router-dom";
 import { processRelations, processRelationTags } from "../../../utils/relationUtils.js";
 import { highlightText } from "../../../utils/searchUtils.jsx";
-import { getChapterLastEventNums, getFolderKeyFromFilename, getEventDataByIndex } from "../../../utils/graphData.js";
+import { getChapterLastEventNums, getFolderKeyFromFilename, getEventDataByIndex, getDetectedMaxChapter } from "../../../utils/graphData.js";
 import { useTooltipPosition } from "../../../hooks/useTooltipPosition.js";
 import { useClickOutside } from "../../../hooks/useClickOutside.js";
 import { useRelationData } from "../../../hooks/useRelationData.js";
@@ -40,7 +40,7 @@ function UnifiedNodeInfo({
   style,
   chapterNum,
   eventNum,
-  maxChapter = 10,
+  maxChapter,
   searchTerm = "",
   elements = [],
   isSearchActive = false,
@@ -50,9 +50,13 @@ function UnifiedNodeInfo({
   const { filename: urlFilename } = useParams();
   const location = useLocation();
   const actualFilename = filename || urlFilename;
-  
+
   // 그래프 단독 페이지 여부 판단
   const isGraphPage = location.pathname.includes('/user/graph/');
+
+  // maxChapter를 동적으로 계산
+  const folderKey = getFolderKeyFromFilename(actualFilename);
+  const dynamicMaxChapter = maxChapter || getDetectedMaxChapter(folderKey);
 
   // 데이터가 중첩되어 있는 경우 처리
   const [nodeData, setNodeData] = useState(() => {
@@ -75,7 +79,7 @@ function UnifiedNodeInfo({
       setNodeData({ id: data?.id, label: data?.label });
     }
   }, [data]);
-  
+
   const [isFlipped, setIsFlipped] = useState(false);
   const [isNodeAppeared, setIsNodeAppeared] = useState(false);
   const [error, setError] = useState(null);
@@ -105,14 +109,14 @@ function UnifiedNodeInfo({
   // 관계 데이터 관리 (슬라이드바 모드에서 사용)
   const id1 = safeNum(nodeData?.id);
   const id2 = safeNum(nodeData?.id);
-  const { fetchData } = useRelationData('standalone', id1, id2, chapterNum, eventNum, maxChapter, actualFilename);
+  const { fetchData } = useRelationData('standalone', id1, id2, chapterNum, eventNum, dynamicMaxChapter, actualFilename);
 
   // 노드 등장 여부 확인 함수
   const checkNodeAppearance = useCallback(() => {
     try {
       setIsNodeAppeared(false);
       setError(null);
-      
+
       if (!data || !chapterNum || chapterNum <= 0) {
         if (data && (data.id || data.label)) {
           setNodeData(data);
@@ -125,18 +129,15 @@ function UnifiedNodeInfo({
       }
 
       let targetEventNum = eventNum;
-      
+
       if (isGraphPage || !eventNum || eventNum === 0) {
-        const folderKey = getFolderKeyFromFilename(actualFilename);
         const lastEventNums = getChapterLastEventNums(folderKey);
         targetEventNum = lastEventNums[chapterNum - 1] || 1;
       }
-
-      const folderKey = getFolderKeyFromFilename(actualFilename);
       const json = getEventDataByIndex(folderKey, chapterNum, targetEventNum);
 
       const nodeId = String(data.id || data.data?.id);
-      
+
       if (!json || !json.relations) {
         if (elements && elements.length > 0) {
           const appeared = elements.some(element => {
@@ -147,7 +148,7 @@ function UnifiedNodeInfo({
         } else {
           setIsNodeAppeared(false);
         }
-        
+
         if (data && (data.id || data.label)) {
           setNodeData(data);
         } else if (data && data.data) {
@@ -157,22 +158,22 @@ function UnifiedNodeInfo({
         }
         return;
       }
-      
+
       const processedRelations = processRelations(json.relations);
       const nodeIdNum = parseFloat(nodeId);
-      
+
       const appeared = processedRelations.some(rel => {
         const id1Num = parseFloat(rel.id1);
         const id2Num = parseFloat(rel.id2);
         return id1Num === nodeIdNum || id2Num === nodeIdNum;
       });
-      
+
       setIsNodeAppeared(appeared);
     } catch (err) {
       setError(err.message);
       setIsNodeAppeared(false);
     }
-  }, [data, chapterNum, eventNum, isGraphPage, maxChapter, actualFilename, elements]);
+  }, [data, chapterNum, eventNum, isGraphPage, dynamicMaxChapter, actualFilename, elements]);
 
   // 노드 등장 여부 확인
   useEffect(() => {
@@ -193,7 +194,7 @@ function UnifiedNodeInfo({
   // 메모이제이션된 데이터 처리
   const processedNodeData = useMemo(() => {
     if (!nodeData) return null;
-    
+
     return {
       ...nodeData,
       names: processRelationTags(nodeData.names || [], nodeData.common_name),
@@ -251,7 +252,7 @@ function UnifiedNodeInfo({
             left: position.x,
             top: position.y,
             zIndex: zIndexValue,
-            width: 300,
+            width: 500,
             minHeight: 150,
             background: "#fff",
             borderRadius: 12,
@@ -318,7 +319,7 @@ function UnifiedNodeInfo({
             <ellipse cx="20" cy="32" rx="12" ry="6" fill="#9ca3af" />
           </svg>
         </div>
-        
+
         <h3
           style={{
             fontSize: 20,
@@ -329,7 +330,7 @@ function UnifiedNodeInfo({
         >
           {searchTerm ? highlightText(processedNodeData?.displayName || "", searchTerm) : processedNodeData?.displayName}
         </h3>
-        
+
         <p
           style={{
             fontSize: 16,
@@ -340,7 +341,7 @@ function UnifiedNodeInfo({
         >
           아직 등장하지 않은 인물입니다
         </p>
-        
+
         <p
           style={{
             fontSize: 14,
@@ -370,7 +371,7 @@ function UnifiedNodeInfo({
             opacity: showContent ? 1 : 0,
             transition: isDragging ? "none" : "opacity 0.3s",
             cursor: isDragging ? "grabbing" : "grab",
-            width: 300,
+            width: 500,
             minHeight: 150,
             background: "#fff",
             borderRadius: 20,
@@ -430,7 +431,8 @@ function UnifiedNodeInfo({
         backfaceVisibility: "hidden",
         position: isFlipped ? "absolute" : "relative",
         width: "100%",
-        height: "100%",
+        height: "auto",
+        minHeight: 280,
         transform: isFlipped ? "rotateY(180deg)" : "rotateY(0deg)",
         display: "flex",
         flexDirection: "column",
@@ -443,9 +445,9 @@ function UnifiedNodeInfo({
         className="tooltip-close-btn"
         style={{
           position: "absolute",
-          top: 18,
-          right: 18,
-          fontSize: 22,
+          top: 14,
+          right: 14,
+          fontSize: 18,
           color: "#bfc8e2",
           background: "none",
           border: "none",
@@ -461,9 +463,9 @@ function UnifiedNodeInfo({
           display: "flex",
           flexDirection: "column",
           alignItems: "stretch",
-          padding: "32px 0 0 0",
-          borderTopLeftRadius: 20,
-          borderTopRightRadius: 20,
+          padding: "24px 0 0 0",
+          borderTopLeftRadius: 15,
+          borderTopRightRadius: 15,
           background: "linear-gradient(90deg, #e3eafe 0%, #f8fafc 100%)",
         }}
       >
@@ -473,22 +475,22 @@ function UnifiedNodeInfo({
             flexDirection: "row",
             alignItems: "flex-start",
             justifyContent: "flex-start",
-            gap: 24,
+            gap: 18,
             width: "100%",
           }}
         >
           <div
             className="profile-image-placeholder"
             style={{
-              width: 100,
-              height: 100,
+              width: 75,
+              height: 75,
               borderRadius: "50%",
               background: "#e6e8f0",
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
-              marginBottom: 16,
-              marginLeft: 24,
+              marginBottom: 12,
+              marginLeft: 18,
               boxShadow: "0 2px 8px rgba(108,142,255,0.10)",
             }}
           >
@@ -498,9 +500,9 @@ function UnifiedNodeInfo({
                 display: "flex",
                 justifyContent: "center",
                 alignItems: "center",
-                width: 64,
-                height: 64,
-                margin: "0 auto 12px auto",
+                width: 48,
+                height: 48,
+                margin: "0 auto 9px auto",
                 borderRadius: "50%",
                 background: "#f4f4f4",
               }}
@@ -510,8 +512,8 @@ function UnifiedNodeInfo({
                   src={processedNodeData.image}
                   alt={processedNodeData.displayName || "character"}
                   style={{
-                    width: 100,
-                    height: 100,
+                    width: 75,
+                    height: 75,
                     objectFit: "cover",
                     borderRadius: "50%",
                     border: "2px solid #e0e0e0",
@@ -525,15 +527,15 @@ function UnifiedNodeInfo({
                 />
               ) : null}
               <svg 
-                width="56" 
-                height="56" 
-                viewBox="0 0 56 56" 
+                width="42" 
+                height="42" 
+                viewBox="0 0 42 42" 
                 fill="none"
                 style={{ display: processedNodeData?.hasImage ? 'none' : 'block' }}
               >
-                <circle cx="28" cy="28" r="28" fill="#e5e7eb" />
-                <ellipse cx="28" cy="22" rx="12" ry="12" fill="#bdbdbd" />
-                <ellipse cx="28" cy="44" rx="18" ry="10" fill="#bdbdbd" />
+                <circle cx="21" cy="21" r="21" fill="#e5e7eb" />
+                <ellipse cx="21" cy="16" rx="9" ry="9" fill="#bdbdbd" />
+                <ellipse cx="21" cy="33" rx="13" ry="7" fill="#bdbdbd" />
               </svg>
             </div>
           </div>
@@ -550,17 +552,17 @@ function UnifiedNodeInfo({
               style={{
                 display: "flex",
                 alignItems: "center",
-                gap: 10,
-                marginBottom: 4,
+                gap: 8,
+                marginBottom: 3,
               }}
             >
               <span
                 style={{
                   fontWeight: 800,
-                  fontSize: 24,
+                  fontSize: 20,
                   color: "#22336b",
                   letterSpacing: 0.5,
-                  maxWidth: 220,
+                  maxWidth: 165,
                   overflow: "hidden",
                   textOverflow: "ellipsis",
                   whiteSpace: "nowrap",
@@ -568,14 +570,15 @@ function UnifiedNodeInfo({
               >
                 {searchTerm ? highlightText(processedNodeData?.displayName || "", searchTerm) : processedNodeData?.displayName}
               </span>
+
               {processedNodeData?.isMainCharacter && (
                 <span
                   style={{
                     background: "linear-gradient(90deg, #4F6DDE 0%, #6fa7ff 100%)",
                     color: "#fff",
-                    borderRadius: 14,
-                    fontSize: 13,
-                    padding: "3px 12px",
+                    borderRadius: 11,
+                    fontSize: 12,
+                    padding: "2px 9px",
                     marginLeft: 2,
                     fontWeight: 700,
                     boxShadow: "0 2px 8px rgba(79,109,222,0.13)",
@@ -585,13 +588,14 @@ function UnifiedNodeInfo({
                 </span>
               )}
             </div>
+
             {processedNodeData?.names && processedNodeData.names.length > 0 && (
               <div
                 style={{
                   marginTop: 2,
                   marginBottom: 2,
                   display: "flex",
-                  gap: 6,
+                  gap: 5,
                   flexWrap: "wrap",
                   justifyContent: "flex-start",
                 }}
@@ -604,9 +608,9 @@ function UnifiedNodeInfo({
                       style={{
                         background: "#f3f4f6",
                         color: "#4b5563",
-                        borderRadius: 12,
-                        fontSize: 13,
-                        padding: "3px 12px",
+                        borderRadius: 9,
+                        fontSize: 12,
+                        padding: "2px 9px",
                         border: "1px solid #e5e7eb",
                         fontWeight: 500,
                       }}
@@ -622,9 +626,9 @@ function UnifiedNodeInfo({
       
       <hr
         style={{
-          margin: "18px 0 0 0",
+          margin: "14px 0 0 0",
           border: 0,
-          borderTop: "1.5px solid #f0f2f8",
+          borderTop: "1px solid #f0f2f8",
         }}
       />
       
@@ -632,9 +636,9 @@ function UnifiedNodeInfo({
         className="business-card-description"
         style={{
           color: "#333",
-          fontSize: 16,
-          minHeight: 56,
-          margin: "22px 32px 0 32px",
+          fontSize: 14,
+          minHeight: 42,
+          margin: "17px 24px 0 24px",
           textAlign: "left",
           lineHeight: 1.6,
           fontWeight: 400,
@@ -651,31 +655,31 @@ function UnifiedNodeInfo({
       {isSearchActive && filteredElements.length > 0 && (
         <div
           style={{
-            margin: "16px 32px 0 32px",
-            padding: "12px 16px",
+            margin: "12px 24px 0 24px",
+            padding: "9px 12px",
             background: "#f8f9fc",
-            borderRadius: "8px",
+            borderRadius: "6px",
             border: "1px solid #e3e6ef",
           }}
         >
           <div
             style={{
-              fontSize: 14,
+              fontSize: 13,
               fontWeight: 600,
               color: "#6C8EFF",
-              marginBottom: "8px",
+              marginBottom: "6px",
             }}
           >
             🔍 검색 결과 연결 정보
           </div>
           <div
             style={{
-              fontSize: 13,
+              fontSize: 12,
               color: "#42506b",
               lineHeight: 1.4,
             }}
           >
-            이 인물과 연결된 {filteredElements.filter(el => 
+            {filteredElements.filter(el => 
               el.data.source && 
               (el.data.source === processedNodeData?.id || el.data.target === processedNodeData?.id)
             ).length}개의 관계가 검색 결과에 포함되어 있습니다.
@@ -685,12 +689,12 @@ function UnifiedNodeInfo({
       
       <hr
         style={{
-          margin: "18px 0 0 0",
+          margin: "14px 0 0 0",
           border: 0,
-          borderTop: "1.5px solid #f0f2f8",
+          borderTop: "1px solid #f0f2f8",
         }}
       />
-      <div style={{ flex: 1, marginBottom: 20 }} />
+      <div style={{ flex: 1, marginBottom: 15 }} />
     </div>
   );
 
@@ -710,11 +714,14 @@ function UnifiedNodeInfo({
           cursor: isDragging ? "grabbing" : "grab",
           transform: isFlipped ? "rotateY(180deg)" : "rotateY(0deg)",
           transformStyle: "preserve-3d",
-          width: 420,
-          minHeight: 340,
+          width: 500,
+          minWidth: 500,
+          maxWidth: 500,
+          height: "auto",
+          minHeight: 280,
           background: "#fff",
-          borderRadius: 20,
-          boxShadow: "0 8px 32px rgba(79,109,222,0.13), 0 1.5px 8px rgba(0,0,0,0.04)",
+          borderRadius: 10,
+          boxShadow: "0 8px 4px rgba(79,109,222,0.13), 0 1.5px 8px rgba(0,0,0,0.04)",
           padding: 0,
           border: "1.5px solid #e5e7eb",
           animation: "fadeIn 0.4s ease-out",
@@ -729,9 +736,9 @@ function UnifiedNodeInfo({
 
   // 슬라이드바 모드 렌더링
   if (displayMode === 'sidebar') {
-  return (
-    <div
-      style={{
+    return (
+      <div
+        style={{
           width: '100%',
           height: '100%',
           display: 'flex',
@@ -829,7 +836,7 @@ function UnifiedNodeInfo({
                 e.currentTarget.style.outline = 'none';
               }}
             >
-              닫기
+              ×
             </button>
           </div>
         </div>
@@ -1214,9 +1221,10 @@ function UnifiedNodeInfo({
             </div>
           </div>
         </div>
-    </div>
-  );
+      </div>
+    );
   }
 }
 
 export default React.memo(UnifiedNodeInfo);
+
