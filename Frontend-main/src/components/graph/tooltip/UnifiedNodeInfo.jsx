@@ -7,6 +7,7 @@ import { useTooltipPosition } from "../../../hooks/useTooltipPosition.js";
 import { useClickOutside } from "../../../hooks/useClickOutside.js";
 import { useRelationData } from "../../../hooks/useRelationData.js";
 import { safeNum } from "../../../utils/relationUtils.js";
+import { mergeRefs } from "../../../utils/animations.js";
 import "../RelationGraph.css";
 
 /**
@@ -92,19 +93,6 @@ function UnifiedNodeInfo({
   const clickOutsideRef = useClickOutside(() => {
     if (onClose) onClose();
   }, displayMode === 'tooltip');
-
-  // ref 병합 함수
-  const mergeRefs = useCallback((...refs) => {
-    return (element) => {
-      refs.forEach(ref => {
-        if (typeof ref === 'function') {
-          ref(element);
-        } else if (ref != null) {
-          ref.current = element;
-        }
-      });
-    };
-  }, []);
 
   // 관계 데이터 관리 (슬라이드바 모드에서 사용)
   const id1 = safeNum(nodeData?.id);

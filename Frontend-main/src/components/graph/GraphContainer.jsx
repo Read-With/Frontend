@@ -108,8 +108,6 @@ const GraphContainer = forwardRef(({
     }
   }, [currentEvent, filename, onElementsUpdate]);
 
-
-
   // 검색된 요소들 또는 원래 요소들 사용
   const finalElements = useMemo(() => {
     if (internalIsSearchActive && internalFilteredElements && internalFilteredElements.length > 0) {

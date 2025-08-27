@@ -103,3 +103,20 @@ export function getScaleInAnimation(duration = 0.3) {
     animation: scaleIn ${duration}s cubic-bezier(0.4, 0, 0.2, 1);
   `;
 }
+
+/**
+ * 여러 ref를 하나로 병합하는 유틸리티 함수
+ * @param {...any} refs - 병합할 ref들 (함수형 ref, useRef 객체 등)
+ * @returns {Function} 병합된 ref 함수
+ */
+export function mergeRefs(...refs) {
+  return (element) => {
+    refs.forEach(ref => {
+      if (typeof ref === 'function') {
+        ref(element);
+      } else if (ref != null) {
+        ref.current = element;
+      }
+    });
+  };
+}
