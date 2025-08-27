@@ -7,9 +7,7 @@ import React, {
 } from "react";
 import { useNavigate, useLocation, useParams } from "react-router-dom";
 import CytoscapeGraphUnified from "./CytoscapeGraphUnified";
-import UnifiedNodeInfo from "./UnifiedNodeInfo";
-import UnifiedEdgeTooltip from "./tooltip/UnifiedEdgeTooltip";
-import GraphSidebar from "./GraphSidebar";
+import GraphSidebar from "./tooltip/GraphSidebar";
 import "./RelationGraph.css";
 import { DEFAULT_LAYOUT, createGraphStylesheet, getNodeSize as getNodeSizeUtil, getEdgeStyle as getEdgeStyleUtil, getRelationColor, getWideLayout } from "../../utils/graphStyles";
 import { applySearchHighlight } from "../../utils/searchUtils";
@@ -62,16 +60,10 @@ function StandaloneRelationGraph({
   // 그래프 단독 페이지 여부 확인
   const isStandaloneGraphPage = !inViewer;
 
-  // activeTooltip 상태 변화 감지
-  useEffect(() => {
-    console.log('activeTooltip changed:', activeTooltip);
-  }, [activeTooltip]);
+
 
   const onShowNodeTooltip = useCallback(({ node, nodeCenter, mouseX, mouseY }) => {
-    console.log('onShowNodeTooltip called with:', { node: node.id(), data: node.data() });
-    const tooltipData = { type: 'node', id: node.id(), x: mouseX, y: mouseY, data: node.data(), nodeCenter };
-    console.log('Setting activeTooltip to:', tooltipData);
-    setActiveTooltip(tooltipData);
+    setActiveTooltip({ type: 'node', id: node.id(), x: mouseX, y: mouseY, data: node.data(), nodeCenter });
   }, []);
 
   const onShowEdgeTooltip = useCallback(({ edge, absoluteX, absoluteY }) => {
@@ -87,7 +79,6 @@ function StandaloneRelationGraph({
   }, []);
 
   const onClearTooltip = useCallback(() => {
-    console.log('onClearTooltip called - clearing activeTooltip');
     setActiveTooltip(null);
   }, []);
 
@@ -511,7 +502,6 @@ function StandaloneRelationGraph({
              {/* 그래프 단독 페이지에서 슬라이드바 렌더링 */}
        {isStandaloneGraphPage && (
          <>
-           {console.log('Rendering GraphSidebar with activeTooltip:', activeTooltip)}
            <GraphSidebar
              activeTooltip={activeTooltip}
              onClose={handleCloseTooltip}

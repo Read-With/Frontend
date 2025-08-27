@@ -1,6 +1,6 @@
 import React from "react";
 import UnifiedNodeInfo from "./UnifiedNodeInfo";
-import UnifiedEdgeTooltip from "./tooltip/UnifiedEdgeTooltip";
+import UnifiedEdgeTooltip from "./UnifiedEdgeTooltip";
 
 function GraphSidebar({
   activeTooltip,
@@ -79,7 +79,6 @@ function GraphSidebar({
 
   // 노드 툴팁 렌더링 - UnifiedNodeInfo 사용
   if (activeTooltip.type === "node") {
-    console.log('Rendering node sidebar with data:', activeTooltip.data);
     return (
       <div
         style={{
@@ -121,7 +120,7 @@ function GraphSidebar({
           position: "absolute",
           top: "60px", // 상단 아래부터 시작
           right: "0px",
-          width: "400px",
+          width: "450px",
           height: "calc(100vh - 60px)", // 웹 페이지 맨 아래까지 (상단 60px 제외)
           background: "#fff",
           borderRadius: "0px", // 둥근 모서리 제거
@@ -129,6 +128,12 @@ function GraphSidebar({
           borderRight: "1px solid #e5e7eb", // 챕터 슬라이드바와 동일한 테두리
           zIndex: 1000,
           overflow: "hidden",
+          animation: "slideInFromRight 0.3s ease-out",
+          // 반응형 디자인
+          "@media (max-width: 768px)": {
+            width: "100vw",
+            right: "0px",
+          },
         }}
       >
         <UnifiedEdgeTooltip
@@ -138,6 +143,7 @@ function GraphSidebar({
           eventNum={eventNum}
           maxChapter={maxChapter}
           elements={elements}
+          displayMode="sidebar"
         />
       </div>
     );

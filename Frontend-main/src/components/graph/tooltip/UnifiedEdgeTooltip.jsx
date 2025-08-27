@@ -20,6 +20,7 @@ import "../RelationGraph.css";
  * @param {object} props.targetNode - 도착 노드
  * @param {object} props.style - 추가 스타일
  * @param {string} props.mode - 'standalone' | 'viewer'
+ * @param {string} props.displayMode - 'tooltip' | 'sidebar'
  * @param {number} props.chapterNum - 현재 챕터 번호
  * @param {number} props.eventNum - 현재 이벤트 번호
  * @param {number} props.maxChapter - 최대 챕터 수 (standalone 모드에서만 사용)
@@ -33,23 +34,30 @@ function UnifiedEdgeTooltip({
   targetNode,
   style,
   mode = 'standalone', // 'standalone' | 'viewer'
+  displayMode = 'tooltip', // 'tooltip' | 'sidebar'
   chapterNum = 1,
   eventNum = 1,
   maxChapter = 10,
 }) {
   const { filename } = useParams();
 
-  // 위치 및 드래그 관리
+  // 위치 및 드래그 관리 (사이드바 모드에서는 사용하지 않음)
   const {
     position,
     showContent,
     isDragging,
     tooltipRef,
     handleMouseDown,
-  } = useTooltipPosition(x, y);
+  } = displayMode === 'sidebar' ? {
+    position: { x: 0, y: 0 },
+    showContent: true,
+    isDragging: false,
+    tooltipRef: null,
+    handleMouseDown: () => {},
+  } : useTooltipPosition(x, y);
 
-  // 외부 클릭 감지 훅 - 툴팁 외부 클릭 시 닫기
-  const clickOutsideRef = useClickOutside(() => {
+  // 외부 클릭 감지 훅 - 툴팁 외부 클릭 시 닫기 (사이드바 모드에서는 비활성화)
+  const clickOutsideRef = displayMode === 'sidebar' ? null : useClickOutside(() => {
     if (onClose) onClose();
   }, true);
 
@@ -108,6 +116,452 @@ function UnifiedEdgeTooltip({
   const chartTitle = mode === 'viewer' ? `Chapter ${chapterNum}` : "관계 변화 그래프";
   const safeMaxChapter = mode === 'standalone' && maxChapter && !isNaN(maxChapter) ? maxChapter : 10;
 
+  // 사이드바 모드일 때는 완전히 다른 레이아웃 사용
+  if (displayMode === 'sidebar') {
+    return (
+      <div 
+        style={{
+          width: '100%',
+          height: '100%',
+          display: 'flex',
+          flexDirection: 'column',
+          background: '#fff',
+          overflow: 'hidden',
+          fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
+        }}
+        onKeyDown={(e) => {
+          if (e.key === 'Escape') {
+            onClose();
+          }
+        }}
+        tabIndex={0}
+      >
+        {/* 사이드바 헤더 */}
+        <div style={{
+          padding: '24px 24px 20px 24px',
+          borderBottom: '1px solid #e5e7eb',
+          background: '#fff',
+        }}>
+          <div style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            marginBottom: '16px',
+          }}>
+            <h3 style={{
+              fontSize: '20px',
+              fontWeight: '600',
+              color: '#111827',
+              margin: 0,
+              letterSpacing: '-0.025em',
+            }}>
+              관계 정보
+            </h3>
+            <button
+              onClick={onClose}
+              aria-label="사이드바 닫기"
+              style={{
+                background: 'none',
+                border: 'none',
+                fontSize: '24px',
+                color: '#6b7280',
+                cursor: 'pointer',
+                padding: '8px',
+                borderRadius: '6px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                transition: 'all 0.15s ease',
+                width: '40px',
+                height: '40px',
+              }}
+              onMouseOver={(e) => {
+                e.currentTarget.style.background = '#f3f4f6';
+                e.currentTarget.style.color = '#374151';
+              }}
+              onMouseOut={(e) => {
+                e.currentTarget.style.background = 'none';
+                e.currentTarget.style.color = '#6b7280';
+              }}
+              onFocus={(e) => {
+                e.currentTarget.style.background = '#f3f4f6';
+                e.currentTarget.style.color = '#374151';
+                e.currentTarget.style.outline = '2px solid #2563eb';
+                e.currentTarget.style.outlineOffset = '2px';
+              }}
+              onBlur={(e) => {
+                e.currentTarget.style.background = 'none';
+                e.currentTarget.style.color = '#6b7280';
+                e.currentTarget.style.outline = 'none';
+              }}
+            >
+              ×
+            </button>
+          </div>
+          
+          {/* 관계 태그들 - 툴팁과 동일한 스타일 */}
+          <div style={{
+            display: 'flex',
+            flexWrap: 'wrap',
+            gap: '8px',
+            marginBottom: '0',
+          }}>
+            {relationLabels.map((relation, index) => (
+              <span
+                key={index}
+                style={{
+                  ...tooltipStyles.relationTag,
+                  background: '#e3e6ef',
+                  color: '#42506b',
+                  borderRadius: '8px',
+                  padding: '6px 14px',
+                  fontSize: '13px',
+                  fontWeight: 500,
+                  border: 'none',
+                }}
+              >
+                {relation}
+              </span>
+            ))}
+          </div>
+        </div>
+
+        {/* 사이드바 본문 */}
+        <div 
+          className="sidebar-content"
+          style={{
+            flex: 1,
+            overflow: 'auto',
+            padding: '0 24px',
+          }}
+        >
+          {viewMode === "info" ? (
+            <div style={{ padding: '24px 0' }}>
+              {/* 관계 긍정도 섹션 */}
+              <div 
+                className="sidebar-card"
+                style={{
+                  background: '#fff',
+                  borderRadius: '12px',
+                  padding: '24px',
+                  marginBottom: '24px',
+                  border: '1px solid #e5e7eb',
+                  boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
+                }}
+              >
+                <div style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  marginBottom: '20px',
+                }}>
+                  <span style={{
+                    fontSize: '16px',
+                    fontWeight: '600',
+                    color: relationStyle.color,
+                    letterSpacing: '-0.025em',
+                  }}>
+                    {relationStyle.text}
+                  </span>
+                  <span style={{
+                    fontSize: '20px',
+                    fontWeight: '700',
+                    color: relationStyle.color,
+                    letterSpacing: '-0.025em',
+                  }}>
+                    {data.positivity !== undefined ? `${Math.round(data.positivity * 100)}%` : "N/A"}
+                  </span>
+                </div>
+                
+                {/* 진행률 바 - 툴팁과 동일한 스타일 */}
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'flex-end',
+                  gap: '4px',
+                  height: '28px',
+                  margin: '12px 0 4px 0',
+                  justifyContent: 'center',
+                }}>
+                  {(() => {
+                    let p = Math.abs(data.positivity ?? 0);
+                    p = p * 100;
+                    let remain = p;
+                    return Array.from({ length: 5 }).map((_, i) => {
+                      let fill;
+                      if (remain >= 20) {
+                        fill = 1;
+                      } else if (remain > 0) {
+                        fill = remain / 20;
+                      } else {
+                        fill = 0;
+                      }
+                      remain -= 20;
+                      let background;
+                      if (fill === 1) background = relationStyle.color;
+                      else if (fill > 0)
+                        background = `linear-gradient(to right, ${relationStyle.color} ${fill * 100}%, #e5e7eb ${fill * 100}%)`;
+                      else background = "#e5e7eb";
+                      return (
+                        <div
+                          key={i}
+                          style={{
+                            ...tooltipStyles.progressBar,
+                            background,
+                            width: '80px',
+                            height: '24px',
+                            borderRadius: '6px',
+                            border: '1.5px solid #e5e7eb',
+                          }}
+                        />
+                      );
+                    });
+                  })()}
+                </div>
+                
+                {/* 퍼센트 라벨 - 툴팁과 동일한 스타일 */}
+                <div style={{
+                  display: 'flex',
+                  justifyContent: 'center',
+                  gap: '4px',
+                  marginBottom: '4px',
+                }}>
+                  {[20, 40, 60, 80, 100].map((step, idx) => (
+                    <span
+                      key={idx}
+                      style={{
+                        width: '80px',
+                        textAlign: 'center',
+                        fontSize: '12px',
+                        color: '#6b7280',
+                        display: 'inline-block',
+                        lineHeight: '1.2',
+                      }}
+                    >
+                      {step}%
+                    </span>
+                  ))}
+                </div>
+              </div>
+
+              {/* 설명 섹션 */}
+              {data.explanation && (
+                <div 
+                  className="sidebar-card"
+                  style={{
+                    background: '#fff',
+                    borderRadius: '12px',
+                    padding: '24px',
+                    marginBottom: '24px',
+                    border: '1px solid #e5e7eb',
+                    boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
+                  }}
+                >
+                  <h4 style={{
+                    fontSize: '16px',
+                    fontWeight: '600',
+                    color: '#111827',
+                    margin: '0 0 16px 0',
+                    letterSpacing: '-0.025em',
+                  }}>
+                    관계 설명
+                  </h4>
+                  <div style={{
+                    borderLeft: `4px solid ${relationStyle.color}`,
+                    paddingLeft: '20px',
+                  }}>
+                    <p style={{
+                      margin: '0 0 12px 0',
+                      fontSize: '14px',
+                      lineHeight: '1.6',
+                      color: '#374151',
+                      fontWeight: '500',
+                      letterSpacing: '-0.01em',
+                    }}>
+                      {data.explanation.split("|")[0]}
+                    </p>
+                    {data.explanation.split("|")[1] && (
+                      <p style={{
+                        margin: 0,
+                        fontSize: '14px',
+                        lineHeight: '1.6',
+                        color: '#6b7280',
+                        letterSpacing: '-0.01em',
+                      }}>
+                        {data.explanation.split("|")[1]}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* 차트 보기 버튼 - 툴팁과 동일한 스타일 */}
+              <button
+                onClick={() => setViewMode("chart")}
+                style={{
+                  ...tooltipStyles.button.primary,
+                  width: '100%',
+                  padding: '12px 22px',
+                  fontSize: '15px',
+                  fontWeight: 600,
+                  boxShadow: '0 2px 8px rgba(79,109,222,0.13)',
+                  transition: 'all 0.2s ease',
+                }}
+                onMouseOver={(e) => {
+                  e.currentTarget.style.background = '#1d4ed8';
+                  e.currentTarget.style.transform = 'translateY(-1px)';
+                  e.currentTarget.style.boxShadow = '0 4px 12px rgba(79,109,222,0.2)';
+                }}
+                onMouseOut={(e) => {
+                  e.currentTarget.style.background = '#2563eb';
+                  e.currentTarget.style.transform = 'translateY(0)';
+                  e.currentTarget.style.boxShadow = '0 2px 8px rgba(79,109,222,0.13)';
+                }}
+                onMouseDown={(e) => {
+                  e.currentTarget.style.transform = 'translateY(0)';
+                  e.currentTarget.style.boxShadow = '0 1px 4px rgba(79,109,222,0.13)';
+                }}
+                onMouseUp={(e) => {
+                  e.currentTarget.style.transform = 'translateY(-1px)';
+                  e.currentTarget.style.boxShadow = '0 4px 12px rgba(79,109,222,0.2)';
+                }}
+              >
+                관계 변화 그래프 보기
+              </button>
+            </div>
+          ) : (
+            <div style={{ padding: '24px 0' }}>
+              {/* 차트 섹션 */}
+              <div 
+                className="sidebar-card"
+                style={{
+                  background: '#fff',
+                  borderRadius: '12px',
+                  padding: '24px',
+                  marginBottom: '24px',
+                  border: '1px solid #e5e7eb',
+                  boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
+                }}
+              >
+                <h4 style={{
+                  fontSize: '18px',
+                  fontWeight: '600',
+                  color: '#111827',
+                  margin: '0 0 20px 0',
+                  textAlign: 'center',
+                  letterSpacing: '-0.025em',
+                }}>
+                  {chartTitle}
+                </h4>
+                
+                {loading ? (
+                  <div style={{
+                    textAlign: 'center',
+                    padding: '60px 20px',
+                    color: '#6b7280',
+                    fontSize: '14px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    gap: '12px',
+                  }}>
+                    <div style={{
+                      width: '32px',
+                      height: '32px',
+                      border: '3px solid #e5e7eb',
+                      borderTop: '3px solid #2563eb',
+                      borderRadius: '50%',
+                      animation: 'spin 1s linear infinite',
+                    }}></div>
+                    <span>데이터를 불러오는 중...</span>
+                  </div>
+                ) : (
+                  <div style={{ 
+                    height: '320px',
+                    background: '#fafafa',
+                    borderRadius: '8px',
+                    padding: '16px',
+                  }}>
+                    <Line
+                      data={{
+                        labels,
+                        datasets: [
+                          {
+                            label: "관계 긍정도",
+                            data: timeline,
+                            borderColor: "#2563eb",
+                            backgroundColor: "rgba(37,99,235,0.1)",
+                            fill: true,
+                            tension: 0.3,
+                            spanGaps: true,
+                          },
+                        ],
+                      }}
+                      options={{
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        scales: {
+                          y: {
+                            min: -1,
+                            max: 1,
+                            title: { display: true, text: "긍정도" },
+                          },
+                          x: {
+                            title: { display: true, text: "이벤트 순서" },
+                            min: 0,
+                            max: getMaxEventCount(),
+                            ticks: {
+                              stepSize: 1
+                            }
+                          },
+                        },
+                        plugins: { legend: { display: false } },
+                      }}
+                    />
+                  </div>
+                )}
+              </div>
+
+              {/* 정보 보기 버튼 - 툴팁과 동일한 스타일 */}
+              <button
+                onClick={() => setViewMode("info")}
+                style={{
+                  ...tooltipStyles.button.secondary,
+                  width: '100%',
+                  padding: '12px 22px',
+                  fontSize: '15px',
+                  fontWeight: 600,
+                  boxShadow: '0 2px 8px rgba(79,109,222,0.13)',
+                  transition: 'all 0.2s ease',
+                }}
+                onMouseOver={(e) => {
+                  e.currentTarget.style.background = '#e3eafe';
+                  e.currentTarget.style.transform = 'translateY(-1px)';
+                  e.currentTarget.style.boxShadow = '0 4px 12px rgba(79,109,222,0.15)';
+                }}
+                onMouseOut={(e) => {
+                  e.currentTarget.style.background = '#fff';
+                  e.currentTarget.style.transform = 'translateY(0)';
+                  e.currentTarget.style.boxShadow = '0 2px 8px rgba(79,109,222,0.13)';
+                }}
+                onMouseDown={(e) => {
+                  e.currentTarget.style.transform = 'translateY(0)';
+                  e.currentTarget.style.boxShadow = '0 1px 4px rgba(79,109,222,0.13)';
+                }}
+                onMouseUp={(e) => {
+                  e.currentTarget.style.transform = 'translateY(-1px)';
+                  e.currentTarget.style.boxShadow = '0 4px 12px rgba(79,109,222,0.15)';
+                }}
+              >
+                관계 정보로 돌아가기
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // 툴팁 모드일 때는 기존 코드 사용
   return (
     <div
       ref={mergeRefs(tooltipRef, clickOutsideRef)}

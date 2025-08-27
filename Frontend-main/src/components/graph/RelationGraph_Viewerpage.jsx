@@ -6,7 +6,7 @@ import React, {
   useCallback,
 } from "react";
 import CytoscapeGraphUnified from "./CytoscapeGraphUnified";
-import UnifiedNodeInfo from "./UnifiedNodeInfo";
+import UnifiedNodeInfo from "./tooltip/UnifiedNodeInfo";
 import UnifiedEdgeTooltip from "./tooltip/UnifiedEdgeTooltip";
 import "./RelationGraph.css";
 import { calcGraphDiff } from "../../utils/graphDataUtils.js";

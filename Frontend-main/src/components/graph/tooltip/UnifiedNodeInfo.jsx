@@ -1,13 +1,13 @@
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { useParams, useLocation } from "react-router-dom";
-import { processRelations, processRelationTags } from "../../utils/relationUtils";
-import { highlightText } from "../../utils/searchUtils.jsx";
-import { getChapterLastEventNums, getFolderKeyFromFilename, getEventDataByIndex } from "../../utils/graphData";
-import { useTooltipPosition } from "../../hooks/useTooltipPosition";
-import { useClickOutside } from "../../hooks/useClickOutside";
-import { useRelationData } from "../../hooks/useRelationData";
-import { safeNum } from "../../utils/relationUtils";
-import "./RelationGraph.css";
+import { processRelations, processRelationTags } from "../../../utils/relationUtils.js";
+import { highlightText } from "../../../utils/searchUtils.jsx";
+import { getChapterLastEventNums, getFolderKeyFromFilename, getEventDataByIndex } from "../../../utils/graphData.js";
+import { useTooltipPosition } from "../../../hooks/useTooltipPosition.js";
+import { useClickOutside } from "../../../hooks/useClickOutside.js";
+import { useRelationData } from "../../../hooks/useRelationData.js";
+import { safeNum } from "../../../utils/relationUtils.js";
+import "../RelationGraph.css";
 
 /**
  * 통합 노드 정보 컴포넌트
