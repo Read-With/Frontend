@@ -4,7 +4,8 @@ export default {
   theme: {
     extend: {
       fontFamily: {
-        kyobo: ['Pretendard', 'Spoqa Han Sans', 'Apple SD Gothic Neo', 'Noto Sans KR', 'sans-serif'],
+        primary: ['Noto Serif KR', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', 'sans-serif'],
+        mono: ['source-code-pro', 'Menlo', 'Monaco', 'Consolas', 'Courier New', 'monospace'],
       }
     }
   }

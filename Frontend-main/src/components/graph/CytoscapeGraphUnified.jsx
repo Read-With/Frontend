@@ -256,7 +256,7 @@ const CytoscapeGraphUnified = ({
         zIndex: 1,
         visibility: isGraphVisible ? "visible" : "hidden",
         minHeight: "400px", // 최소 높이 추가
-        minWidth: "400px",  // 최소 너비 추가
+        minWidth: "450px",  // 최소 너비 추가
       }}
       className="graph-canvas-area"
     >

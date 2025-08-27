@@ -23,7 +23,7 @@ function GraphSidebar({
           position: "absolute",
           top: "60px", // 상단 아래부터 시작
           right: "0px",
-          width: "400px",
+          width: "450px",
           height: "calc(100vh - 60px)", // 웹 페이지 맨 아래까지 (상단 60px 제외)
           background: "#fff",
           borderRadius: "0px", // 둥근 모서리 제거
@@ -85,7 +85,7 @@ function GraphSidebar({
           position: "absolute",
           top: "60px", // 상단 아래부터 시작
           right: "0px",
-          width: "500px",
+          width: "450px",
           height: "calc(100vh - 60px)", // 웹 페이지 맨 아래까지 (상단 60px 제외)
           background: "#fff",
           borderRadius: "0px", // 둥근 모서리 제거

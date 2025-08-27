@@ -206,12 +206,11 @@ function UnifiedNodeInfo({
   // 요약 데이터
   const summaryData = useMemo(() => ({
     summary: processedNodeData?.label
-      ? `${processedNodeData.label}은(는) ${
-          processedNodeData.description || "작품의 중요한 인물입니다."
-        }\n\n` +
-        `이 인물은 작품의 중심 서사를 이끌어가는 핵심적인 역할을 담당합니다.\n\n` +
-        `주로 1장, 3장, 5장에서 중요한 장면에 등장하며, 작품의 주제를 표현합니다.\n\n` +
-        `이 인물의 행동과 선택은 작품의 결말에 직접적인 영향을 미칩니다.`
+      ? `${processedNodeData.label}은(는) 작품의 핵심 인물 중 하나입니다.\n\n` +
+        `이 인물은 작품의 중심 서사를 이끌어가는 중요한 역할을 담당하며, 주로 1장, 3장, 5장에서 중요한 장면에 등장합니다.\n\n` +
+        `특히 작품의 주제를 표현하는 데 있어 핵심적인 역할을 하며, 다른 인물들과의 관계를 통해 작품의 깊이를 더합니다.\n\n` +
+        `이 인물의 행동과 선택은 작품의 결말에 직접적인 영향을 미치며, 독자들에게 깊은 인상을 남깁니다.\n\n` +
+        `작품 전체를 관통하는 이 인물의 성장과 변화는 독자들에게 감동과 교훈을 전달합니다.`
       : "인물에 대한 요약 정보가 없습니다.",
   }), [processedNodeData]);
 
@@ -728,21 +727,318 @@ function UnifiedNodeInfo({
   }
 
   // 슬라이드바 모드 렌더링
-  console.log('Rendering sidebar mode with nodeData:', nodeData);
+  if (displayMode === 'sidebar') {
   return (
     <div
       style={{
-        display: "flex",
-        flexDirection: "column",
-        height: "100%",
-        width: "100%",
-        background: "transparent",
-        overflow: "hidden",
-      }}
-    >
-      {nodeInfoContent}
+          width: '100%',
+          height: '100%',
+          display: 'flex',
+          flexDirection: 'column',
+          background: '#fff',
+          overflow: 'hidden',
+          fontFamily: 'var(--font-family-primary)',
+        }}
+        onKeyDown={(e) => {
+          if (e.key === 'Escape') {
+            onClose();
+          }
+        }}
+        tabIndex={0}
+      >
+        {/* 사이드바 헤더 */}
+        <div style={{
+          padding: '24px 24px 16px 24px',
+          borderBottom: '1px solid #e5e7eb',
+          background: '#fff',
+        }}>
+          <div style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'flex-start',
+            marginBottom: '0',
+          }}>
+            {/* 인물 이름과 배지 */}
+            <div style={{
+              display: 'flex',
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: '4px',
+              flex: 1,
+            }}>
+              <span style={{
+                fontSize: '20px',
+                fontWeight: '700',
+                color: '#111827',
+                letterSpacing: '-0.025em',
+              }}>
+                {searchTerm ? highlightText(processedNodeData?.displayName || "", searchTerm) : processedNodeData?.displayName}
+              </span>
+              {processedNodeData?.isMainCharacter && (
+                <span style={{
+                  background: 'linear-gradient(135deg, #4F6DDE 0%, #6fa7ff 100%)',
+                  color: '#fff',
+                  borderRadius: '12px',
+                  fontSize: '12px',
+                  padding: '4px 12px',
+                  fontWeight: '600',
+                  boxShadow: '0 2px 4px rgba(79,109,222,0.2)',
+                }}>
+                  주요 인물
+                </span>
+              )}
+            </div>
+            
+            <button
+              onClick={onClose}
+              aria-label="사이드바 닫기"
+              style={{
+                background: 'none',
+                border: 'none',
+                fontSize: '24px',
+                color: '#6b7280',
+                cursor: 'pointer',
+                padding: '8px',
+                borderRadius: '6px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                transition: 'all 0.15s ease',
+                width: '40px',
+                height: '40px',
+                marginLeft: '16px',
+              }}
+              onMouseOver={(e) => {
+                e.currentTarget.style.background = '#f3f4f6';
+                e.currentTarget.style.color = '#374151';
+              }}
+              onMouseOut={(e) => {
+                e.currentTarget.style.background = 'none';
+                e.currentTarget.style.color = '#6b7280';
+              }}
+              onFocus={(e) => {
+                e.currentTarget.style.background = '#f3f4f6';
+                e.currentTarget.style.color = '#374151';
+                e.currentTarget.style.outline = '2px solid #2563eb';
+                e.currentTarget.style.outlineOffset = '2px';
+              }}
+              onBlur={(e) => {
+                e.currentTarget.style.background = 'none';
+                e.currentTarget.style.color = '#6b7280';
+                e.currentTarget.style.outline = 'none';
+              }}
+            >
+              ×
+            </button>
+          </div>
+        </div>
+
+        {/* 사이드바 본문 */}
+        <div 
+          className="sidebar-content"
+          style={{
+            flex: 1,
+            overflow: 'auto',
+            padding: '0 24px',
+          }}
+        >
+          <div style={{ padding: '24px 0' }}>
+            {/* 통합 프로필 및 설명 섹션 */}
+            <div 
+              className="sidebar-card"
+              style={{
+                background: '#fff',
+                borderRadius: '12px',
+                padding: '24px',
+                marginBottom: '24px',
+                border: '1px solid #e5e7eb',
+                boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
+              }}
+            >
+              {/* 프로필 이미지 */}
+              <div style={{
+                textAlign: 'center',
+                marginBottom: '20px',
+              }}>
+                <div
+                  style={{
+                    width: '120px',
+                    height: '120px',
+                    borderRadius: '50%',
+                    background: '#e6e8f0',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    margin: '0 auto 20px auto',
+                    boxShadow: '0 4px 12px rgba(108,142,255,0.15)',
+                    overflow: 'hidden',
+                  }}
+                >
+                  {processedNodeData?.hasImage ? (
+                    <img
+                      src={processedNodeData.image}
+                      alt={processedNodeData.displayName || "character"}
+                      style={{
+                        width: '100%',
+                        height: '100%',
+                        objectFit: 'cover',
+                        borderRadius: '50%',
+                      }}
+                      onError={(e) => {
+                        e.target.style.display = 'none';
+                        e.target.nextSibling.style.display = 'block';
+                      }}
+                    />
+                  ) : null}
+                  <svg 
+                    width="80" 
+                    height="80" 
+                    viewBox="0 0 80 80" 
+                    fill="none"
+                    style={{ display: processedNodeData?.hasImage ? 'none' : 'block' }}
+                  >
+                    <circle cx="40" cy="40" r="40" fill="#e5e7eb" />
+                    <ellipse cx="40" cy="32" rx="16" ry="16" fill="#bdbdbd" />
+                    <ellipse cx="40" cy="56" rx="24" ry="12" fill="#bdbdbd" />
+                  </svg>
+                </div>
+                
+                <h4 style={{
+                  fontSize: '20px',
+                  fontWeight: '700',
+                  color: '#111827',
+                  margin: '0 0 8px 0',
+                  letterSpacing: '-0.025em',
+                }}>
+                  {searchTerm ? highlightText(processedNodeData?.displayName || "", searchTerm) : processedNodeData?.displayName}
+                </h4>
+                
+                {processedNodeData?.names && processedNodeData.names.length > 0 && (
+                  <div style={{
+                    display: 'flex',
+                    flexWrap: 'wrap',
+                    gap: '8px',
+                    justifyContent: 'center',
+                    marginTop: '12px',
+                  }}>
+                    {processedNodeData.names
+                      .filter(name => name !== processedNodeData.common_name)
+                      .map((name, i) => (
+                        <span
+                          key={i}
+                          style={{
+                            background: '#f3f4f6',
+                            color: '#4b5563',
+                            borderRadius: '12px',
+                            fontSize: '13px',
+                            padding: '4px 12px',
+                            border: '1px solid #e5e7eb',
+                            fontWeight: '500',
+                          }}
+                        >
+                          {searchTerm ? highlightText(name, searchTerm) : name}
+                        </span>
+                      ))}
+                  </div>
+                )}
+              </div>
+
+              {/* 인물 설명 */}
+              {processedNodeData?.hasDescription && (
+                <div style={{
+                  borderTop: '1px solid #e5e7eb',
+                  paddingTop: '20px',
+                }}>
+                  <div style={{
+                    borderLeft: '4px solid #2563eb',
+                    paddingLeft: '20px',
+                  }}>
+                    <p style={{
+                      margin: 0,
+                      fontSize: '14px',
+                      lineHeight: '1.6',
+                      color: '#374151',
+                      letterSpacing: '-0.01em',
+                    }}>
+                      {searchTerm ? highlightText(processedNodeData.description, searchTerm) : processedNodeData.description}
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* 검색 결과 연결 정보 */}
+            {isSearchActive && filteredElements.length > 0 && (
+              <div 
+                className="sidebar-card"
+                style={{
+                  background: '#fff',
+                  borderRadius: '12px',
+                  padding: '24px',
+                  marginBottom: '24px',
+                  border: '1px solid #e5e7eb',
+                  boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
+                }}
+              >
+                <h4 style={{
+                  fontSize: '16px',
+                  fontWeight: '600',
+                  color: '#111827',
+                  margin: '0 0 16px 0',
+                  letterSpacing: '-0.025em',
+                }}>
+                  🔍 검색 결과 연결 정보
+                </h4>
+                <div style={{
+                  background: '#f8f9fc',
+                  borderRadius: '8px',
+                  padding: '16px',
+                  border: '1px solid #e3e6ef',
+                }}>
+                  <p style={{
+                    margin: 0,
+                    fontSize: '14px',
+                    lineHeight: '1.6',
+                    color: '#42506b',
+                    letterSpacing: '-0.01em',
+                  }}>
+                    이 인물과 연결된 {filteredElements.filter(el => 
+                      el.data.source && 
+                      (el.data.source === processedNodeData?.id || el.data.target === processedNodeData?.id)
+                    ).length}개의 관계가 검색 결과에 포함되어 있습니다.
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* 요약 섹션 */}
+            <div 
+              className="sidebar-card"
+              style={{
+                background: '#fff',
+                borderRadius: '12px',
+                padding: '24px',
+                marginBottom: '24px',
+                border: '1px solid #e5e7eb',
+                boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
+              }}
+            >
+              <p style={{
+                margin: 0,
+                fontSize: '14px',
+                lineHeight: '1.6',
+                color: '#374151',
+                letterSpacing: '-0.01em',
+                whiteSpace: 'pre-wrap',
+              }}>
+                {summaryData.summary}
+              </p>
+            </div>
+          </div>
+        </div>
     </div>
   );
+  }
 }
 
 export default React.memo(UnifiedNodeInfo);

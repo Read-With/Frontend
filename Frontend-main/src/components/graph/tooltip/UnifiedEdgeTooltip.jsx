@@ -127,7 +127,7 @@ function UnifiedEdgeTooltip({
           flexDirection: 'column',
           background: '#fff',
           overflow: 'hidden',
-          fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
+          fontFamily: 'var(--font-family-primary)',
         }}
         onKeyDown={(e) => {
           if (e.key === 'Escape') {

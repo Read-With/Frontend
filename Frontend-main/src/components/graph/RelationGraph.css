@@ -434,8 +434,8 @@ html, body {
 
 /* 그래프 단독 페이지에서 슬라이드바가 열려있을 때 그래프 영역 조정 */
 .graph-page-container .graph-canvas-area {
-  width: calc(100% - 400px) !important;
-  max-width: calc(100% - 400px) !important;
+  width: calc(100% - 450px) !important;
+  max-width: calc(100% - 450px) !important;
 }
 
 .graph-controls-area {
@@ -823,7 +823,7 @@ html, body {
 
 /* Edge Tooltip 스타일 */
 .edge-tooltip-container {
-  min-width: 400px;
+  min-width: 450px;
   max-width: 600px;
 }
 
@@ -1186,7 +1186,7 @@ html, body {
 }
 
 .cy-node-label, .node-label {
-  font-family: 'Pretendard', 'Noto Sans KR', 'Inter', 'Segoe UI', 'Arial', sans-serif;
+  font-family: var(--font-family-primary);
   font-weight: 600;
   font-size: 15px;
   letter-spacing: -0.5px;

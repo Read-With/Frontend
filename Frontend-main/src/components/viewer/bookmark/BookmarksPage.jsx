@@ -170,7 +170,7 @@ const BookmarksPage = () => {
                 gap: '0.7rem',
           border: `1px solid ${bookmarkBorders[bm.color || 'normal']}`,
                 position: 'relative',
-          fontFamily: "'Pretendard', 'Noto Sans KR', 'Inter', 'Segoe UI', 'Arial', sans-serif",
+          fontFamily: 'var(--font-family-primary)',
           flex: '0 0 calc(33.33% - 0.8rem)',
           marginRight: marginRight,
           height: '100%',
@@ -465,7 +465,7 @@ const BookmarksPage = () => {
   };
 
   return (
-    <div style={{ padding: '2rem', maxWidth: '1200px', margin: '0 auto', fontFamily: "'Pretendard', 'Noto Sans KR', 'Inter', 'Segoe UI', 'Arial', sans-serif" }}>
+    <div style={{ padding: '2rem', maxWidth: '1200px', margin: '0 auto', fontFamily: 'var(--font-family-primary)' }}>
       <div style={{ marginBottom: '2rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <h1 style={{ margin: 0, fontSize: '1.8rem', color: '#22336b', fontWeight: 600 }}>북마크</h1>
         <button
