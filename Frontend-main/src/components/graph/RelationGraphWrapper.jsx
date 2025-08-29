@@ -64,7 +64,9 @@ function RelationGraphWrapper() {
 
   // 챕터 선택 함수
   const handleChapterSelect = (chapter) => {
-    setCurrentChapter(chapter);
+    if (chapter !== currentChapter) {
+      setCurrentChapter(chapter);
+    }
   };
 
   return (
@@ -155,8 +157,10 @@ function RelationGraphWrapper() {
                 fontWeight: currentChapter === chapter ? '600' : '500',
                 textAlign: 'left',
                 cursor: 'pointer',
-                transition: 'all 0.18s',
+                transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
                 borderLeft: currentChapter === chapter ? '4px solid #6C8EFF' : '4px solid transparent',
+                transform: currentChapter === chapter ? 'translateX(4px)' : 'translateX(0)',
+                boxShadow: currentChapter === chapter ? '0 2px 8px rgba(108, 142, 255, 0.15)' : 'none',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: isSidebarOpen ? 'flex-start' : 'center',
@@ -359,6 +363,7 @@ function RelationGraphWrapper() {
               isSearchActive={isSearchActive}
               filteredElements={filteredElements}
               layout={currentLayout}
+              loading={loading}
             />
           ) : (
             <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, color: '#6C8EFF' }}>

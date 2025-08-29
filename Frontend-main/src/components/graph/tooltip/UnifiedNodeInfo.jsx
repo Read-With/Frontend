@@ -1170,7 +1170,7 @@ function UnifiedNodeInfo({
                         e.currentTarget.style.transform = 'scale(1)';
                       }}
                     >
-                      닫기
+                      &times;
                     </button>
                   </div>
                   

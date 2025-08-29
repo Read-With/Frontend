@@ -35,6 +35,7 @@ function StandaloneRelationGraph({
   searchTerm = "",
   isSearchActive = false,
   filteredElements = null, // 검색된 요소들 (null이면 elements 사용)
+  loading = false,
 }) {
   const cyRef = useRef(null);
   const hasCenteredRef = useRef(false); // 최초 1회만 중앙정렬
@@ -280,7 +281,7 @@ function StandaloneRelationGraph({
             setRipples((prev) => [...prev, { id: rippleId, x: x - rect.left, y: y - rect.top }]);
             setTimeout(() => {
               setRipples((prev) => prev.filter((r) => r.id !== rippleId));
-            }, 700);
+            }, 900);
           }
         }
       });
@@ -311,7 +312,7 @@ function StandaloneRelationGraph({
     setRipples((prev) => [...prev, { id, x, y }]);
     setTimeout(() => {
       setRipples((prev) => prev.filter((r) => r.id !== id));
-    }, 700);
+    }, 900);
 
     // 그래프 온리 페이지에서 슬라이드바가 열려있을 때 닫기
     // 노드 클릭 시에는 툴팁을 닫지 않음 (노드 클릭은 tapNodeHandler에서 처리됨)
@@ -424,13 +425,19 @@ function StandaloneRelationGraph({
       {/* < 버튼은 inViewer && !fullScreen일 때만 보임 */}
       {/* 기존 중앙 고정 < 버튼 완전히 제거 */}
 
+
+
       <div className="flex-1 relative overflow-hidden" style={{ width: '100%', height: '100%' }}>
 
         {/* 그래프 영역 */}
         <div
           className="graph-canvas-area"
           onClick={handleCanvasClick}
-          style={{ position: "relative", width: "100%", height: "100%" }}
+          style={{ 
+            position: "relative", 
+            width: "100%", 
+            height: "100%"
+          }}
         >
           {memoizedElements.length === 0 ? (
             <div style={{ 
