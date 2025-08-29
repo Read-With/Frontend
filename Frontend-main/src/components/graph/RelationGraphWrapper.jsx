@@ -64,10 +64,11 @@ const isolatedButtonStyles = {
 const layoutStyles = {
   container: {
     width: '100vw',
-    height: '100vh',
+    height: 'calc(100vh - 54px)', // 상단바 높이만큼 제외
     background: '#f4f7fb',
     overflow: 'hidden',
-    display: 'flex'
+    display: 'flex',
+    marginTop: '54px' // 상단바 아래에서 시작
   },
   mainContent: {
     flex: 1,
@@ -274,9 +275,67 @@ function RelationGraphWrapper() {
   }
 
   return (
-    <div style={layoutStyles.container}>
-      {/* 사이드바 */}
-      <div style={sidebarStyles.container(isSidebarOpen, ANIMATION_VALUES)}>
+    <div style={{ width: '100vw', height: '100vh', background: '#f4f7fb', overflow: 'hidden' }}>
+      {/* 상단 컨트롤 바 - 사이드바 옆에 위치 */}
+      <div style={{ 
+        ...topBarStyles.container, 
+        position: 'fixed', 
+        top: 0, 
+        left: isSidebarOpen ? '240px' : '60px', // 사이드바 너비만큼 여백
+        right: 0,
+        transition: `left ${ANIMATION_VALUES.DURATION.SLOW} ${ANIMATION_VALUES.EASE_OUT}`
+      }}>
+        <div style={topBarStyles.leftSection}>
+          <GraphControls
+            elements={elements}
+            currentChapterData={currentChapterData}
+            searchTerm={searchTerm}
+            onSearchSubmit={handleSearchSubmit}
+            onClearSearch={clearSearch}
+          />
+          
+          <button
+            onClick={toggleHideIsolated}
+            style={isolatedButtonStyles.button(hideIsolated)}
+            onMouseEnter={handleMouseEnter}
+            onMouseLeave={handleMouseLeave}
+            title={hideIsolated ? '독립 인물을 표시합니다' : '독립 인물을 숨깁니다'}
+          >
+            <div style={isolatedButtonStyles.dot(hideIsolated)} />
+            {hideIsolated ? '독립 인물 표시' : '독립 인물 숨기기'}
+          </button>
+          
+          <EdgeLabelToggle
+            visible={edgeLabelVisible}
+            onToggle={toggleEdgeLabel}
+          />
+        </div>
+
+        <div style={topBarStyles.rightSection}>
+          <button
+            onClick={handleBackToViewer}
+            style={{
+              ...topBarStyles.backButton,
+              marginRight: '24px'
+            }}
+            onMouseEnter={handleMouseEnter}
+            onMouseLeave={handleMouseLeave}
+          >
+            <FaTimes />
+            뷰어로 돌아가기
+          </button>
+        </div>
+      </div>
+
+      {/* 사이드바 - 왼쪽 고정 위치 */}
+      <div style={{
+        ...sidebarStyles.container(isSidebarOpen, ANIMATION_VALUES),
+        position: 'fixed',
+        top: 0, // 맨 위에서 시작
+        left: 0,
+        height: '100vh', // 전체 높이 사용
+        marginTop: 0
+      }}>
         <div style={sidebarStyles.header}>
           <button
             onClick={toggleSidebar}
@@ -309,95 +368,57 @@ function RelationGraphWrapper() {
         </div>
       </div>
 
-      {/* 메인 콘텐츠 영역 */}
-      <div style={layoutStyles.mainContent}>
-        {/* 상단 컨트롤 바 */}
-        <div style={topBarStyles.container}>
-          <div style={topBarStyles.leftSection}>
-            <GraphControls
-              elements={elements}
-              currentChapterData={currentChapterData}
-              searchTerm={searchTerm}
-              onSearchSubmit={handleSearchSubmit}
-              onClearSearch={clearSearch}
-            />
-            
-            <button
-              onClick={toggleHideIsolated}
-              style={isolatedButtonStyles.button(hideIsolated)}
-              onMouseEnter={handleMouseEnter}
-              onMouseLeave={handleMouseLeave}
-              title={hideIsolated ? '독립 인물을 표시합니다' : '독립 인물을 숨깁니다'}
-            >
-              <div style={isolatedButtonStyles.dot(hideIsolated)} />
-              {hideIsolated ? '독립 인물 표시' : '독립 인물 숨기기'}
-            </button>
-            
-            <EdgeLabelToggle
-              visible={edgeLabelVisible}
-              onToggle={toggleEdgeLabel}
-            />
-          </div>
-
-          <div style={topBarStyles.rightSection}>
-            <button
-              onClick={handleBackToViewer}
-              style={{
-                ...topBarStyles.backButton,
-                marginRight: '24px'
-              }}
-              onMouseEnter={handleMouseEnter}
-              onMouseLeave={handleMouseLeave}
-            >
-              <FaTimes />
-              뷰어로 돌아가기
-            </button>
-          </div>
-        </div>
-
-        {/* 그래프 영역 */}
-        <div style={layoutStyles.graphContainer}>
-          <div style={graphStyles.graphPageContainer}>
-            <div style={graphStyles.graphPageInner}>
-              {activeTooltip && (
-                <GraphSidebar
-                  tooltip={activeTooltip}
-                  onClose={onClearTooltip}
-                  chapterNum={currentChapter}
-                  eventNum={eventNum}
-                  maxChapter={maxChapter}
-                  filename={filename}
-                  elements={elements}
-                  isGraphPage={false}
-                  isStandaloneGraphPage={true}
+      {/* 그래프 영역 - 상단바 아래에 직접 배치 */}
+      <div style={{
+        position: 'fixed',
+        top: 0, // 맨 위에서 시작
+        left: isSidebarOpen ? '240px' : '60px', // 사이드바 너비만큼 여백
+        right: 0,
+        bottom: 0,
+        transition: `left ${ANIMATION_VALUES.DURATION.SLOW} ${ANIMATION_VALUES.EASE_OUT}`,
+        overflow: 'hidden'
+      }}>
+        <div style={graphStyles.graphPageContainer}>
+          <div style={graphStyles.graphPageInner}>
+            {activeTooltip && (
+              <GraphSidebar
+                activeTooltip={activeTooltip}
+                onClose={onClearTooltip}
+                chapterNum={currentChapter}
+                eventNum={eventNum}
+                maxChapter={maxChapter}
+                filename={filename}
+                elements={elements}
+                isSearchActive={isSearchActive}
+                filteredElements={filteredElements}
+                searchTerm={searchTerm}
+              />
+            )}
+            <div className="graph-canvas-area" onClick={handleCanvasClick} style={graphStyles.graphArea}>
+              <CytoscapeGraphUnified
+                elements={finalElements}
+                stylesheet={stylesheet}
+                layout={layout}
+                cyRef={cyRef}
+                nodeSize={nodeSize}
+                fitNodeIds={fitNodeIds}
+                searchTerm={searchTerm}
+                isSearchActive={isSearchActive}
+                filteredElements={filteredElements}
+                onShowNodeTooltip={onShowNodeTooltip}
+                onShowEdgeTooltip={onShowEdgeTooltip}
+                onClearTooltip={onClearTooltip}
+                selectedNodeIdRef={selectedNodeIdRef}
+                selectedEdgeIdRef={selectedEdgeIdRef}
+                strictBackgroundClear={true}
+              />
+              {ripples.map((ripple) => (
+                <div
+                  key={ripple.id}
+                  className="cytoscape-ripple"
+                  style={rippleUtils.getRippleStyle(ripple)}
                 />
-              )}
-              <div className="graph-canvas-area" onClick={handleCanvasClick} style={graphStyles.graphArea}>
-                <CytoscapeGraphUnified
-                  elements={finalElements}
-                  stylesheet={stylesheet}
-                  layout={layout}
-                  cyRef={cyRef}
-                  nodeSize={nodeSize}
-                  fitNodeIds={fitNodeIds}
-                  searchTerm={searchTerm}
-                  isSearchActive={isSearchActive}
-                  filteredElements={filteredElements}
-                  onShowNodeTooltip={onShowNodeTooltip}
-                  onShowEdgeTooltip={onShowEdgeTooltip}
-                  onClearTooltip={onClearTooltip}
-                  selectedNodeIdRef={selectedNodeIdRef}
-                  selectedEdgeIdRef={selectedEdgeIdRef}
-                  strictBackgroundClear={true}
-                />
-                {ripples.map((ripple) => (
-                  <div
-                    key={ripple.id}
-                    className="cytoscape-ripple"
-                    style={rippleUtils.getRippleStyle(ripple)}
-                  />
-                ))}
-              </div>
+              ))}
             </div>
           </div>
         </div>

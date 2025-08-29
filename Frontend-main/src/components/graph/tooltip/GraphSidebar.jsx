@@ -21,10 +21,10 @@ function GraphSidebar({
       <div
         style={{
           position: "absolute",
-          top: "60px", // 상단 아래부터 시작
+          top: "54px", // 상단바 바로 아래에서 시작
           right: "0px",
           width: "450px",
-          height: "calc(100vh - 60px)", // 웹 페이지 맨 아래까지 (상단 60px 제외)
+          height: "calc(100vh - 54px)", // 웹 페이지 맨 아래까지 (상단바 54px 제외)
           background: "#fff",
           borderRadius: "0px", // 둥근 모서리 제거
           boxShadow: "2px 0 8px rgba(0,0,0,0.06)", // 챕터 슬라이드바와 동일한 그림자
@@ -83,10 +83,10 @@ function GraphSidebar({
       <div
         style={{
           position: "absolute",
-          top: "60px", // 상단 아래부터 시작
+          top: "54px", // 상단바 바로 아래에서 시작
           right: "0px",
           width: "450px",
-          height: "calc(100vh - 60px)", // 웹 페이지 맨 아래까지 (상단 60px 제외)
+          height: "calc(100vh - 54px)", // 웹 페이지 맨 아래까지 (상단바 54px 제외)
           background: "#fff",
           borderRadius: "0px", // 둥근 모서리 제거
           boxShadow: "2px 0 8px rgba(0,0,0,0.06)", // 챕터 슬라이드바와 동일한 그림자
@@ -118,10 +118,10 @@ function GraphSidebar({
       <div
         style={{
           position: "absolute",
-          top: "60px", // 상단 아래부터 시작
+          top: "54px", // 상단바 바로 아래에서 시작
           right: "0px",
           width: "450px",
-          height: "calc(100vh - 60px)", // 웹 페이지 맨 아래까지 (상단 60px 제외)
+          height: "calc(100vh - 54px)", // 웹 페이지 맨 아래까지 (상단바 54px 제외)
           background: "#fff",
           borderRadius: "0px", // 둥근 모서리 제거
           boxShadow: "2px 0 8px rgba(0,0,0,0.06)", // 챕터 슬라이드바와 동일한 그림자

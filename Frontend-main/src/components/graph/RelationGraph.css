@@ -388,12 +388,13 @@ html, body {
 
 .graph-page-container {
   width: 100vw;
-  height: 100vh;
+  height: calc(100vh - 54px); /* 상단바 높이만큼 제외 */
   display: flex;
   justify-content: center;
   align-items: center;
   background: #f4f7fb;
   overflow: hidden;
+  margin-top: 54px; /* 상단바 아래에서 시작 */
 }
 
 .graph-page-bg {
@@ -618,10 +619,10 @@ html, body {
 /* 그래프 화면에만 overflow hidden 적용 */
 .graph-container-wrapper {
   overflow: hidden !important;
-  height: 100vh !important;
+  height: calc(100vh - 54px) !important; /* 상단바 높이만큼 제외 */
   width: 100vw !important;
   position: fixed;
-  top: 0;
+  top: 54px; /* 상단바 아래에서 시작 */
   left: 0;
 }
 

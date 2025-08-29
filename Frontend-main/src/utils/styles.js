@@ -2,7 +2,7 @@
 export const sidebarStyles = {
   container: (isOpen, animationValues) => ({
     width: isOpen ? '240px' : '60px',
-    height: '100vh',
+    height: '100vh', // 전체 높이 사용
     background: '#fff',
     borderRight: '1px solid #e5e7eb',
     boxShadow: '2px 0 8px rgba(0,0,0,0.06)',
@@ -11,6 +11,9 @@ export const sidebarStyles = {
     flexDirection: 'column',
     zIndex: 1000,
     overflow: 'hidden',
+    position: 'fixed',
+    top: 0, // 맨 위에서 시작
+    left: 0,
   }),
   header: {
     height: '54px',
@@ -305,7 +308,7 @@ export const graphStyles = {
   },
   graphPageContainer: {
     width: '100%', 
-    height: '100%', 
+    height: 'calc(100vh - 54px)', // 상단바 높이만큼 제외
     overflow: 'hidden', 
     position: 'relative', 
     backgroundColor: '#f8fafc' 
