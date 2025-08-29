@@ -5,63 +5,82 @@ import React, {
   useEffect,
   useCallback,
 } from "react";
-import { useNavigate, useLocation, useParams } from "react-router-dom";
+import { useParams } from "react-router-dom";
 import CytoscapeGraphUnified from "./CytoscapeGraphUnified";
 import GraphSidebar from "./tooltip/GraphSidebar";
 import "./RelationGraph.css";
-import { DEFAULT_LAYOUT, createGraphStylesheet, getNodeSize as getNodeSizeUtil, getEdgeStyle as getEdgeStyleUtil, getRelationColor, getWideLayout } from "../../utils/graphStyles";
+import { createGraphStylesheet, getNodeSize as getNodeSizeUtil, getEdgeStyle as getEdgeStyleUtil, getWideLayout } from "../../utils/graphStyles";
 import { applySearchHighlight } from "../../utils/searchUtils";
 import useGraphInteractions from "../../hooks/useGraphInteractions";
 
 const getNodeSize = () => getNodeSizeUtil('graph');
 const getEdgeStyle = () => getEdgeStyleUtil('graph');
 
+// 공통 스타일 정의
+const commonStyles = {
+  emptyState: {
+    width: '100%', 
+    height: '100%', 
+    display: 'flex', 
+    alignItems: 'center', 
+    justifyContent: 'center',
+    flexDirection: 'column',
+    gap: '16px'
+  },
+  emptyStateTitle: {
+    fontSize: '20px',
+    color: '#6C8EFF',
+    fontWeight: '600',
+    textAlign: 'center'
+  },
+  emptyStateDescription: {
+    fontSize: '14px',
+    color: '#64748b',
+    textAlign: 'center',
+    maxWidth: '300px',
+    lineHeight: '1.5'
+  },
+  ripple: {
+    width: 120,
+    height: 120,
+  },
+  graphContainer: {
+    width: '100%',
+    height: '100%',
+    overflow: 'hidden',
+    position: 'relative',
+    backgroundColor: '#f8fafc'
+  }
+};
+
 function StandaloneRelationGraph({ 
   elements, 
   inViewer = false, 
   fullScreen = false, 
-  onFullScreen, 
-  onExitFullScreen, 
-  graphViewState, 
-  setGraphViewState, 
   chapterNum, 
   eventNum, 
-  hideIsolated, 
-  maxEventNum, 
   newNodeIds, 
   maxChapter, 
   edgeLabelVisible = true,
   fitNodeIds = [],
   searchTerm = "",
   isSearchActive = false,
-  filteredElements = null, // 검색된 요소들 (null이면 elements 사용)
-  loading = false,
+  filteredElements = null,
 }) {
   const cyRef = useRef(null);
-  const hasCenteredRef = useRef(false); // 최초 1회만 중앙정렬
-  const [activeTooltip, setActiveTooltip] = useState(null); // 하나의 툴팁만 관리
+  const [activeTooltip, setActiveTooltip] = useState(null);
   const selectedEdgeIdRef = useRef(null);
   const selectedNodeIdRef = useRef(null);
-  const navigate = useNavigate();
-  const location = useLocation();
   const { filename } = useParams();
-  const prevElementsRef = useRef();
-  const prevEventJsonRef = useRef();
   const [isGraphLoading, setIsGraphLoading] = useState(true);
   const prevChapterNum = useRef();
   const prevEventNum = useRef();
-  const prevElementsStr = useRef();
   const [ripples, setRipples] = useState([]);
   const prevNodeIdsRef = useRef([]);
   const prevEdgeIdsRef = useRef([]);
 
-  // gatsby.epub 단독 그래프 페이지에서만 간격을 더 넓게
   const isGraphPage = inViewer && fullScreen;
-  
-  // 그래프 단독 페이지 여부 확인
   const isStandaloneGraphPage = !inViewer;
-
-
 
   const onShowNodeTooltip = useCallback(({ node, nodeCenter, mouseX, mouseY }) => {
     setActiveTooltip({ type: 'node', id: node.id(), x: mouseX, y: mouseY, data: node.data(), nodeCenter });
@@ -96,18 +115,15 @@ function StandaloneRelationGraph({
   });
 
   const handleCloseTooltip = useCallback(() => {
-    console.log('handleCloseTooltip called');
     setActiveTooltip(null);
     if (isStandaloneGraphPage) {
-      // 그래프 단독 페이지에서는 선택 상태만 초기화 (사이드바 닫기)
       clearSelectionOnly();
     } else {
-      // 다른 페이지에서는 툴팁도 함께 초기화
       clearAll();
     }
   }, [clearAll, clearSelectionOnly, isStandaloneGraphPage]);
 
-  // elements/filteredElements를 id 기준으로 정렬해서 비교 및 전달
+  // elements 정렬 및 필터링
   const sortedElements = useMemo(() => {
     if (!elements) return [];
     return [...elements].sort((a, b) => {
@@ -117,31 +133,24 @@ function StandaloneRelationGraph({
     });
   }, [elements]);
 
-  // 검색된 요소들 또는 원래 요소들 사용
   const finalElements = useMemo(() => {
-    // 검색이 활성화되어 있고 필터된 요소가 있으면 사용
     if (isSearchActive && filteredElements && filteredElements.length > 0) {
       return filteredElements;
     }
-    // 그렇지 않으면 원본 elements 사용
     return sortedElements;
   }, [isSearchActive, filteredElements, sortedElements]);
-
-  // currentEventJson이 내용이 같으면 참조도 같게 useMemo로 캐싱
-  const stableEventJson = useMemo(() => graphViewState ? JSON.stringify(graphViewState) : '', [graphViewState]);
 
   const nodeSize = getNodeSize();
   const edgeStyle = getEdgeStyle();
 
-  // utils의 createGraphStylesheet 함수 사용
   const stylesheet = useMemo(
     () => createGraphStylesheet(nodeSize, edgeStyle, edgeLabelVisible, 15),
     [nodeSize, edgeStyle, edgeLabelVisible]
   );
 
-  // === 오직 chapter_node_positions_{chapterNum}만 사용하여 노드 위치 복원 (절대적 위치) ===
+  const layout = useMemo(() => getWideLayout(), []);
 
-  // 개선된 코드: chapterNum, eventNum이 바뀔 때만 로딩 오버레이 표시
+  // 로딩 상태 관리
   useEffect(() => {
     if (chapterNum !== prevChapterNum.current || eventNum !== prevEventNum.current) {
       setIsGraphLoading(true);
@@ -150,21 +159,19 @@ function StandaloneRelationGraph({
     }
   }, [chapterNum, eventNum]);
 
-  // elements가 변경될 때 로딩 상태 업데이트
   useEffect(() => {
     if (elements) {
       setIsGraphLoading(false);
     }
   }, [elements]);
 
-  // elements가 변경될 때 새로 등장한 노드와 간선에 선택 효과 적용
-  useEffect(() => {
+  // 새로 추가된 요소들 처리
+  const processNewElements = useCallback(() => {
     if (!elements || elements.length === 0 || !cyRef.current) {
       prevNodeIdsRef.current = [];
       return;
     }
     
-    // 새로 추가된 노드들 찾기
     const currentNodeIds = elements
       .filter((e) => e.data && !e.data.source)
       .map((e) => e.data.id);
@@ -172,7 +179,6 @@ function StandaloneRelationGraph({
     const newNodeIds = currentNodeIds.filter((id) => !prevNodeIds.includes(id));
     prevNodeIdsRef.current = currentNodeIds;
     
-    // 새로 추가된 간선들 찾기
     const currentEdgeIds = elements
       .filter((e) => e.data && e.data.source)
       .map((e) => e.data.id);
@@ -180,130 +186,131 @@ function StandaloneRelationGraph({
     const newEdgeIds = currentEdgeIds.filter((id) => !prevEdgeIds.includes(id));
     prevEdgeIdsRef.current = currentEdgeIds;
     
-    // 현재 선택된 노드나 간선이 있는지 확인
     const hasSelection = selectedNodeIdRef.current || selectedEdgeIdRef.current || activeTooltip;
     
     if (hasSelection) {
-      // 선택된 노드가 있는 경우
-      if (selectedNodeIdRef.current) {
-        const selectedNode = cyRef.current.getElementById(selectedNodeIdRef.current);
-        if (selectedNode && selectedNode.length > 0) {
-          cyRef.current.batch(() => {
-            // utils의 applySearchHighlight 함수 활용
-            if (isSearchActive && filteredElements && filteredElements.length > 0) {
-              applySearchHighlight(cyRef.current, selectedNode, filteredElements);
-            } else {
-              // 일반 상태에서는 기존 로직 사용
-              newNodeIds.forEach((id) => {
-                const newNode = cyRef.current.getElementById(id);
-                if (newNode && newNode.length > 0) {
-                  const connectedEdges = selectedNode.connectedEdges().intersection(newNode.connectedEdges());
-                  if (connectedEdges.length > 0) {
-                    newNode.removeClass("faded");
-                    const connectedNodes = selectedNode.neighborhood().nodes();
-                    if (connectedNodes.has(newNode)) {
-                      newNode.addClass("highlighted");
-                    }
-                  } else {
-                    newNode.addClass("faded");
-                  }
-                }
-              });
-              
-              newEdgeIds.forEach((id) => {
-                const newEdge = cyRef.current.getElementById(id);
-                if (newEdge && newEdge.length > 0) {
-                  const sourceNode = newEdge.source();
-                  const targetNode = newEdge.target();
-                  
-                  if (sourceNode.same(selectedNode) || targetNode.same(selectedNode)) {
-                    newEdge.removeClass("faded");
-                  } else {
-                    newEdge.addClass("faded");
-                  }
-                }
-              });
-            }
-          });
-        }
-      }
-      
-      // 선택된 간선이 있는 경우
-      if (selectedEdgeIdRef.current) {
-        const selectedEdge = cyRef.current.getElementById(selectedEdgeIdRef.current);
-        if (selectedEdge && selectedEdge.length > 0) {
-          cyRef.current.batch(() => {
-            newNodeIds.forEach((id) => {
-              const newNode = cyRef.current.getElementById(id);
-              if (newNode && newNode.length > 0) {
-                const sourceNode = selectedEdge.source();
-                const targetNode = selectedEdge.target();
-                
-                if (newNode.same(sourceNode) || newNode.same(targetNode)) {
-                  newNode.removeClass("faded").addClass("highlighted");
-                } else {
-                  newNode.addClass("faded");
-                }
-              }
-            });
-            
-            newEdgeIds.forEach((id) => {
-              const newEdge = cyRef.current.getElementById(id);
-              if (newEdge && newEdge.length > 0) {
-                const selectedSource = selectedEdge.source();
-                const selectedTarget = selectedEdge.target();
-                const newSource = newEdge.source();
-                const newTarget = newEdge.target();
-                
-                if (newSource.same(selectedSource) || newSource.same(selectedTarget) ||
-                    newTarget.same(selectedSource) || newTarget.same(selectedTarget)) {
-                  newEdge.removeClass("faded");
-                } else {
-                  newEdge.addClass("faded");
-                }
-              }
-            });
-          });
-        }
-      }
+      processSelectionEffects(newNodeIds, newEdgeIds);
     } else {
-      // 선택이 없는 경우: 새로 등장한 노드에 ripple 효과만 적용
-      newNodeIds.forEach((id) => {
-        const node = cyRef.current.getElementById(id);
-        if (node && node.length > 0) {
-          const pos = node.renderedPosition();
-          const container = document.querySelector(".graph-canvas-area");
-          if (container && pos) {
-            const rect = container.getBoundingClientRect();
-            const x = pos.x + rect.left;
-            const y = pos.y + rect.top;
-            const rippleId = Date.now() + Math.random();
-            setRipples((prev) => [...prev, { id: rippleId, x: x - rect.left, y: y - rect.top }]);
-            setTimeout(() => {
-              setRipples((prev) => prev.filter((r) => r.id !== rippleId));
-            }, 900);
-          }
-        }
-      });
+      applyRippleEffects(newNodeIds);
     }
   }, [elements, activeTooltip, isSearchActive, filteredElements]);
 
-  // elements, stylesheet, layout, searchLayout, style useMemo 최적화
-  const memoizedElements = useMemo(() => finalElements, [finalElements]);
-  const memoizedStylesheet = useMemo(() => stylesheet, [stylesheet]);
-  const memoizedLayout = useMemo(() => getWideLayout(), []);
-  const memoizedStyle = useMemo(() => ({
-    width: '100%',
-    height: '100%',
-    overflow: 'hidden',
-    position: 'relative',
-    backgroundColor: '#f8fafc'
-  }), []);
+  const processSelectionEffects = useCallback((newNodeIds, newEdgeIds) => {
+    if (!cyRef.current) return;
 
+    if (selectedNodeIdRef.current) {
+      const selectedNode = cyRef.current.getElementById(selectedNodeIdRef.current);
+      if (selectedNode && selectedNode.length > 0) {
+        cyRef.current.batch(() => {
+          if (isSearchActive && filteredElements && filteredElements.length > 0) {
+            applySearchHighlight(cyRef.current, selectedNode, filteredElements);
+          } else {
+            applyNodeSelectionEffects(selectedNode, newNodeIds, newEdgeIds);
+          }
+        });
+      }
+    }
+    
+    if (selectedEdgeIdRef.current) {
+      const selectedEdge = cyRef.current.getElementById(selectedEdgeIdRef.current);
+      if (selectedEdge && selectedEdge.length > 0) {
+        cyRef.current.batch(() => {
+          applyEdgeSelectionEffects(selectedEdge, newNodeIds, newEdgeIds);
+        });
+      }
+    }
+  }, [isSearchActive, filteredElements]);
 
+  const applyNodeSelectionEffects = useCallback((selectedNode, newNodeIds, newEdgeIds) => {
+    newNodeIds.forEach((id) => {
+      const newNode = cyRef.current.getElementById(id);
+      if (newNode && newNode.length > 0) {
+        const connectedEdges = selectedNode.connectedEdges().intersection(newNode.connectedEdges());
+        if (connectedEdges.length > 0) {
+          newNode.removeClass("faded");
+          const connectedNodes = selectedNode.neighborhood().nodes();
+          if (connectedNodes.has(newNode)) {
+            newNode.addClass("highlighted");
+          }
+        } else {
+          newNode.addClass("faded");
+        }
+      }
+    });
+    
+    newEdgeIds.forEach((id) => {
+      const newEdge = cyRef.current.getElementById(id);
+      if (newEdge && newEdge.length > 0) {
+        const sourceNode = newEdge.source();
+        const targetNode = newEdge.target();
+        
+        if (sourceNode.same(selectedNode) || targetNode.same(selectedNode)) {
+          newEdge.removeClass("faded");
+        } else {
+          newEdge.addClass("faded");
+        }
+      }
+    });
+  }, []);
 
-  const handleCanvasClick = (e) => {
-    // 리플 효과 처리
+  const applyEdgeSelectionEffects = useCallback((selectedEdge, newNodeIds, newEdgeIds) => {
+    newNodeIds.forEach((id) => {
+      const newNode = cyRef.current.getElementById(id);
+      if (newNode && newNode.length > 0) {
+        const sourceNode = selectedEdge.source();
+        const targetNode = selectedEdge.target();
+        
+        if (newNode.same(sourceNode) || newNode.same(targetNode)) {
+          newNode.removeClass("faded").addClass("highlighted");
+        } else {
+          newNode.addClass("faded");
+        }
+      }
+    });
+    
+    newEdgeIds.forEach((id) => {
+      const newEdge = cyRef.current.getElementById(id);
+      if (newEdge && newEdge.length > 0) {
+        const selectedSource = selectedEdge.source();
+        const selectedTarget = selectedEdge.target();
+        const newSource = newEdge.source();
+        const newTarget = newEdge.target();
+        
+        if (newSource.same(selectedSource) || newSource.same(selectedTarget) ||
+            newTarget.same(selectedSource) || newTarget.same(selectedTarget)) {
+          newEdge.removeClass("faded");
+        } else {
+          newEdge.addClass("faded");
+        }
+      }
+    });
+  }, []);
+
+  const applyRippleEffects = useCallback((newNodeIds) => {
+    newNodeIds.forEach((id) => {
+      const node = cyRef.current.getElementById(id);
+      if (node && node.length > 0) {
+        const pos = node.renderedPosition();
+        const container = document.querySelector(".graph-canvas-area");
+        if (container && pos) {
+          const rect = container.getBoundingClientRect();
+          const x = pos.x + rect.left;
+          const y = pos.y + rect.top;
+          const rippleId = Date.now() + Math.random();
+          setRipples((prev) => [...prev, { id: rippleId, x: x - rect.left, y: y - rect.top }]);
+          setTimeout(() => {
+            setRipples((prev) => prev.filter((r) => r.id !== rippleId));
+          }, 900);
+        }
+      }
+    });
+  }, []);
+
+  useEffect(() => {
+    processNewElements();
+  }, [processNewElements]);
+
+  const handleCanvasClick = useCallback((e) => {
     const container = e.currentTarget;
     const rect = container.getBoundingClientRect();
     const x = e.clientX - rect.left;
@@ -314,17 +321,65 @@ function StandaloneRelationGraph({
       setRipples((prev) => prev.filter((r) => r.id !== id));
     }, 900);
 
-    // 그래프 온리 페이지에서 슬라이드바가 열려있을 때 닫기
-    // 노드 클릭 시에는 툴팁을 닫지 않음 (노드 클릭은 tapNodeHandler에서 처리됨)
     if (isStandaloneGraphPage && activeTooltip) {
-      // 노드나 엣지가 아닌 배경 영역을 클릭했을 때만 툴팁 닫기
       const target = e.target;
       if (target === container || target.classList.contains('graph-canvas-area')) {
-        console.log('Background clicked - closing tooltip');
         handleCloseTooltip();
       }
     }
-  };
+  }, [isStandaloneGraphPage, activeTooltip, handleCloseTooltip]);
+
+  // 공통 그래프 렌더링 컴포넌트
+  const renderGraph = useCallback(() => (
+    <div
+      className="graph-canvas-area"
+      onClick={handleCanvasClick}
+      style={{ position: "relative", width: "100%", height: "100%" }}
+    >
+      {finalElements.length === 0 ? (
+        <div style={commonStyles.emptyState}>
+          <div style={commonStyles.emptyStateTitle}>
+            관계가 없습니다
+          </div>
+          <div style={commonStyles.emptyStateDescription}>
+            현재 챕터에서 선택한 이벤트에는<br />
+            등장 인물 간의 관계 정보가 없습니다.
+          </div>
+        </div>
+      ) : (
+        <>
+          {ripples.map((ripple) => (
+            <div
+              key={ripple.id}
+              className="cytoscape-ripple"
+              style={{
+                left: ripple.x - 60,
+                top: ripple.y - 60,
+                ...commonStyles.ripple
+              }}
+            />
+          ))}
+          <CytoscapeGraphUnified
+            elements={finalElements}
+            stylesheet={stylesheet}
+            layout={layout}
+            tapNodeHandler={tapNodeHandler}
+            tapEdgeHandler={tapEdgeHandler}
+            tapBackgroundHandler={tapBackgroundHandler}
+            fitNodeIds={fitNodeIds}
+            style={commonStyles.graphContainer}
+            cyRef={cyRef}
+            newNodeIds={newNodeIds}
+            nodeSize={nodeSize}
+            searchTerm={searchTerm}
+            isSearchActive={isSearchActive}
+            filteredElements={filteredElements}
+            onLayoutComplete={() => {}}
+          />
+        </>
+      )}
+    </div>
+  ), [finalElements, ripples, handleCanvasClick, stylesheet, layout, tapNodeHandler, tapEdgeHandler, tapBackgroundHandler, fitNodeIds, newNodeIds, nodeSize, searchTerm, isSearchActive, filteredElements]);
 
   if (fullScreen && inViewer) {
     return (
@@ -340,80 +395,9 @@ function StandaloneRelationGraph({
         left: 0,
         zIndex: 9999
       }}>
-        {/* 그래프 본문만 렌더링 (상단바는 RelationGraphWrapper에서 처리) */}
         <div className="flex-1 relative overflow-hidden w-full h-full">
           <div className="flex-1 relative overflow-hidden" style={{ width: '100%', height: '100%' }}>
-                         {/* 그래프 영역 */}
-             <div
-               className="graph-canvas-area"
-               onClick={handleCanvasClick}
-               style={{ position: "relative", width: "100%", height: "100%" }}
-             >
-               {memoizedElements.length === 0 ? (
-                 <div style={{ 
-                   width: '100%', 
-                   height: '100%', 
-                   display: 'flex', 
-                   alignItems: 'center', 
-                   justifyContent: 'center',
-                   flexDirection: 'column',
-                   gap: '16px'
-                 }}>
-                   <div style={{
-                     fontSize: '20px',
-                     color: '#6C8EFF',
-                     fontWeight: '600',
-                     textAlign: 'center'
-                   }}>
-                     관계가 없습니다
-                   </div>
-                   <div style={{
-                     fontSize: '14px',
-                     color: '#64748b',
-                     textAlign: 'center',
-                     maxWidth: '300px',
-                     lineHeight: '1.5'
-                   }}>
-                     현재 챕터에서 선택한 이벤트에는<br />
-                     등장 인물 간의 관계 정보가 없습니다.
-                   </div>
-                 </div>
-               ) : (
-                 <>
-                   {ripples.map((ripple) => (
-                     <div
-                       key={ripple.id}
-                       className="cytoscape-ripple"
-                       style={{
-                         left: ripple.x - 60,
-                         top: ripple.y - 60,
-                         width: 120,
-                         height: 120,
-                       }}
-                     />
-                   ))}
-                   <CytoscapeGraphUnified
-                     elements={finalElements}
-                     stylesheet={memoizedStylesheet}
-                     layout={memoizedLayout}
-                     tapNodeHandler={tapNodeHandler}
-                     tapEdgeHandler={tapEdgeHandler}
-                     tapBackgroundHandler={tapBackgroundHandler}
-                     fitNodeIds={fitNodeIds}
-                     style={memoizedStyle}
-                     cyRef={cyRef}
-                     newNodeIds={newNodeIds}
-                     nodeSize={nodeSize}
-                     searchTerm={searchTerm}
-                     isSearchActive={isSearchActive}
-                     filteredElements={filteredElements}
-                     onLayoutComplete={() => {
-                       // 레이아웃 완료 처리
-                     }}
-                   />
-                 </>
-               )}
-             </div>
+            {renderGraph()}
           </div>
         </div>
       </div>
@@ -422,108 +406,25 @@ function StandaloneRelationGraph({
 
   return (
     <div className={`flex flex-col h-full w-full relative overflow-hidden ${fullScreen ? 'graph-container-wrapper' : ''}`} style={{ width: '100%', height: '100%' }}>
-      {/* < 버튼은 inViewer && !fullScreen일 때만 보임 */}
-      {/* 기존 중앙 고정 < 버튼 완전히 제거 */}
-
-
-
       <div className="flex-1 relative overflow-hidden" style={{ width: '100%', height: '100%' }}>
-
-        {/* 그래프 영역 */}
-        <div
-          className="graph-canvas-area"
-          onClick={handleCanvasClick}
-          style={{ 
-            position: "relative", 
-            width: "100%", 
-            height: "100%"
-          }}
-        >
-          {memoizedElements.length === 0 ? (
-            <div style={{ 
-              width: '100%', 
-              height: '100%', 
-              display: 'flex', 
-              alignItems: 'center', 
-              justifyContent: 'center',
-              flexDirection: 'column',
-              gap: '16px'
-            }}>
-              <div style={{
-                fontSize: '20px',
-                color: '#6C8EFF',
-                fontWeight: '600',
-                textAlign: 'center'
-              }}>
-                관계가 없습니다
-              </div>
-              <div style={{
-                fontSize: '14px',
-                color: '#64748b',
-                textAlign: 'center',
-                maxWidth: '300px',
-                lineHeight: '1.5'
-              }}>
-                현재 챕터에서 선택한 이벤트에는<br />
-                등장 인물 간의 관계 정보가 없습니다.
-              </div>
-            </div>
-          ) : (
-            <>
-              {ripples.map((ripple) => (
-                <div
-                  key={ripple.id}
-                  className="cytoscape-ripple"
-                  style={{
-                    left: ripple.x - 60,
-                    top: ripple.y - 60,
-                    width: 120,
-                    height: 120,
-                  }}
-                />
-              ))}
-              <CytoscapeGraphUnified
-                elements={finalElements}
-                stylesheet={memoizedStylesheet}
-                layout={memoizedLayout}
-                tapNodeHandler={tapNodeHandler}
-                tapEdgeHandler={tapEdgeHandler}
-                tapBackgroundHandler={tapBackgroundHandler}
-                fitNodeIds={fitNodeIds}
-                style={memoizedStyle}
-                cyRef={cyRef}
-                newNodeIds={newNodeIds}
-                nodeSize={nodeSize}
-                searchTerm={searchTerm}
-                isSearchActive={isSearchActive}
-                filteredElements={filteredElements}
-                onLayoutComplete={() => {
-                  // 레이아웃 완료 처리
-                }}
-              />
-            </>
-          )}
-        </div>
+        {renderGraph()}
       </div>
 
-             {/* 그래프 단독 페이지에서 슬라이드바 렌더링 */}
-       {isStandaloneGraphPage && (
-         <>
-           <GraphSidebar
-             activeTooltip={activeTooltip}
-             onClose={handleCloseTooltip}
-             chapterNum={chapterNum}
-             eventNum={eventNum}
-             maxChapter={maxChapter}
-             hasNoRelations={!memoizedElements || memoizedElements.length === 0}
-             filename={filename}
-             elements={finalElements}
-             isSearchActive={isSearchActive}
-             filteredElements={filteredElements}
-             searchTerm={searchTerm}
-           />
-         </>
-       )}
+      {isStandaloneGraphPage && (
+        <GraphSidebar
+          activeTooltip={activeTooltip}
+          onClose={handleCloseTooltip}
+          chapterNum={chapterNum}
+          eventNum={eventNum}
+          maxChapter={maxChapter}
+          hasNoRelations={!finalElements || finalElements.length === 0}
+          filename={filename}
+          elements={finalElements}
+          isSearchActive={isSearchActive}
+          filteredElements={filteredElements}
+          searchTerm={searchTerm}
+        />
+      )}
     </div>
   );
 }

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import StandaloneRelationGraph from "./RelationGraph_Graphpage";
 import EdgeLabelToggle from "./tooltip/EdgeLabelToggle";
 import GraphControls from "./GraphControls";
@@ -6,80 +6,15 @@ import "./RelationGraph.css";
 import { useNavigate, useParams } from "react-router-dom";
 import { FaTimes, FaBars, FaChevronLeft } from 'react-icons/fa';
 
-import { DEFAULT_LAYOUT, SEARCH_LAYOUT } from '../../utils/graphStyles';
+import { SEARCH_LAYOUT } from '../../utils/graphStyles';
 import { ANIMATION_VALUES } from '../../utils/animations';
 import { useGraphSearch } from '../../hooks/useGraphSearch.jsx';
 import { useGraphDataLoader } from '../../hooks/useGraphDataLoader.js';
 import { sidebarStyles, topBarStyles, containerStyles } from '../../utils/styles';
 
-function RelationGraphWrapper() {
-  const navigate = useNavigate();
-  const { filename } = useParams();
-  
-  const [currentChapter, setCurrentChapter] = useState(() => {
-    const saved = localStorage.getItem('lastGraphChapter');
-    return saved ? Number(saved) : 1;
-  });
-  const [hideIsolated, setHideIsolated] = useState(true);
-  const [graphViewState, setGraphViewState] = useState(null);
-  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
-  const [edgeLabelVisible, setEdgeLabelVisible] = useState(true);
-  
-  const {
-    elements,
-    newNodeIds,
-    currentChapterData,
-    maxEventNum,
-    eventNum,
-    maxChapter,
-    loading,
-    error
-  } = useGraphDataLoader(filename, currentChapter);
-  
-  // 레이아웃 상태
-  const [currentLayout, setCurrentLayout] = useState(DEFAULT_LAYOUT);
-
-  const {
-    searchTerm,
-    isSearchActive,
-    filteredElements,
-    fitNodeIds,
-    handleSearchSubmit,
-    clearSearch,
-  } = useGraphSearch(elements, (searchState) => {
-    if (searchState.isSearchActive && searchState.filteredElements.length > 0) {
-      setCurrentLayout(SEARCH_LAYOUT);
-    } else {
-      setCurrentLayout(DEFAULT_LAYOUT);
-    }
-  }, currentChapterData);
-
-  // 사이드바 외부 클릭 감지 - 비활성화 (버튼으로만 제어)
-  // const sidebarRef = useClickOutside(() => {
-  //   if (isSidebarOpen) {
-  //     setIsSidebarOpen(false);
-  //   }
-  // }, isSidebarOpen);
-
-  // 챕터 변경 시 localStorage에 저장
-  useEffect(() => {
-    localStorage.setItem('lastGraphChapter', currentChapter.toString());
-  }, [currentChapter]);
-
-  // 사이드바 토글 함수
-  const toggleSidebar = () => {
-    setIsSidebarOpen(!isSidebarOpen);
-  };
-
-  // 챕터 선택 함수
-  const handleChapterSelect = (chapter) => {
-    if (chapter !== currentChapter) {
-      setCurrentChapter(chapter);
-    }
-  };
-
-  // 독립 인물 버튼 스타일
-  const isolatedButtonStyle = {
+// 스타일 정의
+const styles = {
+  isolatedButton: (hideIsolated) => ({
     height: 36,
     padding: '0 16px',
     borderRadius: 8,
@@ -97,22 +32,136 @@ function RelationGraphWrapper() {
     boxShadow: hideIsolated ? 'none' : '0 2px 8px rgba(108,142,255,0.15)',
     minWidth: '140px',
     justifyContent: 'center',
-  };
-
-  const isolatedDotStyle = {
+  }),
+  isolatedDot: (hideIsolated) => ({
     width: 8,
     height: 8,
     borderRadius: '50%',
     background: hideIsolated ? '#6C8EFF' : '#22336b',
     opacity: hideIsolated ? 0.6 : 1,
-  };
+  }),
+  container: {
+    width: '100vw',
+    height: '100vh',
+    background: '#f4f7fb',
+    overflow: 'hidden',
+    display: 'flex'
+  },
+  mainContent: {
+    flex: 1,
+    display: 'flex',
+    flexDirection: 'column'
+  },
+  graphContainer: {
+    flex: 1,
+    position: 'relative',
+    overflow: 'hidden',
+    width: '100%',
+    height: '100%'
+  },
+  buttonHover: {
+    background: '#f8f9fc',
+    color: '#6C8EFF',
+    transform: 'scale(1.05)'
+  },
+  buttonDefault: {
+    background: '#fff',
+    color: '#22336b',
+    transform: 'scale(1)'
+  }
+};
+
+function RelationGraphWrapper() {
+  const navigate = useNavigate();
+  const { filename } = useParams();
+  
+  const [currentChapter, setCurrentChapter] = useState(() => {
+    const saved = localStorage.getItem('lastGraphChapter');
+    return saved ? Number(saved) : 1;
+  });
+  const [hideIsolated, setHideIsolated] = useState(true);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [edgeLabelVisible, setEdgeLabelVisible] = useState(true);
+  
+  const {
+    elements,
+    newNodeIds,
+    currentChapterData,
+    maxEventNum,
+    eventNum,
+    maxChapter,
+    loading,
+    error
+  } = useGraphDataLoader(filename, currentChapter);
+  
+  const {
+    searchTerm,
+    isSearchActive,
+    filteredElements,
+    fitNodeIds,
+    handleSearchSubmit,
+    clearSearch,
+  } = useGraphSearch(elements, null, currentChapterData);
+
+  // 챕터 변경 시 localStorage에 저장
+  useEffect(() => {
+    localStorage.setItem('lastGraphChapter', currentChapter.toString());
+  }, [currentChapter]);
+
+  // 사이드바 토글 함수
+  const toggleSidebar = useCallback(() => {
+    setIsSidebarOpen(prev => !prev);
+  }, []);
+
+  // 챕터 선택 함수
+  const handleChapterSelect = useCallback((chapter) => {
+    if (chapter !== currentChapter) {
+      setCurrentChapter(chapter);
+    }
+  }, [currentChapter]);
+
+  // 독립 인물 토글 함수
+  const toggleHideIsolated = useCallback(() => {
+    setHideIsolated(prev => !prev);
+  }, []);
+
+  // 간선 라벨 토글 함수
+  const toggleEdgeLabel = useCallback(() => {
+    setEdgeLabelVisible(prev => !prev);
+  }, []);
+
+  // 뷰어로 돌아가기 함수
+  const handleBackToViewer = useCallback(() => {
+    navigate(`/user/viewer/${filename}`);
+  }, [navigate, filename]);
+
+  // 마우스 이벤트 핸들러
+  const handleMouseEnter = useCallback((e) => {
+    Object.assign(e.target.style, styles.buttonHover);
+  }, []);
+
+  const handleMouseLeave = useCallback((e) => {
+    Object.assign(e.target.style, styles.buttonDefault);
+  }, []);
+
+  // 챕터 목록 메모이제이션
+  const chapterList = useMemo(() => 
+    Array.from({ length: maxChapter }, (_, i) => i + 1), 
+    [maxChapter]
+  );
+
+  // 렌더링 상태 결정
+  const renderState = useMemo(() => {
+    if (loading) return 'loading';
+    if (error) return 'error';
+    if (maxEventNum > 0 && elements.length > 0) return 'graph';
+    return 'loading-events';
+  }, [loading, error, maxEventNum, elements.length]);
 
   return (
-    <div style={{ width: '100vw', height: '100vh', background: '#f4f7fb', overflow: 'hidden', display: 'flex' }}>
+    <div style={styles.container}>
       {/* 사이드바 */}
-      <div 
-        style={sidebarStyles.container(isSidebarOpen, ANIMATION_VALUES)}
-      >
+      <div style={sidebarStyles.container(isSidebarOpen, ANIMATION_VALUES)}>
         {/* 사이드바 헤더 */}
         <div style={sidebarStyles.header}>
           <button
@@ -129,7 +178,7 @@ function RelationGraphWrapper() {
 
         {/* 챕터 목록 */}
         <div style={sidebarStyles.chapterList}>
-          {Array.from({ length: maxChapter }, (_, i) => i + 1).map((chapter) => (
+          {chapterList.map((chapter) => (
             <button
               key={chapter}
               onClick={() => handleChapterSelect(chapter)}
@@ -148,7 +197,7 @@ function RelationGraphWrapper() {
       </div>
 
       {/* 메인 콘텐츠 영역 */}
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+      <div style={styles.mainContent}>
         {/* 상단바: 검색, 독립 인물 버튼, 닫기 버튼 */}
         <div 
           style={topBarStyles.container}
@@ -157,12 +206,11 @@ function RelationGraphWrapper() {
           {/* 왼쪽 영역: 검색 컨트롤 + 독립 인물 토글 */}
           <div style={topBarStyles.leftControls}>
             
-            {/* 그래프 검색 기능 - viewer 페이지와 동일하게 props 전달 */}
+            {/* 그래프 검색 기능 */}
             <GraphControls
               elements={elements}
               currentChapterData={currentChapterData}
               searchTerm={searchTerm}
-              isSearchActive={isSearchActive}
               onSearchSubmit={handleSearchSubmit}
               onClearSearch={clearSearch}
             />
@@ -170,16 +218,16 @@ function RelationGraphWrapper() {
             {/* 간선 라벨 스위치 토글 */}
             <EdgeLabelToggle
               isVisible={edgeLabelVisible}
-              onToggle={() => setEdgeLabelVisible(!edgeLabelVisible)}
+              onToggle={toggleEdgeLabel}
             />
             
             {/* 독립 인물 버튼 */}
             <button
-              onClick={() => setHideIsolated(!hideIsolated)}
-              style={isolatedButtonStyle}
+              onClick={toggleHideIsolated}
+              style={styles.isolatedButton(hideIsolated)}
               title={hideIsolated ? '독립 인물을 표시합니다' : '독립 인물을 숨깁니다'}
             >
-              <div style={isolatedDotStyle} />
+              <div style={styles.isolatedDot(hideIsolated)} />
               {hideIsolated ? '독립 인물 표시' : '독립 인물 숨기기'}
             </button>
           </div>
@@ -187,19 +235,11 @@ function RelationGraphWrapper() {
           {/* 오른쪽 영역: 뷰어로 돌아가기 */}
           <div style={topBarStyles.rightControls}>
             <button
-              onClick={() => navigate(`/user/viewer/${filename}`)}
+              onClick={handleBackToViewer}
               style={topBarStyles.closeButton(ANIMATION_VALUES)}
               title="뷰어로 돌아가기"
-              onMouseEnter={(e) => {
-                e.target.style.background = '#f8f9fc';
-                e.target.style.color = '#6C8EFF';
-                e.target.style.transform = 'scale(1.05)';
-              }}
-              onMouseLeave={(e) => {
-                e.target.style.background = '#fff';
-                e.target.style.color = '#22336b';
-                e.target.style.transform = 'scale(1)';
-              }}
+              onMouseEnter={handleMouseEnter}
+              onMouseLeave={handleMouseLeave}
             >
               <FaTimes />
             </button>
@@ -207,26 +247,25 @@ function RelationGraphWrapper() {
         </div>
 
         {/* 그래프 본문 */}
-        <div className="flex-1 relative overflow-hidden" style={{ width: '100%', height: '100%' }}>
-          {loading ? (
+        <div style={styles.graphContainer}>
+          {renderState === 'loading' && (
             <div style={containerStyles.loading}>
               그래프 데이터를 불러오는 중...
             </div>
-          ) : error ? (
+          )}
+          {renderState === 'error' && (
             <div style={containerStyles.error}>
               {error}
             </div>
-          ) : maxEventNum > 0 && elements.length > 0 ? (
+          )}
+          {renderState === 'loading-events' && (
+            <div style={containerStyles.loading}>
+              이벤트 정보를 불러오는 중...
+            </div>
+          )}
+          {renderState === 'graph' && (
             <StandaloneRelationGraph 
               elements={elements} 
-              inViewer={false}
-              fullScreen={true}
-              graphViewState={graphViewState}
-              setGraphViewState={setGraphViewState}
-              chapterNum={currentChapter}
-              eventNum={eventNum}
-              hideIsolated={hideIsolated}
-              maxEventNum={maxEventNum}
               newNodeIds={newNodeIds}
               maxChapter={maxChapter}
               edgeLabelVisible={edgeLabelVisible}
@@ -234,13 +273,7 @@ function RelationGraphWrapper() {
               searchTerm={searchTerm}
               isSearchActive={isSearchActive}
               filteredElements={filteredElements}
-              layout={currentLayout}
-              loading={loading}
             />
-          ) : (
-            <div style={containerStyles.loading}>
-              이벤트 정보를 불러오는 중...
-            </div>
           )}
         </div>
       </div>

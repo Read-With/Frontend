@@ -1,5 +1,3 @@
-
-
 // 사이드바 공통 스타일
 export const sidebarStyles = {
   container: (isOpen, animationValues) => ({
