@@ -137,6 +137,53 @@ export function getButtonHoverAnimation() {
 }
 
 /**
+ * 리플 애니메이션 관련 유틸리티
+ */
+export const rippleUtils = {
+  /**
+   * 리플 효과 생성
+   * @param {Event} e - 클릭 이벤트
+   * @param {HTMLElement} container - 컨테이너 요소
+   * @returns {Object} 리플 정보 { id, x, y }
+   */
+  createRipple: (e, container) => {
+    const rect = container.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    const id = Date.now() + Math.random();
+    return { id, x, y };
+  },
+
+  /**
+   * 리플 스타일 생성
+   * @param {Object} ripple - 리플 정보 { x, y }
+   * @param {Object} options - 옵션 { size: 120, offset: 60 }
+   * @returns {Object} 스타일 객체
+   */
+  getRippleStyle: (ripple, options = {}) => {
+    const { size = 120, offset = 60 } = options;
+    return {
+      left: ripple.x - offset,
+      top: ripple.y - offset,
+      width: size,
+      height: size,
+    };
+  },
+
+  /**
+   * 리플 제거 타이머 설정
+   * @param {Function} setRipples - 리플 상태 설정 함수
+   * @param {string} id - 리플 ID
+   * @param {number} duration - 지속 시간 (ms)
+   */
+  removeRippleAfter: (setRipples, id, duration = 700) => {
+    setTimeout(() => {
+      setRipples((prev) => prev.filter((r) => r.id !== id));
+    }, duration);
+  },
+};
+
+/**
  * 여러 ref를 하나로 병합하는 유틸리티 함수
  * @param {...any} refs - 병합할 ref들 (함수형 ref, useRef 객체 등)
  * @returns {Function} 병합된 ref 함수

@@ -98,15 +98,60 @@ export const sidebarStyles = {
   }),
   chapterText: (isOpen, animationValues) => ({
     opacity: isOpen ? 1 : 0,
-    transform: isOpen ? 'translateX(0)' : 'translateX(-30px)',
+    transform: isOpen ? 'translateX(0)' : 'translateX(-10px)',
+    transition: `all ${animationValues.DURATION.NORMAL} ${animationValues.EASE_OUT}`,
     whiteSpace: 'nowrap',
     overflow: 'hidden',
     width: isOpen ? 'auto' : '0px',
-    transition: `all ${animationValues.DURATION.NORMAL} ${animationValues.EASE_OUT}`,
     display: 'inline-block',
     minWidth: isOpen ? 'auto' : '0px',
-    maxWidth: isOpen ? 'calc(100% - 36px)' : '0px',
   }),
+  chapterTitle: (isOpen, animationValues) => ({
+    opacity: isOpen ? 1 : 0,
+    transform: isOpen ? 'translateX(0)' : 'translateX(-10px)',
+    transition: `all ${animationValues.DURATION.NORMAL} ${animationValues.EASE_OUT}`,
+    whiteSpace: 'nowrap',
+    overflow: 'hidden',
+    width: isOpen ? 'auto' : '0px',
+    display: 'inline-block',
+    minWidth: isOpen ? 'auto' : '0px',
+    fontSize: '12px',
+    color: '#6c757d',
+    marginTop: '2px',
+  }),
+  content: (isOpen, animationValues) => ({
+    flex: 1,
+    padding: isOpen ? '16px' : '8px',
+    overflowY: 'auto',
+    overflowX: 'hidden',
+    transition: `padding ${animationValues.DURATION.NORMAL} ${animationValues.EASE_OUT}`,
+  }),
+  footer: {
+    padding: '16px',
+    borderTop: '1px solid #e5e7eb',
+    background: '#f8f9fc',
+    flexShrink: 0,
+  },
+  footerButton: {
+    width: '100%',
+    height: '40px',
+    border: '1px solid #6C8EFF',
+    borderRadius: '6px',
+    background: '#fff',
+    color: '#6C8EFF',
+    fontSize: '14px',
+    fontWeight: '500',
+    cursor: 'pointer',
+    transition: 'all 0.2s ease',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '8px',
+  },
+  footerButtonHover: {
+    background: '#6C8EFF',
+    color: '#fff',
+  },
 };
 
 // 상단바 공통 스타일
@@ -127,7 +172,7 @@ export const topBarStyles = {
     flexWrap: 'nowrap',
     overflow: 'visible',
   },
-  leftControls: {
+  leftSection: {
     display: 'flex',
     flexDirection: 'row',
     alignItems: 'center',
@@ -137,13 +182,49 @@ export const topBarStyles = {
     overflow: 'visible',
     flexWrap: 'nowrap',
   },
-  rightControls: {
+  centerSection: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flex: 1,
+    textAlign: 'center',
+  },
+  rightSection: {
     display: 'flex',
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
     flexShrink: 0,
-    marginRight: '20px',
+  },
+  backButton: {
+    height: 36,
+    padding: '0 16px',
+    borderRadius: 8,
+    border: '1.5px solid #e3e6ef',
+    background: '#fff',
+    color: '#22336b',
+    fontSize: 13,
+    fontWeight: 600,
+    cursor: 'pointer',
+    transition: 'all 0.2s ease',
+    outline: 'none',
+    display: 'flex',
+    alignItems: 'center',
+    gap: 6,
+    boxShadow: '0 2px 4px rgba(0,0,0,0.05)',
+  },
+  title: {
+    fontSize: 16,
+    fontWeight: 600,
+    color: '#22336b',
+    margin: 0,
+  },
+  subtitle: {
+    fontSize: 12,
+    color: '#6c757d',
+    margin: 0,
+    marginTop: 2,
   },
   closeButton: (animationValues) => ({
     height: 36,
@@ -185,4 +266,150 @@ export const containerStyles = {
     textAlign: 'center',
     padding: '20px',
   },
+  controlsContainer: {
+    padding: '8px 16px',
+    background: '#f8f9fc',
+    borderBottom: '1px solid #e5e7eb',
+  },
+};
+
+/**
+ * 그래프 관련 공통 스타일
+ */
+export const graphStyles = {
+  container: {
+    width: '100%', 
+    height: '100%', 
+    position: 'relative' 
+  },
+  tooltipContainer: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    width: '100%',
+    height: '100%',
+    pointerEvents: 'none',
+    zIndex: 9999,
+  },
+  tooltipStyle: {
+    pointerEvents: 'auto' 
+  },
+  graphArea: {
+    position: 'relative', 
+    width: '100%', 
+    height: '100%' 
+  },
+  ripple: {
+    width: 120,
+    height: 120,
+  },
+  graphPageContainer: {
+    width: '100%', 
+    height: '100%', 
+    overflow: 'hidden', 
+    position: 'relative', 
+    backgroundColor: '#f8fafc' 
+  },
+  graphPageInner: {
+    position: 'relative', 
+    width: '100%', 
+    height: '100%' 
+  },
+};
+
+/**
+ * GraphControls 컴포넌트 스타일
+ */
+export const graphControlsStyles = {
+  input: {
+    width: '180px',
+    minWidth: '150px',
+    maxWidth: '220px',
+    border: '1px solid #e3e6ef',
+    borderRadius: '6px',
+    fontSize: '12px',
+    color: '#42506b',
+    background: '#f8f9fc',
+    transition: 'all 0.2s',
+    outline: 'none',
+    height: '28px',
+    padding: '0 8px',
+  },
+  button: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '8px',
+    border: 'none',
+    borderRadius: '6px',
+    fontSize: '12px',
+    fontWeight: '500',
+    cursor: 'pointer',
+    transition: 'all 0.2s',
+    width: '80px',
+    height: '28px',
+    padding: '0 12px',
+    flexShrink: 0,
+  },
+  searchButton: {
+    background: '#6C8EFF',
+    color: '#fff',
+  },
+  resetButton: {
+    background: '#f8f9fc',
+    color: '#6c757d',
+    border: '1px solid #e3e6ef',
+  },
+  form: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    flexWrap: 'wrap',
+  },
+  dropdown: {
+    position: 'absolute',
+    top: '100%',
+    left: '0',
+    right: '0',
+    background: '#fff',
+    border: '1px solid #e3e6ef',
+    borderRadius: '6px',
+    boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)',
+    zIndex: 9999,
+    maxHeight: '300px',
+    overflowY: 'auto',
+    marginTop: '4px',
+    minWidth: '200px',
+    width: '100%',
+    display: 'block',
+  },
+  suggestionItem: (isSelected) => ({
+    padding: '12px 14px',
+    cursor: 'pointer',
+    borderBottom: '1px solid #f1f3f4',
+    background: isSelected ? '#f8f9fc' : '#fff',
+    transition: 'background 0.2s',
+  }),
+  noResults: {
+    padding: '16px 14px',
+    textAlign: 'center',
+    color: '#6c757d',
+    fontSize: '12px',
+    fontStyle: 'italic'
+  },
+  header: {
+    padding: '8px 14px', 
+    fontSize: '11px', 
+    color: '#6c757d', 
+    background: '#f8f9fc',
+    borderBottom: '1px solid #e3e6ef',
+    fontWeight: '500'
+  },
+  container: {
+    position: 'relative', 
+    display: 'inline-block',
+    width: 'auto',
+    minWidth: '200px',
+    zIndex: 99999
+  }
 };

@@ -1,21 +1,29 @@
-import React, { useState, useEffect, useCallback, useMemo } from "react";
-import StandaloneRelationGraph from "./RelationGraph_Graphpage";
-import EdgeLabelToggle from "./tooltip/EdgeLabelToggle";
-import GraphControls from "./GraphControls";
-import "./RelationGraph.css";
+import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { FaTimes, FaBars, FaChevronLeft } from 'react-icons/fa';
 
-import { SEARCH_LAYOUT } from '../../utils/graphStyles';
-import { ANIMATION_VALUES } from '../../utils/animations';
+import CytoscapeGraphUnified from "./CytoscapeGraphUnified";
+import EdgeLabelToggle from "./tooltip/EdgeLabelToggle";
+import GraphControls from "./GraphControls";
+import GraphSidebar from "./tooltip/GraphSidebar";
+import "./RelationGraph.css";
+
+import { createGraphStylesheet, getNodeSize as getNodeSizeUtil, getEdgeStyle as getEdgeStyleUtil, getWideLayout } from "../../utils/graphStyles";
+import { ANIMATION_VALUES } from "../../utils/animations";
+import { rippleUtils } from "../../utils/animations";
+import { sidebarStyles, topBarStyles, containerStyles, graphStyles } from "../../utils/styles";
 import { useGraphSearch } from '../../hooks/useGraphSearch.jsx';
 import { useGraphDataLoader } from '../../hooks/useGraphDataLoader.js';
-import { sidebarStyles, topBarStyles, containerStyles } from '../../utils/styles';
+import { useLocalStorageNumber } from '../../hooks/useLocalStorage.js';
+import useGraphInteractions from "../../hooks/useGraphInteractions";
 
-// 스타일 정의
-const styles = {
-  isolatedButton: (hideIsolated) => ({
-    height: 36,
+const getNodeSize = () => getNodeSizeUtil('graph');
+const getEdgeStyle = () => getEdgeStyleUtil('graph');
+
+// 독립 인물 버튼 스타일
+const isolatedButtonStyles = {
+  button: (hideIsolated) => ({
+    height: 30,
     padding: '0 16px',
     borderRadius: 8,
     border: '1.5px solid #e3e6ef',
@@ -24,7 +32,7 @@ const styles = {
     fontSize: 13,
     fontWeight: 600,
     cursor: 'pointer',
-    transition: `all ${ANIMATION_VALUES.DURATION.FAST} ease`,
+    transition: 'all 0.2s ease',
     outline: 'none',
     display: 'flex',
     alignItems: 'center',
@@ -33,13 +41,27 @@ const styles = {
     minWidth: '140px',
     justifyContent: 'center',
   }),
-  isolatedDot: (hideIsolated) => ({
+  dot: (hideIsolated) => ({
     width: 8,
     height: 8,
     borderRadius: '50%',
     background: hideIsolated ? '#6C8EFF' : '#22336b',
     opacity: hideIsolated ? 0.6 : 1,
   }),
+  hover: {
+    background: '#f8f9fc',
+    color: '#6C8EFF',
+    transform: 'scale(1.05)'
+  },
+  default: {
+    background: '#fff',
+    color: '#22336b',
+    transform: 'scale(1)'
+  }
+};
+
+// 레이아웃 스타일
+const layoutStyles = {
   container: {
     width: '100vw',
     height: '100vh',
@@ -58,16 +80,6 @@ const styles = {
     overflow: 'hidden',
     width: '100%',
     height: '100%'
-  },
-  buttonHover: {
-    background: '#f8f9fc',
-    color: '#6C8EFF',
-    transform: 'scale(1.05)'
-  },
-  buttonDefault: {
-    background: '#fff',
-    color: '#22336b',
-    transform: 'scale(1)'
   }
 };
 
@@ -75,14 +87,23 @@ function RelationGraphWrapper() {
   const navigate = useNavigate();
   const { filename } = useParams();
   
-  const [currentChapter, setCurrentChapter] = useState(() => {
-    const saved = localStorage.getItem('lastGraphChapter');
-    return saved ? Number(saved) : 1;
-  });
+  // 상태 관리
+  const [currentChapter, setCurrentChapter] = useLocalStorageNumber('lastGraphChapter', 1);
   const [hideIsolated, setHideIsolated] = useState(true);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [edgeLabelVisible, setEdgeLabelVisible] = useState(true);
+  const [activeTooltip, setActiveTooltip] = useState(null);
+  const [isGraphLoading, setIsGraphLoading] = useState(true);
+  const [ripples, setRipples] = useState([]);
   
+  // refs
+  const cyRef = useRef(null);
+  const selectedEdgeIdRef = useRef(null);
+  const selectedNodeIdRef = useRef(null);
+  const prevChapterNum = useRef();
+  const prevEventNum = useRef();
+  
+  // 데이터 로딩
   const {
     elements,
     newNodeIds,
@@ -94,6 +115,7 @@ function RelationGraphWrapper() {
     error
   } = useGraphDataLoader(filename, currentChapter);
   
+  // 검색 기능
   const {
     searchTerm,
     isSearchActive,
@@ -103,45 +125,122 @@ function RelationGraphWrapper() {
     clearSearch,
   } = useGraphSearch(elements, null, currentChapterData);
 
-  // 챕터 변경 시 localStorage에 저장
-  useEffect(() => {
-    localStorage.setItem('lastGraphChapter', currentChapter.toString());
-  }, [currentChapter]);
+  // 툴팁 핸들러
+  const onShowNodeTooltip = useCallback(({ node, nodeCenter, mouseX, mouseY }) => {
+    setActiveTooltip({ type: 'node', id: node.id(), x: mouseX, y: mouseY, data: node.data(), nodeCenter });
+  }, []);
 
-  // 사이드바 토글 함수
+  const onShowEdgeTooltip = useCallback(({ edge, absoluteX, absoluteY }) => {
+    setActiveTooltip({
+      type: 'edge',
+      id: edge.id(),
+      x: absoluteX,
+      y: absoluteY,
+      data: edge.data(),
+      sourceNode: edge.source(),
+      targetNode: edge.target(),
+    });
+  }, []);
+
+  const onClearTooltip = useCallback(() => {
+    setActiveTooltip(null);
+  }, []);
+
+  // 그래프 인터랙션 훅
+  const {
+    tapNodeHandler,
+    tapEdgeHandler,
+    tapBackgroundHandler,
+    clearSelection,
+  } = useGraphInteractions({
+    cyRef,
+    onShowNodeTooltip,
+    onShowEdgeTooltip,
+    onClearTooltip,
+    selectedNodeIdRef,
+    selectedEdgeIdRef,
+    strictBackgroundClear: true,
+    isSearchActive,
+    filteredElements,
+  });
+
+  // elements 정렬 및 필터링
+  const sortedElements = useMemo(() => {
+    if (!elements) return [];
+    return [...elements].sort((a, b) => {
+      const aId = a.data?.id || '';
+      const bId = b.data?.id || '';
+      return aId.localeCompare(bId);
+    });
+  }, [elements]);
+
+  const finalElements = useMemo(() => {
+    if (isSearchActive && filteredElements && filteredElements.length > 0) {
+      return filteredElements;
+    }
+    return sortedElements;
+  }, [isSearchActive, filteredElements, sortedElements]);
+
+  // 그래프 스타일 및 레이아웃
+  const nodeSize = getNodeSize();
+  const edgeStyle = getEdgeStyle();
+  const stylesheet = useMemo(
+    () => createGraphStylesheet(nodeSize, edgeStyle, edgeLabelVisible, 15),
+    [nodeSize, edgeStyle, edgeLabelVisible]
+  );
+  const layout = useMemo(() => getWideLayout(), []);
+
+  // 로딩 상태 관리
+  useEffect(() => {
+    if (currentChapter !== prevChapterNum.current || eventNum !== prevEventNum.current) {
+      setIsGraphLoading(true);
+      prevChapterNum.current = currentChapter;
+      prevEventNum.current = eventNum;
+    }
+  }, [currentChapter, eventNum]);
+
+  useEffect(() => {
+    if (elements) {
+      setIsGraphLoading(false);
+    }
+  }, [elements]);
+
+  // 이벤트 핸들러
   const toggleSidebar = useCallback(() => {
     setIsSidebarOpen(prev => !prev);
   }, []);
 
-  // 챕터 선택 함수
   const handleChapterSelect = useCallback((chapter) => {
     if (chapter !== currentChapter) {
       setCurrentChapter(chapter);
     }
-  }, [currentChapter]);
+  }, [currentChapter, setCurrentChapter]);
 
-  // 독립 인물 토글 함수
   const toggleHideIsolated = useCallback(() => {
     setHideIsolated(prev => !prev);
   }, []);
 
-  // 간선 라벨 토글 함수
   const toggleEdgeLabel = useCallback(() => {
     setEdgeLabelVisible(prev => !prev);
   }, []);
 
-  // 뷰어로 돌아가기 함수
   const handleBackToViewer = useCallback(() => {
     navigate(`/user/viewer/${filename}`);
   }, [navigate, filename]);
 
-  // 마우스 이벤트 핸들러
   const handleMouseEnter = useCallback((e) => {
-    Object.assign(e.target.style, styles.buttonHover);
+    Object.assign(e.target.style, isolatedButtonStyles.hover);
   }, []);
 
   const handleMouseLeave = useCallback((e) => {
-    Object.assign(e.target.style, styles.buttonDefault);
+    Object.assign(e.target.style, isolatedButtonStyles.default);
+  }, []);
+
+  const handleCanvasClick = useCallback((e) => {
+    const container = e.currentTarget;
+    const ripple = rippleUtils.createRipple(e, container);
+    setRipples((prev) => [...prev, ripple]);
+    rippleUtils.removeRippleAfter(setRipples, ripple.id);
   }, []);
 
   // 챕터 목록 메모이제이션
@@ -150,19 +249,34 @@ function RelationGraphWrapper() {
     [maxChapter]
   );
 
-  // 렌더링 상태 결정
-  const renderState = useMemo(() => {
-    if (loading) return 'loading';
-    if (error) return 'error';
-    if (maxEventNum > 0 && elements.length > 0) return 'graph';
-    return 'loading-events';
-  }, [loading, error, maxEventNum, elements.length]);
+  // 로딩 상태 렌더링
+  if (isGraphLoading) {
+    return (
+      <div style={containerStyles.loading}>
+        <div>그래프 로딩 중...</div>
+        <div style={{ fontSize: '14px', color: '#64748b', marginTop: '8px' }}>
+          관계 데이터를 불러오고 있습니다.
+        </div>
+      </div>
+    );
+  }
+
+  // 데이터 없음 상태 렌더링
+  if (!elements || elements.length === 0) {
+    return (
+      <div style={containerStyles.error}>
+        <div>데이터가 없습니다</div>
+        <div style={{ fontSize: '14px', color: '#64748b', marginTop: '8px' }}>
+          이 챕터에는 표시할 관계 데이터가 없습니다.
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div style={styles.container}>
+    <div style={layoutStyles.container}>
       {/* 사이드바 */}
       <div style={sidebarStyles.container(isSidebarOpen, ANIMATION_VALUES)}>
-        {/* 사이드바 헤더 */}
         <div style={sidebarStyles.header}>
           <button
             onClick={toggleSidebar}
@@ -176,7 +290,6 @@ function RelationGraphWrapper() {
           </span>
         </div>
 
-        {/* 챕터 목록 */}
         <div style={sidebarStyles.chapterList}>
           {chapterList.map((chapter) => (
             <button
@@ -197,16 +310,10 @@ function RelationGraphWrapper() {
       </div>
 
       {/* 메인 콘텐츠 영역 */}
-      <div style={styles.mainContent}>
-        {/* 상단바: 검색, 독립 인물 버튼, 닫기 버튼 */}
-        <div 
-          style={topBarStyles.container}
-          onWheel={e => e.preventDefault()}
-        >
-          {/* 왼쪽 영역: 검색 컨트롤 + 독립 인물 토글 */}
-          <div style={topBarStyles.leftControls}>
-            
-            {/* 그래프 검색 기능 */}
+      <div style={layoutStyles.mainContent}>
+        {/* 상단 컨트롤 바 */}
+        <div style={topBarStyles.container}>
+          <div style={topBarStyles.leftSection}>
             <GraphControls
               elements={elements}
               currentChapterData={currentChapterData}
@@ -215,66 +322,84 @@ function RelationGraphWrapper() {
               onClearSearch={clearSearch}
             />
             
-            {/* 간선 라벨 스위치 토글 */}
-            <EdgeLabelToggle
-              isVisible={edgeLabelVisible}
-              onToggle={toggleEdgeLabel}
-            />
-            
-            {/* 독립 인물 버튼 */}
             <button
               onClick={toggleHideIsolated}
-              style={styles.isolatedButton(hideIsolated)}
+              style={isolatedButtonStyles.button(hideIsolated)}
+              onMouseEnter={handleMouseEnter}
+              onMouseLeave={handleMouseLeave}
               title={hideIsolated ? '독립 인물을 표시합니다' : '독립 인물을 숨깁니다'}
             >
-              <div style={styles.isolatedDot(hideIsolated)} />
+              <div style={isolatedButtonStyles.dot(hideIsolated)} />
               {hideIsolated ? '독립 인물 표시' : '독립 인물 숨기기'}
             </button>
+            
+            <EdgeLabelToggle
+              visible={edgeLabelVisible}
+              onToggle={toggleEdgeLabel}
+            />
           </div>
-          
-          {/* 오른쪽 영역: 뷰어로 돌아가기 */}
-          <div style={topBarStyles.rightControls}>
+
+          <div style={topBarStyles.rightSection}>
             <button
               onClick={handleBackToViewer}
-              style={topBarStyles.closeButton(ANIMATION_VALUES)}
-              title="뷰어로 돌아가기"
+              style={{
+                ...topBarStyles.backButton,
+                marginRight: '24px'
+              }}
               onMouseEnter={handleMouseEnter}
               onMouseLeave={handleMouseLeave}
             >
               <FaTimes />
+              뷰어로 돌아가기
             </button>
           </div>
         </div>
 
-        {/* 그래프 본문 */}
-        <div style={styles.graphContainer}>
-          {renderState === 'loading' && (
-            <div style={containerStyles.loading}>
-              그래프 데이터를 불러오는 중...
+        {/* 그래프 영역 */}
+        <div style={layoutStyles.graphContainer}>
+          <div style={graphStyles.graphPageContainer}>
+            <div style={graphStyles.graphPageInner}>
+              {activeTooltip && (
+                <GraphSidebar
+                  tooltip={activeTooltip}
+                  onClose={onClearTooltip}
+                  chapterNum={currentChapter}
+                  eventNum={eventNum}
+                  maxChapter={maxChapter}
+                  filename={filename}
+                  elements={elements}
+                  isGraphPage={false}
+                  isStandaloneGraphPage={true}
+                />
+              )}
+              <div className="graph-canvas-area" onClick={handleCanvasClick} style={graphStyles.graphArea}>
+                <CytoscapeGraphUnified
+                  elements={finalElements}
+                  stylesheet={stylesheet}
+                  layout={layout}
+                  cyRef={cyRef}
+                  nodeSize={nodeSize}
+                  fitNodeIds={fitNodeIds}
+                  searchTerm={searchTerm}
+                  isSearchActive={isSearchActive}
+                  filteredElements={filteredElements}
+                  onShowNodeTooltip={onShowNodeTooltip}
+                  onShowEdgeTooltip={onShowEdgeTooltip}
+                  onClearTooltip={onClearTooltip}
+                  selectedNodeIdRef={selectedNodeIdRef}
+                  selectedEdgeIdRef={selectedEdgeIdRef}
+                  strictBackgroundClear={true}
+                />
+                {ripples.map((ripple) => (
+                  <div
+                    key={ripple.id}
+                    className="cytoscape-ripple"
+                    style={rippleUtils.getRippleStyle(ripple)}
+                  />
+                ))}
+              </div>
             </div>
-          )}
-          {renderState === 'error' && (
-            <div style={containerStyles.error}>
-              {error}
-            </div>
-          )}
-          {renderState === 'loading-events' && (
-            <div style={containerStyles.loading}>
-              이벤트 정보를 불러오는 중...
-            </div>
-          )}
-          {renderState === 'graph' && (
-            <StandaloneRelationGraph 
-              elements={elements} 
-              newNodeIds={newNodeIds}
-              maxChapter={maxChapter}
-              edgeLabelVisible={edgeLabelVisible}
-              fitNodeIds={fitNodeIds}
-              searchTerm={searchTerm}
-              isSearchActive={isSearchActive}
-              filteredElements={filteredElements}
-            />
-          )}
+          </div>
         </div>
       </div>
     </div>

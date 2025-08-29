@@ -287,7 +287,7 @@ const ViewerTopBar = ({
           >
             {/* 간선 라벨 스위치 토글 */}
             <EdgeLabelToggle
-              isVisible={edgeLabelVisible}
+              visible={edgeLabelVisible}
               onToggle={() => setEdgeLabelVisible(!edgeLabelVisible)}
             />
 
@@ -340,7 +340,7 @@ const ViewerTopBar = ({
           >
             {/* 간선 라벨 스위치 토글 */}
             <EdgeLabelToggle
-              isVisible={edgeLabelVisible}
+              visible={edgeLabelVisible}
               onToggle={() => setEdgeLabelVisible(!edgeLabelVisible)}
             />
 

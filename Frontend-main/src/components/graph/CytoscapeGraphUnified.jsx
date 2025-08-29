@@ -3,6 +3,7 @@ import cytoscape from "cytoscape";
 import "./RelationGraph.css";
 import { detectAndResolveOverlap } from "../../utils/graphDataUtils.js";
 import { applySearchFadeEffect, shouldShowNoSearchResults, getNoSearchResultsMessage } from "../../utils/searchUtils.jsx";
+import useGraphInteractions from "../../hooks/useGraphInteractions.js";
 
 export const CytoscapeGraphContext = createContext();
 
@@ -22,10 +23,32 @@ const CytoscapeGraphUnified = ({
   searchTerm = "",
   isSearchActive = false,
   filteredElements = [],
+  onShowNodeTooltip,
+  onShowEdgeTooltip,
+  onClearTooltip,
+  selectedNodeIdRef,
+  selectedEdgeIdRef,
+  strictBackgroundClear = false,
 }) => {
   const containerRef = useRef(null);
   const [isGraphVisible, setIsGraphVisible] = useState(false);
-  const handlersRegisteredRef = useRef(false);
+
+  // useGraphInteractions 훅 사용
+  const {
+    tapNodeHandler: hookTapNodeHandler,
+    tapEdgeHandler: hookTapEdgeHandler,
+    tapBackgroundHandler: hookTapBackgroundHandler,
+  } = useGraphInteractions({
+    cyRef: externalCyRef,
+    onShowNodeTooltip,
+    onShowEdgeTooltip,
+    onClearTooltip,
+    selectedNodeIdRef,
+    selectedEdgeIdRef,
+    strictBackgroundClear,
+    isSearchActive,
+    filteredElements,
+  });
 
   // Cytoscape 인스턴스 생성
   useEffect(() => {
@@ -87,9 +110,9 @@ const CytoscapeGraphUnified = ({
       cy.removeListener('drag', 'node', handleDrag);
       cy.removeListener('dragfree', 'node', handleDragFree);
     };
-  }, [externalCyRef, nodeSize]); // nodeSize 의존성 추가
+  }, [externalCyRef, nodeSize]);
 
-  // 이벤트 핸들러 등록 (핸들러 변경 시 재등록)
+  // 이벤트 핸들러 등록 (커스텀 핸들러가 있으면 사용, 없으면 훅 핸들러 사용)
   useEffect(() => {
     const cy = externalCyRef?.current;
     if (!cy) return;
@@ -99,17 +122,23 @@ const CytoscapeGraphUnified = ({
     cy.removeListener('tap', 'edge');
     cy.removeListener('tap');
     
-    // 새 핸들러 등록
+    // 새 핸들러 등록 (커스텀 핸들러 우선, 없으면 훅 핸들러 사용)
     if (tapNodeHandler) {
       cy.on("tap", "node", tapNodeHandler);
+    } else {
+      cy.on("tap", "node", hookTapNodeHandler);
     }
     if (tapEdgeHandler) {
       cy.on("tap", "edge", tapEdgeHandler);
+    } else {
+      cy.on("tap", "edge", hookTapEdgeHandler);
     }
     if (tapBackgroundHandler) {
       cy.on("tap", tapBackgroundHandler);
+    } else {
+      cy.on("tap", hookTapBackgroundHandler);
     }
-  }, [externalCyRef, tapNodeHandler, tapEdgeHandler, tapBackgroundHandler]);
+  }, [externalCyRef, tapNodeHandler, tapEdgeHandler, tapBackgroundHandler, hookTapNodeHandler, hookTapEdgeHandler, hookTapBackgroundHandler]);
 
   // elements diff patch 및 스타일/레이아웃 적용
   useEffect(() => {

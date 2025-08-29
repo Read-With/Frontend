@@ -1,6 +1,6 @@
 import React from 'react';
 
-const EdgeLabelToggle = ({ isVisible, onToggle }) => {
+const EdgeLabelToggle = ({ visible, onToggle }) => {
   return (
     <div style={{
       display: 'flex',
@@ -26,13 +26,13 @@ const EdgeLabelToggle = ({ isVisible, onToggle }) => {
           height: '18px',
           borderRadius: '9px',
           border: 'none',
-          background: isVisible ? '#6C8EFF' : '#e2e8f0',
+          background: visible ? '#6C8EFF' : '#e2e8f0',
           position: 'relative',
           cursor: 'pointer',
           transition: 'background-color 0.2s ease',
           outline: 'none',
         }}
-        title={isVisible ? '간선 라벨 숨기기' : '간선 라벨 보이기'}
+        title={visible ? '간선 라벨 숨기기' : '간선 라벨 보이기'}
       >
         <div style={{
           width: '14px',
@@ -41,7 +41,7 @@ const EdgeLabelToggle = ({ isVisible, onToggle }) => {
           background: '#fff',
           position: 'absolute',
           top: '2px',
-          left: isVisible ? '16px' : '2px',
+          left: visible ? '16px' : '2px',
           transition: 'left 0.2s ease',
           boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
         }} />
