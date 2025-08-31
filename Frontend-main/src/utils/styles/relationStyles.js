@@ -3,10 +3,8 @@
 // 2. getRelationLabels(relation, label) → 관계 데이터가 배열이면 그대로 반환, 문자열이면 ,로 분리해 라벨 배열로 변환
 // 3. tooltipStyles → 관계 툴팁(카드) UI의 기본 CSS 스타일 세트 정의 (컨테이너, 플립 카드(front/back), 헤더, 관계 태그, 프로그레스바, 버튼 등)
 
-// graphStyles.js에서 색상 계산 함수 import (중복 제거)
 import { getRelationColor } from './graphStyles';
 
-// 스타일 캐싱을 위한 Map
 const styleCache = new Map();
 
 /**

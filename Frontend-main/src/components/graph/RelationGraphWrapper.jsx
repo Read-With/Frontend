@@ -64,11 +64,11 @@ const isolatedButtonStyles = {
 const layoutStyles = {
   container: {
     width: '100vw',
-    height: 'calc(100vh - 54px)', // 상단바 높이만큼 제외
+    height: '100vh', // 전체 화면 높이 사용
     background: '#f4f7fb',
     overflow: 'hidden',
     display: 'flex',
-    marginTop: '54px' // 상단바 아래에서 시작
+    marginTop: 0 // 상단 마진 제거
   },
   mainContent: {
     flex: 1,
@@ -312,19 +312,33 @@ function RelationGraphWrapper() {
         </div>
 
         <div style={topBarStyles.rightSection}>
-          <button
-            onClick={handleBackToViewer}
-            style={{
-              ...topBarStyles.backButton,
-              marginRight: '24px'
-            }}
-            onMouseEnter={handleMouseEnter}
-            onMouseLeave={handleMouseLeave}
-          >
-            <FaTimes />
-            뷰어로 돌아가기
-          </button>
+          {/* 뷰어로 돌아가기 버튼은 고정 위치로 이동했으므로 여기서는 제거 */}
         </div>
+      </div>
+
+      {/* 고정된 뷰어로 돌아가기 버튼 - 항상 우측 상단에 위치 */}
+      <div style={{
+        position: 'fixed',
+        top: '12px',
+        right: '24px',
+        zIndex: 10002,
+        pointerEvents: 'auto'
+      }}>
+        <button
+          onClick={handleBackToViewer}
+          style={{
+            ...topBarStyles.backButton,
+            background: 'rgba(255, 255, 255, 0.95)',
+            backdropFilter: 'blur(2px)',
+            boxShadow: '0 2px 8px rgba(0, 0, 0, 0.15)',
+            border: '1.5px solid rgba(227, 230, 239, 0.8)'
+          }}
+          onMouseEnter={handleMouseEnter}
+          onMouseLeave={handleMouseLeave}
+        >
+          <FaTimes />
+          뷰어로 돌아가기
+        </button>
       </div>
 
       {/* 사이드바 - 왼쪽 고정 위치 */}

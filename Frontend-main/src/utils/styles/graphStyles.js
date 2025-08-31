@@ -200,7 +200,7 @@ export const graphStyles = {
   },
   graphPageContainer: {
     width: '100%', 
-    height: 'calc(100vh - 54px)', // 상단바 높이만큼 제외
+    height: '100vh', // 전체 화면 높이 사용
     overflow: 'hidden', 
     position: 'relative', 
     backgroundColor: '#f8fafc' 

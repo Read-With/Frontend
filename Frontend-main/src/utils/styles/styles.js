@@ -28,7 +28,7 @@ const createFocusStyle = () => ({
     outline: `2px solid ${COLORS.primary}`,
     outlineOffset: '2px',
   },
-  '&:focus-visible': {
+  '&:focusVisible': {
     outline: `2px solid ${COLORS.primary}`,
     outlineOffset: '2px',
   },

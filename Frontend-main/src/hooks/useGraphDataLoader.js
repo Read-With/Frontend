@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { 
   getCharactersData, 
   getEventDataByIndex, 
@@ -30,55 +30,39 @@ export function useGraphDataLoader(filename, chapter, eventIndex = null) {
   // 이전 elements 참조 (diff 계산용)
   const prevElementsRef = useRef([]);
 
+  // 상태 초기화 함수
+  const resetState = useCallback(() => {
+    setElements([]);
+    setNewNodeIds([]);
+    setCurrentChapterData(null);
+    setMaxEventNum(0);
+    setEventNum(0);
+    setError(null);
+  }, []);
+
   // maxChapter를 동적으로 설정
   useEffect(() => {
+    if (!filename) return;
+    
     const folderKey = getFolderKeyFromFilename(filename);
     const detectedMaxChapter = getDetectedMaxChapter(folderKey);
     setMaxChapter(detectedMaxChapter);
   }, [filename]);
 
-  // 챕터 변경 시 데이터 로딩
-  useEffect(() => {
-    if (!filename || !chapter) {
-      setElements([]);
-      setNewNodeIds([]);
-      setCurrentChapterData(null);
-      setMaxEventNum(0);
-      setEventNum(0);
+  // 데이터 로딩 함수
+  const loadData = useCallback(async (folderKey, chapter, targetEventIndex) => {
+    if (targetEventIndex === 0) {
+      resetState();
       setLoading(false);
       return;
     }
 
-    setLoading(true);
-    setError(null);
-
     try {
-      // filename을 기반으로 folderKey 결정
-      const folderKey = getFolderKeyFromFilename(filename);
-      
-      // 이벤트 인덱스 결정 (없으면 마지막 이벤트 사용)
-      const targetEventIndex = eventIndex || getLastEventIndexForChapter(folderKey, chapter);
-      
-      if (targetEventIndex === 0) {
-        setElements([]);
-        setNewNodeIds([]);
-        setMaxEventNum(0);
-        setEventNum(0);
-        setCurrentChapterData(null);
-        setLoading(false);
-        return;
-      }
-
-      setMaxEventNum(targetEventIndex);
-      setEventNum(targetEventIndex);
-
       // 이벤트 데이터 로드
       const eventData = getEventDataByIndex(folderKey, chapter, targetEventIndex);
       
       if (!eventData) {
-        setElements([]);
-        setNewNodeIds([]);
-        setCurrentChapterData(null);
+        resetState();
         setLoading(false);
         return;
       }
@@ -88,9 +72,7 @@ export function useGraphDataLoader(filename, chapter, eventIndex = null) {
       
       if (!charData) {
         setError('캐릭터 데이터를 찾을 수 없습니다.');
-        setElements([]);
-        setNewNodeIds([]);
-        setCurrentChapterData(null);
+        resetState();
         setLoading(false);
         return;
       }
@@ -121,16 +103,34 @@ export function useGraphDataLoader(filename, chapter, eventIndex = null) {
       
       setElements(convertedElements);
       setNewNodeIds(diff.added.filter(el => !el.data?.source).map(el => el.data.id));
+      setMaxEventNum(targetEventIndex);
+      setEventNum(targetEventIndex);
+      setError(null);
       
-      setLoading(false);
     } catch (err) {
       setError('데이터 처리 중 오류 발생: ' + err.message);
-      setElements([]);
-      setNewNodeIds([]);
-      setCurrentChapterData(null);
+      resetState();
+    } finally {
       setLoading(false);
     }
-  }, [filename, chapter, eventIndex]);
+  }, [resetState]);
+
+  // 챕터 변경 시 데이터 로딩
+  useEffect(() => {
+    if (!filename || !chapter) {
+      resetState();
+      setLoading(false);
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+
+    const folderKey = getFolderKeyFromFilename(filename);
+    const targetEventIndex = eventIndex || getLastEventIndexForChapter(folderKey, chapter);
+    
+    loadData(folderKey, chapter, targetEventIndex);
+  }, [filename, chapter, eventIndex, loadData]);
 
   return {
     elements,
@@ -143,3 +143,4 @@ export function useGraphDataLoader(filename, chapter, eventIndex = null) {
     error
   };
 }
+

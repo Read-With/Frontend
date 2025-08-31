@@ -1,5 +1,5 @@
 // [ 통합 검색/필터링 유틸리티 함수들 ]
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { 
   buildSuggestions, 
   filterGraphElements
@@ -32,11 +32,12 @@ export function useGraphSearch(elements, onSearchStateChange = null, currentChap
 
   // 검색 처리 함수
   const handleSearchSubmit = useCallback((searchTerm) => {
+    const trimmedTerm = searchTerm.trim();
     setSearchTerm(searchTerm);
-    setIsSearchActive(!!searchTerm.trim());
+    setIsSearchActive(!!trimmedTerm);
     
-    if (searchTerm.trim() && elements) {
-      const filtered = filterGraphElements(elements, searchTerm, currentChapterData);
+    if (trimmedTerm && elements) {
+      const filtered = filterGraphElements(elements, trimmedTerm, currentChapterData);
       setFilteredElements(filtered || []);
       setFitNodeIds(filtered ? filtered.filter(el => !el.data.source).map(el => el.data.id) : []);
     } else {
@@ -52,11 +53,22 @@ export function useGraphSearch(elements, onSearchStateChange = null, currentChap
     setFilteredElements([]);
     setFitNodeIds([]);
     setIsSearchActive(false);
+    setSuggestions([]);
+    setShowSuggestions(false);
+    setSelectedIndex(-1);
   }, []);
 
   // 검색 제안 생성 (2글자 이상일 때만)
   useEffect(() => {
-    const matches = buildSuggestions(elements, searchTerm, currentChapterData);
+    const trimmedTerm = searchTerm.trim();
+    if (trimmedTerm.length < 2) {
+      setSuggestions([]);
+      setShowSuggestions(false);
+      setSelectedIndex(-1);
+      return;
+    }
+    
+    const matches = buildSuggestions(elements, trimmedTerm, currentChapterData);
     setSuggestions(matches);
     setShowSuggestions(matches.length > 0);
     setSelectedIndex(-1);
@@ -64,7 +76,7 @@ export function useGraphSearch(elements, onSearchStateChange = null, currentChap
 
   // 제안 선택 함수
   const selectSuggestion = useCallback((suggestion, onSelect) => {
-    if (onSelect) {
+    if (onSelect && suggestion?.label) {
       onSelect(suggestion.label);
     }
     setShowSuggestions(false);
@@ -113,22 +125,27 @@ export function useGraphSearch(elements, onSearchStateChange = null, currentChap
     setSelectedIndex(-1);
   }, []);
 
+  // 현재 검색 상태 메모이제이션
+  const currentSearchState = useMemo(() => ({
+    searchTerm,
+    isSearchActive,
+    filteredElements,
+    fitNodeIds
+  }), [searchTerm, isSearchActive, filteredElements, fitNodeIds]);
+
   // 검색 상태가 변경될 때 상위로 전달
   useEffect(() => {
     if (onSearchStateChangeRef.current) {
-      const currentState = {
-        searchTerm,
-        isSearchActive,
-        filteredElements,
-        fitNodeIds
-      };
-      
-      // 이전 상태와 비교하여 실제로 변경되었을 때만 콜백 호출
-      onSearchStateChangeRef.current(currentState);
+      onSearchStateChangeRef.current(currentSearchState);
     }
-  }, [searchTerm, isSearchActive, filteredElements, fitNodeIds]);
+  }, [currentSearchState]);
 
-  const finalElements = isSearchActive && filteredElements && filteredElements.length > 0 ? filteredElements : (elements || []);
+  // 최종 요소 계산 메모이제이션
+  const finalElements = useMemo(() => {
+    return isSearchActive && filteredElements && filteredElements.length > 0 
+      ? filteredElements 
+      : (elements || []);
+  }, [isSearchActive, filteredElements, elements]);
 
   return {
     // 검색 상태

@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import UnifiedNodeInfo from "./UnifiedNodeInfo";
 import UnifiedEdgeTooltip from "./UnifiedEdgeTooltip";
 
@@ -15,20 +15,58 @@ function GraphSidebar({
   filteredElements = [],
   searchTerm = "",
 }) {
+  const [isClosing, setIsClosing] = useState(false);
+  const [isVisible, setIsVisible] = useState(false);
+
+  // 공통 스타일 객체
+  const commonSidebarStyles = {
+    position: "absolute",
+    top: "54px",
+    right: isClosing ? "-450px" : (isVisible ? "0px" : "-450px"),
+    width: "450px",
+    height: "calc(100vh - 54px)",
+    background: "#fff",
+    borderRadius: "0px",
+    boxShadow: "2px 0 8px rgba(0,0,0,0.06)",
+    borderRight: "1px solid #e5e7eb",
+    zIndex: 1000,
+    overflow: "hidden",
+    transition: "right 0.7s cubic-bezier(0.4, 0, 0.2, 1)",
+  };
+
+  // 슬라이드바가 열릴 때 애니메이션 처리
+  useEffect(() => {
+    if (activeTooltip || hasNoRelations) {
+      // 스르륵 애니메이션을 위해 먼저 숨김 상태로 시작
+      setIsVisible(false);
+      setIsClosing(false);
+      
+      // 다음 프레임에서 애니메이션 시작
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          setIsVisible(true);
+        });
+      });
+    } else {
+      setIsVisible(false);
+      setIsClosing(false);
+    }
+  }, [activeTooltip, hasNoRelations]);
+
+  const handleClose = () => {
+    setIsClosing(true);
+    setTimeout(() => {
+      onClose();
+      setIsClosing(false);
+      setIsVisible(false);
+    }, 700); // 애니메이션 시간과 동일
+  };
   // 관계가 없을 때 안내 메시지 표시
   if (hasNoRelations) {
     return (
       <div
         style={{
-          position: "absolute",
-          top: "54px", // 상단바 바로 아래에서 시작
-          right: "0px",
-          width: "450px",
-          height: "calc(100vh - 54px)", // 웹 페이지 맨 아래까지 (상단바 54px 제외)
-          background: "#fff",
-          borderRadius: "0px", // 둥근 모서리 제거
-          boxShadow: "2px 0 8px rgba(0,0,0,0.06)", // 챕터 슬라이드바와 동일한 그림자
-          borderRight: "1px solid #e5e7eb", // 챕터 슬라이드바와 동일한 테두리
+          ...commonSidebarStyles,
           display: "flex",
           flexDirection: "column",
           alignItems: "center",
@@ -36,8 +74,6 @@ function GraphSidebar({
           padding: "40px 20px",
           textAlign: "center",
           color: "#6b7280",
-          zIndex: 1000,
-          overflow: "hidden",
         }}
       >
         <div
@@ -72,33 +108,19 @@ function GraphSidebar({
     );
   }
 
-  // 툴팁이 없을 때는 아무것도 표시하지 않음
-  if (!activeTooltip) {
+  // 슬라이드바가 완전히 숨겨져 있을 때만 렌더링하지 않음
+  if (!isVisible && !isClosing && !activeTooltip && !hasNoRelations) {
     return null;
   }
 
   // 노드 툴팁 렌더링 - UnifiedNodeInfo 사용
   if (activeTooltip.type === "node") {
     return (
-      <div
-        style={{
-          position: "absolute",
-          top: "54px", // 상단바 바로 아래에서 시작
-          right: "0px",
-          width: "450px",
-          height: "calc(100vh - 54px)", // 웹 페이지 맨 아래까지 (상단바 54px 제외)
-          background: "#fff",
-          borderRadius: "0px", // 둥근 모서리 제거
-          boxShadow: "2px 0 8px rgba(0,0,0,0.06)", // 챕터 슬라이드바와 동일한 그림자
-          borderRight: "1px solid #e5e7eb", // 챕터 슬라이드바와 동일한 테두리
-          zIndex: 1000,
-          overflow: "hidden",
-        }}
-      >
+      <div style={commonSidebarStyles}>
         <UnifiedNodeInfo
           displayMode="sidebar"
           data={activeTooltip.data}
-          onClose={onClose}
+          onClose={handleClose}
           chapterNum={chapterNum}
           eventNum={eventNum}
           maxChapter={maxChapter}
@@ -117,28 +139,17 @@ function GraphSidebar({
     return (
       <div
         style={{
-          position: "absolute",
-          top: "54px", // 상단바 바로 아래에서 시작
-          right: "0px",
-          width: "450px",
-          height: "calc(100vh - 54px)", // 웹 페이지 맨 아래까지 (상단바 54px 제외)
-          background: "#fff",
-          borderRadius: "0px", // 둥근 모서리 제거
-          boxShadow: "2px 0 8px rgba(0,0,0,0.06)", // 챕터 슬라이드바와 동일한 그림자
-          borderRight: "1px solid #e5e7eb", // 챕터 슬라이드바와 동일한 테두리
-          zIndex: 1000,
-          overflow: "hidden",
-          animation: "slideInFromRight 0.3s ease-out",
+          ...commonSidebarStyles,
           // 반응형 디자인
           "@media (max-width: 768px)": {
             width: "100vw",
-            right: "0px",
+            right: isClosing ? "-100vw" : (isVisible ? "0px" : "-100vw"),
           },
         }}
       >
         <UnifiedEdgeTooltip
           data={activeTooltip.data}
-          onClose={onClose}
+          onClose={handleClose}
           chapterNum={chapterNum}
           eventNum={eventNum}
           maxChapter={maxChapter}
