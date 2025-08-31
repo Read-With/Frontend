@@ -6,6 +6,37 @@ import { normalizeRelation, isValidRelation } from './relationUtils';
 const validateElements = (elements) => elements?.filter(e => e && e.id) || [];
 const createElementMap = (elements) => new Map(elements.map(e => [e.id, e]));
 
+// 깊은 비교를 위한 유틸리티 함수
+function deepEqual(obj1, obj2) {
+  if (obj1 === obj2) return true;
+  if (obj1 == null || obj2 == null) return false;
+  if (typeof obj1 !== typeof obj2) return false;
+  
+  if (typeof obj1 !== 'object') return obj1 === obj2;
+  
+  const keys1 = Object.keys(obj1);
+  const keys2 = Object.keys(obj2);
+  
+  if (keys1.length !== keys2.length) return false;
+  
+  for (const key of keys1) {
+    if (!keys2.includes(key)) return false;
+    if (!deepEqual(obj1[key], obj2[key])) return false;
+  }
+  
+  return true;
+}
+
+/**
+ * 캐릭터 이미지 경로를 동적으로 생성
+ * @param {string} folderKey - 폴더 키
+ * @param {string} characterId - 캐릭터 ID
+ * @returns {string} 이미지 경로
+ */
+function getCharacterImagePath(folderKey, characterId) {
+  return `/${folderKey}/${characterId}.png`;
+}
+
 /**
  * 공통 데이터 로딩 함수 - GraphContainer와 RelationGraphWrapper에서 공통으로 사용
  * @param {string} folderKey - 폴더 키
@@ -43,7 +74,8 @@ export function loadGraphData(folderKey, chapter, eventIndex, getEventDataFunc) 
     idToName,
     idToDesc,
     idToMain,
-    idToNames
+    idToNames,
+    folderKey
   );
 
   return {
@@ -56,8 +88,15 @@ export function loadGraphData(folderKey, chapter, eventIndex, getEventDataFunc) 
 
 /**
  * 관계 데이터를 그래프 요소로 변환
+ * @param {Array} relations - 관계 데이터 배열
+ * @param {Object} idToName - ID to name 매핑
+ * @param {Object} idToDesc - ID to description 매핑
+ * @param {Object} idToMain - ID to main character 매핑
+ * @param {Object} idToNames - ID to names array 매핑
+ * @param {string} folderKey - 폴더 키 (이미지 경로용)
+ * @returns {Array} 그래프 요소 배열
  */
-export function convertRelationsToElements(relations, idToName, idToDesc, idToMain, idToNames) {
+export function convertRelationsToElements(relations, idToName, idToDesc, idToMain, idToNames, folderKey = 'gatsby') {
   const nodeSet = new Set();
   const nodes = [];
   const edges = [];
@@ -106,7 +145,7 @@ export function convertRelationsToElements(relations, idToName, idToDesc, idToMa
         description: idToDesc[strId] || '',
         names: [commonName, ...(Array.isArray(idToNames[strId]) ? idToNames[strId] : [])],
         common_name: commonName,
-        image: `/gatsby/${strId}.png`
+        image: getCharacterImagePath(folderKey, strId)
       },
       position: { x, y }
     });
@@ -174,7 +213,8 @@ export function calcGraphDiff(prevElements, currElements) {
     const prev = prevMap.get(e.id);
     if (!prev) return false;
     
-    const dataChanged = JSON.stringify(prev) !== JSON.stringify(e);
+    // 성능 개선: 깊은 비교 대신 필요한 부분만 비교
+    const dataChanged = !deepEqual(prev.data, e.data);
     const pos1 = prev.position;
     const pos2 = e.position;
     const posChanged = pos1 && pos2
@@ -188,14 +228,19 @@ export function calcGraphDiff(prevElements, currElements) {
 
 /**
  * 노드 겹침 감지 및 자동 조정
+ * @param {Object} cy - Cytoscape 인스턴스
+ * @param {number} nodeSize - 노드 크기
+ * @param {Function} onCleanup - 정리 함수 (컴포넌트 언마운트 시 호출)
+ * @returns {boolean} 겹침이 있었는지 여부
  */
-export function detectAndResolveOverlap(cy, nodeSize = 40) {
+export function detectAndResolveOverlap(cy, nodeSize = 40, onCleanup = null) {
   if (!cy) return false;
   
   const nodes = cy.nodes();
   const NODE_SIZE = nodeSize;
   const MIN_DISTANCE = NODE_SIZE * 1.0;
   let hasOverlap = false;
+  const timers = [];
   
   for (let i = 0; i < nodes.length; i++) {
     for (let j = i + 1; j < nodes.length; j++) {
@@ -224,12 +269,21 @@ export function detectAndResolveOverlap(cy, nodeSize = 40) {
         node1.addClass('bounce-effect');
         node2.addClass('bounce-effect');
         
-        setTimeout(() => {
-          node1.removeClass('bounce-effect');
-          node2.removeClass('bounce-effect');
+        const timer = setTimeout(() => {
+          if (node1 && node1.removeClass) node1.removeClass('bounce-effect');
+          if (node2 && node2.removeClass) node2.removeClass('bounce-effect');
         }, 300);
+        
+        timers.push(timer);
       }
     }
+  }
+  
+  // 정리 함수가 제공되면 타이머들을 저장
+  if (onCleanup && typeof onCleanup === 'function') {
+    onCleanup(() => {
+      timers.forEach(timer => clearTimeout(timer));
+    });
   }
   
   return hasOverlap;

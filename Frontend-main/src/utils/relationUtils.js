@@ -13,20 +13,30 @@ export function safeNum(value) {
 }
 
 export function normalizeRelation(raw) {
-  // Accept various shapes (id1/id2 or source/target)
-  const id1 = safeNum(raw.id1 ?? raw.source);
-  const id2 = safeNum(raw.id2 ?? raw.target);
-  const positivity = raw.positivity;
-  const weight = raw.weight ?? 1;
-  const count = raw.count;
-  let relationArray = [];
-  if (Array.isArray(raw.relation)) relationArray = raw.relation;
-  else if (typeof raw.relation === "string") relationArray = [raw.relation];
+  if (!raw || typeof raw !== 'object') {
+    console.warn('normalizeRelation: 유효하지 않은 입력:', raw);
+    return null;
+  }
+  
+  try {
+    // Accept various shapes (id1/id2 or source/target)
+    const id1 = safeNum(raw.id1 ?? raw.source);
+    const id2 = safeNum(raw.id2 ?? raw.target);
+    const positivity = raw.positivity;
+    const weight = raw.weight ?? 1;
+    const count = raw.count;
+    let relationArray = [];
+    if (Array.isArray(raw.relation)) relationArray = raw.relation;
+    else if (typeof raw.relation === "string") relationArray = [raw.relation];
 
-  const label = relationArray[0] || (typeof raw.label === "string" ? raw.label : "");
-  const explanation = raw.explanation;
+    const label = relationArray[0] || (typeof raw.label === "string" ? raw.label : "");
+    const explanation = raw.explanation;
 
-  return { id1, id2, positivity, weight, count, relation: relationArray, label, explanation };
+    return { id1, id2, positivity, weight, count, relation: relationArray, label, explanation };
+  } catch (error) {
+    console.error('normalizeRelation 에러:', error);
+    return null;
+  }
 }
 
 export function isValidRelation(normalized) {
@@ -51,9 +61,14 @@ export function isSamePair(rel, a, b) {
  * @returns {Array} 처리된 관계 데이터 배열
  */
 export function processRelations(relations) {
-  return (relations || [])
+  if (!Array.isArray(relations)) {
+    console.warn('processRelations: relations는 배열이어야 합니다');
+    return [];
+  }
+  
+  return relations
     .map(normalizeRelation)
-    .filter(isValidRelation)
+    .filter(relation => relation !== null && isValidRelation(relation))
     .map(r => ({
       id1: r.id1,
       id2: r.id2,
@@ -97,6 +112,44 @@ export function processRelationTags(relation, label) {
   }
   
   return uniqueRelations;
+}
+
+// 관계 태그 처리 캐시
+const relationCache = new Map();
+
+/**
+ * 캐시를 활용한 관계 태그 처리 (성능 최적화)
+ * @param {Array|string} relation - 관계 데이터 (배열 또는 문자열)
+ * @param {string} label - 백업용 라벨 문자열
+ * @returns {Array} 중복이 제거된 관계 태그 배열
+ */
+export function processRelationTagsCached(relation, label) {
+  const cacheKey = JSON.stringify({ relation, label });
+  if (relationCache.has(cacheKey)) {
+    return relationCache.get(cacheKey);
+  }
+  
+  const result = processRelationTags(relation, label);
+  relationCache.set(cacheKey, result);
+  return result;
+}
+
+/**
+ * 관계 태그 캐시 정리 함수
+ * @returns {void}
+ */
+export function clearRelationCache() {
+  relationCache.clear();
+  console.log('🧹 관계 태그 캐시 정리 완료');
+}
+
+/**
+ * 모든 관계 관련 리소스 정리 함수
+ * @returns {void}
+ */
+export function cleanupRelationResources() {
+  clearRelationCache();
+  console.log('🧹 모든 관계 리소스 정리 완료');
 }
 
 

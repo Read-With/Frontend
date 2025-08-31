@@ -7,7 +7,7 @@ import { useTooltipPosition } from "../../../hooks/useTooltipPosition.js";
 import { useClickOutside } from "../../../hooks/useClickOutside.js";
 import { useRelationData } from "../../../hooks/useRelationData.js";
 import { safeNum } from "../../../utils/relationUtils.js";
-import { mergeRefs } from "../../../utils/animations.js";
+import { mergeRefs } from "../../../utils/styles/animations.js";
 import "../RelationGraph.css";
 
 /**

@@ -2,10 +2,21 @@
  * 통합 검색 관련 유틸리티 함수들
  */
 
+// 정규식 캐싱을 위한 Map
+const regexCache = new Map();
+
 // 텍스트에서 검색어 부분만 분리해 하이라이트 가능하게 함
 function highlightParts(text, query) {
   if (!query || !text) return [text];
-  const regex = new RegExp(`(${escapeRegExp(query)})`, 'gi');
+  
+  const cacheKey = query.toLowerCase();
+  let regex = regexCache.get(cacheKey);
+  
+  if (!regex) {
+    regex = new RegExp(`(${escapeRegExp(query)})`, 'gi');
+    regexCache.set(cacheKey, regex);
+  }
+  
   return String(text).split(regex).filter(Boolean);
 }
 
@@ -16,23 +27,35 @@ function escapeRegExp(s) {
 
 // 노드가 검색어와 매칭되는지 확인
 export function nodeMatchesQuery(node, searchLower) {
-  if (!node || !node.data) return false;
-  const label = node.data.label?.toLowerCase() || '';
-  const names = node.data.names || [];
-  const commonName = node.data.common_name?.toLowerCase() || '';
-  return (
-    label.includes(searchLower) ||
-    names.some(name => String(name).toLowerCase().includes(searchLower)) ||
-    commonName.includes(searchLower)
-  );
+  if (!node?.data || typeof searchLower !== 'string') return false;
+  
+  try {
+    const label = String(node.data.label || '').toLowerCase();
+    const names = Array.isArray(node.data.names) ? node.data.names : [];
+    const commonName = String(node.data.common_name || '').toLowerCase();
+    
+    return (
+      label.includes(searchLower) ||
+      names.some(name => String(name).toLowerCase().includes(searchLower)) ||
+      commonName.includes(searchLower)
+    );
+  } catch (error) {
+    console.warn('nodeMatchesQuery 에러:', error);
+    return false;
+  }
 }
 
 // 입력된 검색어와 관련된 노드(인물 등)를 찾아 최대 8개 추천 리스트 생성
 export function buildSuggestions(elements, query, currentChapterData = null) {
-  const trimmed = (query ?? '').trim();
+  if (!Array.isArray(elements)) {
+    console.warn('buildSuggestions: elements는 배열이어야 합니다');
+    return [];
+  }
+  
+  const trimmed = String(query || '').trim();
   if (trimmed.length < 2) return [];
   const searchLower = trimmed.toLowerCase();
-  const characterNodes = Array.isArray(elements) ? elements.filter(el => !el.data.source) : [];
+  const characterNodes = elements.filter(el => !el.data.source);
 
   console.log('buildSuggestions: 입력 데이터', {
     query: trimmed,
@@ -176,7 +199,7 @@ export function createFilteredElementIds(filteredElements) {
  * @param {number} options.fadeOpacity - 페이드 아웃 투명도 (기본: 0.05)
  * @param {number} options.textFadeOpacity - 텍스트 페이드 아웃 투명도 (기본: 0.02)
  * @param {boolean} options.enableLogging - 로깅 활성화 (기본: true)
- * @returns {Object} 페이드 효과 적용 결과 통계
+ * @returns {Object} 페이드 효과 적용 결과 통계 및 cleanup 함수
  */
 export function applySearchFadeEffect(cy, filteredElements, isSearchActive, options = {}) {
   const {
@@ -197,22 +220,28 @@ export function applySearchFadeEffect(cy, filteredElements, isSearchActive, opti
       element.style('text-opacity', '');
     });
     
-    return {
+    const result = {
       fadedNodes: 0,
       visibleNodes: cy.nodes().length,
       fadedEdges: 0,
-      visibleEdges: cy.edges().length
+      visibleEdges: cy.edges().length,
+      cleanup: () => {} // 빈 cleanup 함수
     };
+    
+    return result;
   }
 
   // 검색이 활성화되었지만 결과가 없는 경우
   if (!filteredElements || filteredElements.length === 0) {
-    return {
+    const result = {
       fadedNodes: 0,
       visibleNodes: 0,
       fadedEdges: 0,
-      visibleEdges: 0
+      visibleEdges: 0,
+      cleanup: () => {} // 빈 cleanup 함수
     };
+    
+    return result;
   }
 
   if (enableLogging) {
@@ -264,7 +293,19 @@ export function applySearchFadeEffect(cy, filteredElements, isSearchActive, opti
     fadedNodes: fadedNodeCount,
     visibleNodes: visibleNodeCount,
     fadedEdges: fadedEdgeCount,
-    visibleEdges: visibleEdgeCount
+    visibleEdges: visibleEdgeCount,
+    cleanup: () => {
+      // 모든 페이드 효과 제거
+      cy.elements().forEach(element => {
+        element.removeClass("faded highlighted");
+        element.style('opacity', '');
+        element.style('text-opacity', '');
+      });
+      
+      if (enableLogging) {
+        console.log('🧹 페이드 효과 정리 완료');
+      }
+    }
   };
 
   if (enableLogging) {
@@ -280,15 +321,19 @@ export function applySearchFadeEffect(cy, filteredElements, isSearchActive, opti
  * @param {Object} clickedNode - 클릭된 노드
  * @param {Array} filteredElements - 검색 결과 요소들
  * @param {Object} options - 하이라이트 옵션
- * @returns {boolean} 하이라이트 적용 성공 여부
+ * @returns {Object} 하이라이트 적용 결과 및 cleanup 함수
  */
 export function applySearchHighlight(cy, clickedNode, filteredElements, options = {}) {
   if (!filteredElements || filteredElements.length === 0) {
-    return false;
+    return {
+      success: false,
+      cleanup: () => {}
+    };
   }
 
   const filteredElementIds = createFilteredElementIds(filteredElements);
   const clickedNodeId = clickedNode.id();
+  const highlightedElements = new Set();
 
   // 클릭한 노드가 검색 결과에 포함되어 있는지 확인
   if (filteredElementIds.has(clickedNodeId)) {
@@ -320,6 +365,8 @@ export function applySearchHighlight(cy, clickedNode, filteredElements, options 
       const element = cy.getElementById(elementId);
       if (element.length > 0) {
         element.removeClass("faded").addClass("highlighted");
+        highlightedElements.add(elementId);
+        
         if (!element.data().source) {
           // 노드인 경우, 검색 결과에 포함된 연결 간선들만 하이라이트
           const nodeConnectedEdges = element.connectedEdges();
@@ -327,6 +374,7 @@ export function applySearchHighlight(cy, clickedNode, filteredElements, options 
             const edgeData = edge.data();
             if (filteredElementIds.has(edgeData.source) && filteredElementIds.has(edgeData.target)) {
               edge.removeClass("faded").addClass("highlighted");
+              highlightedElements.add(edge.id());
             }
           });
         }
@@ -338,6 +386,8 @@ export function applySearchHighlight(cy, clickedNode, filteredElements, options 
       const element = cy.getElementById(elementId);
       if (element.length > 0) {
         element.removeClass("faded").addClass("highlighted");
+        highlightedElements.add(elementId);
+        
         if (!element.data().source) {
           // 노드인 경우, 검색 결과에 포함된 연결 간선들만 하이라이트
           const connectedEdges = element.connectedEdges();
@@ -345,6 +395,7 @@ export function applySearchHighlight(cy, clickedNode, filteredElements, options 
             const edgeData = edge.data();
             if (filteredElementIds.has(edgeData.source) && filteredElementIds.has(edgeData.target)) {
               edge.removeClass("faded").addClass("highlighted");
+              highlightedElements.add(edge.id());
             }
           });
         }
@@ -352,7 +403,21 @@ export function applySearchHighlight(cy, clickedNode, filteredElements, options 
     });
   }
 
-  return true;
+  return {
+    success: true,
+    highlightedCount: highlightedElements.size,
+    cleanup: () => {
+      // 하이라이트된 요소들만 정리
+      highlightedElements.forEach(elementId => {
+        const element = cy.getElementById(elementId);
+        if (element.length > 0) {
+          element.removeClass("highlighted");
+        }
+      });
+      
+      console.log('🧹 하이라이트 효과 정리 완료');
+    }
+  };
 }
 
 /**
@@ -381,6 +446,37 @@ export function getNoSearchResultsMessage(searchTerm) {
     title: "검색 결과가 없습니다",
     description: `"${searchTerm}"와 일치하는 인물을 찾을 수 없습니다.`
   };
+}
+
+/**
+ * 정규식 캐시 정리 함수
+ * @returns {void}
+ */
+export function clearRegexCache() {
+  regexCache.clear();
+  console.log('🧹 정규식 캐시 정리 완료');
+}
+
+/**
+ * 모든 검색 관련 리소스 정리 함수
+ * @param {Object} cy - Cytoscape 인스턴스 (선택사항)
+ * @returns {void}
+ */
+export function cleanupSearchResources(cy = null) {
+  // 정규식 캐시 정리
+  clearRegexCache();
+  
+  // Cytoscape 인스턴스가 있는 경우 모든 효과 제거
+  if (cy && typeof cy.elements === 'function') {
+    cy.elements().forEach(element => {
+      element.removeClass("faded highlighted");
+      element.style('opacity', '');
+      element.style('text-opacity', '');
+    });
+    console.log('🧹 Cytoscape 효과 정리 완료');
+  }
+  
+  console.log('🧹 모든 검색 리소스 정리 완료');
 }
 
 

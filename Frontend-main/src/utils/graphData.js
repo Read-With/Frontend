@@ -40,13 +40,22 @@ function extractFolderKey(path) {
  * @returns {string} folderKey - 데이터 폴더명
  */
 export function getFolderKeyFromFilename(filename) {
-  if (!filename) return "gatsby"; // 기본값
+  // 사용 가능한 폴더 목록에서 매칭
+  const availableFolders = Array.from(folderChapters.keys());
+  
+  // 폴더가 없으면 빈 문자열 반환 (초기화 전 호출 방지)
+  if (availableFolders.length === 0) {
+    console.warn('getFolderKeyFromFilename: 사용 가능한 폴더가 없습니다. 모듈 초기화를 확인하세요.');
+    return "";
+  }
+  
+  if (!filename) {
+    // 기본값을 첫 번째 사용 가능한 폴더로 설정
+    return availableFolders[0];
+  }
   
   // 파일 확장자 제거
   const nameWithoutExt = filename.replace(/\.(epub|json)$/i, "");
-  
-  // 사용 가능한 폴더 목록에서 매칭
-  const availableFolders = Array.from(folderChapters.keys());
   
   // 정확한 매칭 시도
   if (availableFolders.includes(nameWithoutExt)) {
@@ -64,7 +73,7 @@ export function getFolderKeyFromFilename(filename) {
   }
   
   // 매칭되지 않으면 첫 번째 사용 가능한 폴더 반환
-  return availableFolders.length > 0 ? availableFolders[0] : "gatsby";
+  return availableFolders[0];
 }
 
 // ---------------------------------------------
@@ -110,10 +119,6 @@ for (const path of Object.keys(charactersModules)) {
   if (!folderChapters.has(folderKey)) folderChapters.set(folderKey, new Set());
   folderChapters.get(folderKey).add(chapter);
 }
-
-// ---------------------------------------------
-// 동적 max chapter 계산
-// ---------------------------------------------
 /**
  * 특정 폴더(작품) 안에서 감지된 최대 챕터 번호를 반환
  * @param {string} folderKey - 데이터 하위 폴더명
@@ -132,9 +137,6 @@ export function getDetectedMaxChapter(folderKey) {
 export function getAllFolderKeys() {
   return Array.from(folderChapters.keys());
 }
-
-// ---------------------------------------------
-// 데이터 조회 유틸
 
 /**
  * 특정 폴더/챕터의 캐릭터 JSON 반환

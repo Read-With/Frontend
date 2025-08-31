@@ -3,7 +3,7 @@ import { FaSearch, FaUndo } from "react-icons/fa";
 import { useClickOutside } from "../../hooks/useClickOutside";
 import { useGraphSearch } from "../../hooks/useGraphSearch.jsx";
 import { highlightText } from "../../utils/searchUtils.jsx";
-import { graphControlsStyles } from "../../utils/styles.js";
+import { graphControlsStyles } from "../../utils/styles/styles.js";
 
 const GraphControls = ({
   elements = [],

@@ -5,7 +5,7 @@ import { useParams } from "react-router-dom";
 import { useTooltipPosition } from "../../../hooks/useTooltipPosition";
 import { useClickOutside } from "../../../hooks/useClickOutside";
 import { useRelationData } from "../../../hooks/useRelationData";
-import { getRelationStyle, getRelationLabels, tooltipStyles } from "../../../utils/relationStyles";
+import { getRelationStyle, getRelationLabels, tooltipStyles } from "../../../utils/styles/relationStyles";
 import { safeNum } from "../../../utils/relationUtils";
 import "../RelationGraph.css";
 

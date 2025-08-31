@@ -3,14 +3,25 @@
 // 2. getRelationLabels(relation, label) → 관계 데이터가 배열이면 그대로 반환, 문자열이면 ,로 분리해 라벨 배열로 변환
 // 3. tooltipStyles → 관계 툴팁(카드) UI의 기본 CSS 스타일 세트 정의 (컨테이너, 플립 카드(front/back), 헤더, 관계 태그, 프로그레스바, 버튼 등)
 
-export function getRelationStyle(positivity) {
+// graphStyles.js에서 색상 계산 함수 import (중복 제거)
+import { getRelationColor } from './graphStyles';
+
+// 스타일 캐싱을 위한 Map
+const styleCache = new Map();
+
+/**
+ * 긍정도에 따른 스타일 계산 (내부 함수)
+ * @param {number} positivity - 긍정도 값 (-1 ~ 1)
+ * @returns {Object} 스타일 객체 { color, text }
+ */
+function calculateStyle(positivity) {
   // 입력 가드 및 범위 클램프
   const value = typeof positivity === 'number' && !Number.isNaN(positivity)
     ? Math.max(-1, Math.min(1, positivity))
     : 0;
-  // 색상: RelationGraphMain.jsx 방식(HSL 그라데이션)
-  const h = (120 * (value + 1)) / 2; // -1~1 → 0~120
-  const color = `hsl(${h}, 70%, 45%)`;
+  
+  // 색상: graphStyles.js의 통합된 함수 사용
+  const color = getRelationColor(value);
   
   // 텍스트 분류는 기존 방식 유지
   if (value > 0.6) return { color, text: "긍정적" };
@@ -20,6 +31,19 @@ export function getRelationStyle(positivity) {
   return { color, text: "부정적" };
 }
 
+export function getRelationStyle(positivity) {
+  // 소수점 2자리로 반올림하여 캐시 키 생성
+  const key = Math.round(positivity * 100) / 100;
+  
+  if (styleCache.has(key)) {
+    return styleCache.get(key);
+  }
+  
+  const result = calculateStyle(positivity);
+  styleCache.set(key, result);
+  return result;
+}
+
 /**
  * 관계 라벨 배열을 생성하는 함수
  * @param {array|string} relation - 관계 데이터 (배열 또는 문자열)
@@ -27,9 +51,20 @@ export function getRelationStyle(positivity) {
  * @returns {array} 관계 라벨 배열
  */
 export function getRelationLabels(relation, label) {
-  return Array.isArray(relation)
-    ? relation
-    : (typeof label === 'string' ? label.split(',').map(s => s.trim()).filter(Boolean) : []);
+  try {
+    if (Array.isArray(relation)) {
+      return relation.filter(item => typeof item === 'string' && item.trim());
+    }
+    
+    if (typeof label === 'string') {
+      return label.split(',').map(s => s.trim()).filter(Boolean);
+    }
+    
+    return [];
+  } catch (error) {
+    console.warn('getRelationLabels 에러:', error);
+    return [];
+  }
 }
 
 /**
@@ -125,3 +160,21 @@ export const tooltipStyles = {
     },
   },
 };
+
+/**
+ * 스타일 캐시 정리 함수
+ * @returns {void}
+ */
+export function clearStyleCache() {
+  styleCache.clear();
+  console.log('🧹 스타일 캐시 정리 완료');
+}
+
+/**
+ * 모든 관계 스타일 관련 리소스 정리 함수
+ * @returns {void}
+ */
+export function cleanupRelationStyleResources() {
+  clearStyleCache();
+  console.log('🧹 모든 관계 스타일 리소스 정리 완료');
+}

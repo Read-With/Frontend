@@ -12,7 +12,7 @@ export const ANIMATION_VALUES = {
 };
 
 /**
- * 슬라이드 인 애니메이션 스타일
+ * 슬라이드 인 애니메이션 스타일 (styles.js의 createSlideAnimation과 통합)
  * @param {string} direction - 슬라이드 방향 ('left', 'right', 'up', 'down')
  * @param {number} duration - 애니메이션 지속 시간 (초)
  * @returns {string} CSS 애니메이션 문자열
@@ -73,6 +73,26 @@ export function getSlideInAnimation(direction = 'right', duration = 0.4) {
     ${animations[direction]}
     animation: slideIn ${duration}s ${ANIMATION_VALUES.EASE_OUT};
   `;
+}
+
+/**
+ * 사이드바용 슬라이드 애니메이션 스타일 (styles.js와 호환)
+ * @param {boolean} isOpen - 사이드바 열림 상태
+ * @param {Object} animationValues - 애니메이션 값 객체
+ * @param {number} translateX - X축 이동 거리
+ * @returns {Object} 스타일 객체
+ */
+export function createSlideAnimation(isOpen, animationValues, translateX = -10) {
+  return {
+    opacity: isOpen ? 1 : 0,
+    transform: isOpen ? 'translateX(0)' : `translateX(${translateX}px)`,
+    transition: `all ${animationValues.DURATION.NORMAL} ${animationValues.EASE_OUT}`,
+    whiteSpace: 'nowrap',
+    overflow: 'hidden',
+    width: isOpen ? 'auto' : '0px',
+    display: 'inline-block',
+    minWidth: isOpen ? 'auto' : '0px',
+  };
 }
 
 /**
@@ -175,11 +195,15 @@ export const rippleUtils = {
    * @param {Function} setRipples - 리플 상태 설정 함수
    * @param {string} id - 리플 ID
    * @param {number} duration - 지속 시간 (ms)
+   * @returns {Function} 타이머 정리 함수
    */
   removeRippleAfter: (setRipples, id, duration = 700) => {
-    setTimeout(() => {
+    const timer = setTimeout(() => {
       setRipples((prev) => prev.filter((r) => r.id !== id));
     }, duration);
+    
+    // 타이머 정리 함수 반환
+    return () => clearTimeout(timer);
   },
 };
 

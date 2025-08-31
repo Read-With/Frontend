@@ -9,9 +9,9 @@ import CytoscapeGraphUnified from "./CytoscapeGraphUnified";
 import UnifiedNodeInfo from "./tooltip/UnifiedNodeInfo";
 import UnifiedEdgeTooltip from "./tooltip/UnifiedEdgeTooltip";
 import "./RelationGraph.css";
-import { getNodeSize, getEdgeStyle, createGraphStylesheet } from "../../utils/graphStyles";
-import { graphStyles } from "../../utils/styles";
-import { rippleUtils } from "../../utils/animations";
+import { getNodeSize, getEdgeStyle, createGraphStylesheet } from "../../utils/styles/graphStyles";
+import { graphStyles } from "../../utils/styles/styles";
+import { rippleUtils } from "../../utils/styles/animations";
 import useGraphInteractions from "../../hooks/useGraphInteractions";
 
 // 상수 정의

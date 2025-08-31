@@ -8,10 +8,10 @@ import GraphControls from "./GraphControls";
 import GraphSidebar from "./tooltip/GraphSidebar";
 import "./RelationGraph.css";
 
-import { createGraphStylesheet, getNodeSize as getNodeSizeUtil, getEdgeStyle as getEdgeStyleUtil, getWideLayout } from "../../utils/graphStyles";
-import { ANIMATION_VALUES } from "../../utils/animations";
-import { rippleUtils } from "../../utils/animations";
-import { sidebarStyles, topBarStyles, containerStyles, graphStyles } from "../../utils/styles";
+import { createGraphStylesheet, getNodeSize as getNodeSizeUtil, getEdgeStyle as getEdgeStyleUtil, getWideLayout } from "../../utils/styles/graphStyles";
+import { ANIMATION_VALUES } from "../../utils/styles/animations";
+import { rippleUtils } from "../../utils/styles/animations";
+import { sidebarStyles, topBarStyles, containerStyles, graphStyles } from "../../utils/styles/styles.js";
 import { useGraphSearch } from '../../hooks/useGraphSearch.jsx';
 import { useGraphDataLoader } from '../../hooks/useGraphDataLoader.js';
 import { useLocalStorageNumber } from '../../hooks/useLocalStorage.js';
