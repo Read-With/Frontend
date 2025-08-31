@@ -13,8 +13,6 @@ import { clearRegexCache, cleanupSearchResources } from './searchUtils';
  * @returns {void}
  */
 export function cleanupAllUtils(cy = null) {
-  console.log('🧹 모든 유틸리티 리소스 정리 시작...');
-  
   // 관계 스타일 캐시 정리
   clearStyleCache();
   
@@ -26,8 +24,6 @@ export function cleanupAllUtils(cy = null) {
   
   // 검색 관련 리소스 정리 (Cytoscape 효과 포함)
   cleanupSearchResources(cy);
-  
-  console.log('✅ 모든 유틸리티 리소스 정리 완료');
 }
 
 /**
@@ -35,12 +31,8 @@ export function cleanupAllUtils(cy = null) {
  * @returns {void}
  */
 export function cleanupRelationUtils() {
-  console.log('🧹 관계 관련 리소스 정리 시작...');
-  
   clearStyleCache();
   clearRelationCache();
-  
-  console.log('✅ 관계 관련 리소스 정리 완료');
 }
 
 /**
@@ -49,12 +41,8 @@ export function cleanupRelationUtils() {
  * @returns {void}
  */
 export function cleanupSearchUtils(cy = null) {
-  console.log('🧹 검색 관련 리소스 정리 시작...');
-  
   clearRegexCache();
   cleanupSearchResources(cy);
-  
-  console.log('✅ 검색 관련 리소스 정리 완료');
 }
 
 /**
@@ -62,9 +50,5 @@ export function cleanupSearchUtils(cy = null) {
  * @returns {void}
  */
 export function cleanupStyleUtils() {
-  console.log('🧹 스타일 관련 리소스 정리 시작...');
-  
   clearStyleCache();
-  
-  console.log('✅ 스타일 관련 리소스 정리 완료');
 }

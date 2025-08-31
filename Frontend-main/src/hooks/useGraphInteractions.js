@@ -31,6 +31,17 @@ export default function useGraphInteractions({
     onClearTooltipRef.current = onClearTooltip;
   }, [onClearTooltip]);
 
+  // 통합된 스타일 초기화 함수
+  const resetAllStyles = useCallback(() => {
+    if (!cyRef?.current) return;
+    
+    const cy = cyRef.current;
+    cy.batch(() => {
+      cy.nodes().removeClass("highlighted").addClass("faded");
+      cy.edges().removeClass("highlighted").addClass("faded");
+    });
+  }, [cyRef]);
+
   // 공통 스타일 초기화 함수
   const clearStyles = useCallback(() => {
     if (!cyRef?.current) return;
@@ -55,147 +66,175 @@ export default function useGraphInteractions({
 
   // 그래프 컨테이너 정보 가져오기
   const getContainerInfo = useCallback(() => {
-    const container = document.querySelector(GRAPH_CONTAINER_SELECTOR);
-    const containerRect = container?.getBoundingClientRect?.() || { left: 0, top: 0 };
-    return { container, containerRect };
+    try {
+      const container = document.querySelector(GRAPH_CONTAINER_SELECTOR);
+      const containerRect = container?.getBoundingClientRect?.() || { left: 0, top: 0 };
+      return { container, containerRect };
+    } catch (error) {
+      console.error('컨테이너 정보 가져오기 실패:', error);
+      return { container: null, containerRect: { left: 0, top: 0 } };
+    }
   }, []);
 
   // 공통 위치 계산 함수
   const calculatePosition = useCallback((pos) => {
-    if (!cyRef?.current) return { x: 0, y: 0 };
-    
-    const pan = cyRef.current.pan();
-    const zoom = cyRef.current.zoom();
-    const { containerRect } = getContainerInfo();
-    
-    return {
-      x: pos.x * zoom + pan.x + containerRect.left,
-      y: pos.y * zoom + pan.y + containerRect.top,
-    };
+    try {
+      if (!cyRef?.current) return { x: 0, y: 0 };
+      
+      const pan = cyRef.current.pan();
+      const zoom = cyRef.current.zoom();
+      const { containerRect } = getContainerInfo();
+      
+      return {
+        x: pos.x * zoom + pan.x + containerRect.left,
+        y: pos.y * zoom + pan.y + containerRect.top,
+      };
+    } catch (error) {
+      console.error('위치 계산 실패:', error);
+      return { x: 0, y: 0 };
+    }
   }, [cyRef, getContainerInfo]);
 
   // 노드 하이라이트 처리 함수
   const handleNodeHighlight = useCallback((node) => {
-    if (!cyRef?.current) return;
-    
-    const cy = cyRef.current;
-    
-    if (isSearchActive && filteredElements.length > 0) {
-      // 검색 상태에서 노드 클릭 시 검색 결과에 포함된 요소들만 하이라이트
-      applySearchHighlight(cy, node, filteredElements);
-    } else {
-      // 일반 상태에서는 기존 로직 사용
-      cy.batch(() => {
-        cy.nodes().removeClass("highlighted");
-        cy.edges().removeClass("highlighted");
-        cy.nodes().addClass("faded");
-        cy.edges().addClass("faded");
+    try {
+      if (!cyRef?.current) return;
+      
+      const cy = cyRef.current;
+      
+      if (isSearchActive && filteredElements.length > 0) {
+        // 검색 상태에서 노드 클릭 시 검색 결과에 포함된 요소들만 하이라이트
+        applySearchHighlight(cy, node, filteredElements);
+      } else {
+        // 일반 상태에서는 기존 로직 사용
+        resetAllStyles();
         
-        node.removeClass("faded").addClass("highlighted");
-        node.connectedEdges().removeClass("faded");
-        node.neighborhood().nodes().removeClass("faded");
-      });
+        cy.batch(() => {
+          node.removeClass("faded").addClass("highlighted");
+          node.connectedEdges().removeClass("faded");
+          node.neighborhood().nodes().removeClass("faded");
+        });
+      }
+    } catch (error) {
+      console.error('노드 하이라이트 처리 실패:', error);
     }
-  }, [cyRef, isSearchActive, filteredElements]);
+  }, [cyRef, isSearchActive, filteredElements, resetAllStyles]);
 
   // 노드 위치 계산 함수
   const calculateNodePosition = useCallback((node) => {
-    const pos = node.renderedPosition();
-    return calculatePosition(pos);
+    try {
+      const pos = node.renderedPosition();
+      return calculatePosition(pos);
+    } catch (error) {
+      console.error('노드 위치 계산 실패:', error);
+      return { x: 0, y: 0 };
+    }
   }, [calculatePosition]);
 
   const tapNodeHandler = useCallback(
     (evt) => {
-      if (!cyRef?.current) return;
-      
-      const node = evt.target;
-      const nodeData = node?.data?.();
-      if (!node || !nodeData) return;
+      try {
+        if (!cyRef?.current) return;
+        
+        const node = evt.target;
+        const nodeData = node?.data?.();
+        if (!node || !nodeData) return;
 
-      const nodeCenter = calculateNodePosition(node);
-      const mouseX = evt.originalEvent?.clientX ?? nodeCenter.x;
-      const mouseY = evt.originalEvent?.clientY ?? nodeCenter.y;
-      
-      // 노드 하이라이트 처리
-      handleNodeHighlight(node);
+        const nodeCenter = calculateNodePosition(node);
+        const mouseX = evt.originalEvent?.clientX ?? nodeCenter.x;
+        const mouseY = evt.originalEvent?.clientY ?? nodeCenter.y;
+        
+        // 노드 하이라이트 처리
+        handleNodeHighlight(node);
 
-      // 컴포넌트별 툴팁 생성 로직 실행
-      if (onShowNodeTooltipRef.current) {
-        onShowNodeTooltipRef.current({ node, evt, nodeCenter, mouseX, mouseY });
+        // 컴포넌트별 툴팁 생성 로직 실행
+        if (onShowNodeTooltipRef.current) {
+          onShowNodeTooltipRef.current({ node, evt, nodeCenter, mouseX, mouseY });
+        }
+        
+        if (selectedNodeIdRef) selectedNodeIdRef.current = node.id();
+      } catch (error) {
+        console.error('노드 클릭 처리 실패:', error);
       }
-      
-      if (selectedNodeIdRef) selectedNodeIdRef.current = node.id();
     },
     [cyRef, handleNodeHighlight, calculateNodePosition, onShowNodeTooltipRef, selectedNodeIdRef]
   );
 
   const tapEdgeHandler = useCallback(
     (evt) => {
-      if (!cyRef?.current) return;
-      
-      const cy = cyRef.current;
-      const edge = evt.target;
-      const edgeData = edge?.data?.();
-      if (!edge || !edgeData) return;
+      try {
+        if (!cyRef?.current) return;
+        
+        const cy = cyRef.current;
+        const edge = evt.target;
+        const edgeData = edge?.data?.();
+        if (!edge || !edgeData) return;
 
-      const pos = edge.midpoint();
-      const { absoluteX, absoluteY } = calculatePosition(pos);
+        const pos = edge.midpoint();
+        const { absoluteX, absoluteY } = calculatePosition(pos);
 
-      // 컴포넌트별 툴팁 생성 로직 실행
-      if (onShowEdgeTooltipRef.current) {
-        onShowEdgeTooltipRef.current({ edge, evt, absoluteX, absoluteY });
+        // 컴포넌트별 툴팁 생성 로직 실행
+        if (onShowEdgeTooltipRef.current) {
+          onShowEdgeTooltipRef.current({ edge, evt, absoluteX, absoluteY });
+        }
+
+        resetAllStyles();
+        
+        cy.batch(() => {
+          edge.removeClass("faded");
+          edge.source().removeClass("faded").addClass("highlighted");
+          edge.target().removeClass("faded").addClass("highlighted");
+        });
+
+        if (selectedEdgeIdRef) selectedEdgeIdRef.current = edge.id();
+      } catch (error) {
+        console.error('간선 클릭 처리 실패:', error);
       }
-
-      cy.batch(() => {
-        cy.nodes().removeClass("highlighted");
-        cy.edges().removeClass("highlighted");
-        cy.nodes().addClass("faded");
-        cy.edges().addClass("faded");
-        edge.removeClass("faded");
-        edge.source().removeClass("faded").addClass("highlighted");
-        edge.target().removeClass("faded").addClass("highlighted");
-      });
-
-      if (selectedEdgeIdRef) selectedEdgeIdRef.current = edge.id();
     },
-    [cyRef, calculatePosition, onShowEdgeTooltipRef, selectedEdgeIdRef]
+    [cyRef, calculatePosition, onShowEdgeTooltipRef, selectedEdgeIdRef, resetAllStyles]
   );
 
   // 배경 클릭 처리 함수
   const handleBackgroundClick = useCallback(() => {
-    if (strictBackgroundClear) {
-      const hasSelection = !!(selectedNodeIdRef?.current || selectedEdgeIdRef?.current);
-      if (!hasSelection) return;
+    try {
+      if (strictBackgroundClear) {
+        const hasSelection = !!(selectedNodeIdRef?.current || selectedEdgeIdRef?.current);
+        if (!hasSelection) return;
+      }
+      // 그래프 온리 페이지에서는 툴팁을 유지하고 선택 상태만 초기화
+      clearStyles();
+      // 즉시 툴팁 닫기 (X 버튼과 동일한 방식)
+      if (onClearTooltipRef.current) {
+        onClearTooltipRef.current();
+      }
+    } catch (error) {
+      console.error('배경 클릭 처리 실패:', error);
     }
-    // 그래프 온리 페이지에서는 툴팁을 유지하고 선택 상태만 초기화
-    clearStyles();
-  }, [strictBackgroundClear, selectedNodeIdRef, selectedEdgeIdRef, clearStyles]);
+  }, [strictBackgroundClear, selectedNodeIdRef, selectedEdgeIdRef, clearStyles, onClearTooltipRef]);
 
   const tapBackgroundHandler = useCallback(
     (evt) => {
-      // evt.target이 DOM Node인지 확인
-      if (!(evt.target instanceof Node)) {
-        // Cytoscape 요소인 경우 배경 클릭으로 처리
-        handleBackgroundClick();
-        return;
-      }
-
-      // 그래프 컨테이너 내의 모든 영역에서 배경 클릭 감지
-      const { container } = getContainerInfo();
-      if (container && container.contains(evt.target)) {
-        // 노드나 엣지가 아닌 영역을 클릭한 경우
-        if (evt.target === cyRef?.current || evt.target === container) {
+      try {
+        // Cytoscape tap 이벤트에서 evt.target은 Cytoscape 요소 객체
+        // 배경 클릭은 evt.target이 Cytoscape core인 경우
+        if (evt.target === cyRef?.current) {
           handleBackgroundClick();
         }
+      } catch (error) {
+        console.error('배경 클릭 감지 실패:', error);
       }
     },
-    [cyRef, handleBackgroundClick, getContainerInfo]
+    [cyRef, handleBackgroundClick]
   );
 
   const clearSelectionAndRebind = useCallback(() => {
-    clearSelectionOnly();
-    if (selectedNodeIdRef) selectedNodeIdRef.current = null;
-    if (selectedEdgeIdRef) selectedEdgeIdRef.current = null;
+    try {
+      clearSelectionOnly();
+      if (selectedNodeIdRef) selectedNodeIdRef.current = null;
+      if (selectedEdgeIdRef) selectedEdgeIdRef.current = null;
+    } catch (error) {
+      console.error('선택 상태 초기화 실패:', error);
+    }
   }, [clearSelectionOnly, selectedNodeIdRef, selectedEdgeIdRef]);
 
   return {

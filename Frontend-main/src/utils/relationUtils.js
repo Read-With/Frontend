@@ -140,7 +140,6 @@ export function processRelationTagsCached(relation, label) {
  */
 export function clearRelationCache() {
   relationCache.clear();
-  console.log('🧹 관계 태그 캐시 정리 완료');
 }
 
 /**
@@ -149,7 +148,6 @@ export function clearRelationCache() {
  */
 export function cleanupRelationResources() {
   clearRelationCache();
-  console.log('🧹 모든 관계 리소스 정리 완료');
 }
 
 

@@ -10,10 +10,10 @@
 
 /* 검색 하이라이트 스타일 */
 .search-highlight {
-  background-color: #FFD700 !important;
-  border-color: #FFA500 !important;
+  background-color:  blue !important;
+  border-color: blue !important;
   border-width: 3px !important;
-  box-shadow: 0 0 15px rgba(255, 215, 0, 0.6) !important;
+  box-shadow: 0 0 15px rgba(0, 0, 255, 0.6) !important;
   animation: search-pulse 2s infinite;
 }
 
@@ -112,9 +112,6 @@
     background-color: #f7f9fc;
   }
 }
-
-/* 그래프 컨트롤 */
-/* .graph-controls 및 하위 스타일 전체 삭제 */
 
 /* 필터 그룹 */
 .filter-group {
@@ -366,8 +363,8 @@
 
 /* highlighted 노드 강조 */
 node.highlighted {
-  border: 3px solid #4caf50 !important;
-  filter: drop-shadow(0 0 10px rgba(76, 175, 80, 0.5));
+  border: 3px solid #3b82f6;
+  filter: drop-shadow(0 0 10px rgba(59, 130, 246, 0.5));
 }
 
 .edge-tooltip .close-btn {
@@ -1603,8 +1600,6 @@ html, body {
 .business-card-body::-webkit-scrollbar-thumb:hover {
   background: #a0a4ad;
 }
-
-/* spin 애니메이션은 App.css에서 공통으로 사용 */
 
 .appear {
   animation: fadeInScale 0.0001s cubic-bezier(0.22, 1, 0.36, 1);

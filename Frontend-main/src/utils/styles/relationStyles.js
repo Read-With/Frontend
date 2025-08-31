@@ -165,7 +165,6 @@ export const tooltipStyles = {
  */
 export function clearStyleCache() {
   styleCache.clear();
-  console.log('🧹 스타일 캐시 정리 완료');
 }
 
 /**
@@ -174,5 +173,4 @@ export function clearStyleCache() {
  */
 export function cleanupRelationStyleResources() {
   clearStyleCache();
-  console.log('🧹 모든 관계 스타일 리소스 정리 완료');
 }

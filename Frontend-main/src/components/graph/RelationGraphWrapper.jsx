@@ -96,6 +96,8 @@ function RelationGraphWrapper() {
   const [activeTooltip, setActiveTooltip] = useState(null);
   const [isGraphLoading, setIsGraphLoading] = useState(true);
   const [ripples, setRipples] = useState([]);
+  const [isSidebarClosing, setIsSidebarClosing] = useState(false);
+  const [forceClose, setForceClose] = useState(false);
   
   // refs
   const cyRef = useRef(null);
@@ -144,7 +146,19 @@ function RelationGraphWrapper() {
   }, []);
 
   const onClearTooltip = useCallback(() => {
-    setActiveTooltip(null);
+    // X 버튼과 동일한 방식으로 처리
+    setForceClose(true);
+    // 애니메이션 완료 후 activeTooltip 상태 초기화
+    setTimeout(() => {
+      setActiveTooltip(null);
+      setIsSidebarClosing(false);
+      setForceClose(false);
+    }, 500); // 0.1초 + 0.4초 애니메이션 완료 후
+  }, []);
+
+  // 슬라이드바 애니메이션 시작 함수
+  const handleStartClosing = useCallback(() => {
+    setIsSidebarClosing(true);
   }, []);
 
   // 그래프 인터랙션 훅
@@ -153,6 +167,7 @@ function RelationGraphWrapper() {
     tapEdgeHandler,
     tapBackgroundHandler,
     clearSelection,
+    clearAll,
   } = useGraphInteractions({
     cyRef,
     onShowNodeTooltip,
@@ -164,6 +179,11 @@ function RelationGraphWrapper() {
     isSearchActive,
     filteredElements,
   });
+
+  // 그래프 초기화 함수 (clearAll이 정의된 후에 정의)
+  const handleClearGraph = useCallback(() => {
+    clearAll();
+  }, [clearAll]);
 
   // elements 정렬 및 필터링
   const sortedElements = useMemo(() => {
@@ -237,12 +257,30 @@ function RelationGraphWrapper() {
     Object.assign(e.target.style, isolatedButtonStyles.default);
   }, []);
 
-  const handleCanvasClick = useCallback((e) => {
-    const container = e.currentTarget;
-    const ripple = rippleUtils.createRipple(e, container);
-    setRipples((prev) => [...prev, ripple]);
-    rippleUtils.removeRippleAfter(setRipples, ripple.id);
-  }, []);
+  // 그래프 영역 클릭 핸들러 (제거 - Cytoscape 배경 클릭 이벤트 사용)
+  // const handleCanvasClick = useCallback((e) => {
+  //   // 노드나 간선 클릭이 아닌 배경 클릭인 경우에만 슬라이드바 닫기
+  //   if (e.target === e.currentTarget) {
+  //     // 이벤트 전파 중단
+  //     e.stopPropagation();
+      
+  //     // 리플 효과 생성
+  //     const container = e.currentTarget;
+  //     const ripple = rippleUtils.createRipple(e, container);
+  //     setRipples((prev) => [...prev, ripple]);
+  //     rippleUtils.removeRippleAfter(setRipples, ripple.id);
+      
+  //     // 슬라이드바가 열려있으면 닫기
+  //     if (activeTooltip && !isSidebarClosing) {
+  //       // 클릭과 동시에 그래프 초기화
+  //       clearAll();
+  //       // 0.1초 후에 슬라이드바 애니메이션 시작
+  //       setTimeout(() => {
+  //         setForceClose(true);
+  //       }, 100);
+  //     }
+  //   }
+  // }, [activeTooltip, isSidebarClosing, clearAll]);
 
   // 챕터 목록 메모이제이션
   const chapterList = useMemo(() => 
@@ -398,6 +436,9 @@ function RelationGraphWrapper() {
               <GraphSidebar
                 activeTooltip={activeTooltip}
                 onClose={onClearTooltip}
+                onStartClosing={handleStartClosing}
+                onClearGraph={handleClearGraph}
+                forceClose={forceClose}
                 chapterNum={currentChapter}
                 eventNum={eventNum}
                 maxChapter={maxChapter}
@@ -408,7 +449,7 @@ function RelationGraphWrapper() {
                 searchTerm={searchTerm}
               />
             )}
-            <div className="graph-canvas-area" onClick={handleCanvasClick} style={graphStyles.graphArea}>
+            <div className="graph-canvas-area" style={graphStyles.graphArea}>
               <CytoscapeGraphUnified
                 elements={finalElements}
                 stylesheet={stylesheet}

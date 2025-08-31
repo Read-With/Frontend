@@ -14,6 +14,9 @@ function GraphSidebar({
   isSearchActive = false,
   filteredElements = [],
   searchTerm = "",
+  onStartClosing, // 애니메이션 시작 콜백 추가
+  onClearGraph, // 그래프 초기화 콜백 추가
+  forceClose, // 외부에서 강제로 닫기 요청
 }) {
   const [isClosing, setIsClosing] = useState(false);
   const [isVisible, setIsVisible] = useState(false);
@@ -53,13 +56,31 @@ function GraphSidebar({
     }
   }, [activeTooltip, hasNoRelations]);
 
+  // 외부에서 강제로 닫기 요청이 있을 때
+  useEffect(() => {
+    if (forceClose && !isClosing) {
+      handleClose();
+    }
+  }, [forceClose, isClosing]);
+
   const handleClose = () => {
-    setIsClosing(true);
+    // X 버튼 클릭 시에만 그래프 초기화 (그래프 영역 클릭 시에는 이미 초기화됨)
+    if (onClearGraph && !forceClose) {
+      onClearGraph();
+    }
+    if (onStartClosing) {
+      onStartClosing(); // 외부에서 애니메이션 시작 알림
+    }
+    // 0.1초 후에 스르륵 접힘 시작
     setTimeout(() => {
+      setIsClosing(true);
+    }, 100);
+    setTimeout(() => {
+      // 애니메이션 완료 후 완전히 닫기
       onClose();
       setIsClosing(false);
       setIsVisible(false);
-    }, 700); // 애니메이션 시간과 동일
+            }, 500); // 0.1초 + 0.4초 애니메이션
   };
   // 관계가 없을 때 안내 메시지 표시
   if (hasNoRelations) {
@@ -137,16 +158,7 @@ function GraphSidebar({
   // 간선 툴팁 렌더링
   if (activeTooltip.type === "edge") {
     return (
-      <div
-        style={{
-          ...commonSidebarStyles,
-          // 반응형 디자인
-          "@media (max-width: 768px)": {
-            width: "100vw",
-            right: isClosing ? "-100vw" : (isVisible ? "0px" : "-100vw"),
-          },
-        }}
-      >
+      <div style={commonSidebarStyles}>
         <UnifiedEdgeTooltip
           data={activeTooltip.data}
           onClose={handleClose}
