@@ -1682,19 +1682,19 @@ html, body {
   border-radius: 50%;
   background-color: #1976d2;
   transform: translate(-50%, -50%);
-  opacity: 0.8;
+  opacity: 0.6;
   animation: ripple 0.5s ease-out;
-  box-shadow: 0 0 10px rgba(25, 118, 210, 0.3);
+  box-shadow: 0 0 10px rgba(25, 118, 210, 0.2);
 }
 
 @keyframes ripple {
   0% {
     width: 0;
     height: 0;
-    opacity: 0.8;
+    opacity: 0.6;
   }
   50% {
-    opacity: 0.6;
+    opacity: 0.4;
   }
   100% {
     width: 100px;

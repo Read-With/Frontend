@@ -7,37 +7,35 @@ import useGraphInteractions from "../../hooks/useGraphInteractions.js";
 
 // Ripple 효과 생성 함수
 const createRippleEffect = (container, x, y, cyRef) => {
-  console.log('Ripple 효과 생성:', { x, y, container });
-  
   const ripple = document.createElement('div');
   ripple.className = 'ripple-effect';
   ripple.style.position = 'absolute';
   
   // Cytoscape 좌표계를 DOM 좌표계로 변환
+  let domX, domY;
   if (cyRef?.current) {
     const pan = cyRef.current.pan();
     const zoom = cyRef.current.zoom();
-    const domX = x * zoom + pan.x;
-    const domY = y * zoom + pan.y;
-    ripple.style.left = `${domX - 50}px`; 
-    ripple.style.top = `${domY - 50}px`; 
+    domX = x * zoom + pan.x;
+    domY = y * zoom + pan.y;
   } else {
-    ripple.style.left = `${x - 50}px`; 
-    ripple.style.top = `${y - 50}px`; 
+    domX = x;
+    domY = y;
   }
+  
+  // ripple 중심 (50px, 50px)이 마우스 클릭 위치와 동일하도록 보정
+  ripple.style.left = `${domX - 50}px`;
+  ripple.style.top = `${domY - 50}px`;
   
   ripple.style.pointerEvents = 'none';
   ripple.style.zIndex = '1000';
-  ripple.style.transform = 'translate(0, 0)';
   
   container.appendChild(ripple);
-  console.log('Ripple 요소가 DOM에 추가됨');
-  
+
   // 500ms 후 ripple 요소 제거
   setTimeout(() => {
     if (ripple.parentNode) {
       ripple.parentNode.removeChild(ripple);
-      console.log('Ripple 요소가 DOM에서 제거됨');
     }
   }, 500);
 };
@@ -104,11 +102,6 @@ const CytoscapeGraphUnified = ({
 
     // calcGraphDiff를 사용하여 새로 추가된 노드들 찾기
     const diff = calcGraphDiff(previousElements, elements);
-    
-    console.log('챕터 변경 감지됨');
-    console.log('이전 elements 개수:', previousElements.length);
-    console.log('현재 elements 개수:', elements.length);
-    console.log('새로 추가된 요소들:', diff.added.length);
 
     // 현재 elements를 이전 elements로 저장 (다음 챕터 전환 시 비교용)
     setPreviousElements(elements);
@@ -127,11 +120,11 @@ const CytoscapeGraphUnified = ({
         style: stylesheet,
         layout: { name: "preset" },
         userZoomingEnabled: true,
-        userPanningEnabled: true, // 그래프 전체 이동 활성화
+        userPanningEnabled: true,
         minZoom: 0.3,
         maxZoom: 1.8,
         wheelSensitivity: 1,
-        autoungrabify: false, // 노드 드래그 허용
+        autoungrabify: false,
         autolock: false,
         autounselectify: false,
         selectionType: 'single',
@@ -189,35 +182,27 @@ const CytoscapeGraphUnified = ({
     // Ripple 효과를 포함한 래퍼 핸들러들
     const createRippleWrapper = (originalHandler) => (evt) => {
       // Ripple 효과 생성
-      if (containerRef.current) {
+      if (containerRef.current && cy) {
         let x, y;
         
         if (evt.renderedPosition) {
-          // 노드나 엣지 클릭 시 - 이미 Cytoscape 좌표계
           x = evt.renderedPosition.x;
           y = evt.renderedPosition.y;
+
         } else if (evt.originalEvent) {
-          // 배경 클릭 시 - DOM 좌표를 Cytoscape 좌표로 변환
+          // 배경 클릭 시 - 마우스 좌표를 Cytoscape 좌표로 변환
           const containerRect = containerRef.current.getBoundingClientRect();
           const clientX = evt.originalEvent.clientX - containerRect.left;
           const clientY = evt.originalEvent.clientY - containerRect.top;
           
-          if (cyRef?.current) {
-            const pan = cyRef.current.pan();
-            const zoom = cyRef.current.zoom();
-            x = (clientX - pan.x) / zoom;
-            y = (clientY - pan.y) / zoom;
-          } else {
-            x = clientX;
-            y = clientY;
-          }
+          const pan = cy.pan();
+          const zoom = cy.zoom();
+          x = (clientX - pan.x) / zoom;
+          y = (clientY - pan.y) / zoom;
         }
         
         if (x !== undefined && y !== undefined) {
-          console.log('클릭 이벤트에서 ripple 생성:', { x, y, evtType: evt.target ? 'element' : 'background' });
-          createRippleEffect(containerRef.current, x, y, externalCyRef);
-        } else {
-          console.log('Ripple 생성 실패: 위치 정보 없음', { evt });
+          createRippleEffect(containerRef.current, x, y, cy);
         }
       }
       
@@ -251,9 +236,7 @@ const CytoscapeGraphUnified = ({
     if (!cy) {
       return;
     }
-    
-    console.log('Elements useEffect 시작 - elements 개수:', elements?.length);
-    console.log('Elements useEffect - elements IDs:', elements?.map(e => e.data?.id || e.id).slice(0, 10));
+  
     
     // 새로운 elements가 로드될 때 이전 elements 정보 초기화 (첫 번째 로드 시)
     if (previousElements.length === 0) {
@@ -313,19 +296,10 @@ const CytoscapeGraphUnified = ({
       // 새로운 요소들만 추가 (기존 요소들은 유지)
       const nodesToAdd = nodes.filter(node => !prevNodeIds.has(node.data.id));
       const edgesToAdd = edges.filter(edge => !prevEdgeIds.has(edge.data.id));
-      
-      console.log('Elements useEffect - 기존 노드 개수:', prevNodeIds.size);
-      console.log('Elements useEffect - 새로운 노드 개수:', nodesToAdd.length);
-      console.log('Elements useEffect - 새로운 노드 IDs:', nodesToAdd.map(n => n.data.id));
-      console.log('Elements useEffect - 기존 엣지 개수:', prevEdgeIds.size);
-      console.log('Elements useEffect - 새로운 엣지 개수:', edgesToAdd.length);
-      
       if (nodesToAdd.length > 0) {
-        console.log('새로운 노드들 추가:', nodesToAdd.map(n => n.data.id));
         cy.add(nodesToAdd);
       }
       if (edgesToAdd.length > 0) {
-        console.log('새로운 엣지들 추가:', edgesToAdd.map(e => e.data.id));
         cy.add(edgesToAdd);
       }
       
@@ -347,6 +321,35 @@ const CytoscapeGraphUnified = ({
           layoutInstance.on('layoutstop', () => {
             setTimeout(() => {
               detectAndResolveOverlap(cy, nodeSize);
+              
+              // 레이아웃 완료 후 새로운 노드들에 ripple 등장 효과 적용
+              if (nodesToAdd.length > 0) {
+                console.log('🎯 새로운 노드 ripple 효과 적용 시작');
+                nodesToAdd.forEach(node => {
+                  const cyNode = cy.getElementById(node.data.id);
+                  if (cyNode.length > 0) {
+                                    
+                  const position = cyNode.renderedPosition();
+                  // evt.renderedPosition과 동일한 방식으로 좌표 계산
+                  const domX = position.x;
+                  const domY = position.y;
+                  
+                  console.log(`📍 노드 ${node.data.id} 위치:`, {
+                    cytoscapeX: position.x,
+                    cytoscapeY: position.y,
+                    domX: domX,
+                    domY: domY
+                  });
+                  
+                  // 노드 클릭 시와 동일하게 DOM 좌표계로 변환된 값 사용 (cyRef 없이)
+                  createRippleEffect(containerRef.current, domX, domY, null);
+                  } else {
+                    console.log(`❌ 노드 ${node.data.id}를 찾을 수 없음`);
+                  }
+                });
+                console.log('✅ 새로운 노드 ripple 효과 적용 완료');
+              }
+              
               if (onLayoutComplete) onLayoutComplete();
             }, 200);
           });
@@ -354,6 +357,24 @@ const CytoscapeGraphUnified = ({
         } else {
           setTimeout(() => {
             detectAndResolveOverlap(cy, nodeSize);
+            
+            // preset 레이아웃 완료 후 새로운 노드들에 ripple 등장 효과 적용
+            if (nodesToAdd.length > 0) {
+              nodesToAdd.forEach(node => {
+                const cyNode = cy.getElementById(node.data.id);
+                if (cyNode.length > 0) {
+                  // 노드 클릭 시와 동일한 방식으로 좌표 얻기
+                  const position = cyNode.renderedPosition();
+                  // evt.renderedPosition과 동일한 방식으로 좌표 계산
+                  const domX = position.x;
+                  const domY = position.y;
+                  
+                  // 노드 클릭 시와 동일하게 DOM 좌표계로 변환된 값 사용 (cyRef 없이)
+                  createRippleEffect(containerRef.current, domX, domY, null);
+                }
+              });
+            }
+            
             if (onLayoutComplete) onLayoutComplete();
           }, 150);
         }

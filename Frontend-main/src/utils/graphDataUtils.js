@@ -200,16 +200,6 @@ export function calcGraphDiff(prevElements, currElements) {
   
   const validPrevElements = validateElements(prevElements);
   const validCurrElements = validateElements(currElements);
-  
-  console.log('calcGraphDiff - prevElements 개수:', validPrevElements.length);
-  console.log('calcGraphDiff - currElements 개수:', validCurrElements.length);
-  if (validPrevElements.length > 0) {
-    console.log('prevElements 첫 번째 요소:', validPrevElements[0]);
-  }
-  if (validCurrElements.length > 0) {
-    console.log('currElements 첫 번째 요소:', validCurrElements[0]);
-  }
-  
   const prevMap = createElementMap(validPrevElements);
   const currMap = createElementMap(validCurrElements);
 
@@ -232,11 +222,6 @@ export function calcGraphDiff(prevElements, currElements) {
       : false;
     return dataChanged || posChanged;
   });
-
-  console.log('calcGraphDiff - added 개수:', added.length);
-  console.log('calcGraphDiff - removed 개수:', removed.length);
-  console.log('calcGraphDiff - updated 개수:', updated.length);
-
   return { added, removed, updated };
 }
 
