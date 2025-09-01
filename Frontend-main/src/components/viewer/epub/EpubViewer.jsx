@@ -97,7 +97,6 @@ const EpubViewer = forwardRef(
     { book, onProgressChange, onCurrentPageChange, onTotalPagesChange, onCurrentChapterChange, onCurrentLineChange, settings },
     ref
   ) => {
-    // Refs
     const viewerRef = useRef(null);
     const bookRef = useRef(null);
     const renditionRef = useRef(null);
@@ -105,7 +104,6 @@ const EpubViewer = forwardRef(
     const currentChapterRef = useRef(1);
     const chapterPageCharsRef = useRef(new Map());
 
-    // State
     const [loading, setLoading] = useState(false);
     const [reloading, setReloading] = useState(false);
     const [error, setError] = useState(null);

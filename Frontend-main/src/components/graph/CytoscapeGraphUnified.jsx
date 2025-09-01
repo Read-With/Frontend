@@ -68,6 +68,8 @@ const CytoscapeGraphUnified = ({
   const containerRef = useRef(null);
   const [isGraphVisible, setIsGraphVisible] = useState(false);
   const [previousElements, setPreviousElements] = useState([]);
+  const prevChapterRef = useRef(window.currentChapter); // 이전 챕터를 저장할 ref
+  const [isInitialLoad, setIsInitialLoad] = useState(true); // 초기 로드 여부를 저장할 state
 
   // useGraphInteractions 훅 사용
   const {
@@ -93,6 +95,22 @@ const CytoscapeGraphUnified = ({
     if (!cy || !elements || elements.length === 0) {
       return;
     }
+
+    // 챕터 변경 감지
+    const checkChapterChange = () => {
+      if (window.currentChapter !== undefined) {
+        const currentChapter = window.currentChapter;
+        if (currentChapter !== prevChapterRef.current) {
+          // 챕터가 변경되었으면 초기 로드로 처리
+          setIsInitialLoad(true);
+          setPreviousElements([]);
+          prevChapterRef.current = currentChapter;
+        }
+      }
+    };
+
+    // 챕터 변경 체크
+    checkChapterChange();
 
     // 이전 elements가 없으면 첫 번째 로드로 간주하고 저장만 함
     if (previousElements.length === 0) {
@@ -322,8 +340,8 @@ const CytoscapeGraphUnified = ({
             setTimeout(() => {
               detectAndResolveOverlap(cy, nodeSize);
               
-              // 레이아웃 완료 후 새로운 노드들에 ripple 등장 효과 적용
-              if (nodesToAdd.length > 0) {
+              // 초기 로드가 아닌 경우에만 새로운 노드들에 ripple 등장 효과 적용
+              if (nodesToAdd.length > 0 && !isInitialLoad) {
                 console.log('🎯 새로운 노드 ripple 효과 적용 시작');
                 nodesToAdd.forEach(node => {
                   const cyNode = cy.getElementById(node.data.id);
@@ -358,18 +376,14 @@ const CytoscapeGraphUnified = ({
           setTimeout(() => {
             detectAndResolveOverlap(cy, nodeSize);
             
-            // preset 레이아웃 완료 후 새로운 노드들에 ripple 등장 효과 적용
-            if (nodesToAdd.length > 0) {
+            // 초기 로드가 아닌 경우에만 preset 레이아웃 완료 후 새로운 노드들에 ripple 등장 효과 적용
+            if (nodesToAdd.length > 0 && !isInitialLoad) {
               nodesToAdd.forEach(node => {
                 const cyNode = cy.getElementById(node.data.id);
                 if (cyNode.length > 0) {
-                  // 노드 클릭 시와 동일한 방식으로 좌표 얻기
                   const position = cyNode.renderedPosition();
-                  // evt.renderedPosition과 동일한 방식으로 좌표 계산
                   const domX = position.x;
                   const domY = position.y;
-                  
-                  // 노드 클릭 시와 동일하게 DOM 좌표계로 변환된 값 사용 (cyRef 없이)
                   createRippleEffect(containerRef.current, domX, domY, null);
                 }
               });
@@ -415,11 +429,14 @@ const CytoscapeGraphUnified = ({
         applySearchFadeEffect(cy, filteredElements, isSearchActive);
       }
     });
-    // 그래프가 한 번 렌더링되면 계속 visible 상태 유지 (깜빡임 방지)
-    if (!isGraphVisible) {
-      setIsGraphVisible(true);
+    
+    // 초기 로드 완료 후 isInitialLoad를 false로 설정
+    if (isInitialLoad) {
+      setIsInitialLoad(false);
     }
-  }, [elements, stylesheet, layout, fitNodeIds, nodeSize, isSearchActive, filteredElements, onLayoutComplete, isGraphVisible]);
+    
+    setIsGraphVisible(true);
+  }, [elements, externalCyRef, previousElements, isInitialLoad, stylesheet, layout, nodeSize, fitNodeIds, isSearchActive, filteredElements, onLayoutComplete]);
 
   // 크기 반응형
   useEffect(() => {
