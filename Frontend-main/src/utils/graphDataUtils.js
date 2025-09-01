@@ -3,8 +3,8 @@ import { getCharactersData, createCharacterMaps } from './graphData';
 import { normalizeRelation, isValidRelation } from './relationUtils';
 
 // 공통 헬퍼 함수들
-const validateElements = (elements) => elements?.filter(e => e && e.id) || [];
-const createElementMap = (elements) => new Map(elements.map(e => [e.id, e]));
+const validateElements = (elements) => elements?.filter(e => e && (e.id || e.data?.id)) || [];
+const createElementMap = (elements) => new Map(elements.map(e => [e.id || e.data?.id, e]));
 
 // 깊은 비교를 위한 유틸리티 함수
 function deepEqual(obj1, obj2) {
@@ -201,16 +201,26 @@ export function calcGraphDiff(prevElements, currElements) {
   const validPrevElements = validateElements(prevElements);
   const validCurrElements = validateElements(currElements);
   
+  console.log('calcGraphDiff - prevElements 개수:', validPrevElements.length);
+  console.log('calcGraphDiff - currElements 개수:', validCurrElements.length);
+  if (validPrevElements.length > 0) {
+    console.log('prevElements 첫 번째 요소:', validPrevElements[0]);
+  }
+  if (validCurrElements.length > 0) {
+    console.log('currElements 첫 번째 요소:', validCurrElements[0]);
+  }
+  
   const prevMap = createElementMap(validPrevElements);
   const currMap = createElementMap(validCurrElements);
 
   // 추가: 현재엔 있지만 이전엔 없는 id
-  const added = validCurrElements.filter(e => !prevMap.has(e.id));
+  const added = validCurrElements.filter(e => !prevMap.has(e.id || e.data?.id));
   // 삭제: 이전엔 있지만 현재엔 없는 id
-  const removed = validPrevElements.filter(e => !currMap.has(e.id));
+  const removed = validPrevElements.filter(e => !currMap.has(e.id || e.data?.id));
   // 수정: id는 같지만 data 또는 position이 다름
   const updated = validCurrElements.filter(e => {
-    const prev = prevMap.get(e.id);
+    const elementId = e.id || e.data?.id;
+    const prev = prevMap.get(elementId);
     if (!prev) return false;
     
     // 성능 개선: 깊은 비교 대신 필요한 부분만 비교
@@ -222,6 +232,10 @@ export function calcGraphDiff(prevElements, currElements) {
       : false;
     return dataChanged || posChanged;
   });
+
+  console.log('calcGraphDiff - added 개수:', added.length);
+  console.log('calcGraphDiff - removed 개수:', removed.length);
+  console.log('calcGraphDiff - updated 개수:', updated.length);
 
   return { added, removed, updated };
 }

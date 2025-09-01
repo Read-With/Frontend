@@ -194,10 +194,7 @@ export const graphStyles = {
     width: '100%', 
     height: '100%' 
   },
-  ripple: {
-    width: 120,
-    height: 120,
-  },
+
   graphPageContainer: {
     width: '100%', 
     height: '100vh', // 전체 화면 높이 사용

@@ -71,16 +71,16 @@ function GraphSidebar({
     if (onStartClosing) {
       onStartClosing(); // 외부에서 애니메이션 시작 알림
     }
-    // 0.1초 후에 스르륵 접힘 시작
+    
+    // 애니메이션 시작과 동시에 상태 초기화
+    setIsClosing(true);
+    
+    // 애니메이션 완료 후 완전히 닫기 (transition 시간에 맞춤)
     setTimeout(() => {
-      setIsClosing(true);
-    }, 100);
-    setTimeout(() => {
-      // 애니메이션 완료 후 완전히 닫기
       onClose();
       setIsClosing(false);
       setIsVisible(false);
-            }, 500); // 0.1초 + 0.4초 애니메이션
+    }, 700); // transition: "right 0.7s" 에 맞춤
   };
   // 관계가 없을 때 안내 메시지 표시
   if (hasNoRelations) {

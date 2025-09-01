@@ -1,9 +1,46 @@
 import React, { useEffect, useRef, useState, useCallback, createContext } from "react";
 import cytoscape from "cytoscape";
 import "./RelationGraph.css";
-import { detectAndResolveOverlap } from "../../utils/graphDataUtils.js";
+import { detectAndResolveOverlap, calcGraphDiff } from "../../utils/graphDataUtils.js";
 import { applySearchFadeEffect, shouldShowNoSearchResults, getNoSearchResultsMessage } from "../../utils/searchUtils.jsx";
 import useGraphInteractions from "../../hooks/useGraphInteractions.js";
+
+// Ripple 효과 생성 함수
+const createRippleEffect = (container, x, y, cyRef) => {
+  console.log('Ripple 효과 생성:', { x, y, container });
+  
+  const ripple = document.createElement('div');
+  ripple.className = 'ripple-effect';
+  ripple.style.position = 'absolute';
+  
+  // Cytoscape 좌표계를 DOM 좌표계로 변환
+  if (cyRef?.current) {
+    const pan = cyRef.current.pan();
+    const zoom = cyRef.current.zoom();
+    const domX = x * zoom + pan.x;
+    const domY = y * zoom + pan.y;
+    ripple.style.left = `${domX - 50}px`; 
+    ripple.style.top = `${domY - 50}px`; 
+  } else {
+    ripple.style.left = `${x - 50}px`; 
+    ripple.style.top = `${y - 50}px`; 
+  }
+  
+  ripple.style.pointerEvents = 'none';
+  ripple.style.zIndex = '1000';
+  ripple.style.transform = 'translate(0, 0)';
+  
+  container.appendChild(ripple);
+  console.log('Ripple 요소가 DOM에 추가됨');
+  
+  // 500ms 후 ripple 요소 제거
+  setTimeout(() => {
+    if (ripple.parentNode) {
+      ripple.parentNode.removeChild(ripple);
+      console.log('Ripple 요소가 DOM에서 제거됨');
+    }
+  }, 500);
+};
 
 export const CytoscapeGraphContext = createContext();
 
@@ -32,6 +69,7 @@ const CytoscapeGraphUnified = ({
 }) => {
   const containerRef = useRef(null);
   const [isGraphVisible, setIsGraphVisible] = useState(false);
+  const [previousElements, setPreviousElements] = useState([]);
 
   // useGraphInteractions 훅 사용
   const {
@@ -50,6 +88,32 @@ const CytoscapeGraphUnified = ({
     filteredElements,
   });
 
+  // 챕터 변경 감지
+  useEffect(() => {
+    const cy = externalCyRef?.current;
+    
+    if (!cy || !elements || elements.length === 0) {
+      return;
+    }
+
+    // 이전 elements가 없으면 첫 번째 로드로 간주하고 저장만 함
+    if (previousElements.length === 0) {
+      setPreviousElements(elements);
+      return;
+    }
+
+    // calcGraphDiff를 사용하여 새로 추가된 노드들 찾기
+    const diff = calcGraphDiff(previousElements, elements);
+    
+    console.log('챕터 변경 감지됨');
+    console.log('이전 elements 개수:', previousElements.length);
+    console.log('현재 elements 개수:', elements.length);
+    console.log('새로 추가된 요소들:', diff.added.length);
+
+    // 현재 elements를 이전 elements로 저장 (다음 챕터 전환 시 비교용)
+    setPreviousElements(elements);
+  }, [elements, externalCyRef, previousElements]);
+
   // Cytoscape 인스턴스 생성
   useEffect(() => {
     if (!containerRef.current) {
@@ -63,11 +127,11 @@ const CytoscapeGraphUnified = ({
         style: stylesheet,
         layout: { name: "preset" },
         userZoomingEnabled: true,
-        userPanningEnabled: true,
+        userPanningEnabled: true, // 그래프 전체 이동 활성화
         minZoom: 0.3,
         maxZoom: 1.8,
         wheelSensitivity: 1,
-        autoungrabify: false,
+        autoungrabify: false, // 노드 드래그 허용
         autolock: false,
         autounselectify: false,
         selectionType: 'single',
@@ -122,21 +186,62 @@ const CytoscapeGraphUnified = ({
     cy.removeListener('tap', 'edge');
     cy.removeListener('tap');
     
+    // Ripple 효과를 포함한 래퍼 핸들러들
+    const createRippleWrapper = (originalHandler) => (evt) => {
+      // Ripple 효과 생성
+      if (containerRef.current) {
+        let x, y;
+        
+        if (evt.renderedPosition) {
+          // 노드나 엣지 클릭 시 - 이미 Cytoscape 좌표계
+          x = evt.renderedPosition.x;
+          y = evt.renderedPosition.y;
+        } else if (evt.originalEvent) {
+          // 배경 클릭 시 - DOM 좌표를 Cytoscape 좌표로 변환
+          const containerRect = containerRef.current.getBoundingClientRect();
+          const clientX = evt.originalEvent.clientX - containerRect.left;
+          const clientY = evt.originalEvent.clientY - containerRect.top;
+          
+          if (cyRef?.current) {
+            const pan = cyRef.current.pan();
+            const zoom = cyRef.current.zoom();
+            x = (clientX - pan.x) / zoom;
+            y = (clientY - pan.y) / zoom;
+          } else {
+            x = clientX;
+            y = clientY;
+          }
+        }
+        
+        if (x !== undefined && y !== undefined) {
+          console.log('클릭 이벤트에서 ripple 생성:', { x, y, evtType: evt.target ? 'element' : 'background' });
+          createRippleEffect(containerRef.current, x, y, externalCyRef);
+        } else {
+          console.log('Ripple 생성 실패: 위치 정보 없음', { evt });
+        }
+      }
+      
+      // 원본 핸들러 호출
+      if (originalHandler) {
+        originalHandler(evt);
+      }
+    };
+    
     // 새 핸들러 등록 (커스텀 핸들러 우선, 없으면 훅 핸들러 사용)
     if (tapNodeHandler) {
-      cy.on("tap", "node", tapNodeHandler);
+      cy.on("tap", "node", createRippleWrapper(tapNodeHandler));
     } else {
-      cy.on("tap", "node", hookTapNodeHandler);
+      cy.on("tap", "node", createRippleWrapper(hookTapNodeHandler));
     }
     if (tapEdgeHandler) {
-      cy.on("tap", "edge", tapEdgeHandler);
+      cy.on("tap", "edge", createRippleWrapper(tapEdgeHandler));
     } else {
-      cy.on("tap", "edge", hookTapEdgeHandler);
+      cy.on("tap", "edge", createRippleWrapper(hookTapEdgeHandler));
     }
     if (tapBackgroundHandler) {
-      cy.on("tap", tapBackgroundHandler);
+      cy.on("tap", createRippleWrapper(tapBackgroundHandler));
     } else {
-      cy.on("tap", hookTapBackgroundHandler);
+      cy.on("tap", createRippleWrapper(hookTapBackgroundHandler));
     }
   }, [externalCyRef, tapNodeHandler, tapEdgeHandler, tapBackgroundHandler, hookTapNodeHandler, hookTapEdgeHandler, hookTapBackgroundHandler]);
 
@@ -145,6 +250,14 @@ const CytoscapeGraphUnified = ({
     const cy = externalCyRef?.current;
     if (!cy) {
       return;
+    }
+    
+    console.log('Elements useEffect 시작 - elements 개수:', elements?.length);
+    console.log('Elements useEffect - elements IDs:', elements?.map(e => e.data?.id || e.id).slice(0, 10));
+    
+    // 새로운 elements가 로드될 때 이전 elements 정보 초기화 (첫 번째 로드 시)
+    if (previousElements.length === 0) {
+      setPreviousElements(elements);
     }
     
     if (!elements || elements.length === 0) {
@@ -160,11 +273,11 @@ const CytoscapeGraphUnified = ({
       const nextNodeIds = new Set(elements.filter(e => !e.data.source).map(e => e.data.id));
       const nextEdgeIds = new Set(elements.filter(e => e.data.source).map(e => e.data.id));
       
-      // 삭제
+      // 삭제할 요소들 제거
       cy.nodes().forEach(n => { if (!nextNodeIds.has(n.id())) n.remove(); });
       cy.edges().forEach(e => { if (!nextEdgeIds.has(e.id())) e.remove(); });
       
-      // 추가
+      // 추가할 요소들 분리
       const nodes = elements.filter(e => !e.data.source && !e.data.target);
       const edges = elements.filter(e => e.data.source && e.data.target);
       
@@ -197,34 +310,56 @@ const CytoscapeGraphUnified = ({
         placedPositions.push({ x, y });
       });
       
-      cy.add(nodes);
-      cy.add(edges);
+      // 새로운 요소들만 추가 (기존 요소들은 유지)
+      const nodesToAdd = nodes.filter(node => !prevNodeIds.has(node.data.id));
+      const edgesToAdd = edges.filter(edge => !prevEdgeIds.has(edge.data.id));
       
-      // 반드시 preset 레이아웃 실행
-      cy.layout({ name: 'preset' }).run();
+      console.log('Elements useEffect - 기존 노드 개수:', prevNodeIds.size);
+      console.log('Elements useEffect - 새로운 노드 개수:', nodesToAdd.length);
+      console.log('Elements useEffect - 새로운 노드 IDs:', nodesToAdd.map(n => n.data.id));
+      console.log('Elements useEffect - 기존 엣지 개수:', prevEdgeIds.size);
+      console.log('Elements useEffect - 새로운 엣지 개수:', edgesToAdd.length);
       
-      // 스타일 적용
-      if (stylesheet) cy.style(stylesheet);
+      if (nodesToAdd.length > 0) {
+        console.log('새로운 노드들 추가:', nodesToAdd.map(n => n.data.id));
+        cy.add(nodesToAdd);
+      }
+      if (edgesToAdd.length > 0) {
+        console.log('새로운 엣지들 추가:', edgesToAdd.map(e => e.data.id));
+        cy.add(edgesToAdd);
+      }
       
-      // 레이아웃 적용
-      if (layout && layout.name !== 'preset') {
-        const layoutInstance = cy.layout({
-          ...layout,
-          animationDuration: 800,
-          animationEasing: 'ease-out'
-        });
-        layoutInstance.on('layoutstop', () => {
+      // 새로운 요소가 추가된 경우에만 레이아웃 실행 (깜빡임 방지)
+      if (nodesToAdd.length > 0 || edgesToAdd.length > 0) {
+        // 반드시 preset 레이아웃 실행
+        cy.layout({ name: 'preset' }).run();
+        
+        // 스타일 적용
+        if (stylesheet) cy.style(stylesheet);
+        
+        // 레이아웃 적용
+        if (layout && layout.name !== 'preset') {
+          const layoutInstance = cy.layout({
+            ...layout,
+            animationDuration: 800,
+            animationEasing: 'ease-out'
+          });
+          layoutInstance.on('layoutstop', () => {
+            setTimeout(() => {
+              detectAndResolveOverlap(cy, nodeSize);
+              if (onLayoutComplete) onLayoutComplete();
+            }, 200);
+          });
+          layoutInstance.run();
+        } else {
           setTimeout(() => {
             detectAndResolveOverlap(cy, nodeSize);
             if (onLayoutComplete) onLayoutComplete();
-          }, 200);
-        });
-        layoutInstance.run();
+          }, 150);
+        }
       } else {
-        setTimeout(() => {
-          detectAndResolveOverlap(cy, nodeSize);
-          if (onLayoutComplete) onLayoutComplete();
-        }, 150);
+        // 새로운 요소가 없으면 스타일만 적용
+        if (stylesheet) cy.style(stylesheet);
       }
       
       // fit
@@ -259,8 +394,11 @@ const CytoscapeGraphUnified = ({
         applySearchFadeEffect(cy, filteredElements, isSearchActive);
       }
     });
-    setIsGraphVisible(true);
-  }, [elements, stylesheet, layout, fitNodeIds, nodeSize, isSearchActive, filteredElements, onLayoutComplete]);
+    // 그래프가 한 번 렌더링되면 계속 visible 상태 유지 (깜빡임 방지)
+    if (!isGraphVisible) {
+      setIsGraphVisible(true);
+    }
+  }, [elements, stylesheet, layout, fitNodeIds, nodeSize, isSearchActive, filteredElements, onLayoutComplete, isGraphVisible]);
 
   // 크기 반응형
   useEffect(() => {
@@ -288,6 +426,8 @@ const CytoscapeGraphUnified = ({
       }}
       className="graph-canvas-area"
     >
+
+      
       {/* 검색 결과가 없을 때 메시지 */}
       {shouldShowNoSearchResults(isSearchActive, searchTerm, fitNodeIds) && (
         (() => {

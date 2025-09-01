@@ -11,7 +11,6 @@ import UnifiedEdgeTooltip from "./tooltip/UnifiedEdgeTooltip";
 import "./RelationGraph.css";
 import { getNodeSize, getEdgeStyle, createGraphStylesheet } from "../../utils/styles/graphStyles";
 import { graphStyles } from "../../utils/styles/styles";
-import { rippleUtils } from "../../utils/styles/animations";
 import useGraphInteractions from "../../hooks/useGraphInteractions";
 
 // 상수 정의
@@ -19,6 +18,7 @@ const MAX_EDGE_LABEL_LENGTH = 15;
 
 const ViewerRelationGraph = ({
   elements,
+  newNodeIds = [],
   chapterNum,
   eventNum,
   edgeLabelVisible = true,
@@ -33,7 +33,6 @@ const ViewerRelationGraph = ({
   const [activeTooltip, setActiveTooltip] = useState(null);
   const selectedEdgeIdRef = useRef(null);
   const selectedNodeIdRef = useRef(null);
-  const [ripples, setRipples] = useState([]);
 
   const onShowNodeTooltip = useCallback(({ node, nodeCenter, mouseX, mouseY }) => {
     const nodeData = node.data();
@@ -103,13 +102,6 @@ const ViewerRelationGraph = ({
     }
   }, [elements]);
 
-  const handleCanvasClick = useCallback((e) => {
-    const container = e.currentTarget;
-    const ripple = rippleUtils.createRipple(e, container);
-    setRipples((prev) => [...prev, ripple]);
-    rippleUtils.removeRippleAfter(setRipples, ripple.id);
-  }, []);
-
   return (
     <div className="relation-graph-container" style={graphStyles.container}>
       <div style={graphStyles.tooltipContainer}>
@@ -149,9 +141,10 @@ const ViewerRelationGraph = ({
           />
         )}
       </div>
-      <div className="graph-canvas-area" onClick={handleCanvasClick} style={graphStyles.graphArea}>
+      <div className="graph-canvas-area" style={graphStyles.graphArea}>
         <CytoscapeGraphUnified
           elements={elements}
+          newNodeIds={newNodeIds}
           stylesheet={stylesheet}
           layout={{ name: 'preset' }}
           cyRef={cyRef}
@@ -167,13 +160,6 @@ const ViewerRelationGraph = ({
           selectedEdgeIdRef={selectedEdgeIdRef}
           strictBackgroundClear={true}
         />
-        {ripples.map((ripple) => (
-          <div
-            key={ripple.id}
-            className="cytoscape-ripple"
-            style={rippleUtils.getRippleStyle(ripple)}
-          />
-        ))}
       </div>
     </div>
   );

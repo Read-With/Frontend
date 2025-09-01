@@ -16,6 +16,7 @@ const GraphContainer = forwardRef(({
   // useGraphDataLoader 훅 사용으로 데이터 로딩 로직 통합
   const {
     elements,
+    newNodeIds,
     currentChapterData,
     loading,
     error
@@ -60,6 +61,7 @@ const GraphContainer = forwardRef(({
   return (
     <ViewerRelationGraph
       elements={finalElements}
+      newNodeIds={newNodeIds}
       chapterNum={currentChapter}
       eventNum={currentEvent ? Math.max(1, currentEvent.eventNum) : 1}
       edgeLabelVisible={edgeLabelVisible}

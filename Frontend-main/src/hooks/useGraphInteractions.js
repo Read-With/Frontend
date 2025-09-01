@@ -170,12 +170,14 @@ export default function useGraphInteractions({
         const edgeData = edge?.data?.();
         if (!edge || !edgeData) return;
 
-        const pos = edge.midpoint();
-        const { absoluteX, absoluteY } = calculatePosition(pos);
+        // 노드 클릭과 동일한 방식으로 위치 계산
+        const edgeCenter = calculatePosition(edge.midpoint());
+        const mouseX = evt.originalEvent?.clientX ?? edgeCenter.x;
+        const mouseY = evt.originalEvent?.clientY ?? edgeCenter.y;
 
         // 컴포넌트별 툴팁 생성 로직 실행
         if (onShowEdgeTooltipRef.current) {
-          onShowEdgeTooltipRef.current({ edge, evt, absoluteX, absoluteY });
+          onShowEdgeTooltipRef.current({ edge, evt, absoluteX: mouseX, absoluteY: mouseY });
         }
 
         resetAllStyles();

@@ -640,11 +640,11 @@ const ViewerPage = ({ darkMode: initialDarkMode }) => {
 
 
 
-  // currentChapter가 바뀔 때 currentEvent, prevEvent, elements 등도 초기화
+  // currentChapter가 바뀔 때 currentEvent, prevEvent만 초기화 (elements는 누적 유지)
   useEffect(() => {
     setCurrentEvent(null);
     setPrevEvent(null);
-    setElements([]); // 그래프도 초기화
+    // setElements([]); // 그래프 초기화 제거 - 누적 유지
   }, [currentChapter]);
 
   // Load data when currentChapter changes
@@ -688,13 +688,29 @@ const ViewerPage = ({ darkMode: initialDarkMode }) => {
       allImportance
     );
     return generatedElements;
-  }, [currentChapter, events, characterData]);
+  }, [events, characterData]); // currentChapter 의존성 제거
 
   // === [수정] elements: 데이터 준비/이벤트별 분리 ===
-  // 1. 데이터 준비되면 fullElements를 보여줌
+  // 1. 데이터 준비되면 fullElements를 보여줌 (챕터 변경 시에만)
   useEffect(() => {
-    if (isDataReady && !currentEvent) {
-      setElements(fullElements);
+    if (isDataReady && !currentEvent && fullElements.length > 0) {
+      // 챕터 변경 시에만 elements 설정 (누적 유지)
+      setElements(prevElements => {
+        // 기존 elements와 새로운 elements를 합침
+        const combinedElements = [...prevElements, ...fullElements];
+        // 중복 제거
+        const uniqueElements = [];
+        const seenIds = new Set();
+        for (let i = combinedElements.length - 1; i >= 0; i--) {
+          const element = combinedElements[i];
+          const elementId = element.data?.id || element.data?.source + '-' + element.data?.target;
+          if (!seenIds.has(elementId)) {
+            seenIds.add(elementId);
+            uniqueElements.unshift(element);
+          }
+        }
+        return uniqueElements;
+      });
       setLoading(false);
     }
   }, [isDataReady, currentEvent, fullElements]);
@@ -786,9 +802,10 @@ const ViewerPage = ({ darkMode: initialDarkMode }) => {
         return el;
       });
 
+    // 이벤트별 필터링이므로 현재 이벤트의 요소들만 표시 (누적하지 않음)
     setElements(sorted);
     setLoading(false);
-  }, [currentEvent, currentChapter, hideIsolated, fullElements, isDataReady]);
+  }, [currentEvent, hideIsolated, fullElements, isDataReady]); // currentChapter 의존성 제거
 
   // === [추가] 마지막 이벤트 등장 노드/간선 위치만 저장 및 이벤트별 적용 ===
   // 마지막 이벤트에서 등장한 노드/간선 위치만 저장
@@ -1271,12 +1288,12 @@ const ViewerPage = ({ darkMode: initialDarkMode }) => {
     }
   }, [elements]);
 
-  // 그래프 로딩 중일 때도 공백으로 보이게 처리
+  // 그래프 로딩 중일 때도 공백으로 보이게 처리 (챕터 변경 시에는 누적 유지)
   useEffect(() => {
-    if (isGraphLoading) {
+    if (isGraphLoading && !currentChapter) {
       setElements([]);
     }
-  }, [isGraphLoading]);
+  }, [isGraphLoading, currentChapter]);
 
   // 1) events 데이터 확인
   useEffect(() => {

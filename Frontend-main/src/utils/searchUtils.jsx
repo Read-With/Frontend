@@ -89,9 +89,6 @@ export function buildSuggestions(elements, query, currentChapterData = null) {
       };
     })
     .slice(0, 8);
-
-
-
   return matches;
 }
 
