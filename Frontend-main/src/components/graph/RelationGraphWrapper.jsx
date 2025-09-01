@@ -122,6 +122,7 @@ function RelationGraphWrapper() {
     isSearchActive,
     filteredElements,
     fitNodeIds,
+    isResetFromSearch,
     handleSearchSubmit,
     clearSearch,
   } = useGraphSearch(elements, null, currentChapterData);
@@ -455,6 +456,7 @@ function RelationGraphWrapper() {
                 selectedNodeIdRef={selectedNodeIdRef}
                 selectedEdgeIdRef={selectedEdgeIdRef}
                 strictBackgroundClear={true}
+                isResetFromSearch={isResetFromSearch}
               />
 
             </div>

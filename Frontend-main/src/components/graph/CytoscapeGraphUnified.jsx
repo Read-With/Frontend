@@ -64,6 +64,7 @@ const CytoscapeGraphUnified = ({
   selectedNodeIdRef,
   selectedEdgeIdRef,
   strictBackgroundClear = false,
+  isResetFromSearch = false,
 }) => {
   const containerRef = useRef(null);
   const [isGraphVisible, setIsGraphVisible] = useState(false);
@@ -341,7 +342,7 @@ const CytoscapeGraphUnified = ({
               detectAndResolveOverlap(cy, nodeSize);
               
               // 초기 로드가 아닌 경우에만 새로운 노드들에 ripple 등장 효과 적용
-              if (nodesToAdd.length > 0 && !isInitialLoad) {
+              if (nodesToAdd.length > 0 && !isInitialLoad && !isResetFromSearch) {
                 console.log('🎯 새로운 노드 ripple 효과 적용 시작');
                 nodesToAdd.forEach(node => {
                   const cyNode = cy.getElementById(node.data.id);
@@ -377,7 +378,7 @@ const CytoscapeGraphUnified = ({
             detectAndResolveOverlap(cy, nodeSize);
             
             // 초기 로드가 아닌 경우에만 preset 레이아웃 완료 후 새로운 노드들에 ripple 등장 효과 적용
-            if (nodesToAdd.length > 0 && !isInitialLoad) {
+            if (nodesToAdd.length > 0 && !isInitialLoad && !isResetFromSearch) {
               nodesToAdd.forEach(node => {
                 const cyNode = cy.getElementById(node.data.id);
                 if (cyNode.length > 0) {
@@ -436,7 +437,7 @@ const CytoscapeGraphUnified = ({
     }
     
     setIsGraphVisible(true);
-  }, [elements, externalCyRef, previousElements, isInitialLoad, stylesheet, layout, nodeSize, fitNodeIds, isSearchActive, filteredElements, onLayoutComplete]);
+  }, [elements, externalCyRef, previousElements, isInitialLoad, stylesheet, layout, nodeSize, fitNodeIds, isSearchActive, filteredElements, onLayoutComplete, isResetFromSearch]);
 
   // 크기 반응형
   useEffect(() => {

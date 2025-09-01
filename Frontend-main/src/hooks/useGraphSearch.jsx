@@ -12,12 +12,14 @@ import {
  * @param {Object} currentChapterData - 현재 챕터의 캐릭터 데이터 (선택사항)
  * @returns {Object} 검색 관련 상태와 함수들
  */
+
 export function useGraphSearch(elements, onSearchStateChange = null, currentChapterData = null) {
   // 검색 상태
   const [searchTerm, setSearchTerm] = useState("");
   const [filteredElements, setFilteredElements] = useState([]);
   const [fitNodeIds, setFitNodeIds] = useState([]);
   const [isSearchActive, setIsSearchActive] = useState(false);
+  const [isResetFromSearch, setIsResetFromSearch] = useState(false);
 
   // 검색 제안 상태
   const [suggestions, setSuggestions] = useState([]);
@@ -35,6 +37,7 @@ export function useGraphSearch(elements, onSearchStateChange = null, currentChap
     const trimmedTerm = searchTerm.trim();
     setSearchTerm(searchTerm);
     setIsSearchActive(!!trimmedTerm);
+    setIsResetFromSearch(false); // 검색 시 초기화 상태 해제
     
     if (trimmedTerm && elements) {
       const filtered = filterGraphElements(elements, trimmedTerm, currentChapterData);
@@ -56,6 +59,7 @@ export function useGraphSearch(elements, onSearchStateChange = null, currentChap
     setSuggestions([]);
     setShowSuggestions(false);
     setSelectedIndex(-1);
+    setIsResetFromSearch(true); // 초기화 상태 설정
   }, []);
 
   // 검색 제안 생성 (2글자 이상일 때만)
@@ -73,6 +77,17 @@ export function useGraphSearch(elements, onSearchStateChange = null, currentChap
     setShowSuggestions(matches.length > 0);
     setSelectedIndex(-1);
   }, [searchTerm, elements, currentChapterData]);
+
+  // isResetFromSearch 상태 자동 초기화
+  useEffect(() => {
+    if (isResetFromSearch) {
+      const timer = setTimeout(() => {
+        setIsResetFromSearch(false);
+      }, 500); // 500ms 후 초기화 상태 해제
+      
+      return () => clearTimeout(timer);
+    }
+  }, [isResetFromSearch]);
 
   // 제안 선택 함수
   const selectSuggestion = useCallback((suggestion, onSelect) => {
@@ -154,6 +169,7 @@ export function useGraphSearch(elements, onSearchStateChange = null, currentChap
     filteredElements,
     fitNodeIds,
     finalElements,
+    isResetFromSearch,
     handleSearchSubmit,
     clearSearch,
     setSearchTerm,
