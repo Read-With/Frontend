@@ -98,7 +98,7 @@ export function useGraphSearch(elements, onSearchStateChange = null, currentChap
     setSelectedIndex(-1);
   }, []);
 
-  // 키보드 네비게이션 처리
+  // 키보드 네비게이션 처리 (화살표 키, Escape 키만 처리)
   const handleKeyDown = useCallback((e, onSelect) => {
     switch (e.key) {
       case 'ArrowDown':
@@ -117,22 +117,15 @@ export function useGraphSearch(elements, onSearchStateChange = null, currentChap
           );
         }
         break;
-      case 'Enter':
-        e.preventDefault();
-        if (showSuggestions && selectedIndex >= 0 && suggestions && suggestions[selectedIndex]) {
-          selectSuggestion(suggestions[selectedIndex], onSelect);
-        } else if (onSelect) {
-          onSelect(searchTerm);
-        }
-        break;
       case 'Escape':
         if (showSuggestions) {
           setShowSuggestions(false);
           setSelectedIndex(-1);
         }
         break;
+      // Enter 키는 GraphControls에서 처리하므로 여기서는 제거
     }
-  }, [showSuggestions, suggestions, selectedIndex, searchTerm, selectSuggestion]);
+  }, [showSuggestions, suggestions, selectedIndex]);
 
   // 드롭다운 닫기
   const closeSuggestions = useCallback(() => {

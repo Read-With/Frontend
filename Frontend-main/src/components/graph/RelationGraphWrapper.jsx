@@ -123,9 +123,22 @@ function RelationGraphWrapper() {
     filteredElements,
     fitNodeIds,
     isResetFromSearch,
+    suggestions,
+    showSuggestions,
+    selectedIndex,
+    selectSuggestion,
+    handleKeyDown,
+    closeSuggestions,
     handleSearchSubmit,
     clearSearch,
+    setSearchTerm, // setSearchTerm 추가
   } = useGraphSearch(elements, null, currentChapterData);
+
+  // 제안 생성을 위한 별도 함수 (실제 검색은 실행하지 않음)
+  const handleGenerateSuggestions = useCallback((searchTerm) => {
+    // 제안 생성을 위해 searchTerm만 업데이트 (실제 검색은 실행하지 않음)
+    setSearchTerm(searchTerm);
+  }, [setSearchTerm]);
 
   // 툴팁 핸들러
   const onShowNodeTooltip = useCallback(({ node, nodeCenter, mouseX, mouseY }) => {
@@ -314,11 +327,17 @@ function RelationGraphWrapper() {
       }}>
         <div style={topBarStyles.leftSection}>
           <GraphControls
-            elements={elements}
-            currentChapterData={currentChapterData}
             searchTerm={searchTerm}
             onSearchSubmit={handleSearchSubmit}
             onClearSearch={clearSearch}
+            onGenerateSuggestions={handleGenerateSuggestions}
+            suggestions={suggestions}
+            showSuggestions={showSuggestions}
+            selectedIndex={selectedIndex}
+            onSelectSuggestion={selectSuggestion}
+            onKeyDown={handleKeyDown}
+            onCloseSuggestions={closeSuggestions}
+            isSearchActive={isSearchActive}
           />
           
           <button

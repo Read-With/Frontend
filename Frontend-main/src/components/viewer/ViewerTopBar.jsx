@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useCallback } from 'react';
 import GraphControls from '../graph/GraphControls';
 import EdgeLabelToggle from '../graph/tooltip/EdgeLabelToggle';
 
@@ -76,6 +76,13 @@ const ViewerTopBar = ({
     return () => clearInterval(interval);
   }, [currentChapter, setCurrentChapter]);
   
+  // 제안 생성을 위한 별도 함수 (실제 검색은 실행하지 않음)
+  const handleGenerateSuggestions = useCallback((searchTerm) => {
+    // 제안 생성을 위해 searchTerm만 업데이트 (실제 검색은 실행하지 않음)
+    // 여기서는 onSearchSubmit을 호출하여 제안을 생성함
+    onSearchSubmit(searchTerm);
+  }, [onSearchSubmit]);
+  
   return (
     <>
       {/* 상단바 1: 전체화면 모드일 때 모든 기능이 통합된 상단바 */}
@@ -146,6 +153,7 @@ const ViewerTopBar = ({
           {!graphFullScreen && (
             <GraphControls
               onSearchSubmit={onSearchSubmit}
+              onGenerateSuggestions={handleGenerateSuggestions}
               searchTerm={searchTerm}
               isSearchActive={isSearchActive}
               onClearSearch={clearSearch}
@@ -158,6 +166,7 @@ const ViewerTopBar = ({
           {graphFullScreen && (
             <GraphControls
               onSearchSubmit={onSearchSubmit}
+              onGenerateSuggestions={handleGenerateSuggestions}
               searchTerm={searchTerm}
               isSearchActive={isSearchActive}
               onClearSearch={clearSearch}

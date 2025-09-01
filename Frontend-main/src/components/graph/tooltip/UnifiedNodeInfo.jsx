@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { useParams, useLocation } from "react-router-dom";
 import { processRelations, processRelationTags } from "../../../utils/relationUtils.js";
-import { highlightText } from "../../../utils/searchUtils.jsx";
 import { getChapterLastEventNums, getFolderKeyFromFilename, getEventDataByIndex, getDetectedMaxChapter } from "../../../utils/graphData.js";
 import { useTooltipPosition } from "../../../hooks/useTooltipPosition.js";
 import { useClickOutside } from "../../../hooks/useClickOutside.js";
@@ -316,7 +315,7 @@ function UnifiedNodeInfo({
             marginBottom: 8,
           }}
         >
-          {searchTerm ? highlightText(processedNodeData?.displayName || "", searchTerm) : processedNodeData?.displayName}
+          {processedNodeData?.displayName}
         </h3>
 
         <p
@@ -556,7 +555,7 @@ function UnifiedNodeInfo({
                   whiteSpace: "nowrap",
                 }}
               >
-                {searchTerm ? highlightText(processedNodeData?.displayName || "", searchTerm) : processedNodeData?.displayName}
+                {processedNodeData?.displayName}
               </span>
 
               {processedNodeData?.isMainCharacter && (
@@ -603,7 +602,7 @@ function UnifiedNodeInfo({
                         fontWeight: 500,
                       }}
                     >
-                      {searchTerm ? highlightText(name, searchTerm) : name}
+                      {name}
                     </span>
                   ))}
               </div>
@@ -633,7 +632,7 @@ function UnifiedNodeInfo({
         }}
       >
         {processedNodeData?.hasDescription ? (
-          searchTerm ? highlightText(processedNodeData.description, searchTerm) : processedNodeData.description
+          processedNodeData.description
         ) : (
           <span style={{ color: "#bbb" }}>설명 정보가 없습니다.</span>
         )}
@@ -768,7 +767,7 @@ function UnifiedNodeInfo({
                 color: '#111827',
                 letterSpacing: '-0.025em',
               }}>
-                {searchTerm ? highlightText(processedNodeData?.displayName || "", searchTerm) : processedNodeData?.displayName}
+                {processedNodeData?.displayName}
               </span>
               {processedNodeData?.isMainCharacter && (
                 <span style={{
@@ -906,7 +905,7 @@ function UnifiedNodeInfo({
                   margin: '0 0 8px 0',
                   letterSpacing: '-0.025em',
                 }}>
-                  {searchTerm ? highlightText(processedNodeData?.displayName || "", searchTerm) : processedNodeData?.displayName}
+                  {processedNodeData?.displayName}
                 </h4>
                 
                 {processedNodeData?.names && processedNodeData.names.length > 0 && (
@@ -932,7 +931,7 @@ function UnifiedNodeInfo({
                             fontWeight: '500',
                           }}
                         >
-                          {searchTerm ? highlightText(name, searchTerm) : name}
+                          {name}
                         </span>
                       ))}
                   </div>
@@ -956,7 +955,7 @@ function UnifiedNodeInfo({
                       color: '#374151',
                       letterSpacing: '-0.01em',
                     }}>
-                      {searchTerm ? highlightText(processedNodeData.description, searchTerm) : processedNodeData.description}
+                      {processedNodeData.description}
                     </p>
                   </div>
                 </div>
