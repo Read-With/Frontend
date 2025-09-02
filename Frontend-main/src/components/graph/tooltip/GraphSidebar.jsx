@@ -96,6 +96,7 @@ function GraphSidebar({
           textAlign: "center",
           color: "#6b7280",
         }}
+        data-testid="graph-sidebar"
       >
         <div
           style={{
@@ -137,7 +138,7 @@ function GraphSidebar({
   // 노드 툴팁 렌더링 - UnifiedNodeInfo 사용
   if (activeTooltip.type === "node") {
     return (
-      <div style={commonSidebarStyles}>
+      <div style={commonSidebarStyles} data-testid="graph-sidebar">
         <UnifiedNodeInfo
           displayMode="sidebar"
           data={activeTooltip.data}
@@ -158,7 +159,7 @@ function GraphSidebar({
   // 간선 툴팁 렌더링
   if (activeTooltip.type === "edge") {
     return (
-      <div style={commonSidebarStyles}>
+      <div style={commonSidebarStyles} data-testid="graph-sidebar">
         <UnifiedEdgeTooltip
           data={activeTooltip.data}
           onClose={handleClose}
@@ -172,7 +173,116 @@ function GraphSidebar({
     );
   }
 
-  return null;
+  return (
+    <div
+      style={commonSidebarStyles}
+      data-testid="graph-sidebar"
+      className="graph-sidebar"
+    >
+      <div style={{
+        display: "flex",
+        flexDirection: "column",
+        height: "100%",
+        position: "relative"
+      }}>
+        {/* 헤더 영역 */}
+        <div style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          padding: "16px 20px",
+          borderBottom: "1px solid #e5e7eb",
+          background: "#f9fafb"
+        }}>
+          <div style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "12px"
+          }}>
+            <div style={{
+              width: "8px",
+              height: "8px",
+              borderRadius: "50%",
+              background: activeTooltip?.type === "node" ? "#3b82f6" : "#10b981"
+            }} />
+            <span style={{
+              fontSize: "16px",
+              fontWeight: "600",
+              color: "#111827"
+            }}>
+              {activeTooltip?.type === "node" ? "인물 정보" : "관계 정보"}
+            </span>
+          </div>
+          
+          <button
+            onClick={handleClose}
+            style={{
+              background: "none",
+              border: "none",
+              fontSize: "18px",
+              color: "#6b7280",
+              cursor: "pointer",
+              padding: "4px",
+              borderRadius: "4px",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              width: "32px",
+              height: "32px",
+              transition: "all 0.2s ease"
+            }}
+            onMouseEnter={(e) => {
+              e.target.style.background = "#f3f4f6";
+              e.target.style.color = "#374151";
+            }}
+            onMouseLeave={(e) => {
+              e.target.style.background = "none";
+              e.target.style.color = "#6b7280";
+            }}
+            title="닫기"
+          >
+            ✕
+          </button>
+        </div>
+
+        {/* 내용 영역 */}
+        <div style={{
+          flex: 1,
+          overflow: "hidden",
+          display: "flex",
+          flexDirection: "column"
+        }}>
+          {activeTooltip?.type === "node" ? (
+            <UnifiedNodeInfo
+              nodeData={activeTooltip.data}
+              chapterNum={chapterNum}
+              eventNum={eventNum}
+              maxChapter={maxChapter}
+              filename={filename}
+              elements={elements}
+              isSearchActive={isSearchActive}
+              filteredElements={filteredElements}
+              searchTerm={searchTerm}
+            />
+          ) : (
+            <UnifiedEdgeTooltip
+              edgeData={activeTooltip.data}
+              sourceNode={activeTooltip.sourceNode}
+              targetNode={activeTooltip.targetNode}
+              chapterNum={chapterNum}
+              eventNum={eventNum}
+              maxChapter={maxChapter}
+              filename={filename}
+              elements={elements}
+              isSearchActive={isSearchActive}
+              filteredElements={filteredElements}
+              searchTerm={searchTerm}
+            />
+          )}
+        </div>
+      </div>
+    </div>
+  );
 }
 
 export default GraphSidebar; 
