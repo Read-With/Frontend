@@ -217,7 +217,8 @@ function GraphControls({
         </button>
       </form>
 
-      {internalShowSuggestions && (
+      {/* 드롭다운 조건 강화 - 검색어가 있을 때만 표시 */}
+      {internalShowSuggestions && internalSearchTerm && internalSearchTerm.trim().length >= 2 && (
         <div style={{
           position: 'absolute',
           top: '100%',
