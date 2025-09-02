@@ -1,19 +1,18 @@
 import { useCallback, useRef, useEffect } from "react";
 import { applySearchHighlight } from '../utils/searchUtils.jsx';
 
-// 상수 정의
 const GRAPH_CONTAINER_SELECTOR = '.graph-canvas-area';
 
 export default function useGraphInteractions({
   cyRef,
-  onShowNodeTooltip, // ({ node, evt, nodeCenter, mouseX, mouseY }) => void
-  onShowEdgeTooltip, // ({ edge, evt, absoluteX, absoluteY }) => void
-  onClearTooltip, // () => void - 툴팁 초기화 콜백
+  onShowNodeTooltip, 
+  onShowEdgeTooltip,
+  onClearTooltip, 
   selectedNodeIdRef,
   selectedEdgeIdRef,
   strictBackgroundClear = false,
-  isSearchActive = false, // 검색 상태 추가
-  filteredElements = [], // 검색된 요소들 추가
+  isSearchActive = false, 
+  filteredElements = [], 
 }) {
   const onShowNodeTooltipRef = useRef(onShowNodeTooltip);
   const onShowEdgeTooltipRef = useRef(onShowEdgeTooltip);

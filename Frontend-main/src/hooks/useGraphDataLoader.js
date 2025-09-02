@@ -133,7 +133,7 @@ export function useGraphDataLoader(filename, chapter, eventIndex = null) {
       const previousAllElements = [];
       for (const [key, elements] of chapterElementsRef.current.entries()) {
         const keyChapter = parseInt(key.split('-')[1]);
-        if (keyChapter < chapter) { // 현재 챕터보다 작은 챕터들만
+        if (keyChapter < chapter) { 
           previousAllElements.push(...elements);
         }
       }
@@ -155,10 +155,6 @@ export function useGraphDataLoader(filename, chapter, eventIndex = null) {
       
       setElements(uniqueElements);
       const newNodes = diff.added.filter(el => !el.data?.source).map(el => el.data.id);
-      console.log('챕터', chapter, '에서 감지된 새로운 노드들:', newNodes);
-      console.log('이전 누적 elements 개수:', previousUniqueElements.length);
-      console.log('현재 누적 elements 개수:', uniqueElements.length);
-      console.log('diff.added 개수:', diff.added.length);
       setNewNodeIds(newNodes);
       setMaxEventNum(targetEventIndex);
       setEventNum(targetEventIndex);
