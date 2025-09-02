@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import UnifiedNodeInfo from "./UnifiedNodeInfo";
 import UnifiedEdgeTooltip from "./UnifiedEdgeTooltip";
 
@@ -14,12 +14,14 @@ function GraphSidebar({
   isSearchActive = false,
   filteredElements = [],
   searchTerm = "",
-  onStartClosing, // 애니메이션 시작 콜백 추가
-  onClearGraph, // 그래프 초기화 콜백 추가
-  forceClose, // 외부에서 강제로 닫기 요청
+  onStartClosing,
+  onClearGraph,
+  forceClose,
 }) {
   const [isClosing, setIsClosing] = useState(false);
   const [isVisible, setIsVisible] = useState(false);
+  const previousActiveTooltipRef = useRef(null);
+  const animationTimeoutRef = useRef(null);
 
   // 공통 스타일 객체
   const commonSidebarStyles = {
@@ -39,10 +41,12 @@ function GraphSidebar({
 
   // 슬라이드바가 열릴 때 애니메이션 처리
   useEffect(() => {
-    if (activeTooltip || hasNoRelations) {
-      // 스르륵 애니메이션을 위해 먼저 숨김 상태로 시작
-      setIsVisible(false);
+    const prevActiveTooltip = previousActiveTooltipRef.current;
+    
+    // 새로운 activeTooltip이 생겼을 때 (열기)
+    if ((activeTooltip || hasNoRelations) && !prevActiveTooltip) {
       setIsClosing(false);
+      setIsVisible(false);
       
       // 다음 프레임에서 애니메이션 시작
       requestAnimationFrame(() => {
@@ -50,11 +54,22 @@ function GraphSidebar({
           setIsVisible(true);
         });
       });
-    } else {
-      setIsVisible(false);
-      setIsClosing(false);
     }
-  }, [activeTooltip, hasNoRelations]);
+    
+    // activeTooltip이 제거될 때 (닫기)
+    if (!activeTooltip && !hasNoRelations && prevActiveTooltip) {
+      setIsClosing(true);
+      
+      // 애니메이션 완료 후 닫기
+      animationTimeoutRef.current = setTimeout(() => {
+        onClose();
+        setIsClosing(false);
+        setIsVisible(false);
+      }, 700);
+    }
+    
+    previousActiveTooltipRef.current = activeTooltip;
+  }, [activeTooltip, hasNoRelations, onClose]);
 
   // 외부에서 강제로 닫기 요청이 있을 때
   useEffect(() => {
@@ -62,6 +77,15 @@ function GraphSidebar({
       handleClose();
     }
   }, [forceClose, isClosing]);
+
+  // 컴포넌트 언마운트 시 타이머 정리
+  useEffect(() => {
+    return () => {
+      if (animationTimeoutRef.current) {
+        clearTimeout(animationTimeoutRef.current);
+      }
+    };
+  }, []);
 
   const handleClose = () => {
     // X 버튼 클릭 시에만 그래프 초기화 (그래프 영역 클릭 시에는 이미 초기화됨)
@@ -136,7 +160,7 @@ function GraphSidebar({
   }
 
   // 노드 툴팁 렌더링 - UnifiedNodeInfo 사용
-  if (activeTooltip.type === "node") {
+  if (activeTooltip?.type === "node") {
     return (
       <div style={commonSidebarStyles} data-testid="graph-sidebar">
         <UnifiedNodeInfo
@@ -157,7 +181,7 @@ function GraphSidebar({
   }
 
   // 간선 툴팁 렌더링
-  if (activeTooltip.type === "edge") {
+  if (activeTooltip?.type === "edge") {
     return (
       <div style={commonSidebarStyles} data-testid="graph-sidebar">
         <UnifiedEdgeTooltip

@@ -260,12 +260,10 @@ function RelationGraphWrapper() {
   }, [centerElementBetweenSidebars, centerElementAtPosition]);
 
   const onClearTooltip = useCallback(() => {
-    // X 버튼과 동일한 방식으로 처리
+    // X 버튼 클릭 시 애니메이션 시작
     setForceClose(true);
-    // 애니메이션 시작과 동시에 activeTooltip 상태 초기화
-    setActiveTooltip(null);
-    setIsSidebarClosing(false);
-    setForceClose(false);
+    // activeTooltip은 GraphSidebar의 애니메이션 완료 후 제거됨
+    // 여기서는 즉시 제거하지 않음
   }, []);
 
   // 슬라이드바 애니메이션 시작 함수
@@ -611,10 +609,15 @@ function RelationGraphWrapper() {
       }}>
         <div style={graphStyles.graphPageContainer}>
           <div style={graphStyles.graphPageInner}>
-            {activeTooltip && (
+            {(activeTooltip || isSidebarClosing) && (
               <GraphSidebar
                 activeTooltip={activeTooltip}
-                onClose={onClearTooltip}
+                onClose={() => {
+                  // 애니메이션이 완료된 후에 activeTooltip 제거
+                  setActiveTooltip(null);
+                  setForceClose(false);
+                  setIsSidebarClosing(false);
+                }}
                 onStartClosing={handleStartClosing}
                 onClearGraph={handleClearGraph}
                 forceClose={forceClose}

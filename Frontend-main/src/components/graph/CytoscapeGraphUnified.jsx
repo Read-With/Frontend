@@ -431,7 +431,6 @@ const CytoscapeGraphUnified = ({
               
               // 초기 로드가 아닌 경우에만 새로운 노드들에 ripple 등장 효과 적용
               if (nodesToAdd.length > 0 && !isInitialLoad && !isResetFromSearch) {
-                console.log('🎯 새로운 노드 ripple 효과 적용 시작');
                 nodesToAdd.forEach(node => {
                   const cyNode = cy.getElementById(node.data.id);
                   if (cyNode.length > 0) {
@@ -441,20 +440,9 @@ const CytoscapeGraphUnified = ({
                   const domX = position.x;
                   const domY = position.y;
                   
-                  console.log(`📍 노드 ${node.data.id} 위치:`, {
-                    cytoscapeX: position.x,
-                    cytoscapeY: position.y,
-                    domX: domX,
-                    domY: domY
-                  });
-                  
-                  // 노드 클릭 시와 동일하게 DOM 좌표계로 변환된 값 사용 (cyRef 없이)
                   createRippleEffect(containerRef.current, domX, domY, null);
-                  } else {
-                    console.log(`❌ 노드 ${node.data.id}를 찾을 수 없음`);
                   }
                 });
-                console.log('✅ 새로운 노드 ripple 효과 적용 완료');
               }
               
               if (onLayoutComplete) onLayoutComplete();
