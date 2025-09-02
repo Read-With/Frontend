@@ -1,6 +1,6 @@
-import React from 'react';
+import React, { useCallback } from 'react';
 import GraphControls from '../graph/GraphControls';
-import EdgeLabelToggle from '../common/EdgeLabelToggle';
+import EdgeLabelToggle from '../graph/tooltip/EdgeLabelToggle';
 
 const ViewerTopBar = ({
   // 상단바 1 props
@@ -28,6 +28,7 @@ const ViewerTopBar = ({
   isSearchActive,
   clearSearch,
   elements = [], // 그래프 요소들 (검색 제안용)
+  currentChapterData = null, // 현재 챕터의 캐릭터 데이터
 }) => {
   // 현재 이벤트 정보를 실시간으로 추적
   const [currentEventInfo, setCurrentEventInfo] = React.useState(null);
@@ -74,6 +75,13 @@ const ViewerTopBar = ({
     
     return () => clearInterval(interval);
   }, [currentChapter, setCurrentChapter]);
+  
+  // 제안 생성을 위한 별도 함수 (실제 검색은 실행하지 않음)
+  const handleGenerateSuggestions = useCallback((searchTerm) => {
+    // 제안 생성을 위해 searchTerm만 업데이트 (실제 검색은 실행하지 않음)
+    // 여기서는 onSearchSubmit을 호출하여 제안을 생성함
+    onSearchSubmit(searchTerm);
+  }, [onSearchSubmit]);
   
   return (
     <>
@@ -145,10 +153,12 @@ const ViewerTopBar = ({
           {!graphFullScreen && (
             <GraphControls
               onSearchSubmit={onSearchSubmit}
+              onGenerateSuggestions={handleGenerateSuggestions}
               searchTerm={searchTerm}
               isSearchActive={isSearchActive}
-              clearSearch={clearSearch}
+              onClearSearch={clearSearch}
               elements={elements}
+              currentChapterData={currentChapterData}
             />
           )}
           
@@ -156,10 +166,12 @@ const ViewerTopBar = ({
           {graphFullScreen && (
             <GraphControls
               onSearchSubmit={onSearchSubmit}
+              onGenerateSuggestions={handleGenerateSuggestions}
               searchTerm={searchTerm}
               isSearchActive={isSearchActive}
-              clearSearch={clearSearch}
+              onClearSearch={clearSearch}
               elements={elements}
+              currentChapterData={currentChapterData}
             />
           )}
         </div>
@@ -284,7 +296,7 @@ const ViewerTopBar = ({
           >
             {/* 간선 라벨 스위치 토글 */}
             <EdgeLabelToggle
-              isVisible={edgeLabelVisible}
+              visible={edgeLabelVisible}
               onToggle={() => setEdgeLabelVisible(!edgeLabelVisible)}
             />
 
@@ -337,7 +349,7 @@ const ViewerTopBar = ({
           >
             {/* 간선 라벨 스위치 토글 */}
             <EdgeLabelToggle
-              isVisible={edgeLabelVisible}
+              visible={edgeLabelVisible}
               onToggle={() => setEdgeLabelVisible(!edgeLabelVisible)}
             />
 

@@ -1,479 +1,598 @@
-import React, { useState, useEffect, useRef } from "react";
-import RelationGraphMain from "./RelationGraphMain";
-import EdgeLabelToggle from "../common/EdgeLabelToggle";
-import GraphControls from "./GraphControls";
-import "./RelationGraph.css";
+import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { FaTimes, FaBars, FaChevronLeft } from 'react-icons/fa';
-import { convertRelationsToElements } from './graphElementUtils';
-import { filterGraphElements } from './graphFilter';
 
-// characters.json, 이벤트별 relations.json glob import
-const characterModules = import.meta.glob('../../data/gatsby/c_chapter*_0.json', { eager: true });
-const eventModules = import.meta.glob('../../data/gatsby/chapter*_relationships_event_*.json', { eager: true });
+import CytoscapeGraphUnified from "./CytoscapeGraphUnified";
+import EdgeLabelToggle from "./tooltip/EdgeLabelToggle";
+import GraphControls from "./GraphControls";
+import GraphSidebar from "./tooltip/GraphSidebar";
+import "./RelationGraph.css";
 
-const getChapterCharacters = (chapter) => {
-  const num = String(chapter).padStart(1, '0');
-  // characters.json 구조: { characters: [...] }
-  const data = characterModules[`../../data/gatsby/c_chapter${num}_0.json`]?.default;
-  if (!data) return [];
-  return data.characters || [];
+import { createGraphStylesheet, getNodeSize as getNodeSizeUtil, getEdgeStyle as getEdgeStyleUtil, getWideLayout } from "../../utils/styles/graphStyles";
+import { ANIMATION_VALUES } from "../../utils/styles/animations";
+import { sidebarStyles, topBarStyles, containerStyles, graphStyles } from "../../utils/styles/styles.js";
+import { useGraphSearch } from '../../hooks/useGraphSearch.jsx';
+import { useGraphDataLoader } from '../../hooks/useGraphDataLoader.js';
+import { useLocalStorageNumber } from '../../hooks/useLocalStorage.js';
+import useGraphInteractions from "../../hooks/useGraphInteractions";
+
+const getNodeSize = () => getNodeSizeUtil('graph');
+const getEdgeStyle = () => getEdgeStyleUtil('graph');
+
+// 독립 인물 버튼 스타일
+const isolatedButtonStyles = {
+  button: (hideIsolated) => ({
+    height: 30,
+    padding: '0 16px',
+    borderRadius: 8,
+    border: '1.5px solid #e3e6ef',
+    background: hideIsolated ? '#f8f9fc' : '#EEF2FF',
+    color: hideIsolated ? '#6C8EFF' : '#22336b',
+    fontSize: 13,
+    fontWeight: 600,
+    cursor: 'pointer',
+    transition: 'all 0.2s ease',
+    outline: 'none',
+    display: 'flex',
+    alignItems: 'center',
+    gap: 6,
+    boxShadow: hideIsolated ? 'none' : '0 2px 8px rgba(108,142,255,0.15)',
+    minWidth: '140px',
+    justifyContent: 'center',
+  }),
+  dot: (hideIsolated) => ({
+    width: 8,
+    height: 8,
+    borderRadius: '50%',
+    background: hideIsolated ? '#6C8EFF' : '#22336b',
+    opacity: hideIsolated ? 0.6 : 1,
+  }),
+  hover: {
+    background: '#f8f9fc',
+    color: '#6C8EFF',
+    transform: 'scale(1.05)'
+  },
+  default: {
+    background: '#fff',
+    color: '#22336b',
+    transform: 'scale(1)'
+  }
+};
+
+// 레이아웃 스타일
+const layoutStyles = {
+  container: {
+    width: '100vw',
+    height: '100vh',
+    background: '#f4f7fb',
+    overflow: 'hidden',
+    display: 'flex',
+    marginTop: 0
+  },
+  mainContent: {
+    flex: 1,
+    display: 'flex',
+    flexDirection: 'column'
+  },
+  graphContainer: {
+    flex: 1,
+    position: 'relative',
+    overflow: 'hidden',
+    width: '100%',
+    height: '100%'
+  }
 };
 
 function RelationGraphWrapper() {
   const navigate = useNavigate();
   const { filename } = useParams();
   
-
-  const [currentChapter, setCurrentChapter] = useState(() => {
-    const saved = localStorage.getItem('lastGraphChapter');
-    return saved ? Number(saved) : 1;
-  });
-  const [elements, setElements] = useState([]);
-  const [maxChapter, setMaxChapter] = useState(9);
+  // 상태 관리
+  const [currentChapter, setCurrentChapter] = useLocalStorageNumber('lastGraphChapter', 1);
   const [hideIsolated, setHideIsolated] = useState(true);
-  const [eventNum, setEventNum] = useState(0);
-  const [maxEventNum, setMaxEventNum] = useState(0);
-  const [graphViewState, setGraphViewState] = useState(null);
-  const [newNodeIds, setNewNodeIds] = useState([]);
-  const [chapterEvents, setChapterEvents] = useState([]);
-  const [isSidebarOpen, setIsSidebarOpen] = useState(true); // 사이드바 열림/닫힘 상태
-  const [edgeLabelVisible, setEdgeLabelVisible] = useState(true); // 간선 라벨 가시성 상태
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [edgeLabelVisible, setEdgeLabelVisible] = useState(true);
+  const [activeTooltip, setActiveTooltip] = useState(null);
+  const [isGraphLoading, setIsGraphLoading] = useState(true);
+  const [isSidebarClosing, setIsSidebarClosing] = useState(false);
+  const [forceClose, setForceClose] = useState(false);
   
-  // 검색 관련 상태 추가
-  const [searchTerm, setSearchTerm] = useState("");
-  const [filteredElements, setFilteredElements] = useState([]);
-  const [fitNodeIds, setFitNodeIds] = useState([]);
-  const [isSearchActive, setIsSearchActive] = useState(false);
+  // refs
+  const cyRef = useRef(null);
+  const selectedEdgeIdRef = useRef(null);
+  const selectedNodeIdRef = useRef(null);
+  const prevChapterNum = useRef();
+  const prevEventNum = useRef();
+  
+  // 데이터 로딩
+  const {
+    elements,
+    newNodeIds,
+    currentChapterData,
+    maxEventNum,
+    eventNum,
+    maxChapter,
+    loading,
+    error
+  } = useGraphDataLoader(filename, currentChapter);
+  
+  // 검색 기능
+  const {
+    searchTerm,
+    isSearchActive,
+    filteredElements,
+    fitNodeIds,
+    isResetFromSearch,
+    suggestions,
+    showSuggestions,
+    selectedIndex,
+    selectSuggestion,
+    handleKeyDown,
+    closeSuggestions,
+    handleSearchSubmit,
+    clearSearch,
+    setSearchTerm,
+  } = useGraphSearch(elements, null, currentChapterData);
 
-  // === 1. 챕터별/이벤트별 모든 relations.json을 미리 누적 구조로 준비 ===
-  const allEventsDataRef = useRef({}); // { [chapterNum]: [ {nodes, edges} ... ] }
-  const allEventFilesRef = useRef({}); // { [chapterNum]: [파일경로, ...] }
-  const allCharactersRef = useRef({}); // { [chapterNum]: [캐릭터배열] }
-
-  // 챕터 변경 시 해당 챕터의 마지막 이벤트 번호를 찾아서 elements 세팅
-  useEffect(() => {
-    const num = String(currentChapter).padStart(1, '');
-    // 해당 챕터의 모든 이벤트 관계 파일 경로 추출
-    const eventFiles = Object.keys(eventModules).filter(path =>
-      path.includes(`chapter${currentChapter}_relationships_event_`)
-    );
-    if (eventFiles.length === 0) {
-      setElements([]);
-      setNewNodeIds([]);
-      return;
-    }
-    // 파일명에서 이벤트 번호 추출, 가장 큰 값 찾기
-    const maxEventNum = Math.max(...eventFiles.map(path => {
-      const match = path.match(/event_(\d+)\.json$/);
-      return match ? Number(match[1]) : 0;
-    }));
-    setMaxEventNum(maxEventNum);
-    // 가장 마지막 이벤트 파일 경로
-    const lastEventFile = eventFiles.find(path => path.includes(`${maxEventNum}.json`));
-    const eventData = lastEventFile ? eventModules[lastEventFile]?.default : null;
-    if (!eventData) {
-      setElements([]);
-      setNewNodeIds([]);
-      return;
-    }
-    // 인물 데이터 로딩
-    const charFile = Object.keys(characterModules).find(path => path.includes(`c_chapter${currentChapter}_0.json`));
-    const charData = charFile ? characterModules[charFile]?.default : null;
-    
-    // elements 변환 (viewer와 동일하게 idToName에 common_name 우선)
-    let idToName = {}, idToDesc = {}, idToMain = {}, idToNames = {};
-    
-    // characters 배열이 있는 경우
-    if (charData?.characters && Array.isArray(charData.characters)) {
-      charData.characters.forEach(c => {
-        const id = String(c.id);
-        idToName[id] = c.common_name || c.name || id;
-        idToDesc[id] = c.description || '';
-        idToMain[id] = c.main_character || false;
-        idToNames[id] = Array.isArray(c.names) ? c.names : [];
-      });
-    }
-    
-    // id1 혹은 id2가 0인 간선과 id1 === id2인 경우의 간선은 제외
-    const filteredRelations = eventData.relations?.filter(rel => {
-      return rel.id1 !== 0 && rel.id2 !== 0 && rel.id1 !== rel.id2;
-    }) || [];
-    
-    const convertedElements = convertRelationsToElements(
-      filteredRelations,
-      idToName,
-      idToDesc,
-      idToMain,
-      idToNames
-    );
-    
-    setElements(convertedElements);
-    setNewNodeIds(convertedElements.filter(el => el.data?.isNew).map(el => el.data.id));
-    
-    // localStorage에 현재 챕터 저장
-    localStorage.setItem('lastGraphChapter', currentChapter.toString());
-  }, [currentChapter]);
-
-  // 사이드바 토글 함수
-  const toggleSidebar = () => {
-    setIsSidebarOpen(!isSidebarOpen);
-  };
-
-  // 챕터 선택 함수
-  const handleChapterSelect = (chapter) => {
-    setCurrentChapter(chapter);
-  };
-
-  // 검색 제출 함수
-  const handleSearchSubmit = (searchTerm) => {
+  // 제안 생성을 위한 별도 함수
+  const handleGenerateSuggestions = useCallback((searchTerm) => {
     setSearchTerm(searchTerm);
-    setIsSearchActive(!!searchTerm.trim());
+  }, [setSearchTerm]);
+
+  // 노드/간선 클릭 시 중앙 정렬 함수
+  const centerElementBetweenSidebars = useCallback((elementId, elementType) => {
+    const cy = cyRef.current;
+    if (!cy) return;
+
+    const element = cy.getElementById(elementId);
+    if (!element.length) return;
+
+    const topBarHeight = 54;
+    const chapterSidebarWidth = isSidebarOpen ? 240 : 60;
+    const tooltipSidebarWidth = 450;
+    const availableGraphWidth = window.innerWidth - chapterSidebarWidth - tooltipSidebarWidth;
+    const availableGraphHeight = window.innerHeight - topBarHeight;
     
-    if (searchTerm.trim()) {
-      const { filteredElements: filtered, fitNodeIds: fitIds } = filterGraphElements(elements, searchTerm);
-      setFilteredElements(filtered);
-      setFitNodeIds(fitIds);
-      
-      if (filtered.length > 0) {
-        // 검색 결과가 있을 때만 처리
-      }
-    } else {
-      // 검색어가 비어있으면 모든 요소 표시
-      setFilteredElements(elements);
-      setFitNodeIds([]);
-      setIsSearchActive(false);
+    const leftOffset = availableGraphWidth * 0.1;
+    const centerX = chapterSidebarWidth + (availableGraphWidth / 2) - leftOffset;
+    
+    const topOffset = availableGraphHeight * 0.15;
+    const centerY = topBarHeight + (availableGraphHeight / 2) - topOffset;
+    
+    const elementPos = element.position();
+    const targetX = centerX - elementPos.x;
+    const targetY = centerY - elementPos.y;
+    
+    cy.animate({
+      pan: { x: targetX, y: targetY },
+      duration: 800,
+      easing: 'ease-out-cubic'
+    });
+  }, [isSidebarOpen]);
+
+  // 특정 좌표를 기준으로 중앙 정렬하는 함수
+  const centerElementAtPosition = useCallback((targetX, targetY) => {
+    const cy = cyRef.current;
+    if (!cy) return;
+
+    const topBarHeight = 54;
+    const chapterSidebarWidth = isSidebarOpen ? 240 : 60;
+    const tooltipSidebarWidth = 450;
+    const availableGraphWidth = window.innerWidth - chapterSidebarWidth - tooltipSidebarWidth;
+    const availableGraphHeight = window.innerHeight - topBarHeight;
+    
+    const leftOffset = availableGraphWidth * 0.1;
+    const centerX = chapterSidebarWidth + (availableGraphWidth / 2) - leftOffset;
+    
+    const topOffset = availableGraphHeight * 0.15;
+    const centerY = topBarHeight + (availableGraphHeight / 2) - topOffset;
+    
+    const panX = centerX - targetX;
+    const panY = centerY - targetY;
+    
+    cy.animate({
+      pan: { x: panX, y: panY },
+      duration: 800,
+      easing: 'ease-out-cubic'
+    });
+  }, [isSidebarOpen]);
+
+  // 툴팁 핸들러
+  const onShowNodeTooltip = useCallback(({ node, nodeCenter, mouseX, mouseY }) => {
+    setActiveTooltip({ type: 'node', id: node.id(), x: mouseX, y: mouseY, data: node.data(), nodeCenter });
+    centerElementBetweenSidebars(node.id(), 'node');
+  }, [centerElementBetweenSidebars]);
+
+  const onShowEdgeTooltip = useCallback(({ edge, absoluteX, absoluteY }) => {
+    setActiveTooltip({
+      type: 'edge',
+      id: edge.id(),
+      x: absoluteX,
+      y: absoluteY,
+      data: edge.data(),
+      sourceNode: edge.source(),
+      targetNode: edge.target(),
+    });
+    
+    const sourcePos = edge.source().position();
+    const targetPos = edge.target().position();
+    const edgeCenterX = (sourcePos.x + targetPos.x) / 2;
+    const edgeCenterY = (sourcePos.y + targetPos.y) / 2;
+    
+    centerElementAtPosition(edgeCenterX, edgeCenterY);
+  }, [centerElementBetweenSidebars, centerElementAtPosition]);
+
+  const onClearTooltip = useCallback(() => {
+    setForceClose(true);
+  }, []);
+
+  // 슬라이드바 애니메이션 시작 함수
+  const handleStartClosing = useCallback(() => {
+    setIsSidebarClosing(true);
+  }, []);
+
+  // 그래프 인터랙션 훅
+  const {
+    tapNodeHandler,
+    tapEdgeHandler,
+    tapBackgroundHandler,
+    clearSelection,
+    clearAll,
+  } = useGraphInteractions({
+    cyRef,
+    onShowNodeTooltip,
+    onShowEdgeTooltip,
+    onClearTooltip,
+    selectedNodeIdRef,
+    selectedEdgeIdRef,
+    strictBackgroundClear: true,
+    isSearchActive,
+    filteredElements,
+  });
+
+  // 그래프 초기화 함수
+  const handleClearGraph = useCallback(() => {
+    clearAll();
+  }, [clearAll]);
+
+  // elements 정렬 및 필터링
+  const sortedElements = useMemo(() => {
+    if (!elements) return [];
+    return [...elements].sort((a, b) => {
+      const aId = a.data?.id || '';
+      const bId = b.data?.id || '';
+      return aId.localeCompare(bId);
+    });
+  }, [elements]);
+
+  const finalElements = useMemo(() => {
+    if (isSearchActive && filteredElements && filteredElements.length > 0) {
+      return filteredElements;
     }
-  };
+    return sortedElements;
+  }, [isSearchActive, filteredElements, sortedElements]);
 
-  // 검색 초기화 함수
-  const clearSearch = () => {
-    setSearchTerm("");
-    setFilteredElements(elements);
-    setFitNodeIds([]);
-    setIsSearchActive(false);
-  };
+  // 그래프 스타일 및 레이아웃
+  const nodeSize = getNodeSize();
+  const edgeStyle = getEdgeStyle();
+  const stylesheet = useMemo(
+    () => createGraphStylesheet(nodeSize, edgeStyle, edgeLabelVisible, 15),
+    [nodeSize, edgeStyle, edgeLabelVisible]
+  );
+  const layout = useMemo(() => getWideLayout(), []);
 
-  // elements가 변경될 때 검색 결과도 업데이트
+  // 로딩 상태 관리
   useEffect(() => {
-    if (isSearchActive && searchTerm.trim()) {
-      const { filteredElements: filtered, fitNodeIds: fitIds } = filterGraphElements(elements, searchTerm);
-      if (filtered.length > 0) {
-        setFilteredElements(filtered);
-        setFitNodeIds(fitIds);
-      } else {
-        setFilteredElements(elements);
-        setFitNodeIds([]);
-      }
-    } else if (!isSearchActive) {
-      setFilteredElements(elements);
+    prevChapterNum.current = currentChapter;
+    prevEventNum.current = eventNum;
+  }, [currentChapter, eventNum]);
+
+  useEffect(() => {
+    if (elements) {
+      setIsGraphLoading(false);
     }
-  }, [elements]); // searchTerm, isSearchActive 제거
+  }, [elements]);
+
+  // 사이드바 상태 변경 시 활성 요소 재중앙 정렬
+  useEffect(() => {
+    if (activeTooltip && cyRef.current && !isSidebarClosing) {
+      const elementId = activeTooltip.id;
+      const elementType = activeTooltip.type;
+      
+      const animationDuration = 700;
+      setTimeout(() => {
+        centerElementBetweenSidebars(elementId, elementType);
+      }, animationDuration + 100);
+    }
+  }, [isSidebarOpen, centerElementBetweenSidebars]);
+
+  // 이벤트 핸들러
+  const toggleSidebar = useCallback(() => {
+    setIsSidebarOpen(prev => !prev);
+  }, []);
+
+  const handleChapterSelect = useCallback((chapter) => {
+    if (chapter !== currentChapter) {
+      setCurrentChapter(chapter);
+    }
+  }, [currentChapter, setCurrentChapter]);
+
+  const toggleHideIsolated = useCallback(() => {
+    setHideIsolated(prev => !prev);
+  }, []);
+
+  const toggleEdgeLabel = useCallback(() => {
+    setEdgeLabelVisible(prev => !prev);
+  }, []);
+
+  const handleBackToViewer = useCallback(() => {
+    navigate(`/user/viewer/${filename}`);
+  }, [navigate, filename]);
+
+  const handleMouseEnter = useCallback((e) => {
+    Object.assign(e.target.style, isolatedButtonStyles.hover);
+  }, []);
+
+  const handleMouseLeave = useCallback((e) => {
+    Object.assign(e.target.style, isolatedButtonStyles.default);
+  }, []);
+
+  // 슬라이드바 외부 영역 클릭 시 닫힘 핸들러
+  const handleGlobalClick = useCallback((e) => {
+    if (!activeTooltip || isSidebarClosing) return;
+    
+    const sidebarElement = document.querySelector('[data-testid="graph-sidebar"]') || 
+                          document.querySelector('.graph-sidebar') ||
+                          e.target.closest('[data-testid="graph-sidebar"]') ||
+                          e.target.closest('.graph-sidebar');
+    
+    if (sidebarElement && sidebarElement.contains(e.target)) {
+      return;
+    }
+    
+    e.stopPropagation();
+    clearAll();
+    setTimeout(() => {
+      setForceClose(true);
+    }, 100);
+  }, [activeTooltip, isSidebarClosing, clearAll]);
+
+  // 그래프 영역 클릭 핸들러
+  const handleCanvasClick = useCallback((e) => {
+    if (e.target === e.currentTarget) {
+      e.stopPropagation();
+      
+      if (activeTooltip && !isSidebarClosing) {
+        clearAll();
+        setTimeout(() => {
+          setForceClose(true);
+        }, 100);
+      }
+    }
+  }, [activeTooltip, isSidebarClosing, clearAll]);
+
+  // 전역 클릭 이벤트 리스너 등록
+  useEffect(() => {
+    if (activeTooltip && !isSidebarClosing) {
+      const handleDocumentClick = (e) => {
+        const graphCanvas = e.target.closest('.graph-canvas-area');
+        if (graphCanvas) return;
+        
+        handleGlobalClick(e);
+      };
+      
+      const timeoutId = setTimeout(() => {
+        document.addEventListener('click', handleDocumentClick, true);
+      }, 10);
+      
+      return () => {
+        clearTimeout(timeoutId);
+        document.removeEventListener('click', handleDocumentClick, true);
+      };
+    }
+  }, [activeTooltip, isSidebarClosing, handleGlobalClick]);
+
+  // 챕터 목록 메모이제이션
+  const chapterList = useMemo(() => 
+    Array.from({ length: maxChapter }, (_, i) => i + 1), 
+    [maxChapter]
+  );
+
+  // 로딩 상태 렌더링
+  if (isGraphLoading) {
+    return (
+      <div style={containerStyles.loading}>
+        <div>그래프 로딩 중...</div>
+        <div style={{ fontSize: '14px', color: '#64748b', marginTop: '8px' }}>
+          관계 데이터를 불러오고 있습니다.
+        </div>
+      </div>
+    );
+  }
+
+  // 데이터 없음 상태 렌더링
+  if (!elements || elements.length === 0) {
+    return (
+      <div style={containerStyles.error}>
+        <div>데이터가 없습니다</div>
+        <div style={{ fontSize: '14px', color: '#64748b', marginTop: '8px' }}>
+          이 챕터에는 표시할 관계 데이터가 없습니다.
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div style={{ width: '100vw', height: '100vh', background: '#f4f7fb', overflow: 'hidden', display: 'flex' }}>
-      {/* 사이드바 */}
+    <div style={{ width: '100vw', height: '100vh', background: '#f4f7fb', overflow: 'hidden' }}>
+      {/* 상단 컨트롤 바 */}
+      <div style={{ 
+        ...topBarStyles.container, 
+        position: 'fixed', 
+        top: 0, 
+        left: isSidebarOpen ? '240px' : '60px',
+        right: 0,
+        transition: `left ${ANIMATION_VALUES.DURATION.SLOW} ${ANIMATION_VALUES.EASE_OUT}`
+      }}>
+        <div style={topBarStyles.leftSection}>
+          <GraphControls
+            searchTerm={searchTerm}
+            onSearchSubmit={handleSearchSubmit}
+            onClearSearch={clearSearch}
+            onGenerateSuggestions={handleGenerateSuggestions}
+            suggestions={suggestions}
+            showSuggestions={showSuggestions}
+            selectedIndex={selectedIndex}
+            onSelectSuggestion={selectSuggestion}
+            onKeyDown={handleKeyDown}
+            onCloseSuggestions={closeSuggestions}
+            isSearchActive={isSearchActive}
+          />
+          
+          <button
+            onClick={toggleHideIsolated}
+            style={isolatedButtonStyles.button(hideIsolated)}
+            onMouseEnter={handleMouseEnter}
+            onMouseLeave={handleMouseLeave}
+            title={hideIsolated ? '독립 인물을 표시합니다' : '독립 인물을 숨깁니다'}
+          >
+            <div style={isolatedButtonStyles.dot(hideIsolated)} />
+            {hideIsolated ? '독립 인물 표시' : '독립 인물 숨기기'}
+          </button>
+          
+          <EdgeLabelToggle
+            visible={edgeLabelVisible}
+            onToggle={toggleEdgeLabel}
+          />
+        </div>
+
+        <div style={topBarStyles.rightSection}>
+        </div>
+      </div>
+
+      {/* 뷰어로 돌아가기 버튼 */}
+      <div style={{
+        position: 'fixed',
+        top: '12px',
+        right: '24px',
+        zIndex: 10002,
+        pointerEvents: 'auto'
+      }}>
+        <button
+          onClick={handleBackToViewer}
+          style={{
+            ...topBarStyles.backButton,
+            background: 'rgba(255, 255, 255, 0.95)',
+            backdropFilter: 'blur(2px)',
+            boxShadow: '0 2px 8px rgba(0, 0, 0, 0.15)',
+            border: '1.5px solid rgba(227, 230, 239, 0.8)'
+          }}
+          onMouseEnter={handleMouseEnter}
+          onMouseLeave={handleMouseLeave}
+        >
+          <FaTimes />
+          뷰어로 돌아가기
+        </button>
+      </div>
+
+      {/* 챕터 사이드바 */}
       <div 
+        data-testid="chapter-sidebar"
         style={{
-          width: isSidebarOpen ? '240px' : '60px',
+          ...sidebarStyles.container(isSidebarOpen, ANIMATION_VALUES),
+          position: 'fixed',
+          top: 0,
+          left: 0,
           height: '100vh',
-          background: '#fff',
-          borderRight: '1px solid #e5e7eb',
-          boxShadow: '2px 0 8px rgba(0,0,0,0.06)',
-          transition: 'width 0.4s cubic-bezier(0.4, 0, 0.2, 1)',
-          display: 'flex',
-          flexDirection: 'column',
-          zIndex: 1000,
+          marginTop: 0
         }}
       >
-        {/* 사이드바 헤더 */}
-        <div style={{
-          height: '54px',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'flex-start',
-          gap: '12px',
-          padding: '0 16px',
-          borderBottom: '1px solid #e5e7eb',
-          background: '#f8f9fc',
-        }}>
+        <div style={sidebarStyles.header}>
           <button
             onClick={toggleSidebar}
-            style={{
-              width: '32px',
-              height: '32px',
-              borderRadius: '6px',
-              border: '1px solid #e3e6ef',
-              background: '#fff',
-              color: '#6C8EFF',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              cursor: 'pointer',
-              transition: 'all 0.18s',
-              outline: 'none',
-            }}
+            style={sidebarStyles.toggleButton(ANIMATION_VALUES)}
             title={isSidebarOpen ? '사이드바 접기' : '사이드바 펼치기'}
           >
             {isSidebarOpen ? <FaChevronLeft /> : <FaBars />}
           </button>
-          <span style={{
-            fontSize: '20px',
-            fontWeight: '600',
-            color: '#22336b',
-            textAlign: 'left',
-            opacity: isSidebarOpen ? 1 : 0,
-            transform: isSidebarOpen ? 'translateX(0)' : 'translateX(-20px)',
-            transition: isSidebarOpen 
-              ? 'all 0.4s cubic-bezier(0.4, 0, 0.2, 1) 0.2s' 
-              : 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-            whiteSpace: 'nowrap',
-            overflow: 'hidden',
-            width: isSidebarOpen ? 'auto' : '0px',
-            display: 'inline-block',
-            minWidth: isSidebarOpen ? 'auto' : '0px',
-          }}>
+          <span style={sidebarStyles.title(isSidebarOpen, ANIMATION_VALUES)}>
             챕터 선택
           </span>
         </div>
 
-        {/* 챕터 목록 */}
-        <div style={{
-          flex: 1,
-          padding: '16px 0',
-          overflowY: 'auto',
-        }}>
-          {Array.from({ length: maxChapter }, (_, i) => i + 1).map((chapter) => (
+        <div style={sidebarStyles.chapterList}>
+          {chapterList.map((chapter) => (
             <button
               key={chapter}
               onClick={() => handleChapterSelect(chapter)}
-              style={{
-                width: '100%',
-                height: '48px',
-                padding: '0 16px',
-                border: 'none',
-                background: currentChapter === chapter ? '#EEF2FF' : 'transparent',
-                color: currentChapter === chapter ? '#22336b' : '#6C8EFF',
-                fontSize: '14px',
-                fontWeight: currentChapter === chapter ? '600' : '500',
-                textAlign: 'left',
-                cursor: 'pointer',
-                transition: 'all 0.18s',
-                borderLeft: currentChapter === chapter ? '4px solid #6C8EFF' : '4px solid transparent',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: isSidebarOpen ? 'flex-start' : 'center',
-                position: 'relative',
-              }}
+              style={sidebarStyles.chapterButton(currentChapter === chapter, isSidebarOpen, ANIMATION_VALUES)}
               title={!isSidebarOpen ? `Chapter ${chapter}` : ''}
             >
-                              <span style={{
-                  width: '24px',
-                  height: '24px',
-                  borderRadius: '50%',
-                  background: currentChapter === chapter ? '#6C8EFF' : '#e3e6ef',
-                  color: currentChapter === chapter ? '#fff' : '#6C8EFF',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontSize: '12px',
-                  fontWeight: '600',
-                  marginRight: '12px',
-                  transition: 'all 0.3s ease',
-                  flexShrink: 0,
-                  minWidth: '24px',
-                  minHeight: '24px',
-                }}>
-                  {chapter}
-                </span>
-                <span style={{
-                  opacity: isSidebarOpen ? 1 : 0,
-                  transform: isSidebarOpen ? 'translateX(0)' : 'translateX(-30px)',
-                  whiteSpace: 'nowrap',
-                  overflow: 'hidden',
-                  width: isSidebarOpen ? 'auto' : '0px',
-                  transition: isSidebarOpen 
-                    ? 'all 0.4s cubic-bezier(0.4, 0, 0.2, 1) 0.2s' 
-                    : 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-                  display: 'inline-block',
-                  minWidth: isSidebarOpen ? 'auto' : '0px',
-                }}>
-                  Chapter {chapter}
-                </span>
+              <span style={sidebarStyles.chapterNumber(currentChapter === chapter, ANIMATION_VALUES)}>
+                {chapter}
+              </span>
+              <span style={sidebarStyles.chapterText(isSidebarOpen, ANIMATION_VALUES)}>
+                Chapter {chapter}
+              </span>
             </button>
           ))}
         </div>
       </div>
 
-      {/* 메인 콘텐츠 영역 */}
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-        {/* 상단바: 검색, 독립 인물 버튼, 닫기 버튼 */}
-        <div style={{
-          width: '100%',
-          background: '#fff',
-          boxShadow: '0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.04)',
-          zIndex: 10001,
-          display: 'flex',
-          flexDirection: 'column',
-          paddingTop: 0,
-          paddingLeft: 0,
-          paddingRight: 0,
-        }}
-        onWheel={e => e.preventDefault()}
-        >
-          {/* 상단바: 독립 인물 버튼 + 검색 + 닫기 버튼 */}
-          <div style={{ 
-            display: 'flex', 
-            flexDirection: 'row', 
-            alignItems: 'center', 
-            justifyContent: 'space-between', 
-            gap: 12, 
-            paddingLeft: 16, 
-            paddingRight: 16, 
-            paddingTop: 0, 
-            paddingBottom: 0,
-            height: 54, 
-            width: '100%',
-            background: '#fff',
-          }}>
-            {/* 왼쪽 영역: 검색 컨트롤 + 독립 인물 토글 */}
-            <div style={{ 
-              display: 'flex', 
-              flexDirection: 'row', 
-              alignItems: 'center', 
-              gap: 12,
-              flex: 1,
-            }}>
-              
-              {/* 그래프 검색 기능 */}
-              <GraphControls
-                onSearchSubmit={handleSearchSubmit}
-                searchTerm={searchTerm}
-                isSearchActive={isSearchActive}
-                clearSearch={clearSearch}
-                elements={elements}
-              />
-              
-              {/* 간선 라벨 스위치 토글 */}
-              <EdgeLabelToggle
-                isVisible={edgeLabelVisible}
-                onToggle={() => setEdgeLabelVisible(!edgeLabelVisible)}
-              />
-              
-              {/* 독립 인물 버튼 */}
-              <button
-                onClick={() => setHideIsolated(!hideIsolated)}
-                style={{
-                  height: 36,
-                  padding: '0 16px',
-                  borderRadius: 8,
-                  border: '1.5px solid #e3e6ef',
-                  background: hideIsolated ? '#f8f9fc' : '#EEF2FF',
-                  color: hideIsolated ? '#6C8EFF' : '#22336b',
-                  fontSize: 13,
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                  transition: 'all 0.2s ease',
-                  outline: 'none',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 6,
-                  boxShadow: hideIsolated ? 'none' : '0 2px 8px rgba(108,142,255,0.15)',
-                  minWidth: '140px',
-                  justifyContent: 'center',
+      {/* 그래프 영역 */}
+      <div style={{
+        position: 'fixed',
+        top: 0,
+        left: isSidebarOpen ? '240px' : '60px',
+        right: 0,
+        bottom: 0,
+        transition: `left ${ANIMATION_VALUES.DURATION.SLOW} ${ANIMATION_VALUES.EASE_OUT}`,
+        overflow: 'hidden'
+      }}>
+        <div style={graphStyles.graphPageContainer}>
+          <div style={graphStyles.graphPageInner}>
+            {(activeTooltip || isSidebarClosing) && (
+              <GraphSidebar
+                activeTooltip={activeTooltip}
+                onClose={() => {
+                  setActiveTooltip(null);
+                  setForceClose(false);
+                  setIsSidebarClosing(false);
                 }}
-                title={hideIsolated ? '독립 인물을 표시합니다' : '독립 인물을 숨깁니다'}
-              >
-                <div style={{
-                  width: 8,
-                  height: 8,
-                  borderRadius: '50%',
-                  background: hideIsolated ? '#6C8EFF' : '#22336b',
-                  opacity: hideIsolated ? 0.6 : 1,
-                }} />
-                {hideIsolated ? '독립 인물 표시' : '독립 인물 숨기기'}
-              </button>
-            </div>
-            
-            {/* 중앙 영역: 여백 */}
-            <div style={{ flex: 1 }} />
-            
-            {/* 오른쪽 영역: 뷰어로 돌아가기 (상대적으로 왼쪽으로 이동) */}
-            <div style={{ 
-              display: 'flex', 
-              flexDirection: 'row', 
-              alignItems: 'center', 
-              gap: 8,
-              marginRight: '28px',
-            }}>
-              <button
-                onClick={() => navigate(`/user/viewer/${filename}`)}
-                style={{
-                  height: 36,
-                  width: 36,
-                  borderRadius: 8,
-                  border: '1.5px solid #e3e6ef',
-                  background: '#fff',
-                  color: '#22336b',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  cursor: 'pointer',
-                  transition: 'all 0.2s ease',
-                  outline: 'none',
-                  fontSize: 14,
-                  boxShadow: '0 2px 4px rgba(0,0,0,0.05)',
-                }}
-                title="뷰어로 돌아가기"
-                onMouseEnter={(e) => {
-                  e.target.style.background = '#f8f9fc';
-                  e.target.style.color = '#6C8EFF';
-                  e.target.style.transform = 'scale(1.05)';
-                }}
-                onMouseLeave={(e) => {
-                  e.target.style.background = '#fff';
-                  e.target.style.color = '#22336b';
-                  e.target.style.transform = 'scale(1)';
-                }}
-              >
-                <FaTimes />
-              </button>
-            </div>
-          </div>
-        </div>
-
-        {/* 그래프 본문 */}
-        <div className="flex-1 relative overflow-hidden" style={{ width: '100%', height: '100%' }}>
-          {maxEventNum > 0 ? (
-            elements.length > 0 ? (
-              <RelationGraphMain 
-                elements={isSearchActive && filteredElements.length > 0 ? filteredElements : elements} 
-                inViewer={false}
-                fullScreen={true}
-                graphViewState={graphViewState}
-                setGraphViewState={setGraphViewState}
+                onStartClosing={handleStartClosing}
+                onClearGraph={handleClearGraph}
+                forceClose={forceClose}
                 chapterNum={currentChapter}
                 eventNum={eventNum}
-                hideIsolated={hideIsolated}
-                maxEventNum={maxEventNum}
-                newNodeIds={newNodeIds}
                 maxChapter={maxChapter}
-                edgeLabelVisible={edgeLabelVisible}
+                filename={filename}
+                elements={elements}
+                isSearchActive={isSearchActive}
+                filteredElements={filteredElements}
+                searchTerm={searchTerm}
+              />
+            )}
+            <div className="graph-canvas-area" onClick={handleCanvasClick} style={graphStyles.graphArea}>
+              <CytoscapeGraphUnified
+                elements={finalElements}
+                newNodeIds={newNodeIds}
+                stylesheet={stylesheet}
+                layout={layout}
+                cyRef={cyRef}
+                nodeSize={nodeSize}
                 fitNodeIds={fitNodeIds}
                 searchTerm={searchTerm}
                 isSearchActive={isSearchActive}
                 filteredElements={filteredElements}
+                onShowNodeTooltip={onShowNodeTooltip}
+                onShowEdgeTooltip={onShowEdgeTooltip}
+                onClearTooltip={onClearTooltip}
+                selectedNodeIdRef={selectedNodeIdRef}
+                selectedEdgeIdRef={selectedEdgeIdRef}
+                strictBackgroundClear={true}
+                isResetFromSearch={isResetFromSearch}
               />
-            ) : (
-              <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, color: '#6C8EFF' }}>
-                그래프 데이터를 불러오는 중...
-              </div>
-            )
-          ) : (
-            <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, color: '#6C8EFF' }}>
-              이벤트 정보를 불러오는 중...
             </div>
-          )}
+          </div>
         </div>
       </div>
     </div>

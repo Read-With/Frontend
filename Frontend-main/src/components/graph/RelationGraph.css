@@ -10,10 +10,10 @@
 
 /* 검색 하이라이트 스타일 */
 .search-highlight {
-  background-color: #FFD700 !important;
-  border-color: #FFA500 !important;
+  background-color:  blue !important;
+  border-color: blue !important;
   border-width: 3px !important;
-  box-shadow: 0 0 15px rgba(255, 215, 0, 0.6) !important;
+  box-shadow: 0 0 15px rgba(0, 0, 255, 0.6) !important;
   animation: search-pulse 2s infinite;
 }
 
@@ -26,6 +26,35 @@
   }
   100% {
     box-shadow: 0 0 15px rgba(255, 215, 0, 0.6);
+  }
+}
+
+/* 챕터 전환 애니메이션 */
+@keyframes fadeInOut {
+  0% {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  20% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  80% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.05);
+  }
+}
+
+@keyframes spin {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
   }
 }
 
@@ -55,17 +84,17 @@
   overflow: hidden;
   min-height: 100%;
   min-width: 100%;
-  transition: min-width 0.3s ease, min-height 0.3s ease;
+  transition: min-width 0.02s ease, min-height 0.02s ease;
 }
 
-/* 그래프 캔버스 영역 - 부드러운 이동을 위한 설정 */
+/* 그래프 캔버스 영역 - 매우 빠른 이동을 위한 설정 */
 .graph-canvas-area {
-  transition: all 0.2s ease-out;
+  transition: all 0.02s ease-out;
 }
 
-/* 노드 드래그 시 부드러운 이동 */
+/* 노드 드래그 시 매우 빠른 이동 */
 .graph-canvas-area .cytoscape-container {
-  transition: transform 0.15s ease-out;
+  transition: transform 0.02s ease-out;
 }
 
 .graph-container.clicked {
@@ -83,9 +112,6 @@
     background-color: #f7f9fc;
   }
 }
-
-/* 그래프 컨트롤 */
-/* .graph-controls 및 하위 스타일 전체 삭제 */
 
 /* 필터 그룹 */
 .filter-group {
@@ -337,8 +363,8 @@
 
 /* highlighted 노드 강조 */
 node.highlighted {
-  border: 3px solid #4caf50 !important;
-  filter: drop-shadow(0 0 10px rgba(76, 175, 80, 0.5));
+  border: 3px solid #3b82f6;
+  filter: drop-shadow(0 0 10px rgba(59, 130, 246, 0.5));
 }
 
 .edge-tooltip .close-btn {
@@ -359,12 +385,13 @@ html, body {
 
 .graph-page-container {
   width: 100vw;
-  height: 100vh;
+  height: 100vh; /* 전체 화면 높이 사용 */
   display: flex;
   justify-content: center;
   align-items: center;
   background: #f4f7fb;
   overflow: hidden;
+  margin-top: 0; /* 상단 마진 제거 */
 }
 
 .graph-page-bg {
@@ -434,8 +461,8 @@ html, body {
 
 /* 그래프 단독 페이지에서 슬라이드바가 열려있을 때 그래프 영역 조정 */
 .graph-page-container .graph-canvas-area {
-  width: calc(100% - 400px) !important;
-  max-width: calc(100% - 400px) !important;
+  width: calc(100% - 450px) !important;
+  max-width: calc(100% - 450px) !important;
 }
 
 .graph-controls-area {
@@ -589,15 +616,15 @@ html, body {
 /* 그래프 화면에만 overflow hidden 적용 */
 .graph-container-wrapper {
   overflow: hidden !important;
-  height: 100vh !important;
+  height: 100vh !important; /* 전체 화면 높이 사용 */
   width: 100vw !important;
   position: fixed;
-  top: 0;
+  top: 0; /* 맨 위에서 시작 */
   left: 0;
 }
 
-/* 타임라인, 북마크 등 다른 페이지에서는 스크롤 허용 */
-.timeline-view, .bookmarks-view {
+/* 북마크 등 다른 페이지에서는 스크롤 허용 */
+.bookmarks-view {
   overflow-y: auto !important;
 }
 
@@ -823,7 +850,7 @@ html, body {
 
 /* Edge Tooltip 스타일 */
 .edge-tooltip-container {
-  min-width: 400px;
+  min-width: 450px;
   max-width: 600px;
 }
 
@@ -1186,7 +1213,7 @@ html, body {
 }
 
 .cy-node-label, .node-label {
-  font-family: 'Pretendard', 'Noto Sans KR', 'Inter', 'Segoe UI', 'Arial', sans-serif;
+  font-family: var(--font-family-primary);
   font-weight: 600;
   font-size: 15px;
   letter-spacing: -0.5px;
@@ -1298,116 +1325,7 @@ html, body {
   margin-top: 8px;
 }
 
-/* epub 뷰어 툴바 버튼 스타일 */
-.epub-toolbar-btn {
-  display: flex;
-  align-items: center;
-  gap: 0.45em;
-  font-size: 14px;
-  font-weight: 500;
-  padding: 8px 16px;
-  border-radius: 2px;
-  border: 1.2px solid #e3e6ef;
-  background: #f8f9fc;
-  color: #42506b;
-  box-shadow: 0 2px 8px rgba(108, 142, 255, 0.07);
-  cursor: pointer;
-  transition: all 0.2s;
-  outline: none;
-  min-width: 60px;
-}
-.epub-toolbar-btn--blue {
-  background: #6C8EFF;
-  color: #fff;
-  border: 1.2px solid #6C8EFF;
-  box-shadow: 0 4px 16px rgba(108, 142, 255, 0.13);
-}
-.epub-toolbar-btn--purple {
-  background: linear-gradient(100deg, #a259e6 0%, #7f6fff 60%, #6fa7ff 100%);
-  color: #fff;
-  border: 1.2px solid #a259e6;
-  box-shadow: 0 4px 16px rgba(162,89,230,0.13);
-}
-.epub-toolbar-btn--gray {
-  background: #f8f9fc;
-  color: #42506b;
-  border: 1.2px solid #e3e6ef;
-  box-shadow: 0 2px 8px rgba(108, 142, 255, 0.07);
-}
-.epub-toolbar-btn--red {
-  background: linear-gradient(100deg, #f87171 0%, #fca5a5 60%, #ffeaea 100%);
-  color: #c82333;
-  border: 1.2px solid #f87171;
-  box-shadow: 0 4px 16px rgba(248,113,113,0.13);
-}
-.epub-toolbar-btn:active {
-  transform: scale(0.97);
-}
-.epub-toolbar-btn:focus {
-  box-shadow: 0 0 0 2px #6C8EFF33;
-}
-.epub-toolbar-btn--blue:hover {
-  background: #5A7BFF;
-  color: #fff;
-}
-.epub-toolbar-btn--gray:hover {
-  background: #e3e6ef;
-  color: #42506b;
-}
-.epub-toolbar-btn--purple:hover {
-  filter: brightness(1.08);
-}
-.epub-toolbar-btn--red:hover {
-  filter: brightness(1.08);
-}
 
-.epub-bookmark-btn {
-  display: block;
-  width: 100%;
-  padding: 8px 12px;
-  border-radius: 6px;
-  background: #f8f9fc;
-  color: #42506b;
-  font-size: 14px;
-  font-weight: 500;
-  border: 1px solid #e3e6ef;
-  margin-bottom: 4px;
-  cursor: pointer;
-  transition: background 0.18s, color 0.18s, box-shadow 0.18s;
-  text-align: left;
-}
-.epub-bookmark-btn:hover {
-  background: #e3e6ef;
-  color: #22336b;
-  box-shadow: 0 2px 8px rgba(108, 142, 255, 0.10);
-  text-decoration: none;
-}
-
-.epub-close-btn {
-  position: absolute;
-  top: 4px;
-  right: 20px;
-  background: #fff;
-  color: #22336b;
-  border: none;
-  border-radius: 8px;
-  box-shadow: 0 2px 10px rgba(0,0,0,0.10);
-  width: 40px;
-  height: 40px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 22px;
-  cursor: pointer;
-  transition: background 0.18s, color 0.18s, box-shadow 0.18s, transform 0.13s;
-  z-index: 100;
-  margin-left: 0;
-}
-.epub-close-btn:hover {
-  background: #f8f9fa;
-  color: #6C8EFF;
-  transform: scale(1.08);
-}
 
 .cytoscape-graph .cy-node {
   cursor: pointer;
@@ -1564,7 +1482,7 @@ html, body {
 .tooltip-front,
 .tooltip-back {
   backface-visibility: hidden;
-  transition: transform 0.6s ease-in-out;
+  transition: transform 0.2s ease-in-out;
   width: 100%;
   height: 100%;
   position: absolute;
@@ -1683,55 +1601,20 @@ html, body {
   background: #a0a4ad;
 }
 
-@keyframes spin {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
-}
-
 .appear {
-  animation: fadeInScale 0.000001s cubic-bezier(0.22, 1, 0.36, 1);
+  animation: fadeInScale 0.0001s cubic-bezier(0.22, 1, 0.36, 1);
 }
 @keyframes fadeInScale {
   from { opacity: 0.999; transform: scale(0.999);}
   to { opacity: 1; transform: scale(1);}
 }
 
-.cytoscape-node-appear {
-  box-shadow: 0 0 0 0 rgba(34,197,94,0.7), 0 0 0 8px rgba(34,197,94,0.3);
-  animation: node-ripple 0.7s cubic-bezier(0.4,0,0.2,1);
-  z-index: 10000 !important;
-}
 
-@keyframes node-ripple {
-  0% {
-    box-shadow: 0 0 0 0 rgba(34,197,94,0.7), 0 0 0 8px rgba(34,197,94,0.3);
-  }
-  70% {
-    box-shadow: 0 0 0 16px rgba(34,197,94,0.0), 0 0 0 32px rgba(34,197,94,0.0);
-  }
-  100% {
-    box-shadow: 0 0 0 0 rgba(34,197,94,0.0), 0 0 0 0 rgba(34,197,94,0.0);
-  }
-}
 
-.cytoscape-ripple {
-  position: absolute;
-  border-radius: 100%;
-  background: rgba(108, 142, 255, 0.25);
-  pointer-events: none;
-  transform: scale(0);
-  animation: cytoscape-ripple-anim 1.05s cubic-bezier(0.23, 1, 0.32, 1) forwards;
-  z-index: 99999;
-}
-@keyframes cytoscape-ripple-anim {
-  to {
-    transform: scale(2);
-    opacity: 0;
-  }
-}
+
 
 .cytoscape-fade {
-  transition: opacity 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: opacity 0.02s cubic-bezier(0.4, 0, 0.2, 1);
   opacity: 1;
 }
 .cytoscape-fade-hidden {
@@ -1745,7 +1628,7 @@ html, body {
   position: relative;
   width: 100%;
   height: 100%;
-  transition: transform 0.6s cubic-bezier(0.4,0,0.2,1);
+  transition: transform 0.2s cubic-bezier(0.4,0,0.2,1);
   transform-style: preserve-3d;
 }
 .edge-tooltip-flip.flipped .edge-tooltip-flip-inner {
@@ -1765,7 +1648,7 @@ html, body {
 
 /* 노드 튕김 효과 */
 .bounce-effect {
-  animation: bounce 0.3s ease-out;
+  animation: bounce 0.1s ease-out;
 }
 
 @keyframes bounce {
@@ -1778,4 +1661,107 @@ html, body {
   100% {
     transform: scale(1);
   }
+}
+
+/* Ripple 효과 */
+.ripple-effect {
+  position: absolute;
+  width: 100px;
+  height: 100px;
+  pointer-events: none;
+  overflow: visible;
+}
+
+.ripple-effect::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 0;
+  height: 0;
+  border-radius: 50%;
+  background-color: #1976d2;
+  transform: translate(-50%, -50%);
+  opacity: 0.6;
+  animation: ripple 0.5s ease-out;
+  box-shadow: 0 0 10px rgba(25, 118, 210, 0.2);
+}
+
+@keyframes ripple {
+  0% {
+    width: 0;
+    height: 0;
+    opacity: 0.6;
+  }
+  50% {
+    opacity: 0.4;
+  }
+  100% {
+    width: 100px;
+    height: 100px;
+    opacity: 0;
+  }
+}
+
+/* 툴팁 애니메이션 */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes scaleIn {
+  from {
+    transform: scale(0.9);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+/* 사이드바 애니메이션 */
+@keyframes slideInFromRight {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+/* 사이드바 스크롤바 스타일링 */
+.sidebar-content::-webkit-scrollbar {
+  width: 6px;
+}
+
+.sidebar-content::-webkit-scrollbar-track {
+  background: #f8f9fa;
+  border-radius: 3px;
+}
+
+.sidebar-content::-webkit-scrollbar-thumb {
+  background: #d1d5db;
+  border-radius: 3px;
+  transition: background-color 0.2s ease;
+}
+
+.sidebar-content::-webkit-scrollbar-thumb:hover {
+  background: #9ca3af;
+}
+
+/* 사이드바 호버 효과 */
+.sidebar-card {
+  transition: all 0.2s ease;
+}
+
+.sidebar-card:hover {
+  box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+  transform: translateY(-1px);
 }

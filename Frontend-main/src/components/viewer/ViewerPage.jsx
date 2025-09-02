@@ -2,20 +2,15 @@ import React, { useRef, useState, useEffect, useMemo } from "react";
 import { useParams, useLocation, useNavigate } from "react-router-dom";
 import ViewerLayout from "./ViewerLayout";
 import EpubViewer from "./epub/EpubViewer";
-import BookmarkPanel from "./epub/BookmarkPanel";
+import BookmarkPanel from "./bookmark/BookmarkPanel";
 import ViewerSettings from "./epub/ViewerSettings";
-import { loadBookmarks, saveBookmarks } from "./epub/BookmarkManager";
+import { loadBookmarks, saveBookmarks } from "./bookmark/BookmarkManager";
 import { toast, ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
-import RelationGraphMain from "../graph/RelationGraphMain";
-import GraphControls from "../graph/GraphControls";
-
 import cytoscape from "cytoscape";
-import CytoscapeGraphPortalProvider from "../graph/CytoscapeGraphPortalProvider";
+import { CytoscapeGraphPortalProvider } from "../graph/CytoscapeGraphUnified";
 import GraphContainer from "../graph/GraphContainer";
-import EdgeLabelToggle from "../common/EdgeLabelToggle";
 import ViewerTopBar from "./ViewerTopBar";
-
 
 const eventRelationModules = import.meta.glob(
   "../../data/gatsby/chapter*_relationships_event_*.json",
@@ -296,6 +291,134 @@ function filterIsolatedNodes(elements, hideIsolated) {
 const loading = false;
 const isDataReady = true;
 
+// GraphSplitArea 컴포넌트를 ViewerPage 함수 전에 정의
+function GraphSplitArea({
+  currentCharIndex,
+  hideIsolated,
+  setHideIsolated,
+  edgeLabelVisible,
+  setEdgeLabelVisible,
+  handleFitView,
+  currentChapter,
+  setCurrentChapter,
+  maxChapter,
+  loading,
+  isDataReady,
+  showGraph,
+  graphFullScreen,
+  setGraphFullScreen,
+  navigate,
+  filename,
+  book,
+  viewerRef,
+  currentEvent,
+  prevValidEvent,
+  prevEvent,
+  events,
+  graphDiff,
+  prevElements,
+  currentElements,
+}) {
+  const graphContainerRef = React.useRef(null);
+  const [searchState, setSearchState] = React.useState({
+    searchTerm: "",
+    isSearchActive: false,
+    filteredElements: [],
+    fitNodeIds: [],
+    currentChapterData: null
+  });
+
+  // elements 상태 추가
+  const [elements, setElements] = React.useState([]);
+
+  const handleSearchStateChange = React.useCallback((newState) => {
+    setSearchState(prevState => {
+      // 이전 상태와 비교하여 실제로 변경되었을 때만 업데이트
+      if (JSON.stringify(prevState) !== JSON.stringify(newState)) {
+        return newState;
+      }
+      return prevState;
+    });
+  }, []);
+
+  // GraphContainer에서 elements 업데이트
+  const handleElementsUpdate = React.useCallback((newElements) => {
+    setElements(newElements);
+  }, []);
+
+  // 검색 제출 함수
+  const handleSearchSubmit = React.useCallback((searchTerm) => {
+    if (graphContainerRef.current && graphContainerRef.current.handleSearchSubmit) {
+      graphContainerRef.current.handleSearchSubmit(searchTerm);
+    }
+  }, []);
+
+  // 검색 초기화 함수
+  const handleClearSearch = React.useCallback(() => {
+    if (graphContainerRef.current && graphContainerRef.current.clearSearch) {
+      graphContainerRef.current.clearSearch();
+    }
+  }, []);
+
+  return (
+    <div
+      className="h-full w-full flex flex-col"
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        height: "100%",
+        minHeight: 0,
+        width: "100%",
+        overflow: "hidden",
+        alignItems: "stretch",
+        justifyContent: "stretch",
+        boxSizing: "border-box",
+        padding: 0,
+      }}
+    >
+      <ViewerTopBar
+        navigate={navigate}
+        filename={filename}
+        currentChapter={currentChapter}
+        setCurrentChapter={setCurrentChapter}
+        maxChapter={maxChapter}
+        book={book}
+        viewerRef={viewerRef}
+        currentEvent={currentEvent}
+        prevValidEvent={prevValidEvent}
+        prevEvent={prevEvent}
+        events={events}
+        graphFullScreen={graphFullScreen}
+        setGraphFullScreen={setGraphFullScreen}
+        edgeLabelVisible={edgeLabelVisible}
+        setEdgeLabelVisible={setEdgeLabelVisible}
+        hideIsolated={hideIsolated}
+        setHideIsolated={setHideIsolated}
+        searchTerm={searchState.searchTerm}
+        isSearchActive={searchState.isSearchActive}
+        elements={elements}
+        onSearchSubmit={handleSearchSubmit}
+        clearSearch={handleClearSearch}
+        currentChapterData={searchState.currentChapterData}
+      />
+      
+      {/* 그래프 본문 */}
+      <div style={{ flex: 1, position: "relative", minHeight: 0, minWidth: 0 }}>
+        <GraphContainer
+          ref={graphContainerRef}
+          currentPosition={currentCharIndex}
+          currentEvent={currentEvent || prevValidEvent}
+          currentChapter={currentChapter}
+          edgeLabelVisible={edgeLabelVisible}
+          onSearchStateChange={handleSearchStateChange}
+          onElementsUpdate={handleElementsUpdate}
+          filename={filename}
+        />
+      </div>
+    </div>
+  );
+}
+
 const ViewerPage = ({ darkMode: initialDarkMode }) => {
   const { filename } = useParams();
   const location = useLocation();
@@ -517,11 +640,11 @@ const ViewerPage = ({ darkMode: initialDarkMode }) => {
 
 
 
-  // currentChapter가 바뀔 때 currentEvent, prevEvent, elements 등도 초기화
+  // currentChapter가 바뀔 때 currentEvent, prevEvent만 초기화 (elements는 누적 유지)
   useEffect(() => {
     setCurrentEvent(null);
     setPrevEvent(null);
-    setElements([]); // 그래프도 초기화
+    // setElements([]); // 그래프 초기화 제거 - 누적 유지
   }, [currentChapter]);
 
   // Load data when currentChapter changes
@@ -565,13 +688,29 @@ const ViewerPage = ({ darkMode: initialDarkMode }) => {
       allImportance
     );
     return generatedElements;
-  }, [currentChapter, events, characterData]);
+  }, [events, characterData]); // currentChapter 의존성 제거
 
   // === [수정] elements: 데이터 준비/이벤트별 분리 ===
-  // 1. 데이터 준비되면 fullElements를 보여줌
+  // 1. 데이터 준비되면 fullElements를 보여줌 (챕터 변경 시에만)
   useEffect(() => {
-    if (isDataReady && !currentEvent) {
-      setElements(fullElements);
+    if (isDataReady && !currentEvent && fullElements.length > 0) {
+      // 챕터 변경 시에만 elements 설정 (누적 유지)
+      setElements(prevElements => {
+        // 기존 elements와 새로운 elements를 합침
+        const combinedElements = [...prevElements, ...fullElements];
+        // 중복 제거
+        const uniqueElements = [];
+        const seenIds = new Set();
+        for (let i = combinedElements.length - 1; i >= 0; i--) {
+          const element = combinedElements[i];
+          const elementId = element.data?.id || element.data?.source + '-' + element.data?.target;
+          if (!seenIds.has(elementId)) {
+            seenIds.add(elementId);
+            uniqueElements.unshift(element);
+          }
+        }
+        return uniqueElements;
+      });
       setLoading(false);
     }
   }, [isDataReady, currentEvent, fullElements]);
@@ -663,9 +802,10 @@ const ViewerPage = ({ darkMode: initialDarkMode }) => {
         return el;
       });
 
+    // 이벤트별 필터링이므로 현재 이벤트의 요소들만 표시 (누적하지 않음)
     setElements(sorted);
     setLoading(false);
-  }, [currentEvent, currentChapter, hideIsolated, fullElements, isDataReady]);
+  }, [currentEvent, hideIsolated, fullElements, isDataReady]); // currentChapter 의존성 제거
 
   // === [추가] 마지막 이벤트 등장 노드/간선 위치만 저장 및 이벤트별 적용 ===
   // 마지막 이벤트에서 등장한 노드/간선 위치만 저장
@@ -1148,12 +1288,12 @@ const ViewerPage = ({ darkMode: initialDarkMode }) => {
     }
   }, [elements]);
 
-  // 그래프 로딩 중일 때도 공백으로 보이게 처리
+  // 그래프 로딩 중일 때도 공백으로 보이게 처리 (챕터 변경 시에는 누적 유지)
   useEffect(() => {
-    if (isGraphLoading) {
+    if (isGraphLoading && !currentChapter) {
       setElements([]);
     }
-  }, [isGraphLoading]);
+  }, [isGraphLoading, currentChapter]);
 
   // 1) events 데이터 확인
   useEffect(() => {
@@ -1293,97 +1433,3 @@ const ViewerPage = ({ darkMode: initialDarkMode }) => {
 };
 
 export default ViewerPage;
-
-function GraphSplitArea({
-  currentCharIndex,
-  hideIsolated,
-  setHideIsolated,
-  edgeLabelVisible,
-  setEdgeLabelVisible,
-  handleFitView,
-  currentChapter,
-  setCurrentChapter,
-  maxChapter,
-  loading,
-  isDataReady,
-  showGraph,
-  graphFullScreen,
-  setGraphFullScreen,
-  navigate,
-  filename,
-  book,
-  viewerRef,
-  currentEvent,
-  prevValidEvent,
-  prevEvent,
-  events,
-  graphDiff,
-  prevElements,
-  currentElements,
-}) {
-  const graphContainerRef = React.useRef(null);
-  const [searchState, setSearchState] = React.useState({
-    searchTerm: "",
-    isSearchActive: false,
-    filteredElements: [],
-    fitNodeIds: []
-  });
-
-  const handleSearchStateChange = React.useCallback((newState) => {
-    setSearchState(newState);
-  }, []);
-
-  return (
-    <div
-      className="h-full w-full flex flex-col"
-      style={{
-        display: "flex",
-        flexDirection: "column",
-        height: "100%",
-        minHeight: 0,
-        width: "100%",
-        overflow: "hidden",
-        alignItems: "stretch",
-        justifyContent: "stretch",
-        boxSizing: "border-box",
-        padding: 0,
-      }}
-    >
-      <ViewerTopBar
-        navigate={navigate}
-        filename={filename}
-        currentChapter={currentChapter}
-        setCurrentChapter={setCurrentChapter}
-        maxChapter={maxChapter}
-        book={book}
-        viewerRef={viewerRef}
-        currentEvent={currentEvent}
-        prevValidEvent={prevValidEvent}
-        prevEvent={prevEvent}
-        events={events}
-        graphFullScreen={graphFullScreen}
-        setGraphFullScreen={setGraphFullScreen}
-        edgeLabelVisible={edgeLabelVisible}
-        setEdgeLabelVisible={setEdgeLabelVisible}
-        hideIsolated={hideIsolated}
-        setHideIsolated={setHideIsolated}
-        onSearchSubmit={(searchTerm) => graphContainerRef.current?.handleSearchSubmit(searchTerm)}
-        searchTerm={searchState.searchTerm}
-        isSearchActive={searchState.isSearchActive}
-        clearSearch={() => graphContainerRef.current?.clearSearch()}
-      />
-      
-      {/* 그래프 본문 */}
-      <div style={{ flex: 1, position: "relative", minHeight: 0, minWidth: 0 }}>
-        <GraphContainer
-          ref={graphContainerRef}
-          currentPosition={currentCharIndex}
-          currentEvent={currentEvent || prevValidEvent}
-          currentChapter={currentChapter}
-          edgeLabelVisible={edgeLabelVisible}
-          onSearchStateChange={handleSearchStateChange}
-        />
-      </div>
-    </div>
-  );
-}

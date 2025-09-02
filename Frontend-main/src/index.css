@@ -6,17 +6,21 @@
 @tailwind components;
 @tailwind utilities;
 
+/* 전역 CSS 변수 정의 */
+:root {
+  --font-family-primary: 'Noto Serif KR', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
+  --font-family-mono: source-code-pro, Menlo, Monaco, Consolas, 'Courier New', monospace;
+}
+
 html, body {
   margin: 0;
   padding: 0;
   overflow-anchor: none;  /* 스크롤 위치 자동 이동 방지 */
-  font-family: 'Noto Serif KR', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
-    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
-    sans-serif;
+  font-family: var(--font-family-primary);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
 code {
-  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New', monospace;
+  font-family: var(--font-family-mono);
 }

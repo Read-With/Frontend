@@ -4,73 +4,93 @@ import React, {
   forwardRef,
   useEffect,
   useState,
+  useMemo,
+  useCallback,
 } from 'react';
 import ePub from 'epubjs';
 
-// glob import 경로를 상대경로로 수정
+// 이벤트 데이터 모듈 로드
 const eventRelationModules = import.meta.glob('../../../data/gatsby/chapter*_events.json', { eager: true });
 
-// getEventsForChapter 함수 정의
-function getEventsForChapter(chapter) {
-  const num = String(chapter);
-  // 1. 이벤트 본문 데이터 추출
-  const textFilePath = Object.keys(eventRelationModules).find(path => path.includes(`chapter${num}_events.json`));
-  if (!textFilePath) {
-    // 파일을 찾을 수 없음
+// 챕터별 이벤트 데이터 캐시
+const eventsCache = new Map();
+
+// 챕터별 이벤트 데이터 가져오기 (메모이제이션 적용)
+const getEventsForChapter = (chapter) => {
+  const chapterNum = String(chapter);
+  
+  // 캐시된 데이터가 있으면 반환
+  if (eventsCache.has(chapterNum)) {
+    return eventsCache.get(chapterNum);
   }
-  const textArray = textFilePath ? eventRelationModules[textFilePath]?.default : [];
 
-  // 2. 각 event에 대해 event_id, eventNum, chapter 세팅
-  const eventsWithMeta = textArray.map(event => {
-    const eventId = (event.event_id === undefined || event.event_id === null) ? 0 : event.event_id;
-    return {
-      ...event,
-      event_id: eventId,
-      eventNum: eventId,
-      chapter: Number(chapter)
-    };
-  });
-  
-  // 3. 현재 챕터의 이벤트만 필터링 (이전 챕터의 마지막 이벤트 제외)
-  const currentChapterEvents = eventsWithMeta.filter(event => {
-    return event.chapter === Number(chapter);
-  });
-  
-  return currentChapterEvents;
-}
-
-// 글자 수를 정확하게 세는 함수 추가
-const countCharacters = (text, element) => {
-  if (!text) return 0;
-  
-  // 불필요한 요소 제외
-  if (element) {
-    // Project Gutenberg 관련 요소 제외
-    if (element.closest('.pg-boilerplate') || 
-        element.closest('.pgheader') ||
-        element.closest('.toc') ||
-        element.closest('.dedication') ||
-        element.closest('.epigraph')) {
-      return 0;
+  try {
+    // 이벤트 파일 찾기
+    const textFilePath = Object.keys(eventRelationModules).find(path => 
+      path.includes(`chapter${chapterNum}_events.json`)
+    );
+    
+    if (!textFilePath) {
+      eventsCache.set(chapterNum, []);
+      return [];
     }
+
+    const textArray = eventRelationModules[textFilePath]?.default || [];
+
+    // 이벤트 메타데이터 추가
+    const eventsWithMeta = textArray.map(event => ({
+      ...event,
+      event_id: event.event_id ?? 0,
+      eventNum: event.event_id ?? 0,
+      chapter: Number(chapter)
+    }));
+
+    // 현재 챕터 이벤트만 필터링
+    const currentChapterEvents = eventsWithMeta.filter(event => 
+      event.chapter === Number(chapter)
+    );
+
+    // 캐시에 저장
+    eventsCache.set(chapterNum, currentChapterEvents);
+    return currentChapterEvents;
+  } catch (error) {
+
+    eventsCache.set(chapterNum, []);
+    return [];
   }
-
-  // 특수문자, 공백, 줄바꿈 제거하고 영문자만 카운트
-  const cleanedText = text
-    .replace(/[\s\n\r\t]/g, '')  // 공백, 줄바꿈 등 제거
-    .replace(/[^a-zA-Z]/g, '');  // 영문자만 남김
-
-  return cleanedText.length;
 };
 
-// 단어 수를 정확하게 세는 함수 추가
-function countWords(text) {
-  return text
-    .replace(/[\n\r\t]+/g, ' ')
-    .split(/[^가-힣a-zA-Z0-9]+/)
-    .filter(word => word.length > 0)
-    .length;
-}
+// 텍스트 처리 유틸리티 함수들
+const textUtils = {
+  // 글자 수 카운트 (불필요한 요소 제외)
+  countCharacters: (text, element) => {
+    if (!text) return 0;
+    
+    // 불필요한 요소 제외
+    if (element) {
+      const excludedClasses = ['.pg-boilerplate', '.pgheader', '.toc', '.dedication', '.epigraph'];
+      if (excludedClasses.some(cls => element.closest(cls))) {
+        return 0;
+      }
+    }
+
+    // 영문자만 카운트
+    return text
+      .replace(/[\s\n\r\t]/g, '')
+      .replace(/[^a-zA-Z]/g, '')
+      .length;
+  },
+
+  // 단어 수 카운트
+  countWords: (text) => {
+    if (!text) return 0;
+    return text
+      .replace(/[\n\r\t]+/g, ' ')
+      .split(/[^가-힣a-zA-Z0-9]+/)
+      .filter(word => word.length > 0)
+      .length;
+  }
+};
 
 const EpubViewer = forwardRef(
   (
@@ -80,40 +100,41 @@ const EpubViewer = forwardRef(
     const viewerRef = useRef(null);
     const bookRef = useRef(null);
     const renditionRef = useRef(null);
-    const styleElementRef = useRef(null);
-    const blobUrlRef = useRef(null);
+    const currentChapterCharsRef = useRef(0);
+    const currentChapterRef = useRef(1);
+    const chapterPageCharsRef = useRef(new Map());
+
     const [loading, setLoading] = useState(false);
     const [reloading, setReloading] = useState(false);
     const [error, setError] = useState(null);
     const [currentPath, setCurrentPath] = useState(null);
-    const [chapterCharCounts, setChapterCharCounts] = useState({});
     const [isNavigating, setIsNavigating] = useState(false);
     const [navigationError, setNavigationError] = useState(null);
 
-    // 현재 챕터의 누적 글자 수를 저장
-    const currentChapterCharsRef = useRef(0);
-    // 현재 챕터 번호 저장
-    const currentChapterRef = useRef(1);
-    // 챕터별 페이지 글자 수를 저장하는 Map
-    const chapterPageCharsRef = useRef(new Map());
+    // 메모이제이션된 값들
+    const { epubPath, cleanPath, storageKeys, pageMode, showGraph } = useMemo(() => {
+      const rawPath = book.path || book.filename;
+      const path = rawPath.startsWith('/') ? rawPath : '/' + rawPath;
+      const clean = rawPath.replace(/^\/+/, '');
+      
+      return {
+        epubPath: path,
+        cleanPath: clean,
+        storageKeys: {
+          lastCFI: `readwith_${clean}_lastCFI`,
+          nextPage: `readwith_nextPagePending`,
+          prevPage: `readwith_prevPagePending`,
+          chapter: `readwith_${clean}_prevChapter`
+        },
+        pageMode: settings?.pageMode || 'double',
+        showGraph: settings?.showGraph || false
+      };
+    }, [book.path, book.filename, settings?.pageMode, settings?.showGraph]);
 
-    const rawPath = book.path || book.filename;
-    const epubPath = rawPath.startsWith('/') ? rawPath : '/' + rawPath;
-    const cleanPath = rawPath.replace(/^\/+/, '');
-
-    const LOCAL_STORAGE_KEY = `readwith_${cleanPath}_lastCFI`;
-    const NEXT_PAGE_FLAG = `readwith_nextPagePending`;
-    const PREV_PAGE_FLAG = `readwith_prevPagePending`;
-    const CHAPTER_KEY = `readwith_${cleanPath}_prevChapter`;
-
-    // 페이지 모드와 그래프 표시 여부 확인
-    const pageMode = settings?.pageMode || 'double'; // 'single' 또는 'double'
-    const showGraph = settings?.showGraph || false; // true 또는 false
-
-    // 스프레드 모드 결정 함수
-    const getSpreadMode = () => {
+    // 스프레드 모드 결정 함수 (메모이제이션)
+    const getSpreadMode = useCallback(() => {
       return pageMode === 'single' ? 'none' : 'always';
-    };
+    }, [pageMode]);
 
     const smoothReload = (type = 'next') => {
       setReloading(type);
@@ -141,7 +162,7 @@ const EpubViewer = forwardRef(
           await rendition.display(targetCfi);
         } else {
           localStorage.setItem(
-            direction === 'next' ? NEXT_PAGE_FLAG : PREV_PAGE_FLAG,
+            direction === 'next' ? storageKeys.nextPage : storageKeys.prevPage,
             'true'
           );
           smoothReload(direction);
@@ -179,7 +200,7 @@ const EpubViewer = forwardRef(
       for (let i = 0; i < paragraphs.length; i++) {
         const paragraph = paragraphs[i];
         const paragraphText = paragraph.textContent;
-        const paragraphChars = countCharacters(paragraphText, paragraph);
+        const paragraphChars = textUtils.countCharacters(paragraphText, paragraph);
         
         // 현재 단락까지의 글자 수만 누적
         if (i <= currentParagraphNum) {
@@ -553,7 +574,7 @@ const EpubViewer = forwardRef(
 
             onCurrentPageChange?.(pageNum);
             onProgressChange?.(Math.round((locIdx / totalPages) * 100));
-            localStorage.setItem(LOCAL_STORAGE_KEY, cfi);
+            localStorage.setItem(storageKeys.lastCFI, cfi);
             
                          // 현재 챕터 감지 및 업데이트
              let currentChapter = 1;
@@ -656,7 +677,7 @@ const EpubViewer = forwardRef(
             }
           });
 
-          const savedCfi = localStorage.getItem(LOCAL_STORAGE_KEY);
+          const savedCfi = localStorage.getItem(storageKeys.lastCFI);
           const displayTarget = savedCfi || bookInstance.locations.cfiFromLocation(0);
           await rendition.display(displayTarget);
 
@@ -664,12 +685,12 @@ const EpubViewer = forwardRef(
           const location = await rendition.currentLocation();
           rendition.emit('relocated', location);
 
-          if (localStorage.getItem(NEXT_PAGE_FLAG) === 'true') {
-            localStorage.removeItem(NEXT_PAGE_FLAG);
+          if (localStorage.getItem(storageKeys.nextPage) === 'true') {
+            localStorage.removeItem(storageKeys.nextPage);
             setTimeout(() => rendition.next(), 200);
           }
-          if (localStorage.getItem(PREV_PAGE_FLAG) === 'true') {
-            localStorage.removeItem(PREV_PAGE_FLAG);
+          if (localStorage.getItem(storageKeys.prevPage) === 'true') {
+            localStorage.removeItem(storageKeys.prevPage);
             setTimeout(() => rendition.prev(), 200);
           }
 
@@ -703,8 +724,8 @@ const EpubViewer = forwardRef(
 
     // 앱이 처음 로드될 때 로컬 스토리지 초기화
     useEffect(() => {
-      localStorage.setItem(CHAPTER_KEY, '1');
-    }, []);
+      localStorage.setItem(storageKeys.chapter, '1');
+    }, [storageKeys.chapter]);
 
     // --- 전체 epub 글자수 및 챕터별 글자수 계산 후 localStorage 저장 useEffect ---
     useEffect(() => {
@@ -741,31 +762,52 @@ const EpubViewer = forwardRef(
       importAll();
     }, []);
 
-    return (
-      <div className="w-full h-full relative flex items-center justify-center">
-        {/* 이동 실패 안내 메시지 */}
-        {navigationError && (
-          <div style={{ position: 'absolute', top: 16, left: '50%', transform: 'translateX(-50%)', zIndex: 1000, background: '#ffefef', color: '#d32f2f', padding: '8px 18px', borderRadius: 8, fontWeight: 600, fontSize: 16, boxShadow: '0 2px 8px rgba(0,0,0,0.08)' }}>
-            {navigationError}
+    // 생동감 있는 로딩 컴포넌트
+    const LoadingComponent = ({ message, isError = false }) => (
+      <div className="flex flex-col items-center justify-center space-y-6 absolute inset-0 z-50 pointer-events-none animate-fade-in">
+        {!isError ? (
+          <div className="text-center">
+            <span className="text-gray-700 font-medium text-lg">epub 파일을 불러오고 있습니다...</span>
+          </div>
+        ) : (
+          // 에러 상태
+          <div className="flex flex-col items-center space-y-4 animate-shake">
+            <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center">
+              <div className="w-8 h-8 bg-red-500 rounded-full flex items-center justify-center text-white font-bold">
+                !
+              </div>
+            </div>
+            <div className="bg-red-50/95 border border-red-200 rounded-xl px-6 py-4 text-center">
+              <span className="text-red-700 font-medium">{message}</span>
+            </div>
           </div>
         )}
-        <div className="flex flex-col items-center justify-center space-y-2 absolute inset-0 z-50 pointer-events-none">
-          {!reloading && loading && (
-            <p className="text-center text-base text-white bg-black bg-opacity-60 px-4 py-2 rounded">
-              로딩 중...
-            </p>
-        )}
-          {!reloading && error && (
-            <p className="text-center text-base text-red-300 bg-black bg-opacity-60 px-4 py-2 rounded">
-              {error}
-            </p>
-          )}
+      </div>
+    );
+
+    // 네비게이션 오류 메시지 컴포넌트  
+    const NavigationError = ({ message }) => (
+      <div className="fixed top-4 left-1/2 transform -translate-x-1/2 z-50 animate-fade-in">
+        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-2 rounded-lg shadow-lg font-medium">
+          {message}
         </div>
+      </div>
+    );
+
+    return (
+      <div className="w-full h-full relative flex items-center justify-center">
+        {/* 네비게이션 오류 메시지 */}
+        {navigationError && <NavigationError message={navigationError} />}
+        
+        {/* 로딩 및 오류 상태 */}
+        {!reloading && loading && <LoadingComponent message="책을 불러오는 중..." />}
+        {!reloading && error && <LoadingComponent message={error} isError />}
+        
+        {/* EPUB 뷰어 */}
         <div
           ref={viewerRef}
+          className="w-full h-full transition-colors duration-300"
           style={{
-            width: '100%',
-            height: '100%',
             minHeight: '400px',
             backgroundColor: settings?.theme === 'dark' ? '#121212' : 
                              settings?.theme === 'sepia' ? '#f4ecd8' : 'white',
