@@ -13,7 +13,7 @@ const GraphContainer = forwardRef(({
   filename,
   ...props
 }, ref) => {
-  // useGraphDataLoader 훅 사용으로 데이터 로딩 로직 통합
+
   const {
     elements,
     newNodeIds,

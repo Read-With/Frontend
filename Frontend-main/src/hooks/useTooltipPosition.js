@@ -147,7 +147,6 @@ export function useTooltipPosition(initialX, initialY) {
     isDragging,
     tooltipRef,
     handleMouseDown,
-    // 공통 위치 계산 함수들
     getContainerInfo,
     getViewportInfo,
     calculateCytoscapePosition,

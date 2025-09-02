@@ -93,7 +93,7 @@ function GraphSidebar({
       onClearGraph();
     }
     if (onStartClosing) {
-      onStartClosing(); // 외부에서 애니메이션 시작 알림
+      onStartClosing();
     }
     
     // 애니메이션 시작과 동시에 상태 초기화
@@ -104,7 +104,7 @@ function GraphSidebar({
       onClose();
       setIsClosing(false);
       setIsVisible(false);
-    }, 700); // transition: "right 0.7s" 에 맞춤
+    }, 700);
   };
   // 관계가 없을 때 안내 메시지 표시
   if (hasNoRelations) {

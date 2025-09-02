@@ -13,7 +13,6 @@ import { getNodeSize, getEdgeStyle, createGraphStylesheet } from "../../utils/st
 import { graphStyles } from "../../utils/styles/styles";
 import useGraphInteractions from "../../hooks/useGraphInteractions";
 
-// 상수 정의
 const MAX_EDGE_LABEL_LENGTH = 15;
 
 const ViewerRelationGraph = ({
@@ -69,7 +68,6 @@ const ViewerRelationGraph = ({
     setActiveTooltip(null);
   }, []);
 
-  // useGraphInteractions 훅 사용
   const {
     tapNodeHandler,
     tapEdgeHandler,
@@ -95,7 +93,6 @@ const ViewerRelationGraph = ({
     [nodeSize, edgeStyle, edgeLabelVisible]
   );
 
-  // 그래프 중앙 정렬
   useEffect(() => {
     if (cyRef.current) {
       cyRef.current.center();

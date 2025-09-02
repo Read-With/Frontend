@@ -7,7 +7,7 @@ function GraphControls({
   searchTerm,
   onSearchSubmit,
   onClearSearch,
-  onGenerateSuggestions, // 제안 생성을 위한 새로운 prop
+  onGenerateSuggestions,
   suggestions = [],
   showSuggestions = false,
   selectedIndex = -1,
@@ -36,7 +36,6 @@ function GraphControls({
 
   // 제안 표시 조건: 외부 제안이 있고 내부 검색어가 2글자 이상일 때
   useEffect(() => {
-    // 선택된 인물이 있으면 드롭다운 숨기기 (검색 결과만 표시)
     if (internalSearchTerm && suggestions && suggestions.length > 0) {
       const hasSelectedSuggestion = suggestions.some(s => s.label === internalSearchTerm);
       if (hasSelectedSuggestion) {
@@ -56,7 +55,6 @@ function GraphControls({
     }
   }, [suggestions, internalSearchTerm]);
 
-  // 검색 초기화 함수
   const handleClearSearch = useCallback(() => {
     onClearSearch();
   }, [onClearSearch]);
@@ -66,26 +64,22 @@ function GraphControls({
     const newValue = e.target.value;
     setInternalSearchTerm(newValue);
     
-    // 검색어가 2글자 이상일 때 제안만 생성 (실제 검색은 하지 않음)
     if (newValue.trim().length >= 2) {
       onGenerateSuggestions(newValue);
     } else {
-      // 검색어가 2글자 미만일 때 제안 숨기기
       setInternalShowSuggestions(false);
       setInternalSelectedIndex(-1);
     }
   }, [onGenerateSuggestions]);
 
-  // 키보드 이벤트 처리 (Enter 키만 처리)
+  // 키보드 이벤트 처리
   const handleKeyDown = useCallback((e) => {
     if (e.key === 'Enter') {
       e.preventDefault();
-      // Enter 키를 눌렀을 때만 실제 검색 실행
       if (internalSearchTerm.trim().length >= 2) {
         onSearchSubmit(internalSearchTerm);
       }
     } else {
-      // 다른 키는 기존 제안 네비게이션 처리
       onKeyDown(e, (selectedTerm) => {
         if (selectedTerm) {
           onSearchSubmit(selectedTerm);
@@ -94,7 +88,6 @@ function GraphControls({
     }
   }, [internalSearchTerm, onSearchSubmit, onKeyDown]);
   
-  // 외부 클릭 감지
   const dropdownRef = useClickOutside(() => {
     onCloseSuggestions();
   });
@@ -102,28 +95,19 @@ function GraphControls({
   // 제안 선택 함수
   const handleSelectSuggestion = useCallback((suggestion) => {
     if (suggestion && suggestion.label) {
-      // 선택된 인물 이름을 검색창에 설정
       setInternalSearchTerm(suggestion.label);
-      
-      // 드롭다운 완전히 숨기기
       setInternalShowSuggestions(false);
       setInternalSelectedIndex(-1);
-      
-      // 선택된 인물로 실제 검색 실행
       onSearchSubmit(suggestion.label);
     }
   }, [onSearchSubmit]);
 
-  // 폼 제출 처리 함수
   const handleFormSubmit = useCallback((e) => {
     e.preventDefault();
     
     if (internalSearchTerm.trim()) {
-      // 검색어가 있을 때: 초기화 버튼으로 동작
       handleClearSearch();
     } else {
-      // 검색어가 없을 때: 검색 버튼으로 동작 (하지만 검색할 내용이 없음)
-      // 실제로는 아무 동작 안함
       return;
     }
   }, [internalSearchTerm, handleClearSearch]);
@@ -135,18 +119,14 @@ function GraphControls({
     const trimmedTerm = internalSearchTerm.trim();
     
     if (trimmedTerm.length >= 2) {
-      // 검색어가 2글자 이상일 때: 검색 실행
       onSearchSubmit(trimmedTerm);
     } else if (trimmedTerm.length === 1) {
-      // 검색어가 1글자일 때: 아무 동작 안함
       return;
     } else {
-      // 검색어가 없을 때: 아무 동작 안함
       return;
     }
   }, [internalSearchTerm, onSearchSubmit]);
 
-  // 초기화 버튼 클릭 핸들러
   const handleResetButtonClick = useCallback((e) => {
     e.preventDefault();
     handleClearSearch();
@@ -170,7 +150,6 @@ function GraphControls({
             e.target.style.borderColor = '#6C8EFF';
             e.target.style.background = '#fff';
             e.target.style.boxShadow = '0 0 0 2px rgba(108, 142, 255, 0.1)';
-            // 2글자 이상일 때만 드롭다운 표시
             if (internalSearchTerm.trim().length >= 2) {
               setInternalShowSuggestions(true);
             }
@@ -217,7 +196,7 @@ function GraphControls({
         </button>
       </form>
 
-      {/* 드롭다운 조건 강화 - 검색어가 있을 때만 표시 */}
+      {/* 드롭다운 - 검색어가 있을 때만 표시 */}
       {internalShowSuggestions && internalSearchTerm && internalSearchTerm.trim().length >= 2 && (
         <div style={{
           position: 'absolute',

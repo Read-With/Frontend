@@ -63,11 +63,11 @@ const isolatedButtonStyles = {
 const layoutStyles = {
   container: {
     width: '100vw',
-    height: '100vh', // 전체 화면 높이 사용
+    height: '100vh',
     background: '#f4f7fb',
     overflow: 'hidden',
     display: 'flex',
-    marginTop: 0 // 상단 마진 제거
+    marginTop: 0
   },
   mainContent: {
     flex: 1,
@@ -131,12 +131,11 @@ function RelationGraphWrapper() {
     closeSuggestions,
     handleSearchSubmit,
     clearSearch,
-    setSearchTerm, // setSearchTerm 추가
+    setSearchTerm,
   } = useGraphSearch(elements, null, currentChapterData);
 
-  // 제안 생성을 위한 별도 함수 (실제 검색은 실행하지 않음)
+  // 제안 생성을 위한 별도 함수
   const handleGenerateSuggestions = useCallback((searchTerm) => {
-    // 제안 생성을 위해 searchTerm만 업데이트 (실제 검색은 실행하지 않음)
     setSearchTerm(searchTerm);
   }, [setSearchTerm]);
 
@@ -148,38 +147,22 @@ function RelationGraphWrapper() {
     const element = cy.getElementById(elementId);
     if (!element.length) return;
 
-    // 상단바 높이
     const topBarHeight = 54;
-    
-    // 챕터 사이드바 너비를 완전히 계산 (펼침/닫힘 상태 고려)
     const chapterSidebarWidth = isSidebarOpen ? 240 : 60;
-    
-    // 노드/간선 슬라이드바가 펼쳐진 후의 영역을 완전히 계산
     const tooltipSidebarWidth = 450;
-    
-    // 슬라이드바가 펼쳐진 후의 그래프 영역 너비를 완전히 계산 (상단바 제외)
     const availableGraphWidth = window.innerWidth - chapterSidebarWidth - tooltipSidebarWidth;
-    
-    // 슬라이드바가 펼쳐진 후의 그래프 영역 높이를 완전히 계산 (상단바 제외)
     const availableGraphHeight = window.innerHeight - topBarHeight;
     
-    // 그래프 영역의 정중앙 위치를 완전히 계산 (슬라이드바 영역 제외, 상단바 제외)
-    // 왼쪽으로 약간 조정 (전체 너비의 10%만큼 왼쪽으로)
     const leftOffset = availableGraphWidth * 0.1;
     const centerX = chapterSidebarWidth + (availableGraphWidth / 2) - leftOffset;
     
-    // 위쪽으로 약간 조정 (전체 높이의 15%만큼 위쪽으로)
     const topOffset = availableGraphHeight * 0.15;
     const centerY = topBarHeight + (availableGraphHeight / 2) - topOffset;
     
-    // 요소의 현재 위치
     const elementPos = element.position();
-    
-    // 요소를 완전히 계산된 중앙으로 이동시키기 위한 pan 계산
     const targetX = centerX - elementPos.x;
-    const targetY = centerY - elementPos.y; // Y축도 상단바를 고려한 중앙으로 이동
+    const targetY = centerY - elementPos.y;
     
-    // 부드러운 애니메이션으로 이동 (완전히 계산된 위치로)
     cy.animate({
       pan: { x: targetX, y: targetY },
       duration: 800,
@@ -192,35 +175,21 @@ function RelationGraphWrapper() {
     const cy = cyRef.current;
     if (!cy) return;
 
-    // 상단바 높이
     const topBarHeight = 54;
-    
-    // 챕터 사이드바 너비를 완전히 계산 (펼침/닫힘 상태 고려)
     const chapterSidebarWidth = isSidebarOpen ? 240 : 60;
-    
-    // 노드/간선 슬라이드바가 펼쳐진 후의 영역을 완전히 계산
     const tooltipSidebarWidth = 450;
-    
-    // 슬라이드바가 펼쳐진 후의 그래프 영역 너비를 완전히 계산 (상단바 제외)
     const availableGraphWidth = window.innerWidth - chapterSidebarWidth - tooltipSidebarWidth;
-    
-    // 슬라이드바가 펼쳐진 후의 그래프 영역 높이를 완전히 계산 (상단바 제외)
     const availableGraphHeight = window.innerHeight - topBarHeight;
     
-    // 그래프 영역의 정중앙 위치를 완전히 계산 (슬라이드바 영역 제외, 상단바 제외)
-    // 왼쪽으로 약간 조정 (전체 너비의 10%만큼 왼쪽으로)
     const leftOffset = availableGraphWidth * 0.1;
     const centerX = chapterSidebarWidth + (availableGraphWidth / 2) - leftOffset;
     
-    // 위쪽으로 약간 조정 (전체 높이의 15%만큼 위쪽으로)
     const topOffset = availableGraphHeight * 0.15;
     const centerY = topBarHeight + (availableGraphHeight / 2) - topOffset;
     
-    // 목표 좌표를 중앙으로 이동시키기 위한 pan 계산
     const panX = centerX - targetX;
     const panY = centerY - targetY;
     
-    // 부드러운 애니메이션으로 이동 (완전히 계산된 위치로)
     cy.animate({
       pan: { x: panX, y: panY },
       duration: 800,
@@ -231,8 +200,6 @@ function RelationGraphWrapper() {
   // 툴팁 핸들러
   const onShowNodeTooltip = useCallback(({ node, nodeCenter, mouseX, mouseY }) => {
     setActiveTooltip({ type: 'node', id: node.id(), x: mouseX, y: mouseY, data: node.data(), nodeCenter });
-    
-    // 노드 클릭 시 중앙 정렬
     centerElementBetweenSidebars(node.id(), 'node');
   }, [centerElementBetweenSidebars]);
 
@@ -247,23 +214,16 @@ function RelationGraphWrapper() {
       targetNode: edge.target(),
     });
     
-    // 간선 클릭 시 간선의 중점(1:1 내분점)을 기준으로 중앙 정렬
     const sourcePos = edge.source().position();
     const targetPos = edge.target().position();
-    
-    // 간선의 중점 계산 (1:1 내분점)
     const edgeCenterX = (sourcePos.x + targetPos.x) / 2;
     const edgeCenterY = (sourcePos.y + targetPos.y) / 2;
     
-    // 간선의 중점을 기준으로 중앙 정렬
     centerElementAtPosition(edgeCenterX, edgeCenterY);
   }, [centerElementBetweenSidebars, centerElementAtPosition]);
 
   const onClearTooltip = useCallback(() => {
-    // X 버튼 클릭 시 애니메이션 시작
     setForceClose(true);
-    // activeTooltip은 GraphSidebar의 애니메이션 완료 후 제거됨
-    // 여기서는 즉시 제거하지 않음
   }, []);
 
   // 슬라이드바 애니메이션 시작 함수
@@ -290,7 +250,7 @@ function RelationGraphWrapper() {
     filteredElements,
   });
 
-  // 그래프 초기화 함수 (clearAll이 정의된 후에 정의)
+  // 그래프 초기화 함수
   const handleClearGraph = useCallback(() => {
     clearAll();
   }, [clearAll]);
@@ -321,9 +281,8 @@ function RelationGraphWrapper() {
   );
   const layout = useMemo(() => getWideLayout(), []);
 
-  // 로딩 상태 관리 (챕터 변경 시에는 로딩 상태를 활성화하지 않음)
+  // 로딩 상태 관리
   useEffect(() => {
-    // 챕터 변경 시에는 로딩 상태를 활성화하지 않음 (깜빡임 방지)
     prevChapterNum.current = currentChapter;
     prevEventNum.current = eventNum;
   }, [currentChapter, eventNum]);
@@ -334,20 +293,18 @@ function RelationGraphWrapper() {
     }
   }, [elements]);
 
-  // 사이드바 상태 변경 시 활성 요소 재중앙 정렬 (챕터 사이드바 상태 변경 시에만)
+  // 사이드바 상태 변경 시 활성 요소 재중앙 정렬
   useEffect(() => {
     if (activeTooltip && cyRef.current && !isSidebarClosing) {
       const elementId = activeTooltip.id;
       const elementType = activeTooltip.type;
       
-      // 챕터 사이드바 상태 변경 시에만 재중앙 정렬 실행
-      const animationDuration = 700; // 사이드바 애니메이션 시간
+      const animationDuration = 700;
       setTimeout(() => {
-        // 사이드바 상태가 완전히 변경된 후 중앙 정렬 실행
         centerElementBetweenSidebars(elementId, elementType);
       }, animationDuration + 100);
     }
-  }, [isSidebarOpen, centerElementBetweenSidebars]); // activeTooltip 의존성 제거
+  }, [isSidebarOpen, centerElementBetweenSidebars]);
 
   // 이벤트 핸들러
   const toggleSidebar = useCallback(() => {
@@ -382,44 +339,31 @@ function RelationGraphWrapper() {
 
   // 슬라이드바 외부 영역 클릭 시 닫힘 핸들러
   const handleGlobalClick = useCallback((e) => {
-    // 슬라이드바가 열려있지 않으면 처리하지 않음
     if (!activeTooltip || isSidebarClosing) return;
     
-    // 클릭된 요소가 슬라이드바 내부인지 확인
     const sidebarElement = document.querySelector('[data-testid="graph-sidebar"]') || 
                           document.querySelector('.graph-sidebar') ||
                           e.target.closest('[data-testid="graph-sidebar"]') ||
                           e.target.closest('.graph-sidebar');
     
-    // 슬라이드바 내부 클릭이면 처리하지 않음
     if (sidebarElement && sidebarElement.contains(e.target)) {
       return;
     }
     
-    // 슬라이드바 외부 클릭이면 슬라이드바 닫기
-    // 이벤트 전파 중단
     e.stopPropagation();
-    
-    // 클릭과 동시에 그래프 초기화
     clearAll();
-    // 0.1초 후에 슬라이드바 애니메이션 시작
     setTimeout(() => {
       setForceClose(true);
     }, 100);
   }, [activeTooltip, isSidebarClosing, clearAll]);
 
-  // 그래프 영역 클릭 핸들러 (기존 로직 유지)
+  // 그래프 영역 클릭 핸들러
   const handleCanvasClick = useCallback((e) => {
-    // 노드나 간선 클릭이 아닌 배경 클릭인 경우에만 처리
     if (e.target === e.currentTarget) {
-      // 이벤트 전파 중단
       e.stopPropagation();
       
-      // 슬라이드바가 열려있으면 닫기
       if (activeTooltip && !isSidebarClosing) {
-        // 클릭과 동시에 그래프 초기화
         clearAll();
-        // 0.1초 후에 슬라이드바 애니메이션 시작
         setTimeout(() => {
           setForceClose(true);
         }, 100);
@@ -431,14 +375,12 @@ function RelationGraphWrapper() {
   useEffect(() => {
     if (activeTooltip && !isSidebarClosing) {
       const handleDocumentClick = (e) => {
-        // 그래프 캔버스 영역 내부 클릭은 무시 (드래그/클릭 구분 로직이 처리)
         const graphCanvas = e.target.closest('.graph-canvas-area');
         if (graphCanvas) return;
         
         handleGlobalClick(e);
       };
       
-      // 약간의 지연을 두어 이벤트 버블링 순서 보장
       const timeoutId = setTimeout(() => {
         document.addEventListener('click', handleDocumentClick, true);
       }, 10);
@@ -482,12 +424,12 @@ function RelationGraphWrapper() {
 
   return (
     <div style={{ width: '100vw', height: '100vh', background: '#f4f7fb', overflow: 'hidden' }}>
-      {/* 상단 컨트롤 바 - 사이드바 옆에 위치 */}
+      {/* 상단 컨트롤 바 */}
       <div style={{ 
         ...topBarStyles.container, 
         position: 'fixed', 
         top: 0, 
-        left: isSidebarOpen ? '240px' : '60px', // 사이드바 너비만큼 여백
+        left: isSidebarOpen ? '240px' : '60px',
         right: 0,
         transition: `left ${ANIMATION_VALUES.DURATION.SLOW} ${ANIMATION_VALUES.EASE_OUT}`
       }}>
@@ -524,11 +466,10 @@ function RelationGraphWrapper() {
         </div>
 
         <div style={topBarStyles.rightSection}>
-          {/* 뷰어로 돌아가기 버튼은 고정 위치로 이동했으므로 여기서는 제거 */}
         </div>
       </div>
 
-      {/* 고정된 뷰어로 돌아가기 버튼 - 항상 우측 상단에 위치 */}
+      {/* 뷰어로 돌아가기 버튼 */}
       <div style={{
         position: 'fixed',
         top: '12px',
@@ -553,15 +494,15 @@ function RelationGraphWrapper() {
         </button>
       </div>
 
-      {/* 사이드바 - 왼쪽 고정 위치 */}
+      {/* 챕터 사이드바 */}
       <div 
         data-testid="chapter-sidebar"
         style={{
           ...sidebarStyles.container(isSidebarOpen, ANIMATION_VALUES),
           position: 'fixed',
-          top: 0, // 맨 위에서 시작
+          top: 0,
           left: 0,
-          height: '100vh', // 전체 높이 사용
+          height: '100vh',
           marginTop: 0
         }}
       >
@@ -597,11 +538,11 @@ function RelationGraphWrapper() {
         </div>
       </div>
 
-      {/* 그래프 영역 - 상단바 아래에 직접 배치 */}
+      {/* 그래프 영역 */}
       <div style={{
         position: 'fixed',
-        top: 0, // 맨 위에서 시작
-        left: isSidebarOpen ? '240px' : '60px', // 사이드바 너비만큼 여백
+        top: 0,
+        left: isSidebarOpen ? '240px' : '60px',
         right: 0,
         bottom: 0,
         transition: `left ${ANIMATION_VALUES.DURATION.SLOW} ${ANIMATION_VALUES.EASE_OUT}`,
@@ -613,7 +554,6 @@ function RelationGraphWrapper() {
               <GraphSidebar
                 activeTooltip={activeTooltip}
                 onClose={() => {
-                  // 애니메이션이 완료된 후에 activeTooltip 제거
                   setActiveTooltip(null);
                   setForceClose(false);
                   setIsSidebarClosing(false);
@@ -651,7 +591,6 @@ function RelationGraphWrapper() {
                 strictBackgroundClear={true}
                 isResetFromSearch={isResetFromSearch}
               />
-
             </div>
           </div>
         </div>
