@@ -187,6 +187,47 @@ function RelationGraphWrapper() {
     });
   }, [isSidebarOpen]);
 
+  // 특정 좌표를 기준으로 중앙 정렬하는 함수
+  const centerElementAtPosition = useCallback((targetX, targetY) => {
+    const cy = cyRef.current;
+    if (!cy) return;
+
+    // 상단바 높이
+    const topBarHeight = 54;
+    
+    // 챕터 사이드바 너비를 완전히 계산 (펼침/닫힘 상태 고려)
+    const chapterSidebarWidth = isSidebarOpen ? 240 : 60;
+    
+    // 노드/간선 슬라이드바가 펼쳐진 후의 영역을 완전히 계산
+    const tooltipSidebarWidth = 450;
+    
+    // 슬라이드바가 펼쳐진 후의 그래프 영역 너비를 완전히 계산 (상단바 제외)
+    const availableGraphWidth = window.innerWidth - chapterSidebarWidth - tooltipSidebarWidth;
+    
+    // 슬라이드바가 펼쳐진 후의 그래프 영역 높이를 완전히 계산 (상단바 제외)
+    const availableGraphHeight = window.innerHeight - topBarHeight;
+    
+    // 그래프 영역의 정중앙 위치를 완전히 계산 (슬라이드바 영역 제외, 상단바 제외)
+    // 왼쪽으로 약간 조정 (전체 너비의 10%만큼 왼쪽으로)
+    const leftOffset = availableGraphWidth * 0.1;
+    const centerX = chapterSidebarWidth + (availableGraphWidth / 2) - leftOffset;
+    
+    // 위쪽으로 약간 조정 (전체 높이의 15%만큼 위쪽으로)
+    const topOffset = availableGraphHeight * 0.15;
+    const centerY = topBarHeight + (availableGraphHeight / 2) - topOffset;
+    
+    // 목표 좌표를 중앙으로 이동시키기 위한 pan 계산
+    const panX = centerX - targetX;
+    const panY = centerY - targetY;
+    
+    // 부드러운 애니메이션으로 이동 (완전히 계산된 위치로)
+    cy.animate({
+      pan: { x: panX, y: panY },
+      duration: 800,
+      easing: 'ease-out-cubic'
+    });
+  }, [isSidebarOpen]);
+
   // 툴팁 핸들러
   const onShowNodeTooltip = useCallback(({ node, nodeCenter, mouseX, mouseY }) => {
     setActiveTooltip({ type: 'node', id: node.id(), x: mouseX, y: mouseY, data: node.data(), nodeCenter });
@@ -206,9 +247,17 @@ function RelationGraphWrapper() {
       targetNode: edge.target(),
     });
     
-    // 간선 클릭 시 중앙 정렬 (소스 노드 기준)
-    centerElementBetweenSidebars(edge.source().id(), 'edge');
-  }, [centerElementBetweenSidebars]);
+    // 간선 클릭 시 간선의 중점(1:1 내분점)을 기준으로 중앙 정렬
+    const sourcePos = edge.source().position();
+    const targetPos = edge.target().position();
+    
+    // 간선의 중점 계산 (1:1 내분점)
+    const edgeCenterX = (sourcePos.x + targetPos.x) / 2;
+    const edgeCenterY = (sourcePos.y + targetPos.y) / 2;
+    
+    // 간선의 중점을 기준으로 중앙 정렬
+    centerElementAtPosition(edgeCenterX, edgeCenterY);
+  }, [centerElementBetweenSidebars, centerElementAtPosition]);
 
   const onClearTooltip = useCallback(() => {
     // X 버튼과 동일한 방식으로 처리
@@ -384,6 +433,10 @@ function RelationGraphWrapper() {
   useEffect(() => {
     if (activeTooltip && !isSidebarClosing) {
       const handleDocumentClick = (e) => {
+        // 그래프 캔버스 영역 내부 클릭은 무시 (드래그/클릭 구분 로직이 처리)
+        const graphCanvas = e.target.closest('.graph-canvas-area');
+        if (graphCanvas) return;
+        
         handleGlobalClick(e);
       };
       

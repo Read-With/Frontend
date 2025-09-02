@@ -203,9 +203,12 @@ export default function useGraphInteractions({
         const hasSelection = !!(selectedNodeIdRef?.current || selectedEdgeIdRef?.current);
         if (!hasSelection) return;
       }
+      
       // 그래프 온리 페이지에서는 툴팁을 유지하고 선택 상태만 초기화
       clearStyles();
-      // 즉시 툴팁 닫기 (X 버튼과 동일한 방식)
+      
+      // 순수 클릭일 때만 툴팁 닫기 (드래그는 사이드바 상태 유지)
+      // Cytoscape의 기본 배경 클릭 이벤트는 드래그와 구분되어야 함
       if (onClearTooltipRef.current) {
         onClearTooltipRef.current();
       }

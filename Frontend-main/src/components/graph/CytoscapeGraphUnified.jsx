@@ -71,6 +71,13 @@ const CytoscapeGraphUnified = ({
   const [previousElements, setPreviousElements] = useState([]);
   const prevChapterRef = useRef(window.currentChapter); // 이전 챕터를 저장할 ref
   const [isInitialLoad, setIsInitialLoad] = useState(true); // 초기 로드 여부를 저장할 state
+  
+  // 드래그 상태를 컴포넌트 레벨에서 관리
+  const isDraggingRef = useRef(false);
+  const prevMouseDownPositionRef = useRef({ x: 0, y: 0 });
+  const mouseDownTimeRef = useRef(0);
+  const hasMovedRef = useRef(false);
+  const isMouseDownRef = useRef(false);
 
   // useGraphInteractions 훅 사용
   const {
@@ -159,6 +166,63 @@ const CytoscapeGraphUnified = ({
     
     const cy = cyInstance;
     
+    // 클릭 vs 드래그 구분을 위한 변수들
+    const CLICK_THRESHOLD = 200; // 200ms 이내 클릭은 클릭으로 간주
+    const MOVE_THRESHOLD = 3; // 3px 이상 움직이면 드래그로 간주
+    
+    // 마우스 이벤트 핸들러
+    const handleMouseDown = (evt) => {
+      // 노드나 간선 위에서의 마우스다운은 무시 (Cytoscape가 처리)
+      if (evt.target !== evt.currentTarget) return;
+      
+      isMouseDownRef.current = true;
+      mouseDownTimeRef.current = Date.now();
+      prevMouseDownPositionRef.current = { x: evt.clientX, y: evt.clientY };
+      hasMovedRef.current = false;
+      isDraggingRef.current = false;
+    };
+    
+    const handleMouseMove = (evt) => {
+      if (!isMouseDownRef.current) return;
+      
+      const deltaX = Math.abs(evt.clientX - prevMouseDownPositionRef.current.x);
+      const deltaY = Math.abs(evt.clientY - prevMouseDownPositionRef.current.y);
+      
+      if (deltaX > MOVE_THRESHOLD || deltaY > MOVE_THRESHOLD) {
+        hasMovedRef.current = true;
+        isDraggingRef.current = true;
+      }
+    };
+    
+    const handleMouseUp = (evt) => {
+      if (!isMouseDownRef.current) return;
+      
+      const clickDuration = Date.now() - mouseDownTimeRef.current;
+      const isClick = clickDuration < CLICK_THRESHOLD && !hasMovedRef.current;
+      
+      // 드래그인 경우 배경 이동 허용 (기본 Cytoscape 동작)
+      if (isDraggingRef.current) {
+        // 사이드바 상태 유지를 위해 아무것도 하지 않음
+        isMouseDownRef.current = false;
+        mouseDownTimeRef.current = 0;
+        hasMovedRef.current = false;
+        isDraggingRef.current = false;
+        return;
+      }
+      
+      // 순수 클릭인 경우에만 기존 로직 실행
+      isMouseDownRef.current = false;
+      mouseDownTimeRef.current = 0;
+      hasMovedRef.current = false;
+      isDraggingRef.current = false;
+    };
+    
+    // DOM 이벤트 리스너 등록 (그래프 캔버스 영역에만)
+    const container = containerRef.current;
+    container.addEventListener('mousedown', handleMouseDown);
+    container.addEventListener('mousemove', handleMouseMove);
+    container.addEventListener('mouseup', handleMouseUp);
+    
     // 이벤트 핸들러 등록
     const handleDragFreeOn = () => {
       setTimeout(() => {
@@ -185,6 +249,11 @@ const CytoscapeGraphUnified = ({
       cy.removeListener('dragfreeon', 'node', handleDragFreeOn);
       cy.removeListener('drag', 'node', handleDrag);
       cy.removeListener('dragfree', 'node', handleDragFree);
+      
+      // DOM 이벤트 리스너 제거
+      container.removeEventListener('mousedown', handleMouseDown);
+      container.removeEventListener('mousemove', handleMouseMove);
+      container.removeEventListener('mouseup', handleMouseUp);
     };
   }, [externalCyRef, nodeSize]);
 
@@ -242,12 +311,31 @@ const CytoscapeGraphUnified = ({
     } else {
       cy.on("tap", "edge", createRippleWrapper(hookTapEdgeHandler));
     }
-    if (tapBackgroundHandler) {
-      cy.on("tap", createRippleWrapper(tapBackgroundHandler));
-    } else {
-      cy.on("tap", createRippleWrapper(hookTapBackgroundHandler));
-    }
-  }, [externalCyRef, tapNodeHandler, tapEdgeHandler, tapBackgroundHandler, hookTapNodeHandler, hookTapEdgeHandler, hookTapBackgroundHandler]);
+    
+    // 배경 클릭 핸들러 - 드래그 상태를 고려하여 처리
+    const handleBackgroundTap = (evt) => {
+      // 노드나 간선이 아닌 배경 클릭인 경우에만 처리
+      if (evt.target === cy) {
+        // 드래그 상태가 아닌 경우에만 배경 클릭 처리
+        if (!isDraggingRef.current) {
+          if (tapBackgroundHandler) {
+            createRippleWrapper(tapBackgroundHandler)(evt);
+          } else {
+            createRippleWrapper(hookTapBackgroundHandler)(evt);
+          }
+        }
+      }
+    };
+    
+    cy.on("tap", handleBackgroundTap);
+    
+    // 클린업 함수
+    return () => {
+      cy.removeListener("tap", "node");
+      cy.removeListener("tap", "edge");
+      cy.removeListener("tap", handleBackgroundTap);
+    };
+  }, [externalCyRef, tapNodeHandler, tapEdgeHandler, tapBackgroundHandler, hookTapNodeHandler, hookTapEdgeHandler, hookTapBackgroundHandler, isDraggingRef]);
 
   // elements diff patch 및 스타일/레이아웃 적용
   useEffect(() => {
