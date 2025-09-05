@@ -1,5 +1,3 @@
-//공통 애니메이션 스타일 유틸리티
-
 // 공통 애니메이션 값들
 export const ANIMATION_VALUES = {
   EASE_OUT: 'cubic-bezier(0.4, 0, 0.2, 1)',

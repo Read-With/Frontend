@@ -1,10 +1,5 @@
 // [관계 그래프에서 긍정도에 따른 색상/라벨 변환과 툴팁 UI 스타일링]
-// 1. getRelationStyle(positivity) → 관계의 긍정도(-1 ~ 1)에 따라 **색상(HSL 그라데이션)과 텍스트(긍정적/우호적/중립적/비우호적/부정적)**을 결정
-// 2. getRelationLabels(relation, label) → 관계 데이터가 배열이면 그대로 반환, 문자열이면 ,로 분리해 라벨 배열로 변환
-// 3. tooltipStyles → 관계 툴팁(카드) UI의 기본 CSS 스타일 세트 정의 (컨테이너, 플립 카드(front/back), 헤더, 관계 태그, 프로그레스바, 버튼 등)
-
 import { getRelationColor } from './graphStyles';
-
 const styleCache = new Map();
 
 /**
@@ -27,7 +22,7 @@ function calculateStyle(positivity) {
   if (value > -0.3) return { color, text: "중립적" };
   if (value > -0.6) return { color, text: "비우호적" };
   return { color, text: "부정적" };
-}
+} //수정 요함 : 이산적임
 
 export function getRelationStyle(positivity) {
   // 소수점 2자리로 반올림하여 캐시 키 생성
@@ -71,7 +66,7 @@ export function getRelationLabels(relation, label) {
 export const tooltipStyles = {
   container: {
     position: "fixed",
-    zIndex: 9999, // 기본값, 컴포넌트에서 오버라이드 가능
+    zIndex: 9999,
     width: "500px",
     perspective: '1200px',
   },
@@ -129,7 +124,7 @@ export const tooltipStyles = {
   },
   button: {
     primary: {
-      background: '#2563eb',
+      background: '#6C8EFF',
       color: '#fff',
       border: 'none',
       borderRadius: 8,
@@ -137,21 +132,21 @@ export const tooltipStyles = {
       fontWeight: 600,
       fontSize: 15,
       cursor: 'pointer',
-      boxShadow: '0 2px 8px rgba(79,109,222,0.13)',
+      boxShadow: '0 2px 8px rgba(108, 142, 255, 0.2)',
       transition: 'background 0.18s, color 0.18s, box-shadow 0.18s, transform 0.13s',
       margin: '0 auto',
       display: 'inline-block',
     },
     secondary: {
       background: '#fff',
-      color: '#2563eb',
-      border: '1.5px solid #2563eb',
+      color: '#6C8EFF',
+      border: '1.5px solid #6C8EFF',
       borderRadius: 8,
       padding: '8px 22px',
       fontWeight: 600,
       fontSize: 15,
       cursor: 'pointer',
-      boxShadow: '0 2px 8px rgba(79,109,222,0.13)',
+      boxShadow: '0 2px 8px rgba(108, 142, 255, 0.2)',
       transition: 'background 0.18s, color 0.18s, box-shadow 0.18s, transform 0.13s',
       margin: '0 auto',
       display: 'inline-block',

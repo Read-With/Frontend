@@ -445,5 +445,3 @@ export function cleanupSearchResources(cy = null) {
     });
   }
 }
-
-

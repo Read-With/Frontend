@@ -305,5 +305,3 @@ export const graphControlsStyles = {
     zIndex: 99999
   }
 };
-
-

@@ -10,7 +10,14 @@ export function useLocalStorage(key, initialValue) {
   const [storedValue, setStoredValue] = useState(() => {
     try {
       const item = localStorage.getItem(key);
-      return item ? JSON.parse(item) : initialValue;
+      if (!item) return initialValue;
+      
+      // CFI 관련 키들은 JSON 파싱하지 않고 문자열로 처리
+      if (key.includes('_lastCFI') || key.includes('_prevChapter') || key.includes('_nextPage') || key.includes('_prevPage')) {
+        return item;
+      }
+      
+      return JSON.parse(item);
     } catch (error) {
       console.error(`Error reading localStorage key "${key}":`, error);
       return initialValue;
@@ -21,7 +28,13 @@ export function useLocalStorage(key, initialValue) {
     try {
       const valueToStore = value instanceof Function ? value(storedValue) : value;
       setStoredValue(valueToStore);
-      localStorage.setItem(key, JSON.stringify(valueToStore));
+      
+      // CFI 관련 키들은 JSON.stringify하지 않고 문자열로 저장
+      if (key.includes('_lastCFI') || key.includes('_prevChapter') || key.includes('_nextPage') || key.includes('_prevPage')) {
+        localStorage.setItem(key, valueToStore);
+      } else {
+        localStorage.setItem(key, JSON.stringify(valueToStore));
+      }
     } catch (error) {
       console.error(`Error setting localStorage key "${key}":`, error);
       // 에러 발생 시 상태는 업데이트하되 localStorage는 건드리지 않음
@@ -35,7 +48,12 @@ export function useLocalStorage(key, initialValue) {
     const handleStorageChange = (e) => {
       if (e.key === key && e.newValue !== null) {
         try {
-          setStoredValue(JSON.parse(e.newValue));
+          // CFI 관련 키들은 JSON 파싱하지 않고 문자열로 처리
+          if (key.includes('_lastCFI') || key.includes('_prevChapter') || key.includes('_nextPage') || key.includes('_prevPage')) {
+            setStoredValue(e.newValue);
+          } else {
+            setStoredValue(JSON.parse(e.newValue));
+          }
         } catch (error) {
           console.error(`Error parsing localStorage value for key "${key}":`, error);
         }
