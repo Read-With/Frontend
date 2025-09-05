@@ -29,6 +29,8 @@ const ViewerTopBar = ({
   clearSearch,
   elements = [], // 그래프 요소들 (검색 제안용)
   currentChapterData = null, // 현재 챕터의 캐릭터 데이터
+  closeSuggestions, // 검색 제안 닫기 함수
+  onGenerateSuggestions, // 검색 제안 생성 함수
 }) => {
   // 현재 이벤트 정보를 실시간으로 추적
   const [currentEventInfo, setCurrentEventInfo] = React.useState(null);
@@ -41,10 +43,10 @@ const ViewerTopBar = ({
     if (eventToShow) {
       setCurrentEventInfo({
         eventNum: eventToShow.eventNum ?? 0,
-        name: eventToShow.name || ""
+        name: eventToShow.name || eventToShow.event_name || ""
       });
       
-      // 프로그레스 바 너비 실시간 계산
+      // 프로그레스 바 너비 실시간 계산 - 현재 이벤트까지의 진행률
       if (events && eventToShow && events.length > 0) {
         const currentEventIndex = events.findIndex(e => e.eventNum === eventToShow.eventNum);
         const progressPercentage = currentEventIndex >= 0 
@@ -52,13 +54,18 @@ const ViewerTopBar = ({
           : 0;
         const progressWidth = `${progressPercentage}%`;
         setCurrentProgressWidth(progressWidth);
-      } else if (eventToShow && eventToShow.eventNum) {
-        // events가 없지만 eventNum이 있는 경우
-        const progressWidth = `${Math.min((eventToShow.eventNum / 20) * 100, 100)}%`;
+      } else if (eventToShow && eventToShow.eventNum !== undefined) {
+        // events가 없지만 eventNum이 있는 경우 - 챕터 내 이벤트 진행률 추정
+        const estimatedTotalEvents = 20; // 기본 추정값
+        const progressWidth = `${Math.min(((eventToShow.eventNum + 1) / estimatedTotalEvents) * 100, 100)}%`;
         setCurrentProgressWidth(progressWidth);
       } else {
         setCurrentProgressWidth("0%");
       }
+    } else {
+      // 이벤트 정보가 없을 때 초기화
+      setCurrentEventInfo(null);
+      setCurrentProgressWidth("0%");
     }
   }, [currentEvent, prevValidEvent, events]);
   
@@ -78,10 +85,74 @@ const ViewerTopBar = ({
   
   // 제안 생성을 위한 별도 함수 (실제 검색은 실행하지 않음)
   const handleGenerateSuggestions = useCallback((searchTerm) => {
-    // 제안 생성을 위해 searchTerm만 업데이트 (실제 검색은 실행하지 않음)
-    // 여기서는 onSearchSubmit을 호출하여 제안을 생성함
-    onSearchSubmit(searchTerm);
-  }, [onSearchSubmit]);
+    // onGenerateSuggestions prop을 사용하여 제안 생성
+    if (onGenerateSuggestions) {
+      onGenerateSuggestions(searchTerm);
+    }
+  }, [onGenerateSuggestions]);
+
+  // 중복 제거를 위한 공통 컴포넌트 렌더링 함수들
+  const renderGraphControls = () => (
+    <GraphControls
+      onSearchSubmit={onSearchSubmit}
+      onGenerateSuggestions={handleGenerateSuggestions}
+      searchTerm={searchTerm}
+      isSearchActive={isSearchActive}
+      onClearSearch={clearSearch}
+      elements={elements}
+      currentChapterData={currentChapterData}
+      onCloseSuggestions={closeSuggestions}
+    />
+  );
+
+  const renderToggleButtons = () => (
+    <div
+      style={{
+        display: "flex",
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 16,
+        marginRight: 24,
+      }}
+    >
+      <EdgeLabelToggle
+        visible={edgeLabelVisible}
+        onToggle={() => setEdgeLabelVisible(!edgeLabelVisible)}
+      />
+      <button
+        onClick={() => setHideIsolated((v) => !v)}
+        style={{
+          height: 30,
+          padding: '0 16px',
+          borderRadius: 8,
+          border: '1.5px solid #e3e6ef',
+          background: hideIsolated ? '#f8f9fc' : '#EEF2FF',
+          color: hideIsolated ? '#6C8EFF' : '#22336b',
+          fontSize: 13,
+          fontWeight: 600,
+          cursor: 'pointer',
+          transition: 'all 0.2s ease',
+          outline: 'none',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 6,
+          boxShadow: hideIsolated ? 'none' : '0 2px 8px rgba(108,142,255,0.15)',
+          minWidth: '140px',
+          justifyContent: 'center',
+        }}
+        title={hideIsolated ? '독립 인물을 표시합니다' : '독립 인물을 숨깁니다'}
+      >
+        <div style={{
+          width: 8,
+          height: 8,
+          borderRadius: '50%',
+          background: hideIsolated ? '#6C8EFF' : '#22336b',
+          opacity: hideIsolated ? 0.6 : 1,
+        }} />
+        {hideIsolated ? '독립 인물 표시' : '독립 인물 숨기기'}
+      </button>
+    </div>
+  );
   
   return (
     <>
@@ -149,31 +220,8 @@ const ViewerTopBar = ({
 
 
 
-          {/* 인물 검색 기능 (분할화면일 때도 왼쪽 영역에 포함) */}
-          {!graphFullScreen && (
-            <GraphControls
-              onSearchSubmit={onSearchSubmit}
-              onGenerateSuggestions={handleGenerateSuggestions}
-              searchTerm={searchTerm}
-              isSearchActive={isSearchActive}
-              onClearSearch={clearSearch}
-              elements={elements}
-              currentChapterData={currentChapterData}
-            />
-          )}
-          
-          {/* 인물 검색 기능 (전체화면일 때만 왼쪽 영역에 포함) */}
-          {graphFullScreen && (
-            <GraphControls
-              onSearchSubmit={onSearchSubmit}
-              onGenerateSuggestions={handleGenerateSuggestions}
-              searchTerm={searchTerm}
-              isSearchActive={isSearchActive}
-              onClearSearch={clearSearch}
-              elements={elements}
-              currentChapterData={currentChapterData}
-            />
-          )}
+          {/* 인물 검색 기능 */}
+          {renderGraphControls()}
         </div>
 
 
@@ -283,111 +331,8 @@ const ViewerTopBar = ({
           </div>
         )}
 
-        {/* 오른쪽 영역: 토글 + 독립 인물 버튼 (분할화면일 때도 표시) */}
-        {!graphFullScreen && (
-          <div
-            style={{
-              display: "flex",
-              flexDirection: "row",
-              alignItems: "center",
-              gap: 16, // 16px 간격
-              marginRight: 24, // 오른쪽 공백 추가
-            }}
-          >
-            {/* 간선 라벨 스위치 토글 */}
-            <EdgeLabelToggle
-              visible={edgeLabelVisible}
-              onToggle={() => setEdgeLabelVisible(!edgeLabelVisible)}
-            />
-
-            {/* 독립 인물 버튼 */}
-            <button
-              onClick={() => setHideIsolated((v) => !v)}
-              style={{
-                height: 30,
-                padding: '0 16px',
-                borderRadius: 8,
-                border: '1.5px solid #e3e6ef',
-                background: hideIsolated ? '#f8f9fc' : '#EEF2FF',
-                color: hideIsolated ? '#6C8EFF' : '#22336b',
-                fontSize: 13,
-                fontWeight: 600,
-                cursor: 'pointer',
-                transition: 'all 0.2s ease',
-                outline: 'none',
-                display: 'flex',
-                alignItems: 'center',
-                gap: 6,
-                boxShadow: hideIsolated ? 'none' : '0 2px 8px rgba(108,142,255,0.15)',
-                minWidth: '140px',
-                justifyContent: 'center',
-              }}
-              title={hideIsolated ? '독립 인물을 표시합니다' : '독립 인물을 숨깁니다'}
-            >
-              <div style={{
-                width: 8,
-                height: 8,
-                borderRadius: '50%',
-                background: hideIsolated ? '#6C8EFF' : '#22336b',
-                opacity: hideIsolated ? 0.6 : 1,
-              }} />
-              {hideIsolated ? '독립 인물 표시' : '독립 인물 숨기기'}
-            </button>
-          </div>
-        )}
-
-        {/* 오른쪽 영역: 토글 + 독립 인물 버튼 (전체화면일 때만 표시) */}
-        {graphFullScreen && (
-          <div
-            style={{
-              display: "flex",
-              flexDirection: "row",
-              alignItems: "center",
-              gap: 16, // 16px 간격
-              marginRight: 24, // 오른쪽 공백 추가
-            }}
-          >
-            {/* 간선 라벨 스위치 토글 */}
-            <EdgeLabelToggle
-              visible={edgeLabelVisible}
-              onToggle={() => setEdgeLabelVisible(!edgeLabelVisible)}
-            />
-
-            {/* 독립 인물 버튼 */}
-            <button
-              onClick={() => setHideIsolated((v) => !v)}
-              style={{
-                height: 30,
-                padding: '0 16px',
-                borderRadius: 8,
-                border: '1.5px solid #e3e6ef',
-                background: hideIsolated ? '#f8f9fc' : '#EEF2FF',
-                color: hideIsolated ? '#6C8EFF' : '#22336b',
-                fontSize: 13,
-                fontWeight: 600,
-                cursor: 'pointer',
-                transition: 'all 0.2s ease',
-                outline: 'none',
-                display: 'flex',
-                alignItems: 'center',
-                gap: 6,
-                boxShadow: hideIsolated ? 'none' : '0 2px 8px rgba(108,142,255,0.15)',
-                minWidth: '140px',
-                justifyContent: 'center',
-              }}
-              title={hideIsolated ? '독립 인물을 표시합니다' : '독립 인물을 숨깁니다'}
-            >
-              <div style={{
-                width: 8,
-                height: 8,
-                borderRadius: '50%',
-                background: hideIsolated ? '#6C8EFF' : '#22336b',
-                opacity: hideIsolated ? 0.6 : 1,
-              }} />
-              {hideIsolated ? '독립 인물 표시' : '독립 인물 숨기기'}
-            </button>
-          </div>
-        )}
+        {/* 오른쪽 영역: 토글 + 독립 인물 버튼 */}
+        {renderToggleButtons()}
       </div>
       
       {/* 상단바 2: 챕터 + 이벤트 정보 (분할화면일 때만) */}

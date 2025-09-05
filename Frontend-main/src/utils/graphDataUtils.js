@@ -6,7 +6,7 @@ import { normalizeRelation, isValidRelation } from './relationUtils';
 const validateElements = (elements) => elements?.filter(e => e && (e.id || e.data?.id)) || [];
 const createElementMap = (elements) => new Map(elements.map(e => [e.id || e.data?.id, e]));
 
-// 깊은 비교를 위한 유틸리티 함수
+// 최적화된 깊은 비교 함수 (성능 개선)
 function deepEqual(obj1, obj2) {
   if (obj1 === obj2) return true;
   if (obj1 == null || obj2 == null) return false;
@@ -14,13 +14,26 @@ function deepEqual(obj1, obj2) {
   
   if (typeof obj1 !== 'object') return obj1 === obj2;
   
+  // 배열인 경우 빠른 비교
+  if (Array.isArray(obj1) && Array.isArray(obj2)) {
+    if (obj1.length !== obj2.length) return false;
+    for (let i = 0; i < obj1.length; i++) {
+      if (!deepEqual(obj1[i], obj2[i])) return false;
+    }
+    return true;
+  }
+  
+  // 객체인 경우
   const keys1 = Object.keys(obj1);
   const keys2 = Object.keys(obj2);
   
   if (keys1.length !== keys2.length) return false;
   
+  // Set을 사용하여 키 존재 여부를 O(1)로 확인
+  const keys2Set = new Set(keys2);
+  
   for (const key of keys1) {
-    if (!keys2.includes(key)) return false;
+    if (!keys2Set.has(key)) return false;
     if (!deepEqual(obj1[key], obj2[key])) return false;
   }
   

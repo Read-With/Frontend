@@ -1,26 +1,19 @@
-/**
- * 모든 유틸리티 파일의 캐시 및 리소스 정리 함수들을 통합
- */
+// 리소스 정리 유틸리티
 
-// 각 유틸리티 파일에서 정리 함수들 import
+// 정리 함수들 import
 import { clearStyleCache, cleanupRelationStyleResources } from './relationStyles';
 import { clearRelationCache, cleanupRelationResources } from './relationUtils';
 import { clearRegexCache, cleanupSearchResources } from './searchUtils';
+import { clearAllCaches, clearCache, cleanupUnusedCaches, getCacheStats as getCacheStatsFromManager } from './cacheManager';
 
 /**
- * 모든 유틸리티 캐시 및 리소스 정리
+ * 모든 유틸리티 캐시 및 리소스 정리 (성능 최적화)
  * @param {Object} cy - Cytoscape 인스턴스 (선택사항)
  * @returns {void}
  */
 export function cleanupAllUtils(cy = null) {
-  // 관계 스타일 캐시 정리
-  clearStyleCache();
-  
-  // 관계 유틸리티 캐시 정리
-  clearRelationCache();
-  
-  // 검색 유틸리티 캐시 정리
-  clearRegexCache();
+  // 통합 캐시 관리 시스템으로 모든 캐시 정리
+  clearAllCaches();
   
   // 검색 관련 리소스 정리 (Cytoscape 효과 포함)
   cleanupSearchResources(cy);
@@ -31,8 +24,8 @@ export function cleanupAllUtils(cy = null) {
  * @returns {void}
  */
 export function cleanupRelationUtils() {
-  clearStyleCache();
-  clearRelationCache();
+  clearCache('relationCache');
+  clearCache('styleCache');
 }
 
 /**
@@ -41,7 +34,7 @@ export function cleanupRelationUtils() {
  * @returns {void}
  */
 export function cleanupSearchUtils(cy = null) {
-  clearRegexCache();
+  clearCache('regexCache');
   cleanupSearchResources(cy);
 }
 
@@ -50,5 +43,31 @@ export function cleanupSearchUtils(cy = null) {
  * @returns {void}
  */
 export function cleanupStyleUtils() {
-  clearStyleCache();
+  clearCache('styleCache');
+}
+
+/**
+ * 메모리 최적화를 위한 사용하지 않는 캐시 정리
+ * @param {number} maxAge - 최대 나이 (ms, 기본값: 10분)
+ * @returns {void}
+ */
+export function cleanupUnusedUtils(maxAge = 600000) {
+  cleanupUnusedCaches(maxAge);
+}
+
+/**
+ * 특정 캐시만 정리
+ * @param {string} cacheName - 캐시 이름
+ * @returns {void}
+ */
+export function cleanupSpecificCache(cacheName) {
+  clearCache(cacheName);
+}
+
+/**
+ * 캐시 통계 정보 반환
+ * @returns {Object} 캐시 통계
+ */
+export function getCacheStats() {
+  return getCacheStatsFromManager();
 }

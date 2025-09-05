@@ -1,9 +1,4 @@
-// [ 관계 데이터(노드 쌍, 속성 등)를 정규화·검증하고 동일한 관계인지 비교 ]
-// 1. safeNum → 값이 숫자/문자열/기타일 때 안전하게 숫자로 변환
-// 2. normalizeRelation → 다양한 형태의 원본 관계 객체(raw)를 표준화된 형태 {id1, id2, positivity, weight, count, relation[], label, explanation} 으로 변환
-// 3. isValidRelation → 정규화된 관계가 유효한지 검사 (숫자 여부, 0 여부, 자기 자신과의 관계 여부 체크)
-// 4. isSamePair → 두 노드 쌍(a, b)이 주어진 관계(rel)의 id1/id2와 동일한 관계인지(순서 무시) 판별
-
+// 관계 데이터 처리
 
 export function safeNum(value) {
   if (value === undefined || value === null) return NaN;
@@ -114,8 +109,11 @@ export function processRelationTags(relation, label) {
   return uniqueRelations;
 }
 
-// 관계 태그 처리 캐시
+// 관계 태그 처리 캐시 (캐시 관리 시스템 통합)
+import { registerCache, recordCacheAccess, enforceCacheSizeLimit } from './cacheManager';
+
 const relationCache = new Map();
+registerCache('relationCache', relationCache, { maxSize: 1000, ttl: 600000 }); // 10분 TTL
 
 /**
  * 캐시를 활용한 관계 태그 처리 (성능 최적화)
@@ -125,12 +123,15 @@ const relationCache = new Map();
  */
 export function processRelationTagsCached(relation, label) {
   const cacheKey = JSON.stringify({ relation, label });
+  recordCacheAccess('relationCache');
+  
   if (relationCache.has(cacheKey)) {
     return relationCache.get(cacheKey);
   }
   
   const result = processRelationTags(relation, label);
   relationCache.set(cacheKey, result);
+  enforceCacheSizeLimit('relationCache');
   return result;
 }
 
@@ -149,5 +150,3 @@ export function clearRelationCache() {
 export function cleanupRelationResources() {
   clearRelationCache();
 }
-
-
