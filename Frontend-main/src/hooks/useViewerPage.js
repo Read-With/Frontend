@@ -2,7 +2,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useParams, useLocation, useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
-import { useLocalStorage } from './useLocalStorage';
+import { useLocalStorage, useLocalStorageNumber } from './useLocalStorage';
 import { useGraphDataLoader } from './useGraphDataLoader';
 import { 
   defaultSettings, 
@@ -32,16 +32,12 @@ export function useViewerPage(initialDarkMode = false) {
   const viewerRef = useRef(null);
   const [reloadKey, setReloadKey] = useState(0);
   const [failCount, setFailCount] = useState(0);
-  const [progress, setProgress] = useState(0);
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   
-  // 설정 관련
-  const [settings, setSettings] = useState(() => loadSettings());
-  const [darkMode, setDarkMode] = useState(
-    initialDarkMode || settings.theme === "dark"
-  );
+  // 설정 관련 - darkMode는 settings가 로드된 후 초기화
+  const [darkMode, setDarkMode] = useState(initialDarkMode);
   
   // 챕터 및 이벤트 관련
   const [currentChapter, setCurrentChapter] = useState(1);
@@ -63,7 +59,7 @@ export function useViewerPage(initialDarkMode = false) {
     const saved = loadViewerMode();
     if (saved === "graph" || saved === "split") return true;
     if (saved === "viewer") return false;
-    return settings.showGraph;
+    return loadSettings().showGraph;
   });
   
   // 기타 상태들
@@ -87,6 +83,11 @@ export function useViewerPage(initialDarkMode = false) {
   const cleanFilename = filename?.trim() || '';
   const [bookmarks, setBookmarks] = useState(() => loadBookmarks(cleanFilename));
   const [showBookmarkList, setShowBookmarkList] = useState(false);
+  
+  // localStorage 연동 상태들
+  const [progress, setProgress] = useLocalStorageNumber(`progress_${cleanFilename}`, 0);
+  const [settings, setSettings] = useLocalStorage('epub_viewer_settings', defaultSettings);
+  const [lastCFI, setLastCFI] = useLocalStorage(`readwith_${cleanFilename}_lastCFI`, null);
   
   // 이전 상태 추적용 ref들
   const prevValidEventRef = useRef(null);
@@ -158,12 +159,14 @@ export function useViewerPage(initialDarkMode = false) {
     };
   }, []);
   
-  // progress 저장
+  // progress는 이제 useLocalStorageNumber로 자동 저장됨
+  
+  // settings 로드 후 darkMode 초기화
   useEffect(() => {
-    if (book && progress !== undefined) {
-      localStorage.setItem(`progress_${cleanFilename}`, progress);
+    if (settings && !initialDarkMode) {
+      setDarkMode(settings.theme === "dark");
     }
-  }, [progress, book, cleanFilename]);
+  }, [settings, initialDarkMode]);
   
   // 북마크 로드
   useEffect(() => {
@@ -352,15 +355,7 @@ export function useViewerPage(initialDarkMode = false) {
     };
     setSettings(updatedSettings);
 
-    // 로컬 스토리지에 설정 저장
-    try {
-      localStorage.setItem(
-        "epub_viewer_settings",
-        JSON.stringify(updatedSettings)
-      );
-    } catch (e) {
-      // 설정 저장 오류 처리
-    }
+    // 설정은 이제 useLocalStorage로 자동 저장됨
 
     // EPUB 뷰어 다시 로드
     const saveCurrent = async () => {
@@ -370,7 +365,7 @@ export function useViewerPage(initialDarkMode = false) {
         if (viewerRef.current?.getCurrentCfi) {
           cfi = await viewerRef.current.getCurrentCfi();
           if (cfi) {
-            localStorage.setItem(`readwith_${cleanFilename}_lastCFI`, cfi);
+            setLastCFI(cfi);
           }
         }
 

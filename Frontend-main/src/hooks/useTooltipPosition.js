@@ -1,7 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-
-// 상수 정의
-const GRAPH_CONTAINER_SELECTOR = '.graph-canvas-area';
+import { getContainerInfo, getViewportInfo, calculateCytoscapePosition, constrainToViewport } from '../utils/graphUtils';
 
 /**
  * 위치 계산 및 툴팁 드래그를 담당하는 통합 커스텀 훅
@@ -21,68 +19,7 @@ export function useTooltipPosition(initialX, initialY) {
     setShowContent(true);
   }, []);
 
-  // 그래프 컨테이너 정보 가져오기
-  const getContainerInfo = useCallback(() => {
-    try {
-      const container = document.querySelector(GRAPH_CONTAINER_SELECTOR);
-      const containerRect = container?.getBoundingClientRect?.() || { left: 0, top: 0 };
-      return { container, containerRect };
-    } catch (error) {
-      console.error('컨테이너 정보 가져오기 실패:', error);
-      return { container: null, containerRect: { left: 0, top: 0 } };
-    }
-  }, []);
-
-  // 뷰포트 정보 가져오기
-  const getViewportInfo = useCallback(() => {
-    const viewportWidth = Math.min(
-      document.documentElement.clientWidth,
-      window.innerWidth
-    );
-    const viewportHeight = Math.min(
-      document.documentElement.clientHeight,
-      window.innerHeight
-    );
-    const scrollX = window.pageXOffset || document.documentElement.scrollLeft;
-    const scrollY = window.pageYOffset || document.documentElement.scrollTop;
-    
-    return { viewportWidth, viewportHeight, scrollX, scrollY };
-  }, []);
-
-  // Cytoscape 위치를 절대 위치로 변환
-  const calculateCytoscapePosition = useCallback((pos, cyRef) => {
-    try {
-      if (!cyRef?.current) return { x: 0, y: 0 };
-      
-      const pan = cyRef.current.pan();
-      const zoom = cyRef.current.zoom();
-      const { containerRect } = getContainerInfo();
-      
-      return {
-        x: pos.x * zoom + pan.x + containerRect.left,
-        y: pos.y * zoom + pan.y + containerRect.top,
-      };
-    } catch (error) {
-      console.error('Cytoscape 위치 계산 실패:', error);
-      return { x: 0, y: 0 };
-    }
-  }, [getContainerInfo]);
-
-  // 뷰포트 경계 내로 위치 제한
-  const constrainToViewport = useCallback((x, y, elementWidth = 0, elementHeight = 0) => {
-    const { viewportWidth, viewportHeight, scrollX, scrollY } = getViewportInfo();
-    
-    const constrainedX = Math.max(
-      scrollX,
-      Math.min(x, viewportWidth + scrollX - elementWidth)
-    );
-    const constrainedY = Math.max(
-      scrollY,
-      Math.min(y, viewportHeight + scrollY - elementHeight)
-    );
-    
-    return { x: constrainedX, y: constrainedY };
-  }, [getViewportInfo]);
+  // 공통 유틸리티 함수들을 import하여 사용
 
   const handleMouseDown = (e) => {
     if (e.target.closest(".tooltip-close-btn")) return;
