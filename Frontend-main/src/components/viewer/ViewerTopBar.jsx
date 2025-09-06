@@ -59,10 +59,11 @@ const ViewerTopBar = ({
     const eventToShow = currentEvent || prevValidEvent;
     
     if (eventToShow) {
-      setCurrentEventInfo({
+      const eventInfo = {
         eventNum: eventToShow.eventNum ?? 0,
         name: eventToShow.name || eventToShow.event_name || ""
-      });
+      };
+      setCurrentEventInfo(eventInfo);
       
       // 프로그레스 바 너비 실시간 계산 - 현재 이벤트까지의 진행률
       if (events && eventToShow && events.length > 0) {
@@ -236,13 +237,9 @@ const ViewerTopBar = ({
             {graphFullScreen ? ">" : "<"}
           </button>
 
-
-
           {/* 인물 검색 기능 */}
           {renderGraphControls()}
         </div>
-
-
 
         {/* 중앙 영역: 챕터 + 이벤트 정보 (전체화면일 때만) */}
         {graphFullScreen && (

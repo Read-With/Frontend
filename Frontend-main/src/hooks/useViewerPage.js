@@ -184,10 +184,11 @@ export function useViewerPage(initialDarkMode = false) {
     updateCurrentChapter();
   }, [currentPage]);
   
-  // currentChapter가 바뀔 때 currentEvent, prevEvent 초기화
+  // currentChapter가 바뀔 때 이전 챕터와 다른 경우에만 초기화
+  // 단, 즉시 초기화하지 않고 EpubViewer에서 새 이벤트가 올 때까지 대기
   useEffect(() => {
-    setCurrentEvent(null);
-    setPrevEvent(null);
+    // 챕터 변경을 감지했지만 즉시 초기화하지 않음
+    // EpubViewer의 relocated 이벤트에서 새로운 이벤트를 설정할 때까지 대기
   }, [currentChapter]);
   
   // currentEvent가 null이 아닐 때만 이전 값 갱신
@@ -537,40 +538,46 @@ export function useViewerPage(initialDarkMode = false) {
     handleFitView,
     handleLocationChange,
     
-    // 그룹화된 상태들 (GraphSplitArea용)
+    // 그룹화된 상태들 (컴포넌트용)
     graphState: {
-      currentCharIndex,
+      currentChapter,
+      currentEvent,
+      prevValidEvent: prevValidEventRef.current,
+      elements,
+      graphViewState,
       hideIsolated,
       edgeLabelVisible,
-      currentChapter,
-      maxChapter,
-      loading,
-      isDataReady,
-      showGraph,
-      graphFullScreen,
-      elements,
-      currentEvent,
-      prevEvent,
-      events,
       graphDiff,
-      prevElements: prevElementsRef.current,
-      currentElements: elements
+      currentCharIndex,
+      graphFullScreen,
+      showGraph,
+      loading: isGraphLoading,
+      isDataReady
     },
+    
     graphActions: {
+      setGraphFullScreen,
+      setShowGraph,
       setHideIsolated,
       setEdgeLabelVisible,
-      handleFitView,
-      setCurrentChapter,
-      setGraphFullScreen
+      handleFitView
     },
+    
     viewerState: {
-      navigate,
       filename,
+      currentPage,
+      totalPages,
+      progress,
+      settings,
+      darkMode,
       book,
-      viewerRef
+      loading,
+      showToolbar
     },
+    
     searchState: {
-      currentChapterData
+      // 검색 상태는 useGraphSearch 훅에서 관리됨
+      // 여기서는 기본 구조만 제공
     }
   };
 }

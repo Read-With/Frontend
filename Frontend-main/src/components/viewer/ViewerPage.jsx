@@ -22,7 +22,8 @@ import {
   getChapterFile,
   filterIsolatedNodes,
   getDetectedMaxChapter,
-  getEventData
+  getEventData,
+  getCharactersData
 } from "../../utils/graphData";
 import { calcGraphDiff } from "../../utils/graphDataUtils";
 
@@ -238,28 +239,75 @@ const ViewerPage = ({ darkMode: initialDarkMode }) => {
         setIsDataReady(false);
         
         // 이벤트 데이터 로드
-        const events = getEventsForChapter(currentChapter);
+        const events = getEventsForChapter(currentChapter, folderKey);
         setEvents(events);
         
-        // 캐릭터 데이터는 useViewerPage의 useGraphDataLoader에서 처리됨
-        if (currentChapterData) {
-          setCharacterData(currentChapterData.characters || currentChapterData);
+        // 캐릭터 데이터는 누적된 모든 챕터의 데이터를 사용
+        try {
+          const allCharacterData = [];
+          
+          // 현재 챕터까지의 모든 캐릭터 데이터를 누적
+          for (let chapter = 1; chapter <= currentChapter; chapter++) {
+            const charData = getCharactersData(folderKey, chapter);
+            if (charData && charData.characters) {
+              allCharacterData.push(...charData.characters);
+            }
+          }
+          
+          // 중복 제거 (같은 ID를 가진 캐릭터는 마지막에 추가된 것만 유지)
+          const uniqueCharacters = [];
+          const seenIds = new Set();
+          for (let i = allCharacterData.length - 1; i >= 0; i--) {
+            const char = allCharacterData[i];
+            const id = String(Math.trunc(char.id));
+            if (!seenIds.has(id)) {
+              seenIds.add(id);
+              uniqueCharacters.unshift(char);
+            }
+          }
+          
+          setCharacterData(uniqueCharacters);
+        } catch (charError) {
+          console.warn('캐릭터 데이터 누적 로드 실패:', charError);
+          // fallback: currentChapterData 사용
+          if (currentChapterData) {
+            setCharacterData(currentChapterData.characters || currentChapterData);
+          }
         }
         
         setIsDataReady(true);
+        
+        // 초기 로딩 시 currentEvent가 없으면 의미있는 이벤트로 설정
+        if (!currentEvent && events.length > 0) {
+          // 현재 챕터의 이벤트 중에서 이벤트 번호가 1 이상인 첫 번째 이벤트를 찾거나, 없으면 첫 번째 이벤트 사용
+          const currentChapterEvents = events.filter(e => e.chapter === currentChapter);
+          const initialEvent = currentChapterEvents.length > 0 
+            ? (currentChapterEvents.find(e => e.eventNum >= 1) || currentChapterEvents[0])
+            : (events.find(e => e.eventNum >= 1) || events[0]);
+            
+          setCurrentEvent(initialEvent);
+        }
       } catch (error) {
         console.error('Chapter data loading error:', error);
+        // 에러 발생 시에도 기본 데이터로 fallback
+        setIsDataReady(true);
       } finally {
         setLoading(false);
       }
     };
     
     loadEventsData();
-  }, [currentChapter, currentChapterData]);
+  }, [currentChapter, currentChapterData, folderKey]);
 
   // === [수정] 현재 이벤트에 해당하는 그래프만 생성 (utils 함수 활용) ===
   const currentEventElements = useMemo(() => {
-    if (!currentEvent || !events || !events.length || !characterData || !characterData.length) {
+    // currentEvent가 없을 때는 빈 배열 반환
+    if (!currentEvent) {
+      return [];
+    }
+    
+    // 필수 데이터가 없을 때는 빈 배열 반환
+    if (!events || !events.length || !characterData || !characterData.length) {
       return [];
     }
     
@@ -270,7 +318,10 @@ const ViewerPage = ({ darkMode: initialDarkMode }) => {
       // utils/graphData.js의 getEventData 함수 활용
       const eventData = getEventData(folderKey, currentChapter, currentEventNum);
       
-      if (!eventData) return [];
+      if (!eventData) {
+        console.warn('이벤트 데이터를 찾을 수 없습니다:', { folderKey, currentChapter, currentEventNum });
+        return [];
+      }
       
       const currentRelations = eventData.relations || [];
       const currentImportance = eventData.importance || {};
@@ -288,27 +339,89 @@ const ViewerPage = ({ darkMode: initialDarkMode }) => {
       console.error('관계 데이터 로드 실패:', error);
       return [];
     }
-  }, [currentEvent, characterData, folderKey]);
+  }, [currentEvent, characterData, folderKey, events]);
 
-  // === [수정] elements: 현재 이벤트에 해당하는 그래프만 표시 ===
-  // 1. 데이터 준비되면 currentEventElements를 보여줌
+  // === [최적화] elements 설정 로직 - 불필요한 재렌더링 방지 ===
+  const elementsRef = useRef([]);
+  const lastProcessedRef = useRef({});
+
   useEffect(() => {
-    if (isDataReady && currentEvent && currentEventElements.length > 0) {
-      // 현재 이벤트에 해당하는 그래프만 표시
-      setElements(currentEventElements);
+    if (!isDataReady || !events || !events.length || !characterData) {
+      return;
     }
-  }, [isDataReady, currentEvent, currentEventElements]);
 
-  // 2. currentEvent가 변경되면 현재 이벤트에 해당하는 그래프만 표시
-  useEffect(() => {
-    if (!currentEvent || !isDataReady) return;
+    // 현재 상태를 키로 사용하여 중복 실행 방지
+    const currentState = {
+      currentEventId: currentEvent?.eventNum,
+      currentChapter,
+      eventsLength: events.length,
+      characterDataLength: characterData.length,
+      hideIsolated
+    };
 
-    // currentEventElements가 이미 현재 이벤트에 해당하는 그래프를 생성했으므로
-    // 추가 필터링 없이 바로 사용
-    if (currentEventElements.length > 0) {
-      // 고립 노드 필터링 적용
-      const filteredWithIsolation = filterIsolatedNodes(currentEventElements, hideIsolated);
+    // 이전과 동일한 상태면 실행하지 않음
+    if (JSON.stringify(currentState) === JSON.stringify(lastProcessedRef.current)) {
+      return;
+    }
 
+    lastProcessedRef.current = currentState;
+
+    let targetElements = [];
+    let source = '';
+
+    // 1차: currentEvent가 있고 currentEventElements가 있을 때
+    if (currentEvent && currentEventElements.length > 0) {
+      targetElements = currentEventElements;
+      source = `현재 이벤트(${currentEvent.eventNum})`;
+    }
+    // 2차: currentEvent가 없거나 currentEventElements가 비어있을 때 적절한 이벤트 선택
+    else {
+      let targetEvent;
+      
+      // 현재 챕터의 이벤트들을 찾아서 더 의미있는 이벤트 선택
+      const currentChapterEvents = events.filter(e => e.chapter === currentChapter);
+      
+      if (currentChapterEvents.length > 0) {
+        // 현재 챕터에서 이벤트 번호가 1 이상인 첫 번째 이벤트를 찾거나, 없으면 첫 번째 이벤트 사용
+        targetEvent = currentChapterEvents.find(e => e.eventNum >= 1) || currentChapterEvents[0];
+      } else {
+        // 현재 챕터에 이벤트가 없으면 전체 이벤트에서 이벤트 번호가 1 이상인 첫 번째 이벤트 사용
+        targetEvent = events.find(e => e.eventNum >= 1) || events[0];
+      }
+        
+      if (targetEvent) {
+        try {
+          const eventData = getEventData(folderKey, targetEvent.chapter, targetEvent.eventNum);
+          if (eventData) {
+            const currentRelations = eventData.relations || [];
+            const currentImportance = eventData.importance || {};
+            const currentNewAppearances = eventData.log?.new_character_ids || [];
+            
+            targetElements = getElementsFromRelations(
+              currentRelations,
+              characterData,
+              currentNewAppearances,
+              currentImportance
+            );
+            source = `Fallback 이벤트(${targetEvent.eventNum})`;
+            
+            // currentEvent가 현재 챕터와 다르면 업데이트
+            if (!currentEvent || currentEvent.chapter !== currentChapter) {
+              setCurrentEvent(targetEvent);
+            }
+          }
+        } catch (error) {
+          console.error('이벤트 데이터 로드 실패:', error);
+          return;
+        }
+      }
+    }
+
+    // elements 설정 (고립 노드 필터링 적용)
+    if (targetElements.length > 0) {
+      const filteredElements = filterIsolatedNodes(targetElements, hideIsolated);
+      
+      // 노드 위치 복원
       let nodePositions = {};
       try {
         const posStr = localStorage.getItem(
@@ -317,15 +430,11 @@ const ViewerPage = ({ darkMode: initialDarkMode }) => {
         if (posStr) nodePositions = JSON.parse(posStr);
       } catch (e) {}
 
-      const sorted = filteredWithIsolation
+      const sortedElements = filteredElements
         .slice()
         .sort((a, b) => {
-          const aId =
-            a.data?.id ||
-            (a.data?.source ? a.data?.source + "-" + a.data?.target : "");
-          const bId =
-            b.data?.id ||
-            (b.data?.source ? b.data?.source + "-" + b.data?.target : "");
+          const aId = a.data?.id || (a.data?.source ? a.data?.source + "-" + a.data?.target : "");
+          const bId = b.data?.id || (b.data?.source ? b.data?.source + "-" + b.data?.target : "");
           return aId.localeCompare(bId);
         })
         .map((el) => {
@@ -335,9 +444,15 @@ const ViewerPage = ({ darkMode: initialDarkMode }) => {
           return el;
         });
 
-      setElements(sorted);
+      // 이전 elements와 동일하면 업데이트하지 않음
+      if (JSON.stringify(elementsRef.current) !== JSON.stringify(sortedElements)) {
+        elementsRef.current = sortedElements;
+        setElements(sortedElements);
+      }
     }
-  }, [currentEvent, currentEventElements, currentChapter, hideIsolated, isDataReady]);
+  }, [isDataReady, currentEvent, currentEventElements, events, characterData, folderKey, hideIsolated, currentChapter]);
+
+  // === [제거] 중복된 useEffect - 위의 통합 로직으로 대체됨 ===
 
   // === [수정] 현재 이벤트 등장 노드/간선 위치 저장 및 이벤트별 적용 ===
   // 현재 이벤트에서 등장한 노드/간선 위치를 저장
@@ -418,6 +533,8 @@ const ViewerPage = ({ darkMode: initialDarkMode }) => {
     setGraphDiff(diff);
     prevElementsRef.current = curr;
   }, [elements]);
+
+  // === [제거] 중복된 초기 로딩 fallback - 위의 통합 로직으로 대체됨 ===
 
   // elements가 이전과 완전히 같으면 로딩 메시지 안 보이게
   const isSameElements = useMemo(() => {
@@ -522,7 +639,7 @@ const ViewerPage = ({ darkMode: initialDarkMode }) => {
               graphState={{
                 ...graphState,
                 prevValidEvent: prevValidEventRef.current,
-                events: getEventsForChapter(currentChapter)
+                events: getEventsForChapter(currentChapter, folderKey)
               }}
               graphActions={graphActions}
               viewerState={viewerState}
@@ -555,10 +672,19 @@ const ViewerPage = ({ darkMode: initialDarkMode }) => {
             setCurrentChapter(chapter);
           }}
           settings={settings}
-          onCurrentLineChange={(charIndex, totalEvents, currentEvent) => {
+          onCurrentLineChange={(charIndex, totalEvents, receivedEvent) => {
             setCurrentCharIndex(charIndex);
             setTotalChapterWords(totalEvents || 0);
-            setCurrentEvent(currentEvent);
+            
+            // 받은 이벤트가 있으면 업데이트 (챕터 동기화는 별도로 처리)
+            if (receivedEvent) {
+              setCurrentEvent(receivedEvent);
+              
+              // 챕터 불일치 시 currentChapter도 업데이트
+              if (receivedEvent.chapter && receivedEvent.chapter !== currentChapter) {
+                setCurrentChapter(receivedEvent.chapter);
+              }
+            }
           }}
           onAllCfisReady={(_cfis, _ranges, offsets) => {}}
           onTextReady={(text, i) => {}}
@@ -601,3 +727,4 @@ const ViewerPage = ({ darkMode: initialDarkMode }) => {
 };
 
 export default ViewerPage;
+

@@ -59,44 +59,54 @@ function getCharacterImagePath(folderKey, characterId) {
  * @returns {object} 로딩된 데이터
  */
 export function loadGraphData(folderKey, chapter, eventIndex, getEventDataFunc) {
-  // 이벤트 데이터 로드
-  const eventData = getEventDataFunc(folderKey, chapter, eventIndex);
-  
-  if (!eventData) {
-    throw new Error('이벤트 데이터를 찾을 수 없습니다.');
+  // 매개변수 유효성 검사
+  if (!folderKey || !chapter || !eventIndex || typeof getEventDataFunc !== 'function') {
+    throw new Error(`loadGraphData: 유효하지 않은 매개변수 - folderKey: ${folderKey}, chapter: ${chapter}, eventIndex: ${eventIndex}`);
   }
 
-  // 캐릭터 데이터 로드
-  const charData = getCharactersData(folderKey, chapter);
-  
-  if (!charData) {
-    throw new Error('캐릭터 데이터를 찾을 수 없습니다.');
+  try {
+    // 이벤트 데이터 로드
+    const eventData = getEventDataFunc(folderKey, chapter, eventIndex);
+    
+    if (!eventData) {
+      throw new Error(`이벤트 데이터를 찾을 수 없습니다: ${folderKey}/chapter${chapter}/event${eventIndex}`);
+    }
+
+    // 캐릭터 데이터 로드
+    const charData = getCharactersData(folderKey, chapter);
+    
+    if (!charData) {
+      throw new Error(`캐릭터 데이터를 찾을 수 없습니다: ${folderKey}/chapter${chapter}`);
+    }
+
+    // 캐릭터 매핑 생성
+    const { idToName, idToDesc, idToMain, idToNames } = createCharacterMaps(charData);
+
+    // 관계 데이터 처리
+    const normalizedRelations = (eventData.relations || [])
+      .map(rel => normalizeRelation(rel))
+      .filter(rel => rel !== null && isValidRelation(rel));
+
+    // 요소 변환
+    const convertedElements = convertRelationsToElements(
+      normalizedRelations,
+      idToName,
+      idToDesc,
+      idToMain,
+      idToNames,
+      folderKey
+    );
+
+    return {
+      elements: convertedElements,
+      charData,
+      eventData,
+      normalizedRelations
+    };
+  } catch (error) {
+    console.error('loadGraphData 에러:', error);
+    throw error;
   }
-
-  // 캐릭터 매핑 생성
-  const { idToName, idToDesc, idToMain, idToNames } = createCharacterMaps(charData);
-
-  // 관계 데이터 처리
-  const normalizedRelations = (eventData.relations || [])
-    .map(rel => normalizeRelation(rel))
-    .filter(rel => isValidRelation(rel));
-
-  // 요소 변환
-  const convertedElements = convertRelationsToElements(
-    normalizedRelations,
-    idToName,
-    idToDesc,
-    idToMain,
-    idToNames,
-    folderKey
-  );
-
-  return {
-    elements: convertedElements,
-    charData,
-    eventData,
-    normalizedRelations
-  };
 }
 
 /**
@@ -110,11 +120,22 @@ export function loadGraphData(folderKey, chapter, eventIndex, getEventDataFunc) 
  * @returns {Array} 그래프 요소 배열
  */
 export function convertRelationsToElements(relations, idToName, idToDesc, idToMain, idToNames, folderKey = 'gatsby') {
+  // 매개변수 유효성 검사
+  if (!Array.isArray(relations)) {
+    console.warn('convertRelationsToElements: relations는 배열이어야 합니다.', typeof relations);
+    return [];
+  }
+  
+  if (!idToName || typeof idToName !== 'object') {
+    console.warn('convertRelationsToElements: idToName이 유효하지 않습니다.', typeof idToName);
+    return [];
+  }
+
   const nodeSet = new Set();
   const nodes = [];
   const edges = [];
   
-  const relationsArray = Array.isArray(relations) ? relations : [];
+  const relationsArray = relations;
   
   // 노드 id 수집
   const nodeIds = [];
@@ -129,15 +150,29 @@ export function convertRelationsToElements(relations, idToName, idToDesc, idToMa
     });
   });
 
-  // id 기반 고정 랜덤 함수
+  // id 기반 고정 랜덤 함수 (캐싱으로 성능 개선)
+  const randomCache = new Map();
   function seededRandom(id, min, max) {
+    const cacheKey = `${id}-${min}-${max}`;
+    if (randomCache.has(cacheKey)) {
+      return randomCache.get(cacheKey);
+    }
+    
     let hash = 0;
     for (let i = 0; i < id.length; i++) {
       hash = ((hash << 5) - hash) + id.charCodeAt(i);
       hash |= 0;
     }
     const seed = Math.abs(hash) % 10000;
-    return min + (seed % (max - min));
+    const result = min + (seed % (max - min));
+    
+    // 캐시 크기 제한 (메모리 누수 방지)
+    if (randomCache.size > 1000) {
+      randomCache.clear();
+    }
+    randomCache.set(cacheKey, result);
+    
+    return result;
   }
 
   // 원 배치 좌표 계산
@@ -209,7 +244,10 @@ export function convertRelationsToElements(relations, idToName, idToDesc, idToMa
  * 그래프 diff 계산 (position까지 비교)
  */
 export function calcGraphDiff(prevElements, currElements) {
-  if (!prevElements || !currElements) return { added: [], removed: [], updated: [] };
+  if (!prevElements || !currElements) {
+    console.warn('calcGraphDiff: prevElements 또는 currElements가 없습니다.', { prevElements: !!prevElements, currElements: !!currElements });
+    return { added: [], removed: [], updated: [] };
+  }
   
   const validPrevElements = validateElements(prevElements);
   const validCurrElements = validateElements(currElements);
@@ -246,7 +284,15 @@ export function calcGraphDiff(prevElements, currElements) {
  * @returns {boolean} 겹침이 있었는지 여부
  */
 export function detectAndResolveOverlap(cy, nodeSize = 40, onCleanup = null) {
-  if (!cy) return false;
+  if (!cy) {
+    console.warn('detectAndResolveOverlap: cy 인스턴스가 없습니다.');
+    return false;
+  }
+  
+  if (typeof nodeSize !== 'number' || nodeSize <= 0) {
+    console.warn('detectAndResolveOverlap: 유효하지 않은 nodeSize', nodeSize);
+    nodeSize = 40;
+  }
   
   const nodes = cy.nodes();
   const NODE_SIZE = nodeSize;
@@ -254,19 +300,30 @@ export function detectAndResolveOverlap(cy, nodeSize = 40, onCleanup = null) {
   let hasOverlap = false;
   const timers = [];
   
-  for (let i = 0; i < nodes.length; i++) {
-    for (let j = i + 1; j < nodes.length; j++) {
-      const node1 = nodes[i];
-      const node2 = nodes[j];
-      const pos1 = node1.position();
-      const pos2 = node2.position();
+  // 성능 최적화: 노드가 많을 때는 겹침 감지를 건너뜀
+  if (nodes.length > 100) {
+    console.warn('detectAndResolveOverlap: 노드가 너무 많아 겹침 감지를 건너뜁니다.', nodes.length);
+    return false;
+  }
+
+  // 위치 캐싱으로 성능 개선
+  const nodePositions = nodes.map(node => ({
+    node,
+    pos: node.position()
+  }));
+
+  for (let i = 0; i < nodePositions.length; i++) {
+    for (let j = i + 1; j < nodePositions.length; j++) {
+      const { node: node1, pos: pos1 } = nodePositions[i];
+      const { node: node2, pos: pos2 } = nodePositions[j];
       
       const dx = pos1.x - pos2.x;
       const dy = pos1.y - pos2.y;
-      const distance = Math.sqrt(dx * dx + dy * dy);
+      const distanceSquared = dx * dx + dy * dy; // 제곱근 계산 생략으로 성능 개선
       
-      if (distance < MIN_DISTANCE) {
+      if (distanceSquared < MIN_DISTANCE * MIN_DISTANCE) {
         hasOverlap = true;
+        const distance = Math.sqrt(distanceSquared);
         const angle = Math.atan2(dy, dx);
         const pushDistance = MIN_DISTANCE - distance + 20;
         
@@ -277,6 +334,10 @@ export function detectAndResolveOverlap(cy, nodeSize = 40, onCleanup = null) {
         
         node1.position({ x: newX1, y: newY1 });
         node2.position({ x: newX2, y: newY2 });
+        
+        // 위치 캐시 업데이트
+        nodePositions[i].pos = { x: newX1, y: newY1 };
+        nodePositions[j].pos = { x: newX2, y: newY2 };
         
         node1.addClass('bounce-effect');
         node2.addClass('bounce-effect');

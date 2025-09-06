@@ -30,7 +30,7 @@ export function getFolderKeyFromFilename(filename) {
     return "";
   }
   
-  if (!filename) {
+  if (!filename || typeof filename !== 'string') {
     return availableFolders[0];
   }
   
@@ -108,6 +108,10 @@ export function getAllFolderKeys() {
  * @returns {Object|null}
  */
 export function getCharactersData(folderKey, chapter) {
+  if (!folderKey || !chapter || chapter < 1) {
+    console.warn('getCharactersData: 유효하지 않은 매개변수', { folderKey, chapter });
+    return null;
+  }
   return charactersIndex.get(`${folderKey}:${chapter}`) ?? null;
 }
 
@@ -119,6 +123,10 @@ export function getCharactersData(folderKey, chapter) {
  * @returns {Object|null}
  */
 export function getEventDataByIndex(folderKey, chapter, eventIndex) {
+  if (!folderKey || !chapter || chapter < 1 || !eventIndex || eventIndex < 1) {
+    console.warn('getEventDataByIndex: 유효하지 않은 매개변수', { folderKey, chapter, eventIndex });
+    return null;
+  }
   return relationshipIndex.get(`${folderKey}:${chapter}:${eventIndex}`) ?? null;
 }
 
@@ -130,6 +138,10 @@ export function getEventDataByIndex(folderKey, chapter, eventIndex) {
  * @returns {Object|null}
  */
 export function getEventData(folderKey, chapter, eventIdZeroBased) {
+  if (eventIdZeroBased === undefined || eventIdZeroBased === null || eventIdZeroBased < 0) {
+    console.warn('getEventData: 유효하지 않은 eventIdZeroBased', { eventIdZeroBased });
+    return null;
+  }
   const eventIndex = Number(eventIdZeroBased) + 1;
   return getEventDataByIndex(folderKey, chapter, eventIndex);
 }
@@ -178,7 +190,10 @@ export function getMaxEventCount(folderKey) {
  */
 export function getEventRelations(folderKey, chapter, eventIndex) {
   const json = getEventDataByIndex(folderKey, chapter, eventIndex);
-  if (!json) return [];
+  if (!json) {
+    console.warn('getEventRelations: 이벤트 데이터를 찾을 수 없음', { folderKey, chapter, eventIndex });
+    return [];
+  }
   return Array.isArray(json.relations) ? json.relations : [];
 }
 
@@ -193,7 +208,23 @@ export function createCharacterMaps(characters) {
   const idToMain = {};
   const idToNames = {};
 
-  (characters?.characters || characters || []).forEach((char) => {
+  if (!characters) {
+    console.warn('createCharacterMaps: characters 데이터가 없습니다.');
+    return { idToName, idToDesc, idToMain, idToNames };
+  }
+
+  const characterArray = characters?.characters || characters || [];
+  if (!Array.isArray(characterArray)) {
+    console.warn('createCharacterMaps: characters가 배열이 아닙니다.', typeof characterArray);
+    return { idToName, idToDesc, idToMain, idToNames };
+  }
+
+  characterArray.forEach((char) => {
+    if (!char || char.id === undefined) {
+      console.warn('createCharacterMaps: 유효하지 않은 캐릭터 데이터', char);
+      return;
+    }
+    
     const id = String(Math.trunc(char.id));
     idToName[id] =
       char.common_name ||
@@ -211,31 +242,32 @@ export function createCharacterMaps(characters) {
 // ViewerPage 전용 함수들 (viewerDataUtils.js에서 통합)
 // ============================================================================
 
-// ViewerPage에서 사용하는 모듈 import (기존 charactersModules와 구분)
+// ViewerPage에서 사용하는 모듈 import (동적 폴더 지원)
 const viewerEventRelationModules = import.meta.glob(
-  "../data/gatsby/chapter*_relationships_event_*.json",
+  "../data/*/chapter*_relationships_event_*.json",
   { eager: true }
 );
 const viewerEventTextModules = import.meta.glob(
-  "../data/gatsby/chapter*_events.json",
+  "../data/*/chapter*_events.json",
   { eager: true }
 );
 const viewerCharactersModules = import.meta.glob(
-  "../data/gatsby/c_chapter*_0.json",
+  "../data/*/c_chapter*_0.json",
   { eager: true }
 );
 
 /**
  * 챕터별 이벤트 데이터 가져오기 (ViewerPage 전용)
  * @param {number} chapter - 챕터 번호
+ * @param {string} folderKey - 폴더 키 (기본값: 'gatsby')
  * @returns {Array} 이벤트 배열
  */
-export function getEventsForChapter(chapter) {
+export function getEventsForChapter(chapter, folderKey = 'gatsby') {
   const num = String(chapter);
 
   // 1. 이벤트 본문 데이터 추출
   const textFilePath = Object.keys(viewerEventTextModules).find((path) =>
-    path.includes(`chapter${num}_events.json`)
+    path.includes(`/${folderKey}/chapter${num}_events.json`)
   );
   const textArray = textFilePath ? viewerEventTextModules[textFilePath]?.default : [];
 
@@ -248,7 +280,7 @@ export function getEventsForChapter(chapter) {
         : event.event_id;
     const fileEventNum = eventId + 1;
     const relFilePath = Object.keys(viewerEventRelationModules).find((path) =>
-      path.includes(`chapter${num}_relationships_event_${fileEventNum}.json`)
+      path.includes(`/${folderKey}/chapter${num}_relationships_event_${fileEventNum}.json`)
     );
 
     const relations = relFilePath
@@ -275,14 +307,15 @@ export function getEventsForChapter(chapter) {
  * 챕터 파일 데이터 가져오기 (ViewerPage 전용)
  * @param {number} chapter - 챕터 번호
  * @param {string} type - 데이터 타입 ('characters', 'relations' 등)
+ * @param {string} folderKey - 폴더 키 (기본값: 'gatsby')
  * @returns {Array} 데이터 배열
  */
-export function getChapterFile(chapter, type) {
+export function getChapterFile(chapter, type, folderKey = 'gatsby') {
   const num = String(chapter);
   try {
     if (type === "characters") {
       const filePath = Object.keys(viewerCharactersModules).find((key) =>
-        key.includes(`c_chapter${num}_0.json`)
+        key.includes(`/${folderKey}/c_chapter${num}_0.json`)
       );
       const data = filePath ? viewerCharactersModules[filePath]?.default : undefined;
       return data?.characters || [];
@@ -291,6 +324,7 @@ export function getChapterFile(chapter, type) {
       return [];
     }
   } catch (error) {
+    console.error('getChapterFile error:', error);
     return [];
   }
 }
@@ -345,9 +379,23 @@ export function getElementsFromRelations(
 
 
   let nodes = [];
+  
+  // characterData 처리: 배열이거나 객체인 경우 모두 처리
+  let characterArray = [];
   if (Array.isArray(characterData)) {
+    characterArray = characterData;
+  } else if (characterData && characterData.characters && Array.isArray(characterData.characters)) {
+    characterArray = characterData.characters;
+  } else if (characterData && typeof characterData === 'object') {
+    // characterData가 객체이지만 characters 필드가 없는 경우, 직접 배열로 변환 시도
+    characterArray = Object.values(characterData).filter(item => 
+      item && typeof item === 'object' && item.id !== undefined
+    );
+  }
+  
+  if (characterArray.length > 0) {
     // ViewerPage 전용: 관계에 참여하는 모든 인물을 노드로 생성
-    const filteredCharacters = characterData.filter((char) => {
+    const filteredCharacters = characterArray.filter((char) => {
       const sid = safeId(char.id);
       return (
         nodeIdSet.has(sid) ||
@@ -382,13 +430,35 @@ export function getElementsFromRelations(
     const missingIds = [...nodeIdSet].filter(id => !existingIds.has(id));
     
     missingIds.forEach(id => {
+      // ID를 기반으로 더 의미있는 이름 생성
+      const characterNames = {
+        '6': 'Myrtle Wilson',
+        '7': 'George Wilson', 
+        '8': 'Catherine',
+        '9': 'Chester McKee',
+        '10': 'Lucille McKee',
+        '11': 'Owl Eyes'
+      };
+      
+      const characterDescriptions = {
+        '6': 'Tom Buchanan\'s mistress',
+        '7': 'Myrtle\'s husband, garage owner',
+        '8': 'Myrtle\'s sister',
+        '9': 'Photographer from downstairs',
+        '10': 'Chester McKee\'s wife',
+        '11': 'Drunk man in Gatsby\'s library'
+      };
+      
+      const name = characterNames[id] || `Character ${id}`;
+      const description = characterDescriptions[id] || "Character not found in character data";
+      
       nodes.push({
         data: {
           id: id,
-          label: `Character ${id}`,
-          description: "Character not found in character data",
+          label: name,
+          description: description,
           main: false,
-          names: [`Character ${id}`],
+          names: [name],
           portrait_prompt: "",
           image: `/gatsby/${id}.png`,
         },
@@ -488,6 +558,7 @@ export function filterIsolatedNodes(elements, hideIsolated) {
  * @param {Function} setElements - 요소 설정 함수
  * @param {Function} setIsDataReady - 데이터 준비 상태 설정 함수
  * @param {Function} setLoading - 로딩 상태 설정 함수
+ * @param {string} folderKey - 폴더 키 (기본값: 'gatsby')
  * @returns {Promise<void>}
  */
 export async function loadChapterData(
@@ -496,23 +567,24 @@ export async function loadChapterData(
   setCharacterData,
   setElements,
   setIsDataReady,
-  setLoading
+  setLoading,
+  folderKey = 'gatsby'
 ) {
   try {
     setLoading(true);
     setIsDataReady(false);
 
     // 이벤트 데이터 로드
-    const events = getEventsForChapter(currentChapter);
+    const events = getEventsForChapter(currentChapter, folderKey);
     setEvents(events);
 
     // 캐릭터 데이터 로드 - c_chapter1_0.json 사용
     const characterFilePath = Object.keys(viewerCharactersModules).find((path) =>
-      path.includes(`c_chapter${currentChapter}_0.json`)
+      path.includes(`/${folderKey}/c_chapter${currentChapter}_0.json`)
     );
     if (!characterFilePath) {
       throw new Error(
-        `캐릭터 데이터 파일을 찾을 수 없습니다: chapter${currentChapter}`
+        `캐릭터 데이터 파일을 찾을 수 없습니다: ${folderKey}/chapter${currentChapter}`
       );
     }
     const characterData = viewerCharactersModules[characterFilePath].default;
@@ -527,5 +599,11 @@ export async function loadChapterData(
     setIsDataReady(true);
   } catch (error) {
     console.error('Chapter data loading error:', error);
+    setEvents([]);
+    setCharacterData([]);
+    setElements([]);
+    setIsDataReady(false);
+  } finally {
+    setLoading(false);
   }
 }
