@@ -11,16 +11,21 @@ const GraphContainer = forwardRef(({
   onSearchStateChange,
   onElementsUpdate,
   filename,
+  elements: externalElements, // 외부에서 전달받은 elements
   ...props
 }, ref) => {
 
+  // ViewerPage에서는 externalElements를 사용하므로 useGraphDataLoader 비활성화
   const {
-    elements,
+    elements: internalElements,
     newNodeIds,
     currentChapterData,
     loading,
     error
-  } = useGraphDataLoader(filename, currentChapter);
+  } = useGraphDataLoader(filename, externalElements ? null : null);
+
+  // 외부에서 전달받은 elements가 있으면 그것을 사용, 없으면 내부 로더 사용
+  const elements = externalElements || internalElements;
 
   // 검색 상태 변경 콜백
   const handleSearchStateChange = useCallback((searchState) => {

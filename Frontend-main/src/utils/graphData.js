@@ -338,20 +338,25 @@ export function getElementsFromRelations(
     Object.keys(importance).forEach((id) => nodeIdSet.add(safeId(id)));
   }
 
+  // new_appearances에 있는 인물들도 추가
+  if (newAppearances && Array.isArray(newAppearances)) {
+    newAppearances.forEach((id) => nodeIdSet.add(safeId(id)));
+  }
+
+
   let nodes = [];
   if (Array.isArray(characterData)) {
-    // relations가 없으면 모든 캐릭터를 노드로!
-    const filteredCharacters =
-      nodeIdSet.size === 0
-        ? characterData
-        : characterData.filter((char) => {
-            const sid = safeId(char.id);
-            return (
-              nodeIdSet.has(sid) ||
-              nodeIdSet.has(char.id) ||
-              nodeIdSet.has(Number(char.id))
-            );
-          });
+    // ViewerPage 전용: 관계에 참여하는 모든 인물을 노드로 생성
+    const filteredCharacters = characterData.filter((char) => {
+      const sid = safeId(char.id);
+      return (
+        nodeIdSet.has(sid) ||
+        nodeIdSet.has(char.id) ||
+        nodeIdSet.has(Number(char.id))
+      );
+    });
+    
+    // characterData에 있는 캐릭터들
     nodes = filteredCharacters.map((char) => {
       const idStr = safeId(char.id); // safeId로 문자열 변환
       return {
@@ -370,6 +375,24 @@ export function getElementsFromRelations(
           image: `/gatsby/${idStr}.png`, // 노드 이미지 추가
         },
       };
+    });
+    
+    // characterData에 없는 ID들에 대해 기본 노드 생성
+    const existingIds = new Set(filteredCharacters.map(char => safeId(char.id)));
+    const missingIds = [...nodeIdSet].filter(id => !existingIds.has(id));
+    
+    missingIds.forEach(id => {
+      nodes.push({
+        data: {
+          id: id,
+          label: `Character ${id}`,
+          description: "Character not found in character data",
+          main: false,
+          names: [`Character ${id}`],
+          portrait_prompt: "",
+          image: `/gatsby/${id}.png`,
+        },
+      });
     });
   }
 
@@ -493,59 +516,16 @@ export async function loadChapterData(
       );
     }
     const characterData = viewerCharactersModules[characterFilePath].default;
-    setCharacterData(characterData);
+    setCharacterData(characterData.characters || characterData);
 
-    // 전체 챕터의 관계 데이터를 바로 로드
-    const allRelations = [];
-    const allImportance = {};
-    const allNewAppearances = [];
-    const edgeSet = new Set(); // 중복 간선 방지용
+    // ViewerPage에서는 관계 데이터를 누적하지 않음
+    // currentEventElements에서 개별 이벤트 데이터를 로드함
 
-    // 각 이벤트의 관계 데이터를 수집
-    for (const ev of events) {
-      const eventId = ev.event_id || 0;
-      const fileEventNum = eventId + 1;
-      const eventRelationFilePath = Object.keys(viewerEventRelationModules).find((path) =>
-        path.includes(`chapter${currentChapter}_relationships_event_${fileEventNum}.json`)
-      );
-
-      if (eventRelationFilePath) {
-        const eventRelations = viewerEventRelationModules[eventRelationFilePath].default;
-        if (Array.isArray(eventRelations?.relations)) {
-          eventRelations.relations.forEach((rel) => {
-            const id1 = rel.id1 || rel.source;
-            const id2 = rel.id2 || rel.target;
-            const edgeKey = `${id1}-${id2}`;
-            if (!edgeSet.has(edgeKey)) {
-              allRelations.push(rel);
-              edgeSet.add(edgeKey);
-            }
-          });
-        }
-        if (eventRelations?.importance) {
-          Object.entries(eventRelations.importance).forEach(([k, v]) => {
-            allImportance[k] = v;
-          });
-        }
-      }
-
-      if (Array.isArray(ev.new_appearances)) {
-        allNewAppearances.push(...ev.new_appearances);
-      }
-    }
-
-    const elements = getElementsFromRelations(
-      allRelations,
-      characterData,
-      allNewAppearances,
-      allImportance
-    );
-
-    setElements(elements);
+    // ViewerPage에서는 빈 elements로 초기화
+    // 실제 그래프는 currentEventElements에서 생성됨
+    setElements([]);
     setIsDataReady(true);
-    setLoading(false);
   } catch (error) {
-    setLoading(false);
     console.error('Chapter data loading error:', error);
   }
 }
