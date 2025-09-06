@@ -536,5 +536,41 @@ export function useViewerPage(initialDarkMode = false) {
     toggleGraph,
     handleFitView,
     handleLocationChange,
+    
+    // 그룹화된 상태들 (GraphSplitArea용)
+    graphState: {
+      currentCharIndex,
+      hideIsolated,
+      edgeLabelVisible,
+      currentChapter,
+      maxChapter,
+      loading,
+      isDataReady,
+      showGraph,
+      graphFullScreen,
+      elements,
+      currentEvent,
+      prevEvent,
+      events,
+      graphDiff,
+      prevElements: prevElementsRef.current,
+      currentElements: elements
+    },
+    graphActions: {
+      setHideIsolated,
+      setEdgeLabelVisible,
+      handleFitView,
+      setCurrentChapter,
+      setGraphFullScreen
+    },
+    viewerState: {
+      navigate,
+      filename,
+      book,
+      viewerRef
+    },
+    searchState: {
+      currentChapterData
+    }
   };
 }

@@ -11,6 +11,7 @@ import ViewerSettings from "./epub/ViewerSettings";
 import ViewerTopBar from "./ViewerTopBar";
 import { useViewerPage } from "../../hooks/useViewerPage";
 import { useGraphSearch } from "../../hooks/useGraphSearch";
+import { createStorageKey } from "../../hooks/useLocalStorage";
 import { 
   parseCfiToChapterDetail, 
   extractEventNodesAndEdges
@@ -20,47 +21,19 @@ import {
   loadChapterData,
   getElementsFromRelations,
   getChapterFile,
-  filterIsolatedNodes
+  filterIsolatedNodes,
+  getDetectedMaxChapter
 } from "../../utils/graphData";
 import { calcGraphDiff } from "../../utils/graphDataUtils";
 
 
 // GraphSplitArea 컴포넌트를 ViewerPage 함수 전에 정의
 function GraphSplitArea({
-  currentCharIndex,
-  hideIsolated,
-  setHideIsolated,
-  edgeLabelVisible,
-  setEdgeLabelVisible,
-  handleFitView,
-  currentChapter,
-  setCurrentChapter,
-  maxChapter,
-  loading,
-  isDataReady,
-  showGraph,
-  graphFullScreen,
-  setGraphFullScreen,
-  navigate,
-  filename,
-  book,
-  viewerRef,
-  currentEvent,
-  prevValidEvent,
-  prevEvent,
-  events,
-  graphDiff,
-  prevElements,
-  currentElements,
-  // 검색 관련 props
-  searchTerm,
-  isSearchActive,
-  elements,
-  onSearchSubmit,
-  clearSearch,
-  currentChapterData,
-  closeSuggestions,
-  onGenerateSuggestions,
+  graphState,
+  graphActions,
+  viewerState,
+  searchState,
+  searchActions,
 }) {
   const graphContainerRef = React.useRef(null);
 
@@ -81,43 +54,23 @@ function GraphSplitArea({
       }}
     >
       <ViewerTopBar
-        navigate={navigate}
-        filename={filename}
-        currentChapter={currentChapter}
-        setCurrentChapter={setCurrentChapter}
-        maxChapter={maxChapter}
-        book={book}
-        viewerRef={viewerRef}
-        currentEvent={currentEvent}
-        prevValidEvent={prevValidEvent}
-        prevEvent={prevEvent}
-        events={events}
-        graphFullScreen={graphFullScreen}
-        setGraphFullScreen={setGraphFullScreen}
-        edgeLabelVisible={edgeLabelVisible}
-        setEdgeLabelVisible={setEdgeLabelVisible}
-        hideIsolated={hideIsolated}
-        setHideIsolated={setHideIsolated}
-        searchTerm={searchTerm}
-        isSearchActive={isSearchActive}
-        elements={elements}
-        onSearchSubmit={onSearchSubmit}
-        clearSearch={clearSearch}
-        currentChapterData={currentChapterData}
-        closeSuggestions={closeSuggestions}
-        onGenerateSuggestions={onGenerateSuggestions}
+        graphState={graphState}
+        graphActions={graphActions}
+        viewerState={viewerState}
+        searchState={searchState}
+        searchActions={searchActions}
       />
       
       {/* 그래프 본문 */}
       <div style={{ flex: 1, position: "relative", minHeight: 0, minWidth: 0 }}>
         <GraphContainer
           ref={graphContainerRef}
-          currentPosition={currentCharIndex}
-          currentEvent={currentEvent || prevValidEvent}
-          currentChapter={currentChapter}
-          edgeLabelVisible={edgeLabelVisible}
-          filename={filename}
-          elements={elements} // ViewerPage에서 생성한 elements 전달
+          currentPosition={graphState.currentCharIndex}
+          currentEvent={graphState.currentEvent || graphState.prevValidEvent}
+          currentChapter={graphState.currentChapter}
+          edgeLabelVisible={graphState.edgeLabelVisible}
+          filename={viewerState.filename}
+          elements={graphState.elements}
         />
       </div>
     </div>
@@ -251,6 +204,12 @@ const ViewerPage = ({ darkMode: initialDarkMode }) => {
     toggleGraph,
     handleFitView,
     handleLocationChange,
+    
+    // 그룹화된 상태들 (GraphSplitArea용)
+    graphState,
+    graphActions,
+    viewerState,
+    searchState,
   } = useViewerPage(initialDarkMode);
 
   // 검색 기능 (useGraphSearch 훅 사용)
@@ -343,7 +302,7 @@ const ViewerPage = ({ darkMode: initialDarkMode }) => {
       let nodePositions = {};
       try {
         const posStr = localStorage.getItem(
-          `chapter_node_positions_${currentChapter}`
+          createStorageKey.chapterNodePositions(currentChapter)
         );
         if (posStr) nodePositions = JSON.parse(posStr);
       } catch (e) {}
@@ -388,11 +347,11 @@ const ViewerPage = ({ darkMode: initialDarkMode }) => {
     
     // 현재 이벤트별로 위치 저장
     try {
-      const eventKey = `graph_event_layout_chapter_${currentChapter}_event_${currentEvent.eventNum}`;
+      const eventKey = createStorageKey.graphEventLayout(currentChapter, currentEvent.eventNum);
       localStorage.setItem(eventKey, JSON.stringify(partialLayout));
       
       // 전체 챕터 레이아웃도 업데이트 (누적)
-      const chapterKey = `graph_partial_layout_chapter_${currentChapter}`;
+      const chapterKey = createStorageKey.graphPartialLayout(currentChapter);
       const existingLayout = JSON.parse(localStorage.getItem(chapterKey) || '{}');
       const updatedLayout = { ...existingLayout, ...partialLayout };
       localStorage.setItem(chapterKey, JSON.stringify(updatedLayout));
@@ -410,7 +369,7 @@ const ViewerPage = ({ darkMode: initialDarkMode }) => {
       
       // 현재 이벤트까지의 모든 이벤트에서 레이아웃 정보 수집
       for (let eventNum = 0; eventNum <= currentEventNum; eventNum++) {
-        const eventKey = `graph_event_layout_chapter_${currentChapter}_event_${eventNum}`;
+        const eventKey = createStorageKey.graphEventLayout(currentChapter, eventNum);
         const eventLayoutStr = localStorage.getItem(eventKey);
         
         if (eventLayoutStr) {
@@ -466,10 +425,13 @@ const ViewerPage = ({ darkMode: initialDarkMode }) => {
 
   // === [디버깅용 로그 추가] 최초 진입 시 모든 챕터의 전체 노드 위치 미리 저장 ===
   useEffect(() => {
-    // 챕터 번호 1~9 (data 폴더 기준)
-    const chapterNums = Array.from({ length: 9 }, (_, i) => i + 1);
+    // 동적으로 최대 챕터 번호 계산
+    const maxChapterCount = getDetectedMaxChapter(folderKey);
+    if (maxChapterCount === 0) return; // 챕터가 없으면 종료
+    
+    const chapterNums = Array.from({ length: maxChapterCount }, (_, i) => i + 1);
     chapterNums.forEach((chapterNum) => {
-      const storageKey = `chapter_node_positions_${chapterNum}`;
+      const storageKey = createStorageKey.chapterNodePositions(chapterNum);
       if (localStorage.getItem(storageKey)) {
         return;
       }
@@ -516,7 +478,7 @@ const ViewerPage = ({ darkMode: initialDarkMode }) => {
         cy.destroy();
       }, 100);
     });
-  }, []);
+  }, [folderKey]);
 
 
   return (
@@ -547,40 +509,25 @@ const ViewerPage = ({ darkMode: initialDarkMode }) => {
         rightSideContent={
           <CytoscapeGraphPortalProvider>
             <GraphSplitArea
-              currentCharIndex={currentCharIndex}
-              hideIsolated={hideIsolated}
-              setHideIsolated={setHideIsolated}
-              edgeLabelVisible={edgeLabelVisible}
-              setEdgeLabelVisible={setEdgeLabelVisible}
-              handleFitView={handleFitView}
-              currentChapter={currentChapter}
-              setCurrentChapter={setCurrentChapter}
-              maxChapter={maxChapter}
-              loading={loading}
-              isDataReady={isDataReady}
-              showGraph={showGraph}
-              graphFullScreen={graphFullScreen}
-              setGraphFullScreen={setGraphFullScreen}
-              navigate={navigate}
-              filename={filename}
-              book={book}
-              viewerRef={viewerRef}
-              currentEvent={currentEvent}
-              prevValidEvent={prevValidEventRef.current}
-              prevEvent={prevEvent}
-              events={getEventsForChapter(currentChapter)}
-              graphDiff={graphDiff}
-              prevElements={prevElementsRef.current}
-              currentElements={elements}
-              // 검색 관련 props
-              searchTerm={searchTerm}
-              isSearchActive={isSearchActive}
-              elements={elements}
-              onSearchSubmit={handleSearchSubmit}
-              clearSearch={clearSearch}
-              currentChapterData={currentChapterData}
-              closeSuggestions={closeSuggestions}
-              onGenerateSuggestions={setSearchTerm}
+              graphState={{
+                ...graphState,
+                prevValidEvent: prevValidEventRef.current,
+                events: getEventsForChapter(currentChapter)
+              }}
+              graphActions={graphActions}
+              viewerState={viewerState}
+              searchState={{
+                ...searchState,
+                searchTerm,
+                isSearchActive,
+                elements
+              }}
+              searchActions={{
+                onSearchSubmit: handleSearchSubmit,
+                clearSearch,
+                closeSuggestions,
+                onGenerateSuggestions: setSearchTerm
+              }}
             />
           </CytoscapeGraphPortalProvider>
         }

@@ -3,35 +3,53 @@ import GraphControls from '../graph/GraphControls';
 import EdgeLabelToggle from '../graph/tooltip/EdgeLabelToggle';
 
 const ViewerTopBar = ({
-  // 상단바 1 props
-  navigate,
-  filename,
-  currentChapter,
-  setCurrentChapter,
-  maxChapter,
-  book,
-  viewerRef,
-  currentEvent,
-  prevValidEvent,
-  prevEvent,
-  events,
-  graphFullScreen,
-  setGraphFullScreen,
-  
-  // 상단바 2 props
-  edgeLabelVisible,
-  setEdgeLabelVisible,
-  hideIsolated,
-  setHideIsolated,
-  onSearchSubmit,
-  searchTerm,
-  isSearchActive,
-  clearSearch,
-  elements = [], // 그래프 요소들 (검색 제안용)
-  currentChapterData = null, // 현재 챕터의 캐릭터 데이터
-  closeSuggestions, // 검색 제안 닫기 함수
-  onGenerateSuggestions, // 검색 제안 생성 함수
+  graphState,
+  graphActions,
+  viewerState,
+  searchState,
+  searchActions,
 }) => {
+  // 그룹화된 상태에서 개별 값들 추출
+  const {
+    navigate,
+    filename,
+    book,
+    viewerRef
+  } = viewerState;
+  
+  const {
+    currentChapter,
+    maxChapter,
+    currentEvent,
+    prevValidEvent,
+    prevEvent,
+    events,
+    graphFullScreen,
+    edgeLabelVisible,
+    hideIsolated
+  } = graphState;
+  
+  const {
+    setCurrentChapter,
+    setGraphFullScreen,
+    setEdgeLabelVisible,
+    setHideIsolated
+  } = graphActions;
+  
+  const {
+    searchTerm,
+    isSearchActive,
+    elements = [],
+    currentChapterData = null
+  } = searchState;
+  
+  const {
+    onSearchSubmit,
+    clearSearch,
+    closeSuggestions,
+    onGenerateSuggestions
+  } = searchActions;
+
   // 현재 이벤트 정보를 실시간으로 추적
   const [currentEventInfo, setCurrentEventInfo] = React.useState(null);
   const [currentProgressWidth, setCurrentProgressWidth] = React.useState("0%");
