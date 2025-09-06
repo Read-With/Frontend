@@ -236,6 +236,7 @@ const ViewerPage = ({ darkMode: initialDarkMode }) => {
     const loadEventsData = async () => {
       try {
         setLoading(true);
+        setIsGraphLoading(true);
         setIsDataReady(false);
         
         // 이벤트 데이터 로드
@@ -278,7 +279,8 @@ const ViewerPage = ({ darkMode: initialDarkMode }) => {
         setIsDataReady(true);
         
         // 초기 로딩 시 currentEvent가 없으면 의미있는 이벤트로 설정
-        if (!currentEvent && events.length > 0) {
+        // 단, 새로고침 중이거나 로딩 중일 때는 이벤트를 설정하지 않음
+        if (!currentEvent && events.length > 0 && !isReloading && !loading) {
           // 현재 챕터의 이벤트 중에서 이벤트 번호가 1 이상인 첫 번째 이벤트를 찾거나, 없으면 첫 번째 이벤트 사용
           const currentChapterEvents = events.filter(e => e.chapter === currentChapter);
           const initialEvent = currentChapterEvents.length > 0 
@@ -293,14 +295,33 @@ const ViewerPage = ({ darkMode: initialDarkMode }) => {
         setIsDataReady(true);
       } finally {
         setLoading(false);
+        setIsGraphLoading(false);
       }
     };
     
     loadEventsData();
   }, [currentChapter, currentChapterData, folderKey]);
 
+  // 새로고침 완료 후 이벤트 설정
+  useEffect(() => {
+    // 새로고침이 완료되고, 데이터가 준비되었으며, currentEvent가 없을 때만 이벤트 설정
+    if (!isReloading && isDataReady && !currentEvent && events.length > 0) {
+      const currentChapterEvents = events.filter(e => e.chapter === currentChapter);
+      const initialEvent = currentChapterEvents.length > 0 
+        ? (currentChapterEvents.find(e => e.eventNum >= 1) || currentChapterEvents[0])
+        : (events.find(e => e.eventNum >= 1) || events[0]);
+        
+      setCurrentEvent(initialEvent);
+    }
+  }, [isReloading, isDataReady, currentEvent, events, currentChapter]);
+
   // === [수정] 현재 이벤트에 해당하는 그래프만 생성 (utils 함수 활용) ===
   const currentEventElements = useMemo(() => {
+    // 로딩 중이거나 새로고침 중일 때는 빈 배열 반환
+    if (loading || isReloading) {
+      return [];
+    }
+    
     // currentEvent가 없을 때는 빈 배열 반환
     if (!currentEvent) {
       return [];
@@ -375,7 +396,8 @@ const ViewerPage = ({ darkMode: initialDarkMode }) => {
       source = `현재 이벤트(${currentEvent.eventNum})`;
     }
     // 2차: currentEvent가 없거나 currentEventElements가 비어있을 때 적절한 이벤트 선택
-    else {
+    // 단, 로딩 중이거나 새로고침 중일 때는 빈 배열 반환
+    else if (!loading && !isReloading) {
       let targetEvent;
       
       // 현재 챕터의 이벤트들을 찾아서 더 의미있는 이벤트 선택

@@ -76,7 +76,7 @@ export function useViewerPage(initialDarkMode = false) {
   const [characterData, setCharacterData] = useState(null);
   const [isReloading, setIsReloading] = useState(false);
   const [eventNum, setEventNum] = useState(0);
-  const [isGraphLoading, setIsGraphLoading] = useState(false);
+  const [isGraphLoading, setIsGraphLoading] = useState(true);
   const [showToolbar, setShowToolbar] = useState(false);
   
   // 북마크 관련
@@ -212,12 +212,20 @@ export function useViewerPage(initialDarkMode = false) {
     prevEventNumRef.current = currentEvent?.eventNum;
   }, [elements, currentChapter, currentEvent]);
   
-  // 새로고침 감지
+  // 새로고침 감지 및 완료 처리
   useEffect(() => {
     if (performance && performance.getEntriesByType) {
       const navEntries = performance.getEntriesByType("navigation");
       if (navEntries.length > 0 && navEntries[0].type === "reload") {
         setIsReloading(true);
+        setIsGraphLoading(true); // 새로고침 시 그래프 로딩 상태도 true로 설정
+        // 새로고침 완료 후 일정 시간 후에 isReloading을 false로 설정
+        const timer = setTimeout(() => {
+          setIsReloading(false);
+          setIsGraphLoading(false); // 새로고침 완료 시 그래프 로딩 상태도 false로 설정
+        }, 1000); // 1초 후 새로고침 완료로 간주
+        
+        return () => clearTimeout(timer);
       }
     }
   }, []);
@@ -556,6 +564,7 @@ export function useViewerPage(initialDarkMode = false) {
     },
     
     graphActions: {
+      setCurrentChapter,
       setGraphFullScreen,
       setShowGraph,
       setHideIsolated,

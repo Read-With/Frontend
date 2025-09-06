@@ -26,7 +26,8 @@ const ViewerTopBar = ({
     events,
     graphFullScreen,
     edgeLabelVisible,
-    hideIsolated
+    hideIsolated,
+    loading: isGraphLoading
   } = graphState;
   
   const {
@@ -251,98 +252,119 @@ const ViewerTopBar = ({
               gap: 16, // 16px 간격
             }}
           >
-            {/* 챕터 정보 표시 */}
-            <span
-              style={{
-                display: "inline-block",
-                padding: "4px 12px",
-                borderRadius: 16,
-                background: "#EEF2FF",
-                color: "#22336b",
-                fontSize: 14,
-                fontWeight: 600,
-                border: "1px solid #e3e6ef",
-              }}
-            >
-              Chapter {currentChapter}
-            </span>
-
-            {/* 이벤트 정보 */}
-            <div
-              style={{
-                display: "flex",
-                flexDirection: "row",
-                alignItems: "center",
-                gap: 12,
-              }}
-            >
-              {/* 이벤트 번호 */}
+            {isGraphLoading || !currentEventInfo || (currentEventInfo && currentEventInfo.eventNum === 0) ? (
+              /* 로딩 중일 때 통합 표시 */
               <span
                 style={{
                   display: "inline-block",
                   padding: "4px 16px",
                   borderRadius: 16,
-                  background: "#4F6DDE",
-                  color: "#fff",
+                  background: "#f3f4f6",
+                  color: "#9ca3af",
                   fontSize: 14,
                   fontWeight: 600,
-                  boxShadow: "0 2px 8px rgba(79,109,222,0.13)",
-                  transition: "transform 0.3s, background 0.3s",
-                  transform:
-                    prevEvent &&
-                    (currentEvent || prevValidEvent) &&
-                    prevEvent.eventNum !== (currentEvent || prevValidEvent).eventNum
-                      ? "scale(1.12)"
-                      : "scale(1)",
+                  border: "1px solid #e3e6ef",
                 }}
               >
-                Event {currentEventInfo?.eventNum || 0}
+                로딩중...
               </span>
-              
-              {/* 이벤트 이름 (있는 경우에만 표시) */}
-              {currentEventInfo?.name && (
+            ) : (
+              /* 로딩 완료 시 chapter와 event 정보 표시 */
+              <>
+                {/* 챕터 정보 표시 */}
                 <span
                   style={{
                     display: "inline-block",
                     padding: "4px 12px",
-                    borderRadius: 12,
-                    background: "#f8f9fc",
+                    borderRadius: 16,
+                    background: "#EEF2FF",
                     color: "#22336b",
-                    fontSize: 13,
-                    fontWeight: 500,
+                    fontSize: 14,
+                    fontWeight: 600,
                     border: "1px solid #e3e6ef",
-                    maxWidth: "200px",
-                    overflow: "hidden",
-                    textOverflow: "ellipsis",
-                    whiteSpace: "nowrap",
                   }}
-                  title={currentEventInfo.name}
                 >
-                  {currentEventInfo.name}
+                  Chapter {currentChapter}
                 </span>
-              )}
-              
-              {/* 프로그레스 바 */}
-              <div
-                style={{
-                  width: 120,
-                  height: 6,
-                  background: "#e3e6ef",
-                  borderRadius: 3,
-                  overflow: "hidden",
-                }}
-              >
+
+                {/* 이벤트 정보 */}
                 <div
                   style={{
-                    width: currentProgressWidth,
-                    height: "100%",
-                    background: "linear-gradient(90deg, #4F6DDE 0%, #6fa7ff 100%)",
-                    borderRadius: 3,
-                    transition: "width 0.4s cubic-bezier(.4,2,.6,1)",
+                    display: "flex",
+                    flexDirection: "row",
+                    alignItems: "center",
+                    gap: 12,
                   }}
-                />
-              </div>
-            </div>
+                >
+                  {/* 이벤트 번호 */}
+                  <span
+                    style={{
+                      display: "inline-block",
+                      padding: "4px 16px",
+                      borderRadius: 16,
+                      background: "#4F6DDE",
+                      color: "#fff",
+                      fontSize: 14,
+                      fontWeight: 600,
+                      boxShadow: "0 2px 8px rgba(79,109,222,0.13)",
+                      transition: "transform 0.3s, background 0.3s",
+                      transform:
+                        prevEvent &&
+                        (currentEvent || prevValidEvent) &&
+                        prevEvent.eventNum !== (currentEvent || prevValidEvent).eventNum
+                          ? "scale(1.12)"
+                          : "scale(1)",
+                    }}
+                  >
+                    Event {currentEventInfo?.eventNum || 0}
+                  </span>
+                  
+                  {/* 이벤트 이름 (있는 경우에만 표시) */}
+                  {currentEventInfo?.name && (
+                    <span
+                      style={{
+                        display: "inline-block",
+                        padding: "4px 12px",
+                        borderRadius: 12,
+                        background: "#f8f9fc",
+                        color: "#22336b",
+                        fontSize: 13,
+                        fontWeight: 500,
+                        border: "1px solid #e3e6ef",
+                        maxWidth: "200px",
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: "nowrap",
+                      }}
+                      title={currentEventInfo.name}
+                    >
+                      {currentEventInfo.name}
+                    </span>
+                  )}
+                  
+                  {/* 프로그레스 바 */}
+                  <div
+                    style={{
+                      width: 120,
+                      height: 6,
+                      background: "#e3e6ef",
+                      borderRadius: 3,
+                      overflow: "hidden",
+                    }}
+                  >
+                    <div
+                      style={{
+                        width: currentProgressWidth,
+                        height: "100%",
+                        background: "linear-gradient(90deg, #4F6DDE 0%, #6fa7ff 100%)",
+                        borderRadius: 3,
+                        transition: "width 0.4s cubic-bezier(.4,2,.6,1)",
+                      }}
+                    />
+                  </div>
+                </div>
+              </>
+            )}
           </div>
         )}
 
@@ -369,100 +391,121 @@ const ViewerTopBar = ({
             borderBottom: "1px solid #e3e6ef",
           }}
         >
-          {/* 챕터 정보 표시 */}
-          <span
-            style={{
-              display: "inline-block",
-              padding: "4px 12px",
-              borderRadius: 16,
-              background: "#EEF2FF",
-              color: "#22336b",
-              fontSize: 14,
-              fontWeight: 600,
-              border: "1px solid #e3e6ef",
-            }}
-          >
-            Chapter {currentChapter}
-          </span>
-
-          {/* 이벤트 정보 */}
-          <div
-            style={{
-              display: "flex",
-              flexDirection: "row",
-              alignItems: "center",
-              gap: 12,
-              marginLeft: 12,
-            }}
-          >
-            {/* 이벤트 번호 */}
+          {isGraphLoading || !currentEventInfo || (currentEventInfo && currentEventInfo.eventNum === 0) ? (
+            /* 로딩 중일 때 통합 표시 */
             <span
               style={{
                 display: "inline-block",
                 padding: "4px 16px",
                 borderRadius: 16,
-                background: "#4F6DDE",
-                color: "#fff",
+                background: "#f3f4f6",
+                color: "#9ca3af",
                 fontSize: 14,
                 fontWeight: 600,
-                boxShadow: "0 2px 8px rgba(79,109,222,0.13)",
-                transition: "transform 0.3s, background 0.3s",
-                transform:
-                  prevEvent &&
-                  (currentEvent || prevValidEvent) &&
-                  prevEvent.eventNum !== (currentEvent || prevValidEvent).eventNum
-                    ? "scale(1.12)"
-                    : "scale(1)",
+                border: "1px solid #e3e6ef",
               }}
             >
-              Event {currentEventInfo?.eventNum || 0}
+              로딩중...
             </span>
-            
-            {/* 이벤트 이름 (있는 경우에만 표시) */}
-            {currentEventInfo?.name && (
+          ) : (
+            /* 로딩 완료 시 chapter와 event 정보 표시 */
+            <>
+              {/* 챕터 정보 표시 */}
               <span
                 style={{
                   display: "inline-block",
                   padding: "4px 12px",
-                  borderRadius: 12,
-                  background: "#f8f9fc",
+                  borderRadius: 16,
+                  background: "#EEF2FF",
                   color: "#22336b",
-                  fontSize: 13,
-                  fontWeight: 500,
+                  fontSize: 14,
+                  fontWeight: 600,
                   border: "1px solid #e3e6ef",
-                  maxWidth: "200px",
-                  overflow: "hidden",
-                  textOverflow: "ellipsis",
-                  whiteSpace: "nowrap",
                 }}
-                title={currentEventInfo.name}
               >
-                {currentEventInfo.name}
+                Chapter {currentChapter}
               </span>
-            )}
-            
-            {/* 프로그레스 바 */}
-            <div
-              style={{
-                width: 120,
-                height: 6,
-                background: "#e3e6ef",
-                borderRadius: 3,
-                overflow: "hidden",
-                position: "relative",
-              }}
-            >
+
+              {/* 이벤트 정보 */}
               <div
                 style={{
-                  width: currentProgressWidth,
-                  height: "100%",
-                  background: "linear-gradient(90deg, #4F6DDE 0%, #6fa7ff 100%)",
-                  borderRadius: 3,
-                  transition: "width 0.4s cubic-bezier(.4,2,.6,1)",
+                  display: "flex",
+                  flexDirection: "row",
+                  alignItems: "center",
+                  gap: 12,
+                  marginLeft: 12,
                 }}
-              />
-            </div>
-          </div>
+              >
+                {/* 이벤트 번호 */}
+                <span
+                  style={{
+                    display: "inline-block",
+                    padding: "4px 16px",
+                    borderRadius: 16,
+                    background: "#4F6DDE",
+                    color: "#fff",
+                    fontSize: 14,
+                    fontWeight: 600,
+                    boxShadow: "0 2px 8px rgba(79,109,222,0.13)",
+                    transition: "transform 0.3s, background 0.3s",
+                    transform:
+                      prevEvent &&
+                      (currentEvent || prevValidEvent) &&
+                      prevEvent.eventNum !== (currentEvent || prevValidEvent).eventNum
+                        ? "scale(1.12)"
+                        : "scale(1)",
+                  }}
+                >
+                  Event {currentEventInfo?.eventNum || 0}
+                </span>
+                
+                {/* 이벤트 이름 (있는 경우에만 표시) */}
+                {currentEventInfo?.name && (
+                  <span
+                    style={{
+                      display: "inline-block",
+                      padding: "4px 12px",
+                      borderRadius: 12,
+                      background: "#f8f9fc",
+                      color: "#22336b",
+                      fontSize: 13,
+                      fontWeight: 500,
+                      border: "1px solid #e3e6ef",
+                      maxWidth: "200px",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
+                    }}
+                    title={currentEventInfo.name}
+                  >
+                    {currentEventInfo.name}
+                  </span>
+                )}
+                
+                {/* 프로그레스 바 */}
+                <div
+                  style={{
+                    width: 120,
+                    height: 6,
+                    background: "#e3e6ef",
+                    borderRadius: 3,
+                    overflow: "hidden",
+                    position: "relative",
+                  }}
+                >
+                  <div
+                    style={{
+                      width: currentProgressWidth,
+                      height: "100%",
+                      background: "linear-gradient(90deg, #4F6DDE 0%, #6fa7ff 100%)",
+                      borderRadius: 3,
+                      transition: "width 0.4s cubic-bezier(.4,2,.6,1)",
+                    }}
+                  />
+                </div>
+              </div>
+            </>
+          )}
         </div>
       )}
     </>
