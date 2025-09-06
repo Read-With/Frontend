@@ -18,11 +18,11 @@ import {
 } from "../../utils/viewerUtils";
 import { 
   getEventsForChapter,
-  loadChapterData,
   getElementsFromRelations,
   getChapterFile,
   filterIsolatedNodes,
-  getDetectedMaxChapter
+  getDetectedMaxChapter,
+  getEventData
 } from "../../utils/graphData";
 import { calcGraphDiff } from "../../utils/graphDataUtils";
 
@@ -230,41 +230,51 @@ const ViewerPage = ({ darkMode: initialDarkMode }) => {
     setSearchTerm,
   } = useGraphSearch(elements, null, currentChapterData);
 
-  // 챕터 데이터 로딩
+  // 챕터 데이터 로딩 (이벤트 데이터만 별도 처리)
   useEffect(() => {
-    loadChapterData(
-      currentChapter,
-      setEvents,
-      setCharacterData,
-      setElements,
-      setIsDataReady,
-      setLoading
-    );
-  }, [currentChapter]);
+    const loadEventsData = async () => {
+      try {
+        setLoading(true);
+        setIsDataReady(false);
+        
+        // 이벤트 데이터 로드
+        const events = getEventsForChapter(currentChapter);
+        setEvents(events);
+        
+        // 캐릭터 데이터는 useViewerPage의 useGraphDataLoader에서 처리됨
+        if (currentChapterData) {
+          setCharacterData(currentChapterData.characters || currentChapterData);
+        }
+        
+        setIsDataReady(true);
+      } catch (error) {
+        console.error('Chapter data loading error:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    
+    loadEventsData();
+  }, [currentChapter, currentChapterData]);
 
-  // === [수정] 현재 이벤트에 해당하는 그래프만 생성 (ViewerPage 전용) ===
+  // === [수정] 현재 이벤트에 해당하는 그래프만 생성 (utils 함수 활용) ===
   const currentEventElements = useMemo(() => {
     if (!currentEvent || !events || !events.length || !characterData || !characterData.length) {
       return [];
     }
     
-    // 현재 이벤트에 해당하는 관계 데이터를 별도로 로드
     const currentEventNum = currentEvent.eventNum;
     const currentChapter = currentEvent.chapter;
     
     try {
-      // chapter1_relationships_event_1.json 형태로 관계 데이터 로드
-      const relationModule = import.meta.glob('/src/data/gatsby/chapter*_relationships_event_*.json', { eager: true });
-      const relationFilePath = Object.keys(relationModule).find(path => 
-        path.includes(`chapter${currentChapter}_relationships_event_${currentEventNum}.json`)
-      );
+      // utils/graphData.js의 getEventData 함수 활용
+      const eventData = getEventData(folderKey, currentChapter, currentEventNum);
       
-      if (!relationFilePath) return [];
+      if (!eventData) return [];
       
-      const relationData = relationModule[relationFilePath]?.default || {};
-      const currentRelations = relationData.relations || [];
-      const currentImportance = relationData.importance || {};
-      const currentNewAppearances = relationData.log?.new_character_ids || [];
+      const currentRelations = eventData.relations || [];
+      const currentImportance = eventData.importance || {};
+      const currentNewAppearances = eventData.log?.new_character_ids || [];
       
       const generatedElements = getElementsFromRelations(
         currentRelations,
@@ -278,7 +288,7 @@ const ViewerPage = ({ darkMode: initialDarkMode }) => {
       console.error('관계 데이터 로드 실패:', error);
       return [];
     }
-  }, [currentEvent, characterData]);
+  }, [currentEvent, characterData, folderKey]);
 
   // === [수정] elements: 현재 이벤트에 해당하는 그래프만 표시 ===
   // 1. 데이터 준비되면 currentEventElements를 보여줌
