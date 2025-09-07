@@ -1,8 +1,5 @@
 import { useState, useEffect } from 'react';
 
-/**
- * 사용자 프로필 데이터를 관리하는 커스텀 훅
- */
 export const useUserProfile = () => {
   const [userProfile, setUserProfile] = useState({
     nickname: "User's Nickname",

@@ -10,13 +10,6 @@ import {
 
 const MIN_POSITIVITY = 1;
 
-/**
- * 관계 데이터에서 특정 노드 쌍의 관계를 찾는 함수
- * @param {Array} relations - 관계 데이터 배열
- * @param {number} id1 - 첫 번째 노드 ID
- * @param {number} id2 - 두 번째 노드 ID
- * @returns {Object|null} 관계 객체 또는 null
- */
 function findRelation(relations, id1, id2) {
   if (!Array.isArray(relations) || relations.length === 0) return null;
   
@@ -195,15 +188,33 @@ function fetchRelationTimelineViewer(id1, id2, chapterNum, eventNum, folderKey) 
   }
   
   try {
-    // 현재 챕터에서 처음 등장한 시점 찾기
+    // 현재 이벤트에서 관계가 존재하는지 먼저 확인
+    const currentEventJson = getEventDataByIndex(folderKey, chapterNum, eventNum);
+    const currentRelation = currentEventJson ? findRelation(currentEventJson.relations, id1, id2) : null;
+    
+    // 현재 이벤트에 관계가 있다면 해당 이벤트만 반환
+    if (currentRelation) {
+      return {
+        points: [currentRelation.positivity],
+        labelInfo: [`E${eventNum}`],
+        noRelation: false
+      };
+    }
+    
+    // 현재 이벤트에 관계가 없다면 챕터 전체에서 관계 찾기
     let firstAppearanceInChapter = null;
-    for (let i = 1; i <= eventNum && !firstAppearanceInChapter; i++) {
+    let lastAppearanceInChapter = null;
+    
+    for (let i = 1; i <= eventNum; i++) {
       const json = getEventDataByIndex(folderKey, chapterNum, i);
       if (!json) continue;
       
       const found = findRelation(json.relations, id1, id2);
       if (found) {
-        firstAppearanceInChapter = i;
+        if (!firstAppearanceInChapter) {
+          firstAppearanceInChapter = i;
+        }
+        lastAppearanceInChapter = i;
       }
     }
     

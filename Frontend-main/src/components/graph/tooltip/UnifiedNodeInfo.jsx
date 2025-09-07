@@ -7,6 +7,7 @@ import { useClickOutside } from "../../../hooks/useClickOutside.js";
 import { useRelationData } from "../../../hooks/useRelationData.js";
 import { safeNum } from "../../../utils/relationUtils.js";
 import { mergeRefs } from "../../../utils/styles/animations.js";
+import { COLORS, createButtonStyle, createAdvancedButtonHandlers, ANIMATION_VALUES, unifiedNodeTooltipStyles, unifiedNodeAnimations } from "../../../utils/styles/styles.js";
 import "../RelationGraph.css";
 
 /**
@@ -209,7 +210,7 @@ function UnifiedNodeInfo({
   // 에러가 있는 경우 에러 메시지 표시
   if (error) {
     const errorContent = (
-      <div style={{ textAlign: "center", color: "#d32f2f" }}>
+      <div style={{ textAlign: "center", color: COLORS.error }}>
         <h4 style={{ margin: "0 0 10px 0" }}>오류가 발생했습니다</h4>
         <p style={{ margin: 0, fontSize: "14px" }}>{error}</p>
         <button
@@ -217,11 +218,12 @@ function UnifiedNodeInfo({
           style={{
             marginTop: "15px",
             padding: "8px 16px",
-            background: "#d32f2f",
+            background: COLORS.error,
             color: "white",
             border: "none",
             borderRadius: "6px",
-            cursor: "pointer"
+            cursor: "pointer",
+            ...createButtonStyle(ANIMATION_VALUES, 'default')
           }}
         >
           닫기
@@ -235,18 +237,10 @@ function UnifiedNodeInfo({
           ref={tooltipRef}
           className="graph-node-tooltip error"
           style={{
-            position: "fixed",
+            ...unifiedNodeTooltipStyles.errorContainer,
             left: position.x,
             top: position.y,
             zIndex: zIndexValue,
-            width: 500,
-            minHeight: 150,
-            background: "#fff",
-            borderRadius: 12,
-            boxShadow: "0 4px 16px rgba(0,0,0,0.1)",
-            padding: "20px",
-            border: "1px solid #ffcdd2",
-            animation: "scaleIn 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
             ...(style || {}),
           }}
         >
@@ -292,18 +286,18 @@ function UnifiedNodeInfo({
             width: 80,
             height: 80,
             borderRadius: "50%",
-            background: "#f3f4f6",
+            background: COLORS.backgroundLight,
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
             marginBottom: 20,
-            border: "2px solid #e5e7eb",
+            border: `2px solid ${COLORS.border}`,
           }}
         >
           <svg width="40" height="40" viewBox="0 0 40 40" fill="none">
-            <circle cx="20" cy="20" r="20" fill="#d1d5db" />
-            <ellipse cx="20" cy="16" rx="8" ry="8" fill="#9ca3af" />
-            <ellipse cx="20" cy="32" rx="12" ry="6" fill="#9ca3af" />
+            <circle cx="20" cy="20" r="20" fill={COLORS.border} />
+            <ellipse cx="20" cy="16" rx="8" ry="8" fill={COLORS.textSecondary} />
+            <ellipse cx="20" cy="32" rx="12" ry="6" fill={COLORS.textSecondary} />
           </svg>
         </div>
 
@@ -311,7 +305,7 @@ function UnifiedNodeInfo({
           style={{
             fontSize: 20,
             fontWeight: 700,
-            color: "#374151",
+            color: COLORS.textPrimary,
             marginBottom: 8,
           }}
         >
@@ -321,7 +315,7 @@ function UnifiedNodeInfo({
         <p
           style={{
             fontSize: 16,
-            color: "#6b7280",
+            color: COLORS.textSecondary,
             lineHeight: 1.5,
             marginBottom: 0,
           }}
@@ -332,7 +326,7 @@ function UnifiedNodeInfo({
         <p
           style={{
             fontSize: 14,
-            color: "#9ca3af",
+            color: COLORS.textSecondary,
             lineHeight: 1.4,
             marginTop: 8,
           }}
@@ -351,21 +345,13 @@ function UnifiedNodeInfo({
           ref={mergeRefs(tooltipRef, clickOutsideRef)}
           className="graph-node-tooltip"
           style={{
-            position: "fixed",
+            ...unifiedNodeTooltipStyles.notAppearedContainer,
             left: position.x,
             top: position.y,
             zIndex: zIndexValue,
             opacity: showContent ? 1 : 0,
-            transition: isDragging ? "none" : "opacity 0.3s",
+            transition: unifiedNodeAnimations.tooltipSimpleTransition(isDragging),
             cursor: isDragging ? "grabbing" : "grab",
-            width: 500,
-            minHeight: 150,
-            background: "#fff",
-            borderRadius: 20,
-            boxShadow: "0 8px 32px rgba(79,109,222,0.13), 0 1.5px 8px rgba(0,0,0,0.04)",
-            padding: 0,
-            border: "1.5px solid #e5e7eb",
-            animation: "scaleIn 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
             ...(style || {}),
           }}
           onMouseDown={handleMouseDown}
@@ -374,15 +360,10 @@ function UnifiedNodeInfo({
             onClick={onClose}
             className="tooltip-close-btn"
             style={{
-              position: "absolute",
+              ...createButtonStyle(ANIMATION_VALUES, 'tooltipClose'),
               top: 18,
               right: 18,
               fontSize: 22,
-              color: "#bfc8e2",
-              background: "none",
-              border: "none",
-              cursor: "pointer",
-              zIndex: 2,
             }}
           >
             &times;
@@ -401,7 +382,7 @@ function UnifiedNodeInfo({
             height: "100%",
             padding: "40px 20px",
             textAlign: "center",
-            color: "#6b7280",
+            color: COLORS.textSecondary,
           }}
         >
           {notAppearedContent}
@@ -430,17 +411,7 @@ function UnifiedNodeInfo({
       <button
         onClick={onClose}
         className="tooltip-close-btn"
-        style={{
-          position: "absolute",
-          top: 14,
-          right: 14,
-          fontSize: 18,
-          color: "#bfc8e2",
-          background: "none",
-          border: "none",
-          cursor: "pointer",
-          zIndex: 2,
-        }}
+        style={createButtonStyle(ANIMATION_VALUES, 'tooltipClose')}
       >
         &times;
       </button>
@@ -547,7 +518,7 @@ function UnifiedNodeInfo({
                 style={{
                   fontWeight: 800,
                   fontSize: 20,
-                  color: "#22336b",
+                  color: COLORS.textPrimary,
                   letterSpacing: 0.5,
                   maxWidth: 165,
                   overflow: "hidden",
@@ -561,14 +532,14 @@ function UnifiedNodeInfo({
               {processedNodeData?.isMainCharacter && (
                 <span
                   style={{
-                    background: "linear-gradient(90deg, #4F6DDE 0%, #6fa7ff 100%)",
+                    background: `linear-gradient(90deg, ${COLORS.primary} 0%, ${COLORS.primary} 100%)`,
                     color: "#fff",
                     borderRadius: 11,
                     fontSize: 12,
                     padding: "2px 9px",
                     marginLeft: 2,
                     fontWeight: 700,
-                    boxShadow: "0 2px 8px rgba(79,109,222,0.13)",
+                    boxShadow: `0 2px 8px ${COLORS.primary}26`,
                   }}
                 >
                   주요 인물
@@ -593,12 +564,12 @@ function UnifiedNodeInfo({
                     <span
                       key={i}
                       style={{
-                        background: "#f3f4f6",
-                        color: "#4b5563",
+                        background: COLORS.backgroundLight,
+                        color: COLORS.textPrimary,
                         borderRadius: 9,
                         fontSize: 12,
                         padding: "2px 9px",
-                        border: "1px solid #e5e7eb",
+                        border: `1px solid ${COLORS.border}`,
                         fontWeight: 500,
                       }}
                     >
@@ -634,7 +605,7 @@ function UnifiedNodeInfo({
         {processedNodeData?.hasDescription ? (
           processedNodeData.description
         ) : (
-          <span style={{ color: "#bbb" }}>설명 정보가 없습니다.</span>
+          <span style={{ color: COLORS.textSecondary }}>설명 정보가 없습니다.</span>
         )}
       </div>
       
@@ -644,16 +615,16 @@ function UnifiedNodeInfo({
           style={{
             margin: "12px 24px 0 24px",
             padding: "9px 12px",
-            background: "#f8f9fc",
+            background: COLORS.backgroundLight,
             borderRadius: "6px",
-            border: "1px solid #e3e6ef",
+            border: `1px solid ${COLORS.borderLight}`,
           }}
         >
           <div
             style={{
               fontSize: 13,
               fontWeight: 600,
-              color: "#6C8EFF",
+              color: COLORS.primary,
               marginBottom: "6px",
             }}
           >
@@ -662,7 +633,7 @@ function UnifiedNodeInfo({
           <div
             style={{
               fontSize: 12,
-              color: "#42506b",
+              color: COLORS.textPrimary,
               lineHeight: 1.4,
             }}
           >
@@ -692,26 +663,14 @@ function UnifiedNodeInfo({
         ref={mergeRefs(tooltipRef, clickOutsideRef)}
         className={`graph-node-tooltip ${isFlipped ? "flipped" : ""}`}
         style={{
-          position: "fixed",
+          ...unifiedNodeTooltipStyles.tooltipContainer,
           left: position.x,
           top: position.y,
           zIndex: zIndexValue,
           opacity: showContent ? 1 : 0,
-          transition: isDragging ? "none" : "opacity 0.3s, transform 0.6s",
+          transition: unifiedNodeAnimations.tooltipComplexTransition(isDragging),
           cursor: isDragging ? "grabbing" : "grab",
           transform: isFlipped ? "rotateY(180deg)" : "rotateY(0deg)",
-          transformStyle: "preserve-3d",
-          width: 500,
-          minWidth: 500,
-          maxWidth: 500,
-          height: "auto",
-          minHeight: 280,
-          background: "#fff",
-          borderRadius: 10,
-          boxShadow: "0 8px 4px rgba(79,109,222,0.13), 0 1.5px 8px rgba(0,0,0,0.04)",
-          padding: 0,
-          border: "1.5px solid #e5e7eb",
-          animation: "fadeIn 0.4s ease-out",
           ...(style || {}),
         }}
         onMouseDown={handleMouseDown}
@@ -725,15 +684,7 @@ function UnifiedNodeInfo({
   if (displayMode === 'sidebar') {
     return (
       <div
-        style={{
-          width: '100%',
-          height: '100%',
-          display: 'flex',
-          flexDirection: 'column',
-          background: '#fff',
-          overflow: 'hidden',
-          fontFamily: 'var(--font-family-primary)',
-        }}
+        style={unifiedNodeTooltipStyles.sidebarContainer}
         onKeyDown={(e) => {
           if (e.key === 'Escape') {
             onClose();
@@ -764,20 +715,20 @@ function UnifiedNodeInfo({
               <span style={{
                 fontSize: '20px',
                 fontWeight: '700',
-                color: '#111827',
+                color: COLORS.textPrimary,
                 letterSpacing: '-0.025em',
               }}>
                 {processedNodeData?.displayName}
               </span>
               {processedNodeData?.isMainCharacter && (
                 <span style={{
-                  background: 'linear-gradient(135deg, #4F6DDE 0%, #6fa7ff 100%)',
+                  background: `linear-gradient(135deg, ${COLORS.primary} 0%, ${COLORS.primary} 100%)`,
                   color: '#fff',
                   borderRadius: '12px',
                   fontSize: '12px',
                   padding: '4px 12px',
                   fontWeight: '600',
-                  boxShadow: '0 2px 4px rgba(79,109,222,0.2)',
+                  boxShadow: `0 2px 4px ${COLORS.primary}33`,
                 }}>
                   주요 인물
                 </span>
@@ -791,35 +742,35 @@ function UnifiedNodeInfo({
                 background: 'none',
                 border: 'none',
                 fontSize: '24px',
-                color: '#6b7280',
+                color: COLORS.textSecondary,
                 cursor: 'pointer',
                 padding: '8px',
                 borderRadius: '6px',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                transition: 'all 0.15s ease',
+                transition: unifiedNodeAnimations.buttonHoverTransition,
                 width: '40px',
                 height: '40px',
                 marginLeft: '16px',
               }}
               onMouseOver={(e) => {
-                e.currentTarget.style.background = '#f3f4f6';
-                e.currentTarget.style.color = '#374151';
+                e.currentTarget.style.background = COLORS.backgroundLight;
+                e.currentTarget.style.color = COLORS.textPrimary;
               }}
               onMouseOut={(e) => {
                 e.currentTarget.style.background = 'none';
-                e.currentTarget.style.color = '#6b7280';
+                e.currentTarget.style.color = COLORS.textSecondary;
               }}
               onFocus={(e) => {
-                e.currentTarget.style.background = '#f3f4f6';
-                e.currentTarget.style.color = '#374151';
-                e.currentTarget.style.outline = '2px solid #2563eb';
+                e.currentTarget.style.background = COLORS.backgroundLight;
+                e.currentTarget.style.color = COLORS.textPrimary;
+                e.currentTarget.style.outline = `2px solid ${COLORS.primary}`;
                 e.currentTarget.style.outlineOffset = '2px';
               }}
               onBlur={(e) => {
                 e.currentTarget.style.background = 'none';
-                e.currentTarget.style.color = '#6b7280';
+                e.currentTarget.style.color = COLORS.textSecondary;
                 e.currentTarget.style.outline = 'none';
               }}
             >
@@ -842,11 +793,11 @@ function UnifiedNodeInfo({
             <div 
               className="sidebar-card"
               style={{
-                background: '#fff',
+                background: COLORS.background,
                 borderRadius: '12px',
                 padding: '24px',
                 marginBottom: '24px',
-                border: '1px solid #e5e7eb',
+                border: `1px solid ${COLORS.border}`,
                 boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
               }}
             >
@@ -901,7 +852,7 @@ function UnifiedNodeInfo({
                 <h4 style={{
                   fontSize: '20px',
                   fontWeight: '700',
-                  color: '#111827',
+                  color: COLORS.textPrimary,
                   margin: '0 0 8px 0',
                   letterSpacing: '-0.025em',
                 }}>
@@ -922,12 +873,12 @@ function UnifiedNodeInfo({
                         <span
                           key={i}
                           style={{
-                            background: '#f3f4f6',
-                            color: '#4b5563',
+                            background: COLORS.backgroundLight,
+                            color: COLORS.textPrimary,
                             borderRadius: '12px',
                             fontSize: '13px',
                             padding: '4px 12px',
-                            border: '1px solid #e5e7eb',
+                            border: `1px solid ${COLORS.border}`,
                             fontWeight: '500',
                           }}
                         >
@@ -952,7 +903,7 @@ function UnifiedNodeInfo({
                       margin: 0,
                       fontSize: '14px',
                       lineHeight: '1.6',
-                      color: '#374151',
+                      color: COLORS.textPrimary,
                       letterSpacing: '-0.01em',
                     }}>
                       {processedNodeData.description}
@@ -967,18 +918,18 @@ function UnifiedNodeInfo({
               <div 
                 className="sidebar-card"
                 style={{
-                  background: '#fff',
+                  background: COLORS.background,
                   borderRadius: '12px',
                   padding: '24px',
                   marginBottom: '24px',
-                  border: '1px solid #e5e7eb',
+                  border: `1px solid ${COLORS.border}`,
                   boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
                 }}
               >
                 <h4 style={{
                   fontSize: '16px',
                   fontWeight: '600',
-                  color: '#111827',
+                  color: COLORS.textPrimary,
                   margin: '0 0 16px 0',
                   letterSpacing: '-0.025em',
                 }}>
@@ -1010,11 +961,11 @@ function UnifiedNodeInfo({
             <div 
               className="sidebar-card"
               style={{
-                background: '#fff',
+                background: COLORS.background,
                 borderRadius: '16px',
                 padding: '28px',
                 marginBottom: '24px',
-                border: '1px solid #e5e7eb',
+                border: `1px solid ${COLORS.border}`,
                 boxShadow: '0 2px 8px rgba(0,0,0,0.06), 0 1px 3px rgba(0,0,0,0.1)',
                 position: 'relative',
                 overflow: 'hidden',
@@ -1033,7 +984,7 @@ function UnifiedNodeInfo({
                     right: '-20px',
                     width: '80px',
                     height: '80px',
-                    background: 'linear-gradient(135deg, rgba(79,109,222,0.05) 0%, rgba(111,167,255,0.05) 100%)',
+                    background: `linear-gradient(135deg, ${COLORS.primary}0D 0%, ${COLORS.primary}0D 100%)`,
                     borderRadius: '50%',
                     zIndex: 0,
                   }} />
@@ -1043,7 +994,7 @@ function UnifiedNodeInfo({
                     left: '-30px',
                     width: '100px',
                     height: '100px',
-                    background: 'linear-gradient(135deg, rgba(79,109,222,0.03) 0%, rgba(111,167,255,0.03) 100%)',
+                    background: `linear-gradient(135deg, ${COLORS.primary}08 0%, ${COLORS.primary}08 100%)`,
                     borderRadius: '50%',
                     zIndex: 0,
                   }} />
@@ -1055,7 +1006,7 @@ function UnifiedNodeInfo({
                     <h4 style={{
                       fontSize: '18px',
                       fontWeight: '700',
-                      color: '#111827',
+                      color: COLORS.textPrimary,
                       margin: '0 0 12px 0',
                       letterSpacing: '-0.025em',
                     }}>
@@ -1064,7 +1015,7 @@ function UnifiedNodeInfo({
                     
                     <p style={{
                       fontSize: '15px',
-                      color: '#6b7280',
+                      color: COLORS.textSecondary,
                       margin: '0 0 28px 0',
                       lineHeight: '1.6',
                       maxWidth: '280px',
@@ -1082,28 +1033,8 @@ function UnifiedNodeInfo({
                     }}>
                       <button
                         onClick={() => setShowSummary(true)}
-                        style={{
-                          background: 'linear-gradient(135deg, #4F6DDE 0%, #6fa7ff 100%)',
-                          color: '#fff',
-                          border: 'none',
-                          borderRadius: '12px',
-                          padding: '14px 28px',
-                          fontSize: '15px',
-                          fontWeight: '600',
-                          cursor: 'pointer',
-                          transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-                          boxShadow: '0 4px 12px rgba(79,109,222,0.25)',
-                          position: 'relative',
-                          overflow: 'hidden',
-                        }}
-                        onMouseOver={(e) => {
-                          e.currentTarget.style.transform = 'translateY(-2px)';
-                          e.currentTarget.style.boxShadow = '0 8px 20px rgba(79,109,222,0.35)';
-                        }}
-                        onMouseOut={(e) => {
-                          e.currentTarget.style.transform = 'translateY(0)';
-                          e.currentTarget.style.boxShadow = '0 4px 12px rgba(79,109,222,0.25)';
-                        }}
+                        style={createButtonStyle(ANIMATION_VALUES, 'primaryAdvanced')}
+                        {...createAdvancedButtonHandlers('primaryAdvanced')}
                       >
                         <span style={{ position: 'relative', zIndex: 1 }}>
                           요약 정보 보기
@@ -1123,7 +1054,7 @@ function UnifiedNodeInfo({
                     alignItems: 'center',
                     marginBottom: '24px',
                     paddingBottom: '16px',
-                    borderBottom: '2px solid #f3f4f6',
+                    borderBottom: `2px solid ${COLORS.backgroundLight}`,
                   }}>
                     <div style={{
                       display: 'flex',
@@ -1133,7 +1064,7 @@ function UnifiedNodeInfo({
                       <h4 style={{
                         fontSize: '18px',
                         fontWeight: '700',
-                        color: '#111827',
+                        color: COLORS.textPrimary,
                         margin: 0,
                         letterSpacing: '-0.025em',
                       }}>
@@ -1143,31 +1074,8 @@ function UnifiedNodeInfo({
                     
                     <button
                       onClick={() => setShowSummary(false)}
-                      style={{
-                        background: 'none',
-                        border: 'none',
-                        fontSize: '18px',
-                        color: '#6b7280',
-                        cursor: 'pointer',
-                        padding: '8px',
-                        borderRadius: '8px',
-                        transition: 'all 0.2s ease',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        width: '36px',
-                        height: '36px',
-                      }}
-                      onMouseOver={(e) => {
-                        e.currentTarget.style.background = '#f3f4f6';
-                        e.currentTarget.style.color = '#374151';
-                        e.currentTarget.style.transform = 'scale(1.1)';
-                      }}
-                      onMouseOut={(e) => {
-                        e.currentTarget.style.background = 'none';
-                        e.currentTarget.style.color = '#6b7280';
-                        e.currentTarget.style.transform = 'scale(1)';
-                      }}
+                      style={createButtonStyle(ANIMATION_VALUES, 'close')}
+                      {...createAdvancedButtonHandlers('close')}
                     >
                       &times;
                     </button>
@@ -1175,10 +1083,10 @@ function UnifiedNodeInfo({
                   
                   {/* 요약 내용 */}
                   <div style={{
-                    background: 'linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)',
+                    background: `linear-gradient(135deg, ${COLORS.backgroundLighter} 0%, ${COLORS.backgroundLight} 100%)`,
                     borderRadius: '12px',
                     padding: '20px',
-                    border: '1px solid #e2e8f0',
+                    border: `1px solid ${COLORS.border}`,
                     position: 'relative',
                   }}>
                     <div style={{
@@ -1187,7 +1095,7 @@ function UnifiedNodeInfo({
                       left: '0',
                       right: '0',
                       height: '4px',
-                      background: 'linear-gradient(90deg, #4F6DDE 0%, #6fa7ff 100%)',
+                      background: `linear-gradient(90deg, ${COLORS.primary} 0%, ${COLORS.primary} 100%)`,
                       borderRadius: '12px 12px 0 0',
                     }} />
                     
@@ -1195,7 +1103,7 @@ function UnifiedNodeInfo({
                       margin: 0,
                       fontSize: '15px',
                       lineHeight: '1.7',
-                      color: '#374151',
+                      color: COLORS.textPrimary,
                       letterSpacing: '-0.01em',
                       whiteSpace: 'pre-wrap',
                       textAlign: 'justify',

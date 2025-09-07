@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { FaTimes, FaFont, FaColumns, FaMoon, FaSun, FaCheck, FaChartBar } from 'react-icons/fa';
+import { FaTimes, FaFont, FaColumns, FaCheck, FaChartBar } from 'react-icons/fa';
 
 // 로컬 스토리지에서 설정 불러오기/저장하기 함수
 const loadSettings = () => {
@@ -23,7 +23,6 @@ const saveSettings = (settings) => {
 const defaultSettings = {
   fontSize: 100, // 기본 글꼴 크기 (%)
   pageMode: 'double', // 페이지 모드 (single, double)
-  theme: 'light', // 테마 (light, dark, sepia)
   lineHeight: 1.5, // 줄 간격
   margin: 20, // 여백 (px)
   fontFamily: 'default', // 글꼴
@@ -271,65 +270,6 @@ const ViewerSettings = ({ isOpen, onClose, onApplySettings, currentSettings }) =
           </div>
         </div>
         
-        {/* 테마 설정 */}
-        <div style={{ marginBottom: '24px' }}>
-          <h3 style={{ fontSize: '1.1rem', fontWeight: 'bold', color: '#22336b', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-            {settings.theme === 'dark' ? <FaMoon /> : <FaSun />} 테마
-          </h3>
-          <div style={{ display: 'flex', gap: '12px' }}>
-            <button
-              onClick={() => handleChange('theme', 'light')}
-              style={{
-                padding: '10px 16px',
-                borderRadius: '8px',
-                border: '1px solid #e7eaf7',
-                backgroundColor: settings.theme === 'light' ? '#4F6DDE' : '#f8fafc',
-                color: settings.theme === 'light' ? 'white' : '#22336b',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px',
-                fontWeight: settings.theme === 'light' ? 'bold' : 'normal',
-              }}
-            >
-              {settings.theme === 'light' && <FaCheck />} 밝은 테마
-            </button>
-            <button
-              onClick={() => handleChange('theme', 'dark')}
-              style={{
-                padding: '10px 16px',
-                borderRadius: '8px',
-                border: '1px solid #e7eaf7',
-                backgroundColor: settings.theme === 'dark' ? '#4F6DDE' : '#f8fafc',
-                color: settings.theme === 'dark' ? 'white' : '#22336b',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px',
-                fontWeight: settings.theme === 'dark' ? 'bold' : 'normal',
-              }}
-            >
-              {settings.theme === 'dark' && <FaCheck />} 어두운 테마
-            </button>
-            <button
-              onClick={() => handleChange('theme', 'sepia')}
-              style={{
-                padding: '10px 16px',
-                borderRadius: '8px',
-                border: '1px solid #e7eaf7',
-                backgroundColor: settings.theme === 'sepia' ? '#4F6DDE' : '#f8fafc',
-                color: settings.theme === 'sepia' ? 'white' : '#22336b',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px',
-                fontWeight: settings.theme === 'sepia' ? 'bold' : 'normal',
-              }}
-            >
-              {settings.theme === 'sepia' && <FaCheck />} 세피아
-            </button>
-          </div>
-        </div>
         
         {/* 줄 간격 설정 */}
         <div style={{ marginBottom: '24px' }}>

@@ -1,5 +1,39 @@
 import { useState, useEffect, useCallback } from 'react';
 
+export const STORAGE_KEYS = {
+  CHAPTER_NODE_POSITIONS: (chapter) => `chapter_node_positions_${chapter}`,
+  GRAPH_EVENT_LAYOUT: (chapter, eventNum) => `graph_event_layout_chapter_${chapter}_event_${eventNum}`,
+  GRAPH_PARTIAL_LAYOUT: (chapter) => `graph_partial_layout_chapter_${chapter}`,
+  LAST_CFI: (filename) => `readwith_${filename}_lastCFI`,
+  PREV_CHAPTER: (filename) => `readwith_${filename}_prevChapter`,
+  NEXT_PAGE: (filename) => `readwith_${filename}_nextPage`,
+  PREV_PAGE: (filename) => `readwith_${filename}_prevPage`,
+  TOTAL_LENGTH: (bookId) => `totalLength_${bookId}`,
+  CHAPTER_LENGTHS: (bookId) => `chapterLengths_${bookId}`,
+  CHAPTER: (filename) => `readwith_${filename}_chapter`,
+};
+
+export const createStorageKey = {
+  chapterNodePositions: (chapter) => STORAGE_KEYS.CHAPTER_NODE_POSITIONS(chapter),
+  
+  // 이벤트별 레이아웃 키 생성
+  graphEventLayout: (chapter, eventNum) => STORAGE_KEYS.GRAPH_EVENT_LAYOUT(chapter, eventNum),
+  
+  // 챕터별 부분 레이아웃 키 생성
+  graphPartialLayout: (chapter) => STORAGE_KEYS.GRAPH_PARTIAL_LAYOUT(chapter),
+  
+  // CFI 관련 키 생성
+  lastCFI: (filename) => STORAGE_KEYS.LAST_CFI(filename),
+  prevChapter: (filename) => STORAGE_KEYS.PREV_CHAPTER(filename),
+  nextPage: (filename) => STORAGE_KEYS.NEXT_PAGE(filename),
+  prevPage: (filename) => STORAGE_KEYS.PREV_PAGE(filename),
+  
+  // 책 관련 키 생성
+  totalLength: (bookId) => STORAGE_KEYS.TOTAL_LENGTH(bookId),
+  chapterLengths: (bookId) => STORAGE_KEYS.CHAPTER_LENGTHS(bookId),
+  chapter: (filename) => STORAGE_KEYS.CHAPTER(filename),
+};
+
 /**
  * localStorage와 연동되는 상태 관리 훅
  * @param {string} key - localStorage 키
@@ -10,7 +44,14 @@ export function useLocalStorage(key, initialValue) {
   const [storedValue, setStoredValue] = useState(() => {
     try {
       const item = localStorage.getItem(key);
-      return item ? JSON.parse(item) : initialValue;
+      if (!item) return initialValue;
+      
+      // CFI 관련 키들은 JSON 파싱하지 않고 문자열로 처리
+      if (key.includes('_lastCFI') || key.includes('_prevChapter') || key.includes('_nextPage') || key.includes('_prevPage')) {
+        return item;
+      }
+      
+      return JSON.parse(item);
     } catch (error) {
       console.error(`Error reading localStorage key "${key}":`, error);
       return initialValue;
@@ -21,7 +62,13 @@ export function useLocalStorage(key, initialValue) {
     try {
       const valueToStore = value instanceof Function ? value(storedValue) : value;
       setStoredValue(valueToStore);
-      localStorage.setItem(key, JSON.stringify(valueToStore));
+      
+      // CFI 관련 키들은 JSON.stringify하지 않고 문자열로 저장
+      if (key.includes('_lastCFI') || key.includes('_prevChapter') || key.includes('_nextPage') || key.includes('_prevPage')) {
+        localStorage.setItem(key, valueToStore);
+      } else {
+        localStorage.setItem(key, JSON.stringify(valueToStore));
+      }
     } catch (error) {
       console.error(`Error setting localStorage key "${key}":`, error);
       // 에러 발생 시 상태는 업데이트하되 localStorage는 건드리지 않음
@@ -35,7 +82,12 @@ export function useLocalStorage(key, initialValue) {
     const handleStorageChange = (e) => {
       if (e.key === key && e.newValue !== null) {
         try {
-          setStoredValue(JSON.parse(e.newValue));
+          // CFI 관련 키들은 JSON 파싱하지 않고 문자열로 처리
+          if (key.includes('_lastCFI') || key.includes('_prevChapter') || key.includes('_nextPage') || key.includes('_prevPage')) {
+            setStoredValue(e.newValue);
+          } else {
+            setStoredValue(JSON.parse(e.newValue));
+          }
         } catch (error) {
           console.error(`Error parsing localStorage value for key "${key}":`, error);
         }

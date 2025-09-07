@@ -1,4 +1,3 @@
-// 색상 상수 정의
 const COLORS = {
   primary: '#6C8EFF',
   primaryLight: '#EEF2FF',
@@ -14,7 +13,6 @@ const COLORS = {
   warning: '#f59e0b',
 };
 
-// 반응형 브레이크포인트
 const BREAKPOINTS = {
   mobile: '480px',
   tablet: '768px',
@@ -22,7 +20,6 @@ const BREAKPOINTS = {
   wide: '1200px',
 };
 
-// 공통 포커스 스타일
 const createFocusStyle = () => ({
   '&:focus': {
     outline: `2px solid ${COLORS.primary}`,
@@ -34,11 +31,11 @@ const createFocusStyle = () => ({
   },
 });
 
-// animations.js에서 슬라이드 애니메이션 import (중복 제거)
-import { createSlideAnimation } from './animations';
+// animations.js에서 애니메이션 관련 함수들 import
+import { createSlideAnimation, ANIMATION_VALUES } from './animations';
 
 // 공통 버튼 스타일
-const createButtonStyle = (animationValues, variant = 'default') => {
+export const createButtonStyle = (animationValues, variant = 'default') => {
   const baseStyle = {
     display: 'flex',
     alignItems: 'center',
@@ -66,9 +63,106 @@ const createButtonStyle = (animationValues, variant = 'default') => {
       color: COLORS.textSecondary,
       border: `1px solid ${COLORS.borderLight}`,
     },
+    // UnifiedNodeInfo의 고급 Primary 버튼 스타일
+    primaryAdvanced: {
+      background: `linear-gradient(135deg, ${COLORS.primary} 0%, ${COLORS.primary} 100%)`,
+      color: '#fff',
+      border: 'none',
+      borderRadius: '12px',
+      padding: '14px 28px',
+      fontSize: '15px',
+      fontWeight: '600',
+      boxShadow: `0 4px 12px ${COLORS.primary}40`,
+      position: 'relative',
+      overflow: 'hidden',
+      transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+    },
+    // UnifiedNodeInfo의 Close 버튼 스타일
+    close: {
+      background: 'none',
+      border: 'none',
+      fontSize: '18px',
+      color: COLORS.textSecondary,
+      padding: '8px',
+      borderRadius: '8px',
+      transition: 'all 0.2s ease',
+      width: '36px',
+      height: '36px',
+    },
+    // 툴팁 닫기 버튼 스타일
+    tooltipClose: {
+      background: 'none',
+      border: 'none',
+      fontSize: '18px',
+      color: '#bfc8e2',
+      cursor: 'pointer',
+      position: 'absolute',
+      top: '14px',
+      right: '14px',
+      zIndex: 2,
+    },
   };
 
   return { ...baseStyle, ...variants[variant] };
+};
+
+/**
+ * 고급 버튼의 hover 효과 핸들러
+ * @param {string} variant - 버튼 variant ('primaryAdvanced' | 'close')
+ * @returns {Object} hover 이벤트 핸들러 객체
+ */
+export const createAdvancedButtonHandlers = (variant) => {
+  if (variant === 'primaryAdvanced') {
+    return {
+      onMouseOver: (e) => {
+        e.currentTarget.style.transform = 'translateY(-2px)';
+        e.currentTarget.style.boxShadow = `0 8px 20px ${COLORS.primary}59`;
+      },
+      onMouseOut: (e) => {
+        e.currentTarget.style.transform = 'translateY(0)';
+        e.currentTarget.style.boxShadow = `0 4px 12px ${COLORS.primary}40`;
+      }
+    };
+  }
+  
+  if (variant === 'close') {
+    return {
+      onMouseOver: (e) => {
+        e.currentTarget.style.background = COLORS.backgroundLight;
+        e.currentTarget.style.color = COLORS.textPrimary;
+        e.currentTarget.style.transform = 'scale(1.1)';
+      },
+      onMouseOut: (e) => {
+        e.currentTarget.style.background = 'none';
+        e.currentTarget.style.color = COLORS.textSecondary;
+        e.currentTarget.style.transform = 'scale(1)';
+      }
+    };
+  }
+  
+  return {};
+};
+
+/**
+ * 조건부 애니메이션 생성 함수
+ * @param {boolean} condition - 애니메이션 비활성화 조건
+ * @param {string} normalTransition - 정상 상태의 transition
+ * @param {string} disabledTransition - 비활성화 상태의 transition
+ * @returns {string} 조건에 따른 transition 값
+ */
+export const createConditionalTransition = (condition, normalTransition, disabledTransition = 'none') => {
+  return condition ? disabledTransition : normalTransition;
+};
+
+/**
+ * 복합 애니메이션 생성 함수
+ * @param {Array<string>} properties - 애니메이션할 속성들
+ * @param {string} duration - 애니메이션 지속 시간
+ * @param {string} easing - 애니메이션 이징 함수
+ * @returns {string} 복합 transition 값
+ */
+export const createComplexTransition = (properties, duration, easing) => {
+  return properties.map(prop => `${prop} ${duration} ${easing}`).join(', ');
 };
 
 // 반응형 사이드바 너비
@@ -330,3 +424,92 @@ export const containerStyles = {
 
 // 그래프 관련 스타일은 graphStyles.js에서 import
 export { graphStyles, graphControlsStyles } from './graphStyles';
+
+// 기본 상수들
+export { COLORS, BREAKPOINTS, ANIMATION_VALUES };
+
+// UnifiedNodeInfo 전용 툴팁 스타일
+export const unifiedNodeTooltipStyles = {
+  // 툴팁 모드 컨테이너
+  tooltipContainer: {
+    position: "fixed",
+    zIndex: 9999,
+    width: 500,
+    minWidth: 500,
+    maxWidth: 500,
+    height: "auto",
+    minHeight: 280,
+    background: COLORS.background,
+    borderRadius: 10,
+    boxShadow: `0 8px 4px ${COLORS.primary}21, 0 1.5px 8px rgba(0,0,0,0.04)`,
+    padding: 0,
+    border: `1.5px solid ${COLORS.border}`,
+    animation: "fadeIn 0.4s ease-out",
+    transformStyle: "preserve-3d",
+  },
+  
+  // 사이드바 모드 컨테이너
+  sidebarContainer: {
+    width: '100%',
+    height: '100%',
+    display: 'flex',
+    flexDirection: 'column',
+    background: COLORS.background,
+    overflow: 'hidden',
+    fontFamily: 'var(--font-family-primary)',
+  },
+  
+  // 에러 툴팁 컨테이너
+  errorContainer: {
+    position: "fixed",
+    zIndex: 10000,
+    width: 500,
+    minHeight: 150,
+    background: COLORS.background,
+    borderRadius: 12,
+    boxShadow: "0 4px 16px rgba(0,0,0,0.1)",
+    padding: "20px",
+    border: `1px solid ${COLORS.error}40`,
+    animation: "scaleIn 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
+  },
+  
+  // 등장하지 않은 인물 툴팁
+  notAppearedContainer: {
+    position: "fixed",
+    zIndex: 9999,
+    opacity: 1,
+    transition: "opacity 0.3s",
+    cursor: "grab",
+    width: 500,
+    minHeight: 150,
+    background: COLORS.background,
+    borderRadius: 20,
+    boxShadow: `0 8px 32px ${COLORS.primary}21, 0 1.5px 8px rgba(0,0,0,0.04)`,
+    padding: 0,
+    border: `1.5px solid ${COLORS.border}`,
+    animation: "scaleIn 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
+  },
+};
+
+// UnifiedNodeInfo 전용 애니메이션 스타일
+export const unifiedNodeAnimations = {
+  // 툴팁 단순 전환 (opacity만)
+  tooltipSimpleTransition: (isDragging) => 
+    createConditionalTransition(isDragging, `opacity ${ANIMATION_VALUES.DURATION.NORMAL}`, 'none'),
+  
+  // 툴팁 복합 전환 (opacity + transform) - UnifiedNodeInfo의 실제 사용 패턴 반영
+  tooltipComplexTransition: (isDragging) => 
+    createConditionalTransition(
+      isDragging, 
+      `opacity ${ANIMATION_VALUES.DURATION.NORMAL}, transform ${ANIMATION_VALUES.DURATION.SLOW}`, 
+      'none'
+    ),
+  
+  // 버튼 hover 전환
+  buttonHoverTransition: `all ${ANIMATION_VALUES.DURATION.FAST} ${ANIMATION_VALUES.EASE}`,
+  
+  // 사이드바 닫기 버튼 전환
+  sidebarCloseTransition: `all ${ANIMATION_VALUES.DURATION.FAST} ${ANIMATION_VALUES.EASE}`,
+};
+
+// 유틸리티 함수들은 위에서 개별적으로 export됨

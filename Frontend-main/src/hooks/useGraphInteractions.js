@@ -1,19 +1,17 @@
 import { useCallback, useRef, useEffect } from "react";
 import { applySearchHighlight } from '../utils/searchUtils.jsx';
-
-// 상수 정의
-const GRAPH_CONTAINER_SELECTOR = '.graph-canvas-area';
+import { getContainerInfo, calculateCytoscapePosition } from '../utils/graphUtils';
 
 export default function useGraphInteractions({
   cyRef,
-  onShowNodeTooltip, // ({ node, evt, nodeCenter, mouseX, mouseY }) => void
-  onShowEdgeTooltip, // ({ edge, evt, absoluteX, absoluteY }) => void
-  onClearTooltip, // () => void - 툴팁 초기화 콜백
+  onShowNodeTooltip, 
+  onShowEdgeTooltip,
+  onClearTooltip, 
   selectedNodeIdRef,
   selectedEdgeIdRef,
   strictBackgroundClear = false,
-  isSearchActive = false, // 검색 상태 추가
-  filteredElements = [], // 검색된 요소들 추가
+  isSearchActive = false, 
+  filteredElements = [], 
 }) {
   const onShowNodeTooltipRef = useRef(onShowNodeTooltip);
   const onShowEdgeTooltipRef = useRef(onShowEdgeTooltip);
@@ -64,36 +62,12 @@ export default function useGraphInteractions({
     }
   }, [clearSelectionOnly]);
 
-  // 그래프 컨테이너 정보 가져오기
-  const getContainerInfo = useCallback(() => {
-    try {
-      const container = document.querySelector(GRAPH_CONTAINER_SELECTOR);
-      const containerRect = container?.getBoundingClientRect?.() || { left: 0, top: 0 };
-      return { container, containerRect };
-    } catch (error) {
-      console.error('컨테이너 정보 가져오기 실패:', error);
-      return { container: null, containerRect: { left: 0, top: 0 } };
-    }
-  }, []);
+  // getContainerInfo는 이제 공통 유틸리티에서 import하여 사용
 
   // 공통 위치 계산 함수
   const calculatePosition = useCallback((pos) => {
-    try {
-      if (!cyRef?.current) return { x: 0, y: 0 };
-      
-      const pan = cyRef.current.pan();
-      const zoom = cyRef.current.zoom();
-      const { containerRect } = getContainerInfo();
-      
-      return {
-        x: pos.x * zoom + pan.x + containerRect.left,
-        y: pos.y * zoom + pan.y + containerRect.top,
-      };
-    } catch (error) {
-      console.error('위치 계산 실패:', error);
-      return { x: 0, y: 0 };
-    }
-  }, [cyRef, getContainerInfo]);
+    return calculateCytoscapePosition(pos, cyRef);
+  }, [cyRef]);
 
   // 노드 하이라이트 처리 함수
   const handleNodeHighlight = useCallback((node) => {

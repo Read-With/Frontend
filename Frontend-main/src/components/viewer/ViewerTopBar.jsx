@@ -1,35 +1,62 @@
 import React, { useCallback } from 'react';
 import GraphControls from '../graph/GraphControls';
 import EdgeLabelToggle from '../graph/tooltip/EdgeLabelToggle';
+import { getChapterEventCount } from '../../utils/graphData';
 
 const ViewerTopBar = ({
-  // 상단바 1 props
-  navigate,
-  filename,
-  currentChapter,
-  setCurrentChapter,
-  maxChapter,
-  book,
-  viewerRef,
-  currentEvent,
-  prevValidEvent,
-  prevEvent,
-  events,
-  graphFullScreen,
-  setGraphFullScreen,
-  
-  // 상단바 2 props
-  edgeLabelVisible,
-  setEdgeLabelVisible,
-  hideIsolated,
-  setHideIsolated,
-  onSearchSubmit,
-  searchTerm,
-  isSearchActive,
-  clearSearch,
-  elements = [], // 그래프 요소들 (검색 제안용)
-  currentChapterData = null, // 현재 챕터의 캐릭터 데이터
+  graphState,
+  graphActions,
+  viewerState,
+  searchState,
+  searchActions,
 }) => {
+  // 그룹화된 상태에서 개별 값들 추출
+  const {
+    navigate,
+    filename,
+    book,
+    viewerRef
+  } = viewerState;
+  
+  const {
+    currentChapter,
+    maxChapter,
+    currentEvent,
+    prevValidEvent,
+    prevEvent,
+    events,
+    graphFullScreen,
+    edgeLabelVisible,
+    hideIsolated,
+    loading: isGraphLoading
+  } = graphState;
+  
+  const {
+    setCurrentChapter,
+    setGraphFullScreen,
+    setEdgeLabelVisible,
+    setHideIsolated
+  } = graphActions;
+  
+  const {
+    searchTerm,
+    isSearchActive,
+    elements = [],
+    currentChapterData = null,
+    suggestions = [],
+    showSuggestions = false,
+    selectedIndex = -1
+  } = searchState;
+  
+  const {
+    onSearchSubmit,
+    clearSearch,
+    closeSuggestions,
+    onGenerateSuggestions,
+    selectSuggestion,
+    handleKeyDown
+  } = searchActions;
+
   // 현재 이벤트 정보를 실시간으로 추적
   const [currentEventInfo, setCurrentEventInfo] = React.useState(null);
   const [currentProgressWidth, setCurrentProgressWidth] = React.useState("0%");
@@ -39,12 +66,13 @@ const ViewerTopBar = ({
     const eventToShow = currentEvent || prevValidEvent;
     
     if (eventToShow) {
-      setCurrentEventInfo({
+      const eventInfo = {
         eventNum: eventToShow.eventNum ?? 0,
-        name: eventToShow.name || ""
-      });
+        name: eventToShow.name || eventToShow.event_name || ""
+      };
+      setCurrentEventInfo(eventInfo);
       
-      // 프로그레스 바 너비 실시간 계산
+      // 프로그레스 바 너비 실시간 계산 - 현재 이벤트까지의 진행률
       if (events && eventToShow && events.length > 0) {
         const currentEventIndex = events.findIndex(e => e.eventNum === eventToShow.eventNum);
         const progressPercentage = currentEventIndex >= 0 
@@ -52,15 +80,27 @@ const ViewerTopBar = ({
           : 0;
         const progressWidth = `${progressPercentage}%`;
         setCurrentProgressWidth(progressWidth);
-      } else if (eventToShow && eventToShow.eventNum) {
-        // events가 없지만 eventNum이 있는 경우
-        const progressWidth = `${Math.min((eventToShow.eventNum / 20) * 100, 100)}%`;
-        setCurrentProgressWidth(progressWidth);
+      } else if (eventToShow && eventToShow.eventNum !== undefined) {
+        // events가 없지만 eventNum이 있는 경우 - 챕터 내 이벤트 진행률 추정
+        try {
+          const totalEvents = getChapterEventCount(currentChapter);
+          const progressWidth = `${Math.min(((eventToShow.eventNum + 1) / totalEvents) * 100, 100)}%`;
+          setCurrentProgressWidth(progressWidth);
+        } catch (error) {
+          // 에러 발생 시 기본값 사용
+          const fallbackTotalEvents = 20;
+          const progressWidth = `${Math.min(((eventToShow.eventNum + 1) / fallbackTotalEvents) * 100, 100)}%`;
+          setCurrentProgressWidth(progressWidth);
+        }
       } else {
         setCurrentProgressWidth("0%");
       }
+    } else {
+      // 이벤트 정보가 없을 때 초기화
+      setCurrentEventInfo(null);
+      setCurrentProgressWidth("0%");
     }
-  }, [currentEvent, prevValidEvent, events]);
+  }, [currentEvent, prevValidEvent, events, currentChapter]);
   
   // 실시간으로 현재 챕터 감지
   React.useEffect(() => {
@@ -78,10 +118,79 @@ const ViewerTopBar = ({
   
   // 제안 생성을 위한 별도 함수 (실제 검색은 실행하지 않음)
   const handleGenerateSuggestions = useCallback((searchTerm) => {
-    // 제안 생성을 위해 searchTerm만 업데이트 (실제 검색은 실행하지 않음)
-    // 여기서는 onSearchSubmit을 호출하여 제안을 생성함
-    onSearchSubmit(searchTerm);
-  }, [onSearchSubmit]);
+    // onGenerateSuggestions prop을 사용하여 제안 생성
+    if (onGenerateSuggestions) {
+      onGenerateSuggestions(searchTerm);
+    }
+  }, [onGenerateSuggestions]);
+
+  // 중복 제거를 위한 공통 컴포넌트 렌더링 함수들
+  const renderGraphControls = () => (
+    <GraphControls
+      onSearchSubmit={onSearchSubmit}
+      onGenerateSuggestions={handleGenerateSuggestions}
+      searchTerm={searchTerm}
+      isSearchActive={isSearchActive}
+      onClearSearch={clearSearch}
+      elements={elements}
+      currentChapterData={currentChapterData}
+      onCloseSuggestions={closeSuggestions}
+      suggestions={suggestions}
+      showSuggestions={showSuggestions}
+      selectedIndex={selectedIndex}
+      onSelectSuggestion={selectSuggestion}
+      onKeyDown={handleKeyDown}
+    />
+  );
+
+  const renderToggleButtons = () => (
+    <div
+      style={{
+        display: "flex",
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 16,
+        marginRight: 24,
+      }}
+    >
+      <EdgeLabelToggle
+        visible={edgeLabelVisible}
+        onToggle={() => setEdgeLabelVisible(!edgeLabelVisible)}
+      />
+      <button
+        onClick={() => setHideIsolated((v) => !v)}
+        style={{
+          height: 30,
+          padding: '0 16px',
+          borderRadius: 8,
+          border: '1.5px solid #e3e6ef',
+          background: hideIsolated ? '#f8f9fc' : '#EEF2FF',
+          color: hideIsolated ? '#6C8EFF' : '#22336b',
+          fontSize: 13,
+          fontWeight: 600,
+          cursor: 'pointer',
+          transition: 'all 0.2s ease',
+          outline: 'none',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 6,
+          boxShadow: hideIsolated ? 'none' : '0 2px 8px rgba(108,142,255,0.15)',
+          minWidth: '140px',
+          justifyContent: 'center',
+        }}
+        title={hideIsolated ? '독립 인물을 표시합니다' : '독립 인물을 숨깁니다'}
+      >
+        <div style={{
+          width: 8,
+          height: 8,
+          borderRadius: '50%',
+          background: hideIsolated ? '#6C8EFF' : '#22336b',
+          opacity: hideIsolated ? 0.6 : 1,
+        }} />
+        {hideIsolated ? '독립 인물 표시' : '독립 인물 숨기기'}
+      </button>
+    </div>
+  );
   
   return (
     <>
@@ -147,36 +256,9 @@ const ViewerTopBar = ({
             {graphFullScreen ? ">" : "<"}
           </button>
 
-
-
-          {/* 인물 검색 기능 (분할화면일 때도 왼쪽 영역에 포함) */}
-          {!graphFullScreen && (
-            <GraphControls
-              onSearchSubmit={onSearchSubmit}
-              onGenerateSuggestions={handleGenerateSuggestions}
-              searchTerm={searchTerm}
-              isSearchActive={isSearchActive}
-              onClearSearch={clearSearch}
-              elements={elements}
-              currentChapterData={currentChapterData}
-            />
-          )}
-          
-          {/* 인물 검색 기능 (전체화면일 때만 왼쪽 영역에 포함) */}
-          {graphFullScreen && (
-            <GraphControls
-              onSearchSubmit={onSearchSubmit}
-              onGenerateSuggestions={handleGenerateSuggestions}
-              searchTerm={searchTerm}
-              isSearchActive={isSearchActive}
-              onClearSearch={clearSearch}
-              elements={elements}
-              currentChapterData={currentChapterData}
-            />
-          )}
+          {/* 인물 검색 기능 */}
+          {renderGraphControls()}
         </div>
-
-
 
         {/* 중앙 영역: 챕터 + 이벤트 정보 (전체화면일 때만) */}
         {graphFullScreen && (
@@ -188,206 +270,124 @@ const ViewerTopBar = ({
               gap: 16, // 16px 간격
             }}
           >
-            {/* 챕터 정보 표시 */}
-            <span
-              style={{
-                display: "inline-block",
-                padding: "4px 12px",
-                borderRadius: 16,
-                background: "#EEF2FF",
-                color: "#22336b",
-                fontSize: 14,
-                fontWeight: 600,
-                border: "1px solid #e3e6ef",
-              }}
-            >
-              Chapter {currentChapter}
-            </span>
-
-            {/* 이벤트 정보 */}
-            <div
-              style={{
-                display: "flex",
-                flexDirection: "row",
-                alignItems: "center",
-                gap: 12,
-              }}
-            >
-              {/* 이벤트 번호 */}
+            {isGraphLoading || !currentEventInfo || (currentEventInfo && currentEventInfo.eventNum === 0) ? (
+              /* 로딩 중일 때 통합 표시 */
               <span
                 style={{
                   display: "inline-block",
                   padding: "4px 16px",
                   borderRadius: 16,
-                  background: "#4F6DDE",
-                  color: "#fff",
+                  background: "#f3f4f6",
+                  color: "#9ca3af",
                   fontSize: 14,
                   fontWeight: 600,
-                  boxShadow: "0 2px 8px rgba(79,109,222,0.13)",
-                  transition: "transform 0.3s, background 0.3s",
-                  transform:
-                    prevEvent &&
-                    (currentEvent || prevValidEvent) &&
-                    prevEvent.eventNum !== (currentEvent || prevValidEvent).eventNum
-                      ? "scale(1.12)"
-                      : "scale(1)",
+                  border: "1px solid #e3e6ef",
                 }}
               >
-                Event {currentEventInfo?.eventNum || 0}
+                로딩중...
               </span>
-              
-              {/* 이벤트 이름 (있는 경우에만 표시) */}
-              {currentEventInfo?.name && (
+            ) : (
+              /* 로딩 완료 시 chapter와 event 정보 표시 */
+              <>
+                {/* 챕터 정보 표시 */}
                 <span
                   style={{
                     display: "inline-block",
                     padding: "4px 12px",
-                    borderRadius: 12,
-                    background: "#f8f9fc",
+                    borderRadius: 16,
+                    background: "#EEF2FF",
                     color: "#22336b",
-                    fontSize: 13,
-                    fontWeight: 500,
+                    fontSize: 14,
+                    fontWeight: 600,
                     border: "1px solid #e3e6ef",
-                    maxWidth: "200px",
-                    overflow: "hidden",
-                    textOverflow: "ellipsis",
-                    whiteSpace: "nowrap",
                   }}
-                  title={currentEventInfo.name}
                 >
-                  {currentEventInfo.name}
+                  Chapter {currentChapter}
                 </span>
-              )}
-              
-              {/* 프로그레스 바 */}
-              <div
-                style={{
-                  width: 120,
-                  height: 6,
-                  background: "#e3e6ef",
-                  borderRadius: 3,
-                  overflow: "hidden",
-                }}
-              >
+
+                {/* 이벤트 정보 */}
                 <div
                   style={{
-                    width: currentProgressWidth,
-                    height: "100%",
-                    background: "linear-gradient(90deg, #4F6DDE 0%, #6fa7ff 100%)",
-                    borderRadius: 3,
-                    transition: "width 0.4s cubic-bezier(.4,2,.6,1)",
+                    display: "flex",
+                    flexDirection: "row",
+                    alignItems: "center",
+                    gap: 12,
                   }}
-                />
-              </div>
-            </div>
+                >
+                  {/* 이벤트 번호 */}
+                  <span
+                    style={{
+                      display: "inline-block",
+                      padding: "4px 16px",
+                      borderRadius: 16,
+                      background: "#4F6DDE",
+                      color: "#fff",
+                      fontSize: 14,
+                      fontWeight: 600,
+                      boxShadow: "0 2px 8px rgba(79,109,222,0.13)",
+                      transition: "transform 0.3s, background 0.3s",
+                      transform:
+                        prevEvent &&
+                        (currentEvent || prevValidEvent) &&
+                        prevEvent.eventNum !== (currentEvent || prevValidEvent).eventNum
+                          ? "scale(1.12)"
+                          : "scale(1)",
+                    }}
+                  >
+                    Event {currentEventInfo?.eventNum || 0}
+                  </span>
+                  
+                  {/* 이벤트 이름 (있는 경우에만 표시) */}
+                  {currentEventInfo?.name && (
+                    <span
+                      style={{
+                        display: "inline-block",
+                        padding: "4px 12px",
+                        borderRadius: 12,
+                        background: "#f8f9fc",
+                        color: "#22336b",
+                        fontSize: 13,
+                        fontWeight: 500,
+                        border: "1px solid #e3e6ef",
+                        maxWidth: "200px",
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: "nowrap",
+                      }}
+                      title={currentEventInfo.name}
+                    >
+                      {currentEventInfo.name}
+                    </span>
+                  )}
+                  
+                  {/* 프로그레스 바 */}
+                  <div
+                    style={{
+                      width: 120,
+                      height: 6,
+                      background: "#e3e6ef",
+                      borderRadius: 3,
+                      overflow: "hidden",
+                    }}
+                  >
+                    <div
+                      style={{
+                        width: currentProgressWidth,
+                        height: "100%",
+                        background: "linear-gradient(90deg, #4F6DDE 0%, #6fa7ff 100%)",
+                        borderRadius: 3,
+                        transition: "width 0.4s cubic-bezier(.4,2,.6,1)",
+                      }}
+                    />
+                  </div>
+                </div>
+              </>
+            )}
           </div>
         )}
 
-        {/* 오른쪽 영역: 토글 + 독립 인물 버튼 (분할화면일 때도 표시) */}
-        {!graphFullScreen && (
-          <div
-            style={{
-              display: "flex",
-              flexDirection: "row",
-              alignItems: "center",
-              gap: 16, // 16px 간격
-              marginRight: 24, // 오른쪽 공백 추가
-            }}
-          >
-            {/* 간선 라벨 스위치 토글 */}
-            <EdgeLabelToggle
-              visible={edgeLabelVisible}
-              onToggle={() => setEdgeLabelVisible(!edgeLabelVisible)}
-            />
-
-            {/* 독립 인물 버튼 */}
-            <button
-              onClick={() => setHideIsolated((v) => !v)}
-              style={{
-                height: 30,
-                padding: '0 16px',
-                borderRadius: 8,
-                border: '1.5px solid #e3e6ef',
-                background: hideIsolated ? '#f8f9fc' : '#EEF2FF',
-                color: hideIsolated ? '#6C8EFF' : '#22336b',
-                fontSize: 13,
-                fontWeight: 600,
-                cursor: 'pointer',
-                transition: 'all 0.2s ease',
-                outline: 'none',
-                display: 'flex',
-                alignItems: 'center',
-                gap: 6,
-                boxShadow: hideIsolated ? 'none' : '0 2px 8px rgba(108,142,255,0.15)',
-                minWidth: '140px',
-                justifyContent: 'center',
-              }}
-              title={hideIsolated ? '독립 인물을 표시합니다' : '독립 인물을 숨깁니다'}
-            >
-              <div style={{
-                width: 8,
-                height: 8,
-                borderRadius: '50%',
-                background: hideIsolated ? '#6C8EFF' : '#22336b',
-                opacity: hideIsolated ? 0.6 : 1,
-              }} />
-              {hideIsolated ? '독립 인물 표시' : '독립 인물 숨기기'}
-            </button>
-          </div>
-        )}
-
-        {/* 오른쪽 영역: 토글 + 독립 인물 버튼 (전체화면일 때만 표시) */}
-        {graphFullScreen && (
-          <div
-            style={{
-              display: "flex",
-              flexDirection: "row",
-              alignItems: "center",
-              gap: 16, // 16px 간격
-              marginRight: 24, // 오른쪽 공백 추가
-            }}
-          >
-            {/* 간선 라벨 스위치 토글 */}
-            <EdgeLabelToggle
-              visible={edgeLabelVisible}
-              onToggle={() => setEdgeLabelVisible(!edgeLabelVisible)}
-            />
-
-            {/* 독립 인물 버튼 */}
-            <button
-              onClick={() => setHideIsolated((v) => !v)}
-              style={{
-                height: 30,
-                padding: '0 16px',
-                borderRadius: 8,
-                border: '1.5px solid #e3e6ef',
-                background: hideIsolated ? '#f8f9fc' : '#EEF2FF',
-                color: hideIsolated ? '#6C8EFF' : '#22336b',
-                fontSize: 13,
-                fontWeight: 600,
-                cursor: 'pointer',
-                transition: 'all 0.2s ease',
-                outline: 'none',
-                display: 'flex',
-                alignItems: 'center',
-                gap: 6,
-                boxShadow: hideIsolated ? 'none' : '0 2px 8px rgba(108,142,255,0.15)',
-                minWidth: '140px',
-                justifyContent: 'center',
-              }}
-              title={hideIsolated ? '독립 인물을 표시합니다' : '독립 인물을 숨깁니다'}
-            >
-              <div style={{
-                width: 8,
-                height: 8,
-                borderRadius: '50%',
-                background: hideIsolated ? '#6C8EFF' : '#22336b',
-                opacity: hideIsolated ? 0.6 : 1,
-              }} />
-              {hideIsolated ? '독립 인물 표시' : '독립 인물 숨기기'}
-            </button>
-          </div>
-        )}
+        {/* 오른쪽 영역: 토글 + 독립 인물 버튼 */}
+        {renderToggleButtons()}
       </div>
       
       {/* 상단바 2: 챕터 + 이벤트 정보 (분할화면일 때만) */}
@@ -409,100 +409,121 @@ const ViewerTopBar = ({
             borderBottom: "1px solid #e3e6ef",
           }}
         >
-          {/* 챕터 정보 표시 */}
-          <span
-            style={{
-              display: "inline-block",
-              padding: "4px 12px",
-              borderRadius: 16,
-              background: "#EEF2FF",
-              color: "#22336b",
-              fontSize: 14,
-              fontWeight: 600,
-              border: "1px solid #e3e6ef",
-            }}
-          >
-            Chapter {currentChapter}
-          </span>
-
-          {/* 이벤트 정보 */}
-          <div
-            style={{
-              display: "flex",
-              flexDirection: "row",
-              alignItems: "center",
-              gap: 12,
-              marginLeft: 12,
-            }}
-          >
-            {/* 이벤트 번호 */}
+          {isGraphLoading || !currentEventInfo || (currentEventInfo && currentEventInfo.eventNum === 0) ? (
+            /* 로딩 중일 때 통합 표시 */
             <span
               style={{
                 display: "inline-block",
                 padding: "4px 16px",
                 borderRadius: 16,
-                background: "#4F6DDE",
-                color: "#fff",
+                background: "#f3f4f6",
+                color: "#9ca3af",
                 fontSize: 14,
                 fontWeight: 600,
-                boxShadow: "0 2px 8px rgba(79,109,222,0.13)",
-                transition: "transform 0.3s, background 0.3s",
-                transform:
-                  prevEvent &&
-                  (currentEvent || prevValidEvent) &&
-                  prevEvent.eventNum !== (currentEvent || prevValidEvent).eventNum
-                    ? "scale(1.12)"
-                    : "scale(1)",
+                border: "1px solid #e3e6ef",
               }}
             >
-              Event {currentEventInfo?.eventNum || 0}
+              로딩중...
             </span>
-            
-            {/* 이벤트 이름 (있는 경우에만 표시) */}
-            {currentEventInfo?.name && (
+          ) : (
+            /* 로딩 완료 시 chapter와 event 정보 표시 */
+            <>
+              {/* 챕터 정보 표시 */}
               <span
                 style={{
                   display: "inline-block",
                   padding: "4px 12px",
-                  borderRadius: 12,
-                  background: "#f8f9fc",
+                  borderRadius: 16,
+                  background: "#EEF2FF",
                   color: "#22336b",
-                  fontSize: 13,
-                  fontWeight: 500,
+                  fontSize: 14,
+                  fontWeight: 600,
                   border: "1px solid #e3e6ef",
-                  maxWidth: "200px",
-                  overflow: "hidden",
-                  textOverflow: "ellipsis",
-                  whiteSpace: "nowrap",
                 }}
-                title={currentEventInfo.name}
               >
-                {currentEventInfo.name}
+                Chapter {currentChapter}
               </span>
-            )}
-            
-            {/* 프로그레스 바 */}
-            <div
-              style={{
-                width: 120,
-                height: 6,
-                background: "#e3e6ef",
-                borderRadius: 3,
-                overflow: "hidden",
-                position: "relative",
-              }}
-            >
+
+              {/* 이벤트 정보 */}
               <div
                 style={{
-                  width: currentProgressWidth,
-                  height: "100%",
-                  background: "linear-gradient(90deg, #4F6DDE 0%, #6fa7ff 100%)",
-                  borderRadius: 3,
-                  transition: "width 0.4s cubic-bezier(.4,2,.6,1)",
+                  display: "flex",
+                  flexDirection: "row",
+                  alignItems: "center",
+                  gap: 12,
+                  marginLeft: 12,
                 }}
-              />
-            </div>
-          </div>
+              >
+                {/* 이벤트 번호 */}
+                <span
+                  style={{
+                    display: "inline-block",
+                    padding: "4px 16px",
+                    borderRadius: 16,
+                    background: "#4F6DDE",
+                    color: "#fff",
+                    fontSize: 14,
+                    fontWeight: 600,
+                    boxShadow: "0 2px 8px rgba(79,109,222,0.13)",
+                    transition: "transform 0.3s, background 0.3s",
+                    transform:
+                      prevEvent &&
+                      (currentEvent || prevValidEvent) &&
+                      prevEvent.eventNum !== (currentEvent || prevValidEvent).eventNum
+                        ? "scale(1.12)"
+                        : "scale(1)",
+                  }}
+                >
+                  Event {currentEventInfo?.eventNum || 0}
+                </span>
+                
+                {/* 이벤트 이름 (있는 경우에만 표시) */}
+                {currentEventInfo?.name && (
+                  <span
+                    style={{
+                      display: "inline-block",
+                      padding: "4px 12px",
+                      borderRadius: 12,
+                      background: "#f8f9fc",
+                      color: "#22336b",
+                      fontSize: 13,
+                      fontWeight: 500,
+                      border: "1px solid #e3e6ef",
+                      maxWidth: "200px",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
+                    }}
+                    title={currentEventInfo.name}
+                  >
+                    {currentEventInfo.name}
+                  </span>
+                )}
+                
+                {/* 프로그레스 바 */}
+                <div
+                  style={{
+                    width: 120,
+                    height: 6,
+                    background: "#e3e6ef",
+                    borderRadius: 3,
+                    overflow: "hidden",
+                    position: "relative",
+                  }}
+                >
+                  <div
+                    style={{
+                      width: currentProgressWidth,
+                      height: "100%",
+                      background: "linear-gradient(90deg, #4F6DDE 0%, #6fa7ff 100%)",
+                      borderRadius: 3,
+                      transition: "width 0.4s cubic-bezier(.4,2,.6,1)",
+                    }}
+                  />
+                </div>
+              </div>
+            </>
+          )}
         </div>
       )}
     </>

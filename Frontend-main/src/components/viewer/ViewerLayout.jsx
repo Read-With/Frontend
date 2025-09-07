@@ -4,7 +4,6 @@ import ViewerProgressBar from './epub/ViewerProgressbar';
 
 const ViewerLayout = ({
   children,
-  darkMode,
   progress,
   setProgress,
   showControls,
@@ -62,7 +61,7 @@ const ViewerLayout = ({
       <div
         className="flex-1 overflow-hidden flex"
         style={{
-          backgroundColor: darkMode ? '#121212' : '#fdfdfd',
+          backgroundColor: '#fdfdfd',
         }}
       >
         {/* 왼쪽: EPUB 뷰어 */}
@@ -122,7 +121,6 @@ const ViewerLayout = ({
           showControls={showControls}
           progress={progress}
           setProgress={setProgress}
-          darkMode={darkMode}
           onSliderChange={onSliderChange}
           currentPage={currentPage}
           totalPages={totalPages}

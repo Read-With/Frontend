@@ -1,364 +1,42 @@
 import React, { useRef, useState, useEffect, useMemo } from "react";
-import { useParams, useLocation, useNavigate } from "react-router-dom";
-import ViewerLayout from "./ViewerLayout";
-import EpubViewer from "./epub/EpubViewer";
-import BookmarkPanel from "./bookmark/BookmarkPanel";
-import ViewerSettings from "./epub/ViewerSettings";
-import { loadBookmarks, saveBookmarks } from "./bookmark/BookmarkManager";
 import { toast, ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import cytoscape from "cytoscape";
 import { CytoscapeGraphPortalProvider } from "../graph/CytoscapeGraphUnified";
 import GraphContainer from "../graph/GraphContainer";
+import ViewerLayout from "./ViewerLayout";
+import EpubViewer from "./epub/EpubViewer";
+import BookmarkPanel from "./bookmark/BookmarkPanel";
+import ViewerSettings from "./epub/ViewerSettings";
 import ViewerTopBar from "./ViewerTopBar";
+import { useViewerPage } from "../../hooks/useViewerPage";
+import { useGraphSearch } from "../../hooks/useGraphSearch";
+import { createStorageKey } from "../../hooks/useLocalStorage";
+import { 
+  parseCfiToChapterDetail, 
+  extractEventNodesAndEdges
+} from "../../utils/viewerUtils";
+import { 
+  getEventsForChapter,
+  getElementsFromRelations,
+  getChapterFile,
+  filterIsolatedNodes,
+  getDetectedMaxChapter,
+  getEventData,
+  getCharactersData
+} from "../../utils/graphData";
+import { calcGraphDiff } from "../../utils/graphDataUtils";
 
-const eventRelationModules = import.meta.glob(
-  "../../data/gatsby/chapter*_relationships_event_*.json",
-  { eager: true }
-);
-const eventTextModules = import.meta.glob(
-  "../../data/gatsby/chapter*_events.json",
-  { eager: true }
-);
-const charactersModules = import.meta.glob(
-  "../../data/gatsby/c_chapter*_0.json",
-  { eager: true }
-);
-// 기본 설정 값
-const defaultSettings = {
-  fontSize: 100,
-  pageMode: "double", // 'single', 'double' 중 하나
-  theme: "light",
-  lineHeight: 1.5,
-  margin: 20,
-  fontFamily: "default",
-  showGraph: true, // 그래프 표시 여부 추가
-};
 
-// 로컬 스토리지에서 설정 불러오기
-const loadSettings = () => {
-  try {
-    const settings = localStorage.getItem("epub_viewer_settings");
-    const loadedSettings = settings ? JSON.parse(settings) : defaultSettings;
-
-    // leftOnly 모드였다면 double로 변경
-    if (loadedSettings.pageMode === "leftOnly") {
-      loadedSettings.pageMode = "double";
-    }
-
-    // showGraph 속성이 없으면 기본값 추가
-    if (loadedSettings.showGraph === undefined) {
-      loadedSettings.showGraph = defaultSettings.showGraph;
-    }
-
-    // 업데이트된 설정 저장
-    localStorage.setItem(
-      "epub_viewer_settings",
-      JSON.stringify(loadedSettings)
-    );
-
-    return loadedSettings;
-  } catch (e) {
-    return defaultSettings;
-  }
-};
-
-function parseCfiToChapterDetail(cfi) {
-  const chapterMatch = cfi.match(/\[chapter-(\d+)\]/);
-  const chapter = chapterMatch ? `${chapterMatch[1]}장` : null;
-
-  // [chapter-x]/숫+ 추출
-  const pageMatch = cfi.match(/\[chapter-\d+\]\/(\d+)/);
-  const page = pageMatch ? pageMatch[1] : null;
-
-  if (chapter && page) return `${chapter} ${page}`;
-  if (chapter) return chapter;
-  return cfi;
-}
-
-const getChapterFile = (chapter, type) => {
-  const num = String(chapter);
-  try {
-    if (type === "characters") {
-      const filePath = Object.keys(charactersModules).find((key) =>
-        key.includes(`c_chapter${num}_0.json`)
-      );
-      const data = filePath ? charactersModules[filePath]?.default : undefined;
-      return data?.characters || [];
-    } else {
-      // (relations 등 다른 타입도 필요하다면 여기에 맞게 수정)
-      return [];
-    }
-  } catch (error) {
-    return [];
-  }
-};
-
-// safeId 함수가 없으면 추가
-function safeId(id) {
-  // id가 2.0, 2, "2" 등 어떤 타입이든 항상 문자열 "2"로 변환
-  return String(parseInt(id, 10));
-}
-
-// 1. 모드 저장 함수
-const saveViewerMode = (mode) => {
-  try {
-    localStorage.setItem("viewer_mode", mode);
-  } catch (e) {}
-};
-
-// 2. 모드 복원 함수
-const loadViewerMode = () => {
-  try {
-    return localStorage.getItem("viewer_mode");
-  } catch (e) {
-    return null;
-  }
-};
-
-//이번에 바꾼것임
-function getEventsForChapter(chapter) {
-  const num = String(chapter);
-
-  // 1. 이벤트 본문 데이터 추출
-  const textFilePath = Object.keys(eventTextModules).find((path) =>
-    path.includes(`chapter${num}_events.json`)
-  );
-  const textArray = textFilePath ? eventTextModules[textFilePath]?.default : [];
-
-  // 2. 각 event에 대해 event_id에 해당하는 관계 파일을 찾음
-  const eventsWithRelations = textArray.map((event) => {
-    // event_id가 undefined/null일 때만 0, 그 외에는 원래 값 사용
-    const eventId =
-      event.event_id === undefined || event.event_id === null
-        ? 0
-        : event.event_id;
-    const fileEventNum = eventId + 1;
-    const relFilePath = Object.keys(eventRelationModules).find((path) =>
-      path.includes(`chapter${num}_relationships_event_${fileEventNum}.json`)
-    );
-
-    const relations = relFilePath
-      ? eventRelationModules[relFilePath]?.default?.relations || []
-      : [];
-    return {
-      ...event,
-      eventNum: eventId,
-      event_id: eventId, // 명시적으로 세팅
-      relations,
-      chapter: Number(chapter), // 반드시 추가!
-    };
-  });
-  
-  // 3. 현재 챕터의 이벤트만 필터링 (이전 챕터의 마지막 이벤트 제외)
-  const currentChapterEvents = eventsWithRelations.filter(event => {
-    return event.chapter === Number(chapter);
-  });
-  
-  return currentChapterEvents;
-}
-
-function getElementsFromRelations(
-  relations,
-  characterData,
-  _newAppearances,
-  importance
-) {
-  // 1. relation, importance에 등장하는 id 모두 수집 (newAppearances는 무시)
-  const nodeIdSet = new Set();
-
-  // relations가 객체인 경우 relations.relations 배열을 사용
-  const relationsArray =
-    relations?.relations || (Array.isArray(relations) ? relations : []);
-
-  if (Array.isArray(relationsArray)) {
-    relationsArray.forEach((rel) => {
-      if (rel.id1 !== undefined) nodeIdSet.add(safeId(rel.id1));
-      if (rel.id2 !== undefined) nodeIdSet.add(safeId(rel.id2));
-      if (rel.source !== undefined) nodeIdSet.add(safeId(rel.source));
-      if (rel.target !== undefined) nodeIdSet.add(safeId(rel.target));
-    });
-  }
-
-  if (importance && typeof importance === "object") {
-    Object.keys(importance).forEach((id) => nodeIdSet.add(safeId(id)));
-  }
-
-  let nodes = [];
-  if (Array.isArray(characterData)) {
-    // relations가 없으면 모든 캐릭터를 노드로!
-    const filteredCharacters =
-      nodeIdSet.size === 0
-        ? characterData
-        : characterData.filter((char) => {
-            const sid = safeId(char.id);
-            return (
-              nodeIdSet.has(sid) ||
-              nodeIdSet.has(char.id) ||
-              nodeIdSet.has(Number(char.id))
-            );
-          });
-    nodes = filteredCharacters.map((char) => {
-      const idStr = safeId(char.id); // safeId로 문자열 변환
-      return {
-        data: {
-          id: safeId(char.id),
-          label: char.common_name || char.name || safeId(char.id),
-          description: char.description || "",
-          main: char.main_character !== undefined ? char.main_character : false,
-          names:
-            char.names && char.names.length > 0
-              ? char.names
-              : char.common_name
-              ? [char.common_name]
-              : [],
-          portrait_prompt: char.portrait_prompt || "",
-          image: `/gatsby/${idStr}.png`, // 노드 이미지 추가
-        },
-      };
-    });
-  }
-
-  // 3. 엣지 생성 (safeId 적용)
-  const edges = relationsArray
-    .filter((rel) => {
-      const source = safeId(rel.id1 || rel.source);
-      const target = safeId(rel.id2 || rel.target);
-      return nodeIdSet.has(source) && nodeIdSet.has(target);
-    })
-    .map((rel, idx) => {
-      // 간선 라벨 로직: 1개인 경우 최초 관계, 여러개인 경우 최근 관계
-      let label = "";
-      if (Array.isArray(rel.relation)) {
-        if (rel.relation.length === 1) {
-          // 1개인 경우: 최초의 관계 (첫 번째 요소)
-          label = rel.relation[0] || "";
-        } else if (rel.relation.length > 1) {
-          // 여러개인 경우: 가장 최근에 추가된 관계 (마지막 요소)
-          label = rel.relation[rel.relation.length - 1] || "";
-        }
-      } else {
-        label = rel.type || "";
-      }
-      
-      return {
-        data: {
-          id: `e${idx}`,
-          source: safeId(rel.id1 || rel.source),
-          target: safeId(rel.id2 || rel.target),
-          label: label,
-          explanation: rel.explanation,
-          positivity: rel.positivity,
-          weight: rel.weight,
-        },
-      };
-    });
-
-  return [...nodes, ...edges];
-}
-
-// --- [추가] 고립 노드(독립 인물) 필터링 함수 ---
-function filterIsolatedNodes(elements, hideIsolated) {
-  if (!hideIsolated) return elements;
-  // 엣지가 하나도 없으면(즉, relations가 아예 없으면) 노드는 숨기지 않음
-  const hasEdge = elements.some(
-    (el) => el.data && el.data.source && el.data.target
-  );
-  if (!hasEdge) return elements;
-  // 노드 id 목록
-  const nodeIds = new Set(
-    elements
-      .filter((el) => el.data && el.data.id && !el.data.source)
-      .map((el) => el.data.id)
-  );
-  // 엣지의 source/target id 목록
-  const connectedIds = new Set(
-    elements
-      .filter((el) => el.data && el.data.source && el.data.target)
-      .flatMap((el) => [el.data.source, el.data.target])
-  );
-  // 연결된 노드만 남김
-  return elements.filter((el) => {
-    if (el.data && el.data.id && !el.data.source) {
-      // 노드
-      return connectedIds.has(el.data.id);
-    }
-    // 엣지는 모두 표시
-    return true;
-  });
-}
-
-const loading = false;
-const isDataReady = true;
-
-// GraphSplitArea 컴포넌트를 ViewerPage 함수 전에 정의
 function GraphSplitArea({
-  currentCharIndex,
-  hideIsolated,
-  setHideIsolated,
-  edgeLabelVisible,
-  setEdgeLabelVisible,
-  handleFitView,
-  currentChapter,
-  setCurrentChapter,
-  maxChapter,
-  loading,
-  isDataReady,
-  showGraph,
-  graphFullScreen,
-  setGraphFullScreen,
-  navigate,
-  filename,
-  book,
-  viewerRef,
-  currentEvent,
-  prevValidEvent,
-  prevEvent,
-  events,
-  graphDiff,
-  prevElements,
-  currentElements,
+  graphState,
+  graphActions,
+  viewerState,
+  searchState,
+  searchActions,
 }) {
   const graphContainerRef = React.useRef(null);
-  const [searchState, setSearchState] = React.useState({
-    searchTerm: "",
-    isSearchActive: false,
-    filteredElements: [],
-    fitNodeIds: [],
-    currentChapterData: null
-  });
-
-  // elements 상태 추가
-  const [elements, setElements] = React.useState([]);
-
-  const handleSearchStateChange = React.useCallback((newState) => {
-    setSearchState(prevState => {
-      // 이전 상태와 비교하여 실제로 변경되었을 때만 업데이트
-      if (JSON.stringify(prevState) !== JSON.stringify(newState)) {
-        return newState;
-      }
-      return prevState;
-    });
-  }, []);
-
-  // GraphContainer에서 elements 업데이트
-  const handleElementsUpdate = React.useCallback((newElements) => {
-    setElements(newElements);
-  }, []);
-
-  // 검색 제출 함수
-  const handleSearchSubmit = React.useCallback((searchTerm) => {
-    if (graphContainerRef.current && graphContainerRef.current.handleSearchSubmit) {
-      graphContainerRef.current.handleSearchSubmit(searchTerm);
-    }
-  }, []);
-
-  // 검색 초기화 함수
-  const handleClearSearch = React.useCallback(() => {
-    if (graphContainerRef.current && graphContainerRef.current.clearSearch) {
-      graphContainerRef.current.clearSearch();
-    }
-  }, []);
+  const { isSearchActive, filteredElements, isResetFromSearch } = searchState;
 
   return (
     <div
@@ -377,790 +55,324 @@ function GraphSplitArea({
       }}
     >
       <ViewerTopBar
-        navigate={navigate}
-        filename={filename}
-        currentChapter={currentChapter}
-        setCurrentChapter={setCurrentChapter}
-        maxChapter={maxChapter}
-        book={book}
-        viewerRef={viewerRef}
-        currentEvent={currentEvent}
-        prevValidEvent={prevValidEvent}
-        prevEvent={prevEvent}
-        events={events}
-        graphFullScreen={graphFullScreen}
-        setGraphFullScreen={setGraphFullScreen}
-        edgeLabelVisible={edgeLabelVisible}
-        setEdgeLabelVisible={setEdgeLabelVisible}
-        hideIsolated={hideIsolated}
-        setHideIsolated={setHideIsolated}
-        searchTerm={searchState.searchTerm}
-        isSearchActive={searchState.isSearchActive}
-        elements={elements}
-        onSearchSubmit={handleSearchSubmit}
-        clearSearch={handleClearSearch}
-        currentChapterData={searchState.currentChapterData}
+        graphState={graphState}
+        graphActions={graphActions}
+        viewerState={viewerState}
+        searchState={searchState}
+        searchActions={searchActions}
       />
       
-      {/* 그래프 본문 */}
       <div style={{ flex: 1, position: "relative", minHeight: 0, minWidth: 0 }}>
         <GraphContainer
           ref={graphContainerRef}
-          currentPosition={currentCharIndex}
-          currentEvent={currentEvent || prevValidEvent}
-          currentChapter={currentChapter}
-          edgeLabelVisible={edgeLabelVisible}
-          onSearchStateChange={handleSearchStateChange}
-          onElementsUpdate={handleElementsUpdate}
-          filename={filename}
+          currentPosition={graphState.currentCharIndex}
+          currentEvent={graphState.currentEvent || graphState.prevValidEvent}
+          currentChapter={graphState.currentChapter}
+          edgeLabelVisible={graphState.edgeLabelVisible}
+          filename={viewerState.filename}
+          elements={isSearchActive && filteredElements && filteredElements.length > 0 ? filteredElements : graphState.elements}
+          isResetFromSearch={isResetFromSearch}
         />
       </div>
     </div>
   );
 }
 
-const ViewerPage = ({ darkMode: initialDarkMode }) => {
-  const { filename } = useParams();
-  const location = useLocation();
-  const viewerRef = useRef(null);
-  const navigate = useNavigate();
-  const [reloadKey, setReloadKey] = useState(0);
-  const [failCount, setFailCount] = useState(0);
-  const [progress, setProgress] = useState(0);
-  const [currentPage, setCurrentPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
-  const [showSettingsModal, setShowSettingsModal] = useState(false);
-  const [settings, setSettings] = useState(() => loadSettings());
-  const [darkMode, setDarkMode] = useState(
-    initialDarkMode || settings.theme === "dark"
-  );
-  const [currentChapter, setCurrentChapter] = useState(1);
-  
-  // 3. localStorage에서 저장된 모드를 확인하여 초기 상태 설정
-  const [graphFullScreen, setGraphFullScreen] = useState(() => {
-    const saved = localStorage.getItem("viewer_mode");
-    if (saved === "graph") {
-      return true;
-    } else if (saved === "split") {
-      return false;
-    } else if (saved === "viewer") {
-      return false;
-    }
-    return false; // 기본값
-  });
-  const [showGraph, setShowGraph] = useState(() => {
-    const saved = localStorage.getItem("viewer_mode");
-    if (saved === "graph" || saved === "split") {
-      return true;
-    } else if (saved === "viewer") {
-      return false;
-    }
-    return settings.showGraph; // 기본값
-  });
-  
-  // 검색 관련 상태 추가
-
-  const [elements, setElements] = useState([]);
-  const [currentCharIndex, setCurrentCharIndex] = useState(0);
-  const [currentPageWords, setCurrentPageWords] = useState(0);
-  const [totalChapterWords, setTotalChapterWords] = useState(0);
-  const [loading, setLoading] = useState(true);
-  const [chapterText, setChapterText] = useState("");
-  const [isDataReady, setIsDataReady] = useState(true);
-  const [currentEvent, setCurrentEvent] = useState(null);
-  const [prevEvent, setPrevEvent] = useState(null);
-  const [graphViewState, setGraphViewState] = useState(null);
-  const [hideIsolated, setHideIsolated] = useState(true);
-  const [edgeLabelVisible, setEdgeLabelVisible] = useState(true);
-  const [characterData, setCharacterData] = useState(null);
-  const [events, setEvents] = useState([]);
-  const [maxChapter, setMaxChapter] = useState(1); // 자동 계산으로 초기값 1
-
-  const [isReloading, setIsReloading] = useState(false);
-  const [eventNum, setEventNum] = useState(0);
-  const [isGraphLoading, setIsGraphLoading] = useState(false);
-  const [showToolbar, setShowToolbar] = useState(false);
-  // 이전 currentEvent를 기억하는 ref 추가
-  const prevValidEventRef = useRef(null);
-
-  // location.state에서 book 정보를 가져오거나, 없으면 filename에서 생성
-  const book = location.state?.book || {
-    title: filename.replace(".epub", ""),
-    path: `/${filename}`,
-    filename: filename,
-  };
-
-  // 파일명에서 경로 제거하고 순수 파일명만 추출 (북마크 저장용)
-  const cleanFilename = filename.trim();
-  const [bookmarks, setBookmarks] = useState(loadBookmarks(cleanFilename));
-  const [showBookmarkList, setShowBookmarkList] = useState(false);
-
-  // 이전 그래프 상태를 추적하기 위한 ref 추가
-  const prevElementsRef = useRef([]);
-  const prevChapterNumRef = useRef();
-  const prevEventNumRef = useRef();
-  const [graphDiff, setGraphDiff] = useState({
-    added: [],
-    removed: [],
-    updated: [],
-  });
-
-  // 4. showGraph/graphFullScreen 상태 변경 시 localStorage에 저장
-  useEffect(() => {
-    if (graphFullScreen) {
-      saveViewerMode("graph");
-    } else if (showGraph) {
-      saveViewerMode("split");
-    } else {
-      saveViewerMode("viewer");
-    }
-  }, [showGraph, graphFullScreen]);
+const ViewerPage = () => {
+  const {
+    filename, location, navigate, viewerRef,
+    reloadKey, setReloadKey, failCount, setFailCount,
+    progress, setProgress, currentPage, setCurrentPage,
+    totalPages, setTotalPages, showSettingsModal, setShowSettingsModal,
+    settings, setSettings,
+    currentChapter, setCurrentChapter, currentEvent, setCurrentEvent,
+    prevEvent, setPrevEvent, events, setEvents, maxChapter, setMaxChapter,
+    graphFullScreen, setGraphFullScreen, showGraph, setShowGraph,
+    elements, setElements, graphViewState, setGraphViewState,
+    hideIsolated, setHideIsolated, edgeLabelVisible, setEdgeLabelVisible,
+    graphDiff, setGraphDiff,
+    currentCharIndex, setCurrentCharIndex, currentPageWords, setCurrentPageWords,
+    totalChapterWords, setTotalChapterWords, loading, setLoading,
+    chapterText, setChapterText, isDataReady, setIsDataReady,
+    characterData, setCharacterData, isReloading, setIsReloading,
+    eventNum, setEventNum, isGraphLoading, setIsGraphLoading,
+    showToolbar, setShowToolbar,
+    cleanFilename, bookmarks, setBookmarks, showBookmarkList, setShowBookmarkList,
+    prevValidEventRef, prevElementsRef, prevChapterNumRef, prevEventNumRef,
+    book, folderKey,
+    graphElements, newNodeIds, currentChapterData, maxEventNum,
+    graphEventNum, detectedMaxChapter, graphLoading, graphError,
+    handlePrevPage, handleNextPage, handleAddBookmark, handleBookmarkSelect,
+    handleOpenSettings, handleCloseSettings, handleApplySettings,
+    onToggleBookmarkList, handleSliderChange, handleDeleteBookmark,
+    handleRemoveBookmark, toggleGraph, handleFitView, handleLocationChange,
+    graphState, graphActions, viewerState, searchState,
+  } = useViewerPage();
 
   useEffect(() => {
-    if (failCount >= 2) {
-      toast.info("🔄 계속 실패하면 브라우저 새로고침을 해주세요!");
-    }
-  }, [failCount]);
-
-  useEffect(() => {
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.body.style.overflow = "auto";
-    };
-  }, []);
-
-  useEffect(() => {
-    if (book && progress !== undefined) {
-      localStorage.setItem(`progress_${cleanFilename}`, progress);
-    }
-  }, [progress, book, cleanFilename]);
-
-  useEffect(() => {
-    // 파일명이 바뀔 때만 localStorage에서 최신 북마크를 불러옴
-    setBookmarks(loadBookmarks(cleanFilename));
-  }, [cleanFilename]);
-
-  // 페이지 변경 시 현재 챕터 번호 업데이트
-  useEffect(() => {
-    // 현재 위치에서 챕터 정보 추출 기능, 예시일 뿐 실제로는 EPUB에서 정보를 가져와야 함
-    const updateCurrentChapter = async () => {
-      if (viewerRef.current && viewerRef.current.getCurrentCfi) {
+    const loadEventsData = async () => {
+      try {
+        setLoading(true);
+        setIsGraphLoading(true);
+        setIsDataReady(false);
+        
+        const events = getEventsForChapter(currentChapter, folderKey);
+        setEvents(events);
+        
         try {
-          const cfi = await viewerRef.current.getCurrentCfi();
-          if (cfi) {
-            const chapterMatch = cfi.match(/\[chapter-(\d+)\]/);
-            if (chapterMatch) {
-              setCurrentChapter(parseInt(chapterMatch[1]));
+          const allCharacterData = [];
+          for (let chapter = 1; chapter <= currentChapter; chapter++) {
+            const charData = getCharactersData(folderKey, chapter);
+            if (charData && charData.characters) {
+              allCharacterData.push(...charData.characters);
             }
           }
-        } catch (e) {
-          // 챕터 정보 읽기 오류 처리
+          
+          const uniqueCharacters = [];
+          const seenIds = new Set();
+          for (let i = allCharacterData.length - 1; i >= 0; i--) {
+            const char = allCharacterData[i];
+            const id = String(Math.trunc(char.id));
+            if (!seenIds.has(id)) {
+              seenIds.add(id);
+              uniqueCharacters.unshift(char);
+            }
+          }
+          
+          setCharacterData(uniqueCharacters);
+        } catch (charError) {
+          console.warn('캐릭터 데이터 누적 로드 실패:', charError);
+          if (currentChapterData) {
+            setCharacterData(currentChapterData.characters || currentChapterData);
+          }
         }
+        
+        setIsDataReady(true);
+      } catch (error) {
+        console.error('Chapter data loading error:', error);
+        setIsDataReady(true);
+      } finally {
+        setLoading(false);
+        setIsGraphLoading(false);
       }
     };
-
-    updateCurrentChapter();
-  }, [currentPage]);
-
-  // 데이터 로딩 상태 관리
-  const loadData = async () => {
-    try {
-      setLoading(true);
-      setIsDataReady(false);
-
-      // 이벤트 데이터 로드
-      const events = await getEventsForChapter(currentChapter);
-      setEvents(events);
-
-      // 캐릭터 데이터 로드 - c_chapter1_0.json 사용
-      const characterFilePath = Object.keys(charactersModules).find((path) =>
-        path.includes(`c_chapter${currentChapter}_0.json`)
-      );
-      if (!characterFilePath) {
-        throw new Error(
-          `캐릭터 데이터 파일을 찾을 수 없습니다: chapter${currentChapter}`
-        );
-      }
-      const characterData = charactersModules[characterFilePath].default;
-      setCharacterData(characterData);
-
-      // 전체 챕터의 관계 데이터를 바로 로드
-      const allRelations = [];
-      const allImportance = {};
-      const allNewAppearances = [];
-      const edgeSet = new Set(); // 중복 간선 방지용
-
-      // 각 이벤트의 관계 데이터를 수집
-      for (const ev of events) {
-        const eventId = ev.event_id || 0;
-        const fileEventNum = eventId + 1;
-        const eventRelationFilePath = Object.keys(eventRelationModules).find((path) =>
-          path.includes(`chapter${currentChapter}_relationships_event_${fileEventNum}.json`)
-        );
-
-        if (eventRelationFilePath) {
-          const eventRelations = eventRelationModules[eventRelationFilePath].default;
-          if (Array.isArray(eventRelations?.relations)) {
-            eventRelations.relations.forEach((rel) => {
-              const id1 = rel.id1 || rel.source;
-              const id2 = rel.id2 || rel.target;
-              const edgeKey = `${id1}-${id2}`;
-              if (!edgeSet.has(edgeKey)) {
-                allRelations.push(rel);
-                edgeSet.add(edgeKey);
-              }
-            });
-          }
-          if (eventRelations?.importance) {
-            Object.entries(eventRelations.importance).forEach(([k, v]) => {
-              allImportance[k] = v;
-            });
-          }
-        }
-
-        if (Array.isArray(ev.new_appearances)) {
-          allNewAppearances.push(...ev.new_appearances);
-        }
-      }
-
-      const elements = getElementsFromRelations(
-        allRelations,
-        characterData,
-        allNewAppearances,
-        allImportance
-      );
-
-      setElements(elements);
-      setIsDataReady(true);
-      setLoading(false);
-    } catch (error) {
-      setLoading(false);
-    }
-  };
-
-
-
-  // currentChapter가 바뀔 때 currentEvent, prevEvent만 초기화 (elements는 누적 유지)
-  useEffect(() => {
-    setCurrentEvent(null);
-    setPrevEvent(null);
-    // setElements([]); // 그래프 초기화 제거 - 누적 유지
-  }, [currentChapter]);
-
-  // Load data when currentChapter changes
-  useEffect(() => {
-    loadData();
-  }, [currentChapter]);
-
-  // === [추가] 챕터 전체 그래프(fullElements) 생성 ===
-  const fullElements = useMemo(() => {
-    if (!events || !events.length || !characterData || !characterData.length)
-      return [];
-    // 모든 relations/importance/new_appearances를 합침
-    let allRelations = [];
-    let allImportance = {};
-    let allNewAppearances = [];
-    const edgeSet = new Set(); // 중복 간선 방지용
-    events.forEach((ev) => {
-      if (Array.isArray(ev.relations)) {
-        ev.relations.forEach((rel) => {
-          const id1 = rel.id1 || rel.source;
-          const id2 = rel.id2 || rel.target;
-          const edgeKey = `${id1}-${id2}`;
-          if (!edgeSet.has(edgeKey)) {
-            allRelations.push(rel);
-            edgeSet.add(edgeKey);
-          }
-        });
-      }
-      if (ev.importance && typeof ev.importance === "object") {
-        Object.entries(ev.importance).forEach(([k, v]) => {
-          allImportance[k] = v;
-        });
-      }
-      if (Array.isArray(ev.new_appearances))
-        allNewAppearances = allNewAppearances.concat(ev.new_appearances);
-    });
-    const generatedElements = getElementsFromRelations(
-      allRelations,
-      characterData,
-      allNewAppearances,
-      allImportance
-    );
-    return generatedElements;
-  }, [events, characterData]); // currentChapter 의존성 제거
-
-  // === [수정] elements: 데이터 준비/이벤트별 분리 ===
-  // 1. 데이터 준비되면 fullElements를 보여줌 (챕터 변경 시에만)
-  useEffect(() => {
-    if (isDataReady && !currentEvent && fullElements.length > 0) {
-      // 챕터 변경 시에만 elements 설정 (누적 유지)
-      setElements(prevElements => {
-        // 기존 elements와 새로운 elements를 합침
-        const combinedElements = [...prevElements, ...fullElements];
-        // 중복 제거
-        const uniqueElements = [];
-        const seenIds = new Set();
-        for (let i = combinedElements.length - 1; i >= 0; i--) {
-          const element = combinedElements[i];
-          const elementId = element.data?.id || element.data?.source + '-' + element.data?.target;
-          if (!seenIds.has(elementId)) {
-            seenIds.add(elementId);
-            uniqueElements.unshift(element);
-          }
-        }
-        return uniqueElements;
-      });
-      setLoading(false);
-    }
-  }, [isDataReady, currentEvent, fullElements]);
-
-  // 2. currentEvent가 잡히면 이벤트별 필터링 그래프를 보여줌
-  useEffect(() => {
-    if (!currentEvent || !isDataReady) return;
-
-    // Use the events state directly instead of re-calling getEventsForChapter
-    if (!events || !events.length) return;
-
-    const maxEventNum =
-      currentEvent?.eventNum || events[events.length - 1].eventNum;
     
-    const nodeFirstEvent = {};
-    const edgeFirstEvent = {};
+    loadEventsData();
+  }, [currentChapter, currentChapterData, folderKey]);
 
-    events.forEach((ev) => {
-      if (ev.importance) {
-        Object.keys(ev.importance).forEach((id) => {
-          if (nodeFirstEvent[id] === undefined)
-            nodeFirstEvent[id] = ev.eventNum;
-        });
-      }
-      if (Array.isArray(ev.new_appearances)) {
-        ev.new_appearances.forEach((id) => {
-          if (nodeFirstEvent[id] === undefined)
-            nodeFirstEvent[id] = ev.eventNum;
-        });
-      }
-      if (Array.isArray(ev.relations)) {
-        ev.relations.forEach((rel) => {
-          const id1 = rel.id1 || rel.source;
-          const id2 = rel.id2 || rel.target;
-          if (id1 && nodeFirstEvent[id1] === undefined)
-            nodeFirstEvent[id1] = ev.eventNum;
-          if (id2 && nodeFirstEvent[id2] === undefined)
-            nodeFirstEvent[id2] = ev.eventNum;
-          const edgeKey = `${id1}-${id2}`;
-          if (edgeFirstEvent[edgeKey] === undefined)
-            edgeFirstEvent[edgeKey] = ev.eventNum;
-        });
-      }
-    });
-
-
-
-    const filtered = fullElements.filter((el) => {
-      if (el.data.source && el.data.target) {
-        const edgeKey = `${el.data.source}-${el.data.target}`;
-        return (
-          edgeFirstEvent[edgeKey] !== undefined &&
-          edgeFirstEvent[edgeKey] <= maxEventNum
-        );
-      } else if (el.data.id) {
-        return (
-          nodeFirstEvent[el.data.id] !== undefined &&
-          nodeFirstEvent[el.data.id] <= maxEventNum
-        );
-      }
-      return false;
-    });
-
-
-
-    let nodePositions = {};
+  const currentEventElements = useMemo(() => {
+    if (loading || isReloading || !currentEvent || !events?.length || !characterData?.length) {
+      return [];
+    }
+    
+    const currentEventNum = currentEvent.eventNum;
+    const currentChapter = currentEvent.chapter;
+    
     try {
-      const posStr = localStorage.getItem(
-        `chapter_node_positions_${currentChapter}`
+      // currentEvent.eventNum이 0-based인지 1-based인지 확인
+      console.log('=== 이벤트 인덱스 디버깅 ===');
+      console.log('currentEvent.eventNum:', currentEventNum);
+      console.log('currentEvent.event_id:', currentEvent.event_id);
+      
+      // event_id가 있으면 그것을 사용, 없으면 eventNum 사용
+      const actualEventNum = currentEvent.event_id !== undefined ? currentEvent.event_id : currentEventNum;
+      console.log('실제 사용할 이벤트 번호:', actualEventNum);
+      
+      const eventData = getEventData(folderKey, currentChapter, actualEventNum);
+      
+      if (!eventData) {
+        console.warn('이벤트 데이터를 찾을 수 없습니다:', { folderKey, currentChapter, actualEventNum });
+        return [];
+      }
+      
+      const currentRelations = eventData.relations || [];
+      const currentImportance = eventData.importance || {};
+      const currentNewAppearances = eventData.log?.new_character_ids || [];
+      
+      // 디버깅: 현재 이벤트의 관계 데이터 로그
+      console.log('=== 현재 이벤트 관계 데이터 ===');
+      console.log('Chapter:', currentChapter, 'Event:', currentEventNum);
+      console.log('Relations:', currentRelations);
+      console.log('Event Data:', eventData);
+      
+      const generatedElements = getElementsFromRelations(
+        currentRelations,
+        characterData,
+        currentNewAppearances,
+        currentImportance
       );
-      if (posStr) nodePositions = JSON.parse(posStr);
-    } catch (e) {}
+      
+      // 디버깅: 생성된 요소들 로그
+      console.log('Generated Elements:', generatedElements);
+      
+      return generatedElements;
+    } catch (error) {
+      console.error('관계 데이터 로드 실패:', error);
+      return [];
+    }
+  }, [currentEvent, characterData, folderKey, events]);
 
-    const sorted = filtered
-      .slice()
-      .sort((a, b) => {
-        const aId =
-          a.data?.id ||
-          (a.data?.source ? a.data?.source + "-" + a.data?.target : "");
-        const bId =
-          b.data?.id ||
-          (b.data?.source ? b.data?.source + "-" + b.data?.target : "");
-        return aId.localeCompare(bId);
-      })
-      .map((el) => {
-        if (el.data.id && nodePositions[el.data.id]) {
-          return { ...el, position: nodePositions[el.data.id] };
-        }
-        return el;
-      });
+  const {
+    searchTerm, isSearchActive, filteredElements, fitNodeIds,
+    isResetFromSearch, suggestions, showSuggestions, selectedIndex,
+    selectSuggestion, handleKeyDown, closeSuggestions,
+    handleSearchSubmit, clearSearch, setSearchTerm,
+  } = useGraphSearch(currentEventElements, null, currentChapterData);
 
-    // 이벤트별 필터링이므로 현재 이벤트의 요소들만 표시 (누적하지 않음)
-    setElements(sorted);
-    setLoading(false);
-  }, [currentEvent, hideIsolated, fullElements, isDataReady]); // currentChapter 의존성 제거
+  // === [최적화] elements 설정 로직 - 불필요한 재렌더링 방지 ===
+  const elementsRef = useRef([]);
+  const lastProcessedRef = useRef({});
 
-  // === [추가] 마지막 이벤트 등장 노드/간선 위치만 저장 및 이벤트별 적용 ===
-  // 마지막 이벤트에서 등장한 노드/간선 위치만 저장
+  useEffect(() => {
+    if (!isDataReady || !events || !events.length || !characterData) {
+      return;
+    }
+
+    // 현재 상태를 키로 사용하여 중복 실행 방지
+    const currentState = {
+      currentEventId: currentEvent?.eventNum,
+      currentChapter,
+      eventsLength: events.length,
+      characterDataLength: characterData.length,
+      hideIsolated
+    };
+
+    // 이전과 동일한 상태면 실행하지 않음
+    if (JSON.stringify(currentState) === JSON.stringify(lastProcessedRef.current)) {
+      return;
+    }
+
+    lastProcessedRef.current = currentState;
+
+    let targetElements = [];
+    let source = '';
+
+    // 1차: currentEvent가 있고 currentEventElements가 있을 때
+    if (currentEvent && currentEventElements.length > 0) {
+      targetElements = currentEventElements;
+      source = `현재 이벤트(${currentEvent.eventNum})`;
+    }
+    // 2차: currentEvent가 없거나 currentEventElements가 비어있을 때는 빈 배열 반환
+    // 자동 이벤트 선택 제거 - 사용자가 직접 선택하도록 함
+
+    // elements 설정 (고립 노드 필터링 적용)
+    if (targetElements.length > 0) {
+      const filteredElements = filterIsolatedNodes(targetElements, hideIsolated);
+      
+      // 노드 위치 복원
+      let nodePositions = {};
+      try {
+        const posStr = localStorage.getItem(
+          createStorageKey.chapterNodePositions(currentChapter)
+        );
+        if (posStr) nodePositions = JSON.parse(posStr);
+      } catch (e) {}
+
+      const sortedElements = filteredElements
+        .slice()
+        .sort((a, b) => {
+          const aId = a.data?.id || (a.data?.source ? a.data?.source + "-" + a.data?.target : "");
+          const bId = b.data?.id || (b.data?.source ? b.data?.source + "-" + b.data?.target : "");
+          return aId.localeCompare(bId);
+        })
+        .map((el) => {
+          if (el.data.id && nodePositions[el.data.id]) {
+            return { ...el, position: nodePositions[el.data.id] };
+          }
+          return el;
+        });
+
+      // 이전 elements와 동일하면 업데이트하지 않음
+      if (JSON.stringify(elementsRef.current) !== JSON.stringify(sortedElements)) {
+        elementsRef.current = sortedElements;
+        setElements(sortedElements);
+      }
+    }
+  }, [isDataReady, currentEvent, currentEventElements, events, characterData, folderKey, hideIsolated, currentChapter]);
+
+  // === [제거] 중복된 useEffect - 위의 통합 로직으로 대체됨 ===
+
+  // === [수정] 현재 이벤트 등장 노드/간선 위치 저장 및 이벤트별 적용 ===
+  // 현재 이벤트에서 등장한 노드/간선 위치를 저장
   useEffect(() => {
     if (!isDataReady || !currentEvent || !graphViewState) return;
-    const events = getEventsForChapter(currentChapter);
-    if (!events || !events.length) return;
-    const isLastEvent =
-      currentEvent.eventNum === events[events.length - 1].eventNum;
-    if (isLastEvent) {
-      // 마지막 이벤트에서 등장한 노드/간선 id만 추출
-      const lastNodes = new Set();
-      const lastEdges = new Set();
-      if (Array.isArray(currentEvent.relations)) {
-        currentEvent.relations.forEach((rel) => {
-          const id1 = rel.id1 || rel.source;
-          const id2 = rel.id2 || rel.target;
-          if (id1) lastNodes.add(String(id1));
-          if (id2) lastNodes.add(String(id2));
-          lastEdges.add(`${id1}-${id2}`);
-        });
+    
+    // 현재 이벤트에서 등장한 노드/간선 id 추출
+    const { nodes: currentNodes, edges: currentEdges } = extractEventNodesAndEdges(currentEvent);
+    
+    // graphViewState에서 해당 노드/간선 위치만 추출
+    const partialLayout = {};
+    Object.entries(graphViewState).forEach(([key, value]) => {
+      if (currentNodes.has(key) || currentEdges.has(key)) {
+        partialLayout[key] = value;
       }
-      if (currentEvent.importance) {
-        Object.keys(currentEvent.importance).forEach((id) =>
-          lastNodes.add(String(id))
-        );
-      }
-      if (Array.isArray(currentEvent.new_appearances)) {
-        currentEvent.new_appearances.forEach((id) => lastNodes.add(String(id)));
-      }
-      // graphViewState에서 해당 노드/간선 위치만 추출
-      const partialLayout = {};
-      Object.entries(graphViewState).forEach(([key, value]) => {
-        // key가 노드 id 또는 간선 id
-        if (lastNodes.has(key) || lastEdges.has(key)) {
-          partialLayout[key] = value;
-        }
-      });
-      try {
-        localStorage.setItem(
-          `graph_partial_layout_chapter_${currentChapter}`,
-          JSON.stringify(partialLayout)
-        );
-      } catch (e) {}
-    }
+    });
+    
+    // 현재 이벤트별로 위치 저장
+    try {
+      const eventKey = createStorageKey.graphEventLayout(currentChapter, currentEvent.eventNum);
+      localStorage.setItem(eventKey, JSON.stringify(partialLayout));
+      
+      // 전체 챕터 레이아웃도 업데이트 (누적)
+      const chapterKey = createStorageKey.graphPartialLayout(currentChapter);
+      const existingLayout = JSON.parse(localStorage.getItem(chapterKey) || '{}');
+      const updatedLayout = { ...existingLayout, ...partialLayout };
+      localStorage.setItem(chapterKey, JSON.stringify(updatedLayout));
+    } catch (e) {}
   }, [isDataReady, currentEvent, currentChapter, graphViewState]);
 
-  // 각 이벤트 페이지에서 partialLayout을 merge해서 graphViewState로 적용
+  // 현재 이벤트까지의 누적 레이아웃을 merge해서 graphViewState로 적용
   useEffect(() => {
     if (!isDataReady || !currentEvent) return;
-    const partialLayoutStr = localStorage.getItem(
-      `graph_partial_layout_chapter_${currentChapter}`
-    );
-    if (!partialLayoutStr) return;
+    
     try {
-      const partialLayout = JSON.parse(partialLayoutStr);
-      // 현재 이벤트에 등장하는 노드/간선만 merge
-      const nodes = new Set();
-      const edges = new Set();
-      if (Array.isArray(currentEvent.relations)) {
-        currentEvent.relations.forEach((rel) => {
-          const id1 = rel.id1 || rel.source;
-          const id2 = rel.id2 || rel.target;
-          if (id1) nodes.add(String(id1));
-          if (id2) nodes.add(String(id2));
-          edges.add(`${id1}-${id2}`);
-        });
+      // 현재 이벤트까지의 모든 이벤트 레이아웃을 누적하여 merge
+      const mergedLayout = {};
+      const currentEventNum = currentEvent.eventNum || 0;
+      
+      // 현재 이벤트까지의 모든 이벤트에서 레이아웃 정보 수집
+      for (let eventNum = 0; eventNum <= currentEventNum; eventNum++) {
+        const eventKey = createStorageKey.graphEventLayout(currentChapter, eventNum);
+        const eventLayoutStr = localStorage.getItem(eventKey);
+        
+        if (eventLayoutStr) {
+          try {
+            const eventLayout = JSON.parse(eventLayoutStr);
+            Object.assign(mergedLayout, eventLayout);
+          } catch (e) {
+            // 개별 이벤트 레이아웃 파싱 오류 무시
+          }
+        }
       }
-      if (currentEvent.importance) {
-        Object.keys(currentEvent.importance).forEach((id) =>
-          nodes.add(String(id))
-        );
-      }
-      if (Array.isArray(currentEvent.new_appearances)) {
-        currentEvent.new_appearances.forEach((id) => nodes.add(String(id)));
-      }
-      // merge: partialLayout에 있는 위치만 우선 적용
-      const merged = {};
-      Object.entries(partialLayout).forEach(([key, value]) => {
-        if (nodes.has(key) || edges.has(key)) {
-          merged[key] = value;
+      
+      // 현재 이벤트에 등장하는 노드/간선만 최종 적용
+      const { nodes: currentNodes, edges: currentEdges } = extractEventNodesAndEdges(currentEvent);
+      
+      // 현재 이벤트에 등장하는 요소들의 위치만 적용
+      const finalLayout = {};
+      Object.entries(mergedLayout).forEach(([key, value]) => {
+        if (currentNodes.has(key) || currentEdges.has(key)) {
+          finalLayout[key] = value;
         }
       });
-      setGraphViewState(merged);
-    } catch (e) {}
-  }, [isDataReady, currentEvent, currentChapter]);
-
-  // EpubViewer에서 페이지/스크롤 이동 시 CFI 받아와서 글자 인덱스 갱신
-  const handleLocationChange = async () => {
-    if (viewerRef.current && viewerRef.current.getCurrentCfi) {
-      try {
-        const cfi = await viewerRef.current.getCurrentCfi();
-        // 현재 챕터 추출
-        const chapterMatch = cfi.match(/\[chapter-(\d+)\]/);
-        let chapterNum = currentChapter;
-        if (chapterMatch) chapterNum = parseInt(chapterMatch[1]);
-
-        // 챕터 번호만 업데이트
-        setCurrentChapter(chapterNum);
-      } catch (e) {
-        // 위치 계산 오류 처리
-      }
-    }
-  };
-
-  // CFI → 챕터/글자 인덱스 변환 함수 (epubjs locations 활용)
-  const cfiToCharIndex = (cfi, chapter) => {
-    try {
-      // viewerRef.current.bookRef.current.locations.locationFromCfi(cfi) 사용
-      if (
-        viewerRef.current &&
-        viewerRef.current.bookRef &&
-        viewerRef.current.bookRef.current &&
-        viewerRef.current.bookRef.current.locations &&
-        typeof viewerRef.current.bookRef.current.locations.locationFromCfi ===
-          "function"
-      ) {
-        // 챕터 내 인덱스 반환
-        return viewerRef.current.bookRef.current.locations.locationFromCfi(cfi);
-      }
+      
+      setGraphViewState(finalLayout);
     } catch (e) {
-      // 무시
+      // 전체 레이아웃 복원 오류 처리
     }
-    return 0;
-  };
+  }, [isDataReady, currentEvent, currentEventElements, currentChapter, hideIsolated]);
 
-  const handlePrevPage = () => {
-    if (viewerRef.current) viewerRef.current.prevPage();
-  };
-
-  const handleNextPage = () => {
-    if (viewerRef.current) viewerRef.current.nextPage();
-  };
-
-  const handleAddBookmark = async () => {
-    if (!viewerRef.current) {
-      toast.error("❗ 페이지가 아직 준비되지 않았어요. 다시 불러옵니다...");
-      setFailCount((cnt) => cnt + 1);
-      return;
-    }
-    let cfi = null;
-    try {
-      cfi = await viewerRef.current.getCurrentCfi?.();
-    } catch (e) {
-      // getCurrentCfi 에러 처리
-    }
-    if (!cfi) {
-      toast.error("❗ 페이지 정보를 읽을 수 없습니다. 다시 불러옵니다...");
-      setFailCount((cnt) => cnt + 1);
-      return;
-    }
-
-    setFailCount(0);
-
-    const latestBookmarks = loadBookmarks(cleanFilename);
-    const isDuplicate = latestBookmarks.some((b) => b.cfi === cfi);
-    let newBookmarks;
-    if (isDuplicate) {
-      newBookmarks = latestBookmarks.filter((b) => b.cfi !== cfi);
-      toast.info("❌ 북마크가 삭제되었습니다");
-    } else {
-      const newBookmark = { cfi, createdAt: new Date().toISOString() };
-      newBookmarks = [newBookmark, ...latestBookmarks];
-      toast.success("✅ 북마크가 추가되었습니다");
-    }
-    setBookmarks(newBookmarks);
-    saveBookmarks(cleanFilename, newBookmarks);
-  };
-
-  const handleBookmarkSelect = (cfi) => {
-    viewerRef.current?.displayAt(cfi);
-    setShowBookmarkList(false);
-  };
-
-  const handleOpenSettings = () => {
-    setShowSettingsModal(true);
-  };
-
-  const handleCloseSettings = () => {
-    setShowSettingsModal(false);
-  };
-
-  const handleApplySettings = (newSettings) => {
-    // 현재 설정 백업
-    const prevSettings = { ...settings };
-
-    // 새 설정 적용
-    setSettings(newSettings);
-
-    // 테마 설정 적용
-    if (newSettings.theme === "dark") {
-      setDarkMode(true);
-    } else {
-      setDarkMode(false);
-    }
-
-    // 그래프 표시 설정 적용
-    setShowGraph(newSettings.showGraph);
-
-    // 페이지 모드 변경 또는 그래프 표시 여부 변경 시 뷰어 다시 로드
-    if (
-      newSettings.pageMode !== prevSettings.pageMode ||
-      newSettings.showGraph !== prevSettings.showGraph
-    ) {
-      // 현재 위치 저장 후 뷰어 다시 로드
-      const saveCurrent = async () => {
-        try {
-          let cfi = null;
-
-          if (viewerRef.current?.getCurrentCfi) {
-            cfi = await viewerRef.current.getCurrentCfi();
-            if (cfi) {
-              localStorage.setItem(`readwith_${cleanFilename}_lastCFI`, cfi);
-            }
-          }
-
-          // 즉시 뷰어 다시 로드
-          setReloadKey((prev) => prev + 1);
-        } catch (e) {
-          // 에러 발생 시에도 뷰어 다시 로드
-          setReloadKey((prev) => prev + 1);
-        }
-      };
-
-      saveCurrent();
-    } else {
-      // 뷰어에 설정 적용 (페이지 모드 외 다른 설정이 변경된 경우)
-      if (viewerRef.current && viewerRef.current.applySettings) {
-        viewerRef.current.applySettings();
-      }
-    }
-
-    // 로컬 스토리지에 설정 저장
-    try {
-      localStorage.setItem("epub_viewer_settings", JSON.stringify(newSettings));
-    } catch (e) {
-      toast.error("설정 저장 중 오류가 발생했습니다.");
-    }
-
-    toast.success("✅ 설정이 적용되었습니다");
-  };
-
-  const onToggleBookmarkList = () => {
-    navigate(`/viewer/${filename}/bookmarks`);
-  };
-
-  const handleSliderChange = async (value) => {
-    setProgress(value);
-    if (viewerRef.current?.moveToProgress) {
-      try {
-        await viewerRef.current.moveToProgress(value);
-        setTimeout(() => {
-          // progress가 여전히 value와 다르면 새로고침
-          if (progress !== value) {
-            window.location.reload();
-          }
-        }, 1000);
-      } catch (e) {
-        window.location.reload();
-      }
-    }
-  };
-
-  const handleDeleteBookmark = (cfi) => {
-    if (!cleanFilename) {
-      toast.error("❗ 파일명이 없어 북마크를 삭제할 수 없습니다.");
-      return;
-    }
-    if (window.confirm("정말 삭제하시겠습니까?")) {
-      const newBookmarks = bookmarks.filter((b) => b.cfi !== cfi);
-      setBookmarks(newBookmarks);
-      saveBookmarks(cleanFilename, newBookmarks);
-    }
-  };
-
-  const handleRemoveBookmark = (cfi) => {
-    if (!cleanFilename) {
-      toast.error("❗ 파일명이 없어 북마크를 삭제할 수 없습니다.");
-      return;
-    }
-    if (window.confirm("정말 삭제하시겠습니까?")) {
-      const newBookmarks = bookmarks.filter((b) => b.cfi !== cfi);
-      setBookmarks(newBookmarks);
-      saveBookmarks(cleanFilename, newBookmarks);
-    }
-  };
-
-  // 그래프 표시 토글 함수
-  const toggleGraph = () => {
-    const newShowGraph = !showGraph;
-    setShowGraph(newShowGraph);
-
-    // 설정에도 그래프 표시 여부 업데이트
-    const updatedSettings = {
-      ...settings,
-      showGraph: newShowGraph,
-    };
-    setSettings(updatedSettings);
-
-    // 로컬 스토리지에 설정 저장
-    try {
-      localStorage.setItem(
-        "epub_viewer_settings",
-        JSON.stringify(updatedSettings)
-      );
-    } catch (e) {
-      // 설정 저장 오류 처리
-    }
-
-    // EPUB 뷰어 다시 로드
-    const saveCurrent = async () => {
-      try {
-        let cfi = null;
-
-        if (viewerRef.current?.getCurrentCfi) {
-          cfi = await viewerRef.current.getCurrentCfi();
-          if (cfi) {
-            localStorage.setItem(`readwith_${cleanFilename}_lastCFI`, cfi);
-          }
-        }
-
-        // 즉시 뷰어 다시 로드
-        setReloadKey((prev) => prev + 1);
-      } catch (e) {
-        // 설정 적용 오류 처리
-        // 에러 발생 시에도 뷰어 다시 로드
-        setReloadKey((prev) => prev + 1);
-      }
-    };
-
-    saveCurrent();
-  };
-
-
-
-  const handleFitView = () => {
-    // Implementation of handleFitView
-  };
-
+  // elements가 바뀔 때마다 diff 계산
   useEffect(() => {
-    // 새로고침 시에만 isReloading true로 설정
-    if (performance && performance.getEntriesByType) {
-      const navEntries = performance.getEntriesByType("navigation");
-      if (navEntries.length > 0 && navEntries[0].type === "reload") {
-        setIsReloading(true);
-      }
-    }
-  }, []);
+    if (!elements) return;
+    const prev = prevElementsRef.current || [];
+    const curr = elements;
+    const diff = calcGraphDiff(prev, curr);
+    setGraphDiff(diff);
+    prevElementsRef.current = curr;
+  }, [elements]);
 
-  // elements, chapterNum, eventNum이 바뀔 때마다 이전 값 저장
-  useEffect(() => {
-    prevElementsRef.current = elements;
-    prevChapterNumRef.current = currentChapter;
-    prevEventNumRef.current = currentEvent?.eventNum;
-  }, [elements, currentChapter, currentEvent]);
+  // === [제거] 중복된 초기 로딩 fallback - 위의 통합 로직으로 대체됨 ===
 
   // elements가 이전과 완전히 같으면 로딩 메시지 안 보이게
   const isSameElements = useMemo(() => {
@@ -1178,10 +390,13 @@ const ViewerPage = ({ darkMode: initialDarkMode }) => {
 
   // === [디버깅용 로그 추가] 최초 진입 시 모든 챕터의 전체 노드 위치 미리 저장 ===
   useEffect(() => {
-    // 챕터 번호 1~9 (data 폴더 기준)
-    const chapterNums = Array.from({ length: 9 }, (_, i) => i + 1);
+    // 동적으로 최대 챕터 번호 계산
+    const maxChapterCount = getDetectedMaxChapter(folderKey);
+    if (maxChapterCount === 0) return; // 챕터가 없으면 종료
+    
+    const chapterNums = Array.from({ length: maxChapterCount }, (_, i) => i + 1);
     chapterNums.forEach((chapterNum) => {
-      const storageKey = `chapter_node_positions_${chapterNum}`;
+      const storageKey = createStorageKey.chapterNodePositions(chapterNum);
       if (localStorage.getItem(storageKey)) {
         return;
       }
@@ -1228,91 +443,7 @@ const ViewerPage = ({ darkMode: initialDarkMode }) => {
         cy.destroy();
       }, 100);
     });
-  }, []);
-
-  // [추가] 그래프 diff 계산 함수
-  function getGraphDiff(prevElements, currentElements) {
-    const prevIds = new Set(prevElements.map((e) => e.data.id));
-    const currIds = new Set(currentElements.map((e) => e.data.id));
-
-    const added = currentElements.filter((e) => !prevIds.has(e.data.id));
-    const removed = prevElements.filter((e) => !currIds.has(e.data.id));
-    const updated = currentElements.filter((e) => {
-      const prev = prevElements.find((pe) => pe.data.id === e.data.id);
-      return prev && JSON.stringify(prev.data) !== JSON.stringify(e.data);
-    });
-
-    return { added, removed, updated };
-  }
-
-  // elements가 바뀔 때마다 diff 계산
-  useEffect(() => {
-    if (!elements) return;
-    const prev = prevElementsRef.current || [];
-    const curr = elements;
-    const diff = getGraphDiff(prev, curr);
-    setGraphDiff(diff);
-    prevElementsRef.current = curr;
-  }, [elements]);
-
-  useEffect(() => {
-    // currentEvent가 변경될 때마다 eventNum 업데이트
-    if (currentEvent) {
-      setEventNum(currentEvent.event_id ?? 0);
-    }
-  }, [currentEvent, fullElements, isDataReady, loading]);
-
-  // currentChapter가 변경될 때 데이터 다시 로드
-  useEffect(() => {
-    loadData();
-  }, [currentChapter]);
-
-  // maxChapter를 c_chapter*_0.json 파일의 개수(또는 최대 챕터 번호)로 자동 설정
-  useEffect(() => {
-    // charactersModules의 key에서 챕터 번호 추출
-    const chapterNums = Object.keys(charactersModules)
-      .map((key) => {
-        const match = key.match(/c_chapter(\d+)_0\.json/);
-        return match ? parseInt(match[1], 10) : null;
-      })
-      .filter((num) => num !== null);
-    if (chapterNums.length > 0) {
-      setMaxChapter(Math.max(...chapterNums));
-    }
-  }, []);
-
-  // elements가 변경될 때 로딩 상태 업데이트
-  useEffect(() => {
-    if (elements) {
-      setIsGraphLoading(false);
-    }
-  }, [elements]);
-
-  // 그래프 로딩 중일 때도 공백으로 보이게 처리 (챕터 변경 시에는 누적 유지)
-  useEffect(() => {
-    if (isGraphLoading && !currentChapter) {
-      setElements([]);
-    }
-  }, [isGraphLoading, currentChapter]);
-
-  // 1) events 데이터 확인
-  useEffect(() => {
-    // events 데이터 디버그
-  }, [events]);
-
-  // 2) currentEvent 상태 변화 확인
-  useEffect(() => {
-    // currentEvent 상태 변화 디버그
-  }, [currentEvent]);
-
-  // currentEvent가 null이 아닐 때만 이전 값 갱신
-  useEffect(() => {
-    if (currentEvent) {
-      prevValidEventRef.current = currentEvent;
-    }
-  }, [currentEvent]);
-
-  // 검색 처리 함수
+  }, [folderKey]);
 
 
   return (
@@ -1324,7 +455,6 @@ const ViewerPage = ({ darkMode: initialDarkMode }) => {
       <ViewerLayout
         showControls={showToolbar}
         book={book}
-        darkMode={darkMode}
         progress={progress}
         setProgress={setProgress}
         onPrev={handlePrevPage}
@@ -1342,33 +472,34 @@ const ViewerPage = ({ darkMode: initialDarkMode }) => {
         graphFullScreen={graphFullScreen}
         rightSideContent={
           <CytoscapeGraphPortalProvider>
-                         <GraphSplitArea
-               currentCharIndex={currentCharIndex}
-               hideIsolated={hideIsolated}
-               setHideIsolated={setHideIsolated}
-               edgeLabelVisible={edgeLabelVisible}
-               setEdgeLabelVisible={setEdgeLabelVisible}
-               handleFitView={handleFitView}
-               currentChapter={currentChapter}
-               setCurrentChapter={setCurrentChapter}
-               maxChapter={maxChapter}
-               loading={loading}
-               isDataReady={isDataReady}
-               showGraph={showGraph}
-               graphFullScreen={graphFullScreen}
-               setGraphFullScreen={setGraphFullScreen}
-               navigate={navigate}
-               filename={filename}
-               book={book}
-               viewerRef={viewerRef}
-               currentEvent={currentEvent}
-               prevValidEvent={prevValidEventRef.current}
-               prevEvent={prevEvent}
-               events={getEventsForChapter(currentChapter)}
-               graphDiff={graphDiff}
-               prevElements={prevElementsRef.current}
-               currentElements={elements}
-             />
+            <GraphSplitArea
+              graphState={{
+                ...graphState,
+                prevValidEvent: prevValidEventRef.current,
+                events: getEventsForChapter(currentChapter, folderKey)
+              }}
+              graphActions={graphActions}
+              viewerState={viewerState}
+              searchState={{
+                ...searchState,
+                searchTerm,
+                isSearchActive,
+                elements: currentEventElements,
+                filteredElements,
+                isResetFromSearch,
+                suggestions,
+                showSuggestions,
+                selectedIndex
+              }}
+              searchActions={{
+                onSearchSubmit: handleSearchSubmit,
+                clearSearch,
+                closeSuggestions,
+                onGenerateSuggestions: setSearchTerm,
+                selectSuggestion,
+                handleKeyDown
+              }}
+            />
           </CytoscapeGraphPortalProvider>
         }
       >
@@ -1378,19 +509,26 @@ const ViewerPage = ({ darkMode: initialDarkMode }) => {
           book={book}
           onProgressChange={setProgress}
           onCurrentPageChange={(page) => {
-            setLoading(true);
             setCurrentPage(page);
           }}
           onTotalPagesChange={setTotalPages}
           onCurrentChapterChange={(chapter) => {
-            setLoading(true);
             setCurrentChapter(chapter);
           }}
           settings={settings}
-          onCurrentLineChange={(charIndex, totalEvents, currentEvent) => {
+          onCurrentLineChange={(charIndex, totalEvents, receivedEvent) => {
             setCurrentCharIndex(charIndex);
             setTotalChapterWords(totalEvents || 0);
-            setCurrentEvent(currentEvent);
+            
+            // 받은 이벤트가 있으면 업데이트 (챕터 동기화는 별도로 처리)
+            if (receivedEvent) {
+              setCurrentEvent(receivedEvent);
+              
+              // 챕터 불일치 시 currentChapter도 업데이트
+              if (receivedEvent.chapter && receivedEvent.chapter !== currentChapter) {
+                setCurrentChapter(receivedEvent.chapter);
+              }
+            }
           }}
           onAllCfisReady={(_cfis, _ranges, offsets) => {}}
           onTextReady={(text, i) => {}}
@@ -1433,3 +571,4 @@ const ViewerPage = ({ darkMode: initialDarkMode }) => {
 };
 
 export default ViewerPage;
+

@@ -8,26 +8,41 @@ import GraphControls from "./GraphControls";
 import GraphSidebar from "./tooltip/GraphSidebar";
 import "./RelationGraph.css";
 
-import { createGraphStylesheet, getNodeSize as getNodeSizeUtil, getEdgeStyle as getEdgeStyleUtil, getWideLayout } from "../../utils/styles/graphStyles";
+import { createGraphStylesheet, getNodeSize, getEdgeStyle, getWideLayout } from "../../utils/styles/graphStyles";
 import { ANIMATION_VALUES } from "../../utils/styles/animations";
 import { sidebarStyles, topBarStyles, containerStyles, graphStyles } from "../../utils/styles/styles.js";
+
+const COLORS = {
+  primary: '#6C8EFF',
+  primaryLight: '#EEF2FF',
+  textPrimary: '#22336b',
+  textSecondary: '#6c757d',
+  border: '#e5e7eb',
+  borderLight: '#e3e6ef',
+  background: '#fff',
+  backgroundLight: '#f8f9fc',
+  backgroundLighter: '#f8fafc',
+  error: '#ef4444',
+  success: '#10b981',
+  warning: '#f59e0b',
+};
 import { useGraphSearch } from '../../hooks/useGraphSearch.jsx';
 import { useGraphDataLoader } from '../../hooks/useGraphDataLoader.js';
 import { useLocalStorageNumber } from '../../hooks/useLocalStorage.js';
 import useGraphInteractions from "../../hooks/useGraphInteractions";
 
-const getNodeSize = () => getNodeSizeUtil('graph');
-const getEdgeStyle = () => getEdgeStyleUtil('graph');
+const getNodeSizeForGraph = () => getNodeSize('graph');
+const getEdgeStyleForGraph = () => getEdgeStyle('graph');
 
-// 독립 인물 버튼 스타일
+// 독립 인물 버튼 스타일 (첨부파일 기준 구조 유지, 중앙화된 색상 사용)
 const isolatedButtonStyles = {
   button: (hideIsolated) => ({
     height: 30,
     padding: '0 16px',
     borderRadius: 8,
-    border: '1.5px solid #e3e6ef',
-    background: hideIsolated ? '#f8f9fc' : '#EEF2FF',
-    color: hideIsolated ? '#6C8EFF' : '#22336b',
+    border: `1.5px solid ${COLORS.borderLight}`,
+    background: hideIsolated ? COLORS.backgroundLight : COLORS.primaryLight,
+    color: hideIsolated ? COLORS.primary : COLORS.textPrimary,
     fontSize: 13,
     fontWeight: 600,
     cursor: 'pointer',
@@ -36,7 +51,7 @@ const isolatedButtonStyles = {
     display: 'flex',
     alignItems: 'center',
     gap: 6,
-    boxShadow: hideIsolated ? 'none' : '0 2px 8px rgba(108,142,255,0.15)',
+    boxShadow: hideIsolated ? 'none' : `0 2px 8px ${COLORS.primary}26`,
     minWidth: '140px',
     justifyContent: 'center',
   }),
@@ -44,27 +59,27 @@ const isolatedButtonStyles = {
     width: 8,
     height: 8,
     borderRadius: '50%',
-    background: hideIsolated ? '#6C8EFF' : '#22336b',
+    background: hideIsolated ? COLORS.primary : COLORS.textPrimary,
     opacity: hideIsolated ? 0.6 : 1,
   }),
   hover: {
-    background: '#f8f9fc',
-    color: '#6C8EFF',
+    background: COLORS.backgroundLight,
+    color: COLORS.primary,
     transform: 'scale(1.05)'
   },
   default: {
-    background: '#fff',
-    color: '#22336b',
+    background: COLORS.background,
+    color: COLORS.textPrimary,
     transform: 'scale(1)'
   }
 };
 
-// 레이아웃 스타일
+// 레이아웃 스타일 (첨부파일 기준 구조 유지, 중앙화된 색상 사용)
 const layoutStyles = {
   container: {
     width: '100vw',
     height: '100vh',
-    background: '#f4f7fb',
+    background: COLORS.backgroundLighter,
     overflow: 'hidden',
     display: 'flex',
     marginTop: 0
@@ -273,8 +288,8 @@ function RelationGraphWrapper() {
   }, [isSearchActive, filteredElements, sortedElements]);
 
   // 그래프 스타일 및 레이아웃
-  const nodeSize = getNodeSize();
-  const edgeStyle = getEdgeStyle();
+  const nodeSize = getNodeSizeForGraph();
+  const edgeStyle = getEdgeStyleForGraph();
   const stylesheet = useMemo(
     () => createGraphStylesheet(nodeSize, edgeStyle, edgeLabelVisible, 15),
     [nodeSize, edgeStyle, edgeLabelVisible]
@@ -403,7 +418,7 @@ function RelationGraphWrapper() {
     return (
       <div style={containerStyles.loading}>
         <div>그래프 로딩 중...</div>
-        <div style={{ fontSize: '14px', color: '#64748b', marginTop: '8px' }}>
+        <div style={{ fontSize: '14px', color: COLORS.textSecondary, marginTop: '8px' }}>
           관계 데이터를 불러오고 있습니다.
         </div>
       </div>
@@ -415,7 +430,7 @@ function RelationGraphWrapper() {
     return (
       <div style={containerStyles.error}>
         <div>데이터가 없습니다</div>
-        <div style={{ fontSize: '14px', color: '#64748b', marginTop: '8px' }}>
+        <div style={{ fontSize: '14px', color: COLORS.textSecondary, marginTop: '8px' }}>
           이 챕터에는 표시할 관계 데이터가 없습니다.
         </div>
       </div>
@@ -423,7 +438,7 @@ function RelationGraphWrapper() {
   }
 
   return (
-    <div style={{ width: '100vw', height: '100vh', background: '#f4f7fb', overflow: 'hidden' }}>
+    <div style={{ width: '100vw', height: '100vh', background: COLORS.backgroundLighter, overflow: 'hidden' }}>
       {/* 상단 컨트롤 바 */}
       <div style={{ 
         ...topBarStyles.container, 
@@ -481,10 +496,10 @@ function RelationGraphWrapper() {
           onClick={handleBackToViewer}
           style={{
             ...topBarStyles.backButton,
-            background: 'rgba(255, 255, 255, 0.95)',
+            background: `${COLORS.background}f2`,
             backdropFilter: 'blur(2px)',
             boxShadow: '0 2px 8px rgba(0, 0, 0, 0.15)',
-            border: '1.5px solid rgba(227, 230, 239, 0.8)'
+            border: `1.5px solid ${COLORS.borderLight}cc`
           }}
           onMouseEnter={handleMouseEnter}
           onMouseLeave={handleMouseLeave}

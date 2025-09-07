@@ -55,13 +55,13 @@ const CytoscapeGraphUnified = ({
   searchTerm = "",
   isSearchActive = false,
   filteredElements = [],
+  isResetFromSearch = false,
   onShowNodeTooltip,
   onShowEdgeTooltip,
   onClearTooltip,
   selectedNodeIdRef,
   selectedEdgeIdRef,
   strictBackgroundClear = false,
-  isResetFromSearch = false,
 }) => {
   const containerRef = useRef(null);
   const [isGraphVisible, setIsGraphVisible] = useState(false);

@@ -16,10 +16,6 @@
   animation: spin 0.8s linear infinite;
   margin: 0 auto;
 }
-.dark .spinner {
-  border: 4px solid #2d3141;
-  border-top: 4px solid #b1b7e3;
-}
 
 @keyframes spin {
   0% { transform: rotate(0deg); }
@@ -39,11 +35,7 @@
     border-bottom: 1px solid #e0e3ea;
     margin-bottom: 12px;
     background: transparent;
-  }
-  .dark .list {
-    border-bottom: 1px solid #363b4a;
-  }
-  
+  }  
 
 .book-card {
   background: rgba(255,255,255,0.95);
@@ -57,10 +49,6 @@
   transform: scale(1.035) translateY(-2px);
   box-shadow: 0 12px 32px rgba(44,62,80,0.14), 0 2px 8px rgba(0,0,0,0.07);
   background: rgba(255,255,255,1);
-}
-.dark .book-card {
-  background: rgba(38,44,55,0.96);
-  box-shadow: 0 6px 24px rgba(20,28,44,0.18);
 }
 
 
@@ -78,11 +66,6 @@
   min-width: 320px;
   max-width: 440px;
   font-size: 1.09rem;
-}
-.dark .modal {
-  background: #23232f;
-  color: #fafafc;
-  box-shadow: 0 8px 32px rgba(22,24,34,0.23);
 }
 
 
@@ -120,10 +103,6 @@
   outline: 2px solid #97b6f7;
   background: #fff;
 }
-.dark .search-bar {
-  background: #2a2d38;
-  color: #ddd;
-}
 
 
 @keyframes App-logo-spin {
@@ -143,17 +122,7 @@
   box-shadow: inset 6px 0 12px -8px rgba(0,0,0,0.1);
 }
 
-/* 다크 테마 */
-.dark .graph-area {
-  border-left: 1px solid rgba(255,255,255,0.05);
-  box-shadow: inset 6px 0 12px -8px rgba(0,0,0,0.25);
-}
 
-/* 세피아 테마 */
-.sepia .graph-area {
-  border-left: 1px solid rgba(95,75,50,0.08);
-  box-shadow: inset 6px 0 12px -8px rgba(95,75,50,0.1);
-}
 
 /* EPUB 컨테이너 스타일 재정의 */
 .epub-container {

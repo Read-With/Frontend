@@ -1,26 +1,25 @@
-/**
- * 통합 검색 관련 유틸리티 함수들
- */
+import { registerCache, recordCacheAccess, enforceCacheSizeLimit } from './cacheManager';
 
-// 정규식 캐싱을 위한 Map
 const regexCache = new Map();
+registerCache('regexCache', regexCache, { maxSize: 500, ttl: 300000 });
 
-// 텍스트에서 검색어 부분만 분리해 하이라이트 가능하게 함
 function highlightParts(text, query) {
   if (!query || !text) return [text];
   
   const cacheKey = query.toLowerCase();
+  recordCacheAccess('regexCache');
+  
   let regex = regexCache.get(cacheKey);
   
   if (!regex) {
     regex = new RegExp(`(${escapeRegExp(query)})`, 'gi');
     regexCache.set(cacheKey, regex);
+    enforceCacheSizeLimit('regexCache');
   }
   
   return String(text).split(regex).filter(Boolean);
 }
 
-// 검색어에 특수문자가 있어도 정규식 안전 처리
 function escapeRegExp(s) {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
@@ -441,5 +440,3 @@ export function cleanupSearchResources(cy = null) {
     });
   }
 }
-
-

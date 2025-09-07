@@ -1,6 +1,3 @@
-//공통 애니메이션 스타일 유틸리티
-
-// 공통 애니메이션 값들
 export const ANIMATION_VALUES = {
   EASE_OUT: 'cubic-bezier(0.4, 0, 0.2, 1)',
   EASE_IN_OUT: 'cubic-bezier(0.4, 2, 0.6, 1)',
@@ -11,12 +8,6 @@ export const ANIMATION_VALUES = {
   }
 };
 
-/**
- * 슬라이드 인 애니메이션 스타일 (styles.js의 createSlideAnimation과 통합)
- * @param {string} direction - 슬라이드 방향 ('left', 'right', 'up', 'down')
- * @param {number} duration - 애니메이션 지속 시간 (초)
- * @returns {string} CSS 애니메이션 문자열
- */
 export function getSlideInAnimation(direction = 'right', duration = 0.4) {
   const animations = {
     right: `

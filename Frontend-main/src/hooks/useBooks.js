@@ -1,14 +1,13 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
+import { useLocalStorage } from './useLocalStorage';
 
-/**
- * 책 데이터를 관리하는 커스텀 훅
- */
 export const useBooks = () => {
   const [books, setBooks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [uploadedBooks, setUploadedBooks] = useLocalStorage('uploadedBooks', []);
 
-  const fetchBooks = async () => {
+  const fetchBooks = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
@@ -21,23 +20,13 @@ export const useBooks = () => {
       
       const defaultBooks = await response.json();
       
-      // 로컬 스토리지에서 업로드된 책들 가져오기
-      let uploadedBooks = [];
-      try {
-        const stored = localStorage.getItem('uploadedBooks');
-        if (stored) {
-          uploadedBooks = JSON.parse(stored);
-          // 기본 책과 중복되지 않는지 확인
-          uploadedBooks = uploadedBooks.filter(book => 
-            !defaultBooks.some(defaultBook => defaultBook.filename === book.filename)
-          );
-        }
-      } catch (err) {
-
-      }
+      // 업로드된 책들에서 기본 책과 중복되지 않는 것만 필터링
+      const filteredUploadedBooks = uploadedBooks.filter(book => 
+        !defaultBooks.some(defaultBook => defaultBook.filename === book.filename)
+      );
       
       // 기본 책들과 업로드된 책들 합치기
-      const allBooks = [...defaultBooks, ...uploadedBooks];
+      const allBooks = [...defaultBooks, ...filteredUploadedBooks];
       setBooks(allBooks);
       
     } catch (err) {
@@ -46,7 +35,7 @@ export const useBooks = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [uploadedBooks]);
 
   const retryFetch = () => {
     fetchBooks();
@@ -54,42 +43,26 @@ export const useBooks = () => {
 
   useEffect(() => {
     fetchBooks();
-  }, []);
+  }, [uploadedBooks]);
 
   // 새 책 추가 함수
   const addBook = (newBook) => {
-    setBooks(prevBooks => {
-      const updatedBooks = [...prevBooks, newBook];
-      
-      // 업로드된 책들만 로컬 스토리지에 저장
-      try {
-        const uploadedOnly = updatedBooks.filter(book => 
-          !['gatsby.epub', 'alice.epub'].includes(book.filename)
-        );
-        localStorage.setItem('uploadedBooks', JSON.stringify(uploadedOnly));
-      } catch (err) {
-
-      }
-      return updatedBooks;
-    });
+    setBooks(prevBooks => [...prevBooks, newBook]);
+    
+    // 업로드된 책들만 localStorage에 저장 (기본 책 제외)
+    if (!['gatsby.epub', 'alice.epub'].includes(newBook.filename)) {
+      setUploadedBooks(prevUploaded => [...prevUploaded, newBook]);
+    }
   };
 
   // 책 삭제 함수
   const removeBook = (filename) => {
-    setBooks(prevBooks => {
-      const updatedBooks = prevBooks.filter(book => book.filename !== filename);
-      
-      // 업로드된 책들만 로컬 스토리지에 저장
-      try {
-        const uploadedOnly = updatedBooks.filter(book => 
-          !['gatsby.epub', 'alice.epub'].includes(book.filename)
-        );
-        localStorage.setItem('uploadedBooks', JSON.stringify(uploadedOnly));
-      } catch (err) {
-
-      }
-      return updatedBooks;
-    });
+    setBooks(prevBooks => prevBooks.filter(book => book.filename !== filename));
+    
+    // 업로드된 책들만 localStorage에서 제거 (기본 책 제외)
+    if (!['gatsby.epub', 'alice.epub'].includes(filename)) {
+      setUploadedBooks(prevUploaded => prevUploaded.filter(book => book.filename !== filename));
+    }
   };
 
   return {
