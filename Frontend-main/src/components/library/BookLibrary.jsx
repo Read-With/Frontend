@@ -1,11 +1,12 @@
-import React from 'react';
+import React, { useState } from 'react';
 import PropTypes from 'prop-types';
 import { useNavigate } from 'react-router-dom';
 import LoadingSpinner from '../common/LoadingSpinner';
 import { theme } from '../common/theme';
 
-const BookCard = ({ book, onToggleFavorite }) => {
+const BookCard = ({ book, onToggleFavorite, onBookClick }) => {
   const navigate = useNavigate();
+  const [imageError, setImageError] = useState(false);
 
   const cardStyle = {
     background: theme.colors.background.card,
@@ -126,14 +127,18 @@ const BookCard = ({ book, onToggleFavorite }) => {
     e.stopPropagation();
     // 로컬 책은 filename을 사용, API 책은 id를 사용
     const identifier = isLocalBook ? book.epubPath : book.id;
-    navigate(`/user/viewer/${identifier}`);
+    // API 책인 경우 책 정보를 state로 전달
+    const state = isLocalBook ? undefined : { book };
+    navigate(`/user/viewer/${identifier}`, { state });
   };
 
   const handleGraphClick = (e) => {
     e.stopPropagation();
     // 로컬 책은 filename을 사용, API 책은 id를 사용
     const identifier = isLocalBook ? book.epubPath : book.id;
-    navigate(`/user/graph/${identifier}`);
+    // API 책인 경우 책 정보를 state로 전달
+    const state = isLocalBook ? undefined : { book };
+    navigate(`/user/graph/${identifier}`, { state });
   };
 
   const handleFavoriteClick = (e) => {
@@ -143,9 +148,26 @@ const BookCard = ({ book, onToggleFavorite }) => {
     }
   };
 
+  const handleCardClick = () => {
+    if (onBookClick) {
+      onBookClick(book);
+    } else {
+      // onBookClick이 없으면 기본적으로 읽기 페이지로 이동
+      handleReadClick({ stopPropagation: () => {} });
+    }
+  };
+
   const renderBookImage = () => {
-    if (book.coverImgUrl) {
-      return <img src={book.coverImgUrl} alt={book.title} style={imageStyle} />;
+    if (book.coverImgUrl && !imageError) {
+      return (
+        <img 
+          src={book.coverImgUrl} 
+          alt={book.title} 
+          style={imageStyle}
+          onError={() => setImageError(true)}
+          onLoad={() => setImageError(false)}
+        />
+      );
     }
     
     return (
@@ -163,6 +185,7 @@ const BookCard = ({ book, onToggleFavorite }) => {
       style={isHovered ? cardHoverStyle : cardStyle}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
+      onClick={handleCardClick}
     >
       {/* 기본 책 배지 */}
       {isLocalBook && (
@@ -245,10 +268,11 @@ BookCard.propTypes = {
     favorite: PropTypes.bool,
     updatedAt: PropTypes.string
   }).isRequired,
-  onToggleFavorite: PropTypes.func
+  onToggleFavorite: PropTypes.func,
+  onBookClick: PropTypes.func
 };
 
-const BookLibrary = ({ books, loading, error, onRetry, onToggleFavorite }) => {
+const BookLibrary = ({ books, loading, error, onRetry, onToggleFavorite, onBookClick }) => {
   const sectionStyle = {
     width: '100%',
     maxWidth: '1100px',
@@ -354,6 +378,7 @@ const BookLibrary = ({ books, loading, error, onRetry, onToggleFavorite }) => {
             key={`${book.title}-${book.id}`} 
             book={book}
             onToggleFavorite={onToggleFavorite}
+            onBookClick={onBookClick}
           />
         ))}
       </div>
@@ -378,7 +403,8 @@ BookLibrary.propTypes = {
   loading: PropTypes.bool.isRequired,
   error: PropTypes.string,
   onRetry: PropTypes.func,
-  onToggleFavorite: PropTypes.func
+  onToggleFavorite: PropTypes.func,
+  onBookClick: PropTypes.func
 };
 
 export default BookLibrary;

@@ -98,9 +98,9 @@ const EpubViewer = forwardRef(
 
     // 메모이제이션된 값들
     const { epubPath, cleanPath, storageKeys, pageMode, showGraph } = useMemo(() => {
-      const rawPath = book.path || book.filename;
-      const path = rawPath.startsWith('/') ? rawPath : '/' + rawPath;
-      const clean = rawPath.replace(/^\/+/, '');
+      const rawPath = book.path || book.filename || '';
+      const path = rawPath && rawPath.startsWith('/') ? rawPath : '/' + rawPath;
+      const clean = rawPath ? rawPath.replace(/^\/+/, '') : '';
       
       return {
         epubPath: path,

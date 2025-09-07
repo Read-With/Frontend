@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { getBooks, deleteBook, toggleBookFavorite, addToFavorites, removeFromFavorites, getFavorites } from '../utils/api';
+import { getBooks, getBook, deleteBook, toggleBookFavorite, addToFavorites, removeFromFavorites, getFavorites } from '../utils/api';
 
 export const useBooks = () => {
   const [books, setBooks] = useState([]);
@@ -48,7 +48,7 @@ export const useBooks = () => {
             id: `local_${localBook.filename}`,
             title: localBook.title,
             author: localBook.author,
-            coverImgUrl: localBook.cover,
+            coverImgUrl: localBook.cover || null,
             epubPath: localBook.filename,
             summary: false,
             default: true,
@@ -161,6 +161,21 @@ export const useBooks = () => {
     fetchBooks(params);
   };
 
+  // 단일 도서 조회
+  const fetchBook = async (bookId) => {
+    try {
+      const response = await getBook(bookId);
+      if (response.isSuccess) {
+        return response.result;
+      } else {
+        throw new Error(response.message || '도서 정보를 불러올 수 없습니다.');
+      }
+    } catch (err) {
+      console.error('도서 조회 오류:', err);
+      throw err;
+    }
+  };
+
   return {
     books,
     loading,
@@ -169,6 +184,7 @@ export const useBooks = () => {
     removeBook,
     toggleFavorite,
     searchBooks,
-    fetchFavorites
+    fetchFavorites,
+    fetchBook
   };
 };

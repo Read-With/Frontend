@@ -102,6 +102,37 @@ export const getFavorites = async () => {
   return apiRequest('/api/favorites');
 };
 
+// 독서 진도 관련 API
+// 사용자의 모든 독서 진도 조회
+export const getAllProgress = async () => {
+  return apiRequest('/api/progress');
+};
+
+// 독서 진도 저장/업데이트
+export const saveProgress = async (progressData) => {
+  return apiRequest('/api/progress', {
+    method: 'POST',
+    body: JSON.stringify(progressData),
+  });
+};
+
+// 특정 책의 독서 진도 조회
+export const getBookProgress = async (bookId) => {
+  return apiRequest(`/api/progress/${bookId}`);
+};
+
+// 특정 책의 독서 진도 삭제
+export const deleteBookProgress = async (bookId) => {
+  return apiRequest(`/api/progress/${bookId}`, {
+    method: 'DELETE',
+  });
+};
+
+// 책 구조 패키지 조회 (manifest)
+export const getBookManifest = async (bookId) => {
+  return apiRequest(`/api/books/${bookId}/manifest`);
+};
+
 export default {
   getBooks,
   uploadBook,
@@ -111,4 +142,9 @@ export default {
   addToFavorites,
   removeFromFavorites,
   getFavorites,
+  getAllProgress,
+  saveProgress,
+  getBookProgress,
+  deleteBookProgress,
+  getBookManifest,
 };

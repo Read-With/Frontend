@@ -15,6 +15,7 @@ import {
 } from '../utils/viewerUtils';
 import { getFolderKeyFromFilename } from '../utils/graphData';
 import { loadBookmarks, saveBookmarks } from '../components/viewer/bookmark/BookmarkManager';
+import { getBookManifest } from '../utils/api';
 
 export function useViewerPage() {
   const { filename } = useParams();
@@ -91,6 +92,78 @@ export function useViewerPage() {
       filename: filename,
     }, [location.state?.book, filename]
   );
+
+  // API로 받아온 도서의 메타데이터와 manifest 정보를 콘솔에 출력
+  useEffect(() => {
+    const fetchBookInfo = async () => {
+      // API 책인지 확인 (숫자 ID를 가진 책)
+      if (book && typeof book.id === 'number' && location.state?.book) {
+        // 도서 기본 정보 출력
+        console.log('📚 도서 정보:', {
+          제목: book.title,
+          저자: book.author,
+          메타데이터: {
+            id: book.id,
+            coverImgUrl: book.coverImgUrl,
+            epubPath: book.epubPath,
+            summary: book.summary,
+            default: book.default,
+            favorite: book.favorite,
+            updatedAt: book.updatedAt
+          }
+        });
+
+        // manifest API 호출
+        try {
+          console.log('🔍 Manifest API 호출 중...', { bookId: book.id });
+          const manifestData = await getBookManifest(book.id);
+          
+          if (manifestData && manifestData.isSuccess && manifestData.result) {
+            console.log('📖 책 구조 패키지 (Manifest):', {
+              책_정보: {
+                id: manifestData.result.book.id,
+                제목: manifestData.result.book.title,
+                저자: manifestData.result.book.author,
+                언어: manifestData.result.book.language,
+                기본책: manifestData.result.book.isDefault,
+                요약여부: manifestData.result.book.summary,
+                표지이미지: manifestData.result.book.coverImgUrl,
+                요약URL: manifestData.result.book.summaryUrl,
+                EPUB경로: manifestData.result.book.epubPath
+              },
+              챕터_정보: manifestData.result.chapters.map(chapter => ({
+                인덱스: chapter.idx,
+                제목: chapter.title,
+                시작위치: chapter.startPos,
+                끝위치: chapter.endPos,
+                원문길이: chapter.rawText?.length || 0,
+                요약텍스트: chapter.summaryText,
+                요약업로드URL: chapter.summaryUploadUrl,
+                요약캐시여부: chapter.povSummariesCached,
+                이벤트수: chapter.events?.length || 0
+              })),
+              인물_정보: manifestData.result.characters.map(character => ({
+                id: character.id,
+                이름: character.name,
+                다른이름들: character.names,
+                프로필이미지: character.profileImage,
+                주인공여부: character.isMainCharacter,
+                첫등장챕터: character.firstChapterIdx,
+                성격설명: character.personalityText,
+                프로필설명: character.profileText
+              }))
+            });
+          } else {
+            console.warn('⚠️ Manifest API 응답이 예상과 다릅니다:', manifestData);
+          }
+        } catch (error) {
+          console.error('❌ Manifest API 호출 실패:', error);
+        }
+      }
+    };
+
+    fetchBookInfo();
+  }, [book.id, location.state?.book]); // book.id와 location.state?.book만 의존성으로 설정
   
   const folderKey = useMemo(() => getFolderKeyFromFilename(filename), [filename]);
   
