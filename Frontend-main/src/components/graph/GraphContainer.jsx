@@ -46,6 +46,7 @@ const GraphContainer = forwardRef(({
     isSearchActive: internalIsSearchActive,
     filteredElements: internalFilteredElements,
     fitNodeIds: internalFitNodeIds,
+    isResetFromSearch: internalIsResetFromSearch,
     handleSearchSubmit,
     clearSearch
   } = useGraphSearch(shouldUseInternalSearch ? elements : [], handleSearchStateChange, currentChapterData);
@@ -78,6 +79,7 @@ const GraphContainer = forwardRef(({
       searchTerm={internalSearchTerm}
       isSearchActive={internalIsSearchActive}
       filteredElements={internalFilteredElements}
+      isResetFromSearch={internalIsResetFromSearch}
       {...props}
     />
   );

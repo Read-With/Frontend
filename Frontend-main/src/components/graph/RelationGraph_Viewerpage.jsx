@@ -27,6 +27,7 @@ const ViewerRelationGraph = ({
   searchTerm,
   isSearchActive,
   filteredElements,
+  isResetFromSearch,
 }) => {
   const cyRef = useRef(null);
   const [activeTooltip, setActiveTooltip] = useState(null);
@@ -150,6 +151,7 @@ const ViewerRelationGraph = ({
           searchTerm={searchTerm}
           isSearchActive={isSearchActive}
           filteredElements={filteredElements}
+          isResetFromSearch={isResetFromSearch}
           onShowNodeTooltip={onShowNodeTooltip}
           onShowEdgeTooltip={onShowEdgeTooltip}
           onClearTooltip={onClearTooltip}
