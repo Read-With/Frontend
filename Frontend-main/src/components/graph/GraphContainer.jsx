@@ -37,7 +37,10 @@ const GraphContainer = forwardRef(({
     }
   }, [onSearchStateChange, currentChapterData]);
 
-  // useGraphSearch 훅을 사용하여 검색 기능 구현
+  // 외부에서 elements를 전달받은 경우 자체 검색 기능 비활성화
+  const shouldUseInternalSearch = !externalElements;
+  
+  // useGraphSearch 훅을 사용하여 검색 기능 구현 (외부 elements가 없을 때만)
   const {
     searchTerm: internalSearchTerm,
     isSearchActive: internalIsSearchActive,
@@ -45,15 +48,15 @@ const GraphContainer = forwardRef(({
     fitNodeIds: internalFitNodeIds,
     handleSearchSubmit,
     clearSearch
-  } = useGraphSearch(elements, handleSearchStateChange, currentChapterData);
+  } = useGraphSearch(shouldUseInternalSearch ? elements : [], handleSearchStateChange, currentChapterData);
 
   // 검색된 요소들 또는 원래 요소들 사용
   const finalElements = useMemo(() => {
-    if (internalIsSearchActive && internalFilteredElements?.length > 0) {
+    if (shouldUseInternalSearch && internalIsSearchActive && internalFilteredElements?.length > 0) {
       return internalFilteredElements;
     }
     return elements;
-  }, [internalIsSearchActive, internalFilteredElements, elements]);
+  }, [shouldUseInternalSearch, internalIsSearchActive, internalFilteredElements, elements]);
 
   // ref를 통해 외부에서 접근할 수 있는 함수들 노출
   useImperativeHandle(ref, () => ({

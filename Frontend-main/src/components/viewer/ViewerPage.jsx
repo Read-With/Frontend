@@ -37,6 +37,9 @@ function GraphSplitArea({
   searchActions,
 }) {
   const graphContainerRef = React.useRef(null);
+  
+  // searchState에서 검색 관련 값들 추출
+  const { isSearchActive, filteredElements } = searchState;
 
   return (
     <div
@@ -71,7 +74,7 @@ function GraphSplitArea({
           currentChapter={graphState.currentChapter}
           edgeLabelVisible={graphState.edgeLabelVisible}
           filename={viewerState.filename}
-          elements={graphState.elements}
+          elements={isSearchActive && filteredElements && filteredElements.length > 0 ? filteredElements : graphState.elements}
         />
       </div>
     </div>
@@ -213,24 +216,6 @@ const ViewerPage = ({ darkMode: initialDarkMode }) => {
     searchState,
   } = useViewerPage(initialDarkMode);
 
-  // 검색 기능 (useGraphSearch 훅 사용)
-  const {
-    searchTerm,
-    isSearchActive,
-    filteredElements,
-    fitNodeIds,
-    isResetFromSearch,
-    suggestions,
-    showSuggestions,
-    selectedIndex,
-    selectSuggestion,
-    handleKeyDown,
-    closeSuggestions,
-    handleSearchSubmit,
-    clearSearch,
-    setSearchTerm,
-  } = useGraphSearch(elements, null, currentChapterData);
-
   // 챕터 데이터 로딩 (이벤트 데이터만 별도 처리)
   useEffect(() => {
     const loadEventsData = async () => {
@@ -361,6 +346,24 @@ const ViewerPage = ({ darkMode: initialDarkMode }) => {
       return [];
     }
   }, [currentEvent, characterData, folderKey, events]);
+
+  // 검색 기능 (useGraphSearch 훅 사용) - currentEventElements 정의 후에 호출
+  const {
+    searchTerm,
+    isSearchActive,
+    filteredElements,
+    fitNodeIds,
+    isResetFromSearch,
+    suggestions,
+    showSuggestions,
+    selectedIndex,
+    selectSuggestion,
+    handleKeyDown,
+    closeSuggestions,
+    handleSearchSubmit,
+    clearSearch,
+    setSearchTerm,
+  } = useGraphSearch(currentEventElements, null, currentChapterData);
 
   // === [최적화] elements 설정 로직 - 불필요한 재렌더링 방지 ===
   const elementsRef = useRef([]);
@@ -669,13 +672,19 @@ const ViewerPage = ({ darkMode: initialDarkMode }) => {
                 ...searchState,
                 searchTerm,
                 isSearchActive,
-                elements
+                elements: currentEventElements,
+                filteredElements,
+                suggestions,
+                showSuggestions,
+                selectedIndex
               }}
               searchActions={{
                 onSearchSubmit: handleSearchSubmit,
                 clearSearch,
                 closeSuggestions,
-                onGenerateSuggestions: setSearchTerm
+                onGenerateSuggestions: setSearchTerm,
+                selectSuggestion,
+                handleKeyDown
               }}
             />
           </CytoscapeGraphPortalProvider>

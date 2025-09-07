@@ -76,15 +76,19 @@ function GraphControls({
   const handleKeyDown = useCallback((e) => {
     if (e.key === 'Enter') {
       e.preventDefault();
-      if (internalSearchTerm.trim().length >= 2) {
-        onSearchSubmit(internalSearchTerm);
+      const trimmedTerm = internalSearchTerm.trim();
+      if (trimmedTerm.length >= 2) {
+        onSearchSubmit(trimmedTerm);
       }
     } else {
-      onKeyDown(e, (selectedTerm) => {
-        if (selectedTerm) {
-          onSearchSubmit(selectedTerm);
-        }
-      });
+      // 화살표 키 등 다른 키 처리
+      if (onKeyDown) {
+        onKeyDown(e, (selectedTerm) => {
+          if (selectedTerm) {
+            setInternalSearchTerm(selectedTerm);
+          }
+        });
+      }
     }
   }, [internalSearchTerm, onSearchSubmit, onKeyDown]);
   
@@ -98,19 +102,18 @@ function GraphControls({
       setInternalSearchTerm(suggestion.label);
       setInternalShowSuggestions(false);
       setInternalSelectedIndex(-1);
-      onSearchSubmit(suggestion.label);
+      // 검색은 실행하지 않고 입력 필드에만 채움
     }
-  }, [onSearchSubmit]);
+  }, []);
 
   const handleFormSubmit = useCallback((e) => {
     e.preventDefault();
     
-    if (internalSearchTerm.trim()) {
-      handleClearSearch();
-    } else {
-      return;
+    const trimmedTerm = internalSearchTerm.trim();
+    if (trimmedTerm.length >= 2) {
+      onSearchSubmit(trimmedTerm);
     }
-  }, [internalSearchTerm, handleClearSearch]);
+  }, [internalSearchTerm, onSearchSubmit]);
 
   // 검색 버튼 클릭 핸들러
   const handleSearchButtonClick = useCallback((e) => {
@@ -120,10 +123,6 @@ function GraphControls({
     
     if (trimmedTerm.length >= 2) {
       onSearchSubmit(trimmedTerm);
-    } else if (trimmedTerm.length === 1) {
-      return;
-    } else {
-      return;
     }
   }, [internalSearchTerm, onSearchSubmit]);
 
@@ -164,25 +163,25 @@ function GraphControls({
           type="submit"
           style={{ 
             ...graphControlsStyles.button, 
-            ...(internalSearchTerm.trim() ? graphControlsStyles.resetButton : graphControlsStyles.searchButton)
+            ...(isSearchActive ? graphControlsStyles.resetButton : graphControlsStyles.searchButton)
           }}
-          onClick={internalSearchTerm.trim() ? handleResetButtonClick : handleSearchButtonClick}
+          onClick={isSearchActive ? handleResetButtonClick : handleSearchButtonClick}
           onMouseEnter={(e) => {
-            if (internalSearchTerm.trim()) {
+            if (isSearchActive) {
               e.target.style.background = '#EEF2FF';
             } else {
               e.target.style.background = '#5a7cff';
             }
           }}
           onMouseLeave={(e) => {
-            if (internalSearchTerm.trim()) {
+            if (isSearchActive) {
               e.target.style.background = '#fff';
             } else {
               e.target.style.background = '#6C8EFF';
             }
           }}
         >
-          {internalSearchTerm.trim() ? (
+          {isSearchActive ? (
             <>
               <FaUndo size={10} />
               초기화

@@ -32,23 +32,39 @@ export function useGraphSearch(elements, onSearchStateChange = null, currentChap
     onSearchStateChangeRef.current = onSearchStateChange;
   }, [onSearchStateChange]);
 
+  // elements와 currentChapterData를 useRef로 안정화
+  const elementsRef = useRef(elements);
+  const currentChapterDataRef = useRef(currentChapterData);
+  
+  useEffect(() => {
+    elementsRef.current = elements;
+  }, [elements]);
+  
+  useEffect(() => {
+    currentChapterDataRef.current = currentChapterData;
+  }, [currentChapterData]);
+
   // 검색 처리 함수
   const handleSearchSubmit = useCallback((searchTerm) => {
     const trimmedTerm = searchTerm.trim();
     setSearchTerm(searchTerm);
     setIsSearchActive(!!trimmedTerm);
     setIsResetFromSearch(false); // 검색 시 초기화 상태 해제
+    setShowSuggestions(false); // 검색 시 추천 드롭다운 숨김
     
-    if (trimmedTerm && elements) {
-      const filtered = filterGraphElements(elements, trimmedTerm, currentChapterData);
+    const currentElements = elementsRef.current;
+    const currentChapterData = currentChapterDataRef.current;
+    
+    if (trimmedTerm && currentElements) {
+      const filtered = filterGraphElements(currentElements, trimmedTerm, currentChapterData);
       setFilteredElements(filtered || []);
       setFitNodeIds(filtered ? filtered.filter(el => !el.data.source).map(el => el.data.id) : []);
     } else {
-      setFilteredElements(elements || []);
+      setFilteredElements(currentElements || []);
       setFitNodeIds([]);
       setIsSearchActive(false);
     }
-  }, [elements, currentChapterData]);
+  }, []);
 
   // 검색 초기화 함수
   const clearSearch = useCallback(() => {
@@ -72,11 +88,13 @@ export function useGraphSearch(elements, onSearchStateChange = null, currentChap
       return;
     }
     
-    const matches = buildSuggestions(elements, trimmedTerm, currentChapterData);
+    const currentElements = elementsRef.current;
+    const currentChapterData = currentChapterDataRef.current;
+    const matches = buildSuggestions(currentElements, trimmedTerm, currentChapterData);
     setSuggestions(matches);
     setShowSuggestions(matches.length > 0);
     setSelectedIndex(-1);
-  }, [searchTerm, elements, currentChapterData]);
+  }, [searchTerm]);
 
   // isResetFromSearch 상태 자동 초기화
   useEffect(() => {

@@ -41,14 +41,19 @@ const ViewerTopBar = ({
     searchTerm,
     isSearchActive,
     elements = [],
-    currentChapterData = null
+    currentChapterData = null,
+    suggestions = [],
+    showSuggestions = false,
+    selectedIndex = -1
   } = searchState;
   
   const {
     onSearchSubmit,
     clearSearch,
     closeSuggestions,
-    onGenerateSuggestions
+    onGenerateSuggestions,
+    selectSuggestion,
+    handleKeyDown
   } = searchActions;
 
   // 현재 이벤트 정보를 실시간으로 추적
@@ -122,6 +127,11 @@ const ViewerTopBar = ({
       elements={elements}
       currentChapterData={currentChapterData}
       onCloseSuggestions={closeSuggestions}
+      suggestions={suggestions}
+      showSuggestions={showSuggestions}
+      selectedIndex={selectedIndex}
+      onSelectSuggestion={selectSuggestion}
+      onKeyDown={handleKeyDown}
     />
   );
 
