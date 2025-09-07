@@ -7,7 +7,7 @@ import { useUserProfile } from '../hooks/useUserProfile';
 import { theme } from '../components/common/theme';
 
 export default function MyPage() {
-  const { books, loading, error, retryFetch, addBook } = useBooks();
+  const { books, loading, error, retryFetch, addBook, toggleFavorite } = useBooks();
   const { userProfile } = useUserProfile();
   const [showUpload, setShowUpload] = useState(false);
 
@@ -63,6 +63,7 @@ export default function MyPage() {
           loading={loading} 
           error={error} 
           onRetry={retryFetch}
+          onToggleFavorite={toggleFavorite}
         />
       </div>
       

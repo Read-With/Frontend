@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import LoadingSpinner from '../common/LoadingSpinner';
 import { theme } from '../common/theme';
 
-const BookCard = ({ book }) => {
+const BookCard = ({ book, onToggleFavorite }) => {
   const navigate = useNavigate();
 
   const cardStyle = {
@@ -118,20 +118,34 @@ const BookCard = ({ book }) => {
   };
 
   const [isHovered, setIsHovered] = React.useState(false);
+  
+  // 로컬 책인지 확인
+  const isLocalBook = typeof book.id === 'string' && book.id.startsWith('local_');
 
   const handleReadClick = (e) => {
     e.stopPropagation();
-    navigate(`/user/viewer/${book.filename}`);
+    // 로컬 책은 filename을 사용, API 책은 id를 사용
+    const identifier = isLocalBook ? book.epubPath : book.id;
+    navigate(`/user/viewer/${identifier}`);
   };
 
   const handleGraphClick = (e) => {
     e.stopPropagation();
-    navigate(`/user/graph/${book.filename}`);
+    // 로컬 책은 filename을 사용, API 책은 id를 사용
+    const identifier = isLocalBook ? book.epubPath : book.id;
+    navigate(`/user/graph/${identifier}`);
+  };
+
+  const handleFavoriteClick = (e) => {
+    e.stopPropagation();
+    if (onToggleFavorite) {
+      onToggleFavorite(book.id, !book.favorite);
+    }
   };
 
   const renderBookImage = () => {
-    if (book.cover) {
-      return <img src={book.cover} alt={book.title} style={imageStyle} />;
+    if (book.coverImgUrl) {
+      return <img src={book.coverImgUrl} alt={book.title} style={imageStyle} />;
     }
     
     return (
@@ -150,6 +164,53 @@ const BookCard = ({ book }) => {
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
+      {/* 기본 책 배지 */}
+      {isLocalBook && (
+        <div style={{
+          position: 'absolute',
+          top: '8px',
+          left: '8px',
+          backgroundColor: '#4F6DDE',
+          color: 'white',
+          fontSize: '10px',
+          fontWeight: '600',
+          padding: '2px 6px',
+          borderRadius: '10px',
+          zIndex: 1
+        }}>
+          기본
+        </div>
+      )}
+      
+      {/* 즐겨찾기 버튼 */}
+      <button
+        onClick={handleFavoriteClick}
+        style={{
+          position: 'absolute',
+          top: '8px',
+          right: '8px',
+          backgroundColor: 'transparent',
+          border: 'none',
+          fontSize: '18px',
+          cursor: 'pointer',
+          zIndex: 1,
+          padding: '4px',
+          borderRadius: '50%',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          transition: 'background-color 0.2s ease'
+        }}
+        onMouseEnter={(e) => {
+          e.target.style.backgroundColor = 'rgba(255, 255, 255, 0.8)';
+        }}
+        onMouseLeave={(e) => {
+          e.target.style.backgroundColor = 'transparent';
+        }}
+      >
+        {book.favorite ? '❤️' : '🤍'}
+      </button>
+      
       <div style={imageContainerStyle}>
         {renderBookImage()}
       </div>
@@ -174,14 +235,20 @@ const BookCard = ({ book }) => {
 
 BookCard.propTypes = {
   book: PropTypes.shape({
+    id: PropTypes.oneOfType([PropTypes.number, PropTypes.string]).isRequired,
     title: PropTypes.string.isRequired,
-    filename: PropTypes.string.isRequired,
-    cover: PropTypes.string,
-    author: PropTypes.string.isRequired
-  }).isRequired
+    author: PropTypes.string.isRequired,
+    coverImgUrl: PropTypes.string,
+    epubPath: PropTypes.string,
+    summary: PropTypes.bool,
+    default: PropTypes.bool,
+    favorite: PropTypes.bool,
+    updatedAt: PropTypes.string
+  }).isRequired,
+  onToggleFavorite: PropTypes.func
 };
 
-const BookLibrary = ({ books, loading, error, onRetry }) => {
+const BookLibrary = ({ books, loading, error, onRetry, onToggleFavorite }) => {
   const sectionStyle = {
     width: '100%',
     maxWidth: '1100px',
@@ -284,8 +351,9 @@ const BookLibrary = ({ books, loading, error, onRetry }) => {
       <div style={gridStyle}>
         {books.map((book) => (
           <BookCard 
-            key={`${book.title}-${book.filename}`} 
-            book={book} 
+            key={`${book.title}-${book.id}`} 
+            book={book}
+            onToggleFavorite={onToggleFavorite}
           />
         ))}
       </div>
@@ -296,15 +364,21 @@ const BookLibrary = ({ books, loading, error, onRetry }) => {
 BookLibrary.propTypes = {
   books: PropTypes.arrayOf(
     PropTypes.shape({
+      id: PropTypes.oneOfType([PropTypes.number, PropTypes.string]).isRequired,
       title: PropTypes.string.isRequired,
-      filename: PropTypes.string.isRequired,
-      cover: PropTypes.string,
-      author: PropTypes.string.isRequired
+      author: PropTypes.string.isRequired,
+      coverImgUrl: PropTypes.string,
+      epubPath: PropTypes.string,
+      summary: PropTypes.bool,
+      default: PropTypes.bool,
+      favorite: PropTypes.bool,
+      updatedAt: PropTypes.string
     })
   ).isRequired,
   loading: PropTypes.bool.isRequired,
   error: PropTypes.string,
-  onRetry: PropTypes.func
+  onRetry: PropTypes.func,
+  onToggleFavorite: PropTypes.func
 };
 
 export default BookLibrary;

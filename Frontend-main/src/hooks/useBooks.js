@@ -1,41 +1,78 @@
 import { useState, useEffect, useCallback } from 'react';
-import { useLocalStorage } from './useLocalStorage';
+import { getBooks, deleteBook, toggleBookFavorite, addToFavorites, removeFromFavorites, getFavorites } from '../utils/api';
 
 export const useBooks = () => {
   const [books, setBooks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [uploadedBooks, setUploadedBooks] = useLocalStorage('uploadedBooks', []);
 
-  const fetchBooks = useCallback(async () => {
+  const fetchBooks = useCallback(async (params = {}) => {
     try {
       setLoading(true);
       setError(null);
       
-      // 기본 책 목록 가져오기
-      const response = await fetch('/books.json');
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+      // API와 로컬 데이터를 병렬로 가져오기
+      const [apiResponse, localResponse] = await Promise.allSettled([
+        getBooks(params),
+        fetch('/books.json')
+      ]);
+      
+      let apiBooks = [];
+      let localBooks = [];
+      
+      // API 응답 처리
+      if (apiResponse.status === 'fulfilled' && apiResponse.value.isSuccess) {
+        apiBooks = apiResponse.value.result || [];
+      } else {
+        console.warn('API 요청 실패:', apiResponse.reason?.message || 'Unknown error');
       }
       
-      const defaultBooks = await response.json();
+      // 로컬 데이터 응답 처리
+      if (localResponse.status === 'fulfilled' && localResponse.value.ok) {
+        localBooks = await localResponse.value.json();
+      } else {
+        console.warn('로컬 데이터 로드 실패:', localResponse.reason?.message || 'Unknown error');
+      }
       
-      // 업로드된 책들에서 기본 책과 중복되지 않는 것만 필터링
-      const filteredUploadedBooks = uploadedBooks.filter(book => 
-        !defaultBooks.some(defaultBook => defaultBook.filename === book.filename)
-      );
+      // API 책과 로컬 책을 합치기 (중복 제거)
+      const allBooks = [...apiBooks];
       
-      // 기본 책들과 업로드된 책들 합치기
-      const allBooks = [...defaultBooks, ...filteredUploadedBooks];
+      // 로컬 책 중에서 API에 없는 것만 추가
+      localBooks.forEach(localBook => {
+        const exists = apiBooks.some(apiBook => 
+          apiBook.title === localBook.title && apiBook.author === localBook.author
+        );
+        if (!exists) {
+          // 로컬 책을 API 형식으로 변환
+          const convertedBook = {
+            id: `local_${localBook.filename}`,
+            title: localBook.title,
+            author: localBook.author,
+            coverImgUrl: localBook.cover,
+            epubPath: localBook.filename,
+            summary: false,
+            default: true,
+            favorite: false,
+            updatedAt: localBook.uploadedAt || new Date().toISOString()
+          };
+          allBooks.push(convertedBook);
+        }
+      });
+      
       setBooks(allBooks);
       
+      // 둘 다 실패한 경우에만 에러 표시
+      if (apiBooks.length === 0 && localBooks.length === 0) {
+        setError('책 정보를 불러올 수 없습니다. 네트워크 연결을 확인해주세요.');
+      }
+      
     } catch (err) {
-      setError(err.message || '책 정보를 불러올 수 없습니다.');
-
+      console.error('예상치 못한 오류:', err);
+      setError('책 정보를 불러올 수 없습니다.');
     } finally {
       setLoading(false);
     }
-  }, [uploadedBooks]);
+  }, []);
 
   const retryFetch = () => {
     fetchBooks();
@@ -43,26 +80,85 @@ export const useBooks = () => {
 
   useEffect(() => {
     fetchBooks();
-  }, [uploadedBooks]);
+  }, [fetchBooks]);
 
-  // 새 책 추가 함수
-  const addBook = (newBook) => {
-    setBooks(prevBooks => [...prevBooks, newBook]);
+  // 책 삭제 함수
+  const removeBook = async (bookId) => {
+    // 로컬 책은 삭제할 수 없음
+    if (typeof bookId === 'string' && bookId.startsWith('local_')) {
+      setError('기본 책은 삭제할 수 없습니다.');
+      return;
+    }
     
-    // 업로드된 책들만 localStorage에 저장 (기본 책 제외)
-    if (!['gatsby.epub', 'alice.epub'].includes(newBook.filename)) {
-      setUploadedBooks(prevUploaded => [...prevUploaded, newBook]);
+    try {
+      const response = await deleteBook(bookId);
+      if (response.isSuccess) {
+        setBooks(prevBooks => prevBooks.filter(book => book.id !== bookId));
+      } else {
+        throw new Error(response.message || '책 삭제에 실패했습니다.');
+      }
+    } catch (err) {
+      setError(err.message || '책 삭제에 실패했습니다.');
     }
   };
 
-  // 책 삭제 함수
-  const removeBook = (filename) => {
-    setBooks(prevBooks => prevBooks.filter(book => book.filename !== filename));
-    
-    // 업로드된 책들만 localStorage에서 제거 (기본 책 제외)
-    if (!['gatsby.epub', 'alice.epub'].includes(filename)) {
-      setUploadedBooks(prevUploaded => prevUploaded.filter(book => book.filename !== filename));
+  // 즐겨찾기 토글 함수
+  const toggleFavorite = async (bookId, favorite) => {
+    // 로컬 책은 로컬 상태만 업데이트
+    if (typeof bookId === 'string' && bookId.startsWith('local_')) {
+      setBooks(prevBooks => 
+        prevBooks.map(book => 
+          book.id === bookId ? { ...book, favorite } : book
+        )
+      );
+      return;
     }
+    
+    try {
+      let response;
+      if (favorite) {
+        response = await addToFavorites(bookId);
+      } else {
+        response = await removeFromFavorites(bookId);
+      }
+      
+      if (response.isSuccess) {
+        setBooks(prevBooks => 
+          prevBooks.map(book => 
+            book.id === bookId ? { ...book, favorite } : book
+          )
+        );
+      } else {
+        throw new Error(response.message || '즐겨찾기 설정에 실패했습니다.');
+      }
+    } catch (err) {
+      setError(err.message || '즐겨찾기 설정에 실패했습니다.');
+    }
+  };
+
+  // 즐겨찾기 목록만 조회
+  const fetchFavorites = useCallback(async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      const response = await getFavorites();
+      if (response.isSuccess) {
+        setBooks(response.result || []);
+      } else {
+        throw new Error(response.message || '즐겨찾기 목록을 불러올 수 없습니다.');
+      }
+      
+    } catch (err) {
+      setError(err.message || '즐겨찾기 목록을 불러올 수 없습니다.');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  // 검색/필터 함수
+  const searchBooks = (params) => {
+    fetchBooks(params);
   };
 
   return {
@@ -70,7 +166,9 @@ export const useBooks = () => {
     loading,
     error,
     retryFetch,
-    addBook,
-    removeBook
+    removeBook,
+    toggleFavorite,
+    searchBooks,
+    fetchFavorites
   };
 };

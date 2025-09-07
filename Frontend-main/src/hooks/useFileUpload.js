@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { uploadBook } from '../utils/api';
 
 export const FILE_CONSTRAINTS = {
   MAX_SIZE: 50 * 1024 * 1024,
@@ -28,20 +29,8 @@ export const useFileUpload = () => {
     return { valid: true, error: null };
   };
 
-  // 파일에서 메타데이터 추출 (기본 정보)
-  const extractMetadata = (file) => {
-    return {
-      title: file.name.replace(/\.epub$/i, ''),
-      filename: file.name,
-      author: 'Unknown',
-      uploadedAt: new Date().toISOString(),
-      size: file.size,
-      cover: null // 실제 구현에서는 EPUB 내부에서 커버 이미지를 추출할 수 있음
-    };
-  };
-
-  // 파일 업로드 시뮬레이션
-  const uploadFile = async (file) => {
+  // 실제 파일 업로드
+  const uploadFile = async (file, metadata = {}) => {
     setUploading(true);
     setUploadProgress(0);
     setUploadError(null);
@@ -53,34 +42,35 @@ export const useFileUpload = () => {
         throw new Error(validation.error);
       }
 
-      // 업로드 진행률 시뮬레이션
-      const simulateUpload = () => {
-        return new Promise((resolve) => {
-          let progress = 0;
-          const interval = setInterval(() => {
-            progress += Math.random() * 15;
-            if (progress >= 100) {
-              progress = 100;
-              clearInterval(interval);
-              resolve();
-            }
-            setUploadProgress(Math.min(progress, 100));
-          }, 200);
+      // FormData 생성
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('title', metadata.title || file.name.replace(/\.epub$/i, ''));
+      formData.append('author', metadata.author || 'Unknown');
+      formData.append('language', metadata.language || 'ko');
+
+      // 업로드 진행률 시뮬레이션 (실제 업로드 진행률은 서버에서 받아야 함)
+      const progressInterval = setInterval(() => {
+        setUploadProgress(prev => {
+          if (prev >= 90) return prev;
+          return prev + Math.random() * 10;
         });
-      };
+      }, 200);
 
-      await simulateUpload();
-
-      // 메타데이터 추출
-      const metadata = extractMetadata(file);
-
-      // 실제 환경에서는 서버에 업로드하고 응답을 받음
-      // 여기서는 로컬 스토리지나 상태에 저장하는 것으로 시뮬레이션
+      // API 호출
+      const response = await uploadBook(formData);
       
-      return {
-        success: true,
-        data: metadata
-      };
+      clearInterval(progressInterval);
+      setUploadProgress(100);
+
+      if (response.isSuccess) {
+        return {
+          success: true,
+          data: response.result
+        };
+      } else {
+        throw new Error(response.message || '업로드에 실패했습니다.');
+      }
 
     } catch (error) {
       setUploadError(error.message);
