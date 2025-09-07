@@ -1,5 +1,5 @@
-import { clearStyleCache, cleanupRelationStyleResources } from './relationStyles';
-import { clearRelationCache, cleanupRelationResources } from './relationUtils';
+import { clearStyleCache, cleanupRelationStyleResources } from '../utils/styles/relationStyles';
+import { clearRelationCache, cleanupRelationResources } from '../utils/relationUtils';
 import { clearRegexCache, cleanupSearchResources } from './searchUtils';
 import { clearAllCaches, clearCache, cleanupUnusedCaches, getCacheStats as getCacheStatsFromManager } from './cacheManager';
 

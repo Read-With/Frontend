@@ -6,7 +6,10 @@ import { useTooltipPosition } from "../../../hooks/useTooltipPosition";
 import { useClickOutside } from "../../../hooks/useClickOutside";
 import { useRelationData } from "../../../hooks/useRelationData";
 import { getRelationStyle, getRelationLabels, tooltipStyles } from "../../../utils/styles/relationStyles";
-import { safeNum } from "../../../utils/relationUtils";
+import { createButtonStyle, createAdvancedButtonHandlers, COLORS, ANIMATION_VALUES } from "../../../utils/styles/styles";
+import { mergeRefs } from "../../../utils/styles/animations";
+import { safeNum, processRelationTagsCached } from "../../../utils/relationUtils";
+import { cleanupRelationUtils } from "../../../utils/cleanupUtils";
 import "../RelationGraph.css";
 
 /**
@@ -61,18 +64,7 @@ function UnifiedEdgeTooltip({
     if (onClose) onClose();
   }, true);
 
-  // ref 병합 함수
-  const mergeRefs = useCallback((...refs) => {
-    return (element) => {
-      refs.forEach(ref => {
-        if (typeof ref === 'function') {
-          ref(element);
-        } else if (ref != null) {
-          ref.current = element;
-        }
-      });
-    };
-  }, []);
+  // ref 병합은 animations.js에서 import한 함수 사용
 
   // 뷰 모드: "info" | "chart"
   const [viewMode, setViewMode] = useState("info");
@@ -105,11 +97,18 @@ function UnifiedEdgeTooltip({
     }
   }, [viewMode, id1, id2, chapterNum, eventNum, mode]);
 
+  // 컴포넌트 언마운트 시 리소스 정리
+  useEffect(() => {
+    return () => {
+      cleanupRelationUtils();
+    };
+  }, []);
+
   // positivity 값에 따른 색상과 텍스트 결정 (filename 기반)
   const relationStyle = getRelationStyle(data.positivity, filename);
 
-  // 관계 라벨 배열 생성
-  const relationLabels = getRelationLabels(data.relation, data.label);
+  // 관계 라벨 배열 생성 (캐시된 함수 사용으로 성능 최적화)
+  const relationLabels = processRelationTagsCached(data.relation, data.label);
 
   // 모드별 설정
   const zIndex = mode === 'viewer' ? 10000 : 9999;
@@ -125,7 +124,7 @@ function UnifiedEdgeTooltip({
           height: '100%',
           display: 'flex',
           flexDirection: 'column',
-          background: '#fff',
+          background: COLORS.background,
           overflow: 'hidden',
           fontFamily: 'var(--font-family-primary)',
         }}
@@ -139,8 +138,8 @@ function UnifiedEdgeTooltip({
         {/* 사이드바 헤더 */}
         <div style={{
           padding: '24px 24px 20px 24px',
-          borderBottom: '1px solid #e5e7eb',
-          background: '#fff',
+          borderBottom: `1px solid ${COLORS.border}`,
+          background: COLORS.background,
         }}>
           <div style={{
             display: 'flex',
@@ -151,7 +150,7 @@ function UnifiedEdgeTooltip({
             <h3 style={{
               fontSize: '20px',
               fontWeight: '600',
-              color: '#111827',
+              color: COLORS.textPrimary,
               margin: 0,
               letterSpacing: '-0.025em',
             }}>
@@ -161,39 +160,12 @@ function UnifiedEdgeTooltip({
               onClick={onClose}
               aria-label="사이드바 닫기"
               style={{
-                background: 'none',
-                border: 'none',
+                ...createButtonStyle(ANIMATION_VALUES, 'close'),
                 fontSize: '24px',
-                color: '#6b7280',
-                cursor: 'pointer',
-                padding: '8px',
-                borderRadius: '6px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                transition: 'all 0.15s ease',
                 width: '40px',
                 height: '40px',
               }}
-              onMouseOver={(e) => {
-                e.currentTarget.style.background = '#f3f4f6';
-                e.currentTarget.style.color = '#374151';
-              }}
-              onMouseOut={(e) => {
-                e.currentTarget.style.background = 'none';
-                e.currentTarget.style.color = '#6b7280';
-              }}
-              onFocus={(e) => {
-                e.currentTarget.style.background = '#f3f4f6';
-                e.currentTarget.style.color = '#374151';
-                e.currentTarget.style.outline = '2px solid #2563eb';
-                e.currentTarget.style.outlineOffset = '2px';
-              }}
-              onBlur={(e) => {
-                e.currentTarget.style.background = 'none';
-                e.currentTarget.style.color = '#6b7280';
-                e.currentTarget.style.outline = 'none';
-              }}
+              {...createAdvancedButtonHandlers('close')}
             >
               ×
             </button>
@@ -241,11 +213,11 @@ function UnifiedEdgeTooltip({
               <div 
                 className="sidebar-card"
                 style={{
-                  background: '#fff',
+                  background: COLORS.background,
                   borderRadius: '12px',
                   padding: '24px',
                   marginBottom: '24px',
-                  border: '1px solid #e5e7eb',
+                  border: `1px solid ${COLORS.border}`,
                   boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
                 }}
               >
@@ -332,7 +304,7 @@ function UnifiedEdgeTooltip({
                         width: '80px',
                         textAlign: 'center',
                         fontSize: '12px',
-                        color: '#6b7280',
+                        color: COLORS.textSecondary,
                         display: 'inline-block',
                         lineHeight: '1.2',
                       }}
@@ -348,18 +320,18 @@ function UnifiedEdgeTooltip({
                 <div 
                   className="sidebar-card"
                   style={{
-                    background: '#fff',
+                    background: COLORS.background,
                     borderRadius: '12px',
                     padding: '24px',
                     marginBottom: '24px',
-                    border: '1px solid #e5e7eb',
+                    border: `1px solid ${COLORS.border}`,
                     boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
                   }}
                 >
                   <h4 style={{
                     fontSize: '16px',
                     fontWeight: '600',
-                    color: '#111827',
+                    color: COLORS.textPrimary,
                     margin: '0 0 16px 0',
                     letterSpacing: '-0.025em',
                   }}>
@@ -373,7 +345,7 @@ function UnifiedEdgeTooltip({
                       margin: '0 0 12px 0',
                       fontSize: '14px',
                       lineHeight: '1.6',
-                      color: '#374151',
+                      color: COLORS.textPrimary,
                       fontWeight: '500',
                       letterSpacing: '-0.01em',
                     }}>
@@ -384,7 +356,7 @@ function UnifiedEdgeTooltip({
                         margin: 0,
                         fontSize: '14px',
                         lineHeight: '1.6',
-                        color: '#6b7280',
+                        color: COLORS.textSecondary,
                         letterSpacing: '-0.01em',
                       }}>
                         {data.explanation.split("|")[1]}
@@ -398,32 +370,13 @@ function UnifiedEdgeTooltip({
               <button
                 onClick={() => setViewMode("chart")}
                 style={{
-                  ...tooltipStyles.button.primary,
+                  ...createButtonStyle(ANIMATION_VALUES, 'primaryAdvanced'),
                   width: '100%',
                   padding: '12px 22px',
                   fontSize: '15px',
                   fontWeight: 600,
-                  boxShadow: '0 2px 8px rgba(79,109,222,0.13)',
-                  transition: 'all 0.2s ease',
                 }}
-                onMouseOver={(e) => {
-                  e.currentTarget.style.background = '#1d4ed8';
-                  e.currentTarget.style.transform = 'translateY(-1px)';
-                  e.currentTarget.style.boxShadow = '0 4px 12px rgba(79,109,222,0.2)';
-                }}
-                onMouseOut={(e) => {
-                  e.currentTarget.style.background = '#2563eb';
-                  e.currentTarget.style.transform = 'translateY(0)';
-                  e.currentTarget.style.boxShadow = '0 2px 8px rgba(79,109,222,0.13)';
-                }}
-                onMouseDown={(e) => {
-                  e.currentTarget.style.transform = 'translateY(0)';
-                  e.currentTarget.style.boxShadow = '0 1px 4px rgba(79,109,222,0.13)';
-                }}
-                onMouseUp={(e) => {
-                  e.currentTarget.style.transform = 'translateY(-1px)';
-                  e.currentTarget.style.boxShadow = '0 4px 12px rgba(79,109,222,0.2)';
-                }}
+                {...createAdvancedButtonHandlers('primaryAdvanced')}
               >
                 관계 변화 그래프 보기
               </button>
@@ -434,18 +387,18 @@ function UnifiedEdgeTooltip({
               <div 
                 className="sidebar-card"
                 style={{
-                  background: '#fff',
+                  background: COLORS.background,
                   borderRadius: '12px',
                   padding: '24px',
                   marginBottom: '24px',
-                  border: '1px solid #e5e7eb',
+                  border: `1px solid ${COLORS.border}`,
                   boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
                 }}
               >
                 <h4 style={{
                   fontSize: '18px',
                   fontWeight: '600',
-                  color: '#111827',
+                  color: COLORS.textPrimary,
                   margin: '0 0 20px 0',
                   textAlign: 'center',
                   letterSpacing: '-0.025em',
@@ -457,7 +410,7 @@ function UnifiedEdgeTooltip({
                   <div style={{
                     textAlign: 'center',
                     padding: '60px 20px',
-                    color: '#6b7280',
+                    color: COLORS.textSecondary,
                     fontSize: '14px',
                     display: 'flex',
                     flexDirection: 'column',
@@ -525,31 +478,11 @@ function UnifiedEdgeTooltip({
               <button
                 onClick={() => setViewMode("info")}
                 style={{
-                  ...tooltipStyles.button.secondary,
+                  ...createButtonStyle(ANIMATION_VALUES, 'secondary'),
                   width: '100%',
                   padding: '12px 22px',
                   fontSize: '15px',
                   fontWeight: 600,
-                  boxShadow: '0 2px 8px rgba(79,109,222,0.13)',
-                  transition: 'all 0.2s ease',
-                }}
-                onMouseOver={(e) => {
-                  e.currentTarget.style.background = '#e3eafe';
-                  e.currentTarget.style.transform = 'translateY(-1px)';
-                  e.currentTarget.style.boxShadow = '0 4px 12px rgba(79,109,222,0.15)';
-                }}
-                onMouseOut={(e) => {
-                  e.currentTarget.style.background = '#fff';
-                  e.currentTarget.style.transform = 'translateY(0)';
-                  e.currentTarget.style.boxShadow = '0 2px 8px rgba(79,109,222,0.13)';
-                }}
-                onMouseDown={(e) => {
-                  e.currentTarget.style.transform = 'translateY(0)';
-                  e.currentTarget.style.boxShadow = '0 1px 4px rgba(79,109,222,0.13)';
-                }}
-                onMouseUp={(e) => {
-                  e.currentTarget.style.transform = 'translateY(-1px)';
-                  e.currentTarget.style.boxShadow = '0 4px 12px rgba(79,109,222,0.15)';
                 }}
               >
                 관계 정보로 돌아가기
@@ -572,7 +505,7 @@ function UnifiedEdgeTooltip({
         top: position.y,
         zIndex,
         opacity: showContent ? 1 : 0,
-        transition: isDragging ? "none" : "opacity 0.3s ease-in-out",
+        transition: isDragging ? "none" : `opacity ${ANIMATION_VALUES.DURATION.NORMAL} ease-in-out`,
         cursor: isDragging ? "grabbing" : "grab",
         ...(style || {}),
       }}
@@ -628,13 +561,8 @@ function UnifiedEdgeTooltip({
                   >
                     <button
                       className="relation-change-chart-btn edge-tooltip-animated-btn"
-                      style={tooltipStyles.button.primary}
+                      style={createButtonStyle(ANIMATION_VALUES, 'primary')}
                       onClick={() => setViewMode("chart")}
-                      onMouseOver={e => e.currentTarget.style.background = '#3b82f6'}
-                      onMouseOut={e => e.currentTarget.style.background = '#2563eb'}
-                      onMouseDown={e => e.currentTarget.style.transform = 'scale(0.97)'}
-                      onMouseUp={e => e.currentTarget.style.transform = 'scale(1)'}
-                      onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}
                     >
                       관계 변화 그래프
                     </button>
@@ -775,13 +703,8 @@ function UnifiedEdgeTooltip({
                   >
                     <button
                       className="relation-change-chart-btn edge-tooltip-animated-btn"
-                      style={tooltipStyles.button.primary}
+                      style={createButtonStyle(ANIMATION_VALUES, 'primary')}
                       onClick={() => setViewMode("chart")}
-                      onMouseOver={e => e.currentTarget.style.background = '#3b82f6'}
-                      onMouseOut={e => e.currentTarget.style.background = '#2563eb'}
-                      onMouseDown={e => e.currentTarget.style.transform = 'scale(0.97)'}
-                      onMouseUp={e => e.currentTarget.style.transform = 'scale(1)'}
-                      onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}
                     >
                       관계 변화 그래프
                     </button>
@@ -831,13 +754,8 @@ function UnifiedEdgeTooltip({
                   </div>
                   <div style={{ marginTop: 'auto', paddingTop: 20, paddingBottom: 6, paddingLeft: 6, paddingRight: 6, textAlign: "center" }}>
                     <button
-                      style={tooltipStyles.button.secondary}
+                      style={createButtonStyle(ANIMATION_VALUES, 'secondary')}
                       onClick={() => setViewMode("info")}
-                      onMouseOver={e => e.currentTarget.style.background = '#e3eafe'}
-                      onMouseOut={e => e.currentTarget.style.background = '#fff'}
-                      onMouseDown={e => e.currentTarget.style.transform = 'scale(0.97)'}
-                      onMouseUp={e => e.currentTarget.style.transform = 'scale(1)'}
-                      onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}
                     >
                       간선 정보로 돌아가기
                     </button>
@@ -904,13 +822,8 @@ function UnifiedEdgeTooltip({
               )}
               <div style={{ marginTop: 'auto', paddingTop: 20, paddingBottom: mode === 'viewer' ? 6 : 20, textAlign: "center" }}>
                 <button
-                  style={tooltipStyles.button.secondary}
+                  style={createButtonStyle(ANIMATION_VALUES, 'secondary')}
                   onClick={() => setViewMode("info")}
-                  onMouseOver={e => e.currentTarget.style.background = '#e3eafe'}
-                  onMouseOut={e => e.currentTarget.style.background = '#fff'}
-                  onMouseDown={e => e.currentTarget.style.transform = 'scale(0.97)'}
-                  onMouseUp={e => e.currentTarget.style.transform = 'scale(1)'}
-                  onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}
                 >
                   간선 정보로 돌아가기
                 </button>

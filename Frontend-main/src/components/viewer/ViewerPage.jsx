@@ -169,10 +169,19 @@ const ViewerPage = () => {
     const currentChapter = currentEvent.chapter;
     
     try {
-      const eventData = getEventData(folderKey, currentChapter, currentEventNum);
+      // currentEvent.eventNum이 0-based인지 1-based인지 확인
+      console.log('=== 이벤트 인덱스 디버깅 ===');
+      console.log('currentEvent.eventNum:', currentEventNum);
+      console.log('currentEvent.event_id:', currentEvent.event_id);
+      
+      // event_id가 있으면 그것을 사용, 없으면 eventNum 사용
+      const actualEventNum = currentEvent.event_id !== undefined ? currentEvent.event_id : currentEventNum;
+      console.log('실제 사용할 이벤트 번호:', actualEventNum);
+      
+      const eventData = getEventData(folderKey, currentChapter, actualEventNum);
       
       if (!eventData) {
-        console.warn('이벤트 데이터를 찾을 수 없습니다:', { folderKey, currentChapter, currentEventNum });
+        console.warn('이벤트 데이터를 찾을 수 없습니다:', { folderKey, currentChapter, actualEventNum });
         return [];
       }
       
@@ -180,12 +189,21 @@ const ViewerPage = () => {
       const currentImportance = eventData.importance || {};
       const currentNewAppearances = eventData.log?.new_character_ids || [];
       
+      // 디버깅: 현재 이벤트의 관계 데이터 로그
+      console.log('=== 현재 이벤트 관계 데이터 ===');
+      console.log('Chapter:', currentChapter, 'Event:', currentEventNum);
+      console.log('Relations:', currentRelations);
+      console.log('Event Data:', eventData);
+      
       const generatedElements = getElementsFromRelations(
         currentRelations,
         characterData,
         currentNewAppearances,
         currentImportance
       );
+      
+      // 디버깅: 생성된 요소들 로그
+      console.log('Generated Elements:', generatedElements);
       
       return generatedElements;
     } catch (error) {
