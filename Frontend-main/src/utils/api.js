@@ -133,6 +133,35 @@ export const getBookManifest = async (bookId) => {
   return apiRequest(`/api/books/${bookId}/manifest`);
 };
 
+// 북마크 관련 API
+// 북마크 목록 조회
+export const getBookmarks = async (bookId) => {
+  return apiRequest(`/api/bookmarks?bookId=${bookId}`);
+};
+
+// 북마크 생성
+export const createBookmark = async (bookmarkData) => {
+  return apiRequest('/api/bookmarks', {
+    method: 'POST',
+    body: JSON.stringify(bookmarkData),
+  });
+};
+
+// 북마크 수정
+export const updateBookmark = async (bookmarkId, updateData) => {
+  return apiRequest(`/api/bookmarks/${bookmarkId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(updateData),
+  });
+};
+
+// 북마크 삭제
+export const deleteBookmark = async (bookmarkId) => {
+  return apiRequest(`/api/bookmarks/${bookmarkId}`, {
+    method: 'DELETE',
+  });
+};
+
 export default {
   getBooks,
   uploadBook,
@@ -147,4 +176,8 @@ export default {
   getBookProgress,
   deleteBookProgress,
   getBookManifest,
+  getBookmarks,
+  createBookmark,
+  updateBookmark,
+  deleteBookmark,
 };

@@ -1,7 +1,7 @@
 import React from 'react';
 import { FaBookmark, FaTrash, FaClock, FaMapMarkerAlt } from 'react-icons/fa';
 
-const BookmarkPanel = ({ bookmarks, onSelect, onDelete }) => {
+const BookmarkPanel = ({ bookmarks, onSelect, onDelete, loading = false }) => {
   const formatDate = (dateString) => {
     const date = new Date(dateString);
     const now = new Date();
@@ -38,7 +38,12 @@ const BookmarkPanel = ({ bookmarks, onSelect, onDelete }) => {
 
       {/* 북마크 목록 */}
       <div className="max-h-80 overflow-y-auto">
-        {bookmarks.length === 0 ? (
+        {loading ? (
+          <div className="p-6 text-center text-gray-500">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-3"></div>
+            <p className="text-sm">북마크를 불러오는 중...</p>
+          </div>
+        ) : bookmarks.length === 0 ? (
           <div className="p-6 text-center text-gray-500">
             <FaBookmark className="mx-auto mb-3 text-3xl text-gray-300" />
             <p className="text-sm">저장된 북마크가 없습니다</p>
@@ -46,13 +51,13 @@ const BookmarkPanel = ({ bookmarks, onSelect, onDelete }) => {
           </div>
         ) : (
           <ul className="p-2 space-y-1">
-            {bookmarks.map((bookmark, index) => (
+            {bookmarks.map((bookmark) => (
               <li
-                key={index}
+                key={bookmark.id}
                 className="group relative"
               >
                 <button
-                  onClick={() => onSelect(bookmark.cfi)}
+                  onClick={() => onSelect(bookmark.startCfi)}
                   className="w-full text-left p-3 rounded-lg transition-all duration-200 hover:bg-blue-50 focus:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-blue-200"
                 >
                   <div className="flex items-start justify-between">
@@ -60,13 +65,13 @@ const BookmarkPanel = ({ bookmarks, onSelect, onDelete }) => {
                       <div className="flex items-center space-x-2 mb-1">
                         <FaMapMarkerAlt className="text-blue-500 text-xs mt-0.5 flex-shrink-0" />
                         <p className="text-sm font-medium text-gray-800 truncate">
-                          북마크 #{index + 1}
+                          북마크 #{bookmark.id}
                         </p>
                       </div>
                       
-                      {bookmark.preview && (
+                      {bookmark.memo && (
                         <p className="text-xs text-gray-600 line-clamp-2 ml-4 mb-2">
-                          "{bookmark.preview}"
+                          "{bookmark.memo}"
                         </p>
                       )}
                       
@@ -82,7 +87,7 @@ const BookmarkPanel = ({ bookmarks, onSelect, onDelete }) => {
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
-                          onDelete(index);
+                          onDelete(bookmark.id);
                         }}
                         className="opacity-0 group-hover:opacity-100 ml-2 p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-md transition-all duration-200 flex-shrink-0"
                         title="북마크 삭제"

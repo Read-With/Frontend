@@ -14,7 +14,7 @@ import {
   settingsUtils
 } from '../utils/viewerUtils';
 import { getFolderKeyFromFilename } from '../utils/graphData';
-import { loadBookmarks, saveBookmarks } from '../components/viewer/bookmark/BookmarkManager';
+import { loadBookmarks, addBookmark, removeBookmark } from '../components/viewer/bookmark/BookmarkManager';
 import { getBookManifest } from '../utils/api';
 
 export function useViewerPage() {
@@ -67,7 +67,8 @@ export function useViewerPage() {
   const [showToolbar, setShowToolbar] = useState(false);
   
   const cleanFilename = filename?.trim() || '';
-  const [bookmarks, setBookmarks] = useState(() => loadBookmarks(cleanFilename));
+  const [bookmarks, setBookmarks] = useState([]);
+  const [bookmarksLoading, setBookmarksLoading] = useState(true);
   const [showBookmarkList, setShowBookmarkList] = useState(false);
   
   const [progress, setProgress] = useLocalStorageNumber(`progress_${cleanFilename}`, 0);
@@ -216,7 +217,22 @@ export function useViewerPage() {
   
   // 북마크 로드
   useEffect(() => {
-    setBookmarks(loadBookmarks(cleanFilename));
+    const fetchBookmarks = async () => {
+      if (!cleanFilename) return;
+      
+      setBookmarksLoading(true);
+      try {
+        const bookmarksData = await loadBookmarks(cleanFilename);
+        setBookmarks(bookmarksData);
+      } catch (error) {
+        console.error('북마크 로드 실패:', error);
+        setBookmarks([]);
+      } finally {
+        setBookmarksLoading(false);
+      }
+    };
+
+    fetchBookmarks();
   }, [cleanFilename]);
   
   // 페이지 변경 시 현재 챕터 번호 업데이트
@@ -314,17 +330,28 @@ export function useViewerPage() {
 
     setFailCount(0);
 
-    const result = await bookmarkUtils.toggleBookmark(
-      cfi, 
-      cleanFilename, 
-      bookmarks, 
-      loadBookmarks, 
-      saveBookmarks
-    );
+    // 기존 북마크가 있는지 확인
+    const existingBookmark = bookmarks.find(b => b.startCfi === cfi);
     
-    setBookmarks(result.bookmarks);
-    saveBookmarks(cleanFilename, result.bookmarks);
-    toast.success(result.message);
+    if (existingBookmark) {
+      // 이미 북마크가 있으면 삭제
+      const result = await removeBookmark(existingBookmark.id);
+      if (result.success) {
+        setBookmarks(prev => prev.filter(b => b.id !== existingBookmark.id));
+        toast.success("📖 북마크가 제거되었습니다");
+      } else {
+        toast.error(result.message || "북마크 제거에 실패했습니다");
+      }
+    } else {
+      // 새 북마크 추가
+      const result = await addBookmark(cleanFilename, cfi);
+      if (result.success) {
+        setBookmarks(prev => [...prev, result.bookmark]);
+        toast.success("📖 북마크가 추가되었습니다");
+      } else {
+        toast.error(result.message || "북마크 추가에 실패했습니다");
+      }
+    }
   }, [cleanFilename, bookmarks]);
   
   const handleBookmarkSelect = useCallback((cfi) => {
@@ -379,23 +406,35 @@ export function useViewerPage() {
     }
   }, [progress]);
   
-  const handleDeleteBookmark = useCallback((cfi) => {
-    const result = bookmarkUtils.deleteBookmark(cfi, cleanFilename, bookmarks, saveBookmarks);
-    if (result.success) {
-      setBookmarks(result.bookmarks);
-    } else {
-      toast.error(result.message);
+  const handleDeleteBookmark = useCallback(async (bookmarkId) => {
+    try {
+      const result = await removeBookmark(bookmarkId);
+      if (result.success) {
+        setBookmarks(prev => prev.filter(b => b.id !== bookmarkId));
+        toast.success("북마크가 삭제되었습니다");
+      } else {
+        toast.error(result.message || "북마크 삭제에 실패했습니다");
+      }
+    } catch (error) {
+      console.error('북마크 삭제 실패:', error);
+      toast.error("북마크 삭제에 실패했습니다");
     }
-  }, [cleanFilename, bookmarks]);
+  }, []);
   
-  const handleRemoveBookmark = useCallback((cfi) => {
-    const result = bookmarkUtils.deleteBookmark(cfi, cleanFilename, bookmarks, saveBookmarks);
-    if (result.success) {
-      setBookmarks(result.bookmarks);
-    } else {
-      toast.error(result.message);
+  const handleRemoveBookmark = useCallback(async (bookmarkId) => {
+    try {
+      const result = await removeBookmark(bookmarkId);
+      if (result.success) {
+        setBookmarks(prev => prev.filter(b => b.id !== bookmarkId));
+        toast.success("북마크가 삭제되었습니다");
+      } else {
+        toast.error(result.message || "북마크 삭제에 실패했습니다");
+      }
+    } catch (error) {
+      console.error('북마크 삭제 실패:', error);
+      toast.error("북마크 삭제에 실패했습니다");
     }
-  }, [cleanFilename, bookmarks]);
+  }, []);
   
   // 그래프 표시 토글 함수
   const toggleGraph = useCallback(() => {
@@ -548,6 +587,7 @@ export function useViewerPage() {
     cleanFilename,
     bookmarks,
     setBookmarks,
+    bookmarksLoading,
     showBookmarkList,
     setShowBookmarkList,
     
