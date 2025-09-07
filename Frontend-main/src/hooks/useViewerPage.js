@@ -1,4 +1,3 @@
-// ViewerPage 전용 커스텀 훅
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useParams, useLocation, useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
@@ -17,18 +16,11 @@ import {
 import { getFolderKeyFromFilename } from '../utils/graphData';
 import { loadBookmarks, saveBookmarks } from '../components/viewer/bookmark/BookmarkManager';
 
-/**
- * ViewerPage의 메인 상태와 로직을 관리하는 커스텀 훅
- * @param {boolean} initialDarkMode - 초기 다크모드 설정
- * @returns {Object} ViewerPage에 필요한 모든 상태와 함수들
- */
-export function useViewerPage(initialDarkMode = false) {
-  // 라우터 관련
+export function useViewerPage() {
   const { filename } = useParams();
   const location = useLocation();
   const navigate = useNavigate();
   
-  // 기본 상태들
   const viewerRef = useRef(null);
   const [reloadKey, setReloadKey] = useState(0);
   const [failCount, setFailCount] = useState(0);
@@ -36,17 +28,12 @@ export function useViewerPage(initialDarkMode = false) {
   const [totalPages, setTotalPages] = useState(1);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   
-  // 설정 관련 - darkMode는 settings가 로드된 후 초기화
-  const [darkMode, setDarkMode] = useState(initialDarkMode);
-  
-  // 챕터 및 이벤트 관련
   const [currentChapter, setCurrentChapter] = useState(1);
   const [currentEvent, setCurrentEvent] = useState(null);
   const [prevEvent, setPrevEvent] = useState(null);
   const [events, setEvents] = useState([]);
   const [maxChapter, setMaxChapter] = useState(1);
   
-  // 그래프 관련
   const [graphFullScreen, setGraphFullScreen] = useState(() => {
     const saved = loadViewerMode();
     if (saved === "graph") return true;
@@ -62,7 +49,6 @@ export function useViewerPage(initialDarkMode = false) {
     return loadSettings().showGraph;
   });
   
-  // 기타 상태들
   const [elements, setElements] = useState([]);
   const [currentCharIndex, setCurrentCharIndex] = useState(0);
   const [currentPageWords, setCurrentPageWords] = useState(0);
@@ -79,30 +65,25 @@ export function useViewerPage(initialDarkMode = false) {
   const [isGraphLoading, setIsGraphLoading] = useState(true);
   const [showToolbar, setShowToolbar] = useState(false);
   
-  // 북마크 관련
   const cleanFilename = filename?.trim() || '';
   const [bookmarks, setBookmarks] = useState(() => loadBookmarks(cleanFilename));
   const [showBookmarkList, setShowBookmarkList] = useState(false);
   
-  // localStorage 연동 상태들
   const [progress, setProgress] = useLocalStorageNumber(`progress_${cleanFilename}`, 0);
   const [settings, setSettings] = useLocalStorage('epub_viewer_settings', defaultSettings);
   const [lastCFI, setLastCFI] = useLocalStorage(`readwith_${cleanFilename}_lastCFI`, null);
   
-  // 이전 상태 추적용 ref들
   const prevValidEventRef = useRef(null);
   const prevElementsRef = useRef([]);
   const prevChapterNumRef = useRef();
   const prevEventNumRef = useRef();
   
-  // 그래프 diff 상태
   const [graphDiff, setGraphDiff] = useState({
     added: [],
     removed: [],
     updated: [],
   });
   
-  // book 정보 생성
   const book = useMemo(() => 
     location.state?.book || {
       title: filename?.replace(".epub", "") || '',
@@ -111,10 +92,8 @@ export function useViewerPage(initialDarkMode = false) {
     }, [location.state?.book, filename]
   );
   
-  // 폴더 키 추출
   const folderKey = useMemo(() => getFolderKeyFromFilename(filename), [filename]);
   
-  // 그래프 데이터 로더 훅 사용
   const {
     elements: graphElements,
     newNodeIds,
@@ -161,12 +140,6 @@ export function useViewerPage(initialDarkMode = false) {
   
   // progress는 이제 useLocalStorageNumber로 자동 저장됨
   
-  // settings 로드 후 darkMode 초기화
-  useEffect(() => {
-    if (settings && !initialDarkMode) {
-      setDarkMode(settings.theme === "dark");
-    }
-  }, [settings, initialDarkMode]);
   
   // 북마크 로드
   useEffect(() => {
@@ -299,7 +272,6 @@ export function useViewerPage(initialDarkMode = false) {
       newSettings,
       settings,
       setSettings,
-      setDarkMode,
       setShowGraph,
       setReloadKey,
       viewerRef,
@@ -446,8 +418,6 @@ export function useViewerPage(initialDarkMode = false) {
     // 설정 관련
     settings,
     setSettings,
-    darkMode,
-    setDarkMode,
     
     // 챕터 및 이벤트 관련
     currentChapter,
@@ -578,7 +548,6 @@ export function useViewerPage(initialDarkMode = false) {
       totalPages,
       progress,
       settings,
-      darkMode,
       book,
       loading,
       showToolbar

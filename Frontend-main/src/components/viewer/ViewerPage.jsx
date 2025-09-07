@@ -28,7 +28,6 @@ import {
 import { calcGraphDiff } from "../../utils/graphDataUtils";
 
 
-// GraphSplitArea 컴포넌트를 ViewerPage 함수 전에 정의
 function GraphSplitArea({
   graphState,
   graphActions,
@@ -37,8 +36,6 @@ function GraphSplitArea({
   searchActions,
 }) {
   const graphContainerRef = React.useRef(null);
-  
-  // searchState에서 검색 관련 값들 추출
   const { isSearchActive, filteredElements, isResetFromSearch } = searchState;
 
   return (
@@ -65,7 +62,6 @@ function GraphSplitArea({
         searchActions={searchActions}
       />
       
-      {/* 그래프 본문 */}
       <div style={{ flex: 1, position: "relative", minHeight: 0, minWidth: 0 }}>
         <GraphContainer
           ref={graphContainerRef}
@@ -82,142 +78,37 @@ function GraphSplitArea({
   );
 }
 
-const ViewerPage = ({ darkMode: initialDarkMode }) => {
-  // 커스텀 훅을 사용하여 모든 상태와 로직을 관리
+const ViewerPage = () => {
   const {
-    // 라우터 관련
-    filename,
-    location,
-    navigate,
-    
-    // refs
-    viewerRef,
-    
-    // 기본 상태
-    reloadKey,
-    setReloadKey,
-    failCount,
-    setFailCount,
-    progress,
-    setProgress,
-    currentPage,
-    setCurrentPage,
-    totalPages,
-    setTotalPages,
-    showSettingsModal,
-    setShowSettingsModal,
-    
-    // 설정 관련
-    settings,
-    setSettings,
-    darkMode,
-    setDarkMode,
-    
-    // 챕터 및 이벤트 관련
-    currentChapter,
-    setCurrentChapter,
-    currentEvent,
-    setCurrentEvent,
-    prevEvent,
-    setPrevEvent,
-    events,
-    setEvents,
-    maxChapter,
-    setMaxChapter,
-    
-    // 그래프 관련
-    graphFullScreen,
-    setGraphFullScreen,
-    showGraph,
-    setShowGraph,
-    elements,
-    setElements,
-    graphViewState,
-    setGraphViewState,
-    hideIsolated,
-    setHideIsolated,
-    edgeLabelVisible,
-    setEdgeLabelVisible,
-    graphDiff,
-    setGraphDiff,
-    
-    // 기타 상태
-    currentCharIndex,
-    setCurrentCharIndex,
-    currentPageWords,
-    setCurrentPageWords,
-    totalChapterWords,
-    setTotalChapterWords,
-    loading,
-    setLoading,
-    chapterText,
-    setChapterText,
-    isDataReady,
-    setIsDataReady,
-    characterData,
-    setCharacterData,
-    isReloading,
-    setIsReloading,
-    eventNum,
-    setEventNum,
-    isGraphLoading,
-    setIsGraphLoading,
-    showToolbar,
-    setShowToolbar,
-    
-    // 북마크 관련
-    cleanFilename,
-    bookmarks,
-    setBookmarks,
-    showBookmarkList,
-    setShowBookmarkList,
-    
-    // refs
-    prevValidEventRef,
-    prevElementsRef,
-    prevChapterNumRef,
-    prevEventNumRef,
-    
-    // book 정보
-    book,
-    
-    // 폴더 키
-    folderKey,
-    
-    // 그래프 데이터 로더 결과
-    graphElements,
-    newNodeIds,
-    currentChapterData,
-    maxEventNum,
-    graphEventNum,
-    detectedMaxChapter,
-    graphLoading,
-    graphError,
-    
-    // 이벤트 핸들러들
-    handlePrevPage,
-    handleNextPage,
-    handleAddBookmark,
-    handleBookmarkSelect,
-    handleOpenSettings,
-    handleCloseSettings,
-    handleApplySettings,
-    onToggleBookmarkList,
-    handleSliderChange,
-    handleDeleteBookmark,
-    handleRemoveBookmark,
-    toggleGraph,
-    handleFitView,
-    handleLocationChange,
-    
-    // 그룹화된 상태들 (GraphSplitArea용)
-    graphState,
-    graphActions,
-    viewerState,
-    searchState,
-  } = useViewerPage(initialDarkMode);
+    filename, location, navigate, viewerRef,
+    reloadKey, setReloadKey, failCount, setFailCount,
+    progress, setProgress, currentPage, setCurrentPage,
+    totalPages, setTotalPages, showSettingsModal, setShowSettingsModal,
+    settings, setSettings,
+    currentChapter, setCurrentChapter, currentEvent, setCurrentEvent,
+    prevEvent, setPrevEvent, events, setEvents, maxChapter, setMaxChapter,
+    graphFullScreen, setGraphFullScreen, showGraph, setShowGraph,
+    elements, setElements, graphViewState, setGraphViewState,
+    hideIsolated, setHideIsolated, edgeLabelVisible, setEdgeLabelVisible,
+    graphDiff, setGraphDiff,
+    currentCharIndex, setCurrentCharIndex, currentPageWords, setCurrentPageWords,
+    totalChapterWords, setTotalChapterWords, loading, setLoading,
+    chapterText, setChapterText, isDataReady, setIsDataReady,
+    characterData, setCharacterData, isReloading, setIsReloading,
+    eventNum, setEventNum, isGraphLoading, setIsGraphLoading,
+    showToolbar, setShowToolbar,
+    cleanFilename, bookmarks, setBookmarks, showBookmarkList, setShowBookmarkList,
+    prevValidEventRef, prevElementsRef, prevChapterNumRef, prevEventNumRef,
+    book, folderKey,
+    graphElements, newNodeIds, currentChapterData, maxEventNum,
+    graphEventNum, detectedMaxChapter, graphLoading, graphError,
+    handlePrevPage, handleNextPage, handleAddBookmark, handleBookmarkSelect,
+    handleOpenSettings, handleCloseSettings, handleApplySettings,
+    onToggleBookmarkList, handleSliderChange, handleDeleteBookmark,
+    handleRemoveBookmark, toggleGraph, handleFitView, handleLocationChange,
+    graphState, graphActions, viewerState, searchState,
+  } = useViewerPage();
 
-  // 챕터 데이터 로딩 (이벤트 데이터만 별도 처리)
   useEffect(() => {
     const loadEventsData = async () => {
       try {
@@ -225,15 +116,11 @@ const ViewerPage = ({ darkMode: initialDarkMode }) => {
         setIsGraphLoading(true);
         setIsDataReady(false);
         
-        // 이벤트 데이터 로드
         const events = getEventsForChapter(currentChapter, folderKey);
         setEvents(events);
         
-        // 캐릭터 데이터는 누적된 모든 챕터의 데이터를 사용
         try {
           const allCharacterData = [];
-          
-          // 현재 챕터까지의 모든 캐릭터 데이터를 누적
           for (let chapter = 1; chapter <= currentChapter; chapter++) {
             const charData = getCharactersData(folderKey, chapter);
             if (charData && charData.characters) {
@@ -241,7 +128,6 @@ const ViewerPage = ({ darkMode: initialDarkMode }) => {
             }
           }
           
-          // 중복 제거 (같은 ID를 가진 캐릭터는 마지막에 추가된 것만 유지)
           const uniqueCharacters = [];
           const seenIds = new Set();
           for (let i = allCharacterData.length - 1; i >= 0; i--) {
@@ -256,18 +142,14 @@ const ViewerPage = ({ darkMode: initialDarkMode }) => {
           setCharacterData(uniqueCharacters);
         } catch (charError) {
           console.warn('캐릭터 데이터 누적 로드 실패:', charError);
-          // fallback: currentChapterData 사용
           if (currentChapterData) {
             setCharacterData(currentChapterData.characters || currentChapterData);
           }
         }
         
         setIsDataReady(true);
-        
-        // 초기 로딩 시 자동 이벤트 설정 제거 - 사용자가 직접 선택하도록 함
       } catch (error) {
         console.error('Chapter data loading error:', error);
-        // 에러 발생 시에도 기본 데이터로 fallback
         setIsDataReady(true);
       } finally {
         setLoading(false);
@@ -278,22 +160,8 @@ const ViewerPage = ({ darkMode: initialDarkMode }) => {
     loadEventsData();
   }, [currentChapter, currentChapterData, folderKey]);
 
-  // 새로고침 완료 후 자동 이벤트 설정 제거 - 사용자가 직접 선택하도록 함
-
-  // === [수정] 현재 이벤트에 해당하는 그래프만 생성 (utils 함수 활용) ===
   const currentEventElements = useMemo(() => {
-    // 로딩 중이거나 새로고침 중일 때는 빈 배열 반환
-    if (loading || isReloading) {
-      return [];
-    }
-    
-    // currentEvent가 없을 때는 빈 배열 반환
-    if (!currentEvent) {
-      return [];
-    }
-    
-    // 필수 데이터가 없을 때는 빈 배열 반환
-    if (!events || !events.length || !characterData || !characterData.length) {
+    if (loading || isReloading || !currentEvent || !events?.length || !characterData?.length) {
       return [];
     }
     
@@ -301,7 +169,6 @@ const ViewerPage = ({ darkMode: initialDarkMode }) => {
     const currentChapter = currentEvent.chapter;
     
     try {
-      // utils/graphData.js의 getEventData 함수 활용
       const eventData = getEventData(folderKey, currentChapter, currentEventNum);
       
       if (!eventData) {
@@ -327,22 +194,11 @@ const ViewerPage = ({ darkMode: initialDarkMode }) => {
     }
   }, [currentEvent, characterData, folderKey, events]);
 
-  // 검색 기능 (useGraphSearch 훅 사용) - currentEventElements 정의 후에 호출
   const {
-    searchTerm,
-    isSearchActive,
-    filteredElements,
-    fitNodeIds,
-    isResetFromSearch,
-    suggestions,
-    showSuggestions,
-    selectedIndex,
-    selectSuggestion,
-    handleKeyDown,
-    closeSuggestions,
-    handleSearchSubmit,
-    clearSearch,
-    setSearchTerm,
+    searchTerm, isSearchActive, filteredElements, fitNodeIds,
+    isResetFromSearch, suggestions, showSuggestions, selectedIndex,
+    selectSuggestion, handleKeyDown, closeSuggestions,
+    handleSearchSubmit, clearSearch, setSearchTerm,
   } = useGraphSearch(currentEventElements, null, currentChapterData);
 
   // === [최적화] elements 설정 로직 - 불필요한 재렌더링 방지 ===
@@ -581,7 +437,6 @@ const ViewerPage = ({ darkMode: initialDarkMode }) => {
       <ViewerLayout
         showControls={showToolbar}
         book={book}
-        darkMode={darkMode}
         progress={progress}
         setProgress={setProgress}
         onPrev={handlePrevPage}

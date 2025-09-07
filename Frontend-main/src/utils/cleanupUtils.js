@@ -1,28 +1,13 @@
-// 리소스 정리 유틸리티
-
-// 정리 함수들 import
 import { clearStyleCache, cleanupRelationStyleResources } from './relationStyles';
 import { clearRelationCache, cleanupRelationResources } from './relationUtils';
 import { clearRegexCache, cleanupSearchResources } from './searchUtils';
 import { clearAllCaches, clearCache, cleanupUnusedCaches, getCacheStats as getCacheStatsFromManager } from './cacheManager';
 
-/**
- * 모든 유틸리티 캐시 및 리소스 정리 (성능 최적화)
- * @param {Object} cy - Cytoscape 인스턴스 (선택사항)
- * @returns {void}
- */
 export function cleanupAllUtils(cy = null) {
-  // 통합 캐시 관리 시스템으로 모든 캐시 정리
   clearAllCaches();
-  
-  // 검색 관련 리소스 정리 (Cytoscape 효과 포함)
   cleanupSearchResources(cy);
 }
 
-/**
- * 관계 관련 리소스만 정리
- * @returns {void}
- */
 export function cleanupRelationUtils() {
   clearCache('relationCache');
   clearCache('styleCache');

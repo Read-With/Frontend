@@ -1,16 +1,12 @@
 import { useState } from 'react';
 
-// 파일 검증 상수들
 export const FILE_CONSTRAINTS = {
-  MAX_SIZE: 50 * 1024 * 1024, // 50MB
+  MAX_SIZE: 50 * 1024 * 1024,
   ALLOWED_TYPES: ['application/epub+zip', 'application/epub'],
   ALLOWED_EXTENSIONS: ['.epub'],
   ACCEPT_ATTRIBUTE: '.epub,application/epub+zip'
 };
 
-/**
- * 파일 업로드를 관리하는 커스텀 훅
- */
 export const useFileUpload = () => {
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);

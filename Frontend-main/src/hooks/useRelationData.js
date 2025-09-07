@@ -10,13 +10,6 @@ import {
 
 const MIN_POSITIVITY = 1;
 
-/**
- * 관계 데이터에서 특정 노드 쌍의 관계를 찾는 함수
- * @param {Array} relations - 관계 데이터 배열
- * @param {number} id1 - 첫 번째 노드 ID
- * @param {number} id2 - 두 번째 노드 ID
- * @returns {Object|null} 관계 객체 또는 null
- */
 function findRelation(relations, id1, id2) {
   if (!Array.isArray(relations) || relations.length === 0) return null;
   

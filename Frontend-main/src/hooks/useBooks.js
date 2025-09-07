@@ -1,9 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useLocalStorage } from './useLocalStorage';
 
-/**
- * 책 데이터를 관리하는 커스텀 훅
- */
 export const useBooks = () => {
   const [books, setBooks] = useState([]);
   const [loading, setLoading] = useState(true);

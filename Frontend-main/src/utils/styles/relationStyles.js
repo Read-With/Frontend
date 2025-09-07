@@ -1,28 +1,61 @@
-// [관계 그래프에서 긍정도에 따른 색상/라벨 변환과 툴팁 UI 스타일링]
 import { getRelationColor } from './graphStyles';
 const styleCache = new Map();
 
-/**
- * 긍정도에 따른 스타일 계산 (내부 함수)
- * @param {number} positivity - 긍정도 값 (-1 ~ 1)
- * @returns {Object} 스타일 객체 { color, text }
- */
+// 데이터 기반 동적 분류를 위한 통계 정보 (실제 데이터 분석 결과)
+const POSITIVITY_STATS = {
+  mean: 0.148,
+  std: 0.451,
+  percentiles: {
+    p10: -0.3,
+    p25: -0.2,
+    p50: 0.27,
+    p75: 0.5,
+    p90: 0.59
+  }
+};
+
+function calculateDynamicThresholds() {
+  const { mean, std, percentiles } = POSITIVITY_STATS;
+  
+  // Z-score 기반 임계값 (표준편차의 배수)
+  const zThresholds = {
+    veryPositive: mean + 1.5 * std,  // Z > 1.5
+    positive: mean + 0.5 * std,      // Z > 0.5
+    neutral: mean - 0.5 * std,       // Z > -0.5
+    negative: mean - 1.5 * std       // Z > -1.5
+  };
+  
+  // 백분위수 기반 임계값
+  const percentileThresholds = {
+    veryPositive: percentiles.p90,   // 상위 10%
+    positive: percentiles.p75,       // 상위 25%
+    neutral: percentiles.p25,        // 하위 25%
+    negative: percentiles.p10        // 하위 10%
+  };
+  
+  // 두 방법을 결합 (가중 평균)
+  return {
+    veryPositive: (zThresholds.veryPositive + percentileThresholds.veryPositive) / 2,
+    positive: (zThresholds.positive + percentileThresholds.positive) / 2,
+    neutral: (zThresholds.neutral + percentileThresholds.neutral) / 2,
+    negative: (zThresholds.negative + percentileThresholds.negative) / 2
+  };
+}
+
 function calculateStyle(positivity) {
-  // 입력 가드 및 범위 클램프
   const value = typeof positivity === 'number' && !Number.isNaN(positivity)
     ? Math.max(-1, Math.min(1, positivity))
     : 0;
   
-  // 색상: graphStyles.js의 통합된 함수 사용
   const color = getRelationColor(value);
+  const thresholds = calculateDynamicThresholds();
   
-  // 텍스트 분류는 기존 방식 유지
-  if (value > 0.6) return { color, text: "긍정적" };
-  if (value > 0.3) return { color, text: "우호적" };
-  if (value > -0.3) return { color, text: "중립적" };
-  if (value > -0.6) return { color, text: "비우호적" };
-  return { color, text: "부정적" };
-} //수정 요함 : 이산적임
+  if (value >= thresholds.veryPositive) return { color, text: "매우 긍정적" };
+  if (value >= thresholds.positive) return { color, text: "긍정적" };
+  if (value >= thresholds.neutral) return { color, text: "중립적" };
+  if (value >= thresholds.negative) return { color, text: "부정적" };
+  return { color, text: "매우 부정적" };
+}
 
 export function getRelationStyle(positivity) {
   // 소수점 2자리로 반올림하여 캐시 키 생성

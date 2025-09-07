@@ -1,12 +1,9 @@
-// 그래프 데이터 처리 통합 유틸리티
 import { getCharactersData, createCharacterMaps } from './graphData';
 import { normalizeRelation, isValidRelation } from './relationUtils';
 
-// 공통 헬퍼 함수들
 const validateElements = (elements) => elements?.filter(e => e && (e.id || e.data?.id)) || [];
 const createElementMap = (elements) => new Map(elements.map(e => [e.id || e.data?.id, e]));
 
-// 최적화된 깊은 비교 함수 (성능 개선)
 function deepEqual(obj1, obj2) {
   if (obj1 === obj2) return true;
   if (obj1 == null || obj2 == null) return false;

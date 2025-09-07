@@ -1,4 +1,3 @@
-// 색상 상수 정의
 const COLORS = {
   primary: '#6C8EFF',
   primaryLight: '#EEF2FF',
@@ -14,7 +13,6 @@ const COLORS = {
   warning: '#f59e0b',
 };
 
-// 반응형 브레이크포인트
 const BREAKPOINTS = {
   mobile: '480px',
   tablet: '768px',
@@ -22,7 +20,6 @@ const BREAKPOINTS = {
   wide: '1200px',
 };
 
-// 공통 포커스 스타일
 const createFocusStyle = () => ({
   '&:focus': {
     outline: `2px solid ${COLORS.primary}`,

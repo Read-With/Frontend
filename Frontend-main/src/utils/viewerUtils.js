@@ -1,18 +1,14 @@
-// 뷰어 유틸리티
 import { getFolderKeyFromFilename, safeId } from './graphData';
 
-// 기본 설정 값
 export const defaultSettings = {
   fontSize: 100,
   pageMode: "double",
-  theme: "light",
   lineHeight: 1.5,
   margin: 20,
   fontFamily: "default",
   showGraph: true,
 };
 
-// 설정 불러오기
 export function loadSettings() {
   try {
     const settings = localStorage.getItem("epub_viewer_settings");
@@ -36,16 +32,10 @@ export function loadSettings() {
   }
 }
 
-/**
- * CFI를 챕터 상세 정보로 파싱
- * @param {string} cfi - CFI 문자열
- * @returns {string} 파싱된 챕터 정보
- */
 export function parseCfiToChapterDetail(cfi) {
   const chapterMatch = cfi.match(/\[chapter-(\d+)\]/);
   const chapter = chapterMatch ? `${chapterMatch[1]}장` : null;
 
-  // [chapter-x]/숫+ 추출
   const pageMatch = cfi.match(/\[chapter-\d+\]\/(\d+)/);
   const page = pageMatch ? pageMatch[1] : null;
 
@@ -279,26 +269,18 @@ export const settingsUtils = {
    * @param {Object} newSettings - 새로운 설정
    * @param {Object} prevSettings - 이전 설정
    * @param {Function} setSettings - 설정 설정 함수
-   * @param {Function} setDarkMode - 다크모드 설정 함수
    * @param {Function} setShowGraph - 그래프 표시 설정 함수
    * @param {Function} setReloadKey - 리로드 키 설정 함수
    * @param {Object} viewerRef - 뷰어 참조
    * @param {string} cleanFilename - 정리된 파일명
    * @returns {Object} 처리 결과
    */
-  applySettings(newSettings, prevSettings, setSettings, setDarkMode, setShowGraph, setReloadKey, viewerRef, cleanFilename) {
+  applySettings(newSettings, prevSettings, setSettings, setShowGraph, setReloadKey, viewerRef, cleanFilename) {
     // 현재 설정 백업
     const currentSettings = { ...prevSettings };
 
     // 새 설정 적용
     setSettings(newSettings);
-
-    // 테마 설정 적용
-    if (newSettings.theme === "dark") {
-      setDarkMode(true);
-    } else {
-      setDarkMode(false);
-    }
 
     // 그래프 표시 설정 적용
     setShowGraph(newSettings.showGraph);

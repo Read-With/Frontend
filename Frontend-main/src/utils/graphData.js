@@ -1,4 +1,3 @@
-// 데이터 파일 자동 인덱싱
 const relationshipModules = import.meta.glob(
   "../data/*/chapter*_relationships_event_*.json",
   { eager: true }
@@ -9,19 +8,16 @@ const charactersModules = import.meta.glob(
   { eager: true }
 );
 
-// 인덱스 맵들
 const relationshipIndex = new Map();
 const chapterMaxEventIndex = new Map();
 const charactersIndex = new Map();
 const folderChapters = new Map();
 
-// 폴더 키 추출
 function extractFolderKey(path) {
   const m = path.match(/^\.\.\/data\/([^/]+)\//);
   return m ? m[1] : "";
 }
 
-// 파일명으로 폴더 키 찾기
 export function getFolderKeyFromFilename(filename) {
   const availableFolders = Array.from(folderChapters.keys());
   
@@ -301,6 +297,17 @@ export function getEventsForChapter(chapter, folderKey = 'gatsby') {
   });
   
   return currentChapterEvents;
+}
+
+/**
+ * 특정 챕터의 이벤트 총 개수 가져오기
+ * @param {number} chapter - 챕터 번호
+ * @param {string} folderKey - 폴더 키 (기본값: 'gatsby')
+ * @returns {number} 해당 챕터의 이벤트 총 개수
+ */
+export function getChapterEventCount(chapter, folderKey = 'gatsby') {
+  const events = getEventsForChapter(chapter, folderKey);
+  return events.length;
 }
 
 /**

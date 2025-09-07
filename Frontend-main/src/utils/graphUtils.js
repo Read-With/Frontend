@@ -1,12 +1,5 @@
-// 그래프 관련 공통 유틸리티 함수들
-
-// 상수 정의
 const GRAPH_CONTAINER_SELECTOR = '.graph-canvas-area';
 
-/**
- * 그래프 컨테이너 정보를 가져오는 함수
- * @returns {Object} container와 containerRect 정보
- */
 export const getContainerInfo = () => {
   try {
     const container = document.querySelector(GRAPH_CONTAINER_SELECTOR);

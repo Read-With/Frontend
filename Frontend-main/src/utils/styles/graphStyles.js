@@ -1,4 +1,3 @@
-// [그래프 레이아웃 설정]
 export const DEFAULT_LAYOUT = {
   name: "preset",
   padding: 20,

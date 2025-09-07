@@ -1,5 +1,3 @@
-// 관계 데이터 처리
-
 export function safeNum(value) {
   if (value === undefined || value === null) return NaN;
   if (typeof value === "number") return value;

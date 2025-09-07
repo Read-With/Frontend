@@ -1,32 +1,20 @@
-// [ 통합 검색/필터링 유틸리티 함수들 ]
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { 
   buildSuggestions, 
   filterGraphElements
 } from '../utils/searchUtils.jsx';
 
-/**
- * 통합 그래프 검색 및 제안 관리 훅
- * @param {Array} elements - 그래프 요소들
- * @param {Function} onSearchStateChange - 검색 상태 변경 콜백 (선택사항)
- * @param {Object} currentChapterData - 현재 챕터의 캐릭터 데이터 (선택사항)
- * @returns {Object} 검색 관련 상태와 함수들
- */
-
 export function useGraphSearch(elements, onSearchStateChange = null, currentChapterData = null) {
-  // 검색 상태
   const [searchTerm, setSearchTerm] = useState("");
   const [filteredElements, setFilteredElements] = useState([]);
   const [fitNodeIds, setFitNodeIds] = useState([]);
   const [isSearchActive, setIsSearchActive] = useState(false);
   const [isResetFromSearch, setIsResetFromSearch] = useState(false);
 
-  // 검색 제안 상태
   const [suggestions, setSuggestions] = useState([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(-1);
 
-  // onSearchStateChange 콜백을 useRef로 안정화
   const onSearchStateChangeRef = useRef(onSearchStateChange);
   useEffect(() => {
     onSearchStateChangeRef.current = onSearchStateChange;

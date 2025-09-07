@@ -9,23 +9,17 @@ import React, {
 } from 'react';
 import ePub from 'epubjs';
 
-// 이벤트 데이터 모듈 로드
 const eventRelationModules = import.meta.glob('../../../data/gatsby/chapter*_events.json', { eager: true });
-
-// 챕터별 이벤트 데이터 캐시
 const eventsCache = new Map();
 
-// 챕터별 이벤트 데이터 가져오기 (메모이제이션 적용)
 const getEventsForChapter = (chapter) => {
   const chapterNum = String(chapter);
   
-  // 캐시된 데이터가 있으면 반환
   if (eventsCache.has(chapterNum)) {
     return eventsCache.get(chapterNum);
   }
 
   try {
-    // 이벤트 파일 찾기
     const textFilePath = Object.keys(eventRelationModules).find(path => 
       path.includes(`chapter${chapterNum}_events.json`)
     );
@@ -37,7 +31,6 @@ const getEventsForChapter = (chapter) => {
 
     const textArray = eventRelationModules[textFilePath]?.default || [];
 
-    // 이벤트 메타데이터 추가
     const eventsWithMeta = textArray.map(event => ({
       ...event,
       event_id: event.event_id ?? 0,
@@ -45,28 +38,22 @@ const getEventsForChapter = (chapter) => {
       chapter: Number(chapter)
     }));
 
-    // 현재 챕터 이벤트만 필터링
     const currentChapterEvents = eventsWithMeta.filter(event => 
       event.chapter === Number(chapter)
     );
 
-    // 캐시에 저장
     eventsCache.set(chapterNum, currentChapterEvents);
     return currentChapterEvents;
   } catch (error) {
-
     eventsCache.set(chapterNum, []);
     return [];
   }
 };
 
-// 텍스트 처리 유틸리티 함수들
 const textUtils = {
-  // 글자 수 카운트 (불필요한 요소 제외)
   countCharacters: (text, element) => {
     if (!text) return 0;
     
-    // 불필요한 요소 제외
     if (element) {
       const excludedClasses = ['.pg-boilerplate', '.pgheader', '.toc', '.dedication', '.epigraph'];
       if (excludedClasses.some(cls => element.closest(cls))) {
@@ -74,14 +61,12 @@ const textUtils = {
       }
     }
 
-    // 영문자만 카운트
     return text
       .replace(/[\s\n\r\t]/g, '')
       .replace(/[^a-zA-Z]/g, '')
       .length;
   },
 
-  // 단어 수 카운트
   countWords: (text) => {
     if (!text) return 0;
     return text
@@ -313,30 +298,6 @@ const EpubViewer = forwardRef(
       });
       }
       
-      // 테마 적용 (설정이 있는 경우)
-      if (settings?.theme) {
-      const themeStyles = {
-        light: {
-          backgroundColor: '#ffffff',
-          textColor: '#000000',
-        },
-        dark: {
-          backgroundColor: '#121212',
-          textColor: '#ffffff',
-        },
-        sepia: {
-          backgroundColor: '#f4ecd8',
-          textColor: '#5f4b32',
-        }
-      };
-      
-        const themeStyle = themeStyles[settings.theme] || themeStyles.light;
-      
-      rendition.themes.override('body', {
-        'color': themeStyle.textColor,
-        'background-color': themeStyle.backgroundColor
-      });
-      }
     };
 
          useImperativeHandle(ref, () => ({
@@ -812,8 +773,7 @@ const EpubViewer = forwardRef(
           className="w-full h-full transition-colors duration-300"
           style={{
             minHeight: '400px',
-            backgroundColor: settings?.theme === 'dark' ? '#121212' : 
-                             settings?.theme === 'sepia' ? '#f4ecd8' : 'white',
+            backgroundColor: 'white',
             overflow: 'hidden',
           }}
         />

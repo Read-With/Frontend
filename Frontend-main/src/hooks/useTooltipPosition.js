@@ -1,12 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { getContainerInfo, getViewportInfo, calculateCytoscapePosition, constrainToViewport } from '../utils/graphUtils';
 
-/**
- * 위치 계산 및 툴팁 드래그를 담당하는 통합 커스텀 훅
- * @param {number} initialX - 초기 X 좌표
- * @param {number} initialY - 초기 Y 좌표
- * @returns {object} 위치 상태와 드래그 관련 핸들러들
- */
 export function useTooltipPosition(initialX, initialY) {
   const [position, setPosition] = useState({ x: 200, y: 200 });
   const [showContent, setShowContent] = useState(false);

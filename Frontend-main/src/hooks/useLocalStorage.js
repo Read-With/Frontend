@@ -1,33 +1,19 @@
 import { useState, useEffect, useCallback } from 'react';
 
-// localStorage 키 상수들
 export const STORAGE_KEYS = {
-  // 챕터별 노드 위치
   CHAPTER_NODE_POSITIONS: (chapter) => `chapter_node_positions_${chapter}`,
-  
-  // 이벤트별 레이아웃
   GRAPH_EVENT_LAYOUT: (chapter, eventNum) => `graph_event_layout_chapter_${chapter}_event_${eventNum}`,
-  
-  // 챕터별 부분 레이아웃
   GRAPH_PARTIAL_LAYOUT: (chapter) => `graph_partial_layout_chapter_${chapter}`,
-  
-  // CFI 관련 키들
   LAST_CFI: (filename) => `readwith_${filename}_lastCFI`,
   PREV_CHAPTER: (filename) => `readwith_${filename}_prevChapter`,
   NEXT_PAGE: (filename) => `readwith_${filename}_nextPage`,
   PREV_PAGE: (filename) => `readwith_${filename}_prevPage`,
-  
-  // 책 관련 키들
   TOTAL_LENGTH: (bookId) => `totalLength_${bookId}`,
   CHAPTER_LENGTHS: (bookId) => `chapterLengths_${bookId}`,
   CHAPTER: (filename) => `readwith_${filename}_chapter`,
 };
 
-/**
- * localStorage 키 생성 유틸리티 함수들
- */
 export const createStorageKey = {
-  // 챕터별 노드 위치 키 생성
   chapterNodePositions: (chapter) => STORAGE_KEYS.CHAPTER_NODE_POSITIONS(chapter),
   
   // 이벤트별 레이아웃 키 생성

@@ -1,14 +1,5 @@
-// 캐시 관리 시스템
-
-// 캐시 등록부
 const cacheRegistry = new Map();
 
-/**
- * 캐시 등록
- * @param {string} name - 캐시 이름
- * @param {Map|Object} cache - 캐시 객체
- * @param {Object} options - 캐시 옵션
- */
 export function registerCache(name, cache, options = {}) {
   const cacheInfo = {
     cache,

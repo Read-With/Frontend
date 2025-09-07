@@ -1,6 +1,7 @@
 import React, { useCallback } from 'react';
 import GraphControls from '../graph/GraphControls';
 import EdgeLabelToggle from '../graph/tooltip/EdgeLabelToggle';
+import { getChapterEventCount } from '../../utils/graphData';
 
 const ViewerTopBar = ({
   graphState,
@@ -81,9 +82,16 @@ const ViewerTopBar = ({
         setCurrentProgressWidth(progressWidth);
       } else if (eventToShow && eventToShow.eventNum !== undefined) {
         // events가 없지만 eventNum이 있는 경우 - 챕터 내 이벤트 진행률 추정
-        const estimatedTotalEvents = 20; // 기본 추정값
-        const progressWidth = `${Math.min(((eventToShow.eventNum + 1) / estimatedTotalEvents) * 100, 100)}%`;
-        setCurrentProgressWidth(progressWidth);
+        try {
+          const totalEvents = getChapterEventCount(currentChapter);
+          const progressWidth = `${Math.min(((eventToShow.eventNum + 1) / totalEvents) * 100, 100)}%`;
+          setCurrentProgressWidth(progressWidth);
+        } catch (error) {
+          // 에러 발생 시 기본값 사용
+          const fallbackTotalEvents = 20;
+          const progressWidth = `${Math.min(((eventToShow.eventNum + 1) / fallbackTotalEvents) * 100, 100)}%`;
+          setCurrentProgressWidth(progressWidth);
+        }
       } else {
         setCurrentProgressWidth("0%");
       }
@@ -92,7 +100,7 @@ const ViewerTopBar = ({
       setCurrentEventInfo(null);
       setCurrentProgressWidth("0%");
     }
-  }, [currentEvent, prevValidEvent, events]);
+  }, [currentEvent, prevValidEvent, events, currentChapter]);
   
   // 실시간으로 현재 챕터 감지
   React.useEffect(() => {

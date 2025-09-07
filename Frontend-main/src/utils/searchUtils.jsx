@@ -1,12 +1,8 @@
-// 검색 유틸리티
-
-// 정규식 캐시
 import { registerCache, recordCacheAccess, enforceCacheSizeLimit } from './cacheManager';
 
 const regexCache = new Map();
 registerCache('regexCache', regexCache, { maxSize: 500, ttl: 300000 });
 
-// 텍스트 하이라이트
 function highlightParts(text, query) {
   if (!query || !text) return [text];
   
@@ -24,7 +20,6 @@ function highlightParts(text, query) {
   return String(text).split(regex).filter(Boolean);
 }
 
-// 정규식 이스케이프
 function escapeRegExp(s) {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }

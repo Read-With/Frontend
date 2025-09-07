@@ -10,7 +10,6 @@ const ViewerProgressBar = ({
   showControls,
   progress = 0,
   setProgress,
-  darkMode,
   onSliderChange,
   currentPage = 1,
   totalPages = 1,
@@ -19,7 +18,7 @@ const ViewerProgressBar = ({
     className={`w-full z-20 px-6 py-2 flex justify-between items-center shadow-md transition-opacity duration-300 ${showControls ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
     style={{
       backdropFilter: 'blur(8px)',
-      background: darkMode ? 'rgba(34, 51, 107, 0.92)' : 'rgba(255,255,255,0.92)',
+      background: 'rgba(255,255,255,0.92)',
       borderRadius: 16,
       boxShadow: '0 2px 16px rgba(79,109,222,0.10)',
       margin: '0.5rem 0 0.5rem 1rem',
@@ -27,7 +26,7 @@ const ViewerProgressBar = ({
     }}
   >
     {/* 좌측: 현재 페이지 / 전체 페이지 */}
-    <span style={{ fontWeight: 700, color: darkMode ? '#fff' : '#22336b', fontSize: '1.08rem', minWidth: 70 }}>
+    <span style={{ fontWeight: 700, color: '#22336b', fontSize: '1.08rem', minWidth: 70 }}>
       {currentPage} / {totalPages}
     </span>
 
