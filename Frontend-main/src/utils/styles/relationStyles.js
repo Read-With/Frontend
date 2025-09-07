@@ -1,8 +1,13 @@
 import { getRelationColor } from './graphStyles';
+import { getFolderKeyFromFilename, collectPositivityValues } from '../graphData';
+
 const styleCache = new Map();
 
-// 데이터 기반 동적 분류를 위한 통계 정보 (실제 데이터 분석 결과)
-const POSITIVITY_STATS = {
+// filename별 통계 정보 캐시
+const statsCache = new Map();
+
+// 기본 통계 정보 (fallback용)
+const DEFAULT_STATS = {
   mean: 0.148,
   std: 0.451,
   percentiles: {
@@ -14,8 +19,81 @@ const POSITIVITY_STATS = {
   }
 };
 
-function calculateDynamicThresholds() {
-  const { mean, std, percentiles } = POSITIVITY_STATS;
+
+/**
+ * 숫자 배열에서 통계 정보 계산
+ * @param {number[]} values - 숫자 배열
+ * @returns {Object} 통계 정보
+ */
+function calculateStats(values) {
+  if (!values || values.length === 0) {
+    return DEFAULT_STATS;
+  }
+  
+  const sortedValues = [...values].sort((a, b) => a - b);
+  const count = sortedValues.length;
+  
+  // 평균 계산
+  const mean = values.reduce((sum, val) => sum + val, 0) / count;
+  
+  // 표준편차 계산
+  const variance = values.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) / count;
+  const std = Math.sqrt(variance);
+  
+  // 백분위수 계산
+  const percentiles = {
+    p10: sortedValues[Math.floor(count * 0.1)],
+    p25: sortedValues[Math.floor(count * 0.25)],
+    p50: sortedValues[Math.floor(count * 0.5)],
+    p75: sortedValues[Math.floor(count * 0.75)],
+    p90: sortedValues[Math.floor(count * 0.9)]
+  };
+  
+  return { mean, std, percentiles };
+}
+
+/**
+ * 특정 책의 통계 정보를 가져오거나 계산
+ * @param {string} filename - 파일명
+ * @returns {Object} 통계 정보
+ */
+export function getPositivityStats(filename) {
+  const folderKey = getFolderKeyFromFilename(filename);
+  
+  // 캐시에서 확인
+  if (statsCache.has(folderKey)) {
+    return statsCache.get(folderKey);
+  }
+  
+  // 데이터 수집 및 통계 계산 (동기 버전)
+  const positivityValues = collectPositivityValues(folderKey);
+  const stats = calculateStats(positivityValues);
+  
+  // 캐시에 저장
+  statsCache.set(folderKey, stats);
+  
+  console.log(`Calculated stats for ${folderKey}:`, {
+    count: positivityValues.length,
+    mean: stats.mean.toFixed(3),
+    std: stats.std.toFixed(3),
+    percentiles: Object.fromEntries(
+      Object.entries(stats.percentiles).map(([k, v]) => [k, v.toFixed(3)])
+    )
+  });
+  
+  return stats;
+}
+
+// filename별 임계값 캐시
+const thresholdsCache = new Map();
+
+/**
+ * 특정 책의 통계 정보를 기반으로 동적 임계값 계산
+ * @param {Object} stats - 통계 정보
+ * @returns {Object} 임계값 객체
+ */
+function calculateDynamicThresholds(stats) {
+  const { mean, std, percentiles } = stats;
   
   // Z-score 기반 임계값 (표준편차의 배수)
   const zThresholds = {
@@ -42,13 +120,22 @@ function calculateDynamicThresholds() {
   };
 }
 
-function calculateStyle(positivity) {
+/**
+ * filename과 positivity 값을 기반으로 관계 스타일 계산
+ * @param {number} positivity - 관계의 긍정성 값
+ * @param {string} filename - 파일명
+ * @returns {Object} 스타일 객체
+ */
+function calculateStyle(positivity, filename) {
   const value = typeof positivity === 'number' && !Number.isNaN(positivity)
     ? Math.max(-1, Math.min(1, positivity))
     : 0;
   
   const color = getRelationColor(value);
-  const thresholds = calculateDynamicThresholds();
+  
+  // filename 기반 통계 정보 가져오기
+  const stats = getPositivityStats(filename);
+  const thresholds = calculateDynamicThresholds(stats);
   
   if (value >= thresholds.veryPositive) return { color, text: "매우 긍정적" };
   if (value >= thresholds.positive) return { color, text: "긍정적" };
@@ -57,17 +144,43 @@ function calculateStyle(positivity) {
   return { color, text: "매우 부정적" };
 }
 
-export function getRelationStyle(positivity) {
-  // 소수점 2자리로 반올림하여 캐시 키 생성
-  const key = Math.round(positivity * 100) / 100;
+/**
+ * filename과 positivity 값을 기반으로 관계 스타일 가져오기
+ * @param {number} positivity - 관계의 긍정성 값
+ * @param {string} filename - 파일명 (선택사항, 없으면 기본값 사용)
+ * @returns {Object} 스타일 객체
+ */
+export function getRelationStyle(positivity, filename = 'gatsby.epub') {
+  const folderKey = getFolderKeyFromFilename(filename);
+  const key = `${folderKey}_${Math.round(positivity * 100) / 100}`;
   
   if (styleCache.has(key)) {
     return styleCache.get(key);
   }
   
-  const result = calculateStyle(positivity);
+  const result = calculateStyle(positivity, filename);
   styleCache.set(key, result);
   return result;
+}
+
+/**
+ * 동기 버전의 관계 스타일 가져오기 (기본 통계 사용)
+ * @param {number} positivity - 관계의 긍정성 값
+ * @returns {Object} 스타일 객체
+ */
+export function getRelationStyleSync(positivity) {
+  const value = typeof positivity === 'number' && !Number.isNaN(positivity)
+    ? Math.max(-1, Math.min(1, positivity))
+    : 0;
+  
+  const color = getRelationColor(value);
+  const thresholds = calculateDynamicThresholds(DEFAULT_STATS);
+  
+  if (value >= thresholds.veryPositive) return { color, text: "매우 긍정적" };
+  if (value >= thresholds.positive) return { color, text: "긍정적" };
+  if (value >= thresholds.neutral) return { color, text: "중립적" };
+  if (value >= thresholds.negative) return { color, text: "부정적" };
+  return { color, text: "매우 부정적" };
 }
 
 /**
@@ -189,10 +302,26 @@ export const tooltipStyles = {
 
 /**
  * 스타일 캐시 정리 함수
+ * @param {string} filename - 특정 책의 캐시만 정리 (선택사항)
  * @returns {void}
  */
-export function clearStyleCache() {
-  styleCache.clear();
+export function clearStyleCache(filename = null) {
+  if (filename) {
+    const folderKey = getFolderKeyFromFilename(filename);
+    // 특정 책의 캐시만 정리
+    for (const key of styleCache.keys()) {
+      if (key.startsWith(`${folderKey}_`)) {
+        styleCache.delete(key);
+      }
+    }
+    statsCache.delete(folderKey);
+    thresholdsCache.delete(folderKey);
+  } else {
+    // 모든 캐시 정리
+    styleCache.clear();
+    statsCache.clear();
+    thresholdsCache.clear();
+  }
 }
 
 /**
@@ -201,4 +330,23 @@ export function clearStyleCache() {
  */
 export function cleanupRelationStyleResources() {
   clearStyleCache();
+}
+
+/**
+ * 현재 임계값 정보를 반환하는 디버깅 함수
+ * @param {string} filename - 파일명 (선택사항)
+ * @returns {Object} 현재 임계값과 통계 정보
+ */
+export function getClassificationInfo(filename = 'gatsby.epub') {
+  const folderKey = getFolderKeyFromFilename(filename);
+  const stats = getPositivityStats(filename);
+  const thresholds = calculateDynamicThresholds(stats);
+  
+  return {
+    folderKey,
+    stats: { ...stats },
+    thresholds: { ...thresholds },
+    cacheSize: styleCache.size,
+    statsCacheSize: statsCache.size
+  };
 }

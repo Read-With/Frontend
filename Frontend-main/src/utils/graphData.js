@@ -48,6 +48,31 @@ export function getFolderKeyFromFilename(filename) {
   return availableFolders[0];
 }
 
+/**
+ * 특정 책의 모든 관계 데이터에서 positivity 값들을 수집
+ * @param {string} folderKey - 책의 폴더 키
+ * @returns {number[]} positivity 값들의 배열
+ */
+export function collectPositivityValues(folderKey) {
+  const positivityValues = [];
+  
+  // 이미 인덱싱된 관계 데이터에서 positivity 값 수집
+  for (const [path, relJson] of Object.entries(relationshipModules)) {
+    if (!path.includes(`/${folderKey}/`)) continue;
+    
+    const data = relJson?.default || relJson;
+    if (data && data.relations && Array.isArray(data.relations)) {
+      data.relations.forEach(relation => {
+        if (typeof relation.positivity === 'number' && !isNaN(relation.positivity)) {
+          positivityValues.push(relation.positivity);
+        }
+      });
+    }
+  }
+  
+  return positivityValues;
+}
+
 // 관계 파일 인덱싱
 for (const path of Object.keys(relationshipModules)) {
   const match = path.match(/\/chapter(\d+)_relationships_event_(\d+)\.json$/);

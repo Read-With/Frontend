@@ -105,8 +105,8 @@ function UnifiedEdgeTooltip({
     }
   }, [viewMode, id1, id2, chapterNum, eventNum, mode]);
 
-  // positivity 값에 따른 색상과 텍스트 결정
-  const relationStyle = getRelationStyle(data.positivity);
+  // positivity 값에 따른 색상과 텍스트 결정 (filename 기반)
+  const relationStyle = getRelationStyle(data.positivity, filename);
 
   // 관계 라벨 배열 생성
   const relationLabels = getRelationLabels(data.relation, data.label);
