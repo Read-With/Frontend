@@ -376,13 +376,17 @@ export function safeId(id) {
  * @param {Array} characterData - 캐릭터 데이터
  * @param {Array} newAppearances - 새로운 등장 인물
  * @param {Object} importance - 중요도 데이터
+ * @param {number} chapter - 챕터 번호 (누락된 캐릭터 검색용)
+ * @param {string} folderKey - 폴더 키 (누락된 캐릭터 검색용)
  * @returns {Array} 그래프 요소 배열
  */
 export function getElementsFromRelations(
   relations,
   characterData,
   newAppearances,
-  importance
+  importance,
+  chapter = 1,
+  folderKey = 'gatsby'
 ) {
   // 1. relation, importance에 등장하는 id 모두 수집 (newAppearances는 무시)
   const nodeIdSet = new Set();
@@ -457,45 +461,73 @@ export function getElementsFromRelations(
       };
     });
     
-    // characterData에 없는 ID들에 대해 기본 노드 생성
+    // characterData에 없는 ID들에 대해 다른 챕터에서 캐릭터 정보 찾기
     const existingIds = new Set(filteredCharacters.map(char => safeId(char.id)));
     const missingIds = [...nodeIdSet].filter(id => !existingIds.has(id));
     
-    missingIds.forEach(id => {
-      // ID를 기반으로 더 의미있는 이름 생성
-      const characterNames = {
-        '6': 'Myrtle Wilson',
-        '7': 'George Wilson', 
-        '8': 'Catherine',
-        '9': 'Chester McKee',
-        '10': 'Lucille McKee',
-        '11': 'Owl Eyes'
-      };
+    if (missingIds.length > 0) {
+      console.warn(`누락된 캐릭터 ID들 발견: ${missingIds.join(', ')}`);
       
-      const characterDescriptions = {
-        '6': 'Tom Buchanan\'s mistress',
-        '7': 'Myrtle\'s husband, garage owner',
-        '8': 'Myrtle\'s sister',
-        '9': 'Photographer from downstairs',
-        '10': 'Chester McKee\'s wife',
-        '11': 'Drunk man in Gatsby\'s library'
-      };
+      // 다른 챕터에서 누락된 캐릭터 정보 찾기
+      const foundMissingCharacters = [];
       
-      const name = characterNames[id] || `Character ${id}`;
-      const description = characterDescriptions[id] || "Character not found in character data";
+      // 현재 챕터부터 역순으로 검색 (최신 정보 우선)
+      for (let searchChapter = chapter; searchChapter >= 1; searchChapter--) {
+        const searchCharData = getCharactersData(folderKey, searchChapter);
+        if (searchCharData && searchCharData.characters) {
+          const searchCharacterArray = searchCharData.characters;
+          
+          missingIds.forEach(missingId => {
+            const foundChar = searchCharacterArray.find(char => 
+              safeId(char.id) === missingId || 
+              String(char.id) === missingId ||
+              Number(char.id) === Number(missingId)
+            );
+            
+            if (foundChar && !foundMissingCharacters.some(fc => safeId(fc.id) === missingId)) {
+              foundMissingCharacters.push(foundChar);
+              console.log(`캐릭터 ID ${missingId}를 챕터 ${searchChapter}에서 발견: ${foundChar.common_name || foundChar.name}`);
+            }
+          });
+        }
+      }
       
-      nodes.push({
-        data: {
-          id: id,
-          label: name,
-          description: description,
-          main: false,
-          names: [name],
-          portrait_prompt: "",
-          image: `/gatsby/${id}.png`,
-        },
+      // 찾은 캐릭터들을 노드에 추가
+      foundMissingCharacters.forEach(char => {
+        const idStr = safeId(char.id);
+        nodes.push({
+          data: {
+            id: idStr,
+            label: char.common_name || char.name || idStr,
+            description: char.description || "",
+            main: char.main_character !== undefined ? char.main_character : false,
+            names: char.names && char.names.length > 0 ? char.names : [char.common_name || char.name || idStr],
+            portrait_prompt: char.portrait_prompt || "",
+            image: `/${folderKey}/${idStr}.png`,
+          },
+        });
       });
-    });
+      
+      // 여전히 찾지 못한 ID들에 대해 기본 노드 생성
+      const stillMissingIds = missingIds.filter(id => 
+        !foundMissingCharacters.some(fc => safeId(fc.id) === id)
+      );
+      
+      stillMissingIds.forEach(id => {
+        console.warn(`캐릭터 ID ${id}를 어떤 챕터에서도 찾을 수 없습니다. 기본 노드를 생성합니다.`);
+        nodes.push({
+          data: {
+            id: id,
+            label: `Character ${id}`,
+            description: "Character not found in any chapter data",
+            main: false,
+            names: [`Character ${id}`],
+            portrait_prompt: "",
+            image: `/${folderKey}/${id}.png`,
+          },
+        });
+      });
+    }
   }
 
   // 3. 엣지 생성 (safeId 적용)
@@ -503,7 +535,26 @@ export function getElementsFromRelations(
     .filter((rel) => {
       const source = safeId(rel.id1 || rel.source);
       const target = safeId(rel.id2 || rel.target);
-      return nodeIdSet.has(source) && nodeIdSet.has(target);
+      
+      // 1. id1 == id2 인 경우 제외
+      if (source === target) {
+        console.warn(`자기 자신과의 관계는 제외됩니다: ${source}`);
+        return false;
+      }
+      
+      // 2. 노드가 0.0 인 경우 제외
+      if (source === '0' || target === '0') {
+        console.warn(`ID가 0인 노드와의 관계는 제외됩니다: ${source} -> ${target}`);
+        return false;
+      }
+      
+      // 3. 해당 event에 없는 노드가 포함된 경우 제외
+      if (!nodeIdSet.has(source) || !nodeIdSet.has(target)) {
+        console.warn(`이벤트에 존재하지 않는 노드와의 관계는 제외됩니다: ${source} -> ${target}`);
+        return false;
+      }
+      
+      return true;
     })
     .map((rel, idx) => {
       // 간선 라벨 로직: 1개인 경우 최초 관계, 여러개인 경우 최근 관계

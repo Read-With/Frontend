@@ -199,7 +199,9 @@ const ViewerPage = () => {
         currentRelations,
         characterData,
         currentNewAppearances,
-        currentImportance
+        currentImportance,
+        currentChapter,
+        folderKey
       );
       
       // 디버깅: 생성된 요소들 로그
@@ -413,7 +415,9 @@ const ViewerPage = () => {
         allRelations,
         charactersData,
         allNewAppearances,
-        allImportance
+        allImportance,
+        chapterNum,
+        folderKey
       );
       if (!elements || elements.length === 0) {
         return;

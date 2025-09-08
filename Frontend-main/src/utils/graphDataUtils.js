@@ -201,31 +201,48 @@ export function convertRelationsToElements(relations, idToName, idToDesc, idToMa
     if (rel.id1 && rel.id2) {
       const id1 = String(rel.id1);
       const id2 = String(rel.id2);
-      if (id1 !== id2) {
-        let relationArray = [];
-        let relationLabel = "";
-        
-        if (Array.isArray(rel.relation)) {
-          relationArray = rel.relation;
-          relationLabel = rel.relation[0] || "";
-        } else if (typeof rel.relation === "string") {
-          relationArray = [rel.relation];
-          relationLabel = rel.relation;
-        }
-        
-        edges.push({
-          data: {
-            id: `${id1}-${id2}`,
-            source: id1,
-            target: id2,
-            relation: relationArray,
-            label: relationLabel || "",
-            weight: rel.weight || 1,
-            positivity: rel.positivity,
-            count: rel.count
-          }
-        });
+      
+      // 1. id1 == id2 인 경우 제외
+      if (id1 === id2) {
+        console.warn(`자기 자신과의 관계는 제외됩니다: ${id1}`);
+        return;
       }
+      
+      // 2. 노드가 0.0 인 경우 제외
+      if (id1 === '0' || id2 === '0') {
+        console.warn(`ID가 0인 노드와의 관계는 제외됩니다: ${id1} -> ${id2}`);
+        return;
+      }
+      
+      // 3. 해당 event에 없는 노드가 포함된 경우 제외
+      if (!nodeSet.has(id1) || !nodeSet.has(id2)) {
+        console.warn(`이벤트에 존재하지 않는 노드와의 관계는 제외됩니다: ${id1} -> ${id2}`);
+        return;
+      }
+      
+      let relationArray = [];
+      let relationLabel = "";
+      
+      if (Array.isArray(rel.relation)) {
+        relationArray = rel.relation;
+        relationLabel = rel.relation[0] || "";
+      } else if (typeof rel.relation === "string") {
+        relationArray = [rel.relation];
+        relationLabel = rel.relation;
+      }
+      
+      edges.push({
+        data: {
+          id: `${id1}-${id2}`,
+          source: id1,
+          target: id2,
+          relation: relationArray,
+          label: relationLabel || "",
+          weight: rel.weight || 1,
+          positivity: rel.positivity,
+          count: rel.count
+        }
+      });
     }
   });
   
