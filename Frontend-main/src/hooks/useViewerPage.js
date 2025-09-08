@@ -10,6 +10,7 @@ import {
   loadViewerMode,
   getCurrentChapterFromViewer,
   findClosestEvent,
+  calculateChapterProgress,
   bookmarkUtils,
   settingsUtils
 } from '../utils/viewerUtils';
@@ -255,11 +256,16 @@ export function useViewerPage() {
     updateCurrentChapter();
   }, [currentPage]);
   
-  // currentChapter가 바뀔 때 이전 챕터와 다른 경우에만 초기화
-  // 단, 즉시 초기화하지 않고 EpubViewer에서 새 이벤트가 올 때까지 대기
+  // currentChapter가 바뀔 때 즉시 상태 초기화
   useEffect(() => {
-    // 챕터 변경을 감지했지만 즉시 초기화하지 않음
-    // EpubViewer의 relocated 이벤트에서 새로운 이벤트를 설정할 때까지 대기
+    // 챕터 변경 시 즉시 currentEvent 초기화하여 로딩 상태 방지
+    setCurrentEvent(null);
+    setPrevEvent(null);
+    setEvents([]);
+    setCharacterData(null);
+    setElements([]);
+    setIsDataReady(false);
+    setIsGraphLoading(true);
   }, [currentChapter]);
   
   // currentEvent가 null이 아닐 때만 이전 값 갱신
@@ -487,7 +493,7 @@ export function useViewerPage() {
     // Implementation of handleFitView
   }, []);
   
-  // EpubViewer에서 페이지/스크롤 이동 시 CFI 받아와서 글자 인덱스 갱신
+  // EpubViewer에서 페이지/스크롤 이동 시 CFI 받아와서 글자 인덱스 갱신 (개선된 버전)
   const handleLocationChange = useCallback(async () => {
     if (viewerRef.current && viewerRef.current.getCurrentCfi) {
       try {
@@ -500,16 +506,25 @@ export function useViewerPage() {
         // 챕터 번호 업데이트
         setCurrentChapter(chapterNum);
 
-        // 현재 위치에 해당하는 이벤트 찾기
+        // 현재 위치에 해당하는 이벤트 찾기 (개선된 버전)
         const currentEvents = events; // getEventsForChapter(chapterNum) 대신 현재 events 사용
         if (currentEvents && currentEvents.length > 0) {
-          const closestEvent = findClosestEvent(cfi, chapterNum, currentEvents);
+          // calculateChapterProgress 함수를 사용하여 정확한 위치 계산
+          const progressInfo = calculateChapterProgress(cfi, chapterNum, currentEvents);
+          
+          // findClosestEvent에 계산된 글자수 전달
+          const closestEvent = findClosestEvent(cfi, chapterNum, currentEvents, progressInfo.currentChars);
           if (closestEvent) {
+            // 추가 정보 포함
+            closestEvent.chapterProgress = progressInfo.progress;
+            closestEvent.currentChars = progressInfo.currentChars;
+            closestEvent.totalChars = progressInfo.totalChars;
+            closestEvent.eventIndex = progressInfo.eventIndex;
             setCurrentEvent(closestEvent);
           }
         }
       } catch (e) {
-        // 위치 계산 오류 처리
+        console.error('위치 계산 오류:', e);
       }
     }
   }, [currentChapter, events]);

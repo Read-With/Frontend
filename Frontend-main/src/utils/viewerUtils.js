@@ -169,36 +169,114 @@ export async function getCurrentChapterFromViewer(viewerRef) {
 }
 
 /**
- * 현재 위치에 해당하는 이벤트 찾기
+ * CFI에서 챕터 내 글자 위치 계산
  * @param {string} cfi - CFI 문자열
  * @param {number} chapterNum - 챕터 번호
  * @param {Array} events - 이벤트 배열
+ * @returns {Object} 위치 정보 { currentChars, totalChars, progress, eventIndex }
+ */
+export function calculateChapterProgress(cfi, chapterNum, events) {
+  if (!events || !events.length) {
+    return { currentChars: 0, totalChars: 0, progress: 0, eventIndex: -1 };
+  }
+
+  // CFI에서 단락 번호와 문자 오프셋 추출
+  const paragraphMatch = cfi.match(/\[chapter-\d+\]\/(\d+)\/1:(\d+)\)$/);
+  const paragraphNum = paragraphMatch ? parseInt(paragraphMatch[1]) : 1;
+  const charOffset = paragraphMatch ? parseInt(paragraphMatch[2]) : 0;
+
+  // 챕터 총 글자수 (마지막 이벤트의 end 값)
+  const totalChars = events[events.length - 1]?.end || 0;
+
+  // 현재까지 읽은 글자수 계산 (단락 기반 추정)
+  // 실제로는 updatePageCharCount() 함수에서 더 정확하게 계산됨
+  let currentChars = 0;
+  
+  // 단락별 평균 글자수로 추정 (정확하지 않으므로 실제 구현에서는 다른 방법 사용)
+  if (totalChars > 0 && paragraphNum > 1) {
+    // 단락당 평균 글자수 추정
+    const avgCharsPerParagraph = totalChars / 50; // 대략적인 단락 수
+    currentChars = Math.min((paragraphNum - 1) * avgCharsPerParagraph + charOffset, totalChars);
+  } else {
+    currentChars = charOffset;
+  }
+
+  // 챕터 내 진행률 계산
+  const progress = totalChars > 0 ? (currentChars / totalChars) * 100 : 0;
+
+  // 현재 위치에 해당하는 이벤트 인덱스 찾기
+  let eventIndex = -1;
+  for (let i = 0; i < events.length; i++) {
+    const event = events[i];
+    if (currentChars >= event.start && currentChars < event.end) {
+      eventIndex = i;
+      break;
+    }
+  }
+
+  // 마지막 이벤트를 넘어선 경우
+  if (currentChars >= totalChars) {
+    eventIndex = events.length - 1;
+  }
+
+  return {
+    currentChars: Math.round(currentChars),
+    totalChars,
+    progress: Math.round(progress * 100) / 100,
+    eventIndex,
+    paragraphNum,
+    charOffset
+  };
+}
+
+/**
+ * 현재 위치에 해당하는 이벤트 찾기 (개선된 버전)
+ * @param {string} cfi - CFI 문자열
+ * @param {number} chapterNum - 챕터 번호
+ * @param {Array} events - 이벤트 배열
+ * @param {number} currentChars - 현재까지 읽은 글자수 (선택사항)
  * @returns {Object|null} 가장 가까운 이벤트
  */
-export function findClosestEvent(cfi, chapterNum, events) {
+export function findClosestEvent(cfi, chapterNum, events, currentChars = null) {
   if (!events || !events.length) return null;
   
-  const pageMatch = cfi.match(/\[chapter-\d+\]\/(\d+)/);
-  if (!pageMatch) return null;
-  
-  const currentPage = parseInt(pageMatch[1]);
-  
-  // 페이지 번호에 가장 가까운 이벤트 찾기
-  let closestEvent = null;
-  let minDistance = Infinity;
-  
-  events.forEach(event => {
-    // 이벤트의 페이지 정보가 있다면 사용, 없다면 이벤트 번호로 추정
-    const eventPage = event.page || (event.eventNum + 1);
-    const distance = Math.abs(currentPage - eventPage);
-    
-    if (distance < minDistance) {
-      minDistance = distance;
-      closestEvent = event;
+  // currentChars가 제공되지 않은 경우 계산
+  if (currentChars === null) {
+    const progressInfo = calculateChapterProgress(cfi, chapterNum, events);
+    currentChars = progressInfo.currentChars;
+  }
+
+  // 글자수 기반으로 정확한 이벤트 찾기
+  for (let i = events.length - 1; i >= 0; i--) {
+    const event = events[i];
+    if (currentChars >= event.start && currentChars < event.end) {
+      return {
+        ...event,
+        eventNum: event.event_id ?? 0,
+        chapter: chapterNum,
+        progress: ((currentChars - event.start) / (event.end - event.start)) * 100
+      };
     }
-  });
-  
-  return closestEvent;
+  }
+
+  // 첫 이벤트보다 앞선 경우
+  if (currentChars < events[0].start) {
+    return {
+      ...events[0],
+      eventNum: events[0].event_id ?? 0,
+      chapter: chapterNum,
+      progress: 0
+    };
+  }
+
+  // 마지막 이벤트를 넘어선 경우
+  const lastEvent = events[events.length - 1];
+  return {
+    ...lastEvent,
+    eventNum: lastEvent.event_id ?? 0,
+    chapter: chapterNum,
+    progress: 100
+  };
 }
 
 /**

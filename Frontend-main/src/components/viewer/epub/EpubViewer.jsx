@@ -167,7 +167,7 @@ const EpubViewer = forwardRef(
       }
     };
 
-    // 페이지 이동 시 글자 수 계산 및 표시 함수
+    // 페이지 이동 시 글자 수 계산 및 표시 함수 (개선된 버전)
     const updatePageCharCount = (direction = 'next') => {
       const rendition = renditionRef.current;
       if (!rendition) return;
@@ -176,29 +176,38 @@ const EpubViewer = forwardRef(
       const currentCfi = rendition.currentLocation()?.start?.cfi;
       if (!currentCfi) return;
 
-      // CFI에서 현재 단락 번호 추출
-      const paragraphMatch = currentCfi.match(/\[chapter-\d+\]\/(\d+)/);
+      // CFI에서 현재 단락 번호와 문자 오프셋 추출
+      const paragraphMatch = currentCfi.match(/\[chapter-\d+\]\/(\d+)\/1:(\d+)\)$/);
       const currentParagraphNum = paragraphMatch ? parseInt(paragraphMatch[1]) : 0;
+      const charOffset = paragraphMatch ? parseInt(paragraphMatch[2]) : 0;
 
       // 현재 페이지의 내용만 가져오기
       const contents = rendition.getContents();
       if (!contents || contents.length === 0) return;
 
-      // 현재 페이지의 글자 수만 계산
+      // 현재 페이지의 글자 수 계산
       let charCount = 0;
       const currentPage = contents[0];
       const paragraphs = currentPage.document.querySelectorAll('p');
 
-      // 현재 단락과 이전 단락들의 글자 수만 계산
-      for (let i = 0; i < paragraphs.length; i++) {
+      // 이전 단락들의 전체 글자 수 계산
+      for (let i = 0; i < currentParagraphNum - 1; i++) {
         const paragraph = paragraphs[i];
-        const paragraphText = paragraph.textContent;
-        const paragraphChars = textUtils.countCharacters(paragraphText, paragraph);
-        
-        // 현재 단락까지의 글자 수만 누적
-        if (i <= currentParagraphNum) {
+        if (paragraph) {
+          const paragraphText = paragraph.textContent;
+          const paragraphChars = textUtils.countCharacters(paragraphText, paragraph);
           charCount += paragraphChars;
         }
+      }
+
+      // 현재 단락의 부분 글자 수 계산
+      if (currentParagraphNum > 0 && paragraphs[currentParagraphNum - 1]) {
+        const currentParagraph = paragraphs[currentParagraphNum - 1];
+        const currentParagraphText = currentParagraph.textContent;
+        const currentParagraphChars = textUtils.countCharacters(currentParagraphText, currentParagraph);
+        
+        // 문자 오프셋을 고려한 부분 글자 수
+        charCount += Math.min(charOffset, currentParagraphChars);
       }
 
       // 현재 페이지의 글자 수를 저장
@@ -622,36 +631,71 @@ const EpubViewer = forwardRef(
             updatePageCharCount();
             const currentChars = currentChapterCharsRef.current;
 
-            // 이벤트 데이터 가져오기 및 매칭 (항상 재계산)
+            // 이벤트 데이터 가져오기 및 매칭 (개선된 버전)
             try {
               const events = getEventsForChapter(chapterNum);
               let currentEvent = null;
 
               if (events && events.length > 0) {
+                // 개선된 이벤트 매칭 로직 사용
                 const lastEvent = events[events.length - 1];
                 const firstEvent = events[0];
 
                 if (currentChars >= lastEvent.end) {
-                  currentEvent = { ...lastEvent, eventNum: lastEvent.event_id + 1, chapter: chapterNum };
+                  // 마지막 이벤트를 넘어선 경우
+                  currentEvent = { 
+                    ...lastEvent, 
+                    eventNum: lastEvent.event_id ?? 0, 
+                    chapter: chapterNum,
+                    progress: 100
+                  };
                 } else if (currentChars < firstEvent.start) {
-                  currentEvent = { ...firstEvent, eventNum: firstEvent.event_id + 1, chapter: chapterNum };
+                  // 첫 이벤트보다 앞선 경우
+                  currentEvent = { 
+                    ...firstEvent, 
+                    eventNum: firstEvent.event_id ?? 0, 
+                    chapter: chapterNum,
+                    progress: 0
+                  };
                 } else {
+                  // 정확한 이벤트 찾기
                   for (let i = events.length - 1; i >= 0; i--) {
                     const event = events[i];
                     if (currentChars >= event.start && currentChars < event.end) {
-                      currentEvent = { ...event, eventNum: event.event_id + 1, chapter: chapterNum };
+                      // 이벤트 내 진행률 계산
+                      const eventProgress = ((currentChars - event.start) / (event.end - event.start)) * 100;
+                      currentEvent = { 
+                        ...event, 
+                        eventNum: event.event_id ?? 0, 
+                        chapter: chapterNum,
+                        progress: Math.round(eventProgress * 100) / 100
+                      };
                       break;
                     }
                   }
+                  
                   // 혹시라도 매칭이 안 되면 가장 가까운 이벤트로 fallback
                   if (!currentEvent) {
-                    currentEvent = { ...firstEvent, eventNum: firstEvent.event_id + 1, chapter: chapterNum };
+                    currentEvent = { 
+                      ...firstEvent, 
+                      eventNum: firstEvent.event_id ?? 0, 
+                      chapter: chapterNum,
+                      progress: 0
+                    };
                   }
                 }
+
+                // 챕터 내 진행률 정보 추가
+                const totalChars = lastEvent.end;
+                const chapterProgress = totalChars > 0 ? (currentChars / totalChars) * 100 : 0;
+                currentEvent.chapterProgress = Math.round(chapterProgress * 100) / 100;
+                currentEvent.currentChars = currentChars;
+                currentEvent.totalChars = totalChars;
               }
               
               onCurrentLineChange?.(currentChars, events.length, currentEvent || null);
             } catch (error) {
+              console.error('이벤트 매칭 오류:', error);
               onCurrentLineChange?.(currentChars, 0, null);
             }
           });
