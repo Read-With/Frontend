@@ -196,6 +196,15 @@ export function useViewerPage() {
       saveViewerMode("viewer");
     }
   }, [showGraph, graphFullScreen]);
+
+  // 화면 모드 전환 시에도 pageMode 설정 유지
+  useEffect(() => {
+    // 화면 모드가 변경되어도 epub 뷰어의 pageMode 설정은 유지
+    // EpubViewer에서 spread 모드를 다시 적용하도록 reloadKey 증가
+    if (viewerRef.current && settings?.pageMode) {
+      setReloadKey(prev => prev + 1);
+    }
+  }, [showGraph, graphFullScreen, settings?.pageMode]);
   
   // 실패 횟수에 따른 토스트 메시지
   useEffect(() => {
@@ -441,10 +450,11 @@ export function useViewerPage() {
     const newShowGraph = !showGraph;
     setShowGraph(newShowGraph);
 
-    // 설정에도 그래프 표시 여부 업데이트
+    // 설정에도 그래프 표시 여부 업데이트 (pageMode는 유지)
     const updatedSettings = {
       ...settings,
       showGraph: newShowGraph,
+      // pageMode는 기존 설정 유지
     };
     setSettings(updatedSettings);
 

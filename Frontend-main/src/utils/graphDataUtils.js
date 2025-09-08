@@ -172,16 +172,26 @@ export function convertRelationsToElements(relations, idToName, idToDesc, idToMa
     return result;
   }
 
+  // 캐릭터 정보가 있는 노드만 필터링
+  const validNodeIds = nodeIds.filter(strId => {
+    const hasName = idToName[strId] && idToName[strId] !== strId;
+    if (!hasName) {
+      console.warn(`캐릭터 ID ${strId}의 정보를 찾을 수 없어 제외합니다.`);
+      nodeSet.delete(strId); // nodeSet에서도 제거
+    }
+    return hasName;
+  });
+
   // 원 배치 좌표 계산
   const centerX = 500;
   const centerY = 350;
   const radius = 320;
-  nodeIds.forEach((strId) => {
+  validNodeIds.forEach((strId) => {
     const angle = seededRandom(strId, 0, 360) * Math.PI / 180;
     const r = radius * (0.7 + 0.3 * (seededRandom(strId, 0, 1000) / 1000));
     const x = centerX + r * Math.cos(angle);
     const y = centerY + r * Math.sin(angle);
-    const commonName = idToName[strId] || strId;
+    const commonName = idToName[strId];
     nodes.push({
       data: {
         id: strId,

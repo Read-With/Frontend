@@ -508,25 +508,19 @@ export function getElementsFromRelations(
         });
       });
       
-      // 여전히 찾지 못한 ID들에 대해 기본 노드 생성
+      // 여전히 찾지 못한 ID들에 대해 로그만 출력하고 노드 생성하지 않음
       const stillMissingIds = missingIds.filter(id => 
         !foundMissingCharacters.some(fc => safeId(fc.id) === id)
       );
       
-      stillMissingIds.forEach(id => {
-        console.warn(`캐릭터 ID ${id}를 어떤 챕터에서도 찾을 수 없습니다. 기본 노드를 생성합니다.`);
-        nodes.push({
-          data: {
-            id: id,
-            label: `Character ${id}`,
-            description: "Character not found in any chapter data",
-            main: false,
-            names: [`Character ${id}`],
-            portrait_prompt: "",
-            image: `/${folderKey}/${id}.png`,
-          },
+      if (stillMissingIds.length > 0) {
+        console.warn(`캐릭터 ID들을 어떤 챕터에서도 찾을 수 없어 제외합니다: ${stillMissingIds.join(', ')}`);
+        
+        // nodeIdSet에서 찾지 못한 ID들 제거
+        stillMissingIds.forEach(id => {
+          nodeIdSet.delete(id);
         });
-      });
+      }
     }
   }
 

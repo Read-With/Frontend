@@ -118,8 +118,16 @@ const EpubViewer = forwardRef(
 
     // 스프레드 모드 결정 함수 (메모이제이션)
     const getSpreadMode = useCallback(() => {
-      return pageMode === 'single' ? 'none' : 'always';
-    }, [pageMode]);
+      // 분할 화면 + 그래프 화면 (showGraph=true, graphFullScreen=false)에서는 뷰어 너비가 50%로 제한
+      if (showGraph) {
+        // 분할 화면: 50% 너비에 최적화하여 항상 한 페이지씩 표시
+        // pageMode 설정과 관계없이 'none'으로 설정 (50% 너비에서는 두 페이지 표시가 부적절)
+        return 'none';
+      } else {
+        // 전체 화면: pageMode에 따라 spread 모드 결정
+        return pageMode === 'single' ? 'none' : 'always';
+      }
+    }, [pageMode, showGraph]);
 
     const smoothReload = (type = 'next') => {
       setReloading(type);
@@ -282,7 +290,7 @@ const EpubViewer = forwardRef(
       
       const rendition = renditionRef.current;
       
-      // 스프레드 모드 설정
+      // 스프레드 모드 설정 - 화면 모드 전환 시에도 유지
       rendition.spread(getSpreadMode());
       
       // 글꼴 크기 적용 (설정이 있는 경우)
@@ -299,6 +307,13 @@ const EpubViewer = forwardRef(
       }
       
     };
+
+    // pageMode 또는 showGraph 변경 시 spread 모드 재적용
+    useEffect(() => {
+      if (renditionRef.current) {
+        applySettings();
+      }
+    }, [pageMode, showGraph, settings?.fontSize, settings?.lineHeight]);
 
          useImperativeHandle(ref, () => ({
        prevPage: () => safeNavigate(() => renditionRef.current.prev(), 'prev'),
@@ -513,7 +528,7 @@ const EpubViewer = forwardRef(
             spread: getSpreadMode(),
             manager: 'default',
             flow: 'paginated',
-            maxSpreadPages: pageMode === 'single' ? 1 : 2,
+            maxSpreadPages: (showGraph || pageMode === 'single') ? 1 : 2,
           });
 
           // 페이지 모드에 맞는 CSS 적용

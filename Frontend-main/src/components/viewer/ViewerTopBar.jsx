@@ -227,10 +227,10 @@ const ViewerTopBar = ({
             onClick={() => {
               if (graphFullScreen) {
                 // 그래프 전체화면 -> 분할 화면으로 전환
-                setGraphFullScreen(false);
+                graphActions.setGraphFullScreen(false);
               } else {
                 // 분할 화면 -> 그래프 전체화면으로 전환
-                setGraphFullScreen(true);
+                graphActions.setGraphFullScreen(true);
               }
             }}
             style={{

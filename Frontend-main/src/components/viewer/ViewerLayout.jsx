@@ -25,6 +25,7 @@ const ViewerLayout = ({
   // 그래프 표시 상태가 변경될 때 창 크기 변경 이벤트 발생시키기
   useEffect(() => {
     // 창 크기 변경 이벤트를 발생시켜 EPUB 뷰어가 크기를 재조정하도록 함
+    // pageMode 설정도 함께 고려하여 spread 모드가 유지되도록 함
     const resizeEvent = window.setTimeout(() => {
       window.dispatchEvent(new Event('resize'));
     }, 300);
@@ -32,7 +33,7 @@ const ViewerLayout = ({
     return () => {
       window.clearTimeout(resizeEvent);
     };
-  }, [showGraph, graphFullScreen]);
+  }, [showGraph, graphFullScreen, pageMode]);
 
   return (
     <div className="flex flex-col h-screen overflow-hidden">
