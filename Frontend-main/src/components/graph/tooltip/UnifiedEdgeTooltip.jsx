@@ -111,7 +111,7 @@ function UnifiedEdgeTooltip({
   const relationLabels = processRelationTagsCached(data.relation, data.label);
 
   // 모드별 설정
-  const zIndex = mode === 'viewer' ? 10000 : 9999;
+  const zIndex = mode === 'viewer' ? 9998 : 9998;
   const chartTitle = mode === 'viewer' ? `Chapter ${chapterNum}` : "관계 변화 그래프";
   const safeMaxChapter = mode === 'standalone' && maxChapter && !isNaN(maxChapter) ? maxChapter : 10;
 

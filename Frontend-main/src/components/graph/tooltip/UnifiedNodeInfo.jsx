@@ -205,7 +205,7 @@ function UnifiedNodeInfo({
   }), [processedNodeData]);
 
   // 모드별 z-index 설정
-  const zIndexValue = inViewer ? 10000 : 9999;
+  const zIndexValue = inViewer ? 9998 : 9998;
 
   // 에러가 있는 경우 에러 메시지 표시
   if (error) {

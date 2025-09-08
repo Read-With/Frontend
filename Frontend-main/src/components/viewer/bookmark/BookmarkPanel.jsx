@@ -1,5 +1,4 @@
 import React from 'react';
-import { FaBookmark, FaTrash, FaClock, FaMapMarkerAlt } from 'react-icons/fa';
 
 const BookmarkPanel = ({ bookmarks, onSelect, onDelete, loading = false }) => {
   const formatDate = (dateString) => {
@@ -28,7 +27,7 @@ const BookmarkPanel = ({ bookmarks, onSelect, onDelete, loading = false }) => {
       {/* 헤더 */}
       <div className="p-4 border-b border-gray-100 bg-gradient-to-r from-blue-50 to-indigo-50">
         <div className="flex items-center space-x-2">
-          <FaBookmark className="text-blue-600" />
+          <span className="material-symbols-outlined text-blue-600">bookmark</span>
           <h3 className="font-bold text-gray-800 text-lg">북마크</h3>
           <span className="bg-blue-100 text-blue-600 text-xs px-2 py-1 rounded-full font-medium">
             {bookmarks.length}
@@ -45,7 +44,7 @@ const BookmarkPanel = ({ bookmarks, onSelect, onDelete, loading = false }) => {
           </div>
         ) : bookmarks.length === 0 ? (
           <div className="p-6 text-center text-gray-500">
-            <FaBookmark className="mx-auto mb-3 text-3xl text-gray-300" />
+            <span className="material-symbols-outlined mx-auto mb-3 text-3xl text-gray-300">bookmark</span>
             <p className="text-sm">저장된 북마크가 없습니다</p>
             <p className="text-xs text-gray-400 mt-1">중요한 부분을 북마크해보세요</p>
           </div>
@@ -63,7 +62,7 @@ const BookmarkPanel = ({ bookmarks, onSelect, onDelete, loading = false }) => {
                   <div className="flex items-start justify-between">
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center space-x-2 mb-1">
-                        <FaMapMarkerAlt className="text-blue-500 text-xs mt-0.5 flex-shrink-0" />
+                        <span className="material-symbols-outlined text-blue-500 text-xs mt-0.5 flex-shrink-0">place</span>
                         <p className="text-sm font-medium text-gray-800 truncate">
                           북마크 #{bookmark.id}
                         </p>
@@ -76,7 +75,7 @@ const BookmarkPanel = ({ bookmarks, onSelect, onDelete, loading = false }) => {
                       )}
                       
                       <div className="flex items-center space-x-2 ml-4">
-                        <FaClock className="text-gray-400 text-xs" />
+                        <span className="material-symbols-outlined text-gray-400 text-xs">schedule</span>
                         <span className="text-xs text-gray-500">
                           {formatDate(bookmark.createdAt)}
                         </span>
@@ -92,7 +91,7 @@ const BookmarkPanel = ({ bookmarks, onSelect, onDelete, loading = false }) => {
                         className="opacity-0 group-hover:opacity-100 ml-2 p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-md transition-all duration-200 flex-shrink-0"
                         title="북마크 삭제"
                       >
-                        <FaTrash className="text-xs" />
+                        <span className="material-symbols-outlined text-xs">delete</span>
                       </button>
                     )}
                   </div>

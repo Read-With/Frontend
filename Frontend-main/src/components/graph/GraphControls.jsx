@@ -1,5 +1,4 @@
 import React, { useRef, useEffect, useCallback, useState } from "react";
-import { FaSearch, FaUndo } from "react-icons/fa";
 import { useClickOutside } from "../../hooks/useClickOutside";
 import { graphControlsStyles } from "../../utils/styles/styles.js";
 
@@ -183,12 +182,12 @@ function GraphControls({
         >
           {isSearchActive ? (
             <>
-              <FaUndo size={10} />
+              <span className="material-symbols-outlined" style={{fontSize: '10px'}}>undo</span>
               초기화
             </>
           ) : (
             <>
-              <FaSearch size={10} />
+              <span className="material-symbols-outlined" style={{fontSize: '10px'}}>search</span>
               검색
             </>
           )}
@@ -206,7 +205,7 @@ function GraphControls({
           border: '1px solid #e3e6ef',
           borderRadius: '12px',
           boxShadow: '0 8px 32px rgba(0, 0, 0, 0.12), 0 4px 16px rgba(0, 0, 0, 0.08)',
-          zIndex: 9999,
+          zIndex: 1,
           maxHeight: '320px',
           overflowY: 'auto',
           marginTop: '8px',

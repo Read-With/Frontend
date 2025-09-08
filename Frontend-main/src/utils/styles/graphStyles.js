@@ -266,7 +266,7 @@ export const graphControlsStyles = {
     border: '1px solid #e3e6ef',
     borderRadius: '6px',
     boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)',
-    zIndex: 9999,
+    zIndex: 1,
     maxHeight: '300px',
     overflowY: 'auto',
     marginTop: '4px',
@@ -301,6 +301,6 @@ export const graphControlsStyles = {
     display: 'inline-block',
     width: 'auto',
     minWidth: '200px',
-    zIndex: 99999
+    zIndex: 1
   }
 };

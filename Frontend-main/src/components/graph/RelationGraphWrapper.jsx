@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { FaTimes, FaBars, FaChevronLeft } from 'react-icons/fa';
 
 import CytoscapeGraphUnified from "./CytoscapeGraphUnified";
 import EdgeLabelToggle from "./tooltip/EdgeLabelToggle";
@@ -504,7 +503,7 @@ function RelationGraphWrapper() {
           onMouseEnter={handleMouseEnter}
           onMouseLeave={handleMouseLeave}
         >
-          <FaTimes />
+          <span className="material-symbols-outlined">close</span>
           뷰어로 돌아가기
         </button>
       </div>
@@ -527,7 +526,7 @@ function RelationGraphWrapper() {
             style={sidebarStyles.toggleButton(ANIMATION_VALUES)}
             title={isSidebarOpen ? '사이드바 접기' : '사이드바 펼치기'}
           >
-            {isSidebarOpen ? <FaChevronLeft /> : <FaBars />}
+            {isSidebarOpen ? <span className="material-symbols-outlined">chevron_left</span> : <span className="material-symbols-outlined">menu</span>}
           </button>
           <span style={sidebarStyles.title(isSidebarOpen, ANIMATION_VALUES)}>
             챕터 선택

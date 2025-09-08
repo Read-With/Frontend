@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
-import { FaArrowLeft, FaArrowRight, FaStar, FaBookOpen, FaTimes, FaSitemap, FaCog, FaChartBar, FaColumns, FaExpand, FaBars, FaEllipsisV } from 'react-icons/fa';
 import './ViewerToolbar.css';
 
 const ViewerToolbar = ({ 
@@ -37,15 +36,15 @@ const ViewerToolbar = ({
   // 현재 보기 모드 텍스트 생성
   const getViewModeText = () => {
     if (pageMode === 'single') {
-      return showGraph ? '단일 페이지 + 그래프' : '단일 페이지 (전체)';
+      return showGraph ? '단일 뷰어/그래프 모드' : '단일 뷰어모드';
     } else {
-      return showGraph ? '분할 페이지 + 그래프' : '분할 페이지 (전체)';
+      return showGraph ? '분할 뷰어/그래프 모드' : '분할 뷰어모드';
     }
   };
 
-  // 그래프 토글 버튼 텍스트 생성
+  // 그래프 토글 버튼 텍스트 (고정)
   const getGraphToggleText = () => {
-    return showGraph ? '그래프 숨기기' : '그래프 표시';
+    return '화면 모드';
   };
 
   const handleGraphClick = () => {
@@ -68,31 +67,31 @@ const ViewerToolbar = ({
         <div className="p-4 grid grid-cols-2 gap-3">
           {/* 북마크 그룹 */}
           <button onClick={onAddBookmark} className="flex items-center justify-center gap-2 p-3 bg-purple-50 text-purple-700 rounded-lg hover:bg-purple-100 transition-colors">
-            <FaStar />
-            <span className="text-sm font-medium">북마크 추가</span>
+            <span className="material-symbols-outlined">bookmark_add</span>
+            <span className="text-sm font-medium">북마크</span>
           </button>
           <button onClick={onToggleBookmarkList} className="flex items-center justify-center gap-2 p-3 bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100 transition-colors">
-            <FaBookOpen />
+            <span className="material-symbols-outlined">bookmarks</span>
             <span className="text-sm font-medium">북마크 목록</span>
           </button>
           
           {/* 그래프 관련 */}
           <button onClick={handleGraphClick} className="flex items-center justify-center gap-2 p-3 bg-green-50 text-green-700 rounded-lg hover:bg-green-100 transition-colors">
-            <FaSitemap />
-            <span className="text-sm font-medium">관계도</span>
+            <span className="material-symbols-outlined">account_tree</span>
+            <span className="text-sm font-medium">인물 관계도</span>
           </button>
           <button onClick={onToggleGraph} className="flex items-center justify-center gap-2 p-3 bg-indigo-50 text-indigo-700 rounded-lg hover:bg-indigo-100 transition-colors">
-            {showGraph ? <FaColumns /> : <FaExpand />}
-            <span className="text-sm font-medium">{getGraphToggleText()}</span>
+            {showGraph ? <span className="material-symbols-outlined">view_column</span> : <span className="material-symbols-outlined">open_in_full</span>}
+            <span className="text-sm font-medium">화면 모드</span>
           </button>
           
           {/* 설정 */}
           <button onClick={onOpenSettings} className="flex items-center justify-center gap-2 p-3 bg-gray-50 text-gray-700 rounded-lg hover:bg-gray-100 transition-colors">
-            <FaCog />
+            <span className="material-symbols-outlined">settings</span>
             <span className="text-sm font-medium">설정</span>
           </button>
           <button onClick={() => navigate('/mypage')} className="flex items-center justify-center gap-2 p-3 bg-red-50 text-red-700 rounded-lg hover:bg-red-100 transition-colors">
-            <FaTimes />
+            <span className="material-symbols-outlined">close</span>
             <span className="text-sm font-medium">닫기</span>
           </button>
         </div>
@@ -116,10 +115,10 @@ const ViewerToolbar = ({
           {/* 왼쪽: 네비게이션 버튼들 */}
           <div className="flex items-center gap-2">
             <button onClick={onPrev} className="p-2 rounded-lg bg-gray-50 hover:bg-gray-100 text-gray-700 transition-colors">
-              <FaArrowLeft />
+              <span className="material-symbols-outlined">arrow_back</span>
             </button>
             <button onClick={onNext} className="p-2 rounded-lg bg-gray-50 hover:bg-gray-100 text-gray-700 transition-colors">
-              <FaArrowRight />
+              <span className="material-symbols-outlined">arrow_forward</span>
             </button>
           </div>
           
@@ -133,7 +132,7 @@ const ViewerToolbar = ({
             onClick={() => setShowMobileMenu(!showMobileMenu)}
             className="p-2 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 transition-colors"
           >
-            <FaBars />
+            <span className="material-symbols-outlined">menu</span>
           </button>
         </div>
       ) : (
@@ -141,14 +140,14 @@ const ViewerToolbar = ({
         <div className="viewer-toolbar-group-wrap" style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', width: '100%', justifyContent: 'space-between' }}>
         <div style={{ display: 'flex', alignItems: 'center' }}>
           {/* 이동 그룹 */}
-          <div className="toolbar-group" style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', marginRight: '1.1rem' }}>
+          <div className="toolbar-group" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginRight: '1rem' }}>
             <button
               onClick={onPrev}
               className="epub-toolbar-btn epub-toolbar-btn--gray"
               aria-label="이전 페이지"
             >
               <span style={{display:'flex',alignItems:'center',gap:'0.45em'}}>
-                <FaArrowLeft style={{ marginBottom: '-2px' }} />
+                <span className="material-symbols-outlined" style={{ marginBottom: '-2px' }}>arrow_back</span>
                 이전
               </span>
             </button>
@@ -159,24 +158,24 @@ const ViewerToolbar = ({
             >
               <span style={{display:'flex',alignItems:'center',gap:'0.45em'}}>
                 다음
-                <FaArrowRight style={{ marginBottom: '-2px' }} />
+                <span className="material-symbols-outlined" style={{ marginBottom: '-2px' }}>arrow_forward</span>
               </span>
             </button>
           </div>
           {/* 북마크 그룹 */}
-          <div className="toolbar-group" style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', marginRight: '1.1rem' }}>
+          <div className="toolbar-group" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginRight: '1rem' }}>
                          <button
                onClick={onAddBookmark}
                className="epub-toolbar-btn epub-toolbar-btn--purple"
-               aria-label="북마크 추가"
+               aria-label="북마크"
                style={{
-                 width: 130,
-                 marginRight: '0.35rem',
+                 width: '7rem',
+                 marginRight: '0.5rem',
                }}
              >
               <span style={{display:'flex',alignItems:'center',justifyContent:'center',gap:'0.45em',width:'100%'}}>
-                <FaStar style={{ marginBottom: '-2px' }} />
-                북마크 추가
+                <span className="material-symbols-outlined" style={{ marginBottom: '-2px' }}>bookmark_add</span>
+                북마크
               </span>
             </button>
                          <button
@@ -184,30 +183,30 @@ const ViewerToolbar = ({
                className="epub-toolbar-btn epub-toolbar-btn--gray"
                aria-label="북마크 목록"
                style={{
-                 width: 130,
-                 marginRight: '0.35rem',
+                 width: '8rem',
+                 marginRight: '0.5rem',
                }}
              >
               <span style={{display:'flex',alignItems:'center',justifyContent:'center',gap:'0.45em',width:'100%'}}>
-                <FaBookOpen style={{ marginBottom: '-2px' }} />
+                <span className="material-symbols-outlined" style={{ marginBottom: '-2px' }}>bookmarks</span>
                 북마크 목록
               </span>
             </button>
           </div>
           {/* 그래프 관련 그룹 */}
-          <div className="toolbar-group" style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', marginLeft: '0.5rem' }}>
+          <div className="toolbar-group" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginLeft: '0.5rem' }}>
                          <button
                className="epub-toolbar-btn epub-toolbar-btn--blue"
                onClick={handleGraphClick}
-               aria-label="관계도"
+               aria-label="인물 관계도"
                style={{
-                 width: 110,
-                 marginRight: '0.35rem',
+                 width: '9rem',
+                 marginRight: '0.5rem',
                }}
              >
               <span style={{display:'flex',alignItems:'center',justifyContent:'center',gap:'0.45em',width:'100%'}}>
-                <FaSitemap style={{ marginBottom: '-2px' }} />
-                관계도
+                <span className="material-symbols-outlined" style={{ marginBottom: '-2px' }}>account_tree</span>
+                인물 관계도
               </span>
             </button>
                          <button
@@ -215,17 +214,17 @@ const ViewerToolbar = ({
                onClick={onToggleGraph}
                aria-label="그래프 토글"
                style={{
-                 width: 150,
-                 marginRight: '0.35rem',
+                 width: '9rem',
+                 marginRight: '0.5rem',
                }}
              >
               <span style={{display:'flex',alignItems:'center',justifyContent:'center',gap:'0.45em',width:'100%'}}>
-                {showGraph ? <FaColumns style={{ marginBottom: '-2px' }} /> : <FaExpand style={{ marginBottom: '-2px' }} />}
+                {showGraph ? <span className="material-symbols-outlined" style={{ marginBottom: '-2px' }}>view_column</span> : <span className="material-symbols-outlined" style={{ marginBottom: '-2px' }}>open_in_full</span>}
                 {getGraphToggleText()}
               </span>
             </button>
             <div className="current-view-mode" style={{ 
-              padding: '0.42rem 1.15rem',
+              padding: '0.5rem 1rem',
               marginLeft: '0.5rem',
               borderRadius: '1rem',
               backgroundColor: '#f0f4ff',
@@ -236,7 +235,7 @@ const ViewerToolbar = ({
               alignItems: 'center',
               gap: '0.5em'
             }}>
-              {pageMode === 'single' ? <FaColumns style={{ marginBottom: '-2px' }} /> : <FaColumns style={{ marginBottom: '-2px' }} />}
+              {pageMode === 'single' ? <span className="material-symbols-outlined" style={{ marginBottom: '-2px' }}>view_column</span> : <span className="material-symbols-outlined" style={{ marginBottom: '-2px' }}>view_column</span>}
               {getViewModeText()}
             </div>
           </div>
@@ -244,18 +243,18 @@ const ViewerToolbar = ({
 
         {/* 오른쪽 버튼 그룹 (설정 및 닫기) */}
         <div className="toolbar-group-right" style={{ display: 'flex', alignItems: 'center' }}>
-          <div style={{ marginRight: '75px' }}>
+          <div style={{ marginRight: '4.5rem' }}>
                          <button
                className="epub-toolbar-btn epub-toolbar-btn--gray"
                aria-label="설정"
                onClick={onOpenSettings}
                style={{
-                 width: 76,
-                 marginRight: '0.25rem',
+                 width: '4.5rem',
+                 marginRight: '0.5rem',
                }}
              >
               <span style={{display:'flex',alignItems:'center',gap:'0.45em'}}>
-                <FaCog style={{ marginBottom: '-2px' }} />
+                <span className="material-symbols-outlined" style={{ marginBottom: '-2px' }}>settings</span>
                 설정
               </span>
             </button>
@@ -266,11 +265,11 @@ const ViewerToolbar = ({
                className="epub-toolbar-btn epub-close-btn"
                aria-label="닫기"
                style={{
-                 width: 32,
+                 width: '2rem',
                }}
              >
               <span style={{display:'flex',alignItems:'center',gap:'0.45em'}}>
-                <FaTimes style={{ marginBottom: '-2px' }} />
+                <span className="material-symbols-outlined" style={{ marginBottom: '-2px' }}>close</span>
               </span>
             </button>
           </div>
