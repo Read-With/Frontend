@@ -13,7 +13,6 @@ import { getNodeSize, getEdgeStyle, createGraphStylesheet } from "../../utils/st
 import { graphStyles } from "../../utils/styles/styles";
 import useGraphInteractions from "../../hooks/useGraphInteractions";
 
-const MAX_EDGE_LABEL_LENGTH = 15;
 
 const ViewerRelationGraph = ({
   elements,
@@ -90,7 +89,7 @@ const ViewerRelationGraph = ({
   const edgeStyle = getEdgeStyle('viewer');
 
   const stylesheet = useMemo(
-    () => createGraphStylesheet(nodeSize, edgeStyle, edgeLabelVisible, MAX_EDGE_LABEL_LENGTH),
+    () => createGraphStylesheet(nodeSize, edgeStyle, edgeLabelVisible),
     [nodeSize, edgeStyle, edgeLabelVisible]
   );
 

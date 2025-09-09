@@ -290,7 +290,7 @@ function RelationGraphWrapper() {
   const nodeSize = getNodeSizeForGraph();
   const edgeStyle = getEdgeStyleForGraph();
   const stylesheet = useMemo(
-    () => createGraphStylesheet(nodeSize, edgeStyle, edgeLabelVisible, 15),
+    () => createGraphStylesheet(nodeSize, edgeStyle, edgeLabelVisible),
     [nodeSize, edgeStyle, edgeLabelVisible]
   );
   const layout = useMemo(() => getWideLayout(), []);
@@ -445,6 +445,7 @@ function RelationGraphWrapper() {
         top: 0, 
         left: isSidebarOpen ? '240px' : '60px',
         right: 0,
+        zIndex: 10000,
         transition: `left ${ANIMATION_VALUES.DURATION.SLOW} ${ANIMATION_VALUES.EASE_OUT}`
       }}>
         <div style={topBarStyles.leftSection}>

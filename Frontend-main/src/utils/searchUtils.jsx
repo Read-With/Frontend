@@ -97,27 +97,51 @@ export function filterGraphElements(elements, searchTerm, currentChapterData = n
   const searchLower = searchTerm.toLowerCase();
   
   // 현재 챕터의 캐릭터 데이터가 있는 경우, 해당 챕터에 존재하는 인물만 필터링
-  let matchingNodes;
+  let candidateNodes;
   if (currentChapterData && currentChapterData.characters) {
     const chapterCharacterIds = new Set(
       currentChapterData.characters.map(char => String(char.id))
     );
-    matchingNodes = elements.filter(el => 
+    candidateNodes = elements.filter(el => 
       !el.data.source && 
       nodeMatchesQuery(el, searchLower) && 
       chapterCharacterIds.has(el.data.id)
     );
   } else {
     // 챕터 데이터가 없는 경우 기존 로직 사용
-    matchingNodes = elements.filter(el => !el.data.source && nodeMatchesQuery(el, searchLower));
+    candidateNodes = elements.filter(el => !el.data.source && nodeMatchesQuery(el, searchLower));
   }
   
-  const matchingNodeIds = new Set(matchingNodes.map(node => node.data.id));
+  // 정확히 일치하는 인물을 우선적으로 찾기
+  let matchingNode = null;
   
-  // 검색된 인물과 연결된 모든 간선 찾기
+  // 1. 완전 일치하는 인물 찾기 (label, common_name, names 중 하나라도 완전 일치)
+  matchingNode = candidateNodes.find(node => {
+    const label = node.data.label?.toLowerCase() || '';
+    const commonName = node.data.common_name?.toLowerCase() || '';
+    const names = node.data.names || [];
+    
+    return label === searchLower || 
+           commonName === searchLower || 
+           names.some(name => String(name).toLowerCase() === searchLower);
+  });
+  
+  // 2. 완전 일치가 없으면 가장 유사한 인물 선택 (첫 번째 매칭)
+  if (!matchingNode && candidateNodes.length > 0) {
+    matchingNode = candidateNodes[0];
+  }
+  
+  // 매칭된 인물이 없으면 빈 결과 반환
+  if (!matchingNode) {
+    return [];
+  }
+  
+  const matchingNodeId = matchingNode.data.id;
+  
+  // 선택된 인물과 연결된 모든 간선 찾기
   const connectedEdges = elements.filter(el => 
     el.data.source && 
-    (matchingNodeIds.has(el.data.source) || matchingNodeIds.has(el.data.target))
+    (el.data.source === matchingNodeId || el.data.target === matchingNodeId)
   );
   
   // 연결된 간선의 source와 target 노드들도 포함

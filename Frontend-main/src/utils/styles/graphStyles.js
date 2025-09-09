@@ -88,7 +88,7 @@ export const getRelationColor = (positivity) => {
 };
 
 // [공통 스타일시트 생성 함수]
-export const createGraphStylesheet = (nodeSize, edgeStyle, edgeLabelVisible, maxEdgeLabelLength = 15) => [
+export const createGraphStylesheet = (nodeSize, edgeStyle, edgeLabelVisible, maxEdgeLabelLength = null) => [
   {
     selector: "node[image]",
     style: {
@@ -124,7 +124,7 @@ export const createGraphStylesheet = (nodeSize, edgeStyle, edgeLabelVisible, max
       label: (ele) => {
         const label = ele.data('label') || '';
         if (!edgeLabelVisible) return '';
-        return label.length > maxEdgeLabelLength ? label.slice(0, maxEdgeLabelLength) + '...' : label;
+        return maxEdgeLabelLength && label.length > maxEdgeLabelLength ? label.slice(0, maxEdgeLabelLength) + '...' : label;
       },
       "font-size": edgeStyle.fontSize,
       "text-rotation": "autorotate",
@@ -183,7 +183,7 @@ export const graphStyles = {
     width: '100%',
     height: '100%',
     pointerEvents: 'none',
-    zIndex: 9999,
+    zIndex: 9998,
   },
   tooltipStyle: {
     pointerEvents: 'auto' 
@@ -301,6 +301,6 @@ export const graphControlsStyles = {
     display: 'inline-block',
     width: 'auto',
     minWidth: '200px',
-    zIndex: 1
+    zIndex: 10001
   }
 };
