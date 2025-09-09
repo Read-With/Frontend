@@ -8,6 +8,7 @@ import React, {
   useCallback,
 } from 'react';
 import ePub from 'epubjs';
+import { calculateChapterProgress, findClosestEvent } from '../../../utils/viewerUtils';
 
 const eventRelationModules = import.meta.glob('../../../data/gatsby/chapter*_events.json', { eager: true });
 const eventsCache = new Map();
@@ -631,69 +632,28 @@ const EpubViewer = forwardRef(
             updatePageCharCount();
             const currentChars = currentChapterCharsRef.current;
 
-            // 이벤트 데이터 가져오기 및 매칭 (개선된 버전)
+            // 이벤트 데이터 가져오기 및 매칭 (개선된 버전 - CFI 기반 정확한 계산)
             try {
               const events = getEventsForChapter(chapterNum);
               let currentEvent = null;
 
               if (events && events.length > 0) {
-                // 개선된 이벤트 매칭 로직 사용
-                const lastEvent = events[events.length - 1];
-                const firstEvent = events[0];
-
-                if (currentChars >= lastEvent.end) {
-                  // 마지막 이벤트를 넘어선 경우
-                  currentEvent = { 
-                    ...lastEvent, 
-                    eventNum: lastEvent.event_id ?? 0, 
-                    chapter: chapterNum,
-                    progress: 100
+                // 새로운 개선된 함수 사용: CFI 기반 정확한 위치 계산
+                const progressInfo = calculateChapterProgress(cfi, chapterNum, events, bookInstance);
+                const closestEvent = findClosestEvent(cfi, chapterNum, events, null, bookInstance);
+                
+                if (closestEvent) {
+                  currentEvent = {
+                    ...closestEvent,
+                    chapterProgress: progressInfo.progress,
+                    currentChars: progressInfo.currentChars,
+                    totalChars: progressInfo.totalChars,
+                    calculationMethod: progressInfo.calculationMethod
                   };
-                } else if (currentChars < firstEvent.start) {
-                  // 첫 이벤트보다 앞선 경우
-                  currentEvent = { 
-                    ...firstEvent, 
-                    eventNum: firstEvent.event_id ?? 0, 
-                    chapter: chapterNum,
-                    progress: 0
-                  };
-                } else {
-                  // 정확한 이벤트 찾기
-                  for (let i = events.length - 1; i >= 0; i--) {
-                    const event = events[i];
-                    if (currentChars >= event.start && currentChars < event.end) {
-                      // 이벤트 내 진행률 계산
-                      const eventProgress = ((currentChars - event.start) / (event.end - event.start)) * 100;
-                      currentEvent = { 
-                        ...event, 
-                        eventNum: event.event_id ?? 0, 
-                        chapter: chapterNum,
-                        progress: Math.round(eventProgress * 100) / 100
-                      };
-                      break;
-                    }
-                  }
-                  
-                  // 혹시라도 매칭이 안 되면 가장 가까운 이벤트로 fallback
-                  if (!currentEvent) {
-                    currentEvent = { 
-                      ...firstEvent, 
-                      eventNum: firstEvent.event_id ?? 0, 
-                      chapter: chapterNum,
-                      progress: 0
-                    };
-                  }
                 }
-
-                // 챕터 내 진행률 정보 추가
-                const totalChars = lastEvent.end;
-                const chapterProgress = totalChars > 0 ? (currentChars / totalChars) * 100 : 0;
-                currentEvent.chapterProgress = Math.round(chapterProgress * 100) / 100;
-                currentEvent.currentChars = currentChars;
-                currentEvent.totalChars = totalChars;
               }
               
-              onCurrentLineChange?.(currentChars, events.length, currentEvent || null);
+              onCurrentLineChange?.(currentEvent?.currentChars || currentChars, events?.length || 0, currentEvent || null);
             } catch (error) {
               console.error('이벤트 매칭 오류:', error);
               onCurrentLineChange?.(currentChars, 0, null);
