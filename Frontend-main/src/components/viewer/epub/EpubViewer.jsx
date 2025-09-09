@@ -8,6 +8,7 @@ import React, {
   useCallback,
 } from 'react';
 import ePub from 'epubjs';
+import { calculateChapterProgress, findClosestEvent } from '../../../utils/viewerUtils';
 
 const eventRelationModules = import.meta.glob('../../../data/gatsby/chapter*_events.json', { eager: true });
 const eventsCache = new Map();
@@ -637,60 +638,20 @@ const EpubViewer = forwardRef(
               let currentEvent = null;
 
               if (events && events.length > 0) {
-                // 개선된 이벤트 매칭 로직 사용
-                const lastEvent = events[events.length - 1];
-                const firstEvent = events[0];
-
-                if (currentChars >= lastEvent.end) {
-                  // 마지막 이벤트를 넘어선 경우
-                  currentEvent = { 
-                    ...lastEvent, 
-                    eventNum: lastEvent.event_id ?? 0, 
-                    chapter: chapterNum,
-                    progress: 100
-                  };
-                } else if (currentChars < firstEvent.start) {
-                  // 첫 이벤트보다 앞선 경우
-                  currentEvent = { 
-                    ...firstEvent, 
-                    eventNum: firstEvent.event_id ?? 0, 
-                    chapter: chapterNum,
-                    progress: 0
-                  };
-                } else {
-                  // 정확한 이벤트 찾기
-                  for (let i = events.length - 1; i >= 0; i--) {
-                    const event = events[i];
-                    if (currentChars >= event.start && currentChars < event.end) {
-                      // 이벤트 내 진행률 계산
-                      const eventProgress = ((currentChars - event.start) / (event.end - event.start)) * 100;
-                      currentEvent = { 
-                        ...event, 
-                        eventNum: event.event_id ?? 0, 
-                        chapter: chapterNum,
-                        progress: Math.round(eventProgress * 100) / 100
-                      };
-                      break;
-                    }
-                  }
-                  
-                  // 혹시라도 매칭이 안 되면 가장 가까운 이벤트로 fallback
-                  if (!currentEvent) {
-                    currentEvent = { 
-                      ...firstEvent, 
-                      eventNum: firstEvent.event_id ?? 0, 
-                      chapter: chapterNum,
-                      progress: 0
-                    };
-                  }
+                // 새로운 calculateChapterProgress 함수 사용 (CFI 기반 정확한 계산)
+                const progressInfo = calculateChapterProgress(cfi, chapterNum, events, bookInstance);
+                
+                // findClosestEvent 함수로 정확한 이벤트 찾기
+                currentEvent = findClosestEvent(cfi, chapterNum, events, progressInfo.currentChars, bookInstance);
+                
+                if (currentEvent) {
+                  // 추가 정보 포함
+                  currentEvent.chapterProgress = progressInfo.progress;
+                  currentEvent.currentChars = progressInfo.currentChars;
+                  currentEvent.totalChars = progressInfo.totalChars;
+                  currentEvent.eventIndex = progressInfo.eventIndex;
+                  currentEvent.calculationMethod = progressInfo.calculationMethod;
                 }
-
-                // 챕터 내 진행률 정보 추가
-                const totalChars = lastEvent.end;
-                const chapterProgress = totalChars > 0 ? (currentChars / totalChars) * 100 : 0;
-                currentEvent.chapterProgress = Math.round(chapterProgress * 100) / 100;
-                currentEvent.currentChars = currentChars;
-                currentEvent.totalChars = totalChars;
               }
               
               onCurrentLineChange?.(currentChars, events.length, currentEvent || null);

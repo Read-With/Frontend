@@ -169,36 +169,77 @@ export async function getCurrentChapterFromViewer(viewerRef) {
 }
 
 /**
- * CFI에서 챕터 내 글자 위치 계산
+ * CFI에서 챕터 내 글자 위치 계산 (개선된 버전)
  * @param {string} cfi - CFI 문자열
  * @param {number} chapterNum - 챕터 번호
  * @param {Array} events - 이벤트 배열
+ * @param {Object} bookInstance - EPUB.js Book 인스턴스 (선택사항)
  * @returns {Object} 위치 정보 { currentChars, totalChars, progress, eventIndex }
  */
-export function calculateChapterProgress(cfi, chapterNum, events) {
+export function calculateChapterProgress(cfi, chapterNum, events, bookInstance = null) {
   if (!events || !events.length) {
     return { currentChars: 0, totalChars: 0, progress: 0, eventIndex: -1 };
   }
 
-  // CFI에서 단락 번호와 문자 오프셋 추출
-  const paragraphMatch = cfi.match(/\[chapter-\d+\]\/(\d+)\/1:(\d+)\)$/);
-  const paragraphNum = paragraphMatch ? parseInt(paragraphMatch[1]) : 1;
-  const charOffset = paragraphMatch ? parseInt(paragraphMatch[2]) : 0;
-
   // 챕터 총 글자수 (마지막 이벤트의 end 값)
   const totalChars = events[events.length - 1]?.end || 0;
-
-  // 현재까지 읽은 글자수 계산 (단락 기반 추정)
-  // 실제로는 updatePageCharCount() 함수에서 더 정확하게 계산됨
   let currentChars = 0;
-  
-  // 단락별 평균 글자수로 추정 (정확하지 않으므로 실제 구현에서는 다른 방법 사용)
-  if (totalChars > 0 && paragraphNum > 1) {
-    // 단락당 평균 글자수 추정
-    const avgCharsPerParagraph = totalChars / 50; // 대략적인 단락 수
-    currentChars = Math.min((paragraphNum - 1) * avgCharsPerParagraph + charOffset, totalChars);
-  } else {
-    currentChars = charOffset;
+  let calculationMethod = 'fallback';
+
+  // 새로운 방식: CFI 기반 정확한 위치 계산
+  if (bookInstance && bookInstance.locations && typeof bookInstance.locations.percentageFromCfi === 'function') {
+    try {
+      // 1. CFI로 전체 페이지 대비 현재 위치 비율 구하기
+      const globalPercentage = bookInstance.locations.percentageFromCfi(cfi);
+      
+      // 2. 전체 글자수와 챕터별 글자수 정보 가져오기
+      const path = window.location.pathname;
+      const fileName = path.split('/').pop();
+      const bookId = fileName.replace('.epub', '');
+      const totalLength = Number(localStorage.getItem(`totalLength_${bookId}`)) || 0;
+      const chapterLengths = JSON.parse(localStorage.getItem(`chapterLengths_${bookId}`) || '{}');
+      
+      if (totalLength > 0 && Object.keys(chapterLengths).length > 0) {
+        // 3. 전체 대비 비율 × 전체 글자수 = 현재 글자수
+        const globalCurrentChars = Math.round(globalPercentage * totalLength);
+        
+        // 4. 이전 챕터까지의 글자수 합 계산
+        let prevChaptersSum = 0;
+        if (chapterNum > 1) {
+          for (let i = 1; i < chapterNum; i++) {
+            prevChaptersSum += Number(chapterLengths[i] || 0);
+          }
+        }
+        
+        // 5. 현재 글자수 - 이전 챕터까지의 글자수 합 = 해당 챕터 내 글자수
+        const chapterCurrentChars = Math.max(0, globalCurrentChars - prevChaptersSum);
+        
+        // 6. 해당 챕터에서의 비율 구하기
+        const currentChapterLength = Number(chapterLengths[chapterNum] || totalChars);
+        if (currentChapterLength > 0) {
+          const chapterPercentage = chapterCurrentChars / currentChapterLength;
+          // 7. 해당 챕터 전체 글자수 × 비율로 정확한 현재 위치 글자수 구하기
+          currentChars = Math.min(Math.round(chapterPercentage * totalChars), totalChars);
+          calculationMethod = 'cfi_accurate';
+        }
+      }
+    } catch (error) {
+      console.warn('CFI 기반 위치 계산 실패, fallback 방식 사용:', error);
+    }
+  }
+
+  // Fallback 방식: 기존 단락 기반 추정 (새로운 방식이 실패한 경우)
+  if (calculationMethod === 'fallback') {
+    const paragraphMatch = cfi.match(/\[chapter-\d+\]\/(\d+)\/1:(\d+)\)$/);
+    const paragraphNum = paragraphMatch ? parseInt(paragraphMatch[1]) : 1;
+    const charOffset = paragraphMatch ? parseInt(paragraphMatch[2]) : 0;
+    
+    if (totalChars > 0 && paragraphNum > 1) {
+      const avgCharsPerParagraph = totalChars / 50;
+      currentChars = Math.min((paragraphNum - 1) * avgCharsPerParagraph + charOffset, totalChars);
+    } else {
+      currentChars = charOffset;
+    }
   }
 
   // 챕터 내 진행률 계산
@@ -224,8 +265,9 @@ export function calculateChapterProgress(cfi, chapterNum, events) {
     totalChars,
     progress: Math.round(progress * 100) / 100,
     eventIndex,
-    paragraphNum,
-    charOffset
+    calculationMethod,
+    paragraphNum: calculationMethod === 'fallback' ? (cfi.match(/\[chapter-\d+\]\/(\d+)\/1:(\d+)\)$/) ? parseInt(cfi.match(/\[chapter-\d+\]\/(\d+)\/1:(\d+)\)$/)[1]) : 1) : null,
+    charOffset: calculationMethod === 'fallback' ? (cfi.match(/\[chapter-\d+\]\/(\d+)\/1:(\d+)\)$/) ? parseInt(cfi.match(/\[chapter-\d+\]\/(\d+)\/1:(\d+)\)$/)[2]) : 0) : null
   };
 }
 
@@ -235,14 +277,15 @@ export function calculateChapterProgress(cfi, chapterNum, events) {
  * @param {number} chapterNum - 챕터 번호
  * @param {Array} events - 이벤트 배열
  * @param {number} currentChars - 현재까지 읽은 글자수 (선택사항)
+ * @param {Object} bookInstance - EPUB.js Book 인스턴스 (선택사항)
  * @returns {Object|null} 가장 가까운 이벤트
  */
-export function findClosestEvent(cfi, chapterNum, events, currentChars = null) {
+export function findClosestEvent(cfi, chapterNum, events, currentChars = null, bookInstance = null) {
   if (!events || !events.length) return null;
   
   // currentChars가 제공되지 않은 경우 계산
   if (currentChars === null) {
-    const progressInfo = calculateChapterProgress(cfi, chapterNum, events);
+    const progressInfo = calculateChapterProgress(cfi, chapterNum, events, bookInstance);
     currentChars = progressInfo.currentChars;
   }
 
