@@ -112,14 +112,20 @@ export default function HomePage() {
         지금 바로 나만의 서재를 시작하세요!
       </p>
       
-      <HomeButton onClick={() => navigate('/mypage')}>
-        내 서재로 가기
-      </HomeButton>
+      <div style={{ display: 'flex', gap: theme.spacing.md, flexWrap: 'wrap', justifyContent: 'center' }}>
+        <HomeButton onClick={() => navigate('/mypage')}>
+          내 서재로 가기
+        </HomeButton>
+        <HomeButton onClick={() => navigate('/bookmark-test')} variant="secondary">
+          🔧 북마크 테스트
+        </HomeButton>
+      </div>
       
       <div style={featuresStyle}>
         <div style={featureStyle}>EPUB 리더</div>
         <div style={featureStyle}>관계 분석</div>
         <div style={featureStyle}>타임라인</div>
+        <div style={featureStyle}>북마크 기능</div>
       </div>
 
 

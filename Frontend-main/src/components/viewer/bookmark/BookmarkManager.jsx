@@ -10,9 +10,9 @@ const createBookmarkData = (bookId, startCfi, endCfi = null, color = '#0Ccd5B', 
 });
 
 // 북마크 목록 조회 (서버에서)
-export const loadBookmarks = async (bookId) => {
+export const loadBookmarks = async (bookId, sort = 'time_desc') => {
   try {
-    const response = await getBookmarks(bookId);
+    const response = await getBookmarks(bookId, sort);
     if (response.isSuccess) {
       return response.result || [];
     }

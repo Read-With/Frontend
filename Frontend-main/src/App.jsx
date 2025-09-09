@@ -2,6 +2,7 @@ import React from 'react';
 import { BrowserRouter as Router, Routes, Route, useLocation, Navigate, useParams, Outlet } from 'react-router-dom';
 import ViewerPage from './components/viewer/ViewerPage';
 import BookmarksPage from './components/viewer/bookmark/BookmarksPage';
+import BookmarkTestPage from './components/viewer/bookmark/BookmarkTestPage';
 import RelationGraphWrapper from './components/graph/RelationGraphWrapper';
 import MyPage from './pages/MyPage';
 import { RecoilRoot } from 'recoil';
@@ -18,8 +19,6 @@ const GraphLayout = () => {
 
 const AppContent = () => {
   const location = useLocation();
-  // '/viewer' 또는 '/graph'로 시작하는 모든 페이지에서 Header 숨김
-  // const hideHeader = location.pathname.startsWith('/viewer') || location.pathname.startsWith('/graph');
 
   return (
     <>
@@ -32,6 +31,8 @@ const AppContent = () => {
         <Route path="/viewer/:filename/relations" element={<RelationRedirect />} />
         {/* /user/viewer/:filename 경로는 GraphLayout으로 감싸지 않고 ViewerPage만 렌더링 */}
         <Route path="/user/viewer/:filename" element={<ViewerPage />} />
+        {/* 북마크 테스트 페이지 */}
+        <Route path="/bookmark-test" element={<BookmarkTestPage />} />
         {/* 그래프 단독 페이지만 GraphLayout으로 감싸서 RelationGraphWrapper 렌더링 */}
         <Route element={<GraphLayout />}>
           <Route path="/user/graph/:filename" element={<RelationGraphWrapper />} />

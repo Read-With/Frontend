@@ -22,9 +22,20 @@ const apiRequest = async (url, options = {}) => {
   // 개발 환경에서는 프록시를 통해 요청
   const requestUrl = import.meta.env.DEV ? url : `${API_BASE_URL}${url}`;
   
+  // 디버깅을 위한 로그 추가
+  console.log('🌐 API 요청:', {
+    url: requestUrl,
+    method: config.method || 'GET',
+    body: config.body,
+    headers: config.headers
+  });
+  
   try {
     const response = await fetch(requestUrl, config);
+    console.log('📡 API 응답 상태:', response.status, response.statusText);
+    
     const data = await response.json();
+    console.log('📄 API 응답 데이터:', data);
     
     if (!response.ok) {
       throw new Error(data.message || 'API 요청 실패');
@@ -135,8 +146,8 @@ export const getBookManifest = async (bookId) => {
 
 // 북마크 관련 API
 // 북마크 목록 조회
-export const getBookmarks = async (bookId) => {
-  return apiRequest(`/api/bookmarks?bookId=${bookId}`);
+export const getBookmarks = async (bookId, sort = 'time_desc') => {
+  return apiRequest(`/api/bookmarks?bookId=${bookId}&sort=${sort}`);
 };
 
 // 북마크 생성

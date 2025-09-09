@@ -232,7 +232,9 @@ export function useViewerPage() {
       
       setBookmarksLoading(true);
       try {
-        const bookmarksData = await loadBookmarks(cleanFilename);
+        // API 책인 경우 bookId 사용, 로컬 책인 경우 cleanFilename 사용
+        const bookId = book?.id || cleanFilename;
+        const bookmarksData = await loadBookmarks(bookId);
         setBookmarks(bookmarksData);
       } catch (error) {
         console.error('북마크 로드 실패:', error);
@@ -243,7 +245,7 @@ export function useViewerPage() {
     };
 
     fetchBookmarks();
-  }, [cleanFilename]);
+  }, [cleanFilename, book?.id]);
   
   // 페이지 변경 시 현재 챕터 번호 업데이트
   useEffect(() => {
@@ -345,27 +347,14 @@ export function useViewerPage() {
 
     setFailCount(0);
 
-    // 기존 북마크가 있는지 확인
-    const existingBookmark = bookmarks.find(b => b.startCfi === cfi);
-    
-    if (existingBookmark) {
-      // 이미 북마크가 있으면 삭제
-      const result = await removeBookmark(existingBookmark.id);
-      if (result.success) {
-        setBookmarks(prev => prev.filter(b => b.id !== existingBookmark.id));
-        toast.success("📖 북마크가 제거되었습니다");
-      } else {
-        toast.error(result.message || "북마크 제거에 실패했습니다");
-      }
+    // 새 북마크 추가 (CFI가 동일해도 시간에 따라 구별)
+    const bookId = book?.id || cleanFilename;
+    const result = await addBookmark(bookId, cfi);
+    if (result.success) {
+      setBookmarks(prev => [...prev, result.bookmark]);
+      toast.success("📖 북마크가 추가되었습니다");
     } else {
-      // 새 북마크 추가
-      const result = await addBookmark(cleanFilename, cfi);
-      if (result.success) {
-        setBookmarks(prev => [...prev, result.bookmark]);
-        toast.success("📖 북마크가 추가되었습니다");
-      } else {
-        toast.error(result.message || "북마크 추가에 실패했습니다");
-      }
+      toast.error(result.message || "북마크 추가에 실패했습니다");
     }
   }, [cleanFilename, bookmarks]);
   
@@ -401,8 +390,8 @@ export function useViewerPage() {
   }, [settings, cleanFilename]);
   
   const onToggleBookmarkList = useCallback(() => {
-    navigate(`/viewer/${filename}/bookmarks`);
-  }, [navigate, filename]);
+    navigate(`/viewer/${filename}/bookmarks`, { state: { book } });
+  }, [navigate, filename, book]);
   
   const handleSliderChange = useCallback(async (value) => {
     setProgress(value);

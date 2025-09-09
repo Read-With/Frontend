@@ -102,7 +102,7 @@ const ViewerSettings = ({ isOpen, onClose, onApplySettings, currentSettings }) =
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        zIndex: 9999,
+        zIndex: 10002,
       }}
     >
       <div 

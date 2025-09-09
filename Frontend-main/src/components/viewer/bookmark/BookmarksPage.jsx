@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { loadBookmarks, removeBookmark, modifyBookmark } from './BookmarkManager';
 
 const bookmarkColors = {
@@ -41,11 +41,14 @@ function parseCfiToChapterFullDetail(cfi) {
 const BookmarksPage = () => {
   const { filename } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const cleanFilename = filename ? filename.replace(/^\//, '') : null;
+  const book = location.state?.book;
   const [bookmarks, setBookmarks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [newMemo, setNewMemo] = useState({});
   const [editingMemo, setEditingMemo] = useState({});
+  const [sortOrder, setSortOrder] = useState('time_desc');
 
   // 북마크 로드
   useEffect(() => {
@@ -54,7 +57,9 @@ const BookmarksPage = () => {
       
       setLoading(true);
       try {
-        const bookmarksData = await loadBookmarks(cleanFilename);
+        // API 책인 경우 bookId 사용, 로컬 책인 경우 cleanFilename 사용
+        const bookId = book?.id || cleanFilename;
+        const bookmarksData = await loadBookmarks(bookId, sortOrder);
         setBookmarks(bookmarksData);
       } catch (error) {
         console.error('북마크 로드 실패:', error);
@@ -64,7 +69,7 @@ const BookmarksPage = () => {
     };
 
     fetchBookmarks();
-  }, [cleanFilename]);
+  }, [cleanFilename, book?.id, sortOrder]);
 
   const handleDeleteBookmark = async (bookmarkId) => {
     try {
@@ -430,7 +435,7 @@ const BookmarksPage = () => {
                 alignItems: 'center',
                 gap: '0.3rem'
               }}
-              onClick={() => navigate(`/viewer/${filename}`, { state: { cfi: bm.startCfi } })}
+              onClick={() => navigate(`/viewer/${filename}`, { state: { cfi: bm.startCfi, book } })}
             >
               <span style={{ fontSize: '0.7rem' }}>📖</span> 이동
             </button>
@@ -472,25 +477,42 @@ const BookmarksPage = () => {
     <div style={{ padding: '2rem', maxWidth: '1200px', margin: '0 auto', fontFamily: 'var(--font-family-primary)' }}>
       <div style={{ marginBottom: '2rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <h1 style={{ margin: 0, fontSize: '1.8rem', color: '#22336b', fontWeight: 600 }}>북마크</h1>
-        <button
-          style={{
-            background: 'linear-gradient(135deg, #6C8EFF 0%, #5A7BFF 100%)',
-            color: 'white',
-            border: 'none',
-            padding: '0.6rem 1.2rem',
-            borderRadius: '0.5rem',
-            fontWeight: 500,
-            cursor: 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '0.5rem',
-            boxShadow: '0 2px 8px rgba(108, 142, 255, 0.2)',
-            transition: 'all 0.2s ease',
-          }}
-          onClick={() => navigate(`/viewer/${cleanFilename}`)}
-        >
-          뷰어로 돌아가기
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+          <select
+            value={sortOrder}
+            onChange={(e) => setSortOrder(e.target.value)}
+            style={{
+              padding: '0.5rem',
+              borderRadius: '0.5rem',
+              border: '1px solid #e5e7eb',
+              backgroundColor: 'white',
+              fontSize: '0.9rem',
+              color: '#374151'
+            }}
+          >
+            <option value="time_desc">최신순</option>
+            <option value="time_asc">오래된순</option>
+          </select>
+          <button
+            style={{
+              background: 'linear-gradient(135deg, #6C8EFF 0%, #5A7BFF 100%)',
+              color: 'white',
+              border: 'none',
+              padding: '0.6rem 1.2rem',
+              borderRadius: '0.5rem',
+              fontWeight: 500,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.5rem',
+              boxShadow: '0 2px 8px rgba(108, 142, 255, 0.2)',
+              transition: 'all 0.2s ease',
+            }}
+            onClick={() => navigate(`/viewer/${cleanFilename}`, { state: { book } })}
+          >
+            뷰어로 돌아가기
+          </button>
+        </div>
       </div>
 
       {bookmarks.length === 0 ? (
@@ -516,7 +538,7 @@ const BookmarksPage = () => {
               fontWeight: 500,
               cursor: 'pointer',
             }}
-            onClick={() => navigate(`/viewer/${cleanFilename}`)}
+            onClick={() => navigate(`/viewer/${cleanFilename}`, { state: { book } })}
           >
             뷰어로 돌아가기
           </button>

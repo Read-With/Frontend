@@ -101,8 +101,9 @@ const ViewerToolbar = ({
 
   return (
     <div
-      className={`w-full z-20 relative transition-all duration-300 ${showControls ? 'opacity-100' : 'opacity-0'}`}
+      className={`w-full relative transition-all duration-300 ${showControls ? 'opacity-100' : 'opacity-0'}`}
       style={{
+        zIndex: 10001,
         backgroundColor: 'white',
         backdropFilter: 'blur(4px)',
         borderBottom: '1.5px solid #e7eaf7',
