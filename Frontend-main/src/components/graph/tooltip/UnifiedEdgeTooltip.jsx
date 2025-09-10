@@ -6,7 +6,7 @@ import { useTooltipPosition } from "../../../hooks/useTooltipPosition";
 import { useClickOutside } from "../../../hooks/useClickOutside";
 import { useRelationData } from "../../../hooks/useRelationData";
 import { getRelationStyle, getRelationLabels, tooltipStyles } from "../../../utils/styles/relationStyles";
-import { createButtonStyle, createAdvancedButtonHandlers, COLORS, ANIMATION_VALUES } from "../../../utils/styles/styles";
+import { createButtonStyle, createAdvancedButtonHandlers, COLORS, ANIMATION_VALUES, unifiedNodeTooltipStyles } from "../../../utils/styles/styles";
 import { mergeRefs } from "../../../utils/styles/animations";
 import { safeNum, processRelationTagsCached } from "../../../utils/relationUtils";
 import { cleanupRelationUtils } from "../../../utils/cleanupUtils";
@@ -135,6 +135,132 @@ function UnifiedEdgeTooltip({
   // 관계 라벨 배열 생성 (캐시된 함수 사용으로 성능 최적화)
   const relationLabels = processRelationTagsCached(data.relation, data.label);
 
+  // utils/styles에서 가져온 버튼 스타일 사용
+  const buttonStyles = {
+    primary: createButtonStyle(ANIMATION_VALUES, 'primaryEdge'),
+    secondary: createButtonStyle(ANIMATION_VALUES, 'secondaryEdge'),
+    close: createButtonStyle(ANIMATION_VALUES, 'closeEdge'),
+    tooltipClose: createButtonStyle(ANIMATION_VALUES, 'tooltipClose')
+  };
+
+  // utils/styles에서 가져온 버튼 핸들러 사용
+  const buttonHandlers = {
+    primary: createAdvancedButtonHandlers('primaryEdge'),
+    secondary: createAdvancedButtonHandlers('secondaryEdge'),
+    close: createAdvancedButtonHandlers('closeEdge'),
+    tooltipClose: createAdvancedButtonHandlers('tooltipClose')
+  };
+
+  // utils/styles에서 가져온 카드 스타일 사용
+  const cardStyles = {
+    sidebarCard: {
+      ...unifiedNodeTooltipStyles.sidebarContainer,
+      borderRadius: '12px',
+      padding: '24px',
+      marginBottom: '24px',
+      border: `1px solid ${COLORS.border}`,
+      boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
+    }
+  };
+
+  // relationStyles의 기존 스타일을 사용한 진행률 바 렌더링 함수
+  const renderProgressBars = (positivity, relationStyle, isSidebar = false) => {
+    let p = Math.abs(positivity ?? 0);
+    p = p * 100;
+    let remain = p;
+    
+    return Array.from({ length: 5 }).map((_, i) => {
+      let fill;
+      if (remain >= 20) {
+        fill = 1;
+      } else if (remain > 0) {
+        fill = remain / 20;
+      } else {
+        fill = 0;
+      }
+      remain -= 20;
+      
+      let background;
+      if (fill === 1) background = relationStyle.color;
+      else if (fill > 0)
+        background = `linear-gradient(to right, ${relationStyle.color} ${fill * 100}%, #e5e7eb ${fill * 100}%)`;
+      else background = "#e5e7eb";
+      
+      return (
+        <div
+          key={i}
+          style={{
+            ...tooltipStyles.progressBar,
+            background,
+            ...(isSidebar && {
+              width: '80px',
+              height: '24px',
+              borderRadius: '6px',
+              border: '1.5px solid #e5e7eb',
+            })
+          }}
+        />
+      );
+    });
+  };
+
+  // 퍼센트 라벨 렌더링 함수 (utils/styles의 COLORS 사용)
+  const renderPercentageLabels = (isSidebar = false) => {
+    return [20, 40, 60, 80, 100].map((step, idx) => (
+      <span
+        key={idx}
+        style={{
+          width: isSidebar ? '80px' : 80,
+          textAlign: 'center',
+          fontSize: isSidebar ? '12px' : 12,
+          color: isSidebar ? COLORS.textSecondary : COLORS.textSecondary,
+          display: 'inline-block',
+          lineHeight: '1.2',
+        }}
+      >
+        {step}%
+      </span>
+    ));
+  };
+
+  // 중복 제거된 차트 설정
+  const chartConfig = {
+    data: {
+      labels,
+      datasets: [
+        {
+          label: "관계 긍정도",
+          data: timeline,
+          borderColor: "#2563eb",
+          backgroundColor: "rgba(37,99,235,0.1)",
+          fill: true,
+          tension: 0.3,
+          spanGaps: true,
+        },
+      ],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      scales: {
+        y: {
+          min: -1,
+          max: 1,
+          title: { display: true, text: "긍정도" },
+        },
+        x: {
+          title: { display: true, text: "이벤트 순서" },
+          min: 0,
+          max: getMaxEventCount(),
+          ticks: {
+            stepSize: 1
+          }
+        },
+      },
+      plugins: { legend: { display: false } },
+    }
+  };
+
   // 모드별 설정 (통합된 이벤트 정보 사용)
   const zIndex = mode === 'viewer' ? 9998 : 9998;
   const chartTitle = mode === 'viewer' 
@@ -188,13 +314,8 @@ function UnifiedEdgeTooltip({
             <button
               onClick={onClose}
               aria-label="사이드바 닫기"
-              style={{
-                ...createButtonStyle(ANIMATION_VALUES, 'close'),
-                fontSize: '24px',
-                width: '40px',
-                height: '40px',
-              }}
-              {...createAdvancedButtonHandlers('close')}
+              style={buttonStyles.close}
+              {...buttonHandlers.close}
             >
               ×
             </button>
@@ -241,14 +362,7 @@ function UnifiedEdgeTooltip({
               {/* 관계 긍정도 섹션 */}
               <div 
                 className="sidebar-card"
-                style={{
-                  background: COLORS.background,
-                  borderRadius: '12px',
-                  padding: '24px',
-                  marginBottom: '24px',
-                  border: `1px solid ${COLORS.border}`,
-                  boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
-                }}
+                style={cardStyles.sidebarCard}
               >
                 <div style={{
                   display: 'flex',
@@ -274,7 +388,7 @@ function UnifiedEdgeTooltip({
                   </span>
                 </div>
                 
-                {/* 진행률 바 - 툴팁과 동일한 스타일 */}
+                {/* 진행률 바 - 공통 함수 사용 */}
                 <div style={{
                   display: 'flex',
                   alignItems: 'flex-end',
@@ -283,64 +397,17 @@ function UnifiedEdgeTooltip({
                   margin: '12px 0 4px 0',
                   justifyContent: 'center',
                 }}>
-                  {(() => {
-                    let p = Math.abs(data.positivity ?? 0);
-                    p = p * 100;
-                    let remain = p;
-                    return Array.from({ length: 5 }).map((_, i) => {
-                      let fill;
-                      if (remain >= 20) {
-                        fill = 1;
-                      } else if (remain > 0) {
-                        fill = remain / 20;
-                      } else {
-                        fill = 0;
-                      }
-                      remain -= 20;
-                      let background;
-                      if (fill === 1) background = relationStyle.color;
-                      else if (fill > 0)
-                        background = `linear-gradient(to right, ${relationStyle.color} ${fill * 100}%, #e5e7eb ${fill * 100}%)`;
-                      else background = "#e5e7eb";
-                      return (
-                        <div
-                          key={i}
-                          style={{
-                            ...tooltipStyles.progressBar,
-                            background,
-                            width: '80px',
-                            height: '24px',
-                            borderRadius: '6px',
-                            border: '1.5px solid #e5e7eb',
-                          }}
-                        />
-                      );
-                    });
-                  })()}
+                  {renderProgressBars(data.positivity, relationStyle, true)}
                 </div>
                 
-                {/* 퍼센트 라벨 - 툴팁과 동일한 스타일 */}
+                {/* 퍼센트 라벨 - 공통 함수 사용 */}
                 <div style={{
                   display: 'flex',
                   justifyContent: 'center',
                   gap: '4px',
                   marginBottom: '4px',
                 }}>
-                  {[20, 40, 60, 80, 100].map((step, idx) => (
-                    <span
-                      key={idx}
-                      style={{
-                        width: '80px',
-                        textAlign: 'center',
-                        fontSize: '12px',
-                        color: COLORS.textSecondary,
-                        display: 'inline-block',
-                        lineHeight: '1.2',
-                      }}
-                    >
-                      {step}%
-                    </span>
-                  ))}
+                  {renderPercentageLabels(true)}
                 </div>
               </div>
 
@@ -348,14 +415,7 @@ function UnifiedEdgeTooltip({
               {data.explanation && (
                 <div 
                   className="sidebar-card"
-                  style={{
-                    background: COLORS.background,
-                    borderRadius: '12px',
-                    padding: '24px',
-                    marginBottom: '24px',
-                    border: `1px solid ${COLORS.border}`,
-                    boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
-                  }}
+                  style={cardStyles.sidebarCard}
                 >
                   <h4 style={{
                     fontSize: '16px',
@@ -395,17 +455,11 @@ function UnifiedEdgeTooltip({
                 </div>
               )}
 
-              {/* 차트 보기 버튼 - 툴팁과 동일한 스타일 */}
+              {/* 차트 보기 버튼 - 다른 페이지와 일관성 있는 스타일 */}
               <button
                 onClick={() => setViewMode("chart")}
-                style={{
-                  ...createButtonStyle(ANIMATION_VALUES, 'primaryAdvanced'),
-                  width: '100%',
-                  padding: '12px 22px',
-                  fontSize: '15px',
-                  fontWeight: 600,
-                }}
-                {...createAdvancedButtonHandlers('primaryAdvanced')}
+                style={{ ...buttonStyles.primary, width: '100%' }}
+                {...buttonHandlers.primary}
               >
                 관계 변화 그래프 보기
               </button>
@@ -415,14 +469,7 @@ function UnifiedEdgeTooltip({
               {/* 차트 섹션 */}
               <div 
                 className="sidebar-card"
-                style={{
-                  background: COLORS.background,
-                  borderRadius: '12px',
-                  padding: '24px',
-                  marginBottom: '24px',
-                  border: `1px solid ${COLORS.border}`,
-                  boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
-                }}
+                style={cardStyles.sidebarCard}
               >
                 <h4 style={{
                   fontSize: '18px',
@@ -463,56 +510,16 @@ function UnifiedEdgeTooltip({
                     borderRadius: '8px',
                     padding: '16px',
                   }}>
-                    <Line
-                      data={{
-                        labels,
-                        datasets: [
-                          {
-                            label: "관계 긍정도",
-                            data: timeline,
-                            borderColor: "#2563eb",
-                            backgroundColor: "rgba(37,99,235,0.1)",
-                            fill: true,
-                            tension: 0.3,
-                            spanGaps: true,
-                          },
-                        ],
-                      }}
-                      options={{
-                        responsive: true,
-                        maintainAspectRatio: false,
-                        scales: {
-                          y: {
-                            min: -1,
-                            max: 1,
-                            title: { display: true, text: "긍정도" },
-                          },
-                          x: {
-                            title: { display: true, text: "이벤트 순서" },
-                            min: 0,
-                            max: getMaxEventCount(),
-                            ticks: {
-                              stepSize: 1
-                            }
-                          },
-                        },
-                        plugins: { legend: { display: false } },
-                      }}
-                    />
+                    <Line {...chartConfig} />
                   </div>
                 )}
               </div>
 
-              {/* 정보 보기 버튼 - 툴팁과 동일한 스타일 */}
+              {/* 정보 보기 버튼 - 다른 페이지와 일관성 있는 스타일 */}
               <button
                 onClick={() => setViewMode("info")}
-                style={{
-                  ...createButtonStyle(ANIMATION_VALUES, 'secondary'),
-                  width: '100%',
-                  padding: '12px 22px',
-                  fontSize: '15px',
-                  fontWeight: 600,
-                }}
+                style={{ ...buttonStyles.secondary, width: '100%' }}
+                {...buttonHandlers.secondary}
               >
                 관계 정보로 돌아가기
               </button>
@@ -553,6 +560,8 @@ function UnifiedEdgeTooltip({
             onClick={onClose}
             className="tooltip-close-btn"
             onMouseDown={(e) => e.stopPropagation()}
+            style={buttonStyles.tooltipClose}
+            {...buttonHandlers.tooltipClose}
           >
             &times;
           </button>
@@ -590,8 +599,9 @@ function UnifiedEdgeTooltip({
                   >
                     <button
                       className="relation-change-chart-btn edge-tooltip-animated-btn"
-                      style={createButtonStyle(ANIMATION_VALUES, 'primary')}
+                      style={buttonStyles.primary}
                       onClick={() => setViewMode("chart")}
+                      {...buttonHandlers.primary}
                     >
                       관계 변화 그래프
                     </button>
@@ -644,38 +654,7 @@ function UnifiedEdgeTooltip({
                           justifyContent: "center",
                         }}
                       >
-                        {(() => {
-                          let p = Math.abs(data.positivity ?? 0); // 절댓값 사용
-                          p = p * 100;
-                          let remain = p;
-                          return Array.from({ length: 5 }).map((_, i) => {
-                            let fill;
-                            if (remain >= 20) {
-                              fill = 1;
-                            } else if (remain > 0) {
-                              fill = remain / 20;
-                            } else {
-                              fill = 0;
-                            }
-                            remain -= 20;
-                            let background;
-                            if (fill === 1) background = relationStyle.color;
-                            else if (fill > 0)
-                              background = `linear-gradient(to right, ${
-                                relationStyle.color
-                              } ${fill * 100}%, #e5e7eb ${fill * 100}%)`;
-                            else background = "#e5e7eb";
-                            return (
-                              <div
-                                key={i}
-                                style={{
-                                  ...tooltipStyles.progressBar,
-                                  background,
-                                }}
-                              />
-                            );
-                          });
-                        })()}
+                        {renderProgressBars(data.positivity, relationStyle, false)}
                       </div>
                       <div
                         style={{
@@ -685,21 +664,7 @@ function UnifiedEdgeTooltip({
                           marginBottom: 4,
                         }}
                       >
-                        {[20, 40, 60, 80, 100].map((step, idx) => (
-                          <span
-                            key={idx}
-                            style={{
-                              width: 80,
-                              textAlign: "center",
-                              fontSize: 12,
-                              color: "#6b7280",
-                              display: "inline-block",
-                              lineHeight: "1.2",
-                            }}
-                          >
-                            {step}%
-                          </span>
-                        ))}
+                        {renderPercentageLabels(false)}
                       </div>
                     </div>
                   </div>
@@ -732,8 +697,9 @@ function UnifiedEdgeTooltip({
                   >
                     <button
                       className="relation-change-chart-btn edge-tooltip-animated-btn"
-                      style={createButtonStyle(ANIMATION_VALUES, 'primary')}
+                      style={buttonStyles.primary}
                       onClick={() => setViewMode("chart")}
+                      {...buttonHandlers.primary}
                     >
                       관계 변화 그래프
                     </button>
@@ -783,8 +749,9 @@ function UnifiedEdgeTooltip({
                   </div>
                   <div style={{ marginTop: 'auto', paddingTop: 20, paddingBottom: 6, paddingLeft: 6, paddingRight: 6, textAlign: "center" }}>
                     <button
-                      style={createButtonStyle(ANIMATION_VALUES, 'secondary')}
+                      style={buttonStyles.secondary}
                       onClick={() => setViewMode("info")}
+                      {...buttonHandlers.secondary}
                     >
                       간선 정보로 돌아가기
                     </button>
@@ -804,43 +771,7 @@ function UnifiedEdgeTooltip({
                     width: '100%',
                     height: mode === 'viewer' ? '100%' : 'auto'
                   }}>
-                    <Line
-                      data={{
-                        labels,
-                        datasets: [
-                          {
-                            label: "관계 긍정도",
-                            data: timeline,
-                            borderColor: "#2563eb",
-                            backgroundColor: "rgba(37,99,235,0.1)",
-                            fill: true,
-                            tension: 0.3,
-                            spanGaps: true,
-                          },
-                        ],
-                      }}
-                      options={{
-                        responsive: true,
-                        maintainAspectRatio: false,
-                        scales: {
-                          y: {
-                            min: -1,
-                            max: 1,
-                            title: { display: true, text: "긍정도" },
-                          },
-                          x: {
-                            title: { display: true, text: "이벤트 순서" },
-                            min: 0,
-                            max: getMaxEventCount(),
-                            ticks: {
-                                stepSize: 1
-                            }
-                          },
-                        },
-                        plugins: { legend: { display: false } },
-                      }}
-                      style={{ height: '200px' }}
-                    />
+                    <Line {...chartConfig} style={{ height: '200px' }} />
                   </div>
                 </div>
               )}
@@ -851,8 +782,9 @@ function UnifiedEdgeTooltip({
               )}
               <div style={{ marginTop: 'auto', paddingTop: 20, paddingBottom: mode === 'viewer' ? 6 : 20, textAlign: "center" }}>
                 <button
-                  style={createButtonStyle(ANIMATION_VALUES, 'secondary')}
+                  style={buttonStyles.secondary}
                   onClick={() => setViewMode("info")}
+                  {...buttonHandlers.secondary}
                 >
                   간선 정보로 돌아가기
                 </button>
