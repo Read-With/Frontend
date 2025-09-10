@@ -5,7 +5,7 @@ import { detectAndResolveOverlap, calcGraphDiff } from "../../utils/graphDataUti
 import { applySearchFadeEffect, shouldShowNoSearchResults, getNoSearchResultsMessage } from "../../utils/searchUtils.jsx";
 import useGraphInteractions from "../../hooks/useGraphInteractions.js";
 
-// Ripple 효과 생성 함수
+// Ripple 효과 생성 함수 - 확대/축소 상태 고려
 const createRippleEffect = (container, x, y, cyRef) => {
   const ripple = document.createElement('div');
   ripple.className = 'ripple-effect';
@@ -13,8 +13,12 @@ const createRippleEffect = (container, x, y, cyRef) => {
   
   let domX, domY;
   if (cyRef?.current) {
-    const pan = cyRef.current.pan();
-    const zoom = cyRef.current.zoom();
+    const cy = cyRef.current;
+    const pan = cy.pan();
+    const zoom = cy.zoom();
+    const containerRect = container.getBoundingClientRect();
+    
+    // Cytoscape 좌표를 DOM 좌표로 정확히 변환
     domX = x * zoom + pan.x;
     domY = y * zoom + pan.y;
   } else {
@@ -251,7 +255,6 @@ const CytoscapeGraphUnified = ({
         if (evt.renderedPosition) {
           x = evt.renderedPosition.x;
           y = evt.renderedPosition.y;
-
         } else if (evt.originalEvent) {
           const containerRect = containerRef.current.getBoundingClientRect();
           const clientX = evt.originalEvent.clientX - containerRect.left;
@@ -259,6 +262,7 @@ const CytoscapeGraphUnified = ({
           
           const pan = cy.pan();
           const zoom = cy.zoom();
+          // 마우스 위치를 Cytoscape 좌표로 정확히 변환
           x = (clientX - pan.x) / zoom;
           y = (clientY - pan.y) / zoom;
         }
@@ -440,7 +444,7 @@ const CytoscapeGraphUnified = ({
           nodes.style('height', nodeSize * 1.2);
         }
       } else {
-        cy.fit(undefined, 60);
+        // 검색이 비활성화된 상태에서는 fit을 호출하지 않음 (확대/축소 상태 유지)
         if (!isSearchActive) {
           cy.nodes().removeClass('search-highlight');
           cy.nodes().style('width', nodeSize);

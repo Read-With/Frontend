@@ -33,7 +33,7 @@ const ViewerRelationGraph = ({
   const selectedEdgeIdRef = useRef(null);
   const selectedNodeIdRef = useRef(null);
 
-  const onShowNodeTooltip = useCallback(({ node, nodeCenter, mouseX, mouseY }) => {
+  const onShowNodeTooltip = useCallback(({ node, nodeCenter, mouseX, mouseY, evt }) => {
     const nodeData = node.data();
     let names = nodeData.names;
     if (typeof names === "string") {
@@ -41,26 +41,35 @@ const ViewerRelationGraph = ({
     }
     let main = nodeData.main;
     if (typeof main === "string") main = main === "true";
+    
+    // useGraphInteractions에서 이미 정확한 위치를 계산해서 전달하므로 그대로 사용
+    const finalX = mouseX !== undefined ? mouseX : nodeCenter?.x || 0;
+    const finalY = mouseY !== undefined ? mouseY : nodeCenter?.y || 0;
+    
     setActiveTooltip({
       type: "node",
       ...nodeData,
       names,
       main,
       nodeCenter,
-      x: mouseX,
-      y: mouseY,
+      x: finalX,
+      y: finalY,
     });
   }, []);
 
-  const onShowEdgeTooltip = useCallback(({ edge, absoluteX, absoluteY }) => {
+  const onShowEdgeTooltip = useCallback(({ edge, absoluteX, absoluteY, evt }) => {
+    // 마우스 위치를 우선 사용하되, 없으면 계산된 간선 중심 위치 사용
+    const finalX = absoluteX !== undefined ? absoluteX : 0;
+    const finalY = absoluteY !== undefined ? absoluteY : 0;
+    
     setActiveTooltip({
       type: "edge",
       id: edge.id(),
       data: edge.data(),
       sourceNode: edge.source(),
       targetNode: edge.target(),
-      x: absoluteX,
-      y: absoluteY,
+      x: finalX,
+      y: finalY,
     });
   }, []);
 

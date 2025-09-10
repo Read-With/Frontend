@@ -38,18 +38,53 @@ export const getViewportInfo = () => {
  */
 export const calculateCytoscapePosition = (pos, cyRef) => {
   try {
-    if (!cyRef?.current) return { x: 0, y: 0 };
+    if (!cyRef?.current || !pos) return { x: 0, y: 0 };
     
-    const pan = cyRef.current.pan();
-    const zoom = cyRef.current.zoom();
+    const cy = cyRef.current;
+    const pan = cy.pan();
+    const zoom = cy.zoom();
     const { containerRect } = getContainerInfo();
     
-    return {
-      x: pos.x * zoom + pan.x + containerRect.left,
-      y: pos.y * zoom + pan.y + containerRect.top,
-    };
+    // Cytoscape 좌표를 DOM 좌표로 정확히 변환
+    const domX = pos.x * zoom + pan.x + containerRect.left;
+    const domY = pos.y * zoom + pan.y + containerRect.top;
+    
+    return { x: domX, y: domY };
   } catch (error) {
     console.error('위치 계산 실패:', error);
+    return { x: 0, y: 0 };
+  }
+};
+
+/**
+ * 마우스 이벤트 위치를 Cytoscape 좌표로 변환하는 함수
+ * @param {Object} evt - 마우스 이벤트 객체
+ * @param {Object} cyRef - Cytoscape 인스턴스 참조
+ * @returns {Object} Cytoscape 좌표 {x, y}
+ */
+export const convertMouseToCytoscapePosition = (evt, cyRef) => {
+  try {
+    if (!cyRef?.current || !evt) return { x: 0, y: 0 };
+    
+    const cy = cyRef.current;
+    const { container, containerRect } = getContainerInfo();
+    
+    if (!container) return { x: 0, y: 0 };
+    
+    // 마우스 위치를 컨테이너 기준으로 변환
+    const clientX = evt.clientX - containerRect.left;
+    const clientY = evt.clientY - containerRect.top;
+    
+    // pan과 zoom을 고려하여 Cytoscape 좌표로 변환
+    const pan = cy.pan();
+    const zoom = cy.zoom();
+    
+    const cyX = (clientX - pan.x) / zoom;
+    const cyY = (clientY - pan.y) / zoom;
+    
+    return { x: cyX, y: cyY };
+  } catch (error) {
+    console.error('마우스 위치 변환 실패:', error);
     return { x: 0, y: 0 };
   }
 };

@@ -64,10 +64,6 @@ export default function useGraphInteractions({
 
   // getContainerInfo는 이제 공통 유틸리티에서 import하여 사용
 
-  // 공통 위치 계산 함수
-  const calculatePosition = useCallback((pos) => {
-    return calculateCytoscapePosition(pos, cyRef);
-  }, [cyRef]);
 
   // 노드 하이라이트 처리 함수
   const handleNodeHighlight = useCallback((node) => {
@@ -94,16 +90,26 @@ export default function useGraphInteractions({
     }
   }, [cyRef, isSearchActive, filteredElements, resetAllStyles]);
 
-  // 노드 위치 계산 함수
+  // 노드 위치 계산 함수 - 확대/축소 상태 고려 (상대 좌표)
   const calculateNodePosition = useCallback((node) => {
     try {
+      if (!cyRef?.current) return { x: 0, y: 0 };
+      
+      const cy = cyRef.current;
       const pos = node.renderedPosition();
-      return calculatePosition(pos);
+      const pan = cy.pan();
+      const zoom = cy.zoom();
+      
+      // Cytoscape 좌표를 그래프 컨테이너 기준 상대 좌표로 변환
+      const domX = pos.x * zoom + pan.x;
+      const domY = pos.y * zoom + pan.y;
+      
+      return { x: domX, y: domY };
     } catch (error) {
       console.error('노드 위치 계산 실패:', error);
       return { x: 0, y: 0 };
     }
-  }, [calculatePosition]);
+  }, [cyRef]);
 
   const tapNodeHandler = useCallback(
     (evt) => {
@@ -115,8 +121,16 @@ export default function useGraphInteractions({
         if (!node || !nodeData) return;
 
         const nodeCenter = calculateNodePosition(node);
-        const mouseX = evt.originalEvent?.clientX ?? nodeCenter.x;
-        const mouseY = evt.originalEvent?.clientY ?? nodeCenter.y;
+        
+        // 마우스 위치를 그래프 컨테이너 기준의 상대 좌표로 변환
+        let mouseX = nodeCenter.x;
+        let mouseY = nodeCenter.y;
+        
+        if (evt.originalEvent) {
+          const { containerRect } = getContainerInfo();
+          mouseX = evt.originalEvent.clientX - containerRect.left;
+          mouseY = evt.originalEvent.clientY - containerRect.top;
+        }
         
         // 노드 하이라이트 처리
         handleNodeHighlight(node);
@@ -144,10 +158,24 @@ export default function useGraphInteractions({
         const edgeData = edge?.data?.();
         if (!edge || !edgeData) return;
 
-        // 노드 클릭과 동일한 방식으로 위치 계산
-        const edgeCenter = calculatePosition(edge.midpoint());
-        const mouseX = evt.originalEvent?.clientX ?? edgeCenter.x;
-        const mouseY = evt.originalEvent?.clientY ?? edgeCenter.y;
+        // 간선 중점 위치 계산 - 확대/축소 상태 고려 (상대 좌표)
+        const edgeMidpoint = edge.midpoint();
+        const pan = cy.pan();
+        const zoom = cy.zoom();
+        
+        const domX = edgeMidpoint.x * zoom + pan.x;
+        const domY = edgeMidpoint.y * zoom + pan.y;
+        
+        
+        // 마우스 위치를 그래프 컨테이너 기준의 상대 좌표로 변환
+        let mouseX = domX;
+        let mouseY = domY;
+        
+        if (evt.originalEvent) {
+          const { containerRect } = getContainerInfo();
+          mouseX = evt.originalEvent.clientX - containerRect.left;
+          mouseY = evt.originalEvent.clientY - containerRect.top;
+        }
 
         // 컴포넌트별 툴팁 생성 로직 실행
         if (onShowEdgeTooltipRef.current) {
@@ -167,7 +195,7 @@ export default function useGraphInteractions({
         console.error('간선 클릭 처리 실패:', error);
       }
     },
-    [cyRef, calculatePosition, onShowEdgeTooltipRef, selectedEdgeIdRef, resetAllStyles]
+    [cyRef, onShowEdgeTooltipRef, selectedEdgeIdRef, resetAllStyles]
   );
 
   // 배경 클릭 처리 함수
