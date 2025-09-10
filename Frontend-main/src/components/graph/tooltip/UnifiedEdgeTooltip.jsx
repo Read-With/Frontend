@@ -264,11 +264,12 @@ function UnifiedEdgeTooltip({
 
   // 모드별 설정 (통합된 이벤트 정보 사용)
   const zIndex = mode === 'viewer' ? 99999 : 99999;
-  const chartTitle = mode === 'viewer' 
-    ? (unifiedEventInfo.name 
-        ? `Chapter ${chapterNum} - ${unifiedEventInfo.name}` 
-        : `Chapter ${chapterNum} - Event ${unifiedEventInfo.eventNum}`)
-    : "관계 변화 그래프";
+  
+  // viewer 모드에서는 간단한 차트 제목 사용
+  let chartTitle = "관계 변화 그래프";
+  if (mode === 'viewer') {
+    chartTitle = `Chapter ${chapterNum} 관계 변화`;
+  }
   // 동적으로 최대 챕터 수 계산
   const folderKey = getFolderKeyFromFilename(filename);
   const safeMaxChapter = maxChapter || getSafeMaxChapter(folderKey, 10);

@@ -174,7 +174,7 @@ function fetchRelationTimelineStandalone(id1, id2, chapterNum, eventNum, maxChap
 }
 
 /**
- * 뷰어 모드용 관계 타임라인 데이터 가져오기 (현재 챕터만)
+ * 뷰어 모드용 관계 타임라인 데이터 가져오기 (관계가 처음 등장하는 이벤트부터 현재 이벤트까지)
  * @param {number} id1 - 첫 번째 노드 ID
  * @param {number} id2 - 두 번째 노드 ID
  * @param {number} chapterNum - 현재 챕터 번호
@@ -188,22 +188,8 @@ function fetchRelationTimelineViewer(id1, id2, chapterNum, eventNum, folderKey) 
   }
   
   try {
-    // 현재 이벤트에서 관계가 존재하는지 먼저 확인
-    const currentEventJson = getEventDataByIndex(folderKey, chapterNum, eventNum);
-    const currentRelation = currentEventJson ? findRelation(currentEventJson.relations, id1, id2) : null;
-    
-    // 현재 이벤트에 관계가 있다면 해당 이벤트만 반환
-    if (currentRelation) {
-      return {
-        points: [currentRelation.positivity],
-        labelInfo: [`E${eventNum}`],
-        noRelation: false
-      };
-    }
-    
-    // 현재 이벤트에 관계가 없다면 챕터 전체에서 관계 찾기
+    // 현재 챕터에서 관계가 처음 등장하는 이벤트 찾기
     let firstAppearanceInChapter = null;
-    let lastAppearanceInChapter = null;
     
     for (let i = 1; i <= eventNum; i++) {
       const json = getEventDataByIndex(folderKey, chapterNum, i);
@@ -211,10 +197,8 @@ function fetchRelationTimelineViewer(id1, id2, chapterNum, eventNum, folderKey) 
       
       const found = findRelation(json.relations, id1, id2);
       if (found) {
-        if (!firstAppearanceInChapter) {
-          firstAppearanceInChapter = i;
-        }
-        lastAppearanceInChapter = i;
+        firstAppearanceInChapter = i;
+        break; // 첫 번째 등장을 찾으면 중단
       }
     }
     
@@ -223,13 +207,19 @@ function fetchRelationTimelineViewer(id1, id2, chapterNum, eventNum, folderKey) 
       return { points: [], labelInfo: [], noRelation: true };
     }
     
-    // 현재 챕터에서 처음 등장한 시점부터 현재 이벤트까지 데이터 수집
-    return collectRelationData(
+    // 관계가 처음 등장한 이벤트부터 현재 이벤트까지 데이터 수집
+    const result = collectRelationData(
       id1, id2, 
       chapterNum, chapterNum, 
-      firstAppearanceInChapter, eventNum, 
+      firstAppearanceInChapter, eventNum, // 관계 첫 등장부터 현재 이벤트까지
       folderKey
     );
+    
+    return {
+      points: result.points,
+      labelInfo: result.labelInfo,
+      noRelation: false
+    };
   } catch (error) {
     console.error('Error fetching viewer timeline:', error);
     return { points: [], labelInfo: [], noRelation: true };
