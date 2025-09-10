@@ -34,7 +34,7 @@ function GraphSidebar({
     borderRadius: "0px",
     boxShadow: "2px 0 8px rgba(0,0,0,0.06)",
     borderRight: "1px solid #e5e7eb",
-    zIndex: 1000,
+    zIndex: 99999,
     overflow: "hidden",
     transition: "right 0.7s cubic-bezier(0.4, 0, 0.2, 1)",
   };

@@ -212,7 +212,7 @@ export function getRelationLabels(relation, label) {
 export const tooltipStyles = {
   container: {
     position: "fixed",
-    zIndex: 9999,
+    zIndex: 99999,
     width: "500px",
     perspective: '1200px',
   },

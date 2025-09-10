@@ -163,10 +163,11 @@ export function convertRelationsToElements(relations, idToName, idToDesc, idToMa
     const seed = Math.abs(hash) % 10000;
     const result = min + (seed % (max - min));
     
-    // 캐시 크기 제한 (메모리 누수 방지)
-    if (randomCache.size > 1000) {
-      randomCache.clear();
-    }
+  // 캐시 크기 제한 (메모리 누수 방지)
+  const MAX_CACHE_SIZE = 1000;
+  if (randomCache.size > MAX_CACHE_SIZE) {
+    randomCache.clear();
+  }
     randomCache.set(cacheKey, result);
     
     return result;
@@ -325,7 +326,8 @@ export function detectAndResolveOverlap(cy, nodeSize = 40, onCleanup = null) {
   const timers = [];
   
   // 성능 최적화: 노드가 많을 때는 겹침 감지를 건너뜀
-  if (nodes.length > 100) {
+  const MAX_NODES_FOR_OVERLAP_DETECTION = 100;
+  if (nodes.length > MAX_NODES_FOR_OVERLAP_DETECTION) {
     console.warn('detectAndResolveOverlap: 노드가 너무 많아 겹침 감지를 건너뜁니다.', nodes.length);
     return false;
   }

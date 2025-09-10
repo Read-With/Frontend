@@ -10,6 +10,7 @@ import { createButtonStyle, createAdvancedButtonHandlers, COLORS, ANIMATION_VALU
 import { mergeRefs } from "../../../utils/styles/animations";
 import { safeNum, processRelationTagsCached } from "../../../utils/relationUtils";
 import { cleanupRelationUtils } from "../../../utils/cleanupUtils";
+import { getSafeMaxChapter, getFolderKeyFromFilename } from "../../../utils/graphData";
 import "../RelationGraph.css";
 
 /**
@@ -40,7 +41,7 @@ function UnifiedEdgeTooltip({
   displayMode = 'tooltip', // 'tooltip' | 'sidebar'
   chapterNum = 1,
   eventNum = 1,
-  maxChapter = 10,
+  maxChapter,
   currentEvent = null,
   prevValidEvent = null,
   events = [],
@@ -262,13 +263,15 @@ function UnifiedEdgeTooltip({
   };
 
   // 모드별 설정 (통합된 이벤트 정보 사용)
-  const zIndex = mode === 'viewer' ? 9998 : 9998;
+  const zIndex = mode === 'viewer' ? 99999 : 99999;
   const chartTitle = mode === 'viewer' 
     ? (unifiedEventInfo.name 
         ? `Chapter ${chapterNum} - ${unifiedEventInfo.name}` 
         : `Chapter ${chapterNum} - Event ${unifiedEventInfo.eventNum}`)
     : "관계 변화 그래프";
-  const safeMaxChapter = mode === 'standalone' && maxChapter && !isNaN(maxChapter) ? maxChapter : 10;
+  // 동적으로 최대 챕터 수 계산
+  const folderKey = getFolderKeyFromFilename(filename);
+  const safeMaxChapter = maxChapter || getSafeMaxChapter(folderKey, 10);
 
   // 사이드바 모드일 때는 완전히 다른 레이아웃 사용
   if (displayMode === 'sidebar') {

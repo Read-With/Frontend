@@ -1,17 +1,27 @@
-const relationshipModules = import.meta.glob(
-  "../data/*/chapter*_relationships_event_*.json",
-  { eager: true }
-);
+// 통합된 데이터 모듈 로딩
+const dataModules = {
+  relationships: import.meta.glob(
+    "../data/*/chapter*_relationships_event_*.json",
+    { eager: true }
+  ),
+  characters: import.meta.glob(
+    "../data/*/c_chapter*_0.json",
+    { eager: true }
+  ),
+  events: import.meta.glob(
+    "../data/*/chapter*_events.json",
+    { eager: true }
+  )
+};
 
-const charactersModules = import.meta.glob(
-  "../data/*/c_chapter*_0.json",
-  { eager: true }
-);
+// graphDataUtils.js에서 함수 import
+import { convertRelationsToElements } from './graphDataUtils';
 
 const relationshipIndex = new Map();
 const chapterMaxEventIndex = new Map();
 const charactersIndex = new Map();
 const folderChapters = new Map();
+const characterIdIndex = new Map(); // 캐릭터 ID별 전체 챕터 정보 인덱스 (빠른 검색용)
 
 function extractFolderKey(path) {
   const m = path.match(/^\.\.\/data\/([^/]+)\//);
@@ -22,8 +32,7 @@ export function getFolderKeyFromFilename(filename) {
   const availableFolders = Array.from(folderChapters.keys());
   
   if (availableFolders.length === 0) {
-    console.warn('getFolderKeyFromFilename: 사용 가능한 폴더가 없습니다.');
-    return "";
+    throw new Error('getFolderKeyFromFilename: 사용 가능한 폴더가 없습니다.');
   }
   
   if (!filename || typeof filename !== 'string') {
@@ -57,7 +66,7 @@ export function collectPositivityValues(folderKey) {
   const positivityValues = [];
   
   // 이미 인덱싱된 관계 데이터에서 positivity 값 수집
-  for (const [path, relJson] of Object.entries(relationshipModules)) {
+  for (const [path, relJson] of Object.entries(dataModules.relationships)) {
     if (!path.includes(`/${folderKey}/`)) continue;
     
     const data = relJson?.default || relJson;
@@ -74,7 +83,7 @@ export function collectPositivityValues(folderKey) {
 }
 
 // 관계 파일 인덱싱
-for (const path of Object.keys(relationshipModules)) {
+for (const path of Object.keys(dataModules.relationships)) {
   const match = path.match(/\/chapter(\d+)_relationships_event_(\d+)\.json$/);
   if (!match) continue;
 
@@ -82,7 +91,7 @@ for (const path of Object.keys(relationshipModules)) {
   const chapter = Number(match[1]);
   const eventIndex = Number(match[2]); // 파일명은 1-based 인덱스
 
-  const relJson = relationshipModules[path]?.default;
+  const relJson = dataModules.relationships[path]?.default;
   relationshipIndex.set(`${folderKey}:${chapter}:${eventIndex}`, relJson);
 
   const key = `${folderKey}:${chapter}`;
@@ -94,15 +103,33 @@ for (const path of Object.keys(relationshipModules)) {
 }
 
 // 캐릭터 파일 인덱싱
-for (const path of Object.keys(charactersModules)) {
+for (const path of Object.keys(dataModules.characters)) {
   const match = path.match(/\/c_chapter(\d+)_0\.json$/);
   if (!match) continue;
 
   const folderKey = extractFolderKey(path);
   const chapter = Number(match[1]);
-  const charJson = charactersModules[path]?.default;
+  const charJson = dataModules.characters[path]?.default;
 
   charactersIndex.set(`${folderKey}:${chapter}`, charJson);
+
+  // 캐릭터 ID 인덱스 구축 (빠른 검색을 위해)
+  if (charJson && charJson.characters && Array.isArray(charJson.characters)) {
+    charJson.characters.forEach(char => {
+      if (char && char.id !== undefined) {
+        const charId = String(char.id);
+        const indexKey = `${folderKey}:${charId}`;
+        
+        if (!characterIdIndex.has(indexKey)) {
+          characterIdIndex.set(indexKey, []);
+        }
+        characterIdIndex.get(indexKey).push({
+          chapter,
+          character: char
+        });
+      }
+    });
+  }
 
   if (!folderChapters.has(folderKey)) folderChapters.set(folderKey, new Set());
   folderChapters.get(folderKey).add(chapter);
@@ -112,6 +139,17 @@ export function getDetectedMaxChapter(folderKey) {
   const set = folderChapters.get(folderKey);
   if (!set || set.size === 0) return 0;
   return Math.max(...Array.from(set));
+}
+
+/**
+ * 안전한 최대 챕터 번호 반환 (fallback 포함)
+ * @param {string} folderKey - 폴더 키
+ * @param {number} fallback - fallback 값 (기본값: 1)
+ * @returns {number} 최대 챕터 번호
+ */
+export function getSafeMaxChapter(folderKey, fallback = 1) {
+  const detected = getDetectedMaxChapter(folderKey);
+  return detected > 0 ? detected : fallback;
 }
 
 /**
@@ -259,24 +297,6 @@ export function createCharacterMaps(characters) {
   return { idToName, idToDesc, idToMain, idToNames };
 }
 
-// ============================================================================
-// ViewerPage 전용 함수들 (viewerDataUtils.js에서 통합)
-// ============================================================================
-
-// ViewerPage에서 사용하는 모듈 import (동적 폴더 지원)
-const viewerEventRelationModules = import.meta.glob(
-  "../data/*/chapter*_relationships_event_*.json",
-  { eager: true }
-);
-const viewerEventTextModules = import.meta.glob(
-  "../data/*/chapter*_events.json",
-  { eager: true }
-);
-const viewerCharactersModules = import.meta.glob(
-  "../data/*/c_chapter*_0.json",
-  { eager: true }
-);
-
 /**
  * 챕터별 이벤트 데이터 가져오기 (ViewerPage 전용)
  * @param {number} chapter - 챕터 번호
@@ -287,10 +307,10 @@ export function getEventsForChapter(chapter, folderKey = 'gatsby') {
   const num = String(chapter);
 
   // 1. 이벤트 본문 데이터 추출
-  const textFilePath = Object.keys(viewerEventTextModules).find((path) =>
+  const textFilePath = Object.keys(dataModules.events).find((path) =>
     path.includes(`/${folderKey}/chapter${num}_events.json`)
   );
-  const textArray = textFilePath ? viewerEventTextModules[textFilePath]?.default : [];
+  const textArray = textFilePath ? dataModules.events[textFilePath]?.default : [];
 
   // 2. 각 event에 대해 event_id에 해당하는 관계 파일을 찾음
   const eventsWithRelations = textArray.map((event) => {
@@ -300,12 +320,12 @@ export function getEventsForChapter(chapter, folderKey = 'gatsby') {
         ? 0
         : event.event_id;
     const fileEventNum = eventId + 1;
-    const relFilePath = Object.keys(viewerEventRelationModules).find((path) =>
+    const relFilePath = Object.keys(dataModules.relationships).find((path) =>
       path.includes(`/${folderKey}/chapter${num}_relationships_event_${fileEventNum}.json`)
     );
 
     const relations = relFilePath
-      ? viewerEventRelationModules[relFilePath]?.default?.relations || []
+      ? dataModules.relationships[relFilePath]?.default?.relations || []
       : [];
     return {
       ...event,
@@ -346,10 +366,10 @@ export function getChapterFile(chapter, type, folderKey = 'gatsby') {
   const num = String(chapter);
   try {
     if (type === "characters") {
-      const filePath = Object.keys(viewerCharactersModules).find((key) =>
+      const filePath = Object.keys(dataModules.characters).find((key) =>
         key.includes(`/${folderKey}/c_chapter${num}_0.json`)
       );
-      const data = filePath ? viewerCharactersModules[filePath]?.default : undefined;
+      const data = filePath ? dataModules.characters[filePath]?.default : undefined;
       return data?.characters || [];
     } else {
       // (relations 등 다른 타입도 필요하다면 여기에 맞게 수정)
@@ -371,13 +391,48 @@ export function safeId(id) {
 }
 
 /**
- * 관계 데이터에서 그래프 요소 생성 (ViewerPage 전용)
+ * 캐릭터 ID로 캐릭터 정보를 빠르게 검색 (인덱스 활용)
+ * @param {string} folderKey - 폴더 키
+ * @param {string} characterId - 캐릭터 ID
+ * @param {number} preferredChapter - 선호하는 챕터 (기본값: 최신 챕터)
+ * @returns {Object|null} 캐릭터 정보
+ */
+export function findCharacterById(folderKey, characterId, preferredChapter = null) {
+  if (!folderKey || !characterId) {
+    return null;
+  }
+  
+  const indexKey = `${folderKey}:${safeId(characterId)}`;
+  const characterEntries = characterIdIndex.get(indexKey);
+  
+  if (!characterEntries || characterEntries.length === 0) {
+    return null;
+  }
+  
+  // 선호하는 챕터가 있으면 해당 챕터의 캐릭터 정보 반환
+  if (preferredChapter) {
+    const preferredEntry = characterEntries.find(entry => entry.chapter === preferredChapter);
+    if (preferredEntry) {
+      return preferredEntry.character;
+    }
+  }
+  
+  // 최신 챕터의 캐릭터 정보 반환 (챕터 번호가 높은 것)
+  const latestEntry = characterEntries.reduce((latest, current) => 
+    current.chapter > latest.chapter ? current : latest
+  );
+  
+  return latestEntry.character;
+}
+
+/**
+ * 관계 데이터에서 그래프 요소 생성 (ViewerPage 전용) - graphDataUtils.js의 convertRelationsToElements 사용
  * @param {Array} relations - 관계 데이터
  * @param {Array} characterData - 캐릭터 데이터
- * @param {Array} newAppearances - 새로운 등장 인물
- * @param {Object} importance - 중요도 데이터
- * @param {number} chapter - 챕터 번호 (누락된 캐릭터 검색용)
- * @param {string} folderKey - 폴더 키 (누락된 캐릭터 검색용)
+ * @param {Array} newAppearances - 새로운 등장 인물 (사용하지 않음)
+ * @param {Object} importance - 중요도 데이터 (사용하지 않음)
+ * @param {number} chapter - 챕터 번호 (사용하지 않음)
+ * @param {string} folderKey - 폴더 키
  * @returns {Array} 그래프 요소 배열
  */
 export function getElementsFromRelations(
@@ -388,197 +443,16 @@ export function getElementsFromRelations(
   chapter = 1,
   folderKey = 'gatsby'
 ) {
-  // 1. relation, importance에 등장하는 id 모두 수집 (newAppearances는 무시)
-  const nodeIdSet = new Set();
-
-  // relations가 객체인 경우 relations.relations 배열을 사용
-  const relationsArray =
-    relations?.relations || (Array.isArray(relations) ? relations : []);
-
-  if (Array.isArray(relationsArray)) {
-    relationsArray.forEach((rel) => {
-      if (rel.id1 !== undefined) nodeIdSet.add(safeId(rel.id1));
-      if (rel.id2 !== undefined) nodeIdSet.add(safeId(rel.id2));
-      if (rel.source !== undefined) nodeIdSet.add(safeId(rel.source));
-      if (rel.target !== undefined) nodeIdSet.add(safeId(rel.target));
-    });
-  }
-
-  if (importance && typeof importance === "object") {
-    Object.keys(importance).forEach((id) => nodeIdSet.add(safeId(id)));
-  }
-
-  // new_appearances에 있는 인물들도 추가
-  if (newAppearances && Array.isArray(newAppearances)) {
-    newAppearances.forEach((id) => nodeIdSet.add(safeId(id)));
-  }
-
-
-  let nodes = [];
+  // graphDataUtils.js의 convertRelationsToElements 사용
   
-  // characterData 처리: 배열이거나 객체인 경우 모두 처리
-  let characterArray = [];
-  if (Array.isArray(characterData)) {
-    characterArray = characterData;
-  } else if (characterData && characterData.characters && Array.isArray(characterData.characters)) {
-    characterArray = characterData.characters;
-  } else if (characterData && typeof characterData === 'object') {
-    // characterData가 객체이지만 characters 필드가 없는 경우, 직접 배열로 변환 시도
-    characterArray = Object.values(characterData).filter(item => 
-      item && typeof item === 'object' && item.id !== undefined
-    );
-  }
+  // 캐릭터 매핑 생성
+  const { idToName, idToDesc, idToMain, idToNames } = createCharacterMaps(characterData);
   
-  if (characterArray.length > 0) {
-    // ViewerPage 전용: 관계에 참여하는 모든 인물을 노드로 생성
-    const filteredCharacters = characterArray.filter((char) => {
-      const sid = safeId(char.id);
-      return (
-        nodeIdSet.has(sid) ||
-        nodeIdSet.has(char.id) ||
-        nodeIdSet.has(Number(char.id))
-      );
-    });
-    
-    // characterData에 있는 캐릭터들
-    nodes = filteredCharacters.map((char) => {
-      const idStr = safeId(char.id); // safeId로 문자열 변환
-      return {
-        data: {
-          id: safeId(char.id),
-          label: char.common_name || char.name || safeId(char.id),
-          description: char.description || "",
-          main: char.main_character !== undefined ? char.main_character : false,
-          names:
-            char.names && char.names.length > 0
-              ? char.names
-              : char.common_name
-              ? [char.common_name]
-              : [],
-          portrait_prompt: char.portrait_prompt || "",
-          image: `/gatsby/${idStr}.png`, // 노드 이미지 추가
-        },
-      };
-    });
-    
-    // characterData에 없는 ID들에 대해 다른 챕터에서 캐릭터 정보 찾기
-    const existingIds = new Set(filteredCharacters.map(char => safeId(char.id)));
-    const missingIds = [...nodeIdSet].filter(id => !existingIds.has(id));
-    
-    if (missingIds.length > 0) {
-      console.warn(`누락된 캐릭터 ID들 발견: ${missingIds.join(', ')}`);
-      
-      // 다른 챕터에서 누락된 캐릭터 정보 찾기
-      const foundMissingCharacters = [];
-      
-      // 현재 챕터부터 역순으로 검색 (최신 정보 우선)
-      for (let searchChapter = chapter; searchChapter >= 1; searchChapter--) {
-        const searchCharData = getCharactersData(folderKey, searchChapter);
-        if (searchCharData && searchCharData.characters) {
-          const searchCharacterArray = searchCharData.characters;
-          
-          missingIds.forEach(missingId => {
-            const foundChar = searchCharacterArray.find(char => 
-              safeId(char.id) === missingId || 
-              String(char.id) === missingId ||
-              Number(char.id) === Number(missingId)
-            );
-            
-            if (foundChar && !foundMissingCharacters.some(fc => safeId(fc.id) === missingId)) {
-              foundMissingCharacters.push(foundChar);
-              console.log(`캐릭터 ID ${missingId}를 챕터 ${searchChapter}에서 발견: ${foundChar.common_name || foundChar.name}`);
-            }
-          });
-        }
-      }
-      
-      // 찾은 캐릭터들을 노드에 추가
-      foundMissingCharacters.forEach(char => {
-        const idStr = safeId(char.id);
-        nodes.push({
-          data: {
-            id: idStr,
-            label: char.common_name || char.name || idStr,
-            description: char.description || "",
-            main: char.main_character !== undefined ? char.main_character : false,
-            names: char.names && char.names.length > 0 ? char.names : [char.common_name || char.name || idStr],
-            portrait_prompt: char.portrait_prompt || "",
-            image: `/${folderKey}/${idStr}.png`,
-          },
-        });
-      });
-      
-      // 여전히 찾지 못한 ID들에 대해 로그만 출력하고 노드 생성하지 않음
-      const stillMissingIds = missingIds.filter(id => 
-        !foundMissingCharacters.some(fc => safeId(fc.id) === id)
-      );
-      
-      if (stillMissingIds.length > 0) {
-        console.warn(`캐릭터 ID들을 어떤 챕터에서도 찾을 수 없어 제외합니다: ${stillMissingIds.join(', ')}`);
-        
-        // nodeIdSet에서 찾지 못한 ID들 제거
-        stillMissingIds.forEach(id => {
-          nodeIdSet.delete(id);
-        });
-      }
-    }
-  }
-
-  // 3. 엣지 생성 (safeId 적용)
-  const edges = relationsArray
-    .filter((rel) => {
-      const source = safeId(rel.id1 || rel.source);
-      const target = safeId(rel.id2 || rel.target);
-      
-      // 1. id1 == id2 인 경우 제외
-      if (source === target) {
-        console.warn(`자기 자신과의 관계는 제외됩니다: ${source}`);
-        return false;
-      }
-      
-      // 2. 노드가 0.0 인 경우 제외
-      if (source === '0' || target === '0') {
-        console.warn(`ID가 0인 노드와의 관계는 제외됩니다: ${source} -> ${target}`);
-        return false;
-      }
-      
-      // 3. 해당 event에 없는 노드가 포함된 경우 제외
-      if (!nodeIdSet.has(source) || !nodeIdSet.has(target)) {
-        console.warn(`이벤트에 존재하지 않는 노드와의 관계는 제외됩니다: ${source} -> ${target}`);
-        return false;
-      }
-      
-      return true;
-    })
-    .map((rel, idx) => {
-      // 간선 라벨 로직: 1개인 경우 최초 관계, 여러개인 경우 최근 관계
-      let label = "";
-      if (Array.isArray(rel.relation)) {
-        if (rel.relation.length === 1) {
-          // 1개인 경우: 최초의 관계 (첫 번째 요소)
-          label = rel.relation[0] || "";
-        } else if (rel.relation.length > 1) {
-          // 여러개인 경우: 가장 최근에 추가된 관계 (마지막 요소)
-          label = rel.relation[rel.relation.length - 1] || "";
-        }
-      } else {
-        label = rel.type || "";
-      }
-      
-      return {
-        data: {
-          id: `e${idx}`,
-          source: safeId(rel.id1 || rel.source),
-          target: safeId(rel.id2 || rel.target),
-          label: label,
-          explanation: rel.explanation,
-          positivity: rel.positivity,
-          weight: rel.weight,
-        },
-      };
-    });
-
-  return [...nodes, ...edges];
+  // relations 배열 추출
+  const relationsArray = relations?.relations || (Array.isArray(relations) ? relations : []);
+  
+  // convertRelationsToElements 사용
+  return convertRelationsToElements(relationsArray, idToName, idToDesc, idToMain, idToNames, folderKey);
 }
 
 /**
@@ -656,7 +530,7 @@ export async function loadChapterData(
     setEvents(events);
 
     // 캐릭터 데이터 로드 - c_chapter1_0.json 사용
-    const characterFilePath = Object.keys(viewerCharactersModules).find((path) =>
+    const characterFilePath = Object.keys(dataModules.characters).find((path) =>
       path.includes(`/${folderKey}/c_chapter${currentChapter}_0.json`)
     );
     if (!characterFilePath) {
@@ -664,7 +538,7 @@ export async function loadChapterData(
         `캐릭터 데이터 파일을 찾을 수 없습니다: ${folderKey}/chapter${currentChapter}`
       );
     }
-    const characterData = viewerCharactersModules[characterFilePath].default;
+    const characterData = dataModules.characters[characterFilePath].default;
     setCharacterData(characterData.characters || characterData);
 
     // ViewerPage에서는 관계 데이터를 누적하지 않음

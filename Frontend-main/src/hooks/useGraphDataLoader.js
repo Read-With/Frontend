@@ -5,6 +5,7 @@ import {
   getLastEventIndexForChapter, 
   getFolderKeyFromFilename, 
   getDetectedMaxChapter,
+  getSafeMaxChapter,
   createCharacterMaps
 } from '../utils/graphData';
 import { convertRelationsToElements, calcGraphDiff } from '../utils/graphDataUtils';
@@ -43,7 +44,7 @@ export function useGraphDataLoader(filename, chapter, eventIndex = null) {
     if (!filename) return;
     
     const folderKey = getFolderKeyFromFilename(filename);
-    const detectedMaxChapter = getDetectedMaxChapter(folderKey);
+    const detectedMaxChapter = getSafeMaxChapter(folderKey, 1);
     setMaxChapter(detectedMaxChapter);
   }, [filename]);
 

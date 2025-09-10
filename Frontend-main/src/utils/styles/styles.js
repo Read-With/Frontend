@@ -417,7 +417,7 @@ export const topBarStyles = {
     width: '100%',
     background: '#fff',
     boxShadow: '0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.04)',
-    zIndex: 10001,
+    zIndex: 1000,
     display: 'flex',
     flexDirection: 'row',
     alignItems: 'center',
@@ -541,7 +541,7 @@ export const unifiedNodeTooltipStyles = {
   // 툴팁 모드 컨테이너
   tooltipContainer: {
     position: "fixed",
-    zIndex: 9999,
+    zIndex: 99999,
     width: 500,
     minWidth: 500,
     maxWidth: 500,
@@ -570,7 +570,7 @@ export const unifiedNodeTooltipStyles = {
   // 에러 툴팁 컨테이너
   errorContainer: {
     position: "fixed",
-    zIndex: 10000,
+    zIndex: 99999,
     width: 500,
     minHeight: 150,
     background: COLORS.background,
@@ -584,7 +584,7 @@ export const unifiedNodeTooltipStyles = {
   // 등장하지 않은 인물 툴팁
   notAppearedContainer: {
     position: "fixed",
-    zIndex: 9999,
+    zIndex: 99999,
     opacity: 1,
     transition: "opacity 0.3s",
     cursor: "grab",

@@ -301,6 +301,6 @@ export const graphControlsStyles = {
     display: 'inline-block',
     width: 'auto',
     minWidth: '200px',
-    zIndex: 10001
+    zIndex: 1000
   }
 };
