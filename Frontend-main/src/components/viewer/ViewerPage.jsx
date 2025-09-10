@@ -72,6 +72,9 @@ function GraphSplitArea({
           filename={viewerState.filename}
           elements={isSearchActive && filteredElements && filteredElements.length > 0 ? filteredElements : graphState.elements}
           isResetFromSearch={isResetFromSearch}
+          // ViewerTopBar와 동일한 이벤트 정보 전달
+          prevValidEvent={graphState.prevValidEvent}
+          events={graphState.events || []}
         />
       </div>
     </div>

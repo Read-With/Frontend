@@ -41,6 +41,9 @@ function UnifiedEdgeTooltip({
   chapterNum = 1,
   eventNum = 1,
   maxChapter = 10,
+  currentEvent = null,
+  prevValidEvent = null,
+  events = [],
 }) {
   const { filename } = useParams();
 
@@ -69,11 +72,33 @@ function UnifiedEdgeTooltip({
   // 뷰 모드: "info" | "chart"
   const [viewMode, setViewMode] = useState("info");
 
+  // ViewerTopBar와 동일한 방식으로 이벤트 정보 처리
+  const getUnifiedEventInfo = useCallback(() => {
+    // ViewerTopBar와 동일한 로직: currentEvent || prevValidEvent
+    const eventToShow = currentEvent || prevValidEvent;
+    
+    if (eventToShow) {
+      return {
+        eventNum: eventToShow.eventNum ?? 0,
+        name: eventToShow.name || eventToShow.event_name || "",
+        chapterProgress: eventToShow.chapterProgress,
+        currentChars: eventToShow.currentChars,
+        totalChars: eventToShow.totalChars
+      };
+    }
+    
+    // 이벤트 정보가 없는 경우 기존 로직 사용 (하위 호환성)
+    return { eventNum: eventNum || 0 };
+  }, [currentEvent, prevValidEvent, eventNum]);
+
   // source/target을 safeNum으로 변환
   const id1 = safeNum(data.source);
   const id2 = safeNum(data.target);
 
-  // 관계 데이터 관리
+  // 통합된 이벤트 정보 가져오기
+  const unifiedEventInfo = getUnifiedEventInfo();
+
+  // 관계 데이터 관리 (통합된 이벤트 번호 사용)
   const {
     timeline,
     labels,
@@ -81,21 +106,21 @@ function UnifiedEdgeTooltip({
     noRelation,
     fetchData,
     getMaxEventCount,
-  } = useRelationData(mode, id1, id2, chapterNum, eventNum, maxChapter, filename);
+  } = useRelationData(mode, id1, id2, chapterNum, unifiedEventInfo.eventNum, maxChapter, filename);
 
-  // 차트 모드일 때 데이터 가져오기
+  // 차트 모드일 때 데이터 가져오기 (통합된 이벤트 정보 사용)
   useEffect(() => {
     if (viewMode === "chart") {
       fetchData();
     }
-  }, [viewMode, id1, id2, chapterNum, eventNum, maxChapter]);
+  }, [viewMode, id1, id2, chapterNum, unifiedEventInfo.eventNum, maxChapter]);
 
-  // 앞면에서도 관계 존재 여부 확인 (viewer 모드에서만)
+  // 앞면에서도 관계 존재 여부 확인 (viewer 모드에서만, 통합된 이벤트 정보 사용)
   useEffect(() => {
     if (viewMode === "info" && mode === 'viewer') {
       fetchData();
     }
-  }, [viewMode, id1, id2, chapterNum, eventNum, mode]);
+  }, [viewMode, id1, id2, chapterNum, unifiedEventInfo.eventNum, mode]);
 
   // 컴포넌트 언마운트 시 리소스 정리
   useEffect(() => {
@@ -110,9 +135,13 @@ function UnifiedEdgeTooltip({
   // 관계 라벨 배열 생성 (캐시된 함수 사용으로 성능 최적화)
   const relationLabels = processRelationTagsCached(data.relation, data.label);
 
-  // 모드별 설정
+  // 모드별 설정 (통합된 이벤트 정보 사용)
   const zIndex = mode === 'viewer' ? 9998 : 9998;
-  const chartTitle = mode === 'viewer' ? `Chapter ${chapterNum}` : "관계 변화 그래프";
+  const chartTitle = mode === 'viewer' 
+    ? (unifiedEventInfo.name 
+        ? `Chapter ${chapterNum} - ${unifiedEventInfo.name}` 
+        : `Chapter ${chapterNum} - Event ${unifiedEventInfo.eventNum}`)
+    : "관계 변화 그래프";
   const safeMaxChapter = mode === 'standalone' && maxChapter && !isNaN(maxChapter) ? maxChapter : 10;
 
   // 사이드바 모드일 때는 완전히 다른 레이아웃 사용

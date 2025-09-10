@@ -11,7 +11,9 @@ const GraphContainer = forwardRef(({
   onSearchStateChange,
   onElementsUpdate,
   filename,
-  elements: externalElements, // 외부에서 전달받은 elements
+  elements: externalElements, 
+  prevValidEvent = null,
+  events = [],
   ...props
 }, ref) => {
 
@@ -80,6 +82,9 @@ const GraphContainer = forwardRef(({
       isSearchActive={internalIsSearchActive}
       filteredElements={internalFilteredElements}
       isResetFromSearch={internalIsResetFromSearch}
+      currentEvent={currentEvent}
+      prevValidEvent={prevValidEvent}
+      events={events}
       {...props}
     />
   );

@@ -47,6 +47,9 @@ function UnifiedNodeInfo({
   isSearchActive = false,
   filteredElements = [],
   filename,
+  currentEvent = null,
+  prevValidEvent = null,
+  events = [],
 }) {
   const { filename: urlFilename } = useParams();
   const location = useLocation();
@@ -99,7 +102,31 @@ function UnifiedNodeInfo({
   const id2 = safeNum(nodeData?.id);
   const { fetchData } = useRelationData('standalone', id1, id2, chapterNum, eventNum, dynamicMaxChapter, actualFilename);
 
-  // 노드 등장 여부 확인 함수
+  // ViewerTopBar와 동일한 방식으로 이벤트 정보 처리
+  const getUnifiedEventInfo = useCallback(() => {
+    // ViewerTopBar와 동일한 로직: currentEvent || prevValidEvent
+    const eventToShow = currentEvent || prevValidEvent;
+    
+    if (eventToShow) {
+      return {
+        eventNum: eventToShow.eventNum ?? 0,
+        name: eventToShow.name || eventToShow.event_name || "",
+        chapterProgress: eventToShow.chapterProgress,
+        currentChars: eventToShow.currentChars,
+        totalChars: eventToShow.totalChars
+      };
+    }
+    
+    // 이벤트 정보가 없는 경우 기존 로직 사용 (하위 호환성)
+    if (isGraphPage || !eventNum || eventNum === 0) {
+      const lastEventNums = getChapterLastEventNums(folderKey);
+      return { eventNum: lastEventNums[chapterNum - 1] || 1 };
+    }
+    
+    return { eventNum: eventNum || 0 };
+  }, [currentEvent, prevValidEvent, isGraphPage, eventNum, chapterNum, folderKey]);
+
+  // 노드 등장 여부 확인 함수 (ViewerTopBar 방식 적용)
   const checkNodeAppearance = useCallback(() => {
     try {
       setIsNodeAppeared(false);
@@ -116,12 +143,10 @@ function UnifiedNodeInfo({
         return;
       }
 
-      let targetEventNum = eventNum;
+      // ViewerTopBar와 동일한 방식으로 이벤트 정보 가져오기
+      const unifiedEventInfo = getUnifiedEventInfo();
+      const targetEventNum = unifiedEventInfo.eventNum;
 
-      if (isGraphPage || !eventNum || eventNum === 0) {
-        const lastEventNums = getChapterLastEventNums(folderKey);
-        targetEventNum = lastEventNums[chapterNum - 1] || 1;
-      }
       const json = getEventDataByIndex(folderKey, chapterNum, targetEventNum);
 
       const nodeId = String(data.id || data.data?.id);
@@ -161,7 +186,7 @@ function UnifiedNodeInfo({
       setError(err.message);
       setIsNodeAppeared(false);
     }
-  }, [data, chapterNum, eventNum, isGraphPage, dynamicMaxChapter, actualFilename, elements]);
+  }, [data, chapterNum, getUnifiedEventInfo, isGraphPage, dynamicMaxChapter, actualFilename, elements]);
 
   // 노드 등장 여부 확인
   useEffect(() => {
@@ -331,10 +356,16 @@ function UnifiedNodeInfo({
             marginTop: 8,
           }}
         >
-          {isGraphPage 
-            ? `챕터 ${chapterNum}에서는 등장하지 않습니다`
-            : `챕터 ${chapterNum} 이벤트 ${eventNum || '현재'}에서는 등장하지 않습니다`
-          }
+          {(() => {
+            const unifiedEventInfo = getUnifiedEventInfo();
+            if (unifiedEventInfo.name) {
+              return `챕터 ${chapterNum} 이벤트 "${unifiedEventInfo.name}"에서는 등장하지 않습니다`;
+            } else if (unifiedEventInfo.eventNum) {
+              return `챕터 ${chapterNum} 이벤트 ${unifiedEventInfo.eventNum}에서는 등장하지 않습니다`;
+            } else {
+              return `챕터 ${chapterNum}에서는 등장하지 않습니다`;
+            }
+          })()}
         </p>
       </div>
     );

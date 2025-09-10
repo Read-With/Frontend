@@ -27,6 +27,10 @@ const ViewerRelationGraph = ({
   isSearchActive,
   filteredElements,
   isResetFromSearch,
+  // ViewerTopBar와 동일한 이벤트 정보를 받기 위한 새로운 props
+  currentEvent = null,
+  prevValidEvent = null,
+  events = [],
 }) => {
   const cyRef = useRef(null);
   const [activeTooltip, setActiveTooltip] = useState(null);
@@ -127,6 +131,10 @@ const ViewerRelationGraph = ({
             filename={filename}
             elements={elements}
             style={graphStyles.tooltipStyle}
+            // ViewerTopBar와 동일한 이벤트 정보 전달
+            currentEvent={currentEvent}
+            prevValidEvent={prevValidEvent}
+            events={events}
           />
         )}
         {activeTooltip?.type === "edge" && (
@@ -144,6 +152,9 @@ const ViewerRelationGraph = ({
             maxChapter={maxChapter}
             filename={filename}
             style={graphStyles.tooltipStyle}
+            currentEvent={currentEvent}
+            prevValidEvent={prevValidEvent}
+            events={events}
           />
         )}
       </div>
