@@ -192,6 +192,7 @@ function GraphSidebar({
           maxChapter={maxChapter}
           elements={elements}
           displayMode="sidebar"
+          filename={filename}
         />
       </div>
     );
@@ -290,7 +291,7 @@ function GraphSidebar({
             />
           ) : (
             <UnifiedEdgeTooltip
-              edgeData={activeTooltip.data}
+              data={activeTooltip.data}
               sourceNode={activeTooltip.sourceNode}
               targetNode={activeTooltip.targetNode}
               chapterNum={chapterNum}
@@ -301,6 +302,8 @@ function GraphSidebar({
               isSearchActive={isSearchActive}
               filteredElements={filteredElements}
               searchTerm={searchTerm}
+              displayMode="sidebar"
+              onClose={handleClose}
             />
           )}
         </div>

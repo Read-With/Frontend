@@ -170,6 +170,89 @@ function fetchRelationTimelineStandalone(id1, id2, chapterNum, eventNum, maxChap
 }
 
 /**
+ * 그래프 온리 페이지용 누적 모드 관계 타임라인 데이터 가져오기
+ * @param {number} id1 - 첫 번째 노드 ID
+ * @param {number} id2 - 두 번째 노드 ID
+ * @param {number} selectedChapter - 선택된 챕터 번호
+ * @param {number} maxChapter - 최대 챕터 수
+ * @param {string} folderKey - 폴더 키
+ * @returns {Object} 타임라인 데이터
+ */
+function fetchRelationTimelineCumulative(id1, id2, selectedChapter, maxChapter, folderKey) {
+  if (!folderKey || selectedChapter < 1) {
+    return { points: [], labelInfo: [] };
+  }
+  
+  try {
+    const detectedMaxChapter = getDetectedMaxChapter(folderKey);
+    const actualMaxChapter = maxChapter || detectedMaxChapter;
+    
+    // 처음 등장한 시점 찾기 (전체 범위에서)
+    const firstAppearance = findFirstAppearance(id1, id2, actualMaxChapter, folderKey);
+    
+    if (!firstAppearance) {
+      return { points: [], labelInfo: [] };
+    }
+
+    const lastEventNums = getChapterLastEventNums(folderKey);
+    
+    if (selectedChapter === firstAppearance.chapter) {
+      // 첫 등장 챕터인 경우: 등장 시점부터 챕터 마지막까지
+      const lastEvent = lastEventNums[selectedChapter - 1] || 0;
+      return collectRelationData(
+        id1, id2,
+        selectedChapter, selectedChapter,
+        firstAppearance.event, lastEvent,
+        folderKey
+      );
+    } else if (selectedChapter > firstAppearance.chapter) {
+      // 이후 챕터인 경우: 처음 등장 챕터부터 이전 챕터까지의 모든 마지막 이벤트 정보 + 현재 챕터 전체
+      const currentLastEvent = lastEventNums[selectedChapter - 1] || 0;
+      
+      // 처음 등장 챕터부터 이전 챕터까지의 모든 마지막 이벤트 데이터 수집
+      const allPrevChaptersData = { points: [], labelInfo: [] };
+      
+      for (let ch = firstAppearance.chapter; ch < selectedChapter; ch++) {
+        const chapterLastEvent = lastEventNums[ch - 1] || 0;
+        
+        // 각 챕터의 마지막 이벤트 데이터만 가져오기
+        const chapterData = collectRelationData(
+          id1, id2,
+          ch, ch,
+          chapterLastEvent, chapterLastEvent,
+          folderKey
+        );
+        
+        allPrevChaptersData.points.push(...chapterData.points);
+        allPrevChaptersData.labelInfo.push(...chapterData.labelInfo.map(() => `Ch${ch}`));
+      }
+      
+      // 현재 챕터의 전체 데이터
+      const currentChapterData = collectRelationData(
+        id1, id2,
+        selectedChapter, selectedChapter,
+        1, currentLastEvent,
+        folderKey
+      );
+      
+      // 데이터 병합 (라벨 수정: 이전 챕터들은 Ch표시, 현재 챕터는 E표시)
+      return {
+        points: [...allPrevChaptersData.points, ...currentChapterData.points],
+        labelInfo: [
+          ...allPrevChaptersData.labelInfo,  // 이전 챕터들: Ch1, Ch2, Ch3...
+          ...currentChapterData.labelInfo    // 현재 챕터는 E1, E2, E3... 형태로 표시
+        ]
+      };
+    } else {
+      // 아직 등장하지 않은 챕터인 경우
+      return { points: [], labelInfo: [] };
+    }
+  } catch (error) {
+    return { points: [], labelInfo: [] };
+  }
+}
+
+/**
  * 뷰어 모드용 관계 타임라인 데이터 가져오기 (관계가 처음 등장하는 이벤트부터 현재 이벤트까지)
  * @param {number} id1 - 첫 번째 노드 ID
  * @param {number} id2 - 두 번째 노드 ID
@@ -244,12 +327,12 @@ function padSingleEvent(points, labels) {
 
 /**
  * 간선 관계 데이터를 가져오는 커스텀 훅
- * @param {string} mode - 'standalone' | 'viewer'
+ * @param {string} mode - 'standalone' | 'viewer' | 'cumulative'
  * @param {number} id1 - 첫 번째 노드 ID
  * @param {number} id2 - 두 번째 노드 ID
  * @param {number} chapterNum - 현재 챕터 번호
- * @param {number} eventNum - 현재 이벤트 번호
- * @param {number} maxChapter - 최대 챕터 수 (standalone 모드에서만 사용, 없으면 자동 감지)
+ * @param {number} eventNum - 현재 이벤트 번호 (cumulative 모드에서는 사용하지 않음)
+ * @param {number} maxChapter - 최대 챕터 수 (standalone, cumulative 모드에서 사용)
  * @param {string} filename - 파일명 (예: "gatsby.epub", "alice.epub")
  * @returns {object} 차트 데이터와 로딩 상태
  */
@@ -293,9 +376,15 @@ export function useRelationData(mode, id1, id2, chapterNum, eventNum, maxChapter
     }
     
     try {
-      const result = mode === 'viewer' 
-        ? fetchRelationTimelineViewer(id1, id2, chapterNum, eventNum, folderKey)
-        : fetchRelationTimelineStandalone(id1, id2, chapterNum, eventNum, maxChapter, folderKey);
+      let result;
+      
+      if (mode === 'viewer') {
+        result = fetchRelationTimelineViewer(id1, id2, chapterNum, eventNum, folderKey);
+      } else if (mode === 'cumulative') {
+        result = fetchRelationTimelineCumulative(id1, id2, chapterNum, maxChapter, folderKey);
+      } else {
+        result = fetchRelationTimelineStandalone(id1, id2, chapterNum, eventNum, maxChapter, folderKey);
+      }
       
       const { points, labels } = padSingleEvent(result.points, result.labelInfo);
       
