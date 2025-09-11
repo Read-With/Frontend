@@ -72,6 +72,9 @@ function UnifiedEdgeTooltip({
 
   // 뷰 모드: "info" | "chart"
   const [viewMode, setViewMode] = useState("info");
+  
+  // 로딩 상태 관리
+  const [isInitialLoad, setIsInitialLoad] = useState(true);
 
   // ViewerTopBar와 동일한 방식으로 이벤트 정보 처리
   const getUnifiedEventInfo = useCallback(() => {
@@ -92,6 +95,16 @@ function UnifiedEdgeTooltip({
     return { eventNum: eventNum || 0 };
   }, [currentEvent, prevValidEvent, eventNum]);
 
+  // 디버깅: 이벤트 정보 변경 감지 (개발 환경에서만)
+  useEffect(() => {
+    if (process.env.NODE_ENV === 'development') {
+      console.log('=== Edge Tooltip 이벤트 정보 변경 ===');
+      console.log('currentEvent:', currentEvent);
+      console.log('prevValidEvent:', prevValidEvent);
+      console.log('unifiedEventInfo:', getUnifiedEventInfo());
+    }
+  }, [currentEvent, prevValidEvent, getUnifiedEventInfo]);
+
   // source/target을 safeNum으로 변환
   const id1 = safeNum(data.source);
   const id2 = safeNum(data.target);
@@ -105,23 +118,50 @@ function UnifiedEdgeTooltip({
     labels,
     loading,
     noRelation,
+    error: relationError,
     fetchData,
     getMaxEventCount,
   } = useRelationData(mode, id1, id2, chapterNum, unifiedEventInfo.eventNum, maxChapter, filename);
 
+  // 디버깅: 관계 데이터 상태 변경 감지 (개발 환경에서만)
+  useEffect(() => {
+    if (process.env.NODE_ENV === 'development') {
+      console.log('=== Edge Tooltip 관계 데이터 상태 변경 ===');
+      console.log('timeline:', timeline);
+      console.log('labels:', labels);
+      console.log('loading:', loading);
+      console.log('noRelation:', noRelation);
+    }
+  }, [timeline, labels, loading, noRelation]);
+
+  // 초기 로딩 완료 감지
+  useEffect(() => {
+    if (!loading && isInitialLoad) {
+      setIsInitialLoad(false);
+    }
+  }, [loading, isInitialLoad]);
+
   // 차트 모드일 때 데이터 가져오기 (통합된 이벤트 정보 사용)
   useEffect(() => {
     if (viewMode === "chart") {
+      if (process.env.NODE_ENV === 'development') {
+        console.log('=== 차트 모드 데이터 가져오기 ===');
+        console.log('unifiedEventInfo.eventNum:', unifiedEventInfo.eventNum);
+      }
       fetchData();
     }
-  }, [viewMode, id1, id2, chapterNum, unifiedEventInfo.eventNum, maxChapter]);
+  }, [viewMode, id1, id2, chapterNum, unifiedEventInfo.eventNum, maxChapter, fetchData]);
 
   // 앞면에서도 관계 존재 여부 확인 (viewer 모드에서만, 통합된 이벤트 정보 사용)
   useEffect(() => {
     if (viewMode === "info" && mode === 'viewer') {
+      if (process.env.NODE_ENV === 'development') {
+        console.log('=== 정보 모드 관계 존재 여부 확인 ===');
+        console.log('unifiedEventInfo.eventNum:', unifiedEventInfo.eventNum);
+      }
       fetchData();
     }
-  }, [viewMode, id1, id2, chapterNum, unifiedEventInfo.eventNum, mode]);
+  }, [viewMode, id1, id2, chapterNum, unifiedEventInfo.eventNum, mode, fetchData]);
 
   // 컴포넌트 언마운트 시 리소스 정리
   useEffect(() => {
@@ -507,6 +547,42 @@ function UnifiedEdgeTooltip({
                     }}></div>
                     <span>데이터를 불러오는 중...</span>
                   </div>
+                ) : relationError ? (
+                  <div style={{
+                    textAlign: 'center',
+                    padding: '60px 20px',
+                    color: '#ef4444',
+                    fontSize: '14px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    gap: '12px',
+                  }}>
+                    <div style={{
+                      width: '32px',
+                      height: '32px',
+                      borderRadius: '50%',
+                      backgroundColor: '#fef2f2',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: '18px',
+                    }}>
+                      ⚠️
+                    </div>
+                    <span>데이터를 불러올 수 없습니다</span>
+                    <button
+                      onClick={fetchData}
+                      style={{
+                        ...buttonStyles.secondary,
+                        fontSize: '12px',
+                        padding: '6px 12px',
+                      }}
+                      {...buttonHandlers.secondary}
+                    >
+                      다시 시도
+                    </button>
+                  </div>
                 ) : (
                   <div style={{ 
                     height: '320px',
@@ -724,6 +800,42 @@ function UnifiedEdgeTooltip({
                 <div style={{ textAlign: "center", marginTop: 60, flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                   불러오는 중...
                 </div>
+              ) : relationError ? (
+                <div style={{ 
+                  flex: 1, 
+                  display: 'flex', 
+                  flexDirection: 'column',
+                  justifyContent: 'center',
+                  alignItems: 'center', 
+                  padding: '20px',
+                  minHeight: '100%'
+                }}>
+                  <div style={{ 
+                    flex: 1,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}>
+                    <div style={{ 
+                      textAlign: "center", 
+                      color: "#ef4444", 
+                      fontSize: 16,
+                      maxWidth: '280px',
+                      lineHeight: '1.5'
+                    }}>
+                      데이터를 불러올 수 없습니다
+                    </div>
+                  </div>
+                  <div style={{ marginTop: 'auto', paddingTop: 20, paddingBottom: 6, paddingLeft: 6, paddingRight: 6, textAlign: "center" }}>
+                    <button
+                      onClick={fetchData}
+                      style={buttonStyles.secondary}
+                      {...buttonHandlers.secondary}
+                    >
+                      다시 시도
+                    </button>
+                  </div>
+                </div>
               ) : (mode === 'viewer' && noRelation) ? (
                 <div style={{ 
                   flex: 1, 
@@ -800,4 +912,18 @@ function UnifiedEdgeTooltip({
   );
 }
 
-export default UnifiedEdgeTooltip;
+// 성능 최적화를 위한 React.memo 적용
+export default React.memo(UnifiedEdgeTooltip, (prevProps, nextProps) => {
+  // 주요 props만 비교하여 불필요한 리렌더링 방지
+  return (
+    prevProps.data === nextProps.data &&
+    prevProps.x === nextProps.x &&
+    prevProps.y === nextProps.y &&
+    prevProps.currentEvent === nextProps.currentEvent &&
+    prevProps.prevValidEvent === nextProps.prevValidEvent &&
+    prevProps.chapterNum === nextProps.chapterNum &&
+    prevProps.eventNum === nextProps.eventNum &&
+    prevProps.mode === nextProps.mode &&
+    prevProps.displayMode === nextProps.displayMode
+  );
+});

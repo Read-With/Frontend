@@ -143,8 +143,17 @@ const ViewerPage = () => {
 
   // 툴팁 설정 함수
   const handleSetActiveTooltip = useCallback((tooltipData) => {
+    if (process.env.NODE_ENV === 'development') {
+      console.log('=== ViewerPage 툴팁 설정 ===');
+      console.log('tooltipData:', tooltipData);
+      console.log('현재 이벤트 정보:', {
+        currentEvent,
+        prevValidEvent: prevValidEventRef.current,
+        currentChapter
+      });
+    }
     setActiveTooltip(tooltipData);
-  }, []);
+  }, [currentEvent, currentChapter]);
 
   // 전역 클릭 감지를 위한 ref - 툴팁이 활성화된 경우에만 감지
   // 툴팁 닫기와 동시에 그래프 스타일도 초기화

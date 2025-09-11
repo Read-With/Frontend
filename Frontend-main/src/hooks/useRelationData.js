@@ -294,12 +294,25 @@ export function useRelationData(mode, id1, id2, chapterNum, eventNum, maxChapter
     setLoading(true);
     setError(null);
     
+    // 디버깅: 관계 데이터 요청 로그 (개발 환경에서만)
+    if (process.env.NODE_ENV === 'development') {
+      console.log('=== useRelationData fetchData 호출 ===');
+      console.log('mode:', mode);
+      console.log('id1:', id1, 'id2:', id2);
+      console.log('chapterNum:', chapterNum, 'eventNum:', eventNum);
+      console.log('folderKey:', folderKey);
+    }
+    
     try {
       const result = mode === 'viewer' 
         ? fetchRelationTimelineViewer(id1, id2, chapterNum, eventNum, folderKey)
         : fetchRelationTimelineStandalone(id1, id2, chapterNum, eventNum, maxChapter, folderKey);
       
       const { points, labels } = padSingleEvent(result.points, result.labelInfo);
+      
+      if (process.env.NODE_ENV === 'development') {
+        console.log('관계 데이터 결과:', { points, labels, noRelation: result.noRelation });
+      }
       
       setTimeline(points);
       setLabels(labels);
@@ -320,7 +333,8 @@ export function useRelationData(mode, id1, id2, chapterNum, eventNum, maxChapter
     fetchData();
   }, [fetchData]);
 
-  return {
+  // 메모이제이션된 반환값으로 불필요한 리렌더링 방지
+  return useMemo(() => ({
     timeline,
     labels,
     loading,
@@ -328,5 +342,5 @@ export function useRelationData(mode, id1, id2, chapterNum, eventNum, maxChapter
     error,
     fetchData,
     getMaxEventCount: () => maxEventCount,
-  };
+  }), [timeline, labels, loading, noRelation, error, fetchData, maxEventCount]);
 }
