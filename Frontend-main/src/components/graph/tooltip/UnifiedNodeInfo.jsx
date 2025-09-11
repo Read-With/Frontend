@@ -90,12 +90,12 @@ function UnifiedNodeInfo({
   const [showSummary, setShowSummary] = useState(false);
 
   // 툴팁 모드에서만 위치 관리 훅 사용
-  const { position, showContent, isDragging, tooltipRef, handleMouseDown } = useTooltipPosition(x, y);
+  const { position, showContent, isDragging, justFinishedDragging, tooltipRef, handleMouseDown } = useTooltipPosition(x, y);
 
-  // 외부 클릭 감지 훅 - 툴팁 모드에서만 사용
+  // 외부 클릭 감지 훅 - 툴팁 모드에서만 사용, 드래그 후 클릭 무시
   const clickOutsideRef = useClickOutside(() => {
     if (onClose) onClose();
-  }, displayMode === 'tooltip');
+  }, displayMode === 'tooltip', true);
 
   // 관계 데이터 관리 (슬라이드바 모드에서 사용)
   const id1 = safeNum(nodeData?.id);

@@ -217,11 +217,20 @@ const CytoscapeGraphUnified = ({
     const handleDrag = (evt) => {
       const node = evt.target;
       node.style('transition-property', 'none');
+      isDraggingRef.current = true;
     };
 
     const handleDragFree = (evt) => {
       const node = evt.target;
       node.style('transition-property', 'position');
+      
+      // 드래그 완료 이벤트 발생
+      const dragEndEvent = new CustomEvent('graphDragEnd', {
+        detail: { type: 'graphDragEnd', timestamp: Date.now() }
+      });
+      document.dispatchEvent(dragEndEvent);
+      
+      isDraggingRef.current = false;
     };
 
     cy.on('dragfreeon', 'node', handleDragFreeOn);

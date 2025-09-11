@@ -3,6 +3,8 @@ import PropTypes from 'prop-types';
 import { useNavigate } from 'react-router-dom';
 import LoadingSpinner from '../common/LoadingSpinner';
 import { theme } from '../common/theme';
+import { createButtonStyle, createAdvancedButtonHandlers } from '../../utils/styles/styles';
+import { ANIMATION_VALUES } from '../../utils/styles/animations';
 
 const BookCard = ({ book, onToggleFavorite, onBookClick }) => {
   const navigate = useNavigate();
@@ -93,29 +95,24 @@ const BookCard = ({ book, onToggleFavorite, onBookClick }) => {
   };
 
   const primaryButtonStyle = {
+    ...createButtonStyle(ANIMATION_VALUES, 'primary'),
     padding: '2px 10px',
     fontSize: theme.fontSize.xs,
     borderRadius: theme.borderRadius.full,
-    background: theme.gradients.primary,
-    color: theme.colors.text.white,
-    border: 'none',
-    fontWeight: 600,
-    cursor: 'pointer',
     minWidth: '70px',
-    transition: `transform ${theme.transitions.default}, background ${theme.transitions.default}`
+    height: 'auto'
   };
 
   const secondaryButtonStyle = {
+    ...createButtonStyle(ANIMATION_VALUES, 'default'),
     padding: '2px 10px',
     fontSize: theme.fontSize.xs,
     borderRadius: theme.borderRadius.full,
     background: '#f0f4fa',
     color: theme.colors.primary,
     border: 'none',
-    fontWeight: 600,
-    cursor: 'pointer',
     minWidth: '70px',
-    transition: `transform ${theme.transitions.default}`
+    height: 'auto'
   };
 
   const [isHovered, setIsHovered] = React.useState(false);
@@ -244,10 +241,18 @@ const BookCard = ({ book, onToggleFavorite, onBookClick }) => {
         </div>
         <div style={{ flex: 1 }} />
         <div style={buttonsStyle}>
-          <button style={primaryButtonStyle} onClick={handleReadClick}>
+          <button 
+            style={primaryButtonStyle} 
+            onClick={handleReadClick}
+            {...createAdvancedButtonHandlers('primary')}
+          >
             읽기
           </button>
-          <button style={secondaryButtonStyle} onClick={handleGraphClick}>
+          <button 
+            style={secondaryButtonStyle} 
+            onClick={handleGraphClick}
+            {...createAdvancedButtonHandlers('default')}
+          >
             그래프
           </button>
         </div>

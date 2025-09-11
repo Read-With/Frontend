@@ -5,6 +5,8 @@ import FileUpload from '../components/library/FileUpload';
 import { useBooks } from '../hooks/useBooks';
 import { useUserProfile } from '../hooks/useUserProfile';
 import { theme } from '../components/common/theme';
+import { createButtonStyle, createAdvancedButtonHandlers } from '../utils/styles/styles';
+import { ANIMATION_VALUES } from '../utils/styles/animations';
 
 export default function MyPage() {
   const { books, loading, error, retryFetch, addBook, toggleFavorite, fetchBook } = useBooks();
@@ -39,23 +41,18 @@ export default function MyPage() {
   };
 
   const uploadButtonStyle = {
+    ...createButtonStyle(ANIMATION_VALUES, 'primary'),
     position: 'fixed',
     bottom: '24px',
     right: '24px',
-    background: '#4F6DDE',
-    color: 'white',
-    border: 'none',
     borderRadius: '50%',
     width: '56px',
     height: '56px',
     fontSize: '24px',
-    cursor: 'pointer',
-    boxShadow: '0 2px 12px rgba(0,0,0,0.15)',
-    transition: 'all 0.2s ease',
-    zIndex: 100,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center'
+    fontWeight: 'bold',
+    boxShadow: '0 4px 12px rgba(79, 109, 222, 0.3)',
+    zIndex: 1000,
+    padding: '0'
   };
 
   const handleUploadSuccess = (newBook) => {
@@ -92,14 +89,7 @@ export default function MyPage() {
       <button 
         style={uploadButtonStyle}
         onClick={() => setShowUpload(true)}
-        onMouseEnter={(e) => {
-          e.target.style.transform = 'scale(1.05)';
-          e.target.style.backgroundColor = '#3a57c4';
-        }}
-        onMouseLeave={(e) => {
-          e.target.style.transform = 'scale(1)';
-          e.target.style.backgroundColor = '#4F6DDE';
-        }}
+        {...createAdvancedButtonHandlers('primary')}
         title="새 책 업로드"
       >
         +

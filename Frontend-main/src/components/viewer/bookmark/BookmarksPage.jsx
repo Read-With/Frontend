@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { loadBookmarks, removeBookmark, modifyBookmark } from './BookmarkManager';
+import { createButtonStyle, createAdvancedButtonHandlers } from '../../../utils/styles/styles';
+import { ANIMATION_VALUES } from '../../../utils/styles/animations';
 
 const bookmarkColors = {
   normal: '#f4f7ff', // 연회색(이전 페이지와 통일)

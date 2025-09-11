@@ -243,19 +243,28 @@ const ViewerToolbar = ({
 
         {/* 오른쪽 버튼 그룹 (설정 및 닫기) */}
         <div className="toolbar-group-right" style={{ display: 'flex', alignItems: 'center' }}>
-          <div style={{ marginRight: '4.5rem' }}>
+          <div style={{ marginRight: '5rem' }}>
                          <button
                className="epub-toolbar-btn epub-toolbar-btn--gray"
                aria-label="설정"
                onClick={onOpenSettings}
                style={{
-                 width: '4.5rem',
-                 marginRight: '0.5rem',
+                 width: '5.5rem',
+                 marginRight: '0.25rem',
                }}
              >
-              <span style={{display:'flex',alignItems:'center',gap:'0.45em'}}>
-                <span className="material-symbols-outlined" style={{ marginBottom: '-2px' }}>settings</span>
-                설정
+              <span style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '0.4em',
+                flexDirection: 'row'
+              }}>
+                <span className="material-symbols-outlined" style={{ 
+                  marginBottom: '-2px',
+                  fontSize: '18px'
+                }}>settings</span>
+                <span style={{ fontSize: '13px', fontWeight: '500' }}>설정</span>
               </span>
             </button>
           </div>
@@ -266,6 +275,8 @@ const ViewerToolbar = ({
                aria-label="닫기"
                style={{
                  width: '2rem',
+                 marginRight: '2rem',
+                 marginTop: '3px',
                }}
              >
               <span style={{display:'flex',alignItems:'center',gap:'0.45em'}}>

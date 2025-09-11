@@ -1,4 +1,6 @@
 import React, { useState, useEffect } from 'react';
+import { createButtonStyle, createAdvancedButtonHandlers } from '../../../utils/styles/styles';
+import { ANIMATION_VALUES } from '../../../utils/styles/animations';
 
 // 로컬 스토리지에서 설정 불러오기/저장하기 함수
 const loadSettings = () => {
@@ -122,13 +124,8 @@ const ViewerSettings = ({ isOpen, onClose, onApplySettings, currentSettings }) =
           <h2 style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#22336b' }}>뷰어 설정</h2>
           <button 
             onClick={onClose}
-            style={{ 
-              background: 'none', 
-              border: 'none', 
-              fontSize: '1.5rem', 
-              cursor: 'pointer',
-              color: '#6b7280'
-            }}
+            style={createButtonStyle(ANIMATION_VALUES, 'close')}
+            {...createAdvancedButtonHandlers('close')}
           >
             <span className="material-symbols-outlined">close</span>
           </button>
@@ -143,34 +140,32 @@ const ViewerSettings = ({ isOpen, onClose, onApplySettings, currentSettings }) =
             <button
               onClick={() => handleChange('pageMode', 'single')}
               style={{
-                padding: '10px 16px',
-                borderRadius: '8px',
-                border: '1px solid #e7eaf7',
+                ...createButtonStyle(ANIMATION_VALUES, settings.pageMode === 'single' ? 'primary' : 'default'),
                 backgroundColor: settings.pageMode === 'single' ? '#4F6DDE' : '#f8fafc',
                 color: settings.pageMode === 'single' ? 'white' : '#22336b',
-                cursor: 'pointer',
+                border: '1px solid #e7eaf7',
                 display: 'flex',
                 alignItems: 'center',
                 gap: '8px',
                 fontWeight: settings.pageMode === 'single' ? 'bold' : 'normal',
               }}
+              {...createAdvancedButtonHandlers(settings.pageMode === 'single' ? 'primary' : 'default')}
             >
               {settings.pageMode === 'single' && <span className="material-symbols-outlined">check</span>} 단일 페이지
             </button>
             <button
               onClick={() => handleChange('pageMode', 'double')}
               style={{
-                padding: '10px 16px',
-                borderRadius: '8px',
-                border: '1px solid #e7eaf7',
+                ...createButtonStyle(ANIMATION_VALUES, settings.pageMode === 'double' ? 'primary' : 'default'),
                 backgroundColor: settings.pageMode === 'double' ? '#4F6DDE' : '#f8fafc',
                 color: settings.pageMode === 'double' ? 'white' : '#22336b',
-                cursor: 'pointer',
+                border: '1px solid #e7eaf7',
                 display: 'flex',
                 alignItems: 'center',
                 gap: '8px',
                 fontWeight: settings.pageMode === 'double' ? 'bold' : 'normal',
               }}
+              {...createAdvancedButtonHandlers(settings.pageMode === 'double' ? 'primary' : 'default')}
             >
               {settings.pageMode === 'double' && <span className="material-symbols-outlined">check</span>} 분할 페이지
             </button>
@@ -186,34 +181,32 @@ const ViewerSettings = ({ isOpen, onClose, onApplySettings, currentSettings }) =
             <button
               onClick={() => handleChange('showGraph', true)}
               style={{
-                padding: '10px 16px',
-                borderRadius: '8px',
-                border: '1px solid #e7eaf7',
+                ...createButtonStyle(ANIMATION_VALUES, settings.showGraph ? 'primary' : 'default'),
                 backgroundColor: settings.showGraph ? '#4F6DDE' : '#f8fafc',
                 color: settings.showGraph ? 'white' : '#22336b',
-                cursor: 'pointer',
+                border: '1px solid #e7eaf7',
                 display: 'flex',
                 alignItems: 'center',
                 gap: '8px',
                 fontWeight: settings.showGraph ? 'bold' : 'normal',
               }}
+              {...createAdvancedButtonHandlers(settings.showGraph ? 'primary' : 'default')}
             >
               {settings.showGraph && <span className="material-symbols-outlined">check</span>} 그래프 표시
             </button>
             <button
               onClick={() => handleChange('showGraph', false)}
               style={{
-                padding: '10px 16px',
-                borderRadius: '8px',
-                border: '1px solid #e7eaf7',
+                ...createButtonStyle(ANIMATION_VALUES, !settings.showGraph ? 'primary' : 'default'),
                 backgroundColor: !settings.showGraph ? '#4F6DDE' : '#f8fafc',
                 color: !settings.showGraph ? 'white' : '#22336b',
-                cursor: 'pointer',
+                border: '1px solid #e7eaf7',
                 display: 'flex',
                 alignItems: 'center',
                 gap: '8px',
                 fontWeight: !settings.showGraph ? 'bold' : 'normal',
               }}
+              {...createAdvancedButtonHandlers(!settings.showGraph ? 'primary' : 'default')}
             >
               {!settings.showGraph && <span className="material-symbols-outlined">check</span>} 그래프 숨기기
             </button>
@@ -229,14 +222,14 @@ const ViewerSettings = ({ isOpen, onClose, onApplySettings, currentSettings }) =
             <button
               onClick={() => handleChange('fontSize', Math.max(80, settings.fontSize - 10))}
               style={{
+                ...createButtonStyle(ANIMATION_VALUES, 'default'),
                 padding: '8px 12px',
-                borderRadius: '8px',
-                border: '1px solid #e7eaf7',
                 backgroundColor: '#f8fafc',
                 color: '#22336b',
-                cursor: 'pointer',
+                border: '1px solid #e7eaf7',
                 fontWeight: 'bold',
               }}
+              {...createAdvancedButtonHandlers('default')}
             >
               -
             </button>
@@ -254,14 +247,14 @@ const ViewerSettings = ({ isOpen, onClose, onApplySettings, currentSettings }) =
             <button
               onClick={() => handleChange('fontSize', Math.min(150, settings.fontSize + 10))}
               style={{
+                ...createButtonStyle(ANIMATION_VALUES, 'default'),
                 padding: '8px 12px',
-                borderRadius: '8px',
-                border: '1px solid #e7eaf7',
                 backgroundColor: '#f8fafc',
                 color: '#22336b',
-                cursor: 'pointer',
+                border: '1px solid #e7eaf7',
                 fontWeight: 'bold',
               }}
+              {...createAdvancedButtonHandlers('default')}
             >
               +
             </button>
@@ -279,14 +272,14 @@ const ViewerSettings = ({ isOpen, onClose, onApplySettings, currentSettings }) =
             <button
               onClick={() => handleChange('lineHeight', Math.max(1.0, settings.lineHeight - 0.1))}
               style={{
+                ...createButtonStyle(ANIMATION_VALUES, 'default'),
                 padding: '8px 12px',
-                borderRadius: '8px',
-                border: '1px solid #e7eaf7',
                 backgroundColor: '#f8fafc',
                 color: '#22336b',
-                cursor: 'pointer',
+                border: '1px solid #e7eaf7',
                 fontWeight: 'bold',
               }}
+              {...createAdvancedButtonHandlers('default')}
             >
               -
             </button>
@@ -304,14 +297,14 @@ const ViewerSettings = ({ isOpen, onClose, onApplySettings, currentSettings }) =
             <button
               onClick={() => handleChange('lineHeight', Math.min(2.0, settings.lineHeight + 0.1))}
               style={{
+                ...createButtonStyle(ANIMATION_VALUES, 'default'),
                 padding: '8px 12px',
-                borderRadius: '8px',
-                border: '1px solid #e7eaf7',
                 backgroundColor: '#f8fafc',
                 color: '#22336b',
-                cursor: 'pointer',
+                border: '1px solid #e7eaf7',
                 fontWeight: 'bold',
               }}
+              {...createAdvancedButtonHandlers('default')}
             >
               +
             </button>
@@ -324,27 +317,22 @@ const ViewerSettings = ({ isOpen, onClose, onApplySettings, currentSettings }) =
           <button
             onClick={handleReset}
             style={{
-              padding: '10px 16px',
-              borderRadius: '8px',
-              border: '1px solid #e7eaf7',
+              ...createButtonStyle(ANIMATION_VALUES, 'default'),
               backgroundColor: '#f8fafc',
               color: '#22336b',
-              cursor: 'pointer',
+              border: '1px solid #e7eaf7',
             }}
+            {...createAdvancedButtonHandlers('default')}
           >
             초기화
           </button>
           <button
             onClick={handleApply}
             style={{
-              padding: '10px 16px',
-              borderRadius: '8px',
-              border: 'none',
-              backgroundColor: '#4F6DDE',
-              color: 'white',
-              cursor: 'pointer',
+              ...createButtonStyle(ANIMATION_VALUES, 'primary'),
               fontWeight: 'bold',
             }}
+            {...createAdvancedButtonHandlers('primary')}
           >
             적용
           </button>

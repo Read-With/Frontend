@@ -34,36 +34,73 @@ const createFocusStyle = () => ({
 // animations.js에서 애니메이션 관련 함수들 import
 import { createSlideAnimation, ANIMATION_VALUES } from './animations';
 
-// 공통 버튼 스타일
+// 통일된 버튼 스타일 (epub-toolbar-btn 기준)
 export const createButtonStyle = (animationValues, variant = 'default') => {
   const baseStyle = {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
+    gap: '0.5em',
+    fontSize: '13px',
+    fontWeight: '500',
+    padding: '8px 16px',
+    borderRadius: '8px',
+    border: '1px solid #e2e8f0',
+    background: '#ffffff',
+    color: '#374151',
     cursor: 'pointer',
+    transition: 'all 0.2s ease',
+    height: '40px',
     outline: 'none',
-    border: 'none',
-    borderRadius: '6px',
-    transition: `all ${animationValues.DURATION.FAST} ease`,
     ...createFocusStyle(),
   };
 
   const variants = {
     default: {
-      background: COLORS.background,
-      color: COLORS.primary,
-      border: `1px solid ${COLORS.borderLight}`,
+      background: '#ffffff',
+      color: '#374151',
+      border: '1px solid #e2e8f0',
     },
     primary: {
-      background: COLORS.primary,
-      color: COLORS.background,
+      background: '#3b82f6',
+      color: '#ffffff',
+      border: '1px solid #3b82f6',
     },
     secondary: {
-      background: COLORS.backgroundLight,
-      color: COLORS.textSecondary,
-      border: `1px solid ${COLORS.borderLight}`,
+      background: '#6b7280',
+      color: '#ffffff',
+      border: '1px solid #6b7280',
     },
-    // UnifiedNodeInfo의 고급 Primary 버튼 스타일
+    // 특수 버튼들
+    close: {
+      position: 'absolute',
+      top: '8px',
+      right: '8px',
+      background: '#ffffff',
+      color: '#374151',
+      border: '1px solid #e2e8f0',
+      borderRadius: '6px',
+      width: '32px',
+      height: '32px',
+      padding: '0',
+      fontSize: '16px',
+      zIndex: 100,
+    },
+    tooltipClose: {
+      background: 'none',
+      border: 'none',
+      fontSize: '18px',
+      color: '#bfc8e2',
+      position: 'absolute',
+      top: '14px',
+      right: '14px',
+      zIndex: 2,
+      width: '24px',
+      height: '24px',
+      padding: '0',
+      borderRadius: '4px',
+    },
+    // 기존 고급 스타일 유지
     primaryAdvanced: {
       background: `linear-gradient(135deg, ${COLORS.primary} 0%, ${COLORS.primary} 100%)`,
       color: '#fff',
@@ -76,78 +113,7 @@ export const createButtonStyle = (animationValues, variant = 'default') => {
       position: 'relative',
       overflow: 'hidden',
       transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-    },
-    // UnifiedNodeInfo의 Close 버튼 스타일
-    close: {
-      background: 'none',
-      border: 'none',
-      fontSize: '18px',
-      color: COLORS.textSecondary,
-      padding: '8px',
-      borderRadius: '8px',
-      transition: 'all 0.2s ease',
-      width: '36px',
-      height: '36px',
-    },
-    // 툴팁 닫기 버튼 스타일
-    tooltipClose: {
-      background: 'none',
-      border: 'none',
-      fontSize: '18px',
-      color: '#bfc8e2',
-      cursor: 'pointer',
-      position: 'absolute',
-      top: '14px',
-      right: '14px',
-      zIndex: 2,
-      width: '24px',
-      height: '24px',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      borderRadius: '4px',
-      transition: 'all 0.2s ease',
-    },
-    // UnifiedEdgeTooltip용 primary 버튼 스타일
-    primaryEdge: {
-      padding: '10px 16px',
-      borderRadius: '8px',
-      border: 'none',
-      backgroundColor: '#4F6DDE',
-      color: 'white',
-      cursor: 'pointer',
-      fontWeight: 'bold',
-      fontSize: '14px',
-      transition: 'all 0.2s ease',
-    },
-    // UnifiedEdgeTooltip용 secondary 버튼 스타일
-    secondaryEdge: {
-      padding: '10px 16px',
-      borderRadius: '8px',
-      border: '1px solid #e7eaf7',
-      backgroundColor: '#f8fafc',
-      color: '#22336b',
-      cursor: 'pointer',
-      fontSize: '14px',
-      fontWeight: '500',
-      transition: 'all 0.2s ease',
-    },
-    // UnifiedEdgeTooltip용 close 버튼 스타일
-    closeEdge: {
-      height: 36,
-      width: 36,
-      borderRadius: 8,
-      border: '1.5px solid #e3e6ef',
-      background: '#fff',
-      color: '#22336b',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      cursor: 'pointer',
-      transition: 'all 0.2s ease',
-      outline: 'none',
-      fontSize: 14,
-      boxShadow: '0 2px 4px rgba(0,0,0,0.05)',
+      height: 'auto',
     },
   };
 
@@ -155,8 +121,8 @@ export const createButtonStyle = (animationValues, variant = 'default') => {
 };
 
 /**
- * 고급 버튼의 hover 효과 핸들러
- * @param {string} variant - 버튼 variant ('primaryAdvanced' | 'close')
+ * 통일된 버튼 hover 효과 핸들러
+ * @param {string} variant - 버튼 variant
  * @returns {Object} hover 이벤트 핸들러 객체
  */
 export const createAdvancedButtonHandlers = (variant) => {
@@ -173,64 +139,54 @@ export const createAdvancedButtonHandlers = (variant) => {
     };
   }
   
+  if (variant === 'primary') {
+    return {
+      onMouseEnter: (e) => {
+        e.target.style.background = '#2563eb';
+        e.target.style.borderColor = '#2563eb';
+      },
+      onMouseLeave: (e) => {
+        e.target.style.background = '#3b82f6';
+        e.target.style.borderColor = '#3b82f6';
+      }
+    };
+  }
+  
+  if (variant === 'secondary') {
+    return {
+      onMouseEnter: (e) => {
+        e.target.style.background = '#4b5563';
+        e.target.style.borderColor = '#4b5563';
+      },
+      onMouseLeave: (e) => {
+        e.target.style.background = '#6b7280';
+        e.target.style.borderColor = '#6b7280';
+      }
+    };
+  }
+  
+  if (variant === 'default') {
+    return {
+      onMouseEnter: (e) => {
+        e.target.style.background = '#f9fafb';
+        e.target.style.borderColor = '#d1d5db';
+      },
+      onMouseLeave: (e) => {
+        e.target.style.background = '#ffffff';
+        e.target.style.borderColor = '#e2e8f0';
+      }
+    };
+  }
+  
   if (variant === 'close') {
     return {
-      onMouseOver: (e) => {
-        e.currentTarget.style.background = COLORS.backgroundLight;
-        e.currentTarget.style.color = COLORS.textPrimary;
-        e.currentTarget.style.transform = 'scale(1.1)';
-      },
-      onMouseOut: (e) => {
-        e.currentTarget.style.background = 'none';
-        e.currentTarget.style.color = COLORS.textSecondary;
-        e.currentTarget.style.transform = 'scale(1)';
-      }
-    };
-  }
-  
-  if (variant === 'primaryEdge') {
-    return {
       onMouseEnter: (e) => {
-        e.target.style.backgroundColor = '#5a7cff';
-        e.target.style.transform = 'translateY(-1px)';
-        e.target.style.boxShadow = '0 4px 8px rgba(79, 109, 222, 0.3)';
+        e.target.style.background = '#f9fafb';
+        e.target.style.borderColor = '#d1d5db';
       },
       onMouseLeave: (e) => {
-        e.target.style.backgroundColor = '#4F6DDE';
-        e.target.style.transform = 'translateY(0)';
-        e.target.style.boxShadow = 'none';
-      }
-    };
-  }
-  
-  if (variant === 'secondaryEdge') {
-    return {
-      onMouseEnter: (e) => {
-        e.target.style.backgroundColor = '#e7eaf7';
-        e.target.style.borderColor = '#4F6DDE';
-        e.target.style.color = '#4F6DDE';
-      },
-      onMouseLeave: (e) => {
-        e.target.style.backgroundColor = '#f8fafc';
-        e.target.style.borderColor = '#e7eaf7';
-        e.target.style.color = '#22336b';
-      }
-    };
-  }
-  
-  if (variant === 'closeEdge') {
-    return {
-      onMouseEnter: (e) => {
-        e.target.style.background = '#f8f9fc';
-        e.target.style.borderColor = '#6C8EFF';
-        e.target.style.color = '#6C8EFF';
-        e.target.style.transform = 'scale(1.05)';
-      },
-      onMouseLeave: (e) => {
-        e.target.style.background = '#fff';
-        e.target.style.borderColor = '#e3e6ef';
-        e.target.style.color = '#22336b';
-        e.target.style.transform = 'scale(1)';
+        e.target.style.background = '#ffffff';
+        e.target.style.borderColor = '#e2e8f0';
       }
     };
   }
