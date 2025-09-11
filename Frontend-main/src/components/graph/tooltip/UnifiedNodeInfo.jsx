@@ -47,6 +47,9 @@ function UnifiedNodeInfo({
   isSearchActive = false,
   filteredElements = [],
   filename,
+  currentEvent = null,
+  prevValidEvent = null,
+  events = [],
 }) {
   const { filename: urlFilename } = useParams();
   const location = useLocation();
@@ -99,7 +102,31 @@ function UnifiedNodeInfo({
   const id2 = safeNum(nodeData?.id);
   const { fetchData } = useRelationData('standalone', id1, id2, chapterNum, eventNum, dynamicMaxChapter, actualFilename);
 
-  // 노드 등장 여부 확인 함수
+  // ViewerTopBar와 동일한 방식으로 이벤트 정보 처리
+  const getUnifiedEventInfo = useCallback(() => {
+    // ViewerTopBar와 동일한 로직: currentEvent || prevValidEvent
+    const eventToShow = currentEvent || prevValidEvent;
+    
+    if (eventToShow) {
+      return {
+        eventNum: eventToShow.eventNum ?? 0,
+        name: eventToShow.name || eventToShow.event_name || "",
+        chapterProgress: eventToShow.chapterProgress,
+        currentChars: eventToShow.currentChars,
+        totalChars: eventToShow.totalChars
+      };
+    }
+    
+    // 이벤트 정보가 없는 경우 기존 로직 사용 (하위 호환성)
+    if (isGraphPage || !eventNum || eventNum === 0) {
+      const lastEventNums = getChapterLastEventNums(folderKey);
+      return { eventNum: lastEventNums[chapterNum - 1] || 1 };
+    }
+    
+    return { eventNum: eventNum || 0 };
+  }, [currentEvent, prevValidEvent, isGraphPage, eventNum, chapterNum, folderKey]);
+
+  // 노드 등장 여부 확인 함수 (ViewerTopBar 방식 적용)
   const checkNodeAppearance = useCallback(() => {
     try {
       setIsNodeAppeared(false);
@@ -116,12 +143,10 @@ function UnifiedNodeInfo({
         return;
       }
 
-      let targetEventNum = eventNum;
+      // ViewerTopBar와 동일한 방식으로 이벤트 정보 가져오기
+      const unifiedEventInfo = getUnifiedEventInfo();
+      const targetEventNum = unifiedEventInfo.eventNum;
 
-      if (isGraphPage || !eventNum || eventNum === 0) {
-        const lastEventNums = getChapterLastEventNums(folderKey);
-        targetEventNum = lastEventNums[chapterNum - 1] || 1;
-      }
       const json = getEventDataByIndex(folderKey, chapterNum, targetEventNum);
 
       const nodeId = String(data.id || data.data?.id);
@@ -161,7 +186,7 @@ function UnifiedNodeInfo({
       setError(err.message);
       setIsNodeAppeared(false);
     }
-  }, [data, chapterNum, eventNum, isGraphPage, dynamicMaxChapter, actualFilename, elements]);
+  }, [data, chapterNum, getUnifiedEventInfo, isGraphPage, dynamicMaxChapter, actualFilename, elements]);
 
   // 노드 등장 여부 확인
   useEffect(() => {
@@ -205,23 +230,23 @@ function UnifiedNodeInfo({
   }), [processedNodeData]);
 
   // 모드별 z-index 설정
-  const zIndexValue = inViewer ? 10000 : 9999;
+  const zIndexValue = inViewer ? 99999 : 99999;
 
   // 에러가 있는 경우 에러 메시지 표시
   if (error) {
     const errorContent = (
       <div style={{ textAlign: "center", color: COLORS.error }}>
-        <h4 style={{ margin: "0 0 10px 0" }}>오류가 발생했습니다</h4>
-        <p style={{ margin: 0, fontSize: "14px" }}>{error}</p>
+        <h4 style={{ margin: "0 0 0.5rem 0" }}>오류가 발생했습니다</h4>
+        <p style={{ margin: 0, fontSize: "0.875rem" }}>{error}</p>
         <button
           onClick={onClose}
           style={{
-            marginTop: "15px",
-            padding: "8px 16px",
+            marginTop: "1rem",
+            padding: "0.5rem 1rem",
             background: COLORS.error,
             color: "white",
             border: "none",
-            borderRadius: "6px",
+            borderRadius: "0.5rem",
             cursor: "pointer",
             ...createButtonStyle(ANIMATION_VALUES, 'default')
           }}
@@ -276,22 +301,22 @@ function UnifiedNodeInfo({
           flexDirection: "column",
           alignItems: "center",
           justifyContent: "center",
-          padding: displayMode === 'tooltip' ? "40px 30px" : "40px 20px",
+          padding: displayMode === 'tooltip' ? "2.5rem 1.5rem" : "2.5rem 1rem",
           textAlign: "center",
-          minHeight: displayMode === 'tooltip' ? "200px" : "auto",
+          minHeight: displayMode === 'tooltip' ? "12.5rem" : "auto",
         }}
       >
         <div
           style={{
-            width: 80,
-            height: 80,
+            width: "5rem",
+            height: "5rem",
             borderRadius: "50%",
             background: COLORS.backgroundLight,
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
-            marginBottom: 20,
-            border: `2px solid ${COLORS.border}`,
+            marginBottom: "1.25rem",
+            border: `0.125rem solid ${COLORS.border}`,
           }}
         >
           <svg width="40" height="40" viewBox="0 0 40 40" fill="none">
@@ -303,10 +328,10 @@ function UnifiedNodeInfo({
 
         <h3
           style={{
-            fontSize: 20,
+            fontSize: "1.25rem",
             fontWeight: 700,
             color: COLORS.textPrimary,
-            marginBottom: 8,
+            marginBottom: "0.5rem",
           }}
         >
           {processedNodeData?.displayName}
@@ -314,7 +339,7 @@ function UnifiedNodeInfo({
 
         <p
           style={{
-            fontSize: 16,
+            fontSize: "1rem",
             color: COLORS.textSecondary,
             lineHeight: 1.5,
             marginBottom: 0,
@@ -325,16 +350,22 @@ function UnifiedNodeInfo({
 
         <p
           style={{
-            fontSize: 14,
+            fontSize: "0.875rem",
             color: COLORS.textSecondary,
             lineHeight: 1.4,
-            marginTop: 8,
+            marginTop: "0.5rem",
           }}
         >
-          {isGraphPage 
-            ? `챕터 ${chapterNum}에서는 등장하지 않습니다`
-            : `챕터 ${chapterNum} 이벤트 ${eventNum || '현재'}에서는 등장하지 않습니다`
-          }
+          {(() => {
+            const unifiedEventInfo = getUnifiedEventInfo();
+            if (unifiedEventInfo.name) {
+              return `챕터 ${chapterNum} 이벤트 "${unifiedEventInfo.name}"에서는 등장하지 않습니다`;
+            } else if (unifiedEventInfo.eventNum) {
+              return `챕터 ${chapterNum} 이벤트 ${unifiedEventInfo.eventNum}에서는 등장하지 않습니다`;
+            } else {
+              return `챕터 ${chapterNum}에서는 등장하지 않습니다`;
+            }
+          })()}
         </p>
       </div>
     );
@@ -361,9 +392,9 @@ function UnifiedNodeInfo({
             className="tooltip-close-btn"
             style={{
               ...createButtonStyle(ANIMATION_VALUES, 'tooltipClose'),
-              top: 18,
-              right: 18,
-              fontSize: 22,
+              top: "1.125rem",
+              right: "1.125rem",
+              fontSize: "1.375rem",
             }}
           >
             &times;
@@ -380,7 +411,7 @@ function UnifiedNodeInfo({
             alignItems: "center",
             justifyContent: "center",
             height: "100%",
-            padding: "40px 20px",
+            padding: "2.5rem 1rem",
             textAlign: "center",
             color: COLORS.textSecondary,
           }}
@@ -400,7 +431,7 @@ function UnifiedNodeInfo({
         position: isFlipped ? "absolute" : "relative",
         width: "100%",
         height: "auto",
-        minHeight: 280,
+        minHeight: "17.5rem",
         transform: isFlipped ? "rotateY(180deg)" : "rotateY(0deg)",
         display: "flex",
         flexDirection: "column",
@@ -421,9 +452,9 @@ function UnifiedNodeInfo({
           display: "flex",
           flexDirection: "column",
           alignItems: "stretch",
-          padding: "24px 0 0 0",
-          borderTopLeftRadius: 15,
-          borderTopRightRadius: 15,
+          padding: "1.75rem 0 0 0",
+          borderTopLeftRadius: "0.9375rem",
+          borderTopRightRadius: "0.9375rem",
           background: "linear-gradient(90deg, #e3eafe 0%, #f8fafc 100%)",
         }}
       >
@@ -433,23 +464,23 @@ function UnifiedNodeInfo({
             flexDirection: "row",
             alignItems: "flex-start",
             justifyContent: "flex-start",
-            gap: 18,
+            gap: "1.3125rem",
             width: "100%",
           }}
         >
           <div
             className="profile-image-placeholder"
             style={{
-              width: 75,
-              height: 75,
+              width: "4.6875rem",
+              height: "4.6875rem",
               borderRadius: "50%",
               background: "#e6e8f0",
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
-              marginBottom: 12,
-              marginLeft: 18,
-              boxShadow: "0 2px 8px rgba(108,142,255,0.10)",
+              marginBottom: "0.75rem",
+              marginLeft: "1.3125rem",
+              boxShadow: "0 0.125rem 0.5rem rgba(108,142,255,0.10)",
             }}
           >
             <div
@@ -458,9 +489,9 @@ function UnifiedNodeInfo({
                 display: "flex",
                 justifyContent: "center",
                 alignItems: "center",
-                width: 48,
-                height: 48,
-                margin: "0 auto 9px auto",
+                width: "3rem",
+                height: "3rem",
+                margin: "0 auto 0.5625rem auto",
                 borderRadius: "50%",
                 background: "#f4f4f4",
               }}
@@ -470,13 +501,13 @@ function UnifiedNodeInfo({
                   src={processedNodeData.image}
                   alt={processedNodeData.displayName || "character"}
                   style={{
-                    width: 75,
-                    height: 75,
+                    width: "4.6875rem",
+                    height: "4.6875rem",
                     objectFit: "cover",
                     borderRadius: "50%",
-                    border: "2px solid #e0e0e0",
+                    border: "0.125rem solid #e0e0e0",
                     background: "#faf7f2",
-                    boxShadow: "0 2px 8px rgba(0,0,0,0.03)",
+                    boxShadow: "0 0.125rem 0.5rem rgba(0,0,0,0.03)",
                   }}
                   onError={(e) => {
                     e.target.style.display = 'none';
@@ -510,17 +541,18 @@ function UnifiedNodeInfo({
               style={{
                 display: "flex",
                 alignItems: "center",
-                gap: 8,
-                marginBottom: 3,
+                gap: "0.5rem",
+                marginTop: "0.75rem",
+                marginBottom: "0.1875rem",
               }}
             >
               <span
                 style={{
                   fontWeight: 800,
-                  fontSize: 20,
+                  fontSize: "1.25rem",
                   color: COLORS.textPrimary,
-                  letterSpacing: 0.5,
-                  maxWidth: 165,
+                  letterSpacing: "0.03125rem",
+                  maxWidth: "10.3125rem",
                   overflow: "hidden",
                   textOverflow: "ellipsis",
                   whiteSpace: "nowrap",
@@ -534,12 +566,12 @@ function UnifiedNodeInfo({
                   style={{
                     background: `linear-gradient(90deg, ${COLORS.primary} 0%, ${COLORS.primary} 100%)`,
                     color: "#fff",
-                    borderRadius: 11,
-                    fontSize: 12,
-                    padding: "2px 9px",
-                    marginLeft: 2,
+                    borderRadius: "0.6875rem",
+                    fontSize: "0.75rem",
+                    padding: "0.125rem 0.5625rem",
+                    marginLeft: "0.125rem",
                     fontWeight: 700,
-                    boxShadow: `0 2px 8px ${COLORS.primary}26`,
+                    boxShadow: `0 0.125rem 0.5rem ${COLORS.primary}26`,
                   }}
                 >
                   주요 인물
@@ -550,10 +582,10 @@ function UnifiedNodeInfo({
             {processedNodeData?.names && processedNodeData.names.length > 0 && (
               <div
                 style={{
-                  marginTop: 2,
-                  marginBottom: 2,
+                  marginTop: "0.125rem",
+                  marginBottom: "0.125rem",
                   display: "flex",
-                  gap: 5,
+                  gap: "0.3125rem",
                   flexWrap: "wrap",
                   justifyContent: "flex-start",
                 }}
@@ -566,10 +598,10 @@ function UnifiedNodeInfo({
                       style={{
                         background: COLORS.backgroundLight,
                         color: COLORS.textPrimary,
-                        borderRadius: 9,
-                        fontSize: 12,
-                        padding: "2px 9px",
-                        border: `1px solid ${COLORS.border}`,
+                        borderRadius: "0.5625rem",
+                        fontSize: "0.75rem",
+                        padding: "0.125rem 0.5625rem",
+                        border: `0.0625rem solid ${COLORS.border}`,
                         fontWeight: 500,
                       }}
                     >
@@ -584,9 +616,9 @@ function UnifiedNodeInfo({
       
       <hr
         style={{
-          margin: "14px 0 0 0",
+          margin: "0.875rem 0 0 0",
           border: 0,
-          borderTop: "1px solid #f0f2f8",
+          borderTop: "0.0625rem solid #f0f2f8",
         }}
       />
       
@@ -594,9 +626,9 @@ function UnifiedNodeInfo({
         className="business-card-description"
         style={{
           color: "#333",
-          fontSize: 14,
-          minHeight: 42,
-          margin: "17px 24px 0 24px",
+          fontSize: "0.875rem",
+          minHeight: "2.625rem",
+          margin: "1.3125rem 1.75rem 0 1.75rem",
           textAlign: "left",
           lineHeight: 1.6,
           fontWeight: 400,
@@ -613,26 +645,26 @@ function UnifiedNodeInfo({
       {isSearchActive && filteredElements.length > 0 && (
         <div
           style={{
-            margin: "12px 24px 0 24px",
-            padding: "9px 12px",
+            margin: "1rem 2rem 0 2rem",
+            padding: "0.75rem 1rem",
             background: COLORS.backgroundLight,
-            borderRadius: "6px",
-            border: `1px solid ${COLORS.borderLight}`,
+            borderRadius: "0.375rem",
+            border: `0.0625rem solid ${COLORS.borderLight}`,
           }}
         >
           <div
             style={{
-              fontSize: 13,
+              fontSize: "0.8125rem",
               fontWeight: 600,
               color: COLORS.primary,
-              marginBottom: "6px",
+              marginBottom: "0.375rem",
             }}
           >
             🔍 검색 결과 연결 정보
           </div>
           <div
             style={{
-              fontSize: 12,
+              fontSize: "0.75rem",
               color: COLORS.textPrimary,
               lineHeight: 1.4,
             }}
@@ -647,12 +679,12 @@ function UnifiedNodeInfo({
       
       <hr
         style={{
-          margin: "14px 0 0 0",
+          margin: "0.875rem 0 0 0",
           border: 0,
-          borderTop: "1px solid #f0f2f8",
+          borderTop: "0.0625rem solid #f0f2f8",
         }}
       />
-      <div style={{ flex: 1, marginBottom: 15 }} />
+      <div style={{ flex: 1, marginBottom: "1.25rem" }} />
     </div>
   );
 
@@ -694,8 +726,8 @@ function UnifiedNodeInfo({
       >
         {/* 사이드바 헤더 */}
         <div style={{
-          padding: '24px 24px 16px 24px',
-          borderBottom: '1px solid #e5e7eb',
+          padding: '1.5rem 1.5rem 1rem 1.5rem',
+          borderBottom: '0.0625rem solid #e5e7eb',
           background: '#fff',
         }}>
           <div style={{
@@ -709,11 +741,11 @@ function UnifiedNodeInfo({
               display: 'flex',
               flexDirection: 'row',
               alignItems: 'center',
-              gap: '4px',
+              gap: '0.25rem',
               flex: 1,
             }}>
               <span style={{
-                fontSize: '20px',
+                fontSize: '1.25rem',
                 fontWeight: '700',
                 color: COLORS.textPrimary,
                 letterSpacing: '-0.025em',
@@ -724,11 +756,11 @@ function UnifiedNodeInfo({
                 <span style={{
                   background: `linear-gradient(135deg, ${COLORS.primary} 0%, ${COLORS.primary} 100%)`,
                   color: '#fff',
-                  borderRadius: '12px',
-                  fontSize: '12px',
-                  padding: '4px 12px',
+                  borderRadius: '0.75rem',
+                  fontSize: '0.75rem',
+                  padding: '0.25rem 0.75rem',
                   fontWeight: '600',
-                  boxShadow: `0 2px 4px ${COLORS.primary}33`,
+                  boxShadow: `0 0.125rem 0.25rem ${COLORS.primary}33`,
                 }}>
                   주요 인물
                 </span>
@@ -741,18 +773,18 @@ function UnifiedNodeInfo({
               style={{
                 background: 'none',
                 border: 'none',
-                fontSize: '24px',
+                fontSize: '1.5rem',
                 color: COLORS.textSecondary,
                 cursor: 'pointer',
-                padding: '8px',
-                borderRadius: '6px',
+                padding: '0.5rem',
+                borderRadius: '0.375rem',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
                 transition: unifiedNodeAnimations.buttonHoverTransition,
-                width: '40px',
-                height: '40px',
-                marginLeft: '16px',
+                width: '2.5rem',
+                height: '2.5rem',
+                marginLeft: '1rem',
               }}
               onMouseOver={(e) => {
                 e.currentTarget.style.background = COLORS.backgroundLight;
@@ -765,8 +797,8 @@ function UnifiedNodeInfo({
               onFocus={(e) => {
                 e.currentTarget.style.background = COLORS.backgroundLight;
                 e.currentTarget.style.color = COLORS.textPrimary;
-                e.currentTarget.style.outline = `2px solid ${COLORS.primary}`;
-                e.currentTarget.style.outlineOffset = '2px';
+                e.currentTarget.style.outline = `0.125rem solid ${COLORS.primary}`;
+                e.currentTarget.style.outlineOffset = '0.125rem';
               }}
               onBlur={(e) => {
                 e.currentTarget.style.background = 'none';
@@ -785,38 +817,38 @@ function UnifiedNodeInfo({
           style={{
             flex: 1,
             overflow: 'auto',
-            padding: '0 24px',
+            padding: '0 1.5rem',
           }}
         >
-          <div style={{ padding: '24px 0' }}>
+          <div style={{ padding: '1.5rem 0' }}>
             {/* 통합 프로필 및 설명 섹션 */}
             <div 
               className="sidebar-card"
               style={{
                 background: COLORS.background,
-                borderRadius: '12px',
-                padding: '24px',
-                marginBottom: '24px',
-                border: `1px solid ${COLORS.border}`,
-                boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
+                borderRadius: '0.75rem',
+                padding: '1.5rem',
+                marginBottom: '1.5rem',
+                border: `0.0625rem solid ${COLORS.border}`,
+                boxShadow: '0 0.0625rem 0.1875rem rgba(0,0,0,0.05)',
               }}
             >
               {/* 프로필 이미지 */}
               <div style={{
                 textAlign: 'center',
-                marginBottom: '20px',
+                marginBottom: '1.25rem',
               }}>
                 <div
                   style={{
-                    width: '120px',
-                    height: '120px',
+                    width: '7.5rem',
+                    height: '7.5rem',
                     borderRadius: '50%',
                     background: '#e6e8f0',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    margin: '0 auto 20px auto',
-                    boxShadow: '0 4px 12px rgba(108,142,255,0.15)',
+                    margin: '0 auto 1.25rem auto',
+                    boxShadow: '0 0.25rem 0.75rem rgba(108,142,255,0.15)',
                     overflow: 'hidden',
                   }}
                 >
@@ -850,10 +882,10 @@ function UnifiedNodeInfo({
                 </div>
                 
                 <h4 style={{
-                  fontSize: '20px',
+                  fontSize: '1.25rem',
                   fontWeight: '700',
                   color: COLORS.textPrimary,
-                  margin: '0 0 8px 0',
+                  margin: '0 0 0.5rem 0',
                   letterSpacing: '-0.025em',
                 }}>
                   {processedNodeData?.displayName}
@@ -863,9 +895,9 @@ function UnifiedNodeInfo({
                   <div style={{
                     display: 'flex',
                     flexWrap: 'wrap',
-                    gap: '8px',
+                    gap: '0.5rem',
                     justifyContent: 'center',
-                    marginTop: '12px',
+                    marginTop: '0.75rem',
                   }}>
                     {processedNodeData.names
                       .filter(name => name !== processedNodeData.common_name)
@@ -875,10 +907,10 @@ function UnifiedNodeInfo({
                           style={{
                             background: COLORS.backgroundLight,
                             color: COLORS.textPrimary,
-                            borderRadius: '12px',
-                            fontSize: '13px',
-                            padding: '4px 12px',
-                            border: `1px solid ${COLORS.border}`,
+                            borderRadius: '0.75rem',
+                            fontSize: '0.8125rem',
+                            padding: '0.25rem 0.75rem',
+                            border: `0.0625rem solid ${COLORS.border}`,
                             fontWeight: '500',
                           }}
                         >
@@ -892,16 +924,16 @@ function UnifiedNodeInfo({
               {/* 인물 설명 */}
               {processedNodeData?.hasDescription && (
                 <div style={{
-                  borderTop: '1px solid #e5e7eb',
-                  paddingTop: '20px',
+                  borderTop: '0.0625rem solid #e5e7eb',
+                  paddingTop: '1.25rem',
                 }}>
                   <div style={{
-                    borderLeft: '4px solid #2563eb',
-                    paddingLeft: '20px',
+                    borderLeft: '0.25rem solid #2563eb',
+                    paddingLeft: '1.25rem',
                   }}>
                     <p style={{
                       margin: 0,
-                      fontSize: '14px',
+                      fontSize: '0.875rem',
                       lineHeight: '1.6',
                       color: COLORS.textPrimary,
                       letterSpacing: '-0.01em',
@@ -919,31 +951,31 @@ function UnifiedNodeInfo({
                 className="sidebar-card"
                 style={{
                   background: COLORS.background,
-                  borderRadius: '12px',
-                  padding: '24px',
-                  marginBottom: '24px',
-                  border: `1px solid ${COLORS.border}`,
-                  boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
+                  borderRadius: '0.75rem',
+                  padding: '1.5rem',
+                  marginBottom: '1.5rem',
+                  border: `0.0625rem solid ${COLORS.border}`,
+                  boxShadow: '0 0.0625rem 0.1875rem rgba(0,0,0,0.05)',
                 }}
               >
                 <h4 style={{
-                  fontSize: '16px',
+                  fontSize: '1rem',
                   fontWeight: '600',
                   color: COLORS.textPrimary,
-                  margin: '0 0 16px 0',
+                  margin: '0 0 1rem 0',
                   letterSpacing: '-0.025em',
                 }}>
                   검색 결과 연결 정보
                 </h4>
                 <div style={{
                   background: '#f8f9fc',
-                  borderRadius: '8px',
-                  padding: '16px',
-                  border: '1px solid #e3e6ef',
+                  borderRadius: '0.5rem',
+                  padding: '1rem',
+                  border: '0.0625rem solid #e3e6ef',
                 }}>
                   <p style={{
                     margin: 0,
-                    fontSize: '14px',
+                    fontSize: '0.875rem',
                     lineHeight: '1.6',
                     color: '#42506b',
                     letterSpacing: '-0.01em',
@@ -962,11 +994,11 @@ function UnifiedNodeInfo({
               className="sidebar-card"
               style={{
                 background: COLORS.background,
-                borderRadius: '16px',
-                padding: '28px',
-                marginBottom: '24px',
-                border: `1px solid ${COLORS.border}`,
-                boxShadow: '0 2px 8px rgba(0,0,0,0.06), 0 1px 3px rgba(0,0,0,0.1)',
+                borderRadius: '1rem',
+                padding: '1.75rem',
+                marginBottom: '1.5rem',
+                border: `0.0625rem solid ${COLORS.border}`,
+                boxShadow: '0 0.125rem 0.5rem rgba(0,0,0,0.06), 0 0.0625rem 0.1875rem rgba(0,0,0,0.1)',
                 position: 'relative',
                 overflow: 'hidden',
               }}
@@ -974,26 +1006,26 @@ function UnifiedNodeInfo({
               {!showSummary ? (
                 <div style={{
                   textAlign: 'center',
-                  padding: '32px 20px',
+                  padding: '2rem 1.25rem',
                   position: 'relative',
                 }}>
                   {/* 배경 장식 요소 */}
                   <div style={{
                     position: 'absolute',
-                    top: '-20px',
-                    right: '-20px',
-                    width: '80px',
-                    height: '80px',
+                    top: '-1.25rem',
+                    right: '-1.25rem',
+                    width: '5rem',
+                    height: '5rem',
                     background: `linear-gradient(135deg, ${COLORS.primary}0D 0%, ${COLORS.primary}0D 100%)`,
                     borderRadius: '50%',
                     zIndex: 0,
                   }} />
                   <div style={{
                     position: 'absolute',
-                    bottom: '-30px',
-                    left: '-30px',
-                    width: '100px',
-                    height: '100px',
+                    bottom: '-1.875rem',
+                    left: '-1.875rem',
+                    width: '6.25rem',
+                    height: '6.25rem',
                     background: `linear-gradient(135deg, ${COLORS.primary}08 0%, ${COLORS.primary}08 100%)`,
                     borderRadius: '50%',
                     zIndex: 0,
@@ -1004,21 +1036,21 @@ function UnifiedNodeInfo({
                     zIndex: 1,
                   }}>
                     <h4 style={{
-                      fontSize: '18px',
+                      fontSize: '1.125rem',
                       fontWeight: '700',
                       color: COLORS.textPrimary,
-                      margin: '0 0 12px 0',
+                      margin: '0 0 0.75rem 0',
                       letterSpacing: '-0.025em',
                     }}>
                       스포일러 주의
                     </h4>
                     
                     <p style={{
-                      fontSize: '15px',
+                      fontSize: '0.9375rem',
                       color: COLORS.textSecondary,
-                      margin: '0 0 28px 0',
+                      margin: '0 0 1.75rem 0',
                       lineHeight: '1.6',
-                      maxWidth: '280px',
+                      maxWidth: '17.5rem',
                       marginLeft: 'auto',
                       marginRight: 'auto',
                     }}>
@@ -1027,7 +1059,7 @@ function UnifiedNodeInfo({
                     
                     <div style={{
                       display: 'flex',
-                      gap: '12px',
+                      gap: '0.75rem',
                       justifyContent: 'center',
                       flexWrap: 'wrap',
                     }}>
@@ -1052,17 +1084,17 @@ function UnifiedNodeInfo({
                     display: 'flex',
                     justifyContent: 'space-between',
                     alignItems: 'center',
-                    marginBottom: '24px',
-                    paddingBottom: '16px',
-                    borderBottom: `2px solid ${COLORS.backgroundLight}`,
+                    marginBottom: '1.5rem',
+                    paddingBottom: '1rem',
+                    borderBottom: `0.125rem solid ${COLORS.backgroundLight}`,
                   }}>
                     <div style={{
                       display: 'flex',
                       alignItems: 'center',
-                      gap: '12px',
+                      gap: '0.75rem',
                     }}>
                       <h4 style={{
-                        fontSize: '18px',
+                        fontSize: '1.125rem',
                         fontWeight: '700',
                         color: COLORS.textPrimary,
                         margin: 0,
@@ -1084,9 +1116,9 @@ function UnifiedNodeInfo({
                   {/* 요약 내용 */}
                   <div style={{
                     background: `linear-gradient(135deg, ${COLORS.backgroundLighter} 0%, ${COLORS.backgroundLight} 100%)`,
-                    borderRadius: '12px',
-                    padding: '20px',
-                    border: `1px solid ${COLORS.border}`,
+                    borderRadius: '0.75rem',
+                    padding: '1.25rem',
+                    border: `0.0625rem solid ${COLORS.border}`,
                     position: 'relative',
                   }}>
                     <div style={{
@@ -1094,14 +1126,14 @@ function UnifiedNodeInfo({
                       top: '0',
                       left: '0',
                       right: '0',
-                      height: '4px',
+                      height: '0.25rem',
                       background: `linear-gradient(90deg, ${COLORS.primary} 0%, ${COLORS.primary} 100%)`,
-                      borderRadius: '12px 12px 0 0',
+                      borderRadius: '0.75rem 0.75rem 0 0',
                     }} />
                     
                     <p style={{
                       margin: 0,
-                      fontSize: '15px',
+                      fontSize: '0.9375rem',
                       lineHeight: '1.7',
                       color: COLORS.textPrimary,
                       letterSpacing: '-0.01em',

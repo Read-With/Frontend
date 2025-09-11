@@ -10,11 +10,13 @@ import {
   loadViewerMode,
   getCurrentChapterFromViewer,
   findClosestEvent,
+  calculateChapterProgress,
   bookmarkUtils,
   settingsUtils
 } from '../utils/viewerUtils';
 import { getFolderKeyFromFilename } from '../utils/graphData';
-import { loadBookmarks, saveBookmarks } from '../components/viewer/bookmark/BookmarkManager';
+import { loadBookmarks, addBookmark, removeBookmark } from '../components/viewer/bookmark/BookmarkManager';
+import { getBookManifest } from '../utils/api';
 
 export function useViewerPage() {
   const { filename } = useParams();
@@ -33,6 +35,7 @@ export function useViewerPage() {
   const [prevEvent, setPrevEvent] = useState(null);
   const [events, setEvents] = useState([]);
   const [maxChapter, setMaxChapter] = useState(1);
+  const [isInitialChapterDetected, setIsInitialChapterDetected] = useState(false);
   
   const [graphFullScreen, setGraphFullScreen] = useState(() => {
     const saved = loadViewerMode();
@@ -66,7 +69,8 @@ export function useViewerPage() {
   const [showToolbar, setShowToolbar] = useState(false);
   
   const cleanFilename = filename?.trim() || '';
-  const [bookmarks, setBookmarks] = useState(() => loadBookmarks(cleanFilename));
+  const [bookmarks, setBookmarks] = useState([]);
+  const [bookmarksLoading, setBookmarksLoading] = useState(true);
   const [showBookmarkList, setShowBookmarkList] = useState(false);
   
   const [progress, setProgress] = useLocalStorageNumber(`progress_${cleanFilename}`, 0);
@@ -91,6 +95,28 @@ export function useViewerPage() {
       filename: filename,
     }, [location.state?.book, filename]
   );
+
+  // API로 받아온 도서의 메타데이터와 manifest 정보를 콘솔에 출력
+  useEffect(() => {
+    const fetchBookInfo = async () => {
+      // API 책인지 확인 (숫자 ID를 가진 책)
+      if (book && typeof book.id === 'number' && location.state?.book) {
+        // 도서 기본 정보 출력
+
+        // manifest API 호출
+        try {
+          const manifestData = await getBookManifest(book.id);
+          
+          if (manifestData && manifestData.isSuccess && manifestData.result) {
+          } else {
+          }
+        } catch (error) {
+        }
+      }
+    };
+
+    fetchBookInfo();
+  }, [book.id, location.state?.book]); // book.id와 location.state?.book만 의존성으로 설정
   
   const folderKey = useMemo(() => getFolderKeyFromFilename(filename), [filename]);
   
@@ -122,6 +148,15 @@ export function useViewerPage() {
       saveViewerMode("viewer");
     }
   }, [showGraph, graphFullScreen]);
+
+  // 화면 모드 전환 시에도 pageMode 설정 유지
+  useEffect(() => {
+    // 화면 모드가 변경되어도 epub 뷰어의 pageMode 설정은 유지
+    // EpubViewer에서 spread 모드를 다시 적용하도록 reloadKey 증가
+    if (viewerRef.current && settings?.pageMode) {
+      setReloadKey(prev => prev + 1);
+    }
+  }, [showGraph, graphFullScreen, settings?.pageMode]);
   
   // 실패 횟수에 따른 토스트 메시지
   useEffect(() => {
@@ -143,7 +178,21 @@ export function useViewerPage() {
   
   // 북마크 로드
   useEffect(() => {
-    setBookmarks(loadBookmarks(cleanFilename));
+    const fetchBookmarks = async () => {
+      if (!cleanFilename) return;
+      
+      setBookmarksLoading(true);
+      try {
+        const bookmarksData = await loadBookmarks(cleanFilename);
+        setBookmarks(bookmarksData);
+      } catch (error) {
+        setBookmarks([]);
+      } finally {
+        setBookmarksLoading(false);
+      }
+    };
+
+    fetchBookmarks();
   }, [cleanFilename]);
   
   // 페이지 변경 시 현재 챕터 번호 업데이트
@@ -157,19 +206,31 @@ export function useViewerPage() {
     updateCurrentChapter();
   }, [currentPage]);
   
-  // currentChapter가 바뀔 때 이전 챕터와 다른 경우에만 초기화
-  // 단, 즉시 초기화하지 않고 EpubViewer에서 새 이벤트가 올 때까지 대기
+  // currentChapter가 바뀔 때 즉시 상태 초기화
   useEffect(() => {
-    // 챕터 변경을 감지했지만 즉시 초기화하지 않음
-    // EpubViewer의 relocated 이벤트에서 새로운 이벤트를 설정할 때까지 대기
+    // 챕터 변경 시 즉시 currentEvent 초기화하여 로딩 상태 방지
+    setCurrentEvent(null);
+    setPrevEvent(null);
+    setEvents([]);
+    setCharacterData(null);
+    setElements([]);
+    setIsDataReady(false);
+    setIsGraphLoading(true);
+    
+    // 이전 챕터의 유효한 이벤트 참조도 초기화
+    prevValidEventRef.current = null;
+    
+    // 초기 챕터 감지 완료 표시
+    setIsInitialChapterDetected(true);
+    
   }, [currentChapter]);
   
-  // currentEvent가 null이 아닐 때만 이전 값 갱신
+  // currentEvent가 null이 아닐 때만 이전 값 갱신 (현재 챕터의 이벤트만)
   useEffect(() => {
-    if (currentEvent) {
+    if (currentEvent && currentEvent.chapter === currentChapter) {
       prevValidEventRef.current = currentEvent;
     }
-  }, [currentEvent]);
+  }, [currentEvent, currentChapter]);
   
   // elements가 변경될 때 로딩 상태 업데이트
   useEffect(() => {
@@ -192,6 +253,18 @@ export function useViewerPage() {
       if (navEntries.length > 0 && navEntries[0].type === "reload") {
         setIsReloading(true);
         setIsGraphLoading(true); // 새로고침 시 그래프 로딩 상태도 true로 설정
+        
+        // 새로고침 시 모든 상태 초기화
+        setCurrentEvent(null);
+        setPrevEvent(null);
+        setEvents([]);
+        setCharacterData(null);
+        setElements([]);
+        setIsDataReady(false);
+        setIsInitialChapterDetected(false);
+        prevValidEventRef.current = null;
+        
+        
         // 새로고침 완료 후 일정 시간 후에 isReloading을 false로 설정
         const timer = setTimeout(() => {
           setIsReloading(false);
@@ -241,17 +314,28 @@ export function useViewerPage() {
 
     setFailCount(0);
 
-    const result = await bookmarkUtils.toggleBookmark(
-      cfi, 
-      cleanFilename, 
-      bookmarks, 
-      loadBookmarks, 
-      saveBookmarks
-    );
+    // 기존 북마크가 있는지 확인
+    const existingBookmark = bookmarks.find(b => b.startCfi === cfi);
     
-    setBookmarks(result.bookmarks);
-    saveBookmarks(cleanFilename, result.bookmarks);
-    toast.success(result.message);
+    if (existingBookmark) {
+      // 이미 북마크가 있으면 삭제
+      const result = await removeBookmark(existingBookmark.id);
+      if (result.success) {
+        setBookmarks(prev => prev.filter(b => b.id !== existingBookmark.id));
+        toast.success("📖 북마크가 제거되었습니다");
+      } else {
+        toast.error(result.message || "북마크 제거에 실패했습니다");
+      }
+    } else {
+      // 새 북마크 추가
+      const result = await addBookmark(cleanFilename, cfi);
+      if (result.success) {
+        setBookmarks(prev => [...prev, result.bookmark]);
+        toast.success("📖 북마크가 추가되었습니다");
+      } else {
+        toast.error(result.message || "북마크 추가에 실패했습니다");
+      }
+    }
   }, [cleanFilename, bookmarks]);
   
   const handleBookmarkSelect = useCallback((cfi) => {
@@ -306,33 +390,44 @@ export function useViewerPage() {
     }
   }, [progress]);
   
-  const handleDeleteBookmark = useCallback((cfi) => {
-    const result = bookmarkUtils.deleteBookmark(cfi, cleanFilename, bookmarks, saveBookmarks);
-    if (result.success) {
-      setBookmarks(result.bookmarks);
-    } else {
-      toast.error(result.message);
+  const handleDeleteBookmark = useCallback(async (bookmarkId) => {
+    try {
+      const result = await removeBookmark(bookmarkId);
+      if (result.success) {
+        setBookmarks(prev => prev.filter(b => b.id !== bookmarkId));
+        toast.success("북마크가 삭제되었습니다");
+      } else {
+        toast.error(result.message || "북마크 삭제에 실패했습니다");
+      }
+    } catch (error) {
+      toast.error("북마크 삭제에 실패했습니다");
     }
-  }, [cleanFilename, bookmarks]);
+  }, []);
   
-  const handleRemoveBookmark = useCallback((cfi) => {
-    const result = bookmarkUtils.deleteBookmark(cfi, cleanFilename, bookmarks, saveBookmarks);
-    if (result.success) {
-      setBookmarks(result.bookmarks);
-    } else {
-      toast.error(result.message);
+  const handleRemoveBookmark = useCallback(async (bookmarkId) => {
+    try {
+      const result = await removeBookmark(bookmarkId);
+      if (result.success) {
+        setBookmarks(prev => prev.filter(b => b.id !== bookmarkId));
+        toast.success("북마크가 삭제되었습니다");
+      } else {
+        toast.error(result.message || "북마크 삭제에 실패했습니다");
+      }
+    } catch (error) {
+      toast.error("북마크 삭제에 실패했습니다");
     }
-  }, [cleanFilename, bookmarks]);
+  }, []);
   
   // 그래프 표시 토글 함수
   const toggleGraph = useCallback(() => {
     const newShowGraph = !showGraph;
     setShowGraph(newShowGraph);
 
-    // 설정에도 그래프 표시 여부 업데이트
+    // 설정에도 그래프 표시 여부 업데이트 (pageMode는 유지)
     const updatedSettings = {
       ...settings,
       showGraph: newShowGraph,
+      // pageMode는 기존 설정 유지
     };
     setSettings(updatedSettings);
 
@@ -365,7 +460,7 @@ export function useViewerPage() {
     // Implementation of handleFitView
   }, []);
   
-  // EpubViewer에서 페이지/스크롤 이동 시 CFI 받아와서 글자 인덱스 갱신
+  // EpubViewer에서 페이지/스크롤 이동 시 CFI 받아와서 글자 인덱스 갱신 (개선된 버전)
   const handleLocationChange = useCallback(async () => {
     if (viewerRef.current && viewerRef.current.getCurrentCfi) {
       try {
@@ -378,16 +473,28 @@ export function useViewerPage() {
         // 챕터 번호 업데이트
         setCurrentChapter(chapterNum);
 
-        // 현재 위치에 해당하는 이벤트 찾기
+        // 현재 위치에 해당하는 이벤트 찾기 (개선된 버전 - CFI 기반 정확한 계산)
         const currentEvents = events; // getEventsForChapter(chapterNum) 대신 현재 events 사용
         if (currentEvents && currentEvents.length > 0) {
-          const closestEvent = findClosestEvent(cfi, chapterNum, currentEvents);
+          // bookInstance 가져오기 (viewerRef에서)
+          const bookInstance = viewerRef.current?.bookRef?.current;
+          
+          // calculateChapterProgress 함수를 사용하여 정확한 위치 계산 (bookInstance 포함)
+          const progressInfo = calculateChapterProgress(cfi, chapterNum, currentEvents, bookInstance);
+          
+          // findClosestEvent에 계산된 글자수 전달 (bookInstance 포함)
+          const closestEvent = findClosestEvent(cfi, chapterNum, currentEvents, progressInfo.currentChars, bookInstance);
           if (closestEvent) {
+            // 추가 정보 포함
+            closestEvent.chapterProgress = progressInfo.progress;
+            closestEvent.currentChars = progressInfo.currentChars;
+            closestEvent.totalChars = progressInfo.totalChars;
+            closestEvent.eventIndex = progressInfo.eventIndex;
+            closestEvent.calculationMethod = progressInfo.calculationMethod;
             setCurrentEvent(closestEvent);
           }
         }
       } catch (e) {
-        // 위치 계산 오류 처리
       }
     }
   }, [currentChapter, events]);
@@ -475,6 +582,7 @@ export function useViewerPage() {
     cleanFilename,
     bookmarks,
     setBookmarks,
+    bookmarksLoading,
     showBookmarkList,
     setShowBookmarkList,
     
@@ -530,7 +638,8 @@ export function useViewerPage() {
       graphFullScreen,
       showGraph,
       loading: isGraphLoading,
-      isDataReady
+      isDataReady,
+      isInitialChapterDetected
     },
     
     graphActions: {

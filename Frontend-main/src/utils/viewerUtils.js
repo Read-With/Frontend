@@ -100,7 +100,6 @@ export function saveViewerMode(mode) {
   try {
     localStorage.setItem("viewer_mode", mode);
   } catch (e) {
-    console.warn('Failed to save viewer mode:', e);
   }
 }
 
@@ -112,7 +111,6 @@ export function loadViewerMode() {
   try {
     return localStorage.getItem("viewer_mode");
   } catch (e) {
-    console.warn('Failed to load viewer mode:', e);
     return null;
   }
 }
@@ -169,36 +167,156 @@ export async function getCurrentChapterFromViewer(viewerRef) {
 }
 
 /**
- * 현재 위치에 해당하는 이벤트 찾기
+ * CFI에서 챕터 내 글자 위치 계산 (개선된 버전)
  * @param {string} cfi - CFI 문자열
  * @param {number} chapterNum - 챕터 번호
  * @param {Array} events - 이벤트 배열
+ * @param {Object} bookInstance - EPUB.js Book 인스턴스 (선택사항)
+ * @returns {Object} 위치 정보 { currentChars, totalChars, progress, eventIndex }
+ */
+export function calculateChapterProgress(cfi, chapterNum, events, bookInstance = null) {
+  if (!events || !events.length) {
+    return { currentChars: 0, totalChars: 0, progress: 0, eventIndex: -1 };
+  }
+
+  // 챕터 총 글자수 (마지막 이벤트의 end 값)
+  const totalChars = events[events.length - 1]?.end || 0;
+  let currentChars = 0;
+  let calculationMethod = 'fallback';
+
+  // 새로운 방식: CFI 기반 정확한 위치 계산 (우선 적용)
+  if (bookInstance && bookInstance.locations && typeof bookInstance.locations.percentageFromCfi === 'function') {
+    try {
+      // 1. CFI로 전체 페이지 대비 현재 위치 비율 구하기
+      const globalProgress = bookInstance.locations.percentageFromCfi(cfi);
+      
+      // 2. 전체 글자수와 챕터별 글자수 정보 가져오기
+      const path = window.location.pathname;
+      const fileName = path.split('/').pop();
+      const bookId = fileName.replace('.epub', '');
+      const totalLength = Number(localStorage.getItem(`totalLength_${bookId}`)) || 0;
+      const chapterLengths = JSON.parse(localStorage.getItem(`chapterLengths_${bookId}`) || '{}');
+      
+      if (totalLength > 0 && Object.keys(chapterLengths).length > 0) {
+        // 3. 전체 대비 비율 × 전체 글자수 = 현재 글자수
+        const globalCurrentChars = Math.round(globalProgress * totalLength);
+        
+        // 4. 이전 챕터까지의 글자수 합 계산
+        let prevChaptersSum = 0;
+        for (let i = 1; i < chapterNum; i++) {
+          prevChaptersSum += Number(chapterLengths[i] || 0);
+        }
+        
+        // 5. 현재 글자수 - 이전챕터까지의 글자수 합 = 해당 챕터 내 글자수
+        const chapterCurrentChars = Math.max(0, globalCurrentChars - prevChaptersSum);
+        
+        // 6. 해당 챕터에서의 비율 구하기
+        const currentChapterLength = Number(chapterLengths[chapterNum] || totalChars);
+        if (currentChapterLength > 0) {
+          const chapterProgress = chapterCurrentChars / currentChapterLength;
+          
+          // 7. 해당 챕터 전체 글자수 × 비율로 정확한 현재 위치 글자수 구하기
+          currentChars = Math.min(Math.round(chapterProgress * totalChars), totalChars);
+          calculationMethod = 'cfi_accurate';
+        }
+      }
+    } catch (error) {
+    }
+  }
+
+  // Fallback 방식: 기존 단락 기반 추정 (새로운 방식이 실패한 경우)
+  if (calculationMethod === 'fallback') {
+    const paragraphMatch = cfi.match(/\[chapter-\d+\]\/(\d+)\/1:(\d+)\)$/);
+    const paragraphNum = paragraphMatch ? parseInt(paragraphMatch[1]) : 1;
+    const charOffset = paragraphMatch ? parseInt(paragraphMatch[2]) : 0;
+    
+    if (totalChars > 0 && paragraphNum > 1) {
+      // 단락당 평균 글자수 추정
+      const avgCharsPerParagraph = totalChars / 50; // 대략적인 단락 수
+      currentChars = Math.min((paragraphNum - 1) * avgCharsPerParagraph + charOffset, totalChars);
+    } else {
+      currentChars = charOffset;
+    }
+  }
+
+  // 챕터 내 진행률 계산
+  const progress = totalChars > 0 ? (currentChars / totalChars) * 100 : 0;
+
+  // 현재 위치에 해당하는 이벤트 인덱스 찾기
+  let eventIndex = -1;
+  for (let i = 0; i < events.length; i++) {
+    const event = events[i];
+    if (currentChars >= event.start && currentChars < event.end) {
+      eventIndex = i;
+      break;
+    }
+  }
+
+  // 마지막 이벤트를 넘어선 경우
+  if (currentChars >= totalChars) {
+    eventIndex = events.length - 1;
+  }
+
+  return {
+    currentChars: Math.round(currentChars),
+    totalChars,
+    progress: Math.round(progress * 100) / 100,
+    eventIndex,
+    calculationMethod,
+    paragraphNum: calculationMethod === 'fallback' ? (cfi.match(/\[chapter-\d+\]\/(\d+)\/1:(\d+)\)$/) ? parseInt(cfi.match(/\[chapter-\d+\]\/(\d+)\/1:(\d+)\)$/)[1]) : 1) : null,
+    charOffset: calculationMethod === 'fallback' ? (cfi.match(/\[chapter-\d+\]\/(\d+)\/1:(\d+)\)$/) ? parseInt(cfi.match(/\[chapter-\d+\]\/(\d+)\/1:(\d+)\)$/)[2]) : 0) : null
+  };
+}
+
+/**
+ * 현재 위치에 해당하는 이벤트 찾기 (개선된 버전)
+ * @param {string} cfi - CFI 문자열
+ * @param {number} chapterNum - 챕터 번호
+ * @param {Array} events - 이벤트 배열
+ * @param {number} currentChars - 현재까지 읽은 글자수 (선택사항)
+ * @param {Object} bookInstance - EPUB.js Book 인스턴스 (선택사항)
  * @returns {Object|null} 가장 가까운 이벤트
  */
-export function findClosestEvent(cfi, chapterNum, events) {
+export function findClosestEvent(cfi, chapterNum, events, currentChars = null, bookInstance = null) {
   if (!events || !events.length) return null;
   
-  const pageMatch = cfi.match(/\[chapter-\d+\]\/(\d+)/);
-  if (!pageMatch) return null;
-  
-  const currentPage = parseInt(pageMatch[1]);
-  
-  // 페이지 번호에 가장 가까운 이벤트 찾기
-  let closestEvent = null;
-  let minDistance = Infinity;
-  
-  events.forEach(event => {
-    // 이벤트의 페이지 정보가 있다면 사용, 없다면 이벤트 번호로 추정
-    const eventPage = event.page || (event.eventNum + 1);
-    const distance = Math.abs(currentPage - eventPage);
-    
-    if (distance < minDistance) {
-      minDistance = distance;
-      closestEvent = event;
+  // currentChars가 제공되지 않은 경우 계산
+  if (currentChars === null) {
+    const progressInfo = calculateChapterProgress(cfi, chapterNum, events, bookInstance);
+    currentChars = progressInfo.currentChars;
+  }
+
+  // 글자수 기반으로 정확한 이벤트 찾기
+  for (let i = events.length - 1; i >= 0; i--) {
+    const event = events[i];
+    if (currentChars >= event.start && currentChars < event.end) {
+      return {
+        ...event,
+        eventNum: event.event_id ?? 0,
+        chapter: chapterNum,
+        progress: ((currentChars - event.start) / (event.end - event.start)) * 100
+      };
     }
-  });
-  
-  return closestEvent;
+  }
+
+  // 첫 이벤트보다 앞선 경우
+  if (currentChars < events[0].start) {
+    return {
+      ...events[0],
+      eventNum: events[0].event_id ?? 0,
+      chapter: chapterNum,
+      progress: 0
+    };
+  }
+
+  // 마지막 이벤트를 넘어선 경우
+  const lastEvent = events[events.length - 1];
+  return {
+    ...lastEvent,
+    eventNum: lastEvent.event_id ?? 0,
+    chapter: chapterNum,
+    progress: 100
+  };
 }
 
 /**
@@ -259,6 +377,108 @@ export const bookmarkUtils = {
     return { success: false, message: "삭제가 취소되었습니다." };
   }
 };
+
+/**
+ * 챕터 번호 추출 유틸리티 함수
+ * @param {string} cfi - CFI 문자열
+ * @param {string} label - 라벨 문자열 (선택사항)
+ * @returns {number} 챕터 번호
+ */
+export function extractChapterNumber(cfi, label = null) {
+  // CFI에서 직접 추출 (가장 정확)
+  const cfiMatch = cfi?.match(/\[chapter-(\d+)\]/);
+  if (cfiMatch) return parseInt(cfiMatch[1]);
+  
+  // 라벨에서 추출
+  if (label) {
+    const patterns = [
+      /Chapter\s+(\d+)/i,
+      /(\d+)\s*장/i,
+      /^(\d+)$/,
+      /Chapter\s+([IVX]+)/i
+    ];
+    
+    for (const pattern of patterns) {
+      const match = label.match(pattern);
+      if (match) {
+        if (pattern.source.includes('[IVX]')) {
+          const romanToNum = { 'I': 1, 'II': 2, 'III': 3, 'IV': 4, 'V': 5, 'VI': 6, 'VII': 7, 'VIII': 8, 'IX': 9 };
+          return romanToNum[match[1]];
+        }
+        return parseInt(match[1]);
+      }
+    }
+  }
+  
+  return 1; // 기본값
+}
+
+/**
+ * localStorage 헬퍼 함수들
+ */
+export const storageUtils = {
+  get: (key) => localStorage.getItem(key),
+  set: (key, value) => localStorage.setItem(key, value),
+  remove: (key) => localStorage.removeItem(key),
+  getJson: (key, defaultValue = {}) => {
+    try {
+      return JSON.parse(localStorage.getItem(key) || '{}');
+    } catch {
+      return defaultValue;
+    }
+  },
+  setJson: (key, value) => localStorage.setItem(key, JSON.stringify(value))
+};
+
+/**
+ * ref 객체 접근 헬퍼 함수
+ * @param {Object} bookRef - book ref 객체
+ * @param {Object} renditionRef - rendition ref 객체
+ * @returns {Object} book과 rendition 객체
+ */
+export function getRefs(bookRef, renditionRef) {
+  return {
+    book: bookRef.current,
+    rendition: renditionRef.current
+  };
+}
+
+/**
+ * ref 객체와 함께 콜백 실행
+ * @param {Object} bookRef - book ref 객체
+ * @param {Object} renditionRef - rendition ref 객체
+ * @param {Function} callback - 실행할 콜백 함수
+ * @returns {any} 콜백 실행 결과
+ */
+export function withRefs(bookRef, renditionRef, callback) {
+  const { book, rendition } = getRefs(bookRef, renditionRef);
+  if (!book || !rendition) return null;
+  return callback(book, rendition);
+}
+
+/**
+ * 네비게이션 정리 함수
+ * @param {Function} setIsNavigating - 네비게이션 상태 설정 함수
+ * @param {Object} rendition - rendition 객체
+ * @param {Function} handler - 이벤트 핸들러
+ */
+export function cleanupNavigation(setIsNavigating, rendition, handler) {
+  setIsNavigating(false);
+  if (rendition && handler) {
+    rendition.off('relocated', handler);
+  }
+}
+
+/**
+ * locations 생성 보장 함수
+ * @param {Object} book - book 객체
+ * @param {number} chars - 생성할 문자 수 (기본값: 2000)
+ */
+export async function ensureLocations(book, chars = 2000) {
+  if (!book.locations?.length()) {
+    await book.locations.generate(chars);
+  }
+}
 
 /**
  * 설정 관련 유틸리티 함수들

@@ -5,6 +5,7 @@ import {
   getLastEventIndexForChapter, 
   getFolderKeyFromFilename, 
   getDetectedMaxChapter,
+  getSafeMaxChapter,
   createCharacterMaps
 } from '../utils/graphData';
 import { convertRelationsToElements, calcGraphDiff } from '../utils/graphDataUtils';
@@ -43,7 +44,7 @@ export function useGraphDataLoader(filename, chapter, eventIndex = null) {
     if (!filename) return;
     
     const folderKey = getFolderKeyFromFilename(filename);
-    const detectedMaxChapter = getDetectedMaxChapter(folderKey);
+    const detectedMaxChapter = getSafeMaxChapter(folderKey, 1);
     setMaxChapter(detectedMaxChapter);
   }, [filename]);
 
@@ -74,12 +75,25 @@ export function useGraphDataLoader(filename, chapter, eventIndex = null) {
         .map(rel => normalizeRelation(rel))
         .filter(rel => isValidRelation(rel));
       
+      // 이전 이벤트 데이터 가져오기
+      let previousEventData = null;
+      if (targetEventIndex > 1) {
+        previousEventData = getEventDataByIndex(folderKey, chapter, targetEventIndex - 1);
+      }
+      
+      const previousRelations = previousEventData ? 
+        (previousEventData.relations || [])
+          .map(rel => normalizeRelation(rel))
+          .filter(rel => isValidRelation(rel)) : null;
+      
       const convertedElements = convertRelationsToElements(
         normalizedRelations,
         idToName,
         idToDesc,
         idToMain,
-        idToNames
+        idToNames,
+        folderKey,
+        previousRelations
       );
       
       const chapterKey = `${folderKey}-${chapter}`;

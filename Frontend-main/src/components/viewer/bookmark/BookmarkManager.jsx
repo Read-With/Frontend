@@ -1,77 +1,89 @@
+import { getBookmarks, createBookmark, updateBookmark, deleteBookmark } from '../../../utils/api';
+
 // 북마크 데이터 구조 개선
-const createBookmark = (cfi, preview = '', chapterTitle = '') => ({
-  cfi,
-  preview: preview.substring(0, 100), // 미리보기 텍스트 100자 제한
-  chapterTitle,
-  createdAt: new Date().toISOString(),
-  id: `bookmark_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+const createBookmarkData = (bookId, startCfi, endCfi = null, color = '#0Ccd5B', memo = '') => ({
+  bookId,
+  startCfi,
+  endCfi,
+  color,
+  memo
 });
 
-// 북마크 저장
-export const saveBookmarks = (bookId, bookmarks) => {
+// 북마크 목록 조회 (서버에서)
+export const loadBookmarks = async (bookId) => {
   try {
-    localStorage.setItem(`bookmarks_${bookId}`, JSON.stringify(bookmarks));
-    return true;
+    const response = await getBookmarks(bookId);
+    if (response.isSuccess) {
+      return response.result || [];
+    }
+    return [];
   } catch (error) {
-
-    return false;
-  }
-};
-
-// 북마크 로드
-export const loadBookmarks = (bookId) => {
-  try {
-    const stored = localStorage.getItem(`bookmarks_${bookId}`);
-    return stored ? JSON.parse(stored) : [];
-  } catch (error) {
-
     return [];
   }
 };
 
-// 북마크 추가
-export const addBookmark = (bookId, cfi, preview = '', chapterTitle = '') => {
-  const bookmarks = loadBookmarks(bookId);
-  
-  // 중복 북마크 체크
-  if (bookmarks.some(bookmark => bookmark.cfi === cfi)) {
-    return { success: false, message: '이미 북마크된 위치입니다.' };
+// 북마크 추가 (서버에 저장)
+export const addBookmark = async (bookId, startCfi, endCfi = null, color = '#0Ccd5B', memo = '') => {
+  try {
+    const bookmarkData = createBookmarkData(bookId, startCfi, endCfi, color, memo);
+    const response = await createBookmark(bookmarkData);
+    
+    if (response.isSuccess) {
+      return { success: true, bookmark: response.result };
+    } else {
+      return { success: false, message: response.message || '북마크 생성에 실패했습니다.' };
+    }
+  } catch (error) {
+    return { success: false, message: '북마크 추가에 실패했습니다.' };
   }
-  
-  const newBookmark = createBookmark(cfi, preview, chapterTitle);
-  const updatedBookmarks = [...bookmarks, newBookmark];
-  
-  if (saveBookmarks(bookId, updatedBookmarks)) {
-    return { success: true, bookmark: newBookmark, bookmarks: updatedBookmarks };
-  } else {
-    return { success: false, message: '북마크 저장에 실패했습니다.' };
+};
+
+// 북마크 수정
+export const modifyBookmark = async (bookmarkId, color, memo) => {
+  try {
+    const response = await updateBookmark(bookmarkId, { color, memo });
+    
+    if (response.isSuccess) {
+      return { success: true, bookmark: response.result };
+    } else {
+      return { success: false, message: response.message || '북마크 수정에 실패했습니다.' };
+    }
+  } catch (error) {
+    return { success: false, message: '북마크 수정에 실패했습니다.' };
   }
 };
 
 // 북마크 삭제
-export const removeBookmark = (bookId, index) => {
+export const removeBookmark = async (bookmarkId) => {
   try {
-    const bookmarks = loadBookmarks(bookId);
-    if (index >= 0 && index < bookmarks.length) {
-      const updatedBookmarks = bookmarks.filter((_, i) => i !== index);
-      saveBookmarks(bookId, updatedBookmarks);
-      return { success: true, bookmarks: updatedBookmarks };
+    const response = await deleteBookmark(bookmarkId);
+    
+    if (response.isSuccess) {
+      return { success: true };
+    } else {
+      return { success: false, message: response.message || '북마크 삭제에 실패했습니다.' };
     }
-    return { success: false, message: '유효하지 않은 북마크입니다.' };
   } catch (error) {
-
     return { success: false, message: '북마크 삭제에 실패했습니다.' };
   }
 };
 
-// 북마크 전체 삭제
-export const clearAllBookmarks = (bookId) => {
+// 로컬 스토리지 백업 함수들 (오프라인 지원용)
+export const saveBookmarksToLocal = (bookId, bookmarks) => {
   try {
-    localStorage.removeItem(`bookmarks_${bookId}`);
-    return { success: true, bookmarks: [] };
+    localStorage.setItem(`bookmarks_${bookId}`, JSON.stringify(bookmarks));
+    return true;
   } catch (error) {
+    return false;
+  }
+};
 
-    return { success: false, message: '북마크 삭제에 실패했습니다.' };
+export const loadBookmarksFromLocal = (bookId) => {
+  try {
+    const stored = localStorage.getItem(`bookmarks_${bookId}`);
+    return stored ? JSON.parse(stored) : [];
+  } catch (error) {
+    return [];
   }
 };
   

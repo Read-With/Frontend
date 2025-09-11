@@ -100,6 +100,54 @@ export const createButtonStyle = (animationValues, variant = 'default') => {
       top: '14px',
       right: '14px',
       zIndex: 2,
+      width: '24px',
+      height: '24px',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderRadius: '4px',
+      transition: 'all 0.2s ease',
+    },
+    // UnifiedEdgeTooltip용 primary 버튼 스타일
+    primaryEdge: {
+      padding: '10px 16px',
+      borderRadius: '8px',
+      border: 'none',
+      backgroundColor: '#4F6DDE',
+      color: 'white',
+      cursor: 'pointer',
+      fontWeight: 'bold',
+      fontSize: '14px',
+      transition: 'all 0.2s ease',
+    },
+    // UnifiedEdgeTooltip용 secondary 버튼 스타일
+    secondaryEdge: {
+      padding: '10px 16px',
+      borderRadius: '8px',
+      border: '1px solid #e7eaf7',
+      backgroundColor: '#f8fafc',
+      color: '#22336b',
+      cursor: 'pointer',
+      fontSize: '14px',
+      fontWeight: '500',
+      transition: 'all 0.2s ease',
+    },
+    // UnifiedEdgeTooltip용 close 버튼 스타일
+    closeEdge: {
+      height: 36,
+      width: 36,
+      borderRadius: 8,
+      border: '1.5px solid #e3e6ef',
+      background: '#fff',
+      color: '#22336b',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      cursor: 'pointer',
+      transition: 'all 0.2s ease',
+      outline: 'none',
+      fontSize: 14,
+      boxShadow: '0 2px 4px rgba(0,0,0,0.05)',
     },
   };
 
@@ -136,6 +184,66 @@ export const createAdvancedButtonHandlers = (variant) => {
         e.currentTarget.style.background = 'none';
         e.currentTarget.style.color = COLORS.textSecondary;
         e.currentTarget.style.transform = 'scale(1)';
+      }
+    };
+  }
+  
+  if (variant === 'primaryEdge') {
+    return {
+      onMouseEnter: (e) => {
+        e.target.style.backgroundColor = '#5a7cff';
+        e.target.style.transform = 'translateY(-1px)';
+        e.target.style.boxShadow = '0 4px 8px rgba(79, 109, 222, 0.3)';
+      },
+      onMouseLeave: (e) => {
+        e.target.style.backgroundColor = '#4F6DDE';
+        e.target.style.transform = 'translateY(0)';
+        e.target.style.boxShadow = 'none';
+      }
+    };
+  }
+  
+  if (variant === 'secondaryEdge') {
+    return {
+      onMouseEnter: (e) => {
+        e.target.style.backgroundColor = '#e7eaf7';
+        e.target.style.borderColor = '#4F6DDE';
+        e.target.style.color = '#4F6DDE';
+      },
+      onMouseLeave: (e) => {
+        e.target.style.backgroundColor = '#f8fafc';
+        e.target.style.borderColor = '#e7eaf7';
+        e.target.style.color = '#22336b';
+      }
+    };
+  }
+  
+  if (variant === 'closeEdge') {
+    return {
+      onMouseEnter: (e) => {
+        e.target.style.background = '#f8f9fc';
+        e.target.style.borderColor = '#6C8EFF';
+        e.target.style.color = '#6C8EFF';
+        e.target.style.transform = 'scale(1.05)';
+      },
+      onMouseLeave: (e) => {
+        e.target.style.background = '#fff';
+        e.target.style.borderColor = '#e3e6ef';
+        e.target.style.color = '#22336b';
+        e.target.style.transform = 'scale(1)';
+      }
+    };
+  }
+  
+  if (variant === 'tooltipClose') {
+    return {
+      onMouseEnter: (e) => {
+        e.target.style.color = '#6C8EFF';
+        e.target.style.backgroundColor = 'rgba(108, 142, 255, 0.1)';
+      },
+      onMouseLeave: (e) => {
+        e.target.style.color = '#bfc8e2';
+        e.target.style.backgroundColor = 'transparent';
       }
     };
   }
@@ -309,7 +417,7 @@ export const topBarStyles = {
     width: '100%',
     background: '#fff',
     boxShadow: '0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.04)',
-    zIndex: 10001,
+    zIndex: 1000,
     display: 'flex',
     flexDirection: 'row',
     alignItems: 'center',
@@ -433,7 +541,7 @@ export const unifiedNodeTooltipStyles = {
   // 툴팁 모드 컨테이너
   tooltipContainer: {
     position: "fixed",
-    zIndex: 9999,
+    zIndex: 99999,
     width: 500,
     minWidth: 500,
     maxWidth: 500,
@@ -462,7 +570,7 @@ export const unifiedNodeTooltipStyles = {
   // 에러 툴팁 컨테이너
   errorContainer: {
     position: "fixed",
-    zIndex: 10000,
+    zIndex: 99999,
     width: 500,
     minHeight: 150,
     background: COLORS.background,
@@ -476,7 +584,7 @@ export const unifiedNodeTooltipStyles = {
   // 등장하지 않은 인물 툴팁
   notAppearedContainer: {
     position: "fixed",
-    zIndex: 9999,
+    zIndex: 99999,
     opacity: 1,
     transition: "opacity 0.3s",
     cursor: "grab",
@@ -511,5 +619,3 @@ export const unifiedNodeAnimations = {
   // 사이드바 닫기 버튼 전환
   sidebarCloseTransition: `all ${ANIMATION_VALUES.DURATION.FAST} ${ANIMATION_VALUES.EASE}`,
 };
-
-// 유틸리티 함수들은 위에서 개별적으로 export됨

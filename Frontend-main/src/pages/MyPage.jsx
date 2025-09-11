@@ -7,9 +7,18 @@ import { useUserProfile } from '../hooks/useUserProfile';
 import { theme } from '../components/common/theme';
 
 export default function MyPage() {
-  const { books, loading, error, retryFetch, addBook } = useBooks();
+  const { books, loading, error, retryFetch, addBook, toggleFavorite, fetchBook } = useBooks();
   const { userProfile } = useUserProfile();
   const [showUpload, setShowUpload] = useState(false);
+
+  // 테스트용: 단일 도서 조회 함수
+  const testSingleBook = async (bookId) => {
+    try {
+      const book = await fetchBook(bookId);
+      return book;
+    } catch (error) {
+    }
+  };
 
   const rootStyle = {
     background: theme.colors.background.main,
@@ -54,6 +63,17 @@ export default function MyPage() {
     setShowUpload(false);
   };
 
+  const handleBookClick = async (book) => {
+    
+    // API 책인 경우 단일 도서 조회 테스트
+    if (typeof book.id === 'number') {
+      try {
+        const detailedBook = await testSingleBook(book.id);
+      } catch (error) {
+      }
+    }
+  };
+
   return (
     <div style={rootStyle}>
       <div style={mainStyle}>
@@ -63,6 +83,8 @@ export default function MyPage() {
           loading={loading} 
           error={error} 
           onRetry={retryFetch}
+          onToggleFavorite={toggleFavorite}
+          onBookClick={handleBookClick}
         />
       </div>
       

@@ -61,40 +61,81 @@ const ViewerTopBar = ({
   const [currentEventInfo, setCurrentEventInfo] = React.useState(null);
   const [currentProgressWidth, setCurrentProgressWidth] = React.useState("0%");
   
-  // 이벤트 정보 실시간 업데이트
+  // 이벤트 정보 실시간 업데이트 (개선된 버전)
   React.useEffect(() => {
     const eventToShow = currentEvent || prevValidEvent;
     
+    
     if (eventToShow) {
+      // 챕터 불일치 체크
+      if (eventToShow.chapter && eventToShow.chapter !== currentChapter) {
+        // 챕터가 다른 이벤트는 표시하지 않음
+        setCurrentEventInfo(null);
+        return;
+      }
+      
       const eventInfo = {
         eventNum: eventToShow.eventNum ?? 0,
         name: eventToShow.name || eventToShow.event_name || ""
       };
       setCurrentEventInfo(eventInfo);
       
-      // 프로그레스 바 너비 실시간 계산 - 현재 이벤트까지의 진행률
-      if (events && eventToShow && events.length > 0) {
+      // 프로그레스 바 너비 실시간 계산 - 마지막 이벤트에서 100%가 되도록 수정
+      let progressPercentage = 0;
+      
+      // 1. chapterProgress가 있는 경우 (가장 정확한 방법)
+      if (eventToShow.chapterProgress !== undefined) {
+        progressPercentage = Math.min(eventToShow.chapterProgress, 100);
+      }
+      // 2. events 배열이 있는 경우
+      else if (events && eventToShow && events.length > 0) {
         const currentEventIndex = events.findIndex(e => e.eventNum === eventToShow.eventNum);
-        const progressPercentage = currentEventIndex >= 0 
-          ? Math.min(((currentEventIndex + 1) / events.length) * 100, 100)
-          : 0;
-        const progressWidth = `${progressPercentage}%`;
-        setCurrentProgressWidth(progressWidth);
-      } else if (eventToShow && eventToShow.eventNum !== undefined) {
-        // events가 없지만 eventNum이 있는 경우 - 챕터 내 이벤트 진행률 추정
+        
+        // 마지막 이벤트를 넘어선 경우 100%로 설정
+        if (currentEventIndex === -1 && eventToShow.progress === 100) {
+          progressPercentage = 100;
+        }
+        // 정상적인 이벤트 인덱스가 있는 경우
+        else if (currentEventIndex >= 0) {
+          // 마지막 이벤트인지 확인
+          const isLastEvent = currentEventIndex === events.length - 1;
+          
+          if (isLastEvent) {
+            // 마지막 이벤트인 경우 100%로 설정
+            progressPercentage = 100;
+          } else {
+            // 이벤트 내 진행률도 고려 (마지막 이벤트가 아닌 경우만)
+            const baseProgress = (currentEventIndex / (events.length - 1)) * 100;
+            const eventProgress = eventToShow.progress || 0;
+            const eventWeight = 100 / events.length; // 각 이벤트가 차지하는 비중
+            
+            progressPercentage = Math.min(baseProgress + (eventProgress * eventWeight / 100), 100);
+          }
+        }
+        // 첫 이벤트보다 앞선 경우
+        else if (currentEventIndex === -1 && eventToShow.progress === 0) {
+          progressPercentage = 0;
+        }
+      }
+      // 3. events가 없지만 eventNum이 있는 경우 - 챕터 내 이벤트 진행률 추정
+      else if (eventToShow && eventToShow.eventNum !== undefined) {
         try {
           const totalEvents = getChapterEventCount(currentChapter);
-          const progressWidth = `${Math.min(((eventToShow.eventNum + 1) / totalEvents) * 100, 100)}%`;
-          setCurrentProgressWidth(progressWidth);
+          // 마지막 이벤트인 경우 100%로 설정
+          if (eventToShow.eventNum >= totalEvents - 1) {
+            progressPercentage = 100;
+          } else {
+            progressPercentage = Math.min((eventToShow.eventNum / (totalEvents - 1)) * 100, 100);
+          }
         } catch (error) {
           // 에러 발생 시 기본값 사용
           const fallbackTotalEvents = 20;
-          const progressWidth = `${Math.min(((eventToShow.eventNum + 1) / fallbackTotalEvents) * 100, 100)}%`;
-          setCurrentProgressWidth(progressWidth);
+          progressPercentage = Math.min((eventToShow.eventNum / (fallbackTotalEvents - 1)) * 100, 100);
         }
-      } else {
-        setCurrentProgressWidth("0%");
       }
+      
+      const progressWidth = `${Math.round(progressPercentage * 100) / 100}%`;
+      setCurrentProgressWidth(progressWidth);
     } else {
       // 이벤트 정보가 없을 때 초기화
       setCurrentEventInfo(null);
@@ -227,10 +268,10 @@ const ViewerTopBar = ({
             onClick={() => {
               if (graphFullScreen) {
                 // 그래프 전체화면 -> 분할 화면으로 전환
-                setGraphFullScreen(false);
+                graphActions.setGraphFullScreen(false);
               } else {
                 // 분할 화면 -> 그래프 전체화면으로 전환
-                setGraphFullScreen(true);
+                graphActions.setGraphFullScreen(true);
               }
             }}
             style={{
@@ -270,7 +311,7 @@ const ViewerTopBar = ({
               gap: 16, // 16px 간격
             }}
           >
-            {isGraphLoading || !currentEventInfo || (currentEventInfo && currentEventInfo.eventNum === 0) ? (
+            {isGraphLoading || !currentEventInfo ? (
               /* 로딩 중일 때 통합 표시 */
               <span
                 style={{
@@ -409,7 +450,7 @@ const ViewerTopBar = ({
             borderBottom: "1px solid #e3e6ef",
           }}
         >
-          {isGraphLoading || !currentEventInfo || (currentEventInfo && currentEventInfo.eventNum === 0) ? (
+          {isGraphLoading || !currentEventInfo ? (
             /* 로딩 중일 때 통합 표시 */
             <span
               style={{

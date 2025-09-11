@@ -1,5 +1,4 @@
 import React, { useRef, useEffect, useCallback, useState } from "react";
-import { FaSearch, FaUndo } from "react-icons/fa";
 import { useClickOutside } from "../../hooks/useClickOutside";
 import { graphControlsStyles } from "../../utils/styles/styles.js";
 
@@ -86,6 +85,8 @@ function GraphControls({
         onKeyDown(e, (selectedTerm) => {
           if (selectedTerm) {
             setInternalSearchTerm(selectedTerm);
+            // 키보드로 선택한 인물에 대해 즉시 검색 실행
+            onSearchSubmit(selectedTerm);
           }
         });
       }
@@ -98,13 +99,16 @@ function GraphControls({
 
   // 제안 선택 함수
   const handleSelectSuggestion = useCallback((suggestion) => {
-    if (suggestion && suggestion.label) {
-      setInternalSearchTerm(suggestion.label);
+    if (suggestion) {
+      // 드롭다운에서 표시되는 이름과 동일한 이름을 검색창에 입력
+      const displayName = suggestion.label || suggestion.common_name || 'Unknown';
+      setInternalSearchTerm(displayName);
       setInternalShowSuggestions(false);
       setInternalSelectedIndex(-1);
-      // 검색은 실행하지 않고 입력 필드에만 채움
+      // 선택한 인물에 대해 즉시 검색 실행
+      onSearchSubmit(displayName);
     }
-  }, []);
+  }, [onSearchSubmit]);
 
   const handleFormSubmit = useCallback((e) => {
     e.preventDefault();
@@ -183,12 +187,12 @@ function GraphControls({
         >
           {isSearchActive ? (
             <>
-              <FaUndo size={10} />
+              <span className="material-symbols-outlined" style={{fontSize: '10px'}}>undo</span>
               초기화
             </>
           ) : (
             <>
-              <FaSearch size={10} />
+              <span className="material-symbols-outlined" style={{fontSize: '10px'}}>search</span>
               검색
             </>
           )}
@@ -206,7 +210,7 @@ function GraphControls({
           border: '1px solid #e3e6ef',
           borderRadius: '12px',
           boxShadow: '0 8px 32px rgba(0, 0, 0, 0.12), 0 4px 16px rgba(0, 0, 0, 0.08)',
-          zIndex: 9999,
+          zIndex: 1000,
           maxHeight: '320px',
           overflowY: 'auto',
           marginTop: '8px',

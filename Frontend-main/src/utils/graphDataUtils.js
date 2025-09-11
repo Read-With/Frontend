@@ -101,7 +101,6 @@ export function loadGraphData(folderKey, chapter, eventIndex, getEventDataFunc) 
       normalizedRelations
     };
   } catch (error) {
-    console.error('loadGraphData 에러:', error);
     throw error;
   }
 }
@@ -116,15 +115,13 @@ export function loadGraphData(folderKey, chapter, eventIndex, getEventDataFunc) 
  * @param {string} folderKey - 폴더 키 (이미지 경로용)
  * @returns {Array} 그래프 요소 배열
  */
-export function convertRelationsToElements(relations, idToName, idToDesc, idToMain, idToNames, folderKey = 'gatsby') {
+export function convertRelationsToElements(relations, idToName, idToDesc, idToMain, idToNames, folderKey = 'gatsby', previousRelations = null) {
   // 매개변수 유효성 검사
   if (!Array.isArray(relations)) {
-    console.warn('convertRelationsToElements: relations는 배열이어야 합니다.', typeof relations);
     return [];
   }
   
   if (!idToName || typeof idToName !== 'object') {
-    console.warn('convertRelationsToElements: idToName이 유효하지 않습니다.', typeof idToName);
     return [];
   }
 
@@ -163,25 +160,35 @@ export function convertRelationsToElements(relations, idToName, idToDesc, idToMa
     const seed = Math.abs(hash) % 10000;
     const result = min + (seed % (max - min));
     
-    // 캐시 크기 제한 (메모리 누수 방지)
-    if (randomCache.size > 1000) {
-      randomCache.clear();
-    }
+  // 캐시 크기 제한 (메모리 누수 방지)
+  const MAX_CACHE_SIZE = 1000;
+  if (randomCache.size > MAX_CACHE_SIZE) {
+    randomCache.clear();
+  }
     randomCache.set(cacheKey, result);
     
     return result;
   }
 
+  // 캐릭터 정보가 있는 노드만 필터링
+  const validNodeIds = nodeIds.filter(strId => {
+    const hasName = idToName[strId] && idToName[strId] !== strId;
+    if (!hasName) {
+      nodeSet.delete(strId); // nodeSet에서도 제거
+    }
+    return hasName;
+  });
+
   // 원 배치 좌표 계산
   const centerX = 500;
   const centerY = 350;
   const radius = 320;
-  nodeIds.forEach((strId) => {
+  validNodeIds.forEach((strId) => {
     const angle = seededRandom(strId, 0, 360) * Math.PI / 180;
     const r = radius * (0.7 + 0.3 * (seededRandom(strId, 0, 1000) / 1000));
     const x = centerX + r * Math.cos(angle);
     const y = centerY + r * Math.sin(angle);
-    const commonName = idToName[strId] || strId;
+    const commonName = idToName[strId];
     nodes.push({
       data: {
         id: strId,
@@ -196,36 +203,83 @@ export function convertRelationsToElements(relations, idToName, idToDesc, idToMa
     });
   });
 
+  // 이전 이벤트의 관계를 Set으로 변환 (빠른 검색을 위해)
+  const previousRelationSet = new Set();
+  if (previousRelations && Array.isArray(previousRelations)) {
+    previousRelations.forEach(prevRel => {
+      if (prevRel.id1 && prevRel.id2) {
+        const prevId1 = String(prevRel.id1);
+        const prevId2 = String(prevRel.id2);
+        previousRelationSet.add(`${prevId1}-${prevId2}`);
+        previousRelationSet.add(`${prevId2}-${prevId1}`); // 양방향 관계 고려
+      }
+    });
+  }
+
   // 엣지 추가
   relationsArray.forEach(rel => {
     if (rel.id1 && rel.id2) {
       const id1 = String(rel.id1);
       const id2 = String(rel.id2);
-      if (id1 !== id2) {
-        let relationArray = [];
-        let relationLabel = "";
-        
-        if (Array.isArray(rel.relation)) {
-          relationArray = rel.relation;
-          relationLabel = rel.relation[0] || "";
-        } else if (typeof rel.relation === "string") {
-          relationArray = [rel.relation];
-          relationLabel = rel.relation;
-        }
-        
-        edges.push({
-          data: {
-            id: `${id1}-${id2}`,
-            source: id1,
-            target: id2,
-            relation: relationArray,
-            label: relationLabel || "",
-            weight: rel.weight || 1,
-            positivity: rel.positivity,
-            count: rel.count
-          }
-        });
+      
+      // 1. id1 == id2 인 경우 제외
+      if (id1 === id2) {
+        return;
       }
+      
+      // 2. 노드가 0.0 인 경우 제외
+      if (id1 === '0' || id2 === '0') {
+        return;
+      }
+      
+      // 3. 해당 event에 없는 노드가 포함된 경우 제외
+      if (!nodeSet.has(id1) || !nodeSet.has(id2)) {
+        return;
+      }
+      
+      let relationArray = [];
+      let relationLabel = "";
+      
+      if (Array.isArray(rel.relation)) {
+        relationArray = rel.relation;
+        // 이전 이벤트와 비교하여 새로 추가된 관계인지 확인
+        const isNewRelation = !previousRelationSet.has(`${id1}-${id2}`) && !previousRelationSet.has(`${id2}-${id1}`);
+        
+        if (isNewRelation || !previousRelations) {
+          // 새로 추가된 관계이거나 첫 번째 이벤트인 경우: 첫 번째 요소를 라벨로 사용
+          relationLabel = rel.relation[0] || "";
+        } else {
+          // 기존 관계인 경우: 이전 이벤트에서의 관계와 비교하여 새로 추가된 요소 찾기
+          const prevRel = previousRelations.find(prevRel => 
+            (String(prevRel.id1) === id1 && String(prevRel.id2) === id2) ||
+            (String(prevRel.id1) === id2 && String(prevRel.id2) === id1)
+          );
+          
+          if (prevRel && Array.isArray(prevRel.relation)) {
+            // 이전 관계에서 새로 추가된 요소 찾기
+            const newElements = rel.relation.filter(element => !prevRel.relation.includes(element));
+            relationLabel = newElements.length > 0 ? newElements[0] : rel.relation[0] || "";
+          } else {
+            relationLabel = rel.relation[0] || "";
+          }
+        }
+      } else if (typeof rel.relation === "string") {
+        relationArray = [rel.relation];
+        relationLabel = rel.relation;
+      }
+      
+      edges.push({
+        data: {
+          id: `${id1}-${id2}`,
+          source: id1,
+          target: id2,
+          relation: relationArray,
+          label: relationLabel || "",
+          weight: rel.weight || 1,
+          positivity: rel.positivity,
+          count: rel.count
+        }
+      });
     }
   });
   
@@ -242,7 +296,6 @@ export function convertRelationsToElements(relations, idToName, idToDesc, idToMa
  */
 export function calcGraphDiff(prevElements, currElements) {
   if (!prevElements || !currElements) {
-    console.warn('calcGraphDiff: prevElements 또는 currElements가 없습니다.', { prevElements: !!prevElements, currElements: !!currElements });
     return { added: [], removed: [], updated: [] };
   }
   
@@ -282,12 +335,10 @@ export function calcGraphDiff(prevElements, currElements) {
  */
 export function detectAndResolveOverlap(cy, nodeSize = 40, onCleanup = null) {
   if (!cy) {
-    console.warn('detectAndResolveOverlap: cy 인스턴스가 없습니다.');
     return false;
   }
   
   if (typeof nodeSize !== 'number' || nodeSize <= 0) {
-    console.warn('detectAndResolveOverlap: 유효하지 않은 nodeSize', nodeSize);
     nodeSize = 40;
   }
   
@@ -298,8 +349,8 @@ export function detectAndResolveOverlap(cy, nodeSize = 40, onCleanup = null) {
   const timers = [];
   
   // 성능 최적화: 노드가 많을 때는 겹침 감지를 건너뜀
-  if (nodes.length > 100) {
-    console.warn('detectAndResolveOverlap: 노드가 너무 많아 겹침 감지를 건너뜁니다.', nodes.length);
+  const MAX_NODES_FOR_OVERLAP_DETECTION = 100;
+  if (nodes.length > MAX_NODES_FOR_OVERLAP_DETECTION) {
     return false;
   }
 

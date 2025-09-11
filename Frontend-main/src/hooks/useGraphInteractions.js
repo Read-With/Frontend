@@ -54,20 +54,13 @@ export default function useGraphInteractions({
     clearStyles();
   }, [clearStyles]);
 
-  // 툴팁을 포함한 모든 상태를 초기화하는 함수
+  // 그래프 스타일만 초기화하는 함수 (툴팁 닫기는 상위에서 처리)
   const clearAll = useCallback(() => {
     clearSelectionOnly();
-    if (onClearTooltipRef.current) {
-      onClearTooltipRef.current();
-    }
   }, [clearSelectionOnly]);
 
   // getContainerInfo는 이제 공통 유틸리티에서 import하여 사용
 
-  // 공통 위치 계산 함수
-  const calculatePosition = useCallback((pos) => {
-    return calculateCytoscapePosition(pos, cyRef);
-  }, [cyRef]);
 
   // 노드 하이라이트 처리 함수
   const handleNodeHighlight = useCallback((node) => {
@@ -90,20 +83,28 @@ export default function useGraphInteractions({
         });
       }
     } catch (error) {
-      console.error('노드 하이라이트 처리 실패:', error);
     }
   }, [cyRef, isSearchActive, filteredElements, resetAllStyles]);
 
-  // 노드 위치 계산 함수
+  // 노드 위치 계산 함수 - 확대/축소 상태 고려 (상대 좌표)
   const calculateNodePosition = useCallback((node) => {
     try {
+      if (!cyRef?.current) return { x: 0, y: 0 };
+      
+      const cy = cyRef.current;
       const pos = node.renderedPosition();
-      return calculatePosition(pos);
+      const pan = cy.pan();
+      const zoom = cy.zoom();
+      
+      // Cytoscape 좌표를 그래프 컨테이너 기준 상대 좌표로 변환
+      const domX = pos.x * zoom + pan.x;
+      const domY = pos.y * zoom + pan.y;
+      
+      return { x: domX, y: domY };
     } catch (error) {
-      console.error('노드 위치 계산 실패:', error);
       return { x: 0, y: 0 };
     }
-  }, [calculatePosition]);
+  }, [cyRef]);
 
   const tapNodeHandler = useCallback(
     (evt) => {
@@ -115,8 +116,16 @@ export default function useGraphInteractions({
         if (!node || !nodeData) return;
 
         const nodeCenter = calculateNodePosition(node);
-        const mouseX = evt.originalEvent?.clientX ?? nodeCenter.x;
-        const mouseY = evt.originalEvent?.clientY ?? nodeCenter.y;
+        
+        // 마우스 위치를 그래프 컨테이너 기준의 상대 좌표로 변환
+        let mouseX = nodeCenter.x;
+        let mouseY = nodeCenter.y;
+        
+        if (evt.originalEvent) {
+          const { containerRect } = getContainerInfo();
+          mouseX = evt.originalEvent.clientX - containerRect.left;
+          mouseY = evt.originalEvent.clientY - containerRect.top;
+        }
         
         // 노드 하이라이트 처리
         handleNodeHighlight(node);
@@ -128,7 +137,6 @@ export default function useGraphInteractions({
         
         if (selectedNodeIdRef) selectedNodeIdRef.current = node.id();
       } catch (error) {
-        console.error('노드 클릭 처리 실패:', error);
       }
     },
     [cyRef, handleNodeHighlight, calculateNodePosition, onShowNodeTooltipRef, selectedNodeIdRef]
@@ -144,10 +152,24 @@ export default function useGraphInteractions({
         const edgeData = edge?.data?.();
         if (!edge || !edgeData) return;
 
-        // 노드 클릭과 동일한 방식으로 위치 계산
-        const edgeCenter = calculatePosition(edge.midpoint());
-        const mouseX = evt.originalEvent?.clientX ?? edgeCenter.x;
-        const mouseY = evt.originalEvent?.clientY ?? edgeCenter.y;
+        // 간선 중점 위치 계산 - 확대/축소 상태 고려 (상대 좌표)
+        const edgeMidpoint = edge.midpoint();
+        const pan = cy.pan();
+        const zoom = cy.zoom();
+        
+        const domX = edgeMidpoint.x * zoom + pan.x;
+        const domY = edgeMidpoint.y * zoom + pan.y;
+        
+        
+        // 마우스 위치를 그래프 컨테이너 기준의 상대 좌표로 변환
+        let mouseX = domX;
+        let mouseY = domY;
+        
+        if (evt.originalEvent) {
+          const { containerRect } = getContainerInfo();
+          mouseX = evt.originalEvent.clientX - containerRect.left;
+          mouseY = evt.originalEvent.clientY - containerRect.top;
+        }
 
         // 컴포넌트별 툴팁 생성 로직 실행
         if (onShowEdgeTooltipRef.current) {
@@ -164,13 +186,12 @@ export default function useGraphInteractions({
 
         if (selectedEdgeIdRef) selectedEdgeIdRef.current = edge.id();
       } catch (error) {
-        console.error('간선 클릭 처리 실패:', error);
       }
     },
-    [cyRef, calculatePosition, onShowEdgeTooltipRef, selectedEdgeIdRef, resetAllStyles]
+    [cyRef, onShowEdgeTooltipRef, selectedEdgeIdRef, resetAllStyles]
   );
 
-  // 배경 클릭 처리 함수
+  // 배경 클릭 처리 함수 - 그래프 스타일 초기화 및 툴팁 닫기
   const handleBackgroundClick = useCallback(() => {
     try {
       if (strictBackgroundClear) {
@@ -178,16 +199,14 @@ export default function useGraphInteractions({
         if (!hasSelection) return;
       }
       
-      // 그래프 온리 페이지에서는 툴팁을 유지하고 선택 상태만 초기화
+      // 스타일 초기화
       clearStyles();
       
-      // 순수 클릭일 때만 툴팁 닫기 (드래그는 사이드바 상태 유지)
-      // Cytoscape의 기본 배경 클릭 이벤트는 드래그와 구분되어야 함
+      // 툴팁 닫기 - 배경 클릭 시 툴팁도 닫음
       if (onClearTooltipRef.current) {
         onClearTooltipRef.current();
       }
     } catch (error) {
-      console.error('배경 클릭 처리 실패:', error);
     }
   }, [strictBackgroundClear, selectedNodeIdRef, selectedEdgeIdRef, clearStyles, onClearTooltipRef]);
 
@@ -200,7 +219,6 @@ export default function useGraphInteractions({
           handleBackgroundClick();
         }
       } catch (error) {
-        console.error('배경 클릭 감지 실패:', error);
       }
     },
     [cyRef, handleBackgroundClick]
@@ -212,7 +230,6 @@ export default function useGraphInteractions({
       if (selectedNodeIdRef) selectedNodeIdRef.current = null;
       if (selectedEdgeIdRef) selectedEdgeIdRef.current = null;
     } catch (error) {
-      console.error('선택 상태 초기화 실패:', error);
     }
   }, [clearSelectionOnly, selectedNodeIdRef, selectedEdgeIdRef]);
 

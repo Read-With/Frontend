@@ -122,8 +122,6 @@
   box-shadow: inset 6px 0 12px -8px rgba(0,0,0,0.1);
 }
 
-
-
 /* EPUB 컨테이너 스타일 재정의 */
 .epub-container {
   min-width: 100% !important;

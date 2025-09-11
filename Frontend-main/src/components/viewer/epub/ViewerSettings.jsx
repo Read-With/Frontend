@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import { FaTimes, FaFont, FaColumns, FaCheck, FaChartBar } from 'react-icons/fa';
 
 // 로컬 스토리지에서 설정 불러오기/저장하기 함수
 const loadSettings = () => {
@@ -131,14 +130,14 @@ const ViewerSettings = ({ isOpen, onClose, onApplySettings, currentSettings }) =
               color: '#6b7280'
             }}
           >
-            <FaTimes />
+            <span className="material-symbols-outlined">close</span>
           </button>
         </div>
         
         {/* 페이지 모드 설정 */}
         <div style={{ marginBottom: '24px' }}>
           <h3 style={{ fontSize: '1.1rem', fontWeight: 'bold', color: '#22336b', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <FaColumns /> 페이지 모드
+            <span className="material-symbols-outlined">view_column</span> 페이지 모드
           </h3>
           <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
             <button
@@ -156,7 +155,7 @@ const ViewerSettings = ({ isOpen, onClose, onApplySettings, currentSettings }) =
                 fontWeight: settings.pageMode === 'single' ? 'bold' : 'normal',
               }}
             >
-              {settings.pageMode === 'single' && <FaCheck />} 단일 페이지
+              {settings.pageMode === 'single' && <span className="material-symbols-outlined">check</span>} 단일 페이지
             </button>
             <button
               onClick={() => handleChange('pageMode', 'double')}
@@ -173,7 +172,7 @@ const ViewerSettings = ({ isOpen, onClose, onApplySettings, currentSettings }) =
                 fontWeight: settings.pageMode === 'double' ? 'bold' : 'normal',
               }}
             >
-              {settings.pageMode === 'double' && <FaCheck />} 분할 페이지
+              {settings.pageMode === 'double' && <span className="material-symbols-outlined">check</span>} 분할 페이지
             </button>
           </div>
         </div>
@@ -181,7 +180,7 @@ const ViewerSettings = ({ isOpen, onClose, onApplySettings, currentSettings }) =
         {/* 그래프 표시 설정 */}
         <div style={{ marginBottom: '24px' }}>
           <h3 style={{ fontSize: '1.1rem', fontWeight: 'bold', color: '#22336b', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <FaChartBar /> 그래프 표시
+            <span className="material-symbols-outlined">bar_chart</span> 그래프 표시
           </h3>
           <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
             <button
@@ -199,7 +198,7 @@ const ViewerSettings = ({ isOpen, onClose, onApplySettings, currentSettings }) =
                 fontWeight: settings.showGraph ? 'bold' : 'normal',
               }}
             >
-              {settings.showGraph && <FaCheck />} 그래프 표시
+              {settings.showGraph && <span className="material-symbols-outlined">check</span>} 그래프 표시
             </button>
             <button
               onClick={() => handleChange('showGraph', false)}
@@ -216,7 +215,7 @@ const ViewerSettings = ({ isOpen, onClose, onApplySettings, currentSettings }) =
                 fontWeight: !settings.showGraph ? 'bold' : 'normal',
               }}
             >
-              {!settings.showGraph && <FaCheck />} 그래프 숨기기
+              {!settings.showGraph && <span className="material-symbols-outlined">check</span>} 그래프 숨기기
             </button>
           </div>
         </div>
@@ -224,7 +223,7 @@ const ViewerSettings = ({ isOpen, onClose, onApplySettings, currentSettings }) =
         {/* 글꼴 크기 설정 */}
         <div style={{ marginBottom: '24px' }}>
           <h3 style={{ fontSize: '1.1rem', fontWeight: 'bold', color: '#22336b', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <FaFont /> 글꼴 크기
+            <span className="material-symbols-outlined">format_size</span> 글꼴 크기
           </h3>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
             <button

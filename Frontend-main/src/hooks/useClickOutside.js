@@ -12,8 +12,9 @@ export function useClickOutside(callback, enabled = true) {
       }
     };
 
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    // mousedown 대신 click 이벤트 사용하여 Cytoscape tap 이벤트와 충돌 방지
+    document.addEventListener('click', handleClickOutside);
+    return () => document.removeEventListener('click', handleClickOutside);
   }, [callback, enabled]);
 
   return ref;

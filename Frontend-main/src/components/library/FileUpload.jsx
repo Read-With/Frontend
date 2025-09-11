@@ -5,19 +5,47 @@ import { theme } from '../common/theme';
 
 const FileUpload = ({ onUploadSuccess, onClose }) => {
   const [dragActive, setDragActive] = useState(false);
+  const [selectedFile, setSelectedFile] = useState(null);
+  const [metadata, setMetadata] = useState({
+    title: '',
+    author: '',
+    language: 'ko'
+  });
+  const [step, setStep] = useState('select'); // 'select' or 'metadata'
   const inputRef = useRef(null);
   const { uploading, uploadProgress, uploadError, uploadFile, resetUpload } = useFileUpload();
 
-  const handleFiles = async (files) => {
+  const handleFiles = (files) => {
     if (files && files.length > 0) {
       const file = files[0];
-      const result = await uploadFile(file);
-      
-      if (result.success) {
-        onUploadSuccess(result.data);
-        onClose();
-      }
+      setSelectedFile(file);
+      setMetadata(prev => ({
+        ...prev,
+        title: file.name.replace(/\.epub$/i, '')
+      }));
+      setStep('metadata');
     }
+  };
+
+  const handleUpload = async () => {
+    if (!selectedFile) return;
+    
+    const result = await uploadFile(selectedFile, metadata);
+    
+    if (result.success) {
+      onUploadSuccess(result.data);
+      onClose();
+    }
+  };
+
+  const handleBack = () => {
+    setStep('select');
+    setSelectedFile(null);
+    setMetadata({
+      title: '',
+      author: '',
+      language: 'ko'
+    });
   };
 
   const handleDrag = (e) => {
@@ -140,6 +168,154 @@ const FileUpload = ({ onUploadSuccess, onClose }) => {
     }
   };
 
+  const renderSelectStep = () => (
+    <>
+      <div
+        style={dropZoneStyle}
+        onDragEnter={handleDrag}
+        onDragLeave={handleDrag}
+        onDragOver={handleDrag}
+        onDrop={handleDrop}
+        onClick={onButtonClick}
+      >
+        <div style={{ 
+          fontSize: '24px', 
+          marginBottom: '12px',
+          color: '#666'
+        }}>
+          📁
+        </div>
+        <p style={{ 
+          fontSize: '16px', 
+          fontWeight: 500,
+          marginBottom: '8px',
+          color: '#333'
+        }}>
+          {dragActive ? '파일을 여기에 놓으세요' : 'EPUB 파일 선택'}
+        </p>
+        <p style={{ 
+          fontSize: '14px', 
+          color: '#666',
+          lineHeight: '1.4',
+          margin: '0'
+        }}>
+          파일을 드래그하거나 클릭해서 업로드하세요<br/>
+          <small style={{ fontSize: '12px', color: '#999' }}>
+            최대 {Math.round(FILE_CONSTRAINTS.MAX_SIZE / (1024 * 1024))}MB, .epub 파일만 지원됩니다
+          </small>
+        </p>
+      </div>
+    
+      <input
+        ref={inputRef}
+        type="file"
+        accept={FILE_CONSTRAINTS.ACCEPT_ATTRIBUTE}
+        style={{ display: 'none' }}
+        onChange={handleChange}
+      />
+    </>
+  );
+
+  const renderMetadataStep = () => (
+    <div>
+      <div style={{ marginBottom: '20px', padding: '16px', backgroundColor: '#f8f9fa', borderRadius: '8px' }}>
+        <div style={{ fontSize: '14px', color: '#666', marginBottom: '4px' }}>선택된 파일:</div>
+        <div style={{ fontSize: '16px', fontWeight: 500 }}>{selectedFile?.name}</div>
+      </div>
+      
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+        <div>
+          <label style={{ display: 'block', fontSize: '14px', fontWeight: 500, marginBottom: '8px', color: '#333' }}>
+            제목 *
+          </label>
+          <input
+            type="text"
+            value={metadata.title}
+            onChange={(e) => setMetadata(prev => ({ ...prev, title: e.target.value }))}
+            style={{
+              width: '100%',
+              padding: '12px',
+              border: '1px solid #ddd',
+              borderRadius: '6px',
+              fontSize: '14px',
+              boxSizing: 'border-box'
+            }}
+            placeholder="책 제목을 입력하세요"
+          />
+        </div>
+        
+        <div>
+          <label style={{ display: 'block', fontSize: '14px', fontWeight: 500, marginBottom: '8px', color: '#333' }}>
+            저자 *
+          </label>
+          <input
+            type="text"
+            value={metadata.author}
+            onChange={(e) => setMetadata(prev => ({ ...prev, author: e.target.value }))}
+            style={{
+              width: '100%',
+              padding: '12px',
+              border: '1px solid #ddd',
+              borderRadius: '6px',
+              fontSize: '14px',
+              boxSizing: 'border-box'
+            }}
+            placeholder="저자명을 입력하세요"
+          />
+        </div>
+        
+        <div>
+          <label style={{ display: 'block', fontSize: '14px', fontWeight: 500, marginBottom: '8px', color: '#333' }}>
+            언어
+          </label>
+          <select
+            value={metadata.language}
+            onChange={(e) => setMetadata(prev => ({ ...prev, language: e.target.value }))}
+            style={{
+              width: '100%',
+              padding: '12px',
+              border: '1px solid #ddd',
+              borderRadius: '6px',
+              fontSize: '14px',
+              boxSizing: 'border-box',
+              backgroundColor: 'white'
+            }}
+          >
+            <option value="ko">한국어</option>
+            <option value="en">English</option>
+            <option value="ja">日本語</option>
+            <option value="zh">中文</option>
+          </select>
+        </div>
+      </div>
+      
+      <div style={{ display: 'flex', gap: '12px', marginTop: '24px' }}>
+        <button 
+          onClick={handleBack}
+          style={{
+            ...closeButtonStyle,
+            flex: 1
+          }}
+        >
+          뒤로
+        </button>
+        <button 
+          onClick={handleUpload}
+          disabled={!metadata.title || !metadata.author}
+          style={{
+            ...closeButtonStyle,
+            flex: 1,
+            backgroundColor: (!metadata.title || !metadata.author) ? '#ccc' : '#4F6DDE',
+            color: 'white',
+            border: 'none'
+          }}
+        >
+          업로드
+        </button>
+      </div>
+    </div>
+  );
+
   return (
     <div style={overlayStyle} onClick={handleOverlayClick}>
       <div style={modalStyle}>
@@ -147,49 +323,7 @@ const FileUpload = ({ onUploadSuccess, onClose }) => {
           
           {!uploading ? (
             <>
-              <div
-                style={dropZoneStyle}
-                onDragEnter={handleDrag}
-                onDragLeave={handleDrag}
-                onDragOver={handleDrag}
-                onDrop={handleDrop}
-                onClick={onButtonClick}
-              >
-                <div style={{ 
-                  fontSize: '24px', 
-                  marginBottom: '12px',
-                  color: '#666'
-                }}>
-                  📁
-                </div>
-                <p style={{ 
-                  fontSize: '16px', 
-                  fontWeight: 500,
-                  marginBottom: '8px',
-                  color: '#333'
-                }}>
-                  {dragActive ? '파일을 여기에 놓으세요' : 'EPUB 파일 선택'}
-                </p>
-                <p style={{ 
-                  fontSize: '14px', 
-                  color: '#666',
-                  lineHeight: '1.4',
-                  margin: '0'
-                }}>
-                  파일을 드래그하거나 클릭해서 업로드하세요<br/>
-                  <small style={{ fontSize: '12px', color: '#999' }}>
-                    최대 {Math.round(FILE_CONSTRAINTS.MAX_SIZE / (1024 * 1024))}MB, .epub 파일만 지원됩니다
-                  </small>
-                </p>
-              </div>
-            
-            <input
-              ref={inputRef}
-              type="file"
-              accept={FILE_CONSTRAINTS.ACCEPT_ATTRIBUTE}
-              style={{ display: 'none' }}
-              onChange={handleChange}
-            />
+              {step === 'select' ? renderSelectStep() : renderMetadataStep()}
             
             {uploadError && (
               <div style={errorStyle}>
@@ -419,7 +553,7 @@ const FileUpload = ({ onUploadSuccess, onClose }) => {
         )}
         
         <div style={{ textAlign: 'center', marginTop: '24px' }}>
-          {!uploading && (
+          {!uploading && step === 'select' && (
             <button 
               style={closeButtonStyle} 
               onClick={onClose}

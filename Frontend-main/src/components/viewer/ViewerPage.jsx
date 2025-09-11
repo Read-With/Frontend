@@ -1,4 +1,4 @@
-import React, { useRef, useState, useEffect, useMemo } from "react";
+import React, { useRef, useState, useEffect, useMemo, useCallback } from "react";
 import { toast, ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import cytoscape from "cytoscape";
@@ -11,6 +11,7 @@ import ViewerSettings from "./epub/ViewerSettings";
 import ViewerTopBar from "./ViewerTopBar";
 import { useViewerPage } from "../../hooks/useViewerPage";
 import { useGraphSearch } from "../../hooks/useGraphSearch";
+import { useClickOutside } from "../../hooks/useClickOutside";
 import { createStorageKey } from "../../hooks/useLocalStorage";
 import { 
   parseCfiToChapterDetail, 
@@ -34,6 +35,11 @@ function GraphSplitArea({
   viewerState,
   searchState,
   searchActions,
+  activeTooltip,
+  onClearTooltip,
+  onSetActiveTooltip,
+  graphClearRef,
+  isEventUndefined,
 }) {
   const graphContainerRef = React.useRef(null);
   const { isSearchActive, filteredElements, isResetFromSearch } = searchState;
@@ -63,16 +69,82 @@ function GraphSplitArea({
       />
       
       <div style={{ flex: 1, position: "relative", minHeight: 0, minWidth: 0 }}>
-        <GraphContainer
-          ref={graphContainerRef}
-          currentPosition={graphState.currentCharIndex}
-          currentEvent={graphState.currentEvent || graphState.prevValidEvent}
-          currentChapter={graphState.currentChapter}
-          edgeLabelVisible={graphState.edgeLabelVisible}
-          filename={viewerState.filename}
-          elements={isSearchActive && filteredElements && filteredElements.length > 0 ? filteredElements : graphState.elements}
-          isResetFromSearch={isResetFromSearch}
-        />
+        {isEventUndefined ? (
+          // 이벤트가 정해지지 않은 경우 새로고침 메시지 표시
+          <div style={{
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            height: '100%',
+            padding: '20px',
+            textAlign: 'center',
+            backgroundColor: '#f8f9fa',
+            borderRadius: '8px',
+            border: '1px solid #e9ecef'
+          }}>
+            <div style={{
+              fontSize: '48px',
+              marginBottom: '16px',
+              color: '#6c757d'
+            }}>
+              ⚠️
+            </div>
+            <h3 style={{
+              color: '#495057',
+              marginBottom: '12px',
+              fontSize: '18px',
+              fontWeight: '600'
+            }}>
+              이벤트 정보를 불러올 수 없습니다
+            </h3>
+            <p style={{
+              color: '#6c757d',
+              marginBottom: '20px',
+              fontSize: '14px',
+              lineHeight: '1.5'
+            }}>
+              페이지를 새로고침하여 다시 시도해주세요.
+            </p>
+            <button
+              onClick={() => window.location.reload()}
+              style={{
+                backgroundColor: '#4F6DDE',
+                color: 'white',
+                border: 'none',
+                borderRadius: '6px',
+                padding: '10px 20px',
+                fontSize: '14px',
+                fontWeight: '500',
+                cursor: 'pointer',
+                transition: 'background-color 0.2s'
+              }}
+              onMouseOver={(e) => e.target.style.backgroundColor = '#3d5bc7'}
+              onMouseOut={(e) => e.target.style.backgroundColor = '#4F6DDE'}
+            >
+              새로고침
+            </button>
+          </div>
+        ) : (
+          <GraphContainer
+            ref={graphContainerRef}
+            currentPosition={graphState.currentCharIndex}
+            currentEvent={graphState.currentEvent}
+            currentChapter={graphState.currentChapter}
+            edgeLabelVisible={graphState.edgeLabelVisible}
+            filename={viewerState.filename}
+            elements={isSearchActive && filteredElements && filteredElements.length > 0 ? filteredElements : graphState.elements}
+            isResetFromSearch={isResetFromSearch}
+            // ViewerTopBar와 동일한 이벤트 정보 전달 - 현재 챕터의 이벤트만 전달
+            prevValidEvent={graphState.currentEvent && graphState.currentEvent.chapter === graphState.currentChapter ? graphState.currentEvent : null}
+            events={graphState.events || []}
+            // 툴팁 관련 props 추가
+            activeTooltip={activeTooltip}
+            onClearTooltip={onClearTooltip}
+            onSetActiveTooltip={onSetActiveTooltip}
+            graphClearRef={graphClearRef}
+          />
+        )}
       </div>
     </div>
   );
@@ -109,6 +181,68 @@ const ViewerPage = () => {
     graphState, graphActions, viewerState, searchState,
   } = useViewerPage();
 
+  // 툴팁 상태 관리
+  const [activeTooltip, setActiveTooltip] = useState(null);
+  
+  // 그래프 상태 초기화를 위한 ref
+  const graphClearRef = useRef(null);
+  
+  // 이벤트 상태 관리
+  const [isEventUndefined, setIsEventUndefined] = useState(false);
+  
+  // 툴팁 닫기 함수
+  const handleClearTooltip = useCallback(() => {
+    setActiveTooltip(null);
+  }, []);
+
+  // 툴팁과 그래프 스타일을 모두 초기화하는 함수
+  const handleClearTooltipAndGraph = useCallback(() => {
+    setActiveTooltip(null);
+    if (graphClearRef.current) {
+      graphClearRef.current();
+    }
+  }, []);
+
+  // 툴팁 설정 함수
+  const handleSetActiveTooltip = useCallback((tooltipData) => {
+    setActiveTooltip(tooltipData);
+  }, [currentEvent, currentChapter]);
+
+  // 전역 클릭 감지를 위한 ref - 툴팁이 활성화된 경우에만 감지
+  // 툴팁 닫기와 동시에 그래프 스타일도 초기화
+  const viewerPageRef = useClickOutside(handleClearTooltipAndGraph, !!activeTooltip);
+
+  // 이벤트 상태 감지 및 새로고침 메시지 표시
+  useEffect(() => {
+    const checkEventStatus = () => {
+      // 로딩 중인 경우는 제외하고 이벤트가 정해지지 않은 경우들만 체크
+      if (loading || isReloading) {
+        setIsEventUndefined(false);
+        return;
+      }
+
+      // 로딩이 완료된 후 이벤트가 정해지지 않은 경우들
+      const isEventInvalid = 
+        // 1. currentEvent가 null이거나 undefined인 경우
+        !currentEvent ||
+        // 2. currentEvent.eventNum이 undefined이거나 null인 경우
+        currentEvent.eventNum === undefined || currentEvent.eventNum === null ||
+        // 3. currentEvent.chapter가 undefined이거나 null인 경우
+        currentEvent.chapter === undefined || currentEvent.chapter === null ||
+        // 4. events 배열이 비어있는 경우
+        !events || events.length === 0;
+
+      if (isEventInvalid) {
+        setIsEventUndefined(true);
+        
+      } else {
+        setIsEventUndefined(false);
+      }
+    };
+
+    checkEventStatus();
+  }, [currentEvent, currentChapter, events, loading, isReloading, isDataReady, isEventUndefined]);
+
   useEffect(() => {
     const loadEventsData = async () => {
       try {
@@ -116,8 +250,23 @@ const ViewerPage = () => {
         setIsGraphLoading(true);
         setIsDataReady(false);
         
+        // 현재 챕터가 유효한지 확인
+        if (!currentChapter || currentChapter < 1) {
+          setIsDataReady(true);
+          return;
+        }
+        
         const events = getEventsForChapter(currentChapter, folderKey);
-        setEvents(events);
+        
+        // 이벤트 데이터가 현재 챕터에 속하는지 검증
+        const validEvents = events.filter(event => {
+          return event.chapter === currentChapter;
+        });
+        
+        if (validEvents.length === 0 && events.length > 0) {
+        }
+        
+        setEvents(validEvents);
         
         try {
           const allCharacterData = [];
@@ -141,7 +290,6 @@ const ViewerPage = () => {
           
           setCharacterData(uniqueCharacters);
         } catch (charError) {
-          console.warn('캐릭터 데이터 누적 로드 실패:', charError);
           if (currentChapterData) {
             setCharacterData(currentChapterData.characters || currentChapterData);
           }
@@ -149,7 +297,6 @@ const ViewerPage = () => {
         
         setIsDataReady(true);
       } catch (error) {
-        console.error('Chapter data loading error:', error);
         setIsDataReady(true);
       } finally {
         setLoading(false);
@@ -157,31 +304,49 @@ const ViewerPage = () => {
       }
     };
     
-    loadEventsData();
-  }, [currentChapter, currentChapterData, folderKey]);
+    // 초기 로딩 시에는 챕터가 확실히 설정되고 초기 감지가 완료된 후에만 실행
+    if (currentChapter && currentChapter > 0 && graphState.isInitialChapterDetected) {
+      loadEventsData();
+    } else if (currentChapter && currentChapter > 0 && !graphState.isInitialChapterDetected) {
+      // 초기 챕터 감지가 완료되지 않은 경우, 일정 시간 후 재시도
+      const timer = setTimeout(() => {
+        if (currentChapter && currentChapter > 0) {
+          loadEventsData();
+        }
+      }, 500); // 0.5초 후 재시도
+      
+      return () => clearTimeout(timer);
+    }
+  }, [currentChapter, currentChapterData, folderKey, graphState.isInitialChapterDetected]);
 
   const currentEventElements = useMemo(() => {
     if (loading || isReloading || !currentEvent || !events?.length || !characterData?.length) {
       return [];
     }
     
+    // 이벤트가 정해지지 않은 경우들 체크
+    if (currentEvent.eventNum === undefined || currentEvent.eventNum === null ||
+        currentEvent.chapter === undefined || currentEvent.chapter === null) {
+      return [];
+    }
+    
+    // 현재 이벤트가 현재 챕터에 속하는지 확인
+    if (currentEvent.chapter !== currentChapter) {
+      return [];
+    }
+    
     const currentEventNum = currentEvent.eventNum;
-    const currentChapter = currentEvent.chapter;
+    const eventChapter = currentEvent.chapter;
     
     try {
       // currentEvent.eventNum이 0-based인지 1-based인지 확인
-      console.log('=== 이벤트 인덱스 디버깅 ===');
-      console.log('currentEvent.eventNum:', currentEventNum);
-      console.log('currentEvent.event_id:', currentEvent.event_id);
       
       // event_id가 있으면 그것을 사용, 없으면 eventNum 사용
       const actualEventNum = currentEvent.event_id !== undefined ? currentEvent.event_id : currentEventNum;
-      console.log('실제 사용할 이벤트 번호:', actualEventNum);
       
-      const eventData = getEventData(folderKey, currentChapter, actualEventNum);
+      const eventData = getEventData(folderKey, eventChapter, actualEventNum);
       
       if (!eventData) {
-        console.warn('이벤트 데이터를 찾을 수 없습니다:', { folderKey, currentChapter, actualEventNum });
         return [];
       }
       
@@ -189,25 +354,19 @@ const ViewerPage = () => {
       const currentImportance = eventData.importance || {};
       const currentNewAppearances = eventData.log?.new_character_ids || [];
       
-      // 디버깅: 현재 이벤트의 관계 데이터 로그
-      console.log('=== 현재 이벤트 관계 데이터 ===');
-      console.log('Chapter:', currentChapter, 'Event:', currentEventNum);
-      console.log('Relations:', currentRelations);
-      console.log('Event Data:', eventData);
       
       const generatedElements = getElementsFromRelations(
         currentRelations,
         characterData,
         currentNewAppearances,
-        currentImportance
+        currentImportance,
+        eventChapter,
+        folderKey
       );
       
-      // 디버깅: 생성된 요소들 로그
-      console.log('Generated Elements:', generatedElements);
       
       return generatedElements;
     } catch (error) {
-      console.error('관계 데이터 로드 실패:', error);
       return [];
     }
   }, [currentEvent, characterData, folderKey, events]);
@@ -413,7 +572,9 @@ const ViewerPage = () => {
         allRelations,
         charactersData,
         allNewAppearances,
-        allImportance
+        allImportance,
+        chapterNum,
+        folderKey
       );
       if (!elements || elements.length === 0) {
         return;
@@ -448,6 +609,7 @@ const ViewerPage = () => {
 
   return (
     <div
+      ref={viewerPageRef}
       className="h-screen"
       onMouseEnter={() => setShowToolbar(true)}
       onMouseLeave={() => setShowToolbar(false)}
@@ -475,7 +637,8 @@ const ViewerPage = () => {
             <GraphSplitArea
               graphState={{
                 ...graphState,
-                prevValidEvent: prevValidEventRef.current,
+                // 현재 챕터의 이벤트만 유효한 이벤트로 설정
+                prevValidEvent: currentEvent && currentEvent.chapter === currentChapter ? currentEvent : null,
                 events: getEventsForChapter(currentChapter, folderKey)
               }}
               graphActions={graphActions}
@@ -499,6 +662,11 @@ const ViewerPage = () => {
                 selectSuggestion,
                 handleKeyDown
               }}
+              activeTooltip={activeTooltip}
+              onClearTooltip={handleClearTooltip}
+              onSetActiveTooltip={handleSetActiveTooltip}
+              graphClearRef={graphClearRef}
+              isEventUndefined={isEventUndefined}
             />
           </CytoscapeGraphPortalProvider>
         }
@@ -522,12 +690,13 @@ const ViewerPage = () => {
             
             // 받은 이벤트가 있으면 업데이트 (챕터 동기화는 별도로 처리)
             if (receivedEvent) {
-              setCurrentEvent(receivedEvent);
               
               // 챕터 불일치 시 currentChapter도 업데이트
               if (receivedEvent.chapter && receivedEvent.chapter !== currentChapter) {
                 setCurrentChapter(receivedEvent.chapter);
               }
+              
+              setCurrentEvent(receivedEvent);
             }
           }}
           onAllCfisReady={(_cfis, _ranges, offsets) => {}}

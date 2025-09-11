@@ -34,7 +34,7 @@ function GraphSidebar({
     borderRadius: "0px",
     boxShadow: "2px 0 8px rgba(0,0,0,0.06)",
     borderRight: "1px solid #e5e7eb",
-    zIndex: 1000,
+    zIndex: 99999,
     overflow: "hidden",
     transition: "right 0.7s cubic-bezier(0.4, 0, 0.2, 1)",
   };
@@ -192,6 +192,7 @@ function GraphSidebar({
           maxChapter={maxChapter}
           elements={elements}
           displayMode="sidebar"
+          filename={filename}
         />
       </div>
     );
@@ -290,7 +291,7 @@ function GraphSidebar({
             />
           ) : (
             <UnifiedEdgeTooltip
-              edgeData={activeTooltip.data}
+              data={activeTooltip.data}
               sourceNode={activeTooltip.sourceNode}
               targetNode={activeTooltip.targetNode}
               chapterNum={chapterNum}
@@ -301,6 +302,8 @@ function GraphSidebar({
               isSearchActive={isSearchActive}
               filteredElements={filteredElements}
               searchTerm={searchTerm}
+              displayMode="sidebar"
+              onClose={handleClose}
             />
           )}
         </div>

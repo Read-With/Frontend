@@ -49,7 +49,6 @@ function getMaxEventCountLimited(folderKey, maxChapter) {
     const limitedEventNums = lastEventNums.slice(0, actualMaxChapter);
     return Math.max(...limitedEventNums, MIN_POSITIVITY);
   } catch (error) {
-    console.error('Error calculating max event count:', error);
     return MIN_POSITIVITY;
   }
 }
@@ -95,7 +94,6 @@ function collectRelationData(id1, id2, startChapter, endChapter, startEvent, end
       }
     }
   } catch (error) {
-    console.error('Error collecting relation data:', error);
   }
   
   return { points, labelInfo };
@@ -128,7 +126,6 @@ function findFirstAppearance(id1, id2, maxChapter, folderKey) {
       }
     }
   } catch (error) {
-    console.error('Error finding first appearance:', error);
   }
   
   return null;
@@ -168,13 +165,95 @@ function fetchRelationTimelineStandalone(id1, id2, chapterNum, eventNum, maxChap
       folderKey
     );
   } catch (error) {
-    console.error('Error fetching standalone timeline:', error);
     return { points: [], labelInfo: [] };
   }
 }
 
 /**
- * 뷰어 모드용 관계 타임라인 데이터 가져오기 (현재 챕터만)
+ * 그래프 온리 페이지용 누적 모드 관계 타임라인 데이터 가져오기
+ * @param {number} id1 - 첫 번째 노드 ID
+ * @param {number} id2 - 두 번째 노드 ID
+ * @param {number} selectedChapter - 선택된 챕터 번호
+ * @param {number} maxChapter - 최대 챕터 수
+ * @param {string} folderKey - 폴더 키
+ * @returns {Object} 타임라인 데이터
+ */
+function fetchRelationTimelineCumulative(id1, id2, selectedChapter, maxChapter, folderKey) {
+  if (!folderKey || selectedChapter < 1) {
+    return { points: [], labelInfo: [] };
+  }
+  
+  try {
+    const detectedMaxChapter = getDetectedMaxChapter(folderKey);
+    const actualMaxChapter = maxChapter || detectedMaxChapter;
+    
+    // 처음 등장한 시점 찾기 (전체 범위에서)
+    const firstAppearance = findFirstAppearance(id1, id2, actualMaxChapter, folderKey);
+    
+    if (!firstAppearance) {
+      return { points: [], labelInfo: [] };
+    }
+
+    const lastEventNums = getChapterLastEventNums(folderKey);
+    
+    if (selectedChapter === firstAppearance.chapter) {
+      // 첫 등장 챕터인 경우: 등장 시점부터 챕터 마지막까지
+      const lastEvent = lastEventNums[selectedChapter - 1] || 0;
+      return collectRelationData(
+        id1, id2,
+        selectedChapter, selectedChapter,
+        firstAppearance.event, lastEvent,
+        folderKey
+      );
+    } else if (selectedChapter > firstAppearance.chapter) {
+      // 이후 챕터인 경우: 처음 등장 챕터부터 이전 챕터까지의 모든 마지막 이벤트 정보 + 현재 챕터 전체
+      const currentLastEvent = lastEventNums[selectedChapter - 1] || 0;
+      
+      // 처음 등장 챕터부터 이전 챕터까지의 모든 마지막 이벤트 데이터 수집
+      const allPrevChaptersData = { points: [], labelInfo: [] };
+      
+      for (let ch = firstAppearance.chapter; ch < selectedChapter; ch++) {
+        const chapterLastEvent = lastEventNums[ch - 1] || 0;
+        
+        // 각 챕터의 마지막 이벤트 데이터만 가져오기
+        const chapterData = collectRelationData(
+          id1, id2,
+          ch, ch,
+          chapterLastEvent, chapterLastEvent,
+          folderKey
+        );
+        
+        allPrevChaptersData.points.push(...chapterData.points);
+        allPrevChaptersData.labelInfo.push(...chapterData.labelInfo.map(() => `Ch${ch}`));
+      }
+      
+      // 현재 챕터의 전체 데이터
+      const currentChapterData = collectRelationData(
+        id1, id2,
+        selectedChapter, selectedChapter,
+        1, currentLastEvent,
+        folderKey
+      );
+      
+      // 데이터 병합 (라벨 수정: 이전 챕터들은 Ch표시, 현재 챕터는 E표시)
+      return {
+        points: [...allPrevChaptersData.points, ...currentChapterData.points],
+        labelInfo: [
+          ...allPrevChaptersData.labelInfo,  // 이전 챕터들: Ch1, Ch2, Ch3...
+          ...currentChapterData.labelInfo    // 현재 챕터는 E1, E2, E3... 형태로 표시
+        ]
+      };
+    } else {
+      // 아직 등장하지 않은 챕터인 경우
+      return { points: [], labelInfo: [] };
+    }
+  } catch (error) {
+    return { points: [], labelInfo: [] };
+  }
+}
+
+/**
+ * 뷰어 모드용 관계 타임라인 데이터 가져오기 (관계가 처음 등장하는 이벤트부터 현재 이벤트까지)
  * @param {number} id1 - 첫 번째 노드 ID
  * @param {number} id2 - 두 번째 노드 ID
  * @param {number} chapterNum - 현재 챕터 번호
@@ -188,22 +267,8 @@ function fetchRelationTimelineViewer(id1, id2, chapterNum, eventNum, folderKey) 
   }
   
   try {
-    // 현재 이벤트에서 관계가 존재하는지 먼저 확인
-    const currentEventJson = getEventDataByIndex(folderKey, chapterNum, eventNum);
-    const currentRelation = currentEventJson ? findRelation(currentEventJson.relations, id1, id2) : null;
-    
-    // 현재 이벤트에 관계가 있다면 해당 이벤트만 반환
-    if (currentRelation) {
-      return {
-        points: [currentRelation.positivity],
-        labelInfo: [`E${eventNum}`],
-        noRelation: false
-      };
-    }
-    
-    // 현재 이벤트에 관계가 없다면 챕터 전체에서 관계 찾기
+    // 현재 챕터에서 관계가 처음 등장하는 이벤트 찾기
     let firstAppearanceInChapter = null;
-    let lastAppearanceInChapter = null;
     
     for (let i = 1; i <= eventNum; i++) {
       const json = getEventDataByIndex(folderKey, chapterNum, i);
@@ -211,10 +276,8 @@ function fetchRelationTimelineViewer(id1, id2, chapterNum, eventNum, folderKey) 
       
       const found = findRelation(json.relations, id1, id2);
       if (found) {
-        if (!firstAppearanceInChapter) {
-          firstAppearanceInChapter = i;
-        }
-        lastAppearanceInChapter = i;
+        firstAppearanceInChapter = i;
+        break; // 첫 번째 등장을 찾으면 중단
       }
     }
     
@@ -223,15 +286,20 @@ function fetchRelationTimelineViewer(id1, id2, chapterNum, eventNum, folderKey) 
       return { points: [], labelInfo: [], noRelation: true };
     }
     
-    // 현재 챕터에서 처음 등장한 시점부터 현재 이벤트까지 데이터 수집
-    return collectRelationData(
+    // 관계가 처음 등장한 이벤트부터 현재 이벤트까지 데이터 수집
+    const result = collectRelationData(
       id1, id2, 
       chapterNum, chapterNum, 
-      firstAppearanceInChapter, eventNum, 
+      firstAppearanceInChapter, eventNum, // 관계 첫 등장부터 현재 이벤트까지
       folderKey
     );
+    
+    return {
+      points: result.points,
+      labelInfo: result.labelInfo,
+      noRelation: false
+    };
   } catch (error) {
-    console.error('Error fetching viewer timeline:', error);
     return { points: [], labelInfo: [], noRelation: true };
   }
 }
@@ -259,12 +327,12 @@ function padSingleEvent(points, labels) {
 
 /**
  * 간선 관계 데이터를 가져오는 커스텀 훅
- * @param {string} mode - 'standalone' | 'viewer'
+ * @param {string} mode - 'standalone' | 'viewer' | 'cumulative'
  * @param {number} id1 - 첫 번째 노드 ID
  * @param {number} id2 - 두 번째 노드 ID
  * @param {number} chapterNum - 현재 챕터 번호
- * @param {number} eventNum - 현재 이벤트 번호
- * @param {number} maxChapter - 최대 챕터 수 (standalone 모드에서만 사용, 없으면 자동 감지)
+ * @param {number} eventNum - 현재 이벤트 번호 (cumulative 모드에서는 사용하지 않음)
+ * @param {number} maxChapter - 최대 챕터 수 (standalone, cumulative 모드에서 사용)
  * @param {string} filename - 파일명 (예: "gatsby.epub", "alice.epub")
  * @returns {object} 차트 데이터와 로딩 상태
  */
@@ -280,7 +348,6 @@ export function useRelationData(mode, id1, id2, chapterNum, eventNum, maxChapter
     try {
       return getFolderKeyFromFilename(filename);
     } catch (error) {
-      console.error('Error getting folder key:', error);
       return null;
     }
   }, [filename]);
@@ -304,18 +371,30 @@ export function useRelationData(mode, id1, id2, chapterNum, eventNum, maxChapter
     setLoading(true);
     setError(null);
     
+    // 디버깅: 관계 데이터 요청 로그 (개발 환경에서만)
+    if (process.env.NODE_ENV === 'development') {
+    }
+    
     try {
-      const result = mode === 'viewer' 
-        ? fetchRelationTimelineViewer(id1, id2, chapterNum, eventNum, folderKey)
-        : fetchRelationTimelineStandalone(id1, id2, chapterNum, eventNum, maxChapter, folderKey);
+      let result;
+      
+      if (mode === 'viewer') {
+        result = fetchRelationTimelineViewer(id1, id2, chapterNum, eventNum, folderKey);
+      } else if (mode === 'cumulative') {
+        result = fetchRelationTimelineCumulative(id1, id2, chapterNum, maxChapter, folderKey);
+      } else {
+        result = fetchRelationTimelineStandalone(id1, id2, chapterNum, eventNum, maxChapter, folderKey);
+      }
       
       const { points, labels } = padSingleEvent(result.points, result.labelInfo);
+      
+      if (process.env.NODE_ENV === 'development') {
+      }
       
       setTimeline(points);
       setLabels(labels);
       setNoRelation(result.noRelation || false);
     } catch (error) {
-      console.error('Error in fetchData:', error);
       setError('데이터를 가져오는 중 오류가 발생했습니다.');
       setTimeline([]);
       setLabels([]);
@@ -330,7 +409,8 @@ export function useRelationData(mode, id1, id2, chapterNum, eventNum, maxChapter
     fetchData();
   }, [fetchData]);
 
-  return {
+  // 메모이제이션된 반환값으로 불필요한 리렌더링 방지
+  return useMemo(() => ({
     timeline,
     labels,
     loading,
@@ -338,5 +418,5 @@ export function useRelationData(mode, id1, id2, chapterNum, eventNum, maxChapter
     error,
     fetchData,
     getMaxEventCount: () => maxEventCount,
-  };
+  }), [timeline, labels, loading, noRelation, error, fetchData, maxEventCount]);
 }

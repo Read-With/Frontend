@@ -53,7 +53,6 @@ export function useLocalStorage(key, initialValue) {
       
       return JSON.parse(item);
     } catch (error) {
-      console.error(`Error reading localStorage key "${key}":`, error);
       return initialValue;
     }
   });
@@ -70,7 +69,6 @@ export function useLocalStorage(key, initialValue) {
         localStorage.setItem(key, JSON.stringify(valueToStore));
       }
     } catch (error) {
-      console.error(`Error setting localStorage key "${key}":`, error);
       // 에러 발생 시 상태는 업데이트하되 localStorage는 건드리지 않음
       const valueToStore = value instanceof Function ? value(storedValue) : value;
       setStoredValue(valueToStore);
@@ -89,7 +87,6 @@ export function useLocalStorage(key, initialValue) {
             setStoredValue(JSON.parse(e.newValue));
           }
         } catch (error) {
-          console.error(`Error parsing localStorage value for key "${key}":`, error);
         }
       }
     };
@@ -114,7 +111,6 @@ export function useLocalStorageNumber(key, initialValue) {
       const parsedValue = item ? Number(item) : initialValue;
       return isNaN(parsedValue) ? initialValue : parsedValue;
     } catch (error) {
-      console.error(`Error reading localStorage key "${key}":`, error);
       return initialValue;
     }
   });
@@ -125,14 +121,12 @@ export function useLocalStorageNumber(key, initialValue) {
       const numericValue = Number(valueToStore);
       
       if (isNaN(numericValue)) {
-        console.warn(`Invalid number value for localStorage key "${key}":`, valueToStore);
         return;
       }
       
       setStoredValue(numericValue);
       localStorage.setItem(key, numericValue.toString());
     } catch (error) {
-      console.error(`Error setting localStorage key "${key}":`, error);
       // 에러 발생 시 상태는 업데이트하되 localStorage는 건드리지 않음
       const valueToStore = value instanceof Function ? value(storedValue) : value;
       const numericValue = Number(valueToStore);
@@ -152,7 +146,6 @@ export function useLocalStorageNumber(key, initialValue) {
             setStoredValue(parsedValue);
           }
         } catch (error) {
-          console.error(`Error parsing localStorage value for key "${key}":`, error);
         }
       }
     };
