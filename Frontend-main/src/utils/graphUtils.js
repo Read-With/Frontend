@@ -6,7 +6,6 @@ export const getContainerInfo = () => {
     const containerRect = container?.getBoundingClientRect?.() || { left: 0, top: 0 };
     return { container, containerRect };
   } catch (error) {
-    console.error('컨테이너 정보 가져오기 실패:', error);
     return { container: null, containerRect: { left: 0, top: 0 } };
   }
 };
@@ -51,7 +50,6 @@ export const calculateCytoscapePosition = (pos, cyRef) => {
     
     return { x: domX, y: domY };
   } catch (error) {
-    console.error('위치 계산 실패:', error);
     return { x: 0, y: 0 };
   }
 };
@@ -84,7 +82,6 @@ export const convertMouseToCytoscapePosition = (evt, cyRef) => {
     
     return { x: cyX, y: cyY };
   } catch (error) {
-    console.error('마우스 위치 변환 실패:', error);
     return { x: 0, y: 0 };
   }
 };

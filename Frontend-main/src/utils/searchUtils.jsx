@@ -39,7 +39,6 @@ export function nodeMatchesQuery(node, searchLower) {
       commonName.includes(searchLower)
     );
   } catch (error) {
-    console.warn('nodeMatchesQuery 에러:', error);
     return false;
   }
 }
@@ -47,7 +46,6 @@ export function nodeMatchesQuery(node, searchLower) {
 // 입력된 검색어와 관련된 노드(인물 등)를 찾아 최대 8개 추천 리스트 생성
 export function buildSuggestions(elements, query, currentChapterData = null) {
   if (!Array.isArray(elements)) {
-    console.warn('buildSuggestions: elements는 배열이어야 합니다');
     return [];
   }
   

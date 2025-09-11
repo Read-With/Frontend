@@ -83,7 +83,6 @@ export default function useGraphInteractions({
         });
       }
     } catch (error) {
-      console.error('노드 하이라이트 처리 실패:', error);
     }
   }, [cyRef, isSearchActive, filteredElements, resetAllStyles]);
 
@@ -103,7 +102,6 @@ export default function useGraphInteractions({
       
       return { x: domX, y: domY };
     } catch (error) {
-      console.error('노드 위치 계산 실패:', error);
       return { x: 0, y: 0 };
     }
   }, [cyRef]);
@@ -139,7 +137,6 @@ export default function useGraphInteractions({
         
         if (selectedNodeIdRef) selectedNodeIdRef.current = node.id();
       } catch (error) {
-        console.error('노드 클릭 처리 실패:', error);
       }
     },
     [cyRef, handleNodeHighlight, calculateNodePosition, onShowNodeTooltipRef, selectedNodeIdRef]
@@ -189,7 +186,6 @@ export default function useGraphInteractions({
 
         if (selectedEdgeIdRef) selectedEdgeIdRef.current = edge.id();
       } catch (error) {
-        console.error('간선 클릭 처리 실패:', error);
       }
     },
     [cyRef, onShowEdgeTooltipRef, selectedEdgeIdRef, resetAllStyles]
@@ -211,7 +207,6 @@ export default function useGraphInteractions({
         onClearTooltipRef.current();
       }
     } catch (error) {
-      console.error('배경 클릭 처리 실패:', error);
     }
   }, [strictBackgroundClear, selectedNodeIdRef, selectedEdgeIdRef, clearStyles, onClearTooltipRef]);
 
@@ -224,7 +219,6 @@ export default function useGraphInteractions({
           handleBackgroundClick();
         }
       } catch (error) {
-        console.error('배경 클릭 감지 실패:', error);
       }
     },
     [cyRef, handleBackgroundClick]
@@ -236,7 +230,6 @@ export default function useGraphInteractions({
       if (selectedNodeIdRef) selectedNodeIdRef.current = null;
       if (selectedEdgeIdRef) selectedEdgeIdRef.current = null;
     } catch (error) {
-      console.error('선택 상태 초기화 실패:', error);
     }
   }, [clearSelectionOnly, selectedNodeIdRef, selectedEdgeIdRef]);
 

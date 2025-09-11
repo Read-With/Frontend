@@ -168,7 +168,6 @@ export function getAllFolderKeys() {
  */
 export function getCharactersData(folderKey, chapter) {
   if (!folderKey || !chapter || chapter < 1) {
-    console.warn('getCharactersData: 유효하지 않은 매개변수', { folderKey, chapter });
     return null;
   }
   return charactersIndex.get(`${folderKey}:${chapter}`) ?? null;
@@ -183,7 +182,6 @@ export function getCharactersData(folderKey, chapter) {
  */
 export function getEventDataByIndex(folderKey, chapter, eventIndex) {
   if (!folderKey || !chapter || chapter < 1 || !eventIndex || eventIndex < 1) {
-    console.warn('getEventDataByIndex: 유효하지 않은 매개변수', { folderKey, chapter, eventIndex });
     return null;
   }
   return relationshipIndex.get(`${folderKey}:${chapter}:${eventIndex}`) ?? null;
@@ -198,7 +196,6 @@ export function getEventDataByIndex(folderKey, chapter, eventIndex) {
  */
 export function getEventData(folderKey, chapter, eventIdZeroBased) {
   if (eventIdZeroBased === undefined || eventIdZeroBased === null || eventIdZeroBased < 0) {
-    console.warn('getEventData: 유효하지 않은 eventIdZeroBased', { eventIdZeroBased });
     return null;
   }
   const eventIndex = Number(eventIdZeroBased) + 1;
@@ -250,7 +247,6 @@ export function getMaxEventCount(folderKey) {
 export function getEventRelations(folderKey, chapter, eventIndex) {
   const json = getEventDataByIndex(folderKey, chapter, eventIndex);
   if (!json) {
-    console.warn('getEventRelations: 이벤트 데이터를 찾을 수 없음', { folderKey, chapter, eventIndex });
     return [];
   }
   return Array.isArray(json.relations) ? json.relations : [];
@@ -268,19 +264,16 @@ export function createCharacterMaps(characters) {
   const idToNames = {};
 
   if (!characters) {
-    console.warn('createCharacterMaps: characters 데이터가 없습니다.');
     return { idToName, idToDesc, idToMain, idToNames };
   }
 
   const characterArray = characters?.characters || characters || [];
   if (!Array.isArray(characterArray)) {
-    console.warn('createCharacterMaps: characters가 배열이 아닙니다.', typeof characterArray);
     return { idToName, idToDesc, idToMain, idToNames };
   }
 
   characterArray.forEach((char) => {
     if (!char || char.id === undefined) {
-      console.warn('createCharacterMaps: 유효하지 않은 캐릭터 데이터', char);
       return;
     }
     
@@ -344,7 +337,6 @@ export function getEventsForChapter(chapter, folderKey = 'gatsby') {
     // 챕터 번호가 정확히 일치하는지 확인
     if (eventChapter !== targetChapter) {
       if (process.env.NODE_ENV === 'development') {
-        console.warn(`이벤트 챕터 불일치: 이벤트 챕터 ${eventChapter}, 요청 챕터 ${targetChapter}`);
       }
       return false;
     }
@@ -354,12 +346,7 @@ export function getEventsForChapter(chapter, folderKey = 'gatsby') {
   
   // 디버깅: 필터링 결과 로그
   if (process.env.NODE_ENV === 'development') {
-    console.log(`=== 챕터 ${chapter} 이벤트 필터링 결과 ===`);
-    console.log(`전체 이벤트 수: ${eventsWithRelations.length}`);
-    console.log(`필터링된 이벤트 수: ${currentChapterEvents.length}`);
     if (currentChapterEvents.length > 0) {
-      console.log('첫 번째 이벤트:', currentChapterEvents[0]);
-      console.log('마지막 이벤트:', currentChapterEvents[currentChapterEvents.length - 1]);
     }
   }
   
@@ -398,7 +385,6 @@ export function getChapterFile(chapter, type, folderKey = 'gatsby') {
       return [];
     }
   } catch (error) {
-    console.error('getChapterFile error:', error);
     return [];
   }
 }
@@ -571,7 +557,6 @@ export async function loadChapterData(
     setElements([]);
     setIsDataReady(true);
   } catch (error) {
-    console.error('Chapter data loading error:', error);
     setEvents([]);
     setCharacterData([]);
     setElements([]);

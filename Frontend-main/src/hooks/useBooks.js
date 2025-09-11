@@ -24,14 +24,12 @@ export const useBooks = () => {
       if (apiResponse.status === 'fulfilled' && apiResponse.value.isSuccess) {
         apiBooks = apiResponse.value.result || [];
       } else {
-        console.warn('API 요청 실패:', apiResponse.reason?.message || 'Unknown error');
       }
       
       // 로컬 데이터 응답 처리
       if (localResponse.status === 'fulfilled' && localResponse.value.ok) {
         localBooks = await localResponse.value.json();
       } else {
-        console.warn('로컬 데이터 로드 실패:', localResponse.reason?.message || 'Unknown error');
       }
       
       // API 책과 로컬 책을 합치기 (중복 제거)
@@ -67,7 +65,6 @@ export const useBooks = () => {
       }
       
     } catch (err) {
-      console.error('예상치 못한 오류:', err);
       setError('책 정보를 불러올 수 없습니다.');
     } finally {
       setLoading(false);
@@ -171,7 +168,6 @@ export const useBooks = () => {
         throw new Error(response.message || '도서 정보를 불러올 수 없습니다.');
       }
     } catch (err) {
-      console.error('도서 조회 오류:', err);
       throw err;
     }
   };

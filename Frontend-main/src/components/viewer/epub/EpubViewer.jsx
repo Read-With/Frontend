@@ -8,10 +8,24 @@ import React, {
   useCallback,
 } from 'react';
 import ePub from 'epubjs';
-import { calculateChapterProgress, findClosestEvent } from '../../../utils/viewerUtils';
+import { 
+  calculateChapterProgress, 
+  findClosestEvent,
+  extractChapterNumber,
+  storageUtils,
+  getRefs,
+  withRefs,
+  cleanupNavigation,
+  ensureLocations,
+  settingsUtils
+} from '../../../utils/viewerUtils';
+import { registerCache, clearCache } from '../../../utils/cacheManager';
 
 const eventRelationModules = import.meta.glob('../../../data/gatsby/chapter*_events.json', { eager: true });
+
+// 캐시 매니저에 eventsCache 등록
 const eventsCache = new Map();
+registerCache('eventsCache', eventsCache, { maxSize: 100, ttl: 600000 });
 
 const getEventsForChapter = (chapter) => {
   const chapterNum = String(chapter);
@@ -139,8 +153,7 @@ const EpubViewer = forwardRef(
 
     const fallbackDisplay = async (direction = 'next') => {
       try {
-        const book = bookRef.current;
-        const rendition = renditionRef.current;
+        const { book, rendition } = getRefs(bookRef, renditionRef);
         if (!book || !rendition) return;
 
         const location = await rendition.currentLocation();
@@ -155,7 +168,7 @@ const EpubViewer = forwardRef(
         if (targetCfi) {
           await rendition.display(targetCfi);
         } else {
-          localStorage.setItem(
+          storageUtils.set(
             direction === 'next' ? storageKeys.nextPage : storageKeys.prevPage,
             'true'
           );
@@ -226,17 +239,15 @@ const EpubViewer = forwardRef(
     };
 
     const safeNavigate = async (action, direction = 'next') => {
-      if (!renditionRef.current || !bookRef.current || isNavigating) return;
+      const { book, rendition } = getRefs(bookRef, renditionRef);
+      if (!book || !rendition || isNavigating) return;
       setIsNavigating(true);
       setNavigationError(null);
-      const rendition = renditionRef.current;
-      const book = bookRef.current;
 
       let relocatedFired = false;
       const relocatedHandler = () => {
         relocatedFired = true;
-        setIsNavigating(false);
-        rendition.off('relocated', relocatedHandler);
+        cleanupNavigation(setIsNavigating, rendition, relocatedHandler);
       };
       rendition.on('relocated', relocatedHandler);
 
@@ -283,12 +294,10 @@ const EpubViewer = forwardRef(
             setNavigationError('이동할 수 없는 페이지입니다.');
           }
           rendition.emit('relocated', afterLocation);
-          setIsNavigating(false);
-          rendition.off('relocated', relocatedHandler);
+          cleanupNavigation(setIsNavigating, rendition, relocatedHandler);
         }
       } catch {
-        setIsNavigating(false);
-        rendition.off('relocated', relocatedHandler);
+        cleanupNavigation(setIsNavigating, rendition, relocatedHandler);
         setNavigationError('이동 중 오류가 발생했습니다.');
         await fallbackDisplay(direction);
       }
@@ -296,9 +305,8 @@ const EpubViewer = forwardRef(
 
     // 설정 적용 함수
     const applySettings = () => {
-      if (!renditionRef.current || !bookRef.current) return;
-      
-      const rendition = renditionRef.current;
+      const { book, rendition } = getRefs(bookRef, renditionRef);
+      if (!book || !rendition) return;
       
       // 스프레드 모드 설정 - 화면 모드 전환 시에도 유지
       rendition.spread(getSpreadMode());
@@ -394,13 +402,10 @@ const EpubViewer = forwardRef(
         }
       },
       showLastPage: async () => {
-        const book = bookRef.current;
-        const rendition = renditionRef.current;
+        const { book, rendition } = getRefs(bookRef, renditionRef);
         if (!book || !rendition) return;
         try {
-          if (!book.locations?.length()) {
-            await book.locations.generate(2000);
-          }
+          await ensureLocations(book, 2000);
           const lastCfi = book.locations.cfiFromPercentage(1.0);
           await rendition.display(lastCfi || book.spine.last()?.href);
         } catch (e) {
@@ -408,13 +413,10 @@ const EpubViewer = forwardRef(
         }
       },
       moveToProgress: async (percentage) => {
-        const book = bookRef.current;
-        const rendition = renditionRef.current;
+        const { book, rendition } = getRefs(bookRef, renditionRef);
         if (!book || !rendition) return;
 
-        if (!book.locations || !book.locations.length()) {
-          await book.locations.generate(3000);
-        }
+        await ensureLocations(book, 3000);
         const percent = Math.min(Math.max(percentage, 0), 100) / 100;
         const targetCfi = book.locations.cfiFromPercentage(percent);
         await rendition.display(targetCfi || (percent < 0.5 ? 0 : book.spine.last()?.href));
@@ -457,52 +459,11 @@ const EpubViewer = forwardRef(
            for (const item of toc) {
              if (!item.cfi) continue;
              
-             // 챕터 번호 추출 (더 정확한 방법)
-             let chapterNum = null;
+             // 챕터 번호 추출 (utils 함수 사용)
+             let chapterNum = extractChapterNumber(item.cfi, item.label);
              
-             // 1. CFI에서 직접 챕터 번호 추출 (가장 정확)
-             const cfiMatch = item.cfi.match(/\[chapter-(\d+)\]/);
-             if (cfiMatch) {
-               chapterNum = parseInt(cfiMatch[1]);
-             }
-             
-             // 2. "Chapter 1", "CHAPTER 1" 형식
-             if (!chapterNum) {
-               const chapterMatch = item.label?.match(/Chapter\s+(\d+)/i);
-               if (chapterMatch) {
-                 chapterNum = parseInt(chapterMatch[1]);
-               }
-             }
-             
-             // 3. "1장", "1 장" 형식
-             if (!chapterNum) {
-               const koreanMatch = item.label?.match(/(\d+)\s*장/i);
-               if (koreanMatch) {
-                 chapterNum = parseInt(koreanMatch[1]);
-               }
-             }
-             
-             // 4. "1", "2" 등 숫자만 있는 경우
-             if (!chapterNum) {
-               const numberMatch = item.label?.match(/^(\d+)$/);
-               if (numberMatch) {
-                 chapterNum = parseInt(numberMatch[1]);
-               }
-             }
-             
-             // 5. "Chapter I", "Chapter II" 등 로마 숫자
-             if (!chapterNum) {
-               const romanMatch = item.label?.match(/Chapter\s+([IVX]+)/i);
-               if (romanMatch) {
-                 const romanNum = romanMatch[1];
-                 // 간단한 로마 숫자 변환 (I=1, II=2, III=3, IV=4, V=5, VI=6, VII=7, VIII=8, IX=9)
-                 const romanToNum = { 'I': 1, 'II': 2, 'III': 3, 'IV': 4, 'V': 5, 'VI': 6, 'VII': 7, 'VIII': 8, 'IX': 9 };
-                 chapterNum = romanToNum[romanNum];
-               }
-             }
-             
-             // 6. spine 인덱스를 챕터 번호로 사용 (최후의 수단)
-             if (!chapterNum) {
+             // spine 인덱스를 챕터 번호로 사용 (최후의 수단)
+             if (chapterNum === 1) {
                // spine에서 해당 항목의 인덱스 찾기
                for (let i = 0; i < bookInstance.spine.length; i++) {
                  const spineItem = bookInstance.spine.get(i);
@@ -560,16 +521,14 @@ const EpubViewer = forwardRef(
 
             onCurrentPageChange?.(pageNum);
             onProgressChange?.(Math.round((locIdx / totalPages) * 100));
-            localStorage.setItem(storageKeys.lastCFI, cfi);
+            storageUtils.set(storageKeys.lastCFI, cfi);
             
               // 현재 챕터 감지 및 업데이트
              let currentChapter = 1;
              
-             // 1. CFI에서 직접 챕터 번호 추출 (가장 확실한 방법)
-             const cfiMatch = cfi?.match(/\[chapter-(\d+)\]/);
-             if (cfiMatch) {
-               currentChapter = parseInt(cfiMatch[1]);
-             } else if (window.chapterCfiMap) {
+             // 챕터 번호 추출 (utils 함수 사용)
+             currentChapter = extractChapterNumber(cfi);
+             if (currentChapter === 1 && window.chapterCfiMap) {
                // 2. chapterCfiMap을 사용한 감지
                for (const [chapterNum, chapterCfi] of window.chapterCfiMap) {
                  if (cfi && cfi.includes(chapterCfi)) {
@@ -585,13 +544,6 @@ const EpubViewer = forwardRef(
              // ViewerPage에 챕터 변경 알림
              const prevChapter = currentChapterRef.current;
              if (currentChapter !== prevChapter) {
-               // 디버깅: 챕터 변경 로그
-               if (process.env.NODE_ENV === 'development') {
-                 console.log('=== EpubViewer 챕터 변경 감지 ===');
-                 console.log('이전 챕터:', prevChapter);
-                 console.log('새로운 챕터:', currentChapter);
-                 console.log('CFI:', cfi);
-               }
                
                onCurrentChapterChange?.(currentChapter);
              }
@@ -605,10 +557,9 @@ const EpubViewer = forwardRef(
               const path = window.location.pathname;
               const fileName = path.split('/').pop();
               const bookId = fileName.replace('.epub', '');
-              const totalLength = Number(localStorage.getItem(`totalLength_${bookId}`)) || 0;
-              const chapterLengths = JSON.parse(localStorage.getItem(`chapterLengths_${bookId}`) || '{}');
-              const chapterMatch = cfi.match(/\[chapter-(\d+)\]/);
-              const chapterNum = chapterMatch ? parseInt(chapterMatch[1]) : 1;
+              const totalLength = Number(storageUtils.get(`totalLength_${bookId}`)) || 0;
+              const chapterLengths = storageUtils.getJson(`chapterLengths_${bookId}`);
+              const chapterNum = extractChapterNumber(cfi);
 
               // 이전 챕터까지의 글자수 합
               let prevChaptersSum = 0;
@@ -623,10 +574,8 @@ const EpubViewer = forwardRef(
             }
 
             // CFI에서 장 번호와 단락 정보 추출
-            const chapterMatch = cfi.match(/\[chapter-(\d+)\]/);
+            const chapterNum = extractChapterNumber(cfi);
             const paragraphMatch = cfi.match(/\/(\d+)\/1:(\d+)\)$/);
-            
-            const chapterNum = chapterMatch ? parseInt(chapterMatch[1]) : 1;
             const paragraphNum = paragraphMatch ? parseInt(paragraphMatch[1]) : 1;
             const charOffset = paragraphMatch ? parseInt(paragraphMatch[2]) : 0;
 
@@ -663,12 +612,11 @@ const EpubViewer = forwardRef(
               
               onCurrentLineChange?.(currentEvent?.currentChars || currentChars, events?.length || 0, currentEvent || null);
             } catch (error) {
-              console.error('이벤트 매칭 오류:', error);
               onCurrentLineChange?.(currentChars, 0, null);
             }
           });
 
-          const savedCfi = localStorage.getItem(storageKeys.lastCFI);
+          const savedCfi = storageUtils.get(storageKeys.lastCFI);
           const displayTarget = savedCfi || bookInstance.locations.cfiFromLocation(0);
           await rendition.display(displayTarget);
 
@@ -676,12 +624,12 @@ const EpubViewer = forwardRef(
           const location = await rendition.currentLocation();
           rendition.emit('relocated', location);
 
-          if (localStorage.getItem(storageKeys.nextPage) === 'true') {
-            localStorage.removeItem(storageKeys.nextPage);
+          if (storageUtils.get(storageKeys.nextPage) === 'true') {
+            storageUtils.remove(storageKeys.nextPage);
             setTimeout(() => rendition.next(), 200);
           }
-          if (localStorage.getItem(storageKeys.prevPage) === 'true') {
-            localStorage.removeItem(storageKeys.prevPage);
+          if (storageUtils.get(storageKeys.prevPage) === 'true') {
+            storageUtils.remove(storageKeys.prevPage);
             setTimeout(() => rendition.prev(), 200);
           }
 
@@ -703,6 +651,8 @@ const EpubViewer = forwardRef(
       loadBook();
       return () => {
         if (bookRef.current) bookRef.current.destroy();
+        // 캐시 정리
+        clearCache('eventsCache');
       };
     }, [epubPath, currentPath]);
 
@@ -715,7 +665,7 @@ const EpubViewer = forwardRef(
 
     // 앱이 처음 로드될 때 로컬 스토리지 초기화
     useEffect(() => {
-      localStorage.setItem(storageKeys.chapter, '1');
+      storageUtils.set(storageKeys.chapter, '1');
     }, [storageKeys.chapter]);
 
     // --- 전체 epub 글자수 및 챕터별 글자수 계산 후 localStorage 저장 useEffect ---
@@ -747,8 +697,8 @@ const EpubViewer = forwardRef(
           chapterLengths[idx + 1] = end;
         });
         // 6. localStorage에 저장
-        localStorage.setItem(`totalLength_${bookId}`, totalLength);
-        localStorage.setItem(`chapterLengths_${bookId}`, JSON.stringify(chapterLengths));
+        storageUtils.set(`totalLength_${bookId}`, totalLength);
+        storageUtils.setJson(`chapterLengths_${bookId}`, chapterLengths);
       };
       importAll();
     }, []);

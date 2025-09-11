@@ -101,7 +101,6 @@ export function loadGraphData(folderKey, chapter, eventIndex, getEventDataFunc) 
       normalizedRelations
     };
   } catch (error) {
-    console.error('loadGraphData 에러:', error);
     throw error;
   }
 }
@@ -119,12 +118,10 @@ export function loadGraphData(folderKey, chapter, eventIndex, getEventDataFunc) 
 export function convertRelationsToElements(relations, idToName, idToDesc, idToMain, idToNames, folderKey = 'gatsby') {
   // 매개변수 유효성 검사
   if (!Array.isArray(relations)) {
-    console.warn('convertRelationsToElements: relations는 배열이어야 합니다.', typeof relations);
     return [];
   }
   
   if (!idToName || typeof idToName !== 'object') {
-    console.warn('convertRelationsToElements: idToName이 유효하지 않습니다.', typeof idToName);
     return [];
   }
 
@@ -177,7 +174,6 @@ export function convertRelationsToElements(relations, idToName, idToDesc, idToMa
   const validNodeIds = nodeIds.filter(strId => {
     const hasName = idToName[strId] && idToName[strId] !== strId;
     if (!hasName) {
-      console.warn(`캐릭터 ID ${strId}의 정보를 찾을 수 없어 제외합니다.`);
       nodeSet.delete(strId); // nodeSet에서도 제거
     }
     return hasName;
@@ -215,19 +211,16 @@ export function convertRelationsToElements(relations, idToName, idToDesc, idToMa
       
       // 1. id1 == id2 인 경우 제외
       if (id1 === id2) {
-        console.warn(`자기 자신과의 관계는 제외됩니다: ${id1}`);
         return;
       }
       
       // 2. 노드가 0.0 인 경우 제외
       if (id1 === '0' || id2 === '0') {
-        console.warn(`ID가 0인 노드와의 관계는 제외됩니다: ${id1} -> ${id2}`);
         return;
       }
       
       // 3. 해당 event에 없는 노드가 포함된 경우 제외
       if (!nodeSet.has(id1) || !nodeSet.has(id2)) {
-        console.warn(`이벤트에 존재하지 않는 노드와의 관계는 제외됩니다: ${id1} -> ${id2}`);
         return;
       }
       
@@ -270,7 +263,6 @@ export function convertRelationsToElements(relations, idToName, idToDesc, idToMa
  */
 export function calcGraphDiff(prevElements, currElements) {
   if (!prevElements || !currElements) {
-    console.warn('calcGraphDiff: prevElements 또는 currElements가 없습니다.', { prevElements: !!prevElements, currElements: !!currElements });
     return { added: [], removed: [], updated: [] };
   }
   
@@ -310,12 +302,10 @@ export function calcGraphDiff(prevElements, currElements) {
  */
 export function detectAndResolveOverlap(cy, nodeSize = 40, onCleanup = null) {
   if (!cy) {
-    console.warn('detectAndResolveOverlap: cy 인스턴스가 없습니다.');
     return false;
   }
   
   if (typeof nodeSize !== 'number' || nodeSize <= 0) {
-    console.warn('detectAndResolveOverlap: 유효하지 않은 nodeSize', nodeSize);
     nodeSize = 40;
   }
   
@@ -328,7 +318,6 @@ export function detectAndResolveOverlap(cy, nodeSize = 40, onCleanup = null) {
   // 성능 최적화: 노드가 많을 때는 겹침 감지를 건너뜀
   const MAX_NODES_FOR_OVERLAP_DETECTION = 100;
   if (nodes.length > MAX_NODES_FOR_OVERLAP_DETECTION) {
-    console.warn('detectAndResolveOverlap: 노드가 너무 많아 겹침 감지를 건너뜁니다.', nodes.length);
     return false;
   }
 

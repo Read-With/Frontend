@@ -18,7 +18,6 @@ export const loadBookmarks = async (bookId) => {
     }
     return [];
   } catch (error) {
-    console.error('북마크 로드 실패:', error);
     return [];
   }
 };
@@ -35,7 +34,6 @@ export const addBookmark = async (bookId, startCfi, endCfi = null, color = '#0Cc
       return { success: false, message: response.message || '북마크 생성에 실패했습니다.' };
     }
   } catch (error) {
-    console.error('북마크 추가 실패:', error);
     return { success: false, message: '북마크 추가에 실패했습니다.' };
   }
 };
@@ -51,7 +49,6 @@ export const modifyBookmark = async (bookmarkId, color, memo) => {
       return { success: false, message: response.message || '북마크 수정에 실패했습니다.' };
     }
   } catch (error) {
-    console.error('북마크 수정 실패:', error);
     return { success: false, message: '북마크 수정에 실패했습니다.' };
   }
 };
@@ -67,7 +64,6 @@ export const removeBookmark = async (bookmarkId) => {
       return { success: false, message: response.message || '북마크 삭제에 실패했습니다.' };
     }
   } catch (error) {
-    console.error('북마크 삭제 실패:', error);
     return { success: false, message: '북마크 삭제에 실패했습니다.' };
   }
 };
@@ -78,7 +74,6 @@ export const saveBookmarksToLocal = (bookId, bookmarks) => {
     localStorage.setItem(`bookmarks_${bookId}`, JSON.stringify(bookmarks));
     return true;
   } catch (error) {
-    console.error('로컬 북마크 저장 실패:', error);
     return false;
   }
 };
@@ -88,7 +83,6 @@ export const loadBookmarksFromLocal = (bookId) => {
     const stored = localStorage.getItem(`bookmarks_${bookId}`);
     return stored ? JSON.parse(stored) : [];
   } catch (error) {
-    console.error('로컬 북마크 로드 실패:', error);
     return [];
   }
 };

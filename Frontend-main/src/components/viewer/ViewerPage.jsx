@@ -205,15 +205,6 @@ const ViewerPage = () => {
 
   // 툴팁 설정 함수
   const handleSetActiveTooltip = useCallback((tooltipData) => {
-    if (process.env.NODE_ENV === 'development') {
-      console.log('=== ViewerPage 툴팁 설정 ===');
-      console.log('tooltipData:', tooltipData);
-      console.log('현재 이벤트 정보:', {
-        currentEvent,
-        prevValidEvent: prevValidEventRef.current,
-        currentChapter
-      });
-    }
     setActiveTooltip(tooltipData);
   }, [currentEvent, currentChapter]);
 
@@ -244,16 +235,6 @@ const ViewerPage = () => {
       if (isEventInvalid) {
         setIsEventUndefined(true);
         
-        if (process.env.NODE_ENV === 'development') {
-          console.warn('이벤트가 정해지지 않았습니다. 새로고침이 필요합니다.', {
-            currentEvent,
-            currentChapter,
-            events: events?.length || 0,
-            loading,
-            isReloading,
-            isDataReady
-          });
-        }
       } else {
         setIsEventUndefined(false);
       }
@@ -271,7 +252,6 @@ const ViewerPage = () => {
         
         // 현재 챕터가 유효한지 확인
         if (!currentChapter || currentChapter < 1) {
-          console.warn('유효하지 않은 챕터 번호:', currentChapter);
           setIsDataReady(true);
           return;
         }
@@ -284,7 +264,6 @@ const ViewerPage = () => {
         });
         
         if (validEvents.length === 0 && events.length > 0) {
-          console.warn(`챕터 ${currentChapter}에 유효한 이벤트가 없습니다. 로드된 이벤트:`, events);
         }
         
         setEvents(validEvents);
@@ -311,7 +290,6 @@ const ViewerPage = () => {
           
           setCharacterData(uniqueCharacters);
         } catch (charError) {
-          console.warn('캐릭터 데이터 누적 로드 실패:', charError);
           if (currentChapterData) {
             setCharacterData(currentChapterData.characters || currentChapterData);
           }
@@ -319,7 +297,6 @@ const ViewerPage = () => {
         
         setIsDataReady(true);
       } catch (error) {
-        console.error('Chapter data loading error:', error);
         setIsDataReady(true);
       } finally {
         setLoading(false);
@@ -350,24 +327,11 @@ const ViewerPage = () => {
     // 이벤트가 정해지지 않은 경우들 체크
     if (currentEvent.eventNum === undefined || currentEvent.eventNum === null ||
         currentEvent.chapter === undefined || currentEvent.chapter === null) {
-      if (process.env.NODE_ENV === 'development') {
-        console.warn('currentEventElements: 이벤트 정보가 불완전합니다', {
-          currentEvent: currentEvent,
-          currentChapter: currentChapter
-        });
-      }
       return [];
     }
     
     // 현재 이벤트가 현재 챕터에 속하는지 확인
     if (currentEvent.chapter !== currentChapter) {
-      if (process.env.NODE_ENV === 'development') {
-        console.warn('currentEventElements: 이벤트 챕터 불일치', {
-          eventChapter: currentEvent.chapter,
-          currentChapter: currentChapter,
-          eventNum: currentEvent.eventNum
-        });
-      }
       return [];
     }
     
@@ -376,18 +340,13 @@ const ViewerPage = () => {
     
     try {
       // currentEvent.eventNum이 0-based인지 1-based인지 확인
-      console.log('=== 이벤트 인덱스 디버깅 ===');
-      console.log('currentEvent.eventNum:', currentEventNum);
-      console.log('currentEvent.event_id:', currentEvent.event_id);
       
       // event_id가 있으면 그것을 사용, 없으면 eventNum 사용
       const actualEventNum = currentEvent.event_id !== undefined ? currentEvent.event_id : currentEventNum;
-      console.log('실제 사용할 이벤트 번호:', actualEventNum);
       
       const eventData = getEventData(folderKey, eventChapter, actualEventNum);
       
       if (!eventData) {
-        console.warn('이벤트 데이터를 찾을 수 없습니다:', { folderKey, eventChapter, actualEventNum });
         return [];
       }
       
@@ -395,11 +354,6 @@ const ViewerPage = () => {
       const currentImportance = eventData.importance || {};
       const currentNewAppearances = eventData.log?.new_character_ids || [];
       
-      // 디버깅: 현재 이벤트의 관계 데이터 로그
-      console.log('=== 현재 이벤트 관계 데이터 ===');
-      console.log('Chapter:', eventChapter, 'Event:', currentEventNum);
-      console.log('Relations:', currentRelations);
-      console.log('Event Data:', eventData);
       
       const generatedElements = getElementsFromRelations(
         currentRelations,
@@ -410,12 +364,9 @@ const ViewerPage = () => {
         folderKey
       );
       
-      // 디버깅: 생성된 요소들 로그
-      console.log('Generated Elements:', generatedElements);
       
       return generatedElements;
     } catch (error) {
-      console.error('관계 데이터 로드 실패:', error);
       return [];
     }
   }, [currentEvent, characterData, folderKey, events]);
@@ -739,19 +690,9 @@ const ViewerPage = () => {
             
             // 받은 이벤트가 있으면 업데이트 (챕터 동기화는 별도로 처리)
             if (receivedEvent) {
-              // 디버깅: 이벤트 수신 로그
-              if (process.env.NODE_ENV === 'development') {
-                console.log('=== EpubViewer에서 이벤트 수신 ===');
-                console.log('수신된 이벤트:', receivedEvent);
-                console.log('현재 챕터:', currentChapter);
-                console.log('이벤트 챕터:', receivedEvent.chapter);
-              }
               
               // 챕터 불일치 시 currentChapter도 업데이트
               if (receivedEvent.chapter && receivedEvent.chapter !== currentChapter) {
-                if (process.env.NODE_ENV === 'development') {
-                  console.log('챕터 불일치 감지, 챕터 업데이트:', receivedEvent.chapter);
-                }
                 setCurrentChapter(receivedEvent.chapter);
               }
               

@@ -15,10 +15,8 @@ export default function MyPage() {
   const testSingleBook = async (bookId) => {
     try {
       const book = await fetchBook(bookId);
-      console.log('단일 도서 정보:', book);
       return book;
     } catch (error) {
-      console.error('단일 도서 조회 실패:', error);
     }
   };
 
@@ -66,15 +64,12 @@ export default function MyPage() {
   };
 
   const handleBookClick = async (book) => {
-    console.log('책 클릭됨:', book);
     
     // API 책인 경우 단일 도서 조회 테스트
     if (typeof book.id === 'number') {
       try {
         const detailedBook = await testSingleBook(book.id);
-        console.log('상세 도서 정보:', detailedBook);
       } catch (error) {
-        console.error('도서 상세 정보 조회 실패:', error);
       }
     }
   };

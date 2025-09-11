@@ -49,7 +49,6 @@ function getMaxEventCountLimited(folderKey, maxChapter) {
     const limitedEventNums = lastEventNums.slice(0, actualMaxChapter);
     return Math.max(...limitedEventNums, MIN_POSITIVITY);
   } catch (error) {
-    console.error('Error calculating max event count:', error);
     return MIN_POSITIVITY;
   }
 }
@@ -95,7 +94,6 @@ function collectRelationData(id1, id2, startChapter, endChapter, startEvent, end
       }
     }
   } catch (error) {
-    console.error('Error collecting relation data:', error);
   }
   
   return { points, labelInfo };
@@ -128,7 +126,6 @@ function findFirstAppearance(id1, id2, maxChapter, folderKey) {
       }
     }
   } catch (error) {
-    console.error('Error finding first appearance:', error);
   }
   
   return null;
@@ -168,7 +165,6 @@ function fetchRelationTimelineStandalone(id1, id2, chapterNum, eventNum, maxChap
       folderKey
     );
   } catch (error) {
-    console.error('Error fetching standalone timeline:', error);
     return { points: [], labelInfo: [] };
   }
 }
@@ -221,7 +217,6 @@ function fetchRelationTimelineViewer(id1, id2, chapterNum, eventNum, folderKey) 
       noRelation: false
     };
   } catch (error) {
-    console.error('Error fetching viewer timeline:', error);
     return { points: [], labelInfo: [], noRelation: true };
   }
 }
@@ -270,7 +265,6 @@ export function useRelationData(mode, id1, id2, chapterNum, eventNum, maxChapter
     try {
       return getFolderKeyFromFilename(filename);
     } catch (error) {
-      console.error('Error getting folder key:', error);
       return null;
     }
   }, [filename]);
@@ -296,11 +290,6 @@ export function useRelationData(mode, id1, id2, chapterNum, eventNum, maxChapter
     
     // 디버깅: 관계 데이터 요청 로그 (개발 환경에서만)
     if (process.env.NODE_ENV === 'development') {
-      console.log('=== useRelationData fetchData 호출 ===');
-      console.log('mode:', mode);
-      console.log('id1:', id1, 'id2:', id2);
-      console.log('chapterNum:', chapterNum, 'eventNum:', eventNum);
-      console.log('folderKey:', folderKey);
     }
     
     try {
@@ -311,14 +300,12 @@ export function useRelationData(mode, id1, id2, chapterNum, eventNum, maxChapter
       const { points, labels } = padSingleEvent(result.points, result.labelInfo);
       
       if (process.env.NODE_ENV === 'development') {
-        console.log('관계 데이터 결과:', { points, labels, noRelation: result.noRelation });
       }
       
       setTimeline(points);
       setLabels(labels);
       setNoRelation(result.noRelation || false);
     } catch (error) {
-      console.error('Error in fetchData:', error);
       setError('데이터를 가져오는 중 오류가 발생했습니다.');
       setTimeline([]);
       setLabels([]);

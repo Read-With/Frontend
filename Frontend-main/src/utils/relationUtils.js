@@ -7,7 +7,6 @@ export function safeNum(value) {
 
 export function normalizeRelation(raw) {
   if (!raw || typeof raw !== 'object') {
-    console.warn('normalizeRelation: 유효하지 않은 입력:', raw);
     return null;
   }
   
@@ -27,7 +26,6 @@ export function normalizeRelation(raw) {
 
     return { id1, id2, positivity, weight, count, relation: relationArray, label, explanation };
   } catch (error) {
-    console.error('normalizeRelation 에러:', error);
     return null;
   }
 }
@@ -55,7 +53,6 @@ export function isSamePair(rel, a, b) {
  */
 export function processRelations(relations) {
   if (!Array.isArray(relations)) {
-    console.warn('processRelations: relations는 배열이어야 합니다');
     return [];
   }
   

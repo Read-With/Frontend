@@ -100,7 +100,6 @@ export function saveViewerMode(mode) {
   try {
     localStorage.setItem("viewer_mode", mode);
   } catch (e) {
-    console.warn('Failed to save viewer mode:', e);
   }
 }
 
@@ -112,7 +111,6 @@ export function loadViewerMode() {
   try {
     return localStorage.getItem("viewer_mode");
   } catch (e) {
-    console.warn('Failed to load viewer mode:', e);
     return null;
   }
 }
@@ -223,7 +221,6 @@ export function calculateChapterProgress(cfi, chapterNum, events, bookInstance =
         }
       }
     } catch (error) {
-      console.warn('CFI 기반 위치 계산 실패, fallback 방식 사용:', error);
     }
   }
 
@@ -380,6 +377,108 @@ export const bookmarkUtils = {
     return { success: false, message: "삭제가 취소되었습니다." };
   }
 };
+
+/**
+ * 챕터 번호 추출 유틸리티 함수
+ * @param {string} cfi - CFI 문자열
+ * @param {string} label - 라벨 문자열 (선택사항)
+ * @returns {number} 챕터 번호
+ */
+export function extractChapterNumber(cfi, label = null) {
+  // CFI에서 직접 추출 (가장 정확)
+  const cfiMatch = cfi?.match(/\[chapter-(\d+)\]/);
+  if (cfiMatch) return parseInt(cfiMatch[1]);
+  
+  // 라벨에서 추출
+  if (label) {
+    const patterns = [
+      /Chapter\s+(\d+)/i,
+      /(\d+)\s*장/i,
+      /^(\d+)$/,
+      /Chapter\s+([IVX]+)/i
+    ];
+    
+    for (const pattern of patterns) {
+      const match = label.match(pattern);
+      if (match) {
+        if (pattern.source.includes('[IVX]')) {
+          const romanToNum = { 'I': 1, 'II': 2, 'III': 3, 'IV': 4, 'V': 5, 'VI': 6, 'VII': 7, 'VIII': 8, 'IX': 9 };
+          return romanToNum[match[1]];
+        }
+        return parseInt(match[1]);
+      }
+    }
+  }
+  
+  return 1; // 기본값
+}
+
+/**
+ * localStorage 헬퍼 함수들
+ */
+export const storageUtils = {
+  get: (key) => localStorage.getItem(key),
+  set: (key, value) => localStorage.setItem(key, value),
+  remove: (key) => localStorage.removeItem(key),
+  getJson: (key, defaultValue = {}) => {
+    try {
+      return JSON.parse(localStorage.getItem(key) || '{}');
+    } catch {
+      return defaultValue;
+    }
+  },
+  setJson: (key, value) => localStorage.setItem(key, JSON.stringify(value))
+};
+
+/**
+ * ref 객체 접근 헬퍼 함수
+ * @param {Object} bookRef - book ref 객체
+ * @param {Object} renditionRef - rendition ref 객체
+ * @returns {Object} book과 rendition 객체
+ */
+export function getRefs(bookRef, renditionRef) {
+  return {
+    book: bookRef.current,
+    rendition: renditionRef.current
+  };
+}
+
+/**
+ * ref 객체와 함께 콜백 실행
+ * @param {Object} bookRef - book ref 객체
+ * @param {Object} renditionRef - rendition ref 객체
+ * @param {Function} callback - 실행할 콜백 함수
+ * @returns {any} 콜백 실행 결과
+ */
+export function withRefs(bookRef, renditionRef, callback) {
+  const { book, rendition } = getRefs(bookRef, renditionRef);
+  if (!book || !rendition) return null;
+  return callback(book, rendition);
+}
+
+/**
+ * 네비게이션 정리 함수
+ * @param {Function} setIsNavigating - 네비게이션 상태 설정 함수
+ * @param {Object} rendition - rendition 객체
+ * @param {Function} handler - 이벤트 핸들러
+ */
+export function cleanupNavigation(setIsNavigating, rendition, handler) {
+  setIsNavigating(false);
+  if (rendition && handler) {
+    rendition.off('relocated', handler);
+  }
+}
+
+/**
+ * locations 생성 보장 함수
+ * @param {Object} book - book 객체
+ * @param {number} chars - 생성할 문자 수 (기본값: 2000)
+ */
+export async function ensureLocations(book, chars = 2000) {
+  if (!book.locations?.length()) {
+    await book.locations.generate(chars);
+  }
+}
 
 /**
  * 설정 관련 유틸리티 함수들

@@ -72,14 +72,6 @@ export function getPositivityStats(filename) {
   // 캐시에 저장
   statsCache.set(folderKey, stats);
   
-  console.log(`Calculated stats for ${folderKey}:`, {
-    count: positivityValues.length,
-    mean: stats.mean.toFixed(3),
-    std: stats.std.toFixed(3),
-    percentiles: Object.fromEntries(
-      Object.entries(stats.percentiles).map(([k, v]) => [k, v.toFixed(3)])
-    )
-  });
   
   return stats;
 }
@@ -201,7 +193,6 @@ export function getRelationLabels(relation, label) {
     
     return [];
   } catch (error) {
-    console.warn('getRelationLabels 에러:', error);
     return [];
   }
 }

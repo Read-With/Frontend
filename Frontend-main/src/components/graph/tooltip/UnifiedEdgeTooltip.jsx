@@ -98,10 +98,6 @@ function UnifiedEdgeTooltip({
   // 디버깅: 이벤트 정보 변경 감지 (개발 환경에서만)
   useEffect(() => {
     if (process.env.NODE_ENV === 'development') {
-      console.log('=== Edge Tooltip 이벤트 정보 변경 ===');
-      console.log('currentEvent:', currentEvent);
-      console.log('prevValidEvent:', prevValidEvent);
-      console.log('unifiedEventInfo:', getUnifiedEventInfo());
     }
   }, [currentEvent, prevValidEvent, getUnifiedEventInfo]);
 
@@ -126,11 +122,6 @@ function UnifiedEdgeTooltip({
   // 디버깅: 관계 데이터 상태 변경 감지 (개발 환경에서만)
   useEffect(() => {
     if (process.env.NODE_ENV === 'development') {
-      console.log('=== Edge Tooltip 관계 데이터 상태 변경 ===');
-      console.log('timeline:', timeline);
-      console.log('labels:', labels);
-      console.log('loading:', loading);
-      console.log('noRelation:', noRelation);
     }
   }, [timeline, labels, loading, noRelation]);
 
@@ -145,8 +136,6 @@ function UnifiedEdgeTooltip({
   useEffect(() => {
     if (viewMode === "chart") {
       if (process.env.NODE_ENV === 'development') {
-        console.log('=== 차트 모드 데이터 가져오기 ===');
-        console.log('unifiedEventInfo.eventNum:', unifiedEventInfo.eventNum);
       }
       fetchData();
     }
@@ -156,8 +145,6 @@ function UnifiedEdgeTooltip({
   useEffect(() => {
     if (viewMode === "info" && mode === 'viewer') {
       if (process.env.NODE_ENV === 'development') {
-        console.log('=== 정보 모드 관계 존재 여부 확인 ===');
-        console.log('unifiedEventInfo.eventNum:', unifiedEventInfo.eventNum);
       }
       fetchData();
     }

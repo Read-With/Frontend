@@ -32,7 +32,6 @@ const apiRequest = async (url, options = {}) => {
     
     return data;
   } catch (error) {
-    console.error('API 요청 오류:', error);
     throw error;
   }
 };

@@ -57,7 +57,6 @@ const BookmarksPage = () => {
         const bookmarksData = await loadBookmarks(cleanFilename);
         setBookmarks(bookmarksData);
       } catch (error) {
-        console.error('북마크 로드 실패:', error);
       } finally {
         setLoading(false);
       }
@@ -75,7 +74,6 @@ const BookmarksPage = () => {
         alert(result.message || '북마크 삭제에 실패했습니다.');
       }
     } catch (error) {
-      console.error('북마크 삭제 실패:', error);
       alert('북마크 삭제에 실패했습니다.');
     }
   };
@@ -94,7 +92,6 @@ const BookmarksPage = () => {
         alert(result.message || '메모 추가에 실패했습니다.');
       }
     } catch (error) {
-      console.error('메모 추가 실패:', error);
       alert('메모 추가에 실패했습니다.');
     }
   };
@@ -118,7 +115,6 @@ const BookmarksPage = () => {
         alert(result.message || '메모 수정에 실패했습니다.');
       }
     } catch (error) {
-      console.error('메모 수정 실패:', error);
       alert('메모 수정에 실패했습니다.');
     }
   };
@@ -134,7 +130,6 @@ const BookmarksPage = () => {
         alert(result.message || '색상 변경에 실패했습니다.');
       }
     } catch (error) {
-      console.error('색상 변경 실패:', error);
       alert('색상 변경에 실패했습니다.');
     }
   };
