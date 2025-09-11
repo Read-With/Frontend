@@ -115,7 +115,7 @@ export function loadGraphData(folderKey, chapter, eventIndex, getEventDataFunc) 
  * @param {string} folderKey - 폴더 키 (이미지 경로용)
  * @returns {Array} 그래프 요소 배열
  */
-export function convertRelationsToElements(relations, idToName, idToDesc, idToMain, idToNames, folderKey = 'gatsby') {
+export function convertRelationsToElements(relations, idToName, idToDesc, idToMain, idToNames, folderKey = 'gatsby', previousRelations = null) {
   // 매개변수 유효성 검사
   if (!Array.isArray(relations)) {
     return [];
@@ -203,6 +203,19 @@ export function convertRelationsToElements(relations, idToName, idToDesc, idToMa
     });
   });
 
+  // 이전 이벤트의 관계를 Set으로 변환 (빠른 검색을 위해)
+  const previousRelationSet = new Set();
+  if (previousRelations && Array.isArray(previousRelations)) {
+    previousRelations.forEach(prevRel => {
+      if (prevRel.id1 && prevRel.id2) {
+        const prevId1 = String(prevRel.id1);
+        const prevId2 = String(prevRel.id2);
+        previousRelationSet.add(`${prevId1}-${prevId2}`);
+        previousRelationSet.add(`${prevId2}-${prevId1}`); // 양방향 관계 고려
+      }
+    });
+  }
+
   // 엣지 추가
   relationsArray.forEach(rel => {
     if (rel.id1 && rel.id2) {
@@ -229,7 +242,27 @@ export function convertRelationsToElements(relations, idToName, idToDesc, idToMa
       
       if (Array.isArray(rel.relation)) {
         relationArray = rel.relation;
-        relationLabel = rel.relation[0] || "";
+        // 이전 이벤트와 비교하여 새로 추가된 관계인지 확인
+        const isNewRelation = !previousRelationSet.has(`${id1}-${id2}`) && !previousRelationSet.has(`${id2}-${id1}`);
+        
+        if (isNewRelation || !previousRelations) {
+          // 새로 추가된 관계이거나 첫 번째 이벤트인 경우: 첫 번째 요소를 라벨로 사용
+          relationLabel = rel.relation[0] || "";
+        } else {
+          // 기존 관계인 경우: 이전 이벤트에서의 관계와 비교하여 새로 추가된 요소 찾기
+          const prevRel = previousRelations.find(prevRel => 
+            (String(prevRel.id1) === id1 && String(prevRel.id2) === id2) ||
+            (String(prevRel.id1) === id2 && String(prevRel.id2) === id1)
+          );
+          
+          if (prevRel && Array.isArray(prevRel.relation)) {
+            // 이전 관계에서 새로 추가된 요소 찾기
+            const newElements = rel.relation.filter(element => !prevRel.relation.includes(element));
+            relationLabel = newElements.length > 0 ? newElements[0] : rel.relation[0] || "";
+          } else {
+            relationLabel = rel.relation[0] || "";
+          }
+        }
       } else if (typeof rel.relation === "string") {
         relationArray = [rel.relation];
         relationLabel = rel.relation;

@@ -75,12 +75,25 @@ export function useGraphDataLoader(filename, chapter, eventIndex = null) {
         .map(rel => normalizeRelation(rel))
         .filter(rel => isValidRelation(rel));
       
+      // 이전 이벤트 데이터 가져오기
+      let previousEventData = null;
+      if (targetEventIndex > 1) {
+        previousEventData = getEventDataByIndex(folderKey, chapter, targetEventIndex - 1);
+      }
+      
+      const previousRelations = previousEventData ? 
+        (previousEventData.relations || [])
+          .map(rel => normalizeRelation(rel))
+          .filter(rel => isValidRelation(rel)) : null;
+      
       const convertedElements = convertRelationsToElements(
         normalizedRelations,
         idToName,
         idToDesc,
         idToMain,
-        idToNames
+        idToNames,
+        folderKey,
+        previousRelations
       );
       
       const chapterKey = `${folderKey}-${chapter}`;
