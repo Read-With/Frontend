@@ -35,6 +35,7 @@ export function useViewerPage() {
   const [prevEvent, setPrevEvent] = useState(null);
   const [events, setEvents] = useState([]);
   const [maxChapter, setMaxChapter] = useState(1);
+  const [isInitialChapterDetected, setIsInitialChapterDetected] = useState(false);
   
   const [graphFullScreen, setGraphFullScreen] = useState(() => {
     const saved = loadViewerMode();
@@ -266,14 +267,27 @@ export function useViewerPage() {
     setElements([]);
     setIsDataReady(false);
     setIsGraphLoading(true);
+    
+    // 이전 챕터의 유효한 이벤트 참조도 초기화
+    prevValidEventRef.current = null;
+    
+    // 초기 챕터 감지 완료 표시
+    setIsInitialChapterDetected(true);
+    
+    // 디버깅: 챕터 변경 로그
+    if (process.env.NODE_ENV === 'development') {
+      console.log('=== 챕터 변경 감지 ===');
+      console.log('새로운 챕터:', currentChapter);
+      console.log('상태 초기화 완료');
+    }
   }, [currentChapter]);
   
-  // currentEvent가 null이 아닐 때만 이전 값 갱신
+  // currentEvent가 null이 아닐 때만 이전 값 갱신 (현재 챕터의 이벤트만)
   useEffect(() => {
-    if (currentEvent) {
+    if (currentEvent && currentEvent.chapter === currentChapter) {
       prevValidEventRef.current = currentEvent;
     }
-  }, [currentEvent]);
+  }, [currentEvent, currentChapter]);
   
   // elements가 변경될 때 로딩 상태 업데이트
   useEffect(() => {
@@ -296,6 +310,23 @@ export function useViewerPage() {
       if (navEntries.length > 0 && navEntries[0].type === "reload") {
         setIsReloading(true);
         setIsGraphLoading(true); // 새로고침 시 그래프 로딩 상태도 true로 설정
+        
+        // 새로고침 시 모든 상태 초기화
+        setCurrentEvent(null);
+        setPrevEvent(null);
+        setEvents([]);
+        setCharacterData(null);
+        setElements([]);
+        setIsDataReady(false);
+        setIsInitialChapterDetected(false);
+        prevValidEventRef.current = null;
+        
+        // 디버깅: 새로고침 감지 로그
+        if (process.env.NODE_ENV === 'development') {
+          console.log('=== 새로고침 감지 ===');
+          console.log('모든 상태 초기화 완료');
+        }
+        
         // 새로고침 완료 후 일정 시간 후에 isReloading을 false로 설정
         const timer = setTimeout(() => {
           setIsReloading(false);
@@ -672,7 +703,8 @@ export function useViewerPage() {
       graphFullScreen,
       showGraph,
       loading: isGraphLoading,
-      isDataReady
+      isDataReady,
+      isInitialChapterDetected
     },
     
     graphActions: {

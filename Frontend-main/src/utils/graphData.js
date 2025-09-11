@@ -338,8 +338,30 @@ export function getEventsForChapter(chapter, folderKey = 'gatsby') {
   
   // 3. 현재 챕터의 이벤트만 필터링 (이전 챕터의 마지막 이벤트 제외)
   const currentChapterEvents = eventsWithRelations.filter(event => {
-    return event.chapter === Number(chapter);
+    const eventChapter = Number(event.chapter);
+    const targetChapter = Number(chapter);
+    
+    // 챕터 번호가 정확히 일치하는지 확인
+    if (eventChapter !== targetChapter) {
+      if (process.env.NODE_ENV === 'development') {
+        console.warn(`이벤트 챕터 불일치: 이벤트 챕터 ${eventChapter}, 요청 챕터 ${targetChapter}`);
+      }
+      return false;
+    }
+    
+    return true;
   });
+  
+  // 디버깅: 필터링 결과 로그
+  if (process.env.NODE_ENV === 'development') {
+    console.log(`=== 챕터 ${chapter} 이벤트 필터링 결과 ===`);
+    console.log(`전체 이벤트 수: ${eventsWithRelations.length}`);
+    console.log(`필터링된 이벤트 수: ${currentChapterEvents.length}`);
+    if (currentChapterEvents.length > 0) {
+      console.log('첫 번째 이벤트:', currentChapterEvents[0]);
+      console.log('마지막 이벤트:', currentChapterEvents[currentChapterEvents.length - 1]);
+    }
+  }
   
   return currentChapterEvents;
 }

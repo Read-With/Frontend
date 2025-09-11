@@ -585,6 +585,14 @@ const EpubViewer = forwardRef(
              // ViewerPage에 챕터 변경 알림
              const prevChapter = currentChapterRef.current;
              if (currentChapter !== prevChapter) {
+               // 디버깅: 챕터 변경 로그
+               if (process.env.NODE_ENV === 'development') {
+                 console.log('=== EpubViewer 챕터 변경 감지 ===');
+                 console.log('이전 챕터:', prevChapter);
+                 console.log('새로운 챕터:', currentChapter);
+                 console.log('CFI:', cfi);
+               }
+               
                onCurrentChapterChange?.(currentChapter);
              }
 

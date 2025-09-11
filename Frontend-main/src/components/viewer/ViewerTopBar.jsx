@@ -65,7 +65,30 @@ const ViewerTopBar = ({
   React.useEffect(() => {
     const eventToShow = currentEvent || prevValidEvent;
     
+    // 디버깅: 이벤트 정보 로그
+    if (process.env.NODE_ENV === 'development') {
+      console.log('=== ViewerTopBar 이벤트 정보 업데이트 ===');
+      console.log('currentEvent:', currentEvent);
+      console.log('prevValidEvent:', prevValidEvent);
+      console.log('eventToShow:', eventToShow);
+      console.log('currentChapter:', currentChapter);
+    }
+    
     if (eventToShow) {
+      // 챕터 불일치 체크
+      if (eventToShow.chapter && eventToShow.chapter !== currentChapter) {
+        if (process.env.NODE_ENV === 'development') {
+          console.warn('ViewerTopBar: 이벤트 챕터 불일치', {
+            eventChapter: eventToShow.chapter,
+            currentChapter: currentChapter,
+            eventNum: eventToShow.eventNum
+          });
+        }
+        // 챕터가 다른 이벤트는 표시하지 않음
+        setCurrentEventInfo(null);
+        return;
+      }
+      
       const eventInfo = {
         eventNum: eventToShow.eventNum ?? 0,
         name: eventToShow.name || eventToShow.event_name || ""
