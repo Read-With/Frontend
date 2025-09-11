@@ -289,7 +289,9 @@ const CytoscapeGraphUnified = ({
     }
     
     const handleBackgroundTap = (evt) => {
+      // 배경 클릭 감지 - evt.target이 Cytoscape core인 경우
       if (evt.target === cy) {
+        // 드래그가 아닌 순수 클릭인 경우에만 처리
         if (!isDraggingRef.current) {
           if (tapBackgroundHandler) {
             createRippleWrapper(tapBackgroundHandler)(evt);

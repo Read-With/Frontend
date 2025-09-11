@@ -1,4 +1,4 @@
-import React, { useRef, useState, useEffect, useMemo } from "react";
+import React, { useRef, useState, useEffect, useMemo, useCallback } from "react";
 import { toast, ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import cytoscape from "cytoscape";
@@ -11,6 +11,7 @@ import ViewerSettings from "./epub/ViewerSettings";
 import ViewerTopBar from "./ViewerTopBar";
 import { useViewerPage } from "../../hooks/useViewerPage";
 import { useGraphSearch } from "../../hooks/useGraphSearch";
+import { useClickOutside } from "../../hooks/useClickOutside";
 import { createStorageKey } from "../../hooks/useLocalStorage";
 import { 
   parseCfiToChapterDetail, 
@@ -34,6 +35,10 @@ function GraphSplitArea({
   viewerState,
   searchState,
   searchActions,
+  activeTooltip,
+  onClearTooltip,
+  onSetActiveTooltip,
+  graphClearRef,
 }) {
   const graphContainerRef = React.useRef(null);
   const { isSearchActive, filteredElements, isResetFromSearch } = searchState;
@@ -75,6 +80,11 @@ function GraphSplitArea({
           // ViewerTopBar와 동일한 이벤트 정보 전달
           prevValidEvent={graphState.prevValidEvent}
           events={graphState.events || []}
+          // 툴팁 관련 props 추가
+          activeTooltip={activeTooltip}
+          onClearTooltip={onClearTooltip}
+          onSetActiveTooltip={onSetActiveTooltip}
+          graphClearRef={graphClearRef}
         />
       </div>
     </div>
@@ -111,6 +121,34 @@ const ViewerPage = () => {
     handleRemoveBookmark, toggleGraph, handleFitView, handleLocationChange,
     graphState, graphActions, viewerState, searchState,
   } = useViewerPage();
+
+  // 툴팁 상태 관리
+  const [activeTooltip, setActiveTooltip] = useState(null);
+  
+  // 그래프 상태 초기화를 위한 ref
+  const graphClearRef = useRef(null);
+  
+  // 툴팁 닫기 함수
+  const handleClearTooltip = useCallback(() => {
+    setActiveTooltip(null);
+  }, []);
+
+  // 툴팁과 그래프 스타일을 모두 초기화하는 함수
+  const handleClearTooltipAndGraph = useCallback(() => {
+    setActiveTooltip(null);
+    if (graphClearRef.current) {
+      graphClearRef.current();
+    }
+  }, []);
+
+  // 툴팁 설정 함수
+  const handleSetActiveTooltip = useCallback((tooltipData) => {
+    setActiveTooltip(tooltipData);
+  }, []);
+
+  // 전역 클릭 감지를 위한 ref - 툴팁이 활성화된 경우에만 감지
+  // 툴팁 닫기와 동시에 그래프 스타일도 초기화
+  const viewerPageRef = useClickOutside(handleClearTooltipAndGraph, !!activeTooltip);
 
   useEffect(() => {
     const loadEventsData = async () => {
@@ -455,6 +493,7 @@ const ViewerPage = () => {
 
   return (
     <div
+      ref={viewerPageRef}
       className="h-screen"
       onMouseEnter={() => setShowToolbar(true)}
       onMouseLeave={() => setShowToolbar(false)}
@@ -506,6 +545,10 @@ const ViewerPage = () => {
                 selectSuggestion,
                 handleKeyDown
               }}
+              activeTooltip={activeTooltip}
+              onClearTooltip={handleClearTooltip}
+              onSetActiveTooltip={handleSetActiveTooltip}
+              graphClearRef={graphClearRef}
             />
           </CytoscapeGraphPortalProvider>
         }

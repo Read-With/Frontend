@@ -54,12 +54,9 @@ export default function useGraphInteractions({
     clearStyles();
   }, [clearStyles]);
 
-  // 툴팁을 포함한 모든 상태를 초기화하는 함수
+  // 그래프 스타일만 초기화하는 함수 (툴팁 닫기는 상위에서 처리)
   const clearAll = useCallback(() => {
     clearSelectionOnly();
-    if (onClearTooltipRef.current) {
-      onClearTooltipRef.current();
-    }
   }, [clearSelectionOnly]);
 
   // getContainerInfo는 이제 공통 유틸리티에서 import하여 사용
@@ -198,7 +195,7 @@ export default function useGraphInteractions({
     [cyRef, onShowEdgeTooltipRef, selectedEdgeIdRef, resetAllStyles]
   );
 
-  // 배경 클릭 처리 함수
+  // 배경 클릭 처리 함수 - 그래프 스타일 초기화 및 툴팁 닫기
   const handleBackgroundClick = useCallback(() => {
     try {
       if (strictBackgroundClear) {
@@ -206,11 +203,10 @@ export default function useGraphInteractions({
         if (!hasSelection) return;
       }
       
-      // 그래프 온리 페이지에서는 툴팁을 유지하고 선택 상태만 초기화
+      // 스타일 초기화
       clearStyles();
       
-      // 순수 클릭일 때만 툴팁 닫기 (드래그는 사이드바 상태 유지)
-      // Cytoscape의 기본 배경 클릭 이벤트는 드래그와 구분되어야 함
+      // 툴팁 닫기 - 배경 클릭 시 툴팁도 닫음
       if (onClearTooltipRef.current) {
         onClearTooltipRef.current();
       }

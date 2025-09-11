@@ -563,7 +563,6 @@ function UnifiedEdgeTooltip({
           <button
             onClick={onClose}
             className="tooltip-close-btn"
-            onMouseDown={(e) => e.stopPropagation()}
             style={buttonStyles.tooltipClose}
             {...buttonHandlers.tooltipClose}
           >

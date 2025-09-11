@@ -14,6 +14,10 @@ const GraphContainer = forwardRef(({
   elements: externalElements, 
   prevValidEvent = null,
   events = [],
+  activeTooltip = null,
+  onClearTooltip = null,
+  onSetActiveTooltip = null,
+  graphClearRef = null,
   ...props
 }, ref) => {
 
@@ -85,6 +89,10 @@ const GraphContainer = forwardRef(({
       currentEvent={currentEvent}
       prevValidEvent={prevValidEvent}
       events={events}
+      activeTooltip={activeTooltip}
+      onClearTooltip={onClearTooltip}
+      onSetActiveTooltip={onSetActiveTooltip}
+      graphClearRef={graphClearRef}
       {...props}
     />
   );

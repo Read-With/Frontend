@@ -31,13 +31,19 @@ const ViewerRelationGraph = ({
   currentEvent = null,
   prevValidEvent = null,
   events = [],
+  // 상위에서 전달받은 툴팁 상태
+  activeTooltip = null,
+  onClearTooltip = null,
+  onSetActiveTooltip = null,
+  graphClearRef = null,
 }) => {
   const cyRef = useRef(null);
-  const [activeTooltip, setActiveTooltip] = useState(null);
   const selectedEdgeIdRef = useRef(null);
   const selectedNodeIdRef = useRef(null);
 
   const onShowNodeTooltip = useCallback(({ node, nodeCenter, mouseX, mouseY, evt }) => {
+    if (!onSetActiveTooltip) return;
+    
     const nodeData = node.data();
     let names = nodeData.names;
     if (typeof names === "string") {
@@ -50,7 +56,7 @@ const ViewerRelationGraph = ({
     const finalX = mouseX !== undefined ? mouseX : nodeCenter?.x || 0;
     const finalY = mouseY !== undefined ? mouseY : nodeCenter?.y || 0;
     
-    setActiveTooltip({
+    onSetActiveTooltip({
       type: "node",
       ...nodeData,
       names,
@@ -59,14 +65,16 @@ const ViewerRelationGraph = ({
       x: finalX,
       y: finalY,
     });
-  }, []);
+  }, [onSetActiveTooltip]);
 
   const onShowEdgeTooltip = useCallback(({ edge, absoluteX, absoluteY, evt }) => {
+    if (!onSetActiveTooltip) return;
+    
     // 마우스 위치를 우선 사용하되, 없으면 계산된 간선 중심 위치 사용
     const finalX = absoluteX !== undefined ? absoluteX : 0;
     const finalY = absoluteY !== undefined ? absoluteY : 0;
     
-    setActiveTooltip({
+    onSetActiveTooltip({
       type: "edge",
       id: edge.id(),
       data: edge.data(),
@@ -75,28 +83,49 @@ const ViewerRelationGraph = ({
       x: finalX,
       y: finalY,
     });
-  }, []);
+  }, [onSetActiveTooltip]);
 
-  const onClearTooltip = useCallback(() => {
-    setActiveTooltip(null);
-  }, []);
+  // 툴팁 닫기 함수 - 외부 클릭이나 배경 클릭 시 호출됨
+  const clearTooltip = useCallback(() => {
+    if (onClearTooltip) {
+      onClearTooltip();
+    }
+  }, [onClearTooltip]);
+
+  // 툴팁 닫기와 그래프 스타일 초기화를 모두 처리하는 함수
+  const clearTooltipAndGraph = useCallback(() => {
+    if (onClearTooltip) {
+      onClearTooltip();
+    }
+    if (graphClearRef?.current) {
+      graphClearRef.current();
+    }
+  }, [onClearTooltip, graphClearRef]);
 
   const {
     tapNodeHandler,
     tapEdgeHandler,
     tapBackgroundHandler,
     clearSelection,
+    clearAll,
   } = useGraphInteractions({
     cyRef,
     onShowNodeTooltip,
     onShowEdgeTooltip,
-    onClearTooltip,
+    onClearTooltip: clearTooltip,
     selectedNodeIdRef,
     selectedEdgeIdRef,
     strictBackgroundClear: true,
     isSearchActive,
     filteredElements,
   });
+
+  // graphClearRef에 그래프 스타일 초기화 함수 설정
+  useEffect(() => {
+    if (graphClearRef) {
+      graphClearRef.current = clearAll;
+    }
+  }, [graphClearRef, clearAll]);
 
   const nodeSize = getNodeSize('viewer');
   const edgeStyle = getEdgeStyle('viewer');
@@ -114,7 +143,10 @@ const ViewerRelationGraph = ({
 
   return (
     <div className="relation-graph-container" style={graphStyles.container}>
-      <div style={graphStyles.tooltipContainer}>
+      <div 
+        style={graphStyles.tooltipContainer}
+        onClick={(e) => e.stopPropagation()}
+      >
         {activeTooltip?.type === "node" && (
           <UnifiedNodeInfo
             key={`node-tooltip-${activeTooltip.id}`}
@@ -123,7 +155,7 @@ const ViewerRelationGraph = ({
             x={activeTooltip.x}
             y={activeTooltip.y}
             nodeCenter={activeTooltip.nodeCenter}
-            onClose={onClearTooltip}
+            onClose={clearTooltipAndGraph}
             inViewer={true}
             chapterNum={chapterNum}
             eventNum={eventNum}
@@ -143,7 +175,7 @@ const ViewerRelationGraph = ({
             data={activeTooltip.data}
             x={activeTooltip.x}
             y={activeTooltip.y}
-            onClose={onClearTooltip}
+            onClose={clearTooltipAndGraph}
             sourceNode={activeTooltip.sourceNode}
             targetNode={activeTooltip.targetNode}
             mode="viewer"
@@ -173,7 +205,7 @@ const ViewerRelationGraph = ({
           isResetFromSearch={isResetFromSearch}
           onShowNodeTooltip={onShowNodeTooltip}
           onShowEdgeTooltip={onShowEdgeTooltip}
-          onClearTooltip={onClearTooltip}
+          onClearTooltip={clearTooltip}
           selectedNodeIdRef={selectedNodeIdRef}
           selectedEdgeIdRef={selectedEdgeIdRef}
           strictBackgroundClear={true}
