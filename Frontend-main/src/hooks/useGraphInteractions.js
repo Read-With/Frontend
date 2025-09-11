@@ -142,6 +142,20 @@ export default function useGraphInteractions({
     [cyRef, handleNodeHighlight, calculateNodePosition, onShowNodeTooltipRef, selectedNodeIdRef]
   );
 
+  // 노드 드래그 시작 핸들러
+  const nodeDragStartHandler = useCallback((evt) => {
+    // 드래그 시작 시 필요한 로직이 있다면 여기에 추가
+  }, []);
+
+  // 노드 드래그 종료 핸들러  
+  const nodeDragEndHandler = useCallback((evt) => {
+    // 드래그 종료 이벤트 발생
+    const dragEndEvent = new CustomEvent('graphDragEnd', {
+      detail: { type: 'graphDragEnd', timestamp: Date.now() }
+    });
+    document.dispatchEvent(dragEndEvent);
+  }, []);
+
   const tapEdgeHandler = useCallback(
     (evt) => {
       try {
@@ -192,8 +206,11 @@ export default function useGraphInteractions({
   );
 
   // 배경 클릭 처리 함수 - 그래프 스타일 초기화 및 툴팁 닫기
-  const handleBackgroundClick = useCallback(() => {
+  const handleBackgroundClick = useCallback((evt) => {
     try {
+      // 드래그 관련 이벤트인지 확인
+      const isDragEvent = evt && evt.detail && evt.detail.type === 'dragend';
+      
       if (strictBackgroundClear) {
         const hasSelection = !!(selectedNodeIdRef?.current || selectedEdgeIdRef?.current);
         if (!hasSelection) return;
@@ -202,8 +219,8 @@ export default function useGraphInteractions({
       // 스타일 초기화
       clearStyles();
       
-      // 툴팁 닫기 - 배경 클릭 시 툴팁도 닫음
-      if (onClearTooltipRef.current) {
+      // 드래그가 아닌 실제 클릭인 경우에만 툴팁 닫기
+      if (!isDragEvent && onClearTooltipRef.current) {
         onClearTooltipRef.current();
       }
     } catch (error) {
@@ -237,6 +254,8 @@ export default function useGraphInteractions({
     tapNodeHandler,
     tapEdgeHandler,
     tapBackgroundHandler,
+    nodeDragStartHandler,
+    nodeDragEndHandler,
     clearSelection: clearSelectionAndRebind,
     clearSelectionOnly,
     clearAll,

@@ -355,6 +355,10 @@ function RelationGraphWrapper() {
   const handleGlobalClick = useCallback((e) => {
     if (!activeTooltip || isSidebarClosing) return;
     
+    // 드래그 후 클릭인지 확인
+    const isDragEndEvent = e.detail && e.detail.type === 'dragend';
+    if (isDragEndEvent) return;
+    
     const sidebarElement = document.querySelector('[data-testid="graph-sidebar"]') || 
                           document.querySelector('.graph-sidebar') ||
                           e.target.closest('[data-testid="graph-sidebar"]') ||
@@ -376,6 +380,10 @@ function RelationGraphWrapper() {
     if (e.target === e.currentTarget) {
       e.stopPropagation();
       
+      // 드래그 후 클릭인지 확인
+      const isDragEndEvent = e.detail && e.detail.type === 'dragend';
+      if (isDragEndEvent) return;
+      
       if (activeTooltip && !isSidebarClosing) {
         clearAll();
         setTimeout(() => {
@@ -394,14 +402,22 @@ function RelationGraphWrapper() {
         
         handleGlobalClick(e);
       };
+
+      const handleDragEnd = (e) => {
+        // 드래그 완료 이벤트를 클릭 이벤트로 변환하지 않도록 처리
+        e.preventDefault();
+        e.stopPropagation();
+      };
       
       const timeoutId = setTimeout(() => {
         document.addEventListener('click', handleDocumentClick, true);
+        document.addEventListener('dragend', handleDragEnd, true);
       }, 10);
       
       return () => {
         clearTimeout(timeoutId);
         document.removeEventListener('click', handleDocumentClick, true);
+        document.removeEventListener('dragend', handleDragEnd, true);
       };
     }
   }, [activeTooltip, isSidebarClosing, handleGlobalClick]);
