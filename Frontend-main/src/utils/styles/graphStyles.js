@@ -1,16 +1,17 @@
 export const DEFAULT_LAYOUT = {
   name: "preset",
-  padding: 20,
-  nodeRepulsion: 15000,
-  idealEdgeLength: 400,
+  padding: 40,
+  nodeRepulsion: 20000,
+  idealEdgeLength: 300,
   animate: false,
   fit: true,
   randomize: false,
   nodeOverlap: 0,
   avoidOverlap: true,
-  nodeSeparation: 50,
+  nodeSeparation: 60,
   randomSeed: 42,
-  componentSpacing: 400
+  componentSpacing: 300,
+  boundingBox: undefined // 컨테이너 크기에 맞춰 자동 조정
 };
 
 export const SEARCH_LAYOUT = {
@@ -196,15 +197,21 @@ export const graphStyles = {
 
   graphPageContainer: {
     width: '100%', 
-    height: '100vh', // 전체 화면 높이 사용
+    height: '100vh', 
     overflow: 'hidden', 
     position: 'relative', 
-    backgroundColor: '#f8fafc' 
+    backgroundColor: '#f8fafc',
+    display: 'flex',
+    flexDirection: 'column'
   },
   graphPageInner: {
     position: 'relative', 
     width: '100%', 
-    height: '100%' 
+    height: '100%',
+    flex: 1,
+    display: 'flex',
+    flexDirection: 'column',
+    minHeight: 0
   },
 };
 

@@ -9,7 +9,7 @@ import "./RelationGraph.css";
 
 import { createGraphStylesheet, getNodeSize, getEdgeStyle, getWideLayout } from "../../utils/styles/graphStyles";
 import { ANIMATION_VALUES } from "../../utils/styles/animations";
-import { sidebarStyles, topBarStyles, containerStyles, graphStyles } from "../../utils/styles/styles.js";
+import { sidebarStyles, topBarStyles, containerStyles, graphStyles, createButtonStyle, createAdvancedButtonHandlers } from "../../utils/styles/styles.js";
 
 const COLORS = {
   primary: '#6C8EFF',
@@ -351,6 +351,21 @@ function RelationGraphWrapper() {
     Object.assign(e.target.style, isolatedButtonStyles.default);
   }, []);
 
+  // 뷰어로 돌아가기 버튼 전용 hover 핸들러
+  const handleBackButtonMouseEnter = useCallback((e) => {
+    e.target.style.background = COLORS.backgroundLight;
+    e.target.style.color = COLORS.primary;
+    e.target.style.transform = 'scale(1.05)';
+    e.target.style.boxShadow = `0 4px 12px ${COLORS.primary}40`;
+  }, []);
+
+  const handleBackButtonMouseLeave = useCallback((e) => {
+    e.target.style.background = `${COLORS.background}f2`;
+    e.target.style.color = COLORS.textPrimary;
+    e.target.style.transform = 'scale(1)';
+    e.target.style.boxShadow = `0 2px 8px ${COLORS.primary}26`;
+  }, []);
+
   // 슬라이드바 외부 영역 클릭 시 닫힘 핸들러
   const handleGlobalClick = useCallback((e) => {
     if (!activeTooltip || isSidebarClosing) return;
@@ -511,16 +526,28 @@ function RelationGraphWrapper() {
         <button
           onClick={handleBackToViewer}
           style={{
-            ...topBarStyles.backButton,
+            height: 30,
+            padding: '0 16px',
+            borderRadius: 8,
+            border: `1.5px solid ${COLORS.borderLight}`,
             background: `${COLORS.background}f2`,
+            color: COLORS.textPrimary,
+            fontSize: 13,
+            fontWeight: 600,
+            cursor: 'pointer',
+            transition: 'all 0.2s ease',
+            outline: 'none',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 6,
+            boxShadow: `0 2px 8px ${COLORS.primary}26`,
             backdropFilter: 'blur(2px)',
-            boxShadow: '0 2px 8px rgba(0, 0, 0, 0.15)',
-            border: `1.5px solid ${COLORS.borderLight}cc`
+            justifyContent: 'center',
           }}
-          onMouseEnter={handleMouseEnter}
-          onMouseLeave={handleMouseLeave}
+          onMouseEnter={handleBackButtonMouseEnter}
+          onMouseLeave={handleBackButtonMouseLeave}
         >
-          <span className="material-symbols-outlined">close</span>
+          <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>close</span>
           뷰어로 돌아가기
         </button>
       </div>
@@ -577,10 +604,23 @@ function RelationGraphWrapper() {
         right: 0,
         bottom: 0,
         transition: `left ${ANIMATION_VALUES.DURATION.SLOW} ${ANIMATION_VALUES.EASE_OUT}`,
-        overflow: 'hidden'
+        overflow: 'hidden',
+        display: 'flex',
+        flexDirection: 'column'
       }}>
-        <div style={graphStyles.graphPageContainer}>
-          <div style={graphStyles.graphPageInner}>
+        <div style={{
+          ...graphStyles.graphPageContainer,
+          display: 'flex',
+          flexDirection: 'column',
+          height: '100%'
+        }}>
+          <div style={{
+            ...graphStyles.graphPageInner,
+            flex: 1,
+            display: 'flex',
+            flexDirection: 'column',
+            position: 'relative'
+          }}>
             {(activeTooltip || isSidebarClosing) && (
               <GraphSidebar
                 activeTooltip={activeTooltip}
@@ -602,7 +642,16 @@ function RelationGraphWrapper() {
                 searchTerm={searchTerm}
               />
             )}
-            <div className="graph-canvas-area" onClick={handleCanvasClick} style={graphStyles.graphArea}>
+            <div 
+              className="graph-canvas-area" 
+              onClick={handleCanvasClick} 
+              style={{
+                ...graphStyles.graphArea,
+                flex: 1,
+                minHeight: 0,
+                position: 'relative'
+              }}
+            >
               <CytoscapeGraphUnified
                 elements={finalElements}
                 newNodeIds={newNodeIds}
