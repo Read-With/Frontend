@@ -5,7 +5,7 @@ const dataModules = {
     { eager: true }
   ),
   characters: import.meta.glob(
-    "../data/*/c_chapter*_0.json",
+    "../data/*/chapter*_characters_0.json",
     { eager: true }
   ),
   events: import.meta.glob(
@@ -104,7 +104,7 @@ for (const path of Object.keys(dataModules.relationships)) {
 
 // 캐릭터 파일 인덱싱
 for (const path of Object.keys(dataModules.characters)) {
-  const match = path.match(/\/c_chapter(\d+)_0\.json$/);
+  const match = path.match(/\/chapter(\d+)_characters_0\.json$/);
   if (!match) continue;
 
   const folderKey = extractFolderKey(path);
@@ -376,7 +376,7 @@ export function getChapterFile(chapter, type, folderKey = 'gatsby') {
   try {
     if (type === "characters") {
       const filePath = Object.keys(dataModules.characters).find((key) =>
-        key.includes(`/${folderKey}/c_chapter${num}_0.json`)
+        key.includes(`/${folderKey}/chapter${num}_characters_0.json`)
       );
       const data = filePath ? dataModules.characters[filePath]?.default : undefined;
       return data?.characters || [];
@@ -537,9 +537,9 @@ export async function loadChapterData(
     const events = getEventsForChapter(currentChapter, folderKey);
     setEvents(events);
 
-    // 캐릭터 데이터 로드 - c_chapter1_0.json 사용
+    // 캐릭터 데이터 로드 - chapter*_characters_0.json 사용
     const characterFilePath = Object.keys(dataModules.characters).find((path) =>
-      path.includes(`/${folderKey}/c_chapter${currentChapter}_0.json`)
+      path.includes(`/${folderKey}/chapter${currentChapter}_characters_0.json`)
     );
     if (!characterFilePath) {
       throw new Error(

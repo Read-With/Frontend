@@ -428,13 +428,15 @@ const EpubViewer = forwardRef(
 
     useEffect(() => {
       const loadBook = async () => {
-        if (!epubPath || !viewerRef.current || epubPath === currentPath) return;
+        if (!epubPath || !viewerRef.current || !viewerRef.current.tagName || epubPath === currentPath) return;
 
         setLoading(true);
         setError(null);
 
         if (bookRef.current) bookRef.current.destroy();
-        viewerRef.current.innerHTML = '';
+        if (viewerRef.current && viewerRef.current.tagName) {
+          viewerRef.current.innerHTML = '';
+        }
 
         try {
           const response = await fetch(epubPath);
@@ -492,6 +494,11 @@ const EpubViewer = forwardRef(
           
           // 챕터 CFI 매핑을 전역으로 저장
           window.chapterCfiMap = chapterCfiMap;
+
+          // viewerRef.current가 유효한 DOM 요소인지 확인
+          if (!viewerRef.current || !viewerRef.current.tagName) {
+            throw new Error("뷰어 컨테이너가 유효하지 않습니다.");
+          }
 
           const rendition = bookInstance.renderTo(viewerRef.current, {
             width: '100%',
