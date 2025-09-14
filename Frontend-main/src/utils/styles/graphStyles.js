@@ -39,25 +39,13 @@ export const getWideLayout = () => {
   return { name: 'preset' };
 };
 
-// [페이지 위치와 관계 값에 따라 그래프 스타일 조절]
-export const getNodeSize = (context = 'default') => {
-  if (typeof window === 'undefined' || !window.location) {
-    return 40; // SSR 환경 고려
-  }
-  
-  const path = window.location.pathname || '';
-  if (path.includes('/user/viewer/')) return 40;
-  if (path.includes('/user/graph/')) {
-    return context === 'viewer' ? 45 : 40;
-  }
-
-  return context === 'viewer' ? 40 : 40;
-};
-
 export const getEdgeStyle = (context = 'default') => {
+  // 새로운 JSON 구조에서는 weight 필드가 없으므로 고정된 두께 사용
+  const edgeWidth = 5; // 기본 엣지 두께
+  
   if (typeof window === 'undefined' || !window.location) {
     return {
-      width: 'data(weight)',
+      width: edgeWidth,
       fontSize: context === 'viewer' ? 8 : 9,
     };
   }
@@ -65,19 +53,19 @@ export const getEdgeStyle = (context = 'default') => {
   const path = window.location.pathname || '';
   if (path.includes('/user/viewer/')) {
     return {
-      width: 'data(weight)',
+      width: edgeWidth,
       fontSize: context === 'viewer' ? 8 : 9,
     };
   }
   if (path.includes('/user/graph/')) {
     return {
-      width: 'data(weight)',
+      width: edgeWidth,
       fontSize: 11,
     };
   }
 
   return {
-    width: 'data(weight)',
+    width: edgeWidth,
     fontSize: context === 'viewer' ? 8 : 9,
   };
 };
@@ -88,8 +76,15 @@ export const getRelationColor = (positivity) => {
   return `hsl(${h}, 70%, 45%)`;
 };
 
-// [공통 스타일시트 생성 함수]
-export const createGraphStylesheet = (nodeSize, edgeStyle, edgeLabelVisible, maxEdgeLabelLength = null) => [
+// 노드 크기 계산 함수 (기본 크기 10 × 가중치)
+export const calculateNodeSize = (baseSize, weight) => {
+  if (!weight || weight <= 0) return 10; // 기본 크기 10
+  // 기본 크기 10에 가중치를 곱하여 노드 크기 계산
+  return Math.round(10 * weight);
+};
+
+// [공통 스타일시트 생성 함수 - 가중치 기반 노드 크기만 사용]
+export const createGraphStylesheet = (edgeStyle, edgeLabelVisible, maxEdgeLabelLength = null) => [
   {
     selector: "node[image]",
     style: {
@@ -97,17 +92,17 @@ export const createGraphStylesheet = (nodeSize, edgeStyle, edgeLabelVisible, max
       "background-image": "data(image)",
       "background-fit": "cover",
       "background-clip": "node",
-      "border-width": (ele) => (ele.data("main") ? 2 : 1),
+      "border-width": (ele) => (ele.data("main_character") ? 2 : 1),
       "border-color": "#5B7BA0",
       "border-opacity": 1,
-      width: nodeSize,
-      height: nodeSize,
+      width: (ele) => calculateNodeSize(10, ele.data("weight")),
+      height: (ele) => calculateNodeSize(10, ele.data("weight")),
       shape: "ellipse",
       label: "data(label)",
       "text-valign": "bottom",
       "text-halign": "center",
       "font-size": 12,
-      "font-weight": (ele) => (ele.data("main") ? 700 : 400),
+      "font-weight": (ele) => (ele.data("main_character") ? 700 : 400),
       color: "#444",
       "text-margin-y": 2,
       "text-background-color": "#fff",
@@ -136,7 +131,12 @@ export const createGraphStylesheet = (nodeSize, edgeStyle, edgeLabelVisible, max
       "text-background-padding": 2,
       "text-outline-color": "#fff",
       "text-outline-width": 2,
-      opacity: "mapData(weight, 0, 1, 0.55, 1)",
+      opacity: (ele) => {
+        const positivity = ele.data("positivity");
+        if (positivity === undefined || positivity === null) return 0.7;
+        // positivity 값에 따라 투명도 조정 (음수는 더 투명, 양수는 더 불투명)
+        return Math.max(0.3, Math.min(1.0, 0.5 + Math.abs(positivity) * 0.3));
+      },
       "target-arrow-shape": "none",
     },
   },

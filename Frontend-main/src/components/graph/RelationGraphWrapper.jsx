@@ -7,7 +7,7 @@ import GraphControls from "./GraphControls";
 import GraphSidebar from "./tooltip/GraphSidebar";
 import "./RelationGraph.css";
 
-import { createGraphStylesheet, getNodeSize, getEdgeStyle, getWideLayout } from "../../utils/styles/graphStyles";
+import { createGraphStylesheet, getEdgeStyle, getWideLayout } from "../../utils/styles/graphStyles";
 import { ANIMATION_VALUES } from "../../utils/styles/animations";
 import { sidebarStyles, topBarStyles, containerStyles, graphStyles, createButtonStyle, createAdvancedButtonHandlers } from "../../utils/styles/styles.js";
 
@@ -30,7 +30,7 @@ import { useGraphDataLoader } from '../../hooks/useGraphDataLoader.js';
 import { useLocalStorageNumber } from '../../hooks/useLocalStorage.js';
 import useGraphInteractions from "../../hooks/useGraphInteractions";
 
-const getNodeSizeForGraph = () => getNodeSize('graph');
+// 노드 크기는 가중치 기반으로만 계산됨
 const getEdgeStyleForGraph = () => getEdgeStyle('graph');
 
 // 독립 인물 버튼 스타일 (첨부파일 기준 구조 유지, 중앙화된 색상 사용)
@@ -287,11 +287,10 @@ function RelationGraphWrapper() {
   }, [isSearchActive, filteredElements, sortedElements]);
 
   // 그래프 스타일 및 레이아웃
-  const nodeSize = getNodeSizeForGraph();
   const edgeStyle = getEdgeStyleForGraph();
   const stylesheet = useMemo(
-    () => createGraphStylesheet(nodeSize, edgeStyle, edgeLabelVisible),
-    [nodeSize, edgeStyle, edgeLabelVisible]
+    () => createGraphStylesheet(edgeStyle, edgeLabelVisible),
+    [edgeStyle, edgeLabelVisible]
   );
   const layout = useMemo(() => getWideLayout(), []);
 
@@ -658,7 +657,7 @@ function RelationGraphWrapper() {
                 stylesheet={stylesheet}
                 layout={layout}
                 cyRef={cyRef}
-                nodeSize={nodeSize}
+                nodeSize={10}
                 fitNodeIds={fitNodeIds}
                 searchTerm={searchTerm}
                 isSearchActive={isSearchActive}

@@ -52,7 +52,7 @@ export function useViewerPage() {
     return loadSettings().showGraph;
   });
   
-  const [elements, setElements] = useState([]);
+  // useGraphDataLoader는 아래에서 사용됨
   const [currentCharIndex, setCurrentCharIndex] = useState(0);
   const [currentPageWords, setCurrentPageWords] = useState(0);
   const [totalChapterWords, setTotalChapterWords] = useState(0);
@@ -121,7 +121,7 @@ export function useViewerPage() {
   const folderKey = useMemo(() => getFolderKeyFromFilename(filename), [filename]);
   
   const {
-    elements: graphElements,
+    elements,
     newNodeIds,
     currentChapterData,
     maxEventNum,
@@ -129,7 +129,7 @@ export function useViewerPage() {
     maxChapter: detectedMaxChapter,
     loading: graphLoading,
     error: graphError
-  } = useGraphDataLoader(filename, currentChapter);
+  } = useGraphDataLoader(filename, currentChapter, currentEvent?.eventNum || 1);
   
   // maxChapter 설정
   useEffect(() => {
@@ -213,7 +213,7 @@ export function useViewerPage() {
     setPrevEvent(null);
     setEvents([]);
     setCharacterData(null);
-    setElements([]);
+    // elements는 useGraphDataLoader에서 관리됨
     setIsDataReady(false);
     setIsGraphLoading(true);
     
@@ -259,7 +259,7 @@ export function useViewerPage() {
         setPrevEvent(null);
         setEvents([]);
         setCharacterData(null);
-        setElements([]);
+        // elements는 useGraphDataLoader에서 관리됨
         setIsDataReady(false);
         setIsInitialChapterDetected(false);
         prevValidEventRef.current = null;
@@ -544,7 +544,6 @@ export function useViewerPage() {
     showGraph,
     setShowGraph,
     elements,
-    setElements,
     graphViewState,
     setGraphViewState,
     hideIsolated,
@@ -599,7 +598,7 @@ export function useViewerPage() {
     folderKey,
     
     // 그래프 데이터 로더 결과
-    graphElements,
+    elements,
     newNodeIds,
     currentChapterData,
     maxEventNum,

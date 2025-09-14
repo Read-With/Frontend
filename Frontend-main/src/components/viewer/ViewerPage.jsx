@@ -19,12 +19,10 @@ import {
 } from "../../utils/viewerUtils";
 import { 
   getEventsForChapter,
-  getElementsFromRelations,
-  getChapterFile,
-  filterIsolatedNodes,
   getDetectedMaxChapter,
-  getEventData,
-  getCharactersData
+  getCharactersData,
+  getChapterFile,
+  getElementsFromRelations
 } from "../../utils/graphData";
 import { calcGraphDiff } from "../../utils/graphDataUtils";
 
@@ -160,7 +158,7 @@ const ViewerPage = () => {
     currentChapter, setCurrentChapter, currentEvent, setCurrentEvent,
     prevEvent, setPrevEvent, events, setEvents, maxChapter, setMaxChapter,
     graphFullScreen, setGraphFullScreen, showGraph, setShowGraph,
-    elements, setElements, graphViewState, setGraphViewState,
+    elements, graphViewState, setGraphViewState,
     hideIsolated, setHideIsolated, edgeLabelVisible, setEdgeLabelVisible,
     graphDiff, setGraphDiff,
     currentCharIndex, setCurrentCharIndex, currentPageWords, setCurrentPageWords,
@@ -319,166 +317,20 @@ const ViewerPage = () => {
     }
   }, [currentChapter, currentChapterData, folderKey, graphState.isInitialChapterDetected]);
 
-  const currentEventElements = useMemo(() => {
-    if (loading || isReloading || !currentEvent || !events?.length || !characterData?.length) {
-      return [];
-    }
-    
-    // 이벤트가 정해지지 않은 경우들 체크
-    if (currentEvent.eventNum === undefined || currentEvent.eventNum === null ||
-        currentEvent.chapter === undefined || currentEvent.chapter === null) {
-      return [];
-    }
-    
-    // 현재 이벤트가 현재 챕터에 속하는지 확인
-    if (currentEvent.chapter !== currentChapter) {
-      return [];
-    }
-    
-    const currentEventNum = currentEvent.eventNum;
-    const eventChapter = currentEvent.chapter;
-    
-    try {
-      // currentEvent.eventNum이 0-based인지 1-based인지 확인
-      
-      // event_id가 있으면 그것을 사용, 없으면 eventNum 사용
-      const actualEventNum = currentEvent.event_id !== undefined ? currentEvent.event_id : currentEventNum;
-      
-      const eventData = getEventData(folderKey, eventChapter, actualEventNum);
-      
-      if (!eventData) {
-        return [];
-      }
-      
-      const currentRelations = eventData.relations || [];
-      const currentImportance = eventData.importance || {};
-      const currentNewAppearances = eventData.log?.new_character_ids || [];
-      
-      
-      const generatedElements = getElementsFromRelations(
-        currentRelations,
-        characterData,
-        currentNewAppearances,
-        currentImportance,
-        eventChapter,
-        folderKey
-      );
-      
-      
-      return generatedElements;
-    } catch (error) {
-      return [];
-    }
-  }, [currentEvent, characterData, folderKey, events]);
+  // currentEventElements는 useGraphDataLoader에서 관리됨
 
   const {
     searchTerm, isSearchActive, filteredElements, fitNodeIds,
     isResetFromSearch, suggestions, showSuggestions, selectedIndex,
     selectSuggestion, handleKeyDown, closeSuggestions,
     handleSearchSubmit, clearSearch, setSearchTerm,
-  } = useGraphSearch(currentEventElements, null, currentChapterData);
+  } = useGraphSearch(elements, null, currentChapterData);
 
-  // === [최적화] elements 설정 로직 - 불필요한 재렌더링 방지 ===
-  const elementsRef = useRef([]);
-  const lastProcessedRef = useRef({});
-
-  useEffect(() => {
-    if (!isDataReady || !events || !events.length || !characterData) {
-      return;
-    }
-
-    // 현재 상태를 키로 사용하여 중복 실행 방지
-    const currentState = {
-      currentEventId: currentEvent?.eventNum,
-      currentChapter,
-      eventsLength: events.length,
-      characterDataLength: characterData.length,
-      hideIsolated
-    };
-
-    // 이전과 동일한 상태면 실행하지 않음
-    if (JSON.stringify(currentState) === JSON.stringify(lastProcessedRef.current)) {
-      return;
-    }
-
-    lastProcessedRef.current = currentState;
-
-    let targetElements = [];
-    let source = '';
-
-    // 1차: currentEvent가 있고 currentEventElements가 있을 때
-    if (currentEvent && currentEventElements.length > 0) {
-      targetElements = currentEventElements;
-      source = `현재 이벤트(${currentEvent.eventNum})`;
-    }
-    // 2차: currentEvent가 없거나 currentEventElements가 비어있을 때는 빈 배열 반환
-    // 자동 이벤트 선택 제거 - 사용자가 직접 선택하도록 함
-
-    // elements 설정 (고립 노드 필터링 적용)
-    if (targetElements.length > 0) {
-      const filteredElements = filterIsolatedNodes(targetElements, hideIsolated);
-      
-      // 노드 위치 복원
-      let nodePositions = {};
-      try {
-        const posStr = localStorage.getItem(
-          createStorageKey.chapterNodePositions(currentChapter)
-        );
-        if (posStr) nodePositions = JSON.parse(posStr);
-      } catch (e) {}
-
-      const sortedElements = filteredElements
-        .slice()
-        .sort((a, b) => {
-          const aId = a.data?.id || (a.data?.source ? a.data?.source + "-" + a.data?.target : "");
-          const bId = b.data?.id || (b.data?.source ? b.data?.source + "-" + b.data?.target : "");
-          return aId.localeCompare(bId);
-        })
-        .map((el) => {
-          if (el.data.id && nodePositions[el.data.id]) {
-            return { ...el, position: nodePositions[el.data.id] };
-          }
-          return el;
-        });
-
-      // 이전 elements와 동일하면 업데이트하지 않음
-      if (JSON.stringify(elementsRef.current) !== JSON.stringify(sortedElements)) {
-        elementsRef.current = sortedElements;
-        setElements(sortedElements);
-      }
-    }
-  }, [isDataReady, currentEvent, currentEventElements, events, characterData, folderKey, hideIsolated, currentChapter]);
+  // elements는 useGraphDataLoader에서 관리됨
 
   // === [제거] 중복된 useEffect - 위의 통합 로직으로 대체됨 ===
 
-  // === [수정] 현재 이벤트 등장 노드/간선 위치 저장 및 이벤트별 적용 ===
-  // 현재 이벤트에서 등장한 노드/간선 위치를 저장
-  useEffect(() => {
-    if (!isDataReady || !currentEvent || !graphViewState) return;
-    
-    // 현재 이벤트에서 등장한 노드/간선 id 추출
-    const { nodes: currentNodes, edges: currentEdges } = extractEventNodesAndEdges(currentEvent);
-    
-    // graphViewState에서 해당 노드/간선 위치만 추출
-    const partialLayout = {};
-    Object.entries(graphViewState).forEach(([key, value]) => {
-      if (currentNodes.has(key) || currentEdges.has(key)) {
-        partialLayout[key] = value;
-      }
-    });
-    
-    // 현재 이벤트별로 위치 저장
-    try {
-      const eventKey = createStorageKey.graphEventLayout(currentChapter, currentEvent.eventNum);
-      localStorage.setItem(eventKey, JSON.stringify(partialLayout));
-      
-      // 전체 챕터 레이아웃도 업데이트 (누적)
-      const chapterKey = createStorageKey.graphPartialLayout(currentChapter);
-      const existingLayout = JSON.parse(localStorage.getItem(chapterKey) || '{}');
-      const updatedLayout = { ...existingLayout, ...partialLayout };
-      localStorage.setItem(chapterKey, JSON.stringify(updatedLayout));
-    } catch (e) {}
-  }, [isDataReady, currentEvent, currentChapter, graphViewState]);
+  // 그래프 위치는 useGraphDataLoader에서 관리됨
 
   // 현재 이벤트까지의 누적 레이아웃을 merge해서 graphViewState로 적용
   useEffect(() => {
@@ -519,7 +371,7 @@ const ViewerPage = () => {
     } catch (e) {
       // 전체 레이아웃 복원 오류 처리
     }
-  }, [isDataReady, currentEvent, currentEventElements, currentChapter, hideIsolated]);
+  }, [isDataReady, currentEvent, elements, currentChapter, hideIsolated]);
 
   // elements가 바뀔 때마다 diff 계산
   useEffect(() => {
@@ -592,7 +444,6 @@ const ViewerPage = () => {
         padding: 80,
       });
       layout.run();
-      // headless 모드에서는 layoutstop 이벤트가 잘 안 오므로, setTimeout으로 우회
       setTimeout(() => {
         const layoutObj = {};
         cy.nodes().forEach((node) => {
@@ -647,7 +498,7 @@ const ViewerPage = () => {
                 ...searchState,
                 searchTerm,
                 isSearchActive,
-                elements: currentEventElements,
+                elements: elements,
                 filteredElements,
                 isResetFromSearch,
                 suggestions,

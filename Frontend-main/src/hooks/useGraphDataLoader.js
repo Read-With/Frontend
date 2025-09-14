@@ -75,6 +75,9 @@ export function useGraphDataLoader(filename, chapter, eventIndex = null) {
         .map(rel => normalizeRelation(rel))
         .filter(rel => isValidRelation(rel));
       
+      // 노드 가중치 정보 추출
+      const nodeWeights = eventData.node_weights_accum || null;
+      
       // 이전 이벤트 데이터 가져오기
       let previousEventData = null;
       if (targetEventIndex > 1) {
@@ -93,6 +96,7 @@ export function useGraphDataLoader(filename, chapter, eventIndex = null) {
         idToMain,
         idToNames,
         folderKey,
+        nodeWeights,
         previousRelations
       );
       
