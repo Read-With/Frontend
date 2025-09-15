@@ -1,0 +1,2164 @@
+{
+    "relations": [
+        {
+            "relation": [
+                "갈등",
+                "동료",
+                "적"
+            ],
+            "id1": 8.0,
+            "id2": 9.0,
+            "positivity": -0.02,
+            "count": 5
+        },
+        {
+            "id1": 8.0,
+            "relation": [
+                "적대",
+                "부하",
+                "무시",
+                "갈등",
+                "적"
+            ],
+            "id2": 1.0,
+            "positivity": -0.55,
+            "count": 8
+        },
+        {
+            "id1": 9.0,
+            "relation": [
+                "적대",
+                "부하",
+                "무시",
+                "갈등",
+                "적"
+            ],
+            "id2": 1.0,
+            "positivity": -0.55,
+            "count": 8
+        },
+        {
+            "id1": 6.0,
+            "relation": [
+                "불신",
+                "동료",
+                "무시",
+                "갈등"
+            ],
+            "id2": 1.0,
+            "positivity": -0.46,
+            "count": 12
+        },
+        {
+            "id1": 7.0,
+            "relation": [
+                "동료",
+                "대화",
+                "상호작용",
+                "협력"
+            ],
+            "id2": 6.0,
+            "positivity": 0.32,
+            "count": 10
+        },
+        {
+            "id1": 10.0,
+            "relation": [
+                "불신",
+                "불길함",
+                "경고",
+                "무시",
+                "갈등"
+            ],
+            "id2": 1.0,
+            "positivity": -0.61,
+            "count": 11
+        },
+        {
+            "relation": [
+                "충성",
+                "지지",
+                "갈등",
+                "상사",
+                "동료",
+                "원한",
+                "부하",
+                "보호"
+            ],
+            "id1": 4.0,
+            "id2": 1.0,
+            "positivity": 0.58,
+            "count": 39
+        },
+        {
+            "relation": [
+                "존경",
+                "남편",
+                "배우자",
+                "아내",
+                "불신",
+                "가족",
+                "원한",
+                "보호"
+            ],
+            "id1": 5.0,
+            "id2": 1.0,
+            "positivity": 0.15,
+            "count": 21
+        },
+        {
+            "id1": 5.0,
+            "relation": [
+                "보호",
+                "동료",
+                "협력"
+            ],
+            "id2": 4.0,
+            "positivity": 0.42,
+            "count": 5
+        },
+        {
+            "id1": 2.0,
+            "relation": [
+                "존경",
+                "암살자",
+                "충성",
+                "지지",
+                "갈등",
+                "배신",
+                "정치적 갈등",
+                "불신",
+                "동료",
+                "경쟁자",
+                "원한",
+                "적"
+            ],
+            "id2": 1.0,
+            "positivity": -0.65,
+            "count": 41
+        },
+        {
+            "id1": 3.0,
+            "relation": [
+                "암살자",
+                "갈등",
+                "배신",
+                "경계",
+                "정치적 갈등",
+                "불신",
+                "동료",
+                "경쟁자",
+                "원한",
+                "음모가",
+                "적"
+            ],
+            "id2": 1.0,
+            "positivity": -0.82,
+            "count": 30
+        },
+        {
+            "id1": 3.0,
+            "relation": [
+                "음모",
+                "라이벌",
+                "상호 관찰",
+                "갈등",
+                "협력",
+                "불신",
+                "동료",
+                "이용",
+                "경쟁자",
+                "계획",
+                "동맹",
+                "음모가",
+                "적"
+            ],
+            "id2": 2.0,
+            "positivity": -0.24,
+            "count": 68
+        },
+        {
+            "relation": [
+                "걱정",
+                "불신",
+                "가족",
+                "부부",
+                "지지",
+                "갈등",
+                "배신"
+            ],
+            "id1": 11.0,
+            "id2": 2.0,
+            "positivity": 0.28,
+            "count": 17
+        },
+        {
+            "relation": [
+                "상사",
+                "동료",
+                "부하",
+                "지시",
+                "협력"
+            ],
+            "id1": 12.0,
+            "id2": 3.0,
+            "positivity": 0.49,
+            "count": 20
+        },
+        {
+            "relation": [
+                "동료",
+                "전달",
+                "동맹",
+                "협력"
+            ],
+            "id1": 12.0,
+            "id2": 2.0,
+            "positivity": 0.48,
+            "count": 12
+        },
+        {
+            "relation": [
+                "음모",
+                "지지",
+                "협력",
+                "불신",
+                "동료",
+                "정보 전달",
+                "경쟁자",
+                "동맹"
+            ],
+            "id1": 3.0,
+            "id2": 6.0,
+            "positivity": 0.3,
+            "count": 18
+        },
+        {
+            "relation": [
+                "상호 관찰"
+            ],
+            "id1": 2.0,
+            "id2": 5.0,
+            "positivity": -0.5,
+            "count": 1
+        },
+        {
+            "id1": 2.0,
+            "relation": [
+                "불신",
+                "상호 관찰",
+                "경쟁자"
+            ],
+            "id2": 7.0,
+            "positivity": -0.4,
+            "count": 3
+        },
+        {
+            "relation": [
+                "존경",
+                "지지",
+                "경계",
+                "갈등",
+                "반박",
+                "불신",
+                "동료",
+                "옹호",
+                "경쟁자",
+                "적"
+            ],
+            "id1": 4.0,
+            "id2": 3.0,
+            "positivity": -0.53,
+            "count": 20
+        },
+        {
+            "id1": 2.0,
+            "relation": [
+                "동료",
+                "협력"
+            ],
+            "id2": 6.0,
+            "positivity": 0.25,
+            "count": 4
+        },
+        {
+            "relation": [
+                "지지",
+                "동료",
+                "적"
+            ],
+            "id1": 6.0,
+            "id2": 4.0,
+            "positivity": -0.07,
+            "count": 3
+        },
+        {
+            "relation": [
+                "친구",
+                "적",
+                "상사",
+                "협력",
+                "동료",
+                "꿈속의 관계",
+                "부하",
+                "무시",
+                "메시지 전달"
+            ],
+            "id1": 12.0,
+            "id2": 1.0,
+            "positivity": -0.05,
+            "count": 8
+        },
+        {
+            "id1": 2.0,
+            "relation": [
+                "상사",
+                "부하",
+                "지지",
+                "보호",
+                "하인"
+            ],
+            "id2": 13.0,
+            "positivity": 0.42,
+            "count": 15
+        },
+        {
+            "id1": 3.0,
+            "relation": [
+                "동료",
+                "동맹",
+                "협력"
+            ],
+            "id2": 14.0,
+            "positivity": 0.59,
+            "count": 14
+        },
+        {
+            "relation": [
+                "동료",
+                "동맹",
+                "협력"
+            ],
+            "id1": 3.0,
+            "id2": 15.0,
+            "positivity": 0.57,
+            "count": 13
+        },
+        {
+            "relation": [
+                "동료",
+                "동맹",
+                "협력"
+            ],
+            "id1": 3.0,
+            "id2": 16.0,
+            "positivity": 0.6,
+            "count": 14
+        },
+        {
+            "relation": [
+                "동료",
+                "동맹",
+                "협력"
+            ],
+            "id1": 2.0,
+            "id2": 14.0,
+            "positivity": 0.57,
+            "count": 8
+        },
+        {
+            "id1": 2.0,
+            "relation": [
+                "동료",
+                "지지",
+                "동맹",
+                "협력"
+            ],
+            "id2": 15.0,
+            "positivity": 0.57,
+            "count": 11
+        },
+        {
+            "relation": [
+                "동료",
+                "협력"
+            ],
+            "id1": 14.0,
+            "id2": 6.0,
+            "positivity": 0.3,
+            "count": 2
+        },
+        {
+            "relation": [
+                "동료",
+                "협력"
+            ],
+            "id1": 14.0,
+            "id2": 12.0,
+            "positivity": 0.3,
+            "count": 2
+        },
+        {
+            "id1": 14.0,
+            "relation": [
+                "동료",
+                "협력"
+            ],
+            "id2": 15.0,
+            "positivity": 0.3,
+            "count": 2
+        },
+        {
+            "relation": [
+                "동료",
+                "협력"
+            ],
+            "id1": 6.0,
+            "id2": 12.0,
+            "positivity": 0.3,
+            "count": 2
+        },
+        {
+            "id1": 6.0,
+            "relation": [
+                "동료",
+                "협력"
+            ],
+            "id2": 15.0,
+            "positivity": 0.3,
+            "count": 2
+        },
+        {
+            "relation": [
+                "동료",
+                "협력"
+            ],
+            "id1": 12.0,
+            "id2": 15.0,
+            "positivity": 0.3,
+            "count": 2
+        },
+        {
+            "id1": 3.0,
+            "relation": [
+                "동료",
+                "협력"
+            ],
+            "id2": 7.0,
+            "positivity": 0.5,
+            "count": 5
+        },
+        {
+            "relation": [
+                "지지",
+                "동료",
+                "협력"
+            ],
+            "id1": 15.0,
+            "id2": 7.0,
+            "positivity": 0.6,
+            "count": 2
+        },
+        {
+            "relation": [
+                "존경",
+                "설득",
+                "지지",
+                "갈등",
+                "아첨",
+                "속임수",
+                "협력",
+                "상사",
+                "불신",
+                "동료",
+                "부하",
+                "무시",
+                "적"
+            ],
+            "id1": 14.0,
+            "id2": 1.0,
+            "positivity": -0.08,
+            "count": 12
+        },
+        {
+            "relation": [
+                "지지",
+                "갈등",
+                "감시",
+                "방해",
+                "협력",
+                "동료",
+                "적대",
+                "적"
+            ],
+            "id1": 16.0,
+            "id2": 4.0,
+            "positivity": 0.17,
+            "count": 9
+        },
+        {
+            "id1": 2.0,
+            "relation": [
+                "우호",
+                "존경",
+                "지지",
+                "갈등",
+                "불신",
+                "동료",
+                "경쟁자",
+                "적",
+                "연인"
+            ],
+            "id2": 4.0,
+            "positivity": -0.44,
+            "count": 28
+        },
+        {
+            "relation": [
+                "존경",
+                "무시"
+            ],
+            "id1": 1.0,
+            "id2": 7.0,
+            "positivity": -0.17,
+            "count": 4
+        },
+        {
+            "relation": [
+                "설득",
+                "음모"
+            ],
+            "id1": 15.0,
+            "id2": 17.0,
+            "positivity": 0.6,
+            "count": 1
+        },
+        {
+            "id1": 2.0,
+            "relation": [
+                "동료",
+                "설득",
+                "지지",
+                "동맹",
+                "협력"
+            ],
+            "id2": 17.0,
+            "positivity": 0.72,
+            "count": 14
+        },
+        {
+            "id1": 15.0,
+            "relation": [
+                "상사",
+                "동료",
+                "원한",
+                "부하",
+                "무시",
+                "갈등",
+                "적",
+                "협력"
+            ],
+            "id2": 1.0,
+            "positivity": -0.46,
+            "count": 9
+        },
+        {
+            "id1": 14.0,
+            "relation": [
+                "배신",
+                "속임수"
+            ],
+            "id2": 5.0,
+            "positivity": -0.8,
+            "count": 1
+        },
+        {
+            "relation": [
+                "무시",
+                "갈등",
+                "적"
+            ],
+            "id1": 1.0,
+            "id2": 17.0,
+            "positivity": -0.5,
+            "count": 5
+        },
+        {
+            "relation": [
+                "존경",
+                "무시"
+            ],
+            "id1": 1.0,
+            "id2": 19.0,
+            "positivity": 0.21,
+            "count": 7
+        },
+        {
+            "id1": 1.0,
+            "relation": [
+                "상사",
+                "동료",
+                "부하",
+                "무시",
+                "갈등",
+                "협력"
+            ],
+            "id2": 16.0,
+            "positivity": -0.25,
+            "count": 6
+        },
+        {
+            "relation": [
+                "불신",
+                "경고",
+                "경쟁",
+                "무시",
+                "갈등"
+            ],
+            "id1": 18.0,
+            "id2": 1.0,
+            "positivity": -0.61,
+            "count": 7
+        },
+        {
+            "id1": 18.0,
+            "relation": [
+                "적"
+            ],
+            "id2": 2.0,
+            "positivity": -0.9,
+            "count": 1
+        },
+        {
+            "id1": 18.0,
+            "relation": [
+                "적"
+            ],
+            "id2": 3.0,
+            "positivity": -0.9,
+            "count": 1
+        },
+        {
+            "id1": 18.0,
+            "relation": [
+                "적"
+            ],
+            "id2": 6.0,
+            "positivity": -0.8,
+            "count": 1
+        },
+        {
+            "id1": 18.0,
+            "relation": [
+                "적"
+            ],
+            "id2": 12.0,
+            "positivity": -0.8,
+            "count": 1
+        },
+        {
+            "id1": 18.0,
+            "relation": [
+                "적"
+            ],
+            "id2": 15.0,
+            "positivity": -0.8,
+            "count": 1
+        },
+        {
+            "relation": [
+                "적"
+            ],
+            "id1": 18.0,
+            "id2": 14.0,
+            "positivity": -0.8,
+            "count": 1
+        },
+        {
+            "relation": [
+                "적"
+            ],
+            "id1": 18.0,
+            "id2": 16.0,
+            "positivity": -0.8,
+            "count": 1
+        },
+        {
+            "relation": [
+                "적"
+            ],
+            "id1": 18.0,
+            "id2": 17.0,
+            "positivity": -0.8,
+            "count": 1
+        },
+        {
+            "id1": 11.0,
+            "relation": [
+                "상사",
+                "보호",
+                "부하",
+                "관심"
+            ],
+            "id2": 13.0,
+            "positivity": 0.35,
+            "count": 2
+        },
+        {
+            "id1": 11.0,
+            "relation": [
+                "관심",
+                "우려",
+                "적",
+                "불신"
+            ],
+            "id2": 1.0,
+            "positivity": -0.1,
+            "count": 2
+        },
+        {
+            "id1": 11.0,
+            "relation": [
+                "질문",
+                "정보요구"
+            ],
+            "id2": 10.0,
+            "positivity": 0.1,
+            "count": 1
+        },
+        {
+            "relation": [
+                "동료",
+                "협력"
+            ],
+            "id1": 3.0,
+            "id2": 17.0,
+            "positivity": 0.69,
+            "count": 7
+        },
+        {
+            "relation": [
+                "불신",
+                "무시",
+                "갈등",
+                "적"
+            ],
+            "id1": 1.0,
+            "id2": 20.0,
+            "positivity": -0.7,
+            "count": 8
+        },
+        {
+            "relation": [
+                "갈등"
+            ],
+            "id1": 1.0,
+            "id2": 21.0,
+            "positivity": -0.4,
+            "count": 2
+        },
+        {
+            "id1": 1.0,
+            "relation": [
+                "갈등"
+            ],
+            "id2": 22.0,
+            "positivity": -0.4,
+            "count": 2
+        },
+        {
+            "relation": [
+                "협력"
+            ],
+            "id1": 3.0,
+            "id2": 10.0,
+            "positivity": 0.6,
+            "count": 6
+        },
+        {
+            "relation": [
+                "무시"
+            ],
+            "id1": 2.0,
+            "id2": 10.0,
+            "positivity": -0.5,
+            "count": 4
+        },
+        {
+            "id1": 2.0,
+            "relation": [
+                "동맹",
+                "협력"
+            ],
+            "id2": 16.0,
+            "positivity": 0.66,
+            "count": 5
+        },
+        {
+            "relation": [
+                "무시"
+            ],
+            "id1": 2.0,
+            "id2": 19.0,
+            "positivity": -0.3,
+            "count": 1
+        },
+        {
+            "relation": [
+                "불신"
+            ],
+            "id1": 2.0,
+            "id2": 20.0,
+            "positivity": -0.7,
+            "count": 4
+        },
+        {
+            "id1": 3.0,
+            "relation": [
+                "협력"
+            ],
+            "id2": 8.0,
+            "positivity": 0.5,
+            "count": 4
+        },
+        {
+            "id1": 3.0,
+            "relation": [
+                "협력"
+            ],
+            "id2": 9.0,
+            "positivity": 0.5,
+            "count": 4
+        },
+        {
+            "relation": [
+                "불신",
+                "갈등"
+            ],
+            "id1": 3.0,
+            "id2": 20.0,
+            "positivity": -0.68,
+            "count": 8
+        },
+        {
+            "relation": [
+                "상사",
+                "동료",
+                "동맹",
+                "협력"
+            ],
+            "id1": 4.0,
+            "id2": 21.0,
+            "positivity": 0.56,
+            "count": 8
+        },
+        {
+            "relation": [
+                "상사",
+                "동료",
+                "부하",
+                "동맹",
+                "지시",
+                "협력"
+            ],
+            "id1": 4.0,
+            "id2": 22.0,
+            "positivity": 0.59,
+            "count": 17
+        },
+        {
+            "id1": 21.0,
+            "relation": [
+                "동맹",
+                "동료",
+                "협력"
+            ],
+            "id2": 22.0,
+            "positivity": 0.76,
+            "count": 5
+        },
+        {
+            "relation": [
+                "동료",
+                "지지"
+            ],
+            "id1": 4.0,
+            "id2": 14.0,
+            "positivity": 0.6,
+            "count": 1
+        },
+        {
+            "relation": [
+                "동료",
+                "지지"
+            ],
+            "id1": 4.0,
+            "id2": 15.0,
+            "positivity": 0.6,
+            "count": 1
+        },
+        {
+            "id1": 4.0,
+            "relation": [
+                "동료",
+                "지지"
+            ],
+            "id2": 12.0,
+            "positivity": 0.6,
+            "count": 1
+        },
+        {
+            "id1": 2.0,
+            "relation": [
+                "상사",
+                "부하",
+                "동료"
+            ],
+            "id2": 23.0,
+            "positivity": 0.32,
+            "count": 4
+        },
+        {
+            "id1": 3.0,
+            "relation": [
+                "상사",
+                "부하",
+                "보호",
+                "동맹"
+            ],
+            "id2": 23.0,
+            "positivity": 0.52,
+            "count": 7
+        },
+        {
+            "id1": 2.0,
+            "relation": [
+                "상사",
+                "부하",
+                "동료"
+            ],
+            "id2": 24.0,
+            "positivity": 0.42,
+            "count": 6
+        },
+        {
+            "id1": 3.0,
+            "relation": [
+                "동료"
+            ],
+            "id2": 24.0,
+            "positivity": 0.37,
+            "count": 3
+        },
+        {
+            "id1": 2.0,
+            "relation": [
+                "상사",
+                "부하",
+                "동료",
+                "지지",
+                "동맹"
+            ],
+            "id2": 25.0,
+            "positivity": 0.57,
+            "count": 8
+        },
+        {
+            "id1": 3.0,
+            "relation": [
+                "동료",
+                "경쟁자",
+                "지지",
+                "동맹"
+            ],
+            "id2": 25.0,
+            "positivity": 0.49,
+            "count": 7
+        },
+        {
+            "relation": [
+                "상사",
+                "부하",
+                "동료"
+            ],
+            "id1": 2.0,
+            "id2": 27.0,
+            "positivity": -0.15,
+            "count": 2
+        },
+        {
+            "id1": 3.0,
+            "relation": [
+                "지지",
+                "동료",
+                "협력"
+            ],
+            "id2": 27.0,
+            "positivity": 0.25,
+            "count": 2
+        },
+        {
+            "relation": [
+                "적"
+            ],
+            "id1": 2.0,
+            "id2": 22.0,
+            "positivity": -0.75,
+            "count": 6
+        },
+        {
+            "relation": [
+                "상사",
+                "동료",
+                "지지",
+                "부하"
+            ],
+            "id1": 2.0,
+            "id2": 26.0,
+            "positivity": 0.38,
+            "count": 6
+        },
+        {
+            "relation": [
+                "자기성찰",
+                "내적갈등"
+            ],
+            "id1": 2.0,
+            "id2": 2.0,
+            "positivity": -0.95,
+            "count": 2
+        },
+        {
+            "relation": [
+                "상사",
+                "부하"
+            ],
+            "id1": 2.0,
+            "id2": 29.0,
+            "positivity": 0.22,
+            "count": 5
+        },
+        {
+            "id1": 2.0,
+            "relation": [
+                "상사",
+                "부하"
+            ],
+            "id2": 30.0,
+            "positivity": 0.22,
+            "count": 5
+        },
+        {
+            "relation": [
+                "영향력",
+                "원한",
+                "예언",
+                "적"
+            ],
+            "id1": 2.0,
+            "id2": 31.0,
+            "positivity": -0.88,
+            "count": 5
+        },
+        {
+            "id1": 13.0,
+            "relation": [
+                "부하",
+                "상사"
+            ],
+            "id2": 3.0,
+            "positivity": -0.2,
+            "count": 1
+        },
+        {
+            "relation": [
+                "부하",
+                "상사"
+            ],
+            "id1": 29.0,
+            "id2": 3.0,
+            "positivity": 0.1,
+            "count": 1
+        },
+        {
+            "relation": [
+                "부하",
+                "상사"
+            ],
+            "id1": 30.0,
+            "id2": 3.0,
+            "positivity": 0.1,
+            "count": 1
+        },
+        {
+            "id1": 3.0,
+            "relation": [
+                "적"
+            ],
+            "id2": 22.0,
+            "positivity": -0.75,
+            "count": 4
+        },
+        {
+            "id1": 3.0,
+            "relation": [
+                "지지",
+                "동료"
+            ],
+            "id2": 26.0,
+            "positivity": 0.43,
+            "count": 3
+        },
+        {
+            "relation": [
+                "영향력",
+                "적"
+            ],
+            "id1": 3.0,
+            "id2": 31.0,
+            "positivity": -0.88,
+            "count": 4
+        },
+        {
+            "id1": 4.0,
+            "relation": [
+                "적"
+            ],
+            "id2": 31.0,
+            "positivity": -0.9,
+            "count": 1
+        },
+        {
+            "id1": 37.0,
+            "relation": [
+                "지지",
+                "동료"
+            ],
+            "id2": 3.0,
+            "positivity": 0.68,
+            "count": 4
+        },
+        {
+            "id1": 37.0,
+            "relation": [
+                "동료"
+            ],
+            "id2": 2.0,
+            "positivity": 0.4,
+            "count": 1
+        },
+        {
+            "id1": 2.0,
+            "relation": [
+                "상사",
+                "부하"
+            ],
+            "id2": 35.0,
+            "positivity": 0.7,
+            "count": 2
+        },
+        {
+            "relation": [
+                "상사",
+                "부하",
+                "동료",
+                "지지"
+            ],
+            "id1": 2.0,
+            "id2": 36.0,
+            "positivity": 0.6,
+            "count": 2
+        },
+        {
+            "relation": [
+                "지지",
+                "동료"
+            ],
+            "id1": 2.0,
+            "id2": 34.0,
+            "positivity": 0.55,
+            "count": 2
+        },
+        {
+            "relation": [
+                "동료"
+            ],
+            "id1": 2.0,
+            "id2": 32.0,
+            "positivity": 0.7,
+            "count": 2
+        },
+        {
+            "relation": [
+                "동료"
+            ],
+            "id1": 2.0,
+            "id2": 8.0,
+            "positivity": 0.3,
+            "count": 2
+        },
+        {
+            "relation": [
+                "동료"
+            ],
+            "id1": 2.0,
+            "id2": 9.0,
+            "positivity": 0.3,
+            "count": 2
+        },
+        {
+            "relation": [
+                "동료"
+            ],
+            "id1": 25.0,
+            "id2": 37.0,
+            "positivity": 0.6,
+            "count": 2
+        },
+        {
+            "relation": [
+                "동료"
+            ],
+            "id1": 26.0,
+            "id2": 11.0,
+            "positivity": 0.3,
+            "count": 1
+        },
+        {
+            "id1": 28.0,
+            "relation": [
+                "무시"
+            ],
+            "id2": 2.0,
+            "positivity": -0.3,
+            "count": 1
+        },
+        {
+            "relation": [
+                "무시"
+            ],
+            "id1": 28.0,
+            "id2": 3.0,
+            "positivity": -0.3,
+            "count": 1
+        },
+        {
+            "id1": 32.0,
+            "relation": [
+                "적"
+            ],
+            "id2": 4.0,
+            "positivity": -0.7,
+            "count": 1
+        },
+        {
+            "id1": 32.0,
+            "relation": [
+                "적"
+            ],
+            "id2": 22.0,
+            "positivity": -0.7,
+            "count": 1
+        },
+        {
+            "id1": 33.0,
+            "relation": [
+                "동료",
+                "지지"
+            ],
+            "id2": 2.0,
+            "positivity": 0.6,
+            "count": 1
+        },
+        {
+            "relation": [
+                "동료"
+            ],
+            "id1": 33.0,
+            "id2": 36.0,
+            "positivity": 0.5,
+            "count": 2
+        },
+        {
+            "relation": [
+                "동료"
+            ],
+            "id1": 34.0,
+            "id2": 35.0,
+            "positivity": 0.5,
+            "count": 2
+        },
+        {
+            "relation": [
+                "동료",
+                "지지"
+            ],
+            "id1": 35.0,
+            "id2": 22.0,
+            "positivity": 0.7,
+            "count": 1
+        }
+    ],
+    "node_weights_accum": {
+        "1": {
+            "weight": 6.27,
+            "count": 53
+        },
+        "2": {
+            "weight": 7.26,
+            "count": 65
+        },
+        "3": {
+            "weight": 6.87,
+            "count": 52
+        },
+        "4": {
+            "weight": 6.33,
+            "count": 41
+        },
+        "5": {
+            "weight": 4.68,
+            "count": 12
+        },
+        "6": {
+            "weight": 5.38,
+            "count": 26
+        },
+        "7": {
+            "weight": 3.58,
+            "count": 12
+        },
+        "8": {
+            "weight": 3.0,
+            "count": 6
+        },
+        "9": {
+            "weight": 3.0,
+            "count": 6
+        },
+        "10": {
+            "weight": 4.0,
+            "count": 9
+        },
+        "11": {
+            "weight": 6.0,
+            "count": 10
+        },
+        "12": {
+            "weight": 4.67,
+            "count": 16
+        },
+        "13": {
+            "weight": 3.42,
+            "count": 14
+        },
+        "14": {
+            "weight": 5.21,
+            "count": 14
+        },
+        "15": {
+            "weight": 4.36,
+            "count": 11
+        },
+        "16": {
+            "weight": 3.7,
+            "count": 10
+        },
+        "17": {
+            "weight": 4.76,
+            "count": 8
+        },
+        "19": {
+            "weight": 3.0,
+            "count": 4
+        },
+        "18": {
+            "weight": 4.33,
+            "count": 3
+        },
+        "20": {
+            "weight": 2.33,
+            "count": 3
+        },
+        "21": {
+            "weight": 4.4,
+            "count": 5
+        },
+        "22": {
+            "weight": 5.08,
+            "count": 12
+        },
+        "0": {
+            "weight": 2.0,
+            "count": 1
+        },
+        "23": {
+            "weight": 4.25,
+            "count": 4
+        },
+        "24": {
+            "weight": 4.33,
+            "count": 3
+        },
+        "25": {
+            "weight": 4.5,
+            "count": 4
+        },
+        "27": {
+            "weight": 3.0,
+            "count": 2
+        },
+        "28": {
+            "weight": 2.5,
+            "count": 2
+        },
+        "26": {
+            "weight": 4.5,
+            "count": 4
+        },
+        "29": {
+            "weight": 2.75,
+            "count": 4
+        },
+        "30": {
+            "weight": 2.75,
+            "count": 4
+        },
+        "31": {
+            "weight": 7.5,
+            "count": 2
+        },
+        "37": {
+            "weight": 5.5,
+            "count": 2
+        },
+        "32": {
+            "weight": 5.0,
+            "count": 1
+        },
+        "35": {
+            "weight": 4.0,
+            "count": 1
+        },
+        "34": {
+            "weight": 4.0,
+            "count": 1
+        },
+        "36": {
+            "weight": 4.0,
+            "count": 1
+        }
+    },
+    "log": {
+        "event_index": 5,
+        "new_character_ids": [
+            5.0,
+            7.0,
+            8.0,
+            9.0,
+            10.0,
+            11.0,
+            12.0,
+            13.0,
+            14.0,
+            15.0,
+            16.0,
+            17.0,
+            18.0,
+            19.0,
+            20.0,
+            21.0,
+            27.0,
+            28.0,
+            29.0,
+            30.0,
+            32.0,
+            33.0,
+            34.0,
+            35.0,
+            36.0
+        ],
+        "new_relations": [
+            [
+                2.0,
+                35.0
+            ],
+            [
+                2.0,
+                36.0
+            ],
+            [
+                2.0,
+                34.0
+            ],
+            [
+                2.0,
+                32.0
+            ],
+            [
+                2.0,
+                8.0
+            ],
+            [
+                2.0,
+                9.0
+            ],
+            [
+                2.0,
+                8.0
+            ],
+            [
+                2.0,
+                9.0
+            ],
+            [
+                25.0,
+                37.0
+            ],
+            [
+                11.0,
+                26.0
+            ],
+            [
+                2.0,
+                28.0
+            ],
+            [
+                3.0,
+                28.0
+            ],
+            [
+                4.0,
+                32.0
+            ],
+            [
+                22.0,
+                32.0
+            ],
+            [
+                2.0,
+                32.0
+            ],
+            [
+                2.0,
+                33.0
+            ],
+            [
+                33.0,
+                36.0
+            ],
+            [
+                2.0,
+                34.0
+            ],
+            [
+                34.0,
+                35.0
+            ],
+            [
+                2.0,
+                35.0
+            ],
+            [
+                22.0,
+                35.0
+            ],
+            [
+                34.0,
+                35.0
+            ],
+            [
+                2.0,
+                36.0
+            ],
+            [
+                33.0,
+                36.0
+            ],
+            [
+                25.0,
+                37.0
+            ]
+        ],
+        "updated_relations": [
+            {
+                "id_pair": [
+                    2.0,
+                    31.0
+                ],
+                "positivity_before": -0.9,
+                "positivity_after": -0.88
+            },
+            {
+                "id_pair": [
+                    2.0,
+                    25.0
+                ],
+                "positivity_before": 0.52,
+                "positivity_after": 0.55
+            },
+            {
+                "id_pair": [
+                    2.0,
+                    24.0
+                ],
+                "positivity_before": 0.38,
+                "positivity_after": 0.4
+            },
+            {
+                "id_pair": [
+                    2.0,
+                    4.0
+                ],
+                "positivity_before": -0.42,
+                "positivity_after": -0.43
+            },
+            {
+                "id_pair": [
+                    2.0,
+                    22.0
+                ],
+                "positivity_before": -0.78,
+                "positivity_after": -0.76
+            },
+            {
+                "id_pair": [
+                    3.0,
+                    31.0
+                ],
+                "positivity_before": -0.9,
+                "positivity_after": -0.87
+            },
+            {
+                "id_pair": [
+                    3.0,
+                    25.0
+                ],
+                "positivity_before": 0.4,
+                "positivity_after": 0.45
+            },
+            {
+                "id_pair": [
+                    3.0,
+                    37.0
+                ],
+                "positivity_before": 0.6,
+                "positivity_after": 0.65
+            },
+            {
+                "id_pair": [
+                    3.0,
+                    20.0
+                ],
+                "positivity_before": -0.7,
+                "positivity_after": -0.69
+            },
+            {
+                "id_pair": [
+                    3.0,
+                    17.0
+                ],
+                "positivity_before": 0.7,
+                "positivity_after": 0.69
+            },
+            {
+                "id_pair": [
+                    3.0,
+                    4.0
+                ],
+                "positivity_before": -0.51,
+                "positivity_after": -0.52
+            },
+            {
+                "id_pair": [
+                    3.0,
+                    22.0
+                ],
+                "positivity_before": -0.8,
+                "positivity_after": -0.77
+            },
+            {
+                "id_pair": [
+                    1.0,
+                    4.0
+                ],
+                "positivity_before": 0.57,
+                "positivity_after": 0.58
+            },
+            {
+                "id_pair": [
+                    4.0,
+                    5.0
+                ],
+                "positivity_before": 0.5,
+                "positivity_after": 0.45
+            },
+            {
+                "id_pair": [
+                    4.0,
+                    22.0
+                ],
+                "positivity_before": 0.56,
+                "positivity_after": 0.58
+            },
+            {
+                "id_pair": [
+                    2.0,
+                    4.0
+                ],
+                "positivity_before": -0.42,
+                "positivity_after": -0.43
+            },
+            {
+                "id_pair": [
+                    3.0,
+                    4.0
+                ],
+                "positivity_before": -0.51,
+                "positivity_after": -0.52
+            },
+            {
+                "id_pair": [
+                    1.0,
+                    5.0
+                ],
+                "positivity_before": 0.12,
+                "positivity_after": 0.15
+            },
+            {
+                "id_pair": [
+                    4.0,
+                    5.0
+                ],
+                "positivity_before": 0.5,
+                "positivity_after": 0.45
+            },
+            {
+                "id_pair": [
+                    6.0,
+                    7.0
+                ],
+                "positivity_before": 0.3,
+                "positivity_after": 0.31
+            },
+            {
+                "id_pair": [
+                    3.0,
+                    6.0
+                ],
+                "positivity_before": 0.29,
+                "positivity_after": 0.3
+            },
+            {
+                "id_pair": [
+                    6.0,
+                    7.0
+                ],
+                "positivity_before": 0.3,
+                "positivity_after": 0.31
+            },
+            {
+                "id_pair": [
+                    1.0,
+                    8.0
+                ],
+                "positivity_before": -0.54,
+                "positivity_after": -0.55
+            },
+            {
+                "id_pair": [
+                    8.0,
+                    9.0
+                ],
+                "positivity_before": -0.37,
+                "positivity_after": -0.15
+            },
+            {
+                "id_pair": [
+                    1.0,
+                    9.0
+                ],
+                "positivity_before": -0.54,
+                "positivity_after": -0.55
+            },
+            {
+                "id_pair": [
+                    8.0,
+                    9.0
+                ],
+                "positivity_before": -0.37,
+                "positivity_after": -0.15
+            },
+            {
+                "id_pair": [
+                    1.0,
+                    10.0
+                ],
+                "positivity_before": -0.59,
+                "positivity_after": -0.61
+            },
+            {
+                "id_pair": [
+                    2.0,
+                    11.0
+                ],
+                "positivity_before": 0.25,
+                "positivity_after": 0.28
+            },
+            {
+                "id_pair": [
+                    2.0,
+                    12.0
+                ],
+                "positivity_before": 0.47,
+                "positivity_after": 0.48
+            },
+            {
+                "id_pair": [
+                    1.0,
+                    14.0
+                ],
+                "positivity_before": -0.15,
+                "positivity_after": -0.08
+            },
+            {
+                "id_pair": [
+                    7.0,
+                    15.0
+                ],
+                "positivity_before": 0.7,
+                "positivity_after": 0.6
+            },
+            {
+                "id_pair": [
+                    4.0,
+                    16.0
+                ],
+                "positivity_before": 0.13,
+                "positivity_after": 0.17
+            },
+            {
+                "id_pair": [
+                    1.0,
+                    18.0
+                ],
+                "positivity_before": -0.58,
+                "positivity_after": -0.61
+            },
+            {
+                "id_pair": [
+                    3.0,
+                    20.0
+                ],
+                "positivity_before": -0.7,
+                "positivity_after": -0.69
+            },
+            {
+                "id_pair": [
+                    4.0,
+                    21.0
+                ],
+                "positivity_before": 0.53,
+                "positivity_after": 0.56
+            },
+            {
+                "id_pair": [
+                    21.0,
+                    22.0
+                ],
+                "positivity_before": 0.73,
+                "positivity_after": 0.75
+            },
+            {
+                "id_pair": [
+                    4.0,
+                    22.0
+                ],
+                "positivity_before": 0.56,
+                "positivity_after": 0.58
+            },
+            {
+                "id_pair": [
+                    21.0,
+                    22.0
+                ],
+                "positivity_before": 0.73,
+                "positivity_after": 0.75
+            },
+            {
+                "id_pair": [
+                    2.0,
+                    22.0
+                ],
+                "positivity_before": -0.78,
+                "positivity_after": -0.76
+            },
+            {
+                "id_pair": [
+                    3.0,
+                    22.0
+                ],
+                "positivity_before": -0.8,
+                "positivity_after": -0.77
+            },
+            {
+                "id_pair": [
+                    2.0,
+                    23.0
+                ],
+                "positivity_before": 0.3,
+                "positivity_after": 0.32
+            },
+            {
+                "id_pair": [
+                    2.0,
+                    24.0
+                ],
+                "positivity_before": 0.38,
+                "positivity_after": 0.4
+            },
+            {
+                "id_pair": [
+                    3.0,
+                    24.0
+                ],
+                "positivity_before": 0.35,
+                "positivity_after": 0.37
+            },
+            {
+                "id_pair": [
+                    2.0,
+                    25.0
+                ],
+                "positivity_before": 0.52,
+                "positivity_after": 0.55
+            },
+            {
+                "id_pair": [
+                    3.0,
+                    25.0
+                ],
+                "positivity_before": 0.4,
+                "positivity_after": 0.45
+            },
+            {
+                "id_pair": [
+                    3.0,
+                    26.0
+                ],
+                "positivity_before": 0.45,
+                "positivity_after": 0.43
+            },
+            {
+                "id_pair": [
+                    2.0,
+                    27.0
+                ],
+                "positivity_before": -0.5,
+                "positivity_after": -0.15
+            },
+            {
+                "id_pair": [
+                    3.0,
+                    27.0
+                ],
+                "positivity_before": 0.3,
+                "positivity_after": 0.25
+            },
+            {
+                "id_pair": [
+                    2.0,
+                    29.0
+                ],
+                "positivity_before": 0.17,
+                "positivity_after": 0.22
+            },
+            {
+                "id_pair": [
+                    2.0,
+                    30.0
+                ],
+                "positivity_before": 0.17,
+                "positivity_after": 0.22
+            },
+            {
+                "id_pair": [
+                    3.0,
+                    37.0
+                ],
+                "positivity_before": 0.6,
+                "positivity_after": 0.65
+            },
+            {
+                "id_pair": [
+                    3.0,
+                    37.0
+                ],
+                "positivity_before": 0.6,
+                "positivity_after": 0.65
+            }
+        ],
+        "updated_node_weights": [
+            {
+                "id": 2,
+                "weight_before": 7.23,
+                "weight_after": 7.26
+            },
+            {
+                "id": 31,
+                "weight_before": 8.0,
+                "weight_after": 7.5
+            },
+            {
+                "id": 3,
+                "weight_before": 6.89,
+                "weight_after": 6.87
+            },
+            {
+                "id": 25,
+                "weight_before": 4.33,
+                "weight_after": 4.5
+            },
+            {
+                "id": 26,
+                "weight_before": 5.0,
+                "weight_after": 4.5
+            },
+            {
+                "id": 24,
+                "weight_before": 5.0,
+                "weight_after": 4.33
+            },
+            {
+                "id": 37,
+                "weight_before": 8.0,
+                "weight_after": 5.5
+            },
+            {
+                "id": 8,
+                "weight_before": 3.2,
+                "weight_after": 3.0
+            },
+            {
+                "id": 9,
+                "weight_before": 3.2,
+                "weight_after": 3.0
+            },
+            {
+                "id": 6,
+                "weight_before": 5.52,
+                "weight_after": 5.38
+            },
+            {
+                "id": 7,
+                "weight_before": 3.72,
+                "weight_after": 3.58
+            },
+            {
+                "id": 12,
+                "weight_before": 4.85,
+                "weight_after": 4.67
+            },
+            {
+                "id": 13,
+                "weight_before": 3.61,
+                "weight_after": 3.42
+            },
+            {
+                "id": 1,
+                "weight_before": 6.28,
+                "weight_after": 6.27
+            },
+            {
+                "id": 4,
+                "weight_before": 6.36,
+                "weight_after": 6.33
+            },
+            {
+                "id": 22,
+                "weight_before": 5.09,
+                "weight_after": 5.08
+            },
+            {
+                "id": 5,
+                "weight_before": 4.83,
+                "weight_after": 4.68
+            },
+            {
+                "id": 10,
+                "weight_before": 4.25,
+                "weight_after": 4.0
+            },
+            {
+                "id": 11,
+                "weight_before": 6.44,
+                "weight_after": 6.0
+            },
+            {
+                "id": 14,
+                "weight_before": 5.46,
+                "weight_after": 5.21
+            },
+            {
+                "id": 15,
+                "weight_before": 4.6,
+                "weight_after": 4.36
+            },
+            {
+                "id": 16,
+                "weight_before": 3.89,
+                "weight_after": 3.7
+            },
+            {
+                "id": 17,
+                "weight_before": 5.15,
+                "weight_after": 4.76
+            },
+            {
+                "id": 18,
+                "weight_before": 5.5,
+                "weight_after": 4.33
+            },
+            {
+                "id": 19,
+                "weight_before": 3.67,
+                "weight_after": 3.0
+            },
+            {
+                "id": 20,
+                "weight_before": 3.0,
+                "weight_after": 2.33
+            },
+            {
+                "id": 21,
+                "weight_before": 4.5,
+                "weight_after": 4.4
+            },
+            {
+                "id": 23,
+                "weight_before": 5.0,
+                "weight_after": 4.25
+            },
+            {
+                "id": 27,
+                "weight_before": 5.0,
+                "weight_after": 3.0
+            },
+            {
+                "id": 28,
+                "weight_before": 4.0,
+                "weight_after": 2.5
+            },
+            {
+                "id": 29,
+                "weight_before": 3.33,
+                "weight_after": 2.75
+            },
+            {
+                "id": 30,
+                "weight_before": 3.33,
+                "weight_after": 2.75
+            }
+        ]
+    }
+}
