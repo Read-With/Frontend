@@ -18,6 +18,7 @@ import {
   parseCfiToChapterDetail, 
   extractEventNodesAndEdges
 } from "../../utils/viewerUtils";
+import { applyBookmarkHighlights, removeBookmarkHighlights } from "./bookmark/BookmarkManager";
 import { 
   getEventsForChapter,
   getDetectedMaxChapter,
@@ -180,6 +181,7 @@ const ViewerPage = () => {
     graphState, graphActions, viewerState, searchState,
   } = useViewerPage();
 
+
   // 툴팁 상태 관리
   const [activeTooltip, setActiveTooltip] = useState(null);
   
@@ -285,6 +287,21 @@ const ViewerPage = () => {
     const timeoutId = setTimeout(autoSaveProgress, 2000);
     return () => clearTimeout(timeoutId);
   }, [book?.id, currentChapter, currentEvent]);
+
+  // 북마크 하이라이트 적용
+  useEffect(() => {
+    if (bookmarks && bookmarks.length > 0) {
+      // DOM이 준비된 후 하이라이트 적용
+      const timer = setTimeout(() => {
+        applyBookmarkHighlights(bookmarks);
+      }, 500);
+      
+      return () => {
+        clearTimeout(timer);
+        removeBookmarkHighlights();
+      };
+    }
+  }, [bookmarks, currentChapter]);
 
   // 이벤트 상태 감지 및 새로고침 메시지 표시
   useEffect(() => {
@@ -662,6 +679,7 @@ const ViewerPage = () => {
         newestOnTop
         closeOnClick
       />
+      
     </div>
   );
 };

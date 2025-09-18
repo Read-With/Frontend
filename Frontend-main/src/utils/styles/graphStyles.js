@@ -40,33 +40,13 @@ export const getWideLayout = () => {
 };
 
 export const getEdgeStyle = (context = 'default') => {
-  // 새로운 JSON 구조에서는 weight 필드가 없으므로 고정된 두께 사용
-  const edgeWidth = 5; // 기본 엣지 두께
+  const edgeWidth = 6;
+  const isViewer = context === 'viewer';
+  const isGraphPage = typeof window !== 'undefined' && window.location?.pathname?.includes('/user/graph/');
   
-  if (typeof window === 'undefined' || !window.location) {
-    return {
-      width: edgeWidth,
-      fontSize: context === 'viewer' ? 8 : 9,
-    };
-  }
-  
-  const path = window.location.pathname || '';
-  if (path.includes('/user/viewer/')) {
-    return {
-      width: edgeWidth,
-      fontSize: context === 'viewer' ? 8 : 9,
-    };
-  }
-  if (path.includes('/user/graph/')) {
-    return {
-      width: edgeWidth,
-      fontSize: 11,
-    };
-  }
-
   return {
     width: edgeWidth,
-    fontSize: context === 'viewer' ? 8 : 9,
+    fontSize: isGraphPage ? 13 : (isViewer ? 10 : 11)
   };
 };
 
@@ -102,7 +82,7 @@ export const createGraphStylesheet = (edgeStyle, edgeLabelVisible, maxEdgeLabelL
       "text-valign": "bottom",
       "text-halign": "center",
       "font-size": 12,
-      "font-weight": (ele) => (ele.data("main_character") ? 700 : 400),
+      "font-weight": (ele) => (ele.data("main_character") ? 600 : 400),
       color: "#444",
       "text-margin-y": 2,
       "text-background-color": "#fff",
@@ -126,17 +106,12 @@ export const createGraphStylesheet = (edgeStyle, edgeLabelVisible, maxEdgeLabelL
       "text-rotation": "autorotate",
       color: "#42506b",
       "text-background-color": "#fff",
-      "text-background-opacity": 0.8,
+      "text-background-opacity": 0.85,
       "text-background-shape": "roundrectangle",
       "text-background-padding": 2,
       "text-outline-color": "#fff",
       "text-outline-width": 2,
-      opacity: (ele) => {
-        const positivity = ele.data("positivity");
-        if (positivity === undefined || positivity === null) return 0.7;
-        // positivity 값에 따라 투명도 조정 (음수는 더 투명, 양수는 더 불투명)
-        return Math.max(0.3, Math.min(1.0, 0.5 + Math.abs(positivity) * 0.3));
-      },
+      opacity: 0.85,
       "target-arrow-shape": "none",
     },
   },

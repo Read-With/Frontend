@@ -6,7 +6,8 @@ const createBookmarkData = (bookId, startCfi, endCfi = null, color = '#0Ccd5B', 
   startCfi,
   endCfi,
   color,
-  memo
+  memo,
+  createdAt: new Date().toISOString()
 });
 
 // 북마크 목록 조회 (서버에서)
@@ -85,5 +86,88 @@ export const loadBookmarksFromLocal = (bookId) => {
   } catch (error) {
     return [];
   }
+};
+
+// 북마크 정렬 함수 (최근 북마크 우선)
+export const sortBookmarksByDate = (bookmarks) => {
+  return [...bookmarks].sort((a, b) => {
+    const dateA = new Date(a.createdAt || a.created_at || 0);
+    const dateB = new Date(b.createdAt || b.created_at || 0);
+    return dateB - dateA; // 최신순
+  });
+};
+
+// 북마크 하이라이트 스타일 생성
+export const createBookmarkHighlightStyle = (color = '#0Ccd5B') => ({
+  backgroundColor: color,
+  opacity: 0.3,
+  borderRadius: '2px',
+  padding: '1px 2px',
+  margin: '0 1px',
+  transition: 'all 0.2s ease'
+});
+
+// 북마크 하이라이트 제거
+export const removeBookmarkHighlights = () => {
+  const highlights = document.querySelectorAll('.bookmark-highlight');
+  highlights.forEach(highlight => {
+    highlight.classList.remove('bookmark-highlight');
+    highlight.style.backgroundColor = '';
+    highlight.style.opacity = '';
+    highlight.style.borderRadius = '';
+    highlight.style.padding = '';
+    highlight.style.margin = '';
+  });
+};
+
+// 북마크 하이라이트 적용
+export const applyBookmarkHighlights = (bookmarks) => {
+  // 기존 하이라이트 제거
+  removeBookmarkHighlights();
+  
+  bookmarks.forEach(bookmark => {
+    try {
+      // CFI를 DOM Range로 변환
+      const range = document.createRange();
+      const cfi = bookmark.startCfi;
+      
+      // CFI 파싱 및 DOM 요소 찾기
+      const cfiMatch = cfi.match(/epubcfi\(([^)]+)\)/);
+      if (!cfiMatch) return;
+      
+      const cfiPath = cfiMatch[1];
+      const pathParts = cfiPath.split('/').filter(part => part);
+      
+      // DOM 요소 찾기 시도
+      let element = document.body;
+      for (const part of pathParts) {
+        if (part.startsWith('[') && part.endsWith(']')) {
+          // ID나 클래스로 찾기
+          const selector = part.slice(1, -1);
+          const found = element.querySelector(`#${selector}`) || element.querySelector(`.${selector}`);
+          if (found) element = found;
+        } else if (!isNaN(part)) {
+          // 인덱스로 찾기
+          const children = Array.from(element.children);
+          if (children[parseInt(part) - 1]) {
+            element = children[parseInt(part) - 1];
+          }
+        }
+      }
+      
+      // 하이라이트 적용
+      if (element && element.textContent) {
+        element.classList.add('bookmark-highlight');
+        element.style.backgroundColor = bookmark.color || '#0Ccd5B';
+        element.style.opacity = '0.3';
+        element.style.borderRadius = '2px';
+        element.style.padding = '1px 2px';
+        element.style.margin = '0 1px';
+        element.style.transition = 'all 0.2s ease';
+      }
+    } catch (error) {
+      console.warn('북마크 하이라이트 적용 실패:', error);
+    }
+  });
 };
   

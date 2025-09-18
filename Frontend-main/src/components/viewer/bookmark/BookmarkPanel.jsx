@@ -1,6 +1,28 @@
-import React from 'react';
+import React, { useState, useMemo } from 'react';
+import { sortBookmarksByDate } from './BookmarkManager';
 
 const BookmarkPanel = ({ bookmarks, onSelect, onDelete, loading = false }) => {
+  const [sortOrder, setSortOrder] = useState('recent'); // 'recent' | 'oldest' | 'position'
+  
+  // 북마크 정렬
+  const sortedBookmarks = useMemo(() => {
+    if (!bookmarks || bookmarks.length === 0) return [];
+    
+    switch (sortOrder) {
+      case 'recent':
+        return sortBookmarksByDate(bookmarks);
+      case 'oldest':
+        return sortBookmarksByDate(bookmarks).reverse();
+      case 'position':
+        return [...bookmarks].sort((a, b) => {
+          // CFI 위치 기반 정렬 (간단한 문자열 비교)
+          return a.startCfi.localeCompare(b.startCfi);
+        });
+      default:
+        return bookmarks;
+    }
+  }, [bookmarks, sortOrder]);
+
   const formatDate = (dateString) => {
     const date = new Date(dateString);
     const now = new Date();
@@ -26,12 +48,28 @@ const BookmarkPanel = ({ bookmarks, onSelect, onDelete, loading = false }) => {
     <div className="absolute right-0 top-16 bg-white shadow-xl border border-gray-200 rounded-xl z-50 w-80 max-h-96 overflow-hidden">
       {/* 헤더 */}
       <div className="p-4 border-b border-gray-100 bg-gradient-to-r from-blue-50 to-indigo-50">
-        <div className="flex items-center space-x-2">
-          <span className="material-symbols-outlined text-blue-600">bookmark</span>
-          <h3 className="font-bold text-gray-800 text-lg">북마크</h3>
-          <span className="bg-blue-100 text-blue-600 text-xs px-2 py-1 rounded-full font-medium">
-            {bookmarks.length}
-          </span>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center space-x-2">
+            <span className="material-symbols-outlined text-blue-600">bookmark</span>
+            <h3 className="font-bold text-gray-800 text-lg">북마크</h3>
+            <span className="bg-blue-100 text-blue-600 text-xs px-2 py-1 rounded-full font-medium">
+              {bookmarks.length}
+            </span>
+          </div>
+          
+          {/* 정렬 옵션 */}
+          <div className="flex items-center space-x-1">
+            <span className="text-xs text-gray-500 mr-2">정렬:</span>
+            <select
+              value={sortOrder}
+              onChange={(e) => setSortOrder(e.target.value)}
+              className="text-xs border border-gray-200 rounded px-2 py-1 bg-white focus:outline-none focus:ring-1 focus:ring-blue-500"
+            >
+              <option value="recent">최신순</option>
+              <option value="oldest">오래된순</option>
+              <option value="position">위치순</option>
+            </select>
+          </div>
         </div>
       </div>
 
@@ -50,7 +88,7 @@ const BookmarkPanel = ({ bookmarks, onSelect, onDelete, loading = false }) => {
           </div>
         ) : (
           <ul className="p-2 space-y-1">
-            {bookmarks.map((bookmark) => (
+            {sortedBookmarks.map((bookmark) => (
               <li
                 key={bookmark.id}
                 className="group relative"

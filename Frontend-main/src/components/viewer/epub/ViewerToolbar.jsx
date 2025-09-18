@@ -36,9 +36,9 @@ const ViewerToolbar = ({
   // 현재 보기 모드 텍스트 생성
   const getViewModeText = () => {
     if (pageMode === 'single') {
-      return showGraph ? '단일 뷰어/그래프 모드' : '단일 뷰어모드';
+      return showGraph ? '단일 뷰어&그래프 모드' : '단일 뷰어모드';
     } else {
-      return showGraph ? '분할 뷰어/그래프 모드' : '분할 뷰어모드';
+      return showGraph ? '분할 뷰어&그래프 모드' : '분할 뷰어모드';
     }
   };
 
@@ -66,31 +66,65 @@ const ViewerToolbar = ({
       <div className="absolute top-full left-0 right-0 bg-white border-t border-gray-200 shadow-lg z-50 animate-slide-up">
         <div className="p-4 grid grid-cols-2 gap-3">
           {/* 북마크 그룹 */}
-          <button onClick={onAddBookmark} className="flex items-center justify-center gap-2 p-3 bg-purple-50 text-purple-700 rounded-lg hover:bg-purple-100 transition-colors">
+          <button 
+            onClick={onAddBookmark} 
+            className="flex items-center justify-center gap-2 p-3 bg-purple-50 text-purple-700 rounded-lg hover:bg-purple-100 transition-colors"
+            title="현재 위치에 북마크 추가"
+          >
             <span className="material-symbols-outlined">bookmark_add</span>
             <span className="text-sm font-medium">북마크</span>
           </button>
-          <button onClick={onToggleBookmarkList} className="flex items-center justify-center gap-2 p-3 bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100 transition-colors">
+          <button 
+            onClick={onToggleBookmarkList} 
+            className="flex items-center justify-center gap-2 p-3 bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100 transition-colors"
+            title="북마크 목록 보기"
+          >
             <span className="material-symbols-outlined">bookmarks</span>
             <span className="text-sm font-medium">북마크 목록</span>
           </button>
           
           {/* 그래프 관련 */}
-          <button onClick={handleGraphClick} className="flex items-center justify-center gap-2 p-3 bg-green-50 text-green-700 rounded-lg hover:bg-green-100 transition-colors">
+          <button 
+            onClick={handleGraphClick} 
+            className="flex items-center justify-center gap-2 p-3 bg-green-50 text-green-700 rounded-lg hover:bg-green-100 transition-colors"
+            title="인물 관계도 페이지로 이동"
+          >
             <span className="material-symbols-outlined">account_tree</span>
             <span className="text-sm font-medium">인물 관계도</span>
           </button>
-          <button onClick={onToggleGraph} className="flex items-center justify-center gap-2 p-3 bg-indigo-50 text-indigo-700 rounded-lg hover:bg-indigo-100 transition-colors">
-            {showGraph ? <span className="material-symbols-outlined">view_column</span> : <span className="material-symbols-outlined">open_in_full</span>}
-            <span className="text-sm font-medium">화면 모드</span>
+          <button 
+            onClick={onToggleGraph} 
+            className={`flex items-center justify-center gap-2 p-3 rounded-lg transition-all duration-200 ${
+              showGraph 
+                ? 'bg-blue-100 text-blue-800 border-2 border-blue-300 shadow-md' 
+                : 'bg-indigo-50 text-indigo-700 border border-indigo-200 hover:bg-indigo-100'
+            }`}
+            title={showGraph ? "그래프 숨기기" : "그래프 표시"}
+            style={{
+              transform: showGraph ? 'scale(1.05)' : 'scale(1)',
+            }}
+          >
+            {showGraph ? 
+              <span className="material-symbols-outlined" style={{ fontWeight: 'bold' }}>view_column</span> : 
+              <span className="material-symbols-outlined">open_in_full</span>
+            }
+            <span className={`text-sm font-medium ${showGraph ? 'font-semibold' : ''}`}>화면 모드</span>
           </button>
           
           {/* 설정 */}
-          <button onClick={onOpenSettings} className="flex items-center justify-center gap-2 p-3 bg-gray-50 text-gray-700 rounded-lg hover:bg-gray-100 transition-colors">
+          <button 
+            onClick={onOpenSettings} 
+            className="flex items-center justify-center gap-2 p-3 bg-gray-50 text-gray-700 rounded-lg hover:bg-gray-100 transition-colors"
+            title="뷰어 설정 열기"
+          >
             <span className="material-symbols-outlined">settings</span>
             <span className="text-sm font-medium">설정</span>
           </button>
-          <button onClick={() => navigate('/mypage')} className="flex items-center justify-center gap-2 p-3 bg-red-50 text-red-700 rounded-lg hover:bg-red-100 transition-colors">
+          <button 
+            onClick={() => navigate('/mypage')} 
+            className="flex items-center justify-center gap-2 p-3 bg-red-50 text-red-700 rounded-lg hover:bg-red-100 transition-colors"
+            title="뷰어 닫기"
+          >
             <span className="material-symbols-outlined">close</span>
             <span className="text-sm font-medium">닫기</span>
           </button>
@@ -114,10 +148,18 @@ const ViewerToolbar = ({
         <div className="flex items-center justify-between">
           {/* 왼쪽: 네비게이션 버튼들 */}
           <div className="flex items-center gap-2">
-            <button onClick={onPrev} className="p-2 rounded-lg bg-gray-50 hover:bg-gray-100 text-gray-700 transition-colors">
+            <button 
+              onClick={onPrev} 
+              className="p-2 rounded-lg bg-gray-50 hover:bg-gray-100 text-gray-700 transition-colors"
+              title="이전 페이지"
+            >
               <span className="material-symbols-outlined">arrow_back</span>
             </button>
-            <button onClick={onNext} className="p-2 rounded-lg bg-gray-50 hover:bg-gray-100 text-gray-700 transition-colors">
+            <button 
+              onClick={onNext} 
+              className="p-2 rounded-lg bg-gray-50 hover:bg-gray-100 text-gray-700 transition-colors"
+              title="다음 페이지"
+            >
               <span className="material-symbols-outlined">arrow_forward</span>
             </button>
           </div>
@@ -131,6 +173,7 @@ const ViewerToolbar = ({
           <button 
             onClick={() => setShowMobileMenu(!showMobileMenu)}
             className="p-2 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 transition-colors"
+            title="메뉴"
           >
             <span className="material-symbols-outlined">menu</span>
           </button>
@@ -145,6 +188,7 @@ const ViewerToolbar = ({
               onClick={onPrev}
               className="epub-toolbar-btn epub-toolbar-btn--gray"
               aria-label="이전 페이지"
+              title="이전 페이지로 이동"
             >
               <span style={{display:'flex',alignItems:'center',gap:'0.45em'}}>
                 <span className="material-symbols-outlined" style={{ marginBottom: '-2px' }}>arrow_back</span>
@@ -155,6 +199,7 @@ const ViewerToolbar = ({
               onClick={onNext}
               className="epub-toolbar-btn epub-toolbar-btn--gray"
               aria-label="다음 페이지"
+              title="다음 페이지로 이동"
             >
               <span style={{display:'flex',alignItems:'center',gap:'0.45em'}}>
                 다음
@@ -168,6 +213,7 @@ const ViewerToolbar = ({
                onClick={onAddBookmark}
                className="epub-toolbar-btn epub-toolbar-btn--purple"
                aria-label="북마크"
+               title="현재 위치에 북마크 추가"
                style={{
                  width: '7rem',
                  marginRight: '0.5rem',
@@ -182,6 +228,7 @@ const ViewerToolbar = ({
                onClick={onToggleBookmarkList}
                className="epub-toolbar-btn epub-toolbar-btn--gray"
                aria-label="북마크 목록"
+               title="북마크 목록 보기/숨기기"
                style={{
                  width: '8rem',
                  marginRight: '0.5rem',
@@ -199,6 +246,7 @@ const ViewerToolbar = ({
                className="epub-toolbar-btn epub-toolbar-btn--blue"
                onClick={handleGraphClick}
                aria-label="인물 관계도"
+               title="인물 관계도 페이지로 이동"
                style={{
                  width: '9rem',
                  marginRight: '0.5rem',
@@ -213,30 +261,52 @@ const ViewerToolbar = ({
                className={`epub-toolbar-btn ${showGraph ? 'epub-toolbar-btn--blue' : 'epub-toolbar-btn--gray'}`}
                onClick={onToggleGraph}
                aria-label="그래프 토글"
+               title={showGraph ? "그래프 숨기기" : "그래프 표시"}
                style={{
                  width: '9rem',
                  marginRight: '0.5rem',
+                 border: showGraph ? '2px solid #4F6DDE' : '1px solid #e2e8f0',
+                 boxShadow: showGraph ? '0 4px 12px rgba(79, 109, 222, 0.2)' : '0 2px 4px rgba(0, 0, 0, 0.1)',
+                 transform: showGraph ? 'scale(1.02)' : 'scale(1)',
+                 transition: 'all 0.2s ease',
                }}
              >
               <span style={{display:'flex',alignItems:'center',justifyContent:'center',gap:'0.45em',width:'100%'}}>
-                {showGraph ? <span className="material-symbols-outlined" style={{ marginBottom: '-2px' }}>view_column</span> : <span className="material-symbols-outlined" style={{ marginBottom: '-2px' }}>open_in_full</span>}
-                {getGraphToggleText()}
+                {showGraph ? 
+                  <span className="material-symbols-outlined" style={{ marginBottom: '-2px', color: '#4F6DDE', fontWeight: 'bold' }}>view_column</span> : 
+                  <span className="material-symbols-outlined" style={{ marginBottom: '-2px', color: '#6b7280' }}>open_in_full</span>
+                }
+                <span style={{ color: showGraph ? '#4F6DDE' : '#6b7280', fontWeight: showGraph ? '600' : '500' }}>
+                  {getGraphToggleText()}
+                </span>
               </span>
             </button>
-            <div className="current-view-mode" style={{ 
-              padding: '0.5rem 1rem',
-              marginLeft: '0.5rem',
-              borderRadius: '1rem',
-              backgroundColor: '#f0f4ff',
-              color: '#4F6DDE',
-              fontWeight: '600',
-              fontSize: '0.9rem',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.5em'
-            }}>
-              {pageMode === 'single' ? <span className="material-symbols-outlined" style={{ marginBottom: '-2px' }}>view_column</span> : <span className="material-symbols-outlined" style={{ marginBottom: '-2px' }}>view_column</span>}
-              {getViewModeText()}
+            <div 
+              className="current-view-mode" 
+              title={getViewModeText()}
+              style={{ 
+                padding: '0.5rem 1rem',
+                marginLeft: '0.5rem',
+                borderRadius: '1rem',
+                backgroundColor: showGraph ? '#EEF2FF' : '#f0f4ff',
+                color: showGraph ? '#4F6DDE' : '#4F6DDE',
+                fontWeight: '600',
+                fontSize: '0.9rem',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.5em',
+                border: showGraph ? '2px solid #4F6DDE' : '1px solid #e3e6ef',
+                boxShadow: showGraph ? '0 2px 8px rgba(79, 109, 222, 0.15)' : '0 1px 3px rgba(0, 0, 0, 0.1)',
+                transition: 'all 0.2s ease',
+              }}
+            >
+              {pageMode === 'single' ? 
+                <span className="material-symbols-outlined" style={{ marginBottom: '-2px', color: showGraph ? '#4F6DDE' : '#4F6DDE', fontWeight: 'bold' }}>view_column</span> : 
+                <span className="material-symbols-outlined" style={{ marginBottom: '-2px', color: showGraph ? '#4F6DDE' : '#4F6DDE', fontWeight: 'bold' }}>view_column</span>
+              }
+              <span style={{ color: showGraph ? '#4F6DDE' : '#4F6DDE', fontWeight: '600' }}>
+                {getViewModeText()}
+              </span>
             </div>
           </div>
         </div>
@@ -247,6 +317,7 @@ const ViewerToolbar = ({
                          <button
                className="epub-toolbar-btn epub-toolbar-btn--gray"
                aria-label="설정"
+               title="뷰어 설정 열기"
                onClick={onOpenSettings}
                style={{
                  width: '5.5rem',
@@ -273,6 +344,7 @@ const ViewerToolbar = ({
                onClick={() => navigate('/mypage')}
                className="epub-toolbar-btn epub-close-btn"
                aria-label="닫기"
+               title="뷰어 닫기"
                style={{
                  width: '2rem',
                  marginRight: '2rem',
