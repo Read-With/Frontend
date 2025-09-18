@@ -13,6 +13,7 @@ import { useViewerPage } from "../../hooks/useViewerPage";
 import { useGraphSearch } from "../../hooks/useGraphSearch";
 import { useClickOutside } from "../../hooks/useClickOutside";
 import { createStorageKey } from "../../hooks/useLocalStorage";
+import { getAllProgress, saveProgress, getBookProgress } from "../../utils/api";
 import { 
   parseCfiToChapterDetail, 
   extractEventNodesAndEdges
@@ -209,6 +210,76 @@ const ViewerPage = () => {
   // 전역 클릭 감지를 위한 ref - 툴팁이 활성화된 경우에만 감지
   // 툴팁 닫기와 동시에 그래프 스타일도 초기화
   const viewerPageRef = useClickOutside(handleClearTooltipAndGraph, !!activeTooltip);
+
+  // 독서 진도 API 테스트 - 페이지 진입 시 호출
+  useEffect(() => {
+    const testProgressAPI = async () => {
+      if (!book?.id) return;
+      
+      try {
+        console.log('📚 독서 진도 API 테스트 시작 - 책 ID:', book.id);
+        
+        // 1. 사용자의 모든 독서 진도 조회
+        console.log('1️⃣ 모든 독서 진도 조회 중...');
+        const allProgress = await getAllProgress();
+        console.log('✅ 모든 독서 진도 조회 성공:', allProgress);
+        
+        // 2. 특정 책의 독서 진도 조회
+        console.log('2️⃣ 특정 책 독서 진도 조회 중...');
+        const bookProgress = await getBookProgress(book.id);
+        console.log('✅ 특정 책 독서 진도 조회 성공:', bookProgress);
+        
+        // 3. 독서 진도 저장/업데이트 (테스트용)
+        console.log('3️⃣ 독서 진도 저장/업데이트 중...');
+        const progressData = {
+          bookId: book.id,
+          chapterIdx: currentChapter || 1,
+          eventIdx: currentEvent?.eventNum || 0,
+          cfi: currentEvent?.cfi || "epubcfi(/6/4[chap01ref]!/4[body01]/10[para05]/2/1:3)"
+        };
+        const savedProgress = await saveProgress(progressData);
+        console.log('✅ 독서 진도 저장/업데이트 성공:', savedProgress);
+        
+      } catch (error) {
+        console.error('❌ 독서 진도 API 호출 실패:', error);
+      }
+    };
+
+    testProgressAPI();
+  }, [book?.id, currentChapter, currentEvent]);
+
+  // 진도 변경 시 자동 저장
+  useEffect(() => {
+    const autoSaveProgress = async () => {
+      if (!book?.id || !currentChapter) return;
+      
+      try {
+        console.log('💾 진도 자동 저장 중...', {
+          bookId: book.id,
+          chapterIdx: currentChapter,
+          eventIdx: currentEvent?.eventNum,
+          cfi: currentEvent?.cfi
+        });
+        
+        const progressData = {
+          bookId: book.id,
+          chapterIdx: currentChapter || 1,
+          eventIdx: currentEvent?.eventNum || 0,
+          cfi: currentEvent?.cfi || "epubcfi(/6/4[chap01ref]!/4[body01]/10[para05]/2/1:3)"
+        };
+        
+        await saveProgress(progressData);
+        console.log('✅ 진도 자동 저장 완료');
+        
+      } catch (error) {
+        console.error('❌ 진도 자동 저장 실패:', error);
+      }
+    };
+
+    // 진도가 변경될 때마다 자동 저장 (디바운스 적용)
+    const timeoutId = setTimeout(autoSaveProgress, 2000);
+    return () => clearTimeout(timeoutId);
+  }, [book?.id, currentChapter, currentEvent]);
 
   // 이벤트 상태 감지 및 새로고침 메시지 표시
   useEffect(() => {
