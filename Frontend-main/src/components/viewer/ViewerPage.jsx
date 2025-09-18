@@ -13,7 +13,7 @@ import { useViewerPage } from "../../hooks/useViewerPage";
 import { useGraphSearch } from "../../hooks/useGraphSearch";
 import { useClickOutside } from "../../hooks/useClickOutside";
 import { createStorageKey } from "../../hooks/useLocalStorage";
-import { getAllProgress, saveProgress, getBookProgress } from "../../utils/api";
+import { getAllProgress, saveProgress, getBookProgress, getBookManifest } from "../../utils/api";
 import { 
   parseCfiToChapterDetail, 
   extractEventNodesAndEdges
@@ -239,6 +239,11 @@ const ViewerPage = () => {
         };
         const savedProgress = await saveProgress(progressData);
         console.log('✅ 독서 진도 저장/업데이트 성공:', savedProgress);
+        
+        // 4. 책 구조 패키지 조회
+        console.log('4️⃣ 책 구조 패키지 조회 중...');
+        const manifest = await getBookManifest(book.id);
+        console.log('✅ 책 구조 패키지 조회 성공:', manifest);
         
       } catch (error) {
         console.error('❌ 독서 진도 API 호출 실패:', error);
