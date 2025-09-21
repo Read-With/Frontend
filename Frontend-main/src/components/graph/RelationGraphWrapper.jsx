@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useLocation } from "react-router-dom";
 
 import CytoscapeGraphUnified from "./CytoscapeGraphUnified";
 import EdgeLabelToggle from "./tooltip/EdgeLabelToggle";
@@ -28,6 +28,9 @@ const COLORS = {
 import { useGraphSearch } from '../../hooks/useGraphSearch.jsx';
 import { useGraphDataLoader } from '../../hooks/useGraphDataLoader.js';
 import { useLocalStorageNumber } from '../../hooks/useLocalStorage.js';
+import { getMacroGraph } from '../../utils/api';
+import { convertRelationsToElements } from '../../utils/graphDataUtils';
+import { createCharacterMaps } from '../../utils/graphData';
 import useGraphInteractions from "../../hooks/useGraphInteractions";
 
 // 노드 크기는 가중치 기반으로만 계산됨
@@ -100,9 +103,12 @@ const layoutStyles = {
 function RelationGraphWrapper() {
   const navigate = useNavigate();
   const { filename } = useParams();
+  const location = useLocation();
+  const book = location.state?.book;
   
   // 상태 관리
   const [currentChapter, setCurrentChapter] = useLocalStorageNumber('lastGraphChapter', 1);
+  const [currentEvent, setCurrentEvent] = useState(1);
   const [hideIsolated, setHideIsolated] = useState(true);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [edgeLabelVisible, setEdgeLabelVisible] = useState(true);
@@ -111,6 +117,10 @@ function RelationGraphWrapper() {
   const [isSidebarClosing, setIsSidebarClosing] = useState(false);
   const [forceClose, setForceClose] = useState(false);
   
+  // API 세밀 그래프 데이터 상태
+  const [apiFineData, setApiFineData] = useState(null);
+  const [apiFineLoading, setApiFineLoading] = useState(false);
+  
   // refs
   const cyRef = useRef(null);
   const selectedEdgeIdRef = useRef(null);
@@ -118,9 +128,89 @@ function RelationGraphWrapper() {
   const prevChapterNum = useRef();
   const prevEventNum = useRef();
   
-  // 데이터 로딩
+   // API 거시 그래프 데이터 로딩
+   useEffect(() => {
+     const loadMacroGraphData = async () => {
+       // API 책인지 확인 (숫자 ID를 가진 책이거나 isFromAPI가 true인 경우)
+       const isApiBook = book && (typeof book.id === 'number' || book.isFromAPI === true);
+       
+        console.log('🔍 API 책 확인 (거시그래프):', { 
+          bookId: book?.id, 
+          isFromAPI: book?.isFromAPI, 
+          currentChapter, 
+          bookType: typeof book?.id,
+          isApiBook: isApiBook
+        });
+       
+       if (!book?.id || !isApiBook || !currentChapter) {
+         console.log('❌ API 거시그래프 로딩 조건 미충족:', {
+           hasBookId: !!book?.id,
+           isFromAPI: book?.isFromAPI,
+           isApiBook: isApiBook,
+           hasCurrentChapter: !!currentChapter
+         });
+         setApiFineData(null);
+         return;
+       }
+      
+      setApiFineLoading(true);
+      try {
+        console.log('🔗 거시 그래프 API 호출 - 챕터별 누적 데이터:', { 
+          bookId: book.id, 
+          uptoChapter: currentChapter,
+          description: `Chapter 1부터 Chapter ${currentChapter}까지의 누적 관계`
+        });
+        
+        const macroData = await getMacroGraph(book.id, currentChapter);
+        setApiFineData(macroData.result);
+        console.log('✅ 거시 그래프 데이터 로딩 성공:', {
+          userCurrentChapter: macroData.result.userCurrentChapter,
+          charactersCount: macroData.result.characters.length,
+          relationsCount: macroData.result.relations.length
+        });
+        
+        // 상세한 거시 그래프 정보 출력
+        console.log('🔍 거시그래프 상세 정보:', {
+          전체응답: macroData,
+          캐릭터목록: macroData.result.characters,
+          관계목록: macroData.result.relations
+        });
+        
+        // 관계별 positivity 값 확인
+        console.log('📊 관계별 긍정도 정보:', macroData.result.relations.map(rel => ({
+          id1: rel.id1,
+          id2: rel.id2,
+          positivity: rel.positivity,
+          relation: rel.relation,
+          count: rel.count
+        })));
+        
+       } catch (error) {
+         console.error('❌ 거시 그래프 API 호출 실패:', error);
+         
+         // 500 에러인 경우 특별한 처리
+         if (error.message.includes('500') || error.message.includes('서버 에러')) {
+           console.log('⚠️ 서버 에러 발생 - API 서버가 해당 데이터를 처리할 수 없습니다.');
+           console.log('📋 요청 정보:', {
+             bookId: book.id,
+             uptoChapter: currentChapter,
+             bookTitle: book.title
+           });
+           console.log('🔄 로컬 데이터로 fallback합니다.');
+         }
+         
+         setApiFineData(null);
+       } finally {
+         setApiFineLoading(false);
+       }
+    };
+
+    loadMacroGraphData();
+  }, [book?.id, currentChapter]);
+
+  // 데이터 로딩 - API 책이 아닌 경우에만 기존 로컬 데이터 사용
   const {
-    elements,
+    elements: localElements,
     newNodeIds,
     currentChapterData,
     maxEventNum,
@@ -128,7 +218,68 @@ function RelationGraphWrapper() {
     maxChapter,
     loading,
     error
-  } = useGraphDataLoader(filename, currentChapter);
+  } = useGraphDataLoader(book?.isFromAPI ? null : filename, currentChapter);
+  
+  // API 데이터를 그래프 요소로 변환
+  const apiElements = useMemo(() => {
+    if (!apiFineData?.characters || !apiFineData?.relations) return [];
+    
+    try {
+      const { idToName, idToDesc, idToMain, idToNames } = createCharacterMaps(apiFineData.characters);
+      const convertedElements = convertRelationsToElements(
+        apiFineData.relations,
+        idToName,
+        idToDesc,
+        idToMain,
+        idToNames,
+        'api', // API 데이터임을 표시
+        null, // nodeWeights
+        null  // previousRelations
+      );
+      
+      // 변환된 요소 정보 출력
+      const edges = convertedElements.filter(el => el.data && el.data.source && el.data.target);
+      const nodes = convertedElements.filter(el => el.data && el.data.id && !el.data.source);
+      console.log('🔄 거시그래프 변환된 요소 (챕터별 누적):', {
+        챕터: currentChapter,
+        노드수: nodes.length,
+        엣지수: edges.length,
+        노드목록: nodes.map(n => ({ id: n.data.id, label: n.data.label })),
+        엣지목록: edges.map(e => ({ 
+          id: e.data.id, 
+          source: e.data.source, 
+          target: e.data.target,
+          positivity: e.data.positivity 
+        }))
+      });
+      
+      // 변환된 간선의 positivity 값 확인
+      console.log('🔗 변환된 간선 긍정도 정보:', edges.map(edge => ({
+        id: edge.data.id,
+        source: edge.data.source,
+        target: edge.data.target,
+        positivity: edge.data.positivity,
+        relation: edge.data.relation,
+        label: edge.data.label
+      })));
+      
+      return convertedElements;
+    } catch (error) {
+      console.error('API 데이터 변환 실패:', error);
+      return [];
+    }
+  }, [apiFineData]);
+  
+  // API 책인지 확인 (숫자 ID를 가진 책이거나 isFromAPI가 true인 경우)
+  const isApiBook = book && (typeof book.id === 'number' || book.isFromAPI === true);
+
+  // 사용할 elements 결정 (API 데이터 우선, 없으면 로컬 데이터)
+  const elements = isApiBook ? apiElements : localElements;
+  
+  // API 책의 경우 이벤트 선택 핸들러
+  const handleEventChange = useCallback((eventNum) => {
+    setCurrentEvent(eventNum);
+  }, []);
   
   // 검색 기능
   const {
@@ -211,22 +362,88 @@ function RelationGraphWrapper() {
     });
   }, [isSidebarOpen]);
 
-  // 툴팁 핸들러
+  // 툴팁 핸들러 - API 데이터 구조에 맞게 수정
   const onShowNodeTooltip = useCallback(({ node, nodeCenter, mouseX, mouseY }) => {
-    setActiveTooltip({ type: 'node', id: node.id(), x: mouseX, y: mouseY, data: node.data(), nodeCenter });
+    const nodeData = node.data();
+    
+    // API 데이터의 names 필드 처리
+    let names = nodeData.names;
+    if (typeof names === "string") {
+      try { 
+        names = JSON.parse(names); 
+      } catch { 
+        names = [names]; 
+      }
+    }
+    
+    // main_character 필드 처리
+    let main = nodeData.main_character;
+    if (typeof main === "string") {
+      main = main === "true";
+    }
+    
+    const tooltipData = {
+      type: 'node',
+      id: node.id(),
+      x: mouseX,
+      y: mouseY,
+      data: {
+        ...nodeData,
+        names: names,
+        main_character: main,
+        // 기존 필드명과 호환성을 위한 매핑
+        main: main,
+        common_name: nodeData.common_name || nodeData.label,
+        description: nodeData.description || '',
+        image: nodeData.image || '',
+        weight: nodeData.weight || 1
+      },
+      nodeCenter
+    };
+    
+    setActiveTooltip(tooltipData);
     centerElementBetweenSidebars(node.id(), 'node');
   }, [centerElementBetweenSidebars]);
 
   const onShowEdgeTooltip = useCallback(({ edge, absoluteX, absoluteY }) => {
-    setActiveTooltip({
+    const edgeData = edge.data();
+    
+    // API 데이터의 relation 필드 처리
+    let relation = edgeData.relation;
+    if (typeof relation === "string") {
+      try { 
+        relation = JSON.parse(relation); 
+      } catch { 
+        relation = [relation]; 
+      }
+    }
+    
+    const tooltipData = {
       type: 'edge',
       id: edge.id(),
       x: absoluteX,
       y: absoluteY,
-      data: edge.data(),
+      data: {
+        ...edgeData,
+        relation: relation,
+        // 기존 필드명과 호환성을 위한 매핑
+        label: edgeData.label || (Array.isArray(relation) ? relation[0] : relation),
+        positivity: edgeData.positivity || 0,
+        count: edgeData.count || 1
+      },
       sourceNode: edge.source(),
       targetNode: edge.target(),
+    };
+    
+    console.log('🔍 간선 클릭 - 슬라이드바 표시용 데이터:', {
+      id: tooltipData.id,
+      positivity: tooltipData.data.positivity,
+      positivityPercent: Math.round(tooltipData.data.positivity * 100),
+      relation: tooltipData.data.relation,
+      source: tooltipData.data.source,
+      target: tooltipData.data.target
     });
+    setActiveTooltip(tooltipData);
     
     const sourcePos = edge.source().position();
     const targetPos = edge.target().position();
@@ -326,6 +543,7 @@ function RelationGraphWrapper() {
 
   const handleChapterSelect = useCallback((chapter) => {
     if (chapter !== currentChapter) {
+      console.log('📖 챕터 변경:', { from: currentChapter, to: chapter });
       setCurrentChapter(chapter);
     }
   }, [currentChapter, setCurrentChapter]);
@@ -443,13 +661,43 @@ function RelationGraphWrapper() {
   );
 
   // 로딩 상태 렌더링
-  if (isGraphLoading) {
+  if (isGraphLoading || apiFineLoading) {
     return (
-      <div style={containerStyles.loading}>
-        <div>그래프 로딩 중...</div>
-        <div style={{ fontSize: '14px', color: COLORS.textSecondary, marginTop: '8px' }}>
-          관계 데이터를 불러오고 있습니다.
+      <div style={{
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        height: '100vh',
+        width: '100vw',
+        backgroundColor: COLORS.backgroundLighter,
+        padding: '20px',
+        textAlign: 'center'
+      }}>
+        <div style={{
+          fontSize: '48px',
+          marginBottom: '16px',
+          color: COLORS.primary,
+          animation: 'spin 1s linear infinite'
+        }}>
+          ⏳
         </div>
+        <h3 style={{
+          color: COLORS.textPrimary,
+          marginBottom: '12px',
+          fontSize: '18px',
+          fontWeight: '600'
+        }}>
+          그래프 정보를 불러오는 중...
+        </h3>
+        <p style={{
+          color: COLORS.textSecondary,
+          marginBottom: '20px',
+          fontSize: '14px',
+          lineHeight: '1.5'
+        }}>
+          관계 데이터를 분석하고 있습니다.
+        </p>
       </div>
     );
   }
@@ -551,6 +799,62 @@ function RelationGraphWrapper() {
         </button>
       </div>
 
+      {/* API 책의 경우 이벤트 선택 UI */}
+      {book?.isFromAPI && (
+        <div 
+          style={{
+            position: 'fixed',
+            top: '60px',
+            right: '24px',
+            background: COLORS.background,
+            border: `1px solid ${COLORS.border}`,
+            borderRadius: '8px',
+            padding: '12px',
+            boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+            zIndex: 10001,
+            pointerEvents: 'auto'
+          }}
+        >
+          <div style={{ marginBottom: '8px', fontSize: '14px', fontWeight: '600', color: COLORS.textPrimary }}>
+            이벤트 선택
+          </div>
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+            <button
+              onClick={() => handleEventChange(Math.max(1, currentEvent - 1))}
+              disabled={currentEvent <= 1}
+              style={{
+                padding: '6px 12px',
+                border: `1px solid ${COLORS.border}`,
+                borderRadius: '4px',
+                background: currentEvent <= 1 ? COLORS.backgroundLight : COLORS.background,
+                color: currentEvent <= 1 ? COLORS.textSecondary : COLORS.textPrimary,
+                cursor: currentEvent <= 1 ? 'not-allowed' : 'pointer',
+                fontSize: '12px'
+              }}
+            >
+              이전
+            </button>
+            <span style={{ fontSize: '14px', color: COLORS.textPrimary, minWidth: '60px', textAlign: 'center' }}>
+              이벤트 {currentEvent}
+            </span>
+            <button
+              onClick={() => handleEventChange(currentEvent + 1)}
+              style={{
+                padding: '6px 12px',
+                border: `1px solid ${COLORS.border}`,
+                borderRadius: '4px',
+                background: COLORS.background,
+                color: COLORS.textPrimary,
+                cursor: 'pointer',
+                fontSize: '12px'
+              }}
+            >
+              다음
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* 챕터 사이드바 */}
       <div 
         data-testid="chapter-sidebar"
@@ -613,6 +917,52 @@ function RelationGraphWrapper() {
           flexDirection: 'column',
           height: '100%'
         }}>
+          {/* 챕터 정보 헤더 */}
+          <div style={{
+            background: '#fff',
+            borderBottom: '1px solid #e5e7eb',
+            padding: '12px 20px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            boxShadow: '0 1px 3px rgba(0,0,0,0.05)'
+          }}>
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '12px'
+            }}>
+              <h2 style={{
+                margin: 0,
+                fontSize: '18px',
+                fontWeight: '600',
+                color: '#1f2937'
+              }}>
+                거시 그래프
+              </h2>
+              <div style={{
+                background: '#f3f4f6',
+                padding: '4px 12px',
+                borderRadius: '20px',
+                fontSize: '14px',
+                color: '#6b7280'
+              }}>
+                Chapter 1 ~ {currentChapter} 누적 관계
+              </div>
+            </div>
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              fontSize: '14px',
+              color: '#6b7280'
+            }}>
+              <span>캐릭터: {apiElements.filter(el => el.data && el.data.id && !el.data.source).length}개</span>
+              <span>•</span>
+              <span>관계: {apiElements.filter(el => el.data && el.data.source && el.data.target).length}개</span>
+            </div>
+          </div>
+          
           <div style={{
             ...graphStyles.graphPageInner,
             flex: 1,

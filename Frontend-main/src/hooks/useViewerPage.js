@@ -122,6 +122,7 @@ export function useViewerPage() {
   
   const {
     elements,
+    setElements,
     newNodeIds,
     currentChapterData,
     maxEventNum,
@@ -647,7 +648,8 @@ export function useViewerPage() {
       setShowGraph,
       setHideIsolated,
       setEdgeLabelVisible,
-      handleFitView
+      handleFitView,
+      setElements
     },
     
     viewerState: {
@@ -658,6 +660,9 @@ export function useViewerPage() {
       settings,
       book,
       loading,
+      isReloading,
+      isGraphLoading,
+      isDataReady,
       showToolbar
     },
     

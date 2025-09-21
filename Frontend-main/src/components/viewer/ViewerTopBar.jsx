@@ -2,7 +2,6 @@ import React, { useCallback, useState, useEffect } from 'react';
 import GraphControls from '../graph/GraphControls';
 import EdgeLabelToggle from '../graph/tooltip/EdgeLabelToggle';
 import { getChapterEventCount } from '../../utils/graphData';
-import { getBookProgress } from '../../utils/api';
 
 const ViewerTopBar = ({
   graphState,
@@ -11,8 +10,6 @@ const ViewerTopBar = ({
   searchState,
   searchActions,
 }) => {
-  const [lastReadingPosition, setLastReadingPosition] = useState(null);
-  const [showContinueButton, setShowContinueButton] = useState(false);
   // 그룹화된 상태에서 개별 값들 추출
   const {
     navigate,
@@ -41,44 +38,6 @@ const ViewerTopBar = ({
     setHideIsolated
   } = graphActions;
 
-  // 마지막 읽은 위치 로드
-  useEffect(() => {
-    const loadLastReadingPosition = async () => {
-      if (!book?.id) return;
-      
-      try {
-        const progress = await getBookProgress(book.id);
-        if (progress.isSuccess && progress.result) {
-          const { chapterIdx, eventIdx, cfi } = progress.result;
-          setLastReadingPosition({ chapterIdx, eventIdx, cfi });
-          setShowContinueButton(true);
-        }
-      } catch (error) {
-        console.warn('마지막 읽은 위치 로드 실패:', error);
-      }
-    };
-
-    loadLastReadingPosition();
-  }, [book?.id]);
-
-  // 이어보기 버튼 클릭 핸들러
-  const handleContinueReading = useCallback(() => {
-    if (!lastReadingPosition || !viewerRef?.current) return;
-    
-    try {
-      // CFI로 이동
-      if (lastReadingPosition.cfi) {
-        viewerRef.current.display(lastReadingPosition.cfi);
-      }
-      
-      // 챕터 변경
-      if (lastReadingPosition.chapterIdx && lastReadingPosition.chapterIdx !== currentChapter) {
-        setCurrentChapter(lastReadingPosition.chapterIdx);
-      }
-    } catch (error) {
-      console.error('이어보기 이동 실패:', error);
-    }
-  }, [lastReadingPosition, viewerRef, currentChapter, setCurrentChapter]);
   
   const {
     searchTerm,
@@ -528,39 +487,6 @@ const ViewerTopBar = ({
                   Chapter {currentChapter}
                 </span>
                 
-                {/* 이어보기 버튼 */}
-                {showContinueButton && lastReadingPosition && (
-                  <button
-                    onClick={handleContinueReading}
-                    style={{
-                      display: "inline-flex",
-                      alignItems: "center",
-                      gap: "4px",
-                      padding: "4px 12px",
-                      borderRadius: 16,
-                      background: "linear-gradient(135deg, #10B981 0%, #059669 100%)",
-                      color: "#fff",
-                      fontSize: 13,
-                      fontWeight: 600,
-                      border: "none",
-                      cursor: "pointer",
-                      boxShadow: "0 2px 8px rgba(16, 185, 129, 0.2)",
-                      transition: "all 0.2s ease",
-                    }}
-                    onMouseOver={(e) => {
-                      e.target.style.transform = "scale(1.05)";
-                      e.target.style.boxShadow = "0 4px 12px rgba(16, 185, 129, 0.3)";
-                    }}
-                    onMouseOut={(e) => {
-                      e.target.style.transform = "scale(1)";
-                      e.target.style.boxShadow = "0 2px 8px rgba(16, 185, 129, 0.2)";
-                    }}
-                    title={`마지막 읽은 위치로 이동 (Chapter ${lastReadingPosition.chapterIdx})`}
-                  >
-                    <span style={{ fontSize: "12px" }}>📖</span>
-                    이어보기
-                  </button>
-                )}
               </div>
 
               {/* 이벤트 정보 */}
