@@ -1,4 +1,27 @@
-import { COLORS, ANIMATION_VALUES } from './styles';
+// 순환 참조 방지를 위해 하드코딩된 값 사용
+const COLORS = {
+  backgroundLighter: '#f8fafc',
+  border: '#e5e7eb',
+  textPrimary: '#22336b',
+  backgroundLight: '#f8f9fc',
+  primary: '#6C8EFF',
+  white: '#ffffff',
+  textSecondary: '#6c757d',
+  borderLight: '#e3e6ef',
+  nodeBackground: '#eee',
+  nodeBorder: '#5B7BA0',
+  nodeText: '#444',
+  edgeText: '#42506b',
+  successGreen: '#22c55e',
+  highlightBlue: '#3b82f6',
+};
+
+const ANIMATION_VALUES = {
+  DURATION: {
+    FAST: '0.18s',
+    SLOW: '0.4s',
+  }
+};
 
 export const DEFAULT_LAYOUT = {
   name: "preset",
@@ -147,7 +170,7 @@ export const createGraphStylesheet = (edgeStyle, edgeLabelVisible, maxEdgeLabelL
 /**
  * 그래프 관련 공통 스타일
  */
-export const graphStyles = {
+export const getGraphStyles = () => ({
   container: {
     width: '100%', 
     height: '100%', 
@@ -189,12 +212,15 @@ export const graphStyles = {
     flexDirection: 'column',
     minHeight: 0
   },
-};
+});
+
+// 하위 호환성을 위한 별칭
+export const graphStyles = getGraphStyles();
 
 /**
  * GraphControls 컴포넌트 스타일
  */
-export const graphControlsStyles = {
+export const getGraphControlsStyles = () => ({
   input: {
     width: '180px',
     minWidth: '150px',
@@ -263,7 +289,7 @@ export const graphControlsStyles = {
   suggestionItem: (isSelected) => ({
     padding: '12px 14px',
     cursor: 'pointer',
-    borderBottom: '1px solid #f1f3f4',
+    borderBottom: `1px solid ${COLORS.borderLight}`,
     background: isSelected ? COLORS.backgroundLight : COLORS.white,
     transition: `background ${ANIMATION_VALUES.DURATION.FAST}`,
   }),
@@ -279,7 +305,7 @@ export const graphControlsStyles = {
     fontSize: '11px', 
     color: COLORS.textSecondary, 
     background: COLORS.backgroundLight,
-    borderBottom: '1px solid #e5e7eb',
+    borderBottom: `1px solid ${COLORS.border}`,
     fontWeight: '500'
   },
   container: {
@@ -289,4 +315,7 @@ export const graphControlsStyles = {
     minWidth: '200px',
     zIndex: 1000
   }
-};
+});
+
+// 하위 호환성을 위한 별칭
+export const graphControlsStyles = getGraphControlsStyles();
