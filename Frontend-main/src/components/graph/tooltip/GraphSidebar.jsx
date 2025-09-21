@@ -25,10 +25,10 @@ function GraphSidebar({
 
   // 공통 스타일 객체
   const commonSidebarStyles = {
-    position: "absolute",
+    position: "fixed",
     top: "54px",
-    right: isClosing ? "-450px" : (isVisible ? "0px" : "-450px"),
-    width: "450px",
+    right: isClosing ? "-480px" : (isVisible ? "0px" : "-480px"),
+    width: "480px",
     height: "calc(100vh - 54px)",
     background: "#fff",
     borderRadius: "0px",

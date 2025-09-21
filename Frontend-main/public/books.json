@@ -4,11 +4,10 @@
     "filename": "gatsby.epub",
     "cover": "gatsby-cover.jpg",
     "author": "F. Scott Fitzgerald"
-  },
-  {
-    "title": "Alice in WonderLand",
-    "filename": "alice.epub",
-    "cover": "alice-cover.jpg",
-    "author": "Unknown"
+  },{
+    "title": "Julius Caesar",
+    "filename": "caesar.epub",
+    "cover": "caesar-cover.png",
+    "author": "William Shakespearen"
   }
 ]

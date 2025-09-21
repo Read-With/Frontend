@@ -84,14 +84,18 @@ export function loadGraphData(folderKey, chapter, eventIndex, getEventDataFunc) 
       .map(rel => normalizeRelation(rel))
       .filter(rel => rel !== null && isValidRelation(rel));
 
-    // 요소 변환
+    // 노드 가중치 정보 추출
+    const nodeWeights = eventData.node_weights_accum || null;
+
+    // 요소 변환 (nodeWeights 매개변수 추가)
     const convertedElements = convertRelationsToElements(
       normalizedRelations,
       idToName,
       idToDesc,
       idToMain,
       idToNames,
-      folderKey
+      folderKey,
+      nodeWeights
     );
 
     return {
@@ -106,16 +110,17 @@ export function loadGraphData(folderKey, chapter, eventIndex, getEventDataFunc) 
 }
 
 /**
- * 관계 데이터를 그래프 요소로 변환
+ * 관계 데이터를 그래프 요소로 변환 (새로운 JSON 구조 대응)
  * @param {Array} relations - 관계 데이터 배열
  * @param {Object} idToName - ID to name 매핑
  * @param {Object} idToDesc - ID to description 매핑
  * @param {Object} idToMain - ID to main character 매핑
  * @param {Object} idToNames - ID to names array 매핑
  * @param {string} folderKey - 폴더 키 (이미지 경로용)
+ * @param {Object} nodeWeights - 노드 가중치 정보 (node_weights_accum)
  * @returns {Array} 그래프 요소 배열
  */
-export function convertRelationsToElements(relations, idToName, idToDesc, idToMain, idToNames, folderKey = 'gatsby', previousRelations = null) {
+export function convertRelationsToElements(relations, idToName, idToDesc, idToMain, idToNames, folderKey = 'gatsby', nodeWeights = null, previousRelations = null) {
   // 매개변수 유효성 검사
   if (!Array.isArray(relations)) {
     return [];
@@ -179,6 +184,14 @@ export function convertRelationsToElements(relations, idToName, idToDesc, idToMa
     return hasName;
   });
 
+  // 노드 가중치 기반 크기 계산
+  const getNodeWeight = (nodeId) => {
+    if (nodeWeights && nodeWeights[nodeId]) {
+      return nodeWeights[nodeId].weight || 1;
+    }
+    return 1;
+  };
+
   // 원 배치 좌표 계산
   const centerX = 500;
   const centerY = 350;
@@ -189,6 +202,8 @@ export function convertRelationsToElements(relations, idToName, idToDesc, idToMa
     const x = centerX + r * Math.cos(angle);
     const y = centerY + r * Math.sin(angle);
     const commonName = idToName[strId];
+    const nodeWeight = getNodeWeight(strId);
+    
     nodes.push({
       data: {
         id: strId,
@@ -197,7 +212,8 @@ export function convertRelationsToElements(relations, idToName, idToDesc, idToMa
         description: idToDesc[strId] || '',
         names: [commonName, ...(Array.isArray(idToNames[strId]) ? idToNames[strId] : [])],
         common_name: commonName,
-        image: getCharacterImagePath(folderKey, strId)
+        image: getCharacterImagePath(folderKey, strId),
+        weight: nodeWeight
       },
       position: { x, y }
     });
@@ -275,9 +291,8 @@ export function convertRelationsToElements(relations, idToName, idToDesc, idToMa
           target: id2,
           relation: relationArray,
           label: relationLabel || "",
-          weight: rel.weight || 1,
           positivity: rel.positivity,
-          count: rel.count
+
         }
       });
     }

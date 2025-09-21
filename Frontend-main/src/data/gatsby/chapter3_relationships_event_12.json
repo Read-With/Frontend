@@ -3,374 +3,424 @@
         {
             "id1": 1.0,
             "relation": [
-                "narrator",
-                "acquaintances",
-                "neighbors"
+                "협력",
+                "지인",
+                "알고 있음",
+                "이웃",
+                "관찰자",
+                "무시",
+                "알게 된 사람",
+                "만남",
+                "존경",
+                "불신"
             ],
             "id2": 2.0,
-            "positivity": 0.53,
-            "weight": 3.33,
-            "count": 6
+            "positivity": 0.1,
+            "count": 14
         },
         {
             "relation": [
-                "conversational partners",
-                "observer",
-                "polite",
-                "observed",
-                "friends",
-                "cousins",
-                "acquaintances",
-                "friendly"
+                "협력",
+                "동료",
+                "알려지지 않음",
+                "불신",
+                "이웃",
+                "대화",
+                "무시",
+                "갈등",
+                "경쟁",
+                "지인"
             ],
             "id1": 1.0,
             "id2": 3.0,
-            "positivity": 0.55,
-            "weight": 4.08,
+            "positivity": -0.16,
+            "count": 14
+        },
+        {
+            "relation": [
+                "동정",
+                "친척",
+                "가족 (사촌)",
+                "이웃",
+                "친구",
+                "보호",
+                "가족",
+                "지지",
+                "사촌",
+                "지인"
+            ],
+            "id1": 1.0,
+            "id2": 4.0,
+            "positivity": 0.34,
+            "count": 18
+        },
+        {
+            "id1": 4.0,
+            "relation": [
+                "과거의 연인",
+                "과거 연인",
+                "과거",
+                "연인",
+                "갈등"
+            ],
+            "id2": 2.0,
+            "positivity": -0.23,
+            "count": 13
+        },
+        {
+            "id1": 4.0,
+            "relation": [
+                "남편",
+                "아내",
+                "이웃",
+                "갈등",
+                "부부",
+                "가족",
+                "배우자",
+                "불신"
+            ],
+            "id2": 3.0,
+            "positivity": -0.4,
+            "count": 26
+        },
+        {
+            "relation": [
+                "경쟁자",
+                "적",
+                "원한"
+            ],
+            "id1": 2.0,
+            "id2": 3.0,
+            "positivity": -0.67,
+            "count": 3
+        },
+        {
+            "id1": 4.0,
+            "relation": [
+                "친구",
+                "대화",
+                "동료"
+            ],
+            "id2": 5.0,
+            "positivity": 0.35,
             "count": 12
         },
         {
             "relation": [
-                "forced acquaintance",
-                "acquaintances",
-                "knew socially",
-                "sharers of ideas",
-                "antagonistic",
-                "polite"
+                "동료",
+                "알려지지 않음",
+                "지인",
+                "이웃",
+                "친구",
+                "대화",
+                "무시",
+                "흥미",
+                "관찰",
+                "불신"
             ],
             "id1": 1.0,
-            "id2": 4.0,
-            "positivity": 0.3,
-            "weight": 3.77,
-            "count": 13
-        },
-        {
-            "relation": [
-                "strained",
-                "married",
-                "antagonistic",
-                "dominant"
-            ],
-            "id1": 3.0,
-            "id2": 4.0,
-            "positivity": -0.06,
-            "weight": 7.67,
-            "count": 16
-        },
-        {
-            "id1": 1.0,
-            "relation": [
-                "acquaintances",
-                "introductions",
-                "observer",
-                "observed"
-            ],
             "id2": 5.0,
-            "positivity": 0.37,
-            "weight": 2.56,
-            "count": 9
-        },
-        {
-            "relation": [
-                "confidantes",
-                "acquaintances",
-                "friends"
-            ],
-            "id1": 3.0,
-            "id2": 5.0,
-            "positivity": 0.4,
-            "weight": 4.38,
-            "count": 8
-        },
-        {
-            "id1": 4.0,
-            "relation": [
-                "acquaintances",
-                "disapproval",
-                "interrupted"
-            ],
-            "id2": 5.0,
-            "positivity": 0.0,
-            "weight": 2.57,
-            "count": 7
-        },
-        {
-            "relation": [
-                "mentioned"
-            ],
-            "id1": 3.0,
-            "id2": 2.0,
-            "positivity": 0.6,
-            "weight": 1.0,
-            "count": 1
-        },
-        {
-            "relation": [
-                "acquaintance",
-                "transaction",
-                "mistress",
-                "antagonists",
-                "lovers",
-                "companions",
-                "extramarital affair",
-                "acquaintances",
-                "adulterous relationship",
-                "affair"
-            ],
-            "id1": 4.0,
-            "id2": 6.0,
-            "positivity": 0.23,
-            "weight": 6.6,
+            "positivity": 0.06,
             "count": 15
         },
         {
             "relation": [
-                "married",
-                "unaware of affair"
+                "동료",
+                "알려지지 않음",
+                "지인",
+                "갈등",
+                "무시"
             ],
-            "id1": 6.0,
-            "id2": 7.0,
-            "positivity": -0.92,
-            "weight": 8.0,
-            "count": 6
+            "id1": 5.0,
+            "id2": 3.0,
+            "positivity": -0.13,
+            "count": 3
         },
         {
             "relation": [
-                "antagonistic",
-                "customer",
-                "deceptive",
-                "acquaintances"
+                "정부",
+                "연인",
+                "불륜",
+                "내연 관계",
+                "대화",
+                "갈등"
             ],
-            "id1": 4.0,
-            "id2": 7.0,
-            "positivity": -0.6,
-            "weight": 6.0,
-            "count": 2
-        },
-        {
-            "relation": [
-                "family",
-                "sisters",
-                "sister"
-            ],
-            "id1": 6.0,
-            "id2": 8.0,
-            "positivity": 0.72,
-            "weight": 8.0,
-            "count": 6
-        },
-        {
-            "relation": [
-                "acquaintances",
-                "strangers"
-            ],
-            "id1": 1.0,
+            "id1": 3.0,
             "id2": 6.0,
-            "positivity": 0.08,
-            "weight": 2.5,
-            "count": 6
+            "positivity": -0.32,
+            "count": 20
         },
         {
+            "id1": 3.0,
+            "relation": [
+                "고용주",
+                "상사",
+                "무시",
+                "배우자",
+                "적대"
+            ],
+            "id2": 7.0,
+            "positivity": -0.67,
+            "count": 3
+        },
+        {
+            "relation": [
+                "불신",
+                "배우자",
+                "배신",
+                "부부"
+            ],
             "id1": 6.0,
-            "relation": [
-                "acquaintance",
-                "professional",
-                "acquaintances",
-                "professional interest"
-            ],
-            "id2": 9.0,
-            "positivity": 0.22,
-            "weight": 2.8,
-            "count": 5
-        },
-        {
-            "relation": [
-                "conversational partners",
-                "acquaintance",
-                "talking to",
-                "acquaintances"
-            ],
-            "id1": 8.0,
-            "id2": 1.0,
-            "positivity": 0.22,
-            "weight": 2.6,
-            "count": 5
-        },
-        {
-            "relation": [
-                "acquaintance",
-                "acquaintances"
-            ],
-            "id1": 9.0,
-            "id2": 1.0,
-            "positivity": 0.55,
-            "weight": 3.5,
-            "count": 2
-        },
-        {
-            "id1": 9.0,
-            "relation": [
-                "married"
-            ],
-            "id2": 10.0,
-            "positivity": 0.55,
-            "weight": 8.22,
+            "id2": 7.0,
+            "positivity": -0.74,
             "count": 9
         },
         {
+            "relation": [
+                "지지",
+                "무시",
+                "자매",
+                "연인",
+                "갈등",
+                "가족"
+            ],
             "id1": 6.0,
-            "relation": [
-                "acquaintances"
-            ],
-            "id2": 10.0,
-            "positivity": 0.5,
-            "weight": 3.0,
-            "count": 2
+            "id2": 8.0,
+            "positivity": 0.14,
+            "count": 15
         },
         {
-            "id1": 4.0,
+            "id1": 9.0,
             "relation": [
-                "acquaintances"
+                "동료",
+                "이웃",
+                "남편",
+                "아내",
+                "상호작용",
+                "지인"
             ],
-            "id2": 10.0,
-            "positivity": 0.2,
-            "weight": 3.0,
-            "count": 1
+            "id2": 6.0,
+            "positivity": -0.05,
+            "count": 6
         },
         {
             "relation": [
-                "acquaintances"
+                "지인",
+                "갈등",
+                "부부"
             ],
             "id1": 9.0,
-            "id2": 4.0,
-            "positivity": -0.2,
-            "weight": 3.0,
-            "count": 1
+            "id2": 8.0,
+            "positivity": -0.06,
+            "count": 5
         },
         {
+            "id1": 3.0,
             "relation": [
-                "acquaintances"
-            ],
-            "id1": 8.0,
-            "id2": 2.0,
-            "positivity": -0.3,
-            "weight": 2.0,
-            "count": 1
-        },
-        {
-            "id1": 10.0,
-            "relation": [
-                "acquaintances",
-                "friends"
+                "적",
+                "지인"
             ],
             "id2": 8.0,
-            "positivity": 0.6,
-            "weight": 4.5,
+            "positivity": -0.35,
             "count": 2
         },
         {
             "relation": [
-                "gossip about"
+                "대화",
+                "상호작용",
+                "무시"
+            ],
+            "id1": 9.0,
+            "id2": 3.0,
+            "positivity": -0.17,
+            "count": 3
+        },
+        {
+            "relation": [
+                "대화",
+                "관심",
+                "지인",
+                "질문"
             ],
             "id1": 8.0,
-            "id2": 3.0,
-            "positivity": -0.2,
-            "weight": 3.0,
-            "count": 1
-        },
-        {
-            "relation": [
-                "talking to"
-            ],
-            "id1": 10.0,
             "id2": 1.0,
-            "positivity": -0.1,
-            "weight": 1.0,
-            "count": 1
+            "positivity": 0.13,
+            "count": 3
         },
         {
             "relation": [
-                "antagonists"
+                "소문",
+                "알고 있음",
+                "불신"
             ],
-            "id1": 6.0,
-            "id2": 3.0,
-            "positivity": -1.0,
-            "weight": 5.0,
-            "count": 1
+            "id1": 8.0,
+            "id2": 2.0,
+            "positivity": -0.2,
+            "count": 3
         },
         {
             "relation": [
-                "acquaintances"
+                "대화"
             ],
-            "id1": 0.0,
-            "id2": 0.0,
-            "positivity": 0.5,
-            "weight": 3.0,
+            "id1": 1.0,
+            "id2": 6.0,
+            "positivity": 0.0,
             "count": 1
         },
         {
+            "id1": 8.0,
             "relation": [
-                "acquaintances"
+                "불신",
+                "적대감",
+                "지인"
             ],
-            "id1": 5.0,
-            "id2": 10.0,
-            "positivity": 0.45,
-            "weight": 2.5,
+            "id2": 4.0,
+            "positivity": -0.25,
             "count": 2
         },
         {
-            "id1": 5.0,
             "relation": [
-                "acquaintances"
+                "적대",
+                "적대감",
+                "불신"
             ],
-            "id2": 9.0,
-            "positivity": 0.2,
-            "weight": 2.0,
+            "id1": 4.0,
+            "id2": 6.0,
+            "positivity": -0.85,
+            "count": 2
+        },
+        {
+            "relation": [
+                "가족",
+                "무시"
+            ],
+            "id1": 8.0,
+            "id2": 7.0,
+            "positivity": -0.4,
             "count": 1
+        },
+        {
+            "id1": 9.0,
+            "relation": [
+                "동료"
+            ],
+            "id2": 1.0,
+            "positivity": 0.1,
+            "count": 1
+        },
+        {
+            "relation": [
+                "친구",
+                "알고 있음"
+            ],
+            "id1": 5.0,
+            "id2": 8.0,
+            "positivity": 0.0,
+            "count": 2
+        },
+        {
+            "id1": 2.0,
+            "relation": [
+                "동료",
+                "무시",
+                "알고 있음",
+                "친구",
+                "지인"
+            ],
+            "id2": 5.0,
+            "positivity": 0.03,
+            "count": 4
         },
         {
             "id1": 10.0,
             "relation": [
-                "gossip",
-                "speculation"
+                "무시"
             ],
-            "id2": 2.0,
-            "positivity": -0.2,
-            "weight": 3.0,
-            "count": 1
-        },
-        {
-            "relation": [
-                "knows"
-            ],
-            "id1": 5.0,
-            "id2": 2.0,
-            "positivity": 0.0,
-            "weight": 2.0,
-            "count": 1
-        },
-        {
-            "relation": [
-                "acquaintances"
-            ],
-            "id1": 5.0,
-            "id2": 11.0,
-            "positivity": 0.5,
-            "weight": 3.0,
+            "id2": 5.0,
+            "positivity": -0.5,
             "count": 1
         }
     ],
+    "node_weights_accum": {
+        "1": {
+            "weight": 5.58,
+            "count": 41
+        },
+        "2": {
+            "weight": 5.9,
+            "count": 19
+        },
+        "4": {
+            "weight": 6.61,
+            "count": 20
+        },
+        "3": {
+            "weight": 5.72,
+            "count": 33
+        },
+        "5": {
+            "weight": 4.87,
+            "count": 21
+        },
+        "7": {
+            "weight": 3.89,
+            "count": 9
+        },
+        "6": {
+            "weight": 7.19,
+            "count": 20
+        },
+        "8": {
+            "weight": 5.42,
+            "count": 17
+        },
+        "9": {
+            "weight": 4.6,
+            "count": 10
+        },
+        "10": {
+            "weight": 7.0,
+            "count": 2
+        }
+    },
     "log": {
         "event_index": 12,
-        "new_character_ids": [
-            11.0
+        "new_character_ids": [],
+        "new_relations": [],
+        "updated_relations": [
+            {
+                "id_pair": [
+                    2.0,
+                    5.0
+                ],
+                "positivity_before": -0.13,
+                "positivity_after": 0.03
+            },
+            {
+                "id_pair": [
+                    1.0,
+                    2.0
+                ],
+                "positivity_before": 0.07,
+                "positivity_after": 0.1
+            }
         ],
-        "new_relations": [
-            [
-                5.0,
-                11.0
-            ]
-        ],
-        "updated_relations": []
+        "updated_node_weights": [
+            {
+                "id": 5,
+                "weight_before": 4.76,
+                "weight_after": 4.87
+            },
+            {
+                "id": 2,
+                "weight_before": 5.73,
+                "weight_after": 5.9
+            },
+            {
+                "id": 1,
+                "weight_before": 5.54,
+                "weight_after": 5.58
+            }
+        ]
     }
 }

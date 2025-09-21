@@ -7,6 +7,7 @@ export function useTooltipPosition(initialX, initialY) {
   const [isDragging, setIsDragging] = useState(false);
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
   const [hasDragged, setHasDragged] = useState(false);
+  const [justFinishedDragging, setJustFinishedDragging] = useState(false);
   const tooltipRef = useRef(null);
 
   useEffect(() => {
@@ -38,6 +39,20 @@ export function useTooltipPosition(initialX, initialY) {
   };
 
   const handleMouseUp = () => {
+    if (isDragging) {
+      setJustFinishedDragging(true);
+      
+      // 드래그 완료 이벤트 발생
+      const dragEndEvent = new CustomEvent('dragend', {
+        detail: { type: 'dragend', timestamp: Date.now() }
+      });
+      document.dispatchEvent(dragEndEvent);
+      
+      // 드래그 완료 후 잠시 후에 플래그 리셋
+      setTimeout(() => {
+        setJustFinishedDragging(false);
+      }, 150);
+    }
     setIsDragging(false);
   };
 
@@ -76,6 +91,7 @@ export function useTooltipPosition(initialX, initialY) {
     position,
     showContent,
     isDragging,
+    justFinishedDragging,
     tooltipRef,
     handleMouseDown,
     getContainerInfo,

@@ -1,6 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { loadBookmarks, removeBookmark, modifyBookmark } from './BookmarkManager';
+import { loadBookmarks, removeBookmark, modifyBookmark, sortBookmarksByDate } from './BookmarkManager';
+import { createButtonStyle, createAdvancedButtonHandlers } from '../../../utils/styles/styles';
+import { ANIMATION_VALUES } from '../../../utils/styles/animations';
 
 const bookmarkColors = {
   normal: '#f4f7ff', // 연회색(이전 페이지와 통일)
@@ -46,6 +48,25 @@ const BookmarksPage = () => {
   const [loading, setLoading] = useState(true);
   const [newMemo, setNewMemo] = useState({});
   const [editingMemo, setEditingMemo] = useState({});
+  const [sortOrder, setSortOrder] = useState('recent'); // 'recent' | 'oldest' | 'position'
+
+  // 북마크 정렬
+  const sortedBookmarks = useMemo(() => {
+    if (!bookmarks || bookmarks.length === 0) return [];
+    
+    switch (sortOrder) {
+      case 'recent':
+        return sortBookmarksByDate(bookmarks);
+      case 'oldest':
+        return sortBookmarksByDate(bookmarks).reverse();
+      case 'position':
+        return [...bookmarks].sort((a, b) => {
+          return a.startCfi.localeCompare(b.startCfi);
+        });
+      default:
+        return bookmarks;
+    }
+  }, [bookmarks, sortOrder]);
 
   // 북마크 로드
   useEffect(() => {
@@ -138,14 +159,14 @@ const BookmarksPage = () => {
     // ... 이하 생략
   };
 
-  // 북마크를 3개씩 그룹화하는 함수 (2개씩에서 3개씩으로 변경)
+  // 북마크를 3개씩 그룹화하는 함수 (정렬된 북마크 사용)
   const getBookmarkGroups = () => {
     const groups = [];
-    for (let i = 0; i < bookmarks.length; i += 3) {
+    for (let i = 0; i < sortedBookmarks.length; i += 3) {
       groups.push([
-        bookmarks[i],
-        i + 1 < bookmarks.length ? bookmarks[i + 1] : null,
-        i + 2 < bookmarks.length ? bookmarks[i + 2] : null
+        sortedBookmarks[i],
+        i + 1 < sortedBookmarks.length ? sortedBookmarks[i + 1] : null,
+        i + 2 < sortedBookmarks.length ? sortedBookmarks[i + 2] : null
       ]);
     }
     return groups;
@@ -466,26 +487,64 @@ const BookmarksPage = () => {
   return (
     <div style={{ padding: '2rem', maxWidth: '1200px', margin: '0 auto', fontFamily: 'var(--font-family-primary)' }}>
       <div style={{ marginBottom: '2rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <h1 style={{ margin: 0, fontSize: '1.8rem', color: '#22336b', fontWeight: 600 }}>북마크</h1>
-        <button
-          style={{
-            background: 'linear-gradient(135deg, #6C8EFF 0%, #5A7BFF 100%)',
-            color: 'white',
-            border: 'none',
-            padding: '0.6rem 1.2rem',
-            borderRadius: '0.5rem',
-            fontWeight: 500,
-            cursor: 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '0.5rem',
-            boxShadow: '0 2px 8px rgba(108, 142, 255, 0.2)',
-            transition: 'all 0.2s ease',
-          }}
-          onClick={() => navigate(`/viewer/${cleanFilename}`)}
-        >
-          뷰어로 돌아가기
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+          <h1 style={{ margin: 0, fontSize: '1.8rem', color: '#22336b', fontWeight: 600 }}>북마크</h1>
+          <span style={{ 
+            background: '#EEF2FF', 
+            color: '#4F6DDE', 
+            padding: '0.3rem 0.8rem', 
+            borderRadius: '1rem', 
+            fontSize: '0.9rem', 
+            fontWeight: 600 
+          }}>
+            {bookmarks.length}개
+          </span>
+        </div>
+        
+        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+          {/* 정렬 옵션 */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <span style={{ fontSize: '0.9rem', color: '#6b7280', fontWeight: 500 }}>정렬:</span>
+            <select
+              value={sortOrder}
+              onChange={(e) => setSortOrder(e.target.value)}
+              style={{
+                padding: '0.4rem 0.8rem',
+                borderRadius: '0.5rem',
+                border: '1px solid #e5e7eb',
+                background: 'white',
+                fontSize: '0.9rem',
+                color: '#374151',
+                cursor: 'pointer',
+                outline: 'none'
+              }}
+            >
+              <option value="recent">최신순</option>
+              <option value="oldest">오래된순</option>
+              <option value="position">위치순</option>
+            </select>
+          </div>
+          
+          <button
+            style={{
+              background: 'linear-gradient(135deg, #6C8EFF 0%, #5A7BFF 100%)',
+              color: 'white',
+              border: 'none',
+              padding: '0.6rem 1.2rem',
+              borderRadius: '0.5rem',
+              fontWeight: 500,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.5rem',
+              boxShadow: '0 2px 8px rgba(108, 142, 255, 0.2)',
+              transition: 'all 0.2s ease',
+            }}
+            onClick={() => navigate(`/viewer/${cleanFilename}`)}
+          >
+            뷰어로 돌아가기
+          </button>
+        </div>
       </div>
 
       {bookmarks.length === 0 ? (

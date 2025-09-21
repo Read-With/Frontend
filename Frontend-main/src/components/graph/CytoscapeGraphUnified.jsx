@@ -5,6 +5,56 @@ import { detectAndResolveOverlap, calcGraphDiff } from "../../utils/graphDataUti
 import { applySearchFadeEffect, shouldShowNoSearchResults, getNoSearchResultsMessage } from "../../utils/searchUtils.jsx";
 import useGraphInteractions from "../../hooks/useGraphInteractions.js";
 
+// 요소들이 화면 경계 내에 있는지 확인하고 조정하는 함수
+const ensureElementsInBounds = (cy, container) => {
+  if (!cy || !container) return;
+  
+  const containerWidth = container.clientWidth;
+  const containerHeight = container.clientHeight;
+  const padding = 100;
+  
+  const bounds = {
+    left: -containerWidth / 2 + padding,
+    right: containerWidth / 2 - padding,
+    top: -containerHeight / 2 + padding,
+    bottom: containerHeight / 2 - padding
+  };
+  
+  let needsAdjustment = false;
+  const nodes = cy.nodes();
+  
+  nodes.forEach(node => {
+    const pos = node.position();
+    let newX = pos.x;
+    let newY = pos.y;
+    
+    if (pos.x < bounds.left) {
+      newX = bounds.left;
+      needsAdjustment = true;
+    } else if (pos.x > bounds.right) {
+      newX = bounds.right;
+      needsAdjustment = true;
+    }
+    
+    if (pos.y < bounds.top) {
+      newY = bounds.top;
+      needsAdjustment = true;
+    } else if (pos.y > bounds.bottom) {
+      newY = bounds.bottom;
+      needsAdjustment = true;
+    }
+    
+    if (newX !== pos.x || newY !== pos.y) {
+      node.position({ x: newX, y: newY });
+    }
+  });
+  
+  // 조정이 필요한 경우 레이아웃을 다시 실행
+  if (needsAdjustment) {
+    cy.layout({ name: 'preset' }).run();
+  }
+};
+
 // Ripple 효과 생성 함수 - 확대/축소 상태 고려
 const createRippleEffect = (container, x, y, cyRef) => {
   const ripple = document.createElement('div');
@@ -55,7 +105,6 @@ const CytoscapeGraphUnified = ({
   cyRef: externalCyRef,
   newNodeIds = [],
   onLayoutComplete,
-  nodeSize = 40,
   searchTerm = "",
   isSearchActive = false,
   filteredElements = [],
@@ -210,18 +259,27 @@ const CytoscapeGraphUnified = ({
     
     const handleDragFreeOn = () => {
       setTimeout(() => {
-        detectAndResolveOverlap(cy, nodeSize);
+        detectAndResolveOverlap(cy, 40);
       }, 50);
     };
 
     const handleDrag = (evt) => {
       const node = evt.target;
       node.style('transition-property', 'none');
+      isDraggingRef.current = true;
     };
 
     const handleDragFree = (evt) => {
       const node = evt.target;
       node.style('transition-property', 'position');
+      
+      // 드래그 완료 이벤트 발생
+      const dragEndEvent = new CustomEvent('graphDragEnd', {
+        detail: { type: 'graphDragEnd', timestamp: Date.now() }
+      });
+      document.dispatchEvent(dragEndEvent);
+      
+      isDraggingRef.current = false;
     };
 
     cy.on('dragfreeon', 'node', handleDragFreeOn);
@@ -237,7 +295,7 @@ const CytoscapeGraphUnified = ({
       container.removeEventListener('mousemove', handleMouseMove);
       container.removeEventListener('mouseup', handleMouseUp);
     };
-  }, [externalCyRef, nodeSize]);
+  }, [externalCyRef]);
 
   // 이벤트 핸들러 등록
   useEffect(() => {
@@ -340,30 +398,55 @@ const CytoscapeGraphUnified = ({
       const nodes = elements.filter(e => !e.data.source && !e.data.target);
       const edges = elements.filter(e => e.data.source && e.data.target);
       
-      const NODE_SIZE = nodeSize;
-      const MIN_DISTANCE = NODE_SIZE * 2.8;
+      const NODE_SIZE = 40;
+      const MIN_DISTANCE = NODE_SIZE * 3.2;
+      const CONTAINER_PADDING = 80;
       const placedPositions = nodes
         .filter(node => prevNodeIds.has(node.data.id) && node.position)
         .map(node => node.position);
       const newNodes = nodes.filter(node => !prevNodeIds.has(node.data.id));
       
+      // 컨테이너 크기 계산
+      const containerWidth = containerRef.current?.clientWidth || 800;
+      const containerHeight = containerRef.current?.clientHeight || 600;
+      const maxRadius = Math.min(containerWidth, containerHeight) / 2 - CONTAINER_PADDING;
+      
       newNodes.forEach(node => {
         let found = false;
         let x, y;
         let attempts = 0;
-        const maxAttempts = 100;
+        const maxAttempts = 200;
+        
         while (!found && attempts < maxAttempts) {
-          const angle = Math.random() * 2 * Math.PI;
-          const radius = 100 + Math.random() * 100;
+          // 스파이럴 패턴으로 배치 시도
+          const angle = (attempts * 0.5) % (2 * Math.PI);
+          const radius = Math.min(50 + attempts * 2, maxRadius);
+          
           x = Math.cos(angle) * radius;
           y = Math.sin(angle) * radius;
-          found = placedPositions.every(pos => {
-            const dx = x - pos.x;
-            const dy = y - pos.y;
-            return Math.sqrt(dx * dx + dy * dy) > MIN_DISTANCE;
-          });
+          
+          // 경계 체크
+          const isWithinBounds = 
+            Math.abs(x) < containerWidth / 2 - CONTAINER_PADDING &&
+            Math.abs(y) < containerHeight / 2 - CONTAINER_PADDING;
+          
+          if (isWithinBounds) {
+            found = placedPositions.every(pos => {
+              const dx = x - pos.x;
+              const dy = y - pos.y;
+              return Math.sqrt(dx * dx + dy * dy) > MIN_DISTANCE;
+            });
+          }
+          
           attempts++;
         }
+        
+        // 최종 위치가 경계를 벗어나면 중앙 근처로 조정
+        if (!found) {
+          x = (Math.random() - 0.5) * 100;
+          y = (Math.random() - 0.5) * 100;
+        }
+        
         node.position = { x, y };
         placedPositions.push({ x, y });
       });
@@ -390,7 +473,9 @@ const CytoscapeGraphUnified = ({
           });
           layoutInstance.on('layoutstop', () => {
             setTimeout(() => {
-              detectAndResolveOverlap(cy, nodeSize);
+              // 레이아웃 완료 후 요소들이 화면 내에 있는지 확인하고 조정
+              ensureElementsInBounds(cy, containerRef.current);
+              detectAndResolveOverlap(cy, 40);
               
               if (nodesToAdd.length > 0 && !isInitialLoad && !isResetFromSearch) {
                 nodesToAdd.forEach(node => {
@@ -411,7 +496,9 @@ const CytoscapeGraphUnified = ({
           layoutInstance.run();
         } else {
           setTimeout(() => {
-            detectAndResolveOverlap(cy, nodeSize);
+            // 레이아웃 완료 후 요소들이 화면 내에 있는지 확인하고 조정
+            ensureElementsInBounds(cy, containerRef.current);
+            detectAndResolveOverlap(cy, 40);
             
             if (nodesToAdd.length > 0 && !isInitialLoad && !isResetFromSearch) {
               nodesToAdd.forEach(node => {
@@ -440,17 +527,24 @@ const CytoscapeGraphUnified = ({
           cy.nodes().removeClass('search-highlight');
           nodes.addClass('search-highlight');
           
-          cy.nodes().style('width', nodeSize);
-          cy.nodes().style('height', nodeSize);
-          nodes.style('width', nodeSize * 1.2);
-          nodes.style('height', nodeSize * 1.2);
+          // 가중치 기반 크기는 스타일시트에서 자동으로 적용되므로 직접 조정하지 않음
+          // 검색 결과 노드만 약간 크게 표시
+               nodes.style('width', (ele) => {
+                 const weight = ele.data('weight');
+                 const baseSize = weight ? Math.round(10 * weight) : 10;
+                 return baseSize * 1.2;
+               });
+               nodes.style('height', (ele) => {
+                 const weight = ele.data('weight');
+                 const baseSize = weight ? Math.round(10 * weight) : 10;
+                 return baseSize * 1.2;
+               });
         }
       } else {
         // 검색이 비활성화된 상태에서는 fit을 호출하지 않음 (확대/축소 상태 유지)
         if (!isSearchActive) {
           cy.nodes().removeClass('search-highlight');
-          cy.nodes().style('width', nodeSize);
-          cy.nodes().style('height', nodeSize);
+          // 가중치 기반 크기는 스타일시트에서 자동으로 적용되므로 직접 조정하지 않음
         }
       }
       
@@ -464,13 +558,23 @@ const CytoscapeGraphUnified = ({
     }
     
     setIsGraphVisible(true);
-  }, [elements, externalCyRef, previousElements, isInitialLoad, stylesheet, layout, nodeSize, fitNodeIds, isSearchActive, filteredElements, onLayoutComplete, isResetFromSearch]);
+  }, [elements, externalCyRef, previousElements, isInitialLoad, stylesheet, layout, fitNodeIds, isSearchActive, filteredElements, onLayoutComplete, isResetFromSearch]);
 
   // 크기 반응형
   useEffect(() => {
     const handleResize = () => {
-      if (externalCyRef?.current) externalCyRef.current.resize();
+      const cy = externalCyRef?.current;
+      if (!cy) return;
+      
+      // 리사이즈 후 요소들이 화면 내에 있는지 확인
+      cy.resize();
+      
+      // 약간의 지연 후 경계 체크
+      setTimeout(() => {
+        ensureElementsInBounds(cy, containerRef.current);
+      }, 100);
     };
+    
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
   }, [externalCyRef]);
@@ -489,6 +593,10 @@ const CytoscapeGraphUnified = ({
         visibility: isGraphVisible ? "visible" : "hidden",
         minHeight: "400px",
         minWidth: "450px",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        boxSizing: "border-box",
       }}
       className="graph-canvas-area"
     >

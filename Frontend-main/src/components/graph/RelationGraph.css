@@ -87,9 +87,15 @@
   transition: min-width 0.02s ease, min-height 0.02s ease;
 }
 
-/* 그래프 캔버스 영역 - 매우 빠른 이동을 위한 설정 */
+/* 그래프 캔버스 영역 - 안정적인 배치를 위한 설정 */
 .graph-canvas-area {
   transition: all 0.02s ease-out;
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
 }
 
 /* 노드 드래그 시 매우 빠른 이동 */

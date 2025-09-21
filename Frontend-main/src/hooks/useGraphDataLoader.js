@@ -50,21 +50,21 @@ export function useGraphDataLoader(filename, chapter, eventIndex = null) {
 
   const loadData = useCallback(async (folderKey, chapter, targetEventIndex) => {
     if (targetEventIndex === 0) {
-      return;
+      return Promise.resolve();
     }
 
     try {
       const eventData = getEventDataByIndex(folderKey, chapter, targetEventIndex);
       
       if (!eventData) {
-        return;
+        return Promise.resolve();
       }
 
       const charData = getCharactersData(folderKey, chapter);
       
       if (!charData) {
         setError('캐릭터 데이터를 찾을 수 없습니다.');
-        return;
+        return Promise.resolve();
       }
       
       setCurrentChapterData(charData);
@@ -74,6 +74,9 @@ export function useGraphDataLoader(filename, chapter, eventIndex = null) {
       const normalizedRelations = (eventData.relations || [])
         .map(rel => normalizeRelation(rel))
         .filter(rel => isValidRelation(rel));
+      
+      // 노드 가중치 정보 추출
+      const nodeWeights = eventData.node_weights_accum || null;
       
       // 이전 이벤트 데이터 가져오기
       let previousEventData = null;
@@ -93,6 +96,7 @@ export function useGraphDataLoader(filename, chapter, eventIndex = null) {
         idToMain,
         idToNames,
         folderKey,
+        nodeWeights,
         previousRelations
       );
       
@@ -159,15 +163,19 @@ export function useGraphDataLoader(filename, chapter, eventIndex = null) {
     }
 
     setError(null);
+    setLoading(true); // 로딩 시작
 
     const folderKey = getFolderKeyFromFilename(filename);
     const targetEventIndex = eventIndex || getLastEventIndexForChapter(folderKey, chapter);
     
-    loadData(folderKey, chapter, targetEventIndex);
+    loadData(folderKey, chapter, targetEventIndex).finally(() => {
+      setLoading(false); // 로딩 완료
+    });
   }, [filename, chapter, eventIndex, loadData]);
 
   return {
     elements,
+    setElements,
     newNodeIds,
     currentChapterData,
     maxEventNum,

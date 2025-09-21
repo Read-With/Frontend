@@ -9,6 +9,19 @@ const createApiResponse = (isSuccess, code, message, result) => ({
   result
 });
 
+// 그래프 API 응답 타입 정의
+const createGraphApiResponse = (isSuccess, code, message, result) => ({
+  isSuccess,
+  code,
+  message,
+  result: {
+    userCurrentChapter: result?.userCurrentChapter || 0,
+    characters: result?.characters || [],
+    relations: result?.relations || [],
+    event: result?.event || null
+  }
+});
+
 // HTTP 요청 헬퍼 함수
 const apiRequest = async (url, options = {}) => {
   const config = {
@@ -27,7 +40,9 @@ const apiRequest = async (url, options = {}) => {
     const data = await response.json();
     
     if (!response.ok) {
-      throw new Error(data.message || 'API 요청 실패');
+      const error = new Error(data.message || 'API 요청 실패');
+      error.status = response.status;
+      throw error;
     }
     
     return data;
@@ -161,6 +176,54 @@ export const deleteBookmark = async (bookmarkId) => {
   });
 };
 
+// 그래프 관련 API
+// 거시(챕터 누적) 그래프 조회
+export const getMacroGraph = async (bookId, uptoChapter) => {
+  if (!bookId || uptoChapter === undefined || uptoChapter === null) {
+    throw new Error('bookId와 uptoChapter는 필수 매개변수입니다.');
+  }
+
+  const queryParams = new URLSearchParams();
+  queryParams.append('bookId', bookId);
+  queryParams.append('uptoChapter', uptoChapter);
+  
+  try {
+    const response = await apiRequest(`/api/graph/macro?${queryParams.toString()}`);
+    return createGraphApiResponse(true, 'SUCCESS', '거시 그래프 데이터를 성공적으로 조회했습니다.', response.result);
+  } catch (error) {
+    throw new Error(`거시 그래프 조회 실패: ${error.message}`);
+  }
+};
+
+// 세밀(이벤트) 그래프 조회
+export const getFineGraph = async (bookId, chapterIdx, eventIdx) => {
+  if (!bookId || chapterIdx === undefined || chapterIdx === null || eventIdx === undefined || eventIdx === null) {
+    throw new Error('bookId, chapterIdx, eventIdx는 필수 매개변수입니다.');
+  }
+
+  const queryParams = new URLSearchParams();
+  queryParams.append('bookId', bookId);
+  queryParams.append('chapterIdx', chapterIdx);
+  queryParams.append('eventIdx', eventIdx);
+  
+  try {
+    const response = await apiRequest(`/api/graph/fine?${queryParams.toString()}`);
+    return createGraphApiResponse(true, 'SUCCESS', '세밀 그래프 데이터를 성공적으로 조회했습니다.', response.result);
+  } catch (error) {
+    // 더 자세한 에러 정보 제공
+    const errorMessage = error.message || '알 수 없는 오류';
+    const statusCode = error.status || 'unknown';
+    
+    if (statusCode === 500) {
+      throw new Error(`세밀 그래프 조회 실패: 서버 에러 (500) - ${errorMessage}`);
+    } else if (statusCode === 404) {
+      throw new Error(`세밀 그래프 조회 실패: 해당 이벤트를 찾을 수 없습니다 (404) - ${errorMessage}`);
+    } else {
+      throw new Error(`세밀 그래프 조회 실패: ${errorMessage} (${statusCode})`);
+    }
+  }
+};
+
 export default {
   getBooks,
   uploadBook,
@@ -179,4 +242,6 @@ export default {
   createBookmark,
   updateBookmark,
   deleteBookmark,
+  getMacroGraph,
+  getFineGraph,
 };

@@ -1,16 +1,17 @@
 export const DEFAULT_LAYOUT = {
   name: "preset",
-  padding: 20,
-  nodeRepulsion: 15000,
-  idealEdgeLength: 400,
+  padding: 40,
+  nodeRepulsion: 20000,
+  idealEdgeLength: 300,
   animate: false,
   fit: true,
   randomize: false,
   nodeOverlap: 0,
   avoidOverlap: true,
-  nodeSeparation: 50,
+  nodeSeparation: 60,
   randomSeed: 42,
-  componentSpacing: 400
+  componentSpacing: 300,
+  boundingBox: undefined // 컨테이너 크기에 맞춰 자동 조정
 };
 
 export const SEARCH_LAYOUT = {
@@ -38,46 +39,14 @@ export const getWideLayout = () => {
   return { name: 'preset' };
 };
 
-// [페이지 위치와 관계 값에 따라 그래프 스타일 조절]
-export const getNodeSize = (context = 'default') => {
-  if (typeof window === 'undefined' || !window.location) {
-    return 40; // SSR 환경 고려
-  }
-  
-  const path = window.location.pathname || '';
-  if (path.includes('/user/viewer/')) return 40;
-  if (path.includes('/user/graph/')) {
-    return context === 'viewer' ? 45 : 40;
-  }
-
-  return context === 'viewer' ? 40 : 40;
-};
-
 export const getEdgeStyle = (context = 'default') => {
-  if (typeof window === 'undefined' || !window.location) {
-    return {
-      width: 'data(weight)',
-      fontSize: context === 'viewer' ? 8 : 9,
-    };
-  }
+  const edgeWidth = 5;
+  const isViewer = context === 'viewer';
+  const isGraphPage = typeof window !== 'undefined' && window.location?.pathname?.includes('/user/graph/');
   
-  const path = window.location.pathname || '';
-  if (path.includes('/user/viewer/')) {
-    return {
-      width: 'data(weight)',
-      fontSize: context === 'viewer' ? 8 : 9,
-    };
-  }
-  if (path.includes('/user/graph/')) {
-    return {
-      width: 'data(weight)',
-      fontSize: 11,
-    };
-  }
-
   return {
-    width: 'data(weight)',
-    fontSize: context === 'viewer' ? 8 : 9,
+    width: edgeWidth,
+    fontSize: isGraphPage ? 12 : (isViewer ? 10 : 10)
   };
 };
 
@@ -87,8 +56,14 @@ export const getRelationColor = (positivity) => {
   return `hsl(${h}, 70%, 45%)`;
 };
 
-// [공통 스타일시트 생성 함수]
-export const createGraphStylesheet = (nodeSize, edgeStyle, edgeLabelVisible, maxEdgeLabelLength = null) => [
+// 노드 크기 계산 함수 (기본 크기 8 × 가중치)
+export const calculateNodeSize = (baseSize, weight) => {
+  if (!weight || weight <= 0) return 8; 
+  return Math.round(8 * weight);
+};
+
+// [공통 스타일시트 생성 함수 - 가중치 기반 노드 크기만 사용]
+export const createGraphStylesheet = (edgeStyle, edgeLabelVisible, maxEdgeLabelLength = null) => [
   {
     selector: "node[image]",
     style: {
@@ -96,17 +71,17 @@ export const createGraphStylesheet = (nodeSize, edgeStyle, edgeLabelVisible, max
       "background-image": "data(image)",
       "background-fit": "cover",
       "background-clip": "node",
-      "border-width": (ele) => (ele.data("main") ? 2 : 1),
+      "border-width": (ele) => (ele.data("main_character") ? 2 : 1),
       "border-color": "#5B7BA0",
       "border-opacity": 1,
-      width: nodeSize,
-      height: nodeSize,
+      width: (ele) => calculateNodeSize(8, ele.data("weight")),
+      height: (ele) => calculateNodeSize(8, ele.data("weight")),
       shape: "ellipse",
       label: "data(label)",
       "text-valign": "bottom",
       "text-halign": "center",
       "font-size": 12,
-      "font-weight": (ele) => (ele.data("main") ? 700 : 400),
+      "font-weight": (ele) => (ele.data("main_character") ? 600 : 400),
       color: "#444",
       "text-margin-y": 2,
       "text-background-color": "#fff",
@@ -130,12 +105,12 @@ export const createGraphStylesheet = (nodeSize, edgeStyle, edgeLabelVisible, max
       "text-rotation": "autorotate",
       color: "#42506b",
       "text-background-color": "#fff",
-      "text-background-opacity": 0.8,
+      "text-background-opacity": 0.85,
       "text-background-shape": "roundrectangle",
       "text-background-padding": 2,
       "text-outline-color": "#fff",
       "text-outline-width": 2,
-      opacity: "mapData(weight, 0, 1, 0.55, 1)",
+      opacity: 0.85,
       "target-arrow-shape": "none",
     },
   },
@@ -196,15 +171,21 @@ export const graphStyles = {
 
   graphPageContainer: {
     width: '100%', 
-    height: '100vh', // 전체 화면 높이 사용
+    height: '100vh', 
     overflow: 'hidden', 
     position: 'relative', 
-    backgroundColor: '#f8fafc' 
+    backgroundColor: '#f8fafc',
+    display: 'flex',
+    flexDirection: 'column'
   },
   graphPageInner: {
     position: 'relative', 
     width: '100%', 
-    height: '100%' 
+    height: '100%',
+    flex: 1,
+    display: 'flex',
+    flexDirection: 'column',
+    minHeight: 0
   },
 };
 

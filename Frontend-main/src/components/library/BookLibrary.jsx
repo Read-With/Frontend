@@ -3,8 +3,11 @@ import PropTypes from 'prop-types';
 import { useNavigate } from 'react-router-dom';
 import LoadingSpinner from '../common/LoadingSpinner';
 import { theme } from '../common/theme';
+import { createButtonStyle, createAdvancedButtonHandlers } from '../../utils/styles/styles';
+import { ANIMATION_VALUES } from '../../utils/styles/animations';
+import BookDetailModal from './BookDetailModal';
 
-const BookCard = ({ book, onToggleFavorite, onBookClick }) => {
+const BookCard = ({ book, onToggleFavorite, onBookClick, onBookDetailClick }) => {
   const navigate = useNavigate();
   const [imageError, setImageError] = useState(false);
 
@@ -87,36 +90,32 @@ const BookCard = ({ book, onToggleFavorite, onBookClick }) => {
 
   const buttonsStyle = {
     display: 'flex',
-    gap: '6px',
+    gap: '4px',
     justifyContent: 'center',
     marginTop: '10px'
   };
 
   const primaryButtonStyle = {
-    padding: '2px 10px',
+    ...createButtonStyle(ANIMATION_VALUES, 'primary'),
+    padding: '2px 8px',
     fontSize: theme.fontSize.xs,
     borderRadius: theme.borderRadius.full,
-    background: theme.gradients.primary,
-    color: theme.colors.text.white,
-    border: 'none',
-    fontWeight: 600,
-    cursor: 'pointer',
-    minWidth: '70px',
-    transition: `transform ${theme.transitions.default}, background ${theme.transitions.default}`
+    minWidth: '60px',
+    height: 'auto'
   };
 
   const secondaryButtonStyle = {
-    padding: '2px 10px',
+    ...createButtonStyle(ANIMATION_VALUES, 'default'),
+    padding: '2px 8px',
     fontSize: theme.fontSize.xs,
     borderRadius: theme.borderRadius.full,
     background: '#f0f4fa',
     color: theme.colors.primary,
     border: 'none',
-    fontWeight: 600,
-    cursor: 'pointer',
-    minWidth: '70px',
-    transition: `transform ${theme.transitions.default}`
+    minWidth: '60px',
+    height: 'auto'
   };
+
 
   const [isHovered, setIsHovered] = React.useState(false);
   
@@ -157,6 +156,13 @@ const BookCard = ({ book, onToggleFavorite, onBookClick }) => {
     }
   };
 
+  const handleDetailClick = (e) => {
+    e.stopPropagation();
+    if (onBookDetailClick) {
+      onBookDetailClick(book);
+    }
+  };
+
   const renderBookImage = () => {
     if (book.coverImgUrl && !imageError) {
       return (
@@ -187,23 +193,6 @@ const BookCard = ({ book, onToggleFavorite, onBookClick }) => {
       onMouseLeave={() => setIsHovered(false)}
       onClick={handleCardClick}
     >
-      {/* 기본 책 배지 */}
-      {isLocalBook && (
-        <div style={{
-          position: 'absolute',
-          top: '8px',
-          left: '8px',
-          backgroundColor: '#4F6DDE',
-          color: 'white',
-          fontSize: '10px',
-          fontWeight: '600',
-          padding: '2px 6px',
-          borderRadius: '10px',
-          zIndex: 1
-        }}>
-          기본
-        </div>
-      )}
       
       {/* 즐겨찾기 버튼 */}
       <button
@@ -211,7 +200,7 @@ const BookCard = ({ book, onToggleFavorite, onBookClick }) => {
         style={{
           position: 'absolute',
           top: '8px',
-          right: '8px',
+          left: '8px',
           backgroundColor: 'transparent',
           border: 'none',
           fontSize: '18px',
@@ -233,6 +222,40 @@ const BookCard = ({ book, onToggleFavorite, onBookClick }) => {
       >
         {book.favorite ? '❤️' : '🤍'}
       </button>
+
+      {/* 상세 버튼 */}
+      <button
+        onClick={handleDetailClick}
+        style={{
+          position: 'absolute',
+          top: '8px',
+          right: '8px',
+          backgroundColor: 'rgba(255, 255, 255, 0.9)',
+          border: '1px solid rgba(0, 0, 0, 0.1)',
+          fontSize: '12px',
+          fontWeight: '600',
+          cursor: 'pointer',
+          zIndex: 1,
+          padding: '4px 8px',
+          borderRadius: '12px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          transition: 'all 0.2s ease',
+          color: '#4F6DDE',
+          boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)'
+        }}
+        onMouseEnter={(e) => {
+          e.target.style.backgroundColor = 'rgba(255, 255, 255, 1)';
+          e.target.style.transform = 'scale(1.05)';
+        }}
+        onMouseLeave={(e) => {
+          e.target.style.backgroundColor = 'rgba(255, 255, 255, 0.9)';
+          e.target.style.transform = 'scale(1)';
+        }}
+      >
+        상세
+      </button>
       
       <div style={imageContainerStyle}>
         {renderBookImage()}
@@ -244,10 +267,18 @@ const BookCard = ({ book, onToggleFavorite, onBookClick }) => {
         </div>
         <div style={{ flex: 1 }} />
         <div style={buttonsStyle}>
-          <button style={primaryButtonStyle} onClick={handleReadClick}>
+          <button 
+            style={primaryButtonStyle} 
+            onClick={handleReadClick}
+            {...createAdvancedButtonHandlers('primary')}
+          >
             읽기
           </button>
-          <button style={secondaryButtonStyle} onClick={handleGraphClick}>
+          <button 
+            style={secondaryButtonStyle} 
+            onClick={handleGraphClick}
+            {...createAdvancedButtonHandlers('default')}
+          >
             그래프
           </button>
         </div>
@@ -269,10 +300,23 @@ BookCard.propTypes = {
     updatedAt: PropTypes.string
   }).isRequired,
   onToggleFavorite: PropTypes.func,
-  onBookClick: PropTypes.func
+  onBookClick: PropTypes.func,
+  onBookDetailClick: PropTypes.func
 };
 
 const BookLibrary = ({ books, loading, error, onRetry, onToggleFavorite, onBookClick }) => {
+  const [selectedBook, setSelectedBook] = React.useState(null);
+  const [showDetailModal, setShowDetailModal] = React.useState(false);
+
+  const handleBookDetailClick = (book) => {
+    setSelectedBook(book);
+    setShowDetailModal(true);
+  };
+
+  const handleCloseDetailModal = () => {
+    setShowDetailModal(false);
+    setSelectedBook(null);
+  };
   const sectionStyle = {
     width: '100%',
     maxWidth: '1100px',
@@ -371,18 +415,27 @@ const BookLibrary = ({ books, loading, error, onRetry, onToggleFavorite, onBookC
   };
 
   return (
-    <div style={sectionStyle}>
-      <div style={gridStyle}>
-        {books.map((book) => (
-          <BookCard 
-            key={`${book.title}-${book.id}`} 
-            book={book}
-            onToggleFavorite={onToggleFavorite}
-            onBookClick={onBookClick}
-          />
-        ))}
+    <>
+      <div style={sectionStyle}>
+        <div style={gridStyle}>
+          {books.map((book) => (
+            <BookCard 
+              key={`${book.title}-${book.id}`} 
+              book={book}
+              onToggleFavorite={onToggleFavorite}
+              onBookClick={onBookClick}
+              onBookDetailClick={handleBookDetailClick}
+            />
+          ))}
+        </div>
       </div>
-    </div>
+      
+      <BookDetailModal
+        book={selectedBook}
+        isOpen={showDetailModal}
+        onClose={handleCloseDetailModal}
+      />
+    </>
   );
 };
 

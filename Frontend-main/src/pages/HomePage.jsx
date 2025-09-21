@@ -1,47 +1,19 @@
-import React, { useState } from 'react';
+import React from 'react';
 import PropTypes from 'prop-types';
 import { useNavigate } from 'react-router-dom';
 import { theme } from '../components/common/theme';
+import { createButtonStyle, createAdvancedButtonHandlers } from '../utils/styles/styles';
+import { ANIMATION_VALUES } from '../utils/styles/animations';
 
 const HomeButton = ({ onClick, children, variant = 'primary' }) => {
-  const [isHovered, setIsHovered] = useState(false);
-  
-  const baseStyle = {
-    padding: `${theme.spacing.sm} 36px`,
-    fontSize: theme.fontSize.xl,
-    borderRadius: theme.borderRadius.full,
-    border: 'none',
-    fontWeight: 600,
-    cursor: 'pointer',
-    transition: `all ${theme.transitions.default}`,
-    textDecoration: 'none',
-    display: 'inline-block',
-    textAlign: 'center'
-  };
-
-  const variants = {
-    primary: {
-      background: isHovered ? theme.gradients.primaryReverse : theme.gradients.primary,
-      color: theme.colors.text.white,
-      boxShadow: isHovered ? theme.boxShadow.hover : theme.boxShadow.md,
-      transform: isHovered ? 'scale(1.05)' : 'scale(1)'
-    },
-    secondary: {
-      background: isHovered ? theme.colors.background.white : 'transparent',
-      color: theme.colors.primary,
-      border: `2px solid ${theme.colors.primary}`,
-      transform: isHovered ? 'scale(1.02)' : 'scale(1)'
-    }
-  };
-
-  const buttonStyle = { ...baseStyle, ...variants[variant] };
+  const buttonStyle = createButtonStyle(ANIMATION_VALUES, variant);
+  const hoverHandlers = createAdvancedButtonHandlers(variant);
 
   return (
     <button
       style={buttonStyle}
       onClick={onClick}
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
+      {...hoverHandlers}
     >
       {children}
     </button>

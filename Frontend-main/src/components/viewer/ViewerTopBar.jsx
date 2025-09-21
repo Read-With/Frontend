@@ -1,4 +1,4 @@
-import React, { useCallback } from 'react';
+import React, { useCallback, useState, useEffect } from 'react';
 import GraphControls from '../graph/GraphControls';
 import EdgeLabelToggle from '../graph/tooltip/EdgeLabelToggle';
 import { getChapterEventCount } from '../../utils/graphData';
@@ -37,6 +37,7 @@ const ViewerTopBar = ({
     setEdgeLabelVisible,
     setHideIsolated
   } = graphActions;
+
   
   const {
     searchTerm,
@@ -190,7 +191,7 @@ const ViewerTopBar = ({
         display: "flex",
         flexDirection: "row",
         alignItems: "center",
-        gap: 16,
+        gap: 12,
         marginRight: 24,
       }}
     >
@@ -470,20 +471,23 @@ const ViewerTopBar = ({
             /* 로딩 완료 시 chapter와 event 정보 표시 */
             <>
               {/* 챕터 정보 표시 */}
-              <span
-                style={{
-                  display: "inline-block",
-                  padding: "4px 12px",
-                  borderRadius: 16,
-                  background: "#EEF2FF",
-                  color: "#22336b",
-                  fontSize: 14,
-                  fontWeight: 600,
-                  border: "1px solid #e3e6ef",
-                }}
-              >
-                Chapter {currentChapter}
-              </span>
+              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                <span
+                  style={{
+                    display: "inline-block",
+                    padding: "4px 12px",
+                    borderRadius: 16,
+                    background: "#EEF2FF",
+                    color: "#22336b",
+                    fontSize: 14,
+                    fontWeight: 600,
+                    border: "1px solid #e3e6ef",
+                  }}
+                >
+                  Chapter {currentChapter}
+                </span>
+                
+              </div>
 
               {/* 이벤트 정보 */}
               <div

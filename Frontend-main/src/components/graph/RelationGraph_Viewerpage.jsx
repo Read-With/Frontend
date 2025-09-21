@@ -9,7 +9,7 @@ import CytoscapeGraphUnified from "./CytoscapeGraphUnified";
 import UnifiedNodeInfo from "./tooltip/UnifiedNodeInfo";
 import UnifiedEdgeTooltip from "./tooltip/UnifiedEdgeTooltip";
 import "./RelationGraph.css";
-import { getNodeSize, getEdgeStyle, createGraphStylesheet } from "../../utils/styles/graphStyles";
+import { getEdgeStyle, createGraphStylesheet } from "../../utils/styles/graphStyles";
 import { graphStyles } from "../../utils/styles/styles";
 import useGraphInteractions from "../../hooks/useGraphInteractions";
 
@@ -127,12 +127,11 @@ const ViewerRelationGraph = ({
     }
   }, [graphClearRef, clearAll]);
 
-  const nodeSize = getNodeSize('viewer');
   const edgeStyle = getEdgeStyle('viewer');
 
   const stylesheet = useMemo(
-    () => createGraphStylesheet(nodeSize, edgeStyle, edgeLabelVisible),
-    [nodeSize, edgeStyle, edgeLabelVisible]
+    () => createGraphStylesheet(edgeStyle, edgeLabelVisible),
+    [edgeStyle, edgeLabelVisible]
   );
 
   useEffect(() => {
@@ -197,7 +196,7 @@ const ViewerRelationGraph = ({
           stylesheet={stylesheet}
           layout={{ name: 'preset' }}
           cyRef={cyRef}
-          nodeSize={nodeSize}
+          nodeSize={10}
           fitNodeIds={fitNodeIds}
           searchTerm={searchTerm}
           isSearchActive={isSearchActive}
