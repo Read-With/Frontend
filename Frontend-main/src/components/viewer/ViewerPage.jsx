@@ -27,7 +27,7 @@ import {
   getElementsFromRelations
 } from "../../utils/graphData";
 import { calcGraphDiff, convertRelationsToElements } from "../../utils/graphDataUtils";
-import { createCharacterMaps } from "../../utils/graphData";
+import { createCharacterMaps } from "../../utils/characterUtils";
 
 
 function GraphSplitArea({

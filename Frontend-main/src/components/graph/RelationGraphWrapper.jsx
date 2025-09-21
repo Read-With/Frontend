@@ -15,7 +15,7 @@ import { useGraphDataLoader } from '../../hooks/useGraphDataLoader.js';
 import { useLocalStorageNumber } from '../../hooks/useLocalStorage.js';
 import { getMacroGraph } from '../../utils/api';
 import { convertRelationsToElements } from '../../utils/graphDataUtils';
-import { createCharacterMaps } from '../../utils/graphData';
+import { createCharacterMaps } from '../../utils/characterUtils';
 import useGraphInteractions from "../../hooks/useGraphInteractions";
 
 // 노드 크기는 가중치 기반으로만 계산됨

@@ -5,9 +5,9 @@ import {
   getLastEventIndexForChapter, 
   getFolderKeyFromFilename, 
   getDetectedMaxChapter,
-  getSafeMaxChapter,
-  createCharacterMaps
+  getSafeMaxChapter
 } from '../utils/graphData';
+import { createCharacterMaps } from '../utils/characterUtils';
 import { convertRelationsToElements, calcGraphDiff } from '../utils/graphDataUtils';
 import { normalizeRelation, isValidRelation } from '../utils/relationUtils';
 

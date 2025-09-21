@@ -1,4 +1,5 @@
-import { getFolderKeyFromFilename, safeId } from './graphData';
+import { getFolderKeyFromFilename } from './graphData';
+import { safeId } from './characterUtils';
 
 export const defaultSettings = {
   fontSize: 100,

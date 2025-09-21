@@ -1,10 +1,18 @@
-import { getCharactersData, createCharacterMaps } from './graphData';
+import { getCharactersData, createCharacterMapsWithCache } from './graphData';
+import { createCharacterMaps, getCharacterImagePath } from './characterUtils';
 import { normalizeRelation, isValidRelation } from './relationUtils';
 
 const validateElements = (elements) => elements?.filter(e => e && (e.id || e.data?.id)) || [];
 const createElementMap = (elements) => new Map(elements.map(e => [e.id || e.data?.id, e]));
 
-function deepEqual(obj1, obj2) {
+function deepEqual(obj1, obj2, depth = 0) {
+  // 최대 깊이 제한 (무한 재귀 방지)
+  const MAX_DEPTH = 10;
+  if (depth > MAX_DEPTH) {
+    console.warn('deepEqual: 최대 깊이 초과, 참조 비교로 대체');
+    return obj1 === obj2;
+  }
+  
   if (obj1 === obj2) return true;
   if (obj1 == null || obj2 == null) return false;
   if (typeof obj1 !== typeof obj2) return false;
@@ -14,8 +22,13 @@ function deepEqual(obj1, obj2) {
   // 배열인 경우 빠른 비교
   if (Array.isArray(obj1) && Array.isArray(obj2)) {
     if (obj1.length !== obj2.length) return false;
+    // 큰 배열의 경우 성능 최적화
+    if (obj1.length > 100) {
+      // 큰 배열은 참조 비교로 대체
+      return obj1 === obj2;
+    }
     for (let i = 0; i < obj1.length; i++) {
-      if (!deepEqual(obj1[i], obj2[i])) return false;
+      if (!deepEqual(obj1[i], obj2[i], depth + 1)) return false;
     }
     return true;
   }
@@ -26,26 +39,23 @@ function deepEqual(obj1, obj2) {
   
   if (keys1.length !== keys2.length) return false;
   
+  // 큰 객체의 경우 성능 최적화
+  if (keys1.length > 50) {
+    // 큰 객체는 참조 비교로 대체
+    return obj1 === obj2;
+  }
+  
   // Set을 사용하여 키 존재 여부를 O(1)로 확인
   const keys2Set = new Set(keys2);
   
   for (const key of keys1) {
     if (!keys2Set.has(key)) return false;
-    if (!deepEqual(obj1[key], obj2[key])) return false;
+    if (!deepEqual(obj1[key], obj2[key], depth + 1)) return false;
   }
   
   return true;
 }
 
-/**
- * 캐릭터 이미지 경로를 동적으로 생성
- * @param {string} folderKey - 폴더 키
- * @param {string} characterId - 캐릭터 ID
- * @returns {string} 이미지 경로
- */
-function getCharacterImagePath(folderKey, characterId) {
-  return `/${folderKey}/${characterId}.png`;
-}
 
 /**
  * 공통 데이터 로딩 함수 - GraphContainer와 RelationGraphWrapper에서 공통으로 사용
@@ -57,8 +67,17 @@ function getCharacterImagePath(folderKey, characterId) {
  */
 export function loadGraphData(folderKey, chapter, eventIndex, getEventDataFunc) {
   // 매개변수 유효성 검사
-  if (!folderKey || !chapter || !eventIndex || typeof getEventDataFunc !== 'function') {
-    throw new Error(`loadGraphData: 유효하지 않은 매개변수 - folderKey: ${folderKey}, chapter: ${chapter}, eventIndex: ${eventIndex}`);
+  if (!folderKey || typeof folderKey !== 'string') {
+    throw new Error(`loadGraphData: 유효하지 않은 folderKey (${typeof folderKey}: ${folderKey})`);
+  }
+  if (!chapter || typeof chapter !== 'number' || chapter < 1) {
+    throw new Error(`loadGraphData: 유효하지 않은 chapter (${typeof chapter}: ${chapter})`);
+  }
+  if (!eventIndex || typeof eventIndex !== 'number' || eventIndex < 1) {
+    throw new Error(`loadGraphData: 유효하지 않은 eventIndex (${typeof eventIndex}: ${eventIndex})`);
+  }
+  if (typeof getEventDataFunc !== 'function') {
+    throw new Error(`loadGraphData: getEventDataFunc이 함수가 아닙니다 (${typeof getEventDataFunc})`);
   }
 
   try {
@@ -66,21 +85,26 @@ export function loadGraphData(folderKey, chapter, eventIndex, getEventDataFunc) 
     const eventData = getEventDataFunc(folderKey, chapter, eventIndex);
     
     if (!eventData) {
-      throw new Error(`이벤트 데이터를 찾을 수 없습니다: ${folderKey}/chapter${chapter}/event${eventIndex}`);
+      throw new Error(`이벤트 데이터를 찾을 수 없습니다: ${folderKey}/chapter${chapter}/event${eventIndex}. 파일이 존재하는지 확인해주세요.`);
     }
 
     // 캐릭터 데이터 로드
     const charData = getCharactersData(folderKey, chapter);
     
     if (!charData) {
-      throw new Error(`캐릭터 데이터를 찾을 수 없습니다: ${folderKey}/chapter${chapter}`);
+      throw new Error(`캐릭터 데이터를 찾을 수 없습니다: ${folderKey}/chapter${chapter}. chapter*_characters_0.json 파일이 존재하는지 확인해주세요.`);
     }
 
-    // 캐릭터 매핑 생성
-    const { idToName, idToDesc, idToMain, idToNames } = createCharacterMaps(charData);
+    // 캐릭터 매핑 생성 (캐시 포함)
+    const { idToName, idToDesc, idToMain, idToNames } = createCharacterMapsWithCache(charData);
 
     // 관계 데이터 처리
-    const normalizedRelations = (eventData.relations || [])
+    const relations = eventData.relations || [];
+    if (!Array.isArray(relations)) {
+      console.warn(`loadGraphData: relations가 배열이 아닙니다 (${typeof relations}): ${folderKey}/chapter${chapter}/event${eventIndex}`);
+    }
+    
+    const normalizedRelations = relations
       .map(rel => normalizeRelation(rel))
       .filter(rel => rel !== null && isValidRelation(rel));
 
@@ -105,6 +129,7 @@ export function loadGraphData(folderKey, chapter, eventIndex, getEventDataFunc) 
       normalizedRelations
     };
   } catch (error) {
+    console.error('loadGraphData 실패:', error, { folderKey, chapter, eventIndex });
     throw error;
   }
 }
@@ -120,13 +145,18 @@ export function loadGraphData(folderKey, chapter, eventIndex, getEventDataFunc) 
  * @param {Object} nodeWeights - 노드 가중치 정보 (node_weights_accum)
  * @returns {Array} 그래프 요소 배열
  */
-export function convertRelationsToElements(relations, idToName, idToDesc, idToMain, idToNames, folderKey = 'gatsby', nodeWeights = null, previousRelations = null) {
+export function convertRelationsToElements(relations, idToName, idToDesc, idToMain, idToNames, folderKey, nodeWeights = null, previousRelations = null) {
   // 매개변수 유효성 검사
   if (!Array.isArray(relations)) {
     return [];
   }
   
   if (!idToName || typeof idToName !== 'object') {
+    return [];
+  }
+  
+  if (!folderKey || typeof folderKey !== 'string') {
+    console.warn('convertRelationsToElements: 유효하지 않은 folderKey');
     return [];
   }
 
@@ -166,9 +196,12 @@ export function convertRelationsToElements(relations, idToName, idToDesc, idToMa
     const result = min + (seed % (max - min));
     
   // 캐시 크기 제한 (메모리 누수 방지)
-  const MAX_CACHE_SIZE = 1000;
+  const MAX_CACHE_SIZE = 500;
   if (randomCache.size > MAX_CACHE_SIZE) {
-    randomCache.clear();
+    // 전체 캐시를 지우는 대신 절반만 지우기
+    const entries = Array.from(randomCache.entries());
+    const toDelete = entries.slice(0, Math.floor(MAX_CACHE_SIZE / 2));
+    toDelete.forEach(([key]) => randomCache.delete(key));
   }
     randomCache.set(cacheKey, result);
     
@@ -304,6 +337,59 @@ export function convertRelationsToElements(relations, idToName, idToDesc, idToMa
   ];
   
   return result;
+}
+
+/**
+ * 관계 데이터에서 그래프 요소 생성 (ViewerPage 전용)
+ * @param {Array} relations - 관계 데이터
+ * @param {Array} characterData - 캐릭터 데이터
+ * @param {Array} newAppearances - 새로운 등장 인물 (현재 사용하지 않음)
+ * @param {Object} importance - 중요도 데이터 (현재 사용하지 않음)
+ * @param {number} chapter - 챕터 번호 (현재 사용하지 않음)
+ * @param {string} folderKey - 폴더 키 (사용자가 선택한 파일명)
+ * @returns {Array} 그래프 요소 배열
+ */
+export function getElementsFromRelations(
+  relations,
+  characterData,
+  newAppearances = [],
+  importance = {},
+  chapter = 1,
+  folderKey
+) {
+  try {
+    if (!relations) {
+      console.warn('getElementsFromRelations: 관계 데이터가 없습니다');
+      return [];
+    }
+    
+    if (!characterData) {
+      console.warn('getElementsFromRelations: 캐릭터 데이터가 없습니다');
+      return [];
+    }
+    
+    if (!folderKey) {
+      console.warn('getElementsFromRelations: 폴더 키가 없습니다');
+      return [];
+    }
+    
+    // 캐릭터 매핑 생성
+    const { idToName, idToDesc, idToMain, idToNames } = createCharacterMaps(characterData);
+    
+    // relations 배열 추출
+    const relationsArray = relations?.relations || (Array.isArray(relations) ? relations : []);
+    
+    if (!Array.isArray(relationsArray)) {
+      console.warn('getElementsFromRelations: relations가 배열이 아닙니다');
+      return [];
+    }
+    
+    // convertRelationsToElements 사용
+    return convertRelationsToElements(relationsArray, idToName, idToDesc, idToMain, idToNames, folderKey);
+  } catch (error) {
+    console.error('getElementsFromRelations 실패:', error);
+    return [];
+  }
 }
 
 /**
