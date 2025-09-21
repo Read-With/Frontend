@@ -681,26 +681,13 @@ const ViewerPage = () => {
         setEvents(validEvents);
         
         try {
-          const allCharacterData = [];
-          for (let chapter = 1; chapter <= currentChapter; chapter++) {
-            const charData = getCharactersData(folderKey, chapter);
-            if (charData && charData.characters) {
-              allCharacterData.push(...charData.characters);
-            }
+          // 현재 챕터의 인물 데이터만 로딩 (누적 방식 제거)
+          const charData = getCharactersData(folderKey, currentChapter);
+          if (charData && charData.characters) {
+            setCharacterData(charData.characters);
+          } else {
+            setCharacterData([]);
           }
-          
-          const uniqueCharacters = [];
-          const seenIds = new Set();
-          for (let i = allCharacterData.length - 1; i >= 0; i--) {
-            const char = allCharacterData[i];
-            const id = String(Math.trunc(char.id));
-            if (!seenIds.has(id)) {
-              seenIds.add(id);
-              uniqueCharacters.unshift(char);
-            }
-          }
-          
-          setCharacterData(uniqueCharacters);
         } catch (charError) {
           if (currentChapterData) {
             setCharacterData(currentChapterData.characters || currentChapterData);

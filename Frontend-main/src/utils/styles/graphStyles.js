@@ -40,13 +40,13 @@ export const getWideLayout = () => {
 };
 
 export const getEdgeStyle = (context = 'default') => {
-  const edgeWidth = 6;
+  const edgeWidth = 5;
   const isViewer = context === 'viewer';
   const isGraphPage = typeof window !== 'undefined' && window.location?.pathname?.includes('/user/graph/');
   
   return {
     width: edgeWidth,
-    fontSize: isGraphPage ? 13 : (isViewer ? 10 : 11)
+    fontSize: isGraphPage ? 12 : (isViewer ? 10 : 10)
   };
 };
 
@@ -56,11 +56,10 @@ export const getRelationColor = (positivity) => {
   return `hsl(${h}, 70%, 45%)`;
 };
 
-// 노드 크기 계산 함수 (기본 크기 10 × 가중치)
+// 노드 크기 계산 함수 (기본 크기 8 × 가중치)
 export const calculateNodeSize = (baseSize, weight) => {
-  if (!weight || weight <= 0) return 10; // 기본 크기 10
-  // 기본 크기 10에 가중치를 곱하여 노드 크기 계산
-  return Math.round(10 * weight);
+  if (!weight || weight <= 0) return 8; 
+  return Math.round(8 * weight);
 };
 
 // [공통 스타일시트 생성 함수 - 가중치 기반 노드 크기만 사용]
@@ -75,8 +74,8 @@ export const createGraphStylesheet = (edgeStyle, edgeLabelVisible, maxEdgeLabelL
       "border-width": (ele) => (ele.data("main_character") ? 2 : 1),
       "border-color": "#5B7BA0",
       "border-opacity": 1,
-      width: (ele) => calculateNodeSize(10, ele.data("weight")),
-      height: (ele) => calculateNodeSize(10, ele.data("weight")),
+      width: (ele) => calculateNodeSize(8, ele.data("weight")),
+      height: (ele) => calculateNodeSize(8, ele.data("weight")),
       shape: "ellipse",
       label: "data(label)",
       "text-valign": "bottom",
