@@ -1,6 +1,15 @@
+/**
+ * 뷰어 관련 유틸리티 함수들
+ * EPUB 뷰어의 설정, CFI 처리, 북마크, 진행률 계산 등을 담당
+ */
+
 import { getFolderKeyFromFilename } from './graphData';
 import { safeId } from './characterUtils';
 
+/**
+ * 기본 뷰어 설정
+ * @type {Object}
+ */
 export const defaultSettings = {
   fontSize: 100,
   pageMode: "double",
@@ -10,6 +19,10 @@ export const defaultSettings = {
   showGraph: true,
 };
 
+/**
+ * 로컬 스토리지에서 뷰어 설정을 로드하는 함수
+ * @returns {Object} 로드된 설정 객체
+ */
 export function loadSettings() {
   try {
     const settings = localStorage.getItem("epub_viewer_settings");
@@ -28,21 +41,39 @@ export function loadSettings() {
     );
 
     return loadedSettings;
-  } catch (e) {
+  } catch (error) {
+    console.error('loadSettings 실패:', error, { 
+      settings: localStorage.getItem("epub_viewer_settings") 
+    });
     return defaultSettings;
   }
 }
 
+/**
+ * CFI 문자열을 챕터 상세 정보로 파싱하는 함수
+ * @param {string} cfi - CFI 문자열
+ * @returns {string} 파싱된 챕터 정보
+ */
 export function parseCfiToChapterDetail(cfi) {
-  const chapterMatch = cfi.match(/\[chapter-(\d+)\]/);
-  const chapter = chapterMatch ? `${chapterMatch[1]}장` : null;
+  if (!cfi || typeof cfi !== 'string') {
+    console.warn('parseCfiToChapterDetail: 유효하지 않은 CFI입니다', { cfi, type: typeof cfi });
+    return cfi || '';
+  }
 
-  const pageMatch = cfi.match(/\[chapter-\d+\]\/(\d+)/);
-  const page = pageMatch ? pageMatch[1] : null;
+  try {
+    const chapterMatch = cfi.match(/\[chapter-(\d+)\]/);
+    const chapter = chapterMatch ? `${chapterMatch[1]}장` : null;
 
-  if (chapter && page) return `${chapter} ${page}`;
-  if (chapter) return chapter;
-  return cfi;
+    const pageMatch = cfi.match(/\[chapter-\d+\]\/(\d+)/);
+    const page = pageMatch ? pageMatch[1] : null;
+
+    if (chapter && page) return `${chapter} ${page}`;
+    if (chapter) return chapter;
+    return cfi;
+  } catch (error) {
+    console.error('parseCfiToChapterDetail 실패:', error, { cfi });
+    return cfi;
+  }
 }
 
 /**
@@ -52,45 +83,54 @@ export function parseCfiToChapterDetail(cfi) {
  */
 export function extractEventNodesAndEdges(event) {
   if (!event || typeof event !== 'object') {
+    console.warn('extractEventNodesAndEdges: 유효하지 않은 이벤트 객체입니다', { event, type: typeof event });
     return { nodes: new Set(), edges: new Set() };
   }
 
-  const nodes = new Set();
-  const edges = new Set();
-  
-  // relations 처리 (가장 일반적인 경우)
-  if (Array.isArray(event.relations)) {
-    for (const rel of event.relations) {
-      if (!rel || typeof rel !== 'object') continue;
-      
-      const id1 = rel.id1 || rel.source;
-      const id2 = rel.id2 || rel.target;
-      
-      if (id1) nodes.add(String(id1));
-      if (id2) nodes.add(String(id2));
-      
-      // 유효한 엣지만 추가
-      if (id1 && id2) {
-        edges.add(`${id1}-${id2}`);
+  try {
+    const nodes = new Set();
+    const edges = new Set();
+    
+    // relations 처리 (가장 일반적인 경우)
+    if (Array.isArray(event.relations)) {
+      for (const rel of event.relations) {
+        if (!rel || typeof rel !== 'object') {
+          console.warn('extractEventNodesAndEdges: 유효하지 않은 관계 객체입니다', { rel });
+          continue;
+        }
+        
+        const id1 = rel.id1 || rel.source;
+        const id2 = rel.id2 || rel.target;
+        
+        if (id1) nodes.add(String(id1));
+        if (id2) nodes.add(String(id2));
+        
+        // 유효한 엣지만 추가
+        if (id1 && id2) {
+          edges.add(`${id1}-${id2}`);
+        }
       }
     }
-  }
-  
-  // importance 처리
-  if (event.importance && typeof event.importance === 'object') {
-    for (const id of Object.keys(event.importance)) {
-      if (id) nodes.add(String(id));
+    
+    // importance 처리
+    if (event.importance && typeof event.importance === 'object') {
+      for (const id of Object.keys(event.importance)) {
+        if (id) nodes.add(String(id));
+      }
     }
-  }
-  
-  // new_appearances 처리
-  if (Array.isArray(event.new_appearances)) {
-    for (const id of event.new_appearances) {
-      if (id) nodes.add(String(id));
+    
+    // new_appearances 처리
+    if (Array.isArray(event.new_appearances)) {
+      for (const id of event.new_appearances) {
+        if (id) nodes.add(String(id));
+      }
     }
+    
+    return { nodes, edges };
+  } catch (error) {
+    console.error('extractEventNodesAndEdges 실패:', error, { event });
+    return { nodes: new Set(), edges: new Set() };
   }
-  
-  return { nodes, edges };
 }
 
 /**
@@ -99,8 +139,13 @@ export function extractEventNodesAndEdges(event) {
  */
 export function saveViewerMode(mode) {
   try {
+    if (!mode || typeof mode !== 'string') {
+      console.warn('saveViewerMode: 유효하지 않은 모드입니다', { mode, type: typeof mode });
+      return;
+    }
     localStorage.setItem("viewer_mode", mode);
-  } catch (e) {
+  } catch (error) {
+    console.error('saveViewerMode 실패:', error, { mode });
   }
 }
 
@@ -111,7 +156,8 @@ export function saveViewerMode(mode) {
 export function loadViewerMode() {
   try {
     return localStorage.getItem("viewer_mode");
-  } catch (e) {
+  } catch (error) {
+    console.error('loadViewerMode 실패:', error);
     return null;
   }
 }
@@ -126,6 +172,16 @@ export function loadViewerMode() {
  * @returns {number} 글자 인덱스
  */
 export function cfiToCharIndex(cfi, chapter, viewerRef) {
+  if (!cfi || typeof cfi !== 'string') {
+    console.warn('cfiToCharIndex: 유효하지 않은 CFI입니다', { cfi, type: typeof cfi });
+    return 0;
+  }
+  
+  if (!chapter || typeof chapter !== 'number' || chapter < 1) {
+    console.warn('cfiToCharIndex: 유효하지 않은 챕터 번호입니다', { chapter, type: typeof chapter });
+    return 0;
+  }
+  
   try {
     // viewerRef.current.bookRef.current.locations.locationFromCfi(cfi) 사용
     if (
@@ -139,8 +195,8 @@ export function cfiToCharIndex(cfi, chapter, viewerRef) {
       // 챕터 내 인덱스 반환
       return viewerRef.current.bookRef.current.locations.locationFromCfi(cfi);
     }
-  } catch (e) {
-    // 무시
+  } catch (error) {
+    console.error('cfiToCharIndex 실패:', error, { cfi, chapter });
   }
   return 0;
 }
@@ -151,17 +207,22 @@ export function cfiToCharIndex(cfi, chapter, viewerRef) {
  * @returns {Promise<number>} 챕터 번호
  */
 export async function getCurrentChapterFromViewer(viewerRef) {
+  if (!viewerRef) {
+    console.warn('getCurrentChapterFromViewer: viewerRef가 없습니다');
+    return null;
+  }
+  
   if (viewerRef?.current && viewerRef.current.getCurrentCfi) {
     try {
       const cfi = await viewerRef.current.getCurrentCfi();
-      if (cfi) {
+      if (cfi && typeof cfi === 'string') {
         const chapterMatch = cfi.match(/\[chapter-(\d+)\]/);
         if (chapterMatch) {
           return parseInt(chapterMatch[1]);
         }
       }
-    } catch (e) {
-      // 챕터 정보 읽기 오류 처리
+    } catch (error) {
+      console.error('getCurrentChapterFromViewer 실패:', error);
     }
   }
   return null;
@@ -176,14 +237,26 @@ export async function getCurrentChapterFromViewer(viewerRef) {
  * @returns {Object} 위치 정보 { currentChars, totalChars, progress, eventIndex }
  */
 export function calculateChapterProgress(cfi, chapterNum, events, bookInstance = null) {
-  if (!events || !events.length) {
+  if (!cfi || typeof cfi !== 'string') {
+    console.warn('calculateChapterProgress: 유효하지 않은 CFI입니다', { cfi, type: typeof cfi });
+    return { currentChars: 0, totalChars: 0, progress: 0, eventIndex: -1 };
+  }
+  
+  if (!chapterNum || typeof chapterNum !== 'number' || chapterNum < 1) {
+    console.warn('calculateChapterProgress: 유효하지 않은 챕터 번호입니다', { chapterNum, type: typeof chapterNum });
+    return { currentChars: 0, totalChars: 0, progress: 0, eventIndex: -1 };
+  }
+  
+  if (!events || !Array.isArray(events) || !events.length) {
+    console.warn('calculateChapterProgress: 유효하지 않은 이벤트 배열입니다', { events, type: typeof events });
     return { currentChars: 0, totalChars: 0, progress: 0, eventIndex: -1 };
   }
 
-  // 챕터 총 글자수 (마지막 이벤트의 end 값)
-  const totalChars = events[events.length - 1]?.end || 0;
-  let currentChars = 0;
-  let calculationMethod = 'fallback';
+  try {
+    // 챕터 총 글자수 (마지막 이벤트의 end 값)
+    const totalChars = events[events.length - 1]?.end || 0;
+    let currentChars = 0;
+    let calculationMethod = 'fallback';
 
   // 새로운 방식: CFI 기반 정확한 위치 계산 (우선 적용)
   if (bookInstance && bookInstance.locations && typeof bookInstance.locations.percentageFromCfi === 'function') {
@@ -258,15 +331,19 @@ export function calculateChapterProgress(cfi, chapterNum, events, bookInstance =
     eventIndex = events.length - 1;
   }
 
-  return {
-    currentChars: Math.round(currentChars),
-    totalChars,
-    progress: Math.round(progress * 100) / 100,
-    eventIndex,
-    calculationMethod,
-    paragraphNum: calculationMethod === 'fallback' ? (cfi.match(/\[chapter-\d+\]\/(\d+)\/1:(\d+)\)$/) ? parseInt(cfi.match(/\[chapter-\d+\]\/(\d+)\/1:(\d+)\)$/)[1]) : 1) : null,
-    charOffset: calculationMethod === 'fallback' ? (cfi.match(/\[chapter-\d+\]\/(\d+)\/1:(\d+)\)$/) ? parseInt(cfi.match(/\[chapter-\d+\]\/(\d+)\/1:(\d+)\)$/)[2]) : 0) : null
-  };
+    return {
+      currentChars: Math.round(currentChars),
+      totalChars,
+      progress: Math.round(progress * 100) / 100,
+      eventIndex,
+      calculationMethod,
+      paragraphNum: calculationMethod === 'fallback' ? (cfi.match(/\[chapter-\d+\]\/(\d+)\/1:(\d+)\)$/) ? parseInt(cfi.match(/\[chapter-\d+\]\/(\d+)\/1:(\d+)\)$/)[1]) : 1) : null,
+      charOffset: calculationMethod === 'fallback' ? (cfi.match(/\[chapter-\d+\]\/(\d+)\/1:(\d+)\)$/) ? parseInt(cfi.match(/\[chapter-\d+\]\/(\d+)\/1:(\d+)\)$/)[2]) : 0) : null
+    };
+  } catch (error) {
+    console.error('calculateChapterProgress 실패:', error, { cfi, chapterNum, eventsLength: events?.length });
+    return { currentChars: 0, totalChars: 0, progress: 0, eventIndex: -1 };
+  }
 }
 
 /**
@@ -279,13 +356,27 @@ export function calculateChapterProgress(cfi, chapterNum, events, bookInstance =
  * @returns {Object|null} 가장 가까운 이벤트
  */
 export function findClosestEvent(cfi, chapterNum, events, currentChars = null, bookInstance = null) {
-  if (!events || !events.length) return null;
-  
-  // currentChars가 제공되지 않은 경우 계산
-  if (currentChars === null) {
-    const progressInfo = calculateChapterProgress(cfi, chapterNum, events, bookInstance);
-    currentChars = progressInfo.currentChars;
+  if (!cfi || typeof cfi !== 'string') {
+    console.warn('findClosestEvent: 유효하지 않은 CFI입니다', { cfi, type: typeof cfi });
+    return null;
   }
+  
+  if (!chapterNum || typeof chapterNum !== 'number' || chapterNum < 1) {
+    console.warn('findClosestEvent: 유효하지 않은 챕터 번호입니다', { chapterNum, type: typeof chapterNum });
+    return null;
+  }
+  
+  if (!events || !Array.isArray(events) || !events.length) {
+    console.warn('findClosestEvent: 유효하지 않은 이벤트 배열입니다', { events, type: typeof events });
+    return null;
+  }
+  
+  try {
+    // currentChars가 제공되지 않은 경우 계산
+    if (currentChars === null) {
+      const progressInfo = calculateChapterProgress(cfi, chapterNum, events, bookInstance);
+      currentChars = progressInfo.currentChars;
+    }
 
   // 글자수 기반으로 정확한 이벤트 찾기
   for (let i = events.length - 1; i >= 0; i--) {
@@ -310,14 +401,18 @@ export function findClosestEvent(cfi, chapterNum, events, currentChars = null, b
     };
   }
 
-  // 마지막 이벤트를 넘어선 경우
-  const lastEvent = events[events.length - 1];
-  return {
-    ...lastEvent,
-    eventNum: lastEvent.event_id ?? 0,
-    chapter: chapterNum,
-    progress: 100
-  };
+    // 마지막 이벤트를 넘어선 경우
+    const lastEvent = events[events.length - 1];
+    return {
+      ...lastEvent,
+      eventNum: lastEvent.event_id ?? 0,
+      chapter: chapterNum,
+      progress: 100
+    };
+  } catch (error) {
+    console.error('findClosestEvent 실패:', error, { cfi, chapterNum, eventsLength: events?.length });
+    return null;
+  }
 }
 
 /**
@@ -380,10 +475,10 @@ export const bookmarkUtils = {
 };
 
 /**
- * 챕터 번호 추출 유틸리티 함수
+ * CFI 또는 라벨에서 챕터 번호를 추출하는 함수
  * @param {string} cfi - CFI 문자열
- * @param {string} label - 라벨 문자열 (선택사항)
- * @returns {number} 챕터 번호
+ * @param {string} [label=null] - 라벨 문자열 (선택사항)
+ * @returns {number} 추출된 챕터 번호
  */
 export function extractChapterNumber(cfi, label = null) {
   // CFI에서 직접 추출 (가장 정확)
@@ -416,6 +511,7 @@ export function extractChapterNumber(cfi, label = null) {
 
 /**
  * localStorage 헬퍼 함수들
+ * @namespace storageUtils
  */
 export const storageUtils = {
   get: (key) => localStorage.getItem(key),

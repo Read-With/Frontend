@@ -13,7 +13,7 @@ import { sidebarStyles, topBarStyles, containerStyles, graphStyles, createButton
 import { useGraphSearch } from '../../hooks/useGraphSearch.jsx';
 import { useGraphDataLoader } from '../../hooks/useGraphDataLoader.js';
 import { useLocalStorageNumber } from '../../hooks/useLocalStorage.js';
-import { getMacroGraph } from '../../utils/api';
+import { getMacroGraph } from '../../utils/common/api.js';
 import { convertRelationsToElements } from '../../utils/graphDataUtils';
 import { createCharacterMaps } from '../../utils/characterUtils';
 import useGraphInteractions from "../../hooks/useGraphInteractions";

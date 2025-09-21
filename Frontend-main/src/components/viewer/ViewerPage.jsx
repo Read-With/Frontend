@@ -13,7 +13,7 @@ import { useViewerPage } from "../../hooks/useViewerPage";
 import { useGraphSearch } from "../../hooks/useGraphSearch";
 import { useClickOutside } from "../../hooks/useClickOutside";
 import { createStorageKey } from "../../hooks/useLocalStorage";
-import { getAllProgress, saveProgress, getBookProgress, getBookManifest, getMacroGraph, getFineGraph } from "../../utils/api";
+import { getAllProgress, saveProgress, getBookProgress, getBookManifest, getMacroGraph, getFineGraph } from "../../utils/common/api";
 import { 
   parseCfiToChapterDetail, 
   extractEventNodesAndEdges

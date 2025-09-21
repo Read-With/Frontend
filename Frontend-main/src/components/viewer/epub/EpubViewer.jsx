@@ -19,7 +19,7 @@ import {
   ensureLocations,
   settingsUtils
 } from '../../../utils/viewerUtils';
-import { registerCache, clearCache } from '../../../utils/cacheManager';
+import { registerCache, clearCache } from '../../../utils/common/cacheManager';
 
 const eventRelationModules = import.meta.glob('../../../data/gatsby/chapter*_events.json', { eager: true });
 

@@ -249,7 +249,7 @@ export function processRelationTags(relation, label) {
 }
 
 // 관계 태그 처리 캐시 (캐시 관리 시스템 통합)
-import { registerCache, recordCacheAccess, enforceCacheSizeLimit } from './cacheManager';
+import { registerCache, recordCacheAccess, enforceCacheSizeLimit } from './common/cacheManager';
 
 const relationCache = new Map();
 registerCache('relationCache', relationCache, { maxSize: 1000, ttl: 600000 }); // 10분 TTL

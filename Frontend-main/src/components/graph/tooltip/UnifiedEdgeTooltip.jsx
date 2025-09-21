@@ -9,7 +9,7 @@ import { getRelationStyle, getRelationLabels, tooltipStyles } from "../../../uti
 import { createButtonStyle, createAdvancedButtonHandlers, COLORS, ANIMATION_VALUES, unifiedNodeTooltipStyles } from "../../../utils/styles/styles";
 import { mergeRefs } from "../../../utils/styles/animations";
 import { safeNum, processRelationTagsCached } from "../../../utils/relationUtils";
-import { cleanupRelationUtils } from "../../../utils/cleanupUtils";
+import { cleanupRelationUtils } from "../../../utils/common/cleanupUtils";
 import { getSafeMaxChapter, getFolderKeyFromFilename } from "../../../utils/graphData";
 import "../RelationGraph.css";
 

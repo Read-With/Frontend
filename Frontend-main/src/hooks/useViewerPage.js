@@ -16,7 +16,7 @@ import {
 } from '../utils/viewerUtils';
 import { getFolderKeyFromFilename } from '../utils/graphData';
 import { loadBookmarks, addBookmark, removeBookmark } from '../components/viewer/bookmark/BookmarkManager';
-import { getBookManifest } from '../utils/api';
+import { getBookManifest } from '../utils/common/api';
 
 export function useViewerPage() {
   const { filename } = useParams();
