@@ -9,22 +9,7 @@ import "./RelationGraph.css";
 
 import { createGraphStylesheet, getEdgeStyle, getWideLayout } from "../../utils/styles/graphStyles";
 import { ANIMATION_VALUES } from "../../utils/styles/animations";
-import { sidebarStyles, topBarStyles, containerStyles, graphStyles, createButtonStyle, createAdvancedButtonHandlers } from "../../utils/styles/styles.js";
-
-const COLORS = {
-  primary: '#6C8EFF',
-  primaryLight: '#EEF2FF',
-  textPrimary: '#22336b',
-  textSecondary: '#6c757d',
-  border: '#e5e7eb',
-  borderLight: '#e3e6ef',
-  background: '#fff',
-  backgroundLight: '#f8f9fc',
-  backgroundLighter: '#f8fafc',
-  error: '#ef4444',
-  success: '#10b981',
-  warning: '#f59e0b',
-};
+import { sidebarStyles, topBarStyles, containerStyles, graphStyles, createButtonStyle, createAdvancedButtonHandlers, COLORS } from "../../utils/styles/styles.js";
 import { useGraphSearch } from '../../hooks/useGraphSearch.jsx';
 import { useGraphDataLoader } from '../../hooks/useGraphDataLoader.js';
 import { useLocalStorageNumber } from '../../hooks/useLocalStorage.js';
@@ -36,44 +21,45 @@ import useGraphInteractions from "../../hooks/useGraphInteractions";
 // 노드 크기는 가중치 기반으로만 계산됨
 const getEdgeStyleForGraph = () => getEdgeStyle('graph');
 
-// 독립 인물 버튼 스타일 (첨부파일 기준 구조 유지, 중앙화된 색상 사용)
+// 독립 인물 버튼 스타일 - 통일된 디자인 시스템 적용
 const isolatedButtonStyles = {
   button: (hideIsolated) => ({
-    height: 30,
+    height: 32,
     padding: '0 16px',
     borderRadius: 8,
-    border: `1.5px solid ${COLORS.borderLight}`,
-    background: hideIsolated ? COLORS.backgroundLight : COLORS.primaryLight,
-    color: hideIsolated ? COLORS.primary : COLORS.textPrimary,
+    border: `1px solid ${COLORS.border}`,
+    background: hideIsolated ? COLORS.background : COLORS.primary,
+    color: hideIsolated ? COLORS.textPrimary : COLORS.background,
     fontSize: 13,
-    fontWeight: 600,
+    fontWeight: 500,
     cursor: 'pointer',
     transition: 'all 0.2s ease',
     outline: 'none',
     display: 'flex',
     alignItems: 'center',
-    gap: 6,
-    boxShadow: hideIsolated ? 'none' : `0 2px 8px ${COLORS.primary}26`,
+    gap: 8,
+    boxShadow: hideIsolated ? '0 1px 3px rgba(0,0,0,0.1)' : `0 2px 8px ${COLORS.primary}40`,
     minWidth: '140px',
     justifyContent: 'center',
   }),
   dot: (hideIsolated) => ({
-    width: 8,
-    height: 8,
+    width: 6,
+    height: 6,
     borderRadius: '50%',
-    background: hideIsolated ? COLORS.primary : COLORS.textPrimary,
-    opacity: hideIsolated ? 0.6 : 1,
+    background: hideIsolated ? COLORS.primary : COLORS.background,
+    opacity: hideIsolated ? 0.7 : 1,
   }),
-  hover: {
-    background: COLORS.backgroundLight,
-    color: COLORS.primary,
-    transform: 'scale(1.05)'
-  },
-  default: {
-    background: COLORS.background,
-    color: COLORS.textPrimary,
-    transform: 'scale(1)'
-  }
+  hover: (hideIsolated) => ({
+    background: hideIsolated ? COLORS.backgroundLight : '#5a7cff',
+    color: hideIsolated ? COLORS.primary : COLORS.background,
+    transform: 'translateY(-1px)',
+    boxShadow: hideIsolated ? '0 2px 8px rgba(0,0,0,0.15)' : `0 4px 12px ${COLORS.primary}50`
+  }),
+  default: (hideIsolated) => ({
+    background: hideIsolated ? COLORS.background : COLORS.primary,
+    color: hideIsolated ? COLORS.textPrimary : COLORS.background,
+    transform: 'translateY(0)'
+  })
 };
 
 // 레이아웃 스타일 (첨부파일 기준 구조 유지, 중앙화된 색상 사용)
@@ -569,26 +555,26 @@ function RelationGraphWrapper() {
   }, [navigate, filename]);
 
   const handleMouseEnter = useCallback((e) => {
-    Object.assign(e.target.style, isolatedButtonStyles.hover);
-  }, []);
+    Object.assign(e.target.style, isolatedButtonStyles.hover(hideIsolated));
+  }, [hideIsolated]);
 
   const handleMouseLeave = useCallback((e) => {
-    Object.assign(e.target.style, isolatedButtonStyles.default);
-  }, []);
+    Object.assign(e.target.style, isolatedButtonStyles.default(hideIsolated));
+  }, [hideIsolated]);
 
-  // 뷰어로 돌아가기 버튼 전용 hover 핸들러
+  // 뷰어로 돌아가기 버튼 전용 hover 핸들러 - 통일된 디자인 적용
   const handleBackButtonMouseEnter = useCallback((e) => {
     e.target.style.background = COLORS.backgroundLight;
     e.target.style.color = COLORS.primary;
-    e.target.style.transform = 'scale(1.05)';
+    e.target.style.transform = 'translateY(-1px)';
     e.target.style.boxShadow = `0 4px 12px ${COLORS.primary}40`;
   }, []);
 
   const handleBackButtonMouseLeave = useCallback((e) => {
-    e.target.style.background = `${COLORS.background}f2`;
+    e.target.style.background = COLORS.background;
     e.target.style.color = COLORS.textPrimary;
-    e.target.style.transform = 'scale(1)';
-    e.target.style.boxShadow = `0 2px 8px ${COLORS.primary}26`;
+    e.target.style.transform = 'translateY(0)';
+    e.target.style.boxShadow = `0 2px 8px rgba(0,0,0,0.1)`;
   }, []);
 
   // 슬라이드바 외부 영역 클릭 시 닫힘 핸들러
@@ -724,7 +710,7 @@ function RelationGraphWrapper() {
 
   return (
     <div style={{ width: '100vw', height: '100vh', background: COLORS.backgroundLighter, overflow: 'hidden' }}>
-      {/* 상단 컨트롤 바 */}
+      {/* 상단 컨트롤 바 - 간소화된 디자인 */}
       <div style={{ 
         ...topBarStyles.container, 
         position: 'fixed', 
@@ -732,7 +718,10 @@ function RelationGraphWrapper() {
         left: isSidebarOpen ? '240px' : '60px',
         right: 0,
         zIndex: 10000,
-        transition: `left ${ANIMATION_VALUES.DURATION.SLOW} ${ANIMATION_VALUES.EASE_OUT}`
+        transition: `left ${ANIMATION_VALUES.DURATION.SLOW} ${ANIMATION_VALUES.EASE_OUT}`,
+        background: 'rgba(255, 255, 255, 0.95)',
+        backdropFilter: 'blur(8px)',
+        borderBottom: `1px solid ${COLORS.border}`
       }}>
         <div style={topBarStyles.leftSection}>
           <GraphControls
@@ -770,7 +759,7 @@ function RelationGraphWrapper() {
         </div>
       </div>
 
-      {/* 뷰어로 돌아가기 버튼 */}
+      {/* 뷰어로 돌아가기 버튼 - 간소화된 디자인 */}
       <div style={{
         position: 'fixed',
         top: '12px',
@@ -781,50 +770,51 @@ function RelationGraphWrapper() {
         <button
           onClick={handleBackToViewer}
           style={{
-            height: 30,
-            padding: '0 16px',
+            height: 32,
+            padding: '0 12px',
             borderRadius: 8,
-            border: `1.5px solid ${COLORS.borderLight}`,
-            background: `${COLORS.background}f2`,
+            border: `1px solid ${COLORS.border}`,
+            background: 'rgba(255, 255, 255, 0.9)',
             color: COLORS.textPrimary,
-            fontSize: 13,
-            fontWeight: 600,
+            fontSize: 12,
+            fontWeight: 500,
             cursor: 'pointer',
             transition: 'all 0.2s ease',
             outline: 'none',
             display: 'flex',
             alignItems: 'center',
             gap: 6,
-            boxShadow: `0 2px 8px ${COLORS.primary}26`,
-            backdropFilter: 'blur(2px)',
+            boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+            backdropFilter: 'blur(8px)',
             justifyContent: 'center',
           }}
           onMouseEnter={handleBackButtonMouseEnter}
           onMouseLeave={handleBackButtonMouseLeave}
         >
           <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>close</span>
-          뷰어로 돌아가기
+          돌아가기
         </button>
       </div>
 
-      {/* API 책의 경우 이벤트 선택 UI */}
+      {/* API 책의 경우 이벤트 선택 UI - 간소화된 디자인 */}
       {book?.isFromAPI && (
         <div 
           style={{
             position: 'fixed',
             top: '60px',
             right: '24px',
-            background: COLORS.background,
+            background: 'rgba(255, 255, 255, 0.95)',
             border: `1px solid ${COLORS.border}`,
             borderRadius: '8px',
-            padding: '12px',
-            boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+            padding: '10px',
+            boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
             zIndex: 10001,
-            pointerEvents: 'auto'
+            pointerEvents: 'auto',
+            backdropFilter: 'blur(8px)'
           }}
         >
-          <div style={{ marginBottom: '8px', fontSize: '14px', fontWeight: '600', color: COLORS.textPrimary }}>
-            이벤트 선택
+          <div style={{ marginBottom: '6px', fontSize: '11px', fontWeight: '500', color: COLORS.textPrimary }}>
+            이벤트
           </div>
           <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
             <button
@@ -833,28 +823,32 @@ function RelationGraphWrapper() {
               style={{
                 padding: '6px 12px',
                 border: `1px solid ${COLORS.border}`,
-                borderRadius: '4px',
+                borderRadius: '6px',
                 background: currentEvent <= 1 ? COLORS.backgroundLight : COLORS.background,
                 color: currentEvent <= 1 ? COLORS.textSecondary : COLORS.textPrimary,
                 cursor: currentEvent <= 1 ? 'not-allowed' : 'pointer',
-                fontSize: '12px'
+                fontSize: '12px',
+                fontWeight: '500',
+                transition: 'all 0.2s ease'
               }}
             >
               이전
             </button>
-            <span style={{ fontSize: '14px', color: COLORS.textPrimary, minWidth: '60px', textAlign: 'center' }}>
-              이벤트 {currentEvent}
+            <span style={{ fontSize: '11px', color: COLORS.textPrimary, minWidth: '40px', textAlign: 'center', fontWeight: '500' }}>
+              {currentEvent}
             </span>
             <button
               onClick={() => handleEventChange(currentEvent + 1)}
               style={{
                 padding: '6px 12px',
                 border: `1px solid ${COLORS.border}`,
-                borderRadius: '4px',
+                borderRadius: '6px',
                 background: COLORS.background,
                 color: COLORS.textPrimary,
                 cursor: 'pointer',
-                fontSize: '12px'
+                fontSize: '12px',
+                fontWeight: '500',
+                transition: 'all 0.2s ease'
               }}
             >
               다음
@@ -925,10 +919,10 @@ function RelationGraphWrapper() {
           flexDirection: 'column',
           height: '100%'
         }}>
-          {/* 챕터 정보 헤더 */}
+          {/* 챕터 정보 헤더 - 통일된 디자인 적용 */}
           <div style={{
-            background: '#fff',
-            borderBottom: '1px solid #e5e7eb',
+            background: COLORS.background,
+            borderBottom: `1px solid ${COLORS.border}`,
             padding: '12px 20px',
             display: 'flex',
             alignItems: 'center',
@@ -942,18 +936,19 @@ function RelationGraphWrapper() {
             }}>
               <h2 style={{
                 margin: 0,
-                fontSize: '18px',
+                fontSize: '16px',
                 fontWeight: '600',
-                color: '#1f2937'
+                color: COLORS.textPrimary
               }}>
                 거시 그래프
               </h2>
               <div style={{
-                background: '#f3f4f6',
+                background: COLORS.backgroundLight,
                 padding: '4px 12px',
-                borderRadius: '20px',
-                fontSize: '14px',
-                color: '#6b7280'
+                borderRadius: '16px',
+                fontSize: '12px',
+                color: COLORS.textSecondary,
+                fontWeight: '500'
               }}>
                 Chapter 1 ~ {currentChapter} 누적 관계
               </div>
@@ -962,12 +957,13 @@ function RelationGraphWrapper() {
               display: 'flex',
               alignItems: 'center',
               gap: '8px',
-              fontSize: '14px',
-              color: '#6b7280'
+              fontSize: '12px',
+              color: COLORS.textSecondary,
+              fontWeight: '500'
             }}>
-              <span>캐릭터: {apiElements.filter(el => el.data && el.data.id && !el.data.source).length}개</span>
+              <span>{apiElements.filter(el => el.data && el.data.id && !el.data.source).length}명</span>
               <span>•</span>
-              <span>관계: {apiElements.filter(el => el.data && el.data.source && el.data.target).length}개</span>
+              <span>{apiElements.filter(el => el.data && el.data.source && el.data.target).length}관계</span>
             </div>
           </div>
           

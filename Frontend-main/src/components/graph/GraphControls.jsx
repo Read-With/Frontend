@@ -145,7 +145,7 @@ function GraphControls({
           ref={inputRef}
           style={graphControlsStyles.input}
           type="text"
-          placeholder="인물 검색 (이름/별칭)"
+          placeholder="인물 검색"
           value={internalSearchTerm}
           onChange={handleInputChange}
           onKeyDown={handleKeyDown}
@@ -158,7 +158,7 @@ function GraphControls({
             }
           }}
           onBlur={(e) => {
-            e.target.style.borderColor = '#e3e6ef';
+            e.target.style.borderColor = '#e5e7eb';
             e.target.style.background = '#f8f9fc';
             e.target.style.boxShadow = 'none';
           }}
@@ -172,16 +172,24 @@ function GraphControls({
           onClick={isSearchActive ? handleResetButtonClick : handleSearchButtonClick}
           onMouseEnter={(e) => {
             if (isSearchActive) {
-              e.target.style.background = '#EEF2FF';
+              e.target.style.background = '#f8f9fc';
+              e.target.style.transform = 'translateY(-1px)';
+              e.target.style.boxShadow = '0 2px 8px rgba(0,0,0,0.15)';
             } else {
               e.target.style.background = '#5a7cff';
+              e.target.style.transform = 'translateY(-1px)';
+              e.target.style.boxShadow = '0 4px 12px rgba(108, 142, 255, 0.5)';
             }
           }}
           onMouseLeave={(e) => {
             if (isSearchActive) {
-              e.target.style.background = '#fff';
+              e.target.style.background = '#f8f9fc';
+              e.target.style.transform = 'translateY(0)';
+              e.target.style.boxShadow = '0 1px 3px rgba(0,0,0,0.1)';
             } else {
               e.target.style.background = '#6C8EFF';
+              e.target.style.transform = 'translateY(0)';
+              e.target.style.boxShadow = '0 2px 8px rgba(108, 142, 255, 0.4)';
             }
           }}
         >
@@ -207,9 +215,9 @@ function GraphControls({
           left: '0',
           right: '0',
           background: '#fff',
-          border: '1px solid #e3e6ef',
-          borderRadius: '12px',
-          boxShadow: '0 8px 32px rgba(0, 0, 0, 0.12), 0 4px 16px rgba(0, 0, 0, 0.08)',
+          border: '1px solid #e5e7eb',
+          borderRadius: '8px',
+          boxShadow: '0 4px 16px rgba(0, 0, 0, 0.1)',
           zIndex: 1000,
           maxHeight: '320px',
           overflowY: 'auto',
@@ -244,18 +252,18 @@ function GraphControls({
               <div style={{
                 padding: '12px 16px',
                 background: '#f8f9fc',
-                borderBottom: '1px solid #e3e6ef',
-                borderTopLeftRadius: '12px',
-                borderTopRightRadius: '12px',
+                borderBottom: '1px solid #e5e7eb',
+                borderTopLeftRadius: '8px',
+                borderTopRightRadius: '8px',
               }}>
                 <div style={{
                   fontSize: '11px',
-                  fontWeight: '600',
+                  fontWeight: '500',
                   color: '#6c757d',
                   textTransform: 'uppercase',
                   letterSpacing: '0.5px',
                 }}>
-                  인물 검색 결과 ({suggestions.length}개)
+                  검색 결과 ({suggestions.length})
                 </div>
               </div>
               
@@ -308,7 +316,7 @@ function GraphControls({
                         {/* 구분선 */}
                         <div style={{
                           height: '1px',
-                          background: '#e3e6ef',
+                          background: '#e5e7eb',
                           marginBottom: '8px',
                         }} />
                         
@@ -321,7 +329,7 @@ function GraphControls({
                           textTransform: 'uppercase',
                           letterSpacing: '0.5px',
                         }}>
-                          다른 이름
+                          별칭
                         </div>
                         
                         {/* 다른 이름 목록 */}
@@ -348,8 +356,8 @@ function GraphControls({
               color: '#6c757d',
               fontSize: '14px',
               background: '#fafbfc',
-              borderBottomLeftRadius: '12px',
-              borderBottomRightRadius: '12px',
+              borderBottomLeftRadius: '8px',
+              borderBottomRightRadius: '8px',
             }}>
               <div style={{ 
                 marginBottom: '12px', 
@@ -362,12 +370,12 @@ function GraphControls({
                 fontWeight: '600', 
                 marginBottom: '6px',
                 color: '#22336b',
-                fontSize: '16px',
+                fontSize: '14px',
               }}>
-                검색 결과가 없습니다
+                검색 결과 없음
               </div>
               <div style={{ 
-                fontSize: '13px', 
+                fontSize: '12px', 
                 opacity: 0.7,
                 color: '#6c757d',
                 lineHeight: '1.4',
