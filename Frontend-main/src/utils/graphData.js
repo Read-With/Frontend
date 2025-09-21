@@ -11,6 +11,10 @@ const dataModules = {
   events: import.meta.glob(
     "../data/*/chapter*_events.json",
     { eager: true }
+  ),
+  perspectiveSummaries: import.meta.glob(
+    "../data/*/chapter*_perspective_summaries_Ko.json",
+    { eager: true }
   )
 };
 
@@ -563,5 +567,45 @@ export async function loadChapterData(
     setIsDataReady(false);
   } finally {
     setLoading(false);
+  }
+}
+
+// perspective summaries 데이터 로드 함수
+export function getPerspectiveSummaries(folderKey, chapterNum) {
+  try {
+    const pattern = `../data/${folderKey}/chapter${chapterNum}_perspective_summaries_Ko.json`;
+    const module = dataModules.perspectiveSummaries[pattern];
+    
+    if (!module) {
+      return null;
+    }
+    
+    return module.default || module;
+  } catch (error) {
+    console.error(`perspective summaries 데이터 로드 실패 (${folderKey}, chapter ${chapterNum}):`, error);
+    return null;
+  }
+}
+
+// 특정 인물의 perspective summary 가져오기
+export function getCharacterPerspectiveSummary(folderKey, chapterNum, characterName) {
+  try {
+    const summaries = getPerspectiveSummaries(folderKey, chapterNum);
+    
+    if (!summaries) {
+      return null;
+    }
+    
+    // character_name으로 매칭
+    for (const key in summaries) {
+      if (summaries[key].character_name === characterName) {
+        return summaries[key].summary;
+      }
+    }
+    
+    return null;
+  } catch (error) {
+    console.error(`인물 perspective summary 가져오기 실패 (${folderKey}, chapter ${chapterNum}, ${characterName}):`, error);
+    return null;
   }
 }

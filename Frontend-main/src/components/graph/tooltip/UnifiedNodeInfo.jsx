@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { useParams, useLocation } from "react-router-dom";
 import { processRelations, processRelationTags } from "../../../utils/relationUtils.js";
-import { getChapterLastEventNums, getFolderKeyFromFilename, getEventDataByIndex, getDetectedMaxChapter } from "../../../utils/graphData.js";
+import { getChapterLastEventNums, getFolderKeyFromFilename, getEventDataByIndex, getDetectedMaxChapter, getCharacterPerspectiveSummary } from "../../../utils/graphData.js";
 import { useTooltipPosition } from "../../../hooks/useTooltipPosition.js";
 import { useClickOutside } from "../../../hooks/useClickOutside.js";
 import { useRelationData } from "../../../hooks/useRelationData.js";
@@ -218,16 +218,32 @@ function UnifiedNodeInfo({
     };
   }, [nodeData]);
 
-  // 요약 데이터
-  const summaryData = useMemo(() => ({
-    summary: processedNodeData?.label
-      ? `${processedNodeData.label}은(는) 작품의 핵심 인물 중 하나입니다.\n\n` +
-        `이 인물은 작품의 중심 서사를 이끌어가는 중요한 역할을 담당하며, 주로 1장, 3장, 5장에서 중요한 장면에 등장합니다.\n\n` +
-        `특히 작품의 주제를 표현하는 데 있어 핵심적인 역할을 하며, 다른 인물들과의 관계를 통해 작품의 깊이를 더합니다.\n\n` +
-        `이 인물의 행동과 선택은 작품의 결말에 직접적인 영향을 미치며, 독자들에게 깊은 인상을 남깁니다.\n\n` +
-        `작품 전체를 관통하는 이 인물의 성장과 변화는 독자들에게 감동과 교훈을 전달합니다.`
-      : "인물에 대한 요약 정보가 없습니다.",
-  }), [processedNodeData]);
+  // 요약 데이터 - perspective summaries에서 가져오기
+  const summaryData = useMemo(() => {
+    if (!processedNodeData?.label) {
+      return { summary: "인물에 대한 요약 정보가 없습니다." };
+    }
+
+    // 현재 챕터 정보 가져오기
+    const currentChapter = chapterNum || 1;
+    const folderKey = getFolderKeyFromFilename(actualFilename);
+    
+    // perspective summary 가져오기
+    const perspectiveSummary = getCharacterPerspectiveSummary(
+      folderKey, 
+      currentChapter, 
+      processedNodeData.label
+    );
+
+    if (perspectiveSummary) {
+      return { summary: perspectiveSummary };
+    }
+
+    // perspective summary가 없는 경우 기본 메시지
+    return { 
+      summary: `${processedNodeData.label}에 대한 ${currentChapter}장 관점 요약이 아직 준비되지 않았습니다.` 
+    };
+  }, [processedNodeData, chapterNum, actualFilename]);
 
   // 모드별 z-index 설정
   const zIndexValue = inViewer ? 99999 : 99999;
