@@ -106,8 +106,8 @@ function RelationGraphWrapper() {
   const location = useLocation();
   const book = location.state?.book;
   
-  // 상태 관리
-  const [currentChapter, setCurrentChapter] = useLocalStorageNumber('lastGraphChapter', 1);
+  // 상태 관리 - 파일명별로 localStorage 키 구분
+  const [currentChapter, setCurrentChapter] = useLocalStorageNumber(`lastGraphChapter_${filename}`, 1);
   const [currentEvent, setCurrentEvent] = useState(1);
   const [hideIsolated, setHideIsolated] = useState(true);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
@@ -219,6 +219,14 @@ function RelationGraphWrapper() {
     loading,
     error
   } = useGraphDataLoader(book?.isFromAPI ? null : filename, currentChapter);
+
+  // currentChapter가 maxChapter를 초과하지 않도록 검증
+  useEffect(() => {
+    if (maxChapter > 0 && currentChapter > maxChapter) {
+      console.log('⚠️ currentChapter가 maxChapter를 초과함:', { currentChapter, maxChapter, filename });
+      setCurrentChapter(1); // 첫 번째 챕터로 리셋
+    }
+  }, [maxChapter, currentChapter, filename, setCurrentChapter]);
   
   // API 데이터를 그래프 요소로 변환
   const apiElements = useMemo(() => {
