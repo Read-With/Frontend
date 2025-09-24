@@ -6,6 +6,7 @@ import RelationGraphWrapper from './components/graph/RelationGraphWrapper';
 import MyPage from './pages/MyPage';
 import { RecoilRoot } from 'recoil';
 import HomePage from './pages/HomePage';
+import GoogleAuth from './components/auth/GoogleAuth';
 
 // 그래프 컴포넌트를 유지하는 레이아웃
 const GraphLayout = () => {
@@ -25,6 +26,7 @@ const AppContent = () => {
     <>
 
       <Routes>
+        <Route path="/login" element={<GoogleAuth />} />
         <Route path="/" element={<HomePage />} />
         <Route path="/mypage" element={<MyPage />} />
         <Route path="/viewer/:filename/*" element={<ViewerPage />} />

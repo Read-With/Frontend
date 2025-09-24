@@ -1,32 +1,78 @@
-import { registerCache, recordCacheAccess, enforceCacheSizeLimit } from './cacheManager';
+/**
+ * 검색 관련 유틸리티 함수들
+ * 그래프 검색, 텍스트 하이라이트, 검색 결과 필터링 등을 담당
+ */
+
+import { registerCache, recordCacheAccess, enforceCacheSizeLimit } from './common/cacheManager';
 
 const regexCache = new Map();
 registerCache('regexCache', regexCache, { maxSize: 500, ttl: 300000 });
 
+/**
+ * 텍스트를 검색어로 분할하여 하이라이트용 배열로 변환
+ * @param {string} text - 원본 텍스트
+ * @param {string} query - 검색어
+ * @returns {Array} 분할된 텍스트 배열
+ */
 function highlightParts(text, query) {
-  if (!query || !text) return [text];
-  
-  const cacheKey = query.toLowerCase();
-  recordCacheAccess('regexCache');
-  
-  let regex = regexCache.get(cacheKey);
-  
-  if (!regex) {
-    regex = new RegExp(`(${escapeRegExp(query)})`, 'gi');
-    regexCache.set(cacheKey, regex);
-    enforceCacheSizeLimit('regexCache');
+  if (!query || !text) {
+    return [text];
   }
   
-  return String(text).split(regex).filter(Boolean);
+  try {
+    const cacheKey = query.toLowerCase();
+    recordCacheAccess('regexCache');
+    
+    let regex = regexCache.get(cacheKey);
+    
+    if (!regex) {
+      regex = new RegExp(`(${escapeRegExp(query)})`, 'gi');
+      regexCache.set(cacheKey, regex);
+      enforceCacheSizeLimit('regexCache');
+    }
+    
+    return String(text).split(regex).filter(Boolean);
+  } catch (error) {
+    console.error('highlightParts 실패:', error, { text, query });
+    return [text];
+  }
 }
 
+/**
+ * 정규식 특수 문자를 이스케이프하는 함수
+ * @param {string} s - 이스케이프할 문자열
+ * @returns {string} 이스케이프된 문자열
+ */
 function escapeRegExp(s) {
-  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  if (!s || typeof s !== 'string') {
+    console.warn('escapeRegExp: 유효하지 않은 입력입니다', { s, type: typeof s });
+    return '';
+  }
+  
+  try {
+    return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  } catch (error) {
+    console.error('escapeRegExp 실패:', error, { s });
+    return s;
+  }
 }
 
-// 노드가 검색어와 매칭되는지 확인
+/**
+ * 노드가 검색어와 매칭되는지 확인하는 함수
+ * @param {Object} node - 검사할 노드 객체
+ * @param {string} searchLower - 소문자로 변환된 검색어
+ * @returns {boolean} 매칭 여부
+ */
 export function nodeMatchesQuery(node, searchLower) {
-  if (!node?.data || typeof searchLower !== 'string') return false;
+  if (!node?.data || typeof searchLower !== 'string') {
+    console.warn('nodeMatchesQuery: 유효하지 않은 매개변수입니다', { 
+      node: !!node, 
+      hasData: !!node?.data, 
+      searchLower, 
+      type: typeof searchLower 
+    });
+    return false;
+  }
   
   try {
     const label = String(node.data.label || '').toLowerCase();
@@ -39,20 +85,35 @@ export function nodeMatchesQuery(node, searchLower) {
       commonName.includes(searchLower)
     );
   } catch (error) {
+    console.error('nodeMatchesQuery 실패:', error, { node, searchLower });
     return false;
   }
 }
 
-// 입력된 검색어와 관련된 노드(인물 등)를 찾아 최대 8개 추천 리스트 생성
+/**
+ * 입력된 검색어와 관련된 노드(인물 등)를 찾아 최대 8개 추천 리스트 생성
+ * @param {Array} elements - 그래프 요소 배열
+ * @param {string} query - 검색어
+ * @param {Object} [currentChapterData=null] - 현재 챕터 데이터
+ * @returns {Array} 추천 리스트
+ */
 export function buildSuggestions(elements, query, currentChapterData = null) {
   if (!Array.isArray(elements)) {
+    console.warn('buildSuggestions: 유효하지 않은 elements 배열입니다', { 
+      elements, 
+      type: typeof elements 
+    });
     return [];
   }
   
   const trimmed = String(query || '').trim();
-  if (trimmed.length < 2) return [];
-  const searchLower = trimmed.toLowerCase();
-  const characterNodes = elements.filter(el => !el.data.source);
+  if (trimmed.length < 2) {
+    return [];
+  }
+  
+  try {
+    const searchLower = trimmed.toLowerCase();
+    const characterNodes = elements.filter(el => !el.data.source);
 
 
 
@@ -86,13 +147,39 @@ export function buildSuggestions(elements, query, currentChapterData = null) {
       };
     })
     .slice(0, 8);
-  return matches;
+    return matches;
+  } catch (error) {
+    console.error('buildSuggestions 실패:', error, { 
+      elementsLength: elements?.length, 
+      query, 
+      hasChapterData: !!currentChapterData 
+    });
+    return [];
+  }
 }
 
-// 그래프 요소 필터링 및 연결 관계 처리
+/**
+ * 그래프 요소 필터링 및 연결 관계 처리
+ * @param {Array} elements - 그래프 요소 배열
+ * @param {string} searchTerm - 검색어
+ * @param {Object} [currentChapterData=null] - 현재 챕터 데이터
+ * @returns {Array} 필터링된 요소 배열
+ */
 export function filterGraphElements(elements, searchTerm, currentChapterData = null) {
-  if (!searchTerm || searchTerm.trim().length < 2) return elements;
-  const searchLower = searchTerm.toLowerCase();
+  if (!Array.isArray(elements)) {
+    console.warn('filterGraphElements: 유효하지 않은 elements 배열입니다', { 
+      elements, 
+      type: typeof elements 
+    });
+    return [];
+  }
+  
+  if (!searchTerm || typeof searchTerm !== 'string' || searchTerm.trim().length < 2) {
+    return elements;
+  }
+  
+  try {
+    const searchLower = searchTerm.toLowerCase();
   
   // 현재 챕터의 캐릭터 데이터가 있는 경우, 해당 챕터에 존재하는 인물만 필터링
   let candidateNodes;
@@ -155,19 +242,47 @@ export function filterGraphElements(elements, searchTerm, currentChapterData = n
     connectedNodeIds.has(el.data.id)
   );
   
-  return [...allConnectedNodes, ...connectedEdges];
+    return [...allConnectedNodes, ...connectedEdges];
+  } catch (error) {
+    console.error('filterGraphElements 실패:', error, { 
+      elementsLength: elements?.length, 
+      searchTerm, 
+      hasChapterData: !!currentChapterData 
+    });
+    return [];
+  }
 }
 
-// 텍스트 하이라이트 렌더링 함수
+/**
+ * 텍스트 하이라이트 렌더링 함수
+ * @param {string} text - 원본 텍스트
+ * @param {string} term - 하이라이트할 검색어
+ * @param {Object} [highlightStyle] - 하이라이트 스타일
+ * @returns {Array} JSX 요소 배열
+ */
 export function highlightText(text, term, highlightStyle = { fontWeight: 'bold', color: '#6C8EFF' }) {
-  const parts = highlightParts(text, term);
-  return parts.map((part, index) =>
-    part.toLowerCase && term && part.toLowerCase() === term.toLowerCase() ? (
-      <span key={index} style={highlightStyle}>{part}</span>
-    ) : (
-      <span key={index}>{part}</span>
-    )
-  );
+  if (!text || typeof text !== 'string') {
+    console.warn('highlightText: 유효하지 않은 텍스트입니다', { text, type: typeof text });
+    return [<span key="0">{text || ''}</span>];
+  }
+  
+  if (!term || typeof term !== 'string') {
+    return [<span key="0">{text}</span>];
+  }
+  
+  try {
+    const parts = highlightParts(text, term);
+    return parts.map((part, index) =>
+      part.toLowerCase && term && part.toLowerCase() === term.toLowerCase() ? (
+        <span key={index} style={highlightStyle}>{part}</span>
+      ) : (
+        <span key={index}>{part}</span>
+      )
+    );
+  } catch (error) {
+    console.error('highlightText 실패:', error, { text, term });
+    return [<span key="0">{text}</span>];
+  }
 }
 
 /**
@@ -176,24 +291,36 @@ export function highlightText(text, term, highlightStyle = { fontWeight: 'bold',
  * @returns {Set} 검색된 요소들의 ID 집합
  */
 export function createFilteredElementIds(filteredElements) {
-  const filteredElementIds = new Set();
-  
-  if (!filteredElements || filteredElements.length === 0) {
-    return filteredElementIds;
+  if (!Array.isArray(filteredElements) || filteredElements.length === 0) {
+    return new Set();
   }
   
-  filteredElements.forEach(element => {
-    if (element.data.source) {
-      // 간선인 경우
-      filteredElementIds.add(element.data.source);
-      filteredElementIds.add(element.data.target);
-    } else {
-      // 노드인 경우
-      filteredElementIds.add(element.data.id);
-    }
-  });
-  
-  return filteredElementIds;
+  try {
+    const filteredElementIds = new Set();
+    
+    filteredElements.forEach(element => {
+      if (!element?.data) {
+        console.warn('createFilteredElementIds: 유효하지 않은 요소입니다', { element });
+        return;
+      }
+      
+      if (element.data.source) {
+        // 간선인 경우
+        filteredElementIds.add(element.data.source);
+        filteredElementIds.add(element.data.target);
+      } else {
+        // 노드인 경우
+        filteredElementIds.add(element.data.id);
+      }
+    });
+    
+    return filteredElementIds;
+  } catch (error) {
+    console.error('createFilteredElementIds 실패:', error, { 
+      filteredElementsLength: filteredElements?.length 
+    });
+    return new Set();
+  }
 }
 
 /**
@@ -208,11 +335,23 @@ export function createFilteredElementIds(filteredElements) {
  * @returns {Object} 페이드 효과 적용 결과 통계 및 cleanup 함수
  */
 export function applySearchFadeEffect(cy, filteredElements, isSearchActive, options = {}) {
-  const {
-    fadeOpacity = 0.05,
-    textFadeOpacity = 0.02,
-    enableLogging = true
-  } = options;
+  if (!cy || typeof cy.elements !== 'function') {
+    console.warn('applySearchFadeEffect: 유효하지 않은 Cytoscape 인스턴스입니다', { cy });
+    return {
+      fadedNodes: 0,
+      visibleNodes: 0,
+      fadedEdges: 0,
+      visibleEdges: 0,
+      cleanup: () => {}
+    };
+  }
+  
+  try {
+    const {
+      fadeOpacity = 0.05,
+      textFadeOpacity = 0.02,
+      enableLogging = true
+    } = options;
 
   // 검색이 비활성화된 경우 모든 페이드 효과 제거
   if (!isSearchActive) {
@@ -300,7 +439,20 @@ export function applySearchFadeEffect(cy, filteredElements, isSearchActive, opti
       });
     }
   };
-  return result;
+    return result;
+  } catch (error) {
+    console.error('applySearchFadeEffect 실패:', error, { 
+      isSearchActive, 
+      filteredElementsLength: filteredElements?.length 
+    });
+    return {
+      fadedNodes: 0,
+      visibleNodes: 0,
+      fadedEdges: 0,
+      visibleEdges: 0,
+      cleanup: () => {}
+    };
+  }
 }
 
 /**
@@ -312,12 +464,30 @@ export function applySearchFadeEffect(cy, filteredElements, isSearchActive, opti
  * @returns {Object} 하이라이트 적용 결과 및 cleanup 함수
  */
 export function applySearchHighlight(cy, clickedNode, filteredElements, options = {}) {
-  if (!filteredElements || filteredElements.length === 0) {
+  if (!cy || typeof cy.elements !== 'function') {
+    console.warn('applySearchHighlight: 유효하지 않은 Cytoscape 인스턴스입니다', { cy });
     return {
       success: false,
       cleanup: () => {}
     };
   }
+  
+  if (!clickedNode || typeof clickedNode.id !== 'function') {
+    console.warn('applySearchHighlight: 유효하지 않은 클릭된 노드입니다', { clickedNode });
+    return {
+      success: false,
+      cleanup: () => {}
+    };
+  }
+  
+  if (!Array.isArray(filteredElements) || filteredElements.length === 0) {
+    return {
+      success: false,
+      cleanup: () => {}
+    };
+  }
+  
+  try {
 
   const filteredElementIds = createFilteredElementIds(filteredElements);
   const clickedNodeId = clickedNode.id();
@@ -391,21 +561,28 @@ export function applySearchHighlight(cy, clickedNode, filteredElements, options 
     });
   }
 
-  return {
-    success: true,
-    highlightedCount: highlightedElements.size,
-    cleanup: () => {
-      // 하이라이트된 요소들만 정리
-      highlightedElements.forEach(elementId => {
-        const element = cy.getElementById(elementId);
-        if (element.length > 0) {
-          element.removeClass("highlighted");
-        }
-      });
-      
-
-    }
-  };
+    return {
+      success: true,
+      highlightedCount: highlightedElements.size,
+      cleanup: () => {
+        // 하이라이트된 요소들만 정리
+        highlightedElements.forEach(elementId => {
+          const element = cy.getElementById(elementId);
+          if (element.length > 0) {
+            element.removeClass("highlighted");
+          }
+        });
+      }
+    };
+  } catch (error) {
+    console.error('applySearchHighlight 실패:', error, { 
+      filteredElementsLength: filteredElements?.length 
+    });
+    return {
+      success: false,
+      cleanup: () => {}
+    };
+  }
 }
 
 /**
@@ -417,8 +594,16 @@ export function applySearchHighlight(cy, clickedNode, filteredElements, options 
  * @returns {boolean} 검색 결과 없음 여부
  */
 export function shouldShowNoSearchResults(isSearchActive, searchTerm, fitNodeIds = [], suggestions = []) {
+  if (typeof isSearchActive !== 'boolean') {
+    console.warn('shouldShowNoSearchResults: isSearchActive이 boolean이 아닙니다', { isSearchActive });
+    return false;
+  }
+  
+  if (!searchTerm || typeof searchTerm !== 'string') {
+    return false;
+  }
+  
   return isSearchActive && 
-         searchTerm && 
          searchTerm.trim().length > 0 &&
          (!fitNodeIds || fitNodeIds.length === 0) &&
          (!suggestions || suggestions.length === 0);
@@ -430,6 +615,14 @@ export function shouldShowNoSearchResults(isSearchActive, searchTerm, fitNodeIds
  * @returns {Object} 메시지 객체
  */
 export function getNoSearchResultsMessage(searchTerm) {
+  if (!searchTerm || typeof searchTerm !== 'string') {
+    console.warn('getNoSearchResultsMessage: 유효하지 않은 검색어입니다', { searchTerm, type: typeof searchTerm });
+    return {
+      title: "검색 결과가 없습니다",
+      description: "검색어를 입력해주세요."
+    };
+  }
+  
   return {
     title: "검색 결과가 없습니다",
     description: `"${searchTerm}"와 일치하는 인물을 찾을 수 없습니다.`
@@ -441,7 +634,12 @@ export function getNoSearchResultsMessage(searchTerm) {
  * @returns {void}
  */
 export function clearRegexCache() {
-  regexCache.clear();
+  try {
+    regexCache.clear();
+    console.info('regexCache 정리 완료');
+  } catch (error) {
+    console.error('clearRegexCache 실패:', error);
+  }
 }
 
 /**
@@ -450,15 +648,21 @@ export function clearRegexCache() {
  * @returns {void}
  */
 export function cleanupSearchResources(cy = null) {
-  // 정규식 캐시 정리
-  clearRegexCache();
-  
-  // Cytoscape 인스턴스가 있는 경우 모든 효과 제거
-  if (cy && typeof cy.elements === 'function') {
-    cy.elements().forEach(element => {
-      element.removeClass("faded highlighted");
-      element.style('opacity', '');
-      element.style('text-opacity', '');
-    });
+  try {
+    // 정규식 캐시 정리
+    clearRegexCache();
+    
+    // Cytoscape 인스턴스가 있는 경우 모든 효과 제거
+    if (cy && typeof cy.elements === 'function') {
+      cy.elements().forEach(element => {
+        element.removeClass("faded highlighted");
+        element.style('opacity', '');
+        element.style('text-opacity', '');
+      });
+    }
+    
+    console.info('검색 관련 리소스 정리 완료');
+  } catch (error) {
+    console.error('cleanupSearchResources 실패:', error);
   }
 }

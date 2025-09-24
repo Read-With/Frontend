@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { theme } from '../common/theme';
-import { getBookManifest } from '../../utils/api';
+import { getBookManifest } from '../../utils/common/api';
 import { createButtonStyle, createAdvancedButtonHandlers } from '../../utils/styles/styles';
 import { ANIMATION_VALUES } from '../../utils/styles/animations';
 

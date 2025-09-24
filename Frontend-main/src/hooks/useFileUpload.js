@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { uploadBook } from '../utils/api';
+import { uploadBook } from '../utils/common/api';
 
 export const FILE_CONSTRAINTS = {
   MAX_SIZE: 50 * 1024 * 1024,

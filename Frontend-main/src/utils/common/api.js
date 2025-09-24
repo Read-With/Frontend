@@ -1,26 +1,58 @@
 // API 기본 설정 및 도서 관련 API 함수들
-const API_BASE_URL = import.meta.env.VITE_API_URL || (import.meta.env.DEV ? '' : 'https://dev.readwith.store');
-
-// API 응답 타입 정의
-const createApiResponse = (isSuccess, code, message, result) => ({
-  isSuccess,
-  code,
-  message,
-  result
-});
-
-// 그래프 API 응답 타입 정의
-const createGraphApiResponse = (isSuccess, code, message, result) => ({
-  isSuccess,
-  code,
-  message,
-  result: {
-    userCurrentChapter: result?.userCurrentChapter || 0,
-    characters: result?.characters || [],
-    relations: result?.relations || [],
-    event: result?.event || null
+const getApiBaseUrl = () => {
+  // 개발 환경에서는 프록시 사용 (vite.config.js에서 설정)
+  if (import.meta.env.DEV) {
+    return '';
   }
-});
+  
+  // 프로덕션 환경에서는 환경변수 또는 기본값 사용
+  return import.meta.env.VITE_API_URL || 'https://dev.readwith.store';
+};
+
+const API_BASE_URL = getApiBaseUrl();
+
+// 통합된 API 응답 타입 정의
+const createApiResponse = (isSuccess, code, message, result, type = 'default') => {
+  const baseResponse = {
+    isSuccess,
+    code,
+    message,
+    result
+  };
+
+  // 그래프 API 전용 응답 처리
+  if (type === 'graph') {
+    baseResponse.result = {
+      userCurrentChapter: result?.userCurrentChapter || 0,
+      characters: result?.characters || [],
+      relations: result?.relations || [],
+      event: result?.event || null
+    };
+  }
+
+  return baseResponse;
+};
+
+// 통합된 에러 처리 함수
+const handleApiError = (error, context) => {
+  const errorMessage = error.message || '알 수 없는 오류';
+  const statusCode = error.status || 'unknown';
+  
+  // HTTP 상태 코드별 에러 메시지
+  const statusMessages = {
+    400: '잘못된 요청입니다',
+    401: '인증이 필요합니다',
+    403: '접근 권한이 없습니다',
+    404: '요청한 리소스를 찾을 수 없습니다',
+    500: '서버 내부 오류가 발생했습니다',
+    502: '게이트웨이 오류가 발생했습니다',
+    503: '서비스를 일시적으로 사용할 수 없습니다'
+  };
+  
+  const statusMessage = statusMessages[statusCode] || 'API 요청 중 오류가 발생했습니다';
+  
+  throw new Error(`${context}: ${statusMessage} (${statusCode}) - ${errorMessage}`);
+};
 
 // HTTP 요청 헬퍼 함수
 const apiRequest = async (url, options = {}) => {
@@ -32,7 +64,7 @@ const apiRequest = async (url, options = {}) => {
     ...options,
   };
 
-  // 개발 환경에서는 프록시를 통해 요청
+  // 환경에 따른 URL 구성
   const requestUrl = import.meta.env.DEV ? url : `${API_BASE_URL}${url}`;
   
   try {
@@ -189,9 +221,9 @@ export const getMacroGraph = async (bookId, uptoChapter) => {
   
   try {
     const response = await apiRequest(`/api/graph/macro?${queryParams.toString()}`);
-    return createGraphApiResponse(true, 'SUCCESS', '거시 그래프 데이터를 성공적으로 조회했습니다.', response.result);
+    return createApiResponse(true, 'SUCCESS', '거시 그래프 데이터를 성공적으로 조회했습니다.', response.result, 'graph');
   } catch (error) {
-    throw new Error(`거시 그래프 조회 실패: ${error.message}`);
+    handleApiError(error, '거시 그래프 조회 실패');
   }
 };
 
@@ -208,19 +240,9 @@ export const getFineGraph = async (bookId, chapterIdx, eventIdx) => {
   
   try {
     const response = await apiRequest(`/api/graph/fine?${queryParams.toString()}`);
-    return createGraphApiResponse(true, 'SUCCESS', '세밀 그래프 데이터를 성공적으로 조회했습니다.', response.result);
+    return createApiResponse(true, 'SUCCESS', '세밀 그래프 데이터를 성공적으로 조회했습니다.', response.result, 'graph');
   } catch (error) {
-    // 더 자세한 에러 정보 제공
-    const errorMessage = error.message || '알 수 없는 오류';
-    const statusCode = error.status || 'unknown';
-    
-    if (statusCode === 500) {
-      throw new Error(`세밀 그래프 조회 실패: 서버 에러 (500) - ${errorMessage}`);
-    } else if (statusCode === 404) {
-      throw new Error(`세밀 그래프 조회 실패: 해당 이벤트를 찾을 수 없습니다 (404) - ${errorMessage}`);
-    } else {
-      throw new Error(`세밀 그래프 조회 실패: ${errorMessage} (${statusCode})`);
-    }
+    handleApiError(error, '세밀 그래프 조회 실패');
   }
 };
 

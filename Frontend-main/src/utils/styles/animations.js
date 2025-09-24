@@ -1,4 +1,5 @@
 export const ANIMATION_VALUES = {
+  EASE: 'ease',
   EASE_OUT: 'cubic-bezier(0.4, 0, 0.2, 1)',
   EASE_IN_OUT: 'cubic-bezier(0.4, 2, 0.6, 1)',
   DURATION: {

@@ -1,4 +1,5 @@
 import { getRelationColor } from './graphStyles';
+import { COLORS, ANIMATION_VALUES, createButtonStyle } from './styles';
 
 const styleCache = new Map();
 
@@ -83,7 +84,7 @@ export const tooltipStyles = {
     width: '100%',
     minHeight: 360,
     height: 360,
-    transition: 'transform 0.6s cubic-bezier(0.4,0,0.2,1)',
+    transition: `transform ${ANIMATION_VALUES.DURATION.SLOW} ${ANIMATION_VALUES.EASE_OUT}`,
     transformStyle: 'preserve-3d',
   },
   front: {
@@ -106,13 +107,13 @@ export const tooltipStyles = {
     left: 0,
   },
   header: {
-    background: '#fff',
+    background: COLORS.white,
     borderBottom: 'none',
     padding: '1.25rem',
   },
   relationTag: {
-    background: '#e3e6ef',
-    color: '#42506b',
+    background: COLORS.borderLight,
+    color: COLORS.textPrimary,
     borderRadius: '0.5rem',
     padding: '0.25rem 0.75rem',
     fontSize: '0.8125rem',
@@ -125,40 +126,14 @@ export const tooltipStyles = {
     height: 24,
     borderRadius: '0.375rem',
     opacity: 1,
-    transition: "background 0.3s",
-    border: "1.5px solid #e5e7eb",
+    transition: `background ${ANIMATION_VALUES.DURATION.NORMAL}`,
+    border: `1.5px solid ${COLORS.border}`,
     boxSizing: "border-box",
     marginBottom: 0,
   },
   button: {
-    primary: {
-      background: '#6C8EFF',
-      color: '#fff',
-      border: 'none',
-      borderRadius: '0.5rem',
-      padding: '0.5rem 1.375rem',
-      fontWeight: 600,
-      fontSize: '0.9375rem',
-      cursor: 'pointer',
-      boxShadow: '0 0.125rem 0.5rem rgba(108, 142, 255, 0.2)',
-      transition: 'background 0.18s, color 0.18s, box-shadow 0.18s, transform 0.13s',
-      margin: '0 auto',
-      display: 'inline-block',
-    },
-    secondary: {
-      background: '#fff',
-      color: '#6C8EFF',
-      border: '1.5px solid #6C8EFF',
-      borderRadius: '0.5rem',
-      padding: '0.5rem 1.375rem',
-      fontWeight: 600,
-      fontSize: '0.9375rem',
-      cursor: 'pointer',
-      boxShadow: '0 0.125rem 0.5rem rgba(108, 142, 255, 0.2)',
-      transition: 'background 0.18s, color 0.18s, box-shadow 0.18s, transform 0.13s',
-      margin: '0 auto',
-      display: 'inline-block',
-    },
+    primary: createButtonStyle(ANIMATION_VALUES, 'primaryEdge'),
+    secondary: createButtonStyle(ANIMATION_VALUES, 'secondaryEdge'),
   },
 };
 

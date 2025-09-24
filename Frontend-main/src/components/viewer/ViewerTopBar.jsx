@@ -27,7 +27,6 @@ const ViewerTopBar = ({
     events,
     graphFullScreen,
     edgeLabelVisible,
-    hideIsolated,
     loading: isGraphLoading
   } = graphState;
   
@@ -35,7 +34,8 @@ const ViewerTopBar = ({
     setCurrentChapter,
     setGraphFullScreen,
     setEdgeLabelVisible,
-    setHideIsolated
+    filterStage,
+    setFilterStage
   } = graphActions;
 
   
@@ -199,38 +199,42 @@ const ViewerTopBar = ({
         visible={edgeLabelVisible}
         onToggle={() => setEdgeLabelVisible(!edgeLabelVisible)}
       />
-      <button
-        onClick={() => setHideIsolated((v) => !v)}
+      
+      {/* 3단계 필터링 드롭다운 */}
+      <select
+        value={filterStage}
+        onChange={(e) => setFilterStage(Number(e.target.value))}
         style={{
-          height: 30,
-          padding: '0 16px',
-          borderRadius: 8,
-          border: '1.5px solid #e3e6ef',
-          background: hideIsolated ? '#f8f9fc' : '#EEF2FF',
-          color: hideIsolated ? '#6C8EFF' : '#22336b',
-          fontSize: 13,
-          fontWeight: 600,
+          height: 28,
+          padding: '0 12px',
+          borderRadius: 6,
+          border: `1.5px solid ${filterStage > 0 ? '#4F6DDE' : '#e3e6ef'}`,
+          background: filterStage > 0 ? '#4F6DDE' : '#fff',
+          color: filterStage > 0 ? '#fff' : '#22336b',
+          fontSize: 12,
+          fontWeight: 500,
           cursor: 'pointer',
-          transition: 'all 0.2s ease',
+          transition: 'all 0.18s ease',
           outline: 'none',
           display: 'flex',
           alignItems: 'center',
           gap: 6,
-          boxShadow: hideIsolated ? 'none' : '0 2px 8px rgba(108,142,255,0.15)',
-          minWidth: '140px',
+          boxShadow: filterStage > 0 ? '0 2px 8px rgba(79,109,222,0.13)' : '0 2px 8px rgba(108,142,255,0.07)',
           justifyContent: 'center',
+          minWidth: 100,
         }}
-        title={hideIsolated ? '독립 인물을 표시합니다' : '독립 인물을 숨깁니다'}
+        title="필터링 단계 선택"
       >
-        <div style={{
-          width: 8,
-          height: 8,
-          borderRadius: '50%',
-          background: hideIsolated ? '#6C8EFF' : '#22336b',
-          opacity: hideIsolated ? 0.6 : 1,
-        }} />
-        {hideIsolated ? '독립 인물 표시' : '독립 인물 숨기기'}
-      </button>
+        <option value={0} style={{ color: '#22336b', background: '#fff' }}>
+          전체 보기
+        </option>
+        <option value={1} style={{ color: '#22336b', background: '#fff' }}>
+          Only Main Character
+        </option>
+        <option value={2} style={{ color: '#22336b', background: '#fff' }}>
+          With Main Character
+        </option>
+      </select>
     </div>
   );
   
@@ -428,7 +432,7 @@ const ViewerTopBar = ({
           </div>
         )}
 
-        {/* 오른쪽 영역: 토글 + 독립 인물 버튼 */}
+        {/* 오른쪽 영역: 토글 버튼 */}
         {renderToggleButtons()}
       </div>
       

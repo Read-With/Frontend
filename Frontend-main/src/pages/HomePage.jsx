@@ -84,9 +84,14 @@ export default function HomePage() {
         지금 바로 나만의 서재를 시작하세요!
       </p>
       
-      <HomeButton onClick={() => navigate('/mypage')}>
-        내 서재로 가기
-      </HomeButton>
+      <div style={{ display: 'flex', gap: theme.spacing.md, flexWrap: 'wrap', justifyContent: 'center' }}>
+        <HomeButton onClick={() => navigate('/mypage')}>
+          내 서재로 가기
+        </HomeButton>
+        <HomeButton onClick={() => navigate('/login')} variant="secondary">
+          로그인
+        </HomeButton>
+      </div>
       
       <div style={featuresStyle}>
         <div style={featureStyle}>EPUB 리더</div>

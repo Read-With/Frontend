@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { theme } from '../common/theme';
-import { getBookManifest } from '../../utils/api';
+import { getBookManifest } from '../../utils/common/api';
 
 const BookInfoPanel = ({ book, isOpen, onClose, progress, currentChapter, currentPage, totalPages }) => {
   const [bookDetails, setBookDetails] = useState(null);
