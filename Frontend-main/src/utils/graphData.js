@@ -496,41 +496,6 @@ export function findCharacterById(folderKey, characterId, preferredChapter = nul
 // getElementsFromRelations 함수를 graphDataUtils.js에서 re-export
 export { getElementsFromRelations };
 
-/**
- * 고립 노드(독립 인물) 필터링 함수
- * @param {Array} elements - 그래프 요소 배열
- * @param {boolean} hideIsolated - 고립 노드 숨김 여부
- * @returns {Array} 필터링된 요소 배열
- */
-export function filterIsolatedNodes(elements, hideIsolated) {
-  if (!hideIsolated) return elements;
-  // 엣지가 하나도 없으면(즉, relations가 아예 없으면) 노드는 숨기지 않음
-  const hasEdge = elements.some(
-    (el) => el.data && el.data.source && el.data.target
-  );
-  if (!hasEdge) return elements;
-  // 노드 id 목록
-  const nodeIds = new Set(
-    elements
-      .filter((el) => el.data && el.data.id && !el.data.source)
-      .map((el) => el.data.id)
-  );
-  // 엣지의 source/target id 목록
-  const connectedIds = new Set(
-    elements
-      .filter((el) => el.data && el.data.source && el.data.target)
-      .flatMap((el) => [el.data.source, el.data.target])
-  );
-  // 연결된 노드만 남김
-  return elements.filter((el) => {
-    if (el.data && el.data.id && !el.data.source) {
-      // 노드
-      return connectedIds.has(el.data.id);
-    }
-    // 엣지는 모두 표시
-    return true;
-  });
-}
 
 
 /**

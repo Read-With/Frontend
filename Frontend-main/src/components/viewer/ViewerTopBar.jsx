@@ -27,15 +27,13 @@ const ViewerTopBar = ({
     events,
     graphFullScreen,
     edgeLabelVisible,
-    hideIsolated,
     loading: isGraphLoading
   } = graphState;
   
   const {
     setCurrentChapter,
     setGraphFullScreen,
-    setEdgeLabelVisible,
-    setHideIsolated
+    setEdgeLabelVisible
   } = graphActions;
 
   
@@ -199,38 +197,6 @@ const ViewerTopBar = ({
         visible={edgeLabelVisible}
         onToggle={() => setEdgeLabelVisible(!edgeLabelVisible)}
       />
-      <button
-        onClick={() => setHideIsolated((v) => !v)}
-        style={{
-          height: 30,
-          padding: '0 16px',
-          borderRadius: 8,
-          border: '1.5px solid #e3e6ef',
-          background: hideIsolated ? '#f8f9fc' : '#EEF2FF',
-          color: hideIsolated ? '#6C8EFF' : '#22336b',
-          fontSize: 13,
-          fontWeight: 600,
-          cursor: 'pointer',
-          transition: 'all 0.2s ease',
-          outline: 'none',
-          display: 'flex',
-          alignItems: 'center',
-          gap: 6,
-          boxShadow: hideIsolated ? 'none' : '0 2px 8px rgba(108,142,255,0.15)',
-          minWidth: '140px',
-          justifyContent: 'center',
-        }}
-        title={hideIsolated ? '독립 인물을 표시합니다' : '독립 인물을 숨깁니다'}
-      >
-        <div style={{
-          width: 8,
-          height: 8,
-          borderRadius: '50%',
-          background: hideIsolated ? '#6C8EFF' : '#22336b',
-          opacity: hideIsolated ? 0.6 : 1,
-        }} />
-        {hideIsolated ? '독립 인물 표시' : '독립 인물 숨기기'}
-      </button>
     </div>
   );
   
@@ -428,7 +394,7 @@ const ViewerTopBar = ({
           </div>
         )}
 
-        {/* 오른쪽 영역: 토글 + 독립 인물 버튼 */}
+        {/* 오른쪽 영역: 토글 버튼 */}
         {renderToggleButtons()}
       </div>
       

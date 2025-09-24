@@ -21,46 +21,6 @@ import useGraphInteractions from "../../hooks/useGraphInteractions";
 // 노드 크기는 가중치 기반으로만 계산됨
 const getEdgeStyleForGraph = () => getEdgeStyle('graph');
 
-// 독립 인물 버튼 스타일 - 통일된 디자인 시스템 적용
-const isolatedButtonStyles = {
-  button: (hideIsolated) => ({
-    height: 32,
-    padding: '0 16px',
-    borderRadius: 8,
-    border: `1px solid ${COLORS.border}`,
-    background: hideIsolated ? COLORS.background : COLORS.primary,
-    color: hideIsolated ? COLORS.textPrimary : COLORS.background,
-    fontSize: 13,
-    fontWeight: 500,
-    cursor: 'pointer',
-    transition: 'all 0.2s ease',
-    outline: 'none',
-    display: 'flex',
-    alignItems: 'center',
-    gap: 8,
-    boxShadow: hideIsolated ? '0 1px 3px rgba(0,0,0,0.1)' : `0 2px 8px ${COLORS.primary}40`,
-    minWidth: '140px',
-    justifyContent: 'center',
-  }),
-  dot: (hideIsolated) => ({
-    width: 6,
-    height: 6,
-    borderRadius: '50%',
-    background: hideIsolated ? COLORS.primary : COLORS.background,
-    opacity: hideIsolated ? 0.7 : 1,
-  }),
-  hover: (hideIsolated) => ({
-    background: hideIsolated ? COLORS.backgroundLight : '#5a7cff',
-    color: hideIsolated ? COLORS.primary : COLORS.background,
-    transform: 'translateY(-1px)',
-    boxShadow: hideIsolated ? '0 2px 8px rgba(0,0,0,0.15)' : `0 4px 12px ${COLORS.primary}50`
-  }),
-  default: (hideIsolated) => ({
-    background: hideIsolated ? COLORS.background : COLORS.primary,
-    color: hideIsolated ? COLORS.textPrimary : COLORS.background,
-    transform: 'translateY(0)'
-  })
-};
 
 // 레이아웃 스타일 (첨부파일 기준 구조 유지, 중앙화된 색상 사용)
 const layoutStyles = {
@@ -95,7 +55,6 @@ function RelationGraphWrapper() {
   // 상태 관리 - 파일명별로 localStorage 키 구분
   const [currentChapter, setCurrentChapter] = useLocalStorageNumber(`lastGraphChapter_${filename}`, 1);
   const [currentEvent, setCurrentEvent] = useState(1);
-  const [hideIsolated, setHideIsolated] = useState(true);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [edgeLabelVisible, setEdgeLabelVisible] = useState(true);
   const [activeTooltip, setActiveTooltip] = useState(null);
@@ -542,9 +501,6 @@ function RelationGraphWrapper() {
     }
   }, [currentChapter, setCurrentChapter]);
 
-  const toggleHideIsolated = useCallback(() => {
-    setHideIsolated(prev => !prev);
-  }, []);
 
   const toggleEdgeLabel = useCallback(() => {
     setEdgeLabelVisible(prev => !prev);
@@ -554,13 +510,6 @@ function RelationGraphWrapper() {
     navigate(`/user/viewer/${filename}`);
   }, [navigate, filename]);
 
-  const handleMouseEnter = useCallback((e) => {
-    Object.assign(e.target.style, isolatedButtonStyles.hover(hideIsolated));
-  }, [hideIsolated]);
-
-  const handleMouseLeave = useCallback((e) => {
-    Object.assign(e.target.style, isolatedButtonStyles.default(hideIsolated));
-  }, [hideIsolated]);
 
   // 뷰어로 돌아가기 버튼 전용 hover 핸들러 - 통일된 디자인 적용
   const handleBackButtonMouseEnter = useCallback((e) => {
@@ -737,17 +686,6 @@ function RelationGraphWrapper() {
             onCloseSuggestions={closeSuggestions}
             isSearchActive={isSearchActive}
           />
-          
-          <button
-            onClick={toggleHideIsolated}
-            style={isolatedButtonStyles.button(hideIsolated)}
-            onMouseEnter={handleMouseEnter}
-            onMouseLeave={handleMouseLeave}
-            title={hideIsolated ? '독립 인물을 표시합니다' : '독립 인물을 숨깁니다'}
-          >
-            <div style={isolatedButtonStyles.dot(hideIsolated)} />
-            {hideIsolated ? '독립 인물 표시' : '독립 인물 숨기기'}
-          </button>
           
           <EdgeLabelToggle
             visible={edgeLabelVisible}
