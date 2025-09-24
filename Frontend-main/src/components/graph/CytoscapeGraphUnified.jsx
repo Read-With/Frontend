@@ -177,35 +177,60 @@ const CytoscapeGraphUnified = ({
   // Cytoscape 인스턴스 생성
   useEffect(() => {
     if (!containerRef.current) {
+      console.warn('⚠️ Cytoscape 컨테이너가 준비되지 않음');
       return;
     }
-    let cyInstance = externalCyRef?.current;
-    if (!cyInstance || typeof cyInstance.container !== 'function') {
-      cyInstance = cytoscape({
-        container: containerRef.current,
-        elements: [],
-        style: stylesheet,
-        layout: { name: "preset" },
-        userZoomingEnabled: true,
-        userPanningEnabled: true,
-        minZoom: 0.3,
-        maxZoom: 1.8,
-        wheelSensitivity: 1,
-        autoungrabify: false,
-        autolock: false,
-        autounselectify: false,
-        selectionType: 'single',
-        touchTapThreshold: 8,
-        desktopTapThreshold: 4,
-      });
-      if (externalCyRef) externalCyRef.current = cyInstance;
-    } else {
-      if (cyInstance.container() !== containerRef.current) {
-        cyInstance.mount(containerRef.current);
+    
+    let cyInstance;
+    
+    try {
+      cyInstance = externalCyRef?.current;
+      if (!cyInstance || typeof cyInstance.container !== 'function') {
+        console.log('🔄 Cytoscape 인스턴스 생성 중...');
+        cyInstance = cytoscape({
+          container: containerRef.current,
+          elements: [],
+          style: stylesheet,
+          layout: { name: "preset" },
+          userZoomingEnabled: true,
+          userPanningEnabled: true,
+          minZoom: 0.2,
+          maxZoom: 2.4,
+          wheelSensitivity: 0.2,
+          autoungrabify: false,
+          autolock: false,
+          autounselectify: false,
+          selectionType: 'single',
+          touchTapThreshold: 8,
+          desktopTapThreshold: 4,
+        });
+        console.log('✅ Cytoscape 인스턴스 생성 완료');
+        if (externalCyRef) externalCyRef.current = cyInstance;
+      } else {
+        if (cyInstance.container() !== containerRef.current) {
+          console.log('🔄 Cytoscape 인스턴스를 새 컨테이너에 마운트');
+          cyInstance.mount(containerRef.current);
+        }
       }
+    } catch (error) {
+      console.error('❌ Cytoscape 인스턴스 생성 실패:', error);
+      return;
+    }
+    
+    if (!cyInstance) {
+      console.error('❌ Cytoscape 인스턴스가 생성되지 않음');
+      return;
     }
     
     const cy = cyInstance;
+    
+    // Cytoscape 인스턴스가 제대로 마운트되었는지 확인
+    if (!cy || !cy.container()) {
+      console.error('❌ Cytoscape 인스턴스 마운트 실패');
+      return;
+    }
+    
+    console.log('✅ Cytoscape 인스턴스 마운트 확인 완료');
     
     const CLICK_THRESHOLD = 200;
     const MOVE_THRESHOLD = 3;
@@ -373,14 +398,22 @@ const CytoscapeGraphUnified = ({
   useEffect(() => {
     const cy = externalCyRef?.current;
     if (!cy) {
+      console.warn('⚠️ 요소 업데이트 시 Cytoscape 인스턴스가 없음');
       return;
     }
   
+    console.log('🔄 그래프 요소 업데이트 중...', {
+      elementsCount: elements?.length || 0,
+      previousElementsCount: previousElements.length,
+      isInitialLoad
+    });
+    
     if (previousElements.length === 0) {
       setPreviousElements(elements);
     }
     
     if (!elements || elements.length === 0) {
+      console.log('⚠️ 요소가 없음 - 그래프 숨김');
       cy.elements().remove();
       setIsGraphVisible(false);
       return;
@@ -453,10 +486,20 @@ const CytoscapeGraphUnified = ({
       
       const nodesToAdd = nodes.filter(node => !prevNodeIds.has(node.data.id));
       const edgesToAdd = edges.filter(edge => !prevEdgeIds.has(edge.data.id));
+      
+      console.log('📊 요소 추가 정보:', {
+        nodesToAdd: nodesToAdd.length,
+        edgesToAdd: edgesToAdd.length,
+        totalNodes: nodes.length,
+        totalEdges: edges.length
+      });
+      
       if (nodesToAdd.length > 0) {
+        console.log('➕ 노드 추가 중...', nodesToAdd.map(n => n.data.id));
         cy.add(nodesToAdd);
       }
       if (edgesToAdd.length > 0) {
+        console.log('➕ 엣지 추가 중...', edgesToAdd.map(e => `${e.data.source}-${e.data.target}`));
         cy.add(edgesToAdd);
       }
       
@@ -554,9 +597,11 @@ const CytoscapeGraphUnified = ({
     });
     
     if (isInitialLoad) {
+      console.log('🔄 초기 로딩 완료');
       setIsInitialLoad(false);
     }
     
+    console.log('✅ 그래프 가시성 설정');
     setIsGraphVisible(true);
   }, [elements, externalCyRef, previousElements, isInitialLoad, stylesheet, layout, fitNodeIds, isSearchActive, filteredElements, onLayoutComplete, isResetFromSearch]);
 
@@ -564,15 +609,25 @@ const CytoscapeGraphUnified = ({
   useEffect(() => {
     const handleResize = () => {
       const cy = externalCyRef?.current;
-      if (!cy) return;
+      if (!cy) {
+        console.warn('⚠️ 리사이즈 시 Cytoscape 인스턴스가 없음');
+        return;
+      }
       
-      // 리사이즈 후 요소들이 화면 내에 있는지 확인
-      cy.resize();
+      console.log('🔄 그래프 리사이즈 중...');
       
-      // 약간의 지연 후 경계 체크
-      setTimeout(() => {
-        ensureElementsInBounds(cy, containerRef.current);
-      }, 100);
+      try {
+        // 리사이즈 후 요소들이 화면 내에 있는지 확인
+        cy.resize();
+        console.log('✅ 그래프 리사이즈 완료');
+        
+        // 약간의 지연 후 경계 체크
+        setTimeout(() => {
+          ensureElementsInBounds(cy, containerRef.current);
+        }, 100);
+      } catch (error) {
+        console.error('❌ 그래프 리사이즈 실패:', error);
+      }
     };
     
     window.addEventListener("resize", handleResize);
