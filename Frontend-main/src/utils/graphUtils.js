@@ -261,6 +261,17 @@ export const invalidateCache = () => {
   cacheTimestamp = 0;
 };
 
+// 윈도우 리사이즈 시 캐시 자동 무효화
+if (typeof window !== 'undefined') {
+  let resizeTimeout;
+  window.addEventListener('resize', () => {
+    clearTimeout(resizeTimeout);
+    resizeTimeout = setTimeout(() => {
+      invalidateCache();
+    }, 100);
+  });
+}
+
 /**
  * 캐시 상태를 확인하는 함수 (디버깅용)
  * @returns {Object} 캐시 상태 정보
@@ -277,4 +288,256 @@ export const getCacheStatus = () => {
     cacheAge: now - cacheTimestamp,
     isValid: (now - cacheTimestamp) < CACHE_DURATION
   };
+};
+
+/**
+ * Ripple 효과 생성 함수 - 확대/축소 상태 고려
+ * @param {Element} container - 컨테이너 DOM 요소
+ * @param {number} x - X 좌표
+ * @param {number} y - Y 좌표
+ * @param {Object} cyRef - Cytoscape 인스턴스 참조
+ * @returns {Function} 정리 함수 (메모리 누수 방지)
+ */
+export const createRippleEffect = (container, x, y, cyRef) => {
+  if (!container) return () => {};
+  
+  const ripple = document.createElement('div');
+  ripple.className = 'ripple-effect';
+  ripple.style.position = 'absolute';
+  
+  let domX, domY;
+  if (cyRef?.current) {
+    const cy = cyRef.current;
+    const pan = cy.pan();
+    const zoom = cy.zoom();
+    
+    // Cytoscape 좌표를 DOM 좌표로 정확히 변환
+    domX = x * zoom + pan.x;
+    domY = y * zoom + pan.y;
+  } else {
+    domX = x;
+    domY = y;
+  }
+  
+  ripple.style.left = `${domX - 50}px`;
+  ripple.style.top = `${domY - 50}px`;
+  ripple.style.pointerEvents = 'none';
+  ripple.style.zIndex = '1000';
+  
+  container.appendChild(ripple);
+
+  const cleanup = () => {
+    if (ripple.parentNode) {
+      ripple.parentNode.removeChild(ripple);
+    }
+  };
+
+  setTimeout(cleanup, 500);
+  
+  return cleanup;
+};
+
+/**
+ * 요소들이 화면 경계 내에 있는지 확인하고 조정하는 함수
+ * @param {Object} cy - Cytoscape 인스턴스
+ * @param {Element} container - 컨테이너 DOM 요소
+ * @param {number} [maxNodes=1000] - 최대 처리할 노드 수 (성능 최적화)
+ */
+export const ensureElementsInBounds = (cy, container, maxNodes = 1000) => {
+  if (!cy || !container) return;
+  
+  const containerWidth = container.clientWidth;
+  const containerHeight = container.clientHeight;
+  const padding = 100;
+  
+  const bounds = {
+    left: -containerWidth / 2 + padding,
+    right: containerWidth / 2 - padding,
+    top: -containerHeight / 2 + padding,
+    bottom: containerHeight / 2 - padding
+  };
+  
+  let needsAdjustment = false;
+  const nodes = cy.nodes();
+  const nodeCount = nodes.length;
+  
+  // 성능 최적화: 노드가 많을 경우 배치 처리
+  if (nodeCount > maxNodes) {
+    console.warn(`ensureElementsInBounds: 노드 수가 많아 성능에 영향을 줄 수 있습니다 (${nodeCount}개)`);
+  }
+  
+  // 배치 처리로 성능 최적화
+  cy.batch(() => {
+    nodes.forEach(node => {
+      const pos = node.position();
+      let newX = pos.x;
+      let newY = pos.y;
+      
+      if (pos.x < bounds.left) {
+        newX = bounds.left;
+        needsAdjustment = true;
+      } else if (pos.x > bounds.right) {
+        newX = bounds.right;
+        needsAdjustment = true;
+      }
+      
+      if (pos.y < bounds.top) {
+        newY = bounds.top;
+        needsAdjustment = true;
+      } else if (pos.y > bounds.bottom) {
+        newY = bounds.bottom;
+        needsAdjustment = true;
+      }
+      
+      if (newX !== pos.x || newY !== pos.y) {
+        node.position({ x: newX, y: newY });
+      }
+    });
+  });
+  
+  // 조정이 필요한 경우 레이아웃을 다시 실행
+  if (needsAdjustment) {
+    cy.layout({ name: 'preset' }).run();
+  }
+};
+
+/**
+ * 마우스 이벤트 핸들러 생성 함수
+ * @param {Object} cy - Cytoscape 인스턴스
+ * @param {Element} container - 컨테이너 DOM 요소
+ * @returns {Object} 마우스 이벤트 핸들러들
+ */
+export const createMouseEventHandlers = (cy, container) => {
+  const CLICK_THRESHOLD = 200;
+  const MOVE_THRESHOLD = 3;
+  
+  const isDraggingRef = { current: false };
+  const prevMouseDownPositionRef = { current: { x: 0, y: 0 } };
+  const mouseDownTimeRef = { current: 0 };
+  const hasMovedRef = { current: false };
+  const isMouseDownRef = { current: false };
+  
+  const handleMouseDown = (evt) => {
+    if (evt.target !== evt.currentTarget) return;
+    
+    isMouseDownRef.current = true;
+    mouseDownTimeRef.current = Date.now();
+    prevMouseDownPositionRef.current = { x: evt.clientX, y: evt.clientY };
+    hasMovedRef.current = false;
+    isDraggingRef.current = false;
+  };
+  
+  const handleMouseMove = (evt) => {
+    if (!isMouseDownRef.current) return;
+    
+    const deltaX = Math.abs(evt.clientX - prevMouseDownPositionRef.current.x);
+    const deltaY = Math.abs(evt.clientY - prevMouseDownPositionRef.current.y);
+    
+    if (deltaX > MOVE_THRESHOLD || deltaY > MOVE_THRESHOLD) {
+      hasMovedRef.current = true;
+      isDraggingRef.current = true;
+    }
+  };
+  
+  const handleMouseUp = (evt) => {
+    if (!isMouseDownRef.current) return;
+    
+    const clickDuration = Date.now() - mouseDownTimeRef.current;
+    const isClick = clickDuration < CLICK_THRESHOLD && !hasMovedRef.current;
+    
+    if (isDraggingRef.current) {
+      isMouseDownRef.current = false;
+      mouseDownTimeRef.current = 0;
+      hasMovedRef.current = false;
+      isDraggingRef.current = false;
+      return;
+    }
+    
+    isMouseDownRef.current = false;
+    mouseDownTimeRef.current = 0;
+    hasMovedRef.current = false;
+    isDraggingRef.current = false;
+  };
+  
+  return {
+    handleMouseDown,
+    handleMouseMove,
+    handleMouseUp,
+    isDraggingRef,
+    isMouseDownRef
+  };
+};
+
+/**
+ * 기본 스타일시트 생성 함수 (간단한 그래프용)
+ * @param {Object} edgeStyle - 엣지 스타일 객체
+ * @param {string} edgeStyle.lineColor - 선 색상
+ * @param {string} edgeStyle.arrowColor - 화살표 색상  
+ * @param {string} edgeStyle.arrowShape - 화살표 모양
+ * @param {boolean} edgeLabelVisible - 엣지 라벨 표시 여부
+ * @returns {Array} Cytoscape 스타일시트 배열
+ */
+export const createBasicStylesheet = (edgeStyle = {}, edgeLabelVisible = true) => {
+  const defaultEdgeStyle = {
+    lineColor: '#666',
+    arrowColor: '#666', 
+    arrowShape: 'triangle',
+    ...edgeStyle
+  };
+
+  return [
+    {
+      selector: 'node',
+      style: {
+        'width': 'mapData(weight, 0, 5, 20, 60)',
+        'height': 'mapData(weight, 0, 5, 20, 60)',
+        'content': 'data(label)',
+        'text-valign': 'center',
+        'text-halign': 'center',
+        'font-size': '12px',
+        'font-weight': 'bold',
+        'color': '#333',
+        'background-color': '#fff',
+        'border-width': '2px',
+        'border-color': '#666',
+        'border-style': 'solid',
+        'text-outline-width': '1px',
+        'text-outline-color': '#fff'
+      }
+    },
+    {
+      selector: 'edge',
+      style: {
+        'width': 'mapData(weight, 0, 5, 1, 8)',
+        'line-color': defaultEdgeStyle.lineColor,
+        'target-arrow-color': defaultEdgeStyle.arrowColor,
+        'target-arrow-shape': defaultEdgeStyle.arrowShape,
+        'curve-style': 'bezier',
+        'label': edgeLabelVisible ? 'data(label)' : '',
+        'font-size': '10px',
+        'font-weight': 'normal',
+        'color': '#666',
+        'text-outline-width': '1px',
+        'text-outline-color': '#fff',
+        'text-rotation': 'autorotate',
+        'text-margin-y': '-10px'
+      }
+    },
+    {
+      selector: 'node:selected',
+      style: {
+        'background-color': '#ff6b6b',
+        'border-color': '#ff5252',
+        'border-width': '3px'
+      }
+    },
+    {
+      selector: 'edge:selected',
+      style: {
+        'line-color': '#ff6b6b',
+        'target-arrow-color': '#ff6b6b',
+        'width': 'mapData(weight, 0, 5, 2, 10)'
+      }
+    }
+  ];
 };
