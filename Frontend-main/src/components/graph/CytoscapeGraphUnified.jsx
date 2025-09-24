@@ -115,6 +115,8 @@ const CytoscapeGraphUnified = ({
   selectedNodeIdRef,
   selectedEdgeIdRef,
   strictBackgroundClear = false,
+  showRippleEffect = true, // ripple 효과 표시 여부 제어
+  isDropdownSelection = false, // 드롭다운 선택 여부
 }) => {
   const containerRef = useRef(null);
   const [isGraphVisible, setIsGraphVisible] = useState(false);
@@ -177,7 +179,10 @@ const CytoscapeGraphUnified = ({
   // Cytoscape 인스턴스 생성
   useEffect(() => {
     if (!containerRef.current) {
-      console.warn('⚠️ Cytoscape 컨테이너가 준비되지 않음');
+      // 개발 환경에서만 경고 표시, 프로덕션에서는 조용히 무시
+      if (process.env.NODE_ENV === 'development') {
+        console.warn('⚠️ Cytoscape 컨테이너가 준비되지 않음');
+      }
       return;
     }
     
@@ -196,7 +201,7 @@ const CytoscapeGraphUnified = ({
           userPanningEnabled: true,
           minZoom: 0.2,
           maxZoom: 2.4,
-          wheelSensitivity: 0.2,
+          wheelSensitivity: 1,
           autoungrabify: false,
           autolock: false,
           autounselectify: false,
@@ -332,7 +337,8 @@ const CytoscapeGraphUnified = ({
     cy.removeListener('tap');
     
     const createRippleWrapper = (originalHandler) => (evt) => {
-      if (containerRef.current && cy) {
+      // ripple 효과가 활성화되고 드롭다운 선택이 아닌 경우에만 표시
+      if (showRippleEffect && !isDropdownSelection && containerRef.current && cy) {
         let x, y;
         
         if (evt.renderedPosition) {
@@ -398,7 +404,10 @@ const CytoscapeGraphUnified = ({
   useEffect(() => {
     const cy = externalCyRef?.current;
     if (!cy) {
-      console.warn('⚠️ 요소 업데이트 시 Cytoscape 인스턴스가 없음');
+      // 개발 환경에서만 경고 표시, 프로덕션에서는 조용히 무시
+      if (process.env.NODE_ENV === 'development') {
+        console.warn('⚠️ 요소 업데이트 시 Cytoscape 인스턴스가 없음');
+      }
       return;
     }
   
@@ -610,7 +619,10 @@ const CytoscapeGraphUnified = ({
     const handleResize = () => {
       const cy = externalCyRef?.current;
       if (!cy) {
-        console.warn('⚠️ 리사이즈 시 Cytoscape 인스턴스가 없음');
+        // 개발 환경에서만 경고 표시, 프로덕션에서는 조용히 무시
+        if (process.env.NODE_ENV === 'development') {
+          console.warn('⚠️ 리사이즈 시 Cytoscape 인스턴스가 없음');
+        }
         return;
       }
       

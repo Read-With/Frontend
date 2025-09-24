@@ -15,7 +15,7 @@ export const defaultSettings = {
   pageMode: "double",
   lineHeight: 1.5,
   margin: 20,
-  fontFamily: "default",
+  fontFamily: "Noto Serif KR",
   showGraph: true,
 };
 

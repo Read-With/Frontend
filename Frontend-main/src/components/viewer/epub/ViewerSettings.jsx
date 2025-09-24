@@ -26,7 +26,7 @@ const defaultSettings = {
   pageMode: 'double', // 페이지 모드 (single, double)
   lineHeight: 1.5, // 줄 간격
   margin: 20, // 여백 (px)
-  fontFamily: 'default', // 글꼴
+  fontFamily: 'Noto Serif KR', // 글꼴
   showGraph: true, // 그래프 표시 여부
 };
 

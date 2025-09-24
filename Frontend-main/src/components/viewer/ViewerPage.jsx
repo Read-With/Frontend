@@ -1,5 +1,5 @@
 import React, { useRef, useState, useEffect, useMemo, useCallback } from "react";
-import { toast, ToastContainer } from "react-toastify";
+import { ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import cytoscape from "cytoscape";
 import { CytoscapeGraphPortalProvider } from "../graph/CytoscapeGraphUnified";
@@ -13,7 +13,7 @@ import { useViewerPage } from "../../hooks/useViewerPage";
 import { useGraphSearch } from "../../hooks/useGraphSearch";
 import { useClickOutside } from "../../hooks/useClickOutside";
 import { createStorageKey } from "../../hooks/useLocalStorage";
-import { getAllProgress, saveProgress, getBookProgress, getBookManifest, getMacroGraph, getFineGraph } from "../../utils/common/api";
+import { getAllProgress, saveProgress, getBookProgress, getBookManifest, getFineGraph } from "../../utils/common/api";
 import { 
   parseCfiToChapterDetail, 
   extractEventNodesAndEdges
@@ -45,6 +45,90 @@ function GraphSplitArea({
   const graphContainerRef = React.useRef(null);
   const { isSearchActive, filteredElements, isResetFromSearch } = searchState;
   const { loading, isReloading, isGraphLoading, isDataReady } = viewerState;
+  const { elements } = graphState;
+  const { filterStage } = graphActions;
+
+  // 3단계 필터링 로직 (GraphSplitArea용)
+  const filteredMainCharacters = React.useMemo(() => {
+    if (filterStage === 0 || !elements) return elements;
+    
+    // 핵심 인물 (main_character: true) 노드들
+    const coreNodes = elements.filter(el => 
+      el.data && 
+      el.data.id && 
+      !el.data.source && 
+      el.data.main_character === true
+    );
+    
+    const coreNodeIds = new Set(coreNodes.map(node => node.data.id));
+    
+    // 주요 인물 (main_character: false이지만 중요한 인물) 노드들
+    const importantNodes = elements.filter(el => 
+      el.data && 
+      el.data.id && 
+      !el.data.source && 
+      el.data.main_character === false &&
+      el.data.importance && el.data.importance > 0.5 // 중요도 임계값
+    );
+    
+    const importantNodeIds = new Set(importantNodes.map(node => node.data.id));
+    
+    let filteredNodes = [];
+    let filteredEdges = [];
+    
+    if (filterStage === 1) {
+      // 1단계: 핵심인물끼리의 연결만
+      filteredNodes = coreNodes;
+      filteredEdges = elements.filter(el => 
+        el.data && 
+        el.data.source && 
+        el.data.target &&
+        coreNodeIds.has(el.data.source) && 
+        coreNodeIds.has(el.data.target)
+      );
+    } else if (filterStage === 2) {
+      // 2단계: 핵심인물과 핵심인물에 연결된 노드(핵심인물, 비핵심인물) + 간선
+      // 핵심 인물과 연결된 간선들 찾기
+      const connectedEdges = elements.filter(el => 
+        el.data && 
+        el.data.source && 
+        el.data.target &&
+        // 최소 하나의 노드는 핵심 인물이어야 함
+        (coreNodeIds.has(el.data.source) || coreNodeIds.has(el.data.target))
+      );
+      
+      // 연결된 노드들의 ID 수집
+      const connectedNodeIds = new Set();
+      connectedEdges.forEach(edge => {
+        if (edge.data.source) connectedNodeIds.add(edge.data.source);
+        if (edge.data.target) connectedNodeIds.add(edge.data.target);
+      });
+      
+      // 핵심 인물과 연결된 모든 노드들
+      const connectedNodes = elements.filter(el => 
+        el.data && 
+        el.data.id && 
+        !el.data.source && 
+        connectedNodeIds.has(el.data.id)
+      );
+      
+      filteredNodes = connectedNodes;
+      filteredEdges = connectedEdges;
+    }
+    
+    return [...filteredNodes, ...filteredEdges];
+  }, [elements, filterStage]);
+
+  // 최종 elements 결정 (검색 > main_character 필터링 > 기본 elements 순)
+  const finalElements = React.useMemo(() => {
+    if (isSearchActive && filteredElements && filteredElements.length > 0) {
+      return filteredElements;
+    }
+    if (filterStage > 0) {
+      return filteredMainCharacters;
+    }
+    return elements;
+  }, [isSearchActive, filteredElements, filterStage, filteredMainCharacters, elements]);
 
   return (
     <div
@@ -174,16 +258,15 @@ function GraphSplitArea({
             currentChapter={graphState.currentChapter}
             edgeLabelVisible={graphState.edgeLabelVisible}
             filename={viewerState.filename}
-            elements={isSearchActive && filteredElements && filteredElements.length > 0 ? filteredElements : graphState.elements}
+            elements={finalElements}
             isResetFromSearch={isResetFromSearch}
-            // ViewerTopBar와 동일한 이벤트 정보 전달 - 현재 챕터의 이벤트만 전달
             prevValidEvent={graphState.currentEvent && graphState.currentEvent.chapter === graphState.currentChapter ? graphState.currentEvent : null}
             events={graphState.events || []}
-            // 툴팁 관련 props 추가
             activeTooltip={activeTooltip}
             onClearTooltip={onClearTooltip}
             onSetActiveTooltip={onSetActiveTooltip}
             graphClearRef={graphClearRef}
+            isEventTransition={isEventTransition}
           />
         )}
       </div>
@@ -193,33 +276,20 @@ function GraphSplitArea({
 
 const ViewerPage = () => {
   const {
-    filename, location, navigate, viewerRef,
-    reloadKey, setReloadKey, failCount, setFailCount,
-    progress, setProgress, currentPage, setCurrentPage,
+    viewerRef, reloadKey, progress, setProgress, currentPage, setCurrentPage,
     totalPages, setTotalPages, showSettingsModal, setShowSettingsModal,
-    settings, setSettings,
-    currentChapter, setCurrentChapter, currentEvent, setCurrentEvent,
-    prevEvent, setPrevEvent, events, setEvents, maxChapter, setMaxChapter,
-    graphFullScreen, setGraphFullScreen, showGraph, setShowGraph,
-    elements, graphViewState, setGraphViewState,
-    hideIsolated, setHideIsolated, edgeLabelVisible, setEdgeLabelVisible,
-    graphDiff, setGraphDiff,
-    currentCharIndex, setCurrentCharIndex, currentPageWords, setCurrentPageWords,
+    settings, setSettings, currentChapter, setCurrentChapter, currentEvent, setCurrentEvent,
+    events, setEvents, showGraph, setShowGraph, elements, graphViewState, setGraphViewState,
+    graphDiff, setGraphDiff, currentCharIndex, setCurrentCharIndex,
     totalChapterWords, setTotalChapterWords, loading, setLoading,
-    chapterText, setChapterText, isDataReady, setIsDataReady,
-    characterData, setCharacterData, isReloading, setIsReloading,
-    eventNum, setEventNum, isGraphLoading, setIsGraphLoading,
-    showToolbar, setShowToolbar,
-    cleanFilename, bookmarks, setBookmarks, showBookmarkList, setShowBookmarkList,
-    prevValidEventRef, prevElementsRef, prevChapterNumRef, prevEventNumRef,
-    book, folderKey,
-    graphElements, newNodeIds, currentChapterData, maxEventNum,
-    graphEventNum, detectedMaxChapter, graphLoading, graphError,
+    isDataReady, setIsDataReady, characterData, setCharacterData, isReloading, setIsReloading,
+    isGraphLoading, setIsGraphLoading, showToolbar, setShowToolbar,
+    bookmarks, setBookmarks, showBookmarkList, setShowBookmarkList,
+    prevElementsRef, book, folderKey, currentChapterData,
     handlePrevPage, handleNextPage, handleAddBookmark, handleBookmarkSelect,
     handleOpenSettings, handleCloseSettings, handleApplySettings,
-    onToggleBookmarkList, handleSliderChange, handleDeleteBookmark,
-    handleRemoveBookmark, toggleGraph, handleFitView, handleLocationChange,
-    graphState, graphActions, viewerState, searchState,
+    onToggleBookmarkList, handleSliderChange, toggleGraph, handleLocationChange,
+    graphState, graphActions, viewerState, searchState, graphFullScreen, setGraphFullScreen,
   } = useViewerPage();
 
 
@@ -231,6 +301,10 @@ const ViewerPage = () => {
   
   // 이벤트 상태 관리
   const [isEventUndefined, setIsEventUndefined] = useState(false);
+  
+  // 이벤트 전환 감지를 위한 상태
+  const [isEventTransition, setIsEventTransition] = useState(false);
+  const prevEventRef = useRef(null);
   
   // 툴팁 닫기 함수
   const handleClearTooltip = useCallback(() => {
@@ -358,10 +432,8 @@ const ViewerPage = () => {
    }, [book?.id]); // book.id만 의존성으로 설정
 
   // API 거시 그래프 데이터 상태 관리
-  const [apiMacroData, setApiMacroData] = useState(null);
-  const [apiMacroLoading, setApiMacroLoading] = useState(false);
-  const [manifestLoaded, setManifestLoaded] = useState(false); // 책 구조 패키지 로딩 완료 상태
-  const apiCallRef = useRef(null); // 중복 호출 방지용 ref
+  const [manifestLoaded, setManifestLoaded] = useState(false);
+  const apiCallRef = useRef(null);
   
    // API로 가져온 책의 거시그래프 데이터 로딩
    useEffect(() => {
@@ -373,7 +445,6 @@ const ViewerPage = () => {
          if (!manifestLoaded) {
            console.log('⏳ 책 구조 패키지 로딩 대기 중...');
          }
-         setApiMacroData(null);
          return;
        }
        
@@ -386,7 +457,6 @@ const ViewerPage = () => {
          }
          apiCallRef.current = callKey;
        
-       setApiMacroLoading(true);
        try {
           // API 호출 전 파라미터 검증
           if (!book?.id || !currentChapter || eventIdx < 0) {
@@ -408,7 +478,6 @@ const ViewerPage = () => {
           });
           
           const fineData = await getFineGraph(book.id, currentChapter, eventIdx);
-        setApiMacroData(fineData.result);
         console.log('✅ 세밀그래프 데이터 로딩 성공:', {
           event: fineData.result.event,
           charactersCount: fineData.result.characters.length,
@@ -484,91 +553,6 @@ const ViewerPage = () => {
         
        } catch (error) {
          console.error('❌ 세밀그래프 API 호출 실패:', error);
-         
-         // 500 에러 또는 404 에러인 경우 특별한 처리
-         if (error.message.includes('500') || error.message.includes('서버 에러') || 
-             error.message.includes('404') || error.message.includes('찾을 수 없습니다')) {
-           if (error.message.includes('404') || error.message.includes('찾을 수 없습니다')) {
-             console.log('⚠️ 404 에러 발생 - 해당 이벤트가 존재하지 않습니다.');
-           } else {
-             console.log('⚠️ 서버 에러 발생 - API 서버가 해당 데이터를 처리할 수 없습니다.');
-           }
-           console.log('📋 요청 정보:', {
-             bookId: book.id,
-             chapterIdx: currentChapter,
-             eventIdx: eventIdx,
-             bookTitle: book.title
-           });
-           
-           // 500/404 에러 시 다른 이벤트 및 챕터 시도
-           const fallbackEventIds = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10].filter(id => id !== eventIdx);
-           const fallbackChapters = [1, 2, 3].filter(ch => ch !== currentChapter);
-           let fallbackSuccess = false;
-           
-           // Fallback 시도 중에는 중복 방지 비활성화
-           const originalCallKey = apiCallRef.current;
-           apiCallRef.current = null;
-           
-           // 1단계: 같은 챕터의 다른 이벤트 시도
-           for (const fallbackEventId of fallbackEventIds) {
-             try {
-               console.log(`🔄 Fallback 시도 - Chapter ${currentChapter}, eventIdx: ${fallbackEventId} (${fallbackEventIds.indexOf(fallbackEventId) + 1}/${fallbackEventIds.length})`);
-               const fallbackData = await getFineGraph(book.id, currentChapter, fallbackEventId);
-               setApiMacroData(fallbackData.result);
-               console.log(`✅ Fallback 성공 - Chapter ${currentChapter}, eventIdx: ${fallbackEventId}`, {
-                 charactersCount: fallbackData.result.characters.length,
-                 relationsCount: fallbackData.result.relations.length,
-                 event: fallbackData.result.event
-               });
-               fallbackSuccess = true;
-               break;
-             } catch (fallbackError) {
-               console.log(`❌ Fallback 실패 - Chapter ${currentChapter}, eventIdx: ${fallbackEventId}:`, fallbackError.message);
-             }
-           }
-           
-           // 2단계: 다른 챕터의 이벤트 시도 (1단계 실패 시)
-           if (!fallbackSuccess) {
-             console.log('🔄 1단계 실패 - 다른 챕터의 이벤트 시도');
-             for (const fallbackChapter of fallbackChapters) {
-               for (const fallbackEventId of [0, 1, 2, 3, 4, 5]) {
-                 try {
-                   console.log(`🔄 Fallback 시도 - Chapter ${fallbackChapter}, eventIdx: ${fallbackEventId}`);
-                   const fallbackData = await getFineGraph(book.id, fallbackChapter, fallbackEventId);
-                   setApiMacroData(fallbackData.result);
-                   console.log(`✅ Fallback 성공 - Chapter ${fallbackChapter}, eventIdx: ${fallbackEventId}`, {
-                     charactersCount: fallbackData.result.characters.length,
-                     relationsCount: fallbackData.result.relations.length,
-                     event: fallbackData.result.event
-                   });
-                   fallbackSuccess = true;
-                   break;
-                 } catch (fallbackError) {
-                   console.log(`❌ Fallback 실패 - Chapter ${fallbackChapter}, eventIdx: ${fallbackEventId}:`, fallbackError.message);
-                 }
-               }
-               if (fallbackSuccess) break;
-             }
-           }
-           
-           // 중복 방지 복원
-           apiCallRef.current = originalCallKey;
-           
-           if (!fallbackSuccess) {
-             console.log('🔄 모든 Fallback 시도 실패 - 로컬 데이터 사용');
-             console.log('📋 시도한 조합:', {
-               originalRequest: { chapter: currentChapter, eventIdx: eventIdx },
-               fallbackEvents: fallbackEventIds,
-               fallbackChapters: fallbackChapters,
-               totalAttempts: fallbackEventIds.length + (fallbackChapters.length * 6)
-             });
-             setApiMacroData(null);
-           }
-         } else {
-           setApiMacroData(null);
-         }
-       } finally {
-         setApiMacroLoading(false);
        }
     };
 
@@ -619,33 +603,45 @@ const ViewerPage = () => {
   // 이벤트 상태 감지 및 새로고침 메시지 표시
   useEffect(() => {
     const checkEventStatus = () => {
-      // 로딩 중인 경우는 제외하고 이벤트가 정해지지 않은 경우들만 체크
       if (loading || isReloading || isGraphLoading || !isDataReady) {
         setIsEventUndefined(false);
         return;
       }
 
-      // 로딩이 완료된 후 이벤트가 정해지지 않은 경우들
       const isEventInvalid = 
-        // 1. currentEvent가 null이거나 undefined인 경우
         !currentEvent ||
-        // 2. currentEvent.eventNum이 undefined이거나 null인 경우
         currentEvent.eventNum === undefined || currentEvent.eventNum === null ||
-        // 3. currentEvent.chapter가 undefined이거나 null인 경우
         currentEvent.chapter === undefined || currentEvent.chapter === null ||
-        // 4. events 배열이 비어있는 경우
         !events || events.length === 0;
 
-      if (isEventInvalid) {
-        setIsEventUndefined(true);
-        
-      } else {
-        setIsEventUndefined(false);
-      }
+      setIsEventUndefined(isEventInvalid);
     };
 
     checkEventStatus();
-  }, [currentEvent, currentChapter, events, loading, isReloading, isDataReady, isEventUndefined, isGraphLoading]);
+  }, [currentEvent, currentChapter, events, loading, isReloading, isDataReady, isGraphLoading]);
+
+  // 이벤트 전환 감지
+  useEffect(() => {
+    if (currentEvent && prevEventRef.current) {
+      const prevEvent = prevEventRef.current;
+      const isEventChanged = 
+        prevEvent.eventNum !== currentEvent.eventNum ||
+        prevEvent.chapter !== currentEvent.chapter;
+      
+      if (isEventChanged) {
+        setIsEventTransition(true);
+        
+        // 짧은 지연 후 이벤트 전환 상태 해제
+        setTimeout(() => {
+          setIsEventTransition(false);
+        }, 200);
+      }
+    }
+    
+    if (currentEvent) {
+      prevEventRef.current = currentEvent;
+    }
+  }, [currentEvent]);
 
   useEffect(() => {
     const loadEventsData = async () => {
@@ -675,8 +671,6 @@ const ViewerPage = () => {
           return event.chapter === currentChapter;
         });
         
-        if (validEvents.length === 0 && events.length > 0) {
-        }
         
         setEvents(validEvents);
         
@@ -689,9 +683,7 @@ const ViewerPage = () => {
             setCharacterData([]);
           }
         } catch (charError) {
-          if (currentChapterData) {
-            setCharacterData(currentChapterData.characters || currentChapterData);
-          }
+          setCharacterData(currentChapterData?.characters || currentChapterData || []);
         }
         
         setIsDataReady(true);
@@ -718,20 +710,15 @@ const ViewerPage = () => {
     }
   }, [currentChapter, currentChapterData, folderKey, graphState.isInitialChapterDetected, book]);
 
-  // currentEventElements는 useGraphDataLoader에서 관리됨
 
   const {
-    searchTerm, isSearchActive, filteredElements, fitNodeIds,
+    searchTerm, isSearchActive, filteredElements,
     isResetFromSearch, suggestions, showSuggestions, selectedIndex,
     selectSuggestion, handleKeyDown, closeSuggestions,
     handleSearchSubmit, clearSearch, setSearchTerm,
   } = useGraphSearch(elements, null, currentChapterData);
 
   // elements는 useGraphDataLoader에서 관리됨
-
-  // === [제거] 중복된 useEffect - 위의 통합 로직으로 대체됨 ===
-
-  // 그래프 위치는 useGraphDataLoader에서 관리됨
 
   // 현재 이벤트까지의 누적 레이아웃을 merge해서 graphViewState로 적용
   useEffect(() => {
@@ -772,35 +759,20 @@ const ViewerPage = () => {
     } catch (e) {
       // 전체 레이아웃 복원 오류 처리
     }
-  }, [isDataReady, currentEvent, elements, currentChapter, hideIsolated]);
+  }, [isDataReady, currentEvent, elements, currentChapter]);
 
   // elements가 바뀔 때마다 diff 계산
   useEffect(() => {
     if (!elements) return;
     const prev = prevElementsRef.current || [];
-    const curr = elements;
-    const diff = calcGraphDiff(prev, curr);
+    const diff = calcGraphDiff(prev, elements);
     setGraphDiff(diff);
-    prevElementsRef.current = curr;
+    prevElementsRef.current = elements;
   }, [elements]);
 
-  // === [제거] 중복된 초기 로딩 fallback - 위의 통합 로직으로 대체됨 ===
 
-  // elements가 이전과 완전히 같으면 로딩 메시지 안 보이게
-  const isSameElements = useMemo(() => {
-    if (!prevElementsRef.current || !elements) return false;
-    if (prevElementsRef.current.length !== elements.length) return false;
-    for (let i = 0; i < elements.length; i++) {
-      if (
-        JSON.stringify(prevElementsRef.current[i]) !==
-        JSON.stringify(elements[i])
-      )
-        return false;
-    }
-    return true;
-  }, [elements]);
 
-  // === [디버깅용 로그 추가] 최초 진입 시 모든 챕터의 전체 노드 위치 미리 저장 ===
+  // 최초 진입 시 모든 챕터의 전체 노드 위치 미리 저장
   useEffect(() => {
     // 동적으로 최대 챕터 번호 계산
     const maxChapterCount = getDetectedMaxChapter(folderKey);
@@ -963,7 +935,7 @@ const ViewerPage = () => {
                 style={{
                   fontSize: "0.98rem",
                   color: "#4F6DDE",
-                  fontFamily: "monospace",
+                  fontFamily: "Noto Serif KR",
                 }}
               >
                 위치: {parseCfiToChapterDetail(bm.cfi)}

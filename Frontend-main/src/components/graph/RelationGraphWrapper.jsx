@@ -61,6 +61,7 @@ function RelationGraphWrapper() {
   const [isGraphLoading, setIsGraphLoading] = useState(true);
   const [isSidebarClosing, setIsSidebarClosing] = useState(false);
   const [forceClose, setForceClose] = useState(false);
+  const [filterStage, setFilterStage] = useState(0); // 0: 전체, 1: 핵심-핵심, 2: 핵심-핵심+핵심-주요, 3: 핵심-핵심+핵심-주요+주요-주요
   
   // API 세밀 그래프 데이터 상태
   const [apiFineData, setApiFineData] = useState(null);
@@ -449,12 +450,86 @@ function RelationGraphWrapper() {
     });
   }, [elements]);
 
+  // 3단계 필터링 로직
+  const filteredMainCharacters = useMemo(() => {
+    if (filterStage === 0 || !elements) return elements;
+    
+    // 핵심 인물 (main_character: true) 노드들
+    const coreNodes = elements.filter(el => 
+      el.data && 
+      el.data.id && 
+      !el.data.source && 
+      el.data.main_character === true
+    );
+    
+    const coreNodeIds = new Set(coreNodes.map(node => node.data.id));
+    
+    // 주요 인물 (main_character: false이지만 중요한 인물) 노드들
+    const importantNodes = elements.filter(el => 
+      el.data && 
+      el.data.id && 
+      !el.data.source && 
+      el.data.main_character === false &&
+      el.data.importance && el.data.importance > 0.5 // 중요도 임계값
+    );
+    
+    const importantNodeIds = new Set(importantNodes.map(node => node.data.id));
+    
+    let filteredNodes = [];
+    let filteredEdges = [];
+    
+    if (filterStage === 1) {
+      // 1단계: 핵심인물끼리의 연결만
+      filteredNodes = coreNodes;
+      filteredEdges = elements.filter(el => 
+        el.data && 
+        el.data.source && 
+        el.data.target &&
+        coreNodeIds.has(el.data.source) && 
+        coreNodeIds.has(el.data.target)
+      );
+    } else if (filterStage === 2) {
+      // 2단계: 핵심인물과 핵심인물에 연결된 노드(핵심인물, 비핵심인물) + 간선
+      // 핵심 인물과 연결된 간선들 찾기
+      const connectedEdges = elements.filter(el => 
+        el.data && 
+        el.data.source && 
+        el.data.target &&
+        // 최소 하나의 노드는 핵심 인물이어야 함
+        (coreNodeIds.has(el.data.source) || coreNodeIds.has(el.data.target))
+      );
+      
+      // 연결된 노드들의 ID 수집
+      const connectedNodeIds = new Set();
+      connectedEdges.forEach(edge => {
+        if (edge.data.source) connectedNodeIds.add(edge.data.source);
+        if (edge.data.target) connectedNodeIds.add(edge.data.target);
+      });
+      
+      // 핵심 인물과 연결된 모든 노드들
+      const connectedNodes = elements.filter(el => 
+        el.data && 
+        el.data.id && 
+        !el.data.source && 
+        connectedNodeIds.has(el.data.id)
+      );
+      
+      filteredNodes = connectedNodes;
+      filteredEdges = connectedEdges;
+    }
+    
+    return [...filteredNodes, ...filteredEdges];
+  }, [elements, filterStage]);
+
   const finalElements = useMemo(() => {
     if (isSearchActive && filteredElements && filteredElements.length > 0) {
       return filteredElements;
     }
+    if (filterStage > 0) {
+      return filteredMainCharacters;
+    }
     return sortedElements;
-  }, [isSearchActive, filteredElements, sortedElements]);
+  }, [isSearchActive, filteredElements, sortedElements, filterStage, filteredMainCharacters]);
 
   // 그래프 스타일 및 레이아웃
   const edgeStyle = getEdgeStyleForGraph();
@@ -494,10 +569,22 @@ function RelationGraphWrapper() {
     setIsSidebarOpen(prev => !prev);
   }, []);
 
+  // 드롭다운 선택 상태 관리
+  const [isDropdownSelection, setIsDropdownSelection] = useState(false);
+
   const handleChapterSelect = useCallback((chapter) => {
     if (chapter !== currentChapter) {
       console.log('📖 챕터 변경:', { from: currentChapter, to: chapter });
+      
+      // 드롭다운 선택 상태 설정
+      setIsDropdownSelection(true);
+      
       setCurrentChapter(chapter);
+      
+      // 짧은 지연 후 드롭다운 선택 상태 해제
+      setTimeout(() => {
+        setIsDropdownSelection(false);
+      }, 100);
     }
   }, [currentChapter, setCurrentChapter]);
 
@@ -691,6 +778,42 @@ function RelationGraphWrapper() {
             visible={edgeLabelVisible}
             onToggle={toggleEdgeLabel}
           />
+          
+          {/* 3단계 필터링 드롭다운 */}
+          <select
+            value={filterStage}
+            onChange={(e) => setFilterStage(Number(e.target.value))}
+            style={{
+              height: 32,
+              padding: '0 12px',
+              borderRadius: 8,
+              border: `1px solid ${filterStage > 0 ? COLORS.primary : COLORS.border}`,
+              background: filterStage > 0 ? COLORS.primary : COLORS.background,
+              color: filterStage > 0 ? '#fff' : COLORS.textPrimary,
+              fontSize: 12,
+              fontWeight: 500,
+              cursor: 'pointer',
+              transition: 'all 0.2s ease',
+              outline: 'none',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              boxShadow: filterStage > 0 ? `0 2px 8px ${COLORS.primary}40` : '0 2px 8px rgba(0,0,0,0.1)',
+              justifyContent: 'center',
+              minWidth: 120,
+            }}
+            title="필터링 단계 선택"
+          >
+            <option value={0} style={{ color: COLORS.textPrimary, background: COLORS.background }}>
+              모두 보기
+            </option>
+            <option value={1} style={{ color: COLORS.textPrimary, background: COLORS.background }}>
+              핵심 인물만
+            </option>
+            <option value={2} style={{ color: COLORS.textPrimary, background: COLORS.background }}>
+              핵심 인물 중심
+            </option>
+          </select>
         </div>
 
         <div style={topBarStyles.rightSection}>
@@ -899,9 +1022,19 @@ function RelationGraphWrapper() {
               color: COLORS.textSecondary,
               fontWeight: '500'
             }}>
-              <span>{apiElements.filter(el => el.data && el.data.id && !el.data.source).length}명</span>
+              <span>
+                {filterStage > 0 
+                  ? `${filteredMainCharacters.filter(el => el.data && el.data.id && !el.data.source).length}명 (필터링됨)`
+                  : `${apiElements.filter(el => el.data && el.data.id && !el.data.source).length}명`
+                }
+              </span>
               <span>•</span>
-              <span>{apiElements.filter(el => el.data && el.data.source && el.data.target).length}관계</span>
+              <span>
+                {filterStage > 0 
+                  ? `${filteredMainCharacters.filter(el => el.data && el.data.source && el.data.target).length}관계 (필터링됨)`
+                  : `${apiElements.filter(el => el.data && el.data.source && el.data.target).length}관계`
+                }
+              </span>
             </div>
           </div>
           
@@ -961,6 +1094,8 @@ function RelationGraphWrapper() {
                 selectedEdgeIdRef={selectedEdgeIdRef}
                 strictBackgroundClear={true}
                 isResetFromSearch={isResetFromSearch}
+                showRippleEffect={true}
+                isDropdownSelection={isDropdownSelection}
               />
             </div>
           </div>

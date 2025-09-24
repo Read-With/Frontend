@@ -33,7 +33,9 @@ const ViewerTopBar = ({
   const {
     setCurrentChapter,
     setGraphFullScreen,
-    setEdgeLabelVisible
+    setEdgeLabelVisible,
+    filterStage,
+    setFilterStage
   } = graphActions;
 
   
@@ -197,6 +199,42 @@ const ViewerTopBar = ({
         visible={edgeLabelVisible}
         onToggle={() => setEdgeLabelVisible(!edgeLabelVisible)}
       />
+      
+      {/* 3단계 필터링 드롭다운 */}
+      <select
+        value={filterStage}
+        onChange={(e) => setFilterStage(Number(e.target.value))}
+        style={{
+          height: 28,
+          padding: '0 12px',
+          borderRadius: 6,
+          border: `1.5px solid ${filterStage > 0 ? '#4F6DDE' : '#e3e6ef'}`,
+          background: filterStage > 0 ? '#4F6DDE' : '#fff',
+          color: filterStage > 0 ? '#fff' : '#22336b',
+          fontSize: 12,
+          fontWeight: 500,
+          cursor: 'pointer',
+          transition: 'all 0.18s ease',
+          outline: 'none',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 6,
+          boxShadow: filterStage > 0 ? '0 2px 8px rgba(79,109,222,0.13)' : '0 2px 8px rgba(108,142,255,0.07)',
+          justifyContent: 'center',
+          minWidth: 100,
+        }}
+        title="필터링 단계 선택"
+      >
+        <option value={0} style={{ color: '#22336b', background: '#fff' }}>
+          전체 보기
+        </option>
+        <option value={1} style={{ color: '#22336b', background: '#fff' }}>
+          Only Main Character
+        </option>
+        <option value={2} style={{ color: '#22336b', background: '#fff' }}>
+          With Main Character
+        </option>
+      </select>
     </div>
   );
   
