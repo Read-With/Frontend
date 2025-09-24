@@ -41,6 +41,7 @@ function GraphSplitArea({
   onSetActiveTooltip,
   graphClearRef,
   isEventUndefined,
+  isEventTransition,
 }) {
   const graphContainerRef = React.useRef(null);
   const { isSearchActive, filteredElements, isResetFromSearch } = searchState;
@@ -891,6 +892,7 @@ const ViewerPage = () => {
               onSetActiveTooltip={handleSetActiveTooltip}
               graphClearRef={graphClearRef}
               isEventUndefined={isEventUndefined}
+              isEventTransition={isEventTransition}
             />
           </CytoscapeGraphPortalProvider>
         }
