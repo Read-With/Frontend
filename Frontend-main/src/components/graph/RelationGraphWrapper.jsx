@@ -14,38 +14,16 @@ import { useGraphSearch } from '../../hooks/useGraphSearch.jsx';
 import { useGraphDataLoader } from '../../hooks/useGraphDataLoader.js';
 import { useLocalStorageNumber } from '../../hooks/useLocalStorage.js';
 import { getMacroGraph } from '../../utils/common/api.js';
-import { convertRelationsToElements } from '../../utils/graphDataUtils';
+import { convertRelationsToElements, filterMainCharacters } from '../../utils/graphDataUtils';
 import { createCharacterMaps } from '../../utils/characterUtils';
-import { createRippleEffect, ensureElementsInBounds } from '../../utils/graphUtils.js';
+import { createRippleEffect, ensureElementsInBounds, processTooltipData } from '../../utils/graphUtils.js';
 import useGraphInteractions from "../../hooks/useGraphInteractions";
 
 // 노드 크기는 가중치 기반으로만 계산됨
 const getEdgeStyleForGraph = () => getEdgeStyle('graph');
 
 
-// 레이아웃 스타일 (첨부파일 기준 구조 유지, 중앙화된 색상 사용)
-const layoutStyles = {
-  container: {
-    width: '100vw',
-    height: '100vh',
-    background: COLORS.backgroundLighter,
-    overflow: 'hidden',
-    display: 'flex',
-    marginTop: 0
-  },
-  mainContent: {
-    flex: 1,
-    display: 'flex',
-    flexDirection: 'column'
-  },
-  graphContainer: {
-    flex: 1,
-    position: 'relative',
-    overflow: 'hidden',
-    width: '100%',
-    height: '100%'
-  }
-};
+// 레이아웃 스타일은 기존 graphStyles에서 가져옴
 
 function RelationGraphWrapper() {
   const navigate = useNavigate();
@@ -62,7 +40,7 @@ function RelationGraphWrapper() {
   const [isGraphLoading, setIsGraphLoading] = useState(true);
   const [isSidebarClosing, setIsSidebarClosing] = useState(false);
   const [forceClose, setForceClose] = useState(false);
-  const [filterStage, setFilterStage] = useState(0); // 0: 전체, 1: 핵심-핵심, 2: 핵심-핵심+핵심-주요, 3: 핵심-핵심+핵심-주요+주요-주요
+  const [filterStage, setFilterStage] = useState(0);
   
   // API 세밀 그래프 데이터 상태
   const [apiFineData, setApiFineData] = useState(null);
@@ -317,88 +295,48 @@ function RelationGraphWrapper() {
     });
   }, [isSidebarOpen]);
 
-  // 툴팁 핸들러 - API 데이터 구조에 맞게 수정
+  // 툴팁 핸들러 - 유틸리티 함수 사용
   const onShowNodeTooltip = useCallback(({ node, nodeCenter, mouseX, mouseY }) => {
     const nodeData = node.data();
-    
-    // API 데이터의 names 필드 처리
-    let names = nodeData.names;
-    if (typeof names === "string") {
-      try { 
-        names = JSON.parse(names); 
-      } catch { 
-        names = [names]; 
-      }
-    }
-    
-    // main_character 필드 처리
-    let main = nodeData.main_character;
-    if (typeof main === "string") {
-      main = main === "true";
-    }
     
     const tooltipData = {
       type: 'node',
       id: node.id(),
       x: mouseX,
       y: mouseY,
-      data: {
-        ...nodeData,
-        names: names,
-        main_character: main,
-        // 기존 필드명과 호환성을 위한 매핑
-        main: main,
-        common_name: nodeData.common_name || nodeData.label,
-        description: nodeData.description || '',
-        image: nodeData.image || '',
-        weight: nodeData.weight || 1
-      },
+      data: nodeData,
       nodeCenter
     };
     
-    setActiveTooltip(tooltipData);
+    const processedTooltipData = processTooltipData(tooltipData, 'node');
+    setActiveTooltip(processedTooltipData);
     centerElementBetweenSidebars(node.id(), 'node');
   }, [centerElementBetweenSidebars]);
 
   const onShowEdgeTooltip = useCallback(({ edge, absoluteX, absoluteY }) => {
     const edgeData = edge.data();
     
-    // API 데이터의 relation 필드 처리
-    let relation = edgeData.relation;
-    if (typeof relation === "string") {
-      try { 
-        relation = JSON.parse(relation); 
-      } catch { 
-        relation = [relation]; 
-      }
-    }
-    
     const tooltipData = {
       type: 'edge',
       id: edge.id(),
       x: absoluteX,
       y: absoluteY,
-      data: {
-        ...edgeData,
-        relation: relation,
-        // 기존 필드명과 호환성을 위한 매핑
-        label: edgeData.label || (Array.isArray(relation) ? relation[0] : relation),
-        positivity: edgeData.positivity || 0,
-        count: edgeData.count || 1
-      },
+      data: edgeData,
       sourceNode: edge.source(),
       targetNode: edge.target(),
     };
     
+    const processedTooltipData = processTooltipData(tooltipData, 'edge');
+    
     console.log('🔍 간선 클릭 - 슬라이드바 표시용 데이터:', {
-      id: tooltipData.id,
-      positivity: tooltipData.data.positivity,
-      positivityPercent: Math.round(tooltipData.data.positivity * 100),
-      relation: tooltipData.data.relation,
-      source: tooltipData.data.source,
-      target: tooltipData.data.target
+      id: processedTooltipData.id,
+      positivity: processedTooltipData.data.positivity,
+      positivityPercent: Math.round(processedTooltipData.data.positivity * 100),
+      relation: processedTooltipData.data.relation,
+      source: processedTooltipData.data.source,
+      target: processedTooltipData.data.target
     });
-    setActiveTooltip(tooltipData);
+    setActiveTooltip(processedTooltipData);
     
     const sourcePos = edge.source().position();
     const targetPos = edge.target().position();
@@ -451,75 +389,9 @@ function RelationGraphWrapper() {
     });
   }, [elements]);
 
-  // 3단계 필터링 로직
+  // 3단계 필터링 로직 - 유틸리티 함수 사용
   const filteredMainCharacters = useMemo(() => {
-    if (filterStage === 0 || !elements) return elements;
-    
-    // 핵심 인물 (main_character: true) 노드들
-    const coreNodes = elements.filter(el => 
-      el.data && 
-      el.data.id && 
-      !el.data.source && 
-      el.data.main_character === true
-    );
-    
-    const coreNodeIds = new Set(coreNodes.map(node => node.data.id));
-    
-    // 주요 인물 (main_character: false이지만 중요한 인물) 노드들
-    const importantNodes = elements.filter(el => 
-      el.data && 
-      el.data.id && 
-      !el.data.source && 
-      el.data.main_character === false &&
-      el.data.importance && el.data.importance > 0.5 // 중요도 임계값
-    );
-    
-    const importantNodeIds = new Set(importantNodes.map(node => node.data.id));
-    
-    let filteredNodes = [];
-    let filteredEdges = [];
-    
-    if (filterStage === 1) {
-      // 1단계: 핵심인물끼리의 연결만
-      filteredNodes = coreNodes;
-      filteredEdges = elements.filter(el => 
-        el.data && 
-        el.data.source && 
-        el.data.target &&
-        coreNodeIds.has(el.data.source) && 
-        coreNodeIds.has(el.data.target)
-      );
-    } else if (filterStage === 2) {
-      // 2단계: 핵심인물과 핵심인물에 연결된 노드(핵심인물, 비핵심인물) + 간선
-      // 핵심 인물과 연결된 간선들 찾기
-      const connectedEdges = elements.filter(el => 
-        el.data && 
-        el.data.source && 
-        el.data.target &&
-        // 최소 하나의 노드는 핵심 인물이어야 함
-        (coreNodeIds.has(el.data.source) || coreNodeIds.has(el.data.target))
-      );
-      
-      // 연결된 노드들의 ID 수집
-      const connectedNodeIds = new Set();
-      connectedEdges.forEach(edge => {
-        if (edge.data.source) connectedNodeIds.add(edge.data.source);
-        if (edge.data.target) connectedNodeIds.add(edge.data.target);
-      });
-      
-      // 핵심 인물과 연결된 모든 노드들
-      const connectedNodes = elements.filter(el => 
-        el.data && 
-        el.data.id && 
-        !el.data.source && 
-        connectedNodeIds.has(el.data.id)
-      );
-      
-      filteredNodes = connectedNodes;
-      filteredEdges = connectedEdges;
-    }
-    
-    return [...filteredNodes, ...filteredEdges];
+    return filterMainCharacters(elements, filterStage);
   }, [elements, filterStage]);
 
   const finalElements = useMemo(() => {
@@ -599,20 +471,8 @@ function RelationGraphWrapper() {
   }, [navigate, filename]);
 
 
-  // 뷰어로 돌아가기 버튼 전용 hover 핸들러 - 통일된 디자인 적용
-  const handleBackButtonMouseEnter = useCallback((e) => {
-    e.target.style.background = COLORS.backgroundLight;
-    e.target.style.color = COLORS.primary;
-    e.target.style.transform = 'translateY(-1px)';
-    e.target.style.boxShadow = `0 4px 12px ${COLORS.primary}40`;
-  }, []);
-
-  const handleBackButtonMouseLeave = useCallback((e) => {
-    e.target.style.background = COLORS.background;
-    e.target.style.color = COLORS.textPrimary;
-    e.target.style.transform = 'translateY(0)';
-    e.target.style.boxShadow = `0 2px 8px rgba(0,0,0,0.1)`;
-  }, []);
+  // 뷰어로 돌아가기 버튼 전용 hover 핸들러 - 기존 createAdvancedButtonHandlers 활용
+  const backButtonHandlers = createAdvancedButtonHandlers('default');
 
   // 슬라이드바 외부 영역 클릭 시 닫힘 핸들러
   const handleGlobalClick = useCallback((e) => {
@@ -747,7 +607,7 @@ function RelationGraphWrapper() {
 
   return (
     <div style={{ width: '100vw', height: '100vh', background: COLORS.backgroundLighter, overflow: 'hidden' }}>
-      {/* 상단 컨트롤 바 - 간소화된 디자인 */}
+      {/* 상단 컨트롤 바 - 기존 topBarStyles 활용 */}
       <div style={{ 
         ...topBarStyles.container, 
         position: 'fixed', 
@@ -780,11 +640,12 @@ function RelationGraphWrapper() {
             onToggle={toggleEdgeLabel}
           />
           
-          {/* 3단계 필터링 드롭다운 */}
+          {/* 3단계 필터링 드롭다운 - 기존 스타일 활용 */}
           <select
             value={filterStage}
             onChange={(e) => setFilterStage(Number(e.target.value))}
             style={{
+              ...createButtonStyle(ANIMATION_VALUES, 'default'),
               height: 32,
               padding: '0 12px',
               borderRadius: 8,
@@ -809,10 +670,10 @@ function RelationGraphWrapper() {
               모두 보기
             </option>
             <option value={1} style={{ color: COLORS.textPrimary, background: COLORS.background }}>
-              핵심 인물만
+              주요 인물만 보기
             </option>
             <option value={2} style={{ color: COLORS.textPrimary, background: COLORS.background }}>
-              핵심 인물 중심
+              주요 인물과 보기
             </option>
           </select>
         </div>
@@ -832,6 +693,7 @@ function RelationGraphWrapper() {
         <button
           onClick={handleBackToViewer}
           style={{
+            ...createButtonStyle(ANIMATION_VALUES, 'default'),
             height: 32,
             padding: '0 12px',
             borderRadius: 8,
@@ -850,8 +712,7 @@ function RelationGraphWrapper() {
             backdropFilter: 'blur(8px)',
             justifyContent: 'center',
           }}
-          onMouseEnter={handleBackButtonMouseEnter}
-          onMouseLeave={handleBackButtonMouseLeave}
+          {...backButtonHandlers}
         >
           <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>close</span>
           돌아가기
@@ -883,6 +744,7 @@ function RelationGraphWrapper() {
               onClick={() => handleEventChange(Math.max(1, currentEvent - 1))}
               disabled={currentEvent <= 1}
               style={{
+                ...createButtonStyle(ANIMATION_VALUES, 'default'),
                 padding: '6px 12px',
                 border: `1px solid ${COLORS.border}`,
                 borderRadius: '6px',
@@ -902,6 +764,7 @@ function RelationGraphWrapper() {
             <button
               onClick={() => handleEventChange(currentEvent + 1)}
               style={{
+                ...createButtonStyle(ANIMATION_VALUES, 'default'),
                 padding: '6px 12px',
                 border: `1px solid ${COLORS.border}`,
                 borderRadius: '6px',

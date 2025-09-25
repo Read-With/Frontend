@@ -428,6 +428,82 @@ export function calcGraphDiff(prevElements, currElements) {
 }
 
 /**
+ * 3단계 필터링 로직 (RelationGraphWrapper와 ViewerPage에서 공통 사용)
+ * @param {Array} elements - 그래프 요소 배열
+ * @param {number} filterStage - 필터링 단계 (0: 전체, 1: 핵심인물만, 2: 핵심인물과 연결된 인물)
+ * @returns {Array} 필터링된 요소 배열
+ */
+export function filterMainCharacters(elements, filterStage) {
+  if (filterStage === 0 || !elements) return elements;
+  
+  // 핵심 인물 (main_character: true) 노드들
+  const coreNodes = elements.filter(el => 
+    el.data && 
+    el.data.id && 
+    !el.data.source && 
+    el.data.main_character === true
+  );
+  
+  const coreNodeIds = new Set(coreNodes.map(node => node.data.id));
+  
+  // 주요 인물 (main_character: false이지만 중요한 인물) 노드들
+  const importantNodes = elements.filter(el => 
+    el.data && 
+    el.data.id && 
+    !el.data.source && 
+    el.data.main_character === false &&
+    el.data.importance && el.data.importance > 0.5 // 중요도 임계값
+  );
+  
+  const importantNodeIds = new Set(importantNodes.map(node => node.data.id));
+  
+  let filteredNodes = [];
+  let filteredEdges = [];
+  
+  if (filterStage === 1) {
+    // 1단계: 핵심인물끼리의 연결만
+    filteredNodes = coreNodes;
+    filteredEdges = elements.filter(el => 
+      el.data && 
+      el.data.source && 
+      el.data.target &&
+      coreNodeIds.has(el.data.source) && 
+      coreNodeIds.has(el.data.target)
+    );
+  } else if (filterStage === 2) {
+    // 2단계: 핵심인물과 핵심인물에 연결된 노드(핵심인물, 비핵심인물) + 간선
+    // 핵심 인물과 연결된 간선들 찾기
+    const connectedEdges = elements.filter(el => 
+      el.data && 
+      el.data.source && 
+      el.data.target &&
+      // 최소 하나의 노드는 핵심 인물이어야 함
+      (coreNodeIds.has(el.data.source) || coreNodeIds.has(el.data.target))
+    );
+    
+    // 연결된 노드들의 ID 수집
+    const connectedNodeIds = new Set();
+    connectedEdges.forEach(edge => {
+      if (edge.data.source) connectedNodeIds.add(edge.data.source);
+      if (edge.data.target) connectedNodeIds.add(edge.data.target);
+    });
+    
+    // 핵심 인물과 연결된 모든 노드들
+    const connectedNodes = elements.filter(el => 
+      el.data && 
+      el.data.id && 
+      !el.data.source && 
+      connectedNodeIds.has(el.data.id)
+    );
+    
+    filteredNodes = connectedNodes;
+    filteredEdges = connectedEdges;
+  }
+  
+  return [...filteredNodes, ...filteredEdges];
+}
+
+/**
  * 노드 겹침 감지 및 자동 조정
  * @param {Object} cy - Cytoscape 인스턴스
  * @param {number} nodeSize - 노드 크기

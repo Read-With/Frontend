@@ -131,10 +131,10 @@ const ViewerSettings = ({ isOpen, onClose, onApplySettings, currentSettings }) =
           </button>
         </div>
         
-        {/* 통합된 보기 모드 설정 */}
+        {/* 화면 모드 설정 */}
         <div style={{ marginBottom: '24px' }}>
           <h3 style={{ fontSize: '1.1rem', fontWeight: 'bold', color: '#22336b', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <span className="material-symbols-outlined">visibility</span> 단일 뷰어 모드
+            <span className="material-symbols-outlined">visibility</span> 화면 모드
           </h3>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
             {/* 단일화면 + 그래프 표시 */}
@@ -194,10 +194,10 @@ const ViewerSettings = ({ isOpen, onClose, onApplySettings, currentSettings }) =
             >
               {settings.pageMode === 'single' && !settings.showGraph && <span className="material-symbols-outlined">check</span>}
               <span className="material-symbols-outlined">view_column</span>
-              단일화면 (그래프 숨기기)
+              단일화면
             </button>
             
-            {/* 분할화면 (그래프 숨기기) */}
+            {/* 분할화면 */}
             <button
               onClick={() => {
                 setSettings(prev => ({
@@ -224,7 +224,7 @@ const ViewerSettings = ({ isOpen, onClose, onApplySettings, currentSettings }) =
             >
               {settings.pageMode === 'double' && !settings.showGraph && <span className="material-symbols-outlined">check</span>}
               <span className="material-symbols-outlined">view_column_2</span>
-              분할화면 (그래프 숨기기)
+              분할화면
             </button>
           </div>
         </div>

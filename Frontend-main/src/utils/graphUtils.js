@@ -469,6 +469,81 @@ export const createMouseEventHandlers = (cy, container) => {
 };
 
 /**
+ * 툴팁 데이터 처리 함수 (RelationGraphWrapper와 ViewerPage에서 공통 사용)
+ * @param {Object} tooltipData - 원본 툴팁 데이터
+ * @param {string} type - 툴팁 타입 ('node' 또는 'edge')
+ * @returns {Object} 처리된 툴팁 데이터
+ */
+export const processTooltipData = (tooltipData, type) => {
+  if (!tooltipData) return null;
+  
+  try {
+    if (type === 'node') {
+      const nodeData = tooltipData;
+      
+      // API 데이터의 names 필드 처리
+      let names = nodeData.names;
+      if (typeof names === "string") {
+        try { 
+          names = JSON.parse(names); 
+        } catch { 
+          names = [names]; 
+        }
+      }
+      
+      // main_character 필드 처리
+      let main = nodeData.main_character;
+      if (typeof main === "string") {
+        main = main === "true";
+      }
+      
+      return {
+        ...tooltipData,
+        names: names,
+        main_character: main,
+        // 기존 필드명과 호환성을 위한 매핑
+        main: main,
+        common_name: nodeData.common_name || nodeData.label,
+        description: nodeData.description || '',
+        image: nodeData.image || '',
+        weight: nodeData.weight || 1
+      };
+      
+    } else if (type === 'edge') {
+      const edgeData = tooltipData;
+      
+      // API 데이터의 relation 필드 처리
+      let relation = edgeData.data?.relation;
+      if (typeof relation === "string") {
+        try { 
+          relation = JSON.parse(relation); 
+        } catch { 
+          relation = [relation]; 
+        }
+      }
+      
+      return {
+        ...tooltipData,
+        data: {
+          ...edgeData.data,
+          relation: relation,
+          // 기존 필드명과 호환성을 위한 매핑
+          label: edgeData.data?.label || (Array.isArray(relation) ? relation[0] : relation),
+          positivity: edgeData.data?.positivity || 0,
+          count: edgeData.data?.count || 1
+        }
+      };
+      
+    } else {
+      return tooltipData;
+    }
+  } catch (error) {
+    console.error('processTooltipData 실패:', error);
+    return tooltipData;
+  }
+};
+
+/**
  * 기본 스타일시트 생성 함수 (간단한 그래프용)
  * @param {Object} edgeStyle - 엣지 스타일 객체
  * @param {string} edgeStyle.lineColor - 선 색상
