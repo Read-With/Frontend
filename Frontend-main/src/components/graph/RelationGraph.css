@@ -10,7 +10,7 @@
 
 /* 검색 하이라이트 스타일 */
 .search-highlight {
-  background-color:  blue !important;
+  background-color: blue !important;
   border-color: blue !important;
   border-width: 3px !important;
   box-shadow: 0 0 15px rgba(0, 0, 255, 0.6) !important;
@@ -251,12 +251,12 @@
 }
 
 .node-tooltip .close-btn:hover {
-  color: #6C8EFF;
+  color: #6c8eff;
 }
 
 .node-tooltip .main-badge {
   display: inline-block;
-  background: #6C8EFF;
+  background: #6c8eff;
   color: #fff;
   font-size: 9px;
   border-radius: 6px;
@@ -384,10 +384,7 @@ node.highlighted {
   cursor: pointer;
 }
 
-html, body {
-  overflow: hidden !important;
-  height: 100% !important;
-}
+/* 전역 스크롤 잠금 문제 해결 */
 
 .graph-page-container {
   width: 100vw;
@@ -488,8 +485,6 @@ html, body {
   justify-content: flex-start;
   align-items: center;
 }
-
-
 
 .close-x-btn {
   position: absolute;
@@ -594,7 +589,7 @@ html, body {
 }
 
 .tooltip-arrow::after {
-  content: '';
+  content: "";
   position: absolute;
   top: -8px;
   left: 0;
@@ -655,7 +650,7 @@ html, body {
 
 .close-btn:hover {
   background-color: #f8f9fa;
-  color: #6C8EFF;
+  color: #6c8eff;
 }
 
 .close-btn svg {
@@ -737,7 +732,7 @@ html, body {
 .summary-badge {
   display: inline-flex;
   align-items: center;
-  background: linear-gradient(135deg, #6C8EFF 0%, #5A7BFF 100%);
+  background: linear-gradient(135deg, #6c8eff 0%, #5a7bff 100%);
   color: white;
   font-size: 11px;
   font-weight: 500;
@@ -748,7 +743,7 @@ html, body {
 }
 
 .main-character-badge::before {
-  content: '⭐';
+  content: "⭐";
   margin-right: 4px;
   font-size: 10px;
 }
@@ -912,7 +907,7 @@ html, body {
 }
 
 .direction-arrow::before {
-  content: '';
+  content: "";
   position: absolute;
   height: 2px;
   width: 24px;
@@ -922,7 +917,7 @@ html, body {
 }
 
 .direction-arrow::after {
-  content: '';
+  content: "";
   position: absolute;
   right: -4px;
   width: 8px;
@@ -956,7 +951,7 @@ html, body {
 }
 
 .weight-label::before {
-  content: '•';
+  content: "•";
   font-size: 20px;
   line-height: 1;
 }
@@ -1218,7 +1213,8 @@ html, body {
   flex-wrap: wrap;
 }
 
-.cy-node-label, .node-label {
+.cy-node-label,
+.node-label {
   font-family: var(--font-family-primary);
   font-weight: 600;
   font-size: 15px;
@@ -1331,8 +1327,6 @@ html, body {
   margin-top: 8px;
 }
 
-
-
 .cytoscape-graph .cy-node {
   cursor: pointer;
 }
@@ -1382,7 +1376,7 @@ html, body {
 
 .file-tab::before,
 .file-tab::after {
-  content: '';
+  content: "";
   position: absolute;
   bottom: 0;
   width: 10px;
@@ -1404,18 +1398,18 @@ html, body {
 }
 
 .file-tab.active {
-  background-color: #6C8EFF;
+  background-color: #6c8eff;
   height: 45px;
   margin-top: -5px;
   z-index: 2;
 }
 
 .file-tab.active::before {
-  box-shadow: 5px 5px 0 5px #6C8EFF;
+  box-shadow: 5px 5px 0 5px #6c8eff;
 }
 
 .file-tab.active::after {
-  box-shadow: -5px 5px 0 5px #6C8EFF;
+  box-shadow: -5px 5px 0 5px #6c8eff;
 }
 
 .file-tab-content {
@@ -1543,7 +1537,7 @@ html, body {
 }
 
 .chat-btn {
-  background: linear-gradient(135deg, #6C8EFF 0%, #5A7BFF 100%);
+  background: linear-gradient(135deg, #6c8eff 0%, #5a7bff 100%);
   color: #ffffff;
   box-shadow: 0 2px 8px rgba(108, 142, 255, 0.2);
   font-weight: 600;
@@ -1551,7 +1545,7 @@ html, body {
 }
 
 .chat-btn:hover {
-  background: linear-gradient(135deg, #5A7BFF 0%, #4A6BFF 100%);
+  background: linear-gradient(135deg, #5a7bff 0%, #4a6bff 100%);
   color: #ffffff;
   box-shadow: 0 2px 12px rgba(108, 142, 255, 0.3);
   transform: translateY(-1px);
@@ -1611,13 +1605,15 @@ html, body {
   animation: fadeInScale 0.0001s cubic-bezier(0.22, 1, 0.36, 1);
 }
 @keyframes fadeInScale {
-  from { opacity: 0.999; transform: scale(0.999);}
-  to { opacity: 1; transform: scale(1);}
+  from {
+    opacity: 0.999;
+    transform: scale(0.999);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
 }
-
-
-
-
 
 .cytoscape-fade {
   transition: opacity 0.02s cubic-bezier(0.4, 0, 0.2, 1);
@@ -1634,13 +1630,14 @@ html, body {
   position: relative;
   width: 100%;
   height: 100%;
-  transition: transform 0.2s cubic-bezier(0.4,0,0.2,1);
+  transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   transform-style: preserve-3d;
 }
 .edge-tooltip-flip.flipped .edge-tooltip-flip-inner {
   transform: rotateY(180deg);
 }
-.edge-tooltip-front, .edge-tooltip-back {
+.edge-tooltip-front,
+.edge-tooltip-back {
   backface-visibility: hidden;
   position: absolute;
   width: 100%;
@@ -1679,7 +1676,7 @@ html, body {
 }
 
 .ripple-effect::before {
-  content: '';
+  content: "";
   position: absolute;
   top: 50%;
   left: 50%;
@@ -1768,6 +1765,6 @@ html, body {
 }
 
 .sidebar-card:hover {
-  box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
   transform: translateY(-1px);
 }
