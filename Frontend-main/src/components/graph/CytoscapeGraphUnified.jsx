@@ -3,93 +3,9 @@ import cytoscape from "cytoscape";
 import "./RelationGraph.css";
 import { detectAndResolveOverlap, calcGraphDiff } from "../../utils/graphDataUtils.js";
 import { applySearchFadeEffect, shouldShowNoSearchResults, getNoSearchResultsMessage } from "../../utils/searchUtils.jsx";
+import { createRippleEffect, ensureElementsInBounds, createMouseEventHandlers } from "../../utils/graphUtils.js";
 import useGraphInteractions from "../../hooks/useGraphInteractions.js";
 
-// 요소들이 화면 경계 내에 있는지 확인하고 조정하는 함수
-const ensureElementsInBounds = (cy, container) => {
-  if (!cy || !container) return;
-  
-  const containerWidth = container.clientWidth;
-  const containerHeight = container.clientHeight;
-  const padding = 100;
-  
-  const bounds = {
-    left: -containerWidth / 2 + padding,
-    right: containerWidth / 2 - padding,
-    top: -containerHeight / 2 + padding,
-    bottom: containerHeight / 2 - padding
-  };
-  
-  let needsAdjustment = false;
-  const nodes = cy.nodes();
-  
-  nodes.forEach(node => {
-    const pos = node.position();
-    let newX = pos.x;
-    let newY = pos.y;
-    
-    if (pos.x < bounds.left) {
-      newX = bounds.left;
-      needsAdjustment = true;
-    } else if (pos.x > bounds.right) {
-      newX = bounds.right;
-      needsAdjustment = true;
-    }
-    
-    if (pos.y < bounds.top) {
-      newY = bounds.top;
-      needsAdjustment = true;
-    } else if (pos.y > bounds.bottom) {
-      newY = bounds.bottom;
-      needsAdjustment = true;
-    }
-    
-    if (newX !== pos.x || newY !== pos.y) {
-      node.position({ x: newX, y: newY });
-    }
-  });
-  
-  // 조정이 필요한 경우 레이아웃을 다시 실행
-  if (needsAdjustment) {
-    cy.layout({ name: 'preset' }).run();
-  }
-};
-
-// Ripple 효과 생성 함수 - 확대/축소 상태 고려
-const createRippleEffect = (container, x, y, cyRef) => {
-  const ripple = document.createElement('div');
-  ripple.className = 'ripple-effect';
-  ripple.style.position = 'absolute';
-  
-  let domX, domY;
-  if (cyRef?.current) {
-    const cy = cyRef.current;
-    const pan = cy.pan();
-    const zoom = cy.zoom();
-    const containerRect = container.getBoundingClientRect();
-    
-    // Cytoscape 좌표를 DOM 좌표로 정확히 변환
-    domX = x * zoom + pan.x;
-    domY = y * zoom + pan.y;
-  } else {
-    domX = x;
-    domY = y;
-  }
-  
-  ripple.style.left = `${domX - 50}px`;
-  ripple.style.top = `${domY - 50}px`;
-  
-  ripple.style.pointerEvents = 'none';
-  ripple.style.zIndex = '1000';
-  
-  container.appendChild(ripple);
-
-  setTimeout(() => {
-    if (ripple.parentNode) {
-      ripple.parentNode.removeChild(ripple);
-    }
-  }, 500);
-};
 
 export const CytoscapeGraphContext = createContext();
 
@@ -115,6 +31,8 @@ const CytoscapeGraphUnified = ({
   selectedNodeIdRef,
   selectedEdgeIdRef,
   strictBackgroundClear = false,
+  showRippleEffect = true, // ripple 효과 표시 여부 제어
+  isDropdownSelection = false, // 드롭다운 선택 여부
 }) => {
   const containerRef = useRef(null);
   const [isGraphVisible, setIsGraphVisible] = useState(false);
@@ -122,11 +40,7 @@ const CytoscapeGraphUnified = ({
   const prevChapterRef = useRef(window.currentChapter);
   const [isInitialLoad, setIsInitialLoad] = useState(true);
   
-  const isDraggingRef = useRef(false);
-  const prevMouseDownPositionRef = useRef({ x: 0, y: 0 });
-  const mouseDownTimeRef = useRef(0);
-  const hasMovedRef = useRef(false);
-  const isMouseDownRef = useRef(false);
+  // 마우스 이벤트 상태는 createMouseEventHandlers에서 관리
 
   const {
     tapNodeHandler: hookTapNodeHandler,
@@ -177,82 +91,69 @@ const CytoscapeGraphUnified = ({
   // Cytoscape 인스턴스 생성
   useEffect(() => {
     if (!containerRef.current) {
+      // 개발 환경에서만 경고 표시, 프로덕션에서는 조용히 무시
+      if (process.env.NODE_ENV === 'development') {
+        console.warn('⚠️ Cytoscape 컨테이너가 준비되지 않음');
+      }
       return;
     }
-    let cyInstance = externalCyRef?.current;
-    if (!cyInstance || typeof cyInstance.container !== 'function') {
-      cyInstance = cytoscape({
-        container: containerRef.current,
-        elements: [],
-        style: stylesheet,
-        layout: { name: "preset" },
-        userZoomingEnabled: true,
-        userPanningEnabled: true,
-        minZoom: 0.3,
-        maxZoom: 1.8,
-        wheelSensitivity: 1,
-        autoungrabify: false,
-        autolock: false,
-        autounselectify: false,
-        selectionType: 'single',
-        touchTapThreshold: 8,
-        desktopTapThreshold: 4,
-      });
-      if (externalCyRef) externalCyRef.current = cyInstance;
-    } else {
-      if (cyInstance.container() !== containerRef.current) {
-        cyInstance.mount(containerRef.current);
+    
+    let cyInstance;
+    
+    try {
+      cyInstance = externalCyRef?.current;
+      if (!cyInstance || typeof cyInstance.container !== 'function') {
+        console.log('🔄 Cytoscape 인스턴스 생성 중...');
+        cyInstance = cytoscape({
+          container: containerRef.current,
+          elements: [],
+          style: stylesheet,
+          layout: { name: "preset" },
+          userZoomingEnabled: true,
+          userPanningEnabled: true,
+          minZoom: 0.2,
+          maxZoom: 2.4,
+          wheelSensitivity: 0.3,
+          autoungrabify: false,
+          autolock: false,
+          autounselectify: false,
+          selectionType: 'single',
+          touchTapThreshold: 8,
+          desktopTapThreshold: 4,
+        });
+        console.log('✅ Cytoscape 인스턴스 생성 완료');
+        if (externalCyRef) externalCyRef.current = cyInstance;
+      } else {
+        if (cyInstance.container() !== containerRef.current) {
+          console.log('🔄 Cytoscape 인스턴스를 새 컨테이너에 마운트');
+          cyInstance.mount(containerRef.current);
+        }
       }
+    } catch (error) {
+      console.error('❌ Cytoscape 인스턴스 생성 실패:', error);
+      return;
+    }
+    
+    if (!cyInstance) {
+      console.error('❌ Cytoscape 인스턴스가 생성되지 않음');
+      return;
     }
     
     const cy = cyInstance;
     
-    const CLICK_THRESHOLD = 200;
-    const MOVE_THRESHOLD = 3;
+    // Cytoscape 인스턴스가 제대로 마운트되었는지 확인
+    if (!cy || !cy.container()) {
+      console.error('❌ Cytoscape 인스턴스 마운트 실패');
+      return;
+    }
     
-    const handleMouseDown = (evt) => {
-      if (evt.target !== evt.currentTarget) return;
-      
-      isMouseDownRef.current = true;
-      mouseDownTimeRef.current = Date.now();
-      prevMouseDownPositionRef.current = { x: evt.clientX, y: evt.clientY };
-      hasMovedRef.current = false;
-      isDraggingRef.current = false;
-    };
+    console.log('✅ Cytoscape 인스턴스 마운트 확인 완료');
     
-    const handleMouseMove = (evt) => {
-      if (!isMouseDownRef.current) return;
-      
-      const deltaX = Math.abs(evt.clientX - prevMouseDownPositionRef.current.x);
-      const deltaY = Math.abs(evt.clientY - prevMouseDownPositionRef.current.y);
-      
-      if (deltaX > MOVE_THRESHOLD || deltaY > MOVE_THRESHOLD) {
-        hasMovedRef.current = true;
-        isDraggingRef.current = true;
-      }
-    };
-    
-    const handleMouseUp = (evt) => {
-      if (!isMouseDownRef.current) return;
-      
-      const clickDuration = Date.now() - mouseDownTimeRef.current;
-      const isClick = clickDuration < CLICK_THRESHOLD && !hasMovedRef.current;
-      
-      if (isDraggingRef.current) {
-        isMouseDownRef.current = false;
-        mouseDownTimeRef.current = 0;
-        hasMovedRef.current = false;
-        isDraggingRef.current = false;
-        return;
-      }
-      
-      isMouseDownRef.current = false;
-      mouseDownTimeRef.current = 0;
-      hasMovedRef.current = false;
-      isDraggingRef.current = false;
-    };
-    
+    // 공통 마우스 이벤트 핸들러 생성
     const container = containerRef.current;
+    const mouseHandlers = createMouseEventHandlers(cy, container);
+    const { handleMouseDown, handleMouseMove, handleMouseUp, isDraggingRef } = mouseHandlers;
+    
     container.addEventListener('mousedown', handleMouseDown);
     container.addEventListener('mousemove', handleMouseMove);
     container.addEventListener('mouseup', handleMouseUp);
@@ -307,7 +208,8 @@ const CytoscapeGraphUnified = ({
     cy.removeListener('tap');
     
     const createRippleWrapper = (originalHandler) => (evt) => {
-      if (containerRef.current && cy) {
+      // ripple 효과가 활성화되고 드롭다운 선택이 아닌 경우에만 표시
+      if (showRippleEffect && !isDropdownSelection && containerRef.current && cy) {
         let x, y;
         
         if (evt.renderedPosition) {
@@ -350,12 +252,11 @@ const CytoscapeGraphUnified = ({
       // 배경 클릭 감지 - evt.target이 Cytoscape core인 경우
       if (evt.target === cy) {
         // 드래그가 아닌 순수 클릭인 경우에만 처리
-        if (!isDraggingRef.current) {
-          if (tapBackgroundHandler) {
-            createRippleWrapper(tapBackgroundHandler)(evt);
-          } else {
-            createRippleWrapper(hookTapBackgroundHandler)(evt);
-          }
+        // isDraggingRef는 이 useEffect 내부에서 접근할 수 없으므로 제거
+        if (tapBackgroundHandler) {
+          createRippleWrapper(tapBackgroundHandler)(evt);
+        } else {
+          createRippleWrapper(hookTapBackgroundHandler)(evt);
         }
       }
     };
@@ -367,20 +268,31 @@ const CytoscapeGraphUnified = ({
       cy.removeListener("tap", "edge");
       cy.removeListener("tap", handleBackgroundTap);
     };
-  }, [externalCyRef, tapNodeHandler, tapEdgeHandler, tapBackgroundHandler, hookTapNodeHandler, hookTapEdgeHandler, hookTapBackgroundHandler, isDraggingRef]);
+  }, [externalCyRef, tapNodeHandler, tapEdgeHandler, tapBackgroundHandler, hookTapNodeHandler, hookTapEdgeHandler, hookTapBackgroundHandler]);
 
   // elements diff patch 및 스타일/레이아웃 적용
   useEffect(() => {
     const cy = externalCyRef?.current;
     if (!cy) {
+      // 개발 환경에서만 경고 표시, 프로덕션에서는 조용히 무시
+      if (process.env.NODE_ENV === 'development') {
+        console.warn('⚠️ 요소 업데이트 시 Cytoscape 인스턴스가 없음');
+      }
       return;
     }
   
+    console.log('🔄 그래프 요소 업데이트 중...', {
+      elementsCount: elements?.length || 0,
+      previousElementsCount: previousElements.length,
+      isInitialLoad
+    });
+    
     if (previousElements.length === 0) {
       setPreviousElements(elements);
     }
     
     if (!elements || elements.length === 0) {
+      console.log('⚠️ 요소가 없음 - 그래프 숨김');
       cy.elements().remove();
       setIsGraphVisible(false);
       return;
@@ -453,10 +365,20 @@ const CytoscapeGraphUnified = ({
       
       const nodesToAdd = nodes.filter(node => !prevNodeIds.has(node.data.id));
       const edgesToAdd = edges.filter(edge => !prevEdgeIds.has(edge.data.id));
+      
+      console.log('📊 요소 추가 정보:', {
+        nodesToAdd: nodesToAdd.length,
+        edgesToAdd: edgesToAdd.length,
+        totalNodes: nodes.length,
+        totalEdges: edges.length
+      });
+      
       if (nodesToAdd.length > 0) {
+        console.log('➕ 노드 추가 중...', nodesToAdd.map(n => n.data.id));
         cy.add(nodesToAdd);
       }
       if (edgesToAdd.length > 0) {
+        console.log('➕ 엣지 추가 중...', edgesToAdd.map(e => `${e.data.source}-${e.data.target}`));
         cy.add(edgesToAdd);
       }
       
@@ -554,9 +476,11 @@ const CytoscapeGraphUnified = ({
     });
     
     if (isInitialLoad) {
+      console.log('🔄 초기 로딩 완료');
       setIsInitialLoad(false);
     }
     
+    console.log('✅ 그래프 가시성 설정');
     setIsGraphVisible(true);
   }, [elements, externalCyRef, previousElements, isInitialLoad, stylesheet, layout, fitNodeIds, isSearchActive, filteredElements, onLayoutComplete, isResetFromSearch]);
 
@@ -564,15 +488,28 @@ const CytoscapeGraphUnified = ({
   useEffect(() => {
     const handleResize = () => {
       const cy = externalCyRef?.current;
-      if (!cy) return;
+      if (!cy) {
+        // 개발 환경에서만 경고 표시, 프로덕션에서는 조용히 무시
+        if (process.env.NODE_ENV === 'development') {
+          console.warn('⚠️ 리사이즈 시 Cytoscape 인스턴스가 없음');
+        }
+        return;
+      }
       
-      // 리사이즈 후 요소들이 화면 내에 있는지 확인
-      cy.resize();
+      console.log('🔄 그래프 리사이즈 중...');
       
-      // 약간의 지연 후 경계 체크
-      setTimeout(() => {
-        ensureElementsInBounds(cy, containerRef.current);
-      }, 100);
+      try {
+        // 리사이즈 후 요소들이 화면 내에 있는지 확인
+        cy.resize();
+        console.log('✅ 그래프 리사이즈 완료');
+        
+        // 약간의 지연 후 경계 체크
+        setTimeout(() => {
+          ensureElementsInBounds(cy, containerRef.current);
+        }, 100);
+      } catch (error) {
+        console.error('❌ 그래프 리사이즈 실패:', error);
+      }
     };
     
     window.addEventListener("resize", handleResize);

@@ -18,6 +18,7 @@ const GraphContainer = forwardRef(({
   onClearTooltip = null,
   onSetActiveTooltip = null,
   graphClearRef = null,
+  isEventTransition = false, // 이벤트 전환 상태
   ...props
 }, ref) => {
 
@@ -93,6 +94,7 @@ const GraphContainer = forwardRef(({
       onClearTooltip={onClearTooltip}
       onSetActiveTooltip={onSetActiveTooltip}
       graphClearRef={graphClearRef}
+      isEventTransition={isEventTransition}
       {...props}
     />
   );

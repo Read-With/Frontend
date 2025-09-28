@@ -1,0 +1,99 @@
+import { useState, useEffect } from 'react';
+
+const useAuth = () => {
+  const [user, setUser] = useState(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    // 로컬 스토리지에서 사용자 정보 확인
+    const savedUser = localStorage.getItem('google_user');
+    if (savedUser) {
+      try {
+        const userData = JSON.parse(savedUser);
+        
+        // 깨진 데이터 감지
+        const isCorruptedName = (name) => {
+          if (!name) return false;
+          // 깨진 UTF-8 패턴 감지 (ì, í, ì± 등)
+          return /[ìíîïðñòóôõö]/.test(name) || /\\x[0-9A-Fa-f]{2}/.test(name);
+        };
+
+        // 깨진 데이터가 있으면 정리
+        if (isCorruptedName(userData.name)) {
+          console.warn('깨진 사용자 데이터 감지됨. 데이터를 정리합니다.');
+          localStorage.removeItem('google_user');
+          setIsLoading(false);
+          return;
+        }
+
+        // 한글 인코딩 문제 해결
+        const decodeName = (name) => {
+          if (!name) return '사용자';
+          
+          try {
+            // 깨진 UTF-8 문자열을 올바르게 디코딩
+            const decoded = decodeURIComponent(escape(name));
+            console.log('localStorage에서 로드된 원본 이름:', name);
+            console.log('디코딩된 이름:', decoded);
+            return decoded;
+          } catch (error) {
+            console.warn('이름 디코딩 실패, 원본 사용:', name);
+            return name;
+          }
+        };
+        
+        // 이름 디코딩 후 사용자 정보 업데이트
+        const decodedUserData = {
+          ...userData,
+          name: decodeName(userData.name)
+        };
+        
+        console.log('디코딩된 사용자 정보:', decodedUserData);
+        setUser(decodedUserData);
+      } catch (err) {
+        console.error('사용자 정보 파싱 실패:', err);
+        localStorage.removeItem('google_user');
+      }
+    }
+    setIsLoading(false);
+  }, []);
+
+  const login = (userData) => {
+    console.log('useAuth에서 받은 사용자 데이터:', userData);
+    console.log('저장될 이름:', userData.name);
+    setUser(userData);
+    localStorage.setItem('google_user', JSON.stringify(userData));
+    console.log('localStorage에 저장된 사용자 정보:', JSON.parse(localStorage.getItem('google_user')));
+  };
+
+  const logout = () => {
+    setUser(null);
+    localStorage.removeItem('google_user');
+    
+    // Google Identity Services 정리
+    if (window.google?.accounts?.id) {
+      window.google.accounts.id.disableAutoSelect();
+    }
+  };
+
+  // 깨진 사용자 데이터 정리 함수
+  const clearCorruptedData = () => {
+    console.log('깨진 사용자 데이터를 정리합니다.');
+    setUser(null);
+    localStorage.removeItem('google_user');
+  };
+
+  const isAuthenticated = () => {
+    return !!user;
+  };
+
+  return {
+    user,
+    isLoading,
+    login,
+    logout,
+    isAuthenticated
+  };
+};
+
+export default useAuth;

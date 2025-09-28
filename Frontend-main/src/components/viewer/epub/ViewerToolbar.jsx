@@ -33,12 +33,12 @@ const ViewerToolbar = ({
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
 
-  // 현재 보기 모드 텍스트 생성
+  // 현재 보기 모드 텍스트 생성 (ViewerSettings와 일치)
   const getViewModeText = () => {
     if (pageMode === 'single') {
       return showGraph ? '단일 뷰어&그래프 모드' : '단일 뷰어모드';
     } else {
-      return showGraph ? '분할 뷰어&그래프 모드' : '분할 뷰어모드';
+      return '분할 뷰어모드'; // "분할 뷰어&그래프 모드" 제거 (ViewerSettings와 일치)
     }
   };
 
@@ -302,7 +302,7 @@ const ViewerToolbar = ({
             >
               {pageMode === 'single' ? 
                 <span className="material-symbols-outlined" style={{ marginBottom: '-2px', color: showGraph ? '#4F6DDE' : '#4F6DDE', fontWeight: 'bold' }}>view_column</span> : 
-                <span className="material-symbols-outlined" style={{ marginBottom: '-2px', color: showGraph ? '#4F6DDE' : '#4F6DDE', fontWeight: 'bold' }}>view_column</span>
+                <span className="material-symbols-outlined" style={{ marginBottom: '-2px', color: showGraph ? '#4F6DDE' : '#4F6DDE', fontWeight: 'bold' }}>view_column_2</span>
               }
               <span style={{ color: showGraph ? '#4F6DDE' : '#4F6DDE', fontWeight: '600' }}>
                 {getViewModeText()}

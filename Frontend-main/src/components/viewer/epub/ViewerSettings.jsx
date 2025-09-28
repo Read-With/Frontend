@@ -23,10 +23,10 @@ const saveSettings = (settings) => {
 // 기본 설정 값
 const defaultSettings = {
   fontSize: 100, // 기본 글꼴 크기 (%)
-  pageMode: 'double', // 페이지 모드 (single, double)
+  pageMode: 'single', // 페이지 모드 (single, double) - 통합된 보기 모드에 맞게 변경
   lineHeight: 1.5, // 줄 간격
   margin: 20, // 여백 (px)
-  fontFamily: 'default', // 글꼴
+  fontFamily: 'Noto Serif KR', // 글꼴
   showGraph: true, // 그래프 표시 여부
 };
 
@@ -131,84 +131,100 @@ const ViewerSettings = ({ isOpen, onClose, onApplySettings, currentSettings }) =
           </button>
         </div>
         
-        {/* 페이지 모드 설정 */}
+        {/* 화면 모드 설정 */}
         <div style={{ marginBottom: '24px' }}>
           <h3 style={{ fontSize: '1.1rem', fontWeight: 'bold', color: '#22336b', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <span className="material-symbols-outlined">view_column</span> 페이지 모드
+            <span className="material-symbols-outlined">visibility</span> 화면 모드
           </h3>
-          <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            {/* 단일화면 + 그래프 표시 */}
             <button
-              onClick={() => handleChange('pageMode', 'single')}
+              onClick={() => {
+                setSettings(prev => ({
+                  ...prev,
+                  pageMode: 'single',
+                  showGraph: true
+                }));
+              }}
               style={{
-                ...createButtonStyle(ANIMATION_VALUES, settings.pageMode === 'single' ? 'primary' : 'default'),
-                backgroundColor: settings.pageMode === 'single' ? '#4F6DDE' : '#f8fafc',
-                color: settings.pageMode === 'single' ? 'white' : '#22336b',
+                ...createButtonStyle(ANIMATION_VALUES, settings.pageMode === 'single' && settings.showGraph ? 'primary' : 'default'),
+                backgroundColor: settings.pageMode === 'single' && settings.showGraph ? '#4F6DDE' : '#f8fafc',
+                color: settings.pageMode === 'single' && settings.showGraph ? 'white' : '#22336b',
                 border: '1px solid #e7eaf7',
                 display: 'flex',
                 alignItems: 'center',
                 gap: '8px',
-                fontWeight: settings.pageMode === 'single' ? 'bold' : 'normal',
+                fontWeight: settings.pageMode === 'single' && settings.showGraph ? 'bold' : 'normal',
+                padding: '12px 16px',
+                textAlign: 'left',
+                width: '100%',
+                justifyContent: 'flex-start',
               }}
-              {...createAdvancedButtonHandlers(settings.pageMode === 'single' ? 'primary' : 'default')}
+              {...createAdvancedButtonHandlers(settings.pageMode === 'single' && settings.showGraph ? 'primary' : 'default')}
             >
-              {settings.pageMode === 'single' && <span className="material-symbols-outlined">check</span>} 단일 페이지
+              {settings.pageMode === 'single' && settings.showGraph && <span className="material-symbols-outlined">check</span>}
+              <span className="material-symbols-outlined">view_column</span>
+              단일 뷰어 & 그래프 화면
             </button>
+            
+            {/* 단일화면 (그래프 숨기기) */}
             <button
-              onClick={() => handleChange('pageMode', 'double')}
+              onClick={() => {
+                setSettings(prev => ({
+                  ...prev,
+                  pageMode: 'single',
+                  showGraph: false
+                }));
+              }}
               style={{
-                ...createButtonStyle(ANIMATION_VALUES, settings.pageMode === 'double' ? 'primary' : 'default'),
-                backgroundColor: settings.pageMode === 'double' ? '#4F6DDE' : '#f8fafc',
-                color: settings.pageMode === 'double' ? 'white' : '#22336b',
+                ...createButtonStyle(ANIMATION_VALUES, settings.pageMode === 'single' && !settings.showGraph ? 'primary' : 'default'),
+                backgroundColor: settings.pageMode === 'single' && !settings.showGraph ? '#4F6DDE' : '#f8fafc',
+                color: settings.pageMode === 'single' && !settings.showGraph ? 'white' : '#22336b',
                 border: '1px solid #e7eaf7',
                 display: 'flex',
                 alignItems: 'center',
                 gap: '8px',
-                fontWeight: settings.pageMode === 'double' ? 'bold' : 'normal',
+                fontWeight: settings.pageMode === 'single' && !settings.showGraph ? 'bold' : 'normal',
+                padding: '12px 16px',
+                textAlign: 'left',
+                width: '100%',
+                justifyContent: 'flex-start',
               }}
-              {...createAdvancedButtonHandlers(settings.pageMode === 'double' ? 'primary' : 'default')}
+              {...createAdvancedButtonHandlers(settings.pageMode === 'single' && !settings.showGraph ? 'primary' : 'default')}
             >
-              {settings.pageMode === 'double' && <span className="material-symbols-outlined">check</span>} 분할 페이지
+              {settings.pageMode === 'single' && !settings.showGraph && <span className="material-symbols-outlined">check</span>}
+              <span className="material-symbols-outlined">view_column</span>
+              단일 뷰어화면
             </button>
-          </div>
-        </div>
-        
-        {/* 그래프 표시 설정 */}
-        <div style={{ marginBottom: '24px' }}>
-          <h3 style={{ fontSize: '1.1rem', fontWeight: 'bold', color: '#22336b', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <span className="material-symbols-outlined">bar_chart</span> 그래프 표시
-          </h3>
-          <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+            
+            {/* 분할화면 */}
             <button
-              onClick={() => handleChange('showGraph', true)}
+              onClick={() => {
+                setSettings(prev => ({
+                  ...prev,
+                  pageMode: 'double',
+                  showGraph: false
+                }));
+              }}
               style={{
-                ...createButtonStyle(ANIMATION_VALUES, settings.showGraph ? 'primary' : 'default'),
-                backgroundColor: settings.showGraph ? '#4F6DDE' : '#f8fafc',
-                color: settings.showGraph ? 'white' : '#22336b',
+                ...createButtonStyle(ANIMATION_VALUES, settings.pageMode === 'double' && !settings.showGraph ? 'primary' : 'default'),
+                backgroundColor: settings.pageMode === 'double' && !settings.showGraph ? '#4F6DDE' : '#f8fafc',
+                color: settings.pageMode === 'double' && !settings.showGraph ? 'white' : '#22336b',
                 border: '1px solid #e7eaf7',
                 display: 'flex',
                 alignItems: 'center',
                 gap: '8px',
-                fontWeight: settings.showGraph ? 'bold' : 'normal',
+                fontWeight: settings.pageMode === 'double' && !settings.showGraph ? 'bold' : 'normal',
+                padding: '12px 16px',
+                textAlign: 'left',
+                width: '100%',
+                justifyContent: 'flex-start',
               }}
-              {...createAdvancedButtonHandlers(settings.showGraph ? 'primary' : 'default')}
+              {...createAdvancedButtonHandlers(settings.pageMode === 'double' && !settings.showGraph ? 'primary' : 'default')}
             >
-              {settings.showGraph && <span className="material-symbols-outlined">check</span>} 그래프 표시
-            </button>
-            <button
-              onClick={() => handleChange('showGraph', false)}
-              style={{
-                ...createButtonStyle(ANIMATION_VALUES, !settings.showGraph ? 'primary' : 'default'),
-                backgroundColor: !settings.showGraph ? '#4F6DDE' : '#f8fafc',
-                color: !settings.showGraph ? 'white' : '#22336b',
-                border: '1px solid #e7eaf7',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px',
-                fontWeight: !settings.showGraph ? 'bold' : 'normal',
-              }}
-              {...createAdvancedButtonHandlers(!settings.showGraph ? 'primary' : 'default')}
-            >
-              {!settings.showGraph && <span className="material-symbols-outlined">check</span>} 그래프 숨기기
+              {settings.pageMode === 'double' && !settings.showGraph && <span className="material-symbols-outlined">check</span>}
+              <span className="material-symbols-outlined">view_column_2</span>
+              분할 뷰어화면
             </button>
           </div>
         </div>
@@ -311,6 +327,7 @@ const ViewerSettings = ({ isOpen, onClose, onApplySettings, currentSettings }) =
             <span style={{ minWidth: '60px', textAlign: 'right' }}>{settings.lineHeight.toFixed(1)}</span>
           </div>
         </div>
+        
         
         {/* 버튼 그룹 */}
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '24px' }}>

@@ -1,3 +1,28 @@
+// 순환 참조 방지를 위해 하드코딩된 값 사용
+const COLORS = {
+  backgroundLighter: '#f8fafc',
+  border: '#e5e7eb',
+  textPrimary: '#22336b',
+  backgroundLight: '#f8f9fc',
+  primary: '#6C8EFF',
+  white: '#ffffff',
+  textSecondary: '#6c757d',
+  borderLight: '#e3e6ef',
+  nodeBackground: '#eee',
+  nodeBorder: '#5B7BA0',
+  nodeText: '#444',
+  edgeText: '#42506b',
+  successGreen: '#22c55e',
+  highlightBlue: '#3b82f6',
+};
+
+const ANIMATION_VALUES = {
+  DURATION: {
+    FAST: '0.18s',
+    SLOW: '0.4s',
+  }
+};
+
 export const DEFAULT_LAYOUT = {
   name: "preset",
   padding: 40,
@@ -67,12 +92,12 @@ export const createGraphStylesheet = (edgeStyle, edgeLabelVisible, maxEdgeLabelL
   {
     selector: "node[image]",
     style: {
-      "background-color": "#eee",
+      "background-color": COLORS.nodeBackground,
       "background-image": "data(image)",
       "background-fit": "cover",
       "background-clip": "node",
       "border-width": (ele) => (ele.data("main_character") ? 2 : 1),
-      "border-color": "#5B7BA0",
+      "border-color": COLORS.nodeBorder,
       "border-opacity": 1,
       width: (ele) => calculateNodeSize(8, ele.data("weight")),
       height: (ele) => calculateNodeSize(8, ele.data("weight")),
@@ -82,9 +107,9 @@ export const createGraphStylesheet = (edgeStyle, edgeLabelVisible, maxEdgeLabelL
       "text-halign": "center",
       "font-size": 12,
       "font-weight": (ele) => (ele.data("main_character") ? 600 : 400),
-      color: "#444",
+      color: COLORS.nodeText,
       "text-margin-y": 2,
-      "text-background-color": "#fff",
+      "text-background-color": COLORS.white,
       "text-background-opacity": 0.8,
       "text-background-shape": "roundrectangle",
       "text-background-padding": 2,
@@ -103,12 +128,12 @@ export const createGraphStylesheet = (edgeStyle, edgeLabelVisible, maxEdgeLabelL
       },
       "font-size": edgeStyle.fontSize,
       "text-rotation": "autorotate",
-      color: "#42506b",
-      "text-background-color": "#fff",
+      color: COLORS.edgeText,
+      "text-background-color": COLORS.white,
       "text-background-opacity": 0.85,
       "text-background-shape": "roundrectangle",
       "text-background-padding": 2,
-      "text-outline-color": "#fff",
+      "text-outline-color": COLORS.white,
       "text-outline-width": 2,
       opacity: 0.85,
       "target-arrow-shape": "none",
@@ -117,11 +142,11 @@ export const createGraphStylesheet = (edgeStyle, edgeLabelVisible, maxEdgeLabelL
   {
     selector: "node.cytoscape-node-appear",
     style: {
-      "border-color": "#22c55e",
+      "border-color": COLORS.successGreen,
       "border-width": 16,
       "border-opacity": 1,
       "transition-property": "border-width, border-color, border-opacity",
-      "transition-duration": "700ms",
+      "transition-duration": ANIMATION_VALUES.DURATION.SLOW,
     },
   },
   {
@@ -134,7 +159,7 @@ export const createGraphStylesheet = (edgeStyle, edgeLabelVisible, maxEdgeLabelL
   {
     selector: ".highlighted",
     style: {
-      "border-color": "#3b82f6",
+      "border-color": COLORS.highlightBlue,
       "border-width": 2,
       "border-opacity": 1,
       "border-style": "solid",
@@ -145,7 +170,7 @@ export const createGraphStylesheet = (edgeStyle, edgeLabelVisible, maxEdgeLabelL
 /**
  * 그래프 관련 공통 스타일
  */
-export const graphStyles = {
+export const getGraphStyles = () => ({
   container: {
     width: '100%', 
     height: '100%', 
@@ -174,7 +199,7 @@ export const graphStyles = {
     height: '100vh', 
     overflow: 'hidden', 
     position: 'relative', 
-    backgroundColor: '#f8fafc',
+    backgroundColor: COLORS.backgroundLighter,
     display: 'flex',
     flexDirection: 'column'
   },
@@ -187,25 +212,29 @@ export const graphStyles = {
     flexDirection: 'column',
     minHeight: 0
   },
-};
+});
+
+// 하위 호환성을 위한 별칭
+export const graphStyles = getGraphStyles();
 
 /**
  * GraphControls 컴포넌트 스타일
  */
-export const graphControlsStyles = {
+export const getGraphControlsStyles = () => ({
   input: {
     width: '180px',
     minWidth: '150px',
     maxWidth: '220px',
-    border: '1px solid #e3e6ef',
-    borderRadius: '6px',
+    border: `1px solid ${COLORS.border}`,
+    borderRadius: '8px',
     fontSize: '12px',
-    color: '#42506b',
-    background: '#f8f9fc',
-    transition: 'all 0.2s',
+    color: COLORS.textPrimary,
+    background: COLORS.backgroundLight,
+    transition: `all ${ANIMATION_VALUES.DURATION.FAST}`,
     outline: 'none',
-    height: '28px',
-    padding: '0 8px',
+    height: '32px',
+    padding: '0 12px',
+    fontWeight: '500',
   },
   button: {
     display: 'flex',
@@ -213,24 +242,26 @@ export const graphControlsStyles = {
     justifyContent: 'center',
     gap: '8px',
     border: 'none',
-    borderRadius: '6px',
+    borderRadius: '8px',
     fontSize: '12px',
     fontWeight: '500',
     cursor: 'pointer',
-    transition: 'all 0.2s',
+    transition: `all ${ANIMATION_VALUES.DURATION.FAST}`,
     width: '80px',
-    height: '28px',
+    height: '32px',
     padding: '0 12px',
     flexShrink: 0,
   },
   searchButton: {
-    background: '#6C8EFF',
-    color: '#fff',
+    background: COLORS.primary,
+    color: COLORS.white,
+    boxShadow: '0 2px 8px rgba(108, 142, 255, 0.4)',
   },
   resetButton: {
-    background: '#f8f9fc',
-    color: '#6c757d',
-    border: '1px solid #e3e6ef',
+    background: COLORS.backgroundLight,
+    color: COLORS.textSecondary,
+    border: `1px solid ${COLORS.border}`,
+    boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
   },
   form: {
     display: 'flex',
@@ -243,10 +274,10 @@ export const graphControlsStyles = {
     top: '100%',
     left: '0',
     right: '0',
-    background: '#fff',
-    border: '1px solid #e3e6ef',
-    borderRadius: '6px',
-    boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)',
+    background: COLORS.white,
+    border: `1px solid ${COLORS.border}`,
+    borderRadius: '8px',
+    boxShadow: '0 4px 16px rgba(0, 0, 0, 0.1)',
     zIndex: 1,
     maxHeight: '300px',
     overflowY: 'auto',
@@ -258,23 +289,23 @@ export const graphControlsStyles = {
   suggestionItem: (isSelected) => ({
     padding: '12px 14px',
     cursor: 'pointer',
-    borderBottom: '1px solid #f1f3f4',
-    background: isSelected ? '#f8f9fc' : '#fff',
-    transition: 'background 0.2s',
+    borderBottom: `1px solid ${COLORS.borderLight}`,
+    background: isSelected ? COLORS.backgroundLight : COLORS.white,
+    transition: `background ${ANIMATION_VALUES.DURATION.FAST}`,
   }),
   noResults: {
     padding: '16px 14px',
     textAlign: 'center',
-    color: '#6c757d',
+    color: COLORS.textSecondary,
     fontSize: '12px',
     fontStyle: 'italic'
   },
   header: {
     padding: '8px 14px', 
     fontSize: '11px', 
-    color: '#6c757d', 
-    background: '#f8f9fc',
-    borderBottom: '1px solid #e3e6ef',
+    color: COLORS.textSecondary, 
+    background: COLORS.backgroundLight,
+    borderBottom: `1px solid ${COLORS.border}`,
     fontWeight: '500'
   },
   container: {
@@ -284,4 +315,7 @@ export const graphControlsStyles = {
     minWidth: '200px',
     zIndex: 1000
   }
-};
+});
+
+// 하위 호환성을 위한 별칭
+export const graphControlsStyles = getGraphControlsStyles();

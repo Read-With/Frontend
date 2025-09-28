@@ -36,6 +36,7 @@ const ViewerRelationGraph = ({
   onClearTooltip = null,
   onSetActiveTooltip = null,
   graphClearRef = null,
+  isEventTransition = false, // 이벤트 전환 상태
 }) => {
   const cyRef = useRef(null);
   const selectedEdgeIdRef = useRef(null);
@@ -208,6 +209,7 @@ const ViewerRelationGraph = ({
           selectedNodeIdRef={selectedNodeIdRef}
           selectedEdgeIdRef={selectedEdgeIdRef}
           strictBackgroundClear={true}
+          showRippleEffect={isEventTransition} // 이벤트 전환에 따른 노드 추가 시에만 ripple 효과 표시
         />
       </div>
     </div>
