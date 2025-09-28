@@ -1,9 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { theme } from '../components/common/theme';
-import { createButtonStyle, createAdvancedButtonHandlers } from '../utils/styles/styles';
-import { ANIMATION_VALUES } from '../utils/styles/animations';
 import useAuth from '../hooks/useAuth';
+import './HomePage.css';
 
 const features = [
   {
@@ -44,177 +42,12 @@ const features = [
   }
 ];
 
-// GoogleAuth와 동일한 스타일 정의
-const containerStyle = {
-  display: 'flex',
-  flexDirection: 'column',
-  alignItems: 'center',
-  justifyContent: 'flex-start',
-  minHeight: '100vh',
-  width: '100%',
-  padding: `${theme.spacing.lg} ${theme.spacing.md}`,
-  background: `linear-gradient(135deg, ${theme.colors.background.main} 0%, rgba(79, 109, 222, 0.05) 100%)`
-};
-
-const heroSectionStyle = {
-  display: 'flex',
-  flexDirection: 'column',
-  alignItems: 'center',
-  textAlign: 'center',
-  maxWidth: '600px',
-  marginBottom: theme.spacing.sm,
-  animation: 'fadeInUp 0.8s ease-out 0.2s both'
-};
-
-const titleStyle = {
-  fontSize: 'clamp(2.5rem, 5vw, 4rem)',
-  fontWeight: 800,
-  marginBottom: theme.spacing.xs,
-  color: theme.colors.primary.main,
-  textAlign: 'center',
-  letterSpacing: '-0.02em',
-  lineHeight: '1.1'
-};
-
-const subtitleStyle = {
-  fontSize: theme.fontSize.xl,
-  fontWeight: 500,
-  color: theme.colors.text.secondary,
-  marginBottom: 0,
-  opacity: 0.9
-};
-
-const descriptionStyle = {
-  fontSize: theme.fontSize.lg,
-  color: theme.colors.text.secondary,
-  maxWidth: '500px',
-  textAlign: 'center',
-  lineHeight: '1.7',
-  marginTop: theme.spacing.xs,
-  marginBottom: theme.spacing.sm,
-  opacity: 0.8
-};
-
-const errorStyle = {
-  color: '#ef4444',
-  fontSize: theme.fontSize.sm,
-  textAlign: 'center',
-  marginTop: theme.spacing.xs
-};
-
-const googleButtonContainerStyle = {
-  display: 'flex',
-  justifyContent: 'center',
-  marginBottom: theme.spacing.lg,
-  animation: 'fadeInUp 0.8s ease-out 0.2s both'
-};
-
-const authSectionStyle = {
-  display: 'flex',
-  flexDirection: 'column',
-  alignItems: 'center',
-  gap: 0,
-  maxWidth: '500px',
-  width: '100%'
-};
-
-const featuresSectionStyle = {
-  width: '100%',
-  maxWidth: '1200px',
-  marginTop: theme.spacing.xl,
-  padding: `0 ${theme.spacing.md}`
-};
-
-const featuresGridStyle = {
-  display: 'grid',
-  gridTemplateColumns: 'repeat(3, 1fr)',
-  gridTemplateRows: '1fr 1fr',
-  gap: theme.spacing.lg,
-  marginTop: theme.spacing.lg,
-  maxWidth: '1200px',
-  margin: `${theme.spacing.lg} auto 0 auto`,
-  alignContent: 'start',
-  minHeight: '320px'
-};
-
-const featureCardStyle = {
-  background: 'rgba(255, 255, 255, 0.95)',
-  borderRadius: '16px',
-  padding: theme.spacing.lg,
-  boxShadow: '0 4px 20px rgba(0, 0, 0, 0.08)',
-  transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-  cursor: 'pointer',
-  position: 'relative',
-  overflow: 'hidden'
-};
-
-const featureCardHoverStyle = {
-  transform: 'translateY(-2px)',
-  boxShadow: '0 8px 25px rgba(0, 0, 0, 0.12)'
-};
-
-const featureCardExpandedStyle = {
-  transform: 'scale(1.03)',
-  zIndex: 10,
-  boxShadow: '0 25px 80px rgba(0, 0, 0, 0.25)',
-  background: 'rgba(255, 255, 255, 0.98)'
-};
-
-const featureTitleStyle = {
-  fontSize: theme.fontSize.lg,
-  fontWeight: 700,
-  color: theme.colors.text.primary,
-  marginBottom: theme.spacing.sm,
-  lineHeight: '1.4'
-};
-
-const featureDescriptionStyle = {
-  fontSize: theme.fontSize.md,
-  color: theme.colors.text.secondary,
-  marginBottom: theme.spacing.md,
-  lineHeight: '1.6'
-};
-
-const featureDetailsStyle = {
-  listStyle: 'none',
-  padding: 0,
-  margin: 0,
-  animation: 'slideDown 0.4s ease-out'
-};
-
-const featureDetailsClosingStyle = {
-  listStyle: 'none',
-  padding: 0,
-  margin: 0,
-  animation: 'slideUp 0.005s ease-out'
-};
-
-const featureDetailItemStyle = {
-  fontSize: theme.fontSize.sm,
-  color: theme.colors.text.secondary,
-  marginBottom: theme.spacing.xs,
-  paddingLeft: theme.spacing.sm,
-  lineHeight: '1.5'
-};
-
-const sectionTitleStyle = {
-  fontSize: 'clamp(1.8rem, 4vw, 2.5rem)',
-  fontWeight: 700,
-  color: theme.colors.text.primary,
-  textAlign: 'center',
-  marginTop: theme.spacing.xs,
-  marginBottom: theme.spacing.xl,
-  opacity: 0.9,
-  animation: 'fadeInUp 0.6s ease-out 0.3s both'
-};
 
 const FeatureCard = ({ feature, index, isExpanded, onToggle }) => {
   const [isHovered, setIsHovered] = useState(false);
   const [isClosing, setIsClosing] = useState(false);
   
   const cardStyle = {
-    ...featureCardStyle,
-    ...(isExpanded ? featureCardExpandedStyle : isHovered ? featureCardHoverStyle : {}),
     animation: `fadeInUp 0.6s ease-out ${0.4 + index * 0.1}s both`,
     ...(isExpanded ? {
       gridRow: '1 / 3',
@@ -247,12 +80,12 @@ const FeatureCard = ({ feature, index, isExpanded, onToggle }) => {
       onMouseLeave={() => setIsHovered(false)}
       onClick={handleClick}
     >
-      <h3 style={featureTitleStyle}>{feature.title}</h3>
-      <p style={featureDescriptionStyle}>{feature.description}</p>
+      <h3 className="feature-title">{feature.title}</h3>
+      <p className="feature-description">{feature.description}</p>
       {isExpanded && (
-        <ul style={isClosing ? featureDetailsClosingStyle : featureDetailsStyle}>
+        <ul className={isClosing ? 'feature-details closing' : 'feature-details'}>
           {feature.details.map((detail, idx) => (
-            <li key={idx} style={featureDetailItemStyle}>
+            <li key={idx} className="feature-detail-item">
               {detail}
             </li>
           ))}
@@ -402,28 +235,28 @@ export default function HomePage() {
   }
 
   return (
-    <div style={containerStyle}>
+    <div className="homepage-container">
       {/* 히어로 섹션 */}
-      <div style={heroSectionStyle}>
-        <h1 style={titleStyle}>ReadWith</h1>
-        <p style={subtitleStyle}>스마트 독서 플랫폼</p>
-        <p style={descriptionStyle}>나만의 독서 공간을 시작하세요</p>
+      <div className="hero-section">
+        <h1 className="hero-title">ReadWith</h1>
+        <p className="hero-subtitle">스마트 독서 플랫폼</p>
+        <p className="hero-description">나만의 독서 공간을 시작하세요</p>
       </div>
 
       {/* 인증 섹션 */}
-      <div style={authSectionStyle}>
+      <div className="auth-section">
         <div 
           id="g_id_signin"
-          style={googleButtonContainerStyle}
+          className="google-button-container"
         ></div>
         
-        {error && <div style={errorStyle}>{error}</div>}
+        {error && <div className="error-message">{error}</div>}
       </div>
 
       {/* 기능 소개 섹션 */}
-      <div style={featuresSectionStyle}>
-        <h2 style={sectionTitleStyle}>주요 기능</h2>
-        <div className="features-grid" style={featuresGridStyle}>
+      <div className="features-section">
+        <h2 className="features-title">주요 기능</h2>
+        <div className="features-grid">
           {features.map((feature, index) => (
             <FeatureCard 
               key={feature.id} 
@@ -436,114 +269,6 @@ export default function HomePage() {
         </div>
       </div>
 
-      <style>
-        {`
-          @keyframes fadeInUp {
-            from {
-              opacity: 0;
-              transform: translateY(30px);
-            }
-            to {
-              opacity: 1;
-              transform: translateY(0);
-            }
-          }
-          
-          @keyframes slideDown {
-            from {
-              opacity: 0;
-              transform: translateY(-10px);
-              max-height: 0;
-            }
-            to {
-              opacity: 1;
-              transform: translateY(0);
-              max-height: 200px;
-            }
-          }
-          
-          @keyframes slideUp {
-            from {
-              opacity: 1;
-              transform: translateY(0);
-              max-height: 200px;
-            }
-            to {
-              opacity: 0;
-              transform: translateY(-10px);
-              max-height: 0;
-            }
-          }
-          
-          /* 반응형 그리드 */
-          @media (max-width: 768px) {
-            .features-grid {
-              grid-template-columns: 1fr !important;
-              grid-template-rows: repeat(3, 1fr) !important;
-              min-height: auto !important;
-            }
-            
-            .feature-card {
-              grid-column: 1 / 2 !important;
-            }
-            
-            .feature-card.expanded {
-              grid-row: span 2 !important;
-            }
-          }
-          
-          @media (max-width: 1024px) and (min-width: 769px) {
-            .features-grid {
-              grid-template-columns: repeat(2, 1fr) !important;
-              grid-template-rows: 1fr 2fr !important;
-            }
-            
-            .feature-card:nth-child(3) {
-              grid-column: 1 / 3 !important;
-              grid-row: 2 / 3 !important;
-            }
-          }
-          
-          @media (max-width: 480px) {
-            .features-grid {
-              grid-template-columns: 1fr !important;
-              grid-template-rows: repeat(3, auto) !important;
-              gap: 1rem !important;
-              min-height: auto !important;
-            }
-            
-            .feature-card {
-              grid-column: 1 / 2 !important;
-              grid-row: auto !important;
-            }
-          }
-          
-          /* Google 버튼 둥근 모서리 스타일 */
-          #g_id_signin {
-            border-radius: 12px !important;
-            box-shadow: none !important;
-            border: 1px solid rgba(0, 0, 0, 0.1) !important;
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
-            overflow: hidden !important;
-          }
-          
-          #g_id_signin:hover {
-            transform: translateY(-1px) !important;
-            border-color: rgba(0, 0, 0, 0.2) !important;
-          }
-          
-          #g_id_signin:active {
-            transform: translateY(0) !important;
-            border-color: rgba(0, 0, 0, 0.15) !important;
-          }
-          
-          /* Google 버튼 내부 iframe도 둥글게 */
-          #g_id_signin iframe {
-            border-radius: 12px !important;
-            border: none !important;
-          }
-        `}
-      </style>
     </div>
   );
 } 

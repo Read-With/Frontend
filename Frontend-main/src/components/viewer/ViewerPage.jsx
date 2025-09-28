@@ -37,15 +37,12 @@ function GraphSplitArea({
   viewerState,
   searchState,
   searchActions,
-  activeTooltip,
-  onClearTooltip,
-  onSetActiveTooltip,
-  graphClearRef,
-  isEventUndefined,
-  isEventTransition,
-  isChapterTransition,
+  tooltipProps,
+  transitionStates,
   apiError,
 }) {
+  const { activeTooltip, onClearTooltip, onSetActiveTooltip, graphClearRef } = tooltipProps;
+  const { isEventUndefined, isEventTransition, isChapterTransition } = transitionStates;
   const graphContainerRef = React.useRef(null);
   const { isSearchActive, filteredElements, isResetFromSearch } = searchState;
   const { loading, isReloading, isGraphLoading, isDataReady } = viewerState;
@@ -286,7 +283,9 @@ const ViewerPage = () => {
   const graphClearRef = useRef(null);
   const [isEventUndefined, setIsEventUndefined] = useState(false);
   const [isEventTransition, setIsEventTransition] = useState(false);
+  const [isChapterTransition, setIsChapterTransition] = useState(false);
   const prevEventRef = useRef(null);
+  const prevChapterRef = useRef(null);
   
   const handleClearTooltip = useCallback(() => {
     setActiveTooltip(null);
@@ -302,7 +301,7 @@ const ViewerPage = () => {
   const handleSetActiveTooltip = useCallback((tooltipData) => {
     const processedTooltipData = processTooltipData(tooltipData, tooltipData.type);
     setActiveTooltip(processedTooltipData);
-  }, [currentEvent, currentChapter]);
+  }, []);
 
   const viewerPageRef = useClickOutside(handleClearTooltipAndGraph, !!activeTooltip);
 
@@ -355,11 +354,15 @@ const ViewerPage = () => {
        
       try {
         if (!book?.id || !currentChapter || eventIdx < 0) {
-          setApiMacroData(null);
+          if (isMounted) {
+            setApiMacroData(null);
+          }
           return;
         }
         
         const fineData = await getFineGraph(book.id, currentChapter, eventIdx);
+        
+        if (!isMounted) return;
         
         let convertedElements = [];
         if (fineData.result.characters && fineData.result.relations) {
@@ -375,7 +378,7 @@ const ViewerPage = () => {
             null
           );
           
-          if (convertedElements.length > 0) {
+          if (convertedElements.length > 0 && isMounted) {
             graphActions.setElements(convertedElements);
             
             if (!events || events.length === 0) {
@@ -414,7 +417,7 @@ const ViewerPage = () => {
     return () => {
       isMounted = false;
     };
-  }, [book?.id, currentChapter, manifestLoaded]);
+  }, [book?.id, currentChapter, manifestLoaded, graphActions, events]);
 
   useEffect(() => {
     const autoSaveProgress = async () => {
@@ -451,9 +454,6 @@ const ViewerPage = () => {
       };
     }
   }, [bookmarks, currentChapter]);
-
-  const [isChapterTransition, setIsChapterTransition] = useState(false);
-  const prevChapterRef = useRef(null);
 
   useEffect(() => {
     const checkEventStatus = () => {
@@ -558,7 +558,7 @@ const ViewerPage = () => {
       setLoading(false);
       setIsGraphLoading(false);
     }
-  }, [book, currentChapter, folderKey, isChapterTransition, currentChapterData]);
+  }, [book, currentChapter, folderKey, isChapterTransition, currentChapterData, setLoading, setIsGraphLoading, setIsDataReady, setIsChapterTransition, setEvents, setCurrentEvent, setCharacterData]);
 
   useEffect(() => {
     if (currentChapter && currentChapter > 0 && graphState.isInitialChapterDetected) {
@@ -779,13 +779,17 @@ const ViewerPage = () => {
                 selectSuggestion,
                 handleKeyDown
               }}
-              activeTooltip={activeTooltip}
-              onClearTooltip={handleClearTooltip}
-              onSetActiveTooltip={handleSetActiveTooltip}
-              graphClearRef={graphClearRef}
-              isEventUndefined={isEventUndefined}
-              isEventTransition={isEventTransition}
-              isChapterTransition={isChapterTransition}
+              tooltipProps={{
+                activeTooltip,
+                onClearTooltip: handleClearTooltip,
+                onSetActiveTooltip: handleSetActiveTooltip,
+                graphClearRef
+              }}
+              transitionStates={{
+                isEventUndefined,
+                isEventTransition,
+                isChapterTransition
+              }}
               apiError={apiError}
             />
           </CytoscapeGraphPortalProvider>

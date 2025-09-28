@@ -164,7 +164,7 @@ const ViewerSettings = ({ isOpen, onClose, onApplySettings, currentSettings }) =
             >
               {settings.pageMode === 'single' && settings.showGraph && <span className="material-symbols-outlined">check</span>}
               <span className="material-symbols-outlined">view_column</span>
-              단일 뷰어&그래프 모드
+              단일 뷰어 & 그래프 화면
             </button>
             
             {/* 단일화면 (그래프 숨기기) */}
@@ -194,7 +194,7 @@ const ViewerSettings = ({ isOpen, onClose, onApplySettings, currentSettings }) =
             >
               {settings.pageMode === 'single' && !settings.showGraph && <span className="material-symbols-outlined">check</span>}
               <span className="material-symbols-outlined">view_column</span>
-              단일화면
+              단일 뷰어화면
             </button>
             
             {/* 분할화면 */}
@@ -224,7 +224,7 @@ const ViewerSettings = ({ isOpen, onClose, onApplySettings, currentSettings }) =
             >
               {settings.pageMode === 'double' && !settings.showGraph && <span className="material-symbols-outlined">check</span>}
               <span className="material-symbols-outlined">view_column_2</span>
-              분할화면
+              분할 뷰어화면
             </button>
           </div>
         </div>

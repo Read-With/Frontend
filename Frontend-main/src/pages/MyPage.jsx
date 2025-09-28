@@ -1,30 +1,19 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import UserProfile from '../components/common/UserProfile';
 import BookLibrary from '../components/library/BookLibrary';
 import FileUpload from '../components/library/FileUpload';
 import { useBooks } from '../hooks/useBooks';
-import { useUserProfile } from '../hooks/useUserProfile';
 import useAuth from '../hooks/useAuth';
 import { theme } from '../components/common/theme';
 import { createButtonStyle, createAdvancedButtonHandlers } from '../utils/styles/styles';
 import { ANIMATION_VALUES } from '../utils/styles/animations';
 
 export default function MyPage() {
-  const { books, loading, error, retryFetch, addBook, toggleFavorite, fetchBook } = useBooks();
-  const { userProfile } = useUserProfile();
+  const { books, loading, error, retryFetch, addBook, toggleFavorite } = useBooks();
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const [showUpload, setShowUpload] = useState(false);
 
-  // 테스트용: 단일 도서 조회 함수
-  const testSingleBook = async (bookId) => {
-    try {
-      const book = await fetchBook(bookId);
-      return book;
-    } catch (error) {
-    }
-  };
 
   const rootStyle = {
     background: theme.colors.background.main,
@@ -68,16 +57,6 @@ export default function MyPage() {
     setShowUpload(false);
   };
 
-  const handleBookClick = async (book) => {
-    
-    // API 책인 경우 단일 도서 조회 테스트
-    if (typeof book.id === 'number') {
-      try {
-        const detailedBook = await testSingleBook(book.id);
-      } catch (error) {
-      }
-    }
-  };
 
   const titleStyle = {
     fontSize: 'clamp(2.5rem, 5vw, 3.5rem)',
@@ -104,20 +83,6 @@ export default function MyPage() {
     opacity: 0.8
   };
 
-  const userImageStyle = {
-    width: '60px',
-    height: '60px',
-    borderRadius: '50%',
-    border: `3px solid ${theme.colors.primary.main}`,
-    boxShadow: '0 8px 25px rgba(79, 109, 222, 0.2)'
-  };
-
-  const userNameStyle = {
-    fontSize: theme.fontSize.lg,
-    fontWeight: 700,
-    color: theme.colors.text.primary,
-    lineHeight: '1.2'
-  };
 
   const statItemStyle = {
     display: 'flex',
@@ -149,14 +114,6 @@ export default function MyPage() {
     letterSpacing: '0.5px'
   };
 
-  const welcomeMessageStyle = {
-    fontSize: theme.fontSize.base,
-    color: theme.colors.text.secondary,
-    textAlign: 'center',
-    marginBottom: theme.spacing.lg,
-    opacity: 0.8,
-    fontStyle: 'italic'
-  };
 
   // 통합된 대시보드 스타일
   const dashboardStyle = {
@@ -274,7 +231,6 @@ export default function MyPage() {
           error={error} 
           onRetry={retryFetch}
           onToggleFavorite={toggleFavorite}
-          onBookClick={handleBookClick}
         />
       </div>
       
