@@ -16,7 +16,7 @@ import {
 } from '../utils/viewerUtils';
 import { getFolderKeyFromFilename } from '../utils/graphData';
 import { loadBookmarks, addBookmark, removeBookmark } from '../components/viewer/bookmark/BookmarkManager';
-import { getBookManifest } from '../utils/api';
+import { getBookManifest } from '../utils/common/api';
 
 export function useViewerPage() {
   const { filename } = useParams();
@@ -62,6 +62,7 @@ export function useViewerPage() {
   const [graphViewState, setGraphViewState] = useState(null);
   const [hideIsolated, setHideIsolated] = useState(true);
   const [edgeLabelVisible, setEdgeLabelVisible] = useState(true);
+  const [filterStage, setFilterStage] = useState(0); // 0: 전체, 1: 핵심-핵심, 2: 핵심-핵심+핵심-주요, 3: 핵심-핵심+핵심-주요+주요-주요
   const [characterData, setCharacterData] = useState(null);
   const [isReloading, setIsReloading] = useState(false);
   const [eventNum, setEventNum] = useState(0);
@@ -649,7 +650,9 @@ export function useViewerPage() {
       setHideIsolated,
       setEdgeLabelVisible,
       handleFitView,
-      setElements
+      setElements,
+      filterStage,
+      setFilterStage
     },
     
     viewerState: {

@@ -1,3 +1,6 @@
+// animations.js에서 애니메이션 관련 함수들 import
+import { createSlideAnimation, ANIMATION_VALUES } from './animations';
+
 const COLORS = {
   primary: '#6C8EFF',
   primaryLight: '#EEF2FF',
@@ -11,6 +14,23 @@ const COLORS = {
   error: '#ef4444',
   success: '#10b981',
   warning: '#f59e0b',
+  // 추가 색상 상수들
+  blue: '#3b82f6',
+  blueHover: '#2563eb',
+  gray: '#6b7280',
+  grayHover: '#4b5563',
+  lightGray: '#f9fafb',
+  lightGrayBorder: '#d1d5db',
+  white: '#ffffff',
+  darkText: '#374151',
+  tooltipClose: '#bfc8e2',
+  // 그래프 전용 색상들
+  nodeBackground: '#eee',
+  nodeBorder: '#5B7BA0',
+  nodeText: '#444',
+  edgeText: '#42506b',
+  successGreen: '#22c55e',
+  highlightBlue: '#3b82f6',
 };
 
 const BREAKPOINTS = {
@@ -31,9 +51,6 @@ const createFocusStyle = () => ({
   },
 });
 
-// animations.js에서 애니메이션 관련 함수들 import
-import { createSlideAnimation, ANIMATION_VALUES } from './animations';
-
 // 통일된 버튼 스타일 (epub-toolbar-btn 기준)
 export const createButtonStyle = (animationValues, variant = 'default') => {
   const baseStyle = {
@@ -45,9 +62,9 @@ export const createButtonStyle = (animationValues, variant = 'default') => {
     fontWeight: '500',
     padding: '8px 16px',
     borderRadius: '8px',
-    border: '1px solid #e2e8f0',
-    background: '#ffffff',
-    color: '#374151',
+    border: `1px solid ${COLORS.border}`,
+    background: COLORS.white,
+    color: COLORS.darkText,
     cursor: 'pointer',
     transition: 'all 0.2s ease',
     height: '40px',
@@ -57,28 +74,28 @@ export const createButtonStyle = (animationValues, variant = 'default') => {
 
   const variants = {
     default: {
-      background: '#ffffff',
-      color: '#374151',
-      border: '1px solid #e2e8f0',
+      background: COLORS.white,
+      color: COLORS.darkText,
+      border: `1px solid ${COLORS.border}`,
     },
     primary: {
-      background: '#3b82f6',
-      color: '#ffffff',
-      border: '1px solid #3b82f6',
+      background: COLORS.blue,
+      color: COLORS.white,
+      border: `1px solid ${COLORS.blue}`,
     },
     secondary: {
-      background: '#6b7280',
-      color: '#ffffff',
-      border: '1px solid #6b7280',
+      background: COLORS.gray,
+      color: COLORS.white,
+      border: `1px solid ${COLORS.gray}`,
     },
     // 특수 버튼들
     close: {
       position: 'absolute',
       top: '8px',
       right: '8px',
-      background: '#ffffff',
-      color: '#374151',
-      border: '1px solid #e2e8f0',
+      background: COLORS.white,
+      color: COLORS.darkText,
+      border: `1px solid ${COLORS.border}`,
       borderRadius: '6px',
       width: '32px',
       height: '32px',
@@ -90,7 +107,7 @@ export const createButtonStyle = (animationValues, variant = 'default') => {
       background: 'none',
       border: 'none',
       fontSize: '18px',
-      color: '#bfc8e2',
+      color: COLORS.tooltipClose,
       position: 'absolute',
       top: '14px',
       right: '14px',
@@ -103,7 +120,7 @@ export const createButtonStyle = (animationValues, variant = 'default') => {
     // 기존 고급 스타일 유지
     primaryAdvanced: {
       background: `linear-gradient(135deg, ${COLORS.primary} 0%, ${COLORS.primary} 100%)`,
-      color: '#fff',
+      color: COLORS.white,
       border: 'none',
       borderRadius: '12px',
       padding: '14px 28px',
@@ -114,6 +131,49 @@ export const createButtonStyle = (animationValues, variant = 'default') => {
       overflow: 'hidden',
       transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
       height: 'auto',
+    },
+    // relationStyles.js 전용 버튼들
+    primaryEdge: {
+      background: COLORS.primary,
+      color: COLORS.white,
+      border: 'none',
+      borderRadius: '0.5rem',
+      padding: '0.5rem 1.375rem',
+      fontWeight: 600,
+      fontSize: '0.9375rem',
+      cursor: 'pointer',
+      boxShadow: `0 0.125rem 0.5rem ${COLORS.primary}20`,
+      transition: `background ${ANIMATION_VALUES.DURATION.FAST}, color ${ANIMATION_VALUES.DURATION.FAST}, box-shadow ${ANIMATION_VALUES.DURATION.FAST}, transform 0.13s`,
+      margin: '0 auto',
+      display: 'inline-block',
+    },
+    secondaryEdge: {
+      background: COLORS.white,
+      color: COLORS.primary,
+      border: `1.5px solid ${COLORS.primary}`,
+      borderRadius: '0.5rem',
+      padding: '0.5rem 1.375rem',
+      fontWeight: 600,
+      fontSize: '0.9375rem',
+      cursor: 'pointer',
+      boxShadow: `0 0.125rem 0.5rem ${COLORS.primary}20`,
+      transition: `background ${ANIMATION_VALUES.DURATION.FAST}, color ${ANIMATION_VALUES.DURATION.FAST}, box-shadow ${ANIMATION_VALUES.DURATION.FAST}, transform 0.13s`,
+      margin: '0 auto',
+      display: 'inline-block',
+    },
+    closeEdge: {
+      background: 'none',
+      border: 'none',
+      fontSize: '18px',
+      color: COLORS.tooltipClose,
+      position: 'absolute',
+      top: '14px',
+      right: '14px',
+      zIndex: 2,
+      width: '24px',
+      height: '24px',
+      padding: '0',
+      borderRadius: '4px',
     },
   };
 
@@ -142,12 +202,12 @@ export const createAdvancedButtonHandlers = (variant) => {
   if (variant === 'primary') {
     return {
       onMouseEnter: (e) => {
-        e.target.style.background = '#2563eb';
-        e.target.style.borderColor = '#2563eb';
+        e.target.style.background = COLORS.blueHover;
+        e.target.style.borderColor = COLORS.blueHover;
       },
       onMouseLeave: (e) => {
-        e.target.style.background = '#3b82f6';
-        e.target.style.borderColor = '#3b82f6';
+        e.target.style.background = COLORS.blue;
+        e.target.style.borderColor = COLORS.blue;
       }
     };
   }
@@ -155,12 +215,12 @@ export const createAdvancedButtonHandlers = (variant) => {
   if (variant === 'secondary') {
     return {
       onMouseEnter: (e) => {
-        e.target.style.background = '#4b5563';
-        e.target.style.borderColor = '#4b5563';
+        e.target.style.background = COLORS.grayHover;
+        e.target.style.borderColor = COLORS.grayHover;
       },
       onMouseLeave: (e) => {
-        e.target.style.background = '#6b7280';
-        e.target.style.borderColor = '#6b7280';
+        e.target.style.background = COLORS.gray;
+        e.target.style.borderColor = COLORS.gray;
       }
     };
   }
@@ -168,12 +228,12 @@ export const createAdvancedButtonHandlers = (variant) => {
   if (variant === 'default') {
     return {
       onMouseEnter: (e) => {
-        e.target.style.background = '#f9fafb';
-        e.target.style.borderColor = '#d1d5db';
+        e.target.style.background = COLORS.lightGray;
+        e.target.style.borderColor = COLORS.lightGrayBorder;
       },
       onMouseLeave: (e) => {
-        e.target.style.background = '#ffffff';
-        e.target.style.borderColor = '#e2e8f0';
+        e.target.style.background = COLORS.white;
+        e.target.style.borderColor = COLORS.border;
       }
     };
   }
@@ -181,12 +241,12 @@ export const createAdvancedButtonHandlers = (variant) => {
   if (variant === 'close') {
     return {
       onMouseEnter: (e) => {
-        e.target.style.background = '#f9fafb';
-        e.target.style.borderColor = '#d1d5db';
+        e.target.style.background = COLORS.lightGray;
+        e.target.style.borderColor = COLORS.lightGrayBorder;
       },
       onMouseLeave: (e) => {
-        e.target.style.background = '#ffffff';
-        e.target.style.borderColor = '#e2e8f0';
+        e.target.style.background = COLORS.white;
+        e.target.style.borderColor = COLORS.border;
       }
     };
   }
@@ -194,11 +254,11 @@ export const createAdvancedButtonHandlers = (variant) => {
   if (variant === 'tooltipClose') {
     return {
       onMouseEnter: (e) => {
-        e.target.style.color = '#6C8EFF';
+        e.target.style.color = COLORS.primary;
         e.target.style.backgroundColor = 'rgba(108, 142, 255, 0.1)';
       },
       onMouseLeave: (e) => {
-        e.target.style.color = '#bfc8e2';
+        e.target.style.color = COLORS.tooltipClose;
         e.target.style.backgroundColor = 'transparent';
       }
     };

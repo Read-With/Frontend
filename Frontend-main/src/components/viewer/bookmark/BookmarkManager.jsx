@@ -1,4 +1,4 @@
-import { getBookmarks, createBookmark, updateBookmark, deleteBookmark } from '../../../utils/api';
+import { getBookmarks, createBookmark, updateBookmark, deleteBookmark } from '../../../utils/common/api';
 
 // 북마크 데이터 구조 개선
 const createBookmarkData = (bookId, startCfi, endCfi = null, color = '#0Ccd5B', memo = '') => ({
