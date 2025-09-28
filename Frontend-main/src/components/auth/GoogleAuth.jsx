@@ -142,8 +142,10 @@ const GoogleAuth = () => {
         try {
           // 깨진 UTF-8 문자열을 올바르게 디코딩
           const decoded = decodeURIComponent(escape(name));
-          console.log('원본 이름:', name);
-          console.log('디코딩된 이름:', decoded);
+          if (import.meta.env.DEV) {
+            console.log('원본 이름:', name);
+            console.log('디코딩된 이름:', decoded);
+          }
           return decoded;
         } catch (error) {
           console.warn('이름 디코딩 실패, 원본 사용:', name);
@@ -158,10 +160,10 @@ const GoogleAuth = () => {
         imageUrl: payload.picture
       };
       
-      console.log('Google에서 가져온 사용자 정보:', userData);
-      console.log('사용자 이름:', payload.name);
-      console.log('디코딩된 사용자 이름:', userData.name);
-      console.log('사용자 이름 타입:', typeof userData.name);
+      // 프로덕션에서는 디버깅 로그 제거
+      if (import.meta.env.DEV) {
+        console.log('Google에서 가져온 사용자 정보:', userData);
+      }
       
       login(userData);
       navigate('/mypage');
@@ -176,7 +178,14 @@ const GoogleAuth = () => {
       return;
     }
 
+    // 환경변수에서 Client ID 가져오기
     const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
+
+    // 개발 환경에서만 디버깅 로그 출력
+    if (import.meta.env.DEV) {
+      console.log('환경변수 VITE_GOOGLE_CLIENT_ID:', import.meta.env.VITE_GOOGLE_CLIENT_ID);
+      console.log('사용할 Client ID:', clientId);
+    }
 
     // Client ID 검증
     if (!clientId) {

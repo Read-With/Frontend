@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import UserProfile from '../components/common/UserProfile';
 import BookLibrary from '../components/library/BookLibrary';
 import FileUpload from '../components/library/FileUpload';
@@ -13,6 +14,7 @@ export default function MyPage() {
   const { books, loading, error, retryFetch, addBook, toggleFavorite, fetchBook } = useBooks();
   const { userProfile } = useUserProfile();
   const { user, logout } = useAuth();
+  const navigate = useNavigate();
   const [showUpload, setShowUpload] = useState(false);
 
   // 테스트용: 단일 도서 조회 함수
@@ -203,6 +205,7 @@ export default function MyPage() {
 
   const handleSignOut = () => {
     logout();
+    navigate('/');
   };
 
   // Google ID에서 가져온 이름 직접 사용
