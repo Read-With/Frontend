@@ -5,7 +5,6 @@ export default defineConfig({
   plugins: [react()],
   server: {
     proxy: {
-      "/naver": "http://localhost:5000", // 백엔드 주소
       "/api": {
         target: "https://dev.readwith.store",
         changeOrigin: true,

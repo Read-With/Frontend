@@ -43,6 +43,33 @@ EPUB 파일을 읽고, 인물 관계도를 시각화하며, 북마크와 메모�
 
 ---
 
+## 🔧 환경 설정
+
+### 1. 환경 변수 설정
+프로젝트 루트에 `.env` 파일을 생성하고 다음 내용을 추가하세요:
+
+```env
+# Google OAuth 설정
+VITE_GOOGLE_CLIENT_ID=your_google_client_id_here
+```
+
+### 2. Google Cloud Console 설정
+1. [Google Cloud Console](https://console.cloud.google.com/)에 접속
+2. 프로젝트 선택 → APIs & Services → Credentials
+3. OAuth 2.0 Client ID 생성/수정
+4. **승인된 JavaScript 원본**에 다음 도메인 추가:
+   - `http://localhost:5173` (개발용)
+   - `http://localhost:3000` (대안)
+   - 실제 배포 도메인
+
+### 3. 개발 서버 실행
+```bash
+npm install
+npm run dev
+```
+
+---
+
 ## 🛠 기술 스택
 
 | 영역 | 기술 |
