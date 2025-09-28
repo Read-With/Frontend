@@ -59,7 +59,6 @@ VITE_GOOGLE_CLIENT_ID=your_google_client_id_here
 3. OAuth 2.0 Client ID 생성/수정
 4. **승인된 JavaScript 원본**에 다음 도메인 추가:
    - `http://localhost:5173` (개발용)
-   - `http://localhost:3000` (대안)
    - 실제 배포 도메인
 
 ### 3. 개발 서버 실행
