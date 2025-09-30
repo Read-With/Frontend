@@ -81,10 +81,12 @@ export const getRelationColor = (positivity) => {
   return `hsl(${h}, 70%, 45%)`;
 };
 
-// 노드 크기 계산 함수 (기본 크기 8 × 가중치)
+// 노드 크기 계산 함수 (기본 크기 10 × 가중치, 최소값 보장)
 export const calculateNodeSize = (baseSize, weight) => {
-  if (!weight || weight <= 0) return 8; 
-  return Math.round(8 * weight);
+  const defaultSize = 40;
+  if (!weight || weight <= 0) return defaultSize;
+  const calculatedSize = Math.round(10 * weight);
+  return Math.max(calculatedSize, 30);
 };
 
 // [공통 스타일시트 생성 함수 - 가중치 기반 노드 크기만 사용]

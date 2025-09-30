@@ -649,13 +649,16 @@ const ViewerPage = () => {
           }
           
           try {
-            const relationsData = getChapterFile(chapterNum, "relations");
-            const charactersData = getChapterFile(chapterNum, "characters");
-            if (!relationsData || !charactersData) return;
+            const charactersData = getChapterFile(chapterNum, "characters", folderKey);
+            if (!charactersData) return;
             
-            const allRelations = relationsData.relations || relationsData;
-            const allImportance = relationsData.importance || {};
-            const allNewAppearances = relationsData.new_appearances || [];
+            const events = getEventsForChapter(chapterNum, folderKey);
+            if (!events || events.length === 0) return;
+            
+            const lastEvent = events[events.length - 1];
+            const allRelations = lastEvent.relations || [];
+            const allImportance = lastEvent.importance || {};
+            const allNewAppearances = lastEvent.new_appearances || [];
             const elements = getElementsFromRelations(
               allRelations,
               charactersData,

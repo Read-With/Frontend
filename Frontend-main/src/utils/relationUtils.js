@@ -186,7 +186,6 @@ export function processRelations(relations) {
         count: r.count,
       }));
     
-    console.info(`processRelations: ${relations.length}개 중 ${processed.length}개 관계 처리 완료`);
     return processed;
   } catch (error) {
     console.error('processRelations 실패:', error, { relationsLength: relations.length });

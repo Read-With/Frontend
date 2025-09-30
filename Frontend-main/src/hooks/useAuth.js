@@ -33,11 +33,8 @@ const useAuth = () => {
           try {
             // 깨진 UTF-8 문자열을 올바르게 디코딩
             const decoded = decodeURIComponent(escape(name));
-            console.log('localStorage에서 로드된 원본 이름:', name);
-            console.log('디코딩된 이름:', decoded);
             return decoded;
           } catch (error) {
-            console.warn('이름 디코딩 실패, 원본 사용:', name);
             return name;
           }
         };
@@ -48,7 +45,6 @@ const useAuth = () => {
           name: decodeName(userData.name)
         };
         
-        console.log('디코딩된 사용자 정보:', decodedUserData);
         setUser(decodedUserData);
       } catch (err) {
         console.error('사용자 정보 파싱 실패:', err);
@@ -59,11 +55,8 @@ const useAuth = () => {
   }, []);
 
   const login = (userData) => {
-    console.log('useAuth에서 받은 사용자 데이터:', userData);
-    console.log('저장될 이름:', userData.name);
     setUser(userData);
     localStorage.setItem('google_user', JSON.stringify(userData));
-    console.log('localStorage에 저장된 사용자 정보:', JSON.parse(localStorage.getItem('google_user')));
   };
 
   const logout = () => {

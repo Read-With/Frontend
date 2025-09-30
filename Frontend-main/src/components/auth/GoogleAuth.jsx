@@ -178,14 +178,7 @@ const GoogleAuth = () => {
       return;
     }
 
-    // 환경변수에서 Client ID 가져오기
     const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
-
-    // 개발 환경에서만 디버깅 로그 출력
-    if (import.meta.env.DEV) {
-      console.log('환경변수 VITE_GOOGLE_CLIENT_ID:', import.meta.env.VITE_GOOGLE_CLIENT_ID);
-      console.log('사용할 Client ID:', clientId);
-    }
 
     // Client ID 검증
     if (!clientId) {
