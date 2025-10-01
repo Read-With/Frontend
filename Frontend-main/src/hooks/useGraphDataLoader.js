@@ -69,7 +69,7 @@ export function useGraphDataLoader(filename, chapter, eventIndex = null) {
       
       setCurrentChapterData(charData);
       
-      const { idToName, idToDesc, idToMain, idToNames } = createCharacterMaps(charData);
+      const { idToName, idToDesc, idToDescKo, idToMain, idToNames } = createCharacterMaps(charData);
       
       const normalizedRelations = (eventData.relations || [])
         .map(rel => normalizeRelation(rel))
@@ -99,6 +99,7 @@ export function useGraphDataLoader(filename, chapter, eventIndex = null) {
         normalizedRelations,
         idToName,
         idToDesc,
+        idToDescKo,
         idToMain,
         idToNames,
         folderKey,

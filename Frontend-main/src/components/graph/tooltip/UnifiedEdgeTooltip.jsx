@@ -723,8 +723,8 @@ function UnifiedEdgeTooltip({
                     className="edge-tooltip-actions"
                     style={{ 
                       marginTop: 'auto', 
-                      paddingTop: '1.25rem', 
-                      paddingBottom: '0.375rem', 
+                      paddingTop: '1rem', 
+                      paddingBottom: mode === 'viewer' ? '0.5rem' : '1rem', 
                       textAlign: "center",
                       display: 'flex',
                       justifyContent: 'center',
@@ -897,14 +897,14 @@ function UnifiedEdgeTooltip({
                   </div>
                   <div style={{ 
                     marginTop: 'auto', 
-                    paddingTop: '1.25rem', 
-                    paddingBottom: '0.375rem', 
-                    paddingLeft: '0.375rem', 
-                    paddingRight: '0.375rem', 
+                    paddingTop: '1rem', 
+                    paddingBottom: mode === 'viewer' ? '0.5rem' : '1rem', 
                     textAlign: "center",
                     display: 'flex',
                     justifyContent: 'center',
-                    alignItems: 'center'
+                    alignItems: 'center',
+                    width: 'calc(100% - 40px)',
+                    margin: '0 auto'
                   }}>
                     <button
                       onClick={fetchData}
@@ -943,14 +943,14 @@ function UnifiedEdgeTooltip({
                   </div>
                   <div style={{ 
                     marginTop: 'auto', 
-                    paddingTop: '1.25rem', 
-                    paddingBottom: '0.375rem', 
-                    paddingLeft: '0.375rem', 
-                    paddingRight: '0.375rem', 
+                    paddingTop: '1rem', 
+                    paddingBottom: mode === 'viewer' ? '0.5rem' : '1rem', 
                     textAlign: "center",
                     display: 'flex',
                     justifyContent: 'center',
-                    alignItems: 'center'
+                    alignItems: 'center',
+                    width: 'calc(100% - 40px)',
+                    margin: '0 auto'
                   }}>
                     <button
                       style={buttonStyles.secondary}
@@ -991,7 +991,9 @@ function UnifiedEdgeTooltip({
                 textAlign: "center",
                 display: 'flex',
                 justifyContent: 'center',
-                alignItems: 'center'
+                alignItems: 'center',
+                width: 'calc(100% - 40px)',
+                margin: '0 auto'
               }}>
                 <button
                   style={buttonStyles.secondary}

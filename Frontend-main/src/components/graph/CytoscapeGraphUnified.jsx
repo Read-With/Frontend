@@ -108,7 +108,7 @@ const CytoscapeGraphUnified = ({
           userPanningEnabled: true,
           minZoom: 0.2,
           maxZoom: 2.4,
-          wheelSensitivity: 0.3,
+          wheelSensitivity: 0.4,
           autoungrabify: false,
           autolock: false,
           autounselectify: false,

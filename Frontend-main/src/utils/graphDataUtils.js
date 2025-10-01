@@ -145,7 +145,7 @@ export function loadGraphData(folderKey, chapter, eventIndex, getEventDataFunc) 
  * @param {Object} nodeWeights - 노드 가중치 정보 (node_weights_accum)
  * @returns {Array} 그래프 요소 배열
  */
-export function convertRelationsToElements(relations, idToName, idToDesc, idToMain, idToNames, folderKey, nodeWeights = null, previousRelations = null) {
+export function convertRelationsToElements(relations, idToName, idToDesc, idToDescKo, idToMain, idToNames, folderKey, nodeWeights = null, previousRelations = null) {
   // 매개변수 유효성 검사
   if (!Array.isArray(relations)) {
     return [];
@@ -251,6 +251,7 @@ export function convertRelationsToElements(relations, idToName, idToDesc, idToMa
         label: commonName,
         main_character: idToMain[strId] || false,
         description: idToDesc[strId] || '',
+        description_ko: idToDescKo[strId] || '',
         names: [commonName, ...(Array.isArray(idToNames[strId]) ? idToNames[strId] : [])],
         common_name: commonName,
         image: getCharacterImagePath(folderKey, strId),

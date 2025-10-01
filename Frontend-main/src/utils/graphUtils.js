@@ -501,10 +501,10 @@ export const processTooltipData = (tooltipData, type) => {
         ...tooltipData,
         names: names,
         main_character: main,
-        // 기존 필드명과 호환성을 위한 매핑
         main: main,
         common_name: nodeData.common_name || nodeData.label,
         description: nodeData.description || '',
+        description_ko: nodeData.description_ko || '',
         image: nodeData.image || '',
         weight: nodeData.weight || 1
       };
