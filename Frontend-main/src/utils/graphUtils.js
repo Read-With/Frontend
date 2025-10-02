@@ -1,37 +1,51 @@
 /**
- * 그래프 관련 유틸리티 함수들
- * Cytoscape 그래프와 DOM 요소 간의 좌표 변환 및 뷰포트 관리
+ * graphUtils.js : Cytoscape 그래프 관련 유틸리티 함수 모음
+ * 
+ * [주요 기능]
+ * 1. 좌표 변환: Cytoscape 좌표 ↔ DOM 좌표 상호 변환
+ * 2. 뷰포트 관리: 컨테이너 및 뷰포트 정보 캐싱 (100ms)
+ * 3. 위치 제약: 요소를 화면 경계 내로 제한
+ * 4. 이벤트 처리: 마우스 이벤트 핸들러 생성 및 관리
+ * 5. UI 효과: 리플 애니메이션 생성
+ * 6. 데이터 처리: 툴팁 데이터 정규화 (API 응답 → 컴포넌트)
+ * 
+ * [성능 최적화]
+ * - DOM 조회 결과를 100ms 동안 캐싱하여 불필요한 재계산 방지
+ * - 리사이즈 이벤트 디바운싱으로 과도한 재계산 방지
+ * - 노드 수 제한으로 대규모 그래프 성능 보장
+ * 
+ * [사용처]
+ * - CytoscapeGraphUnified: 그래프 렌더링 및 상호작용
+ * - RelationGraphWrapper: 관계 그래프 툴팁 처리
+ * - ViewerPage: 뷰어 페이지 툴팁 처리
+ * - useTooltipPosition: 툴팁 위치 계산
+ * - useGraphInteractions: 그래프 상호작용 로직
  */
 
 const GRAPH_CONTAINER_SELECTOR = '.graph-canvas-area';
 
-// 성능 최적화를 위한 캐시
-let containerCache = null;
-let viewportCache = null;
-let cacheTimestamp = 0;
-const CACHE_DURATION = 100; // 100ms 캐시 유지
+// 성능 최적화를 위한 캐시 (단일 객체로 관리)
+const cache = {
+  container: { data: null, timestamp: 0 },
+  viewport: { data: null, timestamp: 0 }
+};
+const CACHE_DURATION = 100;
 
-/**
- * 그래프 컨테이너 정보를 가져오는 함수 (캐시 포함)
- * @returns {Object} 컨테이너 요소와 위치 정보
- * @returns {Element|null} returns.container - 그래프 컨테이너 DOM 요소
- * @returns {DOMRect} returns.containerRect - 컨테이너의 위치 정보
- */
 export const getContainerInfo = () => {
   try {
     const now = Date.now();
     
     // 캐시가 유효한지 확인
-    if (containerCache && (now - cacheTimestamp) < CACHE_DURATION) {
-      return containerCache;
+    if (cache.container.data && (now - cache.container.timestamp) < CACHE_DURATION) {
+      return cache.container.data;
     }
     
     const container = document.querySelector(GRAPH_CONTAINER_SELECTOR);
     if (!container) {
       console.warn(`getContainerInfo: 그래프 컨테이너를 찾을 수 없습니다 (${GRAPH_CONTAINER_SELECTOR})`);
       const result = { container: null, containerRect: { left: 0, top: 0 } };
-      containerCache = result;
-      cacheTimestamp = now;
+      cache.container.data = result;
+      cache.container.timestamp = now;
       return result;
     }
     
@@ -39,39 +53,31 @@ export const getContainerInfo = () => {
     if (!containerRect) {
       console.warn('getContainerInfo: 컨테이너의 getBoundingClientRect()가 실패했습니다');
       const result = { container, containerRect: { left: 0, top: 0 } };
-      containerCache = result;
-      cacheTimestamp = now;
+      cache.container.data = result;
+      cache.container.timestamp = now;
       return result;
     }
     
     const result = { container, containerRect };
-    containerCache = result;
-    cacheTimestamp = now;
+    cache.container.data = result;
+    cache.container.timestamp = now;
     return result;
   } catch (error) {
     console.error('getContainerInfo 실패:', error, { selector: GRAPH_CONTAINER_SELECTOR });
     const result = { container: null, containerRect: { left: 0, top: 0 } };
-    containerCache = result;
-    cacheTimestamp = Date.now();
+    cache.container.data = result;
+    cache.container.timestamp = Date.now();
     return result;
   }
 };
 
-/**
- * 뷰포트 정보를 가져오는 함수 (캐시 포함)
- * @returns {Object} 뷰포트 크기와 스크롤 정보
- * @returns {number} returns.viewportWidth - 뷰포트 너비
- * @returns {number} returns.viewportHeight - 뷰포트 높이
- * @returns {number} returns.scrollX - 수평 스크롤 위치
- * @returns {number} returns.scrollY - 수직 스크롤 위치
- */
 export const getViewportInfo = () => {
   try {
     const now = Date.now();
     
     // 캐시가 유효한지 확인
-    if (viewportCache && (now - cacheTimestamp) < CACHE_DURATION) {
-      return viewportCache;
+    if (cache.viewport.data && (now - cache.viewport.timestamp) < CACHE_DURATION) {
+      return cache.viewport.data;
     }
     
     const viewportWidth = Math.min(
@@ -86,29 +92,18 @@ export const getViewportInfo = () => {
     const scrollY = window.pageYOffset || document.documentElement.scrollTop;
     
     const result = { viewportWidth, viewportHeight, scrollX, scrollY };
-    viewportCache = result;
-    cacheTimestamp = now;
+    cache.viewport.data = result;
+    cache.viewport.timestamp = now;
     return result;
   } catch (error) {
     console.error('getViewportInfo 실패:', error);
     const result = { viewportWidth: 0, viewportHeight: 0, scrollX: 0, scrollY: 0 };
-    viewportCache = result;
-    cacheTimestamp = Date.now();
+    cache.viewport.data = result;
+    cache.viewport.timestamp = Date.now();
     return result;
   }
 };
 
-/**
- * Cytoscape 위치를 절대 위치로 변환하는 함수
- * @param {Object} pos - Cytoscape 위치 객체
- * @param {number} pos.x - Cytoscape X 좌표
- * @param {number} pos.y - Cytoscape Y 좌표
- * @param {Object} cyRef - Cytoscape 인스턴스 참조
- * @param {Object} cyRef.current - Cytoscape 인스턴스
- * @returns {Object} 절대 위치
- * @returns {number} returns.x - DOM X 좌표
- * @returns {number} returns.y - DOM Y 좌표
- */
 export const calculateCytoscapePosition = (pos, cyRef) => {
   try {
     if (!cyRef?.current) {
@@ -147,17 +142,6 @@ export const calculateCytoscapePosition = (pos, cyRef) => {
   }
 };
 
-/**
- * 마우스 이벤트 위치를 Cytoscape 좌표로 변환하는 함수
- * @param {Object} evt - 마우스 이벤트 객체
- * @param {number} evt.clientX - 마우스 X 좌표
- * @param {number} evt.clientY - 마우스 Y 좌표
- * @param {Object} cyRef - Cytoscape 인스턴스 참조
- * @param {Object} cyRef.current - Cytoscape 인스턴스
- * @returns {Object} Cytoscape 좌표
- * @returns {number} returns.x - Cytoscape X 좌표
- * @returns {number} returns.y - Cytoscape Y 좌표
- */
 export const convertMouseToCytoscapePosition = (evt, cyRef) => {
   try {
     if (!cyRef?.current) {
@@ -206,16 +190,6 @@ export const convertMouseToCytoscapePosition = (evt, cyRef) => {
   }
 };
 
-/**
- * 뷰포트 경계 내로 위치를 제한하는 함수
- * @param {number} x - X 좌표
- * @param {number} y - Y 좌표
- * @param {number} [elementWidth=0] - 요소 너비
- * @param {number} [elementHeight=0] - 요소 높이
- * @returns {Object} 제한된 위치
- * @returns {number} returns.x - 제한된 X 좌표
- * @returns {number} returns.y - 제한된 Y 좌표
- */
 export const constrainToViewport = (x, y, elementWidth = 0, elementHeight = 0) => {
   try {
     if (typeof x !== 'number' || typeof y !== 'number') {
@@ -251,14 +225,11 @@ export const constrainToViewport = (x, y, elementWidth = 0, elementHeight = 0) =
   }
 };
 
-/**
- * 캐시를 무효화하는 함수 (윈도우 리사이즈 등에서 호출)
- * @description 컨테이너와 뷰포트 캐시를 초기화하여 다음 호출 시 새로운 값을 가져오도록 함
- */
 export const invalidateCache = () => {
-  containerCache = null;
-  viewportCache = null;
-  cacheTimestamp = 0;
+  cache.container.data = null;
+  cache.container.timestamp = 0;
+  cache.viewport.data = null;
+  cache.viewport.timestamp = 0;
 };
 
 // 윈도우 리사이즈 시 캐시 자동 무효화
@@ -272,34 +243,28 @@ if (typeof window !== 'undefined') {
   });
 }
 
-/**
- * 캐시 상태를 확인하는 함수 (디버깅용)
- * @returns {Object} 캐시 상태 정보
- * @returns {boolean} returns.containerCache - 컨테이너 캐시 존재 여부
- * @returns {boolean} returns.viewportCache - 뷰포트 캐시 존재 여부
- * @returns {number} returns.cacheAge - 캐시 생성 후 경과 시간 (ms)
- * @returns {boolean} returns.isValid - 캐시 유효성 여부
- */
 export const getCacheStatus = () => {
   const now = Date.now();
   return {
-    containerCache: !!containerCache,
-    viewportCache: !!viewportCache,
-    cacheAge: now - cacheTimestamp,
-    isValid: (now - cacheTimestamp) < CACHE_DURATION
+    hasContainerCache: !!cache.container.data,
+    hasViewportCache: !!cache.viewport.data,
+    containerCacheAge: now - cache.container.timestamp,
+    viewportCacheAge: now - cache.viewport.timestamp,
+    isContainerCacheValid: (now - cache.container.timestamp) < CACHE_DURATION,
+    isViewportCacheValid: (now - cache.viewport.timestamp) < CACHE_DURATION
   };
 };
 
-/**
- * Ripple 효과 생성 함수 - 확대/축소 상태 고려
- * @param {Element} container - 컨테이너 DOM 요소
- * @param {number} x - X 좌표
- * @param {number} y - Y 좌표
- * @param {Object} cyRef - Cytoscape 인스턴스 참조
- * @returns {Function} 정리 함수 (메모리 누수 방지)
- */
-export const createRippleEffect = (container, x, y, cyRef) => {
-  if (!container) return () => {};
+export const createRippleEffect = (container, x, y, cyRef, duration = 500) => {
+  if (!container) {
+    console.warn('createRippleEffect: 컨테이너가 없습니다');
+    return () => {};
+  }
+  
+  if (typeof x !== 'number' || typeof y !== 'number') {
+    console.warn('createRippleEffect: 유효하지 않은 좌표입니다', { x, y });
+    return () => {};
+  }
   
   const ripple = document.createElement('div');
   ripple.className = 'ripple-effect';
@@ -326,23 +291,28 @@ export const createRippleEffect = (container, x, y, cyRef) => {
   
   container.appendChild(ripple);
 
+  let timeoutId = null;
+  let isCleanedUp = false;
+
   const cleanup = () => {
+    if (isCleanedUp) return;
+    isCleanedUp = true;
+    
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+      timeoutId = null;
+    }
+    
     if (ripple.parentNode) {
       ripple.parentNode.removeChild(ripple);
     }
   };
 
-  setTimeout(cleanup, 500);
+  timeoutId = setTimeout(cleanup, duration);
   
   return cleanup;
 };
 
-/**
- * 요소들이 화면 경계 내에 있는지 확인하고 조정하는 함수
- * @param {Object} cy - Cytoscape 인스턴스
- * @param {Element} container - 컨테이너 DOM 요소
- * @param {number} [maxNodes=1000] - 최대 처리할 노드 수 (성능 최적화)
- */
 export const ensureElementsInBounds = (cy, container, maxNodes = 1000) => {
   if (!cy || !container) return;
   
@@ -361,14 +331,16 @@ export const ensureElementsInBounds = (cy, container, maxNodes = 1000) => {
   const nodes = cy.nodes();
   const nodeCount = nodes.length;
   
-  // 성능 최적화: 노드가 많을 경우 배치 처리
+  // 성능 최적화: 노드가 많을 경우 처리 제한
   if (nodeCount > maxNodes) {
-    console.warn(`ensureElementsInBounds: 노드 수가 많아 성능에 영향을 줄 수 있습니다 (${nodeCount}개)`);
+    console.warn(`ensureElementsInBounds: 노드 수(${nodeCount}개)가 많아 상위 ${maxNodes}개만 처리합니다`);
   }
   
   // 배치 처리로 성능 최적화
   cy.batch(() => {
-    nodes.forEach(node => {
+    const nodesToProcess = nodeCount > maxNodes ? nodes.slice(0, maxNodes) : nodes;
+    
+    nodesToProcess.forEach(node => {
       const pos = node.position();
       let newX = pos.x;
       let newY = pos.y;
@@ -401,12 +373,6 @@ export const ensureElementsInBounds = (cy, container, maxNodes = 1000) => {
   }
 };
 
-/**
- * 마우스 이벤트 핸들러 생성 함수
- * @param {Object} cy - Cytoscape 인스턴스
- * @param {Element} container - 컨테이너 DOM 요소
- * @returns {Object} 마우스 이벤트 핸들러들
- */
 export const createMouseEventHandlers = (cy, container) => {
   const CLICK_THRESHOLD = 200;
   const MOVE_THRESHOLD = 3;
@@ -459,21 +425,24 @@ export const createMouseEventHandlers = (cy, container) => {
     isDraggingRef.current = false;
   };
   
+  const cleanup = () => {
+    isDraggingRef.current = false;
+    prevMouseDownPositionRef.current = { x: 0, y: 0 };
+    mouseDownTimeRef.current = 0;
+    hasMovedRef.current = false;
+    isMouseDownRef.current = false;
+  };
+  
   return {
     handleMouseDown,
     handleMouseMove,
     handleMouseUp,
     isDraggingRef,
-    isMouseDownRef
+    isMouseDownRef,
+    cleanup
   };
 };
 
-/**
- * 툴팁 데이터 처리 함수 (RelationGraphWrapper와 ViewerPage에서 공통 사용)
- * @param {Object} tooltipData - 원본 툴팁 데이터
- * @param {string} type - 툴팁 타입 ('node' 또는 'edge')
- * @returns {Object} 처리된 툴팁 데이터
- */
 export const processTooltipData = (tooltipData, type) => {
   if (!tooltipData) return null;
   
@@ -491,17 +460,17 @@ export const processTooltipData = (tooltipData, type) => {
         }
       }
       
-      // main_character 필드 처리
-      let main = nodeData.main_character;
-      if (typeof main === "string") {
-        main = main === "true";
+      // main_character 필드 처리 (boolean으로 정규화)
+      let mainCharacter = nodeData.main_character ?? nodeData.main;
+      if (typeof mainCharacter === "string") {
+        mainCharacter = mainCharacter === "true";
       }
+      mainCharacter = !!mainCharacter;
       
       return {
         ...tooltipData,
         names: names,
-        main_character: main,
-        main: main,
+        main_character: mainCharacter,
         common_name: nodeData.common_name || nodeData.label,
         description: nodeData.description || '',
         description_ko: nodeData.description_ko || '',
@@ -522,15 +491,19 @@ export const processTooltipData = (tooltipData, type) => {
         }
       }
       
+      // 기본값 설정
+      const defaultLabel = Array.isArray(relation) && relation.length > 0 
+        ? relation[0] 
+        : (typeof relation === 'string' ? relation : '');
+      
       return {
         ...tooltipData,
         data: {
           ...edgeData.data,
           relation: relation,
-          // 기존 필드명과 호환성을 위한 매핑
-          label: edgeData.data?.label || (Array.isArray(relation) ? relation[0] : relation),
-          positivity: edgeData.data?.positivity || 0,
-          count: edgeData.data?.count || 1
+          label: edgeData.data?.label || defaultLabel,
+          positivity: edgeData.data?.positivity ?? 0,
+          count: edgeData.data?.count ?? 1
         }
       };
       
@@ -541,78 +514,4 @@ export const processTooltipData = (tooltipData, type) => {
     console.error('processTooltipData 실패:', error);
     return tooltipData;
   }
-};
-
-/**
- * 기본 스타일시트 생성 함수 (간단한 그래프용)
- * @param {Object} edgeStyle - 엣지 스타일 객체
- * @param {string} edgeStyle.lineColor - 선 색상
- * @param {string} edgeStyle.arrowColor - 화살표 색상  
- * @param {string} edgeStyle.arrowShape - 화살표 모양
- * @param {boolean} edgeLabelVisible - 엣지 라벨 표시 여부
- * @returns {Array} Cytoscape 스타일시트 배열
- */
-export const createBasicStylesheet = (edgeStyle = {}, edgeLabelVisible = true) => {
-  const defaultEdgeStyle = {
-    lineColor: '#666',
-    arrowColor: '#666', 
-    arrowShape: 'triangle',
-    ...edgeStyle
-  };
-
-  return [
-    {
-      selector: 'node',
-      style: {
-        'width': 'mapData(weight, 0, 5, 20, 60)',
-        'height': 'mapData(weight, 0, 5, 20, 60)',
-        'content': 'data(label)',
-        'text-valign': 'center',
-        'text-halign': 'center',
-        'font-size': '12px',
-        'font-weight': 'bold',
-        'color': '#333',
-        'background-color': '#fff',
-        'border-width': '2px',
-        'border-color': '#666',
-        'border-style': 'solid',
-        'text-outline-width': '1px',
-        'text-outline-color': '#fff'
-      }
-    },
-    {
-      selector: 'edge',
-      style: {
-        'width': 'mapData(weight, 0, 5, 1, 8)',
-        'line-color': defaultEdgeStyle.lineColor,
-        'target-arrow-color': defaultEdgeStyle.arrowColor,
-        'target-arrow-shape': defaultEdgeStyle.arrowShape,
-        'curve-style': 'bezier',
-        'label': edgeLabelVisible ? 'data(label)' : '',
-        'font-size': '10px',
-        'font-weight': 'normal',
-        'color': '#666',
-        'text-outline-width': '1px',
-        'text-outline-color': '#fff',
-        'text-rotation': 'autorotate',
-        'text-margin-y': '-10px'
-      }
-    },
-    {
-      selector: 'node:selected',
-      style: {
-        'background-color': '#ff6b6b',
-        'border-color': '#ff5252',
-        'border-width': '3px'
-      }
-    },
-    {
-      selector: 'edge:selected',
-      style: {
-        'line-color': '#ff6b6b',
-        'target-arrow-color': '#ff6b6b',
-        'width': 'mapData(weight, 0, 5, 2, 10)'
-      }
-    }
-  ];
 };

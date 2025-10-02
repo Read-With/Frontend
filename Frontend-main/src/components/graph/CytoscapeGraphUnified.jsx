@@ -150,7 +150,7 @@ const CytoscapeGraphUnified = ({
     
     const handleDragFreeOn = () => {
       setTimeout(() => {
-        detectAndResolveOverlap(cy, 40);
+        detectAndResolveOverlap(cy);
       }, 50);
     };
 
@@ -381,7 +381,7 @@ const CytoscapeGraphUnified = ({
             setTimeout(() => {
               // 레이아웃 완료 후 요소들이 화면 내에 있는지 확인하고 조정
               ensureElementsInBounds(cy, containerRef.current);
-              detectAndResolveOverlap(cy, 40);
+              detectAndResolveOverlap(cy);
               
               if (nodesToAdd.length > 0 && !isInitialLoad && !isResetFromSearch) {
                 nodesToAdd.forEach(node => {
@@ -404,7 +404,7 @@ const CytoscapeGraphUnified = ({
           setTimeout(() => {
             // 레이아웃 완료 후 요소들이 화면 내에 있는지 확인하고 조정
             ensureElementsInBounds(cy, containerRef.current);
-            detectAndResolveOverlap(cy, 40);
+            detectAndResolveOverlap(cy);
             
             if (nodesToAdd.length > 0 && !isInitialLoad && !isResetFromSearch) {
               nodesToAdd.forEach(node => {

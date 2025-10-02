@@ -662,9 +662,6 @@ const ViewerPage = () => {
             const elements = getElementsFromRelations(
               allRelations,
               charactersData,
-              allNewAppearances,
-              allImportance,
-              chapterNum,
               folderKey
             );
             if (!elements || elements.length === 0) return;
