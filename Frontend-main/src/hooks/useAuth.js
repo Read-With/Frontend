@@ -20,7 +20,6 @@ const useAuth = () => {
 
         // 깨진 데이터가 있으면 정리
         if (isCorruptedName(userData.name)) {
-          console.warn('깨진 사용자 데이터 감지됨. 데이터를 정리합니다.');
           localStorage.removeItem('google_user');
           setIsLoading(false);
           return;
@@ -47,7 +46,6 @@ const useAuth = () => {
         
         setUser(decodedUserData);
       } catch (err) {
-        console.error('사용자 정보 파싱 실패:', err);
         localStorage.removeItem('google_user');
       }
     }
@@ -71,7 +69,6 @@ const useAuth = () => {
 
   // 깨진 사용자 데이터 정리 함수
   const clearCorruptedData = () => {
-    console.log('깨진 사용자 데이터를 정리합니다.');
     setUser(null);
     localStorage.removeItem('google_user');
   };

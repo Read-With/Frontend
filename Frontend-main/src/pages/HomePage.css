@@ -40,54 +40,282 @@
 
 /* 컨테이너 스타일 */
 .homepage-container {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: flex-start;
   min-height: 100vh;
   width: 100%;
-  padding: 1.5rem 1rem;
-  background: linear-gradient(135deg, #f8f9fa 0%, rgba(79, 109, 222, 0.05) 100%);
+  background: #ffffff;
+  padding-top: 60px; /* 헤더 높이만큼 패딩 */
+}
+
+/* 메인 콘텐츠 */
+.main-content {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-height: calc(100vh - 60px);
+  padding: 2rem;
+  max-width: 1200px;
+  margin: 0 auto;
 }
 
 /* 히어로 섹션 */
 .hero-section {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  text-align: center;
-  max-width: 600px;
-  margin-bottom: 0.5rem;
-  animation: fadeInUp 0.8s ease-out 0.2s both;
+  align-items: flex-start;
+  text-align: left;
+  margin-bottom: 4rem;
+  margin-left: 0;
 }
 
 .hero-title {
-  font-size: clamp(2.5rem, 5vw, 4rem);
+  font-size: clamp(3rem, 6vw, 5rem);
   font-weight: 800;
-  margin-bottom: 0.25rem;
-  color: #4F6DDE;
-  text-align: center;
-  letter-spacing: -0.02em;
+  margin-bottom: 1.5rem;
   line-height: 1.1;
+  letter-spacing: -0.02em;
 }
 
-.hero-subtitle {
-  font-size: 1.25rem;
-  font-weight: 500;
-  color: #6c757d;
-  margin-bottom: 0;
-  opacity: 0.9;
+.title-main {
+  color: #000000;
+}
+
+.title-brand {
+  color: #4F6DDE;
 }
 
 .hero-description {
-  font-size: 1.125rem;
+  font-size: 1.25rem;
   color: #6c757d;
-  max-width: 500px;
-  text-align: center;
-  line-height: 1.7;
-  margin-top: 0.25rem;
-  margin-bottom: 0.5rem;
+  max-width: 700px;
+  text-align: left;
+  line-height: 1.6;
+  margin: 0;
   opacity: 0.8;
+}
+
+/* 플레이스홀더 섹션 */
+.placeholder-section {
+  display: flex;
+  gap: 2rem;
+  width: 100%;
+  margin-left: 0;
+}
+
+.placeholder-box {
+  flex: 1;
+  height: 250px;
+  background: #f8f9fa;
+  border: 1px solid #e9ecef;
+  border-radius: 8px;
+  min-width: 350px;
+}
+
+/* 이미지 박스 스타일 */
+.image-box {
+  flex: 1;
+  height: 250px;
+  background: #f8f9fa;
+  border: 1px solid #e9ecef;
+  border-radius: 8px;
+  min-width: 350px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.image-box:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.12);
+  border-color: #4F6DDE;
+}
+
+.image-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  color: #6c757d;
+}
+
+.image-icon {
+  font-size: 48px;
+  opacity: 0.7;
+}
+
+.image-text {
+  font-size: 16px;
+  font-weight: 500;
+  transition: all 0.3s ease;
+  transform: scale(1);
+}
+
+/* 이미지 컨테이너 스타일 */
+.image-container {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  border-radius: 8px;
+}
+
+.preview-image {
+  object-fit: cover;
+  transition: transform 0.3s ease, filter 0.3s ease;
+  filter: grayscale(0.3) brightness(0.8);
+}
+
+/* 1번 이미지: 오른쪽 부분에 초점 */
+.image-box:nth-child(1) .preview-image {
+  object-position: 1% center;
+  width: 100%;
+  height: 100%;
+}
+
+/* 2번 이미지: 더 확대되어 보이도록 */
+.image-box:nth-child(2) .preview-image {
+  object-position: center center;
+  width: 100%;
+  height: 100%;
+}
+
+.image-overlay {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: linear-gradient(transparent, rgba(0, 0, 0, 0.7));
+  color: white;
+  padding: 20px 16px 16px;
+  transform: translateY(100%);
+  transition: all 0.3s ease;
+}
+
+.image-box:hover .preview-image {
+  transform: scale(1.1);
+  filter: grayscale(0) brightness(1);
+}
+
+.image-box:hover .image-overlay {
+  transform: translateY(0);
+}
+
+.image-box:hover .image-text {
+  font-weight: 700;
+  transform: scale(1.1);
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
+}
+
+/* 확대된 이미지 툴팁 스타일 */
+.image-tooltip-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+  animation: fadeIn 0.3s ease;
+}
+
+.image-tooltip-content {
+  position: relative;
+  background: white;
+  border-radius: 12px;
+  padding: 20px;
+  max-width: 80%;
+  max-height: 80%;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+  animation: scaleIn 0.3s ease;
+}
+
+.tooltip-close-btn {
+  position: absolute;
+  top: 10px;
+  right: 15px;
+  background: none;
+  border: none;
+  font-size: 24px;
+  cursor: pointer;
+  color: #6c757d;
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  transition: all 0.2s ease;
+}
+
+.tooltip-close-btn:hover {
+  background: #f8f9fa;
+  color: #000;
+}
+
+.tooltip-image-container {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.tooltip-image-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  padding: 40px;
+  color: #6c757d;
+  text-align: center;
+}
+
+.tooltip-image-icon {
+  font-size: 80px;
+  opacity: 0.7;
+}
+
+.tooltip-image-text {
+  font-size: 24px;
+  font-weight: 600;
+  color: #4F6DDE;
+}
+
+.tooltip-image-description {
+  font-size: 16px;
+  opacity: 0.8;
+}
+
+.tooltip-image {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  border-radius: 8px;
+}
+
+/* 애니메이션 */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes scaleIn {
+  from {
+    opacity: 0;
+    transform: scale(0.8);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
 }
 
 /* 인증 섹션 */
@@ -232,6 +460,29 @@
 
 /* 반응형 디자인 */
 @media (max-width: 768px) {
+  .main-content {
+    padding: 1.5rem;
+  }
+  
+  .hero-section {
+    margin-bottom: 3rem;
+  }
+  
+  .placeholder-section {
+    flex-direction: column;
+    gap: 1.5rem;
+  }
+  
+  .placeholder-box {
+    min-width: auto;
+    height: 200px;
+  }
+  
+  .image-box {
+    min-width: auto;
+    height: 200px;
+  }
+  
   .features-grid {
     grid-template-columns: 1fr !important;
     grid-template-rows: repeat(3, 1fr) !important;
@@ -260,6 +511,26 @@
 }
 
 @media (max-width: 480px) {
+  .main-content {
+    padding: 1rem;
+  }
+  
+  .hero-section {
+    margin-bottom: 2rem;
+  }
+  
+  .placeholder-section {
+    gap: 1rem;
+  }
+  
+  .placeholder-box {
+    height: 150px;
+  }
+  
+  .image-box {
+    height: 150px;
+  }
+  
   .features-grid {
     grid-template-columns: 1fr !important;
     grid-template-rows: repeat(3, auto) !important;
