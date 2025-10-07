@@ -6,6 +6,7 @@ import path from 'path';
 export default defineConfig(({ mode }) => {
   const envPath = path.resolve(process.cwd(), '.env');
   let clientId = null;
+  const isDev = mode === 'development';
   
   try {
     if (fs.existsSync(envPath)) {
@@ -29,13 +30,25 @@ export default defineConfig(({ mode }) => {
     define: {
       'import.meta.env.VITE_GOOGLE_CLIENT_ID': JSON.stringify(clientId),
     },
+    optimizeDeps: {
+      include: ['react', 'react-dom'],
+    },
     server: {
-      proxy: {
-        "/api": {
-          target: "https://dev.readwith.store",
-          changeOrigin: true,
-          secure: true,
-        },
+      cors: {
+        origin: true,
+        credentials: true,
+      },
+      // Google OAuth를 위한 보안 헤더 설정
+      headers: {
+        'Cross-Origin-Opener-Policy': 'same-origin-allow-popups',
+        'X-Content-Type-Options': 'nosniff',
+        'Referrer-Policy': 'strict-origin-when-cross-origin',
+        'Content-Security-Policy': "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://accounts.google.com https://apis.google.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://accounts.google.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self' ws://localhost:* http://localhost:8080 https://dev.readwith.store https://accounts.google.com https://oauth2.googleapis.com; frame-src 'self' https://accounts.google.com;",
+      },
+      hmr: {
+        port: 24678,
+        host: 'localhost',
+        clientPort: 24678,
       },
     },
   };

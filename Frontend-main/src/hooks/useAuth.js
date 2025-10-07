@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { logout as apiLogout } from '../utils/api/authApi';
 
 const useAuth = () => {
   const [user, setUser] = useState(null);
@@ -55,11 +56,20 @@ const useAuth = () => {
   const login = (userData) => {
     setUser(userData);
     localStorage.setItem('google_user', JSON.stringify(userData));
+    
+    // accessToken이 있으면 별도로 저장
+    if (userData.accessToken) {
+      localStorage.setItem('access_token', userData.accessToken);
+    }
   };
 
-  const logout = () => {
+  const logout = async () => {
+    // API 로그아웃 호출
+    await apiLogout();
+    
     setUser(null);
     localStorage.removeItem('google_user');
+    localStorage.removeItem('access_token');
     
     // Google Identity Services 정리
     if (window.google?.accounts?.id) {

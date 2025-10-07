@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import useAuth from '../hooks/useAuth';
 import Header from '../components/common/Header';
@@ -97,12 +97,10 @@ const FeatureCard = ({ feature, index, isExpanded, onToggle }) => {
 };
 
 export default function HomePage() {
-  const [error, setError] = useState(null);
-  const [isGoogleLoaded, setIsGoogleLoaded] = useState(false);
   const [expandedFeature, setExpandedFeature] = useState(null);
   const [selectedImage, setSelectedImage] = useState(null);
   const navigate = useNavigate();
-  const { user, login, logout } = useAuth();
+  const { user } = useAuth();
 
   const handleFeatureToggle = (featureId) => {
     setExpandedFeature(expandedFeature === featureId ? null : featureId);
@@ -116,120 +114,6 @@ export default function HomePage() {
     setSelectedImage(null);
   };
 
-  const handleCredentialResponse = useCallback((response) => {
-    if (!response.credential) {
-      setError('Google 인증 응답이 올바르지 않습니다.');
-      return;
-    }
-    
-    try {
-      const payload = JSON.parse(atob(response.credential.split('.')[1]));
-      
-      // 한글 인코딩 문제 해결
-      const decodeName = (name) => {
-        if (!name) return '사용자';
-        
-        try {
-          // 깨진 UTF-8 문자열을 올바르게 디코딩
-          const decoded = decodeURIComponent(escape(name));
-          return decoded;
-        } catch (error) {
-          return name;
-        }
-      };
-      
-      const userData = {
-        id: payload.sub,
-        name: decodeName(payload.name),
-        email: payload.email,
-        imageUrl: payload.picture
-      };
-      
-      
-      login(userData);
-      navigate('/mypage');
-    } catch (err) {
-      setError(`사용자 정보 처리 실패: ${err.message}`);
-    }
-  }, [navigate, login]);
-
-  const initializeGoogleAuth = useCallback(() => {
-    if (!window.google?.accounts?.id) {
-      setError('Google Identity Services가 로드되지 않았습니다.');
-      return;
-    }
-
-    // 환경변수에서 Client ID 가져오기
-    const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
-
-    if (!clientId) {
-      setError('Google Client ID가 설정되지 않았습니다. .env 파일에 VITE_GOOGLE_CLIENT_ID를 설정해주세요.');
-      return;
-    }
-
-    if (clientId === 'your-google-client-id-here') {
-      setError('Google Client ID가 기본값으로 설정되어 있습니다. 실제 Client ID로 변경해주세요.');
-      return;
-    }
-
-    try {
-      window.google.accounts.id.initialize({
-        client_id: clientId,
-        callback: handleCredentialResponse,
-        auto_select: false,
-        cancel_on_tap_outside: false,
-        use_fedcm_for_prompt: true // 새로운 프롬프트 방식 활성화
-      });
-      
-      // Google 버튼 렌더링
-      window.google.accounts.id.renderButton(
-        document.getElementById('g_id_signin'),
-        {
-          theme: 'outline',
-          size: 'large',
-          type: 'standard',
-          shape: 'rectangular',
-          text: 'sign_in_with',
-          logo_alignment: 'left'
-        }
-      );
-      
-      // 전역 상태로 Google Auth 초기화 완료 표시
-      window.googleAuthInitialized = true;
-    } catch (err) {
-      setError(`Google 인증 초기화 실패: ${err.message}`);
-    }
-  }, [handleCredentialResponse]);
-
-  const loadGoogleIdentityServices = () => {
-    if (window.google?.accounts?.id) {
-      initializeGoogleAuth();
-      return;
-    }
-
-    const script = document.createElement('script');
-    script.src = 'https://accounts.google.com/gsi/client';
-    script.async = true;
-    script.defer = true;
-    script.onload = () => {
-      setIsGoogleLoaded(true);
-      initializeGoogleAuth();
-    };
-    script.onerror = () => {
-      setError('Google 인증 서비스를 로드할 수 없습니다. 네트워크 연결을 확인해주세요.');
-    };
-    document.head.appendChild(script);
-  };
-
-  useEffect(() => {
-    // 전역 콜백 함수 설정 (Header에서도 사용할 수 있도록)
-    window.handleCredentialResponse = handleCredentialResponse;
-    loadGoogleIdentityServices();
-    
-    return () => {
-      delete window.handleCredentialResponse;
-    };
-  }, [handleCredentialResponse]);
 
   // ESC 키로 툴팁 닫기
   useEffect(() => {
@@ -295,22 +179,6 @@ export default function HomePage() {
         </div>
       </div>
 
-      {/* 숨겨진 구글 로그인 버튼 */}
-      <div style={{ 
-        position: 'absolute', 
-        top: '-9999px', 
-        left: '-9999px',
-        visibility: 'hidden',
-        pointerEvents: 'none'
-      }}>
-        <div 
-          id="g_id_signin"
-          className="google-button-container"
-        ></div>
-      </div>
-      
-      {error && <div className="error-message">{error}</div>}
-
       {/* 확대된 이미지 툴팁 */}
       {selectedImage && (
         <div className="image-tooltip-overlay" onClick={handleCloseTooltip}>
@@ -340,6 +208,7 @@ export default function HomePage() {
           </div>
         </div>
       )}
+
     </div>
   );
 } 

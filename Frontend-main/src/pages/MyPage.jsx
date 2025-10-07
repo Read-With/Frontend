@@ -167,9 +167,6 @@ export default function MyPage() {
 
   // Google ID에서 가져온 이름 직접 사용
   const getDisplayName = () => {
-    console.log('MyPage에서 사용자 정보:', user);
-    console.log('MyPage에서 사용자 이름:', user?.name);
-    console.log('최종 표시될 이름:', user?.name || '사용자');
     return user?.name || '사용자';
   };
 

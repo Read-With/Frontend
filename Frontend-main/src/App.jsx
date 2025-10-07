@@ -8,6 +8,7 @@ import { RecoilRoot } from 'recoil';
 import HomePage from './pages/HomePage';
 import AdminPage from './pages/AdminPage';
 import ProtectedRoute from './components/auth/ProtectedRoute';
+import OAuthCallback from './components/auth/OAuthCallback';
 
 // 그래프 컴포넌트를 유지하는 레이아웃
 const GraphLayout = () => {
@@ -28,6 +29,7 @@ const AppContent = () => {
 
       <Routes>
         <Route path="/" element={<HomePage />} />
+        <Route path="/login/oauth2/code/google" element={<OAuthCallback />} />
         <Route path="/admin" element={<AdminPage />} />
         <Route path="/mypage" element={
           <ProtectedRoute>
