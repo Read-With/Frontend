@@ -145,7 +145,7 @@ export function loadGraphData(folderKey, chapter, eventIndex, getEventDataFunc) 
  * @param {Object} nodeWeights - 노드 가중치 정보 (node_weights_accum)
  * @returns {Array} 그래프 요소 배열
  */
-export function convertRelationsToElements(relations, idToName, idToDesc, idToMain, idToNames, folderKey, nodeWeights = null, previousRelations = null) {
+export function convertRelationsToElements(relations, idToName, idToDesc, idToDescKo, idToMain, idToNames, folderKey, nodeWeights = null, previousRelations = null) {
   // 매개변수 유효성 검사
   if (!Array.isArray(relations)) {
     return [];
@@ -219,10 +219,18 @@ export function convertRelationsToElements(relations, idToName, idToDesc, idToMa
 
   // 노드 가중치 기반 크기 계산
   const getNodeWeight = (nodeId) => {
-    if (nodeWeights && nodeWeights[nodeId]) {
-      return nodeWeights[nodeId].weight || 1;
+    if (!nodeWeights) {
+      console.warn(`⚠️ [기본값] 노드 ${nodeId}: 가중치 데이터 없음 → 기본값 3 사용`);
+      return 3;
     }
-    return 1;
+    if (nodeWeights[nodeId]) {
+      const weight = nodeWeights[nodeId].weight;
+      if (typeof weight === 'number' && weight > 0) {
+        return weight;
+      }
+    }
+    console.warn(`⚠️ [기본값] 노드 ${nodeId}: 가중치 누락 → 기본값 3 사용`);
+    return 3;
   };
 
   // 원 배치 좌표 계산
@@ -243,6 +251,7 @@ export function convertRelationsToElements(relations, idToName, idToDesc, idToMa
         label: commonName,
         main_character: idToMain[strId] || false,
         description: idToDesc[strId] || '',
+        description_ko: idToDescKo[strId] || '',
         names: [commonName, ...(Array.isArray(idToNames[strId]) ? idToNames[strId] : [])],
         common_name: commonName,
         image: getCharacterImagePath(folderKey, strId),

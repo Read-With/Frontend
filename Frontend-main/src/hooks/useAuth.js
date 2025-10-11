@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { logout as apiLogout } from '../utils/api/authApi';
 
 const useAuth = () => {
   const [user, setUser] = useState(null);
@@ -20,7 +21,6 @@ const useAuth = () => {
 
         // 깨진 데이터가 있으면 정리
         if (isCorruptedName(userData.name)) {
-          console.warn('깨진 사용자 데이터 감지됨. 데이터를 정리합니다.');
           localStorage.removeItem('google_user');
           setIsLoading(false);
           return;
@@ -33,11 +33,8 @@ const useAuth = () => {
           try {
             // 깨진 UTF-8 문자열을 올바르게 디코딩
             const decoded = decodeURIComponent(escape(name));
-            console.log('localStorage에서 로드된 원본 이름:', name);
-            console.log('디코딩된 이름:', decoded);
             return decoded;
           } catch (error) {
-            console.warn('이름 디코딩 실패, 원본 사용:', name);
             return name;
           }
         };
@@ -48,10 +45,8 @@ const useAuth = () => {
           name: decodeName(userData.name)
         };
         
-        console.log('디코딩된 사용자 정보:', decodedUserData);
         setUser(decodedUserData);
       } catch (err) {
-        console.error('사용자 정보 파싱 실패:', err);
         localStorage.removeItem('google_user');
       }
     }
@@ -59,16 +54,22 @@ const useAuth = () => {
   }, []);
 
   const login = (userData) => {
-    console.log('useAuth에서 받은 사용자 데이터:', userData);
-    console.log('저장될 이름:', userData.name);
     setUser(userData);
     localStorage.setItem('google_user', JSON.stringify(userData));
-    console.log('localStorage에 저장된 사용자 정보:', JSON.parse(localStorage.getItem('google_user')));
+    
+    // accessToken이 있으면 별도로 저장
+    if (userData.accessToken) {
+      localStorage.setItem('access_token', userData.accessToken);
+    }
   };
 
-  const logout = () => {
+  const logout = async () => {
+    // API 로그아웃 호출
+    await apiLogout();
+    
     setUser(null);
     localStorage.removeItem('google_user');
+    localStorage.removeItem('access_token');
     
     // Google Identity Services 정리
     if (window.google?.accounts?.id) {
@@ -78,7 +79,6 @@ const useAuth = () => {
 
   // 깨진 사용자 데이터 정리 함수
   const clearCorruptedData = () => {
-    console.log('깨진 사용자 데이터를 정리합니다.');
     setUser(null);
     localStorage.removeItem('google_user');
   };

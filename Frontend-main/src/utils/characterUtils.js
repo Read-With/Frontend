@@ -1,27 +1,24 @@
-/**
- * 캐릭터 관련 유틸리티 함수들
- * 순환 의존성을 방지하기 위해 별도 파일로 분리
- */
 
 /**
  * 캐릭터 데이터를 ID 기반 매핑 객체로 변환
  * @param {Object} characters - 캐릭터 데이터 객체 (characters 필드가 있거나, 곧바로 배열일 수 있음)
- * @returns {{idToName:Object, idToDesc:Object, idToMain:Object, idToNames:Object}}
+ * @returns {{idToName:Object, idToDesc:Object, idToDescKo:Object, idToMain:Object, idToNames:Object}}
  */
 export function createCharacterMaps(characters) {
   try {
     const idToName = {};
     const idToDesc = {};
+    const idToDescKo = {};
     const idToMain = {};
     const idToNames = {};
 
     if (!characters) {
-      return { idToName, idToDesc, idToMain, idToNames };
+      return { idToName, idToDesc, idToDescKo, idToMain, idToNames };
     }
 
     const characterArray = characters?.characters || characters || [];
     if (!Array.isArray(characterArray)) {
-      return { idToName, idToDesc, idToMain, idToNames };
+      return { idToName, idToDesc, idToDescKo, idToMain, idToNames };
     }
 
     characterArray.forEach((char) => {
@@ -35,14 +32,15 @@ export function createCharacterMaps(characters) {
         char.name ||
         (Array.isArray(char.names) ? char.names[0] : String(char.id));
       idToDesc[id] = char.description || "";
+      idToDescKo[id] = char.description_ko || "";
       idToMain[id] = char.main_character || false;
       idToNames[id] = char.names || [];
     });
 
-    return { idToName, idToDesc, idToMain, idToNames };
+    return { idToName, idToDesc, idToDescKo, idToMain, idToNames };
   } catch (error) {
     console.error('createCharacterMaps 실패:', error);
-    return { idToName: {}, idToDesc: {}, idToMain: {}, idToNames: {} };
+    return { idToName: {}, idToDesc: {}, idToDescKo: {}, idToMain: {}, idToNames: {} };
   }
 }
 

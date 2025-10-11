@@ -88,6 +88,9 @@ function UnifiedNodeInfo({
   const [isNodeAppeared, setIsNodeAppeared] = useState(false);
   const [error, setError] = useState(null);
   const [showSummary, setShowSummary] = useState(false);
+  const [language, setLanguage] = useState('ko');
+  const [isLanguageChanging, setIsLanguageChanging] = useState(false);
+  const [previousDescription, setPreviousDescription] = useState('');
 
   // 툴팁 모드에서만 위치 관리 훅 사용
   const { position, showContent, isDragging, justFinishedDragging, tooltipRef, handleMouseDown } = useTooltipPosition(x, y);
@@ -204,6 +207,17 @@ function UnifiedNodeInfo({
     setIsFlipped(!isFlipped);
   }, [isFlipped]);
 
+  // 언어 전환 핸들러
+  const handleLanguageToggle = useCallback(() => {
+    setIsLanguageChanging(true);
+    setTimeout(() => {
+      setLanguage(prev => prev === 'ko' ? 'en' : 'ko');
+      setTimeout(() => {
+        setIsLanguageChanging(false);
+      }, 200);
+    }, 200);
+  }, []);
+
   // 메모이제이션된 데이터 처리
   const processedNodeData = useMemo(() => {
     if (!nodeData) return null;
@@ -214,9 +228,35 @@ function UnifiedNodeInfo({
       displayName: nodeData.common_name || nodeData.label || "Unknown",
       hasImage: !!nodeData.image,
       isMainCharacter: !!nodeData.main_character,
-      hasDescription: !!(nodeData.description && nodeData.description.trim())
     };
   }, [nodeData]);
+
+  // 언어에 따라 description을 동적으로 계산 (기본값은 항상 한글)
+  const currentDescription = useMemo(() => {
+    if (!nodeData) return '';
+    
+    // 기본적으로 한글 우선, 언어 설정에 따라 전환
+    const description = language === 'ko' 
+      ? (nodeData.description_ko || nodeData.description || '') 
+      : (nodeData.description || '');
+    
+    return description;
+  }, [nodeData, language]);
+
+  const hasDescription = useMemo(() => {
+    return !!(currentDescription && currentDescription.trim());
+  }, [currentDescription]);
+
+  // 언어 전환 시 이전 description 저장
+  useEffect(() => {
+    if (!isLanguageChanging && currentDescription) {
+      setPreviousDescription(currentDescription);
+    }
+  }, [currentDescription, isLanguageChanging]);
+
+  // 실제 표시할 description (번역 중일 때는 이전 값 유지)
+  const displayDescription = isLanguageChanging ? previousDescription : currentDescription;
+  const displayHasDescription = !!(displayDescription && displayDescription.trim());
 
   // 요약 데이터 - perspective summaries에서 가져오기
   const summaryData = useMemo(() => {
@@ -463,6 +503,36 @@ function UnifiedNodeInfo({
         &times;
       </button>
       
+      {/* 언어 전환 버튼 - 툴팁 모드 */}
+      <button
+        onClick={handleLanguageToggle}
+        aria-label="언어 전환"
+        disabled={isLanguageChanging}
+        style={{
+          position: 'absolute',
+          top: '14px',
+          right: '56px',
+          background: COLORS.backgroundLight,
+          border: `1px solid ${COLORS.border}`,
+          borderRadius: '6px',
+          padding: '4px 12px',
+          fontSize: '13px',
+          fontWeight: '600',
+          color: COLORS.primary,
+          cursor: 'pointer',
+          transition: 'all 0.2s ease',
+          zIndex: 2,
+        }}
+        onMouseEnter={(e) => {
+          e.target.style.background = COLORS.primaryLight;
+        }}
+        onMouseLeave={(e) => {
+          e.target.style.background = COLORS.backgroundLight;
+        }}
+      >
+        {language === 'ko' ? 'EN' : 'KO'}
+      </button>
+      
       <div
         style={{
           display: "flex",
@@ -650,8 +720,13 @@ function UnifiedNodeInfo({
           fontWeight: 400,
         }}
       >
-        {processedNodeData?.hasDescription ? (
-          processedNodeData.description
+        {displayHasDescription ? (
+          <span style={{ 
+            opacity: isLanguageChanging ? 0.25: 1,
+            transition: 'opacity 0.2s ease'
+          }}>
+            {displayDescription}
+          </span>
         ) : (
           <span style={{ color: COLORS.textSecondary }}>설명 정보가 없습니다.</span>
         )}
@@ -749,7 +824,7 @@ function UnifiedNodeInfo({
           <div style={{
             display: 'flex',
             justifyContent: 'space-between',
-            alignItems: 'flex-start',
+            alignItems: 'center',
             marginBottom: '0',
           }}>
             {/* 인물 이름과 배지 */}
@@ -782,6 +857,37 @@ function UnifiedNodeInfo({
                 </span>
               )}
             </div>
+            
+            {/* 언어 전환 버튼 */}
+            <button
+              onClick={handleLanguageToggle}
+              aria-label="언어 전환"
+              disabled={isLanguageChanging}
+              style={{
+                background: COLORS.backgroundLight,
+                border: `1px solid ${COLORS.border}`,
+                borderRadius: '6px',
+                padding: '0 12px',
+                height: '2.5rem',
+                fontSize: '13px',
+                fontWeight: '600',
+                color: COLORS.primary,
+                cursor: 'pointer',
+                transition: 'all 0.2s ease',
+                marginRight: '8px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+              onMouseEnter={(e) => {
+                e.target.style.background = COLORS.primaryLight;
+              }}
+              onMouseLeave={(e) => {
+                e.target.style.background = COLORS.backgroundLight;
+              }}
+            >
+              {language === 'ko' ? 'EN' : 'KO'}
+            </button>
             
             <button
               onClick={onClose}
@@ -938,7 +1044,7 @@ function UnifiedNodeInfo({
               </div>
 
               {/* 인물 설명 */}
-              {processedNodeData?.hasDescription && (
+              {displayHasDescription && (
                 <div style={{
                   borderTop: '0.0625rem solid #e5e7eb',
                   paddingTop: '1.25rem',
@@ -953,8 +1059,10 @@ function UnifiedNodeInfo({
                       lineHeight: '1.6',
                       color: COLORS.textPrimary,
                       letterSpacing: '-0.01em',
+                      opacity: isLanguageChanging ? 0.25 : 1,
+                      transition: 'opacity 0.2s ease',
                     }}>
-                      {processedNodeData.description}
+                      {displayDescription}
                     </p>
                   </div>
                 </div>

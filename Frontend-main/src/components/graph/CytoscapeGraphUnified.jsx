@@ -91,10 +91,6 @@ const CytoscapeGraphUnified = ({
   // Cytoscape 인스턴스 생성
   useEffect(() => {
     if (!containerRef.current) {
-      // 개발 환경에서만 경고 표시, 프로덕션에서는 조용히 무시
-      if (process.env.NODE_ENV === 'development') {
-        console.warn('⚠️ Cytoscape 컨테이너가 준비되지 않음');
-      }
       return;
     }
     
@@ -103,7 +99,6 @@ const CytoscapeGraphUnified = ({
     try {
       cyInstance = externalCyRef?.current;
       if (!cyInstance || typeof cyInstance.container !== 'function') {
-        console.log('🔄 Cytoscape 인스턴스 생성 중...');
         cyInstance = cytoscape({
           container: containerRef.current,
           elements: [],
@@ -113,7 +108,7 @@ const CytoscapeGraphUnified = ({
           userPanningEnabled: true,
           minZoom: 0.2,
           maxZoom: 2.4,
-          wheelSensitivity: 0.3,
+          wheelSensitivity: 0.4,
           autoungrabify: false,
           autolock: false,
           autounselectify: false,
@@ -121,11 +116,9 @@ const CytoscapeGraphUnified = ({
           touchTapThreshold: 8,
           desktopTapThreshold: 4,
         });
-        console.log('✅ Cytoscape 인스턴스 생성 완료');
         if (externalCyRef) externalCyRef.current = cyInstance;
       } else {
         if (cyInstance.container() !== containerRef.current) {
-          console.log('🔄 Cytoscape 인스턴스를 새 컨테이너에 마운트');
           cyInstance.mount(containerRef.current);
         }
       }
@@ -141,13 +134,10 @@ const CytoscapeGraphUnified = ({
     
     const cy = cyInstance;
     
-    // Cytoscape 인스턴스가 제대로 마운트되었는지 확인
     if (!cy || !cy.container()) {
       console.error('❌ Cytoscape 인스턴스 마운트 실패');
       return;
     }
-    
-    console.log('✅ Cytoscape 인스턴스 마운트 확인 완료');
     
     // 공통 마우스 이벤트 핸들러 생성
     const container = containerRef.current;
@@ -160,7 +150,7 @@ const CytoscapeGraphUnified = ({
     
     const handleDragFreeOn = () => {
       setTimeout(() => {
-        detectAndResolveOverlap(cy, 40);
+        detectAndResolveOverlap(cy);
       }, 50);
     };
 
@@ -274,25 +264,14 @@ const CytoscapeGraphUnified = ({
   useEffect(() => {
     const cy = externalCyRef?.current;
     if (!cy) {
-      // 개발 환경에서만 경고 표시, 프로덕션에서는 조용히 무시
-      if (process.env.NODE_ENV === 'development') {
-        console.warn('⚠️ 요소 업데이트 시 Cytoscape 인스턴스가 없음');
-      }
       return;
     }
-  
-    console.log('🔄 그래프 요소 업데이트 중...', {
-      elementsCount: elements?.length || 0,
-      previousElementsCount: previousElements.length,
-      isInitialLoad
-    });
     
     if (previousElements.length === 0) {
       setPreviousElements(elements);
     }
     
     if (!elements || elements.length === 0) {
-      console.log('⚠️ 요소가 없음 - 그래프 숨김');
       cy.elements().remove();
       setIsGraphVisible(false);
       return;
@@ -366,26 +345,31 @@ const CytoscapeGraphUnified = ({
       const nodesToAdd = nodes.filter(node => !prevNodeIds.has(node.data.id));
       const edgesToAdd = edges.filter(edge => !prevEdgeIds.has(edge.data.id));
       
-      console.log('📊 요소 추가 정보:', {
-        nodesToAdd: nodesToAdd.length,
-        edgesToAdd: edgesToAdd.length,
-        totalNodes: nodes.length,
-        totalEdges: edges.length
-      });
-      
       if (nodesToAdd.length > 0) {
-        console.log('➕ 노드 추가 중...', nodesToAdd.map(n => n.data.id));
         cy.add(nodesToAdd);
       }
       if (edgesToAdd.length > 0) {
-        console.log('➕ 엣지 추가 중...', edgesToAdd.map(e => `${e.data.source}-${e.data.target}`));
         cy.add(edgesToAdd);
       }
       
       if (nodesToAdd.length > 0 || edgesToAdd.length > 0) {
         cy.layout({ name: 'preset' }).run();
         
-        if (stylesheet) cy.style(stylesheet);
+        if (stylesheet) {
+          cy.style(stylesheet);
+          cy.nodes().forEach(node => {
+            const weight = node.data('weight');
+            if (!weight || weight <= 1) {
+              console.warn(`⚠️ [기본값] 노드 ${node.data('id')} (${node.data('label')}): weight=${weight} → 기본 크기 30px 적용`);
+            }
+            const actualWeight = weight || 1;
+            const size = Math.max(Math.round(10 * actualWeight), 30);
+            node.style({
+              'width': size,
+              'height': size
+            });
+          });
+        }
         
         if (layout && layout.name !== 'preset') {
           const layoutInstance = cy.layout({
@@ -397,7 +381,7 @@ const CytoscapeGraphUnified = ({
             setTimeout(() => {
               // 레이아웃 완료 후 요소들이 화면 내에 있는지 확인하고 조정
               ensureElementsInBounds(cy, containerRef.current);
-              detectAndResolveOverlap(cy, 40);
+              detectAndResolveOverlap(cy);
               
               if (nodesToAdd.length > 0 && !isInitialLoad && !isResetFromSearch) {
                 nodesToAdd.forEach(node => {
@@ -420,7 +404,7 @@ const CytoscapeGraphUnified = ({
           setTimeout(() => {
             // 레이아웃 완료 후 요소들이 화면 내에 있는지 확인하고 조정
             ensureElementsInBounds(cy, containerRef.current);
-            detectAndResolveOverlap(cy, 40);
+            detectAndResolveOverlap(cy);
             
             if (nodesToAdd.length > 0 && !isInitialLoad && !isResetFromSearch) {
               nodesToAdd.forEach(node => {
@@ -476,11 +460,9 @@ const CytoscapeGraphUnified = ({
     });
     
     if (isInitialLoad) {
-      console.log('🔄 초기 로딩 완료');
       setIsInitialLoad(false);
     }
     
-    console.log('✅ 그래프 가시성 설정');
     setIsGraphVisible(true);
   }, [elements, externalCyRef, previousElements, isInitialLoad, stylesheet, layout, fitNodeIds, isSearchActive, filteredElements, onLayoutComplete, isResetFromSearch]);
 
@@ -489,21 +471,11 @@ const CytoscapeGraphUnified = ({
     const handleResize = () => {
       const cy = externalCyRef?.current;
       if (!cy) {
-        // 개발 환경에서만 경고 표시, 프로덕션에서는 조용히 무시
-        if (process.env.NODE_ENV === 'development') {
-          console.warn('⚠️ 리사이즈 시 Cytoscape 인스턴스가 없음');
-        }
         return;
       }
       
-      console.log('🔄 그래프 리사이즈 중...');
-      
       try {
-        // 리사이즈 후 요소들이 화면 내에 있는지 확인
         cy.resize();
-        console.log('✅ 그래프 리사이즈 완료');
-        
-        // 약간의 지연 후 경계 체크
         setTimeout(() => {
           ensureElementsInBounds(cy, containerRef.current);
         }, 100);

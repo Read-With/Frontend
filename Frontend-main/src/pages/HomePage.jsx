@@ -1,6 +1,7 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import useAuth from '../hooks/useAuth';
+import Header from '../components/common/Header';
 import './HomePage.css';
 
 const features = [
@@ -96,137 +97,37 @@ const FeatureCard = ({ feature, index, isExpanded, onToggle }) => {
 };
 
 export default function HomePage() {
-  const [error, setError] = useState(null);
-  const [isGoogleLoaded, setIsGoogleLoaded] = useState(false);
   const [expandedFeature, setExpandedFeature] = useState(null);
+  const [selectedImage, setSelectedImage] = useState(null);
   const navigate = useNavigate();
-  const { user, login, logout } = useAuth();
+  const { user } = useAuth();
 
   const handleFeatureToggle = (featureId) => {
     setExpandedFeature(expandedFeature === featureId ? null : featureId);
   };
 
-  const handleCredentialResponse = useCallback((response) => {
-    if (!response.credential) {
-      setError('Google 인증 응답이 올바르지 않습니다.');
-      return;
-    }
-    
-    try {
-      const payload = JSON.parse(atob(response.credential.split('.')[1]));
-      
-      // 한글 인코딩 문제 해결
-      const decodeName = (name) => {
-        if (!name) return '사용자';
-        
-        try {
-          // 깨진 UTF-8 문자열을 올바르게 디코딩
-          const decoded = decodeURIComponent(escape(name));
-          if (import.meta.env.DEV) {
-            console.log('원본 이름:', name);
-            console.log('디코딩된 이름:', decoded);
-          }
-          return decoded;
-        } catch (error) {
-          console.warn('이름 디코딩 실패, 원본 사용:', name);
-          return name;
-        }
-      };
-      
-      const userData = {
-        id: payload.sub,
-        name: decodeName(payload.name),
-        email: payload.email,
-        imageUrl: payload.picture
-      };
-      
-      // 프로덕션에서는 디버깅 로그 제거
-      if (import.meta.env.DEV) {
-        console.log('Google에서 가져온 사용자 정보:', userData);
-      }
-      
-      login(userData);
-      navigate('/mypage');
-    } catch (err) {
-      setError(`사용자 정보 처리 실패: ${err.message}`);
-    }
-  }, [navigate, login]);
-
-  const initializeGoogleAuth = useCallback(() => {
-    if (!window.google?.accounts?.id) {
-      setError('Google Identity Services가 로드되지 않았습니다.');
-      return;
-    }
-
-    // 환경변수에서 Client ID 가져오기
-    const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
-
-    // 개발 환경에서만 디버깅 로그 출력
-    if (import.meta.env.DEV) {
-      console.log('환경변수 VITE_GOOGLE_CLIENT_ID:', import.meta.env.VITE_GOOGLE_CLIENT_ID);
-      console.log('사용할 Client ID:', clientId);
-    }
-
-    // Client ID 검증
-    if (!clientId) {
-      setError('Google Client ID가 설정되지 않았습니다. .env 파일에 VITE_GOOGLE_CLIENT_ID를 설정해주세요.');
-      return;
-    }
-
-    try {
-      window.google.accounts.id.initialize({
-        client_id: clientId,
-        callback: handleCredentialResponse,
-        auto_select: false,
-        cancel_on_tap_outside: false
-      });
-      
-      // Google 버튼 렌더링
-      window.google.accounts.id.renderButton(
-        document.getElementById('g_id_signin'),
-        {
-          theme: 'outline',
-          size: 'large',
-          type: 'standard',
-          shape: 'rectangular',
-          text: 'sign_in_with',
-          logo_alignment: 'left'
-        }
-      );
-    } catch (err) {
-      console.error('Google Auth 초기화 실패:', err);
-      setError(`Google 인증 초기화 실패: ${err.message}`);
-    }
-  }, [handleCredentialResponse]);
-
-  const loadGoogleIdentityServices = () => {
-    if (window.google?.accounts?.id) {
-      initializeGoogleAuth();
-      return;
-    }
-
-    const script = document.createElement('script');
-    script.src = 'https://accounts.google.com/gsi/client';
-    script.async = true;
-    script.defer = true;
-    script.onload = () => {
-      setIsGoogleLoaded(true);
-      initializeGoogleAuth();
-    };
-    script.onerror = () => {
-      setError('Google 인증 서비스를 로드할 수 없습니다. 네트워크 연결을 확인해주세요.');
-    };
-    document.head.appendChild(script);
+  const handleImageClick = (imageId) => {
+    setSelectedImage(imageId);
   };
 
+  const handleCloseTooltip = () => {
+    setSelectedImage(null);
+  };
+
+
+  // ESC 키로 툴팁 닫기
   useEffect(() => {
-    window.handleCredentialResponse = handleCredentialResponse;
-    loadGoogleIdentityServices();
-    
-    return () => {
-      delete window.handleCredentialResponse;
+    const handleKeyDown = (event) => {
+      if (event.key === 'Escape' && selectedImage) {
+        setSelectedImage(null);
+      }
     };
-  }, [handleCredentialResponse]);
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [selectedImage]);
 
   if (user) {
     // 로그인된 사용자는 바로 마이페이지로 리다이렉트
@@ -236,38 +137,77 @@ export default function HomePage() {
 
   return (
     <div className="homepage-container">
-      {/* 히어로 섹션 */}
-      <div className="hero-section">
-        <h1 className="hero-title">ReadWith</h1>
-        <p className="hero-subtitle">스마트 독서 플랫폼</p>
-        <p className="hero-description">나만의 독서 공간을 시작하세요</p>
-      </div>
+      <Header showAuthLinks={true} />
+      
+      {/* 메인 콘텐츠 */}
+      <div className="main-content">
+        {/* 히어로 섹션 */}
+        <div className="hero-section">
+          <h1 className="hero-title">
+            <span className="title-main">스마트 독서 플랫폼, </span>
+            <span className="title-brand">ReadWith</span>
+          </h1>
+          <p className="hero-description">나를 위한 독서 공간에서 독서 경험을 재정의하세요</p>
+        </div>
 
-      {/* 인증 섹션 */}
-      <div className="auth-section">
-        <div 
-          id="g_id_signin"
-          className="google-button-container"
-        ></div>
-        
-        {error && <div className="error-message">{error}</div>}
-      </div>
-
-      {/* 기능 소개 섹션 */}
-      <div className="features-section">
-        <h2 className="features-title">주요 기능</h2>
-        <div className="features-grid">
-          {features.map((feature, index) => (
-            <FeatureCard 
-              key={feature.id} 
-              feature={feature} 
-              index={index}
-              isExpanded={expandedFeature === feature.id}
-              onToggle={handleFeatureToggle}
-            />
-          ))}
+        {/* 이미지 박스들 */}
+        <div className="placeholder-section">
+           <div className="image-box" onClick={() => handleImageClick(1)}>
+             <div className="image-container">
+               <img 
+                 src="/viewerpage.png" 
+                 alt="뷰어 페이지" 
+                 className="preview-image"
+               />
+               <div className="image-overlay">
+                 <span className="image-text">뷰어 페이지</span>
+               </div>
+             </div>
+           </div>
+           <div className="image-box" onClick={() => handleImageClick(2)}>
+             <div className="image-container">
+               <img 
+                 src="/graphpage.png" 
+                 alt="그래프 페이지" 
+                 className="preview-image"
+               />
+               <div className="image-overlay">
+                 <span className="image-text">그래프 페이지</span>
+               </div>
+             </div>
+           </div>
         </div>
       </div>
+
+      {/* 확대된 이미지 툴팁 */}
+      {selectedImage && (
+        <div className="image-tooltip-overlay" onClick={handleCloseTooltip}>
+          <div className="image-tooltip-content" onClick={(e) => e.stopPropagation()}>
+            <button className="tooltip-close-btn" onClick={handleCloseTooltip}>×</button>
+             <div className="tooltip-image-container">
+               {selectedImage === 1 ? (
+                 <img 
+                   src="/viewerpage.png" 
+                   alt="뷰어 페이지 확대" 
+                   className="tooltip-image"
+                 />
+               ) : selectedImage === 2 ? (
+                 <img 
+                   src="/graphpage.png" 
+                   alt="그래프 페이지 확대" 
+                   className="tooltip-image"
+                 />
+               ) : (
+                 <div className="tooltip-image-placeholder">
+                   <span className="tooltip-image-icon">🖼️</span>
+                   <span className="tooltip-image-text">이미지 {selectedImage} 확대</span>
+                   <span className="tooltip-image-description">여기에 실제 이미지가 표시됩니다</span>
+                 </div>
+               )}
+             </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );

@@ -4,29 +4,19 @@ import fs from 'fs';
 import path from 'path';
 
 export default defineConfig(({ mode }) => {
-  // 직접 .env 파일 읽기
   const envPath = path.resolve(process.cwd(), '.env');
   let clientId = null;
-  
-  console.log('환경변수 파일 경로:', envPath);
-  console.log('파일 존재 여부:', fs.existsSync(envPath));
+  const isDev = mode === 'development';
   
   try {
     if (fs.existsSync(envPath)) {
       const envContent = fs.readFileSync(envPath, 'utf8');
-      console.log('파일 내용:', envContent);
-      console.log('파일 내용 길이:', envContent.length);
-      
       const lines = envContent.split('\n');
-      console.log('분할된 라인 수:', lines.length);
       
       for (const line of lines) {
-        console.log('라인:', line);
-        // BOM 문자 제거 후 검사
         const cleanLine = line.replace(/^\uFEFF/, '').trim();
         if (cleanLine.startsWith('VITE_GOOGLE_CLIENT_ID=')) {
           clientId = cleanLine.split('=')[1].trim();
-          console.log('찾은 Client ID:', clientId);
           break;
         }
       }
@@ -35,20 +25,30 @@ export default defineConfig(({ mode }) => {
     console.error('환경변수 파일 읽기 실패:', error);
   }
   
-  console.log('최종 Client ID:', clientId);
-  
   return {
     plugins: [react()],
     define: {
       'import.meta.env.VITE_GOOGLE_CLIENT_ID': JSON.stringify(clientId),
     },
+    optimizeDeps: {
+      include: ['react', 'react-dom'],
+    },
     server: {
-      proxy: {
-        "/api": {
-          target: "https://dev.readwith.store",
-          changeOrigin: true,
-          secure: true,
-        },
+      cors: {
+        origin: true,
+        credentials: true,
+      },
+      // Google OAuth를 위한 보안 헤더 설정
+      headers: {
+        'Cross-Origin-Opener-Policy': 'same-origin-allow-popups',
+        'X-Content-Type-Options': 'nosniff',
+        'Referrer-Policy': 'strict-origin-when-cross-origin',
+        'Content-Security-Policy': "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://accounts.google.com https://apis.google.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://accounts.google.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self' ws://localhost:* http://localhost:8080 https://dev.readwith.store https://accounts.google.com https://oauth2.googleapis.com; frame-src 'self' https://accounts.google.com;",
+      },
+      hmr: {
+        port: 24678,
+        host: 'localhost',
+        clientPort: 24678,
       },
     },
   };

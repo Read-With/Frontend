@@ -1,12 +1,7 @@
 // API 기본 설정 및 도서 관련 API 함수들
 const getApiBaseUrl = () => {
-  // 개발 환경에서는 프록시 사용 (vite.config.js에서 설정)
-  if (import.meta.env.DEV) {
-    return '';
-  }
-  
-  // 프로덕션 환경에서는 환경변수 또는 기본값 사용
-  return import.meta.env.VITE_API_URL || 'https://dev.readwith.store';
+  // 개발 환경에서는 로컬 백엔드 서버 사용
+  return 'http://localhost:8080';
 };
 
 const API_BASE_URL = getApiBaseUrl();
