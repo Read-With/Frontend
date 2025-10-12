@@ -8,6 +8,13 @@ const useAuth = () => {
   useEffect(() => {
     // 로컬 스토리지에서 사용자 정보 확인
     const savedUser = localStorage.getItem('google_user');
+    
+    // 기존 잘못된 토큰 키 정리
+    const oldToken = localStorage.getItem('access_token');
+    if (oldToken) {
+      localStorage.removeItem('access_token');
+    }
+    
     if (savedUser) {
       try {
         const userData = JSON.parse(savedUser);
@@ -46,6 +53,11 @@ const useAuth = () => {
         };
         
         setUser(decodedUserData);
+        
+        // accessToken이 있으면 올바른 키로 저장
+        if (decodedUserData.accessToken) {
+          localStorage.setItem('accessToken', decodedUserData.accessToken);
+        }
       } catch (err) {
         localStorage.removeItem('google_user');
       }
@@ -57,9 +69,9 @@ const useAuth = () => {
     setUser(userData);
     localStorage.setItem('google_user', JSON.stringify(userData));
     
-    // accessToken이 있으면 별도로 저장
+    // accessToken이 있으면 별도로 저장 (api.js에서 사용하는 키와 일치)
     if (userData.accessToken) {
-      localStorage.setItem('access_token', userData.accessToken);
+      localStorage.setItem('accessToken', userData.accessToken);
     }
   };
 
@@ -69,7 +81,7 @@ const useAuth = () => {
     
     setUser(null);
     localStorage.removeItem('google_user');
-    localStorage.removeItem('access_token');
+    localStorage.removeItem('accessToken'); // 키 이름 수정
     
     // Google Identity Services 정리
     if (window.google?.accounts?.id) {

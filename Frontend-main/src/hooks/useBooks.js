@@ -23,13 +23,11 @@ export const useBooks = () => {
       // API 응답 처리
       if (apiResponse.status === 'fulfilled' && apiResponse.value.isSuccess) {
         apiBooks = apiResponse.value.result || [];
-      } else {
       }
       
       // 로컬 데이터 응답 처리
       if (localResponse.status === 'fulfilled' && localResponse.value.ok) {
         localBooks = await localResponse.value.json();
-      } else {
       }
       
       // API 책과 로컬 책을 합치기 (중복 제거)

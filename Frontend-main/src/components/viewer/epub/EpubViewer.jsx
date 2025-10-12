@@ -21,15 +21,31 @@ import { registerCache, clearCache } from '../../../utils/common/cacheManager';
 
 const eventRelationModules = import.meta.glob('../../../data/gatsby/chapter*_events.json', { eager: true });
 
-// 캐시 매니저에 eventsCache 등록
-const eventsCache = new Map();
-registerCache('eventsCache', eventsCache, { maxSize: 100, ttl: 600000 });
+// 캐시 매니저에 eventsCache 등록 (중복 등록 방지)
+let eventsCache;
+let isCacheRegistered = false;
+
+const getEventsCache = () => {
+  if (!eventsCache) {
+    eventsCache = new Map();
+  }
+  if (!isCacheRegistered) {
+    try {
+      registerCache('eventsCache', eventsCache, { maxSize: 100, ttl: 600000 });
+      isCacheRegistered = true;
+    } catch (e) {
+      // 이미 등록된 경우 무시
+    }
+  }
+  return eventsCache;
+};
 
 const getEventsForChapter = (chapter) => {
   const chapterNum = String(chapter);
+  const cache = getEventsCache();
   
-  if (eventsCache.has(chapterNum)) {
-    return eventsCache.get(chapterNum);
+  if (cache.has(chapterNum)) {
+    return cache.get(chapterNum);
   }
 
   try {
@@ -38,7 +54,7 @@ const getEventsForChapter = (chapter) => {
     );
     
     if (!textFilePath) {
-      eventsCache.set(chapterNum, []);
+      cache.set(chapterNum, []);
       return [];
     }
 
@@ -55,10 +71,10 @@ const getEventsForChapter = (chapter) => {
       event.chapter === Number(chapter)
     );
 
-    eventsCache.set(chapterNum, currentChapterEvents);
+    cache.set(chapterNum, currentChapterEvents);
     return currentChapterEvents;
   } catch (error) {
-    eventsCache.set(chapterNum, []);
+    cache.set(chapterNum, []);
     return [];
   }
 };
@@ -93,9 +109,7 @@ const EpubViewer = forwardRef(
     const currentChapterCharsRef = useRef(0);
     const currentChapterRef = useRef(1);
     const chapterPageCharsRef = useRef(new Map());
-    
-    // 전역 변수 대신 로컬 상태로 관리
-    const [chapterCfiMap, setChapterCfiMap] = useState(new Map());
+    const chapterCfiMapRef = useRef(new Map());
 
     const [loading, setLoading] = useState(false);
     const [reloading, setReloading] = useState(false);
@@ -136,14 +150,14 @@ const EpubViewer = forwardRef(
       }
     }, [pageMode, showGraph]);
 
-    const smoothReload = (type = 'next') => {
+    const smoothReload = useCallback((type = 'next') => {
       setReloading(type);
       setTimeout(() => {
         window.location.reload();
       }, 300);
-    };
+    }, []);
 
-    const fallbackDisplay = async (direction = 'next') => {
+    const fallbackDisplay = useCallback(async (direction = 'next') => {
       try {
         const { book, rendition } = getRefs(bookRef, renditionRef);
         if (!book || !rendition) return;
@@ -171,7 +185,7 @@ const EpubViewer = forwardRef(
       } finally {
         setReloading(false);
       }
-    };
+    }, [storageKeys, smoothReload]);
 
     // 글자 수 계산 유틸리티 함수들 (중복 로직 제거)
     const calculateParagraphChars = useCallback((paragraph, element) => {
@@ -198,36 +212,46 @@ const EpubViewer = forwardRef(
       return 0;
     }, [calculateParagraphChars]);
 
-    // 페이지 이동 시 글자 수 계산 및 표시 함수 (리팩토링된 버전)
+    // 페이지 이동 시 글자 수 계산 및 표시 함수 (디바운싱 적용)
+    const updatePageCharCountTimer = useRef(null);
+    
     const updatePageCharCount = useCallback((direction = 'next') => {
-      const rendition = renditionRef.current;
-      if (!rendition) return;
-
-      const currentCfi = rendition.currentLocation()?.start?.cfi;
-      if (!currentCfi) return;
-
-      const contents = rendition.getContents();
-      if (!contents || contents.length === 0) return;
-
-      // CFI에서 현재 단락 번호와 문자 오프셋 추출
-      const paragraphMatch = currentCfi.match(/\[chapter-\d+\]\/(\d+)\/1:(\d+)\)$/);
-      const currentParagraphNum = paragraphMatch ? parseInt(paragraphMatch[1]) : 0;
-      const charOffset = paragraphMatch ? parseInt(paragraphMatch[2]) : 0;
-
-      const currentPage = contents[0];
-      const paragraphs = currentPage.document.querySelectorAll('p');
-
-      // 이전 단락들의 글자 수 계산
-      const previousChars = calculatePreviousParagraphsChars(paragraphs, currentParagraphNum);
+      // 이전 타이머 취소
+      if (updatePageCharCountTimer.current) {
+        clearTimeout(updatePageCharCountTimer.current);
+      }
       
-      // 현재 단락의 부분 글자 수 계산
-      const currentChars = calculateCurrentParagraphChars(paragraphs, currentParagraphNum, charOffset);
-      
-      const totalCharCount = previousChars + currentChars;
+      // 50ms 디바운싱
+      updatePageCharCountTimer.current = setTimeout(() => {
+        const rendition = renditionRef.current;
+        if (!rendition) return;
 
-      // 현재 페이지의 글자 수를 저장
-      chapterPageCharsRef.current.set(currentCfi, totalCharCount);
-      currentChapterCharsRef.current = totalCharCount;
+        const currentCfi = rendition.currentLocation()?.start?.cfi;
+        if (!currentCfi) return;
+
+        const contents = rendition.getContents();
+        if (!contents || contents.length === 0) return;
+
+        // CFI에서 현재 단락 번호와 문자 오프셋 추출
+        const paragraphMatch = currentCfi.match(/\[chapter-\d+\]\/(\d+)\/1:(\d+)\)$/);
+        const currentParagraphNum = paragraphMatch ? parseInt(paragraphMatch[1]) : 0;
+        const charOffset = paragraphMatch ? parseInt(paragraphMatch[2]) : 0;
+
+        const currentPage = contents[0];
+        const paragraphs = currentPage.document.querySelectorAll('p');
+
+        // 이전 단락들의 글자 수 계산
+        const previousChars = calculatePreviousParagraphsChars(paragraphs, currentParagraphNum);
+        
+        // 현재 단락의 부분 글자 수 계산
+        const currentChars = calculateCurrentParagraphChars(paragraphs, currentParagraphNum, charOffset);
+        
+        const totalCharCount = previousChars + currentChars;
+
+        // 현재 페이지의 글자 수를 저장
+        chapterPageCharsRef.current.set(currentCfi, totalCharCount);
+        currentChapterCharsRef.current = totalCharCount;
+      }, 50);
     }, [calculatePreviousParagraphsChars, calculateCurrentParagraphChars]);
 
 
@@ -235,8 +259,8 @@ const EpubViewer = forwardRef(
     const detectCurrentChapter = useCallback((cfi) => {
       let detectedChapter = extractChapterNumber(cfi);
       
-      if (detectedChapter === 1 && chapterCfiMap.size > 0) {
-        for (const [chapterNum, chapterCfi] of chapterCfiMap) {
+      if (detectedChapter === 1 && chapterCfiMapRef.current.size > 0) {
+        for (const [chapterNum, chapterCfi] of chapterCfiMapRef.current) {
           if (cfi && cfi.includes(chapterCfi)) {
             detectedChapter = chapterNum;
             break;
@@ -245,9 +269,9 @@ const EpubViewer = forwardRef(
       }
       
       return detectedChapter;
-    }, [chapterCfiMap]);
+    }, []);
 
-    const safeNavigate = async (action, direction = 'next') => {
+    const safeNavigate = useCallback(async (action, direction = 'next') => {
       const { book, rendition } = getRefs(bookRef, renditionRef);
       if (!book || !rendition || isNavigating) return;
       setIsNavigating(true);
@@ -310,10 +334,10 @@ const EpubViewer = forwardRef(
         setNavigationError('이동 중 오류가 발생했습니다.');
         await fallbackDisplay(direction);
       }
-    };
+    }, [isNavigating, fallbackDisplay]);
 
     // 설정 적용 함수
-    const applySettings = () => {
+    const applySettings = useCallback(() => {
       const { book, rendition } = getRefs(bookRef, renditionRef);
       if (!book || !rendition) return;
       
@@ -322,7 +346,7 @@ const EpubViewer = forwardRef(
       
       // 글꼴 크기 적용 (설정이 있는 경우)
       if (settings?.fontSize) {
-        const fontSize = settings.fontSize / 100; // 100%를 1로 변환
+        const fontSize = settings.fontSize / 100;
       rendition.themes.fontSize(`${fontSize * 100}%`);
       }
       
@@ -333,14 +357,14 @@ const EpubViewer = forwardRef(
       });
       }
       
-    };
+    }, [getSpreadMode, settings]);
 
     // pageMode 또는 showGraph 변경 시 spread 모드 재적용
     useEffect(() => {
       if (renditionRef.current) {
         applySettings();
       }
-    }, [pageMode, showGraph, settings?.fontSize, settings?.lineHeight]);
+    }, [pageMode, showGraph, settings?.fontSize, settings?.lineHeight, applySettings]);
 
          useImperativeHandle(ref, () => ({
        prevPage: () => safeNavigate(() => renditionRef.current.prev(), 'prev'),
@@ -350,7 +374,7 @@ const EpubViewer = forwardRef(
          const location = await renditionRef.current.currentLocation();
          return location?.start?.cfi || null;
        },
-       book: bookRef.current, // book 객체 노출
+       book: bookRef.current,
       display: async (spineIndex) => {
         if (renditionRef.current && typeof spineIndex === 'number') {
           try {
@@ -380,14 +404,11 @@ const EpubViewer = forwardRef(
       displayAt: async (cfi) => {
         if (renditionRef.current && cfi) {
           try {
-            // 1. 먼저 CFI를 직접 사용해서 시도
             await renditionRef.current.display(cfi);
             
-            // 이동 후 현재 위치 확인
             const currentLocation = await renditionRef.current.currentLocation();
             const currentCfi = currentLocation?.start?.cfi;
             
-            // CFI에서 챕터 번호 추출하여 이동이 실제로 되었는지 확인
             const targetChapterMatch = cfi.match(/\[chapter-(\d+)\]/);
             const currentChapterMatch = currentCfi?.match(/\[chapter-(\d+)\]/);
             
@@ -430,10 +451,9 @@ const EpubViewer = forwardRef(
         const targetCfi = book.locations.cfiFromPercentage(percent);
         await rendition.display(targetCfi || (percent < 0.5 ? 0 : book.spine.last()?.href));
       },
-      // 설정 적용 함수 추가
       applySettings: () => applySettings(),
-      isNavigating, // 외부에서 접근 가능하게 export
-    }));
+      isNavigating,
+    }), [safeNavigate, applySettings, isNavigating]);
 
     useEffect(() => {
       const loadBook = async () => {
@@ -464,45 +484,47 @@ const EpubViewer = forwardRef(
           const chapterTexts = new Map();
           
           // 챕터별 CFI 매핑 저장
-          const chapterCfiMap = new Map();
+          const newChapterCfiMap = new Map();
 
-                     // 각 챕터의 텍스트 로드
-           for (const item of toc) {
-             if (!item.cfi) continue;
-             
-             // 챕터 번호 추출 (utils 함수 사용)
-             let chapterNum = extractChapterNumber(item.cfi, item.label);
-             
-             // spine 인덱스를 챕터 번호로 사용 (최후의 수단)
-             if (chapterNum === 1) {
-               // spine에서 해당 항목의 인덱스 찾기
-               for (let i = 0; i < bookInstance.spine.length; i++) {
-                 const spineItem = bookInstance.spine.get(i);
-                 if (spineItem && spineItem.href && item.cfi.includes(spineItem.href)) {
-                   chapterNum = i + 1; // 1부터 시작하는 챕터 번호
-                   break;
-                 }
-               }
-             }
-             
-             if (chapterNum) {
-               chapterCfiMap.set(chapterNum, item.cfi);
-             }
-            
-            try {
-              const chapterCfi = item.cfi.replace(/!.*$/, '');
-              const chapter = await bookInstance.get(chapterCfi);
-              if (chapter) {
-                const text = chapter.textContent;
-                chapterTexts.set(item.cfi, text);
+          // 각 챕터의 텍스트 병렬 로드
+          await Promise.all(
+            toc.map(async (item) => {
+              if (!item.cfi) return;
+              
+              // 챕터 번호 추출 (utils 함수 사용)
+              let chapterNum = extractChapterNumber(item.cfi, item.label);
+              
+              // spine 인덱스를 챕터 번호로 사용 (최후의 수단)
+              if (chapterNum === 1) {
+                // spine에서 해당 항목의 인덱스 찾기
+                for (let i = 0; i < bookInstance.spine.length; i++) {
+                  const spineItem = bookInstance.spine.get(i);
+                  if (spineItem && spineItem.href && item.cfi.includes(spineItem.href)) {
+                    chapterNum = i + 1; // 1부터 시작하는 챕터 번호
+                    break;
+                  }
+                }
               }
-            } catch (e) {
-              // 챕터 로드 실패
-            }
-          }
+              
+              if (chapterNum) {
+                newChapterCfiMap.set(chapterNum, item.cfi);
+              }
+              
+              try {
+                const chapterCfi = item.cfi.replace(/!.*$/, '');
+                const chapter = await bookInstance.get(chapterCfi);
+                if (chapter) {
+                  const text = chapter.textContent;
+                  chapterTexts.set(item.cfi, text);
+                }
+              } catch (e) {
+                // 챕터 로드 실패 (무시)
+              }
+            })
+          );
           
-          // 챕터 CFI 매핑을 로컬 상태로 저장
-          setChapterCfiMap(chapterCfiMap);
+          // 챕터 CFI 매핑을 ref로 저장
+          chapterCfiMapRef.current = newChapterCfiMap;
 
           // viewerRef.current가 유효한 DOM 요소인지 확인
           if (!viewerRef.current || !viewerRef.current.tagName) {
@@ -528,7 +550,7 @@ const EpubViewer = forwardRef(
             }
           });
 
-          rendition.on('relocated', async (location) => {
+          const relocatedHandler = async (location) => {
             setLoading(false);
             const cfi = location?.start?.cfi;
             const locIdx = bookInstance.locations.locationFromCfi(cfi);
@@ -586,7 +608,9 @@ const EpubViewer = forwardRef(
             } catch (error) {
               onCurrentLineChange?.(currentChars, 0, null);
             }
-          });
+          };
+          
+          rendition.on('relocated', relocatedHandler);
 
           const savedCfi = storageUtils.get(storageKeys.lastCFI);
           const displayTarget = savedCfi || bookInstance.locations.cfiFromLocation(0);
@@ -622,18 +646,45 @@ const EpubViewer = forwardRef(
 
       loadBook();
       return () => {
-        if (bookRef.current) bookRef.current.destroy();
+        // 타이머 정리
+        if (updatePageCharCountTimer.current) {
+          clearTimeout(updatePageCharCountTimer.current);
+        }
+        // Book destroy가 모든 이벤트 리스너를 자동으로 정리함
+        if (bookRef.current) {
+          try {
+            bookRef.current.destroy();
+          } catch (e) {
+            // destroy 중 에러 무시
+          }
+        }
         // 캐시 정리
         clearCache('eventsCache');
       };
-    }, [epubPath, currentPath]);
+    }, [
+      epubPath, 
+      currentPath, 
+      getSpreadMode, 
+      showGraph, 
+      pageMode, 
+      storageKeys, 
+      detectCurrentChapter, 
+      updatePageCharCount,
+      onCurrentPageChange,
+      onProgressChange,
+      onCurrentChapterChange,
+      onCurrentLineChange,
+      onTotalPagesChange,
+      applySettings,
+      settings
+    ]);
 
     // 설정이 변경될 때마다 적용
     useEffect(() => {
       if (renditionRef.current && settings) {
         applySettings();
       }
-    }, [settings]);
+    }, [settings, applySettings]);
 
     // 앱이 처음 로드될 때 로컬 스토리지 초기화
     useEffect(() => {
@@ -641,14 +692,17 @@ const EpubViewer = forwardRef(
     }, [storageKeys.chapter]);
 
     // --- 전체 epub 글자수 및 챕터별 글자수 계산 후 localStorage 저장 useEffect ---
-    useEffect(() => {
-      // 1. 책 id 추출 (예: /user/viewer/gatsby.epub → gatsby)
+    const bookId = useMemo(() => {
       const path = window.location.pathname;
       const fileName = path.split('/').pop();
-      if (!fileName || !fileName.endsWith('.epub')) return;
-      const bookId = fileName.replace('.epub', '');
+      if (!fileName || !fileName.endsWith('.epub')) return null;
+      return fileName.replace('.epub', '');
+    }, []);
 
-      // 2. 모든 책의 이벤트 파일을 glob import 후, bookId로 필터링
+    useEffect(() => {
+      if (!bookId) return;
+
+      // 모든 책의 이벤트 파일을 glob import 후, bookId로 필터링
       const allEventModules = import.meta.glob('/src/data/*/chapter*_events.json');
       const modules = Object.entries(allEventModules)
         .filter(([path]) => path.includes(`/src/data/${bookId}/`))
@@ -656,24 +710,29 @@ const EpubViewer = forwardRef(
 
       const importAll = async () => {
         const chapters = await Promise.all(modules.map(fn => fn()));
-        // 3. 각 챕터의 마지막 event의 end값 추출
+        
+        // 각 챕터의 마지막 event의 end값 추출
         const lastEnds = chapters.map(events => {
           const arr = events.default || events;
           return arr[arr.length - 1]?.end || 0;
         });
-        // 4. 전체 합산
+        
+        // 전체 합산
         const totalLength = lastEnds.reduce((sum, end) => sum + end, 0);
-        // 5. 챕터별 글자수 객체 생성 (1번 챕터부터)
+        
+        // 챕터별 글자수 객체 생성 (1번 챕터부터)
         const chapterLengths = {};
         lastEnds.forEach((end, idx) => {
           chapterLengths[idx + 1] = end;
         });
-        // 6. localStorage에 저장
+        
+        // localStorage에 저장
         storageUtils.set(`totalLength_${bookId}`, totalLength);
         storageUtils.setJson(`chapterLengths_${bookId}`, chapterLengths);
       };
+      
       importAll();
-    }, []);
+    }, [bookId]);
 
     // 생동감 있는 로딩 컴포넌트
     const LoadingComponent = ({ message, isError = false }) => (

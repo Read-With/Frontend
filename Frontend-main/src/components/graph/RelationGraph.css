@@ -29,6 +29,18 @@
   }
 }
 
+/* 스포일러 경고 아이콘 pulse 애니메이션 */
+@keyframes pulse {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.05);
+    opacity: 0.8;
+  }
+}
+
 /* 챕터 전환 애니메이션 */
 @keyframes fadeInOut {
   0% {

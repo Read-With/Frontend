@@ -129,11 +129,12 @@ export default function HomePage() {
     };
   }, [selectedImage]);
 
-  if (user) {
-    // 로그인된 사용자는 바로 마이페이지로 리다이렉트
-    navigate('/mypage');
-    return null;
-  }
+  // 로그인된 사용자는 마이페이지로 리다이렉트
+  useEffect(() => {
+    if (user) {
+      navigate('/mypage');
+    }
+  }, [user, navigate]);
 
   return (
     <div className="homepage-container">

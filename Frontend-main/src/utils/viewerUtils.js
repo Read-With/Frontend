@@ -244,10 +244,13 @@ export function calculateChapterProgress(cfi, chapterNum, events, bookInstance =
   }
 
   // Fallback: 단락 기반 추정
+  let paragraphNum = null;
+  let charOffset = null;
+  
   if (calculationMethod === 'fallback') {
     const paragraphMatch = cfi.match(/\[chapter-\d+\]\/(\d+)\/1:(\d+)\)$/);
-    const paragraphNum = paragraphMatch ? parseInt(paragraphMatch[1]) : 1;
-    const charOffset = paragraphMatch ? parseInt(paragraphMatch[2]) : 0;
+    paragraphNum = paragraphMatch ? parseInt(paragraphMatch[1]) : 1;
+    charOffset = paragraphMatch ? parseInt(paragraphMatch[2]) : 0;
     
     if (totalChars > 0 && paragraphNum > 1) {
       const avgCharsPerParagraph = totalChars / 50;
@@ -277,8 +280,8 @@ export function calculateChapterProgress(cfi, chapterNum, events, bookInstance =
       progress: Math.round(progress * 100) / 100,
       eventIndex,
       calculationMethod,
-      paragraphNum: calculationMethod === 'fallback' ? paragraphNum : null,
-      charOffset: calculationMethod === 'fallback' ? charOffset : null
+      paragraphNum,
+      charOffset
     };
   } catch (error) {
     console.error('calculateChapterProgress 실패:', error, { cfi, chapterNum, eventsLength: events?.length });

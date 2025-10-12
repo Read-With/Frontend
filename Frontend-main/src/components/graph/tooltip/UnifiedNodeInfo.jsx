@@ -87,10 +87,18 @@ function UnifiedNodeInfo({
   const [isFlipped, setIsFlipped] = useState(false);
   const [isNodeAppeared, setIsNodeAppeared] = useState(false);
   const [error, setError] = useState(null);
-  const [showSummary, setShowSummary] = useState(false);
+  const [isWarningExpanded, setIsWarningExpanded] = useState(false); // 경고 화면 펼침 여부
+  const [showSummary, setShowSummary] = useState(false); // 실제 내용 표시 여부
   const [language, setLanguage] = useState('ko');
   const [isLanguageChanging, setIsLanguageChanging] = useState(false);
   const [previousDescription, setPreviousDescription] = useState('');
+
+  // 인물이 변경될 때마다 모든 상태 초기화
+  useEffect(() => {
+    setIsWarningExpanded(false);
+    setShowSummary(false);
+  }, [nodeData?.id]);
+
 
   // 툴팁 모드에서만 위치 관리 훅 사용
   const { position, showContent, isDragging, justFinishedDragging, tooltipRef, handleMouseDown } = useTooltipPosition(x, y);
@@ -541,7 +549,7 @@ function UnifiedNodeInfo({
           padding: "1.75rem 0 0 0",
           borderTopLeftRadius: "0.9375rem",
           borderTopRightRadius: "0.9375rem",
-          background: "linear-gradient(90deg, #e3eafe 0%, #f8fafc 100%)",
+          background: "#f1f5f9",
         }}
       >
         <div
@@ -650,7 +658,7 @@ function UnifiedNodeInfo({
               {processedNodeData?.isMainCharacter && (
                 <span
                   style={{
-                    background: `linear-gradient(90deg, ${COLORS.primary} 0%, ${COLORS.primary} 100%)`,
+                    background: COLORS.primary,
                     color: "#fff",
                     borderRadius: "0.6875rem",
                     fontSize: "0.75rem",
@@ -808,12 +816,6 @@ function UnifiedNodeInfo({
     return (
       <div
         style={unifiedNodeTooltipStyles.sidebarContainer}
-        onKeyDown={(e) => {
-          if (e.key === 'Escape') {
-            onClose();
-          }
-        }}
-        tabIndex={0}
       >
         {/* 사이드바 헤더 */}
         <div style={{
@@ -845,7 +847,7 @@ function UnifiedNodeInfo({
               </span>
               {processedNodeData?.isMainCharacter && (
                 <span style={{
-                  background: `linear-gradient(135deg, ${COLORS.primary} 0%, ${COLORS.primary} 100%)`,
+                  background: COLORS.primary,
                   color: '#fff',
                   borderRadius: '0.75rem',
                   fontSize: '0.75rem',
@@ -947,7 +949,7 @@ function UnifiedNodeInfo({
             <div 
               className="sidebar-card"
               style={{
-                background: COLORS.background,
+                background: '#fff',
                 borderRadius: '0.75rem',
                 padding: '1.5rem',
                 marginBottom: '1.5rem',
@@ -1074,7 +1076,7 @@ function UnifiedNodeInfo({
               <div 
                 className="sidebar-card"
                 style={{
-                  background: COLORS.background,
+                  background: '#fff',
                   borderRadius: '0.75rem',
                   padding: '1.5rem',
                   marginBottom: '1.5rem',
@@ -1104,7 +1106,7 @@ function UnifiedNodeInfo({
                     color: '#42506b',
                     letterSpacing: '-0.01em',
                   }}>
-                    이 인물과 연결된 {filteredElements.filter(el => 
+                    해당 인물과 연결된 {filteredElements.filter(el => 
                       el.data.source && 
                       (el.data.source === processedNodeData?.id || el.data.target === processedNodeData?.id)
                     ).length}개의 관계가 검색 결과에 포함되어 있습니다.
@@ -1113,162 +1115,224 @@ function UnifiedNodeInfo({
               </div>
             )}
 
-            {/* 요약 섹션 */}
+            {/* 요약 섹션 - 3단계 접근 방식 */}
             <div 
               className="sidebar-card"
               style={{
-                background: COLORS.background,
-                borderRadius: '1rem',
-                padding: '1.75rem',
+                background: '#fff',
+                borderRadius: '0.75rem',
                 marginBottom: '1.5rem',
                 border: `0.0625rem solid ${COLORS.border}`,
-                boxShadow: '0 0.125rem 0.5rem rgba(0,0,0,0.06), 0 0.0625rem 0.1875rem rgba(0,0,0,0.1)',
-                position: 'relative',
+                boxShadow: '0 0.0625rem 0.1875rem rgba(0,0,0,0.05)',
                 overflow: 'hidden',
               }}
+              role="region"
+              aria-label="인물 시점 요약"
             >
-              {!showSummary ? (
+              {/* 1단계: 접힌 제목 헤더 */}
+              <button
+                onClick={() => {
+                  if (showSummary || isWarningExpanded) {
+                    // 펼쳐진 상태 → 언제나 접기
+                    setShowSummary(false);
+                    setIsWarningExpanded(false);
+                  } else {
+                    // 접힌 상태 → 경고 화면 펼침
+                    setIsWarningExpanded(true);
+                  }
+                }}
+                style={{
+                  width: '100%',
+                  padding: '1.5rem',
+                  background: 'transparent',
+                  border: 'none',
+                  borderBottom: (isWarningExpanded || showSummary) ? `0.0625rem solid ${COLORS.border}` : 'none',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  transition: 'background 0.2s ease',
+                }}
+                onMouseEnter={(e) => {
+                  if (!showSummary) {
+                    e.currentTarget.style.background = COLORS.backgroundLight;
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = 'transparent';
+                }}
+              >
+                <h4 style={{
+                  fontSize: '1rem',
+                  fontWeight: '700',
+                  color: COLORS.textPrimary,
+                  margin: 0,
+                  letterSpacing: '-0.025em',
+                  textAlign: 'left',
+                }}>
+                  해당 인물 시점의 요약
+                </h4>
+                
+                <span style={{
+                  fontSize: '1.25rem',
+                  transform: (isWarningExpanded || showSummary) ? 'rotate(180deg)' : 'rotate(0deg)',
+                  transition: 'transform 0.3s ease',
+                  display: 'inline-block',
+                  color: COLORS.primary,
+                  flexShrink: 0,
+                }}>
+                  ▼
+                </span>
+              </button>
+              
+              {/* 2단계: 경고 화면 */}
+              <div style={{
+                maxHeight: (isWarningExpanded && !showSummary) ? '350px' : '0',
+                opacity: (isWarningExpanded && !showSummary) ? 1 : 0,
+                overflow: 'hidden',
+                transition: 'max-height 0.4s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.35s ease-in-out',
+                transitionDelay: (isWarningExpanded && !showSummary) ? '0.15s' : '0s',
+              }}>
                 <div style={{
+                  padding: '2rem 1.5rem 1.5rem 1.5rem',
                   textAlign: 'center',
-                  padding: '2rem 1.25rem',
-                  position: 'relative',
                 }}>
-                  {/* 배경 장식 요소 */}
+                  {/* 경고 아이콘 */}
                   <div style={{
-                    position: 'absolute',
-                    top: '-1.25rem',
-                    right: '-1.25rem',
-                    width: '5rem',
-                    height: '5rem',
-                    background: `linear-gradient(135deg, ${COLORS.primary}0D 0%, ${COLORS.primary}0D 100%)`,
-                    borderRadius: '50%',
-                    zIndex: 0,
-                  }} />
-                  <div style={{
-                    position: 'absolute',
-                    bottom: '-1.875rem',
-                    left: '-1.875rem',
-                    width: '6.25rem',
-                    height: '6.25rem',
-                    background: `linear-gradient(135deg, ${COLORS.primary}08 0%, ${COLORS.primary}08 100%)`,
-                    borderRadius: '50%',
-                    zIndex: 0,
-                  }} />
-                  
-                  <div style={{
-                    position: 'relative',
-                    zIndex: 1,
+                    fontSize: '3rem',
+                    marginBottom: '1rem',
+                    animation: (isWarningExpanded && !showSummary) ? 'fadeIn 0.4s ease-in-out, pulse 2s ease-in-out 0.4s infinite' : 'none',
                   }}>
-                    <h4 style={{
-                      fontSize: '1.125rem',
-                      fontWeight: '700',
-                      color: COLORS.textPrimary,
-                      margin: '0 0 0.75rem 0',
-                      letterSpacing: '-0.025em',
-                    }}>
-                      스포일러 주의
-                    </h4>
-                    
-                    <p style={{
-                      fontSize: '0.9375rem',
-                      color: COLORS.textSecondary,
-                      margin: '0 0 1.75rem 0',
-                      lineHeight: '1.6',
-                      maxWidth: '17.5rem',
-                      marginLeft: 'auto',
-                      marginRight: 'auto',
-                    }}>
-                      이 인물의 상세한 요약 정보를 확인하시겠습니까?
-                    </p>
-                    
-                    <div style={{
-                      display: 'flex',
-                      gap: '0.75rem',
-                      justifyContent: 'center',
-                      flexWrap: 'wrap',
-                    }}>
-                      <button
-                        onClick={() => setShowSummary(true)}
-                        style={createButtonStyle(ANIMATION_VALUES, 'primaryAdvanced')}
-                        {...createAdvancedButtonHandlers('primaryAdvanced')}
-                      >
-                        <span style={{ position: 'relative', zIndex: 1 }}>
-                          요약 정보 보기
-                        </span>
-                      </button>
-                    </div>
+                    ⚠️
                   </div>
-                </div>
-              ) : (
-                <div style={{
-                  position: 'relative',
-                }}>
-                  {/* 헤더 섹션 */}
+                  
+                  {/* 경고 제목 */}
+                  <h3 style={{
+                    fontSize: '1.25rem',
+                    fontWeight: '700',
+                    color: '#f59e0b',
+                    margin: '0 0 0.75rem 0',
+                    letterSpacing: '-0.025em',
+                    animation: (isWarningExpanded && !showSummary) ? 'fadeIn 0.4s ease-in-out' : 'none',
+                  }}>
+                    스포일러 포함
+                  </h3>
+                  
+                  {/* 경고 설명 */}
+                  <p style={{
+                    fontSize: '0.9375rem',
+                    lineHeight: '1.7',
+                    color: COLORS.textPrimary,
+                    letterSpacing: '-0.01em',
+                    whiteSpace: 'pre-wrap',
+                    margin: '0 0 1.5rem 0',
+                    animation: (isWarningExpanded && !showSummary) ? 'fadeIn 0.4s ease-in-out' : 'none',
+                  }}>
+                    스토리의 중요한 내용을 담고 있습니다.
+                    <br />
+                    내용을 확인하시겠습니까?
+                  </p>
+                  
+                  {/* 버튼 그룹 */}
                   <div style={{
                     display: 'flex',
-                    justifyContent: 'space-between',
+                    gap: '1rem',
+                    justifyContent: 'center',
                     alignItems: 'center',
-                    marginBottom: '1.5rem',
-                    paddingBottom: '1rem',
-                    borderBottom: `0.125rem solid ${COLORS.backgroundLight}`,
+                    animation: (isWarningExpanded && !showSummary) ? 'fadeIn 0.4s ease-in-out' : 'none',
                   }}>
-                    <div style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '0.75rem',
-                    }}>
-                      <h4 style={{
-                        fontSize: '1.125rem',
-                        fontWeight: '700',
-                        color: COLORS.textPrimary,
-                        margin: 0,
-                        letterSpacing: '-0.025em',
-                      }}>
-                        인물 요약
-                      </h4>
-                    </div>
-                    
+                    {/* 취소 버튼 - 경고 화면 접기 */}
                     <button
-                      onClick={() => setShowSummary(false)}
-                      style={createButtonStyle(ANIMATION_VALUES, 'close')}
-                      {...createAdvancedButtonHandlers('close')}
+                      onClick={() => setIsWarningExpanded(false)}
+                      aria-label="접기"
+                      title="접기"
+                      style={{
+                        padding: '0.625rem 1.25rem',
+                        background: '#fff',
+                        color: COLORS.textSecondary,
+                        border: `0.0625rem solid ${COLORS.border}`,
+                        borderRadius: '0.5rem',
+                        fontSize: '0.875rem',
+                        fontWeight: '600',
+                        cursor: 'pointer',
+                        transition: 'all 0.2s ease',
+                        minWidth: '6rem',
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.background = COLORS.backgroundLight;
+                        e.currentTarget.style.borderColor = COLORS.textSecondary;
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.background = '#fff';
+                        e.currentTarget.style.borderColor = COLORS.border;
+                      }}
                     >
-                      &times;
+                      취소
+                    </button>
+                    
+                    {/* 확인 버튼 */}
+                    <button
+                      onClick={() => setShowSummary(true)}
+                      aria-label="스포일러 내용 확인하기"
+                      style={{
+                        padding: '0.625rem 1.25rem',
+                        background: COLORS.primary,
+                        color: '#fff',
+                        border: 'none',
+                        borderRadius: '0.5rem',
+                        fontSize: '0.875rem',
+                        fontWeight: '600',
+                        cursor: 'pointer',
+                        transition: 'all 0.2s ease',
+                        boxShadow: '0 0.125rem 0.375rem rgba(37, 99, 235, 0.3)',
+                        minWidth: '9rem',
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.background = '#1d4ed8';
+                        e.currentTarget.style.transform = 'translateY(-2px)';
+                        e.currentTarget.style.boxShadow = '0 0.375rem 0.75rem rgba(37, 99, 235, 0.4)';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.background = COLORS.primary;
+                        e.currentTarget.style.transform = 'translateY(0)';
+                        e.currentTarget.style.boxShadow = '0 0.125rem 0.375rem rgba(37, 99, 235, 0.3)';
+                      }}
+                    >
+                      확인하고 보기
                     </button>
                   </div>
-                  
-                  {/* 요약 내용 */}
-                  <div style={{
-                    background: `linear-gradient(135deg, ${COLORS.backgroundLighter} 0%, ${COLORS.backgroundLight} 100%)`,
-                    borderRadius: '0.75rem',
-                    padding: '1.25rem',
-                    border: `0.0625rem solid ${COLORS.border}`,
-                    position: 'relative',
-                  }}>
-                    <div style={{
-                      position: 'absolute',
-                      top: '0',
-                      left: '0',
-                      right: '0',
-                      height: '0.25rem',
-                      background: `linear-gradient(90deg, ${COLORS.primary} 0%, ${COLORS.primary} 100%)`,
-                      borderRadius: '0.75rem 0.75rem 0 0',
-                    }} />
-                    
-                    <p style={{
-                      margin: 0,
-                      fontSize: '0.9375rem',
-                      lineHeight: '1.7',
-                      color: COLORS.textPrimary,
-                      letterSpacing: '-0.01em',
-                      whiteSpace: 'pre-wrap',
-                      textAlign: 'justify',
-                    }}>
-                      {summaryData.summary}
-                    </p>
-                  </div>
                 </div>
-              )}
+              </div>
+              
+              {/* 3단계: 실제 요약 내용 */}
+              <div 
+                style={{
+                  maxHeight: showSummary ? '800px' : '0',
+                  opacity: showSummary ? 1 : 0,
+                  overflow: 'hidden',
+                  transition: 'max-height 0.4s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.35s ease-in-out',
+                  transitionDelay: showSummary ? '0.15s' : '0s',
+                  willChange: showSummary ? 'max-height, opacity' : 'auto',
+                }}
+                aria-hidden={!showSummary}
+              >
+                <div style={{
+                  padding: '1.5rem',
+                  borderLeft: `0.25rem solid ${COLORS.primary}`,
+                }}>
+                  <p style={{
+                    margin: 0,
+                    fontSize: '0.9375rem',
+                    lineHeight: '1.7',
+                    color: COLORS.textPrimary,
+                    letterSpacing: '-0.01em',
+                    whiteSpace: 'pre-wrap',
+                    animation: showSummary ? 'fadeIn 0.4s ease-in-out' : 'none',
+                  }}>
+                    {summaryData.summary}
+                  </p>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -1278,4 +1342,3 @@ function UnifiedNodeInfo({
 }
 
 export default React.memo(UnifiedNodeInfo);
-

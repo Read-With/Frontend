@@ -51,16 +51,20 @@ const handleApiError = (error, context) => {
 
 // HTTP 요청 헬퍼 함수
 const apiRequest = async (url, options = {}) => {
+  // JWT 토큰 가져오기
+  const token = localStorage.getItem('accessToken');
+  
   const config = {
     headers: {
       'Content-Type': 'application/json',
+      ...(token && { 'Authorization': `Bearer ${token}` }),
       ...options.headers,
     },
     ...options,
   };
 
   // 환경에 따른 URL 구성
-  const requestUrl = import.meta.env.DEV ? url : `${API_BASE_URL}${url}`;
+  const requestUrl = import.meta.env.DEV ? `${API_BASE_URL}${url}` : `${API_BASE_URL}${url}`;
   
   try {
     const response = await fetch(requestUrl, config);

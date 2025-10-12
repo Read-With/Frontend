@@ -40,8 +40,6 @@ const Header = ({ userNickname, showAuthLinks = false }) => {
       
       secureLog('Google OAuth 로그인 시작', { clientId: clientId.substring(0, 10) + '...', redirectUri });
       
-      console.log('Google OAuth URL 생성:', { authUrl });
-      
       // Google OAuth URL로 리디렉션
       window.location.href = authUrl;
     } catch (err) {
@@ -54,7 +52,6 @@ const Header = ({ userNickname, showAuthLinks = false }) => {
       }
       
       setLoginError(errorMessage);
-      secureLog('Google OAuth URL 생성 오류', { error: err.message });
     }
   };
 
