@@ -22,9 +22,6 @@ import useGraphInteractions from "../../hooks/useGraphInteractions";
 // 노드 크기는 가중치 기반으로만 계산됨
 const getEdgeStyleForGraph = () => getEdgeStyle('graph');
 
-
-// 레이아웃 스타일은 기존 graphStyles에서 가져옴
-
 function RelationGraphWrapper() {
   const navigate = useNavigate();
   const { filename } = useParams();
@@ -59,69 +56,25 @@ function RelationGraphWrapper() {
        // API 책인지 확인 (숫자 ID를 가진 책이거나 isFromAPI가 true인 경우)
        const isApiBook = book && (typeof book.id === 'number' || book.isFromAPI === true);
        
-        console.log('🔍 API 책 확인 (거시그래프):', { 
-          bookId: book?.id, 
-          isFromAPI: book?.isFromAPI, 
-          currentChapter, 
-          bookType: typeof book?.id,
-          isApiBook: isApiBook
-        });
        
        if (!book?.id || !isApiBook || !currentChapter) {
-         console.log('❌ API 거시그래프 로딩 조건 미충족:', {
-           hasBookId: !!book?.id,
-           isFromAPI: book?.isFromAPI,
-           isApiBook: isApiBook,
-           hasCurrentChapter: !!currentChapter
-         });
          setApiFineData(null);
          return;
        }
       
       setApiFineLoading(true);
       try {
-        console.log('🔗 거시 그래프 API 호출 - 챕터별 누적 데이터:', { 
-          bookId: book.id, 
-          uptoChapter: currentChapter,
-          description: `Chapter 1부터 Chapter ${currentChapter}까지의 누적 관계`
-        });
         
         const macroData = await getMacroGraph(book.id, currentChapter);
         setApiFineData(macroData.result);
-        console.log('✅ 거시 그래프 데이터 로딩 성공:', {
-          userCurrentChapter: macroData.result.userCurrentChapter,
-          charactersCount: macroData.result.characters.length,
-          relationsCount: macroData.result.relations.length
-        });
         
-        // 상세한 거시 그래프 정보 출력
-        console.log('🔍 거시그래프 상세 정보:', {
-          전체응답: macroData,
-          캐릭터목록: macroData.result.characters,
-          관계목록: macroData.result.relations
-        });
         
-        // 관계별 positivity 값 확인
-        console.log('📊 관계별 긍정도 정보:', macroData.result.relations.map(rel => ({
-          id1: rel.id1,
-          id2: rel.id2,
-          positivity: rel.positivity,
-          relation: rel.relation,
-          count: rel.count
-        })));
         
        } catch (error) {
-         console.error('❌ 거시 그래프 API 호출 실패:', error);
+         console.error('거시 그래프 API 호출 실패:', error);
          
          // 500 에러인 경우 특별한 처리
          if (error.message.includes('500') || error.message.includes('서버 에러')) {
-           console.log('⚠️ 서버 에러 발생 - API 서버가 해당 데이터를 처리할 수 없습니다.');
-           console.log('📋 요청 정보:', {
-             bookId: book.id,
-             uptoChapter: currentChapter,
-             bookTitle: book.title
-           });
-           console.log('🔄 로컬 데이터로 fallback합니다.');
          }
          
          setApiFineData(null);
@@ -148,7 +101,6 @@ function RelationGraphWrapper() {
   // currentChapter가 maxChapter를 초과하지 않도록 검증
   useEffect(() => {
     if (maxChapter > 0 && currentChapter > maxChapter) {
-      console.log('⚠️ currentChapter가 maxChapter를 초과함:', { currentChapter, maxChapter, filename });
       setCurrentChapter(1); // 첫 번째 챕터로 리셋
     }
   }, [maxChapter, currentChapter, filename, setCurrentChapter]);
@@ -170,31 +122,7 @@ function RelationGraphWrapper() {
         null  // previousRelations
       );
       
-      // 변환된 요소 정보 출력
-      const edges = convertedElements.filter(el => el.data && el.data.source && el.data.target);
-      const nodes = convertedElements.filter(el => el.data && el.data.id && !el.data.source);
-      console.log('🔄 거시그래프 변환된 요소 (챕터별 누적):', {
-        챕터: currentChapter,
-        노드수: nodes.length,
-        엣지수: edges.length,
-        노드목록: nodes.map(n => ({ id: n.data.id, label: n.data.label })),
-        엣지목록: edges.map(e => ({ 
-          id: e.data.id, 
-          source: e.data.source, 
-          target: e.data.target,
-          positivity: e.data.positivity 
-        }))
-      });
       
-      // 변환된 간선의 positivity 값 확인
-      console.log('🔗 변환된 간선 긍정도 정보:', edges.map(edge => ({
-        id: edge.data.id,
-        source: edge.data.source,
-        target: edge.data.target,
-        positivity: edge.data.positivity,
-        relation: edge.data.relation,
-        label: edge.data.label
-      })));
       
       return convertedElements;
     } catch (error) {
@@ -328,14 +256,6 @@ function RelationGraphWrapper() {
     
     const processedTooltipData = processTooltipData(tooltipData, 'edge');
     
-    console.log('🔍 간선 클릭 - 슬라이드바 표시용 데이터:', {
-      id: processedTooltipData.id,
-      positivity: processedTooltipData.data.positivity,
-      positivityPercent: Math.round(processedTooltipData.data.positivity * 100),
-      relation: processedTooltipData.data.relation,
-      source: processedTooltipData.data.source,
-      target: processedTooltipData.data.target
-    });
     setActiveTooltip(processedTooltipData);
     
     const sourcePos = edge.source().position();
@@ -447,7 +367,6 @@ function RelationGraphWrapper() {
 
   const handleChapterSelect = useCallback((chapter) => {
     if (chapter !== currentChapter) {
-      console.log('📖 챕터 변경:', { from: currentChapter, to: chapter });
       
       // 드롭다운 선택 상태 설정
       setIsDropdownSelection(true);

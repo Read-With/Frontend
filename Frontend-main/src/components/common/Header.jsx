@@ -1,18 +1,13 @@
 import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
+import { LogOut, User } from 'lucide-react';
 import './Header.css';
 import useAuth from '../../hooks/useAuth';
-import { validateUserData, secureLog } from '../../utils/security/oauthSecurity';
-
-// API 기본 URL 설정
-const getApiBaseUrl = () => {
-  // 개발 환경에서는 로컬 백엔드 서버 사용
-  return 'http://localhost:8080';
-};
+import { secureLog } from '../../utils/security/oauthSecurity';
 
 const Header = ({ userNickname, showAuthLinks = false }) => {
   const navigate = useNavigate();
-  const { user, login, logout } = useAuth();
+  const { user, logout } = useAuth();
   const [loginError, setLoginError] = useState(null);
 
   const handleLogout = () => {
@@ -69,29 +64,6 @@ const Header = ({ userNickname, showAuthLinks = false }) => {
             <button
               onClick={handleGoogleLogin}
               className="google-login-button"
-              style={{
-                background: '#fff',
-                border: '1px solid #dadce0',
-                borderRadius: '8px',
-                padding: '12px 24px',
-                fontSize: '14px',
-                fontWeight: 500,
-                color: '#3c4043',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '12px',
-                transition: 'all 0.2s ease',
-                boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
-              }}
-              onMouseEnter={(e) => {
-                e.target.style.boxShadow = '0 4px 8px rgba(0,0,0,0.15)';
-                e.target.style.transform = 'translateY(-1px)';
-              }}
-              onMouseLeave={(e) => {
-                e.target.style.boxShadow = '0 2px 4px rgba(0,0,0,0.1)';
-                e.target.style.transform = 'translateY(0)';
-              }}
             >
               <svg width="20" height="20" viewBox="0 0 24 24">
                 <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
@@ -102,12 +74,7 @@ const Header = ({ userNickname, showAuthLinks = false }) => {
               Google로 로그인
             </button>
             {loginError && (
-              <div style={{
-                color: '#ef4444',
-                fontSize: '12px',
-                marginTop: '8px',
-                textAlign: 'center'
-              }}>
+              <div className="login-error">
                 {loginError}
               </div>
             )}
@@ -120,33 +87,20 @@ const Header = ({ userNickname, showAuthLinks = false }) => {
   return (
     <div className="user-topbar">
       <div className="user-topbar-left">
-        <div className="user-topbar-avatar" />
-        <Link to="/user/mypage" className="user-topbar-title-link">
-          <div className="user-topbar-title">Read With : __ {userNickname || user?.name || 'User'} __</div>
-        </Link>
+        <div className="user-topbar-avatar">
+          <User size={16} strokeWidth={2} />
+        </div>
+        <div className="user-topbar-title">ReadWith : {userNickname || user?.name || 'User'}</div>
       </div>
       
       <div className="user-topbar-right">
-        <div className="user-topbar-nav">
-          <div className="user-topbar-tab">My Page</div>
-          <div className="user-topbar-tab">Settings</div>
-          <button 
-            className="user-topbar-tab logout-button"
-            onClick={handleLogout}
-            style={{
-              background: 'none',
-              border: 'none',
-              cursor: 'pointer',
-              color: 'inherit'
-            }}
-          >
-            Logout
-          </button>
-        </div>
-        <div className="user-topbar-search">
-          <input className="user-topbar-search-input" placeholder="Search in site" />
-          <span className="user-topbar-search-icon">🔍</span>
-        </div>
+        <button 
+          className="user-topbar-logout"
+          onClick={handleLogout}
+        >
+          <LogOut size={16} strokeWidth={2} />
+          <span>Logout</span>
+        </button>
       </div>
     </div>
   );

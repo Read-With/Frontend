@@ -43,7 +43,6 @@ const features = [
   }
 ];
 
-
 const FeatureCard = ({ feature, index, isExpanded, onToggle }) => {
   const [isHovered, setIsHovered] = useState(false);
   const [isClosing, setIsClosing] = useState(false);

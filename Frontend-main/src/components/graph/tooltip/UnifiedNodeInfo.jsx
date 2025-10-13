@@ -8,6 +8,8 @@ import { useRelationData } from "../../../hooks/useRelationData.js";
 import { safeNum } from "../../../utils/relationUtils.js";
 import { mergeRefs } from "../../../utils/styles/animations.js";
 import { COLORS, createButtonStyle, createAdvancedButtonHandlers, ANIMATION_VALUES, unifiedNodeTooltipStyles, unifiedNodeAnimations } from "../../../utils/styles/styles.js";
+import { extractRadarChartData } from "../../../utils/radarChartUtils.js";
+import RelationshipRadarChart from "./RelationshipRadarChart.jsx";
 import "../RelationGraph.css";
 
 /**
@@ -89,6 +91,7 @@ function UnifiedNodeInfo({
   const [error, setError] = useState(null);
   const [isWarningExpanded, setIsWarningExpanded] = useState(false); // 경고 화면 펼침 여부
   const [showSummary, setShowSummary] = useState(false); // 실제 내용 표시 여부
+  const [showRadarChart, setShowRadarChart] = useState(false); // 레이더 차트 표시 여부
   const [language, setLanguage] = useState('ko');
   const [isLanguageChanging, setIsLanguageChanging] = useState(false);
   const [previousDescription, setPreviousDescription] = useState('');
@@ -97,6 +100,7 @@ function UnifiedNodeInfo({
   useEffect(() => {
     setIsWarningExpanded(false);
     setShowSummary(false);
+    setShowRadarChart(false);
   }, [nodeData?.id]);
 
 
@@ -292,6 +296,36 @@ function UnifiedNodeInfo({
       summary: `${processedNodeData.label}에 대한 ${currentChapter}장 관점 요약이 아직 준비되지 않았습니다.` 
     };
   }, [processedNodeData, chapterNum, actualFilename]);
+
+  // 레이더 차트 데이터 추출
+  const radarChartData = useMemo(() => {
+    if (!nodeData?.id || !chapterNum || displayMode !== 'sidebar') {
+      return [];
+    }
+
+    if (!elements || elements.length === 0) {
+      return [];
+    }
+
+    try {
+      const unifiedEventInfo = getUnifiedEventInfo();
+      const targetEventNum = unifiedEventInfo.eventNum;
+      
+      const json = getEventDataByIndex(folderKey, chapterNum, targetEventNum);
+      
+      if (!json || !json.relations) {
+        return [];
+      }
+
+      const processedRelations = processRelations(json.relations);
+      const chartData = extractRadarChartData(nodeData.id, processedRelations, elements, 8);
+      
+      return chartData;
+    } catch (err) {
+      console.error('레이더 차트 데이터 추출 오류:', err);
+      return [];
+    }
+  }, [nodeData?.id, chapterNum, displayMode, folderKey, elements, eventNum, isGraphPage]);
 
   // 모드별 z-index 설정
   const zIndexValue = inViewer ? 99999 : 99999;
@@ -1331,6 +1365,119 @@ function UnifiedNodeInfo({
                   }}>
                     {summaryData.summary}
                   </p>
+                </div>
+              </div>
+            </div>
+
+            {/* 관계 분석 레이더 차트 섹션 */}
+            <div 
+              className="sidebar-card"
+              style={{
+                background: '#fff',
+                borderRadius: '0.75rem',
+                marginBottom: '1.5rem',
+                border: `0.0625rem solid ${COLORS.border}`,
+                boxShadow: '0 0.0625rem 0.1875rem rgba(0,0,0,0.05)',
+                overflow: 'hidden',
+              }}
+              role="region"
+              aria-label="관계 분석"
+            >
+              {/* 헤더 버튼 */}
+              <button
+                onClick={() => setShowRadarChart(!showRadarChart)}
+                style={{
+                  width: '100%',
+                  padding: '1.5rem',
+                  background: 'transparent',
+                  border: 'none',
+                  borderBottom: showRadarChart ? `0.0625rem solid ${COLORS.border}` : 'none',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  transition: 'background 0.2s ease',
+                }}
+                onMouseEnter={(e) => {
+                  if (!showRadarChart) {
+                    e.currentTarget.style.background = COLORS.backgroundLight;
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = 'transparent';
+                }}
+              >
+                <div style={{ textAlign: 'left' }}>
+                  <h4 style={{
+                    fontSize: '1rem',
+                    fontWeight: '700',
+                    color: COLORS.textPrimary,
+                    margin: 0,
+                    letterSpacing: '-0.025em',
+                  }}>
+                    인물 관계 분석
+                  </h4>
+                  <p style={{
+                    fontSize: '0.8rem',
+                    color: COLORS.textSecondary,
+                    margin: '0.5rem 0 0 0',
+                    lineHeight: '1.5',
+                  }}>
+                    {processedNodeData?.displayName}와 연결된 인물들과의 관계를 시각화합니다
+                  </p>
+                </div>
+                
+                <span style={{
+                  fontSize: '1.25rem',
+                  transform: showRadarChart ? 'rotate(180deg)' : 'rotate(0deg)',
+                  transition: 'transform 0.3s ease',
+                  display: 'inline-block',
+                  color: COLORS.primary,
+                  flexShrink: 0,
+                  marginLeft: '1rem',
+                }}>
+                  ▼
+                </span>
+              </button>
+
+              {/* 레이더 차트 또는 안내 메시지 */}
+              <div style={{
+                maxHeight: showRadarChart ? '1000px' : '0',
+                opacity: showRadarChart ? 1 : 0,
+                overflow: 'hidden',
+                transition: 'max-height 0.4s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.35s ease-in-out',
+                transitionDelay: showRadarChart ? '0.15s' : '0s',
+              }}>
+                <div style={{ padding: '1.5rem' }}>
+                  {radarChartData.length > 0 ? (
+                    <RelationshipRadarChart 
+                      data={radarChartData}
+                      centerNodeName={processedNodeData?.displayName}
+                    />
+                  ) : (
+                    <div style={{
+                      padding: '2rem',
+                      textAlign: 'center',
+                      color: COLORS.textSecondary,
+                    }}>
+                      <div style={{
+                        fontSize: '3rem',
+                        marginBottom: '1rem',
+                        opacity: 0.5,
+                      }}>
+                        📊
+                      </div>
+                      <p style={{
+                        margin: 0,
+                        fontSize: '0.875rem',
+                        lineHeight: '1.6',
+                      }}>
+                        현재 이벤트에서 이 인물과 연결된 
+                        <br />
+                        다른 인물들의 정보가 없습니다.
+                      </p>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>

@@ -1,254 +1,275 @@
-import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useMemo, useCallback } from 'react';
+import { Book, BookOpen, CheckCircle2, Search, Plus, Library, Heart, Star, AlertCircle } from 'lucide-react';
+import Header from '../components/common/Header';
 import BookLibrary from '../components/library/BookLibrary';
 import FileUpload from '../components/library/FileUpload';
 import { useBooks } from '../hooks/useBooks';
 import useAuth from '../hooks/useAuth';
-import { theme } from '../components/common/theme';
-import { createButtonStyle, createAdvancedButtonHandlers } from '../utils/styles/styles';
-import { ANIMATION_VALUES } from '../utils/styles/animations';
+import './MyPage.css';
 
 export default function MyPage() {
-  const { books, loading, error, retryFetch, addBook, toggleFavorite } = useBooks();
-  const { user, logout } = useAuth();
-  const navigate = useNavigate();
+  const { books, loading, error, retryFetch, addBook, toggleFavorite, changeBookStatus } = useBooks();
+  const { user } = useAuth();
   const [showUpload, setShowUpload] = useState(false);
+  const [activeTab, setActiveTab] = useState('all');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [sortBy, setSortBy] = useState('recent');
 
-
-  const rootStyle = {
-    background: theme.colors.background.main,
-    minHeight: '100vh',
-    width: '100%',
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'stretch',
-    overflow: 'visible',
-    position: 'relative'
-  };
-
-  const mainStyle = {
-    flex: 1,
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    marginTop: theme.spacing.xl,
-    gap: '10px',
-    overflow: 'visible',
-    paddingBottom: theme.spacing.xl
-  };
-
-  const uploadButtonStyle = {
-    ...createButtonStyle(ANIMATION_VALUES, 'primary'),
-    position: 'fixed',
-    bottom: '24px',
-    right: '24px',
-    borderRadius: '50%',
-    width: '56px',
-    height: '56px',
-    fontSize: '24px',
-    fontWeight: 'bold',
-    boxShadow: '0 4px 12px rgba(79, 109, 222, 0.3)',
-    zIndex: 1000,
-    padding: '0'
-  };
-
-  const handleUploadSuccess = (newBook) => {
+  const handleUploadSuccess = useCallback((newBook) => {
     addBook(newBook);
     setShowUpload(false);
-  };
+  }, [addBook]);
 
-
-  const titleStyle = {
-    fontSize: 'clamp(2.5rem, 5vw, 3.5rem)',
-    fontWeight: 800,
-    color: theme.colors.primary.main,
-    margin: 0,
-    lineHeight: '1.1',
-    letterSpacing: '-0.02em'
-  };
-
-  const subtitleStyle = {
-    fontSize: theme.fontSize.xl,
-    fontWeight: 500,
-    color: theme.colors.text.secondary,
-    marginBottom: theme.spacing.sm,
-    opacity: 0.9
-  };
-
-  const descriptionStyle = {
-    fontSize: theme.fontSize.lg,
-    color: theme.colors.text.secondary,
-    lineHeight: '1.7',
-    marginBottom: theme.spacing.lg,
-    opacity: 0.8
-  };
-
-
-  const statItemStyle = {
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    gap: theme.spacing.sm,
-    padding: `${theme.spacing.md} ${theme.spacing.lg}`,
-    background: 'rgba(255, 255, 255, 0.6)',
-    borderRadius: '12px',
-    border: '1px solid rgba(79, 109, 222, 0.1)',
-    minWidth: '100px',
-    transition: 'all 0.3s ease'
-  };
-
-  const statNumberStyle = {
-    fontSize: '2.5rem',
-    fontWeight: 800,
-    color: theme.colors.primary.main,
-    lineHeight: '1',
-    marginBottom: theme.spacing.xs
-  };
-
-  const statLabelStyle = {
-    fontSize: theme.fontSize.sm,
-    color: theme.colors.text.secondary,
-    opacity: 0.8,
-    fontWeight: 500,
-    textTransform: 'uppercase',
-    letterSpacing: '0.5px'
-  };
-
-
-  // 통합된 대시보드 스타일
-  const dashboardStyle = {
-    background: 'rgba(255, 255, 255, 0.95)',
-    backdropFilter: 'blur(20px)',
-    borderRadius: '20px',
-    boxShadow: '0 25px 50px rgba(0, 0, 0, 0.1)',
-    border: '1px solid rgba(255, 255, 255, 0.3)',
-    marginBottom: theme.spacing.xl,
-    overflow: 'hidden',
-    maxWidth: '900px',
-    width: '100%'
-  };
-
-  const headerSectionStyle = {
-    padding: `${theme.spacing.xl} ${theme.spacing.xl} ${theme.spacing.lg} ${theme.spacing.xl}`,
-    textAlign: 'center',
-    borderBottom: '1px solid rgba(0, 0, 0, 0.05)'
-  };
-
-  const headerContentStyle = {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: theme.spacing.xl,
-    paddingBottom: theme.spacing.lg,
-    borderBottom: '1px solid rgba(0, 0, 0, 0.08)'
-  };
-
-  const welcomeContentStyle = {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: theme.spacing.xl
-  };
-
-  const welcomeTextStyle = {
-    flex: 1,
-    textAlign: 'left'
-  };
-
-  const readingStatsInlineStyle = {
-    display: 'flex',
-    alignItems: 'center'
-  };
-
-  const handleSignOut = () => {
-    logout();
-    navigate('/');
-  };
-
-  // Google ID에서 가져온 이름 직접 사용
-  const getDisplayName = () => {
+  const getDisplayName = useCallback(() => {
     return user?.name || '사용자';
-  };
+  }, [user?.name]);
+
+  // 통계 계산 - 메모이제이션
+  const stats = useMemo(() => ({
+    total: books?.length || 0,
+    reading: books?.filter(b => b.readingStatus === 'reading').length || 0,
+    completed: books?.filter(b => b.readingStatus === 'completed').length || 0,
+    wishlist: books?.filter(b => b.readingStatus === 'wishlist').length || 0,
+  }), [books]);
+
+  // 탭별 필터링 - 메모이제이션
+  const filteredBooks = useMemo(() => {
+    let filtered = books || [];
+
+    // 탭 필터링
+    if (activeTab === 'reading') {
+      filtered = filtered.filter(b => b.readingStatus === 'reading');
+    } else if (activeTab === 'completed') {
+      filtered = filtered.filter(b => b.readingStatus === 'completed');
+    } else if (activeTab === 'wishlist') {
+      filtered = filtered.filter(b => b.readingStatus === 'wishlist');
+    } else if (activeTab === 'favorites') {
+      filtered = filtered.filter(b => b.favorite);
+    }
+
+    // 검색 필터링
+    if (searchQuery) {
+      filtered = filtered.filter(book =>
+        book.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        book.author.toLowerCase().includes(searchQuery.toLowerCase())
+      );
+    }
+
+    // 정렬
+    if (sortBy === 'recent') {
+      filtered.sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
+    } else if (sortBy === 'title') {
+      filtered.sort((a, b) => a.title.localeCompare(b.title));
+    } else if (sortBy === 'author') {
+      filtered.sort((a, b) => a.author.localeCompare(b.author));
+    }
+
+    return filtered;
+  }, [books, activeTab, searchQuery, sortBy]);
 
   return (
     <>
       <style>
         {`
-          body {
+          .mypage-root body {
             overflow: auto !important;
             position: static !important;
           }
-          html {
+          .mypage-root html {
             overflow: auto !important;
           }
         `}
       </style>
-      <div style={rootStyle}>
-        <div style={mainStyle}>
-        {/* 간소화된 사용자 대시보드 */}
-        <div style={dashboardStyle}>
-          {/* 헤더 섹션 - ReadWith와 로그아웃 버튼 */}
-          <div style={headerSectionStyle}>
-            <div style={headerContentStyle}>
-              <h1 style={titleStyle}>ReadWith</h1>
-              <button
-                style={{
-                  ...createButtonStyle(ANIMATION_VALUES, 'secondary'),
-                  padding: `${theme.spacing.md} ${theme.spacing.lg}`,
-                  fontSize: theme.fontSize.sm,
-                  fontWeight: 600,
-                  borderRadius: '12px',
-                  minWidth: '80px',
-                  boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)'
-                }}
-                onClick={handleSignOut}
-                {...createAdvancedButtonHandlers('secondary')}
-              >
-                로그아웃
-              </button>
-            </div>
-            <div style={welcomeContentStyle}>
-              <div style={welcomeTextStyle}>
-                <p style={subtitleStyle}>안녕하세요, {getDisplayName()}님! 👋</p>
-                <p style={descriptionStyle}>나만의 서재에서 책을 읽고, 분석하고, 관리해보세요.</p>
+      <Header userNickname={getDisplayName()} />
+      <div className="mypage-root">
+        <div className="mypage-main">
+          {/* 히어로 배너 */}
+          <section className="hero-banner">
+            <div className="hero-content">
+              <div className="hero-left">
+                <h1 className="hero-title">ReadWith</h1>
+                <p className="hero-subtitle">안녕하세요, {getDisplayName()}님! 👋</p>
+                <p className="hero-description">
+                  나만의 서재에서 책을 읽고, 인물 관계도로 분석하고, 
+                  독서 기록을 관리해보세요.
+                </p>
               </div>
-              <div style={readingStatsInlineStyle}>
-                <div style={statItemStyle}>
-                  <span style={statNumberStyle}>0</span>
-                  <span style={statLabelStyle}>읽은 책</span>
+
+              <div className="hero-stats">
+                <div className="stat-card stat-card-total">
+                  <div className="stat-icon-wrapper">
+                    <Book className="stat-icon-svg" />
+                  </div>
+                  <span className="stat-number">{stats.total}</span>
+                  <span className="stat-label">전체 도서</span>
+                </div>
+                <div className="stat-card stat-card-reading">
+                  <div className="stat-icon-wrapper">
+                    <BookOpen className="stat-icon-svg" />
+                  </div>
+                  <span className="stat-number">{stats.reading}</span>
+                  <span className="stat-label">읽는 중</span>
+                </div>
+                <div className="stat-card stat-card-completed">
+                  <div className="stat-icon-wrapper">
+                    <CheckCircle2 className="stat-icon-svg" />
+                  </div>
+                  <span className="stat-number">{stats.completed}</span>
+                  <span className="stat-label">완독</span>
                 </div>
               </div>
             </div>
-          </div>
+          </section>
 
+          {/* 컨텐츠 영역 */}
+          <div className="content-container">
+            {/* 탭 네비게이션 */}
+            <div className="tabs-container">
+              <nav className="tabs-nav">
+                <button
+                  className={`tab-button ${activeTab === 'all' ? 'active' : ''}`}
+                  onClick={() => setActiveTab('all')}
+                >
+                  전체 도서
+                  <span className="tab-badge">{stats.total}</span>
+                </button>
+                <button
+                  className={`tab-button ${activeTab === 'reading' ? 'active' : ''}`}
+                  onClick={() => setActiveTab('reading')}
+                >
+                  읽는 중
+                  {stats.reading > 0 && <span className="tab-badge">{stats.reading}</span>}
+                </button>
+                <button
+                  className={`tab-button ${activeTab === 'completed' ? 'active' : ''}`}
+                  onClick={() => setActiveTab('completed')}
+                >
+                  완독
+                  {stats.completed > 0 && <span className="tab-badge">{stats.completed}</span>}
+                </button>
+                <button
+                  className={`tab-button ${activeTab === 'wishlist' ? 'active' : ''}`}
+                  onClick={() => setActiveTab('wishlist')}
+                >
+                  읽고 싶은
+                  {stats.wishlist > 0 && <span className="tab-badge">{stats.wishlist}</span>}
+                </button>
+                <button
+                  className={`tab-button ${activeTab === 'favorites' ? 'active' : ''}`}
+                  onClick={() => setActiveTab('favorites')}
+                >
+                  즐겨찾기 ❤️
+                </button>
+              </nav>
+
+              {/* 검색 및 필터 */}
+              <div className="search-filter-bar">
+                <div className="search-input-wrapper">
+                  <input
+                    type="text"
+                    className="search-input"
+                    placeholder="책 제목이나 저자로 검색하세요..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                  />
+                  <Search className="search-icon" size={20} />
+                </div>
+                <select
+                  className="filter-select"
+                  value={sortBy}
+                  onChange={(e) => setSortBy(e.target.value)}
+                >
+                  <option value="recent">최근 추가순</option>
+                  <option value="title">제목순</option>
+                  <option value="author">저자순</option>
+                </select>
+              </div>
+
+              {/* 책 목록 */}
+              <div className="books-grid-section">
+                {loading ? (
+                  <div className="loading-container">
+                    <Library size={48} strokeWidth={1.5} className="loading-icon" />
+                    <div className="loading-text">책 목록을 불러오는 중...</div>
+                  </div>
+                ) : error ? (
+                  <div className="error-container">
+                    <AlertCircle size={32} strokeWidth={2} className="error-icon" />
+                    <div className="error-message">{error}</div>
+                    {retryFetch && (
+                      <button
+                        className="retry-button"
+                        onClick={retryFetch}
+                      >
+                        다시 시도
+                      </button>
+                    )}
+                  </div>
+                ) : filteredBooks.length === 0 ? (
+                  <div className="empty-state">
+                    <div className="empty-icon">
+                      {activeTab === 'all' ? <Library size={80} strokeWidth={1.5} /> : 
+                       activeTab === 'reading' ? <BookOpen size={80} strokeWidth={1.5} /> : 
+                       activeTab === 'completed' ? <CheckCircle2 size={80} strokeWidth={1.5} /> : 
+                       activeTab === 'wishlist' ? <Star size={80} strokeWidth={1.5} /> : <Heart size={80} strokeWidth={1.5} />}
+                    </div>
+                    <h2 className="empty-title">
+                      {activeTab === 'all' ? '아직 책이 없네요!' :
+                       activeTab === 'reading' ? '읽는 중인 책이 없어요' :
+                       activeTab === 'completed' ? '완독한 책이 없어요' :
+                       activeTab === 'wishlist' ? '읽고 싶은 책을 추가해보세요' :
+                       '즐겨찾기한 책이 없어요'}
+                    </h2>
+                    <p className="empty-description">
+                      {activeTab === 'all' 
+                        ? '우측 하단의 + 버튼을 눌러서 첫 번째 책을 추가해보세요'
+                        : searchQuery
+                        ? '검색 결과가 없습니다. 다른 키워드로 검색해보세요.'
+                        : '해당하는 책이 없습니다.'}
+                    </p>
+                    {activeTab === 'all' && !searchQuery && (
+                      <button
+                        className="empty-cta-button"
+                        onClick={() => setShowUpload(true)}
+                      >
+                        첫 번째 책 추가하기
+                      </button>
+                    )}
+                  </div>
+                ) : (
+                  <div className="books-grid">
+                    <BookLibrary
+                      books={filteredBooks}
+                      loading={false}
+                      error={null}
+                      onRetry={retryFetch}
+                      onToggleFavorite={toggleFavorite}
+                      onStatusChange={changeBookStatus}
+                    />
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
         </div>
-        <BookLibrary 
-          books={books} 
-          loading={loading} 
-          error={error} 
-          onRetry={retryFetch}
-          onToggleFavorite={toggleFavorite}
-        />
-      </div>
-      
-      {/* 플로팅 업로드 버튼 */}
-      <button 
-        style={uploadButtonStyle}
-        onClick={() => setShowUpload(true)}
-        {...createAdvancedButtonHandlers('primary')}
-        title="새 책 업로드"
-      >
-        +
-      </button>
-      
-      {/* 업로드 모달 */}
-      {showUpload && (
-        <FileUpload 
-          onUploadSuccess={handleUploadSuccess}
-          onClose={() => setShowUpload(false)}
-        />
-      )}
+
+        {/* 플로팅 업로드 버튼 */}
+        <button
+          className="floating-upload-btn"
+          onClick={() => setShowUpload(true)}
+          title="새 책 업로드"
+        >
+          <Plus size={28} strokeWidth={2.5} />
+        </button>
+
+        {/* 업로드 모달 */}
+        {showUpload && (
+          <FileUpload
+            onUploadSuccess={handleUploadSuccess}
+            onClose={() => setShowUpload(false)}
+          />
+        )}
       </div>
     </>
   );
-} 
+}

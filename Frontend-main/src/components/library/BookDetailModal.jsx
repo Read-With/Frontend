@@ -1,11 +1,9 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, memo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { theme } from '../common/theme';
 import { getBookManifest } from '../../utils/common/api';
-import { createButtonStyle, createAdvancedButtonHandlers } from '../../utils/styles/styles';
-import { ANIMATION_VALUES } from '../../utils/styles/animations';
+import './BookDetailModal.css';
 
-const BookDetailModal = ({ book, isOpen, onClose }) => {
+const BookDetailModal = memo(({ book, isOpen, onClose }) => {
   const navigate = useNavigate();
   const [bookDetails, setBookDetails] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -35,7 +33,7 @@ const BookDetailModal = ({ book, isOpen, onClose }) => {
     }
   }, [isOpen, book]);
 
-  const fetchProgressInfo = () => {
+  const fetchProgressInfo = useCallback(() => {
     if (!book || typeof book.id !== 'number') {
       setProgressInfo(null);
       return;
@@ -56,9 +54,9 @@ const BookDetailModal = ({ book, isOpen, onClose }) => {
       console.error('Progress 정보를 불러오는데 실패했습니다:', err);
       setProgressInfo(null);
     }
-  };
+  }, [book]);
 
-  const fetchBookDetails = async () => {
+  const fetchBookDetails = useCallback(async () => {
     if (!book || typeof book.id !== 'number') {
       setBookDetails(book);
       return;
@@ -82,263 +80,139 @@ const BookDetailModal = ({ book, isOpen, onClose }) => {
           progressMetadata: manifestData.result.progressMetadata || {}
         });
       } else {
+        console.warn('API 응답이 성공하지 않았습니다:', manifestData);
         setBookDetails(book);
+        setError('책의 상세 정보를 불러올 수 없습니다. 기본 정보만 표시됩니다.');
       }
     } catch (err) {
-      setError('책 정보를 불러오는데 실패했습니다.');
+      console.error('책 정보를 불러오는데 실패했습니다:', err);
+      const errorMessage = err.message || '책 정보를 불러오는데 실패했습니다.';
+      setError(errorMessage);
       setBookDetails(book);
     } finally {
       setLoading(false);
     }
-  };
+  }, [book]);
 
-  const modalStyle = {
-    position: 'fixed',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    display: isOpen ? 'flex' : 'none',
-    alignItems: 'center',
-    justifyContent: 'center',
-    zIndex: 1000,
-    padding: '20px'
-  };
+  // 책 타입 확인 유틸리티
+  const isLocalBook = useMemo(() => 
+    typeof book?.id === 'string' && book.id.startsWith('local_'), 
+    [book?.id]
+  );
 
-  const contentStyle = {
-    backgroundColor: theme.colors.background.white,
-    borderRadius: theme.borderRadius.lg,
-    maxWidth: '600px',
-    width: '100%',
-    maxHeight: '80vh',
-    overflow: 'auto',
-    boxShadow: '0 20px 60px rgba(0, 0, 0, 0.3)',
-    position: 'relative'
-  };
+  const getBookIdentifier = useCallback(() => 
+    isLocalBook ? book.epubPath : book.id, 
+    [isLocalBook, book]
+  );
 
-  const headerStyle = {
-    padding: '24px 24px 16px 24px',
-    borderBottom: `1px solid ${theme.colors.border}`,
-    display: 'flex',
-    alignItems: 'flex-start',
-    gap: '16px'
-  };
+  const getNavigationState = useCallback(() => 
+    isLocalBook ? undefined : { book }, 
+    [isLocalBook, book]
+  );
 
-  const coverStyle = {
-    width: '120px',
-    height: '180px',
-    borderRadius: theme.borderRadius.md,
-    objectFit: 'cover',
-    flexShrink: 0,
-    backgroundColor: theme.colors.background.card
-  };
-
-  const titleStyle = {
-    fontSize: theme.fontSize.xl,
-    fontWeight: 700,
-    color: theme.colors.text.primary,
-    marginBottom: '8px',
-    lineHeight: 1.3
-  };
-
-  const authorStyle = {
-    fontSize: theme.fontSize.lg,
-    color: theme.colors.text.secondary,
-    marginBottom: '12px'
-  };
-
-  const closeButtonStyle = {
-    position: 'absolute',
-    top: '16px',
-    right: '16px',
-    width: '32px',
-    height: '32px',
-    borderRadius: '50%',
-    border: 'none',
-    backgroundColor: theme.colors.background.card,
-    color: theme.colors.text.secondary,
-    cursor: 'pointer',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    fontSize: '18px',
-    transition: 'all 0.2s ease'
-  };
-
-  const bodyStyle = {
-    padding: '24px'
-  };
-
-  const sectionStyle = {
-    marginBottom: '20px'
-  };
-
-  const labelStyle = {
-    fontSize: theme.fontSize.sm,
-    fontWeight: 600,
-    color: theme.colors.text.secondary,
-    marginBottom: '4px',
-    textTransform: 'uppercase',
-    letterSpacing: '0.5px'
-  };
-
-  const valueStyle = {
-    fontSize: theme.fontSize.base,
-    color: theme.colors.text.primary,
-    lineHeight: 1.5
-  };
-
-  const buttonGroupStyle = {
-    display: 'flex',
-    gap: '4px',
-    justifyContent: 'center',
-    marginTop: '24px',
-    paddingTop: '20px',
-    borderTop: `1px solid ${theme.colors.border}`
-  };
-
-  const primaryButtonStyle = {
-    ...createButtonStyle(ANIMATION_VALUES, 'primary'),
-    padding: '8px 16px',
-    fontSize: theme.fontSize.sm,
-    borderRadius: theme.borderRadius.full,
-    minWidth: '80px',
-    height: 'auto'
-  };
-
-  const secondaryButtonStyle = {
-    ...createButtonStyle(ANIMATION_VALUES, 'default'),
-    padding: '8px 16px',
-    fontSize: theme.fontSize.sm,
-    borderRadius: theme.borderRadius.full,
-    background: '#f0f4fa',
-    color: theme.colors.primary,
-    border: 'none',
-    minWidth: '80px',
-    height: 'auto'
-  };
-
-  const handleReadClick = () => {
+  // 네비게이션 핸들러들
+  const handleReadClick = useCallback(() => {
     onClose();
-    // 로컬 책인지 확인
-    const isLocalBook = typeof book.id === 'string' && book.id.startsWith('local_');
-    // 로컬 책은 filename을 사용, API 책은 id를 사용
-    const identifier = isLocalBook ? book.epubPath : book.id;
-    // API 책인 경우 책 정보를 state로 전달
-    const state = isLocalBook ? undefined : { book };
-    navigate(`/user/viewer/${identifier}`, { state });
-  };
+    navigate(`/user/viewer/${getBookIdentifier()}`, { state: getNavigationState() });
+  }, [onClose, navigate, getBookIdentifier, getNavigationState]);
 
-  const handleGraphClick = () => {
+  const handleGraphClick = useCallback(() => {
     onClose();
-    // 로컬 책인지 확인
-    const isLocalBook = typeof book.id === 'string' && book.id.startsWith('local_');
-    // 로컬 책은 filename을 사용, API 책은 id를 사용
-    const identifier = isLocalBook ? book.epubPath : book.id;
-    // API 책인 경우 책 정보를 state로 전달
-    const state = isLocalBook ? undefined : { book };
-    navigate(`/user/graph/${identifier}`, { state });
-  };
+    navigate(`/user/graph/${getBookIdentifier()}`, { state: getNavigationState() });
+  }, [onClose, navigate, getBookIdentifier, getNavigationState]);
+
+
+  // ESC 키로 모달 닫기
+  useEffect(() => {
+    const handleEscape = (e) => {
+      if (e.key === 'Escape' && isOpen) {
+        onClose();
+      }
+    };
+
+    if (isOpen) {
+      document.addEventListener('keydown', handleEscape);
+      document.body.style.overflow = 'hidden'; // 스크롤 방지
+    }
+
+    return () => {
+      document.removeEventListener('keydown', handleEscape);
+      document.body.style.overflow = 'unset';
+    };
+  }, [isOpen, onClose]);
 
   if (!isOpen) return null;
 
   return (
-    <div style={modalStyle} onClick={onClose}>
-      <div style={contentStyle} onClick={(e) => e.stopPropagation()}>
+    <div 
+      className={`book-detail-modal ${!isOpen ? 'hidden' : ''}`} 
+      onClick={onClose}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="book-detail-title"
+    >
+      <div className="book-detail-content" onClick={(e) => e.stopPropagation()}>
         <button
-          style={closeButtonStyle}
+          className="book-detail-close-btn"
           onClick={onClose}
-          onMouseEnter={(e) => {
-            e.target.style.backgroundColor = theme.colors.background.section;
-          }}
-          onMouseLeave={(e) => {
-            e.target.style.backgroundColor = theme.colors.background.card;
-          }}
+          aria-label="모달 닫기"
+          type="button"
         >
           ×
         </button>
 
-        <div style={headerStyle}>
-          <div style={coverStyle}>
+        <div className="book-detail-header">
+          <div className="book-detail-cover">
             <img
               src={bookDetails?.coverImgUrl || book?.coverImgUrl}
               alt={bookDetails?.title || book?.title}
-              style={{
-                width: '100%',
-                height: '100%',
-                objectFit: 'cover',
-                borderRadius: theme.borderRadius.md,
-                display: 'block'
-              }}
               onError={(e) => {
                 e.target.style.display = 'none';
               }}
             />
           </div>
-          <div style={{ flex: 1 }}>
-            <h2 style={titleStyle}>
+          <div className="book-detail-info">
+            <h2 id="book-detail-title" className="book-detail-title">
               {bookDetails?.title || book?.title || '제목 없음'}
             </h2>
-            <p style={authorStyle}>
+            <p className="book-detail-author">
               {bookDetails?.author || book?.author || '저자 정보 없음'}
             </p>
             {loading && (
-              <div style={{ color: theme.colors.text.secondary, fontSize: theme.fontSize.sm }}>
+              <div className="book-detail-loading" role="status" aria-live="polite">
                 정보를 불러오는 중...
               </div>
             )}
             {error && (
-              <div style={{ color: theme.colors.error, fontSize: theme.fontSize.sm }}>
+              <div className="book-detail-error" role="alert" aria-live="assertive">
                 {error}
               </div>
             )}
           </div>
         </div>
 
-        <div style={bodyStyle}>
+        <div className="book-detail-body">
           {bookDetails && (
             <>
 
               {uniqueCharacters && uniqueCharacters.length > 0 && (
-                <div style={sectionStyle}>
-                  <div style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '8px',
-                    marginBottom: '4px'
-                  }}>
-                    <div style={labelStyle}>등장 인물</div>
+                <div className="book-detail-section">
+                  <div className="book-detail-characters-header">
+                    <div className="book-detail-label">등장 인물</div>
                     <button
+                      className="book-detail-toggle-btn"
                       onClick={() => setShowCharacters(!showCharacters)}
-                      style={{
-                        background: theme.colors.background.card,
-                        border: `1px solid ${theme.colors.border}`,
-                        borderRadius: theme.borderRadius.sm,
-                        color: theme.colors.text.primary,
-                        cursor: 'pointer',
-                        fontSize: '0.75em',
-                        fontWeight: 500,
-                        padding: '4px 8px',
-                        transition: 'all 0.2s ease'
-                      }}
-                      onMouseEnter={(e) => {
-                        e.target.style.backgroundColor = theme.colors.background.primary;
-                        e.target.style.borderColor = theme.colors.primary;
-                      }}
-                      onMouseLeave={(e) => {
-                        e.target.style.backgroundColor = theme.colors.background.card;
-                        e.target.style.borderColor = theme.colors.border;
-                      }}
+                      aria-expanded={showCharacters}
+                      aria-label={showCharacters ? '인물 목록 숨기기' : '인물 목록 보기'}
                     >
                       {showCharacters ? '숨기기' : '보기'}
                     </button>
                   </div>
-                  <div style={valueStyle}>
+                  <div className="book-detail-value">
                     {showCharacters && (
-                      <div style={{ marginTop: '8px', fontSize: '0.9em', color: theme.colors.text.secondary }}>
-                        {uniqueCharacters.map((character, index) => (
-                          <div key={character.id} style={{ marginBottom: '4px' }}>
+                      <div className="book-detail-characters-list">
+                        {uniqueCharacters.map((character) => (
+                          <div key={character.id} className="book-detail-character-item">
                             {character.name} {character.isMainCharacter && '⭐'}
                           </div>
                         ))}
@@ -349,12 +223,12 @@ const BookDetailModal = ({ book, isOpen, onClose }) => {
               )}
 
               {bookDetails.chapters && bookDetails.chapters.length > 0 && (
-                <div style={sectionStyle}>
-                  <div style={labelStyle}>챕터 정보</div>
-                  <div style={valueStyle}>
-                    <div style={{ marginTop: '8px', fontSize: '0.9em', color: theme.colors.text.secondary }}>
+                <div className="book-detail-section">
+                  <div className="book-detail-label">챕터 정보</div>
+                  <div className="book-detail-value">
+                    <div className="book-detail-chapters-list">
                       {bookDetails.chapters.map((chapter, index) => (
-                        <div key={index} style={{ marginBottom: '4px' }}>
+                        <div key={index} className="book-detail-chapter-item">
                           {chapter.idx}. {chapter.title}
                         </div>
                       ))}
@@ -365,32 +239,34 @@ const BookDetailModal = ({ book, isOpen, onClose }) => {
 
               {/* 최근에 읽은 시점 */}
               {progressInfo && (
-                <div style={sectionStyle}>
-                  <div style={labelStyle}>최근에 읽은 시점</div>
-                  <div style={valueStyle}>
-                    {progressInfo.currentChapter && (
-                      <div style={{ marginBottom: '4px' }}>
-                        챕터 {progressInfo.currentChapter}장
-                      </div>
-                    )}
-                    {progressInfo.currentPage && progressInfo.totalPages && (
-                      <div style={{ marginBottom: '4px' }}>
-                        {progressInfo.currentPage} / {progressInfo.totalPages} 페이지
-                      </div>
-                    )}
-                    {progressInfo.progress && (
-                      <div style={{ marginBottom: '4px' }}>
-                        진도: {Math.round(progressInfo.progress * 100)}%
-                      </div>
-                    )}
+                <div className="book-detail-section">
+                  <div className="book-detail-label">최근에 읽은 시점</div>
+                  <div className="book-detail-value">
+                    <div className="book-detail-progress-info">
+                      {progressInfo.currentChapter && (
+                        <div className="book-detail-progress-item">
+                          챕터 {progressInfo.currentChapter}장
+                        </div>
+                      )}
+                      {progressInfo.currentPage && progressInfo.totalPages && (
+                        <div className="book-detail-progress-item">
+                          {progressInfo.currentPage} / {progressInfo.totalPages} 페이지
+                        </div>
+                      )}
+                      {progressInfo.progress && (
+                        <div className="book-detail-progress-item">
+                          진도: {Math.round(progressInfo.progress * 100)}%
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
               )}
 
               {bookDetails.updatedAt && (
-                <div style={sectionStyle}>
-                  <div style={labelStyle}>업데이트 일시</div>
-                  <div style={valueStyle}>
+                <div className="book-detail-section">
+                  <div className="book-detail-label">업데이트 일시</div>
+                  <div className="book-detail-value">
                     {new Date(bookDetails.updatedAt).toLocaleString('ko-KR')}
                   </div>
                 </div>
@@ -398,18 +274,20 @@ const BookDetailModal = ({ book, isOpen, onClose }) => {
             </>
           )}
 
-          <div style={buttonGroupStyle}>
+          <div className="book-detail-button-group">
             <button
-              style={primaryButtonStyle}
+              className="book-detail-primary-btn"
               onClick={handleReadClick}
-              {...createAdvancedButtonHandlers('primary')}
+              type="button"
+              aria-label="책 읽기 페이지로 이동"
             >
               읽기
             </button>
             <button
-              style={secondaryButtonStyle}
+              className="book-detail-secondary-btn"
               onClick={handleGraphClick}
-              {...createAdvancedButtonHandlers('default')}
+              type="button"
+              aria-label="인물 관계도 페이지로 이동"
             >
               그래프
             </button>
@@ -418,6 +296,8 @@ const BookDetailModal = ({ book, isOpen, onClose }) => {
       </div>
     </div>
   );
-};
+});
+
+BookDetailModal.displayName = 'BookDetailModal';
 
 export default BookDetailModal;

@@ -19,50 +19,68 @@ export const useBooks = () => {
       
       let apiBooks = [];
       let localBooks = [];
+      let hasApiError = false;
+      let hasLocalError = false;
       
       // API 응답 처리
       if (apiResponse.status === 'fulfilled' && apiResponse.value.isSuccess) {
         apiBooks = apiResponse.value.result || [];
+      } else if (apiResponse.status === 'rejected') {
+        hasApiError = true;
+        console.warn('API 요청 실패:', apiResponse.reason);
       }
       
       // 로컬 데이터 응답 처리
       if (localResponse.status === 'fulfilled' && localResponse.value.ok) {
-        localBooks = await localResponse.value.json();
+        try {
+          localBooks = await localResponse.value.json();
+        } catch (parseError) {
+          hasLocalError = true;
+          console.warn('로컬 데이터 파싱 실패:', parseError);
+        }
+      } else if (localResponse.status === 'rejected') {
+        hasLocalError = true;
+        console.warn('로컬 데이터 요청 실패:', localResponse.reason);
       }
       
       // API 책과 로컬 책을 합치기 (중복 제거)
       const allBooks = [...apiBooks];
       
       // 로컬 책 중에서 API에 없는 것만 추가
-      localBooks.forEach(localBook => {
-        const exists = apiBooks.some(apiBook => 
-          apiBook.title === localBook.title && apiBook.author === localBook.author
-        );
-        if (!exists) {
-          // 로컬 책을 API 형식으로 변환
-          const convertedBook = {
-            id: `local_${localBook.filename}`,
-            title: localBook.title,
-            author: localBook.author,
-            coverImgUrl: localBook.cover || null,
-            epubPath: localBook.filename,
-            summary: false,
-            default: true,
-            favorite: false,
-            updatedAt: localBook.uploadedAt || new Date().toISOString()
-          };
-          allBooks.push(convertedBook);
-        }
-      });
+      if (Array.isArray(localBooks)) {
+        localBooks.forEach(localBook => {
+          const exists = apiBooks.some(apiBook => 
+            apiBook.title === localBook.title && apiBook.author === localBook.author
+          );
+          if (!exists) {
+            // 로컬 책을 API 형식으로 변환
+            const convertedBook = {
+              id: `local_${localBook.filename}`,
+              title: localBook.title,
+              author: localBook.author,
+              coverImgUrl: localBook.cover || null,
+              epubPath: localBook.filename,
+              summary: false,
+              default: true,
+              favorite: false,
+              updatedAt: localBook.uploadedAt || new Date().toISOString()
+            };
+            allBooks.push(convertedBook);
+          }
+        });
+      }
       
       setBooks(allBooks);
       
       // 둘 다 실패한 경우에만 에러 표시
-      if (apiBooks.length === 0 && localBooks.length === 0) {
+      if (hasApiError && hasLocalError) {
         setError('책 정보를 불러올 수 없습니다. 네트워크 연결을 확인해주세요.');
+      } else if (hasApiError && allBooks.length === 0) {
+        setError('서버에서 책 정보를 불러올 수 없습니다. 로컬 책만 표시됩니다.');
       }
       
     } catch (err) {
+      console.error('fetchBooks 에러:', err);
       setError('책 정보를 불러올 수 없습니다.');
     } finally {
       setLoading(false);
@@ -170,6 +188,31 @@ export const useBooks = () => {
     }
   };
 
+  // 책 추가
+  const addBook = (newBook) => {
+    setBooks(prevBooks => [newBook, ...prevBooks]);
+  };
+
+  // 책 상태 변경 (읽는 중, 완독, 읽고 싶은 등)
+  const changeBookStatus = async (bookId, status) => {
+    // 로컬 책은 로컬 상태만 업데이트
+    if (typeof bookId === 'string' && bookId.startsWith('local_')) {
+      setBooks(prevBooks => 
+        prevBooks.map(book => 
+          book.id === bookId ? { ...book, readingStatus: status } : book
+        )
+      );
+      return;
+    }
+    
+    // TODO: API가 준비되면 실제 API 호출 추가
+    setBooks(prevBooks => 
+      prevBooks.map(book => 
+        book.id === bookId ? { ...book, readingStatus: status } : book
+      )
+    );
+  };
+
   return {
     books,
     loading,
@@ -179,6 +222,8 @@ export const useBooks = () => {
     toggleFavorite,
     searchBooks,
     fetchFavorites,
-    fetchBook
+    fetchBook,
+    addBook,
+    changeBookStatus
   };
 };

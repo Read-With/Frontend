@@ -32,6 +32,23 @@ export default defineConfig(({ mode }) => {
     },
     optimizeDeps: {
       include: ['react', 'react-dom'],
+      exclude: ['@google-cloud/local-auth', 'googleapis'],
+    },
+    build: {
+      target: 'esnext',
+      minify: 'terser',
+      rollupOptions: {
+        output: {
+          manualChunks: {
+            vendor: ['react', 'react-dom'],
+            charts: ['recharts', 'react-chartjs-2', 'chart.js'],
+            epub: ['epubjs'],
+            graph: ['cytoscape', 'cytoscape-cose-bilkent'],
+            ui: ['@ant-design/pro-components', 'antd'],
+          },
+        },
+      },
+      chunkSizeWarningLimit: 1000,
     },
     server: {
       cors: {
@@ -49,6 +66,9 @@ export default defineConfig(({ mode }) => {
         port: 24678,
         host: 'localhost',
         clientPort: 24678,
+      },
+      watch: {
+        ignored: ['**/node_modules/**', '**/dist/**', '**/.git/**'],
       },
     },
   };
