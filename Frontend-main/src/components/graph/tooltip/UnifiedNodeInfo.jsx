@@ -7,9 +7,9 @@ import { useClickOutside } from "../../../hooks/useClickOutside.js";
 import { useRelationData } from "../../../hooks/useRelationData.js";
 import { safeNum } from "../../../utils/relationUtils.js";
 import { mergeRefs } from "../../../utils/styles/animations.js";
-import { COLORS, createButtonStyle, createAdvancedButtonHandlers, ANIMATION_VALUES, unifiedNodeTooltipStyles, unifiedNodeAnimations } from "../../../utils/styles/styles.js";
-import { extractRadarChartData } from "../../../utils/radarChartUtils.js";
-import RelationshipRadarChart from "./RelationshipRadarChart.jsx";
+import { COLORS, createButtonStyle, ANIMATION_VALUES, unifiedNodeTooltipStyles, unifiedNodeAnimations } from "../../../utils/styles/styles.js";
+import { extractRadarChartData, getPositivityColor, getPositivityLabel } from "../../../utils/radarChartUtils.js";
+import { Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, ResponsiveContainer } from 'recharts';
 import "../RelationGraph.css";
 
 /**
@@ -37,21 +37,18 @@ function UnifiedNodeInfo({
   data,
   x,
   y,
-  nodeCenter,
   onClose,
   inViewer = false,
   style,
   chapterNum,
   eventNum,
   maxChapter,
-  searchTerm = "",
   elements = [],
   isSearchActive = false,
   filteredElements = [],
   filename,
   currentEvent = null,
   prevValidEvent = null,
-  events = [],
 }) {
   const { filename: urlFilename } = useParams();
   const location = useLocation();
@@ -86,26 +83,70 @@ function UnifiedNodeInfo({
     }
   }, [data]);
 
-  const [isFlipped, setIsFlipped] = useState(false);
   const [isNodeAppeared, setIsNodeAppeared] = useState(false);
   const [error, setError] = useState(null);
   const [isWarningExpanded, setIsWarningExpanded] = useState(false); // 경고 화면 펼침 여부
   const [showSummary, setShowSummary] = useState(false); // 실제 내용 표시 여부
-  const [showRadarChart, setShowRadarChart] = useState(false); // 레이더 차트 표시 여부
+  const [isModalOpen, setIsModalOpen] = useState(false); // 확대 화면 모달 상태
+  const [hoveredItem, setHoveredItem] = useState(null); // 호버된 아이템
+  const [hoverPosition, setHoverPosition] = useState({ x: 0, y: 0 }); // 호버 위치
   const [language, setLanguage] = useState('ko');
   const [isLanguageChanging, setIsLanguageChanging] = useState(false);
   const [previousDescription, setPreviousDescription] = useState('');
+
+  // 모달 핸들러
+  const handleOpenModal = useCallback(() => {
+    setIsModalOpen(true);
+  }, []);
+
+  const handleCloseModal = useCallback(() => {
+    setIsModalOpen(false);
+    setHoveredItem(null); // 모달 닫을 때 호버 상태 초기화
+  }, []);
+
+  // 마우스 오버 핸들러
+  const handleMouseEnter = useCallback((name, event) => {
+    setHoveredItem(name);
+    setHoverPosition({
+      x: event.clientX,
+      y: event.clientY
+    });
+  }, []);
+
+  const handleMouseLeave = useCallback(() => {
+    setHoveredItem(null);
+  }, []);
+
+  // ESC 키로 모달 닫기
+  useEffect(() => {
+    const handleKeyDown = (event) => {
+      if (event.key === 'Escape' && isModalOpen) {
+        handleCloseModal();
+      }
+    };
+
+    if (isModalOpen) {
+      document.addEventListener('keydown', handleKeyDown);
+      document.body.style.overflow = 'hidden';
+    }
+
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+      document.body.style.overflow = 'unset';
+    };
+  }, [isModalOpen, handleCloseModal]);
 
   // 인물이 변경될 때마다 모든 상태 초기화
   useEffect(() => {
     setIsWarningExpanded(false);
     setShowSummary(false);
-    setShowRadarChart(false);
+    setIsModalOpen(false);
+    setHoveredItem(null);
   }, [nodeData?.id]);
 
 
   // 툴팁 모드에서만 위치 관리 훅 사용
-  const { position, showContent, isDragging, justFinishedDragging, tooltipRef, handleMouseDown } = useTooltipPosition(x, y);
+  const { position, showContent, isDragging, tooltipRef, handleMouseDown } = useTooltipPosition(x, y);
 
   // 외부 클릭 감지 훅 - 툴팁 모드에서만 사용, 드래그 후 클릭 무시
   const clickOutsideRef = useClickOutside(() => {
@@ -215,9 +256,6 @@ function UnifiedNodeInfo({
     }
   }, [displayMode, nodeData, fetchData]);
 
-  const handleSummaryClick = useCallback(() => {
-    setIsFlipped(!isFlipped);
-  }, [isFlipped]);
 
   // 언어 전환 핸들러
   const handleLanguageToggle = useCallback(() => {
@@ -255,9 +293,6 @@ function UnifiedNodeInfo({
     return description;
   }, [nodeData, language]);
 
-  const hasDescription = useMemo(() => {
-    return !!(currentDescription && currentDescription.trim());
-  }, [currentDescription]);
 
   // 언어 전환 시 이전 description 저장
   useEffect(() => {
@@ -326,6 +361,81 @@ function UnifiedNodeInfo({
       return [];
     }
   }, [nodeData?.id, chapterNum, displayMode, folderKey, elements, eventNum, isGraphPage]);
+
+  // 데이터 Map 생성 (빠른 검색용)
+  const dataMap = useMemo(() => {
+    const map = new Map();
+    radarChartData.forEach(item => {
+      map.set(item.name, item);
+    });
+    return map;
+  }, [radarChartData]);
+
+  // 축 라벨 커스터마이징
+  const renderPolarAngleAxis = ({ payload, x, y, cx }) => {
+    const dataPoint = dataMap.get(payload.value);
+    const color = (dataPoint && dataPoint.positivity !== undefined) 
+      ? getPositivityColor(dataPoint.positivity) 
+      : COLORS.textPrimary;
+    const isHovered = hoveredItem === payload.value;
+    
+    return (
+      <text
+        x={x}
+        y={y}
+        textAnchor={x > cx ? 'start' : 'end'}
+        fill={isHovered ? color : COLORS.textPrimary}
+        fontSize={isHovered ? 13 : 12}
+        fontWeight={isHovered ? 600 : 500}
+        style={{ transition: 'all 0.2s ease' }}
+      >
+        {payload.value}
+      </text>
+    );
+  };
+
+  // 호버된 아이템의 데이터 가져오기
+  const hoveredData = useMemo(() => {
+    if (!hoveredItem) return null;
+    return dataMap.get(hoveredItem);
+  }, [hoveredItem, dataMap]);
+
+  // 커스텀 Dot 렌더링 (각 점을 positivity에 따라 다른 색상으로)
+  const CustomDot = React.memo((props) => {
+    const { cx, cy, payload } = props;
+    
+    if (!payload || !cx || !cy) {
+      return null;
+    }
+    
+    const fullData = dataMap.get(payload.name) || payload;
+    const color = getPositivityColor(fullData.positivity);
+    const isHovered = hoveredItem === payload.name;
+    const radius = isHovered ? 8 : 5;
+    
+    return (
+      <g>
+        {/* 투명한 큰 원 - 호버 감지용 */}
+        <circle
+          cx={cx}
+          cy={cy}
+          r={15}
+          fill="transparent"
+          style={{ cursor: 'pointer', pointerEvents: 'all' }}
+          onMouseEnter={(e) => handleMouseEnter(fullData.name, e)}
+          onMouseLeave={handleMouseLeave}
+        />
+        {/* 실제 표시되는 점 */}
+        <circle
+          cx={cx}
+          cy={cy}
+          r={radius}
+          fill={color}
+          style={{ transition: 'r 0.2s ease' }}
+        />
+      </g>
+    );
+  });
 
   // 모드별 z-index 설정
   const zIndexValue = inViewer ? 99999 : 99999;
@@ -526,11 +636,11 @@ function UnifiedNodeInfo({
       className={`tooltip-content business-card tooltip-front`}
       style={{
         backfaceVisibility: "hidden",
-        position: isFlipped ? "absolute" : "relative",
+        position: "relative",
         width: "100%",
         height: "auto",
         minHeight: "17.5rem",
-        transform: isFlipped ? "rotateY(180deg)" : "rotateY(0deg)",
+        transform: "rotateY(0deg)",
         display: "flex",
         flexDirection: "column",
         padding: 0,
@@ -826,7 +936,7 @@ function UnifiedNodeInfo({
     return (
       <div
         ref={mergeRefs(tooltipRef, clickOutsideRef)}
-        className={`graph-node-tooltip ${isFlipped ? "flipped" : ""}`}
+        className={`graph-node-tooltip`}
         style={{
           ...unifiedNodeTooltipStyles.tooltipContainer,
           left: position.x,
@@ -835,7 +945,7 @@ function UnifiedNodeInfo({
           opacity: showContent ? 1 : 0,
           transition: unifiedNodeAnimations.tooltipComplexTransition(isDragging),
           cursor: isDragging ? "grabbing" : "grab",
-          transform: isFlipped ? "rotateY(180deg)" : "rotateY(0deg)",
+          transform: "rotateY(0deg)",
           ...(style || {}),
         }}
         onMouseDown={handleMouseDown}
@@ -1385,13 +1495,12 @@ function UnifiedNodeInfo({
             >
               {/* 헤더 버튼 */}
               <button
-                onClick={() => setShowRadarChart(!showRadarChart)}
+                onClick={handleOpenModal}
                 style={{
                   width: '100%',
                   padding: '1.5rem',
                   background: 'transparent',
                   border: 'none',
-                  borderBottom: showRadarChart ? `0.0625rem solid ${COLORS.border}` : 'none',
                   cursor: 'pointer',
                   display: 'flex',
                   alignItems: 'center',
@@ -1399,9 +1508,7 @@ function UnifiedNodeInfo({
                   transition: 'background 0.2s ease',
                 }}
                 onMouseEnter={(e) => {
-                  if (!showRadarChart) {
-                    e.currentTarget.style.background = COLORS.backgroundLight;
-                  }
+                  e.currentTarget.style.background = COLORS.backgroundLight;
                 }}
                 onMouseLeave={(e) => {
                   e.currentTarget.style.background = 'transparent';
@@ -1429,60 +1536,257 @@ function UnifiedNodeInfo({
                 
                 <span style={{
                   fontSize: '1.25rem',
-                  transform: showRadarChart ? 'rotate(180deg)' : 'rotate(0deg)',
-                  transition: 'transform 0.3s ease',
                   display: 'inline-block',
                   color: COLORS.primary,
                   flexShrink: 0,
                   marginLeft: '1rem',
                 }}>
-                  ▼
+                  +
                 </span>
               </button>
 
-              {/* 레이더 차트 또는 안내 메시지 */}
-              <div style={{
-                maxHeight: showRadarChart ? '1000px' : '0',
-                opacity: showRadarChart ? 1 : 0,
-                overflow: 'hidden',
-                transition: 'max-height 0.4s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.35s ease-in-out',
-                transitionDelay: showRadarChart ? '0.15s' : '0s',
-              }}>
-                <div style={{ padding: '1.5rem' }}>
-                  {radarChartData.length > 0 ? (
-                    <RelationshipRadarChart 
-                      data={radarChartData}
-                      centerNodeName={processedNodeData?.displayName}
-                    />
-                  ) : (
-                    <div style={{
-                      padding: '2rem',
-                      textAlign: 'center',
-                      color: COLORS.textSecondary,
-                    }}>
-                      <div style={{
-                        fontSize: '3rem',
-                        marginBottom: '1rem',
-                        opacity: 0.5,
-                      }}>
-                        📊
-                      </div>
-                      <p style={{
-                        margin: 0,
-                        fontSize: '0.875rem',
-                        lineHeight: '1.6',
-                      }}>
-                        현재 이벤트에서 이 인물과 연결된 
-                        <br />
-                        다른 인물들의 정보가 없습니다.
-                      </p>
-                    </div>
-                  )}
-                </div>
-              </div>
             </div>
           </div>
         </div>
+
+        {/* 확대 화면 모달 */}
+        {isModalOpen && (
+          <div
+            style={{
+              position: 'fixed',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              background: 'rgba(0, 0, 0, 0.8)',
+              zIndex: 999999,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: '2rem',
+            }}
+            onClick={handleCloseModal}
+          >
+            <div
+              style={{
+                background: '#ffffff',
+                borderRadius: '1rem',
+                padding: '2rem',
+                maxWidth: '90vw',
+                maxHeight: '90vh',
+                width: '800px',
+                height: '600px',
+                position: 'relative',
+                boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
+                display: 'flex',
+                flexDirection: 'column',
+              }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* 모달 헤더 */}
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  marginBottom: '1.5rem',
+                  paddingBottom: '1rem',
+                  borderBottom: `2px solid ${COLORS.borderLight}`,
+                }}
+              >
+                <h2
+                  style={{
+                    margin: 0,
+                    fontSize: '1.5rem',
+                    fontWeight: '700',
+                    color: COLORS.textPrimary,
+                  }}
+                >
+                  관계도 - 확대화면
+                </h2>
+                <button
+                  onClick={handleCloseModal}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    fontSize: '1.5rem',
+                    color: COLORS.textSecondary,
+                    cursor: 'pointer',
+                    padding: '0.5rem',
+                    borderRadius: '0.375rem',
+                    transition: 'all 0.2s ease',
+                    width: '2rem',
+                    height: '2rem',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                  onMouseEnter={(e) => {
+                    e.target.style.background = COLORS.backgroundLight;
+                    e.target.style.color = COLORS.textPrimary;
+                  }}
+                  onMouseLeave={(e) => {
+                    e.target.style.background = 'none';
+                    e.target.style.color = COLORS.textSecondary;
+                  }}
+                >
+                  ×
+                </button>
+              </div>
+
+              {/* 확대된 차트 */}
+              <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                {radarChartData.length > 0 ? (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <RadarChart 
+                      data={radarChartData} 
+                      margin={{ top: 20, right: 30, bottom: 20, left: 30 }}
+                      style={{ outline: 'none' }}
+                    >
+                      <style>{`
+                        svg:focus {
+                          outline: none !important;
+                        }
+                        svg *:focus {
+                          outline: none !important;
+                        }
+                        * {
+                          animation: none !important;
+                          transition: none !important;
+                        }
+                      `}</style>
+                      <PolarGrid stroke={COLORS.border} />
+                      <PolarAngleAxis 
+                        dataKey="name" 
+                        tick={renderPolarAngleAxis}
+                      />
+                      <PolarRadiusAxis 
+                        angle={90} 
+                        domain={[0, 100]} 
+                        tick={{ fontSize: 11, fill: COLORS.textSecondary }}
+                        tickCount={5}
+                        tickFormatter={(value) => {
+                          const normalized = (value / 50) - 1;
+                          return normalized.toFixed(1);
+                        }}
+                      />
+                      <Radar
+                        name={processedNodeData?.displayName}
+                        dataKey="normalizedValue"
+                        stroke="#9ca3af"
+                        fill="#e5e7eb"
+                        fillOpacity={0.2}
+                        strokeWidth={2}
+                        dot={(dotProps) => {
+                          const { key, ...propsWithoutKey } = dotProps;
+                          return <CustomDot key={key} {...propsWithoutKey} />;
+                        }}
+                        isAnimationActive={false}
+                        animationBegin={0}
+                        animationDuration={0}
+                      />
+                    </RadarChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div style={{
+                    padding: '2rem',
+                    textAlign: 'center',
+                    color: COLORS.textSecondary,
+                    fontSize: '0.875rem',
+                  }}>
+                    표시할 관계 데이터가 없습니다.
+                  </div>
+                )}
+
+                {/* 마우스 오버 정보창 */}
+                {hoveredData && (
+                  <div
+                    style={{
+                      position: 'fixed',
+                      left: `${hoverPosition.x + 10}px`,
+                      top: `${hoverPosition.y - 10}px`,
+                      padding: '1.25rem 1.5rem',
+                      background: 'rgba(255, 255, 255, 0.98)',
+                      border: `2px solid ${getPositivityColor(hoveredData.positivity)}`,
+                      borderRadius: '0.75rem',
+                      boxShadow: '0 8px 24px rgba(0,0,0,0.2), 0 2px 8px rgba(0,0,0,0.1)',
+                      zIndex: 999999,
+                      backdropFilter: 'blur(8px)',
+                      pointerEvents: 'none',
+                      minWidth: '320px',
+                      maxWidth: '400px',
+                      minHeight: '160px',
+                    }}
+                  >
+                    {/* 인물 이름 */}
+                    <div style={{ 
+                      fontWeight: '700', 
+                      fontSize: '1rem', 
+                      marginBottom: '0.5rem', 
+                      color: COLORS.textPrimary,
+                    }}>
+                      {hoveredData.fullName || hoveredData.name}
+                    </div>
+                    
+                    {/* 관계도 점수 */}
+                    <div style={{ 
+                      display: 'flex', 
+                      alignItems: 'center',
+                      gap: '0.5rem',
+                      padding: '0.5rem',
+                      background: 'linear-gradient(135deg, #f8f9fc 0%, #ffffff 100%)',
+                      borderRadius: '0.375rem',
+                      border: '1px solid #e3e6ef'
+                    }}>
+                      <span style={{ 
+                        fontSize: '0.75rem',
+                        color: getPositivityColor(hoveredData.positivity),
+                        fontWeight: '600',
+                      }}>
+                        {getPositivityLabel(hoveredData.positivity || 0)}
+                      </span>
+                      <span style={{ 
+                        fontWeight: '700', 
+                        color: getPositivityColor(hoveredData.positivity), 
+                        fontSize: '1.25rem',
+                      }}>
+                        {Math.round((hoveredData.positivity || 0) * 100)}%
+                      </span>
+                    </div>
+                    
+                    {hoveredData.relationTags && hoveredData.relationTags.length > 0 && (
+                      <div style={{ marginTop: '0.75rem', paddingTop: '0.75rem', borderTop: `1px solid ${COLORS.borderLight}` }}>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.375rem' }}>
+                          {hoveredData.relationTags.slice(0, 6).map((tag, i) => (
+                            <span
+                              key={i}
+                              style={{
+                                background: COLORS.backgroundLight,
+                                color: COLORS.textPrimary,
+                                padding: '0.25rem 0.5rem',
+                                borderRadius: '0.375rem',
+                                fontSize: '0.75rem',
+                                border: `1px solid ${COLORS.border}`,
+                                fontWeight: '500',
+                              }}
+                            >
+                              {tag}
+                            </span>
+                          ))}
+                          {hoveredData.relationTags.length > 6 && (
+                            <span style={{ fontSize: '0.75rem', color: COLORS.textSecondary, alignSelf: 'center' }}>
+                              +{hoveredData.relationTags.length - 6}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     );
   }
