@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, useRef } from 'react';
+import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, ResponsiveContainer, Tooltip } from 'recharts';
 import { getPositivityColor, getPositivityLabel } from '../../../utils/radarChartUtils';
 import { COLORS } from '../../../utils/styles/styles';
@@ -10,61 +10,17 @@ import { COLORS } from '../../../utils/styles/styles';
  * @param {string} props.centerNodeName - 중심 노드 이름
  */
 function RelationshipRadarChart({ data, centerNodeName }) {
-  const [hoveredItem, setHoveredItem] = useState(null);
   const [clickedItemInfo, setClickedItemInfo] = useState(null); // { data, position: { x, y } }
   const containerRef = useRef(null);
-  const popoverRef = useRef(null);
-  const [isDragging, setIsDragging] = useState(false);
-  const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
-  const dragStartPos = useRef({ x: 0, y: 0 });
-
-  // 드래그 핸들러
-  const handleMouseDown = (e) => {
-    // X 버튼 클릭은 무시
-    if (e.target.closest('button')) return;
-    
-    setIsDragging(true);
-    dragStartPos.current = {
-      x: e.clientX - dragOffset.x,
-      y: e.clientY - dragOffset.y
-    };
-    e.preventDefault();
-  };
-
-  const handleMouseMove = (e) => {
-    if (!isDragging) return;
-    
-    const newX = e.clientX - dragStartPos.current.x;
-    const newY = e.clientY - dragStartPos.current.y;
-    
-    setDragOffset({ x: newX, y: newY });
-  };
-
-  const handleMouseUp = () => {
-    setIsDragging(false);
-  };
-
-  useEffect(() => {
-    if (isDragging) {
-      document.addEventListener('mousemove', handleMouseMove);
-      document.addEventListener('mouseup', handleMouseUp);
-      return () => {
-        document.removeEventListener('mousemove', handleMouseMove);
-        document.removeEventListener('mouseup', handleMouseUp);
-      };
-    }
-  }, [isDragging, dragOffset]);
 
   // 외부 클릭 감지 - 레이더 차트 영역은 제외
   useEffect(() => {
     const handleClickOutside = (event) => {
-      if (popoverRef.current && !popoverRef.current.contains(event.target)) {
-        // 레이더 차트 영역 내부 클릭은 무시
-        if (containerRef.current && containerRef.current.contains(event.target)) {
-          return;
-        }
-        setClickedItemInfo(null);
+      // 레이더 차트 영역 내부 클릭은 무시
+      if (containerRef.current && containerRef.current.contains(event.target)) {
+        return;
       }
+      setClickedItemInfo(null);
     };
 
     if (clickedItemInfo) {
@@ -75,22 +31,107 @@ function RelationshipRadarChart({ data, centerNodeName }) {
     }
   }, [clickedItemInfo]);
 
-  // 정보창이 닫힐 때 드래그 오프셋 초기화
-  useEffect(() => {
-    if (!clickedItemInfo) {
-      setDragOffset({ x: 0, y: 0 });
-      setIsDragging(false);
-    }
-  }, [clickedItemInfo]);
-
-  // 데이터에 고유 키 추가
-  const processedData = useMemo(() => {
-    if (!data || data.length === 0) return [];
-    return data.map((item, index) => ({
+  // 데이터에 고유 키 추가 및 Map 생성으로 성능 최적화
+  const { processedData, dataMap } = useMemo(() => {
+    if (!data || data.length === 0) return { processedData: [], dataMap: new Map() };
+    
+    const processed = data.map((item, index) => ({
       ...item,
       id: `${item.connectedNodeId || item.name}-${index}`
     }));
+    
+    // 빠른 검색을 위한 Map 생성
+    const map = new Map();
+    processed.forEach(item => {
+      map.set(item.name, item);
+    });
+    
+    return { processedData: processed, dataMap: map };
   }, [data]);
+
+  // 축 라벨 커스터마이징 - 단순화
+  const renderPolarAngleAxis = useCallback(({ payload, x, y, cx }) => {
+    return (
+      <text
+        x={x}
+        y={y}
+        textAnchor={x > cx ? 'start' : 'end'}
+        fill={COLORS.textPrimary}
+        fontSize={12}
+        fontWeight={500}
+      >
+        {payload.value}
+      </text>
+    );
+  }, []);
+
+  // 클릭 핸들러 최적화 - 즉시 정보창 표시
+  const handleDotClick = useCallback((e, fullData, cx, cy) => {
+    e.stopPropagation();
+    
+    // 즉시 정보창 표시 (좌표 계산 최적화)
+    const containerRect = containerRef.current?.getBoundingClientRect();
+    if (containerRect) {
+      const svgElement = e.target.closest('svg');
+      const svgRect = svgElement?.getBoundingClientRect();
+      
+      if (svgRect) {
+        // 최적화된 좌표 계산
+        const relativeX = cx + (svgRect.left - containerRect.left);
+        const relativeY = cy + (svgRect.top - containerRect.top);
+        
+        // 즉시 상태 업데이트
+        setClickedItemInfo({
+          data: fullData,
+          position: { x: relativeX, y: relativeY }
+        });
+      } else {
+        // SVG 요소를 찾을 수 없는 경우 기본 위치 사용
+        setClickedItemInfo({
+          data: fullData,
+          position: { x: cx, y: cy }
+        });
+      }
+    } else {
+      // 컨테이너를 찾을 수 없는 경우 기본 위치 사용
+      setClickedItemInfo({
+        data: fullData,
+        position: { x: cx, y: cy }
+      });
+    }
+  }, []);
+
+  // 클릭 핸들러를 미리 바인딩하여 인라인 함수 제거
+  const createClickHandler = useCallback((fullData, cx, cy) => {
+    return (e) => handleDotClick(e, fullData, cx, cy);
+  }, [handleDotClick]);
+
+  // Popover 위치 계산 - 단순화
+  const popoverPosition = useMemo(() => {
+    if (!clickedItemInfo || !containerRef.current) return { left: 0, top: 0 };
+    
+    const { x, y } = clickedItemInfo.position;
+    const containerRect = containerRef.current.getBoundingClientRect();
+    const popoverWidth = 320;
+    const popoverHeight = 350;
+    const offset = 20;
+    
+    // 화면 기준 좌표로 변환
+    const screenX = containerRect.left + x;
+    const screenY = containerRect.top + y;
+    
+    // 항상 왼쪽 위쪽으로 배치
+    let left = screenX - popoverWidth - offset;
+    let top = screenY - popoverHeight - offset;
+    
+    // 경계 체크 및 조정
+    if (top < 10) top = 10;
+    if (top + popoverHeight > window.innerHeight - 10) top = window.innerHeight - popoverHeight - 10;
+    if (left < 10) left = 10;
+    if (left + popoverWidth > window.innerWidth - 10) left = window.innerWidth - popoverWidth - 10;
+    
+    return { left, top };
+  }, [clickedItemInfo]);
 
   if (!processedData || processedData.length === 0) {
     return (
@@ -107,165 +148,48 @@ function RelationshipRadarChart({ data, centerNodeName }) {
     );
   }
 
-  // 축 라벨 커스터마이징
-  const renderPolarAngleAxis = ({ payload, x, y, cx, cy, verticalAnchor, ...rest }) => {
-    const isHovered = hoveredItem === payload.value;
-    const dataPoint = processedData.find(d => d.name === payload.value);
-    const color = (dataPoint && dataPoint.positivity !== undefined) 
-      ? getPositivityColor(dataPoint.positivity) 
-      : COLORS.textPrimary;
-    
-    return (
-      <text
-        x={x}
-        y={y}
-        textAnchor={x > cx ? 'start' : 'end'}
-        fill={isHovered ? color : COLORS.textPrimary}
-        fontSize={isHovered ? 13 : 12}
-        fontWeight={isHovered ? 600 : 500}
-        style={{ transition: 'all 0.2s ease' }}
-      >
-        {payload.value}
-      </text>
-    );
-  };
+  // 스타일 객체들을 미리 생성하여 재사용
+  const transparentStyle = { cursor: 'pointer', pointerEvents: 'all' };
+  const dotStyle = { cursor: 'pointer', pointerEvents: 'none' };
+  const clickAreaRadius = 15;
 
-  // 커스텀 Dot 렌더링 (각 점을 positivity에 따라 다른 색상으로)
-  const CustomDot = (props) => {
+  // 커스텀 Dot 렌더링 - 단순화
+  const CustomDot = React.memo((props) => {
     const { cx, cy, payload } = props;
     
     if (!payload || !cx || !cy) {
-      console.warn('⚠️ 점 렌더링 실패:', { cx, cy, hasPayload: !!payload });
       return null;
     }
     
-    // processedData에서 완전한 데이터 찾기
-    const fullData = processedData.find(d => d.name === payload.name) || payload;
+    // Map을 사용한 빠른 데이터 검색
+    const fullData = dataMap.get(payload.name) || payload;
     
     const color = getPositivityColor(fullData.positivity);
-    const isHovered = hoveredItem === payload.name;
     const isClicked = clickedItemInfo?.data?.name === payload.name;
-    const radius = isClicked ? 10 : (isHovered ? 8 : 5);
-    const clickAreaRadius = 15; // 클릭 영역 반지름
-    
-    const handleClick = (e) => {
-      e.stopPropagation();
-      
-      // 컨테이너 기준 좌표 계산
-      if (containerRef.current) {
-        const containerRect = containerRef.current.getBoundingClientRect();
-        const svgElement = e.target.closest('svg');
-        if (svgElement) {
-          const svgRect = svgElement.getBoundingClientRect();
-          const relativeX = cx + (svgRect.left - containerRect.left);
-          const relativeY = cy + (svgRect.top - containerRect.top);
-          
-          // 클릭할 때마다 팝오버 표시 (같은 점이어도)
-          setClickedItemInfo({
-            data: fullData,
-            position: { x: relativeX, y: relativeY }
-          });
-        }
-      }
-    };
+    const radius = isClicked ? 10 : 5;
     
     return (
       <g>
-        {/* 투명한 큰 원 - 클릭 영역 확장 및 호버 감지 */}
+        {/* 투명한 큰 원 - 클릭 영역 */}
         <circle
           cx={cx}
           cy={cy}
           r={clickAreaRadius}
           fill="transparent"
-          style={{ 
-            cursor: 'pointer',
-            pointerEvents: 'all'
-          }}
-          onClick={handleClick}
-          onMouseEnter={() => setHoveredItem(fullData.name)}
-          onMouseLeave={() => setHoveredItem(null)}
+          style={transparentStyle}
+          onClick={createClickHandler(fullData, cx, cy)}
         />
-        {/* 실제 표시되는 점 - 동일한 색상, 테두리 없음 */}
+        {/* 실제 표시되는 점 */}
         <circle
           cx={cx}
           cy={cy}
           r={radius}
           fill={color}
-          style={{ 
-            transition: 'all 0.2s ease',
-            cursor: 'pointer',
-            filter: (isHovered || isClicked) ? 'drop-shadow(0 2px 4px rgba(0,0,0,0.3))' : 'none',
-            pointerEvents: 'none'
-          }}
+          style={dotStyle}
         />
       </g>
     );
-  };
-
-  // Popover 위치 계산 (fixed 포지션 사용) - 스마트 방향 선택
-  const calculatePopoverPosition = () => {
-    if (!clickedItemInfo || !containerRef.current) return { left: 0, top: 0 };
-    
-    const { x, y } = clickedItemInfo.position;
-    const containerRect = containerRef.current.getBoundingClientRect();
-    const popoverWidth = 320;
-    const popoverHeight = 350;
-    const offset = 20;
-    
-    // 화면 기준 좌표로 변환
-    const screenX = containerRect.left + x;
-    const screenY = containerRect.top + y;
-    
-    // 팝오버가 나타날 방향 결정
-    let left, top;
-    
-    // 1. 수평 방향 결정 (좌우)
-    if (screenX + popoverWidth + offset > window.innerWidth - 10) {
-      // 오른쪽에 공간이 부족하면 왼쪽에 표시
-      left = screenX - popoverWidth - offset;
-    } else {
-      // 오른쪽에 표시
-      left = screenX + offset;
-    }
-    
-    // 2. 수직 방향 결정 (상하)
-    if (screenY + popoverHeight > window.innerHeight - 10) {
-      // 아래쪽에 공간이 부족하면 위쪽에 표시
-      top = screenY - popoverHeight - offset;
-    } else {
-      // 아래쪽에 표시
-      top = screenY;
-    }
-    
-    // 3. 경계 체크 및 조정
-    // 상단 경계
-    if (top < 10) {
-      top = 10;
-    }
-    
-    // 하단 경계
-    if (top + popoverHeight > window.innerHeight - 10) {
-      top = window.innerHeight - popoverHeight - 10;
-    }
-    
-    // 좌측 경계
-    if (left < 10) {
-      left = 10;
-    }
-    
-    // 우측 경계
-    if (left + popoverWidth > window.innerWidth - 10) {
-      left = window.innerWidth - popoverWidth - 10;
-    }
-    
-    // 드래그 오프셋 적용
-    return { 
-      left: left + dragOffset.x, 
-      top: top + dragOffset.y 
-    };
-  };
-
-  const popoverPosition = calculatePopoverPosition();
+  });
 
   return (
     <div
@@ -276,6 +200,7 @@ function RelationshipRadarChart({ data, centerNodeName }) {
         flexDirection: 'column',
         alignItems: 'center',
         position: 'relative',
+        outline: 'none'
       }}
     >
       {/* 설명 */}
@@ -300,18 +225,30 @@ function RelationshipRadarChart({ data, centerNodeName }) {
           }}
         >
           <strong style={{ color: COLORS.primary }}>
-            점을 클릭하면 바로 옆에 상세 정보가 표시됩니다.
+            점을 클릭하면 상세 정보가 표시됩니다.
           </strong>
-          <br />
-          <span style={{ fontSize: '0.8rem', color: COLORS.textSecondary }}>
-            정보창을 드래그하여 원하는 위치로 이동할 수 있습니다.
-          </span>
         </p>
       </div>
 
       {/* 차트 */}
       <ResponsiveContainer width="100%" height={400}>
-      <RadarChart data={processedData} margin={{ top: 5, right: 20, bottom: 5, left: 20 }}>
+      <RadarChart 
+        data={processedData} 
+        margin={{ top: 5, right: 20, bottom: 5, left: 20 }}
+        style={{ outline: 'none' }}
+      >
+        <style>{`
+          svg:focus {
+            outline: none !important;
+          }
+          svg *:focus {
+            outline: none !important;
+          }
+          * {
+            animation: none !important;
+            transition: none !important;
+          }
+        `}</style>
         <PolarGrid stroke={COLORS.border} />
         <PolarAngleAxis 
           dataKey="name" 
@@ -339,14 +276,15 @@ function RelationshipRadarChart({ data, centerNodeName }) {
             return <CustomDot key={key} {...propsWithoutKey} />;
           }}
           isAnimationActive={false}
+          animationBegin={0}
+          animationDuration={0}
         />
       </RadarChart>
     </ResponsiveContainer>
 
-      {/* 클릭한 점의 정보 Popover - 드래그 가능 */}
+      {/* 클릭한 점의 정보 Popover */}
       {clickedItemInfo && (
         <div
-          ref={popoverRef}
           style={{
             position: 'fixed',
             left: `${popoverPosition.left}px`,
@@ -358,18 +296,12 @@ function RelationshipRadarChart({ data, centerNodeName }) {
             background: 'rgba(255, 255, 255, 0.98)',
             border: `2px solid ${getPositivityColor(clickedItemInfo.data.positivity)}`,
             borderRadius: '0.75rem',
-            boxShadow: isDragging 
-              ? '0 12px 32px rgba(0,0,0,0.3), 0 4px 12px rgba(0,0,0,0.15)'
-              : '0 8px 24px rgba(0,0,0,0.2), 0 2px 8px rgba(0,0,0,0.1)',
+            boxShadow: '0 8px 24px rgba(0,0,0,0.2), 0 2px 8px rgba(0,0,0,0.1)',
             zIndex: 99999,
-            animation: 'popoverFadeIn 0.2s cubic-bezier(0.16, 1, 0.3, 1)',
             backdropFilter: 'blur(8px)',
-            cursor: isDragging ? 'grabbing' : 'grab',
             userSelect: 'none',
-            transition: isDragging ? 'none' : 'box-shadow 0.2s ease',
           }}
           onClick={(e) => e.stopPropagation()}
-          onMouseDown={handleMouseDown}
         >
           {/* 화살표 표시 - 클릭된 점을 가리킴 */}
           <div
@@ -386,18 +318,6 @@ function RelationshipRadarChart({ data, centerNodeName }) {
               zIndex: 1,
             }}
           />
-          <style>{`
-            @keyframes popoverFadeIn {
-              from {
-                opacity: 0;
-                transform: scale(0.9) translateY(-10px);
-              }
-              to {
-                opacity: 1;
-                transform: scale(1) translateY(0);
-              }
-            }
-          `}</style>
           
           <button
             onClick={() => setClickedItemInfo(null)}
