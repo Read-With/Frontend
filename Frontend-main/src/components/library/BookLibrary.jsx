@@ -1,14 +1,13 @@
 import React, { useState, memo } from 'react';
 import PropTypes from 'prop-types';
 import { useNavigate } from 'react-router-dom';
-import { Heart, BookOpen, Network, MoreVertical, Info, CheckCircle, Star, Clock } from 'lucide-react';
+import { Heart, BookOpen, Network, MoreVertical, Info, CheckCircle, Clock, FileText } from 'lucide-react';
 import BookDetailModal from './BookDetailModal';
 import './BookLibrary.css';
 
-const BookCard = ({ book, onToggleFavorite, onBookClick, onBookDetailClick, onStatusChange }) => {
+const BookCard = ({ book, onToggleFavorite, onBookClick, onBookDetailClick, onStatusChange, viewMode = 'grid' }) => {
   const navigate = useNavigate();
   const [imageError, setImageError] = useState(false);
-  const [isHovered, setIsHovered] = useState(false);
   const [showContextMenu, setShowContextMenu] = useState(false);
 
   const isLocalBook = typeof book.id === 'string' && book.id.startsWith('local_');
@@ -70,7 +69,6 @@ const BookCard = ({ book, onToggleFavorite, onBookClick, onBookDetailClick, onSt
     const statusMap = {
       reading: { label: '읽는 중', className: 'status-reading', icon: <BookOpen size={14} /> },
       completed: { label: '완독', className: 'status-completed', icon: <CheckCircle size={14} /> },
-      wishlist: { label: '읽고 싶은', className: 'status-wishlist', icon: <Star size={14} /> },
       none: { label: '미분류', className: 'status-default', icon: <BookOpen size={14} /> }
     };
     return statusMap[status] || statusMap.none;
@@ -105,12 +103,8 @@ const BookCard = ({ book, onToggleFavorite, onBookClick, onBookDetailClick, onSt
 
   return (
     <div 
-      className="book-card"
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => {
-        setIsHovered(false);
-        setShowContextMenu(false);
-      }}
+      className={`book-card ${viewMode === 'list' ? 'list-view' : 'grid-view'}`}
+      onMouseLeave={() => setShowContextMenu(false)}
       onClick={handleCardClick}
     >
       {/* 상태 배지 */}
@@ -167,14 +161,37 @@ const BookCard = ({ book, onToggleFavorite, onBookClick, onBookDetailClick, onSt
         </p>
         
         {/* 메타 정보 */}
-        {book.updatedAt && (
-          <div className="book-meta">
+        <div className="book-meta">
+          {book.updatedAt && (
             <span className="book-meta-item">
               <Clock size={14} />
-              {new Date(book.updatedAt).toLocaleDateString('ko-KR')}
+              {(() => {
+                const date = new Date(book.updatedAt);
+                const now = new Date();
+                const diffTime = Math.abs(now - date);
+                const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                
+                if (diffDays === 1) return '오늘';
+                if (diffDays === 2) return '어제';
+                if (diffDays <= 7) return `${diffDays - 1}일 전`;
+                return date.toLocaleDateString('ko-KR', { month: 'short', day: 'numeric' });
+              })()}
             </span>
-          </div>
-        )}
+          )}
+          
+          {book.format && (
+            <span className="book-meta-item book-format">
+              <FileText size={14} />
+              {book.format.toUpperCase()}
+            </span>
+          )}
+          
+          {book.pages && (
+            <span className="book-meta-item">
+              📄 {book.pages}페이지
+            </span>
+          )}
+        </div>
       </div>
 
       {/* 카드 액션 버튼 */}
@@ -184,7 +201,7 @@ const BookCard = ({ book, onToggleFavorite, onBookClick, onBookDetailClick, onSt
           onClick={handleReadClick}
           title="책 읽기"
         >
-          <BookOpen size={18} className="book-action-icon" />
+          <BookOpen size={16} className="book-action-icon" />
           읽기
         </button>
         <button 
@@ -192,7 +209,7 @@ const BookCard = ({ book, onToggleFavorite, onBookClick, onBookDetailClick, onSt
           onClick={handleGraphClick}
           title="인물 관계도 보기"
         >
-          <Network size={18} className="book-action-icon" />
+          <Network size={16} className="book-action-icon" />
           관계도
         </button>
       </div>
@@ -221,13 +238,6 @@ const BookCard = ({ book, onToggleFavorite, onBookClick, onBookDetailClick, onSt
             >
               <CheckCircle size={18} className="book-context-icon" />
               완독
-            </button>
-            <button
-              className="book-context-item"
-              onClick={(e) => handleStatusChangeClick('wishlist', e)}
-            >
-              <Star size={18} className="book-context-icon" />
-              읽고 싶은 책
             </button>
             <button
               className="book-context-item"
@@ -263,10 +273,11 @@ BookCard.propTypes = {
   onToggleFavorite: PropTypes.func,
   onBookClick: PropTypes.func,
   onBookDetailClick: PropTypes.func,
-  onStatusChange: PropTypes.func
+  onStatusChange: PropTypes.func,
+  viewMode: PropTypes.oneOf(['grid', 'list'])
 };
 
-const BookLibrary = memo(({ books, loading, error, onRetry, onToggleFavorite, onBookClick, onStatusChange }) => {
+const BookLibrary = memo(({ books, loading, error, onRetry, onToggleFavorite, onBookClick, onStatusChange, viewMode = 'grid' }) => {
   const [selectedBook, setSelectedBook] = React.useState(null);
   const [showDetailModal, setShowDetailModal] = React.useState(false);
 
@@ -296,6 +307,7 @@ const BookLibrary = memo(({ books, loading, error, onRetry, onToggleFavorite, on
           onBookClick={onBookClick}
           onBookDetailClick={handleBookDetailClick}
           onStatusChange={onStatusChange}
+          viewMode={viewMode}
         />
       ))}
       
@@ -315,7 +327,8 @@ BookLibrary.propTypes = {
   onRetry: PropTypes.func,
   onToggleFavorite: PropTypes.func,
   onBookClick: PropTypes.func,
-  onStatusChange: PropTypes.func
+  onStatusChange: PropTypes.func,
+  viewMode: PropTypes.oneOf(['grid', 'list'])
 };
 
 BookLibrary.displayName = 'BookLibrary';

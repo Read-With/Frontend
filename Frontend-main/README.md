@@ -1,134 +1,102 @@
-# ReadWith - 스마트 독서 플랫폼
+# ReadWith 📚
 
 EPUB 파일을 읽고, 인물 관계도를 시각화하며, 북마크와 메모를 관리할 수 있는 React 기반 스마트 독서 플랫폼입니다.
 
----
+## ✨ 주요 기능
 
-## 주요 기능
+### 📖 EPUB 뷰어
+- 고성능 EPUB 뷰어
+- 분할/단일 화면 모드 지원
+- 읽기 진행률 추적 및 자동 저장
+- 페이지 네비게이션
 
-### 나의 서재
-- 개인 도서 라이브러리 관리
-- EPUB 파일 업로드 및 저장
-- 즐겨찾기 도서 관리
-- 도서 메타데이터 표시 (제목, 저자, 표지 이미지)
-
-### EPUB 뷰어
-- **react-reader** 기반 고성능 뷰어
-- **분할 화면 모드**: 뷰어와 그래프를 동시에 표시
-- **단일 화면 모드**: 뷰어 또는 그래프만 표시
-- 읽기 진행률 슬라이더 및 페이지 네비게이션
-- **읽은 위치 자동 저장**: CFI 기반 정확한 위치 복원
-
-### 인물 관계도 시각화
-- **Cytoscape.js** 기반 인터랙티브 그래프
-- 챕터별 인물 관계 실시간 업데이트
-- **이벤트 기반 관계 변화** 추적
-- 노드/간선 검색 및 필터링
-- 고립된 인물 숨기기/표시 기능
+### 🗺️ 인물 관계도 시각화
+- Cytoscape.js 기반 인터랙티브 그래프
+- 실시간 관계 업데이트
+- 인물 검색 및 필터링
 - 관계 라벨 표시/숨기기
 
-### 스마트 북마크 시스템
-- **서버 기반 북마크 저장**
+### 🔖 스마트 북마크
 - CFI 기반 정확한 위치 저장
-- 북마크별 메모 작성 및 수정
-- 북마크 색상 구분 (일반/중요/하이라이트)
-- 북마크 목록 페이지에서 통합 관리
+- 북마크별 메모 작성
+- 색상별 중요도 구분
+- 서버 동기화
 
-### 사용자 경험
-- **반응형 디자인**: 모바일/데스크톱 최적화
-- **다크/라이트 테마** 지원
-- **부드러운 애니메이션** 및 전환 효과
-- **키보드 단축키** 지원
-- **로딩 상태** 및 오류 처리
+### 📚 나의 서재
+- 개인 도서 라이브러리 관리
+- EPUB 파일 업로드 및 저장
+- 도서 메타데이터 표시
 
----
+## 🚀 시작하기
 
-## 🔧 환경 설정
+### 1. 설치
+```bash
+npm install
+```
 
-### 1. 환경 변수 설정
-프로젝트 루트에 `.env` 파일을 생성하고 다음 내용을 추가하세요:
+### 2. 환경 변수 설정
+`.env` 파일을 생성하고 Google OAuth 설정을 추가하세요:
 
 ```env
-# Google OAuth 설정
 VITE_GOOGLE_CLIENT_ID=your_google_client_id_here
 ```
 
-### 2. Google Cloud Console 설정
-1. [Google Cloud Console](https://console.cloud.google.com/)에 접속
-2. 프로젝트 선택 → APIs & Services → Credentials
-3. OAuth 2.0 Client ID 생성/수정
-4. **승인된 JavaScript 원본**에 다음 도메인 추가:
-   - `http://localhost:5173` (개발용)
-   - `http://localhost:3000` (대안)
-   - 실제 배포 도메인
+### 3. Google Cloud Console 설정
+1. [Google Cloud Console](https://console.cloud.google.com/) 접속
+2. OAuth 2.0 Client ID 생성
+3. 승인된 JavaScript 원본에 `http://localhost:5173` 추가
 
-### 3. 개발 서버 실행
+### 4. 개발 서버 실행
 ```bash
-npm install
 npm run dev
 ```
-
----
 
 ## 🛠 기술 스택
 
 | 영역 | 기술 |
 |------|------|
-| **프론트엔드** | React 18, React Router, Recoil |
-| **뷰어** | react-reader, epub.js |
-| **그래프** | Cytoscape.js, CytoscapeGraphUnified |
-| **스타일링** | CSS-in-JS, 반응형 디자인 |
-| **상태관리** | React Hooks, Recoil, LocalStorage |
-| **API 통신** | Fetch API, RESTful API |
+| **프론트엔드** | React 19, React Router, Recoil |
+| **뷰어** | epub.js |
+| **그래프** | Cytoscape.js |
+| **스타일링** | Tailwind CSS, 반응형 디자인 |
+| **상태관리** | React Hooks, Recoil |
 | **빌드 도구** | Vite |
-| **기타** | react-toastify, PropTypes |
 
----
-
-## 프로젝트 구조
+## 📁 프로젝트 구조
 
 ```
 src/
 ├── components/
-│   ├── viewer/           # EPUB 뷰어 컴포넌트
-│   │   ├── epub/         # 뷰어 설정 및 툴바
-│   │   └── bookmark/     # 북마크 관리
+│   ├── viewer/           # EPUB 뷰어
 │   ├── graph/            # 관계도 시각화
-│   │   ├── CytoscapeGraphUnified.jsx
-│   │   ├── GraphControls.jsx
-│   │   └── tooltip/      # 그래프 툴팁
 │   ├── library/          # 도서 라이브러리
 │   └── common/           # 공통 컴포넌트
 ├── hooks/                # 커스텀 훅
-│   ├── useViewerPage.js  # 뷰어 페이지 로직
-│   ├── useGraphSearch.js # 그래프 검색
-│   └── useLocalStorage.js # 로컬 스토리지
 ├── utils/                # 유틸리티 함수
-│   ├── viewerUtils.js    # 뷰어 관련 유틸
-│   ├── graphData.js      # 그래프 데이터 처리
-│   └── api.js           # API 통신
 └── pages/               # 페이지 컴포넌트
-    ├── HomePage.jsx     # 홈페이지
-    └── MyPage.jsx       # 나의 서재
 ```
 
----
+## 📝 라이선스
 
-## 핵심 기능 상세
+이 프로젝트는 MIT 라이선스 하에 배포됩니다.
 
-### 인물 관계도 시각화
-- **실시간 업데이트**: 읽기 진행에 따라 관계도 자동 갱신
-- **이벤트 기반**: 각 이벤트별로 등장인물과 관계 변화 추적
-- **인터랙티브**: 노드 클릭 시 상세 정보 표시
-- **검색 기능**: 인물명으로 빠른 검색 및 필터링
+## 🤝 기여하기
 
-### 스마트 북마크
-- **정확한 위치 저장**: CFI(Canonical Fragment Identifier) 기반
-- **메모 기능**: 북마크별 개인 메모 작성
-- **색상 구분**: 중요도에 따른 시각적 구분
-- **서버 동기화**: 클라우드 기반 북마크 저장
+1. Fork the Project
+2. Create your Feature Branch (`git checkout -b feature/AmazingFeature`)
+3. Commit your Changes (`git commit -m 'Add some AmazingFeature'`)
+4. Push to the Branch (`git push origin feature/AmazingFeature`)
+5. Open a Pull Request
 
-### 분할 화면 모드
-- **뷰어/그래프 동시 표시**: 읽기와 관계 분석을 동시에
-- **화면 모드 전환**: 단일/분할 모드 자유 전환
-- **반응형 레이아웃**: 화면 크기에 따른 자동 조정
+## 🐛 문제 해결
+
+### 일반적인 문제들
+
+**Q: Google OAuth 로그인이 안 돼요**
+A: Google Cloud Console에서 승인된 JavaScript 원본에 `http://localhost:5173`이 추가되었는지 확인하세요.
+
+**Q: EPUB 파일이 로드되지 않아요**
+A: 파일이 올바른 EPUB 형식인지 확인하고, 브라우저 콘솔에서 오류 메시지를 확인하세요.
+
+**Q: 그래프가 표시되지 않아요**
+A: 데이터 파일이 올바른 위치에 있는지 확인하고, 네트워크 탭에서 API 호출 상태를 확인하세요.

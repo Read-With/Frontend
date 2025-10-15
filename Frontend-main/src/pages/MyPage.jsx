@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useCallback } from 'react';
-import { Book, BookOpen, CheckCircle2, Search, Plus, Library, Heart, Star, AlertCircle } from 'lucide-react';
+import { Book, BookOpen, CheckCircle2, Search, Plus, Library, Heart, AlertCircle, Grid3X3, List } from 'lucide-react';
 import Header from '../components/common/Header';
 import BookLibrary from '../components/library/BookLibrary';
 import FileUpload from '../components/library/FileUpload';
@@ -14,6 +14,7 @@ export default function MyPage() {
   const [activeTab, setActiveTab] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState('recent');
+  const [viewMode, setViewMode] = useState('grid'); // 'grid' 또는 'list'
 
   const handleUploadSuccess = useCallback((newBook) => {
     addBook(newBook);
@@ -29,8 +30,9 @@ export default function MyPage() {
     total: books?.length || 0,
     reading: books?.filter(b => b.readingStatus === 'reading').length || 0,
     completed: books?.filter(b => b.readingStatus === 'completed').length || 0,
-    wishlist: books?.filter(b => b.readingStatus === 'wishlist').length || 0,
+    favorites: books?.filter(b => b.favorite).length || 0,
   }), [books]);
+
 
   // 탭별 필터링 - 메모이제이션
   const filteredBooks = useMemo(() => {
@@ -41,8 +43,6 @@ export default function MyPage() {
       filtered = filtered.filter(b => b.readingStatus === 'reading');
     } else if (activeTab === 'completed') {
       filtered = filtered.filter(b => b.readingStatus === 'completed');
-    } else if (activeTab === 'wishlist') {
-      filtered = filtered.filter(b => b.readingStatus === 'wishlist');
     } else if (activeTab === 'favorites') {
       filtered = filtered.filter(b => b.favorite);
     }
@@ -62,6 +62,18 @@ export default function MyPage() {
       filtered.sort((a, b) => a.title.localeCompare(b.title));
     } else if (sortBy === 'author') {
       filtered.sort((a, b) => a.author.localeCompare(b.author));
+    } else if (sortBy === 'progress') {
+      filtered.sort((a, b) => {
+        const aProgress = a.progress || 0;
+        const bProgress = b.progress || 0;
+        return bProgress - aProgress;
+      });
+    } else if (sortBy === 'lastRead') {
+      filtered.sort((a, b) => {
+        const aLastRead = a.lastReadAt ? new Date(a.lastReadAt) : new Date(a.updatedAt);
+        const bLastRead = b.lastReadAt ? new Date(b.lastReadAt) : new Date(b.updatedAt);
+        return bLastRead - aLastRead;
+      });
     }
 
     return filtered;
@@ -100,22 +112,67 @@ export default function MyPage() {
                   <div className="stat-icon-wrapper">
                     <Book className="stat-icon-svg" />
                   </div>
-                  <span className="stat-number">{stats.total}</span>
-                  <span className="stat-label">전체 도서</span>
+                  <div className="stat-content">
+                    <span className="stat-number">{stats.total}</span>
+                    <span className="stat-label">전체 도서</span>
+                    {stats.total > 0 && (
+                      <div className="stat-progress-ring">
+                        <svg className="progress-ring" width="40" height="40">
+                          <circle
+                            className="progress-ring-circle"
+                            stroke="#e8ecf3"
+                            strokeWidth="3"
+                            fill="transparent"
+                            r="18"
+                            cx="20"
+                            cy="20"
+                          />
+                          <circle
+                            className="progress-ring-circle progress-ring-fill"
+                            stroke="#4F6DDE"
+                            strokeWidth="3"
+                            fill="transparent"
+                            r="18"
+                            cx="20"
+                            cy="20"
+                            style={{
+                              strokeDasharray: `${2 * Math.PI * 18}`,
+                              strokeDashoffset: `${2 * Math.PI * 18 * (1 - (stats.completed / stats.total))}`
+                            }}
+                          />
+                        </svg>
+                        <span className="progress-text">{Math.round((stats.completed / stats.total) * 100)}%</span>
+                      </div>
+                    )}
+                  </div>
                 </div>
                 <div className="stat-card stat-card-reading">
                   <div className="stat-icon-wrapper">
                     <BookOpen className="stat-icon-svg" />
                   </div>
-                  <span className="stat-number">{stats.reading}</span>
-                  <span className="stat-label">읽는 중</span>
+                  <div className="stat-content">
+                    <span className="stat-number">{stats.reading}</span>
+                    <span className="stat-label">읽는 중</span>
+                    {stats.reading > 0 && (
+                      <div className="stat-badge">
+                        🔥 활발한 독서
+                      </div>
+                    )}
+                  </div>
                 </div>
                 <div className="stat-card stat-card-completed">
                   <div className="stat-icon-wrapper">
                     <CheckCircle2 className="stat-icon-svg" />
                   </div>
-                  <span className="stat-number">{stats.completed}</span>
-                  <span className="stat-label">완독</span>
+                  <div className="stat-content">
+                    <span className="stat-number">{stats.completed}</span>
+                    <span className="stat-label">완독</span>
+                    {stats.completed > 0 && (
+                      <div className="stat-badge">
+                        🏆 {stats.completed}권 완주
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>
@@ -148,17 +205,11 @@ export default function MyPage() {
                   {stats.completed > 0 && <span className="tab-badge">{stats.completed}</span>}
                 </button>
                 <button
-                  className={`tab-button ${activeTab === 'wishlist' ? 'active' : ''}`}
-                  onClick={() => setActiveTab('wishlist')}
-                >
-                  읽고 싶은
-                  {stats.wishlist > 0 && <span className="tab-badge">{stats.wishlist}</span>}
-                </button>
-                <button
                   className={`tab-button ${activeTab === 'favorites' ? 'active' : ''}`}
                   onClick={() => setActiveTab('favorites')}
                 >
                   즐겨찾기 ❤️
+                  {stats.favorites > 0 && <span className="tab-badge">{stats.favorites}</span>}
                 </button>
               </nav>
 
@@ -174,16 +225,39 @@ export default function MyPage() {
                   />
                   <Search className="search-icon" size={20} />
                 </div>
-                <select
-                  className="filter-select"
-                  value={sortBy}
-                  onChange={(e) => setSortBy(e.target.value)}
-                >
-                  <option value="recent">최근 추가순</option>
-                  <option value="title">제목순</option>
-                  <option value="author">저자순</option>
-                </select>
+                
+                <div className="filter-controls">
+                  <select
+                    className="filter-select"
+                    value={sortBy}
+                    onChange={(e) => setSortBy(e.target.value)}
+                  >
+                    <option value="recent">최근 추가순</option>
+                    <option value="title">제목순</option>
+                    <option value="author">저자순</option>
+                    <option value="progress">진행률 높은 순</option>
+                    <option value="lastRead">최근 읽은 순</option>
+                  </select>
+                  
+                  <div className="view-toggle">
+                    <button
+                      className={`view-toggle-btn ${viewMode === 'grid' ? 'active' : ''}`}
+                      onClick={() => setViewMode('grid')}
+                      title="그리드 뷰"
+                    >
+                      <Grid3X3 size={18} />
+                    </button>
+                    <button
+                      className={`view-toggle-btn ${viewMode === 'list' ? 'active' : ''}`}
+                      onClick={() => setViewMode('list')}
+                      title="리스트 뷰"
+                    >
+                      <List size={18} />
+                    </button>
+                  </div>
+                </div>
               </div>
+
 
               {/* 책 목록 */}
               <div className="books-grid-section">
@@ -211,18 +285,21 @@ export default function MyPage() {
                       {activeTab === 'all' ? <Library size={80} strokeWidth={1.5} /> : 
                        activeTab === 'reading' ? <BookOpen size={80} strokeWidth={1.5} /> : 
                        activeTab === 'completed' ? <CheckCircle2 size={80} strokeWidth={1.5} /> : 
-                       activeTab === 'wishlist' ? <Star size={80} strokeWidth={1.5} /> : <Heart size={80} strokeWidth={1.5} />}
+                       <Heart size={80} strokeWidth={1.5} />}
                     </div>
                     <h2 className="empty-title">
                       {activeTab === 'all' ? '아직 책이 없네요!' :
                        activeTab === 'reading' ? '읽는 중인 책이 없어요' :
                        activeTab === 'completed' ? '완독한 책이 없어요' :
-                       activeTab === 'wishlist' ? '읽고 싶은 책을 추가해보세요' :
                        '즐겨찾기한 책이 없어요'}
                     </h2>
                     <p className="empty-description">
                       {activeTab === 'all' 
-                        ? '우측 하단의 + 버튼을 눌러서 첫 번째 책을 추가해보세요'
+                        ? '우측 하단의 + 버튼을 눌러서 첫 번째 책을 추가해보세요. EPUB 파일을 업로드하면 바로 읽을 수 있어요!'
+                        : activeTab === 'reading'
+                        ? '아직 읽고 있는 책이 없네요. 서재에서 책을 선택해 독서를 시작해보세요!'
+                        : activeTab === 'completed'
+                        ? '완독한 책이 아직 없어요. 책을 끝까지 읽으면 여기에 표시됩니다.'
                         : searchQuery
                         ? '검색 결과가 없습니다. 다른 키워드로 검색해보세요.'
                         : '해당하는 책이 없습니다.'}
@@ -237,7 +314,7 @@ export default function MyPage() {
                     )}
                   </div>
                 ) : (
-                  <div className="books-grid">
+                  <div className={`books-grid ${viewMode === 'list' ? 'list-view' : 'grid-view'}`}>
                     <BookLibrary
                       books={filteredBooks}
                       loading={false}
@@ -245,6 +322,7 @@ export default function MyPage() {
                       onRetry={retryFetch}
                       onToggleFavorite={toggleFavorite}
                       onStatusChange={changeBookStatus}
+                      viewMode={viewMode}
                     />
                   </div>
                 )}
