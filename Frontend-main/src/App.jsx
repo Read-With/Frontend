@@ -29,7 +29,7 @@ const AppContent = () => {
 
       <Routes>
         <Route path="/" element={<HomePage />} />
-        <Route path="/login/oauth2/code/google" element={<OAuthCallback />} />
+        <Route path="/auth/callback" element={<OAuthCallback />} />
         <Route path="/admin" element={<AdminPage />} />
         <Route path="/mypage" element={
           <ProtectedRoute>

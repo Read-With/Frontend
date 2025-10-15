@@ -20,28 +20,54 @@ const Header = ({ userNickname, showAuthLinks = false }) => {
     try {
       setLoginError(null);
       
-      // 프론트엔드에서 직접 Google OAuth URL 생성
+      // 백엔드에서 OAuth URL 생성 요청
+      console.log('백엔드에서 OAuth URL 생성 요청...');
+      
+      const response = await fetch('http://localhost:8080/api/auth/google/url', {
+        method: 'GET',
+        headers: {
+          'Accept': 'application/json',
+        },
+      });
+      
+      if (!response.ok) {
+        throw new Error(`백엔드 응답 오류: ${response.status}`);
+      }
+      
+      const data = await response.json();
+      
+      if (!data.isSuccess || !data.result || !data.result.authUrl) {
+        throw new Error('백엔드에서 OAuth URL을 생성할 수 없습니다.');
+      }
+      
+      // 백엔드에서 제공한 URL 템플릿을 실제 값으로 치환
       const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
-      const redirectUri = 'http://localhost:5173/login/oauth2/code/google';
-      const scope = 'openid email profile';
+      const redirectUri = 'http://localhost:5173/auth/callback';
       
-      const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?` +
-        `client_id=${encodeURIComponent(clientId)}&` +
-        `redirect_uri=${encodeURIComponent(redirectUri)}&` +
-        `response_type=code&` +
-        `scope=${encodeURIComponent(scope)}&` +
-        `access_type=offline&` +
-        `prompt=consent`;
+      if (!clientId || clientId === 'CLIENT_ID' || clientId === 'your_google_client_id_here') {
+        setLoginError('Google OAuth 설정이 올바르지 않습니다. 환경변수를 확인해주세요.');
+        return;
+      }
       
-      secureLog('Google OAuth 로그인 시작', { clientId: clientId.substring(0, 10) + '...', redirectUri });
+      const authUrl = data.result.authUrl
+        .replace('${GOOGLE_CLIENT_ID}', clientId)
+        .replace('${GOOGLE_REDIRECT_URI}', redirectUri);
       
-      // Google OAuth URL로 리디렉션
+      console.log('백엔드 응답 데이터:', data);
+      console.log('생성된 OAuth URL:', authUrl);
+      console.log('사용된 리다이렉트 URI:', redirectUri);
+      secureLog('Google OAuth 로그인 시작', { 
+        clientId: clientId.substring(0, 10) + '...', 
+        redirectUri 
+      });
+      
+      // Google OAuth URL로 리다이렉트
       window.location.href = authUrl;
     } catch (err) {
       let errorMessage = '로그인 실패';
       
       if (err.message.includes('Failed to fetch')) {
-        errorMessage = '서버에 연결할 수 없습니다. 네트워크 연결을 확인하고 다시 시도해주세요.';
+        errorMessage = '백엔드 서버에 연결할 수 없습니다. 백엔드 서버가 실행 중인지 확인해주세요.';
       } else {
         errorMessage = `로그인 실패: ${err.message}`;
       }

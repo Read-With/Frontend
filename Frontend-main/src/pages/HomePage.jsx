@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import useAuth from '../hooks/useAuth';
 import Header from '../components/common/Header';
+import OAuthCallback from '../components/auth/OAuthCallback';
 import './HomePage.css';
 
 const features = [
@@ -100,6 +101,11 @@ export default function HomePage() {
   const [selectedImage, setSelectedImage] = useState(null);
   const navigate = useNavigate();
   const { user } = useAuth();
+  const [searchParams] = useSearchParams();
+  
+  // OAuth 콜백 처리
+  const code = searchParams.get('code');
+  const error = searchParams.get('error');
 
   const handleFeatureToggle = (featureId) => {
     setExpandedFeature(expandedFeature === featureId ? null : featureId);
@@ -127,6 +133,36 @@ export default function HomePage() {
       document.removeEventListener('keydown', handleKeyDown);
     };
   }, [selectedImage]);
+
+  // OAuth 콜백이 있으면 OAuthCallback 컴포넌트 렌더링
+  if (code || error) {
+    return <OAuthCallback />;
+  }
+
+  // OAuth 오류 처리
+  const oauthError = searchParams.get('error');
+  if (oauthError) {
+    return (
+      <div className="homepage-container">
+        <Header showAuthLinks={true} />
+        <div className="main-content">
+          <div className="hero-section">
+            <h1 className="hero-title">OAuth 오류</h1>
+            <p className="hero-subtitle">로그인 중 오류가 발생했습니다.</p>
+            <p className="hero-description">
+              오류 코드: {oauthError}
+            </p>
+            <button 
+              className="cta-button"
+              onClick={() => navigate('/')}
+            >
+              홈으로 돌아가기
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   // 로그인된 사용자는 마이페이지로 리다이렉트
   useEffect(() => {

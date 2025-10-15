@@ -58,46 +58,59 @@ const OAuthCallback = () => {
 
         // OAuth 오류 처리
         if (error) {
-          setError(`OAuth 오류: ${error}`);
+          let errorMessage = `OAuth 오류: ${error}`;
+          
+          if (error === 'access_denied') {
+            errorMessage = '사용자가 로그인을 취소했습니다.';
+          } else if (error === 'redirect_uri_mismatch') {
+            errorMessage = 'Google OAuth 리다이렉트 URI가 일치하지 않습니다. Google Console에서 설정을 확인해주세요.';
+          }
+          
+          setError(errorMessage);
           setIsLoading(false);
           setIsProcessing(false);
           return;
         }
 
-        // 백엔드로 인증 코드 전송 (재시도 로직 포함)
-        
-        const makeRequest = async (retryCount = 0) => {
-          const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 30000); // 30초 타임아웃
-          
-          try {
-            const response = await fetch(`${getApiBaseUrl()}/api/auth/google`, {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'Accept': 'application/json',
-              },
-              body: JSON.stringify({
-                code: code,
-                redirectUri: 'http://localhost:5173/login/oauth2/code/google'
-              }),
-              signal: controller.signal
-            });
+            // 백엔드 Google OAuth2 API에 맞춰 요청 (재시도 로직 포함)
             
-            clearTimeout(timeoutId);
-            return response;
-          } catch (error) {
-            clearTimeout(timeoutId);
-            
-                     // 네트워크 오류이고 재시도 횟수가 3번 미만이면 재시도
-                     if (retryCount < 3 && (error.name === 'AbortError' || error.message.includes('Failed to fetch'))) {
-                       await new Promise(resolve => setTimeout(resolve, 2000 * (retryCount + 1))); // 2초, 4초, 6초 대기
-                       return makeRequest(retryCount + 1);
-                     }
-            
-            throw error;
-          }
-        };
+            const makeRequest = async (retryCount = 0) => {
+              const controller = new AbortController();
+              const timeoutId = setTimeout(() => controller.abort(), 20000); // 20초 타임아웃
+              
+              try {
+                // 백엔드 GoogleLoginRequestDTO 형식에 맞춰 JSON 요청
+                const response = await fetch(`${getApiBaseUrl()}/api/auth/google`, {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json',
+                  },
+                  body: JSON.stringify({
+                    code: code
+                  }),
+                  credentials: 'include', // 쿠키 포함
+                  signal: controller.signal
+                });
+                
+                clearTimeout(timeoutId);
+                return response;
+              } catch (error) {
+                clearTimeout(timeoutId);
+                
+                // 백엔드 서버 연결 문제 처리
+                if (error.name === 'AbortError' || error.message.includes('Failed to fetch')) {
+                  if (retryCount < 3) {
+                    await new Promise(resolve => setTimeout(resolve, 3000 * (retryCount + 1)));
+                    return makeRequest(retryCount + 1);
+                  } else {
+                    throw new Error('백엔드 서버에 연결할 수 없습니다. 백엔드 서버가 실행 중인지 확인해주세요.');
+                  }
+                }
+                
+                throw error;
+              }
+            };
         
         const response = await makeRequest();
 
@@ -106,12 +119,12 @@ const OAuthCallback = () => {
           
           // 401 오류인 경우 대안 방법 시도
           if (response.status === 401) {
-            throw new Error('백엔드 인증 설정 문제. 백엔드에서 /api/auth/google 엔드포인트를 확인해주세요.');
+            throw new Error('Google OAuth2 인증 실패. 인증 코드가 유효하지 않거나 만료되었습니다.');
           }
           
           // 500 오류인 경우 서버 처리 시간 부족일 수 있음
           if (response.status === 500) {
-            throw new Error('서버 처리 시간이 부족합니다. 잠시 후 다시 시도해주세요.');
+            throw new Error('서버 내부 오류가 발생했습니다. 잠시 후 다시 시도해주세요.');
           }
           
           throw new Error(`서버 응답 오류: ${response.status} - ${errorText}`);
@@ -143,29 +156,50 @@ const OAuthCallback = () => {
               email: userData.email,
               imageUrl: userData.profileImgUrl || userData.picture || '',
               accessToken: data.result.accessToken,
+              refreshToken: data.result.refreshToken,
               tokenType: data.result.tokenType || 'Bearer',
-              expiresIn: data.result.expiresIn || 3600
+              expiresIn: data.result.expiresIn || 3600000, // 1시간 (백엔드 설정에 맞춤)
+              refreshExpiresIn: data.result.refreshExpiresIn || 604800000 // 7일 (백엔드 설정에 맞춤)
             };
             
             secureLog('OAuth 인증 성공', { userId: userData.id, email: userData.email });
             login(frontendUserData);
             setIsCompleted(true);
             
-            // 성공 시 localStorage 정리 및 즉시 리디렉션
+            // 성공 시 localStorage 정리 및 즉시 리디렉션 (백엔드 설정에 맞춤)
             localStorage.removeItem('oauth_processed_code');
             navigate('/mypage');
           } else {
             throw new Error('사용자 데이터를 받지 못했습니다.');
           }
         } else {
-          // invalid_grant 오류인 경우 특별 처리
+          // 백엔드 에러 코드 처리 (백엔드 API 분석 결과에 맞춤)
+          if (data.code === 'AUTH4001') {
+            throw new Error('Google OAuth2 설정 오류입니다. Google Client ID와 Secret을 확인해주세요.');
+          }
+          
+          if (data.code === 'AUTH4002') {
+            throw new Error('Google OAuth2 인증 실패입니다. 인증 코드가 유효하지 않습니다.');
+          }
+          
+          if (data.code === 'AUTH4003') {
+            throw new Error('JWT 토큰 생성 실패입니다. 백엔드 JWT 설정을 확인해주세요.');
+          }
+          
+          if (data.code === 'AUTH4004') {
+            throw new Error('리다이렉트 URI 불일치입니다. Google Console에서 리다이렉트 URI를 확인해주세요.');
+          }
+          
+          if (data.code === 'AUTH4005') {
+            throw new Error('사용자 정보 처리 실패입니다. Google 사용자 정보를 가져올 수 없습니다.');
+          }
+          
           if (data.message && data.message.includes('invalid_grant')) {
             throw new Error('인증 코드가 만료되었습니다. 다시 로그인해주세요.');
           }
           
-          // DB 제약 조건 오류인 경우 (중복 사용자)
           if (data.message && data.message.includes('Duplicate entry')) {
-            throw new Error('이미 가입된 사용자입니다. 로그인해주세요.');
+            throw new Error('이미 다른 소셜 로그인으로 가입된 이메일입니다.');
           }
           
           throw new Error(data.message || '인증 실패');
