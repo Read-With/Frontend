@@ -12,10 +12,15 @@ import {
   calculateChapterProgress, 
   findClosestEvent,
   extractChapterNumber,
+  detectCurrentChapter,
   storageUtils,
   getRefs,
   cleanupNavigation,
-  ensureLocations
+  ensureLocations,
+  textUtils,
+  settingsUtils,
+  getSpreadMode,
+  navigationUtils
 } from '../../../utils/viewerUtils';
 import { registerCache, clearCache } from '../../../utils/common/cacheManager';
 
@@ -79,24 +84,6 @@ const getEventsForChapter = (chapter) => {
   }
 };
 
-const textUtils = {
-  countCharacters: (text, element) => {
-    if (!text) return 0;
-    
-    if (element) {
-      const excludedClasses = ['.pg-boilerplate', '.pgheader', '.toc', '.dedication', '.epigraph'];
-      if (excludedClasses.some(cls => element.closest(cls))) {
-        return 0;
-      }
-    }
-
-    return text
-      .replace(/[\s\n\r\t]/g, '')
-      .replace(/[^a-zA-Z]/g, '')
-      .length;
-  },
-
-};
 
 const EpubViewer = forwardRef(
   (
@@ -137,18 +124,7 @@ const EpubViewer = forwardRef(
       };
     }, [book.path, book.filename, settings?.pageMode, settings?.showGraph]);
 
-    // 스프레드 모드 결정 함수 (메모이제이션)
-    const getSpreadMode = useCallback(() => {
-      // 분할 화면 + 그래프 화면 (showGraph=true, graphFullScreen=false)에서는 뷰어 너비가 50%로 제한
-      if (showGraph) {
-        // 분할 화면: 50% 너비에 최적화하여 항상 한 페이지씩 표시
-        // pageMode 설정과 관계없이 'none'으로 설정 (50% 너비에서는 두 페이지 표시가 부적절)
-        return 'none';
-      } else {
-        // 전체 화면: pageMode에 따라 spread 모드 결정
-        return pageMode === 'single' ? 'none' : 'always';
-      }
-    }, [pageMode, showGraph]);
+    // 스프레드 모드 결정은 viewerUtils.js의 getSpreadMode 사용
 
     const smoothReload = useCallback((type = 'next') => {
       setReloading(type);
@@ -157,60 +133,9 @@ const EpubViewer = forwardRef(
       }, 300);
     }, []);
 
-    const fallbackDisplay = useCallback(async (direction = 'next') => {
-      try {
-        const { book, rendition } = getRefs(bookRef, renditionRef);
-        if (!book || !rendition) return;
+    // 네비게이션 실패 시 대체 방법은 viewerUtils.js의 navigationUtils 사용
 
-        const location = await rendition.currentLocation();
-        const cfi = location?.start?.cfi;
-        const currentPercent = book.locations.percentageFromCfi(cfi);
-        const targetPercent = direction === 'next'
-          ? Math.min(currentPercent + 0.02, 1.0)
-          : Math.max(currentPercent - 0.02, 0.0);
-
-        const targetCfi = book.locations.cfiFromPercentage(targetPercent);
-
-        if (targetCfi) {
-          await rendition.display(targetCfi);
-        } else {
-          storageUtils.set(
-            direction === 'next' ? storageKeys.nextPage : storageKeys.prevPage,
-            'true'
-          );
-          smoothReload(direction);
-        }
-      } catch (e) {
-        smoothReload(direction);
-      } finally {
-        setReloading(false);
-      }
-    }, [storageKeys, smoothReload]);
-
-    // 글자 수 계산 유틸리티 함수들 (중복 로직 제거)
-    const calculateParagraphChars = useCallback((paragraph, element) => {
-      return textUtils.countCharacters(paragraph.textContent, element);
-    }, []);
-
-    const calculatePreviousParagraphsChars = useCallback((paragraphs, currentParagraphNum) => {
-      let charCount = 0;
-      for (let i = 0; i < currentParagraphNum - 1; i++) {
-        const paragraph = paragraphs[i];
-        if (paragraph) {
-          charCount += calculateParagraphChars(paragraph, paragraph);
-        }
-      }
-      return charCount;
-    }, [calculateParagraphChars]);
-
-    const calculateCurrentParagraphChars = useCallback((paragraphs, currentParagraphNum, charOffset) => {
-      if (currentParagraphNum > 0 && paragraphs[currentParagraphNum - 1]) {
-        const currentParagraph = paragraphs[currentParagraphNum - 1];
-        const currentParagraphChars = calculateParagraphChars(currentParagraph, currentParagraph);
-        return Math.min(charOffset, currentParagraphChars);
-      }
-      return 0;
-    }, [calculateParagraphChars]);
+    // 글자 수 계산은 viewerUtils.js의 textUtils 사용
 
     // 페이지 이동 시 글자 수 계산 및 표시 함수 (디바운싱 적용)
     const updatePageCharCountTimer = useRef(null);
@@ -241,10 +166,10 @@ const EpubViewer = forwardRef(
         const paragraphs = currentPage.document.querySelectorAll('p');
 
         // 이전 단락들의 글자 수 계산
-        const previousChars = calculatePreviousParagraphsChars(paragraphs, currentParagraphNum);
+        const previousChars = textUtils.calculatePreviousParagraphsChars(paragraphs, currentParagraphNum);
         
         // 현재 단락의 부분 글자 수 계산
-        const currentChars = calculateCurrentParagraphChars(paragraphs, currentParagraphNum, charOffset);
+        const currentChars = textUtils.calculateCurrentParagraphChars(paragraphs, currentParagraphNum, charOffset);
         
         const totalCharCount = previousChars + currentChars;
 
@@ -252,123 +177,38 @@ const EpubViewer = forwardRef(
         chapterPageCharsRef.current.set(currentCfi, totalCharCount);
         currentChapterCharsRef.current = totalCharCount;
       }, 50);
-    }, [calculatePreviousParagraphsChars, calculateCurrentParagraphChars]);
-
-
-    // 챕터 번호 감지 함수 (중복 로직 통합)
-    const detectCurrentChapter = useCallback((cfi) => {
-      let detectedChapter = extractChapterNumber(cfi);
-      
-      if (detectedChapter === 1 && chapterCfiMapRef.current.size > 0) {
-        for (const [chapterNum, chapterCfi] of chapterCfiMapRef.current) {
-          if (cfi && cfi.includes(chapterCfi)) {
-            detectedChapter = chapterNum;
-            break;
-          }
-        }
-      }
-      
-      return detectedChapter;
     }, []);
 
-    const safeNavigate = useCallback(async (action, direction = 'next') => {
-      const { book, rendition } = getRefs(bookRef, renditionRef);
-      if (!book || !rendition || isNavigating) return;
-      setIsNavigating(true);
-      setNavigationError(null);
 
-      let relocatedFired = false;
-      const relocatedHandler = () => {
-        relocatedFired = true;
-        cleanupNavigation(setIsNavigating, rendition, relocatedHandler);
-      };
-      rendition.on('relocated', relocatedHandler);
+    // 챕터 번호 감지는 viewerUtils.js의 detectCurrentChapter 사용
 
-      try {
-        const beforeLocation = await rendition.currentLocation();
-        const beforeCfi = beforeLocation?.start?.cfi;
-        const beforeSpinePos = beforeLocation?.start?.spinePos;
+    // 안전한 네비게이션은 viewerUtils.js의 navigationUtils 사용
 
-        // next/prev 실행 결과 반환값 체크
-        const result = await action();
-
-        let waited = 0;
-        const maxWait = 1200;
-        const interval = 60;
-        while (!relocatedFired && waited < maxWait) {
-          await new Promise(res => setTimeout(res, interval));
-          waited += interval;
-        }
-
-        const afterLocation = await rendition.currentLocation();
-        const afterCfi = afterLocation?.start?.cfi;
-        const afterSpinePos = afterLocation?.start?.spinePos;
-
-        // relocated가 발생하지 않았거나, cfi가 그대로면 spine 직접 이동 시도
-        if ((!relocatedFired || beforeCfi === afterCfi) && afterCfi) {
-          // spine 직접 이동 (다음/이전 챕터)
-          let moved = false;
-          if (direction === 'next') {
-            const currSpine = book.spine.get(beforeSpinePos);
-            const nextSpine = book.spine.get(currSpine.index + 1);
-            if (nextSpine) {
-              await rendition.display(nextSpine.href);
-              moved = true;
-            }
-          } else if (direction === 'prev') {
-            const currSpine = book.spine.get(beforeSpinePos);
-            const prevSpine = book.spine.get(currSpine.index - 1);
-            if (prevSpine) {
-              await rendition.display(prevSpine.href);
-              moved = true;
-            }
-          }
-          if (!moved) {
-            setNavigationError('이동할 수 없는 페이지입니다.');
-          }
-          rendition.emit('relocated', afterLocation);
-          cleanupNavigation(setIsNavigating, rendition, relocatedHandler);
-        }
-      } catch {
-        cleanupNavigation(setIsNavigating, rendition, relocatedHandler);
-        setNavigationError('이동 중 오류가 발생했습니다.');
-        await fallbackDisplay(direction);
-      }
-    }, [isNavigating, fallbackDisplay]);
-
-    // 설정 적용 함수
-    const applySettings = useCallback(() => {
-      const { book, rendition } = getRefs(bookRef, renditionRef);
-      if (!book || !rendition) return;
-      
-      // 스프레드 모드 설정 - 화면 모드 전환 시에도 유지
-      rendition.spread(getSpreadMode());
-      
-      // 글꼴 크기 적용 (설정이 있는 경우)
-      if (settings?.fontSize) {
-        const fontSize = settings.fontSize / 100;
-      rendition.themes.fontSize(`${fontSize * 100}%`);
-      }
-      
-      // 줄 간격 적용 (설정이 있는 경우)
-      if (settings?.lineHeight) {
-      rendition.themes.override('body', {
-          'line-height': `${settings.lineHeight}`
-      });
-      }
-      
-    }, [getSpreadMode, settings]);
+    // 설정 적용은 viewerUtils.js의 settingsUtils.applyEpubSettings 사용
 
     // pageMode 또는 showGraph 변경 시 spread 모드 재적용
     useEffect(() => {
       if (renditionRef.current) {
-        applySettings();
+        const { rendition } = getRefs(bookRef, renditionRef);
+        if (rendition) {
+          settingsUtils.applyEpubSettings(rendition, settings, getSpreadMode(pageMode, showGraph));
+        }
       }
-    }, [pageMode, showGraph, settings?.fontSize, settings?.lineHeight, applySettings]);
+    }, [pageMode, showGraph, settings?.fontSize, settings?.lineHeight]);
 
          useImperativeHandle(ref, () => ({
-       prevPage: () => safeNavigate(() => renditionRef.current.prev(), 'prev'),
-       nextPage: () => safeNavigate(() => renditionRef.current.next(), 'next'),
+       prevPage: () => {
+         const { book, rendition } = getRefs(bookRef, renditionRef);
+         if (book && rendition) {
+           navigationUtils.safeNavigate(book, rendition, () => rendition.prev(), 'prev', setIsNavigating, setNavigationError, storageKeys);
+         }
+       },
+       nextPage: () => {
+         const { book, rendition } = getRefs(bookRef, renditionRef);
+         if (book && rendition) {
+           navigationUtils.safeNavigate(book, rendition, () => rendition.next(), 'next', setIsNavigating, setNavigationError, storageKeys);
+         }
+       },
        getCurrentCfi: async () => {
          if (!renditionRef.current?.currentLocation) return null;
          const location = await renditionRef.current.currentLocation();
@@ -451,9 +291,14 @@ const EpubViewer = forwardRef(
         const targetCfi = book.locations.cfiFromPercentage(percent);
         await rendition.display(targetCfi || (percent < 0.5 ? 0 : book.spine.last()?.href));
       },
-      applySettings: () => applySettings(),
+      applySettings: () => {
+        const { rendition } = getRefs(bookRef, renditionRef);
+        if (rendition) {
+          settingsUtils.applyEpubSettings(rendition, settings, getSpreadMode(pageMode, showGraph));
+        }
+      },
       isNavigating,
-    }), [safeNavigate, applySettings, isNavigating]);
+    }), [isNavigating, pageMode, showGraph, storageKeys]);
 
     useEffect(() => {
       const loadBook = async () => {
@@ -534,7 +379,7 @@ const EpubViewer = forwardRef(
           const rendition = bookInstance.renderTo(viewerRef.current, {
             width: '100%',
             height: '100%',
-            spread: getSpreadMode(),
+            spread: getSpreadMode(pageMode, showGraph),
             manager: 'default',
             flow: 'paginated',
             maxSpreadPages: (showGraph || pageMode === 'single') ? 1 : 2,
@@ -562,7 +407,7 @@ const EpubViewer = forwardRef(
             storageUtils.set(storageKeys.lastCFI, cfi);
             
               // 현재 챕터 감지 및 업데이트 (통합된 함수 사용)
-             const detectedChapter = detectCurrentChapter(cfi);
+             const detectedChapter = detectCurrentChapter(cfi, chapterCfiMapRef.current);
              
              
              // ViewerPage에 챕터 변경 알림
@@ -635,7 +480,7 @@ const EpubViewer = forwardRef(
           
           // 설정 적용
           if (settings) {
-            applySettings();
+            settingsUtils.applyEpubSettings(rendition, settings, getSpreadMode(pageMode, showGraph));
           }
         } catch (e) {
           setError("EPUB 로드 오류");
@@ -664,27 +509,27 @@ const EpubViewer = forwardRef(
     }, [
       epubPath, 
       currentPath, 
-      getSpreadMode, 
       showGraph, 
       pageMode, 
       storageKeys, 
-      detectCurrentChapter, 
       updatePageCharCount,
       onCurrentPageChange,
       onProgressChange,
       onCurrentChapterChange,
       onCurrentLineChange,
       onTotalPagesChange,
-      applySettings,
       settings
     ]);
 
     // 설정이 변경될 때마다 적용
     useEffect(() => {
       if (renditionRef.current && settings) {
-        applySettings();
+        const { rendition } = getRefs(bookRef, renditionRef);
+        if (rendition) {
+          settingsUtils.applyEpubSettings(rendition, settings, getSpreadMode(pageMode, showGraph));
+        }
       }
-    }, [settings, applySettings]);
+    }, [settings, pageMode, showGraph]);
 
     // 앱이 처음 로드될 때 로컬 스토리지 초기화
     useEffect(() => {

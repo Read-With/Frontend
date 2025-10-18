@@ -209,7 +209,7 @@ const ViewerRelationGraph = ({
           selectedNodeIdRef={selectedNodeIdRef}
           selectedEdgeIdRef={selectedEdgeIdRef}
           strictBackgroundClear={true}
-          showRippleEffect={isEventTransition} // 이벤트 전환에 따른 노드 추가 시에만 ripple 효과 표시
+          showRippleEffect={true} // 그래프 페이지와 동일하게 항상 ripple 효과 표시
         />
       </div>
     </div>

@@ -62,6 +62,7 @@ export function getFolderKeyFromFilename(filename) {
     
     if (!filename || typeof filename !== 'string') {
       console.warn(`getFolderKeyFromFilename: 파일명이 없거나 유효하지 않습니다 (${typeof filename}: ${filename}). 첫 번째 폴더를 사용합니다.`);
+      console.info(`getFolderKeyFromFilename: 사용 가능한 폴더: [${availableFolders.join(', ')}]`);
       return availableFolders[0];
     }
     

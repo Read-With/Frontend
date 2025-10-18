@@ -119,7 +119,13 @@ export function useViewerPage() {
     fetchBookInfo();
   }, [book.id, location.state?.book]); // book.id와 location.state?.book만 의존성으로 설정
   
-  const folderKey = useMemo(() => getFolderKeyFromFilename(filename), [filename]);
+  const folderKey = useMemo(() => {
+    const key = getFolderKeyFromFilename(filename);
+    if (!key) {
+      console.warn('useViewerPage: folderKey가 null입니다. filename:', filename);
+    }
+    return key;
+  }, [filename]);
   
   const {
     elements,

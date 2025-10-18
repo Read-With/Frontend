@@ -649,6 +649,12 @@ const ViewerPage = () => {
           }
           
           try {
+            // folderKey 유효성 검사
+            if (!folderKey) {
+              console.warn('preloadChapterLayouts: folderKey가 없습니다. 레이아웃 생성을 건너뜁니다.');
+              return;
+            }
+            
             const charactersData = getChapterFile(chapterNum, "characters", folderKey);
             if (!charactersData) return;
             

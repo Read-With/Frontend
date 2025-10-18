@@ -433,6 +433,23 @@ export function extractChapterNumber(cfi, label = null) {
   return 1;
 }
 
+// CFI 매핑을 통한 정확한 챕터 감지 (EpubViewer에서 사용)
+export function detectCurrentChapter(cfi, chapterCfiMap = null) {
+  let detectedChapter = extractChapterNumber(cfi);
+  
+  // 챕터 번호가 1이고 CFI 매핑이 있을 때 정확한 챕터 번호 찾기
+  if (detectedChapter === 1 && chapterCfiMap && chapterCfiMap.size > 0) {
+    for (const [chapterNum, chapterCfi] of chapterCfiMap) {
+      if (cfi && cfi.includes(chapterCfi)) {
+        detectedChapter = chapterNum;
+        break;
+      }
+    }
+  }
+  
+  return detectedChapter;
+}
+
 export const storageUtils = {
   get: (key) => localStorage.getItem(key),
   set: (key, value) => localStorage.setItem(key, value),
@@ -470,6 +487,117 @@ export function cleanupNavigation(setIsNavigating, rendition, handler) {
 export async function ensureLocations(book, chars = 2000) {
   if (!book.locations?.length()) {
     await book.locations.generate(chars);
+  }
+}
+
+// 네비게이션 관련 유틸리티 함수들
+export const navigationUtils = {
+  // 안전한 페이지 이동 처리
+  async safeNavigate(book, rendition, action, direction = 'next', setIsNavigating, setNavigationError, storageKeys) {
+    if (!book || !rendition) return;
+    
+    setIsNavigating(true);
+    setNavigationError(null);
+
+    let relocatedFired = false;
+    const relocatedHandler = () => {
+      relocatedFired = true;
+      cleanupNavigation(setIsNavigating, rendition, relocatedHandler);
+    };
+    rendition.on('relocated', relocatedHandler);
+
+    try {
+      const beforeLocation = await rendition.currentLocation();
+      const beforeCfi = beforeLocation?.start?.cfi;
+      const beforeSpinePos = beforeLocation?.start?.spinePos;
+
+      // next/prev 실행 결과 반환값 체크
+      const result = await action();
+
+      let waited = 0;
+      const maxWait = 1200;
+      const interval = 60;
+      while (!relocatedFired && waited < maxWait) {
+        await new Promise(res => setTimeout(res, interval));
+        waited += interval;
+      }
+
+      const afterLocation = await rendition.currentLocation();
+      const afterCfi = afterLocation?.start?.cfi;
+      const afterSpinePos = afterLocation?.start?.spinePos;
+
+      // relocated가 발생하지 않았거나, cfi가 그대로면 spine 직접 이동 시도
+      if ((!relocatedFired || beforeCfi === afterCfi) && afterCfi) {
+        // spine 직접 이동 (다음/이전 챕터)
+        let moved = false;
+        if (direction === 'next') {
+          const currSpine = book.spine.get(beforeSpinePos);
+          const nextSpine = book.spine.get(currSpine.index + 1);
+          if (nextSpine) {
+            await rendition.display(nextSpine.href);
+            moved = true;
+          }
+        } else if (direction === 'prev') {
+          const currSpine = book.spine.get(beforeSpinePos);
+          const prevSpine = book.spine.get(currSpine.index - 1);
+          if (prevSpine) {
+            await rendition.display(prevSpine.href);
+            moved = true;
+          }
+        }
+        if (!moved) {
+          setNavigationError('이동할 수 없는 페이지입니다.');
+        }
+        rendition.emit('relocated', afterLocation);
+        cleanupNavigation(setIsNavigating, rendition, relocatedHandler);
+      }
+    } catch {
+      cleanupNavigation(setIsNavigating, rendition, relocatedHandler);
+      setNavigationError('이동 중 오류가 발생했습니다.');
+      await navigationUtils.fallbackDisplay(book, rendition, direction, storageKeys);
+    }
+  },
+
+  // 네비게이션 실패 시 대체 방법 제공
+  async fallbackDisplay(book, rendition, direction = 'next', storageKeys) {
+    try {
+      if (!book || !rendition) return;
+
+      const location = await rendition.currentLocation();
+      const cfi = location?.start?.cfi;
+      const currentPercent = book.locations.percentageFromCfi(cfi);
+      const targetPercent = direction === 'next'
+        ? Math.min(currentPercent + 0.02, 1.0)
+        : Math.max(currentPercent - 0.02, 0.0);
+
+      const targetCfi = book.locations.cfiFromPercentage(targetPercent);
+
+      if (targetCfi) {
+        await rendition.display(targetCfi);
+      } else {
+        storageUtils.set(
+          direction === 'next' ? storageKeys.nextPage : storageKeys.prevPage,
+          'true'
+        );
+        // smoothReload는 컴포넌트에서 처리
+        return 'reload';
+      }
+    } catch (e) {
+      return 'reload';
+    }
+  }
+};
+
+// 스프레드 모드 결정 함수
+export function getSpreadMode(pageMode, showGraph) {
+  // 분할 화면 + 그래프 화면 (showGraph=true, graphFullScreen=false)에서는 뷰어 너비가 50%로 제한
+  if (showGraph) {
+    // 분할 화면: 50% 너비에 최적화하여 항상 한 페이지씩 표시
+    // pageMode 설정과 관계없이 'none'으로 설정 (50% 너비에서는 두 페이지 표시가 부적절)
+    return 'none';
+  } else {
+    // 전체 화면: pageMode에 따라 spread 모드 결정
+    return pageMode === 'single' ? 'none' : 'always';
   }
 }
 
@@ -512,5 +640,71 @@ export const settingsUtils = {
     }
 
     return { success: true, message: "✅ 설정이 적용되었습니다" };
+  },
+
+  // EpubViewer에서 사용할 설정 적용 함수
+  applyEpubSettings(rendition, settings, getSpreadMode) {
+    if (!rendition || !settings) return;
+    
+    // 스프레드 모드 설정
+    rendition.spread(getSpreadMode);
+    
+    // 글꼴 크기 적용
+    if (settings.fontSize) {
+      const fontSize = settings.fontSize / 100;
+      rendition.themes.fontSize(`${fontSize * 100}%`);
+    }
+    
+    // 줄 간격 적용
+    if (settings.lineHeight) {
+      rendition.themes.override('body', {
+        'line-height': `${settings.lineHeight}`
+      });
+    }
+  }
+};
+
+export const textUtils = {
+  countCharacters: (text, element) => {
+    if (!text) return 0;
+    
+    if (element) {
+      const excludedClasses = ['.pg-boilerplate', '.pgheader', '.toc', '.dedication', '.epigraph'];
+      if (excludedClasses.some(cls => element.closest(cls))) {
+        return 0;
+      }
+    }
+
+    return text
+      .replace(/[\s\n\r\t]/g, '')
+      .replace(/[^a-zA-Z가-힣]/g, '')
+      .length;
+  },
+
+  // 단락별 글자 수 계산
+  calculateParagraphChars: (paragraph, element) => {
+    return textUtils.countCharacters(paragraph.textContent, element);
+  },
+
+  // 이전 단락들의 누적 글자 수 계산
+  calculatePreviousParagraphsChars: (paragraphs, currentParagraphNum) => {
+    let charCount = 0;
+    for (let i = 0; i < currentParagraphNum - 1; i++) {
+      const paragraph = paragraphs[i];
+      if (paragraph) {
+        charCount += textUtils.calculateParagraphChars(paragraph, paragraph);
+      }
+    }
+    return charCount;
+  },
+
+  // 현재 단락의 부분 글자 수 계산
+  calculateCurrentParagraphChars: (paragraphs, currentParagraphNum, charOffset) => {
+    if (currentParagraphNum > 0 && paragraphs[currentParagraphNum - 1]) {
+      const currentParagraph = paragraphs[currentParagraphNum - 1];
+      const currentParagraphChars = textUtils.calculateParagraphChars(currentParagraph, currentParagraph);
+      return Math.min(charOffset, currentParagraphChars);
+    }
+    return 0;
   }
 };
