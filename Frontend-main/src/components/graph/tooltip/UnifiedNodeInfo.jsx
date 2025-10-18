@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from "react";
-import { useParams, useLocation } from "react-router-dom";
+import { useParams } from "react-router-dom";
 import { processRelations, processRelationTags } from "../../../utils/relationUtils.js";
 import { getChapterLastEventNums, getFolderKeyFromFilename, getEventDataByIndex, getDetectedMaxChapter, getCharacterPerspectiveSummary } from "../../../utils/graphData.js";
 import { useTooltipPosition } from "../../../hooks/useTooltipPosition.js";
@@ -11,35 +11,14 @@ import { COLORS, createButtonStyle, ANIMATION_VALUES, unifiedNodeTooltipStyles, 
 import { extractRadarChartData, getPositivityColor, getPositivityLabel, getConnectionStatus } from "../../../utils/radarChartUtils.js";
 import { Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, ResponsiveContainer } from 'recharts';
 import "../RelationGraph.css";
+import "./UnifiedNodeInfo.css";
 
-/**
- * 통합 노드 정보 컴포넌트
- * @param {object} props - 컴포넌트 props
- * @param {string} props.displayMode - 'tooltip' | 'sidebar' 표시 모드
- * @param {object} props.data - 노드 데이터
- * @param {number} props.x - 툴팁 모드에서의 X 좌표
- * @param {number} props.y - 툴팁 모드에서의 Y 좌표
- * @param {object} props.nodeCenter - 노드 중심 좌표
- * @param {function} props.onClose - 닫기 핸들러
- * @param {boolean} props.inViewer - 뷰어 내 사용 여부
- * @param {object} props.style - 추가 스타일
- * @param {number} props.chapterNum - 현재 챕터 번호
- * @param {number} props.eventNum - 현재 이벤트 번호
- * @param {number} props.maxChapter - 최대 챕터 수
- * @param {string} props.searchTerm - 검색어
- * @param {array} props.elements - 현재 로드된 elements
- * @param {boolean} props.isSearchActive - 검색 상태
- * @param {array} props.filteredElements - 검색된 요소들
- * @param {string} props.filename - 파일명
- */
 function UnifiedNodeInfo({
   displayMode = 'tooltip', // 'tooltip' | 'sidebar'
   data,
   x,
   y,
   onClose,
-  inViewer = false,
-  style,
   chapterNum,
   eventNum,
   maxChapter,
@@ -51,11 +30,7 @@ function UnifiedNodeInfo({
   prevValidEvent = null,
 }) {
   const { filename: urlFilename } = useParams();
-  const location = useLocation();
   const actualFilename = filename || urlFilename;
-
-  // 그래프 단독 페이지 여부 판단
-  const isGraphPage = location.pathname.includes('/user/graph/');
 
   // maxChapter를 동적으로 계산
   const folderKey = getFolderKeyFromFilename(actualFilename);
@@ -154,9 +129,8 @@ function UnifiedNodeInfo({
   }, displayMode === 'tooltip', true);
 
   // 관계 데이터 관리 (슬라이드바 모드에서 사용)
-  const id1 = safeNum(nodeData?.id);
-  const id2 = safeNum(nodeData?.id);
-  const { fetchData } = useRelationData('standalone', id1, id2, chapterNum, eventNum, dynamicMaxChapter, actualFilename);
+  const nodeId = safeNum(nodeData?.id);
+  const { fetchData } = useRelationData('standalone', nodeId, nodeId, chapterNum, eventNum, dynamicMaxChapter, actualFilename);
 
   // ViewerTopBar와 동일한 방식으로 이벤트 정보 처리
   const getUnifiedEventInfo = useCallback(() => {
@@ -174,13 +148,13 @@ function UnifiedNodeInfo({
     }
     
     // 이벤트 정보가 없는 경우 기존 로직 사용 (하위 호환성)
-    if (isGraphPage || !eventNum || eventNum === 0) {
+    if (!eventNum || eventNum === 0) {
       const lastEventNums = getChapterLastEventNums(folderKey);
       return { eventNum: lastEventNums[chapterNum - 1] || 1 };
     }
     
     return { eventNum: eventNum || 0 };
-  }, [currentEvent, prevValidEvent, isGraphPage, eventNum, chapterNum, folderKey]);
+  }, [currentEvent, prevValidEvent, eventNum, chapterNum, folderKey]);
 
   // 노드 등장 여부 확인 함수 (ViewerTopBar 방식 적용)
   const checkNodeAppearance = useCallback(() => {
@@ -242,7 +216,7 @@ function UnifiedNodeInfo({
       setError(err.message);
       setIsNodeAppeared(false);
     }
-  }, [data, chapterNum, getUnifiedEventInfo, isGraphPage, dynamicMaxChapter, actualFilename, elements]);
+  }, [data, chapterNum, getUnifiedEventInfo, dynamicMaxChapter, actualFilename, elements]);
 
   // 노드 등장 여부 확인
   useEffect(() => {
@@ -360,7 +334,7 @@ function UnifiedNodeInfo({
       console.error('레이더 차트 데이터 추출 오류:', err);
       return [];
     }
-  }, [nodeData?.id, chapterNum, displayMode, folderKey, elements, eventNum, isGraphPage]);
+  }, [nodeData?.id, chapterNum, displayMode, folderKey, elements, eventNum]);
 
   // 연결 상태 확인
   const connectionStatus = useMemo(() => {
@@ -442,8 +416,8 @@ function UnifiedNodeInfo({
     );
   });
 
-  // 모드별 z-index 설정
-  const zIndexValue = inViewer ? 99999 : 99999;
+  // z-index 설정
+  const zIndexValue = 99999;
 
   // 에러가 있는 경우 에러 메시지 표시
   if (error) {
@@ -479,7 +453,6 @@ function UnifiedNodeInfo({
             left: position.x,
             top: position.y,
             zIndex: zIndexValue,
-            ...(style || {}),
           }}
         >
           {errorContent}
@@ -598,7 +571,6 @@ function UnifiedNodeInfo({
             opacity: showContent ? 1 : 0,
             transition: unifiedNodeAnimations.tooltipSimpleTransition(isDragging),
             cursor: isDragging ? "grabbing" : "grab",
-            ...(style || {}),
           }}
           onMouseDown={handleMouseDown}
         >
@@ -667,21 +639,7 @@ function UnifiedNodeInfo({
         onClick={handleLanguageToggle}
         aria-label="언어 전환"
         disabled={isLanguageChanging}
-        style={{
-          position: 'absolute',
-          top: '14px',
-          right: '56px',
-          background: COLORS.backgroundLight,
-          border: `1px solid ${COLORS.border}`,
-          borderRadius: '6px',
-          padding: '4px 12px',
-          fontSize: '13px',
-          fontWeight: '600',
-          color: COLORS.primary,
-          cursor: 'pointer',
-          transition: 'all 0.2s ease',
-          zIndex: 2,
-        }}
+        className="language-toggle-btn"
         onMouseEnter={(e) => {
           e.target.style.background = COLORS.primaryLight;
         }}
@@ -955,7 +913,6 @@ function UnifiedNodeInfo({
           transition: unifiedNodeAnimations.tooltipComplexTransition(isDragging),
           cursor: isDragging ? "grabbing" : "grab",
           transform: "rotateY(0deg)",
-          ...(style || {}),
         }}
         onMouseDown={handleMouseDown}
       >
@@ -972,7 +929,7 @@ function UnifiedNodeInfo({
       >
         {/* 사이드바 헤더 */}
         <div style={{
-          padding: '1.5rem 1.5rem 1rem 1.5rem',
+          padding: '1rem 1rem 0.75rem 1rem',
           borderBottom: '0.0625rem solid #e5e7eb',
           background: '#fff',
         }}>
@@ -1018,22 +975,7 @@ function UnifiedNodeInfo({
               onClick={handleLanguageToggle}
               aria-label="언어 전환"
               disabled={isLanguageChanging}
-              style={{
-                background: COLORS.backgroundLight,
-                border: `1px solid ${COLORS.border}`,
-                borderRadius: '6px',
-                padding: '0 12px',
-                height: '2.5rem',
-                fontSize: '13px',
-                fontWeight: '600',
-                color: COLORS.primary,
-                cursor: 'pointer',
-                transition: 'all 0.2s ease',
-                marginRight: '8px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}
+              className="sidebar-language-toggle"
               onMouseEnter={(e) => {
                 e.target.style.background = COLORS.primaryLight;
               }}
@@ -1047,22 +989,7 @@ function UnifiedNodeInfo({
             <button
               onClick={onClose}
               aria-label="사이드바 닫기"
-              style={{
-                background: 'none',
-                border: 'none',
-                fontSize: '1.5rem',
-                color: COLORS.textSecondary,
-                cursor: 'pointer',
-                padding: '0.5rem',
-                borderRadius: '0.375rem',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                transition: unifiedNodeAnimations.buttonHoverTransition,
-                width: '2.5rem',
-                height: '2.5rem',
-                marginLeft: '1rem',
-              }}
+              className="sidebar-close-btn"
               onMouseOver={(e) => {
                 e.currentTarget.style.background = COLORS.backgroundLight;
                 e.currentTarget.style.color = COLORS.textPrimary;
@@ -1094,18 +1021,18 @@ function UnifiedNodeInfo({
           style={{
             flex: 1,
             overflow: 'auto',
-            padding: '0 1.5rem',
+            padding: '0 1rem',
           }}
         >
-          <div style={{ padding: '1.5rem 0' }}>
+          <div style={{ padding: '1rem 0' }}>
             {/* 통합 프로필 및 설명 섹션 */}
             <div 
               className="sidebar-card"
               style={{
                 background: '#fff',
                 borderRadius: '0.75rem',
-                padding: '1.5rem',
-                marginBottom: '1.5rem',
+                padding: '1rem',
+                marginBottom: '1rem',
                 border: `0.0625rem solid ${COLORS.border}`,
                 boxShadow: '0 0.0625rem 0.1875rem rgba(0,0,0,0.05)',
               }}
@@ -1236,8 +1163,8 @@ function UnifiedNodeInfo({
                 style={{
                   background: '#fff',
                   borderRadius: '0.75rem',
-                  padding: '1.5rem',
-                  marginBottom: '1.5rem',
+                  padding: '1rem',
+                  marginBottom: '1rem',
                   border: `0.0625rem solid ${COLORS.border}`,
                   boxShadow: '0 0.0625rem 0.1875rem rgba(0,0,0,0.05)',
                 }}
@@ -1280,14 +1207,15 @@ function UnifiedNodeInfo({
               style={{
                 background: '#fff',
                 borderRadius: '0.75rem',
-                marginBottom: '1.5rem',
+                padding: '1rem',
+                marginBottom: '1rem',
                 border: `0.0625rem solid ${COLORS.border}`,
                 boxShadow: '0 0.0625rem 0.1875rem rgba(0,0,0,0.05)',
                 overflow: 'hidden',
                 position: 'relative',
-                minHeight: '60px',
+                minHeight: '40px',
                 height: (isWarningExpanded && !showSummary) ? '410px' : 
-                       showSummary ? 'auto' : '60px',
+                       showSummary ? 'auto' : '40px',
                 transition: 'height 0.4s cubic-bezier(0.4, 0, 0.2, 1)',
               }}
               role="region"
@@ -1305,20 +1233,9 @@ function UnifiedNodeInfo({
                     setIsWarningExpanded(true);
                   }
                 }}
+                className="summary-toggle-btn"
                 style={{
-                  width: '100%',
-                  padding: '1rem 1.5rem',
-                  background: 'transparent',
-                  border: 'none',
-                  borderBottom: (isWarningExpanded || showSummary) ? `0.0625rem solid ${COLORS.border}` : 'none',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  transition: 'background 0.2s ease',
-                  minHeight: '60px',
-                  boxSizing: 'border-box',
-                  margin: 0,
+                  borderBottom: 'none',
                 }}
                 onMouseEnter={(e) => {
                   if (!showSummary) {
@@ -1365,7 +1282,7 @@ function UnifiedNodeInfo({
                 transitionDelay: (isWarningExpanded && !showSummary) ? '0.15s' : '0s',
               }}>
                 <div style={{
-                  padding: '2rem 1.5rem 1.5rem 1.5rem',
+                  padding: '1.5rem 1rem 1rem 1rem',
                   textAlign: 'center',
                   display: 'flex',
                   flexDirection: 'column',
@@ -1395,7 +1312,7 @@ function UnifiedNodeInfo({
                     color: COLORS.textPrimary,
                     letterSpacing: '-0.01em',
                     whiteSpace: 'pre-wrap',
-                    margin: '0 0 1.5rem 0',
+                    margin: '0 0 1rem 0',
                     wordBreak: 'keep-all',
                     textAlign: 'center',
                     width: '100%',
@@ -1491,9 +1408,13 @@ function UnifiedNodeInfo({
                 aria-hidden={!showSummary}
               >
                 <div style={{
-                  padding: '1.5rem',
-                  borderLeft: `0.25rem solid ${COLORS.primary}`,
+                  marginTop: '1rem',
+                  marginBottom: '0.5rem',
                 }}>
+                   <div style={{
+                     borderLeft: `0.25rem solid ${COLORS.primary}`,
+                     paddingLeft: '1.25rem',
+                   }}>
                    <p style={{
                      margin: 0,
                      fontSize: '0.95rem',
@@ -1508,6 +1429,7 @@ function UnifiedNodeInfo({
                    }}>
                      {summaryData.summary}
                    </p>
+                   </div>
                 </div>
               </div>
             </div>
@@ -1518,11 +1440,11 @@ function UnifiedNodeInfo({
               style={{
                 background: '#fff',
                 borderRadius: '0.75rem',
-                marginBottom: '1.5rem',
+                marginBottom: '1rem',
                 border: `0.0625rem solid ${COLORS.border}`,
                 boxShadow: '0 0.0625rem 0.1875rem rgba(0,0,0,0.05)',
                 overflow: 'hidden',
-                minHeight: '80px', // 최소 높이 줄임
+                minHeight: '40px', // 최소 높이 줄임
                 height: 'auto',
               }}
               role="region"
@@ -1531,19 +1453,7 @@ function UnifiedNodeInfo({
               {/* 헤더 버튼 */}
               <button
                 onClick={handleOpenModal}
-                style={{
-                  width: '100%',
-                  padding: '1rem 1.5rem',
-                  background: 'transparent',
-                  border: 'none',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  transition: 'background 0.2s ease',
-                  minHeight: '60px',
-                  boxSizing: 'border-box',
-                }}
+                className="relation-analysis-btn"
                 onMouseEnter={(e) => {
                   e.currentTarget.style.background = COLORS.backgroundLight;
                 }}
@@ -1591,48 +1501,15 @@ function UnifiedNodeInfo({
         {/* 확대 화면 모달 */}
         {isModalOpen && (
           <div
-            style={{
-              position: 'fixed',
-              top: 0,
-              left: 0,
-              right: 0,
-              bottom: 0,
-              background: 'rgba(0, 0, 0, 0.8)',
-              zIndex: 999999,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              padding: '2rem',
-            }}
+            className="modal-overlay"
             onClick={handleCloseModal}
           >
             <div
-              style={{
-                background: '#ffffff',
-                borderRadius: '1rem',
-                padding: '2rem',
-                maxWidth: '90vw',
-                maxHeight: '90vh',
-                width: '800px',
-                height: '600px',
-                position: 'relative',
-                boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
-                display: 'flex',
-                flexDirection: 'column',
-              }}
+              className="modal-container"
               onClick={(e) => e.stopPropagation()}
             >
               {/* 모달 헤더 */}
-              <div
-                style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  marginBottom: '1.5rem',
-                  paddingBottom: '1rem',
-                  borderBottom: `2px solid ${COLORS.borderLight}`,
-                }}
-              >
+              <div className="modal-header">
                 <h2
                   style={{
                     margin: 0,
@@ -1645,21 +1522,7 @@ function UnifiedNodeInfo({
                 </h2>
                 <button
                   onClick={handleCloseModal}
-                  style={{
-                    background: 'none',
-                    border: 'none',
-                    fontSize: '1.5rem',
-                    color: COLORS.textSecondary,
-                    cursor: 'pointer',
-                    padding: '0.5rem',
-                    borderRadius: '0.375rem',
-                    transition: 'all 0.2s ease',
-                    width: '2rem',
-                    height: '2rem',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                  }}
+                  className="modal-close-btn"
                   onMouseEnter={(e) => {
                     e.target.style.background = COLORS.backgroundLight;
                     e.target.style.color = COLORS.textPrimary;
@@ -1735,7 +1598,7 @@ function UnifiedNodeInfo({
                   </ResponsiveContainer>
                  ) : connectionStatus.status === 'few_connections' ? (
                    <div style={{
-                     padding: '1.5rem',
+                     padding: '1rem',
                      background: COLORS.backgroundLight,
                      borderRadius: '0.75rem',
                      border: `1px solid ${COLORS.border}`,
@@ -1890,7 +1753,7 @@ function UnifiedNodeInfo({
                   </div>
                  ) : (
                    <div style={{
-                     padding: '1.5rem',
+                     padding: '1rem',
                      background: COLORS.backgroundLight,
                      borderRadius: '0.75rem',
                      border: `1px solid ${COLORS.border}`,
@@ -1925,21 +1788,11 @@ function UnifiedNodeInfo({
                 {/* 마우스 오버 정보창 */}
                 {hoveredData && (
                   <div
+                    className="hover-tooltip"
                     style={{
-                      position: 'fixed',
                       left: `${hoverPosition.x + 10}px`,
                       top: `${hoverPosition.y - 10}px`,
-                      padding: '1.25rem 1.5rem',
-                      background: 'rgba(255, 255, 255, 0.98)',
                       border: `2px solid ${getPositivityColor(hoveredData.positivity)}`,
-                      borderRadius: '0.75rem',
-                      boxShadow: '0 8px 24px rgba(0,0,0,0.2), 0 2px 8px rgba(0,0,0,0.1)',
-                      zIndex: 999999,
-                      backdropFilter: 'blur(8px)',
-                      pointerEvents: 'none',
-                      minWidth: '320px',
-                      maxWidth: '400px',
-                      minHeight: '160px',
                     }}
                   >
                      {/* 인물 이름 */}
