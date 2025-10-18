@@ -254,7 +254,8 @@ const BookmarksPage = () => {
           <span style={{ 
             fontSize: '0.75rem', 
             color: '#6b7280', 
-            whiteSpace: 'nowrap' 
+            whiteSpace: 'nowrap',
+            wordBreak: 'keep-all'
           }}>
             {new Date(bm.createdAt).toLocaleDateString()}
           </span>
@@ -369,7 +370,8 @@ const BookmarksPage = () => {
               padding: '0.3rem 0.7rem', 
               fontWeight: 600, 
               cursor: 'pointer',
-              whiteSpace: 'nowrap'
+              whiteSpace: 'nowrap',
+              wordBreak: 'keep-all'
             }}
             onClick={() => handleAddMemo(bm.id, newMemo[bm.id])}
           >추가</button>

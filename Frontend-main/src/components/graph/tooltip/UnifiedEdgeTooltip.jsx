@@ -514,6 +514,7 @@ function UnifiedEdgeTooltip({
                       color: COLORS.textPrimary,
                       fontWeight: '500',
                       letterSpacing: '-0.01em',
+                      wordBreak: 'keep-all',
                     }}>
                       {data.explanation.split("|")[0]}
                     </p>
@@ -524,6 +525,7 @@ function UnifiedEdgeTooltip({
                         lineHeight: '1.6',
                         color: COLORS.textSecondary,
                         letterSpacing: '-0.01em',
+                        wordBreak: 'keep-all',
                       }}>
                         {data.explanation.split("|")[1]}
                       </p>
@@ -714,7 +716,8 @@ function UnifiedEdgeTooltip({
                       color: "#64748b", 
                       fontSize: 16,
                       maxWidth: '280px',
-                      lineHeight: '1.5'
+                      lineHeight: '1.5',
+                      wordBreak: 'keep-all'
                     }}>
                       관계 형성이 이뤄지지 않았습니다
                     </div>
@@ -890,7 +893,8 @@ function UnifiedEdgeTooltip({
                       color: "#ef4444", 
                       fontSize: '1rem',
                       maxWidth: '17.5rem',
-                      lineHeight: '1.5'
+                      lineHeight: '1.5',
+                      wordBreak: 'keep-all'
                     }}>
                       데이터를 불러올 수 없습니다
                     </div>
@@ -936,7 +940,8 @@ function UnifiedEdgeTooltip({
                       color: "#64748b", 
                       fontSize: '1rem',
                       maxWidth: '17.5rem',
-                      lineHeight: '1.5'
+                      lineHeight: '1.5',
+                      wordBreak: 'keep-all'
                     }}>
                       관계 형성이 이뤄지지 않았습니다
                     </div>

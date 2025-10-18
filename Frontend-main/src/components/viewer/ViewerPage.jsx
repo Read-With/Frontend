@@ -121,7 +121,8 @@ function GraphSplitArea({
               color: '#6c757d',
               marginBottom: '20px',
               fontSize: '14px',
-              lineHeight: '1.5'
+              lineHeight: '1.5',
+              wordBreak: 'keep-all'
             }}>
               {isChapterTransition ? '새로운 챕터의 이벤트를 준비하고 있습니다.' : '관계 데이터를 분석하고 있습니다.'}
             </p>
@@ -158,7 +159,8 @@ function GraphSplitArea({
               color: '#6c757d',
               marginBottom: '20px',
               fontSize: '14px',
-              lineHeight: '1.5'
+              lineHeight: '1.5',
+              wordBreak: 'keep-all'
             }}>
               {apiError.details}
             </p>
@@ -213,7 +215,8 @@ function GraphSplitArea({
               color: '#6c757d',
               marginBottom: '20px',
               fontSize: '14px',
-              lineHeight: '1.5'
+              lineHeight: '1.5',
+              wordBreak: 'keep-all'
             }}>
               페이지를 새로고침하여 다시 시도해주세요.
             </p>

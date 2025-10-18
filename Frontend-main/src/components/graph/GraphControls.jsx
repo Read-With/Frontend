@@ -297,13 +297,14 @@ function GraphControls({
                     
                     {/* 설명 */}
                     {suggestion.description && (
-                      <div style={{ 
-                        fontSize: '13px', 
-                        color: '#6c757d', 
-                        lineHeight: '1.5',
-                        marginBottom: '8px',
-                        fontWeight: '400',
-                      }}>
+                    <div style={{ 
+                      fontSize: '13px', 
+                      color: '#6c757d', 
+                      lineHeight: '1.5',
+                      marginBottom: '8px',
+                      fontWeight: '400',
+                      wordBreak: 'keep-all',
+                    }}>
                         {suggestion.description}
                       </div>
                     )}

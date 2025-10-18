@@ -556,6 +556,7 @@ function UnifiedNodeInfo({
             color: COLORS.textSecondary,
             lineHeight: 1.5,
             marginBottom: 0,
+            wordBreak: 'keep-all',
           }}
         >
           아직 등장하지 않은 인물입니다
@@ -567,6 +568,7 @@ function UnifiedNodeInfo({
             color: COLORS.textSecondary,
             lineHeight: 1.4,
             marginTop: "0.5rem",
+            wordBreak: 'keep-all',
           }}
         >
           {(() => {
@@ -875,6 +877,7 @@ function UnifiedNodeInfo({
           textAlign: "left",
           lineHeight: 1.6,
           fontWeight: 400,
+          wordBreak: 'keep-all',
         }}
       >
         {displayHasDescription ? (
@@ -915,6 +918,7 @@ function UnifiedNodeInfo({
               fontSize: "0.75rem",
               color: COLORS.textPrimary,
               lineHeight: 1.4,
+              wordBreak: 'keep-all',
             }}
           >
             {filteredElements.filter(el => 
@@ -1195,11 +1199,15 @@ function UnifiedNodeInfo({
               </div>
 
               {/* 인물 설명 */}
-              {displayHasDescription && (
-                <div style={{
-                  borderTop: '0.0625rem solid #e5e7eb',
-                  paddingTop: '1.25rem',
-                }}>
+              <div style={{
+                borderTop: '0.0625rem solid #e5e7eb',
+                paddingTop: '1.25rem',
+                minHeight: displayHasDescription ? 'auto' : '0',
+                height: displayHasDescription ? 'auto' : '0',
+                overflow: 'hidden',
+                transition: 'height 0.3s ease, min-height 0.3s ease',
+              }}>
+                {displayHasDescription && (
                   <div style={{
                     borderLeft: '0.25rem solid #2563eb',
                     paddingLeft: '1.25rem',
@@ -1211,13 +1219,14 @@ function UnifiedNodeInfo({
                       color: COLORS.textPrimary,
                       letterSpacing: '-0.01em',
                       opacity: isLanguageChanging ? 0.25 : 1,
+                      wordBreak: 'keep-all',
                       transition: 'opacity 0.2s ease',
                     }}>
                       {displayDescription}
                     </p>
                   </div>
-                </div>
-              )}
+                )}
+              </div>
             </div>
 
             {/* 검색 결과 연결 정보 */}
@@ -1254,6 +1263,7 @@ function UnifiedNodeInfo({
                     lineHeight: '1.6',
                     color: '#42506b',
                     letterSpacing: '-0.01em',
+                    wordBreak: 'keep-all',
                   }}>
                     해당 인물과 연결된 {filteredElements.filter(el => 
                       el.data.source && 
@@ -1274,6 +1284,11 @@ function UnifiedNodeInfo({
                 border: `0.0625rem solid ${COLORS.border}`,
                 boxShadow: '0 0.0625rem 0.1875rem rgba(0,0,0,0.05)',
                 overflow: 'hidden',
+                position: 'relative',
+                minHeight: '60px',
+                height: (isWarningExpanded && !showSummary) ? '410px' : 
+                       showSummary ? 'auto' : '60px',
+                transition: 'height 0.4s cubic-bezier(0.4, 0, 0.2, 1)',
               }}
               role="region"
               aria-label="인물 시점 요약"
@@ -1292,7 +1307,7 @@ function UnifiedNodeInfo({
                 }}
                 style={{
                   width: '100%',
-                  padding: '1.5rem',
+                  padding: '1rem 1.5rem',
                   background: 'transparent',
                   border: 'none',
                   borderBottom: (isWarningExpanded || showSummary) ? `0.0625rem solid ${COLORS.border}` : 'none',
@@ -1301,6 +1316,9 @@ function UnifiedNodeInfo({
                   alignItems: 'center',
                   justifyContent: 'space-between',
                   transition: 'background 0.2s ease',
+                  minHeight: '60px',
+                  boxSizing: 'border-box',
+                  margin: 0,
                 }}
                 onMouseEnter={(e) => {
                   if (!showSummary) {
@@ -1315,9 +1333,11 @@ function UnifiedNodeInfo({
                   fontSize: '1rem',
                   fontWeight: '700',
                   color: COLORS.textPrimary,
-                  margin: 0,
+                  margin: '0.25rem 0 0.25rem 0',
                   letterSpacing: '-0.025em',
                   textAlign: 'left',
+                  lineHeight: '1.2',
+                  flex: 1,
                 }}>
                   해당 인물 시점의 요약
                 </h4>
@@ -1329,6 +1349,8 @@ function UnifiedNodeInfo({
                   display: 'inline-block',
                   color: COLORS.primary,
                   flexShrink: 0,
+                  marginLeft: '0.5rem',
+                  lineHeight: '1',
                 }}>
                   ▼
                 </span>
@@ -1336,15 +1358,20 @@ function UnifiedNodeInfo({
               
               {/* 2단계: 경고 화면 */}
               <div style={{
-                maxHeight: (isWarningExpanded && !showSummary) ? '350px' : '0',
+                height: (isWarningExpanded && !showSummary) ? '350px' : '0',
                 opacity: (isWarningExpanded && !showSummary) ? 1 : 0,
                 overflow: 'hidden',
-                transition: 'max-height 0.4s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.35s ease-in-out',
+                transition: 'height 0.4s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.35s ease-in-out',
                 transitionDelay: (isWarningExpanded && !showSummary) ? '0.15s' : '0s',
               }}>
                 <div style={{
                   padding: '2rem 1.5rem 1.5rem 1.5rem',
                   textAlign: 'center',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  minHeight: '300px',
                 }}>
                   
                    {/* 경고 제목 */}
@@ -1354,6 +1381,8 @@ function UnifiedNodeInfo({
                      color: COLORS.textPrimary,
                      margin: '0 0 0.75rem 0',
                      letterSpacing: '-0.025em',
+                     textAlign: 'center',
+                     width: '100%',
                      animation: (isWarningExpanded && !showSummary) ? 'fadeIn 0.4s ease-in-out' : 'none',
                    }}>
                      스포일러 포함
@@ -1367,6 +1396,9 @@ function UnifiedNodeInfo({
                     letterSpacing: '-0.01em',
                     whiteSpace: 'pre-wrap',
                     margin: '0 0 1.5rem 0',
+                    wordBreak: 'keep-all',
+                    textAlign: 'center',
+                    width: '100%',
                     animation: (isWarningExpanded && !showSummary) ? 'fadeIn 0.4s ease-in-out' : 'none',
                   }}>
                     스토리의 중요한 내용을 담고 있습니다.
@@ -1380,6 +1412,8 @@ function UnifiedNodeInfo({
                     gap: '1rem',
                     justifyContent: 'center',
                     alignItems: 'center',
+                    width: '100%',
+                    flexWrap: 'wrap',
                     animation: (isWarningExpanded && !showSummary) ? 'fadeIn 0.4s ease-in-out' : 'none',
                   }}>
                     {/* 취소 버튼 - 경고 화면 접기 */}
@@ -1448,12 +1482,11 @@ function UnifiedNodeInfo({
               {/* 3단계: 실제 요약 내용 */}
               <div 
                 style={{
-                  maxHeight: showSummary ? '800px' : '0',
+                  height: showSummary ? 'auto' : '0',
                   opacity: showSummary ? 1 : 0,
                   overflow: 'hidden',
-                  transition: 'max-height 0.4s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.35s ease-in-out',
+                  transition: 'height 0.4s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.35s ease-in-out',
                   transitionDelay: showSummary ? '0.15s' : '0s',
-                  willChange: showSummary ? 'max-height, opacity' : 'auto',
                 }}
                 aria-hidden={!showSummary}
               >
@@ -1461,17 +1494,20 @@ function UnifiedNodeInfo({
                   padding: '1.5rem',
                   borderLeft: `0.25rem solid ${COLORS.primary}`,
                 }}>
-                  <p style={{
-                    margin: 0,
-                    fontSize: '0.9375rem',
-                    lineHeight: '1.7',
-                    color: COLORS.textPrimary,
-                    letterSpacing: '-0.01em',
-                    whiteSpace: 'pre-wrap',
-                    animation: showSummary ? 'fadeIn 0.4s ease-in-out' : 'none',
-                  }}>
-                    {summaryData.summary}
-                  </p>
+                   <p style={{
+                     margin: 0,
+                     fontSize: '0.95rem',
+                     lineHeight: '2.0',
+                     color: COLORS.textPrimary,
+                     letterSpacing: '-0.01em',
+                     whiteSpace: 'pre-wrap',
+                     wordBreak: 'keep-all',
+                     background: 'rgba(247, 250, 252, 0.8)',
+                     borderRadius: '0.5rem',
+                     animation: showSummary ? 'fadeIn 0.4s ease-in-out' : 'none',
+                   }}>
+                     {summaryData.summary}
+                   </p>
                 </div>
               </div>
             </div>
@@ -1486,6 +1522,8 @@ function UnifiedNodeInfo({
                 border: `0.0625rem solid ${COLORS.border}`,
                 boxShadow: '0 0.0625rem 0.1875rem rgba(0,0,0,0.05)',
                 overflow: 'hidden',
+                minHeight: '80px', // 최소 높이 줄임
+                height: 'auto',
               }}
               role="region"
               aria-label="관계 분석"
@@ -1495,7 +1533,7 @@ function UnifiedNodeInfo({
                 onClick={handleOpenModal}
                 style={{
                   width: '100%',
-                  padding: '1.5rem',
+                  padding: '1rem 1.5rem',
                   background: 'transparent',
                   border: 'none',
                   cursor: 'pointer',
@@ -1503,6 +1541,8 @@ function UnifiedNodeInfo({
                   alignItems: 'center',
                   justifyContent: 'space-between',
                   transition: 'background 0.2s ease',
+                  minHeight: '60px',
+                  boxSizing: 'border-box',
                 }}
                 onMouseEnter={(e) => {
                   e.currentTarget.style.background = COLORS.backgroundLight;
@@ -1516,16 +1556,18 @@ function UnifiedNodeInfo({
                     fontSize: '1rem',
                     fontWeight: '700',
                     color: COLORS.textPrimary,
-                    margin: 0,
+                    margin: '0.25rem 0 0.25rem 0',
                     letterSpacing: '-0.025em',
+                    lineHeight: '1.2',
                   }}>
                     인물 관계 분석
                   </h4>
                   <p style={{
                     fontSize: '0.8rem',
                     color: COLORS.textSecondary,
-                    margin: '0.5rem 0 0 0',
-                    lineHeight: '1.5',
+                    margin: 0,
+                    lineHeight: '1.4',
+                    wordBreak: 'keep-all',
                   }}>
                     {processedNodeData?.displayName}와 연결된 인물들과의 관계를 시각화합니다
                   </p>
@@ -1832,11 +1874,12 @@ function UnifiedNodeInfo({
                           border: '1px solid #e5e7eb',
                           textAlign: 'center'
                         }}>
-                          <div style={{
+                          <div                           style={{
                             fontSize: '0.9rem',
                             color: COLORS.textPrimary,
                             fontWeight: '600',
-                            lineHeight: '1.4'
+                            lineHeight: '1.4',
+                            wordBreak: 'keep-all'
                           }}>
                             <div>현재 연결된 인물이 적어 그리드 차트로 표시하기 어려운 상황입니다.</div>
                             <div>더 풍부한 관계 분석을 위해 다른 챕터나 이벤트를 확인해보시기 바랍니다.</div>
@@ -1870,7 +1913,8 @@ function UnifiedNodeInfo({
                        <div style={{
                          fontSize: '0.8rem',
                          color: COLORS.textSecondary,
-                         lineHeight: '1.4'
+                         lineHeight: '1.4',
+                         wordBreak: 'keep-all'
                        }}>
                          다른 인물을 선택하거나 다른 챕터를 확인해보세요.
                        </div>
