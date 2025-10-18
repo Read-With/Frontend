@@ -9,7 +9,6 @@ function deepEqual(obj1, obj2, depth = 0) {
   // 최대 깊이 제한 (무한 재귀 방지)
   const MAX_DEPTH = 10;
   if (depth > MAX_DEPTH) {
-    console.warn('deepEqual: 최대 깊이 초과, 참조 비교로 대체');
     return obj1 === obj2;
   }
   
@@ -101,7 +100,6 @@ export function loadGraphData(folderKey, chapter, eventIndex, getEventDataFunc) 
     // 관계 데이터 처리
     const relations = eventData.relations || [];
     if (!Array.isArray(relations)) {
-      console.warn(`loadGraphData: relations가 배열이 아닙니다 (${typeof relations}): ${folderKey}/chapter${chapter}/event${eventIndex}`);
     }
     
     const normalizedRelations = relations
@@ -156,7 +154,6 @@ export function convertRelationsToElements(relations, idToName, idToDesc, idToDe
   }
   
   if (!folderKey || typeof folderKey !== 'string') {
-    console.warn('convertRelationsToElements: 유효하지 않은 folderKey');
     return [];
   }
 
@@ -220,7 +217,6 @@ export function convertRelationsToElements(relations, idToName, idToDesc, idToDe
   // 노드 가중치 기반 크기 계산
   const getNodeWeight = (nodeId) => {
     if (!nodeWeights) {
-      console.warn(`⚠️ [기본값] 노드 ${nodeId}: 가중치 데이터 없음 → 기본값 3 사용`);
       return 3;
     }
     if (nodeWeights[nodeId]) {
@@ -229,7 +225,6 @@ export function convertRelationsToElements(relations, idToName, idToDesc, idToDe
         return weight;
       }
     }
-    console.warn(`⚠️ [기본값] 노드 ${nodeId}: 가중치 누락 → 기본값 3 사용`);
     return 3;
   };
 
@@ -368,17 +363,14 @@ export function getElementsFromRelations(
 ) {
   try {
     if (!relations) {
-      console.warn('getElementsFromRelations: 관계 데이터가 없습니다');
       return [];
     }
     
     if (!characterData) {
-      console.warn('getElementsFromRelations: 캐릭터 데이터가 없습니다');
       return [];
     }
     
     if (!folderKey) {
-      console.warn('getElementsFromRelations: 폴더 키가 없습니다');
       return [];
     }
     
@@ -389,7 +381,6 @@ export function getElementsFromRelations(
     const relationsArray = relations?.relations || (Array.isArray(relations) ? relations : []);
     
     if (!Array.isArray(relationsArray)) {
-      console.warn('getElementsFromRelations: relations가 배열이 아닙니다');
       return [];
     }
     

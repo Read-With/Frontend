@@ -75,6 +75,38 @@ export const extractRadarChartData = (nodeId, relations, elements, maxDisplay = 
 };
 
 /**
+ * 연결된 인물이 적을 때의 처리 상태 확인
+ * @param {Array} radarData - 레이더 차트 데이터
+ * @returns {Object} 처리 상태 정보
+ */
+export const getConnectionStatus = (radarData) => {
+  const connectionCount = radarData.length;
+  
+  if (connectionCount === 0) {
+    return {
+      status: 'no_connections',
+      message: '연결된 인물이 없습니다.',
+      suggestion: '다른 인물을 선택하거나 다른 챕터를 확인해보세요.'
+    };
+  }
+  
+  if (connectionCount <= 2) {
+    return {
+      status: 'few_connections',
+      message: `연결된 인물이 ${connectionCount}명입니다.`,
+      suggestion: '관계가 적은 인물입니다. 다른 인물을 선택하거나 다른 챕터를 확인해보세요.',
+      connectionCount
+    };
+  }
+  
+  return {
+    status: 'sufficient_connections',
+    message: `연결된 인물이 ${connectionCount}명입니다.`,
+    connectionCount
+  };
+};
+
+/**
  * positivity 값에 따른 색상 반환
  * @param {number} positivity -1 ~ 1 사이의 값
  * @returns {string} 색상 코드

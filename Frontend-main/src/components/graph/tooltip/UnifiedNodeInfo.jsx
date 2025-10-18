@@ -8,7 +8,7 @@ import { useRelationData } from "../../../hooks/useRelationData.js";
 import { safeNum } from "../../../utils/relationUtils.js";
 import { mergeRefs } from "../../../utils/styles/animations.js";
 import { COLORS, createButtonStyle, ANIMATION_VALUES, unifiedNodeTooltipStyles, unifiedNodeAnimations } from "../../../utils/styles/styles.js";
-import { extractRadarChartData, getPositivityColor, getPositivityLabel } from "../../../utils/radarChartUtils.js";
+import { extractRadarChartData, getPositivityColor, getPositivityLabel, getConnectionStatus } from "../../../utils/radarChartUtils.js";
 import { Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, ResponsiveContainer } from 'recharts';
 import "../RelationGraph.css";
 
@@ -361,6 +361,11 @@ function UnifiedNodeInfo({
       return [];
     }
   }, [nodeData?.id, chapterNum, displayMode, folderKey, elements, eventNum, isGraphPage]);
+
+  // 연결 상태 확인
+  const connectionStatus = useMemo(() => {
+    return getConnectionStatus(radarChartData);
+  }, [radarChartData]);
 
   // 데이터 Map 생성 (빠른 검색용)
   const dataMap = useMemo(() => {
@@ -895,16 +900,16 @@ function UnifiedNodeInfo({
             border: `0.0625rem solid ${COLORS.borderLight}`,
           }}
         >
-          <div
-            style={{
-              fontSize: "0.8125rem",
-              fontWeight: 600,
-              color: COLORS.primary,
-              marginBottom: "0.375rem",
-            }}
-          >
-            🔍 검색 결과 연결 정보
-          </div>
+           <div
+             style={{
+               fontSize: "0.8125rem",
+               fontWeight: 600,
+               color: COLORS.primary,
+               marginBottom: "0.375rem",
+             }}
+           >
+             검색 결과 연결 정보
+           </div>
           <div
             style={{
               fontSize: "0.75rem",
@@ -1341,26 +1346,18 @@ function UnifiedNodeInfo({
                   padding: '2rem 1.5rem 1.5rem 1.5rem',
                   textAlign: 'center',
                 }}>
-                  {/* 경고 아이콘 */}
-                  <div style={{
-                    fontSize: '3rem',
-                    marginBottom: '1rem',
-                    animation: (isWarningExpanded && !showSummary) ? 'fadeIn 0.4s ease-in-out, pulse 2s ease-in-out 0.4s infinite' : 'none',
-                  }}>
-                    ⚠️
-                  </div>
                   
-                  {/* 경고 제목 */}
-                  <h3 style={{
-                    fontSize: '1.25rem',
-                    fontWeight: '700',
-                    color: '#f59e0b',
-                    margin: '0 0 0.75rem 0',
-                    letterSpacing: '-0.025em',
-                    animation: (isWarningExpanded && !showSummary) ? 'fadeIn 0.4s ease-in-out' : 'none',
-                  }}>
-                    스포일러 포함
-                  </h3>
+                   {/* 경고 제목 */}
+                   <h3 style={{
+                     fontSize: '1.25rem',
+                     fontWeight: '700',
+                     color: COLORS.textPrimary,
+                     margin: '0 0 0.75rem 0',
+                     letterSpacing: '-0.025em',
+                     animation: (isWarningExpanded && !showSummary) ? 'fadeIn 0.4s ease-in-out' : 'none',
+                   }}>
+                     스포일러 포함
+                   </h3>
                   
                   {/* 경고 설명 */}
                   <p style={{
@@ -1634,15 +1631,22 @@ function UnifiedNodeInfo({
                 </button>
               </div>
 
-              {/* 확대된 차트 */}
-              <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                {radarChartData.length > 0 ? (
-                  <ResponsiveContainer width="100%" height="100%">
-                    <RadarChart 
-                      data={radarChartData} 
-                      margin={{ top: 20, right: 30, bottom: 20, left: 30 }}
-                      style={{ outline: 'none' }}
-                    >
+               {/* 확대된 차트 */}
+               <div style={{ 
+                 flex: 1, 
+                 display: 'flex', 
+                 alignItems: 'stretch', 
+                 justifyContent: 'stretch',
+                 minHeight: 0,
+                 overflow: 'hidden'
+               }}>
+                 {connectionStatus.status === 'sufficient_connections' ? (
+                   <ResponsiveContainer width="100%" height="100%">
+                     <RadarChart 
+                       data={radarChartData} 
+                       margin={{ top: 20, right: 30, bottom: 20, left: 30 }}
+                       style={{ outline: 'none' }}
+                     >
                       <style>{`
                         svg:focus {
                           outline: none !important;
@@ -1687,14 +1691,190 @@ function UnifiedNodeInfo({
                       />
                     </RadarChart>
                   </ResponsiveContainer>
-                ) : (
-                  <div style={{
-                    padding: '2rem',
-                    textAlign: 'center',
-                    color: COLORS.textSecondary,
-                    fontSize: '0.875rem',
-                  }}>
-                    표시할 관계 데이터가 없습니다.
+                 ) : connectionStatus.status === 'few_connections' ? (
+                   <div style={{
+                     padding: '1.5rem',
+                     background: COLORS.backgroundLight,
+                     borderRadius: '0.75rem',
+                     border: `1px solid ${COLORS.border}`,
+                     width: '100%',
+                     height: '100%',
+                     display: 'flex',
+                     flexDirection: 'column',
+                     alignItems: 'center',
+                     justifyContent: 'flex-start',
+                     textAlign: 'center',
+                     overflowY: 'auto',
+                     paddingTop: '2rem'
+                   }}>
+                    {radarChartData.length > 0 && (
+                        <div style={{ 
+                          background: COLORS.background,
+                          borderRadius: '0.75rem',
+                          border: `1px solid ${COLORS.borderLight}`,
+                          padding: '0.5rem',
+                          width: '100%',
+                          maxWidth: '500px'
+                        }}>
+                         <div style={{ 
+                           fontSize: '1.2rem', 
+                           fontWeight: '700', 
+                           marginBottom: '1rem',
+                           color: COLORS.textPrimary,
+                           textAlign: 'center'
+                         }}>
+                           연결된 인물
+                         </div>
+                        
+                        <div style={{ 
+                          display: 'flex', 
+                          flexDirection: 'column', 
+                          gap: '1rem'
+                        }}>
+                          {radarChartData.map((item, index) => (
+                             <div key={index} style={{ 
+                               display: 'grid',
+                               gridTemplateColumns: '1fr auto',
+                               gridTemplateRows: 'auto auto',
+                               gap: '0.75rem',
+                               padding: '1rem',
+                               background: '#ffffff',
+                               borderRadius: '0.5rem',
+                               border: `1px solid ${COLORS.borderLight}`,
+                               fontSize: '1rem',
+                               boxShadow: '0 2px 4px rgba(0,0,0,0.05)'
+                             }}>
+                               {/* 인물 이름 (왼쪽 위) */}
+                               <div style={{ 
+                                 display: 'flex', 
+                                 alignItems: 'center', 
+                                 gap: '1rem'
+                               }}>
+                                 <div style={{
+                                   width: '14px',
+                                   height: '14px',
+                                   borderRadius: '50%',
+                                   background: getPositivityColor(item.positivity)
+                                 }} />
+                                 <span style={{ 
+                                   color: COLORS.textPrimary,
+                                   fontWeight: '700',
+                                   fontSize: '1.1rem'
+                                 }}>
+                                   {item.name}
+                                 </span>
+                               </div>
+                               
+                               {/* 관계도 정보 (오른쪽 위) */}
+                               <div style={{ 
+                                 display: 'flex',
+                                 alignItems: 'center',
+                                 gap: '1rem'
+                               }}>
+                                 <span style={{ 
+                                   color: getPositivityColor(item.positivity),
+                                   fontWeight: '700',
+                                   padding: '0.5rem 0.75rem',
+                                   background: `${getPositivityColor(item.positivity)}20`,
+                                   borderRadius: '0.5rem',
+                                   fontSize: '0.9rem'
+                                 }}>
+                                   {getPositivityLabel(item.positivity)}
+                                 </span>
+                                 
+                                 <div style={{
+                                   fontSize: '1.1rem',
+                                   color: COLORS.textSecondary,
+                                   fontWeight: '700',
+                                   padding: '0.5rem 0.75rem',
+                                   background: COLORS.backgroundLight,
+                                   borderRadius: '0.5rem'
+                                 }}>
+                                   {Math.round(item.positivity * 100)}%
+                                 </div>
+                               </div>
+                               
+                               {/* 관계 태그 (왼쪽 아래, 전체 너비) */}
+                               {item.relationTags && item.relationTags.length > 0 && (
+                                 <div style={{ 
+                                   display: 'flex', 
+                                   flexWrap: 'wrap', 
+                                   gap: '0.75rem',
+                                   gridColumn: '1 / -1'
+                                 }}>
+                                   {item.relationTags.map((tag, tagIndex) => (
+                                     <span
+                                       key={tagIndex}
+                                       style={{
+                                         background: COLORS.backgroundLight,
+                                         color: COLORS.textPrimary,
+                                         padding: '0.25rem 0.5rem',
+                                         borderRadius: '0.5rem',
+                                         fontSize: '0.8rem',
+                                         border: `1px solid ${COLORS.border}`,
+                                         fontWeight: '600',
+                                       }}
+                                     >
+                                       {tag}
+                                     </span>
+                                   ))}
+                                 </div>
+                               )}
+                            </div>
+                          ))}
+                        </div>
+                        
+                        <div style={{
+                          marginTop: '0.75rem',
+                          padding: '0.75rem',
+                          background: COLORS.backgroundLight,
+                          borderRadius: '0.5rem',
+                          border: '1px solid #e5e7eb',
+                          textAlign: 'center'
+                        }}>
+                          <div style={{
+                            fontSize: '0.9rem',
+                            color: COLORS.textPrimary,
+                            fontWeight: '600',
+                            lineHeight: '1.4'
+                          }}>
+                            <div>현재 연결된 인물이 적어 그리드 차트로 표시하기 어려운 상황입니다.</div>
+                            <div>더 풍부한 관계 분석을 위해 다른 챕터나 이벤트를 확인해보시기 바랍니다.</div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                 ) : (
+                   <div style={{
+                     padding: '1.5rem',
+                     background: COLORS.backgroundLight,
+                     borderRadius: '0.75rem',
+                     border: `1px solid ${COLORS.border}`,
+                     width: '100%',
+                     height: '100%',
+                     display: 'flex',
+                     flexDirection: 'column',
+                     alignItems: 'center',
+                     justifyContent: 'flex-start',
+                     textAlign: 'center',
+                     overflowY: 'auto',
+                     paddingTop: '2rem'
+                   }}>
+                     <div style={{
+                       padding: '1rem',
+                       background: COLORS.background,
+                       borderRadius: '0.5rem',
+                       border: '1px solid #e5e7eb'
+                     }}>
+                       <div style={{
+                         fontSize: '0.8rem',
+                         color: COLORS.textSecondary,
+                         lineHeight: '1.4'
+                       }}>
+                         다른 인물을 선택하거나 다른 챕터를 확인해보세요.
+                       </div>
+                     </div>
                   </div>
                 )}
 
@@ -1718,26 +1898,26 @@ function UnifiedNodeInfo({
                       minHeight: '160px',
                     }}
                   >
-                    {/* 인물 이름 */}
-                    <div style={{ 
-                      fontWeight: '700', 
-                      fontSize: '1rem', 
-                      marginBottom: '0.5rem', 
-                      color: COLORS.textPrimary,
-                    }}>
-                      {hoveredData.fullName || hoveredData.name}
-                    </div>
+                     {/* 인물 이름 */}
+                     <div style={{ 
+                       fontWeight: '700', 
+                       fontSize: '1rem', 
+                       marginBottom: '0.5rem', 
+                       color: COLORS.textPrimary,
+                     }}>
+                       {hoveredData.name}
+                     </div>
                     
-                    {/* 관계도 점수 */}
-                    <div style={{ 
-                      display: 'flex', 
-                      alignItems: 'center',
-                      gap: '0.5rem',
-                      padding: '0.5rem',
-                      background: 'linear-gradient(135deg, #f8f9fc 0%, #ffffff 100%)',
-                      borderRadius: '0.375rem',
-                      border: '1px solid #e3e6ef'
-                    }}>
+                     {/* 관계도 점수 */}
+                     <div style={{ 
+                       display: 'flex', 
+                       alignItems: 'center',
+                       gap: '0.5rem',
+                       padding: '0.5rem',
+                       background: COLORS.backgroundLight,
+                       borderRadius: '0.375rem',
+                       border: '1px solid #e3e6ef'
+                     }}>
                       <span style={{ 
                         fontSize: '0.75rem',
                         color: getPositivityColor(hoveredData.positivity),
@@ -1754,33 +1934,41 @@ function UnifiedNodeInfo({
                       </span>
                     </div>
                     
-                    {hoveredData.relationTags && hoveredData.relationTags.length > 0 && (
-                      <div style={{ marginTop: '0.75rem', paddingTop: '0.75rem', borderTop: `1px solid ${COLORS.borderLight}` }}>
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.375rem' }}>
-                          {hoveredData.relationTags.slice(0, 6).map((tag, i) => (
-                            <span
-                              key={i}
-                              style={{
-                                background: COLORS.backgroundLight,
-                                color: COLORS.textPrimary,
-                                padding: '0.25rem 0.5rem',
-                                borderRadius: '0.375rem',
-                                fontSize: '0.75rem',
-                                border: `1px solid ${COLORS.border}`,
-                                fontWeight: '500',
-                              }}
-                            >
-                              {tag}
-                            </span>
-                          ))}
-                          {hoveredData.relationTags.length > 6 && (
-                            <span style={{ fontSize: '0.75rem', color: COLORS.textSecondary, alignSelf: 'center' }}>
-                              +{hoveredData.relationTags.length - 6}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    )}
+                     {hoveredData.relationTags && hoveredData.relationTags.length > 0 && (
+                       <div style={{ marginTop: '0.75rem', paddingTop: '0.75rem', borderTop: `1px solid ${COLORS.borderLight}` }}>
+                         <div style={{ 
+                           fontSize: '0.8rem', 
+                           color: COLORS.textSecondary, 
+                           marginBottom: '0.5rem',
+                           fontWeight: '600'
+                         }}>
+                           관계 태그
+                         </div>
+                         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.375rem' }}>
+                           {hoveredData.relationTags.slice(0, 6).map((tag, i) => (
+                             <span
+                               key={i}
+                               style={{
+                                 background: COLORS.backgroundLight,
+                                 color: COLORS.textPrimary,
+                                 padding: '0.25rem 0.5rem',
+                                 borderRadius: '0.375rem',
+                                 fontSize: '0.75rem',
+                                 border: `1px solid ${COLORS.border}`,
+                                 fontWeight: '500',
+                               }}
+                             >
+                               {tag}
+                             </span>
+                           ))}
+                           {hoveredData.relationTags.length > 6 && (
+                             <span style={{ fontSize: '0.75rem', color: COLORS.textSecondary, alignSelf: 'center' }}>
+                               +{hoveredData.relationTags.length - 6}
+                             </span>
+                           )}
+                         </div>
+                       </div>
+                     )}
                   </div>
                 )}
               </div>

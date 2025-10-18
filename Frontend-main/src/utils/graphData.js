@@ -61,8 +61,6 @@ export function getFolderKeyFromFilename(filename) {
     }
     
     if (!filename || typeof filename !== 'string') {
-      console.warn(`getFolderKeyFromFilename: 파일명이 없거나 유효하지 않습니다 (${typeof filename}: ${filename}). 첫 번째 폴더를 사용합니다.`);
-      console.info(`getFolderKeyFromFilename: 사용 가능한 폴더: [${availableFolders.join(', ')}]`);
       return availableFolders[0];
     }
     
@@ -80,11 +78,9 @@ export function getFolderKeyFromFilename(filename) {
     );
     
     if (partialMatch) {
-      console.info(`getFolderKeyFromFilename: 부분 매치 발견 (${filename} -> ${partialMatch})`);
       return partialMatch;
     }
     
-    console.warn(`getFolderKeyFromFilename: 매치되는 폴더를 찾을 수 없습니다 (${filename}). 사용 가능한 폴더: [${availableFolders.join(', ')}]. 첫 번째 폴더를 사용합니다.`);
     return availableFolders[0];
   } catch (error) {
     console.error('getFolderKeyFromFilename 실패:', error, { filename, availableFolders: Array.from(folderChapters.keys()) });
@@ -298,12 +294,10 @@ export function createCharacterMapsWithCache(characters) {
 export function getEventsForChapter(chapter, folderKey) {
   try {
     if (!chapter || chapter < 1) {
-      console.warn(`getEventsForChapter: 유효하지 않은 챕터 번호 (${chapter})`);
       return [];
     }
     
     if (!folderKey || typeof folderKey !== 'string') {
-      console.warn(`getEventsForChapter: 유효하지 않은 폴더 키 (${folderKey})`);
       return [];
     }
     
@@ -314,7 +308,6 @@ export function getEventsForChapter(chapter, folderKey) {
         console.error('getEventsForChapter: 사용 가능한 폴더가 없습니다');
         return [];
       }
-      console.warn(`getEventsForChapter: 요청한 폴더 키(${folderKey})가 없습니다. 사용 가능한 폴더: ${availableFolders.join(', ')}`);
       folderKey = availableFolders[0];
     }
 
@@ -332,13 +325,11 @@ export function getEventsForChapter(chapter, folderKey) {
     );
     
     if (!textFilePath) {
-      console.warn(`getEventsForChapter: 이벤트 파일을 찾을 수 없음 (${folderKey}/chapter${num})`);
       return [];
     }
     
     const textArray = dataModules.events[textFilePath]?.default;
     if (!Array.isArray(textArray)) {
-      console.warn(`getEventsForChapter: 이벤트 데이터가 배열이 아님 (${folderKey}/chapter${num})`);
       return [];
     }
 
@@ -419,17 +410,14 @@ export function getChapterEventCount(chapter, folderKey) {
 export function getChapterFile(chapter, type, folderKey) {
   try {
     if (!chapter || chapter < 1) {
-      console.warn(`getChapterFile: 유효하지 않은 챕터 번호 (${chapter})`);
       return [];
     }
     
     if (!type || typeof type !== 'string') {
-      console.warn(`getChapterFile: 유효하지 않은 타입 (${type})`);
       return [];
     }
     
     if (!folderKey || typeof folderKey !== 'string') {
-      console.warn(`getChapterFile: 유효하지 않은 폴더 키 (${folderKey})`);
       return [];
     }
 
@@ -441,7 +429,6 @@ export function getChapterFile(chapter, type, folderKey) {
       );
       
       if (!filePath) {
-        console.warn(`getChapterFile: 캐릭터 파일을 찾을 수 없음 (${folderKey}/chapter${num})`);
         return [];
       }
       
@@ -449,7 +436,6 @@ export function getChapterFile(chapter, type, folderKey) {
       return data?.characters || [];
     } else {
       // (relations 등 다른 타입도 필요하다면 여기에 맞게 수정)
-      console.warn(`getChapterFile: 지원하지 않는 타입 (${type})`);
       return [];
     }
   } catch (error) {
