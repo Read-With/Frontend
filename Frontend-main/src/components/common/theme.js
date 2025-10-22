@@ -1,32 +1,35 @@
 export const theme = {
   colors: {
-    primary: '#4F6DDE',
-    secondary: '#6CA8FF',
+    // 새로운 색상 팔레트
+    primary: '#3E4F2F',      // 가장 진한 녹색
+    secondary: '#586544',     // 중간 진한 녹색
+    tertiary: '#717B59',     // 중간 녹색
+    light: '#B3B6A0',        // 연한 녹색
     background: {
-      main: 'linear-gradient(120deg, #f8fbff 0%, #e9f0ff 100%)',
-      card: '#f8fbff',
-      section: '#f4f7fb',
+      main: 'linear-gradient(120deg, #F5F1E6 0%, #B3B6A0 100%)',
+      card: '#F5F1E6',
+      section: '#B3B6A0',
       white: '#fff'
     },
     text: {
-      primary: '#222',
-      secondary: '#6b7a90',
+      primary: '#3E4F2F',
+      secondary: '#586544',
       white: '#fff',
-      light: '#eaf2ff'
+      light: '#717B59'
     },
-    border: '#bbb',
+    border: '#B3B6A0',
     shadow: {
-      primary: 'rgba(79,109,222,0.10)',
-      card: 'rgba(79,109,222,0.10)',
-      hover: 'rgba(79,109,222,0.18)'
+      primary: 'rgba(62,79,47,0.10)',
+      card: 'rgba(62,79,47,0.10)',
+      hover: 'rgba(62,79,47,0.18)'
     }
   },
   
   gradients: {
-    primary: 'linear-gradient(90deg, #4F6DDE 0%, #6CA8FF 100%)',
-    primaryReverse: 'linear-gradient(90deg, #6CA8FF 0%, #4F6DDE 100%)',
-    background: 'linear-gradient(120deg, #4F6DDE 0%, #6CA8FF 100%)',
-    backgroundLight: 'linear-gradient(120deg, #f8fbff 0%, #e9f0ff 100%)'
+    primary: 'linear-gradient(90deg, #3E4F2F 0%, #586544 100%)',
+    primaryReverse: 'linear-gradient(90deg, #586544 0%, #3E4F2F 100%)',
+    background: 'linear-gradient(120deg, #3E4F2F 0%, #586544 100%)',
+    backgroundLight: 'linear-gradient(120deg, #F5F1E6 0%, #B3B6A0 100%)'
   },
   
   spacing: {

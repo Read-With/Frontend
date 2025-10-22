@@ -11,15 +11,15 @@
   padding: 8px 24px;
   gap: 16px;
   height: 40px;
-  background: #fff;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+  background: #D4D4C3;
+  box-shadow: 0 2px 8px rgba(62, 79, 47, 0.08);
   overflow: hidden;
 }
 
 .user-topbar-avatar {
   width: 32px;
   height: 32px;
-  background: linear-gradient(135deg, #4F6DDE, #6B8AFF);
+  background: linear-gradient(135deg, #3E4F2F, #586544);
   border-radius: 50%;
   display: flex;
   align-items: center;
@@ -32,14 +32,15 @@
   font-weight: 600;
   font-size: 16px;
   line-height: 1;
-  color: #1a1a1a;
+  color: #3E4F2F;
   white-space: nowrap;
+  margin-top: 0.5rem;
 }
 .user-topbar-logout {
   font-family: var(--font-family-primary);
   font-weight: 500;
   font-size: 14px;
-  color: #333;
+  color: #586544;
   cursor: pointer;
   padding: 8px 16px;
   border-radius: 8px;
@@ -54,8 +55,8 @@
 }
 
 .user-topbar-logout:hover {
-  background: rgba(239, 68, 68, 0.1);
-  color: #ef4444;
+  background: rgba(113, 123, 89, 0.1);
+  color: #717B59;
 }
 
 .user-topbar-logout:active {
@@ -84,13 +85,13 @@
   left: 0;
   width: 100%;
   height: 64px;
-  background: white;
+  background: #D4D4C3;
   display: flex;
   justify-content: space-between;
   align-items: center;
   padding: 0 32px;
   z-index: 1000;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 2px 8px rgba(62, 79, 47, 0.08);
 }
 
 .header-left {
@@ -106,13 +107,13 @@
 
 .logo-icon {
   font-size: 28px;
-  color: #4F6DDE;
+  color: #3E4F2F;
 }
 
 .logo-text {
   font-size: 22px;
   font-weight: 600;
-  color: #4F6DDE;
+  color: #3E4F2F;
 }
 
 .header-right {
@@ -129,24 +130,26 @@
 }
 
 .google-login-button {
-  background: white;
-  border: 1px solid #dadce0;
+  background: #FDFCF9;
+  border: 1px solid #717B59;
   border-radius: 8px;
   padding: 12px 24px;
   font-size: 14px;
   font-weight: 500;
-  color: #3c4043;
+  color: #3E4F2F;
   cursor: pointer;
   display: flex;
   align-items: center;
   gap: 12px;
   transition: all 0.2s ease;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 2px 4px rgba(62, 79, 47, 0.1);
 }
 
 .google-login-button:hover {
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+  box-shadow: 0 4px 8px rgba(62, 79, 47, 0.15);
   transform: translateY(-1px);
+  background: #D4D4C3;
+  border-color: #3E4F2F;
 }
 
 .google-login-button:active {
@@ -154,7 +157,7 @@
 }
 
 .login-error {
-  color: #ef4444;
+  color: #717B59;
   font-size: 12px;
   text-align: center;
 }

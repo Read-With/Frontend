@@ -1,104 +1,223 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import useAuth from '../hooks/useAuth';
 import Header from '../components/common/Header';
 import OAuthCallback from '../components/auth/OAuthCallback';
 import './HomePage.css';
 
-const features = [
-  {
-    id: 1,
-    title: '인물 관계도 파악',
-    description: '노드 및 간선에 따라 등장인물 간의 관계를 시각화합니다',
-    details: [
-      '• 네트워크 그래프로 인물 관계 시각화',
-      '• 인물 간 연결 강도 표시',
-      '• 특정 인물 중심 관계 분석',
-      '• 관계 유형별 색상 구분',
-      '• 인터랙티브 그래프 탐색'
-    ]
-  },
-  {
-    id: 2,
-    title: '타인물 시점으로 보기',
-    description: '다른 인물의 관점에서 이야기를 다시 해석해보세요',
-    details: [
-      '• 등장인물 선택 시점 변경',
-      '• 해당 인물이 알 수 있는 정보만 표시',
-      '• 인물별 감정과 생각 분석',
-      '• 시점별 이야기 해석 차이',
-      '• 인물 심리 상태 추적'
-    ]
-  },
-  {
-    id: 3,
-    title: '챗봇',
-    description: 'AI와 대화하며 독서에 대한 질문을 해보세요',
-    details: [
-      '• 인물에 대한 질문과 답변',
-      '• 줄거리 요약 및 설명',
-      '• 테마와 의미 해석 도움',
-      '• 독서 가이드 및 팁 제공',
-      '• 개인화된 독서 경험'
-    ]
-  }
-];
-
-const FeatureCard = ({ feature, index, isExpanded, onToggle }) => {
-  const [isHovered, setIsHovered] = useState(false);
-  const [isClosing, setIsClosing] = useState(false);
+// 스크롤 섹션 컴포넌트들
+const HeroSection = () => {
+  const [scrollY, setScrollY] = useState(0);
   
-  const cardStyle = {
-    animation: `fadeInUp 0.6s ease-out ${0.4 + index * 0.1}s both`,
-    ...(isExpanded ? {
-      gridRow: '1 / 3',
-      gridColumn: `${index + 1} / ${index + 2}`
-    } : {
-      gridRow: '1 / 2',
-      gridColumn: `${index + 1} / ${index + 2}`
-    })
-  };
-
-  const cardClassName = isExpanded ? 'feature-card expanded' : 'feature-card';
-
-  const handleClick = () => {
-    if (isExpanded) {
-      setIsClosing(true);
-      setTimeout(() => {
-        onToggle(feature.id);
-        setIsClosing(false);
-      }, 100);
-    } else {
-      onToggle(feature.id);
-    }
-  };
+  useEffect(() => {
+    const handleScroll = () => setScrollY(window.scrollY);
+    window.addEventListener('scroll', handleScroll);
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
 
   return (
-    <div
-      className={cardClassName}
-      style={cardStyle}
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
-      onClick={handleClick}
-    >
-      <h3 className="feature-title">{feature.title}</h3>
-      <p className="feature-description">{feature.description}</p>
-      {isExpanded && (
-        <ul className={isClosing ? 'feature-details closing' : 'feature-details'}>
-          {feature.details.map((detail, idx) => (
-            <li key={idx} className="feature-detail-item">
-              {detail}
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
+    <section className="scroll-section hero-section">
+      <div className="hero-background">
+        <div className="network-animation" style={{ transform: `translateY(${scrollY * 0.5}px)` }}>
+          <div className="network-node" style={{ top: '15%', left: '10%', animationDelay: '0s' }}></div>
+          <div className="network-node" style={{ top: '25%', right: '15%', animationDelay: '0.5s' }}></div>
+          <div className="network-node" style={{ top: '75%', left: '20%', animationDelay: '1s' }}></div>
+          <div className="network-node" style={{ top: '85%', right: '25%', animationDelay: '1.5s' }}></div>
+          <div className="network-node" style={{ top: '50%', left: '5%', animationDelay: '2s' }}></div>
+          <div className="network-node" style={{ top: '50%', right: '5%', animationDelay: '2.5s' }}></div>
+          <div className="network-connection" style={{ top: '20%', left: '15%', width: '200px', transform: 'rotate(15deg)' }}></div>
+          <div className="network-connection" style={{ top: '80%', left: '25%', width: '150px', transform: 'rotate(-20deg)' }}></div>
+          <div className="network-connection" style={{ top: '55%', left: '10%', width: '180px', transform: 'rotate(10deg)' }}></div>
+        </div>
+      </div>
+      <div className="hero-content">
+          <h1 className="hero-title">
+            <span className="title-main">작품 속 인물들간의</span>
+            <span className="title-brand">관계를 탐험해보세요</span>
+          </h1>
+        <div className="hero-guide">
+          <p className="hero-subtitle">스크롤을 내려 기능을 직접 체험해보세요</p>
+          <div className="scroll-arrows">
+            <div className="arrow"></div>
+            <div className="arrow"></div>
+            <div className="arrow"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+};
+
+const InteractionSection = () => {
+  const [isVisible, setIsVisible] = useState(false);
+  const sectionRef = useRef(null);
+
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setIsVisible(true);
+        }
+      },
+      { threshold: 0.3 }
+    );
+
+    if (sectionRef.current) {
+      observer.observe(sectionRef.current);
+    }
+
+    return () => observer.disconnect();
+  }, []);
+
+  return (
+    <section ref={sectionRef} className="scroll-section interaction-section">
+      <div className="section-content">
+        <h2 className="section-title">그래프를 직접 조작해보세요</h2>
+        <p className="section-description">
+          드래그하거나 인물 위에 마우스를 올려보세요
+        </p>
+        <div className={`interactive-demo ${isVisible ? 'visible' : ''}`}>
+          <div className="demo-graph">
+            <div className="demo-node" style={{ top: '30%', left: '20%' }}>A</div>
+            <div className="demo-node" style={{ top: '40%', right: '25%' }}>B</div>
+            <div className="demo-node" style={{ top: '60%', left: '30%' }}>C</div>
+            <div className="demo-connection" style={{ top: '35%', left: '25%', width: '200px', transform: 'rotate(15deg)' }}></div>
+            <div className="demo-connection" style={{ top: '50%', left: '35%', width: '150px', transform: 'rotate(-20deg)' }}></div>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+};
+
+const RelationshipSection = () => {
+  const [isVisible, setIsVisible] = useState(false);
+  const sectionRef = useRef(null);
+
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setIsVisible(true);
+        }
+      },
+      { threshold: 0.3 }
+    );
+
+    if (sectionRef.current) {
+      observer.observe(sectionRef.current);
+    }
+
+    return () => observer.disconnect();
+  }, []);
+
+  return (
+    <section ref={sectionRef} className="scroll-section relationship-section">
+      <div className="section-content">
+        <h2 className="section-title">관계의 다채로운 의미</h2>
+        <div className={`relationship-demo ${isVisible ? 'visible' : ''}`}>
+          <div className="relationship-focus">
+            <div className="focus-node focus-node-a">A</div>
+            <div className="focus-node focus-node-b">B</div>
+            <div className="focus-connection strong-friendly"></div>
+            <div className="relationship-legend">
+              <div className="legend-item">
+                <div className="legend-line strong-friendly"></div>
+                <span>선 굵기: 관계의 강도</span>
+              </div>
+              <div className="legend-item">
+                <div className="legend-line friendly"></div>
+                <span>색상: 관계 유형 (우호/적대)</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+};
+
+const PerspectiveSection = () => {
+  const [isVisible, setIsVisible] = useState(false);
+  const [selectedPerspective, setSelectedPerspective] = useState('A');
+  const sectionRef = useRef(null);
+
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setIsVisible(true);
+        }
+      },
+      { threshold: 0.3 }
+    );
+
+    if (sectionRef.current) {
+      observer.observe(sectionRef.current);
+    }
+
+    return () => observer.disconnect();
+  }, []);
+
+  return (
+    <section ref={sectionRef} className="scroll-section perspective-section">
+      <div className="section-content">
+        <h2 className="section-title">시점의 전환</h2>
+        <p className="section-description">
+          다른 인물의 관점에서 보면 세상이 달라 보입니다
+        </p>
+        <div className={`perspective-demo ${isVisible ? 'visible' : ''}`}>
+          <div className="perspective-controls">
+            <button 
+              className={`perspective-btn ${selectedPerspective === 'A' ? 'active' : ''}`}
+              onClick={() => setSelectedPerspective('A')}
+            >
+              A의 시점
+            </button>
+            <button 
+              className={`perspective-btn ${selectedPerspective === 'B' ? 'active' : ''}`}
+              onClick={() => setSelectedPerspective('B')}
+            >
+              B의 시점
+            </button>
+          </div>
+          <div className={`perspective-graph ${selectedPerspective.toLowerCase()}-perspective`}>
+            <div className="perspective-node" style={{ opacity: selectedPerspective === 'A' ? 1 : 0.3 }}>A</div>
+            <div className="perspective-node" style={{ opacity: selectedPerspective === 'B' ? 1 : 0.3 }}>B</div>
+            <div className="perspective-node" style={{ opacity: selectedPerspective === 'A' ? 1 : 0.1 }}>C</div>
+            <div className="perspective-connection" style={{ 
+              opacity: selectedPerspective === 'A' ? 1 : 0.2,
+              backgroundColor: selectedPerspective === 'B' ? '#ef4444' : '#10b981'
+            }}></div>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+};
+
+const CTASection = () => {
+  const navigate = useNavigate();
+  
+  return (
+    <section className="scroll-section cta-section">
+      <div className="section-content">
+        <h2 className="section-title">이제 당신의 이야기로</h2>
+        <p className="section-description">
+          원하는 작품을 선택해 직접 관계를 분석해보세요
+        </p>
+        <button 
+          className="cta-button"
+          onClick={() => navigate('/mypage')}
+        >
+          서비스 시작하기
+        </button>
+      </div>
+    </section>
   );
 };
 
 export default function HomePage() {
-  const [expandedFeature, setExpandedFeature] = useState(null);
-  const [selectedImage, setSelectedImage] = useState(null);
   const navigate = useNavigate();
   const { user } = useAuth();
   const [searchParams] = useSearchParams();
@@ -106,33 +225,6 @@ export default function HomePage() {
   // OAuth 콜백 처리
   const code = searchParams.get('code');
   const error = searchParams.get('error');
-
-  const handleFeatureToggle = (featureId) => {
-    setExpandedFeature(expandedFeature === featureId ? null : featureId);
-  };
-
-  const handleImageClick = (imageId) => {
-    setSelectedImage(imageId);
-  };
-
-  const handleCloseTooltip = () => {
-    setSelectedImage(null);
-  };
-
-
-  // ESC 키로 툴팁 닫기
-  useEffect(() => {
-    const handleKeyDown = (event) => {
-      if (event.key === 'Escape' && selectedImage) {
-        setSelectedImage(null);
-      }
-    };
-
-    document.addEventListener('keydown', handleKeyDown);
-    return () => {
-      document.removeEventListener('keydown', handleKeyDown);
-    };
-  }, [selectedImage]);
 
   // OAuth 콜백이 있으면 OAuthCallback 컴포넌트 렌더링
   if (code || error) {
@@ -172,79 +264,13 @@ export default function HomePage() {
   }, [user, navigate]);
 
   return (
-    <div className="homepage-container">
+    <div className="scrolltelling-container">
       <Header showAuthLinks={true} />
-      
-      {/* 메인 콘텐츠 */}
-      <div className="main-content">
-        {/* 히어로 섹션 */}
-        <div className="hero-section">
-          <h1 className="hero-title">
-            <span className="title-main">스마트 독서 플랫폼, </span>
-            <span className="title-brand">ReadWith</span>
-          </h1>
-          <p className="hero-description">나를 위한 독서 공간에서 독서 경험을 재정의하세요</p>
-        </div>
-
-        {/* 이미지 박스들 */}
-        <div className="placeholder-section">
-           <div className="image-box" onClick={() => handleImageClick(1)}>
-             <div className="image-container">
-               <img 
-                 src="/viewerpage.png" 
-                 alt="뷰어 페이지" 
-                 className="preview-image"
-               />
-               <div className="image-overlay">
-                 <span className="image-text">뷰어 페이지</span>
-               </div>
-             </div>
-           </div>
-           <div className="image-box" onClick={() => handleImageClick(2)}>
-             <div className="image-container">
-               <img 
-                 src="/graphpage.png" 
-                 alt="그래프 페이지" 
-                 className="preview-image"
-               />
-               <div className="image-overlay">
-                 <span className="image-text">그래프 페이지</span>
-               </div>
-             </div>
-           </div>
-        </div>
-      </div>
-
-      {/* 확대된 이미지 툴팁 */}
-      {selectedImage && (
-        <div className="image-tooltip-overlay" onClick={handleCloseTooltip}>
-          <div className="image-tooltip-content" onClick={(e) => e.stopPropagation()}>
-            <button className="tooltip-close-btn" onClick={handleCloseTooltip}>×</button>
-             <div className="tooltip-image-container">
-               {selectedImage === 1 ? (
-                 <img 
-                   src="/viewerpage.png" 
-                   alt="뷰어 페이지 확대" 
-                   className="tooltip-image"
-                 />
-               ) : selectedImage === 2 ? (
-                 <img 
-                   src="/graphpage.png" 
-                   alt="그래프 페이지 확대" 
-                   className="tooltip-image"
-                 />
-               ) : (
-                 <div className="tooltip-image-placeholder">
-                   <span className="tooltip-image-icon">🖼️</span>
-                   <span className="tooltip-image-text">이미지 {selectedImage} 확대</span>
-                   <span className="tooltip-image-description">여기에 실제 이미지가 표시됩니다</span>
-                 </div>
-               )}
-             </div>
-          </div>
-        </div>
-      )}
-
+      <HeroSection />
+      <InteractionSection />
+      <RelationshipSection />
+      <PerspectiveSection />
+      <CTASection />
     </div>
   );
 } 
