@@ -3,7 +3,7 @@
   width: 100%;
   padding: 60px 0 10px 0;
   text-align: center;
-  color: #1976d2;
+  color: #5C6F5C;
   font-size: 15px;
   font-weight: 500;
 }
@@ -139,7 +139,7 @@
 
 .filter-group button {
   background: #e3e6ef;
-  color: #1976d2;
+  color: #5C6F5C;
   border: none;
   border-radius: 4px;
   padding: 4px 10px;
@@ -231,7 +231,7 @@
 .side-relation-meta {
   font-size: 12.5px;
   margin-top: 9px;
-  color: #1976d2;
+  color: #5C6F5C;
 }
 
 /* 노드 툴팁 */
@@ -392,7 +392,7 @@ node.highlighted {
   font-size: 18px;
   background: none;
   border: none;
-  color: #1976d2;
+  color: #5C6F5C;
   cursor: pointer;
 }
 
@@ -512,7 +512,7 @@ node.highlighted {
 }
 
 .close-x-btn:hover {
-  color: #1976d2;
+  color: #5C6F5C;
 }
 
 /* 툴팁 공통 스타일 */
@@ -533,7 +533,7 @@ node.highlighted {
   align-items: center;
   padding: 10px 15px;
   border-bottom: 1px solid #eaedf2;
-  background-color: #f8f9fb;
+  background-color: #E8F5E8;
   border-radius: 8px 8px 0 0;
 }
 
@@ -541,7 +541,7 @@ node.highlighted {
   margin: 0;
   font-size: 16px;
   font-weight: 600;
-  color: #22336b;
+  color: #5C6F5C;
 }
 
 .tooltip-close-btn {
@@ -557,7 +557,7 @@ node.highlighted {
   align-items: center;
   justify-content: center;
   font-size: 20px;
-  color: #8892a8;
+  color: #7A8A7A;
   cursor: pointer;
   transition: all 0.2s;
   padding: 0;
@@ -565,7 +565,7 @@ node.highlighted {
 }
 
 .tooltip-close-btn:hover {
-  color: #22336b;
+  color: #5C6F5C;
   background: rgba(0, 0, 0, 0.05);
 }
 
@@ -585,7 +585,7 @@ node.highlighted {
 }
 
 .tooltip-content strong {
-  color: #22336b;
+  color: #5C6F5C;
   font-weight: 600;
 }
 
@@ -648,7 +648,7 @@ node.highlighted {
   right: 0;
   z-index: 9999;
   background: white;
-  color: #22336b;
+  color: #5C6F5C;
   padding: 1rem;
   border: none;
   border-bottom-left-radius: 0.75rem;
@@ -718,7 +718,7 @@ node.highlighted {
 .business-card-title h3 {
   margin: 0 0 8px 0;
   font-size: 20px;
-  color: #22336b;
+  color: #5C6F5C;
   font-weight: 600;
   white-space: nowrap;
   overflow: hidden;
@@ -815,14 +815,14 @@ node.highlighted {
 .info-content label {
   display: block;
   font-size: 12px;
-  color: #8892a8;
+  color: #7A8A7A;
   margin-bottom: 4px;
   font-weight: 500;
 }
 
 .info-content p {
   margin: 0;
-  color: #22336b;
+  color: #5C6F5C;
   font-size: 14px;
   line-height: 1.5;
   white-space: pre-wrap;
@@ -830,7 +830,7 @@ node.highlighted {
 
 .description-text {
   margin: 0;
-  color: #22336b;
+  color: #5C6F5C;
   font-size: 14px;
   line-height: 1.5;
   white-space: pre-wrap;
@@ -849,7 +849,7 @@ node.highlighted {
   align-items: center;
   justify-content: center;
   font-size: 20px;
-  color: #8892a8;
+  color: #7A8A7A;
   cursor: pointer;
   transition: all 0.2s;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
@@ -857,7 +857,7 @@ node.highlighted {
 
 .tooltip-close-btn:hover {
   background: #fff;
-  color: #22336b;
+  color: #5C6F5C;
   transform: scale(1.05);
 }
 
@@ -876,7 +876,7 @@ node.highlighted {
 
 .edge-tooltip-header {
   padding: 16px;
-  background: #f8f9fb;
+  background: #E8F5E8;
   border-bottom: 1px solid #eaedf2;
 }
 
@@ -894,7 +894,7 @@ node.highlighted {
 
 .node-name {
   font-weight: 500;
-  color: #22336b;
+  color: #5C6F5C;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -902,7 +902,7 @@ node.highlighted {
 }
 
 .node-name.source {
-  color: #2563eb;
+  color: #5C6F5C;
 }
 
 .node-name.target {
@@ -942,7 +942,7 @@ node.highlighted {
 .relation-weight {
   margin-top: 12px;
   padding: 16px;
-  background: #f8f9fb;
+  background: #E8F5E8;
   border-radius: 8px;
 }
 
@@ -971,7 +971,7 @@ node.highlighted {
 .weight-value {
   font-size: 14px;
   font-weight: 600;
-  color: #22336b;
+  color: #5C6F5C;
   padding: 2px 8px;
   background: white;
   border-radius: 12px;
@@ -1069,9 +1069,9 @@ node.highlighted {
 }
 
 .relation-explanation {
-  /* margin-top: 16px; */
-  /* padding-top: 16px; */
-  /* border-top: 1px solid #eaedf2; */
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid #eaedf2;
 }
 
 .relation-explanation p {
@@ -1107,7 +1107,7 @@ node.highlighted {
 }
 
 .relation-node.source {
-  border-left: 3px solid #2563eb;
+  border-left: 3px solid #5C6F5C;
 }
 
 .relation-node.target {
@@ -1116,7 +1116,7 @@ node.highlighted {
 
 .relation-weight {
   padding: 8px;
-  background: #f8f9fb;
+  background: #E8F5E8;
   border-radius: 8px;
 }
 
@@ -1249,7 +1249,7 @@ node.highlighted {
 }
 
 .relation-node.source .node-type {
-  color: #2563eb;
+  color: #5C6F5C;
   border-color: #93c5fd;
 }
 
@@ -1269,7 +1269,7 @@ node.highlighted {
 }
 
 .relation-node.source .node-label {
-  color: #2563eb;
+  color: #5C6F5C;
 }
 
 .relation-node.target .node-label {
@@ -1297,7 +1297,7 @@ node.highlighted {
 
 .relation-node.source .role-label {
   background-color: #e0e7ff;
-  color: #2563eb;
+  color: #5C6F5C;
 }
 
 .relation-node.target .role-label {

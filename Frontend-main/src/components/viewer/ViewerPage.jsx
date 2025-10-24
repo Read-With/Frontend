@@ -40,6 +40,9 @@ function GraphSplitArea({
   tooltipProps,
   transitionStates,
   apiError,
+  isFromLibrary = false,
+  previousPage = null,
+  bookId = null,
 }) {
   const { activeTooltip, onClearTooltip, onSetActiveTooltip, graphClearRef } = tooltipProps;
   const { isEventUndefined, isEventTransition, isChapterTransition } = transitionStates;
@@ -48,6 +51,17 @@ function GraphSplitArea({
   const { loading, isReloading, isGraphLoading, isDataReady } = viewerState;
   const { elements } = graphState;
   const { filterStage } = graphActions;
+  
+  // 이전 페이지 정보 로깅
+  React.useEffect(() => {
+    if (isFromLibrary) {
+      console.log('GraphSplitArea: 라이브러리에서 온 사용자', {
+        isFromLibrary,
+        previousPage,
+        elementsCount: elements?.length || 0
+      });
+    }
+  }, [isFromLibrary, previousPage, elements]);
 
   const filteredMainCharacters = React.useMemo(() => {
     return filterMainCharacters(elements, filterStage);
@@ -85,6 +99,8 @@ function GraphSplitArea({
         viewerState={viewerState}
         searchState={searchState}
         searchActions={searchActions}
+        isFromLibrary={isFromLibrary}
+        previousPage={previousPage}
       />
       
       <div style={{ flex: 1, position: "relative", minHeight: 0, minWidth: 0 }}>
@@ -104,7 +120,7 @@ function GraphSplitArea({
             <div style={{
               fontSize: '48px',
               marginBottom: '16px',
-              color: '#4F6DDE',
+              color: '#5C6F5C',
               animation: 'spin 1s linear infinite'
             }}>
               ⏳
@@ -167,7 +183,7 @@ function GraphSplitArea({
             <button
               onClick={apiError.retry}
               style={{
-                backgroundColor: '#4F6DDE',
+                backgroundColor: '#5C6F5C',
                 color: 'white',
                 border: 'none',
                 borderRadius: '6px',
@@ -177,8 +193,8 @@ function GraphSplitArea({
                 cursor: 'pointer',
                 transition: 'background-color 0.2s'
               }}
-              onMouseOver={(e) => e.target.style.backgroundColor = '#3d5bc7'}
-              onMouseOut={(e) => e.target.style.backgroundColor = '#4F6DDE'}
+              onMouseOver={(e) => e.target.style.backgroundColor = '#4A5A4A'}
+              onMouseOut={(e) => e.target.style.backgroundColor = '#5C6F5C'}
             >
               다시 시도
             </button>
@@ -223,7 +239,7 @@ function GraphSplitArea({
             <button
               onClick={() => window.location.reload()}
               style={{
-                backgroundColor: '#4F6DDE',
+                backgroundColor: '#5C6F5C',
                 color: 'white',
                 border: 'none',
                 borderRadius: '6px',
@@ -233,8 +249,8 @@ function GraphSplitArea({
                 cursor: 'pointer',
                 transition: 'background-color 0.2s'
               }}
-              onMouseOver={(e) => e.target.style.backgroundColor = '#3d5bc7'}
-              onMouseOut={(e) => e.target.style.backgroundColor = '#4F6DDE'}
+              onMouseOver={(e) => e.target.style.backgroundColor = '#4A5A4A'}
+              onMouseOut={(e) => e.target.style.backgroundColor = '#5C6F5C'}
             >
               새로고침
             </button>
@@ -279,6 +295,7 @@ const ViewerPage = () => {
     handleOpenSettings, handleCloseSettings, handleApplySettings,
     onToggleBookmarkList, handleSliderChange, toggleGraph, handleLocationChange,
     graphState, graphActions, viewerState, searchState, graphFullScreen, setGraphFullScreen,
+    previousPage, isFromLibrary, bookId,
   } = useViewerPage();
 
 
@@ -289,6 +306,17 @@ const ViewerPage = () => {
   const [isChapterTransition, setIsChapterTransition] = useState(false);
   const prevEventRef = useRef(null);
   const prevChapterRef = useRef(null);
+  
+  // 이전 페이지 정보 로깅 및 처리
+  React.useEffect(() => {
+    if (isFromLibrary) {
+      console.log('라이브러리에서 온 사용자:', {
+        previousPage,
+        bookTitle: book?.title,
+        bookId: book?.id
+      });
+    }
+  }, [isFromLibrary, previousPage, book]);
   
   const handleClearTooltip = useCallback(() => {
     setActiveTooltip(null);
@@ -311,22 +339,46 @@ const ViewerPage = () => {
   const testProgressAPI = useCallback(async () => {
     if (!book?.id) return;
     
+    // 로컬 책인지 API 책인지 구분
+    // bookId가 숫자가 아니거나 .epub로 끝나는 경우 로컬 책
+    const isLocalBook = !book.id || typeof book.id === 'string' || bookId.includes('.epub') || isNaN(parseInt(bookId, 10));
+    
+    if (isLocalBook) {
+      // 로컬 책의 경우 API 호출하지 않음
+      setManifestLoaded(true);
+      return;
+    }
+    
     try {
-      await getAllProgress();
+      // 전체 진도 조회
+      const allProgressResponse = await getAllProgress();
+      if (allProgressResponse.isSuccess) {
+        console.log('전체 진도 조회 성공:', allProgressResponse.result);
+      }
       
+      // 특정 책 진도 조회
       try {
-        await getBookProgress(book.id);
+        const bookProgressResponse = await getBookProgress(book.id);
+        if (bookProgressResponse.isSuccess) {
+          console.log('책 진도 조회 성공:', bookProgressResponse.result);
+        }
       } catch (progressError) {
         if (!progressError.message.includes('404') && !progressError.message.includes('찾을 수 없습니다')) {
           console.error('독서 진도 조회 실패:', progressError);
         }
       }
       
-      await getBookManifest(book.id);
+      // 매니페스트 조회
+      const manifestResponse = await getBookManifest(book.id);
+      if (manifestResponse.isSuccess) {
+        console.log('매니페스트 조회 성공');
+      }
+      
       setManifestLoaded(true);
       
     } catch (error) {
       console.error('독서 진도 API 호출 실패:', error);
+      setManifestLoaded(true); // 에러가 있어도 매니페스트 로드 완료로 처리
     }
   }, [book?.id]);
 
@@ -348,7 +400,8 @@ const ViewerPage = () => {
         return;
       }
       
-      const eventIdx = 3;
+      // 이벤트 인덱스를 동적으로 설정 (현재 이벤트가 있으면 사용, 없으면 0)
+      const eventIdx = currentEvent?.eventNum || 0;
       const callKey = `${book.id}-${currentChapter}-${eventIdx}`;
       if (apiCallRef.current === callKey) {
         return;
@@ -357,10 +410,12 @@ const ViewerPage = () => {
        
       try {
         if (!book?.id || !currentChapter || eventIdx < 0) {
-          if (isMounted) {
-            setApiMacroData(null);
-          }
           return;
+        }
+        
+        // 이벤트 0에 대한 데이터가 없을 가능성이 높으므로 먼저 확인
+        if (eventIdx === 0) {
+          console.log(`챕터 ${currentChapter}, 이벤트 ${eventIdx}에 대한 세밀 그래프 데이터를 확인 중...`);
         }
         
         const fineData = await getFineGraph(book.id, currentChapter, eventIdx);
@@ -368,7 +423,8 @@ const ViewerPage = () => {
         if (!isMounted) return;
         
         let convertedElements = [];
-        if (fineData.result.characters && fineData.result.relations) {
+        if (fineData.result.characters && fineData.result.relations && 
+            fineData.result.characters.length > 0 && fineData.result.relations.length > 0) {
           const { idToName, idToDesc, idToMain, idToNames } = createCharacterMaps(fineData.result.characters);
           convertedElements = convertRelationsToElements(
             fineData.result.relations,
@@ -398,19 +454,29 @@ const ViewerPage = () => {
               setCurrentEvent(defaultEvent);
             }
           }
+        } else {
+          // 데이터가 없는 경우 (이벤트 0 등)
+          console.log(`챕터 ${currentChapter}, 이벤트 ${eventIdx}에 대한 세밀 그래프 데이터가 없습니다.`);
         }
         
       } catch (error) {
         if (isMounted) {
-          console.error('세밀그래프 API 호출 실패:', error);
-          setApiError({
-            message: '그래프 데이터를 불러오는데 실패했습니다.',
-            details: error.message || '알 수 없는 오류가 발생했습니다.',
-            retry: () => {
-              setApiError(null);
-              apiCallRef.current = null;
-            }
-          });
+          // 404 에러인 경우 특별 처리
+          if (error.message.includes('404') || error.message.includes('찾을 수 없습니다')) {
+            console.warn(`챕터 ${currentChapter}, 이벤트 ${eventIdx}에 대한 데이터가 없습니다.`);
+            // API 데이터가 없을 때는 아무것도 하지 않음 (정상적인 상황)
+            setApiError(null); // 404는 에러가 아닌 정상적인 상황으로 처리
+          } else {
+            console.error('세밀그래프 API 호출 실패:', error);
+            setApiError({
+              message: '그래프 데이터를 불러오는데 실패했습니다.',
+              details: error.message || '알 수 없는 오류가 발생했습니다.',
+              retry: () => {
+                setApiError(null);
+                apiCallRef.current = null;
+              }
+            });
+          }
         }
       }
     };
@@ -434,7 +500,13 @@ const ViewerPage = () => {
           cfi: currentEvent?.cfi || "epubcfi(/6/4[chap01ref]!/4[body01]/10[para05]/2/1:3)"
         };
         
-        await saveProgress(progressData);
+        const response = await saveProgress(progressData);
+        
+        if (response.isSuccess) {
+          console.log('진도 저장 성공:', response.result);
+        } else {
+          console.warn('진도 저장 실패:', response.message);
+        }
         
       } catch (error) {
         console.error('진도 자동 저장 실패:', error);
@@ -759,6 +831,8 @@ const ViewerPage = () => {
         onToggleGraph={toggleGraph}
         pageMode={settings.pageMode}
         graphFullScreen={graphFullScreen}
+        isFromLibrary={isFromLibrary}
+        previousPage={previousPage}
         rightSideContent={
           <CytoscapeGraphPortalProvider>
             <GraphSplitArea
@@ -800,6 +874,9 @@ const ViewerPage = () => {
                 isChapterTransition
               }}
               apiError={apiError}
+              isFromLibrary={isFromLibrary}
+              previousPage={previousPage}
+              bookId={bookId}
             />
           </CytoscapeGraphPortalProvider>
         }
@@ -840,7 +917,7 @@ const ViewerPage = () => {
                 key={bm.cfi}
                 style={{
                   fontSize: "0.98rem",
-                  color: "#4F6DDE",
+                  color: "#5C6F5C",
                   fontFamily: "Noto Serif KR",
                 }}
               >

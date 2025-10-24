@@ -113,7 +113,7 @@ const FileUpload = ({ onUploadSuccess, onClose }) => {
   };
 
   const dropZoneStyle = {
-    border: `2px dashed ${dragActive ? '#4F6DDE' : '#ccc'}`,
+    border: `2px dashed ${dragActive ? '#5C6F5C' : '#ccc'}`,
     borderRadius: '8px',
     padding: '40px 24px',
     textAlign: 'center',
@@ -146,7 +146,7 @@ const FileUpload = ({ onUploadSuccess, onClose }) => {
 
   const progressFillStyle = {
     height: '100%',
-    backgroundColor: '#4F6DDE',
+    backgroundColor: '#5C6F5C',
     width: `${uploadProgress}%`,
     transition: 'width 0.3s ease'
   };
@@ -305,7 +305,7 @@ const FileUpload = ({ onUploadSuccess, onClose }) => {
           style={{
             ...closeButtonStyle,
             flex: 1,
-            backgroundColor: (!metadata.title || !metadata.author) ? '#ccc' : '#4F6DDE',
+            backgroundColor: (!metadata.title || !metadata.author) ? '#ccc' : '#5C6F5C',
             color: 'white',
             border: 'none'
           }}
@@ -358,7 +358,7 @@ const FileUpload = ({ onUploadSuccess, onClose }) => {
                   <div style={{
                     width: '100%',
                     height: '100%',
-                    borderTop: '4px solid #2563eb',
+                    borderTop: '4px solid #5C6F5C',
                     borderRadius: '50%'
                   }}></div>
                 </div>
@@ -374,7 +374,7 @@ const FileUpload = ({ onUploadSuccess, onClose }) => {
                   <div style={{
                     width: '40px',
                     height: '48px',
-                    backgroundColor: '#2563eb',
+                    backgroundColor: '#5C6F5C',
                     borderRadius: '4px',
                     position: 'relative',
                     animation: 'enhanced-pulse 1.5s ease-in-out infinite'
@@ -393,7 +393,7 @@ const FileUpload = ({ onUploadSuccess, onClose }) => {
                       right: '12px',
                       width: '12px',
                       height: '12px',
-                      backgroundColor: '#2563eb',
+                      backgroundColor: '#5C6F5C',
                       transform: 'rotate(45deg)'
                     }}></div>
                     
@@ -441,7 +441,7 @@ const FileUpload = ({ onUploadSuccess, onClose }) => {
                       style={{
                         width: '8px',
                         height: '8px',
-                        backgroundColor: '#2563eb',
+                        backgroundColor: '#5C6F5C',
                         borderRadius: '50%',
                         animation: `bounce 1s ease-in-out infinite ${i * 0.2}s`
                       }}
@@ -463,7 +463,7 @@ const FileUpload = ({ onUploadSuccess, onClose }) => {
               }}>
                 <div style={{
                   height: '100%',
-                  background: 'linear-gradient(90deg, #60a5fa, #2563eb, #1d4ed8)',
+                  background: 'linear-gradient(90deg, #7A8A7A, #5C6F5C, #4A5A4A)',
                   width: `${uploadProgress}%`,
                   borderRadius: '6px',
                   transition: 'width 0.5s ease-out',
@@ -499,7 +499,7 @@ const FileUpload = ({ onUploadSuccess, onClose }) => {
                 marginTop: '8px'
               }}>
                 <span style={{ fontSize: '14px', color: '#6b7280' }}>업로드 중...</span>
-                <span style={{ fontSize: '18px', fontWeight: 'bold', color: '#2563eb' }}>
+                <span style={{ fontSize: '18px', fontWeight: 'bold', color: '#5C6F5C' }}>
                   {Math.round(uploadProgress)}%
                 </span>
               </div>
@@ -529,7 +529,7 @@ const FileUpload = ({ onUploadSuccess, onClose }) => {
                     fontSize: '14px',
                     fontWeight: 'bold',
                     backgroundColor: uploadProgress >= threshold ? '#10b981' : 
-                                   uploadProgress >= threshold - 25 ? '#2563eb' : '#e5e7eb',
+                                   uploadProgress >= threshold - 25 ? '#5C6F5C' : '#e5e7eb',
                     color: uploadProgress >= threshold - 25 ? 'white' : '#9ca3af',
                     transform: uploadProgress >= threshold ? 'scale(1.1)' : 'scale(1)',
                     transition: 'all 0.5s ease',

@@ -72,45 +72,45 @@ const OAuthCallback = () => {
           return;
         }
 
-            // 백엔드 Google OAuth2 API에 맞춰 요청 (재시도 로직 포함)
+        // 백엔드 Google OAuth2 API에 맞춰 요청 (재시도 로직 포함)
+        const makeRequest = async (retryCount = 0) => {
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 20000); // 20초 타임아웃
+          
+          try {
+            // 백엔드 GoogleLoginRequestDTO 형식에 맞춰 JSON 요청
+            const response = await fetch(`${getApiBaseUrl()}/api/auth/google`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json',
+              },
+              body: JSON.stringify({
+                code: code
+              }),
+              credentials: 'include', // 쿠키 포함
+              signal: controller.signal
+            });
             
-            const makeRequest = async (retryCount = 0) => {
-              const controller = new AbortController();
-              const timeoutId = setTimeout(() => controller.abort(), 20000); // 20초 타임아웃
-              
-              try {
-                // 백엔드 GoogleLoginRequestDTO 형식에 맞춰 JSON 요청
-                const response = await fetch(`${getApiBaseUrl()}/api/auth/google`, {
-                  method: 'POST',
-                  headers: {
-                    'Content-Type': 'application/json',
-                    'Accept': 'application/json',
-                  },
-                  body: JSON.stringify({
-                    code: code
-                  }),
-                  credentials: 'include', // 쿠키 포함
-                  signal: controller.signal
-                });
-                
-                clearTimeout(timeoutId);
-                return response;
-              } catch (error) {
-                clearTimeout(timeoutId);
-                
-                // 백엔드 서버 연결 문제 처리
-                if (error.name === 'AbortError' || error.message.includes('Failed to fetch')) {
-                  if (retryCount < 3) {
-                    await new Promise(resolve => setTimeout(resolve, 3000 * (retryCount + 1)));
-                    return makeRequest(retryCount + 1);
-                  } else {
-                    throw new Error('백엔드 서버에 연결할 수 없습니다. 백엔드 서버가 실행 중인지 확인해주세요.');
-                  }
-                }
-                
-                throw error;
+            clearTimeout(timeoutId);
+            return response;
+          } catch (error) {
+            clearTimeout(timeoutId);
+            
+            // 백엔드 서버 연결 문제 처리
+            if (error.name === 'AbortError' || error.message.includes('Failed to fetch')) {
+              if (retryCount < 3) {
+                console.log(`서버 연결 재시도 중... (${retryCount + 1}/3)`);
+                await new Promise(resolve => setTimeout(resolve, 3000 * (retryCount + 1)));
+                return makeRequest(retryCount + 1);
+              } else {
+                throw new Error('백엔드 서버에 연결할 수 없습니다. 백엔드 서버가 실행 중인지 확인해주세요.');
               }
-            };
+            }
+            
+            throw error;
+          }
+        };
         
         const response = await makeRequest();
 
@@ -231,19 +231,51 @@ const OAuthCallback = () => {
         alignItems: 'center',
         justifyContent: 'center',
         minHeight: '100vh',
-        background: 'linear-gradient(135deg, #f5f7fa 0%, rgba(79, 109, 222, 0.05) 100%)'
+        background: 'linear-gradient(135deg, #f5f7fa 0%, rgba(92, 111, 92, 0.05) 100%)'
       }}>
         <div style={{
-          width: '40px',
-          height: '40px',
+          width: '50px',
+          height: '50px',
           border: '4px solid #f3f3f3',
           borderTop: '4px solid #4285f4',
           borderRadius: '50%',
-          animation: 'spin 1s linear infinite'
+          animation: 'spin 1s linear infinite',
+          marginBottom: '20px'
         }}></div>
-        <p style={{ marginTop: '20px', color: '#666', fontSize: '16px' }}>
-          {isCompleted ? '로그인 완료 중...' : '로그인 처리 중...'}
+        <h2 style={{ 
+          color: '#333', 
+          fontSize: '24px', 
+          fontWeight: '600',
+          marginBottom: '10px',
+          textAlign: 'center'
+        }}>
+          구글 로그인 처리 중
+        </h2>
+        <p style={{ 
+          color: '#666', 
+          fontSize: '16px',
+          textAlign: 'center',
+          maxWidth: '400px',
+          lineHeight: '1.5'
+        }}>
+          {isCompleted ? '로그인 완료! 잠시만 기다려주세요...' : '구글 인증을 처리하고 있습니다. 잠시만 기다려주세요...'}
         </p>
+        <div style={{
+          marginTop: '30px',
+          padding: '15px 25px',
+          backgroundColor: 'rgba(66, 133, 244, 0.1)',
+          borderRadius: '8px',
+          border: '1px solid rgba(66, 133, 244, 0.2)'
+        }}>
+          <p style={{ 
+            color: '#4285f4', 
+            fontSize: '14px',
+            margin: 0,
+            textAlign: 'center'
+          }}>
+            💡 백엔드 서버 연결이 느릴 수 있습니다. 잠시만 기다려주세요.
+          </p>
+        </div>
         <style>
           {`
             @keyframes spin {
@@ -264,7 +296,7 @@ const OAuthCallback = () => {
         alignItems: 'center',
         justifyContent: 'center',
         minHeight: '100vh',
-        background: 'linear-gradient(135deg, #f5f7fa 0%, rgba(79, 109, 222, 0.05) 100%)'
+        background: 'linear-gradient(135deg, #f5f7fa 0%, rgba(92, 111, 92, 0.05) 100%)'
       }}>
         <div style={{
           background: 'rgba(255, 255, 255, 0.95)',
@@ -272,10 +304,54 @@ const OAuthCallback = () => {
           borderRadius: '12px',
           boxShadow: '0 4px 20px rgba(0, 0, 0, 0.1)',
           textAlign: 'center',
-          maxWidth: '400px'
+          maxWidth: '500px',
+          border: '1px solid rgba(239, 68, 68, 0.2)'
         }}>
-          <h2 style={{ color: '#ef4444', marginBottom: '16px' }}>로그인 실패</h2>
-          <p style={{ color: '#666', marginBottom: '24px' }}>{error}</p>
+          <div style={{
+            width: '60px',
+            height: '60px',
+            backgroundColor: '#fef2f2',
+            borderRadius: '50%',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            margin: '0 auto 20px',
+            border: '2px solid #fecaca'
+          }}>
+            <span style={{ fontSize: '30px' }}>⚠️</span>
+          </div>
+          <h2 style={{ 
+            color: '#ef4444', 
+            marginBottom: '16px',
+            fontSize: '24px',
+            fontWeight: '600'
+          }}>
+            로그인 실패
+          </h2>
+          <p style={{ 
+            color: '#666', 
+            marginBottom: '24px',
+            fontSize: '16px',
+            lineHeight: '1.5'
+          }}>
+            {error}
+          </p>
+          <div style={{
+            marginBottom: '24px',
+            padding: '15px',
+            backgroundColor: '#fef3c7',
+            borderRadius: '8px',
+            border: '1px solid #fde68a'
+          }}>
+            <p style={{ 
+              color: '#92400e', 
+              fontSize: '14px',
+              margin: 0,
+              fontWeight: '500'
+            }}>
+              💡 해결 방법: 백엔드 서버가 실행 중인지 확인하고, Google OAuth 설정을 확인해주세요.
+            </p>
+          </div>
           <button
             onClick={() => navigate('/')}
             style={{
@@ -286,8 +362,11 @@ const OAuthCallback = () => {
               borderRadius: '8px',
               cursor: 'pointer',
               fontSize: '14px',
-              fontWeight: 500
+              fontWeight: 500,
+              transition: 'background-color 0.2s ease'
             }}
+            onMouseOver={(e) => e.target.style.backgroundColor = '#3367d6'}
+            onMouseOut={(e) => e.target.style.backgroundColor = '#4285f4'}
           >
             홈으로 돌아가기
           </button>

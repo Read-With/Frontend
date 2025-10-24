@@ -96,7 +96,12 @@ const useAuth = () => {
   };
 
   const isAuthenticated = () => {
-    return !!user;
+    // user 상태와 localStorage의 토큰을 모두 확인
+    const hasUser = !!user;
+    const hasToken = !!localStorage.getItem('accessToken');
+    const hasGoogleUser = !!localStorage.getItem('google_user');
+    
+    return hasUser && hasToken && hasGoogleUser;
   };
 
   return {

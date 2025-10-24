@@ -1,7 +1,7 @@
-import { getBookmarks, createBookmark, updateBookmark, deleteBookmark } from '../../../utils/common/api';
+import { getBookmarks, createBookmark, updateBookmark, deleteBookmark } from '../../../utils/api/bookmarksApi';
 
 // 북마크 데이터 구조 개선
-const createBookmarkData = (bookId, startCfi, endCfi = null, color = '#0Ccd5B', memo = '') => ({
+const createBookmarkData = (bookId, startCfi, endCfi = null, color = '#28B532', memo = '') => ({
   bookId,
   startCfi,
   endCfi,
@@ -24,7 +24,7 @@ export const loadBookmarks = async (bookId) => {
 };
 
 // 북마크 추가 (서버에 저장)
-export const addBookmark = async (bookId, startCfi, endCfi = null, color = '#0Ccd5B', memo = '') => {
+export const addBookmark = async (bookId, startCfi, endCfi = null, color = '#28B532', memo = '') => {
   try {
     const bookmarkData = createBookmarkData(bookId, startCfi, endCfi, color, memo);
     const response = await createBookmark(bookmarkData);
@@ -98,7 +98,7 @@ export const sortBookmarksByDate = (bookmarks) => {
 };
 
 // 북마크 하이라이트 스타일 생성
-export const createBookmarkHighlightStyle = (color = '#0Ccd5B') => ({
+export const createBookmarkHighlightStyle = (color = '#28B532') => ({
   backgroundColor: color,
   opacity: 0.3,
   borderRadius: '2px',
@@ -158,7 +158,7 @@ export const applyBookmarkHighlights = (bookmarks) => {
       // 하이라이트 적용
       if (element && element.textContent) {
         element.classList.add('bookmark-highlight');
-        element.style.backgroundColor = bookmark.color || '#0Ccd5B';
+        element.style.backgroundColor = bookmark.color || '#28B532';
         element.style.opacity = '0.3';
         element.style.borderRadius = '2px';
         element.style.padding = '1px 2px';

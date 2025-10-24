@@ -137,8 +137,8 @@
 }
 
 .book-detail-toggle-btn:hover {
-  background-color: #4F6DDE;
-  border-color: #4F6DDE;
+  background-color: #5C6F5C;
+  border-color: #5C6F5C;
   color: white;
 }
 
@@ -187,7 +187,7 @@
   border-radius: 50px;
   min-width: 80px;
   height: auto;
-  background: linear-gradient(135deg, #4F6DDE, #6B8AFF);
+  background: linear-gradient(135deg, #5C6F5C, #4A5A4A);
   color: white;
   border: none;
   cursor: pointer;
@@ -205,7 +205,7 @@
   font-size: 0.875rem;
   border-radius: 50px;
   background: #f0f4fa;
-  color: #4F6DDE;
+  color: #5C6F5C;
   border: none;
   min-width: 80px;
   height: auto;

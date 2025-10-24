@@ -2,9 +2,9 @@
 import { createSlideAnimation, ANIMATION_VALUES } from './animations';
 
 const COLORS = {
-  primary: '#6C8EFF',
-  primaryLight: '#EEF2FF',
-  textPrimary: '#22336b',
+  primary: '#5C6F5C',
+  primaryLight: '#E8F5E8',
+  textPrimary: '#5C6F5C',
   textSecondary: '#6c757d',
   border: '#e5e7eb',
   borderLight: '#e3e6ef',
@@ -15,14 +15,14 @@ const COLORS = {
   success: '#10b981',
   warning: '#f59e0b',
   // 추가 색상 상수들
-  blue: '#3b82f6',
-  blueHover: '#2563eb',
+  blue: '#5C6F5C',
+  blueHover: '#4A5A4A',
   gray: '#6b7280',
   grayHover: '#4b5563',
   lightGray: '#f9fafb',
   lightGrayBorder: '#d1d5db',
   white: '#ffffff',
-  darkText: '#374151',
+  darkText: '#5C6F5C',
   tooltipClose: '#bfc8e2',
   // 그래프 전용 색상들
   nodeBackground: '#eee',
@@ -30,7 +30,7 @@ const COLORS = {
   nodeText: '#444',
   edgeText: '#42506b',
   successGreen: '#22c55e',
-  highlightBlue: '#3b82f6',
+  highlightBlue: '#5C6F5C',
 };
 
 const BREAKPOINTS = {
@@ -255,7 +255,7 @@ export const createAdvancedButtonHandlers = (variant) => {
     return {
       onMouseEnter: (e) => {
         e.target.style.color = COLORS.primary;
-        e.target.style.backgroundColor = 'rgba(108, 142, 255, 0.1)';
+        e.target.style.backgroundColor = 'rgba(92, 111, 92, 0.1)';
       },
       onMouseLeave: (e) => {
         e.target.style.color = COLORS.tooltipClose;
@@ -476,7 +476,7 @@ export const topBarStyles = {
     borderRadius: 8,
     border: '1.5px solid #e3e6ef',
     background: '#fff',
-    color: '#22336b',
+    color: '#5C6F5C',
     fontSize: 13,
     fontWeight: 600,
     cursor: 'pointer',
@@ -490,7 +490,7 @@ export const topBarStyles = {
   title: {
     fontSize: 16,
     fontWeight: 600,
-    color: '#22336b',
+    color: '#5C6F5C',
     margin: 0,
   },
   subtitle: {
@@ -505,7 +505,7 @@ export const topBarStyles = {
     borderRadius: 8,
     border: '1.5px solid #e3e6ef',
     background: '#fff',
-    color: '#22336b',
+    color: '#5C6F5C',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -526,7 +526,7 @@ export const containerStyles = {
     alignItems: 'center',
     justifyContent: 'center',
     fontSize: 20,
-    color: '#6C8EFF',
+    color: '#5C6F5C',
   },
   error: {
     width: '100%',

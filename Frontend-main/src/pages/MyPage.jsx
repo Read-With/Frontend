@@ -129,7 +129,7 @@ export default function MyPage() {
                           />
                           <circle
                             className="progress-ring-circle progress-ring-fill"
-                            stroke="#4F6DDE"
+                            stroke="#3E4F2F"
                             strokeWidth="3"
                             fill="transparent"
                             r="18"

@@ -19,8 +19,8 @@ const CHAPTER_STYLE = {
   display: "inline-block",
   padding: "4px 12px",
   borderRadius: 16,
-  background: "#EEF2FF",
-  color: "#22336b",
+  background: "#E8F5E8",
+  color: "#5C6F5C",
   fontSize: 14,
   fontWeight: 600,
   border: "1px solid #e3e6ef",
@@ -30,11 +30,11 @@ const EVENT_NUMBER_STYLE = {
   display: "inline-block",
   padding: "4px 16px",
   borderRadius: 16,
-  background: "#4F6DDE",
+  background: "#5C6F5C",
   color: "#fff",
   fontSize: 14,
   fontWeight: 600,
-  boxShadow: "0 2px 8px rgba(79,109,222,0.13)",
+  boxShadow: "0 2px 8px rgba(92,111,92,0.13)",
   transition: "transform 0.3s, background 0.3s",
 };
 
@@ -43,7 +43,7 @@ const EVENT_NAME_STYLE = {
   padding: "4px 12px",
   borderRadius: 12,
   background: "#f8f9fc",
-  color: "#22336b",
+  color: "#5C6F5C",
   fontSize: 13,
   fontWeight: 500,
   border: "1px solid #e3e6ef",
@@ -63,7 +63,7 @@ const PROGRESS_BAR_CONTAINER_STYLE = {
 
 const PROGRESS_BAR_FILL_STYLE = {
   height: "100%",
-  background: "linear-gradient(90deg, #4F6DDE 0%, #6fa7ff 100%)",
+  background: "linear-gradient(90deg, #5C6F5C 0%, #6B7B6B 100%)",
   borderRadius: 3,
   transition: "width 0.4s cubic-bezier(.4,2,.6,1)",
 };
@@ -74,6 +74,8 @@ const ViewerTopBar = ({
   viewerState,
   searchState,
   searchActions,
+  isFromLibrary = false,
+  previousPage = null,
 }) => {
 
   const {
@@ -126,6 +128,17 @@ const ViewerTopBar = ({
   // 현재 이벤트 정보를 실시간으로 추적
   const [currentEventInfo, setCurrentEventInfo] = React.useState(null);
   const [currentProgressWidth, setCurrentProgressWidth] = React.useState("0%");
+  
+  // 이전 페이지 정보 로깅
+  React.useEffect(() => {
+    if (isFromLibrary) {
+      console.log('ViewerTopBar: 라이브러리에서 온 사용자', {
+        isFromLibrary,
+        previousPage,
+        bookTitle: book?.title
+      });
+    }
+  }, [isFromLibrary, previousPage, book]);
 
   // 프로그레스 계산 함수 (단순화)
   const calculateProgress = useCallback((eventToShow, events, currentChapter) => {
@@ -316,9 +329,9 @@ const ViewerTopBar = ({
           height: 28,
           padding: '0 12px',
           borderRadius: 6,
-          border: `1.5px solid ${filterStage > 0 ? '#4F6DDE' : '#e3e6ef'}`,
-          background: filterStage > 0 ? '#4F6DDE' : '#fff',
-          color: filterStage > 0 ? '#fff' : '#22336b',
+          border: `1.5px solid ${filterStage > 0 ? '#5C6F5C' : '#e3e6ef'}`,
+          background: filterStage > 0 ? '#5C6F5C' : '#fff',
+          color: filterStage > 0 ? '#fff' : '#5C6F5C',
           fontSize: 12,
           fontWeight: 500,
           cursor: 'pointer',
@@ -327,19 +340,19 @@ const ViewerTopBar = ({
           display: 'flex',
           alignItems: 'center',
           gap: 6,
-          boxShadow: filterStage > 0 ? '0 2px 8px rgba(79,109,222,0.13)' : '0 2px 8px rgba(108,142,255,0.07)',
+          boxShadow: filterStage > 0 ? '0 2px 8px rgba(92,111,92,0.13)' : '0 2px 8px rgba(92,111,92,0.07)',
           justifyContent: 'center',
           minWidth: 100,
         }}
         title="필터링 단계 선택"
       >
-        <option value={0} style={{ color: '#22336b', background: '#fff' }}>
+        <option value={0} style={{ color: '#5C6F5C', background: '#fff' }}>
           전체 보기
         </option>
-        <option value={1} style={{ color: '#22336b', background: '#fff' }}>
+        <option value={1} style={{ color: '#5C6F5C', background: '#fff' }}>
           주요 인물만 보기
         </option>
-        <option value={2} style={{ color: '#22336b', background: '#fff' }}>
+        <option value={2} style={{ color: '#5C6F5C', background: '#fff' }}>
           주요 인물로 보기
         </option>
       </select>

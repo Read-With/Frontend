@@ -60,7 +60,7 @@ const LoadingSpinner = ({ size = 'medium', message = '로딩 중...', type = 'de
           style={{
             ...sizeStyles,
             borderStyle: 'solid',
-            borderTopColor: '#2563eb'
+            borderTopColor: '#5C6F5C'
           }}
         />
         

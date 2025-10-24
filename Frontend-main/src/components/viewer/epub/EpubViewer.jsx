@@ -107,7 +107,8 @@ const EpubViewer = forwardRef(
 
     // 메모이제이션된 값들
     const { epubPath, storageKeys, pageMode, showGraph } = useMemo(() => {
-      const rawPath = book.path || book.filename || '';
+      // epubPath 우선순위: book.epubPath > book.path > book.filename
+      const rawPath = book.epubPath || book.path || book.filename || '';
       const path = rawPath && rawPath.startsWith('/') ? rawPath : '/' + rawPath;
       const clean = rawPath ? rawPath.replace(/^\/+/, '') : '';
       
@@ -122,7 +123,7 @@ const EpubViewer = forwardRef(
         pageMode: settings?.pageMode || 'double',
         showGraph: settings?.showGraph || false
       };
-    }, [book.path, book.filename, settings?.pageMode, settings?.showGraph]);
+    }, [book.epubPath, book.path, book.filename, settings?.pageMode, settings?.showGraph]);
 
     // 스프레드 모드 결정은 viewerUtils.js의 getSpreadMode 사용
 

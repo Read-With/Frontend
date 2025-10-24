@@ -1136,7 +1136,7 @@ function UnifiedNodeInfo({
               }}>
                 {displayHasDescription && (
                   <div style={{
-                    borderLeft: '0.25rem solid #2563eb',
+                    borderLeft: '0.25rem solid #5C6F5C',
                     paddingLeft: '1.25rem',
                   }}>
                     <p style={{
@@ -1376,18 +1376,18 @@ function UnifiedNodeInfo({
                         fontWeight: '600',
                         cursor: 'pointer',
                         transition: 'all 0.2s ease',
-                        boxShadow: '0 0.125rem 0.375rem rgba(37, 99, 235, 0.3)',
+                        boxShadow: '0 0.125rem 0.375rem rgba(92, 111, 92, 0.3)',
                         minWidth: '9rem',
                       }}
                       onMouseEnter={(e) => {
-                        e.currentTarget.style.background = '#1d4ed8';
+                        e.currentTarget.style.background = '#4A5A4A';
                         e.currentTarget.style.transform = 'translateY(-2px)';
-                        e.currentTarget.style.boxShadow = '0 0.375rem 0.75rem rgba(37, 99, 235, 0.4)';
+                        e.currentTarget.style.boxShadow = '0 0.375rem 0.75rem rgba(92, 111, 92, 0.4)';
                       }}
                       onMouseLeave={(e) => {
                         e.currentTarget.style.background = COLORS.primary;
                         e.currentTarget.style.transform = 'translateY(0)';
-                        e.currentTarget.style.boxShadow = '0 0.125rem 0.375rem rgba(37, 99, 235, 0.3)';
+                        e.currentTarget.style.boxShadow = '0 0.125rem 0.375rem rgba(92, 111, 92, 0.3)';
                       }}
                     >
                       확인하고 보기

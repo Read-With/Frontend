@@ -14,7 +14,7 @@ const EdgeLabelToggle = ({ visible, onToggle }) => {
       <span style={{
         fontSize: '12px',
         fontWeight: '500',
-        color: '#22336b',
+        color: '#5C6F5C',
         whiteSpace: 'nowrap',
       }}>
         간선 라벨
@@ -26,7 +26,7 @@ const EdgeLabelToggle = ({ visible, onToggle }) => {
           height: '18px',
           borderRadius: '9px',
           border: 'none',
-          background: visible ? '#6C8EFF' : '#e2e8f0',
+          background: visible ? '#5C6F5C' : '#e2e8f0',
           position: 'relative',
           cursor: 'pointer',
           transition: 'background-color 0.2s ease',

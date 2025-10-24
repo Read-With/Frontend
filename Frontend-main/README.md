@@ -35,16 +35,29 @@ npm install
 ```
 
 ### 2. 환경 변수 설정
-`.env` 파일을 생성하고 Google OAuth 설정을 추가하세요:
+프로젝트 루트에 `.env` 파일을 생성하고 다음 설정을 추가하세요:
 
 ```env
-VITE_GOOGLE_CLIENT_ID=your_google_client_id_here
+# 구글 OAuth 설정
+VITE_GOOGLE_CLIENT_ID=your-google-client-id-here
+VITE_GOOGLE_REDIRECT_URI=http://localhost:5173/auth/callback
+
+# 백엔드 API URL
+VITE_API_BASE_URL=http://localhost:8080
+
+# 개발 환경 설정
+VITE_NODE_ENV=development
 ```
 
 ### 3. Google Cloud Console 설정
 1. [Google Cloud Console](https://console.cloud.google.com/) 접속
-2. OAuth 2.0 Client ID 생성
-3. 승인된 JavaScript 원본에 `http://localhost:5173` 추가
+2. 새 프로젝트 생성 또는 기존 프로젝트 선택
+3. "API 및 서비스" > "사용자 인증 정보" 메뉴로 이동
+4. "OAuth 2.0 클라이언트 ID" 생성
+5. 애플리케이션 유형: "웹 애플리케이션" 선택
+6. 승인된 JavaScript 원본에 `http://localhost:5173` 추가
+7. 승인된 리디렉션 URI에 `http://localhost:5173/auth/callback` 추가
+8. 생성된 클라이언트 ID를 `.env` 파일의 `VITE_GOOGLE_CLIENT_ID`에 설정
 
 ### 4. 개발 서버 실행
 ```bash

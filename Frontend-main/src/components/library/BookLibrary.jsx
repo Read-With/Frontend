@@ -17,16 +17,70 @@ const BookCard = ({ book, onToggleFavorite, onBookClick, onBookDetailClick, onSt
 
   const handleReadClick = (e) => {
     e.stopPropagation();
-    const identifier = isLocalBook ? book.epubPath : book.id;
-    const state = isLocalBook ? undefined : { book };
-    navigate(`/user/viewer/${identifier}`, { state });
+    
+    // 기본 URL 파라미터 설정
+    const defaultParams = new URLSearchParams({
+      chapter: '1',
+      page: '1',
+      progress: '0',
+      graphMode: 'viewer'
+    });
+    
+    if (isLocalBook) {
+      // 로컬 책의 경우 epubPath를 filename으로 사용
+      navigate(`/user/viewer/${book.epubPath}?${defaultParams.toString()}`, { 
+        state: { 
+          book,
+          fromLibrary: true,
+          from: { pathname: '/user/mypage' }
+        },
+        replace: false
+      });
+    } else {
+      // API 책의 경우 bookId를 사용
+      navigate(`/user/viewer/${book.id}?${defaultParams.toString()}`, { 
+        state: { 
+          book,
+          fromLibrary: true,
+          from: { pathname: '/user/mypage' }
+        },
+        replace: false
+      });
+    }
   };
 
   const handleGraphClick = (e) => {
     e.stopPropagation();
-    const identifier = isLocalBook ? book.epubPath : book.id;
-    const state = isLocalBook ? undefined : { book };
-    navigate(`/user/graph/${identifier}`, { state });
+    
+    // 그래프 모드 기본 URL 파라미터 설정
+    const graphParams = new URLSearchParams({
+      chapter: '1',
+      page: '1',
+      progress: '0',
+      graphMode: 'graph'
+    });
+    
+    if (isLocalBook) {
+      // 로컬 책의 경우 epubPath를 filename으로 사용
+      navigate(`/user/graph/${book.epubPath}?${graphParams.toString()}`, { 
+        state: { 
+          book,
+          fromLibrary: true,
+          from: { pathname: '/user/mypage' }
+        },
+        replace: false
+      });
+    } else {
+      // API 책의 경우 bookId를 사용
+      navigate(`/user/graph/${book.id}?${graphParams.toString()}`, { 
+        state: { 
+          book,
+          fromLibrary: true,
+          from: { pathname: '/user/mypage' }
+        },
+        replace: false
+      });
+    }
   };
 
   const handleFavoriteClick = (e) => {
@@ -93,7 +147,7 @@ const BookCard = ({ book, onToggleFavorite, onBookClick, onBookDetailClick, onSt
       <div className="book-image-placeholder">
         <svg width="100%" height="100%" viewBox="0 0 120 180" fill="none">
           <rect x="15" y="24" width="90" height="132" rx="8" fill="#b0b8c1" />
-          <rect x="27" y="42" width="66" height="96" rx="6" fill="#e3e9f7" />
+          <rect x="27" y="42" width="66" height="96" rx="6" fill="#e8f5e8" />
           <rect x="33" y="54" width="54" height="9" rx="4" fill="#b0b8c1" />
           <rect x="33" y="72" width="39" height="9" rx="4" fill="#b0b8c1" />
         </svg>

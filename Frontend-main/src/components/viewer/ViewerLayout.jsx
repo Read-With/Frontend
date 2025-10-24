@@ -19,7 +19,9 @@ const ViewerLayout = ({
   onToggleGraph,
   rightSideContent,
   pageMode,
-  graphFullScreen
+  graphFullScreen,
+  isFromLibrary = false,
+  previousPage = null,
 }) => {
 
   // 그래프 표시 상태가 변경될 때 창 크기 변경 이벤트 발생시키기
@@ -55,6 +57,8 @@ const ViewerLayout = ({
           onToggleGraph={onToggleGraph}
           showGraph={showGraph}
           pageMode={pageMode}
+          isFromLibrary={isFromLibrary}
+          previousPage={previousPage}
         />
       </div>
 

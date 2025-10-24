@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { loadBookmarks, removeBookmark, modifyBookmark, sortBookmarksByDate } from './BookmarkManager';
+import { useBookmarks } from '../../../hooks/useBookmarks';
 import { createButtonStyle, createAdvancedButtonHandlers } from '../../../utils/styles/styles';
 import { ANIMATION_VALUES } from '../../../utils/styles/animations';
 
@@ -13,7 +13,7 @@ const bookmarkColors = {
 const bookmarkBorders = {
   normal: '#e7eaf7',
   important: '#ffd600',
-  highlight: '#4F6DDE',
+  highlight: '#5C6F5C',
 };
 
 // 위치 정보 파싱 함수: 장 + 페이지까지만 표시
@@ -44,11 +44,20 @@ const BookmarksPage = () => {
   const { filename } = useParams();
   const navigate = useNavigate();
   const cleanFilename = filename ? filename.replace(/^\//, '') : null;
-  const [bookmarks, setBookmarks] = useState([]);
-  const [loading, setLoading] = useState(true);
   const [newMemo, setNewMemo] = useState({});
   const [editingMemo, setEditingMemo] = useState({});
   const [sortOrder, setSortOrder] = useState('recent'); // 'recent' | 'oldest' | 'position'
+  
+  // 북마크 hook 사용 (bookId는 filename을 사용)
+  const { 
+    bookmarks, 
+    loading, 
+    addBookmark, 
+    modifyBookmark, 
+    removeBookmark, 
+    changeBookmarkColor, 
+    changeBookmarkMemo 
+  } = useBookmarks(cleanFilename);
 
   // 북마크 정렬
   const sortedBookmarks = useMemo(() => {
@@ -56,9 +65,9 @@ const BookmarksPage = () => {
     
     switch (sortOrder) {
       case 'recent':
-        return sortBookmarksByDate(bookmarks);
+        return [...bookmarks].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
       case 'oldest':
-        return sortBookmarksByDate(bookmarks).reverse();
+        return [...bookmarks].sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
       case 'position':
         return [...bookmarks].sort((a, b) => {
           return a.startCfi.localeCompare(b.startCfi);
@@ -68,53 +77,24 @@ const BookmarksPage = () => {
     }
   }, [bookmarks, sortOrder]);
 
-  // 북마크 로드
-  useEffect(() => {
-    const fetchBookmarks = async () => {
-      if (!cleanFilename) return;
-      
-      setLoading(true);
-      try {
-        const bookmarksData = await loadBookmarks(cleanFilename);
-        setBookmarks(bookmarksData);
-      } catch (error) {
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchBookmarks();
-  }, [cleanFilename]);
-
   const handleDeleteBookmark = async (bookmarkId) => {
-    try {
-      const result = await removeBookmark(bookmarkId);
-      if (result.success) {
-        setBookmarks(prev => prev.filter(b => b.id !== bookmarkId));
-      } else {
-        alert(result.message || '북마크 삭제에 실패했습니다.');
-      }
-    } catch (error) {
-      alert('북마크 삭제에 실패했습니다.');
+    const result = await removeBookmark(bookmarkId);
+    if (!result.success) {
+      alert(result.message || '북마크 삭제에 실패했습니다.');
     }
+    return result;
   };
 
   const handleAddMemo = async (bookmarkId, memoText) => {
     if (!memoText.trim()) return;
     
-    try {
-      const result = await modifyBookmark(bookmarkId, null, memoText);
-      if (result.success) {
-        setBookmarks(prev => prev.map(b => 
-          b.id === bookmarkId ? { ...b, memo: memoText } : b
-        ));
-        setNewMemo(prev => ({ ...prev, [bookmarkId]: '' }));
-      } else {
-        alert(result.message || '메모 추가에 실패했습니다.');
-      }
-    } catch (error) {
-      alert('메모 추가에 실패했습니다.');
+    const result = await changeBookmarkMemo(bookmarkId, memoText);
+    if (result.success) {
+      setNewMemo(prev => ({ ...prev, [bookmarkId]: '' }));
+    } else {
+      alert(result.message || '메모 추가에 실패했습니다.');
     }
+    return result;
   };
 
   const handleEditMemo = (bookmarkId, currentMemo) => {
@@ -125,34 +105,21 @@ const BookmarksPage = () => {
     const { bookmarkId, text } = editingMemo;
     if (!text.trim()) return;
     
-    try {
-      const result = await modifyBookmark(bookmarkId, null, text);
-      if (result.success) {
-        setBookmarks(prev => prev.map(b => 
-          b.id === bookmarkId ? { ...b, memo: text } : b
-        ));
-        setEditingMemo({});
-      } else {
-        alert(result.message || '메모 수정에 실패했습니다.');
-      }
-    } catch (error) {
-      alert('메모 수정에 실패했습니다.');
+    const result = await changeBookmarkMemo(bookmarkId, text);
+    if (result.success) {
+      setEditingMemo({});
+    } else {
+      alert(result.message || '메모 수정에 실패했습니다.');
     }
+    return result;
   };
 
   const handleChangeColor = async (bookmarkId, color) => {
-    try {
-      const result = await modifyBookmark(bookmarkId, color, null);
-      if (result.success) {
-        setBookmarks(prev => prev.map(b => 
-          b.id === bookmarkId ? { ...b, color } : b
-        ));
-      } else {
-        alert(result.message || '색상 변경에 실패했습니다.');
-      }
-    } catch (error) {
-      alert('색상 변경에 실패했습니다.');
+    const result = await changeBookmarkColor(bookmarkId, color);
+    if (!result.success) {
+      alert(result.message || '색상 변경에 실패했습니다.');
     }
+    return result;
   };
 
   const handleAddBookmark = () => {
@@ -230,7 +197,7 @@ const BookmarksPage = () => {
             width: 24, 
             height: 24, 
             borderRadius: '50%', 
-            background: '#6C8EFF', 
+            background: '#5C6F5C', 
             display: 'flex', 
             alignItems: 'center', 
             justifyContent: 'center', 
@@ -293,7 +260,7 @@ const BookmarksPage = () => {
                   <button
                     style={{ 
                       fontSize: '0.8rem', 
-                      color: '#4F6DDE', 
+                      color: '#5C6F5C', 
                       background: 'none', 
                       border: 'none', 
                       cursor: 'pointer', 
@@ -319,7 +286,7 @@ const BookmarksPage = () => {
                   <button
                     style={{ 
                       fontSize: '0.9rem', 
-                      color: '#4F6DDE', 
+                      color: '#5C6F5C', 
                       background: 'none', 
                       border: 'none', 
                       cursor: 'pointer', 
@@ -363,7 +330,7 @@ const BookmarksPage = () => {
           <button
             style={{ 
               fontSize: '0.85rem', 
-              background: '#6C8EFF', 
+              background: '#5C6F5C', 
               color: '#fff', 
               border: 'none', 
               borderRadius: 6, 
@@ -394,7 +361,7 @@ const BookmarksPage = () => {
                 borderRadius: '50%', 
                 border: `1px solid ${bookmarkBorders.normal}`, 
                 background: bookmarkColors.normal, 
-                boxShadow: colorKey === 'normal' ? '0 0 0 2px #4F6DDE' : 'none', 
+                boxShadow: colorKey === 'normal' ? '0 0 0 2px #5C6F5C' : 'none', 
                 outline: 'none', 
                 cursor: 'pointer', 
                 opacity: colorKey === 'normal' ? 1 : 0.6 
@@ -424,7 +391,7 @@ const BookmarksPage = () => {
                 borderRadius: '50%', 
                 border: `1px solid ${bookmarkBorders.highlight}`, 
                 background: bookmarkColors.highlight, 
-                boxShadow: colorKey === 'highlight' ? '0 0 0 2px #4F6DDE' : 'none', 
+                boxShadow: colorKey === 'highlight' ? '0 0 0 2px #5C6F5C' : 'none', 
                 outline: 'none', 
                 cursor: 'pointer', 
                 opacity: colorKey === 'highlight' ? 1 : 0.6 
@@ -436,7 +403,7 @@ const BookmarksPage = () => {
           <div style={{ display: 'flex', gap: '0.5rem' }}>
             <button
               style={{ 
-                background: '#6C8EFF', 
+                background: '#5C6F5C', 
                 color: '#fff', 
                 border: 'none', 
                 borderRadius: 6, 
@@ -493,7 +460,7 @@ const BookmarksPage = () => {
           <h1 style={{ margin: 0, fontSize: '1.8rem', color: '#22336b', fontWeight: 600 }}>북마크</h1>
           <span style={{ 
             background: '#EEF2FF', 
-            color: '#4F6DDE', 
+            color: '#5C6F5C', 
             padding: '0.3rem 0.8rem', 
             borderRadius: '1rem', 
             fontSize: '0.9rem', 
@@ -529,7 +496,7 @@ const BookmarksPage = () => {
           
           <button
             style={{
-              background: 'linear-gradient(135deg, #6C8EFF 0%, #5A7BFF 100%)',
+              background: 'linear-gradient(135deg, #5C6F5C 0%, #4A5A4A 100%)',
               color: 'white',
               border: 'none',
               padding: '0.6rem 1.2rem',
@@ -563,7 +530,7 @@ const BookmarksPage = () => {
           <p>책을 읽으면서 북마크를 추가해보세요!</p>
           <button
             style={{
-              background: '#6C8EFF',
+              background: '#5C6F5C',
               color: 'white',
               border: 'none',
               padding: '0.6rem 1.2rem',

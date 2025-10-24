@@ -261,14 +261,14 @@ function UnifiedEdgeTooltip({
 
   // 점 색상 배열 생성 (그래프 온리 페이지에서 라벨에 따라 색상 구분)
   const getPointBackgroundColors = () => {
-    if (!isGraphOnlyPage || !labels) return "#2563eb";
+    if (!isGraphOnlyPage || !labels) return "#5C6F5C";
     
     return labels.map(label => {
       // 라벨이 "Ch"로 시작하면 회색, "E"로 시작하면 파란색
       if (typeof label === 'string' && label.startsWith('Ch')) {
         return "#9ca3af"; // 회색
       }
-      return "#2563eb"; // 파란색
+      return "#5C6F5C"; // 녹색
     });
   };
 
@@ -280,8 +280,8 @@ function UnifiedEdgeTooltip({
         {
           label: "관계 긍정도",
           data: timeline,
-          borderColor: "#2563eb",
-          backgroundColor: "rgba(37,99,235,0.1)",
+          borderColor: "#5C6F5C",
+          backgroundColor: "rgba(92,111,92,0.1)",
           pointBackgroundColor: getPointBackgroundColors(),
           pointBorderColor: getPointBackgroundColors(),
           pointRadius: 4,
@@ -584,7 +584,7 @@ function UnifiedEdgeTooltip({
                       width: '32px',
                       height: '32px',
                       border: '3px solid #e5e7eb',
-                      borderTop: '3px solid #2563eb',
+                      borderTop: '3px solid #5C6F5C',
                       borderRadius: '50%',
                       animation: 'spin 1s linear infinite',
                     }}></div>

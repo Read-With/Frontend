@@ -150,9 +150,9 @@ function GraphControls({
           onChange={handleInputChange}
           onKeyDown={handleKeyDown}
           onFocus={(e) => {
-            e.target.style.borderColor = '#6C8EFF';
+            e.target.style.borderColor = '#5C6F5C';
             e.target.style.background = '#fff';
-            e.target.style.boxShadow = '0 0 0 2px rgba(108, 142, 255, 0.1)';
+            e.target.style.boxShadow = '0 0 0 2px rgba(92, 111, 92, 0.1)';
             if (internalSearchTerm.trim().length >= 2) {
               setInternalShowSuggestions(true);
             }
@@ -176,9 +176,9 @@ function GraphControls({
               e.target.style.transform = 'translateY(-1px)';
               e.target.style.boxShadow = '0 2px 8px rgba(0,0,0,0.15)';
             } else {
-              e.target.style.background = '#5a7cff';
+              e.target.style.background = '#4A5A4A';
               e.target.style.transform = 'translateY(-1px)';
-              e.target.style.boxShadow = '0 4px 12px rgba(108, 142, 255, 0.5)';
+              e.target.style.boxShadow = '0 4px 12px rgba(92, 111, 92, 0.5)';
             }
           }}
           onMouseLeave={(e) => {
@@ -187,9 +187,9 @@ function GraphControls({
               e.target.style.transform = 'translateY(0)';
               e.target.style.boxShadow = '0 1px 3px rgba(0,0,0,0.1)';
             } else {
-              e.target.style.background = '#6C8EFF';
+              e.target.style.background = '#5C6F5C';
               e.target.style.transform = 'translateY(0)';
-              e.target.style.boxShadow = '0 2px 8px rgba(108, 142, 255, 0.4)';
+              e.target.style.boxShadow = '0 2px 8px rgba(92, 111, 92, 0.4)';
             }
           }}
         >
@@ -289,7 +289,7 @@ function GraphControls({
                     <div style={{ 
                       fontWeight: '700', 
                       fontSize: '15px',
-                      color: '#22336b',
+                      color: '#5C6F5C',
                       marginBottom: '6px',
                     }}>
                       {suggestion.label || suggestion.common_name || 'Unknown'}
@@ -370,7 +370,7 @@ function GraphControls({
               <div style={{ 
                 fontWeight: '600', 
                 marginBottom: '6px',
-                color: '#22336b',
+                color: '#5C6F5C',
                 fontSize: '14px',
               }}>
                 검색 결과 없음

@@ -21,22 +21,22 @@
   left: 0;
   right: 0;
   height: 3px;
-  background: linear-gradient(90deg, #4F6DDE, #6B8AFF, #8BA4FF);
+  background: linear-gradient(90deg, #3E4F2F, #586544, #717B59);
   opacity: 0;
   transition: opacity 0.3s ease;
 }
 
 .book-card:hover {
   transform: translateY(-8px);
-  box-shadow: 0 12px 32px rgba(79, 109, 222, 0.15);
-  border-color: rgba(79, 109, 222, 0.2);
+  box-shadow: 0 12px 32px rgba(62, 79, 47, 0.15);
+  border-color: rgba(62, 79, 47, 0.2);
 }
 
 /* 리스트 뷰에서도 동일한 호버 효과 적용 */
 .book-card.list-view:hover {
   transform: translateY(-8px);
-  box-shadow: 0 12px 32px rgba(79, 109, 222, 0.15);
-  border-color: rgba(79, 109, 222, 0.2);
+  box-shadow: 0 12px 32px rgba(62, 79, 47, 0.15);
+  border-color: rgba(62, 79, 47, 0.2);
 }
 
 .book-card:hover::before {
@@ -109,7 +109,7 @@
 }
 
 .status-reading {
-  background: linear-gradient(135deg, #4F6DDE, #6B8AFF);
+  background: linear-gradient(135deg, #3E4F2F, #586544);
   color: white;
 }
 
@@ -185,17 +185,17 @@
 
 .progress-bar-bg {
   height: 6px;
-  background: rgba(79, 109, 222, 0.1);
+  background: rgba(62, 79, 47, 0.1);
   border-radius: 10px;
   overflow: hidden;
 }
 
 .progress-bar-fill {
   height: 100%;
-  background: linear-gradient(90deg, #4F6DDE, #6B8AFF);
+  background: linear-gradient(90deg, #3E4F2F, #586544);
   border-radius: 10px;
   transition: width 0.5s ease;
-  box-shadow: 0 0 8px rgba(79, 109, 222, 0.4);
+  box-shadow: 0 0 8px rgba(62, 79, 47, 0.4);
 }
 
 /* ==================== 카드 바디 (정보 영역) ==================== */
@@ -251,8 +251,8 @@
 }
 
 .book-meta-item.book-format {
-  background: rgba(79, 109, 222, 0.1);
-  color: #4F6DDE;
+  background: rgba(62, 79, 47, 0.1);
+  color: #3E4F2F;
   padding: 2px 6px;
   border-radius: 4px;
   font-size: 0.75rem;
@@ -301,16 +301,16 @@
 }
 
 .book-action-primary {
-  background: linear-gradient(135deg, #4F6DDE, #6B8AFF);
+  background: linear-gradient(135deg, #3E4F2F, #586544);
   color: white;
-  box-shadow: 0 6px 20px rgba(79, 109, 222, 0.3);
+  box-shadow: 0 6px 20px rgba(62, 79, 47, 0.3);
   border: 2px solid transparent;
 }
 
 .book-action-primary:hover {
   transform: translateY(-2px);
-  box-shadow: 0 6px 20px rgba(79, 109, 222, 0.4);
-  background: linear-gradient(135deg, #3B5BCC, #5A7FFF);
+  box-shadow: 0 6px 20px rgba(62, 79, 47, 0.4);
+  background: linear-gradient(135deg, #2D3E24, #4A5A3A);
 }
 
 .book-action-primary:active {
@@ -319,16 +319,16 @@
 
 .book-action-secondary {
   background: linear-gradient(135deg, #f8f9fb, #e8ecf3);
-  color: #4F6DDE;
+  color: #3E4F2F;
   border: 2px solid #e8ecf3;
-  box-shadow: 0 4px 12px rgba(79, 109, 222, 0.1);
+  box-shadow: 0 4px 12px rgba(62, 79, 47, 0.1);
 }
 
 .book-action-secondary:hover {
   background: linear-gradient(135deg, #e8ecf3, #d4dae5);
-  border-color: #4F6DDE;
+  border-color: #3E4F2F;
   transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(79, 109, 222, 0.2);
+  box-shadow: 0 4px 12px rgba(62, 79, 47, 0.2);
 }
 
 .book-action-secondary:active {
@@ -416,7 +416,7 @@
 
 .book-context-item:hover {
   background: #f8f9fb;
-  color: #4F6DDE;
+  color: #3E4F2F;
 }
 
 .book-context-item:not(:last-child) {

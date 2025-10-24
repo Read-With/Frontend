@@ -21,7 +21,7 @@
   left: 0;
   right: 0;
   height: 3px;
-  background: linear-gradient(90deg, #4F6DDE, #6B8AFF, #8BA4FF);
+  background: linear-gradient(90deg, #5C6F5C, #7A8A7A, #9A9A9A);
   opacity: 0;
   transition: opacity 0.3s ease;
 }
@@ -109,7 +109,7 @@
 }
 
 .status-reading {
-  background: linear-gradient(135deg, #4F6DDE, #6B8AFF);
+  background: linear-gradient(135deg, #5C6F5C, #7A8A7A);
   color: white;
 }
 
@@ -192,7 +192,7 @@
 
 .progress-bar-fill {
   height: 100%;
-  background: linear-gradient(90deg, #4F6DDE, #6B8AFF);
+  background: linear-gradient(90deg, #5C6F5C, #7A8A7A);
   border-radius: 10px;
   transition: width 0.5s ease;
   box-shadow: 0 0 8px rgba(79, 109, 222, 0.4);
@@ -252,7 +252,7 @@
 
 .book-meta-item.book-format {
   background: rgba(79, 109, 222, 0.1);
-  color: #4F6DDE;
+  color: #5C6F5C;
   padding: 2px 6px;
   border-radius: 4px;
   font-size: 0.75rem;
@@ -301,7 +301,7 @@
 }
 
 .book-action-primary {
-  background: linear-gradient(135deg, #4F6DDE, #6B8AFF);
+  background: linear-gradient(135deg, #5C6F5C, #7A8A7A);
   color: white;
   box-shadow: 0 6px 20px rgba(79, 109, 222, 0.3);
   border: 2px solid transparent;
@@ -319,14 +319,14 @@
 
 .book-action-secondary {
   background: linear-gradient(135deg, #f8f9fb, #e8ecf3);
-  color: #4F6DDE;
+  color: #5C6F5C;
   border: 2px solid #e8ecf3;
   box-shadow: 0 4px 12px rgba(79, 109, 222, 0.1);
 }
 
 .book-action-secondary:hover {
   background: linear-gradient(135deg, #e8ecf3, #d4dae5);
-  border-color: #4F6DDE;
+  border-color: #5C6F5C;
   transform: translateY(-1px);
   box-shadow: 0 4px 12px rgba(79, 109, 222, 0.2);
 }
@@ -416,7 +416,7 @@
 
 .book-context-item:hover {
   background: #f8f9fb;
-  color: #4F6DDE;
+  color: #5C6F5C;
 }
 
 .book-context-item:not(:last-child) {

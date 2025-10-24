@@ -2,9 +2,9 @@
 const COLORS = {
   backgroundLighter: '#f8fafc',
   border: '#e5e7eb',
-  textPrimary: '#22336b',
+  textPrimary: '#5C6F5C',
   backgroundLight: '#f8f9fc',
-  primary: '#6C8EFF',
+  primary: '#5C6F5C',
   white: '#ffffff',
   textSecondary: '#6c757d',
   borderLight: '#e3e6ef',
@@ -13,7 +13,7 @@ const COLORS = {
   nodeText: '#444',
   edgeText: '#42506b',
   successGreen: '#22c55e',
-  highlightBlue: '#3b82f6',
+  highlightBlue: '#5C6F5C',
 };
 
 const ANIMATION_VALUES = {

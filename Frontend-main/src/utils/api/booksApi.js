@@ -11,7 +11,7 @@ const API_BASE_URL = getApiBaseUrl();
 
 // 인증된 API 요청 헬퍼 함수
 const authenticatedRequest = async (endpoint, options = {}) => {
-  const token = localStorage.getItem('access_token');
+  const token = localStorage.getItem('accessToken');
   
   const defaultHeaders = {
     'Content-Type': 'application/json',
@@ -34,9 +34,10 @@ const authenticatedRequest = async (endpoint, options = {}) => {
   if (!response.ok) {
     if (response.status === 401) {
       // 토큰 만료 시 로그아웃 처리
-      localStorage.removeItem('access_token');
+      localStorage.removeItem('accessToken');
       localStorage.removeItem('google_user');
-      window.location.href = '/';
+      // 즉시 리다이렉트하지 않고 에러를 throw하여 상위에서 처리하도록 함
+      throw new Error('인증이 만료되었습니다. 다시 로그인해주세요.');
     }
     throw new Error(`API 요청 실패: ${response.status}`);
   }
@@ -93,16 +94,17 @@ export const uploadBook = async (bookData) => {
     const response = await fetch(`${API_BASE_URL}/api/books`, {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${localStorage.getItem('access_token')}`,
+        'Authorization': `Bearer ${localStorage.getItem('accessToken')}`,
       },
       body: formData,
     });
     
     if (!response.ok) {
       if (response.status === 401) {
-        localStorage.removeItem('access_token');
+        localStorage.removeItem('accessToken');
         localStorage.removeItem('google_user');
-        window.location.href = '/';
+        // 즉시 리다이렉트하지 않고 에러를 throw하여 상위에서 처리하도록 함
+        throw new Error('인증이 만료되었습니다. 다시 로그인해주세요.');
       }
       throw new Error(`도서 업로드 실패: ${response.status}`);
     }
@@ -149,6 +151,20 @@ export const toggleBookFavorite = async (bookId, favorite) => {
 };
 
 /**
+ * 즐겨찾기 목록 조회
+ * @returns {Promise<Object>} 즐겨찾기 도서 목록
+ */
+export const getFavorites = async () => {
+  try {
+    const data = await authenticatedRequest('/favorites');
+    return data;
+  } catch (error) {
+    console.error('즐겨찾기 목록 조회 실패:', error);
+    throw error;
+  }
+};
+
+/**
  * 도서 삭제
  * @param {number} bookId - 도서 ID
  * @returns {Promise<Object>} 삭제 결과
@@ -161,6 +177,26 @@ export const deleteBook = async (bookId) => {
     return data;
   } catch (error) {
     console.error('도서 삭제 실패:', error);
+    throw error;
+  }
+};
+
+/**
+ * 챕터별 인물 시점 요약 조회
+ * @param {number} bookId - 도서 ID
+ * @param {number} chapterIdx - 챕터 인덱스 (1-based)
+ * @returns {Promise<Object>} 챕터 시점 요약 정보
+ */
+export const getChapterPovSummaries = async (bookId, chapterIdx) => {
+  try {
+    if (!bookId || !chapterIdx) {
+      throw new Error('bookId와 chapterIdx는 필수 매개변수입니다.');
+    }
+    
+    const data = await authenticatedRequest(`/books/${bookId}/chapters/${chapterIdx}/pov-summaries`);
+    return data;
+  } catch (error) {
+    console.error('챕터 시점 요약 조회 실패:', error);
     throw error;
   }
 };

@@ -282,7 +282,7 @@ export function filterGraphElements(elements, searchTerm, currentChapterData = n
  * @param {Object} [highlightStyle] - 하이라이트 스타일
  * @returns {Array} JSX 요소 배열
  */
-export function highlightText(text, term, highlightStyle = { fontWeight: 'bold', color: '#6C8EFF' }) {
+export function highlightText(text, term, highlightStyle = { fontWeight: 'bold', color: '#5C6F5C' }) {
   if (!text || typeof text !== 'string') {
     console.warn('highlightText: 유효하지 않은 텍스트입니다', { text, type: typeof text });
     return [<span key="0">{text || ''}</span>];

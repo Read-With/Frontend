@@ -37,12 +37,58 @@ export const authenticatedRequest = async (endpoint, options = {}) => {
       // 토큰 만료 시 로그아웃 처리
       localStorage.removeItem('accessToken');
       localStorage.removeItem('google_user');
-      window.location.href = '/';
+      // 즉시 리다이렉트하지 않고 에러를 throw하여 상위에서 처리하도록 함
+      throw new Error('인증이 만료되었습니다. 다시 로그인해주세요.');
     }
     throw new Error(`API 요청 실패: ${response.status}`);
   }
   
   return response.json();
+};
+
+// 구글 로그인 URL 생성
+export const getGoogleAuthUrl = async () => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/auth/google/url`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      },
+    });
+    
+    if (!response.ok) {
+      throw new Error(`API 요청 실패: ${response.status}`);
+    }
+    
+    return response.json();
+  } catch (error) {
+    console.error('구글 인증 URL 생성 실패:', error);
+    return null;
+  }
+};
+
+// 구글 로그인 (인증 코드 전송)
+export const googleLogin = async (code) => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/auth/google`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      },
+      body: JSON.stringify({ code }),
+    });
+    
+    if (!response.ok) {
+      throw new Error(`API 요청 실패: ${response.status}`);
+    }
+    
+    return response.json();
+  } catch (error) {
+    console.error('구글 로그인 실패:', error);
+    throw error;
+  }
 };
 
 // 사용자 인증 상태 확인

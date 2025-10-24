@@ -11,13 +11,8 @@ const HeroSection = () => {
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   
   useEffect(() => {
-    console.log('HeroSection mounted');
     setIsVisible(true);
   }, []);
-
-  useEffect(() => {
-    console.log('currentPage changed to:', currentPage);
-  }, [currentPage]);
 
   const storyPages = [
     {
@@ -44,57 +39,42 @@ const HeroSection = () => {
   ];
 
   const nextPage = () => {
-    console.log('nextPage clicked, currentPage:', currentPage);
     setCurrentPage(prev => {
       const newPage = prev + 1;
-      console.log('Page changing from', prev, 'to', newPage);
       return newPage;
     });
   };
 
   const prevPage = () => {
-    console.log('prevPage clicked, currentPage:', currentPage);
     setCurrentPage(prev => {
       const newPage = prev - 1;
-      console.log('Page changing from', prev, 'to', newPage);
       return newPage;
     });
   };
 
-  const handleGoogleLogin = () => {
+  const handleGoogleLogin = async () => {
     setIsLoggingIn(true);
     try {
-      // 현재 로컬 스토리지 상태 확인
-      console.log('현재 로컬 스토리지 상태:');
-      console.log('accessToken:', localStorage.getItem('accessToken'));
-      console.log('google_user:', localStorage.getItem('google_user'));
+      // 환경변수에서 구글 클라이언트 ID 가져오기
+      const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || 'your-google-client-id';
+      const GOOGLE_REDIRECT_URI = import.meta.env.VITE_GOOGLE_REDIRECT_URI || 'http://localhost:5173/auth/callback';
       
-      // 백엔드 서버가 작동하지 않을 경우를 대비한 임시 로그인
-      // 실제 환경에서는 백엔드 OAuth를 사용해야 함
-      setTimeout(() => {
-        const mockUser = {
-          id: 'mock_user_123',
-          name: '테스트 사용자',
-          email: 'test@example.com',
-          picture: 'https://via.placeholder.com/150'
-        };
-        
-        const mockToken = 'mock_access_token_' + Date.now();
-        
-        // 로컬 스토리지에 저장
-        localStorage.setItem('accessToken', mockToken);
-        localStorage.setItem('google_user', JSON.stringify(mockUser));
-        
-        console.log('임시 로그인 완료:', mockUser);
-        setIsLoggingIn(false);
-        
-        // 페이지 새로고침하여 로그인 상태 반영
-        window.location.reload();
-      }, 2000);
+      // 구글 OAuth URL 구성
+      const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?` +
+        `client_id=${GOOGLE_CLIENT_ID}&` +
+        `redirect_uri=${encodeURIComponent(GOOGLE_REDIRECT_URI)}&` +
+        `response_type=code&` +
+        `scope=email profile&` +
+        `access_type=offline&` +
+        `prompt=consent`;
+      
+      // 구글 인증 페이지로 리다이렉트
+      window.location.href = authUrl;
       
     } catch (error) {
-      console.error('Google 로그인 오류:', error);
+      console.error('구글 로그인 URL 생성 실패:', error);
       setIsLoggingIn(false);
+      alert('구글 로그인 중 오류가 발생했습니다.');
     }
   };
 
@@ -128,7 +108,7 @@ const HeroSection = () => {
             backgroundColor: 'rgba(255, 255, 255, 0.95)',
             padding: '15px 25px',
             borderRadius: '25px',
-            border: '2px solid #2C3E50',
+            border: '2px solid #5C6F5C',
             boxShadow: '0 4px 15px rgba(0, 0, 0, 0.2)',
             display: 'flex',
             gap: '15px',
@@ -138,7 +118,6 @@ const HeroSection = () => {
           <button 
             className="nav-button prev" 
             onClick={() => {
-              console.log('PREV BUTTON CLICKED!');
               prevPage();
             }}
             disabled={currentPage === 0}
@@ -146,7 +125,7 @@ const HeroSection = () => {
               pointerEvents: 'auto',
               zIndex: 10002,
               position: 'relative',
-              backgroundColor: currentPage === 0 ? '#ccc' : '#2C3E50',
+              backgroundColor: currentPage === 0 ? '#ccc' : '#5C6F5C',
               color: 'white',
               border: 'none',
               padding: '12px 24px',
@@ -163,7 +142,6 @@ const HeroSection = () => {
           <button 
             className="nav-button next" 
             onClick={() => {
-              console.log('NEXT BUTTON CLICKED!');
               nextPage();
             }}
             disabled={currentPage === storyPages.length - 1}
@@ -295,15 +273,12 @@ export default function HomePage() {
 
   // 로그인된 사용자는 마이페이지로 리다이렉트
   useEffect(() => {
-    console.log('useEffect user check:', user);
     if (user) {
-      console.log('User logged in, redirecting to mypage');
       navigate('/mypage');
     }
   }, [user, navigate]);
 
 
-  console.log('HomePage rendering, user:', user);
   
   return (
     <div className="homepage-container">

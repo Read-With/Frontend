@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { getBooks, getBook, deleteBook, toggleBookFavorite, addToFavorites, removeFromFavorites, getFavorites } from '../utils/common/api';
+import { getBooks, getBook, deleteBook, toggleBookFavorite, getFavorites } from '../utils/api/booksApi';
 
 export const useBooks = () => {
   const [books, setBooks] = useState([]);
@@ -31,7 +31,13 @@ export const useBooks = () => {
         apiBooks = apiResponse.value.result || [];
       } else if (apiResponse.status === 'rejected') {
         hasApiError = true;
-        console.warn('API 요청 실패:', apiResponse.reason);
+        const errorMessage = apiResponse.reason?.message || apiResponse.reason;
+        console.warn('API 요청 실패:', errorMessage);
+        
+        // 인증 에러인 경우 특별 처리
+        if (errorMessage.includes('인증이 만료되었습니다') || errorMessage.includes('401')) {
+          console.warn('인증 토큰이 만료되었습니다. 로그인이 필요합니다.');
+        }
       }
       
       // 로컬 데이터 응답 처리
@@ -132,12 +138,7 @@ export const useBooks = () => {
     }
     
     try {
-      let response;
-      if (favorite) {
-        response = await addToFavorites(bookId);
-      } else {
-        response = await removeFromFavorites(bookId);
-      }
+      const response = await toggleBookFavorite(bookId, favorite);
       
       if (response.isSuccess) {
         setBooks(prevBooks => 
@@ -150,6 +151,7 @@ export const useBooks = () => {
       }
     } catch (err) {
       setError(err.message || '즐겨찾기 설정에 실패했습니다.');
+      console.error('즐겨찾기 토글 실패:', err);
     }
   };
 
@@ -167,7 +169,9 @@ export const useBooks = () => {
       }
       
     } catch (err) {
-      setError(err.message || '즐겨찾기 목록을 불러올 수 없습니다.');
+      const errorMessage = err.message || '즐겨찾기 목록을 불러올 수 없습니다.';
+      setError(errorMessage);
+      console.error('즐겨찾기 목록 조회 실패:', err);
     } finally {
       setLoading(false);
     }

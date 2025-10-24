@@ -59,10 +59,10 @@ export const theme = {
   },
   
   boxShadow: {
-    sm: '0 2px 8px rgba(79,109,222,0.10)',
-    md: '0 4px 16px rgba(79,109,222,0.13)',
-    lg: '0 8px 32px rgba(79,109,222,0.10)',
-    hover: '0 12px 32px rgba(79,109,222,0.18)'
+    sm: '0 2px 8px rgba(92,111,92,0.10)',
+    md: '0 4px 16px rgba(92,111,92,0.13)',
+    lg: '0 8px 32px rgba(92,111,92,0.10)',
+    hover: '0 12px 32px rgba(92,111,92,0.18)'
   },
   
   breakpoints: {

@@ -1,10 +1,10 @@
 import React from 'react';
 
-const barColor = '#4F6DDE';
+const barColor = '#5C6F5C';
 const barBg = '#e7eaf7';
 const thumbColor = '#fff';
-const thumbBorder = '#4F6DDE';
-const thumbShadow = '0 2px 8px rgba(79,109,222,0.13)';
+const thumbBorder = '#5C6F5C';
+const thumbShadow = '0 2px 8px rgba(92,111,92,0.13)';
 
 const ViewerProgressBar = ({
   showControls,

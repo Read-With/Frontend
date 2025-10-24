@@ -78,6 +78,11 @@ const apiRequest = async (url, options = {}) => {
     
     return data;
   } catch (error) {
+    // 네트워크 에러나 기타 에러는 그대로 throw
+    if (error.name === 'TypeError' || error.message.includes('Failed to fetch')) {
+      throw error;
+    }
+    // HTTP 에러는 status 정보와 함께 throw
     throw error;
   }
 };
@@ -115,10 +120,20 @@ export const getBook = async (bookId) => {
 
 // 도서 즐겨찾기 토글
 export const toggleBookFavorite = async (bookId, favorite) => {
-  return apiRequest(`/api/books/${bookId}/favorite`, {
-    method: 'PATCH',
-    body: JSON.stringify({ favorite }),
-  });
+  try {
+    if (!bookId) {
+      throw new Error('bookId는 필수 매개변수입니다.');
+    }
+    
+    const response = await apiRequest(`/api/books/${bookId}/favorite`, {
+      method: 'PATCH',
+      body: JSON.stringify({ favorite }),
+    });
+    return response;
+  } catch (error) {
+    console.error('도서 즐겨찾기 토글 실패:', error);
+    throw error;
+  }
 };
 
 // 도서 삭제
@@ -130,47 +145,109 @@ export const deleteBook = async (bookId) => {
 
 // 즐겨찾기 추가
 export const addToFavorites = async (bookId) => {
-  return apiRequest(`/api/favorites/${bookId}`, {
-    method: 'POST',
-  });
+  try {
+    if (!bookId) {
+      throw new Error('bookId는 필수 매개변수입니다.');
+    }
+    
+    const response = await apiRequest(`/api/favorites/${bookId}`, {
+      method: 'POST',
+    });
+    return response;
+  } catch (error) {
+    console.error('즐겨찾기 추가 실패:', error);
+    throw error;
+  }
 };
 
 // 즐겨찾기 삭제
 export const removeFromFavorites = async (bookId) => {
-  return apiRequest(`/api/favorites/${bookId}`, {
-    method: 'DELETE',
-  });
+  try {
+    if (!bookId) {
+      throw new Error('bookId는 필수 매개변수입니다.');
+    }
+    
+    const response = await apiRequest(`/api/favorites/${bookId}`, {
+      method: 'DELETE',
+    });
+    return response;
+  } catch (error) {
+    console.error('즐겨찾기 삭제 실패:', error);
+    throw error;
+  }
 };
 
 // 즐겨찾기 목록 조회
 export const getFavorites = async () => {
-  return apiRequest('/api/favorites');
+  try {
+    const response = await apiRequest('/api/favorites');
+    return response;
+  } catch (error) {
+    console.error('즐겨찾기 목록 조회 실패:', error);
+    throw error;
+  }
 };
 
 // 독서 진도 관련 API
 // 사용자의 모든 독서 진도 조회
 export const getAllProgress = async () => {
-  return apiRequest('/api/progress');
+  try {
+    const response = await apiRequest('/api/progress');
+    return response;
+  } catch (error) {
+    console.error('전체 독서 진도 조회 실패:', error);
+    throw error;
+  }
 };
 
 // 독서 진도 저장/업데이트
 export const saveProgress = async (progressData) => {
-  return apiRequest('/api/progress', {
-    method: 'POST',
-    body: JSON.stringify(progressData),
-  });
+  try {
+    if (!progressData || !progressData.bookId) {
+      throw new Error('bookId는 필수 매개변수입니다.');
+    }
+    
+    const response = await apiRequest('/api/progress', {
+      method: 'POST',
+      body: JSON.stringify(progressData),
+    });
+    return response;
+  } catch (error) {
+    console.error('독서 진도 저장 실패:', error);
+    throw error;
+  }
 };
 
 // 특정 책의 독서 진도 조회
 export const getBookProgress = async (bookId) => {
-  return apiRequest(`/api/progress/${bookId}`);
+  try {
+    if (!bookId) {
+      throw new Error('bookId는 필수 매개변수입니다.');
+    }
+    
+    const response = await apiRequest(`/api/progress/${bookId}`);
+    return response;
+  } catch (error) {
+    console.error('특정 책 독서 진도 조회 실패:', error);
+    throw error;
+  }
 };
 
 // 특정 책의 독서 진도 삭제
 export const deleteBookProgress = async (bookId) => {
-  return apiRequest(`/api/progress/${bookId}`, {
-    method: 'DELETE',
-  });
+  try {
+    if (!bookId) {
+      throw new Error('bookId는 필수 매개변수입니다.');
+    }
+    
+    const response = await apiRequest(`/api/progress/${bookId}`, {
+      method: 'DELETE',
+    });
+    return response;
+  } catch (error) {
+    console.error('독서 진도 삭제 실패:', error);
+    throw error;
+  }
 };
 
 // 책 구조 패키지 조회 (manifest)
@@ -241,9 +318,23 @@ export const getFineGraph = async (bookId, chapterIdx, eventIdx) => {
     const response = await apiRequest(`/api/graph/fine?${queryParams.toString()}`);
     return createApiResponse(true, 'SUCCESS', '세밀 그래프 데이터를 성공적으로 조회했습니다.', response.result, 'graph');
   } catch (error) {
+    // 404 에러인 경우 더 구체적인 메시지 제공
+    if (error.status === 404 || error.message.includes('404') || error.message.includes('찾을 수 없습니다')) {
+      // 이벤트 0에 대한 데이터가 없는 경우는 정상적인 상황일 수 있음
+      if (eventIdx === 0) {
+        console.warn(`챕터 ${chapterIdx}, 이벤트 ${eventIdx}에 대한 데이터가 없습니다. (정상적인 상황일 수 있음)`);
+        // 빈 결과를 반환하여 에러를 발생시키지 않음
+        return createApiResponse(true, 'SUCCESS', '해당 이벤트에 대한 데이터가 없습니다.', { characters: [], relations: [], event: null }, 'graph');
+      } else {
+        throw new Error(`챕터 ${chapterIdx}, 이벤트 ${eventIdx}에 대한 데이터를 찾을 수 없습니다.`);
+      }
+    }
+    // 404가 아닌 다른 에러는 그대로 처리
     handleApiError(error, '세밀 그래프 조회 실패');
   }
 };
+
+// 챕터별 인물 시점 요약 조회는 booksApi.js에서 처리
 
 export default {
   getBooks,
