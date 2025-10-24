@@ -185,11 +185,11 @@
   font-size: 1.3rem;
   line-height: 1.8;
   color: #34495E;
-  text-align: center;
+  text-align: left;
   margin-bottom: 70px;
   max-width: 100%;
   width: 100%;
-  margin-left: auto;
+  margin-left: 0;
   margin-right: auto;
   white-space: pre-line;
   word-break: keep-all;
@@ -198,7 +198,7 @@
   gap: 5px;
   padding: 0 10px;
   box-sizing: border-box;
-  align-items: center;
+  align-items: flex-start;
   justify-content: center;
   position: relative;
   z-index: 10;
@@ -470,7 +470,7 @@
 .hero-content {
   position: relative;
   z-index: 20;
-  text-align: center;
+  text-align: left;
   max-width: 1200px;
   padding: 0 2rem;
   width: 100%;
@@ -512,7 +512,7 @@
   color: #586544;
   margin: 0;
   font-weight: 800;
-  text-align: center;
+  text-align: left;
   opacity: 0.7;
   white-space: nowrap;
 }
@@ -601,7 +601,7 @@
   max-width: 100%;
   width: 100%;
   padding: 0;
-  text-align: center;
+  text-align: left;
   height: 100%;
 }
 
@@ -825,7 +825,7 @@
   font-size: 1.6rem;
   font-weight: 800;
   margin-bottom: 1.5rem;
-  text-align: center;
+  text-align: left;
   text-shadow: 0 2px 4px rgba(62, 79, 47, 0.1);
 }
 
@@ -927,7 +927,7 @@
   font-size: 1.6rem;
   font-weight: 800;
   margin-bottom: 1.5rem;
-  text-align: center;
+  text-align: left;
   text-shadow: 0 2px 4px rgba(62, 79, 47, 0.1);
 }
 
@@ -942,7 +942,7 @@
   font-size: 1.1rem;
   font-weight: 600;
   margin-bottom: 1rem;
-  text-align: center;
+  text-align: left;
 }
 
 .scenario-perspectives {
@@ -1010,7 +1010,7 @@
   background: linear-gradient(135deg, rgba(62, 79, 47, 0.1), rgba(16, 185, 129, 0.1));
   border-radius: 12px;
   border: 2px dashed #3E4F2F;
-  text-align: center;
+  text-align: left;
   animation: pulse 2s ease-in-out infinite;
 }
 

@@ -102,8 +102,7 @@ export default function MyPage() {
                 <h1 className="hero-title">ReadWith</h1>
                 <p className="hero-subtitle">안녕하세요, {getDisplayName()}님! 👋</p>
                 <p className="hero-description">
-                  나만의 서재에서 책을 읽고, 인물 관계도로 분석하고, 
-                  독서 기록을 관리해보세요.
+                  나만의 서재에서 책을 읽고, 인물 관계도로 분석하고, 독서 기록을 관리해보세요.
                 </p>
               </div>
 

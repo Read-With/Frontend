@@ -86,13 +86,13 @@ const BookmarkPanel = ({ bookId, onSelect, onDelete }) => {
       {/* 북마크 목록 */}
       <div className="max-h-80 overflow-y-auto">
         {loading ? (
-          <div className="p-6 text-center text-gray-500">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-3"></div>
+          <div className="p-6 text-left text-gray-500">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mb-3"></div>
             <p className="text-sm">북마크를 불러오는 중...</p>
           </div>
         ) : bookmarks.length === 0 ? (
-          <div className="p-6 text-center text-gray-500">
-            <span className="material-symbols-outlined mx-auto mb-3 text-3xl text-gray-300">bookmark</span>
+          <div className="p-6 text-left text-gray-500">
+            <span className="material-symbols-outlined mb-3 text-3xl text-gray-300">bookmark</span>
             <p className="text-sm">저장된 북마크가 없습니다</p>
             <p className="text-xs text-gray-400 mt-1">중요한 부분을 북마크해보세요</p>
           </div>

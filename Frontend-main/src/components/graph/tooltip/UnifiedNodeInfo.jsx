@@ -23,8 +23,6 @@ function UnifiedNodeInfo({
   eventNum,
   maxChapter,
   elements = [],
-  isSearchActive = false,
-  filteredElements = [],
   filename,
   currentEvent = null,
   prevValidEvent = null,
@@ -983,42 +981,6 @@ function UnifiedNodeInfo({
         )}
       </div>
       
-      {/* 검색 상태에서 연결 정보 표시 */}
-      {isSearchActive && filteredElements.length > 0 && (
-        <div
-          style={{
-            margin: "1rem 2rem 0 2rem",
-            padding: "0.75rem 1rem",
-            background: COLORS.backgroundLight,
-            borderRadius: "0.375rem",
-            border: `0.0625rem solid ${COLORS.borderLight}`,
-          }}
-        >
-           <div
-             style={{
-               fontSize: "0.8125rem",
-               fontWeight: 600,
-               color: COLORS.primary,
-               marginBottom: "0.375rem",
-             }}
-           >
-             검색 결과 연결 정보
-           </div>
-          <div
-            style={{
-              fontSize: "0.75rem",
-              color: COLORS.textPrimary,
-              lineHeight: 1.4,
-              wordBreak: 'keep-all',
-            }}
-          >
-            {filteredElements.filter(el => 
-              el.data.source && 
-              (el.data.source === processedNodeData?.id || el.data.target === processedNodeData?.id)
-            ).length}개의 관계가 검색 결과에 포함되어 있습니다.
-          </div>
-        </div>
-      )}
       
       <hr
         style={{
@@ -1289,50 +1251,6 @@ function UnifiedNodeInfo({
               </div>
             </div>
 
-            {/* 검색 결과 연결 정보 */}
-            {isSearchActive && filteredElements.length > 0 && (
-              <div 
-                className="sidebar-card"
-                style={{
-                  background: '#fff',
-                  borderRadius: '0.75rem',
-                  padding: '1rem',
-                  marginBottom: '1rem',
-                  border: `0.0625rem solid ${COLORS.border}`,
-                  boxShadow: '0 0.0625rem 0.1875rem rgba(0,0,0,0.05)',
-                }}
-              >
-                <h4 style={{
-                  fontSize: '1rem',
-                  fontWeight: '600',
-                  color: COLORS.textPrimary,
-                  margin: '0 0 1rem 0',
-                  letterSpacing: '-0.025em',
-                }}>
-                  검색 결과 연결 정보
-                </h4>
-                <div style={{
-                  background: '#f8f9fc',
-                  borderRadius: '0.5rem',
-                  padding: '1rem',
-                  border: '0.0625rem solid #e3e6ef',
-                }}>
-                  <p style={{
-                    margin: 0,
-                    fontSize: '0.875rem',
-                    lineHeight: '1.6',
-                    color: '#42506b',
-                    letterSpacing: '-0.01em',
-                    wordBreak: 'keep-all',
-                  }}>
-                    해당 인물과 연결된 {filteredElements.filter(el => 
-                      el.data.source && 
-                      (el.data.source === processedNodeData?.id || el.data.target === processedNodeData?.id)
-                    ).length}개의 관계가 검색 결과에 포함되어 있습니다.
-                  </p>
-                </div>
-              </div>
-            )}
 
             {/* 요약 섹션 - 3단계 접근 방식 */}
             <div 
@@ -1346,9 +1264,9 @@ function UnifiedNodeInfo({
                 boxShadow: '0 0.0625rem 0.1875rem rgba(0,0,0,0.05)',
                 overflow: 'hidden',
                 position: 'relative',
-                minHeight: '40px',
-                height: (isWarningExpanded && !showSummary) ? '410px' : 
-                       showSummary ? 'auto' : '40px',
+                minHeight: '70px',
+                height: (isWarningExpanded && !showSummary) ? '440px' : 
+                       showSummary ? 'auto' : '60px',
                 transition: 'height 0.4s cubic-bezier(0.4, 0, 0.2, 1)',
               }}
               role="region"
