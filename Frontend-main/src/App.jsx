@@ -60,6 +60,12 @@ const AppContent = () => {
               <RelationGraphWrapper />
             </ProtectedRoute>
           } />
+          {/* bookId 기반 그래프 라우트 */}
+          <Route path="/user/graph/:bookId" element={
+            <ProtectedRoute>
+              <RelationGraphWrapper />
+            </ProtectedRoute>
+          } />
         </Route>
       </Routes>
     </>

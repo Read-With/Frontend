@@ -17,6 +17,9 @@ function GraphSidebar({
   onStartClosing,
   onClearGraph,
   forceClose,
+  povSummaries = null,
+  apiMacroData = null,
+  apiFineData = null,
 }) {
   const [isClosing, setIsClosing] = useState(false);
   const [isVisible, setIsVisible] = useState(false);
@@ -175,6 +178,9 @@ function GraphSidebar({
           filteredElements={filteredElements}
           searchTerm={searchTerm}
           filename={filename}
+          povSummaries={povSummaries}
+          apiMacroData={apiMacroData}
+          apiFineData={apiFineData}
         />
       </div>
     );
@@ -288,6 +294,9 @@ function GraphSidebar({
               isSearchActive={isSearchActive}
               filteredElements={filteredElements}
               searchTerm={searchTerm}
+              povSummaries={povSummaries}
+              apiMacroData={apiMacroData}
+              apiFineData={apiFineData}
             />
           ) : (
             <UnifiedEdgeTooltip

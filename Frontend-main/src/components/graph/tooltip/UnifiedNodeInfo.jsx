@@ -28,6 +28,9 @@ function UnifiedNodeInfo({
   filename,
   currentEvent = null,
   prevValidEvent = null,
+  povSummaries = null, // API에서 가져온 관점 요약 데이터
+  apiMacroData = null, // API 거시 그래프 데이터
+  apiFineData = null, // API 세밀 그래프 데이터
 }) {
   const { filename: urlFilename } = useParams();
   const actualFilename = filename || urlFilename;
@@ -279,13 +282,25 @@ function UnifiedNodeInfo({
   const displayDescription = isLanguageChanging ? previousDescription : currentDescription;
   const displayHasDescription = !!(displayDescription && displayDescription.trim());
 
-  // 요약 데이터 - perspective summaries에서 가져오기
+  // 요약 데이터 - API 또는 로컬 데이터에서 가져오기
   const summaryData = useMemo(() => {
     if (!processedNodeData?.label) {
       return { summary: "인물에 대한 요약 정보가 없습니다." };
     }
 
-    // 현재 챕터 정보 가져오기
+    // API 관점 요약 데이터가 있는 경우 우선 사용
+    if (povSummaries && povSummaries.summaries) {
+      const characterName = processedNodeData.label;
+      const characterSummary = povSummaries.summaries.find(
+        summary => summary.characterName === characterName
+      );
+      
+      if (characterSummary && characterSummary.summary) {
+        return { summary: characterSummary.summary };
+      }
+    }
+
+    // API 데이터가 없는 경우 로컬 데이터 사용
     const currentChapter = chapterNum || 1;
     const folderKey = getFolderKeyFromFilename(actualFilename);
     
@@ -304,14 +319,105 @@ function UnifiedNodeInfo({
     return { 
       summary: `${processedNodeData.label}에 대한 ${currentChapter}장 관점 요약이 아직 준비되지 않았습니다.` 
     };
-  }, [processedNodeData, chapterNum, actualFilename]);
+  }, [processedNodeData, chapterNum, actualFilename, povSummaries]);
 
-  // 레이더 차트 데이터 추출
+  // 레이더 차트 데이터 추출 (API 데이터 우선 사용)
   const radarChartData = useMemo(() => {
     if (!nodeData?.id || !chapterNum || displayMode !== 'sidebar') {
       return [];
     }
 
+    // API 데이터가 있는 경우 우선 사용
+    if (apiMacroData || apiFineData) {
+      try {
+        const apiData = apiMacroData || apiFineData;
+        if (apiData && apiData.relations && apiData.characters) {
+          // API 데이터에서 관계 정보 추출
+          const relations = apiData.relations;
+          const characters = apiData.characters;
+          
+          // API 데이터 구조 확인 (필요시에만)
+          // console.log('원본 API 관계 데이터:', relations);
+          // console.log('원본 API 캐릭터 데이터:', characters);
+          
+          // 캐릭터 ID를 이름으로 매핑하는 맵 생성
+          const characterMap = {};
+          const nameToIdMap = {};
+          characters.forEach(char => {
+            const charName = char.common_name || char.name;
+            characterMap[char.id] = charName;
+            nameToIdMap[charName] = char.id;
+          });
+          
+          // 현재 노드의 ID를 API 데이터 형식에 맞게 변환
+          const currentNodeId = nodeData.id;
+          let targetNodeId = currentNodeId;
+          
+          // nodeData.id가 문자열인 경우 (로컬 데이터), 숫자 ID로 변환
+          if (typeof currentNodeId === 'string') {
+            const charName = nodeData.label || nodeData.common_name;
+            targetNodeId = nameToIdMap[charName] || currentNodeId;
+          }
+          
+          // API 데이터를 로컬 형식으로 변환 (중복 제거 포함)
+          const relationMap = new Map(); // 중복 관계를 하나로 처리하기 위한 맵
+          
+          relations.forEach(rel => {
+            // 현재 노드가 관계에 포함되어 있는지 확인
+            const isCurrentNodeId1 = rel.id1 === targetNodeId;
+            const isCurrentNodeId2 = rel.id2 === targetNodeId;
+            
+            if (isCurrentNodeId1 || isCurrentNodeId2) {
+              // 관계의 고유 키 생성 (순서에 관계없이)
+              const key1 = `${rel.id1}-${rel.id2}`;
+              const key2 = `${rel.id2}-${rel.id1}`;
+              
+              // 이미 처리된 관계가 아닌 경우만 추가
+              if (!relationMap.has(key1) && !relationMap.has(key2)) {
+                // 현재 노드를 source로, 상대방을 target으로 설정
+                const sourceId = isCurrentNodeId1 ? rel.id1 : rel.id2;
+                const targetId = isCurrentNodeId1 ? rel.id2 : rel.id1;
+                
+                relationMap.set(key1, {
+                  source: characterMap[sourceId] || sourceId,
+                  target: characterMap[targetId] || targetId,
+                  relation: rel.relation || '관계',
+                  strength: rel.count || 1,
+                  positivity: rel.positivity || 0
+                });
+              }
+            }
+          });
+          
+          // 최종 관계 데이터 (중복 제거됨)
+          const finalRelations = Array.from(relationMap.values());
+          
+          // 정제된 관계 데이터로 그래프 생성
+          console.log('API 중복 제거된 관계 데이터:', finalRelations);
+          
+          // API 데이터를 직접 처리 (processRelations 우회)
+          // API 데이터는 이미 올바른 형식이므로 직접 사용
+          const chartData = extractRadarChartData(targetNodeId, finalRelations, elements, 8);
+          
+          // API 데이터 처리 결과 확인 (필요시에만)
+          // console.log('API 레이더 차트 데이터:', {
+          //   currentNodeId,
+          //   targetNodeId,
+          //   relationsCount: relations.length,
+          //   processedRelationsCount: finalRelations.length,
+          //   chartDataCount: chartData.length,
+          //   characterMap,
+          //   nameToIdMap
+          // });
+          
+          return chartData;
+        }
+      } catch (err) {
+        console.error('API 레이더 차트 데이터 추출 오류:', err);
+      }
+    }
+
+    // API 데이터가 없는 경우 로컬 데이터 사용 (정제된 데이터 적용)
     if (!elements || elements.length === 0) {
       return [];
     }
@@ -326,15 +432,39 @@ function UnifiedNodeInfo({
         return [];
       }
 
-      const processedRelations = processRelations(json.relations);
-      const chartData = extractRadarChartData(nodeData.id, processedRelations, elements, 8);
+      // 로컬 데이터도 중복 제거 적용
+      const relationMap = new Map();
+      
+      json.relations.forEach(rel => {
+        // 관계의 고유 키 생성 (순서에 관계없이)
+        const key1 = `${rel.source}-${rel.target}`;
+        const key2 = `${rel.target}-${rel.source}`;
+        
+        // 이미 처리된 관계가 아닌 경우만 추가
+        if (!relationMap.has(key1) && !relationMap.has(key2)) {
+          relationMap.set(key1, {
+            source: rel.source,
+            target: rel.target,
+            relation: rel.relation,
+            strength: rel.strength || 1,
+            positivity: rel.positivity || 0
+          });
+        }
+      });
+      
+      // 정제된 로컬 관계 데이터
+      const finalRelations = Array.from(relationMap.values());
+      
+      console.log('로컬 중복 제거된 관계 데이터:', finalRelations);
+      
+      const chartData = extractRadarChartData(nodeData.id, finalRelations, elements, 8);
       
       return chartData;
     } catch (err) {
       console.error('레이더 차트 데이터 추출 오류:', err);
       return [];
     }
-  }, [nodeData?.id, chapterNum, displayMode, folderKey, elements, eventNum]);
+  }, [nodeData?.id, chapterNum, displayMode, folderKey, elements, eventNum, apiMacroData, apiFineData]);
 
   // 연결 상태 확인
   const connectionStatus = useMemo(() => {
@@ -478,8 +608,11 @@ function UnifiedNodeInfo({
     }
   }
 
-  // 노드가 현재 챕터/이벤트에서 등장하지 않는 경우
-  if (!isNodeAppeared) {
+  // 거시 그래프 모드에서는 등장 여부 체크를 하지 않음
+  const isGraphOnlyPage = window.location.pathname.includes('/user/graph/');
+  
+  // 노드가 현재 챕터/이벤트에서 등장하지 않는 경우 (거시 그래프가 아닌 경우에만)
+  if (!isGraphOnlyPage && !isNodeAppeared) {
     const notAppearedContent = (
       <div
         style={{

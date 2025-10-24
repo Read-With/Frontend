@@ -18,6 +18,7 @@ import { convertRelationsToElements, filterMainCharacters } from '../../utils/gr
 import { createCharacterMaps } from '../../utils/characterUtils';
 import { createRippleEffect, ensureElementsInBounds, processTooltipData } from '../../utils/graphUtils.js';
 import useGraphInteractions from "../../hooks/useGraphInteractions";
+import { useChapterPovSummaries } from '../../hooks/useChapterPovSummaries';
 
 // 노드 크기는 가중치 기반으로만 계산됨
 const getEdgeStyleForGraph = () => getEdgeStyle('graph');
@@ -27,6 +28,10 @@ function RelationGraphWrapper() {
   const { filename } = useParams();
   const location = useLocation();
   const book = location.state?.book;
+  
+  // bookId인지 filename인지 확인
+  const isBookId = !isNaN(filename) && filename.length > 0;
+  const bookId = isBookId ? parseInt(filename) : null;
   
   // 상태 관리 - 파일명별로 localStorage 키 구분
   const [currentChapter, setCurrentChapter] = useLocalStorageNumber(`lastGraphChapter_${filename}`, 1);
@@ -39,9 +44,16 @@ function RelationGraphWrapper() {
   const [forceClose, setForceClose] = useState(false);
   const [filterStage, setFilterStage] = useState(0);
   
-  // API 세밀 그래프 데이터 상태
+  // API 그래프 데이터 상태
+  const [apiMacroData, setApiMacroData] = useState(null);
   const [apiFineData, setApiFineData] = useState(null);
   const [apiFineLoading, setApiFineLoading] = useState(false);
+  
+  // 거시 그래프에서 관점 요약 가져오기 (1장 기준)
+  const { povSummaries, loading: povLoading, error: povError } = useChapterPovSummaries(
+    isBookId ? bookId : null, 
+    1 // 거시 그래프에서는 1장 기준
+  );
   
   // refs
   const cyRef = useRef(null);
@@ -53,40 +65,40 @@ function RelationGraphWrapper() {
    // API 거시 그래프 데이터 로딩
    useEffect(() => {
      const loadMacroGraphData = async () => {
-       // API 책인지 확인 (숫자 ID를 가진 책이거나 isFromAPI가 true인 경우)
-       const isApiBook = book && (typeof book.id === 'number' || book.isFromAPI === true);
+       // bookId가 있는 경우 또는 API 책인 경우
+       const targetBookId = bookId || (book && typeof book.id === 'number' ? book.id : null);
        
-       
-       if (!book?.id || !isApiBook || !currentChapter) {
+       if (!targetBookId) {
          setApiFineData(null);
          return;
        }
       
       setApiFineLoading(true);
       try {
-        
-        const macroData = await getMacroGraph(book.id, currentChapter);
+        // 거시 그래프는 맨 마지막 챕터의 데이터만 가져옴
+        // 임시로 1을 사용 (실제로는 책의 최대 챕터 번호를 가져와야 함)
+        const macroData = await getMacroGraph(targetBookId, 1);
+        setApiMacroData(macroData.result);
         setApiFineData(macroData.result);
         
+      } catch (error) {
+        console.error('거시 그래프 API 호출 실패:', error);
         
+        // 500 에러인 경우 특별한 처리
+        if (error.message.includes('500') || error.message.includes('서버 에러')) {
+        }
         
-       } catch (error) {
-         console.error('거시 그래프 API 호출 실패:', error);
-         
-         // 500 에러인 경우 특별한 처리
-         if (error.message.includes('500') || error.message.includes('서버 에러')) {
-         }
-         
-         setApiFineData(null);
-       } finally {
-         setApiFineLoading(false);
-       }
+        setApiMacroData(null);
+        setApiFineData(null);
+      } finally {
+        setApiFineLoading(false);
+      }
     };
 
     loadMacroGraphData();
-  }, [book?.id, currentChapter]);
+  }, [bookId, book?.id]);
 
-  // 데이터 로딩 - API 책이 아닌 경우에만 기존 로컬 데이터 사용
+  // 데이터 로딩 - bookId가 있는 경우 또는 API 책이 아닌 경우에만 기존 로컬 데이터 사용
   const {
     elements: localElements,
     newNodeIds,
@@ -96,7 +108,7 @@ function RelationGraphWrapper() {
     maxChapter,
     loading,
     error
-  } = useGraphDataLoader(book?.isFromAPI ? null : filename, currentChapter);
+  } = useGraphDataLoader((isBookId || book?.isFromAPI) ? null : filename, currentChapter);
 
   // currentChapter가 maxChapter를 초과하지 않도록 검증
   useEffect(() => {
@@ -107,22 +119,24 @@ function RelationGraphWrapper() {
   
   // API 데이터를 그래프 요소로 변환
   const apiElements = useMemo(() => {
-    if (!apiFineData?.characters || !apiFineData?.relations) return [];
+    if (!apiFineData?.characters || !apiFineData?.relations) {
+      return [];
+    }
     
     try {
       const { idToName, idToDesc, idToMain, idToNames } = createCharacterMaps(apiFineData.characters);
+      
       const convertedElements = convertRelationsToElements(
         apiFineData.relations,
         idToName,
         idToDesc,
+        idToDesc, // idToDescKo (한국어 설명이 없으므로 idToDesc 사용)
         idToMain,
         idToNames,
-        'api', // API 데이터임을 표시
+        'api', // folderKey
         null, // nodeWeights
         null  // previousRelations
       );
-      
-      
       
       return convertedElements;
     } catch (error) {
@@ -131,11 +145,12 @@ function RelationGraphWrapper() {
     }
   }, [apiFineData]);
   
-  // API 책인지 확인 (숫자 ID를 가진 책이거나 isFromAPI가 true인 경우)
-  const isApiBook = book && (typeof book.id === 'number' || book.isFromAPI === true);
+  // API 책인지 확인 (bookId가 있거나 숫자 ID를 가진 책이거나 isFromAPI가 true인 경우)
+  const isApiBook = isBookId || (book && (typeof book.id === 'number' || book.isFromAPI === true));
 
   // 사용할 elements 결정 (API 데이터 우선, 없으면 로컬 데이터)
   const elements = isApiBook ? apiElements : localElements;
+  
   
   // API 책의 경우 이벤트 선택 핸들러
   const handleEventChange = useCallback((eventNum) => {
@@ -515,10 +530,73 @@ function RelationGraphWrapper() {
   // 데이터 없음 상태 렌더링
   if (!elements || elements.length === 0) {
     return (
-      <div style={containerStyles.error}>
-        <div>데이터가 없습니다</div>
-        <div style={{ fontSize: '14px', color: COLORS.textSecondary, marginTop: '8px' }}>
-          이 챕터에는 표시할 관계 데이터가 없습니다.
+      <div style={{
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        height: '100vh',
+        width: '100vw',
+        backgroundColor: COLORS.backgroundLighter,
+        padding: '20px',
+        textAlign: 'center'
+      }}>
+        <h2 style={{
+          color: COLORS.textPrimary,
+          marginBottom: '16px',
+          fontSize: '24px',
+          fontWeight: '600'
+        }}>
+          {isApiBook ? 'API 데이터를 찾을 수 없습니다' : '데이터가 없습니다'}
+        </h2>
+        <div style={{
+          fontSize: '16px',
+          color: COLORS.textSecondary,
+          marginBottom: '24px',
+          lineHeight: '1.5',
+          maxWidth: '500px'
+        }}>
+          {isApiBook 
+            ? `API에서 bookId ${bookId}의 ${currentChapter}장까지의 관계 데이터를 찾을 수 없습니다.`
+            : `이 챕터에는 표시할 관계 데이터가 없습니다.`
+          }
+        </div>
+        <div style={{
+          display: 'flex',
+          gap: '12px',
+          flexWrap: 'wrap',
+          justifyContent: 'center'
+        }}>
+          <button
+            onClick={() => window.location.reload()}
+            style={{
+              padding: '12px 24px',
+              backgroundColor: COLORS.primary,
+              color: 'white',
+              border: 'none',
+              borderRadius: '8px',
+              cursor: 'pointer',
+              fontSize: '14px',
+              fontWeight: '500'
+            }}
+          >
+            새로고침
+          </button>
+          <button
+            onClick={() => navigate('/user/mypage')}
+            style={{
+              padding: '12px 24px',
+              backgroundColor: COLORS.backgroundLight,
+              color: COLORS.textPrimary,
+              border: `1px solid ${COLORS.border}`,
+              borderRadius: '8px',
+              cursor: 'pointer',
+              fontSize: '14px',
+              fontWeight: '500'
+            }}
+          >
+            마이페이지로 돌아가기
+          </button>
         </div>
       </div>
     );
@@ -847,6 +925,9 @@ function RelationGraphWrapper() {
                 isSearchActive={isSearchActive}
                 filteredElements={filteredElements}
                 searchTerm={searchTerm}
+                povSummaries={povSummaries}
+                apiMacroData={apiMacroData}
+                apiFineData={apiFineData}
               />
             )}
             <div 
