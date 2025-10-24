@@ -214,6 +214,7 @@
   overflow: visible;
   text-overflow: unset;
   margin-top: 220px;
+  margin-bottom: -150px;
   position: relative;
   top: -200px;
 }
@@ -357,10 +358,10 @@
 
 @keyframes float {
   0%, 100% {
-    transform: translateY(0px) rotate(0deg);
+    transform: translateY(0px);
   }
   50% {
-    transform: translateY(-20px) rotate(180deg);
+    transform: translateY(-20px);
   }
 }
 
@@ -1933,5 +1934,94 @@
   .page-illustration {
     font-size: 3rem;
   }
+}
+
+/* 스토리 콘텐츠 래퍼 */
+.story-content-wrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+}
+
+/* 구글 로그인 버튼 스타일 */
+.google-login-section {
+  margin-bottom: 200px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  position: relative;
+  z-index: 10003;
+  animation: fadeInUp 0.8s ease-out 2s both;
+}
+
+.google-login-button {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 20px 40px;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.95) 0%, rgba(248, 250, 252, 0.9) 100%);
+  border: 2px solid #3E4F2F;
+  border-radius: 30px;
+  color: #3E4F2F;
+  font-size: 20px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  box-shadow: 0 10px 30px rgba(62, 79, 47, 0.25);
+  backdrop-filter: blur(15px);
+  position: relative;
+  z-index: 10004;
+  transform: translateY(0);
+  letter-spacing: 0.5px;
+}
+
+.google-login-button:hover {
+  background: linear-gradient(135deg, #3E4F2F 0%, #586544 100%);
+  color: white;
+  transform: translateY(-4px) scale(1.02);
+  box-shadow: 0 15px 40px rgba(62, 79, 47, 0.4);
+  border-color: #586544;
+}
+
+.google-login-button:active {
+  transform: translateY(-2px) scale(0.98);
+  transition: all 0.1s ease;
+}
+
+.google-icon {
+  width: 26px;
+  height: 26px;
+  transition: transform 0.3s ease;
+}
+
+.google-login-button:hover .google-icon {
+  transform: scale(1.1);
+}
+
+/* 로딩 상태 스타일 */
+.google-login-button.loading {
+  opacity: 0.8;
+  cursor: not-allowed;
+}
+
+.google-login-button.loading:hover {
+  transform: none;
+  box-shadow: 0 10px 30px rgba(62, 79, 47, 0.25);
+}
+
+.loading-spinner {
+  width: 20px;
+  height: 20px;
+  border: 2px solid rgba(62, 79, 47, 0.3);
+  border-top: 2px solid #3E4F2F;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin-right: 8px;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
 }
 

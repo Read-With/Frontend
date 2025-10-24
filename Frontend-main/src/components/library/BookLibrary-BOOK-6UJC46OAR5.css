@@ -1,0 +1,734 @@
+.book-card {
+  background: white;
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  border-radius: 16px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.04);
+  width: 100%;
+  height: 100%;
+  min-height: 380px;
+  display: flex;
+  flex-direction: column;
+  cursor: pointer;
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.book-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, #4F6DDE, #6B8AFF, #8BA4FF);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.book-card:hover {
+  transform: translateY(-8px);
+  box-shadow: 0 12px 32px rgba(79, 109, 222, 0.15);
+  border-color: rgba(79, 109, 222, 0.2);
+}
+
+/* 리스트 뷰에서도 동일한 호버 효과 적용 */
+.book-card.list-view:hover {
+  transform: translateY(-8px);
+  box-shadow: 0 12px 32px rgba(79, 109, 222, 0.15);
+  border-color: rgba(79, 109, 222, 0.2);
+}
+
+.book-card:hover::before {
+  opacity: 1;
+}
+
+/* 리스트 뷰에서도 상단 그라데이션 바 효과 적용 */
+.book-card.list-view:hover::before {
+  opacity: 1;
+}
+
+/* ==================== 카드 헤더 (이미지 영역) ==================== */
+.book-card-header {
+  position: relative;
+  padding: 24px 20px 16px;
+  display: flex;
+  justify-content: center;
+  background: linear-gradient(180deg, #f8f9fb 0%, #ffffff 100%);
+}
+
+.book-image-container {
+  position: relative;
+  width: 120px;
+  height: 180px;
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  transition: transform 0.3s ease;
+}
+
+.book-card:hover .book-image-container {
+  transform: scale(1.05);
+}
+
+/* 리스트 뷰에서도 이미지 스케일 효과 적용 */
+.book-card.list-view:hover .book-image-container {
+  transform: scale(1.05);
+}
+
+.book-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.book-image-placeholder {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #e8ecf3 0%, #d4dae5 100%);
+}
+
+/* ==================== 상태 배지 ==================== */
+.book-status-badge {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  padding: 6px 12px;
+  border-radius: 20px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  z-index: 2;
+  text-transform: uppercase;
+}
+
+.status-reading {
+  background: linear-gradient(135deg, #4F6DDE, #6B8AFF);
+  color: white;
+}
+
+.status-completed {
+  background: linear-gradient(135deg, #28a745, #48c774);
+  color: white;
+}
+
+
+.status-default {
+  background: rgba(255, 255, 255, 0.9);
+  color: #666;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+/* ==================== 즐겨찾기 버튼 ==================== */
+.book-favorite-btn {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.95);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+  border: none;
+  font-size: 1.2rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2;
+  transition: transform 0.3s ease, background 0.3s ease, box-shadow 0.3s ease;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.book-favorite-btn:hover {
+  transform: scale(1.15);
+  background: white;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+/* 리스트 뷰에서도 즐겨찾기 버튼 호버 효과 적용 */
+.book-card.list-view .book-favorite-btn:hover {
+  transform: scale(1.15);
+  background: white;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.book-favorite-btn:active {
+  transform: scale(1.05);
+}
+
+/* ==================== 독서 진행률 바 ==================== */
+.book-progress-container {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  padding: 0 20px 12px;
+}
+
+.progress-label {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+  font-size: 0.75rem;
+  color: #666;
+  font-weight: 600;
+}
+
+.progress-bar-bg {
+  height: 6px;
+  background: rgba(79, 109, 222, 0.1);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.progress-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #4F6DDE, #6B8AFF);
+  border-radius: 10px;
+  transition: width 0.5s ease;
+  box-shadow: 0 0 8px rgba(79, 109, 222, 0.4);
+}
+
+/* ==================== 카드 바디 (정보 영역) ==================== */
+.book-card-body {
+  flex: 1;
+  padding: 20px 20px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.book-title {
+  font-size: 1.1rem;
+  font-weight: 700;
+  line-height: 1.4;
+  color: #1a1a1a;
+  margin: 0;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-height: 2.8em;
+}
+
+.book-author {
+  font-size: 0.95rem;
+  font-weight: 500;
+  color: #666;
+  display: -webkit-box;
+  -webkit-line-clamp: 1;
+  line-clamp: 1;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-top: -4px;
+}
+
+.book-meta {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  font-size: 0.85rem;
+  color: #999;
+  margin-top: auto;
+}
+
+.book-meta-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.book-meta-item.book-format {
+  background: rgba(79, 109, 222, 0.1);
+  color: #4F6DDE;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+/* ==================== 카드 액션 버튼들 ==================== */
+.book-card-actions {
+  padding: 12px 16px 16px;
+  display: flex;
+  gap: 8px;
+  margin-top: auto;
+}
+
+.book-action-btn {
+  flex: 1;
+  padding: 10px 12px;
+  border: none;
+  border-radius: 10px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform 0.2s ease, background 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 40px;
+  position: relative;
+  overflow: hidden;
+}
+
+.book-action-btn::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+  transition: left 0.5s ease;
+}
+
+.book-action-btn:hover::before {
+  left: 100%;
+}
+
+.book-action-primary {
+  background: linear-gradient(135deg, #4F6DDE, #6B8AFF);
+  color: white;
+  box-shadow: 0 6px 20px rgba(79, 109, 222, 0.3);
+  border: 2px solid transparent;
+}
+
+.book-action-primary:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(79, 109, 222, 0.4);
+  background: linear-gradient(135deg, #3B5BCC, #5A7FFF);
+}
+
+.book-action-primary:active {
+  transform: translateY(-1px);
+}
+
+.book-action-secondary {
+  background: linear-gradient(135deg, #f8f9fb, #e8ecf3);
+  color: #4F6DDE;
+  border: 2px solid #e8ecf3;
+  box-shadow: 0 4px 12px rgba(79, 109, 222, 0.1);
+}
+
+.book-action-secondary:hover {
+  background: linear-gradient(135deg, #e8ecf3, #d4dae5);
+  border-color: #4F6DDE;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(79, 109, 222, 0.2);
+}
+
+.book-action-secondary:active {
+  transform: translateY(-1px);
+}
+
+.book-action-icon {
+  flex-shrink: 0;
+  transition: transform 0.3s ease;
+  width: 16px;
+  height: 16px;
+}
+
+.book-action-btn:hover .book-action-icon {
+  transform: scale(1.05);
+}
+
+
+/* ==================== 컨텍스트 메뉴 ==================== */
+.book-context-menu {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 10;
+}
+
+.book-context-trigger {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.95);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.2rem;
+  transition: transform 0.3s ease, background 0.3s ease, box-shadow 0.3s ease;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.book-context-trigger:hover {
+  background: white;
+  transform: scale(1.1);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+/* 리스트 뷰에서도 컨텍스트 메뉴 호버 효과 적용 */
+.book-card.list-view .book-context-trigger:hover {
+  background: white;
+  transform: scale(1.1);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.book-context-dropdown {
+  position: absolute;
+  top: 44px;
+  right: 0;
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  min-width: 160px;
+  overflow: hidden;
+  z-index: 100;
+}
+
+.book-context-item {
+  padding: 12px 16px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #333;
+  border: none;
+  background: white;
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.2s ease, color 0.2s ease;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.book-context-item:hover {
+  background: #f8f9fb;
+  color: #4F6DDE;
+}
+
+.book-context-item:not(:last-child) {
+  border-bottom: 1px solid #f0f4fa;
+}
+
+.book-context-icon {
+  flex-shrink: 0;
+}
+
+/* ==================== 빈 상태 스타일 (BookLibrary 내부) ==================== */
+.book-library-empty {
+  text-align: center;
+  padding: 80px 20px;
+}
+
+.book-library-empty-icon {
+  font-size: 5rem;
+  margin-bottom: 24px;
+  opacity: 0.6;
+}
+
+.book-library-empty-title {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #333;
+  margin-bottom: 12px;
+}
+
+.book-library-empty-description {
+  font-size: 1.05rem;
+  color: #666;
+  line-height: 1.6;
+}
+
+/* ==================== 로딩 스피너 ==================== */
+.book-library-loading {
+  text-align: center;
+  padding: 80px 20px;
+}
+
+/* ==================== 리스트 뷰 스타일 ==================== */
+.book-card.list-view {
+  flex-direction: row;
+  min-height: 140px;
+  height: auto;
+  padding: 16px 18px;
+  gap: 18px;
+  max-width: 95%;
+  margin: 0 auto;
+  transition: none;
+}
+
+.book-card.list-view .book-card-header {
+  flex-shrink: 0;
+  padding: 0;
+  background: none;
+  width: 80px;
+  height: 120px;
+}
+
+.book-card.list-view .book-image-container {
+  width: 80px;
+  height: 120px;
+  border-radius: 6px;
+}
+
+.book-card.list-view .book-card-body {
+  flex: 1;
+  padding: 0;
+  justify-content: space-between;
+}
+
+.book-card.list-view .book-title {
+  font-size: 1.2rem;
+  line-height: 1.3;
+  margin-bottom: 8px;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  min-height: auto;
+}
+
+.book-card.list-view .book-author {
+  font-size: 1rem;
+  margin-bottom: 12px;
+}
+
+.book-card.list-view .book-meta {
+  margin-top: 0;
+  font-size: 0.9rem;
+}
+
+.book-card.list-view .book-card-actions {
+  flex-shrink: 0;
+  padding: 0;
+  width: 220px;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.book-card.list-view .book-action-btn {
+  flex: none;
+  padding: 12px 18px;
+  font-size: 0.9rem;
+  min-width: 90px;
+  min-height: 44px;
+}
+
+.book-card.list-view .book-status-badge {
+  top: 16px;
+  left: 16px;
+}
+
+.book-card.list-view .book-favorite-btn,
+.book-card.list-view .book-context-trigger {
+  top: 16px;
+  right: 16px;
+}
+
+.book-card.list-view .book-progress-container {
+  position: static;
+  padding: 0;
+  margin-top: 8px;
+}
+
+
+/* ==================== 반응형 디자인 ==================== */
+@media (max-width: 768px) {
+  .book-card {
+    min-height: 360px;
+  }
+
+  .book-card.list-view {
+    flex-direction: column;
+    min-height: auto;
+    padding: 14px 16px;
+    gap: 12px;
+    max-width: 98%;
+    margin: 0 auto;
+  }
+
+  .book-card.list-view .book-card-header {
+    width: 100%;
+    height: auto;
+    padding: 0;
+  }
+
+  .book-card.list-view .book-image-container {
+    width: 60px;
+    height: 90px;
+    margin: 0 auto;
+  }
+
+  .book-card.list-view .book-card-body {
+    text-align: center;
+  }
+
+  .book-card.list-view .book-card-actions {
+    width: 100%;
+    justify-content: center;
+    gap: 12px;
+    margin-top: 16px;
+  }
+
+  .book-card.list-view .book-action-btn {
+    flex: 1;
+    max-width: 140px;
+    min-height: 46px;
+  }
+
+  .book-card-header {
+    padding: 20px 16px 12px;
+  }
+
+  .book-image-container {
+    width: 100px;
+    height: 150px;
+  }
+
+  .book-status-badge {
+    padding: 5px 10px;
+    font-size: 0.7rem;
+    top: 10px;
+    left: 10px;
+  }
+
+  .book-favorite-btn,
+  .book-context-trigger {
+    width: 32px;
+    height: 32px;
+    font-size: 1.1rem;
+    top: 10px;
+    right: 10px;
+  }
+
+  .book-progress-container {
+    padding: 0 16px 10px;
+  }
+
+  .progress-label {
+    font-size: 0.7rem;
+  }
+
+  .book-title {
+    font-size: 1rem;
+  }
+
+  .book-author {
+    font-size: 0.9rem;
+  }
+
+  .book-meta {
+    font-size: 0.8rem;
+  }
+
+  .book-action-btn {
+    padding: 10px 12px;
+    font-size: 0.85rem;
+    min-height: 42px;
+  }
+
+
+  .book-context-dropdown {
+    min-width: 140px;
+  }
+
+  .book-context-item {
+    padding: 10px 14px;
+    font-size: 0.9rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .book-card {
+    min-height: 340px;
+  }
+
+  .book-card.list-view {
+    max-width: 99%;
+    padding: 12px 14px;
+  }
+
+  .book-image-container {
+    width: 90px;
+    height: 135px;
+  }
+
+  .book-status-badge {
+    padding: 4px 8px;
+    font-size: 0.65rem;
+    top: 8px;
+    left: 8px;
+  }
+
+  .book-favorite-btn,
+  .book-context-trigger {
+    width: 28px;
+    height: 28px;
+    font-size: 1rem;
+    top: 8px;
+    right: 8px;
+  }
+
+  .book-progress-container {
+    padding: 0 12px 8px;
+  }
+
+  .progress-bar-bg {
+    height: 5px;
+  }
+
+  .book-card-body {
+    padding: 16px;
+  }
+
+  .book-card-actions {
+    padding: 0 16px 16px;
+    gap: 6px;
+  }
+
+  .book-action-btn {
+    font-size: 0.8rem;
+    padding: 10px 12px;
+    min-height: 40px;
+    gap: 4px;
+  }
+
+
+  .book-context-dropdown {
+    min-width: 120px;
+    top: 36px;
+  }
+
+  .book-context-item {
+    padding: 10px 12px;
+    font-size: 0.85rem;
+    gap: 8px;
+  }
+
+  .book-library-empty {
+    padding: 60px 16px;
+  }
+
+  .book-library-empty-icon {
+    font-size: 4rem;
+  }
+
+  .book-library-empty-title {
+    font-size: 1.3rem;
+  }
+
+  .book-library-empty-description {
+    font-size: 0.95rem;
+  }
+}

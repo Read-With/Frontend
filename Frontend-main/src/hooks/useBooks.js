@@ -11,9 +11,13 @@ export const useBooks = () => {
       setLoading(true);
       setError(null);
       
+      // 토큰 확인
+      const token = localStorage.getItem('accessToken');
+      console.log('useBooks - 현재 토큰 상태:', token ? '토큰 있음' : '토큰 없음');
+      
       // API와 로컬 데이터를 병렬로 가져오기
       const [apiResponse, localResponse] = await Promise.allSettled([
-        getBooks(params),
+        token ? getBooks(params) : Promise.reject(new Error('인증 토큰이 없습니다')),
         fetch('/books.json')
       ]);
       

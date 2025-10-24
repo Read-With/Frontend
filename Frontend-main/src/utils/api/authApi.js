@@ -12,7 +12,7 @@ const API_BASE_URL = getApiBaseUrl();
 
 // 인증된 API 요청 헬퍼 함수
 export const authenticatedRequest = async (endpoint, options = {}) => {
-  const token = localStorage.getItem('access_token');
+  const token = localStorage.getItem('accessToken');
   
   const defaultHeaders = {
     'Content-Type': 'application/json',
@@ -35,7 +35,7 @@ export const authenticatedRequest = async (endpoint, options = {}) => {
   if (!response.ok) {
     if (response.status === 401) {
       // 토큰 만료 시 로그아웃 처리
-      localStorage.removeItem('access_token');
+      localStorage.removeItem('accessToken');
       localStorage.removeItem('google_user');
       window.location.href = '/';
     }
@@ -66,7 +66,7 @@ export const logout = async () => {
     console.error('로그아웃 API 호출 실패:', error);
   } finally {
     // API 호출 성공 여부와 관계없이 로컬 데이터 정리
-    localStorage.removeItem('access_token');
+    localStorage.removeItem('accessToken');
     localStorage.removeItem('google_user');
   }
 };
