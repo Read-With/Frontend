@@ -32,8 +32,9 @@ export const extractRadarChartData = (nodeId, relations, elements, maxDisplay = 
 
   // 선택된 노드와 연결된 모든 관계 찾기
   relations.forEach((rel) => {
-    const id1 = String(rel.id1);
-    const id2 = String(rel.id2);
+    // id1/id2 또는 source/target 모두 지원
+    const id1 = String(rel.id1 ?? rel.source);
+    const id2 = String(rel.id2 ?? rel.target);
     
     let connectedNodeId = null;
     
@@ -54,7 +55,7 @@ export const extractRadarChartData = (nodeId, relations, elements, maxDisplay = 
         const fullName = connectedNode.data.label || connectedNode.data.common_name || `인물 ${connectedNodeId}`;
         const shortName = fullName.split(' ')[0];
         
-        radarData.push({
+        const radarItem = {
           name: shortName,
           fullName: fullName, // 툴팁에서 전체 이름 표시용
           positivity: rel.positivity,
@@ -62,7 +63,9 @@ export const extractRadarChartData = (nodeId, relations, elements, maxDisplay = 
           relationCount: rel.count || 0,
           relationTags: rel.relation || [],
           connectedNodeId: connectedNodeId
-        });
+        };
+        
+        radarData.push(radarItem);
       }
     }
   });

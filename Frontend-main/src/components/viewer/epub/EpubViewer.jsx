@@ -8,6 +8,7 @@ import React, {
   useCallback,
 } from 'react';
 import ePub from 'epubjs';
+import { toast } from 'react-toastify';
 import { 
   calculateChapterProgress, 
   findClosestEvent,
@@ -85,190 +86,6 @@ const getEventsForChapter = (chapter) => {
   }
 };
 
-// 공통 네비게이션 로직 함수
-const handleNavigation = async (book, rendition, direction, setIsNavigating, setNavigationError, storageKeys) => {
-  console.log(`🚀 handleNavigation 시작: ${direction}`, {
-    hasBook: !!book,
-    hasSpine: !!book?.spine,
-    hasRendition: !!rendition,
-    renditionStarted: rendition?.started,
-    renditionDisplaying: rendition?.displaying,
-    spineLength: book?.spine?.length || 0
-  });
-  
-  try {
-    // 간단한 뷰어 상태 확인
-    const hasSpine = !!book?.spine && book?.spine?.length > 0;
-    const renditionReady = rendition?.started && rendition?.displaying !== undefined;
-    
-    console.log('🔍 뷰어 상태:', {
-      hasSpine,
-      spineLength: book?.spine?.length || 0,
-      renditionReady,
-      renditionStarted: rendition?.started,
-      renditionDisplaying: rendition?.displaying
-    });
-    
-    // 뷰어가 완전히 로드되지 않았으면 기본 네비게이션 사용
-    if (!hasSpine || !renditionReady) {
-      console.warn('⚠️ 뷰어가 완전히 로드되지 않았습니다. 기본 네비게이션으로 대체합니다.');
-      
-      try {
-        if (direction === 'next') {
-          await rendition.next();
-          console.log('✅ 기본 next() 네비게이션 성공');
-        } else {
-          await rendition.prev();
-          console.log('✅ 기본 prev() 네비게이션 성공');
-        }
-        return { success: true, method: 'basic', target: direction };
-      } catch (basicError) {
-        console.error('❌ 기본 네비게이션도 실패:', basicError);
-        setNavigationError('페이지 이동에 실패했습니다. 뷰어가 완전히 로드될 때까지 기다려주세요.');
-        return { success: false, error: basicError.message };
-      }
-    }
-    
-    // currentLocation 함수 확인
-    if (!rendition?.currentLocation || typeof rendition.currentLocation !== 'function') {
-      console.warn('⚠️ rendition.currentLocation이 준비되지 않았습니다');
-      setNavigationError('뷰어가 아직 완전히 준비되지 않았습니다. 잠시 후 다시 시도해주세요.');
-      return;
-    }
-    
-    // 현재 위치 확인
-    let currentLocation;
-    try {
-      currentLocation = rendition.currentLocation();
-      console.log('📍 현재 위치:', currentLocation);
-    } catch (err) {
-      console.error('❌ 현재 위치 조회 실패:', err);
-      setNavigationError('현재 위치를 확인할 수 없습니다.');
-      return;
-    }
-    
-    // 하이브리드 탐색 실행
-    console.log('🔄 safeNavigate 호출 시작');
-    const result = await navigationUtils.safeNavigate(book, rendition, async () => {
-      console.log('🚀 페이지 이동 시도 시작');
-      
-      // 현재 위치를 확실히 구하기
-      let retryCount = 0;
-      const maxRetries = 5;
-      let finalLocation = null;
-      
-      while (retryCount < maxRetries) {
-        try {
-          const currentLocation = rendition.currentLocation();
-          console.log(`📍 현재 위치 확인 (${retryCount + 1}/${maxRetries}):`, currentLocation);
-          
-          if (currentLocation && currentLocation.start && currentLocation.start.cfi) {
-            console.log('✅ 현재 위치 발견 - CFI:', currentLocation.start.cfi);
-            finalLocation = currentLocation;
-            break;
-          }
-          
-          retryCount++;
-          if (retryCount < maxRetries) {
-            console.log(`⏳ 현재 위치 대기 중... (${retryCount}/${maxRetries})`);
-            await new Promise(resolve => setTimeout(resolve, 300));
-          }
-        } catch (error) {
-          console.error(`❌ 현재 위치 확인 시도 ${retryCount + 1} 실패:`, error);
-          retryCount++;
-          if (retryCount < maxRetries) {
-            await new Promise(resolve => setTimeout(resolve, 300));
-          }
-        }
-      }
-      
-      if (!finalLocation || !finalLocation.start || !finalLocation.start.cfi) {
-        console.error('❌ 현재 CFI를 찾을 수 없습니다 - 이동을 시도하지 않습니다');
-        console.log('🔍 뷰어 상태 디버깅:', {
-          hasRendition: !!rendition,
-          hasCurrentLocation: typeof rendition.currentLocation === 'function',
-          renditionStarted: rendition.started,
-          renditionDisplaying: rendition.displaying,
-          bookSpine: book?.spine ? 'exists' : 'missing'
-        });
-        
-        throw new Error('현재 위치를 확인할 수 없어 페이지 이동을 할 수 없습니다. 뷰어가 완전히 로드될 때까지 기다려주세요.');
-      }
-      
-      // CFI 인지하기
-      let currentCfi = finalLocation.start.cfi;
-      console.log('🎯 현재 CFI 정보:', {
-        cfi: currentCfi,
-        file: finalLocation.start.href,
-        chapter: currentCfi.match(/\[chapter-(\d+)\]/)?.[1] || 'unknown',
-        currentPage: finalLocation.start.displayed?.page || 'unknown',
-        totalPages: finalLocation.start.displayed?.total || 'unknown',
-        location: finalLocation.start.location || 'unknown',
-        percentage: finalLocation.start.percentage || 'unknown',
-        index: finalLocation.start.index || 'unknown'
-      });
-      
-      // CFI가 유효하지 않다면 재계산 시도
-      if (!currentCfi || !currentCfi.includes('epubcfi')) {
-        console.log('⚠️ CFI가 유효하지 않습니다. 재계산 시도...');
-        const recalculatedCfi = await cfiUtils.calculateCurrentCfi(book, rendition);
-        if (recalculatedCfi) {
-          currentCfi = recalculatedCfi;
-          console.log('✅ CFI 재계산 성공:', currentCfi);
-        } else {
-          throw new Error('CFI를 계산할 수 없습니다');
-        }
-      }
-      
-      // 하이브리드 탐색 사용
-      console.log('🚀 하이브리드 탐색 시작:', direction);
-      
-      const navigationResult = await cfiUtils.navigateWithFallback(book, rendition, direction);
-      
-      if (navigationResult.success) {
-        console.log('✅ 하이브리드 탐색 성공:', {
-          method: navigationResult.method,
-          target: navigationResult.target
-        });
-        
-        // 이동 후 위치 확인
-        setTimeout(async () => {
-          const newLocation = rendition.currentLocation();
-          console.log('🔍 이동 후 실제 위치:', newLocation);
-          
-          if (newLocation && newLocation.start && newLocation.start.cfi) {
-            console.log('📍 이동 후 CFI 정보:', {
-              cfi: newLocation.start.cfi,
-              file: newLocation.start.href,
-              page: newLocation.start.displayed?.page || 'unknown'
-            });
-            
-            if (newLocation.start.cfi !== currentCfi) {
-              console.log('✅ CFI 변경 확인: 실제로 이동됨');
-            } else {
-              console.warn('⚠️ CFI 변경 없음: 같은 위치에 머물러 있음');
-            }
-          } else {
-            console.warn('⚠️ 이동 후 위치를 확인할 수 없습니다');
-          }
-        }, 500);
-        
-        return navigationResult;
-      } else {
-        console.error('❌ 하이브리드 탐색 실패:', navigationResult.error);
-        throw new Error(`페이지 이동에 실패했습니다: ${navigationResult.error}`);
-      }
-    }, direction, setIsNavigating, setNavigationError, storageKeys);
-    
-    console.log('✅ handleNavigation 완료:', result);
-    return result;
-    
-  } catch (error) {
-    console.error('❌ handleNavigation 오류:', error);
-    setNavigationError(`페이지 이동 중 오류가 발생했습니다: ${error.message}`);
-  }
-};
-
 
 const EpubViewer = forwardRef(
   (
@@ -290,6 +107,8 @@ const EpubViewer = forwardRef(
     const [isNavigating, setIsNavigating] = useState(false);
     const [navigationError, setNavigationError] = useState(null);
     const lastNavigationTimeRef = useRef(0);
+    const isLoadingRef = useRef(false);
+    const currentPathRef = useRef(null); // 동기적 확인용
 
     // 메모이제이션된 값들
     const { epubPath, storageKeys, pageMode, showGraph } = useMemo(() => {
@@ -383,87 +202,70 @@ const EpubViewer = forwardRef(
       }
     }, [pageMode, showGraph, settings?.fontSize, settings?.lineHeight]);
 
-         useImperativeHandle(ref, () => ({
+  useImperativeHandle(ref, () => ({
       prevPage: async () => {
         const { book, rendition } = getRefs(bookRef, renditionRef);
         
-        console.log('🔄 prevPage 호출:', { 
-          hasBook: !!book, 
-          hasRendition: !!rendition,
-          hasSpine: !!book?.spine,
-          spineLength: book?.spine?.length || 0,
-          renditionStarted: rendition?.started,
-          renditionDisplaying: rendition?.displaying,
-          isNavigating
-        });
+        if (isNavigating || isLoadingRef.current) return;
         
-        // 이미 네비게이션 중이면 무시
-        if (isNavigating) {
-          console.log('ℹ️ 이미 네비게이션 중입니다. 잠시만 기다려주세요.');
-          return;
-        }
-        
-        // 중복 호출 방지를 위한 디바운싱
         const now = Date.now();
         if (lastNavigationTimeRef.current && now - lastNavigationTimeRef.current < 500) {
-          console.log('ℹ️ 네비게이션 디바운싱: 너무 빠른 연속 호출 방지');
           return;
         }
         lastNavigationTimeRef.current = now;
         
-        if (book && rendition) {
-          console.log('🚀 강제 prev() 네비게이션 시도 (상태 무시)');
-          try {
-            await rendition.prev();
-            console.log('✅ 강제 prev() 네비게이션 성공');
-          } catch (error) {
-            console.error('❌ 강제 prev() 네비게이션 실패:', error);
-            setNavigationError('이전 페이지로 이동할 수 없습니다.');
-          }
-        } else {
-          console.warn('⚠️ book 또는 rendition이 없습니다.', { book: !!book, rendition: !!rendition });
+        if (!book || !rendition) {
+          setNavigationError('뷰어가 준비되지 않았습니다.');
+          return;
         }
-      },
+        
+        if (!book.spine || book.spine.length === 0) {
+          setNavigationError('EPUB 로드 중입니다. 잠시만 기다려주세요.');
+          return;
+        }
+      
+      await navigationUtils.safeNavigate(
+        book, 
+        rendition, 
+        async () => await cfiUtils.navigateWithFallback(book, rendition, 'prev'),
+        'prev',
+        setIsNavigating,
+        setNavigationError,
+        storageKeys
+      );
+    },
+    
       nextPage: async () => {
         const { book, rendition } = getRefs(bookRef, renditionRef);
         
-        console.log('🔄 nextPage 호출:', { 
-          hasBook: !!book, 
-          hasRendition: !!rendition,
-          hasSpine: !!book?.spine,
-          spineLength: book?.spine?.length || 0,
-          renditionStarted: rendition?.started,
-          renditionDisplaying: rendition?.displaying,
-          isNavigating
-        });
+        if (isNavigating || isLoadingRef.current) return;
         
-        // 이미 네비게이션 중이면 무시
-        if (isNavigating) {
-          console.log('ℹ️ 이미 네비게이션 중입니다. 잠시만 기다려주세요.');
-          return;
-        }
-        
-        // 중복 호출 방지를 위한 디바운싱
         const now = Date.now();
         if (lastNavigationTimeRef.current && now - lastNavigationTimeRef.current < 500) {
-          console.log('ℹ️ 네비게이션 디바운싱: 너무 빠른 연속 호출 방지');
           return;
         }
         lastNavigationTimeRef.current = now;
         
-        if (book && rendition) {
-          console.log('🚀 강제 next() 네비게이션 시도 (상태 무시)');
-          try {
-            await rendition.next();
-            console.log('✅ 강제 next() 네비게이션 성공');
-          } catch (error) {
-            console.error('❌ 강제 next() 네비게이션 실패:', error);
-            setNavigationError('다음 페이지로 이동할 수 없습니다.');
-          }
-        } else {
-          console.warn('⚠️ book 또는 rendition이 없습니다.', { book: !!book, rendition: !!rendition });
+        if (!book || !rendition) {
+          setNavigationError('뷰어가 준비되지 않았습니다.');
+          return;
         }
-      },
+        
+        if (!book.spine || book.spine.length === 0) {
+          setNavigationError('EPUB 로드 중입니다. 잠시만 기다려주세요.');
+          return;
+        }
+      
+      await navigationUtils.safeNavigate(
+        book, 
+        rendition, 
+        async () => await cfiUtils.navigateWithFallback(book, rendition, 'next'),
+        'next',
+        setIsNavigating,
+        setNavigationError,
+        storageKeys
+      );
+    },
        getCurrentCfi: async () => {
          const rendition = renditionRef.current;
          if (!rendition) {
@@ -567,29 +369,91 @@ const EpubViewer = forwardRef(
       },
       isNavigating,
       setIsNavigating,
-    }), [isNavigating, pageMode, showGraph, storageKeys]);
+    }), [isNavigating, pageMode, showGraph, storageKeys, loading]);
 
     useEffect(() => {
       const loadBook = async () => {
-        if (!epubPath || !viewerRef.current || !viewerRef.current.tagName || epubPath === currentPath) return;
+        if (!epubPath || epubPath === currentPathRef.current) {
+          return;
+        }
+
+        if (isLoadingRef.current) {
+          return;
+        }
+        isLoadingRef.current = true;
+        currentPathRef.current = epubPath;
+        setCurrentPath(epubPath);
+        
+        if (!viewerRef.current || !viewerRef.current.tagName) {
+          await new Promise(resolve => setTimeout(resolve, 50));
+          
+          if (!viewerRef.current || !viewerRef.current.tagName) {
+            isLoadingRef.current = false;
+            currentPathRef.current = null;
+            setCurrentPath(null);
+            return;
+          }
+        }
 
         setLoading(true);
         setError(null);
 
-        if (bookRef.current) bookRef.current.destroy();
+        if (renditionRef.current) {
+          try {
+            renditionRef.current.destroy();
+            renditionRef.current = null;
+          } catch (e) {
+            // ignore
+          }
+        }
+        
+        if (bookRef.current) {
+          try {
+            bookRef.current.destroy();
+            bookRef.current = null;
+          } catch (e) {
+            // ignore
+          }
+        }
+        
         if (viewerRef.current && viewerRef.current.tagName) {
-          viewerRef.current.innerHTML = '';
+          try {
+            viewerRef.current.innerHTML = '';
+          } catch (e) {
+            // ignore
+          }
         }
 
         try {
           const response = await fetch(epubPath);
           if (!response.ok) throw new Error("EPUB fetch 실패");
 
-              const blob = await response.blob();
+          const blob = await response.blob();
           const bookInstance = ePub(blob);
-              await bookInstance.ready;
+          
+          // EPUB 완전히 로드 (spine 포함)
+          // 최초 로드 시 spine을 완전히 준비하면 이후 페이지 이동 시 대기 불필요
+          await bookInstance.ready;
+          
+          if (bookInstance.opened && typeof bookInstance.opened.then === 'function') {
+            await bookInstance.opened;
+          }
+          
+          // spine이 준비될 때까지 대기 (최대 4초)
+          let spineAttempts = 0;
+          while ((!bookInstance.spine || bookInstance.spine.length === 0) && spineAttempts < 20) {
+            await new Promise(resolve => setTimeout(resolve, 200));
+            spineAttempts++;
+          }
+          
+          if (!bookInstance.spine || bookInstance.spine.length === 0) {
+            throw new Error("Spine 로드 실패");
+          }
+          
+          // spine 로드 완료 즉시 bookRef에 할당 (페이지 이동 함수에서 즉시 사용 가능)
+          bookRef.current = bookInstance;
+          
           await bookInstance.locations.generate(1800);
-          // 로깅 제거 - 너무 많이 출력됨
           onTotalPagesChange?.(bookInstance.locations.total);
 
           // TOC 정보 로드 및 챕터별 텍스트 저장
@@ -638,13 +502,7 @@ const EpubViewer = forwardRef(
             })
           );
           
-          // 챕터 CFI 매핑을 ref로 저장
           chapterCfiMapRef.current = newChapterCfiMap;
-
-          // viewerRef.current가 유효한 DOM 요소인지 확인
-          if (!viewerRef.current || !viewerRef.current.tagName) {
-            throw new Error("뷰어 컨테이너가 유효하지 않습니다.");
-          }
 
           const rendition = bookInstance.renderTo(viewerRef.current, {
             width: '100%',
@@ -654,6 +512,8 @@ const EpubViewer = forwardRef(
             flow: 'paginated',
             maxSpreadPages: (showGraph || pageMode === 'single') ? 1 : 2,
           });
+          
+          renditionRef.current = rendition;
 
           // 페이지 모드에 맞는 CSS 적용
           rendition.themes.default({
@@ -838,46 +698,53 @@ const EpubViewer = forwardRef(
             setTimeout(() => rendition.prev(), 200);
           }
 
-          bookRef.current = bookInstance;
-          renditionRef.current = rendition;
-          setCurrentPath(epubPath);
-          
           // 설정 적용
           if (settings) {
             settingsUtils.applyEpubSettings(rendition, settings, getSpreadMode(pageMode, showGraph));
           }
         } catch (e) {
           setError("EPUB 로드 오류");
+          currentPathRef.current = null;
+          setCurrentPath(null);
         } finally {
+          isLoadingRef.current = false;
           setLoading(false);
         }
       };
 
       loadBook();
       return () => {
-        // 타이머 정리
         if (updatePageCharCountTimer.current) {
           clearTimeout(updatePageCharCountTimer.current);
         }
-        // Book destroy가 모든 이벤트 리스너를 자동으로 정리함
+        clearCache('eventsCache');
+      };
+    }, [epubPath]);
+
+    useEffect(() => {
+      return () => {
+        if (renditionRef.current) {
+          try {
+            renditionRef.current.destroy();
+            renditionRef.current = null;
+          } catch (e) {
+            // ignore
+          }
+        }
+        
         if (bookRef.current) {
           try {
             bookRef.current.destroy();
+            bookRef.current = null;
           } catch (e) {
-            // destroy 중 에러 무시
+            // ignore
           }
         }
-        // 캐시 정리
-        clearCache('eventsCache');
+        
+        isLoadingRef.current = false;
+        setCurrentPath(null);
       };
-    }, [
-      epubPath, 
-      currentPath, 
-      showGraph, 
-      pageMode, 
-      storageKeys, 
-      settings
-    ]);
+    }, []);
 
     // 설정이 변경될 때마다 적용
     useEffect(() => {
@@ -1031,19 +898,25 @@ const EpubViewer = forwardRef(
       </div>
     );
 
-    // 네비게이션 오류 메시지 컴포넌트  
-    const NavigationError = ({ message }) => (
-      <div className="fixed top-4 left-1/2 transform -translate-x-1/2 z-50 animate-fade-in">
-        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-2 rounded-lg shadow-lg font-medium">
-          {message}
-        </div>
-      </div>
-    );
+    // 네비게이션 에러 toast 표시
+    useEffect(() => {
+      if (navigationError) {
+        toast.error(navigationError, {
+          position: 'top-center',
+          autoClose: 3000,
+          hideProgressBar: false,
+          closeOnClick: true,
+          pauseOnHover: true,
+        });
+        const timer = setTimeout(() => {
+          setNavigationError(null);
+        }, 3000);
+        return () => clearTimeout(timer);
+      }
+    }, [navigationError]);
 
     return (
       <div className="w-full h-full relative flex items-center justify-center">
-        {/* 네비게이션 오류 메시지 */}
-        {navigationError && <NavigationError message={navigationError} />}
         
         {/* 로딩 및 오류 상태 */}
         {!reloading && loading && <LoadingComponent message="책을 불러오는 중..." />}

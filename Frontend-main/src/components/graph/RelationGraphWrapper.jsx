@@ -23,6 +23,28 @@ import { useChapterPovSummaries } from '../../hooks/useChapterPovSummaries';
 // 노드 크기는 가중치 기반으로만 계산됨
 const getEdgeStyleForGraph = () => getEdgeStyle('graph');
 
+// 로그 유틸리티 함수들 (프로덕션에서는 비활성화)
+const logApiCall = (type, data) => {
+  // console.log(`🔍 ${type} API 호출 시작:`, data);
+};
+
+const logApiResponse = (type, data) => {
+  // console.log(`✅ ${type} API 응답:`, data);
+};
+
+const logApiError = (type, error, data) => {
+  // console.error(`❌ ${type} API 호출 실패:`, {
+  //   error: error.message,
+  //   status: error.status,
+  //   ...data,
+  //   timestamp: new Date().toISOString()
+  // });
+};
+
+const logApiFallback = (type) => {
+  // console.log(`🔄 ${type} API 호출 실패, 로컬 데이터 사용으로 전환`);
+};
+
 function RelationGraphWrapper() {
   const navigate = useNavigate();
   const { filename } = useParams();
@@ -48,6 +70,7 @@ function RelationGraphWrapper() {
   const [apiMacroData, setApiMacroData] = useState(null);
   const [apiFineData, setApiFineData] = useState(null);
   const [apiFineLoading, setApiFineLoading] = useState(false);
+  const [apiError, setApiError] = useState(null);
   
   // 거시 그래프에서 관점 요약 가져오기 (1장 기준)
   const { povSummaries, loading: povLoading, error: povError } = useChapterPovSummaries(
@@ -79,31 +102,31 @@ function RelationGraphWrapper() {
       
       // 이미 로딩 중이면 중복 호출 방지
       if (isMacroGraphLoadingRef.current) {
-        console.log('⚠️ 거시 그래프 API 호출 중복 방지:', {
-          targetBookId,
-          isLoading: isMacroGraphLoadingRef.current,
-          timestamp: new Date().toISOString()
-        });
         return;
       }
       
       isMacroGraphLoadingRef.current = true;
       setApiFineLoading(true);
+      setApiError(null); // 에러 상태 초기화
+      
+      // 최소 로딩 시간을 보장하기 위한 지연
+      const minLoadingTime = 6000; // 6초로 증가 (진득하게 기다리기)
+      const startTime = Date.now();
+      
       try {
-        // 거시 그래프는 맨 마지막 챕터의 데이터만 가져옴
-        // 임시로 1을 사용 (실제로는 책의 최대 챕터 번호를 가져와야 함)
-        console.log('🔍 거시 그래프 API 호출 시작:', {
+        // 거시 그래프는 현재 챕터까지의 누적 데이터를 가져옴
+        logApiCall('거시 그래프', {
           targetBookId,
-          uptoChapter: 1,
+          uptoChapter: currentChapter,
           timestamp: new Date().toISOString()
         });
         
         const macroData = await getMacroGraph({
           bookId: targetBookId,
-          uptoChapter: 1
+          uptoChapter: currentChapter
         });
         
-        console.log('✅ 거시 그래프 API 응답:', {
+        logApiResponse('거시 그래프', {
           isSuccess: macroData?.isSuccess,
           hasResult: !!macroData?.result,
           resultKeys: macroData?.result ? Object.keys(macroData.result) : [],
@@ -111,30 +134,42 @@ function RelationGraphWrapper() {
           relationsCount: macroData?.result?.relations?.length || 0
         });
         
-        setApiMacroData(macroData.result);
-        setApiFineData(macroData.result);
+        // API 응답이 성공적이고 데이터가 있는 경우에만 설정
+        if (macroData?.isSuccess && macroData?.result) {
+          setApiMacroData(macroData.result);
+          setApiFineData(macroData.result);
+          setApiError(null); // 성공 시 에러 상태 초기화
+        } else {
+          // API 응답은 성공했지만 데이터가 없는 경우
+          setApiMacroData(null);
+          setApiFineData(null);
+          setApiError('API에서 데이터를 찾을 수 없습니다.');
+        }
         
       } catch (error) {
-        console.error('❌ 거시 그래프 API 호출 실패:', {
-          error: error.message,
-          status: error.status,
+        logApiError('거시 그래프', error, {
           targetBookId,
-          uptoChapter: 1,
-          timestamp: new Date().toISOString()
+          uptoChapter: currentChapter
         });
         
         // API 호출 실패 시 로컬 데이터 사용으로 폴백
-        console.log('🔄 API 호출 실패, 로컬 데이터 사용으로 전환');
+        logApiFallback('거시 그래프');
         setApiMacroData(null);
         setApiFineData(null);
+        setApiError(`API 호출 실패: ${error.message}`);
       } finally {
-        isMacroGraphLoadingRef.current = false;
-        setApiFineLoading(false);
+        const elapsedTime = Date.now() - startTime;
+        const remainingTime = Math.max(0, minLoadingTime - elapsedTime);
+        
+        setTimeout(() => {
+          isMacroGraphLoadingRef.current = false;
+          setApiFineLoading(false);
+        }, remainingTime);
       }
     };
 
     loadMacroGraphData();
-  }, [bookId, book?.id]);
+  }, [bookId, book?.id, currentChapter]);
 
   // 챕터 변경 시 API 데이터 로딩
   useEffect(() => {
@@ -146,8 +181,14 @@ function RelationGraphWrapper() {
       if (!targetBookId) return;
       
       setApiFineLoading(true);
+      setApiError(null); // 에러 상태 초기화
+      
+      // 최소 로딩 시간을 보장하기 위한 지연
+      const minLoadingTime = 6000; // 6초로 증가 (진득하게 기다리기)
+      const startTime = Date.now();
+      
       try {
-        console.log('🔍 챕터 그래프 API 호출 시작:', {
+        logApiCall('챕터 그래프', {
           targetBookId,
           chapterIdx: currentChapter,
           timestamp: new Date().toISOString()
@@ -159,7 +200,7 @@ function RelationGraphWrapper() {
           uptoChapter: currentChapter
         });
         
-        console.log('✅ 챕터 그래프 API 응답:', {
+        logApiResponse('챕터 그래프', {
           isSuccess: chapterData?.isSuccess,
           hasResult: !!chapterData?.result,
           resultKeys: chapterData?.result ? Object.keys(chapterData.result) : [],
@@ -167,22 +208,33 @@ function RelationGraphWrapper() {
           relationsCount: chapterData?.result?.relations?.length || 0
         });
         
-        setApiFineData(chapterData.result);
+        // API 응답이 성공적이고 데이터가 있는 경우에만 설정
+        if (chapterData?.isSuccess && chapterData?.result) {
+          setApiFineData(chapterData.result);
+          setApiError(null); // 성공 시 에러 상태 초기화
+        } else {
+          // API 응답은 성공했지만 데이터가 없는 경우
+          setApiFineData(null);
+          setApiError('API에서 데이터를 찾을 수 없습니다.');
+        }
         
       } catch (error) {
-        console.error('❌ 챕터 그래프 API 호출 실패:', {
-          error: error.message,
-          status: error.status,
+        logApiError('챕터 그래프', error, {
           targetBookId,
-          chapterIdx: currentChapter,
-          timestamp: new Date().toISOString()
+          chapterIdx: currentChapter
         });
         
         // API 호출 실패 시 로컬 데이터 사용으로 폴백
-        console.log('🔄 챕터 그래프 API 호출 실패, 로컬 데이터 사용으로 전환');
+        logApiFallback('챕터 그래프');
         setApiFineData(null);
+        setApiError(`API 호출 실패: ${error.message}`);
       } finally {
-        setApiFineLoading(false);
+        const elapsedTime = Date.now() - startTime;
+        const remainingTime = Math.max(0, minLoadingTime - elapsedTime);
+        
+        setTimeout(() => {
+          setApiFineLoading(false);
+        }, remainingTime);
       }
     };
 
@@ -198,7 +250,8 @@ function RelationGraphWrapper() {
     eventNum,
     maxChapter,
     loading,
-    error
+    error,
+    isDataEmpty
   } = useGraphDataLoader(isApiBook ? null : filename, currentChapter);
 
   // currentChapter가 maxChapter를 초과하지 않도록 검증
@@ -573,8 +626,11 @@ function RelationGraphWrapper() {
     [maxChapter]
   );
 
-  // 로딩 상태 렌더링 (API 호출 중이거나 로컬 데이터 로딩 중)
-  if ((isApiBook && apiFineLoading) || (!isApiBook && isGraphLoading)) {
+  // 로딩 상태 렌더링 (정보를 가져오는 계산 중)
+  const isLoading = (isApiBook && apiFineLoading) || (!isApiBook && loading);
+  
+  // 로딩 중에는 에러 표시하지 않음
+  if (isLoading) {
     return (
       <div style={{
         display: 'flex',
@@ -609,89 +665,52 @@ function RelationGraphWrapper() {
           fontSize: '14px',
           lineHeight: '1.5'
         }}>
-          관계 데이터를 분석하고 있습니다.
+          {isApiBook 
+            ? 'API에서 관계 데이터를 가져오고 있습니다. 잠시만 기다려주세요...'
+            : '로컬 파일에서 관계 데이터를 분석하고 있습니다. 잠시만 기다려주세요...'
+          }
         </p>
+        <div style={{
+          fontSize: '12px',
+          color: COLORS.textSecondary,
+          marginTop: '8px',
+          fontStyle: 'italic'
+        }}>
+          데이터 처리에 시간이 걸릴 수 있습니다. (최대 6초 소요)
+        </div>
+        <div style={{
+          width: '200px',
+          height: '4px',
+          backgroundColor: COLORS.backgroundLight,
+          borderRadius: '2px',
+          marginTop: '16px',
+          overflow: 'hidden'
+        }}>
+          <div style={{
+            width: '100%',
+            height: '100%',
+            backgroundColor: COLORS.primary,
+            borderRadius: '2px',
+            animation: 'loadingProgress 2s ease-in-out infinite'
+          }} />
+        </div>
       </div>
     );
   }
 
-  // 데이터 없음 상태 렌더링
-  if (!elements || elements.length === 0) {
-    return (
-      <div style={{
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'center',
-        height: '100vh',
-        width: '100vw',
-        backgroundColor: COLORS.backgroundLighter,
-        padding: '20px',
-        textAlign: 'center'
-      }}>
-        <h2 style={{
-          color: COLORS.textPrimary,
-          marginBottom: '16px',
-          fontSize: '24px',
-          fontWeight: '600'
-        }}>
-          {isApiBook ? 'API 데이터를 찾을 수 없습니다' : '데이터가 없습니다'}
-        </h2>
-        <div style={{
-          fontSize: '16px',
-          color: COLORS.textSecondary,
-          marginBottom: '24px',
-          lineHeight: '1.5',
-          maxWidth: '500px'
-        }}>
-          {isApiBook 
-            ? `API에서 bookId ${bookId}의 ${currentChapter}장까지의 관계 데이터를 찾을 수 없습니다.`
-            : `이 챕터에는 표시할 관계 데이터가 없습니다.`
-          }
-        </div>
-        <div style={{
-          display: 'flex',
-          gap: '12px',
-          flexWrap: 'wrap',
-          justifyContent: 'center'
-        }}>
-          <button
-            onClick={() => window.location.reload()}
-            style={{
-              padding: '12px 24px',
-              backgroundColor: COLORS.primary,
-              color: 'white',
-              border: 'none',
-              borderRadius: '8px',
-              cursor: 'pointer',
-              fontSize: '14px',
-              fontWeight: '500'
-            }}
-          >
-            새로고침
-          </button>
-          <button
-            onClick={() => navigate('/user/mypage')}
-            style={{
-              padding: '12px 24px',
-              backgroundColor: COLORS.backgroundLight,
-              color: COLORS.textPrimary,
-              border: `1px solid ${COLORS.border}`,
-              borderRadius: '8px',
-              cursor: 'pointer',
-              fontSize: '14px',
-              fontWeight: '500'
-            }}
-          >
-            마이페이지로 돌아가기
-          </button>
-        </div>
-      </div>
-    );
-  }
+  // 에러 처리를 완전히 제거하고 로딩 완료 후 바로 데이터 표시
 
   return (
     <div style={{ width: '100vw', height: '100vh', background: COLORS.backgroundLighter, overflow: 'hidden' }}>
+      <style>
+        {`
+          @keyframes loadingProgress {
+            0% { transform: translateX(-100%); }
+            50% { transform: translateX(0%); }
+            100% { transform: translateX(100%); }
+          }
+        `}
+      </style>
       {/* 상단 컨트롤 바 - 기존 topBarStyles 활용 */}
       <div style={{ 
         ...topBarStyles.container, 

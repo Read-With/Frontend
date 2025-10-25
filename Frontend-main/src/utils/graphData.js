@@ -20,8 +20,6 @@ const dataModules = {
 
 // characterUtils.js에서 함수 import
 import { createCharacterMaps, safeId } from './characterUtils';
-// graphDataUtils.js에서 함수 import
-import { getElementsFromRelations } from './graphDataUtils';
 
 const relationshipIndex = new Map();
 const chapterMaxEventIndex = new Map();
@@ -480,8 +478,6 @@ export function findCharacterById(folderKey, characterId, preferredChapter = nul
   return latestEntry.character;
 }
 
-// getElementsFromRelations 함수를 graphDataUtils.js에서 re-export
-export { getElementsFromRelations };
 
 
 

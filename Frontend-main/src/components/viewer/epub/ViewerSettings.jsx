@@ -119,13 +119,13 @@ const ViewerSettings = ({ isOpen, onClose, onApplySettings, currentSettings }) =
         }}
       >
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-          <h2 style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#2E7D32' }}>뷰어 설정</h2>
+          <h2 style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#5C6F5C' }}>뷰어 설정</h2>
           <button 
             onClick={onClose}
             style={{
               backgroundColor: 'white',
-              color: '#2E7D32',
-              border: '1px solid #4CAF50',
+              color: '#5C6F5C',
+              border: '1px solid #5C6F5C',
               padding: '8px 12px',
               borderRadius: '8px',
               cursor: 'pointer',
@@ -143,7 +143,7 @@ const ViewerSettings = ({ isOpen, onClose, onApplySettings, currentSettings }) =
         
         {/* 화면 모드 설정 */}
         <div style={{ marginBottom: '24px' }}>
-          <h3 style={{ fontSize: '1.1rem', fontWeight: 'bold', color: '#2E7D32', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <h3 style={{ fontSize: '1.1rem', fontWeight: 'bold', color: '#5C6F5C', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
             <span className="material-symbols-outlined">visibility</span> 화면 모드
           </h3>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
@@ -157,9 +157,9 @@ const ViewerSettings = ({ isOpen, onClose, onApplySettings, currentSettings }) =
                 }));
               }}
               style={{
-                backgroundColor: settings.pageMode === 'single' && settings.showGraph ? '#4CAF50' : 'white',
-                color: settings.pageMode === 'single' && settings.showGraph ? 'white' : '#2E7D32',
-                border: '1px solid #4CAF50',
+                backgroundColor: settings.pageMode === 'single' && settings.showGraph ? '#5C6F5C' : 'white',
+                color: settings.pageMode === 'single' && settings.showGraph ? 'white' : '#5C6F5C',
+                border: '1px solid #5C6F5C',
                 display: 'flex',
                 alignItems: 'center',
                 gap: '8px',
@@ -188,9 +188,9 @@ const ViewerSettings = ({ isOpen, onClose, onApplySettings, currentSettings }) =
                 }));
               }}
               style={{
-                backgroundColor: settings.pageMode === 'single' && !settings.showGraph ? '#4CAF50' : 'white',
-                color: settings.pageMode === 'single' && !settings.showGraph ? 'white' : '#2E7D32',
-                border: '1px solid #4CAF50',
+                backgroundColor: settings.pageMode === 'single' && !settings.showGraph ? '#5C6F5C' : 'white',
+                color: settings.pageMode === 'single' && !settings.showGraph ? 'white' : '#5C6F5C',
+                border: '1px solid #5C6F5C',
                 display: 'flex',
                 alignItems: 'center',
                 gap: '8px',
@@ -219,9 +219,9 @@ const ViewerSettings = ({ isOpen, onClose, onApplySettings, currentSettings }) =
                 }));
               }}
               style={{
-                backgroundColor: settings.pageMode === 'double' && !settings.showGraph ? '#4CAF50' : 'white',
-                color: settings.pageMode === 'double' && !settings.showGraph ? 'white' : '#2E7D32',
-                border: '1px solid #4CAF50',
+                backgroundColor: settings.pageMode === 'double' && !settings.showGraph ? '#5C6F5C' : 'white',
+                color: settings.pageMode === 'double' && !settings.showGraph ? 'white' : '#5C6F5C',
+                border: '1px solid #5C6F5C',
                 display: 'flex',
                 alignItems: 'center',
                 gap: '8px',
@@ -244,7 +244,7 @@ const ViewerSettings = ({ isOpen, onClose, onApplySettings, currentSettings }) =
         
         {/* 글꼴 크기 설정 */}
         <div style={{ marginBottom: '24px' }}>
-          <h3 style={{ fontSize: '1.1rem', fontWeight: 'bold', color: '#2E7D32', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <h3 style={{ fontSize: '1.1rem', fontWeight: 'bold', color: '#5C6F5C', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
             <span className="material-symbols-outlined">format_size</span> 글꼴 크기
           </h3>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
@@ -253,8 +253,8 @@ const ViewerSettings = ({ isOpen, onClose, onApplySettings, currentSettings }) =
               style={{
                 padding: '8px 12px',
                 backgroundColor: 'white',
-                color: '#2E7D32',
-                border: '1px solid #4CAF50',
+                color: '#5C6F5C',
+                border: '1px solid #5C6F5C',
                 fontWeight: 'bold',
                 borderRadius: '8px',
                 cursor: 'pointer',
@@ -281,8 +281,8 @@ const ViewerSettings = ({ isOpen, onClose, onApplySettings, currentSettings }) =
               style={{
                 padding: '8px 12px',
                 backgroundColor: 'white',
-                color: '#2E7D32',
-                border: '1px solid #4CAF50',
+                color: '#5C6F5C',
+                border: '1px solid #5C6F5C',
                 fontWeight: 'bold',
                 borderRadius: '8px',
                 cursor: 'pointer',
@@ -300,7 +300,7 @@ const ViewerSettings = ({ isOpen, onClose, onApplySettings, currentSettings }) =
         
         {/* 줄 간격 설정 */}
         <div style={{ marginBottom: '24px' }}>
-          <h3 style={{ fontSize: '1.1rem', fontWeight: 'bold', color: '#2E7D32', marginBottom: '12px' }}>
+          <h3 style={{ fontSize: '1.1rem', fontWeight: 'bold', color: '#5C6F5C', marginBottom: '12px' }}>
             줄 간격
           </h3>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
@@ -309,8 +309,8 @@ const ViewerSettings = ({ isOpen, onClose, onApplySettings, currentSettings }) =
               style={{
                 padding: '8px 12px',
                 backgroundColor: 'white',
-                color: '#2E7D32',
-                border: '1px solid #4CAF50',
+                color: '#5C6F5C',
+                border: '1px solid #5C6F5C',
                 fontWeight: 'bold',
                 borderRadius: '8px',
                 cursor: 'pointer',
@@ -337,8 +337,8 @@ const ViewerSettings = ({ isOpen, onClose, onApplySettings, currentSettings }) =
               style={{
                 padding: '8px 12px',
                 backgroundColor: 'white',
-                color: '#2E7D32',
-                border: '1px solid #4CAF50',
+                color: '#5C6F5C',
+                border: '1px solid #5C6F5C',
                 fontWeight: 'bold',
                 borderRadius: '8px',
                 cursor: 'pointer',
@@ -360,8 +360,8 @@ const ViewerSettings = ({ isOpen, onClose, onApplySettings, currentSettings }) =
             onClick={handleReset}
             style={{
               backgroundColor: 'white',
-              color: '#2E7D32',
-              border: '1px solid #4CAF50',
+              color: '#5C6F5C',
+              border: '1px solid #5C6F5C',
               padding: '10px 20px',
               borderRadius: '8px',
               cursor: 'pointer',
@@ -375,7 +375,7 @@ const ViewerSettings = ({ isOpen, onClose, onApplySettings, currentSettings }) =
           <button
             onClick={handleApply}
             style={{
-              backgroundColor: '#4CAF50',
+              backgroundColor: '#5C6F5C',
               color: 'white',
               border: 'none',
               padding: '10px 20px',
@@ -384,8 +384,8 @@ const ViewerSettings = ({ isOpen, onClose, onApplySettings, currentSettings }) =
               fontWeight: 'bold',
               transition: 'all 0.2s ease'
             }}
-            onMouseOver={(e) => e.target.style.backgroundColor = '#45a049'}
-            onMouseOut={(e) => e.target.style.backgroundColor = '#4CAF50'}
+            onMouseOver={(e) => e.target.style.backgroundColor = '#4A5A4A'}
+            onMouseOut={(e) => e.target.style.backgroundColor = '#5C6F5C'}
           >
             적용
           </button>

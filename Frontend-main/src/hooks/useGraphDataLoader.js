@@ -20,6 +20,7 @@ export function useGraphDataLoader(filename, chapter, eventIndex = null) {
   const [maxChapter, setMaxChapter] = useState(1);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [isDataEmpty, setIsDataEmpty] = useState(false);
   const chapterElementsRef = useRef(new Map());
   const currentFilenameRef = useRef(null);
 
@@ -30,6 +31,7 @@ export function useGraphDataLoader(filename, chapter, eventIndex = null) {
     setMaxEventNum(0);
     setEventNum(0);
     setError(null);
+    setIsDataEmpty(false);
     chapterElementsRef.current.clear();
   }, []);
 
@@ -64,6 +66,7 @@ export function useGraphDataLoader(filename, chapter, eventIndex = null) {
       
       if (!charData) {
         setError('캐릭터 데이터를 찾을 수 없습니다.');
+        setIsDataEmpty(true);
         return Promise.resolve();
       }
       
@@ -155,26 +158,39 @@ export function useGraphDataLoader(filename, chapter, eventIndex = null) {
       setMaxEventNum(targetEventIndex);
       setEventNum(targetEventIndex);
       setError(null);
+      setIsDataEmpty(uniqueElements.length === 0);
       
     } catch (err) {
       setError('데이터 처리 중 오류 발생: ' + err.message);
+      setIsDataEmpty(false);
     }
   }, []);
 
   useEffect(() => {
     if (!filename || !chapter) {
       setLoading(false);
+      setIsDataEmpty(true);
       return;
     }
 
     setError(null);
+    setIsDataEmpty(false);
     setLoading(true); // 로딩 시작
 
     const folderKey = getFolderKeyFromFilename(filename);
     const targetEventIndex = eventIndex || getLastEventIndexForChapter(folderKey, chapter);
     
+    // 최소 로딩 시간을 보장하기 위한 지연
+    const minLoadingTime = 6000; // 6초로 증가 (진득하게 기다리기)
+    const startTime = Date.now();
+    
     loadData(folderKey, chapter, targetEventIndex).finally(() => {
-      setLoading(false); // 로딩 완료
+      const elapsedTime = Date.now() - startTime;
+      const remainingTime = Math.max(0, minLoadingTime - elapsedTime);
+      
+      setTimeout(() => {
+        setLoading(false); // 로딩 완료
+      }, remainingTime);
     });
   }, [filename, chapter, eventIndex, loadData]);
 
@@ -187,6 +203,7 @@ export function useGraphDataLoader(filename, chapter, eventIndex = null) {
     eventNum,
     maxChapter,
     loading,
-    error
+    error,
+    isDataEmpty
   };
 }

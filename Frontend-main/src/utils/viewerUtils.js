@@ -482,12 +482,8 @@ export const cfiUtils = {
     return offsetMatch ? parseInt(offsetMatch[2]) : null;
   },
   
-  // 현재 위치의 CFI를 강제로 재계산
   async calculateCurrentCfi(book, rendition) {
     try {
-      console.log('🔄 CFI 재계산 시작');
-      
-      // 여러 방법으로 CFI 계산 시도
       let currentCfi = null;
       let retryCount = 0;
       const maxRetries = 3;
@@ -495,23 +491,18 @@ export const cfiUtils = {
       while (retryCount < maxRetries && !currentCfi) {
         try {
           const currentLocation = rendition.currentLocation();
-          console.log(`📍 CFI 계산 시도 (${retryCount + 1}/${maxRetries}):`, currentLocation);
           
           if (currentLocation && currentLocation.start && currentLocation.start.cfi) {
             currentCfi = currentLocation.start.cfi;
-            console.log('✅ CFI 발견:', currentCfi);
             break;
           }
           
-          // CFI가 없다면 잠시 대기 후 재시도
           if (retryCount < maxRetries - 1) {
-            console.log(`⏳ CFI 대기 중... (${retryCount + 1}/${maxRetries})`);
             await new Promise(resolve => setTimeout(resolve, 300));
           }
           
           retryCount++;
         } catch (error) {
-          console.error(`❌ CFI 계산 시도 ${retryCount + 1} 실패:`, error);
           retryCount++;
           if (retryCount < maxRetries) {
             await new Promise(resolve => setTimeout(resolve, 300));
@@ -519,14 +510,8 @@ export const cfiUtils = {
         }
       }
       
-      if (!currentCfi) {
-        console.warn('⚠️ CFI 계산 실패 - 모든 시도 후에도 CFI를 찾을 수 없습니다');
-        return null;
-      }
-      
       return currentCfi;
     } catch (error) {
-      console.error('❌ CFI 계산 중 오류:', error);
       return null;
     }
   },
@@ -989,141 +974,84 @@ export const cfiUtils = {
     }
   },
   
-  // 개선된 하이브리드 탐색 (다층적 fallback 체인)
   async navigateWithFallback(book, rendition, direction) {
-    console.log('🚀 navigateWithFallback 시작 (개선된 하이브리드)', { direction });
-    
     try {
-      // 뷰어 로드 상태 확인
-      console.log('🔍 뷰어 로드 상태 확인:', {
-        hasBook: !!book,
-        hasSpine: !!book?.spine,
-        hasRendition: !!rendition,
-        renditionStarted: rendition?.started,
-        renditionDisplaying: rendition?.displaying,
-        spineLength: book?.spine?.length || 0
-      });
-      
-      // 뷰어가 완전히 로드되지 않은 경우 대기
-      if (!book?.spine || !rendition?.started || rendition?.displaying === undefined) {
-        console.warn('⚠️ 뷰어가 아직 완전히 로드되지 않았습니다. 대기 중...', {
-          hasSpine: !!book?.spine,
-          renditionStarted: rendition?.started,
-          renditionDisplaying: rendition?.displaying,
-          spineLength: book?.spine?.length || 0
-        });
-        
-        // 최대 5초 대기 (더 긴 대기 시간)
-        let retryCount = 0;
-        const maxRetries = 15; // 15회 × 300ms = 4.5초
-        
-        while (retryCount < maxRetries) {
-          await new Promise(resolve => setTimeout(resolve, 300));
-          
-          // 더 엄격한 조건 확인
-          const isFullyLoaded = book?.spine && 
-                               rendition?.started && 
-                               rendition?.displaying !== undefined &&
-                               book?.spine?.length > 0;
-          
-          if (isFullyLoaded) {
-            console.log('✅ 뷰어 완전 로드 확인:', {
-              hasSpine: !!book?.spine,
-              spineLength: book?.spine?.length,
-              renditionStarted: rendition?.started,
-              renditionDisplaying: rendition?.displaying
-            });
-            break;
-          }
-          
-          retryCount++;
-          console.log(`⏳ 뷰어 로드 대기 중... (${retryCount}/${maxRetries})`, {
-            hasSpine: !!book?.spine,
-            spineLength: book?.spine?.length || 0,
-            renditionStarted: rendition?.started,
-            renditionDisplaying: rendition?.displaying
-          });
-        }
-        
-        // 여전히 로드되지 않은 경우 기본 메서드 사용
-        const isStillNotLoaded = !book?.spine || !rendition?.started || rendition?.displaying === undefined;
-        if (isStillNotLoaded) {
-          console.warn('⚠️ 뷰어 로드 대기 시간 초과, 기본 메서드 사용', {
-            hasSpine: !!book?.spine,
-            spineLength: book?.spine?.length || 0,
-            renditionStarted: rendition?.started,
-            renditionDisplaying: rendition?.displaying
-          });
-          
-          try {
-            const basicMethod = direction === 'next' ? rendition.next() : rendition.prev();
-            await basicMethod;
-            return { success: true, method: 'basic_fallback', target: direction };
-          } catch (basicError) {
-            console.error('❌ 기본 메서드도 실패:', basicError);
-            return { success: false, error: `뷰어 로드 실패: ${basicError.message}` };
-          }
-        }
+      if (!book || !rendition) {
+        return { success: false, error: 'Book 또는 Rendition 없음' };
       }
       
-      // 1차: CFI 기반 정확한 이동
-      console.log('📍 1차: CFI 기반 이동 시도');
-      const currentLocation = rendition.currentLocation();
-      const currentCfi = currentLocation?.start?.cfi;
+      if (!book.spine || book.spine.length === 0) {
+        return { 
+          success: false, 
+          error: '뷰어가 완전히 로드되지 않았습니다. 새로고침해주세요.' 
+        };
+      }
+      let beforeLocation = null;
+      let beforeCfi = null;
       
-      if (currentCfi) {
-        let targetCfi;
-        if (direction === 'next') {
-          targetCfi = await this.getNextCfi(book, rendition, currentCfi);
-        } else {
-          targetCfi = await this.getPrevCfi(book, rendition, currentCfi);
+      try {
+        beforeLocation = rendition.currentLocation();
+        beforeCfi = beforeLocation?.start?.cfi;
+      } catch (error) {
+        // ignore
+      }
+      
+      try {
+        await (direction === 'next' ? rendition.next() : rendition.prev());
+      } catch (navError) {
+        return { success: false, error: `이동 실패: ${navError.message}` };
+      }
+      
+      await new Promise(resolve => setTimeout(resolve, 300));
+      let afterLocation = null;
+      let afterCfi = null;
+      let verified = false;
+      
+      for (let i = 0; i < 5; i++) {
+        try {
+          afterLocation = rendition.currentLocation();
+          afterCfi = afterLocation?.start?.cfi;
+          
+            if (afterCfi && afterCfi !== beforeCfi) {
+              verified = true;
+              break;
+            }
+        } catch (error) {
+          // retry
         }
         
-        if (targetCfi) {
-          console.log('✅ CFI 기반 이동 시도:', targetCfi);
-          await rendition.display(targetCfi);
-          return { success: true, method: 'cfi', target: targetCfi };
+        if (i < 4) {
+          await new Promise(resolve => setTimeout(resolve, 150));
         }
       }
-      
-      // 2차: Navigation Document 기반 이동
-      console.log('📍 2차: Navigation Document 기반 이동 시도');
-      if (book.navigation?.toc) {
-        const currentChapter = currentCfi?.match(/\[chapter-(\d+)\]/)?.[1];
-        if (currentChapter) {
-          const currentChapterNum = parseInt(currentChapter);
-          const targetChapterNum = direction === 'next' ? currentChapterNum + 1 : currentChapterNum - 1;
-          
-          const targetChapterItem = book.navigation.toc.find(item => {
-            const chapterMatch = item.cfi?.match(/\[chapter-(\d+)\]/);
-            return chapterMatch && parseInt(chapterMatch[1]) === targetChapterNum;
-          });
-          
-          if (targetChapterItem?.cfi) {
-            console.log('✅ Navigation Document 기반 이동 시도:', targetChapterItem.cfi);
-            await rendition.display(targetChapterItem.cfi);
-            return { success: true, method: 'navigation', target: targetChapterItem.cfi };
-          }
+      if (!verified) {
+        const isAtStart = beforeLocation?.start?.spinePos === 0 && direction === 'prev';
+        const isAtEnd = beforeLocation?.start?.spinePos === (book.spine.length - 1) && direction === 'next';
+        
+        let errorMessage = '페이지가 이동하지 않았습니다.';
+        if (isAtStart) {
+          errorMessage = '첫 페이지입니다.';
+        } else if (isAtEnd) {
+          errorMessage = '마지막 페이지입니다.';
         }
+        
+        return { 
+          success: false, 
+          error: errorMessage,
+          isAtStart,
+          isAtEnd
+        };
       }
       
-      // 3차: Spine 기반 직접 이동
-      console.log('📍 3차: Spine 기반 직접 이동 시도');
-      const spineNavigation = await this.getSpineNavigation(book, rendition, direction);
-      if (spineNavigation) {
-        console.log('✅ Spine 기반 이동 시도:', spineNavigation);
-        await rendition.display(spineNavigation.index);
-        return { success: true, method: 'spine', target: spineNavigation };
-      }
-      
-      // 4차: 기본 메서드 (최후의 수단)
-      console.log('📍 4차: 기본 메서드 시도');
-      const basicMethod = direction === 'next' ? rendition.next() : rendition.prev();
-      await basicMethod;
-      return { success: true, method: 'basic', target: direction };
+      return { 
+        success: true, 
+        method: 'basic', 
+        target: direction,
+        beforeCfi,
+        afterCfi
+      };
       
     } catch (error) {
-      console.error('❌ 모든 탐색 방법 실패:', error);
       return { success: false, error: error.message };
     }
   }
@@ -1304,67 +1232,48 @@ export async function ensureLocations(book, chars = 2000) {
 
 // 네비게이션 관련 유틸리티 함수들 (CFI 기반만)
 export const navigationUtils = {
-  // 안전한 페이지 이동 처리 (CFI 기반만)
   async safeNavigate(book, rendition, action, direction = 'next', setIsNavigating, setNavigationError, storageKeys) {
-    console.log(`🔄 safeNavigate 함수 진입: ${direction}`, {
+    console.log(`🔄 safeNavigate 시작: ${direction}`, {
       hasBook: !!book,
       hasRendition: !!rendition,
-      hasAction: typeof action === 'function',
-      hasSetIsNavigating: typeof setIsNavigating === 'function',
-      hasSetNavigationError: typeof setNavigationError === 'function'
+      hasAction: typeof action === 'function'
     });
     
     if (!book || !rendition) {
       errorUtils.logWarning('safeNavigate', 'book 또는 rendition이 없습니다', { hasBook: !!book, hasRendition: !!rendition });
-      return;
+      setNavigationError('뷰어가 준비되지 않았습니다.');
+      return { success: false, error: 'book 또는 rendition 없음' };
     }
-    
-    console.log(`🔄 safeNavigate 시작: ${direction}`, {
-      hasBook: !!book,
-      hasRendition: !!rendition,
-      renditionMethods: rendition ? Object.keys(rendition) : null
-    });
     
     setIsNavigating(true);
     setNavigationError(null);
 
     try {
-      // 현재 위치 확인 (동기적 처리)
-      let currentLocation;
-      try {
-        currentLocation = rendition.currentLocation();
-        console.log('📍 이동 전 현재 위치:', currentLocation);
-      } catch (err) {
-        console.warn('⚠️ 현재 위치 조회 실패:', err);
-        currentLocation = null;
-      }
-      
-      // 무조건 CFI 기반 이동만 시도
-      console.log(`🚀 ${direction} 이동 시도 중...`);
+      console.log(`🚀 ${direction} 페이지 이동 시작`);
       const result = await action();
-      console.log(`✅ ${direction} 이동 결과:`, result);
       
-      // 네비게이션 완료 후 잠시 대기
-      await new Promise(resolve => setTimeout(resolve, 100));
-      
-      // 이동 후 위치 확인 (동기적 처리)
-      let newLocation;
-      try {
-        newLocation = rendition.currentLocation();
-        console.log('📍 이동 후 새로운 위치:', newLocation);
-      } catch (err) {
-        console.warn('⚠️ 이동 후 위치 조회 실패:', err);
-        newLocation = null;
+      if (!result || !result.success) {
+        const errorMsg = result?.error || '페이지 이동에 실패했습니다.';
+        console.error(`❌ ${direction} 이동 실패:`, errorMsg);
+        setNavigationError(errorMsg);
+        return result || { success: false, error: errorMsg };
       }
       
-      errorUtils.logSuccess('safeNavigate', `${direction} 페이지 이동 완료`);
+      console.log(`✅ ${direction} 이동 성공:`, {
+        method: result.method,
+        before: result.beforeCfi?.substring(0, 50) + '...',
+        after: result.afterCfi?.substring(0, 50) + '...'
+      });
+      
+      return result;
       
     } catch (error) {
       console.error(`❌ ${direction} 이동 실패:`, error);
       errorUtils.logError('safeNavigate', error);
-      setNavigationError('페이지 이동 중 오류가 발생했습니다.');
+      const errorMsg = '페이지 이동 중 오류가 발생했습니다.';
+      setNavigationError(errorMsg);
+      return { success: false, error: errorMsg };
     } finally {
-      // 네비게이션 상태 리셋
       setIsNavigating(false);
     }
   }
@@ -1389,9 +1298,12 @@ export const settingsUtils = {
     setSettings(newSettings);
     setShowGraph(newSettings.showGraph);
 
+    // 글꼴 크기나 줄 간격 변경 시에도 새로고침
     const needsReload = 
       newSettings.pageMode !== currentSettings.pageMode ||
-      newSettings.showGraph !== currentSettings.showGraph;
+      newSettings.showGraph !== currentSettings.showGraph ||
+      newSettings.fontSize !== currentSettings.fontSize ||
+      newSettings.lineHeight !== currentSettings.lineHeight;
 
     if (needsReload) {
       const saveCurrent = async () => {
@@ -1431,10 +1343,9 @@ export const settingsUtils = {
     // 스프레드 모드 설정
     rendition.spread(getSpreadMode);
     
-    // 글꼴 크기 적용
+    // 글꼴 크기 적용 (settings.fontSize는 이미 퍼센트 값이므로 그대로 사용)
     if (settings.fontSize) {
-      const fontSize = settings.fontSize / 100;
-      rendition.themes.fontSize(`${fontSize * 100}%`);
+      rendition.themes.fontSize(`${settings.fontSize}%`);
     }
     
     // 줄 간격 적용

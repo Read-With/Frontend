@@ -1,4 +1,4 @@
-import React, { useRef, useState, useEffect, useMemo, useCallback } from "react";
+import React, { useRef, useState, useEffect, useCallback } from "react";
 import { ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import cytoscape from "cytoscape";
@@ -23,8 +23,7 @@ import {
   getEventsForChapter,
   getDetectedMaxChapter,
   getCharactersData,
-  getChapterFile,
-  getElementsFromRelations
+  getChapterFile
 } from "../../utils/graphData";
 import { calcGraphDiff, convertRelationsToElements, filterMainCharacters } from "../../utils/graphDataUtils";
 import { createCharacterMaps } from "../../utils/characterUtils";
@@ -38,30 +37,19 @@ function GraphSplitArea({
   searchState,
   searchActions,
   tooltipProps,
-  transitionStates,
+  transitionState,
   apiError,
   isFromLibrary = false,
   previousPage = null,
   bookId = null,
 }) {
   const { activeTooltip, onClearTooltip, onSetActiveTooltip, graphClearRef } = tooltipProps;
-  const { isEventUndefined, isEventTransition, isChapterTransition } = transitionStates;
   const graphContainerRef = React.useRef(null);
   const { isSearchActive, filteredElements, isResetFromSearch } = searchState;
   const { loading, isReloading, isGraphLoading, isDataReady } = viewerState;
   const { elements } = graphState;
   const { filterStage } = graphActions;
   
-  // 이전 페이지 정보 로깅
-  React.useEffect(() => {
-    if (isFromLibrary) {
-      console.log('GraphSplitArea: 라이브러리에서 온 사용자', {
-        isFromLibrary,
-        previousPage,
-        elementsCount: elements?.length || 0
-      });
-    }
-  }, [isFromLibrary, previousPage, elements]);
 
   const filteredMainCharacters = React.useMemo(() => {
     return filterMainCharacters(elements, filterStage);
@@ -131,7 +119,7 @@ function GraphSplitArea({
               fontSize: '18px',
               fontWeight: '600'
             }}>
-              {isChapterTransition ? '챕터 전환 중...' : '그래프 정보를 불러오는 중...'}
+              {transitionState.type === 'chapter' ? '챕터 전환 중...' : '그래프 정보를 불러오는 중...'}
             </h3>
             <p style={{
               color: '#6c757d',
@@ -140,7 +128,7 @@ function GraphSplitArea({
               lineHeight: '1.5',
               wordBreak: 'keep-all'
             }}>
-              {isChapterTransition ? '새로운 챕터의 이벤트를 준비하고 있습니다.' : '관계 데이터를 분석하고 있습니다.'}
+              {transitionState.type === 'chapter' ? '새로운 챕터의 이벤트를 준비하고 있습니다.' : '관계 데이터를 분석하고 있습니다.'}
             </p>
           </div>
         ) : apiError ? (
@@ -199,7 +187,7 @@ function GraphSplitArea({
               다시 시도
             </button>
           </div>
-        ) : isEventUndefined ? (
+        ) : transitionState.error ? (
           <div style={{
             display: 'flex',
             flexDirection: 'column',
@@ -219,23 +207,23 @@ function GraphSplitArea({
             }}>
               ⚠️
             </div>
-            <h3 style={{
-              color: '#495057',
-              marginBottom: '12px',
-              fontSize: '18px',
-              fontWeight: '600'
-            }}>
-              이벤트 정보를 불러올 수 없습니다
-            </h3>
-            <p style={{
-              color: '#6c757d',
-              marginBottom: '20px',
-              fontSize: '14px',
-              lineHeight: '1.5',
-              wordBreak: 'keep-all'
-            }}>
-              페이지를 새로고침하여 다시 시도해주세요.
-            </p>
+          <h3 style={{
+            color: '#495057',
+            marginBottom: '12px',
+            fontSize: '18px',
+            fontWeight: '600'
+          }}>
+            일시적인 오류가 발생했습니다
+          </h3>
+          <p style={{
+            color: '#6c757d',
+            marginBottom: '20px',
+            fontSize: '14px',
+            lineHeight: '1.5',
+            wordBreak: 'keep-all'
+          }}>
+            새로고침하면 정상적으로 작동할 것입니다.
+          </p>
             <button
               onClick={() => window.location.reload()}
               style={{
@@ -271,7 +259,7 @@ function GraphSplitArea({
             onClearTooltip={onClearTooltip}
             onSetActiveTooltip={onSetActiveTooltip}
             graphClearRef={graphClearRef}
-            isEventTransition={isEventTransition}
+            isEventTransition={transitionState.type === 'event' && transitionState.inProgress}
           />
         )}
       </div>
@@ -284,7 +272,7 @@ const ViewerPage = () => {
     viewerRef, reloadKey, progress, setProgress, currentPage, setCurrentPage,
     totalPages, setTotalPages, showSettingsModal, setShowSettingsModal,
     settings, setSettings, currentChapter, setCurrentChapter, currentEvent, setCurrentEvent,
-    events, setEvents, showGraph, setShowGraph, elements, graphViewState, setGraphViewState,
+    events, setEvents, showGraph, setShowGraph, elements, setElements, graphViewState, setGraphViewState,
     graphDiff, setGraphDiff, currentCharIndex, setCurrentCharIndex,
     totalChapterWords, setTotalChapterWords, loading, setLoading,
     isDataReady, setIsDataReady, characterData, setCharacterData, isReloading, setIsReloading,
@@ -301,22 +289,17 @@ const ViewerPage = () => {
 
   const [activeTooltip, setActiveTooltip] = useState(null);
   const graphClearRef = useRef(null);
-  const [isEventUndefined, setIsEventUndefined] = useState(false);
-  const [isEventTransition, setIsEventTransition] = useState(false);
-  const [isChapterTransition, setIsChapterTransition] = useState(false);
+  
+  // 전환 상태 통합
+  const [transitionState, setTransitionState] = useState({
+    type: null, // 'event' | 'chapter' | null
+    inProgress: false,
+    error: false
+  });
+  
   const prevEventRef = useRef(null);
   const prevChapterRef = useRef(null);
   
-  // 이전 페이지 정보 로깅 및 처리
-  React.useEffect(() => {
-    if (isFromLibrary) {
-      console.log('라이브러리에서 온 사용자:', {
-        previousPage,
-        bookTitle: book?.title,
-        bookId: book?.id
-      });
-    }
-  }, [isFromLibrary, previousPage, book]);
   
   const handleClearTooltip = useCallback(() => {
     setActiveTooltip(null);
@@ -339,28 +322,23 @@ const ViewerPage = () => {
   const testProgressAPI = useCallback(async () => {
     if (!book?.id) return;
     
-    // 로컬 책인지 API 책인지 구분
-    // bookId가 숫자가 아니거나 .epub로 끝나는 경우 로컬 책
     const isLocalBook = !book.id || typeof book.id === 'string' || bookId.includes('.epub') || isNaN(parseInt(bookId, 10));
     
     if (isLocalBook) {
-      // 로컬 책의 경우 API 호출하지 않음
       setManifestLoaded(true);
       return;
     }
     
     try {
-      // 전체 진도 조회
       const allProgressResponse = await getAllProgress();
       if (allProgressResponse.isSuccess) {
-        console.log('전체 진도 조회 성공:', allProgressResponse.result);
+        // 전체 진도 조회 성공
       }
       
-      // 특정 책 진도 조회
       try {
         const bookProgressResponse = await getBookProgress(book.id);
         if (bookProgressResponse.isSuccess) {
-          console.log('책 진도 조회 성공:', bookProgressResponse.result);
+          // 책 진도 조회 성공
         }
       } catch (progressError) {
         if (!progressError.message.includes('404') && !progressError.message.includes('찾을 수 없습니다')) {
@@ -368,17 +346,15 @@ const ViewerPage = () => {
         }
       }
       
-      // 매니페스트 조회
       const manifestResponse = await getBookManifest(book.id);
       if (manifestResponse.isSuccess) {
-        console.log('매니페스트 조회 성공');
+        // 매니페스트 조회 성공
       }
       
       setManifestLoaded(true);
       
     } catch (error) {
-      console.error('독서 진도 API 호출 실패:', error);
-      setManifestLoaded(true); // 에러가 있어도 매니페스트 로드 완료로 처리
+      setManifestLoaded(true);
     }
   }, [book?.id]);
 
@@ -389,104 +365,182 @@ const ViewerPage = () => {
   const [manifestLoaded, setManifestLoaded] = useState(false);
   const [apiError, setApiError] = useState(null);
   const apiCallRef = useRef(null);
+  const isChapterTransitionRef = useRef(false);
+  const setElementsRef = useRef(setElements);
   
+  // setElements 참조 업데이트
+  useEffect(() => {
+    setElementsRef.current = setElements;
+  }, [setElements]);
+  
+  // 챕터 전환 추적
+  useEffect(() => {
+    if (transitionState.type === 'chapter') {
+      isChapterTransitionRef.current = true;
+    } else {
+      isChapterTransitionRef.current = false;
+    }
+  }, [transitionState.type]);
+  
+  // 통합된 그래프 데이터 로딩
   useEffect(() => {
     let isMounted = true;
     
-    const loadMacroGraphData = async () => {
+    const loadGraphData = async () => {
       const isApiBook = book && (typeof book.id === 'number' || book.isFromAPI === true);
       
-      if (!book?.id || !isApiBook || !currentChapter || !manifestLoaded) {
-        return;
-      }
-      
-      // 이벤트 인덱스를 동적으로 설정 (현재 이벤트가 있으면 사용, 없으면 0)
-      const eventIdx = currentEvent?.eventNum || 0;
-      const callKey = `${book.id}-${currentChapter}-${eventIdx}`;
-      if (apiCallRef.current === callKey) {
-        return;
-      }
-      apiCallRef.current = callKey;
-       
-      try {
-        if (!book?.id || !currentChapter || eventIdx < 0) {
+      // API 책인 경우
+      if (isApiBook) {
+        if (!book?.id || !currentChapter || !manifestLoaded) {
           return;
         }
         
-        // 이벤트 0에 대한 데이터가 없을 가능성이 높으므로 먼저 확인
-        if (eventIdx === 0) {
-          console.log(`챕터 ${currentChapter}, 이벤트 ${eventIdx}에 대한 세밀 그래프 데이터를 확인 중...`);
+        const eventIdx = currentEvent?.eventNum || 0;
+        const callKey = `${book.id}-${currentChapter}-${eventIdx}`;
+        if (apiCallRef.current === callKey) {
+          return;
+        }
+        apiCallRef.current = callKey;
+         
+        try {
+          if (!book?.id || !currentChapter || eventIdx < 0) {
+            return;
+          }
+          
+          const fineData = await getFineGraph(book.id, currentChapter, eventIdx);
+          
+          if (!isMounted) return;
+          
+          let convertedElements = [];
+          if (fineData.result.characters && fineData.result.relations && 
+              fineData.result.characters.length > 0 && fineData.result.relations.length > 0) {
+            const { idToName, idToDesc, idToMain, idToNames } = createCharacterMaps(fineData.result.characters);
+            convertedElements = convertRelationsToElements(
+              fineData.result.relations,
+              idToName,
+              idToDesc,
+              idToMain,
+              idToNames,
+              'api',
+              null,
+              null
+            );
+            
+            if (convertedElements.length > 0 && isMounted) {
+              setElementsRef.current(convertedElements);
+              
+              if (!events || events.length === 0) {
+                const apiEvent = fineData.result.event;
+                const defaultEvent = {
+                  chapter: apiEvent?.chapterIdx || currentChapter,
+                  eventNum: apiEvent?.event_id || eventIdx,
+                  cfi: "epubcfi(/6/4[chap01ref]!/4[body01]/10[para05]/2/1:3)",
+                  relations: fineData.result.relations || [],
+                  start: apiEvent?.start,
+                  end: apiEvent?.end
+                };
+                setEvents([defaultEvent]);
+                setCurrentEvent(defaultEvent);
+              }
+            }
+          }
+          
+          if (isMounted) {
+            setIsDataReady(true);
+            setTransitionState({ type: null, inProgress: false, error: false });
+            setApiError(null);
+          }
+          
+        } catch (error) {
+          if (isMounted) {
+            if (error.message.includes('404') || error.message.includes('찾을 수 없습니다')) {
+              setApiError(null);
+            } else {
+              setApiError({
+                message: '그래프 데이터를 불러오는데 실패했습니다.',
+                details: error.message || '알 수 없는 오류가 발생했습니다.',
+                retry: () => {
+                  setApiError(null);
+                  apiCallRef.current = null;
+                }
+              });
+            }
+            setIsDataReady(true);
+            setTransitionState({ type: null, inProgress: false, error: false });
+          }
         }
         
-        const fineData = await getFineGraph(book.id, currentChapter, eventIdx);
+        return;
+      }
+      
+      // 로컬 책인 경우
+      try {
+        setLoading(true);
+        setIsGraphLoading(true);
+        setIsDataReady(false);
+        
+        if (!currentChapter || currentChapter < 1) {
+          setIsDataReady(true);
+          setTransitionState({ type: null, inProgress: false, error: false });
+          return;
+        }
+        
+        const localEvents = getEventsForChapter(currentChapter, folderKey);
+        
+        const validEvents = localEvents.filter(event => {
+          return event.chapter === currentChapter;
+        });
         
         if (!isMounted) return;
         
-        let convertedElements = [];
-        if (fineData.result.characters && fineData.result.relations && 
-            fineData.result.characters.length > 0 && fineData.result.relations.length > 0) {
-          const { idToName, idToDesc, idToMain, idToNames } = createCharacterMaps(fineData.result.characters);
-          convertedElements = convertRelationsToElements(
-            fineData.result.relations,
-            idToName,
-            idToDesc,
-            idToMain,
-            idToNames,
-            'api',
-            null,
-            null
-          );
-          
-          if (convertedElements.length > 0 && isMounted) {
-            graphActions.setElements(convertedElements);
-            
-            if (!events || events.length === 0) {
-              const apiEvent = fineData.result.event;
-              const defaultEvent = {
-                chapter: apiEvent?.chapterIdx || currentChapter,
-                eventNum: apiEvent?.event_id || eventIdx,
-                cfi: "epubcfi(/6/4[chap01ref]!/4[body01]/10[para05]/2/1:3)",
-                relations: fineData.result.relations || [],
-                start: apiEvent?.start,
-                end: apiEvent?.end
-              };
-              setEvents([defaultEvent]);
-              setCurrentEvent(defaultEvent);
-            }
-          }
-        } else {
-          // 데이터가 없는 경우 (이벤트 0 등)
-          console.log(`챕터 ${currentChapter}, 이벤트 ${eventIdx}에 대한 세밀 그래프 데이터가 없습니다.`);
+        setEvents(validEvents);
+        
+        if (validEvents.length > 0 && isChapterTransitionRef.current) {
+          const firstEvent = validEvents[0];
+          setCurrentEvent(firstEvent);
         }
         
+        try {
+          const charData = getCharactersData(folderKey, currentChapter);
+          if (charData && charData.characters) {
+            setCharacterData(charData.characters);
+          } else {
+            setCharacterData([]);
+          }
+        } catch (charError) {
+          setCharacterData([]);
+        }
+        
+        if (isMounted) {
+          setIsDataReady(true);
+          setTransitionState({ type: null, inProgress: false, error: false });
+        }
       } catch (error) {
         if (isMounted) {
-          // 404 에러인 경우 특별 처리
-          if (error.message.includes('404') || error.message.includes('찾을 수 없습니다')) {
-            console.warn(`챕터 ${currentChapter}, 이벤트 ${eventIdx}에 대한 데이터가 없습니다.`);
-            // API 데이터가 없을 때는 아무것도 하지 않음 (정상적인 상황)
-            setApiError(null); // 404는 에러가 아닌 정상적인 상황으로 처리
-          } else {
-            console.error('세밀그래프 API 호출 실패:', error);
-            setApiError({
-              message: '그래프 데이터를 불러오는데 실패했습니다.',
-              details: error.message || '알 수 없는 오류가 발생했습니다.',
-              retry: () => {
-                setApiError(null);
-                apiCallRef.current = null;
-              }
-            });
-          }
+          setIsDataReady(true);
+          setTransitionState({ type: null, inProgress: false, error: false });
+        }
+      } finally {
+        if (isMounted) {
+          setLoading(false);
+          setIsGraphLoading(false);
         }
       }
     };
 
-    loadMacroGraphData();
+    loadGraphData();
     
     return () => {
       isMounted = false;
     };
-  }, [book?.id, currentChapter, manifestLoaded, graphActions, events]);
+  }, [
+    book?.id, 
+    currentChapter, 
+    manifestLoaded, 
+    folderKey,
+    currentEvent?.eventNum  // API 책의 이벤트 변경 감지
+    // graphActions, currentChapterData는 제외 (무한 루프 방지)
+  ]);
 
   useEffect(() => {
     const autoSaveProgress = async () => {
@@ -503,13 +557,13 @@ const ViewerPage = () => {
         const response = await saveProgress(progressData);
         
         if (response.isSuccess) {
-          console.log('진도 저장 성공:', response.result);
+          // 진도 저장 성공
         } else {
           console.warn('진도 저장 실패:', response.message);
         }
         
       } catch (error) {
-        console.error('진도 자동 저장 실패:', error);
+        // 진도 자동 저장 실패
       }
     };
 
@@ -532,22 +586,16 @@ const ViewerPage = () => {
 
   useEffect(() => {
     const checkEventStatus = () => {
-      if (loading || isReloading || isGraphLoading || !isDataReady || isChapterTransition) {
-        setIsEventUndefined(false);
+      if (loading || isReloading || isGraphLoading || !isDataReady || transitionState.type === 'chapter') {
+        setTransitionState(prev => ({ ...prev, error: false }));
         return;
       }
 
-      const isEventInvalid = 
-        !currentEvent ||
-        currentEvent.eventNum === undefined || currentEvent.eventNum === null ||
-        currentEvent.chapter === undefined || currentEvent.chapter === null ||
-        !events || events.length === 0;
-
-      setIsEventUndefined(isEventInvalid);
+      setTransitionState(prev => ({ ...prev, error: false }));
     };
 
     checkEventStatus();
-  }, [currentEvent, currentChapter, events, loading, isReloading, isDataReady, isGraphLoading, isChapterTransition]);
+  }, [currentEvent, currentChapter, events, loading, isReloading, isDataReady, isGraphLoading, transitionState.type]);
 
   useEffect(() => {
     if (currentEvent && prevEventRef.current) {
@@ -557,10 +605,10 @@ const ViewerPage = () => {
         prevEvent.chapter !== currentEvent.chapter;
       
       if (isEventChanged) {
-        setIsEventTransition(true);
+        setTransitionState({ type: 'event', inProgress: true, error: false });
         
         setTimeout(() => {
-          setIsEventTransition(false);
+          setTransitionState({ type: null, inProgress: false, error: false });
         }, 200);
       }
     }
@@ -573,7 +621,7 @@ const ViewerPage = () => {
   useEffect(() => {
     const handleChapterTransition = () => {
       if (prevChapterRef.current !== null && prevChapterRef.current !== currentChapter) {
-        setIsChapterTransition(true);
+        setTransitionState({ type: 'chapter', inProgress: true, error: false });
       }
       prevChapterRef.current = currentChapter;
     };
@@ -581,73 +629,6 @@ const ViewerPage = () => {
     handleChapterTransition();
   }, [currentChapter]);
 
-  const loadEventsData = useCallback(async () => {
-    const isApiBook = book && (typeof book.id === 'number' || book.isFromAPI === true);
-    if (isApiBook) {
-      setIsDataReady(true);
-      setIsChapterTransition(false);
-      return;
-    }
-    
-    try {
-      setLoading(true);
-      setIsGraphLoading(true);
-      setIsDataReady(false);
-      
-      if (!currentChapter || currentChapter < 1) {
-        setIsDataReady(true);
-        setIsChapterTransition(false);
-        return;
-      }
-      
-      const events = getEventsForChapter(currentChapter, folderKey);
-      
-      const validEvents = events.filter(event => {
-        return event.chapter === currentChapter;
-      });
-      
-      setEvents(validEvents);
-      
-      if (validEvents.length > 0 && isChapterTransition) {
-        const firstEvent = validEvents[0];
-        setCurrentEvent(firstEvent);
-      }
-      
-      try {
-        const charData = getCharactersData(folderKey, currentChapter);
-        if (charData && charData.characters) {
-          setCharacterData(charData.characters);
-        } else {
-          setCharacterData([]);
-        }
-      } catch (charError) {
-        setCharacterData(currentChapterData?.characters || currentChapterData || []);
-      }
-      
-      setIsDataReady(true);
-      setIsChapterTransition(false);
-    } catch (error) {
-      setIsDataReady(true);
-      setIsChapterTransition(false);
-    } finally {
-      setLoading(false);
-      setIsGraphLoading(false);
-    }
-  }, [book, currentChapter, folderKey, isChapterTransition, currentChapterData, setLoading, setIsGraphLoading, setIsDataReady, setIsChapterTransition, setEvents, setCurrentEvent, setCharacterData]);
-
-  useEffect(() => {
-    if (currentChapter && currentChapter > 0 && graphState.isInitialChapterDetected) {
-      loadEventsData();
-    } else if (currentChapter && currentChapter > 0 && !graphState.isInitialChapterDetected) {
-      const timer = setTimeout(() => {
-        if (currentChapter && currentChapter > 0) {
-          loadEventsData();
-        }
-      }, 500);
-      
-      return () => clearTimeout(timer);
-    }
-  }, [currentChapter, graphState.isInitialChapterDetected, loadEventsData]);
 
 
   const {
@@ -673,7 +654,7 @@ const ViewerPage = () => {
             const eventLayout = JSON.parse(eventLayoutStr);
             Object.assign(mergedLayout, eventLayout);
           } catch (e) {
-            // 개별 이벤트 레이아웃 파싱 오류 무시
+            // 개별 이벤트 레이아웃 파싱 오류
           }
         }
       }
@@ -689,7 +670,7 @@ const ViewerPage = () => {
       
       setGraphViewState(finalLayout);
     } catch (e) {
-      // 전체 레이아웃 복원 오류 처리
+      // 전체 레이아웃 복원 오류
     }
   }, [isDataReady, currentEvent, elements, currentChapter]);
 
@@ -724,9 +705,7 @@ const ViewerPage = () => {
           }
           
           try {
-            // folderKey 유효성 검사
             if (!folderKey) {
-              console.warn('preloadChapterLayouts: folderKey가 없습니다. 레이아웃 생성을 건너뜁니다.');
               return;
             }
             
@@ -738,11 +717,15 @@ const ViewerPage = () => {
             
             const lastEvent = events[events.length - 1];
             const allRelations = lastEvent.relations || [];
-            const allImportance = lastEvent.importance || {};
-            const allNewAppearances = lastEvent.new_appearances || [];
-            const elements = getElementsFromRelations(
+            
+            const { idToName, idToDesc, idToMain, idToNames } = createCharacterMaps(charactersData);
+            
+            const elements = convertRelationsToElements(
               allRelations,
-              charactersData,
+              idToName,
+              idToDesc,
+              idToMain,
+              idToNames,
               folderKey
             );
             if (!elements || elements.length === 0) return;
@@ -774,12 +757,12 @@ const ViewerPage = () => {
             try {
               localStorage.setItem(storageKey, JSON.stringify(layoutObj));
             } catch (e) {
-              // 로컬 스토리지 저장 실패 무시
+              // 로컬 스토리지 저장 실패
             }
             
             cy.destroy();
           } catch (error) {
-            // 챕터 레이아웃 생성 실패 무시
+            // 챕터 레이아웃 생성 실패
           }
         });
         
@@ -799,7 +782,7 @@ const ViewerPage = () => {
         try {
           cy.destroy();
         } catch (e) {
-          // 이미 정리된 경우 무시
+          // 이미 정리된 경우
         }
       });
     };
@@ -868,11 +851,7 @@ const ViewerPage = () => {
                 onSetActiveTooltip: handleSetActiveTooltip,
                 graphClearRef
               }}
-              transitionStates={{
-                isEventUndefined,
-                isEventTransition,
-                isChapterTransition
-              }}
+              transitionState={transitionState}
               apiError={apiError}
               isFromLibrary={isFromLibrary}
               previousPage={previousPage}
@@ -910,8 +889,6 @@ const ViewerPage = () => {
               setCurrentEvent(receivedEvent);
             }
           }}
-          onAllCfisReady={(_cfis, _ranges, offsets) => {}}
-          onTextReady={(text, i) => {}}
           onRelocated={handleLocationChange}
         />
         {showBookmarkList && (

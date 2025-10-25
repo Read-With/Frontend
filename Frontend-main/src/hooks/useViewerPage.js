@@ -180,7 +180,7 @@ export function useViewerPage() {
   const folderKey = useMemo(() => {
     const key = getFolderKeyFromFilename(bookId);
     if (!key) {
-      console.warn('useViewerPage: folderKey가 null입니다. bookId:', bookId);
+      // folderKey가 null인 경우 무시
     }
     return key;
   }, [bookId]);
@@ -215,23 +215,13 @@ export function useViewerPage() {
     }
   }, [showGraph, graphFullScreen]);
 
-  // 화면 모드 전환 시에도 pageMode 설정 유지
-  useEffect(() => {
-    // 화면 모드가 변경되어도 epub 뷰어의 pageMode 설정은 유지
-    // EpubViewer에서 spread 모드를 다시 적용하도록 reloadKey 증가
-    if (viewerRef.current && settings?.pageMode) {
-      setReloadKey(prev => prev + 1);
-    }
-  }, [showGraph, graphFullScreen, settings?.pageMode]);
   
-  // 실패 횟수에 따른 토스트 메시지
   useEffect(() => {
     if (failCount >= 2) {
       toast.info("🔄 계속 실패하면 브라우저 새로고침을 해주세요!");
     }
   }, [failCount]);
   
-  // body overflow 설정
   useEffect(() => {
     document.body.style.overflow = "hidden";
     return () => {
@@ -239,20 +229,12 @@ export function useViewerPage() {
     };
   }, []);
   
-  // progress는 이제 useLocalStorageNumber로 자동 저장됨
-  
-  
-  // 북마크 로드
   useEffect(() => {
     const fetchBookmarks = async () => {
       if (!cleanBookId) return;
-      
-      // 로컬 책인지 API 책인지 구분
-      // bookId가 숫자가 아니거나 .epub로 끝나는 경우 로컬 책
       const isLocalBook = !book.id || typeof book.id === 'string' || bookId.includes('.epub') || isNaN(parseInt(bookId, 10));
       
       if (isLocalBook) {
-        // 로컬 책의 경우 로컬 스토리지에서 북마크 로드
         setBookmarksLoading(true);
         try {
           const localBookmarks = JSON.parse(localStorage.getItem(`bookmarks_${cleanBookId}`) || '[]');
@@ -263,7 +245,6 @@ export function useViewerPage() {
           setBookmarksLoading(false);
         }
       } else {
-        // API 책의 경우 서버에서 북마크 로드
         setBookmarksLoading(true);
         try {
           const bookmarksData = await loadBookmarks(cleanBookId);
@@ -375,39 +356,26 @@ export function useViewerPage() {
     }
   }, [currentEvent]);
   
-  // 이벤트 핸들러들
   const handlePrevPage = useCallback(() => {
-    console.log('🔄 이전 페이지 요청:', {
-      viewerRef: !!viewerRef.current,
-      hasPrevPage: !!viewerRef.current?.prevPage
-    });
     if (viewerRef.current) {
       try {
         viewerRef.current.prevPage();
       } catch (error) {
-        console.error('❌ 이전 페이지 이동 실패:', error);
         toast.error('이전 페이지로 이동할 수 없습니다.');
       }
     } else {
-      console.warn('⚠️ viewerRef가 없습니다.');
       toast.error('뷰어가 아직 준비되지 않았습니다. 잠시 후 다시 시도해주세요.');
     }
   }, []);
   
   const handleNextPage = useCallback(() => {
-    console.log('🔄 다음 페이지 요청:', {
-      viewerRef: !!viewerRef.current,
-      hasNextPage: !!viewerRef.current?.nextPage
-    });
     if (viewerRef.current) {
       try {
         viewerRef.current.nextPage();
       } catch (error) {
-        console.error('❌ 다음 페이지 이동 실패:', error);
         toast.error('다음 페이지로 이동할 수 없습니다.');
       }
     } else {
-      console.warn('⚠️ viewerRef가 없습니다.');
       toast.error('뷰어가 아직 준비되지 않았습니다. 잠시 후 다시 시도해주세요.');
     }
   }, []);
@@ -730,6 +698,7 @@ export function useViewerPage() {
     showGraph,
     setShowGraph,
     elements,
+    setElements,
     graphViewState,
     setGraphViewState,
     hideIsolated,

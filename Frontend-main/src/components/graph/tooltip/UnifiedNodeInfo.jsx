@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from "react";
+import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useParams } from "react-router-dom";
 import { processRelations, processRelationTags } from "../../../utils/relationUtils.js";
 import { getChapterLastEventNums, getFolderKeyFromFilename, getEventDataByIndex, getDetectedMaxChapter, getCharacterPerspectiveSummary } from "../../../utils/graphData.js";
@@ -90,6 +90,7 @@ function UnifiedNodeInfo({
   }, []);
 
   const handleMouseLeave = useCallback(() => {
+    // 즉시 호버 상태 해제
     setHoveredItem(null);
   }, []);
 
@@ -334,9 +335,6 @@ function UnifiedNodeInfo({
           const relations = apiData.relations;
           const characters = apiData.characters;
           
-          // API 데이터 구조 확인 (필요시에만)
-          // console.log('원본 API 관계 데이터:', relations);
-          // console.log('원본 API 캐릭터 데이터:', characters);
           
           // 캐릭터 ID를 이름으로 매핑하는 맵 생성
           const characterMap = {};
@@ -390,23 +388,10 @@ function UnifiedNodeInfo({
           // 최종 관계 데이터 (중복 제거됨)
           const finalRelations = Array.from(relationMap.values());
           
-          // 정제된 관계 데이터로 그래프 생성
-          console.log('API 중복 제거된 관계 데이터:', finalRelations);
-          
           // API 데이터를 직접 처리 (processRelations 우회)
           // API 데이터는 이미 올바른 형식이므로 직접 사용
           const chartData = extractRadarChartData(targetNodeId, finalRelations, elements, 8);
           
-          // API 데이터 처리 결과 확인 (필요시에만)
-          // console.log('API 레이더 차트 데이터:', {
-          //   currentNodeId,
-          //   targetNodeId,
-          //   relationsCount: relations.length,
-          //   processedRelationsCount: finalRelations.length,
-          //   chartDataCount: chartData.length,
-          //   characterMap,
-          //   nameToIdMap
-          // });
           
           return chartData;
         }
@@ -433,16 +418,27 @@ function UnifiedNodeInfo({
       // 로컬 데이터도 중복 제거 적용
       const relationMap = new Map();
       
-      json.relations.forEach(rel => {
+      
+      json.relations.forEach((rel, index) => {
+        // id1/id2 또는 source/target 모두 지원
+        const source = rel.id1 ?? rel.source;
+        const target = rel.id2 ?? rel.target;
+        
+        
+        if (!source || !target) {
+          console.warn('유효하지 않은 관계 데이터:', rel);
+          return;
+        }
+        
         // 관계의 고유 키 생성 (순서에 관계없이)
-        const key1 = `${rel.source}-${rel.target}`;
-        const key2 = `${rel.target}-${rel.source}`;
+        const key1 = `${source}-${target}`;
+        const key2 = `${target}-${source}`;
         
         // 이미 처리된 관계가 아닌 경우만 추가
         if (!relationMap.has(key1) && !relationMap.has(key2)) {
           relationMap.set(key1, {
-            source: rel.source,
-            target: rel.target,
+            source: source,
+            target: target,
             relation: rel.relation,
             strength: rel.strength || 1,
             positivity: rel.positivity || 0
@@ -453,7 +449,6 @@ function UnifiedNodeInfo({
       // 정제된 로컬 관계 데이터
       const finalRelations = Array.from(relationMap.values());
       
-      console.log('로컬 중복 제거된 관계 데이터:', finalRelations);
       
       const chartData = extractRadarChartData(nodeData.id, finalRelations, elements, 8);
       
@@ -520,17 +515,36 @@ function UnifiedNodeInfo({
     const isHovered = hoveredItem === payload.name;
     const radius = isHovered ? 8 : 5;
     
+    // 마우스 감지 영역 크기 (실제 점 크기의 3배)
+    const hoverRadius = Math.max(15, radius * 3);
+    
+    
+    // 마우스 이벤트 핸들러
+    const handleMouseEnterDot = useCallback((e) => {
+      e.stopPropagation();
+      handleMouseEnter(fullData.name, e);
+    }, [fullData.name, handleMouseEnter]);
+    
+    const handleMouseLeaveDot = useCallback((e) => {
+      e.stopPropagation();
+      handleMouseLeave();
+    }, [handleMouseLeave]);
+    
     return (
       <g>
-        {/* 투명한 큰 원 - 호버 감지용 */}
+        {/* 투명한 원 - 호버 감지용 (동적 크기) */}
         <circle
           cx={cx}
           cy={cy}
-          r={15}
+          r={hoverRadius}
           fill="transparent"
-          style={{ cursor: 'pointer', pointerEvents: 'all' }}
-          onMouseEnter={(e) => handleMouseEnter(fullData.name, e)}
-          onMouseLeave={handleMouseLeave}
+          style={{ 
+            cursor: 'pointer', 
+            pointerEvents: 'all',
+            zIndex: 10
+          }}
+          onMouseEnter={handleMouseEnterDot}
+          onMouseLeave={handleMouseLeaveDot}
         />
         {/* 실제 표시되는 점 */}
         <circle
@@ -538,7 +552,12 @@ function UnifiedNodeInfo({
           cy={cy}
           r={radius}
           fill={color}
-          style={{ transition: 'r 0.2s ease' }}
+          stroke={isHovered ? '#fff' : 'none'}
+          strokeWidth={isHovered ? 2 : 0}
+          style={{ 
+            transition: 'all 0.2s ease',
+            pointerEvents: 'none' // 마우스 이벤트는 투명한 원에서만 처리
+          }}
         />
       </g>
     );
@@ -1841,18 +1860,49 @@ function UnifiedNodeInfo({
                   <div
                     className="hover-tooltip"
                     style={{
-                      left: `${hoverPosition.x + 10}px`,
-                      top: `${hoverPosition.y - 10}px`,
-                      border: `2px solid ${getPositivityColor(hoveredData.positivity)}`,
+                      position: 'fixed',
+                      left: `${Math.min(hoverPosition.x + 15, window.innerWidth - 350)}px`,
+                      top: `${Math.max(hoverPosition.y - 15, 10)}px`,
+                      zIndex: 10000,
+                      pointerEvents: 'auto',
+                      transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                      opacity: 1,
+                      transform: 'scale(1)',
+                      background: 'linear-gradient(135deg, #ffffff 0%, #f8fafc 100%)',
+                      borderRadius: '12px',
+                      padding: '16px',
+                      boxShadow: '0 10px 25px rgba(0,0,0,0.1), 0 4px 10px rgba(0,0,0,0.05)',
+                      border: `1px solid ${getPositivityColor(hoveredData.positivity)}20`,
+                      backdropFilter: 'blur(10px)',
+                      minWidth: '250px',
+                      maxWidth: '350px'
+                    }}
+                    onMouseEnter={() => {
+                      // 툴팁에 마우스가 들어오면 호버 상태 유지
+                    }}
+                    onMouseLeave={() => {
+                      // 툴팁에서 마우스가 나가면 즉시 툴팁 숨김
+                      setHoveredItem(null);
                     }}
                   >
                      {/* 인물 이름 */}
                      <div style={{ 
-                       fontWeight: '700', 
-                       fontSize: '1rem', 
-                       marginBottom: '0.5rem', 
+                       fontWeight: '800', 
+                       fontSize: '1.1rem', 
+                       marginBottom: '12px', 
                        color: COLORS.textPrimary,
+                       letterSpacing: '-0.02em',
+                       display: 'flex',
+                       alignItems: 'center',
+                       gap: '8px'
                      }}>
+                       <div style={{
+                         width: '8px',
+                         height: '8px',
+                         borderRadius: '50%',
+                         background: getPositivityColor(hoveredData.positivity),
+                         flexShrink: 0
+                       }} />
                        {hoveredData.name}
                      </div>
                     
@@ -1860,60 +1910,89 @@ function UnifiedNodeInfo({
                      <div style={{ 
                        display: 'flex', 
                        alignItems: 'center',
-                       gap: '0.5rem',
-                       padding: '0.5rem',
-                       background: COLORS.backgroundLight,
-                       borderRadius: '0.375rem',
-                       border: '1px solid #e3e6ef'
+                       justifyContent: 'space-between',
+                       padding: '12px 16px',
+                       background: `linear-gradient(135deg, ${getPositivityColor(hoveredData.positivity)}15 0%, ${getPositivityColor(hoveredData.positivity)}08 100%)`,
+                       borderRadius: '10px',
+                       border: `1px solid ${getPositivityColor(hoveredData.positivity)}30`,
+                       marginBottom: '12px'
                      }}>
-                      <span style={{ 
-                        fontSize: '0.75rem',
-                        color: getPositivityColor(hoveredData.positivity),
-                        fontWeight: '600',
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                        <span style={{ 
+                          fontSize: '0.8rem',
+                          color: getPositivityColor(hoveredData.positivity),
+                          fontWeight: '600',
+                          textTransform: 'uppercase',
+                          letterSpacing: '0.5px'
+                        }}>
+                          {getPositivityLabel(hoveredData.positivity || 0)}
+                        </span>
+                      </div>
+                      <div style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '8px'
                       }}>
-                        {getPositivityLabel(hoveredData.positivity || 0)}
-                      </span>
-                      <span style={{ 
-                        fontWeight: '700', 
-                        color: getPositivityColor(hoveredData.positivity), 
-                        fontSize: '1.25rem',
-                      }}>
-                        {Math.round((hoveredData.positivity || 0) * 100)}%
-                      </span>
+                        <span style={{ 
+                          fontWeight: '800', 
+                          color: getPositivityColor(hoveredData.positivity), 
+                          fontSize: '1.5rem',
+                          lineHeight: 1
+                        }}>
+                          {Math.round((hoveredData.positivity || 0) * 100)}
+                        </span>
+                        <span style={{
+                          fontSize: '0.9rem',
+                          color: getPositivityColor(hoveredData.positivity),
+                          fontWeight: '600'
+                        }}>
+                          %
+                        </span>
+                      </div>
                     </div>
                     
                      {hoveredData.relationTags && hoveredData.relationTags.length > 0 && (
-                       <div style={{ marginTop: '0.75rem', paddingTop: '0.75rem', borderTop: `1px solid ${COLORS.borderLight}` }}>
+                       <div style={{ 
+                         marginTop: '8px', 
+                         paddingTop: '12px', 
+                         borderTop: `1px solid ${COLORS.borderLight}40`
+                       }}>
                          <div style={{ 
                            fontSize: '0.8rem', 
                            color: COLORS.textSecondary, 
-                           marginBottom: '0.5rem',
-                           fontWeight: '600'
+                           marginBottom: '8px',
+                           fontWeight: '600',
+                           display: 'flex',
+                           alignItems: 'center',
+                           gap: '6px'
                          }}>
+                           <div style={{
+                             width: '4px',
+                             height: '4px',
+                             borderRadius: '50%',
+                             background: COLORS.textSecondary
+                           }} />
                            관계 태그
                          </div>
-                         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.375rem' }}>
-                           {hoveredData.relationTags.slice(0, 6).map((tag, i) => (
+                         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                           {hoveredData.relationTags.map((tag, i) => (
                              <span
                                key={i}
                                style={{
                                  background: COLORS.backgroundLight,
                                  color: COLORS.textPrimary,
-                                 padding: '0.25rem 0.5rem',
-                                 borderRadius: '0.375rem',
-                                 fontSize: '0.75rem',
+                                 padding: '4px 8px',
+                                 borderRadius: '6px',
+                                 fontSize: '0.7rem',
                                  border: `1px solid ${COLORS.border}`,
                                  fontWeight: '500',
+                                 textTransform: 'uppercase',
+                                 letterSpacing: '0.3px'
                                }}
                              >
                                {tag}
                              </span>
                            ))}
-                           {hoveredData.relationTags.length > 6 && (
-                             <span style={{ fontSize: '0.75rem', color: COLORS.textSecondary, alignSelf: 'center' }}>
-                               +{hoveredData.relationTags.length - 6}
-                             </span>
-                           )}
                          </div>
                        </div>
                      )}
