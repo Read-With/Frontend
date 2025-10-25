@@ -19,13 +19,15 @@
 .user-topbar-avatar {
   width: 32px;
   height: 32px;
-  background: linear-gradient(135deg, #3E4F2F, #586544);
+  background: transparent;
   border-radius: 50%;
   display: flex;
-  align-items: center;
+  align-items: flex-end;
   justify-content: center;
-  color: white;
+  color: #3E4F2F;
   flex-shrink: 0;
+  font-size: 24px;
+  padding-bottom: 2px;
 }
 .user-topbar-title {
   font-family: var(--font-family-primary);
@@ -51,7 +53,8 @@
   align-items: center;
   gap: 6px;
   white-space: nowrap;
-  margin-right: 3.5rem;
+  margin-right: 1rem;
+  font-weight: 600;
 }
 
 .user-topbar-logout:hover {
@@ -68,6 +71,33 @@
   display: flex;
   align-items: center;
   gap: 12px;
+}
+
+.user-topbar-brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.brand-text {
+  font-family: var(--font-family-primary);
+  font-weight: 600;
+  font-size: 16px;
+  color: #3E4F2F;
+}
+
+.brand-separator {
+  font-family: var(--font-family-primary);
+  font-weight: 600;
+  font-size: 16px;
+  color: #3E4F2F;
+}
+
+.user-name {
+  font-family: var(--font-family-primary);
+  font-weight: 600;
+  font-size: 16px;
+  color: #3E4F2F;
 }
 
 /* 오른쪽 영역 */

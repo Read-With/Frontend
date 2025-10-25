@@ -1,5 +1,14 @@
 /* MyPage.css - 교보문고 스타일 */
 
+/* CSS 변수 정의 */
+:root {
+  --primary-gradient: linear-gradient(135deg, #3E4F2F, #586544);
+  --primary-gradient-full: linear-gradient(135deg, #3E4F2F 0%, #586544 100%);
+  --secondary-gradient: linear-gradient(135deg, #717B59, #B3B6A0);
+  --accent-gradient: linear-gradient(135deg, #586544, #3E4F2F);
+  --hero-gradient: linear-gradient(135deg, #3E4F2F 0%, #586544 50%, #717B59 100%);
+}
+
 /* ==================== 전역 설정 ==================== */
 .mypage-root {
   background: linear-gradient(135deg, #F5F1E6 0%, #B3B6A0 100%);
@@ -26,7 +35,7 @@
 /* ==================== 히어로 배너 섹션 ==================== */
 .hero-banner {
   width: 100%;
-  background: linear-gradient(135deg, #3E4F2F 0%, #586544 50%, #717B59 100%);
+  background: var(--hero-gradient);
   padding: 60px 20px 80px;
   position: relative;
   overflow: hidden;
@@ -61,28 +70,23 @@
 
 .hero-left {
   flex: 1;
-  color: white;
-}
-
-.hero-left * {
-  color: inherit !important;
 }
 
 .hero-title {
-  font-size: 3.5rem;
-  font-weight: 900;
-  margin: 0 0 16px 0;
+  font-size: 4rem;
+  font-weight: 400;
   line-height: 1.1;
   letter-spacing: -0.03em;
   text-shadow: 0 2px 20px rgba(0, 0, 0, 0.1);
+  color: #ffffff !important;
 }
 
 .hero-subtitle {
   font-size: 1.5rem;
-  font-weight: 600;
+  font-weight: 200;
   margin-bottom: 12px;
-  opacity: 0.95;
-  text-shadow: 0 1px 10px rgba(0, 0, 0, 0.1);
+  color: #ffffff !important;
+  opacity: 1 !important;
 }
 
 /* MyPage 전용 hero-description 스타일 */
@@ -180,17 +184,17 @@
 }
 
 .stat-card-total .stat-icon-wrapper {
-  background: linear-gradient(135deg, #3E4F2F, #586544);
+  background: var(--primary-gradient);
   box-shadow: 0 4px 16px rgba(62, 79, 47, 0.3);
 }
 
 .stat-card-reading .stat-icon-wrapper {
-  background: linear-gradient(135deg, #717B59, #B3B6A0);
+  background: var(--secondary-gradient);
   box-shadow: 0 4px 16px rgba(113, 123, 89, 0.3);
 }
 
 .stat-card-completed .stat-icon-wrapper {
-  background: linear-gradient(135deg, #586544, #3E4F2F);
+  background: var(--accent-gradient);
   box-shadow: 0 4px 16px rgba(88, 101, 68, 0.3);
 }
 
@@ -273,7 +277,7 @@
 }
 
 .stat-badge {
-  background: linear-gradient(135deg, #3E4F2F, #586544);
+  background: var(--primary-gradient);
   color: white;
   padding: 4px 12px;
   border-radius: 12px;
@@ -284,12 +288,12 @@
 }
 
 .stat-card-reading .stat-badge {
-  background: linear-gradient(135deg, #717B59, #B3B6A0);
+  background: var(--secondary-gradient);
   box-shadow: 0 2px 8px rgba(113, 123, 89, 0.3);
 }
 
 .stat-card-completed .stat-badge {
-  background: linear-gradient(135deg, #586544, #3E4F2F);
+  background: var(--accent-gradient);
   box-shadow: 0 2px 8px rgba(88, 101, 68, 0.3);
 }
 
@@ -353,7 +357,7 @@
   padding: 2px 10px;
   font-size: 0.8rem;
   font-weight: 700;
-  background: linear-gradient(135deg, #3E4F2F, #586544);
+  background: var(--primary-gradient);
   color: white;
   border-radius: 12px;
   box-shadow: 0 2px 8px rgba(62, 79, 47, 0.3);
@@ -544,7 +548,7 @@
   padding: 16px 36px;
   font-size: 1.1rem;
   font-weight: 700;
-  background: linear-gradient(135deg, #3E4F2F, #586544);
+  background: var(--primary-gradient);
   color: white;
   border: none;
   border-radius: 50px;
@@ -566,7 +570,7 @@
   width: 64px;
   height: 64px;
   border-radius: 50%;
-  background: linear-gradient(135deg, #3E4F2F, #586544);
+  background: var(--primary-gradient);
   color: white;
   border: none;
   font-size: 2rem;

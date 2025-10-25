@@ -114,10 +114,14 @@ const Header = ({ userNickname, showAuthLinks = false }) => {
   return (
     <div className="user-topbar">
       <div className="user-topbar-left">
-        <div className="user-topbar-avatar">
-          📖
+        <div className="user-topbar-brand">
+          <div className="user-topbar-avatar">
+            📖
+          </div>
+          <span className="brand-text">ReadWith</span>
+          <span className="brand-separator">:</span>
+          <span className="user-name">{userNickname || user?.name || 'User'}</span>
         </div>
-        <div className="user-topbar-title">ReadWith : {userNickname || user?.name || 'User'}</div>
       </div>
       
       <div className="user-topbar-right">
