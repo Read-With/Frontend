@@ -95,7 +95,7 @@
 .book-status-badge {
   position: absolute;
   top: 12px;
-  left: 12px;
+  right: 12px;
   padding: 6px 12px;
   border-radius: 20px;
   font-size: 0.75rem;
@@ -129,7 +129,7 @@
 .book-favorite-btn {
   position: absolute;
   top: 12px;
-  right: 12px;
+  left: 12px;
   width: 36px;
   height: 36px;
   border-radius: 50%;
@@ -153,11 +153,29 @@
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 }
 
+/* 즐겨찾기된 상태 스타일 */
+.book-favorite-btn.favorited {
+  background: rgba(255, 107, 107, 0.1);
+  border: 2px solid rgba(255, 107, 107, 0.3);
+}
+
+.book-favorite-btn.favorited:hover {
+  background: rgba(255, 107, 107, 0.15);
+  border-color: rgba(255, 107, 107, 0.5);
+  transform: scale(1.2);
+}
+
 /* 리스트 뷰에서도 즐겨찾기 버튼 호버 효과 적용 */
 .book-card.list-view .book-favorite-btn:hover {
   transform: scale(1.15);
   background: white;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.book-card.list-view .book-favorite-btn.favorited:hover {
+  background: rgba(255, 107, 107, 0.15);
+  border-color: rgba(255, 107, 107, 0.5);
+  transform: scale(1.2);
 }
 
 .book-favorite-btn:active {
@@ -461,10 +479,10 @@
 /* ==================== 리스트 뷰 스타일 ==================== */
 .book-card.list-view {
   flex-direction: row;
-  min-height: 140px;
-  height: auto;
-  padding: 16px 18px;
-  gap: 18px;
+  min-height: 210px;
+  height: 210px;
+  padding: 20px 24px;
+  gap: 24px;
   max-width: 95%;
   margin: 0 auto;
   transition: none;
@@ -474,14 +492,14 @@
   flex-shrink: 0;
   padding: 0;
   background: none;
-  width: 80px;
-  height: 120px;
+  width: 100px;
+  height: 150px;
 }
 
 .book-card.list-view .book-image-container {
-  width: 80px;
-  height: 120px;
-  border-radius: 6px;
+  width: 100px;
+  height: 150px;
+  border-radius: 8px;
 }
 
 .book-card.list-view .book-card-body {
@@ -491,49 +509,53 @@
 }
 
 .book-card.list-view .book-title {
-  font-size: 1.2rem;
-  line-height: 1.3;
-  margin-bottom: 8px;
+  font-size: 1.3rem;
+  line-height: 1.4;
+  margin-bottom: 12px;
   -webkit-line-clamp: 2;
   line-clamp: 2;
   min-height: auto;
 }
 
 .book-card.list-view .book-author {
-  font-size: 1rem;
-  margin-bottom: 12px;
+  font-size: 1.1rem;
+  margin-bottom: 16px;
 }
 
 .book-card.list-view .book-meta {
   margin-top: 0;
-  font-size: 0.9rem;
+  font-size: 1rem;
 }
 
 .book-card.list-view .book-card-actions {
   flex-shrink: 0;
   padding: 0;
-  width: 220px;
+  width: 240px;
   justify-content: flex-end;
-  gap: 10px;
+  gap: 12px;
 }
 
 .book-card.list-view .book-action-btn {
   flex: none;
-  padding: 12px 18px;
-  font-size: 0.9rem;
-  min-width: 90px;
-  min-height: 44px;
+  padding: 14px 20px;
+  font-size: 1rem;
+  min-width: 100px;
+  min-height: 48px;
 }
 
 .book-card.list-view .book-status-badge {
-  top: 16px;
-  left: 16px;
+  top: 20px;
+  right: 20px;
 }
 
-.book-card.list-view .book-favorite-btn,
+.book-card.list-view .book-favorite-btn {
+  top: 20px;
+  left: 20px;
+}
+
 .book-card.list-view .book-context-trigger {
-  top: 16px;
-  right: 16px;
+  top: 20px;
+  right: 20px;
 }
 
 .book-card.list-view .book-progress-container {
@@ -551,9 +573,10 @@
 
   .book-card.list-view {
     flex-direction: column;
-    min-height: auto;
-    padding: 14px 16px;
-    gap: 12px;
+    min-height: 180px;
+    height: auto;
+    padding: 16px 18px;
+    gap: 16px;
     max-width: 98%;
     margin: 0 auto;
   }
@@ -565,8 +588,8 @@
   }
 
   .book-card.list-view .book-image-container {
-    width: 60px;
-    height: 90px;
+    width: 80px;
+    height: 120px;
     margin: 0 auto;
   }
 
@@ -583,8 +606,8 @@
 
   .book-card.list-view .book-action-btn {
     flex: 1;
-    max-width: 140px;
-    min-height: 46px;
+    max-width: 160px;
+    min-height: 50px;
   }
 
   .book-card-header {
@@ -600,10 +623,22 @@
     padding: 5px 10px;
     font-size: 0.7rem;
     top: 10px;
+    right: 10px;
+  }
+
+  .book-favorite-btn {
+    width: 32px;
+    height: 32px;
+    font-size: 1.1rem;
+    top: 10px;
     left: 10px;
   }
 
-  .book-favorite-btn,
+  .book-favorite-btn.favorited {
+    background: rgba(255, 107, 107, 0.1);
+    border: 2px solid rgba(255, 107, 107, 0.3);
+  }
+
   .book-context-trigger {
     width: 32px;
     height: 32px;
@@ -656,7 +691,8 @@
 
   .book-card.list-view {
     max-width: 99%;
-    padding: 12px 14px;
+    padding: 14px 16px;
+    min-height: 160px;
   }
 
   .book-image-container {
@@ -668,10 +704,22 @@
     padding: 4px 8px;
     font-size: 0.65rem;
     top: 8px;
+    right: 8px;
+  }
+
+  .book-favorite-btn {
+    width: 28px;
+    height: 28px;
+    font-size: 1rem;
+    top: 8px;
     left: 8px;
   }
 
-  .book-favorite-btn,
+  .book-favorite-btn.favorited {
+    background: rgba(255, 107, 107, 0.1);
+    border: 2px solid rgba(255, 107, 107, 0.3);
+  }
+
   .book-context-trigger {
     width: 28px;
     height: 28px;

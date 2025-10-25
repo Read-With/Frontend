@@ -161,16 +161,9 @@ const BookCard = ({ book, onToggleFavorite, onBookClick, onBookDetailClick, onSt
       onMouseLeave={() => setShowContextMenu(false)}
       onClick={handleCardClick}
     >
-      {/* 상태 배지 */}
-      {book.readingStatus && book.readingStatus !== 'none' && (
-        <div className={`book-status-badge ${statusInfo.className}`}>
-          <span>{statusInfo.icon}</span> {statusInfo.label}
-        </div>
-      )}
-
-      {/* 즐겨찾기 버튼 */}
+      {/* 즐겨찾기 버튼 - 왼쪽 상단 */}
       <button
-        className="book-favorite-btn"
+        className={`book-favorite-btn ${book.favorite ? 'favorited' : ''}`}
         onClick={handleFavoriteClick}
         title={book.favorite ? '즐겨찾기 해제' : '즐겨찾기 추가'}
       >
@@ -181,6 +174,13 @@ const BookCard = ({ book, onToggleFavorite, onBookClick, onBookDetailClick, onSt
           strokeWidth={2}
         />
       </button>
+
+      {/* 상태 배지 - 오른쪽 상단 */}
+      {book.readingStatus && book.readingStatus !== 'none' && (
+        <div className={`book-status-badge ${statusInfo.className}`}>
+          <span>{statusInfo.icon}</span> {statusInfo.label}
+        </div>
+      )}
 
       {/* 카드 헤더 - 이미지 영역 */}
       <div className="book-card-header">

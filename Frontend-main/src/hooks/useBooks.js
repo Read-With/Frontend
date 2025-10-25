@@ -29,6 +29,11 @@ export const useBooks = () => {
       // API 응답 처리
       if (apiResponse.status === 'fulfilled' && apiResponse.value.isSuccess) {
         apiBooks = apiResponse.value.result || [];
+        // API 책들의 즐겨찾기 상태를 명시적으로 설정
+        apiBooks = apiBooks.map(book => ({
+          ...book,
+          favorite: book.favorite || false // API에서 받은 즐겨찾기 상태 보장
+        }));
       } else if (apiResponse.status === 'rejected') {
         hasApiError = true;
         const errorMessage = apiResponse.reason?.message || apiResponse.reason;
@@ -58,21 +63,27 @@ export const useBooks = () => {
       
       // 로컬 책 중에서 API에 없는 것만 추가
       if (Array.isArray(localBooks)) {
+        // localStorage에서 로컬 책 상태들 가져오기
+        const localFavorites = JSON.parse(localStorage.getItem('localBookFavorites') || '{}');
+        const localBookStatuses = JSON.parse(localStorage.getItem('localBookStatuses') || '{}');
+        
         localBooks.forEach(localBook => {
           const exists = apiBooks.some(apiBook => 
             apiBook.title === localBook.title && apiBook.author === localBook.author
           );
           if (!exists) {
+            const bookId = `local_${localBook.filename}`;
             // 로컬 책을 API 형식으로 변환
             const convertedBook = {
-              id: `local_${localBook.filename}`,
+              id: bookId,
               title: localBook.title,
               author: localBook.author,
               coverImgUrl: localBook.cover || null,
               epubPath: localBook.filename,
               summary: false,
               default: true,
-              favorite: false,
+              favorite: localFavorites[bookId] || false, // localStorage에서 즐겨찾기 상태 복원
+              readingStatus: localBookStatuses[bookId] || 'none', // localStorage에서 읽기 상태 복원
               updatedAt: localBook.uploadedAt || new Date().toISOString()
             };
             allBooks.push(convertedBook);
@@ -127,8 +138,23 @@ export const useBooks = () => {
 
   // 즐겨찾기 토글 함수
   const toggleFavorite = async (bookId, favorite) => {
-    // 로컬 책은 로컬 상태만 업데이트
+    // 로컬 책은 로컬 상태와 localStorage에 저장
     if (typeof bookId === 'string' && bookId.startsWith('local_')) {
+      // localStorage에서 즐겨찾기 목록 가져오기
+      const localFavorites = JSON.parse(localStorage.getItem('localBookFavorites') || '{}');
+      
+      if (favorite) {
+        // 즐겨찾기 추가
+        localFavorites[bookId] = true;
+      } else {
+        // 즐겨찾기 제거
+        delete localFavorites[bookId];
+      }
+      
+      // localStorage에 저장
+      localStorage.setItem('localBookFavorites', JSON.stringify(localFavorites));
+      
+      // 상태 업데이트
       setBooks(prevBooks => 
         prevBooks.map(book => 
           book.id === bookId ? { ...book, favorite } : book
@@ -141,15 +167,25 @@ export const useBooks = () => {
       const response = await toggleBookFavorite(bookId, favorite);
       
       if (response.isSuccess) {
+        // 즉시 UI 업데이트 (낙관적 업데이트)
         setBooks(prevBooks => 
           prevBooks.map(book => 
             book.id === bookId ? { ...book, favorite } : book
           )
         );
+        
+        // 성공 메시지 (선택적)
+        console.log(`즐겨찾기 ${favorite ? '추가' : '제거'} 완료`);
       } else {
         throw new Error(response.message || '즐겨찾기 설정에 실패했습니다.');
       }
     } catch (err) {
+      // 실패 시 이전 상태로 롤백
+      setBooks(prevBooks => 
+        prevBooks.map(book => 
+          book.id === bookId ? { ...book, favorite: !favorite } : book
+        )
+      );
       setError(err.message || '즐겨찾기 설정에 실패했습니다.');
       console.error('즐겨찾기 토글 실패:', err);
     }
@@ -203,8 +239,16 @@ export const useBooks = () => {
 
   // 책 상태 변경 (읽는 중, 완독, 읽고 싶은 등)
   const changeBookStatus = async (bookId, status) => {
-    // 로컬 책은 로컬 상태만 업데이트
+    // 로컬 책은 로컬 상태와 localStorage에 저장
     if (typeof bookId === 'string' && bookId.startsWith('local_')) {
+      // localStorage에서 로컬 책 상태 가져오기
+      const localBookStatuses = JSON.parse(localStorage.getItem('localBookStatuses') || '{}');
+      
+      // 상태 저장
+      localBookStatuses[bookId] = status;
+      localStorage.setItem('localBookStatuses', JSON.stringify(localBookStatuses));
+      
+      // 상태 업데이트
       setBooks(prevBooks => 
         prevBooks.map(book => 
           book.id === bookId ? { ...book, readingStatus: status } : book

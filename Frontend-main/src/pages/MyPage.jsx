@@ -190,6 +190,13 @@ export default function MyPage() {
                   <span className="tab-badge">{stats.total}</span>
                 </button>
                 <button
+                  className={`tab-button ${activeTab === 'favorites' ? 'active' : ''}`}
+                  onClick={() => setActiveTab('favorites')}
+                >
+                  즐겨찾기 ❤️
+                  {stats.favorites > 0 && <span className="tab-badge">{stats.favorites}</span>}
+                </button>
+                <button
                   className={`tab-button ${activeTab === 'reading' ? 'active' : ''}`}
                   onClick={() => setActiveTab('reading')}
                 >
@@ -202,13 +209,6 @@ export default function MyPage() {
                 >
                   완독
                   {stats.completed > 0 && <span className="tab-badge">{stats.completed}</span>}
-                </button>
-                <button
-                  className={`tab-button ${activeTab === 'favorites' ? 'active' : ''}`}
-                  onClick={() => setActiveTab('favorites')}
-                >
-                  즐겨찾기 ❤️
-                  {stats.favorites > 0 && <span className="tab-badge">{stats.favorites}</span>}
                 </button>
               </nav>
 

@@ -425,6 +425,13 @@
   border-radius: 12px;
   transition: all 0.3s ease;
   background: #B3B6A0;
+  color: #3E4F2F;
+}
+
+.search-input::placeholder {
+  color: #2A3A1F;
+  opacity: 1;
+  font-weight: 700;
 }
 
 .search-input:focus {
@@ -441,19 +448,23 @@
   transform: translateY(-50%);
   color: #586544;
   pointer-events: none;
+  margin-right: 1rem;
 }
 
 .filter-select {
-  padding: 14px 20px;
-  font-size: 1rem;
+  padding: 8px 12px;
+  font-size: 0.9rem;
   font-weight: 600;
   border: 2px solid #717B59;
-  border-radius: 12px;
+  border-radius: 6px;
   background: #B3B6A0;
   cursor: pointer;
   transition: all 0.3s ease;
   min-width: 160px;
   flex-shrink: 0;
+  height: 42px;
+  display: flex;
+  align-items: center;
 }
 
 .filter-select:hover {
@@ -478,19 +489,19 @@
 }
 
 .books-grid {
-  margin-top: 24px;
+  margin-top: 8px;
 }
 
 .books-grid.grid-view {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
   gap: 32px;
 }
 
 .books-grid.list-view {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 24px;
 }
 
 /* ==================== Empty State ==================== */
@@ -522,6 +533,11 @@
   color: #586544;
   max-width: 400px;
   margin: 0 auto 32px;
+  white-space: nowrap;
+  text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .empty-cta-button {
@@ -575,18 +591,29 @@
 
 /* ==================== 로딩 및 에러 상태 ==================== */
 .loading-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
   text-align: center;
   padding: 80px 20px;
+  min-height: 200px;
 }
 
 .loading-icon {
   margin-bottom: 20px;
   color: #3E4F2F;
+  display: flex;
+  justify-content: center;
+  align-items: center;
 }
 
 .loading-text {
   color: #586544;
   font-size: 1.1rem;
+  display: flex;
+  justify-content: center;
+  align-items: center;
 }
 
 .error-container {
@@ -705,6 +732,8 @@
 
   .filter-select {
     width: 100%;
+    height: 34px;
+    font-size: 0.9rem;
   }
 
   .view-toggle {
