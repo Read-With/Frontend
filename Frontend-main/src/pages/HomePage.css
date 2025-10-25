@@ -728,14 +728,14 @@
 
 .edge-tooltip {
   position: absolute;
-  background: rgba(232, 245, 232, 0.95);
-  color: #3E4F2F;
+  background: white;
+  color: #4b5563;
   padding: 12px 16px;
   border-radius: 12px;
   font-size: 0.9rem;
   z-index: 20;
-  box-shadow: 0 8px 25px rgba(62, 79, 47, 0.2);
-  border: 1px solid rgba(62, 79, 47, 0.2);
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
+  border: 1px solid #e5e7eb;
   min-width: 180px;
   transition: none !important;
 }

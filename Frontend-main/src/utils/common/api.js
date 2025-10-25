@@ -49,10 +49,71 @@ const handleApiError = (error, context) => {
   throw new Error(`${context}: ${statusMessage} (${statusCode}) - ${errorMessage}`);
 };
 
+// JWT 토큰 유효성 검사 함수
+const isTokenValid = (token) => {
+  if (!token) return false;
+  
+  try {
+    // JWT 토큰의 payload 부분 디코딩
+    const payload = JSON.parse(atob(token.split('.')[1]));
+    const currentTime = Math.floor(Date.now() / 1000);
+    
+    // 토큰 만료 시간 확인
+    if (payload.exp && payload.exp < currentTime) {
+      console.warn('⚠️ 토큰이 만료되었습니다:', {
+        exp: payload.exp,
+        currentTime,
+        expired: payload.exp < currentTime
+      });
+      return false;
+    }
+    
+    return true;
+  } catch (error) {
+    console.warn('⚠️ 토큰 파싱 실패:', error);
+    return false;
+  }
+};
+
 // HTTP 요청 헬퍼 함수
 const apiRequest = async (url, options = {}) => {
   // JWT 토큰 가져오기
   const token = localStorage.getItem('accessToken');
+  
+  // 디버깅: 토큰 상태 확인
+  if (url.includes('/api/graph/')) {
+    const tokenValid = isTokenValid(token);
+    const isMacroGraph = url.includes('/api/graph/macro');
+    const isFineGraph = url.includes('/api/graph/fine');
+    
+    console.log(`🔍 ${isMacroGraph ? '거시' : isFineGraph ? '세밀' : 'Graph'} API 요청:`, {
+      url,
+      hasToken: !!token,
+      tokenValid,
+      tokenLength: token ? token.length : 0,
+      tokenPreview: token ? token.substring(0, 20) + '...' : 'null',
+      fullUrl: `${API_BASE_URL}${url}`,
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token && { 'Authorization': `Bearer ${token}` })
+      },
+      localStorage: {
+        accessToken: localStorage.getItem('accessToken'),
+        googleUser: localStorage.getItem('google_user')
+      }
+    });
+    
+    // 토큰이 유효하지 않으면 경고 및 로그아웃 처리
+    if (token && !tokenValid) {
+      console.error('❌ 토큰이 유효하지 않습니다. 다시 로그인해주세요.');
+      // 토큰 정리
+      localStorage.removeItem('accessToken');
+      localStorage.removeItem('google_user');
+      // 홈으로 리다이렉트
+      window.location.href = '/';
+      return;
+    }
+  }
   
   const config = {
     headers: {
@@ -71,6 +132,22 @@ const apiRequest = async (url, options = {}) => {
     const data = await response.json();
     
     if (!response.ok) {
+      // 디버깅: 에러 응답 상세 로깅
+      if (url.includes('/api/graph/')) {
+        const isMacroGraph = url.includes('/api/graph/macro');
+        const isFineGraph = url.includes('/api/graph/fine');
+        
+        console.error(`❌ ${isMacroGraph ? '거시' : isFineGraph ? '세밀' : 'Graph'} API 에러:`, {
+          status: response.status,
+          statusText: response.statusText,
+          url: requestUrl,
+          response: data,
+          hasToken: !!token,
+          tokenPreview: token ? token.substring(0, 20) + '...' : 'null',
+          requestHeaders: config.headers
+        });
+      }
+      
       const error = new Error(data.message || 'API 요청 실패');
       error.status = response.status;
       throw error;

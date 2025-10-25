@@ -885,6 +885,10 @@ const ViewerPage = () => {
           key={reloadKey}
           ref={viewerRef}
           book={book}
+          reloadKey={reloadKey}
+          initialChapter={currentChapter}
+          initialPage={currentPage}
+          initialProgress={progress}
           onProgressChange={setProgress}
           onCurrentPageChange={(page) => {
             setCurrentPage(page);

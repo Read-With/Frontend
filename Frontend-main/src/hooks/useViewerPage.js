@@ -282,12 +282,20 @@ export function useViewerPage() {
   // 페이지 변경 시 현재 챕터 번호 업데이트
   useEffect(() => {
     const updateCurrentChapter = async () => {
+      // viewerRef가 준비되었는지 확인
+      if (!viewerRef?.current) {
+        return;
+      }
+      
       const chapter = await getCurrentChapterFromViewer(viewerRef);
       if (chapter) {
         setCurrentChapter(chapter);
       }
     };
-    updateCurrentChapter();
+    
+    // 약간의 지연을 두어 rendition이 완전히 준비되도록 함
+    const timeoutId = setTimeout(updateCurrentChapter, 100);
+    return () => clearTimeout(timeoutId);
   }, [currentPage]);
   
   // currentChapter가 바뀔 때 즉시 상태 초기화
@@ -369,11 +377,39 @@ export function useViewerPage() {
   
   // 이벤트 핸들러들
   const handlePrevPage = useCallback(() => {
-    if (viewerRef.current) viewerRef.current.prevPage();
+    console.log('🔄 이전 페이지 요청:', {
+      viewerRef: !!viewerRef.current,
+      hasPrevPage: !!viewerRef.current?.prevPage
+    });
+    if (viewerRef.current) {
+      try {
+        viewerRef.current.prevPage();
+      } catch (error) {
+        console.error('❌ 이전 페이지 이동 실패:', error);
+        toast.error('이전 페이지로 이동할 수 없습니다.');
+      }
+    } else {
+      console.warn('⚠️ viewerRef가 없습니다.');
+      toast.error('뷰어가 아직 준비되지 않았습니다. 잠시 후 다시 시도해주세요.');
+    }
   }, []);
   
   const handleNextPage = useCallback(() => {
-    if (viewerRef.current) viewerRef.current.nextPage();
+    console.log('🔄 다음 페이지 요청:', {
+      viewerRef: !!viewerRef.current,
+      hasNextPage: !!viewerRef.current?.nextPage
+    });
+    if (viewerRef.current) {
+      try {
+        viewerRef.current.nextPage();
+      } catch (error) {
+        console.error('❌ 다음 페이지 이동 실패:', error);
+        toast.error('다음 페이지로 이동할 수 없습니다.');
+      }
+    } else {
+      console.warn('⚠️ viewerRef가 없습니다.');
+      toast.error('뷰어가 아직 준비되지 않았습니다. 잠시 후 다시 시도해주세요.');
+    }
   }, []);
   
   const handleAddBookmark = useCallback(async () => {

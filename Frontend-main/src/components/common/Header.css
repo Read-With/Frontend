@@ -130,26 +130,27 @@
 }
 
 .google-login-button {
-  background: #FDFCF9;
-  border: 1px solid #717B59;
+  background: #f0fdf4;
+  border: 1px solid #22c55e;
   border-radius: 8px;
   padding: 12px 24px;
   font-size: 14px;
   font-weight: 500;
-  color: #3E4F2F;
+  color: #15803d;
   cursor: pointer;
   display: flex;
   align-items: center;
   gap: 12px;
   transition: all 0.2s ease;
-  box-shadow: 0 2px 4px rgba(62, 79, 47, 0.1);
+  box-shadow: 0 2px 4px rgba(34, 197, 94, 0.1);
 }
 
 .google-login-button:hover {
-  box-shadow: 0 4px 8px rgba(62, 79, 47, 0.15);
+  box-shadow: 0 4px 8px rgba(34, 197, 94, 0.2);
   transform: translateY(-1px);
-  background: #D4D4C3;
-  border-color: #3E4F2F;
+  background: #dcfce7;
+  border-color: #16a34a;
+  color: #166534;
 }
 
 .google-login-button:active {

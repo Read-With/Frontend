@@ -269,7 +269,10 @@ export function convertRelationsToElements(relations, idToName, idToDesc, idToDe
     });
   }
 
-  // 엣지 추가
+  // 간선 통합을 위한 Map (노드 쌍을 키로 사용)
+  const edgeMap = new Map();
+  
+  // 엣지 추가 및 통합
   relationsArray.forEach(rel => {
     if (rel.id1 && rel.id2) {
       const id1 = String(rel.id1);
@@ -289,6 +292,11 @@ export function convertRelationsToElements(relations, idToName, idToDesc, idToDe
       if (!nodeSet.has(id1) || !nodeSet.has(id2)) {
         return;
       }
+      
+      // 노드 쌍을 정규화된 키로 변환 (작은 ID가 앞에 오도록)
+      const edgeKey = id1 < id2 ? `${id1}-${id2}` : `${id2}-${id1}`;
+      const source = id1 < id2 ? id1 : id2;
+      const target = id1 < id2 ? id2 : id1;
       
       let relationArray = [];
       let relationLabel = "";
@@ -321,19 +329,30 @@ export function convertRelationsToElements(relations, idToName, idToDesc, idToDe
         relationLabel = rel.relation;
       }
       
-      edges.push({
-        data: {
-          id: `${id1}-${id2}`,
-          source: id1,
-          target: id2,
-          relation: relationArray,
-          label: relationLabel || "",
-          positivity: rel.positivity,
-
-        }
-      });
+      // 기존 간선이 있는지 확인
+      if (edgeMap.has(edgeKey)) {
+        // 기존 간선에 관계 추가
+        const existingEdge = edgeMap.get(edgeKey);
+        existingEdge.data.relation = [...new Set([...existingEdge.data.relation, ...relationArray])]; // 중복 제거
+        existingEdge.data.label = existingEdge.data.label || relationLabel; // 라벨이 없으면 추가
+      } else {
+        // 새로운 간선 생성
+        edgeMap.set(edgeKey, {
+          data: {
+            id: edgeKey,
+            source: source,
+            target: target,
+            relation: relationArray,
+            label: relationLabel || "",
+            positivity: rel.positivity,
+          }
+        });
+      }
     }
   });
+  
+  // Map에서 간선들을 배열로 변환
+  edges.push(...Array.from(edgeMap.values()));
   
   const result = [
     ...nodes.sort((a, b) => a.data.id.localeCompare(b.data.id)),

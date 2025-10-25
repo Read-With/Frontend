@@ -11,7 +11,7 @@ const API_BASE_URL = getApiBaseUrl();
 
 // 인증된 API 요청 헬퍼 함수
 const authenticatedRequest = async (endpoint, options = {}) => {
-  const token = localStorage.getItem('access_token');
+  const token = localStorage.getItem('accessToken');
   
   const defaultHeaders = {
     'Content-Type': 'application/json',
@@ -23,7 +23,7 @@ const authenticatedRequest = async (endpoint, options = {}) => {
     defaultHeaders['Authorization'] = `Bearer ${token}`;
   }
   
-  const response = await fetch(`${API_BASE_URL}/api${endpoint}`, {
+  const response = await fetch(`${API_BASE_URL}${endpoint}`, {
     ...options,
     headers: {
       ...defaultHeaders,
@@ -34,7 +34,7 @@ const authenticatedRequest = async (endpoint, options = {}) => {
   if (!response.ok) {
     if (response.status === 401) {
       // 토큰 만료 시 로그아웃 처리
-      localStorage.removeItem('access_token');
+      localStorage.removeItem('accessToken');
       localStorage.removeItem('google_user');
       window.location.href = '/';
     }
@@ -65,7 +65,7 @@ export const getMacroGraph = async (params) => {
       uptoChapter: uptoChapter.toString(),
     });
     
-    const data = await authenticatedRequest(`/graph/macro?${queryParams.toString()}`);
+    const data = await authenticatedRequest(`/api/graph/macro?${queryParams.toString()}`);
     return data;
   } catch (error) {
     console.error('거시 그래프 조회 실패:', error);
@@ -96,10 +96,39 @@ export const getFineGraph = async (params) => {
       eventIdx: eventIdx.toString(),
     });
     
-    const data = await authenticatedRequest(`/graph/fine?${queryParams.toString()}`);
+    const data = await authenticatedRequest(`/api/graph/fine?${queryParams.toString()}`);
     return data;
   } catch (error) {
     console.error('세밀 그래프 조회 실패:', error);
+    throw error;
+  }
+};
+
+/**
+ * 챕터별 그래프 조회 (거시 그래프의 챕터별 버전)
+ * 특정 챕터까지의 누적 인물 관계 그래프를 조회합니다.
+ * @param {Object} params - 조회 파라미터
+ * @param {number} params.bookId - 책 ID
+ * @param {number} params.chapterIdx - 챕터 인덱스
+ * @returns {Promise<Object>} 챕터별 그래프 데이터
+ */
+export const getChapterGraph = async (params) => {
+  try {
+    const { bookId, chapterIdx } = params;
+    
+    if (!bookId || chapterIdx === undefined) {
+      throw new Error('bookId와 chapterIdx는 필수 파라미터입니다.');
+    }
+    
+    const queryParams = new URLSearchParams({
+      bookId: bookId.toString(),
+      chapterIdx: chapterIdx.toString(),
+    });
+    
+    const data = await authenticatedRequest(`/api/graph/chapter?${queryParams.toString()}`);
+    return data;
+  } catch (error) {
+    console.error('챕터 그래프 조회 실패:', error);
     throw error;
   }
 };
@@ -132,19 +161,42 @@ export const transformGraphData = (graphData) => {
     classes: character.main_character ? 'main-character' : 'character',
   }));
   
-  // 엣지 변환
-  const edges = relations.map(relation => ({
-    data: {
-      id: `${relation.id1}-${relation.id2}`,
-      source: relation.id1.toString(),
-      target: relation.id2.toString(),
-      positivity: relation.positivity,
-      count: relation.count,
-      relation: relation.relation,
-      label: relation.relation.join(', '),
-    },
-    classes: relation.positivity > 0 ? 'positive' : relation.positivity < 0 ? 'negative' : 'neutral',
-  }));
+  // 엣지 변환 및 통합
+  const edgeMap = new Map();
+  
+  relations.forEach(relation => {
+    const id1 = relation.id1.toString();
+    const id2 = relation.id2.toString();
+    
+    // 노드 쌍을 정규화된 키로 변환 (작은 ID가 앞에 오도록)
+    const edgeKey = id1 < id2 ? `${id1}-${id2}` : `${id2}-${id1}`;
+    const source = id1 < id2 ? id1 : id2;
+    const target = id1 < id2 ? id2 : id1;
+    
+    if (edgeMap.has(edgeKey)) {
+      // 기존 간선에 관계 추가
+      const existingEdge = edgeMap.get(edgeKey);
+      existingEdge.data.relation = [...new Set([...existingEdge.data.relation, ...relation.relation])]; // 중복 제거
+      existingEdge.data.count = (existingEdge.data.count || 0) + (relation.count || 0);
+      existingEdge.data.label = existingEdge.data.relation.join(', ');
+    } else {
+      // 새로운 간선 생성
+      edgeMap.set(edgeKey, {
+        data: {
+          id: edgeKey,
+          source: source,
+          target: target,
+          positivity: relation.positivity,
+          count: relation.count,
+          relation: relation.relation,
+          label: relation.relation.join(', '),
+        },
+        classes: relation.positivity > 0 ? 'positive' : relation.positivity < 0 ? 'negative' : 'neutral',
+      });
+    }
+  });
+  
+  const edges = Array.from(edgeMap.values());
   
   return { nodes, edges };
 };

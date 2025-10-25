@@ -237,7 +237,7 @@ const OAuthCallback = () => {
           width: '50px',
           height: '50px',
           border: '4px solid #f3f3f3',
-          borderTop: '4px solid #4285f4',
+          borderTop: '4px solid #22c55e',
           borderRadius: '50%',
           animation: 'spin 1s linear infinite',
           marginBottom: '20px'
@@ -263,12 +263,12 @@ const OAuthCallback = () => {
         <div style={{
           marginTop: '30px',
           padding: '15px 25px',
-          backgroundColor: 'rgba(66, 133, 244, 0.1)',
+          backgroundColor: 'rgba(34, 197, 94, 0.1)',
           borderRadius: '8px',
-          border: '1px solid rgba(66, 133, 244, 0.2)'
+          border: '1px solid rgba(34, 197, 94, 0.2)'
         }}>
           <p style={{ 
-            color: '#4285f4', 
+            color: '#22c55e', 
             fontSize: '14px',
             margin: 0,
             textAlign: 'center'
@@ -355,7 +355,7 @@ const OAuthCallback = () => {
           <button
             onClick={() => navigate('/')}
             style={{
-              background: '#4285f4',
+              background: '#22c55e',
               color: 'white',
               border: 'none',
               padding: '12px 24px',
@@ -365,8 +365,8 @@ const OAuthCallback = () => {
               fontWeight: 500,
               transition: 'background-color 0.2s ease'
             }}
-            onMouseOver={(e) => e.target.style.backgroundColor = '#3367d6'}
-            onMouseOut={(e) => e.target.style.backgroundColor = '#4285f4'}
+            onMouseOver={(e) => e.target.style.backgroundColor = '#16a34a'}
+            onMouseOut={(e) => e.target.style.backgroundColor = '#22c55e'}
           >
             홈으로 돌아가기
           </button>

@@ -13,7 +13,7 @@ import { sidebarStyles, topBarStyles, containerStyles, graphStyles, createButton
 import { useGraphSearch } from '../../hooks/useGraphSearch.jsx';
 import { useGraphDataLoader } from '../../hooks/useGraphDataLoader.js';
 import { useLocalStorageNumber } from '../../hooks/useLocalStorage.js';
-import { getMacroGraph } from '../../utils/common/api.js';
+import { getMacroGraph, getChapterGraph } from '../../utils/api/graphApi.js';
 import { convertRelationsToElements, filterMainCharacters } from '../../utils/graphDataUtils';
 import { createCharacterMaps } from '../../utils/characterUtils';
 import { createRippleEffect, ensureElementsInBounds, processTooltipData } from '../../utils/graphUtils.js';
@@ -61,42 +61,133 @@ function RelationGraphWrapper() {
   const selectedNodeIdRef = useRef(null);
   const prevChapterNum = useRef();
   const prevEventNum = useRef();
+  const isMacroGraphLoadingRef = useRef(false);
   
-   // API 거시 그래프 데이터 로딩
-   useEffect(() => {
-     const loadMacroGraphData = async () => {
-       // bookId가 있는 경우 또는 API 책인 경우
-       const targetBookId = bookId || (book && typeof book.id === 'number' ? book.id : null);
-       
-       if (!targetBookId) {
-         setApiFineData(null);
-         return;
-       }
+  // API 책인지 확인 (bookId가 있거나 숫자 ID를 가진 책이거나 isFromAPI가 true인 경우)
+  const isApiBook = isBookId || (book && (typeof book.id === 'number' || book.isFromAPI === true));
+  
+  // API 거시 그래프 데이터 로딩 (초기 로딩)
+  useEffect(() => {
+    const loadMacroGraphData = async () => {
+      // bookId가 있는 경우 또는 API 책인 경우
+      const targetBookId = bookId || (book && typeof book.id === 'number' ? book.id : null);
       
+      if (!targetBookId) {
+        setApiFineData(null);
+        return;
+      }
+      
+      // 이미 로딩 중이면 중복 호출 방지
+      if (isMacroGraphLoadingRef.current) {
+        console.log('⚠️ 거시 그래프 API 호출 중복 방지:', {
+          targetBookId,
+          isLoading: isMacroGraphLoadingRef.current,
+          timestamp: new Date().toISOString()
+        });
+        return;
+      }
+      
+      isMacroGraphLoadingRef.current = true;
       setApiFineLoading(true);
       try {
         // 거시 그래프는 맨 마지막 챕터의 데이터만 가져옴
         // 임시로 1을 사용 (실제로는 책의 최대 챕터 번호를 가져와야 함)
-        const macroData = await getMacroGraph(targetBookId, 1);
+        console.log('🔍 거시 그래프 API 호출 시작:', {
+          targetBookId,
+          uptoChapter: 1,
+          timestamp: new Date().toISOString()
+        });
+        
+        const macroData = await getMacroGraph({
+          bookId: targetBookId,
+          uptoChapter: 1
+        });
+        
+        console.log('✅ 거시 그래프 API 응답:', {
+          isSuccess: macroData?.isSuccess,
+          hasResult: !!macroData?.result,
+          resultKeys: macroData?.result ? Object.keys(macroData.result) : [],
+          charactersCount: macroData?.result?.characters?.length || 0,
+          relationsCount: macroData?.result?.relations?.length || 0
+        });
+        
         setApiMacroData(macroData.result);
         setApiFineData(macroData.result);
         
       } catch (error) {
-        console.error('거시 그래프 API 호출 실패:', error);
+        console.error('❌ 거시 그래프 API 호출 실패:', {
+          error: error.message,
+          status: error.status,
+          targetBookId,
+          uptoChapter: 1,
+          timestamp: new Date().toISOString()
+        });
         
-        // 500 에러인 경우 특별한 처리
-        if (error.message.includes('500') || error.message.includes('서버 에러')) {
-        }
-        
+        // API 호출 실패 시 로컬 데이터 사용으로 폴백
+        console.log('🔄 API 호출 실패, 로컬 데이터 사용으로 전환');
         setApiMacroData(null);
         setApiFineData(null);
       } finally {
+        isMacroGraphLoadingRef.current = false;
         setApiFineLoading(false);
       }
     };
 
     loadMacroGraphData();
   }, [bookId, book?.id]);
+
+  // 챕터 변경 시 API 데이터 로딩
+  useEffect(() => {
+    const loadChapterGraphData = async () => {
+      // API 책인 경우에만 실행
+      if (!isApiBook) return;
+      
+      const targetBookId = bookId || (book && typeof book.id === 'number' ? book.id : null);
+      if (!targetBookId) return;
+      
+      setApiFineLoading(true);
+      try {
+        console.log('🔍 챕터 그래프 API 호출 시작:', {
+          targetBookId,
+          chapterIdx: currentChapter,
+          timestamp: new Date().toISOString()
+        });
+        
+        // 임시로 거시 그래프 API를 사용 (챕터별 엔드포인트가 구현되지 않은 경우)
+        const chapterData = await getMacroGraph({
+          bookId: targetBookId,
+          uptoChapter: currentChapter
+        });
+        
+        console.log('✅ 챕터 그래프 API 응답:', {
+          isSuccess: chapterData?.isSuccess,
+          hasResult: !!chapterData?.result,
+          resultKeys: chapterData?.result ? Object.keys(chapterData.result) : [],
+          charactersCount: chapterData?.result?.characters?.length || 0,
+          relationsCount: chapterData?.result?.relations?.length || 0
+        });
+        
+        setApiFineData(chapterData.result);
+        
+      } catch (error) {
+        console.error('❌ 챕터 그래프 API 호출 실패:', {
+          error: error.message,
+          status: error.status,
+          targetBookId,
+          chapterIdx: currentChapter,
+          timestamp: new Date().toISOString()
+        });
+        
+        // API 호출 실패 시 로컬 데이터 사용으로 폴백
+        console.log('🔄 챕터 그래프 API 호출 실패, 로컬 데이터 사용으로 전환');
+        setApiFineData(null);
+      } finally {
+        setApiFineLoading(false);
+      }
+    };
+
+    loadChapterGraphData();
+  }, [currentChapter, isApiBook, bookId, book?.id]);
 
   // 데이터 로딩 - bookId가 있는 경우 또는 API 책이 아닌 경우에만 기존 로컬 데이터 사용
   const {
@@ -108,7 +199,7 @@ function RelationGraphWrapper() {
     maxChapter,
     loading,
     error
-  } = useGraphDataLoader((isBookId || book?.isFromAPI) ? null : filename, currentChapter);
+  } = useGraphDataLoader(isApiBook ? null : filename, currentChapter);
 
   // currentChapter가 maxChapter를 초과하지 않도록 검증
   useEffect(() => {
@@ -145,11 +236,8 @@ function RelationGraphWrapper() {
     }
   }, [apiFineData]);
   
-  // API 책인지 확인 (bookId가 있거나 숫자 ID를 가진 책이거나 isFromAPI가 true인 경우)
-  const isApiBook = isBookId || (book && (typeof book.id === 'number' || book.isFromAPI === true));
-
   // 사용할 elements 결정 (API 데이터 우선, 없으면 로컬 데이터)
-  const elements = isApiBook ? apiElements : localElements;
+  const elements = (isApiBook && apiElements.length > 0) ? apiElements : localElements;
   
   
   // API 책의 경우 이벤트 선택 핸들러
@@ -485,8 +573,8 @@ function RelationGraphWrapper() {
     [maxChapter]
   );
 
-  // 로딩 상태 렌더링
-  if (isGraphLoading || apiFineLoading) {
+  // 로딩 상태 렌더링 (API 호출 중이거나 로컬 데이터 로딩 중)
+  if ((isApiBook && apiFineLoading) || (!isApiBook && isGraphLoading)) {
     return (
       <div style={{
         display: 'flex',
@@ -862,7 +950,7 @@ function RelationGraphWrapper() {
                 fontWeight: '600',
                 color: COLORS.textPrimary
               }}>
-                거시 그래프
+                {isApiBook ? '챕터 그래프' : '거시 그래프'}
               </h2>
               <div style={{
                 background: COLORS.backgroundLight,
@@ -872,7 +960,10 @@ function RelationGraphWrapper() {
                 color: COLORS.textSecondary,
                 fontWeight: '500'
               }}>
-                Chapter 1 ~ {currentChapter} 누적 관계
+                {isApiBook 
+                  ? `Chapter ${currentChapter} 관계`
+                  : `Chapter 1 ~ ${currentChapter} 누적 관계`
+                }
               </div>
             </div>
             <div style={{
