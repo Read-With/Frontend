@@ -88,7 +88,7 @@ const ViewerToolbar = ({
              title="현재 위치에 북마크 추가"
            >
              <span className="material-symbols-outlined">bookmark_add</span>
-             <span className="text-sm font-medium">북마크</span>
+             <span className="text-sm font-semibold">북마크</span>
            </button>
            <button 
              onClick={onToggleBookmarkList} 
@@ -103,7 +103,7 @@ const ViewerToolbar = ({
              title="북마크 목록 보기"
            >
              <span className="material-symbols-outlined">bookmarks</span>
-             <span className="text-sm font-medium">북마크 목록</span>
+             <span className="text-sm font-semibold">북마크 목록</span>
            </button>
           
           {/* 그래프 관련 */}
@@ -144,7 +144,7 @@ const ViewerToolbar = ({
                <span className="material-symbols-outlined" style={{ fontWeight: 'bold' }}>view_column</span> : 
                <span className="material-symbols-outlined">open_in_full</span>
              }
-             <span className={`text-sm font-medium ${showGraph ? 'font-semibold' : ''}`}>화면 모드</span>
+             <span className={`text-sm font-semibold ${showGraph ? 'font-semibold' : ''}`}>화면 모드</span>
            </button>
           
           {/* 설정 */}
@@ -314,7 +314,7 @@ const ViewerToolbar = ({
                 aria-label="북마크 목록"
                 title="북마크 목록 보기/숨기기"
                 style={{
-                  width: '8rem',
+                  width: '9rem',
                   backgroundColor: 'white',
                   color: '#1B5E20',
                   border: '1px solid #388E3C'
@@ -370,7 +370,7 @@ const ViewerToolbar = ({
                    <span className="material-symbols-outlined" style={{ marginBottom: '-2px', fontWeight: 'bold' }}>view_column</span> : 
                    <span className="material-symbols-outlined" style={{ marginBottom: '-2px' }}>open_in_full</span>
                  }
-                 <span style={{ fontWeight: showGraph ? '600' : '500' }}>
+                 <span style={{ fontWeight: '600' }}>
                    {getGraphToggleText()}
                  </span>
                </span>

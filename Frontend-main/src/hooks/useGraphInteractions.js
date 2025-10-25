@@ -127,6 +127,11 @@ export default function useGraphInteractions({
           mouseY = evt.originalEvent.clientY - containerRect.top;
         }
         
+        // 툴팁을 오른쪽으로 오프셋 추가 (노드 크기 + 여백 고려)
+        const nodeSize = node.renderedBoundingBox()?.w || 50;
+        const offsetX = nodeSize + 100;
+        mouseX += offsetX;
+        
         // 노드 하이라이트 처리
         handleNodeHighlight(node);
 
