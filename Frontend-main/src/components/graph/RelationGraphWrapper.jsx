@@ -730,15 +730,14 @@ function RelationGraphWrapper() {
             value={filterStage}
             onChange={(e) => setFilterStage(Number(e.target.value))}
             style={{
-              ...createButtonStyle(ANIMATION_VALUES, 'default'),
               height: 32,
               padding: '0 12px',
               borderRadius: 8,
               border: `1px solid ${filterStage > 0 ? COLORS.primary : COLORS.border}`,
               background: filterStage > 0 ? COLORS.primary : COLORS.background,
               color: filterStage > 0 ? '#fff' : COLORS.textPrimary,
-              fontSize: 12,
-              fontWeight: 500,
+              fontSize: 14,
+              fontWeight: 700,
               cursor: 'pointer',
               transition: 'all 0.2s ease',
               outline: 'none',

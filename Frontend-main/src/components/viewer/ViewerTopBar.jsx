@@ -326,34 +326,34 @@ const ViewerTopBar = ({
         value={filterStage}
         onChange={(e) => setFilterStage(Number(e.target.value))}
         style={{
-          height: 28,
+          height: 32,
           padding: '0 12px',
-          borderRadius: 6,
-          border: `1.5px solid ${filterStage > 0 ? '#5C6F5C' : '#e3e6ef'}`,
+          borderRadius: 8,
+          border: `1px solid ${filterStage > 0 ? '#5C6F5C' : '#e5e7eb'}`,
           background: filterStage > 0 ? '#5C6F5C' : '#fff',
           color: filterStage > 0 ? '#fff' : '#5C6F5C',
-          fontSize: 12,
+          fontSize: 14,
           fontWeight: 500,
           cursor: 'pointer',
-          transition: 'all 0.18s ease',
+          transition: 'all 0.2s ease',
           outline: 'none',
           display: 'flex',
           alignItems: 'center',
           gap: 6,
-          boxShadow: filterStage > 0 ? '0 2px 8px rgba(92,111,92,0.13)' : '0 2px 8px rgba(92,111,92,0.07)',
+          boxShadow: filterStage > 0 ? '0 2px 8px rgba(92,111,92,0.25)' : '0 2px 8px rgba(0,0,0,0.1)',
           justifyContent: 'center',
-          minWidth: 100,
+          minWidth: 120,
         }}
         title="필터링 단계 선택"
       >
         <option value={0} style={{ color: '#5C6F5C', background: '#fff' }}>
-          전체 보기
+          모두 보기
         </option>
         <option value={1} style={{ color: '#5C6F5C', background: '#fff' }}>
           주요 인물만 보기
         </option>
         <option value={2} style={{ color: '#5C6F5C', background: '#fff' }}>
-          주요 인물로 보기
+          주요 인물과 보기
         </option>
       </select>
     </div>
@@ -364,7 +364,7 @@ const ViewerTopBar = ({
       {/* 상단바 1: 전체화면 모드일 때 모든 기능이 통합된 상단바 */}
       <div
         style={{
-          height: 40,
+          height: 44,
           flexShrink: 0,
           display: "flex",
           flexDirection: "row",
@@ -449,7 +449,7 @@ const ViewerTopBar = ({
       {!graphFullScreen && (
         <div
           style={{
-            height: 40,
+            height: 44,
             flexShrink: 0,
             display: "flex",
             flexDirection: "row",

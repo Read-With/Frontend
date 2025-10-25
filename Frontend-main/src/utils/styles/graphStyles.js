@@ -229,7 +229,7 @@ export const getGraphControlsStyles = () => ({
     maxWidth: '220px',
     border: `1px solid ${COLORS.border}`,
     borderRadius: '8px',
-    fontSize: '12px',
+    fontSize: '14px',
     color: COLORS.textPrimary,
     background: COLORS.backgroundLight,
     transition: `all ${ANIMATION_VALUES.DURATION.FAST}`,
@@ -245,25 +245,36 @@ export const getGraphControlsStyles = () => ({
     gap: '8px',
     border: 'none',
     borderRadius: '8px',
-    fontSize: '12px',
+    fontSize: '13px',
     fontWeight: '500',
     cursor: 'pointer',
     transition: `all ${ANIMATION_VALUES.DURATION.FAST}`,
-    width: '80px',
+    width: '84px',
     height: '32px',
     padding: '0 12px',
     flexShrink: 0,
   },
   searchButton: {
-    background: COLORS.primary,
-    color: COLORS.white,
-    boxShadow: '0 2px 8px rgba(108, 142, 255, 0.4)',
-  },
-  resetButton: {
-    background: COLORS.backgroundLight,
-    color: COLORS.textSecondary,
+    background: '#ffffff',
+    color: COLORS.textPrimary,
     border: `1px solid ${COLORS.border}`,
     boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+    '&:hover': {
+      background: '#f8f9fc',
+      transform: 'translateY(-1px)',
+      boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+    }
+  },
+  resetButton: {
+    background: '#ffffff',
+    color: COLORS.textPrimary,
+    border: `1px solid ${COLORS.border}`,
+    boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+    '&:hover': {
+      background: '#f8f9fc',
+      transform: 'translateY(-1px)',
+      boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+    }
   },
   form: {
     display: 'flex',
@@ -308,7 +319,7 @@ export const getGraphControlsStyles = () => ({
     color: COLORS.textSecondary, 
     background: COLORS.backgroundLight,
     borderBottom: `1px solid ${COLORS.border}`,
-    fontWeight: '500'
+    fontWeight: '700'
   },
   container: {
     position: 'relative', 

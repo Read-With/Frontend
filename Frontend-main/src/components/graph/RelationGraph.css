@@ -71,7 +71,7 @@
 }
 
 .search-btn {
-  background: #1976d2;
+  background: #5C6F5C;
   color: #fff;
   border: none;
   border-radius: 4px;
@@ -150,7 +150,7 @@
 
 .filter-group button.active,
 .filter-group button:hover {
-  background: #1976d2;
+  background: #5C6F5C;
   color: #fff;
 }
 
@@ -213,7 +213,7 @@
 
 .main-badge {
   display: inline-block;
-  background: #1976d2;
+  background: #5C6F5C;
   color: #fff;
   font-size: 12px;
   border-radius: 4px;
@@ -263,12 +263,12 @@
 }
 
 .node-tooltip .close-btn:hover {
-  color: #6c8eff;
+  color: #5C6F5C;
 }
 
 .node-tooltip .main-badge {
   display: inline-block;
-  background: #6c8eff;
+  background: #5C6F5C;
   color: #fff;
   font-size: 9px;
   border-radius: 6px;
@@ -421,7 +421,7 @@ node.highlighted {
 .graph-card {
   background: #fff;
   border-radius: 16px;
-  box-shadow: 0 2px 16px #0002, 0 1.5px 8px #1976d211;
+  box-shadow: 0 2px 16px #0002, 0 1.5px 8px #5C6F5C11;
   border: 1.5px solid #e3e6ef;
   padding: 2rem;
   min-width: 2000px;
@@ -661,7 +661,7 @@ node.highlighted {
 
 .close-btn:hover {
   background-color: #f8f9fa;
-  color: #6c8eff;
+  color: #5C6F5C;
 }
 
 .close-btn svg {
@@ -743,7 +743,7 @@ node.highlighted {
 .summary-badge {
   display: inline-flex;
   align-items: center;
-  background: linear-gradient(135deg, #6c8eff 0%, #5a7bff 100%);
+  background: linear-gradient(135deg, #5C6F5C 0%, #4A5A4A 100%);
   color: white;
   font-size: 11px;
   font-weight: 500;
@@ -1414,18 +1414,18 @@ node.highlighted {
 }
 
 .file-tab.active {
-  background-color: #6c8eff;
+  background-color: #5C6F5C;
   height: 45px;
   margin-top: -5px;
   z-index: 2;
 }
 
 .file-tab.active::before {
-  box-shadow: 5px 5px 0 5px #6c8eff;
+  box-shadow: 5px 5px 0 5px #5C6F5C;
 }
 
 .file-tab.active::after {
-  box-shadow: -5px 5px 0 5px #6c8eff;
+  box-shadow: -5px 5px 0 5px #5C6F5C;
 }
 
 .file-tab-content {
@@ -1553,9 +1553,9 @@ node.highlighted {
 }
 
 .chat-btn {
-  background: linear-gradient(135deg, #6c8eff 0%, #5a7bff 100%);
+  background: linear-gradient(135deg, #5C6F5C 0%, #4A5A4A 100%);
   color: #ffffff;
-  box-shadow: 0 2px 8px rgba(108, 142, 255, 0.2);
+  box-shadow: 0 2px 8px rgba(92, 111, 92, 0.2);
   font-weight: 600;
   letter-spacing: 0.3px;
 }
@@ -1699,11 +1699,11 @@ node.highlighted {
   width: 0;
   height: 0;
   border-radius: 50%;
-  background-color: #1976d2;
+  background-color: #5C6F5C;
   transform: translate(-50%, -50%);
   opacity: 0.6;
   animation: ripple 0.5s ease-out;
-  box-shadow: 0 0 10px rgba(25, 118, 210, 0.2);
+  box-shadow: 0 0 10px rgba(92, 111, 92, 0.2);
 }
 
 @keyframes ripple {

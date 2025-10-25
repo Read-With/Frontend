@@ -171,6 +171,16 @@ export function buildSuggestions(elements, query, currentChapterData = null) {
         matchType
       };
     })
+    // 중복 제거: label 기준으로 중복된 인물 제거
+    .reduce((acc, current) => {
+      const existingIndex = acc.findIndex(item => 
+        item.label === current.label
+      );
+      if (existingIndex === -1) {
+        acc.push(current);
+      }
+      return acc;
+    }, [])
     .slice(0, 8);
     return matches;
   } catch (error) {

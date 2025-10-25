@@ -91,7 +91,7 @@ const ViewerLayout = ({
                width: graphFullScreen ? '100%' : '50%',
                position: 'relative',
                boxShadow: graphFullScreen ? 'none' : '-2px 0 10px rgba(0, 0, 0, 0.05)',
-               paddingBottom: '3rem',
+               paddingBottom: '0',
                minWidth: graphFullScreen ? '100%' : '50%',
                               ...(graphFullScreen && {
                   display: 'block'

@@ -231,19 +231,19 @@ const OAuthCallback = () => {
         alignItems: 'center',
         justifyContent: 'center',
         minHeight: '100vh',
-        background: 'linear-gradient(135deg, #f5f7fa 0%, rgba(92, 111, 92, 0.05) 100%)'
+        background: 'linear-gradient(135deg, #1B4D3E 0%, #2D5016 30%, #3E6B1F 70%, #4A7C28 100%)'
       }}>
         <div style={{
           width: '50px',
           height: '50px',
-          border: '4px solid #f3f3f3',
-          borderTop: '4px solid #22c55e',
+          border: '4px solid rgba(255, 255, 255, 0.2)',
+          borderTop: '4px solid #ffffff',
           borderRadius: '50%',
           animation: 'spin 1s linear infinite',
           marginBottom: '20px'
         }}></div>
         <h2 style={{ 
-          color: '#333', 
+          color: '#ffffff', 
           fontSize: '24px', 
           fontWeight: '600',
           marginBottom: '10px',
@@ -252,7 +252,7 @@ const OAuthCallback = () => {
           구글 로그인 처리 중
         </h2>
         <p style={{ 
-          color: '#666', 
+          color: 'rgba(255, 255, 255, 0.9)', 
           fontSize: '16px',
           textAlign: 'center',
           maxWidth: '400px',
@@ -263,17 +263,17 @@ const OAuthCallback = () => {
         <div style={{
           marginTop: '30px',
           padding: '15px 25px',
-          backgroundColor: 'rgba(34, 197, 94, 0.1)',
+          backgroundColor: 'rgba(255, 255, 255, 0.1)',
           borderRadius: '8px',
-          border: '1px solid rgba(34, 197, 94, 0.2)'
+          border: '1px solid rgba(255, 255, 255, 0.2)'
         }}>
           <p style={{ 
-            color: '#22c55e', 
+            color: 'rgba(255, 255, 255, 0.9)', 
             fontSize: '14px',
             margin: 0,
             textAlign: 'center'
           }}>
-            💡 백엔드 서버 연결이 느릴 수 있습니다. 잠시만 기다려주세요.
+            백엔드 서버 연결이 느릴 수 있습니다. 잠시만 기다려주세요.
           </p>
         </div>
         <style>
@@ -296,7 +296,7 @@ const OAuthCallback = () => {
         alignItems: 'center',
         justifyContent: 'center',
         minHeight: '100vh',
-        background: 'linear-gradient(135deg, #f5f7fa 0%, rgba(92, 111, 92, 0.05) 100%)'
+        background: 'linear-gradient(135deg, #1B4D3E 0%, #2D5016 30%, #3E6B1F 70%, #4A7C28 100%)'
       }}>
         <div style={{
           background: 'rgba(255, 255, 255, 0.95)',
@@ -349,13 +349,13 @@ const OAuthCallback = () => {
               margin: 0,
               fontWeight: '500'
             }}>
-              💡 해결 방법: 백엔드 서버가 실행 중인지 확인하고, Google OAuth 설정을 확인해주세요.
+              해결 방법: 백엔드 서버가 실행 중인지 확인하고, Google OAuth 설정을 확인해주세요.
             </p>
           </div>
           <button
             onClick={() => navigate('/')}
             style={{
-              background: '#22c55e',
+              background: '#1B4D3E',
               color: 'white',
               border: 'none',
               padding: '12px 24px',
@@ -365,8 +365,8 @@ const OAuthCallback = () => {
               fontWeight: 500,
               transition: 'background-color 0.2s ease'
             }}
-            onMouseOver={(e) => e.target.style.backgroundColor = '#16a34a'}
-            onMouseOut={(e) => e.target.style.backgroundColor = '#22c55e'}
+            onMouseOver={(e) => e.target.style.backgroundColor = '#2D5016'}
+            onMouseOut={(e) => e.target.style.backgroundColor = '#1B4D3E'}
           >
             홈으로 돌아가기
           </button>

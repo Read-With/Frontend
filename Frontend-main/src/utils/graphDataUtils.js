@@ -334,7 +334,11 @@ export function convertRelationsToElements(relations, idToName, idToDesc, idToDe
         // 기존 간선에 관계 추가
         const existingEdge = edgeMap.get(edgeKey);
         existingEdge.data.relation = [...new Set([...existingEdge.data.relation, ...relationArray])]; // 중복 제거
-        existingEdge.data.label = existingEdge.data.label || relationLabel; // 라벨이 없으면 추가
+        
+        // 새로 추가된 관계가 있으면 라벨을 새로 추가된 관계의 첫 번째 요소로 업데이트
+        if (relationLabel) {
+          existingEdge.data.label = relationLabel;
+        }
       } else {
         // 새로운 간선 생성
         edgeMap.set(edgeKey, {

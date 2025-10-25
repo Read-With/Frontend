@@ -434,7 +434,7 @@ const ViewerToolbar = ({
                    marginBottom: '-2px',
                    fontSize: '18px'
                  }}>settings</span>
-                 <span style={{ fontSize: '13px', fontWeight: '500' }}>설정</span>
+                 <span style={{ fontSize: '13px', fontWeight: '700' }}>설정</span>
                </span>
              </button>
           </div>

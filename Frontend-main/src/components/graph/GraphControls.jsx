@@ -170,37 +170,15 @@ function GraphControls({
             ...(isSearchActive ? graphControlsStyles.resetButton : graphControlsStyles.searchButton)
           }}
           onClick={isSearchActive ? handleResetButtonClick : handleSearchButtonClick}
-          onMouseEnter={(e) => {
-            if (isSearchActive) {
-              e.target.style.background = '#f8f9fc';
-              e.target.style.transform = 'translateY(-1px)';
-              e.target.style.boxShadow = '0 2px 8px rgba(0,0,0,0.15)';
-            } else {
-              e.target.style.background = '#4A5A4A';
-              e.target.style.transform = 'translateY(-1px)';
-              e.target.style.boxShadow = '0 4px 12px rgba(92, 111, 92, 0.5)';
-            }
-          }}
-          onMouseLeave={(e) => {
-            if (isSearchActive) {
-              e.target.style.background = '#f8f9fc';
-              e.target.style.transform = 'translateY(0)';
-              e.target.style.boxShadow = '0 1px 3px rgba(0,0,0,0.1)';
-            } else {
-              e.target.style.background = '#5C6F5C';
-              e.target.style.transform = 'translateY(0)';
-              e.target.style.boxShadow = '0 2px 8px rgba(92, 111, 92, 0.4)';
-            }
-          }}
         >
           {isSearchActive ? (
             <>
-              <span className="material-symbols-outlined" style={{fontSize: '10px'}}>undo</span>
+              <span className="material-symbols-outlined" style={{fontSize: '12px'}}>undo</span>
               초기화
             </>
           ) : (
             <>
-              <span className="material-symbols-outlined" style={{fontSize: '10px'}}>search</span>
+              <span className="material-symbols-outlined" style={{fontSize: '12px'}}>search</span>
               검색
             </>
           )}
@@ -222,7 +200,7 @@ function GraphControls({
           maxHeight: '320px',
           overflowY: 'auto',
           marginTop: '8px',
-          minWidth: '280px',
+          minWidth: '320px',
           width: '100%',
           scrollbarWidth: 'thin',
           scrollbarColor: '#cbd5e1 #f1f5f9',
@@ -257,7 +235,7 @@ function GraphControls({
                 borderTopRightRadius: '8px',
               }}>
                 <div style={{
-                  fontSize: '11px',
+                  fontSize: '13px',
                   fontWeight: '500',
                   color: '#6c757d',
                   textTransform: 'uppercase',
@@ -287,8 +265,8 @@ function GraphControls({
                   <div>
                     {/* 주요 이름 */}
                     <div style={{ 
-                      fontWeight: '700', 
-                      fontSize: '15px',
+                      fontWeight: '900', 
+                      fontSize: '17px',
                       color: '#5C6F5C',
                       marginBottom: '6px',
                     }}>
@@ -298,7 +276,7 @@ function GraphControls({
                     {/* 설명 */}
                     {suggestion.description && (
                     <div style={{ 
-                      fontSize: '13px', 
+                      fontSize: '15px', 
                       color: '#6c757d', 
                       lineHeight: '1.5',
                       marginBottom: '8px',
@@ -323,9 +301,9 @@ function GraphControls({
                         
                         {/* 다른 이름 라벨 */}
                         <div style={{
-                          fontSize: '11px',
+                          fontSize: '13px',
                           color: '#8b9bb4',
-                          fontWeight: '500',
+                          fontWeight: '700',
                           marginBottom: '4px',
                           textTransform: 'uppercase',
                           letterSpacing: '0.5px',
@@ -335,7 +313,7 @@ function GraphControls({
                         
                         {/* 다른 이름 목록 */}
                         <div style={{
-                          fontSize: '12px',
+                          fontSize: '14px',
                           color: '#6c757d',
                           fontStyle: 'italic',
                           lineHeight: '1.4',
@@ -355,7 +333,7 @@ function GraphControls({
               padding: '32px 24px',
               textAlign: 'center',
               color: '#6c757d',
-              fontSize: '14px',
+              fontSize: '16px',
               background: '#fafbfc',
               borderBottomLeftRadius: '8px',
               borderBottomRightRadius: '8px',
@@ -368,15 +346,15 @@ function GraphControls({
                 🔍
               </div>
               <div style={{ 
-                fontWeight: '600', 
+                fontWeight: '700', 
                 marginBottom: '6px',
                 color: '#5C6F5C',
-                fontSize: '14px',
+                fontSize: '16px',
               }}>
                 검색 결과 없음
               </div>
               <div style={{ 
-                fontSize: '12px', 
+                fontSize: '14px', 
                 opacity: 0.7,
                 color: '#6c757d',
                 lineHeight: '1.4',
