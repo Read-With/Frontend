@@ -1,10 +1,11 @@
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { Book, BookOpen, CheckCircle2, Search, Plus, Library, Heart, AlertCircle, Grid3X3, List } from 'lucide-react';
 import Header from '../components/common/Header';
 import BookLibrary from '../components/library/BookLibrary';
 import FileUpload from '../components/library/FileUpload';
 import { useBooks } from '../hooks/useBooks';
 import useAuth from '../hooks/useAuth';
+import { getAllProgress } from '../utils/common/api';
 import './MyPage.css';
 
 export default function MyPage() {
@@ -15,11 +16,29 @@ export default function MyPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState('recent');
   const [viewMode, setViewMode] = useState('grid'); // 'grid' 또는 'list'
+  const [allProgress, setAllProgress] = useState([]);
 
   const handleUploadSuccess = useCallback((newBook) => {
     addBook(newBook);
     setShowUpload(false);
   }, [addBook]);
+
+  useEffect(() => {
+    const fetchAllProgress = async () => {
+      try {
+        const response = await getAllProgress();
+        if (response.isSuccess && response.result) {
+          setAllProgress(response.result);
+        }
+      } catch (err) {
+        console.error('전체 진도 조회 실패:', err);
+      }
+    };
+
+    if (user) {
+      fetchAllProgress();
+    }
+  }, [user]);
 
   const getDisplayName = useCallback(() => {
     return user?.name || '사용자';
@@ -28,24 +47,30 @@ export default function MyPage() {
   // 통계 계산 - 메모이제이션
   const stats = useMemo(() => {
     const total = books?.length || 0;
-    const reading = books?.filter(book => {
-      // CFI 정보가 있는 책만 카운트 (읽는 중으로 간주)
+    
+    // 로컬 책 읽는 중 카운트
+    const localReading = books?.filter(book => {
       const isLocalBook = typeof book.id === 'string' && book.id.startsWith('local_');
       if (isLocalBook) {
         const filename = book.epubPath || book.filename;
         const lastCFI = localStorage.getItem(`lastCFI_${filename}`);
         return lastCFI && lastCFI.trim() !== '';
-      } else {
-        // API 책의 경우 progress가 있으면 읽는 중으로 간주
-        return book.progress && book.progress > 0;
       }
+      return false;
     }).length || 0;
+    
+    // API 책 읽는 중 카운트 (진도 정보가 있는 책)
+    const apiReading = allProgress.length || 0;
+    
+    const reading = localReading + apiReading;
     
     return {
       total,
-      reading
+      reading,
+      apiReading,
+      localReading
     };
-  }, [books]);
+  }, [books, allProgress]);
 
   // 탭별 필터링 - 메모이제이션
   const filteredBooks = useMemo(() => {

@@ -288,14 +288,14 @@ function UnifiedNodeInfo({
     }
 
     // API 관점 요약 데이터가 있는 경우 우선 사용
-    if (povSummaries && povSummaries.summaries) {
+    if (povSummaries && povSummaries.povSummaries) {
       const characterName = processedNodeData.label;
-      const characterSummary = povSummaries.summaries.find(
+      const characterSummary = povSummaries.povSummaries.find(
         summary => summary.characterName === characterName
       );
       
-      if (characterSummary && characterSummary.summary) {
-        return { summary: characterSummary.summary };
+      if (characterSummary && characterSummary.summaryText) {
+        return { summary: characterSummary.summaryText };
       }
     }
 
@@ -370,15 +370,12 @@ function UnifiedNodeInfo({
               
               // 이미 처리된 관계가 아닌 경우만 추가
               if (!relationMap.has(key1) && !relationMap.has(key2)) {
-                // 현재 노드를 source로, 상대방을 target으로 설정
-                const sourceId = isCurrentNodeId1 ? rel.id1 : rel.id2;
-                const targetId = isCurrentNodeId1 ? rel.id2 : rel.id1;
-                
+                // extractRadarChartData는 id1/id2를 기대하므로 ID를 그대로 사용
                 relationMap.set(key1, {
-                  source: characterMap[sourceId] || sourceId,
-                  target: characterMap[targetId] || targetId,
-                  relation: rel.relation || '관계',
-                  strength: rel.count || 1,
+                  id1: rel.id1,
+                  id2: rel.id2,
+                  relation: rel.relation || ['관계'],
+                  count: rel.count || 1,
                   positivity: rel.positivity || 0
                 });
               }
@@ -388,8 +385,7 @@ function UnifiedNodeInfo({
           // 최종 관계 데이터 (중복 제거됨)
           const finalRelations = Array.from(relationMap.values());
           
-          // API 데이터를 직접 처리 (processRelations 우회)
-          // API 데이터는 이미 올바른 형식이므로 직접 사용
+          // extractRadarChartData는 id1/id2 형식을 기대하므로 ID로 직접 전달
           const chartData = extractRadarChartData(targetNodeId, finalRelations, elements, 8);
           
           
@@ -1658,8 +1654,9 @@ function UnifiedNodeInfo({
                         tick={{ fontSize: 14, fill: COLORS.textSecondary, fontWeight: 600 }}
                         tickCount={5}
                         tickFormatter={(value) => {
-                          const normalized = (value / 50) - 1;
-                          return normalized.toFixed(1);
+                          // normalizedValue (0-100)를 원래 positivity (-1~1)로 역변환
+                          const originalValue = ((value / 100) * 2) - 1;
+                          return originalValue.toFixed(1);
                         }}
                       />
                       <Radar
@@ -1944,7 +1941,7 @@ function UnifiedNodeInfo({
                       <div style={{
                         display: 'flex',
                         alignItems: 'center',
-                        gap: '8px'
+                        gap: '4px'
                       }}>
                         <span style={{ 
                           fontWeight: '800', 
@@ -1954,10 +1951,11 @@ function UnifiedNodeInfo({
                         }}>
                           {Math.round((hoveredData.positivity || 0) * 100)}
                         </span>
-                        <span style={{
-                          fontSize: '0.9rem',
-                          color: getPositivityColor(hoveredData.positivity),
-                          fontWeight: '600'
+                        <span style={{ 
+                          fontWeight: '700', 
+                          color: getPositivityColor(hoveredData.positivity), 
+                          fontSize: '1rem',
+                          lineHeight: 1
                         }}>
                           %
                         </span>

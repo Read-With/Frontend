@@ -1,5 +1,5 @@
 .book-card {
-  background: white;
+  background: #FEFCF8;
   border: 1px solid rgba(0, 0, 0, 0.06);
   border-radius: 16px;
   box-shadow: 0 2px 12px rgba(0, 0, 0, 0.04);
@@ -21,22 +21,22 @@
   left: 0;
   right: 0;
   height: 3px;
-  background: linear-gradient(90deg, #3E4F2F, #586544, #717B59);
+  background: linear-gradient(90deg, #5C6F5C, #7A8A7A, #9A9A9A);
   opacity: 0;
   transition: opacity 0.3s ease;
 }
 
 .book-card:hover {
   transform: translateY(-8px);
-  box-shadow: 0 12px 32px rgba(62, 79, 47, 0.15);
-  border-color: rgba(62, 79, 47, 0.2);
+  box-shadow: 0 12px 32px rgba(79, 109, 222, 0.15);
+  border-color: rgba(79, 109, 222, 0.2);
 }
 
 /* 리스트 뷰에서도 동일한 호버 효과 적용 */
 .book-card.list-view:hover {
   transform: translateY(-8px);
-  box-shadow: 0 12px 32px rgba(62, 79, 47, 0.15);
-  border-color: rgba(62, 79, 47, 0.2);
+  box-shadow: 0 12px 32px rgba(79, 109, 222, 0.15);
+  border-color: rgba(79, 109, 222, 0.2);
 }
 
 .book-card:hover::before {
@@ -95,7 +95,7 @@
 .book-status-badge {
   position: absolute;
   top: 12px;
-  right: 12px;
+  left: 12px;
   padding: 6px 12px;
   border-radius: 20px;
   font-size: 0.75rem;
@@ -108,7 +108,15 @@
   text-transform: uppercase;
 }
 
+.status-reading {
+  background: linear-gradient(135deg, #5C6F5C, #7A8A7A);
+  color: white;
+}
 
+.status-completed {
+  background: linear-gradient(135deg, #28a745, #48c774);
+  color: white;
+}
 
 .status-default {
   background: rgba(255, 255, 255, 0.9);
@@ -194,17 +202,17 @@
 
 .progress-bar-bg {
   height: 6px;
-  background: rgba(62, 79, 47, 0.1);
+  background: rgba(79, 109, 222, 0.1);
   border-radius: 10px;
   overflow: hidden;
 }
 
 .progress-bar-fill {
   height: 100%;
-  background: linear-gradient(90deg, #3E4F2F, #586544);
+  background: linear-gradient(90deg, #5C6F5C, #7A8A7A);
   border-radius: 10px;
   transition: width 0.5s ease;
-  box-shadow: 0 0 8px rgba(62, 79, 47, 0.4);
+  box-shadow: 0 0 8px rgba(79, 109, 222, 0.4);
 }
 
 /* ==================== 카드 바디 (정보 영역) ==================== */
@@ -260,8 +268,8 @@
 }
 
 .book-meta-item.book-format {
-  background: rgba(62, 79, 47, 0.1);
-  color: #3E4F2F;
+  background: rgba(79, 109, 222, 0.1);
+  color: #5C6F5C;
   padding: 2px 6px;
   border-radius: 4px;
   font-size: 0.75rem;
@@ -310,9 +318,9 @@
 }
 
 .book-action-primary {
-  background: linear-gradient(135deg, #3E4F2F, #586544);
+  background: linear-gradient(135deg, #5C6F5C, #7A8A7A);
   color: white;
-  box-shadow: 0 6px 20px rgba(62, 79, 47, 0.3);
+  box-shadow: 0 6px 20px rgba(79, 109, 222, 0.3);
   border: 2px solid transparent;
 }
 
@@ -328,16 +336,16 @@
 
 .book-action-secondary {
   background: linear-gradient(135deg, #f8f9fb, #e8ecf3);
-  color: #3E4F2F;
+  color: #5C6F5C;
   border: 2px solid #e8ecf3;
-  box-shadow: 0 4px 12px rgba(62, 79, 47, 0.1);
+  box-shadow: 0 4px 12px rgba(79, 109, 222, 0.1);
 }
 
 .book-action-secondary:hover {
   background: linear-gradient(135deg, #e8ecf3, #d4dae5);
-  border-color: #3E4F2F;
+  border-color: #5C6F5C;
   transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(62, 79, 47, 0.2);
+  box-shadow: 0 4px 12px rgba(79, 109, 222, 0.2);
 }
 
 .book-action-secondary:active {
@@ -425,7 +433,7 @@
 
 .book-context-item:hover {
   background: #f8f9fb;
-  color: #3E4F2F;
+  color: #5C6F5C;
 }
 
 .book-context-item:not(:last-child) {
@@ -470,10 +478,10 @@
 /* ==================== 리스트 뷰 스타일 ==================== */
 .book-card.list-view {
   flex-direction: row;
-  min-height: 210px;
-  height: 210px;
-  padding: 20px 24px;
-  gap: 24px;
+  min-height: 140px;
+  height: auto;
+  padding: 16px 18px;
+  gap: 18px;
   max-width: 95%;
   margin: 0 auto;
   transition: none;
@@ -483,14 +491,14 @@
   flex-shrink: 0;
   padding: 0;
   background: none;
-  width: 100px;
-  height: 150px;
+  width: 80px;
+  height: 120px;
 }
 
 .book-card.list-view .book-image-container {
-  width: 100px;
-  height: 150px;
-  border-radius: 8px;
+  width: 80px;
+  height: 120px;
+  border-radius: 6px;
 }
 
 .book-card.list-view .book-card-body {
@@ -500,53 +508,49 @@
 }
 
 .book-card.list-view .book-title {
-  font-size: 1.3rem;
-  line-height: 1.4;
-  margin-bottom: 12px;
+  font-size: 1.2rem;
+  line-height: 1.3;
+  margin-bottom: 8px;
   -webkit-line-clamp: 2;
   line-clamp: 2;
   min-height: auto;
 }
 
 .book-card.list-view .book-author {
-  font-size: 1.1rem;
-  margin-bottom: 16px;
+  font-size: 1rem;
+  margin-bottom: 12px;
 }
 
 .book-card.list-view .book-meta {
   margin-top: 0;
-  font-size: 1rem;
+  font-size: 0.9rem;
 }
 
 .book-card.list-view .book-card-actions {
   flex-shrink: 0;
   padding: 0;
-  width: 240px;
+  width: 220px;
   justify-content: flex-end;
-  gap: 12px;
+  gap: 10px;
 }
 
 .book-card.list-view .book-action-btn {
   flex: none;
-  padding: 14px 20px;
-  font-size: 1rem;
-  min-width: 100px;
-  min-height: 48px;
+  padding: 12px 18px;
+  font-size: 0.9rem;
+  min-width: 90px;
+  min-height: 44px;
 }
 
 .book-card.list-view .book-status-badge {
-  top: 20px;
-  right: 20px;
+  top: 16px;
+  left: 16px;
 }
 
-.book-card.list-view .book-favorite-btn {
-  top: 20px;
-  left: 20px;
-}
-
+.book-card.list-view .book-favorite-btn,
 .book-card.list-view .book-context-trigger {
-  top: 20px;
-  right: 20px;
+  top: 16px;
+  right: 16px;
 }
 
 .book-card.list-view .book-progress-container {
@@ -564,10 +568,9 @@
 
   .book-card.list-view {
     flex-direction: column;
-    min-height: 180px;
-    height: auto;
-    padding: 16px 18px;
-    gap: 16px;
+    min-height: auto;
+    padding: 14px 16px;
+    gap: 12px;
     max-width: 98%;
     margin: 0 auto;
   }
@@ -579,8 +582,8 @@
   }
 
   .book-card.list-view .book-image-container {
-    width: 80px;
-    height: 120px;
+    width: 60px;
+    height: 90px;
     margin: 0 auto;
   }
 
@@ -597,8 +600,8 @@
 
   .book-card.list-view .book-action-btn {
     flex: 1;
-    max-width: 160px;
-    min-height: 50px;
+    max-width: 140px;
+    min-height: 46px;
   }
 
   .book-card-header {
@@ -682,8 +685,7 @@
 
   .book-card.list-view {
     max-width: 99%;
-    padding: 14px 16px;
-    min-height: 160px;
+    padding: 12px 14px;
   }
 
   .book-image-container {

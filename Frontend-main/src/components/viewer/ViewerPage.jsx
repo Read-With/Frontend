@@ -319,6 +319,9 @@ const ViewerPage = () => {
 
   const viewerPageRef = useClickOutside(handleClearTooltipAndGraph, !!activeTooltip);
 
+  const [savedProgress, setSavedProgress] = useState(null);
+  const [isProgressLoaded, setIsProgressLoaded] = useState(false);
+
   const testProgressAPI = useCallback(async () => {
     if (!book?.id) return;
     
@@ -326,19 +329,16 @@ const ViewerPage = () => {
     
     if (isLocalBook) {
       setManifestLoaded(true);
+      setIsProgressLoaded(true);
       return;
     }
     
     try {
-      const allProgressResponse = await getAllProgress();
-      if (allProgressResponse.isSuccess) {
-        // 성공
-      }
-      
       try {
         const bookProgressResponse = await getBookProgress(book.id);
-        if (bookProgressResponse.isSuccess) {
-          // 성공
+        if (bookProgressResponse.isSuccess && bookProgressResponse.result) {
+          const progressData = bookProgressResponse.result;
+          setSavedProgress(progressData);
         }
       } catch (progressError) {
         if (!progressError.message.includes('404') && !progressError.message.includes('찾을 수 없습니다')) {
@@ -352,11 +352,34 @@ const ViewerPage = () => {
       }
       
       setManifestLoaded(true);
+      setIsProgressLoaded(true);
       
     } catch (error) {
       setManifestLoaded(true);
+      setIsProgressLoaded(true);
     }
   }, [book?.id]);
+
+  useEffect(() => {
+    if (savedProgress && viewerRef.current && isProgressLoaded && !loading) {
+      const restoreProgress = async () => {
+        try {
+          if (savedProgress.chapterIdx && savedProgress.chapterIdx !== currentChapter) {
+            setCurrentChapter(savedProgress.chapterIdx);
+          }
+          
+          if (savedProgress.cfi && viewerRef.current?.displayAt) {
+            await viewerRef.current.displayAt(savedProgress.cfi);
+          }
+        } catch (error) {
+          console.error('진도 복원 실패:', error);
+        }
+      };
+      
+      const timer = setTimeout(restoreProgress, 1000);
+      return () => clearTimeout(timer);
+    }
+  }, [savedProgress, isProgressLoaded, loading]);
 
   useEffect(() => {
     testProgressAPI();

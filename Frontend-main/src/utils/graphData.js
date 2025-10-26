@@ -59,7 +59,7 @@ export function getFolderKeyFromFilename(filename) {
     }
     
     if (!filename || typeof filename !== 'string') {
-      return availableFolders[0];
+      return null;
     }
     
     const nameWithoutExt = filename.replace(/\.(epub|json)$/i, "");
@@ -79,7 +79,7 @@ export function getFolderKeyFromFilename(filename) {
       return partialMatch;
     }
     
-    return availableFolders[0];
+    return null;
   } catch (error) {
     console.error('getFolderKeyFromFilename 실패:', error, { filename, availableFolders: Array.from(folderChapters.keys()) });
     return null;

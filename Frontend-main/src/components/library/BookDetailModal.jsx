@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useMemo, useCallback, memo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { getBookManifest } from '../../utils/common/api';
+import { getBookManifest, getBookProgress, deleteBookProgress } from '../../utils/common/api';
+import { getChapterPovSummaries } from '../../utils/api/booksApi';
+import { toast } from 'react-toastify';
 import './BookDetailModal.css';
 
 const BookDetailModal = memo(({ book, isOpen, onClose }) => {
@@ -10,6 +12,7 @@ const BookDetailModal = memo(({ book, isOpen, onClose }) => {
   const [error, setError] = useState(null);
   const [showCharacters, setShowCharacters] = useState(false);
   const [progressInfo, setProgressInfo] = useState(null);
+  const [povTestResult, setPovTestResult] = useState(null);
 
   // 중복된 인물들 제거
   const uniqueCharacters = useMemo(() => {
@@ -25,33 +28,47 @@ const BookDetailModal = memo(({ book, isOpen, onClose }) => {
     });
   }, [bookDetails?.characters]);
 
-  useEffect(() => {
-    if (isOpen && book) {
-      fetchBookDetails();
-      fetchProgressInfo();
-      setShowCharacters(false); // 모달이 열릴 때마다 인물 숨김 상태로 초기화
+  const testPovSummaries = useCallback(async () => {
+    if (!book || typeof book.id !== 'number') {
+      setPovTestResult(null);
+      return;
     }
-  }, [isOpen, book]);
 
-  const fetchProgressInfo = useCallback(() => {
+    try {
+      const response = await getChapterPovSummaries(book.id, 1);
+      setPovTestResult({
+        success: true,
+        data: response,
+        message: '챕터 1의 POV 요약 데이터가 있습니다'
+      });
+      console.log('✅ POV 요약 데이터:', response);
+    } catch (err) {
+      setPovTestResult({
+        success: false,
+        error: err.message,
+        message: '챕터 1의 POV 요약 데이터가 없습니다'
+      });
+      console.log('❌ POV 요약 데이터 없음:', err.message);
+    }
+  }, [book]);
+
+  const fetchProgressInfo = useCallback(async () => {
     if (!book || typeof book.id !== 'number') {
       setProgressInfo(null);
       return;
     }
 
     try {
-      // 로컬 스토리지에서 progress 정보 가져오기
-      const progressKey = `book_progress_${book.id}`;
-      const savedProgress = localStorage.getItem(progressKey);
-      
-      if (savedProgress) {
-        const progress = JSON.parse(savedProgress);
-        setProgressInfo(progress);
+      const response = await getBookProgress(book.id);
+      if (response.isSuccess && response.result) {
+        setProgressInfo(response.result);
       } else {
         setProgressInfo(null);
       }
     } catch (err) {
-      console.error('Progress 정보를 불러오는데 실패했습니다:', err);
+      if (!err.message.includes('404') && !err.message.includes('찾을 수 없습니다')) {
+        console.error('Progress 정보를 불러오는데 실패했습니다:', err);
+      }
       setProgressInfo(null);
     }
   }, [book]);
@@ -94,6 +111,12 @@ const BookDetailModal = memo(({ book, isOpen, onClose }) => {
     }
   }, [book]);
 
+  useEffect(() => {
+    if (isOpen && book) {
+      testPovSummaries();
+    }
+  }, [isOpen, book, testPovSummaries]);
+
   // 책 타입 확인 유틸리티
   const isLocalBook = useMemo(() => 
     typeof book?.id === 'string' && book.id.startsWith('local_'), 
@@ -120,6 +143,29 @@ const BookDetailModal = memo(({ book, isOpen, onClose }) => {
     onClose();
     navigate(`/user/graph/${getBookIdentifier()}`, { state: getNavigationState() });
   }, [onClose, navigate, getBookIdentifier, getNavigationState]);
+
+  const handleDeleteProgress = useCallback(async () => {
+    if (!book || typeof book.id !== 'number' || !progressInfo) {
+      return;
+    }
+
+    if (!window.confirm('독서 진도를 삭제하시겠습니까?')) {
+      return;
+    }
+
+    try {
+      const response = await deleteBookProgress(book.id);
+      if (response.isSuccess) {
+        setProgressInfo(null);
+        toast.success('독서 진도가 삭제되었습니다');
+      } else {
+        toast.error(response.message || '독서 진도 삭제에 실패했습니다');
+      }
+    } catch (err) {
+      console.error('독서 진도 삭제 실패:', err);
+      toast.error('독서 진도 삭제에 실패했습니다');
+    }
+  }, [book, progressInfo]);
 
 
   // ESC 키로 모달 닫기
@@ -240,22 +286,39 @@ const BookDetailModal = memo(({ book, isOpen, onClose }) => {
               {/* 최근에 읽은 시점 */}
               {progressInfo && (
                 <div className="book-detail-section">
-                  <div className="book-detail-label">최근에 읽은 시점</div>
+                  <div className="book-detail-characters-header">
+                    <div className="book-detail-label">최근에 읽은 시점</div>
+                    <button
+                      className="book-detail-toggle-btn"
+                      onClick={handleDeleteProgress}
+                      style={{ 
+                        color: '#dc2626',
+                        border: '1px solid #fecaca'
+                      }}
+                      aria-label="진도 삭제"
+                    >
+                      삭제
+                    </button>
+                  </div>
                   <div className="book-detail-value">
                     <div className="book-detail-progress-info">
-                      {progressInfo.currentChapter && (
+                      {progressInfo.chapterIdx && (
                         <div className="book-detail-progress-item">
-                          챕터 {progressInfo.currentChapter}장
+                          챕터 {progressInfo.chapterIdx}장
                         </div>
                       )}
-                      {progressInfo.currentPage && progressInfo.totalPages && (
+                      {progressInfo.eventIdx !== undefined && (
                         <div className="book-detail-progress-item">
-                          {progressInfo.currentPage} / {progressInfo.totalPages} 페이지
+                          이벤트 {progressInfo.eventIdx}
                         </div>
                       )}
-                      {progressInfo.progress && (
-                        <div className="book-detail-progress-item">
-                          진도: {Math.round(progressInfo.progress * 100)}%
+                      {progressInfo.cfi && (
+                        <div className="book-detail-progress-item" style={{ 
+                          fontSize: '0.8em',
+                          color: '#6b7280',
+                          wordBreak: 'break-all'
+                        }}>
+                          위치: {progressInfo.cfi.substring(0, 50)}...
                         </div>
                       )}
                     </div>
@@ -268,6 +331,41 @@ const BookDetailModal = memo(({ book, isOpen, onClose }) => {
                   <div className="book-detail-label">업데이트 일시</div>
                   <div className="book-detail-value">
                     {new Date(bookDetails.updatedAt).toLocaleString('ko-KR')}
+                  </div>
+                </div>
+              )}
+
+              {/* POV 요약 테스트 결과 */}
+              {povTestResult && (
+                <div className="book-detail-section">
+                  <div className="book-detail-label">
+                    백엔드 POV 데이터 확인
+                  </div>
+                  <div className="book-detail-value">
+                    <div style={{
+                      padding: '12px',
+                      backgroundColor: povTestResult.success ? '#d1fae5' : '#fee2e2',
+                      borderRadius: '8px',
+                      border: `1px solid ${povTestResult.success ? '#10b981' : '#ef4444'}`,
+                      fontSize: '0.9em'
+                    }}>
+                      {povTestResult.success ? (
+                        <>
+                          <div style={{ color: '#065f46', fontWeight: 'bold', marginBottom: '8px' }}>
+                            ✅ {povTestResult.message}
+                          </div>
+                          {povTestResult.data?.result?.povSummaries?.length > 0 && (
+                            <div style={{ color: '#047857', marginTop: '8px' }}>
+                              인물 수: {povTestResult.data.result.povSummaries.length}명
+                            </div>
+                          )}
+                        </>
+                      ) : (
+                        <div style={{ color: '#991b1b' }}>
+                          ❌ {povTestResult.message}
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
               )}
@@ -301,3 +399,4 @@ const BookDetailModal = memo(({ book, isOpen, onClose }) => {
 BookDetailModal.displayName = 'BookDetailModal';
 
 export default BookDetailModal;
+

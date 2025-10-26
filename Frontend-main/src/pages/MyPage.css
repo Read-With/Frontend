@@ -446,17 +446,11 @@
   border-radius: 6px;
   background: #B3B6A0;
   cursor: pointer;
-  transition: all 0.3s ease;
   min-width: 160px;
   flex-shrink: 0;
   height: 42px;
   display: flex;
   align-items: center;
-}
-
-.filter-select:hover {
-  border-color: #3E4F2F;
-  background: #F5F1E6;
 }
 
 .filter-select:focus {

@@ -76,16 +76,13 @@ export const getMacroGraph = async (params) => {
 /**
  * 세밀(이벤트) 그래프 조회
  * 특정 이벤트에서의 인물 관계 그래프를 조회합니다.
- * @param {Object} params - 조회 파라미터
- * @param {number} params.bookId - 책 ID
- * @param {number} params.chapterIdx - 챕터 인덱스
- * @param {number} params.eventIdx - 이벤트 인덱스
+ * @param {number} bookId - 책 ID
+ * @param {number} chapterIdx - 챕터 인덱스
+ * @param {number} eventIdx - 이벤트 인덱스
  * @returns {Promise<Object>} 세밀 그래프 데이터
  */
-export const getFineGraph = async (params) => {
+export const getFineGraph = async (bookId, chapterIdx, eventIdx) => {
   try {
-    const { bookId, chapterIdx, eventIdx } = params;
-    
     if (!bookId || chapterIdx === undefined || eventIdx === undefined) {
       throw new Error('bookId, chapterIdx, eventIdx는 필수 파라미터입니다.');
     }
@@ -99,7 +96,12 @@ export const getFineGraph = async (params) => {
     const data = await authenticatedRequest(`/api/graph/fine?${queryParams.toString()}`);
     return data;
   } catch (error) {
-    console.error('세밀 그래프 조회 실패:', error);
+    // 404는 데이터 없음으로 정상 상황일 수 있음
+    if (error.message?.includes('404') || error.message?.includes('찾을 수 없습니다')) {
+      // warn 레벨로 로그 (정상적인 상황)
+    } else {
+      console.error('세밀 그래프 조회 실패:', error);
+    }
     throw error;
   }
 };

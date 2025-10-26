@@ -137,15 +137,24 @@ const apiRequest = async (url, options = {}) => {
         const isMacroGraph = url.includes('/api/graph/macro');
         const isFineGraph = url.includes('/api/graph/fine');
         
-        console.error(`❌ ${isMacroGraph ? '거시' : isFineGraph ? '세밀' : 'Graph'} API 에러:`, {
-          status: response.status,
-          statusText: response.statusText,
-          url: requestUrl,
-          response: data,
-          hasToken: !!token,
-          tokenPreview: token ? token.substring(0, 20) + '...' : 'null',
-          requestHeaders: config.headers
-        });
+        // 404는 데이터 없음으로 정상 상황일 수 있으므로 warn으로 처리
+        if (response.status === 404) {
+          console.warn(`⚠️ ${isMacroGraph ? '거시' : isFineGraph ? '세밀' : 'Graph'} API 데이터 없음:`, {
+            status: response.status,
+            message: data.message || '해당 데이터를 찾을 수 없습니다',
+            url: requestUrl
+          });
+        } else {
+          console.error(`❌ ${isMacroGraph ? '거시' : isFineGraph ? '세밀' : 'Graph'} API 에러:`, {
+            status: response.status,
+            statusText: response.statusText,
+            url: requestUrl,
+            response: data,
+            hasToken: !!token,
+            tokenPreview: token ? token.substring(0, 20) + '...' : 'null',
+            requestHeaders: config.headers
+          });
+        }
       }
       
       const error = new Error(data.message || 'API 요청 실패');
@@ -395,18 +404,13 @@ export const getFineGraph = async (bookId, chapterIdx, eventIdx) => {
     const response = await apiRequest(`/api/graph/fine?${queryParams.toString()}`);
     return createApiResponse(true, 'SUCCESS', '세밀 그래프 데이터를 성공적으로 조회했습니다.', response.result, 'graph');
   } catch (error) {
-    // 404 에러인 경우 더 구체적인 메시지 제공
-    if (error.status === 404 || error.message.includes('404') || error.message.includes('찾을 수 없습니다')) {
-      // 이벤트 0에 대한 데이터가 없는 경우는 정상적인 상황일 수 있음
+    if (error.status === 404) {
       if (eventIdx === 0) {
-        console.warn(`챕터 ${chapterIdx}, 이벤트 ${eventIdx}에 대한 데이터가 없습니다. (정상적인 상황일 수 있음)`);
-        // 빈 결과를 반환하여 에러를 발생시키지 않음
         return createApiResponse(true, 'SUCCESS', '해당 이벤트에 대한 데이터가 없습니다.', { characters: [], relations: [], event: null }, 'graph');
       } else {
-        throw new Error(`챕터 ${chapterIdx}, 이벤트 ${eventIdx}에 대한 데이터를 찾을 수 없습니다.`);
+        return createApiResponse(false, 'NOT_FOUND', `챕터 ${chapterIdx}, 이벤트 ${eventIdx}에 대한 데이터를 찾을 수 없습니다.`, { characters: [], relations: [], event: null }, 'graph');
       }
     }
-    // 404가 아닌 다른 에러는 그대로 처리
     handleApiError(error, '세밀 그래프 조회 실패');
   }
 };

@@ -139,9 +139,9 @@ export const getBook = async (bookId) => {
  */
 export const toggleBookFavorite = async (bookId, favorite) => {
   try {
-    const data = await authenticatedRequest(`/books/${bookId}/favorite`, {
-      method: 'PATCH',
-      body: JSON.stringify({ favorite }),
+    const method = favorite ? 'POST' : 'DELETE';
+    const data = await authenticatedRequest(`/favorites/${bookId}`, {
+      method,
     });
     return data;
   } catch (error) {
