@@ -1,29 +1,9 @@
-/**
- * 
- * [주요 기능]
- * 1. 설정 관리: defaultSettings, loadSettings, settingsUtils
- * 2. CFI 처리: CFI ↔ 챕터 변환, 파싱, 글자 인덱스 계산
- * 3. 위치/진행률: calculateChapterProgress, findClosestEvent
- * 4. 북마크: bookmarkUtils (추가/삭제)
- * 5. 이벤트: extractEventNodesAndEdges (그래프 노드/엣지 추출)
- * 6. 뷰어 모드: 저장/복원
- * 7. 스토리지: localStorage 헬퍼 (storageUtils)
- * 8. Ref 헬퍼: getRefs, withRefs
- * 9. 네비게이션: cleanupNavigation, ensureLocations
- * 10. 에러 처리: 통일된 에러 로깅 및 처리
- * 
- * - CFI 기반 정확한 위치 계산 (전역 진행률 → 챕터 내 글자수)
- * - Fallback: 단락 기반 추정 (평균 글자수 × 단락 번호)
- * - 로마 숫자(I~M) → 아라비아 숫자 변환
- */
 
-// 공통 유틸리티 import (utils/common에서 분리)
 import { errorUtils as commonErrorUtils } from './common/errorUtils';
 import { storageUtils as commonStorageUtils } from './common/storageUtils';
 import { cfiUtils as commonCfiUtils } from './common/cfiUtils';
 import { settingsUtils as commonSettingsUtils, defaultSettings as commonDefaultSettings, loadSettings as commonLoadSettings } from './common/settingsUtils';
 
-// 기존 export 유지 (하위 호환성)
 export const errorUtils = commonErrorUtils;
 export const storageUtils = commonStorageUtils;
 export const cfiUtils = commonCfiUtils;
@@ -51,7 +31,6 @@ export function parseCfiToChapterDetail(cfi) {
   }
 }
 
-// 이벤트에서 노드와 엣지 ID 추출 (Set 기반 최적화)
 export function extractEventNodesAndEdges(event) {
   if (!event || typeof event !== 'object') {
     errorUtils.logWarning('extractEventNodesAndEdges', '유효하지 않은 이벤트 객체입니다', { event, type: typeof event });
@@ -101,32 +80,28 @@ export function extractEventNodesAndEdges(event) {
 export function saveViewerMode(mode) {
   try {
     if (!mode || typeof mode !== 'string') {
-      console.warn('saveViewerMode: 유효하지 않은 모드입니다', { mode, type: typeof mode });
       return;
     }
     localStorage.setItem("viewer_mode", mode);
-  } catch (error) {
-    console.error('saveViewerMode 실패:', error, { mode });
-  }
+    } catch (error) {
+      return;
+    }
 }
 
 export function loadViewerMode() {
   try {
     return localStorage.getItem("viewer_mode");
-  } catch (error) {
-    console.error('loadViewerMode 실패:', error);
-    return null;
-  }
+    } catch (error) {
+      return null;
+    }
 }
 
 export function cfiToCharIndex(cfi, chapter, viewerRef) {
   if (!cfi || typeof cfi !== 'string') {
-    console.warn('cfiToCharIndex: 유효하지 않은 CFI입니다', { cfi, type: typeof cfi });
     return 0;
   }
   
   if (!chapter || typeof chapter !== 'number' || chapter < 1) {
-    console.warn('cfiToCharIndex: 유효하지 않은 챕터 번호입니다', { chapter, type: typeof chapter });
     return 0;
   }
   
@@ -141,7 +116,7 @@ export function cfiToCharIndex(cfi, chapter, viewerRef) {
       return viewerRef.current.bookRef.current.locations.locationFromCfi(cfi);
     }
   } catch (error) {
-    console.error('cfiToCharIndex 실패:', error, { cfi, chapter });
+    return 0;
   }
   return 0;
 }
@@ -359,641 +334,6 @@ export const bookmarkUtils = {
   }
 };
 
-// CFI 처리는 commonCfiUtils 사용 (이미 export됨)
-// 아래 주석 처리된 코드는 utils/common/cfiUtils.js로 이동됨
-/*
-export const cfiUtils = {
-  // CFI에서 챕터 번호 추출
-  extractChapterNumber(cfi, label = null) {
-    const cfiMatch = cfi?.match(/\[chapter-(\d+)\]/);
-    if (cfiMatch) return parseInt(cfiMatch[1]);
-    
-    if (label) {
-      const patterns = [
-        /Chapter\s+(\d+)/i,
-        /(\d+)\s*장/i,
-        /^(\d+)$/,
-        /Chapter\s+([IVXLCDM]+)/i
-      ];
-      
-      for (const pattern of patterns) {
-        const match = label.match(pattern);
-        if (match) {
-          if (pattern.source.includes('[IVXLCDM]')) {
-            return romanToArabic(match[1]);
-          }
-          return parseInt(match[1]);
-        }
-      }
-    }
-    
-    return 1;
-  },
-
-  // CFI 유효성 검사 (기본)
-  isValidCfi(cfi) {
-    return cfi && typeof cfi === 'string' && cfi.trim().length > 0;
-  },
-
-  // CFI에서 페이지 번호 추출
-  extractPageNumber(cfi) {
-    if (!this.isValidCfi(cfi)) return null;
-    
-    const pageMatch = cfi.match(/\[chapter-\d+\]\/(\d+)/);
-    return pageMatch ? parseInt(pageMatch[1]) : null;
-  },
-
-  // CFI에서 단락 번호 추출
-  extractParagraphNumber(cfi) {
-    if (!this.isValidCfi(cfi)) return null;
-    
-    const paragraphMatch = cfi.match(/\[chapter-\d+\]\/(\d+)\/1:(\d+)\)$/);
-    return paragraphMatch ? parseInt(paragraphMatch[1]) : null;
-  },
-
-  // CFI에서 글자 오프셋 추출
-  extractCharOffset(cfi) {
-    if (!this.isValidCfi(cfi)) return null;
-    
-    const offsetMatch = cfi.match(/\[chapter-\d+\]\/(\d+)\/1:(\d+)\)$/);
-    return offsetMatch ? parseInt(offsetMatch[2]) : null;
-  },
-  
-  async calculateCurrentCfi(book, rendition) {
-    try {
-      let currentCfi = null;
-      let retryCount = 0;
-      const maxRetries = 3;
-      
-      while (retryCount < maxRetries && !currentCfi) {
-        try {
-          const currentLocation = rendition.currentLocation();
-          
-          if (currentLocation && currentLocation.start && currentLocation.start.cfi) {
-            currentCfi = currentLocation.start.cfi;
-            break;
-          }
-          
-          if (retryCount < maxRetries - 1) {
-            await new Promise(resolve => setTimeout(resolve, 300));
-          }
-          
-          retryCount++;
-        } catch (error) {
-          retryCount++;
-          if (retryCount < maxRetries) {
-            await new Promise(resolve => setTimeout(resolve, 300));
-          }
-        }
-      }
-      
-      return currentCfi;
-    } catch (error) {
-      return null;
-    }
-  },
-  
-  // CFI 구조 상세 분석
-  analyzeCfiStructure(cfi) {
-    if (!cfi || typeof cfi !== 'string') {
-      return {
-        isValid: false,
-        error: '유효하지 않은 CFI'
-      };
-    }
-    
-    const analysis = {
-      isValid: true,
-      fullCfi: cfi,
-      parts: cfi.split('/'),
-      hasChapterPattern: false,
-      hasPgepubidPattern: false,
-      hasPathPattern: false,
-      hasPgHeaderPattern: false,
-      hasLastNumberPattern: false,
-      chapterNumber: null,
-      fileId: null,
-      pathNumbers: [],
-      lastNumber: null,
-      patterns: []
-    };
-    
-    // [chapter-X] 패턴 분석
-    const chapterMatch = cfi.match(/\[chapter-(\d+)\]/);
-      if (chapterMatch) {
-      analysis.hasChapterPattern = true;
-      analysis.chapterNumber = parseInt(chapterMatch[1]);
-      analysis.patterns.push('chapter');
-    }
-    
-    // [pgepubidXXXXX] 패턴 분석
-    const pgepubidMatch = cfi.match(/\[pgepubid(\d+)\]/);
-    if (pgepubidMatch) {
-      analysis.hasPgepubidPattern = true;
-      analysis.fileId = parseInt(pgepubidMatch[1]);
-      analysis.patterns.push('pgepubid');
-    }
-    
-    // 경로 패턴 분석 (숫자:숫자)
-    const pathMatch = cfi.match(/(\d+):(\d+)$/);
-    if (pathMatch) {
-      analysis.hasPathPattern = true;
-      analysis.pathNumbers = [parseInt(pathMatch[1]), parseInt(pathMatch[2])];
-      analysis.patterns.push('path');
-    }
-    
-    // [pg-header] 패턴 분석
-    if (cfi.includes('[pg-header]')) {
-      analysis.hasPgHeaderPattern = true;
-      analysis.patterns.push('pg-header');
-    }
-    
-    // 마지막 숫자 패턴 분석
-    const lastNumberMatch = cfi.match(/(\d+)(?!.*\d)/);
-    if (lastNumberMatch) {
-      analysis.hasLastNumberPattern = true;
-      analysis.lastNumber = parseInt(lastNumberMatch[1]);
-      analysis.patterns.push('last-number');
-    }
-    
-    return analysis;
-  },
-  
-  // 다양한 CFI 계산 방법들
-  calculateNextCfiVariants(currentCfi, cfiAnalysis) {
-    const variants = [];
-    
-    // 방법 1: Chapter 패턴 기반
-    if (cfiAnalysis.hasChapterPattern) {
-      const nextChapter = cfiAnalysis.chapterNumber + 1;
-      const chapterVariant = currentCfi.replace(/\[chapter-\d+\]/, `[chapter-${nextChapter}]`);
-      variants.push({
-        method: 'chapter',
-        cfi: chapterVariant,
-        confidence: 0.9,
-        description: `Chapter ${cfiAnalysis.chapterNumber} → ${nextChapter}`
-      });
-    }
-    
-    // 방법 2: Pgepubid 패턴 기반
-    if (cfiAnalysis.hasPgepubidPattern) {
-      const nextFileId = cfiAnalysis.fileId + 1;
-      const pgepubidVariant = currentCfi.replace(/\[pgepubid\d+\]/, `[pgepubid${nextFileId}]`);
-      variants.push({
-        method: 'pgepubid',
-        cfi: pgepubidVariant,
-        confidence: 0.8,
-        description: `File ID ${cfiAnalysis.fileId} → ${nextFileId}`
-      });
-    }
-    
-    // 방법 3: 경로 패턴 기반
-    if (cfiAnalysis.hasPathPattern) {
-      const [currentPath, currentOffset] = cfiAnalysis.pathNumbers;
-        const nextPath = currentPath + 1;
-      const pathVariant = currentCfi.replace(/\d+:\d+$/, `${nextPath}:0`);
-      variants.push({
-        method: 'path',
-        cfi: pathVariant,
-        confidence: 0.7,
-        description: `Path ${currentPath} → ${nextPath}`
-      });
-    }
-    
-    // 방법 4: Pg-header 패턴 기반
-    if (cfiAnalysis.hasPgHeaderPattern) {
-      const pgHeaderVariants = [
-        currentCfi.replace(/\[pg-header\]/, '[pg-start-separator]'),
-        currentCfi.replace(/\[pg-header\]/, '[pg-content]'),
-        currentCfi.replace(/\[pg-header\]/, '[pg-body]'),
-        currentCfi.replace(/\[pg-header\]/, '[pg-text]'),
-        currentCfi.replace(/\[pg-header\]/, '[pg-chapter]')
-      ];
-      
-      pgHeaderVariants.forEach((variant, index) => {
-        variants.push({
-          method: 'pg-header',
-          cfi: variant,
-          confidence: 0.6 - (index * 0.1),
-          description: `Pg-header → Section ${index + 1}`
-        });
-      });
-    }
-    
-    // 방법 5: 마지막 숫자 패턴 기반
-    if (cfiAnalysis.hasLastNumberPattern) {
-      const nextNumber = cfiAnalysis.lastNumber + 1;
-      const lastNumberVariant = currentCfi.replace(/\d+(?!.*\d)/, nextNumber.toString());
-      variants.push({
-        method: 'last-number',
-        cfi: lastNumberVariant,
-        confidence: 0.5,
-        description: `Last number ${cfiAnalysis.lastNumber} → ${nextNumber}`
-      });
-    }
-    
-    // 방법 6: 복합 패턴 (여러 패턴 조합)
-    if (cfiAnalysis.patterns.length > 1) {
-      const combinedVariant = this.createCombinedVariant(currentCfi, cfiAnalysis);
-      if (combinedVariant) {
-        variants.push({
-          method: 'combined',
-          cfi: combinedVariant,
-          confidence: 0.85,
-          description: 'Combined pattern approach'
-        });
-      }
-    }
-    
-    // 신뢰도 순으로 정렬
-    return variants.sort((a, b) => b.confidence - a.confidence);
-  },
-  
-  // 복합 패턴 CFI 생성
-  createCombinedVariant(currentCfi, cfiAnalysis) {
-    let variant = currentCfi;
-    
-    // Chapter 패턴이 있으면 우선 적용
-    if (cfiAnalysis.hasChapterPattern) {
-      const nextChapter = cfiAnalysis.chapterNumber + 1;
-      variant = variant.replace(/\[chapter-\d+\]/, `[chapter-${nextChapter}]`);
-    }
-    
-    // Pgepubid 패턴이 있으면 적용
-    if (cfiAnalysis.hasPgepubidPattern) {
-      const nextFileId = cfiAnalysis.fileId + 1;
-      variant = variant.replace(/\[pgepubid\d+\]/, `[pgepubid${nextFileId}]`);
-    }
-    
-    // 경로 패턴이 있으면 적용
-    if (cfiAnalysis.hasPathPattern) {
-      const [currentPath] = cfiAnalysis.pathNumbers;
-      const nextPath = currentPath + 1;
-      variant = variant.replace(/\d+:\d+$/, `${nextPath}:0`);
-    }
-    
-    return variant !== currentCfi ? variant : null;
-  },
-  
-  // CFI를 이용한 다음 위치 계산 (다양한 CFI 처리)
-  async getNextCfi(book, rendition, currentCfi) {
-    errorUtils.logInfo('getNextCfi', '다양한 CFI 처리 시작', { currentCfi });
-    
-    try {
-      // CFI 구조 상세 분석
-      const cfiAnalysis = this.analyzeCfiStructure(currentCfi);
-      errorUtils.logInfo('getNextCfi', 'CFI 구조 상세 분석 완료', cfiAnalysis);
-      
-      if (!cfiAnalysis.isValid) {
-        errorUtils.logError('getNextCfi', 'CFI 분석 실패', cfiAnalysis.error);
-        return null;
-      }
-      
-      // 다양한 CFI 계산 방법들 생성
-      const cfiVariants = this.calculateNextCfiVariants(currentCfi, cfiAnalysis);
-      errorUtils.logInfo('getNextCfi', 'CFI 변형들 생성 완료', { count: cfiVariants.length });
-      
-      // Navigation Document 우선 확인 (Chapter 패턴이 있는 경우)
-      if (cfiAnalysis.hasChapterPattern) {
-        const currentChapter = cfiAnalysis.chapterNumber;
-        const nextChapter = currentChapter + 1;
-        
-        errorUtils.logInfo('getNextCfi', '[chapter-X] 패턴 발견', { currentChapter, nextChapter });
-        
-        // Navigation Document에서 다음 챕터의 href 확인
-        if (book.navigation?.toc) {
-          const nextChapterItem = book.navigation.toc.find(item => {
-            const chapterMatch = item.cfi?.match(/\[chapter-(\d+)\]/);
-            return chapterMatch && parseInt(chapterMatch[1]) === nextChapter;
-          });
-          
-          if (nextChapterItem?.href) {
-            errorUtils.logSuccess('getNextCfi', 'Navigation Document에서 다음 챕터 href 발견', { href: nextChapterItem.href });
-            return nextChapterItem.href; // href 기반 대안 반환
-          }
-        }
-      }
-      
-      // CFI 변형들을 신뢰도 순으로 시도
-      for (const variant of cfiVariants) {
-        errorUtils.logInfo('getNextCfi', `${variant.method} 방법 시도`, {
-          cfi: variant.cfi,
-          confidence: variant.confidence,
-          description: variant.description
-        });
-        
-        // CFI 유효성 검사
-        if (this.validateCfi(variant.cfi)) {
-          errorUtils.logSuccess('getNextCfi', `${variant.method} 방법 유효한 CFI 생성`, { cfi: variant.cfi });
-          return variant.cfi;
-        } else {
-          errorUtils.logWarning('getNextCfi', `${variant.method} 방법 CFI 유효성 검사 실패`, { cfi: variant.cfi });
-        }
-      }
-      
-      errorUtils.logWarning('getNextCfi', '모든 CFI 계산 방법 실패');
-      return null;
-    } catch (error) {
-      errorUtils.logError('getNextCfi', error);
-      return null;
-    }
-  },
-  
-  // CFI 상세 유효성 검사 (고급)
-  validateCfi(cfi) {
-    if (!this.isValidCfi(cfi)) return false;
-    
-    // 기본 CFI 형식 검사
-    if (!cfi.includes('epubcfi')) return false;
-    
-    // CFI 길이 검사 (너무 짧거나 긴 경우)
-    if (cfi.length < 10 || cfi.length > 1000) return false;
-    
-    // CFI 구조 검사
-    const cfiParts = cfi.split('/');
-    if (cfiParts.length < 3) return false;
-    
-    // 숫자 패턴 검사
-    const hasValidNumbers = /\d+/.test(cfi);
-    if (!hasValidNumbers) return false;
-    
-    // 특수 문자 검사 (유효하지 않은 문자 제외)
-    const hasInvalidChars = /[<>"']/.test(cfi);
-    if (hasInvalidChars) return false;
-    
-    return true;
-  },
-  
-  // 이전 CFI 계산 방법들
-  calculatePrevCfiVariants(currentCfi, cfiAnalysis) {
-    const variants = [];
-    
-    // 방법 1: Chapter 패턴 기반
-    if (cfiAnalysis.hasChapterPattern && cfiAnalysis.chapterNumber > 1) {
-      const prevChapter = cfiAnalysis.chapterNumber - 1;
-      const chapterVariant = currentCfi.replace(/\[chapter-\d+\]/, `[chapter-${prevChapter}]`);
-      variants.push({
-        method: 'chapter',
-        cfi: chapterVariant,
-        confidence: 0.9,
-        description: `Chapter ${cfiAnalysis.chapterNumber} → ${prevChapter}`
-      });
-    }
-    
-    // 방법 2: Pgepubid 패턴 기반
-    if (cfiAnalysis.hasPgepubidPattern && cfiAnalysis.fileId > 0) {
-      const prevFileId = cfiAnalysis.fileId - 1;
-      const pgepubidVariant = currentCfi.replace(/\[pgepubid\d+\]/, `[pgepubid${prevFileId}]`);
-      variants.push({
-        method: 'pgepubid',
-        cfi: pgepubidVariant,
-        confidence: 0.8,
-        description: `File ID ${cfiAnalysis.fileId} → ${prevFileId}`
-      });
-    }
-    
-    // 방법 3: 경로 패턴 기반
-    if (cfiAnalysis.hasPathPattern && cfiAnalysis.pathNumbers[0] > 0) {
-      const [currentPath] = cfiAnalysis.pathNumbers;
-      const prevPath = currentPath - 1;
-      const pathVariant = currentCfi.replace(/\d+:\d+$/, `${prevPath}:0`);
-      variants.push({
-        method: 'path',
-        cfi: pathVariant,
-        confidence: 0.7,
-        description: `Path ${currentPath} → ${prevPath}`
-      });
-    }
-    
-    // 방법 4: 마지막 숫자 패턴 기반
-    if (cfiAnalysis.hasLastNumberPattern && cfiAnalysis.lastNumber > 0) {
-      const prevNumber = cfiAnalysis.lastNumber - 1;
-      const lastNumberVariant = currentCfi.replace(/\d+(?!.*\d)/, prevNumber.toString());
-      variants.push({
-        method: 'last-number',
-        cfi: lastNumberVariant,
-        confidence: 0.5,
-        description: `Last number ${cfiAnalysis.lastNumber} → ${prevNumber}`
-      });
-    }
-    
-    // 신뢰도 순으로 정렬
-    return variants.sort((a, b) => b.confidence - a.confidence);
-  },
-  
-  // CFI를 이용한 이전 위치 계산 (다양한 CFI 처리)
-  async getPrevCfi(book, rendition, currentCfi) {
-    console.log('🔄 getPrevCfi 함수 시작 (다양한 CFI 처리)', { currentCfi });
-    
-    try {
-      // CFI 구조 상세 분석
-      const cfiAnalysis = this.analyzeCfiStructure(currentCfi);
-      console.log('🔍 CFI 구조 상세 분석:', cfiAnalysis);
-      
-      if (!cfiAnalysis.isValid) {
-        console.error('❌ CFI 분석 실패:', cfiAnalysis.error);
-          return null;
-        }
-      
-      // 다양한 CFI 계산 방법들 생성
-      const cfiVariants = this.calculatePrevCfiVariants(currentCfi, cfiAnalysis);
-      console.log('🎯 생성된 CFI 변형들:', cfiVariants);
-      
-      // Navigation Document 우선 확인 (Chapter 패턴이 있는 경우)
-      if (cfiAnalysis.hasChapterPattern && cfiAnalysis.chapterNumber > 1) {
-        const currentChapter = cfiAnalysis.chapterNumber;
-        const prevChapter = currentChapter - 1;
-        
-        console.log('📍 [chapter-X] 패턴 발견:', { currentChapter, prevChapter });
-        
-        // Navigation Document에서 이전 챕터의 href 확인
-        if (book.navigation?.toc) {
-          const prevChapterItem = book.navigation.toc.find(item => {
-            const chapterMatch = item.cfi?.match(/\[chapter-(\d+)\]/);
-            return chapterMatch && parseInt(chapterMatch[1]) === prevChapter;
-          });
-          
-          if (prevChapterItem?.href) {
-            console.log('✅ Navigation Document에서 이전 챕터 href 발견:', prevChapterItem.href);
-            return prevChapterItem.href; // href 기반 대안 반환
-          }
-        }
-      }
-      
-      // CFI 변형들을 신뢰도 순으로 시도
-      for (const variant of cfiVariants) {
-        console.log(`🔄 ${variant.method} 방법 시도:`, {
-          cfi: variant.cfi,
-          confidence: variant.confidence,
-          description: variant.description
-        });
-        
-        // CFI 유효성 검사
-        if (this.validateCfi(variant.cfi)) {
-          console.log(`✅ ${variant.method} 방법 유효한 CFI 생성:`, variant.cfi);
-          return variant.cfi;
-        } else {
-          console.log(`⚠️ ${variant.method} 방법 CFI 유효성 검사 실패:`, variant.cfi);
-        }
-      }
-      
-      console.warn('⚠️ 모든 CFI 계산 방법 실패');
-      return null;
-    } catch (error) {
-      console.error('❌ 이전 CFI 계산 중 오류:', error);
-          return null;
-        }
-  },
-  
-  // Spine 기반 직접 이동 (CFI 실패 시 대안)
-  async getSpineNavigation(book, rendition, direction) {
-    console.log('🔄 getSpineNavigation 함수 시작', { direction });
-    
-    try {
-      // 현재 위치에서 spine 인덱스 찾기
-      const currentLocation = rendition.currentLocation();
-      if (!currentLocation?.start?.spinePos && currentLocation?.start?.spinePos !== 0) {
-        console.warn('⚠️ 현재 spine 위치를 찾을 수 없습니다');
-        return null;
-      }
-      
-      const currentSpineIndex = currentLocation.start.spinePos;
-      const totalSpineItems = book.spine?.length || 0;
-      
-      console.log('📍 현재 spine 정보:', {
-        currentSpineIndex,
-        totalSpineItems,
-        direction
-      });
-      
-      let targetSpineIndex;
-      
-      if (direction === 'next') {
-        targetSpineIndex = currentSpineIndex + 1;
-        if (targetSpineIndex >= totalSpineItems) {
-          console.log('ℹ️ 마지막 spine 항목입니다');
-          return null;
-        }
-      } else if (direction === 'prev') {
-        targetSpineIndex = currentSpineIndex - 1;
-        if (targetSpineIndex < 0) {
-          console.log('ℹ️ 첫 번째 spine 항목입니다');
-          return null;
-        }
-      } else {
-        console.warn('⚠️ 잘못된 방향입니다:', direction);
-          return null;
-        }
-        
-      // 대상 spine 항목 가져오기
-      const targetSpineItem = book.spine.get(targetSpineIndex);
-      if (!targetSpineItem) {
-        console.warn('⚠️ 대상 spine 항목을 찾을 수 없습니다:', targetSpineIndex);
-        return null;
-      }
-      
-      console.log('✅ Spine 기반 이동 대상:', {
-        targetSpineIndex,
-        href: targetSpineItem.href,
-        direction
-      });
-      
-      // spine 인덱스 또는 href 반환
-      return {
-        type: 'spine',
-        index: targetSpineIndex,
-        href: targetSpineItem.href
-      };
-      
-    } catch (error) {
-      console.error('❌ Spine 기반 이동 계산 중 오류:', error);
-      return null;
-    }
-  },
-  
-  async navigateWithFallback(book, rendition, direction) {
-    try {
-      if (!book || !rendition) {
-        return { success: false, error: 'Book 또는 Rendition 없음' };
-      }
-      
-      if (!book.spine || book.spine.length === 0) {
-        return { 
-          success: false, 
-          error: '뷰어가 완전히 로드되지 않았습니다. 새로고침해주세요.' 
-        };
-      }
-      let beforeLocation = null;
-      let beforeCfi = null;
-      
-      try {
-        beforeLocation = rendition.currentLocation();
-        beforeCfi = beforeLocation?.start?.cfi;
-      } catch (error) {
-        // ignore
-      }
-      
-      try {
-        await (direction === 'next' ? rendition.next() : rendition.prev());
-      } catch (navError) {
-        return { success: false, error: `이동 실패: ${navError.message}` };
-      }
-      
-      await new Promise(resolve => setTimeout(resolve, 300));
-      let afterLocation = null;
-      let afterCfi = null;
-      let verified = false;
-      
-      for (let i = 0; i < 5; i++) {
-        try {
-          afterLocation = rendition.currentLocation();
-          afterCfi = afterLocation?.start?.cfi;
-          
-            if (afterCfi && afterCfi !== beforeCfi) {
-              verified = true;
-              break;
-            }
-        } catch (error) {
-          // retry
-        }
-        
-        if (i < 4) {
-          await new Promise(resolve => setTimeout(resolve, 150));
-        }
-      }
-      if (!verified) {
-        const isAtStart = beforeLocation?.start?.spinePos === 0 && direction === 'prev';
-        const isAtEnd = beforeLocation?.start?.spinePos === (book.spine.length - 1) && direction === 'next';
-        
-        let errorMessage = '페이지가 이동하지 않았습니다.';
-        if (isAtStart) {
-          errorMessage = '첫 페이지입니다.';
-        } else if (isAtEnd) {
-          errorMessage = '마지막 페이지입니다.';
-        }
-        
-        return { 
-          success: false, 
-          error: errorMessage,
-          isAtStart,
-          isAtEnd
-        };
-      }
-      
-      return { 
-        success: true, 
-        method: 'basic', 
-        target: direction,
-        beforeCfi,
-        afterCfi
-      };
-      
-    } catch (error) {
-      return { success: false, error: error.message };
-    }
-  }
-};
-*/
 
 // CFI 매핑을 통한 정확한 챕터 감지 (EpubViewer에서 사용)
 export function detectCurrentChapter(cfi, chapterCfiMap = null) {
@@ -1011,13 +351,6 @@ export function detectCurrentChapter(cfi, chapterCfiMap = null) {
   return detectedChapter;
 }
 
-// StorageCache는 commonStorageUtils 사용 (이미 export됨)
-// 아래 주석 처리된 코드는 utils/common/storageUtils.js로 이동됨
-/*
-class StorageCache { ... }
-const storageCache = new StorageCache();
-export const storageUtils = { ... };
-*/
 
 export function getRefs(bookRef, renditionRef) {
   return {
@@ -1096,12 +429,6 @@ export async function ensureLocations(book, chars = 2000) {
 // 네비게이션 관련 유틸리티 함수들 (CFI 기반만)
 export const navigationUtils = {
   async safeNavigate(book, rendition, action, direction = 'next', setIsNavigating, setNavigationError, storageKeys) {
-    console.log(`🔄 safeNavigate 시작: ${direction}`, {
-      hasBook: !!book,
-      hasRendition: !!rendition,
-      hasAction: typeof action === 'function'
-    });
-    
     if (!book || !rendition) {
       errorUtils.logWarning('safeNavigate', 'book 또는 rendition이 없습니다', { hasBook: !!book, hasRendition: !!rendition });
       setNavigationError('뷰어가 준비되지 않았습니다.');
@@ -1112,26 +439,17 @@ export const navigationUtils = {
     setNavigationError(null);
 
     try {
-      console.log(`🚀 ${direction} 페이지 이동 시작`);
       const result = await action();
       
       if (!result || !result.success) {
         const errorMsg = result?.error || '페이지 이동에 실패했습니다.';
-        console.error(`❌ ${direction} 이동 실패:`, errorMsg);
         setNavigationError(errorMsg);
         return result || { success: false, error: errorMsg };
       }
       
-      console.log(`✅ ${direction} 이동 성공:`, {
-        method: result.method,
-        before: result.beforeCfi?.substring(0, 50) + '...',
-        after: result.afterCfi?.substring(0, 50) + '...'
-      });
-      
       return result;
       
     } catch (error) {
-      console.error(`❌ ${direction} 이동 실패:`, error);
       errorUtils.logError('safeNavigate', error);
       const errorMsg = '페이지 이동 중 오류가 발생했습니다.';
       setNavigationError(errorMsg);
@@ -1144,7 +462,7 @@ export const navigationUtils = {
 
 // 스프레드 모드 결정 함수
 export function getSpreadMode(pageMode, showGraph) {
-  // 분할 화면 + 그래프 화면 (showGraph=true, graphFullScreen=false)에서는 뷰어 너비가 50%로 제한
+    // 분할 화면 + 그래프 화면 (showGraph=true, graphFullScreen=false)에서는 뷰어 너비가 50%로 제한
   if (showGraph) {
     // 분할 화면: 50% 너비에 최적화하여 항상 한 페이지씩 표시
     // pageMode 설정과 관계없이 'none'으로 설정 (50% 너비에서는 두 페이지 표시가 부적절)

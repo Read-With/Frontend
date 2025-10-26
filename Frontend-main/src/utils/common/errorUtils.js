@@ -1,8 +1,3 @@
-/**
- * 통일된 에러 처리 유틸리티
- * viewerUtils.js에서 분리하여 공통 모듈로 사용
- */
-
 export const errorUtils = {
   logError: (context, error, additionalData = {}) => {
     console.error(`❌ ${context} 실패:`, error, additionalData);
@@ -25,4 +20,3 @@ export const errorUtils = {
     return fallbackValue;
   }
 };
-
