@@ -131,21 +131,19 @@ export function convertRelationsToElements(relations, idToName, idToDesc, idToDe
     return result;
   }
 
-  // 캐릭터 정보가 있는 노드만 필터링 (더 관대한 조건 적용)
+  // 캐릭터 정보가 있는 노드만 필터링 (character 데이터에 존재하는 ID만 허용)
   const validNodeIds = nodeIds.filter(strId => {
     const hasName = idToName[strId] && idToName[strId] !== strId;
     const hasValidId = strId && strId !== '0' && strId !== 'undefined' && strId !== 'null';
     
-    // 이름이 없어도 유효한 ID라면 기본 이름 생성
-    if (!hasName && hasValidId) {
-      idToName[strId] = `인물 ${strId}`;
-      console.warn(`캐릭터 이름이 없는 노드 발견 (ID: ${strId}), 기본 이름으로 대체`);
+    // 캐릭터 데이터에 없는 ID는 제외
+    if (!hasName) {
+      nodeSet.delete(strId); // nodeSet에서도 제거
+      console.warn(`캐릭터 데이터에 없는 노드 제외 (ID: ${strId})`);
+      return false;
     }
     
-    if (!hasName && !hasValidId) {
-      nodeSet.delete(strId); // nodeSet에서도 제거
-    }
-    return hasName || hasValidId;
+    return hasValidId;
   });
   
 

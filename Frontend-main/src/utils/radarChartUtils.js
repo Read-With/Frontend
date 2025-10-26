@@ -28,7 +28,7 @@ export const extractRadarChartData = (nodeId, relations, elements, maxDisplay = 
   }
 
   const targetNodeId = String(nodeId);
-  const radarData = [];
+  const radarDataMap = new Map(); // 중복 제거를 위한 Map
 
   // 선택된 노드와 연결된 모든 관계 찾기
   relations.forEach((rel) => {
@@ -45,32 +45,39 @@ export const extractRadarChartData = (nodeId, relations, elements, maxDisplay = 
     }
     
     if (connectedNodeId) {
-      // 연결된 노드의 이름 찾기
-      const connectedNode = elements.find(el => 
-        !el.data.source && String(el.data.id) === connectedNodeId
-      );
+      // 이미 해당 인물에 대한 데이터가 있는지 확인
+      const existingData = radarDataMap.get(connectedNodeId);
       
-      if (connectedNode && rel.positivity !== undefined) {
-        // 이름 처리: 띄어쓰기 기준 첫 단어만 사용
-        const fullName = connectedNode.data.label || connectedNode.data.common_name || `인물 ${connectedNodeId}`;
-        const shortName = fullName.split(' ')[0];
+      // 새로운 관계의 절댓값이 더 크면 업데이트 (더 강한 관계 우선)
+      if (!existingData || Math.abs(rel.positivity) > Math.abs(existingData.positivity)) {
+        // 연결된 노드의 이름 찾기
+        const connectedNode = elements.find(el => 
+          !el.data.source && String(el.data.id) === connectedNodeId
+        );
         
-        const radarItem = {
-          name: shortName,
-          fullName: fullName, // 툴팁에서 전체 이름 표시용
-          positivity: rel.positivity,
-          normalizedValue: normalizePositivity(rel.positivity),
-          relationCount: rel.count || 0,
-          relationTags: rel.relation || [],
-          connectedNodeId: connectedNodeId
-        };
-        
-        radarData.push(radarItem);
+        if (connectedNode && rel.positivity !== undefined) {
+          // 이름 처리: 띄어쓰기 기준 첫 단어만 사용
+          const fullName = connectedNode.data.label || connectedNode.data.common_name || `인물 ${connectedNodeId}`;
+          const shortName = fullName.split(' ')[0];
+          
+          const radarItem = {
+            name: shortName,
+            fullName: fullName, // 툴팁에서 전체 이름 표시용
+            positivity: rel.positivity,
+            normalizedValue: normalizePositivity(rel.positivity),
+            relationCount: rel.count || 0,
+            relationTags: rel.relation || [],
+            connectedNodeId: connectedNodeId
+          };
+          
+          radarDataMap.set(connectedNodeId, radarItem);
+        }
       }
     }
   });
 
-  // positivity 절댓값 기준으로 정렬 (관계가 강한 순서)
+  // Map을 배열로 변환하고 positivity 절댓값 기준으로 정렬 (관계가 강한 순서)
+  const radarData = Array.from(radarDataMap.values());
   radarData.sort((a, b) => Math.abs(b.positivity) - Math.abs(a.positivity));
   
   // 최대 표시 개수로 제한

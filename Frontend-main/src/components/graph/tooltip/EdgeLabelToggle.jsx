@@ -12,7 +12,7 @@ const EdgeLabelToggle = ({ visible, onToggle }) => {
       border: '1px solid #e7eaf7',
     }}>
       <span style={{
-        fontSize: '13px',
+        fontSize: '15px',
         fontWeight: '500',
         color: '#5C6F5C',
         whiteSpace: 'nowrap',

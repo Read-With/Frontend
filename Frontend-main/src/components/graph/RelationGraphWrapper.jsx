@@ -55,8 +55,21 @@ function RelationGraphWrapper() {
   const isBookId = !isNaN(filename) && filename.length > 0;
   const bookId = isBookId ? parseInt(filename) : null;
   
-  // 상태 관리 - 파일명별로 localStorage 키 구분
-  const [currentChapter, setCurrentChapter] = useLocalStorageNumber(`lastGraphChapter_${filename}`, 1);
+  // 상태 관리 - 파일명별로 localStorage 키 구분, URL 파라미터 우선
+  const [savedChapter, setSavedChapter] = useLocalStorageNumber(`lastGraphChapter_${filename}`, 1);
+  const [currentChapter, setCurrentChapter] = useState(savedChapter);
+  
+  // 챕터 변경 시 localStorage와 상태 동기화
+  useEffect(() => {
+    setSavedChapter(currentChapter);
+  }, [currentChapter, setSavedChapter]);
+  
+  // 저장된 챕터 변경 시 동기화
+  useEffect(() => {
+    if (savedChapter && savedChapter !== currentChapter) {
+      setCurrentChapter(savedChapter);
+    }
+  }, [savedChapter]);
   const [currentEvent, setCurrentEvent] = useState(1);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [edgeLabelVisible, setEdgeLabelVisible] = useState(true);
@@ -109,10 +122,6 @@ function RelationGraphWrapper() {
       setApiFineLoading(true);
       setApiError(null); // 에러 상태 초기화
       
-      // 최소 로딩 시간을 보장하기 위한 지연
-      const minLoadingTime = 6000; // 6초로 증가 (진득하게 기다리기)
-      const startTime = Date.now();
-      
       try {
         // 거시 그래프는 현재 챕터까지의 누적 데이터를 가져옴
         logApiCall('거시 그래프', {
@@ -158,13 +167,8 @@ function RelationGraphWrapper() {
         setApiFineData(null);
         setApiError(`API 호출 실패: ${error.message}`);
       } finally {
-        const elapsedTime = Date.now() - startTime;
-        const remainingTime = Math.max(0, minLoadingTime - elapsedTime);
-        
-        setTimeout(() => {
-          isMacroGraphLoadingRef.current = false;
-          setApiFineLoading(false);
-        }, remainingTime);
+        isMacroGraphLoadingRef.current = false;
+        setApiFineLoading(false);
       }
     };
 
@@ -182,10 +186,6 @@ function RelationGraphWrapper() {
       
       setApiFineLoading(true);
       setApiError(null); // 에러 상태 초기화
-      
-      // 최소 로딩 시간을 보장하기 위한 지연
-      const minLoadingTime = 6000; // 6초로 증가 (진득하게 기다리기)
-      const startTime = Date.now();
       
       try {
         logApiCall('챕터 그래프', {
@@ -229,12 +229,7 @@ function RelationGraphWrapper() {
         setApiFineData(null);
         setApiError(`API 호출 실패: ${error.message}`);
       } finally {
-        const elapsedTime = Date.now() - startTime;
-        const remainingTime = Math.max(0, minLoadingTime - elapsedTime);
-        
-        setTimeout(() => {
-          setApiFineLoading(false);
-        }, remainingTime);
+        setApiFineLoading(false);
       }
     };
 
@@ -676,7 +671,7 @@ function RelationGraphWrapper() {
           marginTop: '8px',
           fontStyle: 'italic'
         }}>
-          데이터 처리에 시간이 걸릴 수 있습니다. (최대 6초 소요)
+          데이터 처리 중...
         </div>
         <div style={{
           width: '200px',

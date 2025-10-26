@@ -180,17 +180,8 @@ export function useGraphDataLoader(filename, chapter, eventIndex = null) {
     const folderKey = getFolderKeyFromFilename(filename);
     const targetEventIndex = eventIndex || getLastEventIndexForChapter(folderKey, chapter);
     
-    // 최소 로딩 시간을 보장하기 위한 지연
-    const minLoadingTime = 6000; // 6초로 증가 (진득하게 기다리기)
-    const startTime = Date.now();
-    
     loadData(folderKey, chapter, targetEventIndex).finally(() => {
-      const elapsedTime = Date.now() - startTime;
-      const remainingTime = Math.max(0, minLoadingTime - elapsedTime);
-      
-      setTimeout(() => {
-        setLoading(false); // 로딩 완료
-      }, remainingTime);
+      setLoading(false); // 로딩 완료
     });
   }, [filename, chapter, eventIndex, loadData]);
 

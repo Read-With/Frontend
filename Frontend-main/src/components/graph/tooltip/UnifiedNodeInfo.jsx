@@ -449,8 +449,21 @@ function UnifiedNodeInfo({
       // 정제된 로컬 관계 데이터
       const finalRelations = Array.from(relationMap.values());
       
+      // 현재 이벤트에 등장하는 캐릭터 ID만 필터링
+      const currentEventCharacterIds = new Set();
+      finalRelations.forEach(rel => {
+        currentEventCharacterIds.add(String(rel.source));
+        currentEventCharacterIds.add(String(rel.target));
+      });
       
-      const chartData = extractRadarChartData(nodeData.id, finalRelations, elements, 8);
+      // 현재 이벤트에 등장하는 캐릭터만 필터링
+      const filteredElements = elements.filter(el => {
+        if (el.data.source) return false; // 엣지는 제외
+        const nodeId = String(el.data.id);
+        return currentEventCharacterIds.has(nodeId);
+      });
+      
+      const chartData = extractRadarChartData(nodeData.id, finalRelations, filteredElements, 8);
       
       return chartData;
     } catch (err) {
@@ -487,8 +500,8 @@ function UnifiedNodeInfo({
         y={y}
         textAnchor={x > cx ? 'start' : 'end'}
         fill={isHovered ? color : COLORS.textPrimary}
-        fontSize={isHovered ? 13 : 12}
-        fontWeight={isHovered ? 600 : 500}
+        fontSize={isHovered ? 18 : 16}
+        fontWeight={isHovered ? 700 : 600}
         style={{ transition: 'all 0.2s ease' }}
       >
         {payload.value}
@@ -1642,7 +1655,7 @@ function UnifiedNodeInfo({
                       <PolarRadiusAxis 
                         angle={90} 
                         domain={[0, 100]} 
-                        tick={{ fontSize: 11, fill: COLORS.textSecondary }}
+                        tick={{ fontSize: 14, fill: COLORS.textSecondary, fontWeight: 600 }}
                         tickCount={5}
                         tickFormatter={(value) => {
                           const normalized = (value / 50) - 1;
