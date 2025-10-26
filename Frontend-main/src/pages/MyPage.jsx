@@ -26,23 +26,33 @@ export default function MyPage() {
   }, [user?.name]);
 
   // 통계 계산 - 메모이제이션
-  const stats = useMemo(() => ({
-    total: books?.length || 0,
-    reading: books?.filter(b => b.readingStatus === 'reading').length || 0,
-    completed: books?.filter(b => b.readingStatus === 'completed').length || 0,
-    favorites: books?.filter(b => b.favorite).length || 0,
-  }), [books]);
+  const stats = useMemo(() => {
+    const total = books?.length || 0;
+    const reading = books?.filter(book => {
+      // CFI 정보가 있는 책만 카운트 (읽는 중으로 간주)
+      const isLocalBook = typeof book.id === 'string' && book.id.startsWith('local_');
+      if (isLocalBook) {
+        const filename = book.epubPath || book.filename;
+        const lastCFI = localStorage.getItem(`lastCFI_${filename}`);
+        return lastCFI && lastCFI.trim() !== '';
+      } else {
+        // API 책의 경우 progress가 있으면 읽는 중으로 간주
+        return book.progress && book.progress > 0;
+      }
+    }).length || 0;
+    
+    return {
+      total,
+      reading
+    };
+  }, [books]);
 
   // 탭별 필터링 - 메모이제이션
   const filteredBooks = useMemo(() => {
     let filtered = books || [];
 
     // 탭 필터링
-    if (activeTab === 'reading') {
-      filtered = filtered.filter(b => b.readingStatus === 'reading');
-    } else if (activeTab === 'completed') {
-      filtered = filtered.filter(b => b.readingStatus === 'completed');
-    } else if (activeTab === 'favorites') {
+    if (activeTab === 'favorites') {
       filtered = filtered.filter(b => b.favorite);
     }
 
@@ -109,67 +119,15 @@ export default function MyPage() {
                 <div className="stat-card stat-card-total">
                   <div className="stat-icon-wrapper">
                     <Book className="stat-icon-svg" />
+                    <div className="stat-badge">
+                      총 {stats.total}권
+                    </div>
                   </div>
                   <div className="stat-content">
-                    <span className="stat-number">{stats.total}</span>
-                    <span className="stat-label">전체 도서</span>
-                    {stats.total > 0 && (
-                      <div className="stat-progress-ring">
-                        <svg className="progress-ring" width="40" height="40">
-                          <circle
-                            className="progress-ring-circle"
-                            stroke="#e8ecf3"
-                            strokeWidth="3"
-                            fill="transparent"
-                            r="18"
-                            cx="20"
-                            cy="20"
-                          />
-                          <circle
-                            className="progress-ring-circle progress-ring-fill"
-                            stroke="#3E4F2F"
-                            strokeWidth="3"
-                            fill="transparent"
-                            r="18"
-                            cx="20"
-                            cy="20"
-                            style={{
-                              strokeDasharray: `${2 * Math.PI * 18}`,
-                              strokeDashoffset: `${2 * Math.PI * 18 * (1 - (stats.completed / stats.total))}`
-                            }}
-                          />
-                        </svg>
-                        <span className="progress-text">{Math.round((stats.completed / stats.total) * 100)}%</span>
-                      </div>
-                    )}
-                  </div>
-                </div>
-                <div className="stat-card stat-card-reading">
-                  <div className="stat-icon-wrapper">
-                    <BookOpen className="stat-icon-svg" />
-                  </div>
-                  <div className="stat-content">
-                    <span className="stat-number">{stats.reading}</span>
-                    <span className="stat-label">읽는 중</span>
-                    {stats.reading > 0 && (
-                      <div className="stat-badge">
-                        🔥 활발한 독서
-                      </div>
-                    )}
-                  </div>
-                </div>
-                <div className="stat-card stat-card-completed">
-                  <div className="stat-icon-wrapper">
-                    <CheckCircle2 className="stat-icon-svg" />
-                  </div>
-                  <div className="stat-content">
-                    <span className="stat-number">{stats.completed}</span>
-                    <span className="stat-label">완독</span>
-                    {stats.completed > 0 && (
-                      <div className="stat-badge">
-                        🏆 {stats.completed}권 완주
-                      </div>
-                    )}
+                    <div className="stat-main">
+                      <span className="stat-number">{stats.reading}</span>
+                      <span className="stat-label">권 읽는 중</span>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -194,20 +152,6 @@ export default function MyPage() {
                 >
                   즐겨찾기 ❤️
                   {stats.favorites > 0 && <span className="tab-badge">{stats.favorites}</span>}
-                </button>
-                <button
-                  className={`tab-button ${activeTab === 'reading' ? 'active' : ''}`}
-                  onClick={() => setActiveTab('reading')}
-                >
-                  읽는 중
-                  {stats.reading > 0 && <span className="tab-badge">{stats.reading}</span>}
-                </button>
-                <button
-                  className={`tab-button ${activeTab === 'completed' ? 'active' : ''}`}
-                  onClick={() => setActiveTab('completed')}
-                >
-                  완독
-                  {stats.completed > 0 && <span className="tab-badge">{stats.completed}</span>}
                 </button>
               </nav>
 
@@ -280,23 +224,18 @@ export default function MyPage() {
                   <div className="empty-state">
                     <div className="empty-icon">
                       {activeTab === 'all' ? <Library size={80} strokeWidth={1.5} /> : 
-                       activeTab === 'reading' ? <BookOpen size={80} strokeWidth={1.5} /> : 
-                       activeTab === 'completed' ? <CheckCircle2 size={80} strokeWidth={1.5} /> : 
                        <Heart size={80} strokeWidth={1.5} />}
                     </div>
                     <h2 className="empty-title">
                       {activeTab === 'all' ? '아직 책이 없네요!' :
-                       activeTab === 'reading' ? '읽는 중인 책이 없어요' :
-                       activeTab === 'completed' ? '완독한 책이 없어요' :
+                       activeTab === 'favorites' ? '즐겨찾기한 책이 없어요' :
                        '즐겨찾기한 책이 없어요'}
                     </h2>
                     <p className="empty-description">
                       {activeTab === 'all' 
                         ? '우측 하단의 + 버튼을 눌러서 첫 번째 책을 추가해보세요. EPUB 파일을 업로드하면 바로 읽을 수 있어요!'
-                        : activeTab === 'reading'
-                        ? '아직 읽고 있는 책이 없네요. 서재에서 책을 선택해 독서를 시작해보세요!'
-                        : activeTab === 'completed'
-                        ? '완독한 책이 아직 없어요. 책을 끝까지 읽으면 여기에 표시됩니다.'
+                        : activeTab === 'favorites'
+                        ? '즐겨찾기한 책이 아직 없어요. 책을 즐겨찾기하면 여기에 표시됩니다.'
                         : searchQuery
                         ? '검색 결과가 없습니다. 다른 키워드로 검색해보세요.'
                         : '해당하는 책이 없습니다.'}
@@ -317,8 +256,7 @@ export default function MyPage() {
                       loading={false}
                       error={null}
                       onRetry={retryFetch}
-                      onToggleFavorite={toggleFavorite}
-                      onStatusChange={changeBookStatus}
+            onToggleFavorite={toggleFavorite}
                       viewMode={viewMode}
                     />
                   </div>

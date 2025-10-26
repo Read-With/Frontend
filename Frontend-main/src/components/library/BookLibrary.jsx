@@ -5,15 +5,12 @@ import { Heart, BookOpen, Network, MoreVertical, Info, CheckCircle, Clock, FileT
 import BookDetailModal from './BookDetailModal';
 import './BookLibrary.css';
 
-const BookCard = ({ book, onToggleFavorite, onBookClick, onBookDetailClick, onStatusChange, viewMode = 'grid' }) => {
+const BookCard = ({ book, onToggleFavorite, onBookClick, onBookDetailClick, viewMode = 'grid' }) => {
   const navigate = useNavigate();
   const [imageError, setImageError] = useState(false);
   const [showContextMenu, setShowContextMenu] = useState(false);
 
   const isLocalBook = typeof book.id === 'string' && book.id.startsWith('local_');
-  
-  // 독서 진행률 계산 (임시로 랜덤값, 실제로는 book.progress 사용) - 수정예정
-  const progress = book.progress || 0;
 
   const handleReadClick = (e) => {
     e.stopPropagation();
@@ -110,26 +107,6 @@ const BookCard = ({ book, onToggleFavorite, onBookClick, onBookDetailClick, onSt
     setShowContextMenu(!showContextMenu);
   };
 
-  const handleStatusChangeClick = (status, e) => {
-    e.stopPropagation();
-    if (onStatusChange) {
-      onStatusChange(book.id, status);
-    }
-    setShowContextMenu(false);
-  };
-
-  const getStatusInfo = () => {
-    const status = book.readingStatus || 'none';
-    const statusMap = {
-      reading: { label: '읽는 중', className: 'status-reading', icon: <BookOpen size={14} /> },
-      completed: { label: '완독', className: 'status-completed', icon: <CheckCircle size={14} /> },
-      none: { label: '미분류', className: 'status-default', icon: <BookOpen size={14} /> }
-    };
-    return statusMap[status] || statusMap.none;
-  };
-
-  const statusInfo = getStatusInfo();
-
   const renderBookImage = () => {
     if (book.coverImgUrl && !imageError) {
       return (
@@ -175,30 +152,23 @@ const BookCard = ({ book, onToggleFavorite, onBookClick, onBookDetailClick, onSt
         />
       </button>
 
-      {/* 상태 배지 - 오른쪽 상단 */}
-      {book.readingStatus && book.readingStatus !== 'none' && (
-        <div className={`book-status-badge ${statusInfo.className}`}>
-          <span>{statusInfo.icon}</span> {statusInfo.label}
-        </div>
-      )}
-
       {/* 카드 헤더 - 이미지 영역 */}
       <div className="book-card-header">
         <div className="book-image-container">
           {renderBookImage()}
         </div>
 
-        {/* 독서 진행률 (읽는 중인 책만) */}
-        {book.readingStatus === 'reading' && progress > 0 && (
+        {/* 독서 진행률 */}
+        {book.progress > 0 && (
           <div className="book-progress-container">
             <div className="progress-label">
               <span>독서 진행률</span>
-              <span>{progress}%</span>
+              <span>{book.progress}%</span>
             </div>
             <div className="progress-bar-bg">
               <div 
                 className="progress-bar-fill" 
-                style={{ width: `${progress}%` }}
+                style={{ width: `${book.progress}%` }}
               />
             </div>
           </div>
@@ -282,19 +252,6 @@ const BookCard = ({ book, onToggleFavorite, onBookClick, onBookDetailClick, onSt
           <div className="book-context-dropdown">
             <button
               className="book-context-item"
-              onClick={(e) => handleStatusChangeClick('reading', e)}
-            >
-              <BookOpen size={18} className="book-context-icon" />
-              읽는 중            </button>
-            <button
-              className="book-context-item"
-              onClick={(e) => handleStatusChangeClick('completed', e)}
-            >
-              <CheckCircle size={18} className="book-context-icon" />
-              완독
-            </button>
-            <button
-              className="book-context-item"
               onClick={handleDetailClick}
             >
               <Info size={18} className="book-context-icon" />
@@ -360,7 +317,6 @@ const BookLibrary = memo(({ books, loading, error, onRetry, onToggleFavorite, on
           onToggleFavorite={onToggleFavorite}
           onBookClick={onBookClick}
           onBookDetailClick={handleBookDetailClick}
-          onStatusChange={onStatusChange}
           viewMode={viewMode}
         />
       ))}
@@ -381,7 +337,6 @@ BookLibrary.propTypes = {
   onRetry: PropTypes.func,
   onToggleFavorite: PropTypes.func,
   onBookClick: PropTypes.func,
-  onStatusChange: PropTypes.func,
   viewMode: PropTypes.oneOf(['grid', 'list'])
 };
 

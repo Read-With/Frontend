@@ -79,12 +79,13 @@
   letter-spacing: -0.03em;
   text-shadow: 0 2px 20px rgba(0, 0, 0, 0.1);
   color: #ffffff !important;
+  margin-bottom: 1.5rem;
 }
 
 .hero-subtitle {
   font-size: 1.5rem;
   font-weight: 200;
-  margin-bottom: 12px;
+  margin-bottom: 0.25rem;
   color: #ffffff !important;
   opacity: 1 !important;
 }
@@ -94,7 +95,7 @@
   font-size: 1.1rem !important;
   line-height: 1.7 !important;
   color: #ffffff !important;
-  margin-bottom: 0 !important;
+  margin-bottom: 1rem !important;
   max-width: 500px !important;
   text-shadow: 0 1px 3px rgba(0, 0, 0, 0.15) !important;
   opacity: 1 !important;
@@ -114,9 +115,8 @@
 
 /* ==================== 독서 통계 카드 ==================== */
 .hero-stats {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 24px;
+  display: flex;
+  justify-content: center;
   width: 100%;
   max-width: 500px;
 }
@@ -133,9 +133,10 @@
   position: relative;
   overflow: hidden;
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   align-items: center;
-  gap: 16px;
+  gap: 20px;
+  min-width: 300px;
 }
 
 .stat-card::before {
@@ -153,13 +154,6 @@
   background: linear-gradient(90deg, #3E4F2F, #586544);
 }
 
-.stat-card-reading::before {
-  background: linear-gradient(90deg, #717B59, #B3B6A0);
-}
-
-.stat-card-completed::before {
-  background: linear-gradient(90deg, #586544, #3E4F2F);
-}
 
 .stat-card:hover {
   transform: translateY(-4px);
@@ -172,36 +166,29 @@
 
 /* SVG 아이콘 스타일 */
 .stat-icon-wrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+}
+
+.stat-card-total .stat-icon-wrapper {
+  background: none;
+  box-shadow: none;
+}
+
+
+.stat-icon-svg {
   width: 56px;
   height: 56px;
-  margin: 0 auto 16px;
+  background: transparent;
   border-radius: 16px;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: all 0.3s ease;
-  position: relative;
-}
-
-.stat-card-total .stat-icon-wrapper {
-  background: var(--primary-gradient);
   box-shadow: 0 4px 16px rgba(62, 79, 47, 0.3);
-}
-
-.stat-card-reading .stat-icon-wrapper {
-  background: var(--secondary-gradient);
-  box-shadow: 0 4px 16px rgba(113, 123, 89, 0.3);
-}
-
-.stat-card-completed .stat-icon-wrapper {
-  background: var(--accent-gradient);
-  box-shadow: 0 4px 16px rgba(88, 101, 68, 0.3);
-}
-
-.stat-icon-svg {
-  width: 28px;
-  height: 28px;
-  color: white;
+  color: #3E4F2F;
   transition: transform 0.3s ease;
 }
 
@@ -217,7 +204,7 @@
   font-size: 2.8rem;
   font-weight: 800;
   line-height: 1;
-  margin-bottom: 8px;
+  margin-bottom: 0;
   display: block;
 }
 
@@ -225,17 +212,19 @@
   color: #3E4F2F;
 }
 
-.stat-card-reading .stat-number {
-  color: #717B59;
-}
-
-.stat-card-completed .stat-number {
-  color: #586544;
-}
 
 .stat-content {
   display: flex;
   flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  flex: 1;
+  margin-left: 20px;
+}
+
+.stat-main {
+  display: flex;
+  flex-direction: row;
   align-items: center;
   gap: 8px;
 }
@@ -246,6 +235,9 @@
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.5px;
+  margin-bottom: 0;
+  margin-top: 1.5rem;
+  text-align: left;
 }
 
 .stat-progress-ring {
@@ -279,23 +271,14 @@
 .stat-badge {
   background: var(--primary-gradient);
   color: white;
-  padding: 4px 12px;
+  padding: 6px 16px;
   border-radius: 12px;
-  font-size: 0.75rem;
+  font-size: 0.9rem;
   font-weight: 700;
   margin-top: 4px;
   box-shadow: 0 2px 8px rgba(62, 79, 47, 0.3);
 }
 
-.stat-card-reading .stat-badge {
-  background: var(--secondary-gradient);
-  box-shadow: 0 2px 8px rgba(113, 123, 89, 0.3);
-}
-
-.stat-card-completed .stat-badge {
-  background: var(--accent-gradient);
-  box-shadow: 0 2px 8px rgba(88, 101, 68, 0.3);
-}
 
 /* ==================== 컨텐츠 영역 ==================== */
 .content-container {
@@ -601,7 +584,7 @@
   justify-content: center;
   text-align: center;
   padding: 80px 20px;
-  min-height: 200px;
+  min-height: 360px;
 }
 
 .loading-icon {

@@ -83,7 +83,7 @@ export const useBooks = () => {
               summary: false,
               default: true,
               favorite: localFavorites[bookId] || false, // localStorage에서 즐겨찾기 상태 복원
-              readingStatus: localBookStatuses[bookId] || 'none', // localStorage에서 읽기 상태 복원
+              readingStatus: 'none', // 기본값으로 설정
               updatedAt: localBook.uploadedAt || new Date().toISOString()
             };
             allBooks.push(convertedBook);
@@ -237,34 +237,6 @@ export const useBooks = () => {
     setBooks(prevBooks => [newBook, ...prevBooks]);
   };
 
-  // 책 상태 변경 (읽는 중, 완독, 읽고 싶은 등)
-  const changeBookStatus = async (bookId, status) => {
-    // 로컬 책은 로컬 상태와 localStorage에 저장
-    if (typeof bookId === 'string' && bookId.startsWith('local_')) {
-      // localStorage에서 로컬 책 상태 가져오기
-      const localBookStatuses = JSON.parse(localStorage.getItem('localBookStatuses') || '{}');
-      
-      // 상태 저장
-      localBookStatuses[bookId] = status;
-      localStorage.setItem('localBookStatuses', JSON.stringify(localBookStatuses));
-      
-      // 상태 업데이트
-      setBooks(prevBooks => 
-        prevBooks.map(book => 
-          book.id === bookId ? { ...book, readingStatus: status } : book
-        )
-      );
-      return;
-    }
-    
-    // TODO: API가 준비되면 실제 API 호출 추가
-    setBooks(prevBooks => 
-      prevBooks.map(book => 
-        book.id === bookId ? { ...book, readingStatus: status } : book
-      )
-    );
-  };
-
   return {
     books,
     loading,
@@ -275,7 +247,6 @@ export const useBooks = () => {
     searchBooks,
     fetchFavorites,
     fetchBook,
-    addBook,
-    changeBookStatus
+    addBook
   };
 };

@@ -108,15 +108,6 @@
   text-transform: uppercase;
 }
 
-.status-reading {
-  background: linear-gradient(135deg, #3E4F2F, #586544);
-  color: white;
-}
-
-.status-completed {
-  background: linear-gradient(135deg, #28a745, #48c774);
-  color: white;
-}
 
 
 .status-default {
