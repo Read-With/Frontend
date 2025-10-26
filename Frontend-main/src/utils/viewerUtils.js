@@ -17,60 +17,18 @@
  * - 로마 숫자(I~M) → 아라비아 숫자 변환
  */
 
-// 통일된 에러 처리 유틸리티
-export const errorUtils = {
-  logError: (context, error, additionalData = {}) => {
-    console.error(`❌ ${context} 실패:`, error, additionalData);
-  },
-  
-  logWarning: (context, message, additionalData = {}) => {
-    console.warn(`⚠️ ${context}: ${message}`, additionalData);
-  },
-  
-  logInfo: (context, message, additionalData = {}) => {
-    console.log(`ℹ️ ${context}: ${message}`, additionalData);
-  },
-  
-  logSuccess: (context, message, additionalData = {}) => {
-    console.log(`✅ ${context}: ${message}`, additionalData);
-  },
-  
-  handleError: (context, error, fallbackValue = null, additionalData = {}) => {
-    this.logError(context, error, additionalData);
-    return fallbackValue;
-  }
-};
+// 공통 유틸리티 import (utils/common에서 분리)
+import { errorUtils as commonErrorUtils } from './common/errorUtils';
+import { storageUtils as commonStorageUtils } from './common/storageUtils';
+import { cfiUtils as commonCfiUtils } from './common/cfiUtils';
+import { settingsUtils as commonSettingsUtils, defaultSettings as commonDefaultSettings, loadSettings as commonLoadSettings } from './common/settingsUtils';
 
-export const defaultSettings = {
-  fontSize: 100,
-  pageMode: "double",
-  lineHeight: 1.5,
-  margin: 20,
-  fontFamily: "Noto Serif KR",
-  showGraph: true,
-};
-
-export function loadSettings() {
-  try {
-    const settings = storageUtils.get("epub_viewer_settings");
-    const loadedSettings = settings ? JSON.parse(settings) : defaultSettings;
-
-    if (loadedSettings.pageMode === "leftOnly") {
-      loadedSettings.pageMode = "double";
-    }
-
-    if (loadedSettings.showGraph === undefined) {
-      loadedSettings.showGraph = defaultSettings.showGraph;
-    }
-    storageUtils.set("epub_viewer_settings", JSON.stringify(loadedSettings));
-
-    return loadedSettings;
-  } catch (error) {
-    return errorUtils.handleError('loadSettings', error, defaultSettings, { 
-      settings: storageUtils.get("epub_viewer_settings") 
-    });
-  }
-}
+// 기존 export 유지 (하위 호환성)
+export const errorUtils = commonErrorUtils;
+export const storageUtils = commonStorageUtils;
+export const cfiUtils = commonCfiUtils;
+export const defaultSettings = commonDefaultSettings;
+export const loadSettings = commonLoadSettings;
 
 export function parseCfiToChapterDetail(cfi) {
   if (!cfi || typeof cfi !== 'string') {
@@ -401,30 +359,9 @@ export const bookmarkUtils = {
   }
 };
 
-function romanToArabic(roman) {
-  if (!roman || typeof roman !== 'string') return 1;
-  
-  const romanMap = {
-    'I': 1, 'V': 5, 'X': 10, 'L': 50, 
-    'C': 100, 'D': 500, 'M': 1000
-  };
-  
-  let result = 0;
-  for (let i = 0; i < roman.length; i++) {
-    const current = romanMap[roman[i]];
-    const next = romanMap[roman[i + 1]];
-    
-    if (current < next) {
-      result -= current;
-    } else {
-      result += current;
-    }
-  }
-  
-  return result || 1;
-}
-
-// CFI 처리 공통 유틸리티
+// CFI 처리는 commonCfiUtils 사용 (이미 export됨)
+// 아래 주석 처리된 코드는 utils/common/cfiUtils.js로 이동됨
+/*
 export const cfiUtils = {
   // CFI에서 챕터 번호 추출
   extractChapterNumber(cfi, label = null) {
@@ -1056,14 +993,12 @@ export const cfiUtils = {
     }
   }
 };
-
-// extractChapterNumber는 cfiUtils.extractChapterNumber로 통합됨
+*/
 
 // CFI 매핑을 통한 정확한 챕터 감지 (EpubViewer에서 사용)
 export function detectCurrentChapter(cfi, chapterCfiMap = null) {
   let detectedChapter = cfiUtils.extractChapterNumber(cfi);
   
-  // 챕터 번호가 1이고 CFI 매핑이 있을 때 정확한 챕터 번호 찾기
   if (detectedChapter === 1 && chapterCfiMap && chapterCfiMap.size > 0) {
     for (const [chapterNum, chapterCfi] of chapterCfiMap) {
       if (cfi && cfi.includes(chapterCfi)) {
@@ -1076,85 +1011,13 @@ export function detectCurrentChapter(cfi, chapterCfiMap = null) {
   return detectedChapter;
 }
 
-// localStorage 캐시 관리
-class StorageCache {
-  constructor() {
-    this.cache = new Map();
-    this.maxSize = 50;
-    this.ttl = 5 * 60 * 1000; // 5분
-  }
-
-  get(key) {
-    const cached = this.cache.get(key);
-    if (cached && Date.now() - cached.timestamp < this.ttl) {
-      return cached.value;
-    }
-    
-    const value = localStorage.getItem(key);
-    this._setCache(key, value);
-    return value;
-  }
-
-  set(key, value) {
-    localStorage.setItem(key, value);
-    this._setCache(key, value);
-  }
-
-  remove(key) {
-    localStorage.removeItem(key);
-    this.cache.delete(key);
-  }
-
-  getJson(key, defaultValue = {}) {
-    const cached = this.cache.get(key);
-    if (cached && Date.now() - cached.timestamp < this.ttl && cached.parsed) {
-      return cached.value;
-    }
-
-    try {
-      const value = JSON.parse(localStorage.getItem(key) || '{}');
-      this._setCache(key, value, true);
-      return value;
-    } catch {
-      this._setCache(key, defaultValue, true);
-      return defaultValue;
-    }
-  }
-
-  setJson(key, value) {
-    const jsonValue = JSON.stringify(value);
-    localStorage.setItem(key, jsonValue);
-    this._setCache(key, value, true);
-  }
-
-  _setCache(key, value, parsed = false) {
-    if (this.cache.size >= this.maxSize) {
-      const firstKey = this.cache.keys().next().value;
-      this.cache.delete(firstKey);
-    }
-    
-    this.cache.set(key, {
-      value,
-      timestamp: Date.now(),
-      parsed
-    });
-  }
-
-  clear() {
-    this.cache.clear();
-  }
-}
-
+// StorageCache는 commonStorageUtils 사용 (이미 export됨)
+// 아래 주석 처리된 코드는 utils/common/storageUtils.js로 이동됨
+/*
+class StorageCache { ... }
 const storageCache = new StorageCache();
-
-export const storageUtils = {
-  get: (key) => storageCache.get(key),
-  set: (key, value) => storageCache.set(key, value),
-  remove: (key) => storageCache.remove(key),
-  getJson: (key, defaultValue = {}) => storageCache.getJson(key, defaultValue),
-  setJson: (key, value) => storageCache.setJson(key, value),
-  clearCache: () => storageCache.clear()
-};
+export const storageUtils = { ... };
+*/
 
 export function getRefs(bookRef, renditionRef) {
   return {
@@ -1292,70 +1155,8 @@ export function getSpreadMode(pageMode, showGraph) {
   }
 }
 
-export const settingsUtils = {
-  applySettings(newSettings, prevSettings, setSettings, setShowGraph, setReloadKey, viewerRef, cleanFilename) {
-    const currentSettings = { ...prevSettings };
-    setSettings(newSettings);
-    setShowGraph(newSettings.showGraph);
-
-    // 글꼴 크기나 줄 간격 변경 시에도 새로고침
-    const needsReload = 
-      newSettings.pageMode !== currentSettings.pageMode ||
-      newSettings.showGraph !== currentSettings.showGraph ||
-      newSettings.fontSize !== currentSettings.fontSize ||
-      newSettings.lineHeight !== currentSettings.lineHeight;
-
-    if (needsReload) {
-      const saveCurrent = async () => {
-        try {
-          let cfi = null;
-          if (viewerRef?.current?.getCurrentCfi) {
-            cfi = await viewerRef.current.getCurrentCfi();
-            if (cfi) {
-              localStorage.setItem(`readwith_${cleanFilename}_lastCFI`, cfi);
-            }
-          }
-          setReloadKey((prev) => prev + 1);
-        } catch (e) {
-          setReloadKey((prev) => prev + 1);
-        }
-      };
-      saveCurrent();
-    } else {
-      if (viewerRef?.current?.applySettings) {
-        viewerRef.current.applySettings();
-      }
-    }
-
-    try {
-      localStorage.setItem("epub_viewer_settings", JSON.stringify(newSettings));
-    } catch (e) {
-      return { success: false, message: "설정 저장 중 오류가 발생했습니다." };
-    }
-
-    return { success: true, message: "✅ 설정이 적용되었습니다" };
-  },
-
-  // EpubViewer에서 사용할 설정 적용 함수
-  applyEpubSettings(rendition, settings, getSpreadMode) {
-    if (!rendition || !settings) return;
-    
-    // 스프레드 모드 설정
-    rendition.spread(getSpreadMode);
-    
-    // 글꼴 크기 적용 (settings.fontSize는 이미 퍼센트 값이므로 그대로 사용)
-    if (settings.fontSize) {
-      rendition.themes.fontSize(`${settings.fontSize}%`);
-    }
-    
-    // 줄 간격 적용
-    if (settings.lineHeight) {
-      rendition.themes.override('body', {
-        'line-height': `${settings.lineHeight}`
-      });
-    }
-  }
-};
+// settingsUtils는 commonSettingsUtils 사용 (이미 import됨)
+export const settingsUtils = commonSettingsUtils;
 
 export const textUtils = {
   countCharacters: (text, element) => {

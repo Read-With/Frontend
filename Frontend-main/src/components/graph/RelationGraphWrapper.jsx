@@ -274,7 +274,8 @@ function RelationGraphWrapper() {
         idToNames,
         'api', // folderKey
         null, // nodeWeights
-        null  // previousRelations
+        null, // previousRelations
+        apiFineData.event // eventData
       );
       
       return convertedElements;

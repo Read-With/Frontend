@@ -249,7 +249,7 @@ export const getGraphControlsStyles = () => ({
     fontWeight: '600',
     cursor: 'pointer',
     transition: `all ${ANIMATION_VALUES.DURATION.FAST}`,
-    width: '84px',
+    width: '88px',
     height: '36px',
     padding: '0 12px',
     flexShrink: 0,

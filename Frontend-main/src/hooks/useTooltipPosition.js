@@ -85,7 +85,7 @@ export function useTooltipPosition(initialX, initialY) {
       const constrained = constrainToViewport(initialX, initialY, tooltipRect.width, tooltipRect.height);
       setPosition(constrained);
     }
-  }, [initialX, initialY, isDragging, hasDragged, constrainToViewport]);
+  }, [initialX, initialY, isDragging, hasDragged]);
 
   return {
     position,

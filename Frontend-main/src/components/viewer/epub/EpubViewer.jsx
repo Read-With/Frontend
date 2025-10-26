@@ -15,7 +15,6 @@ import {
   detectCurrentChapter,
   storageUtils,
   getRefs,
-  cleanupNavigation,
   ensureLocations,
   textUtils,
   settingsUtils,
@@ -101,9 +100,7 @@ const EpubViewer = forwardRef(
     const chapterCfiMapRef = useRef(new Map());
 
     const [loading, setLoading] = useState(false);
-    const [reloading, setReloading] = useState(false);
     const [error, setError] = useState(null);
-    const [currentPath, setCurrentPath] = useState(null);
     const [isNavigating, setIsNavigating] = useState(false);
     const [navigationError, setNavigationError] = useState(null);
     const lastNavigationTimeRef = useRef(0);
@@ -130,29 +127,14 @@ const EpubViewer = forwardRef(
       };
     }, [book.epubPath, book.path, book.filename, settings?.pageMode, settings?.showGraph]);
 
-    // 스프레드 모드 결정은 viewerUtils.js의 getSpreadMode 사용
 
-    const smoothReload = useCallback((type = 'next') => {
-      setReloading(type);
-      setTimeout(() => {
-        window.location.reload();
-      }, 300);
-    }, []);
-
-    // 네비게이션 실패 시 대체 방법은 viewerUtils.js의 navigationUtils 사용
-
-    // 글자 수 계산은 viewerUtils.js의 textUtils 사용
-
-    // 페이지 이동 시 글자 수 계산 및 표시 함수 (디바운싱 적용)
     const updatePageCharCountTimer = useRef(null);
     
     const updatePageCharCount = useCallback((direction = 'next') => {
-      // 이전 타이머 취소
       if (updatePageCharCountTimer.current) {
         clearTimeout(updatePageCharCountTimer.current);
       }
       
-      // 50ms 디바운싱
       updatePageCharCountTimer.current = setTimeout(() => {
         const rendition = renditionRef.current;
         if (!rendition) return;
@@ -163,7 +145,6 @@ const EpubViewer = forwardRef(
         const contents = rendition.getContents();
         if (!contents || contents.length === 0) return;
 
-        // CFI에서 현재 단락 번호와 문자 오프셋 추출
         const paragraphMatch = currentCfi.match(/\[chapter-\d+\]\/(\d+)\/1:(\d+)\)$/);
         const currentParagraphNum = paragraphMatch ? parseInt(paragraphMatch[1]) : 0;
         const charOffset = paragraphMatch ? parseInt(paragraphMatch[2]) : 0;
@@ -171,28 +152,15 @@ const EpubViewer = forwardRef(
         const currentPage = contents[0];
         const paragraphs = currentPage.document.querySelectorAll('p');
 
-        // 이전 단락들의 글자 수 계산
         const previousChars = textUtils.calculatePreviousParagraphsChars(paragraphs, currentParagraphNum);
-        
-        // 현재 단락의 부분 글자 수 계산
         const currentChars = textUtils.calculateCurrentParagraphChars(paragraphs, currentParagraphNum, charOffset);
-        
         const totalCharCount = previousChars + currentChars;
 
-        // 현재 페이지의 글자 수를 저장
         chapterPageCharsRef.current.set(currentCfi, totalCharCount);
         currentChapterCharsRef.current = totalCharCount;
       }, 50);
     }, []);
 
-
-    // 챕터 번호 감지는 viewerUtils.js의 detectCurrentChapter 사용
-
-    // 안전한 네비게이션은 viewerUtils.js의 navigationUtils 사용
-
-    // 설정 적용은 viewerUtils.js의 settingsUtils.applyEpubSettings 사용
-
-    // pageMode 또는 showGraph 변경 시 spread 모드 재적용
     useEffect(() => {
       if (renditionRef.current) {
         const { rendition } = getRefs(bookRef, renditionRef);
@@ -382,7 +350,6 @@ const EpubViewer = forwardRef(
         }
         isLoadingRef.current = true;
         currentPathRef.current = epubPath;
-        setCurrentPath(epubPath);
         
         if (!viewerRef.current || !viewerRef.current.tagName) {
           await new Promise(resolve => setTimeout(resolve, 50));
@@ -390,7 +357,6 @@ const EpubViewer = forwardRef(
           if (!viewerRef.current || !viewerRef.current.tagName) {
             isLoadingRef.current = false;
             currentPathRef.current = null;
-            setCurrentPath(null);
             return;
           }
         }
@@ -705,7 +671,6 @@ const EpubViewer = forwardRef(
         } catch (e) {
           setError("EPUB 로드 오류");
           currentPathRef.current = null;
-          setCurrentPath(null);
         } finally {
           isLoadingRef.current = false;
           setLoading(false);
@@ -742,11 +707,9 @@ const EpubViewer = forwardRef(
         }
         
         isLoadingRef.current = false;
-        setCurrentPath(null);
       };
     }, []);
 
-    // 설정이 변경될 때마다 적용
     useEffect(() => {
       if (renditionRef.current && settings) {
         const { rendition } = getRefs(bookRef, renditionRef);
@@ -756,83 +719,10 @@ const EpubViewer = forwardRef(
       }
     }, [settings, pageMode, showGraph]);
 
-    // 새로고침할 때마다 현재 화면에 보이는 CFI를 콘솔로 보여주기
-    useEffect(() => {
-      const showCurrentCFI = async () => {
-        if (renditionRef.current) {
-          console.log('🔄 새로고침 감지 - 현재 화면 CFI 확인 시작');
-          
-          let retryCount = 0;
-          const maxRetries = 15; // 재시도 횟수 증가
-          
-          while (retryCount < maxRetries) {
-            try {
-              const currentLocation = renditionRef.current.currentLocation();
-              console.log(`📍 현재 화면 CFI 확인 (${retryCount + 1}/${maxRetries}):`, currentLocation);
-              
-              // 뷰어 상태 상세 분석
-              console.log('🔍 뷰어 상태 상세 분석:', {
-                hasRendition: !!renditionRef.current,
-                hasCurrentLocation: typeof renditionRef.current.currentLocation === 'function',
-                renditionStarted: renditionRef.current.started,
-                renditionDisplaying: renditionRef.current.displaying,
-                renditionLocation: renditionRef.current.location,
-                currentLocationType: typeof currentLocation,
-                currentLocationKeys: currentLocation ? Object.keys(currentLocation) : 'null',
-                startExists: currentLocation?.start ? 'exists' : 'missing',
-                cfiExists: currentLocation?.start?.cfi ? 'exists' : 'missing'
-              });
-              
-              if (currentLocation && currentLocation.start && currentLocation.start.cfi) {
-                console.log('🎯 ===== 현재 화면에 보이는 CFI =====');
-                console.log('📍 CFI:', currentLocation.start.cfi);
-                console.log('📍 파일:', currentLocation.start.href);
-                console.log('📍 챕터:', currentLocation.start.cfi.match(/\[chapter-(\d+)\]/)?.[1] || 'unknown');
-                console.log('📍 현재 페이지:', currentLocation.start.displayed?.page || 'unknown');
-                console.log('📍 전체 페이지:', currentLocation.start.displayed?.total || 'unknown');
-                console.log('📍 위치:', currentLocation.start.location || 'unknown');
-                console.log('📍 퍼센트:', currentLocation.start.percentage || 'unknown');
-                console.log('🎯 ======================================');
-                break;
-              }
-              
-              retryCount++;
-              if (retryCount < maxRetries) {
-                console.log(`⏳ 현재 화면 CFI 대기 중... (${retryCount}/${maxRetries})`);
-                await new Promise(resolve => setTimeout(resolve, 600)); // 대기 시간 증가
-              }
-            } catch (error) {
-              console.error('❌ 현재 화면 CFI 확인 중 오류:', error);
-              retryCount++;
-              if (retryCount < maxRetries) {
-                await new Promise(resolve => setTimeout(resolve, 600));
-              }
-            }
-          }
-          
-          if (retryCount >= maxRetries) {
-            console.warn('⚠️ 현재 화면 CFI를 찾을 수 없습니다 (15번 시도 후 실패)');
-            console.log('🔍 최종 뷰어 상태:', {
-              hasRendition: !!renditionRef.current,
-              renditionStarted: renditionRef.current?.started,
-              renditionDisplaying: renditionRef.current?.displaying,
-              renditionLocation: renditionRef.current?.location
-            });
-          }
-        }
-      };
-      
-      // 새로고침 감지 시 현재 화면 CFI 즉시 표시
-      const timer = setTimeout(showCurrentCFI, 800); // 대기 시간 증가
-      return () => clearTimeout(timer);
-    }, [reloadKey]); // reloadKey가 변경될 때마다 실행 (새로고침 감지)
-
-    // 앱이 처음 로드될 때 로컬 스토리지 초기화
     useEffect(() => {
       storageUtils.set(storageKeys.chapter, '1');
     }, [storageKeys.chapter]);
 
-    // --- 전체 epub 글자수 및 챕터별 글자수 계산 후 localStorage 저장 useEffect ---
     const bookId = useMemo(() => {
       const path = window.location.pathname;
       const fileName = path.split('/').pop();
@@ -843,7 +733,6 @@ const EpubViewer = forwardRef(
     useEffect(() => {
       if (!bookId) return;
 
-      // 모든 책의 이벤트 파일을 glob import 후, bookId로 필터링
       const allEventModules = import.meta.glob('/src/data/*/chapter*_events.json');
       const modules = Object.entries(allEventModules)
         .filter(([path]) => path.includes(`/src/data/${bookId}/`))
@@ -852,22 +741,18 @@ const EpubViewer = forwardRef(
       const importAll = async () => {
         const chapters = await Promise.all(modules.map(fn => fn()));
         
-        // 각 챕터의 마지막 event의 end값 추출
         const lastEnds = chapters.map(events => {
           const arr = events.default || events;
           return arr[arr.length - 1]?.end || 0;
         });
         
-        // 전체 합산
         const totalLength = lastEnds.reduce((sum, end) => sum + end, 0);
         
-        // 챕터별 글자수 객체 생성 (1번 챕터부터)
         const chapterLengths = {};
         lastEnds.forEach((end, idx) => {
           chapterLengths[idx + 1] = end;
         });
         
-        // localStorage에 저장
         storageUtils.set(`totalLength_${bookId}`, totalLength);
         storageUtils.setJson(`chapterLengths_${bookId}`, chapterLengths);
       };
@@ -875,7 +760,6 @@ const EpubViewer = forwardRef(
       importAll();
     }, [bookId]);
 
-    // 생동감 있는 로딩 컴포넌트
     const LoadingComponent = ({ message, isError = false }) => (
       <div className="flex flex-col items-center justify-center space-y-6 absolute inset-0 z-50 pointer-events-none animate-fade-in">
         {!isError ? (
@@ -883,7 +767,6 @@ const EpubViewer = forwardRef(
             <span className="text-gray-700 font-medium text-lg">epub 파일을 불러오고 있습니다...</span>
           </div>
         ) : (
-          // 에러 상태
           <div className="flex flex-col items-center space-y-4 animate-shake">
             <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center">
               <div className="w-8 h-8 bg-red-500 rounded-full flex items-center justify-center text-white font-bold">
@@ -898,7 +781,6 @@ const EpubViewer = forwardRef(
       </div>
     );
 
-    // 네비게이션 에러 toast 표시
     useEffect(() => {
       if (navigationError) {
         toast.error(navigationError, {
@@ -917,12 +799,8 @@ const EpubViewer = forwardRef(
 
     return (
       <div className="w-full h-full relative flex items-center justify-center">
-        
-        {/* 로딩 및 오류 상태 */}
-        {!reloading && loading && <LoadingComponent message="책을 불러오는 중..." />}
-        {!reloading && error && <LoadingComponent message={error} isError />}
-        
-        {/* EPUB 뷰어 */}
+        {loading && <LoadingComponent message="책을 불러오는 중..." />}
+        {error && <LoadingComponent message={error} isError />}
         <div
           ref={viewerRef}
           className="w-full h-full transition-colors duration-300"

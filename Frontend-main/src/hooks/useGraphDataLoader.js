@@ -105,7 +105,8 @@ export function useGraphDataLoader(filename, chapter, eventIndex = null) {
         idToNames,
         folderKey,
         nodeWeights,
-        previousRelations
+        previousRelations,
+        eventData
       );
       
       const chapterKey = `${folderKey}-${chapter}`;

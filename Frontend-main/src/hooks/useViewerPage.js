@@ -581,7 +581,6 @@ export function useViewerPage() {
     if (viewerRef.current && viewerRef.current.getCurrentCfi) {
       try {
         const cfi = await viewerRef.current.getCurrentCfi();
-        // 현재 챕터 추출
         const chapterMatch = cfi.match(/\[chapter-(\d+)\]/);
         let chapterNum = currentChapter;
         if (chapterMatch) chapterNum = parseInt(chapterMatch[1]);
@@ -589,24 +588,18 @@ export function useViewerPage() {
         // 챕터 번호 업데이트
         setCurrentChapter(chapterNum);
 
-        // 현재 위치에 해당하는 이벤트 찾기 (개선된 버전 - CFI 기반 정확한 계산)
-        const currentEvents = events; // getEventsForChapter(chapterNum) 대신 현재 events 사용
+        const currentEvents = events;
         if (currentEvents && currentEvents.length > 0) {
-          // bookInstance 가져오기 (viewerRef에서)
           const bookInstance = viewerRef.current?.bookRef?.current;
-          
-          // calculateChapterProgress 함수를 사용하여 정확한 위치 계산 (bookInstance 포함)
           const progressInfo = calculateChapterProgress(cfi, chapterNum, currentEvents, bookInstance);
-          
-          // findClosestEvent에 계산된 글자수 전달 (bookInstance 포함)
           const closestEvent = findClosestEvent(cfi, chapterNum, currentEvents, progressInfo.currentChars, bookInstance);
           if (closestEvent) {
-            // 추가 정보 포함
             closestEvent.chapterProgress = progressInfo.progress;
             closestEvent.currentChars = progressInfo.currentChars;
             closestEvent.totalChars = progressInfo.totalChars;
             closestEvent.eventIndex = progressInfo.eventIndex;
             closestEvent.calculationMethod = progressInfo.calculationMethod;
+            
             setCurrentEvent(closestEvent);
           }
         }

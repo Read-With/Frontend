@@ -1,32 +1,5 @@
 import React, { useState, useEffect } from 'react';
-
-// 로컬 스토리지에서 설정 불러오기/저장하기 함수
-const loadSettings = () => {
-  try {
-    const settings = localStorage.getItem('epub_viewer_settings');
-    return settings ? JSON.parse(settings) : null;
-  } catch (e) {
-    return null;
-  }
-};
-
-const saveSettings = (settings) => {
-  try {
-    localStorage.setItem('epub_viewer_settings', JSON.stringify(settings));
-  } catch (e) {
-    // 설정 저장 오류 처리
-  }
-};
-
-// 기본 설정 값
-const defaultSettings = {
-  fontSize: 100, // 기본 글꼴 크기 (%)
-  pageMode: 'single', // 페이지 모드 (single, double) - 통합된 보기 모드에 맞게 변경
-  lineHeight: 1.5, // 줄 간격
-  margin: 20, // 여백 (px)
-  fontFamily: 'Noto Serif KR', // 글꼴
-  showGraph: true, // 그래프 표시 여부
-};
+import { defaultSettings, loadSettings, saveSettings } from '../../../utils/common/settingsUtils';
 
 const ViewerSettings = ({ isOpen, onClose, onApplySettings, currentSettings }) => {
   // 현재 설정 상태

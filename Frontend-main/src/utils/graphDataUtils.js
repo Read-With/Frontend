@@ -2,6 +2,27 @@ import { getCharactersData, createCharacterMapsWithCache } from './graphData';
 import { createCharacterMaps, getCharacterImagePath } from './characterUtils';
 import { normalizeRelation, isValidRelation } from './relationUtils';
 
+/**
+ * 이벤트 텍스트에서 첫 번째 단어를 추출하는 함수
+ * @param {string} text - 이벤트 텍스트
+ * @returns {string} 첫 번째 단어 (문자, 숫자, 하이픈만 포함)
+ */
+function getFirstWordFromEventText(text) {
+  if (!text || typeof text !== 'string') {
+    return '';
+  }
+  
+  // 텍스트를 단어로 분리하고 첫 번째 단어 추출
+  const words = text.trim().split(/\s+/);
+  if (words.length === 0) {
+    return '';
+  }
+  
+  // 첫 번째 단어에서 문자, 숫자, 하이픈만 추출
+  const firstWord = words[0].replace(/[^a-zA-Z0-9가-힣-]/g, '');
+  return firstWord || '';
+}
+
 const validateElements = (elements) => elements?.filter(e => e && (e.id || e.data?.id)) || [];
 const createElementMap = (elements) => new Map(elements.map(e => [e.id || e.data?.id, e]));
 
@@ -66,9 +87,10 @@ function deepEqual(obj1, obj2, depth = 0) {
  * @param {Object} idToNames - ID to names array 매핑
  * @param {string} folderKey - 폴더 키 (이미지 경로용)
  * @param {Object} nodeWeights - 노드 가중치 정보 (node_weights_accum)
+ * @param {Object} eventData - 이벤트 데이터 (text 필드 포함)
  * @returns {Array} 그래프 요소 배열
  */
-export function convertRelationsToElements(relations, idToName, idToDesc, idToDescKo, idToMain, idToNames, folderKey, nodeWeights = null, previousRelations = null) {
+export function convertRelationsToElements(relations, idToName, idToDesc, idToDescKo, idToMain, idToNames, folderKey, nodeWeights = null, previousRelations = null, eventData = null) {
   // 매개변수 유효성 검사
   if (!Array.isArray(relations)) {
     return [];
@@ -236,32 +258,43 @@ export function convertRelationsToElements(relations, idToName, idToDesc, idToDe
       let relationArray = [];
       let relationLabel = "";
       
+      // 이벤트 데이터에서 첫 번째 단어를 가져와서 라벨로 사용
+      if (eventData && eventData.text) {
+        relationLabel = getFirstWordFromEventText(eventData.text);
+      }
+      
       if (Array.isArray(rel.relation)) {
         relationArray = rel.relation;
-        // 이전 이벤트와 비교하여 새로 추가된 관계인지 확인
-        const isNewRelation = !previousRelationSet.has(`${id1}-${id2}`) && !previousRelationSet.has(`${id2}-${id1}`);
-        
-        if (isNewRelation || !previousRelations) {
-          // 새로 추가된 관계이거나 첫 번째 이벤트인 경우: 첫 번째 요소를 라벨로 사용
-          relationLabel = rel.relation[0] || "";
-        } else {
-          // 기존 관계인 경우: 이전 이벤트에서의 관계와 비교하여 새로 추가된 요소 찾기
-          const prevRel = previousRelations.find(prevRel => 
-            (String(prevRel.id1) === id1 && String(prevRel.id2) === id2) ||
-            (String(prevRel.id1) === id2 && String(prevRel.id2) === id1)
-          );
+        // 이벤트 텍스트에서 첫 번째 단어를 가져오지 못한 경우에만 기존 로직 사용
+        if (!relationLabel) {
+          // 이전 이벤트와 비교하여 새로 추가된 관계인지 확인
+          const isNewRelation = !previousRelationSet.has(`${id1}-${id2}`) && !previousRelationSet.has(`${id2}-${id1}`);
           
-          if (prevRel && Array.isArray(prevRel.relation)) {
-            // 이전 관계에서 새로 추가된 요소 찾기
-            const newElements = rel.relation.filter(element => !prevRel.relation.includes(element));
-            relationLabel = newElements.length > 0 ? newElements[0] : rel.relation[0] || "";
-          } else {
+          if (isNewRelation || !previousRelations) {
+            // 새로 추가된 관계이거나 첫 번째 이벤트인 경우: 첫 번째 요소를 라벨로 사용
             relationLabel = rel.relation[0] || "";
+          } else {
+            // 기존 관계인 경우: 이전 이벤트에서의 관계와 비교하여 새로 추가된 요소 찾기
+            const prevRel = previousRelations.find(prevRel => 
+              (String(prevRel.id1) === id1 && String(prevRel.id2) === id2) ||
+              (String(prevRel.id1) === id2 && String(prevRel.id2) === id1)
+            );
+            
+            if (prevRel && Array.isArray(prevRel.relation)) {
+              // 이전 관계에서 새로 추가된 요소 찾기
+              const newElements = rel.relation.filter(element => !prevRel.relation.includes(element));
+              relationLabel = newElements.length > 0 ? newElements[0] : rel.relation[0] || "";
+            } else {
+              relationLabel = rel.relation[0] || "";
+            }
           }
         }
       } else if (typeof rel.relation === "string") {
         relationArray = [rel.relation];
-        relationLabel = rel.relation;
+        // 이벤트 텍스트에서 첫 번째 단어를 가져오지 못한 경우에만 기존 값 사용
+        if (!relationLabel) {
+          relationLabel = rel.relation;
+        }
       }
       
       // 기존 간선이 있는지 확인

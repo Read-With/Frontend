@@ -125,9 +125,9 @@ const ViewerTopBar = ({
     handleKeyDown
   } = searchActions;
 
-  // 현재 이벤트 정보를 실시간으로 추적
   const [currentEventInfo, setCurrentEventInfo] = React.useState(null);
   const [currentProgressWidth, setCurrentProgressWidth] = React.useState("0%");
+  const [hasInitialData, setHasInitialData] = React.useState(false);
   
   // 이전 페이지 정보 로깅
   React.useEffect(() => {
@@ -172,14 +172,11 @@ const ViewerTopBar = ({
     return 0;
   }, [currentChapter]);
   
-  // 이벤트 정보 실시간 업데이트 (단순화된 버전)
   React.useEffect(() => {
     const eventToShow = currentEvent || prevValidEvent;
     
     if (eventToShow) {
-      // 챕터 불일치 체크
       if (eventToShow.chapter && eventToShow.chapter !== currentChapter) {
-        setCurrentEventInfo(null);
         return;
       }
       
@@ -189,17 +186,19 @@ const ViewerTopBar = ({
       };
       setCurrentEventInfo(eventInfo);
       
-      // 단순화된 프로그레스 계산
+      if (!hasInitialData) {
+        setHasInitialData(true);
+      }
+      
       const progressPercentage = calculateProgress(eventToShow, events, currentChapter);
       const progressWidth = `${Math.round(progressPercentage * 100) / 100}%`;
       setCurrentProgressWidth(progressWidth);
-    } else {
+    } else if (!hasInitialData) {
       setCurrentEventInfo(null);
       setCurrentProgressWidth("0%");
     }
-  }, [currentEvent, prevValidEvent, events, currentChapter, calculateProgress]);
+  }, [currentEvent, prevValidEvent, events, currentChapter, calculateProgress, hasInitialData]);
   
-  // 이벤트 기반 챕터 감지 (성능 최적화)
   React.useEffect(() => {
     const handleChapterChange = (event) => {
       if (event.detail && event.detail.chapter !== currentChapter) {
@@ -207,13 +206,16 @@ const ViewerTopBar = ({
       }
     };
     
-    // 커스텀 이벤트 리스너 등록
     window.addEventListener('chapterChange', handleChapterChange);
     
     return () => {
       window.removeEventListener('chapterChange', handleChapterChange);
     };
   }, [currentChapter, setCurrentChapter]);
+  
+  React.useEffect(() => {
+    setHasInitialData(false);
+  }, [currentChapter]);
   
   // 제안 생성을 위한 별도 함수 (실제 검색은 실행하지 않음)
   const handleGenerateSuggestions = useCallback((searchTerm) => {
@@ -223,9 +225,20 @@ const ViewerTopBar = ({
     }
   }, [onGenerateSuggestions]);
 
-  // 공통 컴포넌트들 (메모이제이션 적용)
   const ChapterEventInfo = useMemo(() => {
-    if (isGraphLoading || !currentEventInfo) {
+    const shouldShowLoading = isGraphLoading && !hasInitialData;
+    
+    if (shouldShowLoading) {
+      return (
+        <span style={LOADING_STYLE}>
+          로딩중...
+        </span>
+      );
+    }
+
+    const displayEventInfo = currentEventInfo || (hasInitialData ? { eventNum: 0, name: "" } : null);
+    
+    if (!displayEventInfo) {
       return (
         <span style={LOADING_STYLE}>
           로딩중...
@@ -235,12 +248,10 @@ const ViewerTopBar = ({
 
     return (
       <>
-        {/* 챕터 정보 */}
         <span style={CHAPTER_STYLE}>
           Chapter {currentChapter}
         </span>
 
-        {/* 이벤트 정보 */}
         <div
           style={{
             display: "flex",
@@ -249,7 +260,6 @@ const ViewerTopBar = ({
             gap: 12,
           }}
         >
-          {/* 이벤트 번호 */}
           <span
             style={{
               ...EVENT_NUMBER_STYLE,
@@ -261,20 +271,18 @@ const ViewerTopBar = ({
                   : "scale(1)",
             }}
           >
-            Event {currentEventInfo?.eventNum || 0}
+            Event {displayEventInfo.eventNum}
           </span>
           
-          {/* 이벤트 이름 */}
-          {currentEventInfo?.name && (
+          {displayEventInfo.name && (
             <span
               style={EVENT_NAME_STYLE}
-              title={currentEventInfo.name}
+              title={displayEventInfo.name}
             >
-              {currentEventInfo.name}
+              {displayEventInfo.name}
             </span>
           )}
           
-          {/* 프로그레스 바 */}
           <div style={PROGRESS_BAR_CONTAINER_STYLE}>
             <div
               style={{
@@ -286,7 +294,7 @@ const ViewerTopBar = ({
         </div>
       </>
     );
-  }, [isGraphLoading, currentEventInfo, currentChapter, currentProgressWidth, prevEvent, currentEvent, prevValidEvent]);
+  }, [isGraphLoading, currentEventInfo, currentChapter, currentProgressWidth, prevEvent, currentEvent, prevValidEvent, hasInitialData]);
 
   const renderGraphControls = useCallback(() => (
     <GraphControls
