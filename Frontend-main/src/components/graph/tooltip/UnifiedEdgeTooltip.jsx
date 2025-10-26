@@ -45,6 +45,7 @@ function UnifiedEdgeTooltip({
   currentEvent = null,
   prevValidEvent = null,
   events = [],
+  bookId = null, // API 책 ID
 }) {
   const { filename } = useParams();
 
@@ -125,7 +126,7 @@ function UnifiedEdgeTooltip({
     error: relationError,
     fetchData,
     getMaxEventCount,
-  } = useRelationData(relationDataMode, id1, id2, chapterNum, unifiedEventInfo.eventNum, maxChapter, filename);
+  } = useRelationData(relationDataMode, id1, id2, chapterNum, unifiedEventInfo.eventNum, maxChapter, filename, bookId);
 
   // 디버깅: 관계 데이터 상태 변경 감지 (개발 환경에서만)
   useEffect(() => {

@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
-import { Book, BookOpen, CheckCircle2, Search, Plus, Library, Heart, AlertCircle, Grid3X3, List } from 'lucide-react';
+import { Book, BookOpen, CheckCircle2, Plus, Library, Heart, AlertCircle, Grid3X3, List } from 'lucide-react';
 import Header from '../components/common/Header';
 import BookLibrary from '../components/library/BookLibrary';
 import FileUpload from '../components/library/FileUpload';
@@ -14,6 +14,8 @@ export default function MyPage() {
   const [showUpload, setShowUpload] = useState(false);
   const [activeTab, setActiveTab] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
+  const [searchInput, setSearchInput] = useState(''); // 검색 입력 필드용
+  const [isSearching, setIsSearching] = useState(false); // 검색 중인지 여부
   const [sortBy, setSortBy] = useState('recent');
   const [viewMode, setViewMode] = useState('grid'); // 'grid' 또는 'list'
   const [allProgress, setAllProgress] = useState([]);
@@ -22,6 +24,28 @@ export default function MyPage() {
     addBook(newBook);
     setShowUpload(false);
   }, [addBook]);
+
+  // 검색 실행 함수
+  const handleSearch = useCallback(() => {
+    if (searchInput.trim()) {
+      setSearchQuery(searchInput.trim());
+      setIsSearching(true);
+    }
+  }, [searchInput]);
+
+  // 전체보기로 돌아가기 함수
+  const handleShowAll = useCallback(() => {
+    setSearchQuery('');
+    setSearchInput('');
+    setIsSearching(false);
+  }, []);
+
+  // Enter 키 이벤트 핸들러
+  const handleKeyPress = useCallback((e) => {
+    if (e.key === 'Enter') {
+      handleSearch();
+    }
+  }, [handleSearch]);
 
   useEffect(() => {
     const fetchAllProgress = async () => {
@@ -187,10 +211,26 @@ export default function MyPage() {
                     type="text"
                     className="search-input"
                     placeholder="책 제목이나 저자로 검색하세요..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
+                    value={searchInput}
+                    onChange={(e) => setSearchInput(e.target.value)}
+                    onKeyPress={handleKeyPress}
                   />
-                  <Search className="search-icon" size={20} />
+                  {!isSearching ? (
+                    <button
+                      className="search-button"
+                      onClick={handleSearch}
+                      disabled={!searchInput.trim()}
+                    >
+                      검색
+                    </button>
+                  ) : (
+                    <button
+                      className="search-button show-all-button"
+                      onClick={handleShowAll}
+                    >
+                      전체보기
+                    </button>
+                  )}
                 </div>
                 
                 <div className="filter-controls">
@@ -252,17 +292,18 @@ export default function MyPage() {
                        <Heart size={80} strokeWidth={1.5} />}
                     </div>
                     <h2 className="empty-title">
-                      {activeTab === 'all' ? '아직 책이 없네요!' :
+                      {isSearching ? '검색 결과가 없습니다' :
+                       activeTab === 'all' ? '아직 책이 없네요!' :
                        activeTab === 'favorites' ? '즐겨찾기한 책이 없어요' :
                        '즐겨찾기한 책이 없어요'}
                     </h2>
                     <p className="empty-description">
-                      {activeTab === 'all' 
+                      {isSearching 
+                        ? `"${searchQuery}"에 대한 검색 결과가 없습니다. 다른 키워드로 검색해보세요.`
+                        : activeTab === 'all' 
                         ? '우측 하단의 + 버튼을 눌러서 첫 번째 책을 추가해보세요. EPUB 파일을 업로드하면 바로 읽을 수 있어요!'
                         : activeTab === 'favorites'
                         ? '즐겨찾기한 책이 아직 없어요. 책을 즐겨찾기하면 여기에 표시됩니다.'
-                        : searchQuery
-                        ? '검색 결과가 없습니다. 다른 키워드로 검색해보세요.'
                         : '해당하는 책이 없습니다.'}
                     </p>
                     {activeTab === 'all' && !searchQuery && (

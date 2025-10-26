@@ -1087,6 +1087,7 @@ function RelationGraphWrapper() {
                 povSummaries={povSummaries}
                 apiMacroData={apiMacroData}
                 apiFineData={apiFineData}
+                bookId={bookId || (book && typeof book.id === 'number' ? book.id : null)}
               />
             )}
             <div 

@@ -20,6 +20,7 @@ function GraphSidebar({
   povSummaries = null,
   apiMacroData = null,
   apiFineData = null,
+  bookId = null,
 }) {
   const [isClosing, setIsClosing] = useState(false);
   const [isVisible, setIsVisible] = useState(false);
@@ -199,6 +200,7 @@ function GraphSidebar({
           elements={elements}
           displayMode="sidebar"
           filename={filename}
+          bookId={bookId}
         />
       </div>
     );
@@ -313,6 +315,7 @@ function GraphSidebar({
               searchTerm={searchTerm}
               displayMode="sidebar"
               onClose={handleClose}
+              bookId={bookId}
             />
           )}
         </div>

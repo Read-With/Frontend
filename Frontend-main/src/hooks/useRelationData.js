@@ -7,6 +7,7 @@ import {
   getDetectedMaxChapter,
   getFolderKeyFromFilename
 } from '../utils/graphData';
+import { getFineGraph } from '../utils/api/graphApi';
 
 const MIN_POSITIVITY = 1;
 
@@ -170,7 +171,7 @@ function fetchRelationTimelineStandalone(id1, id2, chapterNum, eventNum, maxChap
 }
 
 /**
- * 그래프 온리 페이지용 누적 모드 관계 타임라인 데이터 가져오기
+ * 그래프 온리 페이지용 누적 모드 관계 타임라인 데이터 가져오기 (로컬 데이터)
  * @param {number} id1 - 첫 번째 노드 ID
  * @param {number} id2 - 두 번째 노드 ID
  * @param {number} selectedChapter - 선택된 챕터 번호
@@ -248,6 +249,82 @@ function fetchRelationTimelineCumulative(id1, id2, selectedChapter, maxChapter, 
       return { points: [], labelInfo: [] };
     }
   } catch (error) {
+    return { points: [], labelInfo: [] };
+  }
+}
+
+/**
+ * API 책용 누적 모드 관계 타임라인 데이터 가져오기
+ * @param {number} bookId - 책 ID
+ * @param {number} id1 - 첫 번째 노드 ID
+ * @param {number} id2 - 두 번째 노드 ID
+ * @param {number} selectedChapter - 선택된 챕터 번호
+ * @returns {Promise<Object>} 타임라인 데이터
+ */
+async function fetchApiRelationTimelineCumulative(bookId, id1, id2, selectedChapter) {
+  if (!bookId || selectedChapter < 1) {
+    return { points: [], labelInfo: [] };
+  }
+  
+  try {
+    const allPrevChaptersData = { points: [], labelInfo: [] };
+    
+    // 이전 챕터들의 마지막 이벤트 데이터 수집
+    for (let ch = 1; ch < selectedChapter; ch++) {
+      try {
+        // 각 챕터의 마지막 이벤트를 가져오기 위해 큰 eventIdx 사용 (API가 마지막 이벤트 반환)
+        const fineData = await getFineGraph(bookId, ch, 999);
+        
+        if (fineData?.isSuccess && fineData?.result?.relations) {
+          const relation = fineData.result.relations.find(rel => 
+            isSamePair(rel, id1, id2)
+          );
+          
+          if (relation) {
+            allPrevChaptersData.points.push(relation.positivity || 0);
+            allPrevChaptersData.labelInfo.push(`Ch${ch}`);
+          }
+        }
+      } catch (error) {
+        // 에러 무시 (데이터 없는 챕터)
+      }
+    }
+    
+    // 현재 챕터의 모든 이벤트 데이터 수집
+    const currentChapterData = { points: [], labelInfo: [] };
+    let eventIdx = 0;
+    let hasMoreEvents = true;
+    
+    while (hasMoreEvents && eventIdx < 100) { // 최대 100개 이벤트
+      try {
+        const fineData = await getFineGraph(bookId, selectedChapter, eventIdx);
+        
+        if (fineData?.isSuccess && fineData?.result?.relations) {
+          const relation = fineData.result.relations.find(rel => 
+            isSamePair(rel, id1, id2)
+          );
+          
+          if (relation) {
+            currentChapterData.points.push(relation.positivity || 0);
+            currentChapterData.labelInfo.push(`E${eventIdx + 1}`);
+          }
+          
+          eventIdx++;
+        } else {
+          hasMoreEvents = false;
+        }
+      } catch (error) {
+        hasMoreEvents = false;
+      }
+    }
+    
+    // 데이터 병합
+    return {
+      points: [...allPrevChaptersData.points, ...currentChapterData.points],
+      labelInfo: [...allPrevChaptersData.labelInfo, ...currentChapterData.labelInfo]
+    };
+  } catch (error) {
+    console.error('API 누적 관계 타임라인 조회 실패:', error);
     return { points: [], labelInfo: [] };
   }
 }
@@ -334,23 +411,30 @@ function padSingleEvent(points, labels) {
  * @param {number} eventNum - 현재 이벤트 번호 (cumulative 모드에서는 사용하지 않음)
  * @param {number} maxChapter - 최대 챕터 수 (standalone, cumulative 모드에서 사용)
  * @param {string} filename - 파일명 (예: "gatsby.epub", "alice.epub")
+ * @param {number} bookId - API 책 ID (API 책인 경우)
  * @returns {object} 차트 데이터와 로딩 상태
  */
-export function useRelationData(mode, id1, id2, chapterNum, eventNum, maxChapter, filename) {
+export function useRelationData(mode, id1, id2, chapterNum, eventNum, maxChapter, filename, bookId = null) {
   const [timeline, setTimeline] = useState([]);
   const [labels, setLabels] = useState([]);
   const [loading, setLoading] = useState(false);
   const [noRelation, setNoRelation] = useState(false);
   const [error, setError] = useState(null);
 
-  // filename을 기반으로 folderKey 결정
+  // API 책 여부 판단
+  const isApiBook = useMemo(() => {
+    return !!bookId;
+  }, [bookId]);
+
+  // filename을 기반으로 folderKey 결정 (로컬 책인 경우에만)
   const folderKey = useMemo(() => {
+    if (isApiBook) return null;
     try {
       return getFolderKeyFromFilename(filename);
     } catch (error) {
       return null;
     }
-  }, [filename]);
+  }, [filename, isApiBook]);
 
   // 메모이제이션된 최대 이벤트 수
   const maxEventCount = useMemo(() => 
@@ -359,7 +443,48 @@ export function useRelationData(mode, id1, id2, chapterNum, eventNum, maxChapter
   );
 
   // 데이터 가져오기 함수
-  const fetchData = useCallback(() => {
+  const fetchData = useCallback(async () => {
+    // API 책인 경우
+    if (isApiBook) {
+      if (!bookId || !id1 || !id2 || !chapterNum) {
+        setTimeline([]);
+        setLabels([]);
+        setNoRelation(true);
+        setError('필수 매개변수가 누락되었습니다.');
+        return;
+      }
+
+      setLoading(true);
+      setError(null);
+      
+      try {
+        let result;
+        
+        if (mode === 'cumulative') {
+          result = await fetchApiRelationTimelineCumulative(bookId, id1, id2, chapterNum);
+        } else {
+          // viewer, standalone 모드는 아직 API 지원 안 함
+          result = { points: [], labelInfo: [], noRelation: true };
+        }
+        
+        const { points, labels } = padSingleEvent(result.points, result.labelInfo);
+        
+        setTimeline(points);
+        setLabels(labels);
+        setNoRelation(result.noRelation || false);
+      } catch (error) {
+        console.error('API 관계 데이터 조회 실패:', error);
+        setError('데이터를 가져오는 중 오류가 발생했습니다.');
+        setTimeline([]);
+        setLabels([]);
+        setNoRelation(true);
+      } finally {
+        setLoading(false);
+      }
+      return;
+    }
+
+    // 로컬 책인 경우
     if (!folderKey || !id1 || !id2 || !chapterNum || !eventNum) {
       setTimeline([]);
       setLabels([]);
@@ -370,10 +495,6 @@ export function useRelationData(mode, id1, id2, chapterNum, eventNum, maxChapter
 
     setLoading(true);
     setError(null);
-    
-    // 디버깅: 관계 데이터 요청 로그 (개발 환경에서만)
-    if (process.env.NODE_ENV === 'development') {
-    }
     
     try {
       let result;
@@ -388,9 +509,6 @@ export function useRelationData(mode, id1, id2, chapterNum, eventNum, maxChapter
       
       const { points, labels } = padSingleEvent(result.points, result.labelInfo);
       
-      if (process.env.NODE_ENV === 'development') {
-      }
-      
       setTimeline(points);
       setLabels(labels);
       setNoRelation(result.noRelation || false);
@@ -402,7 +520,7 @@ export function useRelationData(mode, id1, id2, chapterNum, eventNum, maxChapter
     } finally {
       setLoading(false);
     }
-  }, [mode, id1, id2, chapterNum, eventNum, maxChapter, folderKey]);
+  }, [mode, id1, id2, chapterNum, eventNum, maxChapter, folderKey, isApiBook, bookId]);
 
   // 의존성이 변경될 때 자동으로 데이터 가져오기
   useEffect(() => {
