@@ -55,21 +55,8 @@ function RelationGraphWrapper() {
   const isBookId = !isNaN(filename) && filename.length > 0;
   const bookId = isBookId ? parseInt(filename) : null;
   
-  // 상태 관리 - 파일명별로 localStorage 키 구분, URL 파라미터 우선
-  const [savedChapter, setSavedChapter] = useLocalStorageNumber(`lastGraphChapter_${filename}`, 1);
-  const [currentChapter, setCurrentChapter] = useState(savedChapter);
-  
-  // 챕터 변경 시 localStorage와 상태 동기화
-  useEffect(() => {
-    setSavedChapter(currentChapter);
-  }, [currentChapter, setSavedChapter]);
-  
-  // 저장된 챕터 변경 시 동기화
-  useEffect(() => {
-    if (savedChapter && savedChapter !== currentChapter) {
-      setCurrentChapter(savedChapter);
-    }
-  }, [savedChapter]);
+  // 상태 관리 - 파일명별로 localStorage 키 구분
+  const [currentChapter, setCurrentChapter] = useLocalStorageNumber(`lastGraphChapter_${filename}`, 1);
   const [currentEvent, setCurrentEvent] = useState(1);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [edgeLabelVisible, setEdgeLabelVisible] = useState(true);
@@ -264,12 +251,12 @@ function RelationGraphWrapper() {
     isDataEmpty
   } = useGraphDataLoader(isApiBook ? null : filename, currentChapter);
 
-  // currentChapter가 maxChapter를 초과하지 않도록 검증
+  // currentChapter가 maxChapter를 초과하지 않도록 검증 (maxChapter 로드 완료 후)
   useEffect(() => {
-    if (maxChapter > 0 && currentChapter > maxChapter) {
-      setCurrentChapter(1); // 첫 번째 챕터로 리셋
+    if (maxChapter > 0 && currentChapter > maxChapter && !loading) {
+      setCurrentChapter(maxChapter); // 최대 챕터로 설정
     }
-  }, [maxChapter, currentChapter, filename, setCurrentChapter]);
+  }, [maxChapter, loading]);
   
   // API 데이터를 그래프 요소로 변환
   const apiElements = useMemo(() => {

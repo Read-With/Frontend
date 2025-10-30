@@ -43,7 +43,10 @@ const ViewerRelationGraph = ({
   const selectedNodeIdRef = useRef(null);
 
   const onShowNodeTooltip = useCallback(({ node, nodeCenter, mouseX, mouseY, evt }) => {
-    if (!onSetActiveTooltip) return;
+    if (!onSetActiveTooltip) {
+      console.warn('⚠️ [ViewerRelationGraph] onSetActiveTooltip이 없습니다');
+      return;
+    }
     
     const nodeData = node.data();
     let names = nodeData.names;
@@ -57,19 +60,26 @@ const ViewerRelationGraph = ({
     const finalX = mouseX !== undefined ? mouseX : nodeCenter?.x || 0;
     const finalY = mouseY !== undefined ? mouseY : nodeCenter?.y || 0;
     
-    onSetActiveTooltip({
-      type: "node",
-      ...nodeData,
-      names,
-      main,
-      nodeCenter,
-      x: finalX,
-      y: finalY,
-    });
+    try {
+      onSetActiveTooltip({
+        type: "node",
+        ...nodeData,
+        names,
+        main,
+        nodeCenter,
+        x: finalX,
+        y: finalY,
+      });
+    } catch (error) {
+      console.error('❌ [ViewerRelationGraph] onSetActiveTooltip 호출 오류:', error);
+    }
   }, [onSetActiveTooltip]);
 
   const onShowEdgeTooltip = useCallback(({ edge, absoluteX, absoluteY, evt }) => {
-    if (!onSetActiveTooltip) return;
+    if (!onSetActiveTooltip) {
+      console.warn('⚠️ [ViewerRelationGraph] onSetActiveTooltip이 없습니다');
+      return;
+    }
     
     // 마우스 위치를 우선 사용하되, 없으면 계산된 간선 중심 위치 사용
     const finalX = absoluteX !== undefined ? absoluteX : 0;
@@ -103,31 +113,6 @@ const ViewerRelationGraph = ({
     }
   }, [onClearTooltip, graphClearRef]);
 
-  const {
-    tapNodeHandler,
-    tapEdgeHandler,
-    tapBackgroundHandler,
-    clearSelection,
-    clearAll,
-  } = useGraphInteractions({
-    cyRef,
-    onShowNodeTooltip,
-    onShowEdgeTooltip,
-    onClearTooltip: clearTooltip,
-    selectedNodeIdRef,
-    selectedEdgeIdRef,
-    strictBackgroundClear: true,
-    isSearchActive,
-    filteredElements,
-  });
-
-  // graphClearRef에 그래프 스타일 초기화 함수 설정
-  useEffect(() => {
-    if (graphClearRef) {
-      graphClearRef.current = clearAll;
-    }
-  }, [graphClearRef, clearAll]);
-
   const edgeStyle = getEdgeStyle('viewer');
 
   const stylesheet = useMemo(
@@ -135,11 +120,26 @@ const ViewerRelationGraph = ({
     [edgeStyle, edgeLabelVisible]
   );
 
+  // graphClearRef에 그래프 스타일 초기화 함수 설정
+  useEffect(() => {
+    if (graphClearRef && cyRef.current) {
+      graphClearRef.current = () => {
+        const cy = cyRef.current;
+        if (cy) {
+          cy.nodes().removeClass("faded highlighted");
+          cy.edges().removeClass("faded");
+        }
+      };
+    }
+  }, [graphClearRef, cyRef]);
+
   useEffect(() => {
     if (cyRef.current) {
       cyRef.current.center();
     }
   }, [elements]);
+
+  // activeTooltip 상태 추적 - 제거됨
 
   return (
     <div className="relation-graph-container" style={graphStyles.container}>
@@ -147,48 +147,57 @@ const ViewerRelationGraph = ({
         style={graphStyles.tooltipContainer}
         onClick={(e) => e.stopPropagation()}
       >
-        {activeTooltip?.type === "node" && (
-          <UnifiedNodeInfo
-            key={`node-tooltip-${activeTooltip.id}`}
-            displayMode="tooltip"
-            data={activeTooltip}
-            x={activeTooltip.x}
-            y={activeTooltip.y}
-            nodeCenter={activeTooltip.nodeCenter}
-            onClose={clearTooltipAndGraph}
-            inViewer={true}
-            chapterNum={chapterNum}
-            eventNum={eventNum}
-            maxChapter={maxChapter}
-            filename={filename}
-            elements={elements}
-            style={graphStyles.tooltipStyle}
-            // ViewerTopBar와 동일한 이벤트 정보 전달
-            currentEvent={currentEvent}
-            prevValidEvent={prevValidEvent}
-            events={events}
-          />
-        )}
-        {activeTooltip?.type === "edge" && (
-          <UnifiedEdgeTooltip
-            key={`edge-tooltip-${activeTooltip.id}`}
-            data={activeTooltip.data}
-            x={activeTooltip.x}
-            y={activeTooltip.y}
-            onClose={clearTooltipAndGraph}
-            sourceNode={activeTooltip.sourceNode}
-            targetNode={activeTooltip.targetNode}
-            mode="viewer"
-            chapterNum={chapterNum}
-            eventNum={eventNum}
-            maxChapter={maxChapter}
-            filename={filename}
-            style={graphStyles.tooltipStyle}
-            currentEvent={currentEvent}
-            prevValidEvent={prevValidEvent}
-            events={events}
-          />
-        )}
+        {(() => {
+          if (activeTooltip?.type === "node") {
+            return (
+              <UnifiedNodeInfo
+                key={`node-tooltip-${activeTooltip.id}`}
+                displayMode="tooltip"
+                data={activeTooltip}
+                x={activeTooltip.x}
+                y={activeTooltip.y}
+                nodeCenter={activeTooltip.nodeCenter}
+                onClose={clearTooltipAndGraph}
+                inViewer={true}
+                chapterNum={chapterNum}
+                eventNum={eventNum}
+                maxChapter={maxChapter}
+                filename={filename}
+                elements={elements}
+                style={graphStyles.tooltipStyle}
+                currentEvent={currentEvent}
+                prevValidEvent={prevValidEvent}
+                events={events}
+              />
+            );
+          }
+          return null;
+        })()}
+        {(() => {
+          if (activeTooltip?.type === "edge") {
+            return (
+              <UnifiedEdgeTooltip
+                key={`edge-tooltip-${activeTooltip.id}`}
+                data={activeTooltip.data}
+                x={activeTooltip.x}
+                y={activeTooltip.y}
+                onClose={clearTooltipAndGraph}
+                sourceNode={activeTooltip.sourceNode}
+                targetNode={activeTooltip.targetNode}
+                mode="viewer"
+                chapterNum={chapterNum}
+                eventNum={eventNum}
+                maxChapter={maxChapter}
+                filename={filename}
+                style={graphStyles.tooltipStyle}
+                currentEvent={currentEvent}
+                prevValidEvent={prevValidEvent}
+                events={events}
+              />
+            );
+          }
+          return null;
+        })()}
       </div>
       <div className="graph-canvas-area" style={graphStyles.graphArea}>
         <CytoscapeGraphUnified

@@ -227,26 +227,24 @@ const CytoscapeGraphUnified = ({
       }
     };
     
-    if (tapNodeHandler) {
-      cy.on("tap", "node", createRippleWrapper(tapNodeHandler));
-    } else {
-      cy.on("tap", "node", createRippleWrapper(hookTapNodeHandler));
+    // 노드 클릭 핸들러 등록
+    const nodeHandler = tapNodeHandler || hookTapNodeHandler;
+    if (nodeHandler) {
+      cy.on("tap", "node", createRippleWrapper(nodeHandler));
     }
-    if (tapEdgeHandler) {
-      cy.on("tap", "edge", createRippleWrapper(tapEdgeHandler));
-    } else {
-      cy.on("tap", "edge", createRippleWrapper(hookTapEdgeHandler));
+    
+    // 간선 클릭 핸들러 등록
+    const edgeHandler = tapEdgeHandler || hookTapEdgeHandler;
+    if (edgeHandler) {
+      cy.on("tap", "edge", createRippleWrapper(edgeHandler));
     }
     
     const handleBackgroundTap = (evt) => {
       // 배경 클릭 감지 - evt.target이 Cytoscape core인 경우
       if (evt.target === cy) {
-        // 드래그가 아닌 순수 클릭인 경우에만 처리
-        // isDraggingRef는 이 useEffect 내부에서 접근할 수 없으므로 제거
-        if (tapBackgroundHandler) {
-          createRippleWrapper(tapBackgroundHandler)(evt);
-        } else {
-          createRippleWrapper(hookTapBackgroundHandler)(evt);
+        const bgHandler = tapBackgroundHandler || hookTapBackgroundHandler;
+        if (bgHandler) {
+          createRippleWrapper(bgHandler)(evt);
         }
       }
     };
@@ -258,7 +256,7 @@ const CytoscapeGraphUnified = ({
       cy.removeListener("tap", "edge");
       cy.removeListener("tap", handleBackgroundTap);
     };
-  }, [externalCyRef, tapNodeHandler, tapEdgeHandler, tapBackgroundHandler, hookTapNodeHandler, hookTapEdgeHandler, hookTapBackgroundHandler]);
+  }, [externalCyRef, tapNodeHandler, tapEdgeHandler, tapBackgroundHandler, hookTapNodeHandler, hookTapEdgeHandler, hookTapBackgroundHandler, showRippleEffect, isDropdownSelection]);
 
   // elements diff patch 및 스타일/레이아웃 적용
   useEffect(() => {

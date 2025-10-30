@@ -132,6 +132,8 @@ export default function useGraphInteractions({
         const offsetX = nodeSize + 100;
         mouseX += offsetX;
         
+        // 위치 계산 완료
+        
         // 노드 하이라이트 처리
         handleNodeHighlight(node);
 
@@ -142,6 +144,7 @@ export default function useGraphInteractions({
         
         if (selectedNodeIdRef) selectedNodeIdRef.current = node.id();
       } catch (error) {
+        console.error('❌ [useGraphInteractions] 노드 클릭 처리 오류:', error);
       }
     },
     [cyRef, handleNodeHighlight, calculateNodePosition, onShowNodeTooltipRef, selectedNodeIdRef]
@@ -190,6 +193,8 @@ export default function useGraphInteractions({
           mouseY = evt.originalEvent.clientY - containerRect.top;
         }
 
+        // 위치 계산 완료
+
         // 컴포넌트별 툴팁 생성 로직 실행
         if (onShowEdgeTooltipRef.current) {
           onShowEdgeTooltipRef.current({ edge, evt, absoluteX: mouseX, absoluteY: mouseY });
@@ -205,6 +210,7 @@ export default function useGraphInteractions({
 
         if (selectedEdgeIdRef) selectedEdgeIdRef.current = edge.id();
       } catch (error) {
+        console.error('❌ [useGraphInteractions] 간선 클릭 처리 오류:', error);
       }
     },
     [cyRef, onShowEdgeTooltipRef, selectedEdgeIdRef, resetAllStyles]

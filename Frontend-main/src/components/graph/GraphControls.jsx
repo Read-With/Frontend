@@ -18,7 +18,19 @@ function GraphControls({
   const [internalSearchTerm, setInternalSearchTerm] = useState(searchTerm || "");
   const [internalShowSuggestions, setInternalShowSuggestions] = useState(showSuggestions);
   const [internalSelectedIndex, setInternalSelectedIndex] = useState(selectedIndex);
+  const [showToast, setShowToast] = useState(false);
+  const [toastMessage, setToastMessage] = useState("");
   const inputRef = useRef(null);
+
+  // 토스트 메시지 표시 함수
+  const showToastMessage = useCallback((message) => {
+    setToastMessage(message);
+    setShowToast(true);
+    // 3초 후 토스트 메시지 자동 숨김
+    setTimeout(() => {
+      setShowToast(false);
+    }, 3000);
+  }, []);
 
   // 외부 상태와 동기화
   useEffect(() => {
@@ -77,7 +89,19 @@ function GraphControls({
       e.preventDefault();
       const trimmedTerm = internalSearchTerm.trim();
       if (trimmedTerm.length >= 2) {
-        onSearchSubmit(trimmedTerm);
+        // 정확히 일치하는 인물이 있는지 확인
+        const exactMatch = suggestions.find(suggestion => 
+          suggestion.label?.toLowerCase() === trimmedTerm.toLowerCase() ||
+          suggestion.common_name?.toLowerCase() === trimmedTerm.toLowerCase() ||
+          suggestion.names?.some(name => String(name).toLowerCase() === trimmedTerm.toLowerCase())
+        );
+        
+        if (exactMatch) {
+          onSearchSubmit(trimmedTerm);
+        } else if (suggestions.length > 0) {
+          // 정확히 일치하는 인물이 없고 여러 후보가 있으면 토스트 메시지 표시
+          showToastMessage("여러 후보가 있습니다. 드롭다운에서 선택해주세요.");
+        }
       }
     } else {
       // 화살표 키 등 다른 키 처리
@@ -91,11 +115,11 @@ function GraphControls({
         });
       }
     }
-  }, [internalSearchTerm, onSearchSubmit, onKeyDown]);
+  }, [internalSearchTerm, onSearchSubmit, onKeyDown, suggestions, showToastMessage]);
   
   const dropdownRef = useClickOutside(() => {
     onCloseSuggestions();
-  });
+  }, internalShowSuggestions);
 
   // 제안 선택 함수
   const handleSelectSuggestion = useCallback((suggestion) => {
@@ -115,9 +139,21 @@ function GraphControls({
     
     const trimmedTerm = internalSearchTerm.trim();
     if (trimmedTerm.length >= 2) {
-      onSearchSubmit(trimmedTerm);
+      // 정확히 일치하는 인물이 있는지 확인
+      const exactMatch = suggestions.find(suggestion => 
+        suggestion.label?.toLowerCase() === trimmedTerm.toLowerCase() ||
+        suggestion.common_name?.toLowerCase() === trimmedTerm.toLowerCase() ||
+        suggestion.names?.some(name => String(name).toLowerCase() === trimmedTerm.toLowerCase())
+      );
+      
+      if (exactMatch) {
+        onSearchSubmit(trimmedTerm);
+      } else if (suggestions.length > 0) {
+        // 정확히 일치하는 인물이 없고 여러 후보가 있으면 토스트 메시지 표시
+        showToastMessage("여러 후보가 있습니다. 드롭다운에서 선택해주세요.");
+      }
     }
-  }, [internalSearchTerm, onSearchSubmit]);
+  }, [internalSearchTerm, onSearchSubmit, suggestions, showToastMessage]);
 
   // 검색 버튼 클릭 핸들러
   const handleSearchButtonClick = useCallback((e) => {
@@ -126,9 +162,21 @@ function GraphControls({
     const trimmedTerm = internalSearchTerm.trim();
     
     if (trimmedTerm.length >= 2) {
-      onSearchSubmit(trimmedTerm);
+      // 정확히 일치하는 인물이 있는지 확인
+      const exactMatch = suggestions.find(suggestion => 
+        suggestion.label?.toLowerCase() === trimmedTerm.toLowerCase() ||
+        suggestion.common_name?.toLowerCase() === trimmedTerm.toLowerCase() ||
+        suggestion.names?.some(name => String(name).toLowerCase() === trimmedTerm.toLowerCase())
+      );
+      
+      if (exactMatch) {
+        onSearchSubmit(trimmedTerm);
+      } else if (suggestions.length > 0) {
+        // 정확히 일치하는 인물이 없고 여러 후보가 있으면 토스트 메시지 표시
+        showToastMessage("여러 후보가 있습니다. 드롭다운에서 선택해주세요.");
+      }
     }
-  }, [internalSearchTerm, onSearchSubmit]);
+  }, [internalSearchTerm, onSearchSubmit, suggestions, showToastMessage]);
 
   const handleResetButtonClick = useCallback((e) => {
     e.preventDefault();
@@ -137,6 +185,45 @@ function GraphControls({
 
   return (
     <div ref={dropdownRef} style={graphControlsStyles.container}>
+      {/* 토스트 메시지 */}
+      {showToast && (
+        <div style={{
+          position: 'absolute',
+          top: '0',
+          left: '100%',
+          marginLeft: '12px',
+          background: '#5C6F5C',
+          color: '#fff',
+          padding: '12px 24px',
+          borderRadius: '8px',
+          fontSize: '14px',
+          fontWeight: '500',
+          boxShadow: '0 4px 20px rgba(92, 111, 92, 0.3)',
+          zIndex: 9999,
+          whiteSpace: 'nowrap',
+          animation: 'toastSlideInRight 0.3s ease-out',
+          pointerEvents: 'none',
+          minWidth: '280px',
+          textAlign: 'center',
+        }}>
+          {toastMessage}
+          <style>
+            {`
+              @keyframes toastSlideInRight {
+                from {
+                  opacity: 0;
+                  transform: translateY(-20px);
+                }
+                to {
+                  opacity: 1;
+                  transform: translateY(0);
+                }
+              }
+            `}
+          </style>
+        </div>
+      )}
+      
       <form
         style={graphControlsStyles.form}
         onSubmit={handleFormSubmit}
@@ -194,13 +281,13 @@ function GraphControls({
           right: '0',
           background: '#fff',
           border: '1px solid #e5e7eb',
-          borderRadius: '8px',
-          boxShadow: '0 4px 16px rgba(0, 0, 0, 0.1)',
+          borderRadius: '12px',
+          boxShadow: '0 6px 24px rgba(0, 0, 0, 0.15)',
           zIndex: 1000,
-          maxHeight: '320px',
+          maxHeight: '480px',
           overflowY: 'auto',
-          marginTop: '8px',
-          minWidth: '320px',
+          marginTop: '12px',
+          minWidth: '400px',
           width: '100%',
           scrollbarWidth: 'thin',
           scrollbarColor: '#cbd5e1 #f1f5f9',
@@ -228,15 +315,15 @@ function GraphControls({
             <>
               {/* 드롭다운 헤더 */}
               <div style={{
-                padding: '12px 16px',
+                padding: '16px 24px',
                 background: '#f8f9fc',
                 borderBottom: '1px solid #e5e7eb',
-                borderTopLeftRadius: '8px',
-                borderTopRightRadius: '8px',
+                borderTopLeftRadius: '12px',
+                borderTopRightRadius: '12px',
               }}>
                 <div style={{
-                  fontSize: '13px',
-                  fontWeight: '500',
+                  fontSize: '15px',
+                  fontWeight: '600',
                   color: '#6c757d',
                   textTransform: 'uppercase',
                   letterSpacing: '0.5px',
@@ -250,7 +337,7 @@ function GraphControls({
                 <div
                   key={suggestion.id || index}
                   style={{
-                    padding: '16px 20px',
+                    padding: '20px 28px',
                     cursor: 'pointer',
                     borderBottom: index < suggestions.length - 1 ? '1px solid #f0f0f0' : 'none',
                     background: index === internalSelectedIndex ? '#f8f9fc' : 'transparent',
@@ -266,9 +353,9 @@ function GraphControls({
                     {/* 주요 이름 */}
                     <div style={{ 
                       fontWeight: '900', 
-                      fontSize: '17px',
+                      fontSize: '20px',
                       color: '#5C6F5C',
-                      marginBottom: '6px',
+                      marginBottom: '8px',
                     }}>
                       {suggestion.label || suggestion.common_name || 'Unknown'}
                     </div>
@@ -276,11 +363,11 @@ function GraphControls({
                     {/* 설명 */}
                     {suggestion.description && (
                     <div style={{ 
-                      fontSize: '15px', 
+                      fontSize: '16px', 
                       color: '#6c757d', 
-                      lineHeight: '1.5',
-                      marginBottom: '8px',
-                      fontWeight: '400',
+                      lineHeight: '1.6',
+                      marginBottom: '12px',
+                      fontWeight: '500',
                       wordBreak: 'keep-all',
                     }}>
                         {suggestion.description}
@@ -301,10 +388,10 @@ function GraphControls({
                         
                         {/* 다른 이름 라벨 */}
                         <div style={{
-                          fontSize: '13px',
+                          fontSize: '14px',
                           color: '#8b9bb4',
                           fontWeight: '700',
-                          marginBottom: '4px',
+                          marginBottom: '6px',
                           textTransform: 'uppercase',
                           letterSpacing: '0.5px',
                         }}>
@@ -313,10 +400,11 @@ function GraphControls({
                         
                         {/* 다른 이름 목록 */}
                         <div style={{
-                          fontSize: '14px',
+                          fontSize: '15px',
                           color: '#6c757d',
                           fontStyle: 'italic',
-                          lineHeight: '1.4',
+                          fontWeight: '500',
+                          lineHeight: '1.5',
                         }}>
                           {suggestion.names.slice(0, 3).join(', ')}
                           {suggestion.names.length > 3 && '...'}

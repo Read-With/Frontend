@@ -163,21 +163,35 @@ export function buildSuggestions(elements, query, currentChapterData = null) {
       if (label.includes(searchLower)) matchType = 'label';
       else if (names.some(name => String(name).toLowerCase().includes(searchLower))) matchType = 'names';
       else if (commonName.includes(searchLower)) matchType = 'common_name';
+      
+      // names 배열에서 중복 제거 (대소문자 구분 없이)
+      const uniqueNames = names.filter((name, index, arr) => 
+        arr.findIndex(n => String(n).toLowerCase() === String(name).toLowerCase()) === index
+      );
+      
       return {
         id: node.data.id,
         label: node.data.label,
-        names: node.data.names || [],
+        names: uniqueNames,
         common_name: node.data.common_name,
         matchType
       };
     })
-    // 중복 제거: label 기준으로 중복된 인물 제거
+    // 중복 제거: id 기준으로 중복된 인물 제거
     .reduce((acc, current) => {
       const existingIndex = acc.findIndex(item => 
-        item.label === current.label
+        item.id === current.id
       );
       if (existingIndex === -1) {
         acc.push(current);
+      } else {
+        // 이미 존재하는 인물의 경우, names 배열을 병합하고 중복 제거
+        const existing = acc[existingIndex];
+        const mergedNames = [...(existing.names || []), ...(current.names || [])];
+        const uniqueMergedNames = mergedNames.filter((name, index, arr) => 
+          arr.findIndex(n => String(n).toLowerCase() === String(name).toLowerCase()) === index
+        );
+        existing.names = uniqueMergedNames;
       }
       return acc;
     }, [])

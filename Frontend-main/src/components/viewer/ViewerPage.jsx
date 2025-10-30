@@ -1,8 +1,8 @@
 import React, { useRef, useState, useEffect, useCallback } from "react";
-import { ToastContainer } from "react-toastify";
+import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import cytoscape from "cytoscape";
-import { CytoscapeGraphPortalProvider } from "../graph/CytoscapeGraphUnified";
+// CytoscapeGraphPortalProvider는 뷰어페이지에서 사용하지 않음
 import GraphContainer from "../graph/GraphContainer";
 import ViewerLayout from "./ViewerLayout";
 import EpubViewer from "./epub/EpubViewer";
@@ -11,7 +11,6 @@ import ViewerSettings from "./epub/ViewerSettings";
 import ViewerTopBar from "./ViewerTopBar";
 import { useViewerPage } from "../../hooks/useViewerPage";
 import { useGraphSearch } from "../../hooks/useGraphSearch";
-import { useClickOutside } from "../../hooks/useClickOutside";
 import { createStorageKey } from "../../hooks/useLocalStorage";
 import { getAllProgress, saveProgress, getBookProgress, getBookManifest, getFineGraph } from "../../utils/common/api";
 import { 
@@ -289,6 +288,10 @@ const ViewerPage = () => {
 
   const [activeTooltip, setActiveTooltip] = useState(null);
   const graphClearRef = useRef(null);
+  const lastTooltipOpenAtRef = useRef(0);
+  const activeTooltipRef = useRef(null);
+  
+  // activeTooltip 상태 변화 추적 - 제거됨
   
   const [transitionState, setTransitionState] = useState({
     type: null,
@@ -302,10 +305,18 @@ const ViewerPage = () => {
   
   
   const handleClearTooltip = useCallback(() => {
+    const now = Date.now();
+    if (now - lastTooltipOpenAtRef.current < 150) {
+      return;
+    }
     setActiveTooltip(null);
   }, []);
 
   const handleClearTooltipAndGraph = useCallback(() => {
+    const now = Date.now();
+    if (now - lastTooltipOpenAtRef.current < 150) {
+      return;
+    }
     setActiveTooltip(null);
     if (graphClearRef.current) {
       graphClearRef.current();
@@ -314,10 +325,27 @@ const ViewerPage = () => {
 
   const handleSetActiveTooltip = useCallback((tooltipData) => {
     const processedTooltipData = processTooltipData(tooltipData, tooltipData.type);
+    lastTooltipOpenAtRef.current = Date.now();
     setActiveTooltip(processedTooltipData);
+    // 툴팁 표시 실패 알림 (열림 직후 곧바로 닫힌 경우)
+    setTimeout(() => {
+      if (!activeTooltipRef.current) {
+        toast.error("툴팁 표시에 문제가 발생했습니다. 페이지를 새로고침 해주세요.", {
+          autoClose: 2000,
+          closeOnClick: true,
+          pauseOnHover: true
+        });
+      }
+    }, 220);
   }, []);
 
-  const viewerPageRef = useClickOutside(handleClearTooltipAndGraph, !!activeTooltip);
+  // ViewerPage에서는 useClickOutside를 사용하지 않음 (툴팁 컴포넌트 자체에서 처리)
+  const viewerPageRef = useRef(null);
+  
+  // activeTooltip 최신값을 ref로 유지 (watchdog 용)
+  useEffect(() => {
+    activeTooltipRef.current = activeTooltip;
+  }, [activeTooltip]);
 
   const [savedProgress, setSavedProgress] = useState(null);
   const [isProgressLoaded, setIsProgressLoaded] = useState(false);
@@ -865,47 +893,45 @@ const ViewerPage = () => {
         isFromLibrary={isFromLibrary}
         previousPage={previousPage}
         rightSideContent={
-          <CytoscapeGraphPortalProvider>
-            <GraphSplitArea
-              graphState={{
-                ...graphState,
-                prevValidEvent: currentEvent && currentEvent.chapter === currentChapter ? currentEvent : null,
-                events: getEventsForChapter(currentChapter, folderKey)
-              }}
-              graphActions={graphActions}
-              viewerState={viewerState}
-              searchState={{
-                ...searchState,
-                searchTerm,
-                isSearchActive,
-                elements: elements,
-                filteredElements,
-                isResetFromSearch,
-                suggestions,
-                showSuggestions,
-                selectedIndex
-              }}
-              searchActions={{
-                onSearchSubmit: handleSearchSubmit,
-                clearSearch,
-                closeSuggestions,
-                onGenerateSuggestions: setSearchTerm,
-                selectSuggestion,
-                handleKeyDown
-              }}
-              tooltipProps={{
-                activeTooltip,
-                onClearTooltip: handleClearTooltip,
-                onSetActiveTooltip: handleSetActiveTooltip,
-                graphClearRef
-              }}
-              transitionState={transitionState}
-              apiError={apiError}
-              isFromLibrary={isFromLibrary}
-              previousPage={previousPage}
-              bookId={bookId}
-            />
-          </CytoscapeGraphPortalProvider>
+          <GraphSplitArea
+            graphState={{
+              ...graphState,
+              prevValidEvent: currentEvent && currentEvent.chapter === currentChapter ? currentEvent : null,
+              events: getEventsForChapter(currentChapter, folderKey)
+            }}
+            graphActions={graphActions}
+            viewerState={viewerState}
+            searchState={{
+              ...searchState,
+              searchTerm,
+              isSearchActive,
+              elements: elements,
+              filteredElements,
+              isResetFromSearch,
+              suggestions,
+              showSuggestions,
+              selectedIndex
+            }}
+            searchActions={{
+              onSearchSubmit: handleSearchSubmit,
+              clearSearch,
+              closeSuggestions,
+              onGenerateSuggestions: setSearchTerm,
+              selectSuggestion,
+              handleKeyDown
+            }}
+            tooltipProps={{
+              activeTooltip,
+              onClearTooltip: handleClearTooltip,
+              onSetActiveTooltip: handleSetActiveTooltip,
+              graphClearRef
+            }}
+            transitionState={transitionState}
+            apiError={apiError}
+            isFromLibrary={isFromLibrary}
+            previousPage={previousPage}
+            bookId={bookId}
+          />
         }
       >
         <EpubViewer
