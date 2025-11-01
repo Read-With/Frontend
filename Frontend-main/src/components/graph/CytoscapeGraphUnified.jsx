@@ -355,6 +355,13 @@ const CytoscapeGraphUnified = ({
         
         if (stylesheet) {
           cy.style(stylesheet);
+          // 스타일시트 적용을 즉시 반영
+          try {
+            cy.style().update();
+            requestAnimationFrame(() => {
+              try { cy.style().update(); } catch {}
+            });
+          } catch {}
           cy.nodes().forEach(node => {
             const weight = node.data('weight');
             if (!weight || weight <= 1) {
@@ -419,8 +426,16 @@ const CytoscapeGraphUnified = ({
             if (onLayoutComplete) onLayoutComplete();
           }, 150);
         }
-      } else {
-        if (stylesheet) cy.style(stylesheet);
+        } else {
+        if (stylesheet) {
+          cy.style(stylesheet);
+          try {
+            cy.style().update();
+            requestAnimationFrame(() => {
+              try { cy.style().update(); } catch {}
+            });
+          } catch {}
+        }
       }
       
       if (fitNodeIds && fitNodeIds.length > 0) {

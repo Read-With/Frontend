@@ -120,6 +120,8 @@ const ViewerRelationGraph = ({
     [edgeStyle, edgeLabelVisible]
   );
 
+  // 프리워밍은 공용 훅(useGraphInteractions)의 prewarmStyles에 위임
+
   // graphClearRef에 그래프 스타일 초기화 함수 설정
   useEffect(() => {
     if (graphClearRef && cyRef.current) {
@@ -134,10 +136,21 @@ const ViewerRelationGraph = ({
   }, [graphClearRef, cyRef]);
 
   useEffect(() => {
-    if (cyRef.current) {
-      cyRef.current.center();
-    }
-  }, [elements]);
+    const cy = cyRef.current;
+    if (!cy) return;
+    if (isSearchActive) return;
+    try {
+      // 첫 렌더 직후 하이라이트 렌더와 경합을 피하기 위해 2프레임 지연
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          try {
+            cy.resize();
+            cy.fit(cy.elements(), 80);
+          } catch {}
+        });
+      });
+    } catch {}
+  }, [elements, eventNum, chapterNum, isSearchActive]);
 
   // activeTooltip 상태 추적 - 제거됨
 

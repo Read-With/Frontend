@@ -142,6 +142,13 @@ export const createGraphStylesheet = (edgeStyle, edgeLabelVisible, maxEdgeLabelL
     },
   },
   {
+    selector: "edge.highlighted",
+    style: {
+      width: 8,
+      opacity: 1,
+    },
+  },
+  {
     selector: "node.cytoscape-node-appear",
     style: {
       "border-color": COLORS.successGreen,
@@ -159,10 +166,10 @@ export const createGraphStylesheet = (edgeStyle, edgeLabelVisible, maxEdgeLabelL
     },
   },
   {
-    selector: ".highlighted",
+    selector: "node.highlighted",
     style: {
       "border-color": COLORS.highlightBlue,
-      "border-width": 2,
+      "border-width": 6,
       "border-opacity": 1,
       "border-style": "solid",
     },
