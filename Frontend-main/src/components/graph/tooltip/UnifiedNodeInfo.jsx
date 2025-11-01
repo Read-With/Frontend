@@ -66,9 +66,6 @@ function UnifiedNodeInfo({
   const [isModalOpen, setIsModalOpen] = useState(false); // 확대 화면 모달 상태
   const [hoveredItem, setHoveredItem] = useState(null); // 호버된 아이템
   const [hoverPosition, setHoverPosition] = useState({ x: 0, y: 0 }); // 호버 위치
-  const [language, setLanguage] = useState('ko');
-  const [isLanguageChanging, setIsLanguageChanging] = useState(false);
-  const [previousDescription, setPreviousDescription] = useState('');
 
   // 모달 핸들러
   const handleOpenModal = useCallback(() => {
@@ -232,18 +229,6 @@ function UnifiedNodeInfo({
     }
   }, [displayMode, nodeData, fetchData]);
 
-
-  // 언어 전환 핸들러
-  const handleLanguageToggle = useCallback(() => {
-    setIsLanguageChanging(true);
-    setTimeout(() => {
-      setLanguage(prev => prev === 'ko' ? 'en' : 'ko');
-      setTimeout(() => {
-        setIsLanguageChanging(false);
-      }, 200);
-    }, 200);
-  }, []);
-
   // 메모이제이션된 데이터 처리
   const processedNodeData = useMemo(() => {
     if (!nodeData) return null;
@@ -257,28 +242,13 @@ function UnifiedNodeInfo({
     };
   }, [nodeData]);
 
-  // 언어에 따라 description을 동적으로 계산 (기본값은 항상 한글)
+  // 한글 description만 표시
   const currentDescription = useMemo(() => {
     if (!nodeData) return '';
-    
-    // 기본적으로 한글 우선, 언어 설정에 따라 전환
-    const description = language === 'ko' 
-      ? (nodeData.description_ko || nodeData.description || '') 
-      : (nodeData.description || '');
-    
-    return description;
-  }, [nodeData, language]);
+    return nodeData.description_ko || nodeData.description || '';
+  }, [nodeData]);
 
-
-  // 언어 전환 시 이전 description 저장
-  useEffect(() => {
-    if (!isLanguageChanging && currentDescription) {
-      setPreviousDescription(currentDescription);
-    }
-  }, [currentDescription, isLanguageChanging]);
-
-  // 실제 표시할 description (번역 중일 때는 이전 값 유지)
-  const displayDescription = isLanguageChanging ? previousDescription : currentDescription;
+  const displayDescription = currentDescription;
   const displayHasDescription = !!(displayDescription && displayDescription.trim());
 
   // 요약 데이터 - API 또는 로컬 데이터에서 가져오기
@@ -793,22 +763,6 @@ function UnifiedNodeInfo({
         &times;
       </button>
       
-      {/* 언어 전환 버튼 - 툴팁 모드 */}
-      <button
-        onClick={handleLanguageToggle}
-        aria-label="언어 전환"
-        disabled={isLanguageChanging}
-        className="language-toggle-btn"
-        onMouseEnter={(e) => {
-          e.target.style.background = COLORS.primaryLight;
-        }}
-        onMouseLeave={(e) => {
-          e.target.style.background = COLORS.backgroundLight;
-        }}
-      >
-        {language === 'ko' ? 'EN' : 'KO'}
-      </button>
-      
       <div
         style={{
           display: "flex",
@@ -998,10 +952,7 @@ function UnifiedNodeInfo({
         }}
       >
         {displayHasDescription ? (
-          <span style={{ 
-            opacity: isLanguageChanging ? 0.25: 1,
-            transition: 'opacity 0.2s ease'
-          }}>
+          <span>
             {displayDescription}
           </span>
         ) : (
@@ -1092,22 +1043,6 @@ function UnifiedNodeInfo({
                 </span>
               )}
             </div>
-            
-            {/* 언어 전환 버튼 */}
-            <button
-              onClick={handleLanguageToggle}
-              aria-label="언어 전환"
-              disabled={isLanguageChanging}
-              className="sidebar-language-toggle"
-              onMouseEnter={(e) => {
-                e.target.style.background = COLORS.primaryLight;
-              }}
-              onMouseLeave={(e) => {
-                e.target.style.background = COLORS.backgroundLight;
-              }}
-            >
-              {language === 'ko' ? 'EN' : 'KO'}
-            </button>
             
             <button
               onClick={onClose}
@@ -1268,9 +1203,7 @@ function UnifiedNodeInfo({
                       lineHeight: '1.6',
                       color: COLORS.textPrimary,
                       letterSpacing: '-0.01em',
-                      opacity: isLanguageChanging ? 0.25 : 1,
                       wordBreak: 'keep-all',
-                      transition: 'opacity 0.2s ease',
                     }}>
                       {displayDescription}
                     </p>
