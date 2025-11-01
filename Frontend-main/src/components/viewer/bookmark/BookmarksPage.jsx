@@ -528,21 +528,6 @@ const BookmarksPage = () => {
         }}>
           <p style={{ fontSize: '1.1rem' }}>저장된 북마크가 없습니다.</p>
           <p>책을 읽으면서 북마크를 추가해보세요!</p>
-          <button
-            style={{
-              background: '#5C6F5C',
-              color: 'white',
-              border: 'none',
-              padding: '0.6rem 1.2rem',
-              borderRadius: '0.5rem',
-              marginTop: '1rem',
-              fontWeight: 500,
-              cursor: 'pointer',
-            }}
-            onClick={() => navigate(`/viewer/${cleanFilename}`)}
-          >
-            뷰어로 돌아가기
-          </button>
         </div>
       ) : (
         // 북마크 그룹(행)들

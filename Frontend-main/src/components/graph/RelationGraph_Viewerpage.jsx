@@ -75,15 +75,15 @@ const ViewerRelationGraph = ({
     }
   }, [onSetActiveTooltip]);
 
-  const onShowEdgeTooltip = useCallback(({ edge, absoluteX, absoluteY, evt }) => {
+  const onShowEdgeTooltip = useCallback(({ edge, edgeCenter, mouseX, mouseY, evt }) => {
     if (!onSetActiveTooltip) {
       console.warn('⚠️ [ViewerRelationGraph] onSetActiveTooltip이 없습니다');
       return;
     }
     
-    // 마우스 위치를 우선 사용하되, 없으면 계산된 간선 중심 위치 사용
-    const finalX = absoluteX !== undefined ? absoluteX : 0;
-    const finalY = absoluteY !== undefined ? absoluteY : 0;
+    // useGraphInteractions에서 이미 정확한 위치를 계산해서 전달하므로 그대로 사용
+    const finalX = mouseX !== undefined ? mouseX : edgeCenter?.x || 0;
+    const finalY = mouseY !== undefined ? mouseY : edgeCenter?.y || 0;
     
     onSetActiveTooltip({
       type: "edge",
@@ -91,6 +91,7 @@ const ViewerRelationGraph = ({
       data: edge.data(),
       sourceNode: edge.source(),
       targetNode: edge.target(),
+      edgeCenter,
       x: finalX,
       y: finalY,
     });

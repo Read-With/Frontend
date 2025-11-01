@@ -395,30 +395,30 @@ function RelationGraphWrapper() {
     centerElementBetweenSidebars(node.id(), 'node');
   }, [centerElementBetweenSidebars]);
 
-  const onShowEdgeTooltip = useCallback(({ edge, absoluteX, absoluteY }) => {
+  const onShowEdgeTooltip = useCallback(({ edge, edgeCenter, mouseX, mouseY }) => {
     const edgeData = edge.data();
+    
+    // useGraphInteractions에서 이미 정확한 위치를 계산해서 전달하므로 그대로 사용
+    const finalX = mouseX !== undefined ? mouseX : edgeCenter?.x || 0;
+    const finalY = mouseY !== undefined ? mouseY : edgeCenter?.y || 0;
     
     const tooltipData = {
       type: 'edge',
       id: edge.id(),
-      x: absoluteX,
-      y: absoluteY,
+      x: finalX,
+      y: finalY,
       data: edgeData,
       sourceNode: edge.source(),
       targetNode: edge.target(),
+      edgeCenter,
     };
     
     const processedTooltipData = processTooltipData(tooltipData, 'edge');
     
     setActiveTooltip(processedTooltipData);
     
-    const sourcePos = edge.source().position();
-    const targetPos = edge.target().position();
-    const edgeCenterX = (sourcePos.x + targetPos.x) / 2;
-    const edgeCenterY = (sourcePos.y + targetPos.y) / 2;
-    
-    centerElementAtPosition(edgeCenterX, edgeCenterY);
-  }, [centerElementBetweenSidebars, centerElementAtPosition]);
+    centerElementBetweenSidebars(edge.id(), 'edge');
+  }, [centerElementBetweenSidebars]);
 
   const onClearTooltip = useCallback(() => {
     setForceClose(true);

@@ -266,6 +266,22 @@ export default function useGraphInteractions({
       if (!cyRef?.current) return { x: 0, y: 0 };
       
       const cy = cyRef.current;
+      const { containerRect } = getContainerInfo();
+      
+      // 마우스 클릭 이벤트가 있으면 마우스 위치를 우선 사용
+      if (evt?.originalEvent) {
+        let domX = evt.originalEvent.clientX - containerRect.left;
+        let domY = evt.originalEvent.clientY - containerRect.top;
+        
+        // 노드의 경우 offset 추가
+        if (offset > 0) {
+          domX += offset;
+        }
+        
+        return { x: domX, y: domY };
+      }
+      
+      // 마우스 이벤트가 없으면 element 위치 계산
       const isNode = typeof element.renderedPosition === 'function';
       
       let basePos;
@@ -276,17 +292,11 @@ export default function useGraphInteractions({
         basePos = { x: midpoint.x, y: midpoint.y };
       }
       
-      const pan = cy.pan();
-      const zoom = cy.zoom();
+      // calculateCytoscapePosition을 사용하여 정확한 컨테이너 기준 좌표 계산
+      const position = calculateCytoscapePosition(basePos, cyRef);
       
-      let domX = basePos.x * zoom + pan.x;
-      let domY = basePos.y * zoom + pan.y;
-      
-      if (evt?.originalEvent) {
-        const { containerRect } = getContainerInfo();
-        domX = evt.originalEvent.clientX - containerRect.left;
-        domY = evt.originalEvent.clientY - containerRect.top;
-      }
+      let domX = position.x - containerRect.left;
+      let domY = position.y - containerRect.top;
       
       if (offset > 0 && isNode) {
         domX += offset;
@@ -351,10 +361,7 @@ export default function useGraphInteractions({
         if (!edge || !edgeData) return;
 
         const { x: mouseX, y: mouseY } = calculateTooltipPosition(edge, evt, 0);
-
-        if (onShowEdgeTooltipRef.current) {
-          onShowEdgeTooltipRef.current({ edge, evt, absoluteX: mouseX, absoluteY: mouseY });
-        }
+        const edgeCenter = calculateTooltipPosition(edge, null, 0);
 
         resetAllStyles();
         forceStyleUpdate(cy, { immediate: true, asyncFrames: 0 });
@@ -373,6 +380,10 @@ export default function useGraphInteractions({
         applyNodeHighlightStyles(tgtNode);
         
         forceStyleUpdate(cy, { immediate: true, asyncFrames: 2 });
+
+        if (onShowEdgeTooltipRef.current) {
+          onShowEdgeTooltipRef.current({ edge, evt, edgeCenter, mouseX, mouseY });
+        }
 
         if (selectedEdgeIdRef) selectedEdgeIdRef.current = edge.id();
       } catch (error) {
