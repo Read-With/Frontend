@@ -179,6 +179,22 @@ export function getCharactersData(folderKey, chapter) {
 }
 
 /**
+ * 특정 폴더의 최대 챕터에서 캐릭터 데이터를 가져옴
+ * @param {string} folderKey - 데이터 하위 폴더명
+ * @returns {Object|null}
+ */
+export function getCharactersDataFromMaxChapter(folderKey) {
+  if (!folderKey) {
+    return null;
+  }
+  const maxChapter = getDetectedMaxChapter(folderKey);
+  if (maxChapter < 1) {
+    return null;
+  }
+  return charactersIndex.get(`${folderKey}:${maxChapter}`) ?? null;
+}
+
+/**
  * 1-based eventIndex로 이벤트 JSON 반환
  * @param {string} folderKey
  * @param {number} chapter
@@ -520,21 +536,13 @@ export async function loadChapterData(
     }
     setEvents(events);
 
-    // 캐릭터 데이터 로드 - chapter*_characters_0.json 사용
-    const characterFilePath = Object.keys(dataModules.characters).find((path) =>
-      path.includes(`/${folderKey}/chapter${currentChapter}_characters_0.json`)
-    );
-    if (!characterFilePath) {
-      const availablePaths = Object.keys(dataModules.characters).filter(path => 
-        path.includes(`/${folderKey}/`)
-      );
-      throw new Error(
-        `캐릭터 데이터 파일을 찾을 수 없습니다: ${folderKey}/chapter${currentChapter}. 사용 가능한 파일: [${availablePaths.join(', ')}]`
-      );
-    }
-    const characterData = dataModules.characters[characterFilePath].default;
+    // 캐릭터 데이터 로드 - 최대 챕터에서 한번만 가져오기
+    const characterData = getCharactersDataFromMaxChapter(folderKey);
     if (!characterData) {
-      throw new Error(`캐릭터 데이터가 비어있습니다: ${characterFilePath}`);
+      const maxChapter = getDetectedMaxChapter(folderKey);
+      throw new Error(
+        `캐릭터 데이터 파일을 찾을 수 없습니다: ${folderKey}/chapter${maxChapter}`
+      );
     }
     setCharacterData(characterData.characters || characterData);
 

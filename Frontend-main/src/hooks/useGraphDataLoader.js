@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { 
-  getCharactersData, 
+  getCharactersData,
+  getCharactersDataFromMaxChapter,
   getEventDataByIndex, 
   getLastEventIndexForChapter, 
   getFolderKeyFromFilename, 
@@ -62,7 +63,7 @@ export function useGraphDataLoader(filename, chapter, eventIndex = null) {
         return Promise.resolve();
       }
 
-      const charData = getCharactersData(folderKey, chapter);
+      const charData = getCharactersDataFromMaxChapter(folderKey);
       
       if (!charData) {
         setError('캐릭터 데이터를 찾을 수 없습니다.');

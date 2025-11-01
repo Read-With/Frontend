@@ -22,6 +22,7 @@ import {
   getEventsForChapter,
   getDetectedMaxChapter,
   getCharactersData,
+  getCharactersDataFromMaxChapter,
   getChapterFile
 } from "../../utils/graphData";
 import { calcGraphDiff, convertRelationsToElements, filterMainCharacters } from "../../utils/graphDataUtils";
@@ -476,11 +477,12 @@ const ViewerPage = () => {
           let convertedElements = [];
           if (fineData.result.characters && fineData.result.relations && 
               fineData.result.characters.length > 0 && fineData.result.relations.length > 0) {
-            const { idToName, idToDesc, idToMain, idToNames } = createCharacterMaps(fineData.result.characters);
+            const { idToName, idToDesc, idToDescKo, idToMain, idToNames } = createCharacterMaps(fineData.result.characters);
             convertedElements = convertRelationsToElements(
               fineData.result.relations,
               idToName,
               idToDesc,
+              idToDescKo,
               idToMain,
               idToNames,
               'api',
@@ -572,7 +574,7 @@ const ViewerPage = () => {
         }
         
         try {
-          const charData = getCharactersData(folderKey, currentChapter);
+          const charData = getCharactersDataFromMaxChapter(folderKey);
           // characterData는 현재 사용되지 않음
         } catch (charError) {
           // characterData는 현재 사용되지 않음
@@ -782,8 +784,11 @@ const ViewerPage = () => {
               return;
             }
             
-            const charactersData = getChapterFile(chapterNum, "characters", folderKey);
-            if (!charactersData) return;
+            const characterDataObj = getCharactersDataFromMaxChapter(folderKey);
+            if (!characterDataObj) return;
+            
+            const charactersData = characterDataObj.characters || characterDataObj;
+            if (!charactersData || !Array.isArray(charactersData) || charactersData.length === 0) return;
             
             const events = getEventsForChapter(chapterNum, folderKey);
             if (!events || events.length === 0) return;
@@ -791,12 +796,13 @@ const ViewerPage = () => {
             const lastEvent = events[events.length - 1];
             const allRelations = lastEvent.relations || [];
             
-            const { idToName, idToDesc, idToMain, idToNames } = createCharacterMaps(charactersData);
+            const { idToName, idToDesc, idToDescKo, idToMain, idToNames } = createCharacterMaps({ characters: charactersData });
             
             const elements = convertRelationsToElements(
               allRelations,
               idToName,
               idToDesc,
+              idToDescKo,
               idToMain,
               idToNames,
               folderKey,
