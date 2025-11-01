@@ -4,6 +4,7 @@ import "./RelationGraph.css";
 import { detectAndResolveOverlap, calcGraphDiff } from "../../utils/graphDataUtils.js";
 import { applySearchFadeEffect, shouldShowNoSearchResults, getNoSearchResultsMessage } from "../../utils/searchUtils.jsx";
 import { createRippleEffect, ensureElementsInBounds, createMouseEventHandlers } from "../../utils/graphUtils.js";
+import { calculateNodeSize } from "../../utils/styles/graphStyles.js";
 import useGraphInteractions from "../../hooks/useGraphInteractions.js";
 
 
@@ -364,11 +365,7 @@ const CytoscapeGraphUnified = ({
           } catch {}
           cy.nodes().forEach(node => {
             const weight = node.data('weight');
-            if (!weight || weight <= 1) {
-              console.warn(`⚠️ [기본값] 노드 ${node.data('id')} (${node.data('label')}): weight=${weight} → 기본 크기 30px 적용`);
-            }
-            const actualWeight = weight || 1;
-            const size = Math.max(Math.round(10 * actualWeight), 30);
+            const size = calculateNodeSize(8, weight);
             node.style({
               'width': size,
               'height': size
@@ -446,16 +443,15 @@ const CytoscapeGraphUnified = ({
           cy.nodes().removeClass('search-highlight');
           nodes.addClass('search-highlight');
           
-          // 가중치 기반 크기는 스타일시트에서 자동으로 적용되므로 직접 조정하지 않음
           // 검색 결과 노드만 약간 크게 표시
                nodes.style('width', (ele) => {
                  const weight = ele.data('weight');
-                 const baseSize = weight ? Math.round(10 * weight) : 10;
+                 const baseSize = calculateNodeSize(8, weight);
                  return baseSize * 1.2;
                });
                nodes.style('height', (ele) => {
                  const weight = ele.data('weight');
-                 const baseSize = weight ? Math.round(10 * weight) : 10;
+                 const baseSize = calculateNodeSize(8, weight);
                  return baseSize * 1.2;
                });
         }

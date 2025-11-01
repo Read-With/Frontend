@@ -198,7 +198,7 @@ export default function useGraphInteractions({
   const applyNodeHighlightStyles = useCallback((node) => {
     try {
       node.style('border-color', '#5C6F5C');
-      node.style('border-width', 6);
+      node.style('border-width', 4);
       node.style('border-opacity', 1);
       node.style('border-style', 'solid');
       node.style('opacity', 1);
