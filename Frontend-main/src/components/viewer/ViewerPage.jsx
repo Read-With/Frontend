@@ -42,14 +42,34 @@ function GraphSplitArea({
   isFromLibrary = false,
   previousPage = null,
   bookId = null,
+  book = null,
 }) {
   const { activeTooltip, onClearTooltip, onSetActiveTooltip, graphClearRef } = tooltipProps;
   const graphContainerRef = React.useRef(null);
   const { isSearchActive, filteredElements, isResetFromSearch } = searchState;
   const { loading, isReloading, isGraphLoading, isDataReady } = viewerState;
-  const { elements } = graphState;
+  const { elements, currentEvent, currentChapter } = graphState;
   const { filterStage } = graphActions;
   
+  const isApiBook = React.useMemo(() => {
+    if (book && (typeof book.id === 'number' || book.isFromAPI === true)) {
+      return true;
+    }
+    if (bookId && (typeof bookId === 'number' || !isNaN(parseInt(bookId, 10)))) {
+      return true;
+    }
+    return false;
+  }, [book, bookId]);
+  
+  const isLocationDetermined = React.useMemo(() => {
+    if (!currentChapter || currentChapter < 1) {
+      return false;
+    }
+    if (isApiBook && !currentEvent) {
+      return false;
+    }
+    return true;
+  }, [currentChapter, currentEvent, isApiBook]);
 
   const filteredMainCharacters = React.useMemo(() => {
     return filterMainCharacters(elements, filterStage);
@@ -92,7 +112,7 @@ function GraphSplitArea({
       />
       
       <div style={{ flex: 1, position: "relative", minHeight: 0, minWidth: 0 }}>
-        {loading || isReloading || isGraphLoading || !isDataReady ? (
+        {loading || isReloading || isGraphLoading || !isDataReady || !isLocationDetermined ? (
           <div style={{
             display: 'flex',
             flexDirection: 'column',
@@ -119,7 +139,9 @@ function GraphSplitArea({
               fontSize: '18px',
               fontWeight: '600'
             }}>
-              {transitionState.type === 'chapter' ? '챕터 전환 중...' : '그래프 정보를 불러오는 중...'}
+              {!isLocationDetermined ? '위치 정보를 확인하는 중...' : 
+               transitionState.type === 'chapter' ? '챕터 전환 중...' : 
+               '그래프 정보를 불러오는 중...'}
             </h3>
             <p style={{
               color: '#6c757d',
@@ -128,7 +150,9 @@ function GraphSplitArea({
               lineHeight: '1.5',
               wordBreak: 'keep-all'
             }}>
-              {transitionState.type === 'chapter' ? '새로운 챕터의 이벤트를 준비하고 있습니다.' : '관계 데이터를 분석하고 있습니다.'}
+              {!isLocationDetermined ? '현재 읽고 있는 위치를 파악하고 있습니다. 잠시만 기다려주세요.' :
+               transitionState.type === 'chapter' ? '새로운 챕터의 이벤트를 준비하고 있습니다.' : 
+               '관계 데이터를 분석하고 있습니다.'}
             </p>
           </div>
         ) : apiError ? (
@@ -937,6 +961,7 @@ const ViewerPage = () => {
             isFromLibrary={isFromLibrary}
             previousPage={previousPage}
             bookId={bookId}
+            book={book}
           />
         }
       >
