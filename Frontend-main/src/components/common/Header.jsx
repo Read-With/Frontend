@@ -16,63 +16,52 @@ const Header = ({ userNickname, showAuthLinks = false }) => {
   };
 
   // Google OAuth 로그인 시작
-  const handleGoogleLogin = async () => {
+  const handleGoogleLogin = () => {
     try {
       setLoginError(null);
       
-      // 백엔드에서 OAuth URL 생성 요청
-      console.log('백엔드에서 OAuth URL 생성 요청...');
+      // redirect_uri 설정 (로컬/프로덕션 구분)
+      // 백엔드가 요청 본문의 redirectUri를 읽을 수 있도록 각 환경에 맞는 값 사용
+      const getRedirectUri = () => {
+        // 환경변수가 있으면 우선 사용
+        if (import.meta.env.VITE_GOOGLE_REDIRECT_URI) {
+          return import.meta.env.VITE_GOOGLE_REDIRECT_URI;
+        }
+        // 로컬 개발 환경: 로컬 프론트엔드 사용
+        if (import.meta.env.DEV) {
+          return `${window.location.protocol}//${window.location.host}/auth/callback`;
+        }
+        // 프로덕션 환경: 배포 서버 사용
+        return 'https://dev.readwith.store/auth/callback';
+      };
       
-      const response = await fetch('http://localhost:8080/api/auth/google/url', {
-        method: 'GET',
-        headers: {
-          'Accept': 'application/json',
-        },
-      });
+      // 환경변수에서 구글 클라이언트 ID 가져오기
+      const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID;
+      const GOOGLE_REDIRECT_URI = getRedirectUri();
       
-      if (!response.ok) {
-        throw new Error(`백엔드 응답 오류: ${response.status}`);
-      }
-      
-      const data = await response.json();
-      
-      if (!data.isSuccess || !data.result || !data.result.authUrl) {
-        throw new Error('백엔드에서 OAuth URL을 생성할 수 없습니다.');
-      }
-      
-      // 백엔드에서 제공한 URL 템플릿을 실제 값으로 치환
-      const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
-      const redirectUri = 'http://localhost:5173/auth/callback';
-      
-      if (!clientId || clientId === 'CLIENT_ID' || clientId === 'your_google_client_id_here') {
-        setLoginError('Google OAuth 설정이 올바르지 않습니다. 환경변수를 확인해주세요.');
+      if (!GOOGLE_CLIENT_ID || GOOGLE_CLIENT_ID === 'CLIENT_ID' || GOOGLE_CLIENT_ID === 'your_google_client_id_here') {
+        setLoginError('Google OAuth 설정이 올바르지 않습니다. .env 파일에 VITE_GOOGLE_CLIENT_ID를 설정해주세요.');
         return;
       }
       
-      const authUrl = data.result.authUrl
-        .replace('${GOOGLE_CLIENT_ID}', clientId)
-        .replace('${GOOGLE_REDIRECT_URI}', redirectUri);
+      // 구글 OAuth URL 구성 (가이드에 따라 직접 생성)
+      const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?` +
+        `client_id=${GOOGLE_CLIENT_ID}&` +
+        `redirect_uri=${encodeURIComponent(GOOGLE_REDIRECT_URI)}&` +
+        `response_type=code&` +
+        `scope=email profile&` +
+        `access_type=offline&` +
+        `prompt=consent`;
       
-      console.log('백엔드 응답 데이터:', data);
-      console.log('생성된 OAuth URL:', authUrl);
-      console.log('사용된 리다이렉트 URI:', redirectUri);
       secureLog('Google OAuth 로그인 시작', { 
-        clientId: clientId.substring(0, 10) + '...', 
-        redirectUri 
+        clientId: GOOGLE_CLIENT_ID.substring(0, 10) + '...', 
+        redirectUri: GOOGLE_REDIRECT_URI
       });
       
       // Google OAuth URL로 리다이렉트
       window.location.href = authUrl;
     } catch (err) {
-      let errorMessage = '로그인 실패';
-      
-      if (err.message.includes('Failed to fetch')) {
-        errorMessage = '백엔드 서버에 연결할 수 없습니다. 백엔드 서버가 실행 중인지 확인해주세요.';
-      } else {
-        errorMessage = `로그인 실패: ${err.message}`;
-      }
-      
-      setLoginError(errorMessage);
+      setLoginError(`로그인 실패: ${err.message}`);
     }
   };
 

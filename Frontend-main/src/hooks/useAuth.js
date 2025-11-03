@@ -73,6 +73,11 @@ const useAuth = () => {
     if (userData.accessToken) {
       localStorage.setItem('accessToken', userData.accessToken);
     }
+    
+    // refreshToken도 별도로 저장 (토큰 갱신에 사용)
+    if (userData.refreshToken) {
+      localStorage.setItem('refreshToken', userData.refreshToken);
+    }
   };
 
   const logout = async () => {
@@ -81,7 +86,8 @@ const useAuth = () => {
     
     setUser(null);
     localStorage.removeItem('google_user');
-    localStorage.removeItem('accessToken'); // 키 이름 수정
+    localStorage.removeItem('accessToken');
+    localStorage.removeItem('refreshToken'); // Refresh Token도 정리
     
     // Google Identity Services 정리
     if (window.google?.accounts?.id) {

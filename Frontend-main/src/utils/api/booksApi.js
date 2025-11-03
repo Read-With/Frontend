@@ -2,15 +2,22 @@
  * 도서 관련 API 호출 유틸리티
  */
 
-// API 기본 URL 설정
+import { refreshToken } from './authApi';
+
+// API 기본 URL 설정 (배포 서버 고정 사용)
 const getApiBaseUrl = () => {
-  return 'http://localhost:8080';
+  // 로컬 개발 환경: 프록시 사용 (배포 서버로 전달)
+  if (import.meta.env.DEV) {
+    return ''; // 프록시를 통해 배포 서버로 요청
+  }
+  // 프로덕션 환경: 커스텀 도메인 사용
+  return 'https://dev.readwith.store';
 };
 
 const API_BASE_URL = getApiBaseUrl();
 
-// 인증된 API 요청 헬퍼 함수
-const authenticatedRequest = async (endpoint, options = {}) => {
+// 인증된 API 요청 헬퍼 함수 (토큰 갱신 자동 처리 포함)
+const authenticatedRequest = async (endpoint, options = {}, retryCount = 0) => {
   const token = localStorage.getItem('accessToken');
   
   const defaultHeaders = {
@@ -23,7 +30,9 @@ const authenticatedRequest = async (endpoint, options = {}) => {
     defaultHeaders['Authorization'] = `Bearer ${token}`;
   }
   
-  const response = await fetch(`${API_BASE_URL}/api${endpoint}`, {
+  const fullUrl = `${API_BASE_URL}/api${endpoint}`;
+  
+  const response = await fetch(fullUrl, {
     ...options,
     headers: {
       ...defaultHeaders,
@@ -32,14 +41,57 @@ const authenticatedRequest = async (endpoint, options = {}) => {
   });
   
   if (!response.ok) {
+    if (response.status === 401 && retryCount === 0) {
+      // 토큰 만료 시 자동으로 토큰 갱신 시도
+      try {
+        await refreshToken();
+        
+        // 갱신된 토큰으로 재시도 (최대 1번만)
+        return authenticatedRequest(endpoint, options, retryCount + 1);
+      } catch (refreshError) {
+        // 토큰 갱신 실패 시 로그아웃 처리
+        localStorage.removeItem('accessToken');
+        localStorage.removeItem('refreshToken');
+        localStorage.removeItem('google_user');
+        throw new Error('인증이 만료되었습니다. 다시 로그인해주세요.');
+      }
+    }
+    
+    // 401 에러이고 재시도 횟수가 초과했거나, 다른 에러인 경우
     if (response.status === 401) {
-      // 토큰 만료 시 로그아웃 처리
       localStorage.removeItem('accessToken');
+      localStorage.removeItem('refreshToken');
       localStorage.removeItem('google_user');
-      // 즉시 리다이렉트하지 않고 에러를 throw하여 상위에서 처리하도록 함
       throw new Error('인증이 만료되었습니다. 다시 로그인해주세요.');
     }
-    throw new Error(`API 요청 실패: ${response.status}`);
+    
+    // 500 에러 등 상세 정보 로깅
+    let errorMessage = `API 요청 실패: ${response.status}`;
+    const clonedResponse = response.clone();
+    try {
+      const errorData = await clonedResponse.json();
+      console.error('🔴 API 에러 상세 (JSON):', JSON.stringify(errorData, null, 2));
+      if (errorData.message) {
+        errorMessage = errorData.message;
+      }
+      console.error('API 에러 응답:', {
+        status: response.status,
+        endpoint,
+        message: errorData.message,
+        error: errorData
+      });
+    } catch (e) {
+      const errorText = await response.text();
+      console.error('🔴 API 에러 상세 (TEXT):', errorText);
+      console.error('에러 응답 상세:', {
+        status: response.status,
+        statusText: response.statusText,
+        endpoint,
+        responseText: errorText
+      });
+    }
+    
+    throw new Error(errorMessage);
   }
   
   return response.json();
@@ -60,13 +112,34 @@ export const getBooks = async (params = {}) => {
     
     if (params.q) queryParams.append('q', params.q);
     if (params.language) queryParams.append('language', params.language);
-    if (params.sort) queryParams.append('sort', params.sort);
+    queryParams.append('sort', params.sort || 'updatedAt');
     if (params.favorite !== undefined) queryParams.append('favorite', params.favorite);
     
     const queryString = queryParams.toString();
-    const endpoint = queryString ? `/books?${queryString}` : '/books';
+    const endpoint = `/books?${queryString}`;
     
     const data = await authenticatedRequest(endpoint);
+    
+    const resultLength = Array.isArray(data.result) ? data.result.length : 0;
+    const bookIds = Array.isArray(data.result) ? data.result.map(b => ({ 
+      id: b.id, 
+      title: b.title, 
+      isDefault: b.default, 
+      summary: b.summary,
+      uploadedBy: b.uploadedBy?.id || null
+    })) : [];
+    
+    const envInfo = API_BASE_URL.includes('localhost') || API_BASE_URL.includes('127.0.0.1') ? '로컬' : '배포';
+    
+    console.log(`📚 [${envInfo}] API 원본 응답:`, {
+      isSuccess: data.isSuccess,
+      resultType: Array.isArray(data.result) ? 'array' : typeof data.result,
+      resultLength,
+      endpoint,
+      apiUrl: `${API_BASE_URL}/api${endpoint}`,
+      books: bookIds
+    });
+    
     return data;
   } catch (error) {
     console.error('도서 목록 조회 실패:', error);
@@ -91,11 +164,15 @@ export const uploadBook = async (bookData) => {
     formData.append('author', bookData.author);
     formData.append('language', bookData.language);
     
+    const token = localStorage.getItem('accessToken');
+    const headers = {};
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+    
     const response = await fetch(`${API_BASE_URL}/api/books`, {
       method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${localStorage.getItem('accessToken')}`,
-      },
+      headers,
       body: formData,
     });
     
@@ -103,10 +180,23 @@ export const uploadBook = async (bookData) => {
       if (response.status === 401) {
         localStorage.removeItem('accessToken');
         localStorage.removeItem('google_user');
-        // 즉시 리다이렉트하지 않고 에러를 throw하여 상위에서 처리하도록 함
         throw new Error('인증이 만료되었습니다. 다시 로그인해주세요.');
       }
-      throw new Error(`도서 업로드 실패: ${response.status}`);
+      
+      let errorMessage = `도서 업로드 실패: ${response.status}`;
+      const clonedResponse = response.clone();
+      try {
+        const errorData = await clonedResponse.json();
+        if (errorData.message) {
+          errorMessage = errorData.message;
+        }
+        console.error('🔴 업로드 에러 상세 (JSON):', JSON.stringify(errorData, null, 2));
+      } catch (e) {
+        const errorText = await response.text();
+        console.error('🔴 업로드 에러 상세 (TEXT):', errorText);
+      }
+      
+      throw new Error(errorMessage);
     }
     
     return await response.json();
@@ -200,3 +290,5 @@ export const getChapterPovSummaries = async (bookId, chapterIdx) => {
     throw error;
   }
 };
+
+

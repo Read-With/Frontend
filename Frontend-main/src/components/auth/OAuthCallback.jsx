@@ -3,10 +3,11 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import useAuth from '../../hooks/useAuth';
 import { validateUserData, secureLog } from '../../utils/security/oauthSecurity';
 
-// API 기본 URL 설정
 const getApiBaseUrl = () => {
-  // 개발 환경에서는 로컬 백엔드 서버 사용
-  return 'http://localhost:8080';
+  if (import.meta.env.DEV) {
+    return '';
+  }
+  return 'https://dev.readwith.store';
 };
 
 const OAuthCallback = () => {
@@ -14,41 +15,37 @@ const OAuthCallback = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [isProcessing, setIsProcessing] = useState(false);
   const [isCompleted, setIsCompleted] = useState(false);
+  
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { login } = useAuth();
 
   useEffect(() => {
     const handleOAuthCallback = async () => {
-      // 이미 처리 완료되었거나 처리 중이면 중복 실행 방지
+      try {
       if (isProcessing || isCompleted) {
         return;
       }
       
-      // URL 파라미터에서 인증 코드 추출
       const code = searchParams.get('code');
       const error = searchParams.get('error');
       const state = searchParams.get('state');
       
-      // 인증 코드가 없으면 처리하지 않음
       if (!code) {
         setIsLoading(false);
         return;
       }
       
-      // 이미 처리된 코드인지 확인 (localStorage 사용)
       const processedCode = localStorage.getItem('oauth_processed_code');
       if (processedCode === code) {
         setIsLoading(false);
         return;
       }
       
-      // 처리할 코드를 localStorage에 저장
       localStorage.setItem('oauth_processed_code', code);
       setIsProcessing(true);
       
       try {
-        // URL에서 파라미터 즉시 제거 (보안상 이유 및 중복 처리 방지)
         if (window.history && window.history.replaceState) {
           const cleanUrl = new URL(window.location);
           cleanUrl.searchParams.delete('code');
@@ -56,7 +53,6 @@ const OAuthCallback = () => {
           window.history.replaceState({}, document.title, cleanUrl.toString());
         }
 
-        // OAuth 오류 처리
         if (error) {
           let errorMessage = `OAuth 오류: ${error}`;
           
@@ -72,35 +68,50 @@ const OAuthCallback = () => {
           return;
         }
 
-        // 백엔드 Google OAuth2 API에 맞춰 요청 (재시도 로직 포함)
         const makeRequest = async (retryCount = 0) => {
           const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 20000); // 20초 타임아웃
+          const timeoutId = setTimeout(() => controller.abort(), 20000);
           
           try {
-            // 백엔드 GoogleLoginRequestDTO 형식에 맞춰 JSON 요청
-            const response = await fetch(`${getApiBaseUrl()}/api/auth/google`, {
+            const apiBaseUrl = getApiBaseUrl();
+            const requestUrl = `${apiBaseUrl}/api/auth/google`;
+            
+            const getRedirectUri = () => {
+              if (import.meta.env.VITE_GOOGLE_REDIRECT_URI) {
+                return import.meta.env.VITE_GOOGLE_REDIRECT_URI;
+              }
+              if (import.meta.env.DEV) {
+                return `${window.location.protocol}//${window.location.host}/auth/callback`;
+              }
+              return 'https://dev.readwith.store/auth/callback';
+            };
+            
+            const redirectUri = getRedirectUri();
+            
+            const requestBody = {
+              code: code,
+              redirectUri: redirectUri
+            };
+            
+            const response = await fetch(requestUrl, {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
                 'Accept': 'application/json',
               },
-              body: JSON.stringify({
-                code: code
-              }),
-              credentials: 'include', // 쿠키 포함
+              body: JSON.stringify(requestBody),
+              credentials: 'include',
               signal: controller.signal
             });
             
             clearTimeout(timeoutId);
+            
             return response;
           } catch (error) {
             clearTimeout(timeoutId);
             
-            // 백엔드 서버 연결 문제 처리
             if (error.name === 'AbortError' || error.message.includes('Failed to fetch')) {
               if (retryCount < 3) {
-                console.log(`서버 연결 재시도 중... (${retryCount + 1}/3)`);
                 await new Promise(resolve => setTimeout(resolve, 3000 * (retryCount + 1)));
                 return makeRequest(retryCount + 1);
               } else {
@@ -112,17 +123,89 @@ const OAuthCallback = () => {
           }
         };
         
-        const response = await makeRequest();
+        let response;
+        try {
+          response = await makeRequest();
+        } catch (fetchError) {
+          if (fetchError.name === 'TypeError' && fetchError.message.includes('Failed to fetch')) {
+            const isLocalFrontend = window.location.hostname === 'localhost' || 
+                                    window.location.hostname === '127.0.0.1';
+            const isDeployBackend = getApiBaseUrl().includes('elasticbeanstalk.com') || getApiBaseUrl().includes('dev.readwith.store');
+            
+            if (isLocalFrontend && isDeployBackend) {
+              throw new Error('CORS 에러: 백엔드 서버에서 http://localhost:5173을 허용하도록 CORS 설정이 필요합니다.');
+            }
+          }
+          throw fetchError;
+        }
 
         if (!response.ok) {
           const errorText = await response.text();
           
-          // 401 오류인 경우 대안 방법 시도
           if (response.status === 401) {
+            let errorData = null;
+            try {
+              const clonedResponse = response.clone();
+              errorData = await clonedResponse.json();
+            } catch (parseError) {
+            }
+            
+            if (errorData && errorData.code === 'COMMON401') {
+              throw new Error(`인증이 필요합니다 (COMMON401).
+
+백엔드 응답:
+- 코드: ${errorData.code}
+- 메시지: ${errorData.message}
+
+가능한 원인:
+1. 백엔드가 Google OAuth 토큰 교환에 실패했습니다
+2. OAuth 인증 코드가 유효하지 않거나 만료되었습니다
+3. 백엔드의 GOOGLE_REDIRECT_URI 환경 변수가 일치하지 않습니다
+
+해결 방법:
+- 백엔드 개발자에게 다음 확인 요청:
+  1. 서버 로그에서 Google OAuth 토큰 교환 오류 확인
+  2. GOOGLE_REDIRECT_URI 환경 변수 확인 (https://dev.readwith.store/auth/callback)
+  3. Google Client ID/Secret 확인
+  4. Spring Security에서 /api/auth/google 경로 허용 확인`);
+            }
+            
             throw new Error('Google OAuth2 인증 실패. 인증 코드가 유효하지 않거나 만료되었습니다.');
           }
           
-          // 500 오류인 경우 서버 처리 시간 부족일 수 있음
+          if (response.status === 404) {
+            const actualRequestUrl = response.url || `${getApiBaseUrl()}/api/auth/google`;
+            const backendUrl = import.meta.env.DEV 
+              ? 'http://read-with-dev-env.eba-wuzcb2s6.ap-northeast-2.elasticbeanstalk.com'
+              : getApiBaseUrl();
+            
+            const errorMessage = `백엔드 서버에서 OAuth API를 찾을 수 없습니다 (404).
+
+🔍 요청 정보:
+- 요청 경로: POST ${actualRequestUrl}
+- 프록시 사용: ${import.meta.env.DEV ? '예 (개발 환경)' : '아니오 (프로덕션)'}
+- 예상 백엔드 URL: ${backendUrl}/api/auth/google
+
+📋 확인 방법:
+1. 개발 서버 터미널 확인:
+   - "🔄 [프록시 요청]" 로그: 프록시가 백엔드로 전달한 실제 URL
+   - "🔴 [404 에러]" 로그: 백엔드 응답 상세 정보
+   
+2. 백엔드 개발자에게 확인 요청:
+   ✅ POST /api/auth/google 엔드포인트가 구현되어 있는지
+   ✅ OAuth API가 배포 서버에 포함되어 있는지  
+   ✅ 다른 경로를 사용하는지 (예: /auth/google, /oauth/google)
+   ✅ Spring Security 설정에서 해당 경로가 차단되지 않았는지
+   ✅ 서버 로그에서 요청이 도달했는지 확인
+   
+💡 참고:
+- Swagger 문서에는 OAuth API가 표시되지 않습니다
+- 보안상 이유로 숨겨져 있을 수 있지만, 실제로는 존재하지 않을 수도 있습니다
+- 가이드에는 POST /api/auth/google이 있다고 명시되어 있으므로, 배포가 누락되었을 가능성이 높습니다`;
+
+            throw new Error(errorMessage);
+          }
+          
           if (response.status === 500) {
             throw new Error('서버 내부 오류가 발생했습니다. 잠시 후 다시 시도해주세요.');
           }
@@ -130,52 +213,187 @@ const OAuthCallback = () => {
           throw new Error(`서버 응답 오류: ${response.status} - ${errorText}`);
         }
 
+        if (response.status === 401) {
+          try {
+            const errorData = await response.clone().json();
+            
+            if (errorData.code === 'COMMON401') {
+              throw new Error(`인증이 필요합니다 (COMMON401).
+
+백엔드 응답:
+- 코드: ${errorData.code}
+- 메시지: ${errorData.message}
+
+가능한 원인:
+1. OAuth 인증 코드가 유효하지 않거나 만료되었습니다
+2. 백엔드가 Google OAuth 토큰 교환에 실패했습니다
+3. 백엔드의 GOOGLE_REDIRECT_URI 환경 변수가 일치하지 않습니다
+
+해결 방법:
+- OAuth 로그인을 다시 시도해주세요
+- 백엔드 개발자에게 GOOGLE_REDIRECT_URI 환경 변수 확인 요청
+- 백엔드 서버 로그에서 Google OAuth 토큰 교환 오류 확인`);
+            }
+          } catch (parseError) {
+          }
+          
+          throw new Error(`인증이 필요합니다 (401 Unauthorized).
+
+백엔드에서 인증을 확인하지 못했습니다.
+OAuth 로그인을 다시 시도해주세요.`);
+        }
+        
         const data = await response.json();
         
-        // 응답 데이터 검증
         if (!data || typeof data !== 'object') {
           throw new Error('서버 응답 형식이 올바르지 않습니다.');
         }
         
-        // 백엔드 응답 형식에 맞게 수정
-        if (data.isSuccess && data.result) {
-          // 백엔드 응답 형식에 따라 처리
+        const isSuccess = data.isSuccess === true || data.success === true;
+        
+        if (isSuccess && data.result) {
           if (data.result.user) {
             const userData = data.result.user;
             
-            // 사용자 데이터 검증
             const userValidation = validateUserData(userData);
             if (!userValidation.isValid) {
               throw new Error(userValidation.error);
             }
             
-            // 백엔드 응답 형식을 프론트엔드 형식으로 변환
             const frontendUserData = {
               id: userData.id.toString(),
               name: userData.nickname || userData.name || '사용자',
               email: userData.email,
               imageUrl: userData.profileImgUrl || userData.picture || '',
+              provider: userData.provider || 'GOOGLE',
               accessToken: data.result.accessToken,
               refreshToken: data.result.refreshToken,
               tokenType: data.result.tokenType || 'Bearer',
-              expiresIn: data.result.expiresIn || 3600000, // 1시간 (백엔드 설정에 맞춤)
-              refreshExpiresIn: data.result.refreshExpiresIn || 604800000 // 7일 (백엔드 설정에 맞춤)
+              expiresIn: data.result.expiresIn || 3600,
+              refreshExpiresIn: data.result.refreshExpiresIn || 604800
             };
             
             secureLog('OAuth 인증 성공', { userId: userData.id, email: userData.email });
+            
             login(frontendUserData);
             setIsCompleted(true);
             
-            // 성공 시 localStorage 정리 및 즉시 리디렉션 (백엔드 설정에 맞춤)
             localStorage.removeItem('oauth_processed_code');
+            
             navigate('/mypage');
           } else {
             throw new Error('사용자 데이터를 받지 못했습니다.');
           }
         } else {
-          // 백엔드 에러 코드 처리 (백엔드 API 분석 결과에 맞춤)
+          if (data.code === 'COMMON401') {
+            throw new Error(`인증이 필요합니다 (COMMON401).
+
+백엔드 응답:
+- 코드: ${data.code}
+- 메시지: ${data.message}
+
+가능한 원인:
+1. OAuth 로그인이 아직 완료되지 않았습니다
+2. 인증 토큰이 유효하지 않거나 만료되었습니다
+3. 백엔드에서 인증을 확인하지 못했습니다
+
+해결 방법:
+- OAuth 로그인을 다시 시도해주세요
+- 브라우저 콘솔에서 OAuth 응답 로그를 확인하세요`);
+          }
+          
           if (data.code === 'AUTH4001') {
-            throw new Error('Google OAuth2 설정 오류입니다. Google Client ID와 Secret을 확인해주세요.');
+            if (data.message && data.message.includes('redirect_uri_mismatch')) {
+              const getActualRedirectUri = () => {
+                if (import.meta.env.VITE_GOOGLE_REDIRECT_URI) {
+                  return import.meta.env.VITE_GOOGLE_REDIRECT_URI;
+                }
+                if (import.meta.env.DEV) {
+                  return `${window.location.protocol}//${window.location.host}/auth/callback`;
+                }
+                return 'https://dev.readwith.store/auth/callback';
+              };
+              
+              const actualRedirectUri = getActualRedirectUri();
+              const isLocalDev = import.meta.env.DEV;
+              
+              const errorMessage = isLocalDev
+                ? `리다이렉트 URI 불일치 오류 (로컬 개발 환경)
+
+🔍 현재 상황:
+- 프론트엔드에서 사용한 URI: ${actualRedirectUri}
+- 프론트엔드가 요청 본문에 redirectUri를 포함했습니다
+- 백엔드가 Google과 토큰 교환 시 다른 redirectUri를 사용한 것으로 보입니다
+
+📋 해결 방법:
+
+1. ✅ Google Cloud Console 설정 확인:
+   - https://console.cloud.google.com 접속
+   - 프로젝트 선택 → API 및 서비스 → 사용자 인증 정보
+   - OAuth 2.0 클라이언트 ID 클릭
+   - "승인된 리디렉션 URI"에 다음 URI가 등록되어 있는지 확인:
+     ${actualRedirectUri}
+   - 등록되어 있지 않다면 추가
+
+2. 🔧 백엔드 개발자에게 확인 요청:
+   - 백엔드가 POST /api/auth/google 요청 본문에서 redirectUri를 읽는지 확인
+   - 현재 프론트엔드는 요청 본문에 redirectUri를 포함했습니다
+   - 백엔드가 환경 변수만 사용한다면 로컬 개발 환경 지원을 위해 수정 필요
+   - 또는 백엔드가 요청 본문의 redirectUri를 우선 사용하도록 수정 필요
+
+3. 🔄 백엔드 수정 (백엔드 개발자 작업):
+   - GoogleLoginRequestDTO에 redirectUri 필드 추가 (optional)
+   - 요청 본문에 redirectUri가 있으면 그것을 사용
+   - 없으면 환경 변수 GOOGLE_REDIRECT_URI 사용
+
+⚠️ 중요:
+- 로컬 개발 환경: 프론트엔드 redirectUri = ${actualRedirectUri}
+- 백엔드가 Google과 토큰 교환 시 사용하는 redirectUri도 동일해야 합니다`
+                : `리다이렉트 URI 불일치 오류 (프로덕션)
+
+🔍 현재 상황:
+- 프론트엔드에서 사용한 URI: ${actualRedirectUri}
+- 백엔드는 환경 변수 GOOGLE_REDIRECT_URI를 사용합니다
+
+📋 해결 방법:
+
+1. ✅ Google Cloud Console 설정:
+   - https://console.cloud.google.com 접속
+   - 프로젝트 선택 → API 및 서비스 → 사용자 인증 정보
+   - OAuth 2.0 클라이언트 ID 클릭
+   - "승인된 리디렉션 URI"에 다음 URI 추가:
+     https://dev.readwith.store/auth/callback
+
+2. 🔧 백엔드 환경 변수 확인 필요 (백엔드 개발자에게 요청):
+   - 배포 서버의 GOOGLE_REDIRECT_URI 환경 변수 값 확인
+   - 프론트엔드가 사용하는 URI: https://dev.readwith.store/auth/callback
+   - ⚠️ 이 두 값이 정확히 일치해야 합니다
+
+3. 🔄 백엔드 환경 변수 수정 (백엔드 개발자 작업):
+   - GOOGLE_REDIRECT_URI 환경 변수를 https://dev.readwith.store/auth/callback로 변경
+   - 환경 변수 변경 후 서버 재시작
+
+⚠️ 중요 주의사항:
+- URL 끝의 슬래시(/) 차이도 불일치로 인식됩니다
+- http vs https 차이도 불일치로 인식됩니다
+- 포트 번호까지 정확히 일치해야 합니다
+- 대소문자도 정확히 일치해야 합니다`;
+
+              throw new Error(errorMessage);
+            }
+            
+            if (data.message && data.message.includes('Duplicate entry')) {
+              if (data.message.includes('provider_uid') || data.message.includes('UK423ot3bb0fm0mhtmh1t59my3o')) {
+                throw new Error('이미 등록된 Google 계정입니다. 다른 계정으로 로그인하거나 관리자에게 문의하세요.');
+              }
+              throw new Error('이미 다른 소셜 로그인으로 가입된 이메일입니다.');
+            }
+            
+            if (data.message && (data.message.includes('Client ID') || data.message.includes('Client Secret') || data.message.includes('invalid_client'))) {
+              throw new Error('Google OAuth2 설정 오류입니다. 백엔드의 Google Client ID와 Secret 설정을 확인해주세요.');
+            }
+            
+            throw new Error(`Google 로그인 실패: ${data.message || '백엔드 설정을 확인해주세요.'}`);
           }
           
           if (data.code === 'AUTH4002') {
@@ -194,6 +412,48 @@ const OAuthCallback = () => {
             throw new Error('사용자 정보 처리 실패입니다. Google 사용자 정보를 가져올 수 없습니다.');
           }
           
+          if (data.message && data.message.includes('redirect_uri_mismatch')) {
+            const expectedRedirectUri = 'https://dev.readwith.store/auth/callback';
+            const envRedirectUri = import.meta.env.VITE_GOOGLE_REDIRECT_URI;
+            const actualRedirectUri = envRedirectUri || expectedRedirectUri;
+            
+            throw new Error(`리다이렉트 URI 불일치 오류 (redirect_uri_mismatch)
+
+🔍 현재 상황:
+- 프론트엔드에서 사용한 URI: ${actualRedirectUri}
+- 백엔드는 환경 변수 GOOGLE_REDIRECT_URI를 사용합니다
+
+📋 해결 방법:
+
+1. ✅ Google Cloud Console 설정:
+   - https://console.cloud.google.com 접속
+   - 프로젝트 선택 → API 및 서비스 → 사용자 인증 정보
+   - OAuth 2.0 클라이언트 ID 클릭
+   - "승인된 리디렉션 URI"에 다음 URI 추가:
+     https://dev.readwith.store/auth/callback
+
+2. 🔧 백엔드 환경 변수 확인 필요 (백엔드 개발자에게 요청):
+   - 배포 서버의 GOOGLE_REDIRECT_URI 환경 변수 값 확인
+   - 현재 설정된 값: ? (백엔드 개발자에게 확인 필요)
+   - 프론트엔드가 사용하는 URI: https://dev.readwith.store/auth/callback
+   - ⚠️ 이 두 값이 정확히 일치해야 합니다
+
+3. 🔄 백엔드 환경 변수 수정 (백엔드 개발자 작업):
+   - GOOGLE_REDIRECT_URI 환경 변수를 https://dev.readwith.store/auth/callback로 변경
+   - 환경 변수 변경 후 서버 재시작
+
+⚠️ 중요 주의사항:
+- URL 끝의 슬래시(/) 차이도 불일치로 인식됩니다
+  예: https://dev.readwith.store/auth/callback (O) vs https://dev.readwith.store/auth/callback/ (X)
+- http vs https 차이도 불일치로 인식됩니다
+- 포트 번호까지 정확히 일치해야 합니다
+- 대소문자도 정확히 일치해야 합니다`);
+          }
+          
+          if (!isSuccess && data.message) {
+            throw new Error(data.message || '인증 실패');
+          }
+          
           if (data.message && data.message.includes('invalid_grant')) {
             throw new Error('인증 코드가 만료되었습니다. 다시 로그인해주세요.');
           }
@@ -207,7 +467,15 @@ const OAuthCallback = () => {
       } catch (err) {
         let errorMessage = '로그인 실패';
         
-        if (err.message.includes('Failed to fetch')) {
+        const isCorsError = err.message.includes('CORS') || 
+                           err.message.includes('Access-Control-Allow-Origin') ||
+                           err.message.includes('blocked by CORS policy') ||
+                           err.message.includes('Failed to fetch') ||
+                           (err.name === 'TypeError' && err.message.includes('fetch'));
+        
+        if (isCorsError) {
+          errorMessage = 'CORS 에러: 백엔드 서버에서 http://localhost:5173을 허용하도록 CORS 설정이 필요합니다. 백엔드 개발자에게 문의하세요.';
+        } else if (err.message.includes('Failed to fetch') || err.name === 'TypeError') {
           errorMessage = '서버에 연결할 수 없습니다. 네트워크 연결을 확인하고 다시 시도해주세요.';
         } else {
           errorMessage = `로그인 실패: ${err.message}`;
@@ -218,10 +486,18 @@ const OAuthCallback = () => {
         setIsLoading(false);
         setIsProcessing(false);
       }
+      } catch (outerError) {
+        setError(`처리 실패: ${outerError.message}`);
+        setIsLoading(false);
+        setIsProcessing(false);
+      }
     };
 
-    handleOAuthCallback();
-  }, []); // 컴포넌트 마운트 시에만 실행하여 중복 실행 완전 방지
+    handleOAuthCallback().catch(err => {
+      setError(`초기화 실패: ${err.message}`);
+      setIsLoading(false);
+    });
+  }, []);
 
   if (isLoading || isProcessing) {
     return (
@@ -304,7 +580,7 @@ const OAuthCallback = () => {
           borderRadius: '12px',
           boxShadow: '0 4px 20px rgba(0, 0, 0, 0.1)',
           textAlign: 'center',
-          maxWidth: '500px',
+          maxWidth: '600px',
           border: '1px solid rgba(239, 68, 68, 0.2)'
         }}>
           <div style={{
@@ -339,17 +615,22 @@ const OAuthCallback = () => {
           <div style={{
             marginBottom: '24px',
             padding: '15px',
-            backgroundColor: '#fef3c7',
+            backgroundColor: error.includes('CORS') ? '#fee2e2' : 
+                          error.includes('이미 등록된 Google 계정') ? '#fee2e2' : '#fef3c7',
             borderRadius: '8px',
-            border: '1px solid #fde68a'
+            border: `1px solid ${error.includes('CORS') || error.includes('이미 등록된 Google 계정') ? '#fecaca' : '#fde68a'}`
           }}>
             <p style={{ 
-              color: '#92400e', 
+              color: error.includes('CORS') || error.includes('이미 등록된 Google 계정') ? '#991b1b' : '#92400e', 
               fontSize: '14px',
               margin: 0,
               fontWeight: '500'
             }}>
-              해결 방법: 백엔드 서버가 실행 중인지 확인하고, Google OAuth 설정을 확인해주세요.
+              {error.includes('CORS') 
+                ? '해결 방법: 백엔드 서버에서 CORS 설정이 필요합니다. 백엔드 개발자에게 http://localhost:5173을 허용하도록 CORS 설정을 요청하세요.'
+                : error.includes('이미 등록된 Google 계정')
+                ? '해결 방법: 이미 가입된 Google 계정입니다. 다른 Google 계정으로 로그인하거나, 기존 계정의 비밀번호를 찾아 로그인하세요. 문제가 지속되면 관리자에게 문의하세요.'
+                : '해결 방법: 백엔드 서버가 실행 중인지 확인하고, Google OAuth 설정을 확인해주세요.'}
             </p>
           </div>
           <button

@@ -2,15 +2,22 @@
  * 북마크 관련 API 호출 유틸리티
  */
 
-// API 기본 URL 설정
+import { refreshToken } from './authApi';
+
+// API 기본 URL 설정 (배포 서버 고정 사용)
 const getApiBaseUrl = () => {
-  return 'http://localhost:8080';
+  // 로컬 개발 환경: 프록시 사용 (배포 서버로 전달)
+  if (import.meta.env.DEV) {
+    return ''; // 프록시를 통해 배포 서버로 요청
+  }
+  // 프로덕션 환경: 커스텀 도메인 사용
+  return 'https://dev.readwith.store';
 };
 
 const API_BASE_URL = getApiBaseUrl();
 
-// 인증된 API 요청 헬퍼 함수
-const authenticatedRequest = async (endpoint, options = {}) => {
+// 인증된 API 요청 헬퍼 함수 (토큰 갱신 자동 처리 포함)
+const authenticatedRequest = async (endpoint, options = {}, retryCount = 0) => {
   const token = localStorage.getItem('accessToken');
   
   const defaultHeaders = {
@@ -32,13 +39,30 @@ const authenticatedRequest = async (endpoint, options = {}) => {
   });
   
   if (!response.ok) {
+    if (response.status === 401 && retryCount === 0) {
+      // 토큰 만료 시 자동으로 토큰 갱신 시도
+      try {
+        await refreshToken();
+        
+        // 갱신된 토큰으로 재시도 (최대 1번만)
+        return authenticatedRequest(endpoint, options, retryCount + 1);
+      } catch (refreshError) {
+        // 토큰 갱신 실패 시 로그아웃 처리
+        localStorage.removeItem('accessToken');
+        localStorage.removeItem('refreshToken');
+        localStorage.removeItem('google_user');
+        throw new Error('인증이 만료되었습니다. 다시 로그인해주세요.');
+      }
+    }
+    
+    // 401 에러이고 재시도 횟수가 초과했거나, 다른 에러인 경우
     if (response.status === 401) {
-      // 토큰 만료 시 로그아웃 처리
       localStorage.removeItem('accessToken');
+      localStorage.removeItem('refreshToken');
       localStorage.removeItem('google_user');
-      // 즉시 리다이렉트하지 않고 에러를 throw하여 상위에서 처리하도록 함
       throw new Error('인증이 만료되었습니다. 다시 로그인해주세요.');
     }
+    
     throw new Error(`API 요청 실패: ${response.status}`);
   }
   

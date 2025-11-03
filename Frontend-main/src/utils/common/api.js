@@ -1,7 +1,11 @@
-// API 기본 설정 및 도서 관련 API 함수들
+// API 기본 설정 및 도서 관련 API 함수들 (배포 서버 고정 사용)
 const getApiBaseUrl = () => {
-  // 개발 환경에서는 로컬 백엔드 서버 사용
-  return 'http://localhost:8080';
+  // 로컬 개발 환경: 프록시 사용 (배포 서버로 전달)
+  if (import.meta.env.DEV) {
+    return ''; // 프록시를 통해 배포 서버로 요청
+  }
+  // 프로덕션 환경: 커스텀 도메인 사용
+  return 'https://dev.readwith.store';
 };
 
 const API_BASE_URL = getApiBaseUrl();
@@ -85,23 +89,6 @@ const apiRequest = async (url, options = {}) => {
     const tokenValid = isTokenValid(token);
     const isMacroGraph = url.includes('/api/graph/macro');
     const isFineGraph = url.includes('/api/graph/fine');
-    
-    console.log(`🔍 ${isMacroGraph ? '거시' : isFineGraph ? '세밀' : 'Graph'} API 요청:`, {
-      url,
-      hasToken: !!token,
-      tokenValid,
-      tokenLength: token ? token.length : 0,
-      tokenPreview: token ? token.substring(0, 20) + '...' : 'null',
-      fullUrl: `${API_BASE_URL}${url}`,
-      headers: {
-        'Content-Type': 'application/json',
-        ...(token && { 'Authorization': `Bearer ${token}` })
-      },
-      localStorage: {
-        accessToken: localStorage.getItem('accessToken'),
-        googleUser: localStorage.getItem('google_user')
-      }
-    });
     
     // 토큰이 유효하지 않으면 경고 및 로그아웃 처리
     if (token && !tokenValid) {

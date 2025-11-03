@@ -125,49 +125,8 @@ export const applyBookmarkHighlights = (bookmarks) => {
   // 기존 하이라이트 제거
   removeBookmarkHighlights();
   
-  bookmarks.forEach(bookmark => {
-    try {
-      // CFI를 DOM Range로 변환
-      const range = document.createRange();
-      const cfi = bookmark.startCfi;
-      
-      // CFI 파싱 및 DOM 요소 찾기
-      const cfiMatch = cfi.match(/epubcfi\(([^)]+)\)/);
-      if (!cfiMatch) return;
-      
-      const cfiPath = cfiMatch[1];
-      const pathParts = cfiPath.split('/').filter(part => part);
-      
-      // DOM 요소 찾기 시도
-      let element = document.body;
-      for (const part of pathParts) {
-        if (part.startsWith('[') && part.endsWith(']')) {
-          // ID나 클래스로 찾기
-          const selector = part.slice(1, -1);
-          const found = element.querySelector(`#${selector}`) || element.querySelector(`.${selector}`);
-          if (found) element = found;
-        } else if (!isNaN(part)) {
-          // 인덱스로 찾기
-          const children = Array.from(element.children);
-          if (children[parseInt(part) - 1]) {
-            element = children[parseInt(part) - 1];
-          }
-        }
-      }
-      
-      // 하이라이트 적용
-      if (element && element.textContent) {
-        element.classList.add('bookmark-highlight');
-        element.style.backgroundColor = bookmark.color || '#28B532';
-        element.style.opacity = '0.3';
-        element.style.borderRadius = '2px';
-        element.style.padding = '1px 2px';
-        element.style.margin = '0 1px';
-        element.style.transition = 'all 0.2s ease';
-      }
-    } catch (error) {
-      console.warn('북마크 하이라이트 적용 실패:', error);
-    }
-  });
+  // CFI 파싱 로직이 정확하지 않아 body가 녹색으로 칠해지는 문제 발생
+  // 임시로 비활성화 - 향후 EpubCFI 라이브러리를 사용하여 정확한 DOM Range 찾기 구현 필요
+  return;
 };
   

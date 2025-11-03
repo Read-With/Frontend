@@ -72,27 +72,16 @@ export default function MyPage() {
   const stats = useMemo(() => {
     const total = books?.length || 0;
     
-    // 로컬 책 읽는 중 카운트
-    const localReading = books?.filter(book => {
-      const isLocalBook = typeof book.id === 'string' && book.id.startsWith('local_');
-      if (isLocalBook) {
-        const filename = book.epubPath || book.filename;
-        const lastCFI = localStorage.getItem(`lastCFI_${filename}`);
-        return lastCFI && lastCFI.trim() !== '';
-      }
-      return false;
-    }).length || 0;
-    
     // API 책 읽는 중 카운트 (진도 정보가 있는 책)
-    const apiReading = allProgress.length || 0;
+    const reading = allProgress.length || 0;
     
-    const reading = localReading + apiReading;
+    // 즐겨찾기된 책 개수
+    const favorites = books?.filter(book => book.favorite).length || 0;
     
     return {
       total,
       reading,
-      apiReading,
-      localReading
+      favorites
     };
   }, [books, allProgress]);
 

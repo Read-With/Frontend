@@ -1,7 +1,17 @@
 import React, { useState, useEffect } from "react";
 import axios from "axios";
 
-const API_BASE_URL = "http://localhost:8080/api/admin";
+// API 기본 URL 설정 (배포 서버 고정 사용)
+const getApiBaseUrl = () => {
+  // 로컬 개발 환경: 프록시 사용 (배포 서버로 전달)
+  if (import.meta.env.DEV) {
+    return ''; // 프록시를 통해 배포 서버로 요청
+  }
+  // 프로덕션 환경: 커스텀 도메인 사용
+  return 'https://dev.readwith.store';
+};
+
+const API_BASE_URL = `${getApiBaseUrl()}/api/admin`;
 
 // API 요청을 위한 axios 인스턴스
 const apiClient = axios.create({

@@ -144,9 +144,24 @@ const HeroSection = () => {
   const handleGoogleLogin = async () => {
     setIsLoggingIn(true);
     try {
+      // redirect_uri 설정 (로컬/프로덕션 구분)
+      // 백엔드가 요청 본문의 redirectUri를 읽을 수 있도록 각 환경에 맞는 값 사용
+      const getRedirectUri = () => {
+        // 환경변수가 있으면 우선 사용
+        if (import.meta.env.VITE_GOOGLE_REDIRECT_URI) {
+          return import.meta.env.VITE_GOOGLE_REDIRECT_URI;
+        }
+        // 로컬 개발 환경: 로컬 프론트엔드 사용
+        if (import.meta.env.DEV) {
+          return `${window.location.protocol}//${window.location.host}/auth/callback`;
+        }
+        // 프로덕션 환경: 배포 서버 사용
+        return 'https://dev.readwith.store/auth/callback';
+      };
+      
       // 환경변수에서 구글 클라이언트 ID 가져오기
       const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || 'your-google-client-id';
-      const GOOGLE_REDIRECT_URI = import.meta.env.VITE_GOOGLE_REDIRECT_URI || 'http://localhost:5173/auth/callback';
+      const GOOGLE_REDIRECT_URI = getRedirectUri();
       
       // 구글 OAuth URL 구성
       const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?` +
@@ -161,7 +176,6 @@ const HeroSection = () => {
       window.location.href = authUrl;
       
     } catch (error) {
-      console.error('구글 로그인 URL 생성 실패:', error);
       setIsLoggingIn(false);
       alert('구글 로그인 중 오류가 발생했습니다.');
     }
