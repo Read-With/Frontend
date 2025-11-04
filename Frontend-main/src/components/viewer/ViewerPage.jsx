@@ -458,8 +458,6 @@ const ViewerPage = () => {
         return;
       }
       
-      console.log('📊 모든 챕터의 이벤트 정보:');
-      console.log('━'.repeat(80));
       
       const allChapterInfo = [];
       
@@ -490,7 +488,6 @@ const ViewerPage = () => {
         
         // chapterIdx가 유효하지 않으면 스킵
         if (!chapterIdx || chapterIdx === undefined) {
-          console.warn(`⚠️ Chapter 정보가 유효하지 않음:`, chapterInfo);
           continue;
         }
         
@@ -548,64 +545,6 @@ const ViewerPage = () => {
         allChapterInfo.push(chapterData);
       }
       
-      // 콘솔에 출력
-      console.log(`총 ${allChapterInfo.length}개 챕터:`);
-      console.log('');
-      
-      allChapterInfo.forEach(chapterData => {
-        if (!chapterData.chapterIdx || chapterData.chapterIdx === undefined) {
-          console.log(`📖 Chapter 정보 없음`);
-          console.log('');
-          return;
-        }
-        
-        const validEvents = chapterData.eventIndices.filter(e => e.hasData);
-        console.log(`📖 Chapter ${chapterData.chapterIdx} (총 ${chapterData.eventCount}개 이벤트, 데이터 있음: ${validEvents.length}개):`);
-        
-        if (chapterData.eventIndices.length === 0) {
-          console.log('  └─ 이벤트 없음');
-        } else {
-          // 데이터가 있는 이벤트만 표시 (간단하게)
-          const eventsWithData = chapterData.eventIndices.filter(e => e.hasData);
-          if (eventsWithData.length > 0) {
-            eventsWithData.forEach(eventInfo => {
-              console.log(`  ├─ eventIdx ${eventInfo.eventIdx}: ✅ 데이터 있음 (캐릭터: ${eventInfo.charactersCount}, 관계: ${eventInfo.relationsCount})`);
-            });
-          } else {
-            // 데이터가 없으면 처음 몇 개만 표시
-            const firstFew = chapterData.eventIndices.slice(0, 3);
-            firstFew.forEach(eventInfo => {
-              const errorMsg = eventInfo.error ? ` (${eventInfo.error})` : '';
-              console.log(`  ├─ eventIdx ${eventInfo.eventIdx}: ❌ 데이터 없음${errorMsg}`);
-            });
-            if (chapterData.eventIndices.length > 3) {
-              console.log(`  └─ ... 외 ${chapterData.eventIndices.length - 3}개 이벤트도 데이터 없음`);
-            }
-          }
-        }
-        console.log('');
-      });
-      
-      console.log('━'.repeat(80));
-      
-      // 요약 정보
-      const totalEvents = allChapterInfo.reduce((sum, ch) => {
-        const count = typeof ch.eventCount === 'number' ? ch.eventCount : 0;
-        return sum + count;
-      }, 0);
-      const eventsWithData = allChapterInfo.reduce((sum, ch) => 
-        sum + ch.eventIndices.filter(e => e.hasData).length, 0
-      );
-      const eventsWithoutData = allChapterInfo.reduce((sum, ch) => 
-        sum + ch.eventIndices.filter(e => !e.hasData).length, 0
-      );
-      
-      console.log(`📈 요약:`);
-      console.log(`  - 총 챕터: ${allChapterInfo.length}개`);
-      console.log(`  - 총 이벤트 (확인한 범위): ${eventsWithData + eventsWithoutData}개`);
-      console.log(`  - 데이터 있는 이벤트: ${eventsWithData}개`);
-      console.log(`  - 데이터 없는 이벤트: ${eventsWithoutData}개`);
-      console.log('━'.repeat(80));
     };
     
     // manifest 로드 후 실행
@@ -703,21 +642,6 @@ const ViewerPage = () => {
             // characters 배열의 모든 필드 사용: id, profileImage, description, names, weight, count, common_name, main_character, portrait_prompt
             const { idToName, idToDesc, idToDescKo, idToMain, idToNames, idToProfileImage } = createCharacterMaps(resultData.characters);
             
-            // 디버깅: profileImage가 있는 캐릭터 확인
-            if (Object.keys(idToProfileImage).length > 0) {
-              console.log('✅ API 책 - profileImage가 있는 캐릭터:', Object.keys(idToProfileImage).map(id => ({
-                id,
-                name: idToName[id],
-                profileImage: idToProfileImage[id]
-              })));
-            } else {
-              console.warn('⚠️ API 책 - profileImage가 있는 캐릭터가 없습니다. 원본 데이터:', resultData.characters.map(char => ({
-                id: char.id,
-                name: char.common_name || char.name,
-                profileImage: char.profileImage,
-                hasProfileImage: !!(char.profileImage && char.profileImage.trim() !== '')
-              })));
-            }
             
             // relations 배열의 모든 필드 사용: id1, id2, positivity, count, relation
             // 정규화된 event 객체 전달 (로컬 데이터 형식과 통일)

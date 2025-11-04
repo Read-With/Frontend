@@ -129,17 +129,6 @@ export const getBooks = async (params = {}) => {
       uploadedBy: b.uploadedBy?.id || null
     })) : [];
     
-    const envInfo = API_BASE_URL.includes('localhost') || API_BASE_URL.includes('127.0.0.1') ? '로컬' : '배포';
-    
-    console.log(`📚 [${envInfo}] API 원본 응답:`, {
-      isSuccess: data.isSuccess,
-      resultType: Array.isArray(data.result) ? 'array' : typeof data.result,
-      resultLength,
-      endpoint,
-      apiUrl: `${API_BASE_URL}/api${endpoint}`,
-      books: bookIds
-    });
-    
     return data;
   } catch (error) {
     console.error('도서 목록 조회 실패:', error);

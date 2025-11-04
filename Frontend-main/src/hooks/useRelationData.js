@@ -665,25 +665,15 @@ async function fetchApiRelationTimelineCumulative(bookId, id1, id2, selectedChap
   // 1. 캐시 확인
   const cachedResult = getCachedData(cacheKey);
   if (cachedResult) {
-    // 개발 환경에서만 간단한 로그 출력
-    if (process.env.NODE_ENV === 'development') {
-      console.log(`✅ [캐시 히트] 챕터 ${selectedChapter} 간선 (${id1}-${id2})`);
-    }
     return cachedResult;
   }
   
   // 2. 캐시가 없거나 만료된 경우 API 호출
-  if (process.env.NODE_ENV === 'development') {
-    console.log(`🌐 [API 호출] 챕터 ${selectedChapter} 간선 (${id1}-${id2})`);
-  }
   
   try {
     const result = await fetchApiRelationTimelineCumulativeFromAPI(bookId, id1, id2, selectedChapter);
     
     // 3. API 결과를 캐시에 저장
-    if (process.env.NODE_ENV === 'development') {
-      console.log(`💾 [캐시 저장] 챕터 ${selectedChapter} 간선 (${id1}-${id2})`);
-    }
     setCachedData(cacheKey, result);
     
     return result;

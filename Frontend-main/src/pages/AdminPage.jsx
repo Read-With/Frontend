@@ -42,7 +42,6 @@ const AdminPage = () => {
       const result = await apiFunction();
       // 백엔드의 ApiResponse 형식에 맞춰 실제 데이터는 result.data.result에 있음.
       if (result.data && result.data.isSuccess) {
-        console.log("API Success:", result.data);
         setResponse(result.data.result);
       } else {
         setError(

@@ -40,26 +40,6 @@ export const useBooks = () => {
         const summaryBooks = bookInfo.filter(b => b.summary);
         const noSummaryBooks = bookInfo.filter(b => !b.summary);
         
-        console.log('📚 프론트엔드 처리 완료:', {
-          totalCount: apiBooks.length,
-          breakdown: {
-            기본책: defaultBooks.length,
-            개인책: userBooks.length,
-            요약완료: summaryBooks.length,
-            요약미완료: noSummaryBooks.length
-          },
-          books: bookInfo
-        });
-        
-        if (apiBooks.length === 0) {
-          console.warn('⚠️ 책이 하나도 반환되지 않았습니다. 백엔드 필터링 조건을 확인하세요.');
-        } else {
-          console.info(`📊 ${apiBooks.length}권 반환됨 (기본: ${defaultBooks.length}, 개인: ${userBooks.length}, 요약완료: ${summaryBooks.length}, 요약미완료: ${noSummaryBooks.length})`);
-          
-          if (noSummaryBooks.length > 0 && defaultBooks.length === 0) {
-            console.warn('⚠️ 요약 미완료 기본책이 있습니다. 백엔드 필터링 조건에서 제외되었을 수 있습니다.');
-          }
-        }
         setBooks(apiBooks);
       } else {
         throw new Error(response.message || '책 정보를 불러올 수 없습니다.');

@@ -103,11 +103,6 @@ function UnifiedEdgeTooltip({
     return { eventNum: eventNum || 0 };
   }, [currentEvent, prevValidEvent, eventNum]);
 
-  // 디버깅: 이벤트 정보 변경 감지 (개발 환경에서만)
-  useEffect(() => {
-    if (process.env.NODE_ENV === 'development') {
-    }
-  }, [currentEvent, prevValidEvent, getUnifiedEventInfo]);
 
   // source/target을 safeNum으로 변환
   const id1 = safeNum(data.source);
@@ -133,11 +128,6 @@ function UnifiedEdgeTooltip({
     getMaxEventCount,
   } = useRelationData(relationDataMode, id1, id2, chapterNum, unifiedEventInfo.eventNum, maxChapter, filename, bookId);
 
-  // 디버깅: 관계 데이터 상태 변경 감지 (개발 환경에서만)
-  useEffect(() => {
-    if (process.env.NODE_ENV === 'development') {
-    }
-  }, [timeline, labels, loading, noRelation]);
 
   // 초기 로딩 완료 감지
   useEffect(() => {
@@ -149,8 +139,6 @@ function UnifiedEdgeTooltip({
   // 차트 모드일 때 데이터 가져오기 (통합된 이벤트 정보 사용)
   useEffect(() => {
     if (viewMode === "chart") {
-      if (process.env.NODE_ENV === 'development') {
-      }
       fetchData();
     }
   }, [viewMode, id1, id2, chapterNum, unifiedEventInfo.eventNum, maxChapter, fetchData]);
@@ -158,8 +146,6 @@ function UnifiedEdgeTooltip({
   // 앞면에서도 관계 존재 여부 확인 (viewer 모드에서만, 통합된 이벤트 정보 사용)
   useEffect(() => {
     if (viewMode === "info" && mode === 'viewer') {
-      if (process.env.NODE_ENV === 'development') {
-      }
       fetchData();
     }
   }, [viewMode, id1, id2, chapterNum, unifiedEventInfo.eventNum, mode, fetchData]);

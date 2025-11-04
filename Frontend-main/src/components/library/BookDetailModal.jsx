@@ -41,14 +41,12 @@ const BookDetailModal = memo(({ book, isOpen, onClose }) => {
         data: response,
         message: '챕터 1의 POV 요약 데이터가 있습니다'
       });
-      console.log('✅ POV 요약 데이터:', response);
     } catch (err) {
       setPovTestResult({
         success: false,
         error: err.message,
         message: '챕터 1의 POV 요약 데이터가 없습니다'
       });
-      console.log('❌ POV 요약 데이터 없음:', err.message);
     }
   }, [book]);
 
