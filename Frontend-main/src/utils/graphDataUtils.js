@@ -87,10 +87,12 @@ function deepEqual(obj1, obj2, depth = 0) {
  * @param {Object} idToNames - ID to names array 매핑
  * @param {string} folderKey - 폴더 키 (이미지 경로용)
  * @param {Object} nodeWeights - 노드 가중치 정보 (node_weights_accum)
+ * @param {Object} previousRelations - 이전 이벤트의 관계 데이터
  * @param {Object} eventData - 이벤트 데이터 (text 필드 포함)
+ * @param {Object} idToProfileImage - ID to profileImage 매핑 (API 책용)
  * @returns {Array} 그래프 요소 배열
  */
-export function convertRelationsToElements(relations, idToName, idToDesc, idToDescKo, idToMain, idToNames, folderKey, nodeWeights = null, previousRelations = null, eventData = null) {
+export function convertRelationsToElements(relations, idToName, idToDesc, idToDescKo, idToMain, idToNames, folderKey, nodeWeights = null, previousRelations = null, eventData = null, idToProfileImage = null) {
   // 매개변수 유효성 검사
   if (!Array.isArray(relations)) {
     return [];
@@ -195,18 +197,40 @@ export function convertRelationsToElements(relations, idToName, idToDesc, idToDe
     const commonName = idToName[strId];
     const nodeWeight = getNodeWeight(strId);
     
+    // 이미지 경로 결정
+    let imagePath = null;
+    
+    if (folderKey === 'api') {
+      // API 책: profileImage가 유효한 경우에만 사용
+      // profileImage가 없으면 이미지 경로를 생성하지 않음 (401 에러 방지)
+      if (idToProfileImage && idToProfileImage[strId] && idToProfileImage[strId].trim() !== '') {
+        imagePath = idToProfileImage[strId];
+      }
+      // profileImage가 없으면 imagePath는 null로 유지 (이미지 없음)
+    } else {
+      // 로컬 책: 항상 이미지 경로 생성 (이미지 파일 존재 여부는 체크하지 않음)
+      imagePath = getCharacterImagePath(folderKey, strId);
+    }
+    
+    // 노드 데이터 생성
+    const nodeData = {
+      id: strId,
+      label: commonName,
+      main_character: idToMain[strId] || false,
+      description: idToDesc[strId] || '',
+      description_ko: idToDescKo[strId] || '',
+      names: [commonName, ...(Array.isArray(idToNames[strId]) ? idToNames[strId] : [])],
+      common_name: commonName,
+      weight: nodeWeight
+    };
+    
+    // 이미지 경로가 있으면 image 필드 추가
+    if (imagePath && imagePath.trim() !== '') {
+      nodeData.image = imagePath;
+    }
+    
     nodes.push({
-      data: {
-        id: strId,
-        label: commonName,
-        main_character: idToMain[strId] || false,
-        description: idToDesc[strId] || '',
-        description_ko: idToDescKo[strId] || '',
-        names: [commonName, ...(Array.isArray(idToNames[strId]) ? idToNames[strId] : [])],
-        common_name: commonName,
-        image: getCharacterImagePath(folderKey, strId),
-        weight: nodeWeight
-      },
+      data: nodeData,
       position: { x, y }
     });
   });

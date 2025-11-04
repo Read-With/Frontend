@@ -79,6 +79,11 @@ function UnifiedEdgeTooltip({
   // 로딩 상태 관리
   const [isInitialLoad, setIsInitialLoad] = useState(true);
 
+  // 간선이 변경될 때마다 viewMode를 "info"로 리셋
+  useEffect(() => {
+    setViewMode("info");
+  }, [data?.id, data?.source, data?.target]);
+
   // ViewerTopBar와 동일한 방식으로 이벤트 정보 처리
   const getUnifiedEventInfo = useCallback(() => {
     // ViewerTopBar와 동일한 로직: currentEvent || prevValidEvent
@@ -296,6 +301,9 @@ function UnifiedEdgeTooltip({
     options: {
       responsive: true,
       maintainAspectRatio: false,
+      layout: {
+        padding: 0
+      },
       scales: {
         y: {
           min: -1,
@@ -305,15 +313,26 @@ function UnifiedEdgeTooltip({
         x: {
           title: { display: true, text: "이벤트 순서" },
           min: 0,
-          max: getMaxEventCount(),
+          max: getMaxEventCount() + 1.0, // 끝 부분이 잘리지 않도록 여유 공간 추가
           ticks: {
             stepSize: 1
+          },
+          grid: {
+            offset: false
           }
         },
       },
       plugins: { 
         legend: { display: false },
         tooltip: {
+          padding: 10,
+          titleFont: {
+            size: 15
+          },
+          bodyFont: {
+            size: 15
+          },
+          borderRadius: 8,
           callbacks: {
             label: function(context) {
               const value = context.parsed.y;
@@ -424,7 +443,7 @@ function UnifiedEdgeTooltip({
           style={{
             flex: 1,
             overflow: 'auto',
-            padding: '0 20px',
+            padding: '0 5px',
           }}
         >
           {viewMode === "info" ? (
@@ -549,7 +568,7 @@ function UnifiedEdgeTooltip({
               </button>
             </div>
           ) : (
-            <div style={{ padding: '20px 0' }}>
+            <div style={{ padding: '10px 0' }}>
               {/* 차트 섹션 */}
               <div 
                 className="sidebar-card"
@@ -629,10 +648,11 @@ function UnifiedEdgeTooltip({
                   </div>
                 ) : (
                   <div style={{ 
-                    height: '320px',
+                    height: '352px',
+                    width: '100%',
                     background: '#fafafa',
                     borderRadius: '8px',
-                    padding: '16px',
+                    padding: '0',
                   }}>
                     <Line {...chartConfig} />
                   </div>
@@ -970,7 +990,7 @@ function UnifiedEdgeTooltip({
               ) : (
                 <div style={{ 
                   flex: 1, 
-                  padding: mode === 'viewer' ? '0.75rem 0.5rem' : '0.75rem 0',
+                  padding: mode === 'viewer' ? '0.75rem 0' : '0.75rem 0',
                   display: 'flex',
                   alignItems: mode === 'viewer' ? 'flex-start' : 'center',
                   justifyContent: mode === 'viewer' ? 'flex-start' : 'center',
@@ -981,7 +1001,7 @@ function UnifiedEdgeTooltip({
                     width: '100%',
                     height: mode === 'viewer' ? '100%' : 'auto'
                   }}>
-                    <Line {...chartConfig} style={{ height: '12.5rem' }} />
+                    <Line {...chartConfig} style={{ height: '12.5rem', width: '100%' }} />
                   </div>
                 </div>
               )}

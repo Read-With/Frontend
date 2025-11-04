@@ -1,4 +1,6 @@
 // API 기본 설정 및 도서 관련 API 함수들 (배포 서버 고정 사용)
+import { setManifestData, isValidEvent } from './manifestCache';
+
 const getApiBaseUrl = () => {
   // 로컬 개발 환경: 프록시 사용 (배포 서버로 전달)
   if (import.meta.env.DEV) {
@@ -19,13 +21,15 @@ const createApiResponse = (isSuccess, code, message, result, type = 'default') =
     result
   };
 
-  // 그래프 API 전용 응답 처리
+  // 그래프 API 전용 응답 처리 - 모든 필드 유지
   if (type === 'graph') {
+    // result 객체 전체를 유지하되, 기본값만 보장
     baseResponse.result = {
-      userCurrentChapter: result?.userCurrentChapter || 0,
-      characters: result?.characters || [],
-      relations: result?.relations || [],
-      event: result?.event || null
+      ...result,
+      userCurrentChapter: result?.userCurrentChapter ?? 0,
+      characters: result?.characters ?? [],
+      relations: result?.relations ?? [],
+      event: result?.event ?? null
     };
   }
 
@@ -124,13 +128,15 @@ const apiRequest = async (url, options = {}) => {
         const isMacroGraph = url.includes('/api/graph/macro');
         const isFineGraph = url.includes('/api/graph/fine');
         
-        // 404는 데이터 없음으로 정상 상황일 수 있으므로 warn으로 처리
+        // 404는 데이터 없음으로 정상 상황일 수 있으므로 조용히 처리
         if (response.status === 404) {
-          console.warn(`⚠️ ${isMacroGraph ? '거시' : isFineGraph ? '세밀' : 'Graph'} API 데이터 없음:`, {
-            status: response.status,
-            message: data.message || '해당 데이터를 찾을 수 없습니다',
-            url: requestUrl
-          });
+          // eventIdx=0인 경우나 데이터가 없는 경우는 정상 상황이므로 로그 출력 안 함
+          // 필요시 디버그 모드에서만 활성화
+          // console.debug(`⚠️ ${isMacroGraph ? '거시' : isFineGraph ? '세밀' : 'Graph'} API 데이터 없음:`, {
+          //   status: response.status,
+          //   message: data.message || '해당 데이터를 찾을 수 없습니다',
+          //   url: requestUrl
+          // });
         } else {
           console.error(`❌ ${isMacroGraph ? '거시' : isFineGraph ? '세밀' : 'Graph'} API 에러:`, {
             status: response.status,
@@ -325,7 +331,14 @@ export const deleteBookProgress = async (bookId) => {
 
 // 책 구조 패키지 조회 (manifest)
 export const getBookManifest = async (bookId) => {
-  return apiRequest(`/api/books/${bookId}/manifest`);
+  const response = await apiRequest(`/api/books/${bookId}/manifest`);
+  
+  // 응답이 성공하고 result가 있으면 maxChapter 저장
+  if (response?.isSuccess && response?.result && bookId) {
+    setManifestData(bookId, response.result);
+  }
+  
+  return response;
 };
 
 // 북마크 관련 API
@@ -382,6 +395,30 @@ export const getFineGraph = async (bookId, chapterIdx, eventIdx) => {
     throw new Error('bookId, chapterIdx, eventIdx는 필수 매개변수입니다.');
   }
 
+  // eventIdx=0은 404 에러가 발생하므로 조용히 빈 데이터 반환
+  if (eventIdx === 0 || eventIdx < 1) {
+    return createApiResponse(true, 'SUCCESS', '해당 이벤트에 대한 데이터가 없습니다.', { 
+      characters: [], 
+      relations: [], 
+      event: null,
+      userCurrentChapter: 0
+    }, 'graph');
+  }
+
+  // manifest 캐시에서 이벤트 유효성 검사 (API 책인 경우)
+  if (typeof bookId === 'number') {
+    const isValid = isValidEvent(bookId, chapterIdx, eventIdx);
+    if (!isValid) {
+      // 유효하지 않은 이벤트는 API 호출 없이 빈 데이터 반환
+      return createApiResponse(true, 'SUCCESS', '해당 이벤트에 대한 데이터가 없습니다.', { 
+        characters: [], 
+        relations: [], 
+        event: null,
+        userCurrentChapter: 0
+      }, 'graph');
+    }
+  }
+
   const queryParams = new URLSearchParams();
   queryParams.append('bookId', bookId);
   queryParams.append('chapterIdx', chapterIdx);
@@ -391,12 +428,15 @@ export const getFineGraph = async (bookId, chapterIdx, eventIdx) => {
     const response = await apiRequest(`/api/graph/fine?${queryParams.toString()}`);
     return createApiResponse(true, 'SUCCESS', '세밀 그래프 데이터를 성공적으로 조회했습니다.', response.result, 'graph');
   } catch (error) {
+    // 404 에러는 데이터 없음으로 정상 상황 (아직 생성되지 않은 이벤트)
     if (error.status === 404) {
-      if (eventIdx === 0) {
-        return createApiResponse(true, 'SUCCESS', '해당 이벤트에 대한 데이터가 없습니다.', { characters: [], relations: [], event: null }, 'graph');
-      } else {
-        return createApiResponse(false, 'NOT_FOUND', `챕터 ${chapterIdx}, 이벤트 ${eventIdx}에 대한 데이터를 찾을 수 없습니다.`, { characters: [], relations: [], event: null }, 'graph');
-      }
+      // 빈 데이터 반환 (에러로 처리하지 않음)
+      return createApiResponse(true, 'SUCCESS', '해당 이벤트에 대한 데이터가 없습니다.', { 
+        characters: [], 
+        relations: [], 
+        event: null,
+        userCurrentChapter: 0
+      }, 'graph');
     }
     handleApiError(error, '세밀 그래프 조회 실패');
   }

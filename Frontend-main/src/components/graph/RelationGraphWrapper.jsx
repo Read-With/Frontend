@@ -13,9 +13,11 @@ import { sidebarStyles, topBarStyles, containerStyles, graphStyles, createButton
 import { useGraphSearch } from '../../hooks/useGraphSearch.jsx';
 import { useGraphDataLoader } from '../../hooks/useGraphDataLoader.js';
 import { useLocalStorageNumber } from '../../hooks/useLocalStorage.js';
-import { getMacroGraph, getChapterGraph, getFineGraph } from '../../utils/api/graphApi.js';
+import { getMacroGraph, getFineGraph, getBookManifest } from '../../utils/common/api.js';
+import { getMaxChapter } from '../../utils/common/manifestCache';
 import { convertRelationsToElements, filterMainCharacters } from '../../utils/graphDataUtils';
 import { createCharacterMaps } from '../../utils/characterUtils';
+import { getFolderKeyFromFilename, getLastEventIndexForChapter } from '../../utils/graphData';
 import { createRippleEffect, ensureElementsInBounds, processTooltipData } from '../../utils/graphUtils.js';
 import useGraphInteractions from "../../hooks/useGraphInteractions";
 import { useChapterPovSummaries } from '../../hooks/useChapterPovSummaries';
@@ -72,6 +74,8 @@ function RelationGraphWrapper() {
   const [apiFineLoading, setApiFineLoading] = useState(false);
   const [apiError, setApiError] = useState(null);
   const [userCurrentChapter, setUserCurrentChapter] = useState(null);
+  const [manifestData, setManifestData] = useState(null);
+  const [apiMaxChapter, setApiMaxChapter] = useState(1);
   
   // 현재 챕터 기준으로 관점 요약 가져오기
   const { povSummaries, loading: povLoading, error: povError } = useChapterPovSummaries(
@@ -89,6 +93,62 @@ function RelationGraphWrapper() {
   
   // API 책인지 확인 (bookId가 있거나 숫자 ID를 가진 책이거나 isFromAPI가 true인 경우)
   const isApiBook = isBookId || (book && (typeof book.id === 'number' || book.isFromAPI === true));
+  
+  // API 책의 manifest 데이터 로딩 (최대 챕터 정보 추출)
+  useEffect(() => {
+    const loadManifestData = async () => {
+      if (!isApiBook) {
+        return;
+      }
+      
+      const targetBookId = bookId || (book && typeof book.id === 'number' ? book.id : null);
+      if (!targetBookId) {
+        return;
+      }
+      
+      try {
+        const manifestResponse = await getBookManifest(targetBookId);
+        
+        if (manifestResponse?.isSuccess && manifestResponse?.result) {
+          setManifestData(manifestResponse.result);
+          
+          // 캐시에서 maxChapter 가져오기 (getBookManifest에서 자동 저장됨)
+          const cachedMaxChapter = getMaxChapter(targetBookId);
+          if (cachedMaxChapter) {
+            setApiMaxChapter(cachedMaxChapter);
+          } else {
+            // 캐시에 없으면 progressMetadata에서 직접 가져오기
+            const maxChapterFromMetadata = manifestResponse.result.progressMetadata?.maxChapter;
+            if (maxChapterFromMetadata && maxChapterFromMetadata > 0) {
+              setApiMaxChapter(maxChapterFromMetadata);
+            } else {
+              // fallback: chapters 배열에서 계산
+              const chapters = manifestResponse.result.chapters || [];
+              if (chapters.length > 0) {
+                let maxChapterIdx = 1;
+                for (const chapterInfo of chapters) {
+                  const chapterIdx = chapterInfo?.idx || chapterInfo?.chapterIdx || chapterInfo?.chapter || chapterInfo?.index || chapterInfo?.number || chapterInfo?.id;
+                  if (typeof chapterIdx === 'number' && !isNaN(chapterIdx) && chapterIdx > 0 && chapterIdx > maxChapterIdx) {
+                    maxChapterIdx = chapterIdx;
+                  }
+                }
+                setApiMaxChapter(maxChapterIdx);
+              } else {
+                setApiMaxChapter(1);
+              }
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Manifest 데이터 로딩 실패:', error);
+        // 캐시에서 maxChapter 확인 시도
+        const cachedMaxChapter = getMaxChapter(targetBookId);
+        setApiMaxChapter(cachedMaxChapter || 1);
+      }
+    };
+    
+    loadManifestData();
+  }, [isApiBook, bookId, book?.id]);
   
   // API 거시 그래프 데이터 로딩 (초기 로딩 및 챕터 변경 시)
   useEffect(() => {
@@ -121,10 +181,7 @@ function RelationGraphWrapper() {
           timestamp: new Date().toISOString()
         });
         
-        const macroData = await getMacroGraph({
-          bookId: targetBookId,
-          uptoChapter: currentChapter
-        });
+        const macroData = await getMacroGraph(targetBookId, currentChapter);
         
         logApiResponse('거시 그래프', {
           isSuccess: macroData?.isSuccess,
@@ -181,8 +238,36 @@ function RelationGraphWrapper() {
       const targetBookId = bookId || (book && typeof book.id === 'number' ? book.id : null);
       if (!targetBookId) return;
       
-      // 거시 그래프 데이터가 아직 로드되지 않았으면 대기
-      if (!apiMacroData) return;
+      // 거시 그래프 데이터가 아직 로드되지 않았으면 거시 API도 함께 호출
+      if (!apiMacroData) {
+        try {
+          const macroData = await getMacroGraph(targetBookId, currentChapter);
+          if (macroData?.isSuccess && macroData?.result) {
+            setApiMacroData(macroData.result);
+            if (macroData.result.userCurrentChapter !== undefined) {
+              setUserCurrentChapter(macroData.result.userCurrentChapter);
+            }
+          }
+        } catch (error) {
+          // 거시 API 실패는 무시하고 세밀 API 계속 진행
+        }
+      }
+      
+      // eventIdx 계산 (currentEvent는 1-based, API는 0-based)
+      // eventIdx는 1 이상이어야 함 (0은 404 에러 발생)
+      const eventIdx = currentEvent >= 1 ? currentEvent - 1 : 0;
+      
+      // eventIdx가 0 이하인 경우는 API 호출하지 않음 (404 방지)
+      // 거시 데이터로 폴백 (거시 데이터가 없으면 빈 상태 유지)
+      if (eventIdx < 1) {
+        const fallbackData = apiMacroData || null;
+        if (fallbackData) {
+          setApiFineData(fallbackData);
+        }
+        setApiError(null);
+        setApiFineLoading(false);
+        return;
+      }
       
       setApiFineLoading(true);
       setApiError(null);
@@ -191,11 +276,11 @@ function RelationGraphWrapper() {
         logApiCall('세밀 그래프', {
           targetBookId,
           chapterIdx: currentChapter,
-          eventIdx: currentEvent - 1,
+          eventIdx: eventIdx,
           timestamp: new Date().toISOString()
         });
         
-        const fineData = await getFineGraph(targetBookId, currentChapter, currentEvent - 1);
+        const fineData = await getFineGraph(targetBookId, currentChapter, eventIdx);
         
         logApiResponse('세밀 그래프', {
           isSuccess: fineData?.isSuccess,
@@ -211,24 +296,30 @@ function RelationGraphWrapper() {
           setApiError(null);
         } else {
           // 세밀 데이터가 없으면 거시 데이터로 폴백
-          setApiFineData(apiMacroData);
+          const fallbackData = apiMacroData || null;
+          if (fallbackData) {
+            setApiFineData(fallbackData);
+          }
           setApiError(null); // 에러 표시 안 함 (거시 데이터 표시)
         }
         
       } catch (error) {
         // 404는 정상적인 상황 (데이터가 아직 없음)
         if (error.status === 404 || error.message?.includes('찾을 수 없습니다')) {
-          console.info(`ℹ️ 세밀 그래프 데이터 없음 (Chapter ${currentChapter}, Event ${currentEvent - 1}) - 거시 데이터로 폴백`);
+          // 404는 조용히 처리 (콘솔 출력 안 함)
         } else {
           logApiError('세밀 그래프', error, {
             targetBookId,
             chapterIdx: currentChapter,
-            eventIdx: currentEvent - 1
+            eventIdx: eventIdx
           });
         }
         
         // API 호출 실패 시 거시 데이터로 폴백
-        setApiFineData(apiMacroData);
+        const fallbackData = apiMacroData || null;
+        if (fallbackData) {
+          setApiFineData(fallbackData);
+        }
         setApiError(null); // 에러 표시 안 함 (거시 데이터 표시)
       } finally {
         setApiFineLoading(false);
@@ -251,12 +342,15 @@ function RelationGraphWrapper() {
     isDataEmpty
   } = useGraphDataLoader(isApiBook ? null : filename, currentChapter);
 
-  // currentChapter가 maxChapter를 초과하지 않도록 검증 (maxChapter 로드 완료 후)
+  // API 책인 경우 apiMaxChapter 사용, 아니면 로컬 maxChapter 사용
+  const effectiveMaxChapter = isApiBook ? apiMaxChapter : maxChapter;
+
+  // currentChapter가 effectiveMaxChapter를 초과하지 않도록 검증 (effectiveMaxChapter 로드 완료 후)
   useEffect(() => {
-    if (maxChapter > 0 && currentChapter > maxChapter && !loading) {
-      setCurrentChapter(maxChapter); // 최대 챕터로 설정
+    if (effectiveMaxChapter > 0 && currentChapter > effectiveMaxChapter) {
+      setCurrentChapter(effectiveMaxChapter); // 최대 챕터로 설정
     }
-  }, [maxChapter, loading]);
+  }, [effectiveMaxChapter, currentChapter, setCurrentChapter]);
   
   // API 데이터를 그래프 요소로 변환
   const apiElements = useMemo(() => {
@@ -265,7 +359,37 @@ function RelationGraphWrapper() {
     }
     
     try {
-      const { idToName, idToDesc, idToMain, idToNames } = createCharacterMaps(apiFineData.characters);
+      const { idToName, idToDesc, idToMain, idToNames, idToProfileImage } = createCharacterMaps(apiFineData.characters);
+      
+      // 디버깅: profileImage가 있는 캐릭터 확인
+      if (Object.keys(idToProfileImage).length > 0) {
+        console.log('✅ 그래프 - profileImage가 있는 캐릭터:', Object.keys(idToProfileImage).map(id => ({
+          id,
+          name: idToName[id],
+          profileImage: idToProfileImage[id]
+        })));
+      } else {
+        console.warn('⚠️ 그래프 - profileImage가 있는 캐릭터가 없습니다. 원본 데이터:', apiFineData.characters.map(char => ({
+          id: char.id,
+          name: char.common_name || char.name,
+          profileImage: char.profileImage,
+          hasProfileImage: !!(char.profileImage && char.profileImage.trim() !== '')
+        })));
+      }
+      
+      // API 응답의 event 객체를 로컬 데이터 형식으로 정규화
+      // API: { chapterIdx, start, end, event_id }
+      // 로컬: { chapter, eventNum, event_id, start, end, ... }
+      const apiEvent = apiFineData.event;
+      const normalizedEvent = apiEvent ? {
+        chapter: apiEvent.chapterIdx ?? currentChapter,
+        chapterIdx: apiEvent.chapterIdx ?? currentChapter, // API 필드명도 유지 (호환성)
+        eventNum: apiEvent.event_id ?? (currentEvent - 1),
+        event_id: apiEvent.event_id ?? (currentEvent - 1), // 원본 필드명도 유지 (호환성)
+        start: apiEvent.start,
+        end: apiEvent.end,
+        ...apiEvent // 나머지 모든 필드 유지
+      } : null;
       
       const convertedElements = convertRelationsToElements(
         apiFineData.relations,
@@ -277,7 +401,8 @@ function RelationGraphWrapper() {
         'api', // folderKey
         null, // nodeWeights
         null, // previousRelations
-        apiFineData.event // eventData
+        normalizedEvent, // 정규화된 event 객체 전달
+        idToProfileImage // API 책의 profileImage 매핑
       );
       
       return convertedElements;
@@ -285,7 +410,7 @@ function RelationGraphWrapper() {
       console.error('API 데이터 변환 실패:', error);
       return [];
     }
-  }, [apiFineData]);
+  }, [apiFineData, currentChapter, currentEvent]);
   
   // 사용할 elements 결정 (API 데이터 우선, 없으면 로컬 데이터)
   const elements = (isApiBook && apiElements.length > 0) ? apiElements : localElements;
@@ -525,14 +650,53 @@ function RelationGraphWrapper() {
       // 드롭다운 선택 상태 설정
       setIsDropdownSelection(true);
       
+      // 챕터 변경
       setCurrentChapter(chapter);
+      
+      // 해당 챕터의 마지막 이벤트 찾기
+      let lastEventNum = 1;
+      
+      if (isApiBook) {
+        // API 책인 경우: manifestData에서 해당 챕터의 eventCount 찾기
+        if (manifestData?.chapters) {
+          const chapterInfo = manifestData.chapters.find(
+            ch => (ch.chapterIdx === chapter || ch.chapter === chapter || ch.index === chapter || ch.number === chapter)
+          );
+          
+          if (chapterInfo) {
+            // eventCount 추출
+            let eventCount = chapterInfo.eventCount || chapterInfo.events || chapterInfo.event_count || 0;
+            if (Array.isArray(eventCount)) {
+              eventCount = eventCount.length;
+            } else if (typeof eventCount !== 'number' || isNaN(eventCount)) {
+              eventCount = 0;
+            }
+            
+            // 마지막 이벤트는 eventCount (1-based이므로 그대로 사용)
+            // 단, API는 0-based이므로 eventCount를 그대로 사용하면 됨
+            // 하지만 실제로는 eventIdx가 1부터 시작하므로 eventCount를 그대로 사용
+            lastEventNum = eventCount > 0 ? eventCount : 1;
+          }
+        }
+      } else {
+        // 로컬 책인 경우: getLastEventIndexForChapter 사용
+        const folderKey = getFolderKeyFromFilename(filename);
+        if (folderKey) {
+          const lastEventIndex = getLastEventIndexForChapter(folderKey, chapter);
+          // getLastEventIndexForChapter는 1-based 인덱스를 반환하므로 그대로 사용
+          lastEventNum = lastEventIndex > 0 ? lastEventIndex : 1;
+        }
+      }
+      
+      // 마지막 이벤트로 설정
+      setCurrentEvent(lastEventNum);
       
       // 짧은 지연 후 드롭다운 선택 상태 해제
       setTimeout(() => {
         setIsDropdownSelection(false);
       }, 100);
     }
-  }, [currentChapter, setCurrentChapter]);
+  }, [currentChapter, setCurrentChapter, isApiBook, manifestData, filename]);
 
 
   const toggleEdgeLabel = useCallback(() => {
@@ -617,11 +781,11 @@ function RelationGraphWrapper() {
       };
     }
   }, [activeTooltip, isSidebarClosing, handleGlobalClick]);
-
+  
   // 챕터 목록 메모이제이션
   const chapterList = useMemo(() => 
-    Array.from({ length: maxChapter }, (_, i) => i + 1), 
-    [maxChapter]
+    Array.from({ length: effectiveMaxChapter }, (_, i) => i + 1), 
+    [effectiveMaxChapter]
   );
 
   // 로딩 상태 렌더링 (정보를 가져오는 계산 중)
@@ -1062,11 +1226,11 @@ function RelationGraphWrapper() {
                 }}
                 onStartClosing={handleStartClosing}
                 onClearGraph={handleClearGraph}
-                forceClose={forceClose}
-                chapterNum={currentChapter}
-                eventNum={eventNum}
-                maxChapter={maxChapter}
-                filename={filename}
+                                  forceClose={forceClose}
+                  chapterNum={currentChapter}
+                  eventNum={eventNum}
+                  maxChapter={effectiveMaxChapter}
+                  filename={filename}
                 elements={elements}
                 isSearchActive={isSearchActive}
                 filteredElements={filteredElements}

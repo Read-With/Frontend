@@ -264,3 +264,98 @@
     font-size: 16px;
   }
 } 
+
+/* 로그아웃 확인 다이얼로그 */
+.logout-confirm-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 2000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+}
+
+.logout-confirm-dialog {
+  background: #ffffff;
+  border-radius: 12px;
+  padding: 24px;
+  max-width: 400px;
+  width: 100%;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+  animation: fadeIn 0.2s ease;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.logout-confirm-title {
+  font-family: var(--font-family-primary);
+  font-size: 20px;
+  font-weight: 600;
+  color: #3E4F2F;
+  margin: 0 0 12px 0;
+}
+
+.logout-confirm-message {
+  font-family: var(--font-family-primary);
+  font-size: 16px;
+  color: #586544;
+  margin: 0 0 24px 0;
+  line-height: 1.5;
+}
+
+.logout-confirm-buttons {
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+}
+
+.logout-confirm-cancel,
+.logout-confirm-logout {
+  font-family: var(--font-family-primary);
+  font-size: 14px;
+  font-weight: 500;
+  padding: 10px 20px;
+  border-radius: 8px;
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.logout-confirm-cancel {
+  background: #f3f4f6;
+  color: #586544;
+}
+
+.logout-confirm-cancel:hover {
+  background: #e5e7eb;
+  color: #3E4F2F;
+}
+
+.logout-confirm-logout {
+  background: #D4D4C3;
+  color: #3E4F2F;
+}
+
+.logout-confirm-logout:hover {
+  background: #C4C4B3;
+  color: #2D3F1F;
+}
+
+.logout-confirm-logout:active,
+.logout-confirm-cancel:active {
+  transform: scale(0.98);
+} 

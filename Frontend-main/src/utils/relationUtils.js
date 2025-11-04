@@ -265,17 +265,27 @@ export function processRelationTagsCached(relation, label) {
 export function clearRelationCache() {
   try {
     relationCache.clear();
-    console.info('relationCache 정리 완료');
+    // 개발 환경에서만 로그 출력
+    if (process.env.NODE_ENV === 'development') {
+      console.info('relationCache 정리 완료');
+    }
   } catch (error) {
-    console.error('clearRelationCache 실패:', error);
+    // 에러는 개발 환경에서만 출력
+    if (process.env.NODE_ENV === 'development') {
+      console.error('clearRelationCache 실패:', error);
+    }
   }
 }
 
 export function cleanupRelationResources() {
   try {
     clearRelationCache();
-    console.info('관계 관련 리소스 정리 완료');
+    // 개발 환경에서만 로그 출력
+    if (process.env.NODE_ENV === 'development') {
+      console.info('관계 관련 리소스 정리 완료');
+    }
   } catch (error) {
+    // 에러는 항상 출력
     console.error('cleanupRelationResources 실패:', error);
   }
 }

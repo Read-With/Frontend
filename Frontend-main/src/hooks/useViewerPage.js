@@ -17,6 +17,7 @@ import {
 import { getFolderKeyFromFilename } from '../utils/graphData';
 import { loadBookmarks, addBookmark, removeBookmark } from '../components/viewer/bookmark/BookmarkManager';
 import { getBookManifest } from '../utils/common/api';
+import { getMaxChapter } from '../utils/common/manifestCache';
 
 export function useViewerPage() {
   const { filename: bookId } = useParams(); // filename을 bookId로 rename
@@ -160,16 +161,23 @@ export function useViewerPage() {
     const fetchBookInfo = async () => {
       // API 책인지 확인 (숫자 ID를 가진 책)
       if (book && typeof book.id === 'number' && location.state?.book) {
-        // 도서 기본 정보 출력
-
         // manifest API 호출
         try {
           const manifestData = await getBookManifest(book.id);
           
           if (manifestData && manifestData.isSuccess && manifestData.result) {
-          } else {
+            // 캐시에서 maxChapter 가져오기 (getBookManifest에서 자동 저장됨)
+            const cachedMaxChapter = getMaxChapter(book.id);
+            if (cachedMaxChapter && cachedMaxChapter > 0) {
+              setMaxChapter(cachedMaxChapter);
+            }
           }
         } catch (error) {
+          // 에러 발생 시 캐시에서 확인 시도
+          const cachedMaxChapter = getMaxChapter(book.id);
+          if (cachedMaxChapter && cachedMaxChapter > 0) {
+            setMaxChapter(cachedMaxChapter);
+          }
         }
       }
     };
@@ -199,10 +207,22 @@ export function useViewerPage() {
   
   // maxChapter 설정
   useEffect(() => {
-    if (detectedMaxChapter > 0) {
-      setMaxChapter(detectedMaxChapter);
+    // API 책인 경우 캐시에서 확인
+    if (book && typeof book.id === 'number') {
+      const cachedMaxChapter = getMaxChapter(book.id);
+      if (cachedMaxChapter && cachedMaxChapter > 0) {
+        setMaxChapter(cachedMaxChapter);
+      } else if (detectedMaxChapter > 0) {
+        // 캐시에 없으면 로컬 책처럼 detectedMaxChapter 사용
+        setMaxChapter(detectedMaxChapter);
+      }
+    } else {
+      // 로컬 책인 경우
+      if (detectedMaxChapter > 0) {
+        setMaxChapter(detectedMaxChapter);
+      }
     }
-  }, [detectedMaxChapter]);
+  }, [detectedMaxChapter, book]);
   
   // showGraph/graphFullScreen 상태 변경 시 localStorage에 저장
   useEffect(() => {

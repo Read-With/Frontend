@@ -64,32 +64,33 @@ export default defineConfig(({ mode }) => {
           ws: false,
           timeout: 30000,
           configure: (proxy, options) => {
-            proxy.on('proxyReq', (proxyReq, req, res) => {
-              const targetUrl = `${options.target}${req.url}`;
-              console.log('🔄 [프록시 요청]', {
-                method: req.method,
-                원본경로: req.url,
-                타겟URL: targetUrl,
-                타겟서버: options.target,
-                path: req.url
-              });
-            });
             proxy.on('proxyRes', (proxyRes, req, res) => {
-              console.log('✅ [프록시 응답]', {
-                상태코드: proxyRes.statusCode,
-                상태메시지: proxyRes.statusMessage,
-                경로: req.url,
-                ContentType: proxyRes.headers['content-type']
-              });
-              
-              // 404 에러인 경우 상세 정보 로깅
+              // 404 에러인 경우 - 데이터가 없을 수 있는 엔드포인트는 조용히 처리
               if (proxyRes.statusCode === 404) {
-                console.error('🔴 [404 에러] 백엔드에서 경로를 찾지 못함:', {
-                  요청경로: req.url,
-                  전체URL: `${options.target}${req.url}`,
-                  백엔드서버: options.target,
-                  메시지: '백엔드 서버에 해당 엔드포인트가 존재하지 않거나 경로가 다를 수 있습니다.'
-                });
+                const url = req.url || '';
+                
+                // 데이터가 없을 수 있는 정상적인 404 엔드포인트들
+                const silent404Endpoints = [
+                  '/api/graph/fine',
+                  '/api/graph/macro',
+                  '/api/progress/'
+                ];
+                
+                const isSilent404 = silent404Endpoints.some(endpoint => url.includes(endpoint));
+                
+                if (isSilent404) {
+                  // 데이터 부재로 정상적인 상황이므로 로깅하지 않음
+                  // 디버그가 필요할 때만 활성화
+                  // console.debug('⚠️ [404] 데이터 없음 (정상):', url);
+                } else {
+                  // 다른 엔드포인트의 404는 에러로 로깅
+                  console.error('🔴 [404 에러] 백엔드에서 경로를 찾지 못함:', {
+                    요청경로: url,
+                    전체URL: `${options.target}${url}`,
+                    백엔드서버: options.target,
+                    메시지: '백엔드 서버에 해당 엔드포인트가 존재하지 않거나 경로가 다를 수 있습니다.'
+                  });
+                }
               }
             });
             proxy.on('error', (err, req, res) => {

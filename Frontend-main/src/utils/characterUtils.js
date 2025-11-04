@@ -11,14 +11,15 @@ export function createCharacterMaps(characters) {
     const idToDescKo = {};
     const idToMain = {};
     const idToNames = {};
+    const idToProfileImage = {};
 
     if (!characters) {
-      return { idToName, idToDesc, idToDescKo, idToMain, idToNames };
+      return { idToName, idToDesc, idToDescKo, idToMain, idToNames, idToProfileImage };
     }
 
     const characterArray = characters?.characters || characters || [];
     if (!Array.isArray(characterArray)) {
-      return { idToName, idToDesc, idToDescKo, idToMain, idToNames };
+      return { idToName, idToDesc, idToDescKo, idToMain, idToNames, idToProfileImage };
     }
 
     characterArray.forEach((char) => {
@@ -35,12 +36,17 @@ export function createCharacterMaps(characters) {
       idToDescKo[id] = char.description_ko || "";
       idToMain[id] = char.main_character || false;
       idToNames[id] = char.names || [];
+      
+      // profileImage가 유효한 경우에만 저장 (null, undefined, 빈 문자열 제외)
+      if (char.profileImage && typeof char.profileImage === 'string' && char.profileImage.trim() !== '') {
+        idToProfileImage[id] = char.profileImage;
+      }
     });
 
-    return { idToName, idToDesc, idToDescKo, idToMain, idToNames };
+    return { idToName, idToDesc, idToDescKo, idToMain, idToNames, idToProfileImage };
   } catch (error) {
     console.error('createCharacterMaps 실패:', error);
-    return { idToName: {}, idToDesc: {}, idToDescKo: {}, idToMain: {}, idToNames: {} };
+    return { idToName: {}, idToDesc: {}, idToDescKo: {}, idToMain: {}, idToNames: {}, idToProfileImage: {} };
   }
 }
 

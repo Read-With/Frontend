@@ -113,9 +113,11 @@ const BookDetailModal = memo(({ book, isOpen, onClose }) => {
 
   useEffect(() => {
     if (isOpen && book) {
+      fetchBookDetails();
+      fetchProgressInfo();
       testPovSummaries();
     }
-  }, [isOpen, book, testPovSummaries]);
+  }, [isOpen, book, fetchBookDetails, fetchProgressInfo, testPovSummaries]);
 
   // 책 타입 확인 유틸리티
   const isLocalBook = useMemo(() => 

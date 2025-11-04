@@ -4,6 +4,13 @@ import useAuth from '../hooks/useAuth';
 import OAuthCallback from '../components/auth/OAuthCallback';
 import './HomePage.css';
 
+const getApiBaseUrl = () => {
+  if (import.meta.env.DEV) {
+    return '';
+  }
+  return 'https://dev.readwith.store';
+};
+
 // 미니맵 그래프 컴포넌트
 const MinimapGraph = () => {
   // 노드 데이터 정의
@@ -305,7 +312,7 @@ const HeroSection = () => {
                 
                 {/* 마지막 페이지에서만 구글 로그인 버튼 표시 */}
                 {currentPage === storyPages.length - 1 && (
-                  <div className="google-login-section">
+                  <div className="google-login-section" style={{ display: 'flex', gap: '12px', justifyContent: 'center', alignItems: 'center', flexWrap: 'wrap' }}>
                     <button 
                       className={`google-login-button ${isLoggingIn ? 'loading' : ''}`}
                       onClick={handleGoogleLogin}

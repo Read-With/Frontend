@@ -16,59 +16,142 @@ const getApiBaseUrl = () => {
 
 const API_BASE_URL = getApiBaseUrl();
 
-// 인증된 API 요청 헬퍼 함수 (토큰 갱신 자동 처리 포함)
-const authenticatedRequest = async (endpoint, options = {}, retryCount = 0) => {
-  const token = localStorage.getItem('accessToken');
+// 전역 요청 캐시: 진행 중인 요청과 완료된 요청을 추적
+const requestCache = new Map();
+const CACHE_DURATION = 5 * 60 * 1000; // 5분
+
+// 캐시 키 생성
+function getCacheKey(endpoint) {
+  return endpoint;
+}
+
+// 캐시에서 데이터 가져오기
+function getCachedRequest(cacheKey) {
+  const cached = requestCache.get(cacheKey);
+  if (!cached) return null;
   
-  const defaultHeaders = {
-    'Content-Type': 'application/json',
-    'Accept': 'application/json',
-  };
-  
-  // 토큰이 있으면 Authorization 헤더 추가
-  if (token) {
-    defaultHeaders['Authorization'] = `Bearer ${token}`;
+  const now = Date.now();
+  if (now - cached.timestamp > CACHE_DURATION) {
+    requestCache.delete(cacheKey);
+    return null;
   }
   
-  const response = await fetch(`${API_BASE_URL}${endpoint}`, {
-    ...options,
-    headers: {
-      ...defaultHeaders,
-      ...options.headers,
-    },
+  return cached;
+}
+
+// 캐시에 데이터 저장
+function setCachedRequest(cacheKey, data) {
+  requestCache.set(cacheKey, {
+    data,
+    timestamp: Date.now()
   });
   
-  if (!response.ok) {
-    if (response.status === 401 && retryCount === 0) {
-      // 토큰 만료 시 자동으로 토큰 갱신 시도
-      try {
-        await refreshToken();
-        
-        // 갱신된 토큰으로 재시도 (최대 1번만)
-        return authenticatedRequest(endpoint, options, retryCount + 1);
-      } catch (refreshError) {
-        // 토큰 갱신 실패 시 로그아웃 처리
-        localStorage.removeItem('accessToken');
-        localStorage.removeItem('refreshToken');
-        localStorage.removeItem('google_user');
-        window.location.href = '/';
-        throw new Error('인증이 만료되었습니다. 다시 로그인해주세요.');
-      }
-    }
-    
-    // 401 에러이고 재시도 횟수가 초과했거나, 다른 에러인 경우
-    if (response.status === 401) {
-      localStorage.removeItem('accessToken');
-      localStorage.removeItem('refreshToken');
-      localStorage.removeItem('google_user');
-      window.location.href = '/';
-      throw new Error('인증이 만료되었습니다. 다시 로그인해주세요.');
-    }
-    
-    throw new Error(`API 요청 실패: ${response.status}`);
+  // 캐시 크기 관리 (최대 100개)
+  if (requestCache.size > 100) {
+    const oldestKey = Array.from(requestCache.entries())
+      .sort((a, b) => a[1].timestamp - b[1].timestamp)[0][0];
+    requestCache.delete(oldestKey);
+  }
+}
+
+// 진행 중인 요청 추적
+const pendingRequests = new Map();
+
+// 인증된 API 요청 헬퍼 함수 (토큰 갱신 자동 처리 포함, 중복 요청 방지)
+const authenticatedRequest = async (endpoint, options = {}, retryCount = 0) => {
+  const cacheKey = getCacheKey(endpoint);
+  
+  // 진행 중인 요청이 있으면 기다림
+  if (pendingRequests.has(cacheKey)) {
+    return pendingRequests.get(cacheKey);
   }
   
-  return response.json();
+  // 캐시된 요청이 있으면 반환
+  const cached = getCachedRequest(cacheKey);
+  if (cached) {
+    return Promise.resolve(JSON.parse(JSON.stringify(cached.data)));
+  }
+  
+  // 요청 생성
+  const requestPromise = (async () => {
+    try {
+      const token = localStorage.getItem('accessToken');
+      
+      const defaultHeaders = {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      };
+      
+      if (token) {
+        defaultHeaders['Authorization'] = `Bearer ${token}`;
+      }
+      
+      const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+        ...options,
+        headers: {
+          ...defaultHeaders,
+          ...options.headers,
+        },
+      });
+      
+      if (!response.ok) {
+        if (response.status === 401 && retryCount === 0) {
+          try {
+            await refreshToken();
+            return authenticatedRequest(endpoint, options, retryCount + 1);
+          } catch (refreshError) {
+            localStorage.removeItem('accessToken');
+            localStorage.removeItem('refreshToken');
+            localStorage.removeItem('google_user');
+            window.location.href = '/';
+            throw new Error('인증이 만료되었습니다. 다시 로그인해주세요.');
+          }
+        }
+        
+        if (response.status === 401) {
+          localStorage.removeItem('accessToken');
+          localStorage.removeItem('refreshToken');
+          localStorage.removeItem('google_user');
+          window.location.href = '/';
+          throw new Error('인증이 만료되었습니다. 다시 로그인해주세요.');
+        }
+        
+        // 404 에러는 조용히 처리 (빈 데이터로 캐시하여 재요청 방지)
+        if (response.status === 404 && endpoint.includes('/api/graph/fine')) {
+          // 404 에러도 빈 데이터로 캐시하여 불필요한 재요청 방지
+          const emptyData = {
+            isSuccess: true,
+            code: 'SUCCESS',
+            message: '해당 이벤트에 대한 데이터가 없습니다.',
+            result: {
+              characters: [],
+              relations: [],
+              event: null,
+              userCurrentChapter: 0
+            }
+          };
+          setCachedRequest(cacheKey, emptyData);
+          return emptyData;
+        }
+        
+        throw new Error(`API 요청 실패: ${response.status}`);
+      }
+      
+      const data = await response.json();
+      
+      // 성공한 요청 캐시
+      if (response.ok) {
+        setCachedRequest(cacheKey, data);
+      }
+      
+      return data;
+    } finally {
+      pendingRequests.delete(cacheKey);
+    }
+  })();
+  
+  pendingRequests.set(cacheKey, requestPromise);
+  return requestPromise;
 };
 
 /**
@@ -114,6 +197,48 @@ export const getFineGraph = async (bookId, chapterIdx, eventIdx) => {
       throw new Error('bookId, chapterIdx, eventIdx는 필수 파라미터입니다.');
     }
     
+    // eventIdx=0은 404 에러가 발생하므로 조용히 빈 데이터 반환
+    if (eventIdx === 0 || eventIdx < 1) {
+      const emptyData = {
+        isSuccess: true,
+        code: 'SUCCESS',
+        message: '해당 이벤트에 대한 데이터가 없습니다.',
+        result: {
+          characters: [],
+          relations: [],
+          event: null,
+          userCurrentChapter: 0
+        }
+      };
+      // 빈 데이터도 캐시하여 불필요한 요청 방지
+      const cacheKey = getCacheKey(`/api/graph/fine?bookId=${bookId}&chapterIdx=${chapterIdx}&eventIdx=${eventIdx}`);
+      setCachedRequest(cacheKey, emptyData);
+      return emptyData;
+    }
+    
+    // manifest 캐시에서 이벤트 유효성 검사 (API 책인 경우)
+    if (typeof bookId === 'number') {
+      const { isValidEvent } = await import('../common/manifestCache');
+      const isValid = isValidEvent(bookId, chapterIdx, eventIdx);
+      if (!isValid) {
+        // 유효하지 않은 이벤트는 API 호출 없이 빈 데이터 반환 및 캐시
+        const emptyData = {
+          isSuccess: true,
+          code: 'SUCCESS',
+          message: '해당 이벤트에 대한 데이터가 없습니다.',
+          result: {
+            characters: [],
+            relations: [],
+            event: null,
+            userCurrentChapter: 0
+          }
+        };
+        const cacheKey = getCacheKey(`/api/graph/fine?bookId=${bookId}&chapterIdx=${chapterIdx}&eventIdx=${eventIdx}`);
+        setCachedRequest(cacheKey, emptyData);
+        return emptyData;
+      }
+    }
+    
     const queryParams = new URLSearchParams({
       bookId: bookId.toString(),
       chapterIdx: chapterIdx.toString(),
@@ -123,10 +248,26 @@ export const getFineGraph = async (bookId, chapterIdx, eventIdx) => {
     const data = await authenticatedRequest(`/api/graph/fine?${queryParams.toString()}`);
     return data;
   } catch (error) {
-    // 404는 데이터 없음으로 정상 상황일 수 있음
-    if (error.message?.includes('404') || error.message?.includes('찾을 수 없습니다')) {
-      // warn 레벨로 로그 (정상적인 상황)
-    } else {
+    // 404는 데이터 없음으로 정상 상황 - 빈 데이터 반환 및 캐시
+    if (error.status === 404 || error.message?.includes('404') || error.message?.includes('찾을 수 없습니다') || error.message?.includes('API 요청 실패: 404')) {
+      const emptyData = {
+        isSuccess: true,
+        code: 'SUCCESS',
+        message: '해당 이벤트에 대한 데이터가 없습니다.',
+        result: {
+          characters: [],
+          relations: [],
+          event: null,
+          userCurrentChapter: 0
+        }
+      };
+      // 404 에러도 빈 데이터로 캐시하여 불필요한 재요청 방지
+      const cacheKey = getCacheKey(`/api/graph/fine?bookId=${bookId}&chapterIdx=${chapterIdx}&eventIdx=${eventIdx}`);
+      setCachedRequest(cacheKey, emptyData);
+      return emptyData;
+    }
+    // 404가 아닌 다른 에러만 콘솔에 출력
+    if (error.status !== 404) {
       console.error('세밀 그래프 조회 실패:', error);
     }
     throw error;

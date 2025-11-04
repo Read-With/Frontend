@@ -441,6 +441,178 @@ const ViewerPage = () => {
   const [manifestLoaded, setManifestLoaded] = useState(false);
   const [apiError, setApiError] = useState(null);
   const [manifestData, setManifestData] = useState(null);
+  
+  // 모든 챕터의 eventIdx 정보 확인 (디버깅용)
+  useEffect(() => {
+    const logAllChapterEventInfo = async () => {
+      const isApiBook = book && (typeof book.id === 'number' || book.isFromAPI === true);
+      
+      if (!isApiBook || !book?.id || !manifestLoaded || !manifestData?.chapters) {
+        return;
+      }
+      
+      // 인증 토큰 확인 (로그아웃 상태 체크)
+      const token = localStorage.getItem('accessToken');
+      if (!token) {
+        // 로그아웃 상태에서는 실행하지 않음
+        return;
+      }
+      
+      console.log('📊 모든 챕터의 이벤트 정보:');
+      console.log('━'.repeat(80));
+      
+      const allChapterInfo = [];
+      
+            for (let i = 0; i < manifestData.chapters.length; i++) {
+        const chapterInfo = manifestData.chapters[i];
+        
+        // 다양한 필드명 시도 (배열 인덱스도 고려)
+        let chapterIdx = chapterInfo?.chapterIdx || chapterInfo?.chapter || chapterInfo?.index || chapterInfo?.number || chapterInfo?.id;
+        
+        // chapterIdx가 없으면 배열 인덱스 + 1 사용 (1-based)
+        if (!chapterIdx || chapterIdx === undefined || chapterIdx === null) {
+          chapterIdx = i + 1;
+        }
+        
+                // eventCount 추출 (배열이면 length 사용, 숫자면 그대로)
+        let eventCount = chapterInfo?.eventCount || chapterInfo?.events || chapterInfo?.event_count || 0;
+        if (Array.isArray(eventCount)) {
+          eventCount = eventCount.length;
+        } else if (typeof eventCount !== 'number' || isNaN(eventCount)) {
+          eventCount = 0;
+        }
+
+        const chapterData = {
+          chapterIdx,
+          eventCount,
+          eventIndices: []
+        };
+        
+        // chapterIdx가 유효하지 않으면 스킵
+        if (!chapterIdx || chapterIdx === undefined) {
+          console.warn(`⚠️ Chapter 정보가 유효하지 않음:`, chapterInfo);
+          continue;
+        }
+        
+        // 각 eventIdx에 대해 정보 수집
+        // eventCount가 0이면 최대 이벤트 수를 시도해보기 위해 일단 작은 범위로 테스트
+        const maxEventToCheck = eventCount > 0 ? eventCount : 10; // eventCount가 0이면 최대 10까지 확인
+        
+        for (let eventIdx = 1; eventIdx < maxEventToCheck; eventIdx++) { // eventIdx=0은 건너뜀 (404 방지)
+          try {
+            const fineData = await getFineGraph(book.id, chapterIdx, eventIdx);
+            
+            if (fineData?.isSuccess && fineData?.result) {
+              const resultData = fineData.result;
+              chapterData.eventIndices.push({
+                eventIdx,
+                hasData: true,
+                charactersCount: resultData.characters?.length || 0,
+                relationsCount: resultData.relations?.length || 0,
+                hasEvent: !!resultData.event
+              });
+            } else {
+              chapterData.eventIndices.push({
+                eventIdx,
+                hasData: false
+              });
+            }
+          } catch (error) {
+            // 401 (Unauthorized)는 인증 문제로 조용히 처리 (로그아웃 상태 등)
+            if (error.status === 401) {
+              // 인증 문제는 조용히 처리 - 콘솔에 출력하지 않음
+              return; // 함수 종료 (더 이상 진행하지 않음)
+            }
+            
+            // 404는 데이터 없음으로 조용히 처리
+            if (error.status === 404) {
+              chapterData.eventIndices.push({
+                eventIdx,
+                hasData: false,
+                error: '404 (데이터 없음)'
+              });
+              // 404는 조용히 처리 - 콘솔에 출력하지 않음
+            } else {
+              chapterData.eventIndices.push({
+                eventIdx,
+                hasData: false,
+                error: error.message
+              });
+            }
+          }
+          
+          // API 호출 간격을 두어 서버 부하 방지
+          await new Promise(resolve => setTimeout(resolve, 50));
+        }
+        
+        allChapterInfo.push(chapterData);
+      }
+      
+      // 콘솔에 출력
+      console.log(`총 ${allChapterInfo.length}개 챕터:`);
+      console.log('');
+      
+      allChapterInfo.forEach(chapterData => {
+        if (!chapterData.chapterIdx || chapterData.chapterIdx === undefined) {
+          console.log(`📖 Chapter 정보 없음`);
+          console.log('');
+          return;
+        }
+        
+        const validEvents = chapterData.eventIndices.filter(e => e.hasData);
+        console.log(`📖 Chapter ${chapterData.chapterIdx} (총 ${chapterData.eventCount}개 이벤트, 데이터 있음: ${validEvents.length}개):`);
+        
+        if (chapterData.eventIndices.length === 0) {
+          console.log('  └─ 이벤트 없음');
+        } else {
+          // 데이터가 있는 이벤트만 표시 (간단하게)
+          const eventsWithData = chapterData.eventIndices.filter(e => e.hasData);
+          if (eventsWithData.length > 0) {
+            eventsWithData.forEach(eventInfo => {
+              console.log(`  ├─ eventIdx ${eventInfo.eventIdx}: ✅ 데이터 있음 (캐릭터: ${eventInfo.charactersCount}, 관계: ${eventInfo.relationsCount})`);
+            });
+          } else {
+            // 데이터가 없으면 처음 몇 개만 표시
+            const firstFew = chapterData.eventIndices.slice(0, 3);
+            firstFew.forEach(eventInfo => {
+              const errorMsg = eventInfo.error ? ` (${eventInfo.error})` : '';
+              console.log(`  ├─ eventIdx ${eventInfo.eventIdx}: ❌ 데이터 없음${errorMsg}`);
+            });
+            if (chapterData.eventIndices.length > 3) {
+              console.log(`  └─ ... 외 ${chapterData.eventIndices.length - 3}개 이벤트도 데이터 없음`);
+            }
+          }
+        }
+        console.log('');
+      });
+      
+      console.log('━'.repeat(80));
+      
+      // 요약 정보
+      const totalEvents = allChapterInfo.reduce((sum, ch) => {
+        const count = typeof ch.eventCount === 'number' ? ch.eventCount : 0;
+        return sum + count;
+      }, 0);
+      const eventsWithData = allChapterInfo.reduce((sum, ch) => 
+        sum + ch.eventIndices.filter(e => e.hasData).length, 0
+      );
+      const eventsWithoutData = allChapterInfo.reduce((sum, ch) => 
+        sum + ch.eventIndices.filter(e => !e.hasData).length, 0
+      );
+      
+      console.log(`📈 요약:`);
+      console.log(`  - 총 챕터: ${allChapterInfo.length}개`);
+      console.log(`  - 총 이벤트 (확인한 범위): ${eventsWithData + eventsWithoutData}개`);
+      console.log(`  - 데이터 있는 이벤트: ${eventsWithData}개`);
+      console.log(`  - 데이터 없는 이벤트: ${eventsWithoutData}개`);
+      console.log('━'.repeat(80));
+    };
+    
+    // manifest 로드 후 실행
+    if (manifestLoaded && manifestData?.chapters) {
+      logAllChapterEventInfo();
+    }
+  }, [book?.id, manifestLoaded, manifestData]);
   const apiCallRef = useRef(null);
   const isChapterTransitionRef = useRef(false);
   const setElementsRef = useRef(setElements);
@@ -468,7 +640,7 @@ const ViewerPage = () => {
             return;
           }
           
-          let eventIdx = currentEvent?.eventNum || 0;
+          let eventIdx = currentEvent?.eventNum || 1;
           
           if (isChapterTransitionRef.current) {
             const direction = transitionState.direction;
@@ -476,34 +648,81 @@ const ViewerPage = () => {
             if (direction === 'backward' && manifestData?.chapters) {
               const chapterInfo = manifestData.chapters.find(ch => ch.chapter === currentChapter || ch.chapterIdx === currentChapter);
               if (chapterInfo && chapterInfo.eventCount > 0) {
-                eventIdx = chapterInfo.eventCount - 1;
+                eventIdx = chapterInfo.eventCount; // 1-based로 변환 (API는 0-based이므로 나중에 -1)
+              } else {
+                eventIdx = 1; // 최소값 1로 설정
               }
             } else if (direction === 'forward') {
-              eventIdx = 0;
+              eventIdx = 1; // eventIdx=0 대신 1로 설정
             }
           }
           
-          const callKey = `${book.id}-${currentChapter}-${eventIdx}`;
+          // API 호출을 위해 0-based로 변환 (eventIdx >= 1인 경우에만)
+          const apiEventIdx = eventIdx >= 1 ? eventIdx - 1 : 0;
+          
+          const callKey = `${book.id}-${currentChapter}-${apiEventIdx}`;
           if (apiCallRef.current === callKey) {
             return;
           }
           apiCallRef.current = callKey;
          
         try {
-          if (!book?.id || !currentChapter || eventIdx < 0) {
+          // eventIdx가 0 이하일 때는 API 호출하지 않음 (데이터 없음)
+          if (!book?.id || !currentChapter || apiEventIdx < 1) {
+            setElementsRef.current([]);
+            setIsDataReady(true);
+            setTransitionState({ type: null, inProgress: false, error: false, direction: null });
             return;
           }
           
-          const fineData = await getFineGraph(book.id, currentChapter, eventIdx);
+          const fineData = await getFineGraph(book.id, currentChapter, apiEventIdx);
           
           if (!isMounted) return;
           
+          // API 응답의 모든 필드가 포함된 result 객체 사용
+          // result에는 characters, relations, event 외에도 모든 필드가 포함됨
+          const resultData = fineData.result || {};
+          
+          // API 응답의 event 객체를 로컬 데이터 형식으로 정규화
+          // API: { chapterIdx, start, end, event_id }
+          // 로컬: { chapter, eventNum, event_id, start, end, ... }
+          const apiEvent = resultData.event;
+          const normalizedEvent = apiEvent ? {
+            chapter: apiEvent.chapterIdx ?? currentChapter,
+            chapterIdx: apiEvent.chapterIdx ?? currentChapter, // API 필드명도 유지 (호환성)
+            eventNum: apiEvent.event_id ?? (apiEventIdx + 1), // 1-based로 변환
+            event_id: apiEvent.event_id ?? (apiEventIdx + 1), // 원본 필드명도 유지 (호환성)
+            start: apiEvent.start,
+            end: apiEvent.end,
+            ...apiEvent // 나머지 모든 필드 유지
+          } : null;
+          
           let convertedElements = [];
-          if (fineData.result.characters && fineData.result.relations && 
-              fineData.result.characters.length > 0 && fineData.result.relations.length > 0) {
-            const { idToName, idToDesc, idToDescKo, idToMain, idToNames } = createCharacterMaps(fineData.result.characters);
+                    if (resultData.characters && resultData.relations && 
+            resultData.characters.length > 0 && resultData.relations.length > 0) {
+            // characters 배열의 모든 필드 사용: id, profileImage, description, names, weight, count, common_name, main_character, portrait_prompt
+            const { idToName, idToDesc, idToDescKo, idToMain, idToNames, idToProfileImage } = createCharacterMaps(resultData.characters);
+            
+            // 디버깅: profileImage가 있는 캐릭터 확인
+            if (Object.keys(idToProfileImage).length > 0) {
+              console.log('✅ API 책 - profileImage가 있는 캐릭터:', Object.keys(idToProfileImage).map(id => ({
+                id,
+                name: idToName[id],
+                profileImage: idToProfileImage[id]
+              })));
+            } else {
+              console.warn('⚠️ API 책 - profileImage가 있는 캐릭터가 없습니다. 원본 데이터:', resultData.characters.map(char => ({
+                id: char.id,
+                name: char.common_name || char.name,
+                profileImage: char.profileImage,
+                hasProfileImage: !!(char.profileImage && char.profileImage.trim() !== '')
+              })));
+            }
+            
+            // relations 배열의 모든 필드 사용: id1, id2, positivity, count, relation
+            // 정규화된 event 객체 전달 (로컬 데이터 형식과 통일)
             convertedElements = convertRelationsToElements(
-              fineData.result.relations,
+              resultData.relations,
               idToName,
               idToDesc,
               idToDescKo,
@@ -512,22 +731,26 @@ const ViewerPage = () => {
               'api',
               null,
               null,
-              fineData.result.event
+              normalizedEvent, // 정규화된 event 객체 전달
+              idToProfileImage // API 책의 profileImage 매핑
             );
             
             if (convertedElements.length > 0 && isMounted) {
               setElementsRef.current(convertedElements);
               
               if (!events || events.length === 0) {
-                const apiEvent = fineData.result.event;
-                const defaultEvent = {
-                  chapter: apiEvent?.chapterIdx || currentChapter,
-                  eventNum: apiEvent?.event_id || eventIdx,
+                              // 정규화된 event 객체를 사용하여 로컬 데이터 형식과 통일
+              const defaultEvent = {
+                chapter: normalizedEvent?.chapter || currentChapter,
+                eventNum: normalizedEvent?.eventNum || (apiEventIdx + 1), // 1-based로 변환
                   cfi: "epubcfi(/6/4[chap01ref]!/4[body01]/10[para05]/2/1:3)",
-                  relations: fineData.result.relations || [],
-                  start: apiEvent?.start,
-                  end: apiEvent?.end
-                };
+                                  relations: resultData.relations || [],
+                start: normalizedEvent?.start,
+                end: normalizedEvent?.end,
+                // API 필드명도 유지 (호환성)
+                chapterIdx: normalizedEvent?.chapterIdx,
+                event_id: normalizedEvent?.event_id ?? (apiEventIdx + 1) // 1-based로 변환
+              };
                 setEvents([defaultEvent]);
                 setCurrentEvent(defaultEvent);
               }
@@ -546,7 +769,10 @@ const ViewerPage = () => {
           
         } catch (error) {
           if (isMounted) {
-            if (error.message.includes('404') || error.message.includes('찾을 수 없습니다')) {
+            // 404 에러는 데이터 없음으로 정상 상황 (eventIdx=0 등)
+            if (error.status === 404 || error.message?.includes('404') || error.message?.includes('찾을 수 없습니다')) {
+              // 빈 elements로 설정하고 에러로 표시하지 않음
+              setElementsRef.current([]);
               setApiError(null);
             } else {
               setApiError({

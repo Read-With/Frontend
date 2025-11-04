@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { LogOut, BookOpen } from 'lucide-react';
+import { LogOut } from 'lucide-react';
 import './Header.css';
 import useAuth from '../../hooks/useAuth';
 import { secureLog } from '../../utils/security/oauthSecurity';
@@ -9,11 +9,47 @@ const Header = ({ userNickname, showAuthLinks = false }) => {
   const navigate = useNavigate();
   const { user, logout } = useAuth();
   const [loginError, setLoginError] = useState(null);
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
 
-  const handleLogout = () => {
-    logout();
+  const getApiBaseUrl = () => {
+    if (import.meta.env.DEV) {
+      return '';
+    }
+    return 'https://dev.readwith.store';
+  };
+
+  const handleLogoutClick = () => {
+    setShowLogoutConfirm(true);
+  };
+
+  const handleLogoutConfirm = async () => {
+    await logout();
+    setShowLogoutConfirm(false);
     navigate('/');
   };
+
+  const handleLogoutCancel = () => {
+    setShowLogoutConfirm(false);
+  };
+
+  // ESC 키로 다이얼로그 닫기
+  useEffect(() => {
+    const handleEscape = (e) => {
+      if (e.key === 'Escape' && showLogoutConfirm) {
+        handleLogoutCancel();
+      }
+    };
+
+    if (showLogoutConfirm) {
+      document.addEventListener('keydown', handleEscape);
+      document.body.style.overflow = 'hidden'; // 스크롤 방지
+    }
+
+    return () => {
+      document.removeEventListener('keydown', handleEscape);
+      document.body.style.overflow = 'unset';
+    };
+  }, [showLogoutConfirm]);
 
   // Google OAuth 로그인 시작
   const handleGoogleLogin = () => {
@@ -75,11 +111,11 @@ const Header = ({ userNickname, showAuthLinks = false }) => {
           </div>
         </div>
         <div className="header-right">
-          <div className="google-login-container">
+          <div className="google-login-container" style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
             <button
               onClick={handleGoogleLogin}
               className="google-login-button"
-              style={{ marginRight: '6rem'}}
+              style={{ marginRight: '0' }}
             >
               <svg width="20" height="20" viewBox="0 0 24 24">
                 <path fill="#22c55e" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
@@ -116,12 +152,44 @@ const Header = ({ userNickname, showAuthLinks = false }) => {
       <div className="user-topbar-right">
         <button 
           className="user-topbar-logout"
-          onClick={handleLogout}
+          onClick={handleLogoutClick}
         >
           <LogOut size={16} strokeWidth={2} />
           <span>Logout</span>
         </button>
       </div>
+
+      {/* 로그아웃 확인 다이얼로그 */}
+      {showLogoutConfirm && (
+        <div 
+          className="logout-confirm-overlay"
+          onClick={handleLogoutCancel}
+        >
+          <div 
+            className="logout-confirm-dialog"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="logout-confirm-title">로그아웃</h3>
+            <p className="logout-confirm-message">
+              정말 로그아웃 하시겠습니까?
+            </p>
+            <div className="logout-confirm-buttons">
+              <button
+                className="logout-confirm-cancel"
+                onClick={handleLogoutCancel}
+              >
+                취소
+              </button>
+              <button
+                className="logout-confirm-logout"
+                onClick={handleLogoutConfirm}
+              >
+                로그아웃
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
