@@ -80,7 +80,7 @@ function RelationGraphWrapper() {
   const cyRef = useRef(null);
   const selectedEdgeIdRef = useRef(null);
   const selectedNodeIdRef = useRef(null);
-  const prevChapterNum = useRef();
+  const prevChapterNum = useRef(currentChapter);
   const prevEventNum = useRef();
   const isMacroGraphLoadingRef = useRef(false);
   
@@ -319,7 +319,30 @@ function RelationGraphWrapper() {
     }
     
     try {
+      // API 응답 디버깅 (개발 환경에서만)
+      if (import.meta.env.DEV && apiFineData.characters?.length > 0) {
+        const sampleChar = apiFineData.characters[0];
+        console.debug('[API 이미지 디버깅] 샘플 캐릭터 데이터:', {
+          id: sampleChar.id,
+          name: sampleChar.common_name || sampleChar.name,
+          hasProfileImage: !!sampleChar.profileImage,
+          profileImage: sampleChar.profileImage,
+          profileImageType: typeof sampleChar.profileImage
+        });
+      }
+      
       const { idToName, idToDesc, idToMain, idToNames, idToProfileImage } = createCharacterMaps(apiFineData.characters);
+      
+      // profileImage 매핑 결과 디버깅
+      if (import.meta.env.DEV) {
+        const imageCount = Object.keys(idToProfileImage).length;
+        const totalCount = apiFineData.characters?.length || 0;
+        console.debug(`[이미지 매핑 결과] 전체 캐릭터: ${totalCount}명, 이미지 있는 캐릭터: ${imageCount}명`);
+        if (imageCount > 0) {
+          const firstImageId = Object.keys(idToProfileImage)[0];
+          console.debug(`[이미지 매핑 샘플] ID: ${firstImageId}, URL: ${idToProfileImage[firstImageId]}`);
+        }
+      }
       
       const apiEvent = apiFineData.event;
       const normalizedEvent = apiEvent ? {
@@ -392,6 +415,17 @@ function RelationGraphWrapper() {
   const handleGenerateSuggestions = useCallback((searchTerm) => {
     setSearchTerm(searchTerm);
   }, [setSearchTerm]);
+
+  // 챕터 변경 시 검색 초기화
+  useEffect(() => {
+    if (prevChapterNum.current !== undefined && prevChapterNum.current !== currentChapter) {
+      if (isSearchActive) {
+        clearSearch();
+      }
+    }
+    prevChapterNum.current = currentChapter;
+    prevEventNum.current = eventNum;
+  }, [currentChapter, eventNum, isSearchActive, clearSearch]);
 
   const centerElementBetweenSidebars = useCallback((elementId, elementType) => {
     const cy = cyRef.current;
@@ -549,11 +583,6 @@ function RelationGraphWrapper() {
     [edgeStyle, edgeLabelVisible]
   );
   const layout = useMemo(() => getWideLayout(), []);
-
-  useEffect(() => {
-    prevChapterNum.current = currentChapter;
-    prevEventNum.current = eventNum;
-  }, [currentChapter, eventNum]);
 
   useEffect(() => {
     if (elements) {

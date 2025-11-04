@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState, useCallback, createContext } from "react";
+import React, { useEffect, useRef, useState, useCallback, createContext, useMemo } from "react";
 import cytoscape from "cytoscape";
 import "./RelationGraph.css";
 import { detectAndResolveOverlap, calcGraphDiff } from "../../utils/graphDataUtils.js";
@@ -463,9 +463,6 @@ const CytoscapeGraphUnified = ({
         }
       }
       
-      if (isSearchActive || filteredElements.length > 0) {
-        applySearchFadeEffect(cy, filteredElements, isSearchActive);
-      }
     });
     
     if (isInitialLoad) {
@@ -474,6 +471,29 @@ const CytoscapeGraphUnified = ({
     
     setIsGraphVisible(true);
   }, [elements, externalCyRef, previousElements, isInitialLoad, stylesheet, layout, fitNodeIds, isSearchActive, filteredElements, onLayoutComplete, isResetFromSearch]);
+
+  // 검색 상태 변경 시에만 초기 fade 효과 적용 (별도 useEffect)
+  const filteredElementIdsStr = useMemo(() => {
+    if (!filteredElements || filteredElements.length === 0) return '';
+    return filteredElements.map(e => e.data?.id).filter(Boolean).sort().join(',');
+  }, [filteredElements]);
+  
+  useEffect(() => {
+    const cy = externalCyRef?.current;
+    if (!cy) return;
+    
+    if (isSearchActive && filteredElements.length > 0) {
+      // 검색 활성화 시 초기 fade 효과만 적용
+      applySearchFadeEffect(cy, filteredElements, isSearchActive);
+    } else if (!isSearchActive) {
+      // 검색 비활성화 시 모든 fade 효과 제거
+      cy.elements().forEach(element => {
+        element.removeClass("faded highlighted");
+        element.style('opacity', '');
+        element.style('text-opacity', '');
+      });
+    }
+  }, [isSearchActive, filteredElementIdsStr, filteredElements, externalCyRef]);
 
   // 크기 반응형
   useEffect(() => {

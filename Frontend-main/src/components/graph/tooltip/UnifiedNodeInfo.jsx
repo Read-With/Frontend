@@ -825,9 +825,18 @@ function UnifiedNodeInfo({
                     background: "#faf7f2",
                     boxShadow: "0 0.125rem 0.5rem rgba(0,0,0,0.03)",
                   }}
+                  crossOrigin="anonymous"
                   onError={(e) => {
+                    console.warn(`이미지 로딩 실패 (API 책):`, {
+                      url: processedNodeData.image,
+                      characterId: processedNodeData.id,
+                      characterName: processedNodeData.displayName,
+                      error: e.target.error
+                    });
                     e.target.style.display = 'none';
-                    e.target.nextSibling.style.display = 'block';
+                    if (e.target.nextSibling) {
+                      e.target.nextSibling.style.display = 'block';
+                    }
                   }}
                 />
               ) : null}
@@ -1124,9 +1133,18 @@ function UnifiedNodeInfo({
                         objectFit: 'cover',
                         borderRadius: '50%',
                       }}
+                      crossOrigin="anonymous"
                       onError={(e) => {
+                        console.warn(`이미지 로딩 실패 (API 책):`, {
+                          url: processedNodeData.image,
+                          characterId: processedNodeData.id,
+                          characterName: processedNodeData.displayName,
+                          error: e.target.error
+                        });
                         e.target.style.display = 'none';
-                        e.target.nextSibling.style.display = 'block';
+                        if (e.target.nextSibling) {
+                          e.target.nextSibling.style.display = 'block';
+                        }
                       }}
                     />
                   ) : null}

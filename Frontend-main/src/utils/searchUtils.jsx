@@ -530,89 +530,148 @@ export function applySearchHighlight(cy, clickedNode, filteredElements, options 
   }
   
   try {
+    const {
+      fadeOpacity = 0.05,
+      textFadeOpacity = 0.02
+    } = options;
+
     const filteredElementIds = createFilteredElementIds(filteredElements);
     const clickedNodeId = clickedNode.id();
-    const highlightedElements = new Set();
+    const highlightedNodeIds = new Set();
+    const highlightedEdgeIds = new Set();
 
-    // 클릭한 노드가 검색 결과에 포함되어 있는지 확인
+    cy.nodes().forEach((n) => {
+      n.removeStyle('border-color');
+      n.removeStyle('border-width');
+      n.removeStyle('border-opacity');
+      n.removeStyle('border-style');
+    });
+    cy.edges().forEach((e) => {
+      e.removeStyle('width');
+    });
+
     if (filteredElementIds.has(clickedNodeId)) {
-      // 클릭한 노드와 직접 연결된 검색 결과 요소들만 하이라이트
-      const connectedElements = new Set();
-      connectedElements.add(clickedNodeId);
-
-      // 클릭한 노드와 직접 연결된 검색 결과 노드들 찾기
-      const connectedNodes = clickedNode.neighborhood().nodes();
-      connectedNodes.forEach(connectedNode => {
-        const connectedNodeId = connectedNode.id();
-        if (filteredElementIds.has(connectedNodeId)) {
-          connectedElements.add(connectedNodeId);
-        }
-      });
-
-      // 클릭한 노드와 직접 연결된 검색 결과 간선들 찾기
       const connectedEdges = clickedNode.connectedEdges();
+      highlightedNodeIds.add(clickedNodeId);
+
       connectedEdges.forEach(edge => {
         const edgeData = edge.data();
-        if (filteredElementIds.has(edgeData.source) && filteredElementIds.has(edgeData.target)) {
-          connectedElements.add(edgeData.source);
-          connectedElements.add(edgeData.target);
-        }
-      });
-
-      // 연결된 검색 결과 요소들만 하이라이트
-      connectedElements.forEach(elementId => {
-        const element = cy.getElementById(elementId);
-        if (element.length > 0) {
-          element.removeClass("faded").addClass("highlighted");
-          highlightedElements.add(elementId);
-          
-          if (!element.data().source) {
-            // 노드인 경우, 검색 결과에 포함된 연결 간선들만 하이라이트
-            const nodeConnectedEdges = element.connectedEdges();
-            nodeConnectedEdges.forEach(edge => {
-              const edgeData = edge.data();
-              if (filteredElementIds.has(edgeData.source) && filteredElementIds.has(edgeData.target)) {
-                edge.removeClass("faded").addClass("highlighted");
-                highlightedElements.add(edge.id());
-              }
-            });
-          }
+        const sourceId = edgeData.source;
+        const targetId = edgeData.target;
+        
+        if (filteredElementIds.has(sourceId) && filteredElementIds.has(targetId)) {
+          highlightedEdgeIds.add(edge.id());
+          highlightedNodeIds.add(sourceId);
+          highlightedNodeIds.add(targetId);
         }
       });
     } else {
-      // 클릭한 노드가 검색 결과에 포함되지 않은 경우, 검색 결과에 포함된 모든 요소들 하이라이트
       filteredElementIds.forEach(elementId => {
         const element = cy.getElementById(elementId);
-        if (element.length > 0) {
-          element.removeClass("faded").addClass("highlighted");
-          highlightedElements.add(elementId);
+        if (element.length > 0 && !element.data().source) {
+          highlightedNodeIds.add(elementId);
           
-          if (!element.data().source) {
-            // 노드인 경우, 검색 결과에 포함된 연결 간선들만 하이라이트
-            const connectedEdges = element.connectedEdges();
-            connectedEdges.forEach(edge => {
-              const edgeData = edge.data();
-              if (filteredElementIds.has(edgeData.source) && filteredElementIds.has(edgeData.target)) {
-                edge.removeClass("faded").addClass("highlighted");
-                highlightedElements.add(edge.id());
-              }
-            });
-          }
+          const connectedEdges = element.connectedEdges();
+          connectedEdges.forEach(edge => {
+            const edgeData = edge.data();
+            if (filteredElementIds.has(edgeData.source) && filteredElementIds.has(edgeData.target)) {
+              highlightedEdgeIds.add(edge.id());
+            }
+          });
         }
       });
     }
 
+    cy.batch(() => {
+      cy.nodes().removeClass("highlighted faded");
+      cy.edges().removeClass("highlighted faded");
+
+      cy.nodes().forEach((node) => {
+        const nodeId = node.id();
+        if (filteredElementIds.has(nodeId)) {
+          if (highlightedNodeIds.has(nodeId)) {
+            node.addClass("highlighted");
+            node.style('opacity', '');
+            node.style('text-opacity', '');
+          } else {
+            node.addClass("faded");
+            node.style('opacity', fadeOpacity);
+            node.style('text-opacity', textFadeOpacity);
+          }
+        } else {
+          node.addClass("faded");
+          node.style('opacity', fadeOpacity);
+          node.style('text-opacity', textFadeOpacity);
+        }
+      });
+
+      cy.edges().forEach((edge) => {
+        const edgeData = edge.data();
+        const sourceId = edgeData.source;
+        const targetId = edgeData.target;
+        const edgeId = edge.id();
+
+        if (filteredElementIds.has(sourceId) && filteredElementIds.has(targetId)) {
+          if (highlightedEdgeIds.has(edgeId)) {
+            edge.addClass("highlighted");
+            edge.style('opacity', '');
+          } else {
+            edge.addClass("faded");
+            edge.style('opacity', fadeOpacity);
+          }
+        } else {
+          edge.addClass("faded");
+          edge.style('opacity', fadeOpacity);
+        }
+      });
+    });
+
+    try {
+      cy.style().update();
+    } catch {}
+
+    requestAnimationFrame(() => {
+      try {
+        if (highlightedNodeIds.has(clickedNodeId)) {
+          const clickedElement = cy.getElementById(clickedNodeId);
+          if (clickedElement.length > 0) {
+            clickedElement.style('border-color', '#5C6F5C');
+            clickedElement.style('border-width', 4);
+            clickedElement.style('border-opacity', 1);
+            clickedElement.style('border-style', 'solid');
+          }
+
+          highlightedEdgeIds.forEach(edgeId => {
+            const edge = cy.getElementById(edgeId);
+            if (edge.length > 0) {
+              edge.style('width', 8);
+              edge.style('opacity', 1);
+            }
+          });
+        }
+
+        cy.style().update();
+      } catch {}
+    });
+
     return {
       success: true,
-      highlightedCount: highlightedElements.size,
+      highlightedCount: highlightedNodeIds.size + highlightedEdgeIds.size,
       cleanup: () => {
-        // 하이라이트된 요소들만 정리
-        highlightedElements.forEach(elementId => {
-          const element = cy.getElementById(elementId);
-          if (element.length > 0) {
-            element.removeClass("highlighted");
-          }
+        cy.batch(() => {
+          cy.nodes().forEach((node) => {
+            node.removeClass("highlighted");
+            node.removeStyle('border-color');
+            node.removeStyle('border-width');
+            node.removeStyle('border-opacity');
+            node.removeStyle('border-style');
+          });
+          cy.edges().forEach((edge) => {
+            edge.removeClass("highlighted");
+            edge.removeStyle('width');
+          });
         });
+        cy.style().update();
       }
     };
   } catch (error) {

@@ -37,9 +37,19 @@ export function createCharacterMaps(characters) {
       idToMain[id] = char.main_character || false;
       idToNames[id] = char.names || [];
       
-      // profileImage가 유효한 경우에만 저장 (null, undefined, 빈 문자열 제외)
-      if (char.profileImage && typeof char.profileImage === 'string' && char.profileImage.trim() !== '') {
-        idToProfileImage[id] = char.profileImage;
+      // profileImage 검증 및 정규화
+      if (char.profileImage) {
+        const validatedUrl = validateAndNormalizeProfileImageUrl(char.profileImage);
+        if (validatedUrl) {
+          idToProfileImage[id] = validatedUrl;
+        } else {
+          console.warn(`[이미지 검증 실패] 캐릭터 ID: ${id}, 원본 profileImage:`, char.profileImage);
+        }
+      } else {
+        // profileImage가 없는 경우 디버깅 정보 출력 (개발 환경에서만)
+        if (import.meta.env.DEV && char.id) {
+          console.debug(`[이미지 없음] 캐릭터 ID: ${id}, 이름: ${idToName[id] || 'Unknown'}`);
+        }
       }
     });
 
@@ -61,6 +71,56 @@ export function getCharacterImagePath(folderKey, characterId) {
     return '';
   }
   return `/${folderKey}/${characterId}.png`;
+}
+
+/**
+ * API에서 받은 profileImage URL을 검증하고 정규화
+ * @param {string} profileImage - 원본 profileImage URL
+ * @returns {string|null} 검증된 이미지 URL, 유효하지 않으면 null
+ */
+export function validateAndNormalizeProfileImageUrl(profileImage) {
+  if (!profileImage || typeof profileImage !== 'string') {
+    return null;
+  }
+  
+  const trimmed = profileImage.trim();
+  if (trimmed === '') {
+    return null;
+  }
+  
+  // 절대 URL인 경우 (http://, https://)
+  if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+    try {
+      new URL(trimmed);
+      return trimmed;
+    } catch {
+      console.warn(`[이미지 검증] 유효하지 않은 절대 URL: ${trimmed}`);
+      return null;
+    }
+  }
+  
+  // 상대 경로인 경우 API 베이스 URL과 결합
+  if (trimmed.startsWith('/')) {
+    const getApiBaseUrl = () => {
+      if (import.meta.env.DEV) {
+        // 개발 환경: 프록시를 통해 배포 서버로 요청하므로 빈 문자열
+        return '';
+      }
+      return 'https://dev.readwith.store';
+    };
+    const apiBaseUrl = getApiBaseUrl();
+    const fullUrl = apiBaseUrl ? `${apiBaseUrl}${trimmed}` : trimmed;
+    
+    if (import.meta.env.DEV) {
+      console.debug(`[이미지 URL 정규화] 상대 경로: ${trimmed} -> 개발 환경에서는 프록시 사용`);
+    }
+    
+    return fullUrl;
+  }
+  
+  // 그 외의 경우 (잘못된 형식)
+  console.warn(`[이미지 검증] 유효하지 않은 이미지 URL 형식: ${trimmed}`);
+  return null;
 }
 
 /**

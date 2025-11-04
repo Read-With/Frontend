@@ -167,6 +167,19 @@ export const createGraphStylesheet = (edgeStyle, edgeLabelVisible, maxEdgeLabelL
       "border-style": "solid",
     },
   },
+  {
+    selector: "node.faded",
+    style: {
+      opacity: 0.05,
+      "text-opacity": 0.02,
+    },
+  },
+  {
+    selector: "edge.faded",
+    style: {
+      opacity: 0.05,
+    },
+  },
 ];
 
 /**

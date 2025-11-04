@@ -1,5 +1,5 @@
 import { useCallback, useRef, useEffect } from "react";
-import { applySearchHighlight } from '../utils/searchUtils.jsx';
+import { applySearchHighlight, createFilteredElementIds } from '../utils/searchUtils.jsx';
 import { getContainerInfo, calculateCytoscapePosition } from '../utils/graphUtils';
 
 export default function useGraphInteractions({
@@ -197,38 +197,85 @@ export default function useGraphInteractions({
     } catch {}
   }, []);
 
-  const handleNodeHighlight = useCallback((node) => {
+      const handleNodeHighlight = useCallback((node) => {
     try {
       if (!cyRef?.current) return;
-      
+
       const cy = cyRef.current;
-      
+
       if (isSearchActive && filteredElements.length > 0) {
         removeInlineStyles(cy, { includeOpacity: false });
-        try {
-          cy.style().update();
-        } catch {}
+        cy.style().update();
+        
         applySearchHighlight(cy, node, filteredElements);
+        
+        forceStyleUpdate(cy, { immediate: true, asyncFrames: 2 });
       } else {
-        resetAllStyles();
-        forceStyleUpdate(cy, { immediate: true, asyncFrames: 0 });
-        
-        const connectedEdges = node.connectedEdges();
-        const neighborhoodNodes = node.neighborhood().nodes();
-        
-        cy.batch(() => {
-          node.addClass("highlighted");
-          connectedEdges.addClass("highlighted");
+        cy.nodes().forEach((n) => {
+          n.removeStyle('border-color');
+          n.removeStyle('border-width');
+          n.removeStyle('border-opacity');
+          n.removeStyle('border-style');
         });
-        
+        cy.edges().forEach((e) => {
+          e.removeStyle('width');
+        });
+
+        const clickedNodeId = node.id();
+        const connectedEdges = node.connectedEdges();
+        const connectedNodeIds = new Set([clickedNodeId]);
+        const connectedEdgeIds = new Set();
+
+        connectedEdges.forEach((edge) => {
+          const edgeId = edge.id();
+          const sourceId = edge.source().id();
+          const targetId = edge.target().id();
+          
+          connectedEdgeIds.add(edgeId);
+          connectedNodeIds.add(sourceId);
+          connectedNodeIds.add(targetId);
+        });
+
+        const fadeOpacity = 0.05;
+        const textFadeOpacity = 0.02;
+
+        cy.batch(() => {
+          cy.nodes().removeClass("highlighted faded");
+          cy.edges().removeClass("highlighted faded");
+          
+          cy.nodes().forEach((n) => {
+            if (connectedNodeIds.has(n.id())) {
+              n.addClass("highlighted");
+              n.style('opacity', '');
+              n.style('text-opacity', '');
+            } else {
+              n.addClass("faded");
+              n.style('opacity', fadeOpacity);
+              n.style('text-opacity', textFadeOpacity);
+            }
+          });
+
+          cy.edges().forEach((edge) => {
+            if (connectedEdgeIds.has(edge.id())) {
+              edge.addClass("highlighted");
+              edge.style('opacity', '');
+            } else {
+              edge.addClass("faded");
+              edge.style('opacity', fadeOpacity);
+            }
+          });
+        });
+
+        forceStyleUpdate(cy, { immediate: true, asyncFrames: 0 });
+
         applyNodeHighlightStyles(node);
         connectedEdges.forEach((edge) => applyEdgeHighlightStyles(edge));
-        
+
         forceStyleUpdate(cy, { immediate: true, asyncFrames: 2 });
       }
     } catch (error) {
     }
-  }, [cyRef, isSearchActive, filteredElements, resetAllStyles, removeInlineStyles, forceStyleUpdate, applyNodeHighlightStyles, applyEdgeHighlightStyles]);
+  }, [cyRef, isSearchActive, filteredElements, removeInlineStyles, forceStyleUpdate, applyNodeHighlightStyles, applyEdgeHighlightStyles]);
 
   const calculateTooltipPosition = useCallback((element, evt, offset = 0) => {
     try {
@@ -255,13 +302,48 @@ export default function useGraphInteractions({
       
       let basePos;
       if (isNode) {
-        basePos = element.renderedPosition();
+        const rendered = element.renderedPosition();
+        if (rendered && typeof rendered.x === 'number' && typeof rendered.y === 'number') {
+          basePos = rendered;
+        } else {
+          const pos = element.position();
+          basePos = pos && typeof pos.x === 'number' && typeof pos.y === 'number' ? pos : { x: 0, y: 0 };
+        }
       } else {
-        const midpoint = element.midpoint();
-        basePos = { x: midpoint.x, y: midpoint.y };
+        try {
+          const midpoint = element.midpoint();
+          if (midpoint && typeof midpoint.x === 'number' && typeof midpoint.y === 'number') {
+            basePos = midpoint;
+          } else {
+            const source = element.source();
+            const target = element.target();
+            if (source && target) {
+              const sourcePos = source.renderedPosition ? source.renderedPosition() : source.position();
+              const targetPos = target.renderedPosition ? target.renderedPosition() : target.position();
+              if (sourcePos && targetPos && 
+                  typeof sourcePos.x === 'number' && typeof sourcePos.y === 'number' &&
+                  typeof targetPos.x === 'number' && typeof targetPos.y === 'number') {
+                basePos = {
+                  x: (sourcePos.x + targetPos.x) / 2,
+                  y: (sourcePos.y + targetPos.y) / 2
+                };
+              } else {
+                basePos = { x: 0, y: 0 };
+              }
+            } else {
+              basePos = { x: 0, y: 0 };
+            }
+          }
+        } catch (err) {
+          basePos = { x: 0, y: 0 };
+        }
       }
       
       // calculateCytoscapePosition을 사용하여 정확한 컨테이너 기준 좌표 계산
+      if (!basePos || typeof basePos.x !== 'number' || typeof basePos.y !== 'number') {
+        return { x: 0, y: 0 };
+      }
+      
       const position = calculateCytoscapePosition(basePos, cyRef);
       
       let domX = position.x - containerRect.left;
@@ -322,7 +404,7 @@ export default function useGraphInteractions({
     (evt) => {
       try {
         if (!cyRef?.current) return;
-        
+
         const cy = cyRef.current;
         const edge = evt.target;
         const edgeData = edge?.data?.();
@@ -331,33 +413,132 @@ export default function useGraphInteractions({
         const { x: mouseX, y: mouseY } = calculateTooltipPosition(edge, evt, 0);
         const edgeCenter = calculateTooltipPosition(edge, null, 0);
 
-        resetAllStyles();
-        forceStyleUpdate(cy, { immediate: true, asyncFrames: 0 });
-        
         const srcNode = edge.source();
         const tgtNode = edge.target();
-        
-        cy.batch(() => {
-          edge.removeClass("faded").addClass("highlighted");
-          srcNode.removeClass("faded").addClass("highlighted");
-          tgtNode.removeClass("faded").addClass("highlighted");
+        const srcId = srcNode.id();
+        const tgtId = tgtNode.id();
+        const edgeId = edge.id();
+
+        const connectedNodeIds = new Set([srcId, tgtId]);
+        const connectedEdgeIds = new Set([edgeId]);
+
+        const fadeOpacity = 0.05;
+        const textFadeOpacity = 0.02;
+
+        cy.nodes().forEach((n) => {
+          n.removeStyle('border-color');
+          n.removeStyle('border-width');
+          n.removeStyle('border-opacity');
+          n.removeStyle('border-style');
         });
-        
-        applyEdgeHighlightStyles(edge);
-        applyNodeHighlightStyles(srcNode);
-        applyNodeHighlightStyles(tgtNode);
-        
-        forceStyleUpdate(cy, { immediate: true, asyncFrames: 2 });
+        cy.edges().forEach((e) => {
+          e.removeStyle('width');
+        });
+
+        if (isSearchActive && filteredElements.length > 0) {
+          const filteredElementIds = new Set();
+          filteredElements.forEach(element => {
+            if (element?.data) {
+              if (element.data.source) {
+                filteredElementIds.add(element.data.source);
+                filteredElementIds.add(element.data.target);
+              } else {
+                filteredElementIds.add(element.data.id);
+              }
+            }
+          });
+
+          cy.batch(() => {
+            cy.nodes().removeClass("highlighted faded");
+            cy.edges().removeClass("highlighted faded");
+
+            cy.nodes().forEach((n) => {
+              const nodeId = n.id();
+              if (connectedNodeIds.has(nodeId)) {
+                n.addClass("highlighted");
+                n.style('opacity', '');
+                n.style('text-opacity', '');
+              } else if (filteredElementIds.has(nodeId)) {
+                n.addClass("faded");
+                n.style('opacity', fadeOpacity);
+                n.style('text-opacity', textFadeOpacity);
+              } else {
+                n.addClass("faded");
+                n.style('opacity', fadeOpacity);
+                n.style('text-opacity', textFadeOpacity);
+              }
+            });
+
+            cy.edges().forEach((e) => {
+              const eId = e.id();
+              if (connectedEdgeIds.has(eId)) {
+                e.addClass("highlighted");
+                e.style('opacity', '');
+              } else {
+                e.addClass("faded");
+                e.style('opacity', fadeOpacity);
+              }
+            });
+          });
+
+          forceStyleUpdate(cy, { immediate: true, asyncFrames: 0 });
+
+          applyEdgeHighlightStyles(edge);
+          applyNodeHighlightStyles(srcNode);
+          applyNodeHighlightStyles(tgtNode);
+
+          forceStyleUpdate(cy, { immediate: true, asyncFrames: 2 });
+        } else {
+          resetAllStyles();
+          forceStyleUpdate(cy, { immediate: true, asyncFrames: 0 });
+
+          const srcNode = edge.source();
+          const tgtNode = edge.target();
+          const connectedNodeIds = new Set([srcNode.id(), tgtNode.id()]);
+
+          const fadeOpacity = 0.05;
+          const textFadeOpacity = 0.02;
+
+          cy.batch(() => {
+            cy.nodes().forEach((n) => {
+              if (connectedNodeIds.has(n.id())) {
+                n.removeClass("faded").addClass("highlighted");
+                n.style('opacity', '');
+                n.style('text-opacity', '');
+              } else {
+                n.removeClass("highlighted").addClass("faded");
+                n.style('opacity', fadeOpacity);
+                n.style('text-opacity', textFadeOpacity);
+              }
+            });
+
+            cy.edges().forEach((e) => {
+              if (e.id() === edge.id()) {
+                e.removeClass("faded").addClass("highlighted");
+                e.style('opacity', '');
+              } else {
+                e.removeClass("highlighted").addClass("faded");
+                e.style('opacity', fadeOpacity);
+              }
+            });
+          });
+
+          applyEdgeHighlightStyles(edge);
+          applyNodeHighlightStyles(srcNode);
+          applyNodeHighlightStyles(tgtNode);
+
+          forceStyleUpdate(cy, { immediate: true, asyncFrames: 2 });
+        }
 
         if (onShowEdgeTooltipRef.current) {
-          onShowEdgeTooltipRef.current({ edge, evt, edgeCenter, mouseX, mouseY });
+          onShowEdgeTooltipRef.current({ edge, evt, edgeCenter, mouseX, mouseY });                                                                              
         }
 
         if (selectedEdgeIdRef) selectedEdgeIdRef.current = edge.id();
       } catch (error) {
       }
     },
-    [cyRef, onShowEdgeTooltipRef, selectedEdgeIdRef, resetAllStyles, calculateTooltipPosition, forceStyleUpdate, applyEdgeHighlightStyles, applyNodeHighlightStyles]
+    [cyRef, isSearchActive, filteredElements, onShowEdgeTooltipRef, selectedEdgeIdRef, resetAllStyles, calculateTooltipPosition, forceStyleUpdate, applyEdgeHighlightStyles, applyNodeHighlightStyles]                                                                            
   );
 
   const handleBackgroundClick = useCallback((evt) => {
