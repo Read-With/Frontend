@@ -14,8 +14,6 @@ export function useTooltipPosition(initialX, initialY) {
     setShowContent(true);
   }, []);
 
-  // 공통 유틸리티 함수들을 import하여 사용
-
   const handleMouseDown = (e) => {
     if (e.target.closest(".tooltip-close-btn")) return;
     setIsDragging(true);
@@ -56,7 +54,6 @@ export function useTooltipPosition(initialX, initialY) {
     setIsDragging(false);
   };
 
-  // 드래그 이벤트 리스너 등록
   useEffect(() => {
     if (isDragging) {
       window.addEventListener("mousemove", handleMouseMove);
@@ -72,7 +69,6 @@ export function useTooltipPosition(initialX, initialY) {
     };
   }, [isDragging]);
 
-  // 초기 위치 설정
   useEffect(() => {
     if (
       initialX !== undefined &&

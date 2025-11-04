@@ -46,8 +46,6 @@ export const useBooks = () => {
       }
       
     } catch (err) {
-      console.error('fetchBooks 에러:', err);
-      
       if (err.message?.includes('인증이 만료되었습니다') || err.message?.includes('401')) {
         setError('인증이 만료되었습니다. 다시 로그인해주세요.');
       } else {
@@ -83,7 +81,6 @@ export const useBooks = () => {
     }
   };
 
-  // 즐겨찾기 토글 함수
   const toggleFavorite = async (bookId, favorite) => {
     try {
       setBooks(prevBooks => 
@@ -106,12 +103,10 @@ export const useBooks = () => {
         )
       );
       setError(err.message || '즐겨찾기 설정에 실패했습니다.');
-      console.error('즐겨찾기 토글 실패:', err);
       throw err;
     }
   };
 
-  // 즐겨찾기 목록만 조회
   const fetchFavorites = useCallback(async () => {
     try {
       setLoading(true);
@@ -127,18 +122,15 @@ export const useBooks = () => {
     } catch (err) {
       const errorMessage = err.message || '즐겨찾기 목록을 불러올 수 없습니다.';
       setError(errorMessage);
-      console.error('즐겨찾기 목록 조회 실패:', err);
     } finally {
       setLoading(false);
     }
   }, []);
 
-  // 검색/필터 함수
   const searchBooks = (params) => {
     fetchBooks(params);
   };
 
-  // 단일 도서 조회
   const fetchBook = async (bookId) => {
     try {
       const response = await getBook(bookId);
@@ -152,13 +144,11 @@ export const useBooks = () => {
     }
   };
 
-  // 책 추가
   const addBook = async (newBook) => {
     try {
       setBooks(prevBooks => [newBook, ...prevBooks]);
       await fetchBooks();
     } catch (err) {
-      console.error('책 추가 후 목록 갱신 실패:', err);
     }
   };
 

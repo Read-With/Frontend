@@ -83,28 +83,12 @@ export default function useGraphInteractions({
     const cy = cyRef.current;
     
     cy.batch(() => {
-      cy.nodes().removeClass("highlighted").addClass("faded");
-      cy.edges().removeClass("highlighted").addClass("faded");
+      cy.nodes().removeClass("highlighted");
+      cy.edges().removeClass("highlighted");
     });
     
     removeInlineStyles(cy, { includeOpacity: true });
     forceStyleUpdate(cy, { immediate: true, asyncFrames: 2 });
-    
-    requestAnimationFrame(() => {
-      try {
-        cy.nodes().forEach((node) => {
-          if (!node.hasClass('faded')) {
-            try { node.addClass('faded'); } catch {}
-          }
-        });
-        cy.edges().forEach((edge) => {
-          if (!edge.hasClass('faded')) {
-            try { edge.addClass('faded'); } catch {}
-          }
-        });
-        cy.style().update();
-      } catch {}
-    });
   }, [cyRef, removeInlineStyles, forceStyleUpdate]);
 
   const clearStyles = useCallback(() => {
@@ -201,8 +185,6 @@ export default function useGraphInteractions({
       node.style('border-width', 4);
       node.style('border-opacity', 1);
       node.style('border-style', 'solid');
-      node.style('opacity', 1);
-      node.style('text-opacity', 1);
       if (typeof node.raise === 'function') node.raise();
     } catch {}
   }, []);
@@ -235,29 +217,16 @@ export default function useGraphInteractions({
         const neighborhoodNodes = node.neighborhood().nodes();
         
         cy.batch(() => {
-          node.removeClass("faded").addClass("highlighted");
-          connectedEdges.removeClass("faded").addClass("highlighted");
-          neighborhoodNodes.removeClass("faded");
+          node.addClass("highlighted");
+          connectedEdges.addClass("highlighted");
         });
         
         applyNodeHighlightStyles(node);
         connectedEdges.forEach((edge) => applyEdgeHighlightStyles(edge));
         
-        neighborhoodNodes.forEach((nbNode) => {
-          try {
-            nbNode.removeStyle('border-color');
-            nbNode.removeStyle('border-width');
-            nbNode.removeStyle('border-opacity');
-            nbNode.removeStyle('border-style');
-            nbNode.style('opacity', 1);
-            nbNode.style('text-opacity', 1);
-          } catch {}
-        });
-        
         forceStyleUpdate(cy, { immediate: true, asyncFrames: 2 });
       }
     } catch (error) {
-      console.error('❌ [useGraphInteractions] handleNodeHighlight 오류:', error);
     }
   }, [cyRef, isSearchActive, filteredElements, resetAllStyles, removeInlineStyles, forceStyleUpdate, applyNodeHighlightStyles, applyEdgeHighlightStyles]);
 
@@ -334,7 +303,6 @@ export default function useGraphInteractions({
         
         if (selectedNodeIdRef) selectedNodeIdRef.current = node.id();
       } catch (error) {
-        console.error('❌ [useGraphInteractions] 노드 클릭 처리 오류:', error);
       }
     },
     [cyRef, handleNodeHighlight, calculateNodePosition, calculateTooltipPosition, onShowNodeTooltipRef, selectedNodeIdRef]
@@ -387,7 +355,6 @@ export default function useGraphInteractions({
 
         if (selectedEdgeIdRef) selectedEdgeIdRef.current = edge.id();
       } catch (error) {
-        console.error('❌ [useGraphInteractions] 간선 클릭 처리 오류:', error);
       }
     },
     [cyRef, onShowEdgeTooltipRef, selectedEdgeIdRef, resetAllStyles, calculateTooltipPosition, forceStyleUpdate, applyEdgeHighlightStyles, applyNodeHighlightStyles]

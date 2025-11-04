@@ -642,6 +642,18 @@ const ViewerPage = () => {
             // characters 배열의 모든 필드 사용: id, profileImage, description, names, weight, count, common_name, main_character, portrait_prompt
             const { idToName, idToDesc, idToDescKo, idToMain, idToNames, idToProfileImage } = createCharacterMaps(resultData.characters);
             
+            const nodeWeights = {};
+            if (resultData.characters) {
+              resultData.characters.forEach(char => {
+                if (char.id !== undefined && char.weight !== undefined && char.weight > 0) {
+                  const nodeId = String(char.id);
+                  nodeWeights[nodeId] = {
+                    weight: char.weight,
+                    count: char.count || 1
+                  };
+                }
+              });
+            }
             
             // relations 배열의 모든 필드 사용: id1, id2, positivity, count, relation
             // 정규화된 event 객체 전달 (로컬 데이터 형식과 통일)
@@ -653,7 +665,7 @@ const ViewerPage = () => {
               idToMain,
               idToNames,
               'api',
-              null,
+              Object.keys(nodeWeights).length > 0 ? nodeWeights : null,
               null,
               normalizedEvent, // 정규화된 event 객체 전달
               idToProfileImage // API 책의 profileImage 매핑

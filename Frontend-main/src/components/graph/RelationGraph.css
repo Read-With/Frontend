@@ -379,11 +379,6 @@
   line-height: 1.4;
 }
 
-/* highlighted 노드 강조 */
-node.highlighted {
-  border: 3px solid #3b82f6;
-  filter: drop-shadow(0 0 10px rgba(59, 130, 246, 0.5));
-}
 
 .edge-tooltip .close-btn {
   position: absolute;

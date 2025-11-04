@@ -332,6 +332,19 @@ function RelationGraphWrapper() {
         ...apiEvent
       } : null;
       
+      const nodeWeights = {};
+      if (apiFineData.characters) {
+        apiFineData.characters.forEach(char => {
+          if (char.id !== undefined && char.weight !== undefined && char.weight > 0) {
+            const nodeId = String(char.id);
+            nodeWeights[nodeId] = {
+              weight: char.weight,
+              count: char.count || 1
+            };
+          }
+        });
+      }
+      
       const convertedElements = convertRelationsToElements(
         apiFineData.relations,
         idToName,
@@ -340,7 +353,7 @@ function RelationGraphWrapper() {
         idToMain,
         idToNames,
         'api',
-        null,
+        Object.keys(nodeWeights).length > 0 ? nodeWeights : null,
         null,
         normalizedEvent,
         idToProfileImage

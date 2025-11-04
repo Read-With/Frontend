@@ -159,17 +159,10 @@ export const createGraphStylesheet = (edgeStyle, edgeLabelVisible, maxEdgeLabelL
     },
   },
   {
-    selector: ".faded",
-    style: {
-      opacity: 0.25,
-      "text-opacity": 0.12,
-    },
-  },
-  {
     selector: "node.highlighted",
     style: {
       "border-color": COLORS.highlightBlue,
-      "border-width": 6,
+      "border-width": 4,
       "border-opacity": 1,
       "border-style": "solid",
     },
