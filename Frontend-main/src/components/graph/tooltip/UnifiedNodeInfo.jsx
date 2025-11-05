@@ -453,18 +453,28 @@ function UnifiedNodeInfo({
   }, [radarChartData]);
 
   // 축 라벨 커스터마이징
-  const renderPolarAngleAxis = ({ payload, x, y, cx }) => {
+  const renderPolarAngleAxis = ({ payload, x, y, cx, cy }) => {
     const dataPoint = dataMap.get(payload.value);
     const color = (dataPoint && dataPoint.positivity !== undefined) 
       ? getPositivityColor(dataPoint.positivity) 
       : COLORS.textPrimary;
     const isHovered = hoveredItem === payload.value;
     
+    const dx = x - cx;
+    const dy = y - cy;
+    const distance = Math.sqrt(dx * dx + dy * dy);
+    const nameLength = payload.value ? payload.value.length : 0;
+    const offset = Math.max(40, 25 + (nameLength * 2));
+    const scale = (distance + offset) / distance;
+    const newX = cx + dx * scale;
+    const newY = cy + dy * scale;
+    
     return (
       <text
-        x={x}
-        y={y}
-        textAnchor={x > cx ? 'start' : 'end'}
+        x={newX}
+        y={newY}
+        textAnchor="middle"
+        dominantBaseline="middle"
         fill={isHovered ? color : COLORS.textPrimary}
         fontSize={isHovered ? 18 : 16}
         fontWeight={isHovered ? 700 : 600}
@@ -1579,7 +1589,7 @@ function UnifiedNodeInfo({
                    <ResponsiveContainer width="100%" height="100%">
                      <RadarChart 
                        data={radarChartData} 
-                       margin={{ top: 20, right: 30, bottom: 20, left: 30 }}
+                       margin={{ top: 60, right: 60, bottom: 60, left: 60 }}
                        style={{ outline: 'none' }}
                      >
                       <style>{`

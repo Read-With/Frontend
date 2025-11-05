@@ -87,8 +87,8 @@ function RelationshipRadarChart({ data, centerNodeName }) {
               padding: '2rem',
               maxWidth: '90vw',
               maxHeight: '90vh',
-              width: '800px',
-              height: '600px',
+              width: '1000px',
+              height: '750px',
               position: 'relative',
               boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
               display: 'flex',
@@ -152,11 +152,36 @@ function RelationshipRadarChart({ data, centerNodeName }) {
               <ResponsiveContainer width="100%" height="100%">
                 <RadarChart 
                   data={data} 
-                  margin={{ top: 20, right: 30, bottom: 20, left: 30 }}
+                  margin={{ top: 60, right: 60, bottom: 60, left: 60 }}
                   style={{ outline: 'none' }}
                 >
                   <PolarGrid stroke={COLORS.border} />
-                  <PolarAngleAxis dataKey="name" />
+                  <PolarAngleAxis 
+                    dataKey="name" 
+                    tick={({ payload, x, y, cx, cy }) => {
+                      const dx = x - cx;
+                      const dy = y - cy;
+                      const distance = Math.sqrt(dx * dx + dy * dy);
+                      const nameLength = payload.value ? payload.value.length : 0;
+                      const offset = Math.max(40, 25 + (nameLength * 2));
+                      const scale = (distance + offset) / distance;
+                      const newX = cx + dx * scale;
+                      const newY = cy + dy * scale;
+                      return (
+                        <text
+                          x={newX}
+                          y={newY}
+                          textAnchor="middle"
+                          dominantBaseline="middle"
+                          fill={COLORS.textPrimary}
+                          fontSize={14}
+                          fontWeight={600}
+                        >
+                          {payload.value}
+                        </text>
+                      );
+                    }}
+                  />
                   <PolarRadiusAxis 
                     angle={90} 
                     domain={[0, 100]} 

@@ -56,13 +56,12 @@ export const extractRadarChartData = (nodeId, relations, elements, maxDisplay = 
         );
         
         if (connectedNode && rel.positivity !== undefined) {
-          // 이름 처리: 띄어쓰기 기준 첫 단어만 사용
+          // 전체 이름 사용
           const fullName = connectedNode.data.label || connectedNode.data.common_name || `인물 ${connectedNodeId}`;
-          const shortName = fullName.split(' ')[0];
           
           const radarItem = {
-            name: shortName,
-            fullName: fullName, // 툴팁에서 전체 이름 표시용
+            name: fullName,
+            fullName: fullName,
             positivity: rel.positivity,
             normalizedValue: normalizePositivity(rel.positivity),
             relationCount: rel.count || 0,
