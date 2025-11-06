@@ -391,10 +391,6 @@ function RelationGraphWrapper() {
   
   const elements = (isApiBook && apiElements.length > 0) ? apiElements : localElements;
   
-  const handleEventChange = useCallback((eventNum) => {
-    setCurrentEvent(eventNum);
-  }, []);
-  
   const {
     searchTerm,
     isSearchActive,
@@ -415,17 +411,6 @@ function RelationGraphWrapper() {
   const handleGenerateSuggestions = useCallback((searchTerm) => {
     setSearchTerm(searchTerm);
   }, [setSearchTerm]);
-
-  // 챕터 변경 시 검색 초기화
-  useEffect(() => {
-    if (prevChapterNum.current !== undefined && prevChapterNum.current !== currentChapter) {
-      if (isSearchActive) {
-        clearSearch();
-      }
-    }
-    prevChapterNum.current = currentChapter;
-    prevEventNum.current = eventNum;
-  }, [currentChapter, eventNum, isSearchActive, clearSearch]);
 
   const centerElementBetweenSidebars = useCallback((elementId, elementType) => {
     const cy = cyRef.current;
@@ -550,9 +535,33 @@ function RelationGraphWrapper() {
     filteredElements,
   });
 
+  const handleEventChange = useCallback((eventNum) => {
+    clearAll();
+    setCurrentEvent(eventNum);
+  }, [clearAll]);
+
   const handleClearGraph = useCallback(() => {
     clearAll();
   }, [clearAll]);
+
+  // 챕터 변경 시 검색 초기화 및 선택 효과 제거
+  useEffect(() => {
+    if (prevChapterNum.current !== undefined && prevChapterNum.current !== currentChapter) {
+      if (isSearchActive) {
+        clearSearch();
+      }
+      clearAll();
+    }
+    prevChapterNum.current = currentChapter;
+    prevEventNum.current = eventNum;
+  }, [currentChapter, eventNum, isSearchActive, clearSearch, clearAll]);
+  
+  // 이벤트 변경 시 선택 효과 제거
+  useEffect(() => {
+    if (prevEventNum.current !== undefined && prevEventNum.current !== eventNum) {
+      clearAll();
+    }
+  }, [eventNum, clearAll]);
 
   const sortedElements = useMemo(() => {
     if (!elements) return [];
@@ -611,6 +620,7 @@ function RelationGraphWrapper() {
   const handleChapterSelect = useCallback((chapter) => {
     if (chapter !== currentChapter) {
       setIsDropdownSelection(true);
+      clearAll();
       setCurrentChapter(chapter);
       
       let lastEventNum = 1;
@@ -646,7 +656,7 @@ function RelationGraphWrapper() {
         setIsDropdownSelection(false);
       }, 100);
     }
-  }, [currentChapter, setCurrentChapter, isApiBook, manifestData, filename]);
+  }, [currentChapter, setCurrentChapter, isApiBook, manifestData, filename, clearAll]);
 
 
   const toggleEdgeLabel = useCallback(() => {

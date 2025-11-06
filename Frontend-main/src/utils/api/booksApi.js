@@ -65,7 +65,26 @@ const authenticatedRequest = async (endpoint, options = {}, retryCount = 0) => {
       throw new Error('인증이 만료되었습니다. 다시 로그인해주세요.');
     }
     
-    // 500 에러 등 상세 정보 로깅
+    // 404는 서버 기반 응답 (서버에 해당 리소스가 없음 - 정상적인 상황)
+    // 브라우저 네트워크 탭에는 나타나지만, 코드에서는 조용히 처리
+    if (response.status === 404) {
+      let errorMessage = '서버에서 해당 리소스를 찾을 수 없습니다. (서버 기반 응답)';
+      try {
+        const errorData = await response.clone().json();
+        if (errorData.message) {
+          errorMessage = `서버 기반 응답: ${errorData.message}`;
+        }
+      } catch (e) {
+        // JSON 파싱 실패 시 기본 메시지 사용
+      }
+      // 서버 기반 404 에러 (조용히 처리, 콘솔 로그 없음)
+      const notFoundError = new Error(errorMessage);
+      notFoundError.status = 404;
+      notFoundError.isServerBased = true; // 서버 기반 에러 표시
+      throw notFoundError;
+    }
+    
+    // 500 에러 등 상세 정보 로깅 (404 제외)
     let errorMessage = `API 요청 실패: ${response.status}`;
     const clonedResponse = response.clone();
     try {
@@ -205,7 +224,21 @@ export const getBook = async (bookId) => {
     const data = await authenticatedRequest(`/books/${bookId}`);
     return data;
   } catch (error) {
-    console.error('도서 조회 실패:', error);
+    // 404는 서버 기반 응답 (서버에 해당 책이 없음 - 정상적인 상황)
+    // 브라우저 네트워크 탭의 404는 서버 기반 응답이므로 조용히 처리
+    if (error.status === 404 || error.message?.includes('404') || error.message?.includes('찾을 수 없습니다')) {
+      // 서버 기반 응답: 서버에서 해당 책을 찾을 수 없음
+      // 콘솔 로그 없이 조용히 NOT_FOUND 응답 반환
+      return {
+        isSuccess: false,
+        code: 'NOT_FOUND',
+        message: '서버에서 해당 책을 찾을 수 없습니다. (서버 기반 응답)',
+        result: null,
+        isServerBased: true // 서버 기반 응답 표시
+      };
+    }
+    // 404가 아닌 에러만 로그 출력 (서버 기반 에러가 아닌 경우)
+    console.error('도서 조회 실패 (서버 기반 에러 아님):', error);
     throw error;
   }
 };

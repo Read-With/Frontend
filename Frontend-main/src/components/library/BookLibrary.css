@@ -440,8 +440,155 @@
   border-bottom: 1px solid #f0f4fa;
 }
 
+.book-context-item-danger {
+  color: #dc2626 !important;
+}
+
+.book-context-item-danger:hover {
+  background: #fee2e2 !important;
+  color: #991b1b !important;
+}
+
 .book-context-icon {
   flex-shrink: 0;
+}
+
+/* ==================== 삭제 확인 모달 ==================== */
+.delete-confirm-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+  animation: fadeIn 0.2s ease;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.delete-confirm-modal {
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15);
+  width: 90%;
+  max-width: 400px;
+  overflow: hidden;
+  animation: slideUp 0.2s ease;
+}
+
+@keyframes slideUp {
+  from {
+    transform: translateY(20px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.delete-confirm-header {
+  padding: 20px 24px;
+  border-bottom: 1px solid #f0f4fa;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.delete-confirm-header h3 {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #333;
+}
+
+.delete-confirm-close {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #666;
+  border-radius: 4px;
+  transition: all 0.2s ease;
+}
+
+.delete-confirm-close:hover {
+  background: #f8f9fb;
+  color: #333;
+}
+
+.delete-confirm-body {
+  padding: 24px;
+}
+
+.delete-confirm-message {
+  margin: 0 0 8px 0;
+  font-size: 1rem;
+  color: #333;
+  line-height: 1.6;
+  font-weight: 500;
+}
+
+.delete-confirm-note {
+  margin: 8px 0 0 0;
+  font-size: 0.9rem;
+  color: #666;
+}
+
+.delete-confirm-actions {
+  display: flex;
+  gap: 12px;
+  padding: 16px 24px;
+  border-top: 1px solid #f0f4fa;
+  justify-content: flex-end;
+}
+
+.delete-confirm-actions button {
+  min-width: 80px;
+}
+
+.delete-confirm-cancel,
+.delete-confirm-delete {
+  padding: 10px 20px;
+  border-radius: 8px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border: none;
+}
+
+.delete-confirm-cancel {
+  background: #f8f9fb;
+  color: #666;
+}
+
+.delete-confirm-cancel:hover {
+  background: #e8ebef;
+  color: #333;
+}
+
+.delete-confirm-delete {
+  background: #dc2626;
+  color: white;
+}
+
+.delete-confirm-delete:hover {
+  background: #b91c1c;
 }
 
 /* ==================== 빈 상태 스타일 (BookLibrary 내부) ==================== */

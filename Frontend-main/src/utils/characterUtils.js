@@ -32,7 +32,7 @@ export function createCharacterMaps(characters) {
         char.common_name ||
         char.name ||
         (Array.isArray(char.names) ? char.names[0] : String(char.id));
-      idToDesc[id] = char.description || "";
+      idToDesc[id] = char.description || char.profile_text || "";
       idToDescKo[id] = char.description_ko || "";
       idToMain[id] = char.main_character || false;
       idToNames[id] = char.names || [];

@@ -83,8 +83,8 @@ export default function useGraphInteractions({
     const cy = cyRef.current;
     
     cy.batch(() => {
-      cy.nodes().removeClass("highlighted");
-      cy.edges().removeClass("highlighted");
+      cy.nodes().removeClass("highlighted faded");
+      cy.edges().removeClass("highlighted faded");
     });
     
     removeInlineStyles(cy, { includeOpacity: true });
@@ -550,14 +550,17 @@ export default function useGraphInteractions({
         if (!hasSelection) return;
       }
       
-      clearStyles();
+      resetAllStyles();
+      
+      if (selectedNodeIdRef) selectedNodeIdRef.current = null;
+      if (selectedEdgeIdRef) selectedEdgeIdRef.current = null;
       
       if (!isDragEvent && onClearTooltipRef.current) {
         onClearTooltipRef.current();
       }
     } catch (error) {
     }
-  }, [strictBackgroundClear, selectedNodeIdRef, selectedEdgeIdRef, clearStyles, onClearTooltipRef]);
+  }, [strictBackgroundClear, selectedNodeIdRef, selectedEdgeIdRef, resetAllStyles, onClearTooltipRef]);
 
   const tapBackgroundHandler = useCallback(
     (evt) => {

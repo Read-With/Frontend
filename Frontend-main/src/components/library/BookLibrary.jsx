@@ -1,16 +1,90 @@
 import React, { useState, memo } from 'react';
 import PropTypes from 'prop-types';
 import { useNavigate } from 'react-router-dom';
-import { Heart, BookOpen, Network, MoreVertical, Info, CheckCircle, Clock, FileText } from 'lucide-react';
+import { Heart, BookOpen, Network, MoreVertical, Info, CheckCircle, Clock, FileText, Trash2, X } from 'lucide-react';
 import BookDetailModal from './BookDetailModal';
 import './BookLibrary.css';
 
-const BookCard = ({ book, onToggleFavorite, onBookClick, onBookDetailClick, viewMode = 'grid' }) => {
+const DeleteConfirmModal = ({ isOpen, onClose, onConfirm, isIndexedDbOnly }) => {
+  React.useEffect(() => {
+    if (!isOpen) return;
+
+    const handleEscape = (e) => {
+      if (e.key === 'Escape') {
+        onClose();
+      }
+    };
+
+    document.addEventListener('keydown', handleEscape);
+    document.body.style.overflow = 'hidden';
+
+    return () => {
+      document.removeEventListener('keydown', handleEscape);
+      document.body.style.overflow = 'unset';
+    };
+  }, [isOpen, onClose]);
+
+  if (!isOpen) return null;
+
+  return (
+    <div 
+      className="delete-confirm-modal-overlay"
+      onClick={onClose}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="delete-confirm-title"
+    >
+      <div 
+        className="delete-confirm-modal"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="delete-confirm-header">
+          <h3 id="delete-confirm-title">책 삭제</h3>
+          <button
+            className="delete-confirm-close"
+            onClick={onClose}
+            aria-label="닫기"
+            type="button"
+          >
+            <X size={20} />
+          </button>
+        </div>
+        <div className="delete-confirm-body">
+          <p className="delete-confirm-message">이 책을 삭제하시겠습니까?</p>
+        </div>
+        <div className="delete-confirm-actions">
+          <button
+            className="delete-confirm-cancel"
+            onClick={onClose}
+            type="button"
+          >
+            취소
+          </button>
+          <button
+            className="delete-confirm-delete"
+            onClick={onConfirm}
+            type="button"
+            autoFocus
+          >
+            삭제하기
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+DeleteConfirmModal.propTypes = {
+  isOpen: PropTypes.bool.isRequired,
+  onClose: PropTypes.func.isRequired,
+  onConfirm: PropTypes.func.isRequired,
+  isIndexedDbOnly: PropTypes.bool
+};
+
+const BookCard = ({ book, onToggleFavorite, onBookClick, onBookDetailClick, onShowDeleteModal, viewMode = 'grid' }) => {
   const navigate = useNavigate();
   const [imageError, setImageError] = useState(false);
   const [showContextMenu, setShowContextMenu] = useState(false);
-
-  const isLocalBook = typeof book.id === 'string' && book.id.startsWith('local_');
 
   const handleReadClick = (e) => {
     e.stopPropagation();
@@ -23,27 +97,16 @@ const BookCard = ({ book, onToggleFavorite, onBookClick, onBookDetailClick, view
       graphMode: 'viewer'
     });
     
-    if (isLocalBook) {
-      // 로컬 책의 경우 epubPath를 filename으로 사용
-      navigate(`/user/viewer/${book.epubPath}?${defaultParams.toString()}`, { 
-        state: { 
-          book,
-          fromLibrary: true,
-          from: { pathname: '/user/mypage' }
-        },
-        replace: false
-      });
-    } else {
-      // API 책의 경우 bookId를 사용
-      navigate(`/user/viewer/${book.id}?${defaultParams.toString()}`, { 
-        state: { 
-          book,
-          fromLibrary: true,
-          from: { pathname: '/user/mypage' }
-        },
-        replace: false
-      });
-    }
+    // 모든 책을 서버에서 받은 bookID로 관리
+    const bookId = book.id;
+    navigate(`/user/viewer/${bookId}?${defaultParams.toString()}`, { 
+      state: { 
+        book,
+        fromLibrary: true,
+        from: { pathname: '/user/mypage' }
+      },
+      replace: false
+    });
   };
 
   const handleGraphClick = (e) => {
@@ -57,27 +120,15 @@ const BookCard = ({ book, onToggleFavorite, onBookClick, onBookDetailClick, view
       graphMode: 'graph'
     });
     
-    if (isLocalBook) {
-      // 로컬 책의 경우 epubPath를 filename으로 사용
-      navigate(`/user/graph/${book.epubPath}?${graphParams.toString()}`, { 
-        state: { 
-          book,
-          fromLibrary: true,
-          from: { pathname: '/user/mypage' }
-        },
-        replace: false
-      });
-    } else {
-      // API 책의 경우 bookId를 사용
-      navigate(`/user/graph/${book.id}?${graphParams.toString()}`, { 
-        state: { 
-          book,
-          fromLibrary: true,
-          from: { pathname: '/user/mypage' }
-        },
-        replace: false
-      });
-    }
+    // 모든 책을 서버 bookId로 관리
+    navigate(`/user/graph/${book.id}?${graphParams.toString()}`, { 
+      state: { 
+        book,
+        fromLibrary: true,
+        from: { pathname: '/user/mypage' }
+      },
+      replace: false
+    });
   };
 
   const handleFavoriteClick = (e) => {
@@ -105,6 +156,14 @@ const BookCard = ({ book, onToggleFavorite, onBookClick, onBookDetailClick, view
   const handleContextMenu = (e) => {
     e.stopPropagation();
     setShowContextMenu(!showContextMenu);
+  };
+
+  const handleDeleteClick = (e) => {
+    e.stopPropagation();
+    setShowContextMenu(false);
+    if (onShowDeleteModal) {
+      onShowDeleteModal(book);
+    }
   };
 
   const renderBookImage = () => {
@@ -257,6 +316,13 @@ const BookCard = ({ book, onToggleFavorite, onBookClick, onBookDetailClick, view
               <Info size={18} className="book-context-icon" />
               상세 정보
             </button>
+            <button
+              className="book-context-item book-context-item-danger"
+              onClick={handleDeleteClick}
+            >
+              <Trash2 size={18} className="book-context-icon" />
+              삭제
+            </button>
           </div>
         )}
       </div>
@@ -284,13 +350,16 @@ BookCard.propTypes = {
   onToggleFavorite: PropTypes.func,
   onBookClick: PropTypes.func,
   onBookDetailClick: PropTypes.func,
+  onShowDeleteModal: PropTypes.func,
   onStatusChange: PropTypes.func,
   viewMode: PropTypes.oneOf(['grid', 'list'])
 };
 
-const BookLibrary = memo(({ books, loading, error, onRetry, onToggleFavorite, onBookClick, onStatusChange, viewMode = 'grid' }) => {
+const BookLibrary = memo(({ books, loading, error, onRetry, onToggleFavorite, onBookClick, onStatusChange, onBookDelete, viewMode = 'grid' }) => {
   const [selectedBook, setSelectedBook] = React.useState(null);
   const [showDetailModal, setShowDetailModal] = React.useState(false);
+  const [deleteTargetBook, setDeleteTargetBook] = React.useState(null);
+  const [showDeleteModal, setShowDeleteModal] = React.useState(false);
 
   const handleBookDetailClick = (book) => {
     setSelectedBook(book);
@@ -300,6 +369,41 @@ const BookLibrary = memo(({ books, loading, error, onRetry, onToggleFavorite, on
   const handleCloseDetailModal = () => {
     setShowDetailModal(false);
     setSelectedBook(null);
+  };
+
+  const handleShowDeleteModal = (book) => {
+    setDeleteTargetBook(book);
+    setShowDeleteModal(true);
+  };
+
+  const handleCloseDeleteModal = () => {
+    setShowDeleteModal(false);
+    setDeleteTargetBook(null);
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!deleteTargetBook || !deleteTargetBook.id) {
+      return;
+    }
+
+    setShowDeleteModal(false);
+
+    if (onBookDelete) {
+      try {
+        await onBookDelete(deleteTargetBook.id);
+      } catch (err) {
+        console.error('책 삭제 실패:', err);
+      }
+    }
+
+    setDeleteTargetBook(null);
+  };
+
+  const handleBookDelete = async (bookId) => {
+    if (onBookDelete) {
+      await onBookDelete(bookId);
+    }
+    handleCloseDetailModal();
   };
 
   // BookLibrary 컴포넌트는 이제 그리드 컨테이너 역할만 함
@@ -317,6 +421,7 @@ const BookLibrary = memo(({ books, loading, error, onRetry, onToggleFavorite, on
           onToggleFavorite={onToggleFavorite}
           onBookClick={onBookClick}
           onBookDetailClick={handleBookDetailClick}
+          onShowDeleteModal={handleShowDeleteModal}
           viewMode={viewMode}
         />
       ))}
@@ -325,7 +430,15 @@ const BookLibrary = memo(({ books, loading, error, onRetry, onToggleFavorite, on
         book={selectedBook}
         isOpen={showDetailModal}
         onClose={handleCloseDetailModal}
+        onDelete={handleBookDelete}
       />
+
+           <DeleteConfirmModal
+             isOpen={showDeleteModal}
+             onClose={handleCloseDeleteModal}
+             onConfirm={handleDeleteConfirm}
+             isIndexedDbOnly={false} // 모든 책은 서버 API 기반
+           />
     </>
   );
 });
@@ -337,6 +450,7 @@ BookLibrary.propTypes = {
   onRetry: PropTypes.func,
   onToggleFavorite: PropTypes.func,
   onBookClick: PropTypes.func,
+  onBookDelete: PropTypes.func,
   viewMode: PropTypes.oneOf(['grid', 'list'])
 };
 

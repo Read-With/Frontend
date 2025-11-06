@@ -2,6 +2,7 @@ import React, { useRef, useState } from 'react';
 import PropTypes from 'prop-types';
 import { useFileUpload, FILE_CONSTRAINTS } from '../../hooks/useFileUpload';
 import { theme } from '../common/theme';
+import ePub from 'epubjs';
 
 const FileUpload = ({ onUploadSuccess, onClose }) => {
   const [dragActive, setDragActive] = useState(false);
@@ -12,29 +13,222 @@ const FileUpload = ({ onUploadSuccess, onClose }) => {
     language: 'ko'
   });
   const [step, setStep] = useState('select'); // 'select' or 'metadata'
+  const [extractingMetadata, setExtractingMetadata] = useState(false);
+  const [showApprovalPendingModal, setShowApprovalPendingModal] = useState(false);
+  const [uploadedBook, setUploadedBook] = useState(null);
   const inputRef = useRef(null);
   const { uploading, uploadProgress, uploadError, uploadFile, resetUpload } = useFileUpload();
 
-  const handleFiles = (files) => {
+  const extractEpubMetadata = async (file) => {
+    try {
+      setExtractingMetadata(true);
+      
+      // 전체 프로세스에 타임아웃 설정 (최대 10초)
+      const metadataPromise = (async () => {
+        try {
+          // EPUB 파일을 메모리에만 로드하고 리소스 처리는 최소화
+          const book = ePub(file, {
+            replacements: 'none', // 리소스 대체 비활성화
+            openAs: 'epub' // EPUB로 직접 열기
+          });
+          
+          // ready 상태 대기 (타임아웃 8초)
+          await Promise.race([
+            book.ready,
+            new Promise((_, reject) => setTimeout(() => reject(new Error('Ready timeout')), 8000))
+          ]);
+          
+          // 메타데이터 안전하게 추출
+          let metadata = {};
+          try {
+            metadata = book.packaging?.metadata || book.metadata || {};
+          } catch (e) {
+            console.warn('메타데이터 접근 실패:', e);
+          }
+          
+          const getMetadataValue = (field) => {
+            try {
+              const value = metadata[field];
+              if (Array.isArray(value) && value.length > 0) {
+                return value[0];
+              }
+              return value || null;
+            } catch (e) {
+              return null;
+            }
+          };
+          
+          const metadataResult = {
+            title: getMetadataValue('title') || file.name.replace(/\.epub$/i, ''),
+            author: getMetadataValue('creator') || getMetadataValue('author') || 'Unknown',
+            language: getMetadataValue('language') || 'ko'
+          };
+          
+          // 책 객체 정리
+          try {
+            if (book && typeof book.destroy === 'function') {
+              book.destroy();
+            }
+          } catch (e) {
+            // destroy 실패는 무시
+          }
+          
+          return metadataResult;
+        } catch (error) {
+          console.warn('EPUB 메타데이터 추출 중 에러:', error);
+          throw error;
+        }
+      })();
+      
+      // 전체 프로세스 타임아웃 적용
+      return await Promise.race([
+        metadataPromise,
+        new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Metadata extraction timeout')), 10000)
+        )
+      ]);
+    } catch (error) {
+      console.warn('EPUB 메타데이터 추출 실패, 파일명 사용:', error);
+      // 에러 발생 시 파일명 기반으로 기본값 반환
+      return {
+        title: file.name.replace(/\.epub$/i, ''),
+        author: 'Unknown',
+        language: 'ko'
+      };
+    } finally {
+      setExtractingMetadata(false);
+    }
+  };
+
+  const handleFiles = async (files) => {
     if (files && files.length > 0) {
-      const file = files[0];
-      setSelectedFile(file);
-      setMetadata(prev => ({
-        ...prev,
-        title: file.name.replace(/\.epub$/i, '')
-      }));
-      setStep('metadata');
+      try {
+        const file = files[0];
+        setSelectedFile(file);
+        
+        // 파일 선택 후 즉시 메타데이터 단계로 이동 (UI 블로킹 방지)
+        setStep('metadata');
+        
+        // 메타데이터 추출은 백그라운드에서 진행
+        const extractedMetadata = await extractEpubMetadata(file);
+        setMetadata(prev => ({
+          ...prev,
+          ...extractedMetadata
+        }));
+      } catch (error) {
+        console.error('파일 처리 실패:', error);
+        // 에러 발생 시에도 메타데이터 단계로 이동
+        if (!selectedFile && files && files.length > 0) {
+          setSelectedFile(files[0]);
+          setMetadata(prev => ({
+            ...prev,
+            title: files[0].name.replace(/\.epub$/i, ''),
+            author: prev.author || 'Unknown',
+            language: prev.language || 'ko'
+          }));
+          setStep('metadata');
+        }
+      }
     }
   };
 
   const handleUpload = async () => {
     if (!selectedFile) return;
     
+    // 서버에 업로드하여 bookID와 메타데이터 받기
     const result = await uploadFile(selectedFile, metadata);
-    
     if (result.success) {
-      onUploadSuccess(result.data);
+      const book = result.data;
+      setUploadedBook(book);
+      
+      // 서버는 책 정보(메타데이터)만 제공하고 EPUB 파일 경로는 제공하지 않음
+      // EPUB 파일은 프론트엔드에서 IndexedDB에 저장하여 로컬에서 사용
+      
+      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      console.log('📚 EPUB 업로드 완료');
+      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      console.log('📖 서버 응답 (책 정보):');
+      console.log('   - Book ID:', book.id);
+      console.log('   - 제목:', book.title);
+      console.log('   - 저자:', book.author);
+      console.log('   - 언어:', book.language);
+      console.log('   - 승인 상태:', book.approved || book.status || 'pending');
+      console.log('');
+      console.log('💾 로컬 저장 정보:');
+      console.log('   - EPUB 파일: IndexedDB에 저장됨');
+      console.log('   - 저장 키:', book.id.toString());
+      console.log('   - 파일명:', selectedFile.name);
+      console.log('   - 파일 크기:', (selectedFile.size / 1024).toFixed(1), 'KB');
+      console.log('');
+      console.log('ℹ️ 참고:');
+      console.log('   - 서버는 책 정보(메타데이터)만 저장');
+      console.log('   - EPUB 파일은 프론트엔드 IndexedDB에 저장');
+      console.log('   - 뷰어에서 열 때 IndexedDB에서 로드');
+      console.log('');
+      console.log('📦 서버 응답 전체:', book);
+      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      
+      // EPUB 파일을 ArrayBuffer로 변환하여 IndexedDB에 저장 (책 제목으로)
+      try {
+        const arrayBuffer = await selectedFile.arrayBuffer();
+        const { saveLocalBookBuffer } = await import('../../utils/localBookStorage');
+        
+        // 제목 정규화 함수 (IndexedDB 키로 사용)
+        const normalizeTitle = (title) => {
+          if (!title) return '';
+          return title
+            .toLowerCase()
+            .trim()
+            .replace(/\s+/g, ' ') // 여러 공백을 하나로
+            .replace(/[^\w\s가-힣]/g, '') // 특수문자 제거 (한글 포함)
+            .replace(/\s/g, ''); // 모든 공백 제거
+        };
+        
+        // 책 제목을 정규화하여 IndexedDB 키로 사용
+        const normalizedTitle = normalizeTitle(book.title || metadata.title);
+        if (!normalizedTitle) {
+          throw new Error('책 제목을 추출할 수 없습니다.');
+        }
+        
+        // 정규화된 제목을 키로 사용하여 IndexedDB에 저장
+        await saveLocalBookBuffer(normalizedTitle, arrayBuffer);
+        console.log('✅ EPUB 파일을 IndexedDB에 저장 완료 (제목 기반):', normalizedTitle, '→', book.title);
+      } catch (error) {
+        console.error('❌ IndexedDB 저장 실패:', error);
+        // 저장 실패해도 계속 진행 (메모리에서 사용)
+      }
+      
+      // book 객체에 EPUB 파일 정보 추가 (메모리에서 바로 사용하기 위해)
+      // 서버는 EPUB 파일 경로를 제공하지 않으므로 로컬 파일로만 사용
+      book.epubFile = selectedFile;
+      book.epubArrayBuffer = await selectedFile.arrayBuffer().catch(() => null);
+      // epubPath는 제거 (서버에서 제공하지 않음)
+      delete book.epubPath;
+      delete book.filePath;
+      delete book.s3Path;
+      delete book.fileUrl;
+      
+      // 승인 상태 확인 (로깅용)
+      const isApproved = 
+        book.approved === true || 
+        book.status === 'approved' || 
+        book.approvalStatus === 'approved' ||
+        book.approval_status === 'approved' ||
+        (book.status !== 'pending' && book.status !== 'waiting' && book.status !== 'rejected');
+      
+      const isDefaultBook = book.default === true;
+      const needsApproval = !isApproved && !isDefaultBook;
+      
+      if (needsApproval) {
+        console.log('ℹ️ 승인 대기 중인 책이지만 뷰어에서 볼 수 있습니다.');
+      }
+      
+      // 서버에서 받은 bookID와 로컬 EPUB 파일로 바로 뷰어로 이동
+      onUploadSuccess(book);
       onClose();
+    } else {
+      // 업로드 실패 시 에러는 이미 uploadError에 설정됨
+      console.error('업로드 실패:', result.error);
     }
   };
 
@@ -221,6 +415,11 @@ const FileUpload = ({ onUploadSuccess, onClose }) => {
       <div style={{ marginBottom: '20px', padding: '16px', backgroundColor: '#f8f9fa', borderRadius: '8px' }}>
         <div style={{ fontSize: '14px', color: '#666', marginBottom: '4px' }}>선택된 파일:</div>
         <div style={{ fontSize: '16px', fontWeight: 500 }}>{selectedFile?.name}</div>
+        {extractingMetadata && (
+          <div style={{ fontSize: '12px', color: '#5C6F5C', marginTop: '8px' }}>
+            📖 EPUB 메타데이터 추출 중...
+          </div>
+        )}
       </div>
       
       <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
@@ -232,15 +431,18 @@ const FileUpload = ({ onUploadSuccess, onClose }) => {
             type="text"
             value={metadata.title}
             onChange={(e) => setMetadata(prev => ({ ...prev, title: e.target.value }))}
+            disabled={extractingMetadata}
             style={{
               width: '100%',
               padding: '12px',
               border: '1px solid #ddd',
               borderRadius: '6px',
               fontSize: '14px',
-              boxSizing: 'border-box'
+              boxSizing: 'border-box',
+              backgroundColor: extractingMetadata ? '#f5f5f5' : 'white',
+              cursor: extractingMetadata ? 'not-allowed' : 'text'
             }}
-            placeholder="책 제목을 입력하세요"
+            placeholder={extractingMetadata ? '메타데이터 추출 중...' : '책 제목을 입력하세요'}
           />
         </div>
         
@@ -252,15 +454,18 @@ const FileUpload = ({ onUploadSuccess, onClose }) => {
             type="text"
             value={metadata.author}
             onChange={(e) => setMetadata(prev => ({ ...prev, author: e.target.value }))}
+            disabled={extractingMetadata}
             style={{
               width: '100%',
               padding: '12px',
               border: '1px solid #ddd',
               borderRadius: '6px',
               fontSize: '14px',
-              boxSizing: 'border-box'
+              boxSizing: 'border-box',
+              backgroundColor: extractingMetadata ? '#f5f5f5' : 'white',
+              cursor: extractingMetadata ? 'not-allowed' : 'text'
             }}
-            placeholder="저자명을 입력하세요"
+            placeholder={extractingMetadata ? '메타데이터 추출 중...' : '저자명을 입력하세요'}
           />
         </div>
         
@@ -287,6 +492,7 @@ const FileUpload = ({ onUploadSuccess, onClose }) => {
             <option value="zh">中文</option>
           </select>
         </div>
+
       </div>
       
       <div style={{ display: 'flex', gap: '12px', marginTop: '24px' }}>
@@ -301,16 +507,17 @@ const FileUpload = ({ onUploadSuccess, onClose }) => {
         </button>
         <button 
           onClick={handleUpload}
-          disabled={!metadata.title || !metadata.author}
+          disabled={!metadata.title || !metadata.author || extractingMetadata}
           style={{
             ...closeButtonStyle,
             flex: 1,
-            backgroundColor: (!metadata.title || !metadata.author) ? '#ccc' : '#5C6F5C',
+            backgroundColor: (!metadata.title || !metadata.author || extractingMetadata) ? '#ccc' : '#5C6F5C',
             color: 'white',
-            border: 'none'
+            border: 'none',
+            cursor: (!metadata.title || !metadata.author || extractingMetadata) ? 'not-allowed' : 'pointer'
           }}
         >
-          업로드
+          {extractingMetadata ? '메타데이터 추출 중...' : '업로드'}
         </button>
       </div>
     </div>
@@ -569,6 +776,121 @@ const FileUpload = ({ onUploadSuccess, onClose }) => {
           )}
         </div>
       </div>
+      
+      {/* 승인 대기 모달 */}
+      {showApprovalPendingModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.6)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 2000
+        }}>
+          <div style={{
+            background: '#fff',
+            borderRadius: '12px',
+            padding: '32px',
+            maxWidth: '480px',
+            width: '90%',
+            boxShadow: '0 4px 20px rgba(0, 0, 0, 0.15)',
+            border: '1px solid #e0e0e0',
+            textAlign: 'center'
+          }}>
+            <div style={{
+              fontSize: '48px',
+              marginBottom: '16px'
+            }}>
+              ⏳
+            </div>
+            <h3 style={{
+              fontSize: '20px',
+              fontWeight: 600,
+              color: '#333',
+              marginBottom: '16px'
+            }}>
+              관리자 승인 대기 중
+            </h3>
+            <p style={{
+              fontSize: '14px',
+              color: '#666',
+              lineHeight: '1.6',
+              marginBottom: '16px'
+            }}>
+              업로드가 완료되었습니다!
+            </p>
+            <div style={{
+              padding: '16px',
+              backgroundColor: '#e8f5e9',
+              borderRadius: '8px',
+              marginBottom: '24px',
+              border: '1px solid #4caf50'
+            }}>
+              <p style={{
+                fontSize: '14px',
+                color: '#2e7d32',
+                lineHeight: '1.6',
+                margin: 0,
+                fontWeight: 500
+              }}>
+                📚 <strong>관리자에 의해 인증을 받으면</strong><br/>
+                라이브러리에 책이 자동으로 추가됩니다.
+              </p>
+              <p style={{
+                fontSize: '13px',
+                color: '#388e3c',
+                lineHeight: '1.5',
+                marginTop: '8px',
+                margin: '8px 0 0 0'
+              }}>
+                승인이 완료되면 라이브러리에서 바로 읽을 수 있습니다.
+              </p>
+            </div>
+            <div style={{
+              padding: '12px',
+              backgroundColor: '#f8f9fa',
+              borderRadius: '8px',
+              marginBottom: '24px',
+              textAlign: 'left'
+            }}>
+              <div style={{ fontSize: '12px', color: '#666', marginBottom: '4px' }}>업로드된 책:</div>
+              <div style={{ fontSize: '14px', fontWeight: 500 }}>{uploadedBook?.title || '제목 없음'}</div>
+              <div style={{ fontSize: '12px', color: '#999', marginTop: '4px' }}>{uploadedBook?.author || '저자 없음'}</div>
+            </div>
+            <button
+              onClick={() => {
+                setShowApprovalPendingModal(false);
+                setUploadedBook(null);
+                onClose();
+              }}
+              style={{
+                width: '100%',
+                padding: '12px',
+                backgroundColor: '#5C6F5C',
+                color: 'white',
+                border: 'none',
+                borderRadius: '6px',
+                fontSize: '14px',
+                fontWeight: 500,
+                cursor: 'pointer',
+                transition: 'background-color 0.2s ease'
+              }}
+              onMouseEnter={(e) => {
+                e.target.style.backgroundColor = '#4A5A4A';
+              }}
+              onMouseLeave={(e) => {
+                e.target.style.backgroundColor = '#5C6F5C';
+              }}
+            >
+              확인
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -106,23 +106,91 @@ const apiRequest = async (url, options = {}) => {
     }
   }
   
+  // FormData인 경우 Content-Type을 설정하지 않음 (브라우저가 자동 설정)
+  const isFormData = options.body instanceof FormData;
+  
+  // 기본 헤더 설정
+  const defaultHeaders = {
+    ...(!isFormData && { 'Content-Type': 'application/json' }),
+    ...(token && { 'Authorization': `Bearer ${token}` }),
+  };
+  
+  // options를 먼저 spread하고, headers는 나중에 merge하여 덮어쓰기 방지
   const config = {
-    headers: {
-      'Content-Type': 'application/json',
-      ...(token && { 'Authorization': `Bearer ${token}` }),
-      ...options.headers,
-    },
     ...options,
+    headers: {
+      ...defaultHeaders,
+      ...options.headers, // options.headers가 있으면 덮어쓰기 (명시적 설정 우선)
+    },
   };
 
   // 환경에 따른 URL 구성
   const requestUrl = import.meta.env.DEV ? `${API_BASE_URL}${url}` : `${API_BASE_URL}${url}`;
   
+  // 업로드 요청인 경우 디버깅 정보 출력
+  if (url.includes('/api/books') && options.method === 'POST') {
+    console.log('📤 업로드 요청 정보:', {
+      url: requestUrl,
+      hasToken: !!token,
+      tokenPreview: token ? token.substring(0, 20) + '...' : 'null',
+      isFormData: isFormData,
+      headers: {
+        ...config.headers,
+        Authorization: config.headers.Authorization ? config.headers.Authorization.substring(0, 30) + '...' : '없음'
+      },
+      allHeaders: Object.keys(config.headers)
+    });
+  }
+  
+  // 404 에러를 조용히 처리할 엔드포인트 목록
+  const silent404Endpoints = [
+    '/api/graph/fine',
+    '/api/graph/macro',
+    '/api/progress/',
+    '/api/books/',
+    '/manifest'
+  ];
+  
+  const isSilent404 = silent404Endpoints.some(endpoint => url.includes(endpoint));
+  
   try {
     const response = await fetch(requestUrl, config);
+    
+    // 401 에러인 경우 상세 정보 출력
+    if (response.status === 401) {
+      const errorText = await response.clone().text();
+      console.error('❌ 401 Unauthorized 에러:', {
+        url: requestUrl,
+        fullUrl: requestUrl,
+        status: response.status,
+        hasToken: !!token,
+        tokenValid: token ? isTokenValid(token) : false,
+        authorizationHeader: config.headers.Authorization ? config.headers.Authorization.substring(0, 50) + '...' : '없음',
+        allHeaders: Object.keys(config.headers),
+        headers: {
+          ...config.headers,
+          Authorization: config.headers.Authorization ? config.headers.Authorization.substring(0, 30) + '...' : '없음'
+        },
+        responseHeaders: Object.fromEntries(response.headers.entries()),
+        errorResponse: errorText
+      });
+    }
+    
+    // 404 에러이고 조용히 처리할 엔드포인트인 경우 조용히 처리
+    if (response.status === 404 && isSilent404) {
+      // 조용히 처리 - 빈 응답 반환 (에러 로그 출력 안 함)
+      return {
+        isSuccess: false,
+        code: 'NOT_FOUND',
+        message: '데이터를 찾을 수 없습니다',
+        result: null
+      };
+    }
+    
     const data = await response.json();
     
     if (!response.ok) {
+      
       // 디버깅: 에러 응답 상세 로깅
       if (url.includes('/api/graph/')) {
         const isMacroGraph = url.includes('/api/graph/macro');
@@ -150,6 +218,7 @@ const apiRequest = async (url, options = {}) => {
         }
       }
       
+      // 여기 도달했다면 404가 아니거나 조용히 처리하지 않는 엔드포인트
       const error = new Error(data.message || 'API 요청 실패');
       error.status = response.status;
       throw error;
@@ -183,10 +252,32 @@ export const getBooks = async (params = {}) => {
 
 // 도서 업로드
 export const uploadBook = async (formData) => {
+  // 토큰 확인
+  const token = localStorage.getItem('accessToken');
+  if (!token) {
+    console.error('❌ 업로드 실패: 토큰이 없습니다.');
+    throw new Error('인증이 필요합니다. 로그인해주세요.');
+  }
+  
+  // 토큰 유효성 확인
+  const tokenValid = isTokenValid(token);
+  if (!tokenValid) {
+    console.error('❌ 업로드 실패: 토큰이 만료되었습니다.');
+    localStorage.removeItem('accessToken');
+    localStorage.removeItem('google_user');
+    throw new Error('인증이 만료되었습니다. 다시 로그인해주세요.');
+  }
+  
+  console.log('✅ 토큰 검증 통과:', {
+    tokenPreview: token.substring(0, 20) + '...',
+    tokenValid: true
+  });
+  
   return apiRequest('/api/books', {
     method: 'POST',
     headers: {
       // multipart/form-data는 브라우저가 자동으로 설정
+      // Authorization 헤더는 apiRequest에서 자동 추가됨
     },
     body: formData,
   });
@@ -305,8 +396,30 @@ export const getBookProgress = async (bookId) => {
     }
     
     const response = await apiRequest(`/api/progress/${bookId}`);
+    
+    // 404인 경우 조용히 처리 (진도가 없는 것은 정상)
+    // IndexedDB로 관리되는 EPUB는 진도가 없을 수 있음
+    if (!response.isSuccess && response.code === 'NOT_FOUND') {
+      return {
+        isSuccess: false,
+        code: 'NOT_FOUND',
+        message: '진도 정보를 찾을 수 없습니다',
+        result: null
+      };
+    }
+    
     return response;
   } catch (error) {
+    // 404 에러는 조용히 처리 (진도가 없는 것은 정상)
+    if (error.status === 404 || error.message?.includes('404') || error.message?.includes('찾을 수 없습니다')) {
+      return {
+        isSuccess: false,
+        code: 'NOT_FOUND',
+        message: '진도 정보를 찾을 수 없습니다',
+        result: null
+      };
+    }
+    // 404가 아닌 에러만 콘솔에 출력
     console.error('특정 책 독서 진도 조회 실패:', error);
     throw error;
   }
@@ -331,14 +444,30 @@ export const deleteBookProgress = async (bookId) => {
 
 // 책 구조 패키지 조회 (manifest)
 export const getBookManifest = async (bookId) => {
-  const response = await apiRequest(`/api/books/${bookId}/manifest`);
-  
-  // 응답이 성공하고 result가 있으면 maxChapter 저장
-  if (response?.isSuccess && response?.result && bookId) {
-    setManifestData(bookId, response.result);
+  try {
+    const response = await apiRequest(`/api/books/${bookId}/manifest`);
+    
+    // 응답이 성공하고 result가 있으면 maxChapter 저장
+    if (response?.isSuccess && response?.result && bookId) {
+      setManifestData(bookId, response.result);
+    }
+    
+    return response;
+  } catch (error) {
+    // 404 에러는 조용히 처리 (manifest가 아직 생성되지 않았을 수 있음)
+    // IndexedDB로 관리되는 EPUB는 manifest가 없을 수 있음
+    if (error.status === 404 || error.message?.includes('404') || error.message?.includes('찾을 수 없습니다')) {
+      return {
+        isSuccess: false,
+        code: 'NOT_FOUND',
+        message: 'Manifest를 찾을 수 없습니다',
+        result: null
+      };
+    }
+    // 404가 아닌 에러만 콘솔에 출력
+    console.error('Manifest 조회 실패:', error);
+    throw error;
   }
-  
-  return response;
 };
 
 // 북마크 관련 API

@@ -321,7 +321,7 @@ export const transformGraphData = (graphData) => {
       id: character.id.toString(),
       label: character.common_name || character.names[0] || `Character ${character.id}`,
       names: character.names,
-      description: character.description,
+      description: character.description || character.profile_text || '',
       profileImage: character.profileImage,
       weight: character.weight,
       count: character.count,

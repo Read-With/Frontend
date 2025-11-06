@@ -112,49 +112,115 @@ export function useViewerPage() {
     updated: [],
   });
   
+  // 서버에서 책 정보 가져오기 (URL 직접 접근 시)
+  // 서버에는 EPUB 파일을 제외한 메타데이터만 있음
+  const [serverBook, setServerBook] = useState(null);
+  const [loadingServerBook, setLoadingServerBook] = useState(false);
+  
+  useEffect(() => {
+    const fetchServerBook = async () => {
+      // location.state?.book이 있으면 서버 호출 불필요
+      if (location.state?.book) {
+        return;
+      }
+      
+      const numericBookId = parseInt(bookId, 10);
+      if (isNaN(numericBookId)) {
+        return;
+      }
+      
+      setLoadingServerBook(true);
+      try {
+        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+        console.log('📚 URL 직접 접근: 서버에서 책 메타데이터 가져오기');
+        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+        console.log('📖 Book ID:', numericBookId);
+        console.log('ℹ️ 서버에는 EPUB 파일을 제외한 메타데이터만 있음');
+        
+        const { getBook } = await import('../utils/api/booksApi');
+        const response = await getBook(numericBookId);
+        
+        if (response && response.isSuccess && response.result) {
+          const bookData = response.result;
+          console.log('✅ 서버에서 책 메타데이터 가져오기 성공');
+          console.log('📖 제목:', bookData.title);
+          console.log('📖 저자:', bookData.author);
+          console.log('💾 EPUB 파일은 IndexedDB에서 제목으로 로드 예정');
+          console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+          setServerBook(bookData);
+        } else {
+          console.error('❌ 서버에서 책 정보를 가져올 수 없습니다:', response);
+          console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+        }
+      } catch (error) {
+        console.error('❌ 서버 API 호출 실패:', error);
+        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      } finally {
+        setLoadingServerBook(false);
+      }
+    };
+    
+    fetchServerBook();
+  }, [bookId, location.state?.book]);
+  
   const book = useMemo(() => {
     if (location.state?.book) {
-      // API 책인 경우 (숫자 ID)
-      if (typeof location.state.book.id === 'number') {
-        return {
-          ...location.state.book,
-          path: location.state.book.epubPath || `/${bookId}`,
-          epubPath: location.state.book.epubPath || `/${bookId}`,
-          filename: bookId,
-        };
-      }
-      // 로컬 책인 경우 (문자열 ID로 시작하는 경우)
+      // 네비게이션으로 온 경우 (state에 book 정보가 있음)
       return {
         ...location.state.book,
-        path: location.state.book.epubPath || `/${bookId}`,
-        epubPath: location.state.book.epubPath || `/${bookId}`,
-        filename: bookId, // 로컬 책의 경우 bookId가 filename이 됨
+        epubFile: location.state.book.epubFile,
+        epubArrayBuffer: location.state.book.epubArrayBuffer,
+        filename: bookId,
+        _indexedDbId: location.state.book._indexedDbId || location.state.book.id?.toString() || bookId,
+        _needsLoad: !location.state.book.epubFile && !location.state.book.epubArrayBuffer,
+        _bookId: location.state.book.id || bookId,
+        epubPath: undefined,
+        filePath: undefined,
+        s3Path: undefined,
+        fileUrl: undefined
       };
     }
     
-    // state가 없는 경우 (직접 URL 접근)
-    // bookId가 숫자인지 문자열인지로 API 책인지 로컬 책인지 판단
-    const isNumericId = !isNaN(bookId) && !isNaN(parseFloat(bookId));
-    
-    if (isNumericId) {
-      // API 책으로 추정
-      return {
-        title: `Book ${bookId}`,
-        path: `/${bookId}`,
-        epubPath: `/${bookId}`,
-        filename: bookId,
-        id: parseInt(bookId, 10)
+    // URL 직접 접근: 서버에서 가져온 책 메타데이터 사용
+    if (serverBook) {
+      // 제목 정규화 함수 (IndexedDB 키로 사용)
+      const normalizeTitle = (title) => {
+        if (!title) return '';
+        return title
+          .toLowerCase()
+          .trim()
+          .replace(/\s+/g, ' ')
+          .replace(/[^\w\s가-힣]/g, '')
+          .replace(/\s/g, '');
       };
-    } else {
-      // 로컬 책으로 추정
+      
+      const normalizedTitle = normalizeTitle(serverBook.title);
+      
       return {
-        title: bookId?.replace(".epub", "") || '',
-        path: `/${bookId}`,
-        epubPath: `/${bookId}`,
+        ...serverBook,
         filename: bookId,
+        _needsLoad: true, // IndexedDB에서 EPUB 로드 필요
+        _indexedDbId: normalizedTitle, // 정규화된 제목으로 IndexedDB 접근
+        _bookId: serverBook.id,
+        epubPath: undefined,
+        filePath: undefined,
+        s3Path: undefined,
+        fileUrl: undefined
       };
     }
-  }, [location.state?.book, bookId]);
+    
+    // 서버 책 정보 로딩 중이거나 실패한 경우 기본값
+    const numericBookId = parseInt(bookId, 10);
+    return {
+      title: loadingServerBook ? '로딩 중...' : `Book ${bookId}`,
+      filename: bookId,
+      id: !isNaN(numericBookId) ? numericBookId : null,
+      _needsLoad: true,
+      _indexedDbId: null, // 제목이 없으면 IndexedDB 접근 불가
+      _bookId: !isNaN(numericBookId) ? numericBookId : bookId,
+      epubPath: undefined
+    };
+  }, [location.state?.book, bookId, serverBook, loadingServerBook]);
 
   // API로 받아온 도서의 메타데이터와 manifest 정보를 콘솔에 출력
   useEffect(() => {
@@ -252,28 +318,17 @@ export function useViewerPage() {
   useEffect(() => {
     const fetchBookmarks = async () => {
       if (!cleanBookId) return;
-      const isLocalBook = !book.id || typeof book.id === 'string' || bookId.includes('.epub') || isNaN(parseInt(bookId, 10));
       
-      if (isLocalBook) {
-        setBookmarksLoading(true);
-        try {
-          const localBookmarks = JSON.parse(localStorage.getItem(`bookmarks_${cleanBookId}`) || '[]');
-          setBookmarks(localBookmarks);
-        } catch (error) {
-          setBookmarks([]);
-        } finally {
-          setBookmarksLoading(false);
-        }
-      } else {
-        setBookmarksLoading(true);
-        try {
-          const bookmarksData = await loadBookmarks(cleanBookId);
-          setBookmarks(bookmarksData);
-        } catch (error) {
-          setBookmarks([]);
-        } finally {
-          setBookmarksLoading(false);
-        }
+      // 모든 책을 서버에서 받은 bookID로 관리
+      // bookID는 항상 숫자
+      setBookmarksLoading(true);
+      try {
+        const bookmarksData = await loadBookmarks(cleanBookId);
+        setBookmarks(bookmarksData);
+      } catch (error) {
+        setBookmarks([]);
+      } finally {
+        setBookmarksLoading(false);
       }
     };
 

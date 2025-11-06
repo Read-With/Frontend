@@ -1,11 +1,13 @@
 import React, { useState, useEffect, useMemo, useCallback, memo } from 'react';
+import PropTypes from 'prop-types';
 import { useNavigate } from 'react-router-dom';
 import { getBookManifest, getBookProgress, deleteBookProgress } from '../../utils/common/api';
 import { getChapterPovSummaries } from '../../utils/api/booksApi';
+import { deleteLocalBookBuffer } from '../../utils/localBookStorage';
 import { toast } from 'react-toastify';
 import './BookDetailModal.css';
 
-const BookDetailModal = memo(({ book, isOpen, onClose }) => {
+const BookDetailModal = memo(({ book, isOpen, onClose, onDelete }) => {
   const navigate = useNavigate();
   const [bookDetails, setBookDetails] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -157,7 +159,7 @@ const BookDetailModal = memo(({ book, isOpen, onClose }) => {
       const response = await deleteBookProgress(book.id);
       if (response.isSuccess) {
         setProgressInfo(null);
-        toast.success('독서 진도가 삭제되었습니다');
+        toast.success('독서 진도를 삭제되었습니다');
       } else {
         toast.error(response.message || '독서 진도 삭제에 실패했습니다');
       }
@@ -166,6 +168,30 @@ const BookDetailModal = memo(({ book, isOpen, onClose }) => {
       toast.error('독서 진도 삭제에 실패했습니다');
     }
   }, [book, progressInfo]);
+
+  const handleDeleteBook = useCallback(async () => {
+    if (!book || !book.id) {
+      return;
+    }
+
+    if (!window.confirm('이 책을 삭제하시겠습니까?')) {
+      return;
+    }
+
+    try {
+      // 모든 책은 서버 API 기반으로 삭제
+      if (onDelete) {
+        await onDelete(book.id);
+        toast.success('책이 삭제되었습니다');
+        onClose();
+      } else {
+        toast.error('삭제 기능을 사용할 수 없습니다');
+      }
+    } catch (err) {
+      console.error('책 삭제 실패:', err);
+      toast.error('책 삭제에 실패했습니다');
+    }
+  }, [book, onDelete, onClose]);
 
 
   // ESC 키로 모달 닫기
@@ -389,12 +415,33 @@ const BookDetailModal = memo(({ book, isOpen, onClose }) => {
             >
               그래프
             </button>
+            <button
+              className="book-detail-danger-btn"
+              onClick={handleDeleteBook}
+              type="button"
+              aria-label="책 삭제"
+              style={{
+                backgroundColor: '#dc2626',
+                color: 'white',
+                border: '1px solid #dc2626',
+                marginTop: '8px'
+              }}
+            >
+              삭제
+            </button>
           </div>
         </div>
       </div>
     </div>
   );
 });
+
+BookDetailModal.propTypes = {
+  book: PropTypes.object,
+  isOpen: PropTypes.bool.isRequired,
+  onClose: PropTypes.func.isRequired,
+  onDelete: PropTypes.func
+};
 
 BookDetailModal.displayName = 'BookDetailModal';
 
