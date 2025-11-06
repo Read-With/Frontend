@@ -37,13 +37,6 @@ export const useBooks = () => {
         // 서버에서 모든 책 정보 가져오기 (승인 대기 중이어도 표시)
         const allBooks = response.result || [];
         
-        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-        console.log('📚 책 목록 로드 (서버 API 기반)');
-        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-        console.log('📖 서버에서 가져온 책:', allBooks.length, '권');
-        console.log('💾 IndexedDB에 저장된 EPUB 파일:', indexedDbBookIds.length, '개');
-        console.log('');
-        
         // 제목 정규화 함수 (EPUB 파일 매칭용)
         const normalizeTitle = (title) => {
           if (!title) return '';
@@ -64,8 +57,6 @@ export const useBooks = () => {
           
           // IndexedDB에 정규화된 제목으로 EPUB 파일이 있는지 확인
           const hasIndexedDbFile = indexedDbTitleSet.has(normalizedTitle);
-          
-          console.log(`📖 "${book.title}" (ID: ${book.id}):`, hasIndexedDbFile ? '✅ EPUB 있음' : '❌ EPUB 없음');
           
           return {
             ...book,
@@ -106,29 +97,16 @@ export const useBooks = () => {
         });
         const allBooksCombined = Array.from(seenTitles.values());
         
-        console.log('');
-        console.log('📊 최종 표시할 책:', allBooksCombined.length, '권');
-        console.log('   - 기본 책:', allBooksCombined.filter(b => b.default).length, '권');
-        console.log('   - EPUB 파일 있는 책:', allBooksCombined.filter(b => b._hasIndexedDbFile).length, '권');
-        console.log('');
-        console.log('ℹ️ 참고:');
-        console.log('   - 모든 책 정보는 서버 API에서 제공');
-        console.log('   - EPUB 파일만 IndexedDB에서 제목으로 로드');
-        console.log('   - IndexedDB에 EPUB이 없으면 표시하지 않음 (기본 책 제외)');
-        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-        
         // 모든 책을 서버 bookID 기반으로 관리
         setBooks(allBooksCombined);
       } else {
         // API 실패 시 빈 배열 (서버 API 정보에만 의존)
-        console.error('❌ 서버 API 호출 실패:', response.message);
         setBooks([]);
         throw new Error(response.message || '책 정보를 불러올 수 없습니다.');
       }
       
     } catch (err) {
       // 서버 API 의존이므로 에러 시 빈 배열
-      console.error('❌ 책 목록 로드 실패:', err);
       setBooks([]);
       
       if (err.message?.includes('인증이 만료되었습니다') || err.message?.includes('401')) {
@@ -152,11 +130,6 @@ export const useBooks = () => {
   // 책 삭제 함수
   const removeBook = async (bookId) => {
     try {
-      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-      console.log('🗑️ 책 삭제 시작');
-      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-      console.log('📖 삭제할 책 ID:', bookId);
-      
       // 현재 책 목록에서 해당 책 찾기
       const bookToDelete = books.find(b => {
         const bid = b.id?.toString();
@@ -165,24 +138,16 @@ export const useBooks = () => {
       });
       
       if (!bookToDelete) {
-        console.error('❌ 삭제할 책을 찾을 수 없습니다:', bookId);
         throw new Error('삭제할 책을 찾을 수 없습니다.');
       }
       
-      console.log('📖 책 정보:', bookToDelete.title, '(ID:', bookToDelete.id, ')');
-      
       // 서버에서 삭제 (모든 책은 서버 API 기반)
-      console.log('🔄 서버에서 책 삭제 중...');
       const response = await deleteBook(bookId);
       
       if (response.isSuccess) {
-        console.log('✅ 서버에서 책 삭제 완료');
-        
         // IndexedDB에서 EPUB 파일도 삭제 (제목 기반)
         if (bookToDelete._indexedDbId) {
-          console.log('🔄 IndexedDB에서 EPUB 파일 삭제 중...');
           await deleteLocalBookBuffer(bookToDelete._indexedDbId);
-          console.log('✅ IndexedDB에서 EPUB 파일 삭제 완료:', bookToDelete._indexedDbId);
         }
         
         // 책 목록에서 즉시 제거
@@ -192,17 +157,12 @@ export const useBooks = () => {
           return bid !== targetId;
         }));
         
-        console.log('✅ 책 삭제 완료');
-        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-        
         // 책 목록 새로고침
         await fetchBooks();
       } else {
         throw new Error(response.message || '책 삭제에 실패했습니다.');
       }
     } catch (err) {
-      console.error('❌ 책 삭제 실패:', err);
-      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
       setError(err.message || '책 삭제에 실패했습니다.');
       throw err;
     }

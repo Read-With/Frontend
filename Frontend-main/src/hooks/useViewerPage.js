@@ -131,30 +131,15 @@ export function useViewerPage() {
       
       setLoadingServerBook(true);
       try {
-        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-        console.log('📚 URL 직접 접근: 서버에서 책 메타데이터 가져오기');
-        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-        console.log('📖 Book ID:', numericBookId);
-        console.log('ℹ️ 서버에는 EPUB 파일을 제외한 메타데이터만 있음');
-        
         const { getBook } = await import('../utils/api/booksApi');
         const response = await getBook(numericBookId);
         
         if (response && response.isSuccess && response.result) {
           const bookData = response.result;
-          console.log('✅ 서버에서 책 메타데이터 가져오기 성공');
-          console.log('📖 제목:', bookData.title);
-          console.log('📖 저자:', bookData.author);
-          console.log('💾 EPUB 파일은 IndexedDB에서 제목으로 로드 예정');
-          console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
           setServerBook(bookData);
-        } else {
-          console.error('❌ 서버에서 책 정보를 가져올 수 없습니다:', response);
-          console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
         }
       } catch (error) {
-        console.error('❌ 서버 API 호출 실패:', error);
-        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+        // 에러는 조용히 처리
       } finally {
         setLoadingServerBook(false);
       }

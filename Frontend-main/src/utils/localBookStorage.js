@@ -52,9 +52,7 @@ export const saveLocalBookBuffer = async (bookId, arrayBuffer) => {
       request.onerror = () => reject(request.error);
     });
     
-    console.log('✅ 로컬 책 ArrayBuffer 저장 완료:', bookId);
   } catch (error) {
-    console.error('❌ 로컬 책 ArrayBuffer 저장 실패:', error);
     throw error;
   }
 };
@@ -78,7 +76,6 @@ export const loadLocalBookBuffer = async (bookId) => {
       request.onerror = () => reject(request.error);
     });
   } catch (error) {
-    console.error('❌ 로컬 책 ArrayBuffer 불러오기 실패:', error);
     return null;
   }
 };
@@ -99,9 +96,8 @@ export const deleteLocalBookBuffer = async (bookId) => {
       request.onerror = () => reject(request.error);
     });
     
-    console.log('✅ 로컬 책 ArrayBuffer 삭제 완료:', bookId);
   } catch (error) {
-    console.error('❌ 로컬 책 ArrayBuffer 삭제 실패:', error);
+    // 삭제 실패 무시
   }
 };
 
@@ -120,9 +116,8 @@ export const clearAllLocalBookBuffers = async () => {
       request.onerror = () => reject(request.error);
     });
     
-    console.log('✅ 모든 로컬 책 ArrayBuffer 삭제 완료');
   } catch (error) {
-    console.error('❌ 모든 로컬 책 ArrayBuffer 삭제 실패:', error);
+    // 삭제 실패 무시
   }
 };
 
@@ -142,13 +137,11 @@ export const getAllLocalBookIds = async () => {
         const keys = request.result || [];
         // 숫자 ID를 문자열로 변환
         const bookIds = keys.map(key => key.toString());
-        console.log('📚 IndexedDB에 저장된 책 ID 목록:', bookIds);
         resolve(bookIds);
       };
       request.onerror = () => reject(request.error);
     });
   } catch (error) {
-    console.error('❌ IndexedDB 책 ID 목록 조회 실패:', error);
     return [];
   }
 };
@@ -169,12 +162,6 @@ export const inspectIndexedDB = async () => {
         const keys = request.result || [];
         const bookIds = keys.map(key => key.toString());
         
-        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-        console.log('📚 IndexedDB 내용 확인');
-        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-        console.log(`총 ${bookIds.length}개의 책이 저장되어 있습니다.`);
-        console.log('');
-        
         const bookInfo = {};
         
         // 각 책의 크기 정보 가져오기
@@ -190,21 +177,13 @@ export const inspectIndexedDB = async () => {
                 sizeInMB: parseFloat(sizeInMB),
                 exists: true
               };
-              console.log(`📖 ${bookId}: ${sizeInMB} MB (${sizeInKB} KB)`);
             } else {
               bookInfo[bookId] = { exists: false };
-              console.log(`⚠️ ${bookId}: 데이터 없음`);
             }
           } catch (error) {
             bookInfo[bookId] = { exists: false, error: error.message };
-            console.log(`❌ ${bookId}: 로드 실패 - ${error.message}`);
           }
         }
-        
-        console.log('');
-        console.log('📊 상세 정보:');
-        console.log(JSON.stringify(bookInfo, null, 2));
-        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
         
         resolve({
           totalCount: bookIds.length,
@@ -215,7 +194,6 @@ export const inspectIndexedDB = async () => {
       request.onerror = () => reject(request.error);
     });
   } catch (error) {
-    console.error('❌ IndexedDB 확인 실패:', error);
     throw error;
   }
 };

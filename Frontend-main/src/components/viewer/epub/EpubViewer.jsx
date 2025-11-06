@@ -379,7 +379,6 @@ const EpubViewer = forwardRef(
         
         // book.id가 없으면 에러
         if (!book.id) {
-          console.error('❌ book.id가 없습니다.');
           setError('책 정보가 올바르지 않습니다.');
           setLoading(false);
           return;
@@ -387,34 +386,30 @@ const EpubViewer = forwardRef(
         
         // 서버에서 책 정보 로딩 중이면 대기 (최대 10초)
         if (!book.title || book.title === '로딩 중...') {
-          console.log('⏳ 서버에서 책 정보 로딩 중... 대기');
           setLoading(true);
           
           // 10초 후에도 로딩 중이면 에러 표시
           retryTimeout = setTimeout(() => {
             if (!book.title || book.title === '로딩 중...') {
-              console.error('❌ 책 정보 로딩 시간 초과');
               setError('책 정보를 불러오는 데 시간이 너무 오래 걸립니다. 새로고침해주세요.');
               setLoading(false);
             }
-          }, 10000); // 10초 대기
+          }, 10000);
           
           return;
         }
         
         // 서버에서 책 정보를 가져오지 못한 경우 (3초 후 에러)
         if (book.title.startsWith('Book ')) {
-          console.log('⏳ 서버에서 책 정보를 가져오는 중... 잠시 대기');
           setLoading(true);
           
           // 3초 후에도 여전히 'Book X' 형태면 에러 표시
           retryTimeout = setTimeout(() => {
             if (book.title.startsWith('Book ')) {
-              console.error('❌ 서버에서 책 정보를 가져올 수 없습니다.');
               setError('책 정보를 불러올 수 없습니다. 책이 존재하지 않거나 권한이 없습니다.');
               setLoading(false);
             }
-          }, 3000); // 3초 대기
+          }, 3000);
           
           return;
         }
@@ -441,15 +436,12 @@ const EpubViewer = forwardRef(
             actualEpubSource = await loadLocalBookBuffer(normalizedBookTitle);
             if (actualEpubSource) {
               targetBookId = normalizedBookTitle;
-              console.log('✅ IndexedDB에서 EPUB 파일 로드 성공 (제목 매칭):', targetBookId, '→', book.title);
             }
           }
           
           // 3단계: IndexedDB에 없으면 메모리에서 찾아서 저장
           if (!actualEpubSource) {
             if (book.epubFile || book.epubArrayBuffer) {
-              console.log('⚠️ IndexedDB에 없지만 메모리에 있음. IndexedDB에 저장 후 사용');
-              
               let bufferToSave = null;
               if (book.epubArrayBuffer instanceof ArrayBuffer) {
                 bufferToSave = book.epubArrayBuffer;
@@ -462,22 +454,18 @@ const EpubViewer = forwardRef(
                 targetBookId = normalizedBookTitle || 'temp';
                 await saveLocalBookBuffer(targetBookId, bufferToSave);
                 actualEpubSource = bufferToSave;
-                console.log('✅ 메모리의 EPUB 파일을 IndexedDB에 저장 완료 (제목 기반):', targetBookId, '→', book.title);
               } else {
-                console.warn('⚠️ IndexedDB에 EPUB 파일이 없고 메모리에도 없습니다.');
                 setError('EPUB 파일을 찾을 수 없습니다. 다시 업로드해주세요.');
                 setLoading(false);
                 return;
               }
             } else {
-              console.warn('⚠️ IndexedDB에 EPUB 파일이 없습니다 (제목:', book.title, ', bookId:', book.id, ')');
               setError('EPUB 파일을 찾을 수 없습니다. 다시 업로드해주세요.');
               setLoading(false);
               return;
             }
           }
         } catch (error) {
-          console.error('❌ IndexedDB에서 EPUB 파일 로드 실패:', error);
           setError('EPUB 파일 로드에 실패했습니다.');
           setLoading(false);
           return;
@@ -485,7 +473,6 @@ const EpubViewer = forwardRef(
         
         // epubSource와 targetBookId 확인 (이미 위에서 체크했지만 안전장치)
         if (!actualEpubSource || !targetBookId) {
-          console.error('❌ EPUB 파일을 찾을 수 없습니다.');
           setError('EPUB 파일을 찾을 수 없습니다. IndexedDB에서 로드에 실패했습니다.');
           setLoading(false);
           return;
@@ -499,7 +486,6 @@ const EpubViewer = forwardRef(
         const globalInstance = globalEpubInstances.get(currentSource);
         if (globalInstance && globalInstance.bookInstance && globalInstance.rendition && globalInstance.viewerRef) {
           // 전역 인스턴스가 있으면 재사용
-          console.log('📚 전역 EPUB 인스턴스 재사용 (graph에서 돌아옴):', currentSource);
           
           // ref에 전역 인스턴스 할당
           bookRef.current = globalInstance.bookInstance;
@@ -524,7 +510,7 @@ const EpubViewer = forwardRef(
                 globalInstance.rendition = newRendition;
                 globalInstance.viewerRef = viewerRef.current;
               } catch (e) {
-                console.warn('Rendition 재렌더링 실패:', e);
+                // 재렌더링 실패 무시
               }
             }
           }
@@ -555,7 +541,6 @@ const EpubViewer = forwardRef(
           
           // 로컬 ref가 있으면 재사용
           if (bookRef.current && renditionRef.current && viewerRef.current) {
-            console.log('📚 로컬 EPUB 인스턴스 재사용:', currentSource);
             setLoading(false);
             setError(null);
             return;
@@ -584,7 +569,6 @@ const EpubViewer = forwardRef(
         // 같은 책이면 이전 인스턴스를 재사용 (graph에서 돌아온 경우)
         if (currentSource === currentPathRef.current && bookRef.current && renditionRef.current && viewerRef.current) {
           // 이미 로드된 경우 재사용 (destroy하지 않음)
-          console.log('📚 기존 EPUB 인스턴스 재사용 (같은 책):', currentSource);
           // viewerRef 내용은 유지 (이미 렌더링되어 있음)
           // 책 인스턴스는 재사용하므로 새로 생성하지 않음
           // 아래 로직을 건너뛰고 바로 display만 수행
@@ -598,7 +582,6 @@ const EpubViewer = forwardRef(
             return;
           } catch (e) {
             // CFI 복원 실패 시 정상 로드 진행
-            console.warn('CFI 복원 실패, 정상 로드 진행:', e);
           }
         }
         
@@ -638,12 +621,10 @@ const EpubViewer = forwardRef(
           // 캐시에서 확인
           const cachedData = cache.get(cacheKey);
           if (cachedData && cachedData.blob) {
-            console.log('📚 EPUB 캐시에서 로드:', cacheKey);
             // 캐시된 Blob으로 새 인스턴스 생성 (인스턴스는 재사용 불가)
             bookInstance = ePub(cachedData.blob);
           } else {
             // 캐시에 없으면 IndexedDB에서 로드한 ArrayBuffer 사용
-            console.log('📥 EPUB 새로 로드 (IndexedDB):', cacheKey);
             
             if (actualEpubSource instanceof ArrayBuffer) {
               bookInstance = ePub(actualEpubSource);
@@ -946,12 +927,11 @@ const EpubViewer = forwardRef(
           if (settings) {
             settingsUtils.applyEpubSettings(rendition, settings, getSpreadMode(pageMode, showGraph));
           }
-        } catch (e) {
-          console.error('❌ EPUB 로드 오류:', e);
-          const errorMessage = e?.message || e?.toString() || 'EPUB 파일을 불러오는 중 오류가 발생했습니다.';
-          setError(errorMessage);
-          currentPathRef.current = null;
-        } finally {
+          } catch (e) {
+            const errorMessage = e?.message || e?.toString() || 'EPUB 파일을 불러오는 중 오류가 발생했습니다.';
+            setError(errorMessage);
+            currentPathRef.current = null;
+          } finally {
           isLoadingRef.current = false;
           setLoading(false);
         }

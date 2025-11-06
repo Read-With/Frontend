@@ -43,7 +43,6 @@ const FileUpload = ({ onUploadSuccess, onClose }) => {
           try {
             metadata = book.packaging?.metadata || book.metadata || {};
           } catch (e) {
-            console.warn('메타데이터 접근 실패:', e);
           }
           
           const getMetadataValue = (field) => {
@@ -75,7 +74,6 @@ const FileUpload = ({ onUploadSuccess, onClose }) => {
           
           return metadataResult;
         } catch (error) {
-          console.warn('EPUB 메타데이터 추출 중 에러:', error);
           throw error;
         }
       })();
@@ -88,7 +86,6 @@ const FileUpload = ({ onUploadSuccess, onClose }) => {
         )
       ]);
     } catch (error) {
-      console.warn('EPUB 메타데이터 추출 실패, 파일명 사용:', error);
       // 에러 발생 시 파일명 기반으로 기본값 반환
       return {
         title: file.name.replace(/\.epub$/i, ''),
@@ -116,7 +113,6 @@ const FileUpload = ({ onUploadSuccess, onClose }) => {
           ...extractedMetadata
         }));
       } catch (error) {
-        console.error('파일 처리 실패:', error);
         // 에러 발생 시에도 메타데이터 단계로 이동
         if (!selectedFile && files && files.length > 0) {
           setSelectedFile(files[0]);
@@ -135,40 +131,13 @@ const FileUpload = ({ onUploadSuccess, onClose }) => {
   const handleUpload = async () => {
     if (!selectedFile) return;
     
-    // 서버에 업로드하여 bookID와 메타데이터 받기
-    const result = await uploadFile(selectedFile, metadata);
-    if (result.success) {
-      const book = result.data;
-      setUploadedBook(book);
-      
-      // 서버는 책 정보(메타데이터)만 제공하고 EPUB 파일 경로는 제공하지 않음
-      // EPUB 파일은 프론트엔드에서 IndexedDB에 저장하여 로컬에서 사용
-      
-      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-      console.log('📚 EPUB 업로드 완료');
-      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-      console.log('📖 서버 응답 (책 정보):');
-      console.log('   - Book ID:', book.id);
-      console.log('   - 제목:', book.title);
-      console.log('   - 저자:', book.author);
-      console.log('   - 언어:', book.language);
-      console.log('   - 승인 상태:', book.approved || book.status || 'pending');
-      console.log('');
-      console.log('💾 로컬 저장 정보:');
-      console.log('   - EPUB 파일: IndexedDB에 저장됨');
-      console.log('   - 저장 키:', book.id.toString());
-      console.log('   - 파일명:', selectedFile.name);
-      console.log('   - 파일 크기:', (selectedFile.size / 1024).toFixed(1), 'KB');
-      console.log('');
-      console.log('ℹ️ 참고:');
-      console.log('   - 서버는 책 정보(메타데이터)만 저장');
-      console.log('   - EPUB 파일은 프론트엔드 IndexedDB에 저장');
-      console.log('   - 뷰어에서 열 때 IndexedDB에서 로드');
-      console.log('');
-      console.log('📦 서버 응답 전체:', book);
-      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-      
-      // EPUB 파일을 ArrayBuffer로 변환하여 IndexedDB에 저장 (책 제목으로)
+        // 서버에 업로드하여 bookID와 메타데이터 받기
+        const result = await uploadFile(selectedFile, metadata);
+        if (result.success) {
+          const book = result.data;
+          setUploadedBook(book);
+          
+          // EPUB 파일을 ArrayBuffer로 변환하여 IndexedDB에 저장 (책 제목으로)
       try {
         const arrayBuffer = await selectedFile.arrayBuffer();
         const { saveLocalBookBuffer } = await import('../../utils/localBookStorage');
@@ -192,9 +161,7 @@ const FileUpload = ({ onUploadSuccess, onClose }) => {
         
         // 정규화된 제목을 키로 사용하여 IndexedDB에 저장
         await saveLocalBookBuffer(normalizedTitle, arrayBuffer);
-        console.log('✅ EPUB 파일을 IndexedDB에 저장 완료 (제목 기반):', normalizedTitle, '→', book.title);
       } catch (error) {
-        console.error('❌ IndexedDB 저장 실패:', error);
         // 저장 실패해도 계속 진행 (메모리에서 사용)
       }
       
@@ -216,20 +183,10 @@ const FileUpload = ({ onUploadSuccess, onClose }) => {
         book.approval_status === 'approved' ||
         (book.status !== 'pending' && book.status !== 'waiting' && book.status !== 'rejected');
       
-      const isDefaultBook = book.default === true;
-      const needsApproval = !isApproved && !isDefaultBook;
-      
-      if (needsApproval) {
-        console.log('ℹ️ 승인 대기 중인 책이지만 뷰어에서 볼 수 있습니다.');
-      }
-      
-      // 서버에서 받은 bookID와 로컬 EPUB 파일로 바로 뷰어로 이동
-      onUploadSuccess(book);
-      onClose();
-    } else {
-      // 업로드 실패 시 에러는 이미 uploadError에 설정됨
-      console.error('업로드 실패:', result.error);
-    }
+          // 서버에서 받은 bookID와 로컬 EPUB 파일로 바로 뷰어로 이동
+          onUploadSuccess(book);
+          onClose();
+        }
   };
 
   const handleBack = () => {

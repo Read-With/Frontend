@@ -89,13 +89,19 @@ function RelationGraphWrapper() {
   useEffect(() => {
     const loadManifestData = async () => {
       if (!isApiBook) {
+        // 로컬 책인 경우 로딩 상태 해제
+        setIsGraphLoading(false);
         return;
       }
       
       const targetBookId = bookId || (book && typeof book.id === 'number' ? book.id : null);
       if (!targetBookId) {
+        setIsGraphLoading(false);
         return;
       }
+      
+      // manifest 로드 시작 시 로딩 상태 유지
+      setIsGraphLoading(true);
       
       try {
         const manifestResponse = await getBookManifest(targetBookId);
@@ -106,10 +112,13 @@ function RelationGraphWrapper() {
           const cachedMaxChapter = getMaxChapter(targetBookId);
           if (cachedMaxChapter) {
             setApiMaxChapter(cachedMaxChapter);
+            // 챕터 정보가 준비되면 로딩 해제
+            setIsGraphLoading(false);
           } else {
             const maxChapterFromMetadata = manifestResponse.result.progressMetadata?.maxChapter;
             if (maxChapterFromMetadata && maxChapterFromMetadata > 0) {
               setApiMaxChapter(maxChapterFromMetadata);
+              setIsGraphLoading(false);
             } else {
               const chapters = manifestResponse.result.chapters || [];
               if (chapters.length > 0) {
@@ -121,16 +130,24 @@ function RelationGraphWrapper() {
                   }
                 }
                 setApiMaxChapter(maxChapterIdx);
+                setIsGraphLoading(false);
               } else {
                 setApiMaxChapter(1);
+                setIsGraphLoading(false);
               }
             }
           }
+        } else {
+          // manifest 로드 실패 시에도 기본값 설정 후 로딩 해제
+          const cachedMaxChapter = getMaxChapter(targetBookId);
+          setApiMaxChapter(cachedMaxChapter || 1);
+          setIsGraphLoading(false);
         }
       } catch (error) {
-        console.error('Manifest 데이터 로딩 실패:', error);
+        // 에러 발생 시에도 기본값 설정 후 로딩 해제
         const cachedMaxChapter = getMaxChapter(targetBookId);
         setApiMaxChapter(cachedMaxChapter || 1);
+        setIsGraphLoading(false);
       }
     };
     
@@ -307,6 +324,13 @@ function RelationGraphWrapper() {
 
   const effectiveMaxChapter = isApiBook ? apiMaxChapter : maxChapter;
 
+  // 로컬 책인 경우 maxChapter가 준비될 때까지 로딩 상태 유지
+  useEffect(() => {
+    if (!isApiBook && maxChapter > 0) {
+      setIsGraphLoading(false);
+    }
+  }, [isApiBook, maxChapter]);
+
   useEffect(() => {
     if (effectiveMaxChapter > 0 && currentChapter > effectiveMaxChapter) {
       setCurrentChapter(effectiveMaxChapter);
@@ -319,30 +343,7 @@ function RelationGraphWrapper() {
     }
     
     try {
-      // API 응답 디버깅 (개발 환경에서만)
-      if (import.meta.env.DEV && apiFineData.characters?.length > 0) {
-        const sampleChar = apiFineData.characters[0];
-        console.debug('[API 이미지 디버깅] 샘플 캐릭터 데이터:', {
-          id: sampleChar.id,
-          name: sampleChar.common_name || sampleChar.name,
-          hasProfileImage: !!sampleChar.profileImage,
-          profileImage: sampleChar.profileImage,
-          profileImageType: typeof sampleChar.profileImage
-        });
-      }
-      
       const { idToName, idToDesc, idToMain, idToNames, idToProfileImage } = createCharacterMaps(apiFineData.characters);
-      
-      // profileImage 매핑 결과 디버깅
-      if (import.meta.env.DEV) {
-        const imageCount = Object.keys(idToProfileImage).length;
-        const totalCount = apiFineData.characters?.length || 0;
-        console.debug(`[이미지 매핑 결과] 전체 캐릭터: ${totalCount}명, 이미지 있는 캐릭터: ${imageCount}명`);
-        if (imageCount > 0) {
-          const firstImageId = Object.keys(idToProfileImage)[0];
-          console.debug(`[이미지 매핑 샘플] ID: ${firstImageId}, URL: ${idToProfileImage[firstImageId]}`);
-        }
-      }
       
       const apiEvent = apiFineData.event;
       const normalizedEvent = apiEvent ? {
@@ -384,7 +385,6 @@ function RelationGraphWrapper() {
       
       return convertedElements;
     } catch (error) {
-      console.error('API 데이터 변환 실패:', error);
       return [];
     }
   }, [apiFineData, currentChapter, currentEvent]);
@@ -739,7 +739,9 @@ function RelationGraphWrapper() {
     [effectiveMaxChapter]
   );
 
-  const isLoading = (isApiBook && apiFineLoading) || (!isApiBook && loading);
+  // 로딩 상태: 그래프 데이터 로딩 또는 챕터 리스트 준비 대기
+  // 챕터 드롭다운이 표시되려면 effectiveMaxChapter가 준비되어야 함
+  const isLoading = (isApiBook && (apiFineLoading || isGraphLoading)) || (!isApiBook && (loading || isGraphLoading));
   
   if (isLoading) {
     return (
@@ -776,9 +778,11 @@ function RelationGraphWrapper() {
           fontSize: '14px',
           lineHeight: '1.5'
         }}>
-          {isApiBook 
-            ? 'API에서 관계 데이터를 가져오고 있습니다. 잠시만 기다려주세요...'
-            : '로컬 파일에서 관계 데이터를 분석하고 있습니다. 잠시만 기다려주세요...'
+          {isGraphLoading
+            ? '챕터 정보를 준비하고 있습니다. 잠시만 기다려주세요...'
+            : isApiBook 
+              ? 'API에서 관계 데이터를 가져오고 있습니다. 잠시만 기다려주세요...'
+              : '로컬 파일에서 관계 데이터를 분석하고 있습니다. 잠시만 기다려주세요...'
           }
         </p>
         <div style={{
@@ -787,7 +791,7 @@ function RelationGraphWrapper() {
           marginTop: '8px',
           fontStyle: 'italic'
         }}>
-          데이터 처리 중...
+          {isGraphLoading ? '챕터 드롭다운 준비 중...' : '데이터 처리 중...'}
         </div>
         <div style={{
           width: '200px',
