@@ -578,6 +578,79 @@ async function fetchApiRelationTimelineCumulative(bookId, id1, id2, selectedChap
   }
 }
 
+async function fetchApiRelationTimelineViewer(bookId, id1, id2, chapterNum, eventNum) {
+  if (!bookId || chapterNum < 1 || eventNum < 1) {
+    return { points: [], labelInfo: [], noRelation: true };
+  }
+
+  try {
+    const cachedData = new Map();
+    let firstAppearanceIdx = null;
+
+    for (let idx = 1; idx <= eventNum; idx++) {
+      try {
+        const fineData = await getFineGraph(bookId, chapterNum, idx);
+        cachedData.set(idx, fineData);
+
+        const hasRealData = fineData?.isSuccess && fineData?.result && (
+          fineData.result.characters ||
+          (fineData.result.relations && fineData.result.relations.length > 0) ||
+          fineData.result.event
+        );
+
+        if (!hasRealData) {
+          continue;
+        }
+
+        if (firstAppearanceIdx === null && fineData.result.relations && fineData.result.relations.length > 0) {
+          const relation = fineData.result.relations.find(rel =>
+            isSamePair(rel, id1, id2)
+          );
+
+          if (relation) {
+            firstAppearanceIdx = idx;
+          }
+        }
+      } catch (error) {
+      }
+    }
+
+    if (firstAppearanceIdx === null) {
+      return { points: [], labelInfo: [], noRelation: true };
+    }
+
+    const points = [];
+    const labelInfo = [];
+
+    for (let idx = firstAppearanceIdx; idx <= eventNum; idx++) {
+      try {
+        let fineData = cachedData.get(idx);
+        if (!fineData) {
+          fineData = await getFineGraph(bookId, chapterNum, idx);
+        }
+
+        const relation = fineData?.result?.relations?.find(rel =>
+          isSamePair(rel, id1, id2)
+        );
+
+        if (relation) {
+          points.push(relation.positivity || 0);
+          labelInfo.push(`E${idx}`);
+        }
+      } catch (error) {
+      }
+    }
+
+    return {
+      points,
+      labelInfo,
+      noRelation: points.length === 0
+    };
+  } catch (error) {
+    return { points: [], labelInfo: [], noRelation: true };
+  }
+}
+
 function fetchRelationTimelineViewer(id1, id2, chapterNum, eventNum, folderKey) {
   if (!folderKey || chapterNum < 1 || eventNum < 1) {
     return { points: [], labelInfo: [], noRelation: true };
@@ -678,6 +751,8 @@ export function useRelationData(mode, id1, id2, chapterNum, eventNum, maxChapter
         
         if (mode === 'cumulative') {
           result = await fetchApiRelationTimelineCumulative(bookId, id1, id2, chapterNum);
+      } else if (mode === 'viewer') {
+        result = await fetchApiRelationTimelineViewer(bookId, id1, id2, chapterNum, eventNum);
         } else {
           result = { points: [], labelInfo: [], noRelation: true };
         }

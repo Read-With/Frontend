@@ -116,14 +116,14 @@ function UnifiedEdgeTooltip({
   
   // 모드 결정: 그래프 온리 페이지에서는 cumulative 모드 사용
   const relationDataMode = useMemo(() => {
-    if (isGraphOnlyPage) {
-      return 'cumulative';
+    if (mode === 'viewer') {
+      return 'viewer';
     }
-    if (bookId) {
+    if (isGraphOnlyPage || displayMode === 'sidebar' || bookId) {
       return 'cumulative';
     }
     return mode;
-  }, [isGraphOnlyPage, bookId, mode]);
+  }, [mode, isGraphOnlyPage, displayMode, bookId]);
   
   // 관계 데이터 관리 (그래프 온리 페이지에서는 누적 모드 사용)
   const {
