@@ -24,12 +24,169 @@ import {
   getDetectedMaxChapter,
   getCharactersData,
   getCharactersDataFromMaxChapter,
-  getChapterFile
+  getEventDataByIndex
 } from "../../utils/graphData";
 import { calcGraphDiff, convertRelationsToElements, filterMainCharacters } from "../../utils/graphDataUtils";
 import { createCharacterMaps } from "../../utils/characterUtils";
 import { processTooltipData } from "../../utils/graphUtils";
+import { safeNum } from "../../utils/relationUtils";
 
+const createRelationKey = (a, b) => {
+  const first = safeNum(a);
+  const second = safeNum(b);
+  if (!Number.isFinite(first) || !Number.isFinite(second)) {
+    return null;
+  }
+  const min = first <= second ? first : second;
+  const max = first <= second ? second : first;
+  return `${min}-${max}`;
+};
+
+const getRelationKeyFromRelation = (relation) => {
+  if (!relation || typeof relation !== "object") {
+    return null;
+  }
+  return createRelationKey(relation.id1 ?? relation.source, relation.id2 ?? relation.target);
+};
+
+const collectLocalRelationKeys = (folderKey, chapterNum, eventNum, targetKeys) => {
+  const seen = new Set();
+  if (!folderKey || !Number.isFinite(chapterNum) || !Number.isFinite(eventNum) || eventNum < 1) {
+    return seen;
+  }
+
+  for (let idx = 1; idx <= eventNum; idx += 1) {
+    const eventData = getEventDataByIndex(folderKey, chapterNum, idx);
+    const relations = eventData?.relations;
+    if (!Array.isArray(relations) || relations.length === 0) {
+      continue;
+    }
+
+    for (const rel of relations) {
+      const key = getRelationKeyFromRelation(rel);
+      if (!key) {
+        continue;
+      }
+      if (!targetKeys || targetKeys.has(key)) {
+        seen.add(key);
+        if (targetKeys && seen.size === targetKeys.size) {
+          return seen;
+        }
+      }
+    }
+  }
+
+  return seen;
+};
+
+const collectApiRelationKeys = async (bookId, chapterNum, eventNum, targetKeys, cacheRef) => {
+  const seen = new Set();
+  if (!bookId || !Number.isFinite(chapterNum) || !Number.isFinite(eventNum) || eventNum < 1) {
+    return seen;
+  }
+
+  const cache = cacheRef?.current;
+
+  for (let idx = 1; idx <= eventNum; idx += 1) {
+    let result = null;
+    const cacheKey = `${chapterNum}-${idx}`;
+
+    if (cache && cache.has(cacheKey)) {
+      result = cache.get(cacheKey);
+    } else {
+      try {
+        const response = await getFineGraph(bookId, chapterNum, idx);
+        result = response?.result || null;
+        if (cache && result) {
+          cache.set(cacheKey, result);
+        }
+      } catch (error) {
+        continue;
+      }
+    }
+
+    const relations = result?.relations;
+    if (!Array.isArray(relations) || relations.length === 0) {
+      continue;
+    }
+
+    for (const rel of relations) {
+      const key = getRelationKeyFromRelation(rel);
+      if (!key) {
+        continue;
+      }
+      if (!targetKeys || targetKeys.has(key)) {
+        seen.add(key);
+        if (targetKeys && seen.size === targetKeys.size) {
+          return seen;
+        }
+      }
+    }
+  }
+
+  return seen;
+};
+
+const filterRelationsByTimeline = async ({
+  relations,
+  mode,
+  bookId,
+  folderKey,
+  chapterNum,
+  eventNum,
+  cacheRef
+}) => {
+  if (!Array.isArray(relations) || relations.length === 0) {
+    return [];
+  }
+
+  if (!Number.isFinite(chapterNum) || chapterNum < 1 || !Number.isFinite(eventNum) || eventNum < 1) {
+    return relations;
+  }
+
+  const targetKeys = new Set();
+  for (const rel of relations) {
+    const key = getRelationKeyFromRelation(rel);
+    if (key) {
+      targetKeys.add(key);
+    }
+  }
+
+  if (targetKeys.size === 0) {
+    return relations;
+  }
+
+  try {
+    let seenKeys = null;
+    if (mode === "api") {
+      if (!bookId) {
+        return relations;
+      }
+      seenKeys = await collectApiRelationKeys(bookId, chapterNum, eventNum, targetKeys, cacheRef);
+    } else if (mode === "local") {
+      if (!folderKey) {
+        return relations;
+      }
+      seenKeys = collectLocalRelationKeys(folderKey, chapterNum, eventNum, targetKeys);
+    } else {
+      return relations;
+    }
+
+    if (!(seenKeys instanceof Set)) {
+      return relations;
+    }
+
+    return relations.filter((rel) => {
+      const key = getRelationKeyFromRelation(rel);
+      if (!key) {
+        return true;
+      }
+      return seenKeys.has(key);
+    });
+  } catch (error) {
+    return relations;
+  }
+};
 
 function GraphSplitArea({
   graphState,
@@ -365,6 +522,7 @@ const ViewerPage = () => {
 
   const [activeTooltip, setActiveTooltip] = useState(null);
   const graphClearRef = useRef(null);
+  const apiEventCacheRef = useRef(new Map());
   const lastTooltipOpenAtRef = useRef(0);
   const activeTooltipRef = useRef(null);
   
@@ -393,6 +551,10 @@ const ViewerPage = () => {
     }
   }, [bookKey]);
   
+  useEffect(() => {
+    apiEventCacheRef.current.clear();
+  }, [book?.id, currentChapter]);
+
   
   const handleClearTooltip = useCallback(() => {
     const now = Date.now();
@@ -960,6 +1122,7 @@ const ViewerPage = () => {
           
           if (!isMounted) return;
           
+          const cacheKey = `${currentChapter}-${apiEventIdx}`;
           let resultData = fineData.result || {};
           let usedMacroFallback = false;
           
@@ -1015,6 +1178,75 @@ const ViewerPage = () => {
             }
 
             return;
+          }
+          
+          if (apiEventCacheRef.current) {
+            apiEventCacheRef.current.set(cacheKey, resultData);
+          }
+
+          const filteredRelations = await filterRelationsByTimeline({
+            relations: resultData.relations,
+            mode: "api",
+            bookId: book.id,
+            chapterNum: currentChapter,
+            eventNum: apiEventIdx,
+            cacheRef: apiEventCacheRef
+          });
+
+          if (!Array.isArray(filteredRelations) || filteredRelations.length === 0) {
+            previousGraphDataRef.current = {
+              elements: [],
+              eventIdx: apiEventIdx,
+              chapterIdx: currentChapter
+            };
+            setElementsRef.current([]);
+
+            const emptyEvent = {
+              chapter: currentChapter,
+              chapterIdx: currentChapter,
+              eventNum: apiEventIdx,
+              eventIdx: apiEventIdx,
+              relations: [],
+              characters: [],
+              start: resultData?.event?.start,
+              end: resultData?.event?.end,
+              event_id: resultData?.event?.event_id ?? apiEventIdx,
+              ...resultData?.event
+            };
+
+            setCurrentEvent(emptyEvent);
+
+            setEvents((prevEvents) => {
+              if (!Array.isArray(prevEvents) || prevEvents.length === 0) {
+                return [emptyEvent];
+              }
+              const updated = prevEvents.map((evt) =>
+                (evt?.eventIdx ?? evt?.eventNum) === apiEventIdx ? { ...evt, ...emptyEvent } : evt
+              );
+              const exists = updated.some((evt) => (evt?.eventIdx ?? evt?.eventNum) === apiEventIdx);
+              if (!exists) {
+                updated.push(emptyEvent);
+              }
+              return updated;
+            });
+
+            if (apiEventCacheRef.current) {
+              apiEventCacheRef.current.set(cacheKey, { ...resultData, relations: [] });
+            }
+
+            if (isMounted) {
+              setIsDataReady(true);
+              setLoading(false);
+              setTransitionState({ type: null, inProgress: false, error: false, direction: null });
+              setApiError(null);
+            }
+
+            return;
+          }
+
+          resultData = { ...resultData, relations: filteredRelations };
+          if (apiEventCacheRef.current) {
+            apiEventCacheRef.current.set(cacheKey, resultData);
           }
           
           const apiEvent = resultData.event;

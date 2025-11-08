@@ -4,7 +4,7 @@ import { processRelations, processRelationTags } from "../../../utils/relationUt
 import { getChapterLastEventNums, getFolderKeyFromFilename, getEventDataByIndex, getDetectedMaxChapter, getCharacterPerspectiveSummary } from "../../../utils/graphData.js";
 import { useTooltipPosition } from "../../../hooks/useTooltipPosition.js";
 import { useClickOutside } from "../../../hooks/useClickOutside.js";
-import { useRelationData } from "../../../hooks/useRelationData.js";
+import { useRelationData } from "../../../hooks/useRelationData.jsx";
 import { safeNum } from "../../../utils/relationUtils.js";
 import { mergeRefs } from "../../../utils/styles/animations.js";
 import { COLORS, createButtonStyle, ANIMATION_VALUES, unifiedNodeTooltipStyles, unifiedNodeAnimations } from "../../../utils/styles/styles.js";
@@ -29,6 +29,7 @@ function UnifiedNodeInfo({
   povSummaries = null, // API에서 가져온 관점 요약 데이터
   apiMacroData = null, // API 거시 그래프 데이터
   apiFineData = null, // API 세밀 그래프 데이터
+  bookId = null,
 }) {
   const { filename: urlFilename } = useParams();
   const actualFilename = filename || urlFilename;
@@ -129,7 +130,18 @@ function UnifiedNodeInfo({
 
   // 관계 데이터 관리 (슬라이드바 모드에서 사용)
   const nodeId = safeNum(nodeData?.id);
-  const { fetchData } = useRelationData('standalone', nodeId, nodeId, chapterNum, eventNum, dynamicMaxChapter, actualFilename);
+  const normalizedBookId = useMemo(() => {
+    if (bookId !== null && bookId !== undefined) {
+      const parsed = Number(bookId);
+      if (Number.isFinite(parsed) && parsed > 0) return parsed;
+    }
+    if (actualFilename) {
+      const parsed = Number(actualFilename);
+      if (Number.isFinite(parsed) && parsed > 0) return parsed;
+    }
+    return null;
+  }, [bookId, actualFilename]);
+  const { fetchData } = useRelationData('standalone', nodeId, nodeId, chapterNum, eventNum, dynamicMaxChapter, actualFilename, normalizedBookId);
 
   // ViewerTopBar와 동일한 방식으로 이벤트 정보 처리
   const getUnifiedEventInfo = useCallback(() => {

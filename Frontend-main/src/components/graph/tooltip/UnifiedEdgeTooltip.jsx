@@ -10,7 +10,7 @@ import { createButtonStyle, createAdvancedButtonHandlers, COLORS, ANIMATION_VALU
 import { mergeRefs } from "../../../utils/styles/animations";
 import { safeNum, processRelationTagsCached } from "../../../utils/relationUtils";
 import { cleanupRelationUtils } from "../../../utils/common/cleanupUtils";
-import { getSafeMaxChapter, getFolderKeyFromFilename } from "../../../utils/graphData";
+import { getMaxChapter } from "../../../utils/common/manifestCache";
 import "../RelationGraph.css";
 
 /**
@@ -124,6 +124,35 @@ function UnifiedEdgeTooltip({
     }
     return mode;
   }, [mode, isGraphOnlyPage, displayMode, bookId]);
+
+  const numericBookId = useMemo(() => {
+    if (bookId !== null && bookId !== undefined) {
+      const parsed = Number(bookId);
+      if (Number.isFinite(parsed) && parsed > 0) {
+        return parsed;
+      }
+    }
+    if (filename) {
+      const parsed = Number(filename);
+      if (Number.isFinite(parsed) && parsed > 0) {
+        return parsed;
+      }
+    }
+    return null;
+  }, [bookId, filename]);
+
+  const safeMaxChapterValue = useMemo(() => {
+    if (maxChapter && maxChapter > 0) {
+      return maxChapter;
+    }
+    if (numericBookId) {
+      const manifestMax = getMaxChapter(numericBookId);
+      if (manifestMax && manifestMax > 0) {
+        return manifestMax;
+      }
+    }
+    return 10;
+  }, [maxChapter, numericBookId]);
   
   // 관계 데이터 관리 (그래프 온리 페이지에서는 누적 모드 사용)
   const {
@@ -134,7 +163,7 @@ function UnifiedEdgeTooltip({
     error: relationError,
     fetchData,
     getMaxEventCount,
-  } = useRelationData(relationDataMode, id1, id2, chapterNum, unifiedEventInfo.eventNum, maxChapter, filename, bookId);
+  } = useRelationData(relationDataMode, id1, id2, chapterNum, unifiedEventInfo.eventNum, safeMaxChapterValue, filename, numericBookId);
 
 
   // 초기 로딩 완료 감지
@@ -165,9 +194,6 @@ function UnifiedEdgeTooltip({
     };
   }, []);
 
-  // positivity 값에 따른 색상과 텍스트 결정 (filename 기반)
-  const relationStyle = getRelationStyle(data.positivity, filename);
-
   // 관계 라벨 배열 생성 (캐시된 함수 사용으로 성능 최적화)
   const relationLabels = processRelationTagsCached(data.relation, data.label);
 
@@ -181,8 +207,21 @@ function UnifiedEdgeTooltip({
     : false;
 
   const currentEventNumber = useMemo(() => {
-    return currentEvent?.eventNum ?? currentEvent?.eventIdx ?? eventNum ?? 1;
-  }, [currentEvent, eventNum]);
+    const candidates = [
+      currentEvent?.eventNum,
+      currentEvent?.eventIdx,
+      eventNum
+    ];
+
+    for (const candidate of candidates) {
+      const parsed = Number(candidate);
+      if (Number.isFinite(parsed) && parsed > 0) {
+        return parsed;
+      }
+    }
+
+    return 1;
+  }, [currentEvent?.eventNum, currentEvent?.eventIdx, eventNum]);
 
   const extractNumericLabel = useCallback((label) => {
     if (typeof label === 'number' && Number.isFinite(label)) {
@@ -199,6 +238,36 @@ function UnifiedEdgeTooltip({
     }
     return null;
   }, []);
+
+  const earliestNumericLabel = useMemo(() => {
+    if (!timelineHasNumeric || !Array.isArray(labels) || labels.length === 0) {
+      return null;
+    }
+    const length = Math.min(labels.length, timeline.length);
+    for (let i = 0; i < length; i += 1) {
+      const label = labels[i];
+      const value = timeline[i];
+      if (typeof value !== 'number' || Number.isNaN(value)) {
+        continue;
+      }
+      const numericLabel = extractNumericLabel(label);
+      if (Number.isFinite(numericLabel) && numericLabel > 0) {
+        return numericLabel;
+      }
+    }
+    return null;
+  }, [timelineHasNumeric, labels, timeline, extractNumericLabel]);
+
+  const effectiveEventColumns = useMemo(() => {
+    if (isGraphOnlyPage) return Number.POSITIVE_INFINITY;
+
+    const candidate = Number(currentEventNumber);
+    if (Number.isFinite(candidate) && candidate > 0) {
+      return candidate;
+    }
+
+    return Number.POSITIVE_INFINITY;
+  }, [isGraphOnlyPage, currentEventNumber]);
 
   const chartPairs = useMemo(() => {
     const pairs = [];
@@ -236,7 +305,7 @@ function UnifiedEdgeTooltip({
           continue;
         }
 
-        if (!isGraphOnlyPage && numericLabel > currentEventNumber) {
+        if (!isGraphOnlyPage && Number.isFinite(effectiveEventColumns) && numericLabel > effectiveEventColumns) {
           continue;
         }
 
@@ -259,7 +328,16 @@ function UnifiedEdgeTooltip({
     }
 
     return pairs;
-  }, [timelineHasNumeric, labels, timeline, extractNumericLabel, currentEventNumber, clampedFallbackPositivity, isGraphOnlyPage]);
+  }, [
+    timelineHasNumeric,
+    labels,
+    timeline,
+    extractNumericLabel,
+    currentEventNumber,
+    clampedFallbackPositivity,
+    isGraphOnlyPage,
+    effectiveEventColumns
+  ]);
 
   const activeEventHasPositivity = useMemo(() => {
     if (chartPairs.length === 0) return false;
@@ -283,7 +361,12 @@ function UnifiedEdgeTooltip({
   const chartLabels = useMemo(() => {
     if (!activeEventHasPositivity) return [];
     return chartPairs.map((pair, index) => {
-      if (pair.label) return pair.label;
+      if (typeof pair.label === 'string' && pair.label.trim().length > 0) {
+        return pair.label;
+      }
+      if (Number.isFinite(pair.numericLabel) && pair.numericLabel > 0) {
+        return `E${pair.numericLabel}`;
+      }
       return `E${index + 1}`;
     });
   }, [chartPairs, activeEventHasPositivity]);
@@ -299,6 +382,74 @@ function UnifiedEdgeTooltip({
   const hasChartData = chartPoints.length > 0;
   const effectiveNoRelation = !hasChartData;
   const shouldShowRelationError = !!relationError && !hasChartData;
+
+  const timelinePositivity = useMemo(() => {
+    const validPairs = chartPairs.filter(pair => typeof pair?.value === 'number' && !Number.isNaN(pair.value));
+    if (validPairs.length === 0) {
+      return null;
+    }
+
+    const getLastEventPair = () => {
+      for (let i = validPairs.length - 1; i >= 0; i -= 1) {
+        const pair = validPairs[i];
+        if (!pair?.isChapterAggregate) {
+          return pair;
+        }
+      }
+      return validPairs[validPairs.length - 1] ?? null;
+    };
+
+    if (mode === 'viewer') {
+      let targetEvent = Number(currentEventNumber || 0);
+
+      if ((!Number.isFinite(targetEvent) || targetEvent <= 0) && validPairs.length > 0) {
+        const firstPair = validPairs.find(pair => !pair.isChapterAggregate && Number.isFinite(pair.numericLabel));
+        if (firstPair?.numericLabel) {
+          targetEvent = firstPair.numericLabel;
+        }
+      }
+
+      if (Number.isFinite(targetEvent) && targetEvent > 0) {
+        for (let i = validPairs.length - 1; i >= 0; i -= 1) {
+          const pair = validPairs[i];
+          if (pair?.isChapterAggregate) continue;
+          if (pair?.numericLabel === targetEvent) {
+            return pair.value;
+          }
+        }
+        for (let i = validPairs.length - 1; i >= 0; i -= 1) {
+          const pair = validPairs[i];
+          if (pair?.isChapterAggregate) continue;
+          if (typeof pair?.numericLabel === 'number' && pair.numericLabel < targetEvent) {
+            return pair.value;
+          }
+        }
+      }
+      const fallbackPair = getLastEventPair();
+      return fallbackPair ? fallbackPair.value : null;
+    }
+
+    const lastPair = getLastEventPair();
+    return lastPair ? lastPair.value : null;
+  }, [chartPairs, mode, currentEventNumber]);
+
+  const effectivePositivity = useMemo(() => {
+    if (typeof timelinePositivity === 'number' && !Number.isNaN(timelinePositivity)) {
+      return Math.max(-1, Math.min(1, timelinePositivity));
+    }
+    if (typeof clampedFallbackPositivity === 'number' && !Number.isNaN(clampedFallbackPositivity)) {
+      return clampedFallbackPositivity;
+    }
+    return null;
+  }, [timelinePositivity, clampedFallbackPositivity]);
+
+  const hasDisplayPositivity = typeof effectivePositivity === 'number' && !Number.isNaN(effectivePositivity);
+  const displayPositivityValue = hasDisplayPositivity ? effectivePositivity : null;
+  const positivityForBars = hasDisplayPositivity ? effectivePositivity : 0;
+  const positivityPercentage = hasDisplayPositivity ? Math.round(effectivePositivity * 100) : null;
+
+  // positivity 값에 따른 색상과 텍스트 결정 (filename 기반)
+  const relationStyle = getRelationStyle(hasDisplayPositivity ? effectivePositivity : 0, filename);
 
   // utils/styles에서 가져온 버튼 스타일 사용
   const buttonStyles = {
@@ -399,6 +550,16 @@ function UnifiedEdgeTooltip({
     });
   };
 
+  const xAxisBounds = useMemo(() => {
+    if (chartPoints.length === 0) {
+      return { min: 1, max: 1 };
+    }
+    if (chartPoints.length === 1) {
+      return { min: 0.5, max: 1.5 };
+    }
+    return { min: 1, max: chartPoints.length };
+  }, [chartPoints]);
+
   const chartConfig = {
     data: {
       labels: chartLabels,
@@ -434,8 +595,8 @@ function UnifiedEdgeTooltip({
         x: {
           type: 'linear',
           title: { display: false, text: '' },
-          min: chartPoints.length > 0 ? 1 : 1,
-          max: chartPoints.length > 0 ? chartPoints.length : 1,
+          min: xAxisBounds.min,
+          max: xAxisBounds.max,
           ticks: {
             stepSize: 1,
             callback: (value) => {
@@ -485,8 +646,6 @@ function UnifiedEdgeTooltip({
     chartTitle = `Chapter ${chapterNum}까지의 누적 관계 변화`;
   }
   // 동적으로 최대 챕터 수 계산
-  const folderKey = getFolderKeyFromFilename(filename);
-  const safeMaxChapter = maxChapter || getSafeMaxChapter(folderKey, 10);
 
   // 사이드바 모드일 때는 완전히 다른 레이아웃 사용
   if (displayMode === 'sidebar') {
@@ -606,7 +765,7 @@ function UnifiedEdgeTooltip({
                     color: relationStyle.color,
                     letterSpacing: '-0.025em',
                   }}>
-                    {data.positivity !== undefined ? `${Math.round(data.positivity * 100)}%` : "N/A"}
+                    {positivityPercentage !== null ? `${positivityPercentage}%` : "N/A"}
                   </span>
                 </div>
                 
@@ -619,7 +778,7 @@ function UnifiedEdgeTooltip({
                   margin: '16px 0 8px 0',
                   justifyContent: 'center',
                 }}>
-                  {renderProgressBars(data.positivity, relationStyle, true)}
+                  {renderProgressBars(positivityForBars, relationStyle, true)}
                 </div>
                 
                 {/* 퍼센트 라벨 - 공통 함수 사용 */}
@@ -931,7 +1090,7 @@ function UnifiedEdgeTooltip({
                           {relationStyle.text}
                         </span>
                         <span className="weight-value">
-                          {data.positivity !== undefined ? `${Math.round(data.positivity * 100)}%` : "N/A"}
+                          {positivityPercentage !== null ? `${positivityPercentage}%` : "N/A"}
                         </span>
                       </div>
                       <div
@@ -944,7 +1103,7 @@ function UnifiedEdgeTooltip({
                           justifyContent: "center",
                         }}
                       >
-                        {renderProgressBars(data.positivity, relationStyle, false)}
+                        {renderProgressBars(positivityForBars, relationStyle, false)}
                       </div>
                       <div
                         style={{

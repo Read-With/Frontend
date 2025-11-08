@@ -24,28 +24,9 @@ import {
   errorUtils
 } from '../../../utils/viewerUtils';
 import { getBookProgress } from '../../../utils/common/api';
-import { registerCache, clearCache } from '../../../utils/common/cacheManager';
-
-const eventRelationModules = import.meta.glob('../../../data/gatsby/chapter*_events.json', { eager: true });
-
-// 캐시 매니저에 eventsCache 등록 (중복 등록 방지)
-let eventsCache;
-let isCacheRegistered = false;
-
-const getEventsCache = () => {
-  if (!eventsCache) {
-    eventsCache = new Map();
-  }
-  if (!isCacheRegistered) {
-    try {
-      registerCache('eventsCache', eventsCache, { maxSize: 100, ttl: 600000 });
-      isCacheRegistered = true;
-    } catch (e) {
-      // 이미 등록된 경우 무시
-    }
-  }
-  return eventsCache;
-};
+import { registerCache } from '../../../utils/common/cacheManager';
+import { getEventsForChapter as getGraphEventsForChapter, getFolderKeyFromFilename } from '../../../utils/graphData';
+import { getManifestFromCache, getTotalLength } from '../../../utils/common/manifestCache';
 
 // EPUB 인스턴스 및 Blob 캐시
 let epubCache = new Map();
@@ -74,45 +55,6 @@ const getEpubCacheKey = (epubPath, epubSource, bookId) => {
   }
   // 경로 기반인 경우
   return epubPath || `book_${bookId || 'unknown'}`;
-};
-
-const getEventsForChapter = (chapter) => {
-  const chapterNum = String(chapter);
-  const cache = getEventsCache();
-  
-  if (cache.has(chapterNum)) {
-    return cache.get(chapterNum);
-  }
-
-  try {
-    const textFilePath = Object.keys(eventRelationModules).find(path => 
-      path.includes(`chapter${chapterNum}_events.json`)
-    );
-    
-    if (!textFilePath) {
-      cache.set(chapterNum, []);
-      return [];
-    }
-
-    const textArray = eventRelationModules[textFilePath]?.default || [];
-
-    const eventsWithMeta = textArray.map(event => ({
-      ...event,
-      event_id: event.event_id ?? 0,
-      eventNum: event.event_id ?? 0,
-      chapter: Number(chapter)
-    }));
-
-    const currentChapterEvents = eventsWithMeta.filter(event => 
-      event.chapter === Number(chapter)
-    );
-
-    cache.set(chapterNum, currentChapterEvents);
-    return currentChapterEvents;
-  } catch (error) {
-    cache.set(chapterNum, []);
-    return [];
-  }
 };
 
 
@@ -159,6 +101,17 @@ const EpubViewer = forwardRef(
 
 
     const updatePageCharCountTimer = useRef(null);
+    
+    const folderKey = useMemo(() => {
+      if (book?.filename) {
+        const key = getFolderKeyFromFilename(book.filename);
+        if (key) return key;
+      }
+      if (book?.id !== undefined && book?.id !== null) {
+        return getFolderKeyFromFilename(book.id);
+      }
+      return null;
+    }, [book?.filename, book?.id]);
     
     const updatePageCharCount = useCallback((direction = 'next') => {
       if (updatePageCharCountTimer.current) {
@@ -848,7 +801,7 @@ const EpubViewer = forwardRef(
                   onCurrentLineChange?.(progressInfo.currentChars, 0, null);
                 }
               } else {
-                const events = getEventsForChapter(detectedChapter);
+                const events = getGraphEventsForChapter(detectedChapter, folderKey);
                 let currentEvent = null;
 
                 if (events && events.length > 0 && cfi) {
@@ -982,7 +935,6 @@ const EpubViewer = forwardRef(
         if (retryTimeout) {
           clearTimeout(retryTimeout);
         }
-        clearCache('eventsCache');
         // cleanup 시 ref는 유지 (뒤로 가기 시 재사용을 위해)
         // isLoadingRef는 false로만 리셋
         isLoadingRef.current = false;
@@ -1017,42 +969,52 @@ const EpubViewer = forwardRef(
       storageUtils.set(storageKeys.chapter, '1');
     }, [storageKeys.chapter]);
 
-    const bookId = useMemo(() => {
-      const path = window.location.pathname;
-      const fileName = path.split('/').pop();
-      if (!fileName || !fileName.endsWith('.epub')) return null;
-      return fileName.replace('.epub', '');
-    }, []);
-
     useEffect(() => {
-      if (!bookId) return;
+      if (!book || typeof book.id !== 'number') return;
 
-      const allEventModules = import.meta.glob('/src/data/*/chapter*_events.json');
-      const modules = Object.entries(allEventModules)
-        .filter(([path]) => path.includes(`/src/data/${bookId}/`))
-        .map(([, mod]) => mod);
+      const manifest = getManifestFromCache(book.id);
+      if (!manifest) return;
 
-      const importAll = async () => {
-        const chapters = await Promise.all(modules.map(fn => fn()));
-        
-        const lastEnds = chapters.map(events => {
-          const arr = events.default || events;
-          return arr[arr.length - 1]?.end || 0;
+      const totalLength = getTotalLength(book.id);
+      if (totalLength && Number.isFinite(totalLength)) {
+        storageUtils.set(`totalLength_${book.id}`, totalLength);
+      }
+
+      const chapterLengths = {};
+
+      const chapterLengthMetadata = manifest.progressMetadata?.chapterLengths;
+      if (Array.isArray(chapterLengthMetadata) && chapterLengthMetadata.length > 0) {
+        chapterLengthMetadata.forEach((item) => {
+          if (!item) return;
+          const chapterIdx = Number(item.chapterIdx ?? item.idx);
+          const length = Number(item.length);
+          if (Number.isFinite(chapterIdx) && chapterIdx > 0 && Number.isFinite(length)) {
+            chapterLengths[chapterIdx] = length;
+          }
         });
-        
-        const totalLength = lastEnds.reduce((sum, end) => sum + end, 0);
-        
-        const chapterLengths = {};
-        lastEnds.forEach((end, idx) => {
-          chapterLengths[idx + 1] = end;
+      } else if (Array.isArray(manifest.chapters)) {
+        manifest.chapters.forEach((chapter) => {
+          if (!chapter) return;
+          const chapterIdx = Number(chapter.idx ?? chapter.chapterIdx);
+          if (!Number.isFinite(chapterIdx) || chapterIdx <= 0) return;
+          const endPos = Number(
+            chapter.endPos ??
+              chapter.end ??
+              (chapter.events && chapter.events.length
+                ? chapter.events[chapter.events.length - 1]?.endPos ??
+                  chapter.events[chapter.events.length - 1]?.end
+                : null)
+          );
+          if (Number.isFinite(endPos) && endPos > 0) {
+            chapterLengths[chapterIdx] = endPos;
+          }
         });
-        
-        storageUtils.set(`totalLength_${bookId}`, totalLength);
-        storageUtils.setJson(`chapterLengths_${bookId}`, chapterLengths);
-      };
-      
-      importAll();
-    }, [bookId]);
+      }
+
+      if (Object.keys(chapterLengths).length > 0) {
+        storageUtils.setJson(`chapterLengths_${book.id}`, chapterLengths);
+      }
+    }, [book?.id]);
 
     const LoadingComponent = ({ message, isError = false }) => (
       <div className="flex flex-col items-center justify-center space-y-6 absolute inset-0 z-50 pointer-events-none animate-fade-in">
