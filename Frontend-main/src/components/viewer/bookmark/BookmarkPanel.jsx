@@ -6,10 +6,13 @@ const parseBookmarkLocation = (bookmark) => {
   if (bookmark.chapterTitle) return bookmark.chapterTitle;
   const cfi = bookmark.startCfi || '';
   const chapterMatch = cfi.match(/\[chapter-(\d+)\]/);
-  const chapter = chapterMatch ? `${chapterMatch[1]}장` : null;
+  const chapter = chapterMatch ? `${chapterMatch[1]}챕터` : null;
   const pageMatch = cfi.match(/\[chapter-\d+\]\/(\d+)/);
   const page = pageMatch ? `${pageMatch[1]}페이지` : null;
-  return chapter && page ? `${chapter} · ${page}` : chapter || cfi;
+  if (page && chapter) return `${page} (${chapter})`;
+  if (page) return page;
+  if (chapter) return chapter;
+  return cfi;
 };
 
 const BookmarkPanel = ({ bookId, onSelect, onDelete }) => {

@@ -18,12 +18,13 @@ export function parseCfiToChapterDetail(cfi) {
 
   try {
     const chapterMatch = cfi.match(/\[chapter-(\d+)\]/);
-    const chapter = chapterMatch ? `${chapterMatch[1]}장` : null;
+    const chapter = chapterMatch ? `${chapterMatch[1]}챕터` : null;
 
     const pageMatch = cfi.match(/\[chapter-\d+\]\/(\d+)/);
-    const page = pageMatch ? pageMatch[1] : null;
+    const page = pageMatch ? `${pageMatch[1]}페이지` : null;
 
-    if (chapter && page) return `${chapter} ${page}`;
+    if (page && chapter) return `${page} (${chapter})`;
+    if (page) return page;
     if (chapter) return chapter;
     return cfi;
   } catch (error) {

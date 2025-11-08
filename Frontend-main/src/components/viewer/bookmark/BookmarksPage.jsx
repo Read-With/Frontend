@@ -20,26 +20,26 @@ const colorOptions = [
   { key: 'highlight', label: '강조', color: bookmarkColors.highlight, border: bookmarkBorders.highlight, icon: 'styler' },
 ];
 
-// 위치 정보 파싱 함수: 장 + 페이지까지만 표시
+// 위치 정보 파싱 함수: 페이지 + (챕터) 형식
 function parseCfiToChapterPage(cfi) {
   const chapterMatch = cfi.match(/\[chapter-(\d+)\]/);
-  const chapter = chapterMatch ? `${chapterMatch[1]}장` : null;
-  // [chapter-x]/숫+ 추출 (페이지)
+  const chapter = chapterMatch ? `${chapterMatch[1]}챕터` : null;
   const pageMatch = cfi.match(/\[chapter-\d+\]\/(\d+)/);
   const page = pageMatch ? `${pageMatch[1]}페이지` : null;
-  if (chapter && page) return `${chapter} ${page}`;
+  if (page && chapter) return `${page} (${chapter})`;
+  if (page) return page;
   if (chapter) return chapter;
   return cfi;
 }
 
-// 위치 정보 파싱 함수 개선: 장 + [chapter-x] 뒤의 전체 경로
+// 위치 정보 파싱 함수 개선: 상세 경로 + (챕터)
 function parseCfiToChapterFullDetail(cfi) {
   const chapterMatch = cfi.match(/\[chapter-(\d+)\]/);
-  const chapter = chapterMatch ? `${chapterMatch[1]}장` : null;
-  // [chapter-x] 뒤의 전체 경로 추출 (예: /220/1:305)
+  const chapter = chapterMatch ? `${chapterMatch[1]}챕터` : null;
   const afterChapterMatch = cfi.match(/\[chapter-\d+\]((?:\/\d+)+:\d+)/);
   const detail = afterChapterMatch ? afterChapterMatch[1].replace(/^\//, '') : null;
-  if (chapter && detail) return `${chapter} ${detail}`;
+  if (detail && chapter) return `${detail} (${chapter})`;
+  if (detail) return detail;
   if (chapter) return chapter;
   return cfi;
 }
