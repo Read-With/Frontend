@@ -37,6 +37,7 @@ const ViewerRelationGraph = ({
   onSetActiveTooltip = null,
   graphClearRef = null,
   isEventTransition = false, // 이벤트 전환 상태
+  bookId = null,
 }) => {
   const cyRef = useRef(null);
   const selectedEdgeIdRef = useRef(null);
@@ -207,6 +208,7 @@ const ViewerRelationGraph = ({
                 currentEvent={currentEvent}
                 prevValidEvent={prevValidEvent}
                 events={events}
+                bookId={bookId}
               />
             );
           }

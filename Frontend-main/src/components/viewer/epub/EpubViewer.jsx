@@ -23,6 +23,7 @@ import {
   cfiUtils,
   errorUtils
 } from '../../../utils/viewerUtils';
+import { getBookProgress } from '../../../utils/common/api';
 import { registerCache, clearCache } from '../../../utils/common/cacheManager';
 
 const eventRelationModules = import.meta.glob('../../../data/gatsby/chapter*_events.json', { eager: true });
@@ -376,6 +377,7 @@ const EpubViewer = forwardRef(
         // 뷰어에서 EPUB을 보여줄 때만 책 이름(제목)으로 IndexedDB에서 찾기
         let actualEpubSource = null;
         let targetBookId = null;
+        let apiProgressData = null;
         
         // book.id가 없으면 에러
         if (!book.id) {
@@ -414,6 +416,23 @@ const EpubViewer = forwardRef(
           return;
         }
         
+        if (book && typeof book.id === 'number') {
+          try {
+            const apiProgressResponse = await getBookProgress(book.id);
+            if (apiProgressResponse?.isSuccess && apiProgressResponse?.result) {
+              apiProgressData = apiProgressResponse.result;
+              if (apiProgressData.chapterIdx) {
+                currentChapterRef.current = apiProgressData.chapterIdx;
+              }
+            }
+          } catch (progressError) {
+            if (!progressError?.message?.includes('404')) {
+              console.warn('API 진도 조회 실패:', progressError);
+            }
+            apiProgressData = null;
+          }
+        }
+
         try {
           const { getAllLocalBookIds, loadLocalBookBuffer, saveLocalBookBuffer } = await import('../../../utils/localBookStorage');
           
@@ -799,40 +818,78 @@ const EpubViewer = forwardRef(
             updatePageCharCount();
             const currentChars = currentChapterCharsRef.current;
 
-            // 이벤트 데이터 가져오기 및 매칭 (개선된 버전 - CFI 기반 정확한 계산)
+            // 이벤트 데이터 가져오기 및 매칭
             try {
-              const events = getEventsForChapter(detectedChapter);
-              let currentEvent = null;
-
-              if (events && events.length > 0 && cfi) {
-                // 새로운 개선된 함수 사용: CFI 기반 정확한 위치 계산
-                const progressInfo = calculateChapterProgress(cfi, detectedChapter, events, bookInstance);
-                const closestEvent = findClosestEvent(cfi, detectedChapter, events, null, bookInstance);
+              const isApiBook = book && typeof book.id === 'number';
+              
+              if (isApiBook) {
+                const { calculateApiChapterProgress, findApiEventFromChars } = await import('../../../utils/common/manifestCache');
                 
-                if (closestEvent) {
-                  currentEvent = {
-                    ...closestEvent,
+                const progressInfo = calculateApiChapterProgress(book.id, cfi, detectedChapter, bookInstance);
+                const matchedEvent = await findApiEventFromChars(
+                  book.id,
+                  detectedChapter,
+                  progressInfo.currentChars,
+                  progressInfo.chapterStartPos
+                );
+                
+                if (matchedEvent) {
+                  const currentEvent = {
+                    ...matchedEvent,
+                    chapter: detectedChapter,
+                    eventNum: matchedEvent.eventIdx,
                     chapterProgress: progressInfo.progress,
                     currentChars: progressInfo.currentChars,
                     totalChars: progressInfo.totalChars,
-                    calculationMethod: progressInfo.calculationMethod
+                    cfi: cfi
                   };
+                  
+                  console.log('📍 현재 이벤트 정보:', currentEvent);
+                  onCurrentLineChange?.(currentEvent.currentChars, 0, currentEvent);
+                } else {
+                  onCurrentLineChange?.(progressInfo.currentChars, 0, null);
                 }
+              } else {
+                const events = getEventsForChapter(detectedChapter);
+                let currentEvent = null;
+
+                if (events && events.length > 0 && cfi) {
+                  const progressInfo = calculateChapterProgress(cfi, detectedChapter, events, bookInstance);
+                  const closestEvent = findClosestEvent(cfi, detectedChapter, events, null, bookInstance);
+                  
+                  if (closestEvent) {
+                    currentEvent = {
+                      ...closestEvent,
+                      chapterProgress: progressInfo.progress,
+                      currentChars: progressInfo.currentChars,
+                      totalChars: progressInfo.totalChars,
+                      calculationMethod: progressInfo.calculationMethod
+                    };
+                  }
+                }
+                
+                onCurrentLineChange?.(currentEvent?.currentChars || currentChars, events?.length || 0, currentEvent || null);
               }
-              
-              onCurrentLineChange?.(currentEvent?.currentChars || currentChars, events?.length || 0, currentEvent || null);
             } catch (error) {
+              console.error('이벤트 매칭 실패:', error);
               onCurrentLineChange?.(currentChars, 0, null);
             }
           };
           
           rendition.on('relocated', relocatedHandler);
 
-          // 초기 CFI 설정 개선 - URL 파라미터 우선 처리
+          // 초기 CFI 설정: API 진도 → URL 파라미터 → 로컬 저장 순서
           let displayTarget;
-          
+ 
+          if (!displayTarget && apiProgressData?.cfi) {
+            displayTarget = apiProgressData.cfi;
+            if (apiProgressData.chapterIdx) {
+              onCurrentChapterChange?.(apiProgressData.chapterIdx);
+            }
+          }
+
           // 1. URL 파라미터 기반 초기 위치 설정 (최우선)
-          if (initialChapter || initialPage || initialProgress) {
+          if (!displayTarget && (initialChapter || initialPage || initialProgress)) {
             errorUtils.logInfo('loadBook', 'URL 파라미터 기반 초기 위치 설정', {
               chapter: initialChapter,
               page: initialPage,
@@ -893,26 +950,8 @@ const EpubViewer = forwardRef(
           
           await rendition.display(displayTarget);
 
-          // display 후 강제로 relocated 이벤트 트리거
-          const location = await rendition.currentLocation();
-          
-          // EPUB 필수 정보 저장
-          const epubInfo = {
-            cfi: location?.start?.cfi,
-            spinePos: location?.start?.spinePos,
-            href: location?.start?.href,
-            totalPages: bookInstance.locations?.total || 0,
-            locationsLength: bookInstance.locations?.length() || 0,
-            spineLength: bookInstance.spine?.length || 0,
-            timestamp: Date.now()
-          };
-          
-          storageUtils.set(storageKeys.lastCFI, location?.start?.cfi);
-          storageUtils.set('epubInfo_' + (book.filename || 'book'), JSON.stringify(epubInfo));
-          
-          // EPUB 필수 정보 저장
-          
-          rendition.emit('relocated', location);
+          // display가 자동으로 relocated 이벤트를 발생시키므로 강제 emit 제거
+          // (중복 호출 방지)
 
           if (storageUtils.get(storageKeys.nextPage) === 'true') {
             storageUtils.remove(storageKeys.nextPage);

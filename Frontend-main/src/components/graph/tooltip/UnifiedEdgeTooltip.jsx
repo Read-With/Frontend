@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { Line } from "react-chartjs-2";
 import "chart.js/auto";
 import { useParams } from "react-router-dom";
@@ -115,7 +115,15 @@ function UnifiedEdgeTooltip({
   const isGraphOnlyPage = window.location.pathname.includes('/user/graph/');
   
   // 모드 결정: 그래프 온리 페이지에서는 cumulative 모드 사용
-  const relationDataMode = isGraphOnlyPage ? 'cumulative' : mode;
+  const relationDataMode = useMemo(() => {
+    if (isGraphOnlyPage) {
+      return 'cumulative';
+    }
+    if (bookId) {
+      return 'cumulative';
+    }
+    return mode;
+  }, [isGraphOnlyPage, bookId, mode]);
   
   // 관계 데이터 관리 (그래프 온리 페이지에서는 누적 모드 사용)
   const {
@@ -162,6 +170,149 @@ function UnifiedEdgeTooltip({
 
   // 관계 라벨 배열 생성 (캐시된 함수 사용으로 성능 최적화)
   const relationLabels = processRelationTagsCached(data.relation, data.label);
+
+  const hasFallbackPositivity = typeof data?.positivity === 'number' && !Number.isNaN(data.positivity);
+  const clampedFallbackPositivity = hasFallbackPositivity
+    ? Math.max(-1, Math.min(1, data.positivity))
+    : null;
+
+  const timelineHasNumeric = Array.isArray(timeline)
+    ? timeline.some(value => typeof value === 'number' && !Number.isNaN(value))
+    : false;
+
+  const currentEventNumber = useMemo(() => {
+    return currentEvent?.eventNum ?? currentEvent?.eventIdx ?? eventNum ?? 1;
+  }, [currentEvent, eventNum]);
+
+  const extractNumericLabel = useCallback((label) => {
+    if (typeof label === 'number' && Number.isFinite(label)) {
+      return label;
+    }
+    if (typeof label === 'string') {
+      const match = label.match(/\d+/g);
+      if (match && match.length > 0) {
+        const parsed = Number(match[match.length - 1]);
+        if (Number.isFinite(parsed)) {
+          return parsed;
+        }
+      }
+    }
+    return null;
+  }, []);
+
+  const chartPairs = useMemo(() => {
+    if (timelineHasNumeric && Array.isArray(labels) && labels.length > 0) {
+      const length = Math.min(labels.length, timeline.length);
+      const pairs = [];
+      for (let i = 0; i < length; i++) {
+        const eventIdx = extractNumericLabel(labels[i]);
+        if (!Number.isFinite(eventIdx) || eventIdx > currentEventNumber) {
+          continue;
+        }
+        const rawValue = timeline[i];
+        let clamped = 0;
+        if (typeof rawValue === 'number' && !Number.isNaN(rawValue)) {
+          clamped = Math.max(-1, Math.min(1, rawValue));
+        }
+        pairs.push({ eventIdx, value: clamped });
+      }
+      if (pairs.length > 0) {
+        return pairs;
+      }
+    }
+
+    if (clampedFallbackPositivity !== null) {
+      return [{ eventIdx: currentEventNumber, value: clampedFallbackPositivity }];
+    }
+
+    return [];
+  }, [timelineHasNumeric, labels, timeline, extractNumericLabel, currentEventNumber, clampedFallbackPositivity]);
+
+  const chartPairMap = useMemo(() => {
+    const map = new Map();
+    chartPairs.forEach(pair => {
+      if (Number.isFinite(pair.eventIdx)) {
+        map.set(pair.eventIdx, pair.value);
+      }
+    });
+    return map;
+  }, [chartPairs]);
+
+  const eventIndicesFromEvents = useMemo(() => {
+    if (!Array.isArray(events)) {
+      return [];
+    }
+    return events
+      .map((event) => Number(event?.eventIdx ?? event?.eventNum ?? event?.idx ?? event?.id))
+      .filter((value) => Number.isFinite(value) && value > 0 && value <= currentEventNumber);
+  }, [events, currentEventNumber]);
+
+  const allEventIndices = useMemo(() => {
+    let earliest = currentEventNumber;
+    if (eventIndicesFromEvents.length > 0) {
+      earliest = Math.min(earliest, Math.min(...eventIndicesFromEvents));
+    }
+    if (chartPairs.length > 0) {
+      earliest = Math.min(earliest, Math.min(...chartPairs.map(pair => pair.eventIdx)));
+    }
+    if (!Number.isFinite(earliest) || earliest < 1) {
+      earliest = 1;
+    }
+
+    const indices = [];
+    for (let idx = earliest; idx <= currentEventNumber; idx++) {
+      indices.push(idx);
+    }
+    return indices;
+  }, [eventIndicesFromEvents, chartPairs, currentEventNumber]);
+
+  const chartLabels = useMemo(() => {
+    return allEventIndices;
+  }, [allEventIndices]);
+
+  const chartPoints = useMemo(() => {
+    return allEventIndices.map((idx) => ({
+      x: idx,
+      y: chartPairMap.has(idx) ? chartPairMap.get(idx) : 0
+    }));
+  }, [allEventIndices, chartPairMap]);
+
+  const hasChartData = chartPoints.length > 0;
+  const effectiveNoRelation = !hasChartData;
+  const shouldShowRelationError = !!relationError && !hasChartData;
+
+  const { minX, maxX } = useMemo(() => {
+    if (!hasChartData || chartPoints.length === 0) {
+      return { minX: 1, maxX: 1 };
+    }
+
+    const eventNumbers = chartPoints.map(point => point.x);
+    const minEvent = Math.min(...eventNumbers);
+    const maxEvent = Math.max(...eventNumbers);
+
+    if (chartPoints.length === 1) {
+      const safeEvent = Number.isFinite(minEvent) ? minEvent : 1;
+      return {
+        minX: Math.max(1, safeEvent - 0.5),
+        maxX: safeEvent + 0.5
+      };
+    }
+
+    let min = Math.max(1, Math.floor(minEvent));
+    let max = Math.ceil(maxEvent);
+
+    if (min === max) {
+      if (min === 1) {
+        max = min + 1;
+      } else {
+        min = Math.max(1, min - 1);
+      }
+    }
+
+    return { minX: min, maxX: max };
+  }, [chartPoints, hasChartData]);
+
+  const showXAxisLabels = chartPoints.length > 1;
 
   // utils/styles에서 가져온 버튼 스타일 사용
   const buttonStyles = {
@@ -253,10 +404,10 @@ function UnifiedEdgeTooltip({
 
   // 점 색상 배열 생성 (그래프 온리 페이지에서 라벨에 따라 색상 구분)
   const getPointBackgroundColors = () => {
-    if (!isGraphOnlyPage || !labels) return "#5C6F5C";
+    if (!isGraphOnlyPage) return "#5C6F5C";
     
-    return labels.map(label => {
-      // 라벨이 "Ch"로 시작하면 회색, "E"로 시작하면 파란색
+    return chartPoints.map(point => {
+      const label = point.x;
       if (typeof label === 'string' && label.startsWith('Ch')) {
         return "#9ca3af"; // 회색
       }
@@ -264,14 +415,13 @@ function UnifiedEdgeTooltip({
     });
   };
 
-  // 중복 제거된 차트 설정
   const chartConfig = {
     data: {
-      labels,
+      labels: chartLabels.map(label => `E${label}`),
       datasets: [
         {
           label: "관계 긍정도",
-          data: timeline,
+          data: chartPoints,
           borderColor: "#5C6F5C",
           backgroundColor: "rgba(92,111,92,0.1)",
           pointBackgroundColor: getPointBackgroundColors(),
@@ -281,6 +431,7 @@ function UnifiedEdgeTooltip({
           fill: true,
           tension: 0.3,
           spanGaps: true,
+          parsing: false
         },
       ],
     },
@@ -297,14 +448,15 @@ function UnifiedEdgeTooltip({
           title: { display: true, text: "긍정도" },
         },
         x: {
-          title: { display: true, text: "이벤트 순서" },
-          min: 0,
-          max: getMaxEventCount() + 1.0, // 끝 부분이 잘리지 않도록 여유 공간 추가
+          type: 'linear',
+          title: { display: false, text: '' },
+          min: minX,
+          max: maxX,
           ticks: {
-            stepSize: 1
-          },
-          grid: {
-            offset: false
+            stepSize: 1,
+            callback: (value) => {
+              return chartLabels.some(label => label === value) ? `E${value}` : '';
+            }
           }
         },
       },
@@ -700,7 +852,7 @@ function UnifiedEdgeTooltip({
           </button>
           {viewMode === "info" && (
             <div style={{ minHeight: '100%', display: 'flex', flexDirection: 'column' }}>
-              {(mode === 'viewer' && noRelation) ? (
+              {(mode === 'viewer' && effectiveNoRelation) ? (
                 <div style={{ 
                   flex: 1, 
                   display: 'flex', 
@@ -879,7 +1031,7 @@ function UnifiedEdgeTooltip({
                 <div style={{ textAlign: "center", marginTop: '3.75rem', flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                   불러오는 중...
                 </div>
-              ) : relationError ? (
+              ) : shouldShowRelationError ? (
                 <div style={{ 
                   flex: 1, 
                   display: 'flex', 
@@ -926,7 +1078,7 @@ function UnifiedEdgeTooltip({
                     </button>
                   </div>
                 </div>
-              ) : (mode === 'viewer' && noRelation) ? (
+              ) : (mode === 'viewer' && effectiveNoRelation) ? (
                 <div style={{ 
                   flex: 1, 
                   display: 'flex', 

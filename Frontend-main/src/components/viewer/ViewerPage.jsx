@@ -13,6 +13,7 @@ import { useViewerPage } from "../../hooks/useViewerPage";
 import { useGraphSearch } from "../../hooks/useGraphSearch";
 import { createStorageKey } from "../../hooks/useLocalStorage";
 import { getAllProgress, saveProgress, getBookProgress, getBookManifest, getFineGraph } from "../../utils/common/api";
+import { discoverChapterEvents, getEventData, getMaxEventIdx, getCachedChapterEvents } from "../../utils/common/chapterEventCache";
 import { 
   parseCfiToChapterDetail, 
   extractEventNodesAndEdges
@@ -85,6 +86,38 @@ function GraphSplitArea({
     return elements;
   }, [isSearchActive, filteredElements, filterStage, filteredMainCharacters, elements]);
 
+  const shouldShowLoading = loading || isReloading || isGraphLoading || !isDataReady || !isLocationDetermined;
+  const currentEventIdx = currentEvent?.eventIdx;
+  const currentEventNum = currentEvent?.eventNum;
+  const currentEventId = currentEvent?.id;
+
+  useEffect(() => {
+    if (process.env.NODE_ENV !== "development") {
+      return;
+    }
+    console.log("🎬 렌더링 조건 체크:", {
+      loading,
+      isReloading,
+      isGraphLoading,
+      isDataReady,
+      isLocationDetermined,
+      shouldShowLoading,
+      currentChapter,
+      currentEvent: currentEventIdx ?? currentEventNum ?? currentEventId ?? null,
+    });
+  }, [
+    loading,
+    isReloading,
+    isGraphLoading,
+    isDataReady,
+    isLocationDetermined,
+    shouldShowLoading,
+    currentChapter,
+    currentEventIdx,
+    currentEventNum,
+    currentEventId,
+  ]);
+
   return (
     <div
       className="h-full w-full flex flex-col"
@@ -112,7 +145,7 @@ function GraphSplitArea({
       />
       
       <div style={{ flex: 1, position: "relative", minHeight: 0, minWidth: 0 }}>
-        {loading || isReloading || isGraphLoading || !isDataReady || !isLocationDetermined ? (
+        {shouldShowLoading ? (
           <div style={{
             display: 'flex',
             flexDirection: 'column',
@@ -284,6 +317,7 @@ function GraphSplitArea({
             onSetActiveTooltip={onSetActiveTooltip}
             graphClearRef={graphClearRef}
             isEventTransition={transitionState.type === 'event' && transitionState.inProgress}
+            bookId={book?.id ?? bookId}
           />
         )}
       </div>
@@ -555,6 +589,8 @@ const ViewerPage = () => {
   const apiCallRef = useRef(null);
   const isChapterTransitionRef = useRef(false);
   const setElementsRef = useRef(setElements);
+  const previousGraphDataRef = useRef({ elements: [], eventIdx: 0, chapterIdx: 0 });
+  const chapterEventDiscoveryRef = useRef(new Map()); // 챕터별 이벤트 탐색 상태
   
   useEffect(() => {
     setElementsRef.current = setElements;
@@ -568,6 +604,56 @@ const ViewerPage = () => {
     }
   }, [transitionState.type]);
   
+  // 챕터별 이벤트 탐색 (챕터 변경 시)
+  useEffect(() => {
+    let isMounted = true;
+    
+    const discoverEvents = async () => {
+      const isApiBook = book && (typeof book.id === 'number' || book.isFromAPI === true);
+      
+      if (!isApiBook || !book?.id || !currentChapter) {
+        return;
+      }
+      
+      // 이미 탐색 중이거나 완료된 챕터는 스킵
+      const discoveryKey = `${book.id}-${currentChapter}`;
+      if (chapterEventDiscoveryRef.current.has(discoveryKey)) {
+        return;
+      }
+      
+      // 탐색 시작 표시
+      chapterEventDiscoveryRef.current.set(discoveryKey, 'discovering');
+      
+      try {
+        console.log('🔍 챕터 이벤트 탐색 시작:', { bookId: book.id, chapterIdx: currentChapter });
+        
+        // 이벤트 순차 탐색 (캐시 우선)
+        const result = await discoverChapterEvents(book.id, currentChapter);
+        
+        if (isMounted) {
+          chapterEventDiscoveryRef.current.set(discoveryKey, 'completed');
+          console.log('✅ 챕터 이벤트 탐색 완료:', {
+            bookId: book.id,
+            chapterIdx: currentChapter,
+            maxEventIdx: result.maxEventIdx,
+            eventsCount: result.events?.length || 0
+          });
+        }
+      } catch (error) {
+        console.error('❌ 챕터 이벤트 탐색 실패:', error);
+        if (isMounted) {
+          chapterEventDiscoveryRef.current.delete(discoveryKey);
+        }
+      }
+    };
+    
+    discoverEvents();
+    
+    return () => {
+      isMounted = false;
+    };
+  }, [book?.id, currentChapter]);
+  
   useEffect(() => {
     let isMounted = true;
     
@@ -579,25 +665,27 @@ const ViewerPage = () => {
             return;
           }
           
-          let eventIdx = currentEvent?.eventNum || 1;
+          // API 책은 currentEvent가 설정될 때까지 대기 (챕터 전환 제외)
+          if (!currentEvent && !isChapterTransitionRef.current) {
+            console.log('⏳ currentEvent 대기 중...');
+            return;
+          }
+          
+          let eventIdx = currentEvent?.eventNum || currentEvent?.eventIdx || 1;
           
           if (isChapterTransitionRef.current) {
             const direction = transitionState.direction;
             
-            if (direction === 'backward' && manifestData?.chapters) {
-              const chapterInfo = manifestData.chapters.find(ch => ch.chapter === currentChapter || ch.chapterIdx === currentChapter);
-              if (chapterInfo && chapterInfo.eventCount > 0) {
-                eventIdx = chapterInfo.eventCount; // 1-based로 변환 (API는 0-based이므로 나중에 -1)
-              } else {
-                eventIdx = 1; // 최소값 1로 설정
-              }
+            // 캐시된 챕터 이벤트 정보 사용
+            if (direction === 'backward') {
+              const maxEventIdx = await getMaxEventIdx(book.id, currentChapter);
+              eventIdx = maxEventIdx > 0 ? maxEventIdx : 1;
             } else if (direction === 'forward') {
-              eventIdx = 1; // eventIdx=0 대신 1로 설정
+              eventIdx = 1;
             }
           }
           
-          // API 호출을 위해 0-based로 변환 (eventIdx >= 1인 경우에만)
-          const apiEventIdx = eventIdx >= 1 ? eventIdx - 1 : 0;
+          const apiEventIdx = eventIdx;
           
           const callKey = `${book.id}-${currentChapter}-${apiEventIdx}`;
           if (apiCallRef.current === callKey) {
@@ -606,7 +694,6 @@ const ViewerPage = () => {
           apiCallRef.current = callKey;
          
         try {
-          // eventIdx가 0 이하일 때는 API 호출하지 않음 (데이터 없음)
           if (!book?.id || !currentChapter || apiEventIdx < 1) {
             setElementsRef.current([]);
             setIsDataReady(true);
@@ -614,33 +701,62 @@ const ViewerPage = () => {
             return;
           }
           
+          console.log('📡 그래프 API 호출:', { bookId: book.id, chapterIdx: currentChapter, eventIdx: apiEventIdx });
+          
           const fineData = await getFineGraph(book.id, currentChapter, apiEventIdx);
           
           if (!isMounted) return;
           
-          // API 응답의 모든 필드가 포함된 result 객체 사용
-          // result에는 characters, relations, event 외에도 모든 필드가 포함됨
+          console.log('🔍 API 원본 응답:', {
+            isSuccess: fineData?.isSuccess,
+            hasResult: !!fineData?.result,
+            resultKeys: fineData?.result ? Object.keys(fineData.result) : [],
+            characters: fineData?.result?.characters,
+            relations: fineData?.result?.relations,
+            event: fineData?.result?.event,
+            fullResponse: fineData
+          });
+          
           const resultData = fineData.result || {};
           
-          // API 응답의 event 객체를 로컬 데이터 형식으로 정규화
-          // API: { chapterIdx, start, end, event_id }
-          // 로컬: { chapter, eventNum, event_id, start, end, ... }
           const apiEvent = resultData.event;
           const normalizedEvent = apiEvent ? {
             chapter: apiEvent.chapterIdx ?? currentChapter,
-            chapterIdx: apiEvent.chapterIdx ?? currentChapter, // API 필드명도 유지 (호환성)
-            eventNum: apiEvent.event_id ?? (apiEventIdx + 1), // 1-based로 변환
-            event_id: apiEvent.event_id ?? (apiEventIdx + 1), // 원본 필드명도 유지 (호환성)
+            chapterIdx: apiEvent.chapterIdx ?? currentChapter,
+            eventNum: apiEvent.event_id ?? apiEventIdx,
+            eventIdx: apiEvent.event_id ?? apiEventIdx,
+            event_id: apiEvent.event_id ?? apiEventIdx,
             start: apiEvent.start,
             end: apiEvent.end,
-            ...apiEvent // 나머지 모든 필드 유지
+            ...apiEvent
           } : null;
+          
+          console.log('✅ 그래프 데이터 로드 완료:', {
+            charactersCount: resultData.characters?.length || 0,
+            relationsCount: resultData.relations?.length || 0,
+            normalizedEvent,
+            hasCharacters: !!resultData.characters,
+            hasRelations: !!resultData.relations
+          });
           
           let convertedElements = [];
                     if (resultData.characters && resultData.relations && 
             resultData.characters.length > 0 && resultData.relations.length > 0) {
-            // characters 배열의 모든 필드 사용: id, profileImage, description, names, weight, count, common_name, main_character, portrait_prompt
+            
+            console.log('🔧 그래프 변환 시작:', {
+              charactersCount: resultData.characters.length,
+              relationsCount: resultData.relations.length,
+              sampleCharacter: resultData.characters[0],
+              sampleRelation: resultData.relations[0]
+            });
+            
             const { idToName, idToDesc, idToDescKo, idToMain, idToNames, idToProfileImage } = createCharacterMaps(resultData.characters);
+            
+            console.log('🗺️ 캐릭터 맵 생성 완료:', {
+              idToNameKeys: Object.keys(idToName),
+              idToProfileImageKeys: Object.keys(idToProfileImage),
+              sampleMapping: { id: '67', name: idToName['67'], image: idToProfileImage['67'] }
+            });
             
             const nodeWeights = {};
             if (resultData.characters) {
@@ -655,8 +771,6 @@ const ViewerPage = () => {
               });
             }
             
-            // relations 배열의 모든 필드 사용: id1, id2, positivity, count, relation
-            // 정규화된 event 객체 전달 (로컬 데이터 형식과 통일)
             convertedElements = convertRelationsToElements(
               resultData.relations,
               idToName,
@@ -667,30 +781,103 @@ const ViewerPage = () => {
               'api',
               Object.keys(nodeWeights).length > 0 ? nodeWeights : null,
               null,
-              normalizedEvent, // 정규화된 event 객체 전달
-              idToProfileImage // API 책의 profileImage 매핑
+              normalizedEvent,
+              idToProfileImage
             );
             
+            console.log('✨ 그래프 변환 완료:', {
+              convertedElementsCount: convertedElements.length,
+              nodesCount: convertedElements.filter(e => e.data && !e.data.source).length,
+              edgesCount: convertedElements.filter(e => e.data && e.data.source).length,
+              sampleNode: convertedElements.find(e => e.data && !e.data.source),
+              sampleEdge: convertedElements.find(e => e.data && e.data.source)
+            });
+            
             if (convertedElements.length > 0 && isMounted) {
-              setElementsRef.current(convertedElements);
+              // 누적 그래프 방식: 이전 데이터와 병합
+              const prevData = previousGraphDataRef.current;
+              
+              // 챕터가 바뀌면 이전 데이터 초기화
+              if (prevData.chapterIdx !== currentChapter) {
+                previousGraphDataRef.current = {
+                  elements: convertedElements,
+                  eventIdx: apiEventIdx,
+                  chapterIdx: currentChapter
+                };
+                setElementsRef.current(convertedElements);
+                console.log('🔄 새 챕터 시작: 그래프 초기화', { chapterIdx: currentChapter, eventIdx: apiEventIdx });
+              } else {
+                // 같은 챕터 내에서 이벤트가 증가하는 경우에만 누적
+                if (apiEventIdx > prevData.eventIdx) {
+                  // 기존 노드 ID 수집
+                  const existingNodeIds = new Set(
+                    prevData.elements
+                      .filter(e => e.data && !e.data.source)
+                      .map(e => e.data.id)
+                  );
+                  
+                  // 새로운 노드만 추출
+                  const newNodes = convertedElements.filter(e => 
+                    e.data && !e.data.source && !existingNodeIds.has(e.data.id)
+                  );
+                  
+                  // 모든 엣지는 최신 데이터 사용 (관계가 업데이트될 수 있음)
+                  const allEdges = convertedElements.filter(e => e.data && e.data.source);
+                  
+                  // 기존 노드 + 새 노드 + 최신 엣지
+                  const mergedElements = [
+                    ...prevData.elements.filter(e => e.data && !e.data.source),
+                    ...newNodes,
+                    ...allEdges
+                  ];
+                  
+                  previousGraphDataRef.current = {
+                    elements: mergedElements,
+                    eventIdx: apiEventIdx,
+                    chapterIdx: currentChapter
+                  };
+                  
+                  setElementsRef.current(mergedElements);
+                  
+                  console.log('➕ 누적 그래프 업데이트:', {
+                    chapterIdx: currentChapter,
+                    eventIdx: apiEventIdx,
+                    prevEventIdx: prevData.eventIdx,
+                    existingNodes: existingNodeIds.size,
+                    newNodes: newNodes.length,
+                    totalNodes: mergedElements.filter(e => e.data && !e.data.source).length,
+                    totalEdges: allEdges.length
+                  });
+                } else {
+                  // 이벤트가 감소하거나 같은 경우 (뒤로 가기 등) - 현재 이벤트 데이터만 표시
+                  previousGraphDataRef.current = {
+                    elements: convertedElements,
+                    eventIdx: apiEventIdx,
+                    chapterIdx: currentChapter
+                  };
+                  setElementsRef.current(convertedElements);
+                  console.log('⬅️ 이벤트 역방향 이동: 현재 이벤트만 표시', { chapterIdx: currentChapter, eventIdx: apiEventIdx });
+                }
+              }
               
               if (!events || events.length === 0) {
-                              // 정규화된 event 객체를 사용하여 로컬 데이터 형식과 통일
               const defaultEvent = {
                 chapter: normalizedEvent?.chapter || currentChapter,
-                eventNum: normalizedEvent?.eventNum || (apiEventIdx + 1), // 1-based로 변환
-                  cfi: "epubcfi(/6/4[chap01ref]!/4[body01]/10[para05]/2/1:3)",
-                                  relations: resultData.relations || [],
+                eventNum: normalizedEvent?.eventNum || apiEventIdx,
+                eventIdx: normalizedEvent?.eventIdx || apiEventIdx,
+                cfi: currentEvent?.cfi || "epubcfi(/6/4[chap01ref]!/4[body01]/10[para05]/2/1:3)",
+                relations: resultData.relations || [],
                 start: normalizedEvent?.start,
                 end: normalizedEvent?.end,
-                // API 필드명도 유지 (호환성)
                 chapterIdx: normalizedEvent?.chapterIdx,
-                event_id: normalizedEvent?.event_id ?? (apiEventIdx + 1) // 1-based로 변환
+                event_id: normalizedEvent?.event_id ?? apiEventIdx
               };
                 setEvents([defaultEvent]);
                 setCurrentEvent(defaultEvent);
               }
             }
+          } else {
+            console.warn('⚠️ 그래프 데이터 변환 실패: characters 또는 relations가 비어있음');
           }
           
           if (isChapterTransitionRef.current) {
@@ -699,8 +886,15 @@ const ViewerPage = () => {
           
           if (isMounted) {
             setIsDataReady(true);
+            setLoading(false);
             setTransitionState({ type: null, inProgress: false, error: false, direction: null });
             setApiError(null);
+            console.log('📊 그래프 상태 업데이트:', {
+              isDataReady: true,
+              loading: false,
+              hasElements: convertedElements?.length > 0,
+              elementsCount: convertedElements?.length || 0
+            });
           }
           
         } catch (error) {
@@ -721,6 +915,7 @@ const ViewerPage = () => {
               });
             }
             setIsDataReady(true);
+            setLoading(false);
             setTransitionState({ type: null, inProgress: false, error: false, direction: null });
           }
         }
