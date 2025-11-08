@@ -463,15 +463,54 @@ async function fetchApiRelationTimelineCumulativeFromAPI(bookId, id1, id2, selec
         }
         
         if (lastEventInChapter !== null && lastEventData) {
-          if (lastEventData?.isSuccess && lastEventData?.result?.relations) {
-            const relation = lastEventData.result.relations.find(rel => 
-              isSamePair(rel, id1, id2)
-            );
-            
-            if (relation) {
-              allPrevChaptersData.points.push(relation.positivity || 0);
-              allPrevChaptersData.labelInfo.push(`Ch${ch}`);
+          const extractRelationPositivity = (fineData) => {
+            if (!fineData?.isSuccess || !fineData?.result?.relations) return null;
+            const relation = fineData.result.relations.find(rel => isSamePair(rel, id1, id2));
+            return relation ? (relation.positivity || 0) : null;
+          };
+
+          let previousChapterPositivity = extractRelationPositivity(lastEventData);
+
+          if (previousChapterPositivity === null) {
+            const MAX_RELATION_SEARCH = 60;
+            let searchIdx = Math.max(1, lastEventInChapter - 1);
+            let relationSearchCount = 0;
+            let relation404Count = 0;
+            const MAX_RELATION_404 = 4;
+
+            while (searchIdx >= 1 && relationSearchCount < MAX_RELATION_SEARCH && relation404Count < MAX_RELATION_404) {
+              try {
+                const fineData = await getFineGraph(bookId, ch, searchIdx);
+                relationSearchCount += 1;
+
+                if (fineData?.isSuccess && fineData?.result) {
+                  const hasRealData = fineData.result.characters || 
+                                      (fineData.result.relations && fineData.result.relations.length > 0) ||
+                                      fineData.result.event;
+                  
+                  if (hasRealData) {
+                    const relationValue = extractRelationPositivity(fineData);
+                    if (relationValue !== null) {
+                      previousChapterPositivity = relationValue;
+                      break;
+                    }
+                  } else {
+                    relation404Count += 1;
+                  }
+                } else {
+                  relation404Count += 1;
+                }
+              } catch (error) {
+                relation404Count += 1;
+              }
+
+              searchIdx -= 1;
             }
+          }
+
+          if (previousChapterPositivity !== null) {
+            allPrevChaptersData.points.push(previousChapterPositivity);
+            allPrevChaptersData.labelInfo.push(`Ch${ch}`);
           }
         }
       } catch (error) {

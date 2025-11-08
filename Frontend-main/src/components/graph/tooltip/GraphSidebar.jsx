@@ -49,6 +49,10 @@ function GraphSidebar({
     
     // 새로운 activeTooltip이 생겼을 때 (열기)
     if ((activeTooltip || hasNoRelations) && !prevActiveTooltip) {
+      if (animationTimeoutRef.current) {
+        clearTimeout(animationTimeoutRef.current);
+        animationTimeoutRef.current = null;
+      }
       setIsClosing(false);
       setIsVisible(false);
       
@@ -96,6 +100,10 @@ function GraphSidebar({
     if (onClearGraph && !forceClose) {
       onClearGraph();
     }
+    if (animationTimeoutRef.current) {
+      clearTimeout(animationTimeoutRef.current);
+      animationTimeoutRef.current = null;
+    }
     if (onStartClosing) {
       onStartClosing();
     }
@@ -104,10 +112,11 @@ function GraphSidebar({
     setIsClosing(true);
     
     // 애니메이션 완료 후 완전히 닫기 (transition 시간에 맞춤)
-    setTimeout(() => {
+    animationTimeoutRef.current = setTimeout(() => {
       onClose();
       setIsClosing(false);
       setIsVisible(false);
+      animationTimeoutRef.current = null;
     }, 700);
   };
   // 관계가 없을 때 안내 메시지 표시

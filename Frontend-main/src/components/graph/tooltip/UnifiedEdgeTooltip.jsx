@@ -201,133 +201,104 @@ function UnifiedEdgeTooltip({
   }, []);
 
   const chartPairs = useMemo(() => {
+    const pairs = [];
+
     if (timelineHasNumeric && Array.isArray(labels) && labels.length > 0) {
       const length = Math.min(labels.length, timeline.length);
-      const pairs = [];
+
       for (let i = 0; i < length; i++) {
-        const eventIdx = extractNumericLabel(labels[i]);
-        if (!Number.isFinite(eventIdx) || eventIdx > currentEventNumber) {
+        const label = labels[i];
+        const value = timeline[i];
+        if (typeof value !== 'number' || Number.isNaN(value)) {
           continue;
         }
-        const rawValue = timeline[i];
-        if (typeof rawValue !== 'number' || Number.isNaN(rawValue)) {
+
+        const normalizedValue = Math.max(-1, Math.min(1, value));
+
+        if (
+          typeof label === 'string' &&
+          label.startsWith('Ch') &&
+          timeline[i + 1] !== undefined &&
+          typeof timeline[i + 1] === 'number' &&
+          !Number.isNaN(timeline[i + 1])
+        ) {
+          pairs.push({
+            value: normalizedValue,
+            label,
+            numericLabel: null,
+            isChapterAggregate: true
+          });
           continue;
         }
-        const clamped = Math.max(-1, Math.min(1, rawValue));
-        pairs.push({ eventIdx, value: clamped });
-      }
-      if (pairs.length > 0) {
-        return pairs;
+
+        const numericLabel = extractNumericLabel(label);
+        if (!Number.isFinite(numericLabel)) {
+          continue;
+        }
+
+        if (!isGraphOnlyPage && numericLabel > currentEventNumber) {
+          continue;
+        }
+
+        pairs.push({
+          value: normalizedValue,
+          label,
+          numericLabel,
+          isChapterAggregate: false
+        });
       }
     }
 
-    if (clampedFallbackPositivity !== null) {
-      return [{ eventIdx: currentEventNumber, value: clampedFallbackPositivity }];
+    if (pairs.length === 0 && clampedFallbackPositivity !== null) {
+      pairs.push({
+        value: clampedFallbackPositivity,
+        label: `E${currentEventNumber || 1}`,
+        numericLabel: currentEventNumber || 1,
+        isChapterAggregate: false
+      });
     }
 
-    return [];
-  }, [timelineHasNumeric, labels, timeline, extractNumericLabel, currentEventNumber, clampedFallbackPositivity]);
+    return pairs;
+  }, [timelineHasNumeric, labels, timeline, extractNumericLabel, currentEventNumber, clampedFallbackPositivity, isGraphOnlyPage]);
 
   const activeEventHasPositivity = useMemo(() => {
-    const eventIdx = Number(currentEvent?.eventNum ?? currentEvent?.eventIdx ?? eventNum ?? 0);
-    if (!Number.isFinite(eventIdx) || eventIdx <= 0) {
+    if (chartPairs.length === 0) return false;
+    if (isGraphOnlyPage) return true;
+    const currentEventIdx = Number(currentEvent?.eventNum ?? currentEvent?.eventIdx ?? eventNum ?? 0);
+    if (!Number.isFinite(currentEventIdx) || currentEventIdx <= 0) {
       return chartPairs.length > 0;
     }
-    return chartPairs.some(pair => Number(pair.eventIdx) === eventIdx);
-  }, [chartPairs, currentEvent, eventNum]);
-
-  const chartPairMap = useMemo(() => {
-    const map = new Map();
-    chartPairs.forEach(pair => {
-      if (Number.isFinite(pair.eventIdx)) {
-        map.set(pair.eventIdx, pair.value);
-      }
-    });
-    return map;
-  }, [chartPairs]);
-
-  const eventIndicesFromEvents = useMemo(() => {
-    if (!Array.isArray(events)) {
-      return [];
-    }
-    return events
-      .map((event) => Number(event?.eventIdx ?? event?.eventNum ?? event?.idx ?? event?.id))
-      .filter((value) => Number.isFinite(value) && value > 0 && value <= currentEventNumber);
-  }, [events, currentEventNumber]);
-
-  const allEventIndices = useMemo(() => {
-    let earliest = chartPairs.length > 0
-      ? Math.min(...chartPairs.map(pair => pair.eventIdx))
-      : currentEventNumber;
-
-    if (eventIndicesFromEvents.length > 0) {
-      earliest = Math.min(earliest, Math.min(...eventIndicesFromEvents));
-    }
-
-    if (!Number.isFinite(earliest) || earliest < 1) {
-      earliest = 1;
-    }
-
-    const indices = [];
-    for (let idx = earliest; idx <= currentEventNumber; idx++) {
-      indices.push(idx);
-    }
-    return indices;
-  }, [eventIndicesFromEvents, chartPairs, currentEventNumber]);
-
-  const chartLabels = useMemo(() => {
-    if (activeEventHasPositivity) {
-      return allEventIndices;
-    }
-    return [];
-  }, [allEventIndices, activeEventHasPositivity]);
+    const currentLabel = `E${currentEventIdx}`;
+    return chartPairs.some(pair => pair.label === currentLabel || pair.numericLabel === currentEventIdx);
+  }, [chartPairs, currentEvent, eventNum, isGraphOnlyPage]);
 
   const chartPoints = useMemo(() => {
-    if (activeEventHasPositivity) {
-      return allEventIndices.map((idx) => ({
-        x: idx,
-        y: chartPairMap.has(idx) ? chartPairMap.get(idx) : null
-      }));
-    }
-    return [];
-  }, [allEventIndices, chartPairMap, activeEventHasPositivity]);
+    if (!activeEventHasPositivity) return [];
+    return chartPairs.map((pair, index) => ({
+      x: index + 1,
+      y: pair.value
+    }));
+  }, [chartPairs, activeEventHasPositivity]);
+
+  const chartLabels = useMemo(() => {
+    if (!activeEventHasPositivity) return [];
+    return chartPairs.map((pair, index) => {
+      if (pair.label) return pair.label;
+      return `E${index + 1}`;
+    });
+  }, [chartPairs, activeEventHasPositivity]);
+
+  const xLabelMap = useMemo(() => {
+    const map = {};
+    chartPoints.forEach((point, idx) => {
+      map[Math.round(point.x)] = chartLabels[idx] ?? `E${idx + 1}`;
+    });
+    return map;
+  }, [chartPoints, chartLabels]);
 
   const hasChartData = chartPoints.length > 0;
   const effectiveNoRelation = !hasChartData;
   const shouldShowRelationError = !!relationError && !hasChartData;
-
-  const { minX, maxX } = useMemo(() => {
-    if (!hasChartData || chartPoints.length === 0) {
-      return { minX: 1, maxX: 1 };
-    }
-
-    const eventNumbers = chartPoints.map(point => point.x);
-    const minEvent = Math.min(...eventNumbers);
-    const maxEvent = Math.max(...eventNumbers);
-
-    if (chartPoints.length === 1) {
-      const safeEvent = Number.isFinite(minEvent) ? minEvent : 1;
-      return {
-        minX: Math.max(1, safeEvent - 0.5),
-        maxX: safeEvent + 0.5
-      };
-    }
-
-    let min = Math.max(1, Math.floor(minEvent));
-    let max = Math.ceil(maxEvent);
-
-    if (min === max) {
-      if (min === 1) {
-        max = min + 1;
-      } else {
-        min = Math.max(1, min - 1);
-      }
-    }
-
-    return { minX: min, maxX: max };
-  }, [chartPoints, hasChartData]);
-
-  const showXAxisLabels = chartPoints.length > 1;
 
   // utils/styles에서 가져온 버튼 스타일 사용
   const buttonStyles = {
@@ -419,20 +390,18 @@ function UnifiedEdgeTooltip({
 
   // 점 색상 배열 생성 (그래프 온리 페이지에서 라벨에 따라 색상 구분)
   const getPointBackgroundColors = () => {
-    if (!isGraphOnlyPage) return "#5C6F5C";
-    
-    return chartPoints.map(point => {
-      const label = point.x;
-      if (typeof label === 'string' && label.startsWith('Ch')) {
-        return "#9ca3af"; // 회색
+    if (!hasChartData) return [];
+    return chartPairs.map(pair => {
+      if (typeof pair.label === 'string' && pair.label.startsWith('Ch')) {
+        return "#9ca3af";
       }
-      return "#5C6F5C"; // 녹색
+      return "#5C6F5C";
     });
   };
 
   const chartConfig = {
     data: {
-      labels: chartLabels.map(label => `E${label}`),
+      labels: chartLabels,
       datasets: [
         {
           label: "관계 긍정도",
@@ -465,12 +434,13 @@ function UnifiedEdgeTooltip({
         x: {
           type: 'linear',
           title: { display: false, text: '' },
-          min: minX,
-          max: maxX,
+          min: chartPoints.length > 0 ? 1 : 1,
+          max: chartPoints.length > 0 ? chartPoints.length : 1,
           ticks: {
             stepSize: 1,
             callback: (value) => {
-              return chartLabels.some(label => label === value) ? `E${value}` : '';
+              if (!hasChartData) return '';
+              return xLabelMap[value] ?? '';
             }
           }
         },
@@ -487,6 +457,12 @@ function UnifiedEdgeTooltip({
           },
           borderRadius: 8,
           callbacks: {
+            title: function(context) {
+              if (!context?.length) return '';
+              const point = context[0];
+              const label = xLabelMap[Math.round(point.parsed.x)];
+              return label || '';
+            },
             label: function(context) {
               const value = context.parsed.y;
               const percentage = Math.round(value * 100);

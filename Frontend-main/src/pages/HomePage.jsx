@@ -11,104 +11,15 @@ const getApiBaseUrl = () => {
   return 'https://dev.readwith.store';
 };
 
-// 미니맵 그래프 컴포넌트
-const MinimapGraph = () => {
-  // 노드 데이터 정의
-  const nodes = [
-    { id: 'ron', name: '론', icon: '🦁', x: 80, y: 45, isCenter: false, isHighlight: false, size: 'large' },
-    { id: 'hermione', name: '헤르미온느', icon: '📚', x: 250, y: 45, isCenter: false, isHighlight: false, size: 'large' },
-    { id: 'harry', name: '해리', icon: '⚡', x: 250, y: 300, isCenter: true, isHighlight: false, size: 'xlarge' },
-    { id: 'malfoy', name: '말포이', icon: '🐍', x: 500, y: 300, isCenter: false, isHighlight: true, size: 'large' },
-    { id: 'dumbledore', name: '덤블도어', icon: '🦅', x: 680, y: 45, isCenter: false, isHighlight: false, size: 'large' },
-    { id: 'voldemort', name: '볼드모트', icon: '💀', x: 680, y: 540, isCenter: false, isHighlight: false, size: 'large' },
-  ];
-
-  // 관계 데이터 정의 (from -> to, sentiment: +1 = 긍정, -1 = 부정)
-  const edges = [
-    { from: 'ron', to: 'hermione', isHighlight: false, sentiment: 1 },
-    { from: 'hermione', to: 'harry', isHighlight: false, sentiment: 1 },
-    { from: 'harry', to: 'malfoy', isHighlight: true, sentiment: -1 },
-    { from: 'malfoy', to: 'dumbledore', isHighlight: false, sentiment: -1 },
-    { from: 'malfoy', to: 'voldemort', isHighlight: false, sentiment: 1 },
-  ];
-
-  // 노드 위치를 맵으로 변환
-  const nodeMap = nodes.reduce((acc, node) => {
-    acc[node.id] = node;
-    return acc;
-  }, {});
-
-  return (
-    <div className="relation-minimap">
-      {/* 배경 그래프 SVG */}
-      <svg className="minimap-bg" viewBox="0 0 1000 750" preserveAspectRatio="xMidYMid meet">
-        {/* 관계선 그리기 */}
-        {edges.map((edge, index) => {
-          const fromNode = nodeMap[edge.from];
-          const toNode = nodeMap[edge.to];
-          const isPositive = edge.sentiment > 0;
-          const strokeColor = isPositive ? '#4CAF50' : '#F44336';
-          
-          return (
-            <line
-              key={index}
-              className={edge.isHighlight ? 'minimap-edge-highlight' : 'minimap-edge-minor'}
-              x1={fromNode.x}
-              y1={fromNode.y}
-              x2={toNode.x}
-              y2={toNode.y}
-              stroke={strokeColor}
-              strokeWidth={edge.isHighlight ? 4 : 2}
-              opacity={edge.isHighlight ? 0.9 : 0.5}
-              strokeDasharray="none"
-            />
-          );
-        })}
-      </svg>
-
-      {/* 인물 노드들 */}
-      {nodes.map((node) => (
-        <div
-          key={node.id}
-          className={`minimap-node ${node.isCenter ? 'minimap-node-center' : ''} ${node.isHighlight ? 'minimap-node-highlight' : ''} ${node.size === 'xlarge' ? 'minimap-node-xlarge' : node.size === 'large' ? 'minimap-node-large' : ''}`}
-          style={{
-            left: `${node.x}px`,
-            top: `${node.y}px`,
-            transform: 'translate(-50%, -50%)',
-          }}
-        >
-          <div className="node-icon">{node.icon}</div>
-          <div className="node-name">{node.name}</div>
-        </div>
-      ))}
-
-
-    </div>
-  );
-};
-
 // 스크롤 섹션 컴포넌트들
 const HeroSection = () => {
   const [currentPage, setCurrentPage] = useState(0);
   const [isVisible, setIsVisible] = useState(false);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
-  const [showPage2Text, setShowPage2Text] = useState(false);
   
   useEffect(() => {
     setIsVisible(true);
   }, []);
-
-  useEffect(() => {
-    if (currentPage === 1) {
-      setShowPage2Text(false);
-      const timer = setTimeout(() => {
-        setShowPage2Text(true);
-      }, 4500);
-      return () => clearTimeout(timer);
-    } else {
-      setShowPage2Text(false);
-    }
-  }, [currentPage]);
 
   const storyPages = [
     {
@@ -116,16 +27,6 @@ const HeroSection = () => {
       subtitle: "책을 읽다 보면 누구나 한 번쯤 드는 생각이죠",
       content: "'해리와 말포이는 정말 숙명의 적일까?', '헤르미온느와 론은 언제부터 서로를 좋아한걸까?'\n\n<strong>이런 궁금증과 복잡함을 한눈에 해결해 줄 무언가가 필요하다고 생각한 적 없으신가요?</strong>",
       illustration: "🤔"
-    },
-    {
-      title: "관계의 지도",
-      subtitle: "이제 당신의 손으로 인물들의 관계를 탐험해보세요",
-      content: "해리, 헤르미온느, 론, 말포이, 덤블도어, 볼드모트... 이들의 관계를 시각적으로 탐험해보세요.",
-    },
-    {
-      title: "시점의 전환",
-      subtitle: "같은 사건도 누구의 관점에서 보느냐에 따라 완전히 다르게 해석됩니다",
-      content: "해리와 말포이의 첫 만남을 예로 들어보세요.\n\n해리에게는 '오만한 놈'이었지만, 말포이에게는 '유명세에 취한 놈'이었습니다. 진실은 하나지만, 해석은 무수히 많습니다.",
     },
     {
       title: "이제, 책을 탐험하는 시대",
@@ -300,15 +201,10 @@ const HeroSection = () => {
               )}
               <div className="page-number">{currentPage + 1} / {storyPages.length}</div>
               <div className="story-illustration">{storyPages[currentPage].illustration}</div>
-              <h1 className={`story-title ${currentPage === 1 && !showPage2Text ? 'page-2-hidden' : ''}`}>{storyPages[currentPage].title}</h1>
-              <h2 className={`story-subtitle ${currentPage === 1 && !showPage2Text ? 'page-2-hidden' : ''}`}>{storyPages[currentPage].subtitle}</h2>
+              <h1 className="story-title">{storyPages[currentPage].title}</h1>
+              <h2 className="story-subtitle">{storyPages[currentPage].subtitle}</h2>
               <div className="story-content-wrapper">
-                {/* 두 번째 페이지(관계의 지도)에 미니맵 예시 추가 */}
-                {currentPage === 1 && (
-                  <MinimapGraph />
-                )}
-                
-                <p className={`story-content ${currentPage === 1 && !showPage2Text ? 'page-2-hidden' : ''}`} dangerouslySetInnerHTML={{__html: storyPages[currentPage].content}}></p>
+                <p className="story-content" dangerouslySetInnerHTML={{__html: storyPages[currentPage].content}}></p>
                 
                 {/* 마지막 페이지에서만 구글 로그인 버튼 표시 */}
                 {currentPage === storyPages.length - 1 && (

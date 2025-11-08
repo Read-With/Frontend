@@ -87,14 +87,27 @@ export function useLocalStorage(key, initialValue) {
   return [storedValue, setValue];
 }
 
-export function useLocalStorageNumber(key, initialValue) {
+export function useLocalStorageNumber(key, initialValue, options = {}) {
+  const { forceInitialValue = false } = options;
+
   const [storedValue, setStoredValue] = useState(() => {
+    const numericInitial = Number(initialValue);
+    const sanitizedInitial = isNaN(numericInitial) ? initialValue : numericInitial;
+
+    if (forceInitialValue) {
+      try {
+        localStorage.setItem(key, sanitizedInitial.toString());
+      } catch (error) {
+      }
+      return sanitizedInitial;
+    }
+
     try {
       const item = localStorage.getItem(key);
-      const parsedValue = item ? Number(item) : initialValue;
-      return isNaN(parsedValue) ? initialValue : parsedValue;
+      const parsedValue = item ? Number(item) : sanitizedInitial;
+      return isNaN(parsedValue) ? sanitizedInitial : parsedValue;
     } catch (error) {
-      return initialValue;
+      return sanitizedInitial;
     }
   });
 

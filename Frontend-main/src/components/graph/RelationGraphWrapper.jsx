@@ -51,10 +51,29 @@ function RelationGraphWrapper() {
   const location = useLocation();
   const book = location.state?.book;
   
+  const initialChapter = useMemo(() => {
+    if (typeof window === 'undefined') {
+      return 1;
+    }
+    try {
+      const searchParams = new URLSearchParams(location.search || '');
+      const chapterParam = Number(searchParams.get('chapter'));
+      if (Number.isFinite(chapterParam) && chapterParam >= 1) {
+        return Math.floor(chapterParam);
+      }
+    } catch (error) {
+    }
+    return 1;
+  }, [location.search]);
+  
   const isBookId = !isNaN(filename) && filename.length > 0;
   const bookId = isBookId ? parseInt(filename) : null;
   
-  const [currentChapter, setCurrentChapter] = useLocalStorageNumber(`lastGraphChapter_${filename}`, 1);
+  const [currentChapter, setCurrentChapter] = useLocalStorageNumber(
+    `lastGraphChapter_${filename}`,
+    initialChapter,
+    { forceInitialValue: true }
+  );
   const [currentEvent, setCurrentEvent] = useState(1);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [edgeLabelVisible, setEdgeLabelVisible] = useState(true);
@@ -85,7 +104,7 @@ function RelationGraphWrapper() {
   const isMacroGraphLoadingRef = useRef(false);
   
   const isApiBook = isBookId || (book && (typeof book.id === 'number' || book.isFromAPI === true));
-  
+
   useEffect(() => {
     const loadManifestData = async () => {
       if (!isApiBook) {
@@ -469,6 +488,8 @@ function RelationGraphWrapper() {
   }, [isSidebarOpen]);
 
   const onShowNodeTooltip = useCallback(({ node, nodeCenter, mouseX, mouseY }) => {
+    setForceClose(false);
+    setIsSidebarClosing(false);
     const nodeData = node.data();
     
     const tooltipData = {
@@ -486,6 +507,8 @@ function RelationGraphWrapper() {
   }, [centerElementBetweenSidebars]);
 
   const onShowEdgeTooltip = useCallback(({ edge, edgeCenter, mouseX, mouseY }) => {
+    setForceClose(false);
+    setIsSidebarClosing(false);
     const edgeData = edge.data();
     
     const finalX = mouseX !== undefined ? mouseX : edgeCenter?.x || 0;
@@ -1172,7 +1195,7 @@ function RelationGraphWrapper() {
                 onClearGraph={handleClearGraph}
                                   forceClose={forceClose}
                   chapterNum={currentChapter}
-                  eventNum={eventNum}
+                  eventNum={isApiBook ? Math.max(currentEvent, 1) : eventNum}
                   maxChapter={effectiveMaxChapter}
                   filename={filename}
                 elements={elements}
