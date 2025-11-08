@@ -906,10 +906,7 @@ const ViewerPage = () => {
             return;
           }
           
-          // API 책은 currentEvent가 설정될 때까지 대기 (챕터 전환 제외)
-          if (!currentEvent && !isChapterTransitionRef.current) {
-            return;
-          }
+          // currentEvent가 아직 없어도 초기 이벤트(1)로 즉시 로드
           
           let eventIdx = currentEvent?.eventNum || currentEvent?.eventIdx || 1;
           

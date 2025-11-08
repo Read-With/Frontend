@@ -874,7 +874,7 @@ function UnifiedEdgeTooltip({
                   flexDirection: 'column',
                   justifyContent: 'center',
                   alignItems: 'center', 
-                  padding: '1.5rem',
+                  padding: '1rem',
                   minHeight: '100%',
                   width: 'calc(100% - 40px)',
                   margin: '0 auto'
@@ -900,8 +900,8 @@ function UnifiedEdgeTooltip({
                     className="edge-tooltip-actions"
                     style={{ 
                       marginTop: 'auto', 
-                      paddingTop: '1rem', 
-                      paddingBottom: mode === 'viewer' ? '0.5rem' : '1rem', 
+                      paddingTop: '0.5rem', 
+                      paddingBottom: mode === 'viewer' ? '0.5rem' : '0.75rem', 
                       textAlign: "center",
                       display: 'flex',
                       justifyContent: 'center',
@@ -927,15 +927,15 @@ function UnifiedEdgeTooltip({
                   alignItems: 'center', 
                   justifyContent: 'center',
                   flex: 1,
-                  padding: mode === 'viewer' ? '1.5rem 0.375rem' : '1.5rem'
+                  padding: mode === 'viewer' ? '1rem 0.25rem' : '1rem'
                 }}>
                   <div className="edge-tooltip-header" style={{ 
                     ...tooltipStyles.header, 
-                    padding: mode === 'viewer' ? '1.25rem 0.5rem' : '1.25rem',
+                    padding: mode === 'viewer' ? '0.75rem 0.5rem' : '0.75rem',
                     width: 'calc(100% - 40px)',
                     margin: '0 auto'
                   }}>
-                    <div className="relation-tags" style={{ display: 'flex', flexWrap: 'wrap', gap: '0.375rem 0.5rem', marginBottom: '0.75rem' }}>
+                    <div className="relation-tags" style={{ display: 'flex', flexWrap: 'wrap', gap: '0.25rem 0.375rem', marginBottom: '0.5rem' }}>
                       {relationLabels.map((relation, index) => (
                         <span
                           key={index}
@@ -962,9 +962,9 @@ function UnifiedEdgeTooltip({
                         style={{
                           display: "flex",
                           alignItems: "flex-end",
-                          gap: '0.25rem',
-                          height: '1.75rem',
-                          margin: "1rem 0 0.5rem 0",
+                          gap: '0.2rem',
+                          height: '1.4rem',
+                          margin: "0.5rem 0 0.25rem 0",
                           justifyContent: "center",
                         }}
                       >
@@ -974,8 +974,8 @@ function UnifiedEdgeTooltip({
                         style={{
                           display: "flex",
                           justifyContent: "center",
-                          gap: '0.25rem',
-                          marginBottom: '0.5rem',
+                          gap: '0.2rem',
+                          marginBottom: '0.25rem',
                         }}
                       >
                         {renderPercentageLabels(false)}
@@ -987,7 +987,7 @@ function UnifiedEdgeTooltip({
                       display: 'flex', 
                       alignItems: 'center', 
                       justifyContent: 'center',
-                      padding: mode === 'viewer' ? '1.25rem 0.5rem' : '1.25rem',
+                      padding: mode === 'viewer' ? '0.75rem 0.5rem' : '0.75rem',
                       width: 'calc(100% - 40px)',
                       margin: '0 auto'
                     }}>
@@ -1010,8 +1010,8 @@ function UnifiedEdgeTooltip({
                     className="edge-tooltip-actions"
                     style={{ 
                       marginTop: 'auto', 
-                      paddingTop: '1rem', 
-                      paddingBottom: mode === 'viewer' ? '0.5rem' : '1rem', 
+                      paddingTop: '0.5rem', 
+                      paddingBottom: mode === 'viewer' ? '0.5rem' : '0.75rem', 
                       textAlign: "center",
                       display: 'flex',
                       justifyContent: 'center',
@@ -1053,7 +1053,7 @@ function UnifiedEdgeTooltip({
                   flexDirection: 'column',
                   justifyContent: 'center',
                   alignItems: 'center', 
-                  padding: '1.5rem',
+                  padding: '1rem',
                   minHeight: '100%'
                 }}>
                   <div style={{ 
@@ -1075,8 +1075,8 @@ function UnifiedEdgeTooltip({
                   </div>
                   <div style={{ 
                     marginTop: 'auto', 
-                    paddingTop: '1rem', 
-                    paddingBottom: mode === 'viewer' ? '0.5rem' : '1rem', 
+                    paddingTop: '0.5rem', 
+                    paddingBottom: mode === 'viewer' ? '0.5rem' : '0.75rem', 
                     textAlign: "center",
                     display: 'flex',
                     justifyContent: 'center',
@@ -1100,7 +1100,7 @@ function UnifiedEdgeTooltip({
                   flexDirection: 'column',
                   justifyContent: 'center',
                   alignItems: 'center', 
-                  padding: '1.5rem',
+                  padding: '1rem',
                   minHeight: '100%'
                 }}>
                   <div style={{ 
@@ -1122,8 +1122,8 @@ function UnifiedEdgeTooltip({
                   </div>
                   <div style={{ 
                     marginTop: 'auto', 
-                    paddingTop: '1rem', 
-                    paddingBottom: mode === 'viewer' ? '0.5rem' : '1rem', 
+                    paddingTop: '0.5rem', 
+                    paddingBottom: mode === 'viewer' ? '0.5rem' : '0.75rem', 
                     textAlign: "center",
                     display: 'flex',
                     justifyContent: 'center',

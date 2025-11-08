@@ -109,7 +109,7 @@ export const tooltipStyles = {
   header: {
     background: COLORS.white,
     borderBottom: 'none',
-    padding: '1.25rem',
+    padding: '0.75rem',
   },
   relationTag: {
     background: COLORS.borderLight,
@@ -123,7 +123,7 @@ export const tooltipStyles = {
   },
   progressBar: {
     width: 80,
-    height: 24,
+    height: 20,
     borderRadius: '0.375rem',
     opacity: 1,
     transition: `background ${ANIMATION_VALUES.DURATION.NORMAL}`,
