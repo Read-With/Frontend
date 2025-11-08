@@ -1,62 +1,61 @@
 import React, { useState, useMemo } from 'react';
 import { useBookmarks } from '../../../hooks/useBookmarks';
 
+const parseBookmarkLocation = (bookmark) => {
+  if (!bookmark) return '';
+  if (bookmark.chapterTitle) return bookmark.chapterTitle;
+  const cfi = bookmark.startCfi || '';
+  const chapterMatch = cfi.match(/\[chapter-(\d+)\]/);
+  const chapter = chapterMatch ? `${chapterMatch[1]}장` : null;
+  const pageMatch = cfi.match(/\[chapter-\d+\]\/(\d+)/);
+  const page = pageMatch ? `${pageMatch[1]}페이지` : null;
+  return chapter && page ? `${chapter} · ${page}` : chapter || cfi;
+};
+
 const BookmarkPanel = ({ bookId, onSelect, onDelete }) => {
-  const [sortOrder, setSortOrder] = useState('recent'); // 'recent' | 'oldest' | 'position'
+  const [sortOrder, setSortOrder] = useState('recent');
   const { bookmarks, loading, removeBookmark } = useBookmarks(bookId);
-  
-  // 북마크 정렬
+
   const sortedBookmarks = useMemo(() => {
     if (!bookmarks || bookmarks.length === 0) return [];
-    
-    switch (sortOrder) {
-      case 'recent':
-        return [...bookmarks].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-      case 'oldest':
-        return [...bookmarks].sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
-      case 'position':
-        return [...bookmarks].sort((a, b) => {
-          // CFI 위치 기반 정렬 (간단한 문자열 비교)
-          return a.startCfi.localeCompare(b.startCfi);
-        });
-      default:
-        return bookmarks;
-    }
+    const sorted = [...bookmarks];
+    if (sortOrder === 'position') return sorted.sort((a, b) => (a.startCfi || '').localeCompare(b.startCfi || ''));
+    const factor = sortOrder === 'oldest' ? 1 : -1;
+    return sorted.sort((a, b) => {
+      const dateA = new Date(a.createdAt || a.created_at || 0).getTime();
+      const dateB = new Date(b.createdAt || b.created_at || 0).getTime();
+      return (dateA - dateB) * factor;
+    });
   }, [bookmarks, sortOrder]);
 
-  // 북마크 삭제 핸들러
   const handleDelete = async (bookmarkId) => {
     const result = await removeBookmark(bookmarkId);
-    if (result.success && onDelete) {
-      onDelete(bookmarkId);
-    }
+    if (result.success && onDelete) onDelete(bookmarkId);
     return result;
   };
 
   const formatDate = (dateString) => {
+    if (!dateString) return '';
     const date = new Date(dateString);
     const now = new Date();
-    const diffMs = now - date;
+    const diffMs = now.getTime() - date.getTime();
     const diffMins = Math.floor(diffMs / (1000 * 60));
-    const diffHours = Math.floor(diffMins / 60);
-    const diffDays = Math.floor(diffHours / 24);
-
     if (diffMins < 1) return '방금 전';
     if (diffMins < 60) return `${diffMins}분 전`;
+    const diffHours = Math.floor(diffMins / 60);
     if (diffHours < 24) return `${diffHours}시간 전`;
+    const diffDays = Math.floor(diffHours / 24);
     if (diffDays < 7) return `${diffDays}일 전`;
-    
-    return date.toLocaleDateString('ko-KR', { 
-      month: 'short', 
+    return date.toLocaleDateString('ko-KR', {
+      month: 'short',
       day: 'numeric',
       hour: '2-digit',
-      minute: '2-digit'
+      minute: '2-digit',
     });
   };
 
   return (
     <div className="absolute right-0 top-16 bg-white shadow-xl border border-gray-200 rounded-xl z-50 w-80 max-h-96 overflow-hidden">
-      {/* 헤더 */}
       <div className="p-4 border-b border-gray-100 bg-gradient-to-r from-blue-50 to-indigo-50">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-2">
@@ -83,7 +82,6 @@ const BookmarkPanel = ({ bookId, onSelect, onDelete }) => {
         </div>
       </div>
 
-      {/* 북마크 목록 */}
       <div className="max-h-80 overflow-y-auto">
         {loading ? (
           <div className="p-6 text-left text-gray-500">
@@ -111,17 +109,41 @@ const BookmarkPanel = ({ bookId, onSelect, onDelete }) => {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center space-x-2 mb-1">
                         <span className="material-symbols-outlined text-green-500 text-xs mt-0.5 flex-shrink-0">place</span>
-                        <p className="text-sm font-medium text-gray-800 truncate">
-                          북마크 #{bookmark.id}
-                        </p>
+                        <div className="flex flex-col truncate">
+                          <p className="text-sm font-semibold text-gray-800 truncate">
+                            {parseBookmarkLocation(bookmark)}
+                          </p>
+                          <span className="text-xs text-gray-500 truncate">
+                            북마크 #{bookmark.id}
+                          </span>
+                        </div>
                       </div>
-                      
-                      {bookmark.memo && (
-                        <p className="text-xs text-gray-600 line-clamp-2 ml-4 mb-2">
-                          "{bookmark.memo}"
+
+                      {(bookmark.highlightText || bookmark.textSnippet) && (
+                        <p className="text-xs text-gray-600 line-clamp-2 ml-4 mb-2 italic">
+                          “{bookmark.highlightText || bookmark.textSnippet}”
                         </p>
                       )}
-                      
+
+                      {bookmark.memo && (
+                        <p className="text-xs text-gray-700 line-clamp-2 ml-4 mb-2">
+                          {bookmark.memo}
+                        </p>
+                      )}
+
+                      {!!(bookmark.tags && bookmark.tags.length) && (
+                        <div className="flex flex-wrap gap-1 ml-4 mb-2">
+                          {bookmark.tags.map((tag) => (
+                            <span
+                              key={tag}
+                              className="text-[11px] px-2 py-0.5 rounded-full bg-green-100 text-green-600 font-medium"
+                            >
+                              {tag}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+
                       <div className="flex items-center space-x-2 ml-4">
                         <span className="material-symbols-outlined text-gray-400 text-xs">schedule</span>
                         <span className="text-xs text-gray-500">
@@ -129,7 +151,7 @@ const BookmarkPanel = ({ bookId, onSelect, onDelete }) => {
                         </span>
                       </div>
                     </div>
-                    
+
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
