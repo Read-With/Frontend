@@ -717,7 +717,62 @@ const ViewerPage = () => {
             fullResponse: fineData
           });
           
-          const resultData = fineData.result || {};
+          let resultData = fineData.result || {};
+          let usedMacroFallback = false;
+          
+          const hasApiCharacters = Array.isArray(resultData.characters) && resultData.characters.length > 0;
+          const hasApiRelations = Array.isArray(resultData.relations) && resultData.relations.length > 0;
+          
+          if (!hasApiCharacters || !hasApiRelations) {
+            previousGraphDataRef.current = {
+              elements: [],
+              eventIdx: apiEventIdx,
+              chapterIdx: currentChapter
+            };
+            setElementsRef.current([]);
+
+            const emptyEvent = {
+              chapter: currentChapter,
+              chapterIdx: currentChapter,
+              eventNum: apiEventIdx,
+              eventIdx: apiEventIdx,
+              relations: [],
+              characters: [],
+              start: resultData?.event?.start,
+              end: resultData?.event?.end,
+              event_id: resultData?.event?.event_id ?? apiEventIdx,
+              ...resultData?.event
+            };
+
+            setCurrentEvent(emptyEvent);
+
+            setEvents((prevEvents) => {
+              if (!Array.isArray(prevEvents) || prevEvents.length === 0) {
+                return [emptyEvent];
+              }
+              const updated = prevEvents.map((evt) =>
+                (evt?.eventIdx ?? evt?.eventNum) === apiEventIdx ? { ...evt, ...emptyEvent } : evt
+              );
+              const exists = updated.some((evt) => (evt?.eventIdx ?? evt?.eventNum) === apiEventIdx);
+              if (!exists) {
+                updated.push(emptyEvent);
+              }
+              return updated;
+            });
+
+            if (isMounted) {
+              setIsDataReady(true);
+              setLoading(false);
+              setTransitionState({ type: null, inProgress: false, error: false, direction: null });
+              setApiError(null);
+              console.warn('⚠️ 이벤트 데이터 없음: 그래프 클리어', {
+                chapterIdx: currentChapter,
+                eventIdx: apiEventIdx
+              });
+            }
+
+            return;
+          }
           
           const apiEvent = resultData.event;
           const normalizedEvent = apiEvent ? {
@@ -861,19 +916,32 @@ const ViewerPage = () => {
               }
               
               if (!events || events.length === 0) {
-              const defaultEvent = {
-                chapter: normalizedEvent?.chapter || currentChapter,
-                eventNum: normalizedEvent?.eventNum || apiEventIdx,
-                eventIdx: normalizedEvent?.eventIdx || apiEventIdx,
-                cfi: currentEvent?.cfi || "epubcfi(/6/4[chap01ref]!/4[body01]/10[para05]/2/1:3)",
-                relations: resultData.relations || [],
-                start: normalizedEvent?.start,
-                end: normalizedEvent?.end,
-                chapterIdx: normalizedEvent?.chapterIdx,
-                event_id: normalizedEvent?.event_id ?? apiEventIdx
-              };
+                const defaultEvent = {
+                  chapter: normalizedEvent?.chapter || currentChapter,
+                  eventNum: normalizedEvent?.eventNum || apiEventIdx,
+                  eventIdx: normalizedEvent?.eventIdx || apiEventIdx,
+                  cfi: currentEvent?.cfi || "epubcfi(/6/4[chap01ref]!/4[body01]/10[para05]/2/1:3)",
+                  relations: resultData.relations || [],
+                  start: normalizedEvent?.start,
+                  end: normalizedEvent?.end,
+                  chapterIdx: normalizedEvent?.chapterIdx,
+                  event_id: normalizedEvent?.event_id ?? apiEventIdx
+                };
                 setEvents([defaultEvent]);
                 setCurrentEvent(defaultEvent);
+              } else if (!resultData.relations?.length && !resultData.characters?.length) {
+                setEvents([]);
+                setCurrentEvent(null);
+                setElementsRef.current([]);
+              }
+
+              if (!resultData.relations?.length && !resultData.characters?.length) {
+                previousGraphDataRef.current = {
+                  elements: [],
+                  eventIdx: apiEventIdx,
+                  chapterIdx: currentChapter
+                };
+                setElementsRef.current([]);
               }
             }
           } else {
@@ -943,6 +1011,7 @@ const ViewerPage = () => {
         if (!isMounted) return;
         
         setEvents(validEvents);
+        setPreviousEventsRef(validEvents);
         
         if (validEvents.length > 0 && isChapterTransitionRef.current) {
           const direction = transitionState.direction;

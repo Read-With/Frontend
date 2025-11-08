@@ -1,7 +1,9 @@
 import React, { useCallback, useState, useEffect, useMemo } from 'react';
 import GraphControls from '../graph/GraphControls';
 import EdgeLabelToggle from '../graph/tooltip/EdgeLabelToggle';
-import { getChapterEventCount } from '../../utils/graphData';
+import { getChapterEventCount, getFolderKeyFromFilename } from '../../utils/graphData';
+import { getCachedChapterEvents } from '../../utils/common/chapterEventCache';
+import { getChapterData } from '../../utils/common/manifestCache';
 
 // 공통 스타일 상수들
 const LOADING_STYLE = {
@@ -94,7 +96,8 @@ const ViewerTopBar = ({
     events,
     graphFullScreen,
     edgeLabelVisible,
-    loading: isGraphLoading
+    loading: isGraphLoading,
+    maxChapterEvents
   } = graphState;
   
   const {
@@ -128,6 +131,22 @@ const ViewerTopBar = ({
   const [currentEventInfo, setCurrentEventInfo] = React.useState(null);
   const [currentProgressWidth, setCurrentProgressWidth] = React.useState("0%");
   const [hasInitialData, setHasInitialData] = React.useState(false);
+
+  const bookId = useMemo(() => {
+    if (book && typeof book.id === 'number') {
+      return book.id;
+    }
+    return null;
+  }, [book]);
+
+  const folderKey = useMemo(() => {
+    if (!filename) return null;
+    try {
+      return getFolderKeyFromFilename(filename);
+    } catch (error) {
+      return null;
+    }
+  }, [filename]);
   
   // 이전 페이지 정보 로깅
   React.useEffect(() => {
@@ -140,7 +159,57 @@ const ViewerTopBar = ({
     }
   }, [isFromLibrary, previousPage, book]);
 
-  // 프로그레스 계산 함수 (단순화)
+  const getTotalEventsForChapter = useCallback((eventsList, chapter) => {
+    let totalEvents = 0;
+
+    if (Array.isArray(eventsList) && eventsList.length > 0) {
+      const maxFromEvents = eventsList.reduce((maxValue, evt) => {
+        const eventNumber = Number(evt?.eventIdx ?? evt?.eventNum ?? evt?.idx ?? evt?.id ?? 0);
+        return Number.isFinite(eventNumber) ? Math.max(maxValue, eventNumber) : maxValue;
+      }, 0);
+      totalEvents = Math.max(totalEvents, maxFromEvents);
+      totalEvents = Math.max(totalEvents, eventsList.length);
+    }
+
+    if (bookId) {
+      const cached = getCachedChapterEvents(bookId, chapter);
+      if (cached) {
+        if (Number.isFinite(cached.maxEventIdx)) {
+          totalEvents = Math.max(totalEvents, cached.maxEventIdx);
+        }
+        if (Array.isArray(cached.events) && cached.events.length > 0) {
+          const maxCached = cached.events.reduce((maxValue, evt) => {
+            const eventNumber = Number(evt?.eventIdx ?? evt?.idx ?? evt?.eventNum ?? evt?.id ?? 0);
+            return Number.isFinite(eventNumber) ? Math.max(maxValue, eventNumber) : maxValue;
+          }, 0);
+          totalEvents = Math.max(totalEvents, maxCached);
+          totalEvents = Math.max(totalEvents, cached.events.length);
+        }
+      }
+
+      const manifestChapter = getChapterData(bookId, chapter);
+      if (manifestChapter?.events && manifestChapter.events.length > 0) {
+        const maxManifest = manifestChapter.events.reduce((maxValue, evt) => {
+          const eventNumber = Number(evt?.eventIdx ?? evt?.idx ?? evt?.eventNum ?? evt?.id ?? 0);
+          return Number.isFinite(eventNumber) ? Math.max(maxValue, eventNumber) : maxValue;
+        }, 0);
+        totalEvents = Math.max(totalEvents, maxManifest);
+        totalEvents = Math.max(totalEvents, manifestChapter.events.length);
+      }
+    }
+
+    if (folderKey) {
+      const localCount = getChapterEventCount(chapter, folderKey);
+      totalEvents = Math.max(totalEvents, localCount);
+    }
+
+    if (!Number.isFinite(totalEvents) || totalEvents <= 0) {
+      totalEvents = 0;
+    }
+
+    return totalEvents;
+  }, [bookId, folderKey]);
+
   const calculateProgress = useCallback((eventToShow, events, currentChapter) => {
     // 1. chapterProgress가 있는 경우 (가장 정확한 방법)
     if (eventToShow.chapterProgress !== undefined) {
@@ -159,18 +228,30 @@ const ViewerTopBar = ({
     
     // 3. eventNum만 있는 경우
     if (eventToShow.eventNum !== undefined) {
-      try {
-        const totalEvents = getChapterEventCount(currentChapter);
-        return eventToShow.eventNum >= totalEvents - 1 ? 100 : 
-               Math.min((eventToShow.eventNum / (totalEvents - 1)) * 100, 100);
-      } catch (error) {
-        const fallbackTotalEvents = 20;
-        return Math.min((eventToShow.eventNum / (fallbackTotalEvents - 1)) * 100, 100);
+      const eventNumber = Number(eventToShow.eventNum ?? eventToShow.eventIdx ?? 0);
+      const totalEvents = getTotalEventsForChapter(events, currentChapter);
+
+      if (!Number.isFinite(eventNumber) || eventNumber <= 0) {
+        return 0;
       }
+
+      if (!Number.isFinite(totalEvents) || totalEvents <= 0) {
+        return Math.min(eventNumber * 100, 100);
+      }
+
+      const adjustedTotal = Math.max(totalEvents, eventNumber, 1);
+
+      if (adjustedTotal <= 1) {
+        return eventNumber >= adjustedTotal ? 100 : 0;
+      }
+
+      const clampedEventNumber = Math.min(eventNumber, adjustedTotal);
+      const progressRatio = (clampedEventNumber - 1) / (adjustedTotal - 1);
+      return Math.min(Math.max(progressRatio * 100, 0), 100);
     }
     
     return 0;
-  }, [currentChapter]);
+  }, [getTotalEventsForChapter]);
   
   React.useEffect(() => {
     const eventToShow = currentEvent || prevValidEvent;

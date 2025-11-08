@@ -210,10 +210,10 @@ function UnifiedEdgeTooltip({
           continue;
         }
         const rawValue = timeline[i];
-        let clamped = 0;
-        if (typeof rawValue === 'number' && !Number.isNaN(rawValue)) {
-          clamped = Math.max(-1, Math.min(1, rawValue));
+        if (typeof rawValue !== 'number' || Number.isNaN(rawValue)) {
+          continue;
         }
+        const clamped = Math.max(-1, Math.min(1, rawValue));
         pairs.push({ eventIdx, value: clamped });
       }
       if (pairs.length > 0) {
@@ -227,6 +227,14 @@ function UnifiedEdgeTooltip({
 
     return [];
   }, [timelineHasNumeric, labels, timeline, extractNumericLabel, currentEventNumber, clampedFallbackPositivity]);
+
+  const activeEventHasPositivity = useMemo(() => {
+    const eventIdx = Number(currentEvent?.eventNum ?? currentEvent?.eventIdx ?? eventNum ?? 0);
+    if (!Number.isFinite(eventIdx) || eventIdx <= 0) {
+      return chartPairs.length > 0;
+    }
+    return chartPairs.some(pair => Number(pair.eventIdx) === eventIdx);
+  }, [chartPairs, currentEvent, eventNum]);
 
   const chartPairMap = useMemo(() => {
     const map = new Map();
@@ -248,13 +256,14 @@ function UnifiedEdgeTooltip({
   }, [events, currentEventNumber]);
 
   const allEventIndices = useMemo(() => {
-    let earliest = currentEventNumber;
+    let earliest = chartPairs.length > 0
+      ? Math.min(...chartPairs.map(pair => pair.eventIdx))
+      : currentEventNumber;
+
     if (eventIndicesFromEvents.length > 0) {
       earliest = Math.min(earliest, Math.min(...eventIndicesFromEvents));
     }
-    if (chartPairs.length > 0) {
-      earliest = Math.min(earliest, Math.min(...chartPairs.map(pair => pair.eventIdx)));
-    }
+
     if (!Number.isFinite(earliest) || earliest < 1) {
       earliest = 1;
     }
@@ -267,15 +276,21 @@ function UnifiedEdgeTooltip({
   }, [eventIndicesFromEvents, chartPairs, currentEventNumber]);
 
   const chartLabels = useMemo(() => {
-    return allEventIndices;
-  }, [allEventIndices]);
+    if (activeEventHasPositivity) {
+      return allEventIndices;
+    }
+    return [];
+  }, [allEventIndices, activeEventHasPositivity]);
 
   const chartPoints = useMemo(() => {
-    return allEventIndices.map((idx) => ({
-      x: idx,
-      y: chartPairMap.has(idx) ? chartPairMap.get(idx) : 0
-    }));
-  }, [allEventIndices, chartPairMap]);
+    if (activeEventHasPositivity) {
+      return allEventIndices.map((idx) => ({
+        x: idx,
+        y: chartPairMap.has(idx) ? chartPairMap.get(idx) : null
+      }));
+    }
+    return [];
+  }, [allEventIndices, chartPairMap, activeEventHasPositivity]);
 
   const hasChartData = chartPoints.length > 0;
   const effectiveNoRelation = !hasChartData;

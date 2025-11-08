@@ -105,6 +105,7 @@ export function useViewerPage() {
   const prevElementsRef = useRef([]);
   const prevChapterNumRef = useRef();
   const prevEventNumRef = useRef();
+  const [maxChapterEvents, setMaxChapterEvents] = useState(new Map());
   
   const [graphDiff, setGraphDiff] = useState({
     added: [],
