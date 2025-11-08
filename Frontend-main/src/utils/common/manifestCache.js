@@ -397,19 +397,29 @@ export const findApiEventFromChars = async (bookId, chapterIdx, currentChars, ch
   });
   
   const base = typeof chapterStartPos === 'number' ? chapterStartPos : 0;
-  const absolutePos = base + currentChars;
-
   const firstEvent = mergedEvents[0];
+
+  let isRelativePositions = false;
+  if (firstEvent) {
+    const firstStart = Number(firstEvent.startPos ?? firstEvent.start ?? 0);
+    if (base > 0 && firstStart >= 0 && firstStart < base) {
+      isRelativePositions = true;
+    }
+  }
+
+  const position = isRelativePositions ? currentChars : base + currentChars;
+
   if (firstEvent) {
     const firstStart = Number(firstEvent.startPos ?? firstEvent.start ?? 0);
     const firstEndRaw = Number(firstEvent.endPos ?? firstEvent.end ?? firstStart);
     const span = Math.max(firstEndRaw - firstStart, 1);
-    if (absolutePos <= firstStart) {
+    if (position <= firstStart) {
       return {
         ...firstEvent,
         eventIdx: firstEvent.eventIdx ?? firstEvent.idx,
         chapterIdx: targetChapterIdx,
-        progress: 0
+        progress: 0,
+        __useRelative: isRelativePositions
       };
     }
   }
@@ -418,7 +428,8 @@ export const findApiEventFromChars = async (bookId, chapterIdx, currentChars, ch
     chapterIdx: targetChapterIdx,
     currentChars,
     base,
-    absolutePos,
+    absolutePos: position,
+    useRelativePositions: isRelativePositions,
     eventsCount: mergedEvents.length,
     sampleEvents: mergedEvents.slice(0, 5).map((ev) => ({ 
       idx: ev.eventIdx ?? ev.idx, 
@@ -433,15 +444,16 @@ export const findApiEventFromChars = async (bookId, chapterIdx, currentChars, ch
     const eventEndPosRaw = Number(event.endPos ?? event.end ?? eventStartPos);
     const eventEndPos = eventEndPosRaw > eventStartPos ? eventEndPosRaw : eventStartPos + 1;
     
-    if (absolutePos >= eventStartPos && absolutePos < eventEndPos) {
+    if (position >= eventStartPos && position < eventEndPos) {
       const span = Math.max(eventEndPos - eventStartPos, 1);
-      const rawProgress = ((absolutePos - eventStartPos) / span) * 100;
+      const rawProgress = ((position - eventStartPos) / span) * 100;
       const clampedProgress = Math.min(Math.max(rawProgress, 0), 100);
       return {
         ...event,
         eventIdx: event.eventIdx ?? event.idx,
         chapterIdx: targetChapterIdx,
-        progress: clampedProgress
+        progress: clampedProgress,
+        __useRelative: isRelativePositions
       };
     }
   }
@@ -453,7 +465,8 @@ export const findApiEventFromChars = async (bookId, chapterIdx, currentChars, ch
       ...lastEvent,
       eventIdx: lastEvent.eventIdx ?? lastEvent.idx,
       chapterIdx: targetChapterIdx,
-      progress: 100
+      progress: 100,
+      __useRelative: isRelativePositions
     };
   }
   
