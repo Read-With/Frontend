@@ -141,16 +141,18 @@ export function buildSuggestions(elements, query, currentChapterData = null) {
   try {
     const searchLower = trimmed.toLowerCase();
     const characterNodes = elements.filter(el => !el.data.source);
-
+    
     // 현재 챕터의 캐릭터 데이터가 있는 경우, 해당 챕터에 존재하는 인물만 필터링
     let filteredNodes = characterNodes;
-    if (currentChapterData && currentChapterData.characters) {
+    if (currentChapterData && currentChapterData.characters && currentChapterData.characters.length > 0) {
       const chapterCharacterIds = new Set(
         currentChapterData.characters.map(char => String(char.id))
       );
-      filteredNodes = characterNodes.filter(node => 
-        chapterCharacterIds.has(node.data.id)
-      );
+      filteredNodes = characterNodes.filter(node => {
+        const nodeId = node?.data?.id;
+        if (nodeId === undefined || nodeId === null) return false;
+        return chapterCharacterIds.has(String(nodeId));
+      });
     }
 
     const matches = filteredNodes
@@ -232,15 +234,17 @@ export function filterGraphElements(elements, searchTerm, currentChapterData = n
     
     // 현재 챕터의 캐릭터 데이터가 있는 경우, 해당 챕터에 존재하는 인물만 필터링
     let candidateNodes;
-    if (currentChapterData && currentChapterData.characters) {
+    if (currentChapterData && currentChapterData.characters && currentChapterData.characters.length > 0) {
       const chapterCharacterIds = new Set(
         currentChapterData.characters.map(char => String(char.id))
       );
-      candidateNodes = elements.filter(el => 
-        !el.data.source && 
-        nodeMatchesQuery(el, searchLower) && 
-        chapterCharacterIds.has(el.data.id)
-      );
+      candidateNodes = elements.filter(el => {
+        if (el.data.source) return false;
+        if (!nodeMatchesQuery(el, searchLower)) return false;
+        const nodeId = el?.data?.id;
+        if (nodeId === undefined || nodeId === null) return false;
+        return chapterCharacterIds.has(String(nodeId));
+      });
     } else {
       // 챕터 데이터가 없는 경우 기존 로직 사용
       candidateNodes = elements.filter(el => !el.data.source && nodeMatchesQuery(el, searchLower));
@@ -276,7 +280,7 @@ export function filterGraphElements(elements, searchTerm, currentChapterData = n
   );
   
   // 연결된 간선의 source와 target 노드들도 포함
-  const connectedNodeIds = new Set();
+  const connectedNodeIds = new Set([matchingNodeId]);
   connectedEdges.forEach(edge => {
     connectedNodeIds.add(edge.data.source);
     connectedNodeIds.add(edge.data.target);
@@ -287,8 +291,27 @@ export function filterGraphElements(elements, searchTerm, currentChapterData = n
     !el.data.source && 
     connectedNodeIds.has(el.data.id)
   );
+
+  const uniqueNodes = new Map();
+  allConnectedNodes.forEach(node => {
+    if (node?.data?.id !== undefined) {
+      uniqueNodes.set(String(node.data.id), node);
+    }
+  });
+  if (matchingNode?.data?.id !== undefined) {
+    uniqueNodes.set(String(matchingNode.data.id), matchingNode);
+  }
+
+  const uniqueEdges = new Map();
+  connectedEdges.forEach(edge => {
+    if (edge?.data?.id !== undefined) {
+      uniqueEdges.set(String(edge.data.id), edge);
+    } else {
+      uniqueEdges.set(`${edge.data.source}-${edge.data.target}`, edge);
+    }
+  });
   
-    return [...allConnectedNodes, ...connectedEdges];
+    return [...uniqueNodes.values(), ...uniqueEdges.values()];
   } catch (error) {
     console.error('filterGraphElements 실패:', error, { 
       elementsLength: elements?.length, 

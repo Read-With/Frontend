@@ -173,7 +173,7 @@ function UnifiedNodeInfo({
       setIsNodeAppeared(false);
       setError(null);
 
-      if (!data || !chapterNum || chapterNum <= 0) {
+      const syncNodeDataState = () => {
         if (data && (data.id || data.label)) {
           setNodeData(data);
         } else if (data && data.data) {
@@ -181,6 +181,10 @@ function UnifiedNodeInfo({
         } else {
           setNodeData({ id: data?.id, label: data?.label });
         }
+      };
+
+      if (!data || !chapterNum || chapterNum <= 0) {
+        syncNodeDataState();
         return;
       }
 
@@ -190,44 +194,97 @@ function UnifiedNodeInfo({
 
       const json = getEventDataByIndex(folderKey, chapterNum, targetEventNum);
 
-      const nodeId = String(data.id || data.data?.id);
+      const normalizeToString = (value) => {
+        if (value === undefined || value === null) return "";
+        if (typeof value === "number") {
+          if (!Number.isFinite(value)) return "";
+          return String(Math.trunc(value));
+        }
+        return String(value).trim();
+      };
+
+      const parseToFiniteNumber = (value) => {
+        const num = Number(value);
+        return Number.isFinite(num) ? num : null;
+      };
+
+      const rawNodeId = data?.id ?? data?.data?.id ?? nodeData?.id;
+      const normalizedNodeId = normalizeToString(rawNodeId);
+      const nodeIdNum = parseToFiniteNumber(normalizedNodeId);
+      const normalizedNodeName = normalizeToString(
+        data?.common_name ??
+        data?.label ??
+        data?.data?.common_name ??
+        data?.data?.label ??
+        nodeData?.common_name ??
+        nodeData?.label
+      );
+
+      const isSameIdentifier = (candidate) => {
+        if (!candidate) return false;
+        const candidateId = candidate.id ?? candidate.character_id ?? candidate.characterId ?? candidate.char_id ?? candidate.pk ?? candidate.node_id;
+        const candidateName = candidate.common_name ?? candidate.name ?? candidate.label ?? candidate.displayName;
+
+        const candidateIdStr = normalizeToString(candidateId);
+        if (candidateIdStr && normalizedNodeId && candidateIdStr === normalizedNodeId) {
+          return true;
+        }
+
+        const candidateIdNum = parseToFiniteNumber(candidateIdStr);
+        if (candidateIdNum !== null && nodeIdNum !== null && candidateIdNum === nodeIdNum) {
+          return true;
+        }
+
+        const candidateNameStr = normalizeToString(candidateName);
+        if (candidateNameStr && normalizedNodeName && candidateNameStr === normalizedNodeName) {
+          return true;
+        }
+
+        return false;
+      };
+
+      const appearedInElements = Array.isArray(elements) && elements.length > 0
+        ? elements.some((element) => {
+            if (!element || element.data?.source) return false;
+            const elementId = element.data?.id ?? element.id;
+            const elementName = element.data?.common_name ?? element.data?.label;
+            return isSameIdentifier({ id: elementId, name: elementName });
+          })
+        : false;
 
       if (!json || !json.relations) {
-        if (elements && elements.length > 0) {
-          const appeared = elements.some(element => {
-            if (element.data && element.data.source) return false;
-            return String(element.data?.id) === nodeId;
-          });
-          setIsNodeAppeared(appeared);
-        } else {
-          setIsNodeAppeared(false);
-        }
-
-        if (data && (data.id || data.label)) {
-          setNodeData(data);
-        } else if (data && data.data) {
-          setNodeData(data.data);
-        } else {
-          setNodeData({ id: data?.id, label: data?.label });
-        }
+        setIsNodeAppeared(appearedInElements);
+        syncNodeDataState();
         return;
       }
 
       const processedRelations = processRelations(json.relations);
-      const nodeIdNum = parseFloat(nodeId);
 
-      const appeared = processedRelations.some(rel => {
-        const id1Num = parseFloat(rel.id1);
-        const id2Num = parseFloat(rel.id2);
-        return id1Num === nodeIdNum || id2Num === nodeIdNum;
+      const appearedInCharacters = Array.isArray(json.characters)
+        ? json.characters.some((character) => isSameIdentifier(character))
+        : false;
+
+      const appearedInRelations = processedRelations.some((rel) => {
+        const id1Num = parseToFiniteNumber(rel.id1);
+        const id2Num = parseToFiniteNumber(rel.id2);
+        if (nodeIdNum !== null) {
+          return id1Num === nodeIdNum || id2Num === nodeIdNum;
+        }
+        return (
+          (normalizedNodeId && (normalizeToString(rel.id1) === normalizedNodeId || normalizeToString(rel.id2) === normalizedNodeId)) ||
+          (normalizedNodeName && (normalizeToString(rel.name1) === normalizedNodeName || normalizeToString(rel.name2) === normalizedNodeName))
+        );
       });
 
+      const appeared = appearedInCharacters || appearedInRelations || appearedInElements;
+
       setIsNodeAppeared(appeared);
+      syncNodeDataState();
     } catch (err) {
       setError(err.message);
       setIsNodeAppeared(false);
     }
-  }, [data, chapterNum, getUnifiedEventInfo, dynamicMaxChapter, actualFilename, elements]);
+  }, [data, nodeData, chapterNum, getUnifiedEventInfo, dynamicMaxChapter, actualFilename, elements]);
 
   // 노드 등장 여부 확인
   useEffect(() => {

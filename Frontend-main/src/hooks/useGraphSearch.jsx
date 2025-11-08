@@ -144,8 +144,11 @@ export function useGraphSearch(elements, onSearchStateChange = null, currentChap
     searchTerm,
     isSearchActive,
     filteredElements,
-    fitNodeIds
-  }), [searchTerm, isSearchActive, filteredElements, fitNodeIds]);
+    fitNodeIds,
+    suggestions,
+    showSuggestions,
+    selectedIndex
+  }), [searchTerm, isSearchActive, filteredElements, fitNodeIds, suggestions, showSuggestions, selectedIndex]);
 
   // 검색 상태가 변경될 때 상위로 전달
   useEffect(() => {

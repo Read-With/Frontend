@@ -19,7 +19,12 @@ const GraphContainer = forwardRef(({
   onSetActiveTooltip = null,
   graphClearRef = null,
   isEventTransition = false, // 이벤트 전환 상태
-  ...props
+  searchTerm: externalSearchTerm,
+  isSearchActive: externalIsSearchActive,
+  filteredElements: externalFilteredElements,
+  fitNodeIds: externalFitNodeIds,
+  isResetFromSearch: externalIsResetFromSearch,
+  ...rest
 }, ref) => {
 
   // ViewerPage에서는 externalElements를 사용하므로 useGraphDataLoader 비활성화
@@ -45,7 +50,11 @@ const GraphContainer = forwardRef(({
   }, [onSearchStateChange, currentChapterData]);
 
   // 외부에서 elements를 전달받은 경우 자체 검색 기능 비활성화
-  const shouldUseInternalSearch = !externalElements;
+  const shouldUseInternalSearch =
+    externalSearchTerm === undefined &&
+    externalIsSearchActive === undefined &&
+    externalFilteredElements === undefined &&
+    externalFitNodeIds === undefined;
   
   // useGraphSearch 훅을 사용하여 검색 기능 구현 (외부 elements가 없을 때만)
   const {
@@ -56,23 +65,48 @@ const GraphContainer = forwardRef(({
     isResetFromSearch: internalIsResetFromSearch,
     handleSearchSubmit,
     clearSearch
-  } = useGraphSearch(shouldUseInternalSearch ? elements : [], handleSearchStateChange, currentChapterData);
+  } = useGraphSearch(
+    shouldUseInternalSearch ? (elements || []) : [],
+    handleSearchStateChange,
+    currentChapterData
+  );
+
+  const effectiveSearchTerm = externalSearchTerm ?? internalSearchTerm;
+  const effectiveIsSearchActive = externalIsSearchActive ?? internalIsSearchActive;
+  const effectiveFilteredElements = externalFilteredElements ?? internalFilteredElements;
+  const effectiveIsResetFromSearch = externalIsResetFromSearch ?? internalIsResetFromSearch;
+
+  const effectiveFitNodeIds = useMemo(() => {
+    if (Array.isArray(externalFitNodeIds)) {
+      return externalFitNodeIds;
+    }
+    if (Array.isArray(internalFitNodeIds) && internalFitNodeIds.length > 0) {
+      return internalFitNodeIds;
+    }
+    if (effectiveIsSearchActive && Array.isArray(effectiveFilteredElements) && effectiveFilteredElements.length > 0) {
+      const ids = effectiveFilteredElements
+        .filter((el) => el && el.data && !el.data.source && el.data.id !== undefined && el.data.id !== null)
+        .map((el) => el.data.id);
+      return Array.from(new Set(ids));
+    }
+    return [];
+  }, [externalFitNodeIds, internalFitNodeIds, effectiveIsSearchActive, effectiveFilteredElements]);
 
   // 검색된 요소들 또는 원래 요소들 사용
   const finalElements = useMemo(() => {
-    if (shouldUseInternalSearch && internalIsSearchActive && internalFilteredElements?.length > 0) {
-      return internalFilteredElements;
+    if (effectiveIsSearchActive && effectiveFilteredElements?.length > 0) {
+      return effectiveFilteredElements;
     }
     return elements;
-  }, [shouldUseInternalSearch, internalIsSearchActive, internalFilteredElements, elements]);
+  }, [effectiveIsSearchActive, effectiveFilteredElements, elements]);
 
   // ref를 통해 외부에서 접근할 수 있는 함수들 노출
   useImperativeHandle(ref, () => ({
-    searchTerm: internalSearchTerm,
-    isSearchActive: internalIsSearchActive,
-    handleSearchSubmit,
-    clearSearch
-  }), [internalSearchTerm, internalIsSearchActive, handleSearchSubmit, clearSearch]);
+    searchTerm: effectiveSearchTerm,
+    isSearchActive: effectiveIsSearchActive,
+    handleSearchSubmit: shouldUseInternalSearch ? handleSearchSubmit : (() => {}),
+    clearSearch: shouldUseInternalSearch ? clearSearch : (() => {})
+  }), [effectiveSearchTerm, effectiveIsSearchActive, handleSearchSubmit, clearSearch, shouldUseInternalSearch]);
 
   return (
     <ViewerRelationGraph
@@ -82,11 +116,11 @@ const GraphContainer = forwardRef(({
       eventNum={currentEvent ? Math.max(1, currentEvent.eventNum) : 1}
       edgeLabelVisible={edgeLabelVisible}
       filename={filename}
-      fitNodeIds={internalFitNodeIds}
-      searchTerm={internalSearchTerm}
-      isSearchActive={internalIsSearchActive}
-      filteredElements={internalFilteredElements}
-      isResetFromSearch={internalIsResetFromSearch}
+      fitNodeIds={effectiveFitNodeIds}
+      searchTerm={effectiveSearchTerm}
+      isSearchActive={effectiveIsSearchActive}
+      filteredElements={effectiveFilteredElements}
+      isResetFromSearch={effectiveIsResetFromSearch}
       currentEvent={currentEvent}
       prevValidEvent={prevValidEvent}
       events={events}
@@ -95,7 +129,7 @@ const GraphContainer = forwardRef(({
       onSetActiveTooltip={onSetActiveTooltip}
       graphClearRef={graphClearRef}
       isEventTransition={isEventTransition}
-      {...props}
+      {...rest}
     />
   );
 });

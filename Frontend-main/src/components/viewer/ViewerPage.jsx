@@ -192,7 +192,7 @@ function GraphSplitArea({
   graphState,
   graphActions,
   viewerState,
-  searchState,
+  searchState = {},
   searchActions,
   tooltipProps,
   transitionState,
@@ -205,7 +205,15 @@ function GraphSplitArea({
 }) {
   const { activeTooltip, onClearTooltip, onSetActiveTooltip, graphClearRef } = tooltipProps;
   const graphContainerRef = React.useRef(null);
-  const { isSearchActive, filteredElements, isResetFromSearch } = searchState;
+  const searchTermValue = searchState?.searchTerm ?? "";
+  const isSearchActiveValue = searchState?.isSearchActive ?? false;
+  const filteredElementsValue = searchState?.filteredElements ?? [];
+  const isResetFromSearchValue = searchState?.isResetFromSearch ?? false;
+  const searchFitNodeIds = searchState?.fitNodeIds ?? [];
+  const suggestionsValue = searchState?.suggestions ?? [];
+  const showSuggestionsValue = searchState?.showSuggestions ?? false;
+  const selectedSuggestionIndex = searchState?.selectedIndex ?? -1;
+  
   const { loading, isReloading, isGraphLoading, isDataReady } = viewerState;
   const { elements, currentEvent, currentChapter } = graphState;
   const { filterStage } = graphActions;
@@ -250,14 +258,14 @@ function GraphSplitArea({
   }, [elements, filterStage]);
 
   const finalElements = React.useMemo(() => {
-    if (isSearchActive && filteredElements && filteredElements.length > 0) {
-      return filteredElements;
+    if (isSearchActiveValue && filteredElementsValue && filteredElementsValue.length > 0) {
+      return filteredElementsValue;
     }
     if (filterStage > 0) {
       return filteredMainCharacters;
     }
     return elements;
-  }, [isSearchActive, filteredElements, filterStage, filteredMainCharacters, elements]);
+  }, [isSearchActiveValue, filteredElementsValue, filterStage, filteredMainCharacters, elements]);
 
   const hasCurrentEvent = !!currentEvent;
   const shouldShowLoading =
@@ -289,7 +297,17 @@ function GraphSplitArea({
         graphState={graphState}
         graphActions={graphActions}
         viewerState={viewerState}
-        searchState={searchState}
+        searchState={{
+          searchTerm: searchTermValue,
+          isSearchActive: isSearchActiveValue,
+          elements: graphState.elements ?? [],
+          filteredElements: filteredElementsValue,
+          isResetFromSearch: isResetFromSearchValue,
+          fitNodeIds: searchFitNodeIds,
+          suggestions: suggestionsValue,
+          showSuggestions: showSuggestionsValue,
+          selectedIndex: selectedSuggestionIndex,
+        }}
         searchActions={searchActions}
         isFromLibrary={isFromLibrary}
         previousPage={previousPage}
@@ -460,7 +478,11 @@ function GraphSplitArea({
             edgeLabelVisible={graphState.edgeLabelVisible}
             filename={viewerState.filename}
             elements={finalElements}
-            isResetFromSearch={isResetFromSearch}
+            searchTerm={searchTermValue}
+            isSearchActive={isSearchActiveValue}
+            filteredElements={filteredElementsValue}
+            fitNodeIds={searchFitNodeIds}
+            isResetFromSearch={isResetFromSearchValue}
             prevValidEvent={graphState.currentEvent && graphState.currentEvent.chapter === graphState.currentChapter ? graphState.currentEvent : null}
             events={graphState.events || []}
             activeTooltip={activeTooltip}
@@ -1667,6 +1689,7 @@ const ViewerPage = () => {
 
   const {
     searchTerm, isSearchActive, filteredElements,
+    fitNodeIds,
     isResetFromSearch, suggestions, showSuggestions, selectedIndex,
     selectSuggestion, handleKeyDown, closeSuggestions,
     handleSearchSubmit, clearSearch, setSearchTerm,
@@ -1872,6 +1895,7 @@ const ViewerPage = () => {
               elements: elements,
               filteredElements,
               isResetFromSearch,
+              fitNodeIds,
               suggestions,
               showSuggestions,
               selectedIndex
