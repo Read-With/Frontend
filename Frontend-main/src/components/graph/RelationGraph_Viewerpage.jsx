@@ -42,6 +42,8 @@ const ViewerRelationGraph = ({
   const cyRef = useRef(null);
   const selectedEdgeIdRef = useRef(null);
   const selectedNodeIdRef = useRef(null);
+  const autoFitChapterSetRef = useRef(new Set());
+  const hasGlobalFitRef = useRef(false);
 
   const onShowNodeTooltip = useCallback(({ node, nodeCenter, mouseX, mouseY, evt }) => {
     if (!onSetActiveTooltip) {
@@ -140,19 +142,41 @@ const ViewerRelationGraph = ({
   useEffect(() => {
     const cy = cyRef.current;
     if (!cy) return;
-    if (isSearchActive) return;
+
     try {
-      // 첫 렌더 직후 하이라이트 렌더와 경합을 피하기 위해 2프레임 지연
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-          try {
-            cy.resize();
-            cy.fit(cy.elements(), 80);
-          } catch {}
-        });
-      });
+      cy.resize();
     } catch {}
-  }, [elements, eventNum, chapterNum, isSearchActive]);
+
+    if (isSearchActive) {
+      return;
+    }
+
+    const nodes = cy.nodes();
+    if (!nodes || nodes.length === 0) {
+      return;
+    }
+
+    const chapterKey = chapterNum ?? '__default__';
+    const hasAutoFitted = autoFitChapterSetRef.current.has(chapterKey);
+    const shouldFit =
+      !hasGlobalFitRef.current ||
+      !hasAutoFitted;
+
+    if (!shouldFit) {
+      return;
+    }
+
+    autoFitChapterSetRef.current.add(chapterKey);
+    hasGlobalFitRef.current = true;
+
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        try {
+          cy.fit(nodes, 80);
+        } catch {}
+      });
+    });
+  }, [elements, chapterNum, isSearchActive]);
 
   // activeTooltip 상태 추적 - 제거됨
 
