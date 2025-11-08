@@ -69,7 +69,7 @@ function UnifiedEdgeTooltip({
   // 외부 클릭 감지 훅 - 툴팁 외부 클릭 시 닫기 (사이드바 모드에서는 비활성화, 드래그 후 클릭 무시)
   const clickOutsideRef = displayMode === 'sidebar' ? null : useClickOutside(() => {
     if (onClose) onClose();
-  }, true, true);
+  }, showContent, true);
 
   // ref 병합은 animations.js에서 import한 함수 사용
 

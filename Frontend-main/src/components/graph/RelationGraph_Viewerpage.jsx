@@ -44,6 +44,7 @@ const ViewerRelationGraph = ({
   const selectedNodeIdRef = useRef(null);
   const autoFitChapterSetRef = useRef(new Set());
   const hasGlobalFitRef = useRef(false);
+  const containerRef = useRef(null);
 
   const onShowNodeTooltip = useCallback(({ node, nodeCenter, mouseX, mouseY, evt }) => {
     if (!onSetActiveTooltip) {
@@ -132,12 +133,80 @@ const ViewerRelationGraph = ({
       graphClearRef.current = () => {
         const cy = cyRef.current;
         if (cy) {
-          cy.nodes().removeClass("faded highlighted");
-          cy.edges().removeClass("faded");
+          try {
+            cy.batch(() => {
+              cy.nodes().forEach((node) => {
+                node.removeClass("faded highlighted");
+                node.removeStyle("opacity");
+                node.removeStyle("text-opacity");
+                node.removeStyle("border-color");
+                node.removeStyle("border-width");
+                node.removeStyle("border-opacity");
+                node.removeStyle("border-style");
+              });
+
+              cy.edges().forEach((edge) => {
+                edge.removeClass("faded highlighted");
+                edge.removeStyle("opacity");
+                edge.removeStyle("text-opacity");
+                edge.removeStyle("width");
+              });
+            });
+
+            if (typeof cy.style === "function") {
+              try {
+                cy.style().update();
+              } catch {}
+            }
+          } catch {}
         }
+        if (selectedNodeIdRef) selectedNodeIdRef.current = null;
+        if (selectedEdgeIdRef) selectedEdgeIdRef.current = null;
       };
     }
-  }, [graphClearRef, cyRef]);
+  }, [graphClearRef, cyRef, selectedNodeIdRef, selectedEdgeIdRef]);
+
+  useEffect(() => {
+    if (!activeTooltip) return;
+
+    const handleDocumentClick = (event) => {
+      const isInsideTooltip =
+        !!event.target.closest(".graph-node-tooltip") ||
+        !!event.target.closest(".edge-tooltip-container");
+      if (isInsideTooltip) {
+        return;
+      }
+
+      const isInsideGraph =
+        containerRef.current && containerRef.current.contains(event.target);
+      if (isInsideGraph) {
+        return;
+      }
+
+      const isDragEndEvent = event?.detail && event.detail.type === 'graphDragEnd';
+      if (isDragEndEvent) {
+        return;
+      }
+
+      clearTooltip();
+    };
+
+    const handleGraphDragEnd = (event) => {
+      event.preventDefault?.();
+      event.stopPropagation?.();
+    };
+
+    const timeoutId = setTimeout(() => {
+      document.addEventListener('click', handleDocumentClick, true);
+      document.addEventListener('graphDragEnd', handleGraphDragEnd, true);
+    }, 20);
+
+    return () => {
+      clearTimeout(timeoutId);
+      document.removeEventListener('click', handleDocumentClick, true);
+      document.removeEventListener('graphDragEnd', handleGraphDragEnd, true);
+    };
+  }, [activeTooltip, clearTooltip]);
 
   useEffect(() => {
     const cy = cyRef.current;
@@ -181,7 +250,11 @@ const ViewerRelationGraph = ({
   // activeTooltip 상태 추적 - 제거됨
 
   return (
-    <div className="relation-graph-container" style={graphStyles.container}>
+    <div
+      ref={containerRef}
+      className="relation-graph-container"
+      style={graphStyles.container}
+    >
       <div 
         style={graphStyles.tooltipContainer}
         onClick={(e) => e.stopPropagation()}

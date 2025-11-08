@@ -45,9 +45,7 @@ if (import.meta.env.DEV) {
   // 디버깅 로그 조회 함수
   window.GET_OAUTH_LOGS = () => {
     try {
-      const logs = JSON.parse(localStorage.getItem('oauth_debug_logs') || '[]');
-      console.table(logs);
-      return logs;
+      return JSON.parse(localStorage.getItem('oauth_debug_logs') || '[]');
     } catch (error) {
       console.error('로그 조회 실패:', error);
       return [];
@@ -58,17 +56,10 @@ if (import.meta.env.DEV) {
   window.CLEAR_OAUTH_LOGS = () => {
     try {
       localStorage.removeItem('oauth_debug_logs');
-      console.log('OAuth 디버깅 로그가 초기화되었습니다.');
     } catch (error) {
       console.error('로그 초기화 실패:', error);
     }
   };
-  
-  console.log('🔒 안전한 OAuth 디버깅 시스템이 활성화되었습니다.');
-  console.log('사용법:');
-  console.log('- DEBUG_OAUTH("메시지", 데이터)');
-  console.log('- GET_OAUTH_LOGS() - 로그 조회');
-  console.log('- CLEAR_OAUTH_LOGS() - 로그 초기화');
 }
 
 // 민감한 데이터 마스킹 함수

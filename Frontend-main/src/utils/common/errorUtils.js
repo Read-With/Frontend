@@ -8,11 +8,15 @@ export const errorUtils = {
   },
   
   logInfo: (context, message, additionalData = {}) => {
-    console.log(`ℹ️ ${context}: ${message}`, additionalData);
+    void context;
+    void message;
+    void additionalData;
   },
   
   logSuccess: (context, message, additionalData = {}) => {
-    console.log(`✅ ${context}: ${message}`, additionalData);
+    void context;
+    void message;
+    void additionalData;
   },
   
   handleError: (context, error, fallbackValue = null, additionalData = {}) => {

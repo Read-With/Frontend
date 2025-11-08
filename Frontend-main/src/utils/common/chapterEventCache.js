@@ -11,6 +11,83 @@ import { getChapterData as getManifestChapterData } from './manifestCache';
 const CHAPTER_EVENT_CACHE_PREFIX = 'chapter_events_';
 const CACHE_VERSION = 'v1';
 
+const READER_PROGRESS_CACHE_PREFIX = 'reader_progress_';
+const READER_PROGRESS_VERSION = 'v1';
+const READER_PROGRESS_MAX_AGE = 3 * 24 * 60 * 60 * 1000; // 3일
+
+const sanitizeBookKey = (bookKey) => {
+  if (bookKey === null || bookKey === undefined) return null;
+  const normalized = String(bookKey).trim();
+  return normalized.length > 0 ? normalized : null;
+};
+
+const getReaderProgressCacheKey = (bookKey) => {
+  const sanitized = sanitizeBookKey(bookKey);
+  if (!sanitized) return null;
+  return `${READER_PROGRESS_CACHE_PREFIX}${READER_PROGRESS_VERSION}_${sanitized}`;
+};
+
+const normalizeReaderProgressPayload = (bookKey, payload) => {
+  if (!payload) return null;
+
+  const chapterIdxCandidate =
+    payload.chapterIdx ??
+    payload.chapter ??
+    payload.chapterIndex ??
+    payload.chapterNumber ??
+    payload.chapterId;
+  const chapterIdx = Number(chapterIdxCandidate);
+
+  if (!Number.isFinite(chapterIdx) || chapterIdx <= 0) {
+    return null;
+  }
+
+  const rawEventIdx =
+    payload.eventIdx ??
+    payload.eventNum ??
+    payload.event_id ??
+    payload.eventId ??
+    payload.idx ??
+    payload.id;
+  const eventIdx = Number(rawEventIdx);
+  const normalizedEventIdx = Number.isFinite(eventIdx) && eventIdx > 0 ? eventIdx : null;
+
+  const eventNumCandidate = Number(payload.eventNum);
+  const normalizedEventNum =
+    Number.isFinite(eventNumCandidate) && eventNumCandidate > 0
+      ? eventNumCandidate
+      : normalizedEventIdx;
+
+  const chapterProgressCandidate = Number(payload.chapterProgress);
+  const normalizedChapterProgress = Number.isFinite(chapterProgressCandidate)
+    ? Math.max(Math.min(chapterProgressCandidate, 100), 0)
+    : null;
+
+  const normalized = {
+    key: bookKey,
+    version: READER_PROGRESS_VERSION,
+    bookId: payload.bookId ?? null,
+    chapterIdx: chapterIdx,
+    eventIdx: normalizedEventIdx,
+    eventNum: normalizedEventNum,
+    eventId: payload.eventId ?? payload.event_id ?? payload.id ?? null,
+    cfi: typeof payload.cfi === 'string' ? payload.cfi : null,
+    eventName:
+      payload.eventName ??
+      payload.eventTitle ??
+      payload.eventLabel ??
+      payload.name ??
+      payload.title ??
+      (payload.event && (payload.event.name ?? payload.event.title)) ??
+      null,
+    chapterProgress: normalizedChapterProgress,
+    source: payload.source ?? 'runtime',
+    timestamp: Date.now()
+  };
+
+  return normalized;
+};
+
 /**
  * 챕터별 이벤트 캐시 키 생성
  */
@@ -69,6 +146,71 @@ export const setCachedChapterEvents = (bookId, chapterIdx, eventData) => {
   }
 };
 
+export const getCachedReaderProgress = (bookKey) => {
+  try {
+    const cacheKey = getReaderProgressCacheKey(bookKey);
+    if (!cacheKey) return null;
+
+    const cached = localStorage.getItem(cacheKey);
+    if (!cached) return null;
+
+    const parsed = JSON.parse(cached);
+    const timestamp = parsed?.timestamp ?? 0;
+
+    if (!Number.isFinite(Number(parsed?.chapterIdx))) {
+      localStorage.removeItem(cacheKey);
+      return null;
+    }
+
+    if (Date.now() - timestamp > READER_PROGRESS_MAX_AGE) {
+      localStorage.removeItem(cacheKey);
+      return null;
+    }
+
+    return {
+      ...parsed,
+      chapterIdx: Number(parsed.chapterIdx),
+      eventIdx: Number.isFinite(Number(parsed.eventIdx)) ? Number(parsed.eventIdx) : null,
+      eventNum: Number.isFinite(Number(parsed.eventNum)) ? Number(parsed.eventNum) : null,
+      chapterProgress: Number.isFinite(Number(parsed.chapterProgress))
+        ? Number(parsed.chapterProgress)
+        : null
+    };
+  } catch (error) {
+    console.error('독서 위치 캐시 로드 실패:', error);
+    return null;
+  }
+};
+
+export const setCachedReaderProgress = (bookKey, payload) => {
+  try {
+    const cacheKey = getReaderProgressCacheKey(bookKey);
+    if (!cacheKey) return null;
+
+    const normalized = normalizeReaderProgressPayload(sanitizeBookKey(bookKey), payload);
+    if (!normalized) return null;
+
+    localStorage.setItem(cacheKey, JSON.stringify(normalized));
+    return normalized;
+  } catch (error) {
+    console.error('독서 위치 캐시 저장 실패:', error);
+    return null;
+  }
+};
+
+export const clearCachedReaderProgress = (bookKey) => {
+  try {
+    const cacheKey = getReaderProgressCacheKey(bookKey);
+    if (!cacheKey) return false;
+
+    localStorage.removeItem(cacheKey);
+    return true;
+  } catch (error) {
+    console.error('독서 위치 캐시 삭제 실패:', error);
+    return false;
+  }
+};
+
 /**
  * 특정 챕터의 모든 이벤트를 순차적으로 탐색
  * 
@@ -78,18 +220,10 @@ export const setCachedChapterEvents = (bookId, chapterIdx, eventData) => {
  * @returns {Promise<{maxEventIdx: number, events: Array}>}
  */
 export const discoverChapterEvents = async (bookId, chapterIdx, forceRefresh = false) => {
-  console.log('🔍 챕터 이벤트 탐색 시작:', { bookId, chapterIdx, forceRefresh });
-  
   // 캐시 확인 (강제 새로고침이 아닌 경우)
   if (!forceRefresh) {
     const cached = getCachedChapterEvents(bookId, chapterIdx);
     if (cached) {
-      console.log('✅ 캐시된 이벤트 정보 사용:', {
-        bookId,
-        chapterIdx,
-        maxEventIdx: cached.maxEventIdx,
-        eventsCount: cached.events?.length || 0
-      });
       return cached;
     }
   }
@@ -141,13 +275,6 @@ export const discoverChapterEvents = async (bookId, chapterIdx, forceRefresh = f
         source: 'manifest'
       };
 
-      console.log('📚 manifest 이벤트 정보 사용:', {
-        bookId,
-        chapterIdx,
-        maxEventIdx,
-        eventsCount: normalizedEvents.length
-      });
-
       setCachedChapterEvents(bookId, chapterIdx, resultFromManifest);
       return resultFromManifest;
     }
@@ -162,8 +289,6 @@ export const discoverChapterEvents = async (bookId, chapterIdx, forceRefresh = f
   
   while (true) {
     try {
-      console.log(`📡 이벤트 API 호출: eventIdx=${currentEventIdx}`);
-      
       const response = await getFineGraph(bookId, chapterIdx, currentEventIdx);
       
       // 응답 검증
@@ -172,7 +297,6 @@ export const discoverChapterEvents = async (bookId, chapterIdx, forceRefresh = f
         consecutiveEmptyCount++;
         
         if (consecutiveEmptyCount >= maxConsecutiveEmpty) {
-          console.log(`🛑 연속 ${maxConsecutiveEmpty}번 실패, 탐색 종료`);
           break;
         }
         
@@ -201,14 +325,11 @@ export const discoverChapterEvents = async (bookId, chapterIdx, forceRefresh = f
           eventId: event?.event_id
         });
         
-        console.log(`✅ 이벤트 ${currentEventIdx}: 데이터 존재 (캐릭터: ${characters?.length || 0}, 관계: ${relations?.length || 0})`);
       } else {
         // 데이터 없음
-        console.log(`⚪ 이벤트 ${currentEventIdx}: 데이터 없음`);
         consecutiveEmptyCount++;
         
         if (consecutiveEmptyCount >= maxConsecutiveEmpty) {
-          console.log(`🛑 연속 ${maxConsecutiveEmpty}번 비어있음, 탐색 종료`);
           break;
         }
       }
@@ -229,7 +350,6 @@ export const discoverChapterEvents = async (bookId, chapterIdx, forceRefresh = f
       consecutiveEmptyCount++;
       
       if (consecutiveEmptyCount >= maxConsecutiveEmpty) {
-        console.log(`🛑 연속 ${maxConsecutiveEmpty}번 오류, 탐색 종료`);
         break;
       }
       
@@ -244,13 +364,6 @@ export const discoverChapterEvents = async (bookId, chapterIdx, forceRefresh = f
     events,
     timestamp: Date.now()
   };
-  
-  console.log('🎯 챕터 이벤트 탐색 완료:', {
-    bookId,
-    chapterIdx,
-    maxEventIdx,
-    totalEvents: events.length
-  });
   
   // 캐시에 저장
   setCachedChapterEvents(bookId, chapterIdx, result);
@@ -268,7 +381,6 @@ export const getEventData = async (bookId, chapterIdx, eventIdx) => {
   if (cached && cached.events) {
     const event = cached.events.find(e => e.eventIdx === eventIdx);
     if (event) {
-      console.log('✅ 캐시된 이벤트 사용:', { bookId, chapterIdx, eventIdx });
       return event;
     }
   }
@@ -320,7 +432,6 @@ export const clearChapterEventCache = (bookId, chapterIdx) => {
   try {
     const cacheKey = getChapterEventCacheKey(bookId, chapterIdx);
     localStorage.removeItem(cacheKey);
-    console.log('🗑️ 챕터 이벤트 캐시 삭제:', { bookId, chapterIdx });
     return true;
   } catch (error) {
     console.error('챕터 이벤트 캐시 삭제 실패:', error);
@@ -344,7 +455,6 @@ export const clearAllChapterEventCaches = (bookId) => {
       }
     });
     
-    console.log(`🗑️ 책 ${bookId}의 모든 챕터 이벤트 캐시 삭제 (${count}개)`);
     return count;
   } catch (error) {
     console.error('모든 챕터 이벤트 캐시 삭제 실패:', error);

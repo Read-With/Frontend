@@ -120,18 +120,7 @@ export const validateRedirectUri = (redirectUri) => {
 // 로그 보안 (민감한 정보 마스킹)
 export const secureLog = (message, data = null) => {
   if (import.meta.env.DEV) {
-    if (data) {
-      // 민감한 정보 마스킹
-      const maskedData = { ...data };
-      if (maskedData.code) {
-        maskedData.code = maskedData.code.substring(0, 10) + '...';
-      }
-      if (maskedData.token) {
-        maskedData.token = maskedData.token.substring(0, 10) + '...';
-      }
-      console.log(message, maskedData);
-    } else {
-      console.log(message);
-    }
+    void message;
+    void data;
   }
 };

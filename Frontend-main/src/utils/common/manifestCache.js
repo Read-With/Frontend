@@ -185,16 +185,6 @@ export const calculateApiChapterProgress = (bookId, cfi, chapterIdx, bookInstanc
     return { currentChars: 0, totalChars: 0, progress: 0 };
   }
   
-  console.log('🔍 챕터 검색:', { 
-    chapterIdx: targetChapterIdx, 
-    availableChapters: manifest.chapters.map(ch => ({ 
-      idx: normalizeChapterIdxValue(ch.idx), 
-      startPos: ch.startPos, 
-      endPos: ch.endPos,
-      title: ch.title 
-    })) 
-  });
-  
   const chapterData = manifest.chapters.find(ch => {
     const idx = normalizeChapterIdxValue(ch.idx);
     const chapterIdxValue = normalizeChapterIdxValue(ch.chapterIdx);
@@ -206,13 +196,6 @@ export const calculateApiChapterProgress = (bookId, cfi, chapterIdx, bookInstanc
     return { currentChars: 0, totalChars: 0, progress: 0 };
   }
   
-  console.log('✅ 찾은 챕터:', { 
-    idx: normalizeChapterIdxValue(chapterData.idx), 
-    startPos: chapterData.startPos, 
-    endPos: chapterData.endPos,
-    title: chapterData.title 
-  });
-
   const extractChapterIdx = (item) => {
     if (!item) return null;
     return normalizeChapterIdxValue(item.chapterIdx ?? item.idx ?? item.chapter ?? item.number ?? null);
@@ -297,18 +280,6 @@ export const calculateApiChapterProgress = (bookId, cfi, chapterIdx, bookInstanc
     const globalCurrentChars = Math.round(bookProgress * totalLength);
     const chapterCurrentChars = Math.max(0, globalCurrentChars - chapterStartPos);
     const progress = totalChars > 0 ? (chapterCurrentChars / totalChars) * 100 : 0;
-    
-    console.log('📊 진행도 계산:', {
-      bookProgress,
-      totalLength,
-      globalCurrentChars,
-      chapterStartPos,
-      chapterCurrentChars,
-      totalChars,
-      progress,
-      chapterIdx: targetChapterIdx,
-      lengthSource: totalChars > 0 ? (lengthEntry ? 'metadata' : 'events') : 'unknown'
-    });
     
     return {
       currentChars: totalChars > 0 ? Math.min(chapterCurrentChars, totalChars) : chapterCurrentChars,
@@ -424,20 +395,6 @@ export const findApiEventFromChars = async (bookId, chapterIdx, currentChars, ch
     }
   }
 
-  console.log('🔎 이벤트 검색:', {
-    chapterIdx: targetChapterIdx,
-    currentChars,
-    base,
-    absolutePos: position,
-    useRelativePositions: isRelativePositions,
-    eventsCount: mergedEvents.length,
-    sampleEvents: mergedEvents.slice(0, 5).map((ev) => ({ 
-      idx: ev.eventIdx ?? ev.idx, 
-      startPos: ev.startPos, 
-      endPos: ev.endPos 
-    }))
-  });
-  
   for (let i = 0; i < mergedEvents.length; i++) {
     const event = mergedEvents[i];
     const eventStartPos = Number(event.startPos ?? event.start ?? 0);

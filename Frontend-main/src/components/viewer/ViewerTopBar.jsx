@@ -148,17 +148,6 @@ const ViewerTopBar = ({
     }
   }, [filename]);
   
-  // 이전 페이지 정보 로깅
-  React.useEffect(() => {
-    if (isFromLibrary) {
-      console.log('ViewerTopBar: 라이브러리에서 온 사용자', {
-        isFromLibrary,
-        previousPage,
-        bookTitle: book?.title
-      });
-    }
-  }, [isFromLibrary, previousPage, book]);
-
   const getTotalEventsForChapter = useCallback((eventsList, chapter) => {
     let totalEvents = 0;
 

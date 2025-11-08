@@ -372,6 +372,19 @@ export default function useGraphInteractions({
         const nodeData = node?.data?.();
         if (!node || !nodeData) return;
 
+        const nodeId = node.id();
+        const isSameNodeSelected = selectedNodeIdRef?.current === nodeId;
+
+        if (isSameNodeSelected) {
+          if (onClearTooltipRef.current) {
+            onClearTooltipRef.current();
+          }
+          resetAllStyles();
+          if (selectedNodeIdRef) selectedNodeIdRef.current = null;
+          if (selectedEdgeIdRef) selectedEdgeIdRef.current = null;
+          return;
+        }
+
         const nodeSize = node.renderedBoundingBox()?.w || 50;
         const offsetX = nodeSize + 100;
         const { x: mouseX, y: mouseY } = calculateTooltipPosition(node, evt, offsetX);
@@ -383,11 +396,11 @@ export default function useGraphInteractions({
           onShowNodeTooltipRef.current({ node, evt, nodeCenter, mouseX, mouseY });
         }
         
-        if (selectedNodeIdRef) selectedNodeIdRef.current = node.id();
+        if (selectedNodeIdRef) selectedNodeIdRef.current = nodeId;
       } catch (error) {
       }
     },
-    [cyRef, handleNodeHighlight, calculateNodePosition, calculateTooltipPosition, onShowNodeTooltipRef, selectedNodeIdRef]
+    [cyRef, handleNodeHighlight, calculateNodePosition, calculateTooltipPosition, onShowNodeTooltipRef, selectedNodeIdRef, selectedEdgeIdRef, resetAllStyles, onClearTooltipRef]
   );
 
   const nodeDragStartHandler = useCallback((evt) => {
@@ -410,6 +423,20 @@ export default function useGraphInteractions({
         const edgeData = edge?.data?.();
         if (!edge || !edgeData) return;
 
+        const currentEdgeId = edge.id();
+        const isSameEdgeSelected = selectedEdgeIdRef?.current === currentEdgeId;
+
+        // 동일 간선 재클릭 시: 툴팁/하이라이트 해제
+        if (isSameEdgeSelected) {
+          if (onClearTooltipRef.current) {
+            onClearTooltipRef.current();
+          }
+          resetAllStyles();
+          if (selectedEdgeIdRef) selectedEdgeIdRef.current = null;
+          if (selectedNodeIdRef) selectedNodeIdRef.current = null;
+          return;
+        }
+
         const { x: mouseX, y: mouseY } = calculateTooltipPosition(edge, evt, 0);
         const edgeCenter = calculateTooltipPosition(edge, null, 0);
 
@@ -417,10 +444,9 @@ export default function useGraphInteractions({
         const tgtNode = edge.target();
         const srcId = srcNode.id();
         const tgtId = tgtNode.id();
-        const edgeId = edge.id();
 
         const connectedNodeIds = new Set([srcId, tgtId]);
-        const connectedEdgeIds = new Set([edgeId]);
+        const connectedEdgeIds = new Set([currentEdgeId]);
 
         const fadeOpacity = 0.05;
         const textFadeOpacity = 0.02;
@@ -513,7 +539,7 @@ export default function useGraphInteractions({
             });
 
             cy.edges().forEach((e) => {
-              if (e.id() === edge.id()) {
+              if (e.id() === currentEdgeId) {
                 e.removeClass("faded").addClass("highlighted");
                 e.style('opacity', '');
               } else {
@@ -534,11 +560,12 @@ export default function useGraphInteractions({
           onShowEdgeTooltipRef.current({ edge, evt, edgeCenter, mouseX, mouseY });                                                                              
         }
 
-        if (selectedEdgeIdRef) selectedEdgeIdRef.current = edge.id();
+        if (selectedEdgeIdRef) selectedEdgeIdRef.current = currentEdgeId;
+        if (selectedNodeIdRef) selectedNodeIdRef.current = null;
       } catch (error) {
       }
     },
-    [cyRef, isSearchActive, filteredElements, onShowEdgeTooltipRef, selectedEdgeIdRef, resetAllStyles, calculateTooltipPosition, forceStyleUpdate, applyEdgeHighlightStyles, applyNodeHighlightStyles]                                                                            
+    [cyRef, isSearchActive, filteredElements, onShowEdgeTooltipRef, selectedEdgeIdRef, selectedNodeIdRef, resetAllStyles, calculateTooltipPosition, forceStyleUpdate, applyEdgeHighlightStyles, applyNodeHighlightStyles, onClearTooltipRef]                                                                            
   );
 
   const handleBackgroundClick = useCallback((evt) => {

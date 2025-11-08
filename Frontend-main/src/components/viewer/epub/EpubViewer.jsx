@@ -843,8 +843,6 @@ const EpubViewer = forwardRef(
                     totalChars: progressInfo.totalChars,
                     cfi: cfi
                   };
-                  
-                  console.log('📍 현재 이벤트 정보:', currentEvent);
                   onCurrentLineChange?.(currentEvent.currentChars, 0, currentEvent);
                 } else {
                   onCurrentLineChange?.(progressInfo.currentChars, 0, null);

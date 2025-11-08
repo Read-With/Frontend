@@ -404,11 +404,8 @@ export const cfiUtils = {
   },
   
   async getPrevCfi(book, rendition, currentCfi) {
-    console.log('🔄 getPrevCfi 함수 시작 (다양한 CFI 처리)', { currentCfi });
-    
     try {
       const cfiAnalysis = this.analyzeCfiStructure(currentCfi);
-      console.log('🔍 CFI 구조 상세 분석:', cfiAnalysis);
       
       if (!cfiAnalysis.isValid) {
         console.error('❌ CFI 분석 실패:', cfiAnalysis.error);
@@ -416,14 +413,11 @@ export const cfiUtils = {
         }
       
       const cfiVariants = this.calculatePrevCfiVariants(currentCfi, cfiAnalysis);
-      console.log('🎯 생성된 CFI 변형들:', cfiVariants);
       
       if (cfiAnalysis.hasChapterPattern && cfiAnalysis.chapterNumber > 1) {
         const currentChapter = cfiAnalysis.chapterNumber;
         const prevChapter = currentChapter - 1;
-        
-        console.log('📍 [chapter-X] 패턴 발견:', { currentChapter, prevChapter });
-        
+
         if (book.navigation?.toc) {
           const prevChapterItem = book.navigation.toc.find(item => {
             const chapterMatch = item.cfi?.match(/\[chapter-(\d+)\]/);
@@ -431,24 +425,14 @@ export const cfiUtils = {
           });
           
           if (prevChapterItem?.href) {
-            console.log('✅ Navigation Document에서 이전 챕터 href 발견:', prevChapterItem.href);
             return prevChapterItem.href;
           }
         }
       }
       
       for (const variant of cfiVariants) {
-        console.log(`🔄 ${variant.method} 방법 시도:`, {
-          cfi: variant.cfi,
-          confidence: variant.confidence,
-          description: variant.description
-        });
-        
         if (this.validateCfi(variant.cfi)) {
-          console.log(`✅ ${variant.method} 방법 유효한 CFI 생성:`, variant.cfi);
           return variant.cfi;
-        } else {
-          console.log(`⚠️ ${variant.method} 방법 CFI 유효성 검사 실패:`, variant.cfi);
         }
       }
       
@@ -461,8 +445,6 @@ export const cfiUtils = {
   },
   
   async getSpineNavigation(book, rendition, direction) {
-    console.log('🔄 getSpineNavigation 함수 시작', { direction });
-    
     try {
       const currentLocation = rendition.currentLocation();
       if (!currentLocation?.start?.spinePos && currentLocation?.start?.spinePos !== 0) {
@@ -473,24 +455,16 @@ export const cfiUtils = {
       const currentSpineIndex = currentLocation.start.spinePos;
       const totalSpineItems = book.spine?.length || 0;
       
-      console.log('📍 현재 spine 정보:', {
-        currentSpineIndex,
-        totalSpineItems,
-        direction
-      });
-      
       let targetSpineIndex;
       
       if (direction === 'next') {
         targetSpineIndex = currentSpineIndex + 1;
         if (targetSpineIndex >= totalSpineItems) {
-          console.log('ℹ️ 마지막 spine 항목입니다');
           return null;
         }
       } else if (direction === 'prev') {
         targetSpineIndex = currentSpineIndex - 1;
         if (targetSpineIndex < 0) {
-          console.log('ℹ️ 첫 번째 spine 항목입니다');
           return null;
         }
       } else {
@@ -503,12 +477,6 @@ export const cfiUtils = {
         console.warn('⚠️ 대상 spine 항목을 찾을 수 없습니다:', targetSpineIndex);
         return null;
       }
-      
-      console.log('✅ Spine 기반 이동 대상:', {
-        targetSpineIndex,
-        href: targetSpineItem.href,
-        direction
-      });
       
       return {
         type: 'spine',

@@ -127,21 +127,6 @@ const apiRequest = async (url, options = {}) => {
   // 환경에 따른 URL 구성
   const requestUrl = import.meta.env.DEV ? `${API_BASE_URL}${url}` : `${API_BASE_URL}${url}`;
   
-  // 업로드 요청인 경우 디버깅 정보 출력
-  if (url.includes('/api/books') && options.method === 'POST') {
-    console.log('📤 업로드 요청 정보:', {
-      url: requestUrl,
-      hasToken: !!token,
-      tokenPreview: token ? token.substring(0, 20) + '...' : 'null',
-      isFormData: isFormData,
-      headers: {
-        ...config.headers,
-        Authorization: config.headers.Authorization ? config.headers.Authorization.substring(0, 30) + '...' : '없음'
-      },
-      allHeaders: Object.keys(config.headers)
-    });
-  }
-  
   // 404 에러를 조용히 처리할 엔드포인트 목록
   const silent404Endpoints = [
     '/api/graph/fine',
@@ -267,11 +252,6 @@ export const uploadBook = async (formData) => {
     localStorage.removeItem('google_user');
     throw new Error('인증이 만료되었습니다. 다시 로그인해주세요.');
   }
-  
-  console.log('✅ 토큰 검증 통과:', {
-    tokenPreview: token.substring(0, 20) + '...',
-    tokenValid: true
-  });
   
   return apiRequest('/api/books', {
     method: 'POST',
