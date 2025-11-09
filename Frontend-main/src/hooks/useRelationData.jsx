@@ -176,48 +176,32 @@ async function fetchApiRelationTimelineCumulativeFromAPI(bookId, id1, id2, selec
   }
 
   try {
-    let chapterLastEventIdx = 0;
-    let firstAppearanceEventIdx = null;
-    const cachedData = new Map();
+    const eventCache = new Map(); // key: `${chapter}-${eventIdx}`
+    const chapterRelationCache = new Map(); // key: chapter -> { relationEvents, firstIdx, lastIdx }
 
-    let left = 1;
-    let right = 100;
-
-    while (left <= right) {
-      const mid = Math.floor((left + right) / 2);
-      try {
-        const searchData = await getFineGraph(bookId, selectedChapter, mid);
-        const hasRealData =
-          searchData?.isSuccess &&
-          searchData?.result &&
-          (searchData.result.characters ||
-            (searchData.result.relations && searchData.result.relations.length > 0) ||
-            searchData.result.event);
-
-        if (hasRealData) {
-          chapterLastEventIdx = mid;
-          cachedData.set(mid, searchData);
-          left = mid + 1;
-        } else {
-          right = mid - 1;
-        }
-      } catch (error) {
-        right = mid - 1;
+    const fetchEventData = async (chapter, eventIdx) => {
+      const cacheKey = `${chapter}-${eventIdx}`;
+      if (eventCache.has(cacheKey)) {
+        return eventCache.get(cacheKey);
       }
-    }
+      const data = await getFineGraph(bookId, chapter, eventIdx);
+      eventCache.set(cacheKey, data);
+      return data;
+    };
 
-    if (chapterLastEventIdx > 0) {
-      let consecutiveEmptyCount = 0;
-      const MAX_CONSECUTIVE_EMPTY = 2;
+    const getRelationEventsForChapter = async (chapter) => {
+      if (chapterRelationCache.has(chapter)) {
+        return chapterRelationCache.get(chapter);
+      }
 
-      for (let idx = 1; idx <= chapterLastEventIdx && consecutiveEmptyCount < MAX_CONSECUTIVE_EMPTY; idx += 1) {
+      let chapterLastEventIdx = 0;
+      let left = 1;
+      let right = 100;
+
+      while (left <= right) {
+        const mid = Math.floor((left + right) / 2);
         try {
-          let searchData = cachedData.get(idx);
-          if (!searchData) {
-            searchData = await getFineGraph(bookId, selectedChapter, idx);
-            cachedData.set(idx, searchData);
-          }
-
+          const searchData = await fetchEventData(chapter, mid);
           const hasRealData =
             searchData?.isSuccess &&
             searchData?.result &&
@@ -226,41 +210,22 @@ async function fetchApiRelationTimelineCumulativeFromAPI(bookId, id1, id2, selec
               searchData.result.event);
 
           if (hasRealData) {
-            consecutiveEmptyCount = 0;
-
-            if (
-              firstAppearanceEventIdx === null &&
-              searchData?.result?.relations &&
-              searchData.result.relations.length > 0
-            ) {
-              const relation = searchData.result.relations.find((rel) => isSamePair(rel, id1, id2));
-              if (relation) {
-                firstAppearanceEventIdx = idx;
-              }
-            }
+            chapterLastEventIdx = mid;
+            left = mid + 1;
           } else {
-            consecutiveEmptyCount += 1;
+            right = mid - 1;
           }
         } catch (error) {
-          consecutiveEmptyCount += 1;
+          right = mid - 1;
         }
       }
-    }
 
-    if (chapterLastEventIdx === 0 || firstAppearanceEventIdx === null) {
-      return { points: [], labelInfo: [] };
-    }
+      const relationEvents = [];
 
-    const allPrevChapters = { points: [], labelInfo: [] };
-
-    for (let chapter = 1; chapter < selectedChapter; chapter += 1) {
-      try {
-        let lastEventIdx = 0;
-        let lastEventData = null;
-
-        for (let testIdx = 50; testIdx >= 1 && lastEventIdx === 0; testIdx -= 1) {
+      if (chapterLastEventIdx > 0) {
+        for (let idx = 1; idx <= chapterLastEventIdx; idx += 1) {
           try {
-            const fineData = await getFineGraph(bookId, chapter, testIdx);
+            const fineData = await fetchEventData(chapter, idx);
             const hasRealData =
               fineData?.isSuccess &&
               fineData?.result &&
@@ -268,52 +233,86 @@ async function fetchApiRelationTimelineCumulativeFromAPI(bookId, id1, id2, selec
                 (fineData.result.relations && fineData.result.relations.length > 0) ||
                 fineData.result.event);
 
-            if (hasRealData) {
-              lastEventIdx = testIdx;
-              lastEventData = fineData;
+            if (!hasRealData) {
+              continue;
+            }
+
+            if (fineData?.result?.relations?.length) {
+              const relation = fineData.result.relations.find((rel) => isSamePair(rel, id1, id2));
+              if (relation) {
+                relationEvents.push({
+                  idx,
+                  positivity: relation.positivity || 0,
+                });
+              }
             }
           } catch (error) {
-            // ignore per-event errors
           }
         }
-
-        if (lastEventIdx > 0 && lastEventData?.result?.relations) {
-          const relation = lastEventData.result.relations.find((rel) => isSamePair(rel, id1, id2));
-          if (relation) {
-            allPrevChapters.points.push(relation.positivity || 0);
-            allPrevChapters.labelInfo.push(`Ch${chapter}`);
-          }
-        }
-      } catch (error) {
-        // ignore per-chapter errors
       }
-    }
 
-    const currentChapterData = { points: [], labelInfo: [] };
+      const chapterResult = {
+        relationEvents,
+        firstIdx: relationEvents.length ? relationEvents[0].idx : null,
+        lastIdx: relationEvents.length ? relationEvents[relationEvents.length - 1].idx : null,
+      };
 
-    for (let idx = firstAppearanceEventIdx; idx <= chapterLastEventIdx; idx += 1) {
-      try {
-        let fineData = cachedData.get(idx);
-        if (!fineData) {
-          fineData = await getFineGraph(bookId, selectedChapter, idx);
-        }
-
-        if (fineData?.result?.relations?.length) {
-          const relation = fineData.result.relations.find((rel) => isSamePair(rel, id1, id2));
-          if (relation) {
-            currentChapterData.points.push(relation.positivity || 0);
-            currentChapterData.labelInfo.push(`E${idx}`);
-          }
-        }
-      } catch (error) {
-        // ignore per-event errors
-      }
-    }
-
-    return {
-      points: [...allPrevChapters.points, ...currentChapterData.points],
-      labelInfo: [...allPrevChapters.labelInfo, ...currentChapterData.labelInfo],
+      chapterRelationCache.set(chapter, chapterResult);
+      return chapterResult;
     };
+
+    let firstAppearanceChapter = null;
+    const previousChapterPairs = [];
+    let currentChapterPairs = [];
+
+    for (let chapter = 1; chapter <= selectedChapter; chapter += 1) {
+      const { relationEvents } = await getRelationEventsForChapter(chapter);
+      if (!relationEvents || relationEvents.length === 0) {
+        continue;
+      }
+
+      if (firstAppearanceChapter === null) {
+        firstAppearanceChapter = chapter;
+      }
+
+      if (chapter < selectedChapter) {
+        const lastEvent = relationEvents[relationEvents.length - 1];
+        previousChapterPairs.push({
+          chapter,
+          label: `Ch${chapter}`,
+          value: lastEvent.positivity || 0,
+        });
+      } else {
+        currentChapterPairs = relationEvents.map((event) => ({
+          label: `E${event.idx}`,
+          value: event.positivity || 0,
+        }));
+      }
+    }
+
+    if (firstAppearanceChapter === null) {
+      return { points: [], labelInfo: [] };
+    }
+
+    const filteredPreviousPairs = previousChapterPairs.filter(
+      (pair) => pair.chapter >= firstAppearanceChapter
+    );
+
+    if (filteredPreviousPairs.length === 0 && currentChapterPairs.length === 0) {
+      return { points: [], labelInfo: [] };
+    }
+
+    const points = [
+      ...filteredPreviousPairs.map((pair) => pair.value),
+      ...currentChapterPairs.map((event) => event.value),
+    ];
+
+    const labelInfo = [
+      ...filteredPreviousPairs.map((pair) => pair.label),
+      ...currentChapterPairs.map((event) => event.label),
+    ];
+
+    return { points, labelInfo };
   } catch (error) {
     return { points: [], labelInfo: [] };
   }
