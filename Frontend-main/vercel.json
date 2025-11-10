@@ -1,5 +1,4 @@
 {
-{
   "version": 2,
   "builds": [
     {
@@ -11,10 +10,10 @@
     }
   ],
   "routes": [
+    { "handle": "filesystem" },
     {
-      "src": "/(.*)",
+      "src": "/.*",
       "dest": "/index.html"
     }
   ]
 }
-  
