@@ -2,9 +2,8 @@ import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { createCharacterMaps } from '../utils/characterUtils';
 import { convertRelationsToElements, calcGraphDiff } from '../utils/graphDataUtils';
 import { normalizeRelation, isValidRelation } from '../utils/relationUtils';
-import { discoverChapterEvents } from '../utils/common/chapterEventCache';
-import { getBookManifest } from '../utils/common/api';
-import { getMaxChapter } from '../utils/common/manifestCache';
+import { getCachedChapterEvents, reconstructChapterGraphState, getGraphBookCache } from '../utils/common/chapterEventCache';
+import { getMaxChapter, getManifestFromCache } from '../utils/common/manifestCache';
 
 const toNumberOrNull = (value) => {
   if (value === null || value === undefined) return null;
@@ -40,29 +39,31 @@ export function useGraphDataLoader(bookId, chapterIdx, eventIdx = null) {
     setIsDataEmpty(false);
   }, []);
 
-  const ensureMaxChapter = useCallback(async () => {
+  const ensureMaxChapter = useCallback(() => {
     if (!numericBookId) {
       setMaxChapter(1);
       return;
     }
 
-    const cachedMaxChapter = getMaxChapter(numericBookId);
-    if (cachedMaxChapter && cachedMaxChapter > 0) {
-      setMaxChapter(cachedMaxChapter);
+    const cachedMax = getMaxChapter(numericBookId);
+    if (cachedMax && cachedMax > 0) {
+      setMaxChapter(cachedMax);
       return;
     }
 
-    try {
-      const response = await getBookManifest(numericBookId);
-      if (response?.isSuccess) {
-        const refreshedMax = getMaxChapter(numericBookId);
-        setMaxChapter(refreshedMax && refreshedMax > 0 ? refreshedMax : 1);
-      } else {
-        setMaxChapter(1);
-      }
-    } catch {
-      setMaxChapter(1);
+    const manifest = getManifestFromCache(numericBookId);
+    if (Array.isArray(manifest?.chapters) && manifest.chapters.length > 0) {
+      setMaxChapter(manifest.chapters.length);
+      return;
     }
+
+    const graphSummary = getGraphBookCache(numericBookId);
+    if (graphSummary?.maxChapter && graphSummary.maxChapter > 0) {
+      setMaxChapter(graphSummary.maxChapter);
+      return;
+    }
+
+    setMaxChapter(1);
   }, [numericBookId]);
 
   useEffect(() => {
@@ -78,7 +79,7 @@ export function useGraphDataLoader(bookId, chapterIdx, eventIdx = null) {
         return chapterEventsCacheRef.current.get(cacheKey);
       }
 
-      const result = await discoverChapterEvents(bookIdNum, chapter);
+      const result = getCachedChapterEvents(bookIdNum, chapter);
       if (result) {
         chapterEventsCacheRef.current.set(cacheKey, result);
       }
@@ -181,7 +182,7 @@ export function useGraphDataLoader(bookId, chapterIdx, eventIdx = null) {
         );
 
         const maxEventIdxInChapter =
-          chapterEvents?.maxEventIdx ||
+          Number(chapterEvents?.maxEventIdx) ||
           (eventsArray.length > 0
             ? Number(eventsArray[eventsArray.length - 1].eventIdx) || 0
             : 0);
@@ -196,7 +197,65 @@ export function useGraphDataLoader(bookId, chapterIdx, eventIdx = null) {
           targetIdx = maxEventIdxInChapter;
         }
 
-        if (!eventsArray.length || !maxEventIdxInChapter) {
+        if (!maxEventIdxInChapter) {
+          setElements([]);
+          setNewNodeIds([]);
+          setCurrentChapterData({ characters: [] });
+          setEventNum(targetIdx || 0);
+          setIsDataEmpty(true);
+          return;
+        }
+
+        const hasDiffCache =
+          chapterEvents?.baseSnapshot &&
+          Array.isArray(chapterEvents?.diffs);
+
+        if (hasDiffCache) {
+          const currentState = reconstructChapterGraphState(
+            chapterEvents,
+            targetIdx
+          );
+
+          if (currentState) {
+            const baseEventIdx =
+              Number(chapterEvents?.baseSnapshot?.eventIdx) || 1;
+            let previousElements = [];
+            if ((currentState.eventIdx || baseEventIdx) > baseEventIdx) {
+              const previousState = reconstructChapterGraphState(
+                chapterEvents,
+                Math.max((currentState.eventIdx || baseEventIdx) - 1, baseEventIdx)
+              );
+              previousElements = previousState?.elements || [];
+            }
+            const diff = calcGraphDiff(
+              previousElements,
+              currentState?.elements || []
+            );
+
+            const newNodes = (diff?.added || [])
+              .filter(
+                (el) =>
+                  el &&
+                  el.data &&
+                  !el.data.source &&
+                  el.data.id !== undefined &&
+                  el.data.id !== null
+              )
+              .map((el) => el.data.id);
+
+            setElements(currentState.elements || []);
+            setCurrentChapterData({
+              characters: currentState.characters || []
+            });
+            setNewNodeIds(newNodes);
+            setEventNum(currentState.eventIdx || targetIdx);
+            setError(null);
+            setIsDataEmpty((currentState.elements || []).length === 0);
+            return;
+          }
+        }
+
+        if (!eventsArray.length) {
           setElements([]);
           setNewNodeIds([]);
           setCurrentChapterData({ characters: [] });

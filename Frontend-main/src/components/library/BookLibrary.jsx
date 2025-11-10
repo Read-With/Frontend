@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { Heart, BookOpen, Network, MoreVertical, Info, CheckCircle, Clock, FileText, Trash2, X } from 'lucide-react';
 import BookDetailModal from './BookDetailModal';
 import './BookLibrary.css';
+import { ensureGraphBookCache } from '../../utils/common/chapterEventCache';
 
 const DeleteConfirmModal = ({ isOpen, onClose, onConfirm, isIndexedDbOnly }) => {
   React.useEffect(() => {
@@ -360,6 +361,42 @@ const BookLibrary = memo(({ books, loading, error, onRetry, onToggleFavorite, on
   const [showDetailModal, setShowDetailModal] = React.useState(false);
   const [deleteTargetBook, setDeleteTargetBook] = React.useState(null);
   const [showDeleteModal, setShowDeleteModal] = React.useState(false);
+
+  React.useEffect(() => {
+    if (!Array.isArray(books) || books.length === 0) {
+      return undefined;
+    }
+
+    const numericBooks = books.filter((book) => Number.isFinite(Number(book?.id)));
+    if (numericBooks.length === 0) {
+      return undefined;
+    }
+
+    let cancelled = false;
+
+    const initializeSequentially = async () => {
+      for (const book of numericBooks) {
+        if (cancelled) break;
+
+        const bookId = Number(book.id);
+        if (!Number.isFinite(bookId)) {
+          continue;
+        }
+
+        try {
+          await ensureGraphBookCache(bookId);
+        } catch (error) {
+          console.warn('도서 캐시 초기화 실패', { bookId, error });
+        }
+      }
+    };
+
+    initializeSequentially();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [books]);
 
   const handleBookDetailClick = (book) => {
     setSelectedBook(book);

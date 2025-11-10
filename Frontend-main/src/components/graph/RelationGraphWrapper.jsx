@@ -82,6 +82,7 @@ function RelationGraphWrapper() {
   const [isSidebarClosing, setIsSidebarClosing] = useState(false);
   const [forceClose, setForceClose] = useState(false);
   const [filterStage, setFilterStage] = useState(0);
+  const [hasShownGraphOnce, setHasShownGraphOnce] = useState(false);
   
   const [apiMacroData, setApiMacroData] = useState(null);
   const [apiFineData, setApiFineData] = useState(null);
@@ -766,7 +767,15 @@ function RelationGraphWrapper() {
   // 챕터 드롭다운이 표시되려면 effectiveMaxChapter가 준비되어야 함
   const isLoading = (isApiBook && (apiFineLoading || isGraphLoading)) || (!isApiBook && (loading || isGraphLoading));
   
-  if (isLoading) {
+  useEffect(() => {
+    if (!isLoading) {
+      setHasShownGraphOnce(true);
+    }
+  }, [isLoading]);
+  
+  const isBlockingInitialLoad = isLoading && !hasShownGraphOnce;
+  
+  if (isBlockingInitialLoad) {
     return (
       <div style={{
         display: 'flex',
@@ -1218,6 +1227,25 @@ function RelationGraphWrapper() {
                 position: 'relative'
               }}
             >
+              {isLoading && hasShownGraphOnce && (
+                <div
+                  style={{
+                    position: 'absolute',
+                    inset: 0,
+                    background: 'rgba(255, 255, 255, 0.75)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    zIndex: 10,
+                    fontSize: '16px',
+                    fontWeight: 600,
+                    color: COLORS.primary,
+                    letterSpacing: '0.02em'
+                  }}
+                >
+                  그래프 업데이트 중...
+                </div>
+              )}
               <CytoscapeGraphUnified
                 elements={finalElements}
                 newNodeIds={newNodeIds}
@@ -1238,6 +1266,7 @@ function RelationGraphWrapper() {
                 isResetFromSearch={isResetFromSearch}
                 showRippleEffect={true}
                 isDropdownSelection={isDropdownSelection}
+                isDataRefreshing={isLoading}
               />
             </div>
           </div>

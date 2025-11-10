@@ -3,6 +3,7 @@ import { errorUtils as commonErrorUtils } from './common/errorUtils';
 import { storageUtils as commonStorageUtils } from './common/storageUtils';
 import { cfiUtils as commonCfiUtils } from './common/cfiUtils';
 import { settingsUtils as commonSettingsUtils, defaultSettings as commonDefaultSettings, loadSettings as commonLoadSettings } from './common/settingsUtils';
+import { getManifestFromCache } from './common/manifestCache';
 
 export const errorUtils = commonErrorUtils;
 export const storageUtils = commonStorageUtils;
@@ -174,10 +175,43 @@ export function calculateChapterProgress(cfi, chapterNum, events, bookInstance =
       const fileName = path.split('/').pop();
       const bookId = fileName.replace('.epub', '');
       
-      // 캐시된 localStorage 접근으로 최적화
-      const totalLength = Number(storageUtils.get(`totalLength_${bookId}`)) || 0;
-      const chapterLengths = storageUtils.getJson(`chapterLengths_${bookId}`, {});
-      
+      // Manifest 기반 진행도 계산
+      const numericBookId = Number(bookId);
+      const manifest = Number.isFinite(numericBookId) ? getManifestFromCache(numericBookId) : null;
+      const progressMetadata = manifest?.progressMetadata;
+
+      const chapterLengths = {};
+      if (Array.isArray(progressMetadata?.chapterLengths)) {
+        progressMetadata.chapterLengths.forEach((item) => {
+          if (!item) return;
+          const chapterIdx = Number(item.chapterIdx ?? item.idx);
+          const length = Number(item.length);
+          if (Number.isFinite(chapterIdx) && chapterIdx > 0 && Number.isFinite(length) && length > 0) {
+            chapterLengths[chapterIdx] = length;
+          }
+        });
+      } else if (Array.isArray(manifest?.chapters)) {
+        manifest.chapters.forEach((chapter) => {
+          if (!chapter) return;
+          const chapterIdx = Number(chapter.idx ?? chapter.chapterIdx);
+          const endPos = Number(
+            chapter.endPos ??
+            chapter.end ??
+            (chapter.events && chapter.events.length
+              ? chapter.events[chapter.events.length - 1]?.endPos ??
+                chapter.events[chapter.events.length - 1]?.end
+              : null)
+          );
+          if (Number.isFinite(chapterIdx) && chapterIdx > 0 && Number.isFinite(endPos) && endPos > 0) {
+            chapterLengths[chapterIdx] = endPos;
+          }
+        });
+      }
+
+      const totalLength =
+        Number(progressMetadata?.totalLength) ||
+        Object.values(chapterLengths).reduce((sum, length) => sum + Number(length || 0), 0);
+
       if (totalLength > 0 && Object.keys(chapterLengths).length > 0) {
         const globalCurrentChars = Math.round(globalProgress * totalLength);
         let prevChaptersSum = 0;

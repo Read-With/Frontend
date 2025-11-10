@@ -29,38 +29,6 @@
   }
 }
 
-@keyframes pulse {
-  0%, 100% {
-    opacity: 0.6;
-  }
-  50% {
-    opacity: 1;
-  }
-}
-
-@keyframes slideInLeft {
-  from {
-    opacity: 0;
-    transform: translateX(-50px);
-  }
-  to {
-    opacity: 1;
-    transform: translateX(0);
-  }
-}
-
-@keyframes slideInRight {
-  from {
-    opacity: 0;
-    transform: translateX(50px);
-  }
-  to {
-    opacity: 1;
-    transform: translateX(0);
-  }
-}
-
-
 /* 스크롤 섹션 공통 스타일 */
 .scroll-section {
   min-height: 100vh;
@@ -148,12 +116,16 @@
 }
 
 /* 마지막 페이지 특별 레이아웃 */
-.story-page:last-child {
-  justify-content: flex-start;
-  padding-top: 150px;
+.story-page.page-1 {
+  padding-top: 200px;
 }
 
-.story-page:last-child .story-content {
+.story-page.page-2 {
+  justify-content: flex-start;
+  padding-top: 320px;
+}
+
+.story-page.page-2 .story-content {
   margin-top: 0;
   margin-bottom: 40px;
 }
@@ -170,7 +142,7 @@
 .story-illustration {
   font-size: 6rem;
   text-align: center;
-  margin: 60px 0 20px 0;
+  margin: -80px 0 10px 0;
   animation: float 3s ease-in-out infinite;
 }
 
@@ -180,7 +152,7 @@
   font-weight: 800;
   color: #5C6F5C;
   text-align: center;
-  margin-bottom: 30px;
+  margin-bottom: 10px;
   line-height: 1.2;
   position: relative;
   z-index: 20;
@@ -204,14 +176,6 @@
 }
 
 /* 두 번째 페이지 텍스트 애니메이션 - 제목, 부제목, 본문 모두 나중에 나타남 */
-.story-title.page-2-hidden,
-.story-subtitle.page-2-hidden,
-.story-content.page-2-hidden {
-  opacity: 0 !important;
-}
-
-
-
 .story-content {
   font-size: 1.3rem;
   line-height: 1.8;
@@ -234,18 +198,19 @@
   position: relative;
   z-index: 20;
   opacity: 1;
-  margin-top: 100px;
 }
 
 .story-content strong {
   font-weight: 700;
   color: #5C6F5C;
   font-size: 1.4rem;
-  white-space: nowrap;
+  white-space: normal;
   display: block;
   width: 100%;
   overflow: visible;
   text-overflow: unset;
+  text-align: center;
+  align-self: stretch;
   margin-top: 30px;
   margin-bottom: 20px;
   position: relative;
@@ -554,176 +519,3 @@
   0% { transform: rotate(0deg); }
   100% { transform: rotate(360deg); }
 }
-
-/* 미니맵 그래프 스타일 */
-.relation-minimap {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  width: 1000px;
-  height: 750px;
-  opacity: 1;
-  z-index: 1;
-  pointer-events: none;
-  animation: minimap-fade-out 5s ease-in-out forwards;
-}
-
-@keyframes minimap-fade-out {
-  0% {
-    opacity: 1;
-  }
-  60% {
-    opacity: 1;
-  }
-  100% {
-    opacity: 0;
-  }
-}
-
-.minimap-bg {
-  position: absolute;
-  width: 100%;
-  height: 100%;
-  top: 0;
-  left: 0;
-}
-
-.minimap-edge-highlight {
-  animation: edge-pulse 2s ease-in-out infinite;
-}
-
-@keyframes edge-pulse {
-  0%, 100% {
-    opacity: 0.8;
-    stroke-width: 3;
-  }
-  50% {
-    opacity: 1;
-    stroke-width: 4;
-  }
-}
-
-.minimap-node {
-  position: absolute;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 4px;
-  animation: minimap-fade-out 5s ease-in-out forwards;
-}
-
-.node-icon {
-  width: 56px;
-  height: 56px;
-  background: rgba(255, 255, 255, 0.8);
-  border: 2px solid rgba(92, 111, 92, 0.4);
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 30px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-}
-
-.minimap-node-large .node-icon {
-  width: 64px;
-  height: 64px;
-  font-size: 34px;
-}
-
-.minimap-node-xlarge .node-icon {
-  width: 80px;
-  height: 80px;
-  font-size: 42px;
-  background: rgba(92, 111, 92, 0.2);
-  border-color: rgba(92, 111, 92, 0.6);
-}
-
-.minimap-node-center .node-icon {
-  width: 60px;
-  height: 60px;
-  font-size: 32px;
-  background: rgba(92, 111, 92, 0.2);
-  border-color: rgba(92, 111, 92, 0.6);
-}
-
-.minimap-node-highlight .node-icon {
-  animation: highlight-pulse 2s ease-in-out infinite;
-  border-color: rgba(92, 111, 92, 0.8);
-}
-
-@keyframes highlight-pulse {
-  0%, 100% {
-    box-shadow: 0 2px 8px rgba(92, 111, 92, 0.2);
-  }
-  50% {
-    box-shadow: 0 2px 12px rgba(92, 111, 92, 0.4);
-  }
-}
-
-.node-name {
-  font-size: 14px;
-  font-weight: 600;
-  color: rgba(92, 111, 92, 0.9);
-  text-shadow: 0 1px 2px rgba(255, 255, 255, 0.8);
-  white-space: nowrap;
-}
-
-.minimap-node-large .node-name {
-  font-size: 15px;
-}
-
-.minimap-node-xlarge .node-name {
-  font-size: 16px;
-  font-weight: 700;
-}
-
-.drag-indicator {
-  position: absolute;
-  left: 50%;
-  top: 55%;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  align-items: center;
-  animation: minimap-fade-out 5s ease-in-out forwards;
-  transform: translateX(-50%);
-}
-
-.drag-indicator-icons {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  animation: drag-bounce 2s ease-in-out infinite;
-}
-
-.drag-indicator-text {
-  font-size: 16px;
-  font-weight: 600;
-  color: rgba(92, 111, 92, 0.9);
-  text-shadow: 0 2px 4px rgba(255, 255, 255, 0.8);
-  text-align: center;
-  white-space: nowrap;
-}
-
-
-
-.drag-hand {
-  font-size: 24px;
-}
-
-.drag-arrow {
-  font-size: 20px;
-  color: rgba(92, 111, 92, 0.7);
-}
-
-@keyframes drag-bounce {
-  0%, 100% {
-    transform: translateX(0);
-  }
-  50% {
-    transform: translateX(10px);
-  }
-}
-

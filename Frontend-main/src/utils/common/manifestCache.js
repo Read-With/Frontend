@@ -1,8 +1,11 @@
-const MANIFEST_CACHE_PREFIX = 'manifest_cache_';
-const MANIFEST_CACHE_VERSION = 'v1';
+const manifestCachePrefix = 'manifest_cache_';
+const MANIFEST_TTL_MS = 1000 * 60 * 15; // 15분
+
+const memoryCache = new Map();
+const prefetchPromises = new Map();
 
 export const getManifestCacheKey = (bookId) => {
-  return `${MANIFEST_CACHE_PREFIX}${MANIFEST_CACHE_VERSION}_${bookId}`;
+  return `${manifestCachePrefix}${bookId}`;
 };
 
 const toNumberOrNull = (value) => {
@@ -81,35 +84,135 @@ const normalizeManifestData = (manifestData) => {
   };
 };
 
-export const setManifestData = (bookId, manifestData) => {
+const isExpired = (timestamp) => {
+  if (!timestamp || MANIFEST_TTL_MS <= 0) return false;
+  return Date.now() - timestamp > MANIFEST_TTL_MS;
+};
+
+export const setManifestData = (bookId, manifestData, { persist = true } = {}) => {
   try {
-    const cacheKey = getManifestCacheKey(bookId);
+    if (!bookId || !manifestData) {
+      return null;
+    }
+
     const normalizedData = normalizeManifestData(manifestData);
-    const cacheData = {
+    const cacheKey = getManifestCacheKey(bookId);
+    const payload = {
       data: normalizedData,
-      timestamp: Date.now()
+      timestamp: Date.now(),
     };
-    localStorage.setItem(cacheKey, JSON.stringify(cacheData));
-    return true;
+
+    memoryCache.set(String(bookId), payload);
+
+    if (persist && typeof localStorage !== 'undefined') {
+      localStorage.setItem(cacheKey, JSON.stringify(payload));
+    }
+
+    return normalizedData;
   } catch (error) {
     console.error('Manifest 캐시 저장 실패:', error);
-    return false;
+    return null;
   }
 };
 
-export const getManifestFromCache = (bookId) => {
+const readFromLocalStorage = (bookId) => {
+  if (typeof localStorage === 'undefined') {
+    return null;
+  }
+
   try {
     const cacheKey = getManifestCacheKey(bookId);
     const cached = localStorage.getItem(cacheKey);
-    
-    if (!cached) return null;
-    
-    const cacheData = JSON.parse(cached);
-    return cacheData.data;
+    if (!cached) {
+      return null;
+    }
+
+    const parsed = JSON.parse(cached);
+    if (!parsed || typeof parsed !== 'object') {
+      localStorage.removeItem(cacheKey);
+      return null;
+    }
+
+    if (isExpired(parsed.timestamp)) {
+      localStorage.removeItem(cacheKey);
+      return null;
+    }
+
+    memoryCache.set(String(bookId), parsed);
+    return parsed;
   } catch (error) {
     console.error('Manifest 캐시 로드 실패:', error);
     return null;
   }
+};
+
+export const getManifestFromCache = (bookId) => {
+  if (!bookId) return null;
+
+  const key = String(bookId);
+  const cachedInMemory = memoryCache.get(key);
+  if (cachedInMemory && !isExpired(cachedInMemory.timestamp)) {
+    return cachedInMemory.data;
+  }
+
+  const fromStorage = readFromLocalStorage(bookId);
+  return fromStorage?.data ?? null;
+};
+
+export const hasManifestData = (bookId) => {
+  const key = String(bookId);
+  const cachedInMemory = memoryCache.get(key);
+  if (cachedInMemory && !isExpired(cachedInMemory.timestamp)) {
+    return true;
+  }
+  const fromStorage = readFromLocalStorage(bookId);
+  return !!fromStorage?.data;
+};
+
+export const invalidateManifest = (bookId) => {
+  if (!bookId) return;
+  const key = String(bookId);
+  memoryCache.delete(key);
+  if (typeof localStorage !== 'undefined') {
+    const cacheKey = getManifestCacheKey(bookId);
+    localStorage.removeItem(cacheKey);
+  }
+};
+
+export const prefetchManifest = async (bookId, fetcher) => {
+  if (!bookId || typeof fetcher !== 'function') {
+    return null;
+  }
+
+  if (hasManifestData(bookId)) {
+    return getManifestFromCache(bookId);
+  }
+
+  const key = String(bookId);
+  if (prefetchPromises.has(key)) {
+    return prefetchPromises.get(key);
+  }
+
+  const promise = (async () => {
+    try {
+      const response = await fetcher(bookId);
+      const manifest = response?.result ?? response?.data ?? null;
+
+      if (response?.isSuccess && manifest) {
+        return setManifestData(bookId, manifest);
+      }
+
+      return null;
+    } catch (error) {
+      console.warn('Manifest 프리패치 실패:', error);
+      return null;
+    } finally {
+      prefetchPromises.delete(key);
+    }
+  })();
+
+  prefetchPromises.set(key, promise);
+  return promise;
 };
 
 const normalizeChapterIdxValue = (value) => {

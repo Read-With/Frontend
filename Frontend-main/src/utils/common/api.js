@@ -1,5 +1,5 @@
 // API 기본 설정 및 도서 관련 API 함수들 (배포 서버 고정 사용)
-import { setManifestData, isValidEvent } from './manifestCache';
+import { setManifestData, isValidEvent, getManifestFromCache } from './manifestCache';
 
 const getApiBaseUrl = () => {
   // 로컬 개발 환경: 프록시 사용 (배포 서버로 전달)
@@ -423,20 +423,34 @@ export const deleteBookProgress = async (bookId) => {
 };
 
 // 책 구조 패키지 조회 (manifest)
-export const getBookManifest = async (bookId) => {
+export const getBookManifest = async (bookId, { forceRefresh = false } = {}) => {
   try {
+    if (!forceRefresh) {
+      const cached = getManifestFromCache(bookId);
+      if (cached) {
+        return {
+          isSuccess: true,
+          code: 'CACHE_HIT',
+          message: 'Manifest loaded from cache',
+          result: cached,
+          fromCache: true
+        };
+      }
+    }
+
     const response = await apiRequest(`/api/books/${bookId}/manifest`);
-    
-    // 응답이 성공하고 result가 있으면 maxChapter 저장
+
     if (response?.isSuccess && response?.result && bookId) {
       setManifestData(bookId, response.result);
     }
-    
+
     return response;
   } catch (error) {
-    // 404 에러는 조용히 처리 (manifest가 아직 생성되지 않았을 수 있음)
-    // IndexedDB로 관리되는 EPUB는 manifest가 없을 수 있음
-    if (error.status === 404 || error.message?.includes('404') || error.message?.includes('찾을 수 없습니다')) {
+    if (
+      error.status === 404 ||
+      error.message?.includes('404') ||
+      error.message?.includes('찾을 수 없습니다')
+    ) {
       return {
         isSuccess: false,
         code: 'NOT_FOUND',
@@ -444,7 +458,6 @@ export const getBookManifest = async (bookId) => {
         result: null
       };
     }
-    // 404가 아닌 에러만 콘솔에 출력
     console.error('Manifest 조회 실패:', error);
     throw error;
   }

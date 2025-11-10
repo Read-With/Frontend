@@ -72,7 +72,7 @@ const AppContent = () => {
   );
 };
 
-// :filename을 실제 파일명으로 치환해주는 래퍼 컴포넌트
+// :filename을 실제 파일명으로 치환해주는 래퍼 컴포넌트 - 이제 안쓸텐데
 function RelationRedirect() {
   const { filename } = useParams();
   return <Navigate to={`/user/graph/${filename}`} replace />;

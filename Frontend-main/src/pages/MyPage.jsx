@@ -11,7 +11,7 @@ import './MyPage.css';
 
 export default function MyPage() {
   const navigate = useNavigate();
-  const { books, loading, error, retryFetch, addBook, toggleFavorite, changeBookStatus, removeBook } = useBooks();
+  const { books, loading, error, retryFetch, addBook, toggleFavorite, removeBook } = useBooks();
   const { user } = useAuth();
   const [showUpload, setShowUpload] = useState(false);
   const [activeTab, setActiveTab] = useState('all');

@@ -1,6 +1,6 @@
 import { createCharacterMaps } from './characterUtils';
 import { getMaxChapter, getChapterData } from './common/manifestCache';
-import { getCachedChapterEvents } from './common/chapterEventCache';
+import { getCachedChapterEvents, reconstructChapterGraphState } from './common/chapterEventCache';
 
 const API_PREFIX = 'api:';
 const EVENTS_CACHE_LIMIT = 100;
@@ -133,6 +133,33 @@ export function getAllFolderKeys() {
   return [];
 }
 
+const convertElementsToRelations = (elements) => {
+  if (!Array.isArray(elements)) {
+    return [];
+  }
+
+  return elements
+    .filter(
+      (element) =>
+        element &&
+        element.data &&
+        element.data.source &&
+        element.data.target
+    )
+    .map((element) => ({
+      id1: element.data.source,
+      id2: element.data.target,
+      relation: Array.isArray(element.data.relation)
+        ? [...element.data.relation]
+        : [],
+      label: element.data.label || '',
+      positivity:
+        typeof element.data.positivity === 'number'
+          ? element.data.positivity
+          : null,
+    }));
+};
+
 export function getEventsForChapter(chapter, folderKey) {
   const bookId = extractBookId(folderKey);
   if (!bookId || !chapter || chapter < 1) {
@@ -140,19 +167,55 @@ export function getEventsForChapter(chapter, folderKey) {
   }
 
   const snapshot = getChapterEventsSnapshot(bookId, chapter);
-  if (!snapshot?.events) {
+  if (!snapshot) {
     return [];
   }
 
-  return snapshot.events.map((event) => ({
-    ...event,
-    chapter,
-    chapterIdx: chapter,
-    eventNum: event.eventIdx ?? 0,
-    event_id: event.event?.event_id ?? event.eventIdx ?? 0,
-    relations: Array.isArray(event.relations) ? event.relations : [],
-    characters: Array.isArray(event.characters) ? event.characters : [],
-  }));
+  const hasDiffCache =
+    snapshot.baseSnapshot && Array.isArray(snapshot.diffs);
+
+  const eventMetas = Array.isArray(snapshot.events)
+    ? snapshot.events
+    : [];
+
+  if (!hasDiffCache) {
+    return eventMetas.map((event) => ({
+      ...event,
+      chapter,
+      chapterIdx: chapter,
+      eventNum: event.eventIdx ?? event.idx ?? 0,
+      event_id: event.event?.event_id ?? event.eventIdx ?? event.idx ?? 0,
+      relations: Array.isArray(event.relations) ? event.relations : [],
+      characters: Array.isArray(event.characters) ? event.characters : [],
+    }));
+  }
+
+  return eventMetas.map((eventMeta) => {
+    const targetEventIdx = Number(eventMeta?.eventIdx) || 0;
+    const reconstructed = reconstructChapterGraphState(
+      snapshot,
+      targetEventIdx
+    );
+
+    const characters = reconstructed?.characters || [];
+    const relations = convertElementsToRelations(
+      reconstructed?.elements || []
+    );
+
+    return {
+      ...eventMeta,
+      chapter,
+      chapterIdx: chapter,
+      eventNum: targetEventIdx,
+      event_id:
+        reconstructed?.eventMeta?.event_id ??
+        eventMeta.eventId ??
+        targetEventIdx,
+      event: reconstructed?.eventMeta ?? eventMeta?.event ?? null,
+      relations,
+      characters,
+    };
+  });
 }
 
 export function getLastEventIndexForChapter(folderKey, chapter) {
@@ -206,11 +269,14 @@ export function getEventDataByIndex(folderKey, chapter, eventIndex) {
   }
 
   const snapshot = getChapterEventsSnapshot(bookId, chapter);
-  if (!snapshot?.events?.length) {
+  const events = getEventsForChapter(chapter, folderKey);
+  if (!events.length) {
     return null;
   }
 
-  const event = snapshot.events.find((entry) => Number(entry.eventIdx) === Number(eventIndex));
+  const event = events.find(
+    (entry) => Number(entry.eventIdx) === Number(eventIndex)
+  );
   if (!event) {
     return null;
   }

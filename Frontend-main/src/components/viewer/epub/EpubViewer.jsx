@@ -26,7 +26,6 @@ import {
 import { getBookProgress } from '../../../utils/common/api';
 import { registerCache } from '../../../utils/common/cacheManager';
 import { getEventsForChapter as getGraphEventsForChapter, getFolderKeyFromFilename } from '../../../utils/graphData';
-import { getManifestFromCache, getTotalLength } from '../../../utils/common/manifestCache';
 
 // EPUB 인스턴스 및 Blob 캐시
 let epubCache = new Map();
@@ -968,53 +967,6 @@ const EpubViewer = forwardRef(
     useEffect(() => {
       storageUtils.set(storageKeys.chapter, '1');
     }, [storageKeys.chapter]);
-
-    useEffect(() => {
-      if (!book || typeof book.id !== 'number') return;
-
-      const manifest = getManifestFromCache(book.id);
-      if (!manifest) return;
-
-      const totalLength = getTotalLength(book.id);
-      if (totalLength && Number.isFinite(totalLength)) {
-        storageUtils.set(`totalLength_${book.id}`, totalLength);
-      }
-
-      const chapterLengths = {};
-
-      const chapterLengthMetadata = manifest.progressMetadata?.chapterLengths;
-      if (Array.isArray(chapterLengthMetadata) && chapterLengthMetadata.length > 0) {
-        chapterLengthMetadata.forEach((item) => {
-          if (!item) return;
-          const chapterIdx = Number(item.chapterIdx ?? item.idx);
-          const length = Number(item.length);
-          if (Number.isFinite(chapterIdx) && chapterIdx > 0 && Number.isFinite(length)) {
-            chapterLengths[chapterIdx] = length;
-          }
-        });
-      } else if (Array.isArray(manifest.chapters)) {
-        manifest.chapters.forEach((chapter) => {
-          if (!chapter) return;
-          const chapterIdx = Number(chapter.idx ?? chapter.chapterIdx);
-          if (!Number.isFinite(chapterIdx) || chapterIdx <= 0) return;
-          const endPos = Number(
-            chapter.endPos ??
-              chapter.end ??
-              (chapter.events && chapter.events.length
-                ? chapter.events[chapter.events.length - 1]?.endPos ??
-                  chapter.events[chapter.events.length - 1]?.end
-                : null)
-          );
-          if (Number.isFinite(endPos) && endPos > 0) {
-            chapterLengths[chapterIdx] = endPos;
-          }
-        });
-      }
-
-      if (Object.keys(chapterLengths).length > 0) {
-        storageUtils.setJson(`chapterLengths_${book.id}`, chapterLengths);
-      }
-    }, [book?.id]);
 
     const LoadingComponent = ({ message, isError = false }) => (
       <div className="flex flex-col items-center justify-center space-y-6 absolute inset-0 z-50 pointer-events-none animate-fade-in">

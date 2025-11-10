@@ -34,12 +34,14 @@ const CytoscapeGraphUnified = ({
   strictBackgroundClear = false,
   showRippleEffect = true, // ripple 효과 표시 여부 제어
   isDropdownSelection = false, // 드롭다운 선택 여부
+  isDataRefreshing = false,
 }) => {
   const containerRef = useRef(null);
   const [isGraphVisible, setIsGraphVisible] = useState(false);
-  const [previousElements, setPreviousElements] = useState([]);
+  const previousElementsRef = useRef([]);
   const prevChapterRef = useRef(window.currentChapter);
   const [isInitialLoad, setIsInitialLoad] = useState(true);
+  const addedNodeIdsRef = useRef(new Set());
   
   // 마우스 이벤트 상태는 createMouseEventHandlers에서 관리
 
@@ -61,9 +63,16 @@ const CytoscapeGraphUnified = ({
 
   // 챕터 변경 감지
   useEffect(() => {
+    if (!elements || elements.length === 0) {
+      if (!isDataRefreshing) {
+        previousElementsRef.current = [];
+        addedNodeIdsRef.current = new Set();
+      }
+      return;
+    }
+
     const cy = externalCyRef?.current;
-    
-    if (!cy || !elements || elements.length === 0) {
+    if (!cy) {
       return;
     }
 
@@ -72,7 +81,8 @@ const CytoscapeGraphUnified = ({
         const currentChapter = window.currentChapter;
         if (currentChapter !== prevChapterRef.current) {
           setIsInitialLoad(true);
-          setPreviousElements([]);
+          previousElementsRef.current = [];
+          addedNodeIdsRef.current = new Set();
           prevChapterRef.current = currentChapter;
         }
       }
@@ -80,14 +90,21 @@ const CytoscapeGraphUnified = ({
 
     checkChapterChange();
 
-    if (previousElements.length === 0) {
-      setPreviousElements(elements);
+    if (previousElementsRef.current.length === 0) {
+      previousElementsRef.current = elements;
+      addedNodeIdsRef.current = new Set();
       return;
     }
 
-    const diff = calcGraphDiff(previousElements, elements);
-    setPreviousElements(elements);
-  }, [elements, externalCyRef, previousElements]);
+    const diff = calcGraphDiff(previousElementsRef.current, elements);
+    const addedNodeIds = diff.added
+      ?.filter(element => element?.data && !element.data.source && !element.data.target)
+      ?.map(element => element.data.id)
+      ?.filter(Boolean) || [];
+
+    addedNodeIdsRef.current = new Set(addedNodeIds);
+    previousElementsRef.current = elements;
+  }, [elements, externalCyRef, isDataRefreshing]);
 
   // Cytoscape 인스턴스 생성
   useEffect(() => {
@@ -265,17 +282,42 @@ const CytoscapeGraphUnified = ({
     if (!cy) {
       return;
     }
-    
-    if (previousElements.length === 0) {
-      setPreviousElements(elements);
-    }
-    
+
     if (!elements || elements.length === 0) {
-      cy.elements().remove();
-      setIsGraphVisible(false);
+      if (!isDataRefreshing) {
+        cy.elements().remove();
+        setIsGraphVisible(false);
+      }
       return;
     }
-    
+
+    if (previousElementsRef.current.length === 0) {
+      previousElementsRef.current = elements;
+    }
+
+    const triggerRippleForAddedNodes = () => {
+      if (isInitialLoad || isResetFromSearch) {
+        return;
+      }
+
+      const recentlyAddedIds = addedNodeIdsRef.current;
+      if (!recentlyAddedIds || recentlyAddedIds.size === 0) {
+        return;
+      }
+
+      recentlyAddedIds.forEach(nodeId => {
+        const cyNode = cy.getElementById(nodeId);
+        if (cyNode && cyNode.length > 0) {
+          const position = cyNode.renderedPosition();
+          if (position && typeof position.x === 'number' && typeof position.y === 'number') {
+            createRippleEffect(containerRef.current, position.x, position.y, null);
+          }
+        }
+      });
+
+      addedNodeIdsRef.current = new Set();
+    };
+
     cy.batch(() => {
       const prevNodeIds = new Set(cy.nodes().map(n => n.id()));
       const prevEdgeIds = new Set(cy.edges().map(e => e.id()));
@@ -385,18 +427,7 @@ const CytoscapeGraphUnified = ({
               ensureElementsInBounds(cy, containerRef.current);
               detectAndResolveOverlap(cy);
               
-              if (nodesToAdd.length > 0 && !isInitialLoad && !isResetFromSearch) {
-                nodesToAdd.forEach(node => {
-                  const cyNode = cy.getElementById(node.data.id);
-                  if (cyNode.length > 0) {
-                    const position = cyNode.renderedPosition();
-                    const domX = position.x;
-                    const domY = position.y;
-                    
-                    createRippleEffect(containerRef.current, domX, domY, null);
-                  }
-                });
-              }
+              triggerRippleForAddedNodes();
               
               if (onLayoutComplete) onLayoutComplete();
             }, 200);
@@ -408,22 +439,12 @@ const CytoscapeGraphUnified = ({
             ensureElementsInBounds(cy, containerRef.current);
             detectAndResolveOverlap(cy);
             
-            if (nodesToAdd.length > 0 && !isInitialLoad && !isResetFromSearch) {
-              nodesToAdd.forEach(node => {
-                const cyNode = cy.getElementById(node.data.id);
-                if (cyNode.length > 0) {
-                  const position = cyNode.renderedPosition();
-                  const domX = position.x;
-                  const domY = position.y;
-                  createRippleEffect(containerRef.current, domX, domY, null);
-                }
-              });
-            }
+            triggerRippleForAddedNodes();
             
             if (onLayoutComplete) onLayoutComplete();
           }, 150);
         }
-        } else {
+      } else {
         if (stylesheet) {
           cy.style(stylesheet);
           try {
@@ -433,6 +454,7 @@ const CytoscapeGraphUnified = ({
             });
           } catch {}
         }
+        triggerRippleForAddedNodes();
       }
       
       if (fitNodeIds && fitNodeIds.length > 0) {
@@ -470,7 +492,7 @@ const CytoscapeGraphUnified = ({
     }
     
     setIsGraphVisible(true);
-  }, [elements, externalCyRef, previousElements, isInitialLoad, stylesheet, layout, fitNodeIds, isSearchActive, filteredElements, onLayoutComplete, isResetFromSearch]);
+  }, [elements, externalCyRef, isInitialLoad, stylesheet, layout, fitNodeIds, isSearchActive, filteredElements, onLayoutComplete, isResetFromSearch, isDataRefreshing]);
 
   // 검색 상태 변경 시에만 초기 fade 효과 적용 (별도 useEffect)
   const filteredElementIdsStr = useMemo(() => {

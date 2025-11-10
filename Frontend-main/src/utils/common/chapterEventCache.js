@@ -1,19 +1,185 @@
-/**
- * 챕터별 이벤트 탐색 및 캐싱 유틸리티
- * 
- * 각 챕터마다 eventIdx 1부터 순차적으로 API를 호출하여
- * 마지막 이벤트를 찾고, 결과를 로컬 스토리지에 캐싱합니다.
- */
-
-import { getFineGraph } from './api';
-import { getChapterData as getManifestChapterData } from './manifestCache';
-
-const CHAPTER_EVENT_CACHE_PREFIX = 'chapter_events_';
-const CACHE_VERSION = 'v1';
+import { getFineGraph, getBookManifest } from './api';
+import { getChapterData as getManifestChapterData, getManifestFromCache } from './manifestCache';
+import { createCharacterMaps } from '../characterUtils';
+import { convertRelationsToElements, calcGraphDiff } from '../graphDataUtils';
 
 const READER_PROGRESS_CACHE_PREFIX = 'reader_progress_';
-const READER_PROGRESS_VERSION = 'v1';
 const READER_PROGRESS_MAX_AGE = 3 * 24 * 60 * 60 * 1000; // 3일
+
+const GRAPH_BOOK_CACHE_PREFIX = 'graph_cache_';
+const graphBookMemoryCache = new Map();
+const graphBuildPromises = new Map();
+
+const getGraphBookCacheKey = (bookId) => {
+  if (bookId === null || bookId === undefined) return null;
+  const numeric = Number(bookId);
+  if (!Number.isFinite(numeric) || numeric <= 0) return null;
+  return `${GRAPH_BOOK_CACHE_PREFIX}${numeric}`;
+};
+
+const readGraphBookCache = (bookId) => {
+  const key = getGraphBookCacheKey(bookId);
+  if (!key) return null;
+
+  if (graphBookMemoryCache.has(key)) {
+    return graphBookMemoryCache.get(key);
+  }
+
+  if (typeof localStorage === 'undefined') {
+    return null;
+  }
+
+  try {
+    const stored = localStorage.getItem(key);
+    if (!stored) {
+      return null;
+    }
+    const parsed = JSON.parse(stored);
+    graphBookMemoryCache.set(key, parsed);
+    return parsed;
+  } catch (error) {
+    console.warn('그래프 책 캐시 로드 실패:', error);
+    return null;
+  }
+};
+
+const writeGraphBookCache = (bookId, payload) => {
+  const key = getGraphBookCacheKey(bookId);
+  if (!key) return null;
+
+  const normalized = {
+    ...payload,
+    bookId: Number(bookId),
+    builtAt: payload?.builtAt ?? Date.now(),
+  };
+
+  graphBookMemoryCache.set(key, normalized);
+
+  if (typeof localStorage !== 'undefined') {
+    try {
+      localStorage.setItem(key, JSON.stringify(normalized));
+    } catch (error) {
+      console.warn('그래프 책 캐시 저장 실패:', error);
+    }
+  }
+
+  return normalized;
+};
+
+export const getGraphBookCache = (bookId) => readGraphBookCache(bookId);
+
+export const hasGraphBookCache = (bookId) => {
+  const key = getGraphBookCacheKey(bookId);
+  if (!key) return false;
+  if (graphBookMemoryCache.has(key)) return true;
+  if (typeof localStorage === 'undefined') return false;
+  return localStorage.getItem(key) !== null;
+};
+
+export const ensureGraphBookCache = async (
+  bookId,
+  { forceRefresh = false, signal } = {}
+) => {
+  const numericId = Number(bookId);
+  if (!Number.isFinite(numericId) || numericId <= 0) {
+    return null;
+  }
+
+  if (!forceRefresh) {
+    const existing = getGraphBookCache(numericId);
+    if (existing) {
+      return existing;
+    }
+  }
+
+  if (graphBuildPromises.has(numericId)) {
+    return graphBuildPromises.get(numericId);
+  }
+
+  const buildPromise = (async () => {
+    await getBookManifest(numericId, { forceRefresh });
+    const manifest = getManifestFromCache(numericId);
+
+    const chapters = Array.isArray(manifest?.chapters)
+      ? manifest.chapters
+      : [];
+
+    const normalizedChapterIndices = chapters
+      .map((chapter, index) => {
+        const idxCandidate =
+          chapter?.chapterIdx ??
+          chapter?.idx ??
+          chapter?.chapter ??
+          chapter?.number ??
+          index + 1;
+        const numericIdx = Number(idxCandidate);
+        return Number.isFinite(numericIdx) && numericIdx > 0
+          ? numericIdx
+          : null;
+      })
+      .filter((idx, idxIndex, self) => idx && self.indexOf(idx) === idxIndex)
+      .sort((a, b) => a - b);
+
+    const chapterSummaries = [];
+
+    for (const chapterIdx of normalizedChapterIndices) {
+      if (signal?.aborted) {
+        throw new DOMException('Aborted', 'AbortError');
+      }
+
+      let chapterCache = forceRefresh
+        ? null
+        : getCachedChapterEvents(numericId, chapterIdx);
+
+      if (!chapterCache) {
+        chapterCache = await discoverChapterEvents(
+          numericId,
+          chapterIdx,
+          true
+        );
+      }
+
+      if (chapterCache) {
+        chapterSummaries.push({
+          chapterIdx,
+          maxEventIdx: Number(chapterCache.maxEventIdx) || 0,
+          totalEvents: Array.isArray(chapterCache.events)
+            ? chapterCache.events.length
+            : 0,
+          source: chapterCache.source ?? 'cache',
+        });
+      }
+    }
+
+    const summaryPayload = writeGraphBookCache(numericId, {
+      bookId: numericId,
+      chapters: chapterSummaries,
+      maxChapter: chapterSummaries.length
+        ? Math.max(...chapterSummaries.map((item) => item.chapterIdx))
+        : 0,
+      builtAt: Date.now(),
+    });
+
+    return summaryPayload;
+  })();
+
+  graphBuildPromises.set(numericId, buildPromise);
+
+  try {
+    const result = await buildPromise;
+    return result;
+  } finally {
+    graphBuildPromises.delete(numericId);
+  }
+};
+
+export const getGraphEventState = (bookId, chapterIdx, eventIdx) => {
+  const chapterPayload = getCachedChapterEvents(bookId, chapterIdx);
+  if (!chapterPayload) {
+    return null;
+  }
+  return reconstructChapterGraphState(chapterPayload, eventIdx);
+};
 
 const sanitizeBookKey = (bookKey) => {
   if (bookKey === null || bookKey === undefined) return null;
@@ -24,7 +190,410 @@ const sanitizeBookKey = (bookKey) => {
 const getReaderProgressCacheKey = (bookKey) => {
   const sanitized = sanitizeBookKey(bookKey);
   if (!sanitized) return null;
-  return `${READER_PROGRESS_CACHE_PREFIX}${READER_PROGRESS_VERSION}_${sanitized}`;
+  return `${READER_PROGRESS_CACHE_PREFIX}${sanitized}`;
+};
+
+const deepClone = (value) => {
+  try {
+    if (typeof structuredClone === 'function') {
+      return structuredClone(value);
+    }
+  } catch (error) {
+    console.warn('structuredClone 실패, JSON 직렬화로 대체합니다.', error);
+  }
+
+  try {
+    return JSON.parse(JSON.stringify(value));
+  } catch (error) {
+    console.error('deepClone 실패:', error);
+    return value;
+  }
+};
+
+const getElementId = (element) => {
+  if (!element) return null;
+  return (
+    element.id ??
+    element.data?.id ??
+    null
+  );
+};
+
+const cloneElements = (elements) => {
+  if (!Array.isArray(elements)) return [];
+  return elements.map((element) => deepClone(element));
+};
+
+const cloneCharacters = (characters) => {
+  if (!Array.isArray(characters)) return [];
+  return characters.map((character) => deepClone(character));
+};
+
+const extractCharacterId = (character) => {
+  if (!character || typeof character !== 'object') return null;
+  const candidate =
+    character.id ??
+    character.characterId ??
+    character.character_id ??
+    character.char_id ??
+    character.pk ??
+    character.node_id ??
+    null;
+  if (candidate === null || candidate === undefined) return null;
+  const normalized = String(candidate).trim();
+  return normalized.length > 0 ? normalized : null;
+};
+
+const safeCompare = (a, b) => {
+  if (a === b) return true;
+  if (a == null || b == null) return false;
+  try {
+    return JSON.stringify(a) === JSON.stringify(b);
+  } catch (error) {
+    console.warn('safeCompare 실패:', error);
+    return false;
+  }
+};
+
+const computeCharacterDiff = (prevCharacters, nextCharacters) => {
+  const prevMap = new Map();
+  const nextMap = new Map();
+
+  (Array.isArray(prevCharacters) ? prevCharacters : []).forEach((character) => {
+    const id = extractCharacterId(character);
+    if (!id) return;
+    prevMap.set(id, character);
+  });
+
+  (Array.isArray(nextCharacters) ? nextCharacters : []).forEach((character) => {
+    const id = extractCharacterId(character);
+    if (!id) return;
+    nextMap.set(id, character);
+  });
+
+  const added = [];
+  const updated = [];
+  const removedIds = [];
+
+  nextMap.forEach((character, id) => {
+    const prev = prevMap.get(id);
+    if (!prev) {
+      added.push(deepClone(character));
+    } else if (!safeCompare(prev, character)) {
+      updated.push(deepClone(character));
+    }
+  });
+
+  prevMap.forEach((character, id) => {
+    if (!nextMap.has(id)) {
+      removedIds.push(id);
+    }
+  });
+
+  return {
+    added,
+    updated,
+    removedIds
+  };
+};
+
+const applyCharacterDiff = (prevCharacters, diff) => {
+  const map = new Map();
+
+  (Array.isArray(prevCharacters) ? prevCharacters : []).forEach((character) => {
+    const id = extractCharacterId(character);
+    if (!id) return;
+    map.set(id, deepClone(character));
+  });
+
+  (diff?.removedIds || []).forEach((id) => {
+    if (!id) return;
+    map.delete(String(id));
+  });
+
+  (diff?.updated || []).forEach((character) => {
+    const id = extractCharacterId(character);
+    if (!id) return;
+    map.set(id, deepClone(character));
+  });
+
+  (diff?.added || []).forEach((character) => {
+    const id = extractCharacterId(character);
+    if (!id) return;
+    map.set(id, deepClone(character));
+  });
+
+  return Array.from(map.values());
+};
+
+const applyElementDiff = (prevElements, diff) => {
+  const map = new Map();
+
+  (Array.isArray(prevElements) ? prevElements : []).forEach((element) => {
+    const id = getElementId(element);
+    if (!id) return;
+    map.set(id, deepClone(element));
+  });
+
+  (diff?.removedIds || []).forEach((id) => {
+    if (!id) return;
+    map.delete(String(id));
+  });
+
+  (diff?.updated || []).forEach((element) => {
+    const id = getElementId(element);
+    if (!id) return;
+    map.set(id, deepClone(element));
+  });
+
+  (diff?.added || []).forEach((element) => {
+    const id = getElementId(element);
+    if (!id) return;
+    map.set(id, deepClone(element));
+  });
+
+  const result = Array.from(map.values());
+  result.sort((a, b) => {
+    const aIsEdge = Boolean(a?.data?.source);
+    const bIsEdge = Boolean(b?.data?.source);
+    if (aIsEdge !== bIsEdge) {
+      return aIsEdge ? 1 : -1;
+    }
+    const idA = getElementId(a) || '';
+    const idB = getElementId(b) || '';
+    return idA.localeCompare(idB);
+  });
+  return result;
+};
+
+const buildNodeWeights = (characters) => {
+  const weights = {};
+  (Array.isArray(characters) ? characters : []).forEach((character) => {
+    const id = extractCharacterId(character);
+    if (!id) return;
+    const weight = typeof character?.weight === 'number' ? character.weight : null;
+    const count = typeof character?.count === 'number' ? character.count : null;
+    if (weight !== null || count !== null) {
+      weights[id] = {
+        weight: weight ?? 3,
+        count: count ?? 0
+      };
+    }
+  });
+  return weights;
+};
+
+const sortEventsByIdx = (events) => {
+  if (!Array.isArray(events)) return [];
+  return [...events].sort((a, b) => {
+    const idxA = Number(a?.eventIdx) || 0;
+    const idxB = Number(b?.eventIdx) || 0;
+    return idxA - idxB;
+  });
+};
+
+const buildChapterCachePayload = (bookId, chapterIdx, events, source = 'runtime', folderKey = 'api') => {
+  const timestamp = Date.now();
+  const sortedEvents = sortEventsByIdx(events);
+
+  if (!sortedEvents.length) {
+    return {
+      bookId,
+      chapterIdx,
+      maxEventIdx: 0,
+    events: [],
+      baseSnapshot: null,
+      diffs: [],
+      eventSummaries: [],
+      timestamp,
+      source
+    };
+  }
+
+  const aggregatedRelations = [];
+  const aggregatedCharactersMap = new Map();
+  const diffs = [];
+  const eventSummaries = [];
+  let baseSnapshot = null;
+  let prevElements = [];
+  let prevCharacters = [];
+
+  sortedEvents.forEach((event, index) => {
+    const relations = Array.isArray(event?.relations) ? event.relations : [];
+    relations.forEach((relation) => aggregatedRelations.push(deepClone(relation)));
+
+    const rawCharacters = Array.isArray(event?.characters) ? event.characters : [];
+    rawCharacters.forEach((character) => {
+      const id = extractCharacterId(character);
+      if (!id) return;
+      aggregatedCharactersMap.set(id, deepClone(character));
+    });
+
+    const aggregatedCharacters = Array.from(aggregatedCharactersMap.values());
+    aggregatedCharacters.sort((a, b) => {
+      const idA = extractCharacterId(a) || '';
+      const idB = extractCharacterId(b) || '';
+      return idA.localeCompare(idB);
+    });
+
+    const {
+      idToName,
+      idToDesc,
+      idToDescKo,
+      idToMain,
+      idToNames,
+      idToProfileImage
+    } = createCharacterMaps(aggregatedCharacters);
+
+    const nodeWeights = buildNodeWeights(aggregatedCharacters);
+
+    let convertedElements = [];
+    try {
+      convertedElements = convertRelationsToElements(
+        aggregatedRelations,
+        idToName,
+        idToDesc,
+        idToDescKo,
+        idToMain,
+        idToNames,
+        folderKey,
+        Object.keys(nodeWeights).length ? nodeWeights : null,
+        null,
+        event?.event ?? null,
+        idToProfileImage
+      );
+    } catch (error) {
+      console.error('convertRelationsToElements 실패:', error);
+      convertedElements = [];
+    }
+
+    const currentElements = cloneElements(convertedElements);
+    const currentCharacters = cloneCharacters(aggregatedCharacters);
+
+    if (index === 0) {
+      baseSnapshot = {
+        eventIdx: Number(event.eventIdx) || 1,
+        elements: currentElements,
+        characters: currentCharacters,
+        eventMeta: event?.event ? deepClone(event.event) : null
+      };
+    } else {
+      const elementDiffRaw = calcGraphDiff(prevElements, convertedElements);
+      const elementDiff = {
+        added: cloneElements(elementDiffRaw?.added || []),
+        updated: cloneElements(elementDiffRaw?.updated || []),
+        removedIds: (elementDiffRaw?.removed || [])
+          .map((element) => getElementId(element))
+          .filter(Boolean)
+      };
+      const characterDiff = computeCharacterDiff(prevCharacters, aggregatedCharacters);
+
+      diffs.push({
+        eventIdx: Number(event.eventIdx) || (baseSnapshot?.eventIdx ?? 1),
+        eventMeta: event?.event ? deepClone(event.event) : null,
+        elementDiff,
+        characterDiff
+      });
+    }
+
+    prevElements = currentElements;
+    prevCharacters = currentCharacters;
+
+    eventSummaries.push({
+      bookId,
+      chapterIdx,
+      eventIdx: Number(event.eventIdx) || 0,
+      eventId: event?.eventId ?? event?.event?.event_id ?? null,
+      start: event?.startPos ?? event?.start ?? null,
+      end: event?.endPos ?? event?.end ?? null,
+      title:
+        event?.event?.name ??
+        event?.event?.title ??
+        event?.event?.eventName ??
+        null,
+      text: event?.event?.text ?? null,
+      hasCharacters: rawCharacters.length > 0,
+      hasRelations: relations.length > 0
+    });
+  });
+
+  const maxEventIdx = sortedEvents.reduce((max, event) => {
+    const idx = Number(event?.eventIdx) || 0;
+    return idx > max ? idx : max;
+  }, 0);
+
+  return {
+    bookId,
+    chapterIdx,
+    maxEventIdx,
+    events: eventSummaries.map((summary) => deepClone(summary)),
+    baseSnapshot,
+    diffs,
+    eventSummaries,
+    timestamp,
+    source
+  };
+};
+
+const normalizeManifestEvents = (bookId, chapterIdx, manifestChapter) => {
+  if (!manifestChapter?.events?.length) {
+    return [];
+  }
+
+  return manifestChapter.events
+    .map((rawEvent, index) => {
+      if (!rawEvent) return null;
+
+      const rawIdx =
+        rawEvent.idx ??
+        rawEvent.eventIdx ??
+        rawEvent.index ??
+        rawEvent.id ??
+        index + 1;
+      const eventIdx = Number(rawIdx);
+      if (!Number.isFinite(eventIdx) || eventIdx <= 0) {
+        return null;
+      }
+
+      const startPos =
+        typeof rawEvent.startPos === 'number'
+          ? rawEvent.startPos
+          : rawEvent.start ?? null;
+      const endPos =
+        typeof rawEvent.endPos === 'number'
+          ? rawEvent.endPos
+          : rawEvent.end ?? null;
+
+      const characters = Array.isArray(rawEvent.characters)
+        ? rawEvent.characters.map((character) => deepClone(character))
+        : [];
+      const relations = Array.isArray(rawEvent.relations)
+        ? rawEvent.relations.map((relation) => deepClone(relation))
+        : [];
+
+      return {
+        bookId,
+        chapterIdx,
+        eventIdx,
+        characters,
+        relations,
+        event: {
+          ...deepClone(rawEvent),
+          idx: eventIdx,
+          chapterIdx,
+          start: startPos,
+          end: endPos
+        },
+        startPos,
+        endPos,
+        eventId:
+          rawEvent.eventId ??
+          rawEvent.event_id ??
+          rawEvent.id ??
+          null
+      };
+    })
+    .filter(Boolean);
 };
 
 const normalizeReaderProgressPayload = (bookKey, payload) => {
@@ -65,7 +634,6 @@ const normalizeReaderProgressPayload = (bookKey, payload) => {
 
   const normalized = {
     key: bookKey,
-    version: READER_PROGRESS_VERSION,
     bookId: payload.bookId ?? null,
     chapterIdx: chapterIdx,
     eventIdx: normalizedEventIdx,
@@ -92,7 +660,12 @@ const normalizeReaderProgressPayload = (bookKey, payload) => {
  * 챕터별 이벤트 캐시 키 생성
  */
 const getChapterEventCacheKey = (bookId, chapterIdx) => {
-  return `${CHAPTER_EVENT_CACHE_PREFIX}${CACHE_VERSION}_${bookId}_${chapterIdx}`;
+  const bookIdNum = Number(bookId);
+  const chapterIdxNum = Number(chapterIdx);
+  if (!Number.isFinite(bookIdNum) || !Number.isFinite(chapterIdxNum) || chapterIdxNum <= 0) {
+    return null;
+  }
+  return `${bookIdNum}-${chapterIdxNum}`;
 };
 
 /**
@@ -101,6 +674,7 @@ const getChapterEventCacheKey = (bookId, chapterIdx) => {
 export const getCachedChapterEvents = (bookId, chapterIdx) => {
   try {
     const cacheKey = getChapterEventCacheKey(bookId, chapterIdx);
+    if (!cacheKey) return null;
     const cached = localStorage.getItem(cacheKey);
     
     if (!cached) return null;
@@ -129,13 +703,21 @@ export const getCachedChapterEvents = (bookId, chapterIdx) => {
  */
 export const setCachedChapterEvents = (bookId, chapterIdx, eventData) => {
   try {
+    if (!eventData) {
+      return false;
+    }
     const cacheKey = getChapterEventCacheKey(bookId, chapterIdx);
+    if (!cacheKey) return false;
     const cacheData = {
       bookId,
       chapterIdx,
-      maxEventIdx: eventData.maxEventIdx,
-      events: eventData.events,
-      timestamp: Date.now()
+      maxEventIdx: Number(eventData.maxEventIdx) || 0,
+      events: Array.isArray(eventData.events) ? eventData.events : [],
+      baseSnapshot: eventData.baseSnapshot ? deepClone(eventData.baseSnapshot) : null,
+      diffs: Array.isArray(eventData.diffs) ? deepClone(eventData.diffs) : [],
+      eventSummaries: Array.isArray(eventData.eventSummaries) ? deepClone(eventData.eventSummaries) : [],
+      timestamp: Number(eventData.timestamp) || Date.now(),
+      source: eventData.source || null
     };
     
     localStorage.setItem(cacheKey, JSON.stringify(cacheData));
@@ -220,7 +802,20 @@ export const clearCachedReaderProgress = (bookKey) => {
  * @returns {Promise<{maxEventIdx: number, events: Array}>}
  */
 export const discoverChapterEvents = async (bookId, chapterIdx, forceRefresh = false) => {
-  // 캐시 확인 (강제 새로고침이 아닌 경우)
+  if (!bookId || !chapterIdx || chapterIdx < 1) {
+    return {
+      bookId,
+      chapterIdx,
+      maxEventIdx: 0,
+      events: [],
+      baseSnapshot: null,
+      diffs: [],
+      eventSummaries: [],
+      timestamp: Date.now(),
+      source: 'invalid'
+    };
+  }
+
   if (!forceRefresh) {
     const cached = getCachedChapterEvents(bookId, chapterIdx);
     if (cached) {
@@ -228,147 +823,216 @@ export const discoverChapterEvents = async (bookId, chapterIdx, forceRefresh = f
     }
   }
   
-  // manifest에서 이벤트 정보 우선 확인
+  // manifest에서 이벤트 구조(startPos/endPos) 가져오기
+  let manifestEventStructures = [];
+  try {
   const manifestChapter = getManifestChapterData(bookId, chapterIdx);
   if (manifestChapter?.events?.length) {
-    const normalizedEvents = manifestChapter.events
-      .map((rawEvent, index) => {
-        if (!rawEvent) return null;
+      manifestEventStructures = manifestChapter.events.map((rawEvent, index) => ({
+        eventIdx: Number(rawEvent.idx ?? rawEvent.eventIdx ?? index + 1),
+        startPos: rawEvent.startPos ?? rawEvent.start ?? null,
+        endPos: rawEvent.endPos ?? rawEvent.end ?? null,
+        rawText: rawEvent.rawText ?? null
+      })).filter(e => e.eventIdx > 0);
+    }
+  } catch (error) {
+    console.warn('manifest 이벤트 구조 로드 실패:', error);
+  }
 
-        const rawIdx = rawEvent.idx ?? rawEvent.eventIdx ?? rawEvent.index ?? rawEvent.id;
-        const eventIdx = Number(rawIdx ?? index + 1);
+  // API로 각 이벤트의 그래프 데이터 가져오기
+  const apiEvents = [];
 
-        if (!Number.isFinite(eventIdx) || eventIdx <= 0) return null;
+  const manifestEventMap = new Map();
+  const manifestEventIndices = [];
+  manifestEventStructures.forEach((structure) => {
+    const idx = Number(structure?.eventIdx);
+    if (!Number.isFinite(idx) || idx <= 0 || manifestEventMap.has(idx)) {
+      return;
+    }
+    manifestEventMap.set(idx, structure);
+    manifestEventIndices.push(idx);
+  });
 
-        const startPos = typeof rawEvent.startPos === 'number' ? rawEvent.startPos : rawEvent.start;
-        const endPos = typeof rawEvent.endPos === 'number' ? rawEvent.endPos : rawEvent.end;
+  const sortedManifestIndices = manifestEventIndices.sort((a, b) => a - b);
 
-        const normalizedEvent = {
-          eventIdx,
-          chapterIdx,
-          characters: rawEvent.characters || [],
-          relations: rawEvent.relations || [],
-          event: {
-            ...rawEvent,
-            idx: eventIdx,
-            start: startPos ?? null,
-            end: endPos ?? null
-          },
-          startPos: startPos ?? null,
-          endPos: endPos ?? null,
-          eventId: rawEvent.eventId ?? rawEvent.event_id ?? rawEvent.id ?? null
-        };
+  const collectEvent = async (eventIdx, manifestStructure = null) => {
+    try {
+      const response = await getFineGraph(bookId, chapterIdx, eventIdx);
 
-        return normalizedEvent;
-      })
-      .filter(Boolean);
+      const { characters, relations, event } = response?.result || {};
+      const hasCharacters = Array.isArray(characters) && characters.length > 0;
+      const hasRelations = Array.isArray(relations) && relations.length > 0;
+      const hasEventMeta =
+        event &&
+        (event.event_id !== undefined ||
+          event.eventId !== undefined ||
+          event.name ||
+          event.title ||
+          event.start !== undefined ||
+          event.end !== undefined);
 
-    if (normalizedEvents.length > 0) {
-      const maxEventIdx = normalizedEvents.reduce((max, ev) => Math.max(max, ev.eventIdx), 0);
+      if (!hasCharacters && !hasRelations && !hasEventMeta && !manifestStructure) {
+        return false;
+      }
 
-      const resultFromManifest = {
+      const normalizedEvent = {
         bookId,
         chapterIdx,
-        maxEventIdx,
-        events: normalizedEvents,
-        timestamp: Date.now(),
-        source: 'manifest'
+        eventIdx,
+        characters: hasCharacters ? characters.map((character) => deepClone(character)) : [],
+        relations: hasRelations ? relations.map((relation) => deepClone(relation)) : [],
+        event: {
+          idx: eventIdx,
+          chapterIdx,
+          start: manifestStructure?.startPos ?? manifestStructure?.start ?? event?.start ?? null,
+          end: manifestStructure?.endPos ?? manifestStructure?.end ?? event?.end ?? null,
+          startPos: manifestStructure?.startPos ?? manifestStructure?.start ?? event?.start ?? null,
+          endPos: manifestStructure?.endPos ?? manifestStructure?.end ?? event?.end ?? null,
+          rawText: manifestStructure?.rawText ?? event?.rawText ?? null,
+          event_id: event?.event_id ?? event?.eventId ?? null,
+          ...(event || {})
+        },
+        startPos: manifestStructure?.startPos ?? manifestStructure?.start ?? event?.start ?? null,
+        endPos: manifestStructure?.endPos ?? manifestStructure?.end ?? event?.end ?? null,
+        eventId: event?.event_id ?? event?.eventId ?? null
       };
 
-      setCachedChapterEvents(bookId, chapterIdx, resultFromManifest);
-      return resultFromManifest;
+      apiEvents.push(normalizedEvent);
+
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      return hasCharacters || hasRelations || hasEventMeta;
+    } catch (error) {
+      console.warn(`⚠️ 이벤트 ${eventIdx} API 호출 실패, manifest 구조만 사용:`, error);
+
+      if (manifestStructure) {
+        apiEvents.push({
+          bookId,
+          chapterIdx,
+          eventIdx,
+          characters: [],
+          relations: [],
+          event: {
+            idx: eventIdx,
+            chapterIdx,
+            start: manifestStructure.startPos ?? manifestStructure.start ?? null,
+            end: manifestStructure.endPos ?? manifestStructure.end ?? null,
+            startPos: manifestStructure.startPos ?? manifestStructure.start ?? null,
+            endPos: manifestStructure.endPos ?? manifestStructure.end ?? null,
+            rawText: manifestStructure.rawText ?? null
+          },
+          startPos: manifestStructure.startPos ?? manifestStructure.start ?? null,
+          endPos: manifestStructure.endPos ?? manifestStructure.end ?? null,
+          eventId: null
+        });
+        return true;
+      }
+
+      return false;
     }
+  };
+
+  if (sortedManifestIndices.length > 0) {
+    for (const eventIdx of sortedManifestIndices) {
+      await collectEvent(eventIdx, manifestEventMap.get(eventIdx));
+    }
+  } else {
+    let eventIdx = 1;
+    let emptyStreak = 0;
+    const EMPTY_STREAK_LIMIT = 2;
+    const MAX_DYNAMIC_SCAN = 500;
+
+    while (eventIdx <= MAX_DYNAMIC_SCAN && emptyStreak < EMPTY_STREAK_LIMIT) {
+      const hadData = await collectEvent(eventIdx, null);
+      if (hadData) {
+        emptyStreak = 0;
+      } else {
+        emptyStreak += 1;
+      }
+      eventIdx += 1;
+    }
+  }
+  
+  if (!apiEvents.length) {
+    console.warn(`⚠️ 챕터 ${chapterIdx}: API 및 manifest 모두에서 이벤트를 찾을 수 없음`);
+    const emptyPayload = {
+      bookId,
+      chapterIdx,
+      maxEventIdx: 0,
+      events: [],
+      baseSnapshot: null,
+      diffs: [],
+      eventSummaries: [],
+      timestamp: Date.now(),
+      source: 'empty'
+    };
+    setCachedChapterEvents(bookId, chapterIdx, emptyPayload);
+    return emptyPayload;
   }
 
-  // API를 통해 이벤트 순차 탐색
-  const events = [];
-  let currentEventIdx = 1;
-  let maxEventIdx = 0;
-  let consecutiveEmptyCount = 0;
-  const maxConsecutiveEmpty = 1; // 연속 1번 비어있으면 종료
-  
-  while (true) {
-    try {
-      const response = await getFineGraph(bookId, chapterIdx, currentEventIdx);
-      
-      // 응답 검증
-      if (!response?.isSuccess || !response?.result) {
-        console.warn(`⚠️ 이벤트 ${currentEventIdx}: 응답 실패`);
-        consecutiveEmptyCount++;
-        
-        if (consecutiveEmptyCount >= maxConsecutiveEmpty) {
-          break;
-        }
-        
-        currentEventIdx++;
-        continue;
-      }
-      
-      const { characters, relations, event } = response.result;
-      
-      // 데이터가 있는지 확인
-      const hasData = (characters && characters.length > 0) || (relations && relations.length > 0);
-      
-      if (hasData) {
-        // 유효한 이벤트 발견
-        maxEventIdx = currentEventIdx;
-        consecutiveEmptyCount = 0;
-        
-        events.push({
-          eventIdx: currentEventIdx,
-          chapterIdx,
-          characters,
-          relations,
-          event,
-          startPos: event?.start,
-          endPos: event?.end,
-          eventId: event?.event_id
-        });
-        
-      } else {
-        // 데이터 없음
-        consecutiveEmptyCount++;
-        
-        if (consecutiveEmptyCount >= maxConsecutiveEmpty) {
-          break;
-        }
-      }
-      
-      currentEventIdx++;
-      
-      // 안전장치: 최대 100개 이벤트까지만 탐색
-      if (currentEventIdx > 100) {
-        console.warn('⚠️ 최대 이벤트 수(100) 도달, 탐색 종료');
-        break;
-      }
-      
-      // API 부하 방지를 위한 딜레이
-      await new Promise(resolve => setTimeout(resolve, 100));
-      
-    } catch (error) {
-      console.error(`❌ 이벤트 ${currentEventIdx} 탐색 실패:`, error);
-      consecutiveEmptyCount++;
-      
-      if (consecutiveEmptyCount >= maxConsecutiveEmpty) {
-        break;
-      }
-      
-      currentEventIdx++;
-    }
-  }
-  
-  const result = {
+  const payload = buildChapterCachePayload(
     bookId,
     chapterIdx,
-    maxEventIdx,
-    events,
-    timestamp: Date.now()
+    apiEvents,
+    'hybrid'
+  );
+
+  setCachedChapterEvents(bookId, chapterIdx, payload);
+  return payload;
+};
+
+/**
+ * diff 기반 캐시에서 그래프 상태 복원
+ * @param {object} cachePayload - 캐시된 챕터 이벤트 데이터
+ * @param {number} targetEventIdx - 복원할 이벤트 인덱스
+ * @returns {{elements:Array, characters:Array, eventMeta:Object|null, eventIdx:number}|null}
+ */
+export const reconstructChapterGraphState = (cachePayload, targetEventIdx) => {
+  if (!cachePayload || typeof cachePayload !== 'object') {
+    return null;
+  }
+
+  const baseSnapshot = cachePayload.baseSnapshot;
+  if (!baseSnapshot || !Array.isArray(baseSnapshot.elements)) {
+    return null;
+  }
+
+  const baseIdx = Number(baseSnapshot.eventIdx) || 1;
+  const normalizedTarget = Number(targetEventIdx);
+
+  let currentElements = cloneElements(baseSnapshot.elements);
+  let currentCharacters = cloneCharacters(baseSnapshot.characters || []);
+  let currentEventMeta = baseSnapshot.eventMeta ? deepClone(baseSnapshot.eventMeta) : null;
+  let appliedEventIdx = baseIdx;
+
+  if (!Number.isFinite(normalizedTarget) || normalizedTarget <= baseIdx) {
+    return {
+      elements: currentElements,
+      characters: currentCharacters,
+      eventMeta: currentEventMeta,
+      eventIdx: appliedEventIdx
+    };
+  }
+
+  const sortedDiffs = sortEventsByIdx(cachePayload.diffs || []);
+
+  sortedDiffs.forEach((diff) => {
+    const diffIdx = Number(diff?.eventIdx);
+    if (!Number.isFinite(diffIdx) || diffIdx > normalizedTarget) {
+      return;
+    }
+
+    currentElements = applyElementDiff(currentElements, diff?.elementDiff);
+    currentCharacters = applyCharacterDiff(currentCharacters, diff?.characterDiff);
+    currentEventMeta = diff?.eventMeta ? deepClone(diff.eventMeta) : currentEventMeta;
+    appliedEventIdx = diffIdx;
+  });
+
+  return {
+    elements: currentElements,
+    characters: currentCharacters,
+    eventMeta: currentEventMeta,
+    eventIdx: appliedEventIdx
   };
-  
-  // 캐시에 저장
-  setCachedChapterEvents(bookId, chapterIdx, result);
-  
-  return result;
 };
 
 /**
@@ -431,6 +1095,7 @@ export const getMaxEventIdx = async (bookId, chapterIdx) => {
 export const clearChapterEventCache = (bookId, chapterIdx) => {
   try {
     const cacheKey = getChapterEventCacheKey(bookId, chapterIdx);
+    if (!cacheKey) return false;
     localStorage.removeItem(cacheKey);
     return true;
   } catch (error) {
@@ -445,19 +1110,51 @@ export const clearChapterEventCache = (bookId, chapterIdx) => {
 export const clearAllChapterEventCaches = (bookId) => {
   try {
     const keys = Object.keys(localStorage);
-    const prefix = `${CHAPTER_EVENT_CACHE_PREFIX}${CACHE_VERSION}_${bookId}_`;
+    const bookIdNum = Number(bookId);
+    if (!Number.isFinite(bookIdNum)) {
+      return 0;
+    }
     
     let count = 0;
     keys.forEach(key => {
-      if (key.startsWith(prefix)) {
+      const segments = key.split('-');
+      if (segments.length === 2) {
+        const [storedBookId, storedChapterIdx] = segments;
+        if (Number(storedBookId) === bookIdNum && Number.isFinite(Number(storedChapterIdx))) {
         localStorage.removeItem(key);
         count++;
+        }
       }
     });
     
     return count;
   } catch (error) {
     console.error('모든 챕터 이벤트 캐시 삭제 실패:', error);
+    return 0;
+  }
+};
+
+export const clearAllChapterEventCachesGlobally = () => {
+  try {
+    const keys = Object.keys(localStorage);
+    let count = 0;
+    keys.forEach(key => {
+      const segments = key.split('-');
+      if (segments.length === 2) {
+        const [storedBookId, storedChapterIdx] = segments;
+        if (
+          Number.isFinite(Number(storedBookId)) &&
+          Number.isFinite(Number(storedChapterIdx))
+        ) {
+          localStorage.removeItem(key);
+          count++;
+        }
+      }
+    });
+    
+    return count;
+  } catch (error) {
+    console.error('글로벌 챕터 이벤트 캐시 삭제 실패:', error);
     return 0;
   }
 };
