@@ -528,7 +528,7 @@ export function applySearchFadeEffect(cy, filteredElements, isSearchActive, opti
  * @param {Object} options - 하이라이트 옵션
  * @returns {Object} 하이라이트 적용 결과 및 cleanup 함수
  */
-export function applySearchHighlight(cy, clickedNode, filteredElements, options = {}) {
+export function applySearchHighlight(cy, clickedNode, filteredElements) {
   if (!cy || typeof cy.elements !== 'function') {
     console.warn('applySearchHighlight: 유효하지 않은 Cytoscape 인스턴스입니다', { cy });
     return {
@@ -553,25 +553,17 @@ export function applySearchHighlight(cy, clickedNode, filteredElements, options 
   }
   
   try {
-    const {
-      fadeOpacity = 0.05,
-      textFadeOpacity = 0.02
-    } = options;
-
     const filteredElementIds = createFilteredElementIds(filteredElements);
+    if (!filteredElementIds || filteredElementIds.size === 0) {
+      return {
+        success: false,
+        cleanup: () => {}
+      };
+    }
+
     const clickedNodeId = clickedNode.id();
     const highlightedNodeIds = new Set();
     const highlightedEdgeIds = new Set();
-
-    cy.nodes().forEach((n) => {
-      n.removeStyle('border-color');
-      n.removeStyle('border-width');
-      n.removeStyle('border-opacity');
-      n.removeStyle('border-style');
-    });
-    cy.edges().forEach((e) => {
-      e.removeStyle('width');
-    });
 
     if (filteredElementIds.has(clickedNodeId)) {
       const connectedEdges = clickedNode.connectedEdges();
@@ -605,96 +597,54 @@ export function applySearchHighlight(cy, clickedNode, filteredElements, options 
       });
     }
 
+    const toCollection = (idSet) => {
+      if (!idSet || idSet.size === 0) {
+        return cy.collection();
+      }
+      const elements = [];
+      idSet.forEach((rawId) => {
+        if (!rawId && rawId !== 0) return;
+        const id = String(rawId);
+        const element = cy.getElementById(id);
+        if (element && element.length > 0) {
+          elements.push(element);
+        }
+      });
+      return elements.length ? cy.collection(elements) : cy.collection();
+    };
+
+    const highlightedNodes = highlightedNodeIds.size > 0 ? toCollection(highlightedNodeIds) : cy.collection();
+    const highlightedEdges = highlightedEdgeIds.size > 0 ? toCollection(highlightedEdgeIds) : cy.collection();
+
+    const cyNodes = cy.nodes();
+    const cyEdges = cy.edges();
+
     cy.batch(() => {
-      cy.nodes().removeClass("highlighted faded");
-      cy.edges().removeClass("highlighted faded");
+      cyNodes.removeClass("highlighted faded");
+      cyEdges.removeClass("highlighted faded");
 
-      cy.nodes().forEach((node) => {
-        const nodeId = node.id();
-        if (filteredElementIds.has(nodeId)) {
-          if (highlightedNodeIds.has(nodeId)) {
-            node.addClass("highlighted");
-            node.style('opacity', '');
-            node.style('text-opacity', '');
-          } else {
-            node.addClass("faded");
-            node.style('opacity', fadeOpacity);
-            node.style('text-opacity', textFadeOpacity);
-          }
-        } else {
-          node.addClass("faded");
-          node.style('opacity', fadeOpacity);
-          node.style('text-opacity', textFadeOpacity);
-        }
-      });
+      highlightedNodes.addClass("highlighted");
+      highlightedEdges.addClass("highlighted");
 
-      cy.edges().forEach((edge) => {
-        const edgeData = edge.data();
-        const sourceId = edgeData.source;
-        const targetId = edgeData.target;
-        const edgeId = edge.id();
-
-        if (filteredElementIds.has(sourceId) && filteredElementIds.has(targetId)) {
-          if (highlightedEdgeIds.has(edgeId)) {
-            edge.addClass("highlighted");
-            edge.style('opacity', '');
-          } else {
-            edge.addClass("faded");
-            edge.style('opacity', fadeOpacity);
-          }
-        } else {
-          edge.addClass("faded");
-          edge.style('opacity', fadeOpacity);
-        }
-      });
+      cyNodes.difference(highlightedNodes).addClass("faded");
+      cyEdges.difference(highlightedEdges).addClass("faded");
     });
 
     try {
       cy.style().update();
     } catch {}
 
-    requestAnimationFrame(() => {
-      try {
-        if (highlightedNodeIds.has(clickedNodeId)) {
-          const clickedElement = cy.getElementById(clickedNodeId);
-          if (clickedElement.length > 0) {
-            clickedElement.style('border-color', '#5C6F5C');
-            clickedElement.style('border-width', 4);
-            clickedElement.style('border-opacity', 1);
-            clickedElement.style('border-style', 'solid');
-          }
-
-          highlightedEdgeIds.forEach(edgeId => {
-            const edge = cy.getElementById(edgeId);
-            if (edge.length > 0) {
-              edge.style('width', 8);
-              edge.style('opacity', 1);
-            }
-          });
-        }
-
-        cy.style().update();
-      } catch {}
-    });
-
     return {
       success: true,
       highlightedCount: highlightedNodeIds.size + highlightedEdgeIds.size,
       cleanup: () => {
         cy.batch(() => {
-          cy.nodes().forEach((node) => {
-            node.removeClass("highlighted");
-            node.removeStyle('border-color');
-            node.removeStyle('border-width');
-            node.removeStyle('border-opacity');
-            node.removeStyle('border-style');
-          });
-          cy.edges().forEach((edge) => {
-            edge.removeClass("highlighted");
-            edge.removeStyle('width');
-          });
+          cyNodes.removeClass("highlighted faded");
+          cyEdges.removeClass("highlighted faded");
         });
-        cy.style().update();
+        try {
+          cy.style().update();
+        } catch {}
       }
     };
   } catch (error) {

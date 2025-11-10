@@ -1,5 +1,5 @@
 import { useCallback, useRef, useEffect } from "react";
-import { applySearchHighlight, createFilteredElementIds } from '../utils/searchUtils.jsx';
+import { applySearchHighlight } from '../utils/searchUtils.jsx';
 import { getContainerInfo, calculateCytoscapePosition } from '../utils/graphUtils';
 
 export default function useGraphInteractions({
@@ -30,50 +30,12 @@ export default function useGraphInteractions({
     onClearTooltipRef.current = onClearTooltip;
   }, [onClearTooltip]);
 
-  const removeInlineStyles = useCallback((cy, { includeOpacity = true } = {}) => {
-    try {
-      cy.nodes().forEach((node) => {
-        try {
-          node.removeStyle('border-color');
-          node.removeStyle('border-width');
-          node.removeStyle('border-opacity');
-          node.removeStyle('border-style');
-          if (includeOpacity) {
-            node.removeStyle('opacity');
-            node.removeStyle('text-opacity');
-          }
-        } catch {}
-      });
-      cy.edges().forEach((edge) => {
-        try {
-          edge.removeStyle('width');
-          if (includeOpacity) {
-            edge.removeStyle('opacity');
-            edge.removeStyle('text-opacity');
-          }
-        } catch {}
-      });
-    } catch {}
-  }, []);
-
-  const forceStyleUpdate = useCallback((cy, { immediate = true, asyncFrames = 2 } = {}) => {
+  const forceStyleUpdate = useCallback((cy, { immediate = true } = {}) => {
+    if (!cy) return;
     if (immediate) {
       try {
         cy.style().update();
       } catch {}
-    }
-    
-    if (asyncFrames > 0) {
-      const scheduleUpdate = (remainingFrames) => {
-        if (remainingFrames <= 0) return;
-        requestAnimationFrame(() => {
-          try {
-            cy.style().update();
-            scheduleUpdate(remainingFrames - 1);
-          } catch {}
-        });
-      };
-      scheduleUpdate(asyncFrames);
     }
   }, []);
 
@@ -85,11 +47,19 @@ export default function useGraphInteractions({
     cy.batch(() => {
       cy.nodes().removeClass("highlighted faded");
       cy.edges().removeClass("highlighted faded");
+      cy.nodes().removeStyle('opacity');
+      cy.nodes().removeStyle('text-opacity');
+      cy.nodes().removeStyle('border-color');
+      cy.nodes().removeStyle('border-width');
+      cy.nodes().removeStyle('border-opacity');
+      cy.nodes().removeStyle('border-style');
+      cy.edges().removeStyle('opacity');
+      cy.edges().removeStyle('text-opacity');
+      cy.edges().removeStyle('width');
     });
     
-    removeInlineStyles(cy, { includeOpacity: true });
-    forceStyleUpdate(cy, { immediate: true, asyncFrames: 2 });
-  }, [cyRef, removeInlineStyles, forceStyleUpdate]);
+    forceStyleUpdate(cy, { immediate: true });
+  }, [cyRef, forceStyleUpdate]);
 
   const clearStyles = useCallback(() => {
     if (!cyRef?.current) return;
@@ -98,10 +68,14 @@ export default function useGraphInteractions({
     cy.batch(() => {
       cy.nodes().removeClass("faded highlighted");
       cy.edges().removeClass("faded highlighted");
+      cy.nodes().removeStyle('opacity');
+      cy.nodes().removeStyle('text-opacity');
+      cy.edges().removeStyle('opacity');
+      cy.edges().removeStyle('text-opacity');
+      cy.edges().removeStyle('width');
     });
-    removeInlineStyles(cy, { includeOpacity: true });
-    forceStyleUpdate(cy, { immediate: true, asyncFrames: 0 });
-  }, [cyRef, removeInlineStyles, forceStyleUpdate]);
+    forceStyleUpdate(cy, { immediate: true });
+  }, [cyRef, forceStyleUpdate]);
 
   const clearSelectionOnly = useCallback(() => {
     clearStyles();
@@ -179,103 +153,53 @@ export default function useGraphInteractions({
     }
   }, [cyRef]);
 
-  const applyNodeHighlightStyles = useCallback((node) => {
-    try {
-      node.style('border-color', '#5C6F5C');
-      node.style('border-width', 4);
-      node.style('border-opacity', 1);
-      node.style('border-style', 'solid');
-      if (typeof node.raise === 'function') node.raise();
-    } catch {}
-  }, []);
-
-  const applyEdgeHighlightStyles = useCallback((edge) => {
-    try {
-      edge.style('width', 8);
-      edge.style('opacity', 1);
-      edge.style('text-opacity', 1);
-    } catch {}
-  }, []);
-
-      const handleNodeHighlight = useCallback((node) => {
+  const handleNodeHighlight = useCallback((node) => {
     try {
       if (!cyRef?.current) return;
 
       const cy = cyRef.current;
 
       if (isSearchActive && filteredElements.length > 0) {
-        removeInlineStyles(cy, { includeOpacity: false });
-        cy.style().update();
-        
         applySearchHighlight(cy, node, filteredElements);
-        
-        forceStyleUpdate(cy, { immediate: true, asyncFrames: 2 });
-      } else {
-        cy.nodes().forEach((n) => {
-          n.removeStyle('border-color');
-          n.removeStyle('border-width');
-          n.removeStyle('border-opacity');
-          n.removeStyle('border-style');
-        });
-        cy.edges().forEach((e) => {
-          e.removeStyle('width');
-        });
-
-        const clickedNodeId = node.id();
-        const connectedEdges = node.connectedEdges();
-        const connectedNodeIds = new Set([clickedNodeId]);
-        const connectedEdgeIds = new Set();
-
-        connectedEdges.forEach((edge) => {
-          const edgeId = edge.id();
-          const sourceId = edge.source().id();
-          const targetId = edge.target().id();
-          
-          connectedEdgeIds.add(edgeId);
-          connectedNodeIds.add(sourceId);
-          connectedNodeIds.add(targetId);
-        });
-
-        const fadeOpacity = 0.05;
-        const textFadeOpacity = 0.02;
-
-        cy.batch(() => {
-          cy.nodes().removeClass("highlighted faded");
-          cy.edges().removeClass("highlighted faded");
-          
-          cy.nodes().forEach((n) => {
-            if (connectedNodeIds.has(n.id())) {
-              n.addClass("highlighted");
-              n.style('opacity', '');
-              n.style('text-opacity', '');
-            } else {
-              n.addClass("faded");
-              n.style('opacity', fadeOpacity);
-              n.style('text-opacity', textFadeOpacity);
-            }
-          });
-
-          cy.edges().forEach((edge) => {
-            if (connectedEdgeIds.has(edge.id())) {
-              edge.addClass("highlighted");
-              edge.style('opacity', '');
-            } else {
-              edge.addClass("faded");
-              edge.style('opacity', fadeOpacity);
-            }
-          });
-        });
-
-        forceStyleUpdate(cy, { immediate: true, asyncFrames: 0 });
-
-        applyNodeHighlightStyles(node);
-        connectedEdges.forEach((edge) => applyEdgeHighlightStyles(edge));
-
-        forceStyleUpdate(cy, { immediate: true, asyncFrames: 2 });
+        forceStyleUpdate(cy, { immediate: true });
+        return;
       }
+
+      const cyNodes = cy.nodes();
+      const cyEdges = cy.edges();
+
+      let connectedNodes = cy.collection([node]);
+      if (typeof node.closedNeighborhood === 'function') {
+        try {
+          connectedNodes = node.closedNeighborhood().nodes();
+        } catch {
+          connectedNodes = cy.collection([node]);
+        }
+      }
+
+      let connectedEdges = node.connectedEdges ? node.connectedEdges() : cy.collection();
+      if (!connectedEdges || typeof connectedEdges.length !== 'number') {
+        connectedEdges = cy.collection();
+      }
+
+      cy.batch(() => {
+        cyNodes.removeClass("highlighted faded");
+        cyEdges.removeClass("highlighted faded");
+
+        connectedNodes.addClass("highlighted");
+        connectedEdges.addClass("highlighted");
+
+        const fadedNodes = cyNodes.difference(connectedNodes);
+        const fadedEdges = cyEdges.difference(connectedEdges);
+
+        fadedNodes.addClass("faded");
+        fadedEdges.addClass("faded");
+      });
+
+      forceStyleUpdate(cy, { immediate: true });
     } catch (error) {
     }
-  }, [cyRef, isSearchActive, filteredElements, removeInlineStyles, forceStyleUpdate, applyNodeHighlightStyles, applyEdgeHighlightStyles]);
+  }, [cyRef, isSearchActive, filteredElements, forceStyleUpdate]);
 
   const calculateTooltipPosition = useCallback((element, evt, offset = 0) => {
     try {
@@ -426,7 +350,6 @@ export default function useGraphInteractions({
         const currentEdgeId = edge.id();
         const isSameEdgeSelected = selectedEdgeIdRef?.current === currentEdgeId;
 
-        // 동일 간선 재클릭 시: 툴팁/하이라이트 해제
         if (isSameEdgeSelected) {
           if (onClearTooltipRef.current) {
             onClearTooltipRef.current();
@@ -440,124 +363,30 @@ export default function useGraphInteractions({
         const { x: mouseX, y: mouseY } = calculateTooltipPosition(edge, evt, 0);
         const edgeCenter = calculateTooltipPosition(edge, null, 0);
 
-        const srcNode = edge.source();
-        const tgtNode = edge.target();
-        const srcId = srcNode.id();
-        const tgtId = tgtNode.id();
+        const connectedNodes = edge.connectedNodes ? edge.connectedNodes() : cy.collection();
+        const edgeCollection = cy.collection([edge]);
 
-        const connectedNodeIds = new Set([srcId, tgtId]);
-        const connectedEdgeIds = new Set([currentEdgeId]);
+        const cyNodes = cy.nodes();
+        const cyEdges = cy.edges();
 
-        const fadeOpacity = 0.05;
-        const textFadeOpacity = 0.02;
+        cy.batch(() => {
+          cyNodes.removeClass("highlighted faded");
+          cyEdges.removeClass("highlighted faded");
 
-        cy.nodes().forEach((n) => {
-          n.removeStyle('border-color');
-          n.removeStyle('border-width');
-          n.removeStyle('border-opacity');
-          n.removeStyle('border-style');
+          connectedNodes.addClass("highlighted");
+          edgeCollection.addClass("highlighted");
+
+          const fadedNodes = cyNodes.difference(connectedNodes);
+          const fadedEdges = cyEdges.difference(edgeCollection);
+
+          fadedNodes.addClass("faded");
+          fadedEdges.addClass("faded");
         });
-        cy.edges().forEach((e) => {
-          e.removeStyle('width');
-        });
 
-        if (isSearchActive && filteredElements.length > 0) {
-          const filteredElementIds = new Set();
-          filteredElements.forEach(element => {
-            if (element?.data) {
-              if (element.data.source) {
-                filteredElementIds.add(element.data.source);
-                filteredElementIds.add(element.data.target);
-              } else {
-                filteredElementIds.add(element.data.id);
-              }
-            }
-          });
-
-          cy.batch(() => {
-            cy.nodes().removeClass("highlighted faded");
-            cy.edges().removeClass("highlighted faded");
-
-            cy.nodes().forEach((n) => {
-              const nodeId = n.id();
-              if (connectedNodeIds.has(nodeId)) {
-                n.addClass("highlighted");
-                n.style('opacity', '');
-                n.style('text-opacity', '');
-              } else if (filteredElementIds.has(nodeId)) {
-                n.addClass("faded");
-                n.style('opacity', fadeOpacity);
-                n.style('text-opacity', textFadeOpacity);
-              } else {
-                n.addClass("faded");
-                n.style('opacity', fadeOpacity);
-                n.style('text-opacity', textFadeOpacity);
-              }
-            });
-
-            cy.edges().forEach((e) => {
-              const eId = e.id();
-              if (connectedEdgeIds.has(eId)) {
-                e.addClass("highlighted");
-                e.style('opacity', '');
-              } else {
-                e.addClass("faded");
-                e.style('opacity', fadeOpacity);
-              }
-            });
-          });
-
-          forceStyleUpdate(cy, { immediate: true, asyncFrames: 0 });
-
-          applyEdgeHighlightStyles(edge);
-          applyNodeHighlightStyles(srcNode);
-          applyNodeHighlightStyles(tgtNode);
-
-          forceStyleUpdate(cy, { immediate: true, asyncFrames: 2 });
-        } else {
-          resetAllStyles();
-          forceStyleUpdate(cy, { immediate: true, asyncFrames: 0 });
-
-          const srcNode = edge.source();
-          const tgtNode = edge.target();
-          const connectedNodeIds = new Set([srcNode.id(), tgtNode.id()]);
-
-          const fadeOpacity = 0.05;
-          const textFadeOpacity = 0.02;
-
-          cy.batch(() => {
-            cy.nodes().forEach((n) => {
-              if (connectedNodeIds.has(n.id())) {
-                n.removeClass("faded").addClass("highlighted");
-                n.style('opacity', '');
-                n.style('text-opacity', '');
-              } else {
-                n.removeClass("highlighted").addClass("faded");
-                n.style('opacity', fadeOpacity);
-                n.style('text-opacity', textFadeOpacity);
-              }
-            });
-
-            cy.edges().forEach((e) => {
-              if (e.id() === currentEdgeId) {
-                e.removeClass("faded").addClass("highlighted");
-                e.style('opacity', '');
-              } else {
-                e.removeClass("highlighted").addClass("faded");
-                e.style('opacity', fadeOpacity);
-              }
-            });
-          });
-
-          applyEdgeHighlightStyles(edge);
-          applyNodeHighlightStyles(srcNode);
-          applyNodeHighlightStyles(tgtNode);
-
-          forceStyleUpdate(cy, { immediate: true, asyncFrames: 2 });
-        }
+        forceStyleUpdate(cy, { immediate: true });
 
         if (onShowEdgeTooltipRef.current) {
-          onShowEdgeTooltipRef.current({ edge, evt, edgeCenter, mouseX, mouseY });                                                                              
+          onShowEdgeTooltipRef.current({ edge, evt, edgeCenter, mouseX, mouseY });
         }
 
         if (selectedEdgeIdRef) selectedEdgeIdRef.current = currentEdgeId;
@@ -565,7 +394,7 @@ export default function useGraphInteractions({
       } catch (error) {
       }
     },
-    [cyRef, isSearchActive, filteredElements, onShowEdgeTooltipRef, selectedEdgeIdRef, selectedNodeIdRef, resetAllStyles, calculateTooltipPosition, forceStyleUpdate, applyEdgeHighlightStyles, applyNodeHighlightStyles, onClearTooltipRef]                                                                            
+    [cyRef, onShowEdgeTooltipRef, selectedEdgeIdRef, selectedNodeIdRef, resetAllStyles, calculateTooltipPosition, forceStyleUpdate, onClearTooltipRef]
   );
 
   const handleBackgroundClick = useCallback((evt) => {

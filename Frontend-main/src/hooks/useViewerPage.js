@@ -211,31 +211,29 @@ export function useViewerPage() {
   // API로 받아온 도서의 메타데이터와 manifest 정보를 콘솔에 출력
   useEffect(() => {
     const fetchBookInfo = async () => {
-      // API 책인지 확인 (숫자 ID를 가진 책)
-      if (book && typeof book.id === 'number' && location.state?.book) {
-        // manifest API 호출
-        try {
-          const manifestData = await getBookManifest(book.id);
-          
-          if (manifestData && manifestData.isSuccess && manifestData.result) {
-            // 캐시에서 maxChapter 가져오기 (getBookManifest에서 자동 저장됨)
-            const cachedMaxChapter = getMaxChapter(book.id);
-            if (cachedMaxChapter && cachedMaxChapter > 0) {
-              setMaxChapter(cachedMaxChapter);
-            }
-          }
-        } catch (error) {
-          // 에러 발생 시 캐시에서 확인 시도
+      if (!book || typeof book.id !== 'number') {
+        return;
+      }
+
+      try {
+        const manifestData = await getBookManifest(book.id);
+
+        if (manifestData && manifestData.isSuccess && manifestData.result) {
           const cachedMaxChapter = getMaxChapter(book.id);
           if (cachedMaxChapter && cachedMaxChapter > 0) {
             setMaxChapter(cachedMaxChapter);
           }
         }
+      } catch (error) {
+        const cachedMaxChapter = getMaxChapter(book.id);
+        if (cachedMaxChapter && cachedMaxChapter > 0) {
+          setMaxChapter(cachedMaxChapter);
+        }
       }
     };
 
     fetchBookInfo();
-  }, [book.id, location.state?.book]); // book.id와 location.state?.book만 의존성으로 설정
+  }, [book]);
   
   const folderKey = useMemo(() => {
     const key = getFolderKeyFromFilename(bookId);

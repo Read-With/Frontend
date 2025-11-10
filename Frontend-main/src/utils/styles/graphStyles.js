@@ -77,8 +77,13 @@ export const getEdgeStyle = (context = 'default') => {
 
 // 통합된 관계 색상 계산 함수 (relationStyles.js와 중복 제거)
 export const getRelationColor = (positivity) => {
-  const h = (120 * (positivity + 1)) / 2;
-  return `hsl(${h}, 70%, 45%)`;
+  const value = Number.isFinite(positivity) ? Math.max(-1, Math.min(1, positivity)) : 0;
+  const normalized = (value + 1) / 2;
+  const eased = 0.5 + 0.5 * Math.sin((normalized - 0.5) * Math.PI);
+  const hue = 120 * eased;
+  const saturation = 55 + 30 * Math.abs(value);
+  const lightness = 52 - 10 * Math.abs(value);
+  return `hsl(${hue}, ${saturation}%, ${lightness}%)`;
 };
 
 // 노드 크기 계산 함수 (기본 크기 10 × 가중치, 최소값 보장)

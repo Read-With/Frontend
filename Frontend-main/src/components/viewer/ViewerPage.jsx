@@ -80,11 +80,111 @@ const collectLocalRelationKeys = (folderKey, chapterNum, eventNum, targetKeys) =
   return seen;
 };
 
-const collectApiRelationKeys = async (bookId, chapterNum, eventNum, targetKeys) => {
+const apiRelationTimelineCache = new WeakMap();
+
+const getApiTimelineCache = (cacheRef) => {
+  if (!cacheRef) {
+    return null;
+  }
+  let timeline = apiRelationTimelineCache.get(cacheRef);
+  if (!timeline) {
+    timeline = new Map();
+    apiRelationTimelineCache.set(cacheRef, timeline);
+  }
+  return timeline;
+};
+
+const getChapterTimelineCache = (timelineCache, bookId, chapterNum) => {
+  if (!timelineCache) {
+    return null;
+  }
+  const numericBookId = Number(bookId);
+  const numericChapter = Number(chapterNum);
+  const chapterKey = `${Number.isFinite(numericBookId) ? numericBookId : String(bookId ?? "unknown")}-${Number.isFinite(numericChapter) ? numericChapter : String(chapterNum ?? "unknown")}`;
+
+  if (!timelineCache.has(chapterKey)) {
+    timelineCache.set(chapterKey, {
+      eventSets: new Map(),
+      sortedEvents: null,
+      lastComputedIdx: 0,
+      lastComputedSet: new Set(),
+    });
+  }
+
+  return timelineCache.get(chapterKey);
+};
+
+const normalizeEventIdx = (event) => {
+  const candidates = [
+    event?.eventIdx,
+    event?.eventNum,
+    event?.event_id,
+    event?.eventId,
+    event?.idx,
+  ];
+  for (const candidate of candidates) {
+    const numeric = Number(candidate);
+    if (Number.isFinite(numeric) && numeric > 0) {
+      return numeric;
+    }
+  }
+  return null;
+};
+
+const prepareChapterEvents = (chapterCache, bookId, chapterNum) => {
+  if (!chapterCache) {
+    return [];
+  }
+
+  if (Array.isArray(chapterCache.sortedEvents)) {
+    return chapterCache.sortedEvents;
+  }
+
+  const cached = getCachedChapterEvents(bookId, chapterNum);
+  if (!cached?.events?.length) {
+    chapterCache.sortedEvents = [];
+    return chapterCache.sortedEvents;
+  }
+
+  const normalized = cached.events
+    .map((event) => {
+      const idx = normalizeEventIdx(event);
+      if (!Number.isFinite(idx) || idx <= 0) {
+        return null;
+      }
+      return {
+        idx,
+        relations: Array.isArray(event?.relations) ? event.relations : [],
+      };
+    })
+    .filter(Boolean)
+    .sort((a, b) => a.idx - b.idx);
+
+  chapterCache.sortedEvents = normalized;
+  return chapterCache.sortedEvents;
+};
+
+const filterWithTargetKeys = (sourceSet, targetKeys) => {
+  if (!(targetKeys instanceof Set) || targetKeys.size === 0) {
+    return sourceSet;
+  }
+  const filtered = new Set();
+  for (const key of targetKeys) {
+    if (sourceSet.has(key)) {
+      filtered.add(key);
+    }
+  }
+  return filtered;
+};
+
+const collectApiRelationKeysLegacy = async (bookId, chapterNum, eventNum, targetKeys) => {
   const seen = new Set();
   if (!bookId || !Number.isFinite(chapterNum) || !Number.isFinite(eventNum) || eventNum < 1) {
     return seen;
   }
+
+  const hasTargetKeys = targetKeys instanceof Set && targetKeys.size > 0;
+  let matchedCount = 0;
 
   for (let idx = 1; idx <= eventNum; idx += 1) {
     const state = getGraphEventState(bookId, chapterNum, idx);
@@ -100,12 +200,13 @@ const collectApiRelationKeys = async (bookId, chapterNum, eventNum, targetKeys) 
 
     for (const rel of relations) {
       const key = getRelationKeyFromRelation(rel);
-      if (!key) {
+      if (!key || seen.has(key)) {
         continue;
       }
-      if (!targetKeys || targetKeys.has(key)) {
-        seen.add(key);
-        if (targetKeys && seen.size === targetKeys.size) {
+      seen.add(key);
+      if (hasTargetKeys && targetKeys.has(key)) {
+        matchedCount += 1;
+        if (matchedCount === targetKeys.size) {
           return seen;
         }
       }
@@ -113,6 +214,83 @@ const collectApiRelationKeys = async (bookId, chapterNum, eventNum, targetKeys) 
   }
 
   return seen;
+};
+
+const collectApiRelationKeys = async (bookId, chapterNum, eventNum, targetKeys, cacheRef) => {
+  if (!bookId || !Number.isFinite(chapterNum) || !Number.isFinite(eventNum) || eventNum < 1) {
+    return new Set();
+  }
+
+  const timelineCache = getApiTimelineCache(cacheRef);
+  const chapterCache = getChapterTimelineCache(timelineCache, bookId, chapterNum);
+  const sortedEvents = prepareChapterEvents(chapterCache, bookId, chapterNum);
+  const hasTargetKeys = targetKeys instanceof Set && targetKeys.size > 0;
+
+  if (!sortedEvents.length) {
+    const legacyResult = await collectApiRelationKeysLegacy(bookId, chapterNum, eventNum, targetKeys);
+    if (chapterCache) {
+      chapterCache.eventSets.set(eventNum, legacyResult);
+      if (!chapterCache.lastComputedIdx || eventNum >= chapterCache.lastComputedIdx) {
+        chapterCache.lastComputedIdx = eventNum;
+        chapterCache.lastComputedSet = legacyResult;
+      }
+    }
+    return filterWithTargetKeys(legacyResult, targetKeys);
+  }
+
+  let lastComputedIdx = chapterCache?.lastComputedIdx ?? 0;
+  let baseSet = chapterCache?.lastComputedSet instanceof Set ? chapterCache.lastComputedSet : null;
+
+  if (!baseSet) {
+    const entries = Array.from(chapterCache.eventSets.entries());
+    if (entries.length) {
+      entries.sort((a, b) => a[0] - b[0]);
+      const [latestIdx, latestSet] = entries[entries.length - 1];
+      lastComputedIdx = latestIdx;
+      baseSet = latestSet;
+    } else {
+      baseSet = new Set();
+    }
+  }
+
+  for (const event of sortedEvents) {
+    if (event.idx <= lastComputedIdx) {
+      continue;
+    }
+    if (event.idx > eventNum) {
+      break;
+    }
+
+    const nextSet = new Set(baseSet);
+    for (const rel of event.relations) {
+      const key = getRelationKeyFromRelation(rel);
+      if (key) {
+        nextSet.add(key);
+      }
+    }
+
+    chapterCache.eventSets.set(event.idx, nextSet);
+    baseSet = nextSet;
+    lastComputedIdx = event.idx;
+  }
+
+  chapterCache.lastComputedIdx = lastComputedIdx;
+  chapterCache.lastComputedSet = baseSet;
+
+  let bestIdx = 0;
+  let bestSet = null;
+  for (const [idx, set] of chapterCache.eventSets) {
+    if (idx <= eventNum && idx >= bestIdx) {
+      bestIdx = idx;
+      bestSet = set;
+    }
+  }
+
+  if (!bestSet) {
+    return new Set();
+  }
+
+  return hasTargetKeys ? filterWithTargetKeys(bestSet, targetKeys) : bestSet;
 };
 
 const filterRelationsByTimeline = async ({
@@ -150,7 +328,7 @@ const filterRelationsByTimeline = async ({
       if (!bookId) {
         return relations;
       }
-      seenKeys = await collectApiRelationKeys(bookId, chapterNum, eventNum, targetKeys);
+      seenKeys = await collectApiRelationKeys(bookId, chapterNum, eventNum, targetKeys, cacheRef);
     } else if (mode === "local") {
       if (!folderKey) {
         return relations;
