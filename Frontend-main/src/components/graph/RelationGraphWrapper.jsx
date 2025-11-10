@@ -106,6 +106,21 @@ function RelationGraphWrapper() {
   
   const isApiBook = isBookId || (book && (typeof book.id === 'number' || book.isFromAPI === true));
 
+  const loaderBookKey = useMemo(() => {
+    if (isApiBook) {
+      if (Number.isFinite(bookId) && bookId > 0) {
+        return bookId;
+      }
+      const numericBookId = Number(book?.id);
+      return Number.isFinite(numericBookId) && numericBookId > 0 ? numericBookId : null;
+    }
+    return filename || null;
+  }, [isApiBook, bookId, book?.id, filename]);
+
+  const loaderEventIdx = useMemo(() => {
+    return Number.isFinite(currentEvent) && currentEvent > 0 ? currentEvent : null;
+  }, [currentEvent]);
+
   useEffect(() => {
     const loadManifestData = async () => {
       if (!isApiBook) {
@@ -340,7 +355,7 @@ function RelationGraphWrapper() {
     loading,
     error,
     isDataEmpty
-  } = useGraphDataLoader(isApiBook ? null : filename, currentChapter);
+  } = useGraphDataLoader(loaderBookKey, currentChapter, loaderEventIdx);
 
   const effectiveMaxChapter = isApiBook ? apiMaxChapter : maxChapter;
 

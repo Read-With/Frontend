@@ -1,7 +1,20 @@
 import { useState, useEffect, useCallback } from 'react';
 
+const normalizeKeySegment = (value) => {
+  if (value === undefined || value === null) return null;
+  const trimmed = String(value).trim();
+  if (!trimmed) return null;
+  return trimmed.replace(/[^a-zA-Z0-9_-]/g, '_');
+};
+
 export const STORAGE_KEYS = {
-  CHAPTER_NODE_POSITIONS: (chapter) => `chapter_node_positions_${chapter}`,
+  CHAPTER_NODE_POSITIONS: (bookKey, chapter) => {
+    const bookSegment = normalizeKeySegment(bookKey);
+    const chapterSegment = normalizeKeySegment(chapter) ?? 'unknown';
+    return bookSegment
+      ? `chapter_node_positions_${bookSegment}_${chapterSegment}`
+      : `chapter_node_positions_${chapterSegment}`;
+  },
   GRAPH_EVENT_LAYOUT: (chapter, eventNum) => `graph_event_layout_chapter_${chapter}_event_${eventNum}`,
   GRAPH_PARTIAL_LAYOUT: (chapter) => `graph_partial_layout_chapter_${chapter}`,
   LAST_CFI: (filename) => `readwith_${filename}_lastCFI`,
@@ -14,7 +27,7 @@ export const STORAGE_KEYS = {
 };
 
 export const createStorageKey = {
-  chapterNodePositions: (chapter) => STORAGE_KEYS.CHAPTER_NODE_POSITIONS(chapter),
+  chapterNodePositions: (bookKey, chapter) => STORAGE_KEYS.CHAPTER_NODE_POSITIONS(bookKey, chapter),
   
   // 이벤트별 레이아웃 키 생성
   graphEventLayout: (chapter, eventNum) => STORAGE_KEYS.GRAPH_EVENT_LAYOUT(chapter, eventNum),

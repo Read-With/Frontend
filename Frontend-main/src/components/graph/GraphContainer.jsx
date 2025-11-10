@@ -24,6 +24,7 @@ const GraphContainer = forwardRef(({
   filteredElements: externalFilteredElements,
   fitNodeIds: externalFitNodeIds,
   isResetFromSearch: externalIsResetFromSearch,
+  bookId = null,
   ...rest
 }, ref) => {
 
@@ -34,7 +35,19 @@ const GraphContainer = forwardRef(({
     currentChapterData,
     loading,
     error
-  } = useGraphDataLoader(filename, externalElements ? null : null);
+  } = useGraphDataLoader(
+    externalElements ? null : (bookId ?? filename ?? null),
+    externalElements ? null : currentChapter,
+    externalElements ? null : (
+      typeof currentEvent?.eventNum === 'number' && currentEvent.eventNum > 0
+        ? currentEvent.eventNum
+        : (
+          typeof currentEvent === 'number' && currentEvent > 0
+            ? currentEvent
+            : null
+        )
+    )
+  );
 
   // 외부에서 전달받은 elements가 있으면 그것을 사용, 없으면 내부 로더 사용
   const elements = externalElements || internalElements;

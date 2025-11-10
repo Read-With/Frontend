@@ -1915,6 +1915,9 @@ const ViewerPage = () => {
 
 
   useEffect(() => {
+    if (!folderKey || !bookKey) {
+      return;
+    }
     let isMounted = true;
     const cyInstances = [];
     
@@ -1929,7 +1932,7 @@ const ViewerPage = () => {
         
         const batch = chapterNums.slice(i, i + 3);
         const promises = batch.map(async (chapterNum) => {
-          const storageKey = createStorageKey.chapterNodePositions(chapterNum);
+          const storageKey = createStorageKey.chapterNodePositions(bookKey, chapterNum);
           if (localStorage.getItem(storageKey)) {
             return;
           }
@@ -2023,7 +2026,7 @@ const ViewerPage = () => {
         }
       });
     };
-  }, [folderKey]);
+  }, [folderKey, bookKey]);
 
 
   return (
