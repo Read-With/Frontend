@@ -19,6 +19,16 @@ import { loadBookmarks, addBookmark, removeBookmark } from '../components/viewer
 import { getBookManifest } from '../utils/common/api';
 import { getMaxChapter } from '../utils/common/manifestCache';
 
+const normalizeTitle = (title) => {
+  if (!title) return '';
+  return title
+    .toLowerCase()
+    .trim()
+    .replace(/\s+/g, ' ')
+    .replace(/[^\w\s가-힣]/g, '')
+    .replace(/\s/g, '');
+};
+
 export function useViewerPage() {
   const { filename: bookId } = useParams(); // filename을 bookId로 rename
   const location = useLocation();
@@ -52,6 +62,7 @@ export function useViewerPage() {
   const [events, setEvents] = useState([]);
   const [maxChapter, setMaxChapter] = useState(1);
   const [isInitialChapterDetected, setIsInitialChapterDetected] = useState(false);
+  const [matchedServerBook, setMatchedServerBook] = useState(null);
   
   const [graphFullScreen, setGraphFullScreen] = useState(() => {
     if (savedGraphMode === 'graph') return true;
@@ -149,17 +160,131 @@ export function useViewerPage() {
     fetchServerBook();
   }, [bookId, location.state?.book]);
   
+  useEffect(() => {
+    const stateBook = location.state?.book;
+    if (!stateBook || typeof stateBook.id === 'number') {
+      if (matchedServerBook) {
+        setMatchedServerBook(null);
+      }
+      return;
+    }
+
+    const normalizedTitle = normalizeTitle(stateBook.title);
+    if (!normalizedTitle) {
+      if (matchedServerBook) {
+        setMatchedServerBook(null);
+      }
+      return;
+    }
+
+    if (
+      matchedServerBook &&
+      typeof matchedServerBook.id === 'number' &&
+      normalizeTitle(matchedServerBook.title) === normalizedTitle
+    ) {
+      return;
+    }
+
+    let cancelled = false;
+
+    const fetchMatchingServerBook = async () => {
+      try {
+        const { getBooks } = await import('../utils/api/booksApi');
+        const response = await getBooks({ q: stateBook.title });
+
+        if (cancelled) {
+          return;
+        }
+
+        if (response?.isSuccess && Array.isArray(response.result)) {
+          const candidate = response.result.find(
+            (item) => normalizeTitle(item.title) === normalizedTitle && typeof item.id === 'number'
+          );
+          if (candidate) {
+            setMatchedServerBook(candidate);
+            return;
+          }
+        }
+
+        setMatchedServerBook(null);
+      } catch (error) {
+        if (!cancelled) {
+          setMatchedServerBook(null);
+        }
+      }
+    };
+
+    fetchMatchingServerBook();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [location.state?.book, matchedServerBook]);
+
+  useEffect(() => {
+    if (!matchedServerBook || typeof matchedServerBook.id !== 'number') {
+      return;
+    }
+
+    const numericId = matchedServerBook.id;
+    if (`${numericId}` === bookId) {
+      return;
+    }
+
+    const stateBook = location.state?.book;
+    const normalizedTitle = normalizeTitle(matchedServerBook.title);
+
+    navigate(`/user/viewer/${numericId}${location.search || ''}`, {
+      replace: true,
+      state: {
+        ...location.state,
+        book: {
+          ...matchedServerBook,
+          epubFile: stateBook?.epubFile,
+          epubArrayBuffer: stateBook?.epubArrayBuffer,
+          filename: String(numericId),
+          _indexedDbId: normalizedTitle,
+          _bookId: numericId,
+          _needsLoad: !stateBook?.epubFile && !stateBook?.epubArrayBuffer,
+          epubPath: undefined,
+          filePath: undefined,
+          s3Path: undefined,
+          fileUrl: undefined
+        }
+      }
+    });
+  }, [matchedServerBook, bookId, location.search, location.state, navigate]);
+
   const book = useMemo(() => {
     if (location.state?.book) {
-      // 네비게이션으로 온 경우 (state에 book 정보가 있음)
+      const stateBook = location.state.book;
+
+      if (matchedServerBook && typeof matchedServerBook.id === 'number') {
+        const normalizedTitle = normalizeTitle(matchedServerBook.title);
+
+        return {
+          ...matchedServerBook,
+          epubFile: stateBook.epubFile,
+          epubArrayBuffer: stateBook.epubArrayBuffer,
+          filename: String(matchedServerBook.id ?? bookId),
+          _indexedDbId: normalizedTitle,
+          _needsLoad: !stateBook.epubFile && !stateBook.epubArrayBuffer,
+          _bookId: matchedServerBook.id,
+          epubPath: undefined,
+          filePath: undefined,
+          s3Path: undefined,
+          fileUrl: undefined
+        };
+      }
+
       return {
-        ...location.state.book,
-        epubFile: location.state.book.epubFile,
-        epubArrayBuffer: location.state.book.epubArrayBuffer,
+        ...stateBook,
+        epubFile: stateBook.epubFile,
+        epubArrayBuffer: stateBook.epubArrayBuffer,
         filename: bookId,
-        _indexedDbId: location.state.book._indexedDbId || location.state.book.id?.toString() || bookId,
-        _needsLoad: !location.state.book.epubFile && !location.state.book.epubArrayBuffer,
-        _bookId: location.state.book.id || bookId,
+        _indexedDbId: stateBook._indexedDbId || (typeof stateBook.id === 'number' ? stateBook.id.toString() : bookId),
+        _needsLoad: !stateBook.epubFile && !stateBook.epubArrayBuffer,
+        _bookId: stateBook.id || bookId,
         epubPath: undefined,
         filePath: undefined,
         s3Path: undefined,
@@ -169,17 +294,6 @@ export function useViewerPage() {
     
     // URL 직접 접근: 서버에서 가져온 책 메타데이터 사용
     if (serverBook) {
-      // 제목 정규화 함수 (IndexedDB 키로 사용)
-      const normalizeTitle = (title) => {
-        if (!title) return '';
-        return title
-          .toLowerCase()
-          .trim()
-          .replace(/\s+/g, ' ')
-          .replace(/[^\w\s가-힣]/g, '')
-          .replace(/\s/g, '');
-      };
-      
       const normalizedTitle = normalizeTitle(serverBook.title);
       
       return {
@@ -206,7 +320,7 @@ export function useViewerPage() {
       _bookId: !isNaN(numericBookId) ? numericBookId : bookId,
       epubPath: undefined
     };
-  }, [location.state?.book, bookId, serverBook, loadingServerBook]);
+  }, [location.state?.book, matchedServerBook, bookId, serverBook, loadingServerBook]);
 
   // API로 받아온 도서의 메타데이터와 manifest 정보를 콘솔에 출력
   useEffect(() => {
@@ -550,20 +664,13 @@ export function useViewerPage() {
   
   const handleSliderChange = useCallback(async (value) => {
     setProgress(value);
-    if (viewerRef.current?.moveToProgress) {
-      try {
-        await viewerRef.current.moveToProgress(value);
-        setTimeout(() => {
-          // progress가 여전히 value와 다르면 새로고침
-          if (progress !== value) {
-            window.location.reload();
-          }
-        }, 1000);
-      } catch (e) {
-        window.location.reload();
-      }
+    if (!viewerRef.current?.moveToProgress) return;
+    try {
+      await viewerRef.current.moveToProgress(value);
+    } catch (e) {
+      window.location.reload();
     }
-  }, [progress]);
+  }, [setProgress, viewerRef]);
   
   const handleDeleteBookmark = useCallback(async (bookmarkId) => {
     try {
@@ -690,14 +797,41 @@ export function useViewerPage() {
     window.history.replaceState({}, '', newURL);
   }, [location.pathname, location.search]);
   
+  const prevUrlStateRef = useRef({
+    chapter: null,
+    page: null,
+    progress: null,
+    graphMode: null
+  });
+
   // 상태 변경 시 URL 업데이트
   useEffect(() => {
-    updateURL({
-      chapter: currentChapter,
-      page: currentPage,
-      progress: progress,
-      graphMode: graphFullScreen ? 'graph' : (showGraph ? 'split' : 'viewer')
-    });
+    const graphModeValue = graphFullScreen ? 'graph' : (showGraph ? 'split' : 'viewer');
+    const prev = prevUrlStateRef.current;
+    const updates = {};
+
+    if (currentChapter !== prev.chapter) {
+      updates.chapter = currentChapter;
+    }
+    if (currentPage !== prev.page) {
+      updates.page = currentPage;
+    }
+    if (progress !== prev.progress) {
+      updates.progress = progress;
+    }
+    if (graphModeValue !== prev.graphMode) {
+      updates.graphMode = graphModeValue;
+    }
+
+    if (Object.keys(updates).length > 0) {
+      updateURL(updates);
+      prevUrlStateRef.current = {
+        chapter: currentChapter,
+        page: currentPage,
+        progress,
+        graphMode: graphModeValue
+      };
+    }
   }, [currentChapter, currentPage, progress, graphFullScreen, showGraph, updateURL]);
   
   return {

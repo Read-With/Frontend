@@ -1,5 +1,4 @@
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { Book, BookOpen, CheckCircle2, Plus, Library, Heart, AlertCircle, Grid3X3, List } from 'lucide-react';
 import Header from '../components/common/Header';
 import BookLibrary from '../components/library/BookLibrary';
@@ -10,7 +9,6 @@ import { getAllProgress } from '../utils/common/api';
 import './MyPage.css';
 
 export default function MyPage() {
-  const navigate = useNavigate();
   const { books, loading, error, retryFetch, addBook, toggleFavorite, removeBook } = useBooks();
   const { user } = useAuth();
   const [showUpload, setShowUpload] = useState(false);
@@ -25,48 +23,7 @@ export default function MyPage() {
   const handleUploadSuccess = useCallback((newBook) => {
     addBook(newBook);
     setShowUpload(false);
-    
-    // 업로드된 책을 뷰어에서 열 수 있는지 확인하고 뷰어로 이동
-    if (newBook && newBook.id) {
-      const defaultParams = new URLSearchParams({
-        chapter: '1',
-        page: '1',
-        progress: '0',
-        graphMode: 'viewer'
-      });
-      
-      // 모든 책을 서버에서 받은 bookID로 관리
-      // 서버는 메타데이터만 제공하고, EPUB 파일은 로컬 IndexedDB에서 사용
-      const bookId = newBook.id;
-      const safeBookId = encodeURIComponent(bookId);
-      
-      // EPUB 파일은 로컬에서 사용 (IndexedDB에 저장됨)
-      // 서버는 EPUB 파일 경로를 제공하지 않으므로 epubPath는 사용하지 않음
-      
-      navigate(`/user/viewer/${safeBookId}?${defaultParams.toString()}`, {
-        state: {
-          book: {
-            ...newBook,
-            // EPUB 파일은 로컬에서 사용 (업로드 직후 메모리에 있거나 IndexedDB에서 로드)
-            epubFile: newBook.epubFile,
-            epubArrayBuffer: newBook.epubArrayBuffer,
-            filename: newBook.id.toString(),
-            // IndexedDB ID 설정 (업로드 직후에는 book.id로 저장됨)
-            _indexedDbId: newBook.id.toString(),
-            _bookId: newBook.id,
-            // 서버에서 epubPath를 제공하지 않으므로 제거
-            epubPath: undefined,
-            filePath: undefined,
-            s3Path: undefined,
-            fileUrl: undefined
-          },
-          fromLibrary: true,
-          from: { pathname: '/user/mypage' }
-        },
-        replace: false
-      });
-    }
-  }, [addBook, navigate]);
+  }, [addBook]);
 
   // 검색 실행 함수
   const handleSearch = useCallback(() => {

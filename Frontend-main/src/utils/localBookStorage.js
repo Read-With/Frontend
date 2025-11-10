@@ -3,8 +3,9 @@
  */
 
 const DB_NAME = 'readwith_local_books';
-const STORE_NAME = 'books';
-const DB_VERSION = 1;
+const BUFFER_STORE = 'books';
+const META_STORE = 'books_metadata';
+const DB_VERSION = 2;
 
 let db = null;
 
@@ -28,8 +29,11 @@ const openDB = () => {
 
     request.onupgradeneeded = (event) => {
       const database = event.target.result;
-      if (!database.objectStoreNames.contains(STORE_NAME)) {
-        database.createObjectStore(STORE_NAME);
+      if (!database.objectStoreNames.contains(BUFFER_STORE)) {
+        database.createObjectStore(BUFFER_STORE);
+      }
+      if (!database.objectStoreNames.contains(META_STORE)) {
+        database.createObjectStore(META_STORE);
       }
     };
   });
@@ -43,8 +47,8 @@ const openDB = () => {
 export const saveLocalBookBuffer = async (bookId, arrayBuffer) => {
   try {
     const database = await openDB();
-    const transaction = database.transaction([STORE_NAME], 'readwrite');
-    const store = transaction.objectStore(STORE_NAME);
+    const transaction = database.transaction([BUFFER_STORE], 'readwrite');
+    const store = transaction.objectStore(BUFFER_STORE);
     
     await new Promise((resolve, reject) => {
       const request = store.put(arrayBuffer, bookId);
@@ -65,8 +69,8 @@ export const saveLocalBookBuffer = async (bookId, arrayBuffer) => {
 export const loadLocalBookBuffer = async (bookId) => {
   try {
     const database = await openDB();
-    const transaction = database.transaction([STORE_NAME], 'readonly');
-    const store = transaction.objectStore(STORE_NAME);
+    const transaction = database.transaction([BUFFER_STORE], 'readonly');
+    const store = transaction.objectStore(BUFFER_STORE);
     
     return new Promise((resolve, reject) => {
       const request = store.get(bookId);
@@ -87,8 +91,8 @@ export const loadLocalBookBuffer = async (bookId) => {
 export const deleteLocalBookBuffer = async (bookId) => {
   try {
     const database = await openDB();
-    const transaction = database.transaction([STORE_NAME], 'readwrite');
-    const store = transaction.objectStore(STORE_NAME);
+    const transaction = database.transaction([BUFFER_STORE], 'readwrite');
+    const store = transaction.objectStore(BUFFER_STORE);
     
     await new Promise((resolve, reject) => {
       const request = store.delete(bookId);
@@ -101,14 +105,85 @@ export const deleteLocalBookBuffer = async (bookId) => {
   }
 };
 
+export const saveLocalBookMetadata = async (bookId, metadata) => {
+  try {
+    const database = await openDB();
+    const transaction = database.transaction([META_STORE], 'readwrite');
+    const store = transaction.objectStore(META_STORE);
+    await new Promise((resolve, reject) => {
+      const request = store.put(metadata, bookId);
+      request.onsuccess = () => resolve();
+      request.onerror = () => reject(request.error);
+    });
+  } catch (error) {
+    throw error;
+  }
+};
+
+export const loadLocalBookMetadata = async (bookId) => {
+  try {
+    const database = await openDB();
+    const transaction = database.transaction([META_STORE], 'readonly');
+    const store = transaction.objectStore(META_STORE);
+    return new Promise((resolve, reject) => {
+      const request = store.get(bookId);
+      request.onsuccess = () => resolve(request.result || null);
+      request.onerror = () => reject(request.error);
+    });
+  } catch (error) {
+    return null;
+  }
+};
+
+export const getAllLocalBookMetadata = async () => {
+  try {
+    const database = await openDB();
+    const transaction = database.transaction([META_STORE], 'readonly');
+    const store = transaction.objectStore(META_STORE);
+    const [keys, values] = await Promise.all([
+      new Promise((resolve, reject) => {
+        const request = store.getAllKeys();
+        request.onsuccess = () => resolve(request.result || []);
+        request.onerror = () => reject(request.error);
+      }),
+      new Promise((resolve, reject) => {
+        const request = store.getAll();
+        request.onsuccess = () => resolve(request.result || []);
+        request.onerror = () => reject(request.error);
+      }),
+    ]);
+    return keys.map((key, index) => ({
+      key: key.toString(),
+      value: values[index] || null,
+    }));
+  } catch (error) {
+    return [];
+  }
+};
+
+export const deleteLocalBookMetadata = async (bookId) => {
+  try {
+    const database = await openDB();
+    const transaction = database.transaction([META_STORE], 'readwrite');
+    const store = transaction.objectStore(META_STORE);
+    await new Promise((resolve, reject) => {
+      const request = store.delete(bookId);
+      request.onsuccess = () => resolve();
+      request.onerror = () => reject(request.error);
+    });
+  } catch (error) {
+    // noop
+  }
+};
+
 /**
  * 모든 로컬 책 ArrayBuffer 삭제
  */
 export const clearAllLocalBookBuffers = async () => {
   try {
     const database = await openDB();
-    const transaction = database.transaction([STORE_NAME], 'readwrite');
-    const store = transaction.objectStore(STORE_NAME);
+    const transaction = database.transaction([BUFFER_STORE], 'readwrite');
+    const store = transaction.objectStore(BUFFER_STORE);
     
     await new Promise((resolve, reject) => {
       const request = store.clear();
@@ -128,8 +203,8 @@ export const clearAllLocalBookBuffers = async () => {
 export const getAllLocalBookIds = async () => {
   try {
     const database = await openDB();
-    const transaction = database.transaction([STORE_NAME], 'readonly');
-    const store = transaction.objectStore(STORE_NAME);
+    const transaction = database.transaction([BUFFER_STORE], 'readonly');
+    const store = transaction.objectStore(BUFFER_STORE);
     
     return new Promise((resolve, reject) => {
       const request = store.getAllKeys();
@@ -153,8 +228,8 @@ export const getAllLocalBookIds = async () => {
 export const inspectIndexedDB = async () => {
   try {
     const database = await openDB();
-    const transaction = database.transaction([STORE_NAME], 'readonly');
-    const store = transaction.objectStore(STORE_NAME);
+    const transaction = database.transaction([BUFFER_STORE], 'readonly');
+    const store = transaction.objectStore(BUFFER_STORE);
     
     return new Promise((resolve, reject) => {
       const request = store.getAllKeys();

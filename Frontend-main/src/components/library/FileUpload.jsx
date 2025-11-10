@@ -140,7 +140,7 @@ const FileUpload = ({ onUploadSuccess, onClose }) => {
           // EPUB 파일을 ArrayBuffer로 변환하여 IndexedDB에 저장 (책 제목으로)
       try {
         const arrayBuffer = await selectedFile.arrayBuffer();
-        const { saveLocalBookBuffer } = await import('../../utils/localBookStorage');
+        const { saveLocalBookBuffer, saveLocalBookMetadata } = await import('../../utils/localBookStorage');
         
         // 제목 정규화 함수 (IndexedDB 키로 사용)
         const normalizeTitle = (title) => {
@@ -160,7 +160,31 @@ const FileUpload = ({ onUploadSuccess, onClose }) => {
         }
         
         // 정규화된 제목을 키로 사용하여 IndexedDB에 저장
-        await saveLocalBookBuffer(normalizedTitle, arrayBuffer);
+        const coverImgUrl =
+          book.coverImgUrl ||
+          book.coverImage ||
+          book.coverUrl ||
+          metadata.coverImgUrl ||
+          metadata.coverImage ||
+          '';
+
+        const savedId = book.id || metadata.id || normalizedTitle;
+
+        await Promise.all([
+          saveLocalBookBuffer(normalizedTitle, arrayBuffer),
+          saveLocalBookMetadata(normalizedTitle, {
+            id: savedId,
+            title: book.title || metadata.title || '',
+            author: book.author || metadata.author || '',
+            language: book.language || metadata.language || 'ko',
+            coverImgUrl,
+            coverImage: coverImgUrl,
+            description: book.description || metadata.description || '',
+            favorite: !!book.favorite,
+            uploadedAt: new Date().toISOString(),
+            isLocalOnly: !book.id,
+          }),
+        ]);
       } catch (error) {
         // 저장 실패해도 계속 진행 (메모리에서 사용)
       }

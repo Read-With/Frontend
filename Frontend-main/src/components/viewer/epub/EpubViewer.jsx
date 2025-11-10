@@ -56,6 +56,24 @@ const getEpubCacheKey = (epubPath, epubSource, bookId) => {
   return epubPath || `book_${bookId || 'unknown'}`;
 };
 
+const resolveTotalLocations = (locations) => {
+  if (!locations) return 1;
+  try {
+    if (typeof locations.length === 'function') {
+      const lengthValue = Number(locations.length());
+      if (Number.isFinite(lengthValue) && lengthValue > 0) {
+        return lengthValue;
+      }
+    }
+  } catch (error) {
+  }
+  const totalValue = Number(locations?.total);
+  if (Number.isFinite(totalValue) && totalValue > 0) {
+    return totalValue;
+  }
+  return 1;
+};
+
 
 const EpubViewer = forwardRef(
   (
@@ -636,7 +654,8 @@ const EpubViewer = forwardRef(
              });
           
           await bookInstance.locations.generate(1800);
-          onTotalPagesChange?.(bookInstance.locations.total);
+          const initialTotal = resolveTotalLocations(bookInstance.locations);
+          onTotalPagesChange?.(initialTotal);
 
           // TOC 정보 로드 및 챕터별 텍스트 저장
           const toc = bookInstance.navigation.toc;
@@ -726,12 +745,25 @@ const EpubViewer = forwardRef(
             const cfi = location?.start?.cfi;
             
             if (cfi) {
-              const locIdx = bookInstance.locations.locationFromCfi(cfi);
-              const totalPages = bookInstance.locations.total;
-              const pageNum = Math.min(locIdx + 1, totalPages);
+              let locIdx = 0;
+              try {
+                const idxCandidate = bookInstance.locations?.locationFromCfi?.(cfi);
+                if (Number.isFinite(idxCandidate) && idxCandidate >= 0) {
+                  locIdx = idxCandidate;
+                }
+              } catch (error) {
+              }
+              const totalLocations = resolveTotalLocations(bookInstance.locations);
+              const clampedIndex = Math.min(Math.max(locIdx, 0), Math.max(totalLocations - 1, 0));
+              const pageNum = Math.max(Math.min(clampedIndex + 1, totalLocations), 1);
+              const progressValue = totalLocations > 1
+                ? Math.round((clampedIndex / (totalLocations - 1)) * 100)
+                : (clampedIndex > 0 ? 100 : 0);
+              const normalizedProgress = Math.max(0, Math.min(progressValue, 100));
 
               onCurrentPageChange?.(pageNum);
-              onProgressChange?.(Math.round((locIdx / totalPages) * 100));
+              onTotalPagesChange?.(totalLocations);
+              onProgressChange?.(normalizedProgress);
               storageUtils.set(storageKeys.lastCFI, cfi);
               
               // EPUB 정보 업데이트
@@ -739,7 +771,7 @@ const EpubViewer = forwardRef(
                 cfi: cfi,
                 spinePos: location?.start?.spinePos,
                 href: location?.start?.href,
-                totalPages: totalPages,
+                totalPages: totalLocations,
                 locationsLength: bookInstance.locations?.length() || 0,
                 spineLength: bookInstance.spine?.length || 0,
                 timestamp: Date.now()
