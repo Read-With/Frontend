@@ -59,16 +59,13 @@ const Header = ({ userNickname, showAuthLinks = false }) => {
       // redirect_uri 설정 (로컬/프로덕션 구분)
       // 백엔드가 요청 본문의 redirectUri를 읽을 수 있도록 각 환경에 맞는 값 사용
       const getRedirectUri = () => {
-        // 환경변수가 있으면 우선 사용
         if (import.meta.env.VITE_GOOGLE_REDIRECT_URI) {
           return import.meta.env.VITE_GOOGLE_REDIRECT_URI;
         }
-        // 로컬 개발 환경: 로컬 프론트엔드 사용
-        if (import.meta.env.DEV) {
-          return `${window.location.protocol}//${window.location.host}/auth/callback`;
+        if (typeof window !== 'undefined') {
+          return `${window.location.origin}/auth/callback`;
         }
-        // 프로덕션 환경: 배포 서버 사용
-        return 'https://dev.readwith.store/auth/callback';
+        return 'https://readwith-frontend.vercel.app/auth/callback';
       };
       
       // 환경변수에서 구글 클라이언트 ID 가져오기
