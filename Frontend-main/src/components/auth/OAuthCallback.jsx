@@ -80,10 +80,10 @@ const OAuthCallback = () => {
               if (import.meta.env.VITE_GOOGLE_REDIRECT_URI) {
                 return import.meta.env.VITE_GOOGLE_REDIRECT_URI;
               }
-              if (import.meta.env.DEV) {
-                return `${window.location.protocol}//${window.location.host}/auth/callback`;
+              if (typeof window !== 'undefined') {
+                return `${window.location.origin}/auth/callback`;
               }
-              return 'https://dev.readwith.store/auth/callback';
+              return 'https://readwith-frontend.vercel.app/auth/callback';
             };
             
             const redirectUri = getRedirectUri();
