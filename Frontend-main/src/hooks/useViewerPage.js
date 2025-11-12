@@ -771,12 +771,28 @@ export function useViewerPage() {
   
   const handleSliderChange = useCallback(async (value) => {
     setProgress(value);
-    if (!viewerRef.current?.moveToProgress) return;
-    try {
-      await viewerRef.current.moveToProgress(value);
-    } catch (e) {
-      window.location.reload();
+    
+    // 뷰어가 준비될 때까지 대기 (최대 3초)
+    let attempts = 0;
+    while (attempts < 30) {
+      if (viewerRef.current?.moveToProgress) {
+        try {
+          await viewerRef.current.moveToProgress(value);
+          return;
+        } catch (e) {
+          console.error('프로그레스 이동 실패:', e);
+          // 재시도
+          await new Promise(resolve => setTimeout(resolve, 100));
+          attempts++;
+        }
+      } else {
+        await new Promise(resolve => setTimeout(resolve, 100));
+        attempts++;
+      }
     }
+    
+    // 최종 실패 시 경고만 표시 (새로고침하지 않음)
+    console.warn('프로그레스 이동 실패: 뷰어가 준비되지 않았습니다.');
   }, [setProgress, viewerRef]);
   
   const handleDeleteBookmark = useCallback(async (bookmarkId) => {
@@ -820,22 +836,50 @@ export function useViewerPage() {
     };
     setSettings(updatedSettings);
 
-    // 설정은 이제 useLocalStorage로 자동 저장됨
-
     // EPUB 뷰어 다시 로드
     const saveCurrent = async () => {
       try {
+        // 현재 CFI와 프로그레스 저장
         let cfi = null;
+        let currentProgress = progress;
 
-        if (viewerRef.current?.getCurrentCfi) {
-          cfi = await viewerRef.current.getCurrentCfi();
-          if (cfi) {
-            setLastCFI(cfi);
+        // 뷰어가 준비될 때까지 대기 (최대 2초)
+        let attempts = 0;
+        while (attempts < 20) {
+          if (viewerRef.current?.getCurrentCfi) {
+            try {
+              cfi = await viewerRef.current.getCurrentCfi();
+              if (cfi) {
+                setLastCFI(cfi);
+                break;
+              }
+            } catch (e) {
+              // 재시도
+            }
           }
+          await new Promise(resolve => setTimeout(resolve, 100));
+          attempts++;
         }
 
-        // 즉시 뷰어 다시 로드
+        // 뷰어 다시 로드
         setReloadKey((prev) => prev + 1);
+        
+        // 뷰어가 재로드된 후 프로그레스 복원 (최대 3초 대기)
+        setTimeout(async () => {
+          let restoreAttempts = 0;
+          while (restoreAttempts < 30) {
+            if (viewerRef.current?.moveToProgress) {
+              try {
+                await viewerRef.current.moveToProgress(currentProgress);
+                return;
+              } catch (e) {
+                // 재시도
+              }
+            }
+            await new Promise(resolve => setTimeout(resolve, 100));
+            restoreAttempts++;
+          }
+        }, 200);
       } catch (e) {
         // 설정 적용 오류 처리
         setReloadKey((prev) => prev + 1);
@@ -843,7 +887,7 @@ export function useViewerPage() {
     };
 
     saveCurrent();
-  }, [showGraph, settings, cleanBookId]);
+  }, [showGraph, settings, cleanBookId, progress]);
   
   const handleFitView = useCallback(() => {
     // Implementation of handleFitView

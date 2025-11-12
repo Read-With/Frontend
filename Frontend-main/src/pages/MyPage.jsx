@@ -5,8 +5,6 @@ import BookLibrary from '../components/library/BookLibrary';
 import FileUpload from '../components/library/FileUpload';
 import { useBooks } from '../hooks/useBooks';
 import useAuth from '../hooks/useAuth';
-import { getAllProgress } from '../utils/common/api';
-import { getAllProgressFromCache } from '../utils/common/progressCache';
 import './MyPage.css';
 
 export default function MyPage() {
@@ -19,8 +17,6 @@ export default function MyPage() {
   const [isSearching, setIsSearching] = useState(false); // 검색 중인지 여부
   const [sortBy, setSortBy] = useState('recent');
   const [viewMode, setViewMode] = useState('grid'); // 'grid' 또는 'list'
-  // 초기값을 로컬 캐시에서 가져오기
-  const [allProgress, setAllProgress] = useState(() => getAllProgressFromCache());
 
   const handleUploadSuccess = useCallback((newBook) => {
     addBook(newBook);
@@ -49,36 +45,48 @@ export default function MyPage() {
     }
   }, [handleSearch]);
 
-  useEffect(() => {
-    // 로컬 캐시에서만 가져오기 (서버 호출 없음)
-    const cachedProgress = getAllProgressFromCache();
-    if (cachedProgress.length > 0) {
-      setAllProgress(cachedProgress);
-    }
-  }, []);
 
   const getDisplayName = useCallback(() => {
     return user?.name || '사용자';
   }, [user?.name]);
 
-  // 통계 계산 - 메모이제이션 (로컬 캐시에서 직접 가져오기)
+  // 통계 계산 - 메모이제이션 (reader_progress_{bookId} 키 기반)
   const stats = useMemo(() => {
     const total = books?.length || 0;
     
-    // 로컬 캐시에서 진도 정보 가져오기
-    const cachedProgress = getAllProgressFromCache();
-    const progressList = Array.isArray(allProgress) && allProgress.length > 0 
-      ? allProgress 
-      : cachedProgress;
+    // localStorage에서 reader_progress_{bookId} 키가 있는 책 찾기
+    const bookIds = new Set();
+    if (books && Array.isArray(books)) {
+      books.forEach(book => {
+        if (book.id !== undefined && book.id !== null) {
+          bookIds.add(String(book.id));
+        }
+        if (book._bookId !== undefined && book._bookId !== null) {
+          bookIds.add(String(book._bookId));
+        }
+      });
+    }
     
-    // 읽는 중 카운트 (진도 정보가 있고 실제로 존재하는 책만)
-    const bookIds = new Set(books?.map(book => book.id) || []);
-    const reading = Array.isArray(progressList) 
-      ? progressList.filter(progress => {
-          const progressBookId = progress?.bookId ?? progress?.id;
-          return progressBookId && bookIds.has(progressBookId);
-        }).length
-      : 0;
+    // localStorage에서 reader_progress_로 시작하는 모든 키 찾기
+    let reading = 0;
+    try {
+      if (typeof localStorage !== 'undefined') {
+        const allKeys = Object.keys(localStorage);
+        const readerProgressKeys = allKeys.filter(key => key.startsWith('reader_progress_'));
+        
+        const validBookIds = new Set();
+        readerProgressKeys.forEach(key => {
+          const bookId = key.replace('reader_progress_', '');
+          if (bookId && bookIds.has(bookId)) {
+            validBookIds.add(bookId);
+          }
+        });
+        
+        reading = validBookIds.size;
+      }
+    } catch (error) {
+      console.warn('읽는 중 책 수 계산 실패:', error);
+    }
     
     // 읽는 중 권수가 총 권수를 초과하지 않도록 제한
     const validReading = Math.min(reading, total);
@@ -91,7 +99,7 @@ export default function MyPage() {
       reading: validReading,
       favorites
     };
-  }, [books, allProgress]);
+  }, [books]);
 
   // 탭별 필터링 - 메모이제이션
   const filteredBooks = useMemo(() => {

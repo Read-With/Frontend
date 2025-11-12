@@ -322,13 +322,35 @@ const EpubViewer = forwardRef(
         }
       },
       moveToProgress: async (percentage) => {
-        const { book, rendition } = getRefs(bookRef, renditionRef);
-        if (!book || !rendition) return;
+        // book과 rendition이 준비될 때까지 대기 (최대 5초)
+        let attempts = 0;
+        let book, rendition;
+        while (attempts < 50) {
+          const refs = getRefs(bookRef, renditionRef);
+          book = refs.book;
+          rendition = refs.rendition;
+          
+          if (book && rendition && book.spine && book.spine.length > 0) {
+            break;
+          }
+          
+          await new Promise(resolve => setTimeout(resolve, 100));
+          attempts++;
+        }
+        
+        if (!book || !rendition) {
+          console.warn('moveToProgress: book 또는 rendition이 준비되지 않았습니다.');
+          return;
+        }
 
-        await ensureLocations(book, 3000);
-        const percent = Math.min(Math.max(percentage, 0), 100) / 100;
-        const targetCfi = book.locations.cfiFromPercentage(percent);
-        await rendition.display(targetCfi || (percent < 0.5 ? 0 : book.spine.last()?.href));
+        try {
+          await ensureLocations(book, 3000);
+          const percent = Math.min(Math.max(percentage, 0), 100) / 100;
+          const targetCfi = book.locations.cfiFromPercentage(percent);
+          await rendition.display(targetCfi || (percent < 0.5 ? 0 : book.spine.last()?.href));
+        } catch (error) {
+          console.error('moveToProgress 실패:', error);
+        }
       },
       applySettings: () => {
         const { rendition } = getRefs(bookRef, renditionRef);
