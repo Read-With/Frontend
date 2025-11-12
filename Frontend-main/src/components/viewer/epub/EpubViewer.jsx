@@ -810,7 +810,7 @@ const EpubViewer = forwardRef(
             
             if (cfi) {
               // 현재 챕터 감지
-              const detectedChapter = detectCurrentChapter(cfi, chapterCfiMapRef.current);
+              const detectedChapter = detectCurrentChapter(cfi, chapterCfiMapRef.current, book?.title);
               
               // pgepubid 추출
               const pgepubidMatch = cfi.match(/\[pgepubid(\d+)\]/);
@@ -868,7 +868,7 @@ const EpubViewer = forwardRef(
             }
             
               // 현재 챕터 감지 및 업데이트 (통합된 함수 사용)
-             const detectedChapter = detectCurrentChapter(cfi, chapterCfiMapRef.current);
+             const detectedChapter = detectCurrentChapter(cfi, chapterCfiMapRef.current, book?.title);
              
              
              // ViewerPage에 챕터 변경 알림

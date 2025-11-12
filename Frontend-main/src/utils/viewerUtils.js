@@ -344,13 +344,154 @@ export const bookmarkUtils = {
 
 
 /**
+ * Julius Caesar 책의 CFI를 chapter로 변환
+ * @param {string} cfi - 현재 CFI
+ * @returns {number} 감지된 챕터 번호
+ */
+function detectJuliusCaesarChapter(cfi) {
+  if (!cfi) return 1;
+  
+  // Julius Caesar 책의 chapter 시작 CFI 매핑
+  const juliusCaesarChapterCfis = [
+    { chapter: 1, cfi: 'epubcfi(/6/10!/4/2[pgepubid00004]/2/4/1:0)' },
+    { chapter: 2, cfi: 'epubcfi(/6/8!/4/2[pgepubid00004]/42/1:0)' },
+    { chapter: 3, cfi: 'epubcfi(/6/8!/4/2[pgepubid00004]/248/1:0)' },
+    { chapter: 4, cfi: 'epubcfi(/6/10!/4/2[pgepubid00008]/2/4/1:0)' },
+    { chapter: 5, cfi: 'epubcfi(/6/10!/4/2[pgepubid00008]/214/13:0)' },
+    { chapter: 6, cfi: 'epubcfi(/6/10!/4/2[pgepubid00008]/318/1:0)' },
+    { chapter: 7, cfi: 'epubcfi(/6/10!/4/2[pgepubid00008]/334/1:0)' },
+    { chapter: 8, cfi: 'epubcfi(/6/10!/4/2[pgepubid00013]/2/4/1:0)' },
+    { chapter: 9, cfi: 'epubcfi(/6/12!/4/2[pgepubid00013]/208/1:0)' },
+    { chapter: 10, cfi: 'epubcfi(/6/12!/4/2[pgepubid00013]/416/5:0)' },
+    { chapter: 11, cfi: 'epubcfi(/6/10!/4/2[pgepubid00017]/2/4/1:0)' },
+    { chapter: 12, cfi: 'epubcfi(/6/14!/4/2[pgepubid00017]/34/5:0)' },
+    { chapter: 13, cfi: 'epubcfi(/6/14!/4/2[pgepubid00017]/94/1:0)' },
+    { chapter: 14, cfi: 'epubcfi(/6/10!/4/2[pgepubid00021]/2/4/1:0)' },
+    { chapter: 15, cfi: 'epubcfi(/6/16!/4/2[pgepubid00021]/104/1:0)' },
+    { chapter: 16, cfi: 'epubcfi(/6/16!/4/2[pgepubid00021]/128/1:0)' },
+    { chapter: 17, cfi: 'epubcfi(/6/16!/4/2[pgepubid00021]/214/5:0)' },
+    { chapter: 18, cfi: 'epubcfi(/6/16!/4/2[pgepubid00021]/256/1:0)' }
+  ];
+  
+  // CFI 정규화 (epubcfi() 제거, 괄호 정리)
+  const normalizeCfi = (cfiStr) => {
+    if (!cfiStr) return '';
+    let normalized = cfiStr.replace(/^epubcfi\(/, '').replace(/\)$/, '').trim();
+    // 마지막 닫는 괄호 제거 (있는 경우)
+    if (normalized.endsWith(')')) {
+      normalized = normalized.slice(0, -1);
+    }
+    return normalized;
+  };
+  
+  const normalizedCurrentCfi = normalizeCfi(cfi);
+  
+  // CFI 비교 함수: 현재 CFI가 chapter 시작 CFI보다 크거나 같은지 확인
+  const compareCfi = (current, chapterStart) => {
+    const normalizedCurrent = normalizeCfi(current);
+    const normalizedStart = normalizeCfi(chapterStart);
+    
+    // 1. 정확한 포함 관계 확인
+    if (normalizedCurrent.includes(normalizedStart)) {
+      return true;
+    }
+    
+    // 2. pgepubid 추출
+    const currentPgepubidMatch = normalizedCurrent.match(/\[pgepubid(\d+)\]/);
+    const startPgepubidMatch = normalizedStart.match(/\[pgepubid(\d+)\]/);
+    
+    if (!currentPgepubidMatch || !startPgepubidMatch) {
+      // pgepubid가 없으면 문자열 비교로 fallback
+      return normalizedCurrent >= normalizedStart;
+    }
+    
+    const currentPgepubid = parseInt(currentPgepubidMatch[1]);
+    const startPgepubid = parseInt(startPgepubidMatch[1]);
+    
+    // 3. pgepubid 비교 (pgepubid가 클수록 더 나중 chapter)
+    if (currentPgepubid > startPgepubid) {
+      return true;
+    } else if (currentPgepubid < startPgepubid) {
+      return false;
+    }
+    
+    // 4. 같은 pgepubid면 path 숫자 비교
+    // path 숫자 추출 - pgepubid 이후의 숫자 부분
+    // 예: /6/10!/4/2[pgepubid00004]/2/4/1:0 -> /2/4/1:0 부분
+    const extractPathAfterPgepubid = (cfiStr) => {
+      const pgepubidIndex = cfiStr.indexOf(']');
+      if (pgepubidIndex === -1) return null;
+      const afterPgepubid = cfiStr.substring(pgepubidIndex + 1);
+      const pathMatch = afterPgepubid.match(/\/(\d+)\/(\d+)(?::(\d+))?/);
+      if (pathMatch) {
+        return [
+          parseInt(pathMatch[1]),
+          parseInt(pathMatch[2]),
+          pathMatch[3] ? parseInt(pathMatch[3]) : 0
+        ];
+      }
+      return null;
+    };
+    
+    const currentPath = extractPathAfterPgepubid(normalizedCurrent);
+    const startPath = extractPathAfterPgepubid(normalizedStart);
+    
+    if (currentPath && startPath) {
+      // 첫 번째 path 숫자 비교
+      if (currentPath[0] > startPath[0]) {
+        return true;
+      } else if (currentPath[0] < startPath[0]) {
+        return false;
+      }
+      
+      // 두 번째 path 숫자 비교
+      if (currentPath[1] > startPath[1]) {
+        return true;
+      } else if (currentPath[1] < startPath[1]) {
+        return false;
+      }
+      
+      // 세 번째 path 숫자 비교 (있는 경우)
+      return currentPath[2] >= startPath[2];
+    }
+    
+    // path 숫자를 추출할 수 없으면 문자열 비교
+    return normalizedCurrent >= normalizedStart;
+  };
+  
+  // 역순으로 확인 (마지막 chapter부터)
+  for (let i = juliusCaesarChapterCfis.length - 1; i >= 0; i--) {
+    const chapterInfo = juliusCaesarChapterCfis[i];
+    
+    // 현재 CFI가 이 chapter 시작 CFI보다 크거나 같으면 이 chapter 반환
+    if (compareCfi(cfi, chapterInfo.cfi)) {
+      return chapterInfo.chapter;
+    }
+  }
+  
+  // 매칭 실패 시 첫 번째 chapter
+  return 1;
+}
+
+/**
  * 로컬 CFI 기반 현재 챕터 감지
  * @param {string} cfi - 로컬 CFI (현재 보고 있는 EPUB의 CFI)
  * @param {Map} chapterCfiMap - 챕터 CFI 맵 (로컬 EPUB의 챕터 CFI)
+ * @param {string} bookTitle - 책 제목 (선택적)
  * @returns {number} 감지된 챕터 번호
  */
-export function detectCurrentChapter(cfi, chapterCfiMap = null) {
+export function detectCurrentChapter(cfi, chapterCfiMap = null, bookTitle = null) {
   if (!cfi) return 1;
+  
+  // Julius Caesar 책 예외 처리
+  const isJuliusCaesar = bookTitle && (
+    bookTitle.toLowerCase().includes('julius caesar') ||
+    bookTitle.toLowerCase().includes('줄리어스 시저')
+  );
+  
+  if (isJuliusCaesar) {
+    return detectJuliusCaesarChapter(cfi);
+  }
   
   // 1. [chapter-X] 패턴으로 직접 추출 시도
   let detectedChapter = cfiUtils.extractChapterNumber(cfi);
