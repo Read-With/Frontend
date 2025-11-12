@@ -3,15 +3,21 @@ import { useBookmarks } from '../../../hooks/useBookmarks';
 
 const parseBookmarkLocation = (bookmark) => {
   if (!bookmark) return '';
-  if (bookmark.chapterTitle) return bookmark.chapterTitle;
+  
+  // 저장된 title이 있으면 우선 사용 (로컬 CFI 기반으로 저장된 형식)
+  if (bookmark.title) return bookmark.title;
+  
+  // title이 없으면 CFI에서 파싱 (로컬 CFI 기반)
   const cfi = bookmark.startCfi || '';
   const chapterMatch = cfi.match(/\[chapter-(\d+)\]/);
-  const chapter = chapterMatch ? `${chapterMatch[1]}챕터` : null;
+  const chapter = chapterMatch ? parseInt(chapterMatch[1]) : null;
   const pageMatch = cfi.match(/\[chapter-\d+\]\/(\d+)/);
-  const page = pageMatch ? `${pageMatch[1]}페이지` : null;
-  if (page && chapter) return `${page} (${chapter})`;
-  if (page) return page;
-  if (chapter) return chapter;
+  const page = pageMatch ? parseInt(pageMatch[1]) : null;
+  
+  // "몇페이지 (챕터 몇)" 형식으로 반환
+  if (page && chapter) return `${page}페이지 (${chapter}챕터)`;
+  if (page) return `${page}페이지`;
+  if (chapter) return `${chapter}챕터`;
   return cfi;
 };
 

@@ -6,6 +6,7 @@ import FileUpload from '../components/library/FileUpload';
 import { useBooks } from '../hooks/useBooks';
 import useAuth from '../hooks/useAuth';
 import { getAllProgress } from '../utils/common/api';
+import { getAllProgressFromCache } from '../utils/common/progressCache';
 import './MyPage.css';
 
 export default function MyPage() {
@@ -18,7 +19,8 @@ export default function MyPage() {
   const [isSearching, setIsSearching] = useState(false); // 검색 중인지 여부
   const [sortBy, setSortBy] = useState('recent');
   const [viewMode, setViewMode] = useState('grid'); // 'grid' 또는 'list'
-  const [allProgress, setAllProgress] = useState([]);
+  // 초기값을 로컬 캐시에서 가져오기
+  const [allProgress, setAllProgress] = useState(() => getAllProgressFromCache());
 
   const handleUploadSuccess = useCallback((newBook) => {
     addBook(newBook);
@@ -48,34 +50,31 @@ export default function MyPage() {
   }, [handleSearch]);
 
   useEffect(() => {
-    const fetchAllProgress = async () => {
-      try {
-        const response = await getAllProgress();
-        if (response.isSuccess && response.result) {
-          setAllProgress(response.result);
-        }
-      } catch (err) {
-        console.error('전체 진도 조회 실패:', err);
-      }
-    };
-
-    if (user) {
-      fetchAllProgress();
+    // 로컬 캐시에서만 가져오기 (서버 호출 없음)
+    const cachedProgress = getAllProgressFromCache();
+    if (cachedProgress.length > 0) {
+      setAllProgress(cachedProgress);
     }
-  }, [user]);
+  }, []);
 
   const getDisplayName = useCallback(() => {
     return user?.name || '사용자';
   }, [user?.name]);
 
-  // 통계 계산 - 메모이제이션
+  // 통계 계산 - 메모이제이션 (로컬 캐시에서 직접 가져오기)
   const stats = useMemo(() => {
     const total = books?.length || 0;
     
-    // API 책 읽는 중 카운트 (진도 정보가 있고 실제로 존재하는 책만)
+    // 로컬 캐시에서 진도 정보 가져오기
+    const cachedProgress = getAllProgressFromCache();
+    const progressList = Array.isArray(allProgress) && allProgress.length > 0 
+      ? allProgress 
+      : cachedProgress;
+    
+    // 읽는 중 카운트 (진도 정보가 있고 실제로 존재하는 책만)
     const bookIds = new Set(books?.map(book => book.id) || []);
-    const reading = Array.isArray(allProgress) 
-      ? allProgress.filter(progress => {
+    const reading = Array.isArray(progressList) 
+      ? progressList.filter(progress => {
           const progressBookId = progress?.bookId ?? progress?.id;
           return progressBookId && bookIds.has(progressBookId);
         }).length

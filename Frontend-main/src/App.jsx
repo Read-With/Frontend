@@ -9,7 +9,6 @@ import HomePage from './pages/HomePage';
 import AdminPage from './pages/AdminPage';
 import ProtectedRoute from './components/auth/ProtectedRoute';
 import OAuthCallback from './components/auth/OAuthCallback';
-import { SpeedInsights } from '@vercel/speed-insights/react';
 
 // 그래프 컴포넌트를 유지하는 레이아웃
 const GraphLayout = () => {
@@ -86,7 +85,6 @@ const App = () => {
       <Router>
         <AppContent />
       </Router>
-      <SpeedInsights />
     </RecoilRoot>
   );
 };

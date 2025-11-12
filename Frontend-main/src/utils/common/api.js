@@ -1,5 +1,6 @@
 // API 기본 설정 및 도서 관련 API 함수들 (배포 서버 고정 사용)
 import { setManifestData, isValidEvent, getManifestFromCache } from './manifestCache';
+import { setAllProgress, getProgressFromCache, getAllProgressFromCache } from './progressCache';
 
 const getApiBaseUrl = () => {
   // 로컬 개발 환경: 프록시 사용 (배포 서버로 전달)
@@ -127,7 +128,7 @@ const apiRequest = async (url, options = {}) => {
   // 환경에 따른 URL 구성
   const requestUrl = import.meta.env.DEV ? `${API_BASE_URL}${url}` : `${API_BASE_URL}${url}`;
   
-  // 404 에러를 조용히 처리할 엔드포인트 목록
+  // 404와 403 에러를 조용히 처리할 엔드포인트 목록
   const silent404Endpoints = [
     '/api/graph/fine',
     '/api/graph/macro',
@@ -137,9 +138,25 @@ const apiRequest = async (url, options = {}) => {
   ];
   
   const isSilent404 = silent404Endpoints.some(endpoint => url.includes(endpoint));
+  const isSilent403 = silent404Endpoints.some(endpoint => url.includes(endpoint));
   
   try {
     const response = await fetch(requestUrl, config);
+    
+    // 403 에러는 조용히 처리 (권한이 없는 것은 정상 상황)
+    // 디버깅이 필요한 경우에만 주석 해제
+    // if (response.status === 403 && url.includes('/api/progress')) {
+    //   const errorText = await response.clone().text().catch(() => '');
+    //   console.debug('🔍 403 Forbidden (Progress API):', {
+    //     url: requestUrl,
+    //     status: response.status,
+    //     hasToken: !!token,
+    //     tokenValid: token ? isTokenValid(token) : false,
+    //     tokenPreview: token ? token.substring(0, 30) + '...' : '없음',
+    //     authorizationHeader: config.headers.Authorization ? '있음' : '없음',
+    //     responseText: errorText.substring(0, 200)
+    //   });
+    // }
     
     // 401 에러인 경우 상세 정보 출력
     if (response.status === 401) {
@@ -172,7 +189,39 @@ const apiRequest = async (url, options = {}) => {
       };
     }
     
-    const data = await response.json();
+    // 403 에러이고 조용히 처리할 엔드포인트인 경우 조용히 처리
+    // response.json() 호출 전에 처리해야 함 (403 응답이 JSON이 아닐 수 있음)
+    if (response.status === 403 && isSilent403) {
+      // 조용히 처리 - 빈 응답 반환 (에러 로그 출력 안 함)
+      // response.json()을 호출하지 않고 바로 반환
+      return {
+        isSuccess: false,
+        code: 'FORBIDDEN',
+        message: '접근 권한이 없습니다',
+        result: null
+      };
+    }
+    
+    // 403이 아니거나 조용히 처리하지 않는 경우에만 JSON 파싱
+    let data;
+    try {
+      data = await response.json();
+    } catch (jsonError) {
+      // JSON 파싱 실패 시 (빈 응답 등)
+      if (response.status === 403 && isSilent403) {
+        // 403이고 조용히 처리해야 하는 경우
+        return {
+          isSuccess: false,
+          code: 'FORBIDDEN',
+          message: '접근 권한이 없습니다',
+          result: null
+        };
+      }
+      // JSON 파싱 실패이지만 403이 아니거나 조용히 처리하지 않는 경우
+      const error = new Error('응답을 파싱할 수 없습니다');
+      error.status = response.status;
+      throw error;
+    }
     
     if (!response.ok) {
       
@@ -181,13 +230,13 @@ const apiRequest = async (url, options = {}) => {
         const isMacroGraph = url.includes('/api/graph/macro');
         const isFineGraph = url.includes('/api/graph/fine');
         
-        // 404는 데이터 없음으로 정상 상황일 수 있으므로 조용히 처리
-        if (response.status === 404) {
-          // eventIdx=0인 경우나 데이터가 없는 경우는 정상 상황이므로 로그 출력 안 함
+        // 404와 403은 데이터 없음 또는 권한 없음으로 정상 상황일 수 있으므로 조용히 처리
+        if (response.status === 404 || response.status === 403) {
+          // eventIdx=0인 경우나 데이터가 없는 경우, 또는 권한이 없는 경우는 정상 상황이므로 로그 출력 안 함
           // 필요시 디버그 모드에서만 활성화
-          // console.debug(`⚠️ ${isMacroGraph ? '거시' : isFineGraph ? '세밀' : 'Graph'} API 데이터 없음:`, {
+          // console.debug(`⚠️ ${isMacroGraph ? '거시' : isFineGraph ? '세밀' : 'Graph'} API 데이터 없음/권한 없음:`, {
           //   status: response.status,
-          //   message: data.message || '해당 데이터를 찾을 수 없습니다',
+          //   message: data.message || '해당 데이터를 찾을 수 없거나 권한이 없습니다',
           //   url: requestUrl
           // });
         } else {
@@ -203,7 +252,8 @@ const apiRequest = async (url, options = {}) => {
         }
       }
       
-      // 여기 도달했다면 404가 아니거나 조용히 처리하지 않는 엔드포인트
+      // 404와 403은 이미 위에서 조용히 처리했으므로 여기서는 다른 에러만 처리
+      // 여기 도달했다면 404/403이 아니거나 조용히 처리하지 않는 엔드포인트
       const error = new Error(data.message || 'API 요청 실패');
       error.status = response.status;
       throw error;
@@ -339,15 +389,18 @@ export const getFavorites = async () => {
 };
 
 // 독서 진도 관련 API
-// 사용자의 모든 독서 진도 조회
+// 사용자의 모든 독서 진도 조회 (로컬 캐시에서만 조회)
 export const getAllProgress = async () => {
-  try {
-    const response = await apiRequest('/api/progress');
-    return response;
-  } catch (error) {
-    console.error('전체 독서 진도 조회 실패:', error);
-    throw error;
-  }
+  // 로컬 캐시에서만 조회 (서버 호출 없음)
+  const cachedProgress = getAllProgressFromCache();
+  
+  return {
+    isSuccess: true,
+    code: 'CACHE_HIT',
+    message: '진도 정보를 로컬 캐시에서 가져왔습니다',
+    result: cachedProgress,
+    fromCache: true
+  };
 };
 
 // 독서 진도 저장/업데이트
@@ -363,46 +416,53 @@ export const saveProgress = async (progressData) => {
     });
     return response;
   } catch (error) {
+    // 403 에러는 권한 문제이므로 조용히 처리 (책에 접근할 권한이 없는 경우)
+    if (error.status === 403 || error.message?.includes('403') || error.message?.includes('권한')) {
+      // 권한이 없는 경우 조용히 반환 (로컬 책이거나 삭제된 책일 수 있음)
+      return {
+        isSuccess: false,
+        code: 'FORBIDDEN',
+        message: '해당 책에 접근할 권한이 없습니다',
+        result: null
+      };
+    }
+    // 403이 아닌 에러만 콘솔에 출력
     console.error('독서 진도 저장 실패:', error);
     throw error;
   }
 };
 
-// 특정 책의 독서 진도 조회
+// 특정 책의 독서 진도 조회 (로컬 캐시에서만 조회)
+// manifest 로드 시 이미 모든 진도를 가져와서 로컬 캐시에 저장하므로 서버 조회 불필요
 export const getBookProgress = async (bookId) => {
-  try {
-    if (!bookId) {
-      throw new Error('bookId는 필수 매개변수입니다.');
-    }
-    
-    const response = await apiRequest(`/api/progress/${bookId}`);
-    
-    // 404인 경우 조용히 처리 (진도가 없는 것은 정상)
-    // IndexedDB로 관리되는 EPUB는 진도가 없을 수 있음
-    if (!response.isSuccess && response.code === 'NOT_FOUND') {
-      return {
-        isSuccess: false,
-        code: 'NOT_FOUND',
-        message: '진도 정보를 찾을 수 없습니다',
-        result: null
-      };
-    }
-    
-    return response;
-  } catch (error) {
-    // 404 에러는 조용히 처리 (진도가 없는 것은 정상)
-    if (error.status === 404 || error.message?.includes('404') || error.message?.includes('찾을 수 없습니다')) {
-      return {
-        isSuccess: false,
-        code: 'NOT_FOUND',
-        message: '진도 정보를 찾을 수 없습니다',
-        result: null
-      };
-    }
-    // 404가 아닌 에러만 콘솔에 출력
-    console.error('특정 책 독서 진도 조회 실패:', error);
-    throw error;
+  if (!bookId) {
+    return {
+      isSuccess: false,
+      code: 'INVALID_INPUT',
+      message: 'bookId는 필수 매개변수입니다.',
+      result: null
+    };
   }
+  
+  // 로컬 캐시에서만 조회
+  const cachedProgress = getProgressFromCache(bookId);
+  if (cachedProgress) {
+    return {
+      isSuccess: true,
+      code: 'CACHE_HIT',
+      message: '진도 정보를 로컬 캐시에서 가져왔습니다',
+      result: cachedProgress,
+      fromCache: true
+    };
+  }
+  
+  // 캐시에 없으면 진도가 없는 것으로 처리
+  return {
+    isSuccess: false,
+    code: 'NOT_FOUND',
+    message: '진도 정보를 찾을 수 없습니다',
+    result: null
+  };
 };
 
 // 특정 책의 독서 진도 삭제
@@ -417,6 +477,24 @@ export const deleteBookProgress = async (bookId) => {
     });
     return response;
   } catch (error) {
+    // 403 에러는 권한 문제이므로 조용히 처리 (책에 접근할 권한이 없는 경우)
+    if (error.status === 403 || error.message?.includes('403') || error.message?.includes('권한')) {
+      return {
+        isSuccess: false,
+        code: 'FORBIDDEN',
+        message: '해당 책에 접근할 권한이 없습니다',
+        result: null
+      };
+    }
+    // 404 에러는 조용히 처리 (진도가 없는 것은 정상)
+    if (error.status === 404 || error.message?.includes('404') || error.message?.includes('찾을 수 없습니다')) {
+      return {
+        isSuccess: false,
+        code: 'NOT_FOUND',
+        message: '진도 정보를 찾을 수 없습니다',
+        result: null
+      };
+    }
     console.error('독서 진도 삭제 실패:', error);
     throw error;
   }

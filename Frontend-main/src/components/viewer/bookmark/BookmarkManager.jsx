@@ -1,12 +1,13 @@
 import { getBookmarks, createBookmark, updateBookmark, deleteBookmark } from '../../../utils/api/bookmarksApi';
 
-// 북마크 데이터 구조 개선
-const createBookmarkData = (bookId, startCfi, endCfi = null, color = '#28B532', memo = '') => ({
+// 북마크 데이터 구조 개선 (로컬 CFI 기반)
+const createBookmarkData = (bookId, startCfi, endCfi = null, color = '#28B532', memo = '', title = null) => ({
   bookId,
   startCfi,
   endCfi,
   color,
   memo,
+  title, // 로컬 CFI 기반으로 생성된 "몇페이지 (챕터 몇)" 형식
   createdAt: new Date().toISOString()
 });
 
@@ -23,10 +24,10 @@ export const loadBookmarks = async (bookId) => {
   }
 };
 
-// 북마크 추가 (서버에 저장)
-export const addBookmark = async (bookId, startCfi, endCfi = null, color = '#28B532', memo = '') => {
+// 북마크 추가 (서버에 저장, 로컬 CFI 기반)
+export const addBookmark = async (bookId, startCfi, endCfi = null, color = '#28B532', memo = '', title = null) => {
   try {
-    const bookmarkData = createBookmarkData(bookId, startCfi, endCfi, color, memo);
+    const bookmarkData = createBookmarkData(bookId, startCfi, endCfi, color, memo, title);
     const response = await createBookmark(bookmarkData);
     
     if (response.isSuccess) {

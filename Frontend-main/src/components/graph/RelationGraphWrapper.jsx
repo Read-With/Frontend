@@ -92,8 +92,22 @@ function RelationGraphWrapper() {
   const [manifestData, setManifestData] = useState(null);
   const [apiMaxChapter, setApiMaxChapter] = useState(1);
   
+  // 서버 bookId 계산 (book.id 또는 book._bookId 중 숫자인 것 우선 사용)
+  const serverBookId = useMemo(() => {
+    if (book?.id && typeof book.id === 'number') {
+      return book.id;
+    }
+    if (book?._bookId && typeof book._bookId === 'number') {
+      return book._bookId;
+    }
+    if (Number.isFinite(bookId) && bookId > 0) {
+      return bookId;
+    }
+    return null;
+  }, [book?.id, book?._bookId, bookId]);
+  
   const { povSummaries, loading: povLoading, error: povError } = useChapterPovSummaries(
-    isBookId ? bookId : null, 
+    serverBookId, 
     currentChapter
   );
   
@@ -103,19 +117,15 @@ function RelationGraphWrapper() {
   const prevChapterNum = useRef(currentChapter);
   const prevEventNum = useRef();
   const isMacroGraphLoadingRef = useRef(false);
-  
-  const isApiBook = isBookId || (book && (typeof book.id === 'number' || book.isFromAPI === true));
+
+  const isApiBook = !!serverBookId || (book && book.isFromAPI === true);
 
   const loaderBookKey = useMemo(() => {
-    if (isApiBook) {
-      if (Number.isFinite(bookId) && bookId > 0) {
-        return bookId;
-      }
-      const numericBookId = Number(book?.id);
-      return Number.isFinite(numericBookId) && numericBookId > 0 ? numericBookId : null;
+    if (isApiBook && serverBookId) {
+      return serverBookId;
     }
     return filename || null;
-  }, [isApiBook, bookId, book?.id, filename]);
+  }, [isApiBook, serverBookId, filename]);
 
   const loaderEventIdx = useMemo(() => {
     return Number.isFinite(currentEvent) && currentEvent > 0 ? currentEvent : null;
@@ -123,17 +133,13 @@ function RelationGraphWrapper() {
 
   useEffect(() => {
     const loadManifestData = async () => {
-      if (!isApiBook) {
+      if (!isApiBook || !serverBookId) {
         // 로컬 책인 경우 로딩 상태 해제
         setIsGraphLoading(false);
         return;
       }
       
-      const targetBookId = bookId || (book && typeof book.id === 'number' ? book.id : null);
-      if (!targetBookId) {
-        setIsGraphLoading(false);
-        return;
-      }
+      const targetBookId = serverBookId;
       
       // manifest 로드 시작 시 로딩 상태 유지
       setIsGraphLoading(true);
@@ -187,18 +193,15 @@ function RelationGraphWrapper() {
     };
     
     loadManifestData();
-  }, [isApiBook, bookId, book?.id]);
+  }, [isApiBook, serverBookId]);
   
   useEffect(() => {
     const loadMacroGraphData = async () => {
-      if (!isApiBook) {
+      if (!isApiBook || !serverBookId) {
         return;
       }
       
-      const targetBookId = bookId || (book && typeof book.id === 'number' ? book.id : null);
-      if (!targetBookId) {
-        return;
-      }
+      const targetBookId = serverBookId;
       
       if (isMacroGraphLoadingRef.current) {
         return;
@@ -255,14 +258,13 @@ function RelationGraphWrapper() {
     };
 
     loadMacroGraphData();
-  }, [bookId, book?.id, currentChapter]);
+  }, [isApiBook, serverBookId, currentChapter]);
 
   useEffect(() => {
     const loadFineGraphData = async () => {
-      if (!isApiBook) return;
+      if (!isApiBook || !serverBookId) return;
       
-      const targetBookId = bookId || (book && typeof book.id === 'number' ? book.id : null);
-      if (!targetBookId) return;
+      const targetBookId = serverBookId;
       
       if (!apiMacroData) {
         try {
@@ -343,7 +345,7 @@ function RelationGraphWrapper() {
     };
 
     loadFineGraphData();
-  }, [currentEvent, currentChapter, isApiBook, bookId, book?.id, apiMacroData]);
+  }, [currentEvent, currentChapter, isApiBook, serverBookId, apiMacroData]);
 
   const {
     elements: localElements,
@@ -703,8 +705,28 @@ function RelationGraphWrapper() {
   }, []);
 
   const handleBackToViewer = useCallback(() => {
-    navigate(`/user/viewer/${filename}`);
-  }, [navigate, filename]);
+    const retainedSearch = location.state?.viewerSearch || '';
+    const nextSearch = retainedSearch && retainedSearch.startsWith('?')
+      ? retainedSearch
+      : retainedSearch
+        ? `?${retainedSearch}`
+        : '';
+
+    const nextState = {
+      ...(location.state || {}),
+      from: (location.state && location.state.from) || { pathname: location.pathname, search: location.search },
+      fromGraph: true,
+    };
+
+    if (book || location.state?.book) {
+      nextState.book = book || location.state?.book;
+    }
+
+    navigate(`/user/viewer/${filename}${nextSearch}`, {
+      state: nextState,
+      replace: false,
+    });
+  }, [navigate, filename, book, location.pathname, location.search, location.state]);
 
   const backButtonHandlers = createAdvancedButtonHandlers('default');
 
@@ -1229,7 +1251,7 @@ function RelationGraphWrapper() {
                 povSummaries={povSummaries}
                 apiMacroData={apiMacroData}
                 apiFineData={apiFineData}
-                bookId={bookId || (book && typeof book.id === 'number' ? book.id : null)}
+                bookId={serverBookId}
               />
             )}
             <div 

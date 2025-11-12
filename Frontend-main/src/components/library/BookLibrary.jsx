@@ -445,7 +445,8 @@ const BookLibrary = memo(({ books, loading, error, onRetry, onToggleFavorite, on
 
   // BookLibrary 컴포넌트는 이제 그리드 컨테이너 역할만 함
   // 로딩, 에러, 빈 상태는 MyPage에서 처리
-  if (loading || error || !books || books.length === 0) {
+  // books가 없거나 빈 배열이면 빈 fragment 반환 (null 대신)
+  if (!books || books.length === 0) {
     return null;
   }
 

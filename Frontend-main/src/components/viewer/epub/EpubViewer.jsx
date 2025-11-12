@@ -24,6 +24,7 @@ import {
   errorUtils
 } from '../../../utils/viewerUtils';
 import { getBookProgress } from '../../../utils/common/api';
+import { getProgressFromCache } from '../../../utils/common/progressCache';
 import { registerCache } from '../../../utils/common/cacheManager';
 import { getEventsForChapter as getGraphEventsForChapter, getFolderKeyFromFilename } from '../../../utils/graphData';
 
@@ -349,8 +350,9 @@ const EpubViewer = forwardRef(
         let targetBookId = null;
         let apiProgressData = null;
         
-        // book.id가 없으면 에러
-        if (!book.id) {
+        // book.id 또는 book._bookId가 없으면 에러
+        const hasBookId = book.id || book._bookId;
+        if (!hasBookId) {
           setError('책 정보가 올바르지 않습니다.');
           setLoading(false);
           return;
@@ -386,49 +388,53 @@ const EpubViewer = forwardRef(
           return;
         }
         
-        if (book && typeof book.id === 'number') {
+        // bookKey 생성 (로컬 캐시에서 진도 조회용)
+        const bookKeyForProgress = book.id || book._bookId || book.filename || bookId;
+        
+        // 진도 조회: 로컬 캐시에서 가져오기 (모든 책 - 로컬/서버 구분 없음)
+        if (bookKeyForProgress) {
           try {
-            const apiProgressResponse = await getBookProgress(book.id);
-            if (apiProgressResponse?.isSuccess && apiProgressResponse?.result) {
-              apiProgressData = apiProgressResponse.result;
+            // 로컬 캐시에서 직접 조회
+            const cachedProgress = getProgressFromCache(String(bookKeyForProgress));
+            if (cachedProgress) {
+              apiProgressData = cachedProgress;
               if (apiProgressData.chapterIdx) {
                 currentChapterRef.current = apiProgressData.chapterIdx;
               }
             }
           } catch (progressError) {
-            if (!progressError?.message?.includes('404')) {
-              console.warn('API 진도 조회 실패:', progressError);
-            }
+            // 에러는 조용히 처리 (로컬 캐시에서 가져오므로 일반적으로 에러 없음)
             apiProgressData = null;
           }
         }
 
         try {
-          const { getAllLocalBookIds, loadLocalBookBuffer, saveLocalBookBuffer } = await import('../../../utils/localBookStorage');
+          const { loadLocalBookBuffer, saveLocalBookBuffer } = await import('../../../utils/localBookStorage');
           
-          // 제목 정규화 함수
-          const normalizeTitle = (title) => {
-            if (!title) return '';
-            return title
-              .toLowerCase()
-              .trim()
-              .replace(/\s+/g, ' ')
-              .replace(/[^\w\s가-힣]/g, '')
-              .replace(/\s/g, '');
-          };
+          // 로컬 bookID는 사용하지 않음 - bookId만 사용
+          const candidateKeys = Array.from(
+            new Set(
+              [
+                book._indexedDbId ? String(book._indexedDbId) : null,
+                book._bookId ? String(book._bookId) : null,
+                book.id ? String(book.id) : null,
+                book.filename ? String(book.filename) : null,
+              ].filter(Boolean),
+            ),
+          );
           
-          const normalizedBookTitle = normalizeTitle(book.title);
+          targetBookId = candidateKeys[0] || 'temp';
+          let globalReuseEntry = null;
           
-          // IndexedDB는 정규화된 책 제목을 키로 사용
-          // 1단계: 정규화된 제목으로 직접 찾기
-          if (normalizedBookTitle) {
-            actualEpubSource = await loadLocalBookBuffer(normalizedBookTitle);
-            if (actualEpubSource) {
-              targetBookId = normalizedBookTitle;
+          for (const key of candidateKeys) {
+            const buffer = await loadLocalBookBuffer(key);
+            if (buffer) {
+              actualEpubSource = buffer;
+              targetBookId = key;
+              break;
             }
           }
           
-          // 3단계: IndexedDB에 없으면 메모리에서 찾아서 저장
           if (!actualEpubSource) {
             if (book.epubFile || book.epubArrayBuffer) {
               let bufferToSave = null;
@@ -439,20 +445,66 @@ const EpubViewer = forwardRef(
               }
               
               if (bufferToSave) {
-                // 정규화된 제목을 키로 사용하여 저장
-                targetBookId = normalizedBookTitle || 'temp';
-                await saveLocalBookBuffer(targetBookId, bufferToSave);
+                // 로컬 bookID는 사용하지 않음 - bookId만 사용
+                const assignedKey = targetBookId || (book.id ? String(book.id) : book._bookId ? String(book._bookId) : 'temp');
+                targetBookId = assignedKey;
+                await saveLocalBookBuffer(assignedKey, bufferToSave);
                 actualEpubSource = bufferToSave;
-              } else {
-                setError('EPUB 파일을 찾을 수 없습니다. 다시 업로드해주세요.');
-                setLoading(false);
-                return;
               }
-            } else {
+            }
+          }
+          
+          if (!actualEpubSource) {
+            for (const key of candidateKeys) {
+              const entry = globalEpubInstances.get(`local_${key}`);
+              if (entry?.bookInstance) {
+                globalReuseEntry = entry;
+                targetBookId = key;
+                break;
+              }
+            }
+            
+            if (!globalReuseEntry) {
               setError('EPUB 파일을 찾을 수 없습니다. 다시 업로드해주세요.');
               setLoading(false);
               return;
             }
+            
+            currentPathRef.current = `local_${targetBookId}`;
+            bookRef.current = globalReuseEntry.bookInstance;
+            renditionRef.current = globalReuseEntry.rendition;
+            if (globalReuseEntry.viewerRef !== viewerRef.current && globalReuseEntry.bookInstance) {
+              try {
+                if (globalReuseEntry.rendition) {
+                  globalReuseEntry.rendition.destroy();
+                }
+                const newRendition = globalReuseEntry.bookInstance.renderTo(viewerRef.current, {
+                  width: '100%',
+                  height: '100%',
+                  spread: getSpreadMode(pageMode, showGraph),
+                  manager: 'default',
+                  flow: 'paginated',
+                  maxSpreadPages: (showGraph || pageMode === 'single') ? 1 : 2,
+                });
+                renditionRef.current = newRendition;
+                globalReuseEntry.rendition = newRendition;
+                globalReuseEntry.viewerRef = viewerRef.current;
+              } catch (e) {
+              }
+            }
+            
+            try {
+              const savedCfi = storageUtils.get(storageKeys.lastCFI);
+              if (savedCfi && renditionRef.current) {
+                await renditionRef.current.display(savedCfi);
+              }
+            } catch (e) {
+            }
+            
+            setLoading(false);
+            setError(null);
+            isLoadingRef.current = false;
+            return;
           }
         } catch (error) {
           setError('EPUB 파일 로드에 실패했습니다.');
@@ -460,18 +512,8 @@ const EpubViewer = forwardRef(
           return;
         }
         
-        // epubSource와 targetBookId 확인 (이미 위에서 체크했지만 안전장치)
-        if (!actualEpubSource || !targetBookId) {
-          setError('EPUB 파일을 찾을 수 없습니다. IndexedDB에서 로드에 실패했습니다.');
-          setLoading(false);
-          return;
-        }
-        
-        // IndexedDB ID 기반으로 currentSource 생성
         const currentSource = `local_${targetBookId}`;
         
-        // 같은 책으로 다시 돌아온 경우 (graph에서 돌아오기 등)
-        // 전역 인스턴스에서 확인
         const globalInstance = globalEpubInstances.get(currentSource);
         if (globalInstance && globalInstance.bookInstance && globalInstance.rendition && globalInstance.viewerRef) {
           // 전역 인스턴스가 있으면 재사용
@@ -745,6 +787,29 @@ const EpubViewer = forwardRef(
             const cfi = location?.start?.cfi;
             
             if (cfi) {
+              // 현재 챕터 감지
+              const detectedChapter = detectCurrentChapter(cfi, chapterCfiMapRef.current);
+              
+              // pgepubid 추출
+              const pgepubidMatch = cfi.match(/\[pgepubid(\d+)\]/);
+              const pgepubid = pgepubidMatch ? pgepubidMatch[1] : null;
+              
+              // spine 인덱스 추출
+              const spineMatch = cfi.match(/\/\d+\/(\d+)!/);
+              const spineIndex = spineMatch ? spineMatch[1] : null;
+              
+              // chapterCfiMap 디버깅 (첫 번째 호출 시에만)
+              if (!window._chapterCfiMapLogged && chapterCfiMapRef.current) {
+                console.log('chapterCfiMap:', Array.from(chapterCfiMapRef.current.entries()));
+                window._chapterCfiMapLogged = true;
+              }
+              
+              console.log('CFI:', cfi, {
+                chapter: detectedChapter,
+                pgepubid: pgepubid,
+                spineIndex: spineIndex,
+                chapterCfiMapSize: chapterCfiMapRef.current?.size || 0
+              });
               let locIdx = 0;
               try {
                 const idxCandidate = bookInstance.locations?.locationFromCfi?.(cfi);
@@ -804,14 +869,18 @@ const EpubViewer = forwardRef(
 
             // 이벤트 데이터 가져오기 및 매칭
             try {
-              const isApiBook = book && typeof book.id === 'number';
+              // 서버 bookId 확인 (공통 함수 사용)
+              const { getServerBookId } = await import('../../../utils/viewerUtils');
+              const serverBookId = getServerBookId(book);
+              const isApiBook = !!serverBookId;
               
-              if (isApiBook) {
+              if (isApiBook && serverBookId) {
                 const { calculateApiChapterProgress, findApiEventFromChars } = await import('../../../utils/common/manifestCache');
                 
-                const progressInfo = calculateApiChapterProgress(book.id, cfi, detectedChapter, bookInstance);
+                // 로컬 CFI를 사용하여 진행도 계산
+                const progressInfo = calculateApiChapterProgress(serverBookId, cfi, detectedChapter, bookInstance);
                 const matchedEvent = await findApiEventFromChars(
-                  book.id,
+                  serverBookId,
                   detectedChapter,
                   progressInfo.currentChars,
                   progressInfo.chapterStartPos
@@ -860,17 +929,23 @@ const EpubViewer = forwardRef(
           
           rendition.on('relocated', relocatedHandler);
 
-          // 초기 CFI 설정: API 진도 → URL 파라미터 → 로컬 저장 순서
+          // 초기 CFI 설정: 로컬 진도 CFI → URL 파라미터 → 로컬 저장 CFI 순서
           let displayTarget;
  
+          // 0. 로컬 캐시에서 가져온 진도의 CFI 사용 (최우선)
           if (!displayTarget && apiProgressData?.cfi) {
             displayTarget = apiProgressData.cfi;
             if (apiProgressData.chapterIdx) {
               onCurrentChapterChange?.(apiProgressData.chapterIdx);
+              currentChapterRef.current = apiProgressData.chapterIdx;
             }
+            errorUtils.logInfo('loadBook', '로컬 진도 CFI 사용', { 
+              target: displayTarget, 
+              chapter: apiProgressData.chapterIdx 
+            });
           }
 
-          // 1. URL 파라미터 기반 초기 위치 설정 (최우선)
+          // 1. URL 파라미터 기반 초기 위치 설정
           if (!displayTarget && (initialChapter || initialPage || initialProgress)) {
             errorUtils.logInfo('loadBook', 'URL 파라미터 기반 초기 위치 설정', {
               chapter: initialChapter,
@@ -892,6 +967,9 @@ const EpubViewer = forwardRef(
                 if (chapterCfi) {
                   displayTarget = chapterCfi;
                   errorUtils.logInfo('loadBook', 'Chapter 기반 위치', { target: displayTarget });
+                  // 챕터 변경 알림
+                  onCurrentChapterChange?.(initialChapter);
+                  currentChapterRef.current = initialChapter;
                 } else {
                   // spine 인덱스 기반 위치 설정
                   const spineIndex = Math.max(0, initialChapter - 1);
@@ -899,6 +977,9 @@ const EpubViewer = forwardRef(
                   if (spineItem) {
                     displayTarget = spineItem.href;
                     errorUtils.logInfo('loadBook', 'Spine 기반 위치', { target: displayTarget });
+                    // 챕터 변경 알림
+                    onCurrentChapterChange?.(initialChapter);
+                    currentChapterRef.current = initialChapter;
                   }
                 }
               }

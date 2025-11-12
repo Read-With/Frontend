@@ -20,29 +20,20 @@ const colorOptions = [
   { key: 'highlight', label: '강조', color: bookmarkColors.highlight, border: bookmarkBorders.highlight, icon: 'styler' },
 ];
 
-// 위치 정보 파싱 함수: 페이지 + (챕터) 형식
+// 위치 정보 파싱 함수: 페이지 + (챕터) 형식 (로컬 CFI 기반)
 function parseCfiToChapterPage(cfi) {
+  if (!cfi) return '';
   const chapterMatch = cfi.match(/\[chapter-(\d+)\]/);
-  const chapter = chapterMatch ? `${chapterMatch[1]}챕터` : null;
+  const chapter = chapterMatch ? parseInt(chapterMatch[1]) : null;
   const pageMatch = cfi.match(/\[chapter-\d+\]\/(\d+)/);
-  const page = pageMatch ? `${pageMatch[1]}페이지` : null;
-  if (page && chapter) return `${page} (${chapter})`;
-  if (page) return page;
-  if (chapter) return chapter;
+  const page = pageMatch ? parseInt(pageMatch[1]) : null;
+  // "몇페이지 (챕터 몇)" 형식으로 반환
+  if (page && chapter) return `${page}페이지 (${chapter}챕터)`;
+  if (page) return `${page}페이지`;
+  if (chapter) return `${chapter}챕터`;
   return cfi;
 }
 
-// 위치 정보 파싱 함수 개선: 상세 경로 + (챕터)
-function parseCfiToChapterFullDetail(cfi) {
-  const chapterMatch = cfi.match(/\[chapter-(\d+)\]/);
-  const chapter = chapterMatch ? `${chapterMatch[1]}챕터` : null;
-  const afterChapterMatch = cfi.match(/\[chapter-\d+\]((?:\/\d+)+:\d+)/);
-  const detail = afterChapterMatch ? afterChapterMatch[1].replace(/^\//, '') : null;
-  if (detail && chapter) return `${detail} (${chapter})`;
-  if (detail) return detail;
-  if (chapter) return chapter;
-  return cfi;
-}
 
 const getColorKey = (color) => {
   if (color === bookmarkColors.important) return 'important';
@@ -78,14 +69,18 @@ const formatAbsoluteTime = (value) => {
 
 const getLocationLabel = (bookmark) => {
   if (!bookmark) return '';
-  if (bookmark.chapterTitle) return bookmark.chapterTitle;
+  // 저장된 title이 있으면 우선 사용 (로컬 CFI 기반으로 저장된 형식)
+  if (bookmark.title) return bookmark.title;
+  // 로컬 CFI 기반으로 파싱
   return parseCfiToChapterPage(bookmark.startCfi || '');
 };
 
 const getLocationDetail = (bookmark) => {
   if (!bookmark) return '';
-  if (bookmark.sectionTitle) return bookmark.sectionTitle;
-  return parseCfiToChapterFullDetail(bookmark.startCfi || '');
+  // 저장된 title이 있으면 우선 사용 (로컬 CFI 기반으로 저장된 형식)
+  if (bookmark.title) return bookmark.title;
+  // 로컬 CFI 기반으로 파싱
+  return parseCfiToChapterPage(bookmark.startCfi || '');
 };
 
 const getHighlightSnippet = (bookmark) => {

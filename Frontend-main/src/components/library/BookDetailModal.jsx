@@ -53,13 +53,17 @@ const BookDetailModal = memo(({ book, isOpen, onClose, onDelete }) => {
   }, [book]);
 
   const fetchProgressInfo = useCallback(async () => {
-    if (!book || typeof book.id !== 'number') {
+    // 서버 bookId 확인 (공통 함수 사용)
+    const { getServerBookId } = await import('../../utils/viewerUtils');
+    const serverBookId = getServerBookId(book);
+    
+    if (!serverBookId) {
       setProgressInfo(null);
       return;
     }
 
     try {
-      const response = await getBookProgress(book.id);
+      const response = await getBookProgress(serverBookId);
       if (response.isSuccess && response.result) {
         setProgressInfo(response.result);
       } else {
@@ -74,7 +78,11 @@ const BookDetailModal = memo(({ book, isOpen, onClose, onDelete }) => {
   }, [book]);
 
   const fetchBookDetails = useCallback(async () => {
-    if (!book || typeof book.id !== 'number') {
+    // 서버 bookId 확인 (book.id 또는 book._bookId 중 숫자인 것 사용)
+    const serverBookId = (book?.id && typeof book.id === 'number' ? book.id : null) || 
+                         (book?._bookId && typeof book._bookId === 'number' ? book._bookId : null);
+    
+    if (!serverBookId) {
       setBookDetails(book);
       return;
     }
@@ -83,7 +91,7 @@ const BookDetailModal = memo(({ book, isOpen, onClose, onDelete }) => {
     setError(null);
 
     try {
-      const manifestData = await getBookManifest(book.id);
+      const manifestData = await getBookManifest(serverBookId);
       
       if (manifestData && manifestData.isSuccess && manifestData.result) {
         // API 응답 구조에 맞게 데이터 처리
@@ -147,7 +155,11 @@ const BookDetailModal = memo(({ book, isOpen, onClose, onDelete }) => {
   }, [onClose, navigate, getBookIdentifier, getNavigationState]);
 
   const handleDeleteProgress = useCallback(async () => {
-    if (!book || typeof book.id !== 'number' || !progressInfo) {
+    // 서버 bookId 확인 (book.id 또는 book._bookId 중 숫자인 것 사용)
+    const serverBookId = (book?.id && typeof book.id === 'number' ? book.id : null) || 
+                         (book?._bookId && typeof book._bookId === 'number' ? book._bookId : null);
+    
+    if (!serverBookId || !progressInfo) {
       return;
     }
 
@@ -156,7 +168,7 @@ const BookDetailModal = memo(({ book, isOpen, onClose, onDelete }) => {
     }
 
     try {
-      const response = await deleteBookProgress(book.id);
+      const response = await deleteBookProgress(serverBookId);
       if (response.isSuccess) {
         setProgressInfo(null);
         toast.success('독서 진도를 삭제되었습니다');

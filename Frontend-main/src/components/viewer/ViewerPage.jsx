@@ -12,12 +12,13 @@ import ViewerTopBar from "./ViewerTopBar";
 import { useViewerPage } from "../../hooks/useViewerPage";
 import { useGraphSearch } from "../../hooks/useGraphSearch";
 import { createStorageKey } from "../../hooks/useLocalStorage";
-import { saveProgress, getBookProgress, getFineGraph } from "../../utils/common/api";
+import { getBookProgress, getFineGraph, getBookManifest } from "../../utils/common/api";
+import { setProgressToCache } from "../../utils/common/progressCache";
 import { getGraphEventState, getCachedReaderProgress, setCachedReaderProgress, getCachedChapterEvents } from "../../utils/common/chapterEventCache";
 import { getManifestFromCache } from "../../utils/common/manifestCache";
 import { 
-  parseCfiToChapterDetail, 
-  extractEventNodesAndEdges
+  extractEventNodesAndEdges,
+  getServerBookId
 } from "../../utils/viewerUtils";
 import { applyBookmarkHighlights, removeBookmarkHighlights } from "./bookmark/BookmarkManager";
 import { 
@@ -981,68 +982,76 @@ const ViewerPage = () => {
   const [isProgressLoaded, setIsProgressLoaded] = useState(false);
 
   const testProgressAPI = useCallback(async () => {
-    if (!book?.id) return;
+    // 서버 bookId 확인 (공통 함수 사용)
+    const serverBookId = getServerBookId(book);
+    
+    if (!serverBookId) return;
 
-    const isLocalBook =
-      !book.id ||
-      typeof book.id === 'string' ||
-      bookId.includes('.epub') ||
-      isNaN(parseInt(bookId, 10));
+    // 로컬 책인지 확인 (서버 bookId가 없으면 로컬 책)
+    const isLocalBook = !serverBookId || book.isLocalOnly === true;
 
-    if (isLocalBook) {
-      setManifestLoaded(true);
-      setIsProgressLoaded(true);
-      return;
-    }
+    // 서버에 업로드된 책인지 확인
+    const isServerBook = !!serverBookId;
 
     try {
-      try {
-        const bookProgressResponse = await getBookProgress(book.id);
-        if (bookProgressResponse.isSuccess && bookProgressResponse.result) {
-          const progressData = bookProgressResponse.result;
-          setSavedProgress(progressData);
+      // 진도 조회: 로컬 캐시에서 가져오기 (manifest 로드 시 이미 모든 진도가 로컬에 저장됨)
+      if (isServerBook && serverBookId) {
+        try {
+          const bookProgressResponse = await getBookProgress(serverBookId);
+          if (bookProgressResponse.isSuccess && bookProgressResponse.result) {
+            const progressData = bookProgressResponse.result;
+            setSavedProgress(progressData);
+          }
+        } catch (progressError) {
+          // 에러는 조용히 처리 (로컬 캐시에서 가져오므로 일반적으로 에러 없음)
         }
-      } catch (progressError) {
-        if (
-          !progressError.message.includes('404') &&
-          !progressError.message.includes('찾을 수 없습니다')
-        ) {
-          console.error('독서 진도 조회 실패:', progressError);
+      }
+
+      // Manifest 조회: 서버에 업로드된 책이면 서버에서 가져옴 (로컬 책이어도 서버에 업로드되어 있으면 호출)
+      if (isServerBook && serverBookId) {
+        // 먼저 캐시 확인 (서버 bookId 사용)
+        let manifest = getManifestFromCache(serverBookId);
+        
+        // 캐시에 없으면 서버에서 가져오기 (서버 bookId 사용)
+        if (!manifest) {
+          try {
+            const manifestResponse = await getBookManifest(serverBookId);
+            if (manifestResponse?.isSuccess && manifestResponse?.result) {
+              manifest = manifestResponse.result;
+              setManifestData(manifest);
+            } else {
+              console.warn('[Viewer] 그래프/매니페스트를 서버에서 가져올 수 없습니다.', { bookId: serverBookId });
+              setApiError((prev) => prev ?? '그래프 데이터를 서버에서 가져올 수 없습니다.');
+            }
+          } catch (manifestError) {
+            // 404와 403 에러는 조용히 처리
+            if (
+              manifestError.status !== 404 &&
+              manifestError.status !== 403 &&
+              !manifestError.message?.includes('404') &&
+              !manifestError.message?.includes('403')
+            ) {
+              console.warn('[Viewer] 그래프/매니페스트 조회 실패:', manifestError);
+            }
+            setApiError((prev) => prev ?? '그래프 데이터를 서버에서 가져올 수 없습니다.');
+          }
+        } else {
+          // 캐시에서 가져온 경우
+          setManifestData(manifest);
         }
+      } else {
+        // 로컬 책이고 서버에 업로드되지 않은 경우
+        console.warn('[Viewer] 로컬 책은 그래프/매니페스트를 사용할 수 없습니다.', { bookId: serverBookId || book?.id || book?._bookId });
       }
     } finally {
-      const manifest = getManifestFromCache(book.id);
-      if (manifest) {
-        setManifestData(manifest);
-      } else {
-        console.warn('[Viewer] 그래프/매니페스트 캐시가 없습니다. 마이페이지에서 사전 준비가 필요합니다.', { bookId: book.id });
-        setApiError((prev) => prev ?? '그래프 데이터 캐시가 없습니다. 마이페이지에서 책을 한번 열어주세요.');
-      }
       setManifestLoaded(true);
       setIsProgressLoaded(true);
     }
-  }, [book?.id, bookId]);
+  }, [book, bookId]);
 
-  useEffect(() => {
-    if (savedProgress && viewerRef.current && isProgressLoaded && !loading) {
-      const restoreProgress = async () => {
-        try {
-          if (savedProgress.chapterIdx && savedProgress.chapterIdx !== currentChapter) {
-            setCurrentChapter(savedProgress.chapterIdx);
-          }
-          
-          if (savedProgress.cfi && viewerRef.current?.displayAt) {
-            await viewerRef.current.displayAt(savedProgress.cfi);
-          }
-        } catch (error) {
-          console.error('진도 복원 실패:', error);
-        }
-      };
-      
-      const timer = setTimeout(restoreProgress, 1000);
-      return () => clearTimeout(timer);
-    }
-  }, [savedProgress, isProgressLoaded, loading]);
+  // 진도 복원은 EpubViewer에서 이미 수행하므로 여기서는 제거
+  // EpubViewer의 loadBook()에서 apiProgressData를 사용하여 displayTarget을 설정하고
+  // rendition.display()를 호출하므로 중복 복원을 방지
 
   useEffect(() => {
     testProgressAPI();
@@ -1768,32 +1777,29 @@ const ViewerPage = () => {
 
   useEffect(() => {
     const autoSaveProgress = async () => {
-      if (!book?.id || !currentChapter || typeof book.id !== 'number') return;
+      if (!currentChapter) return;
+      if (!bookKey) return;
       
       try {
+        // bookKey를 bookId로 사용 (로컬 책과 서버 책 모두 지원)
         const progressData = {
-          bookId: book.id,
+          bookId: bookKey,
           chapterIdx: currentChapter || 1,
           eventIdx: currentEvent?.eventNum || 0,
-          cfi: currentEvent?.cfi || "epubcfi(/6/4[chap01ref]!/4[body01]/10[para05]/2/1:3)"
+          cfi: currentEvent?.cfi || null
         };
         
-        const response = await saveProgress(progressData);
-        
-        if (response.isSuccess) {
-          // 성공
-        } else {
-          console.warn('진도 저장 실패:', response.message);
-        }
+        // 로컬 캐시에 저장 (모든 책 - 로컬/서버 구분 없음)
+        setProgressToCache(progressData);
         
       } catch (error) {
-        // 저장 실패
+        // 에러는 조용히 처리
       }
     };
 
     const timeoutId = setTimeout(autoSaveProgress, 2000);
     return () => clearTimeout(timeoutId);
-  }, [book?.id, currentChapter, currentEvent]);
+  }, [bookKey, currentChapter, currentEvent]);
 
   useEffect(() => {
     if (bookmarks && bookmarks.length > 0) {
@@ -2206,7 +2212,17 @@ const ViewerPage = () => {
                   fontFamily: "Noto Serif KR",
                 }}
               >
-                위치: {parseCfiToChapterDetail(bm.cfi)}
+                위치: {bm.title || (() => {
+                  const cfi = bm.cfi || bm.startCfi || '';
+                  const chapterMatch = cfi.match(/\[chapter-(\d+)\]/);
+                  const chapter = chapterMatch ? parseInt(chapterMatch[1]) : null;
+                  const pageMatch = cfi.match(/\[chapter-\d+\]\/(\d+)/);
+                  const page = pageMatch ? parseInt(pageMatch[1]) : null;
+                  if (page && chapter) return `${page}페이지 (${chapter}챕터)`;
+                  if (page) return `${page}페이지`;
+                  if (chapter) return `${chapter}챕터`;
+                  return cfi;
+                })()}
               </span>
             ))}
           </BookmarkPanel>

@@ -8,7 +8,6 @@ import {
   loadSettings, 
   saveViewerMode, 
   loadViewerMode,
-  getCurrentChapterFromViewer,
   findClosestEvent,
   calculateChapterProgress,
   bookmarkUtils,
@@ -57,6 +56,33 @@ export function useViewerPage() {
   const [currentChapter, setCurrentChapter] = useState(() => {
     return savedChapter ? parseInt(savedChapter, 10) : 1;
   });
+  
+  const prevUrlChapterRef = useRef(savedChapter ? parseInt(savedChapter, 10) : null);
+  
+  // URL 파라미터 변경 시 currentChapter 업데이트
+  useEffect(() => {
+    const urlParams = new URLSearchParams(location.search);
+    const chapterParam = urlParams.get('chapter');
+    if (chapterParam) {
+      const chapterNum = parseInt(chapterParam, 10);
+      if (chapterNum && chapterNum > 0) {
+        // URL의 chapter 값이 실제로 변경되었는지 확인
+        if (prevUrlChapterRef.current !== chapterNum) {
+          prevUrlChapterRef.current = chapterNum;
+          if (chapterNum !== currentChapter) {
+            setCurrentChapter(chapterNum);
+          }
+        }
+      }
+    } else {
+      prevUrlChapterRef.current = null;
+    }
+  }, [location.search]);
+  
+  // currentChapter가 변경되면 ref도 업데이트
+  useEffect(() => {
+    prevUrlChapterRef.current = currentChapter;
+  }, [currentChapter]);
   const [currentEvent, setCurrentEvent] = useState(null);
   const [prevEvent, setPrevEvent] = useState(null);
   const [events, setEvents] = useState([]);
@@ -103,14 +129,9 @@ export function useViewerPage() {
   const [isGraphLoading, setIsGraphLoading] = useState(true);
   const [showToolbar, setShowToolbar] = useState(false);
   
-  const cleanBookId = bookId?.trim() || '';
   const [bookmarks, setBookmarks] = useState([]);
   const [bookmarksLoading, setBookmarksLoading] = useState(true);
   const [showBookmarkList, setShowBookmarkList] = useState(false);
-  
-  const [progress, setProgress] = useLocalStorageNumber(`progress_${cleanBookId}`, 0);
-  const [settings, setSettings] = useLocalStorage('epub_viewer_settings', defaultSettings);
-  const [lastCFI, setLastCFI] = useLocalStorage(`readwith_${cleanBookId}_lastCFI`, null);
   
   const prevValidEventRef = useRef(null);
   const prevElementsRef = useRef([]);
@@ -197,11 +218,21 @@ export function useViewerPage() {
         }
 
         if (response?.isSuccess && Array.isArray(response.result)) {
-          const candidate = response.result.find(
+          // 정규화된 제목으로 매칭
+          const matched = response.result.filter(
             (item) => normalizeTitle(item.title) === normalizedTitle && typeof item.id === 'number'
           );
-          if (candidate) {
-            setMatchedServerBook(candidate);
+          
+          if (matched.length > 0) {
+            // 동일한 책 제목이 여러 개인 경우, bookId 중 가장 작은 수를 선택
+            const sortedMatched = matched.sort((a, b) => {
+              const aId = Number(a?.id) || Number.MAX_SAFE_INTEGER;
+              const bId = Number(b?.id) || Number.MAX_SAFE_INTEGER;
+              return aId - bId;
+            });
+            
+            // 가장 작은 bookId 선택
+            setMatchedServerBook(sortedMatched[0]);
             return;
           }
         }
@@ -232,7 +263,8 @@ export function useViewerPage() {
     }
 
     const stateBook = location.state?.book;
-    const normalizedTitle = normalizeTitle(matchedServerBook.title);
+    // 로컬 bookID는 사용하지 않음 - bookId를 IndexedDB 키로 사용
+    const indexedDbKey = String(numericId);
 
     navigate(`/user/viewer/${numericId}${location.search || ''}`, {
       replace: true,
@@ -243,7 +275,7 @@ export function useViewerPage() {
           epubFile: stateBook?.epubFile,
           epubArrayBuffer: stateBook?.epubArrayBuffer,
           filename: String(numericId),
-          _indexedDbId: normalizedTitle,
+          _indexedDbId: indexedDbKey,
           _bookId: numericId,
           _needsLoad: !stateBook?.epubFile && !stateBook?.epubArrayBuffer,
           epubPath: undefined,
@@ -260,14 +292,15 @@ export function useViewerPage() {
       const stateBook = location.state.book;
 
       if (matchedServerBook && typeof matchedServerBook.id === 'number') {
-        const normalizedTitle = normalizeTitle(matchedServerBook.title);
+        // 로컬 bookID는 사용하지 않음 - bookId를 IndexedDB 키로 사용
+        const indexedDbKey = String(matchedServerBook.id);
 
         return {
           ...matchedServerBook,
           epubFile: stateBook.epubFile,
           epubArrayBuffer: stateBook.epubArrayBuffer,
           filename: String(matchedServerBook.id ?? bookId),
-          _indexedDbId: normalizedTitle,
+          _indexedDbId: indexedDbKey,
           _needsLoad: !stateBook.epubFile && !stateBook.epubArrayBuffer,
           _bookId: matchedServerBook.id,
           epubPath: undefined,
@@ -277,14 +310,18 @@ export function useViewerPage() {
         };
       }
 
+      // 로컬 bookID는 사용하지 않음 - bookId를 IndexedDB 키로 사용
+      const stateBookId = stateBook.id || stateBook._bookId || bookId;
+      const indexedDbKey = stateBookId ? String(stateBookId) : null;
+
       return {
         ...stateBook,
         epubFile: stateBook.epubFile,
         epubArrayBuffer: stateBook.epubArrayBuffer,
         filename: bookId,
-        _indexedDbId: stateBook._indexedDbId || (typeof stateBook.id === 'number' ? stateBook.id.toString() : bookId),
+        _indexedDbId: indexedDbKey,
         _needsLoad: !stateBook.epubFile && !stateBook.epubArrayBuffer,
-        _bookId: stateBook.id || bookId,
+        _bookId: stateBook.id || stateBook._bookId || bookId,
         epubPath: undefined,
         filePath: undefined,
         s3Path: undefined,
@@ -294,13 +331,14 @@ export function useViewerPage() {
     
     // URL 직접 접근: 서버에서 가져온 책 메타데이터 사용
     if (serverBook) {
-      const normalizedTitle = normalizeTitle(serverBook.title);
+      // 로컬 bookID는 사용하지 않음 - bookId를 IndexedDB 키로 사용
+      const indexedDbKey = serverBook.id ? String(serverBook.id) : null;
       
       return {
         ...serverBook,
         filename: bookId,
         _needsLoad: true, // IndexedDB에서 EPUB 로드 필요
-        _indexedDbId: normalizedTitle, // 정규화된 제목으로 IndexedDB 접근
+        _indexedDbId: indexedDbKey, // bookId로 IndexedDB 접근
         _bookId: serverBook.id,
         epubPath: undefined,
         filePath: undefined,
@@ -311,35 +349,56 @@ export function useViewerPage() {
     
     // 서버 책 정보 로딩 중이거나 실패한 경우 기본값
     const numericBookId = parseInt(bookId, 10);
+    const indexedDbKey = !isNaN(numericBookId) ? String(numericBookId) : bookId;
+    
     return {
       title: loadingServerBook ? '로딩 중...' : `Book ${bookId}`,
       filename: bookId,
       id: !isNaN(numericBookId) ? numericBookId : null,
       _needsLoad: true,
-      _indexedDbId: null, // 제목이 없으면 IndexedDB 접근 불가
+      _indexedDbId: indexedDbKey, // bookId로 IndexedDB 접근
       _bookId: !isNaN(numericBookId) ? numericBookId : bookId,
       epubPath: undefined
     };
   }, [location.state?.book, matchedServerBook, bookId, serverBook, loadingServerBook]);
 
+  // 서버 bookId를 우선 사용, 없으면 URL 파라미터의 bookId 사용
+  const cleanBookId = useMemo(() => {
+    if (book?.id && typeof book.id === 'number') {
+      return String(book.id);
+    }
+    if (book?._bookId && typeof book._bookId === 'number') {
+      return String(book._bookId);
+    }
+    return bookId?.trim() || '';
+  }, [book?.id, book?._bookId, bookId]);
+
+  const [progress, setProgress] = useLocalStorageNumber(`progress_${cleanBookId}`, 0);
+  const [settings, setSettings] = useLocalStorage('epub_viewer_settings', defaultSettings);
+  const [lastCFI, setLastCFI] = useLocalStorage(`readwith_${cleanBookId}_lastCFI`, null);
+
   // API로 받아온 도서의 메타데이터와 manifest 정보를 콘솔에 출력
   useEffect(() => {
     const fetchBookInfo = async () => {
-      if (!book || typeof book.id !== 'number') {
+      // 서버 bookId 확인 (book.id 또는 book._bookId 중 숫자인 것 사용)
+      const serverBookId = (book?.id && typeof book.id === 'number' ? book.id : null) || 
+                           (book?._bookId && typeof book._bookId === 'number' ? book._bookId : null);
+      
+      if (!serverBookId) {
         return;
       }
 
       try {
-        const manifestData = await getBookManifest(book.id);
+        const manifestData = await getBookManifest(serverBookId);
 
         if (manifestData && manifestData.isSuccess && manifestData.result) {
-          const cachedMaxChapter = getMaxChapter(book.id);
+          const cachedMaxChapter = getMaxChapter(serverBookId);
           if (cachedMaxChapter && cachedMaxChapter > 0) {
             setMaxChapter(cachedMaxChapter);
           }
         }
       } catch (error) {
-        const cachedMaxChapter = getMaxChapter(book.id);
+        const cachedMaxChapter = getMaxChapter(serverBookId);
         if (cachedMaxChapter && cachedMaxChapter > 0) {
           setMaxChapter(cachedMaxChapter);
         }
@@ -357,6 +416,17 @@ export function useViewerPage() {
     return key;
   }, [bookId]);
   
+  // 그래프 데이터 로더에 서버 bookId 전달 (숫자인 경우만)
+  const graphBookId = useMemo(() => {
+    if (book?.id && typeof book.id === 'number') {
+      return String(book.id);
+    }
+    if (book?._bookId && typeof book._bookId === 'number') {
+      return String(book._bookId);
+    }
+    return bookId;
+  }, [book?.id, book?._bookId, bookId]);
+
   const {
     elements,
     setElements,
@@ -367,13 +437,17 @@ export function useViewerPage() {
     maxChapter: detectedMaxChapter,
     loading: graphLoading,
     error: graphError
-  } = useGraphDataLoader(bookId, currentChapter, currentEvent?.eventNum || 1);
+  } = useGraphDataLoader(graphBookId, currentChapter, currentEvent?.eventNum || 1);
   
   // maxChapter 설정
   useEffect(() => {
+    // 서버 bookId 확인 (book.id 또는 book._bookId 중 숫자인 것 사용)
+    const serverBookId = (book?.id && typeof book.id === 'number' ? book.id : null) || 
+                         (book?._bookId && typeof book._bookId === 'number' ? book._bookId : null);
+    
     // API 책인 경우 캐시에서 확인
-    if (book && typeof book.id === 'number') {
-      const cachedMaxChapter = getMaxChapter(book.id);
+    if (serverBookId) {
+      const cachedMaxChapter = getMaxChapter(serverBookId);
       if (cachedMaxChapter && cachedMaxChapter > 0) {
         setMaxChapter(cachedMaxChapter);
       } else if (detectedMaxChapter > 0) {
@@ -417,8 +491,7 @@ export function useViewerPage() {
     const fetchBookmarks = async () => {
       if (!cleanBookId) return;
       
-      // 모든 책을 서버에서 받은 bookID로 관리
-      // bookID는 항상 숫자
+      // 서버 bookId를 사용하여 북마크 로드
       setBookmarksLoading(true);
       try {
         const bookmarksData = await loadBookmarks(cleanBookId);
@@ -431,26 +504,10 @@ export function useViewerPage() {
     };
 
     fetchBookmarks();
-  }, [cleanBookId, book.id]);
+  }, [cleanBookId]);
   
   // 페이지 변경 시 현재 챕터 번호 업데이트
-  useEffect(() => {
-    const updateCurrentChapter = async () => {
-      // viewerRef가 준비되었는지 확인
-      if (!viewerRef?.current) {
-        return;
-      }
-      
-      const chapter = await getCurrentChapterFromViewer(viewerRef);
-      if (chapter) {
-        setCurrentChapter(chapter);
-      }
-    };
-    
-    // 약간의 지연을 두어 rendition이 완전히 준비되도록 함
-    const timeoutId = setTimeout(updateCurrentChapter, 100);
-    return () => clearTimeout(timeoutId);
-  }, [currentPage]);
+  // handleLocationChange에서 이미 로컬 CFI 기반으로 챕터를 업데이트하므로 중복 제거
   
   // currentChapter가 바뀔 때 즉시 상태 초기화
   useEffect(() => {
@@ -561,8 +618,38 @@ export function useViewerPage() {
     }
     
     let cfi = null;
+    let pageNum = null;
+    let chapterNum = null;
+    
     try {
       cfi = await viewerRef.current.getCurrentCfi?.();
+      
+      // 로컬 CFI에서 페이지와 챕터 정보 추출
+      if (cfi) {
+        // 챕터 번호 추출
+        const chapterMatch = cfi.match(/\[chapter-(\d+)\]/);
+        if (chapterMatch) {
+          chapterNum = parseInt(chapterMatch[1]);
+        }
+        
+        // 페이지 번호 추출 (bookInstance를 통해 정확한 페이지 번호 얻기)
+        try {
+          const bookInstance = viewerRef.current?.bookRef?.current;
+          if (bookInstance?.locations) {
+            const locIdx = bookInstance.locations.locationFromCfi?.(cfi);
+            if (Number.isFinite(locIdx) && locIdx >= 0) {
+              const totalLocations = bookInstance.locations.length?.() || 1;
+              pageNum = Math.max(1, Math.min(locIdx + 1, totalLocations));
+            }
+          }
+        } catch (e) {
+          // bookInstance 접근 실패 시 CFI에서 직접 파싱
+          const pageMatch = cfi.match(/\[chapter-\d+\]\/(\d+)/);
+          if (pageMatch) {
+            pageNum = parseInt(pageMatch[1]);
+          }
+        }
+      }
     } catch (e) {
       // getCurrentCfi 에러 처리
     }
@@ -575,9 +662,20 @@ export function useViewerPage() {
 
     setFailCount(0);
 
-    // 로컬 책인지 API 책인지 구분
-    // bookId가 숫자가 아니거나 .epub로 끝나는 경우 로컬 책
-    const isLocalBook = !book.id || typeof book.id === 'string' || bookId.includes('.epub') || isNaN(parseInt(bookId, 10));
+    // 로컬 책인지 확인 (서버 bookId가 없으면 로컬 책)
+    const isLocalBook = !book.id || typeof book.id !== 'number';
+    
+    // 북마크 제목 생성: "몇페이지 (챕터 몇)" 형식
+    let bookmarkTitle = '';
+    if (pageNum && chapterNum) {
+      bookmarkTitle = `${pageNum}페이지 (${chapterNum}챕터)`;
+    } else if (pageNum) {
+      bookmarkTitle = `${pageNum}페이지`;
+    } else if (chapterNum) {
+      bookmarkTitle = `${chapterNum}챕터`;
+    } else {
+      bookmarkTitle = `북마크 ${bookmarks.length + 1}`;
+    }
     
     // 기존 북마크가 있는지 확인
     const existingBookmark = bookmarks.find(b => b.startCfi === cfi);
@@ -591,7 +689,7 @@ export function useViewerPage() {
         localStorage.setItem(`bookmarks_${cleanBookId}`, JSON.stringify(updatedBookmarks));
         toast.success("📖 북마크가 제거되었습니다");
       } else {
-        // API 책의 경우 서버에서 제거
+        // 서버 책의 경우 서버에서 제거 (서버 bookId 사용)
         const result = await removeBookmark(existingBookmark.id);
         if (result.success) {
           setBookmarks(prev => prev.filter(b => b.id !== existingBookmark.id));
@@ -607,7 +705,9 @@ export function useViewerPage() {
         const newBookmark = {
           id: Date.now().toString(),
           startCfi: cfi,
-          title: `북마크 ${bookmarks.length + 1}`,
+          title: bookmarkTitle,
+          pageNum: pageNum,
+          chapterNum: chapterNum,
           createdAt: new Date().toISOString()
         };
         const updatedBookmarks = [...bookmarks, newBookmark];
@@ -615,17 +715,24 @@ export function useViewerPage() {
         localStorage.setItem(`bookmarks_${cleanBookId}`, JSON.stringify(updatedBookmarks));
         toast.success("📖 북마크가 추가되었습니다");
       } else {
-        // API 책의 경우 서버에 추가
-        const result = await addBookmark(cleanBookId, cfi);
+        // 서버 책의 경우 서버에 추가 (서버 bookId 사용, title 포함)
+        const result = await addBookmark(cleanBookId, cfi, null, '#28B532', '', bookmarkTitle);
         if (result.success) {
-          setBookmarks(prev => [...prev, result.bookmark]);
+          // 서버 응답에 title이 없으면 추가
+          const bookmarkWithTitle = {
+            ...result.bookmark,
+            title: bookmarkTitle,
+            pageNum: pageNum,
+            chapterNum: chapterNum
+          };
+          setBookmarks(prev => [...prev, bookmarkWithTitle]);
           toast.success("📖 북마크가 추가되었습니다");
         } else {
           toast.error(result.message || "북마크 추가에 실패했습니다");
         }
       }
     }
-  }, [cleanBookId, bookmarks]);
+  }, [cleanBookId, bookmarks, book]);
   
   const handleBookmarkSelect = useCallback((cfi) => {
     viewerRef.current?.displayAt(cfi);

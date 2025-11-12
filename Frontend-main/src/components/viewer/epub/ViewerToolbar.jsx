@@ -57,13 +57,25 @@ const ViewerToolbar = ({
       path: `/${bookId}`,
       filename: bookId
     };
+
+    const currentSearch =
+      typeof window !== 'undefined' && window.location?.search ? window.location.search : '';
+    const currentPathname =
+      typeof window !== 'undefined' && window.location?.pathname ? window.location.pathname : `/user/viewer/${bookId}`;
+    const previousLocation =
+      previousPage ||
+      {
+        pathname: currentPathname,
+        search: currentSearch
+      };
     
     // RelationGraphWrapper 컴포넌트로 이동 (절대 경로 사용)
     navigate(`/user/graph/${bookId}`, { 
       state: { 
         book: bookData,
         fromLibrary: isFromLibrary,
-        from: previousPage
+        from: previousLocation,
+        viewerSearch: currentSearch
       },
       replace: false
     });

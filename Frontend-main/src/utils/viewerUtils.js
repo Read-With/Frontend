@@ -11,26 +11,26 @@ export const cfiUtils = commonCfiUtils;
 export const defaultSettings = commonDefaultSettings;
 export const loadSettings = commonLoadSettings;
 
-export function parseCfiToChapterDetail(cfi) {
-  if (!cfi || typeof cfi !== 'string') {
-    errorUtils.logWarning('parseCfiToChapterDetail', '유효하지 않은 CFI입니다', { cfi, type: typeof cfi });
-    return cfi || '';
+/**
+ * 서버 bookId를 가져옵니다.
+ * book.id 또는 book._bookId 중 숫자인 값을 우선 사용합니다.
+ * @param {Object} book - 책 객체
+ * @returns {number|null} 서버 bookId (없으면 null)
+ */
+export function getServerBookId(book) {
+  if (!book) return null;
+  
+  // book.id가 숫자이면 우선 사용
+  if (book.id !== undefined && book.id !== null && typeof book.id === 'number') {
+    return book.id;
   }
-
-  try {
-    const chapterMatch = cfi.match(/\[chapter-(\d+)\]/);
-    const chapter = chapterMatch ? `${chapterMatch[1]}챕터` : null;
-
-    const pageMatch = cfi.match(/\[chapter-\d+\]\/(\d+)/);
-    const page = pageMatch ? `${pageMatch[1]}페이지` : null;
-
-    if (page && chapter) return `${page} (${chapter})`;
-    if (page) return page;
-    if (chapter) return chapter;
-    return cfi;
-  } catch (error) {
-    return errorUtils.handleError('parseCfiToChapterDetail', error, cfi, { cfi });
+  
+  // book._bookId가 숫자이면 사용
+  if (book._bookId !== undefined && book._bookId !== null && typeof book._bookId === 'number') {
+    return book._bookId;
   }
+  
+  return null;
 }
 
 export function extractEventNodesAndEdges(event) {
@@ -98,54 +98,16 @@ export function loadViewerMode() {
     }
 }
 
-export function cfiToCharIndex(cfi, chapter, viewerRef) {
-  if (!cfi || typeof cfi !== 'string') {
-    return 0;
-  }
-  
-  if (!chapter || typeof chapter !== 'number' || chapter < 1) {
-    return 0;
-  }
-  
-  try {
-    if (
-      viewerRef?.current &&
-      viewerRef.current.bookRef &&
-      viewerRef.current.bookRef.current &&
-      viewerRef.current.bookRef.current.locations &&
-      typeof viewerRef.current.bookRef.current.locations.locationFromCfi === "function"
-    ) {
-      return viewerRef.current.bookRef.current.locations.locationFromCfi(cfi);
-    }
-  } catch (error) {
-    return 0;
-  }
-  return 0;
-}
-
-export async function getCurrentChapterFromViewer(viewerRef) {
-  if (!viewerRef?.current) {
-    return null;
-  }
-  
-  if (viewerRef.current.getCurrentCfi) {
-    try {
-      const cfi = await viewerRef.current.getCurrentCfi();
-      if (cfi && typeof cfi === 'string') {
-        const chapterMatch = cfi.match(/\[chapter-(\d+)\]/);
-        if (chapterMatch) {
-          return parseInt(chapterMatch[1]);
-        }
-      }
-    } catch (error) {
-      // getCurrentCfi 실패 시 조용히 처리
-      return null;
-    }
-  }
-  return null;
-}
 
 // CFI 기반 챕터 내 글자 위치 계산
+/**
+ * 로컬 CFI 기반 챕터 진행도 계산
+ * @param {string} cfi - 로컬 CFI (현재 보고 있는 EPUB의 CFI)
+ * @param {number} chapterNum - 챕터 번호
+ * @param {Array} events - 이벤트 배열
+ * @param {Object} bookInstance - EPUB.js book 인스턴스 (로컬 EPUB)
+ * @returns {Object} 진행도 정보
+ */
 export function calculateChapterProgress(cfi, chapterNum, events, bookInstance = null) {
   if (!cfiUtils.isValidCfi(cfi)) {
     errorUtils.logWarning('calculateChapterProgress', '유효하지 않은 CFI입니다', { cfi, type: typeof cfi });
@@ -167,9 +129,10 @@ export function calculateChapterProgress(cfi, chapterNum, events, bookInstance =
     let currentChars = 0;
     let calculationMethod = 'fallback';
 
-  // CFI 기반 정확한 위치 계산
+  // 로컬 CFI 기반 정확한 위치 계산
   if (bookInstance?.locations?.percentageFromCfi) {
     try {
+      // 로컬 EPUB의 locations를 사용하여 CFI 기반 진행도 계산
       const globalProgress = bookInstance.locations.percentageFromCfi(cfi);
       const path = window.location.pathname;
       const fileName = path.split('/').pop();
@@ -227,7 +190,7 @@ export function calculateChapterProgress(cfi, chapterNum, events, bookInstance =
         }
       }
     } catch (error) {
-      errorUtils.logWarning('calculateChapterProgress', 'CFI 기반 정확한 위치 계산 실패, fallback 방식 사용', { error });
+      errorUtils.logWarning('calculateChapterProgress', '로컬 CFI 기반 정확한 위치 계산 실패, fallback 방식 사용', { error });
     }
   }
 
@@ -275,6 +238,15 @@ export function calculateChapterProgress(cfi, chapterNum, events, bookInstance =
   }
 }
 
+/**
+ * 로컬 CFI 기반 가장 가까운 이벤트 찾기
+ * @param {string} cfi - 로컬 CFI (현재 보고 있는 EPUB의 CFI)
+ * @param {number} chapterNum - 챕터 번호
+ * @param {Array} events - 이벤트 배열
+ * @param {number} currentChars - 현재 문자 위치 (선택사항)
+ * @param {Object} bookInstance - EPUB.js book 인스턴스 (로컬 EPUB)
+ * @returns {Object|null} 가장 가까운 이벤트
+ */
 export function findClosestEvent(cfi, chapterNum, events, currentChars = null, bookInstance = null) {
   if (!cfiUtils.isValidCfi(cfi)) {
     errorUtils.logWarning('findClosestEvent', '유효하지 않은 CFI입니다', { cfi, type: typeof cfi });
@@ -293,6 +265,7 @@ export function findClosestEvent(cfi, chapterNum, events, currentChars = null, b
   
   try {
     if (currentChars === null) {
+      // 로컬 CFI 기반으로 진행도 계산
       const progressInfo = calculateChapterProgress(cfi, chapterNum, events, bookInstance);
       currentChars = progressInfo.currentChars;
     }
@@ -370,20 +343,123 @@ export const bookmarkUtils = {
 };
 
 
-// CFI 매핑을 통한 정확한 챕터 감지 (EpubViewer에서 사용)
+/**
+ * 로컬 CFI 기반 현재 챕터 감지
+ * @param {string} cfi - 로컬 CFI (현재 보고 있는 EPUB의 CFI)
+ * @param {Map} chapterCfiMap - 챕터 CFI 맵 (로컬 EPUB의 챕터 CFI)
+ * @returns {number} 감지된 챕터 번호
+ */
 export function detectCurrentChapter(cfi, chapterCfiMap = null) {
+  if (!cfi) return 1;
+  
+  // 1. [chapter-X] 패턴으로 직접 추출 시도
   let detectedChapter = cfiUtils.extractChapterNumber(cfi);
   
-  if (detectedChapter === 1 && chapterCfiMap && chapterCfiMap.size > 0) {
-    for (const [chapterNum, chapterCfi] of chapterCfiMap) {
-      if (cfi && cfi.includes(chapterCfi)) {
-        detectedChapter = chapterNum;
-        break;
+  // 2. chapterCfiMap이 있으면 더 정확한 매칭 시도
+  if (chapterCfiMap && chapterCfiMap.size > 0) {
+    // 현재 CFI에서 spine 인덱스 추출
+    const currentSpineMatch = cfi.match(/\/\d+\/(\d+)!/);
+    const currentSpineIndex = currentSpineMatch ? parseInt(currentSpineMatch[1]) : null;
+    
+    // 2-1. pgepubid 기반 매칭 (가장 정확)
+    const currentPgepubidMatch = cfi.match(/\[pgepubid(\d+)\]/);
+    if (currentPgepubidMatch) {
+      const currentPgepubid = currentPgepubidMatch[1];
+      
+      for (const [chapterNum, chapterCfi] of chapterCfiMap) {
+        if (!chapterCfi) continue;
+        
+        // chapterCfi에서도 pgepubid 추출
+        const chapterPgepubidMatch = chapterCfi.match(/\[pgepubid(\d+)\]/);
+        if (chapterPgepubidMatch && chapterPgepubidMatch[1] === currentPgepubid) {
+          detectedChapter = chapterNum;
+          break;
+        }
+      }
+    }
+    
+    // 2-2. spine 인덱스 기반 매칭 (pgepubid 매칭 실패 시)
+    if (detectedChapter === 1 && currentSpineIndex !== null) {
+      for (const [chapterNum, chapterCfi] of chapterCfiMap) {
+        if (!chapterCfi) continue;
+        
+        // chapterCfi에서 spine 인덱스 추출
+        const chapterSpineMatch = chapterCfi.match(/\/\d+\/(\d+)!/);
+        if (chapterSpineMatch) {
+          const chapterSpineIndex = parseInt(chapterSpineMatch[1]);
+          if (chapterSpineIndex === currentSpineIndex) {
+            detectedChapter = chapterNum;
+            break;
+          }
+        }
+      }
+    }
+    
+    // 2-3. CFI base 경로 매칭 (spine 부분 비교)
+    if (detectedChapter === 1) {
+      for (const [chapterNum, chapterCfi] of chapterCfiMap) {
+        if (!chapterCfi) continue;
+        
+        // chapterCfi의 기본 경로 추출 (spine 부분만)
+        const chapterBase = chapterCfi.split('!')[0];
+        const currentBase = cfi.split('!')[0];
+        
+        // spine 인덱스가 같거나, CFI가 chapterCfi를 포함하는지 확인
+        if (currentBase === chapterBase || cfi.includes(chapterBase)) {
+          detectedChapter = chapterNum;
+          break;
+        }
+      }
+    }
+    
+    // 2-4. 여전히 실패하면 부분 문자열 매칭 (기존 방식)
+    if (detectedChapter === 1) {
+      for (const [chapterNum, chapterCfi] of chapterCfiMap) {
+        if (chapterCfi && cfi.includes(chapterCfi)) {
+          detectedChapter = chapterNum;
+          break;
+        }
       }
     }
   }
   
-  return detectedChapter;
+  // 3. chapterCfiMap이 비어있거나 매칭 실패 시 pgepubid 기반 fallback
+  if (detectedChapter === 1) {
+    const currentPgepubidMatch = cfi.match(/\[pgepubid(\d+)\]/);
+    if (currentPgepubidMatch) {
+      const currentPgepubid = parseInt(currentPgepubidMatch[1]);
+      
+      // chapterCfiMap에서 최소 pgepubid 찾기
+      let minPgepubid = null;
+      if (chapterCfiMap && chapterCfiMap.size > 0) {
+        for (const [, chapterCfi] of chapterCfiMap) {
+          if (!chapterCfi) continue;
+          const match = chapterCfi.match(/\[pgepubid(\d+)\]/);
+          if (match) {
+            const pgepubid = parseInt(match[1]);
+            if (minPgepubid === null || pgepubid < minPgepubid) {
+              minPgepubid = pgepubid;
+            }
+          }
+        }
+      }
+      
+      // 최소 pgepubid를 찾지 못했으면 기본값 3 사용 (일반적인 경우)
+      if (minPgepubid === null) {
+        minPgepubid = 3;
+      }
+      
+      // pgepubid 기반 챕터 계산
+      if (currentPgepubid >= minPgepubid) {
+        detectedChapter = currentPgepubid - minPgepubid + 1;
+      } else {
+        // pgepubid가 최소값보다 작으면 1로 설정
+        detectedChapter = 1;
+      }
+    }
+  }
+  
+  return detectedChapter || 1;
 }
 
 

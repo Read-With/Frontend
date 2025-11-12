@@ -274,6 +274,14 @@ export const getChapterLength = (bookId, chapterIdx) => {
   return chapterLength?.length || 0;
 };
 
+/**
+ * 로컬 CFI 기반 챕터 진행도 계산
+ * @param {number|string} bookId - 책 ID
+ * @param {string} cfi - 로컬 CFI (현재 보고 있는 EPUB의 CFI)
+ * @param {number} chapterIdx - 챕터 인덱스
+ * @param {Object} bookInstance - EPUB.js book 인스턴스 (로컬 EPUB)
+ * @returns {Object} 진행도 정보
+ */
 export const calculateApiChapterProgress = (bookId, cfi, chapterIdx, bookInstance = null) => {
   const manifest = getManifestFromCache(bookId);
   
@@ -366,12 +374,14 @@ export const calculateApiChapterProgress = (bookId, cfi, chapterIdx, bookInstanc
     console.warn('totalChars 계산 실패, 기본값 0 유지', { chapterIdx, chapterData, lengthEntry });
   }
    
+  // 로컬 EPUB의 locations를 사용하여 CFI 기반 진행도 계산
   if (!bookInstance?.locations?.percentageFromCfi) {
     console.warn('bookInstance.locations 없음');
     return { currentChars: 0, totalChars, progress: 0, chapterStartPos };
   }
    
   try {
+    // 로컬 CFI를 사용하여 진행도 계산
     const bookProgress = bookInstance.locations.percentageFromCfi(cfi);
     const totalLength = manifest.progressMetadata?.totalLength || 0;
     
@@ -393,7 +403,7 @@ export const calculateApiChapterProgress = (bookId, cfi, chapterIdx, bookInstanc
       lengthSource: totalChars > 0 ? 'chapter' : 'unknown'
     };
   } catch (error) {
-    console.error('API 챕터 진행도 계산 실패:', error);
+    console.error('로컬 CFI 기반 챕터 진행도 계산 실패:', error);
     return { currentChars: 0, totalChars, progress: 0, chapterStartPos };
   }
 };
