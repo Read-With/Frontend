@@ -9,7 +9,7 @@ import "./RelationGraph.css";
 
 import { createGraphStylesheet, getEdgeStyle, getWideLayout } from "../../utils/styles/graphStyles";
 import { ANIMATION_VALUES } from "../../utils/styles/animations";
-import { sidebarStyles, topBarStyles, containerStyles, graphStyles, createButtonStyle, createAdvancedButtonHandlers, COLORS } from "../../utils/styles/styles.js";
+import { sidebarStyles, topBarStyles, graphStyles, createButtonStyle, createAdvancedButtonHandlers, COLORS } from "../../utils/styles/styles.js";
 import { useGraphSearch } from '../../hooks/useGraphSearch.jsx';
 import { useGraphDataLoader } from '../../hooks/useGraphDataLoader.js';
 import { useLocalStorageNumber } from '../../hooks/useLocalStorage.js';
@@ -19,7 +19,7 @@ import { getGraphBookCache, getCachedChapterEvents } from '../../utils/common/ch
 import { convertRelationsToElements, filterMainCharacters } from '../../utils/graphDataUtils';
 import { createCharacterMaps } from '../../utils/characterUtils';
 import { getFolderKeyFromFilename, getLastEventIndexForChapter } from '../../utils/graphData';
-import { createRippleEffect, ensureElementsInBounds, processTooltipData } from '../../utils/graphUtils.js';
+import { processTooltipData } from '../../utils/graphUtils.js';
 import useGraphInteractions from "../../hooks/useGraphInteractions";
 import { useChapterPovSummaries } from '../../hooks/useChapterPovSummaries';
 
@@ -44,6 +44,47 @@ const logApiError = (type, error, data) => {
 
 const logApiFallback = (type) => {
   // console.log(`🔄 ${type} API 호출 실패, 로컬 데이터 사용으로 전환`);
+};
+
+const calculateMaxChapterFromChapters = (chapters) => {
+  if (!Array.isArray(chapters) || chapters.length === 0) {
+    return 1;
+  }
+  let maxChapterIdx = 1;
+  for (const chapterInfo of chapters) {
+    const chapterIdx = chapterInfo?.idx || chapterInfo?.chapterIdx || chapterInfo?.chapter || chapterInfo?.index || chapterInfo?.number || chapterInfo?.id;
+    if (typeof chapterIdx === 'number' && !isNaN(chapterIdx) && chapterIdx > 0 && chapterIdx > maxChapterIdx) {
+      maxChapterIdx = chapterIdx;
+    }
+  }
+  return maxChapterIdx;
+};
+
+const saveToLocalStorage = (key, data) => {
+  try {
+    localStorage.setItem(key, JSON.stringify(data));
+  } catch (storageError) {
+    // localStorage 저장 실패는 무시 (캐시는 선택사항)
+  }
+};
+
+const getChapterEventFallbackData = (targetBookId, currentChapter, eventIdx) => {
+  const fallbackChapterCache = getCachedChapterEvents(targetBookId, currentChapter);
+  if (fallbackChapterCache?.events && Array.isArray(fallbackChapterCache.events)) {
+    const fallbackEvent = fallbackChapterCache.events.find(e => 
+      Number(e.eventIdx) === eventIdx || Number(e.idx) === eventIdx
+    );
+    
+    if (fallbackEvent && (fallbackEvent.characters || fallbackEvent.relations)) {
+      return {
+        characters: Array.isArray(fallbackEvent.characters) ? fallbackEvent.characters : [],
+        relations: Array.isArray(fallbackEvent.relations) ? fallbackEvent.relations : [],
+        event: fallbackEvent.event || null,
+        userCurrentChapter: 0
+      };
+    }
+  }
+  return null;
 };
 
 function RelationGraphWrapper() {
@@ -88,7 +129,6 @@ function RelationGraphWrapper() {
   const [apiMacroData, setApiMacroData] = useState(null);
   const [apiFineData, setApiFineData] = useState(null);
   const [apiFineLoading, setApiFineLoading] = useState(false);
-  const [apiError, setApiError] = useState(null);
   const [userCurrentChapter, setUserCurrentChapter] = useState(null);
   const [manifestData, setManifestData] = useState(null);
   const [apiMaxChapter, setApiMaxChapter] = useState(1);
@@ -107,7 +147,7 @@ function RelationGraphWrapper() {
     return null;
   }, [book?.id, book?._bookId, bookId]);
   
-  const { povSummaries, loading: povLoading, error: povError } = useChapterPovSummaries(
+  const { povSummaries } = useChapterPovSummaries(
     serverBookId, 
     currentChapter
   );
@@ -118,6 +158,7 @@ function RelationGraphWrapper() {
   const prevChapterNum = useRef(currentChapter);
   const prevEventNum = useRef();
   const isMacroGraphLoadingRef = useRef(false);
+  const timeoutRef = useRef(null);
 
   const isApiBook = !!serverBookId || (book && book.isFromAPI === true);
 
@@ -169,19 +210,8 @@ function RelationGraphWrapper() {
               if (maxChapterFromMetadata && maxChapterFromMetadata > 0) {
                 setApiMaxChapter(maxChapterFromMetadata);
               } else {
-                const chapters = cachedManifest.chapters || [];
-                if (chapters.length > 0) {
-                  let maxChapterIdx = 1;
-                  for (const chapterInfo of chapters) {
-                    const chapterIdx = chapterInfo?.idx || chapterInfo?.chapterIdx || chapterInfo?.chapter || chapterInfo?.index || chapterInfo?.number || chapterInfo?.id;
-                    if (typeof chapterIdx === 'number' && !isNaN(chapterIdx) && chapterIdx > 0 && chapterIdx > maxChapterIdx) {
-                      maxChapterIdx = chapterIdx;
-                    }
-                  }
-                  setApiMaxChapter(maxChapterIdx);
-                } else {
-                  setApiMaxChapter(1);
-                }
+                const maxChapterIdx = calculateMaxChapterFromChapters(cachedManifest.chapters);
+                setApiMaxChapter(maxChapterIdx);
               }
             }
           }
@@ -207,19 +237,8 @@ function RelationGraphWrapper() {
               if (maxChapterFromMetadata && maxChapterFromMetadata > 0) {
                 setApiMaxChapter(maxChapterFromMetadata);
               } else {
-                const chapters = manifestResponse.result.chapters || [];
-                if (chapters.length > 0) {
-                  let maxChapterIdx = 1;
-                  for (const chapterInfo of chapters) {
-                    const chapterIdx = chapterInfo?.idx || chapterInfo?.chapterIdx || chapterInfo?.chapter || chapterInfo?.index || chapterInfo?.number || chapterInfo?.id;
-                    if (typeof chapterIdx === 'number' && !isNaN(chapterIdx) && chapterIdx > 0 && chapterIdx > maxChapterIdx) {
-                      maxChapterIdx = chapterIdx;
-                    }
-                  }
-                  setApiMaxChapter(maxChapterIdx);
-                } else {
-                  setApiMaxChapter(1);
-                }
+                const maxChapterIdx = calculateMaxChapterFromChapters(manifestResponse.result.chapters);
+                setApiMaxChapter(maxChapterIdx);
               }
             }
           }
@@ -260,7 +279,6 @@ function RelationGraphWrapper() {
       
       isMacroGraphLoadingRef.current = true;
       setApiFineLoading(true);
-      setApiError(null);
       
       try {
         // 3번: localStorage 캐시 먼저 확인
@@ -277,7 +295,6 @@ function RelationGraphWrapper() {
               if (parsedData.userCurrentChapter !== undefined) {
                 setUserCurrentChapter(parsedData.userCurrentChapter);
               }
-              setApiError(null);
               isMacroGraphLoadingRef.current = false;
               setApiFineLoading(false);
               return;
@@ -306,23 +323,15 @@ function RelationGraphWrapper() {
         });
         
         if (macroData?.isSuccess && macroData?.result) {
-          // API 응답을 localStorage에 캐싱
-          try {
-            localStorage.setItem(cacheKey, JSON.stringify(macroData.result));
-          } catch (storageError) {
-            // localStorage 저장 실패는 무시 (캐시는 선택사항)
-          }
-          
+          saveToLocalStorage(cacheKey, macroData.result);
           setApiMacroData(macroData.result);
           setApiFineData(macroData.result);
           if (macroData.result.userCurrentChapter !== undefined) {
             setUserCurrentChapter(macroData.result.userCurrentChapter);
           }
-          setApiError(null);
         } else {
           setApiMacroData(null);
           setApiFineData(null);
-          setApiError('API에서 데이터를 찾을 수 없습니다.');
         }
         
       } catch (error) {
@@ -334,7 +343,6 @@ function RelationGraphWrapper() {
         logApiFallback('거시 그래프');
         setApiMacroData(null);
         setApiFineData(null);
-        setApiError(`API 호출 실패: ${error.message}`);
       } finally {
         isMacroGraphLoadingRef.current = false;
         setApiFineLoading(false);
@@ -349,8 +357,9 @@ function RelationGraphWrapper() {
       if (!isApiBook || !serverBookId) return;
       
       const targetBookId = serverBookId;
+      const currentApiMacroData = apiMacroData;
       
-      if (!apiMacroData) {
+      if (!currentApiMacroData) {
         // 거시 그래프 캐시 확인
         const macroCacheKey = `graph_macro_${targetBookId}_${currentChapter}`;
         const cachedMacroData = localStorage.getItem(macroCacheKey);
@@ -363,25 +372,26 @@ function RelationGraphWrapper() {
               if (parsedData.userCurrentChapter !== undefined) {
                 setUserCurrentChapter(parsedData.userCurrentChapter);
               }
+              return;
             }
           } catch (parseError) {
             // 캐시 파싱 실패 시 API 호출
             try {
               const macroData = await getMacroGraph(targetBookId, currentChapter);
               if (macroData?.isSuccess && macroData?.result) {
-                // API 응답을 캐싱
-                try {
-                  localStorage.setItem(macroCacheKey, JSON.stringify(macroData.result));
-                } catch (storageError) {
-                  // 캐시 저장 실패는 무시
-                }
+                saveToLocalStorage(macroCacheKey, macroData.result);
                 setApiMacroData(macroData.result);
                 if (macroData.result.userCurrentChapter !== undefined) {
                   setUserCurrentChapter(macroData.result.userCurrentChapter);
                 }
+                return;
               }
             } catch (error) {
-              // API 호출 실패는 무시
+              logApiError('거시 그래프 (폴백)', error, {
+                targetBookId,
+                uptoChapter: currentChapter,
+                context: 'loadFineGraphData - 캐시 파싱 실패 후 API 호출'
+              });
             }
           }
         } else {
@@ -389,19 +399,19 @@ function RelationGraphWrapper() {
           try {
             const macroData = await getMacroGraph(targetBookId, currentChapter);
             if (macroData?.isSuccess && macroData?.result) {
-              // API 응답을 캐싱
-              try {
-                localStorage.setItem(macroCacheKey, JSON.stringify(macroData.result));
-              } catch (storageError) {
-                // 캐시 저장 실패는 무시
-              }
+              saveToLocalStorage(macroCacheKey, macroData.result);
               setApiMacroData(macroData.result);
               if (macroData.result.userCurrentChapter !== undefined) {
                 setUserCurrentChapter(macroData.result.userCurrentChapter);
               }
+              return;
             }
           } catch (error) {
-            // API 호출 실패는 무시
+            logApiError('거시 그래프 (폴백)', error, {
+              targetBookId,
+              uptoChapter: currentChapter,
+              context: 'loadFineGraphData - 캐시 없음 상태에서 API 호출'
+            });
           }
         }
       }
@@ -409,17 +419,15 @@ function RelationGraphWrapper() {
       const eventIdx = currentEvent >= 1 ? currentEvent - 1 : 0;
       
       if (eventIdx < 1) {
-        const fallbackData = apiMacroData || null;
-        if (fallbackData) {
-          setApiFineData(fallbackData);
-        }
-        setApiError(null);
-        setApiFineLoading(false);
-        return;
+      const fallbackData = currentApiMacroData || null;
+      if (fallbackData) {
+        setApiFineData(fallbackData);
+      }
+      setApiFineLoading(false);
+      return;
       }
       
       setApiFineLoading(true);
-      setApiError(null);
       
       try {
         // 4번: localStorage 캐시 먼저 확인
@@ -432,7 +440,6 @@ function RelationGraphWrapper() {
             if (parsedData && parsedData.characters && parsedData.relations) {
               // 캐시된 데이터 사용, API 호출 생략
               setApiFineData(parsedData);
-              setApiError(null);
               setApiFineLoading(false);
               return;
             }
@@ -458,15 +465,8 @@ function RelationGraphWrapper() {
               userCurrentChapter: 0
             };
             
-            // localStorage에도 저장 (다음번 빠른 접근을 위해)
-            try {
-              localStorage.setItem(cacheKey, JSON.stringify(cachedEventData));
-            } catch (storageError) {
-              // 저장 실패는 무시
-            }
-            
+            saveToLocalStorage(cacheKey, cachedEventData);
             setApiFineData(cachedEventData);
-            setApiError(null);
             setApiFineLoading(false);
             return;
           }
@@ -492,71 +492,29 @@ function RelationGraphWrapper() {
         });
         
         if (fineData?.isSuccess && fineData?.result) {
-          // API 응답을 localStorage에 캐싱
-          try {
-            localStorage.setItem(cacheKey, JSON.stringify(fineData.result));
-          } catch (storageError) {
-            // localStorage 저장 실패는 무시 (캐시는 선택사항)
-          }
-          
+          saveToLocalStorage(cacheKey, fineData.result);
           setApiFineData(fineData.result);
-          setApiError(null);
         } else {
           // API 응답 실패 시 Chapter Events 캐시로 폴백 (5번)
-          const fallbackChapterCache = getCachedChapterEvents(targetBookId, currentChapter);
-          if (fallbackChapterCache?.events && Array.isArray(fallbackChapterCache.events)) {
-            const fallbackEvent = fallbackChapterCache.events.find(e => 
-              Number(e.eventIdx) === eventIdx || Number(e.idx) === eventIdx
-            );
-            
-            if (fallbackEvent && (fallbackEvent.characters || fallbackEvent.relations)) {
-              const fallbackEventData = {
-                characters: Array.isArray(fallbackEvent.characters) ? fallbackEvent.characters : [],
-                relations: Array.isArray(fallbackEvent.relations) ? fallbackEvent.relations : [],
-                event: fallbackEvent.event || null,
-                userCurrentChapter: 0
-              };
-              setApiFineData(fallbackEventData);
-              setApiError(null);
-            } else {
-              // Chapter Events 캐시에도 없으면 거시 그래프로 폴백
-              const fallbackData = apiMacroData || null;
-              if (fallbackData) {
-                setApiFineData(fallbackData);
-              }
-              setApiError(null);
-            }
+          const fallbackEventData = getChapterEventFallbackData(targetBookId, currentChapter, eventIdx);
+          if (fallbackEventData) {
+            setApiFineData(fallbackEventData);
           } else {
-            // Chapter Events 캐시가 없으면 거시 그래프로 폴백
-            const fallbackData = apiMacroData || null;
-            if (fallbackData) {
-              setApiFineData(fallbackData);
+            // Chapter Events 캐시에도 없으면 거시 그래프로 폴백
+            if (currentApiMacroData) {
+              setApiFineData(currentApiMacroData);
             }
-            setApiError(null);
           }
         }
         
       } catch (error) {
         if (error.status === 404 || error.message?.includes('찾을 수 없습니다')) {
           // 404 에러 시 Chapter Events 캐시로 폴백 (5번)
-          const fallbackChapterCache = getCachedChapterEvents(targetBookId, currentChapter);
-          if (fallbackChapterCache?.events && Array.isArray(fallbackChapterCache.events)) {
-            const fallbackEvent = fallbackChapterCache.events.find(e => 
-              Number(e.eventIdx) === eventIdx || Number(e.idx) === eventIdx
-            );
-            
-            if (fallbackEvent && (fallbackEvent.characters || fallbackEvent.relations)) {
-              const fallbackEventData = {
-                characters: Array.isArray(fallbackEvent.characters) ? fallbackEvent.characters : [],
-                relations: Array.isArray(fallbackEvent.relations) ? fallbackEvent.relations : [],
-                event: fallbackEvent.event || null,
-                userCurrentChapter: 0
-              };
-              setApiFineData(fallbackEventData);
-              setApiError(null);
-              setApiFineLoading(false);
-              return;
-            }
+          const fallbackEventData = getChapterEventFallbackData(targetBookId, currentChapter, eventIdx);
+          if (fallbackEventData) {
+            setApiFineData(fallbackEventData);
+            setApiFineLoading(false);
+            return;
           }
           // 404 에러는 데이터 없음으로 정상 상황, 거시 그래프로 폴백
         } else {
@@ -568,50 +526,32 @@ function RelationGraphWrapper() {
         }
         
         // 에러 발생 시 Chapter Events 캐시로 폴백 (5번)
-        const fallbackChapterCache = getCachedChapterEvents(targetBookId, currentChapter);
-        if (fallbackChapterCache?.events && Array.isArray(fallbackChapterCache.events)) {
-          const fallbackEvent = fallbackChapterCache.events.find(e => 
-            Number(e.eventIdx) === eventIdx || Number(e.idx) === eventIdx
-          );
-          
-          if (fallbackEvent && (fallbackEvent.characters || fallbackEvent.relations)) {
-            const fallbackEventData = {
-              characters: Array.isArray(fallbackEvent.characters) ? fallbackEvent.characters : [],
-              relations: Array.isArray(fallbackEvent.relations) ? fallbackEvent.relations : [],
-              event: fallbackEvent.event || null,
-              userCurrentChapter: 0
-            };
-            setApiFineData(fallbackEventData);
-            setApiError(null);
-            setApiFineLoading(false);
-            return;
-          }
+        const fallbackEventData = getChapterEventFallbackData(targetBookId, currentChapter, eventIdx);
+        if (fallbackEventData) {
+          setApiFineData(fallbackEventData);
+          setApiFineLoading(false);
+          return;
         }
         
         // Chapter Events 캐시에도 없으면 거시 그래프로 폴백
-        const fallbackData = apiMacroData || null;
-        if (fallbackData) {
-          setApiFineData(fallbackData);
+        if (currentApiMacroData) {
+          setApiFineData(currentApiMacroData);
         }
-        setApiError(null);
       } finally {
         setApiFineLoading(false);
       }
     };
 
     loadFineGraphData();
-  }, [currentEvent, currentChapter, isApiBook, serverBookId, apiMacroData]);
+  }, [currentEvent, currentChapter, isApiBook, serverBookId]);
 
   const {
     elements: localElements,
     newNodeIds,
     currentChapterData,
-    maxEventNum,
     eventNum,
     maxChapter,
-    loading,
-    error,
-    isDataEmpty
+    loading
   } = useGraphDataLoader(loaderBookKey, currentChapter, loaderEventIdx);
 
   const effectiveMaxChapter = isApiBook ? apiMaxChapter : maxChapter;
@@ -734,31 +674,6 @@ function RelationGraphWrapper() {
     });
   }, [isSidebarOpen]);
 
-  const centerElementAtPosition = useCallback((targetX, targetY) => {
-    const cy = cyRef.current;
-    if (!cy) return;
-
-    const topBarHeight = 54;
-    const chapterSidebarWidth = isSidebarOpen ? 240 : 60;
-    const tooltipSidebarWidth = 450;
-    const availableGraphWidth = window.innerWidth - chapterSidebarWidth - tooltipSidebarWidth;
-    const availableGraphHeight = window.innerHeight - topBarHeight;
-    
-    const leftOffset = availableGraphWidth * 0.1;
-    const centerX = chapterSidebarWidth + (availableGraphWidth / 2) - leftOffset;
-    
-    const topOffset = availableGraphHeight * 0.15;
-    const centerY = topBarHeight + (availableGraphHeight / 2) - topOffset;
-    
-    const panX = centerX - targetX;
-    const panY = centerY - targetY;
-    
-    cy.animate({
-      pan: { x: panX, y: panY },
-      duration: 800,
-      easing: 'ease-out-cubic'
-    });
-  }, [isSidebarOpen]);
 
   const onShowNodeTooltip = useCallback(({ node, nodeCenter, mouseX, mouseY }) => {
     setForceClose(false);
@@ -872,6 +787,20 @@ function RelationGraphWrapper() {
     return filterMainCharacters(elements, filterStage);
   }, [elements, filterStage]);
 
+  const nodeCount = useMemo(() => {
+    if (filterStage > 0) {
+      return filteredMainCharacters.filter(el => el.data && el.data.id && !el.data.source).length;
+    }
+    return elements.filter(el => el.data && el.data.id && !el.data.source).length;
+  }, [filterStage, filteredMainCharacters, elements]);
+
+  const relationCount = useMemo(() => {
+    if (filterStage > 0) {
+      return filteredMainCharacters.filter(el => el.data && el.data.source && el.data.target).length;
+    }
+    return elements.filter(el => el.data && el.data.source && el.data.target).length;
+  }, [filterStage, filteredMainCharacters, elements]);
+
   const finalElements = useMemo(() => {
     if (isSearchActive && filteredElements && filteredElements.length > 0) {
       return filteredElements;
@@ -901,11 +830,15 @@ function RelationGraphWrapper() {
       const elementType = activeTooltip.type;
       
       const animationDuration = 700;
-      setTimeout(() => {
+      const timeoutId = setTimeout(() => {
         centerElementBetweenSidebars(elementId, elementType);
       }, animationDuration + 100);
+      
+      return () => {
+        clearTimeout(timeoutId);
+      };
     }
-  }, [isSidebarOpen, centerElementBetweenSidebars]);
+  }, [activeTooltip, isSidebarOpen, isSidebarClosing, centerElementBetweenSidebars]);
 
   const toggleSidebar = useCallback(() => {
     setIsSidebarOpen(prev => !prev);
@@ -947,12 +880,20 @@ function RelationGraphWrapper() {
       }
       
       setCurrentEvent(lastEventNum);
-      
-      setTimeout(() => {
-        setIsDropdownSelection(false);
-      }, 100);
     }
   }, [currentChapter, setCurrentChapter, isApiBook, manifestData, filename, clearAll]);
+
+  useEffect(() => {
+    if (isDropdownSelection) {
+      const timeoutId = setTimeout(() => {
+        setIsDropdownSelection(false);
+      }, 100);
+      
+      return () => {
+        clearTimeout(timeoutId);
+      };
+    }
+  }, [isDropdownSelection]);
 
 
   const toggleEdgeLabel = useCallback(() => {
@@ -1002,8 +943,13 @@ function RelationGraphWrapper() {
     
     e.stopPropagation();
     clearAll();
-    setTimeout(() => {
+    
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+    }
+    timeoutRef.current = setTimeout(() => {
       setForceClose(true);
+      timeoutRef.current = null;
     }, 100);
   }, [activeTooltip, isSidebarClosing, clearAll]);
 
@@ -1016,8 +962,13 @@ function RelationGraphWrapper() {
       
       if (activeTooltip && !isSidebarClosing) {
         clearAll();
-        setTimeout(() => {
+        
+        if (timeoutRef.current) {
+          clearTimeout(timeoutRef.current);
+        }
+        timeoutRef.current = setTimeout(() => {
           setForceClose(true);
+          timeoutRef.current = null;
         }, 100);
       }
     }
@@ -1049,6 +1000,15 @@ function RelationGraphWrapper() {
       };
     }
   }, [activeTooltip, isSidebarClosing, handleGlobalClick]);
+
+  useEffect(() => {
+    return () => {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+        timeoutRef.current = null;
+      }
+    };
+  }, []);
   
   const chapterList = useMemo(() => 
     Array.from({ length: effectiveMaxChapter }, (_, i) => i + 1), 
@@ -1441,15 +1401,15 @@ function RelationGraphWrapper() {
             }}>
               <span>
                 {filterStage > 0 
-                  ? `${filteredMainCharacters.filter(el => el.data && el.data.id && !el.data.source).length}명 (필터링됨)`
-                  : `${elements.filter(el => el.data && el.data.id && !el.data.source).length}명`
+                  ? `${nodeCount}명 (필터링됨)`
+                  : `${nodeCount}명`
                 }
               </span>
               <span>•</span>
               <span>
                 {filterStage > 0 
-                  ? `${filteredMainCharacters.filter(el => el.data && el.data.source && el.data.target).length}관계 (필터링됨)`
-                  : `${elements.filter(el => el.data && el.data.source && el.data.target).length}관계`
+                  ? `${relationCount}관계 (필터링됨)`
+                  : `${relationCount}관계`
                 }
               </span>
               {isApiBook && (
