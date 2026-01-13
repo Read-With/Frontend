@@ -11,22 +11,20 @@ import {
   findClosestEvent,
   calculateChapterProgress,
   bookmarkUtils,
-  settingsUtils
+  settingsUtils,
+  ensureLocations
 } from '../utils/viewerUtils';
 import { getFolderKeyFromFilename } from '../utils/graphData';
-import { loadBookmarks, addBookmark, removeBookmark } from '../components/viewer/bookmark/BookmarkManager';
-import { getBookManifest } from '../utils/common/api';
-import { getMaxChapter } from '../utils/common/manifestCache';
-
-const normalizeTitle = (title) => {
-  if (!title) return '';
-  return title
-    .toLowerCase()
-    .trim()
-    .replace(/\s+/g, ' ')
-    .replace(/[^\w\s가-힣]/g, '')
-    .replace(/\s/g, '');
-};
+import { 
+  loadBookmarks, 
+  addBookmark, 
+  removeBookmark,
+  loadBookmarksFromLocal,
+  saveBookmarksToLocal
+} from '../components/viewer/bookmark/BookmarkManager';
+import { getBookManifest } from '../utils/api/api';
+import { getMaxChapter } from '../utils/common/cache/manifestCache';
+import { normalizeTitle } from '../utils/stringUtils';
 
 export function useViewerPage() {
   const { filename: bookId } = useParams(); // filename을 bookId로 rename
@@ -126,6 +124,7 @@ export function useViewerPage() {
   const [characterData, setCharacterData] = useState(null);
   const [isReloading, setIsReloading] = useState(false);
   const [eventNum, setEventNum] = useState(0);
+  // isGraphLoading: 내부 상태, 챕터 변경 시 그래프 UI 로딩 상태 관리
   const [isGraphLoading, setIsGraphLoading] = useState(true);
   const [showToolbar, setShowToolbar] = useState(false);
   
@@ -362,6 +361,11 @@ export function useViewerPage() {
     };
   }, [location.state?.book, matchedServerBook, bookId, serverBook, loadingServerBook]);
 
+  const isLocalBook = useMemo(
+    () => !(book?.id && typeof book.id === 'number'),
+    [book]
+  );
+
   // 서버 bookId를 우선 사용, 없으면 URL 파라미터의 bookId 사용
   const cleanBookId = useMemo(() => {
     if (book?.id && typeof book.id === 'number') {
@@ -435,7 +439,7 @@ export function useViewerPage() {
     maxEventNum,
     eventNum: graphEventNum,
     maxChapter: detectedMaxChapter,
-    loading: graphLoading,
+    loading: graphLoading, // graphLoading: useGraphDataLoader에서 반환, 그래프 데이터 로딩 상태
     error: graphError
   } = useGraphDataLoader(graphBookId, currentChapter, currentEvent?.eventNum || 1);
   
@@ -491,11 +495,15 @@ export function useViewerPage() {
     const fetchBookmarks = async () => {
       if (!cleanBookId) return;
       
-      // 서버 bookId를 사용하여 북마크 로드
       setBookmarksLoading(true);
       try {
-        const bookmarksData = await loadBookmarks(cleanBookId);
-        setBookmarks(bookmarksData);
+        if (isLocalBook) {
+          const localBookmarks = loadBookmarksFromLocal(cleanBookId);
+          setBookmarks(localBookmarks);
+        } else {
+          const bookmarksData = await loadBookmarks(cleanBookId);
+          setBookmarks(bookmarksData);
+        }
       } catch (error) {
         setBookmarks([]);
       } finally {
@@ -504,7 +512,7 @@ export function useViewerPage() {
     };
 
     fetchBookmarks();
-  }, [cleanBookId]);
+  }, [cleanBookId, isLocalBook]);
   
   // 페이지 변경 시 현재 챕터 번호 업데이트
   // handleLocationChange에서 이미 로컬 CFI 기반으로 챕터를 업데이트하므로 중복 제거
@@ -610,6 +618,30 @@ export function useViewerPage() {
     }
   }, []);
   
+  // 북마크 삭제 핸들러 (로컬/서버 분기 처리)
+  const handleRemoveBookmark = useCallback(async (bookmarkId) => {
+    try {
+      if (isLocalBook) {
+        setBookmarks(prev => {
+          const next = prev.filter(b => b.id !== bookmarkId);
+          saveBookmarksToLocal(cleanBookId, next);
+          return next;
+        });
+        toast.success("북마크가 삭제되었습니다");
+      } else {
+        const result = await removeBookmark(bookmarkId);
+        if (result.success) {
+          setBookmarks(prev => prev.filter(b => b.id !== bookmarkId));
+          toast.success("북마크가 삭제되었습니다");
+        } else {
+          toast.error(result.message || "북마크 삭제에 실패했습니다");
+        }
+      }
+    } catch (error) {
+      toast.error("북마크 삭제에 실패했습니다");
+    }
+  }, [isLocalBook, cleanBookId]);
+
   const handleAddBookmark = useCallback(async () => {
     if (!viewerRef.current) {
       toast.error("❗ 페이지가 아직 준비되지 않았어요. 다시 불러옵니다...");
@@ -662,9 +694,6 @@ export function useViewerPage() {
 
     setFailCount(0);
 
-    // 로컬 책인지 확인 (서버 bookId가 없으면 로컬 책)
-    const isLocalBook = !book.id || typeof book.id !== 'number';
-    
     // 북마크 제목 생성: "몇페이지 (챕터 몇)" 형식
     let bookmarkTitle = '';
     if (pageNum && chapterNum) {
@@ -681,23 +710,9 @@ export function useViewerPage() {
     const existingBookmark = bookmarks.find(b => b.startCfi === cfi);
     
     if (existingBookmark) {
-      // 이미 북마크가 있으면 삭제
-      if (isLocalBook) {
-        // 로컬 책의 경우 로컬 스토리지에서 제거
-        const updatedBookmarks = bookmarks.filter(b => b.id !== existingBookmark.id);
-        setBookmarks(updatedBookmarks);
-        localStorage.setItem(`bookmarks_${cleanBookId}`, JSON.stringify(updatedBookmarks));
-        toast.success("📖 북마크가 제거되었습니다");
-      } else {
-        // 서버 책의 경우 서버에서 제거 (서버 bookId 사용)
-        const result = await removeBookmark(existingBookmark.id);
-        if (result.success) {
-          setBookmarks(prev => prev.filter(b => b.id !== existingBookmark.id));
-          toast.success("📖 북마크가 제거되었습니다");
-        } else {
-          toast.error(result.message || "북마크 제거에 실패했습니다");
-        }
-      }
+      // 이미 북마크가 있으면 삭제 (handleRemoveBookmark 재사용)
+      await handleRemoveBookmark(existingBookmark.id);
+      return;
     } else {
       // 새 북마크 추가
       if (isLocalBook) {
@@ -712,7 +727,7 @@ export function useViewerPage() {
         };
         const updatedBookmarks = [...bookmarks, newBookmark];
         setBookmarks(updatedBookmarks);
-        localStorage.setItem(`bookmarks_${cleanBookId}`, JSON.stringify(updatedBookmarks));
+        saveBookmarksToLocal(cleanBookId, updatedBookmarks);
         toast.success("📖 북마크가 추가되었습니다");
       } else {
         // 서버 책의 경우 서버에 추가 (서버 bookId 사용, title 포함)
@@ -732,7 +747,7 @@ export function useViewerPage() {
         }
       }
     }
-  }, [cleanBookId, bookmarks, book]);
+  }, [cleanBookId, bookmarks, book, isLocalBook, handleRemoveBookmark]);
   
   const handleBookmarkSelect = useCallback((cfi) => {
     viewerRef.current?.displayAt(cfi);
@@ -794,34 +809,9 @@ export function useViewerPage() {
     // 최종 실패 시 경고만 표시 (새로고침하지 않음)
     console.warn('프로그레스 이동 실패: 뷰어가 준비되지 않았습니다.');
   }, [setProgress, viewerRef]);
-  
-  const handleDeleteBookmark = useCallback(async (bookmarkId) => {
-    try {
-      const result = await removeBookmark(bookmarkId);
-      if (result.success) {
-        setBookmarks(prev => prev.filter(b => b.id !== bookmarkId));
-        toast.success("북마크가 삭제되었습니다");
-      } else {
-        toast.error(result.message || "북마크 삭제에 실패했습니다");
-      }
-    } catch (error) {
-      toast.error("북마크 삭제에 실패했습니다");
-    }
-  }, []);
-  
-  const handleRemoveBookmark = useCallback(async (bookmarkId) => {
-    try {
-      const result = await removeBookmark(bookmarkId);
-      if (result.success) {
-        setBookmarks(prev => prev.filter(b => b.id !== bookmarkId));
-        toast.success("북마크가 삭제되었습니다");
-      } else {
-        toast.error(result.message || "북마크 삭제에 실패했습니다");
-      }
-    } catch (error) {
-      toast.error("북마크 삭제에 실패했습니다");
-    }
-  }, []);
+
+  // 호환성을 위해 handleDeleteBookmark로도 노출
+  const handleDeleteBookmark = handleRemoveBookmark;
   
   // 그래프 표시 토글 함수
   const toggleGraph = useCallback(() => {
@@ -836,58 +826,46 @@ export function useViewerPage() {
     };
     setSettings(updatedSettings);
 
-    // EPUB 뷰어 다시 로드
-    const saveCurrent = async () => {
+    const applyAndSync = async () => {
       try {
-        // 현재 CFI와 프로그레스 저장
-        let cfi = null;
-        let currentProgress = progress;
-
-        // 뷰어가 준비될 때까지 대기 (최대 2초)
+        // 뷰어 준비 대기 (최대 2초)
         let attempts = 0;
-        while (attempts < 20) {
-          if (viewerRef.current?.getCurrentCfi) {
-            try {
-              cfi = await viewerRef.current.getCurrentCfi();
-              if (cfi) {
-                setLastCFI(cfi);
-                break;
-              }
-            } catch (e) {
-              // 재시도
-            }
-          }
+        while (attempts < 20 && !viewerRef.current?.applySettings) {
           await new Promise(resolve => setTimeout(resolve, 100));
           attempts++;
         }
 
-        // 뷰어 다시 로드
-        setReloadKey((prev) => prev + 1);
-        
-        // 뷰어가 재로드된 후 프로그레스 복원 (최대 3초 대기)
-        setTimeout(async () => {
-          let restoreAttempts = 0;
-          while (restoreAttempts < 30) {
-            if (viewerRef.current?.moveToProgress) {
-              try {
-                await viewerRef.current.moveToProgress(currentProgress);
-                return;
-              } catch (e) {
-                // 재시도
-              }
+        // 레이아웃만 갱신
+        viewerRef.current?.applySettings?.();
+
+        // 현재 위치 동기화
+        const cfi = await viewerRef.current?.getCurrentCfi?.();
+        const bookInstance = viewerRef.current?.getBookInstance?.();
+
+        if (bookInstance) {
+          await ensureLocations(bookInstance, 2000);
+          const total = Math.max(1, Number(bookInstance.locations?.length?.()) || 1);
+          setTotalPages(total);
+
+          if (cfi) {
+            const locIdx = bookInstance.locations?.locationFromCfi?.(cfi);
+            if (Number.isFinite(locIdx) && locIdx >= 0) {
+              const pageNum = Math.min(locIdx + 1, total);
+              setCurrentPage(pageNum);
+              const progressValue = total > 1
+                ? Math.round((locIdx / (total - 1)) * 100)
+                : (locIdx > 0 ? 100 : 0);
+              setProgress(progressValue);
             }
-            await new Promise(resolve => setTimeout(resolve, 100));
-            restoreAttempts++;
           }
-        }, 200);
+        }
       } catch (e) {
-        // 설정 적용 오류 처리
-        setReloadKey((prev) => prev + 1);
+        toast.error('화면 모드 전환 중 오류가 발생했습니다.');
       }
     };
 
-    saveCurrent();
-  }, [showGraph, settings, cleanBookId, progress]);
+    applyAndSync();
+  }, [showGraph, settings, viewerRef, setTotalPages, setCurrentPage, setProgress]);
   
   const handleFitView = useCallback(() => {
     // Implementation of handleFitView
@@ -1034,7 +1012,6 @@ export function useViewerPage() {
     setGraphFullScreen,
     showGraph,
     setShowGraph,
-    elements,
     setElements,
     graphViewState,
     setGraphViewState,
@@ -1110,7 +1087,6 @@ export function useViewerPage() {
     onToggleBookmarkList,
     handleSliderChange,
     handleDeleteBookmark,
-    handleRemoveBookmark,
     toggleGraph,
     handleFitView,
     handleLocationChange,

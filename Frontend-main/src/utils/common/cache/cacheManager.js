@@ -1,14 +1,62 @@
 const cacheRegistry = new Map();
 
-/**
- * 캐시 등록 (타이머 중복 생성 방지)
- * @param {string} name - 캐시 이름
- * @param {Map|Object} cache - 캐시 객체
- * @param {Object} options - 캐시 옵션
- */
+function getStorage(storageType = 'localStorage') {
+  if (typeof window === 'undefined') return null;
+  return storageType === 'sessionStorage' ? sessionStorage : localStorage;
+}
+
+function deleteFromCache(cache, key) {
+  if (!cache) return;
+  if (cache.delete) {
+    cache.delete(key);
+  } else {
+    delete cache[key];
+  }
+}
+
+function loadFromStorage(storageKey, storageType = 'localStorage') {
+  const storage = getStorage(storageType);
+  if (!storage) return null;
+  
+  try {
+    const stored = storage.getItem(storageKey);
+    if (!stored) return null;
+    const parsed = JSON.parse(stored);
+    if (!parsed || typeof parsed !== 'object') {
+      storage.removeItem(storageKey);
+      return null;
+    }
+    return parsed;
+  } catch (error) {
+    storage.removeItem(storageKey);
+    return null;
+  }
+}
+
+function saveToStorage(storageKey, data, storageType = 'localStorage') {
+  const storage = getStorage(storageType);
+  if (!storage) return;
+  
+  try {
+    storage.setItem(storageKey, JSON.stringify(data));
+  } catch (error) {
+    console.error(`스토리지 저장 실패 (${storageKey}):`, error);
+  }
+}
+
+function removeFromStorage(storageKey, storageType = 'localStorage') {
+  const storage = getStorage(storageType);
+  if (!storage) return;
+  
+  try {
+    storage.removeItem(storageKey);
+  } catch (error) {
+    console.error(`스토리지 삭제 실패 (${storageKey}):`, error);
+  }
+}
+
 export function registerCache(name, cache, options = {}) {
   try {
-    // 기존 캐시가 있으면 먼저 정리
     if (cacheRegistry.has(name)) {
       clearCache(name);
     }
@@ -17,18 +65,33 @@ export function registerCache(name, cache, options = {}) {
       cache,
       options: {
         maxSize: options.maxSize || 1000,
-        ttl: options.ttl || null, // Time To Live (ms)
-        cleanupInterval: options.cleanupInterval || 300000, // 5분
+        ttl: options.ttl || null,
+        cleanupInterval: options.cleanupInterval || 300000,
+        storageKey: options.storageKey || null,
+        storageType: options.storageType || 'localStorage',
+        persist: options.persist !== false,
         ...options
       },
       lastAccess: Date.now(),
       accessCount: 0,
-      cleanupTimer: null // 타이머 참조 초기화
+      cleanupTimer: null
     };
+    
+    if (cacheInfo.options.storageKey && cacheInfo.options.persist) {
+      const stored = loadFromStorage(cacheInfo.options.storageKey, cacheInfo.options.storageType);
+      if (stored && stored.data) {
+        if (cache instanceof Map) {
+          Object.entries(stored.data).forEach(([key, value]) => {
+            cache.set(key, value);
+          });
+        } else {
+          Object.assign(cache, stored.data);
+        }
+      }
+    }
     
     cacheRegistry.set(name, cacheInfo);
     
-    // TTL이 설정된 경우 정리 타이머 설정
     if (cacheInfo.options.ttl) {
       setupCleanupTimer(name, cacheInfo);
     }
@@ -38,10 +101,6 @@ export function registerCache(name, cache, options = {}) {
   }
 }
 
-/**
- * 캐시 접근 기록
- * @param {string} name - 캐시 이름
- */
 export function recordCacheAccess(name) {
   try {
     const cacheInfo = cacheRegistry.get(name);
@@ -54,10 +113,6 @@ export function recordCacheAccess(name) {
   }
 }
 
-/**
- * 캐시 크기 제한 적용 (진정한 LRU 구현)
- * @param {string} name - 캐시 이름
- */
 export function enforceCacheSizeLimit(name) {
   try {
     const cacheInfo = cacheRegistry.get(name);
@@ -67,26 +122,18 @@ export function enforceCacheSizeLimit(name) {
     const currentSize = cache.size || Object.keys(cache).length;
     
     if (currentSize > options.maxSize) {
-      // 진정한 LRU 구현: 접근 시간 기준으로 정렬
       const entries = Array.from(cache.entries());
       
-      // 각 항목의 접근 시간을 기준으로 정렬 (오래된 것부터)
       entries.sort((a, b) => {
         const aTime = (a[1] && a[1].lastAccess) ? a[1].lastAccess : 0;
         const bTime = (b[1] && b[1].lastAccess) ? b[1].lastAccess : 0;
         return aTime - bTime;
       });
       
-      // 제거할 항목 수 계산
       const toRemove = entries.slice(0, currentSize - options.maxSize);
       
-      // 오래된 항목들 제거
       for (const [key] of toRemove) {
-        if (cache.delete) {
-          cache.delete(key);
-        } else {
-          delete cache[key];
-        }
+        deleteFromCache(cache, key);
       }
     }
   } catch (error) {
@@ -94,14 +141,8 @@ export function enforceCacheSizeLimit(name) {
   }
 }
 
-/**
- * TTL 기반 캐시 정리 타이머 설정
- * @param {string} name - 캐시 이름
- * @param {Object} cacheInfo - 캐시 정보
- */
 function setupCleanupTimer(name, cacheInfo) {
   try {
-    // 기존 타이머가 있으면 정리
     if (cacheInfo.cleanupTimer) {
       clearInterval(cacheInfo.cleanupTimer);
     }
@@ -110,60 +151,68 @@ function setupCleanupTimer(name, cacheInfo) {
       try {
         const now = Date.now();
         const { cache, options } = cacheInfo;
+        let hasChanges = false;
         
         if (cache.size) {
           for (const [key, value] of cache.entries()) {
-            // 타입 안전성 강화: timestamp 속성 존재 확인
             if (value && typeof value === 'object' && value.timestamp && 
                 (now - value.timestamp) > options.ttl) {
-              if (cache.delete) {
-                cache.delete(key);
-              } else {
-                delete cache[key];
-              }
+              deleteFromCache(cache, key);
+              hasChanges = true;
             }
           }
+        } else if (cache && typeof cache === 'object') {
+          for (const key of Object.keys(cache)) {
+            const value = cache[key];
+            if (value && typeof value === 'object' && value.timestamp && 
+                (now - value.timestamp) > options.ttl) {
+              deleteFromCache(cache, key);
+              hasChanges = true;
+            }
+          }
+        }
+        
+        if (hasChanges && options.storageKey && options.persist) {
+          const data = cache instanceof Map 
+            ? Object.fromEntries(cache.entries())
+            : { ...cache };
+          saveToStorage(options.storageKey, { data, timestamp: Date.now() }, options.storageType);
         }
       } catch (error) {
         console.error(`TTL 캐시 정리 중 오류 (${name}):`, error);
       }
     }, cacheInfo.options.cleanupInterval);
     
-    // 타이머 참조 저장 (나중에 정리용)
     cacheInfo.cleanupTimer = interval;
   } catch (error) {
     console.error(`캐시 타이머 설정 실패 (${name}):`, error);
   }
 }
 
-/**
- * 특정 캐시 정리
- * @param {string} name - 캐시 이름
- */
 export function clearCache(name) {
   try {
     const cacheInfo = cacheRegistry.get(name);
     if (!cacheInfo) return;
     
-    const { cache, cleanupTimer } = cacheInfo;
+    const { cache, cleanupTimer, options } = cacheInfo;
     
-    // 캐시 정리
     if (cache && typeof cache.clear === 'function') {
       cache.clear();
     } else if (cache && typeof cache === 'object') {
-      // Map이 아닌 경우
       for (const key of Object.keys(cache)) {
         delete cache[key];
       }
     }
     
-    // 타이머 정리
     if (cleanupTimer) {
       clearInterval(cleanupTimer);
-      cacheInfo.cleanupTimer = null; // 참조 초기화
+      cacheInfo.cleanupTimer = null;
     }
     
-    // 접근 기록 초기화
+    if (options.storageKey) {
+      removeFromStorage(options.storageKey, options.storageType);
+    }
+    
     cacheInfo.lastAccess = Date.now();
     cacheInfo.accessCount = 0;
   } catch (error) {
@@ -171,9 +220,6 @@ export function clearCache(name) {
   }
 }
 
-/**
- * 모든 캐시 정리
- */
 export function clearAllCaches() {
   try {
     for (const [name] of cacheRegistry) {
@@ -184,11 +230,7 @@ export function clearAllCaches() {
   }
 }
 
-/**
- * 사용하지 않는 캐시 정리 (메모리 최적화)
- * @param {number} maxAge - 최대 나이 (ms)
- */
-export function cleanupUnusedCaches(maxAge = 600000) { // 10분
+export function cleanupUnusedCaches(maxAge = 600000) {
   try {
     const now = Date.now();
     
@@ -202,10 +244,6 @@ export function cleanupUnusedCaches(maxAge = 600000) { // 10분
   }
 }
 
-/**
- * 캐시 통계 정보 반환
- * @returns {Object} 캐시 통계
- */
 export function getCacheStats() {
   try {
     const stats = {};
@@ -232,10 +270,6 @@ export function getCacheStats() {
   }
 }
 
-/**
- * 캐시 등록 해제
- * @param {string} name - 캐시 이름
- */
 export function unregisterCache(name) {
   try {
     clearCache(name);
@@ -245,25 +279,28 @@ export function unregisterCache(name) {
   }
 }
 
-/**
- * 캐시 항목 접근 시 LRU 업데이트
- * @param {string} name - 캐시 이름
- * @param {string} key - 캐시 키
- * @returns {*} 캐시 값
- */
 export function getCacheItem(name, key) {
   try {
     const cacheInfo = cacheRegistry.get(name);
     if (!cacheInfo) return undefined;
     
-    const { cache } = cacheInfo;
-    const value = cache.get ? cache.get(key) : cache[key];
+    const { cache, options } = cacheInfo;
+    let value = cache.get ? cache.get(key) : cache[key];
+    
+    if (value === undefined && options.storageKey && options.persist) {
+      const stored = loadFromStorage(options.storageKey, options.storageType);
+      if (stored && stored.data && stored.data[key]) {
+        value = stored.data[key];
+        if (cache.set) {
+          cache.set(key, value);
+        } else {
+          cache[key] = value;
+        }
+      }
+    }
     
     if (value !== undefined) {
-      // 접근 기록 업데이트
       recordCacheAccess(name);
-      
-      // LRU를 위한 접근 시간 업데이트
       if (value && typeof value === 'object') {
         value.lastAccess = Date.now();
       }
@@ -276,23 +313,17 @@ export function getCacheItem(name, key) {
   }
 }
 
-/**
- * 캐시 항목 설정 시 LRU 업데이트
- * @param {string} name - 캐시 이름
- * @param {string} key - 캐시 키
- * @param {*} value - 캐시 값
- */
 export function setCacheItem(name, key, value) {
   try {
     const cacheInfo = cacheRegistry.get(name);
     if (!cacheInfo) return false;
     
-    const { cache } = cacheInfo;
+    const { cache, options } = cacheInfo;
     
-    // LRU를 위한 접근 시간 추가
     const cacheValue = {
       ...value,
-      lastAccess: Date.now()
+      lastAccess: Date.now(),
+      timestamp: value.timestamp || Date.now()
     };
     
     if (cache.set) {
@@ -301,11 +332,15 @@ export function setCacheItem(name, key, value) {
       cache[key] = cacheValue;
     }
     
-    // 접근 기록 업데이트
     recordCacheAccess(name);
-    
-    // 크기 제한 적용
     enforceCacheSizeLimit(name);
+    
+    if (options.storageKey && options.persist) {
+      const data = cache instanceof Map 
+        ? Object.fromEntries(cache.entries())
+        : { ...cache };
+      saveToStorage(options.storageKey, { data, timestamp: Date.now() }, options.storageType);
+    }
     
     return true;
   } catch (error) {
@@ -314,7 +349,36 @@ export function setCacheItem(name, key, value) {
   }
 }
 
-// 페이지 언로드 시 모든 캐시 정리
+export function removeCacheItem(name, key) {
+  try {
+    const cacheInfo = cacheRegistry.get(name);
+    if (!cacheInfo) return false;
+    
+    const { cache, options } = cacheInfo;
+    deleteFromCache(cache, key);
+    
+    if (options.storageKey && options.persist) {
+      const storage = getStorage(options.storageType);
+      if (storage) {
+        try {
+          const stored = loadFromStorage(options.storageKey, options.storageType);
+          if (stored && stored.data) {
+            delete stored.data[key];
+            saveToStorage(options.storageKey, stored, options.storageType);
+          }
+        } catch (error) {
+          console.error(`캐시 항목 스토리지 삭제 실패 (${name}, ${key}):`, error);
+        }
+      }
+    }
+    
+    return true;
+  } catch (error) {
+    console.error(`캐시 항목 삭제 실패 (${name}, ${key}):`, error);
+    return false;
+  }
+}
+
 if (typeof window !== 'undefined') {
   window.addEventListener('beforeunload', clearAllCaches);
 }

@@ -1,13 +1,21 @@
-import { getFineGraph, getBookManifest } from './api';
+import { sortEventsByIdx } from '../../eventUtils';
+import { buildNodeWeights, extractCharacterId } from '../../characterUtils';
+import { getFineGraph, getBookManifest } from '../../api/api';
 import { getChapterData as getManifestChapterData, getManifestFromCache } from './manifestCache';
-import { createCharacterMaps } from '../characterUtils';
-import { convertRelationsToElements, calcGraphDiff } from '../graphDataUtils';
+import { createCharacterMaps } from '../../characterUtils';
+import { convertRelationsToElements, calcGraphDiff } from '../../graphDataUtils';
+import { registerCache, getCacheItem, setCacheItem } from './cacheManager';
 
 const READER_PROGRESS_CACHE_PREFIX = 'reader_progress_';
-const READER_PROGRESS_MAX_AGE = 3 * 24 * 60 * 60 * 1000; // 3일
+const READER_PROGRESS_MAX_AGE = 3 * 24 * 60 * 60 * 1000;
 
 const GRAPH_BOOK_CACHE_PREFIX = 'graph_cache_';
 const graphBookMemoryCache = new Map();
+registerCache('graphBookCache', graphBookMemoryCache, {
+  maxSize: 50,
+  ttl: null,
+  cleanupInterval: 3600000
+});
 const graphBuildPromises = new Map();
 
 const getGraphBookCacheKey = (bookId) => {
@@ -21,8 +29,9 @@ const readGraphBookCache = (bookId) => {
   const key = getGraphBookCacheKey(bookId);
   if (!key) return null;
 
-  if (graphBookMemoryCache.has(key)) {
-    return graphBookMemoryCache.get(key);
+  const cached = getCacheItem('graphBookCache', key);
+  if (cached) {
+    return cached;
   }
 
   if (typeof localStorage === 'undefined') {
@@ -35,7 +44,7 @@ const readGraphBookCache = (bookId) => {
       return null;
     }
     const parsed = JSON.parse(stored);
-    graphBookMemoryCache.set(key, parsed);
+    setCacheItem('graphBookCache', key, parsed);
     return parsed;
   } catch (error) {
     console.warn('그래프 책 캐시 로드 실패:', error);
@@ -51,9 +60,10 @@ const writeGraphBookCache = (bookId, payload) => {
     ...payload,
     bookId: Number(bookId),
     builtAt: payload?.builtAt ?? Date.now(),
+    timestamp: Date.now()
   };
 
-  graphBookMemoryCache.set(key, normalized);
+  setCacheItem('graphBookCache', key, normalized);
 
   if (typeof localStorage !== 'undefined') {
     try {
@@ -71,7 +81,8 @@ export const getGraphBookCache = (bookId) => readGraphBookCache(bookId);
 export const hasGraphBookCache = (bookId) => {
   const key = getGraphBookCacheKey(bookId);
   if (!key) return false;
-  if (graphBookMemoryCache.has(key)) return true;
+  const cached = getCacheItem('graphBookCache', key);
+  if (cached) return true;
   if (typeof localStorage === 'undefined') return false;
   return localStorage.getItem(key) !== null;
 };
@@ -229,20 +240,6 @@ const cloneCharacters = (characters) => {
   return characters.map((character) => deepClone(character));
 };
 
-const extractCharacterId = (character) => {
-  if (!character || typeof character !== 'object') return null;
-  const candidate =
-    character.id ??
-    character.characterId ??
-    character.character_id ??
-    character.char_id ??
-    character.pk ??
-    character.node_id ??
-    null;
-  if (candidate === null || candidate === undefined) return null;
-  const normalized = String(candidate).trim();
-  return normalized.length > 0 ? normalized : null;
-};
 
 const safeCompare = (a, b) => {
   if (a === b) return true;
@@ -366,31 +363,6 @@ const applyElementDiff = (prevElements, diff) => {
   return result;
 };
 
-const buildNodeWeights = (characters) => {
-  const weights = {};
-  (Array.isArray(characters) ? characters : []).forEach((character) => {
-    const id = extractCharacterId(character);
-    if (!id) return;
-    const weight = typeof character?.weight === 'number' ? character.weight : null;
-    const count = typeof character?.count === 'number' ? character.count : null;
-    if (weight !== null || count !== null) {
-      weights[id] = {
-        weight: weight ?? 3,
-        count: count ?? 0
-      };
-    }
-  });
-  return weights;
-};
-
-const sortEventsByIdx = (events) => {
-  if (!Array.isArray(events)) return [];
-  return [...events].sort((a, b) => {
-    const idxA = Number(a?.eventIdx) || 0;
-    const idxB = Number(b?.eventIdx) || 0;
-    return idxA - idxB;
-  });
-};
 
 const buildChapterCachePayload = (bookId, chapterIdx, events, source = 'runtime', folderKey = 'api') => {
   const timestamp = Date.now();
@@ -535,7 +507,7 @@ const buildChapterCachePayload = (bookId, chapterIdx, events, source = 'runtime'
   };
 };
 
-const normalizeManifestEvents = (bookId, chapterIdx, manifestChapter) => {
+export const normalizeManifestEvents = (bookId, chapterIdx, manifestChapter) => {
   if (!manifestChapter?.events?.length) {
     return [];
   }
@@ -656,9 +628,6 @@ const normalizeReaderProgressPayload = (bookKey, payload) => {
   return normalized;
 };
 
-/**
- * 챕터별 이벤트 캐시 키 생성
- */
 const getChapterEventCacheKey = (bookId, chapterIdx) => {
   const bookIdNum = Number(bookId);
   const chapterIdxNum = Number(chapterIdx);
@@ -668,9 +637,6 @@ const getChapterEventCacheKey = (bookId, chapterIdx) => {
   return `${bookIdNum}-${chapterIdxNum}`;
 };
 
-/**
- * 캐시된 챕터 이벤트 정보 가져오기
- */
 export const getCachedChapterEvents = (bookId, chapterIdx) => {
   try {
     const cacheKey = getChapterEventCacheKey(bookId, chapterIdx);
@@ -681,10 +647,9 @@ export const getCachedChapterEvents = (bookId, chapterIdx) => {
     
     const cacheData = JSON.parse(cached);
     
-    // 캐시 유효성 검사 (24시간)
     const now = Date.now();
     const cacheAge = now - (cacheData.timestamp || 0);
-    const maxAge = 24 * 60 * 60 * 1000; // 24시간
+    const maxAge = 24 * 60 * 60 * 1000;
     
     if (cacheAge > maxAge) {
       localStorage.removeItem(cacheKey);
@@ -698,9 +663,6 @@ export const getCachedChapterEvents = (bookId, chapterIdx) => {
   }
 };
 
-/**
- * 챕터 이벤트 정보 캐시에 저장
- */
 export const setCachedChapterEvents = (bookId, chapterIdx, eventData) => {
   try {
     if (!eventData) {
@@ -793,14 +755,6 @@ export const clearCachedReaderProgress = (bookKey) => {
   }
 };
 
-/**
- * 특정 챕터의 모든 이벤트를 순차적으로 탐색
- * 
- * @param {number} bookId - 책 ID
- * @param {number} chapterIdx - 챕터 인덱스
- * @param {boolean} forceRefresh - 캐시 무시하고 강제로 다시 탐색
- * @returns {Promise<{maxEventIdx: number, events: Array}>}
- */
 export const discoverChapterEvents = async (bookId, chapterIdx, forceRefresh = false) => {
   if (!bookId || !chapterIdx || chapterIdx < 1) {
     return {
@@ -823,7 +777,6 @@ export const discoverChapterEvents = async (bookId, chapterIdx, forceRefresh = f
     }
   }
   
-  // manifest에서 이벤트 구조(startPos/endPos) 가져오기
   let manifestEventStructures = [];
   try {
   const manifestChapter = getManifestChapterData(bookId, chapterIdx);
@@ -839,7 +792,6 @@ export const discoverChapterEvents = async (bookId, chapterIdx, forceRefresh = f
     console.warn('manifest 이벤트 구조 로드 실패:', error);
   }
 
-  // API로 각 이벤트의 그래프 데이터 가져오기
   const apiEvents = [];
 
   const manifestEventMap = new Map();
@@ -980,12 +932,6 @@ export const discoverChapterEvents = async (bookId, chapterIdx, forceRefresh = f
   return payload;
 };
 
-/**
- * diff 기반 캐시에서 그래프 상태 복원
- * @param {object} cachePayload - 캐시된 챕터 이벤트 데이터
- * @param {number} targetEventIdx - 복원할 이벤트 인덱스
- * @returns {{elements:Array, characters:Array, eventMeta:Object|null, eventIdx:number}|null}
- */
 export const reconstructChapterGraphState = (cachePayload, targetEventIdx) => {
   if (!cachePayload || typeof cachePayload !== 'object') {
     return null;
@@ -1035,11 +981,7 @@ export const reconstructChapterGraphState = (cachePayload, targetEventIdx) => {
   };
 };
 
-/**
- * 특정 이벤트 데이터 가져오기 (캐시 우선)
- */
 export const getEventData = async (bookId, chapterIdx, eventIdx) => {
-  // 캐시된 챕터 이벤트 확인
   const cached = getCachedChapterEvents(bookId, chapterIdx);
   
   if (cached && cached.events) {
@@ -1049,7 +991,6 @@ export const getEventData = async (bookId, chapterIdx, eventIdx) => {
     }
   }
   
-  // 캐시에 없으면 API 호출
   try {
     const response = await getFineGraph(bookId, chapterIdx, eventIdx);
     
@@ -1074,9 +1015,6 @@ export const getEventData = async (bookId, chapterIdx, eventIdx) => {
   return null;
 };
 
-/**
- * 챕터의 최대 이벤트 인덱스 가져오기
- */
 export const getMaxEventIdx = async (bookId, chapterIdx) => {
   const cached = getCachedChapterEvents(bookId, chapterIdx);
   
@@ -1084,14 +1022,10 @@ export const getMaxEventIdx = async (bookId, chapterIdx) => {
     return cached.maxEventIdx;
   }
   
-  // 캐시에 없으면 탐색
   const result = await discoverChapterEvents(bookId, chapterIdx);
   return result.maxEventIdx;
 };
 
-/**
- * 챕터 이벤트 캐시 삭제
- */
 export const clearChapterEventCache = (bookId, chapterIdx) => {
   try {
     const cacheKey = getChapterEventCacheKey(bookId, chapterIdx);
@@ -1104,9 +1038,6 @@ export const clearChapterEventCache = (bookId, chapterIdx) => {
   }
 };
 
-/**
- * 모든 챕터 이벤트 캐시 삭제
- */
 export const clearAllChapterEventCaches = (bookId) => {
   try {
     const keys = Object.keys(localStorage);
@@ -1158,4 +1089,3 @@ export const clearAllChapterEventCachesGlobally = () => {
     return 0;
   }
 };
-

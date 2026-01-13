@@ -10,7 +10,7 @@ import { createButtonStyle, createAdvancedButtonHandlers, COLORS, ANIMATION_VALU
 import { mergeRefs } from "../../../utils/styles/animations";
 import { safeNum, processRelationTagsCached } from "../../../utils/relationUtils";
 import { cleanupRelationUtils } from "../../../utils/common/cleanupUtils";
-import { getMaxChapter } from "../../../utils/common/manifestCache";
+import { getMaxChapter } from "../../../utils/common/cache/manifestCache";
 import "../RelationGraph.css";
 
 /**

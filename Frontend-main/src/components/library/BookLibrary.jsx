@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { Heart, BookOpen, Network, MoreVertical, Info, CheckCircle, Clock, FileText, Trash2, X } from 'lucide-react';
 import BookDetailModal from './BookDetailModal';
 import './BookLibrary.css';
-import { ensureGraphBookCache } from '../../utils/common/chapterEventCache';
+import { ensureGraphBookCache } from '../../utils/common/cache/chapterEventCache';
 
 const DeleteConfirmModal = ({ isOpen, onClose, onConfirm, isIndexedDbOnly }) => {
   React.useEffect(() => {

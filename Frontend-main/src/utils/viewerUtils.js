@@ -1,9 +1,9 @@
 
 import { errorUtils as commonErrorUtils } from './common/errorUtils';
-import { storageUtils as commonStorageUtils } from './common/storageUtils';
+import { storageUtils as commonStorageUtils } from './common/cache/storageUtils';
 import { cfiUtils as commonCfiUtils } from './common/cfiUtils';
 import { settingsUtils as commonSettingsUtils, defaultSettings as commonDefaultSettings, loadSettings as commonLoadSettings } from './common/settingsUtils';
-import { getManifestFromCache } from './common/manifestCache';
+import { getManifestFromCache } from './common/cache/manifestCache';
 
 export const errorUtils = commonErrorUtils;
 export const storageUtils = commonStorageUtils;

@@ -13,9 +13,9 @@ import { sidebarStyles, topBarStyles, graphStyles, createButtonStyle, createAdva
 import { useGraphSearch } from '../../hooks/useGraphSearch.jsx';
 import { useGraphDataLoader } from '../../hooks/useGraphDataLoader.js';
 import { useLocalStorageNumber } from '../../hooks/useLocalStorage.js';
-import { getMacroGraph, getFineGraph, getBookManifest } from '../../utils/common/api.js';
-import { getMaxChapter, getManifestFromCache } from '../../utils/common/manifestCache';
-import { getGraphBookCache, getCachedChapterEvents } from '../../utils/common/chapterEventCache';
+import { getMacroGraph, getFineGraph, getBookManifest } from '../../utils/api/api.js';
+import { getMaxChapter, getManifestFromCache } from '../../utils/common/cache/manifestCache';
+import { getGraphBookCache, getCachedChapterEvents } from '../../utils/common/cache/chapterEventCache';
 import { convertRelationsToElements, filterMainCharacters } from '../../utils/graphDataUtils';
 import { createCharacterMaps } from '../../utils/characterUtils';
 import { getFolderKeyFromFilename, getLastEventIndexForChapter } from '../../utils/graphData';

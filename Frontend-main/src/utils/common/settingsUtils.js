@@ -3,7 +3,7 @@
  * viewerUtils.js와 ViewerSettings.jsx의 설정 로직을 통합
  */
 
-import { storageUtils } from './storageUtils';
+import { storageUtils } from './cache/storageUtils';
 import { errorUtils } from './errorUtils';
 
 export const defaultSettings = {

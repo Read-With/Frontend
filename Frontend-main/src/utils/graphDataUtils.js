@@ -142,16 +142,16 @@ export function convertRelationsToElements(relations, idToName, idToDesc, idToDe
     const seed = Math.abs(hash) % 10000;
     const result = min + (seed % (max - min));
     
-  // 캐시 크기 제한 (메모리 누수 방지)
-  const MAX_CACHE_SIZE = 500;
-  if (randomCache.size > MAX_CACHE_SIZE) {
-    // 전체 캐시를 지우는 대신 절반만 지우기
-    const entries = Array.from(randomCache.entries());
-    const toDelete = entries.slice(0, Math.floor(MAX_CACHE_SIZE / 2));
-    toDelete.forEach(([key]) => randomCache.delete(key));
-  }
-    randomCache.set(cacheKey, result);
+    // 캐시 크기 제한 (메모리 누수 방지) - 캐시 저장 전에 체크
+    const MAX_CACHE_SIZE = 500;
+    if (randomCache.size >= MAX_CACHE_SIZE) {
+      // 전체 캐시를 지우는 대신 절반만 지우기
+      const entries = Array.from(randomCache.entries());
+      const toDelete = entries.slice(0, Math.floor(MAX_CACHE_SIZE / 2));
+      toDelete.forEach(([key]) => randomCache.delete(key));
+    }
     
+    randomCache.set(cacheKey, result);
     return result;
   }
 

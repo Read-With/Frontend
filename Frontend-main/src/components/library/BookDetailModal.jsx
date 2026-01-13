@@ -1,22 +1,24 @@
 import React, { useState, useEffect, useMemo, useCallback, memo } from 'react';
 import PropTypes from 'prop-types';
 import { useNavigate } from 'react-router-dom';
-import { getBookManifest, getBookProgress, deleteBookProgress } from '../../utils/common/api';
-import { getChapterPovSummaries } from '../../utils/api/booksApi';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { getBookManifest, getBookProgress, deleteBookProgress } from '../../utils/api/api';
+import { getManifestFromCache } from '../../utils/common/cache/manifestCache';
 import { deleteLocalBookBuffer } from '../../utils/localBookStorage';
+import { getServerBookId } from '../../utils/viewerUtils';
 import { toast } from 'react-toastify';
 import './BookDetailModal.css';
 
 const BookDetailModal = memo(({ book, isOpen, onClose, onDelete }) => {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [bookDetails, setBookDetails] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  const [showCharacters, setShowCharacters] = useState(false);
+  const [showMoreCharacters, setShowMoreCharacters] = useState(false);
   const [progressInfo, setProgressInfo] = useState(null);
-  const [povTestResult, setPovTestResult] = useState(null);
 
-  // 중복된 인물들 제거
+  // 중복된 인물들 제거 및 주요/일반 인물 분리
   const uniqueCharacters = useMemo(() => {
     if (!bookDetails?.characters) return [];
     
@@ -30,31 +32,15 @@ const BookDetailModal = memo(({ book, isOpen, onClose, onDelete }) => {
     });
   }, [bookDetails?.characters]);
 
-  const testPovSummaries = useCallback(async () => {
-    if (!book || typeof book.id !== 'number') {
-      setPovTestResult(null);
-      return;
-    }
+  const mainCharacters = useMemo(() => {
+    return uniqueCharacters.filter(char => char.isMainCharacter);
+  }, [uniqueCharacters]);
 
-    try {
-      const response = await getChapterPovSummaries(book.id, 1);
-      setPovTestResult({
-        success: true,
-        data: response,
-        message: '챕터 1의 POV 요약 데이터가 있습니다'
-      });
-    } catch (err) {
-      setPovTestResult({
-        success: false,
-        error: err.message,
-        message: '챕터 1의 POV 요약 데이터가 없습니다'
-      });
-    }
-  }, [book]);
+  const otherCharacters = useMemo(() => {
+    return uniqueCharacters.filter(char => !char.isMainCharacter);
+  }, [uniqueCharacters]);
 
   const fetchProgressInfo = useCallback(async () => {
-    // 서버 bookId 확인 (공통 함수 사용)
-    const { getServerBookId } = await import('../../utils/viewerUtils');
     const serverBookId = getServerBookId(book);
     
     if (!serverBookId) {
@@ -78,9 +64,7 @@ const BookDetailModal = memo(({ book, isOpen, onClose, onDelete }) => {
   }, [book]);
 
   const fetchBookDetails = useCallback(async () => {
-    // 서버 bookId 확인 (book.id 또는 book._bookId 중 숫자인 것 사용)
-    const serverBookId = (book?.id && typeof book.id === 'number' ? book.id : null) || 
-                         (book?._bookId && typeof book._bookId === 'number' ? book._bookId : null);
+    const serverBookId = getServerBookId(book);
     
     if (!serverBookId) {
       setBookDetails(book);
@@ -94,15 +78,18 @@ const BookDetailModal = memo(({ book, isOpen, onClose, onDelete }) => {
       const manifestData = await getBookManifest(serverBookId);
       
       if (manifestData && manifestData.isSuccess && manifestData.result) {
+        // 정규화된 manifest 데이터 가져오기 (캐시에서 가져오면 정규화됨)
+        const normalizedManifest = getManifestFromCache(serverBookId) || manifestData.result;
+        
         // API 응답 구조에 맞게 데이터 처리
-        const bookInfo = manifestData.result.book || {};
+        const bookInfo = normalizedManifest.book || manifestData.result.book || {};
         setBookDetails({
           ...book,
           ...bookInfo,
-          // 추가 정보들
-          chapters: manifestData.result.chapters || [],
-          characters: manifestData.result.characters || [],
-          progressMetadata: manifestData.result.progressMetadata || {}
+          // 정규화된 챕터 데이터 사용 (title 필드가 정규화됨)
+          chapters: normalizedManifest.chapters || manifestData.result.chapters || [],
+          characters: normalizedManifest.characters || manifestData.result.characters || [],
+          progressMetadata: normalizedManifest.progressMetadata || manifestData.result.progressMetadata || {}
         });
       } else {
         console.warn('API 응답이 성공하지 않았습니다:', manifestData);
@@ -123,9 +110,8 @@ const BookDetailModal = memo(({ book, isOpen, onClose, onDelete }) => {
     if (isOpen && book) {
       fetchBookDetails();
       fetchProgressInfo();
-      testPovSummaries();
     }
-  }, [isOpen, book, fetchBookDetails, fetchProgressInfo, testPovSummaries]);
+  }, [isOpen, book, fetchBookDetails, fetchProgressInfo]);
 
   // 책 타입 확인 유틸리티
   const isLocalBook = useMemo(() => 
@@ -154,10 +140,32 @@ const BookDetailModal = memo(({ book, isOpen, onClose, onDelete }) => {
     navigate(`/user/graph/${getBookIdentifier()}`, { state: getNavigationState() });
   }, [onClose, navigate, getBookIdentifier, getNavigationState]);
 
+  // 진도 삭제 - useMutation + 낙관적 업데이트
+  const deleteProgressMutation = useMutation({
+    mutationFn: (bookId) => deleteBookProgress(bookId),
+    onMutate: async () => {
+      // 낙관적 업데이트 - 즉시 UI 반영
+      const previousProgress = progressInfo;
+      setProgressInfo(null);
+      return { previousProgress };
+    },
+    onSuccess: () => {
+      toast.success('독서 진도가 삭제되었습니다');
+      // 책 목록 무효화 (진도율 업데이트)
+      queryClient.invalidateQueries({ queryKey: ['books', 'server'] });
+    },
+    onError: (err, variables, context) => {
+      // 롤백
+      if (context?.previousProgress) {
+        setProgressInfo(context.previousProgress);
+      }
+      console.error('독서 진도 삭제 실패:', err);
+      toast.error('독서 진도 삭제에 실패했습니다');
+    },
+  });
+
   const handleDeleteProgress = useCallback(async () => {
-    // 서버 bookId 확인 (book.id 또는 book._bookId 중 숫자인 것 사용)
-    const serverBookId = (book?.id && typeof book.id === 'number' ? book.id : null) || 
-                         (book?._bookId && typeof book._bookId === 'number' ? book._bookId : null);
+    const serverBookId = getServerBookId(book);
     
     if (!serverBookId || !progressInfo) {
       return;
@@ -168,18 +176,11 @@ const BookDetailModal = memo(({ book, isOpen, onClose, onDelete }) => {
     }
 
     try {
-      const response = await deleteBookProgress(serverBookId);
-      if (response.isSuccess) {
-        setProgressInfo(null);
-        toast.success('독서 진도를 삭제되었습니다');
-      } else {
-        toast.error(response.message || '독서 진도 삭제에 실패했습니다');
-      }
+      await deleteProgressMutation.mutateAsync(serverBookId);
     } catch (err) {
-      console.error('독서 진도 삭제 실패:', err);
-      toast.error('독서 진도 삭제에 실패했습니다');
+      // 에러는 onError에서 처리
     }
-  }, [book, progressInfo]);
+  }, [book, progressInfo, deleteProgressMutation]);
 
   const handleDeleteBook = useCallback(async () => {
     if (!book || !book.id) {
@@ -273,6 +274,19 @@ const BookDetailModal = memo(({ book, isOpen, onClose, onDelete }) => {
               </div>
             )}
           </div>
+          {bookDetails?.updatedAt && (() => {
+            const date = new Date(bookDetails.updatedAt);
+            const year = date.getFullYear();
+            const month = String(date.getMonth() + 1).padStart(2, '0');
+            const day = String(date.getDate()).padStart(2, '0');
+            const hours = String(date.getHours()).padStart(2, '0');
+            const minutes = String(date.getMinutes()).padStart(2, '0');
+            return (
+              <div className="book-detail-updated-at">
+                {year}. {month}. {day}. {hours}:{minutes}
+              </div>
+            );
+          })()}
         </div>
 
         <div className="book-detail-body">
@@ -283,24 +297,50 @@ const BookDetailModal = memo(({ book, isOpen, onClose, onDelete }) => {
                 <div className="book-detail-section">
                   <div className="book-detail-characters-header">
                     <div className="book-detail-label">등장 인물</div>
-                    <button
-                      className="book-detail-toggle-btn"
-                      onClick={() => setShowCharacters(!showCharacters)}
-                      aria-expanded={showCharacters}
-                      aria-label={showCharacters ? '인물 목록 숨기기' : '인물 목록 보기'}
-                    >
-                      {showCharacters ? '숨기기' : '보기'}
-                    </button>
                   </div>
                   <div className="book-detail-value">
-                    {showCharacters && (
+                    {/* 주요 인물 - 항상 표시 */}
+                    {mainCharacters.length > 0 && (
                       <div className="book-detail-characters-list">
-                        {uniqueCharacters.map((character) => (
-                          <div key={character.id} className="book-detail-character-item">
-                            {character.name} {character.isMainCharacter && '⭐'}
-                          </div>
-                        ))}
+                        {mainCharacters
+                          .sort((a, b) => a.name.localeCompare(b.name))
+                          .map((character) => (
+                            <div 
+                              key={character.id} 
+                              className="book-detail-character-item main-character"
+                            >
+                              <span className="character-name">{character.name}</span>
+                              <span className="character-star" aria-label="주요 인물">⭐</span>
+                            </div>
+                          ))}
                       </div>
+                    )}
+                    
+                    {/* 일반 인물 - 더보기 버튼으로 제어 */}
+                    {otherCharacters.length > 0 && (
+                      <>
+                        {showMoreCharacters && (
+                          <div className="book-detail-characters-list">
+                            {otherCharacters
+                              .sort((a, b) => a.name.localeCompare(b.name))
+                              .map((character) => (
+                                <div 
+                                  key={character.id} 
+                                  className="book-detail-character-item"
+                                >
+                                  <span className="character-name">{character.name}</span>
+                                </div>
+                              ))}
+                          </div>
+                        )}
+                        <button
+                          className="book-detail-more-btn"
+                          onClick={() => setShowMoreCharacters(!showMoreCharacters)}
+                          aria-expanded={showMoreCharacters}
+                        >
+                          {showMoreCharacters ? '일반 인물 숨기기' : `일반 인물 더보기 (${otherCharacters.length}명)`}
+                        </button>
+                      </>
                     )}
                   </div>
                 </div>
@@ -311,11 +351,23 @@ const BookDetailModal = memo(({ book, isOpen, onClose, onDelete }) => {
                   <div className="book-detail-label">챕터 정보</div>
                   <div className="book-detail-value">
                     <div className="book-detail-chapters-list">
-                      {bookDetails.chapters.map((chapter, index) => (
-                        <div key={index} className="book-detail-chapter-item">
-                          {chapter.idx}. {chapter.title}
-                        </div>
-                      ))}
+                      {bookDetails.chapters.map((chapter, index) => {
+                        const chapterTitle = chapter.title || 
+                                             chapter.chapterTitle || 
+                                             chapter.name || 
+                                             chapter.chapterName ||
+                                             '';
+                        const chapterIdx = chapter.idx || 
+                                         chapter.chapterIdx || 
+                                         chapter.chapter || 
+                                         chapter.number ||
+                                         (index + 1);
+                        return (
+                          <div key={index} className="book-detail-chapter-item">
+                            {chapterIdx}. {chapterTitle || '(제목 없음)'}
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
                 </div>
@@ -364,49 +416,7 @@ const BookDetailModal = memo(({ book, isOpen, onClose, onDelete }) => {
                 </div>
               )}
 
-              {bookDetails.updatedAt && (
-                <div className="book-detail-section">
-                  <div className="book-detail-label">업데이트 일시</div>
-                  <div className="book-detail-value">
-                    {new Date(bookDetails.updatedAt).toLocaleString('ko-KR')}
-                  </div>
-                </div>
-              )}
 
-              {/* POV 요약 테스트 결과 */}
-              {povTestResult && (
-                <div className="book-detail-section">
-                  <div className="book-detail-label">
-                    백엔드 POV 데이터 확인
-                  </div>
-                  <div className="book-detail-value">
-                    <div style={{
-                      padding: '12px',
-                      backgroundColor: povTestResult.success ? '#d1fae5' : '#fee2e2',
-                      borderRadius: '8px',
-                      border: `1px solid ${povTestResult.success ? '#10b981' : '#ef4444'}`,
-                      fontSize: '0.9em'
-                    }}>
-                      {povTestResult.success ? (
-                        <>
-                          <div style={{ color: '#065f46', fontWeight: 'bold', marginBottom: '8px' }}>
-                            ✅ {povTestResult.message}
-                          </div>
-                          {povTestResult.data?.result?.povSummaries?.length > 0 && (
-                            <div style={{ color: '#047857', marginTop: '8px' }}>
-                              인물 수: {povTestResult.data.result.povSummaries.length}명
-                            </div>
-                          )}
-                        </>
-                      ) : (
-                        <div style={{ color: '#991b1b' }}>
-                          ❌ {povTestResult.message}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              )}
             </>
           )}
 
