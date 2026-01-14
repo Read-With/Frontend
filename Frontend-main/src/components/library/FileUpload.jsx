@@ -4,16 +4,7 @@ import { useFileUpload, FILE_CONSTRAINTS } from '../../hooks/useFileUpload';
 import { getBooks } from '../../utils/api/booksApi';
 import { theme } from '../common/theme';
 import ePub from 'epubjs';
-
-const normalizeTitle = (title) => {
-  if (!title) return '';
-  return title
-    .toLowerCase()
-    .trim()
-    .replace(/\s+/g, ' ')
-    .replace(/[^\w\s가-힣]/g, '')
-    .replace(/\s/g, '');
-};
+import { normalizeTitle } from '../../utils/stringUtils';
 
 const FileUpload = ({ onUploadSuccess, onClose }) => {
   const [dragActive, setDragActive] = useState(false);

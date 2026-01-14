@@ -1,17 +1,52 @@
-const manifestCachePrefix = 'manifest_cache_';
-const MANIFEST_TTL_MS = 1000 * 60 * 15; // 15분
+import { toNumberOrNull } from '../../numberUtils';
+import { registerCache, getCacheItem, setCacheItem, clearCache, removeCacheItem } from './cacheManager';
 
-const memoryCache = new Map();
+const manifestCachePrefix = 'manifest_cache_';
+const MANIFEST_TTL_MS = 1000 * 60 * 15;
+
+const manifestCache = new Map();
+registerCache('manifestCache', manifestCache, {
+  maxSize: 100,
+  ttl: MANIFEST_TTL_MS,
+  cleanupInterval: 300000
+});
+
 const prefetchPromises = new Map();
+
+function getFromLocalStorage(key) {
+  if (typeof localStorage === 'undefined') return null;
+  try {
+    const stored = localStorage.getItem(key);
+    if (!stored) return null;
+    return JSON.parse(stored);
+  } catch (error) {
+    try {
+      localStorage.removeItem(key);
+    } catch {}
+    return null;
+  }
+}
+
+function saveToLocalStorage(key, data) {
+  if (typeof localStorage === 'undefined') return;
+  try {
+    localStorage.setItem(key, JSON.stringify(data));
+  } catch (error) {
+    console.error('localStorage 저장 실패:', error);
+  }
+}
+
+function removeFromLocalStorage(key) {
+  if (typeof localStorage === 'undefined') return;
+  try {
+    localStorage.removeItem(key);
+  } catch (error) {
+    console.error('localStorage 삭제 실패:', error);
+  }
+}
 
 export const getManifestCacheKey = (bookId) => {
   return `${manifestCachePrefix}${bookId}`;
-};
-
-const toNumberOrNull = (value) => {
-  if (value === null || value === undefined) return null;
-  const num = Number(value);
-  return Number.isFinite(num) ? num : null;
 };
 
 const normalizeEvent = (event, fallbackIdx) => {
@@ -44,6 +79,12 @@ const normalizeChapter = (chapter, index) => {
     chapter.chapterIdx ?? chapter.idx ?? chapter.chapter ?? chapter.number ?? index + 1
   );
 
+  const resolvedTitle = chapter.title ?? 
+                       chapter.chapterTitle ?? 
+                       chapter.name ?? 
+                       chapter.chapterName ?? 
+                       null;
+
   const normalizedEvents = Array.isArray(chapter.events)
     ? chapter.events
         .map((event, eventIndex) => normalizeEvent(event, eventIndex + 1))
@@ -63,6 +104,8 @@ const normalizeChapter = (chapter, index) => {
     ...chapter,
     idx: resolvedChapterIdx ?? index + 1,
     chapterIdx: resolvedChapterIdx ?? index + 1,
+    title: resolvedTitle,
+    chapterTitle: resolvedTitle,
     startPos: normalizedStartPos,
     endPos: normalizedEndPos,
     events: normalizedEvents,
@@ -102,10 +145,10 @@ export const setManifestData = (bookId, manifestData, { persist = true } = {}) =
       timestamp: Date.now(),
     };
 
-    memoryCache.set(String(bookId), payload);
+    setCacheItem('manifestCache', String(bookId), payload);
 
-    if (persist && typeof localStorage !== 'undefined') {
-      localStorage.setItem(cacheKey, JSON.stringify(payload));
+    if (persist) {
+      saveToLocalStorage(cacheKey, payload);
     }
 
     return normalizedData;
@@ -115,68 +158,44 @@ export const setManifestData = (bookId, manifestData, { persist = true } = {}) =
   }
 };
 
-const readFromLocalStorage = (bookId) => {
-  if (typeof localStorage === 'undefined') {
-    return null;
-  }
-
-  try {
-    const cacheKey = getManifestCacheKey(bookId);
-    const cached = localStorage.getItem(cacheKey);
-    if (!cached) {
-      return null;
-    }
-
-    const parsed = JSON.parse(cached);
-    if (!parsed || typeof parsed !== 'object') {
-      localStorage.removeItem(cacheKey);
-      return null;
-    }
-
-    if (isExpired(parsed.timestamp)) {
-      localStorage.removeItem(cacheKey);
-      return null;
-    }
-
-    memoryCache.set(String(bookId), parsed);
-    return parsed;
-  } catch (error) {
-    console.error('Manifest 캐시 로드 실패:', error);
-    return null;
-  }
-};
-
 export const getManifestFromCache = (bookId) => {
   if (!bookId) return null;
 
   const key = String(bookId);
-  const cachedInMemory = memoryCache.get(key);
+  const cachedInMemory = getCacheItem('manifestCache', key);
   if (cachedInMemory && !isExpired(cachedInMemory.timestamp)) {
     return cachedInMemory.data;
   }
 
-  const fromStorage = readFromLocalStorage(bookId);
-  return fromStorage?.data ?? null;
+  const cacheKey = getManifestCacheKey(bookId);
+  const fromStorage = getFromLocalStorage(cacheKey);
+  if (fromStorage && !isExpired(fromStorage.timestamp)) {
+    setCacheItem('manifestCache', key, fromStorage);
+    return fromStorage.data;
+  }
+
+  return null;
 };
 
 export const hasManifestData = (bookId) => {
   const key = String(bookId);
-  const cachedInMemory = memoryCache.get(key);
+  const cachedInMemory = getCacheItem('manifestCache', key);
   if (cachedInMemory && !isExpired(cachedInMemory.timestamp)) {
     return true;
   }
-  const fromStorage = readFromLocalStorage(bookId);
-  return !!fromStorage?.data;
+  
+  const cacheKey = getManifestCacheKey(bookId);
+  const fromStorage = getFromLocalStorage(cacheKey);
+  return !!(fromStorage && !isExpired(fromStorage.timestamp) && fromStorage.data);
 };
 
 export const invalidateManifest = (bookId) => {
   if (!bookId) return;
   const key = String(bookId);
-  memoryCache.delete(key);
-  if (typeof localStorage !== 'undefined') {
-    const cacheKey = getManifestCacheKey(bookId);
-    localStorage.removeItem(cacheKey);
-  }
+  removeCacheItem('manifestCache', key);
+  
+  const cacheKey = getManifestCacheKey(bookId);
+  removeFromLocalStorage(cacheKey);
 };
 
 export const prefetchManifest = async (bookId, fetcher) => {
@@ -215,20 +234,14 @@ export const prefetchManifest = async (bookId, fetcher) => {
   return promise;
 };
 
-const normalizeChapterIdxValue = (value) => {
-  if (value === null || value === undefined) return null;
-  const num = Number(value);
-  return Number.isFinite(num) ? num : null;
-};
-
 export const getChapterData = (bookId, chapterIdx) => {
   const manifest = getManifestFromCache(bookId);
   if (!manifest || !manifest.chapters) return null;
   
-  const targetIdx = normalizeChapterIdxValue(chapterIdx);
+  const targetIdx = toNumberOrNull(chapterIdx);
   return manifest.chapters.find(ch => {
-    const idx = normalizeChapterIdxValue(ch.idx);
-    const chapterIdxValue = normalizeChapterIdxValue(ch.chapterIdx);
+    const idx = toNumberOrNull(ch.idx);
+    const chapterIdxValue = toNumberOrNull(ch.chapterIdx);
     return idx === targetIdx || chapterIdxValue === targetIdx;
   });
 };
@@ -274,14 +287,6 @@ export const getChapterLength = (bookId, chapterIdx) => {
   return chapterLength?.length || 0;
 };
 
-/**
- * 로컬 CFI 기반 챕터 진행도 계산
- * @param {number|string} bookId - 책 ID
- * @param {string} cfi - 로컬 CFI (현재 보고 있는 EPUB의 CFI)
- * @param {number} chapterIdx - 챕터 인덱스
- * @param {Object} bookInstance - EPUB.js book 인스턴스 (로컬 EPUB)
- * @returns {Object} 진행도 정보
- */
 export const calculateApiChapterProgress = (bookId, cfi, chapterIdx, bookInstance = null) => {
   const manifest = getManifestFromCache(bookId);
   
@@ -290,26 +295,26 @@ export const calculateApiChapterProgress = (bookId, cfi, chapterIdx, bookInstanc
     return { currentChars: 0, totalChars: 0, progress: 0 };
   }
   
-  const targetChapterIdx = normalizeChapterIdxValue(chapterIdx);
+  const targetChapterIdx = toNumberOrNull(chapterIdx);
   if (targetChapterIdx === null) {
     console.warn('유효하지 않은 chapterIdx:', { chapterIdx });
     return { currentChars: 0, totalChars: 0, progress: 0 };
   }
   
   const chapterData = manifest.chapters.find(ch => {
-    const idx = normalizeChapterIdxValue(ch.idx);
-    const chapterIdxValue = normalizeChapterIdxValue(ch.chapterIdx);
+    const idx = toNumberOrNull(ch.idx);
+    const chapterIdxValue = toNumberOrNull(ch.chapterIdx);
     return idx === targetChapterIdx || chapterIdxValue === targetChapterIdx;
   });
   
   if (!chapterData) {
-    console.warn('챕터 데이터 없음:', { bookId, chapterIdx: targetChapterIdx, availableChapters: manifest.chapters.map(ch => normalizeChapterIdxValue(ch.idx) ?? normalizeChapterIdxValue(ch.chapterIdx)) });
+    console.warn('챕터 데이터 없음:', { bookId, chapterIdx: targetChapterIdx, availableChapters: manifest.chapters.map(ch => toNumberOrNull(ch.idx) ?? toNumberOrNull(ch.chapterIdx)) });
     return { currentChars: 0, totalChars: 0, progress: 0 };
   }
   
   const extractChapterIdx = (item) => {
     if (!item) return null;
-    return normalizeChapterIdxValue(item.chapterIdx ?? item.idx ?? item.chapter ?? item.number ?? null);
+    return toNumberOrNull(item.chapterIdx ?? item.idx ?? item.chapter ?? item.number ?? null);
   };
 
   const chapterLengths = Array.isArray(manifest.progressMetadata?.chapterLengths)
@@ -374,14 +379,12 @@ export const calculateApiChapterProgress = (bookId, cfi, chapterIdx, bookInstanc
     console.warn('totalChars 계산 실패, 기본값 0 유지', { chapterIdx, chapterData, lengthEntry });
   }
    
-  // 로컬 EPUB의 locations를 사용하여 CFI 기반 진행도 계산
   if (!bookInstance?.locations?.percentageFromCfi) {
     console.warn('bookInstance.locations 없음');
     return { currentChars: 0, totalChars, progress: 0, chapterStartPos };
   }
    
   try {
-    // 로컬 CFI를 사용하여 진행도 계산
     const bookProgress = bookInstance.locations.percentageFromCfi(cfi);
     const totalLength = manifest.progressMetadata?.totalLength || 0;
     
@@ -409,9 +412,8 @@ export const calculateApiChapterProgress = (bookId, cfi, chapterIdx, bookInstanc
 };
 
 export const findApiEventFromChars = async (bookId, chapterIdx, currentChars, chapterStartPos = 0) => {
-  const targetChapterIdx = normalizeChapterIdxValue(chapterIdx);
+  const targetChapterIdx = toNumberOrNull(chapterIdx);
   
-  // 1. 먼저 새 캐시 시스템에서 이벤트 정보 가져오기
   let chapterEvents = null;
   try {
     const { getCachedChapterEvents } = await import('./chapterEventCache');
@@ -528,7 +530,6 @@ export const findApiEventFromChars = async (bookId, chapterIdx, currentChars, ch
     }
   }
   
-  // 마지막 이벤트 반환
   if (mergedEvents.length > 0) {
     const lastEvent = mergedEvents[mergedEvents.length - 1];
     return {

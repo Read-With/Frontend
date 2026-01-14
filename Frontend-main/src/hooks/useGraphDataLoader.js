@@ -1,15 +1,11 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { createCharacterMaps } from '../utils/characterUtils';
+import { toNumberOrNull } from '../utils/numberUtils';
+import { sortEventsByIdx, normalizeEventIdx, filterEventsUpTo, filterEventsBefore, getMaxEventIdx } from '../utils/eventUtils';
+import { createCharacterMaps, aggregateCharactersFromEvents, buildNodeWeights, normalizeCharacterId } from '../utils/characterUtils';
 import { convertRelationsToElements, calcGraphDiff } from '../utils/graphDataUtils';
 import { normalizeRelation, isValidRelation } from '../utils/relationUtils';
-import { getCachedChapterEvents, reconstructChapterGraphState, getGraphBookCache } from '../utils/common/chapterEventCache';
-import { getMaxChapter, getManifestFromCache } from '../utils/common/manifestCache';
-
-const toNumberOrNull = (value) => {
-  if (value === null || value === undefined) return null;
-  const num = Number(value);
-  return Number.isFinite(num) ? num : null;
-};
+import { getCachedChapterEvents, reconstructChapterGraphState, getGraphBookCache } from '../utils/common/cache/chapterEventCache';
+import { getMaxChapter, getManifestFromCache } from '../utils/common/cache/manifestCache';
 
 export function useGraphDataLoader(bookId, chapterIdx, eventIdx = null) {
   const [elements, setElements] = useState([]);
@@ -28,6 +24,14 @@ export function useGraphDataLoader(bookId, chapterIdx, eventIdx = null) {
     const parsed = toNumberOrNull(bookId);
     return parsed && parsed > 0 ? parsed : null;
   }, [bookId]);
+
+  const setEmptyState = useCallback((eventNum = 0) => {
+    setElements([]);
+    setNewNodeIds([]);
+    setCurrentChapterData({ characters: [] });
+    setEventNum(eventNum);
+    setIsDataEmpty(true);
+  }, []);
 
   const resetState = useCallback(() => {
     setElements([]);
@@ -88,24 +92,30 @@ export function useGraphDataLoader(bookId, chapterIdx, eventIdx = null) {
     []
   );
 
+  const extractNewNodeIds = useCallback((diff) => {
+    return (diff?.added || [])
+      .filter(
+        (el) =>
+          el &&
+          el.data &&
+          !el.data.source &&
+          el.data.id !== undefined &&
+          el.data.id !== null
+      )
+      .map((el) => el.data.id);
+  }, []);
+
   const buildGraphPayload = useCallback((eventList) => {
     if (!Array.isArray(eventList) || eventList.length === 0) {
       return { elements: [], characters: [] };
     }
 
     const aggregatedRelations = [];
-    const charactersMap = new Map();
+    const charactersMap = aggregateCharactersFromEvents(eventList);
     let latestEventMeta = null;
 
     eventList.forEach((entry) => {
       if (!entry) return;
-
-      const characters = Array.isArray(entry.characters) ? entry.characters : [];
-      characters.forEach((char) => {
-        if (!char || char.id === undefined || char.id === null) return;
-        const id = String(Math.trunc(char.id));
-        charactersMap.set(id, char);
-      });
 
       const relations = Array.isArray(entry.relations) ? entry.relations : [];
       relations.forEach((rel) => aggregatedRelations.push(rel));
@@ -129,19 +139,7 @@ export function useGraphDataLoader(bookId, chapterIdx, eventIdx = null) {
       .map((rel) => normalizeRelation(rel))
       .filter((rel) => isValidRelation(rel));
 
-    const nodeWeights = {};
-    aggregatedCharacters.forEach((char) => {
-      if (!char || char.id === undefined || char.id === null) return;
-      const id = String(Math.trunc(char.id));
-      const weight = typeof char.weight === 'number' ? char.weight : null;
-      const count = typeof char.count === 'number' ? char.count : null;
-      if (weight !== null || count !== null) {
-        nodeWeights[id] = {
-          weight: weight ?? 3,
-          count: count ?? 0
-        };
-      }
-    });
+    const nodeWeights = buildNodeWeights(aggregatedCharacters);
 
     const elements = convertRelationsToElements(
       normalizedRelations,
@@ -174,35 +172,19 @@ export function useGraphDataLoader(bookId, chapterIdx, eventIdx = null) {
       try {
         const chapterEvents = await getChapterEvents(bookIdNum, chapter);
         const eventsArray = Array.isArray(chapterEvents?.events)
-          ? [...chapterEvents.events]
+          ? sortEventsByIdx(chapterEvents.events)
           : [];
 
-        eventsArray.sort(
-          (a, b) => (Number(a?.eventIdx) || 0) - (Number(b?.eventIdx) || 0)
-        );
-
         const maxEventIdxInChapter =
-          Number(chapterEvents?.maxEventIdx) ||
-          (eventsArray.length > 0
-            ? Number(eventsArray[eventsArray.length - 1].eventIdx) || 0
-            : 0);
+          toNumberOrNull(chapterEvents?.maxEventIdx) ||
+          getMaxEventIdx(eventsArray);
 
         setMaxEventNum(maxEventIdxInChapter);
 
-        let targetIdx = toNumberOrNull(requestedEventIdx);
-        if (!targetIdx || targetIdx < 1) {
-          targetIdx = maxEventIdxInChapter || 1;
-        }
-        if (maxEventIdxInChapter && targetIdx > maxEventIdxInChapter) {
-          targetIdx = maxEventIdxInChapter;
-        }
+        const targetIdx = normalizeEventIdx(requestedEventIdx, maxEventIdxInChapter);
 
         if (!maxEventIdxInChapter) {
-          setElements([]);
-          setNewNodeIds([]);
-          setCurrentChapterData({ characters: [] });
-          setEventNum(targetIdx || 0);
-          setIsDataEmpty(true);
+          setEmptyState(targetIdx || 0);
           return;
         }
 
@@ -232,16 +214,7 @@ export function useGraphDataLoader(bookId, chapterIdx, eventIdx = null) {
               currentState?.elements || []
             );
 
-            const newNodes = (diff?.added || [])
-              .filter(
-                (el) =>
-                  el &&
-                  el.data &&
-                  !el.data.source &&
-                  el.data.id !== undefined &&
-                  el.data.id !== null
-              )
-              .map((el) => el.data.id);
+            const newNodes = extractNewNodeIds(diff);
 
             setElements(currentState.elements || []);
             setCurrentChapterData({
@@ -256,20 +229,12 @@ export function useGraphDataLoader(bookId, chapterIdx, eventIdx = null) {
         }
 
         if (!eventsArray.length) {
-          setElements([]);
-          setNewNodeIds([]);
-          setCurrentChapterData({ characters: [] });
-          setEventNum(targetIdx || 0);
-          setIsDataEmpty(true);
+          setEmptyState(targetIdx || 0);
           return;
         }
 
-        const currentEvents = eventsArray.filter(
-          (entry) => Number(entry?.eventIdx) <= targetIdx
-        );
-        const previousEvents = eventsArray.filter(
-          (entry) => Number(entry?.eventIdx) < targetIdx
-        );
+        const currentEvents = filterEventsUpTo(eventsArray, targetIdx);
+        const previousEvents = filterEventsBefore(eventsArray, targetIdx);
 
         const currentPayload = buildGraphPayload(currentEvents);
         const previousPayload = buildGraphPayload(previousEvents);
@@ -282,27 +247,14 @@ export function useGraphDataLoader(bookId, chapterIdx, eventIdx = null) {
           currentPayload.elements || []
         );
 
-        const newNodes = diff.added
-          .filter(
-            (el) =>
-              el &&
-              el.data &&
-              !el.data.source &&
-              el.data.id !== undefined &&
-              el.data.id !== null
-          )
-          .map((el) => el.data.id);
+        const newNodes = extractNewNodeIds(diff);
 
         setNewNodeIds(newNodes);
         setEventNum(targetIdx);
         setError(null);
         setIsDataEmpty((currentPayload.elements || []).length === 0);
       } catch (err) {
-        setElements([]);
-        setNewNodeIds([]);
-        setCurrentChapterData({ characters: [] });
-        setEventNum(0);
-        setIsDataEmpty(true);
+        setEmptyState(0);
         setError(
           err?.message
             ? `그래프 데이터를 불러오는 중 오류가 발생했습니다: ${err.message}`
@@ -310,7 +262,7 @@ export function useGraphDataLoader(bookId, chapterIdx, eventIdx = null) {
         );
       }
     },
-    [buildGraphPayload, getChapterEvents, resetState]
+    [buildGraphPayload, getChapterEvents, resetState, setEmptyState, extractNewNodeIds]
   );
 
   useEffect(() => {

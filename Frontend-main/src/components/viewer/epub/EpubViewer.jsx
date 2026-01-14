@@ -23,9 +23,9 @@ import {
   cfiUtils,
   errorUtils
 } from '../../../utils/viewerUtils';
-import { getBookProgress } from '../../../utils/common/api';
-import { getProgressFromCache } from '../../../utils/common/progressCache';
-import { registerCache } from '../../../utils/common/cacheManager';
+import { getBookProgress } from '../../../utils/api/api';
+import { getProgressFromCache } from '../../../utils/common/cache/progressCache';
+import { registerCache } from '../../../utils/common/cache/cacheManager';
 import { getEventsForChapter as getGraphEventsForChapter, getFolderKeyFromFilename } from '../../../utils/graphData';
 
 // EPUB 인스턴스 및 Blob 캐시
@@ -358,6 +358,7 @@ const EpubViewer = forwardRef(
           settingsUtils.applyEpubSettings(rendition, settings, getSpreadMode(pageMode, showGraph));
         }
       },
+      getBookInstance: () => bookRef.current,
       isNavigating,
       setIsNavigating,
     }), [isNavigating, pageMode, showGraph, storageKeys, loading]);
@@ -718,6 +719,7 @@ const EpubViewer = forwardRef(
              });
           
           await bookInstance.locations.generate(1800);
+          await ensureLocations(bookInstance, 2000);
           const initialTotal = resolveTotalLocations(bookInstance.locations);
           onTotalPagesChange?.(initialTotal);
 
@@ -832,6 +834,8 @@ const EpubViewer = forwardRef(
                 spineIndex: spineIndex,
                 chapterCfiMapSize: chapterCfiMapRef.current?.size || 0
               });
+              // locations 길이가 0인 경우 재생성하여 초기 총 페이지 수가 1로 고정되는 문제 방지
+              await ensureLocations(bookInstance, 2000);
               let locIdx = 0;
               try {
                 const idxCandidate = bookInstance.locations?.locationFromCfi?.(cfi);
@@ -897,7 +901,7 @@ const EpubViewer = forwardRef(
               const isApiBook = !!serverBookId;
               
               if (isApiBook && serverBookId) {
-                const { calculateApiChapterProgress, findApiEventFromChars } = await import('../../../utils/common/manifestCache');
+                const { calculateApiChapterProgress, findApiEventFromChars } = await import('../../../utils/common/cache/manifestCache');
                 
                 // 로컬 CFI를 사용하여 진행도 계산
                 const progressInfo = calculateApiChapterProgress(serverBookId, cfi, detectedChapter, bookInstance);

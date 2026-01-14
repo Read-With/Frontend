@@ -2,13 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import useAuth from '../../hooks/useAuth';
 import { validateUserData, secureLog } from '../../utils/security/oauthSecurity';
-
-const getApiBaseUrl = () => {
-  if (import.meta.env.DEV) {
-    return '';
-  }
-  return 'https://dev.readwith.store';
-};
+import { getApiBaseUrl } from '../../utils/common/authUtils';
 
 const OAuthCallback = () => {
   const [error, setError] = useState(null);
@@ -507,7 +501,7 @@ OAuth 로그인을 다시 시도해주세요.`);
         alignItems: 'center',
         justifyContent: 'center',
         minHeight: '100vh',
-        background: 'linear-gradient(135deg, #1B4D3E 0%, #2D5016 30%, #3E6B1F 70%, #4A7C28 100%)'
+        background: 'linear-gradient(135deg, #3E4F2F 0%, #586544 50%, #717B59 100%)'
       }}>
         <div style={{
           width: '50px',
@@ -572,7 +566,7 @@ OAuth 로그인을 다시 시도해주세요.`);
         alignItems: 'center',
         justifyContent: 'center',
         minHeight: '100vh',
-        background: 'linear-gradient(135deg, #1B4D3E 0%, #2D5016 30%, #3E6B1F 70%, #4A7C28 100%)'
+        background: 'linear-gradient(135deg, #3E4F2F 0%, #586544 50%, #717B59 100%)'
       }}>
         <div style={{
           background: 'rgba(255, 255, 255, 0.95)',
@@ -636,7 +630,7 @@ OAuth 로그인을 다시 시도해주세요.`);
           <button
             onClick={() => navigate('/')}
             style={{
-              background: '#1B4D3E',
+              background: '#3E4F2F',
               color: 'white',
               border: 'none',
               padding: '12px 24px',
@@ -646,8 +640,8 @@ OAuth 로그인을 다시 시도해주세요.`);
               fontWeight: 500,
               transition: 'background-color 0.2s ease'
             }}
-            onMouseOver={(e) => e.target.style.backgroundColor = '#2D5016'}
-            onMouseOut={(e) => e.target.style.backgroundColor = '#1B4D3E'}
+            onMouseOver={(e) => e.target.style.backgroundColor = '#586544'}
+            onMouseOut={(e) => e.target.style.backgroundColor = '#3E4F2F'}
           >
             홈으로 돌아가기
           </button>

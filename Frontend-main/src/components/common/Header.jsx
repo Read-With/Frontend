@@ -4,19 +4,13 @@ import { LogOut } from 'lucide-react';
 import './Header.css';
 import useAuth from '../../hooks/useAuth';
 import { secureLog } from '../../utils/security/oauthSecurity';
+import { getApiBaseUrl } from '../../utils/common/authUtils';
 
 const Header = ({ userNickname, showAuthLinks = false }) => {
   const navigate = useNavigate();
   const { user, logout } = useAuth();
   const [loginError, setLoginError] = useState(null);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
-
-  const getApiBaseUrl = () => {
-    if (import.meta.env.DEV) {
-      return '';
-    }
-    return 'https://dev.readwith.store';
-  };
 
   const handleLogoutClick = () => {
     setShowLogoutConfirm(true);

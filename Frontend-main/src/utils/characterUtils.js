@@ -146,3 +146,88 @@ export function safeId(id) {
     return '0';
   }
 }
+
+/**
+ * 캐릭터 ID 정규화 (숫자를 문자열로)
+ * @param {any} id - 캐릭터 ID
+ * @returns {string|null} 정규화된 ID 또는 null
+ */
+export function normalizeCharacterId(id) {
+  if (id === undefined || id === null) return null;
+  const numId = Number(id);
+  if (!Number.isFinite(numId)) return null;
+  return String(Math.trunc(numId));
+}
+
+/**
+ * 캐릭터 객체에서 ID 추출
+ * @param {object} character - 캐릭터 객체
+ * @returns {string|null} 추출된 ID
+ */
+export function extractCharacterId(character) {
+  if (!character || typeof character !== 'object') return null;
+  const candidate = 
+    character.id ?? 
+    character.characterId ?? 
+    character.character_id ?? 
+    character.char_id ?? 
+    character.pk ?? 
+    character.node_id ?? 
+    null;
+  return normalizeCharacterId(candidate);
+}
+
+/**
+ * 캐릭터 배열을 Map으로 집계 (ID 중복 제거)
+ * @param {Array} eventList - 이벤트 배열
+ * @returns {Map<string, object>} 캐릭터 Map (ID -> 캐릭터 객체)
+ */
+export function aggregateCharactersFromEvents(eventList) {
+  const charactersMap = new Map();
+  
+  if (!Array.isArray(eventList)) return charactersMap;
+  
+  eventList.forEach((entry) => {
+    if (!entry) return;
+    
+    const characters = Array.isArray(entry.characters) ? entry.characters : [];
+    characters.forEach((char) => {
+      if (!char) return;
+      const id = normalizeCharacterId(char.id);
+      if (id) {
+        charactersMap.set(id, char);
+      }
+    });
+  });
+  
+  return charactersMap;
+}
+
+/**
+ * 캐릭터 배열로부터 노드 가중치 계산
+ * @param {Array} characters - 캐릭터 배열
+ * @returns {Object} 노드 가중치 맵 (ID -> {weight, count})
+ */
+export function buildNodeWeights(characters) {
+  const nodeWeights = {};
+  
+  if (!Array.isArray(characters)) return nodeWeights;
+  
+  characters.forEach((char) => {
+    if (!char) return;
+    const id = normalizeCharacterId(char.id);
+    if (!id) return;
+    
+    const weight = typeof char.weight === 'number' ? char.weight : null;
+    const count = typeof char.count === 'number' ? char.count : null;
+    
+    if (weight !== null || count !== null) {
+      nodeWeights[id] = {
+        weight: weight ?? 3,
+        count: count ?? 0
+      };
+    }
+  });
+  
+  return nodeWeights;
+}

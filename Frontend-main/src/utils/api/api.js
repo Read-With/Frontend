@@ -1,15 +1,7 @@
-// API 기본 설정 및 도서 관련 API 함수들 (배포 서버 고정 사용)
-import { setManifestData, isValidEvent, getManifestFromCache } from './manifestCache';
-import { setAllProgress, getProgressFromCache, getAllProgressFromCache } from './progressCache';
-
-const getApiBaseUrl = () => {
-  // 로컬 개발 환경: 프록시 사용 (배포 서버로 전달)
-  if (import.meta.env.DEV) {
-    return ''; // 프록시를 통해 배포 서버로 요청
-  }
-  // 프로덕션 환경: 커스텀 도메인 사용
-  return 'https://dev.readwith.store';
-};
+import { setManifestData, isValidEvent, getManifestFromCache } from '../common/cache/manifestCache';
+import { setAllProgress, getProgressFromCache, getAllProgressFromCache } from '../common/cache/progressCache';
+import { getApiBaseUrl, clearAuthData } from '../common/authUtils';
+import { isTokenValid } from './authApi';
 
 const API_BASE_URL = getApiBaseUrl();
 
@@ -58,77 +50,38 @@ const handleApiError = (error, context) => {
   throw new Error(`${context}: ${statusMessage} (${statusCode}) - ${errorMessage}`);
 };
 
-// JWT 토큰 유효성 검사 함수
-const isTokenValid = (token) => {
-  if (!token) return false;
-  
-  try {
-    // JWT 토큰의 payload 부분 디코딩
-    const payload = JSON.parse(atob(token.split('.')[1]));
-    const currentTime = Math.floor(Date.now() / 1000);
-    
-    // 토큰 만료 시간 확인
-    if (payload.exp && payload.exp < currentTime) {
-      console.warn('⚠️ 토큰이 만료되었습니다:', {
-        exp: payload.exp,
-        currentTime,
-        expired: payload.exp < currentTime
-      });
-      return false;
-    }
-    
-    return true;
-  } catch (error) {
-    console.warn('⚠️ 토큰 파싱 실패:', error);
-    return false;
-  }
-};
-
-// HTTP 요청 헬퍼 함수
+// HTTP 요청 헬퍼 함수 (api.js 전용 - 다른 파일은 authApi.js의 authenticatedRequest 사용)
 const apiRequest = async (url, options = {}) => {
-  // JWT 토큰 가져오기
   const token = localStorage.getItem('accessToken');
   
-  // 디버깅: 토큰 상태 확인
   if (url.includes('/api/graph/')) {
     const tokenValid = isTokenValid(token);
-    const isMacroGraph = url.includes('/api/graph/macro');
-    const isFineGraph = url.includes('/api/graph/fine');
     
-    // 토큰이 유효하지 않으면 경고 및 로그아웃 처리
     if (token && !tokenValid) {
       console.error('❌ 토큰이 유효하지 않습니다. 다시 로그인해주세요.');
-      // 토큰 정리
-      localStorage.removeItem('accessToken');
-      localStorage.removeItem('google_user');
-      // 홈으로 리다이렉트
+      clearAuthData();
       window.location.href = '/';
       return;
     }
   }
   
-  // FormData인 경우 Content-Type을 설정하지 않음 (브라우저가 자동 설정)
   const isFormData = options.body instanceof FormData;
   
-  // 기본 헤더 설정
   const defaultHeaders = {
     ...(!isFormData && { 'Content-Type': 'application/json' }),
     ...(token && { 'Authorization': `Bearer ${token}` }),
   };
   
-  // options를 먼저 spread하고, headers는 나중에 merge하여 덮어쓰기 방지
   const config = {
     ...options,
     headers: {
       ...defaultHeaders,
-      ...options.headers, // options.headers가 있으면 덮어쓰기 (명시적 설정 우선)
+      ...options.headers,
     },
   };
 
-  // 환경에 따른 URL 구성
-  const requestUrl = import.meta.env.DEV ? `${API_BASE_URL}${url}` : `${API_BASE_URL}${url}`;
+  const requestUrl = `${API_BASE_URL}${url}`;
   
-  // 404와 403 에러를 조용히 처리할 엔드포인트 목록
   const silent404Endpoints = [
     '/api/graph/fine',
     '/api/graph/macro',
@@ -143,44 +96,18 @@ const apiRequest = async (url, options = {}) => {
   try {
     const response = await fetch(requestUrl, config);
     
-    // 403 에러는 조용히 처리 (권한이 없는 것은 정상 상황)
-    // 디버깅이 필요한 경우에만 주석 해제
-    // if (response.status === 403 && url.includes('/api/progress')) {
-    //   const errorText = await response.clone().text().catch(() => '');
-    //   console.debug('🔍 403 Forbidden (Progress API):', {
-    //     url: requestUrl,
-    //     status: response.status,
-    //     hasToken: !!token,
-    //     tokenValid: token ? isTokenValid(token) : false,
-    //     tokenPreview: token ? token.substring(0, 30) + '...' : '없음',
-    //     authorizationHeader: config.headers.Authorization ? '있음' : '없음',
-    //     responseText: errorText.substring(0, 200)
-    //   });
-    // }
-    
-    // 401 에러인 경우 상세 정보 출력
     if (response.status === 401) {
       const errorText = await response.clone().text();
       console.error('❌ 401 Unauthorized 에러:', {
         url: requestUrl,
-        fullUrl: requestUrl,
         status: response.status,
         hasToken: !!token,
         tokenValid: token ? isTokenValid(token) : false,
-        authorizationHeader: config.headers.Authorization ? config.headers.Authorization.substring(0, 50) + '...' : '없음',
-        allHeaders: Object.keys(config.headers),
-        headers: {
-          ...config.headers,
-          Authorization: config.headers.Authorization ? config.headers.Authorization.substring(0, 30) + '...' : '없음'
-        },
-        responseHeaders: Object.fromEntries(response.headers.entries()),
         errorResponse: errorText
       });
     }
     
-    // 404 에러이고 조용히 처리할 엔드포인트인 경우 조용히 처리
     if (response.status === 404 && isSilent404) {
-      // 조용히 처리 - 빈 응답 반환 (에러 로그 출력 안 함)
       return {
         isSuccess: false,
         code: 'NOT_FOUND',
@@ -189,11 +116,7 @@ const apiRequest = async (url, options = {}) => {
       };
     }
     
-    // 403 에러이고 조용히 처리할 엔드포인트인 경우 조용히 처리
-    // response.json() 호출 전에 처리해야 함 (403 응답이 JSON이 아닐 수 있음)
     if (response.status === 403 && isSilent403) {
-      // 조용히 처리 - 빈 응답 반환 (에러 로그 출력 안 함)
-      // response.json()을 호출하지 않고 바로 반환
       return {
         isSuccess: false,
         code: 'FORBIDDEN',
@@ -202,14 +125,11 @@ const apiRequest = async (url, options = {}) => {
       };
     }
     
-    // 403이 아니거나 조용히 처리하지 않는 경우에만 JSON 파싱
     let data;
     try {
       data = await response.json();
     } catch (jsonError) {
-      // JSON 파싱 실패 시 (빈 응답 등)
       if (response.status === 403 && isSilent403) {
-        // 403이고 조용히 처리해야 하는 경우
         return {
           isSuccess: false,
           code: 'FORBIDDEN',
@@ -217,29 +137,17 @@ const apiRequest = async (url, options = {}) => {
           result: null
         };
       }
-      // JSON 파싱 실패이지만 403이 아니거나 조용히 처리하지 않는 경우
       const error = new Error('응답을 파싱할 수 없습니다');
       error.status = response.status;
       throw error;
     }
     
     if (!response.ok) {
-      
-      // 디버깅: 에러 응답 상세 로깅
       if (url.includes('/api/graph/')) {
         const isMacroGraph = url.includes('/api/graph/macro');
         const isFineGraph = url.includes('/api/graph/fine');
         
-        // 404와 403은 데이터 없음 또는 권한 없음으로 정상 상황일 수 있으므로 조용히 처리
-        if (response.status === 404 || response.status === 403) {
-          // eventIdx=0인 경우나 데이터가 없는 경우, 또는 권한이 없는 경우는 정상 상황이므로 로그 출력 안 함
-          // 필요시 디버그 모드에서만 활성화
-          // console.debug(`⚠️ ${isMacroGraph ? '거시' : isFineGraph ? '세밀' : 'Graph'} API 데이터 없음/권한 없음:`, {
-          //   status: response.status,
-          //   message: data.message || '해당 데이터를 찾을 수 없거나 권한이 없습니다',
-          //   url: requestUrl
-          // });
-        } else {
+        if (response.status !== 404 && response.status !== 403) {
           console.error(`❌ ${isMacroGraph ? '거시' : isFineGraph ? '세밀' : 'Graph'} API 에러:`, {
             status: response.status,
             statusText: response.statusText,
@@ -252,8 +160,6 @@ const apiRequest = async (url, options = {}) => {
         }
       }
       
-      // 404와 403은 이미 위에서 조용히 처리했으므로 여기서는 다른 에러만 처리
-      // 여기 도달했다면 404/403이 아니거나 조용히 처리하지 않는 엔드포인트
       const error = new Error(data.message || 'API 요청 실패');
       error.status = response.status;
       throw error;
@@ -261,11 +167,9 @@ const apiRequest = async (url, options = {}) => {
     
     return data;
   } catch (error) {
-    // 네트워크 에러나 기타 에러는 그대로 throw
     if (error.name === 'TypeError' || error.message.includes('Failed to fetch')) {
       throw error;
     }
-    // HTTP 에러는 status 정보와 함께 throw
     throw error;
   }
 };
@@ -285,16 +189,13 @@ export const getBooks = async (params = {}) => {
   return apiRequest(url);
 };
 
-// 도서 업로드
 export const uploadBook = async (formData) => {
-  // 토큰 확인
   const token = localStorage.getItem('accessToken');
   if (!token) {
     console.error('❌ 업로드 실패: 토큰이 없습니다.');
     throw new Error('인증이 필요합니다. 로그인해주세요.');
   }
   
-  // 토큰 유효성 확인
   const tokenValid = isTokenValid(token);
   if (!tokenValid) {
     console.error('❌ 업로드 실패: 토큰이 만료되었습니다.');
@@ -305,79 +206,20 @@ export const uploadBook = async (formData) => {
   
   return apiRequest('/api/books', {
     method: 'POST',
-    headers: {
-      // multipart/form-data는 브라우저가 자동으로 설정
-      // Authorization 헤더는 apiRequest에서 자동 추가됨
-    },
     body: formData,
   });
 };
 
-// 단일 도서 조회
 export const getBook = async (bookId) => {
   return apiRequest(`/api/books/${bookId}`);
 };
 
-// 도서 즐겨찾기 토글
-export const toggleBookFavorite = async (bookId, favorite) => {
-  try {
-    if (!bookId) {
-      throw new Error('bookId는 필수 매개변수입니다.');
-    }
-    
-    const response = await apiRequest(`/api/books/${bookId}/favorite`, {
-      method: 'PATCH',
-      body: JSON.stringify({ favorite }),
-    });
-    return response;
-  } catch (error) {
-    console.error('도서 즐겨찾기 토글 실패:', error);
-    throw error;
-  }
-};
-
-// 도서 삭제
 export const deleteBook = async (bookId) => {
   return apiRequest(`/api/books/${bookId}`, {
     method: 'DELETE',
   });
 };
 
-// 즐겨찾기 추가
-export const addToFavorites = async (bookId) => {
-  try {
-    if (!bookId) {
-      throw new Error('bookId는 필수 매개변수입니다.');
-    }
-    
-    const response = await apiRequest(`/api/favorites/${bookId}`, {
-      method: 'POST',
-    });
-    return response;
-  } catch (error) {
-    console.error('즐겨찾기 추가 실패:', error);
-    throw error;
-  }
-};
-
-// 즐겨찾기 삭제
-export const removeFromFavorites = async (bookId) => {
-  try {
-    if (!bookId) {
-      throw new Error('bookId는 필수 매개변수입니다.');
-    }
-    
-    const response = await apiRequest(`/api/favorites/${bookId}`, {
-      method: 'DELETE',
-    });
-    return response;
-  } catch (error) {
-    console.error('즐겨찾기 삭제 실패:', error);
-    throw error;
-  }
-};
-
-// 즐겨찾기 목록 조회
 export const getFavorites = async () => {
   try {
     const response = await apiRequest('/api/favorites');
@@ -388,10 +230,7 @@ export const getFavorites = async () => {
   }
 };
 
-// 독서 진도 관련 API
-// 사용자의 모든 독서 진도 조회 (로컬 캐시에서만 조회)
 export const getAllProgress = async () => {
-  // 로컬 캐시에서만 조회 (서버 호출 없음)
   const cachedProgress = getAllProgressFromCache();
   
   return {
@@ -403,7 +242,6 @@ export const getAllProgress = async () => {
   };
 };
 
-// 독서 진도 저장/업데이트
 export const saveProgress = async (progressData) => {
   try {
     if (!progressData || !progressData.bookId) {
@@ -416,9 +254,7 @@ export const saveProgress = async (progressData) => {
     });
     return response;
   } catch (error) {
-    // 403 에러는 권한 문제이므로 조용히 처리 (책에 접근할 권한이 없는 경우)
     if (error.status === 403 || error.message?.includes('403') || error.message?.includes('권한')) {
-      // 권한이 없는 경우 조용히 반환 (로컬 책이거나 삭제된 책일 수 있음)
       return {
         isSuccess: false,
         code: 'FORBIDDEN',
@@ -426,14 +262,11 @@ export const saveProgress = async (progressData) => {
         result: null
       };
     }
-    // 403이 아닌 에러만 콘솔에 출력
     console.error('독서 진도 저장 실패:', error);
     throw error;
   }
 };
 
-// 특정 책의 독서 진도 조회 (로컬 캐시에서만 조회)
-// manifest 로드 시 이미 모든 진도를 가져와서 로컬 캐시에 저장하므로 서버 조회 불필요
 export const getBookProgress = async (bookId) => {
   if (!bookId) {
     return {
@@ -444,7 +277,6 @@ export const getBookProgress = async (bookId) => {
     };
   }
   
-  // 로컬 캐시에서만 조회
   const cachedProgress = getProgressFromCache(bookId);
   if (cachedProgress) {
     return {
@@ -456,7 +288,6 @@ export const getBookProgress = async (bookId) => {
     };
   }
   
-  // 캐시에 없으면 진도가 없는 것으로 처리
   return {
     isSuccess: false,
     code: 'NOT_FOUND',
@@ -465,7 +296,6 @@ export const getBookProgress = async (bookId) => {
   };
 };
 
-// 특정 책의 독서 진도 삭제
 export const deleteBookProgress = async (bookId) => {
   try {
     if (!bookId) {
@@ -477,7 +307,6 @@ export const deleteBookProgress = async (bookId) => {
     });
     return response;
   } catch (error) {
-    // 403 에러는 권한 문제이므로 조용히 처리 (책에 접근할 권한이 없는 경우)
     if (error.status === 403 || error.message?.includes('403') || error.message?.includes('권한')) {
       return {
         isSuccess: false,
@@ -486,7 +315,6 @@ export const deleteBookProgress = async (bookId) => {
         result: null
       };
     }
-    // 404 에러는 조용히 처리 (진도가 없는 것은 정상)
     if (error.status === 404 || error.message?.includes('404') || error.message?.includes('찾을 수 없습니다')) {
       return {
         isSuccess: false,
@@ -500,7 +328,6 @@ export const deleteBookProgress = async (bookId) => {
   }
 };
 
-// 책 구조 패키지 조회 (manifest)
 export const getBookManifest = async (bookId, { forceRefresh = false } = {}) => {
   try {
     if (!forceRefresh) {
@@ -524,11 +351,7 @@ export const getBookManifest = async (bookId, { forceRefresh = false } = {}) => 
 
     return response;
   } catch (error) {
-    if (
-      error.status === 404 ||
-      error.message?.includes('404') ||
-      error.message?.includes('찾을 수 없습니다')
-    ) {
+    if (error.status === 404 || error.message?.includes('404') || error.message?.includes('찾을 수 없습니다')) {
       return {
         isSuccess: false,
         code: 'NOT_FOUND',
@@ -541,37 +364,6 @@ export const getBookManifest = async (bookId, { forceRefresh = false } = {}) => 
   }
 };
 
-// 북마크 관련 API
-// 북마크 목록 조회
-export const getBookmarks = async (bookId) => {
-  return apiRequest(`/api/bookmarks?bookId=${bookId}`);
-};
-
-// 북마크 생성
-export const createBookmark = async (bookmarkData) => {
-  return apiRequest('/api/bookmarks', {
-    method: 'POST',
-    body: JSON.stringify(bookmarkData),
-  });
-};
-
-// 북마크 수정
-export const updateBookmark = async (bookmarkId, updateData) => {
-  return apiRequest(`/api/bookmarks/${bookmarkId}`, {
-    method: 'PATCH',
-    body: JSON.stringify(updateData),
-  });
-};
-
-// 북마크 삭제
-export const deleteBookmark = async (bookmarkId) => {
-  return apiRequest(`/api/bookmarks/${bookmarkId}`, {
-    method: 'DELETE',
-  });
-};
-
-// 그래프 관련 API
-// 거시(챕터 누적) 그래프 조회
 export const getMacroGraph = async (bookId, uptoChapter) => {
   if (!bookId || uptoChapter === undefined || uptoChapter === null) {
     throw new Error('bookId와 uptoChapter는 필수 매개변수입니다.');
@@ -589,13 +381,11 @@ export const getMacroGraph = async (bookId, uptoChapter) => {
   }
 };
 
-// 세밀(이벤트) 그래프 조회
 export const getFineGraph = async (bookId, chapterIdx, eventIdx) => {
   if (!bookId || chapterIdx === undefined || chapterIdx === null || eventIdx === undefined || eventIdx === null) {
     throw new Error('bookId, chapterIdx, eventIdx는 필수 매개변수입니다.');
   }
 
-  // eventIdx=0은 404 에러가 발생하므로 조용히 빈 데이터 반환
   if (eventIdx === 0 || eventIdx < 1) {
     return createApiResponse(true, 'SUCCESS', '해당 이벤트에 대한 데이터가 없습니다.', { 
       characters: [], 
@@ -605,11 +395,9 @@ export const getFineGraph = async (bookId, chapterIdx, eventIdx) => {
     }, 'graph');
   }
 
-  // manifest 캐시에서 이벤트 유효성 검사 (API 책인 경우)
   if (typeof bookId === 'number') {
     const isValid = isValidEvent(bookId, chapterIdx, eventIdx);
     if (!isValid) {
-      // 유효하지 않은 이벤트는 API 호출 없이 빈 데이터 반환
       return createApiResponse(true, 'SUCCESS', '해당 이벤트에 대한 데이터가 없습니다.', { 
         characters: [], 
         relations: [], 
@@ -628,9 +416,7 @@ export const getFineGraph = async (bookId, chapterIdx, eventIdx) => {
     const response = await apiRequest(`/api/graph/fine?${queryParams.toString()}`);
     return createApiResponse(true, 'SUCCESS', '세밀 그래프 데이터를 성공적으로 조회했습니다.', response.result, 'graph');
   } catch (error) {
-    // 404 에러는 데이터 없음으로 정상 상황 (아직 생성되지 않은 이벤트)
     if (error.status === 404) {
-      // 빈 데이터 반환 (에러로 처리하지 않음)
       return createApiResponse(true, 'SUCCESS', '해당 이벤트에 대한 데이터가 없습니다.', { 
         characters: [], 
         relations: [], 
@@ -642,26 +428,17 @@ export const getFineGraph = async (bookId, chapterIdx, eventIdx) => {
   }
 };
 
-// 챕터별 인물 시점 요약 조회는 booksApi.js에서 처리
-
 export default {
   getBooks,
   uploadBook,
   getBook,
-  toggleBookFavorite,
   deleteBook,
-  addToFavorites,
-  removeFromFavorites,
   getFavorites,
   getAllProgress,
   saveProgress,
   getBookProgress,
   deleteBookProgress,
   getBookManifest,
-  getBookmarks,
-  createBookmark,
-  updateBookmark,
-  deleteBookmark,
   getMacroGraph,
   getFineGraph,
 };

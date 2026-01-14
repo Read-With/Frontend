@@ -2,8 +2,8 @@ import React, { useCallback, useState, useEffect, useMemo } from 'react';
 import GraphControls from '../graph/GraphControls';
 import EdgeLabelToggle from '../graph/tooltip/EdgeLabelToggle';
 import { getChapterEventCount, getFolderKeyFromFilename } from '../../utils/graphData';
-import { getCachedChapterEvents } from '../../utils/common/chapterEventCache';
-import { getChapterData } from '../../utils/common/manifestCache';
+import { getCachedChapterEvents } from '../../utils/common/cache/chapterEventCache';
+import { getChapterData } from '../../utils/common/cache/manifestCache';
 
 // 공통 스타일 상수들
 const LOADING_STYLE = {

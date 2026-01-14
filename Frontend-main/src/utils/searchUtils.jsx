@@ -30,7 +30,7 @@
  */
 
 import React from 'react';
-import { registerCache, recordCacheAccess, enforceCacheSizeLimit } from './common/cacheManager';
+import { registerCache, recordCacheAccess, enforceCacheSizeLimit } from './common/cache/cacheManager';
 
 const regexCache = new Map();
 registerCache('regexCache', regexCache, { maxSize: 500, ttl: 300000 });

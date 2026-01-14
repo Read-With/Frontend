@@ -12,10 +12,10 @@ import ViewerTopBar from "./ViewerTopBar";
 import { useViewerPage } from "../../hooks/useViewerPage";
 import { useGraphSearch } from "../../hooks/useGraphSearch";
 import { createStorageKey } from "../../hooks/useLocalStorage";
-import { getBookProgress, getFineGraph, getBookManifest } from "../../utils/common/api";
-import { setProgressToCache } from "../../utils/common/progressCache";
-import { getGraphEventState, getCachedReaderProgress, setCachedReaderProgress, getCachedChapterEvents } from "../../utils/common/chapterEventCache";
-import { getManifestFromCache } from "../../utils/common/manifestCache";
+import { getBookProgress, getFineGraph, getBookManifest } from "../../utils/api/api";
+import { setProgressToCache } from "../../utils/common/cache/progressCache";
+import { getGraphEventState, getCachedReaderProgress, setCachedReaderProgress, getCachedChapterEvents } from "../../utils/common/cache/chapterEventCache";
+import { getManifestFromCache } from "../../utils/common/cache/manifestCache";
 import { 
   extractEventNodesAndEdges,
   getServerBookId

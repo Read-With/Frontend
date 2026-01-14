@@ -1,157 +1,74 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
+import { toNumberOrNull } from '../utils/numberUtils';
 import { isSamePair } from '../utils/relationUtils';
-import { getFineGraph } from '../utils/api/graphApi';
+import { getFineGraph } from '../utils/api/api';
+import { registerCache, getCacheItem, setCacheItem, clearCache, enforceCacheSizeLimit } from '../utils/common/cache/cacheManager';
 
 const CACHE_DURATION = 5 * 60 * 1000;
 const CACHE_PREFIX = 'relation-timeline-';
 const MAX_CACHE_SIZE = 50;
 
-const toNumberOrNull = (value) => {
-  if (value === null || value === undefined) return null;
-  const num = Number(value);
-  return Number.isFinite(num) ? num : null;
-};
+const relationTimelineCache = new Map();
+registerCache('relationTimelineCache', relationTimelineCache, {
+  maxSize: MAX_CACHE_SIZE,
+  ttl: CACHE_DURATION,
+  cleanupInterval: 300000,
+  storageType: 'sessionStorage'
+});
 
 function getCacheKey(bookId, chapterNum, id1, id2) {
   return `${CACHE_PREFIX}${bookId}-${chapterNum}-${id1}-${id2}`;
 }
 
-function iterateCacheKeys(callback) {
-  try {
-    if (typeof sessionStorage === 'undefined') return;
-
-    for (let i = 0; i < sessionStorage.length; i += 1) {
-      const key = sessionStorage.key(i);
-      if (key && key.startsWith(CACHE_PREFIX)) {
-        callback(key);
-      }
-    }
-  } catch (error) {
-    // ignore storage errors
-  }
-}
-
-function cleanupOldCache() {
-  try {
-    if (typeof sessionStorage === 'undefined') return;
-
-    const now = Date.now();
-    const keysToRemove = [];
-
-    iterateCacheKeys((key) => {
-      try {
-        const cached = sessionStorage.getItem(key);
-        if (cached) {
-          const data = JSON.parse(cached);
-          if (now - (data.timestamp || 0) >= CACHE_DURATION) {
-            keysToRemove.push(key);
-          }
-        }
-      } catch (error) {
-        keysToRemove.push(key);
-      }
-    });
-
-    keysToRemove.forEach((key) => sessionStorage.removeItem(key));
-  } catch (error) {
-    // ignore storage errors
-  }
-}
-
-function clearOldestCache(count = 10) {
-  try {
-    if (typeof sessionStorage === 'undefined') return;
-
-    const cacheEntries = [];
-    iterateCacheKeys((key) => {
-      try {
-        const cached = sessionStorage.getItem(key);
-        if (cached) {
-          const data = JSON.parse(cached);
-          cacheEntries.push({ key, timestamp: data.timestamp || 0 });
-        }
-      } catch (error) {
-        sessionStorage.removeItem(key);
-      }
-    });
-
-    cacheEntries
-      .sort((a, b) => a.timestamp - b.timestamp)
-      .slice(0, Math.min(count, cacheEntries.length))
-      .forEach((entry) => sessionStorage.removeItem(entry.key));
-  } catch (error) {
-    // ignore storage errors
-  }
-}
-
 function getCachedData(cacheKey) {
-  try {
-    if (typeof sessionStorage === 'undefined') return null;
-
-    const cached = sessionStorage.getItem(cacheKey);
-    if (!cached) return null;
-
-    const data = JSON.parse(cached);
-    if (Date.now() - (data.timestamp || 0) >= CACHE_DURATION) {
-      sessionStorage.removeItem(cacheKey);
-      return null;
-    }
-
-    return data.result;
-  } catch (error) {
-    try {
-      sessionStorage.removeItem(cacheKey);
-    } catch (e) {
-      // ignore storage errors
-    }
-    return null;
+  const cached = getCacheItem('relationTimelineCache', cacheKey);
+  if (cached && cached.result) {
+    return cached.result;
   }
+  return null;
 }
 
 function setCachedData(cacheKey, result) {
-  try {
-    if (typeof sessionStorage === 'undefined') return;
-
-    cleanupOldCache();
-    sessionStorage.setItem(
-      cacheKey,
-      JSON.stringify({
-        result,
-        timestamp: Date.now(),
-      })
-    );
-  } catch (error) {
-    if (error?.name === 'QuotaExceededError' || error?.code === 22) {
-      clearOldestCache(10);
-      try {
-        sessionStorage.setItem(
-          cacheKey,
-          JSON.stringify({
-            result,
-            timestamp: Date.now(),
-          })
-        );
-      } catch (e) {
-        // ignore storage errors
-      }
-    }
-  }
+  setCacheItem('relationTimelineCache', cacheKey, {
+    result,
+    timestamp: Date.now()
+  });
+  enforceCacheSizeLimit('relationTimelineCache');
 }
 
 function invalidateCache(bookId, chapterNum = null) {
-  try {
-    const keyPattern =
-      chapterNum !== null
-        ? `${CACHE_PREFIX}${bookId}-${chapterNum}-`
-        : `${CACHE_PREFIX}${bookId}-`;
+  const keyPattern =
+    chapterNum !== null
+      ? `${CACHE_PREFIX}${bookId}-${chapterNum}-`
+      : `${CACHE_PREFIX}${bookId}-`;
 
-    iterateCacheKeys((key) => {
+  if (relationTimelineCache.forEach) {
+    const keysToDelete = [];
+    relationTimelineCache.forEach((value, key) => {
       if (key.startsWith(keyPattern)) {
-        sessionStorage.removeItem(key);
+        keysToDelete.push(key);
       }
     });
-  } catch (error) {
-    // ignore storage errors
+    keysToDelete.forEach(key => {
+      if (relationTimelineCache.delete) {
+        relationTimelineCache.delete(key);
+      } else {
+        delete relationTimelineCache[key];
+      }
+    });
+  }
+  
+  if (typeof sessionStorage !== 'undefined') {
+    try {
+      for (let i = 0; i < sessionStorage.length; i += 1) {
+        const key = sessionStorage.key(i);
+        if (key && key.startsWith(keyPattern)) {
+          sessionStorage.removeItem(key);
+        }
+      }
+    } catch (error) {
+      // ignore storage errors
+    }
   }
 }
 
