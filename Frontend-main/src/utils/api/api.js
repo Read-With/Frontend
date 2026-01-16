@@ -375,8 +375,28 @@ export const getMacroGraph = async (bookId, uptoChapter) => {
   
   try {
     const response = await apiRequest(`/api/graph/macro?${queryParams.toString()}`);
-    return createApiResponse(true, 'SUCCESS', '거시 그래프 데이터를 성공적으로 조회했습니다.', response.result, 'graph');
+    
+    if (!response || !response.isSuccess) {
+      return createApiResponse(false, response?.code || 'ERROR', response?.message || '거시 그래프 조회에 실패했습니다.', {
+        userCurrentChapter: 0,
+        characters: [],
+        relations: []
+      }, 'graph');
+    }
+    
+    return createApiResponse(true, 'SUCCESS', '거시 그래프 데이터를 성공적으로 조회했습니다.', response.result || {
+      userCurrentChapter: 0,
+      characters: [],
+      relations: []
+    }, 'graph');
   } catch (error) {
+    if (error.status === 404) {
+      return createApiResponse(false, 'NOT_FOUND', '거시 그래프 데이터를 찾을 수 없습니다.', {
+        userCurrentChapter: 0,
+        characters: [],
+        relations: []
+      }, 'graph');
+    }
     handleApiError(error, '거시 그래프 조회 실패');
   }
 };
@@ -387,7 +407,7 @@ export const getFineGraph = async (bookId, chapterIdx, eventIdx) => {
   }
 
   if (eventIdx === 0 || eventIdx < 1) {
-    return createApiResponse(true, 'SUCCESS', '해당 이벤트에 대한 데이터가 없습니다.', { 
+    return createApiResponse(false, 'INVALID_EVENT', '이벤트 인덱스는 1 이상이어야 합니다.', { 
       characters: [], 
       relations: [], 
       event: null,
@@ -398,7 +418,7 @@ export const getFineGraph = async (bookId, chapterIdx, eventIdx) => {
   if (typeof bookId === 'number') {
     const isValid = isValidEvent(bookId, chapterIdx, eventIdx);
     if (!isValid) {
-      return createApiResponse(true, 'SUCCESS', '해당 이벤트에 대한 데이터가 없습니다.', { 
+      return createApiResponse(false, 'INVALID_EVENT', '해당 이벤트에 대한 데이터가 없습니다.', { 
         characters: [], 
         relations: [], 
         event: null,
@@ -414,10 +434,25 @@ export const getFineGraph = async (bookId, chapterIdx, eventIdx) => {
   
   try {
     const response = await apiRequest(`/api/graph/fine?${queryParams.toString()}`);
-    return createApiResponse(true, 'SUCCESS', '세밀 그래프 데이터를 성공적으로 조회했습니다.', response.result, 'graph');
+    
+    if (!response || !response.isSuccess) {
+      return createApiResponse(false, response?.code || 'ERROR', response?.message || '세밀 그래프 조회에 실패했습니다.', {
+        characters: [],
+        relations: [],
+        event: null,
+        userCurrentChapter: 0
+      }, 'graph');
+    }
+    
+    return createApiResponse(true, 'SUCCESS', '세밀 그래프 데이터를 성공적으로 조회했습니다.', response.result || {
+      characters: [],
+      relations: [],
+      event: null,
+      userCurrentChapter: 0
+    }, 'graph');
   } catch (error) {
     if (error.status === 404) {
-      return createApiResponse(true, 'SUCCESS', '해당 이벤트에 대한 데이터가 없습니다.', { 
+      return createApiResponse(false, 'NOT_FOUND', '해당 이벤트에 대한 데이터를 찾을 수 없습니다.', { 
         characters: [], 
         relations: [], 
         event: null,

@@ -14,78 +14,18 @@ import { useGraphSearch } from '../../hooks/useGraphSearch.jsx';
 import { useGraphDataLoader } from '../../hooks/useGraphDataLoader.js';
 import { useLocalStorageNumber } from '../../hooks/useLocalStorage.js';
 import { getMacroGraph, getFineGraph, getBookManifest } from '../../utils/api/api.js';
-import { getMaxChapter, getManifestFromCache } from '../../utils/common/cache/manifestCache';
-import { getGraphBookCache, getCachedChapterEvents } from '../../utils/common/cache/chapterEventCache';
+import { getMaxChapter, getManifestFromCache, calculateMaxChapterFromChapters } from '../../utils/common/cache/manifestCache';
+import { getGraphBookCache, getCachedChapterEvents, getChapterEventFallbackData } from '../../utils/common/cache/chapterEventCache';
 import { convertRelationsToElements, filterMainCharacters } from '../../utils/graphDataUtils';
 import { createCharacterMaps } from '../../utils/characterUtils';
 import { getFolderKeyFromFilename, getLastEventIndexForChapter } from '../../utils/graphData';
 import { processTooltipData } from '../../utils/graphUtils.js';
+import { eventUtils } from '../../utils/viewerUtils';
+import { loadFromStorage, saveToStorage } from '../../utils/common/cache/cacheManager';
 import useGraphInteractions from "../../hooks/useGraphInteractions";
 import { useChapterPovSummaries } from '../../hooks/useChapterPovSummaries';
 
 const getEdgeStyleForGraph = () => getEdgeStyle('graph');
-
-const logApiCall = (type, data) => {
-  // console.log(`🔍 ${type} API 호출 시작:`, data);
-};
-
-const logApiResponse = (type, data) => {
-  // console.log(`✅ ${type} API 응답:`, data);
-};
-
-const logApiError = (type, error, data) => {
-  // console.error(`❌ ${type} API 호출 실패:`, {
-  //   error: error.message,
-  //   status: error.status,
-  //   ...data,
-  //   timestamp: new Date().toISOString()
-  // });
-};
-
-const logApiFallback = (type) => {
-  // console.log(`🔄 ${type} API 호출 실패, 로컬 데이터 사용으로 전환`);
-};
-
-const calculateMaxChapterFromChapters = (chapters) => {
-  if (!Array.isArray(chapters) || chapters.length === 0) {
-    return 1;
-  }
-  let maxChapterIdx = 1;
-  for (const chapterInfo of chapters) {
-    const chapterIdx = chapterInfo?.idx || chapterInfo?.chapterIdx || chapterInfo?.chapter || chapterInfo?.index || chapterInfo?.number || chapterInfo?.id;
-    if (typeof chapterIdx === 'number' && !isNaN(chapterIdx) && chapterIdx > 0 && chapterIdx > maxChapterIdx) {
-      maxChapterIdx = chapterIdx;
-    }
-  }
-  return maxChapterIdx;
-};
-
-const saveToLocalStorage = (key, data) => {
-  try {
-    localStorage.setItem(key, JSON.stringify(data));
-  } catch (storageError) {
-    // localStorage 저장 실패는 무시 (캐시는 선택사항)
-  }
-};
-
-const getChapterEventFallbackData = (targetBookId, currentChapter, eventIdx) => {
-  const fallbackChapterCache = getCachedChapterEvents(targetBookId, currentChapter);
-  if (fallbackChapterCache?.events && Array.isArray(fallbackChapterCache.events)) {
-    const fallbackEvent = fallbackChapterCache.events.find(e => 
-      Number(e.eventIdx) === eventIdx || Number(e.idx) === eventIdx
-    );
-    
-    if (fallbackEvent && (fallbackEvent.characters || fallbackEvent.relations)) {
-      return {
-        characters: Array.isArray(fallbackEvent.characters) ? fallbackEvent.characters : [],
-        relations: Array.isArray(fallbackEvent.relations) ? fallbackEvent.relations : [],
-        event: fallbackEvent.event || null,
-        userCurrentChapter: 0
-      };
-    }
-  }
-  return null;
-};
 
 function RelationGraphWrapper() {
   const navigate = useNavigate();
@@ -283,47 +223,25 @@ function RelationGraphWrapper() {
       try {
         // 3번: localStorage 캐시 먼저 확인
         const cacheKey = `graph_macro_${targetBookId}_${currentChapter}`;
-        const cachedData = localStorage.getItem(cacheKey);
+        const parsedData = loadFromStorage(cacheKey, 'localStorage');
         
-        if (cachedData) {
-          try {
-            const parsedData = JSON.parse(cachedData);
-            if (parsedData && parsedData.characters && parsedData.relations) {
-              // 캐시된 데이터 사용, API 호출 생략
-              setApiMacroData(parsedData);
-              setApiFineData(parsedData);
-              if (parsedData.userCurrentChapter !== undefined) {
-                setUserCurrentChapter(parsedData.userCurrentChapter);
-              }
-              isMacroGraphLoadingRef.current = false;
-              setApiFineLoading(false);
-              return;
-            }
-          } catch (parseError) {
-            // 캐시 파싱 실패 시 삭제하고 API 호출
-            localStorage.removeItem(cacheKey);
+        if (parsedData && parsedData.characters && parsedData.relations) {
+          // 캐시된 데이터 사용, API 호출 생략
+          setApiMacroData(parsedData);
+          setApiFineData(parsedData);
+          if (parsedData.userCurrentChapter !== undefined) {
+            setUserCurrentChapter(parsedData.userCurrentChapter);
           }
+          isMacroGraphLoadingRef.current = false;
+          setApiFineLoading(false);
+          return;
         }
         
         // 캐시가 없을 때만 API 호출
-        logApiCall('거시 그래프', {
-          targetBookId,
-          uptoChapter: currentChapter,
-          timestamp: new Date().toISOString()
-        });
-        
         const macroData = await getMacroGraph(targetBookId, currentChapter);
         
-        logApiResponse('거시 그래프', {
-          isSuccess: macroData?.isSuccess,
-          hasResult: !!macroData?.result,
-          resultKeys: macroData?.result ? Object.keys(macroData.result) : [],
-          charactersCount: macroData?.result?.characters?.length || 0,
-          relationsCount: macroData?.result?.relations?.length || 0
-        });
-        
         if (macroData?.isSuccess && macroData?.result) {
-          saveToLocalStorage(cacheKey, macroData.result);
+          saveToStorage(cacheKey, macroData.result, 'localStorage');
           setApiMacroData(macroData.result);
           setApiFineData(macroData.result);
           if (macroData.result.userCurrentChapter !== undefined) {
@@ -335,12 +253,6 @@ function RelationGraphWrapper() {
         }
         
       } catch (error) {
-        logApiError('거시 그래프', error, {
-          targetBookId,
-          uptoChapter: currentChapter
-        });
-        
-        logApiFallback('거시 그래프');
         setApiMacroData(null);
         setApiFineData(null);
       } finally {
@@ -354,72 +266,25 @@ function RelationGraphWrapper() {
 
   useEffect(() => {
     const loadFineGraphData = async () => {
-      if (!isApiBook || !serverBookId) return;
+      if (!isApiBook || !serverBookId || !apiMacroData) return;
       
       const targetBookId = serverBookId;
-      const currentApiMacroData = apiMacroData;
       
-      if (!currentApiMacroData) {
-        // 거시 그래프 캐시 확인
-        const macroCacheKey = `graph_macro_${targetBookId}_${currentChapter}`;
-        const cachedMacroData = localStorage.getItem(macroCacheKey);
-        
-        if (cachedMacroData) {
-          try {
-            const parsedData = JSON.parse(cachedMacroData);
-            if (parsedData && parsedData.characters && parsedData.relations) {
-              setApiMacroData(parsedData);
-              if (parsedData.userCurrentChapter !== undefined) {
-                setUserCurrentChapter(parsedData.userCurrentChapter);
-              }
-              return;
-            }
-          } catch (parseError) {
-            // 캐시 파싱 실패 시 API 호출
-            try {
-              const macroData = await getMacroGraph(targetBookId, currentChapter);
-              if (macroData?.isSuccess && macroData?.result) {
-                saveToLocalStorage(macroCacheKey, macroData.result);
-                setApiMacroData(macroData.result);
-                if (macroData.result.userCurrentChapter !== undefined) {
-                  setUserCurrentChapter(macroData.result.userCurrentChapter);
-                }
-                return;
-              }
-            } catch (error) {
-              logApiError('거시 그래프 (폴백)', error, {
-                targetBookId,
-                uptoChapter: currentChapter,
-                context: 'loadFineGraphData - 캐시 파싱 실패 후 API 호출'
-              });
-            }
-          }
-        } else {
-          // 캐시가 없을 때만 API 호출
-          try {
-            const macroData = await getMacroGraph(targetBookId, currentChapter);
-            if (macroData?.isSuccess && macroData?.result) {
-              saveToLocalStorage(macroCacheKey, macroData.result);
-              setApiMacroData(macroData.result);
-              if (macroData.result.userCurrentChapter !== undefined) {
-                setUserCurrentChapter(macroData.result.userCurrentChapter);
-              }
-              return;
-            }
-          } catch (error) {
-            logApiError('거시 그래프 (폴백)', error, {
-              targetBookId,
-              uptoChapter: currentChapter,
-              context: 'loadFineGraphData - 캐시 없음 상태에서 API 호출'
-            });
-          }
-        }
+      if (apiMacroData.characters && apiMacroData.relations) {
+        setApiFineData(apiMacroData);
+        return;
       }
       
-      const eventIdx = currentEvent >= 1 ? currentEvent - 1 : 0;
+      // currentEvent가 숫자면 그대로, 객체면 eventNum/eventIdx 추출
+      let eventNumValue = typeof currentEvent === 'number' 
+        ? currentEvent 
+        : (currentEvent?.eventNum ?? currentEvent?.eventIdx ?? currentEvent?.event_id ?? 1);
+      
+      // eventIdx는 서버 API에서 1-based로 사용되므로 eventNumValue 그대로 사용
+      const eventIdx = Number.isFinite(eventNumValue) && eventNumValue >= 1 ? eventNumValue : 1;
       
       if (eventIdx < 1) {
-      const fallbackData = currentApiMacroData || null;
+        const fallbackData = apiMacroData || null;
       if (fallbackData) {
         setApiFineData(fallbackData);
       }
@@ -432,29 +297,19 @@ function RelationGraphWrapper() {
       try {
         // 4번: localStorage 캐시 먼저 확인
         const cacheKey = `graph_fine_${targetBookId}_${currentChapter}_${eventIdx}`;
-        const cachedData = localStorage.getItem(cacheKey);
+        const parsedData = loadFromStorage(cacheKey, 'localStorage');
         
-        if (cachedData) {
-          try {
-            const parsedData = JSON.parse(cachedData);
-            if (parsedData && parsedData.characters && parsedData.relations) {
-              // 캐시된 데이터 사용, API 호출 생략
-              setApiFineData(parsedData);
-              setApiFineLoading(false);
-              return;
-            }
-          } catch (parseError) {
-            // 캐시 파싱 실패 시 삭제하고 계속 진행
-            localStorage.removeItem(cacheKey);
-          }
+        if (parsedData && parsedData.characters && parsedData.relations) {
+          // 캐시된 데이터 사용, API 호출 생략
+          setApiFineData(parsedData);
+          setApiFineLoading(false);
+          return;
         }
         
         // 5번: Chapter Events 캐시 확인 (API 호출 전)
         const chapterCache = getCachedChapterEvents(targetBookId, currentChapter);
         if (chapterCache?.events && Array.isArray(chapterCache.events)) {
-          const targetEvent = chapterCache.events.find(e => 
-            Number(e.eventIdx) === eventIdx || Number(e.idx) === eventIdx
-          );
+          const targetEvent = eventUtils.findEventInCache(chapterCache.events, eventIdx);
           
           if (targetEvent && (targetEvent.characters || targetEvent.relations)) {
             // Chapter Events 캐시에서 데이터 구성
@@ -465,7 +320,7 @@ function RelationGraphWrapper() {
               userCurrentChapter: 0
             };
             
-            saveToLocalStorage(cacheKey, cachedEventData);
+            saveToStorage(cacheKey, cachedEventData, 'localStorage');
             setApiFineData(cachedEventData);
             setApiFineLoading(false);
             return;
@@ -473,26 +328,10 @@ function RelationGraphWrapper() {
         }
         
         // 캐시가 없을 때만 API 호출
-        logApiCall('세밀 그래프', {
-          targetBookId,
-          chapterIdx: currentChapter,
-          eventIdx: eventIdx,
-          timestamp: new Date().toISOString()
-        });
-        
         const fineData = await getFineGraph(targetBookId, currentChapter, eventIdx);
         
-        logApiResponse('세밀 그래프', {
-          isSuccess: fineData?.isSuccess,
-          hasResult: !!fineData?.result,
-          resultKeys: fineData?.result ? Object.keys(fineData.result) : [],
-          charactersCount: fineData?.result?.characters?.length || 0,
-          relationsCount: fineData?.result?.relations?.length || 0,
-          eventInfo: fineData?.result?.event
-        });
-        
         if (fineData?.isSuccess && fineData?.result) {
-          saveToLocalStorage(cacheKey, fineData.result);
+          saveToStorage(cacheKey, fineData.result, 'localStorage');
           setApiFineData(fineData.result);
         } else {
           // API 응답 실패 시 Chapter Events 캐시로 폴백 (5번)
@@ -501,8 +340,8 @@ function RelationGraphWrapper() {
             setApiFineData(fallbackEventData);
           } else {
             // Chapter Events 캐시에도 없으면 거시 그래프로 폴백
-            if (currentApiMacroData) {
-              setApiFineData(currentApiMacroData);
+            if (apiMacroData) {
+              setApiFineData(apiMacroData);
             }
           }
         }
@@ -517,12 +356,6 @@ function RelationGraphWrapper() {
             return;
           }
           // 404 에러는 데이터 없음으로 정상 상황, 거시 그래프로 폴백
-        } else {
-          logApiError('세밀 그래프', error, {
-            targetBookId,
-            chapterIdx: currentChapter,
-            eventIdx: eventIdx
-          });
         }
         
         // 에러 발생 시 Chapter Events 캐시로 폴백 (5번)
@@ -534,8 +367,8 @@ function RelationGraphWrapper() {
         }
         
         // Chapter Events 캐시에도 없으면 거시 그래프로 폴백
-        if (currentApiMacroData) {
-          setApiFineData(currentApiMacroData);
+        if (apiMacroData) {
+          setApiFineData(apiMacroData);
         }
       } finally {
         setApiFineLoading(false);
@@ -543,7 +376,7 @@ function RelationGraphWrapper() {
     };
 
     loadFineGraphData();
-  }, [currentEvent, currentChapter, isApiBook, serverBookId]);
+  }, [currentEvent, currentChapter, isApiBook, serverBookId, apiMacroData]);
 
   const {
     elements: localElements,
@@ -796,9 +629,9 @@ function RelationGraphWrapper() {
 
   const relationCount = useMemo(() => {
     if (filterStage > 0) {
-      return filteredMainCharacters.filter(el => el.data && el.data.source && el.data.target).length;
+      return eventUtils.filterEdges(filteredMainCharacters).length;
     }
-    return elements.filter(el => el.data && el.data.source && el.data.target).length;
+    return eventUtils.filterEdges(elements).length;
   }, [filterStage, filteredMainCharacters, elements]);
 
   const finalElements = useMemo(() => {

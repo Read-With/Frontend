@@ -10,7 +10,6 @@ import {
   loadViewerMode,
   findClosestEvent,
   calculateChapterProgress,
-  bookmarkUtils,
   settingsUtils,
   ensureLocations
 } from '../utils/viewerUtils';
@@ -35,12 +34,12 @@ export function useViewerPage() {
   const previousPage = location.state?.from || null;
   const isFromLibrary = previousPage?.pathname === '/user/mypage' || location.state?.fromLibrary === true;
   
-  // URL 쿼리 파라미터에서 상태 복원
-  const urlParams = new URLSearchParams(location.search);
-  const savedChapter = urlParams.get('chapter');
-  const savedPage = urlParams.get('page');
-  const savedProgress = urlParams.get('progress');
-  const savedGraphMode = urlParams.get('graphMode');
+  // URL 쿼리 파라미터 파싱 (useMemo로 통합)
+  const urlParams = useMemo(() => new URLSearchParams(location.search), [location.search]);
+  const savedChapter = useMemo(() => urlParams.get('chapter'), [urlParams]);
+  const savedPage = useMemo(() => urlParams.get('page'), [urlParams]);
+  const savedProgress = useMemo(() => urlParams.get('progress'), [urlParams]);
+  const savedGraphMode = useMemo(() => urlParams.get('graphMode'), [urlParams]);
   
   const viewerRef = useRef(null);
   const [reloadKey, setReloadKey] = useState(0);
@@ -59,7 +58,6 @@ export function useViewerPage() {
   
   // URL 파라미터 변경 시 currentChapter 업데이트
   useEffect(() => {
-    const urlParams = new URLSearchParams(location.search);
     const chapterParam = urlParams.get('chapter');
     if (chapterParam) {
       const chapterNum = parseInt(chapterParam, 10);
@@ -75,7 +73,7 @@ export function useViewerPage() {
     } else {
       prevUrlChapterRef.current = null;
     }
-  }, [location.search]);
+  }, [urlParams, currentChapter]);
   
   // currentChapter가 변경되면 ref도 업데이트
   useEffect(() => {
@@ -366,52 +364,24 @@ export function useViewerPage() {
     [book]
   );
 
+  // 서버 bookId 추출 유틸리티 함수
+  const getServerBookId = useCallback((bookObj) => {
+    return (bookObj?.id && typeof bookObj.id === 'number' ? bookObj.id : null) || 
+           (bookObj?._bookId && typeof bookObj._bookId === 'number' ? bookObj._bookId : null);
+  }, []);
+
   // 서버 bookId를 우선 사용, 없으면 URL 파라미터의 bookId 사용
   const cleanBookId = useMemo(() => {
-    if (book?.id && typeof book.id === 'number') {
-      return String(book.id);
-    }
-    if (book?._bookId && typeof book._bookId === 'number') {
-      return String(book._bookId);
+    const serverId = getServerBookId(book);
+    if (serverId) {
+      return String(serverId);
     }
     return bookId?.trim() || '';
-  }, [book?.id, book?._bookId, bookId]);
+  }, [book, bookId, getServerBookId]);
 
   const [progress, setProgress] = useLocalStorageNumber(`progress_${cleanBookId}`, 0);
   const [settings, setSettings] = useLocalStorage('epub_viewer_settings', defaultSettings);
-  const [lastCFI, setLastCFI] = useLocalStorage(`readwith_${cleanBookId}_lastCFI`, null);
 
-  // API로 받아온 도서의 메타데이터와 manifest 정보를 콘솔에 출력
-  useEffect(() => {
-    const fetchBookInfo = async () => {
-      // 서버 bookId 확인 (book.id 또는 book._bookId 중 숫자인 것 사용)
-      const serverBookId = (book?.id && typeof book.id === 'number' ? book.id : null) || 
-                           (book?._bookId && typeof book._bookId === 'number' ? book._bookId : null);
-      
-      if (!serverBookId) {
-        return;
-      }
-
-      try {
-        const manifestData = await getBookManifest(serverBookId);
-
-        if (manifestData && manifestData.isSuccess && manifestData.result) {
-          const cachedMaxChapter = getMaxChapter(serverBookId);
-          if (cachedMaxChapter && cachedMaxChapter > 0) {
-            setMaxChapter(cachedMaxChapter);
-          }
-        }
-      } catch (error) {
-        const cachedMaxChapter = getMaxChapter(serverBookId);
-        if (cachedMaxChapter && cachedMaxChapter > 0) {
-          setMaxChapter(cachedMaxChapter);
-        }
-      }
-    };
-
-    fetchBookInfo();
-  }, [book]);
-  
   const folderKey = useMemo(() => {
     const key = getFolderKeyFromFilename(bookId);
     if (!key) {
@@ -422,14 +392,12 @@ export function useViewerPage() {
   
   // 그래프 데이터 로더에 서버 bookId 전달 (숫자인 경우만)
   const graphBookId = useMemo(() => {
-    if (book?.id && typeof book.id === 'number') {
-      return String(book.id);
-    }
-    if (book?._bookId && typeof book._bookId === 'number') {
-      return String(book._bookId);
+    const serverId = getServerBookId(book);
+    if (serverId) {
+      return String(serverId);
     }
     return bookId;
-  }, [book?.id, book?._bookId, bookId]);
+  }, [book, bookId, getServerBookId]);
 
   const {
     elements,
@@ -443,28 +411,43 @@ export function useViewerPage() {
     error: graphError
   } = useGraphDataLoader(graphBookId, currentChapter, currentEvent?.eventNum || 1);
   
-  // maxChapter 설정
+  // maxChapter 설정 (통합)
   useEffect(() => {
-    // 서버 bookId 확인 (book.id 또는 book._bookId 중 숫자인 것 사용)
-    const serverBookId = (book?.id && typeof book.id === 'number' ? book.id : null) || 
-                         (book?._bookId && typeof book._bookId === 'number' ? book._bookId : null);
+    const serverBookId = getServerBookId(book);
     
-    // API 책인 경우 캐시에서 확인
     if (serverBookId) {
-      const cachedMaxChapter = getMaxChapter(serverBookId);
-      if (cachedMaxChapter && cachedMaxChapter > 0) {
-        setMaxChapter(cachedMaxChapter);
-      } else if (detectedMaxChapter > 0) {
-        // 캐시에 없으면 로컬 책처럼 detectedMaxChapter 사용
-        setMaxChapter(detectedMaxChapter);
-      }
+      // 서버 책인 경우: manifest 조회 후 캐시 확인
+      const fetchBookInfo = async () => {
+        try {
+          const manifestData = await getBookManifest(serverBookId);
+          if (manifestData && manifestData.isSuccess && manifestData.result) {
+            const cachedMaxChapter = getMaxChapter(serverBookId);
+            if (cachedMaxChapter && cachedMaxChapter > 0) {
+              setMaxChapter(cachedMaxChapter);
+              return;
+            }
+          }
+        } catch (error) {
+          // 에러 발생 시에도 캐시 확인
+        }
+        
+        // manifest 조회 실패 또는 캐시에 없는 경우
+        const cachedMaxChapter = getMaxChapter(serverBookId);
+        if (cachedMaxChapter && cachedMaxChapter > 0) {
+          setMaxChapter(cachedMaxChapter);
+        } else if (detectedMaxChapter > 0) {
+          setMaxChapter(detectedMaxChapter);
+        }
+      };
+      
+      fetchBookInfo();
     } else {
       // 로컬 책인 경우
       if (detectedMaxChapter > 0) {
         setMaxChapter(detectedMaxChapter);
       }
     }
-  }, [detectedMaxChapter, book]);
+  }, [detectedMaxChapter, book, getServerBookId]);
   
   // showGraph/graphFullScreen 상태 변경 시 localStorage에 저장
   useEffect(() => {
@@ -837,7 +820,7 @@ export function useViewerPage() {
 
         // 레이아웃만 갱신
         viewerRef.current?.applySettings?.();
-
+        
         // 현재 위치 동기화
         const cfi = await viewerRef.current?.getCurrentCfi?.();
         const bookInstance = viewerRef.current?.getBookInstance?.();
@@ -868,7 +851,7 @@ export function useViewerPage() {
   }, [showGraph, settings, viewerRef, setTotalPages, setCurrentPage, setProgress]);
   
   const handleFitView = useCallback(() => {
-    // Implementation of handleFitView
+    // TODO: 그래프 뷰 포커스 기능 구현 예정
   }, []);
   
   // EpubViewer에서 페이지/스크롤 이동 시 CFI 받아와서 글자 인덱스 갱신 (개선된 버전)
@@ -1106,7 +1089,8 @@ export function useViewerPage() {
       showGraph,
       loading: isGraphLoading,
       isDataReady,
-      isInitialChapterDetected
+      isInitialChapterDetected,
+      maxChapterEvents
     },
     
     graphActions: {

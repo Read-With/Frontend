@@ -772,3 +772,187 @@ export const textUtils = {
     return 0;
   }
 };
+
+export const eventUtils = {
+  normalizeEventIdx: (event) => {
+    if (!event || typeof event !== 'object') {
+      return null;
+    }
+    
+    const candidates = [
+      event.resolvedEventIdx,
+      event.eventIdx,
+      event.eventNum,
+      event.event_id,
+      event.eventId,
+      event.idx,
+      event.id
+    ];
+    
+    for (const candidate of candidates) {
+      const numeric = Number(candidate);
+      if (Number.isFinite(numeric) && numeric > 0) {
+        return numeric;
+      }
+    }
+    
+    if (event?.event?.eventIdx) {
+      const nestedIdx = Number(event.event.eventIdx);
+      if (Number.isFinite(nestedIdx) && nestedIdx > 0) {
+        return nestedIdx;
+      }
+    }
+    
+    if (event?.event?.idx) {
+      const nestedIdx = Number(event.event.idx);
+      if (Number.isFinite(nestedIdx) && nestedIdx > 0) {
+        return nestedIdx;
+      }
+    }
+    
+    if (event?.originalEventIdx) {
+      const originalIdx = Number(event.originalEventIdx);
+      if (Number.isFinite(originalIdx) && originalIdx > 0) {
+        return originalIdx;
+      }
+    }
+    
+    return null;
+  },
+
+  extractRawEventIdx: (event) => {
+    if (!event || typeof event !== 'object') {
+      return 0;
+    }
+    
+    const idx = eventUtils.normalizeEventIdx(event);
+    return idx !== null ? idx : 0;
+  },
+
+  convertElementsToRelations: (elements, options = {}) => {
+    if (!Array.isArray(elements) || elements.length === 0) {
+      return [];
+    }
+    
+    const {
+      includeLabel = false,
+      includeCount = true,
+      positivityDefault = null
+    } = options;
+    
+    return elements
+      .filter((el) => el?.data?.source && el?.data?.target)
+      .map((edge) => {
+        const relation = {
+          id1: edge.data.source,
+          id2: edge.data.target,
+          relation: Array.isArray(edge.data.relation) ? [...edge.data.relation] : [],
+          positivity: typeof edge.data.positivity === 'number' 
+            ? edge.data.positivity 
+            : positivityDefault,
+        };
+        
+        if (includeLabel) {
+          relation.label = edge.data.label || '';
+        }
+        
+        if (includeCount) {
+          relation.count = edge.data.count || 1;
+        }
+        
+        return relation;
+      });
+  },
+
+  filterEdges: (elements) => {
+    if (!Array.isArray(elements)) {
+      return [];
+    }
+    return elements.filter(el => el?.data && el.data.source && el.data.target);
+  },
+
+  filterNodes: (elements) => {
+    if (!Array.isArray(elements)) {
+      return [];
+    }
+    return elements.filter(el => el?.data && !el.data.source && !el.data.target);
+  },
+
+  findEventInCache: (events, eventIdx) => {
+    if (!Array.isArray(events) || !Number.isFinite(eventIdx)) {
+      return null;
+    }
+    return events.find(e => 
+      Number(e.eventIdx) === eventIdx || Number(e.idx) === eventIdx
+    ) || null;
+  },
+
+  getMaxEventIdx: (chapterCache) => {
+    if (!chapterCache) {
+      return 0;
+    }
+    
+    const maxEventIdx = Number(chapterCache?.maxEventIdx);
+    if (Number.isFinite(maxEventIdx) && maxEventIdx > 0) {
+      return maxEventIdx;
+    }
+    
+    if (Array.isArray(chapterCache?.events)) {
+      return chapterCache.events.length;
+    }
+    
+    return 0;
+  },
+
+  createEmptyEvent: (currentChapter, eventIdx, eventData = null) => {
+    return {
+      chapter: currentChapter,
+      chapterIdx: currentChapter,
+      eventNum: eventIdx,
+      eventIdx: eventIdx,
+      event_id: eventData?.event_id ?? eventIdx,
+      relations: [],
+      characters: [],
+      start: eventData?.start ?? null,
+      end: eventData?.end ?? null,
+      ...(eventData || {})
+    };
+  },
+
+  updateGraphDataRef: (ref, elements, eventIdx, chapterIdx) => {
+    if (!ref || !ref.current) {
+      return;
+    }
+    
+    ref.current = {
+      elements: Array.isArray(elements) ? elements : [],
+      eventIdx: Number.isFinite(eventIdx) ? eventIdx : 0,
+      chapterIdx: Number.isFinite(chapterIdx) ? chapterIdx : 0
+    };
+  }
+};
+
+export const transitionUtils = {
+  getInitialState: () => ({
+    type: null,
+    inProgress: false,
+    error: false,
+    direction: null
+  }),
+
+  reset: (setTransitionState) => {
+    setTransitionState(transitionUtils.getInitialState());
+  }
+};
+
+export const bookUtils = {
+  isApiBook: (book, bookId = null) => {
+    if (book && (typeof book.id === 'number' || book.isFromAPI === true)) {
+      return true;
+    }
+    if (bookId && (typeof bookId === 'number' || !isNaN(parseInt(bookId, 10)))) {
+      return true;
+    }
+    return false;
+  }
+};

@@ -1,6 +1,6 @@
 const cacheRegistry = new Map();
 
-function getStorage(storageType = 'localStorage') {
+export function getStorage(storageType = 'localStorage') {
   if (typeof window === 'undefined') return null;
   return storageType === 'sessionStorage' ? sessionStorage : localStorage;
 }
@@ -14,7 +14,7 @@ function deleteFromCache(cache, key) {
   }
 }
 
-function loadFromStorage(storageKey, storageType = 'localStorage') {
+export function loadFromStorage(storageKey, storageType = 'localStorage') {
   const storage = getStorage(storageType);
   if (!storage) return null;
   
@@ -33,7 +33,7 @@ function loadFromStorage(storageKey, storageType = 'localStorage') {
   }
 }
 
-function saveToStorage(storageKey, data, storageType = 'localStorage') {
+export function saveToStorage(storageKey, data, storageType = 'localStorage') {
   const storage = getStorage(storageType);
   if (!storage) return;
   
@@ -44,7 +44,7 @@ function saveToStorage(storageKey, data, storageType = 'localStorage') {
   }
 }
 
-function removeFromStorage(storageKey, storageType = 'localStorage') {
+export function removeFromStorage(storageKey, storageType = 'localStorage') {
   const storage = getStorage(storageType);
   if (!storage) return;
   
@@ -52,6 +52,28 @@ function removeFromStorage(storageKey, storageType = 'localStorage') {
     storage.removeItem(storageKey);
   } catch (error) {
     console.error(`스토리지 삭제 실패 (${storageKey}):`, error);
+  }
+}
+
+export function getRawFromStorage(storageKey, storageType = 'localStorage') {
+  const storage = getStorage(storageType);
+  if (!storage) return null;
+  
+  try {
+    return storage.getItem(storageKey);
+  } catch (error) {
+    return null;
+  }
+}
+
+export function setRawToStorage(storageKey, value, storageType = 'localStorage') {
+  const storage = getStorage(storageType);
+  if (!storage) return;
+  
+  try {
+    storage.setItem(storageKey, value);
+  } catch (error) {
+    console.error(`스토리지 저장 실패 (${storageKey}):`, error);
   }
 }
 

@@ -165,6 +165,14 @@ function UnifiedEdgeTooltip({
     getMaxEventCount,
   } = useRelationData(relationDataMode, id1, id2, chapterNum, unifiedEventInfo.eventNum, safeMaxChapterValue, filename, numericBookId);
 
+  // fallback positivity 값 확인 (useEffect 이전에 선언 필요)
+  const hasFallbackPositivity = typeof data?.positivity === 'number' && !Number.isNaN(data.positivity);
+  const clampedFallbackPositivity = hasFallbackPositivity
+    ? Math.max(-1, Math.min(1, data.positivity))
+    : null;
+
+  // 관계 라벨 배열 생성 (캐시된 함수 사용으로 성능 최적화)
+  const relationLabels = processRelationTagsCached(data.relation, data.label);
 
   // 초기 로딩 완료 감지
   useEffect(() => {
@@ -181,11 +189,21 @@ function UnifiedEdgeTooltip({
   }, [viewMode, id1, id2, chapterNum, unifiedEventInfo.eventNum, maxChapter, fetchData]);
 
   // 앞면에서도 관계 존재 여부 확인 (viewer 모드에서만, 통합된 이벤트 정보 사용)
+  // fallback positivity 값이 있으면 즉시 표시하고, API 호출은 백그라운드에서 처리
   useEffect(() => {
     if (viewMode === "info" && mode === 'viewer') {
-      fetchData();
+      // fallback 값이 있으면 즉시 표시하고 API 호출은 비동기로 처리
+      if (hasFallbackPositivity) {
+        // 다음 틱에서 API 호출 (UI 블로킹 방지)
+        setTimeout(() => {
+          fetchData();
+        }, 0);
+      } else {
+        // fallback 값이 없으면 즉시 API 호출
+        fetchData();
+      }
     }
-  }, [viewMode, id1, id2, chapterNum, unifiedEventInfo.eventNum, mode, fetchData]);
+  }, [viewMode, id1, id2, chapterNum, unifiedEventInfo.eventNum, mode, fetchData, hasFallbackPositivity]);
 
   // 컴포넌트 언마운트 시 리소스 정리
   useEffect(() => {
@@ -193,14 +211,6 @@ function UnifiedEdgeTooltip({
       cleanupRelationUtils();
     };
   }, []);
-
-  // 관계 라벨 배열 생성 (캐시된 함수 사용으로 성능 최적화)
-  const relationLabels = processRelationTagsCached(data.relation, data.label);
-
-  const hasFallbackPositivity = typeof data?.positivity === 'number' && !Number.isNaN(data.positivity);
-  const clampedFallbackPositivity = hasFallbackPositivity
-    ? Math.max(-1, Math.min(1, data.positivity))
-    : null;
 
   const timelineHasNumeric = Array.isArray(timeline)
     ? timeline.some(value => typeof value === 'number' && !Number.isNaN(value))
@@ -433,10 +443,13 @@ function UnifiedEdgeTooltip({
     return lastPair ? lastPair.value : null;
   }, [chartPairs, mode, currentEventNumber]);
 
+  // effectivePositivity 계산 최적화: fallback 값을 우선 사용하여 즉시 표시
   const effectivePositivity = useMemo(() => {
+    // timelinePositivity가 있으면 우선 사용 (더 정확한 값)
     if (typeof timelinePositivity === 'number' && !Number.isNaN(timelinePositivity)) {
       return Math.max(-1, Math.min(1, timelinePositivity));
     }
+    // fallback 값을 즉시 사용 (API 응답 대기 없이 표시)
     if (typeof clampedFallbackPositivity === 'number' && !Number.isNaN(clampedFallbackPositivity)) {
       return clampedFallbackPositivity;
     }
