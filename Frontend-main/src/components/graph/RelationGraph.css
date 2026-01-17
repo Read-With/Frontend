@@ -556,11 +556,16 @@ node.highlighted {
 .edge-tooltip-container {
   min-width: 450px;
   max-width: 600px;
+  width: 500px;
+  height: 360px;
+  min-height: 360px;
+  max-height: 360px;
   background-color: white;
   border-radius: 8px;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
   padding: 0;
   pointer-events: auto;
+  overflow: hidden;
 }
 
 .edge-tooltip-content {
@@ -568,6 +573,8 @@ node.highlighted {
   border-radius: 12px;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
   overflow: hidden;
+  height: 100%;
+  width: 100%;
 }
 
 .edge-tooltip-header {
@@ -747,6 +754,24 @@ node.highlighted {
 
 .edge-tooltip-body {
   padding: 16px;
+}
+
+.edge-tooltip-body::-webkit-scrollbar {
+  width: 6px;
+}
+
+.edge-tooltip-body::-webkit-scrollbar-track {
+  background: #f1f4f8;
+  border-radius: 3px;
+}
+
+.edge-tooltip-body::-webkit-scrollbar-thumb {
+  background: #c7cad1;
+  border-radius: 3px;
+}
+
+.edge-tooltip-body::-webkit-scrollbar-thumb:hover {
+  background: #a0a4ad;
 }
 
 .relation-tags {

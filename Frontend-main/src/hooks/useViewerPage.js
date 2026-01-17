@@ -87,10 +87,12 @@ export function useViewerPage() {
   const [matchedServerBook, setMatchedServerBook] = useState(null);
   
   const [graphFullScreen, setGraphFullScreen] = useState(() => {
+    // URL 파라미터 우선 확인
     if (savedGraphMode === 'graph') return true;
     if (savedGraphMode === 'split') return false;
     if (savedGraphMode === 'viewer') return false;
     
+    // URL 파라미터가 없으면 localStorage에서 복원
     const saved = loadViewerMode();
     if (saved === "graph") return true;
     if (saved === "split") return false;
@@ -99,14 +101,39 @@ export function useViewerPage() {
   });
   
   const [showGraph, setShowGraph] = useState(() => {
+    // URL 파라미터 우선 확인
     if (savedGraphMode === 'graph' || savedGraphMode === 'split') return true;
     if (savedGraphMode === 'viewer') return false;
     
+    // URL 파라미터가 없으면 localStorage에서 복원
     const saved = loadViewerMode();
     if (saved === "graph" || saved === "split") return true;
     if (saved === "viewer") return false;
     return loadSettings().showGraph;
   });
+  
+  // 새로고침 시 localStorage에서 분할 모드 복원
+  useEffect(() => {
+    if (performance && performance.getEntriesByType) {
+      const navEntries = performance.getEntriesByType("navigation");
+      if (navEntries.length > 0 && navEntries[0].type === "reload") {
+        // URL 파라미터가 없으면 localStorage에서 복원
+        if (!savedGraphMode) {
+          const saved = loadViewerMode();
+          if (saved === "graph") {
+            setGraphFullScreen(true);
+            setShowGraph(true);
+          } else if (saved === "split") {
+            setGraphFullScreen(false);
+            setShowGraph(true);
+          } else if (saved === "viewer") {
+            setGraphFullScreen(false);
+            setShowGraph(false);
+          }
+        }
+      }
+    }
+  }, [savedGraphMode]);
   
   // useGraphDataLoader는 아래에서 사용됨
   const [currentCharIndex, setCurrentCharIndex] = useState(0);

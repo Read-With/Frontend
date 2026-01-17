@@ -34,307 +34,8 @@ import { convertRelationsToElements, filterMainCharacters, filterRelationsByTime
 import { createCharacterMaps, buildNodeWeights } from "../../utils/characterUtils";
 import { processTooltipData } from "../../utils/graphUtils";
 import { getRelationKeyFromRelation } from "../../utils/relationUtils";
-
-function GraphSplitArea({
-  graphState,
-  graphActions,
-  viewerState,
-  searchState = {},
-  searchActions,
-  tooltipProps,
-  transitionState,
-  apiError,
-  isFromLibrary = false,
-  previousPage = null,
-  bookId = null,
-  book = null,
-  cachedLocation = null,
-}) {
-  const { activeTooltip, onClearTooltip, onSetActiveTooltip, graphClearRef } = tooltipProps;
-  const graphContainerRef = React.useRef(null);
-  const searchTermValue = searchState?.searchTerm ?? "";
-  const isSearchActiveValue = searchState?.isSearchActive ?? false;
-  const filteredElementsValue = searchState?.filteredElements ?? [];
-  const isResetFromSearchValue = searchState?.isResetFromSearch ?? false;
-  const searchFitNodeIds = searchState?.fitNodeIds ?? [];
-  const suggestionsValue = searchState?.suggestions ?? [];
-  const showSuggestionsValue = searchState?.showSuggestions ?? false;
-  const selectedSuggestionIndex = searchState?.selectedIndex ?? -1;
-  
-  const { loading, isReloading, isGraphLoading, isDataReady } = viewerState;
-  const { elements, currentEvent, currentChapter } = graphState;
-  const { filterStage } = graphActions;
-  
-  const isApiBook = React.useMemo(() => {
-    return bookUtils.isApiBook(book, bookId);
-  }, [book, bookId]);
-  
-  const hasCachedLocation = React.useMemo(() => {
-    if (!cachedLocation) {
-      return false;
-    }
-    const cachedChapter = Number(cachedLocation.chapterIdx);
-    if (!Number.isFinite(cachedChapter) || cachedChapter < 1) {
-      return false;
-    }
-    if (isApiBook) {
-      const cachedEvent = Number(cachedLocation.eventIdx ?? cachedLocation.eventNum ?? 0);
-      return Number.isFinite(cachedEvent) && cachedEvent > 0;
-    }
-    return true;
-  }, [cachedLocation, isApiBook]);
-
-  const isLocationDetermined = React.useMemo(() => {
-    if (!currentChapter || currentChapter < 1) {
-      return hasCachedLocation;
-    }
-    if (isApiBook && !currentEvent) {
-      return hasCachedLocation;
-    }
-    return true;
-  }, [currentChapter, currentEvent, isApiBook, hasCachedLocation]);
-
-  const filteredMainCharacters = React.useMemo(() => {
-    return filterMainCharacters(elements, filterStage);
-  }, [elements, filterStage]);
-
-  const finalElements = React.useMemo(() => {
-    if (isSearchActiveValue && filteredElementsValue && filteredElementsValue.length > 0) {
-      return filteredElementsValue;
-    }
-    if (filterStage > 0) {
-      return filteredMainCharacters;
-    }
-    return elements;
-  }, [isSearchActiveValue, filteredElementsValue, filterStage, filteredMainCharacters, elements]);
-
-  const hasCurrentEvent = !!currentEvent;
-  const shouldShowLoading =
-    loading ||
-    isReloading ||
-    !isLocationDetermined ||
-    (!isDataReady && !hasCurrentEvent);
-
-  return (
-    <div
-      className="h-full w-full flex flex-col"
-      style={{
-        display: "flex",
-        flexDirection: "column",
-        height: "100%",
-        minHeight: 0,
-        width: "100%",
-        overflow: "hidden",
-        alignItems: "stretch",
-        justifyContent: "stretch",
-        boxSizing: "border-box",
-        padding: 0,
-      }}
-    >
-      <ViewerTopBar
-        graphState={graphState}
-        graphActions={graphActions}
-        viewerState={viewerState}
-        searchState={{
-          searchTerm: searchTermValue,
-          isSearchActive: isSearchActiveValue,
-          elements: graphState.elements ?? [],
-          filteredElements: filteredElementsValue,
-          isResetFromSearch: isResetFromSearchValue,
-          fitNodeIds: searchFitNodeIds,
-          suggestions: suggestionsValue,
-          showSuggestions: showSuggestionsValue,
-          selectedIndex: selectedSuggestionIndex,
-        }}
-        searchActions={searchActions}
-        isFromLibrary={isFromLibrary}
-        previousPage={previousPage}
-      />
-      
-      <div style={{ flex: 1, position: "relative", minHeight: 0, minWidth: 0 }}>
-        {shouldShowLoading ? (
-          <div style={{
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            justifyContent: 'center',
-            height: '100%',
-            padding: '20px',
-            textAlign: 'center',
-            backgroundColor: '#f8f9fa',
-            borderRadius: '8px',
-            border: '1px solid #e9ecef'
-          }}>
-            <div style={{
-              fontSize: '48px',
-              marginBottom: '16px',
-              color: '#5C6F5C',
-              animation: 'spin 1s linear infinite'
-            }}>
-              ⏳
-            </div>
-            <h3 style={{
-              color: '#495057',
-              marginBottom: '12px',
-              fontSize: '18px',
-              fontWeight: '600'
-            }}>
-              {!isLocationDetermined ? '위치 정보를 확인하는 중...' : 
-               transitionState.type === 'chapter' ? '챕터 전환 중...' : 
-               '그래프 정보를 불러오는 중...'}
-            </h3>
-            <p style={{
-              color: '#6c757d',
-              marginBottom: '20px',
-              fontSize: '14px',
-              lineHeight: '1.5',
-              wordBreak: 'keep-all'
-            }}>
-              {!isLocationDetermined ? '현재 읽고 있는 위치를 파악하고 있습니다. 잠시만 기다려주세요.' :
-               transitionState.type === 'chapter' ? '새로운 챕터의 이벤트를 준비하고 있습니다.' : 
-               '관계 데이터를 분석하고 있습니다.'}
-            </p>
-          </div>
-        ) : apiError ? (
-          <div style={{
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            justifyContent: 'center',
-            height: '100%',
-            padding: '20px',
-            textAlign: 'center',
-            backgroundColor: '#f8f9fa',
-            borderRadius: '8px',
-            border: '1px solid #e9ecef'
-          }}>
-            <div style={{
-              fontSize: '48px',
-              marginBottom: '16px',
-              color: '#dc3545'
-            }}>
-              ❌
-            </div>
-            <h3 style={{
-              color: '#495057',
-              marginBottom: '12px',
-              fontSize: '18px',
-              fontWeight: '600'
-            }}>
-              {apiError.message}
-            </h3>
-            <p style={{
-              color: '#6c757d',
-              marginBottom: '20px',
-              fontSize: '14px',
-              lineHeight: '1.5',
-              wordBreak: 'keep-all'
-            }}>
-              {apiError.details}
-            </p>
-            <button
-              onClick={apiError.retry}
-              style={{
-                backgroundColor: '#5C6F5C',
-                color: 'white',
-                border: 'none',
-                borderRadius: '6px',
-                padding: '10px 20px',
-                fontSize: '14px',
-                fontWeight: '500',
-                cursor: 'pointer',
-                transition: 'background-color 0.2s'
-              }}
-              onMouseOver={(e) => e.target.style.backgroundColor = '#4A5A4A'}
-              onMouseOut={(e) => e.target.style.backgroundColor = '#5C6F5C'}
-            >
-              다시 시도
-            </button>
-          </div>
-        ) : transitionState.error ? (
-          <div style={{
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            justifyContent: 'center',
-            height: '100%',
-            padding: '20px',
-            textAlign: 'center',
-            backgroundColor: '#f8f9fa',
-            borderRadius: '8px',
-            border: '1px solid #e9ecef'
-          }}>
-            <div style={{
-              fontSize: '48px',
-              marginBottom: '16px',
-              color: '#6c757d'
-            }}>
-              ⚠️
-            </div>
-          <h3 style={{
-            color: '#495057',
-            marginBottom: '12px',
-            fontSize: '18px',
-            fontWeight: '600'
-          }}>
-            일시적인 오류가 발생했습니다
-          </h3>
-          <p style={{
-            color: '#6c757d',
-            marginBottom: '20px',
-            fontSize: '14px',
-            lineHeight: '1.5',
-            wordBreak: 'keep-all'
-          }}>
-            새로고침하면 정상적으로 작동할 것입니다.
-          </p>
-            <button
-              onClick={() => window.location.reload()}
-              style={{
-                backgroundColor: '#5C6F5C',
-                color: 'white',
-                border: 'none',
-                borderRadius: '6px',
-                padding: '10px 20px',
-                fontSize: '14px',
-                fontWeight: '500',
-                cursor: 'pointer',
-                transition: 'background-color 0.2s'
-              }}
-              onMouseOver={(e) => e.target.style.backgroundColor = '#4A5A4A'}
-              onMouseOut={(e) => e.target.style.backgroundColor = '#5C6F5C'}
-            >
-              새로고침
-            </button>
-          </div>
-        ) : (
-          <GraphContainer
-            ref={graphContainerRef}
-            currentPosition={graphState.currentCharIndex}
-            currentEvent={graphState.currentEvent}
-            currentChapter={graphState.currentChapter}
-            edgeLabelVisible={graphState.edgeLabelVisible}
-            filename={viewerState.filename}
-            elements={finalElements}
-            searchTerm={searchTermValue}
-            isSearchActive={isSearchActiveValue}
-            filteredElements={filteredElementsValue}
-            fitNodeIds={searchFitNodeIds}
-            isResetFromSearch={isResetFromSearchValue}
-            prevValidEvent={graphState.currentEvent && graphState.currentEvent.chapter === graphState.currentChapter ? graphState.currentEvent : null}
-            events={graphState.events || []}
-            activeTooltip={activeTooltip}
-            onClearTooltip={onClearTooltip}
-            onSetActiveTooltip={onSetActiveTooltip}
-            graphClearRef={graphClearRef}
-            isEventTransition={transitionState.type === 'event' && transitionState.inProgress}
-            bookId={book?.id ?? bookId}
-          />
-        )}
-      </div>
-    </div>
-  );
-}
+import { errorUtils } from "../../utils/common/errorUtils";
+import GraphSplitArea from "./GraphSplitArea";
 
 const ViewerPage = () => {
   const {
@@ -375,7 +76,8 @@ const ViewerPage = () => {
     if (!bookKey) return null;
     try {
       return getCachedReaderProgress(bookKey);
-    } catch {
+    } catch (error) {
+      console.warn('[ViewerPage] 캐시된 위치 정보를 불러오는데 실패했습니다:', error);
       return null;
     }
   });
@@ -385,18 +87,32 @@ const ViewerPage = () => {
   const apiEventCacheRef = useRef(new Map());
   const lastTooltipOpenAtRef = useRef(0);
   const activeTooltipRef = useRef(null);
-  
-  // activeTooltip 상태 변화 추적 - 제거됨
+  const tooltipTimeoutRef = useRef(null);
+  const apiCallRef = useRef(null);
+  const initialGraphEventLoadedRef = useRef(false);
+  const isChapterTransitionRef = useRef(false);
+  const chapterTransitionDirectionRef = useRef(null);
+  const forcedChapterEventIdxRef = useRef(null);
+  const sequentialPrefetchStatusRef = useRef(new Map());
+  const setElementsRef = useRef(setElements);
+  const previousGraphDataRef = useRef({ elements: [], eventIdx: 0, chapterIdx: 0 });
+  const chapterEventDiscoveryRef = useRef(new Map());
+  const retryTimeoutRef = useRef(null);
   
   const [transitionState, setTransitionState] = useState({
     type: null,
     inProgress: false,
     error: false,
-    direction: null // 'forward' or 'backward'
+    direction: null
   });
   
   const prevEventRef = useRef(null);
   const prevChapterRef = useRef(null);
+  
+  const [manifestLoaded, setManifestLoaded] = useState(false);
+  const [apiError, setApiError] = useState(null);
+  
+  const transitionDirectionRef = useRef(null);
   
   useEffect(() => {
     if (!bookKey) {
@@ -406,7 +122,8 @@ const ViewerPage = () => {
     try {
       const cached = getCachedReaderProgress(bookKey);
       setCachedLocation(cached);
-    } catch {
+    } catch (error) {
+      errorUtils.logWarning('[ViewerPage] 캐시된 위치 정보를 불러오는데 실패했습니다', error.message);
       setCachedLocation(null);
     }
   }, [bookKey]);
@@ -417,6 +134,11 @@ const ViewerPage = () => {
 
   
   const handleClearTooltip = useCallback(() => {
+    if (tooltipTimeoutRef.current) {
+      clearTimeout(tooltipTimeoutRef.current);
+      tooltipTimeoutRef.current = null;
+    }
+    
     const now = Date.now();
     if (now - lastTooltipOpenAtRef.current < 150) {
       return;
@@ -426,13 +148,17 @@ const ViewerPage = () => {
       graphClearRef.current();
     }
   }, []);
-
+  
   const handleSetActiveTooltip = useCallback((tooltipData) => {
+    if (tooltipTimeoutRef.current) {
+      clearTimeout(tooltipTimeoutRef.current);
+    }
+    
     const processedTooltipData = processTooltipData(tooltipData, tooltipData.type);
     lastTooltipOpenAtRef.current = Date.now();
     setActiveTooltip(processedTooltipData);
     // 툴팁 표시 실패 알림 (열림 직후 곧바로 닫힌 경우)
-    setTimeout(() => {
+    tooltipTimeoutRef.current = setTimeout(() => {
       if (!activeTooltipRef.current) {
         toast.error("툴팁 표시에 문제가 발생했습니다. 페이지를 새로고침 해주세요.", {
           autoClose: 2000,
@@ -440,28 +166,33 @@ const ViewerPage = () => {
           pauseOnHover: true
         });
       }
+      tooltipTimeoutRef.current = null;
     }, 220);
   }, []);
 
 
+  const currentEventKey = React.useMemo(() => {
+    if (!currentEvent || currentEvent.placeholder) return null;
+    if (currentEvent.chapter && Number(currentEvent.chapter) !== Number(currentChapter)) return null;
+    
+    return {
+      chapter: currentChapter,
+      eventIdx: eventUtils.extractRawEventIdx(currentEvent),
+      eventNum: currentEvent.eventNum ?? currentEvent.eventIdx,
+      cfi: currentEvent.cfi ?? null
+    };
+  }, [currentChapter, currentEvent?.eventNum, currentEvent?.eventIdx, currentEvent?.cfi, currentEvent?.placeholder, currentEvent?.chapter]);
+
   useEffect(() => {
-    if (!bookKey) {
-      return;
-    }
-    if (!currentChapter || currentChapter < 1) {
-      return;
-    }
-    if (!currentEvent || currentEvent.placeholder) {
-      return;
-    }
-    if (currentEvent.chapter && Number(currentEvent.chapter) !== Number(currentChapter)) {
+    if (!bookKey || !currentEventKey) {
       return;
     }
 
-    const resolvedIdx = eventUtils.extractRawEventIdx(currentEvent);
-    const cachedChapterIdx = cachedLocation ? Number(cachedLocation.chapterIdx) : null;
-    const cachedEventIdxValue = cachedLocation
-      ? Number(cachedLocation.eventIdx ?? cachedLocation.eventNum ?? 0)
+    const resolvedIdx = currentEventKey.eventIdx;
+    const currentCachedLocation = getCachedReaderProgress(bookKey);
+    const cachedChapterIdx = currentCachedLocation ? Number(currentCachedLocation.chapterIdx) : null;
+    const cachedEventIdxValue = currentCachedLocation
+      ? Number(currentCachedLocation.eventIdx ?? currentCachedLocation.eventNum ?? 0)
       : null;
     const hasCachedEventIdx =
       cachedEventIdxValue !== null && Number.isFinite(cachedEventIdxValue) && cachedEventIdxValue > 0;
@@ -469,12 +200,12 @@ const ViewerPage = () => {
       cachedChapterIdx !== null &&
       Number.isFinite(cachedChapterIdx) &&
       cachedChapterIdx > 0 &&
-      Number(cachedChapterIdx) === Number(currentChapter);
+      Number(cachedChapterIdx) === Number(currentEventKey.chapter);
     const isSameEvent =
       isSameChapter &&
       hasCachedEventIdx &&
       cachedEventIdxValue === resolvedIdx &&
-      ((cachedLocation?.cfi ?? null) === (currentEvent.cfi ?? null));
+      ((currentCachedLocation?.cfi ?? null) === currentEventKey.cfi);
 
     if (isSameEvent) {
       return;
@@ -482,25 +213,25 @@ const ViewerPage = () => {
 
     const stored = setCachedReaderProgress(bookKey, {
       bookId: typeof book?.id === 'number' ? book.id : null,
-      chapterIdx: currentChapter,
+      chapterIdx: currentEventKey.chapter,
       eventIdx: resolvedIdx,
-      eventNum: currentEvent.eventNum ?? currentEvent.eventIdx ?? resolvedIdx,
-      eventId: currentEvent.event_id ?? currentEvent.eventId ?? currentEvent.id ?? null,
-      cfi: currentEvent.cfi ?? null,
+      eventNum: currentEventKey.eventNum ?? resolvedIdx,
+      eventId: currentEvent?.event_id ?? currentEvent?.eventId ?? currentEvent?.id ?? null,
+      cfi: currentEventKey.cfi,
       eventName:
-        currentEvent.event?.name ??
-        currentEvent.event?.title ??
-        currentEvent.title ??
-        currentEvent.name ??
+        currentEvent?.event?.name ??
+        currentEvent?.event?.title ??
+        currentEvent?.title ??
+        currentEvent?.name ??
         null,
-      chapterProgress: currentEvent.chapterProgress ?? null,
+      chapterProgress: currentEvent?.chapterProgress ?? null,
       source: 'runtime'
     });
 
     if (stored) {
       setCachedLocation(stored);
     }
-  }, [bookKey, currentChapter, currentEvent, cachedLocation, book?.id]);
+  }, [bookKey, currentEventKey, book?.id, currentEvent]);
 
   const prefetchChapterEventsSequentially = useCallback(async (targetChapter) => {
     if (!book?.id || typeof book.id !== 'number') {
@@ -604,71 +335,79 @@ const ViewerPage = () => {
   useEffect(() => {
     activeTooltipRef.current = activeTooltip;
   }, [activeTooltip]);
+  
+  // 컴포넌트 언마운트 시 모든 timeout과 ref 정리
+  useEffect(() => {
+    return () => {
+      if (tooltipTimeoutRef.current) {
+        clearTimeout(tooltipTimeoutRef.current);
+        tooltipTimeoutRef.current = null;
+      }
+      if (retryTimeoutRef.current) {
+        clearTimeout(retryTimeoutRef.current);
+        retryTimeoutRef.current = null;
+      }
+      if (apiEventCacheRef.current) {
+        apiEventCacheRef.current.clear();
+      }
+      if (sequentialPrefetchStatusRef.current) {
+        sequentialPrefetchStatusRef.current.clear();
+      }
+      if (chapterEventDiscoveryRef.current) {
+        chapterEventDiscoveryRef.current.clear();
+      }
+    };
+  }, []);
 
   const testProgressAPI = useCallback(async () => {
-    // 서버 bookId 확인 (공통 함수 사용)
     const serverBookId = getServerBookId(book);
-    
-    // 서버에 업로드된 책인지 확인
     const isServerBook = !!serverBookId;
 
-    // 로컬 책인 경우 manifestLoaded를 즉시 true로 설정
     if (!isServerBook || !serverBookId) {
       setManifestLoaded(true);
       return;
     }
 
     try {
-      // 진도 조회: 로컬 캐시에서 가져오기 (manifest 로드 시 이미 모든 진도가 로컬에 저장됨)
       try {
         await getBookProgress(serverBookId);
       } catch (progressError) {
-        // 에러는 조용히 처리 (로컬 캐시에서 가져오므로 일반적으로 에러 없음)
+        // 조용히 처리
       }
 
-      // Manifest 조회: 서버에 업로드된 책이면 서버에서 가져옴
-      // 먼저 캐시 확인 (서버 bookId 사용)
       let manifest = getManifestFromCache(serverBookId);
       
-      // 캐시에 있으면 즉시 manifestLoaded 설정
       if (manifest) {
-        // 캐시에 이미 있으므로 로컬 상태만 업데이트 (캐시 저장 불필요)
-        setManifestData(manifest);
         setManifestLoaded(true);
         return;
       }
       
-      // 캐시에 없으면 서버에서 가져오기
       try {
         const manifestResponse = await getBookManifest(serverBookId);
         if (manifestResponse?.isSuccess && manifestResponse?.result) {
           manifest = manifestResponse.result;
-          // getBookManifest 내부에서 이미 캐시에 저장하므로 로컬 상태만 업데이트
-          setManifestData(manifest);
           setManifestLoaded(true);
         } else {
-          console.warn('[Viewer] 그래프/매니페스트를 서버에서 가져올 수 없습니다.', { bookId: serverBookId });
+          errorUtils.logWarning('[Viewer] 그래프/매니페스트를 서버에서 가져올 수 없습니다', '', { bookId: serverBookId });
           setApiError((prev) => prev ?? '그래프 데이터를 서버에서 가져올 수 없습니다.');
           setManifestLoaded(true);
         }
       } catch (manifestError) {
-        // 404와 403 에러는 조용히 처리
-        if (
-          manifestError.status !== 404 &&
-          manifestError.status !== 403 &&
-          !manifestError.message?.includes('404') &&
-          !manifestError.message?.includes('403')
-        ) {
-          console.warn('[Viewer] 그래프/매니페스트 조회 실패:', manifestError);
+        const status = manifestError?.status;
+        const message = manifestError?.message || '';
+        const isSilentError = status === 404 || status === 403 || message.includes('404') || message.includes('403');
+        
+        if (!isSilentError) {
+          errorUtils.logWarning('[Viewer] 그래프/매니페스트 조회 실패', message, { status });
         }
         setApiError((prev) => prev ?? '그래프 데이터를 서버에서 가져올 수 없습니다.');
         setManifestLoaded(true);
       }
     } catch (error) {
-      console.error('[Viewer] Manifest 로드 중 오류:', error);
+      errorUtils.logError('[Viewer] Manifest 로드 중 오류', error);
       setManifestLoaded(true);
     }
-  }, [book, bookId]);
+  }, [book?.id, bookId]);
 
   // 진도 복원은 EpubViewer에서 이미 수행하므로 여기서는 제거
   // EpubViewer의 loadBook()에서 apiProgressData를 사용하여 displayTarget을 설정하고
@@ -677,20 +416,6 @@ const ViewerPage = () => {
   useEffect(() => {
     testProgressAPI();
   }, [testProgressAPI]);
-
-  const [manifestLoaded, setManifestLoaded] = useState(false);
-  const [apiError, setApiError] = useState(null);
-  const [manifestData, setManifestData] = useState(null);
-  
-  const apiCallRef = useRef(null);
-  const initialGraphEventLoadedRef = useRef(false);
-  const isChapterTransitionRef = useRef(false);
-  const chapterTransitionDirectionRef = useRef(null);
-  const forcedChapterEventIdxRef = useRef(null);
-  const sequentialPrefetchStatusRef = useRef(new Map());
-  const setElementsRef = useRef(setElements);
-  const previousGraphDataRef = useRef({ elements: [], eventIdx: 0, chapterIdx: 0 });
-  const chapterEventDiscoveryRef = useRef(new Map()); // 챕터별 이벤트 탐색 상태
   
   useEffect(() => {
     setElementsRef.current = setElements;
@@ -701,7 +426,6 @@ const ViewerPage = () => {
     initialGraphEventLoadedRef.current = false;
     apiCallRef.current = null;
     setManifestLoaded(false);
-    setManifestData(null);
     setApiError(null);
   }, [book?.id]);
   
@@ -723,9 +447,11 @@ const ViewerPage = () => {
     if (transitionState.type === 'chapter') {
       isChapterTransitionRef.current = true;
       chapterTransitionDirectionRef.current = transitionState.direction;
+      transitionDirectionRef.current = transitionState.direction;
     } else if (!transitionState.inProgress) {
       isChapterTransitionRef.current = false;
       chapterTransitionDirectionRef.current = null;
+      transitionDirectionRef.current = null;
     }
   }, [transitionState.type, transitionState.direction, transitionState.inProgress]);
   
@@ -783,11 +509,9 @@ const ViewerPage = () => {
           if (!manifestLoaded) {
             const serverBookId = getServerBookId(book);
             if (serverBookId) {
-              const cachedManifest = getManifestFromCache(serverBookId);
-              if (cachedManifest) {
-                // 캐시에 있으면 즉시 manifestLoaded 설정하고 계속 진행
-                setManifestData(cachedManifest);
-                setManifestLoaded(true);
+            const cachedManifest = getManifestFromCache(serverBookId);
+            if (cachedManifest) {
+              setManifestLoaded(true);
               } else {
                 // 캐시에 없으면 manifest 로드 완료 대기
                 return;
@@ -812,10 +536,10 @@ const ViewerPage = () => {
               forced = maxEventIdx > 0 ? maxEventIdx : 1;
               forcedChapterEventIdxRef.current = forced;
             }
-            if (forced && Number.isFinite(forced)) {
-              eventIdx = forced;
-            } else {
-              const direction = chapterTransitionDirectionRef.current || transitionState.direction;
+            if (forced && forced !== 'max' && Number.isFinite(Number(forced))) {
+              eventIdx = Number(forced);
+            } else if (!forced || forced === 'max') {
+              const direction = chapterTransitionDirectionRef.current || transitionDirectionRef.current;
               if (direction === 'backward') {
                 const chapterCache = getCachedChapterEvents(book.id, currentChapter);
                 const maxEventIdx = eventUtils.getMaxEventIdx(chapterCache);
@@ -837,7 +561,7 @@ const ViewerPage = () => {
           // 전환 중에는 강제 인덱스 외 호출 차단
           if (isChapterTransitionRef.current) {
             const forced = forcedChapterEventIdxRef.current;
-            if (forced && forced !== 'max' && apiEventIdx !== forced) {
+            if (forced && forced !== 'max' && Number.isFinite(Number(forced)) && apiEventIdx !== Number(forced)) {
               return;
             }
           }
@@ -886,7 +610,14 @@ const ViewerPage = () => {
                   }
                 }
               } catch (apiError) {
-                // API 호출 실패 시 캐시 재확인은 아래 로직에서 수행
+                const status = apiError?.status;
+                if (status !== 404 && status !== 403) {
+                  errorUtils.logWarning('[ViewerPage] 그래프 데이터 API 호출 실패', apiError?.message || '알 수 없는 오류', {
+                    bookId: book.id,
+                    chapter: currentChapter,
+                    eventIdx: apiEventIdx
+                  });
+                }
               }
             }
           }
@@ -1063,6 +794,9 @@ const ViewerPage = () => {
             );
           }
           
+          const hasGraphPayload = Array.isArray(resultData?.relations) && resultData.relations.length > 0;
+          const hasCharacterPayload = Array.isArray(resultData?.characters) && resultData.characters.length > 0;
+          
           // convertedElements가 있으면 처리
           if (convertedElements.length > 0 && isMounted) {
               // 캐시 사용 시 diff 기반 누적, 아니면 기존 병합 로직
@@ -1132,9 +866,6 @@ const ViewerPage = () => {
               characters: resultData.characters || []
             };
 
-            const hasGraphPayload = Array.isArray(resultData.relations) && resultData.relations.length > 0;
-            const hasCharacterPayload = Array.isArray(resultData.characters) && resultData.characters.length > 0;
-
             setEvents(prevEvents => {
               const previous = Array.isArray(prevEvents) ? prevEvents : [];
               const otherChapterEvents = previous.filter(evt => Number(evt?.chapter ?? evt?.chapterIdx) !== currentChapter);
@@ -1188,10 +919,12 @@ const ViewerPage = () => {
               });
 
               const appliedIdx = eventUtils.extractRawEventIdx(nextEventData);
+              const forced = forcedChapterEventIdxRef.current;
               if (
-                forcedChapterEventIdxRef.current &&
-                Number.isFinite(forcedChapterEventIdxRef.current) &&
-                appliedIdx === forcedChapterEventIdxRef.current
+                forced &&
+                forced !== 'max' &&
+                Number.isFinite(Number(forced)) &&
+                appliedIdx === Number(forced)
               ) {
                 forcedChapterEventIdxRef.current = null;
                 chapterTransitionDirectionRef.current = null;
@@ -1205,17 +938,19 @@ const ViewerPage = () => {
               setElementsRef.current([]);
             }
           } else {
-            // 변환 실패 또는 데이터 없음
             if (!usedCache || !Array.isArray(resultData.elements) || resultData.elements.length === 0) {
-              console.warn('⚠️ 그래프 데이터 변환 실패: characters, relations, 또는 elements가 비어있음');
+              errorUtils.logWarning('[ViewerPage] 그래프 데이터 변환 실패', 'characters, relations, 또는 elements가 비어있음');
             }
             
-            // 변환 실패 시 elements 비우기
             eventUtils.updateGraphDataRef(previousGraphDataRef, [], apiEventIdx, currentChapter);
             setElementsRef.current([]);
           }
           
-          if (transitionState.type === 'chapter' && transitionState.direction && currentChapter !== prevChapterRef.current) {
+          const isChapterTransition = transitionState.type === 'chapter' && 
+                                     transitionState.direction && 
+                                     currentChapter !== prevChapterRef.current;
+          
+          if (isChapterTransition) {
             if (!hasGraphPayload && !hasCharacterPayload) {
               setEvents([]);
               setCurrentEvent(null);
@@ -1245,32 +980,35 @@ const ViewerPage = () => {
           
         } catch (error) {
           if (isMounted) {
-            // 404 에러는 데이터 없음으로 정상 상황 (eventIdx=0 등)
-            if (error.status === 404 || error.message?.includes('404') || error.message?.includes('찾을 수 없습니다')) {
-              // 빈 elements로 설정하고 에러로 표시하지 않음
+            const status = error?.status;
+            const message = error?.message || '';
+            const isNotFound = status === 404 || message.includes('404') || message.includes('찾을 수 없습니다');
+            
+            if (isNotFound) {
               setElementsRef.current([]);
               setApiError(null);
               setIsDataReady(true);
               setLoading(false);
               transitionUtils.reset(setTransitionState);
             } else {
-              // 재시도 가능한 에러
               const maxRetries = 3;
               const retryCount = (error.retryCount || 0) + 1;
               
               if (retryCount < maxRetries) {
-                // 재시도 전 대기
-                setTimeout(() => {
+                if (retryTimeoutRef.current) {
+                  clearTimeout(retryTimeoutRef.current);
+                }
+                retryTimeoutRef.current = setTimeout(() => {
                   if (isMounted) {
                     apiCallRef.current = null;
-                    // 재시도를 위해 강제로 useEffect 재실행
                     setLoading(prev => !prev);
                   }
+                  retryTimeoutRef.current = null;
                 }, 1000 * retryCount);
                 
                 setApiError({
                   message: '그래프 데이터를 불러오는데 실패했습니다.',
-                  details: `${error.message || '알 수 없는 오류'} (재시도 ${retryCount}/${maxRetries})`,
+                  details: `${message || '알 수 없는 오류'} (재시도 ${retryCount}/${maxRetries})`,
                   retry: () => {
                     setApiError(null);
                     apiCallRef.current = null;
@@ -1278,10 +1016,9 @@ const ViewerPage = () => {
                   }
                 });
               } else {
-                // 최대 재시도 횟수 초과
                 setApiError({
                   message: '그래프 데이터를 불러오는데 실패했습니다.',
-                  details: error.message || '알 수 없는 오류가 발생했습니다. 잠시 후 다시 시도해주세요.',
+                  details: message || '알 수 없는 오류가 발생했습니다. 잠시 후 다시 시도해주세요.',
                   retry: () => {
                     setApiError(null);
                     apiCallRef.current = null;
@@ -1324,6 +1061,7 @@ const ViewerPage = () => {
         
         setIsDataReady(true);
       } catch (error) {
+        errorUtils.logError('[ViewerPage] 로컬 이벤트 로드 오류', error);
         if (isMounted) {
           setIsDataReady(true);
           transitionUtils.reset(setTransitionState);
@@ -1340,14 +1078,19 @@ const ViewerPage = () => {
     
     return () => {
       isMounted = false;
+      if (retryTimeoutRef.current) {
+        clearTimeout(retryTimeoutRef.current);
+        retryTimeoutRef.current = null;
+      }
     };
   }, [
     book?.id, 
     currentChapter, 
     manifestLoaded, 
-    folderKey,
-    currentEvent?.eventNum,  // API 책의 이벤트 변경 감지
-    transitionState.direction  // 챕터 전환 방향 감지
+    folderKey
+    // currentEvent?.eventNum 제외: loadGraphData 내부에서 currentEvent를 사용하지만
+    // 의존성에 포함하면 무한 루프 위험이 있음 (API 호출이 currentEvent를 업데이트함)
+    // transitionState.direction 제외: 챕터 전환은 currentChapter 변경으로 감지됨
     // graphActions, currentChapterData는 제외 (무한 루프 방지)
   ]);
 
@@ -1369,7 +1112,7 @@ const ViewerPage = () => {
         setProgressToCache(progressData);
         
       } catch (error) {
-        // 에러는 조용히 처리
+        console.warn('[ViewerPage] 진도 자동 저장 실패:', error);
       }
     };
 
@@ -1413,9 +1156,11 @@ const ViewerPage = () => {
       if (isEventChanged) {
         setTransitionState({ type: 'event', inProgress: true, error: false, direction: null });
         
-        setTimeout(() => {
+        const timeoutId = setTimeout(() => {
           transitionUtils.reset(setTransitionState);
         }, 200);
+        
+        return () => clearTimeout(timeoutId);
       }
     }
     
@@ -1443,13 +1188,20 @@ const ViewerPage = () => {
 
 
 
+  const memoizedElements = React.useMemo(() => elements, [elements]);
+  const memoizedCurrentChapterData = React.useMemo(() => currentChapterData, [currentChapterData]);
+  
   const {
     searchTerm, isSearchActive, filteredElements,
     fitNodeIds,
     isResetFromSearch, suggestions, showSuggestions, selectedIndex,
     selectSuggestion, handleKeyDown, closeSuggestions,
     handleSearchSubmit, clearSearch, setSearchTerm,
-  } = useGraphSearch(elements, null, currentChapterData);
+  } = useGraphSearch(memoizedElements, null, memoizedCurrentChapterData);
+
+  const memoizedEventsForChapter = React.useMemo(() => {
+    return getEventsForChapter(currentChapter, folderKey);
+  }, [currentChapter, folderKey]);
 
   useEffect(() => {
     if (!isDataReady || !currentEvent) return;
@@ -1463,11 +1215,11 @@ const ViewerPage = () => {
         const eventLayoutStr = localStorage.getItem(eventKey);
         
         if (eventLayoutStr) {
-          try {
-            const eventLayout = JSON.parse(eventLayoutStr);
-            Object.assign(mergedLayout, eventLayout);
+            try {
+              const eventLayout = JSON.parse(eventLayoutStr);
+              Object.assign(mergedLayout, eventLayout);
             } catch (e) {
-              // 파싱 오류
+              console.warn('[ViewerPage] 레이아웃 파싱 오류:', e);
             }
         }
       }
@@ -1483,7 +1235,7 @@ const ViewerPage = () => {
       
       setGraphViewState(finalLayout);
     } catch (e) {
-      // 복원 오류
+      console.warn('[ViewerPage] 그래프 레이아웃 복원 오류:', e);
     }
   }, [isDataReady, currentEvent, elements, currentChapter]);
 
@@ -1500,6 +1252,7 @@ const ViewerPage = () => {
     }
     let isMounted = true;
     const cyInstances = [];
+    const abortController = new AbortController();
     
     const preloadChapterLayouts = async () => {
       const maxChapterCount = getDetectedMaxChapter(folderKey);
@@ -1508,10 +1261,12 @@ const ViewerPage = () => {
       const chapterNums = Array.from({ length: maxChapterCount }, (_, i) => i + 1);
       
       for (let i = 0; i < chapterNums.length; i += 3) {
-        if (!isMounted) break;
+        if (!isMounted || abortController.signal.aborted) break;
         
         const batch = chapterNums.slice(i, i + 3);
         const promises = batch.map(async (chapterNum) => {
+          if (abortController.signal.aborted) return;
+          
           const storageKey = createStorageKey.chapterNodePositions(bookKey, chapterNum);
           if (localStorage.getItem(storageKey)) {
             return;
@@ -1544,11 +1299,13 @@ const ViewerPage = () => {
               idToMain,
               idToNames,
               folderKey,
-              null, // nodeWeights
-              null, // previousRelations
-              lastEvent // eventData
+              null,
+              null,
+              lastEvent
             );
             if (!elements || elements.length === 0) return;
+            
+            if (abortController.signal.aborted) return;
             
             const cy = cytoscape({
               elements,
@@ -1565,9 +1322,18 @@ const ViewerPage = () => {
             });
             
             await new Promise(resolve => {
+              if (abortController.signal.aborted) {
+                resolve();
+                return;
+              }
               layout.one('layoutstop', resolve);
               layout.run();
             });
+            
+            if (abortController.signal.aborted) {
+              cy.destroy();
+              return;
+            }
             
             const layoutObj = {};
             cy.nodes().forEach((node) => {
@@ -1577,18 +1343,20 @@ const ViewerPage = () => {
             try {
               localStorage.setItem(storageKey, JSON.stringify(layoutObj));
             } catch (e) {
-              // 저장 실패
+              errorUtils.logWarning('[ViewerPage] 레이아웃 저장 실패', e.message);
             }
             
             cy.destroy();
           } catch (error) {
-            // 생성 실패
+            if (!abortController.signal.aborted) {
+              errorUtils.logWarning('[ViewerPage] 챕터 레이아웃 생성 실패', error.message);
+            }
           }
         });
         
         await Promise.all(promises);
         
-        if (i + 3 < chapterNums.length) {
+        if (i + 3 < chapterNums.length && !abortController.signal.aborted) {
           await new Promise(resolve => setTimeout(resolve, 100));
         }
       }
@@ -1598,11 +1366,12 @@ const ViewerPage = () => {
     
     return () => {
       isMounted = false;
+      abortController.abort();
       cyInstances.forEach(cy => {
         try {
           cy.destroy();
         } catch (e) {
-          // 정리됨
+          errorUtils.logWarning('[ViewerPage] Cytoscape 인스턴스 정리 중 오류', e.message);
         }
       });
     };
@@ -1640,7 +1409,7 @@ const ViewerPage = () => {
             graphState={{
               ...graphState,
               prevValidEvent: currentEvent && currentEvent.chapter === currentChapter ? currentEvent : null,
-              events: getEventsForChapter(currentChapter, folderKey)
+              events: memoizedEventsForChapter
             }}
             graphActions={graphActions}
             viewerState={viewerState}
@@ -1699,16 +1468,17 @@ const ViewerPage = () => {
             if (prev && next && prev !== next) {
               isChapterTransitionRef.current = true;
               chapterTransitionDirectionRef.current = prev > next ? 'backward' : 'forward';
-              const forcedIdx = chapterTransitionDirectionRef.current === 'forward' ? 1 : 'max';
+              const direction = chapterTransitionDirectionRef.current;
+              const forcedIdx = direction === 'forward' ? 1 : 'max';
               forcedChapterEventIdxRef.current = forcedIdx;
               
-              if (Number.isFinite(forcedIdx)) {
+              if (forcedIdx === 1) {
                 setCurrentEvent({
                   chapter: next,
                   chapterIdx: next,
-                  eventIdx: forcedIdx,
-                  eventNum: forcedIdx,
-                  event_id: forcedIdx,
+                  eventIdx: 1,
+                  eventNum: 1,
+                  event_id: 1,
                   relations: [],
                   characters: [],
                   placeholder: true

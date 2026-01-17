@@ -1,7 +1,7 @@
 import { setManifestData, isValidEvent, getManifestFromCache } from '../common/cache/manifestCache';
 import { setAllProgress, getProgressFromCache, getAllProgressFromCache } from '../common/cache/progressCache';
 import { getApiBaseUrl, clearAuthData } from '../common/authUtils';
-import { isTokenValid } from './authApi';
+import { isTokenValid, refreshToken } from './authApi';
 
 const API_BASE_URL = getApiBaseUrl();
 
@@ -51,7 +51,7 @@ const handleApiError = (error, context) => {
 };
 
 // HTTP 요청 헬퍼 함수 (api.js 전용 - 다른 파일은 authApi.js의 authenticatedRequest 사용)
-const apiRequest = async (url, options = {}) => {
+const apiRequest = async (url, options = {}, retryCount = 0) => {
   const token = localStorage.getItem('accessToken');
   
   if (url.includes('/api/graph/')) {
@@ -95,6 +95,40 @@ const apiRequest = async (url, options = {}) => {
   
   try {
     const response = await fetch(requestUrl, config);
+    
+    if (response.status === 401 && retryCount === 0) {
+      const errorText = await response.clone().text();
+      console.error('❌ 401 Unauthorized 에러 (토큰 갱신 시도):', {
+        url: requestUrl,
+        status: response.status,
+        hasToken: !!token,
+        tokenValid: token ? isTokenValid(token) : false,
+        errorResponse: errorText
+      });
+      
+      try {
+        await refreshToken();
+        return apiRequest(url, options, retryCount + 1);
+      } catch (refreshError) {
+        clearAuthData();
+        const authError = new Error('인증이 만료되었습니다. 다시 로그인해주세요.');
+        authError.status = 401;
+        throw authError;
+      }
+    }
+    
+    if (response.status === 401 && retryCount > 0) {
+      const errorText = await response.clone().text();
+      console.error('❌ 401 Unauthorized 에러 (토큰 갱신 후 재시도 실패):', {
+        url: requestUrl,
+        status: response.status,
+        errorResponse: errorText
+      });
+      clearAuthData();
+      const authError = new Error('인증이 만료되었습니다. 다시 로그인해주세요.');
+      authError.status = 401;
+      throw authError;
+    }
     
     if (response.status === 401) {
       const errorText = await response.clone().text();
