@@ -1,15 +1,15 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { getBooks, getBook, toggleBookFavorite } from '../utils/api/booksApi';
+import { getBooks, getBook, toggleBookFavorite } from '../../utils/api/booksApi';
 import {
   getAllLocalBookIds,
   deleteLocalBookBuffer,
   getAllLocalBookMetadata,
   deleteLocalBookMetadata,
-} from '../utils/localBookStorage';
-import { prefetchManifest } from '../utils/common/cache/manifestCache';
-import { getBookManifest } from '../utils/api/api';
-import { normalizeTitle } from '../utils/stringUtils';
+} from '../../utils/localBookStorage';
+import { prefetchManifest } from '../../utils/common/cache/manifestCache';
+import { getBookManifest } from '../../utils/api/api';
+import { normalizeTitle } from '../../utils/stringUtils';
 
 const isDefaultBook = (book) => book?.default === true || book?.isDefault === true;
 

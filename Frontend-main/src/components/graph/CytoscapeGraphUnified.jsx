@@ -5,7 +5,7 @@ import { detectAndResolveOverlap, calcGraphDiff } from "../../utils/graphDataUti
 import { applySearchFadeEffect, shouldShowNoSearchResults, getNoSearchResultsMessage } from "../../utils/searchUtils.jsx";
 import { createRippleEffect, ensureElementsInBounds, createMouseEventHandlers } from "../../utils/graphUtils.js";
 import { calculateNodeSize } from "../../utils/styles/graphStyles.js";
-import useGraphInteractions from "../../hooks/useGraphInteractions.js";
+import useGraphInteractions from "../../hooks/graph/useGraphInteractions.js";
 import { eventUtils } from "../../utils/viewerUtils";
 
 

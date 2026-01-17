@@ -2,9 +2,9 @@ import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { Line } from "react-chartjs-2";
 import "chart.js/auto";
 import { useParams } from "react-router-dom";
-import { useTooltipPosition } from "../../../hooks/useTooltipPosition";
-import { useClickOutside } from "../../../hooks/useClickOutside";
-import { useRelationData } from "../../../hooks/useRelationData";
+import { useTooltipPosition } from "../../../hooks/ui/useTooltipPosition";
+import { useClickOutside } from "../../../hooks/ui/useClickOutside";
+import { useRelationData } from "../../../hooks/graph/useRelationData";
 import { getRelationStyle, getRelationLabels, tooltipStyles } from "../../../utils/styles/relationStyles";
 import { createButtonStyle, createAdvancedButtonHandlers, COLORS, ANIMATION_VALUES, unifiedNodeTooltipStyles } from "../../../utils/styles/styles";
 import { mergeRefs } from "../../../utils/styles/animations";
@@ -174,15 +174,19 @@ function UnifiedEdgeTooltip({
   // 관계 라벨 배열 생성 (캐시된 함수 사용으로 성능 최적화)
   const relationLabels = processRelationTagsCached(data.relation, data.label);
 
+  // 간선이 변경될 때마다 즉시 데이터 불러오기
+  useEffect(() => {
+    if (id1 && id2 && numericBookId && chapterNum) {
+      fetchData();
+    }
+  }, [id1, id2, numericBookId, chapterNum, unifiedEventInfo.eventNum, relationDataMode, fetchData]);
+
   // 초기 로딩 완료 감지
   useEffect(() => {
     if (!loading && isInitialLoad) {
       setIsInitialLoad(false);
     }
   }, [loading, isInitialLoad]);
-
-  // useRelationData가 컴포넌트 마운트 시 자동으로 데이터를 가져오므로,
-  // viewMode 변경 시 추가로 fetchData()를 호출하지 않음
 
   // 컴포넌트 언마운트 시 리소스 정리
   useEffect(() => {

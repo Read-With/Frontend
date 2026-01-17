@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { useBookmarks } from '../../../hooks/useBookmarks';
+import { useBookmarks } from '../../../hooks/bookmarks/useBookmarks';
 
 const parseBookmarkLocation = (bookmark) => {
   if (!bookmark) return '';

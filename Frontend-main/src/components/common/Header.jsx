@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { LogOut } from 'lucide-react';
 import './Header.css';
-import useAuth from '../../hooks/useAuth';
+import useAuth from '../../hooks/auth/useAuth';
 import { secureLog } from '../../utils/security/oauthSecurity';
 import { getApiBaseUrl } from '../../utils/common/authUtils';
 

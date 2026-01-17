@@ -1,5 +1,5 @@
 import React from 'react';
-import { useChapterPovSummaries } from '../../hooks/useChapterPovSummaries';
+import { useChapterPovSummaries } from '../../hooks/viewer/useChapterPovSummaries';
 import { BookOpen, User, Star, RefreshCw } from 'lucide-react';
 
 /**

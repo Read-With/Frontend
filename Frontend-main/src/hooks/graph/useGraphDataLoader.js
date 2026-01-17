@@ -1,11 +1,11 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { toNumberOrNull } from '../utils/numberUtils';
-import { sortEventsByIdx, normalizeEventIdx, filterEventsUpTo, filterEventsBefore, getMaxEventIdx } from '../utils/eventUtils';
-import { createCharacterMaps, aggregateCharactersFromEvents, buildNodeWeights, normalizeCharacterId } from '../utils/characterUtils';
-import { convertRelationsToElements, calcGraphDiff } from '../utils/graphDataUtils';
-import { normalizeRelation, isValidRelation } from '../utils/relationUtils';
-import { getCachedChapterEvents, reconstructChapterGraphState, getGraphBookCache } from '../utils/common/cache/chapterEventCache';
-import { getMaxChapter, getManifestFromCache } from '../utils/common/cache/manifestCache';
+import { toNumberOrNull } from '../../utils/numberUtils';
+import { sortEventsByIdx, normalizeEventIdx, filterEventsUpTo, filterEventsBefore, getMaxEventIdx } from '../../utils/eventUtils';
+import { createCharacterMaps, aggregateCharactersFromEvents, buildNodeWeights, normalizeCharacterId } from '../../utils/characterUtils';
+import { convertRelationsToElements, calcGraphDiff } from '../../utils/graphDataUtils';
+import { normalizeRelation, isValidRelation } from '../../utils/relationUtils';
+import { getCachedChapterEvents, reconstructChapterGraphState, getGraphBookCache } from '../../utils/common/cache/chapterEventCache';
+import { getMaxChapter, getManifestFromCache } from '../../utils/common/cache/manifestCache';
 
 export function useGraphDataLoader(bookId, chapterIdx, eventIdx = null) {
   const [elements, setElements] = useState([]);

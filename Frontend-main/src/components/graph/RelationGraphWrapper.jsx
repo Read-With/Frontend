@@ -10,9 +10,9 @@ import "./RelationGraph.css";
 import { createGraphStylesheet, getEdgeStyle, getWideLayout } from "../../utils/styles/graphStyles";
 import { ANIMATION_VALUES } from "../../utils/styles/animations";
 import { sidebarStyles, topBarStyles, graphStyles, createButtonStyle, createAdvancedButtonHandlers, COLORS } from "../../utils/styles/styles.js";
-import { useGraphSearch } from '../../hooks/useGraphSearch.jsx';
-import { useGraphDataLoader } from '../../hooks/useGraphDataLoader.js';
-import { useLocalStorageNumber } from '../../hooks/useLocalStorage.js';
+import { useGraphSearch } from '../../hooks/graph/useGraphSearch.jsx';
+import { useGraphDataLoader } from '../../hooks/graph/useGraphDataLoader.js';
+import { useLocalStorageNumber } from '../../hooks/common/useLocalStorage.js';
 import { getMacroGraph, getFineGraph, getBookManifest } from '../../utils/api/api.js';
 import { getMaxChapter, getManifestFromCache, calculateMaxChapterFromChapters } from '../../utils/common/cache/manifestCache';
 import { getGraphBookCache, getCachedChapterEvents, getChapterEventFallbackData } from '../../utils/common/cache/chapterEventCache';
@@ -22,8 +22,8 @@ import { getFolderKeyFromFilename, getLastEventIndexForChapter } from '../../uti
 import { processTooltipData } from '../../utils/graphUtils.js';
 import { eventUtils } from '../../utils/viewerUtils';
 import { loadFromStorage, saveToStorage } from '../../utils/common/cache/cacheManager';
-import useGraphInteractions from "../../hooks/useGraphInteractions";
-import { useChapterPovSummaries } from '../../hooks/useChapterPovSummaries';
+import useGraphInteractions from "../../hooks/graph/useGraphInteractions";
+import { useChapterPovSummaries } from '../../hooks/viewer/useChapterPovSummaries';
 
 const getEdgeStyleForGraph = () => getEdgeStyle('graph');
 

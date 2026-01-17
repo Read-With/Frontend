@@ -4,8 +4,8 @@ import { Book, BookOpen, CheckCircle2, Plus, Library, Heart, AlertCircle, Grid3X
 import Header from '../components/common/Header';
 import BookLibrary from '../components/library/BookLibrary';
 import FileUpload from '../components/library/FileUpload';
-import { useBooks } from '../hooks/useBooks';
-import useAuth from '../hooks/useAuth';
+import { useBooks } from '../hooks/books/useBooks';
+import useAuth from '../hooks/auth/useAuth';
 import './MyPage.css';
 
 export default function MyPage() {

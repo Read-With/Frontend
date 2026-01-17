@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { useBookmarks } from '../../../hooks/useBookmarks';
+import { useBookmarks } from '../../../hooks/bookmarks/useBookmarks';
 
 const bookmarkColors = {
   normal: '#f4f7ff', // 연회색(이전 페이지와 통일)

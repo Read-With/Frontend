@@ -2,9 +2,9 @@ import React, { useState, useEffect, useCallback, useMemo, useRef } from "react"
 import { useParams } from "react-router-dom";
 import { processRelations, processRelationTags } from "../../../utils/relationUtils.js";
 import { getChapterLastEventNums, getFolderKeyFromFilename, getEventDataByIndex, getDetectedMaxChapter, getCharacterPerspectiveSummary } from "../../../utils/graphData.js";
-import { useTooltipPosition } from "../../../hooks/useTooltipPosition.js";
-import { useClickOutside } from "../../../hooks/useClickOutside.js";
-import { useRelationData } from "../../../hooks/useRelationData.jsx";
+import { useTooltipPosition } from "../../../hooks/ui/useTooltipPosition.js";
+import { useClickOutside } from "../../../hooks/ui/useClickOutside.js";
+import { useRelationData } from "../../../hooks/graph/useRelationData.jsx";
 import { safeNum } from "../../../utils/relationUtils.js";
 import { mergeRefs } from "../../../utils/styles/animations.js";
 import { COLORS, createButtonStyle, ANIMATION_VALUES, unifiedNodeTooltipStyles, unifiedNodeAnimations } from "../../../utils/styles/styles.js";

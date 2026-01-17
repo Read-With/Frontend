@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import useAuth from '../hooks/useAuth';
+import useAuth from '../hooks/auth/useAuth';
 import OAuthCallback from '../components/auth/OAuthCallback';
 import './HomePage.css';
 

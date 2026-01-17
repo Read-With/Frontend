@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { uploadBook } from '../utils/api/api';
+import { uploadBook } from '../../utils/api/api';
 
 export const FILE_CONSTRAINTS = {
   MAX_SIZE: 50 * 1024 * 1024,
@@ -62,7 +62,7 @@ export const useFileUpload = () => {
       
       // IndexedDB에 ArrayBuffer 저장 (다시 열기 위해)
       try {
-        const { saveLocalBookBuffer } = await import('../utils/localBookStorage');
+        const { saveLocalBookBuffer } = await import('../../utils/localBookStorage');
         await saveLocalBookBuffer(localBookId, arrayBuffer);
       } catch (error) {
         console.warn('IndexedDB 저장 실패, 메모리에서만 사용:', error);

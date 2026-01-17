@@ -1,12 +1,12 @@
 import { useState, useEffect, useCallback } from 'react';
 import { toast } from 'react-toastify';
-import { createBookmark, updateBookmark, deleteBookmark } from '../utils/api/bookmarksApi';
+import { createBookmark, updateBookmark, deleteBookmark } from '../../utils/api/bookmarksApi';
 import { 
   loadBookmarks as loadBookmarksFromManager, 
   addBookmark as addBookmarkFromManager,
   loadBookmarksFromLocal,
   saveBookmarksToLocal
-} from '../components/viewer/bookmark/BookmarkManager';
+} from '../../components/viewer/bookmark/BookmarkManager';
 
 export const useBookmarks = (bookId, options = {}) => {
   const { 

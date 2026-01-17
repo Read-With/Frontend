@@ -1,8 +1,10 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useParams, useLocation, useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
-import { useLocalStorage, useLocalStorageNumber } from './useLocalStorage';
-import { useGraphDataLoader } from './useGraphDataLoader';
+import { useLocalStorage, useLocalStorageNumber } from '../common/useLocalStorage';
+import { useGraphDataLoader } from '../graph/useGraphDataLoader';
+import { useServerBookMatching } from '../books/useServerBookMatching';
+import { useViewerUrlParams } from './useViewerUrlParams';
 import { 
   defaultSettings, 
   loadSettings, 
@@ -11,16 +13,17 @@ import {
   findClosestEvent,
   calculateChapterProgress,
   settingsUtils,
-  ensureLocations
-} from '../utils/viewerUtils';
-import { getFolderKeyFromFilename } from '../utils/graphData';
-import { useBookmarks } from './useBookmarks';
-import { getBookManifest } from '../utils/api/api';
-import { getMaxChapter } from '../utils/common/cache/manifestCache';
-import { normalizeTitle } from '../utils/stringUtils';
+  ensureLocations,
+  errorUtils,
+  bookUtils
+} from '../../utils/viewerUtils';
+import { getFolderKeyFromFilename } from '../../utils/graphData';
+import { useBookmarks } from '../bookmarks/useBookmarks';
+import { getBookManifest } from '../../utils/api/api';
+import { getMaxChapter } from '../../utils/common/cache/manifestCache';
 
 export function useViewerPage() {
-  const { filename: bookId } = useParams(); // filename을 bookId로 rename
+  const { filename: bookId } = useParams();
   const location = useLocation();
   const navigate = useNavigate();
   
@@ -28,97 +31,64 @@ export function useViewerPage() {
   const previousPage = location.state?.from || null;
   const isFromLibrary = previousPage?.pathname === '/user/mypage' || location.state?.fromLibrary === true;
   
-  // URL 쿼리 파라미터 파싱 (통합)
-  const urlSearchParams = useMemo(() => {
-    const params = new URLSearchParams(location.search);
-    return {
-      chapter: params.get('chapter'),
-      page: params.get('page'),
-      progress: params.get('progress'),
-      graphMode: params.get('graphMode')
-    };
-  }, [location.search]);
+  // URL 파라미터 관리
+  const {
+    urlSearchParams,
+    savedChapter,
+    savedPage,
+    savedProgress,
+    savedGraphMode,
+    initialGraphMode,
+    currentPage,
+    setCurrentPage,
+    currentChapter,
+    setCurrentChapter,
+    currentChapterRef,
+    updateURL,
+    prevUrlStateRef
+  } = useViewerUrlParams();
   
-  const savedChapter = urlSearchParams.chapter;
-  const savedPage = urlSearchParams.page;
-  const savedProgress = urlSearchParams.progress;
-  const savedGraphMode = urlSearchParams.graphMode;
+  // 서버 책 매칭
+  const {
+    serverBook,
+    loadingServerBook,
+    matchedServerBook
+  } = useServerBookMatching(bookId);
   
   const viewerRef = useRef(null);
   const [reloadKey, setReloadKey] = useState(0);
   const [failCount, setFailCount] = useState(0);
-  const [currentPage, setCurrentPage] = useState(() => {
-    return savedPage ? parseInt(savedPage, 10) : 1;
-  });
   const [totalPages, setTotalPages] = useState(1);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
-  
-  // 초기 상태 계산 (통합)
-  const initialGraphMode = useMemo(() => {
-    if (savedGraphMode === 'graph') return { fullScreen: true, show: true };
-    if (savedGraphMode === 'split') return { fullScreen: false, show: true };
-    if (savedGraphMode === 'viewer') return { fullScreen: false, show: false };
-    
-    const saved = loadViewerMode();
-    if (saved === "graph") return { fullScreen: true, show: true };
-    if (saved === "split") return { fullScreen: false, show: true };
-    if (saved === "viewer") return { fullScreen: false, show: false };
-    return { fullScreen: false, show: loadSettings().showGraph };
-  }, [savedGraphMode]);
-
-  const [currentChapter, setCurrentChapter] = useState(() => {
-    return savedChapter ? parseInt(savedChapter, 10) : 1;
-  });
-  
-  const prevUrlChapterRef = useRef(savedChapter ? parseInt(savedChapter, 10) : null);
-  
-  // URL 파라미터 변경 시 currentChapter 업데이트 (중복 제거)
-  useEffect(() => {
-    const chapterParam = urlSearchParams.chapter;
-    if (chapterParam) {
-      const chapterNum = parseInt(chapterParam, 10);
-      if (chapterNum && chapterNum > 0 && chapterNum !== currentChapter) {
-        if (prevUrlChapterRef.current !== chapterNum) {
-          prevUrlChapterRef.current = chapterNum;
-          setCurrentChapter(chapterNum);
-        }
-      }
-    } else {
-      prevUrlChapterRef.current = null;
-    }
-  }, [urlSearchParams, currentChapter]);
   const [currentEvent, setCurrentEvent] = useState(null);
   const [prevEvent, setPrevEvent] = useState(null);
   const [events, setEvents] = useState([]);
   const [maxChapter, setMaxChapter] = useState(1);
   const [isInitialChapterDetected, setIsInitialChapterDetected] = useState(false);
-  const [matchedServerBook, setMatchedServerBook] = useState(null);
   
   const [graphFullScreen, setGraphFullScreen] = useState(initialGraphMode.fullScreen);
   const [showGraph, setShowGraph] = useState(initialGraphMode.show);
+  const isInitialMountRef = useRef(true);
   
-  // 새로고침 시 localStorage에서 분할 모드 복원
+  // savedGraphMode 변경 시 상태 동기화
   useEffect(() => {
-    if (performance && performance.getEntriesByType) {
-      const navEntries = performance.getEntriesByType("navigation");
-      if (navEntries.length > 0 && navEntries[0].type === "reload") {
-        // URL 파라미터가 없으면 localStorage에서 복원
-        if (!savedGraphMode) {
-          const saved = loadViewerMode();
-          if (saved === "graph") {
-            setGraphFullScreen(true);
-            setShowGraph(true);
-          } else if (saved === "split") {
-            setGraphFullScreen(false);
-            setShowGraph(true);
-          } else if (saved === "viewer") {
-            setGraphFullScreen(false);
-            setShowGraph(false);
-          }
-        }
-      }
+    if (isInitialMountRef.current) {
+      isInitialMountRef.current = false;
+      return;
+    }
+    
+    if (savedGraphMode === 'graph') {
+      setGraphFullScreen(true);
+      setShowGraph(true);
+    } else if (savedGraphMode === 'split') {
+      setGraphFullScreen(false);
+      setShowGraph(true);
+    } else if (savedGraphMode === 'viewer') {
+      setGraphFullScreen(false);
+      setShowGraph(false);
     }
   }, [savedGraphMode]);
+  
   
   // useGraphDataLoader는 아래에서 사용됨
   const [currentCharIndex, setCurrentCharIndex] = useState(0);
@@ -142,8 +112,7 @@ export function useViewerPage() {
   const prevElementsRef = useRef([]);
   const prevChapterNumRef = useRef();
   const prevEventNumRef = useRef();
-  const matchedServerBookRef = useRef(null);
-  const prevNormalizedTitleRef = useRef(null);
+  const eventsRef = useRef([]);
   const [maxChapterEvents, setMaxChapterEvents] = useState(new Map());
   
   const [graphDiff, setGraphDiff] = useState({
@@ -152,230 +121,15 @@ export function useViewerPage() {
     updated: [],
   });
   
-  // 서버에서 책 정보 가져오기 (URL 직접 접근 시)
-  // 서버에는 EPUB 파일을 제외한 메타데이터만 있음
-  const [serverBook, setServerBook] = useState(null);
-  const [loadingServerBook, setLoadingServerBook] = useState(false);
-  
-  useEffect(() => {
-    const fetchServerBook = async () => {
-      // location.state?.book이 있으면 서버 호출 불필요
-      if (location.state?.book) {
-        return;
-      }
-      
-      const numericBookId = parseInt(bookId, 10);
-      if (isNaN(numericBookId)) {
-        return;
-      }
-      
-      setLoadingServerBook(true);
-      try {
-        const { getBook } = await import('../utils/api/booksApi');
-        const response = await getBook(numericBookId);
-        
-        if (response && response.isSuccess && response.result) {
-          const bookData = response.result;
-          setServerBook(bookData);
-        }
-      } catch (error) {
-        // 에러는 조용히 처리
-      } finally {
-        setLoadingServerBook(false);
-      }
-    };
-    
-    fetchServerBook();
-  }, [bookId, location.state?.book]);
-  
-  // matchedServerBook을 ref로 추적하여 의존성 문제 방지
-  useEffect(() => {
-    matchedServerBookRef.current = matchedServerBook;
-  }, [matchedServerBook]);
-
-  useEffect(() => {
-    const stateBook = location.state?.book;
-    if (!stateBook || typeof stateBook.id === 'number') {
-      if (matchedServerBookRef.current) {
-        setMatchedServerBook(null);
-      }
-      prevNormalizedTitleRef.current = null;
-      return;
-    }
-
-    const normalizedTitle = normalizeTitle(stateBook.title);
-    if (!normalizedTitle) {
-      if (matchedServerBookRef.current) {
-        setMatchedServerBook(null);
-      }
-      prevNormalizedTitleRef.current = null;
-      return;
-    }
-
-    // 이미 같은 제목으로 검색했으면 스킵
-    if (prevNormalizedTitleRef.current === normalizedTitle) {
-      const currentMatched = matchedServerBookRef.current;
-      if (
-        currentMatched &&
-        typeof currentMatched.id === 'number' &&
-        normalizeTitle(currentMatched.title) === normalizedTitle
-      ) {
-        return;
-      }
-    }
-
-    prevNormalizedTitleRef.current = normalizedTitle;
-    let cancelled = false;
-
-    const fetchMatchingServerBook = async () => {
-      try {
-        const { getBooks } = await import('../utils/api/booksApi');
-        const response = await getBooks({ q: stateBook.title });
-
-        if (cancelled) {
-          return;
-        }
-
-        if (response?.isSuccess && Array.isArray(response.result)) {
-          const matched = response.result.filter(
-            (item) => normalizeTitle(item.title) === normalizedTitle && typeof item.id === 'number'
-          );
-          
-          if (matched.length > 0) {
-            const sortedMatched = matched.sort((a, b) => {
-              const aId = Number(a?.id) || Number.MAX_SAFE_INTEGER;
-              const bId = Number(b?.id) || Number.MAX_SAFE_INTEGER;
-              return aId - bId;
-            });
-            
-            setMatchedServerBook(sortedMatched[0]);
-            return;
-          }
-        }
-
-        setMatchedServerBook(null);
-      } catch (error) {
-        if (!cancelled) {
-          setMatchedServerBook(null);
-        }
-      }
-    };
-
-    fetchMatchingServerBook();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [location.state?.book]);
-
-  useEffect(() => {
-    if (!matchedServerBook || typeof matchedServerBook.id !== 'number') {
-      return;
-    }
-
-    const numericId = matchedServerBook.id;
-    if (`${numericId}` === bookId) {
-      return;
-    }
-
-    const stateBook = location.state?.book;
-    // 로컬 bookID는 사용하지 않음 - bookId를 IndexedDB 키로 사용
-    const indexedDbKey = String(numericId);
-
-    navigate(`/user/viewer/${numericId}${location.search || ''}`, {
-      replace: true,
-      state: {
-        ...location.state,
-        book: {
-          ...matchedServerBook,
-          epubFile: stateBook?.epubFile,
-          epubArrayBuffer: stateBook?.epubArrayBuffer,
-          filename: String(numericId),
-          _indexedDbId: indexedDbKey,
-          _bookId: numericId,
-          _needsLoad: !stateBook?.epubFile && !stateBook?.epubArrayBuffer,
-          epubPath: undefined,
-          filePath: undefined,
-          s3Path: undefined,
-          fileUrl: undefined
-        }
-      }
-    });
-  }, [matchedServerBook, bookId, location.search, location.state, navigate]);
 
   const book = useMemo(() => {
-    if (location.state?.book) {
-      const stateBook = location.state.book;
-
-      if (matchedServerBook && typeof matchedServerBook.id === 'number') {
-        // 로컬 bookID는 사용하지 않음 - bookId를 IndexedDB 키로 사용
-        const indexedDbKey = String(matchedServerBook.id);
-
-        return {
-          ...matchedServerBook,
-          epubFile: stateBook.epubFile,
-          epubArrayBuffer: stateBook.epubArrayBuffer,
-          filename: String(matchedServerBook.id ?? bookId),
-          _indexedDbId: indexedDbKey,
-          _needsLoad: !stateBook.epubFile && !stateBook.epubArrayBuffer,
-          _bookId: matchedServerBook.id,
-          epubPath: undefined,
-          filePath: undefined,
-          s3Path: undefined,
-          fileUrl: undefined
-        };
-      }
-
-      // 로컬 bookID는 사용하지 않음 - bookId를 IndexedDB 키로 사용
-      const stateBookId = stateBook.id || stateBook._bookId || bookId;
-      const indexedDbKey = stateBookId ? String(stateBookId) : null;
-
-      return {
-        ...stateBook,
-        epubFile: stateBook.epubFile,
-        epubArrayBuffer: stateBook.epubArrayBuffer,
-        filename: bookId,
-        _indexedDbId: indexedDbKey,
-        _needsLoad: !stateBook.epubFile && !stateBook.epubArrayBuffer,
-        _bookId: stateBook.id || stateBook._bookId || bookId,
-        epubPath: undefined,
-        filePath: undefined,
-        s3Path: undefined,
-        fileUrl: undefined
-      };
-    }
-    
-    // URL 직접 접근: 서버에서 가져온 책 메타데이터 사용
-    if (serverBook) {
-      // 로컬 bookID는 사용하지 않음 - bookId를 IndexedDB 키로 사용
-      const indexedDbKey = serverBook.id ? String(serverBook.id) : null;
-      
-      return {
-        ...serverBook,
-        filename: bookId,
-        _needsLoad: true, // IndexedDB에서 EPUB 로드 필요
-        _indexedDbId: indexedDbKey, // bookId로 IndexedDB 접근
-        _bookId: serverBook.id,
-        epubPath: undefined,
-        filePath: undefined,
-        s3Path: undefined,
-        fileUrl: undefined
-      };
-    }
-    
-    // 서버 책 정보 로딩 중이거나 실패한 경우 기본값
-    const numericBookId = parseInt(bookId, 10);
-    const indexedDbKey = !isNaN(numericBookId) ? String(numericBookId) : bookId;
-    
-    return {
-      title: loadingServerBook ? '로딩 중...' : `Book ${bookId}`,
-      filename: bookId,
-      id: !isNaN(numericBookId) ? numericBookId : null,
-      _needsLoad: true,
-      _indexedDbId: indexedDbKey, // bookId로 IndexedDB 접근
-      _bookId: !isNaN(numericBookId) ? numericBookId : bookId,
-      epubPath: undefined
-    };
+    return bookUtils.createBookObject({
+      stateBook: location.state?.book,
+      matchedServerBook,
+      serverBook,
+      bookId,
+      loadingServerBook
+    });
   }, [location.state?.book, matchedServerBook, bookId, serverBook, loadingServerBook]);
 
   const isLocalBook = useMemo(
@@ -539,12 +293,18 @@ export function useViewerPage() {
     }
   }, [currentEvent, currentChapter]);
   
+  // events 변경 시 ref 동기화
+  useEffect(() => {
+    eventsRef.current = events;
+  }, [events]);
+  
   // elements가 변경될 때 로딩 상태 업데이트
   useEffect(() => {
-    if (elements) {
+    // graphLoading이 false이고 elements가 배열이며 데이터가 있을 때만 로딩 완료
+    if (!graphLoading && Array.isArray(elements) && elements.length > 0) {
       setIsGraphLoading(false);
     }
-  }, [elements]);
+  }, [elements, graphLoading]);
   
   // elements, chapterNum, eventNum이 바뀔 때마다 이전 값 저장
   useEffect(() => {
@@ -559,29 +319,42 @@ export function useViewerPage() {
       const navEntries = performance.getEntriesByType("navigation");
       if (navEntries.length > 0 && navEntries[0].type === "reload") {
         setIsReloading(true);
-        setIsGraphLoading(true); // 새로고침 시 그래프 로딩 상태도 true로 설정
+        setIsGraphLoading(true);
         
         // 새로고침 시 모든 상태 초기화
         setCurrentEvent(null);
         setPrevEvent(null);
         setEvents([]);
         setCharacterData(null);
-        // elements는 useGraphDataLoader에서 관리됨
         setIsDataReady(false);
         setIsInitialChapterDetected(false);
         prevValidEventRef.current = null;
         
+        // URL 파라미터가 없으면 localStorage에서 그래프 모드 복원
+        if (!savedGraphMode) {
+          const saved = loadViewerMode();
+          if (saved === "graph") {
+            setGraphFullScreen(true);
+            setShowGraph(true);
+          } else if (saved === "split") {
+            setGraphFullScreen(false);
+            setShowGraph(true);
+          } else if (saved === "viewer") {
+            setGraphFullScreen(false);
+            setShowGraph(false);
+          }
+        }
         
         // 새로고침 완료 후 일정 시간 후에 isReloading을 false로 설정
         const timer = setTimeout(() => {
           setIsReloading(false);
-          setIsGraphLoading(false); // 새로고침 완료 시 그래프 로딩 상태도 false로 설정
-        }, 1000); // 1초 후 새로고침 완료로 간주
+          setIsGraphLoading(false);
+        }, 1000);
         
         return () => clearTimeout(timer);
       }
     }
-  }, []);
+  }, [savedGraphMode]);
   
   // currentEvent가 변경될 때마다 eventNum 업데이트
   useEffect(() => {
@@ -747,13 +520,13 @@ export function useViewerPage() {
       try {
         const cfi = await viewerRef.current.getCurrentCfi();
         const chapterMatch = cfi.match(/\[chapter-(\d+)\]/);
-        let chapterNum = currentChapter;
+        let chapterNum = currentChapterRef.current;
         if (chapterMatch) chapterNum = parseInt(chapterMatch[1]);
 
         // 챕터 번호 업데이트
         setCurrentChapter(chapterNum);
 
-        const currentEvents = events;
+        const currentEvents = eventsRef.current;
         if (currentEvents && currentEvents.length > 0) {
           const bookInstance = viewerRef.current?.bookRef?.current;
           const progressInfo = calculateChapterProgress(cfi, chapterNum, currentEvents, bookInstance);
@@ -769,40 +542,11 @@ export function useViewerPage() {
           }
         }
       } catch (e) {
+        // 에러는 조용히 처리 (뷰어 이동 중 에러는 일반적)
       }
     }
-  }, [currentChapter, events]);
+  }, []);
   
-  // URL 업데이트 함수
-  const updateURL = useCallback((updates = {}) => {
-    const currentParams = new URLSearchParams(location.search);
-    
-    // 업데이트할 파라미터들
-    if (updates.chapter !== undefined) {
-      currentParams.set('chapter', updates.chapter);
-    }
-    if (updates.page !== undefined) {
-      currentParams.set('page', updates.page);
-    }
-    if (updates.progress !== undefined) {
-      currentParams.set('progress', updates.progress);
-    }
-    if (updates.graphMode !== undefined) {
-      currentParams.set('graphMode', updates.graphMode);
-    }
-    
-    // URL 업데이트 (히스토리 스택에 추가하지 않음)
-    const newURL = `${location.pathname}?${currentParams.toString()}`;
-    window.history.replaceState({}, '', newURL);
-  }, [location.pathname, location.search]);
-  
-  const prevUrlStateRef = useRef({
-    chapter: null,
-    page: null,
-    progress: null,
-    graphMode: null
-  });
-
   // 상태 변경 시 URL 업데이트
   useEffect(() => {
     const graphModeValue = graphFullScreen ? 'graph' : (showGraph ? 'split' : 'viewer');

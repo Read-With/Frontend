@@ -1,6 +1,6 @@
 import React, { useRef, useState } from 'react';
 import PropTypes from 'prop-types';
-import { useFileUpload, FILE_CONSTRAINTS } from '../../hooks/useFileUpload';
+import { useFileUpload, FILE_CONSTRAINTS } from '../../hooks/books/useFileUpload';
 import { getBooks } from '../../utils/api/booksApi';
 import { theme } from '../common/theme';
 import ePub from 'epubjs';

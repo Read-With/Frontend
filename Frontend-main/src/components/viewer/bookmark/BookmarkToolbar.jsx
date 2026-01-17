@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import BookmarkCreator from './BookmarkCreator';
 import BookmarkEditor from './BookmarkEditor';
-import { useBookmarks } from '../../../hooks/useBookmarks';
+import { useBookmarks } from '../../../hooks/bookmarks/useBookmarks';
 
 /**
  * 북마크 툴바 컴포넌트

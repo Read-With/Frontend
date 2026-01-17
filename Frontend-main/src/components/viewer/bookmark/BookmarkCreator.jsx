@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useBookmarks } from '../../../hooks/useBookmarks';
+import { useBookmarks } from '../../../hooks/bookmarks/useBookmarks';
 
 /**
  * 북마크 생성 컴포넌트
