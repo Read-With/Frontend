@@ -14,13 +14,7 @@ import {
   ensureLocations
 } from '../utils/viewerUtils';
 import { getFolderKeyFromFilename } from '../utils/graphData';
-import { 
-  loadBookmarks, 
-  addBookmark, 
-  removeBookmark,
-  loadBookmarksFromLocal,
-  saveBookmarksToLocal
-} from '../components/viewer/bookmark/BookmarkManager';
+import { useBookmarks } from './useBookmarks';
 import { getBookManifest } from '../utils/api/api';
 import { getMaxChapter } from '../utils/common/cache/manifestCache';
 import { normalizeTitle } from '../utils/stringUtils';
@@ -34,12 +28,21 @@ export function useViewerPage() {
   const previousPage = location.state?.from || null;
   const isFromLibrary = previousPage?.pathname === '/user/mypage' || location.state?.fromLibrary === true;
   
-  // URL 쿼리 파라미터 파싱 (useMemo로 통합)
-  const urlParams = useMemo(() => new URLSearchParams(location.search), [location.search]);
-  const savedChapter = useMemo(() => urlParams.get('chapter'), [urlParams]);
-  const savedPage = useMemo(() => urlParams.get('page'), [urlParams]);
-  const savedProgress = useMemo(() => urlParams.get('progress'), [urlParams]);
-  const savedGraphMode = useMemo(() => urlParams.get('graphMode'), [urlParams]);
+  // URL 쿼리 파라미터 파싱 (통합)
+  const urlSearchParams = useMemo(() => {
+    const params = new URLSearchParams(location.search);
+    return {
+      chapter: params.get('chapter'),
+      page: params.get('page'),
+      progress: params.get('progress'),
+      graphMode: params.get('graphMode')
+    };
+  }, [location.search]);
+  
+  const savedChapter = urlSearchParams.chapter;
+  const savedPage = urlSearchParams.page;
+  const savedProgress = urlSearchParams.progress;
+  const savedGraphMode = urlSearchParams.graphMode;
   
   const viewerRef = useRef(null);
   const [reloadKey, setReloadKey] = useState(0);
@@ -50,35 +53,40 @@ export function useViewerPage() {
   const [totalPages, setTotalPages] = useState(1);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   
+  // 초기 상태 계산 (통합)
+  const initialGraphMode = useMemo(() => {
+    if (savedGraphMode === 'graph') return { fullScreen: true, show: true };
+    if (savedGraphMode === 'split') return { fullScreen: false, show: true };
+    if (savedGraphMode === 'viewer') return { fullScreen: false, show: false };
+    
+    const saved = loadViewerMode();
+    if (saved === "graph") return { fullScreen: true, show: true };
+    if (saved === "split") return { fullScreen: false, show: true };
+    if (saved === "viewer") return { fullScreen: false, show: false };
+    return { fullScreen: false, show: loadSettings().showGraph };
+  }, [savedGraphMode]);
+
   const [currentChapter, setCurrentChapter] = useState(() => {
     return savedChapter ? parseInt(savedChapter, 10) : 1;
   });
   
   const prevUrlChapterRef = useRef(savedChapter ? parseInt(savedChapter, 10) : null);
   
-  // URL 파라미터 변경 시 currentChapter 업데이트
+  // URL 파라미터 변경 시 currentChapter 업데이트 (중복 제거)
   useEffect(() => {
-    const chapterParam = urlParams.get('chapter');
+    const chapterParam = urlSearchParams.chapter;
     if (chapterParam) {
       const chapterNum = parseInt(chapterParam, 10);
-      if (chapterNum && chapterNum > 0) {
-        // URL의 chapter 값이 실제로 변경되었는지 확인
+      if (chapterNum && chapterNum > 0 && chapterNum !== currentChapter) {
         if (prevUrlChapterRef.current !== chapterNum) {
           prevUrlChapterRef.current = chapterNum;
-          if (chapterNum !== currentChapter) {
-            setCurrentChapter(chapterNum);
-          }
+          setCurrentChapter(chapterNum);
         }
       }
     } else {
       prevUrlChapterRef.current = null;
     }
-  }, [urlParams, currentChapter]);
-  
-  // currentChapter가 변경되면 ref도 업데이트
-  useEffect(() => {
-    prevUrlChapterRef.current = currentChapter;
-  }, [currentChapter]);
+  }, [urlSearchParams, currentChapter]);
   const [currentEvent, setCurrentEvent] = useState(null);
   const [prevEvent, setPrevEvent] = useState(null);
   const [events, setEvents] = useState([]);
@@ -86,31 +94,8 @@ export function useViewerPage() {
   const [isInitialChapterDetected, setIsInitialChapterDetected] = useState(false);
   const [matchedServerBook, setMatchedServerBook] = useState(null);
   
-  const [graphFullScreen, setGraphFullScreen] = useState(() => {
-    // URL 파라미터 우선 확인
-    if (savedGraphMode === 'graph') return true;
-    if (savedGraphMode === 'split') return false;
-    if (savedGraphMode === 'viewer') return false;
-    
-    // URL 파라미터가 없으면 localStorage에서 복원
-    const saved = loadViewerMode();
-    if (saved === "graph") return true;
-    if (saved === "split") return false;
-    if (saved === "viewer") return false;
-    return false;
-  });
-  
-  const [showGraph, setShowGraph] = useState(() => {
-    // URL 파라미터 우선 확인
-    if (savedGraphMode === 'graph' || savedGraphMode === 'split') return true;
-    if (savedGraphMode === 'viewer') return false;
-    
-    // URL 파라미터가 없으면 localStorage에서 복원
-    const saved = loadViewerMode();
-    if (saved === "graph" || saved === "split") return true;
-    if (saved === "viewer") return false;
-    return loadSettings().showGraph;
-  });
+  const [graphFullScreen, setGraphFullScreen] = useState(initialGraphMode.fullScreen);
+  const [showGraph, setShowGraph] = useState(initialGraphMode.show);
   
   // 새로고침 시 localStorage에서 분할 모드 복원
   useEffect(() => {
@@ -153,14 +138,12 @@ export function useViewerPage() {
   const [isGraphLoading, setIsGraphLoading] = useState(true);
   const [showToolbar, setShowToolbar] = useState(false);
   
-  const [bookmarks, setBookmarks] = useState([]);
-  const [bookmarksLoading, setBookmarksLoading] = useState(true);
-  const [showBookmarkList, setShowBookmarkList] = useState(false);
-  
   const prevValidEventRef = useRef(null);
   const prevElementsRef = useRef([]);
   const prevChapterNumRef = useRef();
   const prevEventNumRef = useRef();
+  const matchedServerBookRef = useRef(null);
+  const prevNormalizedTitleRef = useRef(null);
   const [maxChapterEvents, setMaxChapterEvents] = useState(new Map());
   
   const [graphDiff, setGraphDiff] = useState({
@@ -205,31 +188,43 @@ export function useViewerPage() {
     fetchServerBook();
   }, [bookId, location.state?.book]);
   
+  // matchedServerBook을 ref로 추적하여 의존성 문제 방지
+  useEffect(() => {
+    matchedServerBookRef.current = matchedServerBook;
+  }, [matchedServerBook]);
+
   useEffect(() => {
     const stateBook = location.state?.book;
     if (!stateBook || typeof stateBook.id === 'number') {
-      if (matchedServerBook) {
+      if (matchedServerBookRef.current) {
         setMatchedServerBook(null);
       }
+      prevNormalizedTitleRef.current = null;
       return;
     }
 
     const normalizedTitle = normalizeTitle(stateBook.title);
     if (!normalizedTitle) {
-      if (matchedServerBook) {
+      if (matchedServerBookRef.current) {
         setMatchedServerBook(null);
       }
+      prevNormalizedTitleRef.current = null;
       return;
     }
 
-    if (
-      matchedServerBook &&
-      typeof matchedServerBook.id === 'number' &&
-      normalizeTitle(matchedServerBook.title) === normalizedTitle
-    ) {
-      return;
+    // 이미 같은 제목으로 검색했으면 스킵
+    if (prevNormalizedTitleRef.current === normalizedTitle) {
+      const currentMatched = matchedServerBookRef.current;
+      if (
+        currentMatched &&
+        typeof currentMatched.id === 'number' &&
+        normalizeTitle(currentMatched.title) === normalizedTitle
+      ) {
+        return;
+      }
     }
 
+    prevNormalizedTitleRef.current = normalizedTitle;
     let cancelled = false;
 
     const fetchMatchingServerBook = async () => {
@@ -242,20 +237,17 @@ export function useViewerPage() {
         }
 
         if (response?.isSuccess && Array.isArray(response.result)) {
-          // 정규화된 제목으로 매칭
           const matched = response.result.filter(
             (item) => normalizeTitle(item.title) === normalizedTitle && typeof item.id === 'number'
           );
           
           if (matched.length > 0) {
-            // 동일한 책 제목이 여러 개인 경우, bookId 중 가장 작은 수를 선택
             const sortedMatched = matched.sort((a, b) => {
               const aId = Number(a?.id) || Number.MAX_SAFE_INTEGER;
               const bId = Number(b?.id) || Number.MAX_SAFE_INTEGER;
               return aId - bId;
             });
             
-            // 가장 작은 bookId 선택
             setMatchedServerBook(sortedMatched[0]);
             return;
           }
@@ -274,7 +266,7 @@ export function useViewerPage() {
     return () => {
       cancelled = true;
     };
-  }, [location.state?.book, matchedServerBook]);
+  }, [location.state?.book]);
 
   useEffect(() => {
     if (!matchedServerBook || typeof matchedServerBook.id !== 'number') {
@@ -501,28 +493,22 @@ export function useViewerPage() {
     };
   }, []);
   
-  useEffect(() => {
-    const fetchBookmarks = async () => {
-      if (!cleanBookId) return;
-      
-      setBookmarksLoading(true);
-      try {
-        if (isLocalBook) {
-          const localBookmarks = loadBookmarksFromLocal(cleanBookId);
-          setBookmarks(localBookmarks);
-        } else {
-          const bookmarksData = await loadBookmarks(cleanBookId);
-          setBookmarks(bookmarksData);
-        }
-      } catch (error) {
-        setBookmarks([]);
-      } finally {
-        setBookmarksLoading(false);
-      }
-    };
-
-    fetchBookmarks();
-  }, [cleanBookId, isLocalBook]);
+  // 북마크 관리 훅 (통합)
+  const {
+    bookmarks,
+    setBookmarks,
+    loading: bookmarksLoading,
+    showBookmarkList,
+    setShowBookmarkList,
+    handleAddBookmark,
+    handleRemoveBookmark,
+    handleBookmarkSelect,
+    handleDeleteBookmark
+  } = useBookmarks(cleanBookId, {
+    isLocalBook,
+    viewerRef,
+    setFailCount
+  });
   
   // 페이지 변경 시 현재 챕터 번호 업데이트
   // handleLocationChange에서 이미 로컬 CFI 기반으로 챕터를 업데이트하므로 중복 제거
@@ -628,142 +614,6 @@ export function useViewerPage() {
     }
   }, []);
   
-  // 북마크 삭제 핸들러 (로컬/서버 분기 처리)
-  const handleRemoveBookmark = useCallback(async (bookmarkId) => {
-    try {
-      if (isLocalBook) {
-        setBookmarks(prev => {
-          const next = prev.filter(b => b.id !== bookmarkId);
-          saveBookmarksToLocal(cleanBookId, next);
-          return next;
-        });
-        toast.success("북마크가 삭제되었습니다");
-      } else {
-        const result = await removeBookmark(bookmarkId);
-        if (result.success) {
-          setBookmarks(prev => prev.filter(b => b.id !== bookmarkId));
-          toast.success("북마크가 삭제되었습니다");
-        } else {
-          toast.error(result.message || "북마크 삭제에 실패했습니다");
-        }
-      }
-    } catch (error) {
-      toast.error("북마크 삭제에 실패했습니다");
-    }
-  }, [isLocalBook, cleanBookId]);
-
-  const handleAddBookmark = useCallback(async () => {
-    if (!viewerRef.current) {
-      toast.error("❗ 페이지가 아직 준비되지 않았어요. 다시 불러옵니다...");
-      setFailCount((cnt) => cnt + 1);
-      return;
-    }
-    
-    let cfi = null;
-    let pageNum = null;
-    let chapterNum = null;
-    
-    try {
-      cfi = await viewerRef.current.getCurrentCfi?.();
-      
-      // 로컬 CFI에서 페이지와 챕터 정보 추출
-      if (cfi) {
-        // 챕터 번호 추출
-        const chapterMatch = cfi.match(/\[chapter-(\d+)\]/);
-        if (chapterMatch) {
-          chapterNum = parseInt(chapterMatch[1]);
-        }
-        
-        // 페이지 번호 추출 (bookInstance를 통해 정확한 페이지 번호 얻기)
-        try {
-          const bookInstance = viewerRef.current?.bookRef?.current;
-          if (bookInstance?.locations) {
-            const locIdx = bookInstance.locations.locationFromCfi?.(cfi);
-            if (Number.isFinite(locIdx) && locIdx >= 0) {
-              const totalLocations = bookInstance.locations.length?.() || 1;
-              pageNum = Math.max(1, Math.min(locIdx + 1, totalLocations));
-            }
-          }
-        } catch (e) {
-          // bookInstance 접근 실패 시 CFI에서 직접 파싱
-          const pageMatch = cfi.match(/\[chapter-\d+\]\/(\d+)/);
-          if (pageMatch) {
-            pageNum = parseInt(pageMatch[1]);
-          }
-        }
-      }
-    } catch (e) {
-      // getCurrentCfi 에러 처리
-    }
-    
-    if (!cfi) {
-      toast.error("❗ 페이지 정보를 읽을 수 없습니다. 다시 불러옵니다...");
-      setFailCount((cnt) => cnt + 1);
-      return;
-    }
-
-    setFailCount(0);
-
-    // 북마크 제목 생성: "몇페이지 (챕터 몇)" 형식
-    let bookmarkTitle = '';
-    if (pageNum && chapterNum) {
-      bookmarkTitle = `${pageNum}페이지 (${chapterNum}챕터)`;
-    } else if (pageNum) {
-      bookmarkTitle = `${pageNum}페이지`;
-    } else if (chapterNum) {
-      bookmarkTitle = `${chapterNum}챕터`;
-    } else {
-      bookmarkTitle = `북마크 ${bookmarks.length + 1}`;
-    }
-    
-    // 기존 북마크가 있는지 확인
-    const existingBookmark = bookmarks.find(b => b.startCfi === cfi);
-    
-    if (existingBookmark) {
-      // 이미 북마크가 있으면 삭제 (handleRemoveBookmark 재사용)
-      await handleRemoveBookmark(existingBookmark.id);
-      return;
-    } else {
-      // 새 북마크 추가
-      if (isLocalBook) {
-        // 로컬 책의 경우 로컬 스토리지에 추가
-        const newBookmark = {
-          id: Date.now().toString(),
-          startCfi: cfi,
-          title: bookmarkTitle,
-          pageNum: pageNum,
-          chapterNum: chapterNum,
-          createdAt: new Date().toISOString()
-        };
-        const updatedBookmarks = [...bookmarks, newBookmark];
-        setBookmarks(updatedBookmarks);
-        saveBookmarksToLocal(cleanBookId, updatedBookmarks);
-        toast.success("📖 북마크가 추가되었습니다");
-      } else {
-        // 서버 책의 경우 서버에 추가 (서버 bookId 사용, title 포함)
-        const result = await addBookmark(cleanBookId, cfi, null, '#28B532', '', bookmarkTitle);
-        if (result.success) {
-          // 서버 응답에 title이 없으면 추가
-          const bookmarkWithTitle = {
-            ...result.bookmark,
-            title: bookmarkTitle,
-            pageNum: pageNum,
-            chapterNum: chapterNum
-          };
-          setBookmarks(prev => [...prev, bookmarkWithTitle]);
-          toast.success("📖 북마크가 추가되었습니다");
-        } else {
-          toast.error(result.message || "북마크 추가에 실패했습니다");
-        }
-      }
-    }
-  }, [cleanBookId, bookmarks, book, isLocalBook, handleRemoveBookmark]);
-  
-  const handleBookmarkSelect = useCallback((cfi) => {
-    viewerRef.current?.displayAt(cfi);
-    setShowBookmarkList(false);
-  }, []);
-  
   const handleOpenSettings = useCallback(() => {
     setShowSettingsModal(true);
   }, []);
@@ -819,9 +669,6 @@ export function useViewerPage() {
     // 최종 실패 시 경고만 표시 (새로고침하지 않음)
     console.warn('프로그레스 이동 실패: 뷰어가 준비되지 않았습니다.');
   }, [setProgress, viewerRef]);
-
-  // 호환성을 위해 handleDeleteBookmark로도 노출
-  const handleDeleteBookmark = handleRemoveBookmark;
   
   // 그래프 표시 토글 함수
   const toggleGraph = useCallback(() => {
@@ -845,11 +692,24 @@ export function useViewerPage() {
           attempts++;
         }
 
+        // applySettings 호출 전에 현재 CFI를 저장
+        const savedCfi = await viewerRef.current?.getCurrentCfi?.();
+        
         // 레이아웃만 갱신
         viewerRef.current?.applySettings?.();
         
-        // 현재 위치 동기화
-        const cfi = await viewerRef.current?.getCurrentCfi?.();
+        // 렌더링이 완료될 때까지 대기 (spread 변경 후 리렌더링 시간 확보)
+        await new Promise(resolve => setTimeout(resolve, 150));
+        
+        // 저장된 CFI로 다시 이동하여 위치 유지
+        if (savedCfi && viewerRef.current?.displayAt) {
+          await viewerRef.current.displayAt(savedCfi);
+          // displayAt 호출 후 위치 안정화 대기
+          await new Promise(resolve => setTimeout(resolve, 100));
+        }
+        
+        // 최종 위치 동기화
+        const finalCfi = await viewerRef.current?.getCurrentCfi?.();
         const bookInstance = viewerRef.current?.getBookInstance?.();
 
         if (bookInstance) {
@@ -857,8 +717,8 @@ export function useViewerPage() {
           const total = Math.max(1, Number(bookInstance.locations?.length?.()) || 1);
           setTotalPages(total);
 
-          if (cfi) {
-            const locIdx = bookInstance.locations?.locationFromCfi?.(cfi);
+          if (finalCfi) {
+            const locIdx = bookInstance.locations?.locationFromCfi?.(finalCfi);
             if (Number.isFinite(locIdx) && locIdx >= 0) {
               const pageNum = Math.min(locIdx + 1, total);
               setCurrentPage(pageNum);

@@ -181,29 +181,8 @@ function UnifiedEdgeTooltip({
     }
   }, [loading, isInitialLoad]);
 
-  // 차트 모드일 때 데이터 가져오기 (통합된 이벤트 정보 사용)
-  useEffect(() => {
-    if (viewMode === "chart") {
-      fetchData();
-    }
-  }, [viewMode, id1, id2, chapterNum, unifiedEventInfo.eventNum, maxChapter, fetchData]);
-
-  // 앞면에서도 관계 존재 여부 확인 (viewer 모드에서만, 통합된 이벤트 정보 사용)
-  // fallback positivity 값이 있으면 즉시 표시하고, API 호출은 백그라운드에서 처리
-  useEffect(() => {
-    if (viewMode === "info" && mode === 'viewer') {
-      // fallback 값이 있으면 즉시 표시하고 API 호출은 비동기로 처리
-      if (hasFallbackPositivity) {
-        // 다음 틱에서 API 호출 (UI 블로킹 방지)
-        setTimeout(() => {
-          fetchData();
-        }, 0);
-      } else {
-        // fallback 값이 없으면 즉시 API 호출
-        fetchData();
-      }
-    }
-  }, [viewMode, id1, id2, chapterNum, unifiedEventInfo.eventNum, mode, fetchData, hasFallbackPositivity]);
+  // useRelationData가 컴포넌트 마운트 시 자동으로 데이터를 가져오므로,
+  // viewMode 변경 시 추가로 fetchData()를 호출하지 않음
 
   // 컴포넌트 언마운트 시 리소스 정리
   useEffect(() => {

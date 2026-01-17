@@ -40,7 +40,8 @@ export const useBooks = () => {
       if (Array.isArray(parsed)) {
         return new Set(parsed.map((id) => `${id}`));
       }
-    } catch {
+    } catch (error) {
+      console.warn('hiddenServerBookIds 초기화 실패:', error);
     }
     return new Set();
   });
@@ -199,7 +200,7 @@ export const useBooks = () => {
       return { books: fetched, needsAuth: false };
     },
     staleTime: 5 * 60 * 1000,
-    cacheTime: 30 * 60 * 1000,
+    gcTime: 30 * 60 * 1000,
     retry: 1,
   });
 
@@ -290,19 +291,11 @@ export const useBooks = () => {
     localBookKeysRef.current.forEach((key) => localKeys.add(key));
     
     const reconciled = reconcileBooks(serverBooks, localKeys);
-    const serverKeys = new Set(reconciled.map((book) => getBookKey(book)).filter(Boolean));
-
-    const metadataMap = new Map();
-    localOnlyBooks.forEach((book) => {
-      const key = book._bookIdKey || getBookKey(book);
-      if (key) {
-        metadataMap.set(key, { ...book });
-      }
-    });
 
     const combinedMap = new Map();
+    
     localOnlyBooks.forEach((book) => {
-      const key = getBookKey(book);
+      const key = book._bookIdKey || getBookKey(book);
       if (key) {
         combinedMap.set(key, { ...book });
       }
@@ -313,7 +306,7 @@ export const useBooks = () => {
       if (!key) {
         return;
       }
-      const localInfo = metadataMap.get(key);
+      const localInfo = combinedMap.get(key);
       if (localInfo) {
         combinedMap.set(key, {
           ...localInfo,
@@ -324,26 +317,19 @@ export const useBooks = () => {
           coverImgUrl: book.coverImgUrl || localInfo.coverImgUrl || '',
           coverImage: book.coverImgUrl || localInfo.coverImgUrl || '',
         });
-      } else {
-        if (localKeys.has(key)) {
-          combinedMap.set(key, {
-            ...book,
-            _bookId: book.id,
-          });
-        }
+      } else if (localKeys.has(key)) {
+        combinedMap.set(key, {
+          ...book,
+          _bookId: book.id,
+        });
       }
     });
 
     const hiddenIds = hiddenServerBookIdsRef.current;
-    const nextBooks = Array.from(combinedMap.values()).filter((book) => {
+    return Array.from(combinedMap.values()).filter((book) => {
       const idKey = book?.id !== undefined && book?.id !== null ? `${book.id}` : null;
-      if (idKey && hiddenIds.has(idKey)) {
-        return false;
-      }
-      return true;
+      return !idKey || !hiddenIds.has(idKey);
     });
-
-    return nextBooks;
   }, [serverBooksData, localOnlyBooks, localBookKeys, reconcileBooks]);
 
   // 즐겨찾기 토글 - useMutation + 낙관적 업데이트
