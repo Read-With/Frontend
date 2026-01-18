@@ -181,7 +181,8 @@ export function useViewerPage() {
     eventNum: graphEventNum,
     maxChapter: detectedMaxChapter,
     loading: graphLoading, // graphLoading: useGraphDataLoader에서 반환, 그래프 데이터 로딩 상태
-    error: graphError
+    error: graphError,
+    isDataEmpty
   } = useGraphDataLoader(graphBookId, currentChapter, currentEvent?.eventNum || 1);
   
   // maxChapter 설정 (통합)
@@ -300,11 +301,13 @@ export function useViewerPage() {
   
   // elements가 변경될 때 로딩 상태 업데이트
   useEffect(() => {
-    // graphLoading이 false이고 elements가 배열이며 데이터가 있을 때만 로딩 완료
-    if (!graphLoading && Array.isArray(elements) && elements.length > 0) {
+    // graphLoading이 false이면 로딩 완료 (데이터가 있든 없든)
+    // elements가 있을 때만 로딩 완료로 설정했던 것을 수정하여
+    // 데이터가 없어도 로딩이 완료된 것으로 처리
+    if (!graphLoading) {
       setIsGraphLoading(false);
     }
-  }, [elements, graphLoading]);
+  }, [elements, graphLoading, isDataEmpty]);
   
   // elements, chapterNum, eventNum이 바뀔 때마다 이전 값 저장
   useEffect(() => {
@@ -747,8 +750,10 @@ export function useViewerPage() {
       loading,
       isReloading,
       isGraphLoading,
+      graphLoading, // useGraphDataLoader의 실제 데이터 로딩 상태
       isDataReady,
-      showToolbar
+      showToolbar,
+      isDataEmpty
     },
     
     searchState: {

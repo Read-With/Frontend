@@ -91,7 +91,7 @@ function GraphSplitArea({
   const showSuggestionsValue = searchState?.showSuggestions ?? false;
   const selectedSuggestionIndex = searchState?.selectedIndex ?? -1;
   
-  const { loading, isReloading, isGraphLoading, isDataReady } = viewerState;
+  const { loading, isReloading, isGraphLoading, graphLoading, isDataReady, isDataEmpty } = viewerState;
   const { elements, currentEvent, currentChapter } = graphState;
   const { filterStage } = graphActions;
   
@@ -141,11 +141,22 @@ function GraphSplitArea({
   const hasCurrentEvent = !!currentEvent;
   const hasElements = elements && Array.isArray(elements) && elements.length > 0;
   
+  // graphLoading이 false이고 isDataEmpty가 true면 데이터 로드 완료 후 데이터 없음 상태
+  // 이 경우 다른 로딩 조건들을 무시하고 데이터 없음 메시지를 우선 표시
+  const isDataLoadCompleteAndEmpty = graphLoading === false && isDataEmpty && !hasElements;
+  
+  // 로딩 중인지 확인 (API 호출 중이거나 데이터를 가져오는 중)
+  // 단, 데이터 로드 완료 후 데이터가 없는 경우는 제외
+  const isLoading = isDataLoadCompleteAndEmpty 
+    ? false 
+    : (loading || isReloading || !isLocationDetermined || (!isDataReady && isApiBook && !hasCurrentEvent) || (graphLoading !== false && isGraphLoading));
+  
+  // 로딩 완료 후 데이터가 없는 경우
+  const shouldShowEmptyData = isDataLoadCompleteAndEmpty;
+  
   // 로컬 책의 경우 currentEvent가 없어도 elements가 있으면 그래프 표시
   // API 책의 경우 currentEvent와 elements가 모두 필요
-  const shouldShowLoading = hasElements
-    ? false
-    : (loading || isReloading || !isLocationDetermined || (!isDataReady && isApiBook && !hasCurrentEvent));
+  const shouldShowLoading = hasElements ? false : isLoading;
 
   return (
     <div
@@ -196,6 +207,14 @@ function GraphSplitArea({
               {!isLocationDetermined ? '현재 읽고 있는 위치를 파악하고 있습니다. 잠시만 기다려주세요.' :
                transitionState.type === 'chapter' ? '새로운 챕터의 이벤트를 준비하고 있습니다.' : 
                '관계 데이터를 분석하고 있습니다.'}
+            </p>
+          </div>
+        ) : shouldShowEmptyData ? (
+          <div style={loadingContainerStyle}>
+            <div style={warningIconStyle}>📭</div>
+            <h3 style={titleStyle}>아직 이벤트가 없습니다</h3>
+            <p style={descriptionStyle}>
+              현재 챕터에는 그래프 데이터가 없습니다. 이벤트가 생성되면 여기에 표시됩니다.
             </p>
           </div>
         ) : apiError ? (
