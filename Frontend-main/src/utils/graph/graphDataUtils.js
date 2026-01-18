@@ -1,6 +1,6 @@
 import { getCharactersData, createCharacterMapsWithCache } from './graphData';
-import { createCharacterMaps, getCharacterImagePath } from './characterUtils';
-import { normalizeRelation, isValidRelation } from './relationUtils';
+import { createCharacterMaps, getCharacterImagePath } from '../characterUtils';
+import { normalizeRelation, isValidRelation } from '../relationUtils';
 
 /**
  * 이벤트 텍스트에서 첫 번째 단어를 추출하는 함수

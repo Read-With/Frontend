@@ -1,6 +1,6 @@
 import { useCallback, useRef, useEffect } from "react";
 import { applySearchHighlight } from '../../utils/searchUtils.jsx';
-import { getContainerInfo, calculateCytoscapePosition } from '../../utils/graphUtils';
+import { getContainerInfo, calculateCytoscapePosition } from '../../utils/graph/graphUtils';
 
 export default function useGraphInteractions({
   cyRef,

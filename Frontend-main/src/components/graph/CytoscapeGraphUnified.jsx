@@ -1,9 +1,9 @@
 import React, { useEffect, useRef, useState, useCallback, createContext, useMemo } from "react";
 import cytoscape from "cytoscape";
 import "./RelationGraph.css";
-import { detectAndResolveOverlap, calcGraphDiff } from "../../utils/graphDataUtils.js";
+import { detectAndResolveOverlap, calcGraphDiff } from "../../utils/graph/graphDataUtils.js";
 import { applySearchFadeEffect, shouldShowNoSearchResults, getNoSearchResultsMessage } from "../../utils/searchUtils.jsx";
-import { createRippleEffect, ensureElementsInBounds, createMouseEventHandlers } from "../../utils/graphUtils.js";
+import { createRippleEffect, ensureElementsInBounds, createMouseEventHandlers } from "../../utils/graph/graphUtils.js";
 import { calculateNodeSize } from "../../utils/styles/graphStyles.js";
 import useGraphInteractions from "../../hooks/graph/useGraphInteractions.js";
 import { eventUtils } from "../../utils/viewerUtils";

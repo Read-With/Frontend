@@ -3,7 +3,7 @@ import { buildNodeWeights, extractCharacterId } from '../../characterUtils';
 import { getFineGraph, getBookManifest } from '../../api/api';
 import { getChapterData as getManifestChapterData, getManifestFromCache } from './manifestCache';
 import { createCharacterMaps } from '../../characterUtils';
-import { convertRelationsToElements, calcGraphDiff } from '../../graphDataUtils';
+import { convertRelationsToElements, calcGraphDiff } from '../../graph/graphDataUtils';
 import { 
   registerCache, 
   getCacheItem, 

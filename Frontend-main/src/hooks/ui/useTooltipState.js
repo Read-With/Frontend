@@ -12,7 +12,7 @@
  */
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { processTooltipData } from '../../utils/graphUtils';
+import { processTooltipData } from '../../utils/graph/graphUtils';
 
 /**
  * 툴팁 상태 관리 훅

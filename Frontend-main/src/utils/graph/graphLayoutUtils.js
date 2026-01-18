@@ -10,16 +10,16 @@
  */
 
 import cytoscape from 'cytoscape';
-import { createStorageKey } from '../hooks/common/useLocalStorage';
-import { extractEventNodesAndEdges } from './viewerUtils';
+import { createStorageKey } from '../../hooks/common/useLocalStorage';
+import { extractEventNodesAndEdges } from '../viewerUtils';
 import { 
   getDetectedMaxChapter, 
   getCharactersDataFromMaxChapter, 
   getEventsForChapter 
 } from './graphData';
-import { createCharacterMaps } from './characterUtils';
+import { createCharacterMaps } from '../characterUtils';
 import { convertRelationsToElements } from './graphDataUtils';
-import { errorUtils } from './common/errorUtils';
+import { errorUtils } from '../common/errorUtils';
 
 /**
  * 그래프 레이아웃 복원

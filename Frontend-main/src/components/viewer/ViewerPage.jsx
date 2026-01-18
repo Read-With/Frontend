@@ -23,13 +23,13 @@ import {
   graphDataTransformUtils,
   cacheKeyUtils
 } from "../../utils/viewerUtils";
-import { restoreGraphLayout, preloadChapterLayouts } from "../../utils/graphLayoutUtils";
+import { restoreGraphLayout, preloadChapterLayouts } from "../../utils/graph/graphLayoutUtils";
 import { applyBookmarkHighlights, removeBookmarkHighlights } from "./bookmark/BookmarkManager";
 import { 
   getEventsForChapter,
   getEventDataByIndex
-} from "../../utils/graphData";
-import { convertRelationsToElements, filterRelationsByTimeline } from "../../utils/graphDataUtils";
+} from "../../utils/graph/graphData";
+import { convertRelationsToElements, filterRelationsByTimeline } from "../../utils/graph/graphDataUtils";
 import { buildNodeWeights, createCharacterMaps } from "../../utils/characterUtils";
 import { getRelationKeyFromRelation } from "../../utils/relationUtils";
 import { errorUtils } from "../../utils/common/errorUtils";

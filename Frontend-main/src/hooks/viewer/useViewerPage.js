@@ -17,7 +17,7 @@ import {
   errorUtils,
   bookUtils
 } from '../../utils/viewerUtils';
-import { getFolderKeyFromFilename } from '../../utils/graphData';
+import { getFolderKeyFromFilename } from '../../utils/graph/graphData';
 import { useBookmarks } from '../bookmarks/useBookmarks';
 import { getBookManifest } from '../../utils/api/api';
 import { getMaxChapter } from '../../utils/common/cache/manifestCache';

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { getContainerInfo, getViewportInfo, calculateCytoscapePosition, constrainToViewport } from '../../utils/graphUtils';
+import { getContainerInfo, getViewportInfo, calculateCytoscapePosition, constrainToViewport } from '../../utils/graph/graphUtils';
 
 export function useTooltipPosition(initialX, initialY) {
   const [position, setPosition] = useState({ x: 200, y: 200 });

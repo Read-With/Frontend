@@ -1,7 +1,7 @@
 import React from "react";
 import GraphContainer from "../graph/GraphContainer";
 import ViewerTopBar from "./ViewerTopBar";
-import { filterMainCharacters } from "../../utils/graphDataUtils";
+import { filterMainCharacters } from "../../utils/graph/graphDataUtils";
 import { bookUtils } from "../../utils/viewerUtils";
 
 const loadingContainerStyle = {
@@ -64,6 +64,28 @@ const retryButtonStyle = {
 };
 
 const retryButtonHoverStyle = '#4A5A4A';
+
+const handleButtonHover = (e, isEntering) => {
+  e.target.style.backgroundColor = isEntering ? retryButtonHoverStyle : retryButtonStyle.backgroundColor;
+};
+
+const ErrorMessage = ({ icon, title, description, buttonText, onButtonClick }) => (
+  <div style={loadingContainerStyle}>
+    <div style={icon === '❌' ? errorIconStyle : warningIconStyle}>{icon}</div>
+    <h3 style={titleStyle}>{title}</h3>
+    <p style={descriptionStyle}>{description}</p>
+    {buttonText && onButtonClick && (
+      <button
+        onClick={onButtonClick}
+        style={retryButtonStyle}
+        onMouseEnter={(e) => handleButtonHover(e, true)}
+        onMouseLeave={(e) => handleButtonHover(e, false)}
+      >
+        {buttonText}
+      </button>
+    )}
+  </div>
+);
 
 function GraphSplitArea({
   graphState,
@@ -159,21 +181,7 @@ function GraphSplitArea({
   const shouldShowLoading = hasElements ? false : isLoading;
 
   return (
-    <div
-      className="h-full w-full flex flex-col"
-      style={{
-        display: "flex",
-        flexDirection: "column",
-        height: "100%",
-        minHeight: 0,
-        width: "100%",
-        overflow: "hidden",
-        alignItems: "stretch",
-        justifyContent: "stretch",
-        boxSizing: "border-box",
-        padding: 0,
-      }}
-    >
+    <div className="h-full w-full flex flex-col" style={{ minHeight: 0, overflow: "hidden" }}>
       <ViewerTopBar
         graphState={graphState}
         graphActions={graphActions}
@@ -218,33 +226,21 @@ function GraphSplitArea({
             </p>
           </div>
         ) : apiError ? (
-          <div style={loadingContainerStyle}>
-            <div style={errorIconStyle}>❌</div>
-            <h3 style={titleStyle}>{apiError.message}</h3>
-            <p style={descriptionStyle}>{apiError.details}</p>
-            <button
-              onClick={apiError.retry}
-              style={retryButtonStyle}
-              onMouseEnter={(e) => { e.target.style.backgroundColor = retryButtonHoverStyle; }}
-              onMouseLeave={(e) => { e.target.style.backgroundColor = retryButtonStyle.backgroundColor; }}
-            >
-              다시 시도
-            </button>
-          </div>
+          <ErrorMessage 
+            icon="❌" 
+            title={apiError.message} 
+            description={apiError.details}
+            buttonText="다시 시도"
+            onButtonClick={apiError.retry}
+          />
         ) : transitionState.error ? (
-          <div style={loadingContainerStyle}>
-            <div style={warningIconStyle}>⚠️</div>
-            <h3 style={titleStyle}>일시적인 오류가 발생했습니다</h3>
-            <p style={descriptionStyle}>새로고침하면 정상적으로 작동할 것입니다.</p>
-            <button
-              onClick={() => window.location.reload()}
-              style={retryButtonStyle}
-              onMouseEnter={(e) => { e.target.style.backgroundColor = retryButtonHoverStyle; }}
-              onMouseLeave={(e) => { e.target.style.backgroundColor = retryButtonStyle.backgroundColor; }}
-            >
-              새로고침
-            </button>
-          </div>
+          <ErrorMessage 
+            icon="⚠️" 
+            title="일시적인 오류가 발생했습니다" 
+            description="새로고침하면 정상적으로 작동할 것입니다."
+            buttonText="새로고침"
+            onButtonClick={() => window.location.reload()}
+          />
         ) : (
           <GraphContainer
             ref={graphContainerRef}

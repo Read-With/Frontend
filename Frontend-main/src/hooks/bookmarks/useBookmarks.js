@@ -7,6 +7,8 @@ import {
   loadBookmarksFromLocal,
   saveBookmarksToLocal
 } from '../../components/viewer/bookmark/BookmarkManager';
+import { cfiUtils } from '../../utils/common/cfiUtils';
+import { createBookmarkTitle } from '../../utils/bookmarkUtils';
 
 export const useBookmarks = (bookId, options = {}) => {
   const { 
@@ -35,10 +37,12 @@ export const useBookmarks = (bookId, options = {}) => {
       } else {
         let bookmarksData = await loadBookmarksFromManager(bookId);
         if (sort && sort !== 'time_desc') {
-          bookmarksData = [...(bookmarksData || [])].sort((a, b) => {
-            const dateA = new Date(a.createdAt || 0);
-            const dateB = new Date(b.createdAt || 0);
-            return sort === 'time_asc' ? dateA - dateB : dateB - dateA;
+          const sorted = [...(bookmarksData || [])];
+          const factor = sort === 'time_asc' ? 1 : -1;
+          bookmarksData = sorted.sort((a, b) => {
+            const dateA = new Date(a.createdAt || a.created_at || 0).getTime();
+            const dateB = new Date(b.createdAt || b.created_at || 0).getTime();
+            return (dateA - dateB) * factor;
           });
         }
         setBookmarks(bookmarksData || []);
@@ -131,22 +135,6 @@ export const useBookmarks = (bookId, options = {}) => {
     return await modifyBookmark(bookmarkId, { memo });
   }, [modifyBookmark]);
 
-  const sortBookmarks = useCallback((sortOrder) => {
-    const sorted = [...bookmarks].sort((a, b) => {
-      const dateA = new Date(a.createdAt);
-      const dateB = new Date(b.createdAt);
-      
-      switch (sortOrder) {
-        case 'time_asc':
-          return dateA - dateB;
-        case 'time_desc':
-        default:
-          return dateB - dateA;
-      }
-    });
-    
-    setBookmarks(sorted);
-  }, [bookmarks]);
 
   // 북마크 추가 (뷰어 특화: CFI 자동 추출)
   const handleAddBookmark = useCallback(async () => {
@@ -164,10 +152,7 @@ export const useBookmarks = (bookId, options = {}) => {
       cfi = await viewerRef.current.getCurrentCfi?.();
       
       if (cfi) {
-        const chapterMatch = cfi.match(/\[chapter-(\d+)\]/);
-        if (chapterMatch) {
-          chapterNum = parseInt(chapterMatch[1]);
-        }
+        chapterNum = cfiUtils.extractChapterNumber(cfi);
         
         try {
           const bookInstance = viewerRef.current?.bookRef?.current;
@@ -179,10 +164,7 @@ export const useBookmarks = (bookId, options = {}) => {
             }
           }
         } catch (e) {
-          const pageMatch = cfi.match(/\[chapter-\d+\]\/(\d+)/);
-          if (pageMatch) {
-            pageNum = parseInt(pageMatch[1]);
-          }
+          pageNum = cfiUtils.extractPageNumber(cfi);
         }
       }
     } catch (e) {
@@ -197,17 +179,7 @@ export const useBookmarks = (bookId, options = {}) => {
 
     if (setFailCount) setFailCount(0);
 
-    // 북마크 제목 생성: "몇페이지 (챕터 몇)" 형식
-    let bookmarkTitle = '';
-    if (pageNum && chapterNum) {
-      bookmarkTitle = `${pageNum}페이지 (${chapterNum}챕터)`;
-    } else if (pageNum) {
-      bookmarkTitle = `${pageNum}페이지`;
-    } else if (chapterNum) {
-      bookmarkTitle = `${chapterNum}챕터`;
-    } else {
-      bookmarkTitle = `북마크 ${bookmarks.length + 1}`;
-    }
+    const bookmarkTitle = createBookmarkTitle(pageNum, chapterNum, cfi, bookmarks.length + 1);
     
     // 기존 북마크가 있는지 확인
     const existingBookmark = bookmarks.find(b => b.startCfi === cfi);
@@ -269,7 +241,6 @@ export const useBookmarks = (bookId, options = {}) => {
     removeBookmark,
     changeBookmarkColor,
     changeBookmarkMemo,
-    sortBookmarks,
   };
 
   // 뷰어 특화 기능이 있으면 추가로 노출

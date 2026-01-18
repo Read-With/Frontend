@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import BookmarkCreator from './BookmarkCreator';
-import BookmarkEditor from './BookmarkEditor';
 import { useBookmarks } from '../../../hooks/bookmarks/useBookmarks';
 
 /**
@@ -107,7 +106,7 @@ const BookmarkToolbar = ({ bookId, startCfi, endCfi, onBookmarkCreated }) => {
 
       {/* 북마크 편집 모달 */}
       {showEditor && editingBookmark && (
-        <BookmarkEditor
+        <BookmarkCreator
           bookId={bookId}
           bookmark={editingBookmark}
           onClose={handleCloseEditor}

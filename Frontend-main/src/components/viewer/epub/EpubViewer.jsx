@@ -26,7 +26,7 @@ import {
 } from '../../../utils/viewerUtils';
 import { getProgressFromCache } from '../../../utils/common/cache/progressCache';
 import { registerCache } from '../../../utils/common/cache/cacheManager';
-import { getEventsForChapter as getGraphEventsForChapter, getFolderKeyFromFilename } from '../../../utils/graphData';
+import { getEventsForChapter as getGraphEventsForChapter, getFolderKeyFromFilename } from '../../../utils/graph/graphData';
 
 // EPUB 인스턴스 및 Blob 캐시
 let epubCache = new Map();

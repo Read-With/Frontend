@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useParams } from "react-router-dom";
 import { processRelations, processRelationTags } from "../../../utils/relationUtils.js";
-import { getChapterLastEventNums, getFolderKeyFromFilename, getEventDataByIndex, getDetectedMaxChapter, getCharacterPerspectiveSummary } from "../../../utils/graphData.js";
+import { getChapterLastEventNums, getFolderKeyFromFilename, getEventDataByIndex, getDetectedMaxChapter, getCharacterPerspectiveSummary } from "../../../utils/graph/graphData.js";
 import { useTooltipPosition } from "../../../hooks/ui/useTooltipPosition.js";
 import { useClickOutside } from "../../../hooks/ui/useClickOutside.js";
 import { useRelationData } from "../../../hooks/graph/useRelationData.jsx";
