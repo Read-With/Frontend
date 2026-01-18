@@ -1,11 +1,12 @@
 import React, { useEffect, useRef, useState, useCallback, createContext, useMemo } from "react";
 import cytoscape from "cytoscape";
 import "./RelationGraph.css";
-import { detectAndResolveOverlap, calcGraphDiff } from "../../utils/graphDataUtils.js";
+import { detectAndResolveOverlap, calcGraphDiff } from "../../utils/graph/graphDataUtils.js";
 import { applySearchFadeEffect, shouldShowNoSearchResults, getNoSearchResultsMessage } from "../../utils/searchUtils.jsx";
-import { createRippleEffect, ensureElementsInBounds, createMouseEventHandlers } from "../../utils/graphUtils.js";
+import { createRippleEffect, ensureElementsInBounds, createMouseEventHandlers } from "../../utils/graph/graphUtils.js";
 import { calculateNodeSize } from "../../utils/styles/graphStyles.js";
-import useGraphInteractions from "../../hooks/useGraphInteractions.js";
+import useGraphInteractions from "../../hooks/graph/useGraphInteractions.js";
+import { eventUtils } from "../../utils/viewerUtils";
 
 
 export const CytoscapeGraphContext = createContext();
@@ -98,9 +99,8 @@ const CytoscapeGraphUnified = ({
 
     const diff = calcGraphDiff(previousElementsRef.current, elements);
     const addedNodeIds = diff.added
-      ?.filter(element => element?.data && !element.data.source && !element.data.target)
-      ?.map(element => element.data.id)
-      ?.filter(Boolean) || [];
+      ? eventUtils.filterNodes(diff.added).map(element => element.data.id).filter(Boolean)
+      : [];
 
     addedNodeIdsRef.current = new Set(addedNodeIds);
     previousElementsRef.current = elements;
@@ -327,8 +327,8 @@ const CytoscapeGraphUnified = ({
       cy.nodes().forEach(n => { if (!nextNodeIds.has(n.id())) n.remove(); });
       cy.edges().forEach(e => { if (!nextEdgeIds.has(e.id())) e.remove(); });
       
-      const nodes = elements.filter(e => !e.data.source && !e.data.target);
-      const edges = elements.filter(e => e.data.source && e.data.target);
+      const nodes = eventUtils.filterNodes(elements);
+      const edges = eventUtils.filterEdges(elements);
       
       const NODE_SIZE = 40;
       const MIN_DISTANCE = NODE_SIZE * 3.2;

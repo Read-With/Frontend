@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { 
   buildSuggestions, 
   filterGraphElements
-} from '../utils/searchUtils.jsx';
+} from '../../utils/searchUtils.jsx';
 
 export function useGraphSearch(elements, onSearchStateChange = null, currentChapterData = null) {
   const [searchTerm, setSearchTerm] = useState("");

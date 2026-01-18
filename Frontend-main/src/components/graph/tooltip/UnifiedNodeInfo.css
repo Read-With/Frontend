@@ -21,13 +21,6 @@
   box-shadow: 0 0.5rem 1.5rem rgba(239, 68, 68, 0.15);
 }
 
-/* 등장하지 않은 인물 컨테이너 */
-.graph-node-tooltip.not-appeared {
-  background: #E8F5E8;
-  border-color: #cbd5e1;
-  box-shadow: 0 0.5rem 1.5rem rgba(148, 163, 184, 0.15);
-}
-
 /* 툴팁 닫기 버튼 */
 .tooltip-close-btn {
   position: absolute;
@@ -71,10 +64,6 @@
   transform: rotateY(0deg);
 }
 
-.business-card-front {
-  transform: rotateY(0deg);
-}
-
 /* 프로필 이미지 플레이스홀더 */
 .profile-image-placeholder {
   width: 4.6875rem;
@@ -112,16 +101,6 @@
   word-break: keep-all;
 }
 
-/* 사이드바 컨테이너 */
-.sidebar-container {
-  display: flex;
-  flex-direction: column;
-  height: 100vh;
-  background: #E8F5E8;
-  border-left: 0.0625rem solid #e5e7eb;
-  box-shadow: -0.25rem 0 0.75rem rgba(0, 0, 0, 0.1);
-}
-
 /* 사이드바 콘텐츠 */
 .sidebar-content {
   flex: 1;
@@ -137,54 +116,6 @@
   margin-bottom: 1.5rem;
   border: 0.0625rem solid #e5e7eb;
   box-shadow: 0 0.0625rem 0.1875rem rgba(0, 0, 0, 0.05);
-}
-
-/* 언어 전환 버튼 */
-.language-toggle-btn {
-  position: absolute;
-  top: 14px;
-  right: 56px;
-  background: #E8F5E8;
-  border: 1px solid #e5e7eb;
-  border-radius: 6px;
-  padding: 4px 12px;
-  font-size: 13px;
-  font-weight: 600;
-  color: #5C6F5C;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  z-index: 2;
-}
-
-.language-toggle-btn:hover {
-  background: #E8F5E8;
-}
-
-.language-toggle-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-/* 사이드바 언어 전환 버튼 */
-.sidebar-language-toggle {
-  background: #E8F5E8;
-  border: 1px solid #e5e7eb;
-  border-radius: 6px;
-  padding: 0 12px;
-  height: 2.5rem;
-  font-size: 13px;
-  font-weight: 600;
-  color: #5C6F5C;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  margin-right: 8px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.sidebar-language-toggle:hover {
-  background: #E8F5E8;
 }
 
 /* 사이드바 닫기 버튼 */
@@ -343,10 +274,6 @@
   }
 }
 
-.fade-in {
-  animation: fadeIn 0.4s ease-in-out;
-}
-
 /* 반응형 디자인 */
 @media (max-width: 768px) {
   .graph-node-tooltip {
@@ -358,10 +285,6 @@
     width: 95vw;
     height: 80vh;
     padding: 1rem;
-  }
-  
-  .sidebar-container {
-    width: 100vw;
   }
 }
 

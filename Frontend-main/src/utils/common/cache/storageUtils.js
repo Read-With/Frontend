@@ -1,4 +1,13 @@
-import { registerCache, getCacheItem, setCacheItem, clearCache, removeCacheItem } from './cacheManager';
+import { 
+  registerCache, 
+  getCacheItem, 
+  setCacheItem, 
+  clearCache, 
+  removeCacheItem,
+  getRawFromStorage,
+  setRawToStorage,
+  removeFromStorage
+} from './cacheManager';
 
 const STORAGE_TTL = 5 * 60 * 1000;
 const storageCache = new Map();
@@ -11,33 +20,6 @@ registerCache('storageCache', storageCache, {
   persist: true
 });
 
-function getFromStorage(key) {
-  if (typeof localStorage === 'undefined') return null;
-  try {
-    return localStorage.getItem(key);
-  } catch {
-    return null;
-  }
-}
-
-function setToStorage(key, value) {
-  if (typeof localStorage === 'undefined') return;
-  try {
-    localStorage.setItem(key, value);
-  } catch (error) {
-    console.error('localStorage 저장 실패:', error);
-  }
-}
-
-function removeFromStorageLocal(key) {
-  if (typeof localStorage === 'undefined') return;
-  try {
-    localStorage.removeItem(key);
-  } catch (error) {
-    console.error('localStorage 삭제 실패:', error);
-  }
-}
-
 export const storageUtils = {
   get: (key) => {
     const cached = getCacheItem('storageCache', key);
@@ -45,7 +27,7 @@ export const storageUtils = {
       return cached.value;
     }
     
-    const value = getFromStorage(key);
+    const value = getRawFromStorage(key, 'localStorage');
     if (value !== null) {
       setCacheItem('storageCache', key, {
         value,
@@ -57,7 +39,7 @@ export const storageUtils = {
   },
   
   set: (key, value) => {
-    setToStorage(key, value);
+    setRawToStorage(key, value, 'localStorage');
     setCacheItem('storageCache', key, {
       value,
       timestamp: Date.now(),
@@ -66,7 +48,7 @@ export const storageUtils = {
   },
   
   remove: (key) => {
-    removeFromStorageLocal(key);
+    removeFromStorage(key, 'localStorage');
     removeCacheItem('storageCache', key);
   },
   
@@ -77,7 +59,7 @@ export const storageUtils = {
     }
     
     try {
-      const stored = getFromStorage(key);
+      const stored = getRawFromStorage(key, 'localStorage');
       const value = stored ? JSON.parse(stored) : defaultValue;
       setCacheItem('storageCache', key, {
         value,
@@ -97,7 +79,7 @@ export const storageUtils = {
   
   setJson: (key, value) => {
     const jsonValue = JSON.stringify(value);
-    setToStorage(key, jsonValue);
+    setRawToStorage(key, jsonValue, 'localStorage');
     setCacheItem('storageCache', key, {
       value,
       timestamp: Date.now(),

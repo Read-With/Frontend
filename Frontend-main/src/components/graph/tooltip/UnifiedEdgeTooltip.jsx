@@ -2,9 +2,9 @@ import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { Line } from "react-chartjs-2";
 import "chart.js/auto";
 import { useParams } from "react-router-dom";
-import { useTooltipPosition } from "../../../hooks/useTooltipPosition";
-import { useClickOutside } from "../../../hooks/useClickOutside";
-import { useRelationData } from "../../../hooks/useRelationData";
+import { useTooltipPosition } from "../../../hooks/ui/useTooltipPosition";
+import { useClickOutside } from "../../../hooks/ui/useClickOutside";
+import { useRelationData } from "../../../hooks/graph/useRelationData";
 import { getRelationStyle, getRelationLabels, tooltipStyles } from "../../../utils/styles/relationStyles";
 import { createButtonStyle, createAdvancedButtonHandlers, COLORS, ANIMATION_VALUES, unifiedNodeTooltipStyles } from "../../../utils/styles/styles";
 import { mergeRefs } from "../../../utils/styles/animations";
@@ -165,6 +165,21 @@ function UnifiedEdgeTooltip({
     getMaxEventCount,
   } = useRelationData(relationDataMode, id1, id2, chapterNum, unifiedEventInfo.eventNum, safeMaxChapterValue, filename, numericBookId);
 
+  // fallback positivity 값 확인 (useEffect 이전에 선언 필요)
+  const hasFallbackPositivity = typeof data?.positivity === 'number' && !Number.isNaN(data.positivity);
+  const clampedFallbackPositivity = hasFallbackPositivity
+    ? Math.max(-1, Math.min(1, data.positivity))
+    : null;
+
+  // 관계 라벨 배열 생성 (캐시된 함수 사용으로 성능 최적화)
+  const relationLabels = processRelationTagsCached(data.relation, data.label);
+
+  // 간선이 변경될 때마다 즉시 데이터 불러오기
+  useEffect(() => {
+    if (id1 && id2 && numericBookId && chapterNum) {
+      fetchData();
+    }
+  }, [id1, id2, numericBookId, chapterNum, unifiedEventInfo.eventNum, relationDataMode, fetchData]);
 
   // 초기 로딩 완료 감지
   useEffect(() => {
@@ -173,34 +188,12 @@ function UnifiedEdgeTooltip({
     }
   }, [loading, isInitialLoad]);
 
-  // 차트 모드일 때 데이터 가져오기 (통합된 이벤트 정보 사용)
-  useEffect(() => {
-    if (viewMode === "chart") {
-      fetchData();
-    }
-  }, [viewMode, id1, id2, chapterNum, unifiedEventInfo.eventNum, maxChapter, fetchData]);
-
-  // 앞면에서도 관계 존재 여부 확인 (viewer 모드에서만, 통합된 이벤트 정보 사용)
-  useEffect(() => {
-    if (viewMode === "info" && mode === 'viewer') {
-      fetchData();
-    }
-  }, [viewMode, id1, id2, chapterNum, unifiedEventInfo.eventNum, mode, fetchData]);
-
   // 컴포넌트 언마운트 시 리소스 정리
   useEffect(() => {
     return () => {
       cleanupRelationUtils();
     };
   }, []);
-
-  // 관계 라벨 배열 생성 (캐시된 함수 사용으로 성능 최적화)
-  const relationLabels = processRelationTagsCached(data.relation, data.label);
-
-  const hasFallbackPositivity = typeof data?.positivity === 'number' && !Number.isNaN(data.positivity);
-  const clampedFallbackPositivity = hasFallbackPositivity
-    ? Math.max(-1, Math.min(1, data.positivity))
-    : null;
 
   const timelineHasNumeric = Array.isArray(timeline)
     ? timeline.some(value => typeof value === 'number' && !Number.isNaN(value))
@@ -433,10 +426,13 @@ function UnifiedEdgeTooltip({
     return lastPair ? lastPair.value : null;
   }, [chartPairs, mode, currentEventNumber]);
 
+  // effectivePositivity 계산 최적화: fallback 값을 우선 사용하여 즉시 표시
   const effectivePositivity = useMemo(() => {
+    // timelinePositivity가 있으면 우선 사용 (더 정확한 값)
     if (typeof timelinePositivity === 'number' && !Number.isNaN(timelinePositivity)) {
       return Math.max(-1, Math.min(1, timelinePositivity));
     }
+    // fallback 값을 즉시 사용 (API 응답 대기 없이 표시)
     if (typeof clampedFallbackPositivity === 'number' && !Number.isNaN(clampedFallbackPositivity)) {
       return clampedFallbackPositivity;
     }
@@ -1001,16 +997,15 @@ function UnifiedEdgeTooltip({
             &times;
           </button>
           {viewMode === "info" && (
-            <div style={{ minHeight: '100%', display: 'flex', flexDirection: 'column' }}>
+            <div style={{ height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
               {(mode === 'viewer' && effectiveNoRelation) ? (
                 <div style={{ 
-                  flex: 1, 
+                  height: '100%',
                   display: 'flex', 
                   flexDirection: 'column',
                   justifyContent: 'center',
                   alignItems: 'center', 
                   padding: '1rem',
-                  minHeight: '100%',
                   width: 'calc(100% - 40px)',
                   margin: '0 auto'
                 }}>
@@ -1057,19 +1052,22 @@ function UnifiedEdgeTooltip({
                 </div>
               ) : (
                 <div style={{ 
+                  height: '100%',
                   display: 'flex', 
                   flexDirection: 'column', 
-                  alignItems: 'center', 
-                  justifyContent: 'center',
-                  flex: 1,
-                  padding: mode === 'viewer' ? '1rem 0.25rem' : '1rem'
+                  overflow: 'hidden',
+                  padding: mode === 'viewer' ? '0.5rem 0.25rem' : '0.5rem'
                 }}>
-                  <div className="edge-tooltip-header" style={{ 
-                    ...tooltipStyles.header, 
-                    padding: mode === 'viewer' ? '0.75rem 0.5rem' : '0.75rem',
-                    width: 'calc(100% - 40px)',
-                    margin: '0 auto'
-                  }}>
+                  <div 
+                    className="edge-tooltip-header" 
+                    style={{ 
+                      ...tooltipStyles.header, 
+                      padding: mode === 'viewer' ? '0.75rem 0.5rem' : '0.75rem',
+                      width: 'calc(100% - 40px)',
+                      margin: '0 auto',
+                      flexShrink: 0
+                    }}
+                  >
                     <div className="relation-tags" style={{ display: 'flex', flexWrap: 'wrap', gap: '0.25rem 0.375rem', marginBottom: '0.5rem' }}>
                       {relationLabels.map((relation, index) => (
                         <span
@@ -1118,15 +1116,21 @@ function UnifiedEdgeTooltip({
                     </div>
                   </div>
                   {data.explanation && (
-                    <div className="edge-tooltip-body" style={{ 
-                      display: 'flex', 
-                      alignItems: 'center', 
-                      justifyContent: 'center',
-                      padding: mode === 'viewer' ? '0.75rem 0.5rem' : '0.75rem',
-                      width: 'calc(100% - 40px)',
-                      margin: '0 auto'
-                    }}>
-                      <div className="relation-explanation">
+                    <div 
+                      className="edge-tooltip-body" 
+                      style={{ 
+                        flex: 1,
+                        overflowY: 'auto',
+                        display: 'flex', 
+                        alignItems: 'flex-start', 
+                        justifyContent: 'center',
+                        padding: mode === 'viewer' ? '0.5rem 0.5rem' : '0.5rem',
+                        width: 'calc(100% - 40px)',
+                        margin: '0 auto',
+                        minHeight: 0
+                      }}
+                    >
+                      <div className="relation-explanation" style={{ width: '100%' }}>
                         <div
                           className="quote-box"
                           style={{ borderLeft: `0.25rem solid ${relationStyle.color}` }}
@@ -1144,7 +1148,7 @@ function UnifiedEdgeTooltip({
                   <div
                     className="edge-tooltip-actions"
                     style={{ 
-                      marginTop: 'auto', 
+                      flexShrink: 0,
                       paddingTop: '0.5rem', 
                       paddingBottom: mode === 'viewer' ? '0.5rem' : '0.75rem', 
                       textAlign: "center",
@@ -1173,23 +1177,36 @@ function UnifiedEdgeTooltip({
         {/* 뒷면 */}
         <div className="edge-tooltip-content edge-tooltip-back" style={tooltipStyles.back}>
           {viewMode === "chart" && (
-            <div style={{ minHeight: '100%', display: 'flex', flexDirection: 'column' }}>
-              <h3 style={{ margin: "0.75rem 0 0.75rem 0", fontWeight: 700, fontSize: '1.125rem', textAlign: "center" }}>
+            <div style={{ height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+              <h3 style={{ 
+                margin: "0.75rem 0 0.5rem 0", 
+                fontWeight: 700, 
+                fontSize: '1.125rem', 
+                textAlign: "center",
+                flexShrink: 0
+              }}>
                 {chartTitle}
               </h3>
               {loading ? (
-                <div style={{ textAlign: "center", marginTop: '3.75rem', flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <div style={{ 
+                  flex: 1,
+                  textAlign: "center", 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  justifyContent: 'center',
+                  minHeight: 0
+                }}>
                   불러오는 중...
                 </div>
               ) : shouldShowRelationError ? (
                 <div style={{ 
-                  flex: 1, 
+                  height: '100%',
                   display: 'flex', 
                   flexDirection: 'column',
                   justifyContent: 'center',
                   alignItems: 'center', 
                   padding: '1rem',
-                  minHeight: '100%'
+                  minHeight: 0
                 }}>
                   <div style={{ 
                     flex: 1,
@@ -1209,7 +1226,7 @@ function UnifiedEdgeTooltip({
                     </div>
                   </div>
                   <div style={{ 
-                    marginTop: 'auto', 
+                    flexShrink: 0,
                     paddingTop: '0.5rem', 
                     paddingBottom: mode === 'viewer' ? '0.5rem' : '0.75rem', 
                     textAlign: "center",
@@ -1230,13 +1247,13 @@ function UnifiedEdgeTooltip({
                 </div>
               ) : (mode === 'viewer' && effectiveNoRelation) ? (
                 <div style={{ 
-                  flex: 1, 
+                  height: '100%',
                   display: 'flex', 
                   flexDirection: 'column',
                   justifyContent: 'center',
                   alignItems: 'center', 
                   padding: '1rem',
-                  minHeight: '100%'
+                  minHeight: 0
                 }}>
                   <div style={{ 
                     flex: 1,
@@ -1256,7 +1273,7 @@ function UnifiedEdgeTooltip({
                     </div>
                   </div>
                   <div style={{ 
-                    marginTop: 'auto', 
+                    flexShrink: 0,
                     paddingTop: '0.5rem', 
                     paddingBottom: mode === 'viewer' ? '0.5rem' : '0.75rem', 
                     textAlign: "center",
@@ -1277,31 +1294,42 @@ function UnifiedEdgeTooltip({
                 </div>
               ) : (
                 <div style={{ 
-                  flex: 1, 
-                  padding: mode === 'viewer' ? '0.75rem 0' : '0.75rem 0',
+                  flex: 1,
+                  padding: mode === 'viewer' ? '0.5rem 0' : '0.5rem 0',
                   display: 'flex',
-                  alignItems: mode === 'viewer' ? 'flex-start' : 'center',
-                  justifyContent: mode === 'viewer' ? 'flex-start' : 'center',
-                  height: '50rem',
-                  overflowY: 'auto'
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  minHeight: 0,
+                  overflow: 'hidden'
                 }}>
                   <div style={{ 
                     width: '100%',
-                    height: mode === 'viewer' ? '100%' : 'auto'
+                    height: '100%',
+                    maxHeight: '100%',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
                   }}>
-                    <Line {...chartConfig} style={{ height: '12.5rem', width: '100%' }} />
+                    <Line {...chartConfig} style={{ height: '100%', width: '100%', maxHeight: '280px' }} />
                   </div>
                 </div>
               )}
-              {mode === 'standalone' && (
-                <div style={{ fontSize: '0.8125rem', color: "#64748b", marginTop: '0.75rem', marginBottom: '0.75rem', textAlign: "center" }}>
+              {mode === 'standalone' && !loading && !shouldShowRelationError && !(mode === 'viewer' && effectiveNoRelation) && (
+                <div style={{ 
+                  fontSize: '0.8125rem', 
+                  color: "#64748b", 
+                  marginTop: '0.5rem', 
+                  marginBottom: '0.5rem', 
+                  textAlign: "center",
+                  flexShrink: 0
+                }}>
                   x축: 챕터별 마지막/이벤트, y축: 관계 긍정도(-1~1)
                 </div>
               )}
               <div style={{ 
-                marginTop: 'auto', 
-                paddingTop: '1rem', 
-                paddingBottom: mode === 'viewer' ? '0.5rem' : '1rem', 
+                flexShrink: 0,
+                paddingTop: '0.75rem', 
+                paddingBottom: mode === 'viewer' ? '0.5rem' : '0.75rem', 
                 textAlign: "center",
                 display: 'flex',
                 justifyContent: 'center',

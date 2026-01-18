@@ -7,6 +7,12 @@ const normalizeKeySegment = (value) => {
   return trimmed.replace(/[^a-zA-Z0-9_-]/g, '_');
 };
 
+const STRING_STORAGE_KEY_SUFFIXES = ['_lastCFI', '_prevChapter', '_nextPage', '_prevPage'];
+
+const isStringStorageKey = (key) => {
+  return STRING_STORAGE_KEY_SUFFIXES.some(suffix => key.includes(suffix));
+};
+
 export const STORAGE_KEYS = {
   CHAPTER_NODE_POSITIONS: (bookKey, chapter) => {
     const bookSegment = normalizeKeySegment(bookKey);
@@ -48,54 +54,75 @@ export const createStorageKey = {
 };
 
 export function useLocalStorage(key, initialValue) {
+  const isStringKey = isStringStorageKey(key);
+  
   const [storedValue, setStoredValue] = useState(() => {
     try {
       const item = localStorage.getItem(key);
       if (!item) return initialValue;
       
-      if (key.includes('_lastCFI') || key.includes('_prevChapter') || key.includes('_nextPage') || key.includes('_prevPage')) {
+      if (isStringKey) {
         return item;
       }
       
       return JSON.parse(item);
     } catch (error) {
+      console.error(`[useLocalStorage] 초기값 로드 실패 (key: ${key}):`, error);
       return initialValue;
     }
   });
 
   const setValue = useCallback((value) => {
+    const valueToStore = value instanceof Function ? value(storedValue) : value;
+    const previousValue = storedValue;
+    
     try {
-      const valueToStore = value instanceof Function ? value(storedValue) : value;
-      setStoredValue(valueToStore);
-      
-      if (key.includes('_lastCFI') || key.includes('_prevChapter') || key.includes('_nextPage') || key.includes('_prevPage')) {
+      if (isStringKey) {
         localStorage.setItem(key, valueToStore);
       } else {
         localStorage.setItem(key, JSON.stringify(valueToStore));
       }
-    } catch (error) {
-      const valueToStore = value instanceof Function ? value(storedValue) : value;
+      
       setStoredValue(valueToStore);
+      
+      window.dispatchEvent(new CustomEvent('localStorageChange', {
+        detail: { key, newValue: isStringKey ? valueToStore : JSON.stringify(valueToStore) }
+      }));
+    } catch (error) {
+      console.error(`[useLocalStorage] 저장 실패 (key: ${key}):`, error);
+      setStoredValue(previousValue);
     }
-  }, [key, storedValue]);
+  }, [key, storedValue, isStringKey]);
 
   useEffect(() => {
     const handleStorageChange = (e) => {
       if (e.key === key && e.newValue !== null) {
         try {
-          if (key.includes('_lastCFI') || key.includes('_prevChapter') || key.includes('_nextPage') || key.includes('_prevPage')) {
+          if (isStringKey) {
             setStoredValue(e.newValue);
           } else {
             setStoredValue(JSON.parse(e.newValue));
           }
         } catch (error) {
+          console.error(`[useLocalStorage] storage 이벤트 처리 실패 (key: ${key}):`, error);
         }
       }
     };
 
+    const handleCustomStorageChange = (e) => {
+      if (e.detail?.key === key && e.detail?.newValue !== null) {
+        handleStorageChange({ key: e.detail.key, newValue: e.detail.newValue });
+      }
+    };
+
     window.addEventListener('storage', handleStorageChange);
-    return () => window.removeEventListener('storage', handleStorageChange);
-  }, [key]);
+    window.addEventListener('localStorageChange', handleCustomStorageChange);
+    
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener('localStorageChange', handleCustomStorageChange);
+    };
+  }, [key, isStringKey]);
 
   return [storedValue, setValue];
 }
@@ -111,6 +138,7 @@ export function useLocalStorageNumber(key, initialValue, options = {}) {
       try {
         localStorage.setItem(key, sanitizedInitial.toString());
       } catch (error) {
+        console.error(`[useLocalStorageNumber] 초기값 강제 저장 실패 (key: ${key}):`, error);
       }
       return sanitizedInitial;
     }
@@ -120,27 +148,30 @@ export function useLocalStorageNumber(key, initialValue, options = {}) {
       const parsedValue = item ? Number(item) : sanitizedInitial;
       return isNaN(parsedValue) ? sanitizedInitial : parsedValue;
     } catch (error) {
+      console.error(`[useLocalStorageNumber] 초기값 로드 실패 (key: ${key}):`, error);
       return sanitizedInitial;
     }
   });
 
   const setValue = useCallback((value) => {
+    const valueToStore = value instanceof Function ? value(storedValue) : value;
+    const numericValue = Number(valueToStore);
+    const previousValue = storedValue;
+    
+    if (isNaN(numericValue)) {
+      return;
+    }
+    
     try {
-      const valueToStore = value instanceof Function ? value(storedValue) : value;
-      const numericValue = Number(valueToStore);
-      
-      if (isNaN(numericValue)) {
-        return;
-      }
-      
-      setStoredValue(numericValue);
       localStorage.setItem(key, numericValue.toString());
+      setStoredValue(numericValue);
+      
+      window.dispatchEvent(new CustomEvent('localStorageChange', {
+        detail: { key, newValue: numericValue.toString() }
+      }));
     } catch (error) {
-      const valueToStore = value instanceof Function ? value(storedValue) : value;
-      const numericValue = Number(valueToStore);
-      if (!isNaN(numericValue)) {
-        setStoredValue(numericValue);
-      }
+      console.error(`[useLocalStorageNumber] 저장 실패 (key: ${key}):`, error);
+      setStoredValue(previousValue);
     }
   }, [key, storedValue]);
 
@@ -153,12 +184,24 @@ export function useLocalStorageNumber(key, initialValue, options = {}) {
             setStoredValue(parsedValue);
           }
         } catch (error) {
+          console.error(`[useLocalStorageNumber] storage 이벤트 처리 실패 (key: ${key}):`, error);
         }
       }
     };
 
+    const handleCustomStorageChange = (e) => {
+      if (e.detail?.key === key && e.detail?.newValue !== null) {
+        handleStorageChange({ key: e.detail.key, newValue: e.detail.newValue });
+      }
+    };
+
     window.addEventListener('storage', handleStorageChange);
-    return () => window.removeEventListener('storage', handleStorageChange);
+    window.addEventListener('localStorageChange', handleCustomStorageChange);
+    
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener('localStorageChange', handleCustomStorageChange);
+    };
   }, [key]);
 
   return [storedValue, setValue];

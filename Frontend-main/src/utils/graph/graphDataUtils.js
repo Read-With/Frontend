@@ -1,6 +1,6 @@
 import { getCharactersData, createCharacterMapsWithCache } from './graphData';
-import { createCharacterMaps, getCharacterImagePath } from './characterUtils';
-import { normalizeRelation, isValidRelation } from './relationUtils';
+import { createCharacterMaps, getCharacterImagePath } from '../characterUtils';
+import { normalizeRelation, isValidRelation } from '../relationUtils';
 
 /**
  * 이벤트 텍스트에서 첫 번째 단어를 추출하는 함수
@@ -553,4 +553,301 @@ export function detectAndResolveOverlap(cy, nodeSize = 40, onCleanup = null) {
   }
   
   return hasOverlap;
+}
+
+/**
+ * 관계 키 타임라인 필터링 유틸리티
+ * ViewerPage에서 사용하는 관계 키 수집 및 필터링 로직
+ */
+
+const apiRelationTimelineCache = new WeakMap();
+
+function getApiTimelineCache(cacheRef) {
+  if (!cacheRef) {
+    return null;
+  }
+  let timeline = apiRelationTimelineCache.get(cacheRef);
+  if (!timeline) {
+    timeline = new Map();
+    apiRelationTimelineCache.set(cacheRef, timeline);
+  }
+  return timeline;
+}
+
+function getChapterTimelineCache(timelineCache, bookId, chapterNum) {
+  if (!timelineCache) {
+    return null;
+  }
+  const numericBookId = Number(bookId);
+  const numericChapter = Number(chapterNum);
+  const chapterKey = `${Number.isFinite(numericBookId) ? numericBookId : String(bookId ?? "unknown")}-${Number.isFinite(numericChapter) ? numericChapter : String(chapterNum ?? "unknown")}`;
+
+  if (!timelineCache.has(chapterKey)) {
+    timelineCache.set(chapterKey, {
+      eventSets: new Map(),
+      sortedEvents: null,
+      lastComputedIdx: 0,
+      lastComputedSet: new Set(),
+    });
+  }
+
+  return timelineCache.get(chapterKey);
+}
+
+function prepareChapterEvents(chapterCache, bookId, chapterNum, eventUtils, getCachedChapterEvents) {
+  if (!chapterCache) {
+    return [];
+  }
+
+  if (Array.isArray(chapterCache.sortedEvents)) {
+    return chapterCache.sortedEvents;
+  }
+
+  const cached = getCachedChapterEvents(bookId, chapterNum);
+  if (!cached?.events?.length) {
+    chapterCache.sortedEvents = [];
+    return chapterCache.sortedEvents;
+  }
+
+  const normalized = cached.events
+    .map((event) => {
+      const idx = eventUtils.normalizeEventIdx(event);
+      if (!Number.isFinite(idx) || idx <= 0) {
+        return null;
+      }
+      return {
+        idx,
+        relations: Array.isArray(event?.relations) ? event.relations : [],
+      };
+    })
+    .filter(Boolean)
+    .sort((a, b) => a.idx - b.idx);
+
+  chapterCache.sortedEvents = normalized;
+  return chapterCache.sortedEvents;
+}
+
+function filterWithTargetKeys(sourceSet, targetKeys) {
+  if (!(targetKeys instanceof Set) || targetKeys.size === 0) {
+    return sourceSet;
+  }
+  const filtered = new Set();
+  for (const key of targetKeys) {
+    if (sourceSet.has(key)) {
+      filtered.add(key);
+    }
+  }
+  return filtered;
+}
+
+export function collectLocalRelationKeys(folderKey, chapterNum, eventNum, targetKeys, getEventDataByIndex, getRelationKeyFromRelation) {
+  const seen = new Set();
+  if (!folderKey || !Number.isFinite(chapterNum) || !Number.isFinite(eventNum) || eventNum < 1) {
+    return seen;
+  }
+
+  for (let idx = 1; idx <= eventNum; idx += 1) {
+    const eventData = getEventDataByIndex(folderKey, chapterNum, idx);
+    const relations = eventData?.relations;
+    if (!Array.isArray(relations) || relations.length === 0) {
+      continue;
+    }
+
+    for (const rel of relations) {
+      const key = getRelationKeyFromRelation(rel);
+      if (!key) {
+        continue;
+      }
+      if (!targetKeys || targetKeys.has(key)) {
+        seen.add(key);
+        if (targetKeys && seen.size === targetKeys.size) {
+          return seen;
+        }
+      }
+    }
+  }
+
+  return seen;
+}
+
+export async function collectApiRelationKeysLegacy(bookId, chapterNum, eventNum, targetKeys, getGraphEventState, getRelationKeyFromRelation) {
+  const seen = new Set();
+  if (!bookId || !Number.isFinite(chapterNum) || !Number.isFinite(eventNum) || eventNum < 1) {
+    return seen;
+  }
+
+  const hasTargetKeys = targetKeys instanceof Set && targetKeys.size > 0;
+  let matchedCount = 0;
+
+  for (let idx = 1; idx <= eventNum; idx += 1) {
+    const state = getGraphEventState(bookId, chapterNum, idx);
+    const result = state
+      ? {
+          relations: state.eventMeta?.relations ?? state.relations ?? [],
+        }
+      : null;
+    const relations = result?.relations;
+    if (!Array.isArray(relations) || relations.length === 0) {
+      continue;
+    }
+
+    for (const rel of relations) {
+      const key = getRelationKeyFromRelation(rel);
+      if (!key || seen.has(key)) {
+        continue;
+      }
+      seen.add(key);
+      if (hasTargetKeys && targetKeys.has(key)) {
+        matchedCount += 1;
+        if (matchedCount === targetKeys.size) {
+          return seen;
+        }
+      }
+    }
+  }
+
+  return seen;
+}
+
+export async function collectApiRelationKeys(bookId, chapterNum, eventNum, targetKeys, cacheRef, eventUtils, getCachedChapterEvents, getGraphEventState, getRelationKeyFromRelation) {
+  if (!bookId || !Number.isFinite(chapterNum) || !Number.isFinite(eventNum) || eventNum < 1) {
+    return new Set();
+  }
+
+  const timelineCache = getApiTimelineCache(cacheRef);
+  const chapterCache = getChapterTimelineCache(timelineCache, bookId, chapterNum);
+  const sortedEvents = prepareChapterEvents(chapterCache, bookId, chapterNum, eventUtils, getCachedChapterEvents);
+  const hasTargetKeys = targetKeys instanceof Set && targetKeys.size > 0;
+
+  if (!sortedEvents.length) {
+    const legacyResult = await collectApiRelationKeysLegacy(bookId, chapterNum, eventNum, targetKeys, getGraphEventState, getRelationKeyFromRelation);
+    if (chapterCache) {
+      chapterCache.eventSets.set(eventNum, legacyResult);
+      if (!chapterCache.lastComputedIdx || eventNum >= chapterCache.lastComputedIdx) {
+        chapterCache.lastComputedIdx = eventNum;
+        chapterCache.lastComputedSet = legacyResult;
+      }
+    }
+    return filterWithTargetKeys(legacyResult, targetKeys);
+  }
+
+  let lastComputedIdx = chapterCache?.lastComputedIdx ?? 0;
+  let baseSet = chapterCache?.lastComputedSet instanceof Set ? chapterCache.lastComputedSet : null;
+
+  if (!baseSet) {
+    const entries = Array.from(chapterCache.eventSets.entries());
+    if (entries.length) {
+      entries.sort((a, b) => a[0] - b[0]);
+      const [latestIdx, latestSet] = entries[entries.length - 1];
+      lastComputedIdx = latestIdx;
+      baseSet = latestSet;
+    } else {
+      baseSet = new Set();
+    }
+  }
+
+  for (const event of sortedEvents) {
+    if (event.idx <= lastComputedIdx) {
+      continue;
+    }
+    if (event.idx > eventNum) {
+      break;
+    }
+
+    const nextSet = new Set(baseSet);
+    for (const rel of event.relations) {
+      const key = getRelationKeyFromRelation(rel);
+      if (key) {
+        nextSet.add(key);
+      }
+    }
+
+    chapterCache.eventSets.set(event.idx, nextSet);
+    baseSet = nextSet;
+    lastComputedIdx = event.idx;
+  }
+
+  chapterCache.lastComputedIdx = lastComputedIdx;
+  chapterCache.lastComputedSet = baseSet;
+
+  let bestIdx = 0;
+  let bestSet = null;
+  for (const [idx, set] of chapterCache.eventSets) {
+    if (idx <= eventNum && idx >= bestIdx) {
+      bestIdx = idx;
+      bestSet = set;
+    }
+  }
+
+  if (!bestSet) {
+    return new Set();
+  }
+
+  return hasTargetKeys ? filterWithTargetKeys(bestSet, targetKeys) : bestSet;
+}
+
+export async function filterRelationsByTimeline({
+  relations,
+  mode,
+  bookId,
+  folderKey,
+  chapterNum,
+  eventNum,
+  cacheRef,
+  eventUtils,
+  getCachedChapterEvents,
+  getGraphEventState,
+  getEventDataByIndex,
+  getRelationKeyFromRelation
+}) {
+  if (!Array.isArray(relations) || relations.length === 0) {
+    return [];
+  }
+
+  if (!Number.isFinite(chapterNum) || chapterNum < 1 || !Number.isFinite(eventNum) || eventNum < 1) {
+    return relations;
+  }
+
+  const targetKeys = new Set();
+  for (const rel of relations) {
+    const key = getRelationKeyFromRelation(rel);
+    if (key) {
+      targetKeys.add(key);
+    }
+  }
+
+  if (targetKeys.size === 0) {
+    return relations;
+  }
+
+  try {
+    let seenKeys = null;
+    if (mode === "api") {
+      if (!bookId) {
+        return relations;
+      }
+      seenKeys = await collectApiRelationKeys(bookId, chapterNum, eventNum, targetKeys, cacheRef, eventUtils, getCachedChapterEvents, getGraphEventState, getRelationKeyFromRelation);
+    } else if (mode === "local") {
+      if (!folderKey) {
+        return relations;
+      }
+      seenKeys = collectLocalRelationKeys(folderKey, chapterNum, eventNum, targetKeys, getEventDataByIndex, getRelationKeyFromRelation);
+    } else {
+      return relations;
+    }
+
+    if (!(seenKeys instanceof Set)) {
+      return relations;
+    }
+
+    return relations.filter((rel) => {
+      const key = getRelationKeyFromRelation(rel);
+      if (!key) {
+        return true;
+      }
+      return seenKeys.has(key);
+    });
+  } catch (error) {
+    return relations;
+  }
 }
