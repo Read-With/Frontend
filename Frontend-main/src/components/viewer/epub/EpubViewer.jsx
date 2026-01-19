@@ -634,7 +634,8 @@ const EpubViewer = forwardRef(
         try {
           const { loadLocalBookBuffer, saveLocalBookBuffer } = await import('../../../utils/localBookStorage');
           
-          // 로컬 bookID는 사용하지 않음 - bookId만 사용
+          // 서버 bookId로 IndexedDB에서 EPUB 파일 로드
+          // EPUB 파일은 IndexedDB에만 저장되므로, 서버 bookId를 키로 사용하여 매칭함
           const candidateKeys = Array.from(
             new Set(
               [
@@ -649,6 +650,7 @@ const EpubViewer = forwardRef(
           targetBookId = candidateKeys[0] || 'temp';
           let globalReuseEntry = null;
           
+          // 서버 bookId로 IndexedDB에서 EPUB 파일(ArrayBuffer) 로드
           for (const key of candidateKeys) {
             const buffer = await loadLocalBookBuffer(key);
             if (buffer) {

@@ -137,66 +137,36 @@ const FileUpload = ({ onUploadSuccess, onClose }) => {
       const arrayBuffer = await selectedFile.arrayBuffer();
       const { saveLocalBookBuffer, saveLocalBookMetadata } = await import('../../utils/localBookStorage');
       
-      // 1. 책 제목을 정규화하여 서버에서 매칭하기 위해 사용
-      const normalizedTitle = normalizeTitle(metadata.title);
-      if (!normalizedTitle) {
-        throw new Error('책 제목을 추출할 수 없습니다.');
-      }
-
-      // 2. 서버에 업로드한 epub이 존재하는지 확인
-      // 확인 기준: 책 이름이 대소문자 구분 없고 특수문자 관계없이 동일한지 확인
-      let matchedBookId = null;
-      try {
-        const serverResponse = await getBooks({ q: metadata.title });
-        if (serverResponse?.isSuccess && Array.isArray(serverResponse.result)) {
-          // 정규화된 제목으로 매칭
-          const matched = serverResponse.result.filter((item) => 
-            normalizeTitle(item.title) === normalizedTitle
-          );
-          
-          if (matched.length > 0) {
-            // 3. 동일한 책 제목이 여러 개인 경우, bookId 중 가장 작은 수를 선택
-            const sortedMatched = matched.sort((a, b) => {
-              const aId = Number(a?.id) || Number.MAX_SAFE_INTEGER;
-              const bId = Number(b?.id) || Number.MAX_SAFE_INTEGER;
-              return aId - bId;
-            });
-            
-            // 가장 작은 bookId 선택
-            matchedBookId = sortedMatched[0].id;
-          }
-        }
-      } catch (error) {
-        console.warn('서버 도서 확인 중 오류:', error);
-      }
-
-      // 4. 서버에 업로드 시도
+      // 1. EPUB 파일을 서버에 업로드 (서버에는 메타데이터만 저장됨)
       let serverBook = null;
       try {
         const result = await uploadFile(selectedFile, metadata);
         if (result.success) {
           serverBook = result.data;
           setUploadedBook(serverBook);
+        } else {
+          throw new Error(result.error || '서버 업로드에 실패했습니다.');
         }
       } catch (uploadError) {
-        console.warn('서버 업로드 실패:', uploadError);
+        throw new Error(uploadError.message || '서버 업로드에 실패했습니다. 로그인 상태를 확인해주세요.');
       }
 
-      // 5. bookId 결정: 서버에서 매칭된 bookId가 있으면 사용, 없으면 서버 업로드 결과 사용
-      // 로컬 bookID는 사용하지 않음
-      const finalBookId = matchedBookId || serverBook?.id;
-      
+      // 2. 서버 업로드 성공 후 bookId 확인
+      // 서버에서 반환된 bookId는 서버 책 목록과 IndexedDB의 EPUB 파일을 매칭하는 키로 사용됨
+      const finalBookId = serverBook?.id;
       if (!finalBookId) {
-        throw new Error('서버에서 책을 찾을 수 없거나 업로드에 실패했습니다. 로그인 상태를 확인해주세요.');
+        throw new Error('서버에서 책 ID를 받지 못했습니다.');
       }
-      
-      // 6. book 객체 생성
+
+      // 3. IndexedDB에 서버 bookId로 EPUB 파일 저장
+      // 중요: EPUB 파일은 IndexedDB에만 저장되며, 서버에는 메타데이터만 저장됨
+      // 서버 bookId를 키로 사용하여 서버 책 목록과 IndexedDB의 EPUB 파일을 매칭함
       const book = {
         id: finalBookId,
         _bookId: finalBookId,
-        title: metadata.title || selectedFile.name.replace(/\.epub$/i, ''),
-        author: metadata.author || 'Unknown',
-        language: metadata.language || 'ko',
+        title: serverBook?.title || metadata.title || selectedFile.name.replace(/\.epub$/i, ''),
+        author: serverBook?.author || metadata.author || 'Unknown',
+        language: serverBook?.language || metadata.language || 'ko',
         coverImgUrl: serverBook?.coverImgUrl || serverBook?.coverImage || serverBook?.coverUrl || '',
         coverImage: serverBook?.coverImgUrl || serverBook?.coverImage || serverBook?.coverUrl || '',
         description: serverBook?.description || '',
@@ -206,7 +176,6 @@ const FileUpload = ({ onUploadSuccess, onClose }) => {
         epubArrayBuffer: arrayBuffer,
       };
 
-      // 7. IndexedDB에 저장 (bookId를 키로 사용)
       await Promise.all([
         saveLocalBookBuffer(String(finalBookId), arrayBuffer),
         saveLocalBookMetadata(String(finalBookId), {
@@ -225,17 +194,14 @@ const FileUpload = ({ onUploadSuccess, onClose }) => {
         }),
       ]);
 
-      // 8. IndexedDB 저장 완료 후 즉시 목록 새로고침을 위한 이벤트 발생
-      window.dispatchEvent(new CustomEvent('indexeddb-book-added', { 
-        detail: { bookId: String(finalBookId) } 
-      }));
-
-      // 9. 서버에서 받은 bookID와 로컬 EPUB 파일로 바로 뷰어로 이동
+      // 4. 서버 책 목록 갱신 및 뷰어로 이동
+      // onUploadSuccess가 addBook을 호출하여 서버 책 목록을 갱신하고,
+      // useBooks에서 서버 책만 표시하므로 자동으로 library에 표시됨
+      // 뷰어에서는 서버 bookId로 IndexedDB에서 EPUB 파일을 로드함
       onUploadSuccess(book);
       onClose();
     } catch (error) {
       console.error('업로드 처리 실패:', error);
-      // 에러 발생 시에도 사용자에게 알림
       alert(`업로드 처리 중 오류가 발생했습니다: ${error.message}`);
     }
   };

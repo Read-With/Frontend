@@ -5,10 +5,13 @@ import { errorUtils } from '../../utils/viewerUtils';
 
 /**
  * 서버 책 매칭 훅
- * 로컬 책과 서버 책을 매칭하고, 매칭된 경우 URL을 업데이트합니다.
+ * 로컬에서 열린 책이 서버에 존재하는지 확인하고, 매칭되면 서버 bookId로 URL을 업데이트합니다.
+ * 
+ * 중요: EPUB 파일은 IndexedDB에만 저장되며, 서버에는 메타데이터만 저장됨
+ * 서버 bookId를 키로 사용하여 서버 책 목록과 IndexedDB의 EPUB 파일을 매칭함
  * 
  * @param {string} bookId - 현재 URL의 bookId
- * @returns {Object} 서버 책 매칭 관련 상태 및 함수
+ * @returns {Object} { serverBook, loadingServerBook, matchedServerBook }
  */
 export function useServerBookMatching(bookId) {
   const location = useLocation();

@@ -113,21 +113,10 @@ const BookDetailModal = memo(({ book, isOpen, onClose, onDelete }) => {
     }
   }, [isOpen, book, fetchBookDetails, fetchProgressInfo]);
 
-  // 책 타입 확인 유틸리티
-  const isLocalBook = useMemo(() => 
-    typeof book?.id === 'string' && book.id.startsWith('local_'), 
-    [book?.id]
-  );
-
-  const getBookIdentifier = useCallback(() => 
-    isLocalBook ? book.epubPath : book.id, 
-    [isLocalBook, book]
-  );
-
-  const getNavigationState = useCallback(() => 
-    isLocalBook ? undefined : { book }, 
-    [isLocalBook, book]
-  );
+  // 서버 책만 표시하므로 항상 서버 bookId 사용
+  const getBookIdentifier = useCallback(() => book.id, [book?.id]);
+  
+  const getNavigationState = useCallback(() => ({ book }), [book]);
 
   // 네비게이션 핸들러들
   const handleReadClick = useCallback(() => {

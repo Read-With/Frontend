@@ -2,37 +2,16 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getBooks, getBook, toggleBookFavorite } from '../../utils/api/booksApi';
 import {
-  getAllLocalBookIds,
   deleteLocalBookBuffer,
-  getAllLocalBookMetadata,
   deleteLocalBookMetadata,
+  loadLocalBookBuffer,
 } from '../../utils/localBookStorage';
 import { prefetchManifest } from '../../utils/common/cache/manifestCache';
 import { getBookManifest } from '../../utils/api/api';
-import { normalizeTitle } from '../../utils/stringUtils';
-
-const isDefaultBook = (book) => book?.default === true || book?.isDefault === true;
-
-const getBookKey = (book) => {
-  if (!book) return '';
-  if (book.id !== undefined && book.id !== null) {
-    return `${book.id}`;
-  }
-  if (book._bookId !== undefined && book._bookId !== null) {
-    return `${book._bookId}`;
-  }
-  if (typeof book.filename === 'string') {
-    return book.filename;
-  }
-  return '';
-};
-
 const HIDDEN_SERVER_BOOK_IDS_KEY = 'readwith_hidden_server_book_ids';
 
 export const useBooks = () => {
   const queryClient = useQueryClient();
-  const [localBookKeys, setLocalBookKeys] = useState(new Set());
-  const [localOnlyBooks, setLocalOnlyBooks] = useState([]);
   const [hiddenServerBookIds, setHiddenServerBookIds] = useState(() => {
     try {
       const raw = localStorage.getItem(HIDDEN_SERVER_BOOK_IDS_KEY);
@@ -46,126 +25,21 @@ export const useBooks = () => {
     return new Set();
   });
   
-  const localOnlyBooksRef = useRef([]);
   const hiddenServerBookIdsRef = useRef(new Set(hiddenServerBookIds));
-  const localBookKeysRef = useRef(new Set());
-
-  useEffect(() => {
-    localOnlyBooksRef.current = localOnlyBooks;
-  }, [localOnlyBooks]);
+  const [indexedDbBookIds, setIndexedDbBookIds] = useState(new Set());
+  const indexedDbBookIdsRef = useRef(new Set());
 
   useEffect(() => {
     hiddenServerBookIdsRef.current = new Set(hiddenServerBookIds);
   }, [hiddenServerBookIds]);
 
   useEffect(() => {
-    localBookKeysRef.current = localBookKeys;
-  }, [localBookKeys]);
-
-  // 로컬 데이터 조회 (기존 로직 유지)
-  const fetchLocalData = useCallback(async () => {
-    const [ids, metadataEntries] = await Promise.all([
-      getAllLocalBookIds(),
-      getAllLocalBookMetadata(),
-    ]);
-    
-    const bookIdKeys = new Set(
-      (ids || [])
-        .map((id) => (typeof id === 'string' ? id : id?.toString?.() || ''))
-        .filter(Boolean)
-    );
-    
-    const allMetadata = [];
-    (metadataEntries || []).forEach(({ key, value }) => {
-      if (!key || !value) return;
-      const bookIdKey = key;
-      const baseId = value.id || value._bookId || value.bookId || bookIdKey;
-      const coverImgUrl =
-        value.coverImgUrl ||
-        value.coverImage ||
-        value.coverUrl ||
-        '';
-
-      const merged = {
-        ...value,
-        id: baseId,
-        _bookId: baseId,
-        title: value.title || value.name || baseId || '제목 없음',
-        author: value.author || value.writer || '저자 미상',
-        language: value.language || 'ko',
-        coverImgUrl,
-        coverImage: coverImgUrl,
-        favorite: !!value.favorite,
-        uploadedAt: value.uploadedAt || value.createdAt || value.updatedAt || new Date().toISOString(),
-        updatedAt: value.updatedAt || value.uploadedAt || value.createdAt || new Date().toISOString(),
-        isLocalOnly: value.isLocalOnly ?? !baseId,
-        _bookIdKey: bookIdKey,
-      };
-
-      allMetadata.push(merged);
-    });
-    
-    const titleMap = new Map();
-    allMetadata.forEach((book) => {
-      const normalizedTitle = normalizeTitle(book.title);
-      if (!normalizedTitle) return;
-      
-      const existing = titleMap.get(normalizedTitle);
-      if (!existing) {
-        titleMap.set(normalizedTitle, book);
-      } else {
-        const existingTime = new Date(existing.uploadedAt || existing.createdAt || existing.updatedAt || 0).getTime();
-        const currentTime = new Date(book.uploadedAt || book.createdAt || book.updatedAt || 0).getTime();
-        
-        if (currentTime < existingTime) {
-          titleMap.set(normalizedTitle, book);
-        }
-      }
-    });
-    
-    const metadataBooks = Array.from(titleMap.values());
-    
-    const finalBookIdKeys = new Set();
-    metadataBooks.forEach((book) => {
-      if (book._bookIdKey) {
-        finalBookIdKeys.add(book._bookIdKey);
-      }
-      if (book.id) {
-        finalBookIdKeys.add(String(book.id));
-      }
-    });
-    bookIdKeys.forEach((key) => {
-      finalBookIdKeys.add(key);
-    });
-
-    const metadataKeySet = new Set(metadataBooks.map((book) => book.id || book._bookId || book._bookIdKey).filter(Boolean));
-
-    const fallbackBooks = Array.from(finalBookIdKeys)
-      .filter((key) => key && !metadataKeySet.has(key))
-      .map((key) => ({
-        id: key,
-        _bookId: key,
-        title: key,
-        author: '로컬 도서',
-        language: 'ko',
-        coverImgUrl: '',
-        coverImage: '',
-        description: '',
-        favorite: false,
-        uploadedAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-        isLocalOnly: true,
-        _bookIdKey: key,
-      }));
-
-    setLocalBookKeys(new Set(finalBookIdKeys));
-    return {
-      keys: finalBookIdKeys,
-      metadataBooks: [...metadataBooks, ...fallbackBooks],
-    };
-  }, []);
+    indexedDbBookIdsRef.current = new Set(indexedDbBookIds);
+  }, [indexedDbBookIds]);
 
   // 서버 책 조회 - React Query 사용
+  // 중요: 서버에는 메타데이터만 저장되며, EPUB 파일은 IndexedDB에만 저장됨
+  // 서버 bookId를 키로 사용하여 IndexedDB의 EPUB 파일과 매칭함
   const {
     data: serverBooksData,
     isLoading: isServerLoading,
@@ -204,133 +78,100 @@ export const useBooks = () => {
     retry: 1,
   });
 
-  // 로컬 책 조회
-  useEffect(() => {
-    let cancelled = false;
-
-    const loadLocalBooks = async () => {
-      try {
-        const localData = await fetchLocalData();
-        if (!cancelled) {
-          setLocalOnlyBooks(localData.metadataBooks || []);
-        }
-      } catch (error) {
-        console.error('로컬 책 로드 실패:', error);
-      }
-    };
-
-    loadLocalBooks();
-
-    // IndexedDB 변경 이벤트 리스너
-    const handleBookAdded = () => {
-      if (!cancelled) {
-        setTimeout(() => {
-          if (!cancelled) {
-            loadLocalBooks();
-          }
-        }, 100);
-      }
-    };
-
-    window.addEventListener('indexeddb-book-added', handleBookAdded);
-
-    return () => {
-      cancelled = true;
-      window.removeEventListener('indexeddb-book-added', handleBookAdded);
-    };
-  }, [fetchLocalData]);
-
-  // 서버 책 + 로컬 책 병합
-  const reconcileBooks = useCallback((fetchedBooks, localKeys) => {
+  // 서버 책 중복 제거 및 정규화
+  const reconcileBooks = useCallback((fetchedBooks) => {
     if (!Array.isArray(fetchedBooks)) return [];
 
     const deduped = new Map();
 
     fetchedBooks.forEach((book) => {
       const bookId = book?.id !== undefined && book?.id !== null ? `${book.id}` : null;
-      const bookKey = bookId || `__temp_${book?.title || ''}`;
-      
-      const shouldShow = isDefaultBook(book) || (bookId && localKeys.has(bookId));
+      if (!bookId) return;
 
-      if (!shouldShow) {
-        return;
-      }
-
-      const existing = deduped.get(bookKey);
+      const existing = deduped.get(bookId);
       if (!existing) {
-        deduped.set(bookKey, {
+        deduped.set(bookId, {
           ...book,
           favorite: !!book.favorite,
         });
-        return;
-      }
-
-      const existingId = existing?.id !== undefined && existing?.id !== null ? Number(existing.id) : null;
-      const incomingId = book?.id !== undefined && book?.id !== null ? Number(book.id) : null;
-
-      const shouldReplace =
-        incomingId !== null &&
-        (existingId === null || incomingId < existingId);
-
-      if (shouldReplace) {
-        deduped.set(bookKey, {
-          ...existing,
-          ...book,
-          favorite: !!book.favorite,
-        });
+      } else {
+        // 중복된 경우 더 작은 ID를 가진 책을 유지
+        const existingId = Number(existing.id);
+        const incomingId = Number(book.id);
+        if (incomingId < existingId) {
+          deduped.set(bookId, {
+            ...book,
+            favorite: !!book.favorite,
+          });
+        }
       }
     });
 
     return Array.from(deduped.values());
   }, []);
 
-  // 최종 병합된 책 목록
-  const books = useMemo(() => {
+  // 서버 책 중복 제거 및 정규화된 목록
+  const reconciledBooks = useMemo(() => {
     const serverBooks = serverBooksData?.books || [];
-    const localKeys = new Set(localBookKeys);
-    localBookKeysRef.current.forEach((key) => localKeys.add(key));
-    
-    const reconciled = reconcileBooks(serverBooks, localKeys);
+    return reconcileBooks(serverBooks);
+  }, [serverBooksData, reconcileBooks]);
 
-    const combinedMap = new Map();
-    
-    localOnlyBooks.forEach((book) => {
-      const key = book._bookIdKey || getBookKey(book);
-      if (key) {
-        combinedMap.set(key, { ...book });
-      }
-    });
-
-    reconciled.forEach((book) => {
-      const key = getBookKey(book);
-      if (!key) {
+  // IndexedDB에 EPUB 파일이 있는 책만 필터링
+  useEffect(() => {
+    const checkIndexedDB = async () => {
+      if (reconciledBooks.length === 0) {
+        setIndexedDbBookIds(new Set());
         return;
       }
-      const localInfo = combinedMap.get(key);
-      if (localInfo) {
-        combinedMap.set(key, {
-          ...localInfo,
-          ...book,
-          id: book.id,
-          _bookId: book.id,
-          isLocalOnly: false,
-          coverImgUrl: book.coverImgUrl || localInfo.coverImgUrl || '',
-          coverImage: book.coverImgUrl || localInfo.coverImgUrl || '',
-        });
-      } else if (localKeys.has(key)) {
-        combinedMap.set(key, {
-          ...book,
-          _bookId: book.id,
-        });
-      }
-    });
 
+      const bookIdsWithEpub = new Set();
+      
+      // 모든 책을 병렬로 확인
+      const checkPromises = reconciledBooks.map(async (book) => {
+        const bookId = book?.id !== undefined && book?.id !== null ? `${book.id}` : null;
+        if (!bookId) return null;
+
+        try {
+          const buffer = await loadLocalBookBuffer(bookId);
+          if (buffer) {
+            return bookId;
+          }
+        } catch (error) {
+          // 에러는 조용히 처리
+        }
+        return null;
+      });
+
+      const results = await Promise.all(checkPromises);
+      results.forEach((bookId) => {
+        if (bookId) {
+          bookIdsWithEpub.add(bookId);
+        }
+      });
+
+      setIndexedDbBookIds(bookIdsWithEpub);
+    };
+
+    checkIndexedDB();
+  }, [reconciledBooks]);
+
+  // 서버 책만 반환 (로컬 책 제외)
+  // 서버에 있는 책 중 IndexedDB에 EPUB 파일이 있는 책만 표시
+  const books = useMemo(() => {
     const hiddenIds = hiddenServerBookIdsRef.current;
-    return Array.from(combinedMap.values()).filter((book) => {
+    const indexedDbIds = indexedDbBookIdsRef.current;
+
+    return reconciledBooks.filter((book) => {
       const idKey = book?.id !== undefined && book?.id !== null ? `${book.id}` : null;
-      return !idKey || !hiddenIds.has(idKey);
+      if (!idKey) return false;
+      
+      // 숨김 처리된 책 제외
+      if (hiddenIds.has(idKey)) return false;
+      
+      // IndexedDB에 EPUB 파일이 있는 책만 표시
+      return indexedDbIds.has(idKey);
     });
-  }, [serverBooksData, localOnlyBooks, localBookKeys, reconcileBooks]);
+  }, [reconciledBooks, indexedDbBookIds]);
 
   // 즐겨찾기 토글 - useMutation + 낙관적 업데이트
   const toggleFavoriteMutation = useMutation({
@@ -404,18 +245,6 @@ export const useBooks = () => {
       return { previousServerBooks };
     },
     onSuccess: (deletedBookId) => {
-      // 로컬 상태 업데이트
-      setLocalBookKeys((prev) => {
-        const next = new Set(prev);
-        next.delete(deletedBookId);
-        return next;
-      });
-      setLocalOnlyBooks((prev) =>
-        prev.filter((book) => {
-          const key = getBookKey(book);
-          return key !== deletedBookId;
-        })
-      );
       setHiddenServerBookIds((prev) => {
         const next = new Set(prev);
         next.add(deletedBookId);
@@ -432,52 +261,9 @@ export const useBooks = () => {
     },
   });
 
-  // 책 추가 (로컬)
+  // 책 추가 후 서버 책 목록 갱신
   const addBook = useCallback(
     async (newBook) => {
-      if (newBook) {
-        const key = getBookKey(newBook);
-        const assignedId = newBook.id || newBook._bookId;
-        
-        if (assignedId) {
-          const bookIdKey = String(assignedId);
-          setLocalBookKeys((prev) => {
-            const next = new Set(prev);
-            next.add(bookIdKey);
-            localBookKeysRef.current = next;
-            return next;
-          });
-        }
-
-        const nextBook = {
-          ...newBook,
-          id: assignedId || newBook.id,
-          _bookId: assignedId || newBook._bookId,
-        };
-
-        setLocalOnlyBooks((prev) => {
-          if (!key) {
-            return [nextBook, ...prev];
-          }
-          let replaced = false;
-          const updated = prev.map((book) => {
-            const bookKey = getBookKey(book);
-            if (bookKey === key) {
-              replaced = true;
-              return { ...book, ...nextBook };
-            }
-            return book;
-          });
-          if (!replaced) {
-            return [nextBook, ...updated];
-          }
-          return updated;
-        });
-
-        // 서버 책 목록도 갱신
-        queryClient.invalidateQueries({ queryKey: ['books', 'server'] });
-        return;
-      }
       queryClient.invalidateQueries({ queryKey: ['books', 'server'] });
     },
     [queryClient],
@@ -493,7 +279,7 @@ export const useBooks = () => {
 
   // 기존 API 호환성 유지
   const loading = isServerLoading;
-  const error = serverError?.message || (serverBooksData?.needsAuth && localOnlyBooks.length === 0 ? '인증이 필요합니다. 로그인해주세요.' : null);
+  const error = serverError?.message || (serverBooksData?.needsAuth ? '인증이 필요합니다. 로그인해주세요.' : null);
   
   const retryFetch = useCallback(() => {
     refetchServer();
