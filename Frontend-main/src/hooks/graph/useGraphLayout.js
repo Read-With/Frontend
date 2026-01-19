@@ -29,14 +29,31 @@ export function useGraphLayout({
   setIsInitialLoad,
   containerRef,
 }) {
-  const handleLayoutComplete = useCallback((cy, triggerRipple) => {
+  const fitGraphOnInitialLoad = useCallback((cy) => {
+    if (!cy) return;
+    const nodes = cy.nodes();
+    if (nodes && nodes.length > 0) {
+      try {
+        cy.fit(nodes, 80);
+      } catch (error) {
+        console.warn('초기 그래프 fit 실패:', error);
+      }
+    }
+  }, []);
+
+  const handleLayoutComplete = useCallback((cy, triggerRipple, shouldFitOnInitialLoad) => {
     if (!cy) return;
     
     ensureElementsInBounds(cy, containerRef.current);
     detectAndResolveOverlap(cy);
+    
+    if (shouldFitOnInitialLoad) {
+      fitGraphOnInitialLoad(cy);
+    }
+    
     if (triggerRipple) triggerRipple();
     if (onLayoutComplete) onLayoutComplete();
-  }, [onLayoutComplete, containerRef]);
+  }, [onLayoutComplete, containerRef, fitGraphOnInitialLoad]);
 
   useEffect(() => {
     if (!cy || !elements || elements.length === 0) {
@@ -54,7 +71,10 @@ export function useGraphLayout({
       }
       
       const completeCallback = () => {
-        handleLayoutComplete(cy, triggerRippleForAddedNodes);
+        handleLayoutComplete(cy, triggerRippleForAddedNodes, isInitialLoad);
+        if (isInitialLoad) {
+          setIsInitialLoad(false);
+        }
       };
       
       if (layout && layout.name !== 'preset') {
@@ -73,10 +93,10 @@ export function useGraphLayout({
     } else {
       updateStylesheet(cy);
       triggerRippleForAddedNodes();
-    }
-
-    if (isInitialLoad) {
-      setIsInitialLoad(false);
+      if (isInitialLoad) {
+        fitGraphOnInitialLoad(cy);
+        setIsInitialLoad(false);
+      }
     }
   }, [
     cy,
@@ -89,6 +109,7 @@ export function useGraphLayout({
     handleLayoutComplete,
     triggerRippleForAddedNodes,
     isInitialLoad,
-    setIsInitialLoad
+    setIsInitialLoad,
+    fitGraphOnInitialLoad
   ]);
 }

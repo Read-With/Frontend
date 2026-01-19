@@ -60,7 +60,7 @@ function RelationGraphWrapper() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [edgeLabelVisible, setEdgeLabelVisible] = useState(true);
   const [activeTooltip, setActiveTooltip] = useState(null);
-  const [isGraphLoading, setIsGraphLoading] = useState(true);
+  const [isGraphLoading, setIsGraphLoading] = useState(false);
   const [isSidebarClosing, setIsSidebarClosing] = useState(false);
   const [forceClose, setForceClose] = useState(false);
   const [filterStage, setFilterStage] = useState(0);
@@ -858,7 +858,7 @@ function RelationGraphWrapper() {
     }
   }, [isLoading]);
   
-  const isBlockingInitialLoad = isLoading && !hasShownGraphOnce;
+  const isBlockingInitialLoad = false;
   
   if (isBlockingInitialLoad) {
     return (
