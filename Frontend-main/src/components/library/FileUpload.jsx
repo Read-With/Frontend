@@ -137,28 +137,108 @@ const FileUpload = ({ onUploadSuccess, onClose }) => {
       const arrayBuffer = await selectedFile.arrayBuffer();
       const { saveLocalBookBuffer, saveLocalBookMetadata } = await import('../../utils/localBookStorage');
       
-      // 1. EPUB 파일을 서버에 업로드 (서버에는 메타데이터만 저장됨)
-      let serverBook = null;
+      // 1. 업로드 전에 서버 책 목록 확인하여 제목+저자로 매칭
+      let existingBookId = null;
       try {
-        const result = await uploadFile(selectedFile, metadata);
-        if (result.success) {
-          serverBook = result.data;
-          setUploadedBook(serverBook);
-        } else {
-          throw new Error(result.error || '서버 업로드에 실패했습니다.');
+        const { getBooks } = await import('../../utils/api/booksApi');
+        const booksResponse = await getBooks({});
+        
+        if (booksResponse?.isSuccess && Array.isArray(booksResponse.result)) {
+          const normalizedTitle = (metadata.title || '').trim().toLowerCase();
+          const normalizedAuthor = (metadata.author || '').trim().toLowerCase();
+          
+          // 제목과 저자가 일치하는 책 찾기
+          const matchingBooks = booksResponse.result.filter(book => {
+            const bookTitle = (book.title || '').trim().toLowerCase();
+            const bookAuthor = (book.author || '').trim().toLowerCase();
+            return bookTitle === normalizedTitle && bookAuthor === normalizedAuthor;
+          });
+          
+          if (matchingBooks.length > 0) {
+            // ID가 가장 작은 것부터 비교하여 선택 (가장 오래된 책)
+            // ID를 숫자로 변환하여 정렬
+            const sortedBooks = matchingBooks.sort((a, b) => {
+              const idA = Number(a.id) || 0;
+              const idB = Number(b.id) || 0;
+              return idA - idB; // 오름차순 정렬 (가장 작은 ID가 첫 번째)
+            });
+            
+            // 가장 작은 ID를 가진 책 선택
+            existingBookId = sortedBooks[0].id;
+          }
         }
-      } catch (uploadError) {
-        throw new Error(uploadError.message || '서버 업로드에 실패했습니다. 로그인 상태를 확인해주세요.');
+      } catch (error) {
+        console.warn('서버 책 목록 확인 실패, 새로 업로드합니다:', error);
+      }
+      
+      // 2. 기존 책이 있으면 그 ID로만 취급 (새로 업로드하지 않음)
+      let serverBook = null;
+      let finalBookId = existingBookId;
+      
+      if (existingBookId) {
+        // 기존 책 ID 사용 - 새로 업로드하지 않고 기존 ID로만 취급
+        try {
+          const { getBook } = await import('../../utils/api/booksApi');
+          const bookResponse = await getBook(existingBookId);
+          if (bookResponse?.isSuccess && bookResponse.result) {
+            serverBook = bookResponse.result;
+          } else {
+            throw new Error('기존 책 정보를 가져올 수 없습니다.');
+          }
+        } catch (error) {
+          throw new Error(`기존 책 정보 가져오기 실패: ${error.message}`);
+        }
+      } else {
+        // 기존 책이 없을 때만 새로 업로드
+        try {
+          const result = await uploadFile(selectedFile, metadata);
+          if (result.success) {
+            serverBook = result.data;
+            setUploadedBook(serverBook);
+            finalBookId = serverBook?.id;
+          } else {
+            throw new Error(result.error || '서버 업로드에 실패했습니다.');
+          }
+        } catch (uploadError) {
+          throw new Error(uploadError.message || '서버 업로드에 실패했습니다. 로그인 상태를 확인해주세요.');
+        }
       }
 
-      // 2. 서버 업로드 성공 후 bookId 확인
-      // 서버에서 반환된 bookId는 서버 책 목록과 IndexedDB의 EPUB 파일을 매칭하는 키로 사용됨
-      const finalBookId = serverBook?.id;
+      // 3. bookId 확인
       if (!finalBookId) {
         throw new Error('서버에서 책 ID를 받지 못했습니다.');
       }
 
-      // 3. IndexedDB에 서버 bookId로 EPUB 파일 저장
+      // 4. 서버에서 manifest 정보 가져오기 (기존 책이면 manifest가 있을 수 있음)
+      let manifestData = null;
+      if (serverBook?.isDefault || serverBook?.chapters || serverBook?.characters) {
+        // 서버 응답에 이미 manifest 정보가 포함되어 있음
+        manifestData = {
+          chapters: serverBook.chapters || [],
+          characters: serverBook.characters || [],
+          progressMetadata: serverBook.progressMetadata || {},
+        };
+      } else {
+        // manifest 정보가 없으면 가져오기 시도
+        try {
+          const { getBookManifest } = await import('../../utils/api/api');
+          const manifestResponse = await getBookManifest(finalBookId, { forceRefresh: false });
+          if (manifestResponse?.isSuccess && manifestResponse?.result) {
+            manifestData = {
+              chapters: manifestResponse.result.chapters || [],
+              characters: manifestResponse.result.characters || [],
+              progressMetadata: manifestResponse.result.progressMetadata || {},
+            };
+          }
+        } catch (error) {
+          // 404 에러는 조용히 처리 (manifest가 없는 책일 수 있음)
+          if (error.status !== 404 && !error.message?.includes('404')) {
+            console.warn('Manifest 정보를 가져오지 못했습니다:', error);
+          }
+        }
+      }
+
+      // 5. IndexedDB에 서버 bookId로 EPUB 파일 저장
       // 중요: EPUB 파일은 IndexedDB에만 저장되며, 서버에는 메타데이터만 저장됨
       // 서버 bookId를 키로 사용하여 서버 책 목록과 IndexedDB의 EPUB 파일을 매칭함
       const book = {
@@ -174,27 +254,50 @@ const FileUpload = ({ onUploadSuccess, onClose }) => {
         isLocalOnly: false,
         epubFile: selectedFile,
         epubArrayBuffer: arrayBuffer,
+        // 서버에서 가져온 manifest 정보 포함
+        ...(manifestData && {
+          chapters: manifestData.chapters,
+          characters: manifestData.characters,
+          progressMetadata: manifestData.progressMetadata,
+        }),
       };
 
+      // IndexedDB에 저장 (완료 확인)
+      // 책 이름, 저자 이름, EPUB 파일만 저장
       await Promise.all([
         saveLocalBookBuffer(String(finalBookId), arrayBuffer),
         saveLocalBookMetadata(String(finalBookId), {
-          id: finalBookId,
-          _bookId: finalBookId,
           title: book.title,
           author: book.author,
-          language: book.language,
-          coverImgUrl: book.coverImgUrl,
-          coverImage: book.coverImage,
-          description: book.description,
-          favorite: book.favorite,
-          uploadedAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-          isLocalOnly: false,
         }),
       ]);
 
-      // 4. 서버 책 목록 갱신 및 뷰어로 이동
+      // IndexedDB 저장 완료 확인 (저장이 실제로 완료되었는지 검증)
+      // 최대 10번 재시도 (총 최대 2초 대기)
+      const { loadLocalBookBuffer } = await import('../../utils/localBookStorage');
+      let savedBuffer = null;
+      for (let i = 0; i < 10; i++) {
+        try {
+          savedBuffer = await loadLocalBookBuffer(String(finalBookId));
+          if (savedBuffer && savedBuffer.byteLength > 0) {
+            // 저장 완료 확인됨
+            break;
+          }
+        } catch (error) {
+          // 에러는 무시하고 재시도
+        }
+        
+        // 저장이 완료되지 않았으면 잠시 대기 후 재시도
+        if (i < 9) {
+          await new Promise(resolve => setTimeout(resolve, 200));
+        }
+      }
+
+      if (!savedBuffer || savedBuffer.byteLength === 0) {
+        throw new Error('IndexedDB에 파일 저장이 완료되지 않았습니다. 다시 시도해주세요.');
+      }
+
+      // 6. 서버 책 목록 갱신 및 뷰어로 이동
       // onUploadSuccess가 addBook을 호출하여 서버 책 목록을 갱신하고,
       // useBooks에서 서버 책만 표시하므로 자동으로 library에 표시됨
       // 뷰어에서는 서버 bookId로 IndexedDB에서 EPUB 파일을 로드함
