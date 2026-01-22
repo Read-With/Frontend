@@ -1,7 +1,7 @@
 import React, { useEffect, useState, forwardRef, useImperativeHandle, useMemo, useCallback } from "react";
 import ViewerRelationGraph from "./RelationGraph_Viewerpage";
-import { useGraphDataLoader } from "../../hooks/useGraphDataLoader.js";
-import { useGraphSearch } from "../../hooks/useGraphSearch.jsx";
+import { useGraphDataLoader } from "../../hooks/graph/useGraphDataLoader.js";
+import { useGraphSearch } from "../../hooks/graph/useGraphSearch.jsx";
 
 const GraphContainer = forwardRef(({
   currentPosition,

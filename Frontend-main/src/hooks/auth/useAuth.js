@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { logout as apiLogout } from '../utils/api/authApi';
+import { logout as apiLogout } from '../../utils/api/authApi';
 
 const useAuth = () => {
   const [user, setUser] = useState(null);

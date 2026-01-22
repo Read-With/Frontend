@@ -11,7 +11,7 @@ import UnifiedEdgeTooltip from "./tooltip/UnifiedEdgeTooltip";
 import "./RelationGraph.css";
 import { getEdgeStyle, createGraphStylesheet } from "../../utils/styles/graphStyles";
 import { graphStyles } from "../../utils/styles/styles";
-import useGraphInteractions from "../../hooks/useGraphInteractions";
+import useGraphInteractions from "../../hooks/graph/useGraphInteractions";
 
 
 const ViewerRelationGraph = ({

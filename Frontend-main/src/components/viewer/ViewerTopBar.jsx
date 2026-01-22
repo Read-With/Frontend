@@ -1,7 +1,7 @@
 import React, { useCallback, useState, useEffect, useMemo } from 'react';
 import GraphControls from '../graph/GraphControls';
 import EdgeLabelToggle from '../graph/tooltip/EdgeLabelToggle';
-import { getChapterEventCount, getFolderKeyFromFilename } from '../../utils/graphData';
+import { getChapterEventCount, getFolderKeyFromFilename } from '../../utils/graph/graphData';
 import { getCachedChapterEvents } from '../../utils/common/cache/chapterEventCache';
 import { getChapterData } from '../../utils/common/cache/manifestCache';
 

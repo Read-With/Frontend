@@ -1,59 +1,83 @@
-import React, { useState } from 'react';
-import { useBookmarks } from '../../../hooks/useBookmarks';
+import React, { useState, useEffect } from 'react';
+import { useBookmarks } from '../../../hooks/bookmarks/useBookmarks';
+import { bookmarkColorPalette, createBookmarkData, parseCfiToChapterPage } from '../../../utils/bookmarkUtils';
 
-/**
- * 북마크 생성 컴포넌트
- * @param {Object} props
- * @param {number} props.bookId - 책 ID
- * @param {string} props.startCfi - 시작 CFI
- * @param {string} props.endCfi - 종료 CFI (선택사항)
- * @param {Function} props.onClose - 닫기 콜백
- * @param {Function} props.onSuccess - 성공 콜백
- */
-const BookmarkCreator = ({ bookId, startCfi, endCfi, onClose, onSuccess }) => {
+const BookmarkCreator = ({ bookId, startCfi, endCfi, bookmark, onClose, onSuccess }) => {
+  const isEditMode = !!bookmark;
   const [memo, setMemo] = useState('');
   const [color, setColor] = useState('#28B532');
   const [loading, setLoading] = useState(false);
-  const { addBookmark } = useBookmarks(bookId);
+  const { addBookmark, changeBookmarkColor, changeBookmarkMemo } = useBookmarks(bookId);
 
-  const colors = [
-    { value: '#28B532', label: '기본', preview: '#28B532' },
-    { value: '#FF6B6B', label: '빨강', preview: '#FF6B6B' },
-    { value: '#4ECDC4', label: '청록', preview: '#4ECDC4' },
-    { value: '#45B7D1', label: '파랑', preview: '#45B7D1' },
-    { value: '#96CEB4', label: '연두', preview: '#96CEB4' },
-    { value: '#FFEAA7', label: '노랑', preview: '#FFEAA7' },
-    { value: '#DDA0DD', label: '보라', preview: '#DDA0DD' },
-    { value: '#FFB347', label: '주황', preview: '#FFB347' },
-  ];
+  useEffect(() => {
+    if (isEditMode && bookmark) {
+      setMemo(bookmark.memo || '');
+      setColor(bookmark.color || '#28B532');
+    }
+  }, [isEditMode, bookmark]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!bookId || !startCfi) return;
-
-    setLoading(true);
-    try {
-      const bookmarkData = {
-        bookId,
-        startCfi,
-        endCfi: endCfi || null,
-        color,
-        memo: memo.trim(),
-      };
-
-      const result = await addBookmark(bookmarkData);
+    
+    if (isEditMode) {
+      if (!bookId || !bookmark?.id) return;
       
-      if (result.success) {
-        if (onSuccess) onSuccess(result.bookmark);
-        if (onClose) onClose();
-      } else {
-        alert(result.message || '북마크 생성에 실패했습니다.');
+      setLoading(true);
+      try {
+        const updates = [];
+        
+        if (color !== bookmark.color) {
+          const colorResult = await changeBookmarkColor(bookmark.id, color);
+          if (!colorResult.success) {
+            alert(colorResult.message || '색상 변경에 실패했습니다.');
+            return;
+          }
+          updates.push('색상');
+        }
+
+        if (memo.trim() !== (bookmark.memo || '')) {
+          const memoResult = await changeBookmarkMemo(bookmark.id, memo.trim());
+          if (!memoResult.success) {
+            alert(memoResult.message || '메모 변경에 실패했습니다.');
+            return;
+          }
+          updates.push('메모');
+        }
+
+        if (updates.length > 0) {
+          if (onSuccess) onSuccess();
+          if (onClose) onClose();
+        } else {
+          if (onClose) onClose();
+        }
+      } catch (error) {
+        console.error('북마크 편집 오류:', error);
+        alert('북마크 편집 중 오류가 발생했습니다.');
+      } finally {
+        setLoading(false);
       }
-    } catch (error) {
-      console.error('북마크 생성 오류:', error);
-      alert('북마크 생성 중 오류가 발생했습니다.');
-    } finally {
-      setLoading(false);
+    } else {
+      if (!bookId || !startCfi) return;
+
+      setLoading(true);
+      try {
+        const title = parseCfiToChapterPage(startCfi);
+        const bookmarkData = createBookmarkData(bookId, startCfi, endCfi || null, color, memo.trim(), title);
+
+        const result = await addBookmark(bookmarkData);
+        
+        if (result.success) {
+          if (onSuccess) onSuccess(result.bookmark);
+          if (onClose) onClose();
+        } else {
+          alert(result.message || '북마크 생성에 실패했습니다.');
+        }
+      } catch (error) {
+        console.error('북마크 생성 오류:', error);
+        alert('북마크 생성 중 오류가 발생했습니다.');
+      } finally {
+        setLoading(false);
+      }
     }
   };
 
@@ -61,11 +85,15 @@ const BookmarkCreator = ({ bookId, startCfi, endCfi, onClose, onSuccess }) => {
     if (onClose) onClose();
   };
 
+  if (isEditMode && !bookmark) return null;
+
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
       <div className="bg-white rounded-xl shadow-2xl p-6 w-full max-w-md mx-4">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-semibold text-gray-800">북마크 추가</h3>
+          <h3 className="text-lg font-semibold text-gray-800">
+            {isEditMode ? '북마크 편집' : '북마크 추가'}
+          </h3>
           <button
             onClick={handleCancel}
             className="text-gray-400 hover:text-gray-600 transition-colors"
@@ -81,7 +109,7 @@ const BookmarkCreator = ({ bookId, startCfi, endCfi, onClose, onSuccess }) => {
               색상 선택
             </label>
             <div className="grid grid-cols-4 gap-2">
-              {colors.map((colorOption) => (
+              {bookmarkColorPalette.map((colorOption) => (
                 <button
                   key={colorOption.value}
                   type="button"
@@ -101,7 +129,7 @@ const BookmarkCreator = ({ bookId, startCfi, endCfi, onClose, onSuccess }) => {
           {/* 메모 입력 */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              메모 (선택사항)
+              {isEditMode ? '메모' : '메모 (선택사항)'}
             </label>
             <textarea
               value={memo}
@@ -120,17 +148,24 @@ const BookmarkCreator = ({ bookId, startCfi, endCfi, onClose, onSuccess }) => {
           <div className="bg-gray-50 rounded-lg p-3">
             <div className="text-xs text-gray-600 mb-1">위치 정보</div>
             <div className="text-sm font-mono text-gray-800 break-all">
-              {startCfi}
+              {isEditMode ? bookmark.startCfi : startCfi}
             </div>
-            {endCfi && (
+            {(isEditMode ? bookmark.endCfi : endCfi) && (
               <>
                 <div className="text-xs text-gray-600 mt-2 mb-1">종료 위치</div>
                 <div className="text-sm font-mono text-gray-800 break-all">
-                  {endCfi}
+                  {isEditMode ? bookmark.endCfi : endCfi}
                 </div>
               </>
             )}
           </div>
+
+          {/* 생성일 표시 (편집 모드만) */}
+          {isEditMode && bookmark.createdAt && (
+            <div className="text-xs text-gray-500">
+              생성일: {new Date(bookmark.createdAt).toLocaleString('ko-KR')}
+            </div>
+          )}
 
           {/* 버튼 */}
           <div className="flex space-x-3 pt-4">
@@ -150,10 +185,10 @@ const BookmarkCreator = ({ bookId, startCfi, endCfi, onClose, onSuccess }) => {
               {loading ? (
                 <div className="flex items-center justify-center">
                   <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                  생성 중...
+                  {isEditMode ? '저장 중...' : '생성 중...'}
                 </div>
               ) : (
-                '북마크 생성'
+                isEditMode ? '변경사항 저장' : '북마크 생성'
               )}
             </button>
           </div>

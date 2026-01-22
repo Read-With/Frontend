@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import useAuth from '../../hooks/useAuth';
+import useAuth from '../../hooks/auth/useAuth';
 import { validateUserData, secureLog } from '../../utils/security/oauthSecurity';
 import { getApiBaseUrl } from '../../utils/common/authUtils';
 

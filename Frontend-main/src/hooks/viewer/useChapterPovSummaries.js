@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { getChapterPovSummaries } from '../utils/api/booksApi';
+import { getChapterPovSummaries } from '../../utils/api/booksApi';
 
 export const useChapterPovSummaries = (bookId, chapterIdx) => {
   const [povSummaries, setPovSummaries] = useState(null);

@@ -31,6 +31,52 @@ const cache = {
 };
 const CACHE_DURATION = 100;
 
+const validateCytoscapeRef = (cyRef) => {
+  if (!cyRef?.current) {
+    return { valid: false, cy: null };
+  }
+  return { valid: true, cy: cyRef.current };
+};
+
+const validatePan = (pan) => {
+  if (!pan || typeof pan.x !== 'number' || typeof pan.y !== 'number') {
+    return false;
+  }
+  return true;
+};
+
+const validateZoom = (zoom) => {
+  if (typeof zoom !== 'number' || zoom <= 0) {
+    return false;
+  }
+  return true;
+};
+
+const validatePosition = (pos) => {
+  if (!pos || typeof pos.x !== 'number' || typeof pos.y !== 'number') {
+    return false;
+  }
+  return true;
+};
+
+const parseJsonSafely = (value) => {
+  if (typeof value !== 'string') {
+    return value;
+  }
+  try {
+    return JSON.parse(value);
+  } catch {
+    return [value];
+  }
+};
+
+const resetMouseState = (refs) => {
+  if (refs.isMouseDownRef) refs.isMouseDownRef.current = false;
+  if (refs.mouseDownTimeRef) refs.mouseDownTimeRef.current = 0;
+  if (refs.hasMovedRef) refs.hasMovedRef.current = false;
+  if (refs.isDraggingRef) refs.isDraggingRef.current = false;
+};
+
 export const getContainerInfo = () => {
   try {
     const now = Date.now();
@@ -106,32 +152,31 @@ export const getViewportInfo = () => {
 
 export const calculateCytoscapePosition = (pos, cyRef) => {
   try {
-    if (!cyRef?.current) {
+    const { valid, cy } = validateCytoscapeRef(cyRef);
+    if (!valid) {
       console.warn('calculateCytoscapePosition: cyRef.current가 없습니다');
       return { x: 0, y: 0 };
     }
     
-    if (!pos || typeof pos.x !== 'number' || typeof pos.y !== 'number') {
+    if (!validatePosition(pos)) {
       console.warn('calculateCytoscapePosition: 유효하지 않은 pos 객체입니다', pos);
       return { x: 0, y: 0 };
     }
     
-    const cy = cyRef.current;
     const pan = cy.pan();
     const zoom = cy.zoom();
     const { containerRect } = getContainerInfo();
     
-    if (!pan || typeof pan.x !== 'number' || typeof pan.y !== 'number') {
+    if (!validatePan(pan)) {
       console.warn('calculateCytoscapePosition: 유효하지 않은 pan 값입니다', pan);
       return { x: 0, y: 0 };
     }
     
-    if (typeof zoom !== 'number' || zoom <= 0) {
+    if (!validateZoom(zoom)) {
       console.warn('calculateCytoscapePosition: 유효하지 않은 zoom 값입니다', zoom);
       return { x: 0, y: 0 };
     }
     
-    // Cytoscape 좌표를 DOM 좌표로 정확히 변환
     const domX = pos.x * zoom + pan.x + containerRect.left;
     const domY = pos.y * zoom + pan.y + containerRect.top;
     
@@ -144,7 +189,8 @@ export const calculateCytoscapePosition = (pos, cyRef) => {
 
 export const convertMouseToCytoscapePosition = (evt, cyRef) => {
   try {
-    if (!cyRef?.current) {
+    const { valid, cy } = validateCytoscapeRef(cyRef);
+    if (!valid) {
       console.warn('convertMouseToCytoscapePosition: cyRef.current가 없습니다');
       return { x: 0, y: 0 };
     }
@@ -154,7 +200,6 @@ export const convertMouseToCytoscapePosition = (evt, cyRef) => {
       return { x: 0, y: 0 };
     }
     
-    const cy = cyRef.current;
     const { container, containerRect } = getContainerInfo();
     
     if (!container) {
@@ -162,20 +207,18 @@ export const convertMouseToCytoscapePosition = (evt, cyRef) => {
       return { x: 0, y: 0 };
     }
     
-    // 마우스 위치를 컨테이너 기준으로 변환
     const clientX = evt.clientX - containerRect.left;
     const clientY = evt.clientY - containerRect.top;
     
-    // pan과 zoom을 고려하여 Cytoscape 좌표로 변환
     const pan = cy.pan();
     const zoom = cy.zoom();
     
-    if (!pan || typeof pan.x !== 'number' || typeof pan.y !== 'number') {
+    if (!validatePan(pan)) {
       console.warn('convertMouseToCytoscapePosition: 유효하지 않은 pan 값입니다', pan);
       return { x: 0, y: 0 };
     }
     
-    if (typeof zoom !== 'number' || zoom <= 0) {
+    if (!validateZoom(zoom)) {
       console.warn('convertMouseToCytoscapePosition: 유효하지 않은 zoom 값입니다', zoom);
       return { x: 0, y: 0 };
     }
@@ -342,27 +385,12 @@ export const ensureElementsInBounds = (cy, container, maxNodes = 1000) => {
     
     nodesToProcess.forEach(node => {
       const pos = node.position();
-      let newX = pos.x;
-      let newY = pos.y;
+      const constrainedX = Math.max(bounds.left, Math.min(pos.x, bounds.right));
+      const constrainedY = Math.max(bounds.top, Math.min(pos.y, bounds.bottom));
       
-      if (pos.x < bounds.left) {
-        newX = bounds.left;
+      if (constrainedX !== pos.x || constrainedY !== pos.y) {
         needsAdjustment = true;
-      } else if (pos.x > bounds.right) {
-        newX = bounds.right;
-        needsAdjustment = true;
-      }
-      
-      if (pos.y < bounds.top) {
-        newY = bounds.top;
-        needsAdjustment = true;
-      } else if (pos.y > bounds.bottom) {
-        newY = bounds.bottom;
-        needsAdjustment = true;
-      }
-      
-      if (newX !== pos.x || newY !== pos.y) {
-        node.position({ x: newX, y: newY });
+        node.position({ x: constrainedX, y: constrainedY });
       }
     });
   });
@@ -374,7 +402,6 @@ export const ensureElementsInBounds = (cy, container, maxNodes = 1000) => {
 };
 
 export const createMouseEventHandlers = (cy, container) => {
-  const CLICK_THRESHOLD = 200;
   const MOVE_THRESHOLD = 3;
   
   const isDraggingRef = { current: false };
@@ -408,29 +435,32 @@ export const createMouseEventHandlers = (cy, container) => {
   const handleMouseUp = (evt) => {
     if (!isMouseDownRef.current) return;
     
-    const clickDuration = Date.now() - mouseDownTimeRef.current;
-    const isClick = clickDuration < CLICK_THRESHOLD && !hasMovedRef.current;
-    
     if (isDraggingRef.current) {
-      isMouseDownRef.current = false;
-      mouseDownTimeRef.current = 0;
-      hasMovedRef.current = false;
-      isDraggingRef.current = false;
+      resetMouseState({
+        isMouseDownRef,
+        mouseDownTimeRef,
+        hasMovedRef,
+        isDraggingRef
+      });
       return;
     }
     
-    isMouseDownRef.current = false;
-    mouseDownTimeRef.current = 0;
-    hasMovedRef.current = false;
-    isDraggingRef.current = false;
+    resetMouseState({
+      isMouseDownRef,
+      mouseDownTimeRef,
+      hasMovedRef,
+      isDraggingRef
+    });
   };
   
   const cleanup = () => {
-    isDraggingRef.current = false;
+    resetMouseState({
+      isMouseDownRef,
+      mouseDownTimeRef,
+      hasMovedRef,
+      isDraggingRef
+    });
     prevMouseDownPositionRef.current = { x: 0, y: 0 };
-    mouseDownTimeRef.current = 0;
-    hasMovedRef.current = false;
-    isMouseDownRef.current = false;
   };
   
   return {
@@ -450,15 +480,7 @@ export const processTooltipData = (tooltipData, type) => {
     if (type === 'node') {
       const nodeData = tooltipData;
       
-      // API 데이터의 names 필드 처리
-      let names = nodeData.names;
-      if (typeof names === "string") {
-        try { 
-          names = JSON.parse(names); 
-        } catch { 
-          names = [names]; 
-        }
-      }
+      const names = parseJsonSafely(nodeData.names);
       
       // main_character 필드 처리 (boolean으로 정규화)
       let mainCharacter = nodeData.main_character ?? nodeData.main;
@@ -481,15 +503,7 @@ export const processTooltipData = (tooltipData, type) => {
     } else if (type === 'edge') {
       const edgeData = tooltipData;
       
-      // API 데이터의 relation 필드 처리
-      let relation = edgeData.data?.relation;
-      if (typeof relation === "string") {
-        try { 
-          relation = JSON.parse(relation); 
-        } catch { 
-          relation = [relation]; 
-        }
-      }
+      const relation = parseJsonSafely(edgeData.data?.relation);
       
       // 기본값 설정
       const defaultLabel = Array.isArray(relation) && relation.length > 0 
@@ -514,4 +528,185 @@ export const processTooltipData = (tooltipData, type) => {
     console.error('processTooltipData 실패:', error);
     return tooltipData;
   }
+};
+
+/**
+ * 챕터의 마지막 이벤트 번호를 계산합니다.
+ * @param {Object} options - 계산 옵션
+ * @param {boolean} options.isApiBook - API 책 여부
+ * @param {Array} options.manifestChapters - Manifest 챕터 목록
+ * @param {number} options.chapter - 챕터 번호
+ * @param {string} options.filename - 파일명
+ * @returns {number} 마지막 이벤트 번호 (기본값: 1)
+ */
+export const calculateLastEventForChapter = ({ 
+  isApiBook, 
+  manifestChapters, 
+  chapter, 
+  filename,
+  getFolderKeyFromFilename,
+  getLastEventIndexForChapter
+}) => {
+  if (isApiBook) {
+    if (!manifestChapters) return 1;
+    
+    const chapterInfo = manifestChapters.find(ch => 
+      ch.chapterIdx === chapter || 
+      ch.chapter === chapter || 
+      ch.index === chapter || 
+      ch.number === chapter
+    );
+    
+    if (!chapterInfo) return 1;
+    
+    let eventCount = chapterInfo.eventCount || chapterInfo.events || chapterInfo.event_count || 0;
+    if (Array.isArray(eventCount)) {
+      eventCount = eventCount.length;
+    } else if (typeof eventCount !== 'number' || isNaN(eventCount)) {
+      eventCount = 0;
+    }
+    
+    return eventCount > 0 ? eventCount : 1;
+  } else {
+    if (!getFolderKeyFromFilename || !getLastEventIndexForChapter) {
+      console.warn('calculateLastEventForChapter: 로컬 책 처리를 위한 함수가 제공되지 않았습니다');
+      return 1;
+    }
+    
+    const folderKey = getFolderKeyFromFilename(filename);
+    if (!folderKey) return 1;
+    
+    const lastEventIndex = getLastEventIndexForChapter(folderKey, chapter);
+    return lastEventIndex > 0 ? lastEventIndex : 1;
+  }
+};
+
+/**
+ * API 이벤트 객체를 정규화합니다.
+ * @param {Object} apiEvent - API 이벤트 객체
+ * @param {number} currentChapter - 현재 챕터
+ * @param {number} currentEvent - 현재 이벤트
+ * @returns {Object|null} 정규화된 이벤트 객체
+ */
+export const normalizeApiEvent = (apiEvent, currentChapter, currentEvent) => {
+  if (!apiEvent) return null;
+  
+  return {
+    chapter: apiEvent.chapterIdx ?? currentChapter,
+    chapterIdx: apiEvent.chapterIdx ?? currentChapter,
+    eventNum: apiEvent.event_id ?? (currentEvent - 1),
+    event_id: apiEvent.event_id ?? (currentEvent - 1),
+    start: apiEvent.start,
+    end: apiEvent.end,
+    ...apiEvent
+  };
+};
+
+/**
+ * API 캐릭터 데이터로부터 노드 가중치 맵을 생성합니다.
+ * @param {Array} characters - 캐릭터 배열
+ * @returns {Object} 노드 ID를 키로 하는 가중치 맵
+ */
+export const buildNodeWeights = (characters) => {
+  if (!characters || !Array.isArray(characters)) return {};
+  
+  const nodeWeights = {};
+  characters.forEach(char => {
+    if (char.id !== undefined && char.weight !== undefined && char.weight > 0) {
+      const nodeId = String(char.id);
+      nodeWeights[nodeId] = {
+        weight: char.weight,
+        count: char.count || 1
+      };
+    }
+  });
+  
+  return nodeWeights;
+};
+
+/**
+ * 검색 파라미터를 포맷팅합니다.
+ * @param {string} retainedSearch - 보존된 검색 파라미터
+ * @returns {string} 포맷팅된 검색 파라미터
+ */
+export const formatSearchParams = (retainedSearch) => {
+  if (!retainedSearch) return '';
+  
+  return retainedSearch.startsWith('?') ? retainedSearch : `?${retainedSearch}`;
+};
+
+/**
+ * 이벤트가 사이드바 요소 내부인지 확인합니다.
+ * @param {Event} event - DOM 이벤트
+ * @returns {boolean} 사이드바 요소 내부 여부
+ */
+export const isSidebarElement = (event) => {
+  const sidebarElement = document.querySelector('[data-testid="graph-sidebar"]') || 
+                        document.querySelector('.graph-sidebar') ||
+                        event.target.closest('[data-testid="graph-sidebar"]') ||
+                        event.target.closest('.graph-sidebar');
+  
+  return sidebarElement && sidebarElement.contains(event.target);
+};
+
+/**
+ * 서버 bookId를 해결합니다.
+ * @param {Object} options - 해결 옵션
+ * @param {Object} options.book - 책 객체
+ * @param {number} options.bookId - 책 ID
+ * @returns {number|null} 서버 bookId
+ */
+export const resolveServerBookId = ({ book, bookId }) => {
+  if (book?.id && typeof book.id === 'number') {
+    return book.id;
+  }
+  if (book?._bookId && typeof book._bookId === 'number') {
+    return book._bookId;
+  }
+  if (Number.isFinite(bookId) && bookId > 0) {
+    return bookId;
+  }
+  return null;
+};
+
+/**
+ * 이벤트가 드래그 종료 이벤트인지 확인합니다.
+ * @param {Event} event - DOM 이벤트
+ * @returns {boolean} 드래그 종료 이벤트 여부
+ */
+export const isDragEndEvent = (event) => {
+  return event.detail && event.detail.type === 'dragend';
+};
+
+export const sortElementsById = (elements) => {
+  if (!elements || !Array.isArray(elements)) return [];
+  return [...elements].sort((a, b) => {
+    const aId = a.data?.id || '';
+    const bId = b.data?.id || '';
+    return aId.localeCompare(bId);
+  });
+};
+
+export const calculateNodeCount = (elements, filterStage, filteredMainCharacters) => {
+  if (filterStage > 0) {
+    return filteredMainCharacters.filter(el => el.data && el.data.id && !el.data.source).length;
+  }
+  return elements.filter(el => el.data && el.data.id && !el.data.source).length;
+};
+
+export const calculateRelationCount = (elements, filterStage, filteredMainCharacters, eventUtils) => {
+  if (filterStage > 0) {
+    return eventUtils.filterEdges(filteredMainCharacters).length;
+  }
+  return eventUtils.filterEdges(elements).length;
+};
+
+export const determineFinalElements = (isSearchActive, filteredElements, sortedElements, filterStage, filteredMainCharacters) => {
+  if (isSearchActive && filteredElements && filteredElements.length > 0) {
+    return filteredElements;
+  }
+  if (filterStage > 0) {
+    return filteredMainCharacters;
+  }
+  return sortedElements;
 };
