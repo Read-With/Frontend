@@ -1,13 +1,49 @@
-import { useState, useEffect } from 'react';
-import { logout as apiLogout } from '../../utils/api/authApi';
+import { useState, useEffect, useRef } from 'react';
+import { logout as apiLogout, refreshToken, isTokenExpiringSoon, isTokenValid } from '../../utils/api/authApi';
+import { clearAuthData } from '../../utils/common/authUtils';
 
 const useAuth = () => {
   const [user, setUser] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
+  const tokenRefreshIntervalRef = useRef(null);
+
+  // 토큰 자동 갱신 (10분마다 체크)
+  useEffect(() => {
+    const checkAndRefreshToken = async () => {
+      try {
+        const token = localStorage.getItem('accessToken');
+        if (token && isTokenExpiringSoon(token, 15 * 60)) {
+          await refreshToken();
+        }
+      } catch (error) {
+        console.warn('토큰 자동 갱신 실패:', error);
+      }
+    };
+
+    // 10분마다 토큰 만료 여부 확인
+    tokenRefreshIntervalRef.current = setInterval(checkAndRefreshToken, 10 * 60 * 1000);
+
+    return () => {
+      if (tokenRefreshIntervalRef.current) {
+        clearInterval(tokenRefreshIntervalRef.current);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     try {
       const savedUser = localStorage.getItem('google_user');
+      const accessToken = localStorage.getItem('accessToken');
+      
+      // 최초 접근시 토큰 만료 체크
+      if (accessToken && !isTokenValid(accessToken)) {
+        clearAuthData();
+        const currentPath = window.location.pathname;
+        if (currentPath !== '/') {
+          window.location.href = 'http://localhost:5173/';
+          return;
+        }
+      }
       
       try {
         const oldToken = localStorage.getItem('access_token');

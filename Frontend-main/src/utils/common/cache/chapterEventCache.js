@@ -84,6 +84,14 @@ export const hasGraphBookCache = (bookId) => {
   return getRawFromStorage(key, 'localStorage') !== null;
 };
 
+export const isGraphBookCacheBuilding = (bookId) => {
+  const numericId = Number(bookId);
+  if (!Number.isFinite(numericId) || numericId <= 0) {
+    return false;
+  }
+  return graphBuildPromises.has(numericId);
+};
+
 export const ensureGraphBookCache = async (
   bookId,
   { forceRefresh = false, signal } = {}

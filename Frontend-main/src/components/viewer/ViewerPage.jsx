@@ -12,7 +12,7 @@ import { useProgressAutoSave } from "../../hooks/viewer/useProgressAutoSave";
 import { useTooltipState } from "../../hooks/ui/useTooltipState";
 import { useCachedLocation } from "../../hooks/viewer/useCachedLocation";
 import { getBookProgress, getFineGraph, getBookManifest } from "../../utils/api/api";
-import { getGraphEventState, getCachedChapterEvents } from "../../utils/common/cache/chapterEventCache";
+import { getGraphEventState, getCachedChapterEvents, isGraphBookCacheBuilding } from "../../utils/common/cache/chapterEventCache";
 import { getManifestFromCache } from "../../utils/common/cache/manifestCache";
 import { 
   getServerBookId,
@@ -374,6 +374,7 @@ const ViewerPage = () => {
   // 챕터별 이벤트 탐색 (챕터 변경 시)
   useEffect(() => {
     let isMounted = true;
+    let checkInterval = null;
     
     const discoverEvents = async () => {
       const isApiBook = bookUtils.isApiBook(book);
@@ -384,21 +385,64 @@ const ViewerPage = () => {
       
       // 이미 탐색 중이거나 완료된 챕터는 스킵
       const discoveryKey = cacheKeyUtils.createChapterKey(book.id, currentChapter);
-      if (chapterEventDiscoveryRef.current.has(discoveryKey)) {
+      const currentStatus = chapterEventDiscoveryRef.current.get(discoveryKey);
+      if (currentStatus === 'completed' || currentStatus === 'loading') {
         return;
       }
-      
-      // 탐색 시작 표시
-      chapterEventDiscoveryRef.current.set(discoveryKey, 'discovering');
       
       const cached = getCachedChapterEvents(book.id, currentChapter);
       if (cached) {
         chapterEventDiscoveryRef.current.set(discoveryKey, 'completed');
+        if (isMounted) {
+          setApiError(null);
+        }
         return;
       }
 
+      // 빌드가 진행 중인지 확인
+      const isBuilding = isGraphBookCacheBuilding(book.id);
+      if (isBuilding) {
+        chapterEventDiscoveryRef.current.set(discoveryKey, 'loading');
+        if (isMounted) {
+          setIsGraphLoading(true);
+          setApiError(null);
+        }
+        
+        // 빌드 완료를 주기적으로 확인
+        checkInterval = setInterval(() => {
+          if (!isMounted) {
+            if (checkInterval) clearInterval(checkInterval);
+            return;
+          }
+          
+          const stillBuilding = isGraphBookCacheBuilding(book.id);
+          const nowCached = getCachedChapterEvents(book.id, currentChapter);
+          
+          if (nowCached) {
+            chapterEventDiscoveryRef.current.set(discoveryKey, 'completed');
+            if (checkInterval) clearInterval(checkInterval);
+            if (isMounted) {
+              setIsGraphLoading(false);
+              setApiError(null);
+            }
+          } else if (!stillBuilding) {
+            // 빌드가 완료되었지만 캐시가 없는 경우
+            chapterEventDiscoveryRef.current.set(discoveryKey, 'missing');
+            if (checkInterval) clearInterval(checkInterval);
+            if (isMounted) {
+              setIsGraphLoading(false);
+              setApiError((prev) => prev ?? '그래프 이벤트 캐시가 없습니다. 마이페이지에서 데이터를 준비해주세요.');
+            }
+          }
+        }, 500);
+        
+        return;
+      }
+
+      // 빌드 진행 중이 아니고 캐시도 없는 경우
       if (isMounted) {
         chapterEventDiscoveryRef.current.set(discoveryKey, 'missing');
+        setIsGraphLoading(false);
         setApiError((prev) => prev ?? '그래프 이벤트 캐시가 없습니다. 마이페이지에서 데이터를 준비해주세요.');
       }
     };
@@ -407,6 +451,9 @@ const ViewerPage = () => {
     
     return () => {
       isMounted = false;
+      if (checkInterval) {
+        clearInterval(checkInterval);
+      }
     };
   }, [book?.id, currentChapter]);
   

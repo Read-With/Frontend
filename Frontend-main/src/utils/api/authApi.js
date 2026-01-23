@@ -25,8 +25,41 @@ export const isTokenValid = (token) => {
   }
 };
 
+// 토큰 만료까지 남은 시간 확인 (초 단위)
+export const getTokenExpirationTime = (token) => {
+  if (!token) return null;
+  
+  try {
+    const payload = JSON.parse(atob(token.split('.')[1]));
+    if (payload.exp) {
+      const currentTime = Math.floor(Date.now() / 1000);
+      return payload.exp - currentTime;
+    }
+    return null;
+  } catch (error) {
+    return null;
+  }
+};
+
+// 토큰이 곧 만료될 예정인지 확인 (기본 5분 전)
+export const isTokenExpiringSoon = (token, bufferSeconds = 5 * 60) => {
+  const remainingTime = getTokenExpirationTime(token);
+  if (remainingTime === null) return false;
+  return remainingTime < bufferSeconds;
+};
+
 export const authenticatedRequest = async (endpoint, options = {}, retryCount = 0) => {
-  const token = localStorage.getItem('accessToken');
+  let token = localStorage.getItem('accessToken');
+  
+  // 토큰이 곧 만료될 예정이면 미리 갱신 (15분 전)
+  if (token && isTokenExpiringSoon(token, 15 * 60)) {
+    try {
+      await refreshToken();
+      token = localStorage.getItem('accessToken');
+    } catch (error) {
+      console.warn('토큰 자동 갱신 실패:', error);
+    }
+  }
   
   const defaultHeaders = {
     'Content-Type': 'application/json',
