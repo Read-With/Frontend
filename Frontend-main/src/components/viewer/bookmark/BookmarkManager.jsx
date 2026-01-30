@@ -1,15 +1,5 @@
 import { getBookmarks, createBookmark, updateBookmark, deleteBookmark } from '../../../utils/api/bookmarksApi';
-
-// 북마크 데이터 구조 개선 (로컬 CFI 기반)
-const createBookmarkData = (bookId, startCfi, endCfi = null, color = '#28B532', memo = '', title = null) => ({
-  bookId,
-  startCfi,
-  endCfi,
-  color,
-  memo,
-  title, // 로컬 CFI 기반으로 생성된 "몇페이지 (챕터 몇)" 형식
-  createdAt: new Date().toISOString()
-});
+import { createBookmarkData } from '../../../utils/bookmarkUtils';
 
 // 북마크 목록 조회 (서버에서)
 export const loadBookmarks = async (bookId) => {

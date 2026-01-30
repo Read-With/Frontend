@@ -4,6 +4,7 @@ import { createCharacterMaps, normalizeCharacterId, aggregateCharactersFromEvent
 import { getMaxChapter, getChapterData } from './common/cache/manifestCache';
 import { getCachedChapterEvents, reconstructChapterGraphState, normalizeManifestEvents } from './common/cache/chapterEventCache';
 import { registerCache, getCacheItem, setCacheItem } from './common/cache/cacheManager';
+import { eventUtils } from './viewerUtils';
 
 const API_PREFIX = 'api:';
 const CHARACTER_CACHE_LIMIT = 50;
@@ -86,30 +87,11 @@ export function getAllFolderKeys() {
 }
 
 const convertElementsToRelations = (elements) => {
-  if (!Array.isArray(elements)) {
-    return [];
-  }
-
-  return elements
-    .filter(
-      (element) =>
-        element &&
-        element.data &&
-        element.data.source &&
-        element.data.target
-    )
-    .map((element) => ({
-      id1: element.data.source,
-      id2: element.data.target,
-      relation: Array.isArray(element.data.relation)
-        ? [...element.data.relation]
-        : [],
-      label: element.data.label || '',
-      positivity:
-        typeof element.data.positivity === 'number'
-          ? element.data.positivity
-          : null,
-    }));
+  return eventUtils.convertElementsToRelations(elements, {
+    includeLabel: true,
+    includeCount: false,
+    positivityDefault: null
+  });
 };
 
 export function getEventsForChapter(chapter, folderKey) {

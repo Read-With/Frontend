@@ -101,13 +101,6 @@ export function validateAndNormalizeProfileImageUrl(profileImage) {
   
   // 상대 경로인 경우 API 베이스 URL과 결합
   if (trimmed.startsWith('/')) {
-    const getApiBaseUrl = () => {
-      if (import.meta.env.DEV) {
-        // 개발 환경: 프록시를 통해 배포 서버로 요청하므로 빈 문자열
-        return '';
-      }
-      return 'https://dev.readwith.store';
-    };
     const apiBaseUrl = getApiBaseUrl();
     const fullUrl = apiBaseUrl ? `${apiBaseUrl}${trimmed}` : trimmed;
     

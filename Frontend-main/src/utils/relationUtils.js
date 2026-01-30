@@ -229,3 +229,32 @@ export function isValidRelationsArray(relations) {
   
   return isValidRelationData(relations[0]);
 }
+
+/**
+ * 관계 키 생성 (정규화된 ID 쌍으로 고유 키 생성)
+ * @param {any} a - 첫 번째 ID
+ * @param {any} b - 두 번째 ID
+ * @returns {string|null} 관계 키 (min-max 형식) 또는 null
+ */
+export function createRelationKey(a, b) {
+  const first = safeNum(a);
+  const second = safeNum(b);
+  if (!Number.isFinite(first) || !Number.isFinite(second)) {
+    return null;
+  }
+  const min = first <= second ? first : second;
+  const max = first <= second ? second : first;
+  return `${min}-${max}`;
+}
+
+/**
+ * 관계 객체에서 관계 키 추출
+ * @param {Object} relation - 관계 객체 (id1/id2 또는 source/target 포함)
+ * @returns {string|null} 관계 키 또는 null
+ */
+export function getRelationKeyFromRelation(relation) {
+  if (!relation || typeof relation !== "object") {
+    return null;
+  }
+  return createRelationKey(relation.id1 ?? relation.source, relation.id2 ?? relation.target);
+}

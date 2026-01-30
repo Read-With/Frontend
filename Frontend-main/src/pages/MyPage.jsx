@@ -1,13 +1,15 @@
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Book, BookOpen, CheckCircle2, Plus, Library, Heart, AlertCircle, Grid3X3, List } from 'lucide-react';
 import Header from '../components/common/Header';
 import BookLibrary from '../components/library/BookLibrary';
 import FileUpload from '../components/library/FileUpload';
-import { useBooks } from '../hooks/useBooks';
-import useAuth from '../hooks/useAuth';
+import { useBooks } from '../hooks/books/useBooks';
+import useAuth from '../hooks/auth/useAuth';
 import './MyPage.css';
 
 export default function MyPage() {
+  const navigate = useNavigate();
   const { books, loading, error, retryFetch, addBook, toggleFavorite, removeBook } = useBooks();
   const { user } = useAuth();
   const [showUpload, setShowUpload] = useState(false);
@@ -49,6 +51,12 @@ export default function MyPage() {
   const getDisplayName = useCallback(() => {
     return user?.name || '사용자';
   }, [user?.name]);
+
+  useEffect(() => {
+    if (error && (error.includes('인증이 필요합니다') || error.includes('인증'))) {
+      navigate('/', { replace: true });
+    }
+  }, [error, navigate]);
 
   // 통계 계산 - 메모이제이션 (reader_progress_{bookId} 키 기반)
   const stats = useMemo(() => {

@@ -331,15 +331,12 @@ const BookCard = ({ book, onToggleFavorite, onBookClick, onBookDetailClick, onSh
   );
 };
 
-// 공통 book shape 정의
+// 공통 book shape 정의 (서버 책만 표시)
 const bookShape = PropTypes.shape({
   id: PropTypes.oneOfType([PropTypes.number, PropTypes.string]).isRequired,
   title: PropTypes.string.isRequired,
   author: PropTypes.string.isRequired,
   coverImgUrl: PropTypes.string,
-  epubPath: PropTypes.string,
-  summary: PropTypes.bool,
-  default: PropTypes.bool,
   favorite: PropTypes.bool,
   readingStatus: PropTypes.string,
   progress: PropTypes.number,

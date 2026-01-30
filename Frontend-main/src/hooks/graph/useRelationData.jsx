@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { toNumberOrNull } from '../utils/numberUtils';
-import { isSamePair } from '../utils/relationUtils';
-import { getFineGraph } from '../utils/api/api';
-import { registerCache, getCacheItem, setCacheItem, clearCache, enforceCacheSizeLimit } from '../utils/common/cache/cacheManager';
+import { toNumberOrNull } from '../../utils/numberUtils';
+import { isSamePair } from '../../utils/relationUtils';
+import { getFineGraph } from '../../utils/api/api';
+import { registerCache, getCacheItem, setCacheItem, clearCache, enforceCacheSizeLimit } from '../../utils/common/cache/cacheManager';
 
 const CACHE_DURATION = 5 * 60 * 1000;
 const CACHE_PREFIX = 'relation-timeline-';

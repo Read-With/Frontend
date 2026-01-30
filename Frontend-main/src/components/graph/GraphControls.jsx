@@ -1,5 +1,5 @@
 import React, { useRef, useEffect, useCallback, useState } from "react";
-import { useClickOutside } from "../../hooks/useClickOutside";
+import { useClickOutside } from "../../hooks/ui/useClickOutside";
 import { graphControlsStyles } from "../../utils/styles/styles.js";
 
 function GraphControls({

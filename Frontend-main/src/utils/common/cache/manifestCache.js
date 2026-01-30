@@ -1,5 +1,14 @@
 import { toNumberOrNull } from '../../numberUtils';
-import { registerCache, getCacheItem, setCacheItem, clearCache, removeCacheItem } from './cacheManager';
+import { 
+  registerCache, 
+  getCacheItem, 
+  setCacheItem, 
+  clearCache, 
+  removeCacheItem,
+  loadFromStorage,
+  saveToStorage,
+  removeFromStorage
+} from './cacheManager';
 
 const manifestCachePrefix = 'manifest_cache_';
 const MANIFEST_TTL_MS = 1000 * 60 * 15;
@@ -12,38 +21,6 @@ registerCache('manifestCache', manifestCache, {
 });
 
 const prefetchPromises = new Map();
-
-function getFromLocalStorage(key) {
-  if (typeof localStorage === 'undefined') return null;
-  try {
-    const stored = localStorage.getItem(key);
-    if (!stored) return null;
-    return JSON.parse(stored);
-  } catch (error) {
-    try {
-      localStorage.removeItem(key);
-    } catch {}
-    return null;
-  }
-}
-
-function saveToLocalStorage(key, data) {
-  if (typeof localStorage === 'undefined') return;
-  try {
-    localStorage.setItem(key, JSON.stringify(data));
-  } catch (error) {
-    console.error('localStorage 저장 실패:', error);
-  }
-}
-
-function removeFromLocalStorage(key) {
-  if (typeof localStorage === 'undefined') return;
-  try {
-    localStorage.removeItem(key);
-  } catch (error) {
-    console.error('localStorage 삭제 실패:', error);
-  }
-}
 
 export const getManifestCacheKey = (bookId) => {
   return `${manifestCachePrefix}${bookId}`;
@@ -148,7 +125,7 @@ export const setManifestData = (bookId, manifestData, { persist = true } = {}) =
     setCacheItem('manifestCache', String(bookId), payload);
 
     if (persist) {
-      saveToLocalStorage(cacheKey, payload);
+      saveToStorage(cacheKey, payload, 'localStorage');
     }
 
     return normalizedData;
@@ -168,7 +145,7 @@ export const getManifestFromCache = (bookId) => {
   }
 
   const cacheKey = getManifestCacheKey(bookId);
-  const fromStorage = getFromLocalStorage(cacheKey);
+  const fromStorage = loadFromStorage(cacheKey, 'localStorage');
   if (fromStorage && !isExpired(fromStorage.timestamp)) {
     setCacheItem('manifestCache', key, fromStorage);
     return fromStorage.data;
@@ -185,7 +162,7 @@ export const hasManifestData = (bookId) => {
   }
   
   const cacheKey = getManifestCacheKey(bookId);
-  const fromStorage = getFromLocalStorage(cacheKey);
+  const fromStorage = loadFromStorage(cacheKey, 'localStorage');
   return !!(fromStorage && !isExpired(fromStorage.timestamp) && fromStorage.data);
 };
 
@@ -195,7 +172,7 @@ export const invalidateManifest = (bookId) => {
   removeCacheItem('manifestCache', key);
   
   const cacheKey = getManifestCacheKey(bookId);
-  removeFromLocalStorage(cacheKey);
+  removeFromStorage(cacheKey, 'localStorage');
 };
 
 export const prefetchManifest = async (bookId, fetcher) => {
@@ -265,6 +242,20 @@ export const getMaxChapter = (bookId) => {
   if (!manifest || !manifest.progressMetadata) return 0;
   
   return manifest.progressMetadata.maxChapter || 0;
+};
+
+export const calculateMaxChapterFromChapters = (chapters) => {
+  if (!Array.isArray(chapters) || chapters.length === 0) {
+    return 1;
+  }
+  let maxChapterIdx = 1;
+  for (const chapterInfo of chapters) {
+    const chapterIdx = chapterInfo?.idx || chapterInfo?.chapterIdx || chapterInfo?.chapter || chapterInfo?.index || chapterInfo?.number || chapterInfo?.id;
+    if (typeof chapterIdx === 'number' && !isNaN(chapterIdx) && chapterIdx > 0 && chapterIdx > maxChapterIdx) {
+      maxChapterIdx = chapterIdx;
+    }
+  }
+  return maxChapterIdx;
 };
 
 export const getTotalLength = (bookId) => {

@@ -1,14 +1,46 @@
 import React, { useEffect, useRef, useState, useCallback, createContext, useMemo } from "react";
+import PropTypes from "prop-types";
 import cytoscape from "cytoscape";
 import "./RelationGraph.css";
-import { detectAndResolveOverlap, calcGraphDiff } from "../../utils/graphDataUtils.js";
+import { detectAndResolveOverlap, calcGraphDiff } from "../../utils/graph/graphDataUtils.js";
 import { applySearchFadeEffect, shouldShowNoSearchResults, getNoSearchResultsMessage } from "../../utils/searchUtils.jsx";
-import { createRippleEffect, ensureElementsInBounds, createMouseEventHandlers } from "../../utils/graphUtils.js";
+import { createRippleEffect, ensureElementsInBounds, createMouseEventHandlers } from "../../utils/graph/graphUtils.js";
+import { calculateSpiralPlacement, getContainerDimensions } from "../../utils/graph/nodePlacementUtils.js";
 import { calculateNodeSize } from "../../utils/styles/graphStyles.js";
-import useGraphInteractions from "../../hooks/useGraphInteractions.js";
-
+import useGraphInteractions from "../../hooks/graph/useGraphInteractions.js";
+import { useGraphLayout } from "../../hooks/graph/useGraphLayout.js";
+import { eventUtils } from "../../utils/viewerUtils";
 
 export const CytoscapeGraphContext = createContext();
+
+// 정적 스타일 상수
+const NO_RESULTS_CONTAINER_STYLE = {
+  position: 'absolute',
+  top: '50%',
+  left: '50%',
+  transform: 'translate(-50%, -50%)',
+  background: 'rgba(255, 255, 255, 0.95)',
+  padding: '20px 30px',
+  borderRadius: '12px',
+  boxShadow: '0 4px 20px rgba(0, 0, 0, 0.1)',
+  border: '1px solid #e3e6ef',
+  zIndex: 1000,
+  textAlign: 'center',
+  maxWidth: '300px'
+};
+
+const NO_RESULTS_TITLE_STYLE = {
+  fontSize: '18px',
+  fontWeight: '600',
+  color: '#64748b',
+  marginBottom: '8px'
+};
+
+const NO_RESULTS_DESCRIPTION_STYLE = {
+  fontSize: '14px',
+  color: '#94a3b8',
+  lineHeight: '1.4'
+};
 
 const CytoscapeGraphUnified = ({
   elements,
@@ -32,16 +64,130 @@ const CytoscapeGraphUnified = ({
   selectedNodeIdRef,
   selectedEdgeIdRef,
   strictBackgroundClear = false,
-  showRippleEffect = true, // ripple 효과 표시 여부 제어
-  isDropdownSelection = false, // 드롭다운 선택 여부
+  showRippleEffect = true,
+  isDropdownSelection = false,
   isDataRefreshing = false,
+  currentChapter,
 }) => {
   const containerRef = useRef(null);
   const [isGraphVisible, setIsGraphVisible] = useState(false);
   const previousElementsRef = useRef([]);
-  const prevChapterRef = useRef(window.currentChapter);
+  const prevChapterRef = useRef(currentChapter ?? window.currentChapter);
   const [isInitialLoad, setIsInitialLoad] = useState(true);
   const addedNodeIdsRef = useRef(new Set());
+  
+  // cy 인스턴스 가져오기 (통합)
+  const getCyInstance = useCallback(() => {
+    const cy = externalCyRef?.current;
+    if (!cy || typeof cy.container !== 'function') return null;
+    return cy;
+  }, [externalCyRef]);
+
+  // 안전한 Cytoscape 작업 실행 헬퍼
+  const safeCyOperation = useCallback((operation, errorMessage) => {
+    try {
+      return operation();
+    } catch (error) {
+      console.error(errorMessage, error);
+      return null;
+    }
+  }, []);
+
+  // 유틸리티 함수 (useCallback 불필요)
+  const isEmpty = (arr) => !arr || arr.length === 0;
+  const isEmptyElements = () => previousElementsRef.current.length === 0;
+  const resetPreviousElements = () => {
+    previousElementsRef.current = [];
+    addedNodeIdsRef.current = new Set();
+  };
+
+  // 스타일시트 업데이트 헬퍼
+  const updateStylesheet = useCallback((cy) => {
+    if (!cy || !stylesheet) return;
+    
+    return safeCyOperation(() => {
+      cy.style(stylesheet);
+      cy.style().update();
+      requestAnimationFrame(() => {
+        safeCyOperation(() => {
+          cy.style().update();
+        }, '❌ 스타일시트 업데이트 실패');
+      });
+      return true;
+    }, '❌ 스타일시트 적용 실패');
+  }, [stylesheet, safeCyOperation]);
+
+  // 노드 크기 적용 헬퍼
+  const applyNodeSizes = useCallback((cy, nodes, scale = 1) => {
+    if (!cy || !nodes) return;
+    nodes.forEach(node => {
+      const weight = node.data('weight');
+      const size = calculateNodeSize(8, weight) * scale;
+      node.style({
+        'width': size,
+        'height': size
+      });
+    });
+  }, []);
+
+  // 추가된 노드에 대한 ripple 효과 트리거
+  const triggerRippleForAddedNodes = useCallback(() => {
+    const cy = getCyInstance();
+    if (!cy) return;
+
+    if (isInitialLoad || isResetFromSearch) {
+      return;
+    }
+
+    const recentlyAddedIds = addedNodeIdsRef.current;
+    if (!recentlyAddedIds || recentlyAddedIds.size === 0) {
+      return;
+    }
+
+    recentlyAddedIds.forEach(nodeId => {
+      const cyNode = cy.getElementById(nodeId);
+      if (cyNode && cyNode.length > 0) {
+        const position = cyNode.renderedPosition();
+        if (position && typeof position.x === 'number' && typeof position.y === 'number') {
+          createRippleEffect(containerRef.current, position.x, position.y, null);
+        }
+      }
+    });
+
+    addedNodeIdsRef.current = new Set();
+  }, [getCyInstance, isInitialLoad, isResetFromSearch]);
+
+  // ripple 효과 래퍼 생성
+  const createRippleWrapper = useCallback((originalHandler) => {
+    return (evt) => {
+      const cy = getCyInstance();
+      if (showRippleEffect && !isDropdownSelection && containerRef.current && cy) {
+        let x, y;
+        
+        if (evt.renderedPosition) {
+          x = evt.renderedPosition.x;
+          y = evt.renderedPosition.y;
+        } else if (evt.originalEvent) {
+          const containerRect = containerRef.current.getBoundingClientRect();
+          const clientX = evt.originalEvent.clientX - containerRect.left;
+          const clientY = evt.originalEvent.clientY - containerRect.top;
+          
+          const pan = cy.pan();
+          const zoom = cy.zoom();
+          x = (clientX - pan.x) / zoom;
+          y = (clientY - pan.y) / zoom;
+        }
+        
+        if (x !== undefined && y !== undefined) {
+          createRippleEffect(containerRef.current, x, y, cy);
+        }
+      }
+      
+      if (originalHandler) {
+        originalHandler(evt);
+      }
+    };
+  }, [getCyInstance, showRippleEffect, isDropdownSelection]);
   
   // 마우스 이벤트 상태는 createMouseEventHandlers에서 관리
 
@@ -61,50 +207,48 @@ const CytoscapeGraphUnified = ({
     filteredElements,
   });
 
-  // 챕터 변경 감지
+  // 챕터 변경 감지 및 요소 diff 계산
   useEffect(() => {
-    if (!elements || elements.length === 0) {
+    if (isEmpty(elements)) {
       if (!isDataRefreshing) {
-        previousElementsRef.current = [];
-        addedNodeIdsRef.current = new Set();
+        resetPreviousElements();
       }
       return;
     }
 
-    const cy = externalCyRef?.current;
-    if (!cy) {
-      return;
+    const cy = getCyInstance();
+    if (!cy) return;
+
+    // 챕터 변경 확인
+    const chapter = currentChapter ?? window.currentChapter;
+    if (chapter !== undefined && chapter !== prevChapterRef.current) {
+      setIsInitialLoad(true);
+      resetPreviousElements();
+      prevChapterRef.current = chapter;
     }
 
-    const checkChapterChange = () => {
-      if (window.currentChapter !== undefined) {
-        const currentChapter = window.currentChapter;
-        if (currentChapter !== prevChapterRef.current) {
-          setIsInitialLoad(true);
-          previousElementsRef.current = [];
-          addedNodeIdsRef.current = new Set();
-          prevChapterRef.current = currentChapter;
-        }
-      }
-    };
-
-    checkChapterChange();
-
-    if (previousElementsRef.current.length === 0) {
+    // 초기 로드 시 요소 저장만 수행
+    if (isEmptyElements()) {
       previousElementsRef.current = elements;
       addedNodeIdsRef.current = new Set();
       return;
     }
 
-    const diff = calcGraphDiff(previousElementsRef.current, elements);
-    const addedNodeIds = diff.added
-      ?.filter(element => element?.data && !element.data.source && !element.data.target)
-      ?.map(element => element.data.id)
-      ?.filter(Boolean) || [];
+    // 요소 diff 계산
+    const diff = safeCyOperation(
+      () => calcGraphDiff(previousElementsRef.current, elements),
+      '❌ 그래프 diff 계산 실패'
+    );
 
-    addedNodeIdsRef.current = new Set(addedNodeIds);
-    previousElementsRef.current = elements;
-  }, [elements, externalCyRef, isDataRefreshing]);
+    if (diff) {
+      const addedNodeIds = diff.added
+        ? eventUtils.filterNodes(diff.added).map(element => element.data.id).filter(Boolean)
+        : [];
+
+      addedNodeIdsRef.current = new Set(addedNodeIds);
+      previousElementsRef.current = elements;
+    }
+  }, [elements, isDataRefreshing, currentChapter, safeCyOperation]);
 
   // Cytoscape 인스턴스 생성
   useEffect(() => {
@@ -206,117 +350,61 @@ const CytoscapeGraphUnified = ({
     };
   }, [externalCyRef]);
 
+  // 배경 탭 핸들러
+  const handleBackgroundTap = useCallback((evt) => {
+    const cy = getCyInstance();
+    if (!cy || evt.target !== cy) return;
+    
+    const bgHandler = tapBackgroundHandler || hookTapBackgroundHandler;
+    if (bgHandler) {
+      createRippleWrapper(bgHandler)(evt);
+    }
+  }, [getCyInstance, tapBackgroundHandler, hookTapBackgroundHandler, createRippleWrapper]);
+
   // 이벤트 핸들러 등록
   useEffect(() => {
-    const cy = externalCyRef?.current;
+    const cy = getCyInstance();
     if (!cy) return;
     
-    cy.removeListener('tap', 'node');
-    cy.removeListener('tap', 'edge');
-    cy.removeListener('tap');
-    
-    const createRippleWrapper = (originalHandler) => (evt) => {
-      // ripple 효과가 활성화되고 드롭다운 선택이 아닌 경우에만 표시
-      if (showRippleEffect && !isDropdownSelection && containerRef.current && cy) {
-        let x, y;
-        
-        if (evt.renderedPosition) {
-          x = evt.renderedPosition.x;
-          y = evt.renderedPosition.y;
-        } else if (evt.originalEvent) {
-          const containerRect = containerRef.current.getBoundingClientRect();
-          const clientX = evt.originalEvent.clientX - containerRect.left;
-          const clientY = evt.originalEvent.clientY - containerRect.top;
-          
-          const pan = cy.pan();
-          const zoom = cy.zoom();
-          // 마우스 위치를 Cytoscape 좌표로 정확히 변환
-          x = (clientX - pan.x) / zoom;
-          y = (clientY - pan.y) / zoom;
-        }
-        
-        if (x !== undefined && y !== undefined) {
-          createRippleEffect(containerRef.current, x, y, cy);
-        }
-      }
-      
-      if (originalHandler) {
-        originalHandler(evt);
-      }
-    };
-    
-    // 노드 클릭 핸들러 등록
     const nodeHandler = tapNodeHandler || hookTapNodeHandler;
+    const edgeHandler = tapEdgeHandler || hookTapEdgeHandler;
+    
+    // 기존 리스너 제거
+    cy.off('tap');
+    
+    // 새 리스너 등록
     if (nodeHandler) {
       cy.on("tap", "node", createRippleWrapper(nodeHandler));
     }
-    
-    // 간선 클릭 핸들러 등록
-    const edgeHandler = tapEdgeHandler || hookTapEdgeHandler;
     if (edgeHandler) {
       cy.on("tap", "edge", createRippleWrapper(edgeHandler));
     }
-    
-    const handleBackgroundTap = (evt) => {
-      // 배경 클릭 감지 - evt.target이 Cytoscape core인 경우
-      if (evt.target === cy) {
-        const bgHandler = tapBackgroundHandler || hookTapBackgroundHandler;
-        if (bgHandler) {
-          createRippleWrapper(bgHandler)(evt);
-        }
-      }
-    };
-    
     cy.on("tap", handleBackgroundTap);
     
     return () => {
-      cy.removeListener("tap", "node");
-      cy.removeListener("tap", "edge");
-      cy.removeListener("tap", handleBackgroundTap);
+      cy.off('tap');
     };
-  }, [externalCyRef, tapNodeHandler, tapEdgeHandler, tapBackgroundHandler, hookTapNodeHandler, hookTapEdgeHandler, hookTapBackgroundHandler, showRippleEffect, isDropdownSelection]);
+  }, [getCyInstance, tapNodeHandler, tapEdgeHandler, hookTapNodeHandler, hookTapEdgeHandler, createRippleWrapper, handleBackgroundTap]);
 
-  // elements diff patch 및 스타일/레이아웃 적용
+  // 요소 업데이트 및 노드 배치
+  const elementsUpdateRef = useRef({ nodesToAdd: [], edgesToAdd: [], hasChanges: false });
+
   useEffect(() => {
-    const cy = externalCyRef?.current;
-    if (!cy) {
-      return;
-    }
+    const cy = getCyInstance();
+    if (!cy) return;
 
-    if (!elements || elements.length === 0) {
+    if (isEmpty(elements)) {
       if (!isDataRefreshing) {
         cy.elements().remove();
         setIsGraphVisible(false);
       }
+      elementsUpdateRef.current = { nodesToAdd: [], edgesToAdd: [], hasChanges: false };
       return;
     }
 
-    if (previousElementsRef.current.length === 0) {
+    if (isEmptyElements()) {
       previousElementsRef.current = elements;
     }
-
-    const triggerRippleForAddedNodes = () => {
-      if (isInitialLoad || isResetFromSearch) {
-        return;
-      }
-
-      const recentlyAddedIds = addedNodeIdsRef.current;
-      if (!recentlyAddedIds || recentlyAddedIds.size === 0) {
-        return;
-      }
-
-      recentlyAddedIds.forEach(nodeId => {
-        const cyNode = cy.getElementById(nodeId);
-        if (cyNode && cyNode.length > 0) {
-          const position = cyNode.renderedPosition();
-          if (position && typeof position.x === 'number' && typeof position.y === 'number') {
-            createRippleEffect(containerRef.current, position.x, position.y, null);
-          }
-        }
-      });
-
-      addedNodeIdsRef.current = new Set();
-    };
 
     cy.batch(() => {
       const prevNodeIds = new Set(cy.nodes().map(n => n.id()));
@@ -327,64 +415,19 @@ const CytoscapeGraphUnified = ({
       cy.nodes().forEach(n => { if (!nextNodeIds.has(n.id())) n.remove(); });
       cy.edges().forEach(e => { if (!nextEdgeIds.has(e.id())) e.remove(); });
       
-      const nodes = elements.filter(e => !e.data.source && !e.data.target);
-      const edges = elements.filter(e => e.data.source && e.data.target);
+      const nodes = eventUtils.filterNodes(elements);
+      const edges = eventUtils.filterEdges(elements);
       
-      const NODE_SIZE = 40;
-      const MIN_DISTANCE = NODE_SIZE * 3.2;
-      const CONTAINER_PADDING = 80;
       const placedPositions = nodes
         .filter(node => prevNodeIds.has(node.data.id) && node.position)
         .map(node => node.position);
-      const newNodes = nodes.filter(node => !prevNodeIds.has(node.data.id));
-      
-      // 컨테이너 크기 계산
-      const containerWidth = containerRef.current?.clientWidth || 800;
-      const containerHeight = containerRef.current?.clientHeight || 600;
-      const maxRadius = Math.min(containerWidth, containerHeight) / 2 - CONTAINER_PADDING;
-      
-      newNodes.forEach(node => {
-        let found = false;
-        let x, y;
-        let attempts = 0;
-        const maxAttempts = 200;
-        
-        while (!found && attempts < maxAttempts) {
-          // 스파이럴 패턴으로 배치 시도
-          const angle = (attempts * 0.5) % (2 * Math.PI);
-          const radius = Math.min(50 + attempts * 2, maxRadius);
-          
-          x = Math.cos(angle) * radius;
-          y = Math.sin(angle) * radius;
-          
-          // 경계 체크
-          const isWithinBounds = 
-            Math.abs(x) < containerWidth / 2 - CONTAINER_PADDING &&
-            Math.abs(y) < containerHeight / 2 - CONTAINER_PADDING;
-          
-          if (isWithinBounds) {
-            found = placedPositions.every(pos => {
-              const dx = x - pos.x;
-              const dy = y - pos.y;
-              return Math.sqrt(dx * dx + dy * dy) > MIN_DISTANCE;
-            });
-          }
-          
-          attempts++;
-        }
-        
-        // 최종 위치가 경계를 벗어나면 중앙 근처로 조정
-        if (!found) {
-          x = (Math.random() - 0.5) * 100;
-          y = (Math.random() - 0.5) * 100;
-        }
-        
-        node.position = { x, y };
-        placedPositions.push({ x, y });
-      });
-      
       const nodesToAdd = nodes.filter(node => !prevNodeIds.has(node.data.id));
       const edgesToAdd = edges.filter(edge => !prevEdgeIds.has(edge.data.id));
+      
+      const { width: containerWidth, height: containerHeight } = getContainerDimensions(containerRef.current);
+      if (nodesToAdd.length > 0) {
+        calculateSpiralPlacement(nodesToAdd, placedPositions, containerWidth, containerHeight);
+      }
       
       if (nodesToAdd.length > 0) {
         cy.add(nodesToAdd);
@@ -393,212 +436,213 @@ const CytoscapeGraphUnified = ({
         cy.add(edgesToAdd);
       }
       
-      if (nodesToAdd.length > 0 || edgesToAdd.length > 0) {
-        cy.layout({ name: 'preset' }).run();
-        
-        if (stylesheet) {
-          cy.style(stylesheet);
-          // 스타일시트 적용을 즉시 반영
-          try {
-            cy.style().update();
-            requestAnimationFrame(() => {
-              try { cy.style().update(); } catch {}
-            });
-          } catch {}
-          cy.nodes().forEach(node => {
-            const weight = node.data('weight');
-            const size = calculateNodeSize(8, weight);
-            node.style({
-              'width': size,
-              'height': size
-            });
-          });
-        }
-        
-        if (layout && layout.name !== 'preset') {
-          const layoutInstance = cy.layout({
-            ...layout,
-            animationDuration: 800,
-            animationEasing: 'ease-out'
-          });
-          layoutInstance.on('layoutstop', () => {
-            setTimeout(() => {
-              // 레이아웃 완료 후 요소들이 화면 내에 있는지 확인하고 조정
-              ensureElementsInBounds(cy, containerRef.current);
-              detectAndResolveOverlap(cy);
-              
-              triggerRippleForAddedNodes();
-              
-              if (onLayoutComplete) onLayoutComplete();
-            }, 200);
-          });
-          layoutInstance.run();
-        } else {
-          setTimeout(() => {
-            // 레이아웃 완료 후 요소들이 화면 내에 있는지 확인하고 조정
-            ensureElementsInBounds(cy, containerRef.current);
-            detectAndResolveOverlap(cy);
-            
-            triggerRippleForAddedNodes();
-            
-            if (onLayoutComplete) onLayoutComplete();
-          }, 150);
-        }
-      } else {
-        if (stylesheet) {
-          cy.style(stylesheet);
-          try {
-            cy.style().update();
-            requestAnimationFrame(() => {
-              try { cy.style().update(); } catch {}
-            });
-          } catch {}
-        }
-        triggerRippleForAddedNodes();
-      }
-      
+      elementsUpdateRef.current = {
+        nodesToAdd,
+        edgesToAdd,
+        hasChanges: nodesToAdd.length > 0 || edgesToAdd.length > 0
+      };
+    });
+
+    setIsGraphVisible(true);
+  }, [elements, isDataRefreshing]);
+
+  // 레이아웃 및 스타일 적용 (커스텀 훅으로 분리)
+  const cy = getCyInstance();
+  useGraphLayout({
+    cy,
+    elements,
+    stylesheet,
+    layout,
+    elementsUpdateRef,
+    updateStylesheet,
+    applyNodeSizes,
+    triggerRippleForAddedNodes,
+    onLayoutComplete,
+    isInitialLoad,
+    setIsInitialLoad,
+    containerRef,
+  });
+
+  // 검색 fit 처리
+  useEffect(() => {
+    const cy = getCyInstance();
+    if (!cy || isEmpty(elements)) return;
+
+    cy.batch(() => {
       if (fitNodeIds && fitNodeIds.length > 0) {
         const nodes = cy.nodes().filter(n => fitNodeIds.includes(n.id()));
         if (nodes.length > 0) {
           cy.fit(nodes, 60);
-          
           cy.nodes().removeClass('search-highlight');
           nodes.addClass('search-highlight');
-          
-          // 검색 결과 노드만 약간 크게 표시
-               nodes.style('width', (ele) => {
-                 const weight = ele.data('weight');
-                 const baseSize = calculateNodeSize(8, weight);
-                 return baseSize * 1.2;
-               });
-               nodes.style('height', (ele) => {
-                 const weight = ele.data('weight');
-                 const baseSize = calculateNodeSize(8, weight);
-                 return baseSize * 1.2;
-               });
+          applyNodeSizes(cy, nodes, 1.2);
         }
-      } else {
-        // 검색이 비활성화된 상태에서는 fit을 호출하지 않음 (확대/축소 상태 유지)
-        if (!isSearchActive) {
-          cy.nodes().removeClass('search-highlight');
-          // 가중치 기반 크기는 스타일시트에서 자동으로 적용되므로 직접 조정하지 않음
-        }
+      } else if (!isSearchActive) {
+        cy.nodes().removeClass('search-highlight');
       }
-      
     });
-    
-    if (isInitialLoad) {
-      setIsInitialLoad(false);
-    }
-    
-    setIsGraphVisible(true);
-  }, [elements, externalCyRef, isInitialLoad, stylesheet, layout, fitNodeIds, isSearchActive, filteredElements, onLayoutComplete, isResetFromSearch, isDataRefreshing]);
+  }, [fitNodeIds, isSearchActive, applyNodeSizes]);
 
-  // 검색 상태 변경 시에만 초기 fade 효과 적용 (별도 useEffect)
+  // 검색 상태 변경 시에만 초기 fade 효과 적용
   const filteredElementIdsStr = useMemo(() => {
     if (!filteredElements || filteredElements.length === 0) return '';
     return filteredElements.map(e => e.data?.id).filter(Boolean).sort().join(',');
   }, [filteredElements]);
   
   useEffect(() => {
-    const cy = externalCyRef?.current;
+    const cy = getCyInstance();
     if (!cy) return;
     
     if (isSearchActive && filteredElements.length > 0) {
-      // 검색 활성화 시 초기 fade 효과만 적용
       applySearchFadeEffect(cy, filteredElements, isSearchActive);
     } else if (!isSearchActive) {
-      // 검색 비활성화 시 모든 fade 효과 제거
       cy.elements().forEach(element => {
         element.removeClass("faded highlighted");
         element.style('opacity', '');
         element.style('text-opacity', '');
       });
     }
-  }, [isSearchActive, filteredElementIdsStr, filteredElements, externalCyRef]);
+  }, [isSearchActive, filteredElementIdsStr]);
 
   // 크기 반응형
   useEffect(() => {
     const handleResize = () => {
-      const cy = externalCyRef?.current;
-      if (!cy) {
-        return;
-      }
+      const cy = getCyInstance();
+      if (!cy) return;
       
-      try {
+      safeCyOperation(() => {
         cy.resize();
         setTimeout(() => {
-          ensureElementsInBounds(cy, containerRef.current);
+          safeCyOperation(() => {
+            ensureElementsInBounds(cy, containerRef.current);
+          }, '❌ 요소 경계 조정 실패');
         }, 100);
-      } catch (error) {
-        console.error('❌ 그래프 리사이즈 실패:', error);
-      }
+      }, '❌ 그래프 리사이즈 실패');
     };
     
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
-  }, [externalCyRef]);
+  }, [safeCyOperation]);
+
+  // 컨테이너 스타일 메모이제이션
+  const containerStyle = useMemo(() => ({
+    width: "100%",
+    height: "100%",
+    background: "#ffffff",
+    ...style,
+    position: "relative",
+    overflow: "hidden",
+    zIndex: 1,
+    visibility: isGraphVisible ? "visible" : "hidden",
+    minHeight: "400px",
+    minWidth: "450px",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    boxSizing: "border-box",
+  }), [style, isGraphVisible]);
+
+  // 검색 결과 없음 메시지 (조건부 렌더링 최적화)
+  const shouldShowNoResults = shouldShowNoSearchResults(isSearchActive, searchTerm, fitNodeIds);
+  const noResultsMessage = shouldShowNoResults ? (() => {
+    const message = getNoSearchResultsMessage(searchTerm);
+    return (
+      <div style={NO_RESULTS_CONTAINER_STYLE}>
+        <div style={NO_RESULTS_TITLE_STYLE}>
+          {message.title}
+        </div>
+        <div style={NO_RESULTS_DESCRIPTION_STYLE}>
+          {message.description}
+        </div>
+      </div>
+    );
+  })() : null;
 
   return (
     <div
       ref={containerRef}
-      style={{
-        width: "100%",
-        height: "100%",
-        background: "#ffffff",
-        ...style,
-        position: "relative",
-        overflow: "hidden",
-        zIndex: 1,
-        visibility: isGraphVisible ? "visible" : "hidden",
-        minHeight: "400px",
-        minWidth: "450px",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        boxSizing: "border-box",
-      }}
+      style={containerStyle}
       className="graph-canvas-area"
     >
-      {shouldShowNoSearchResults(isSearchActive, searchTerm, fitNodeIds) && (
-        (() => {
-          const message = getNoSearchResultsMessage(searchTerm);
-          return (
-            <div style={{
-              position: 'absolute',
-              top: '50%',
-              left: '50%',
-              transform: 'translate(-50%, -50%)',
-              background: 'rgba(255, 255, 255, 0.95)',
-              padding: '20px 30px',
-              borderRadius: '12px',
-              boxShadow: '0 4px 20px rgba(0, 0, 0, 0.1)',
-              border: '1px solid #e3e6ef',
-              zIndex: 1000,
-              textAlign: 'center',
-              maxWidth: '300px'
-            }}>
-              <div style={{
-                fontSize: '18px',
-                fontWeight: '600',
-                color: '#64748b',
-                marginBottom: '8px'
-              }}>
-                {message.title}
-              </div>
-              <div style={{
-                fontSize: '14px',
-                color: '#94a3b8',
-                lineHeight: '1.4'
-              }}>
-                {message.description}
-              </div>
-            </div>
-          );
-        })()
-      )}
+      {noResultsMessage}
     </div>
   );
+};
+
+// Element shape 정의
+const elementShape = PropTypes.shape({
+  data: PropTypes.shape({
+    id: PropTypes.oneOfType([PropTypes.string, PropTypes.number]).isRequired,
+    source: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
+    target: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
+    label: PropTypes.string,
+    weight: PropTypes.number,
+  }),
+  position: PropTypes.shape({
+    x: PropTypes.number,
+    y: PropTypes.number,
+  }),
+  classes: PropTypes.string,
+});
+
+// Layout shape 정의
+const layoutShape = PropTypes.shape({
+  name: PropTypes.string.isRequired,
+  animationDuration: PropTypes.number,
+  animationEasing: PropTypes.string,
+  fit: PropTypes.bool,
+  padding: PropTypes.number,
+});
+
+// CytoscapeGraphUnified PropTypes
+CytoscapeGraphUnified.propTypes = {
+  elements: PropTypes.arrayOf(elementShape).isRequired,
+  stylesheet: PropTypes.arrayOf(PropTypes.object),
+  layout: layoutShape,
+  tapNodeHandler: PropTypes.func,
+  tapEdgeHandler: PropTypes.func,
+  tapBackgroundHandler: PropTypes.func,
+  fitNodeIds: PropTypes.arrayOf(PropTypes.oneOfType([PropTypes.string, PropTypes.number])),
+  style: PropTypes.object,
+  cyRef: PropTypes.shape({
+    current: PropTypes.object,
+  }).isRequired,
+  newNodeIds: PropTypes.arrayOf(PropTypes.oneOfType([PropTypes.string, PropTypes.number])),
+  onLayoutComplete: PropTypes.func,
+  searchTerm: PropTypes.string,
+  isSearchActive: PropTypes.bool,
+  filteredElements: PropTypes.arrayOf(elementShape),
+  isResetFromSearch: PropTypes.bool,
+  onShowNodeTooltip: PropTypes.func,
+  onShowEdgeTooltip: PropTypes.func,
+  onClearTooltip: PropTypes.func,
+  selectedNodeIdRef: PropTypes.shape({
+    current: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
+  }),
+  selectedEdgeIdRef: PropTypes.shape({
+    current: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
+  }),
+  strictBackgroundClear: PropTypes.bool,
+  showRippleEffect: PropTypes.bool,
+  isDropdownSelection: PropTypes.bool,
+  isDataRefreshing: PropTypes.bool,
+  currentChapter: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
+};
+
+// 기본값 (isRequired가 아닌 props만)
+CytoscapeGraphUnified.defaultProps = {
+  stylesheet: [],
+  layout: { name: "preset" },
+  style: {},
+  newNodeIds: [],
+  searchTerm: "",
+  isSearchActive: false,
+  filteredElements: [],
+  isResetFromSearch: false,
+  strictBackgroundClear: false,
+  showRippleEffect: true,
+  isDropdownSelection: false,
+  isDataRefreshing: false,
 };
 
 export default CytoscapeGraphUnified; 
@@ -627,3 +671,7 @@ export function CytoscapeGraphPortalProvider({ children }) {
     </CytoscapeGraphContext.Provider>
   );
 }
+
+CytoscapeGraphPortalProvider.propTypes = {
+  children: PropTypes.node.isRequired,
+};

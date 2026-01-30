@@ -3,8 +3,18 @@ import { buildNodeWeights, extractCharacterId } from '../../characterUtils';
 import { getFineGraph, getBookManifest } from '../../api/api';
 import { getChapterData as getManifestChapterData, getManifestFromCache } from './manifestCache';
 import { createCharacterMaps } from '../../characterUtils';
-import { convertRelationsToElements, calcGraphDiff } from '../../graphDataUtils';
-import { registerCache, getCacheItem, setCacheItem } from './cacheManager';
+import { convertRelationsToElements, calcGraphDiff } from '../../graph/graphDataUtils';
+import { 
+  registerCache, 
+  getCacheItem, 
+  setCacheItem,
+  loadFromStorage,
+  saveToStorage,
+  removeFromStorage,
+  getRawFromStorage,
+  getStorage
+} from './cacheManager';
+import { eventUtils } from '../../viewerUtils';
 
 const READER_PROGRESS_CACHE_PREFIX = 'reader_progress_';
 const READER_PROGRESS_MAX_AGE = 3 * 24 * 60 * 60 * 1000;
@@ -34,18 +44,13 @@ const readGraphBookCache = (bookId) => {
     return cached;
   }
 
-  if (typeof localStorage === 'undefined') {
-    return null;
-  }
-
   try {
-    const stored = localStorage.getItem(key);
-    if (!stored) {
-      return null;
+    const stored = loadFromStorage(key, 'localStorage');
+    if (stored) {
+      setCacheItem('graphBookCache', key, stored);
+      return stored;
     }
-    const parsed = JSON.parse(stored);
-    setCacheItem('graphBookCache', key, parsed);
-    return parsed;
+    return null;
   } catch (error) {
     console.warn('그래프 책 캐시 로드 실패:', error);
     return null;
@@ -64,14 +69,7 @@ const writeGraphBookCache = (bookId, payload) => {
   };
 
   setCacheItem('graphBookCache', key, normalized);
-
-  if (typeof localStorage !== 'undefined') {
-    try {
-      localStorage.setItem(key, JSON.stringify(normalized));
-    } catch (error) {
-      console.warn('그래프 책 캐시 저장 실패:', error);
-    }
-  }
+  saveToStorage(key, normalized, 'localStorage');
 
   return normalized;
 };
@@ -83,8 +81,15 @@ export const hasGraphBookCache = (bookId) => {
   if (!key) return false;
   const cached = getCacheItem('graphBookCache', key);
   if (cached) return true;
-  if (typeof localStorage === 'undefined') return false;
-  return localStorage.getItem(key) !== null;
+  return getRawFromStorage(key, 'localStorage') !== null;
+};
+
+export const isGraphBookCacheBuilding = (bookId) => {
+  const numericId = Number(bookId);
+  if (!Number.isFinite(numericId) || numericId <= 0) {
+    return false;
+  }
+  return graphBuildPromises.has(numericId);
 };
 
 export const ensureGraphBookCache = async (
@@ -583,15 +588,7 @@ const normalizeReaderProgressPayload = (bookKey, payload) => {
     return null;
   }
 
-  const rawEventIdx =
-    payload.eventIdx ??
-    payload.eventNum ??
-    payload.event_id ??
-    payload.eventId ??
-    payload.idx ??
-    payload.id;
-  const eventIdx = Number(rawEventIdx);
-  const normalizedEventIdx = Number.isFinite(eventIdx) && eventIdx > 0 ? eventIdx : null;
+  const normalizedEventIdx = eventUtils.normalizeEventIdx(payload);
 
   const eventNumCandidate = Number(payload.eventNum);
   const normalizedEventNum =
@@ -641,18 +638,16 @@ export const getCachedChapterEvents = (bookId, chapterIdx) => {
   try {
     const cacheKey = getChapterEventCacheKey(bookId, chapterIdx);
     if (!cacheKey) return null;
-    const cached = localStorage.getItem(cacheKey);
     
-    if (!cached) return null;
-    
-    const cacheData = JSON.parse(cached);
+    const cacheData = loadFromStorage(cacheKey, 'localStorage');
+    if (!cacheData) return null;
     
     const now = Date.now();
     const cacheAge = now - (cacheData.timestamp || 0);
     const maxAge = 24 * 60 * 60 * 1000;
     
     if (cacheAge > maxAge) {
-      localStorage.removeItem(cacheKey);
+      removeFromStorage(cacheKey, 'localStorage');
       return null;
     }
     
@@ -682,7 +677,7 @@ export const setCachedChapterEvents = (bookId, chapterIdx, eventData) => {
       source: eventData.source || null
     };
     
-    localStorage.setItem(cacheKey, JSON.stringify(cacheData));
+    saveToStorage(cacheKey, cacheData, 'localStorage');
     return true;
   } catch (error) {
     console.error('챕터 이벤트 캐시 저장 실패:', error);
@@ -695,19 +690,18 @@ export const getCachedReaderProgress = (bookKey) => {
     const cacheKey = getReaderProgressCacheKey(bookKey);
     if (!cacheKey) return null;
 
-    const cached = localStorage.getItem(cacheKey);
-    if (!cached) return null;
+    const parsed = loadFromStorage(cacheKey, 'localStorage');
+    if (!parsed) return null;
 
-    const parsed = JSON.parse(cached);
     const timestamp = parsed?.timestamp ?? 0;
 
     if (!Number.isFinite(Number(parsed?.chapterIdx))) {
-      localStorage.removeItem(cacheKey);
+      removeFromStorage(cacheKey, 'localStorage');
       return null;
     }
 
     if (Date.now() - timestamp > READER_PROGRESS_MAX_AGE) {
-      localStorage.removeItem(cacheKey);
+      removeFromStorage(cacheKey, 'localStorage');
       return null;
     }
 
@@ -734,7 +728,7 @@ export const setCachedReaderProgress = (bookKey, payload) => {
     const normalized = normalizeReaderProgressPayload(sanitizeBookKey(bookKey), payload);
     if (!normalized) return null;
 
-    localStorage.setItem(cacheKey, JSON.stringify(normalized));
+    saveToStorage(cacheKey, normalized, 'localStorage');
     return normalized;
   } catch (error) {
     console.error('독서 위치 캐시 저장 실패:', error);
@@ -747,7 +741,7 @@ export const clearCachedReaderProgress = (bookKey) => {
     const cacheKey = getReaderProgressCacheKey(bookKey);
     if (!cacheKey) return false;
 
-    localStorage.removeItem(cacheKey);
+    removeFromStorage(cacheKey, 'localStorage');
     return true;
   } catch (error) {
     console.error('독서 위치 캐시 삭제 실패:', error);
@@ -1030,7 +1024,7 @@ export const clearChapterEventCache = (bookId, chapterIdx) => {
   try {
     const cacheKey = getChapterEventCacheKey(bookId, chapterIdx);
     if (!cacheKey) return false;
-    localStorage.removeItem(cacheKey);
+    removeFromStorage(cacheKey, 'localStorage');
     return true;
   } catch (error) {
     console.error('챕터 이벤트 캐시 삭제 실패:', error);
@@ -1040,7 +1034,10 @@ export const clearChapterEventCache = (bookId, chapterIdx) => {
 
 export const clearAllChapterEventCaches = (bookId) => {
   try {
-    const keys = Object.keys(localStorage);
+    const storage = getStorage('localStorage');
+    if (!storage) return 0;
+    
+    const keys = Object.keys(storage);
     const bookIdNum = Number(bookId);
     if (!Number.isFinite(bookIdNum)) {
       return 0;
@@ -1052,8 +1049,8 @@ export const clearAllChapterEventCaches = (bookId) => {
       if (segments.length === 2) {
         const [storedBookId, storedChapterIdx] = segments;
         if (Number(storedBookId) === bookIdNum && Number.isFinite(Number(storedChapterIdx))) {
-        localStorage.removeItem(key);
-        count++;
+          removeFromStorage(key, 'localStorage');
+          count++;
         }
       }
     });
@@ -1067,7 +1064,10 @@ export const clearAllChapterEventCaches = (bookId) => {
 
 export const clearAllChapterEventCachesGlobally = () => {
   try {
-    const keys = Object.keys(localStorage);
+    const storage = getStorage('localStorage');
+    if (!storage) return 0;
+    
+    const keys = Object.keys(storage);
     let count = 0;
     keys.forEach(key => {
       const segments = key.split('-');
@@ -1077,7 +1077,7 @@ export const clearAllChapterEventCachesGlobally = () => {
           Number.isFinite(Number(storedBookId)) &&
           Number.isFinite(Number(storedChapterIdx))
         ) {
-          localStorage.removeItem(key);
+          removeFromStorage(key, 'localStorage');
           count++;
         }
       }
@@ -1088,4 +1088,21 @@ export const clearAllChapterEventCachesGlobally = () => {
     console.error('글로벌 챕터 이벤트 캐시 삭제 실패:', error);
     return 0;
   }
+};
+
+export const getChapterEventFallbackData = (bookId, chapterIdx, eventIdx) => {
+  const chapterCache = getCachedChapterEvents(bookId, chapterIdx);
+  if (chapterCache?.events && Array.isArray(chapterCache.events)) {
+    const fallbackEvent = eventUtils.findEventInCache(chapterCache.events, eventIdx);
+    
+    if (fallbackEvent && (fallbackEvent.characters || fallbackEvent.relations)) {
+      return {
+        characters: Array.isArray(fallbackEvent.characters) ? fallbackEvent.characters : [],
+        relations: Array.isArray(fallbackEvent.relations) ? fallbackEvent.relations : [],
+        event: fallbackEvent.event || null,
+        userCurrentChapter: 0
+      };
+    }
+  }
+  return null;
 };

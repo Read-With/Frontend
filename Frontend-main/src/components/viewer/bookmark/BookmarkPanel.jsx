@@ -1,66 +1,17 @@
-import React, { useState, useMemo } from 'react';
-import { useBookmarks } from '../../../hooks/useBookmarks';
-
-const parseBookmarkLocation = (bookmark) => {
-  if (!bookmark) return '';
-  
-  // 저장된 title이 있으면 우선 사용 (로컬 CFI 기반으로 저장된 형식)
-  if (bookmark.title) return bookmark.title;
-  
-  // title이 없으면 CFI에서 파싱 (로컬 CFI 기반)
-  const cfi = bookmark.startCfi || '';
-  const chapterMatch = cfi.match(/\[chapter-(\d+)\]/);
-  const chapter = chapterMatch ? parseInt(chapterMatch[1]) : null;
-  const pageMatch = cfi.match(/\[chapter-\d+\]\/(\d+)/);
-  const page = pageMatch ? parseInt(pageMatch[1]) : null;
-  
-  // "몇페이지 (챕터 몇)" 형식으로 반환
-  if (page && chapter) return `${page}페이지 (${chapter}챕터)`;
-  if (page) return `${page}페이지`;
-  if (chapter) return `${chapter}챕터`;
-  return cfi;
-};
+import React, { useState } from 'react';
+import { useBookmarks } from '../../../hooks/bookmarks/useBookmarks';
+import { useBookmarkSort } from '../../../hooks/bookmarks/useBookmarkSort';
+import { parseBookmarkLocation, formatDate } from '../../../utils/bookmarkUtils';
 
 const BookmarkPanel = ({ bookId, onSelect, onDelete }) => {
   const [sortOrder, setSortOrder] = useState('recent');
   const { bookmarks, loading, removeBookmark } = useBookmarks(bookId);
-
-  const sortedBookmarks = useMemo(() => {
-    if (!bookmarks || bookmarks.length === 0) return [];
-    const sorted = [...bookmarks];
-    if (sortOrder === 'position') return sorted.sort((a, b) => (a.startCfi || '').localeCompare(b.startCfi || ''));
-    const factor = sortOrder === 'oldest' ? 1 : -1;
-    return sorted.sort((a, b) => {
-      const dateA = new Date(a.createdAt || a.created_at || 0).getTime();
-      const dateB = new Date(b.createdAt || b.created_at || 0).getTime();
-      return (dateA - dateB) * factor;
-    });
-  }, [bookmarks, sortOrder]);
+  const sortedBookmarks = useBookmarkSort(bookmarks, sortOrder);
 
   const handleDelete = async (bookmarkId) => {
     const result = await removeBookmark(bookmarkId);
     if (result.success && onDelete) onDelete(bookmarkId);
     return result;
-  };
-
-  const formatDate = (dateString) => {
-    if (!dateString) return '';
-    const date = new Date(dateString);
-    const now = new Date();
-    const diffMs = now.getTime() - date.getTime();
-    const diffMins = Math.floor(diffMs / (1000 * 60));
-    if (diffMins < 1) return '방금 전';
-    if (diffMins < 60) return `${diffMins}분 전`;
-    const diffHours = Math.floor(diffMins / 60);
-    if (diffHours < 24) return `${diffHours}시간 전`;
-    const diffDays = Math.floor(diffHours / 24);
-    if (diffDays < 7) return `${diffDays}일 전`;
-    return date.toLocaleDateString('ko-KR', {
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
   };
 
   return (

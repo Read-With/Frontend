@@ -1,86 +1,23 @@
 import React, { useState, useMemo, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { useBookmarks } from '../../../hooks/useBookmarks';
-
-const bookmarkColors = {
-  normal: '#f4f7ff', // 연회색(이전 페이지와 통일)
-  important: '#fff3c2', // 노랑 (더 부드럽게)
-  highlight: '#e0e7ff', // 파랑(더 부드럽게)
-};
-
-const bookmarkBorders = {
-  normal: '#e7eaf7',
-  important: '#ffd600',
-  highlight: '#5C6F5C',
-};
-
-const colorOptions = [
-  { key: 'normal', label: '기본', color: bookmarkColors.normal, border: bookmarkBorders.normal, icon: 'bookmark' },
-  { key: 'important', label: '중요', color: bookmarkColors.important, border: bookmarkBorders.important, icon: 'grade' },
-  { key: 'highlight', label: '강조', color: bookmarkColors.highlight, border: bookmarkBorders.highlight, icon: 'styler' },
-];
-
-// 위치 정보 파싱 함수: 페이지 + (챕터) 형식 (로컬 CFI 기반)
-function parseCfiToChapterPage(cfi) {
-  if (!cfi) return '';
-  const chapterMatch = cfi.match(/\[chapter-(\d+)\]/);
-  const chapter = chapterMatch ? parseInt(chapterMatch[1]) : null;
-  const pageMatch = cfi.match(/\[chapter-\d+\]\/(\d+)/);
-  const page = pageMatch ? parseInt(pageMatch[1]) : null;
-  // "몇페이지 (챕터 몇)" 형식으로 반환
-  if (page && chapter) return `${page}페이지 (${chapter}챕터)`;
-  if (page) return `${page}페이지`;
-  if (chapter) return `${chapter}챕터`;
-  return cfi;
-}
-
-
-const getColorKey = (color) => {
-  if (color === bookmarkColors.important) return 'important';
-  if (color === bookmarkColors.highlight) return 'highlight';
-  return 'normal';
-};
-
-const formatRelativeTime = (value) => {
-  if (!value) return '';
-  const date = new Date(value);
-  const now = new Date();
-  const diffMs = now.getTime() - date.getTime();
-  const diffMin = Math.floor(diffMs / (1000 * 60));
-  if (diffMin < 1) return '방금 전';
-  if (diffMin < 60) return `${diffMin}분 전`;
-  const diffHour = Math.floor(diffMin / 60);
-  if (diffHour < 24) return `${diffHour}시간 전`;
-  const diffDay = Math.floor(diffHour / 24);
-  if (diffDay < 7) return `${diffDay}일 전`;
-  return date.toLocaleDateString('ko-KR', { month: 'short', day: 'numeric' });
-};
-
-const formatAbsoluteTime = (value) => {
-  if (!value) return '';
-  const date = new Date(value);
-  return date.toLocaleString('ko-KR', {
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-};
+import { useBookmarks } from '../../../hooks/bookmarks/useBookmarks';
+import { useBookmarkSort } from '../../../hooks/bookmarks/useBookmarkSort';
+import {
+  bookmarkColors,
+  bookmarkBorders,
+  colorOptions,
+  getColorKey,
+  formatRelativeTime,
+  formatAbsoluteTime,
+  parseBookmarkLocation,
+} from '../../../utils/bookmarkUtils';
 
 const getLocationLabel = (bookmark) => {
-  if (!bookmark) return '';
-  // 저장된 title이 있으면 우선 사용 (로컬 CFI 기반으로 저장된 형식)
-  if (bookmark.title) return bookmark.title;
-  // 로컬 CFI 기반으로 파싱
-  return parseCfiToChapterPage(bookmark.startCfi || '');
+  return parseBookmarkLocation(bookmark);
 };
 
 const getLocationDetail = (bookmark) => {
-  if (!bookmark) return '';
-  // 저장된 title이 있으면 우선 사용 (로컬 CFI 기반으로 저장된 형식)
-  if (bookmark.title) return bookmark.title;
-  // 로컬 CFI 기반으로 파싱
-  return parseCfiToChapterPage(bookmark.startCfi || '');
+  return parseBookmarkLocation(bookmark);
 };
 
 const getHighlightSnippet = (bookmark) => {
@@ -172,17 +109,7 @@ const BookmarksPage = () => {
     });
   }, [bookmarks, selectedTag, searchTerm, filterBySearch]);
 
-  const sortedBookmarks = useMemo(() => {
-    if (filteredBookmarks.length === 0) return [];
-    const sorted = [...filteredBookmarks];
-    if (sortOrder === 'position') return sorted.sort((a, b) => (a.startCfi || '').localeCompare(b.startCfi || ''));
-    const factor = sortOrder === 'oldest' ? 1 : -1;
-    return sorted.sort((a, b) => {
-      const dateA = new Date(a.createdAt || a.created_at || 0).getTime();
-      const dateB = new Date(b.createdAt || b.created_at || 0).getTime();
-      return (dateA - dateB) * factor;
-    });
-  }, [filteredBookmarks, sortOrder]);
+  const sortedBookmarks = useBookmarkSort(filteredBookmarks, sortOrder);
   const isFilteredView = searchTerm.trim().length > 0 || selectedTag !== 'all';
 
   const handleDeleteBookmark = async (bookmarkId) => {
