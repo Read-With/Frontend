@@ -64,9 +64,10 @@ const parseJsonSafely = (value) => {
     return value;
   }
   try {
-    return JSON.parse(value);
+    const parsed = JSON.parse(value);
+    return parsed;
   } catch {
-    return [value];
+    return value;
   }
 };
 
@@ -276,15 +277,29 @@ export const invalidateCache = () => {
 };
 
 // 윈도우 리사이즈 시 캐시 자동 무효화
+let resizeTimeout = null;
+let resizeHandler = null;
+
 if (typeof window !== 'undefined') {
-  let resizeTimeout;
-  window.addEventListener('resize', () => {
+  resizeHandler = () => {
     clearTimeout(resizeTimeout);
     resizeTimeout = setTimeout(() => {
       invalidateCache();
     }, 100);
-  });
+  };
+  window.addEventListener('resize', resizeHandler);
 }
+
+export const cleanupResizeListener = () => {
+  if (typeof window !== 'undefined' && resizeHandler) {
+    window.removeEventListener('resize', resizeHandler);
+    resizeHandler = null;
+  }
+  if (resizeTimeout) {
+    clearTimeout(resizeTimeout);
+    resizeTimeout = null;
+  }
+};
 
 export const getCacheStatus = () => {
   const now = Date.now();
@@ -318,10 +333,11 @@ export const createRippleEffect = (container, x, y, cyRef, duration = 500) => {
     const cy = cyRef.current;
     const pan = cy.pan();
     const zoom = cy.zoom();
+    const { containerRect } = getContainerInfo();
     
-    // Cytoscape 좌표를 DOM 좌표로 정확히 변환
-    domX = x * zoom + pan.x;
-    domY = y * zoom + pan.y;
+    // Cytoscape 좌표를 DOM 좌표로 정확히 변환 (calculateCytoscapePosition과 일관성 유지)
+    domX = x * zoom + pan.x + containerRect.left;
+    domY = y * zoom + pan.y + containerRect.top;
   } else {
     domX = x;
     domY = y;
@@ -361,6 +377,12 @@ export const ensureElementsInBounds = (cy, container, maxNodes = 1000) => {
   
   const containerWidth = container.clientWidth;
   const containerHeight = container.clientHeight;
+  
+  if (containerWidth <= 0 || containerHeight <= 0) {
+    console.warn('ensureElementsInBounds: 컨테이너 크기가 유효하지 않습니다', { containerWidth, containerHeight });
+    return;
+  }
+  
   const padding = 100;
   
   const bounds = {
@@ -582,49 +604,6 @@ export const calculateLastEventForChapter = ({
 };
 
 /**
- * API 이벤트 객체를 정규화합니다.
- * @param {Object} apiEvent - API 이벤트 객체
- * @param {number} currentChapter - 현재 챕터
- * @param {number} currentEvent - 현재 이벤트
- * @returns {Object|null} 정규화된 이벤트 객체
- */
-export const normalizeApiEvent = (apiEvent, currentChapter, currentEvent) => {
-  if (!apiEvent) return null;
-  
-  return {
-    chapter: apiEvent.chapterIdx ?? currentChapter,
-    chapterIdx: apiEvent.chapterIdx ?? currentChapter,
-    eventNum: apiEvent.event_id ?? (currentEvent - 1),
-    event_id: apiEvent.event_id ?? (currentEvent - 1),
-    start: apiEvent.start,
-    end: apiEvent.end,
-    ...apiEvent
-  };
-};
-
-/**
- * API 캐릭터 데이터로부터 노드 가중치 맵을 생성합니다.
- * @param {Array} characters - 캐릭터 배열
- * @returns {Object} 노드 ID를 키로 하는 가중치 맵
- */
-export const buildNodeWeights = (characters) => {
-  if (!characters || !Array.isArray(characters)) return {};
-  
-  const nodeWeights = {};
-  characters.forEach(char => {
-    if (char.id !== undefined && char.weight !== undefined && char.weight > 0) {
-      const nodeId = String(char.id);
-      nodeWeights[nodeId] = {
-        weight: char.weight,
-        count: char.count || 1
-      };
-    }
-  });
-  
-  return nodeWeights;
-};
-
-/**
  * 검색 파라미터를 포맷팅합니다.
  * @param {string} retainedSearch - 보존된 검색 파라미터
  * @returns {string} 포맷팅된 검색 파라미터
@@ -641,32 +620,16 @@ export const formatSearchParams = (retainedSearch) => {
  * @returns {boolean} 사이드바 요소 내부 여부
  */
 export const isSidebarElement = (event) => {
+  if (!event || !event.target) {
+    return false;
+  }
+  
   const sidebarElement = document.querySelector('[data-testid="graph-sidebar"]') || 
                         document.querySelector('.graph-sidebar') ||
                         event.target.closest('[data-testid="graph-sidebar"]') ||
                         event.target.closest('.graph-sidebar');
   
   return sidebarElement && sidebarElement.contains(event.target);
-};
-
-/**
- * 서버 bookId를 해결합니다.
- * @param {Object} options - 해결 옵션
- * @param {Object} options.book - 책 객체
- * @param {number} options.bookId - 책 ID
- * @returns {number|null} 서버 bookId
- */
-export const resolveServerBookId = ({ book, bookId }) => {
-  if (book?.id && typeof book.id === 'number') {
-    return book.id;
-  }
-  if (book?._bookId && typeof book._bookId === 'number') {
-    return book._bookId;
-  }
-  if (Number.isFinite(bookId) && bookId > 0) {
-    return bookId;
-  }
-  return null;
 };
 
 /**

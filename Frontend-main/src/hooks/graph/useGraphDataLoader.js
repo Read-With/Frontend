@@ -334,6 +334,7 @@ export function useGraphDataLoader(bookId, chapterIdx, eventIdx = null) {
   return {
     elements,
     setElements,
+    setIsDataEmpty,
     newNodeIds,
     currentChapterData,
     maxEventNum,
