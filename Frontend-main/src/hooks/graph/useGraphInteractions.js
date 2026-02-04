@@ -210,16 +210,17 @@ export default function useGraphInteractions({
       const cy = cyRef.current;
       const { containerRect } = getContainerInfo();
       
+      const isEdge = element && typeof element.midpoint === 'function';
+      const edgeTooltipOffsetX = 48;
+
       // 마우스 클릭 이벤트가 있으면 마우스 위치를 우선 사용
       if (evt?.originalEvent) {
         let domX = evt.originalEvent.clientX - containerRect.left;
         let domY = evt.originalEvent.clientY - containerRect.top;
-        
-        // 노드의 경우 offset 추가
-        if (offset > 0) {
-          domX += offset;
-        }
-        
+
+        if (offset > 0) domX += offset;
+        if (isEdge) domX += edgeTooltipOffsetX;
+
         return { x: domX, y: domY };
       }
       
@@ -274,11 +275,10 @@ export default function useGraphInteractions({
       
       let domX = position.x - containerRect.left;
       let domY = position.y - containerRect.top;
-      
-      if (offset > 0 && isNode) {
-        domX += offset;
-      }
-      
+
+      if (offset > 0 && isNode) domX += offset;
+      if (isEdge) domX += edgeTooltipOffsetX;
+
       return { x: domX, y: domY };
     } catch (error) {
       console.debug('calculateTooltipPosition 실패:', error);
@@ -408,15 +408,12 @@ export default function useGraphInteractions({
         const hasSelection = !!(selectedNodeIdRef?.current || selectedEdgeIdRef?.current);
         if (!hasSelection) return;
       }
-      
-      resetAllStyles();
-      
-      if (selectedNodeIdRef) selectedNodeIdRef.current = null;
-      if (selectedEdgeIdRef) selectedEdgeIdRef.current = null;
-      
       if (onClearTooltipRef.current) {
         onClearTooltipRef.current();
       }
+      if (selectedNodeIdRef) selectedNodeIdRef.current = null;
+      if (selectedEdgeIdRef) selectedEdgeIdRef.current = null;
+      resetAllStyles();
     } catch (error) {
       console.debug('handleBackgroundClick 실패:', error);
     }

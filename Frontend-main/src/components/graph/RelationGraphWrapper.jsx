@@ -117,6 +117,7 @@ function RelationGraphWrapper() {
   const cyRef = useRef(null);
   const selectedEdgeIdRef = useRef(null);
   const selectedNodeIdRef = useRef(null);
+  const viewBeforeSelectionRef = useRef(null);
   const prevChapterNum = useRef(currentChapter);
   const prevEventNum = useRef();
   const timeoutRef = useRef(null);
@@ -232,8 +233,8 @@ function RelationGraphWrapper() {
     
     cy.animate({
       pan: { x: targetX, y: targetY },
-      duration: 800,
-      easing: 'ease-out-cubic'
+      duration: 500,
+      easing: 'ease-in'
     });
   }, [isSidebarOpen]);
 
@@ -241,6 +242,8 @@ function RelationGraphWrapper() {
   const onShowNodeTooltip = useCallback(({ node, nodeCenter, mouseX, mouseY }) => {
     setForceClose(false);
     setIsSidebarClosing(false);
+    const cy = cyRef.current;
+    if (cy) viewBeforeSelectionRef.current = { pan: { ...cy.pan() }, zoom: cy.zoom() };
     const nodeData = node.data();
     
     const tooltipData = {
@@ -260,6 +263,8 @@ function RelationGraphWrapper() {
   const onShowEdgeTooltip = useCallback(({ edge, edgeCenter, mouseX, mouseY }) => {
     setForceClose(false);
     setIsSidebarClosing(false);
+    const cy = cyRef.current;
+    if (cy) viewBeforeSelectionRef.current = { pan: { ...cy.pan() }, zoom: cy.zoom() };
     const edgeData = edge.data();
     
     const finalX = mouseX !== undefined ? mouseX : edgeCenter?.x || 0;
@@ -283,7 +288,18 @@ function RelationGraphWrapper() {
     centerElementBetweenSidebars(edge.id());
   }, [setForceClose, setIsSidebarClosing, setActiveTooltip, centerElementBetweenSidebars]);
 
-  const onClearTooltip = clearTooltip;
+  const onClearTooltip = useCallback(() => {
+    closeSidebar();
+    const stored = viewBeforeSelectionRef.current;
+    const cy = cyRef.current;
+    if (stored && cy) {
+      viewBeforeSelectionRef.current = null;
+      cy.animate({
+        pan: stored.pan,
+        zoom: stored.zoom,
+      }, { duration: 500, easing: 'ease-in' });
+    }
+  }, [closeSidebar]);
 
   const handleStartClosing = startClosing;
 
