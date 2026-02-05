@@ -206,27 +206,18 @@ export default function useGraphInteractions({
   const calculateTooltipPosition = useCallback((element, evt, offset = 0) => {
     try {
       if (!cyRef?.current) return { x: 0, y: 0 };
-      
-      const cy = cyRef.current;
-      const { containerRect } = getContainerInfo();
-      
-      const isEdge = element && typeof element.midpoint === 'function';
-      const edgeTooltipOffsetX = 60;
 
-      // 마우스 클릭 이벤트가 있으면 마우스 위치를 우선 사용
+      const { containerRect } = getContainerInfo();
+
+      // 노드/간선 동일: evt 있으면 마우스 위치, 없으면 element 위치 사용
       if (evt?.originalEvent) {
         let domX = evt.originalEvent.clientX - containerRect.left;
         let domY = evt.originalEvent.clientY - containerRect.top;
-
-        if (offset > 0) domX += offset;
-        if (isEdge) domX -= edgeTooltipOffsetX;
-
+        if (offset !== 0) domX += offset;
         return { x: domX, y: domY };
       }
-      
-      // 마우스 이벤트가 없으면 element 위치 계산
+
       const isNode = typeof element.renderedPosition === 'function';
-      
       let basePos;
       if (isNode) {
         const rendered = element.renderedPosition();
@@ -247,7 +238,7 @@ export default function useGraphInteractions({
             if (source && target) {
               const sourcePos = source.renderedPosition ? source.renderedPosition() : source.position();
               const targetPos = target.renderedPosition ? target.renderedPosition() : target.position();
-              if (sourcePos && targetPos && 
+              if (sourcePos && targetPos &&
                   typeof sourcePos.x === 'number' && typeof sourcePos.y === 'number' &&
                   typeof targetPos.x === 'number' && typeof targetPos.y === 'number') {
                 basePos = {
@@ -265,19 +256,15 @@ export default function useGraphInteractions({
           basePos = { x: 0, y: 0 };
         }
       }
-      
-      // calculateCytoscapePosition을 사용하여 정확한 컨테이너 기준 좌표 계산
+
       if (!basePos || typeof basePos.x !== 'number' || typeof basePos.y !== 'number') {
         return { x: 0, y: 0 };
       }
-      
+
       const position = calculateCytoscapePosition(basePos, cyRef);
-      
       let domX = position.x - containerRect.left;
       let domY = position.y - containerRect.top;
-
-      if (offset > 0 && isNode) domX += offset;
-      if (isEdge) domX -= edgeTooltipOffsetX;
+      if (offset !== 0) domX += offset;
 
       return { x: domX, y: domY };
     } catch (error) {
@@ -311,7 +298,7 @@ export default function useGraphInteractions({
         }
 
         const nodeSize = node.renderedBoundingBox()?.w || 50;
-        const offsetX = nodeSize + 100;
+        const offsetX = nodeSize + 200;
         const { x: mouseX, y: mouseY } = calculateTooltipPosition(node, evt, offsetX);
         const nodeCenter = calculateNodePosition(node);
 
@@ -360,7 +347,9 @@ export default function useGraphInteractions({
           return;
         }
 
-        const { x: mouseX, y: mouseY } = calculateTooltipPosition(edge, evt, 0);
+        const edgeSize = edge.renderedBoundingBox?.()?.w ?? 50;
+        const offsetX = edgeSize + 200;
+        const { x: mouseX, y: mouseY } = calculateTooltipPosition(edge, evt, offsetX);
         const edgeCenter = calculateTooltipPosition(edge, null, 0);
 
         const connectedNodes = edge.connectedNodes ? edge.connectedNodes() : cy.collection();

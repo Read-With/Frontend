@@ -1,6 +1,8 @@
 /**
  * 레이더 차트 데이터 처리 유틸리티
+ * 관계 색/라벨은 relationStyles 단일 소스에서 re-export.
  */
+export { getPositivityColor, getPositivityLabel } from './styles/relationStyles';
 
 /**
  * positivity 값을 0-100 스케일로 변환
@@ -113,36 +115,4 @@ export const getConnectionStatus = (radarData) => {
     message: `연결된 인물이 ${connectionCount}명입니다.`,
     connectionCount
   };
-};
-
-/**
- * positivity 값에 따른 색상 반환
- * @param {number} positivity -1 ~ 1 사이의 값
- * @returns {string} 색상 코드
- */
-
-export const getPositivityColor = (positivity) => {
-  if (positivity === undefined || positivity === null || isNaN(positivity)) {
-    return 'hsl(60, 70%, 45%)'; // 기본값: 중립 (노란색 계열)
-  }
-  const h = (120 * (positivity + 1)) / 2;
-  return `hsl(${h}, 70%, 45%)`;
-};
-
-/**
- * positivity 값에 따른 라벨 반환
- * @param {number} positivity -1 ~ 1 사이의 값
- * @returns {string} 관계 상태 라벨
- */
-export const getPositivityLabel = (positivity) => {
-  if (positivity === undefined || positivity === null || isNaN(positivity)) {
-    return '정보 없음';
-  }
-  if (positivity > 0.6) return '매우 긍정적';
-  if (positivity > 0.3) return '긍정적';
-  if (positivity > 0.1) return '약간 긍정적';
-  if (positivity > -0.1) return '중립적';
-  if (positivity > -0.3) return '약간 부정적';
-  if (positivity > -0.6) return '부정적';
-  return '매우 부정적';
 };

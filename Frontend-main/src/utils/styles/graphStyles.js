@@ -75,7 +75,7 @@ export const getEdgeStyle = (context = 'default') => {
   };
 };
 
-// 통합된 관계 색상 계산 함수 (relationStyles.js와 중복 제거)
+// 관계 색상 공식 (relationStyles가 임계값·라벨 단일 소스, 여기는 색상만)
 export const getRelationColor = (positivity) => {
   const value = Number.isFinite(positivity) ? Math.max(-1, Math.min(1, positivity)) : 0;
   const normalized = (value + 1) / 2;

@@ -38,42 +38,44 @@ export const useBooks = () => {
     indexedDbBookIdsRef.current = new Set(indexedDbBookIds);
   }, [indexedDbBookIds]);
 
-  // IndexedDB에서 EPUB 파일(buffer)이 실제로 있는 책 ID만 가져오기
-  useEffect(() => {
-    const loadIndexedDbBookIds = async () => {
-      try {
-        const allBookIds = await getAllLocalBookIds();
-        const bookIdsWithBuffer = new Set();
-        
-        // 각 책 ID에 대해 실제 buffer가 있는지 확인
-        const checkPromises = allBookIds.map(async (bookId) => {
-          try {
-            const buffer = await loadLocalBookBuffer(bookId);
-            if (buffer) {
-              return bookId;
-            }
-          } catch (error) {
-            // 에러는 조용히 처리
-          }
+  const refreshIndexedDbBookIds = useCallback(async () => {
+    try {
+      const allBookIds = await getAllLocalBookIds();
+      const bookIdsWithBuffer = new Set();
+      const checkPromises = (allBookIds || []).map(async (bookId) => {
+        try {
+          const buffer = await loadLocalBookBuffer(bookId);
+          return buffer && buffer.byteLength > 0 ? bookId : null;
+        } catch {
           return null;
-        });
-
-        const results = await Promise.all(checkPromises);
-        results.forEach((bookId) => {
-          if (bookId) {
-            bookIdsWithBuffer.add(bookId);
-          }
-        });
-
-        setIndexedDbBookIds(bookIdsWithBuffer);
-      } catch (error) {
-        console.warn('IndexedDB 책 ID 로드 실패:', error);
-        setIndexedDbBookIds(new Set());
-      }
-    };
-
-    loadIndexedDbBookIds();
+        }
+      });
+      const results = await Promise.all(checkPromises);
+      results.forEach((id) => id && bookIdsWithBuffer.add(id));
+      setIndexedDbBookIds(bookIdsWithBuffer);
+    } catch (e) {
+      console.warn('IndexedDB 책 ID 로드 실패:', e);
+      setIndexedDbBookIds(new Set());
+    }
   }, []);
+
+  useEffect(() => {
+    refreshIndexedDbBookIds();
+  }, [refreshIndexedDbBookIds]);
+
+  useEffect(() => {
+    const INTERVAL_MS = 15000;
+    const id = setInterval(refreshIndexedDbBookIds, INTERVAL_MS);
+    return () => clearInterval(id);
+  }, [refreshIndexedDbBookIds]);
+
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') refreshIndexedDbBookIds();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
+  }, [refreshIndexedDbBookIds]);
 
   // 서버 책 조회 - React Query 사용
   // 중요: 서버에는 메타데이터만 저장되며, EPUB 파일은 IndexedDB에만 저장됨
@@ -154,74 +156,29 @@ export const useBooks = () => {
     return reconcileBooks(serverBooks);
   }, [serverBooksData, reconcileBooks]);
 
-  // 서버 책 목록이 갱신될 때 IndexedDB도 다시 확인 (debounce 적용)
   useEffect(() => {
-    if (!serverBooksData?.books) {
-      return;
-    }
+    if (!serverBooksData?.books) return;
+    const t = setTimeout(refreshIndexedDbBookIds, 500);
+    return () => clearTimeout(t);
+  }, [serverBooksData, refreshIndexedDbBookIds]);
 
-    // debounce를 위한 timeout
-    const timeoutId = setTimeout(async () => {
-      try {
-        const allBookIds = await getAllLocalBookIds();
-        const bookIdsWithBuffer = new Set();
-        
-        // 각 책 ID에 대해 실제 buffer가 있는지 확인
-        const checkPromises = allBookIds.map(async (bookId) => {
-          try {
-            const buffer = await loadLocalBookBuffer(bookId);
-            if (buffer && buffer.byteLength > 0) {
-              return bookId;
-            }
-          } catch (error) {
-            // 에러는 조용히 처리
-          }
-          return null;
-        });
-
-        const results = await Promise.all(checkPromises);
-        results.forEach((bookId) => {
-          if (bookId) {
-            bookIdsWithBuffer.add(bookId);
-          }
-        });
-
-        setIndexedDbBookIds(bookIdsWithBuffer);
-      } catch (error) {
-        console.warn('IndexedDB 책 ID 갱신 실패:', error);
-      }
-    }, 500); // 500ms debounce
-
-    return () => clearTimeout(timeoutId);
-  }, [serverBooksData]);
-
-  // IndexedDB에 있는 책 중 서버에 존재하는 책만 표시
+  // IndexedDB에 있는 책 중 서버에도 있는 것만 표시 (서버에 없으면 숨김)
   const books = useMemo(() => {
     const hiddenIds = hiddenServerBookIdsRef.current;
-    const indexedDbIds = indexedDbBookIdsRef.current;
-    
-    // 서버 책을 Map으로 변환 (빠른 조회를 위해)
+    const indexedDbIds = indexedDbBookIds;
+
     const serverBooksMap = new Map();
     reconciledBooks.forEach((book) => {
       const idKey = book?.id !== undefined && book?.id !== null ? `${book.id}` : null;
-      if (idKey) {
-        serverBooksMap.set(idKey, book);
-      }
+      if (idKey) serverBooksMap.set(idKey, book);
     });
 
-    // IndexedDB에 있는 책 ID 중 서버에 존재하는 책만 필터링
     const result = [];
     indexedDbIds.forEach((bookId) => {
-      // 숨김 처리된 책 제외
       if (hiddenIds.has(bookId)) return;
-      
-      // 서버에 존재하는 책만 추가
       const serverBook = serverBooksMap.get(bookId);
-      if (serverBook) {
-        result.push(serverBook);
-      }
+      if (serverBook) result.push(serverBook);
     });
-
     return result;
   }, [reconciledBooks, indexedDbBookIds]);
 
@@ -320,77 +277,45 @@ export const useBooks = () => {
     },
   });
 
-  // 책 추가 후 서버 책 목록 갱신 및 IndexedDB 책 ID 목록 갱신
   const addBook = useCallback(
     async (newBook) => {
-      // 새 책의 ID 추출
-      const newBookId = newBook?.id || newBook?._bookId;
-      const newBookIdStr = newBookId ? String(newBookId) : null;
-      
-      // 서버 책 목록 갱신 (refetchQueries 사용하여 stale 경고 방지)
-      await queryClient.refetchQueries({ 
-        queryKey: ['books', 'server'],
-        type: 'active'
-      });
-      
-      // 새 책이 있으면 IndexedDB에 buffer가 있는지 확인하고 즉시 추가
-      if (newBookIdStr) {
-        try {
-          // 최대 10번 재시도 (IndexedDB 저장 완료 대기, 총 최대 2초)
-          let buffer = null;
-          for (let i = 0; i < 10; i++) {
-            buffer = await loadLocalBookBuffer(newBookIdStr);
-            if (buffer) {
-              // 새 책 ID를 즉시 추가
-              setIndexedDbBookIds((prev) => {
-                const next = new Set(prev);
-                next.add(newBookIdStr);
-                return next;
-              });
-              return;
-            }
-            // 저장이 완료되지 않았으면 잠시 대기 후 재시도
-            await new Promise(resolve => setTimeout(resolve, 200));
-          }
-          
-          // 재시도 후에도 없으면 전체 IndexedDB 다시 로드
-          console.warn('IndexedDB buffer 확인 실패, 전체 재로드 시도');
-        } catch (error) {
-          console.warn('IndexedDB buffer 확인 실패:', error);
-        }
-      }
-      
-      // 새 책이 없거나 buffer가 없으면 전체 IndexedDB 다시 로드
       try {
-        const allBookIds = await getAllLocalBookIds();
-        const bookIdsWithBuffer = new Set();
-        
-        // 각 책 ID에 대해 실제 buffer가 있는지 확인
-        const checkPromises = allBookIds.map(async (bookId) => {
-          try {
-            const buffer = await loadLocalBookBuffer(bookId);
-            if (buffer) {
-              return bookId;
-            }
-          } catch (error) {
-            // 에러는 조용히 처리
-          }
-          return null;
+        const newBookId = newBook?.id ?? newBook?._bookId;
+        const newBookIdStr = newBookId != null ? String(newBookId) : null;
+        if (!newBookIdStr) return;
+
+        const serverShape = {
+          id: newBook.id ?? newBook._bookId,
+          title: newBook.title ?? '',
+          author: newBook.author ?? 'Unknown',
+          favorite: !!newBook.favorite,
+          coverImgUrl: newBook.coverImgUrl ?? newBook.coverImage ?? newBook.coverUrl ?? '',
+          coverImage: newBook.coverImgUrl ?? newBook.coverImage ?? newBook.coverUrl ?? '',
+          description: newBook.description ?? '',
+          language: newBook.language ?? 'ko',
+          updatedAt: newBook.updatedAt ?? new Date().toISOString(),
+        };
+
+        queryClient.setQueryData(['books', 'server'], (old) => {
+          if (!old) return { books: [serverShape], needsAuth: false };
+          const list = Array.isArray(old.books) ? old.books : [];
+          const exists = list.some((b) => b && `${b.id}` === newBookIdStr);
+          if (exists) return old;
+          return { ...old, books: [...list, serverShape] };
+        });
+        setIndexedDbBookIds((prev) => {
+          const next = new Set(prev);
+          next.add(newBookIdStr);
+          return next;
         });
 
-        const results = await Promise.all(checkPromises);
-        results.forEach((bookId) => {
-          if (bookId) {
-            bookIdsWithBuffer.add(bookId);
-          }
-        });
-
-        setIndexedDbBookIds(bookIdsWithBuffer);
-      } catch (error) {
-        console.warn('IndexedDB 책 ID 갱신 실패:', error);
+        queryClient.refetchQueries({ queryKey: ['books', 'server'], type: 'active' }).catch(() => {});
+        refreshIndexedDbBookIds();
+      } catch (e) {
+        console.warn('addBook 실패:', e);
       }
     },
-    [queryClient],
+    [queryClient, refreshIndexedDbBookIds],
   );
 
   const fetchBook = useCallback(async (bookId) => {
