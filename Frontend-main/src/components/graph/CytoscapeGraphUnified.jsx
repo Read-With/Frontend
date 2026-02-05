@@ -9,6 +9,7 @@ import { calculateSpiralPlacement, getContainerDimensions } from "../../utils/gr
 import { calculateNodeSize } from "../../utils/styles/graphStyles.js";
 import useGraphInteractions from "../../hooks/graph/useGraphInteractions.js";
 import { useGraphLayout } from "../../hooks/graph/useGraphLayout.js";
+import { useCyInstance } from "../../hooks/graph/useCyInstance.js";
 import { eventUtils } from "../../utils/viewerUtils";
 
 export const CytoscapeGraphContext = createContext();
@@ -42,6 +43,10 @@ const NO_RESULTS_DESCRIPTION_STYLE = {
   lineHeight: '1.4'
 };
 
+const DEFAULT_LAYOUT = { name: "preset" };
+
+const EMPTY_ELEMENTS_UPDATE = { nodesToAdd: [], edgesToAdd: [], hasChanges: false };
+
 const CytoscapeGraphUnified = ({
   elements,
   stylesheet,
@@ -71,17 +76,13 @@ const CytoscapeGraphUnified = ({
 }) => {
   const containerRef = useRef(null);
   const [isGraphVisible, setIsGraphVisible] = useState(false);
+  const [cyReady, setCyReady] = useState(false);
   const previousElementsRef = useRef([]);
   const prevChapterRef = useRef(currentChapter ?? window.currentChapter);
   const [isInitialLoad, setIsInitialLoad] = useState(true);
   const addedNodeIdsRef = useRef(new Set());
-  
-  // cy 인스턴스 가져오기 (통합)
-  const getCyInstance = useCallback(() => {
-    const cy = externalCyRef?.current;
-    if (!cy || typeof cy.container !== 'function') return null;
-    return cy;
-  }, [externalCyRef]);
+
+  const cy = useCyInstance(externalCyRef, cyReady);
 
   // 안전한 Cytoscape 작업 실행 헬퍼
   const safeCyOperation = useCallback((operation, errorMessage) => {
@@ -132,9 +133,7 @@ const CytoscapeGraphUnified = ({
 
   // 추가된 노드에 대한 ripple 효과 트리거
   const triggerRippleForAddedNodes = useCallback(() => {
-    const cy = getCyInstance();
     if (!cy) return;
-
     if (isInitialLoad || isResetFromSearch) {
       return;
     }
@@ -155,12 +154,11 @@ const CytoscapeGraphUnified = ({
     });
 
     addedNodeIdsRef.current = new Set();
-  }, [getCyInstance, isInitialLoad, isResetFromSearch]);
+  }, [cy, isInitialLoad, isResetFromSearch]);
 
   // ripple 효과 래퍼 생성
   const createRippleWrapper = useCallback((originalHandler) => {
     return (evt) => {
-      const cy = getCyInstance();
       if (showRippleEffect && !isDropdownSelection && containerRef.current && cy) {
         let x, y;
         
@@ -187,7 +185,7 @@ const CytoscapeGraphUnified = ({
         originalHandler(evt);
       }
     };
-  }, [getCyInstance, showRippleEffect, isDropdownSelection]);
+  }, [cy, showRippleEffect, isDropdownSelection]);
   
   // 마우스 이벤트 상태는 createMouseEventHandlers에서 관리
 
@@ -207,16 +205,10 @@ const CytoscapeGraphUnified = ({
     filteredElements,
   });
 
-  // 챕터 변경 감지 및 요소 diff 계산
+  // 챕터 변경 감지 및 요소 diff 계산 (빈 elements 정리는 요소 업데이트 effect에서만)
   useEffect(() => {
-    if (isEmpty(elements)) {
-      if (!isDataRefreshing) {
-        resetPreviousElements();
-      }
-      return;
-    }
+    if (isEmpty(elements)) return;
 
-    const cy = getCyInstance();
     if (!cy) return;
 
     // 챕터 변경 확인
@@ -248,7 +240,7 @@ const CytoscapeGraphUnified = ({
       addedNodeIdsRef.current = new Set(addedNodeIds);
       previousElementsRef.current = elements;
     }
-  }, [elements, isDataRefreshing, currentChapter, safeCyOperation]);
+  }, [elements, isDataRefreshing, currentChapter, safeCyOperation, cy]);
 
   // Cytoscape 인스턴스 생성
   useEffect(() => {
@@ -265,7 +257,7 @@ const CytoscapeGraphUnified = ({
           container: containerRef.current,
           elements: [],
           style: stylesheet,
-          layout: { name: "preset" },
+          layout: DEFAULT_LAYOUT,
           userZoomingEnabled: true,
           userPanningEnabled: true,
           minZoom: 0.2,
@@ -338,8 +330,11 @@ const CytoscapeGraphUnified = ({
     cy.on('dragfreeon', 'node', handleDragFreeOn);
     cy.on('drag', 'node', handleDrag);
     cy.on('dragfree', 'node', handleDragFree);
-    
+
+    setCyReady(true);
+
     return () => {
+      setCyReady(false);
       cy.removeListener('dragfreeon', 'node', handleDragFreeOn);
       cy.removeListener('drag', 'node', handleDrag);
       cy.removeListener('dragfree', 'node', handleDragFree);
@@ -352,20 +347,17 @@ const CytoscapeGraphUnified = ({
 
   // 배경 탭 핸들러
   const handleBackgroundTap = useCallback((evt) => {
-    const cy = getCyInstance();
     if (!cy || evt.target !== cy) return;
-    
     const bgHandler = tapBackgroundHandler || hookTapBackgroundHandler;
     if (bgHandler) {
       createRippleWrapper(bgHandler)(evt);
     }
-  }, [getCyInstance, tapBackgroundHandler, hookTapBackgroundHandler, createRippleWrapper]);
+  }, [cy, tapBackgroundHandler, hookTapBackgroundHandler, createRippleWrapper]);
 
   // 이벤트 핸들러 등록
   useEffect(() => {
-    const cy = getCyInstance();
     if (!cy) return;
-    
+
     const nodeHandler = tapNodeHandler || hookTapNodeHandler;
     const edgeHandler = tapEdgeHandler || hookTapEdgeHandler;
     
@@ -384,40 +376,36 @@ const CytoscapeGraphUnified = ({
     return () => {
       cy.off('tap');
     };
-  }, [getCyInstance, tapNodeHandler, tapEdgeHandler, hookTapNodeHandler, hookTapEdgeHandler, createRippleWrapper, handleBackgroundTap]);
+  }, [cy, tapNodeHandler, tapEdgeHandler, hookTapNodeHandler, hookTapEdgeHandler, createRippleWrapper, handleBackgroundTap]);
 
   // 요소 업데이트 및 노드 배치
-  const elementsUpdateRef = useRef({ nodesToAdd: [], edgesToAdd: [], hasChanges: false });
+  const elementsUpdateRef = useRef(EMPTY_ELEMENTS_UPDATE);
 
   useEffect(() => {
-    const cy = getCyInstance();
     if (!cy) return;
 
     if (isEmpty(elements)) {
       if (!isDataRefreshing) {
+        resetPreviousElements();
         cy.elements().remove();
         setIsGraphVisible(false);
       }
-      elementsUpdateRef.current = { nodesToAdd: [], edgesToAdd: [], hasChanges: false };
+      elementsUpdateRef.current = EMPTY_ELEMENTS_UPDATE;
       return;
     }
 
-    if (isEmptyElements()) {
-      previousElementsRef.current = elements;
-    }
-
+    // 초기 로드 시 previousElementsRef 동기화는 챕터/diff effect에서만 수행
     cy.batch(() => {
-      const prevNodeIds = new Set(cy.nodes().map(n => n.id()));
-      const prevEdgeIds = new Set(cy.edges().map(e => e.id()));
-      const nextNodeIds = new Set(elements.filter(e => !e.data.source).map(e => e.data.id));
-      const nextEdgeIds = new Set(elements.filter(e => e.data.source).map(e => e.data.id));
-      
-      cy.nodes().forEach(n => { if (!nextNodeIds.has(n.id())) n.remove(); });
-      cy.edges().forEach(e => { if (!nextEdgeIds.has(e.id())) e.remove(); });
-      
       const nodes = eventUtils.filterNodes(elements);
       const edges = eventUtils.filterEdges(elements);
-      
+      const prevNodeIds = new Set(cy.nodes().map(n => n.id()));
+      const prevEdgeIds = new Set(cy.edges().map(e => e.id()));
+      const nextNodeIds = new Set(nodes.map(n => n.data.id));
+      const nextEdgeIds = new Set(edges.map(e => e.data.id));
+
+      cy.nodes().forEach(n => { if (!nextNodeIds.has(n.id())) n.remove(); });
+      cy.edges().forEach(e => { if (!nextEdgeIds.has(e.id())) e.remove(); });
+
       const placedPositions = nodes
         .filter(node => prevNodeIds.has(node.data.id) && node.position)
         .map(node => node.position);
@@ -444,10 +432,9 @@ const CytoscapeGraphUnified = ({
     });
 
     setIsGraphVisible(true);
-  }, [elements, isDataRefreshing]);
+  }, [elements, isDataRefreshing, cy]);
 
   // 레이아웃 및 스타일 적용 (커스텀 훅으로 분리)
-  const cy = getCyInstance();
   useGraphLayout({
     cy,
     elements,
@@ -465,7 +452,6 @@ const CytoscapeGraphUnified = ({
 
   // 검색 fit 처리
   useEffect(() => {
-    const cy = getCyInstance();
     if (!cy || isEmpty(elements)) return;
 
     cy.batch(() => {
@@ -481,7 +467,7 @@ const CytoscapeGraphUnified = ({
         cy.nodes().removeClass('search-highlight');
       }
     });
-  }, [fitNodeIds, isSearchActive, applyNodeSizes]);
+  }, [cy, elements, fitNodeIds, isSearchActive, applyNodeSizes]);
 
   // 검색 상태 변경 시에만 초기 fade 효과 적용
   const filteredElementIdsStr = useMemo(() => {
@@ -490,9 +476,8 @@ const CytoscapeGraphUnified = ({
   }, [filteredElements]);
   
   useEffect(() => {
-    const cy = getCyInstance();
     if (!cy) return;
-    
+
     if (isSearchActive && filteredElements.length > 0) {
       applySearchFadeEffect(cy, filteredElements, isSearchActive);
     } else if (!isSearchActive) {
@@ -502,14 +487,13 @@ const CytoscapeGraphUnified = ({
         element.style('text-opacity', '');
       });
     }
-  }, [isSearchActive, filteredElementIdsStr]);
+  }, [cy, isSearchActive, filteredElementIdsStr]);
 
   // 크기 반응형
   useEffect(() => {
     const handleResize = () => {
-      const cy = getCyInstance();
       if (!cy) return;
-      
+
       safeCyOperation(() => {
         cy.resize();
         setTimeout(() => {
@@ -522,7 +506,7 @@ const CytoscapeGraphUnified = ({
     
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
-  }, [safeCyOperation]);
+  }, [cy, safeCyOperation]);
 
   // 컨테이너 스타일 메모이제이션
   const containerStyle = useMemo(() => ({
@@ -632,7 +616,7 @@ CytoscapeGraphUnified.propTypes = {
 // 기본값 (isRequired가 아닌 props만)
 CytoscapeGraphUnified.defaultProps = {
   stylesheet: [],
-  layout: { name: "preset" },
+  layout: DEFAULT_LAYOUT,
   style: {},
   newNodeIds: [],
   searchTerm: "",
@@ -648,26 +632,20 @@ CytoscapeGraphUnified.defaultProps = {
 export default CytoscapeGraphUnified; 
 
 export function CytoscapeGraphPortalProvider({ children }) {
-  const [graphProps, setGraphProps] = useState({
+  const cyRef = useRef(null);
+  const [graphProps, setGraphProps] = useState(() => ({
+    ...CytoscapeGraphUnified.defaultProps,
     elements: [],
-    stylesheet: [],
-    layout: { name: "preset" },
-    tapNodeHandler: undefined,
-    tapEdgeHandler: undefined,
-    tapBackgroundHandler: undefined,
-    fitNodeIds: undefined,
-    style: {},
-    newNodeIds: [],
-  });
+  }));
 
   const updateGraph = useCallback((newProps) => {
     setGraphProps((prev) => ({ ...prev, ...newProps }));
   }, []);
 
   return (
-    <CytoscapeGraphContext.Provider value={{ graphProps, updateGraph }}>
+    <CytoscapeGraphContext.Provider value={{ graphProps, updateGraph, cyRef }}>
       {children}
-      <CytoscapeGraphUnified {...graphProps} />
+      <CytoscapeGraphUnified {...graphProps} cyRef={cyRef} />
     </CytoscapeGraphContext.Provider>
   );
 }
