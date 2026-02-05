@@ -211,7 +211,7 @@ export default function useGraphInteractions({
       const { containerRect } = getContainerInfo();
       
       const isEdge = element && typeof element.midpoint === 'function';
-      const edgeTooltipOffsetX = 48;
+      const edgeTooltipOffsetX = 60;
 
       // 마우스 클릭 이벤트가 있으면 마우스 위치를 우선 사용
       if (evt?.originalEvent) {
@@ -219,7 +219,7 @@ export default function useGraphInteractions({
         let domY = evt.originalEvent.clientY - containerRect.top;
 
         if (offset > 0) domX += offset;
-        if (isEdge) domX += edgeTooltipOffsetX;
+        if (isEdge) domX -= edgeTooltipOffsetX;
 
         return { x: domX, y: domY };
       }
@@ -277,7 +277,7 @@ export default function useGraphInteractions({
       let domY = position.y - containerRect.top;
 
       if (offset > 0 && isNode) domX += offset;
-      if (isEdge) domX += edgeTooltipOffsetX;
+      if (isEdge) domX -= edgeTooltipOffsetX;
 
       return { x: domX, y: domY };
     } catch (error) {
@@ -294,7 +294,7 @@ export default function useGraphInteractions({
     (evt) => {
       try {
         if (!cyRef?.current) return;
-        
+
         const node = evt.target;
         const nodeData = node?.data?.();
         if (!node || !nodeData) return;
@@ -303,12 +303,10 @@ export default function useGraphInteractions({
         const isSameNodeSelected = selectedNodeIdRef?.current === nodeId;
 
         if (isSameNodeSelected) {
-          if (onClearTooltipRef.current) {
-            onClearTooltipRef.current();
-          }
-          resetAllStyles();
+          if (onClearTooltipRef.current) onClearTooltipRef.current();
           if (selectedNodeIdRef) selectedNodeIdRef.current = null;
           if (selectedEdgeIdRef) selectedEdgeIdRef.current = null;
+          resetAllStyles();
           return;
         }
 
@@ -355,12 +353,10 @@ export default function useGraphInteractions({
         const isSameEdgeSelected = selectedEdgeIdRef?.current === currentEdgeId;
 
         if (isSameEdgeSelected) {
-          if (onClearTooltipRef.current) {
-            onClearTooltipRef.current();
-          }
-          resetAllStyles();
+          if (onClearTooltipRef.current) onClearTooltipRef.current();
           if (selectedEdgeIdRef) selectedEdgeIdRef.current = null;
           if (selectedNodeIdRef) selectedNodeIdRef.current = null;
+          resetAllStyles();
           return;
         }
 
