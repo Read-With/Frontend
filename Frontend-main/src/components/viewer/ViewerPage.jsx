@@ -3,6 +3,7 @@ import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import ViewerLayout from "./ViewerLayout";
 import EpubViewer from "./epub/EpubViewer";
+import XhtmlViewer from "./xhtml/XhtmlViewer";
 import BookmarkPanel from "./bookmark/BookmarkPanel";
 import ViewerSettings from "./epub/ViewerSettings";
 import { useViewerPage } from "../../hooks/viewer/useViewerPage";
@@ -12,6 +13,7 @@ import { useProgressAutoSave } from "../../hooks/viewer/useProgressAutoSave";
 import { useTooltipState } from "../../hooks/ui/useTooltipState";
 import { useCachedLocation } from "../../hooks/viewer/useCachedLocation";
 import { getBookProgress, getFineGraph, getBookManifest } from "../../utils/api/api";
+import { getProgressFromCache } from "../../utils/common/cache/progressCache";
 import { getGraphEventState, getCachedChapterEvents, isGraphBookCacheBuilding, ensureGraphBookCache } from "../../utils/common/cache/chapterEventCache";
 import { getManifestFromCache } from "../../utils/common/cache/manifestCache";
 import { 
@@ -51,7 +53,7 @@ const ViewerPage = () => {
     handleOpenSettings, handleCloseSettings, handleApplySettings,
     onToggleBookmarkList, handleSliderChange, toggleGraph, handleLocationChange,
     graphState, graphActions, viewerState, searchState, graphFullScreen, setGraphFullScreen,
-    previousPage, isFromLibrary, bookId,
+    previousPage, isFromLibrary, bookId, cleanBookId,
   } = useViewerPage();
 
   const bookKey = React.useMemo(() => {
@@ -971,87 +973,95 @@ const ViewerPage = () => {
           />
         }
       >
-        <EpubViewer
-          key={reloadKey}
-          ref={viewerRef}
-          book={book}
-          reloadKey={reloadKey}
-          initialChapter={currentChapter}
-          initialPage={currentPage}
-          initialProgress={progress}
-          onProgressChange={setProgress}
-          onCurrentPageChange={(page) => {
-            setCurrentPage(page);
-          }}
-          onTotalPagesChange={setTotalPages}
-          onCurrentChapterChange={(chapter) => {
-            const prev = Number(currentChapter || 0);
-            const next = Number(chapter || 0);
-            if (prev && next && prev !== next) {
-              const transitionInfo = startChapterTransition(prev, next);
-              if (transitionInfo && transitionInfo.forcedIdx === 1) {
-                setCurrentEvent({
-                  chapter: next,
-                  chapterIdx: next,
-                  eventIdx: 1,
-                  eventNum: 1,
-                  event_id: 1,
-                  relations: [],
-                  characters: [],
-                  placeholder: true
-                });
-              }
-            }
-            setCurrentChapter(chapter);
-          }}
-          settings={settings}
-          onCurrentLineChange={(charIndex, totalEvents, receivedEvent) => {
-            setCurrentCharIndex(charIndex);
-            
-            if (receivedEvent) {
-              if (receivedEvent.chapter && receivedEvent.chapter !== currentChapter) {
-                setCurrentChapter(receivedEvent.chapter);
-              }
-
-              const forcedIdx = forcedChapterEventIdxRef.current;
-              const rawIdx = eventUtils.extractRawEventIdx(receivedEvent);
-
-              let shouldReleaseForced = false;
-              let nextEvent = receivedEvent;
-
-              if (Number.isFinite(forcedIdx)) {
-                if (rawIdx > 0 && rawIdx !== forcedIdx) {
-                  shouldReleaseForced = true;
-                } else {
-                  nextEvent = {
-                    ...receivedEvent,
-                    eventIdx: forcedIdx,
-                    eventNum: forcedIdx,
-                    event_id: forcedIdx,
-                    resolvedEventIdx: forcedIdx,
-                    originalEventIdx: rawIdx || forcedIdx
-                  };
-                  shouldReleaseForced = true;
+        {(() => {
+          const isNormalized = cleanBookId && isNaN(Number(cleanBookId));
+          const commonProps = {
+            key: reloadKey,
+            ref: viewerRef,
+            book,
+            initialChapter: currentChapter,
+            initialProgress: progress,
+            onProgressChange: setProgress,
+            onCurrentPageChange: (page) => setCurrentPage(page),
+            onTotalPagesChange: setTotalPages,
+            onCurrentChapterChange: (chapter) => {
+              const prev = Number(currentChapter || 0);
+              const next = Number(chapter || 0);
+              if (prev && next && prev !== next) {
+                const transitionInfo = startChapterTransition(prev, next);
+                if (transitionInfo && transitionInfo.forcedIdx === 1) {
+                  setCurrentEvent({
+                    chapter: next,
+                    chapterIdx: next,
+                    eventIdx: 1,
+                    eventNum: 1,
+                    event_id: 1,
+                    relations: [],
+                    characters: [],
+                    placeholder: true
+                  });
                 }
               }
-
-              const resolvedIdxForEvent = eventUtils.extractRawEventIdx(nextEvent);
-              if (!Number.isFinite(nextEvent.resolvedEventIdx) || nextEvent.resolvedEventIdx <= 0) {
-                nextEvent = {
-                  ...nextEvent,
-                  resolvedEventIdx: resolvedIdxForEvent > 0 ? resolvedIdxForEvent : undefined
-                };
+              setCurrentChapter(chapter);
+            },
+            settings,
+            onCurrentLineChange: (charIndex, totalEvents, receivedEvent) => {
+              setCurrentCharIndex(charIndex);
+              if (receivedEvent) {
+                const chapter = receivedEvent.chapter ?? (receivedEvent.anchor?.start ? receivedEvent.anchor.start.chapterIndex + 1 : null);
+                if (chapter && chapter !== currentChapter) {
+                  setCurrentChapter(chapter);
+                }
+                const forcedIdx = forcedChapterEventIdxRef.current;
+                const rawIdx = eventUtils.extractRawEventIdx(receivedEvent);
+                let shouldReleaseForced = false;
+                let nextEvent = receivedEvent;
+                if (Number.isFinite(forcedIdx)) {
+                  if (rawIdx > 0 && rawIdx !== forcedIdx) {
+                    shouldReleaseForced = true;
+                  } else {
+                    nextEvent = {
+                      ...receivedEvent,
+                      eventIdx: forcedIdx,
+                      eventNum: forcedIdx,
+                      event_id: forcedIdx,
+                      resolvedEventIdx: forcedIdx,
+                      originalEventIdx: rawIdx || forcedIdx
+                    };
+                    shouldReleaseForced = true;
+                  }
+                }
+                const resolvedIdxForEvent = eventUtils.extractRawEventIdx(nextEvent);
+                if (!Number.isFinite(nextEvent.resolvedEventIdx) || nextEvent.resolvedEventIdx <= 0) {
+                  nextEvent = {
+                    ...nextEvent,
+                    resolvedEventIdx: resolvedIdxForEvent > 0 ? resolvedIdxForEvent : undefined
+                  };
+                }
+                setCurrentEvent(nextEvent);
+                if (shouldReleaseForced) releaseForcedEventIdx();
               }
-              
-              setCurrentEvent(nextEvent);
-
-              if (shouldReleaseForced) {
-                releaseForcedEventIdx();
-              }
-            }
-          }}
-          onRelocated={handleLocationChange}
-        />
+            },
+          };
+          if (isNormalized) {
+            const cachedProgress = getProgressFromCache(cleanBookId);
+            return (
+              <XhtmlViewer
+                {...commonProps}
+                bookId={cleanBookId}
+                initialAnchor={cachedProgress?.anchor ?? undefined}
+              />
+            );
+          }
+          return (
+            <EpubViewer
+              {...commonProps}
+              reloadKey={reloadKey}
+              initialPage={currentPage}
+              onRelocated={handleLocationChange}
+            />
+          );
+        })()}
         {showBookmarkList && (
           <BookmarkPanel bookmarks={bookmarks} onSelect={handleBookmarkSelect}>
             {bookmarks.map((bm) => (

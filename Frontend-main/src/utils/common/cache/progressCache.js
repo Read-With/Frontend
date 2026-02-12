@@ -40,7 +40,8 @@ export const setAllProgress = (progressList) => {
         bookId: progress.bookId,
         chapterIdx: progress.chapterIdx ?? null,
         eventIdx: progress.eventIdx ?? null,
-        cfi: progress.cfi ?? null
+        cfi: progress.cfi ?? null,
+        anchor: progress.anchor ?? null
       };
     }
   });
@@ -66,6 +67,7 @@ export const setProgressToCache = (progressData) => {
     chapterIdx: progressData.chapterIdx ?? null,
     eventIdx: progressData.eventIdx ?? null,
     cfi: progressData.cfi ?? null,
+    anchor: progressData.anchor ?? null,
     timestamp: Date.now()
   };
 
@@ -89,7 +91,8 @@ export const getProgressFromCache = (bookId) => {
       bookId: cached.bookId,
       chapterIdx: cached.chapterIdx,
       eventIdx: cached.eventIdx,
-      cfi: cached.cfi
+      cfi: cached.cfi,
+      anchor: cached.anchor ?? null
     };
   }
 
@@ -137,7 +140,8 @@ export const getAllProgressFromCache = () => {
           bookId: value.bookId,
           chapterIdx: value.chapterIdx,
           eventIdx: value.eventIdx,
-          cfi: value.cfi
+          cfi: value.cfi,
+          anchor: value.anchor ?? null
         });
         processedBookIds.add(bookId);
       }

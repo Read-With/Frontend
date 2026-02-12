@@ -398,6 +398,40 @@ export const getBookManifest = async (bookId, { forceRefresh = false } = {}) => 
   }
 };
 
+export const getBookMeta = async (bookId, { forceRefresh = false } = {}) => {
+  if (!bookId) {
+    return {
+      isSuccess: false,
+      code: 'INVALID_INPUT',
+      message: 'bookId는 필수입니다.',
+      result: null
+    };
+  }
+  try {
+    const response = await apiRequest(`/api/books/${bookId}/meta`);
+    if (response?.isSuccess && response?.result) {
+      return response;
+    }
+    return {
+      isSuccess: false,
+      code: response?.code || 'ERROR',
+      message: response?.message || 'meta 조회 실패',
+      result: null
+    };
+  } catch (error) {
+    if (error.status === 404 || error.message?.includes('404')) {
+      return {
+        isSuccess: false,
+        code: 'NOT_FOUND',
+        message: 'meta를 찾을 수 없습니다',
+        result: null
+      };
+    }
+    console.error('meta 조회 실패:', error);
+    throw error;
+  }
+};
+
 export const getMacroGraph = async (bookId, uptoChapter) => {
   if (!bookId || uptoChapter === undefined || uptoChapter === null) {
     throw new Error('bookId와 uptoChapter는 필수 매개변수입니다.');
@@ -508,6 +542,7 @@ export default {
   getBookProgress,
   deleteBookProgress,
   getBookManifest,
+  getBookMeta,
   getMacroGraph,
   getFineGraph,
 };

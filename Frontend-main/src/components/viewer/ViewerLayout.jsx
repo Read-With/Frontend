@@ -71,7 +71,7 @@ const ViewerLayout = ({
       >
         {/* 왼쪽: EPUB 뷰어 */}
                  <div 
-           className={`h-full overflow-hidden`}
+           className={`h-full overflow-hidden relative`}
            style={{
              width: showGraph && !graphFullScreen ? '50%' : graphFullScreen ? '0%' : '100%',
              borderRight: showGraph && !graphFullScreen ? '1px solid #e2e8f0' : 'none',
@@ -81,6 +81,42 @@ const ViewerLayout = ({
          data-graph-fullscreen={graphFullScreen}
        >
         {children}
+        {!graphFullScreen && (
+          <>
+            <div
+              role="button"
+              tabIndex={0}
+              aria-label="이전 페이지"
+              onClick={onPrev}
+              onKeyDown={(e) => e.key === 'Enter' && onPrev?.()}
+              style={{
+                position: 'absolute',
+                left: 0, top: 0, bottom: 0,
+                width: '15%',
+                minWidth: 48,
+                maxWidth: 120,
+                cursor: 'pointer',
+                zIndex: 5,
+              }}
+            />
+            <div
+              role="button"
+              tabIndex={0}
+              aria-label="다음 페이지"
+              onClick={onNext}
+              onKeyDown={(e) => e.key === 'Enter' && onNext?.()}
+              style={{
+                position: 'absolute',
+                right: 0, top: 0, bottom: 0,
+                width: '15%',
+                minWidth: 48,
+                maxWidth: 120,
+                cursor: 'pointer',
+                zIndex: 5,
+              }}
+            />
+          </>
+        )}
         </div>
         
         {/* 오른쪽: 그래프 (조건부 렌더링) */}

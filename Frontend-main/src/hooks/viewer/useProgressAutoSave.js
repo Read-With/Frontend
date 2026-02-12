@@ -27,32 +27,26 @@ export function useProgressAutoSave({ bookKey, currentChapter, currentEvent, del
   const timeoutRef = useRef(null);
 
   useEffect(() => {
-    if (!currentChapter || !bookKey) {
-      return;
-    }
+    if (!bookKey) return;
+    const chapter = currentChapter || 1;
+    const anchor = currentEvent?.anchor;
 
-    const currentEventNum = currentEvent?.eventNum;
-    const currentEventCfi = currentEvent?.cfi;
-
-    const autoSaveProgress = async () => {
+    const autoSaveProgress = () => {
       try {
         const progressData = {
           bookId: bookKey,
-          chapterIdx: currentChapter || 1,
-          eventIdx: currentEventNum || 0,
-          cfi: currentEventCfi || null
+          chapterIdx: anchor?.start ? anchor.start.chapterIndex + 1 : chapter,
+          eventIdx: currentEvent?.eventNum ?? currentEvent?.eventIdx ?? 0,
+          cfi: currentEvent?.cfi ?? null,
+          anchor: anchor ?? null
         };
-        
         setProgressToCache(progressData);
       } catch (error) {
         errorUtils.logWarning('[useProgressAutoSave] 진도 자동 저장 실패', error.message);
       }
     };
 
-    if (timeoutRef.current) {
-      clearTimeout(timeoutRef.current);
-    }
-
+    if (timeoutRef.current) clearTimeout(timeoutRef.current);
     timeoutRef.current = setTimeout(autoSaveProgress, delay);
 
     return () => {
@@ -61,5 +55,5 @@ export function useProgressAutoSave({ bookKey, currentChapter, currentEvent, del
         timeoutRef.current = null;
       }
     };
-  }, [bookKey, currentChapter, currentEvent?.eventNum, currentEvent?.cfi, delay]);
+  }, [bookKey, currentChapter, currentEvent?.eventNum, currentEvent?.cfi, currentEvent?.anchor, delay]);
 }
