@@ -19,17 +19,15 @@ export const loadSettings = commonLoadSettings;
  */
 export function getServerBookId(book) {
   if (!book) return null;
-  
-  // book.id가 숫자이면 우선 사용
-  if (book.id !== undefined && book.id !== null && typeof book.id === 'number') {
-    return book.id;
+  const numId = (v) => (v !== undefined && v !== null && Number.isFinite(Number(v))) ? Number(v) : null;
+  if (book.id !== undefined && book.id !== null) {
+    const n = typeof book.id === 'number' ? book.id : numId(book.id);
+    if (n != null && n > 0) return n;
   }
-  
-  // book._bookId가 숫자이면 사용
-  if (book._bookId !== undefined && book._bookId !== null && typeof book._bookId === 'number') {
-    return book._bookId;
+  if (book._bookId !== undefined && book._bookId !== null) {
+    const n = typeof book._bookId === 'number' ? book._bookId : numId(book._bookId);
+    if (n != null && n > 0) return n;
   }
-  
   return null;
 }
 

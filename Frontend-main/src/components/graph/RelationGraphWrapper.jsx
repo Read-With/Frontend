@@ -18,23 +18,20 @@ import { useApiGraphData } from '../../hooks/graph/useApiGraphData.js';
 import { useGraphState } from '../../hooks/graph/useGraphState.js';
 import { useLocalStorageNumber } from '../../hooks/common/useLocalStorage.js';
 import { convertRelationsToElements, filterMainCharacters } from '../../utils/graph/graphDataUtils';
-import { createCharacterMaps } from '../../utils/characterUtils';
+import { createCharacterMaps, buildNodeWeights } from '../../utils/characterUtils';
 import { getFolderKeyFromFilename, getLastEventIndexForChapter } from '../../utils/graph/graphData';
 import { 
   processTooltipData, 
   calculateLastEventForChapter,
-  normalizeApiEvent,
-  buildNodeWeights,
   formatSearchParams,
   isSidebarElement,
-  resolveServerBookId,
   isDragEndEvent,
   sortElementsById,
   calculateNodeCount,
   calculateRelationCount,
   determineFinalElements
 } from '../../utils/graph/graphUtils.js';
-import { eventUtils } from '../../utils/viewerUtils';
+import { eventUtils, graphDataTransformUtils, getServerBookId } from '../../utils/viewerUtils';
 import useGraphInteractions from "../../hooks/graph/useGraphInteractions";
 import { useChapterPovSummaries } from '../../hooks/viewer/useChapterPovSummaries';
 
@@ -73,7 +70,7 @@ function RelationGraphWrapper() {
   const [hasShownGraphOnce, setHasShownGraphOnce] = useState(false);
 
   const serverBookId = useMemo(() => {
-    return resolveServerBookId({ book, bookId });
+    return getServerBookId(book) || bookId || null;
   }, [book?.id, book?._bookId, bookId]);
 
   const {
@@ -120,6 +117,7 @@ function RelationGraphWrapper() {
   const cyRef = useRef(null);
   const selectedEdgeIdRef = useRef(null);
   const selectedNodeIdRef = useRef(null);
+  const viewBeforeSelectionRef = useRef(null);
   const prevChapterNum = useRef(currentChapter);
   const prevEventNum = useRef();
   const timeoutRef = useRef(null);
@@ -161,7 +159,7 @@ function RelationGraphWrapper() {
     try {
       const { idToName, idToDesc, idToMain, idToNames, idToProfileImage } = createCharacterMaps(apiFineData.characters);
       
-      const normalizedEvent = normalizeApiEvent(apiFineData.event, currentChapter, currentEvent);
+      const normalizedEvent = graphDataTransformUtils.normalizeApiEvent(apiFineData.event, currentChapter, currentEvent);
       const nodeWeights = buildNodeWeights(apiFineData.characters);
       
       const convertedElements = convertRelationsToElements(
@@ -235,8 +233,8 @@ function RelationGraphWrapper() {
     
     cy.animate({
       pan: { x: targetX, y: targetY },
-      duration: 800,
-      easing: 'ease-out-cubic'
+      duration: 500,
+      easing: 'ease-in'
     });
   }, [isSidebarOpen]);
 
@@ -244,6 +242,8 @@ function RelationGraphWrapper() {
   const onShowNodeTooltip = useCallback(({ node, nodeCenter, mouseX, mouseY }) => {
     setForceClose(false);
     setIsSidebarClosing(false);
+    const cy = cyRef.current;
+    if (cy) viewBeforeSelectionRef.current = { pan: { ...cy.pan() }, zoom: cy.zoom() };
     const nodeData = node.data();
     
     const tooltipData = {
@@ -263,6 +263,8 @@ function RelationGraphWrapper() {
   const onShowEdgeTooltip = useCallback(({ edge, edgeCenter, mouseX, mouseY }) => {
     setForceClose(false);
     setIsSidebarClosing(false);
+    const cy = cyRef.current;
+    if (cy) viewBeforeSelectionRef.current = { pan: { ...cy.pan() }, zoom: cy.zoom() };
     const edgeData = edge.data();
     
     const finalX = mouseX !== undefined ? mouseX : edgeCenter?.x || 0;
@@ -286,7 +288,18 @@ function RelationGraphWrapper() {
     centerElementBetweenSidebars(edge.id());
   }, [setForceClose, setIsSidebarClosing, setActiveTooltip, centerElementBetweenSidebars]);
 
-  const onClearTooltip = clearTooltip;
+  const onClearTooltip = useCallback(() => {
+    closeSidebar();
+    const stored = viewBeforeSelectionRef.current;
+    const cy = cyRef.current;
+    if (stored && cy) {
+      viewBeforeSelectionRef.current = null;
+      cy.animate({
+        pan: stored.pan,
+        zoom: stored.zoom,
+      }, { duration: 500, easing: 'ease-in' });
+    }
+  }, [closeSidebar]);
 
   const handleStartClosing = startClosing;
 

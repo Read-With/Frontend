@@ -175,12 +175,13 @@ export function useViewerPage() {
   const {
     elements,
     setElements,
+    setIsDataEmpty,
     newNodeIds,
     currentChapterData,
     maxEventNum,
     eventNum: graphEventNum,
     maxChapter: detectedMaxChapter,
-    loading: graphLoading, // graphLoading: useGraphDataLoader에서 반환, 그래프 데이터 로딩 상태
+    loading: graphLoading,
     error: graphError,
     isDataEmpty
   } = useGraphDataLoader(graphBookId, currentChapter, currentEvent?.eventNum || 1);
@@ -735,6 +736,7 @@ export function useViewerPage() {
       setEdgeLabelVisible,
       handleFitView,
       setElements,
+      setIsDataEmpty,
       filterStage,
       setFilterStage
     },

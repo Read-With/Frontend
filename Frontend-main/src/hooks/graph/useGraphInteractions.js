@@ -206,26 +206,18 @@ export default function useGraphInteractions({
   const calculateTooltipPosition = useCallback((element, evt, offset = 0) => {
     try {
       if (!cyRef?.current) return { x: 0, y: 0 };
-      
-      const cy = cyRef.current;
+
       const { containerRect } = getContainerInfo();
-      
-      // 마우스 클릭 이벤트가 있으면 마우스 위치를 우선 사용
+
+      // 노드/간선 동일: evt 있으면 마우스 위치, 없으면 element 위치 사용
       if (evt?.originalEvent) {
         let domX = evt.originalEvent.clientX - containerRect.left;
         let domY = evt.originalEvent.clientY - containerRect.top;
-        
-        // 노드의 경우 offset 추가
-        if (offset > 0) {
-          domX += offset;
-        }
-        
+        if (offset !== 0) domX += offset;
         return { x: domX, y: domY };
       }
-      
-      // 마우스 이벤트가 없으면 element 위치 계산
+
       const isNode = typeof element.renderedPosition === 'function';
-      
       let basePos;
       if (isNode) {
         const rendered = element.renderedPosition();
@@ -246,7 +238,7 @@ export default function useGraphInteractions({
             if (source && target) {
               const sourcePos = source.renderedPosition ? source.renderedPosition() : source.position();
               const targetPos = target.renderedPosition ? target.renderedPosition() : target.position();
-              if (sourcePos && targetPos && 
+              if (sourcePos && targetPos &&
                   typeof sourcePos.x === 'number' && typeof sourcePos.y === 'number' &&
                   typeof targetPos.x === 'number' && typeof targetPos.y === 'number') {
                 basePos = {
@@ -264,21 +256,16 @@ export default function useGraphInteractions({
           basePos = { x: 0, y: 0 };
         }
       }
-      
-      // calculateCytoscapePosition을 사용하여 정확한 컨테이너 기준 좌표 계산
+
       if (!basePos || typeof basePos.x !== 'number' || typeof basePos.y !== 'number') {
         return { x: 0, y: 0 };
       }
-      
+
       const position = calculateCytoscapePosition(basePos, cyRef);
-      
       let domX = position.x - containerRect.left;
       let domY = position.y - containerRect.top;
-      
-      if (offset > 0 && isNode) {
-        domX += offset;
-      }
-      
+      if (offset !== 0) domX += offset;
+
       return { x: domX, y: domY };
     } catch (error) {
       console.debug('calculateTooltipPosition 실패:', error);
@@ -294,7 +281,7 @@ export default function useGraphInteractions({
     (evt) => {
       try {
         if (!cyRef?.current) return;
-        
+
         const node = evt.target;
         const nodeData = node?.data?.();
         if (!node || !nodeData) return;
@@ -303,17 +290,15 @@ export default function useGraphInteractions({
         const isSameNodeSelected = selectedNodeIdRef?.current === nodeId;
 
         if (isSameNodeSelected) {
-          if (onClearTooltipRef.current) {
-            onClearTooltipRef.current();
-          }
-          resetAllStyles();
+          if (onClearTooltipRef.current) onClearTooltipRef.current();
           if (selectedNodeIdRef) selectedNodeIdRef.current = null;
           if (selectedEdgeIdRef) selectedEdgeIdRef.current = null;
+          resetAllStyles();
           return;
         }
 
         const nodeSize = node.renderedBoundingBox()?.w || 50;
-        const offsetX = nodeSize + 100;
+        const offsetX = nodeSize + 200;
         const { x: mouseX, y: mouseY } = calculateTooltipPosition(node, evt, offsetX);
         const nodeCenter = calculateNodePosition(node);
 
@@ -355,16 +340,16 @@ export default function useGraphInteractions({
         const isSameEdgeSelected = selectedEdgeIdRef?.current === currentEdgeId;
 
         if (isSameEdgeSelected) {
-          if (onClearTooltipRef.current) {
-            onClearTooltipRef.current();
-          }
-          resetAllStyles();
+          if (onClearTooltipRef.current) onClearTooltipRef.current();
           if (selectedEdgeIdRef) selectedEdgeIdRef.current = null;
           if (selectedNodeIdRef) selectedNodeIdRef.current = null;
+          resetAllStyles();
           return;
         }
 
-        const { x: mouseX, y: mouseY } = calculateTooltipPosition(edge, evt, 0);
+        const edgeSize = edge.renderedBoundingBox?.()?.w ?? 50;
+        const offsetX = edgeSize + 200;
+        const { x: mouseX, y: mouseY } = calculateTooltipPosition(edge, evt, offsetX);
         const edgeCenter = calculateTooltipPosition(edge, null, 0);
 
         const connectedNodes = edge.connectedNodes ? edge.connectedNodes() : cy.collection();
@@ -408,15 +393,12 @@ export default function useGraphInteractions({
         const hasSelection = !!(selectedNodeIdRef?.current || selectedEdgeIdRef?.current);
         if (!hasSelection) return;
       }
-      
-      resetAllStyles();
-      
-      if (selectedNodeIdRef) selectedNodeIdRef.current = null;
-      if (selectedEdgeIdRef) selectedEdgeIdRef.current = null;
-      
       if (onClearTooltipRef.current) {
         onClearTooltipRef.current();
       }
+      if (selectedNodeIdRef) selectedNodeIdRef.current = null;
+      if (selectedEdgeIdRef) selectedEdgeIdRef.current = null;
+      resetAllStyles();
     } catch (error) {
       console.debug('handleBackgroundClick 실패:', error);
     }

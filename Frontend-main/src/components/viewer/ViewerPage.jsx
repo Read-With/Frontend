@@ -12,7 +12,7 @@ import { useProgressAutoSave } from "../../hooks/viewer/useProgressAutoSave";
 import { useTooltipState } from "../../hooks/ui/useTooltipState";
 import { useCachedLocation } from "../../hooks/viewer/useCachedLocation";
 import { getBookProgress, getFineGraph, getBookManifest } from "../../utils/api/api";
-import { getGraphEventState, getCachedChapterEvents, isGraphBookCacheBuilding } from "../../utils/common/cache/chapterEventCache";
+import { getGraphEventState, getCachedChapterEvents, isGraphBookCacheBuilding, ensureGraphBookCache } from "../../utils/common/cache/chapterEventCache";
 import { getManifestFromCache } from "../../utils/common/cache/manifestCache";
 import { 
   getServerBookId,
@@ -399,25 +399,28 @@ const ViewerPage = () => {
         return;
       }
 
-      // 빌드가 진행 중인지 확인
-      const isBuilding = isGraphBookCacheBuilding(book.id);
-      if (isBuilding) {
+      let isBuilding = isGraphBookCacheBuilding(book.id);
+      if (!isBuilding) {
         chapterEventDiscoveryRef.current.set(discoveryKey, 'loading');
         if (isMounted) {
           setIsGraphLoading(true);
           setApiError(null);
         }
-        
-        // 빌드 완료를 주기적으로 확인
+        ensureGraphBookCache(book.id).catch(() => {});
+      }
+
+      if (isBuilding || chapterEventDiscoveryRef.current.get(discoveryKey) === 'loading') {
+        if (isMounted) {
+          setIsGraphLoading(true);
+          setApiError(null);
+        }
         checkInterval = setInterval(() => {
           if (!isMounted) {
             if (checkInterval) clearInterval(checkInterval);
             return;
           }
-          
           const stillBuilding = isGraphBookCacheBuilding(book.id);
           const nowCached = getCachedChapterEvents(book.id, currentChapter);
-          
           if (nowCached) {
             chapterEventDiscoveryRef.current.set(discoveryKey, 'completed');
             if (checkInterval) clearInterval(checkInterval);
@@ -426,7 +429,6 @@ const ViewerPage = () => {
               setApiError(null);
             }
           } else if (!stillBuilding) {
-            // 빌드가 완료되었지만 캐시가 없는 경우
             chapterEventDiscoveryRef.current.set(discoveryKey, 'missing');
             if (checkInterval) clearInterval(checkInterval);
             if (isMounted) {
@@ -435,11 +437,9 @@ const ViewerPage = () => {
             }
           }
         }, 500);
-        
         return;
       }
 
-      // 빌드 진행 중이 아니고 캐시도 없는 경우
       if (isMounted) {
         chapterEventDiscoveryRef.current.set(discoveryKey, 'missing');
         setIsGraphLoading(false);
@@ -650,7 +650,8 @@ const ViewerPage = () => {
               eventUtils.updateGraphDataRef(previousGraphDataRef, finalElements, apiEventIdx, currentChapter);
               setElementsRef.current(finalElements);
             }
-            
+            if (graphActions.setIsDataEmpty) graphActions.setIsDataEmpty(false);
+
             const nextEventData = graphDataTransformUtils.createNextEventData(
               normalizedEvent,
               currentChapter,

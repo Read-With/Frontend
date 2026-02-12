@@ -47,6 +47,17 @@ export function getRelationStyle(positivity) {
   return result;
 }
 
+/** 관계 색상/라벨 단일 소스. 노드·엣지 툴팁 등에서 사용 */
+export function getPositivityColor(positivity) {
+  const value = (positivity === undefined || positivity === null || isNaN(positivity)) ? 0 : positivity;
+  return getRelationStyle(value).color;
+}
+
+export function getPositivityLabel(positivity) {
+  if (positivity === undefined || positivity === null || isNaN(positivity)) return '정보 없음';
+  return getRelationStyle(positivity).text;
+}
+
 /**
  * 관계 라벨 배열을 생성하는 함수
  * @param {array|string} relation - 관계 데이터 (배열 또는 문자열)

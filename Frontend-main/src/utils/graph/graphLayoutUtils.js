@@ -28,13 +28,17 @@ import { errorUtils } from '../common/errorUtils';
  * @returns {Object|null} 복원된 레이아웃 객체 (실패 시 null)
  */
 export function restoreGraphLayout(currentEvent, currentChapter) {
-  if (!currentEvent || !currentChapter) {
+  if (!currentEvent || typeof currentEvent !== 'object') {
+    return null;
+  }
+  
+  if (typeof currentChapter !== 'number' || !Number.isFinite(currentChapter) || currentChapter < 0) {
     return null;
   }
 
   try {
     const mergedLayout = {};
-    const currentEventNum = currentEvent.eventNum || 0;
+    const currentEventNum = typeof currentEvent.eventNum === 'number' ? currentEvent.eventNum : 0;
     
     for (let eventNum = 0; eventNum <= currentEventNum; eventNum++) {
       const eventKey = createStorageKey.graphEventLayout(currentChapter, eventNum);
@@ -43,14 +47,24 @@ export function restoreGraphLayout(currentEvent, currentChapter) {
       if (eventLayoutStr) {
         try {
           const eventLayout = JSON.parse(eventLayoutStr);
-          Object.assign(mergedLayout, eventLayout);
+          if (eventLayout && typeof eventLayout === 'object') {
+            Object.assign(mergedLayout, eventLayout);
+          }
         } catch (e) {
-          errorUtils.logWarning('[graphLayoutUtils] 레이아웃 파싱 오류', e.message);
+          errorUtils.logWarning('[graphLayoutUtils] 레이아웃 파싱 오류', e.message, { chapter: currentChapter, eventNum });
         }
       }
     }
     
-    const { nodes: currentNodes, edges: currentEdges } = extractEventNodesAndEdges(currentEvent);
+    const nodesAndEdges = extractEventNodesAndEdges(currentEvent);
+    if (!nodesAndEdges || typeof nodesAndEdges !== 'object') {
+      return null;
+    }
+    
+    const { nodes: currentNodes, edges: currentEdges } = nodesAndEdges;
+    if (!currentNodes || !currentEdges || typeof currentNodes.has !== 'function' || typeof currentEdges.has !== 'function') {
+      return null;
+    }
     
     const finalLayout = {};
     Object.entries(mergedLayout).forEach(([key, value]) => {
@@ -61,7 +75,7 @@ export function restoreGraphLayout(currentEvent, currentChapter) {
     
     return finalLayout;
   } catch (e) {
-    errorUtils.logWarning('[graphLayoutUtils] 그래프 레이아웃 복원 오류', e.message);
+    errorUtils.logWarning('[graphLayoutUtils] 그래프 레이아웃 복원 오류', e.message, { chapter: currentChapter });
     return null;
   }
 }
@@ -78,13 +92,23 @@ export function restoreGraphLayout(currentEvent, currentChapter) {
 async function generateChapterLayout({ folderKey, bookKey, chapterNum, signal }) {
   if (signal?.aborted) return null;
 
+  if (!bookKey || typeof bookKey !== 'string') {
+    return null;
+  }
+
   const storageKey = createStorageKey.chapterNodePositions(bookKey, chapterNum);
   if (localStorage.getItem(storageKey)) {
     return null;
   }
   
+  let cy = null;
+  
   try {
-    if (!folderKey) {
+    if (!folderKey || typeof folderKey !== 'string') {
+      return null;
+    }
+    
+    if (typeof chapterNum !== 'number' || !Number.isFinite(chapterNum) || chapterNum < 1) {
       return null;
     }
     
@@ -98,6 +122,8 @@ async function generateChapterLayout({ folderKey, bookKey, chapterNum, signal })
     if (!events || events.length === 0) return null;
     
     const lastEvent = events[events.length - 1];
+    if (!lastEvent || typeof lastEvent !== 'object') return null;
+    
     const allRelations = lastEvent.relations || [];
     
     const { idToName, idToDesc, idToDescKo, idToMain, idToNames } = createCharacterMaps({ characters: charactersData });
@@ -118,7 +144,7 @@ async function generateChapterLayout({ folderKey, bookKey, chapterNum, signal })
     
     if (signal?.aborted) return null;
     
-    const cy = cytoscape({
+    cy = cytoscape({
       elements,
       style: [],
       headless: true,
@@ -131,36 +157,105 @@ async function generateChapterLayout({ folderKey, bookKey, chapterNum, signal })
       padding: 80,
     });
     
-    await new Promise(resolve => {
+    await new Promise((resolve) => {
       if (signal?.aborted) {
         resolve();
         return;
       }
-      layout.one('layoutstop', resolve);
+      
+      let timeoutId = null;
+      let resolved = false;
+      
+      const cleanup = () => {
+        if (resolved) return;
+        resolved = true;
+        if (timeoutId) {
+          clearTimeout(timeoutId);
+          timeoutId = null;
+        }
+        resolve();
+      };
+      
+      layout.one('layoutstop', cleanup);
       layout.run();
+      
+      timeoutId = setTimeout(() => {
+        if (!resolved) {
+          errorUtils.logWarning('[graphLayoutUtils] 레이아웃 타임아웃', `챕터 ${chapterNum} 레이아웃 생성이 30초 내에 완료되지 않음`);
+          cleanup();
+        }
+      }, 30000);
     });
     
     if (signal?.aborted) {
-      cy.destroy();
+      if (cy) {
+        cy.destroy();
+        cy = null;
+      }
       return null;
     }
     
+    if (!cy) return null;
+    
     const layoutObj = {};
     cy.nodes().forEach((node) => {
-      layoutObj[node.id()] = node.position();
+      const nodeId = node.id();
+      const position = node.position();
+      if (nodeId && position && typeof position === 'object') {
+        layoutObj[nodeId] = position;
+      }
     });
+    
+    if (Object.keys(layoutObj).length === 0) {
+      if (cy) {
+        cy.destroy();
+        cy = null;
+      }
+      return null;
+    }
     
     try {
       localStorage.setItem(storageKey, JSON.stringify(layoutObj));
     } catch (e) {
-      errorUtils.logWarning('[graphLayoutUtils] 레이아웃 저장 실패', e.message);
+      const errorInfo = {
+        chapter: chapterNum,
+        bookKey,
+        errorName: e.name,
+        errorMessage: e.message,
+        storageKeyLength: storageKey.length,
+        layoutObjSize: JSON.stringify(layoutObj).length
+      };
+      
+      if (e.name === 'QuotaExceededError') {
+        errorUtils.logWarning('[graphLayoutUtils] 레이아웃 저장 실패: 저장 공간 부족', e.message, errorInfo);
+      } else {
+        errorUtils.logWarning('[graphLayoutUtils] 레이아웃 저장 실패', e.message, errorInfo);
+      }
     }
     
-    cy.destroy();
+    if (cy) {
+      cy.destroy();
+      cy = null;
+    }
+    
     return layoutObj;
   } catch (error) {
+    if (cy) {
+      try {
+        cy.destroy();
+      } catch (destroyError) {
+        errorUtils.logWarning('[graphLayoutUtils] Cytoscape 인스턴스 정리 실패', destroyError.message);
+      }
+      cy = null;
+    }
+    
     if (!signal?.aborted) {
-      errorUtils.logWarning('[graphLayoutUtils] 챕터 레이아웃 생성 실패', error.message);
+      errorUtils.logWarning('[graphLayoutUtils] 챕터 레이아웃 생성 실패', error.message, {
+        chapter: chapterNum,
+        bookKey,
+        folderKey,
+        errorName: error.name
+      });
     }
     return null;
   }
@@ -176,26 +271,45 @@ async function generateChapterLayout({ folderKey, bookKey, chapterNum, signal })
  * @returns {Promise<void>}
  */
 export async function preloadChapterLayouts({ folderKey, bookKey, signal, onProgress }) {
-  if (!folderKey || !bookKey) {
+  if (!folderKey || typeof folderKey !== 'string' || !bookKey || typeof bookKey !== 'string') {
     return;
   }
 
   const maxChapterCount = getDetectedMaxChapter(folderKey);
-  if (maxChapterCount === 0) return;
+  if (maxChapterCount === 0) {
+    if (onProgress) {
+      onProgress({ processed: 0, total: 0 });
+    }
+    return;
+  }
   
   const chapterNums = Array.from({ length: maxChapterCount }, (_, i) => i + 1);
+  let processedCount = 0;
   
   try {
     for (let i = 0; i < chapterNums.length; i += 3) {
-      if (signal?.aborted) break;
+      if (signal?.aborted) {
+        if (onProgress) {
+          onProgress({ processed: processedCount, total: chapterNums.length });
+        }
+        break;
+      }
       
       const batch = chapterNums.slice(i, i + 3);
       const promises = batch.map(async (chapterNum) => {
-        if (signal?.aborted) return;
-        await generateChapterLayout({ folderKey, bookKey, chapterNum, signal });
+        if (signal?.aborted) return null;
+        try {
+          return await generateChapterLayout({ folderKey, bookKey, chapterNum, signal });
+        } catch (error) {
+          if (!signal?.aborted) {
+            errorUtils.logWarning('[graphLayoutUtils] 배치 레이아웃 생성 실패', error.message, { chapter: chapterNum });
+          }
+          return null;
+        }
       });
       
-      await Promise.all(promises);
+      const results = await Promise.all(promises);
+      processedCount += results.filter(r => r !== null).length;
       
       if (onProgress) {
         onProgress({ processed: Math.min(i + 3, chapterNums.length), total: chapterNums.length });
@@ -205,9 +319,23 @@ export async function preloadChapterLayouts({ folderKey, bookKey, signal, onProg
         await new Promise(resolve => setTimeout(resolve, 100));
       }
     }
+    
+    if (onProgress && !signal?.aborted) {
+      onProgress({ processed: chapterNums.length, total: chapterNums.length });
+    }
   } catch (error) {
     if (!signal?.aborted) {
-      errorUtils.logWarning('[graphLayoutUtils] 레이아웃 사전 로드 실패', error.message);
+      errorUtils.logWarning('[graphLayoutUtils] 레이아웃 사전 로드 실패', error.message, {
+        folderKey,
+        bookKey,
+        processed: processedCount,
+        total: chapterNums.length,
+        errorName: error.name
+      });
+    }
+    
+    if (onProgress) {
+      onProgress({ processed: processedCount, total: chapterNums.length });
     }
   }
 }
