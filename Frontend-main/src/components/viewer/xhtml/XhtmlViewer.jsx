@@ -3,6 +3,7 @@ import React, {
   useImperativeHandle,
   forwardRef,
   useEffect,
+  useLayoutEffect,
   useState,
   useCallback,
 } from 'react';
@@ -52,6 +53,35 @@ const XhtmlViewer = forwardRef(
     const blocksRef = useRef([]);
     const lastAnchorRef = useRef(null);
     const metaRef = useRef(null);
+    const lineBoundsRef = useRef([]);
+    const [, setLineBoundsReady] = useState(0);
+
+    const getSnappedOffsetAndHeight = useCallback(
+      (pageIdx, pH) => {
+        const targetY = pageIdx * pH;
+        const lines = lineBoundsRef.current;
+        if (!lines.length) return { offsetY: Math.max(0, targetY), visibleHeight: pH };
+        let offsetY = 0;
+        for (let i = lines.length - 1; i >= 0; i--) {
+          if (lines[i].top <= targetY) {
+            offsetY = lines[i].top;
+            break;
+          }
+        }
+        const endY = offsetY + pH;
+        let visibleEnd = endY;
+        for (let j = lines.length - 1; j >= 0; j--) {
+          if (lines[j].bottom <= endY) {
+            visibleEnd = lines[j].bottom;
+            break;
+          }
+        }
+        let visibleHeight = Math.min(pH, Math.max(0, visibleEnd - offsetY));
+        if (visibleHeight <= 0) visibleHeight = pH;
+        return { offsetY, visibleHeight };
+      },
+      []
+    );
 
     const totalPages = Math.max(1, pageHeight ? Math.ceil(contentHeight / pageHeight) : 1);
     const currentPage = Math.min(totalPages, currentPageIndex + 1);
@@ -118,6 +148,25 @@ const XhtmlViewer = forwardRef(
       ro.observe(ruler);
       return () => ro.disconnect();
     }, [xhtmlContent]);
+
+    useLayoutEffect(() => {
+      const ruler = rulerRef.current;
+      if (!xhtmlContent || !ruler || !ruler.firstChild) return;
+      try {
+        const range = document.createRange();
+        range.selectNodeContents(ruler);
+        const rects = range.getClientRects();
+        const rulerRect = ruler.getBoundingClientRect();
+        const bounds = Array.from(rects)
+          .map((r) => ({ top: r.top - rulerRect.top, bottom: r.bottom - rulerRect.top }))
+          .filter((b) => b.bottom > b.top)
+          .sort((a, b) => a.top - b.top);
+        lineBoundsRef.current = bounds;
+        setLineBoundsReady((v) => v + 1);
+      } catch {
+        lineBoundsRef.current = [];
+      }
+    }, [xhtmlContent, contentHeight, settings?.fontSize, settings?.lineHeight]);
 
     useEffect(() => {
       onTotalPagesChange?.(totalPages);
@@ -269,7 +318,7 @@ const XhtmlViewer = forwardRef(
       width: '300%',
       height: '100%',
       transform: `translateX(calc(-33.333% + ${slideOffset * 33.333}%))`,
-      transition: slideOffset !== 0 ? 'transform 0.18s cubic-bezier(0.33, 1, 0.68, 1)' : 'none',
+      transition: slideOffset !== 0 ? 'transform 0.1s cubic-bezier(0.33, 1, 0.68, 1)' : 'none',
     };
 
     return (
@@ -278,10 +327,16 @@ const XhtmlViewer = forwardRef(
         <style>{`
           .xhtml-viewer-content {
             padding: 24px;
+            padding-bottom: 32px;
             box-sizing: border-box;
+            width: 100%;
+            max-width: 100%;
+            min-width: 0;
             font-size: ${baseFontSize}%;
             line-height: ${lineHeight};
             font-family: ${settings?.fontFamily || 'Noto Serif KR'}, serif;
+            overflow-wrap: break-word;
+            word-break: break-word;
           }
           .xhtml-viewer-ruler {
             position: absolute;
@@ -299,11 +354,11 @@ const XhtmlViewer = forwardRef(
         >
           {[-1, 0, 1].map((delta) => {
             const pageIdx = currentPageIndex + delta;
-            const offsetY = Math.max(0, pageIdx * pageHeight);
+            const { offsetY, visibleHeight } = getSnappedOffsetAndHeight(pageIdx, pageHeight);
             const isCenter = delta === 0;
             return (
               <div key={delta} style={colStyle}>
-                <div style={{ height: '100%', overflow: 'hidden' }}>
+                <div style={{ height: visibleHeight || '100%', overflow: 'hidden' }}>
                   <div style={sliceStyle(offsetY)} ref={isCenter ? contentRef : undefined} className="xhtml-viewer-content" dangerouslySetInnerHTML={{ __html: bodyHTML }} />
                 </div>
               </div>
