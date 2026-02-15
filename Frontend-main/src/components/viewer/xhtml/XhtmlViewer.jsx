@@ -6,7 +6,9 @@ import React, {
   useLayoutEffect,
   useState,
   useCallback,
+  useMemo,
 } from 'react';
+import { flushSync } from 'react-dom';
 import { loadCombinedXhtml, loadBookMeta } from '../../../utils/normalizedContent';
 import { defaultSettings, settingsUtils } from '../../../utils/common/settingsUtils';
 
@@ -47,40 +49,48 @@ const XhtmlViewer = forwardRef(
     const [pageHeight, setPageHeight] = useState(0);
     const [contentHeight, setContentHeight] = useState(0);
     const [currentPageIndex, setCurrentPageIndex] = useState(0);
-    const [slideOffset, setSlideOffset] = useState(0);
-    const isSlidingRef = useRef(false);
-    const slideDirectionRef = useRef(0);
-    const blocksRef = useRef([]);
+    const touchStartX = useRef(0);
     const lastAnchorRef = useRef(null);
     const metaRef = useRef(null);
     const lineBoundsRef = useRef([]);
-    const [, setLineBoundsReady] = useState(0);
+    const [lineBoundsVersion, setLineBoundsReady] = useState(0);
 
-    const getSnappedOffsetAndHeight = useCallback(
-      (pageIdx, pH) => {
-        const targetY = pageIdx * pH;
-        const lines = lineBoundsRef.current;
-        if (!lines.length) return { offsetY: Math.max(0, targetY), visibleHeight: pH };
-        let offsetY = 0;
-        for (let i = lines.length - 1; i >= 0; i--) {
-          if (lines[i].top <= targetY) {
-            offsetY = lines[i].top;
-            break;
-          }
+    const getSnappedOffsetAndHeight = useCallback((pageIdx, pH) => {
+      const targetY = pageIdx * pH;
+      const lines = lineBoundsRef.current;
+      if (!lines.length) return { offsetY: Math.max(0, targetY), visibleHeight: pH };
+      let offsetY = 0;
+      for (let i = lines.length - 1; i >= 0; i--) {
+        if (lines[i].top <= targetY) {
+          offsetY = lines[i].top;
+          break;
         }
-        const endY = offsetY + pH;
-        let visibleEnd = endY;
-        for (let j = lines.length - 1; j >= 0; j--) {
-          if (lines[j].bottom <= endY) {
-            visibleEnd = lines[j].bottom;
-            break;
-          }
+      }
+      const endY = offsetY + pH;
+      let visibleEnd = endY;
+      for (let j = lines.length - 1; j >= 0; j--) {
+        if (lines[j].bottom <= endY) {
+          visibleEnd = lines[j].bottom;
+          break;
         }
-        let visibleHeight = Math.min(pH, Math.max(0, visibleEnd - offsetY));
-        if (visibleHeight <= 0) visibleHeight = pH;
-        return { offsetY, visibleHeight };
-      },
-      []
+      }
+      const visibleHeight = Math.min(pH, Math.max(0, visibleEnd - offsetY)) || pH;
+      return { offsetY, visibleHeight };
+    }, []);
+
+    const currentSnap = useMemo(
+      () => getSnappedOffsetAndHeight(currentPageIndex, pageHeight || 1),
+      [currentPageIndex, pageHeight, lineBoundsVersion, getSnappedOffsetAndHeight]
+    );
+
+    const contentHtml = useMemo(() => (xhtmlContent ? { __html: xhtmlContent.bodyHTML } : { __html: '' }), [xhtmlContent]);
+    const viewportStyle = useMemo(
+      () => ({ height: currentSnap.visibleHeight || '100%', overflow: 'hidden' }),
+      [currentSnap.visibleHeight]
+    );
+    const contentStyle = useMemo(
+      () => ({ transform: `translateY(-${currentSnap.offsetY}px)` }),
+      [currentSnap.offsetY]
     );
 
     const totalPages = Math.max(1, pageHeight ? Math.ceil(contentHeight / pageHeight) : 1);
@@ -235,28 +245,18 @@ const XhtmlViewer = forwardRef(
       }
     }, [xhtmlContent, initialAnchor, totalPages, pageHeight]);
 
-    const handleSlideEnd = useCallback(() => {
-      const dir = slideDirectionRef.current;
-      if (dir === -1) setCurrentPageIndex((i) => Math.min(totalPages - 1, i + 1));
-      else if (dir === 1) setCurrentPageIndex((i) => Math.max(0, i - 1));
-      setSlideOffset(0);
-      slideDirectionRef.current = 0;
-      isSlidingRef.current = false;
-    }, [totalPages]);
-
-    const prevPage = useCallback(() => {
-      if (isSlidingRef.current || currentPageIndex <= 0) return;
-      isSlidingRef.current = true;
-      slideDirectionRef.current = 1;
-      setSlideOffset(1);
-    }, [currentPageIndex]);
-
-    const nextPage = useCallback(() => {
-      if (isSlidingRef.current || currentPageIndex >= totalPages - 1) return;
-      isSlidingRef.current = true;
-      slideDirectionRef.current = -1;
-      setSlideOffset(-1);
+    const goPage = useCallback((direction) => {
+      if (direction === 1 && currentPageIndex <= 0) return;
+      if (direction === -1 && currentPageIndex >= totalPages - 1) return;
+      flushSync(() => {
+        setCurrentPageIndex((i) =>
+          direction === -1 ? Math.min(totalPages - 1, i + 1) : Math.max(0, i - 1)
+        );
+      });
     }, [currentPageIndex, totalPages]);
+
+    const prevPage = useCallback(() => goPage(1), [goPage]);
+    const nextPage = useCallback(() => goPage(-1), [goPage]);
 
     useEffect(() => {
       if (!xhtmlContent || initialAnchor || initialProgress == null || initialProgress <= 0) return;
@@ -273,13 +273,12 @@ const XhtmlViewer = forwardRef(
         return a ? JSON.stringify(a) : null;
       },
       moveToProgress: (pct) => {
-        const pages = Math.max(1, pageHeight ? Math.ceil(contentHeight / pageHeight) : 1);
-        const idx = Math.min(pages - 1, Math.max(0, Math.round((pct / 100) * (pages - 1))));
+        const idx = Math.min(totalPages - 1, Math.max(0, Math.round((pct / 100) * (totalPages - 1))));
         setCurrentPageIndex(idx);
       },
       displayAt: () => {},
       applySettings: () => {},
-    }), [prevPage, nextPage, pageHeight, contentHeight]);
+    }), [prevPage, nextPage, totalPages]);
 
     const handleKeyDown = useCallback((e) => {
       if (e.target.closest('input, textarea, [contenteditable]')) return;
@@ -289,6 +288,17 @@ const XhtmlViewer = forwardRef(
       }
       if (e.key === 'ArrowLeft') { e.preventDefault(); prevPage(); return; }
       if (e.key === 'ArrowRight') { e.preventDefault(); nextPage(); }
+    }, [prevPage, nextPage]);
+
+    const SWIPE_THRESHOLD = 50;
+    const handleTouchStart = useCallback((e) => {
+      touchStartX.current = e.touches[0].clientX;
+    }, []);
+    const handleTouchEnd = useCallback((e) => {
+      const dx = e.changedTouches[0].clientX - touchStartX.current;
+      if (Math.abs(dx) < SWIPE_THRESHOLD) return;
+      if (dx > 0) prevPage();
+      else nextPage();
     }, [prevPage, nextPage]);
 
     if (loading) {
@@ -311,18 +321,8 @@ const XhtmlViewer = forwardRef(
     const baseFontSize = settings?.fontSize ?? 100;
     const lineHeight = settings?.lineHeight ?? 1.5;
 
-    const sliceStyle = (offsetY) => ({ transform: `translateY(-${offsetY}px)` });
-    const colStyle = { width: '33.333%', flexShrink: 0, height: '100%', overflow: 'hidden' };
-    const wrapperStyle = {
-      display: 'flex',
-      width: '300%',
-      height: '100%',
-      transform: `translateX(calc(-33.333% + ${slideOffset * 33.333}%))`,
-      transition: slideOffset !== 0 ? 'transform 0.1s cubic-bezier(0.33, 1, 0.68, 1)' : 'none',
-    };
-
     return (
-      <div ref={containerRef} className="w-full h-full overflow-hidden bg-white relative" tabIndex={0} onKeyDown={handleKeyDown} onWheel={(e) => e.preventDefault()} style={{ touchAction: 'none' }}>
+      <div ref={containerRef} className="w-full h-full overflow-hidden bg-white relative" tabIndex={0} onKeyDown={handleKeyDown} onWheel={(e) => e.preventDefault()} onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd} style={{ touchAction: 'pan-y' }}>
         <style>{styleHTML}</style>
         <style>{`
           .xhtml-viewer-content {
@@ -347,23 +347,9 @@ const XhtmlViewer = forwardRef(
             width: 100%;
           }
         `}</style>
-        <div ref={rulerRef} className="xhtml-viewer-ruler xhtml-viewer-content" dangerouslySetInnerHTML={{ __html: bodyHTML }} aria-hidden />
-        <div
-          style={wrapperStyle}
-          onTransitionEnd={(e) => e.propertyName === 'transform' && handleSlideEnd()}
-        >
-          {[-1, 0, 1].map((delta) => {
-            const pageIdx = currentPageIndex + delta;
-            const { offsetY, visibleHeight } = getSnappedOffsetAndHeight(pageIdx, pageHeight);
-            const isCenter = delta === 0;
-            return (
-              <div key={delta} style={colStyle}>
-                <div style={{ height: visibleHeight || '100%', overflow: 'hidden' }}>
-                  <div style={sliceStyle(offsetY)} ref={isCenter ? contentRef : undefined} className="xhtml-viewer-content" dangerouslySetInnerHTML={{ __html: bodyHTML }} />
-                </div>
-              </div>
-            );
-          })}
+        <div ref={rulerRef} className="xhtml-viewer-ruler xhtml-viewer-content" dangerouslySetInnerHTML={contentHtml} aria-hidden />
+        <div style={viewportStyle}>
+          <div ref={contentRef} className="xhtml-viewer-content" style={contentStyle} dangerouslySetInnerHTML={contentHtml} />
         </div>
       </div>
     );
