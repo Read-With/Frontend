@@ -118,8 +118,6 @@ const EpubViewer = forwardRef(
       return {
         storageKeys: {
           lastCFI: `readwith_${clean}_lastCFI`,
-          nextPage: `readwith_nextPagePending`,
-          prevPage: `readwith_nextPagePending`,
           chapter: `readwith_${clean}_prevChapter`
         },
         pageMode: settings?.pageMode || 'double',
@@ -1013,18 +1011,6 @@ const EpubViewer = forwardRef(
           }
           
           await rendition.display(displayTarget);
-
-          // display가 자동으로 relocated 이벤트를 발생시키므로 강제 emit 제거
-          // (중복 호출 방지)
-
-          if (storageUtils.get(storageKeys.nextPage) === 'true') {
-            storageUtils.remove(storageKeys.nextPage);
-            setTimeout(() => rendition.next(), 200);
-          }
-          if (storageUtils.get(storageKeys.prevPage) === 'true') {
-            storageUtils.remove(storageKeys.prevPage);
-            setTimeout(() => rendition.prev(), 200);
-          }
 
           // 설정 적용
           if (settings) {
