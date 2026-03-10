@@ -1,19 +1,19 @@
 export const parseCfiToChapterPage = (cfi) => {
-  if (!cfi) return '';
+  if (!cfi || typeof cfi !== 'string') return '';
   const chapterMatch = cfi.match(/\[chapter-(\d+)\]/);
   const chapter = chapterMatch ? parseInt(chapterMatch[1]) : null;
   const pageMatch = cfi.match(/\[chapter-\d+\]\/(\d+)/);
   const page = pageMatch ? parseInt(pageMatch[1]) : null;
-  if (page && chapter) return `${page}페이지 (${chapter}챕터)`;
-  if (page) return `${page}페이지`;
-  if (chapter) return `${chapter}챕터`;
+  if (page != null && chapter != null) return `${page}페이지 (${chapter}챕터)`;
+  if (page != null) return `${page}페이지`;
+  if (chapter != null) return `${chapter}챕터`;
   return cfi;
 };
 
 export const createBookmarkTitle = (pageNum, chapterNum, cfi = null, fallbackIndex = null) => {
-  if (pageNum && chapterNum) return `${pageNum}페이지 (${chapterNum}챕터)`;
-  if (pageNum) return `${pageNum}페이지`;
-  if (chapterNum) return `${chapterNum}챕터`;
+  if (pageNum != null && chapterNum != null) return `${pageNum}페이지 (${chapterNum}챕터)`;
+  if (pageNum != null) return `${pageNum}페이지`;
+  if (chapterNum != null) return `${chapterNum}챕터`;
   if (cfi) return parseCfiToChapterPage(cfi);
   return fallbackIndex !== null ? `북마크 ${fallbackIndex}` : '';
 };
@@ -21,27 +21,40 @@ export const createBookmarkTitle = (pageNum, chapterNum, cfi = null, fallbackInd
 export const parseBookmarkLocation = (bookmark) => {
   if (!bookmark) return '';
   if (bookmark.title) return bookmark.title;
+  const loc = bookmark.startLocator;
+  if (loc && Number.isFinite(loc.chapterIndex)) return `${loc.chapterIndex}챕터`;
   return parseCfiToChapterPage(bookmark.startCfi || '');
+};
+
+const RELATIVE_DAYS_THRESHOLD = 7;
+
+const formatRelativeCore = (value) => {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return { valid: false, date: null };
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffMin = Math.floor(diffMs / (1000 * 60));
+  if (diffMin < 1) return { valid: true, relative: '방금 전', date };
+  if (diffMin < 60) return { valid: true, relative: `${diffMin}분 전`, date };
+  const diffHour = Math.floor(diffMin / 60);
+  if (diffHour < 24) return { valid: true, relative: `${diffHour}시간 전`, date };
+  const diffDay = Math.floor(diffHour / 24);
+  if (diffDay < RELATIVE_DAYS_THRESHOLD) return { valid: true, relative: `${diffDay}일 전`, date };
+  return { valid: true, relative: null, date };
 };
 
 export const formatRelativeTime = (value) => {
   if (!value) return '';
-  const date = new Date(value);
-  const now = new Date();
-  const diffMs = now.getTime() - date.getTime();
-  const diffMin = Math.floor(diffMs / (1000 * 60));
-  if (diffMin < 1) return '방금 전';
-  if (diffMin < 60) return `${diffMin}분 전`;
-  const diffHour = Math.floor(diffMin / 60);
-  if (diffHour < 24) return `${diffHour}시간 전`;
-  const diffDay = Math.floor(diffHour / 24);
-  if (diffDay < 7) return `${diffDay}일 전`;
-  return date.toLocaleDateString('ko-KR', { month: 'short', day: 'numeric' });
+  const result = formatRelativeCore(value);
+  if (!result.valid) return '';
+  if (result.relative) return result.relative;
+  return result.date.toLocaleDateString('ko-KR', { month: 'short', day: 'numeric' });
 };
 
 export const formatAbsoluteTime = (value) => {
   if (!value) return '';
   const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
   return date.toLocaleString('ko-KR', {
     month: 'short',
     day: 'numeric',
@@ -52,17 +65,10 @@ export const formatAbsoluteTime = (value) => {
 
 export const formatDate = (dateString) => {
   if (!dateString) return '';
-  const date = new Date(dateString);
-  const now = new Date();
-  const diffMs = now.getTime() - date.getTime();
-  const diffMins = Math.floor(diffMs / (1000 * 60));
-  if (diffMins < 1) return '방금 전';
-  if (diffMins < 60) return `${diffMins}분 전`;
-  const diffHours = Math.floor(diffMins / 60);
-  if (diffHours < 24) return `${diffHours}시간 전`;
-  const diffDays = Math.floor(diffHours / 24);
-  if (diffDays < 7) return `${diffDays}일 전`;
-  return date.toLocaleDateString('ko-KR', {
+  const result = formatRelativeCore(dateString);
+  if (!result.valid) return '';
+  if (result.relative) return result.relative;
+  return result.date.toLocaleString('ko-KR', {
     month: 'short',
     day: 'numeric',
     hour: '2-digit',
@@ -99,18 +105,18 @@ export const bookmarkColorPalette = [
   { value: '#FFB347', label: '주황', preview: '#FFB347' },
 ];
 
+/** normal/important/highlight 3종만 구분. bookmarkColorPalette 색상은 매칭되지 않으면 'normal' 반환 */
 export const getColorKey = (color) => {
   if (color === bookmarkColors.important) return 'important';
   if (color === bookmarkColors.highlight) return 'highlight';
   return 'normal';
 };
 
-export const createBookmarkData = (bookId, startCfi, endCfi = null, color = '#28B532', memo = '', title = null) => ({
-  bookId,
-  startCfi,
-  endCfi,
-  color,
-  memo,
-  title,
-  createdAt: new Date().toISOString()
-});
+const isPlainObject = (v) => v != null && typeof v === 'object' && !Array.isArray(v);
+
+export const createBookmarkData = (bookId, startCfi, endCfi = null, color = '#28B532', memo = '', title = null, startLocator = null, endLocator = null) => {
+  const data = { bookId, startCfi, endCfi, color, memo, title, createdAt: new Date().toISOString() };
+  if (isPlainObject(startLocator)) data.startLocator = startLocator;
+  if (isPlainObject(endLocator)) data.endLocator = endLocator;
+  return data;
+};

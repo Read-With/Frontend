@@ -480,35 +480,41 @@ const EpubViewer = forwardRef(
         }
       },
       
-      displayAt: async (cfi) => {
-        if (renditionRef.current && cfi) {
-          try {
-            await renditionRef.current.display(cfi);
-            
-            const currentLocation = await renditionRef.current.currentLocation();
+      displayAt: async (target) => {
+        const rendition = renditionRef.current;
+        const book = bookRef.current;
+        if (!rendition || !target) return false;
+        const cfi = typeof target === 'string' ? target : null;
+        const locator = target && typeof target === 'object' && (target.chapterIndex != null || target.chapterIdx != null || target.start) ? (target.start || target) : null;
+        try {
+          if (cfi) {
+            await rendition.display(cfi);
+            const currentLocation = await rendition.currentLocation();
             const currentCfi = currentLocation?.start?.cfi;
-            
             const targetChapterMatch = cfi.match(/\[chapter-(\d+)\]/);
             const currentChapterMatch = currentCfi?.match(/\[chapter-(\d+)\]/);
-            
             if (targetChapterMatch && currentChapterMatch) {
               const targetChapter = parseInt(targetChapterMatch[1]);
               const currentChapter = parseInt(currentChapterMatch[1]);
-              
-              if (targetChapter === currentChapter) {
-                return true;
-              } else {
-                throw new Error(`이동 실패: 목표 챕터 ${targetChapter}, 현재 챕터 ${currentChapter}`);
-              }
-            } else {
-              return true;
+              if (targetChapter !== currentChapter) throw new Error(`이동 실패: 목표 챕터 ${targetChapter}, 현재 챕터 ${currentChapter}`);
             }
-          } catch (error) {
-            return false;
+            return true;
           }
-        } else {
+          if (locator && book?.spine) {
+            const chapterIdx = locator.chapterIndex ?? locator.chapterIdx;
+            if (Number.isFinite(chapterIdx) && chapterIdx >= 1) {
+              const spineIndex = Math.max(0, Number(chapterIdx) - 1);
+              const item = book.spine.get(spineIndex);
+              if (item?.href) {
+                await rendition.display(item.href);
+                return true;
+              }
+            }
+          }
+        } catch (error) {
           return false;
         }
+        return false;
       },
       showLastPage: async () => {
         const { book, rendition } = getRefs(bookRef, renditionRef);

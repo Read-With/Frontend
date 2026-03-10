@@ -96,8 +96,12 @@ export default defineConfig(({ mode }) => {
                 const silent404Endpoints = [
                   '/api/graph/fine',
                   '/api/graph/macro',
+                  '/api/v2/graph/fine',
+                  '/api/v2/graph/macro',
                   '/api/progress/',
+                  '/api/v2/progress/',
                   '/api/books/',
+                  '/api/v2/books/',
                   '/manifest'
                 ];
                 

@@ -73,6 +73,7 @@ const BookmarksPage = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedTag, setSelectedTag] = useState('all');
   const [memoComposer, setMemoComposer] = useState(null);
+  const [deleteConfirmId, setDeleteConfirmId] = useState(null);
   const resetEditingMemo = useCallback(() => {
     setEditingMemo({ bookmarkId: null, entryIndex: null, text: '' });
   }, []);
@@ -113,16 +114,16 @@ const BookmarksPage = () => {
   const isFilteredView = searchTerm.trim().length > 0 || selectedTag !== 'all';
 
   const handleDeleteBookmark = async (bookmarkId) => {
-    if (!window.confirm('정말 삭제하시겠습니까?')) return { success: false };
     setNewMemo(prev => ({ ...prev, [bookmarkId]: '' }));
     if (memoComposer === bookmarkId) setMemoComposer(null);
     if (editingMemo.bookmarkId === bookmarkId) resetEditingMemo();
     const result = await removeBookmark(bookmarkId);
-    if (!result.success) {
-      alert(result.message || '북마크 삭제에 실패했습니다.');
-    }
+    setDeleteConfirmId(null);
     return result;
   };
+
+  const openDeleteConfirm = (bookmarkId) => setDeleteConfirmId(bookmarkId);
+  const closeDeleteConfirm = () => setDeleteConfirmId(null);
 
   const handleAddMemo = async (bookmarkId, memoText) => {
     const text = (memoText || '').trim();
@@ -136,8 +137,6 @@ const BookmarksPage = () => {
     if (result.success) {
       setNewMemo(prev => ({ ...prev, [bookmarkId]: '' }));
       setMemoComposer(null);
-    } else {
-      alert(result.message || '메모 추가에 실패했습니다.');
     }
     return result;
   };
@@ -164,8 +163,6 @@ const BookmarksPage = () => {
     const result = await changeBookmarkMemo(bookmarkId, serialized);
     if (result.success) {
       resetEditingMemo();
-    } else {
-      alert(result.message || '메모 수정에 실패했습니다.');
     }
     return result;
   };
@@ -182,11 +179,7 @@ const BookmarksPage = () => {
   };
 
   const handleChangeColor = async (bookmarkId, color) => {
-    const result = await changeBookmarkColor(bookmarkId, color);
-    if (!result.success) {
-      alert(result.message || '색상 변경에 실패했습니다.');
-    }
-    return result;
+    return await changeBookmarkColor(bookmarkId, color);
   };
 
   const renderBookmark = (bookmark) => {
@@ -515,7 +508,7 @@ const BookmarksPage = () => {
             <button
               onClick={(e) => {
                 e.stopPropagation();
-                handleDeleteBookmark(bookmark.id);
+                openDeleteConfirm(bookmark.id);
               }}
               style={{
                 display: 'flex',
@@ -633,6 +626,70 @@ const BookmarksPage = () => {
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
           {sortedBookmarks.map((bookmark) => renderBookmark(bookmark))}
+        </div>
+      )}
+
+      {deleteConfirmId && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0,0,0,0.4)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 9999,
+          }}
+          onClick={closeDeleteConfirm}
+        >
+          <div
+            style={{
+              background: '#fff',
+              borderRadius: 16,
+              padding: '1.5rem 1.75rem',
+              maxWidth: 360,
+              boxShadow: '0 12px 40px rgba(0,0,0,0.15)',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <p style={{ margin: '0 0 1.25rem', fontSize: '1rem', color: '#1f2a44' }}>
+              정말 삭제하시겠습니까?
+            </p>
+            <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end' }}>
+              <button
+                type="button"
+                onClick={closeDeleteConfirm}
+                style={{
+                  padding: '0.5rem 1rem',
+                  borderRadius: 10,
+                  border: '1px solid #e5e7eb',
+                  background: '#fff',
+                  color: '#6b7280',
+                  fontSize: '0.9rem',
+                  fontWeight: 500,
+                  cursor: 'pointer',
+                }}
+              >
+                취소
+              </button>
+              <button
+                type="button"
+                onClick={() => handleDeleteBookmark(deleteConfirmId)}
+                style={{
+                  padding: '0.5rem 1rem',
+                  borderRadius: 10,
+                  border: 'none',
+                  background: '#f76c6c',
+                  color: '#fff',
+                  fontSize: '0.9rem',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                }}
+              >
+                삭제
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

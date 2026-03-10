@@ -1,5 +1,6 @@
 import { setManifestData, isValidEvent, getManifestFromCache } from '../common/cache/manifestCache';
-import { setAllProgress, getProgressFromCache, getAllProgressFromCache } from '../common/cache/progressCache';
+import { setAllProgress, setProgressToCache, removeProgressFromCache, getProgressFromCache, getAllProgressFromCache } from '../common/cache/progressCache';
+import { progressPayloadFromData } from '../common/locatorUtils';
 import { getApiBaseUrl, clearAuthData } from '../common/authUtils';
 import { isTokenValid, refreshToken } from './authApi';
 
@@ -16,13 +17,13 @@ const createApiResponse = (isSuccess, code, message, result, type = 'default') =
 
   // 그래프 API 전용 응답 처리 - 모든 필드 유지
   if (type === 'graph') {
-    // result 객체 전체를 유지하되, 기본값만 보장
+    const safe = result ?? {};
     baseResponse.result = {
-      ...result,
-      userCurrentChapter: result?.userCurrentChapter ?? 0,
-      characters: result?.characters ?? [],
-      relations: result?.relations ?? [],
-      event: result?.event ?? null
+      ...safe,
+      userCurrentChapter: safe.userCurrentChapter ?? 0,
+      characters: safe.characters ?? [],
+      relations: safe.relations ?? [],
+      event: safe.event ?? null
     };
   }
 
@@ -54,7 +55,7 @@ const handleApiError = (error, context) => {
 const apiRequest = async (url, options = {}, retryCount = 0) => {
   const token = localStorage.getItem('accessToken');
   
-  if (url.includes('/api/graph/')) {
+  if (url.includes('/api/graph/') || url.includes('/api/v2/graph/')) {
     const tokenValid = isTokenValid(token);
     
     if (token && !tokenValid) {
@@ -82,16 +83,18 @@ const apiRequest = async (url, options = {}, retryCount = 0) => {
 
   const requestUrl = `${API_BASE_URL}${url}`;
   
-  const silent404Endpoints = [
+  const silentErrorEndpoints = [
     '/api/graph/fine',
     '/api/graph/macro',
+    '/api/v2/graph/fine',
+    '/api/v2/graph/macro',
     '/api/progress/',
+    '/api/v2/progress/',
     '/api/books/',
+    '/api/v2/books/',
     '/manifest'
   ];
-  
-  const isSilent404 = silent404Endpoints.some(endpoint => url.includes(endpoint));
-  const isSilent403 = silent404Endpoints.some(endpoint => url.includes(endpoint));
+  const isSilentError = silentErrorEndpoints.some(endpoint => url.includes(endpoint));
   
   try {
     const response = await fetch(requestUrl, config);
@@ -141,7 +144,7 @@ const apiRequest = async (url, options = {}, retryCount = 0) => {
       });
     }
     
-    if (response.status === 404 && isSilent404) {
+    if (response.status === 404 && isSilentError) {
       return {
         isSuccess: false,
         code: 'NOT_FOUND',
@@ -149,8 +152,7 @@ const apiRequest = async (url, options = {}, retryCount = 0) => {
         result: null
       };
     }
-    
-    if (response.status === 403 && isSilent403) {
+    if (response.status === 403 && isSilentError) {
       return {
         isSuccess: false,
         code: 'FORBIDDEN',
@@ -163,7 +165,7 @@ const apiRequest = async (url, options = {}, retryCount = 0) => {
     try {
       data = await response.json();
     } catch (jsonError) {
-      if (response.status === 403 && isSilent403) {
+      if (response.status === 403 && isSilentError) {
         return {
           isSuccess: false,
           code: 'FORBIDDEN',
@@ -177,9 +179,9 @@ const apiRequest = async (url, options = {}, retryCount = 0) => {
     }
     
     if (!response.ok) {
-      if (url.includes('/api/graph/')) {
-        const isMacroGraph = url.includes('/api/graph/macro');
-        const isFineGraph = url.includes('/api/graph/fine');
+      if (url.includes('/api/graph/') || url.includes('/api/v2/graph/')) {
+        const isMacroGraph = url.includes('/api/graph/macro') || url.includes('/api/v2/graph/macro');
+        const isFineGraph = url.includes('/api/graph/fine') || url.includes('/api/v2/graph/fine');
         
         if (response.status !== 404 && response.status !== 403) {
           console.error(`❌ ${isMacroGraph ? '거시' : isFineGraph ? '세밀' : 'Graph'} API 에러:`, {
@@ -201,9 +203,6 @@ const apiRequest = async (url, options = {}, retryCount = 0) => {
     
     return data;
   } catch (error) {
-    if (error.name === 'TypeError' || error.message.includes('Failed to fetch')) {
-      throw error;
-    }
     throw error;
   }
 };
@@ -266,26 +265,48 @@ export const getFavorites = async () => {
 
 export const getAllProgress = async () => {
   const cachedProgress = getAllProgressFromCache();
-  
-  return {
-    isSuccess: true,
-    code: 'CACHE_HIT',
-    message: '진도 정보를 로컬 캐시에서 가져왔습니다',
-    result: cachedProgress,
-    fromCache: true
-  };
+  if (cachedProgress && cachedProgress.length > 0) {
+    return {
+      isSuccess: true,
+      code: 'CACHE_HIT',
+      message: '진도 정보를 로컬 캐시에서 가져왔습니다',
+      result: cachedProgress,
+      fromCache: true
+    };
+  }
+
+  try {
+    const response = await apiRequest('/api/v2/progress');
+
+    if (response?.isSuccess && Array.isArray(response.result)) {
+      setAllProgress(response.result);
+    }
+
+    return response;
+  } catch (error) {
+    return {
+      isSuccess: true,
+      code: 'CACHE_FALLBACK',
+      message: '진도 조회 실패로 로컬 캐시를 반환합니다',
+      result: cachedProgress || [],
+      fromCache: true
+    };
+  }
 };
 
 export const saveProgress = async (progressData) => {
   try {
-    if (!progressData || !progressData.bookId) {
-      throw new Error('bookId는 필수 매개변수입니다.');
+    const payload = progressPayloadFromData(progressData);
+    if (!payload) {
+      throw new Error('bookId와 startLocator(또는 anchor)는 필수입니다.');
     }
-    
-    const response = await apiRequest('/api/progress', {
+    const response = await apiRequest('/api/v2/progress', {
       method: 'POST',
-      body: JSON.stringify(progressData),
+      body: JSON.stringify(payload),
     });
+    if (response?.isSuccess) {
+      setProgressToCache(response?.result ?? payload);
+    }
     return response;
   } catch (error) {
     if (error.status === 403 || error.message?.includes('403') || error.message?.includes('권한')) {
@@ -321,13 +342,33 @@ export const getBookProgress = async (bookId) => {
       fromCache: true
     };
   }
-  
-  return {
-    isSuccess: false,
-    code: 'NOT_FOUND',
-    message: '진도 정보를 찾을 수 없습니다',
-    result: null
-  };
+
+  try {
+    const response = await apiRequest(`/api/v2/progress/${bookId}`);
+    if (response?.isSuccess && response.result) {
+      const toCache = progressPayloadFromData(response.result) ? response.result : null;
+      if (toCache) setProgressToCache(toCache);
+    }
+    return response;
+  } catch (error) {
+    if (error.status === 403 || error.message?.includes('403') || error.message?.includes('권한')) {
+      return {
+        isSuccess: false,
+        code: 'FORBIDDEN',
+        message: '해당 책에 접근할 권한이 없습니다',
+        result: null
+      };
+    }
+    if (error.status === 404 || error.message?.includes('404') || error.message?.includes('찾을 수 없습니다')) {
+      return {
+        isSuccess: false,
+        code: 'NOT_FOUND',
+        message: '진도 정보를 찾을 수 없습니다',
+        result: null
+      };
+    }
+    throw error;
+  }
 };
 
 export const deleteBookProgress = async (bookId) => {
@@ -336,9 +377,12 @@ export const deleteBookProgress = async (bookId) => {
       throw new Error('bookId는 필수 매개변수입니다.');
     }
     
-    const response = await apiRequest(`/api/progress/${bookId}`, {
+    const response = await apiRequest(`/api/v2/progress/${bookId}`, {
       method: 'DELETE',
     });
+    if (response?.isSuccess) {
+      removeProgressFromCache(bookId);
+    }
     return response;
   } catch (error) {
     if (error.status === 403 || error.message?.includes('403') || error.message?.includes('권한')) {
@@ -377,7 +421,7 @@ export const getBookManifest = async (bookId, { forceRefresh = false } = {}) => 
       }
     }
 
-    const response = await apiRequest(`/api/books/${bookId}/manifest`);
+    const response = await apiRequest(`/api/v2/books/${bookId}/manifest`);
 
     if (response?.isSuccess && response?.result && bookId) {
       setManifestData(bookId, response.result);
@@ -442,7 +486,7 @@ export const getMacroGraph = async (bookId, uptoChapter) => {
   queryParams.append('uptoChapter', uptoChapter);
   
   try {
-    const response = await apiRequest(`/api/graph/macro?${queryParams.toString()}`);
+    const response = await apiRequest(`/api/v2/graph/macro?${queryParams.toString()}`);
     
     if (!response || !response.isSuccess) {
       return createApiResponse(false, response?.code || 'ERROR', response?.message || '거시 그래프 조회에 실패했습니다.', {
@@ -474,25 +518,21 @@ export const getFineGraph = async (bookId, chapterIdx, eventIdx) => {
     throw new Error('bookId, chapterIdx, eventIdx는 필수 매개변수입니다.');
   }
 
-  if (eventIdx === 0 || eventIdx < 1) {
-    return createApiResponse(false, 'INVALID_EVENT', '이벤트 인덱스는 1 이상이어야 합니다.', { 
-      characters: [], 
-      relations: [], 
+  if (eventIdx < 1) {
+    return createApiResponse(false, 'INVALID_EVENT', '이벤트 인덱스는 1 이상이어야 합니다.', {
+      characters: [],
+      relations: [],
       event: null,
       userCurrentChapter: 0
     }, 'graph');
   }
-
-  if (typeof bookId === 'number') {
-    const isValid = isValidEvent(bookId, chapterIdx, eventIdx);
-    if (!isValid) {
-      return createApiResponse(false, 'INVALID_EVENT', '해당 이벤트에 대한 데이터가 없습니다.', { 
-        characters: [], 
-        relations: [], 
-        event: null,
-        userCurrentChapter: 0
-      }, 'graph');
-    }
+  if (!isValidEvent(bookId, chapterIdx, eventIdx)) {
+    return createApiResponse(false, 'INVALID_EVENT', '해당 이벤트에 대한 데이터가 없습니다.', {
+      characters: [],
+      relations: [],
+      event: null,
+      userCurrentChapter: 0
+    }, 'graph');
   }
 
   const queryParams = new URLSearchParams();
@@ -501,7 +541,7 @@ export const getFineGraph = async (bookId, chapterIdx, eventIdx) => {
   queryParams.append('eventIdx', eventIdx);
   
   try {
-    const response = await apiRequest(`/api/graph/fine?${queryParams.toString()}`);
+    const response = await apiRequest(`/api/v2/graph/fine?${queryParams.toString()}`);
     
     if (!response || !response.isSuccess) {
       return createApiResponse(false, response?.code || 'ERROR', response?.message || '세밀 그래프 조회에 실패했습니다.', {

@@ -742,17 +742,19 @@ export function useViewerPage() {
     },
     
     viewerState: {
-      filename: bookId, // 호환성을 위해 filename으로 반환
+      filename: bookId,
       bookId,
+      navigate,
+      viewerRef,
+      book,
       currentPage,
       totalPages,
       progress,
       settings,
-      book,
       loading,
       isReloading,
       isGraphLoading,
-      graphLoading, // useGraphDataLoader의 실제 데이터 로딩 상태
+      graphLoading,
       isDataReady,
       showToolbar,
       isDataEmpty

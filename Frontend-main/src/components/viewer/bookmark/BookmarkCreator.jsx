@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { toast } from 'react-toastify';
 import { useBookmarks } from '../../../hooks/bookmarks/useBookmarks';
 import { bookmarkColorPalette, createBookmarkData, parseCfiToChapterPage } from '../../../utils/bookmarkUtils';
 
@@ -28,19 +29,13 @@ const BookmarkCreator = ({ bookId, startCfi, endCfi, bookmark, onClose, onSucces
         
         if (color !== bookmark.color) {
           const colorResult = await changeBookmarkColor(bookmark.id, color);
-          if (!colorResult.success) {
-            alert(colorResult.message || '색상 변경에 실패했습니다.');
-            return;
-          }
+          if (!colorResult.success) return;
           updates.push('색상');
         }
 
         if (memo.trim() !== (bookmark.memo || '')) {
           const memoResult = await changeBookmarkMemo(bookmark.id, memo.trim());
-          if (!memoResult.success) {
-            alert(memoResult.message || '메모 변경에 실패했습니다.');
-            return;
-          }
+          if (!memoResult.success) return;
           updates.push('메모');
         }
 
@@ -52,7 +47,7 @@ const BookmarkCreator = ({ bookId, startCfi, endCfi, bookmark, onClose, onSucces
         }
       } catch (error) {
         console.error('북마크 편집 오류:', error);
-        alert('북마크 편집 중 오류가 발생했습니다.');
+        toast.error('북마크 편집 중 오류가 발생했습니다.');
       } finally {
         setLoading(false);
       }
@@ -69,12 +64,10 @@ const BookmarkCreator = ({ bookId, startCfi, endCfi, bookmark, onClose, onSucces
         if (result.success) {
           if (onSuccess) onSuccess(result.bookmark);
           if (onClose) onClose();
-        } else {
-          alert(result.message || '북마크 생성에 실패했습니다.');
         }
       } catch (error) {
         console.error('북마크 생성 오류:', error);
-        alert('북마크 생성 중 오류가 발생했습니다.');
+        toast.error('북마크 생성 중 오류가 발생했습니다.');
       } finally {
         setLoading(false);
       }

@@ -14,10 +14,10 @@ export const loadBookmarks = async (bookId) => {
   }
 };
 
-// 북마크 추가 (서버에 저장, 로컬 CFI 기반)
-export const addBookmark = async (bookId, startCfi, endCfi = null, color = '#28B532', memo = '', title = null) => {
+// 북마크 추가 (서버에 저장, CFI 또는 locator 기반)
+export const addBookmark = async (bookId, startCfi, endCfi = null, color = '#28B532', memo = '', title = null, startLocator = null, endLocator = null) => {
   try {
-    const bookmarkData = createBookmarkData(bookId, startCfi, endCfi, color, memo, title);
+    const bookmarkData = createBookmarkData(bookId, startCfi, endCfi, color, memo, title, startLocator, endLocator);
     const response = await createBookmark(bookmarkData);
     
     if (response.isSuccess) {
@@ -81,6 +81,7 @@ export const loadBookmarksFromLocal = (bookId) => {
 
 // 북마크 정렬 함수 (최근 북마크 우선)
 export const sortBookmarksByDate = (bookmarks) => {
+  if (!Array.isArray(bookmarks)) return [];
   return [...bookmarks].sort((a, b) => {
     const dateA = new Date(a.createdAt || a.created_at || 0);
     const dateB = new Date(b.createdAt || b.created_at || 0);

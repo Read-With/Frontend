@@ -115,6 +115,7 @@ const ViewerPage = () => {
   
   const [manifestLoaded, setManifestLoaded] = useState(false);
   const [apiError, setApiError] = useState(null);
+  const [initialProgressAnchor, setInitialProgressAnchor] = useState(null);
   
   const updateLoadingState = useCallback((isReady, isLoading, error = null, shouldResetTransition = true) => {
     setIsDataReady(isReady);
@@ -127,7 +128,7 @@ const ViewerPage = () => {
     } else {
       setApiError(null);
     }
-  }, [resetTransition]);
+  }, [setIsDataReady, setLoading, setApiError, resetTransition]);
   
   useEffect(() => {
     apiEventCacheRef.current.clear();
@@ -237,12 +238,9 @@ const ViewerPage = () => {
         (a, b) => (Number(a?.eventIdx) || 0) - (Number(b?.eventIdx) || 0)
       );
 
-      sortedEvents.forEach((event) => {
+      const normalizedEvents = sortedEvents.reduce((acc, event) => {
         const normalizedIdx = eventUtils.normalizeEventIdx(event) || 0;
-        if (!normalizedIdx) {
-          return;
-        }
-
+        if (!normalizedIdx) return acc;
         const normalizedEvent = {
           ...event.event,
           chapter: targetChapter,
@@ -257,11 +255,14 @@ const ViewerPage = () => {
           start: event?.startPos ?? event?.start ?? null,
           end: event?.endPos ?? event?.end ?? null,
         };
+        return eventUtils.updateEventsInState(acc, normalizedEvent, targetChapter);
+      }, []);
 
-        setEvents((prevEvents) => 
-          eventUtils.updateEventsInState(prevEvents, normalizedEvent, targetChapter)
-        );
-      });
+      setEvents((prev) =>
+        normalizedEvents.length > 0
+          ? normalizedEvents.reduce((p, evt) => eventUtils.updateEventsInState(p, evt, targetChapter), prev)
+          : prev
+      );
 
       sequentialPrefetchStatusRef.current.set(key, 'completed');
     } catch (error) {
@@ -309,7 +310,12 @@ const ViewerPage = () => {
 
     try {
       try {
-        await getBookProgress(serverBookId);
+        const progressRes = await getBookProgress(serverBookId);
+        if (progressRes?.isSuccess && progressRes?.result) {
+          const r = progressRes.result;
+          const start = r.startLocator ?? r.anchor?.start;
+          if (start) setInitialProgressAnchor({ start, end: r.endLocator ?? r.anchor?.end ?? start });
+        }
       } catch (progressError) {
         // 조용히 처리
       }
@@ -346,7 +352,7 @@ const ViewerPage = () => {
       errorUtils.logError('[Viewer] Manifest 로드 중 오류', error);
       setManifestLoaded(true);
     }
-  }, [book?.id, bookId]);
+  }, [book?.id]);
 
   // 진도 복원은 EpubViewer에서 이미 수행하므로 여기서는 제거
   // EpubViewer의 loadBook()에서 apiProgressData를 사용하여 displayTarget을 설정하고
@@ -457,7 +463,7 @@ const ViewerPage = () => {
         clearInterval(checkInterval);
       }
     };
-  }, [book?.id, currentChapter]);
+  }, [book?.id, currentChapter, setIsGraphLoading, setApiError]);
   
   useEffect(() => {
     let isMounted = true;
@@ -474,15 +480,13 @@ const ViewerPage = () => {
           if (!manifestLoaded) {
             const serverBookId = getServerBookId(book);
             if (serverBookId) {
-            const cachedManifest = getManifestFromCache(serverBookId);
-            if (cachedManifest) {
-              setManifestLoaded(true);
+              const cachedManifest = getManifestFromCache(serverBookId);
+              if (cachedManifest) {
+                setManifestLoaded(true);
               } else {
-                // 캐시에 없으면 manifest 로드 완료 대기
                 return;
               }
             } else {
-              // 서버 bookId가 없으면 로컬 책이므로 manifestLoaded 불필요
               setManifestLoaded(true);
               return;
             }
@@ -535,8 +539,8 @@ const ViewerPage = () => {
             hasCalledApiForEvent
           );
 
-          if (!isMounted) return;
-          
+          if (!isMounted || apiCallRef.current !== callKey) return;
+
           const cacheKey = cacheKeyUtils.createCacheKey(currentChapter, apiEventIdx);
           
           // 데이터 유효성 검사: 캐시는 elements 우선, API는 relations 우선
@@ -579,6 +583,8 @@ const ViewerPage = () => {
                 getRelationKeyFromRelation
               })
             : (resultData.relations || []);
+
+          if (!isMounted || apiCallRef.current !== callKey) return;
 
           if (!Array.isArray(filteredRelations) || filteredRelations.length === 0) {
             clearGraphElements(apiEventIdx, currentChapter);
@@ -1045,11 +1051,12 @@ const ViewerPage = () => {
           };
           if (isNormalized) {
             const cachedProgress = getProgressFromCache(cleanBookId);
+            const anchor = initialProgressAnchor ?? cachedProgress?.anchor ?? undefined;
             return (
               <XhtmlViewer
                 {...commonProps}
                 bookId={cleanBookId}
-                initialAnchor={cachedProgress?.anchor ?? undefined}
+                initialAnchor={anchor}
               />
             );
           }
@@ -1062,31 +1069,8 @@ const ViewerPage = () => {
             />
           );
         })()}
-        {showBookmarkList && (
-          <BookmarkPanel bookmarks={bookmarks} onSelect={handleBookmarkSelect}>
-            {bookmarks.map((bm) => (
-              <span
-                key={bm.cfi}
-                style={{
-                  fontSize: "0.98rem",
-                  color: "#5C6F5C",
-                  fontFamily: "Noto Serif KR",
-                }}
-              >
-                위치: {bm.title || (() => {
-                  const cfi = bm.cfi || bm.startCfi || '';
-                  const chapterMatch = cfi.match(/\[chapter-(\d+)\]/);
-                  const chapter = chapterMatch ? parseInt(chapterMatch[1]) : null;
-                  const pageMatch = cfi.match(/\[chapter-\d+\]\/(\d+)/);
-                  const page = pageMatch ? parseInt(pageMatch[1]) : null;
-                  if (page && chapter) return `${page}페이지 (${chapter}챕터)`;
-                  if (page) return `${page}페이지`;
-                  if (chapter) return `${chapter}챕터`;
-                  return cfi;
-                })()}
-              </span>
-            ))}
-          </BookmarkPanel>
+        {showBookmarkList && bookKey && (
+          <BookmarkPanel bookId={bookKey} onSelect={handleBookmarkSelect} />
         )}
 
         <ViewerSettings

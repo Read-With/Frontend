@@ -10,9 +10,34 @@ import React, {
 } from 'react';
 import { flushSync } from 'react-dom';
 import { loadCombinedXhtml, loadBookMeta } from '../../../utils/normalizedContent';
-import { defaultSettings, settingsUtils } from '../../../utils/common/settingsUtils';
+import { defaultSettings } from '../../../utils/common/settingsUtils';
+import { codePointOffsetInBlock } from '../../../utils/common/locatorUtils';
 
 const BLOCK_SELECTOR = '[data-chapter-index][data-block-index]';
+
+const getBlockLocator = (el, offset = 0) => {
+  const ci = el.getAttribute('data-chapter-index');
+  const bi = el.getAttribute('data-block-index');
+  if (ci == null || bi == null) return null;
+  return {
+    chapterIndex: Number(ci),
+    blockIndex: Number(bi),
+    offset: Number.isFinite(offset) ? offset : 0,
+  };
+};
+
+const getSelectionOffsets = (contentEl, startBlock, endBlock) => {
+  const sel = window.getSelection();
+  if (!sel || sel.rangeCount === 0 || !contentEl) return { startOffset: 0, endOffset: 0 };
+  const range = sel.getRangeAt(0);
+  const startOffset = startBlock && contentEl.contains(range.startContainer)
+    ? codePointOffsetInBlock(startBlock, range)
+    : 0;
+  const endOffset = endBlock && contentEl.contains(range.endContainer)
+    ? codePointOffsetInBlock(endBlock, range, { useEnd: true })
+    : 0;
+  return { startOffset, endOffset };
+};
 
 function parseXhtmlBody(xhtml) {
   const parser = new DOMParser();
@@ -52,6 +77,7 @@ const XhtmlViewer = forwardRef(
     const touchStartX = useRef(0);
     const lastAnchorRef = useRef(null);
     const metaRef = useRef(null);
+    const initialAnchorAppliedRef = useRef(false);
     const lineBoundsRef = useRef([]);
     const [lineBoundsVersion, setLineBoundsReady] = useState(0);
 
@@ -104,7 +130,7 @@ const XhtmlViewer = forwardRef(
         if (!anchor || JSON.stringify(anchor) === JSON.stringify(lastAnchorRef.current)) return;
         lastAnchorRef.current = anchor;
         const { chapterIndex } = anchor.start || anchor;
-        onCurrentChapterChange?.(chapterIndex + 1);
+        onCurrentChapterChange?.(chapterIndex);
         onCurrentLineChange?.(0, 0, { anchor });
       },
       [onCurrentChapterChange, onCurrentLineChange]
@@ -120,6 +146,7 @@ const XhtmlViewer = forwardRef(
         }
         setLoading(true);
         setError(null);
+        initialAnchorAppliedRef.current = false;
         try {
           const [raw, meta] = await Promise.all([
             loadCombinedXhtml(bid, book || {}),
@@ -185,15 +212,17 @@ const XhtmlViewer = forwardRef(
     }, [totalPages, currentPage, progress, onTotalPagesChange, onCurrentPageChange, onProgressChange]);
 
     useEffect(() => {
-      if (!xhtmlContent || !contentRef.current) return;
+      if (!xhtmlContent || !contentRef.current || !containerRef.current) return;
 
       const content = contentRef.current;
+      const container = containerRef.current;
       const blocks = content.querySelectorAll(BLOCK_SELECTOR);
       if (blocks.length === 0) return;
 
       const visibleMap = new Map();
       const io = new IntersectionObserver(
         (entries) => {
+          const rootBounds = container.getBoundingClientRect();
           entries.forEach((entry) => {
             const el = entry.target;
             const ci = el.getAttribute('data-chapter-index');
@@ -201,29 +230,41 @@ const XhtmlViewer = forwardRef(
             if (ci == null || bi == null) return;
             const key = `${ci}-${bi}`;
             const ratio = entry.intersectionRatio;
-            const prev = visibleMap.get(key) || 0;
-            visibleMap.set(key, Math.max(prev, ratio));
+            const rect = entry.boundingClientRect;
+            const top = rect.top - rootBounds.top;
+            const bottom = rect.bottom - rootBounds.top;
+            const prev = visibleMap.get(key);
+            const prevRatio = prev?.ratio ?? 0;
+            visibleMap.set(key, {
+              ratio: Math.max(prevRatio, ratio),
+              top,
+              bottom,
+              el,
+            });
           });
         },
-        { root: containerRef.current, rootMargin: '0px', threshold: [0, 0.25, 0.5, 0.75, 1] }
+        { root: container, rootMargin: '0px', threshold: [0, 0.25, 0.5, 0.75, 1] }
       );
 
       blocks.forEach((b) => io.observe(b));
 
       const interval = setInterval(() => {
-        let bestKey = null;
-        let bestRatio = 0;
-        visibleMap.forEach((r, k) => {
-          if (r > bestRatio) {
-            bestRatio = r;
-            bestKey = k;
-          }
-        });
-        if (bestKey) {
-          const [ci, bi] = bestKey.split('-').map(Number);
+        const visible = Array.from(visibleMap.entries())
+          .filter(([, v]) => v.ratio > 0)
+          .map(([key, v]) => ({ key, ...v }));
+        if (visible.length === 0) return;
+        visible.sort((a, b) => a.top - b.top);
+        const startEntry = visible[0];
+        const endEntry = visible[visible.length - 1];
+        const startBlock = startEntry.el;
+        const endBlock = endEntry.el;
+        const { startOffset, endOffset } = getSelectionOffsets(content, startBlock, endBlock);
+        const startLoc = getBlockLocator(startBlock, startOffset);
+        const endLoc = getBlockLocator(endBlock, endOffset);
+        if (startLoc && endLoc) {
           emitAnchor({
-            start: { chapterIndex: ci, blockIndex: bi, offset: 0 },
-            end: { chapterIndex: ci, blockIndex: bi, offset: 0 },
+            start: startLoc,
+            end: endLoc,
           });
         }
       }, 300);
@@ -235,15 +276,22 @@ const XhtmlViewer = forwardRef(
     }, [xhtmlContent, emitAnchor]);
 
     useEffect(() => {
-      if (!xhtmlContent || !initialAnchor || !rulerRef.current || !pageHeight) return;
-      const { chapterIndex: c, blockIndex: b } = initialAnchor.start || initialAnchor;
-      const el = rulerRef.current.querySelector(`[data-chapter-index="${c}"][data-block-index="${b}"]`);
+      if (!xhtmlContent || !rulerRef.current || !pageHeight || initialAnchorAppliedRef.current) return;
+      const ruler = rulerRef.current;
+      let el = null;
+      if (initialAnchor?.start || initialAnchor?.chapterIndex != null) {
+        const { chapterIndex: c, blockIndex: b } = initialAnchor.start || initialAnchor;
+        el = ruler.querySelector(`[data-chapter-index="${c}"][data-block-index="${b ?? 0}"]`);
+      } else if (initialChapter != null) {
+        el = ruler.querySelector(`[data-chapter-index="${initialChapter}"]`);
+      }
       if (el) {
         const top = el.offsetTop;
         const idx = Math.min(totalPages - 1, Math.max(0, Math.floor(top / pageHeight)));
         setCurrentPageIndex(idx);
+        initialAnchorAppliedRef.current = true;
       }
-    }, [xhtmlContent, initialAnchor, totalPages, pageHeight]);
+    }, [xhtmlContent, initialAnchor, initialChapter, totalPages, pageHeight]);
 
     const goPage = useCallback((direction) => {
       if (direction === 1 && currentPageIndex <= 0) return;
@@ -257,6 +305,23 @@ const XhtmlViewer = forwardRef(
 
     const prevPage = useCallback(() => goPage(1), [goPage]);
     const nextPage = useCallback(() => goPage(-1), [goPage]);
+
+    const displayAt = useCallback((target) => {
+      const locator = (target && typeof target === 'object' && target.start)
+        ? target.start
+        : (target && typeof target === 'object' && Number.isFinite(target.chapterIndex))
+          ? target
+          : null;
+      if (!locator || !rulerRef.current || !pageHeight) return;
+      const el = rulerRef.current.querySelector(
+        `[data-chapter-index="${locator.chapterIndex}"][data-block-index="${locator.blockIndex ?? 0}"]`
+      );
+      if (el) {
+        const top = el.offsetTop;
+        const idx = Math.min(totalPages - 1, Math.max(0, Math.floor(top / pageHeight)));
+        setCurrentPageIndex(idx);
+      }
+    }, [pageHeight, totalPages]);
 
     useEffect(() => {
       if (!xhtmlContent || initialAnchor || initialProgress == null || initialProgress <= 0) return;
@@ -276,9 +341,9 @@ const XhtmlViewer = forwardRef(
         const idx = Math.min(totalPages - 1, Math.max(0, Math.round((pct / 100) * (totalPages - 1))));
         setCurrentPageIndex(idx);
       },
-      displayAt: () => {},
+      displayAt,
       applySettings: () => {},
-    }), [prevPage, nextPage, totalPages]);
+    }), [prevPage, nextPage, totalPages, displayAt]);
 
     const handleKeyDown = useCallback((e) => {
       if (e.target.closest('input, textarea, [contenteditable]')) return;
@@ -292,10 +357,13 @@ const XhtmlViewer = forwardRef(
 
     const SWIPE_THRESHOLD = 50;
     const handleTouchStart = useCallback((e) => {
-      touchStartX.current = e.touches[0].clientX;
+      const t = e.touches?.[0];
+      if (t) touchStartX.current = t.clientX;
     }, []);
     const handleTouchEnd = useCallback((e) => {
-      const dx = e.changedTouches[0].clientX - touchStartX.current;
+      const t = e.changedTouches?.[0];
+      if (!t) return;
+      const dx = t.clientX - touchStartX.current;
       if (Math.abs(dx) < SWIPE_THRESHOLD) return;
       if (dx > 0) prevPage();
       else nextPage();
