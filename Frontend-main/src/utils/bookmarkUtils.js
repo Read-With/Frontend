@@ -22,8 +22,33 @@ export const parseBookmarkLocation = (bookmark) => {
   if (!bookmark) return '';
   if (bookmark.title) return bookmark.title;
   const loc = bookmark.startLocator;
-  if (loc && Number.isFinite(loc.chapterIndex)) return `${loc.chapterIndex}챕터`;
+  if (isValidLocator(loc)) return `${loc.chapterIndex}챕터`;
   return parseCfiToChapterPage(bookmark.startCfi || '');
+};
+
+export const isValidLocator = (loc) =>
+  loc != null && typeof loc === 'object' && Number.isFinite(loc.chapterIndex);
+
+export const isSameBookmarkPosition = (bookmark, ref) => {
+  if (!bookmark || !ref) return false;
+  const { startLocator, endLocator, startCfi, endCfi } = ref;
+  if (isValidLocator(startLocator) && isValidLocator(bookmark.startLocator)) {
+    const a = bookmark.startLocator;
+    return a.chapterIndex === startLocator.chapterIndex
+      && (a.blockIndex ?? 0) === (startLocator.blockIndex ?? 0)
+      && (a.offset ?? 0) === (startLocator.offset ?? 0);
+  }
+  if (startCfi && bookmark.startCfi === startCfi) {
+    return !endCfi || bookmark.endCfi === endCfi;
+  }
+  return false;
+};
+
+export const getLocatorSortKey = (loc) => {
+  if (!isValidLocator(loc)) return '';
+  const b = loc.blockIndex ?? 0;
+  const o = loc.offset ?? 0;
+  return `${String(loc.chapterIndex).padStart(6, '0')}_${String(b).padStart(6, '0')}_${String(o).padStart(8, '0')}`;
 };
 
 const RELATIVE_DAYS_THRESHOLD = 7;
@@ -114,7 +139,7 @@ export const getColorKey = (color) => {
 
 const isPlainObject = (v) => v != null && typeof v === 'object' && !Array.isArray(v);
 
-export const createBookmarkData = (bookId, startCfi, endCfi = null, color = '#28B532', memo = '', title = null, startLocator = null, endLocator = null) => {
+export const createBookmarkData = (bookId, startCfi = null, endCfi = null, color = '#28B532', memo = '', title = null, startLocator = null, endLocator = null) => {
   const data = { bookId, startCfi, endCfi, color, memo, title, createdAt: new Date().toISOString() };
   if (isPlainObject(startLocator)) data.startLocator = startLocator;
   if (isPlainObject(endLocator)) data.endLocator = endLocator;

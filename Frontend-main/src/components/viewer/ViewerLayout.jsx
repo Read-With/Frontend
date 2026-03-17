@@ -24,9 +24,8 @@ const ViewerLayout = ({
   previousPage = null,
 }) => {
 
-  // 그래프 표시 상태가 변경될 때 창 크기 변경 이벤트 발생시키기
   useEffect(() => {
-    // 창 크기 변경 이벤트를 발생시켜 EPUB 뷰어가 크기를 재조정하도록 함
+    // 그래프 표시/레이아웃 변경 시 뷰어 리사이즈
     // pageMode 설정도 함께 고려하여 spread 모드가 유지되도록 함
     const resizeEvent = window.setTimeout(() => {
       window.dispatchEvent(new Event('resize'));
@@ -69,7 +68,7 @@ const ViewerLayout = ({
           backgroundColor: '#fdfdfd',
         }}
       >
-        {/* 왼쪽: EPUB 뷰어 */}
+        {/* 왼쪽: 뷰어 (XHTML) */}
                  <div 
            className={`h-full overflow-hidden relative`}
            style={{
@@ -81,42 +80,6 @@ const ViewerLayout = ({
          data-graph-fullscreen={graphFullScreen}
        >
         {children}
-        {!graphFullScreen && (
-          <>
-            <div
-              role="button"
-              tabIndex={0}
-              aria-label="이전 페이지"
-              onClick={onPrev}
-              onKeyDown={(e) => e.key === 'Enter' && onPrev?.()}
-              style={{
-                position: 'absolute',
-                left: 0, top: 0, bottom: 0,
-                width: '15%',
-                minWidth: 48,
-                maxWidth: 120,
-                cursor: 'pointer',
-                zIndex: 5,
-              }}
-            />
-            <div
-              role="button"
-              tabIndex={0}
-              aria-label="다음 페이지"
-              onClick={onNext}
-              onKeyDown={(e) => e.key === 'Enter' && onNext?.()}
-              style={{
-                position: 'absolute',
-                right: 0, top: 0, bottom: 0,
-                width: '15%',
-                minWidth: 48,
-                maxWidth: 120,
-                cursor: 'pointer',
-                zIndex: 5,
-              }}
-            />
-          </>
-        )}
         </div>
         
         {/* 오른쪽: 그래프 (조건부 렌더링) */}

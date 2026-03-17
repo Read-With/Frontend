@@ -1,25 +1,26 @@
 import React, { useState } from 'react';
 import BookmarkCreator from './BookmarkCreator';
 import { useBookmarks } from '../../../hooks/bookmarks/useBookmarks';
+import { isSameBookmarkPosition } from '../../../utils/bookmarkUtils';
 
 /**
  * 북마크 툴바 컴포넌트
  * @param {Object} props
  * @param {number} props.bookId - 책 ID
- * @param {string} props.startCfi - 시작 CFI
- * @param {string} props.endCfi - 종료 CFI (선택사항)
+ * @param {Object} props.startLocator - 시작 locator (v2)
+ * @param {Object} props.endLocator - 종료 locator (선택)
+ * @param {string} props.startCfi - 시작 CFI (폴백)
+ * @param {string} props.endCfi - 종료 CFI (폴백)
  * @param {Function} props.onBookmarkCreated - 북마크 생성 콜백
  */
-const BookmarkToolbar = ({ bookId, startCfi, endCfi, onBookmarkCreated }) => {
+const BookmarkToolbar = ({ bookId, startLocator, endLocator, startCfi, endCfi, onBookmarkCreated }) => {
   const [showCreator, setShowCreator] = useState(false);
   const [showEditor, setShowEditor] = useState(false);
   const [editingBookmark, setEditingBookmark] = useState(null);
   const { bookmarks, loading } = useBookmarks(bookId);
 
-  // 현재 위치의 북마크 찾기
-  const currentBookmark = bookmarks.find(bookmark => 
-    bookmark.startCfi === startCfi && 
-    (!endCfi || bookmark.endCfi === endCfi)
+  const currentBookmark = bookmarks.find((b) =>
+    isSameBookmarkPosition(b, { startLocator, endLocator, startCfi, endCfi })
   );
 
   const handleCreateBookmark = () => {
@@ -54,7 +55,7 @@ const BookmarkToolbar = ({ bookId, startCfi, endCfi, onBookmarkCreated }) => {
     setEditingBookmark(null);
   };
 
-  if (!bookId || !startCfi) return null;
+  if (!bookId || (!startLocator && !startCfi)) return null;
 
   return (
     <>
@@ -97,6 +98,8 @@ const BookmarkToolbar = ({ bookId, startCfi, endCfi, onBookmarkCreated }) => {
       {showCreator && (
         <BookmarkCreator
           bookId={bookId}
+          startLocator={startLocator}
+          endLocator={endLocator}
           startCfi={startCfi}
           endCfi={endCfi}
           onClose={handleCloseCreator}

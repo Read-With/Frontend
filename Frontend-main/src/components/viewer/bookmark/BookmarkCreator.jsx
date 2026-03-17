@@ -1,14 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import { toast } from 'react-toastify';
 import { useBookmarks } from '../../../hooks/bookmarks/useBookmarks';
-import { bookmarkColorPalette, createBookmarkData, parseCfiToChapterPage } from '../../../utils/bookmarkUtils';
+import { bookmarkColorPalette, createBookmarkData, createBookmarkTitle, isValidLocator, parseCfiToChapterPage } from '../../../utils/bookmarkUtils';
 
-const BookmarkCreator = ({ bookId, startCfi, endCfi, bookmark, onClose, onSuccess }) => {
+const BookmarkCreator = ({ bookId, startLocator, endLocator, startCfi, endCfi, bookmark, onClose, onSuccess }) => {
   const isEditMode = !!bookmark;
   const [memo, setMemo] = useState('');
   const [color, setColor] = useState('#28B532');
   const [loading, setLoading] = useState(false);
   const { addBookmark, changeBookmarkColor, changeBookmarkMemo } = useBookmarks(bookId);
+  const loc = startLocator ?? bookmark?.startLocator;
+  const hasLocator = isValidLocator(loc);
 
   useEffect(() => {
     if (isEditMode && bookmark) {
@@ -52,12 +54,21 @@ const BookmarkCreator = ({ bookId, startCfi, endCfi, bookmark, onClose, onSucces
         setLoading(false);
       }
     } else {
-      if (!bookId || !startCfi) return;
+      if (!bookId || (!hasLocator && !startCfi)) return;
 
       setLoading(true);
       try {
-        const title = parseCfiToChapterPage(startCfi);
-        const bookmarkData = createBookmarkData(bookId, startCfi, endCfi || null, color, memo.trim(), title);
+        const title = hasLocator ? createBookmarkTitle(null, loc.chapterIndex, null, null) : parseCfiToChapterPage(startCfi);
+        const bookmarkData = createBookmarkData(
+          bookId,
+          hasLocator ? null : (startCfi ?? null),
+          hasLocator ? null : (endCfi ?? null),
+          color,
+          memo.trim(),
+          title,
+          startLocator ?? bookmark?.startLocator ?? null,
+          endLocator ?? bookmark?.endLocator ?? null
+        );
 
         const result = await addBookmark(bookmarkData);
         
@@ -137,17 +148,19 @@ const BookmarkCreator = ({ bookId, startCfi, endCfi, bookmark, onClose, onSucces
             </div>
           </div>
 
-          {/* CFI 정보 표시 */}
+          {/* 위치 정보 (locator 우선) */}
           <div className="bg-gray-50 rounded-lg p-3">
             <div className="text-xs text-gray-600 mb-1">위치 정보</div>
             <div className="text-sm font-mono text-gray-800 break-all">
-              {isEditMode ? bookmark.startCfi : startCfi}
+              {hasLocator ? `${loc.chapterIndex}챕터 (block ${loc.blockIndex ?? 0}, offset ${loc.offset ?? 0})` : (isEditMode ? bookmark?.startCfi : startCfi) || '-'}
             </div>
-            {(isEditMode ? bookmark.endCfi : endCfi) && (
+            {(hasLocator ? (endLocator ?? bookmark?.endLocator) : (isEditMode ? bookmark?.endCfi : endCfi)) && (
               <>
                 <div className="text-xs text-gray-600 mt-2 mb-1">종료 위치</div>
                 <div className="text-sm font-mono text-gray-800 break-all">
-                  {isEditMode ? bookmark.endCfi : endCfi}
+                  {endLocator ?? bookmark?.endLocator
+                    ? `${(endLocator ?? bookmark?.endLocator).chapterIndex}챕터`
+                    : (isEditMode ? bookmark?.endCfi : endCfi)}
                 </div>
               </>
             )}

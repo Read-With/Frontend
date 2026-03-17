@@ -10,10 +10,7 @@ import {
   loadSettings, 
   saveViewerMode, 
   loadViewerMode,
-  findClosestEvent,
-  calculateChapterProgress,
   settingsUtils,
-  ensureLocations,
   errorUtils,
   bookUtils
 } from '../../utils/viewerUtils';
@@ -469,42 +466,20 @@ export function useViewerPage() {
           attempts++;
         }
 
-        // applySettings 호출 전에 현재 CFI를 저장
-        const savedCfi = await viewerRef.current?.getCurrentCfi?.();
-        
-        // 레이아웃만 갱신
-        viewerRef.current?.applySettings?.();
-        
-        // 렌더링이 완료될 때까지 대기 (spread 변경 후 리렌더링 시간 확보)
-        await new Promise(resolve => setTimeout(resolve, 150));
-        
-        // 저장된 CFI로 다시 이동하여 위치 유지
-        if (savedCfi && viewerRef.current?.displayAt) {
-          await viewerRef.current.displayAt(savedCfi);
-          // displayAt 호출 후 위치 안정화 대기
-          await new Promise(resolve => setTimeout(resolve, 100));
+        const saved = await viewerRef.current?.getCurrentLocator?.() ?? await viewerRef.current?.getCurrentCfi?.();
+        let displayTarget = saved;
+        if (typeof saved === 'string' && saved.trim().startsWith('{')) {
+          try {
+            displayTarget = JSON.parse(saved);
+          } catch (_) {}
         }
-        
-        // 최종 위치 동기화
-        const finalCfi = await viewerRef.current?.getCurrentCfi?.();
-        const bookInstance = viewerRef.current?.getBookInstance?.();
 
-        if (bookInstance) {
-          await ensureLocations(bookInstance, 2000);
-          const total = Math.max(1, Number(bookInstance.locations?.length?.()) || 1);
-          setTotalPages(total);
+        viewerRef.current?.applySettings?.();
+        await new Promise(resolve => setTimeout(resolve, 150));
 
-          if (finalCfi) {
-            const locIdx = bookInstance.locations?.locationFromCfi?.(finalCfi);
-            if (Number.isFinite(locIdx) && locIdx >= 0) {
-              const pageNum = Math.min(locIdx + 1, total);
-              setCurrentPage(pageNum);
-              const progressValue = total > 1
-                ? Math.round((locIdx / (total - 1)) * 100)
-                : (locIdx > 0 ? 100 : 0);
-              setProgress(progressValue);
-            }
-          }
+        if (displayTarget && viewerRef.current?.displayAt) {
+          await viewerRef.current.displayAt(displayTarget);
+          await new Promise(resolve => setTimeout(resolve, 100));
         }
       } catch (e) {
         toast.error('화면 모드 전환 중 오류가 발생했습니다.');
@@ -518,37 +493,30 @@ export function useViewerPage() {
     // TODO: 그래프 뷰 포커스 기능 구현 예정
   }, []);
   
-  // EpubViewer에서 페이지/스크롤 이동 시 CFI 받아와서 글자 인덱스 갱신 (개선된 버전)
   const handleLocationChange = useCallback(async () => {
-    if (viewerRef.current && viewerRef.current.getCurrentCfi) {
-      try {
+    if (!viewerRef.current) return;
+    try {
+      let anchor = await viewerRef.current.getCurrentLocator?.();
+      if (!anchor?.start && viewerRef.current.getCurrentCfi) {
         const cfi = await viewerRef.current.getCurrentCfi();
-        const chapterMatch = cfi.match(/\[chapter-(\d+)\]/);
-        let chapterNum = currentChapterRef.current;
-        if (chapterMatch) chapterNum = parseInt(chapterMatch[1]);
-
-        // 챕터 번호 업데이트
-        setCurrentChapter(chapterNum);
-
-        const currentEvents = eventsRef.current;
-        if (currentEvents && currentEvents.length > 0) {
-          const bookInstance = viewerRef.current?.bookRef?.current;
-          const progressInfo = calculateChapterProgress(cfi, chapterNum, currentEvents, bookInstance);
-          const closestEvent = findClosestEvent(cfi, chapterNum, currentEvents, progressInfo.currentChars, bookInstance);
-          if (closestEvent) {
-            closestEvent.chapterProgress = progressInfo.progress;
-            closestEvent.currentChars = progressInfo.currentChars;
-            closestEvent.totalChars = progressInfo.totalChars;
-            closestEvent.eventIndex = progressInfo.eventIndex;
-            closestEvent.calculationMethod = progressInfo.calculationMethod;
-            
-            setCurrentEvent(closestEvent);
-          }
+        if (typeof cfi === 'string' && cfi.trim().startsWith('{')) {
+          try {
+            anchor = JSON.parse(cfi);
+          } catch (_) {}
         }
-      } catch (e) {
-        // 에러는 조용히 처리 (뷰어 이동 중 에러는 일반적)
       }
-    }
+      if (anchor?.start) {
+        setCurrentChapter(anchor.start.chapterIndex);
+        setCurrentEvent({
+          anchor,
+          chapter: anchor.start.chapterIndex,
+          chapterIdx: anchor.start.chapterIndex,
+          eventIdx: 1,
+          eventNum: 1,
+          placeholder: true,
+        });
+      }
+    } catch (_) {}
   }, []);
   
   // 상태 변경 시 URL 업데이트
@@ -613,6 +581,8 @@ export function useViewerPage() {
     settings,
     setSettings,
     
+    savedProgress,
+
     // 챕터 및 이벤트 관련
     currentChapter,
     setCurrentChapter,

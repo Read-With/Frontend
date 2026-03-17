@@ -1,4 +1,4 @@
-import React, { useState, memo } from 'react';
+import React, { useState, useEffect, memo } from 'react';
 import PropTypes from 'prop-types';
 import { useNavigate } from 'react-router-dom';
 import { Heart, BookOpen, Network, MoreVertical, Info, CheckCircle, Clock, FileText, Trash2, X } from 'lucide-react';
@@ -86,56 +86,53 @@ const BookCard = ({ book, onToggleFavorite, onBookClick, onBookDetailClick, onSh
   const navigate = useNavigate();
   const [imageError, setImageError] = useState(false);
   const [showContextMenu, setShowContextMenu] = useState(false);
+  const [optimisticFavorite, setOptimisticFavorite] = useState(null);
+  const displayFavorite = optimisticFavorite !== null ? optimisticFavorite : !!book.favorite;
 
   const handleReadClick = (e) => {
     e.stopPropagation();
-    
-    // 기본 URL 파라미터 설정
-    const defaultParams = new URLSearchParams({
+    const progressVal = book.progress != null && Number.isFinite(Number(book.progress)) ? String(book.progress) : '0';
+    const params = new URLSearchParams({
       chapter: '1',
       page: '1',
-      progress: '0',
+      progress: progressVal,
       graphMode: 'viewer'
     });
-    
-    // 모든 책을 서버에서 받은 bookID로 관리
     const bookId = book.id;
-    navigate(`/user/viewer/${bookId}?${defaultParams.toString()}`, { 
-      state: { 
-        book,
-        fromLibrary: true,
-        from: { pathname: '/user/mypage' }
-      },
+    navigate(`/user/viewer/${bookId}?${params.toString()}`, {
+      state: { book, fromLibrary: true, from: { pathname: '/user/mypage' } },
       replace: false
     });
   };
 
   const handleGraphClick = (e) => {
     e.stopPropagation();
-    
-    // 그래프 모드 기본 URL 파라미터 설정
+    const progressVal = book.progress != null && Number.isFinite(Number(book.progress)) ? String(book.progress) : '0';
     const graphParams = new URLSearchParams({
       chapter: '1',
       page: '1',
-      progress: '0',
+      progress: progressVal,
       graphMode: 'graph'
     });
-    
-    // 모든 책을 서버 bookId로 관리
-    navigate(`/user/graph/${book.id}?${graphParams.toString()}`, { 
-      state: { 
-        book,
-        fromLibrary: true,
-        from: { pathname: '/user/mypage' }
-      },
+    navigate(`/user/graph/${book.id}?${graphParams.toString()}`, {
+      state: { book, fromLibrary: true, from: { pathname: '/user/mypage' } },
       replace: false
     });
   };
 
-  const handleFavoriteClick = (e) => {
+  useEffect(() => {
+    setOptimisticFavorite(null);
+  }, [book.favorite]);
+
+  const handleFavoriteClick = async (e) => {
     e.stopPropagation();
-    if (onToggleFavorite) {
-      onToggleFavorite(book.id, !book.favorite);
+    if (!onToggleFavorite) return;
+    const next = !displayFavorite;
+    setOptimisticFavorite(next);
+    try {
+      await onToggleFavorite(book.id, next);
+    } catch {
+      setOptimisticFavorite(null);
     }
   };
 
@@ -200,14 +197,14 @@ const BookCard = ({ book, onToggleFavorite, onBookClick, onBookDetailClick, onSh
     >
       {/* 즐겨찾기 버튼 - 왼쪽 상단 */}
       <button
-        className={`book-favorite-btn ${book.favorite ? 'favorited' : ''}`}
+        className={`book-favorite-btn ${displayFavorite ? 'favorited' : ''}`}
         onClick={handleFavoriteClick}
-        title={book.favorite ? '즐겨찾기 해제' : '즐겨찾기 추가'}
+        title={displayFavorite ? '즐겨찾기 해제' : '즐겨찾기 추가'}
       >
         <Heart 
           size={20} 
-          fill={book.favorite ? '#ff6b6b' : 'none'} 
-          stroke={book.favorite ? '#ff6b6b' : '#999'}
+          fill={displayFavorite ? '#ff6b6b' : 'none'} 
+          stroke={displayFavorite ? '#ff6b6b' : '#999'}
           strokeWidth={2}
         />
       </button>

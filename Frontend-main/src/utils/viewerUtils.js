@@ -2,6 +2,7 @@
 import { errorUtils as commonErrorUtils } from './common/errorUtils';
 import { storageUtils as commonStorageUtils } from './common/cache/storageUtils';
 import { cfiUtils as commonCfiUtils } from './common/cfiUtils';
+import { toLocator } from './common/locatorUtils';
 import { settingsUtils as commonSettingsUtils, defaultSettings as commonDefaultSettings, loadSettings as commonLoadSettings } from './common/settingsUtils';
 import { getManifestFromCache } from './common/cache/manifestCache';
 
@@ -601,6 +602,24 @@ export function detectCurrentChapter(cfi, chapterCfiMap = null, bookTitle = null
   return detectedChapter || 1;
 }
 
+/**
+ * EPUB CFI를 v2 locator로 변환 (진행/북마크 저장용).
+ * @param {Object} bookInstance - epub.js Book
+ * @param {string} cfi - CFI 문자열
+ * @param {{ chapterCfiMap?: Map, bookTitle?: string }} opts
+ * @returns {{ chapterIndex: number, blockIndex: number, offset: number } | null}
+ */
+export function cfiToLocator(bookInstance, cfi, opts = {}) {
+  if (!cfi || typeof cfi !== 'string' || !bookInstance) return null;
+  const chapterIndex = detectCurrentChapter(cfi, opts.chapterCfiMap ?? null, opts.bookTitle ?? null);
+  let locIdx = 0;
+  try {
+    const idx = bookInstance.locations?.locationFromCfi?.(cfi);
+    if (Number.isFinite(idx) && idx >= 0) locIdx = idx;
+  } catch (_) {}
+  const locator = toLocator({ chapterIndex, blockIndex: 0, offset: locIdx });
+  return locator;
+}
 
 export function getRefs(bookRef, renditionRef) {
   return {

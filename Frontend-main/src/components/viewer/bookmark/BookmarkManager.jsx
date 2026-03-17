@@ -14,8 +14,8 @@ export const loadBookmarks = async (bookId) => {
   }
 };
 
-// 북마크 추가 (서버에 저장, CFI 또는 locator 기반)
-export const addBookmark = async (bookId, startCfi, endCfi = null, color = '#28B532', memo = '', title = null, startLocator = null, endLocator = null) => {
+// 북마크 추가 (서버에 저장, locator 우선·CFI 폴백)
+export const addBookmark = async (bookId, startCfi = null, endCfi = null, color = '#28B532', memo = '', title = null, startLocator = null, endLocator = null) => {
   try {
     const bookmarkData = createBookmarkData(bookId, startCfi, endCfi, color, memo, title, startLocator, endLocator);
     const response = await createBookmark(bookmarkData);

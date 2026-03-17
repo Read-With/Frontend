@@ -62,6 +62,7 @@ const XhtmlViewer = forwardRef(
       initialChapter,
       initialProgress,
       initialAnchor,
+      initialPage,
     },
     ref
   ) => {
@@ -307,12 +308,17 @@ const XhtmlViewer = forwardRef(
     const nextPage = useCallback(() => goPage(-1), [goPage]);
 
     const displayAt = useCallback((target) => {
-      const locator = (target && typeof target === 'object' && target.start)
-        ? target.start
-        : (target && typeof target === 'object' && Number.isFinite(target.chapterIndex))
-          ? target
-          : null;
-      if (!locator || !rulerRef.current || !pageHeight) return;
+      if (!target || !rulerRef.current || !pageHeight) return;
+      let locator = null;
+      if (typeof target === 'string' && target.trim().startsWith('{')) {
+        try {
+          const parsed = JSON.parse(target);
+          locator = parsed?.start ?? parsed?.startLocator ?? (Number.isFinite(parsed?.chapterIndex) ? parsed : null);
+        } catch (_) {}
+      } else if (target && typeof target === 'object') {
+        locator = target.start ?? target.startLocator ?? (Number.isFinite(target.chapterIndex) ? target : null);
+      }
+      if (!locator) return;
       const el = rulerRef.current.querySelector(
         `[data-chapter-index="${locator.chapterIndex}"][data-block-index="${locator.blockIndex ?? 0}"]`
       );
@@ -324,15 +330,22 @@ const XhtmlViewer = forwardRef(
     }, [pageHeight, totalPages]);
 
     useEffect(() => {
-      if (!xhtmlContent || initialAnchor || initialProgress == null || initialProgress <= 0) return;
-      const pct = Math.min(100, Math.max(0, initialProgress)) / 100;
-      setCurrentPageIndex((i) => Math.min(totalPages - 1, Math.round(pct * (totalPages - 1))));
-    }, [xhtmlContent, initialProgress, totalPages]);
+      if (!xhtmlContent || initialAnchor) return;
+      if (initialProgress != null && initialProgress > 0) {
+        const pct = Math.min(100, Math.max(0, initialProgress)) / 100;
+        setCurrentPageIndex((i) => Math.min(totalPages - 1, Math.round(pct * (totalPages - 1))));
+        return;
+      }
+      if (Number.isFinite(initialPage) && initialPage >= 1 && totalPages >= 1) {
+        setCurrentPageIndex((i) => Math.min(totalPages - 1, Math.max(0, initialPage - 1)));
+      }
+    }, [xhtmlContent, initialAnchor, initialProgress, initialPage, totalPages]);
 
     useImperativeHandle(ref, () => ({
       prevPage,
       nextPage,
       getCurrentAnchor: () => lastAnchorRef.current,
+      getCurrentLocator: () => lastAnchorRef.current,
       getCurrentCfi: () => {
         const a = lastAnchorRef.current;
         return a ? JSON.stringify(a) : null;

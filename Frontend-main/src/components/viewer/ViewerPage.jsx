@@ -2,7 +2,6 @@ import React, { useRef, useState, useEffect, useCallback } from "react";
 import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import ViewerLayout from "./ViewerLayout";
-import EpubViewer from "./epub/EpubViewer";
 import XhtmlViewer from "./xhtml/XhtmlViewer";
 import BookmarkPanel from "./bookmark/BookmarkPanel";
 import ViewerSettings from "./epub/ViewerSettings";
@@ -53,7 +52,7 @@ const ViewerPage = () => {
     handleOpenSettings, handleCloseSettings, handleApplySettings,
     onToggleBookmarkList, handleSliderChange, toggleGraph, handleLocationChange,
     graphState, graphActions, viewerState, searchState, graphFullScreen, setGraphFullScreen,
-    previousPage, isFromLibrary, bookId, cleanBookId,
+    previousPage, isFromLibrary, bookId, cleanBookId, savedProgress,
   } = useViewerPage();
 
   const bookKey = React.useMemo(() => {
@@ -180,16 +179,23 @@ const ViewerPage = () => {
       Number.isFinite(cachedChapterIdx) &&
       cachedChapterIdx > 0 &&
       Number(cachedChapterIdx) === Number(currentEventKey.chapter);
+    const cachedStart = currentCachedLocation?.startLocator ?? currentCachedLocation?.anchor?.start;
+    const keyStart = currentEvent?.anchor?.start;
+    const sameByLocator = keyStart && cachedStart &&
+      cachedStart.chapterIndex === keyStart.chapterIndex &&
+      (cachedStart.blockIndex ?? 0) === (keyStart.blockIndex ?? 0) &&
+      (cachedStart.offset ?? 0) === (keyStart.offset ?? 0);
     const isSameEvent =
       isSameChapter &&
       hasCachedEventIdx &&
       cachedEventIdxValue === resolvedIdx &&
-      ((currentCachedLocation?.cfi ?? null) === currentEventKey.cfi);
+      (sameByLocator || ((currentCachedLocation?.cfi ?? null) === currentEventKey.cfi));
 
     if (isSameEvent) {
       return;
     }
 
+    const anchor = currentEvent?.anchor;
     saveLocation({
       bookId: typeof book?.id === 'number' ? book.id : null,
       chapterIdx: currentEventKey.chapter,
@@ -197,6 +203,8 @@ const ViewerPage = () => {
       eventNum: currentEventKey.eventNum ?? resolvedIdx,
       eventId: currentEvent?.event_id ?? currentEvent?.eventId ?? currentEvent?.id ?? null,
       cfi: currentEventKey.cfi,
+      startLocator: anchor?.start ?? undefined,
+      endLocator: anchor?.end ?? anchor?.start ?? undefined,
       eventName:
         currentEvent?.event?.name ??
         currentEvent?.event?.title ??
@@ -353,10 +361,6 @@ const ViewerPage = () => {
       setManifestLoaded(true);
     }
   }, [book?.id]);
-
-  // 진도 복원은 EpubViewer에서 이미 수행하므로 여기서는 제거
-  // EpubViewer의 loadBook()에서 apiProgressData를 사용하여 displayTarget을 설정하고
-  // rendition.display()를 호출하므로 중복 복원을 방지
 
   useEffect(() => {
     testProgressAPI();
@@ -980,13 +984,13 @@ const ViewerPage = () => {
         }
       >
         {(() => {
-          const isNormalized = cleanBookId && isNaN(Number(cleanBookId));
+          const initialProgressFromUrl = savedProgress != null && savedProgress !== '' ? Number(savedProgress) : null;
+          const useProgressForPosition = initialProgressFromUrl != null && Number.isFinite(initialProgressFromUrl) && initialProgressFromUrl > 0;
           const commonProps = {
-            key: reloadKey,
             ref: viewerRef,
             book,
             initialChapter: currentChapter,
-            initialProgress: progress,
+            initialProgress: initialProgressFromUrl != null && Number.isFinite(initialProgressFromUrl) ? initialProgressFromUrl : progress,
             onProgressChange: setProgress,
             onCurrentPageChange: (page) => setCurrentPage(page),
             onTotalPagesChange: setTotalPages,
@@ -1014,7 +1018,7 @@ const ViewerPage = () => {
             onCurrentLineChange: (charIndex, totalEvents, receivedEvent) => {
               setCurrentCharIndex(charIndex);
               if (receivedEvent) {
-                const chapter = receivedEvent.chapter ?? (receivedEvent.anchor?.start ? receivedEvent.anchor.start.chapterIndex + 1 : null);
+                const chapter = receivedEvent.chapter ?? (receivedEvent.anchor?.start ? receivedEvent.anchor.start.chapterIndex : null);
                 if (chapter && chapter !== currentChapter) {
                   setCurrentChapter(chapter);
                 }
@@ -1049,23 +1053,16 @@ const ViewerPage = () => {
               }
             },
           };
-          if (isNormalized) {
-            const cachedProgress = getProgressFromCache(cleanBookId);
-            const anchor = initialProgressAnchor ?? cachedProgress?.anchor ?? undefined;
-            return (
-              <XhtmlViewer
-                {...commonProps}
-                bookId={cleanBookId}
-                initialAnchor={anchor}
-              />
-            );
-          }
+          const progressKey = cleanBookId ?? bookKey;
+          const cachedProgress = getProgressFromCache(progressKey);
+          const anchor = initialProgressAnchor ?? cachedProgress?.anchor ?? undefined;
           return (
-            <EpubViewer
+            <XhtmlViewer
+              key={reloadKey}
               {...commonProps}
-              reloadKey={reloadKey}
-              initialPage={currentPage}
-              onRelocated={handleLocationChange}
+              bookId={progressKey}
+              initialAnchor={anchor}
+              initialPage={useProgressForPosition ? undefined : currentPage}
             />
           );
         })()}

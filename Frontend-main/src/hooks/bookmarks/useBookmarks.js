@@ -8,7 +8,7 @@ import {
   saveBookmarksToLocal
 } from '../../components/viewer/bookmark/BookmarkManager';
 import { cfiUtils } from '../../utils/common/cfiUtils';
-import { createBookmarkTitle } from '../../utils/bookmarkUtils';
+import { createBookmarkTitle, isValidLocator, isSameBookmarkPosition } from '../../utils/bookmarkUtils';
 
 const getErrorMessage = (err, fallback) =>
   err?.message ?? (typeof err === 'string' ? err : fallback);
@@ -76,7 +76,9 @@ export const useBookmarks = (bookId, options = {}) => {
   }, [bookId, sort, isLocalBook]);
 
   const addBookmark = useCallback(async (bookmarkData) => {
-    if (isLocalBook && typeof bookmarkData === 'object' && bookmarkData.startCfi) {
+    const hasLocator = isValidLocator(bookmarkData?.startLocator);
+    const hasCfi = !!bookmarkData?.startCfi;
+    if (isLocalBook && typeof bookmarkData === 'object' && (hasLocator || hasCfi)) {
       const newBookmark = {
         id: Date.now().toString(),
         ...bookmarkData,
@@ -167,52 +169,59 @@ export const useBookmarks = (bookId, options = {}) => {
   }, [modifyBookmark]);
 
 
-  // 북마크 추가 (뷰어 특화: CFI 자동 추출)
+  // 북마크 추가 (뷰어: getCurrentLocator 우선, locator만 저장)
   const handleAddBookmark = useCallback(async () => {
     if (!viewerRef?.current) {
       toast.error("❗ 페이지가 아직 준비되지 않았어요. 다시 불러옵니다...");
       if (setFailCount) setFailCount((cnt) => cnt + 1);
       return;
     }
-    
+
+    let startLocator = null;
+    let endLocator = null;
     let cfi = null;
     let pageNum = null;
     let chapterNum = null;
-    let startLocator = null;
-    let endLocator = null;
-    
+
     try {
-      cfi = await viewerRef.current.getCurrentCfi?.();
-      
-      if (cfi) {
-        try {
-          const parsed = typeof cfi === 'string' ? JSON.parse(cfi) : cfi;
-          if (parsed && typeof parsed === 'object' && parsed.start) {
-            startLocator = parsed.start;
-            endLocator = parsed.end ?? parsed.start;
-            chapterNum = startLocator.chapterIndex;
-          }
-        } catch (_) {}
-        if (chapterNum == null) chapterNum = cfiUtils.extractChapterNumber(cfi);
-        
-        try {
-          const bookInstance = viewerRef.current?.getBookInstance?.() ?? viewerRef.current?.bookRef?.current;
-          if (bookInstance?.locations) {
-            const locIdx = bookInstance.locations.locationFromCfi?.(cfi);
-            if (Number.isFinite(locIdx) && locIdx >= 0) {
-              const totalLocations = bookInstance.locations.length?.() || 1;
-              pageNum = Math.max(1, Math.min(locIdx + 1, totalLocations));
+      const anchor = await viewerRef.current.getCurrentLocator?.();
+      if (anchor?.start) {
+        startLocator = anchor.start;
+        endLocator = anchor.end ?? anchor.start;
+        chapterNum = startLocator.chapterIndex;
+        if (Number.isFinite(startLocator.offset)) pageNum = startLocator.offset + 1;
+      }
+      if (!startLocator) {
+        cfi = await viewerRef.current.getCurrentCfi?.();
+        if (cfi) {
+          try {
+            const parsed = typeof cfi === 'string' ? JSON.parse(cfi) : cfi;
+            if (parsed?.start && Number.isFinite(parsed.start.chapterIndex)) {
+              startLocator = parsed.start;
+              endLocator = parsed.end ?? parsed.start;
+              chapterNum = startLocator.chapterIndex;
+            }
+          } catch (_) {}
+          if (chapterNum == null) chapterNum = cfiUtils.extractChapterNumber(cfi);
+          if (pageNum == null) {
+            try {
+              const bookInstance = viewerRef.current?.getBookInstance?.() ?? viewerRef.current?.bookRef?.current;
+              if (bookInstance?.locations) {
+                const locIdx = bookInstance.locations.locationFromCfi?.(cfi);
+                if (Number.isFinite(locIdx) && locIdx >= 0) {
+                  const totalLocations = bookInstance.locations.length?.() || 1;
+                  pageNum = Math.max(1, Math.min(locIdx + 1, totalLocations));
+                }
+              }
+            } catch (e) {
+              pageNum = cfiUtils.extractPageNumber(cfi);
             }
           }
-        } catch (e) {
-          pageNum = cfiUtils.extractPageNumber(cfi);
         }
       }
-    } catch (e) {
-      // getCurrentCfi 에러 처리
-    }
-    
-    if (!cfi) {
+    } catch (e) {}
+
+    if (!startLocator && !cfi) {
       toast.error("❗ 페이지 정보를 읽을 수 없습니다. 다시 불러옵니다...");
       if (setFailCount) setFailCount((cnt) => cnt + 1);
       return;
@@ -221,9 +230,10 @@ export const useBookmarks = (bookId, options = {}) => {
     if (setFailCount) setFailCount(0);
 
     const currentList = bookmarksRef.current;
-    const bookmarkTitle = createBookmarkTitle(pageNum, chapterNum, cfi, currentList.length + 1);
-    const sameLoc = (b) => b.startCfi === cfi || (startLocator && b.startLocator?.chapterIndex === startLocator.chapterIndex && b.startLocator?.blockIndex === startLocator.blockIndex);
-    const existingBookmark = currentList.find(sameLoc);
+    const bookmarkTitle = createBookmarkTitle(pageNum, chapterNum, startLocator ? null : cfi, currentList.length + 1);
+    const existingBookmark = currentList.find((b) =>
+      isSameBookmarkPosition(b, { startLocator, endLocator, startCfi: cfi, endCfi: null })
+    );
 
     if (existingBookmark) {
       await removeBookmark(existingBookmark.id);
@@ -232,19 +242,31 @@ export const useBookmarks = (bookId, options = {}) => {
 
     if (isLocalBook) {
       await addBookmark({
-        startCfi: cfi,
+        startLocator: startLocator ?? undefined,
+        endLocator: endLocator ?? undefined,
+        startCfi: cfi ?? undefined,
+        endCfi: null,
         title: bookmarkTitle,
-        pageNum: pageNum,
-        chapterNum: chapterNum
+        pageNum,
+        chapterNum,
       });
     } else {
-      const result = await addBookmarkFromManager(bookId, cfi, null, '#28B532', '', bookmarkTitle, startLocator, endLocator);
+      const result = await addBookmarkFromManager(
+        bookId,
+        cfi ?? null,
+        null,
+        '#28B532',
+        '',
+        bookmarkTitle,
+        startLocator,
+        endLocator
+      );
       if (result.success) {
         const bookmarkWithTitle = {
           ...result.bookmark,
           title: bookmarkTitle,
-          pageNum: pageNum,
-          chapterNum: chapterNum
+          pageNum,
+          chapterNum,
         };
         setBookmarks(prev => [...prev, bookmarkWithTitle]);
         toast.success('📖 북마크가 추가되었습니다');

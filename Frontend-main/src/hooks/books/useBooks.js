@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useLocation } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getBooks, getBook, toggleBookFavorite } from '../../utils/api/booksApi';
 import {
@@ -15,8 +16,20 @@ const HIDDEN_SERVER_BOOK_IDS_KEY = 'readwith_hidden_server_book_ids';
 const HIDDEN_PUBLIC_BOOK_IDS_KEY = 'readwith_hidden_public_book_ids';
 const PUBLIC_BOOK_FAVORITES_KEY = 'readwith_public_book_favorites';
 
+const getLocalProgress = (bookId) => {
+  try {
+    const raw = localStorage.getItem(`progress_${bookId}`);
+    if (raw == null) return null;
+    const n = Number(raw);
+    return Number.isFinite(n) ? Math.min(100, Math.max(0, n)) : null;
+  } catch {
+    return null;
+  }
+};
+
 export const useBooks = () => {
   const queryClient = useQueryClient();
+  const location = useLocation();
   const [hiddenServerBookIds, setHiddenServerBookIds] = useState(() => {
     try {
       const raw = localStorage.getItem(HIDDEN_SERVER_BOOK_IDS_KEY);
@@ -209,7 +222,10 @@ export const useBooks = () => {
     indexedDbIds.forEach((bookId) => {
       if (hiddenServer.has(bookId)) return;
       const serverBook = serverBooksMap.get(bookId);
-      if (serverBook) result.push(serverBook);
+      if (!serverBook) return;
+      const localProgress = getLocalProgress(bookId);
+      const progress = serverBook.progress ?? localProgress ?? 0;
+      result.push({ ...serverBook, progress });
     });
 
     const publicBooks = publicBooksData || [];
@@ -235,7 +251,7 @@ export const useBooks = () => {
       });
     });
     return result;
-  }, [reconciledBooks, indexedDbBookIds, publicBooksData, hiddenPublicBookIds, publicBookFavorites]);
+  }, [reconciledBooks, indexedDbBookIds, publicBooksData, hiddenPublicBookIds, publicBookFavorites, location.pathname]);
 
   const toggleFavoriteMutation = useMutation({
     mutationFn: async ({ bookId, favorite }) => {
@@ -265,10 +281,11 @@ export const useBooks = () => {
       const previousServerBooks = queryClient.getQueryData(['books', 'server']);
       queryClient.setQueryData(['books', 'server'], (old) => {
         if (!old) return old;
+        const idStr = String(bookId);
         return {
           ...old,
           books: (old.books || []).map((book) =>
-            book.id === bookId ? { ...book, favorite } : book
+            String(book?.id) === idStr ? { ...book, favorite } : book
           ),
         };
       });
