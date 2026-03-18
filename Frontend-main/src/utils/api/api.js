@@ -55,7 +55,7 @@ const handleApiError = (error, context) => {
 const apiRequest = async (url, options = {}, retryCount = 0) => {
   const token = localStorage.getItem('accessToken');
   
-  if (url.includes('/api/graph/') || url.includes('/api/v2/graph/')) {
+  if (url.includes('/api/v2/graph/')) {
     const tokenValid = isTokenValid(token);
     
     if (token && !tokenValid) {
@@ -84,11 +84,8 @@ const apiRequest = async (url, options = {}, retryCount = 0) => {
   const requestUrl = `${API_BASE_URL}${url}`;
   
   const silentErrorEndpoints = [
-    '/api/graph/fine',
-    '/api/graph/macro',
     '/api/v2/graph/fine',
     '/api/v2/graph/macro',
-    '/api/progress/',
     '/api/v2/progress/',
     '/api/books/',
     '/api/v2/books/',
@@ -179,9 +176,9 @@ const apiRequest = async (url, options = {}, retryCount = 0) => {
     }
     
     if (!response.ok) {
-      if (url.includes('/api/graph/') || url.includes('/api/v2/graph/')) {
-        const isMacroGraph = url.includes('/api/graph/macro') || url.includes('/api/v2/graph/macro');
-        const isFineGraph = url.includes('/api/graph/fine') || url.includes('/api/v2/graph/fine');
+      if (url.includes('/api/v2/graph/')) {
+        const isMacroGraph = url.includes('/api/v2/graph/macro');
+        const isFineGraph = url.includes('/api/v2/graph/fine');
         
         if (response.status !== 404 && response.status !== 403) {
           console.error(`❌ ${isMacroGraph ? '거시' : isFineGraph ? '세밀' : 'Graph'} API 에러:`, {

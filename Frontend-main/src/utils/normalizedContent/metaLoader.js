@@ -2,9 +2,7 @@
  * meta.json 로더
  * 구조: { chapters: [{ chapterIndex, paragraphStarts, paragraphLengths, totalCodePoints }] }
  *
- * 우선순위:
- * 1. API GET /api/books/{bookId}/meta
- * 2. /books/{bookId}/meta.json (public, 개발용)
+ * 우선순위: GET /api/books/{bookId}/meta → 실패 시 public /books/{bookId}/meta.json
  */
 
 import { getBookMeta } from '../api/api';

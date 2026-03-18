@@ -1,6 +1,13 @@
 import { toNumberOrNull } from './numberUtils';
 
-// 이벤트 정렬 (eventIdx 기준)
+const truncIdx = (value) => {
+  const n = toNumberOrNull(value);
+  return n === null ? null : Math.trunc(n);
+};
+
+/**
+ * eventIdx 기준 오름차순. eventIdx 없음은 맨 뒤.
+ */
 export const sortEventsByIdx = (events) => {
   if (!Array.isArray(events)) return [];
   return [...events].sort((a, b) => {
@@ -10,39 +17,65 @@ export const sortEventsByIdx = (events) => {
   });
 };
 
-// 특정 이벤트까지의 이벤트 필터
+/**
+ * eventIdx가 숫자인 항목만 대상으로 idx 이하 포함. (eventIdx 없음 제외)
+ * 누적 그래프용 — 배열은 sortEventsByIdx 후 넘기는 것이 안전.
+ */
 export const filterEventsUpTo = (events, targetIdx) => {
   if (!Array.isArray(events)) return [];
-  const target = toNumberOrNull(targetIdx);
-  if (target === null) return [];
-  return events.filter((entry) => toNumberOrNull(entry?.eventIdx) <= target);
+  const target = truncIdx(targetIdx);
+  if (target === null || target < 0) return [];
+  return events.filter((entry) => {
+    const e = truncIdx(entry?.eventIdx);
+    return e !== null && e <= target;
+  });
 };
 
-// 특정 이벤트 전까지의 이벤트 필터
+/**
+ * eventIdx가 숫자인 항목만 대상으로 idx 미만.
+ */
 export const filterEventsBefore = (events, targetIdx) => {
   if (!Array.isArray(events)) return [];
-  const target = toNumberOrNull(targetIdx);
-  if (target === null) return [];
-  return events.filter((entry) => toNumberOrNull(entry?.eventIdx) < target);
+  const target = truncIdx(targetIdx);
+  if (target === null || target < 0) return [];
+  return events.filter((entry) => {
+    const e = truncIdx(entry?.eventIdx);
+    return e !== null && e < target;
+  });
 };
 
-// 최대 이벤트 인덱스 찾기
 export const getMaxEventIdx = (events) => {
   if (!Array.isArray(events) || events.length === 0) return 0;
   return events.reduce((max, event) => {
-    const idx = toNumberOrNull(event?.eventIdx) || 0;
+    const idx = truncIdx(event?.eventIdx);
+    if (idx === null) return max;
     return Math.max(max, idx);
   }, 0);
 };
 
-// 이벤트 인덱스 정규화 (범위 내로 제한)
+/**
+ * 1-based 이벤트 인덱스 정규화.
+ * @param {*} requestedIdx
+ * @param {*} maxIdx 상한(포함). 0이면 이벤트 없음 → 항상 0. null/undefined면 상한 없음(무효 요청 시 1).
+ */
 export const normalizeEventIdx = (requestedIdx, maxIdx) => {
-  let targetIdx = toNumberOrNull(requestedIdx);
-  if (!targetIdx || targetIdx < 1) {
-    targetIdx = maxIdx || 1;
+  const maxRaw = toNumberOrNull(maxIdx);
+  const hasUpper = maxRaw !== null && Number.isFinite(maxRaw);
+  const maxInt = hasUpper ? Math.max(0, Math.trunc(maxRaw)) : null;
+
+  const reqInt = truncIdx(requestedIdx);
+
+  if (hasUpper && maxInt === 0) {
+    return 0;
   }
-  if (maxIdx && targetIdx > maxIdx) {
-    targetIdx = maxIdx;
+
+  if (!hasUpper) {
+    if (reqInt !== null && reqInt >= 1) return reqInt;
+    return 1;
   }
-  return targetIdx;
+
+  if (reqInt === null || reqInt < 1) {
+    return maxInt;
+  }
+  return Math.min(reqInt, maxInt);
 };

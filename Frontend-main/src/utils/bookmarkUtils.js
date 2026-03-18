@@ -1,3 +1,5 @@
+import { toLocator } from './common/locatorUtils';
+
 export const createBookmarkTitle = (pageNum, chapterNum, fallbackIndex = null) => {
   if (pageNum != null && chapterNum != null) return `${pageNum}페이지 (${chapterNum}챕터)`;
   if (pageNum != null) return `${pageNum}페이지`;
@@ -7,30 +9,27 @@ export const createBookmarkTitle = (pageNum, chapterNum, fallbackIndex = null) =
 
 export const parseBookmarkLocation = (bookmark) => {
   if (!bookmark) return '';
-  if (bookmark.title) return bookmark.title;
-  const loc = bookmark.startLocator;
-  if (isValidLocator(loc)) return `${loc.chapterIndex}챕터`;
+  const rawTitle = bookmark.title;
+  if (rawTitle != null && String(rawTitle).trim()) return String(rawTitle).trim();
+  const loc = toLocator(bookmark.startLocator);
+  if (loc) return `${loc.chapterIndex}챕터`;
   return '';
 };
 
-export const isValidLocator = (loc) =>
-  loc != null && typeof loc === 'object' && Number.isFinite(loc.chapterIndex);
+export const isValidLocator = (loc) => toLocator(loc) != null;
 
 export const isSameBookmarkPosition = (bookmark, ref) => {
   if (!bookmark || !ref) return false;
-  const { startLocator } = ref;
-  if (!isValidLocator(startLocator) || !isValidLocator(bookmark.startLocator)) return false;
-  const a = bookmark.startLocator;
-  return a.chapterIndex === startLocator.chapterIndex
-    && (a.blockIndex ?? 0) === (startLocator.blockIndex ?? 0)
-    && (a.offset ?? 0) === (startLocator.offset ?? 0);
+  const a = toLocator(bookmark.startLocator);
+  const b = toLocator(ref.startLocator);
+  if (!a || !b) return false;
+  return a.chapterIndex === b.chapterIndex && a.blockIndex === b.blockIndex && a.offset === b.offset;
 };
 
 export const getLocatorSortKey = (loc) => {
-  if (!isValidLocator(loc)) return '';
-  const b = loc.blockIndex ?? 0;
-  const o = loc.offset ?? 0;
-  return `${String(loc.chapterIndex).padStart(6, '0')}_${String(b).padStart(6, '0')}_${String(o).padStart(8, '0')}`;
+  const n = toLocator(loc);
+  if (!n) return '';
+  return `${String(n.chapterIndex).padStart(6, '0')}_${String(n.blockIndex).padStart(6, '0')}_${String(n.offset).padStart(8, '0')}`;
 };
 
 const RELATIVE_DAYS_THRESHOLD = 7;
@@ -50,13 +49,18 @@ const formatRelativeCore = (value) => {
   return { valid: true, relative: null, date };
 };
 
-export const formatRelativeTime = (value) => {
+const formatBookmarkTime = (value, withTimeForPast) => {
   if (!value) return '';
   const result = formatRelativeCore(value);
   if (!result.valid) return '';
   if (result.relative) return result.relative;
-  return result.date.toLocaleDateString('ko-KR', { month: 'short', day: 'numeric' });
+  const opts = withTimeForPast
+    ? { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }
+    : { month: 'short', day: 'numeric' };
+  return result.date.toLocaleString('ko-KR', opts);
 };
+
+export const formatRelativeTime = (value) => formatBookmarkTime(value, false);
 
 export const formatAbsoluteTime = (value) => {
   if (!value) return '';
@@ -70,18 +74,7 @@ export const formatAbsoluteTime = (value) => {
   });
 };
 
-export const formatDate = (dateString) => {
-  if (!dateString) return '';
-  const result = formatRelativeCore(dateString);
-  if (!result.valid) return '';
-  if (result.relative) return result.relative;
-  return result.date.toLocaleString('ko-KR', {
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-};
+export const formatDate = (value) => formatBookmarkTime(value, true);
 
 export const bookmarkColors = {
   normal: '#f4f7ff',
@@ -112,18 +105,17 @@ export const bookmarkColorPalette = [
   { value: '#FFB347', label: '주황', preview: '#FFB347' },
 ];
 
-/** normal/important/highlight 3종만 구분. bookmarkColorPalette 색상은 매칭되지 않으면 'normal' 반환 */
 export const getColorKey = (color) => {
   if (color === bookmarkColors.important) return 'important';
   if (color === bookmarkColors.highlight) return 'highlight';
   return 'normal';
 };
 
-const isPlainObject = (v) => v != null && typeof v === 'object' && !Array.isArray(v);
-
 export const createBookmarkData = (bookId, color = '#28B532', memo = '', title = null, startLocator = null, endLocator = null) => {
   const data = { bookId, color, memo, title, createdAt: new Date().toISOString() };
-  if (isPlainObject(startLocator)) data.startLocator = startLocator;
-  if (isPlainObject(endLocator)) data.endLocator = endLocator;
+  const start = toLocator(startLocator);
+  const end = toLocator(endLocator);
+  if (start) data.startLocator = start;
+  if (end) data.endLocator = end;
   return data;
 };
