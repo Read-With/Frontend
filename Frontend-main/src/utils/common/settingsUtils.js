@@ -17,7 +17,7 @@ export const defaultSettings = {
 
 export function loadSettings() {
   try {
-    const settings = storageUtils.get("epub_viewer_settings");
+    let settings = storageUtils.get("xhtml_viewer_settings");
     const loadedSettings = settings ? JSON.parse(settings) : defaultSettings;
 
     if (loadedSettings.pageMode === "leftOnly") {
@@ -27,19 +27,19 @@ export function loadSettings() {
     if (loadedSettings.showGraph === undefined) {
       loadedSettings.showGraph = defaultSettings.showGraph;
     }
-    storageUtils.set("epub_viewer_settings", JSON.stringify(loadedSettings));
+    storageUtils.set("xhtml_viewer_settings", JSON.stringify(loadedSettings));
 
     return loadedSettings;
   } catch (error) {
     return errorUtils.handleError('loadSettings', error, defaultSettings, { 
-      settings: storageUtils.get("epub_viewer_settings") 
+      settings: storageUtils.get("xhtml_viewer_settings") 
     });
   }
 }
 
 export function saveSettings(settings) {
   try {
-    storageUtils.set("epub_viewer_settings", JSON.stringify(settings));
+    storageUtils.set("xhtml_viewer_settings", JSON.stringify(settings));
     return { success: true };
   } catch (error) {
     errorUtils.logError('saveSettings', error, { settings });
@@ -64,21 +64,7 @@ export const settingsUtils = {
       newSettings.lineHeight !== currentSettings.lineHeight;
 
     if (needsReload) {
-      const saveCurrent = async () => {
-        try {
-          let cfi = null;
-          if (viewerRef?.current?.getCurrentCfi) {
-            cfi = await viewerRef.current.getCurrentCfi();
-            if (cfi) {
-              localStorage.setItem(`readwith_${cleanFilename}_lastCFI`, cfi);
-            }
-          }
-          setReloadKey((prev) => prev + 1);
-        } catch (e) {
-          setReloadKey((prev) => prev + 1);
-        }
-      };
-      saveCurrent();
+      setReloadKey((prev) => prev + 1);
     } else {
       if (viewerRef?.current?.applySettings) {
         viewerRef.current.applySettings();
@@ -92,21 +78,5 @@ export const settingsUtils = {
 
     return { success: true, message: "✅ 설정이 적용되었습니다" };
   },
-
-  applyEpubSettings(rendition, settings, getSpreadMode) {
-    if (!rendition || !settings) return;
-    
-    rendition.spread(getSpreadMode);
-    
-    if (settings.fontSize) {
-      rendition.themes.fontSize(`${settings.fontSize}%`);
-    }
-    
-    if (settings.lineHeight) {
-      rendition.themes.override('body', {
-        'line-height': `${settings.lineHeight}`
-      });
-    }
-  }
 };
 

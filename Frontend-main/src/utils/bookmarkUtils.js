@@ -1,20 +1,7 @@
-export const parseCfiToChapterPage = (cfi) => {
-  if (!cfi || typeof cfi !== 'string') return '';
-  const chapterMatch = cfi.match(/\[chapter-(\d+)\]/);
-  const chapter = chapterMatch ? parseInt(chapterMatch[1]) : null;
-  const pageMatch = cfi.match(/\[chapter-\d+\]\/(\d+)/);
-  const page = pageMatch ? parseInt(pageMatch[1]) : null;
-  if (page != null && chapter != null) return `${page}페이지 (${chapter}챕터)`;
-  if (page != null) return `${page}페이지`;
-  if (chapter != null) return `${chapter}챕터`;
-  return cfi;
-};
-
-export const createBookmarkTitle = (pageNum, chapterNum, cfi = null, fallbackIndex = null) => {
+export const createBookmarkTitle = (pageNum, chapterNum, fallbackIndex = null) => {
   if (pageNum != null && chapterNum != null) return `${pageNum}페이지 (${chapterNum}챕터)`;
   if (pageNum != null) return `${pageNum}페이지`;
   if (chapterNum != null) return `${chapterNum}챕터`;
-  if (cfi) return parseCfiToChapterPage(cfi);
   return fallbackIndex !== null ? `북마크 ${fallbackIndex}` : '';
 };
 
@@ -23,7 +10,7 @@ export const parseBookmarkLocation = (bookmark) => {
   if (bookmark.title) return bookmark.title;
   const loc = bookmark.startLocator;
   if (isValidLocator(loc)) return `${loc.chapterIndex}챕터`;
-  return parseCfiToChapterPage(bookmark.startCfi || '');
+  return '';
 };
 
 export const isValidLocator = (loc) =>
@@ -31,17 +18,12 @@ export const isValidLocator = (loc) =>
 
 export const isSameBookmarkPosition = (bookmark, ref) => {
   if (!bookmark || !ref) return false;
-  const { startLocator, endLocator, startCfi, endCfi } = ref;
-  if (isValidLocator(startLocator) && isValidLocator(bookmark.startLocator)) {
-    const a = bookmark.startLocator;
-    return a.chapterIndex === startLocator.chapterIndex
-      && (a.blockIndex ?? 0) === (startLocator.blockIndex ?? 0)
-      && (a.offset ?? 0) === (startLocator.offset ?? 0);
-  }
-  if (startCfi && bookmark.startCfi === startCfi) {
-    return !endCfi || bookmark.endCfi === endCfi;
-  }
-  return false;
+  const { startLocator } = ref;
+  if (!isValidLocator(startLocator) || !isValidLocator(bookmark.startLocator)) return false;
+  const a = bookmark.startLocator;
+  return a.chapterIndex === startLocator.chapterIndex
+    && (a.blockIndex ?? 0) === (startLocator.blockIndex ?? 0)
+    && (a.offset ?? 0) === (startLocator.offset ?? 0);
 };
 
 export const getLocatorSortKey = (loc) => {
@@ -139,8 +121,8 @@ export const getColorKey = (color) => {
 
 const isPlainObject = (v) => v != null && typeof v === 'object' && !Array.isArray(v);
 
-export const createBookmarkData = (bookId, startCfi = null, endCfi = null, color = '#28B532', memo = '', title = null, startLocator = null, endLocator = null) => {
-  const data = { bookId, startCfi, endCfi, color, memo, title, createdAt: new Date().toISOString() };
+export const createBookmarkData = (bookId, color = '#28B532', memo = '', title = null, startLocator = null, endLocator = null) => {
+  const data = { bookId, color, memo, title, createdAt: new Date().toISOString() };
   if (isPlainObject(startLocator)) data.startLocator = startLocator;
   if (isPlainObject(endLocator)) data.endLocator = endLocator;
   return data;

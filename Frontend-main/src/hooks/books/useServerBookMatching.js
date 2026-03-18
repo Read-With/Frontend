@@ -7,8 +7,8 @@ import { errorUtils } from '../../utils/viewerUtils';
  * 서버 책 매칭 훅
  * 로컬에서 열린 책이 서버에 존재하는지 확인하고, 매칭되면 서버 bookId로 URL을 업데이트합니다.
  * 
- * 중요: EPUB 파일은 IndexedDB에만 저장되며, 서버에는 메타데이터만 저장됨
- * 서버 bookId를 키로 사용하여 서버 책 목록과 IndexedDB의 EPUB 파일을 매칭함
+ * 로컬 XHTML/HTML 원본은 IndexedDB에만 저장, 서버는 메타데이터만 저장
+ * bookId로 매칭, 뷰어는 combined XHTML
  * 
  * @param {string} bookId - 현재 URL의 bookId
  * @returns {Object} { serverBook, loadingServerBook, matchedServerBook }
@@ -149,6 +149,9 @@ export function useServerBookMatching(bookId) {
 
     const stateBook = location.state?.book;
     const indexedDbKey = String(numericId);
+    const xf = stateBook?.xhtmlFile;
+    const xab = stateBook?.xhtmlArrayBuffer;
+    const hasLocal = !!(xf || xab);
 
     navigate(`/user/viewer/${numericId}${location.search || ''}`, {
       replace: true,
@@ -156,13 +159,13 @@ export function useServerBookMatching(bookId) {
         ...location.state,
         book: {
           ...matchedServerBook,
-          epubFile: stateBook?.epubFile,
-          epubArrayBuffer: stateBook?.epubArrayBuffer,
+          xhtmlFile: xf,
+          xhtmlArrayBuffer: xab,
           filename: String(numericId),
           _indexedDbId: indexedDbKey,
           _bookId: numericId,
-          _needsLoad: !stateBook?.epubFile && !stateBook?.epubArrayBuffer,
-          epubPath: undefined,
+          _needsLoad: !hasLocal,
+          xhtmlPath: undefined,
           filePath: undefined,
           s3Path: undefined,
           fileUrl: undefined

@@ -2,67 +2,55 @@ import React, { useState, useEffect } from 'react';
 import { defaultSettings, loadSettings, saveSettings } from '../../../utils/common/settingsUtils';
 
 const ViewerSettings = ({ isOpen, onClose, onApplySettings, currentSettings }) => {
-  // 현재 설정 상태
   const [settings, setSettings] = useState(() => {
-    // 저장된 설정 또는 현재 설정 또는 기본 설정 사용
     const initialSettings = currentSettings || loadSettings() || defaultSettings;
-    
-    // leftOnly 모드였다면 double로 변경
     if (initialSettings.pageMode === 'leftOnly') {
       initialSettings.pageMode = 'double';
     }
-    
     return initialSettings;
   });
-  
-  // 설정 변경 핸들러
+
   const handleChange = (key, value) => {
     setSettings(prev => ({
       ...prev,
       [key]: value
     }));
   };
-  
-  // 설정 적용 핸들러
+
   const handleApply = () => {
     saveSettings(settings);
     onApplySettings(settings);
     onClose();
   };
-  
-  // 설정 초기화 핸들러
+
   const handleReset = () => {
     setSettings(defaultSettings);
   };
-  
-  // 모달 외부 클릭 시 닫기
+
   const handleOutsideClick = (e) => {
     if (e.target.classList.contains('settings-modal-overlay')) {
       onClose();
     }
   };
-  
-  // ESC 키 누를 때 닫기
+
   useEffect(() => {
     const handleEsc = (e) => {
       if (e.key === 'Escape') {
         onClose();
       }
     };
-    
     if (isOpen) {
       document.addEventListener('keydown', handleEsc);
     }
-    
     return () => {
       document.removeEventListener('keydown', handleEsc);
     };
   }, [isOpen, onClose]);
-  
+
   if (!isOpen) return null;
-  
+
   return (
-    <div 
+    <div
       className="settings-modal-overlay"
       onClick={handleOutsideClick}
       style={{
@@ -78,7 +66,7 @@ const ViewerSettings = ({ isOpen, onClose, onApplySettings, currentSettings }) =
         zIndex: 9999,
       }}
     >
-      <div 
+      <div
         className="settings-modal"
         style={{
           backgroundColor: 'white',
@@ -93,7 +81,7 @@ const ViewerSettings = ({ isOpen, onClose, onApplySettings, currentSettings }) =
       >
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
           <h2 style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#5C6F5C' }}>뷰어 설정</h2>
-          <button 
+          <button
             onClick={onClose}
             style={{
               backgroundColor: 'white',
@@ -113,14 +101,12 @@ const ViewerSettings = ({ isOpen, onClose, onApplySettings, currentSettings }) =
             <span className="material-symbols-outlined">close</span>
           </button>
         </div>
-        
-        {/* 화면 모드 설정 */}
+
         <div style={{ marginBottom: '24px' }}>
           <h3 style={{ fontSize: '1.1rem', fontWeight: 'bold', color: '#5C6F5C', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
             <span className="material-symbols-outlined">visibility</span> 화면 모드
           </h3>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            {/* 단일화면 + 그래프 표시 */}
             <button
               onClick={() => {
                 setSettings(prev => ({
@@ -150,8 +136,7 @@ const ViewerSettings = ({ isOpen, onClose, onApplySettings, currentSettings }) =
               <span className="material-symbols-outlined">view_column</span>
               단일 뷰어 & 그래프 화면
             </button>
-            
-            {/* 단일화면 (그래프 숨기기) */}
+
             <button
               onClick={() => {
                 setSettings(prev => ({
@@ -181,8 +166,7 @@ const ViewerSettings = ({ isOpen, onClose, onApplySettings, currentSettings }) =
               <span className="material-symbols-outlined">view_column</span>
               단일 뷰어화면
             </button>
-            
-            {/* 분할화면 */}
+
             <button
               onClick={() => {
                 setSettings(prev => ({
@@ -214,8 +198,7 @@ const ViewerSettings = ({ isOpen, onClose, onApplySettings, currentSettings }) =
             </button>
           </div>
         </div>
-        
-        {/* 글꼴 크기 설정 */}
+
         <div style={{ marginBottom: '24px' }}>
           <h3 style={{ fontSize: '1.1rem', fontWeight: 'bold', color: '#5C6F5C', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
             <span className="material-symbols-outlined">format_size</span> 글꼴 크기
@@ -269,9 +252,7 @@ const ViewerSettings = ({ isOpen, onClose, onApplySettings, currentSettings }) =
             <span style={{ minWidth: '60px', textAlign: 'right' }}>{settings.fontSize}%</span>
           </div>
         </div>
-        
-        
-        {/* 줄 간격 설정 */}
+
         <div style={{ marginBottom: '24px' }}>
           <h3 style={{ fontSize: '1.1rem', fontWeight: 'bold', color: '#5C6F5C', marginBottom: '12px' }}>
             줄 간격
@@ -325,9 +306,7 @@ const ViewerSettings = ({ isOpen, onClose, onApplySettings, currentSettings }) =
             <span style={{ minWidth: '60px', textAlign: 'right' }}>{settings.lineHeight.toFixed(1)}</span>
           </div>
         </div>
-        
-        
-        {/* 버튼 그룹 */}
+
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '24px' }}>
           <button
             onClick={handleReset}
@@ -368,4 +347,4 @@ const ViewerSettings = ({ isOpen, onClose, onApplySettings, currentSettings }) =
   );
 };
 
-export default ViewerSettings; 
+export default ViewerSettings;

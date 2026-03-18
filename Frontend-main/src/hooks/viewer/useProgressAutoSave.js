@@ -20,7 +20,7 @@ export function useProgressAutoSave({ bookKey, currentChapter, currentEvent, del
       return;
     }
     const anchor = currentEvent?.anchor;
-    if (!anchor?.start) return;
+    if (!anchor?.startLocator && !anchor?.start) return;
 
     const { startLocator, endLocator } = anchorToLocators(anchor);
     if (!startLocator) return;

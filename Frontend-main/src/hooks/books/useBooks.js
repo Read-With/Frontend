@@ -115,8 +115,7 @@ export const useBooks = () => {
   }, [refreshIndexedDbBookIds]);
 
   // 서버 책 조회 - React Query 사용
-  // 중요: 서버에는 메타데이터만 저장되며, EPUB 파일은 IndexedDB에만 저장됨
-  // 서버 bookId를 키로 사용하여 IndexedDB의 EPUB 파일과 매칭함
+  // 서버는 메타데이터만, 로컬 원본 버퍼는 IndexedDB; 뷰어는 combined XHTML
   const {
     data: serverBooksData,
     isLoading: isServerLoading,

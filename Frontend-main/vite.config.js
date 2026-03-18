@@ -42,7 +42,6 @@ export default defineConfig(({ mode }) => {
           manualChunks: {
             vendor: ['react', 'react-dom'],
             charts: ['recharts', 'react-chartjs-2', 'chart.js'],
-            epub: ['epubjs'],
             graph: ['cytoscape', 'cytoscape-cose-bilkent'],
             ui: ['@ant-design/pro-components', 'antd'],
           },

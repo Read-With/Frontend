@@ -4,23 +4,16 @@ import { useBookmarks } from '../../../hooks/bookmarks/useBookmarks';
 import { isSameBookmarkPosition } from '../../../utils/bookmarkUtils';
 
 /**
- * 북마크 툴바 컴포넌트
- * @param {Object} props
- * @param {number} props.bookId - 책 ID
- * @param {Object} props.startLocator - 시작 locator (v2)
- * @param {Object} props.endLocator - 종료 locator (선택)
- * @param {string} props.startCfi - 시작 CFI (폴백)
- * @param {string} props.endCfi - 종료 CFI (폴백)
- * @param {Function} props.onBookmarkCreated - 북마크 생성 콜백
+ * 북마크 툴바 컴포넌트 (locator 전용)
  */
-const BookmarkToolbar = ({ bookId, startLocator, endLocator, startCfi, endCfi, onBookmarkCreated }) => {
+const BookmarkToolbar = ({ bookId, startLocator, endLocator, onBookmarkCreated }) => {
   const [showCreator, setShowCreator] = useState(false);
   const [showEditor, setShowEditor] = useState(false);
   const [editingBookmark, setEditingBookmark] = useState(null);
   const { bookmarks, loading } = useBookmarks(bookId);
 
   const currentBookmark = bookmarks.find((b) =>
-    isSameBookmarkPosition(b, { startLocator, endLocator, startCfi, endCfi })
+    isSameBookmarkPosition(b, { startLocator, endLocator })
   );
 
   const handleCreateBookmark = () => {
@@ -55,7 +48,7 @@ const BookmarkToolbar = ({ bookId, startLocator, endLocator, startCfi, endCfi, o
     setEditingBookmark(null);
   };
 
-  if (!bookId || (!startLocator && !startCfi)) return null;
+  if (!bookId || !startLocator) return null;
 
   return (
     <>
@@ -100,8 +93,6 @@ const BookmarkToolbar = ({ bookId, startLocator, endLocator, startCfi, endCfi, o
           bookId={bookId}
           startLocator={startLocator}
           endLocator={endLocator}
-          startCfi={startCfi}
-          endCfi={endCfi}
           onClose={handleCloseCreator}
           onSuccess={handleBookmarkCreated}
         />

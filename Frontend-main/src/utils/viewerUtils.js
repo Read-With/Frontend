@@ -1,14 +1,9 @@
 
 import { errorUtils as commonErrorUtils } from './common/errorUtils';
 import { storageUtils as commonStorageUtils } from './common/cache/storageUtils';
-import { cfiUtils as commonCfiUtils } from './common/cfiUtils';
-import { toLocator } from './common/locatorUtils';
 import { settingsUtils as commonSettingsUtils, defaultSettings as commonDefaultSettings, loadSettings as commonLoadSettings } from './common/settingsUtils';
-import { getManifestFromCache } from './common/cache/manifestCache';
-
 export const errorUtils = commonErrorUtils;
 export const storageUtils = commonStorageUtils;
-export const cfiUtils = commonCfiUtils;
 export const defaultSettings = commonDefaultSettings;
 export const loadSettings = commonLoadSettings;
 
@@ -97,178 +92,43 @@ export function loadViewerMode() {
     }
 }
 
+function approxCharsFromLocator(startLocator, totalChars) {
+  if (!startLocator || !Number.isFinite(startLocator.chapterIndex)) return 0;
+  const b = Number(startLocator.blockIndex) || 0;
+  const o = Number(startLocator.offset) || 0;
+  const est = b * 3000 + o;
+  return totalChars > 0 ? Math.min(est, totalChars) : est;
+}
 
-// CFI 기반 챕터 내 글자 위치 계산
-/**
- * 로컬 CFI 기반 챕터 진행도 계산
- * @param {string} cfi - 로컬 CFI (현재 보고 있는 EPUB의 CFI)
- * @param {number} chapterNum - 챕터 번호
- * @param {Array} events - 이벤트 배열
- * @param {Object} bookInstance - EPUB.js book 인스턴스 (로컬 EPUB)
- * @returns {Object} 진행도 정보
- */
-export function calculateChapterProgress(cfi, chapterNum, events, bookInstance = null) {
-  if (!cfiUtils.isValidCfi(cfi)) {
-    errorUtils.logWarning('calculateChapterProgress', '유효하지 않은 CFI입니다', { cfi, type: typeof cfi });
+export function calculateChapterProgressFromLocator(startLocator, chapterNum, events) {
+  if (!chapterNum || chapterNum < 1 || !events?.length) {
     return { currentChars: 0, totalChars: 0, progress: 0, eventIndex: -1 };
   }
-  
-  if (!chapterNum || typeof chapterNum !== 'number' || chapterNum < 1) {
-    errorUtils.logWarning('calculateChapterProgress', '유효하지 않은 챕터 번호입니다', { chapterNum, type: typeof chapterNum });
+  if (!startLocator || Number(startLocator.chapterIndex) !== Number(chapterNum)) {
     return { currentChars: 0, totalChars: 0, progress: 0, eventIndex: -1 };
   }
-  
-  if (!events || !Array.isArray(events) || !events.length) {
-    errorUtils.logWarning('calculateChapterProgress', '유효하지 않은 이벤트 배열입니다', { events, type: typeof events });
-    return { currentChars: 0, totalChars: 0, progress: 0, eventIndex: -1 };
-  }
-
-  try {
-    const totalChars = events[events.length - 1]?.end || 0;
-    let currentChars = 0;
-    let calculationMethod = 'fallback';
-
-  // 로컬 CFI 기반 정확한 위치 계산
-  if (bookInstance?.locations?.percentageFromCfi) {
-    try {
-      // 로컬 EPUB의 locations를 사용하여 CFI 기반 진행도 계산
-      const globalProgress = bookInstance.locations.percentageFromCfi(cfi);
-      const path = window.location.pathname;
-      const fileName = path.split('/').pop();
-      const bookId = fileName.replace('.epub', '');
-      
-      // Manifest 기반 진행도 계산
-      const numericBookId = Number(bookId);
-      const manifest = Number.isFinite(numericBookId) ? getManifestFromCache(numericBookId) : null;
-      const progressMetadata = manifest?.progressMetadata;
-
-      const chapterLengths = {};
-      if (Array.isArray(progressMetadata?.chapterLengths)) {
-        progressMetadata.chapterLengths.forEach((item) => {
-          if (!item) return;
-          const chapterIdx = Number(item.chapterIdx ?? item.idx);
-          const length = Number(item.length);
-          if (Number.isFinite(chapterIdx) && chapterIdx > 0 && Number.isFinite(length) && length > 0) {
-            chapterLengths[chapterIdx] = length;
-          }
-        });
-      } else if (Array.isArray(manifest?.chapters)) {
-        manifest.chapters.forEach((chapter) => {
-          if (!chapter) return;
-          const chapterIdx = Number(chapter.idx ?? chapter.chapterIdx);
-          const endPos = Number(
-            chapter.endPos ??
-            chapter.end ??
-            (chapter.events && chapter.events.length
-              ? chapter.events[chapter.events.length - 1]?.endPos ??
-                chapter.events[chapter.events.length - 1]?.end
-              : null)
-          );
-          if (Number.isFinite(chapterIdx) && chapterIdx > 0 && Number.isFinite(endPos) && endPos > 0) {
-            chapterLengths[chapterIdx] = endPos;
-          }
-        });
-      }
-
-      const totalLength =
-        Number(progressMetadata?.totalLength) ||
-        Object.values(chapterLengths).reduce((sum, length) => sum + Number(length || 0), 0);
-
-      if (totalLength > 0 && Object.keys(chapterLengths).length > 0) {
-        const globalCurrentChars = Math.round(globalProgress * totalLength);
-        let prevChaptersSum = 0;
-        for (let i = 1; i < chapterNum; i++) {
-          prevChaptersSum += Number(chapterLengths[i] || 0);
-        }
-        const chapterCurrentChars = Math.max(0, globalCurrentChars - prevChaptersSum);
-        const currentChapterLength = Number(chapterLengths[chapterNum] || totalChars);
-        if (currentChapterLength > 0) {
-          const chapterProgress = chapterCurrentChars / currentChapterLength;
-          currentChars = Math.min(Math.round(chapterProgress * totalChars), totalChars);
-          calculationMethod = 'cfi_accurate';
-        }
-      }
-    } catch (error) {
-      errorUtils.logWarning('calculateChapterProgress', '로컬 CFI 기반 정확한 위치 계산 실패, fallback 방식 사용', { error });
-    }
-  }
-
-  // Fallback: 단락 기반 추정
-  let paragraphNum = null;
-  let charOffset = null;
-  
-  if (calculationMethod === 'fallback') {
-    paragraphNum = cfiUtils.extractParagraphNumber(cfi) || 1;
-    charOffset = cfiUtils.extractCharOffset(cfi) || 0;
-    
-    if (totalChars > 0 && paragraphNum > 1) {
-      const avgCharsPerParagraph = totalChars / 50;
-      currentChars = Math.min((paragraphNum - 1) * avgCharsPerParagraph + charOffset, totalChars);
-    } else {
-      currentChars = charOffset;
-    }
-  }
-
+  const totalChars = events[events.length - 1]?.end || 0;
+  const currentChars = approxCharsFromLocator(startLocator, totalChars);
   const progress = totalChars > 0 ? (currentChars / totalChars) * 100 : 0;
   let eventIndex = -1;
   for (let i = 0; i < events.length; i++) {
-    const event = events[i];
-    if (currentChars >= event.start && currentChars < event.end) {
+    if (currentChars >= events[i].start && currentChars < events[i].end) {
       eventIndex = i;
       break;
     }
   }
-
-  if (currentChars >= totalChars) {
-    eventIndex = events.length - 1;
-  }
-
-    return {
-      currentChars: Math.round(currentChars),
-      totalChars,
-      progress: Math.round(progress * 100) / 100,
-      eventIndex,
-      calculationMethod,
-      paragraphNum,
-      charOffset
-    };
-  } catch (error) {
-    return errorUtils.handleError('calculateChapterProgress', error, { currentChars: 0, totalChars: 0, progress: 0, eventIndex: -1 }, { cfi, chapterNum, eventsLength: events?.length });
-  }
+  if (eventIndex < 0 && currentChars >= totalChars) eventIndex = events.length - 1;
+  return {
+    currentChars: Math.round(currentChars),
+    totalChars,
+    progress: Math.round(progress * 100) / 100,
+    eventIndex,
+  };
 }
 
-/**
- * 로컬 CFI 기반 가장 가까운 이벤트 찾기
- * @param {string} cfi - 로컬 CFI (현재 보고 있는 EPUB의 CFI)
- * @param {number} chapterNum - 챕터 번호
- * @param {Array} events - 이벤트 배열
- * @param {number} currentChars - 현재 문자 위치 (선택사항)
- * @param {Object} bookInstance - EPUB.js book 인스턴스 (로컬 EPUB)
- * @returns {Object|null} 가장 가까운 이벤트
- */
-export function findClosestEvent(cfi, chapterNum, events, currentChars = null, bookInstance = null) {
-  if (!cfiUtils.isValidCfi(cfi)) {
-    errorUtils.logWarning('findClosestEvent', '유효하지 않은 CFI입니다', { cfi, type: typeof cfi });
-    return null;
-  }
-  
-  if (!chapterNum || typeof chapterNum !== 'number' || chapterNum < 1) {
-    errorUtils.logWarning('findClosestEvent', '유효하지 않은 챕터 번호입니다', { chapterNum, type: typeof chapterNum });
-    return null;
-  }
-  
-  if (!events || !Array.isArray(events) || !events.length) {
-    errorUtils.logWarning('findClosestEvent', '유효하지 않은 이벤트 배열입니다', { events, type: typeof events });
-    return null;
-  }
-  
-  try {
-    if (currentChars === null) {
-      // 로컬 CFI 기반으로 진행도 계산
-      const progressInfo = calculateChapterProgress(cfi, chapterNum, events, bookInstance);
-      currentChars = progressInfo.currentChars;
-    }
-
+export function findClosestEventFromLocator(startLocator, chapterNum, events) {
+  if (!events?.length || !chapterNum) return null;
+  const { currentChars } = calculateChapterProgressFromLocator(startLocator, chapterNum, events);
   for (let i = events.length - 1; i >= 0; i--) {
     const event = events[i];
     if (currentChars >= event.start && currentChars < event.end) {
@@ -276,432 +136,46 @@ export function findClosestEvent(cfi, chapterNum, events, currentChars = null, b
         ...event,
         eventNum: event.event_id ?? 0,
         chapter: chapterNum,
-        progress: ((currentChars - event.start) / (event.end - event.start)) * 100
+        progress: ((currentChars - event.start) / (event.end - event.start)) * 100,
       };
     }
   }
-
   if (currentChars < events[0].start) {
-    return {
-      ...events[0],
-      eventNum: events[0].event_id ?? 0,
-      chapter: chapterNum,
-      progress: 0
-    };
+    return { ...events[0], eventNum: events[0].event_id ?? 0, chapter: chapterNum, progress: 0 };
   }
-
-    const lastEvent = events[events.length - 1];
-    return {
-      ...lastEvent,
-      eventNum: lastEvent.event_id ?? 0,
-      chapter: chapterNum,
-      progress: 100
-    };
-  } catch (error) {
-    return errorUtils.handleError('findClosestEvent', error, null, { cfi, chapterNum, eventsLength: events?.length });
-  }
+  const last = events[events.length - 1];
+  return { ...last, eventNum: last.event_id ?? 0, chapter: chapterNum, progress: 100 };
 }
 
-export const bookmarkUtils = {
-  async toggleBookmark(cfi, cleanFilename, currentBookmarks, loadBookmarks, saveBookmarks) {
-    const latestBookmarks = loadBookmarks(cleanFilename);
-    const isDuplicate = latestBookmarks.some((b) => b.cfi === cfi);
-    
-    let newBookmarks;
-    if (isDuplicate) {
-      newBookmarks = latestBookmarks.filter((b) => b.cfi !== cfi);
-      return { 
-        bookmarks: newBookmarks, 
-        message: "❌ 북마크가 삭제되었습니다",
-        isAdded: false
-      };
-    } else {
-      const newBookmark = { cfi, createdAt: new Date().toISOString() };
-      newBookmarks = [newBookmark, ...latestBookmarks];
-      return { 
-        bookmarks: newBookmarks, 
-        message: "✅ 북마크가 추가되었습니다",
-        isAdded: true
-      };
-    }
-  },
-
-  deleteBookmark(cfi, cleanFilename, bookmarks, saveBookmarks) {
-    if (!cleanFilename) {
-      return { success: false, message: "❗ 파일명이 없어 북마크를 삭제할 수 없습니다." };
-    }
-    
-    if (window.confirm("정말 삭제하시겠습니까?")) {
-      const newBookmarks = bookmarks.filter((b) => b.cfi !== cfi);
-      saveBookmarks(cleanFilename, newBookmarks);
-      return { success: true, bookmarks: newBookmarks };
-    }
-    
-    return { success: false, message: "삭제가 취소되었습니다." };
-  }
-};
-
-
-/**
- * Julius Caesar 책의 CFI를 chapter로 변환
- * @param {string} cfi - 현재 CFI
- * @returns {number} 감지된 챕터 번호
- */
-function detectJuliusCaesarChapter(cfi) {
-  if (!cfi) return 1;
-  
-  // Julius Caesar 책의 chapter 시작 CFI 매핑
-  const juliusCaesarChapterCfis = [
-    { chapter: 1, cfi: 'epubcfi(/6/10!/4/2[pgepubid00004]/2/4/1:0)' },
-    { chapter: 2, cfi: 'epubcfi(/6/8!/4/2[pgepubid00004]/42/1:0)' },
-    { chapter: 3, cfi: 'epubcfi(/6/8!/4/2[pgepubid00004]/248/1:0)' },
-    { chapter: 4, cfi: 'epubcfi(/6/10!/4/2[pgepubid00008]/2/4/1:0)' },
-    { chapter: 5, cfi: 'epubcfi(/6/10!/4/2[pgepubid00008]/214/13:0)' },
-    { chapter: 6, cfi: 'epubcfi(/6/10!/4/2[pgepubid00008]/318/1:0)' },
-    { chapter: 7, cfi: 'epubcfi(/6/10!/4/2[pgepubid00008]/334/1:0)' },
-    { chapter: 8, cfi: 'epubcfi(/6/10!/4/2[pgepubid00013]/2/4/1:0)' },
-    { chapter: 9, cfi: 'epubcfi(/6/12!/4/2[pgepubid00013]/208/1:0)' },
-    { chapter: 10, cfi: 'epubcfi(/6/12!/4/2[pgepubid00013]/416/5:0)' },
-    { chapter: 11, cfi: 'epubcfi(/6/10!/4/2[pgepubid00017]/2/4/1:0)' },
-    { chapter: 12, cfi: 'epubcfi(/6/14!/4/2[pgepubid00017]/34/5:0)' },
-    { chapter: 13, cfi: 'epubcfi(/6/14!/4/2[pgepubid00017]/94/1:0)' },
-    { chapter: 14, cfi: 'epubcfi(/6/10!/4/2[pgepubid00021]/2/4/1:0)' },
-    { chapter: 15, cfi: 'epubcfi(/6/16!/4/2[pgepubid00021]/104/1:0)' },
-    { chapter: 16, cfi: 'epubcfi(/6/16!/4/2[pgepubid00021]/128/1:0)' },
-    { chapter: 17, cfi: 'epubcfi(/6/16!/4/2[pgepubid00021]/214/5:0)' },
-    { chapter: 18, cfi: 'epubcfi(/6/16!/4/2[pgepubid00021]/256/1:0)' }
-  ];
-  
-  // CFI 정규화 (epubcfi() 제거, 괄호 정리)
-  const normalizeCfi = (cfiStr) => {
-    if (!cfiStr) return '';
-    let normalized = cfiStr.replace(/^epubcfi\(/, '').replace(/\)$/, '').trim();
-    // 마지막 닫는 괄호 제거 (있는 경우)
-    if (normalized.endsWith(')')) {
-      normalized = normalized.slice(0, -1);
-    }
-    return normalized;
-  };
-  
-  const normalizedCurrentCfi = normalizeCfi(cfi);
-  
-  // CFI 비교 함수: 현재 CFI가 chapter 시작 CFI보다 크거나 같은지 확인
-  const compareCfi = (current, chapterStart) => {
-    const normalizedCurrent = normalizeCfi(current);
-    const normalizedStart = normalizeCfi(chapterStart);
-    
-    // 1. 정확한 포함 관계 확인
-    if (normalizedCurrent.includes(normalizedStart)) {
-      return true;
-    }
-    
-    // 2. pgepubid 추출
-    const currentPgepubidMatch = normalizedCurrent.match(/\[pgepubid(\d+)\]/);
-    const startPgepubidMatch = normalizedStart.match(/\[pgepubid(\d+)\]/);
-    
-    if (!currentPgepubidMatch || !startPgepubidMatch) {
-      // pgepubid가 없으면 문자열 비교로 fallback
-      return normalizedCurrent >= normalizedStart;
-    }
-    
-    const currentPgepubid = parseInt(currentPgepubidMatch[1]);
-    const startPgepubid = parseInt(startPgepubidMatch[1]);
-    
-    // 3. pgepubid 비교 (pgepubid가 클수록 더 나중 chapter)
-    if (currentPgepubid > startPgepubid) {
-      return true;
-    } else if (currentPgepubid < startPgepubid) {
-      return false;
-    }
-    
-    // 4. 같은 pgepubid면 path 숫자 비교
-    // path 숫자 추출 - pgepubid 이후의 숫자 부분
-    // 예: /6/10!/4/2[pgepubid00004]/2/4/1:0 -> /2/4/1:0 부분
-    const extractPathAfterPgepubid = (cfiStr) => {
-      const pgepubidIndex = cfiStr.indexOf(']');
-      if (pgepubidIndex === -1) return null;
-      const afterPgepubid = cfiStr.substring(pgepubidIndex + 1);
-      const pathMatch = afterPgepubid.match(/\/(\d+)\/(\d+)(?::(\d+))?/);
-      if (pathMatch) {
-        return [
-          parseInt(pathMatch[1]),
-          parseInt(pathMatch[2]),
-          pathMatch[3] ? parseInt(pathMatch[3]) : 0
-        ];
-      }
-      return null;
-    };
-    
-    const currentPath = extractPathAfterPgepubid(normalizedCurrent);
-    const startPath = extractPathAfterPgepubid(normalizedStart);
-    
-    if (currentPath && startPath) {
-      // 첫 번째 path 숫자 비교
-      if (currentPath[0] > startPath[0]) {
-        return true;
-      } else if (currentPath[0] < startPath[0]) {
-        return false;
-      }
-      
-      // 두 번째 path 숫자 비교
-      if (currentPath[1] > startPath[1]) {
-        return true;
-      } else if (currentPath[1] < startPath[1]) {
-        return false;
-      }
-      
-      // 세 번째 path 숫자 비교 (있는 경우)
-      return currentPath[2] >= startPath[2];
-    }
-    
-    // path 숫자를 추출할 수 없으면 문자열 비교
-    return normalizedCurrent >= normalizedStart;
-  };
-  
-  // 역순으로 확인 (마지막 chapter부터)
-  for (let i = juliusCaesarChapterCfis.length - 1; i >= 0; i--) {
-    const chapterInfo = juliusCaesarChapterCfis[i];
-    
-    // 현재 CFI가 이 chapter 시작 CFI보다 크거나 같으면 이 chapter 반환
-    if (compareCfi(cfi, chapterInfo.cfi)) {
-      return chapterInfo.chapter;
-    }
-  }
-  
-  // 매칭 실패 시 첫 번째 chapter
-  return 1;
-}
-
-/**
- * 로컬 CFI 기반 현재 챕터 감지
- * @param {string} cfi - 로컬 CFI (현재 보고 있는 EPUB의 CFI)
- * @param {Map} chapterCfiMap - 챕터 CFI 맵 (로컬 EPUB의 챕터 CFI)
- * @param {string} bookTitle - 책 제목 (선택적)
- * @returns {number} 감지된 챕터 번호
- */
-export function detectCurrentChapter(cfi, chapterCfiMap = null, bookTitle = null) {
-  if (!cfi) return 1;
-  
-  // Julius Caesar 책 예외 처리
-  const isJuliusCaesar = bookTitle && (
-    bookTitle.toLowerCase().includes('julius caesar') ||
-    bookTitle.toLowerCase().includes('줄리어스 시저')
-  );
-  
-  if (isJuliusCaesar) {
-    return detectJuliusCaesarChapter(cfi);
-  }
-  
-  // 1. [chapter-X] 패턴으로 직접 추출 시도
-  let detectedChapter = cfiUtils.extractChapterNumber(cfi);
-  
-  // 2. chapterCfiMap이 있으면 더 정확한 매칭 시도
-  if (chapterCfiMap && chapterCfiMap.size > 0) {
-    // 현재 CFI에서 spine 인덱스 추출
-    const currentSpineMatch = cfi.match(/\/\d+\/(\d+)!/);
-    const currentSpineIndex = currentSpineMatch ? parseInt(currentSpineMatch[1]) : null;
-    
-    // 2-1. pgepubid 기반 매칭 (가장 정확)
-    const currentPgepubidMatch = cfi.match(/\[pgepubid(\d+)\]/);
-    if (currentPgepubidMatch) {
-      const currentPgepubid = currentPgepubidMatch[1];
-      
-      for (const [chapterNum, chapterCfi] of chapterCfiMap) {
-        if (!chapterCfi) continue;
-        
-        // chapterCfi에서도 pgepubid 추출
-        const chapterPgepubidMatch = chapterCfi.match(/\[pgepubid(\d+)\]/);
-        if (chapterPgepubidMatch && chapterPgepubidMatch[1] === currentPgepubid) {
-          detectedChapter = chapterNum;
-          break;
-        }
-      }
-    }
-    
-    // 2-2. spine 인덱스 기반 매칭 (pgepubid 매칭 실패 시)
-    if (detectedChapter === 1 && currentSpineIndex !== null) {
-      for (const [chapterNum, chapterCfi] of chapterCfiMap) {
-        if (!chapterCfi) continue;
-        
-        // chapterCfi에서 spine 인덱스 추출
-        const chapterSpineMatch = chapterCfi.match(/\/\d+\/(\d+)!/);
-        if (chapterSpineMatch) {
-          const chapterSpineIndex = parseInt(chapterSpineMatch[1]);
-          if (chapterSpineIndex === currentSpineIndex) {
-            detectedChapter = chapterNum;
-            break;
-          }
-        }
-      }
-    }
-    
-    // 2-3. CFI base 경로 매칭 (spine 부분 비교)
-    if (detectedChapter === 1) {
-      for (const [chapterNum, chapterCfi] of chapterCfiMap) {
-        if (!chapterCfi) continue;
-        
-        // chapterCfi의 기본 경로 추출 (spine 부분만)
-        const chapterBase = chapterCfi.split('!')[0];
-        const currentBase = cfi.split('!')[0];
-        
-        // spine 인덱스가 같거나, CFI가 chapterCfi를 포함하는지 확인
-        if (currentBase === chapterBase || cfi.includes(chapterBase)) {
-          detectedChapter = chapterNum;
-          break;
-        }
-      }
-    }
-    
-    // 2-4. 여전히 실패하면 부분 문자열 매칭 (기존 방식)
-    if (detectedChapter === 1) {
-      for (const [chapterNum, chapterCfi] of chapterCfiMap) {
-        if (chapterCfi && cfi.includes(chapterCfi)) {
-          detectedChapter = chapterNum;
-          break;
-        }
-      }
-    }
-  }
-  
-  // 3. chapterCfiMap이 비어있거나 매칭 실패 시 pgepubid 기반 fallback
-  if (detectedChapter === 1) {
-    const currentPgepubidMatch = cfi.match(/\[pgepubid(\d+)\]/);
-    if (currentPgepubidMatch) {
-      const currentPgepubid = parseInt(currentPgepubidMatch[1]);
-      
-      // chapterCfiMap에서 최소 pgepubid 찾기
-      let minPgepubid = null;
-      if (chapterCfiMap && chapterCfiMap.size > 0) {
-        for (const [, chapterCfi] of chapterCfiMap) {
-          if (!chapterCfi) continue;
-          const match = chapterCfi.match(/\[pgepubid(\d+)\]/);
-          if (match) {
-            const pgepubid = parseInt(match[1]);
-            if (minPgepubid === null || pgepubid < minPgepubid) {
-              minPgepubid = pgepubid;
-            }
-          }
-        }
-      }
-      
-      // 최소 pgepubid를 찾지 못했으면 기본값 3 사용 (일반적인 경우)
-      if (minPgepubid === null) {
-        minPgepubid = 3;
-      }
-      
-      // pgepubid 기반 챕터 계산
-      if (currentPgepubid >= minPgepubid) {
-        detectedChapter = currentPgepubid - minPgepubid + 1;
-      } else {
-        // pgepubid가 최소값보다 작으면 1로 설정
-        detectedChapter = 1;
-      }
-    }
-  }
-  
-  return detectedChapter || 1;
-}
-
-/**
- * EPUB CFI를 v2 locator로 변환 (진행/북마크 저장용).
- * @param {Object} bookInstance - epub.js Book
- * @param {string} cfi - CFI 문자열
- * @param {{ chapterCfiMap?: Map, bookTitle?: string }} opts
- * @returns {{ chapterIndex: number, blockIndex: number, offset: number } | null}
- */
-export function cfiToLocator(bookInstance, cfi, opts = {}) {
-  if (!cfi || typeof cfi !== 'string' || !bookInstance) return null;
-  const chapterIndex = detectCurrentChapter(cfi, opts.chapterCfiMap ?? null, opts.bookTitle ?? null);
-  let locIdx = 0;
-  try {
-    const idx = bookInstance.locations?.locationFromCfi?.(cfi);
-    if (Number.isFinite(idx) && idx >= 0) locIdx = idx;
-  } catch (_) {}
-  const locator = toLocator({ chapterIndex, blockIndex: 0, offset: locIdx });
-  return locator;
-}
-
-export function getRefs(bookRef, renditionRef) {
+export function getRefs(xhtmlBookRef, xhtmlViewerRef) {
   return {
-    book: bookRef.current,
-    rendition: renditionRef.current
+    xhtmlBook: xhtmlBookRef?.current,
+    xhtmlViewer: xhtmlViewerRef?.current,
   };
 }
 
-export function withRefs(bookRef, renditionRef, callback) {
-  const { book, rendition } = getRefs(bookRef, renditionRef);
-  if (!book || !rendition) return null;
-  return callback(book, rendition);
+export function withRefs(xhtmlBookRef, xhtmlViewerRef, callback) {
+  const { xhtmlBook, xhtmlViewer } = getRefs(xhtmlBookRef, xhtmlViewerRef);
+  if (!xhtmlBook || !xhtmlViewer) return null;
+  return callback(xhtmlBook, xhtmlViewer);
 }
 
-export function cleanupNavigation(setIsNavigating, rendition, handler) {
+export function cleanupNavigation(setIsNavigating, xhtmlViewer, handler) {
   setIsNavigating(false);
-  if (rendition && handler) {
-    rendition.off('relocated', handler);
+  if (xhtmlViewer && handler && typeof xhtmlViewer.off === 'function') {
+    xhtmlViewer.off('relocated', handler);
   }
 }
 
-export async function ensureLocations(book, chars = 2000) {
-  if (!book) {
-    errorUtils.logWarning('ensureLocations', 'book 객체가 없습니다');
-    return false;
-  }
-  
-  if (!book.locations) {
-    errorUtils.logWarning('ensureLocations', 'book.locations가 없습니다', { 
-      hasBook: !!book,
-      bookKeys: book ? Object.keys(book) : []
-    });
-    return false;
-  }
-  
-  if (!book.locations.length()) {
-    try {
-      errorUtils.logInfo('ensureLocations', `locations 생성 시작 (${chars} chars)`);
-      
-      // 더 작은 값으로 시도해보기
-      let generated = false;
-      for (const charCount of [chars, 1000, 500, 100]) {
-        try {
-          await book.locations.generate(charCount);
-          if (book.locations.length() > 0) {
-            errorUtils.logSuccess('ensureLocations', `locations 생성 완료 (${book.locations.length()} locations, ${charCount} chars)`);
-            generated = true;
-            break;
-          }
-        } catch (generateError) {
-          errorUtils.logWarning('ensureLocations', `locations 생성 실패 (${charCount} chars)`, { generateError });
-          continue;
-        }
-      }
-      
-      if (!generated) {
-        errorUtils.logWarning('ensureLocations', '모든 시도에서 locations 생성 실패');
-        return false;
-      }
-      
-      return true;
-    } catch (error) {
-      errorUtils.logError('ensureLocations', error, { 
-        chars, 
-        hasLocations: !!book.locations,
-        locationsLength: book.locations?.length() || 0
-      });
-      return false;
-    }
-  }
-  
-  return true;
-}
-
-
-// 네비게이션 관련 유틸리티 함수들 (CFI 기반만)
 export const navigationUtils = {
-  async safeNavigate(book, rendition, action, direction = 'next', setIsNavigating, setNavigationError, storageKeys) {
-    if (!book || !rendition) {
-      errorUtils.logWarning('safeNavigate', 'book 또는 rendition이 없습니다', { hasBook: !!book, hasRendition: !!rendition });
+  async safeNavigate(xhtmlBook, xhtmlViewer, action, direction = 'next', setIsNavigating, setNavigationError, storageKeys) {
+    if (!xhtmlBook || !xhtmlViewer) {
+      errorUtils.logWarning('safeNavigate', '책 또는 XHTML 뷰어가 없습니다', {
+        hasXhtmlBook: !!xhtmlBook,
+        hasXhtmlViewer: !!xhtmlViewer,
+      });
       setNavigationError('뷰어가 준비되지 않았습니다.');
-      return { success: false, error: 'book 또는 rendition 없음' };
+      return { success: false, error: '책 또는 XHTML 뷰어 없음' };
     }
     
     setIsNavigating(true);
@@ -728,19 +202,6 @@ export const navigationUtils = {
     }
   }
 };
-
-// 스프레드 모드 결정 함수
-export function getSpreadMode(pageMode, showGraph) {
-    // 분할 화면 + 그래프 화면 (showGraph=true, graphFullScreen=false)에서는 뷰어 너비가 50%로 제한
-  if (showGraph) {
-    // 분할 화면: 50% 너비에 최적화하여 항상 한 페이지씩 표시
-    // pageMode 설정과 관계없이 'none'으로 설정 (50% 너비에서는 두 페이지 표시가 부적절)
-    return 'none';
-  } else {
-    // 전체 화면: pageMode에 따라 spread 모드 결정
-    return pageMode === 'single' ? 'none' : 'always';
-  }
-}
 
 // settingsUtils는 commonSettingsUtils 사용 (이미 import됨)
 export const settingsUtils = commonSettingsUtils;
@@ -1030,19 +491,23 @@ export const bookUtils = {
    * @returns {Object} 생성된 책 객체
    */
   createBookObject: ({ stateBook, matchedServerBook, serverBook, bookId, loadingServerBook }) => {
+    const localFile = stateBook?.xhtmlFile;
+    const localBuf = stateBook?.xhtmlArrayBuffer;
+    const hasLocal = !!(localFile || localBuf);
+
     if (stateBook) {
       if (matchedServerBook && typeof matchedServerBook.id === 'number') {
         const indexedDbKey = String(matchedServerBook.id);
 
         return {
           ...matchedServerBook,
-          epubFile: stateBook.epubFile,
-          epubArrayBuffer: stateBook.epubArrayBuffer,
+          xhtmlFile: localFile,
+          xhtmlArrayBuffer: localBuf,
           filename: String(matchedServerBook.id ?? bookId),
           _indexedDbId: indexedDbKey,
-          _needsLoad: !stateBook.epubFile && !stateBook.epubArrayBuffer,
+          _needsLoad: !hasLocal,
           _bookId: matchedServerBook.id,
-          epubPath: undefined,
+          xhtmlPath: undefined,
           filePath: undefined,
           s3Path: undefined,
           fileUrl: undefined
@@ -1051,16 +516,17 @@ export const bookUtils = {
 
       const stateBookId = stateBook.id || stateBook._bookId || bookId;
       const indexedDbKey = stateBookId ? String(stateBookId) : null;
+      const stateRest = { ...stateBook };
 
       return {
-        ...stateBook,
-        epubFile: stateBook.epubFile,
-        epubArrayBuffer: stateBook.epubArrayBuffer,
+        ...stateRest,
+        xhtmlFile: localFile,
+        xhtmlArrayBuffer: localBuf,
         filename: bookId,
         _indexedDbId: indexedDbKey,
-        _needsLoad: !stateBook.epubFile && !stateBook.epubArrayBuffer,
+        _needsLoad: !hasLocal,
         _bookId: stateBook.id || stateBook._bookId || bookId,
-        epubPath: undefined,
+        xhtmlPath: undefined,
         filePath: undefined,
         s3Path: undefined,
         fileUrl: undefined
@@ -1076,7 +542,7 @@ export const bookUtils = {
         _needsLoad: true,
         _indexedDbId: indexedDbKey,
         _bookId: serverBook.id,
-        epubPath: undefined,
+        xhtmlPath: undefined,
         filePath: undefined,
         s3Path: undefined,
         fileUrl: undefined
@@ -1093,7 +559,7 @@ export const bookUtils = {
       _needsLoad: true,
       _indexedDbId: indexedDbKey,
       _bookId: !isNaN(numericBookId) ? numericBookId : bookId,
-      epubPath: undefined
+      xhtmlPath: undefined
     };
   }
 };

@@ -25,12 +25,10 @@ const ViewerProgressBar = ({
       maxWidth: 700,
     }}
   >
-    {/* 좌측: 현재 페이지 / 전체 페이지 */}
     <span style={{ fontWeight: 700, color: '#22336b', fontSize: '1.08rem', minWidth: 70 }}>
       {currentPage} / {totalPages}
     </span>
 
-    {/* 중앙: 슬라이더 */}
     <input
       type="range"
       min="0"
@@ -55,7 +53,6 @@ const ViewerProgressBar = ({
       className="progressbar-slider"
     />
 
-    {/* 우측: 진행률 % */}
     <span style={{ fontWeight: 700, color: barColor, fontSize: '1.08rem', minWidth: 60, textAlign: 'right' }}>
       {Math.max(0, Math.min(progress, 100))}%
     </span>

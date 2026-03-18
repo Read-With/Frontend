@@ -76,7 +76,7 @@ const XhtmlViewer = forwardRef(
     const [contentHeight, setContentHeight] = useState(0);
     const [currentPageIndex, setCurrentPageIndex] = useState(0);
     const touchStartX = useRef(0);
-    const lastAnchorRef = useRef(null);
+    const lastLocatorRef = useRef(null);
     const metaRef = useRef(null);
     const initialAnchorAppliedRef = useRef(false);
     const lineBoundsRef = useRef([]);
@@ -126,13 +126,13 @@ const XhtmlViewer = forwardRef(
 
     const bid = bookId || book?.id || book?.filename || '';
 
-    const emitAnchor = useCallback(
-      (anchor) => {
-        if (!anchor || JSON.stringify(anchor) === JSON.stringify(lastAnchorRef.current)) return;
-        lastAnchorRef.current = anchor;
-        const { chapterIndex } = anchor.start || anchor;
+    const emitLocator = useCallback(
+      (loc) => {
+        if (!loc?.startLocator || JSON.stringify(loc) === JSON.stringify(lastLocatorRef.current)) return;
+        lastLocatorRef.current = loc;
+        const { chapterIndex } = loc.startLocator;
         onCurrentChapterChange?.(chapterIndex);
-        onCurrentLineChange?.(0, 0, { anchor });
+        onCurrentLineChange?.(0, 0, { anchor: loc });
       },
       [onCurrentChapterChange, onCurrentLineChange]
     );
@@ -263,9 +263,9 @@ const XhtmlViewer = forwardRef(
         const startLoc = getBlockLocator(startBlock, startOffset);
         const endLoc = getBlockLocator(endBlock, endOffset);
         if (startLoc && endLoc) {
-          emitAnchor({
-            start: startLoc,
-            end: endLoc,
+          emitLocator({
+            startLocator: startLoc,
+            endLocator: endLoc,
           });
         }
       }, 300);
@@ -274,14 +274,15 @@ const XhtmlViewer = forwardRef(
         io.disconnect();
         clearInterval(interval);
       };
-    }, [xhtmlContent, emitAnchor]);
+    }, [xhtmlContent, emitLocator]);
 
     useEffect(() => {
       if (!xhtmlContent || !rulerRef.current || !pageHeight || initialAnchorAppliedRef.current) return;
       const ruler = rulerRef.current;
       let el = null;
-      if (initialAnchor?.start || initialAnchor?.chapterIndex != null) {
-        const { chapterIndex: c, blockIndex: b } = initialAnchor.start || initialAnchor;
+      const initLoc = initialAnchor?.startLocator ?? initialAnchor?.start ?? initialAnchor;
+      if (initLoc?.chapterIndex != null || initLoc?.chapterIdx != null) {
+        const { chapterIndex: c, blockIndex: b } = initLoc;
         el = ruler.querySelector(`[data-chapter-index="${c}"][data-block-index="${b ?? 0}"]`);
       } else if (initialChapter != null) {
         el = ruler.querySelector(`[data-chapter-index="${initialChapter}"]`);
@@ -344,12 +345,7 @@ const XhtmlViewer = forwardRef(
     useImperativeHandle(ref, () => ({
       prevPage,
       nextPage,
-      getCurrentAnchor: () => lastAnchorRef.current,
-      getCurrentLocator: () => lastAnchorRef.current,
-      getCurrentCfi: () => {
-        const a = lastAnchorRef.current;
-        return a ? JSON.stringify(a) : null;
-      },
+      getCurrentLocator: () => lastLocatorRef.current,
       moveToProgress: (pct) => {
         const idx = Math.min(totalPages - 1, Math.max(0, Math.round((pct / 100) * (totalPages - 1))));
         setCurrentPageIndex(idx);

@@ -92,12 +92,14 @@ const BookmarksPage = () => {
   const filterBySearch = useCallback((bookmark, term) => {
     if (!term) return true;
     const lower = term.toLowerCase();
+    const loc = bookmark.startLocator;
+    const locStr = loc && Number.isFinite(loc.chapterIndex) ? `챕터 ${loc.chapterIndex}` : '';
     const candidate = [
       bookmark.memo,
       bookmark.highlightText,
       bookmark.textSnippet,
       bookmark.chapterTitle,
-      bookmark.startCfi,
+      locStr,
     ].filter(Boolean).join(' ').toLowerCase();
     return candidate.includes(lower);
   }, []);

@@ -23,8 +23,16 @@ const toNumber = (v) => {
 
 export const anchorToLocators = (anchor) => {
   if (!anchor) return { startLocator: null, endLocator: null };
-  const start = toLocator(anchor.start ?? anchor);
-  const end = toLocator(anchor.end ?? anchor.start ?? anchor);
+  const start =
+    toLocator(anchor.startLocator) ??
+    toLocator(anchor.start) ??
+    (Number.isFinite(Number(anchor.chapterIndex)) || Number.isFinite(Number(anchor.chapterIdx)) ? toLocator(anchor) : null);
+  const end =
+    toLocator(anchor.endLocator) ??
+    toLocator(anchor.end) ??
+    toLocator(anchor.startLocator) ??
+    toLocator(anchor.start) ??
+    start;
   return {
     startLocator: start,
     endLocator: end ?? start,
@@ -33,8 +41,15 @@ export const anchorToLocators = (anchor) => {
 
 export const progressPayloadFromData = (data) => {
   if (!data?.bookId) return null;
-  const start = data.startLocator ?? (data.anchor && (toLocator(data.anchor.start) ?? toLocator(data.anchor)));
-  const end = data.endLocator ?? (data.anchor && (toLocator(data.anchor.end) ?? toLocator(data.anchor.start) ?? toLocator(data.anchor)));
+  const a = data.anchor;
+  const start =
+    data.startLocator ??
+    toLocator(data.locator) ??
+    (a && (toLocator(a.startLocator) ?? toLocator(a.start) ?? toLocator(a)));
+  const end =
+    data.endLocator ??
+    (a && (toLocator(a.endLocator) ?? toLocator(a.end) ?? toLocator(a.startLocator) ?? toLocator(a.start) ?? toLocator(a))) ??
+    start;
   if (!start) return null;
   return {
     bookId: data.bookId,

@@ -150,7 +150,7 @@ export function useViewerPage() {
   }, [book, bookId, getServerBookId]);
 
   const [progress, setProgress] = useLocalStorageNumber(`progress_${cleanBookId}`, 0);
-  const [settings, setSettings] = useLocalStorage('epub_viewer_settings', defaultSettings);
+  const [settings, setSettings] = useLocalStorage('xhtml_viewer_settings', defaultSettings);
 
   const folderKey = useMemo(() => {
     const key = getFolderKeyFromFilename(bookId);
@@ -264,7 +264,7 @@ export function useViewerPage() {
   });
   
   // 페이지 변경 시 현재 챕터 번호 업데이트
-  // handleLocationChange에서 이미 로컬 CFI 기반으로 챕터를 업데이트하므로 중복 제거
+  // handleLocationChange에서 locator 기반 챕터 업데이트와 중복 방지
   
   // currentChapter가 바뀔 때 즉시 상태 초기화
   useEffect(() => {
@@ -466,13 +466,15 @@ export function useViewerPage() {
           attempts++;
         }
 
-        const saved = await viewerRef.current?.getCurrentLocator?.() ?? await viewerRef.current?.getCurrentCfi?.();
-        let displayTarget = saved;
-        if (typeof saved === 'string' && saved.trim().startsWith('{')) {
-          try {
-            displayTarget = JSON.parse(saved);
-          } catch (_) {}
-        }
+        const saved = await viewerRef.current?.getCurrentLocator?.();
+        let displayTarget =
+          saved?.startLocator
+            ? saved
+            : saved?.start
+              ? { startLocator: saved.start, endLocator: saved.end ?? saved.start }
+              : saved && typeof saved === 'object'
+                ? saved
+                : null;
 
         viewerRef.current?.applySettings?.();
         await new Promise(resolve => setTimeout(resolve, 150));
@@ -496,21 +498,16 @@ export function useViewerPage() {
   const handleLocationChange = useCallback(async () => {
     if (!viewerRef.current) return;
     try {
-      let anchor = await viewerRef.current.getCurrentLocator?.();
-      if (!anchor?.start && viewerRef.current.getCurrentCfi) {
-        const cfi = await viewerRef.current.getCurrentCfi();
-        if (typeof cfi === 'string' && cfi.trim().startsWith('{')) {
-          try {
-            anchor = JSON.parse(cfi);
-          } catch (_) {}
-        }
-      }
-      if (anchor?.start) {
-        setCurrentChapter(anchor.start.chapterIndex);
+      const loc = await viewerRef.current.getCurrentLocator?.();
+      const start = loc?.startLocator ?? loc?.start;
+      if (start) {
+        const end = loc?.endLocator ?? loc?.end ?? start;
+        const anchor = loc?.startLocator ? { startLocator: loc.startLocator, endLocator: end } : { start, end };
+        setCurrentChapter(start.chapterIndex);
         setCurrentEvent({
           anchor,
-          chapter: anchor.start.chapterIndex,
-          chapterIdx: anchor.start.chapterIndex,
+          chapter: start.chapterIndex,
+          chapterIdx: start.chapterIndex,
           eventIdx: 1,
           eventNum: 1,
           placeholder: true,

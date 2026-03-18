@@ -7,8 +7,8 @@ export const useBookmarkSort = (bookmarks, sortOrder) => {
     const sorted = [...bookmarks];
     if (sortOrder === 'position') {
       return sorted.sort((a, b) => {
-        const keyA = getLocatorSortKey(a.startLocator) || (a.startCfi || '');
-        const keyB = getLocatorSortKey(b.startLocator) || (b.startCfi || '');
+        const keyA = getLocatorSortKey(a.startLocator) || '';
+        const keyB = getLocatorSortKey(b.startLocator) || '';
         return keyA.localeCompare(keyB);
       });
     }

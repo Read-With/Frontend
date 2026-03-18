@@ -298,7 +298,7 @@ export const saveProgress = async (progressData) => {
   try {
     const payload = progressPayloadFromData(progressData);
     if (!payload) {
-      throw new Error('bookId와 startLocator(또는 anchor)는 필수입니다.');
+      throw new Error('bookId와 startLocator는 필수입니다.');
     }
     const response = await apiRequest('/api/v2/progress', {
       method: 'POST',

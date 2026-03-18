@@ -314,7 +314,7 @@ export default function MyPage() {
                       {isSearching 
                         ? `"${searchQuery}"에 대한 검색 결과가 없습니다. 다른 키워드로 검색해보세요.`
                         : activeTab === 'all' 
-                        ? '우측 하단의 + 버튼을 눌러서 첫 번째 책을 추가해보세요. EPUB 파일을 업로드하면 바로 읽을 수 있어요!'
+                        ? '우측 하단의 + 버튼으로 책을 추가하세요. XHTML 뷰어에서 바로 읽을 수 있어요.'
                         : activeTab === 'favorites'
                         ? '즐겨찾기한 책이 아직 없어요. 책을 즐겨찾기하면 여기에 표시됩니다.'
                         : '해당하는 책이 없습니다.'}

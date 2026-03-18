@@ -4,7 +4,7 @@ import "react-toastify/dist/ReactToastify.css";
 import ViewerLayout from "./ViewerLayout";
 import XhtmlViewer from "./xhtml/XhtmlViewer";
 import BookmarkPanel from "./bookmark/BookmarkPanel";
-import ViewerSettings from "./epub/ViewerSettings";
+import ViewerSettings from "./ui/ViewerSettings";
 import { useViewerPage } from "../../hooks/viewer/useViewerPage";
 import { useGraphSearch } from "../../hooks/graph/useGraphSearch";
 import { useTransitionState } from "../../hooks/ui/useTransitionState";
@@ -13,6 +13,7 @@ import { useTooltipState } from "../../hooks/ui/useTooltipState";
 import { useCachedLocation } from "../../hooks/viewer/useCachedLocation";
 import { getBookProgress, getFineGraph, getBookManifest } from "../../utils/api/api";
 import { getProgressFromCache } from "../../utils/common/cache/progressCache";
+import { toLocator } from "../../utils/common/locatorUtils";
 import { getGraphEventState, getCachedChapterEvents, isGraphBookCacheBuilding, ensureGraphBookCache } from "../../utils/common/cache/chapterEventCache";
 import { getManifestFromCache } from "../../utils/common/cache/manifestCache";
 import { 
@@ -152,14 +153,12 @@ const ViewerPage = () => {
   const currentEventKey = React.useMemo(() => {
     if (!currentEvent || currentEvent.placeholder) return null;
     if (currentEvent.chapter && Number(currentEvent.chapter) !== Number(currentChapter)) return null;
-    
     return {
       chapter: currentChapter,
       eventIdx: eventUtils.extractRawEventIdx(currentEvent),
       eventNum: currentEvent.eventNum ?? currentEvent.eventIdx,
-      cfi: currentEvent.cfi ?? null
     };
-  }, [currentChapter, currentEvent?.eventNum, currentEvent?.eventIdx, currentEvent?.cfi, currentEvent?.placeholder, currentEvent?.chapter]);
+  }, [currentChapter, currentEvent?.eventNum, currentEvent?.eventIdx, currentEvent?.placeholder, currentEvent?.chapter]);
 
   useEffect(() => {
     if (!bookKey || !currentEventKey) {
@@ -179,8 +178,12 @@ const ViewerPage = () => {
       Number.isFinite(cachedChapterIdx) &&
       cachedChapterIdx > 0 &&
       Number(cachedChapterIdx) === Number(currentEventKey.chapter);
-    const cachedStart = currentCachedLocation?.startLocator ?? currentCachedLocation?.anchor?.start;
-    const keyStart = currentEvent?.anchor?.start;
+    const cachedStart =
+      currentCachedLocation?.startLocator ??
+      currentCachedLocation?.anchor?.startLocator ??
+      currentCachedLocation?.anchor?.start;
+    const keyStart =
+      currentEvent?.anchor?.startLocator ?? currentEvent?.anchor?.start;
     const sameByLocator = keyStart && cachedStart &&
       cachedStart.chapterIndex === keyStart.chapterIndex &&
       (cachedStart.blockIndex ?? 0) === (keyStart.blockIndex ?? 0) &&
@@ -189,22 +192,23 @@ const ViewerPage = () => {
       isSameChapter &&
       hasCachedEventIdx &&
       cachedEventIdxValue === resolvedIdx &&
-      (sameByLocator || ((currentCachedLocation?.cfi ?? null) === currentEventKey.cfi));
+      sameByLocator;
 
     if (isSameEvent) {
       return;
     }
 
     const anchor = currentEvent?.anchor;
+    const startL = anchor?.startLocator ?? anchor?.start;
+    const endL = anchor?.endLocator ?? anchor?.end ?? startL;
     saveLocation({
       bookId: typeof book?.id === 'number' ? book.id : null,
       chapterIdx: currentEventKey.chapter,
       eventIdx: resolvedIdx,
       eventNum: currentEventKey.eventNum ?? resolvedIdx,
       eventId: currentEvent?.event_id ?? currentEvent?.eventId ?? currentEvent?.id ?? null,
-      cfi: currentEventKey.cfi,
-      startLocator: anchor?.start ?? undefined,
-      endLocator: anchor?.end ?? anchor?.start ?? undefined,
+      startLocator: startL ?? undefined,
+      endLocator: endL ?? undefined,
       eventName:
         currentEvent?.event?.name ??
         currentEvent?.event?.title ??
@@ -321,8 +325,12 @@ const ViewerPage = () => {
         const progressRes = await getBookProgress(serverBookId);
         if (progressRes?.isSuccess && progressRes?.result) {
           const r = progressRes.result;
-          const start = r.startLocator ?? r.anchor?.start;
-          if (start) setInitialProgressAnchor({ start, end: r.endLocator ?? r.anchor?.end ?? start });
+          const start =
+            r.startLocator ?? toLocator(r.locator) ?? r.anchor?.startLocator ?? r.anchor?.start;
+          if (start) {
+            const end = r.endLocator ?? r.anchor?.endLocator ?? r.anchor?.end ?? start;
+            setInitialProgressAnchor({ startLocator: start, endLocator: end });
+          }
         }
       } catch (progressError) {
         // 조용히 처리
@@ -1018,7 +1026,11 @@ const ViewerPage = () => {
             onCurrentLineChange: (charIndex, totalEvents, receivedEvent) => {
               setCurrentCharIndex(charIndex);
               if (receivedEvent) {
-                const chapter = receivedEvent.chapter ?? (receivedEvent.anchor?.start ? receivedEvent.anchor.start.chapterIndex : null);
+                const chapter =
+                  receivedEvent.chapter ??
+                  receivedEvent.anchor?.startLocator?.chapterIndex ??
+                  receivedEvent.anchor?.start?.chapterIndex ??
+                  null;
                 if (chapter && chapter !== currentChapter) {
                   setCurrentChapter(chapter);
                 }

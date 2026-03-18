@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
-import ViewerToolbar from './epub/ViewerToolbar';
-import ViewerProgressBar from './epub/ViewerProgressbar';
+import ViewerToolbar from './ui/ViewerToolbar';
+import ViewerProgressBar from './ui/ViewerProgressbar';
 
 const ViewerLayout = ({
   children,
@@ -26,7 +26,7 @@ const ViewerLayout = ({
 
   useEffect(() => {
     // 그래프 표시/레이아웃 변경 시 뷰어 리사이즈
-    // pageMode 설정도 함께 고려하여 spread 모드가 유지되도록 함
+    // pageMode(단면/양면) 변경 시 레이아웃 재계산
     const resizeEvent = window.setTimeout(() => {
       window.dispatchEvent(new Event('resize'));
     }, 300);

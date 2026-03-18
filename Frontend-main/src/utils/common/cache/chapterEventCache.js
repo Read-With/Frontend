@@ -608,7 +608,10 @@ const normalizeReaderProgressPayload = (bookKey, payload) => {
     eventIdx: normalizedEventIdx,
     eventNum: normalizedEventNum,
     eventId: payload.eventId ?? payload.event_id ?? payload.id ?? null,
-    cfi: typeof payload.cfi === 'string' ? payload.cfi : null,
+    startLocator:
+      payload.startLocator ?? payload.anchor?.startLocator ?? payload.anchor?.start ?? undefined,
+    endLocator:
+      payload.endLocator ?? payload.anchor?.endLocator ?? payload.anchor?.end ?? undefined,
     eventName:
       payload.eventName ??
       payload.eventTitle ??

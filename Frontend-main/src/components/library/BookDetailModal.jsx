@@ -391,13 +391,10 @@ const BookDetailModal = memo(({ book, isOpen, onClose, onDelete }) => {
                           이벤트 {progressInfo.eventIdx}
                         </div>
                       )}
-                      {progressInfo.cfi && (
-                        <div className="book-detail-progress-item" style={{ 
-                          fontSize: '0.8em',
-                          color: '#6b7280',
-                          wordBreak: 'break-all'
-                        }}>
-                          위치: {progressInfo.cfi.substring(0, 50)}...
+                      {(progressInfo.startLocator?.chapterIndex ?? progressInfo.chapterIdx) && (
+                        <div className="book-detail-progress-item" style={{ fontSize: '0.8em', color: '#6b7280' }}>
+                          위치: {progressInfo.startLocator?.chapterIndex ?? progressInfo.chapterIdx}챕터
+                          {Number.isFinite(progressInfo.startLocator?.blockIndex) && ` (block ${progressInfo.startLocator.blockIndex})`}
                         </div>
                       )}
                     </div>

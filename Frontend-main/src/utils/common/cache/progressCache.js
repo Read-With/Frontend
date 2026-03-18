@@ -29,10 +29,28 @@ const saveProgressCacheToStorage = (progressMap) => {
   });
 };
 
+const resolveProgressEndpoints = (raw) => {
+  if (!raw) return { start: null, end: null };
+  const a = raw.anchor;
+  const start =
+    raw.startLocator ??
+    toLocator(raw.locator) ??
+    (a && (toLocator(a.startLocator) ?? toLocator(a.start) ?? toLocator(a)));
+  const end =
+    raw.endLocator ??
+    (a &&
+      (toLocator(a.endLocator) ??
+        toLocator(a.end) ??
+        toLocator(a.startLocator) ??
+        toLocator(a.start) ??
+        toLocator(a))) ??
+    start;
+  return { start: start ?? null, end: (end ?? start) ?? null };
+};
+
 const toStoredProgress = (item) => {
   if (!item || item.bookId == null) return null;
-  const start = item.startLocator ?? (item.anchor && (toLocator(item.anchor.start) ?? toLocator(item.anchor)));
-  const end = item.endLocator ?? (item.anchor && (toLocator(item.anchor.end) ?? toLocator(item.anchor.start) ?? toLocator(item.anchor)));
+  const { start, end } = resolveProgressEndpoints(item);
   if (!start) return { bookId: item.bookId, startLocator: null, endLocator: null };
   return {
     bookId: item.bookId,
@@ -43,16 +61,15 @@ const toStoredProgress = (item) => {
 
 const fromStoredProgress = (stored) => {
   if (!stored) return null;
-  const start = stored.startLocator ?? (stored.anchor && (toLocator(stored.anchor.start) ?? toLocator(stored.anchor)));
-  const end = stored.endLocator ?? (stored.anchor && (toLocator(stored.anchor.end) ?? toLocator(stored.anchor.start) ?? toLocator(stored.anchor)));
-  const startLocator = start ?? null;
-  const endLocator = end ?? start ?? null;
-  const anchor = startLocator ? { start: startLocator, end: endLocator ?? startLocator } : stored.anchor ?? null;
+  const { start: startLocator, end: endLocator } = resolveProgressEndpoints(stored);
+  const end = endLocator ?? startLocator;
+  const anchor =
+    startLocator != null ? { startLocator, endLocator: end ?? startLocator } : undefined;
   return {
     bookId: stored.bookId,
     startLocator: startLocator ?? undefined,
-    endLocator: endLocator ?? undefined,
-    anchor: anchor ?? undefined,
+    endLocator: end ?? undefined,
+    anchor,
     chapterIdx: startLocator?.chapterIndex ?? stored.chapterIdx,
   };
 };
@@ -104,10 +121,7 @@ export const getProgressFromCache = (bookId) => {
 };
 
 export const removeProgressFromCache = (bookId) => {
-  if (!bookId) {
-    return;
-  }
-
+  if (!bookId) return;
   const bookIdStr = String(bookId);
   removeCacheItem('progressCache', bookIdStr);
 
@@ -121,27 +135,19 @@ export const removeProgressFromCache = (bookId) => {
 export const getAllProgressFromCache = () => {
   const cached = getProgressCacheFromStorage();
   const allProgress = [];
-  const processedBookIds = new Set();
+  const seen = new Set();
 
-  progressCache.forEach?.((value, bookId) => {
-    if (value && !processedBookIds.has(bookId)) {
-      const restored = fromStoredProgress(value);
-      if (restored) {
-        allProgress.push(restored);
-        processedBookIds.add(bookId);
-      }
+  const pushUnique = (bookId, row) => {
+    if (!row || seen.has(bookId)) return;
+    const restored = fromStoredProgress(row);
+    if (restored) {
+      allProgress.push(restored);
+      seen.add(bookId);
     }
-  });
+  };
 
-  Object.entries(cached ?? {}).forEach(([bookId, progress]) => {
-    if (progress && !processedBookIds.has(bookId)) {
-      const restored = fromStoredProgress(progress);
-      if (restored) {
-        allProgress.push(restored);
-        processedBookIds.add(bookId);
-      }
-    }
-  });
+  progressCache.forEach?.((value, bookId) => pushUnique(bookId, value));
+  Object.entries(cached ?? {}).forEach(([bookId, progress]) => pushUnique(bookId, progress));
 
   return allProgress;
 };

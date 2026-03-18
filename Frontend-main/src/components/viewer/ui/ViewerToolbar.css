@@ -1,5 +1,5 @@
-/* EPUB 뷰어 툴바 버튼 스타일 */
-.epub-toolbar-btn {
+/* XHTML 뷰어 툴바 버튼 스타일 */
+.xhtml-toolbar-btn {
   display: flex;
   align-items: center;
   gap: 0.5em;
@@ -16,43 +16,43 @@
   outline: none;
 }
 
-.epub-toolbar-btn:hover {
+.xhtml-toolbar-btn:hover {
   background: #f9fafb;
   border-color: #d1d5db;
 }
 
-.epub-toolbar-btn:active {
+.xhtml-toolbar-btn:active {
   transform: translateY(1px);
 }
 
-.epub-toolbar-btn:focus {
+.xhtml-toolbar-btn:focus {
   outline: 2px solid #3b82f6;
   outline-offset: 2px;
 }
 
-.epub-toolbar-btn--primary {
+.xhtml-toolbar-btn--primary {
   background: #3b82f6;
   color: #ffffff;
   border-color: #3b82f6;
 }
 
-.epub-toolbar-btn--primary:hover {
+.xhtml-toolbar-btn--primary:hover {
   background: #5C6F5C;
   border-color: #5C6F5C;
 }
 
-.epub-toolbar-btn--secondary {
+.xhtml-toolbar-btn--secondary {
   background: #6b7280;
   color: #ffffff;
   border-color: #6b7280;
 }
 
-.epub-toolbar-btn--secondary:hover {
+.xhtml-toolbar-btn--secondary:hover {
   background: #4b5563;
   border-color: #4b5563;
 }
 
-.epub-bookmark-btn {
+.xhtml-bookmark-btn {
   display: block;
   width: 100%;
   padding: 8px 12px;
@@ -68,11 +68,11 @@
   text-align: left;
 }
 
-.epub-bookmark-btn:hover {
+.xhtml-bookmark-btn:hover {
   background: #f9fafb;
 }
 
-.epub-close-btn {
+.xhtml-close-btn {
   position: absolute;
   top: 8px;
   right: 8px;
@@ -91,7 +91,7 @@
   z-index: 100;
 }
 
-.epub-close-btn:hover {
+.xhtml-close-btn:hover {
   background: #f9fafb;
   border-color: #d1d5db;
 }

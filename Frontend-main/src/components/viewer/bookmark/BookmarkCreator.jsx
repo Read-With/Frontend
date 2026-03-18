@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { toast } from 'react-toastify';
 import { useBookmarks } from '../../../hooks/bookmarks/useBookmarks';
-import { bookmarkColorPalette, createBookmarkData, createBookmarkTitle, isValidLocator, parseCfiToChapterPage } from '../../../utils/bookmarkUtils';
+import { bookmarkColorPalette, createBookmarkData, createBookmarkTitle, isValidLocator } from '../../../utils/bookmarkUtils';
 
-const BookmarkCreator = ({ bookId, startLocator, endLocator, startCfi, endCfi, bookmark, onClose, onSuccess }) => {
+const BookmarkCreator = ({ bookId, startLocator, endLocator, bookmark, onClose, onSuccess }) => {
   const isEditMode = !!bookmark;
   const [memo, setMemo] = useState('');
   const [color, setColor] = useState('#28B532');
@@ -54,15 +54,13 @@ const BookmarkCreator = ({ bookId, startLocator, endLocator, startCfi, endCfi, b
         setLoading(false);
       }
     } else {
-      if (!bookId || (!hasLocator && !startCfi)) return;
+      if (!bookId || !hasLocator) return;
 
       setLoading(true);
       try {
-        const title = hasLocator ? createBookmarkTitle(null, loc.chapterIndex, null, null) : parseCfiToChapterPage(startCfi);
+        const title = createBookmarkTitle(null, loc.chapterIndex, null);
         const bookmarkData = createBookmarkData(
           bookId,
-          hasLocator ? null : (startCfi ?? null),
-          hasLocator ? null : (endCfi ?? null),
           color,
           memo.trim(),
           title,
@@ -152,15 +150,13 @@ const BookmarkCreator = ({ bookId, startLocator, endLocator, startCfi, endCfi, b
           <div className="bg-gray-50 rounded-lg p-3">
             <div className="text-xs text-gray-600 mb-1">위치 정보</div>
             <div className="text-sm font-mono text-gray-800 break-all">
-              {hasLocator ? `${loc.chapterIndex}챕터 (block ${loc.blockIndex ?? 0}, offset ${loc.offset ?? 0})` : (isEditMode ? bookmark?.startCfi : startCfi) || '-'}
+              {hasLocator ? `${loc.chapterIndex}챕터 (block ${loc.blockIndex ?? 0}, offset ${loc.offset ?? 0})` : '-'}
             </div>
-            {(hasLocator ? (endLocator ?? bookmark?.endLocator) : (isEditMode ? bookmark?.endCfi : endCfi)) && (
+            {(endLocator ?? bookmark?.endLocator) && (
               <>
                 <div className="text-xs text-gray-600 mt-2 mb-1">종료 위치</div>
                 <div className="text-sm font-mono text-gray-800 break-all">
-                  {endLocator ?? bookmark?.endLocator
-                    ? `${(endLocator ?? bookmark?.endLocator).chapterIndex}챕터`
-                    : (isEditMode ? bookmark?.endCfi : endCfi)}
+                  {(endLocator ?? bookmark?.endLocator).chapterIndex}챕터
                 </div>
               </>
             )}

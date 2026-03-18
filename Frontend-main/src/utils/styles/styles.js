@@ -51,7 +51,7 @@ const createFocusStyle = () => ({
   },
 });
 
-// 통일된 버튼 스타일 (epub-toolbar-btn 기준)
+// 통일된 버튼 스타일 (xhtml-toolbar-btn 기준)
 export const createButtonStyle = (animationValues, variant = 'default') => {
   const baseStyle = {
     display: 'flex',

@@ -68,7 +68,7 @@ const BookmarkPanel = ({ bookId, onSelect, onDelete }) => {
                 className="group relative"
               >
                 <button
-                  onClick={() => onSelect?.(bookmark.startLocator ?? bookmark.startCfi)}
+                  onClick={() => bookmark.startLocator && onSelect?.({ start: bookmark.startLocator })}
                   className="w-full text-left p-3 rounded-lg transition-all duration-200 hover:bg-green-50 focus:bg-green-50 focus:outline-none focus:ring-2 focus:ring-green-200"
                 >
                   <div className="flex items-start justify-between">

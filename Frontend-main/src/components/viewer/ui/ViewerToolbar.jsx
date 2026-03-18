@@ -43,9 +43,8 @@ const ViewerToolbar = ({
       : '분할 뷰어모드';
 
   const handleGraphClick = () => {
-    // book 정보가 있으면 함께 전달, 없으면 bookId만 사용하여 RelationGraphWrapper로 이동
     const bookData = book || {
-      title: bookId.replace('.epub', '').replace(/([A-Z])/g, ' $1').trim(),
+      title: String(bookId || '').replace(/\.(xhtml|html|htm)$/i, '').replace(/([A-Z])/g, ' $1').trim(),
       author: '알 수 없음',
       path: `/${bookId}`,
       filename: bookId
@@ -61,10 +60,9 @@ const ViewerToolbar = ({
         pathname: currentPathname,
         search: currentSearch
       };
-    
-    // RelationGraphWrapper 컴포넌트로 이동 (절대 경로 사용)
-    navigate(`/user/graph/${bookId}`, { 
-      state: { 
+
+    navigate(`/user/graph/${bookId}`, {
+      state: {
         book: bookData,
         fromLibrary: isFromLibrary,
         from: previousLocation,
@@ -145,13 +143,13 @@ const ViewerToolbar = ({
         <div className="viewer-toolbar-group-wrap" style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', width: '100%', justifyContent: 'space-between' }}>
         <div style={{ display: 'flex', alignItems: 'center' }}>
           <div className="toolbar-group" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginRight: '2rem' }}>
-            <button onClick={onPrev} className="epub-toolbar-btn" aria-label="이전 페이지" title="이전 페이지로 이동" style={TOOLBAR_BTN} onMouseOver={onBtnOver} onMouseOut={onBtnOut}>
+            <button onClick={onPrev} className="xhtml-toolbar-btn" aria-label="이전 페이지" title="이전 페이지로 이동" style={TOOLBAR_BTN} onMouseOver={onBtnOver} onMouseOut={onBtnOut}>
               <span style={{ display: 'flex', alignItems: 'center', gap: '0.45em' }}>
                 <span className="material-symbols-outlined" style={{ marginBottom: '-2px' }}>arrow_back</span>
                 이전
               </span>
             </button>
-            <button onClick={onNext} className="epub-toolbar-btn" aria-label="다음 페이지" title="다음 페이지로 이동" style={TOOLBAR_BTN} onMouseOver={onBtnOver} onMouseOut={onBtnOut}>
+            <button onClick={onNext} className="xhtml-toolbar-btn" aria-label="다음 페이지" title="다음 페이지로 이동" style={TOOLBAR_BTN} onMouseOver={onBtnOver} onMouseOut={onBtnOut}>
               <span style={{ display: 'flex', alignItems: 'center', gap: '0.45em' }}>
                 다음
                 <span className="material-symbols-outlined" style={{ marginBottom: '-2px' }}>arrow_forward</span>
@@ -159,13 +157,13 @@ const ViewerToolbar = ({
             </button>
           </div>
           <div className="toolbar-group" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginRight: '1rem' }}>
-            <button onClick={onAddBookmark} className="epub-toolbar-btn" aria-label="북마크" title="현재 위치에 북마크 추가" style={{ ...TOOLBAR_BTN, width: '7rem' }} onMouseOver={onBtnOver} onMouseOut={onBtnOut}>
+            <button onClick={onAddBookmark} className="xhtml-toolbar-btn" aria-label="북마크" title="현재 위치에 북마크 추가" style={{ ...TOOLBAR_BTN, width: '7rem' }} onMouseOver={onBtnOver} onMouseOut={onBtnOut}>
               <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.45em', width: '100%' }}>
                 <span className="material-symbols-outlined" style={{ marginBottom: '-2px' }}>bookmark_add</span>
                 북마크
               </span>
             </button>
-            <button onClick={onToggleBookmarkList} className="epub-toolbar-btn" aria-label="북마크 목록" title="북마크 목록 보기/숨기기" style={{ ...TOOLBAR_BTN, width: '9rem' }} onMouseOver={onBtnOver} onMouseOut={onBtnOut}>
+            <button onClick={onToggleBookmarkList} className="xhtml-toolbar-btn" aria-label="북마크 목록" title="북마크 목록 보기/숨기기" style={{ ...TOOLBAR_BTN, width: '9rem' }} onMouseOver={onBtnOver} onMouseOut={onBtnOut}>
               <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.45em', width: '100%' }}>
                 <span className="material-symbols-outlined" style={{ marginBottom: '-2px' }}>bookmarks</span>
                 북마크 목록
@@ -173,14 +171,14 @@ const ViewerToolbar = ({
             </button>
           </div>
           <div className="toolbar-group" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginLeft: '1rem', marginRight: '1rem' }}>
-            <button className="epub-toolbar-btn" onClick={handleGraphClick} aria-label="인물 관계도" title="인물 관계도 페이지로 이동" style={{ ...TOOLBAR_BTN, width: '9rem' }} onMouseOver={onBtnOver} onMouseOut={onBtnOut}>
+            <button className="xhtml-toolbar-btn" onClick={handleGraphClick} aria-label="인물 관계도" title="인물 관계도 페이지로 이동" style={{ ...TOOLBAR_BTN, width: '9rem' }} onMouseOver={onBtnOver} onMouseOut={onBtnOut}>
               <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.45em', width: '100%' }}>
                 <span className="material-symbols-outlined" style={{ marginBottom: '-2px' }}>account_tree</span>
                 인물 관계도
               </span>
             </button>
             <button
-              className="epub-toolbar-btn"
+              className="xhtml-toolbar-btn"
               onClick={onToggleGraph}
               aria-label="그래프 토글"
               title={showGraph ? '그래프 숨기기' : '그래프 표시'}
@@ -193,10 +191,10 @@ const ViewerToolbar = ({
                 <span style={{ fontWeight: '600' }}>화면 모드</span>
               </span>
             </button>
-            <div 
-               className="current-view-mode" 
+            <div
+               className="current-view-mode"
                title={getViewModeText()}
-               style={{ 
+               style={{
                  padding: '0.5rem 1rem',
                  marginLeft: '1rem',
                  borderRadius: '1rem',
@@ -212,8 +210,8 @@ const ViewerToolbar = ({
                  transition: 'all 0.2s ease',
                }}
              >
-               {pageMode === 'single' ? 
-                 <span className="material-symbols-outlined" style={{ marginBottom: '-2px', fontWeight: 'bold' }}>view_column</span> : 
+               {pageMode === 'single' ?
+                 <span className="material-symbols-outlined" style={{ marginBottom: '-2px', fontWeight: 'bold' }}>view_column</span> :
                  <span className="material-symbols-outlined" style={{ marginBottom: '-2px', fontWeight: 'bold' }}>view_column_2</span>
                }
                <span style={{ fontWeight: '600' }}>
@@ -225,7 +223,7 @@ const ViewerToolbar = ({
 
         <div className="toolbar-group-right" style={{ display: 'flex', alignItems: 'center' }}>
           <div style={{ marginRight: '5rem', gap: '1rem' }}>
-            <button className="epub-toolbar-btn" aria-label="설정" title="뷰어 설정 열기" onClick={onOpenSettings} style={{ ...TOOLBAR_BTN, width: '5.5rem', marginRight: '0.25rem' }} onMouseOver={onBtnOver} onMouseOut={onBtnOut}>
+            <button className="xhtml-toolbar-btn" aria-label="설정" title="뷰어 설정 열기" onClick={onOpenSettings} style={{ ...TOOLBAR_BTN, width: '5.5rem', marginRight: '0.25rem' }} onMouseOver={onBtnOver} onMouseOut={onBtnOut}>
               <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4em', flexDirection: 'row' }}>
                 <span className="material-symbols-outlined" style={{ marginBottom: '-2px', fontSize: '18px' }}>settings</span>
                 <span style={{ fontSize: '13px', fontWeight: '700' }}>설정</span>
@@ -233,7 +231,7 @@ const ViewerToolbar = ({
             </button>
           </div>
           <div>
-            <Link to="/mypage" replace className="epub-toolbar-btn epub-close-btn" aria-label="닫기" title="마이페이지로 돌아가기" style={{ width: '2rem', marginRight: '2rem', marginTop: '3px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <Link to="/mypage" replace className="xhtml-toolbar-btn xhtml-close-btn" aria-label="닫기" title="마이페이지로 돌아가기" style={{ width: '2rem', marginRight: '2rem', marginTop: '3px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <span style={{ display: 'flex', alignItems: 'center', gap: '0.45em' }}>
                 <span className="material-symbols-outlined" style={{ marginBottom: '-2px' }}>close</span>
               </span>
@@ -242,8 +240,7 @@ const ViewerToolbar = ({
         </div>
         </div>
       )}
-      
-      {/* 모바일 메뉴 */}
+
       <MobileMenu />
     </div>
   );
