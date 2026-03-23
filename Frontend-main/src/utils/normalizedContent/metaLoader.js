@@ -1,8 +1,9 @@
 /**
- * meta.json 로더
- * 구조: { chapters: [{ chapterIndex, paragraphStarts, paragraphLengths, totalCodePoints }] }
+ * 정규화 메타(meta.json 동일 스키마) 로더.
+ * chapters[].chapterIndex, paragraphStarts, paragraphLengths, totalCodePoints
  *
- * 우선순위: GET /api/books/{bookId}/meta → 실패 시 public /books/{bookId}/meta.json
+ * 1) GET /api/books/{bookId}/meta (성공 시 15분 TTL 캐시)
+ * 2) 실패 시 fetch(`${BASE_URL}books/{bookId}/meta.json`) — 개발·폴백
  */
 
 import { getBookMeta } from '../api/api';
