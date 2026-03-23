@@ -670,7 +670,7 @@ export function collectLocalRelationKeys(folderKey, chapterNum, eventNum, target
   return seen;
 }
 
-export async function collectApiRelationKeysLegacy(bookId, chapterNum, eventNum, targetKeys, getGraphEventState, getRelationKeyFromRelation) {
+function collectRelationKeysFromGraphState(bookId, chapterNum, eventNum, targetKeys, getGraphEventState, getRelationKeyFromRelation) {
   const seen = new Set();
   if (!bookId || !Number.isFinite(chapterNum) || !Number.isFinite(eventNum) || eventNum < 1) {
     return seen;
@@ -720,15 +720,15 @@ export async function collectApiRelationKeys(bookId, chapterNum, eventNum, targe
   const hasTargetKeys = targetKeys instanceof Set && targetKeys.size > 0;
 
   if (!sortedEvents.length) {
-    const legacyResult = await collectApiRelationKeysLegacy(bookId, chapterNum, eventNum, targetKeys, getGraphEventState, getRelationKeyFromRelation);
+    const fallbackSet = collectRelationKeysFromGraphState(bookId, chapterNum, eventNum, targetKeys, getGraphEventState, getRelationKeyFromRelation);
     if (chapterCache) {
-      chapterCache.eventSets.set(eventNum, legacyResult);
+      chapterCache.eventSets.set(eventNum, fallbackSet);
       if (!chapterCache.lastComputedIdx || eventNum >= chapterCache.lastComputedIdx) {
         chapterCache.lastComputedIdx = eventNum;
-        chapterCache.lastComputedSet = legacyResult;
+        chapterCache.lastComputedSet = fallbackSet;
       }
     }
-    return filterWithTargetKeys(legacyResult, targetKeys);
+    return filterWithTargetKeys(fallbackSet, targetKeys);
   }
 
   let lastComputedIdx = chapterCache?.lastComputedIdx ?? 0;

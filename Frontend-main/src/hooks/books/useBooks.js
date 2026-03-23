@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useLocation } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getBooks, getBook, toggleBookFavorite } from '../../utils/api/booksApi';
 import {
@@ -9,30 +10,66 @@ import {
 } from '../../utils/localBookStorage';
 import { prefetchManifest } from '../../utils/common/cache/manifestCache';
 import { getBookManifest } from '../../utils/api/api';
+import { loadPublicBooks } from '../../utils/normalizedContent';
+
 const HIDDEN_SERVER_BOOK_IDS_KEY = 'readwith_hidden_server_book_ids';
+const HIDDEN_PUBLIC_BOOK_IDS_KEY = 'readwith_hidden_public_book_ids';
+const PUBLIC_BOOK_FAVORITES_KEY = 'readwith_public_book_favorites';
+
+const getLocalProgress = (bookId) => {
+  try {
+    const raw = localStorage.getItem(`progress_${bookId}`);
+    if (raw == null) return null;
+    const n = Number(raw);
+    return Number.isFinite(n) ? Math.min(100, Math.max(0, n)) : null;
+  } catch {
+    return null;
+  }
+};
 
 export const useBooks = () => {
   const queryClient = useQueryClient();
+  const location = useLocation();
   const [hiddenServerBookIds, setHiddenServerBookIds] = useState(() => {
     try {
       const raw = localStorage.getItem(HIDDEN_SERVER_BOOK_IDS_KEY);
       const parsed = raw ? JSON.parse(raw) : [];
-      if (Array.isArray(parsed)) {
-        return new Set(parsed.map((id) => `${id}`));
-      }
-    } catch (error) {
-      console.warn('hiddenServerBookIds 초기화 실패:', error);
-    }
+      if (Array.isArray(parsed)) return new Set(parsed.map((id) => `${id}`));
+    } catch (e) {}
+    return new Set();
+  });
+  const [hiddenPublicBookIds, setHiddenPublicBookIds] = useState(() => {
+    try {
+      const raw = localStorage.getItem(HIDDEN_PUBLIC_BOOK_IDS_KEY);
+      const parsed = raw ? JSON.parse(raw) : [];
+      if (Array.isArray(parsed)) return new Set(parsed.map((id) => `${id}`));
+    } catch (e) {}
+    return new Set();
+  });
+  const [publicBookFavorites, setPublicBookFavorites] = useState(() => {
+    try {
+      const raw = localStorage.getItem(PUBLIC_BOOK_FAVORITES_KEY);
+      const parsed = raw ? JSON.parse(raw) : [];
+      if (Array.isArray(parsed)) return new Set(parsed.map((id) => `${id}`));
+    } catch (e) {}
     return new Set();
   });
   
   const hiddenServerBookIdsRef = useRef(new Set(hiddenServerBookIds));
+  const hiddenPublicBookIdsRef = useRef(new Set(hiddenPublicBookIds));
+  const publicBookFavoritesRef = useRef(new Set(publicBookFavorites));
   const [indexedDbBookIds, setIndexedDbBookIds] = useState(new Set());
   const indexedDbBookIdsRef = useRef(new Set());
 
   useEffect(() => {
     hiddenServerBookIdsRef.current = new Set(hiddenServerBookIds);
   }, [hiddenServerBookIds]);
+  useEffect(() => {
+    hiddenPublicBookIdsRef.current = new Set(hiddenPublicBookIds);
+  }, [hiddenPublicBookIds]);
+  useEffect(() => {
+    publicBookFavoritesRef.current = new Set(publicBookFavorites);
+  }, [publicBookFavorites]);
 
   useEffect(() => {
     indexedDbBookIdsRef.current = new Set(indexedDbBookIds);
@@ -78,8 +115,7 @@ export const useBooks = () => {
   }, [refreshIndexedDbBookIds]);
 
   // 서버 책 조회 - React Query 사용
-  // 중요: 서버에는 메타데이터만 저장되며, EPUB 파일은 IndexedDB에만 저장됨
-  // 서버 bookId를 키로 사용하여 IndexedDB의 EPUB 파일과 매칭함
+  // 서버는 메타데이터만, 로컬 원본 버퍼는 IndexedDB; 뷰어는 combined XHTML
   const {
     data: serverBooksData,
     isLoading: isServerLoading,
@@ -116,6 +152,12 @@ export const useBooks = () => {
     staleTime: 5 * 60 * 1000,
     gcTime: 30 * 60 * 1000,
     retry: 1,
+  });
+
+  const { data: publicBooksData } = useQuery({
+    queryKey: ['books', 'public'],
+    queryFn: loadPublicBooks,
+    staleTime: 5 * 60 * 1000,
   });
 
   // 서버 책 중복 제거 및 정규화
@@ -162,47 +204,90 @@ export const useBooks = () => {
     return () => clearTimeout(t);
   }, [serverBooksData, refreshIndexedDbBookIds]);
 
-  // IndexedDB에 있는 책 중 서버에도 있는 것만 표시 (서버에 없으면 숨김)
+  // 서버 책 + public/books/ 정규화 책
   const books = useMemo(() => {
-    const hiddenIds = hiddenServerBookIdsRef.current;
+    const hiddenServer = hiddenServerBookIdsRef.current;
+    const hiddenPublic = hiddenPublicBookIdsRef.current;
+    const favorites = publicBookFavoritesRef.current;
     const indexedDbIds = indexedDbBookIds;
 
     const serverBooksMap = new Map();
     reconciledBooks.forEach((book) => {
-      const idKey = book?.id !== undefined && book?.id !== null ? `${book.id}` : null;
+      const idKey = book?.id != null ? `${book.id}` : null;
       if (idKey) serverBooksMap.set(idKey, book);
     });
 
     const result = [];
     indexedDbIds.forEach((bookId) => {
-      if (hiddenIds.has(bookId)) return;
+      if (hiddenServer.has(bookId)) return;
       const serverBook = serverBooksMap.get(bookId);
-      if (serverBook) result.push(serverBook);
+      if (!serverBook) return;
+      const localProgress = getLocalProgress(bookId);
+      const progress = serverBook.progress ?? localProgress ?? 0;
+      result.push({ ...serverBook, progress });
+    });
+
+    const publicBooks = publicBooksData || [];
+    publicBooks.forEach((b) => {
+      const id = b?.id ? String(b.id) : null;
+      if (!id || hiddenPublic.has(id)) return;
+      let progress = 0;
+      try {
+        const raw = localStorage.getItem(`progress_${id}`);
+        if (raw) {
+          const n = Number(raw);
+          if (Number.isFinite(n)) progress = Math.min(100, Math.max(0, n));
+        }
+      } catch (e) {}
+      result.push({
+        id,
+        title: b.title ?? id,
+        author: b.author ?? '',
+        favorite: favorites.has(id),
+        progress,
+        updatedAt: new Date().toISOString(),
+        _isPublic: true,
+      });
     });
     return result;
-  }, [reconciledBooks, indexedDbBookIds]);
+  }, [reconciledBooks, indexedDbBookIds, publicBooksData, hiddenPublicBookIds, publicBookFavorites, location.pathname]);
 
-  // 즐겨찾기 토글 - useMutation + 낙관적 업데이트
   const toggleFavoriteMutation = useMutation({
-    mutationFn: ({ bookId, favorite }) => toggleBookFavorite(bookId, favorite),
+    mutationFn: async ({ bookId, favorite }) => {
+      const idStr = String(bookId);
+      if (isNaN(Number(bookId))) {
+        const raw = localStorage.getItem(PUBLIC_BOOK_FAVORITES_KEY);
+        const list = raw ? JSON.parse(raw) : [];
+        const set = new Set(list);
+        if (favorite) set.add(idStr);
+        else set.delete(idStr);
+        localStorage.setItem(PUBLIC_BOOK_FAVORITES_KEY, JSON.stringify([...set]));
+        return { bookId, favorite };
+      }
+      return toggleBookFavorite(bookId, favorite);
+    },
     onMutate: async ({ bookId, favorite }) => {
-      // 진행 중인 쿼리 취소
+      if (isNaN(Number(bookId))) {
+        setPublicBookFavorites((prev) => {
+          const next = new Set(prev);
+          if (favorite) next.add(String(bookId));
+          else next.delete(String(bookId));
+          return next;
+        });
+        return {};
+      }
       await queryClient.cancelQueries({ queryKey: ['books', 'server'] });
-
-      // 이전 상태 스냅샷
       const previousServerBooks = queryClient.getQueryData(['books', 'server']);
-
-      // 낙관적 업데이트
       queryClient.setQueryData(['books', 'server'], (old) => {
         if (!old) return old;
+        const idStr = String(bookId);
         return {
           ...old,
           books: (old.books || []).map((book) =>
-            book.id === bookId ? { ...book, favorite } : book
+            String(book?.id) === idStr ? { ...book, favorite } : book
           ),
         };
       });
-
       return { previousServerBooks };
     },
     onError: (err, variables, context) => {
@@ -220,32 +305,36 @@ export const useBooks = () => {
     },
   });
 
-  // 책 삭제 - useMutation + 낙관적 업데이트
   const removeBookMutation = useMutation({
     mutationFn: async (bookId) => {
       const targetBookId = String(bookId);
-      
-      // 로컬 데이터 삭제
+      if (isNaN(Number(bookId))) {
+        const hiddenIds = new Set(hiddenPublicBookIdsRef.current);
+        hiddenIds.add(targetBookId);
+        localStorage.setItem(HIDDEN_PUBLIC_BOOK_IDS_KEY, JSON.stringify([...hiddenIds]));
+        return targetBookId;
+      }
       await Promise.all([
         deleteLocalBookBuffer(targetBookId),
         deleteLocalBookMetadata(targetBookId),
       ]);
-
-      // 숨김 목록에 추가
       const hiddenIds = new Set(hiddenServerBookIdsRef.current);
       hiddenIds.add(targetBookId);
-      localStorage.setItem(HIDDEN_SERVER_BOOK_IDS_KEY, JSON.stringify(Array.from(hiddenIds)));
-      
+      localStorage.setItem(HIDDEN_SERVER_BOOK_IDS_KEY, JSON.stringify([...hiddenIds]));
       return targetBookId;
     },
     onMutate: async (bookId) => {
       const targetBookId = String(bookId);
-      
+      if (isNaN(Number(bookId))) {
+        setHiddenPublicBookIds((prev) => {
+          const next = new Set(prev);
+          next.add(targetBookId);
+          return next;
+        });
+        return {};
+      }
       await queryClient.cancelQueries({ queryKey: ['books', 'server'] });
-
       const previousServerBooks = queryClient.getQueryData(['books', 'server']);
-
-      // 낙관적 업데이트
       queryClient.setQueryData(['books', 'server'], (old) => {
         if (!old) return old;
         return {
@@ -253,15 +342,22 @@ export const useBooks = () => {
           books: (old.books || []).filter((book) => `${book.id}` !== targetBookId),
         };
       });
-
       return { previousServerBooks };
     },
     onSuccess: (deletedBookId) => {
-      setHiddenServerBookIds((prev) => {
-        const next = new Set(prev);
-        next.add(deletedBookId);
-        return next;
-      });
+      if (isNaN(Number(deletedBookId))) {
+        setHiddenPublicBookIds((prev) => {
+          const next = new Set(prev);
+          next.add(deletedBookId);
+          return next;
+        });
+      } else {
+        setHiddenServerBookIds((prev) => {
+          const next = new Set(prev);
+          next.add(deletedBookId);
+          return next;
+        });
+      }
     },
     onError: (err, variables, context) => {
       if (context?.previousServerBooks) {

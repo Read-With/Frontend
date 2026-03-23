@@ -42,7 +42,7 @@ const openDB = () => {
 /**
  * 로컬 책의 ArrayBuffer 저장
  * @param {string} bookId - 책 ID
- * @param {ArrayBuffer} arrayBuffer - EPUB 파일의 ArrayBuffer
+ * @param {ArrayBuffer} arrayBuffer - 업로드 원본(XHTML 등) ArrayBuffer
  */
 export const saveLocalBookBuffer = async (bookId, arrayBuffer) => {
   try {

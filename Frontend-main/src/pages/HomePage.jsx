@@ -32,7 +32,7 @@ const HeroSection = () => {
     {
       title: "이제, 책을 탐험하는 시대",
       subtitle: "단순히 읽는 것을 넘어, 이야기 속으로 직접 뛰어드세요",
-      content: "EPUB 뷰어에서 실시간으로 펼쳐지는 인물 관계도를 확인하고, 터치 한 번으로 다른 인물의 시점에서 사건을 다시 보세요.\n\n<strong>독서의 새로운 기준, 지금 경험해보세요.</strong>",
+      content: "XHTML 뷰어에서 실시간으로 펼쳐지는 인물 관계도를 확인하고, 터치 한 번으로 다른 인물의 시점에서 사건을 다시 보세요.\n\n<strong>독서의 새로운 기준, 지금 경험해보세요.</strong>",
       pageClass: 'page-2'
     }
   ];
@@ -178,7 +178,7 @@ const HeroSection = () => {
 
       <div className="book-container">
         <div className="book-cover">
-          <div className="book-spine"></div>
+          <div className="library-card-spine"></div>
           <div className="book-pages">
             <div className={`story-page ${storyPages[currentPage].pageClass} ${isVisible ? 'visible' : ''}`}>
               {currentPage === storyPages.length - 1 && (

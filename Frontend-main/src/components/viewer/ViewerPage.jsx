@@ -2,9 +2,9 @@ import React, { useRef, useState, useEffect, useCallback } from "react";
 import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import ViewerLayout from "./ViewerLayout";
-import EpubViewer from "./epub/EpubViewer";
+import XhtmlViewer from "./xhtml/XhtmlViewer";
 import BookmarkPanel from "./bookmark/BookmarkPanel";
-import ViewerSettings from "./epub/ViewerSettings";
+import ViewerSettings from "./ui/ViewerSettings";
 import { useViewerPage } from "../../hooks/viewer/useViewerPage";
 import { useGraphSearch } from "../../hooks/graph/useGraphSearch";
 import { useTransitionState } from "../../hooks/ui/useTransitionState";
@@ -12,6 +12,8 @@ import { useProgressAutoSave } from "../../hooks/viewer/useProgressAutoSave";
 import { useTooltipState } from "../../hooks/ui/useTooltipState";
 import { useCachedLocation } from "../../hooks/viewer/useCachedLocation";
 import { getBookProgress, getFineGraph, getBookManifest } from "../../utils/api/api";
+import { getProgressFromCache } from "../../utils/common/cache/progressCache";
+import { toLocator } from "../../utils/common/locatorUtils";
 import { getGraphEventState, getCachedChapterEvents, isGraphBookCacheBuilding, ensureGraphBookCache } from "../../utils/common/cache/chapterEventCache";
 import { getManifestFromCache } from "../../utils/common/cache/manifestCache";
 import { 
@@ -51,7 +53,7 @@ const ViewerPage = () => {
     handleOpenSettings, handleCloseSettings, handleApplySettings,
     onToggleBookmarkList, handleSliderChange, toggleGraph, handleLocationChange,
     graphState, graphActions, viewerState, searchState, graphFullScreen, setGraphFullScreen,
-    previousPage, isFromLibrary, bookId,
+    previousPage, isFromLibrary, bookId, cleanBookId, savedProgress,
   } = useViewerPage();
 
   const bookKey = React.useMemo(() => {
@@ -113,6 +115,7 @@ const ViewerPage = () => {
   
   const [manifestLoaded, setManifestLoaded] = useState(false);
   const [apiError, setApiError] = useState(null);
+  const [initialProgressAnchor, setInitialProgressAnchor] = useState(null);
   
   const updateLoadingState = useCallback((isReady, isLoading, error = null, shouldResetTransition = true) => {
     setIsDataReady(isReady);
@@ -125,7 +128,7 @@ const ViewerPage = () => {
     } else {
       setApiError(null);
     }
-  }, [resetTransition]);
+  }, [setIsDataReady, setLoading, setApiError, resetTransition]);
   
   useEffect(() => {
     apiEventCacheRef.current.clear();
@@ -150,14 +153,12 @@ const ViewerPage = () => {
   const currentEventKey = React.useMemo(() => {
     if (!currentEvent || currentEvent.placeholder) return null;
     if (currentEvent.chapter && Number(currentEvent.chapter) !== Number(currentChapter)) return null;
-    
     return {
       chapter: currentChapter,
       eventIdx: eventUtils.extractRawEventIdx(currentEvent),
       eventNum: currentEvent.eventNum ?? currentEvent.eventIdx,
-      cfi: currentEvent.cfi ?? null
     };
-  }, [currentChapter, currentEvent?.eventNum, currentEvent?.eventIdx, currentEvent?.cfi, currentEvent?.placeholder, currentEvent?.chapter]);
+  }, [currentChapter, currentEvent?.eventNum, currentEvent?.eventIdx, currentEvent?.placeholder, currentEvent?.chapter]);
 
   useEffect(() => {
     if (!bookKey || !currentEventKey) {
@@ -177,23 +178,37 @@ const ViewerPage = () => {
       Number.isFinite(cachedChapterIdx) &&
       cachedChapterIdx > 0 &&
       Number(cachedChapterIdx) === Number(currentEventKey.chapter);
+    const cachedStart =
+      currentCachedLocation?.startLocator ??
+      currentCachedLocation?.anchor?.startLocator ??
+      currentCachedLocation?.anchor?.start;
+    const keyStart =
+      currentEvent?.anchor?.startLocator ?? currentEvent?.anchor?.start;
+    const sameByLocator = keyStart && cachedStart &&
+      cachedStart.chapterIndex === keyStart.chapterIndex &&
+      (cachedStart.blockIndex ?? 0) === (keyStart.blockIndex ?? 0) &&
+      (cachedStart.offset ?? 0) === (keyStart.offset ?? 0);
     const isSameEvent =
       isSameChapter &&
       hasCachedEventIdx &&
       cachedEventIdxValue === resolvedIdx &&
-      ((currentCachedLocation?.cfi ?? null) === currentEventKey.cfi);
+      sameByLocator;
 
     if (isSameEvent) {
       return;
     }
 
+    const anchor = currentEvent?.anchor;
+    const startL = anchor?.startLocator ?? anchor?.start;
+    const endL = anchor?.endLocator ?? anchor?.end ?? startL;
     saveLocation({
       bookId: typeof book?.id === 'number' ? book.id : null,
       chapterIdx: currentEventKey.chapter,
       eventIdx: resolvedIdx,
       eventNum: currentEventKey.eventNum ?? resolvedIdx,
       eventId: currentEvent?.event_id ?? currentEvent?.eventId ?? currentEvent?.id ?? null,
-      cfi: currentEventKey.cfi,
+      startLocator: startL ?? undefined,
+      endLocator: endL ?? undefined,
       eventName:
         currentEvent?.event?.name ??
         currentEvent?.event?.title ??
@@ -235,12 +250,9 @@ const ViewerPage = () => {
         (a, b) => (Number(a?.eventIdx) || 0) - (Number(b?.eventIdx) || 0)
       );
 
-      sortedEvents.forEach((event) => {
+      const normalizedEvents = sortedEvents.reduce((acc, event) => {
         const normalizedIdx = eventUtils.normalizeEventIdx(event) || 0;
-        if (!normalizedIdx) {
-          return;
-        }
-
+        if (!normalizedIdx) return acc;
         const normalizedEvent = {
           ...event.event,
           chapter: targetChapter,
@@ -255,11 +267,14 @@ const ViewerPage = () => {
           start: event?.startPos ?? event?.start ?? null,
           end: event?.endPos ?? event?.end ?? null,
         };
+        return eventUtils.updateEventsInState(acc, normalizedEvent, targetChapter);
+      }, []);
 
-        setEvents((prevEvents) => 
-          eventUtils.updateEventsInState(prevEvents, normalizedEvent, targetChapter)
-        );
-      });
+      setEvents((prev) =>
+        normalizedEvents.length > 0
+          ? normalizedEvents.reduce((p, evt) => eventUtils.updateEventsInState(p, evt, targetChapter), prev)
+          : prev
+      );
 
       sequentialPrefetchStatusRef.current.set(key, 'completed');
     } catch (error) {
@@ -307,7 +322,16 @@ const ViewerPage = () => {
 
     try {
       try {
-        await getBookProgress(serverBookId);
+        const progressRes = await getBookProgress(serverBookId);
+        if (progressRes?.isSuccess && progressRes?.result) {
+          const r = progressRes.result;
+          const start =
+            r.startLocator ?? toLocator(r.locator) ?? r.anchor?.startLocator ?? r.anchor?.start;
+          if (start) {
+            const end = r.endLocator ?? r.anchor?.endLocator ?? r.anchor?.end ?? start;
+            setInitialProgressAnchor({ startLocator: start, endLocator: end });
+          }
+        }
       } catch (progressError) {
         // 조용히 처리
       }
@@ -344,11 +368,7 @@ const ViewerPage = () => {
       errorUtils.logError('[Viewer] Manifest 로드 중 오류', error);
       setManifestLoaded(true);
     }
-  }, [book?.id, bookId]);
-
-  // 진도 복원은 EpubViewer에서 이미 수행하므로 여기서는 제거
-  // EpubViewer의 loadBook()에서 apiProgressData를 사용하여 displayTarget을 설정하고
-  // rendition.display()를 호출하므로 중복 복원을 방지
+  }, [book?.id]);
 
   useEffect(() => {
     testProgressAPI();
@@ -455,7 +475,7 @@ const ViewerPage = () => {
         clearInterval(checkInterval);
       }
     };
-  }, [book?.id, currentChapter]);
+  }, [book?.id, currentChapter, setIsGraphLoading, setApiError]);
   
   useEffect(() => {
     let isMounted = true;
@@ -472,15 +492,13 @@ const ViewerPage = () => {
           if (!manifestLoaded) {
             const serverBookId = getServerBookId(book);
             if (serverBookId) {
-            const cachedManifest = getManifestFromCache(serverBookId);
-            if (cachedManifest) {
-              setManifestLoaded(true);
+              const cachedManifest = getManifestFromCache(serverBookId);
+              if (cachedManifest) {
+                setManifestLoaded(true);
               } else {
-                // 캐시에 없으면 manifest 로드 완료 대기
                 return;
               }
             } else {
-              // 서버 bookId가 없으면 로컬 책이므로 manifestLoaded 불필요
               setManifestLoaded(true);
               return;
             }
@@ -533,8 +551,8 @@ const ViewerPage = () => {
             hasCalledApiForEvent
           );
 
-          if (!isMounted) return;
-          
+          if (!isMounted || apiCallRef.current !== callKey) return;
+
           const cacheKey = cacheKeyUtils.createCacheKey(currentChapter, apiEventIdx);
           
           // 데이터 유효성 검사: 캐시는 elements 우선, API는 relations 우선
@@ -577,6 +595,8 @@ const ViewerPage = () => {
                 getRelationKeyFromRelation
               })
             : (resultData.relations || []);
+
+          if (!isMounted || apiCallRef.current !== callKey) return;
 
           if (!Array.isArray(filteredRelations) || filteredRelations.length === 0) {
             clearGraphElements(apiEventIdx, currentChapter);
@@ -971,112 +991,95 @@ const ViewerPage = () => {
           />
         }
       >
-        <EpubViewer
-          key={reloadKey}
-          ref={viewerRef}
-          book={book}
-          reloadKey={reloadKey}
-          initialChapter={currentChapter}
-          initialPage={currentPage}
-          initialProgress={progress}
-          onProgressChange={setProgress}
-          onCurrentPageChange={(page) => {
-            setCurrentPage(page);
-          }}
-          onTotalPagesChange={setTotalPages}
-          onCurrentChapterChange={(chapter) => {
-            const prev = Number(currentChapter || 0);
-            const next = Number(chapter || 0);
-            if (prev && next && prev !== next) {
-              const transitionInfo = startChapterTransition(prev, next);
-              if (transitionInfo && transitionInfo.forcedIdx === 1) {
-                setCurrentEvent({
-                  chapter: next,
-                  chapterIdx: next,
-                  eventIdx: 1,
-                  eventNum: 1,
-                  event_id: 1,
-                  relations: [],
-                  characters: [],
-                  placeholder: true
-                });
-              }
-            }
-            setCurrentChapter(chapter);
-          }}
-          settings={settings}
-          onCurrentLineChange={(charIndex, totalEvents, receivedEvent) => {
-            setCurrentCharIndex(charIndex);
-            
-            if (receivedEvent) {
-              if (receivedEvent.chapter && receivedEvent.chapter !== currentChapter) {
-                setCurrentChapter(receivedEvent.chapter);
-              }
-
-              const forcedIdx = forcedChapterEventIdxRef.current;
-              const rawIdx = eventUtils.extractRawEventIdx(receivedEvent);
-
-              let shouldReleaseForced = false;
-              let nextEvent = receivedEvent;
-
-              if (Number.isFinite(forcedIdx)) {
-                if (rawIdx > 0 && rawIdx !== forcedIdx) {
-                  shouldReleaseForced = true;
-                } else {
-                  nextEvent = {
-                    ...receivedEvent,
-                    eventIdx: forcedIdx,
-                    eventNum: forcedIdx,
-                    event_id: forcedIdx,
-                    resolvedEventIdx: forcedIdx,
-                    originalEventIdx: rawIdx || forcedIdx
-                  };
-                  shouldReleaseForced = true;
+        {(() => {
+          const initialProgressFromUrl = savedProgress != null && savedProgress !== '' ? Number(savedProgress) : null;
+          const useProgressForPosition = initialProgressFromUrl != null && Number.isFinite(initialProgressFromUrl) && initialProgressFromUrl > 0;
+          const commonProps = {
+            ref: viewerRef,
+            book,
+            initialChapter: currentChapter,
+            initialProgress: initialProgressFromUrl != null && Number.isFinite(initialProgressFromUrl) ? initialProgressFromUrl : progress,
+            onProgressChange: setProgress,
+            onCurrentPageChange: (page) => setCurrentPage(page),
+            onTotalPagesChange: setTotalPages,
+            onCurrentChapterChange: (chapter) => {
+              const prev = Number(currentChapter || 0);
+              const next = Number(chapter || 0);
+              if (prev && next && prev !== next) {
+                const transitionInfo = startChapterTransition(prev, next);
+                if (transitionInfo && transitionInfo.forcedIdx === 1) {
+                  setCurrentEvent({
+                    chapter: next,
+                    chapterIdx: next,
+                    eventIdx: 1,
+                    eventNum: 1,
+                    event_id: 1,
+                    relations: [],
+                    characters: [],
+                    placeholder: true
+                  });
                 }
               }
-
-              const resolvedIdxForEvent = eventUtils.extractRawEventIdx(nextEvent);
-              if (!Number.isFinite(nextEvent.resolvedEventIdx) || nextEvent.resolvedEventIdx <= 0) {
-                nextEvent = {
-                  ...nextEvent,
-                  resolvedEventIdx: resolvedIdxForEvent > 0 ? resolvedIdxForEvent : undefined
-                };
+              setCurrentChapter(chapter);
+            },
+            settings,
+            onCurrentLineChange: (charIndex, totalEvents, receivedEvent) => {
+              setCurrentCharIndex(charIndex);
+              if (receivedEvent) {
+                const chapter =
+                  receivedEvent.chapter ??
+                  receivedEvent.anchor?.startLocator?.chapterIndex ??
+                  receivedEvent.anchor?.start?.chapterIndex ??
+                  null;
+                if (chapter && chapter !== currentChapter) {
+                  setCurrentChapter(chapter);
+                }
+                const forcedIdx = forcedChapterEventIdxRef.current;
+                const rawIdx = eventUtils.extractRawEventIdx(receivedEvent);
+                let shouldReleaseForced = false;
+                let nextEvent = receivedEvent;
+                if (Number.isFinite(forcedIdx)) {
+                  if (rawIdx > 0 && rawIdx !== forcedIdx) {
+                    shouldReleaseForced = true;
+                  } else {
+                    nextEvent = {
+                      ...receivedEvent,
+                      eventIdx: forcedIdx,
+                      eventNum: forcedIdx,
+                      event_id: forcedIdx,
+                      resolvedEventIdx: forcedIdx,
+                      originalEventIdx: rawIdx || forcedIdx
+                    };
+                    shouldReleaseForced = true;
+                  }
+                }
+                const resolvedIdxForEvent = eventUtils.extractRawEventIdx(nextEvent);
+                if (!Number.isFinite(nextEvent.resolvedEventIdx) || nextEvent.resolvedEventIdx <= 0) {
+                  nextEvent = {
+                    ...nextEvent,
+                    resolvedEventIdx: resolvedIdxForEvent > 0 ? resolvedIdxForEvent : undefined
+                  };
+                }
+                setCurrentEvent(nextEvent);
+                if (shouldReleaseForced) releaseForcedEventIdx();
               }
-              
-              setCurrentEvent(nextEvent);
-
-              if (shouldReleaseForced) {
-                releaseForcedEventIdx();
-              }
-            }
-          }}
-          onRelocated={handleLocationChange}
-        />
-        {showBookmarkList && (
-          <BookmarkPanel bookmarks={bookmarks} onSelect={handleBookmarkSelect}>
-            {bookmarks.map((bm) => (
-              <span
-                key={bm.cfi}
-                style={{
-                  fontSize: "0.98rem",
-                  color: "#5C6F5C",
-                  fontFamily: "Noto Serif KR",
-                }}
-              >
-                위치: {bm.title || (() => {
-                  const cfi = bm.cfi || bm.startCfi || '';
-                  const chapterMatch = cfi.match(/\[chapter-(\d+)\]/);
-                  const chapter = chapterMatch ? parseInt(chapterMatch[1]) : null;
-                  const pageMatch = cfi.match(/\[chapter-\d+\]\/(\d+)/);
-                  const page = pageMatch ? parseInt(pageMatch[1]) : null;
-                  if (page && chapter) return `${page}페이지 (${chapter}챕터)`;
-                  if (page) return `${page}페이지`;
-                  if (chapter) return `${chapter}챕터`;
-                  return cfi;
-                })()}
-              </span>
-            ))}
-          </BookmarkPanel>
+            },
+          };
+          const progressKey = cleanBookId ?? bookKey;
+          const cachedProgress = getProgressFromCache(progressKey);
+          const anchor = initialProgressAnchor ?? cachedProgress?.anchor ?? undefined;
+          return (
+            <XhtmlViewer
+              key={reloadKey}
+              {...commonProps}
+              bookId={progressKey}
+              initialAnchor={anchor}
+              initialPage={useProgressForPosition ? undefined : currentPage}
+            />
+          );
+        })()}
+        {showBookmarkList && bookKey && (
+          <BookmarkPanel bookId={bookKey} onSelect={handleBookmarkSelect} />
         )}
 
         <ViewerSettings

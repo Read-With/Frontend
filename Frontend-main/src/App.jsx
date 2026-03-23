@@ -1,5 +1,5 @@
 import React from 'react';
-import { BrowserRouter as Router, Routes, Route, useLocation, Navigate, useParams, Outlet } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate, useParams, Outlet } from 'react-router-dom';
 import ViewerPage from './components/viewer/ViewerPage';
 import BookmarksPage from './components/viewer/bookmark/BookmarksPage';
 import RelationGraphWrapper from './components/graph/RelationGraphWrapper';
@@ -20,59 +20,48 @@ const GraphLayout = () => {
 };
 
 const AppContent = () => {
-  const location = useLocation();
-  // '/viewer' 또는 '/graph'로 시작하는 모든 페이지에서 Header 숨김
-  // const hideHeader = location.pathname.startsWith('/viewer') || location.pathname.startsWith('/graph');
-
   return (
-    <>
-
-      <Routes>
-        <Route path="/" element={<HomePage />} />
-        <Route path="/auth/callback" element={<OAuthCallback />} />
-        <Route path="/admin" element={<AdminPage />} />
-        <Route path="/mypage" element={
+    <Routes>
+      <Route path="/" element={<HomePage />} />
+      <Route path="/auth/callback" element={<OAuthCallback />} />
+      <Route path="/admin" element={<AdminPage />} />
+      <Route path="/mypage" element={
+        <ProtectedRoute>
+          <MyPage />
+        </ProtectedRoute>
+      } />
+      <Route path="/viewer/:filename/*" element={
+        <ProtectedRoute>
+          <ViewerPage />
+        </ProtectedRoute>
+      } />
+      <Route path="/viewer/:filename/bookmarks" element={
+        <ProtectedRoute>
+          <BookmarksPage />
+        </ProtectedRoute>
+      } />
+      <Route path="/viewer/:filename/relations" element={<RelationRedirect />} />
+      <Route path="/user/viewer/:filename" element={
+        <ProtectedRoute>
+          <ViewerPage />
+        </ProtectedRoute>
+      } />
+      <Route element={<GraphLayout />}>
+        <Route path="/user/graph/:filename" element={
           <ProtectedRoute>
-            <MyPage />
+            <RelationGraphWrapper />
           </ProtectedRoute>
         } />
-        <Route path="/viewer/:filename/*" element={
+        <Route path="/user/graph/:bookId" element={
           <ProtectedRoute>
-            <ViewerPage />
+            <RelationGraphWrapper />
           </ProtectedRoute>
         } />
-        <Route path="/viewer/:filename/bookmarks" element={
-          <ProtectedRoute>
-            <BookmarksPage />
-          </ProtectedRoute>
-        } />
-        <Route path="/viewer/:filename/relations" element={<RelationRedirect />} />
-        {/* /user/viewer/:filename 경로는 GraphLayout으로 감싸지 않고 ViewerPage만 렌더링 */}
-        <Route path="/user/viewer/:filename" element={
-          <ProtectedRoute>
-            <ViewerPage />
-          </ProtectedRoute>
-        } />
-        {/* 그래프 단독 페이지만 GraphLayout으로 감싸서 RelationGraphWrapper 렌더링 */}
-        <Route element={<GraphLayout />}>
-          <Route path="/user/graph/:filename" element={
-            <ProtectedRoute>
-              <RelationGraphWrapper />
-            </ProtectedRoute>
-          } />
-          {/* bookId 기반 그래프 라우트 */}
-          <Route path="/user/graph/:bookId" element={
-            <ProtectedRoute>
-              <RelationGraphWrapper />
-            </ProtectedRoute>
-          } />
-        </Route>
-      </Routes>
-    </>
+      </Route>
+    </Routes>
   );
 };
 
-// :filename을 실제 파일명으로 치환해주는 래퍼 컴포넌트 - 이제 안쓸텐데
 function RelationRedirect() {
   const { filename } = useParams();
   return <Navigate to={`/user/graph/${filename}`} replace />;

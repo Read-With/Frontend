@@ -1,24 +1,20 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import axios from "axios";
+import { getApiBaseUrl } from "../utils/common/authUtils";
 
-// API 기본 URL 설정 (배포 서버 고정 사용)
-const getApiBaseUrl = () => {
-  // 로컬 개발 환경: 프록시 사용 (배포 서버로 전달)
-  if (import.meta.env.DEV) {
-    return ''; // 프록시를 통해 배포 서버로 요청
-  }
-  // 프로덕션 환경: 커스텀 도메인 사용
-  return 'https://dev.readwith.store';
-};
+const API_BASE_URL = `${getApiBaseUrl()}/api/v2/admin`;
 
-const API_BASE_URL = `${getApiBaseUrl()}/api/admin`;
-
-// API 요청을 위한 axios 인스턴스
 const apiClient = axios.create({
   baseURL: API_BASE_URL,
   headers: {
     "Content-Type": "application/json",
   },
+});
+
+apiClient.interceptors.request.use((config) => {
+  const token = localStorage.getItem("accessToken");
+  if (token) config.headers.Authorization = `Bearer ${token}`;
+  return config;
 });
 
 const AdminPage = () => {
@@ -51,7 +47,9 @@ const AdminPage = () => {
     } catch (err) {
       console.error("API Error:", err.response || err);
       setError(
-        err.response ? err.response.data : "An unexpected error occurred."
+        err.response?.data ?? {
+          message: err?.message ?? "An unexpected error occurred.",
+        }
       );
     } finally {
       setLoading(false);
@@ -70,7 +68,7 @@ const AdminPage = () => {
     handleApiCall(() => apiClient.get("/books/unsummarized"));
 
   const uploadMultipleFiles = (endpoint) => {
-    if (!bookId || !files) {
+    if (!bookId || !files || files.length === 0) {
       setError({ message: "Book ID와 파일을 모두 선택해야 합니다." });
       return;
     }
@@ -140,7 +138,7 @@ const AdminPage = () => {
 
         {/* --- 공통 입력 필드 --- */}
         <div style={styles.section}>
-          <h3>공통 파라미터</h3>
+          <h2>공통 파라미터</h2>
           <input
             type="text"
             placeholder="Book ID"
@@ -167,10 +165,10 @@ const AdminPage = () => {
         {/* --- 데이터 조회 섹션 --- */}
         <div style={styles.section}>
           <h2>데이터 조회</h2>
-          <button onClick={getUnsummarizedChapters} style={styles.button}>
+          <button type="button" disabled={loading} onClick={getUnsummarizedChapters} style={styles.button}>
             미요약 챕터 목록 조회
           </button>
-          <button onClick={getUnsummarizedBooks} style={styles.button}>
+          <button type="button" disabled={loading} onClick={getUnsummarizedBooks} style={styles.button}>
             미요약 도서 목록 조회
           </button>
         </div>
@@ -186,6 +184,8 @@ const AdminPage = () => {
           />
           <div style={styles.buttonGroup} title="Book ID와 파일이 필요합니다.">
             <button
+              type="button"
+              disabled={loading}
               onClick={() => uploadSingleFile("characters")}
               style={styles.button}
               title="단일 JSON 파일(file)을 업로드합니다."
@@ -193,6 +193,8 @@ const AdminPage = () => {
               인물 정보 업로드
             </button>
             <button
+              type="button"
+              disabled={loading}
               onClick={() => uploadMultipleFiles("events")}
               style={styles.button}
               title="여러 챕터의 이벤트 JSON 파일(files)을 업로드합니다."
@@ -200,6 +202,8 @@ const AdminPage = () => {
               이벤트 정보 업로드
             </button>
             <button
+              type="button"
+              disabled={loading}
               onClick={() => uploadMultipleFiles("summary")}
               style={styles.button}
               title="여러 챕터의 요약 JSON 파일(files)을 업로드합니다."
@@ -207,6 +211,8 @@ const AdminPage = () => {
               챕터 요약본 업로드
             </button>
             <button
+              type="button"
+              disabled={loading}
               onClick={() => uploadMultipleFiles("relationships")}
               style={styles.button}
               title="여러 관계 JSON 파일(files)을 업로드합니다."
@@ -221,6 +227,8 @@ const AdminPage = () => {
           <h2>데이터 삭제</h2>
           <div style={styles.buttonGroup}>
             <button
+              type="button"
+              disabled={loading}
               onClick={() => deleteData("/books/{bookId}/characters")}
               style={styles.button}
               title="Book ID가 필요합니다."
@@ -228,6 +236,8 @@ const AdminPage = () => {
               인물 정보 삭제
             </button>
             <button
+              type="button"
+              disabled={loading}
               onClick={() =>
                 deleteData("/books/{bookId}/chapters/{chapterIdx}/events")
               }
@@ -237,6 +247,8 @@ const AdminPage = () => {
               이벤트 정보 삭제
             </button>
             <button
+              type="button"
+              disabled={loading}
               onClick={() =>
                 deleteData("/books/{bookId}/chapters/{chapterIdx}/summary")
               }
@@ -246,6 +258,8 @@ const AdminPage = () => {
               챕터 요약본 삭제
             </button>
             <button
+              type="button"
+              disabled={loading}
               onClick={() =>
                 deleteData(
                   "/books/{bookId}/chapters/{chapterIdx}/events/{eventIdx}/relationships"

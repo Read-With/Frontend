@@ -1,58 +1,52 @@
 /**
- * useProgressAutoSave.js : 진도 자동 저장 훅
- * 
- * [주요 기능]
- * 1. 현재 읽기 위치를 자동으로 캐시에 저장
- * 2. 챕터, 이벤트, CFI 변경 시 자동 저장
- * 3. 디바운싱을 통한 성능 최적화
- * 
- * [사용처]
- * - ViewerPage: 읽기 진도 자동 저장
+ * useProgressAutoSave.js : 진도 자동 저장 훅 (v2 locator 전용)
+ * - 캐시 + 서버(POST /api/v2/progress) 전송
+ * - 디바운스(delay) 및 중복 저장 방지
  */
 
 import { useEffect, useRef } from 'react';
 import { setProgressToCache } from '../../utils/common/cache/progressCache';
+import { anchorToLocators } from '../../utils/common/locatorUtils';
 import { errorUtils } from '../../utils/common/errorUtils';
+import { saveProgress } from '../../utils/api/api';
 
-/**
- * 진도 자동 저장 훅
- * @param {Object} params - 파라미터 객체
- * @param {string} params.bookKey - 책 키 (bookId)
- * @param {number} params.currentChapter - 현재 챕터 번호
- * @param {Object} params.currentEvent - 현재 이벤트 객체
- * @param {number} params.delay - 저장 딜레이 시간 (ms, 기본값: 2000)
- * @returns {void}
- */
 export function useProgressAutoSave({ bookKey, currentChapter, currentEvent, delay = 2000 }) {
   const timeoutRef = useRef(null);
+  const lastPayloadRef = useRef(null);
 
   useEffect(() => {
-    if (!currentChapter || !bookKey) {
+    if (!bookKey) {
+      lastPayloadRef.current = null;
       return;
     }
+    const anchor = currentEvent?.anchor;
+    if (!anchor?.startLocator && !anchor?.start) return;
 
-    const currentEventNum = currentEvent?.eventNum;
-    const currentEventCfi = currentEvent?.cfi;
+    const { startLocator, endLocator } = anchorToLocators(anchor);
+    if (!startLocator) return;
 
-    const autoSaveProgress = async () => {
+    const payload = {
+      bookId: bookKey,
+      startLocator,
+      endLocator: endLocator ?? startLocator,
+    };
+    const payloadKey = JSON.stringify(payload);
+
+    const autoSaveProgress = () => {
+      if (lastPayloadRef.current === payloadKey) return;
       try {
-        const progressData = {
-          bookId: bookKey,
-          chapterIdx: currentChapter || 1,
-          eventIdx: currentEventNum || 0,
-          cfi: currentEventCfi || null
-        };
-        
-        setProgressToCache(progressData);
+        setProgressToCache(payload);
+        lastPayloadRef.current = payloadKey;
+        saveProgress(payload).catch((err) => {
+          errorUtils.logWarning('[useProgressAutoSave] 서버 저장 실패', err?.message ?? (typeof err === 'string' ? err : ''));
+        });
       } catch (error) {
-        errorUtils.logWarning('[useProgressAutoSave] 진도 자동 저장 실패', error.message);
+        const msg = error?.message ?? (typeof error === 'string' ? error : '알 수 없는 오류');
+        errorUtils.logWarning('[useProgressAutoSave] 진도 자동 저장 실패', msg);
       }
     };
 
-    if (timeoutRef.current) {
-      clearTimeout(timeoutRef.current);
-    }
-
+    if (timeoutRef.current) clearTimeout(timeoutRef.current);
     timeoutRef.current = setTimeout(autoSaveProgress, delay);
 
     return () => {
@@ -61,5 +55,5 @@ export function useProgressAutoSave({ bookKey, currentChapter, currentEvent, del
         timeoutRef.current = null;
       }
     };
-  }, [bookKey, currentChapter, currentEvent?.eventNum, currentEvent?.cfi, delay]);
+  }, [bookKey, currentChapter, currentEvent?.anchor, delay]);
 }

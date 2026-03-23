@@ -42,7 +42,6 @@ export default defineConfig(({ mode }) => {
           manualChunks: {
             vendor: ['react', 'react-dom'],
             charts: ['recharts', 'react-chartjs-2', 'chart.js'],
-            epub: ['epubjs'],
             graph: ['cytoscape', 'cytoscape-cose-bilkent'],
             ui: ['@ant-design/pro-components', 'antd'],
           },
@@ -96,8 +95,12 @@ export default defineConfig(({ mode }) => {
                 const silent404Endpoints = [
                   '/api/graph/fine',
                   '/api/graph/macro',
+                  '/api/v2/graph/fine',
+                  '/api/v2/graph/macro',
                   '/api/progress/',
+                  '/api/v2/progress/',
                   '/api/books/',
+                  '/api/v2/books/',
                   '/manifest'
                 ];
                 

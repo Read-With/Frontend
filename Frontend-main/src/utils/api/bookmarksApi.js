@@ -1,14 +1,14 @@
 import { authenticatedRequest } from './authApi';
 
 export const getBookmarks = async (bookId, sort = 'time_desc') => {
+  if (bookId == null || bookId === '') {
+    throw new Error('bookId는 필수입니다.');
+  }
   try {
     const queryParams = new URLSearchParams();
     queryParams.append('bookId', bookId);
-    if (sort) {
-      queryParams.append('sort', sort);
-    }
-    
-    const data = await authenticatedRequest(`/bookmarks?${queryParams.toString()}`);
+    if (sort) queryParams.append('sort', sort);
+    const data = await authenticatedRequest(`/v2/bookmarks?${queryParams.toString()}`);
     return data;
   } catch (error) {
     console.error('북마크 목록 조회 실패:', error);
@@ -17,13 +17,15 @@ export const getBookmarks = async (bookId, sort = 'time_desc') => {
 };
 
 export const createBookmark = async (bookmarkData) => {
+  if (!bookmarkData || typeof bookmarkData !== 'object') {
+    throw new Error('bookmarkData는 필수입니다.');
+  }
   try {
     const dataToSend = {
       ...bookmarkData,
-      color: bookmarkData.color || '#28B532'
+      color: bookmarkData.color ?? '#28B532',
     };
-    
-    const data = await authenticatedRequest('/bookmarks', {
+    const data = await authenticatedRequest('/v2/bookmarks', {
       method: 'POST',
       body: JSON.stringify(dataToSend),
     });
@@ -35,10 +37,13 @@ export const createBookmark = async (bookmarkData) => {
 };
 
 export const updateBookmark = async (bookmarkId, updateData) => {
+  if (bookmarkId == null || bookmarkId === '') {
+    throw new Error('bookmarkId는 필수입니다.');
+  }
   try {
-    const data = await authenticatedRequest(`/bookmarks/${bookmarkId}`, {
+    const data = await authenticatedRequest(`/v2/bookmarks/${bookmarkId}`, {
       method: 'PATCH',
-      body: JSON.stringify(updateData),
+      body: JSON.stringify(updateData ?? {}),
     });
     return data;
   } catch (error) {
@@ -48,8 +53,11 @@ export const updateBookmark = async (bookmarkId, updateData) => {
 };
 
 export const deleteBookmark = async (bookmarkId) => {
+  if (bookmarkId == null || bookmarkId === '') {
+    throw new Error('bookmarkId는 필수입니다.');
+  }
   try {
-    const data = await authenticatedRequest(`/bookmarks/${bookmarkId}`, {
+    const data = await authenticatedRequest(`/v2/bookmarks/${bookmarkId}`, {
       method: 'DELETE',
     });
     return data;

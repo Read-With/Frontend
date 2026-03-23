@@ -114,7 +114,7 @@
   }
 }
 
-/* EPUB 뷰어 스타일 */
+/* XHTML 뷰어 스타일 */
 /* 그래프 영역 스타일 */
 .graph-area {
   position: relative;
@@ -122,23 +122,22 @@
   box-shadow: inset 6px 0 12px -8px rgba(0,0,0,0.1);
 }
 
-/* EPUB 컨테이너 스타일 재정의 */
-.epub-container {
+/* XHTML 뷰어 컨테이너 스타일 */
+.xhtml-container {
   min-width: 100% !important;
   width: 100% !important;
   height: 100% !important;
   position: relative !important;
 }
 
-/* EPUB 뷰어 내부 요소 스타일 */
-.epub-view {
+/* XHTML 뷰어 내부 요소 스타일 */
+.xhtml-view {
   min-width: 100% !important;
   width: 100% !important;
   max-width: 100% !important;
 }
 
-/* iframe 내부 스타일 - 이미지 크기 제한 */
-.epub-view iframe {
+.xhtml-view iframe {
   min-width: 100% !important;
   width: 100% !important;
 }

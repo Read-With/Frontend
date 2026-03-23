@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
-import ViewerToolbar from './epub/ViewerToolbar';
-import ViewerProgressBar from './epub/ViewerProgressbar';
+import ViewerToolbar from './ui/ViewerToolbar';
+import ViewerProgressBar from './ui/ViewerProgressbar';
 
 const ViewerLayout = ({
   children,
@@ -24,10 +24,9 @@ const ViewerLayout = ({
   previousPage = null,
 }) => {
 
-  // 그래프 표시 상태가 변경될 때 창 크기 변경 이벤트 발생시키기
   useEffect(() => {
-    // 창 크기 변경 이벤트를 발생시켜 EPUB 뷰어가 크기를 재조정하도록 함
-    // pageMode 설정도 함께 고려하여 spread 모드가 유지되도록 함
+    // 그래프 표시/레이아웃 변경 시 뷰어 리사이즈
+    // pageMode(단면/양면) 변경 시 레이아웃 재계산
     const resizeEvent = window.setTimeout(() => {
       window.dispatchEvent(new Event('resize'));
     }, 300);
@@ -69,9 +68,9 @@ const ViewerLayout = ({
           backgroundColor: '#fdfdfd',
         }}
       >
-        {/* 왼쪽: EPUB 뷰어 */}
+        {/* 왼쪽: 뷰어 (XHTML) */}
                  <div 
-           className={`h-full overflow-hidden`}
+           className={`h-full overflow-hidden relative`}
            style={{
              width: showGraph && !graphFullScreen ? '50%' : graphFullScreen ? '0%' : '100%',
              borderRight: showGraph && !graphFullScreen ? '1px solid #e2e8f0' : 'none',

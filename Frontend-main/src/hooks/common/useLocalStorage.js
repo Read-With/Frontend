@@ -7,7 +7,7 @@ const normalizeKeySegment = (value) => {
   return trimmed.replace(/[^a-zA-Z0-9_-]/g, '_');
 };
 
-const STRING_STORAGE_KEY_SUFFIXES = ['_lastCFI', '_prevChapter', '_nextPage', '_prevPage'];
+const STRING_STORAGE_KEY_SUFFIXES = ['_prevChapter', '_nextPage', '_prevPage'];
 
 const isStringStorageKey = (key) => {
   return STRING_STORAGE_KEY_SUFFIXES.some(suffix => key.includes(suffix));
@@ -23,7 +23,6 @@ export const STORAGE_KEYS = {
   },
   GRAPH_EVENT_LAYOUT: (chapter, eventNum) => `graph_event_layout_chapter_${chapter}_event_${eventNum}`,
   GRAPH_PARTIAL_LAYOUT: (chapter) => `graph_partial_layout_chapter_${chapter}`,
-  LAST_CFI: (filename) => `readwith_${filename}_lastCFI`,
   PREV_CHAPTER: (filename) => `readwith_${filename}_prevChapter`,
   NEXT_PAGE: (filename) => `readwith_${filename}_nextPage`,
   PREV_PAGE: (filename) => `readwith_${filename}_prevPage`,
@@ -41,8 +40,6 @@ export const createStorageKey = {
   // 챕터별 부분 레이아웃 키 생성
   graphPartialLayout: (chapter) => STORAGE_KEYS.GRAPH_PARTIAL_LAYOUT(chapter),
   
-  // CFI 관련 키 생성
-  lastCFI: (filename) => STORAGE_KEYS.LAST_CFI(filename),
   prevChapter: (filename) => STORAGE_KEYS.PREV_CHAPTER(filename),
   nextPage: (filename) => STORAGE_KEYS.NEXT_PAGE(filename),
   prevPage: (filename) => STORAGE_KEYS.PREV_PAGE(filename),

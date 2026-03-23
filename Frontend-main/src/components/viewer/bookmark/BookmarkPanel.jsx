@@ -5,13 +5,19 @@ import { parseBookmarkLocation, formatDate } from '../../../utils/bookmarkUtils'
 
 const BookmarkPanel = ({ bookId, onSelect, onDelete }) => {
   const [sortOrder, setSortOrder] = useState('recent');
+  const [deletingId, setDeletingId] = useState(null);
   const { bookmarks, loading, removeBookmark } = useBookmarks(bookId);
   const sortedBookmarks = useBookmarkSort(bookmarks, sortOrder);
 
   const handleDelete = async (bookmarkId) => {
-    const result = await removeBookmark(bookmarkId);
-    if (result.success && onDelete) onDelete(bookmarkId);
-    return result;
+    setDeletingId(bookmarkId);
+    try {
+      const result = await removeBookmark(bookmarkId);
+      if (result.success && onDelete) onDelete(bookmarkId);
+      return result;
+    } finally {
+      setDeletingId(null);
+    }
   };
 
   return (
@@ -22,7 +28,7 @@ const BookmarkPanel = ({ bookId, onSelect, onDelete }) => {
             <span className="material-symbols-outlined text-blue-600">bookmark</span>
             <h3 className="font-bold text-gray-800 text-lg">북마크</h3>
             <span className="bg-blue-100 text-blue-600 text-xs px-2 py-1 rounded-full font-medium">
-              {bookmarks.length}
+              {bookmarks?.length ?? 0}
             </span>
           </div>
           
@@ -48,7 +54,7 @@ const BookmarkPanel = ({ bookId, onSelect, onDelete }) => {
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mb-3"></div>
             <p className="text-sm">북마크를 불러오는 중...</p>
           </div>
-        ) : bookmarks.length === 0 ? (
+        ) : !bookmarks?.length ? (
           <div className="p-6 text-left text-gray-500">
             <span className="material-symbols-outlined mb-3 text-3xl text-gray-300">bookmark</span>
             <p className="text-sm">저장된 북마크가 없습니다</p>
@@ -56,13 +62,13 @@ const BookmarkPanel = ({ bookId, onSelect, onDelete }) => {
           </div>
         ) : (
           <ul className="p-2 space-y-1">
-            {sortedBookmarks.map((bookmark) => (
+            {sortedBookmarks.map((bookmark, index) => (
               <li
-                key={bookmark.id}
+                key={bookmark.id ?? `bm-${index}`}
                 className="group relative"
               >
                 <button
-                  onClick={() => onSelect(bookmark.startCfi)}
+                  onClick={() => bookmark.startLocator && onSelect?.({ start: bookmark.startLocator })}
                   className="w-full text-left p-3 rounded-lg transition-all duration-200 hover:bg-green-50 focus:bg-green-50 focus:outline-none focus:ring-2 focus:ring-green-200"
                 >
                   <div className="flex items-start justify-between">
@@ -107,17 +113,19 @@ const BookmarkPanel = ({ bookId, onSelect, onDelete }) => {
                       <div className="flex items-center space-x-2 ml-4">
                         <span className="material-symbols-outlined text-gray-400 text-xs">schedule</span>
                         <span className="text-xs text-gray-500">
-                          {formatDate(bookmark.createdAt)}
+                          {formatDate(bookmark.createdAt ?? bookmark.created_at)}
                         </span>
                       </div>
                     </div>
 
                     <button
+                      type="button"
                       onClick={(e) => {
                         e.stopPropagation();
                         handleDelete(bookmark.id);
                       }}
-                      className="opacity-0 group-hover:opacity-100 ml-2 p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-md transition-all duration-200 flex-shrink-0"
+                      disabled={deletingId === bookmark.id}
+                      className="opacity-0 group-hover:opacity-100 ml-2 p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-md transition-all duration-200 flex-shrink-0 disabled:opacity-50 disabled:pointer-events-none"
                       title="북마크 삭제"
                     >
                       <span className="material-symbols-outlined text-xs">delete</span>

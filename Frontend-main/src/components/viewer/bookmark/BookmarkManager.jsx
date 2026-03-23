@@ -14,10 +14,9 @@ export const loadBookmarks = async (bookId) => {
   }
 };
 
-// 북마크 추가 (서버에 저장, 로컬 CFI 기반)
-export const addBookmark = async (bookId, startCfi, endCfi = null, color = '#28B532', memo = '', title = null) => {
+export const addBookmark = async (bookId, color = '#28B532', memo = '', title = null, startLocator = null, endLocator = null) => {
   try {
-    const bookmarkData = createBookmarkData(bookId, startCfi, endCfi, color, memo, title);
+    const bookmarkData = createBookmarkData(bookId, color, memo, title, startLocator, endLocator);
     const response = await createBookmark(bookmarkData);
     
     if (response.isSuccess) {
@@ -81,6 +80,7 @@ export const loadBookmarksFromLocal = (bookId) => {
 
 // 북마크 정렬 함수 (최근 북마크 우선)
 export const sortBookmarksByDate = (bookmarks) => {
+  if (!Array.isArray(bookmarks)) return [];
   return [...bookmarks].sort((a, b) => {
     const dateA = new Date(a.createdAt || a.created_at || 0);
     const dateB = new Date(b.createdAt || b.created_at || 0);
@@ -116,8 +116,7 @@ export const applyBookmarkHighlights = (bookmarks) => {
   // 기존 하이라이트 제거
   removeBookmarkHighlights();
   
-  // CFI 파싱 로직이 정확하지 않아 body가 녹색으로 칠해지는 문제 발생
-  // 임시로 비활성화 - 향후 EpubCFI 라이브러리를 사용하여 정확한 DOM Range 찾기 구현 필요
+  // Range 기반 하이라이트는 locator/DOM 매핑 안정화 후 재검토
   return;
 };
   

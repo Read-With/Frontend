@@ -3,8 +3,8 @@ import PropTypes from 'prop-types';
 import { useFileUpload, FILE_CONSTRAINTS } from '../../hooks/books/useFileUpload';
 import { getBooks } from '../../utils/api/booksApi';
 import { theme } from '../common/theme';
-import ePub from 'epubjs';
 import { normalizeTitle } from '../../utils/stringUtils';
+import { extractXhtmlFileMetadata, xhtmlUploadBasename } from '../../utils/xhtmlUploadUtils';
 
 const FileUpload = ({ onUploadSuccess, onClose }) => {
   const [dragActive, setDragActive] = useState(false);
@@ -19,80 +19,22 @@ const FileUpload = ({ onUploadSuccess, onClose }) => {
   const [showApprovalPendingModal, setShowApprovalPendingModal] = useState(false);
   const [uploadedBook, setUploadedBook] = useState(null);
   const inputRef = useRef(null);
-  const { uploading, uploadProgress, uploadError, uploadFile, resetUpload } = useFileUpload();
+  const { uploading, uploadProgress, uploadError, uploadFile, resetUpload, validateXhtmlFile } = useFileUpload();
 
-  const extractEpubMetadata = async (file) => {
+  const extractXhtmlMetadata = async (file) => {
     try {
       setExtractingMetadata(true);
-      
-      // 전체 프로세스에 타임아웃 설정 (최대 10초)
-      const metadataPromise = (async () => {
-        try {
-          // EPUB 파일을 메모리에만 로드하고 리소스 처리는 최소화
-          const book = ePub(file, {
-            replacements: 'none', // 리소스 대체 비활성화
-            openAs: 'epub' // EPUB로 직접 열기
-          });
-          
-          // ready 상태 대기 (타임아웃 8초)
-          await Promise.race([
-            book.ready,
-            new Promise((_, reject) => setTimeout(() => reject(new Error('Ready timeout')), 8000))
-          ]);
-          
-          // 메타데이터 안전하게 추출
-          let metadata = {};
-          try {
-            metadata = book.packaging?.metadata || book.metadata || {};
-          } catch (e) {
-          }
-          
-          const getMetadataValue = (field) => {
-            try {
-              const value = metadata[field];
-              if (Array.isArray(value) && value.length > 0) {
-                return value[0];
-              }
-              return value || null;
-            } catch (e) {
-              return null;
-            }
-          };
-          
-          const metadataResult = {
-            title: getMetadataValue('title') || file.name.replace(/\.epub$/i, ''),
-            author: getMetadataValue('creator') || getMetadataValue('author') || 'Unknown',
-            language: getMetadataValue('language') || 'ko'
-          };
-          
-          // 책 객체 정리
-          try {
-            if (book && typeof book.destroy === 'function') {
-              book.destroy();
-            }
-          } catch (e) {
-            // destroy 실패는 무시
-          }
-          
-          return metadataResult;
-        } catch (error) {
-          throw error;
-        }
-      })();
-      
-      // 전체 프로세스 타임아웃 적용
       return await Promise.race([
-        metadataPromise,
-        new Promise((_, reject) => 
+        extractXhtmlFileMetadata(file),
+        new Promise((_, reject) =>
           setTimeout(() => reject(new Error('Metadata extraction timeout')), 10000)
-        )
+        ),
       ]);
-    } catch (error) {
-      // 에러 발생 시 파일명 기반으로 기본값 반환
+    } catch {
       return {
-        title: file.name.replace(/\.epub$/i, ''),
+        title: xhtmlUploadBasename(file.name),
         author: 'Unknown',
-        language: 'ko'
+        language: 'ko',
       };
     } finally {
       setExtractingMetadata(false);
@@ -101,15 +43,20 @@ const FileUpload = ({ onUploadSuccess, onClose }) => {
 
   const handleFiles = async (files) => {
     if (files && files.length > 0) {
+      const file = files[0];
+      const v = validateXhtmlFile(file);
+      if (!v.valid) {
+        alert(v.error);
+        return;
+      }
       try {
-        const file = files[0];
         setSelectedFile(file);
         
         // 파일 선택 후 즉시 메타데이터 단계로 이동 (UI 블로킹 방지)
         setStep('metadata');
         
         // 메타데이터 추출은 백그라운드에서 진행
-        const extractedMetadata = await extractEpubMetadata(file);
+        const extractedMetadata = await extractXhtmlSourceMetadata(file);
         setMetadata(prev => ({
           ...prev,
           ...extractedMetadata
@@ -120,7 +67,7 @@ const FileUpload = ({ onUploadSuccess, onClose }) => {
           setSelectedFile(files[0]);
           setMetadata(prev => ({
             ...prev,
-            title: files[0].name.replace(/\.epub$/i, ''),
+            title: xhtmlUploadBasename(files[0].name),
             author: prev.author || 'Unknown',
             language: prev.language || 'ko'
           }));
@@ -238,13 +185,10 @@ const FileUpload = ({ onUploadSuccess, onClose }) => {
         }
       }
 
-      // 5. IndexedDB에 서버 bookId로 EPUB 파일 저장
-      // 중요: EPUB 파일은 IndexedDB에만 저장되며, 서버에는 메타데이터만 저장됨
-      // 서버 bookId를 키로 사용하여 서버 책 목록과 IndexedDB의 EPUB 파일을 매칭함
       const book = {
         id: finalBookId,
         _bookId: finalBookId,
-        title: serverBook?.title || metadata.title || selectedFile.name.replace(/\.epub$/i, ''),
+        title: serverBook?.title || metadata.title || xhtmlUploadBasename(selectedFile.name),
         author: serverBook?.author || metadata.author || 'Unknown',
         language: serverBook?.language || metadata.language || 'ko',
         coverImgUrl: serverBook?.coverImgUrl || serverBook?.coverImage || serverBook?.coverUrl || '',
@@ -252,8 +196,8 @@ const FileUpload = ({ onUploadSuccess, onClose }) => {
         description: serverBook?.description || '',
         favorite: !!serverBook?.favorite,
         isLocalOnly: false,
-        epubFile: selectedFile,
-        epubArrayBuffer: arrayBuffer,
+        xhtmlFile: selectedFile,
+        xhtmlArrayBuffer: arrayBuffer,
         // 서버에서 가져온 manifest 정보 포함
         ...(manifestData && {
           chapters: manifestData.chapters,
@@ -262,8 +206,7 @@ const FileUpload = ({ onUploadSuccess, onClose }) => {
         }),
       };
 
-      // IndexedDB에 저장 (완료 확인)
-      // 책 이름, 저자 이름, EPUB 파일만 저장
+      // IndexedDB: 원본 바이너리 + 메타
       await Promise.all([
         saveLocalBookBuffer(String(finalBookId), arrayBuffer),
         saveLocalBookMetadata(String(finalBookId), {
@@ -300,7 +243,7 @@ const FileUpload = ({ onUploadSuccess, onClose }) => {
       // 6. 서버 책 목록 갱신 및 뷰어로 이동
       // onUploadSuccess가 addBook을 호출하여 서버 책 목록을 갱신하고,
       // useBooks에서 서버 책만 표시하므로 자동으로 library에 표시됨
-      // 뷰어에서는 서버 bookId로 IndexedDB에서 EPUB 파일을 로드함
+      // 뷰어는 combined XHTML, IndexedDB는 로컬 백업용
       onUploadSuccess(book);
       onClose();
     } catch (error) {
@@ -462,7 +405,7 @@ const FileUpload = ({ onUploadSuccess, onClose }) => {
           marginBottom: '8px',
           color: '#333'
         }}>
-          {dragActive ? '파일을 여기에 놓으세요' : 'EPUB 파일 선택'}
+          {dragActive ? '파일을 여기에 놓으세요' : 'XHTML/HTML 파일 선택'}
         </p>
         <p style={{ 
           fontSize: '14px', 
@@ -472,7 +415,7 @@ const FileUpload = ({ onUploadSuccess, onClose }) => {
         }}>
           파일을 드래그하거나 클릭해서 업로드하세요<br/>
           <small style={{ fontSize: '12px', color: '#999' }}>
-            최대 {Math.round(FILE_CONSTRAINTS.MAX_SIZE / (1024 * 1024))}MB, .epub 파일만 지원됩니다
+            최대 {Math.round(FILE_CONSTRAINTS.MAX_SIZE / (1024 * 1024))}MB, .xhtml · .html · .htm
           </small>
         </p>
       </div>
@@ -494,7 +437,7 @@ const FileUpload = ({ onUploadSuccess, onClose }) => {
         <div style={{ fontSize: '16px', fontWeight: 500 }}>{selectedFile?.name}</div>
         {extractingMetadata && (
           <div style={{ fontSize: '12px', color: '#5C6F5C', marginTop: '8px' }}>
-            📖 EPUB 메타데이터 추출 중...
+            📖 XHTML용 메타데이터 추출 중...
           </div>
         )}
       </div>
