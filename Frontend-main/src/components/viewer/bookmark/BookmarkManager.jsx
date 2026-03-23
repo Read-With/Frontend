@@ -2,9 +2,9 @@ import { getBookmarks, createBookmark, updateBookmark, deleteBookmark } from '..
 import { createBookmarkData } from '../../../utils/bookmarkUtils';
 
 // 북마크 목록 조회 (서버에서)
-export const loadBookmarks = async (bookId) => {
+export const loadBookmarks = async (bookId, sort = 'time_desc') => {
   try {
-    const response = await getBookmarks(bookId);
+    const response = await getBookmarks(bookId, sort);
     if (response.isSuccess) {
       return response.result || [];
     }
@@ -14,9 +14,9 @@ export const loadBookmarks = async (bookId) => {
   }
 };
 
-export const addBookmark = async (bookId, color = '#28B532', memo = '', title = null, startLocator = null, endLocator = null) => {
+export const addBookmark = async (bookId, color = '#28B532', memo = '', startLocator = null, endLocator = null) => {
   try {
-    const bookmarkData = createBookmarkData(bookId, color, memo, title, startLocator, endLocator);
+    const bookmarkData = createBookmarkData(bookId, color, memo, startLocator, endLocator);
     const response = await createBookmark(bookmarkData);
     
     if (response.isSuccess) {
@@ -82,8 +82,8 @@ export const loadBookmarksFromLocal = (bookId) => {
 export const sortBookmarksByDate = (bookmarks) => {
   if (!Array.isArray(bookmarks)) return [];
   return [...bookmarks].sort((a, b) => {
-    const dateA = new Date(a.createdAt || a.created_at || 0);
-    const dateB = new Date(b.createdAt || b.created_at || 0);
+    const dateA = new Date(a.createdAt || 0);
+    const dateB = new Date(b.createdAt || 0);
     return dateB - dateA; // 최신순
   });
 };

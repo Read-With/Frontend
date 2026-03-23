@@ -1,12 +1,19 @@
 import { authenticatedRequest } from './authApi';
 
+const normalizeBookId = (bookId) => {
+  if (bookId == null || bookId === '') return null;
+  const normalized = Number(bookId);
+  return Number.isFinite(normalized) ? normalized : null;
+};
+
 export const getBookmarks = async (bookId, sort = 'time_desc') => {
-  if (bookId == null || bookId === '') {
-    throw new Error('bookId는 필수입니다.');
+  const normalizedBookId = normalizeBookId(bookId);
+  if (normalizedBookId == null) {
+    throw new Error('유효한 bookId는 필수입니다.');
   }
   try {
     const queryParams = new URLSearchParams();
-    queryParams.append('bookId', bookId);
+    queryParams.append('bookId', String(normalizedBookId));
     if (sort) queryParams.append('sort', sort);
     const data = await authenticatedRequest(`/v2/bookmarks?${queryParams.toString()}`);
     return data;
@@ -20,10 +27,20 @@ export const createBookmark = async (bookmarkData) => {
   if (!bookmarkData || typeof bookmarkData !== 'object') {
     throw new Error('bookmarkData는 필수입니다.');
   }
+  const normalizedBookId = normalizeBookId(bookmarkData.bookId);
+  if (normalizedBookId == null) {
+    throw new Error('유효한 bookId는 필수입니다.');
+  }
+  if (!bookmarkData.startLocator || typeof bookmarkData.startLocator !== 'object') {
+    throw new Error('startLocator는 필수입니다.');
+  }
   try {
     const dataToSend = {
-      ...bookmarkData,
-      color: bookmarkData.color ?? '#28B532',
+      bookId: normalizedBookId,
+      startLocator: bookmarkData.startLocator,
+      color: bookmarkData.color ?? '#203A7B',
+      memo: bookmarkData.memo ?? '',
+      ...(bookmarkData.endLocator ? { endLocator: bookmarkData.endLocator } : {}),
     };
     const data = await authenticatedRequest('/v2/bookmarks', {
       method: 'POST',

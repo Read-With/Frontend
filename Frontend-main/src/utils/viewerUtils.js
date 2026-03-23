@@ -107,12 +107,12 @@ export function calculateChapterProgressFromLocator(startLocator, chapterNum, ev
   if (!startLocator || Number(startLocator.chapterIndex) !== Number(chapterNum)) {
     return { currentChars: 0, totalChars: 0, progress: 0, eventIndex: -1 };
   }
-  const totalChars = events[events.length - 1]?.end || 0;
+  const totalChars = events[events.length - 1]?.endTxtOffset || 0;
   const currentChars = approxCharsFromLocator(startLocator, totalChars);
   const progress = totalChars > 0 ? (currentChars / totalChars) * 100 : 0;
   let eventIndex = -1;
   for (let i = 0; i < events.length; i++) {
-    if (currentChars >= events[i].start && currentChars < events[i].end) {
+    if (currentChars >= events[i].startTxtOffset && currentChars < events[i].endTxtOffset) {
       eventIndex = i;
       break;
     }
@@ -131,20 +131,22 @@ export function findClosestEventFromLocator(startLocator, chapterNum, events) {
   const { currentChars } = calculateChapterProgressFromLocator(startLocator, chapterNum, events);
   for (let i = events.length - 1; i >= 0; i--) {
     const event = events[i];
-    if (currentChars >= event.start && currentChars < event.end) {
+    const start = Number(event.startTxtOffset);
+    const end = Number(event.endTxtOffset);
+    if (currentChars >= start && currentChars < end) {
       return {
         ...event,
-        eventNum: event.event_id ?? 0,
+        eventNum: event.eventId ?? 0,
         chapter: chapterNum,
-        progress: ((currentChars - event.start) / (event.end - event.start)) * 100,
+        progress: ((currentChars - start) / (end - start)) * 100,
       };
     }
   }
-  if (currentChars < events[0].start) {
-    return { ...events[0], eventNum: events[0].event_id ?? 0, chapter: chapterNum, progress: 0 };
+  if (currentChars < Number(events[0].startTxtOffset)) {
+    return { ...events[0], eventNum: events[0].eventId ?? 0, chapter: chapterNum, progress: 0 };
   }
   const last = events[events.length - 1];
-  return { ...last, eventNum: last.event_id ?? 0, chapter: chapterNum, progress: 100 };
+  return { ...last, eventNum: last.eventId ?? 0, chapter: chapterNum, progress: 100 };
 }
 
 export function getRefs(xhtmlBookRef, xhtmlViewerRef) {
@@ -261,7 +263,6 @@ export const eventUtils = {
       event.resolvedEventIdx,
       event.eventIdx,
       event.eventNum,
-      event.event_id,
       event.eventId,
       event.idx,
       event.id
@@ -388,11 +389,11 @@ export const eventUtils = {
       chapterIdx: currentChapter,
       eventNum: eventIdx,
       eventIdx: eventIdx,
-      event_id: eventData?.event_id ?? eventIdx,
+      eventId: eventData?.eventId ?? eventIdx,
       relations: [],
       characters: [],
-      start: eventData?.start ?? null,
-      end: eventData?.end ?? null,
+      startTxtOffset: eventData?.startTxtOffset ?? null,
+      endTxtOffset: eventData?.endTxtOffset ?? null,
       ...(eventData || {})
     };
   },
@@ -718,15 +719,18 @@ export const graphDataCacheUtils = {
 export const graphDataTransformUtils = {
   normalizeApiEvent: (apiEvent, currentChapter, apiEventIdx) => {
     if (!apiEvent) return null;
-    
+    const resolvedEventId = apiEvent.eventId ?? apiEvent.idx ?? apiEvent.id ?? apiEventIdx;
+    const resolvedStart = apiEvent.startTxtOffset ?? null;
+    const resolvedEnd = apiEvent.endTxtOffset ?? null;
+
     return {
       chapter: apiEvent.chapterIdx ?? currentChapter,
       chapterIdx: apiEvent.chapterIdx ?? currentChapter,
-      eventNum: apiEvent.event_id ?? apiEventIdx,
-      eventIdx: apiEvent.event_id ?? apiEventIdx,
-      event_id: apiEvent.event_id ?? apiEventIdx,
-      start: apiEvent.start,
-      end: apiEvent.end,
+      eventNum: resolvedEventId,
+      eventIdx: resolvedEventId,
+      eventId: resolvedEventId,
+      startTxtOffset: resolvedStart,
+      endTxtOffset: resolvedEnd,
       ...apiEvent
     };
   },
@@ -804,7 +808,7 @@ export const graphDataTransformUtils = {
         chapterIdx: normalizedEvent.chapterIdx ?? currentChapter,
         eventNum: resolvedEventIdx,
         eventIdx: resolvedEventIdx,
-        event_id: resolvedEventIdx,
+        eventId: resolvedEventIdx,
         resolvedEventIdx,
         originalEventIdx,
         relations: resultData.relations || [],
@@ -817,7 +821,7 @@ export const graphDataTransformUtils = {
       chapterIdx: currentChapter,
       eventNum: resolvedEventIdx,
       eventIdx: resolvedEventIdx,
-      event_id: resolvedEventIdx,
+      eventId: resolvedEventIdx,
       resolvedEventIdx,
       originalEventIdx: resolvedEventIdx,
       relations: resultData.relations || [],

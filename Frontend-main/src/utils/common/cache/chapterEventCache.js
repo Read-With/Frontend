@@ -480,9 +480,9 @@ const buildChapterCachePayload = (bookId, chapterIdx, events, source = 'runtime'
       bookId,
       chapterIdx,
       eventIdx: Number(event.eventIdx) || 0,
-      eventId: event?.eventId ?? event?.event?.event_id ?? null,
-      start: event?.startPos ?? event?.start ?? null,
-      end: event?.endPos ?? event?.end ?? null,
+      eventId: event?.eventId ?? event?.event?.eventId ?? null,
+      startTxtOffset: event?.startTxtOffset ?? null,
+      endTxtOffset: event?.endTxtOffset ?? null,
       title:
         event?.event?.name ??
         event?.event?.title ??
@@ -532,14 +532,8 @@ export const normalizeManifestEvents = (bookId, chapterIdx, manifestChapter) => 
         return null;
       }
 
-      const startPos =
-        typeof rawEvent.startPos === 'number'
-          ? rawEvent.startPos
-          : rawEvent.start ?? null;
-      const endPos =
-        typeof rawEvent.endPos === 'number'
-          ? rawEvent.endPos
-          : rawEvent.end ?? null;
+      const startTxtOffset = typeof rawEvent.startTxtOffset === 'number' ? rawEvent.startTxtOffset : null;
+      const endTxtOffset = typeof rawEvent.endTxtOffset === 'number' ? rawEvent.endTxtOffset : null;
 
       const characters = Array.isArray(rawEvent.characters)
         ? rawEvent.characters.map((character) => deepClone(character))
@@ -558,16 +552,12 @@ export const normalizeManifestEvents = (bookId, chapterIdx, manifestChapter) => 
           ...deepClone(rawEvent),
           idx: eventIdx,
           chapterIdx,
-          start: startPos,
-          end: endPos
+          startTxtOffset,
+          endTxtOffset
         },
-        startPos,
-        endPos,
-        eventId:
-          rawEvent.eventId ??
-          rawEvent.event_id ??
-          rawEvent.id ??
-          null
+        startTxtOffset,
+        endTxtOffset,
+        eventId: rawEvent.eventId ?? rawEvent.id ?? null
       };
     })
     .filter(Boolean);
@@ -607,7 +597,7 @@ const normalizeReaderProgressPayload = (bookKey, payload) => {
     chapterIdx: chapterIdx,
     eventIdx: normalizedEventIdx,
     eventNum: normalizedEventNum,
-    eventId: payload.eventId ?? payload.event_id ?? payload.id ?? null,
+    eventId: payload.eventId ?? payload.id ?? null,
     startLocator:
       payload.startLocator ?? payload.anchor?.startLocator ?? payload.anchor?.start ?? undefined,
     endLocator:
@@ -780,8 +770,9 @@ export const discoverChapterEvents = async (bookId, chapterIdx, forceRefresh = f
   if (manifestChapter?.events?.length) {
       manifestEventStructures = manifestChapter.events.map((rawEvent, index) => ({
         eventIdx: Number(rawEvent.idx ?? rawEvent.eventIdx ?? index + 1),
-        startPos: rawEvent.startPos ?? rawEvent.start ?? null,
-        endPos: rawEvent.endPos ?? rawEvent.end ?? null,
+        eventId: rawEvent.eventId ?? null,
+        startTxtOffset: rawEvent.startTxtOffset ?? null,
+        endTxtOffset: rawEvent.endTxtOffset ?? null,
         rawText: rawEvent.rawText ?? null
       })).filter(e => e.eventIdx > 0);
     }
@@ -813,12 +804,11 @@ export const discoverChapterEvents = async (bookId, chapterIdx, forceRefresh = f
       const hasRelations = Array.isArray(relations) && relations.length > 0;
       const hasEventMeta =
         event &&
-        (event.event_id !== undefined ||
-          event.eventId !== undefined ||
+        (event.eventId !== undefined ||
           event.name ||
           event.title ||
-          event.start !== undefined ||
-          event.end !== undefined);
+          event.startTxtOffset !== undefined ||
+          event.endTxtOffset !== undefined);
 
       if (!hasCharacters && !hasRelations && !hasEventMeta && !manifestStructure) {
         return false;
@@ -833,17 +823,15 @@ export const discoverChapterEvents = async (bookId, chapterIdx, forceRefresh = f
         event: {
           idx: eventIdx,
           chapterIdx,
-          start: manifestStructure?.startPos ?? manifestStructure?.start ?? event?.start ?? null,
-          end: manifestStructure?.endPos ?? manifestStructure?.end ?? event?.end ?? null,
-          startPos: manifestStructure?.startPos ?? manifestStructure?.start ?? event?.start ?? null,
-          endPos: manifestStructure?.endPos ?? manifestStructure?.end ?? event?.end ?? null,
+          startTxtOffset: event?.startTxtOffset ?? manifestStructure?.startTxtOffset ?? null,
+          endTxtOffset: event?.endTxtOffset ?? manifestStructure?.endTxtOffset ?? null,
           rawText: manifestStructure?.rawText ?? event?.rawText ?? null,
-          event_id: event?.event_id ?? event?.eventId ?? null,
+          eventId: event?.eventId ?? event?.id ?? null,
           ...(event || {})
         },
-        startPos: manifestStructure?.startPos ?? manifestStructure?.start ?? event?.start ?? null,
-        endPos: manifestStructure?.endPos ?? manifestStructure?.end ?? event?.end ?? null,
-        eventId: event?.event_id ?? event?.eventId ?? null
+        startTxtOffset: event?.startTxtOffset ?? manifestStructure?.startTxtOffset ?? null,
+        endTxtOffset: event?.endTxtOffset ?? manifestStructure?.endTxtOffset ?? null,
+        eventId: event?.eventId ?? event?.id ?? manifestStructure?.eventId ?? null
       };
 
       apiEvents.push(normalizedEvent);
@@ -863,14 +851,12 @@ export const discoverChapterEvents = async (bookId, chapterIdx, forceRefresh = f
           event: {
             idx: eventIdx,
             chapterIdx,
-            start: manifestStructure.startPos ?? manifestStructure.start ?? null,
-            end: manifestStructure.endPos ?? manifestStructure.end ?? null,
-            startPos: manifestStructure.startPos ?? manifestStructure.start ?? null,
-            endPos: manifestStructure.endPos ?? manifestStructure.end ?? null,
+            startTxtOffset: manifestStructure.startTxtOffset ?? null,
+            endTxtOffset: manifestStructure.endTxtOffset ?? null,
             rawText: manifestStructure.rawText ?? null
           },
-          startPos: manifestStructure.startPos ?? manifestStructure.start ?? null,
-          endPos: manifestStructure.endPos ?? manifestStructure.end ?? null,
+          startTxtOffset: manifestStructure.startTxtOffset ?? null,
+          endTxtOffset: manifestStructure.endTxtOffset ?? null,
           eventId: null
         });
         return true;
@@ -1000,9 +986,9 @@ export const getEventData = async (bookId, chapterIdx, eventIdx) => {
         characters,
         relations,
         event,
-        startPos: event?.start,
-        endPos: event?.end,
-        eventId: event?.event_id
+        startTxtOffset: event?.startTxtOffset,
+        endTxtOffset: event?.endTxtOffset,
+        eventId: event?.eventId
       };
     }
   } catch (error) {

@@ -33,17 +33,18 @@ const normalizeEvent = (event, fallbackIdx) => {
     event.idx ?? event.eventIdx ?? event.index ?? event.id ?? fallbackIdx
   );
 
-  const startPos = toNumberOrNull(event.startPos ?? event.start ?? event.begin);
-  const endPos = toNumberOrNull(event.endPos ?? event.end ?? event.finish);
+  const startPos = toNumberOrNull(event.startTxtOffset);
+  const endPos = toNumberOrNull(event.endTxtOffset);
 
   return {
     ...event,
     idx: resolvedIdx ?? fallbackIdx ?? null,
     eventIdx: resolvedIdx ?? fallbackIdx ?? null,
+    eventId: event.eventId ?? event.id ?? null,
     startPos: startPos ?? 0,
     endPos: endPos ?? 0,
-    start: startPos ?? null,
-    end: endPos ?? null,
+    startTxtOffset: startPos ?? 0,
+    endTxtOffset: endPos ?? 0,
   };
 };
 
@@ -89,6 +90,19 @@ const normalizeChapter = (chapter, index) => {
   };
 };
 
+const normalizeCharacter = (character) => {
+  if (!character || typeof character !== 'object' || Array.isArray(character)) {
+    return null;
+  }
+  return {
+    ...character,
+    main_character: character.main_character ?? character.isMainCharacter ?? false,
+    profile_text: character.profile_text ?? character.profileText ?? '',
+    description: character.description ?? character.profileText ?? '',
+    description_ko: character.description_ko ?? character.personalityText ?? '',
+  };
+};
+
 const normalizeProgressMetadata = (progressMetadata) => {
   if (!progressMetadata || typeof progressMetadata !== 'object') {
     return progressMetadata;
@@ -124,10 +138,14 @@ const normalizeManifestData = (manifestData) => {
     : manifestData.chapters;
 
   const progressMetadata = normalizeProgressMetadata(manifestData.progressMetadata);
+  const normalizedCharacters = Array.isArray(manifestData.characters)
+    ? manifestData.characters.map(normalizeCharacter).filter(Boolean)
+    : manifestData.characters;
 
   return {
     ...manifestData,
     chapters: normalizedChapters,
+    characters: normalizedCharacters,
     progressMetadata: progressMetadata ?? manifestData.progressMetadata,
   };
 };
@@ -406,12 +424,14 @@ export const findApiEventFromChars = async (bookId, chapterIdx, currentChars, ch
     const existing = eventsMap.get(idx) ?? {};
     const normalized = { ...existing, ...sourceEvent };
 
-    const startPos = Number(normalized.startPos ?? normalized.start ?? 0);
-    const endPosCandidate = Number(normalized.endPos ?? normalized.end ?? normalized.finish ?? startPos);
+    const startPos = Number(normalized.startTxtOffset ?? normalized.startPos ?? 0);
+    const endPosCandidate = Number(normalized.endTxtOffset ?? normalized.endPos ?? startPos);
     const endPos = Number.isFinite(endPosCandidate) ? endPosCandidate : startPos;
 
     normalized.startPos = Number.isFinite(startPos) ? startPos : 0;
     normalized.endPos = endPos >= normalized.startPos ? endPos : normalized.startPos;
+    normalized.startTxtOffset = normalized.startPos;
+    normalized.endTxtOffset = normalized.endPos;
 
     normalized.eventIdx = idx;
     normalized.idx = normalized.idx ?? idx;
@@ -446,8 +466,8 @@ export const findApiEventFromChars = async (bookId, chapterIdx, currentChars, ch
     if (idxA !== idxB) {
       return idxA - idxB;
     }
-    const startA = Number(a.startPos ?? a.start ?? 0);
-    const startB = Number(b.startPos ?? b.start ?? 0);
+    const startA = Number(a.startTxtOffset ?? a.startPos ?? 0);
+    const startB = Number(b.startTxtOffset ?? b.startPos ?? 0);
     return startA - startB;
   });
   
@@ -456,7 +476,7 @@ export const findApiEventFromChars = async (bookId, chapterIdx, currentChars, ch
 
   let isRelativePositions = false;
   if (firstEvent) {
-    const firstStart = Number(firstEvent.startPos ?? firstEvent.start ?? 0);
+    const firstStart = Number(firstEvent.startTxtOffset ?? firstEvent.startPos ?? 0);
     if (base > 0 && firstStart >= 0 && firstStart < base) {
       isRelativePositions = true;
     }
@@ -465,8 +485,8 @@ export const findApiEventFromChars = async (bookId, chapterIdx, currentChars, ch
   const position = isRelativePositions ? currentChars : base + currentChars;
 
   if (firstEvent) {
-    const firstStart = Number(firstEvent.startPos ?? firstEvent.start ?? 0);
-    const firstEndRaw = Number(firstEvent.endPos ?? firstEvent.end ?? firstStart);
+    const firstStart = Number(firstEvent.startTxtOffset ?? firstEvent.startPos ?? 0);
+    const firstEndRaw = Number(firstEvent.endTxtOffset ?? firstEvent.endPos ?? firstStart);
     const span = Math.max(firstEndRaw - firstStart, 1);
     if (position <= firstStart) {
       return {
@@ -481,8 +501,8 @@ export const findApiEventFromChars = async (bookId, chapterIdx, currentChars, ch
 
   for (let i = 0; i < mergedEvents.length; i++) {
     const event = mergedEvents[i];
-    const eventStartPos = Number(event.startPos ?? event.start ?? 0);
-    const eventEndPosRaw = Number(event.endPos ?? event.end ?? eventStartPos);
+    const eventStartPos = Number(event.startTxtOffset ?? event.startPos ?? 0);
+    const eventEndPosRaw = Number(event.endTxtOffset ?? event.endPos ?? eventStartPos);
     const eventEndPos = eventEndPosRaw > eventStartPos ? eventEndPosRaw : eventStartPos + 1;
     
     if (position >= eventStartPos && position < eventEndPos) {

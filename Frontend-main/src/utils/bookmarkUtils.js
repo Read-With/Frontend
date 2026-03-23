@@ -111,8 +111,8 @@ export const getColorKey = (color) => {
   return 'normal';
 };
 
-export const createBookmarkData = (bookId, color = '#28B532', memo = '', title = null, startLocator = null, endLocator = null) => {
-  const data = { bookId, color, memo, title, createdAt: new Date().toISOString() };
+export const createBookmarkData = (bookId, color = '#28B532', memo = '', startLocator = null, endLocator = null) => {
+  const data = { bookId, color, memo };
   const start = toLocator(startLocator);
   const end = toLocator(endLocator);
   if (start) data.startLocator = start;

@@ -42,19 +42,14 @@ export const anchorToLocators = (anchor) => {
 export const progressPayloadFromData = (data) => {
   if (!data?.bookId) return null;
   const a = data.anchor;
-  const start =
+  const locator =
     data.startLocator ??
     toLocator(data.locator) ??
     (a && (toLocator(a.startLocator) ?? toLocator(a.start) ?? toLocator(a)));
-  const end =
-    data.endLocator ??
-    (a && (toLocator(a.endLocator) ?? toLocator(a.end) ?? toLocator(a.startLocator) ?? toLocator(a.start) ?? toLocator(a))) ??
-    start;
-  if (!start) return null;
+  if (!locator) return null;
   return {
     bookId: data.bookId,
-    startLocator: start,
-    endLocator: end ?? start,
+    locator,
   };
 };
 

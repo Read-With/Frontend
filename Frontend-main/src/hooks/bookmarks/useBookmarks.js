@@ -54,16 +54,7 @@ export const useBookmarks = (bookId, options = {}) => {
         const localBookmarks = loadBookmarksFromLocal(bookId);
         setBookmarks(localBookmarks || []);
       } else {
-        let bookmarksData = await loadBookmarksFromManager(bookId);
-        if (sort && sort !== 'time_desc') {
-          const sorted = [...(bookmarksData || [])];
-          const factor = sort === 'time_asc' ? 1 : -1;
-          bookmarksData = sorted.sort((a, b) => {
-            const dateA = new Date(a.createdAt || a.created_at || 0).getTime();
-            const dateB = new Date(b.createdAt || b.created_at || 0).getTime();
-            return (dateA - dateB) * factor;
-          });
-        }
+        const bookmarksData = await loadBookmarksFromManager(bookId, sort);
         setBookmarks(bookmarksData || []);
       }
     } catch (err) {
@@ -222,7 +213,6 @@ export const useBookmarks = (bookId, options = {}) => {
         bookId,
         '#28B532',
         '',
-        bookmarkTitle,
         startLocator,
         endLocator
       );

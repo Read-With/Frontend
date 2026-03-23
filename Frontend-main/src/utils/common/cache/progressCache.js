@@ -93,11 +93,13 @@ export const setProgressToCache = (progressData) => {
   if (!progressData || progressData.bookId == null) return;
   const payload = progressPayloadFromData(progressData);
   if (!payload) return;
+  const { start, end } = resolveProgressEndpoints(payload);
+  if (!start) return;
   const bookIdStr = String(progressData.bookId);
   const progress = {
     bookId: payload.bookId,
-    startLocator: payload.startLocator,
-    endLocator: payload.endLocator,
+    startLocator: start,
+    endLocator: end ?? start,
     timestamp: Date.now(),
   };
   setCacheItem('progressCache', bookIdStr, progress);
