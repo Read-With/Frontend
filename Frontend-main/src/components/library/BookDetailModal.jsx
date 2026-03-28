@@ -3,8 +3,8 @@ import PropTypes from 'prop-types';
 import { useNavigate } from 'react-router-dom';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { getBookManifest, getBookProgress, deleteBookProgress } from '../../utils/api/api';
+import { resolveProgressLocator } from '../../utils/common/locatorUtils';
 import { getManifestFromCache } from '../../utils/common/cache/manifestCache';
-import { deleteLocalBookBuffer } from '../../utils/localBookStorage';
 import { getServerBookId } from '../../utils/viewerUtils';
 import { toast } from 'react-toastify';
 import './BookDetailModal.css';
@@ -40,6 +40,27 @@ const BookDetailModal = memo(({ book, isOpen, onClose, onDelete }) => {
     return uniqueCharacters.filter(char => !char.isMainCharacter);
   }, [uniqueCharacters]);
 
+  const sortedMainCharacters = useMemo(
+    () =>
+      [...mainCharacters].sort((a, b) =>
+        String(a.name ?? '').localeCompare(String(b.name ?? ''), 'ko')
+      ),
+    [mainCharacters]
+  );
+
+  const sortedOtherCharacters = useMemo(
+    () =>
+      [...otherCharacters].sort((a, b) =>
+        String(a.name ?? '').localeCompare(String(b.name ?? ''), 'ko')
+      ),
+    [otherCharacters]
+  );
+
+  const progressLocator = useMemo(
+    () => (progressInfo ? resolveProgressLocator(progressInfo) : null),
+    [progressInfo]
+  );
+
   const fetchProgressInfo = useCallback(async () => {
     const serverBookId = getServerBookId(book);
     
@@ -56,7 +77,8 @@ const BookDetailModal = memo(({ book, isOpen, onClose, onDelete }) => {
         setProgressInfo(null);
       }
     } catch (err) {
-      if (!err.message.includes('404') && !err.message.includes('찾을 수 없습니다')) {
+      const msg = err?.message ?? '';
+      if (!msg.includes('404') && !msg.includes('찾을 수 없습니다')) {
         console.error('Progress 정보를 불러오는데 실패했습니다:', err);
       }
       setProgressInfo(null);
@@ -86,10 +108,9 @@ const BookDetailModal = memo(({ book, isOpen, onClose, onDelete }) => {
         setBookDetails({
           ...book,
           ...bookInfo,
-          // 정규화된 챕터 데이터 사용 (title 필드가 정규화됨)
           chapters: normalizedManifest.chapters || manifestData.result.chapters || [],
           characters: normalizedManifest.characters || manifestData.result.characters || [],
-          progressMetadata: normalizedManifest.progressMetadata || manifestData.result.progressMetadata || {}
+          progressMetadata: normalizedManifest.progressMetadata || manifestData.result.progressMetadata || {},
         });
       } else {
         console.warn('API 응답이 성공하지 않았습니다:', manifestData);
@@ -98,7 +119,7 @@ const BookDetailModal = memo(({ book, isOpen, onClose, onDelete }) => {
       }
     } catch (err) {
       console.error('책 정보를 불러오는데 실패했습니다:', err);
-      const errorMessage = err.message || '책 정보를 불러오는데 실패했습니다.';
+      const errorMessage = err?.message || '책 정보를 불러오는데 실패했습니다.';
       setError(errorMessage);
       setBookDetails(book);
     } finally {
@@ -113,20 +134,37 @@ const BookDetailModal = memo(({ book, isOpen, onClose, onDelete }) => {
     }
   }, [isOpen, book, fetchBookDetails, fetchProgressInfo]);
 
-  // 서버 책만 표시하므로 항상 서버 bookId 사용
-  const getBookIdentifier = useCallback(() => book.id, [book?.id]);
-  
+  useEffect(() => {
+    if (isOpen && book) {
+      setShowMoreCharacters(false);
+    }
+  }, [isOpen, book?.id]);
+
+  const getBookIdentifier = useCallback(() => {
+    const id = book?.id ?? getServerBookId(book);
+    return id != null ? String(id) : '';
+  }, [book]);
+
   const getNavigationState = useCallback(() => ({ book }), [book]);
 
-  // 네비게이션 핸들러들
   const handleReadClick = useCallback(() => {
+    const id = getBookIdentifier();
+    if (!id) {
+      toast.error('책 정보가 없어 이동할 수 없습니다.');
+      return;
+    }
     onClose();
-    navigate(`/user/viewer/${getBookIdentifier()}`, { state: getNavigationState() });
+    navigate(`/user/viewer/${id}`, { state: getNavigationState() });
   }, [onClose, navigate, getBookIdentifier, getNavigationState]);
 
   const handleGraphClick = useCallback(() => {
+    const id = getBookIdentifier();
+    if (!id) {
+      toast.error('책 정보가 없어 이동할 수 없습니다.');
+      return;
+    }
     onClose();
-    navigate(`/user/graph/${getBookIdentifier()}`, { state: getNavigationState() });
+    navigate(`/user/graph/${id}`, { state: getNavigationState() });
   }, [onClose, navigate, getBookIdentifier, getNavigationState]);
 
   // 진도 삭제 - useMutation + 낙관적 업데이트
@@ -218,8 +256,8 @@ const BookDetailModal = memo(({ book, isOpen, onClose, onDelete }) => {
   if (!isOpen) return null;
 
   return (
-    <div 
-      className={`book-detail-modal ${!isOpen ? 'hidden' : ''}`} 
+    <div
+      className="book-detail-modal"
       onClick={onClose}
       role="dialog"
       aria-modal="true"
@@ -282,20 +320,17 @@ const BookDetailModal = memo(({ book, isOpen, onClose, onDelete }) => {
           {bookDetails && (
             <>
 
-              {uniqueCharacters && uniqueCharacters.length > 0 && (
+              {uniqueCharacters.length > 0 && (
                 <div className="book-detail-section">
                   <div className="book-detail-characters-header">
                     <div className="book-detail-label">등장 인물</div>
                   </div>
                   <div className="book-detail-value">
-                    {/* 주요 인물 - 항상 표시 */}
                     {mainCharacters.length > 0 && (
                       <div className="book-detail-characters-list">
-                        {mainCharacters
-                          .sort((a, b) => a.name.localeCompare(b.name))
-                          .map((character) => (
+                        {sortedMainCharacters.map((character) => (
                             <div 
-                              key={character.id} 
+                              key={character.id ?? character.name} 
                               className="book-detail-character-item main-character"
                             >
                               <span className="character-name">{character.name}</span>
@@ -310,11 +345,9 @@ const BookDetailModal = memo(({ book, isOpen, onClose, onDelete }) => {
                       <>
                         {showMoreCharacters && (
                           <div className="book-detail-characters-list">
-                            {otherCharacters
-                              .sort((a, b) => a.name.localeCompare(b.name))
-                              .map((character) => (
+                            {sortedOtherCharacters.map((character) => (
                                 <div 
-                                  key={character.id} 
+                                  key={character.id ?? character.name} 
                                   className="book-detail-character-item"
                                 >
                                   <span className="character-name">{character.name}</span>
@@ -351,8 +384,9 @@ const BookDetailModal = memo(({ book, isOpen, onClose, onDelete }) => {
                                          chapter.chapter || 
                                          chapter.number ||
                                          (index + 1);
+                        const chapterKey = chapter.id ?? chapter.href ?? `${chapterIdx}-${chapterTitle}`;
                         return (
-                          <div key={index} className="book-detail-chapter-item">
+                          <div key={chapterKey} className="book-detail-chapter-item">
                             {chapterIdx}. {chapterTitle || '(제목 없음)'}
                           </div>
                         );
@@ -381,20 +415,14 @@ const BookDetailModal = memo(({ book, isOpen, onClose, onDelete }) => {
                   </div>
                   <div className="book-detail-value">
                     <div className="book-detail-progress-info">
-                      {progressInfo.chapterIdx && (
-                        <div className="book-detail-progress-item">
-                          챕터 {progressInfo.chapterIdx}장
+                      {progressLocator && (
+                        <div className="book-detail-progress-item" style={{ fontSize: '0.9em', color: '#374151' }}>
+                          챕터 {progressLocator.chapterIndex} · 블록 {progressLocator.blockIndex} · 오프셋 {progressLocator.offset}
                         </div>
                       )}
-                      {progressInfo.eventIdx !== undefined && (
-                        <div className="book-detail-progress-item">
-                          이벤트 {progressInfo.eventIdx}
-                        </div>
-                      )}
-                      {(progressInfo.startLocator?.chapterIndex ?? progressInfo.chapterIdx) && (
+                      {progressInfo.updatedAt && (
                         <div className="book-detail-progress-item" style={{ fontSize: '0.8em', color: '#6b7280' }}>
-                          위치: {progressInfo.startLocator?.chapterIndex ?? progressInfo.chapterIdx}챕터
-                          {Number.isFinite(progressInfo.startLocator?.blockIndex) && ` (block ${progressInfo.startLocator.blockIndex})`}
+                          갱신: {new Date(progressInfo.updatedAt).toLocaleString()}
                         </div>
                       )}
                     </div>
@@ -423,20 +451,22 @@ const BookDetailModal = memo(({ book, isOpen, onClose, onDelete }) => {
             >
               그래프
             </button>
-            <button
-              className="book-detail-danger-btn"
-              onClick={handleDeleteBook}
-              type="button"
-              aria-label="책 삭제"
-              style={{
-                backgroundColor: '#dc2626',
-                color: 'white',
-                border: '1px solid #dc2626',
-                marginTop: '8px'
-              }}
-            >
-              삭제
-            </button>
+            {!book?._isPublic && (
+              <button
+                className="book-detail-danger-btn"
+                onClick={handleDeleteBook}
+                type="button"
+                aria-label="책 삭제"
+                style={{
+                  backgroundColor: '#dc2626',
+                  color: 'white',
+                  border: '1px solid #dc2626',
+                  marginTop: '8px'
+                }}
+              >
+                삭제
+              </button>
+            )}
           </div>
         </div>
       </div>

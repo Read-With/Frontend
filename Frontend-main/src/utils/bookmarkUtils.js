@@ -1,4 +1,4 @@
-import { toLocator } from './common/locatorUtils';
+import { toLocator, locatorsEqual } from './common/locatorUtils';
 
 export const createBookmarkTitle = (pageNum, chapterNum, fallbackIndex = null) => {
   if (pageNum != null && chapterNum != null) return `${pageNum}페이지 (${chapterNum}챕터)`;
@@ -12,8 +12,12 @@ export const parseBookmarkLocation = (bookmark) => {
   const rawTitle = bookmark.title;
   if (rawTitle != null && String(rawTitle).trim()) return String(rawTitle).trim();
   const loc = toLocator(bookmark.startLocator);
-  if (loc) return `${loc.chapterIndex}챕터`;
-  return '';
+  if (!loc) return '';
+  const base = `${loc.chapterIndex}챕터`;
+  if (bookmark.rangeBookmark) return `${base} · 범위`;
+  const end = toLocator(bookmark.endLocator);
+  if (end && !locatorsEqual(loc, end)) return `${base} · 범위`;
+  return base;
 };
 
 export const isValidLocator = (loc) => toLocator(loc) != null;
@@ -116,6 +120,6 @@ export const createBookmarkData = (bookId, color = '#28B532', memo = '', startLo
   const start = toLocator(startLocator);
   const end = toLocator(endLocator);
   if (start) data.startLocator = start;
-  if (end) data.endLocator = end;
+  if (start && end && !locatorsEqual(start, end)) data.endLocator = end;
   return data;
 };

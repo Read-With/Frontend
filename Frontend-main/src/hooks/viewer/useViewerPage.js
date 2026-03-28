@@ -129,15 +129,22 @@ export function useViewerPage() {
     });
   }, [location.state?.book, matchedServerBook, bookId, serverBook, loadingServerBook]);
 
-  const isLocalBook = useMemo(
-    () => !(book?.id && typeof book.id === 'number'),
-    [book]
-  );
+  const isLocalBook = useMemo(() => {
+    const numericBookId = Number(book?.id);
+    return !Number.isFinite(numericBookId) || numericBookId <= 0;
+  }, [book]);
 
   // 서버 bookId 추출 유틸리티 함수
   const getServerBookId = useCallback((bookObj) => {
-    return (bookObj?.id && typeof bookObj.id === 'number' ? bookObj.id : null) || 
-           (bookObj?._bookId && typeof bookObj._bookId === 'number' ? bookObj._bookId : null);
+    const primaryId = Number(bookObj?.id);
+    if (Number.isFinite(primaryId) && primaryId > 0) {
+      return primaryId;
+    }
+    const fallbackId = Number(bookObj?._bookId);
+    if (Number.isFinite(fallbackId) && fallbackId > 0) {
+      return fallbackId;
+    }
+    return null;
   }, []);
 
   // 서버 bookId를 우선 사용, 없으면 URL 파라미터의 bookId 사용

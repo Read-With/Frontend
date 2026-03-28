@@ -13,7 +13,6 @@ import { getBookManifest } from '../../utils/api/api';
 import { loadPublicBooks } from '../../utils/normalizedContent';
 
 const HIDDEN_SERVER_BOOK_IDS_KEY = 'readwith_hidden_server_book_ids';
-const HIDDEN_PUBLIC_BOOK_IDS_KEY = 'readwith_hidden_public_book_ids';
 const PUBLIC_BOOK_FAVORITES_KEY = 'readwith_public_book_favorites';
 
 const getLocalProgress = (bookId) => {
@@ -38,14 +37,6 @@ export const useBooks = () => {
     } catch (e) {}
     return new Set();
   });
-  const [hiddenPublicBookIds, setHiddenPublicBookIds] = useState(() => {
-    try {
-      const raw = localStorage.getItem(HIDDEN_PUBLIC_BOOK_IDS_KEY);
-      const parsed = raw ? JSON.parse(raw) : [];
-      if (Array.isArray(parsed)) return new Set(parsed.map((id) => `${id}`));
-    } catch (e) {}
-    return new Set();
-  });
   const [publicBookFavorites, setPublicBookFavorites] = useState(() => {
     try {
       const raw = localStorage.getItem(PUBLIC_BOOK_FAVORITES_KEY);
@@ -56,7 +47,6 @@ export const useBooks = () => {
   });
   
   const hiddenServerBookIdsRef = useRef(new Set(hiddenServerBookIds));
-  const hiddenPublicBookIdsRef = useRef(new Set(hiddenPublicBookIds));
   const publicBookFavoritesRef = useRef(new Set(publicBookFavorites));
   const [indexedDbBookIds, setIndexedDbBookIds] = useState(new Set());
   const indexedDbBookIdsRef = useRef(new Set());
@@ -64,9 +54,6 @@ export const useBooks = () => {
   useEffect(() => {
     hiddenServerBookIdsRef.current = new Set(hiddenServerBookIds);
   }, [hiddenServerBookIds]);
-  useEffect(() => {
-    hiddenPublicBookIdsRef.current = new Set(hiddenPublicBookIds);
-  }, [hiddenPublicBookIds]);
   useEffect(() => {
     publicBookFavoritesRef.current = new Set(publicBookFavorites);
   }, [publicBookFavorites]);
@@ -207,7 +194,6 @@ export const useBooks = () => {
   // 서버 책 + public/books/ 정규화 책
   const books = useMemo(() => {
     const hiddenServer = hiddenServerBookIdsRef.current;
-    const hiddenPublic = hiddenPublicBookIdsRef.current;
     const favorites = publicBookFavoritesRef.current;
     const indexedDbIds = indexedDbBookIds;
 
@@ -230,7 +216,7 @@ export const useBooks = () => {
     const publicBooks = publicBooksData || [];
     publicBooks.forEach((b) => {
       const id = b?.id ? String(b.id) : null;
-      if (!id || hiddenPublic.has(id)) return;
+      if (!id) return;
       let progress = 0;
       try {
         const raw = localStorage.getItem(`progress_${id}`);
@@ -250,7 +236,7 @@ export const useBooks = () => {
       });
     });
     return result;
-  }, [reconciledBooks, indexedDbBookIds, publicBooksData, hiddenPublicBookIds, publicBookFavorites, location.pathname]);
+  }, [reconciledBooks, indexedDbBookIds, publicBooksData, publicBookFavorites, location.pathname]);
 
   const toggleFavoriteMutation = useMutation({
     mutationFn: async ({ bookId, favorite }) => {
@@ -309,9 +295,6 @@ export const useBooks = () => {
     mutationFn: async (bookId) => {
       const targetBookId = String(bookId);
       if (isNaN(Number(bookId))) {
-        const hiddenIds = new Set(hiddenPublicBookIdsRef.current);
-        hiddenIds.add(targetBookId);
-        localStorage.setItem(HIDDEN_PUBLIC_BOOK_IDS_KEY, JSON.stringify([...hiddenIds]));
         return targetBookId;
       }
       await Promise.all([
@@ -326,11 +309,6 @@ export const useBooks = () => {
     onMutate: async (bookId) => {
       const targetBookId = String(bookId);
       if (isNaN(Number(bookId))) {
-        setHiddenPublicBookIds((prev) => {
-          const next = new Set(prev);
-          next.add(targetBookId);
-          return next;
-        });
         return {};
       }
       await queryClient.cancelQueries({ queryKey: ['books', 'server'] });
@@ -345,13 +323,7 @@ export const useBooks = () => {
       return { previousServerBooks };
     },
     onSuccess: (deletedBookId) => {
-      if (isNaN(Number(deletedBookId))) {
-        setHiddenPublicBookIds((prev) => {
-          const next = new Set(prev);
-          next.add(deletedBookId);
-          return next;
-        });
-      } else {
+      if (!isNaN(Number(deletedBookId))) {
         setHiddenServerBookIds((prev) => {
           const next = new Set(prev);
           next.add(deletedBookId);

@@ -1,10 +1,13 @@
 import { authenticatedRequest } from './authApi';
+import { toLocator, locatorsEqual } from '../common/locatorUtils';
 
 const normalizeBookId = (bookId) => {
   if (bookId == null || bookId === '') return null;
   const normalized = Number(bookId);
   return Number.isFinite(normalized) ? normalized : null;
 };
+
+const BOOKMARK_SORT = new Set(['time_desc', 'time_asc']);
 
 export const getBookmarks = async (bookId, sort = 'time_desc') => {
   const normalizedBookId = normalizeBookId(bookId);
@@ -14,13 +17,21 @@ export const getBookmarks = async (bookId, sort = 'time_desc') => {
   try {
     const queryParams = new URLSearchParams();
     queryParams.append('bookId', String(normalizedBookId));
-    if (sort) queryParams.append('sort', sort);
+    const sortParam = BOOKMARK_SORT.has(sort) ? sort : 'time_desc';
+    queryParams.append('sort', sortParam);
     const data = await authenticatedRequest(`/v2/bookmarks?${queryParams.toString()}`);
     return data;
   } catch (error) {
     console.error('북마크 목록 조회 실패:', error);
     throw error;
   }
+};
+
+const buildPatchBody = (updateData) => {
+  const body = {};
+  if (updateData?.color !== undefined) body.color = updateData.color;
+  if (updateData?.memo !== undefined) body.memo = updateData.memo;
+  return body;
 };
 
 export const createBookmark = async (bookmarkData) => {
@@ -31,17 +42,21 @@ export const createBookmark = async (bookmarkData) => {
   if (normalizedBookId == null) {
     throw new Error('유효한 bookId는 필수입니다.');
   }
-  if (!bookmarkData.startLocator || typeof bookmarkData.startLocator !== 'object') {
+  const startLocator = toLocator(bookmarkData.startLocator);
+  if (!startLocator) {
     throw new Error('startLocator는 필수입니다.');
   }
   try {
+    const endLocator = toLocator(bookmarkData.endLocator);
     const dataToSend = {
       bookId: normalizedBookId,
-      startLocator: bookmarkData.startLocator,
-      color: bookmarkData.color ?? '#203A7B',
+      startLocator,
+      color: bookmarkData.color ?? '#28B532',
       memo: bookmarkData.memo ?? '',
-      ...(bookmarkData.endLocator ? { endLocator: bookmarkData.endLocator } : {}),
     };
+    if (endLocator && !locatorsEqual(startLocator, endLocator)) {
+      dataToSend.endLocator = endLocator;
+    }
     const data = await authenticatedRequest('/v2/bookmarks', {
       method: 'POST',
       body: JSON.stringify(dataToSend),
@@ -57,10 +72,14 @@ export const updateBookmark = async (bookmarkId, updateData) => {
   if (bookmarkId == null || bookmarkId === '') {
     throw new Error('bookmarkId는 필수입니다.');
   }
+  const body = buildPatchBody(updateData);
+  if (Object.keys(body).length === 0) {
+    throw new Error('수정할 color 또는 memo가 필요합니다.');
+  }
   try {
     const data = await authenticatedRequest(`/v2/bookmarks/${bookmarkId}`, {
       method: 'PATCH',
-      body: JSON.stringify(updateData ?? {}),
+      body: JSON.stringify(body),
     });
     return data;
   } catch (error) {

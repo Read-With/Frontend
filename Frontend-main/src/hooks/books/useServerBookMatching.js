@@ -147,11 +147,7 @@ export function useServerBookMatching(bookId) {
       return;
     }
 
-    const stateBook = location.state?.book;
     const indexedDbKey = String(numericId);
-    const xf = stateBook?.xhtmlFile;
-    const xab = stateBook?.xhtmlArrayBuffer;
-    const hasLocal = !!(xf || xab);
 
     navigate(`/user/viewer/${numericId}${location.search || ''}`, {
       replace: true,
@@ -159,12 +155,10 @@ export function useServerBookMatching(bookId) {
         ...location.state,
         book: {
           ...matchedServerBook,
-          xhtmlFile: xf,
-          xhtmlArrayBuffer: xab,
           filename: String(numericId),
           _indexedDbId: indexedDbKey,
           _bookId: numericId,
-          _needsLoad: !hasLocal,
+          _needsLoad: true,
           xhtmlPath: undefined,
           filePath: undefined,
           s3Path: undefined,

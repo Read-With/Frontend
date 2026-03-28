@@ -103,6 +103,21 @@ const normalizeCharacter = (character) => {
   };
 };
 
+const normalizeReaderArtifacts = (readerArtifacts) => {
+  if (!readerArtifacts || typeof readerArtifacts !== 'object' || Array.isArray(readerArtifacts)) {
+    return readerArtifacts;
+  }
+  const path = readerArtifacts.combinedXhtmlPath ?? '';
+  const dataAttributes = Array.isArray(readerArtifacts.dataAttributes)
+    ? readerArtifacts.dataAttributes
+    : [];
+  return {
+    ...readerArtifacts,
+    ...(typeof path === 'string' && path ? { combinedXhtmlPath: path } : {}),
+    dataAttributes,
+  };
+};
+
 const normalizeProgressMetadata = (progressMetadata) => {
   if (!progressMetadata || typeof progressMetadata !== 'object') {
     return progressMetadata;
@@ -142,11 +157,22 @@ const normalizeManifestData = (manifestData) => {
     ? manifestData.characters.map(normalizeCharacter).filter(Boolean)
     : manifestData.characters;
 
+  const readerArtifacts = manifestData.readerArtifacts
+    ? normalizeReaderArtifacts(manifestData.readerArtifacts)
+    : manifestData.readerArtifacts;
+
+  const book =
+    manifestData.book && typeof manifestData.book === 'object' && !Array.isArray(manifestData.book)
+      ? { ...manifestData.book }
+      : manifestData.book;
+
   return {
     ...manifestData,
+    book,
     chapters: normalizedChapters,
     characters: normalizedCharacters,
     progressMetadata: progressMetadata ?? manifestData.progressMetadata,
+    readerArtifacts,
   };
 };
 

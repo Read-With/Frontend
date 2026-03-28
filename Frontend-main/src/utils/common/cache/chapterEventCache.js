@@ -805,10 +805,13 @@ export const discoverChapterEvents = async (bookId, chapterIdx, forceRefresh = f
       const hasEventMeta =
         event &&
         (event.eventId !== undefined ||
+          event.event_id !== undefined ||
           event.name ||
           event.title ||
           event.startTxtOffset !== undefined ||
-          event.endTxtOffset !== undefined);
+          event.endTxtOffset !== undefined ||
+          event.startLocator !== undefined ||
+          event.endLocator !== undefined);
 
       if (!hasCharacters && !hasRelations && !hasEventMeta && !manifestStructure) {
         return false;
@@ -823,15 +826,18 @@ export const discoverChapterEvents = async (bookId, chapterIdx, forceRefresh = f
         event: {
           idx: eventIdx,
           chapterIdx,
+          event_id: event?.event_id ?? eventIdx,
           startTxtOffset: event?.startTxtOffset ?? manifestStructure?.startTxtOffset ?? null,
           endTxtOffset: event?.endTxtOffset ?? manifestStructure?.endTxtOffset ?? null,
+          startLocator: event?.startLocator,
+          endLocator: event?.endLocator,
           rawText: manifestStructure?.rawText ?? event?.rawText ?? null,
           eventId: event?.eventId ?? event?.id ?? null,
           ...(event || {})
         },
         startTxtOffset: event?.startTxtOffset ?? manifestStructure?.startTxtOffset ?? null,
         endTxtOffset: event?.endTxtOffset ?? manifestStructure?.endTxtOffset ?? null,
-        eventId: event?.eventId ?? event?.id ?? manifestStructure?.eventId ?? null
+        eventId: event?.eventId ?? event?.event_id ?? event?.id ?? manifestStructure?.eventId ?? null
       };
 
       apiEvents.push(normalizedEvent);
@@ -988,7 +994,8 @@ export const getEventData = async (bookId, chapterIdx, eventIdx) => {
         event,
         startTxtOffset: event?.startTxtOffset,
         endTxtOffset: event?.endTxtOffset,
-        eventId: event?.eventId
+        eventId: event?.eventId ?? event?.event_id,
+        event_id: event?.event_id
       };
     }
   } catch (error) {
@@ -1088,8 +1095,7 @@ export const getChapterEventFallbackData = (bookId, chapterIdx, eventIdx) => {
       return {
         characters: Array.isArray(fallbackEvent.characters) ? fallbackEvent.characters : [],
         relations: Array.isArray(fallbackEvent.relations) ? fallbackEvent.relations : [],
-        event: fallbackEvent.event || null,
-        userCurrentChapter: 0
+        event: fallbackEvent.event || null
       };
     }
   }

@@ -1,14 +1,16 @@
 /**
  * combined.xhtml 로더
- * Phase 1: 현재 직접 제공 → 이후 서버 fetch
  *
  * 우선순위:
  * 1. book.combinedXhtmlContent (직접 전달)
  * 2. book.combinedXhtmlUrl (URL fetch)
- * 3. /books/{bookId}/combined.xhtml (public 폴더, 개발용)
+ * 3. manifest 캐시의 readerArtifacts.combinedXhtmlPath (getBookManifest 후)
+ * 4. {BASE_URL}books/{bookId}/combined.xhtml (public 정적 파일)
  */
 
 import { errorUtils } from '../common/errorUtils';
+import { getManifestFromCache } from '../common/cache/manifestCache';
+import { resolveApiArtifactUrl } from '../common/artifactUrlUtils';
 
 export async function loadCombinedXhtml(bookId, book = {}) {
   const content = book.combinedXhtmlContent;
@@ -16,7 +18,11 @@ export async function loadCombinedXhtml(bookId, book = {}) {
     return content.trim();
   }
 
-  const url = book.combinedXhtmlUrl;
+  let url = book.combinedXhtmlUrl;
+  if (!url?.trim?.() && bookId != null && String(bookId).trim() !== '') {
+    const path = getManifestFromCache(bookId)?.readerArtifacts?.combinedXhtmlPath;
+    if (path) url = resolveApiArtifactUrl(path);
+  }
   if (typeof url === 'string' && url.trim()) {
     try {
       const res = await fetch(url);

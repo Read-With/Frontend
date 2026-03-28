@@ -22,14 +22,10 @@ export function useProgressAutoSave({ bookKey, currentChapter, currentEvent, del
     const anchor = currentEvent?.anchor;
     if (!anchor?.startLocator && !anchor?.start) return;
 
-    const { startLocator, endLocator } = anchorToLocators(anchor);
+    const { startLocator } = anchorToLocators(anchor);
     if (!startLocator) return;
 
-    const payload = {
-      bookId: bookKey,
-      startLocator,
-      endLocator: endLocator ?? startLocator,
-    };
+    const payload = { bookId: bookKey, locator: startLocator };
     const payloadKey = JSON.stringify(payload);
 
     const autoSaveProgress = () => {

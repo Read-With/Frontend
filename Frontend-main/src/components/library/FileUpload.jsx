@@ -161,6 +161,7 @@ const FileUpload = ({ onUploadSuccess, onClose }) => {
       if (serverBook?.isDefault || serverBook?.chapters || serverBook?.characters) {
         // 서버 응답에 이미 manifest 정보가 포함되어 있음
         manifestData = {
+          book: serverBook.book || null,
           chapters: serverBook.chapters || [],
           characters: serverBook.characters || [],
           progressMetadata: serverBook.progressMetadata || {},
@@ -172,6 +173,7 @@ const FileUpload = ({ onUploadSuccess, onClose }) => {
           const manifestResponse = await getBookManifest(finalBookId, { forceRefresh: false });
           if (manifestResponse?.isSuccess && manifestResponse?.result) {
             manifestData = {
+              book: manifestResponse.result.book || null,
               chapters: manifestResponse.result.chapters || [],
               characters: manifestResponse.result.characters || [],
               progressMetadata: manifestResponse.result.progressMetadata || {},
@@ -196,10 +198,9 @@ const FileUpload = ({ onUploadSuccess, onClose }) => {
         description: serverBook?.description || '',
         favorite: !!serverBook?.favorite,
         isLocalOnly: false,
-        xhtmlFile: selectedFile,
-        xhtmlArrayBuffer: arrayBuffer,
         // 서버에서 가져온 manifest 정보 포함
         ...(manifestData && {
+          ...(manifestData.book && typeof manifestData.book === 'object' ? manifestData.book : {}),
           chapters: manifestData.chapters,
           characters: manifestData.characters,
           progressMetadata: manifestData.progressMetadata,

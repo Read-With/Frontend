@@ -15,6 +15,13 @@ export const toLocator = (obj) => {
   };
 };
 
+export const locatorsEqual = (a, b) => {
+  const A = toLocator(a);
+  const B = toLocator(b);
+  if (!A || !B) return false;
+  return A.chapterIndex === B.chapterIndex && A.blockIndex === B.blockIndex && A.offset === B.offset;
+};
+
 const toNumber = (v) => {
   if (v == null) return null;
   const n = Number(v);
@@ -39,18 +46,23 @@ export const anchorToLocators = (anchor) => {
   };
 };
 
-export const progressPayloadFromData = (data) => {
-  if (!data?.bookId) return null;
+/** 서버 v2 progress·캐시 공통: 단일 reading 위치(locator) 해석 */
+export const resolveProgressLocator = (data) => {
+  if (!data || typeof data !== 'object') return null;
   const a = data.anchor;
-  const locator =
+  const candidate =
     data.startLocator ??
     toLocator(data.locator) ??
     (a && (toLocator(a.startLocator) ?? toLocator(a.start) ?? toLocator(a)));
+  if (candidate == null) return null;
+  return toLocator(candidate) ?? candidate;
+};
+
+export const progressPayloadFromData = (data) => {
+  if (!data?.bookId) return null;
+  const locator = resolveProgressLocator(data);
   if (!locator) return null;
-  return {
-    bookId: data.bookId,
-    locator,
-  };
+  return { bookId: data.bookId, locator };
 };
 
 /**

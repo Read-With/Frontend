@@ -263,6 +263,7 @@ export const eventUtils = {
       event.resolvedEventIdx,
       event.eventIdx,
       event.eventNum,
+      event.event_id,
       event.eventId,
       event.idx,
       event.id
@@ -284,6 +285,13 @@ export const eventUtils = {
     
     if (event?.event?.idx) {
       const nestedIdx = Number(event.event.idx);
+      if (Number.isFinite(nestedIdx) && nestedIdx > 0) {
+        return nestedIdx;
+      }
+    }
+
+    if (event?.event?.event_id !== undefined && event?.event?.event_id !== null) {
+      const nestedIdx = Number(event.event.event_id);
       if (Number.isFinite(nestedIdx) && nestedIdx > 0) {
         return nestedIdx;
       }
@@ -362,7 +370,9 @@ export const eventUtils = {
       return null;
     }
     return events.find(e => 
-      Number(e.eventIdx) === eventIdx || Number(e.idx) === eventIdx
+      Number(e.eventIdx) === eventIdx ||
+      Number(e.idx) === eventIdx ||
+      Number(e.event_id) === eventIdx
     ) || null;
   },
 
@@ -492,21 +502,15 @@ export const bookUtils = {
    * @returns {Object} 생성된 책 객체
    */
   createBookObject: ({ stateBook, matchedServerBook, serverBook, bookId, loadingServerBook }) => {
-    const localFile = stateBook?.xhtmlFile;
-    const localBuf = stateBook?.xhtmlArrayBuffer;
-    const hasLocal = !!(localFile || localBuf);
-
     if (stateBook) {
       if (matchedServerBook && typeof matchedServerBook.id === 'number') {
         const indexedDbKey = String(matchedServerBook.id);
 
         return {
           ...matchedServerBook,
-          xhtmlFile: localFile,
-          xhtmlArrayBuffer: localBuf,
           filename: String(matchedServerBook.id ?? bookId),
           _indexedDbId: indexedDbKey,
-          _needsLoad: !hasLocal,
+          _needsLoad: true,
           _bookId: matchedServerBook.id,
           xhtmlPath: undefined,
           filePath: undefined,
@@ -517,15 +521,13 @@ export const bookUtils = {
 
       const stateBookId = stateBook.id || stateBook._bookId || bookId;
       const indexedDbKey = stateBookId ? String(stateBookId) : null;
-      const stateRest = { ...stateBook };
+      const { xhtmlFile: _xf, xhtmlArrayBuffer: _xb, ...stateRest } = stateBook;
 
       return {
         ...stateRest,
-        xhtmlFile: localFile,
-        xhtmlArrayBuffer: localBuf,
         filename: bookId,
         _indexedDbId: indexedDbKey,
-        _needsLoad: !hasLocal,
+        _needsLoad: true,
         _bookId: stateBook.id || stateBook._bookId || bookId,
         xhtmlPath: undefined,
         filePath: undefined,
@@ -719,19 +721,30 @@ export const graphDataCacheUtils = {
 export const graphDataTransformUtils = {
   normalizeApiEvent: (apiEvent, currentChapter, apiEventIdx) => {
     if (!apiEvent) return null;
-    const resolvedEventId = apiEvent.eventId ?? apiEvent.idx ?? apiEvent.id ?? apiEventIdx;
+    const numericFromApi =
+      apiEvent.event_id !== undefined && apiEvent.event_id !== null
+        ? Number(apiEvent.event_id)
+        : NaN;
+    const numericIdx = Number.isFinite(numericFromApi) && numericFromApi > 0
+      ? numericFromApi
+      : (() => {
+          const n = Number(apiEvent.eventIdx ?? apiEvent.idx ?? apiEvent.id);
+          return Number.isFinite(n) && n > 0 ? n : null;
+        })();
+    const resolvedIdx = numericIdx ?? apiEventIdx;
+    const resolvedEventId = apiEvent.eventId ?? resolvedIdx;
     const resolvedStart = apiEvent.startTxtOffset ?? null;
     const resolvedEnd = apiEvent.endTxtOffset ?? null;
 
     return {
+      ...apiEvent,
       chapter: apiEvent.chapterIdx ?? currentChapter,
       chapterIdx: apiEvent.chapterIdx ?? currentChapter,
-      eventNum: resolvedEventId,
-      eventIdx: resolvedEventId,
+      eventNum: resolvedIdx,
+      eventIdx: resolvedIdx,
       eventId: resolvedEventId,
       startTxtOffset: resolvedStart,
-      endTxtOffset: resolvedEnd,
-      ...apiEvent
+      endTxtOffset: resolvedEnd
     };
   },
 

@@ -1,5 +1,5 @@
 import { registerCache, getCacheItem, setCacheItem, clearCache, removeCacheItem } from './cacheManager';
-import { toLocator, progressPayloadFromData } from '../locatorUtils';
+import { progressPayloadFromData, resolveProgressLocator } from '../locatorUtils';
 
 const PROGRESS_CACHE_KEY = 'readwith_progress_cache';
 const PROGRESS_CACHE_TTL_MS = 1000 * 60 * 60 * 24;
@@ -29,48 +29,22 @@ const saveProgressCacheToStorage = (progressMap) => {
   });
 };
 
-const resolveProgressEndpoints = (raw) => {
-  if (!raw) return { start: null, end: null };
-  const a = raw.anchor;
-  const start =
-    raw.startLocator ??
-    toLocator(raw.locator) ??
-    (a && (toLocator(a.startLocator) ?? toLocator(a.start) ?? toLocator(a)));
-  const end =
-    raw.endLocator ??
-    (a &&
-      (toLocator(a.endLocator) ??
-        toLocator(a.end) ??
-        toLocator(a.startLocator) ??
-        toLocator(a.start) ??
-        toLocator(a))) ??
-    start;
-  return { start: start ?? null, end: (end ?? start) ?? null };
-};
-
 const toStoredProgress = (item) => {
   if (!item || item.bookId == null) return null;
-  const { start, end } = resolveProgressEndpoints(item);
-  if (!start) return { bookId: item.bookId, startLocator: null, endLocator: null };
-  return {
-    bookId: item.bookId,
-    startLocator: start,
-    endLocator: end ?? start,
-  };
+  const locator = resolveProgressLocator(item);
+  if (!locator) return null;
+  return { bookId: item.bookId, locator };
 };
 
 const fromStoredProgress = (stored) => {
-  if (!stored) return null;
-  const { start: startLocator, end: endLocator } = resolveProgressEndpoints(stored);
-  const end = endLocator ?? startLocator;
-  const anchor =
-    startLocator != null ? { startLocator, endLocator: end ?? startLocator } : undefined;
+  if (!stored || stored.bookId == null) return null;
+  const locator = resolveProgressLocator(stored);
+  const anchor = locator ? { startLocator: locator, endLocator: locator } : undefined;
   return {
     bookId: stored.bookId,
-    startLocator: startLocator ?? undefined,
-    endLocator: end ?? undefined,
+    ...(locator && { locator, startLocator: locator, endLocator: locator }),
     anchor,
-    chapterIdx: startLocator?.chapterIndex ?? stored.chapterIdx,
+    chapterIdx: locator?.chapterIndex ?? stored.chapterIdx,
   };
 };
 
@@ -92,14 +66,11 @@ export const setAllProgress = (progressList) => {
 export const setProgressToCache = (progressData) => {
   if (!progressData || progressData.bookId == null) return;
   const payload = progressPayloadFromData(progressData);
-  if (!payload) return;
-  const { start, end } = resolveProgressEndpoints(payload);
-  if (!start) return;
+  if (!payload?.locator) return;
   const bookIdStr = String(progressData.bookId);
   const progress = {
     bookId: payload.bookId,
-    startLocator: start,
-    endLocator: end ?? start,
+    locator: payload.locator,
     timestamp: Date.now(),
   };
   setCacheItem('progressCache', bookIdStr, progress);

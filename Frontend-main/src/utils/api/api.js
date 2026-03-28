@@ -15,16 +15,28 @@ const createApiResponse = (isSuccess, code, message, result, type = 'default') =
     result
   };
 
-  // 그래프 API 전용 응답 처리 - 모든 필드 유지
-  if (type === 'graph') {
+  // GET /api/v2/graph/macro — userCurrentChapter + characters + relations
+  if (type === 'graph-macro') {
     const safe = result ?? {};
     baseResponse.result = {
       ...safe,
       userCurrentChapter: safe.userCurrentChapter ?? 0,
-      characters: safe.characters ?? [],
-      relations: safe.relations ?? [],
-      event: safe.event ?? null
+      characters: Array.isArray(safe.characters) ? safe.characters : [],
+      relations: Array.isArray(safe.relations) ? safe.relations : [],
     };
+    return baseResponse;
+  }
+
+  // GET /api/v2/graph/fine — characters + relations + event (locator 등)
+  if (type === 'graph-fine') {
+    const safe = result ?? {};
+    baseResponse.result = {
+      ...safe,
+      characters: Array.isArray(safe.characters) ? safe.characters : [],
+      relations: Array.isArray(safe.relations) ? safe.relations : [],
+      event: safe.event ?? null,
+    };
+    return baseResponse;
   }
 
   return baseResponse;
@@ -84,9 +96,8 @@ const apiRequest = async (url, options = {}, retryCount = 0) => {
   const requestUrl = `${API_BASE_URL}${url}`;
   
   const silentErrorEndpoints = [
-    '/api/v2/graph/fine',
-    '/api/v2/graph/macro',
-    '/api/v2/progress/',
+    '/api/v2/graph/',
+    '/api/v2/progress',
     '/api/books/',
     '/api/v2/books/',
     '/manifest'
@@ -177,18 +188,14 @@ const apiRequest = async (url, options = {}, retryCount = 0) => {
     
     if (!response.ok) {
       if (url.includes('/api/v2/graph/')) {
-        const isMacroGraph = url.includes('/api/v2/graph/macro');
-        const isFineGraph = url.includes('/api/v2/graph/fine');
-        
+        const graphKind = url.includes('/macro') ? '거시' : '세밀';
         if (response.status !== 404 && response.status !== 403) {
-          console.error(`❌ ${isMacroGraph ? '거시' : isFineGraph ? '세밀' : 'Graph'} API 에러:`, {
+          console.error(`❌ ${graphKind} 그래프 API 에러:`, {
             status: response.status,
             statusText: response.statusText,
             url: requestUrl,
             response: data,
             hasToken: !!token,
-            tokenPreview: token ? token.substring(0, 20) + '...' : 'null',
-            requestHeaders: config.headers
           });
         }
       }
@@ -490,21 +497,21 @@ export const getMacroGraph = async (bookId, uptoChapter) => {
         userCurrentChapter: 0,
         characters: [],
         relations: []
-      }, 'graph');
+      }, 'graph-macro');
     }
     
     return createApiResponse(true, 'SUCCESS', '거시 그래프 데이터를 성공적으로 조회했습니다.', response.result || {
       userCurrentChapter: 0,
       characters: [],
       relations: []
-    }, 'graph');
+    }, 'graph-macro');
   } catch (error) {
     if (error.status === 404) {
       return createApiResponse(false, 'NOT_FOUND', '거시 그래프 데이터를 찾을 수 없습니다.', {
         userCurrentChapter: 0,
         characters: [],
         relations: []
-      }, 'graph');
+      }, 'graph-macro');
     }
     handleApiError(error, '거시 그래프 조회 실패');
   }
@@ -519,17 +526,15 @@ export const getFineGraph = async (bookId, chapterIdx, eventIdx) => {
     return createApiResponse(false, 'INVALID_EVENT', '이벤트 인덱스는 1 이상이어야 합니다.', {
       characters: [],
       relations: [],
-      event: null,
-      userCurrentChapter: 0
-    }, 'graph');
+      event: null
+    }, 'graph-fine');
   }
   if (!isValidEvent(bookId, chapterIdx, eventIdx)) {
     return createApiResponse(false, 'INVALID_EVENT', '해당 이벤트에 대한 데이터가 없습니다.', {
       characters: [],
       relations: [],
-      event: null,
-      userCurrentChapter: 0
-    }, 'graph');
+      event: null
+    }, 'graph-fine');
   }
 
   const queryParams = new URLSearchParams();
@@ -544,25 +549,22 @@ export const getFineGraph = async (bookId, chapterIdx, eventIdx) => {
       return createApiResponse(false, response?.code || 'ERROR', response?.message || '세밀 그래프 조회에 실패했습니다.', {
         characters: [],
         relations: [],
-        event: null,
-        userCurrentChapter: 0
-      }, 'graph');
+        event: null
+      }, 'graph-fine');
     }
     
     return createApiResponse(true, 'SUCCESS', '세밀 그래프 데이터를 성공적으로 조회했습니다.', response.result || {
       characters: [],
       relations: [],
-      event: null,
-      userCurrentChapter: 0
-    }, 'graph');
+      event: null
+    }, 'graph-fine');
   } catch (error) {
     if (error.status === 404) {
       return createApiResponse(false, 'NOT_FOUND', '해당 이벤트에 대한 데이터를 찾을 수 없습니다.', { 
         characters: [], 
         relations: [], 
-        event: null,
-        userCurrentChapter: 0
-      }, 'graph');
+        event: null
+      }, 'graph-fine');
     }
     handleApiError(error, '세밀 그래프 조회 실패');
   }

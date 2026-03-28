@@ -314,13 +314,15 @@ const BookCard = ({ book, onToggleFavorite, onBookClick, onBookDetailClick, onSh
               <Info size={18} className="book-context-icon" />
               상세 정보
             </button>
-            <button
-              className="book-context-item book-context-item-danger"
-              onClick={handleDeleteClick}
-            >
-              <Trash2 size={18} className="book-context-icon" />
-              삭제
-            </button>
+            {!book._isPublic && (
+              <button
+                className="book-context-item book-context-item-danger"
+                onClick={handleDeleteClick}
+              >
+                <Trash2 size={18} className="book-context-icon" />
+                삭제
+              </button>
+            )}
           </div>
         )}
       </div>

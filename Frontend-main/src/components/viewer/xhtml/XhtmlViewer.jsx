@@ -63,6 +63,7 @@ const XhtmlViewer = forwardRef(
       initialProgress,
       initialAnchor,
       initialPage,
+      manifestReady = true,
     },
     ref
   ) => {
@@ -167,7 +168,7 @@ const XhtmlViewer = forwardRef(
       };
       load();
       return () => { cancelled = true; };
-    }, [bid, book?.combinedXhtmlContent, book?.combinedXhtmlUrl]);
+    }, [bid, book?.combinedXhtmlContent, book?.combinedXhtmlUrl, manifestReady]);
 
     useEffect(() => {
       const container = containerRef.current;

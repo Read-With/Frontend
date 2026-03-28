@@ -13,7 +13,7 @@ import { useTooltipState } from "../../hooks/ui/useTooltipState";
 import { useCachedLocation } from "../../hooks/viewer/useCachedLocation";
 import { getBookProgress, getFineGraph, getBookManifest } from "../../utils/api/api";
 import { getProgressFromCache } from "../../utils/common/cache/progressCache";
-import { toLocator } from "../../utils/common/locatorUtils";
+import { resolveProgressLocator } from "../../utils/common/locatorUtils";
 import { getGraphEventState, getCachedChapterEvents, isGraphBookCacheBuilding, ensureGraphBookCache } from "../../utils/common/cache/chapterEventCache";
 import { getManifestFromCache } from "../../utils/common/cache/manifestCache";
 import { 
@@ -26,7 +26,7 @@ import {
   cacheKeyUtils
 } from "../../utils/viewerUtils";
 import { restoreGraphLayout, preloadChapterLayouts } from "../../utils/graph/graphLayoutUtils";
-import { applyBookmarkHighlights, removeBookmarkHighlights } from "./bookmark/BookmarkManager";
+import { removeBookmarkHighlights } from "./bookmark/BookmarkManager";
 import { 
   getEventsForChapter,
   getEventDataByIndex
@@ -324,12 +324,9 @@ const ViewerPage = () => {
       try {
         const progressRes = await getBookProgress(serverBookId);
         if (progressRes?.isSuccess && progressRes?.result) {
-          const r = progressRes.result;
-          const start =
-            r.startLocator ?? toLocator(r.locator) ?? r.anchor?.startLocator ?? r.anchor?.start;
-          if (start) {
-            const end = r.endLocator ?? r.anchor?.endLocator ?? r.anchor?.end ?? start;
-            setInitialProgressAnchor({ startLocator: start, endLocator: end });
+          const loc = resolveProgressLocator(progressRes.result);
+          if (loc) {
+            setInitialProgressAnchor({ startLocator: loc, endLocator: loc });
           }
         }
       } catch (progressError) {
@@ -863,16 +860,14 @@ const ViewerPage = () => {
   });
 
   useEffect(() => {
-    if (bookmarks && bookmarks.length > 0) {
-      const timer = setTimeout(() => {
-        applyBookmarkHighlights(bookmarks);
-      }, 500);
-      
-      return () => {
-        clearTimeout(timer);
-        removeBookmarkHighlights();
-      };
-    }
+    if (!bookmarks?.length) return undefined;
+    const timer = setTimeout(() => {
+      removeBookmarkHighlights();
+    }, 500);
+    return () => {
+      clearTimeout(timer);
+      removeBookmarkHighlights();
+    };
   }, [bookmarks, currentChapter]);
 
   const {
@@ -997,6 +992,7 @@ const ViewerPage = () => {
           const commonProps = {
             ref: viewerRef,
             book,
+            manifestReady: manifestLoaded,
             initialChapter: currentChapter,
             initialProgress: initialProgressFromUrl != null && Number.isFinite(initialProgressFromUrl) ? initialProgressFromUrl : progress,
             onProgressChange: setProgress,

@@ -1,13 +1,21 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { toast } from 'react-toastify';
 import { createBookmark, updateBookmark, deleteBookmark } from '../../utils/api/bookmarksApi';
-import { 
-  loadBookmarks as loadBookmarksFromManager, 
-  addBookmark as addBookmarkFromManager,
+import {
+  loadBookmarks as loadBookmarksFromManager,
   loadBookmarksFromLocal,
-  saveBookmarksToLocal
+  saveBookmarksToLocal,
 } from '../../components/viewer/bookmark/BookmarkManager';
-import { createBookmarkTitle, isValidLocator, isSameBookmarkPosition } from '../../utils/bookmarkUtils';
+import {
+  createBookmarkTitle,
+  createBookmarkData,
+  isValidLocator,
+  isSameBookmarkPosition,
+} from '../../utils/bookmarkUtils';
+
+const DEFAULT_VIEWER_BOOKMARK_COLOR = '#28B532';
+
+const hasBookId = (id) => id != null && id !== '';
 
 const getErrorMessage = (err, fallback) =>
   err?.message ?? (typeof err === 'string' ? err : fallback);
@@ -17,7 +25,7 @@ const getBookmarkFriendlyMessage = (err, fallback) => {
   const status = err.status || err.statusCode;
   if (status === 404)
     return '북마크 기능이 아직 준비되지 않았거나 연결 경로를 찾을 수 없습니다. 잠시 후 다시 시도해 주세요.';
-  const msg = (err.message || '').toLowerCase();
+  const msg = (err?.message || '').toLowerCase();
   if (msg.includes('failed to fetch') || msg.includes('network') || msg.includes('networkerror'))
     return '연결을 확인한 뒤 다시 시도해 주세요.';
   return getErrorMessage(err, fallback);
@@ -65,29 +73,38 @@ export const useBookmarks = (bookId, options = {}) => {
     }
   }, [bookId, sort, isLocalBook]);
 
-  const addBookmark = useCallback(async (bookmarkData) => {
+  const addBookmark = useCallback(async (bookmarkData, mergeIntoBookmark = null) => {
     const hasLocator = isValidLocator(bookmarkData?.startLocator);
     if (isLocalBook && typeof bookmarkData === 'object' && hasLocator) {
+      if (!hasBookId(bookId)) {
+        const msg = '책 정보가 없어 북마크를 저장할 수 없습니다.';
+        toast.error(msg);
+        return { success: false, message: msg };
+      }
       const newBookmark = {
         id: Date.now().toString(),
         ...bookmarkData,
-        createdAt: bookmarkData.createdAt || new Date().toISOString()
+        createdAt: bookmarkData.createdAt || new Date().toISOString(),
       };
-      setBookmarks(prev => {
+      setBookmarks((prev) => {
         const updatedBookmarks = [...prev, newBookmark];
         saveBookmarksToLocal(bookId, updatedBookmarks);
         return updatedBookmarks;
       });
-      toast.success("📖 북마크가 추가되었습니다");
+      toast.success('📖 북마크가 추가되었습니다');
       return { success: true, bookmark: newBookmark };
     }
-    
+
     try {
       const response = await createBookmark(bookmarkData);
       if (response.isSuccess) {
-        setBookmarks(prev => [response.result, ...prev]);
+        const bookmark =
+          mergeIntoBookmark && typeof mergeIntoBookmark === 'object'
+            ? { ...response.result, ...mergeIntoBookmark }
+            : response.result;
+        setBookmarks((prev) => [bookmark, ...prev]);
         toast.success('📖 북마크가 추가되었습니다');
-        return { success: true, bookmark: response.result };
+        return { success: true, bookmark };
       }
       const msg = response.message || '북마크 생성에 실패했습니다.';
       toast.error(msg);
@@ -124,12 +141,17 @@ export const useBookmarks = (bookId, options = {}) => {
     const idStr = String(bookmarkId);
     try {
       if (isLocalBook) {
-        setBookmarks(prev => {
-          const next = prev.filter(b => String(b.id) !== idStr);
+        if (!hasBookId(bookId)) {
+          const msg = '책 정보가 없어 삭제 상태를 저장할 수 없습니다.';
+          toast.error(msg);
+          return { success: false, message: msg };
+        }
+        setBookmarks((prev) => {
+          const next = prev.filter((b) => String(b.id) !== idStr);
           saveBookmarksToLocal(bookId, next);
           return next;
         });
-        toast.success("북마크가 삭제되었습니다");
+        toast.success('북마크가 삭제되었습니다');
         return { success: true };
       }
       
@@ -179,7 +201,9 @@ export const useBookmarks = (bookId, options = {}) => {
         chapterNum = startLocator.chapterIndex;
         if (Number.isFinite(startLocator.offset)) pageNum = startLocator.offset + 1;
       }
-    } catch (e) {}
+    } catch {
+      void 0;
+    }
 
     if (!startLocator) {
       toast.error("❗ 페이지 정보를 읽을 수 없습니다. 다시 불러옵니다...");
@@ -188,6 +212,11 @@ export const useBookmarks = (bookId, options = {}) => {
     }
 
     if (setFailCount) setFailCount(0);
+
+    if (!hasBookId(bookId)) {
+      toast.error('책 정보가 없어 북마크를 추가할 수 없습니다.');
+      return;
+    }
 
     const currentList = bookmarksRef.current;
     const bookmarkTitle = createBookmarkTitle(pageNum, chapterNum, currentList.length + 1);
@@ -209,25 +238,10 @@ export const useBookmarks = (bookId, options = {}) => {
         chapterNum,
       });
     } else {
-      const result = await addBookmarkFromManager(
-        bookId,
-        '#28B532',
-        '',
-        startLocator,
-        endLocator
+      await addBookmark(
+        createBookmarkData(bookId, DEFAULT_VIEWER_BOOKMARK_COLOR, '', startLocator, endLocator),
+        { title: bookmarkTitle, pageNum, chapterNum }
       );
-      if (result.success) {
-        const bookmarkWithTitle = {
-          ...result.bookmark,
-          title: bookmarkTitle,
-          pageNum,
-          chapterNum,
-        };
-        setBookmarks(prev => [...prev, bookmarkWithTitle]);
-        toast.success('📖 북마크가 추가되었습니다');
-      } else {
-        toast.error(result.message || '북마크 추가에 실패했습니다.');
-      }
     }
   }, [bookId, isLocalBook, viewerRef, setFailCount, addBookmark, removeBookmark]);
 

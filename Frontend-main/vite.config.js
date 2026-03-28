@@ -67,22 +67,11 @@ export default defineConfig(({ mode }) => {
             'Connection': 'keep-alive',
           },
           configure: (proxy, options) => {
-            // 요청 전 로깅 및 헤더 확인 (디버깅용)
             proxy.on('proxyReq', (proxyReq, req, res) => {
               if (req.url?.includes('/api/books') && req.method === 'POST') {
                 const authHeader = req.headers['authorization'] || req.headers['Authorization'];
-                console.log('🔄 프록시 요청:', {
-                  url: req.url,
-                  method: req.method,
-                  originalAuthHeader: authHeader ? authHeader.substring(0, 30) + '...' : '없음',
-                  proxyAuthHeader: proxyReq.getHeader('Authorization') ? proxyReq.getHeader('Authorization').substring(0, 30) + '...' : '없음',
-                  allHeaders: Object.keys(proxyReq.getHeaders())
-                });
-                
-                // Authorization 헤더가 없으면 원본 요청에서 가져와서 설정
                 if (!proxyReq.getHeader('Authorization') && authHeader) {
                   proxyReq.setHeader('Authorization', authHeader);
-                  console.log('✅ Authorization 헤더 재설정됨');
                 }
               }
             });
@@ -93,12 +82,8 @@ export default defineConfig(({ mode }) => {
                 
                 // 데이터가 없을 수 있는 정상적인 404 엔드포인트들
                 const silent404Endpoints = [
-                  '/api/graph/fine',
-                  '/api/graph/macro',
-                  '/api/v2/graph/fine',
-                  '/api/v2/graph/macro',
-                  '/api/progress/',
-                  '/api/v2/progress/',
+                  '/api/v2/graph/',
+                  '/api/v2/progress',
                   '/api/books/',
                   '/api/v2/books/',
                   '/manifest'

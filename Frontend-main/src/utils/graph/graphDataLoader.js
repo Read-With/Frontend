@@ -26,7 +26,6 @@ export const checkChapterEventsCache = (bookId, chapter, eventIdx) => {
     characters: Array.isArray(targetEvent.characters) ? targetEvent.characters : [],
     relations: Array.isArray(targetEvent.relations) ? targetEvent.relations : [],
     event: targetEvent.event || null,
-    userCurrentChapter: 0,
   };
 };
 

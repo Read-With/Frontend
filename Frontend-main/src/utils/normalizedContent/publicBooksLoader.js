@@ -1,6 +1,5 @@
 /**
- * public/books/ 목록 로드
- * books.json에서 정규화된 책 목록 조회
+ * public/books/ 목록 로드 (`npm run generate:public-books`로 books.json 갱신)
  */
 
 const PUBLIC_BOOKS_CACHE_KEY = 'readwith_public_books';
