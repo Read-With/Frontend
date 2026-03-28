@@ -8,7 +8,7 @@ import { useRelationData } from "../../../hooks/graph/useRelationData";
 import { getRelationStyle, getRelationLabels, tooltipStyles } from "../../../utils/styles/relationStyles";
 import { createButtonStyle, createAdvancedButtonHandlers, COLORS, ANIMATION_VALUES, unifiedNodeTooltipStyles } from "../../../utils/styles/styles";
 import { mergeRefs } from "../../../utils/styles/animations";
-import { safeNum, processRelationTagsCached } from "../../../utils/relationUtils";
+import { safeNum, processRelationTagsCached } from "../../../utils/graph/relationUtils";
 import { cleanupRelationUtils } from "../../../utils/common/cleanupUtils";
 import { getMaxChapter } from "../../../utils/common/cache/manifestCache";
 import "../RelationGraph.css";

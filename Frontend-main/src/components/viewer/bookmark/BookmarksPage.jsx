@@ -10,7 +10,7 @@ import {
   formatRelativeTime,
   formatAbsoluteTime,
   parseBookmarkLocation,
-} from '../../../utils/bookmarkUtils';
+} from '../../../utils/bookmarks/bookmarkUtils';
 
 const sameBookmarkId = (a, b) => String(a) === String(b);
 

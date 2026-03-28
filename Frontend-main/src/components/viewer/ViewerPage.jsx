@@ -24,7 +24,7 @@ import {
   eventIdxUtils,
   graphDataTransformUtils,
   cacheKeyUtils
-} from "../../utils/viewerUtils";
+} from "../../utils/viewer/viewerUtils";
 import { restoreGraphLayout, preloadChapterLayouts } from "../../utils/graph/graphLayoutUtils";
 import { removeBookmarkHighlights } from "./bookmark/BookmarkManager";
 import { 
@@ -32,8 +32,8 @@ import {
   getEventDataByIndex
 } from "../../utils/graph/graphData";
 import { convertRelationsToElements, filterRelationsByTimeline } from "../../utils/graph/graphDataUtils";
-import { buildNodeWeights, createCharacterMaps } from "../../utils/characterUtils";
-import { getRelationKeyFromRelation } from "../../utils/relationUtils";
+import { buildNodeWeights, createCharacterMaps } from "../../utils/graph/characterUtils";
+import { getRelationKeyFromRelation } from "../../utils/graph/relationUtils";
 import { errorUtils } from "../../utils/common/errorUtils";
 import GraphSplitArea from "./GraphSplitArea";
 

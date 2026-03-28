@@ -1,4 +1,4 @@
-import { getApiBaseUrl } from './common/authUtils';
+import { getApiBaseUrl } from '../common/authUtils';
 
 const REQUEST_TIMEOUT = 10000;
 

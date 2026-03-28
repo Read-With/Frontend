@@ -7,7 +7,7 @@ import {
   deleteLocalBookMetadata,
   loadLocalBookBuffer,
   getAllLocalBookIds,
-} from '../../utils/localBookStorage';
+} from '../../utils/library/localBookStorage';
 import { prefetchManifest } from '../../utils/common/cache/manifestCache';
 import { getBookManifest } from '../../utils/api/api';
 import { loadPublicBooks } from '../../utils/normalizedContent';

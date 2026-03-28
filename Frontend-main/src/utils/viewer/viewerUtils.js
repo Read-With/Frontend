@@ -1,7 +1,7 @@
 
-import { errorUtils as commonErrorUtils } from './common/errorUtils';
-import { storageUtils as commonStorageUtils } from './common/cache/storageUtils';
-import { settingsUtils as commonSettingsUtils, defaultSettings as commonDefaultSettings, loadSettings as commonLoadSettings } from './common/settingsUtils';
+import { errorUtils as commonErrorUtils } from '../common/errorUtils';
+import { storageUtils as commonStorageUtils } from '../common/cache/storageUtils';
+import { settingsUtils as commonSettingsUtils, defaultSettings as commonDefaultSettings, loadSettings as commonLoadSettings } from '../common/settingsUtils';
 export const errorUtils = commonErrorUtils;
 export const storageUtils = commonStorageUtils;
 export const defaultSettings = commonDefaultSettings;

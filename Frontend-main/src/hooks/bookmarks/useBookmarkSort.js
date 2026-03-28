@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { getLocatorSortKey } from '../../utils/bookmarkUtils';
+import { getLocatorSortKey } from '../../utils/bookmarks/bookmarkUtils';
 
 export const useBookmarkSort = (bookmarks, sortOrder) => {
   return useMemo(() => {

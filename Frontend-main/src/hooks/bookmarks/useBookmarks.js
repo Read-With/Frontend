@@ -11,7 +11,7 @@ import {
   createBookmarkData,
   isValidLocator,
   isSameBookmarkPosition,
-} from '../../utils/bookmarkUtils';
+} from '../../utils/bookmarks/bookmarkUtils';
 
 const DEFAULT_VIEWER_BOOKMARK_COLOR = '#28B532';
 

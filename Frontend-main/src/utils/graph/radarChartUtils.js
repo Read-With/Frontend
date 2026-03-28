@@ -2,7 +2,7 @@
  * 레이더 차트 데이터 처리 유틸리티
  * 관계 색/라벨은 relationStyles 단일 소스에서 re-export.
  */
-export { getPositivityColor, getPositivityLabel } from './styles/relationStyles';
+export { getPositivityColor, getPositivityLabel } from '../styles/relationStyles';
 
 /**
  * positivity 값을 0-100 스케일로 변환

@@ -14,7 +14,7 @@ import {
   settingsUtils,
   errorUtils,
   bookUtils
-} from '../../utils/viewerUtils';
+} from '../../utils/viewer/viewerUtils';
 import { getFolderKeyFromFilename } from '../../utils/graph/graphData';
 import { useBookmarks } from '../bookmarks/useBookmarks';
 import { getBookManifest } from '../../utils/api/api';

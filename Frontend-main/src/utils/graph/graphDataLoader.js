@@ -1,6 +1,6 @@
 import { loadFromStorage, saveToStorage } from '../common/cache/cacheManager';
 import { getCachedChapterEvents, getChapterEventFallbackData } from '../common/cache/chapterEventCache';
-import { eventUtils } from '../viewerUtils';
+import { eventUtils } from '../viewer/viewerUtils';
 import { errorUtils } from '../common/errorUtils';
 
 export const checkLocalStorageCache = (cacheKey) => {

@@ -5,7 +5,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { getBookManifest, getBookProgress, deleteBookProgress } from '../../utils/api/api';
 import { resolveProgressLocator } from '../../utils/common/locatorUtils';
 import { getManifestFromCache } from '../../utils/common/cache/manifestCache';
-import { getServerBookId } from '../../utils/viewerUtils';
+import { getServerBookId } from '../../utils/viewer/viewerUtils';
 import { toast } from 'react-toastify';
 import './BookDetailModal.css';
 

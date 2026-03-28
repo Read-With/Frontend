@@ -1,14 +1,14 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useParams } from "react-router-dom";
-import { processRelations, processRelationTags } from "../../../utils/relationUtils.js";
+import { processRelations, processRelationTags } from "../../../utils/graph/relationUtils.js";
 import { getChapterLastEventNums, getFolderKeyFromFilename, getEventDataByIndex, getDetectedMaxChapter, getCharacterPerspectiveSummary } from "../../../utils/graph/graphData.js";
 import { useTooltipPosition } from "../../../hooks/ui/useTooltipPosition.js";
 import { useClickOutside } from "../../../hooks/ui/useClickOutside.js";
 import { useRelationData } from "../../../hooks/graph/useRelationData.jsx";
-import { safeNum } from "../../../utils/relationUtils.js";
+import { safeNum } from "../../../utils/graph/relationUtils.js";
 import { mergeRefs } from "../../../utils/styles/animations.js";
 import { COLORS, createButtonStyle, ANIMATION_VALUES, unifiedNodeTooltipStyles, unifiedNodeAnimations } from "../../../utils/styles/styles.js";
-import { extractRadarChartData, getPositivityColor, getPositivityLabel, getConnectionStatus } from "../../../utils/radarChartUtils.js";
+import { extractRadarChartData, getPositivityColor, getPositivityLabel, getConnectionStatus } from "../../../utils/graph/radarChartUtils.js";
 import { Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, ResponsiveContainer } from 'recharts';
 import "../RelationGraph.css";
 import "./UnifiedNodeInfo.css";

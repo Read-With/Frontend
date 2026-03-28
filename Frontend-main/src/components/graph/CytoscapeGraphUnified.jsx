@@ -3,14 +3,14 @@ import PropTypes from "prop-types";
 import cytoscape from "cytoscape";
 import "./RelationGraph.css";
 import { detectAndResolveOverlap, calcGraphDiff } from "../../utils/graph/graphDataUtils.js";
-import { applySearchFadeEffect, shouldShowNoSearchResults, getNoSearchResultsMessage } from "../../utils/searchUtils.jsx";
+import { applySearchFadeEffect, shouldShowNoSearchResults, getNoSearchResultsMessage } from "../../utils/graph/searchUtils.jsx";
 import { createRippleEffect, ensureElementsInBounds, createMouseEventHandlers } from "../../utils/graph/graphUtils.js";
 import { calculateSpiralPlacement, getContainerDimensions } from "../../utils/graph/nodePlacementUtils.js";
 import { calculateNodeSize } from "../../utils/styles/graphStyles.js";
 import useGraphInteractions from "../../hooks/graph/useGraphInteractions.js";
 import { useGraphLayout } from "../../hooks/graph/useGraphLayout.js";
 import { useCyInstance } from "../../hooks/graph/useCyInstance.js";
-import { eventUtils } from "../../utils/viewerUtils";
+import { eventUtils } from "../../utils/viewer/viewerUtils";
 
 export const CytoscapeGraphContext = createContext();
 

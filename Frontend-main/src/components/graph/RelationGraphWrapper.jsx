@@ -18,7 +18,7 @@ import { useApiGraphData } from '../../hooks/graph/useApiGraphData.js';
 import { useGraphState } from '../../hooks/graph/useGraphState.js';
 import { useLocalStorageNumber } from '../../hooks/common/useLocalStorage.js';
 import { convertRelationsToElements, filterMainCharacters } from '../../utils/graph/graphDataUtils';
-import { createCharacterMaps, buildNodeWeights } from '../../utils/characterUtils';
+import { createCharacterMaps, buildNodeWeights } from '../../utils/graph/characterUtils';
 import { getFolderKeyFromFilename, getLastEventIndexForChapter } from '../../utils/graph/graphData';
 import { 
   processTooltipData, 
@@ -31,7 +31,7 @@ import {
   calculateRelationCount,
   determineFinalElements
 } from '../../utils/graph/graphUtils.js';
-import { eventUtils, graphDataTransformUtils, getServerBookId } from '../../utils/viewerUtils';
+import { eventUtils, graphDataTransformUtils, getServerBookId } from '../../utils/viewer/viewerUtils';
 import useGraphInteractions from "../../hooks/graph/useGraphInteractions";
 import { useChapterPovSummaries } from '../../hooks/viewer/useChapterPovSummaries';
 

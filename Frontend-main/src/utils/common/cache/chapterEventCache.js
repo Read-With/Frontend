@@ -1,8 +1,8 @@
-import { sortEventsByIdx } from '../../eventUtils';
-import { buildNodeWeights, extractCharacterId } from '../../characterUtils';
+import { sortEventsByIdx } from '../../graph/eventUtils';
+import { buildNodeWeights, extractCharacterId } from '../../graph/characterUtils';
 import { getFineGraph, getBookManifest } from '../../api/api';
 import { getChapterData as getManifestChapterData, getManifestFromCache } from './manifestCache';
-import { createCharacterMaps } from '../../characterUtils';
+import { createCharacterMaps } from '../../graph/characterUtils';
 import { convertRelationsToElements, calcGraphDiff } from '../../graph/graphDataUtils';
 import { 
   registerCache, 
@@ -14,7 +14,7 @@ import {
   getRawFromStorage,
   getStorage
 } from './cacheManager';
-import { eventUtils } from '../../viewerUtils';
+import { eventUtils } from '../../viewer/viewerUtils';
 
 const READER_PROGRESS_CACHE_PREFIX = 'reader_progress_';
 const READER_PROGRESS_MAX_AGE = 3 * 24 * 60 * 60 * 1000;

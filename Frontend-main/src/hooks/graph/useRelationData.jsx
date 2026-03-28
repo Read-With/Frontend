@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { toNumberOrNull } from '../../utils/numberUtils';
-import { isSamePair } from '../../utils/relationUtils';
+import { toNumberOrNull } from '../../utils/common/numberUtils';
+import { isSamePair } from '../../utils/graph/relationUtils';
 import { getFineGraph } from '../../utils/api/api';
 import { registerCache, getCacheItem, setCacheItem, clearCache, enforceCacheSizeLimit } from '../../utils/common/cache/cacheManager';
 

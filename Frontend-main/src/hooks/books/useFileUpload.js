@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { uploadBook } from '../../utils/api/api';
-import { xhtmlUploadBasename } from '../../utils/xhtmlUploadUtils';
+import { xhtmlUploadBasename } from '../../utils/library/xhtmlUploadUtils';
 
 export const FILE_CONSTRAINTS = {
   MAX_SIZE: 50 * 1024 * 1024,

@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { loadViewerMode, loadSettings } from '../../utils/viewerUtils';
+import { loadViewerMode, loadSettings } from '../../utils/viewer/viewerUtils';
 import { flagsFromGraphMode } from './graphModeFlags';
 
 /**

@@ -1,4 +1,4 @@
-import { getApiBaseUrl } from './common/authUtils';
+import { getApiBaseUrl } from '../common/authUtils';
 
 /**
  * 캐릭터 데이터를 ID 기반 매핑 객체로 변환

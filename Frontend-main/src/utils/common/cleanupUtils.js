@@ -1,6 +1,6 @@
 import { clearStyleCache, cleanupRelationStyleResources } from '../styles/relationStyles';
-import { clearRelationCache, cleanupRelationResources } from '../relationUtils';
-import { clearRegexCache, cleanupSearchResources } from '../searchUtils';
+import { clearRelationCache, cleanupRelationResources } from '../graph/relationUtils';
+import { clearRegexCache, cleanupSearchResources } from '../graph/searchUtils.jsx';
 import { clearAllCaches, clearCache, cleanupUnusedCaches, getCacheStats as getCacheStatsFromManager } from './cache/cacheManager';
 
 /**

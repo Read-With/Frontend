@@ -12,7 +12,7 @@
  */
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { transitionUtils } from '../../utils/viewerUtils';
+import { transitionUtils } from '../../utils/viewer/viewerUtils';
 
 /**
  * 전환 상태 관리 훅

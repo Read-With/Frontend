@@ -1,10 +1,10 @@
-import { toNumberOrNull } from '../numberUtils';
-import { sortEventsByIdx } from '../eventUtils';
-import { createCharacterMaps, normalizeCharacterId, aggregateCharactersFromEvents } from '../characterUtils';
+import { toNumberOrNull } from '../common/numberUtils';
+import { sortEventsByIdx } from './eventUtils';
+import { createCharacterMaps, normalizeCharacterId, aggregateCharactersFromEvents } from './characterUtils';
 import { getMaxChapter, getChapterData } from '../common/cache/manifestCache';
 import { getCachedChapterEvents, reconstructChapterGraphState, normalizeManifestEvents } from '../common/cache/chapterEventCache';
 import { registerCache, getCacheItem, setCacheItem } from '../common/cache/cacheManager';
-import { eventUtils } from '../viewerUtils';
+import { eventUtils } from '../viewer/viewerUtils';
 
 const API_PREFIX = 'api:';
 const CHARACTER_CACHE_LIMIT = 50;

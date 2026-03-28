@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useBookmarks } from '../../../hooks/bookmarks/useBookmarks';
 import { useBookmarkSort } from '../../../hooks/bookmarks/useBookmarkSort';
-import { parseBookmarkLocation, formatDate } from '../../../utils/bookmarkUtils';
+import { parseBookmarkLocation, formatDate } from '../../../utils/bookmarks/bookmarkUtils';
 
 const BookmarkPanel = ({ bookId, onSelect, onDelete }) => {
   const [sortOrder, setSortOrder] = useState('recent');

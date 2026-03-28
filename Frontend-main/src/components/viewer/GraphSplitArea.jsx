@@ -2,7 +2,7 @@ import React from "react";
 import GraphContainer from "../graph/GraphContainer";
 import ViewerTopBar from "./ViewerTopBar";
 import { filterMainCharacters } from "../../utils/graph/graphDataUtils";
-import { bookUtils } from "../../utils/viewerUtils";
+import { bookUtils } from "../../utils/viewer/viewerUtils";
 
 const loadingContainerStyle = {
   display: 'flex',

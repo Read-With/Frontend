@@ -1,9 +1,9 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { toNumberOrNull } from '../../utils/numberUtils';
-import { sortEventsByIdx, normalizeEventIdx, filterEventsUpTo, filterEventsBefore, getMaxEventIdx } from '../../utils/eventUtils';
-import { createCharacterMaps, aggregateCharactersFromEvents, buildNodeWeights } from '../../utils/characterUtils';
+import { toNumberOrNull } from '../../utils/common/numberUtils';
+import { sortEventsByIdx, normalizeEventIdx, filterEventsUpTo, filterEventsBefore, getMaxEventIdx } from '../../utils/graph/eventUtils';
+import { createCharacterMaps, aggregateCharactersFromEvents, buildNodeWeights } from '../../utils/graph/characterUtils';
 import { convertRelationsToElements, calcGraphDiff } from '../../utils/graph/graphDataUtils';
-import { normalizeRelation, isValidRelation } from '../../utils/relationUtils';
+import { normalizeRelation, isValidRelation } from '../../utils/graph/relationUtils';
 import { getCachedChapterEvents, reconstructChapterGraphState } from '../../utils/common/cache/chapterEventCache';
 import { getManifestFromCache } from '../../utils/common/cache/manifestCache';
 import { resolveMaxChapter } from '../../utils/graph/maxChapterResolver';

@@ -4,12 +4,12 @@ import { useFileUpload, FILE_CONSTRAINTS } from '../../hooks/books/useFileUpload
 import { getBooks, getBook } from '../../utils/api/booksApi';
 import { getBookManifest } from '../../utils/api/api';
 import { theme } from '../common/theme';
-import { extractXhtmlFileMetadata, xhtmlUploadBasename } from '../../utils/xhtmlUploadUtils';
+import { extractXhtmlFileMetadata, xhtmlUploadBasename } from '../../utils/library/xhtmlUploadUtils';
 import {
   saveLocalBookBuffer,
   saveLocalBookMetadata,
   loadLocalBookBuffer,
-} from '../../utils/localBookStorage';
+} from '../../utils/library/localBookStorage';
 
 const FileUpload = ({ onUploadSuccess, onClose }) => {
   const [dragActive, setDragActive] = useState(false);

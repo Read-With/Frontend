@@ -1,4 +1,4 @@
-import { toLocator, locatorsEqual } from './common/locatorUtils';
+import { toLocator, locatorsEqual } from '../common/locatorUtils';
 
 export const createBookmarkTitle = (pageNum, chapterNum, fallbackIndex = null) => {
   if (pageNum != null && chapterNum != null) return `${pageNum}페이지 (${chapterNum}챕터)`;
