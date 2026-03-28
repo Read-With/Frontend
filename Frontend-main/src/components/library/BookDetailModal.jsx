@@ -18,48 +18,42 @@ const BookDetailModal = memo(({ book, isOpen, onClose, onDelete }) => {
   const [showMoreCharacters, setShowMoreCharacters] = useState(false);
   const [progressInfo, setProgressInfo] = useState(null);
 
-  // 중복된 인물들 제거 및 주요/일반 인물 분리
-  const uniqueCharacters = useMemo(() => {
-    if (!bookDetails?.characters) return [];
-    
+  const characterLists = useMemo(() => {
+    const raw = bookDetails?.characters;
+    if (!raw?.length) {
+      return { unique: [], sortedMain: [], sortedOther: [] };
+    }
     const seen = new Set();
-    return bookDetails.characters.filter(character => {
-      if (seen.has(character.id)) {
-        return false;
-      }
+    const unique = raw.filter((character) => {
+      if (seen.has(character.id)) return false;
       seen.add(character.id);
       return true;
     });
+    const main = unique.filter((c) => c.isMainCharacter);
+    const other = unique.filter((c) => !c.isMainCharacter);
+    const byName = (a, b) => String(a.name ?? '').localeCompare(String(b.name ?? ''), 'ko');
+    return {
+      unique,
+      sortedMain: [...main].sort(byName),
+      sortedOther: [...other].sort(byName),
+    };
   }, [bookDetails?.characters]);
-
-  const mainCharacters = useMemo(() => {
-    return uniqueCharacters.filter(char => char.isMainCharacter);
-  }, [uniqueCharacters]);
-
-  const otherCharacters = useMemo(() => {
-    return uniqueCharacters.filter(char => !char.isMainCharacter);
-  }, [uniqueCharacters]);
-
-  const sortedMainCharacters = useMemo(
-    () =>
-      [...mainCharacters].sort((a, b) =>
-        String(a.name ?? '').localeCompare(String(b.name ?? ''), 'ko')
-      ),
-    [mainCharacters]
-  );
-
-  const sortedOtherCharacters = useMemo(
-    () =>
-      [...otherCharacters].sort((a, b) =>
-        String(a.name ?? '').localeCompare(String(b.name ?? ''), 'ko')
-      ),
-    [otherCharacters]
-  );
 
   const progressLocator = useMemo(
     () => (progressInfo ? resolveProgressLocator(progressInfo) : null),
     [progressInfo]
   );
+
+  const updatedAtFormatted = useMemo(() => {
+    if (!bookDetails?.updatedAt) return null;
+    const date = new Date(bookDetails.updatedAt);
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, '0');
+    const d = String(date.getDate()).padStart(2, '0');
+    const h = String(date.getHours()).padStart(2, '0');
+    const min = String(date.getMinutes()).padStart(2, '0');
+    return `${y}. ${m}. ${d}. ${h}:${min}`;
+  }, [bookDetails?.updatedAt]);
 
   const fetchProgressInfo = useCallback(async () => {
     const serverBookId = getServerBookId(book);
@@ -145,27 +139,22 @@ const BookDetailModal = memo(({ book, isOpen, onClose, onDelete }) => {
     return id != null ? String(id) : '';
   }, [book]);
 
-  const getNavigationState = useCallback(() => ({ book }), [book]);
+  const navigateToBookPage = useCallback(
+    (pathPrefix) => {
+      const id = getBookIdentifier();
+      if (!id) {
+        toast.error('책 정보가 없어 이동할 수 없습니다.');
+        return;
+      }
+      onClose();
+      navigate(`${pathPrefix}/${id}`, { state: { book } });
+    },
+    [book, getBookIdentifier, onClose, navigate]
+  );
 
-  const handleReadClick = useCallback(() => {
-    const id = getBookIdentifier();
-    if (!id) {
-      toast.error('책 정보가 없어 이동할 수 없습니다.');
-      return;
-    }
-    onClose();
-    navigate(`/user/viewer/${id}`, { state: getNavigationState() });
-  }, [onClose, navigate, getBookIdentifier, getNavigationState]);
+  const handleReadClick = useCallback(() => navigateToBookPage('/user/viewer'), [navigateToBookPage]);
 
-  const handleGraphClick = useCallback(() => {
-    const id = getBookIdentifier();
-    if (!id) {
-      toast.error('책 정보가 없어 이동할 수 없습니다.');
-      return;
-    }
-    onClose();
-    navigate(`/user/graph/${id}`, { state: getNavigationState() });
-  }, [onClose, navigate, getBookIdentifier, getNavigationState]);
+  const handleGraphClick = useCallback(() => navigateToBookPage('/user/graph'), [navigateToBookPage]);
 
   // 진도 삭제 - useMutation + 낙관적 업데이트
   const deleteProgressMutation = useMutation({
@@ -301,58 +290,47 @@ const BookDetailModal = memo(({ book, isOpen, onClose, onDelete }) => {
               </div>
             )}
           </div>
-          {bookDetails?.updatedAt && (() => {
-            const date = new Date(bookDetails.updatedAt);
-            const year = date.getFullYear();
-            const month = String(date.getMonth() + 1).padStart(2, '0');
-            const day = String(date.getDate()).padStart(2, '0');
-            const hours = String(date.getHours()).padStart(2, '0');
-            const minutes = String(date.getMinutes()).padStart(2, '0');
-            return (
-              <div className="book-detail-updated-at">
-                {year}. {month}. {day}. {hours}:{minutes}
-              </div>
-            );
-          })()}
+          {updatedAtFormatted && (
+            <div className="book-detail-updated-at">{updatedAtFormatted}</div>
+          )}
         </div>
 
         <div className="book-detail-body">
           {bookDetails && (
             <>
 
-              {uniqueCharacters.length > 0 && (
+              {characterLists.unique.length > 0 && (
                 <div className="book-detail-section">
                   <div className="book-detail-characters-header">
                     <div className="book-detail-label">등장 인물</div>
                   </div>
                   <div className="book-detail-value">
-                    {mainCharacters.length > 0 && (
+                    {characterLists.sortedMain.length > 0 && (
                       <div className="book-detail-characters-list">
-                        {sortedMainCharacters.map((character) => (
-                            <div 
-                              key={character.id ?? character.name} 
-                              className="book-detail-character-item main-character"
-                            >
-                              <span className="character-name">{character.name}</span>
-                              <span className="character-star" aria-label="주요 인물">⭐</span>
-                            </div>
-                          ))}
+                        {characterLists.sortedMain.map((character) => (
+                          <div
+                            key={character.id ?? character.name}
+                            className="book-detail-character-item main-character"
+                          >
+                            <span className="character-name">{character.name}</span>
+                            <span className="character-star" aria-label="주요 인물">⭐</span>
+                          </div>
+                        ))}
                       </div>
                     )}
-                    
-                    {/* 일반 인물 - 더보기 버튼으로 제어 */}
-                    {otherCharacters.length > 0 && (
+
+                    {characterLists.sortedOther.length > 0 && (
                       <>
                         {showMoreCharacters && (
                           <div className="book-detail-characters-list">
-                            {sortedOtherCharacters.map((character) => (
-                                <div 
-                                  key={character.id ?? character.name} 
-                                  className="book-detail-character-item"
-                                >
-                                  <span className="character-name">{character.name}</span>
-                                </div>
-                              ))}
+                            {characterLists.sortedOther.map((character) => (
+                              <div
+                                key={character.id ?? character.name}
+                                className="book-detail-character-item"
+                              >
+                                <span className="character-name">{character.name}</span>
+                              </div>
+                            ))}
                           </div>
                         )}
                         <button
@@ -360,7 +338,9 @@ const BookDetailModal = memo(({ book, isOpen, onClose, onDelete }) => {
                           onClick={() => setShowMoreCharacters(!showMoreCharacters)}
                           aria-expanded={showMoreCharacters}
                         >
-                          {showMoreCharacters ? '일반 인물 숨기기' : `일반 인물 더보기 (${otherCharacters.length}명)`}
+                          {showMoreCharacters
+                            ? '일반 인물 숨기기'
+                            : `일반 인물 더보기 (${characterLists.sortedOther.length}명)`}
                         </button>
                       </>
                     )}

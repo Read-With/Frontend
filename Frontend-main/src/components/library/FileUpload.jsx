@@ -1,10 +1,15 @@
 import React, { useRef, useState } from 'react';
 import PropTypes from 'prop-types';
 import { useFileUpload, FILE_CONSTRAINTS } from '../../hooks/books/useFileUpload';
-import { getBooks } from '../../utils/api/booksApi';
+import { getBooks, getBook } from '../../utils/api/booksApi';
+import { getBookManifest } from '../../utils/api/api';
 import { theme } from '../common/theme';
-import { normalizeTitle } from '../../utils/stringUtils';
 import { extractXhtmlFileMetadata, xhtmlUploadBasename } from '../../utils/xhtmlUploadUtils';
+import {
+  saveLocalBookBuffer,
+  saveLocalBookMetadata,
+  loadLocalBookBuffer,
+} from '../../utils/localBookStorage';
 
 const FileUpload = ({ onUploadSuccess, onClose }) => {
   const [dragActive, setDragActive] = useState(false);
@@ -56,7 +61,7 @@ const FileUpload = ({ onUploadSuccess, onClose }) => {
         setStep('metadata');
         
         // 메타데이터 추출은 백그라운드에서 진행
-        const extractedMetadata = await extractXhtmlSourceMetadata(file);
+        const extractedMetadata = await extractXhtmlMetadata(file);
         setMetadata(prev => ({
           ...prev,
           ...extractedMetadata
@@ -82,12 +87,10 @@ const FileUpload = ({ onUploadSuccess, onClose }) => {
     
     try {
       const arrayBuffer = await selectedFile.arrayBuffer();
-      const { saveLocalBookBuffer, saveLocalBookMetadata } = await import('../../utils/localBookStorage');
-      
+
       // 1. 업로드 전에 서버 책 목록 확인하여 제목+저자로 매칭
       let existingBookId = null;
       try {
-        const { getBooks } = await import('../../utils/api/booksApi');
         const booksResponse = await getBooks({});
         
         if (booksResponse?.isSuccess && Array.isArray(booksResponse.result)) {
@@ -125,7 +128,6 @@ const FileUpload = ({ onUploadSuccess, onClose }) => {
       if (existingBookId) {
         // 기존 책 ID 사용 - 새로 업로드하지 않고 기존 ID로만 취급
         try {
-          const { getBook } = await import('../../utils/api/booksApi');
           const bookResponse = await getBook(existingBookId);
           if (bookResponse?.isSuccess && bookResponse.result) {
             serverBook = bookResponse.result;
@@ -169,7 +171,6 @@ const FileUpload = ({ onUploadSuccess, onClose }) => {
       } else {
         // manifest 정보가 없으면 가져오기 시도
         try {
-          const { getBookManifest } = await import('../../utils/api/api');
           const manifestResponse = await getBookManifest(finalBookId, { forceRefresh: false });
           if (manifestResponse?.isSuccess && manifestResponse?.result) {
             manifestData = {
@@ -218,7 +219,6 @@ const FileUpload = ({ onUploadSuccess, onClose }) => {
 
       // IndexedDB 저장 완료 확인 (저장이 실제로 완료되었는지 검증)
       // 최대 10번 재시도 (총 최대 2초 대기)
-      const { loadLocalBookBuffer } = await import('../../utils/localBookStorage');
       let savedBuffer = null;
       for (let i = 0; i < 10; i++) {
         try {
@@ -348,22 +348,6 @@ const FileUpload = ({ onUploadSuccess, onClose }) => {
     fontWeight: 500,
     cursor: 'pointer',
     transition: 'background-color 0.2s ease'
-  };
-
-  const progressBarStyle = {
-    width: '100%',
-    height: '8px',
-    backgroundColor: '#e9ecef',
-    borderRadius: '4px',
-    overflow: 'hidden',
-    marginBottom: '16px'
-  };
-
-  const progressFillStyle = {
-    height: '100%',
-    backgroundColor: '#5C6F5C',
-    width: `${uploadProgress}%`,
-    transition: 'width 0.3s ease'
   };
 
   const errorStyle = {

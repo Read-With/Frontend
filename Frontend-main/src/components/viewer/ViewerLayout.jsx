@@ -22,6 +22,7 @@ const ViewerLayout = ({
   graphFullScreen,
   isFromLibrary = false,
   previousPage = null,
+  onExitToMypage,
 }) => {
 
   useEffect(() => {
@@ -58,6 +59,7 @@ const ViewerLayout = ({
           pageMode={pageMode}
           isFromLibrary={isFromLibrary}
           previousPage={previousPage}
+          onExitToMypage={onExitToMypage}
         />
       </div>
 

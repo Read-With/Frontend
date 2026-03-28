@@ -36,15 +36,11 @@ export const useChapterPovSummaries = (bookId, chapterIdx) => {
     fetchPovSummaries();
   }, [fetchPovSummaries]);
 
-  const refetch = useCallback(() => {
-    fetchPovSummaries();
-  }, [fetchPovSummaries]);
-
   return {
     povSummaries,
     loading,
     error,
-    refetch
+    refetch: fetchPovSummaries,
   };
 };
 

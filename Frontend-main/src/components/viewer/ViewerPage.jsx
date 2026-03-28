@@ -53,7 +53,7 @@ const ViewerPage = () => {
     handleOpenSettings, handleCloseSettings, handleApplySettings,
     onToggleBookmarkList, handleSliderChange, toggleGraph, handleLocationChange,
     graphState, graphActions, viewerState, searchState, graphFullScreen, setGraphFullScreen,
-    previousPage, isFromLibrary, bookId, cleanBookId, savedProgress,
+    previousPage, isFromLibrary, bookId, cleanBookId, savedProgress, exitToMypage,
   } = useViewerPage();
 
   const bookKey = React.useMemo(() => {
@@ -941,6 +941,7 @@ const ViewerPage = () => {
         graphFullScreen={graphFullScreen}
         isFromLibrary={isFromLibrary}
         previousPage={previousPage}
+        onExitToMypage={exitToMypage}
         rightSideContent={
           <GraphSplitArea
             graphState={{

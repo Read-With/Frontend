@@ -13,7 +13,8 @@ import { errorUtils } from '../../utils/viewerUtils';
  * @param {string} bookId - 현재 URL의 bookId
  * @returns {Object} { serverBook, loadingServerBook, matchedServerBook }
  */
-export function useServerBookMatching(bookId) {
+export function useServerBookMatching(bookId, options = {}) {
+  const { skipBookIdRedirectRef } = options;
   const location = useLocation();
   const navigate = useNavigate();
   
@@ -138,6 +139,12 @@ export function useServerBookMatching(bookId) {
 
   // 매칭된 서버 책으로 URL 업데이트
   useEffect(() => {
+    if (skipBookIdRedirectRef?.current) {
+      return;
+    }
+    if (!location.pathname.includes('/viewer/')) {
+      return;
+    }
     if (!matchedServerBook || typeof matchedServerBook.id !== 'number') {
       return;
     }
@@ -166,7 +173,7 @@ export function useServerBookMatching(bookId) {
         }
       }
     });
-  }, [matchedServerBook, bookId, location.search, location.state, navigate]);
+  }, [matchedServerBook, bookId, location.pathname, location.search, location.state, navigate, skipBookIdRedirectRef]);
 
   return {
     serverBook,

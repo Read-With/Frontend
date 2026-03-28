@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { loadViewerMode, loadSettings } from '../../utils/viewerUtils';
+import { flagsFromGraphMode } from './graphModeFlags';
 
 /**
  * 뷰어 URL 파라미터 관리 훅
@@ -8,8 +9,10 @@ import { loadViewerMode, loadSettings } from '../../utils/viewerUtils';
  * 
  * @returns {Object} URL 파라미터 관련 상태 및 함수
  */
-export function useViewerUrlParams() {
+export function useViewerUrlParams(options = {}) {
+  const { skipHistoryMutationsRef } = options;
   const location = useLocation();
+  const navigate = useNavigate();
   
   // URL 쿼리 파라미터 파싱
   const urlSearchParams = useMemo(() => {
@@ -29,15 +32,13 @@ export function useViewerUrlParams() {
   
   // 초기 상태 계산
   const initialGraphMode = useMemo(() => {
-    if (savedGraphMode === 'graph') return { fullScreen: true, show: true };
-    if (savedGraphMode === 'split') return { fullScreen: false, show: true };
-    if (savedGraphMode === 'viewer') return { fullScreen: false, show: false };
-    
-    const saved = loadViewerMode();
-    if (saved === "graph") return { fullScreen: true, show: true };
-    if (saved === "split") return { fullScreen: false, show: true };
-    if (saved === "viewer") return { fullScreen: false, show: false };
-    return { fullScreen: false, show: loadSettings().showGraph };
+    return (
+      flagsFromGraphMode(savedGraphMode) ??
+      flagsFromGraphMode(loadViewerMode()) ?? {
+        fullScreen: false,
+        show: loadSettings().showGraph,
+      }
+    );
   }, [savedGraphMode]);
   
   // 초기 상태 설정
@@ -75,6 +76,9 @@ export function useViewerUrlParams() {
   
   // URL 업데이트 함수
   const updateURL = useCallback((updates = {}) => {
+    if (skipHistoryMutationsRef?.current) {
+      return;
+    }
     const currentParams = new URLSearchParams(location.search);
     
     if (updates.chapter !== undefined) {
@@ -90,9 +94,12 @@ export function useViewerUrlParams() {
       currentParams.set('graphMode', updates.graphMode);
     }
     
-    const newURL = `${location.pathname}?${currentParams.toString()}`;
-    window.history.replaceState({}, '', newURL);
-  }, [location.pathname, location.search]);
+    const qs = currentParams.toString();
+    navigate(
+      { pathname: location.pathname, search: qs ? `?${qs}` : '' },
+      { replace: true }
+    );
+  }, [location.pathname, location.search, navigate, skipHistoryMutationsRef]);
   
   const prevUrlStateRef = useRef({
     chapter: null,

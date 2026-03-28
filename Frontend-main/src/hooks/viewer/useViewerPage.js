@@ -5,6 +5,7 @@ import { useLocalStorage, useLocalStorageNumber } from '../common/useLocalStorag
 import { useGraphDataLoader } from '../graph/useGraphDataLoader';
 import { useServerBookMatching } from '../books/useServerBookMatching';
 import { useViewerUrlParams } from './useViewerUrlParams';
+import { flagsFromGraphMode } from './graphModeFlags';
 import { 
   defaultSettings, 
   loadSettings, 
@@ -19,11 +20,34 @@ import { useBookmarks } from '../bookmarks/useBookmarks';
 import { getBookManifest } from '../../utils/api/api';
 import { getMaxChapter } from '../../utils/common/cache/manifestCache';
 
+function runViewerPaging(viewerRef, direction) {
+  const ref = viewerRef.current;
+  if (!ref) {
+    toast.error('뷰어가 아직 준비되지 않았습니다. 잠시 후 다시 시도해주세요.');
+    return;
+  }
+  try {
+    if (direction === 'prev') ref.prevPage();
+    else ref.nextPage();
+  } catch {
+    toast.error(
+      direction === 'prev'
+        ? '이전 페이지로 이동할 수 없습니다.'
+        : '다음 페이지로 이동할 수 없습니다.'
+    );
+  }
+}
+
 export function useViewerPage() {
   const { filename: bookId } = useParams();
   const location = useLocation();
   const navigate = useNavigate();
-  
+  const skipViewerHistoryMutationRef = useRef(false);
+
+  useEffect(() => {
+    skipViewerHistoryMutationRef.current = false;
+  }, [bookId]);
+
   // 이전 페이지 정보 추출
   const previousPage = location.state?.from || null;
   const isFromLibrary = previousPage?.pathname === '/user/mypage' || location.state?.fromLibrary === true;
@@ -43,14 +67,14 @@ export function useViewerPage() {
     currentChapterRef,
     updateURL,
     prevUrlStateRef
-  } = useViewerUrlParams();
-  
+  } = useViewerUrlParams({ skipHistoryMutationsRef: skipViewerHistoryMutationRef });
+
   // 서버 책 매칭
   const {
     serverBook,
     loadingServerBook,
     matchedServerBook
-  } = useServerBookMatching(bookId);
+  } = useServerBookMatching(bookId, { skipBookIdRedirectRef: skipViewerHistoryMutationRef });
   
   const viewerRef = useRef(null);
   const [reloadKey, setReloadKey] = useState(0);
@@ -73,16 +97,10 @@ export function useViewerPage() {
       isInitialMountRef.current = false;
       return;
     }
-    
-    if (savedGraphMode === 'graph') {
-      setGraphFullScreen(true);
-      setShowGraph(true);
-    } else if (savedGraphMode === 'split') {
-      setGraphFullScreen(false);
-      setShowGraph(true);
-    } else if (savedGraphMode === 'viewer') {
-      setGraphFullScreen(false);
-      setShowGraph(false);
+    const flags = flagsFromGraphMode(savedGraphMode);
+    if (flags) {
+      setGraphFullScreen(flags.fullScreen);
+      setShowGraph(flags.show);
     }
   }, [savedGraphMode]);
   
@@ -159,13 +177,7 @@ export function useViewerPage() {
   const [progress, setProgress] = useLocalStorageNumber(`progress_${cleanBookId}`, 0);
   const [settings, setSettings] = useLocalStorage('xhtml_viewer_settings', defaultSettings);
 
-  const folderKey = useMemo(() => {
-    const key = getFolderKeyFromFilename(bookId);
-    if (!key) {
-      // folderKey가 null인 경우 무시
-    }
-    return key;
-  }, [bookId]);
+  const folderKey = useMemo(() => getFolderKeyFromFilename(bookId), [bookId]);
   
   // 그래프 데이터 로더에 서버 bookId 전달 (숫자인 경우만)
   const graphBookId = useMemo(() => {
@@ -340,16 +352,10 @@ export function useViewerPage() {
         
         // URL 파라미터가 없으면 localStorage에서 그래프 모드 복원
         if (!savedGraphMode) {
-          const saved = loadViewerMode();
-          if (saved === "graph") {
-            setGraphFullScreen(true);
-            setShowGraph(true);
-          } else if (saved === "split") {
-            setGraphFullScreen(false);
-            setShowGraph(true);
-          } else if (saved === "viewer") {
-            setGraphFullScreen(false);
-            setShowGraph(false);
+          const flags = flagsFromGraphMode(loadViewerMode());
+          if (flags) {
+            setGraphFullScreen(flags.fullScreen);
+            setShowGraph(flags.show);
           }
         }
         
@@ -371,29 +377,8 @@ export function useViewerPage() {
     }
   }, [currentEvent]);
   
-  const handlePrevPage = useCallback(() => {
-    if (viewerRef.current) {
-      try {
-        viewerRef.current.prevPage();
-      } catch (error) {
-        toast.error('이전 페이지로 이동할 수 없습니다.');
-      }
-    } else {
-      toast.error('뷰어가 아직 준비되지 않았습니다. 잠시 후 다시 시도해주세요.');
-    }
-  }, []);
-  
-  const handleNextPage = useCallback(() => {
-    if (viewerRef.current) {
-      try {
-        viewerRef.current.nextPage();
-      } catch (error) {
-        toast.error('다음 페이지로 이동할 수 없습니다.');
-      }
-    } else {
-      toast.error('뷰어가 아직 준비되지 않았습니다. 잠시 후 다시 시도해주세요.');
-    }
-  }, []);
+  const handlePrevPage = useCallback(() => runViewerPaging(viewerRef, 'prev'), []);
+  const handleNextPage = useCallback(() => runViewerPaging(viewerRef, 'next'), []);
   
   const handleOpenSettings = useCallback(() => {
     setShowSettingsModal(true);
@@ -496,7 +481,7 @@ export function useViewerPage() {
     };
 
     applyAndSync();
-  }, [showGraph, settings, viewerRef, setTotalPages, setCurrentPage, setProgress]);
+  }, [showGraph, settings, setSettings, viewerRef]);
   
   const handleFitView = useCallback(() => {
     // TODO: 그래프 뷰 포커스 기능 구현 예정
@@ -525,6 +510,9 @@ export function useViewerPage() {
   
   // 상태 변경 시 URL 업데이트
   useEffect(() => {
+    if (skipViewerHistoryMutationRef.current) {
+      return;
+    }
     const graphModeValue = graphFullScreen ? 'graph' : (showGraph ? 'split' : 'viewer');
     const prev = prevUrlStateRef.current;
     const updates = {};
@@ -552,6 +540,13 @@ export function useViewerPage() {
       };
     }
   }, [currentChapter, currentPage, progress, graphFullScreen, showGraph, updateURL]);
+
+  const exitToMypage = useCallback(() => {
+    skipViewerHistoryMutationRef.current = true;
+    const prefix = (import.meta.env.BASE_URL || '/').replace(/\/$/, '');
+    const path = `${prefix}/mypage`.replace(/\/{2,}/g, '/');
+    window.location.replace(path);
+  }, []);
   
   return {
     // 라우터 관련
@@ -682,7 +677,8 @@ export function useViewerPage() {
     toggleGraph,
     handleFitView,
     handleLocationChange,
-    
+    exitToMypage,
+
     // 그룹화된 상태들 (컴포넌트용)
     graphState: {
       currentChapter,
