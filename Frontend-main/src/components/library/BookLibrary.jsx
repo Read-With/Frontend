@@ -352,7 +352,7 @@ BookCard.propTypes = {
   viewMode: PropTypes.oneOf(['grid', 'list'])
 };
 
-const BookLibrary = memo(({ books, loading, error, onRetry, onToggleFavorite, onBookClick, onBookDelete, viewMode = 'grid' }) => {
+const BookLibrary = memo(({ books, loading: _loading, error: _loadError, onRetry: _onRetry, onToggleFavorite, onBookClick, onBookDelete, viewMode = 'grid' }) => {
   const [selectedBook, setSelectedBook] = useState(null);
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [deleteTargetBook, setDeleteTargetBook] = useState(null);

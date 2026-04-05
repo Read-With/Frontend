@@ -51,7 +51,7 @@ export async function loadBookMeta(bookId, { useCache = true } = {}) {
     const data = normalizeMeta(raw);
     setCached(key, data);
     return data;
-  } catch (e) {
+  } catch (_e) {
     errorUtils.logWarning('loadBookMeta', 'meta.json fallback 실패', { bookId, fallbackUrl });
     return null;
   }

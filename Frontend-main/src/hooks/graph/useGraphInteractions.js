@@ -252,7 +252,7 @@ export default function useGraphInteractions({
               basePos = { x: 0, y: 0 };
             }
           }
-        } catch (err) {
+        } catch (_err) {
           basePos = { x: 0, y: 0 };
         }
       }
@@ -316,10 +316,10 @@ export default function useGraphInteractions({
     [cyRef, handleNodeHighlight, calculateNodePosition, calculateTooltipPosition, selectedNodeIdRef, selectedEdgeIdRef, resetAllStyles]
   );
 
-  const nodeDragStartHandler = useCallback((evt) => {
+  const nodeDragStartHandler = useCallback((_evt) => {
   }, []);
 
-  const nodeDragEndHandler = useCallback((evt) => {
+  const nodeDragEndHandler = useCallback((_evt) => {
     const dragEndEvent = new CustomEvent('graphDragEnd', {
       detail: { type: 'graphDragEnd', timestamp: Date.now() }
     });

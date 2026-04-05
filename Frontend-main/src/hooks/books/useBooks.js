@@ -11,6 +11,8 @@ import {
 import { prefetchManifest } from '../../utils/common/cache/manifestCache';
 import { getBookManifest } from '../../utils/api/api';
 import { loadPublicBooks } from '../../utils/normalizedContent';
+import { getStoredAccessToken } from '../../utils/security/authTokenStorage';
+import { ensureSessionAccessToken } from '../../utils/api/authApi';
 
 const HIDDEN_SERVER_BOOK_IDS_KEY = 'readwith_hidden_server_book_ids';
 const PUBLIC_BOOK_FAVORITES_KEY = 'readwith_public_book_favorites';
@@ -34,7 +36,7 @@ export const useBooks = () => {
       const raw = localStorage.getItem(HIDDEN_SERVER_BOOK_IDS_KEY);
       const parsed = raw ? JSON.parse(raw) : [];
       if (Array.isArray(parsed)) return new Set(parsed.map((id) => `${id}`));
-    } catch (e) {}
+    } catch (_e) {}
     return new Set();
   });
   const [publicBookFavorites, setPublicBookFavorites] = useState(() => {
@@ -42,7 +44,7 @@ export const useBooks = () => {
       const raw = localStorage.getItem(PUBLIC_BOOK_FAVORITES_KEY);
       const parsed = raw ? JSON.parse(raw) : [];
       if (Array.isArray(parsed)) return new Set(parsed.map((id) => `${id}`));
-    } catch (e) {}
+    } catch (_e) {}
     return new Set();
   });
   
@@ -111,7 +113,8 @@ export const useBooks = () => {
   } = useQuery({
     queryKey: ['books', 'server'],
     queryFn: async () => {
-      const token = localStorage.getItem('accessToken');
+      await ensureSessionAccessToken();
+      const token = getStoredAccessToken();
       if (!token) {
         return { books: [], needsAuth: true };
       }
@@ -224,7 +227,7 @@ export const useBooks = () => {
           const n = Number(raw);
           if (Number.isFinite(n)) progress = Math.min(100, Math.max(0, n));
         }
-      } catch (e) {}
+      } catch (_e) {}
       result.push({
         id,
         title: b.title ?? id,
@@ -404,22 +407,14 @@ export const useBooks = () => {
 
   const toggleFavorite = useCallback(
     async (bookId, favorite) => {
-      try {
-        await toggleFavoriteMutation.mutateAsync({ bookId, favorite });
-      } catch (err) {
-        throw err;
-      }
+      await toggleFavoriteMutation.mutateAsync({ bookId, favorite });
     },
     [toggleFavoriteMutation],
   );
 
   const removeBook = useCallback(
     async (bookId) => {
-      try {
-        await removeBookMutation.mutateAsync(bookId);
-      } catch (err) {
-        throw err;
-      }
+      await removeBookMutation.mutateAsync(bookId);
     },
     [removeBookMutation],
   );

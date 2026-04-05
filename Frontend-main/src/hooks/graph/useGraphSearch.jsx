@@ -105,7 +105,7 @@ export function useGraphSearch(elements, onSearchStateChange = null, currentChap
   }, []);
 
   // 키보드 네비게이션 처리 (화살표 키, Escape 키만 처리)
-  const handleKeyDown = useCallback((e, onSelect) => {
+  const handleKeyDown = useCallback((e, _onSelect) => {
     switch (e.key) {
       case 'ArrowDown':
         if (showSuggestions && suggestions && suggestions.length > 0) {

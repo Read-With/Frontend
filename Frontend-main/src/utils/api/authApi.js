@@ -1,4 +1,11 @@
 import { getApiBaseUrl, clearAuthData } from '../common/authUtils';
+import {
+  getStoredAccessToken,
+  setStoredAccessToken,
+  getStoredRefreshToken,
+  setStoredRefreshToken,
+  setStoredGoogleUserJson,
+} from '../security/authTokenStorage';
 
 const API_BASE_URL = getApiBaseUrl();
 
@@ -36,7 +43,7 @@ export const getTokenExpirationTime = (token) => {
       return payload.exp - currentTime;
     }
     return null;
-  } catch (error) {
+  } catch (_error) {
     return null;
   }
 };
@@ -49,13 +56,14 @@ export const isTokenExpiringSoon = (token, bufferSeconds = 5 * 60) => {
 };
 
 export const authenticatedRequest = async (endpoint, options = {}, retryCount = 0) => {
-  let token = localStorage.getItem('accessToken');
+  await ensureSessionAccessToken();
+  let token = getStoredAccessToken();
   
   // 토큰이 곧 만료될 예정이면 미리 갱신 (15분 전)
   if (token && isTokenExpiringSoon(token, 15 * 60)) {
     try {
       await refreshToken();
-      token = localStorage.getItem('accessToken');
+      token = getStoredAccessToken();
     } catch (error) {
       console.warn('토큰 자동 갱신 실패:', error);
     }
@@ -84,7 +92,7 @@ export const authenticatedRequest = async (endpoint, options = {}, retryCount = 
       try {
         await refreshToken();
         return authenticatedRequest(endpoint, options, retryCount + 1);
-      } catch (refreshError) {
+      } catch (_refreshError) {
         clearAuthData();
         const error = new Error('인증이 만료되었습니다. 다시 로그인해주세요.');
         error.status = 401;
@@ -102,7 +110,7 @@ export const authenticatedRequest = async (endpoint, options = {}, retryCount = 
     let data;
     try {
       data = await response.json();
-    } catch (jsonError) {
+    } catch (_jsonError) {
       const error = new Error('응답을 파싱할 수 없습니다');
       error.status = response.status;
       throw error;
@@ -161,7 +169,7 @@ export const googleLogin = async (code) => {
 
 export const refreshToken = async () => {
   try {
-    const refreshTokenValue = localStorage.getItem('refreshToken');
+    const refreshTokenValue = getStoredRefreshToken();
     
     if (!refreshTokenValue) {
       throw new Error('Refresh Token이 없습니다.');
@@ -188,10 +196,10 @@ export const refreshToken = async () => {
     
     if (data.isSuccess && data.result) {
       if (data.result.accessToken) {
-        localStorage.setItem('accessToken', data.result.accessToken);
+        setStoredAccessToken(data.result.accessToken);
       }
       if (data.result.refreshToken) {
-        localStorage.setItem('refreshToken', data.result.refreshToken);
+        setStoredRefreshToken(data.result.refreshToken);
       }
       
       if (data.result.user) {
@@ -202,7 +210,7 @@ export const refreshToken = async () => {
           imageUrl: data.result.user.profileImgUrl || '',
           provider: data.result.user.provider || 'GOOGLE',
         };
-        localStorage.setItem('google_user', JSON.stringify(userData));
+        setStoredGoogleUserJson(JSON.stringify(userData));
       }
       
       return data.result;
@@ -214,6 +222,26 @@ export const refreshToken = async () => {
     throw error;
   }
 };
+
+let sessionBootstrapPromise = null;
+
+/** 페이지 로드 직후 메모리에 액세스 토큰이 없을 때, 리프레시 토큰으로 한 번 채운다. */
+export async function ensureSessionAccessToken() {
+  if (getStoredAccessToken()) return;
+  if (!getStoredRefreshToken()) return;
+  if (!sessionBootstrapPromise) {
+    sessionBootstrapPromise = (async () => {
+      try {
+        await refreshToken();
+      } catch {
+        /* refreshToken이 실패 시 clearAuth 등 처리 */
+      }
+    })().finally(() => {
+      sessionBootstrapPromise = null;
+    });
+  }
+  await sessionBootstrapPromise;
+}
 
 export const checkAuthStatus = async () => {
   try {

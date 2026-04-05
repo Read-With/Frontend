@@ -3,9 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { LogOut } from 'lucide-react';
 import './Header.css';
 import useAuth from '../../hooks/auth/useAuth';
-import { secureLog } from '../../utils/security/oauthSecurity';
-import { getApiBaseUrl } from '../../utils/common/authUtils';
-
+import { secureLog, createAndStoreGoogleOAuthState } from '../../utils/security/oauthSecurity';
+import { getGoogleOAuthRedirectUri } from '../../utils/common/authUtils';
 const Header = ({ userNickname, showAuthLinks = false }) => {
   const navigate = useNavigate();
   const { user, logout } = useAuth();
@@ -52,19 +51,8 @@ const Header = ({ userNickname, showAuthLinks = false }) => {
       
       // redirect_uri 설정 (로컬/프로덕션 구분)
       // 백엔드가 요청 본문의 redirectUri를 읽을 수 있도록 각 환경에 맞는 값 사용
-      const getRedirectUri = () => {
-        if (import.meta.env.VITE_GOOGLE_REDIRECT_URI) {
-          return import.meta.env.VITE_GOOGLE_REDIRECT_URI;
-        }
-        if (typeof window !== 'undefined') {
-          return `${window.location.origin}/auth/callback`;
-        }
-        return 'https://readwith-frontend.vercel.app/auth/callback';
-      };
-      
-      // 환경변수에서 구글 클라이언트 ID 가져오기
       const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID;
-      const GOOGLE_REDIRECT_URI = getRedirectUri();
+      const GOOGLE_REDIRECT_URI = getGoogleOAuthRedirectUri();
       
       if (!GOOGLE_CLIENT_ID || GOOGLE_CLIENT_ID === 'CLIENT_ID' || GOOGLE_CLIENT_ID === 'your_google_client_id_here') {
         setLoginError('Google OAuth 설정이 올바르지 않습니다. .env 파일에 VITE_GOOGLE_CLIENT_ID를 설정해주세요.');
@@ -72,13 +60,15 @@ const Header = ({ userNickname, showAuthLinks = false }) => {
       }
       
       // 구글 OAuth URL 구성 (가이드에 따라 직접 생성)
+      const oauthState = createAndStoreGoogleOAuthState();
       const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?` +
         `client_id=${GOOGLE_CLIENT_ID}&` +
         `redirect_uri=${encodeURIComponent(GOOGLE_REDIRECT_URI)}&` +
         `response_type=code&` +
         `scope=email profile&` +
         `access_type=offline&` +
-        `prompt=consent`;
+        `prompt=consent&` +
+        `state=${encodeURIComponent(oauthState)}`;
       
       secureLog('Google OAuth 로그인 시작', { 
         clientId: GOOGLE_CLIENT_ID.substring(0, 10) + '...', 

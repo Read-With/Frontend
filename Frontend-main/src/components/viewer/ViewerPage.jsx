@@ -1,4 +1,4 @@
-import React, { useRef, useState, useEffect, useCallback } from "react";
+import React, { useRef, useState, useEffect, useCallback, useMemo } from "react";
 import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import ViewerLayout from "./ViewerLayout";
@@ -42,34 +42,25 @@ const ViewerPage = () => {
     viewerRef, reloadKey, progress, setProgress, currentPage, setCurrentPage,
     totalPages, setTotalPages, showSettingsModal,
     settings, currentChapter, setCurrentChapter, currentEvent, setCurrentEvent,
-    events, setEvents, showGraph, elements, setElements, setGraphViewState,
+    events: _events, setEvents, showGraph, elements, setElements, setGraphViewState,
     setCurrentCharIndex,
     loading, setLoading,
-    isDataReady, setIsDataReady, isReloading, setIsReloading,
+    isDataReady, setIsDataReady, isReloading, setIsReloading: _setIsReloading,
     isGraphLoading, setIsGraphLoading, showToolbar, setShowToolbar,
-    bookmarks, showBookmarkList, setShowBookmarkList,
+    bookmarks, showBookmarkList, setShowBookmarkList: _setShowBookmarkList,
     prevElementsRef, book, folderKey, currentChapterData,
     handlePrevPage, handleNextPage, handleAddBookmark, handleBookmarkSelect,
     handleOpenSettings, handleCloseSettings, handleApplySettings,
-    onToggleBookmarkList, handleSliderChange, toggleGraph, handleLocationChange,
-    graphState, graphActions, viewerState, searchState, graphFullScreen, setGraphFullScreen,
+    onToggleBookmarkList, handleSliderChange, toggleGraph, handleLocationChange: _handleLocationChange,
+    graphState, graphActions, viewerState, searchState, graphFullScreen, setGraphFullScreen: _setGraphFullScreen,
     previousPage, isFromLibrary, bookId, cleanBookId, savedProgress, exitToMypage,
   } = useViewerPage();
 
-  const bookKey = React.useMemo(() => {
-    if (bookId !== undefined && bookId !== null) {
-      const trimmed = String(bookId).trim();
-      if (trimmed) {
-        return trimmed;
-      }
-    }
-    if (book?.id !== undefined && book?.id !== null) {
-      const trimmed = String(book.id).trim();
-      if (trimmed) {
-        return trimmed;
-      }
-    }
-    return null;
+  const bookKey = useMemo(() => {
+    const id = bookId ?? book?.id;
+    if (id == null) return null;
+    const trimmed = String(id).trim();
+    return trimmed || null;
   }, [bookId, book?.id]);
 
   const { cachedLocation, saveLocation } = useCachedLocation(bookKey);
@@ -120,14 +111,8 @@ const ViewerPage = () => {
   const updateLoadingState = useCallback((isReady, isLoading, error = null, shouldResetTransition = true) => {
     setIsDataReady(isReady);
     setLoading(isLoading);
-    if (shouldResetTransition) {
-      resetTransition();
-    }
-    if (error !== null) {
-      setApiError(error);
-    } else {
-      setApiError(null);
-    }
+    if (shouldResetTransition) resetTransition();
+    setApiError(error);
   }, [setIsDataReady, setLoading, setApiError, resetTransition]);
   
   useEffect(() => {
@@ -150,7 +135,7 @@ const ViewerPage = () => {
   });
 
 
-  const currentEventKey = React.useMemo(() => {
+  const currentEventKey = useMemo(() => {
     if (!currentEvent || currentEvent.placeholder) return null;
     if (currentEvent.chapter && Number(currentEvent.chapter) !== Number(currentChapter)) return null;
     return {
@@ -329,7 +314,7 @@ const ViewerPage = () => {
             setInitialProgressAnchor({ startLocator: loc, endLocator: loc });
           }
         }
-      } catch (progressError) {
+      } catch (_progressError) {
         // 조용히 처리
       }
 
@@ -878,9 +863,110 @@ const ViewerPage = () => {
     handleSearchSubmit, clearSearch, setSearchTerm,
   } = useGraphSearch(elements, null, currentChapterData);
 
-  const memoizedEventsForChapter = React.useMemo(() => {
-    return getEventsForChapter(currentChapter, folderKey);
-  }, [currentChapter, folderKey]);
+  const memoizedEventsForChapter = useMemo(
+    () => getEventsForChapter(currentChapter, folderKey),
+    [currentChapter, folderKey]
+  );
+
+  // ─── JSX용 콜백 ─────────────────────────────────────────────────────────────
+  const handleCurrentChapterChange = useCallback((chapter) => {
+    const prev = Number(currentChapter || 0);
+    const next = Number(chapter || 0);
+    if (prev && next && prev !== next) {
+      const transitionInfo = startChapterTransition(prev, next);
+      if (transitionInfo && transitionInfo.forcedIdx === 1) {
+        setCurrentEvent({
+          chapter: next, chapterIdx: next,
+          eventIdx: 1, eventNum: 1, event_id: 1,
+          relations: [], characters: [],
+          placeholder: true,
+        });
+      }
+    }
+    setCurrentChapter(chapter);
+  }, [currentChapter, startChapterTransition, setCurrentEvent, setCurrentChapter]);
+
+  const handleCurrentLineChange = useCallback((charIndex, _totalEvents, receivedEvent) => {
+    setCurrentCharIndex(charIndex);
+    if (!receivedEvent) return;
+
+    const chapter =
+      receivedEvent.chapter ??
+      receivedEvent.anchor?.startLocator?.chapterIndex ??
+      receivedEvent.anchor?.start?.chapterIndex ??
+      null;
+    if (chapter && chapter !== currentChapter) {
+      setCurrentChapter(chapter);
+    }
+
+    const forcedIdx = forcedChapterEventIdxRef.current;
+    const rawIdx = eventUtils.extractRawEventIdx(receivedEvent);
+    let shouldReleaseForced = false;
+    let nextEvent = receivedEvent;
+
+    if (Number.isFinite(forcedIdx)) {
+      if (rawIdx > 0 && rawIdx !== forcedIdx) {
+        shouldReleaseForced = true;
+      } else {
+        nextEvent = {
+          ...receivedEvent,
+          eventIdx: forcedIdx,
+          eventNum: forcedIdx,
+          event_id: forcedIdx,
+          resolvedEventIdx: forcedIdx,
+          originalEventIdx: rawIdx || forcedIdx,
+        };
+        shouldReleaseForced = true;
+      }
+    }
+
+    const resolvedIdxForEvent = eventUtils.extractRawEventIdx(nextEvent);
+    if (!Number.isFinite(nextEvent.resolvedEventIdx) || nextEvent.resolvedEventIdx <= 0) {
+      nextEvent = {
+        ...nextEvent,
+        resolvedEventIdx: resolvedIdxForEvent > 0 ? resolvedIdxForEvent : undefined,
+      };
+    }
+    setCurrentEvent(nextEvent);
+    if (shouldReleaseForced) releaseForcedEventIdx();
+  }, [currentChapter, setCurrentChapter, setCurrentCharIndex, setCurrentEvent, releaseForcedEventIdx]);
+
+  // ─── GraphSplitArea 전달 props 메모이제이션 ──────────────────────────────────
+  const graphStateProp = useMemo(() => ({
+    ...graphState,
+    prevValidEvent: currentEvent?.chapter === currentChapter ? currentEvent : null,
+    events: memoizedEventsForChapter,
+  }), [graphState, currentEvent, currentChapter, memoizedEventsForChapter]);
+
+  const searchStateProp = useMemo(() => ({
+    ...searchState,
+    searchTerm,
+    isSearchActive,
+    elements,
+    filteredElements,
+    isResetFromSearch,
+    fitNodeIds,
+    suggestions,
+    showSuggestions,
+    selectedIndex,
+  }), [searchState, searchTerm, isSearchActive, elements, filteredElements,
+      isResetFromSearch, fitNodeIds, suggestions, showSuggestions, selectedIndex]);
+
+  const searchActionsProp = useMemo(() => ({
+    onSearchSubmit: handleSearchSubmit,
+    clearSearch,
+    closeSuggestions,
+    onGenerateSuggestions: setSearchTerm,
+    selectSuggestion,
+    handleKeyDown,
+  }), [handleSearchSubmit, clearSearch, closeSuggestions, setSearchTerm, selectSuggestion, handleKeyDown]);
+
+  const tooltipPropsProp = useMemo(() => ({
+    activeTooltip,
+    onClearTooltip: handleClearTooltip,
+    onSetActiveTooltip: handleSetActiveTooltip,
+    graphClearRef,
+  }), [activeTooltip, handleClearTooltip, handleSetActiveTooltip]);
 
   useEffect(() => {
     if (!isDataReady || !currentEvent) return;
@@ -944,39 +1030,12 @@ const ViewerPage = () => {
         onExitToMypage={exitToMypage}
         rightSideContent={
           <GraphSplitArea
-            graphState={{
-              ...graphState,
-              prevValidEvent: currentEvent && currentEvent.chapter === currentChapter ? currentEvent : null,
-              events: memoizedEventsForChapter
-            }}
+            graphState={graphStateProp}
             graphActions={graphActions}
             viewerState={viewerState}
-            searchState={{
-              ...searchState,
-              searchTerm,
-              isSearchActive,
-              elements: elements,
-              filteredElements,
-              isResetFromSearch,
-              fitNodeIds,
-              suggestions,
-              showSuggestions,
-              selectedIndex
-            }}
-            searchActions={{
-              onSearchSubmit: handleSearchSubmit,
-              clearSearch,
-              closeSuggestions,
-              onGenerateSuggestions: setSearchTerm,
-              selectSuggestion,
-              handleKeyDown
-            }}
-            tooltipProps={{
-              activeTooltip,
-              onClearTooltip: handleClearTooltip,
-              onSetActiveTooltip: handleSetActiveTooltip,
-              graphClearRef
-            }}
+            searchState={searchStateProp}
+            searchActions={searchActionsProp}
+            tooltipProps={tooltipPropsProp}
             transitionState={transitionState}
             apiError={apiError}
             isFromLibrary={isFromLibrary}
@@ -989,86 +1048,24 @@ const ViewerPage = () => {
       >
         {(() => {
           const initialProgressFromUrl = savedProgress != null && savedProgress !== '' ? Number(savedProgress) : null;
-          const useProgressForPosition = initialProgressFromUrl != null && Number.isFinite(initialProgressFromUrl) && initialProgressFromUrl > 0;
-          const commonProps = {
-            ref: viewerRef,
-            book,
-            manifestReady: manifestLoaded,
-            initialChapter: currentChapter,
-            initialProgress: initialProgressFromUrl != null && Number.isFinite(initialProgressFromUrl) ? initialProgressFromUrl : progress,
-            onProgressChange: setProgress,
-            onCurrentPageChange: (page) => setCurrentPage(page),
-            onTotalPagesChange: setTotalPages,
-            onCurrentChapterChange: (chapter) => {
-              const prev = Number(currentChapter || 0);
-              const next = Number(chapter || 0);
-              if (prev && next && prev !== next) {
-                const transitionInfo = startChapterTransition(prev, next);
-                if (transitionInfo && transitionInfo.forcedIdx === 1) {
-                  setCurrentEvent({
-                    chapter: next,
-                    chapterIdx: next,
-                    eventIdx: 1,
-                    eventNum: 1,
-                    event_id: 1,
-                    relations: [],
-                    characters: [],
-                    placeholder: true
-                  });
-                }
-              }
-              setCurrentChapter(chapter);
-            },
-            settings,
-            onCurrentLineChange: (charIndex, totalEvents, receivedEvent) => {
-              setCurrentCharIndex(charIndex);
-              if (receivedEvent) {
-                const chapter =
-                  receivedEvent.chapter ??
-                  receivedEvent.anchor?.startLocator?.chapterIndex ??
-                  receivedEvent.anchor?.start?.chapterIndex ??
-                  null;
-                if (chapter && chapter !== currentChapter) {
-                  setCurrentChapter(chapter);
-                }
-                const forcedIdx = forcedChapterEventIdxRef.current;
-                const rawIdx = eventUtils.extractRawEventIdx(receivedEvent);
-                let shouldReleaseForced = false;
-                let nextEvent = receivedEvent;
-                if (Number.isFinite(forcedIdx)) {
-                  if (rawIdx > 0 && rawIdx !== forcedIdx) {
-                    shouldReleaseForced = true;
-                  } else {
-                    nextEvent = {
-                      ...receivedEvent,
-                      eventIdx: forcedIdx,
-                      eventNum: forcedIdx,
-                      event_id: forcedIdx,
-                      resolvedEventIdx: forcedIdx,
-                      originalEventIdx: rawIdx || forcedIdx
-                    };
-                    shouldReleaseForced = true;
-                  }
-                }
-                const resolvedIdxForEvent = eventUtils.extractRawEventIdx(nextEvent);
-                if (!Number.isFinite(nextEvent.resolvedEventIdx) || nextEvent.resolvedEventIdx <= 0) {
-                  nextEvent = {
-                    ...nextEvent,
-                    resolvedEventIdx: resolvedIdxForEvent > 0 ? resolvedIdxForEvent : undefined
-                  };
-                }
-                setCurrentEvent(nextEvent);
-                if (shouldReleaseForced) releaseForcedEventIdx();
-              }
-            },
-          };
+          const useProgressForPosition = Number.isFinite(initialProgressFromUrl) && initialProgressFromUrl > 0;
           const progressKey = cleanBookId ?? bookKey;
           const cachedProgress = getProgressFromCache(progressKey);
           const anchor = initialProgressAnchor ?? cachedProgress?.anchor ?? undefined;
           return (
             <XhtmlViewer
               key={reloadKey}
-              {...commonProps}
+              ref={viewerRef}
+              book={book}
+              manifestReady={manifestLoaded}
+              initialChapter={currentChapter}
+              initialProgress={Number.isFinite(initialProgressFromUrl) ? initialProgressFromUrl : progress}
+              onProgressChange={setProgress}
+              onCurrentPageChange={(page) => setCurrentPage(page)}
+              onTotalPagesChange={setTotalPages}
+              onCurrentChapterChange={handleCurrentChapterChange}
+              settings={settings}
+              onCurrentLineChange={handleCurrentLineChange}
               bookId={progressKey}
               initialAnchor={anchor}
               initialPage={useProgressForPosition ? undefined : currentPage}

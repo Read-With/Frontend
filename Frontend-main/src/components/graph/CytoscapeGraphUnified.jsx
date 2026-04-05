@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState, useCallback, createContext, useMemo } from "react";
+import React, { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import PropTypes from "prop-types";
 import cytoscape from "cytoscape";
 import "./RelationGraph.css";
@@ -11,8 +11,6 @@ import useGraphInteractions from "../../hooks/graph/useGraphInteractions.js";
 import { useGraphLayout } from "../../hooks/graph/useGraphLayout.js";
 import { useCyInstance } from "../../hooks/graph/useCyInstance.js";
 import { eventUtils } from "../../utils/viewer/viewerUtils";
-
-export const CytoscapeGraphContext = createContext();
 
 // 정적 스타일 상수
 const NO_RESULTS_CONTAINER_STYLE = {
@@ -47,17 +45,19 @@ const DEFAULT_LAYOUT = { name: "preset" };
 
 const EMPTY_ELEMENTS_UPDATE = { nodesToAdd: [], edgesToAdd: [], hasChanges: false };
 
+const isEmpty = (arr) => !arr || arr.length === 0;
+
 const CytoscapeGraphUnified = ({
   elements,
-  stylesheet,
-  layout,
-  tapNodeHandler,  
+  stylesheet = [],
+  layout = DEFAULT_LAYOUT,
+  tapNodeHandler,
   tapEdgeHandler,
   tapBackgroundHandler,
-  fitNodeIds, 
+  fitNodeIds,
   style = {},
   cyRef: externalCyRef,
-  newNodeIds = [],
+  newNodeIds: _newNodeIds = [],
   onLayoutComplete,
   searchTerm = "",
   isSearchActive = false,
@@ -78,7 +78,7 @@ const CytoscapeGraphUnified = ({
   const [isGraphVisible, setIsGraphVisible] = useState(false);
   const [cyReady, setCyReady] = useState(false);
   const previousElementsRef = useRef([]);
-  const prevChapterRef = useRef(currentChapter ?? window.currentChapter);
+  const prevChapterRef = useRef(currentChapter);
   const [isInitialLoad, setIsInitialLoad] = useState(true);
   const addedNodeIdsRef = useRef(new Set());
 
@@ -89,14 +89,12 @@ const CytoscapeGraphUnified = ({
     try {
       return operation();
     } catch (error) {
-      console.error(errorMessage, error);
+      if (import.meta.env.DEV) console.error(errorMessage, error);
       return null;
     }
   }, []);
 
   // 유틸리티 함수 (useCallback 불필요)
-  const isEmpty = (arr) => !arr || arr.length === 0;
-  const isEmptyElements = () => previousElementsRef.current.length === 0;
   const resetPreviousElements = () => {
     previousElementsRef.current = [];
     addedNodeIdsRef.current = new Set();
@@ -212,7 +210,7 @@ const CytoscapeGraphUnified = ({
     if (!cy) return;
 
     // 챕터 변경 확인
-    const chapter = currentChapter ?? window.currentChapter;
+    const chapter = currentChapter;
     if (chapter !== undefined && chapter !== prevChapterRef.current) {
       setIsInitialLoad(true);
       resetPreviousElements();
@@ -220,7 +218,7 @@ const CytoscapeGraphUnified = ({
     }
 
     // 초기 로드 시 요소 저장만 수행
-    if (isEmptyElements()) {
+    if (isEmpty(previousElementsRef.current)) {
       previousElementsRef.current = elements;
       addedNodeIdsRef.current = new Set();
       return;
@@ -613,43 +611,4 @@ CytoscapeGraphUnified.propTypes = {
   currentChapter: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
 };
 
-// 기본값 (isRequired가 아닌 props만)
-CytoscapeGraphUnified.defaultProps = {
-  stylesheet: [],
-  layout: DEFAULT_LAYOUT,
-  style: {},
-  newNodeIds: [],
-  searchTerm: "",
-  isSearchActive: false,
-  filteredElements: [],
-  isResetFromSearch: false,
-  strictBackgroundClear: false,
-  showRippleEffect: true,
-  isDropdownSelection: false,
-  isDataRefreshing: false,
-};
-
-export default CytoscapeGraphUnified; 
-
-export function CytoscapeGraphPortalProvider({ children }) {
-  const cyRef = useRef(null);
-  const [graphProps, setGraphProps] = useState(() => ({
-    ...CytoscapeGraphUnified.defaultProps,
-    elements: [],
-  }));
-
-  const updateGraph = useCallback((newProps) => {
-    setGraphProps((prev) => ({ ...prev, ...newProps }));
-  }, []);
-
-  return (
-    <CytoscapeGraphContext.Provider value={{ graphProps, updateGraph, cyRef }}>
-      {children}
-      <CytoscapeGraphUnified {...graphProps} cyRef={cyRef} />
-    </CytoscapeGraphContext.Provider>
-  );
-}
-
-CytoscapeGraphPortalProvider.propTypes = {
-  children: PropTypes.node.isRequired,
-};
+export default CytoscapeGraphUnified;

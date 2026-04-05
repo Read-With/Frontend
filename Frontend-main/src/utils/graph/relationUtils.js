@@ -1,3 +1,14 @@
+/**
+ * @typedef {Object} NormalizedRelation
+ * @property {number} id1
+ * @property {number} id2
+ * @property {*} [positivity]
+ * @property {number} [weight]
+ * @property {*} [count]
+ * @property {string[]} relation
+ * @property {string} label
+ */
+
 export function safeNum(value) {
   try {
     if (value === undefined || value === null) {
@@ -22,7 +33,7 @@ export function safeNum(value) {
     }
     
     return converted;
-  } catch (error) {
+  } catch (_error) {
     return NaN;
   }
 }
@@ -51,12 +62,13 @@ export function normalizeRelation(raw) {
     } else if (typeof raw.relation === "string") {
       relationArray = [raw.relation];
     } else if (raw.relation !== undefined && raw.relation !== null) {
+      relationArray = [];
     }
 
     const label = relationArray[0] || (typeof raw.label === "string" ? raw.label : "");
 
     return { id1, id2, positivity, weight, count, relation: relationArray, label };
-  } catch (error) {
+  } catch (_error) {
     return null;
   }
 }
@@ -123,7 +135,7 @@ export function processRelations(relations) {
       }));
     
     return processed;
-  } catch (error) {
+  } catch (_error) {
     return [];
   }
 }
@@ -157,7 +169,7 @@ export function processRelationTags(relation, label) {
     }
     
     return uniqueRelations;
-  } catch (error) {
+  } catch (_error) {
     return [];
   }
 }
@@ -188,7 +200,7 @@ export function processRelationTagsCached(relation, label) {
     relationCache.set(cacheKey, result);
     enforceCacheSizeLimit('relationCache');
     return result;
-  } catch (error) {
+  } catch (_error) {
     return processRelationTags(relation, label);
   }
 }
@@ -196,14 +208,16 @@ export function processRelationTagsCached(relation, label) {
 export function clearRelationCache() {
   try {
     relationCache.clear();
-  } catch (error) {
+  } catch (_error) {
+    /* ignore */
   }
 }
 
 export function cleanupRelationResources() {
   try {
     clearRelationCache();
-  } catch (error) {
+  } catch (_error) {
+    /* ignore */
   }
 }
 

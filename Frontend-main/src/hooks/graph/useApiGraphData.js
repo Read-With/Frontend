@@ -96,7 +96,7 @@ export function useApiGraphData(serverBookId, currentChapter, currentEvent, isAp
 
     try {
       const cacheKey = `graph_macro_${targetBookId}_${currentChapter}`;
-      const result = await loadGraphDataWithCache({
+      await loadGraphDataWithCache({
         bookId: targetBookId,
         chapter: currentChapter,
         eventIdx: null,

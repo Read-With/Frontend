@@ -52,7 +52,7 @@ export const settingsUtils = {
   loadSettings,
   saveSettings,
   
-  applySettings(newSettings, prevSettings, setSettings, setShowGraph, setReloadKey, viewerRef, cleanFilename) {
+  applySettings(newSettings, prevSettings, setSettings, setShowGraph, setReloadKey, viewerRef, _cleanFilename) {
     const currentSettings = { ...prevSettings };
     setSettings(newSettings);
     setShowGraph(newSettings.showGraph);

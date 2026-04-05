@@ -79,17 +79,17 @@ export function saveViewerMode(mode) {
       return;
     }
     localStorage.setItem("viewer_mode", mode);
-    } catch (error) {
-      return;
-    }
+  } catch (_error) {
+    return;
+  }
 }
 
 export function loadViewerMode() {
   try {
     return localStorage.getItem("viewer_mode");
-    } catch (error) {
-      return null;
-    }
+  } catch (_error) {
+    return null;
+  }
 }
 
 function approxCharsFromLocator(startLocator, totalChars) {
@@ -170,7 +170,7 @@ export function cleanupNavigation(setIsNavigating, xhtmlViewer, handler) {
 }
 
 export const navigationUtils = {
-  async safeNavigate(xhtmlBook, xhtmlViewer, action, direction = 'next', setIsNavigating, setNavigationError, storageKeys) {
+  async safeNavigate(xhtmlBook, xhtmlViewer, action, _direction = 'next', setIsNavigating, setNavigationError, _storageKeys) {
     if (!xhtmlBook || !xhtmlViewer) {
       errorUtils.logWarning('safeNavigate', '책 또는 XHTML 뷰어가 없습니다', {
         hasXhtmlBook: !!xhtmlBook,

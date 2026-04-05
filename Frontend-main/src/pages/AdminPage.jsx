@@ -1,6 +1,8 @@
 import React, { useState } from "react";
 import axios from "axios";
 import { getApiBaseUrl } from "../utils/common/authUtils";
+import { getStoredAccessToken } from "../utils/security/authTokenStorage";
+import { ensureSessionAccessToken } from "../utils/api/authApi";
 
 const API_BASE_URL = `${getApiBaseUrl()}/api/v2/admin`;
 
@@ -11,8 +13,9 @@ const apiClient = axios.create({
   },
 });
 
-apiClient.interceptors.request.use((config) => {
-  const token = localStorage.getItem("accessToken");
+apiClient.interceptors.request.use(async (config) => {
+  await ensureSessionAccessToken();
+  const token = getStoredAccessToken();
   if (token) config.headers.Authorization = `Bearer ${token}`;
   return config;
 });

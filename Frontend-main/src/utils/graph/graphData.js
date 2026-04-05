@@ -1,5 +1,4 @@
 import { toNumberOrNull } from '../common/numberUtils';
-import { sortEventsByIdx } from './eventUtils';
 import { createCharacterMaps, normalizeCharacterId, aggregateCharactersFromEvents } from './characterUtils';
 import { getMaxChapter, getChapterData } from '../common/cache/manifestCache';
 import { getCachedChapterEvents, reconstructChapterGraphState, normalizeManifestEvents } from '../common/cache/chapterEventCache';
@@ -63,6 +62,10 @@ const getChapterEventsSnapshot = (bookId, chapterIdx) => {
   };
 };
 
+/**
+ * @param {string|number|null|undefined} filename
+ * @returns {string|null} `api:{bookId}` 또는 파싱 불가 시 null
+ */
 export function getFolderKeyFromFilename(filename) {
   const bookId = extractBookId(filename);
   if (!bookId) return null;
@@ -202,7 +205,6 @@ export function getEventDataByIndex(folderKey, chapter, eventIndex) {
     return null;
   }
 
-  const snapshot = getChapterEventsSnapshot(bookId, chapter);
   const events = getEventsForChapter(chapter, folderKey);
   if (!events.length) {
     return null;
@@ -269,7 +271,7 @@ export function createCharacterMapsWithCache(characters) {
     const maps = createCharacterMaps(characters);
     setCacheItem('characterMapsCache', cacheKey, maps);
     return maps;
-  } catch (error) {
+  } catch (_error) {
     return { idToName: {}, idToDesc: {}, idToDescKo: {}, idToMain: {}, idToNames: {}, idToProfileImage: {} };
   }
 }

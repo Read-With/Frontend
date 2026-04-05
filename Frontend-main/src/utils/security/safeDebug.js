@@ -37,7 +37,7 @@ if (import.meta.env.DEV) {
       }
       console.groupEnd();
       
-    } catch (error) {
+    } catch (_error) {
       // 디버깅 실패 시 조용히 무시
     }
   };

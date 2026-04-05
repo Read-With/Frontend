@@ -8,11 +8,9 @@ import { useViewerUrlParams } from './useViewerUrlParams';
 import { flagsFromGraphMode } from './graphModeFlags';
 import { 
   defaultSettings, 
-  loadSettings, 
   saveViewerMode, 
   loadViewerMode,
   settingsUtils,
-  errorUtils,
   bookUtils
 } from '../../utils/viewer/viewerUtils';
 import { getFolderKeyFromFilename } from '../../utils/graph/graphData';
@@ -54,9 +52,9 @@ export function useViewerPage() {
   
   // URL 파라미터 관리
   const {
-    urlSearchParams,
-    savedChapter,
-    savedPage,
+    urlSearchParams: _urlSearchParams,
+    savedChapter: _savedChapter,
+    savedPage: _savedPage,
     savedProgress,
     savedGraphMode,
     initialGraphMode,
@@ -64,7 +62,7 @@ export function useViewerPage() {
     setCurrentPage,
     currentChapter,
     setCurrentChapter,
-    currentChapterRef,
+    currentChapterRef: _currentChapterRef,
     updateURL,
     prevUrlStateRef
   } = useViewerUrlParams({ skipHistoryMutationsRef: skipViewerHistoryMutationRef });
@@ -128,7 +126,7 @@ export function useViewerPage() {
   const prevChapterNumRef = useRef();
   const prevEventNumRef = useRef();
   const eventsRef = useRef([]);
-  const [maxChapterEvents, setMaxChapterEvents] = useState(new Map());
+  const [maxChapterEvents, _setMaxChapterEvents] = useState(new Map());
   
   const [graphDiff, setGraphDiff] = useState({
     added: [],
@@ -218,7 +216,7 @@ export function useViewerPage() {
               return;
             }
           }
-        } catch (error) {
+        } catch (_error) {
           // 에러 발생 시에도 캐시 확인
         }
         
@@ -273,7 +271,7 @@ export function useViewerPage() {
     showBookmarkList,
     setShowBookmarkList,
     handleAddBookmark,
-    handleRemoveBookmark,
+    handleRemoveBookmark: _handleRemoveBookmark,
     handleBookmarkSelect,
     handleDeleteBookmark
   } = useBookmarks(cleanBookId, {
@@ -475,7 +473,7 @@ export function useViewerPage() {
           await viewerRef.current.displayAt(displayTarget);
           await new Promise(resolve => setTimeout(resolve, 100));
         }
-      } catch (e) {
+      } catch (_e) {
         toast.error('화면 모드 전환 중 오류가 발생했습니다.');
       }
     };

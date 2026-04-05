@@ -12,6 +12,10 @@ import { flushSync } from 'react-dom';
 import { loadCombinedXhtml, loadBookMeta } from '../../../utils/normalizedContent';
 import { defaultSettings } from '../../../utils/common/settingsUtils';
 import { codePointOffsetInBlock } from '../../../utils/common/locatorUtils';
+import {
+  sanitizeXhtmlBodyHtml,
+  collectSanitizedStyleCssFromDocument,
+} from '../../../utils/viewer/sanitizeXhtml';
 
 const BLOCK_SELECTOR = '[data-chapter-index][data-block-index]';
 
@@ -42,10 +46,10 @@ const getSelectionOffsets = (contentEl, startBlock, endBlock) => {
 function parseXhtmlBody(xhtml) {
   const parser = new DOMParser();
   const doc = parser.parseFromString(xhtml, 'text/html');
-  const styleEl = doc.querySelector('style');
-  const styleHTML = styleEl ? styleEl.outerHTML : '';
-  const bodyHTML = doc.body ? doc.body.innerHTML : xhtml;
-  return { styleHTML, bodyHTML };
+  const styleCss = collectSanitizedStyleCssFromDocument(doc);
+  const rawBody = doc.body ? doc.body.innerHTML : xhtml;
+  const bodyHTML = sanitizeXhtmlBodyHtml(rawBody);
+  return { styleCss, bodyHTML };
 }
 
 const XhtmlViewer = forwardRef(
@@ -156,8 +160,8 @@ const XhtmlViewer = forwardRef(
           ]);
           if (cancelled) return;
           metaRef.current = meta;
-          const { styleHTML, bodyHTML } = parseXhtmlBody(raw);
-          setXhtmlContent({ styleHTML, bodyHTML });
+          const { styleCss, bodyHTML } = parseXhtmlBody(raw);
+          setXhtmlContent({ styleCss, bodyHTML });
         } catch (e) {
           if (!cancelled) {
             setError(e?.message || '로드 실패');
@@ -335,11 +339,11 @@ const XhtmlViewer = forwardRef(
       if (!xhtmlContent || initialAnchor) return;
       if (initialProgress != null && initialProgress > 0) {
         const pct = Math.min(100, Math.max(0, initialProgress)) / 100;
-        setCurrentPageIndex((i) => Math.min(totalPages - 1, Math.round(pct * (totalPages - 1))));
+        setCurrentPageIndex((_i) => Math.min(totalPages - 1, Math.round(pct * (totalPages - 1))));
         return;
       }
       if (Number.isFinite(initialPage) && initialPage >= 1 && totalPages >= 1) {
-        setCurrentPageIndex((i) => Math.min(totalPages - 1, Math.max(0, initialPage - 1)));
+        setCurrentPageIndex((_i) => Math.min(totalPages - 1, Math.max(0, initialPage - 1)));
       }
     }, [xhtmlContent, initialAnchor, initialProgress, initialPage, totalPages]);
 
@@ -395,13 +399,13 @@ const XhtmlViewer = forwardRef(
     }
     if (!xhtmlContent) return null;
 
-    const { styleHTML, bodyHTML } = xhtmlContent;
+    const { styleCss } = xhtmlContent;
     const baseFontSize = settings?.fontSize ?? 100;
     const lineHeight = settings?.lineHeight ?? 1.5;
 
     return (
       <div ref={containerRef} className="w-full h-full overflow-hidden bg-white relative" tabIndex={0} onKeyDown={handleKeyDown} onWheel={(e) => e.preventDefault()} onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd} style={{ touchAction: 'pan-y' }}>
-        <style>{styleHTML}</style>
+        {styleCss ? <style>{styleCss}</style> : null}
         <style>{`
           .xhtml-viewer-content {
             padding: 24px;

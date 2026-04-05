@@ -123,7 +123,7 @@ export function useServerBookMatching(bookId, options = {}) {
         }
 
         setMatchedServerBook(null);
-      } catch (error) {
+      } catch (_error) {
         if (!cancelled) {
           setMatchedServerBook(null);
         }

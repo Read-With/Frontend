@@ -60,7 +60,7 @@ export function useGraphLayout({
       return;
     }
 
-    const { nodesToAdd, edgesToAdd, hasChanges } = elementsUpdateRef.current || {};
+    const { nodesToAdd, edgesToAdd: _edgesToAdd, hasChanges } = elementsUpdateRef.current || {};
 
     if (hasChanges) {
       cy.layout({ name: 'preset' }).run();

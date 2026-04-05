@@ -419,7 +419,6 @@ export function applySearchFadeEffect(cy, filteredElements, isSearchActive, opti
     const {
       fadeOpacity = 0.05,
       textFadeOpacity = 0.02,
-      enableLogging = true
     } = options;
 
     // 검색이 비활성화된 경우 모든 페이드 효과 제거

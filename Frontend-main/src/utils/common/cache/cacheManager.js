@@ -27,7 +27,7 @@ export function loadFromStorage(storageKey, storageType = 'localStorage') {
       return null;
     }
     return parsed;
-  } catch (error) {
+  } catch (_error) {
     storage.removeItem(storageKey);
     return null;
   }
@@ -61,7 +61,7 @@ export function getRawFromStorage(storageKey, storageType = 'localStorage') {
   
   try {
     return storage.getItem(storageKey);
-  } catch (error) {
+  } catch (_error) {
     return null;
   }
 }

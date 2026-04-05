@@ -45,20 +45,15 @@ const openDB = () => {
  * @param {ArrayBuffer} arrayBuffer - 업로드 원본(XHTML 등) ArrayBuffer
  */
 export const saveLocalBookBuffer = async (bookId, arrayBuffer) => {
-  try {
-    const database = await openDB();
-    const transaction = database.transaction([BUFFER_STORE], 'readwrite');
-    const store = transaction.objectStore(BUFFER_STORE);
-    
-    await new Promise((resolve, reject) => {
-      const request = store.put(arrayBuffer, bookId);
-      request.onsuccess = () => resolve();
-      request.onerror = () => reject(request.error);
-    });
-    
-  } catch (error) {
-    throw error;
-  }
+  const database = await openDB();
+  const transaction = database.transaction([BUFFER_STORE], 'readwrite');
+  const store = transaction.objectStore(BUFFER_STORE);
+
+  await new Promise((resolve, reject) => {
+    const request = store.put(arrayBuffer, bookId);
+    request.onsuccess = () => resolve();
+    request.onerror = () => reject(request.error);
+  });
 };
 
 /**
@@ -79,7 +74,7 @@ export const loadLocalBookBuffer = async (bookId) => {
       };
       request.onerror = () => reject(request.error);
     });
-  } catch (error) {
+  } catch (_error) {
     return null;
   }
 };
@@ -100,24 +95,20 @@ export const deleteLocalBookBuffer = async (bookId) => {
       request.onerror = () => reject(request.error);
     });
     
-  } catch (error) {
+  } catch (_error) {
     // 삭제 실패 무시
   }
 };
 
 export const saveLocalBookMetadata = async (bookId, metadata) => {
-  try {
-    const database = await openDB();
-    const transaction = database.transaction([META_STORE], 'readwrite');
-    const store = transaction.objectStore(META_STORE);
-    await new Promise((resolve, reject) => {
-      const request = store.put(metadata, bookId);
-      request.onsuccess = () => resolve();
-      request.onerror = () => reject(request.error);
-    });
-  } catch (error) {
-    throw error;
-  }
+  const database = await openDB();
+  const transaction = database.transaction([META_STORE], 'readwrite');
+  const store = transaction.objectStore(META_STORE);
+  await new Promise((resolve, reject) => {
+    const request = store.put(metadata, bookId);
+    request.onsuccess = () => resolve();
+    request.onerror = () => reject(request.error);
+  });
 };
 
 export const loadLocalBookMetadata = async (bookId) => {
@@ -130,7 +121,7 @@ export const loadLocalBookMetadata = async (bookId) => {
       request.onsuccess = () => resolve(request.result || null);
       request.onerror = () => reject(request.error);
     });
-  } catch (error) {
+  } catch (_error) {
     return null;
   }
 };
@@ -156,7 +147,7 @@ export const getAllLocalBookMetadata = async () => {
       key: key.toString(),
       value: values[index] || null,
     }));
-  } catch (error) {
+  } catch (_error) {
     return [];
   }
 };
@@ -171,7 +162,7 @@ export const deleteLocalBookMetadata = async (bookId) => {
       request.onsuccess = () => resolve();
       request.onerror = () => reject(request.error);
     });
-  } catch (error) {
+  } catch (_error) {
     // noop
   }
 };
@@ -191,7 +182,7 @@ export const clearAllLocalBookBuffers = async () => {
       request.onerror = () => reject(request.error);
     });
     
-  } catch (error) {
+  } catch (_error) {
     // 삭제 실패 무시
   }
 };
@@ -216,7 +207,7 @@ export const getAllLocalBookIds = async () => {
       };
       request.onerror = () => reject(request.error);
     });
-  } catch (error) {
+  } catch (_error) {
     return [];
   }
 };
@@ -226,50 +217,45 @@ export const getAllLocalBookIds = async () => {
  * @returns {Promise<Object>} 책 정보 객체 (ID -> 크기 정보)
  */
 export const inspectIndexedDB = async () => {
-  try {
-    const database = await openDB();
-    const transaction = database.transaction([BUFFER_STORE], 'readonly');
-    const store = transaction.objectStore(BUFFER_STORE);
-    
-    return new Promise((resolve, reject) => {
-      const request = store.getAllKeys();
-      request.onsuccess = async () => {
-        const keys = request.result || [];
-        const bookIds = keys.map(key => key.toString());
-        
-        const bookInfo = {};
-        
-        // 각 책의 크기 정보 가져오기
-        for (const bookId of bookIds) {
-          try {
-            const arrayBuffer = await loadLocalBookBuffer(bookId);
-            if (arrayBuffer) {
-              const sizeInKB = (arrayBuffer.byteLength / 1024).toFixed(2);
-              const sizeInMB = (arrayBuffer.byteLength / (1024 * 1024)).toFixed(2);
-              bookInfo[bookId] = {
-                size: arrayBuffer.byteLength,
-                sizeInKB: parseFloat(sizeInKB),
-                sizeInMB: parseFloat(sizeInMB),
-                exists: true
-              };
-            } else {
-              bookInfo[bookId] = { exists: false };
-            }
-          } catch (error) {
-            bookInfo[bookId] = { exists: false, error: error.message };
+  const database = await openDB();
+  const transaction = database.transaction([BUFFER_STORE], 'readonly');
+  const store = transaction.objectStore(BUFFER_STORE);
+
+  return new Promise((resolve, reject) => {
+    const request = store.getAllKeys();
+    request.onsuccess = async () => {
+      const keys = request.result || [];
+      const bookIds = keys.map(key => key.toString());
+
+      const bookInfo = {};
+
+      for (const bookId of bookIds) {
+        try {
+          const arrayBuffer = await loadLocalBookBuffer(bookId);
+          if (arrayBuffer) {
+            const sizeInKB = (arrayBuffer.byteLength / 1024).toFixed(2);
+            const sizeInMB = (arrayBuffer.byteLength / (1024 * 1024)).toFixed(2);
+            bookInfo[bookId] = {
+              size: arrayBuffer.byteLength,
+              sizeInKB: parseFloat(sizeInKB),
+              sizeInMB: parseFloat(sizeInMB),
+              exists: true
+            };
+          } else {
+            bookInfo[bookId] = { exists: false };
           }
+        } catch (error) {
+          bookInfo[bookId] = { exists: false, error: error.message };
         }
-        
-        resolve({
-          totalCount: bookIds.length,
-          bookIds: bookIds,
-          bookInfo: bookInfo
-        });
-      };
-      request.onerror = () => reject(request.error);
-    });
-  } catch (error) {
-    throw error;
-  }
+      }
+
+      resolve({
+        totalCount: bookIds.length,
+        bookIds: bookIds,
+        bookInfo: bookInfo
+      });
+    };
+    request.onerror = () => reject(request.error);
+  });
 };
 

@@ -1,8 +1,9 @@
 import { setManifestData, isValidEvent, getManifestFromCache } from '../common/cache/manifestCache';
 import { setAllProgress, setProgressToCache, removeProgressFromCache, getProgressFromCache, getAllProgressFromCache } from '../common/cache/progressCache';
 import { progressPayloadFromData } from '../common/locatorUtils';
-import { getApiBaseUrl, clearAuthData } from '../common/authUtils';
-import { isTokenValid, refreshToken } from './authApi';
+import { getApiBaseUrl, clearAuthData, getPostLoginHomeUrl } from '../common/authUtils';
+import { getStoredAccessToken } from '../security/authTokenStorage';
+import { isTokenValid, refreshToken, ensureSessionAccessToken } from './authApi';
 
 const API_BASE_URL = getApiBaseUrl();
 
@@ -65,7 +66,8 @@ const handleApiError = (error, context) => {
 
 // HTTP 요청 헬퍼 함수 (api.js 전용 - 다른 파일은 authApi.js의 authenticatedRequest 사용)
 const apiRequest = async (url, options = {}, retryCount = 0) => {
-  const token = localStorage.getItem('accessToken');
+  await ensureSessionAccessToken();
+  const token = getStoredAccessToken();
   
   if (url.includes('/api/v2/graph/')) {
     const tokenValid = isTokenValid(token);
@@ -73,7 +75,7 @@ const apiRequest = async (url, options = {}, retryCount = 0) => {
     if (token && !tokenValid) {
       console.error('❌ 토큰이 유효하지 않습니다. 다시 로그인해주세요.');
       clearAuthData();
-      window.location.href = '/';
+      window.location.href = getPostLoginHomeUrl();
       return;
     }
   }
@@ -103,9 +105,8 @@ const apiRequest = async (url, options = {}, retryCount = 0) => {
     '/manifest'
   ];
   const isSilentError = silentErrorEndpoints.some(endpoint => url.includes(endpoint));
-  
-  try {
-    const response = await fetch(requestUrl, config);
+
+  const response = await fetch(requestUrl, config);
     
     if (response.status === 401 && retryCount === 0) {
       const errorText = await response.clone().text();
@@ -120,7 +121,7 @@ const apiRequest = async (url, options = {}, retryCount = 0) => {
       try {
         await refreshToken();
         return apiRequest(url, options, retryCount + 1);
-      } catch (refreshError) {
+      } catch (_refreshError) {
         clearAuthData();
         const authError = new Error('인증이 만료되었습니다. 다시 로그인해주세요.');
         authError.status = 401;
@@ -172,7 +173,7 @@ const apiRequest = async (url, options = {}, retryCount = 0) => {
     let data;
     try {
       data = await response.json();
-    } catch (jsonError) {
+    } catch (_jsonError) {
       if (response.status === 403 && isSilentError) {
         return {
           isSuccess: false,
@@ -205,10 +206,7 @@ const apiRequest = async (url, options = {}, retryCount = 0) => {
       throw error;
     }
     
-    return data;
-  } catch (error) {
-    throw error;
-  }
+  return data;
 };
 
 // 도서 목록 조회
@@ -227,7 +225,8 @@ export const getBooks = async (params = {}) => {
 };
 
 export const uploadBook = async (formData) => {
-  const token = localStorage.getItem('accessToken');
+  await ensureSessionAccessToken();
+  const token = getStoredAccessToken();
   if (!token) {
     console.error('❌ 업로드 실패: 토큰이 없습니다.');
     throw new Error('인증이 필요합니다. 로그인해주세요.');
@@ -236,8 +235,7 @@ export const uploadBook = async (formData) => {
   const tokenValid = isTokenValid(token);
   if (!tokenValid) {
     console.error('❌ 업로드 실패: 토큰이 만료되었습니다.');
-    localStorage.removeItem('accessToken');
-    localStorage.removeItem('google_user');
+    clearAuthData();
     throw new Error('인증이 만료되었습니다. 다시 로그인해주세요.');
   }
   
@@ -287,7 +285,7 @@ export const getAllProgress = async () => {
     }
 
     return response;
-  } catch (error) {
+  } catch (_error) {
     return {
       isSuccess: true,
       code: 'CACHE_FALLBACK',
@@ -446,7 +444,7 @@ export const getBookManifest = async (bookId, { forceRefresh = false } = {}) => 
   }
 };
 
-export const getBookMeta = async (bookId, { forceRefresh = false } = {}) => {
+export const getBookMeta = async (bookId) => {
   if (!bookId) {
     return {
       isSuccess: false,

@@ -423,7 +423,7 @@ export const ensureElementsInBounds = (cy, container, maxNodes = 1000) => {
   }
 };
 
-export const createMouseEventHandlers = (cy, container) => {
+export const createMouseEventHandlers = (_cy, _container) => {
   const MOVE_THRESHOLD = 3;
   
   const isDraggingRef = { current: false };
@@ -454,7 +454,7 @@ export const createMouseEventHandlers = (cy, container) => {
     }
   };
   
-  const handleMouseUp = (evt) => {
+  const handleMouseUp = (_evt) => {
     if (!isMouseDownRef.current) return;
     
     if (isDraggingRef.current) {

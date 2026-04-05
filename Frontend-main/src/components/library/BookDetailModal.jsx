@@ -193,7 +193,7 @@ const BookDetailModal = memo(({ book, isOpen, onClose, onDelete }) => {
 
     try {
       await deleteProgressMutation.mutateAsync(serverBookId);
-    } catch (err) {
+    } catch (_err) {
       // 에러는 onError에서 처리
     }
   }, [book, progressInfo, deleteProgressMutation]);

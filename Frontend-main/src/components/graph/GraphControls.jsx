@@ -10,7 +10,7 @@ function GraphControls({
   suggestions = [],
   showSuggestions = false,
   selectedIndex = -1,
-  onSelectSuggestion,
+  onSelectSuggestion: _onSelectSuggestion,
   onKeyDown,
   onCloseSuggestions,
   isSearchActive = false

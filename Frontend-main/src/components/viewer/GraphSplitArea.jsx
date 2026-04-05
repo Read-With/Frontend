@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useRef, useMemo } from "react";
 import GraphContainer from "../graph/GraphContainer";
 import ViewerTopBar from "./ViewerTopBar";
 import { filterMainCharacters } from "../../utils/graph/graphDataUtils";
@@ -103,25 +103,25 @@ function GraphSplitArea({
   cachedLocation = null,
 }) {
   const { activeTooltip, onClearTooltip, onSetActiveTooltip, graphClearRef } = tooltipProps;
-  const graphContainerRef = React.useRef(null);
-  const searchTermValue = searchState?.searchTerm ?? "";
-  const isSearchActiveValue = searchState?.isSearchActive ?? false;
-  const filteredElementsValue = searchState?.filteredElements ?? [];
-  const isResetFromSearchValue = searchState?.isResetFromSearch ?? false;
-  const searchFitNodeIds = searchState?.fitNodeIds ?? [];
-  const suggestionsValue = searchState?.suggestions ?? [];
-  const showSuggestionsValue = searchState?.showSuggestions ?? false;
-  const selectedSuggestionIndex = searchState?.selectedIndex ?? -1;
+  const graphContainerRef = useRef(null);
+  const {
+    searchTerm: searchTermValue = "",
+    isSearchActive: isSearchActiveValue = false,
+    filteredElements: filteredElementsValue = [],
+    isResetFromSearch: isResetFromSearchValue = false,
+    fitNodeIds: searchFitNodeIds = [],
+    suggestions: suggestionsValue = [],
+    showSuggestions: showSuggestionsValue = false,
+    selectedIndex: selectedSuggestionIndex = -1,
+  } = searchState;
   
   const { loading, isReloading, isGraphLoading, graphLoading, isDataReady, isDataEmpty } = viewerState;
   const { elements, currentEvent, currentChapter } = graphState;
   const { filterStage } = graphActions;
   
-  const isApiBook = React.useMemo(() => {
-    return bookUtils.isApiBook(book, bookId);
-  }, [book, bookId]);
-  
-  const hasCachedLocation = React.useMemo(() => {
+  const isApiBook = useMemo(() => bookUtils.isApiBook(book, bookId), [book, bookId]);
+
+  const hasCachedLocation = useMemo(() => {
     if (!cachedLocation) {
       return false;
     }
@@ -136,7 +136,7 @@ function GraphSplitArea({
     return true;
   }, [cachedLocation, isApiBook]);
 
-  const isLocationDetermined = React.useMemo(() => {
+  const isLocationDetermined = useMemo(() => {
     if (!currentChapter || currentChapter < 1) {
       return hasCachedLocation;
     }
@@ -146,11 +146,12 @@ function GraphSplitArea({
     return true;
   }, [currentChapter, currentEvent, isApiBook, hasCachedLocation]);
 
-  const filteredMainCharacters = React.useMemo(() => {
-    return filterMainCharacters(elements, filterStage);
-  }, [elements, filterStage]);
+  const filteredMainCharacters = useMemo(
+    () => filterMainCharacters(elements, filterStage),
+    [elements, filterStage]
+  );
 
-  const finalElements = React.useMemo(() => {
+  const finalElements = useMemo(() => {
     if (isSearchActiveValue && filteredElementsValue && filteredElementsValue.length > 0) {
       return filteredElementsValue;
     }
@@ -159,6 +160,11 @@ function GraphSplitArea({
     }
     return elements;
   }, [isSearchActiveValue, filteredElementsValue, filterStage, filteredMainCharacters, elements]);
+
+  const prevValidEvent = useMemo(() => {
+    const ev = graphState.currentEvent;
+    return ev && ev.chapter === graphState.currentChapter ? ev : null;
+  }, [graphState.currentEvent, graphState.currentChapter]);
 
   const hasCurrentEvent = !!currentEvent;
   const hasElements = elements && Array.isArray(elements) && elements.length > 0;
@@ -176,9 +182,21 @@ function GraphSplitArea({
   // 로딩 완료 후 데이터가 없는 경우
   const shouldShowEmptyData = isDataLoadCompleteAndEmpty;
   
-  // 로컬 책의 경우 currentEvent가 없어도 elements가 있으면 그래프 표시
-  // API 책의 경우 currentEvent와 elements가 모두 필요
-  const shouldShowLoading = hasElements ? false : isLoading;
+  // 로컬 책: elements가 있으면 바로 표시. API 책: currentEvent + elements 모두 필요
+  const shouldShowLoading = !hasElements && isLoading;
+
+  const topBarSearchState = useMemo(() => ({
+    searchTerm: searchTermValue,
+    isSearchActive: isSearchActiveValue,
+    elements: graphState.elements ?? [],
+    filteredElements: filteredElementsValue,
+    isResetFromSearch: isResetFromSearchValue,
+    fitNodeIds: searchFitNodeIds,
+    suggestions: suggestionsValue,
+    showSuggestions: showSuggestionsValue,
+    selectedIndex: selectedSuggestionIndex,
+  }), [searchTermValue, isSearchActiveValue, graphState.elements, filteredElementsValue,
+      isResetFromSearchValue, searchFitNodeIds, suggestionsValue, showSuggestionsValue, selectedSuggestionIndex]);
 
   return (
     <div className="h-full w-full flex flex-col" style={{ minHeight: 0, overflow: "hidden" }}>
@@ -186,17 +204,7 @@ function GraphSplitArea({
         graphState={graphState}
         graphActions={graphActions}
         viewerState={viewerState}
-        searchState={{
-          searchTerm: searchTermValue,
-          isSearchActive: isSearchActiveValue,
-          elements: graphState.elements ?? [],
-          filteredElements: filteredElementsValue,
-          isResetFromSearch: isResetFromSearchValue,
-          fitNodeIds: searchFitNodeIds,
-          suggestions: suggestionsValue,
-          showSuggestions: showSuggestionsValue,
-          selectedIndex: selectedSuggestionIndex,
-        }}
+        searchState={topBarSearchState}
         searchActions={searchActions}
         isFromLibrary={isFromLibrary}
         previousPage={previousPage}
@@ -255,7 +263,7 @@ function GraphSplitArea({
             filteredElements={filteredElementsValue}
             fitNodeIds={searchFitNodeIds}
             isResetFromSearch={isResetFromSearchValue}
-            prevValidEvent={graphState.currentEvent && graphState.currentEvent.chapter === graphState.currentChapter ? graphState.currentEvent : null}
+            prevValidEvent={prevValidEvent}
             events={graphState.events || []}
             activeTooltip={activeTooltip}
             onClearTooltip={onClearTooltip}

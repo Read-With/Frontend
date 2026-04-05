@@ -1,6 +1,4 @@
-import { getCharactersData, createCharacterMapsWithCache } from './graphData';
-import { createCharacterMaps, getCharacterImagePath } from './characterUtils';
-import { normalizeRelation, isValidRelation } from './relationUtils';
+import { getCharacterImagePath } from './characterUtils';
 
 /**
  * 이벤트 텍스트에서 첫 번째 단어를 추출하는 함수
@@ -253,7 +251,7 @@ export function convertRelationsToElements(relations, idToName, idToDesc, idToDe
   
   // 엣지 추가 및 통합
   
-  relationsArray.forEach((rel, index) => {
+  relationsArray.forEach((rel) => {
     
     if (rel.id1 && rel.id2) {
       const id1 = String(rel.id1);
@@ -413,17 +411,6 @@ export function filterMainCharacters(elements, filterStage) {
   );
   
   const coreNodeIds = new Set(coreNodes.map(node => node.data.id));
-  
-  // 주요 인물 (main_character: false이지만 중요한 인물) 노드들
-  const importantNodes = elements.filter(el => 
-    el.data && 
-    el.data.id && 
-    !el.data.source && 
-    el.data.main_character === false &&
-    el.data.importance && el.data.importance > 0.5 // 중요도 임계값
-  );
-  
-  const importantNodeIds = new Set(importantNodes.map(node => node.data.id));
   
   let filteredNodes = [];
   let filteredEdges = [];
@@ -847,7 +834,7 @@ export async function filterRelationsByTimeline({
       }
       return seenKeys.has(key);
     });
-  } catch (error) {
+  } catch (_error) {
     return relations;
   }
 }

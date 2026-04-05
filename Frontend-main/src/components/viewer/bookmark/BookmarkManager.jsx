@@ -8,7 +8,7 @@ export const loadBookmarks = async (bookId, sort = 'time_desc') => {
       return Array.isArray(list) ? list : [];
     }
     return [];
-  } catch (error) {
+  } catch (_error) {
     return [];
   }
 };
@@ -18,7 +18,7 @@ export const saveBookmarksToLocal = (bookId, bookmarks) => {
   try {
     localStorage.setItem(`bookmarks_${bookId}`, JSON.stringify(bookmarks));
     return true;
-  } catch (error) {
+  } catch (_error) {
     return false;
   }
 };
@@ -27,7 +27,7 @@ export const loadBookmarksFromLocal = (bookId) => {
   try {
     const stored = localStorage.getItem(`bookmarks_${bookId}`);
     return stored ? JSON.parse(stored) : [];
-  } catch (error) {
+  } catch (_error) {
     return [];
   }
 };

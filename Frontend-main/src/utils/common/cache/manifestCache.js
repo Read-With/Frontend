@@ -3,7 +3,6 @@ import {
   registerCache, 
   getCacheItem, 
   setCacheItem, 
-  clearCache, 
   removeCacheItem,
   loadFromStorage,
   saveToStorage,
@@ -513,7 +512,7 @@ export const findApiEventFromChars = async (bookId, chapterIdx, currentChars, ch
   if (firstEvent) {
     const firstStart = Number(firstEvent.startTxtOffset ?? firstEvent.startPos ?? 0);
     const firstEndRaw = Number(firstEvent.endTxtOffset ?? firstEvent.endPos ?? firstStart);
-    const span = Math.max(firstEndRaw - firstStart, 1);
+    const _span = Math.max(firstEndRaw - firstStart, 1);
     if (position <= firstStart) {
       return {
         ...firstEvent,

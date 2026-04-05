@@ -1,4 +1,4 @@
-import React, { useCallback, useState, useEffect, useMemo } from 'react';
+import React, { useCallback, useMemo } from 'react';
 import GraphControls from '../graph/GraphControls';
 import EdgeLabelToggle from '../graph/tooltip/EdgeLabelToggle';
 import { getChapterEventCount, getFolderKeyFromFilename } from '../../utils/graph/graphData';
@@ -76,20 +76,20 @@ const ViewerTopBar = ({
   viewerState,
   searchState,
   searchActions,
-  isFromLibrary = false,
-  previousPage = null,
+  isFromLibrary: _isFromLibrary = false,
+  previousPage: _previousPage = null,
 }) => {
 
   const {
-    navigate,
+    navigate: _navigate,
     filename,
     book,
-    viewerRef
+    viewerRef: _viewerRef
   } = viewerState;
   
   const {
     currentChapter,
-    maxChapter,
+    maxChapter: _maxChapter,
     currentEvent,
     prevValidEvent,
     prevEvent,
@@ -97,12 +97,12 @@ const ViewerTopBar = ({
     graphFullScreen,
     edgeLabelVisible,
     loading: isGraphLoading,
-    maxChapterEvents
+    maxChapterEvents: _maxChapterEvents
   } = graphState;
   
   const {
     setCurrentChapter,
-    setGraphFullScreen,
+    setGraphFullScreen: _setGraphFullScreen,
     setEdgeLabelVisible,
     filterStage,
     setFilterStage
@@ -143,7 +143,7 @@ const ViewerTopBar = ({
     if (!filename) return null;
     try {
       return getFolderKeyFromFilename(filename);
-    } catch (error) {
+    } catch (_error) {
       return null;
     }
   }, [filename]);

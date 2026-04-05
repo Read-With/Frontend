@@ -66,7 +66,7 @@ const FileUpload = ({ onUploadSuccess, onClose }) => {
           ...prev,
           ...extractedMetadata
         }));
-      } catch (error) {
+      } catch (_error) {
         // 에러 발생 시에도 메타데이터 단계로 이동
         if (!selectedFile && files && files.length > 0) {
           setSelectedFile(files[0]);
@@ -227,7 +227,7 @@ const FileUpload = ({ onUploadSuccess, onClose }) => {
             // 저장 완료 확인됨
             break;
           }
-        } catch (error) {
+        } catch (_error) {
           // 에러는 무시하고 재시도
         }
         

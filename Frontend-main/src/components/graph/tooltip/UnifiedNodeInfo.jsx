@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { useParams } from "react-router-dom";
 import { processRelations, processRelationTags } from "../../../utils/graph/relationUtils.js";
 import { getChapterLastEventNums, getFolderKeyFromFilename, getEventDataByIndex, getDetectedMaxChapter, getCharacterPerspectiveSummary } from "../../../utils/graph/graphData.js";
@@ -12,6 +12,79 @@ import { extractRadarChartData, getPositivityColor, getPositivityLabel, getConne
 import { Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, ResponsiveContainer } from 'recharts';
 import "../RelationGraph.css";
 import "./UnifiedNodeInfo.css";
+
+/** 레이더 점 — 부모 내부 정의 시 매 렌더 새 컴포넌트 타입이 되어 Recharts/리conciliation에 불리함 */
+const UnifiedNodeRadarDot = React.memo(function UnifiedNodeRadarDot({
+  cx,
+  cy,
+  payload,
+  dataMap,
+  hoveredItem,
+  onDotMouseEnter,
+  onDotMouseLeave,
+}) {
+  const fullData =
+    payload && payload.name != null
+      ? dataMap.get(payload.name) || payload
+      : null;
+  const dotName = fullData?.name ?? payload?.name;
+
+  const handleMouseEnterDot = useCallback(
+    (e) => {
+      if (!dotName) return;
+      e.stopPropagation();
+      onDotMouseEnter(dotName, e);
+    },
+    [dotName, onDotMouseEnter]
+  );
+
+  const handleMouseLeaveDot = useCallback(
+    (e) => {
+      e.stopPropagation();
+      onDotMouseLeave();
+    },
+    [onDotMouseLeave]
+  );
+
+  if (!payload || cx == null || cy == null || !fullData) {
+    return null;
+  }
+
+  const color = getPositivityColor(fullData.positivity);
+  const isHovered = hoveredItem === payload.name;
+  const radius = isHovered ? 8 : 5;
+  const hoverRadius = Math.max(15, radius * 3);
+
+  return (
+    <g>
+      <circle
+        cx={cx}
+        cy={cy}
+        r={hoverRadius}
+        fill="transparent"
+        style={{
+          cursor: "pointer",
+          pointerEvents: "all",
+          zIndex: 10,
+        }}
+        onMouseEnter={handleMouseEnterDot}
+        onMouseLeave={handleMouseLeaveDot}
+      />
+      <circle
+        cx={cx}
+        cy={cy}
+        r={radius}
+        fill={color}
+        stroke={isHovered ? "#fff" : "none"}
+        strokeWidth={isHovered ? 2 : 0}
+        style={{
+          transition: "all 0.2s ease",
+          pointerEvents: "none",
+        }}
+      />
+    </g>
+  );
+});
 
 function UnifiedNodeInfo({
   displayMode = 'tooltip', // 'tooltip' | 'sidebar'
@@ -120,13 +193,21 @@ function UnifiedNodeInfo({
   }, [nodeData?.id]);
 
 
-  // 툴팁 모드에서만 위치 관리 훅 사용
-  const { position, showContent, isDragging, tooltipRef, handleMouseDown } = useTooltipPosition(x, y);
+  const isTooltipMode = displayMode === 'tooltip';
+  const { position, showContent, isDragging, tooltipRef, handleMouseDown } = useTooltipPosition(
+    x,
+    y,
+    { enabled: isTooltipMode }
+  );
 
   // 외부 클릭 감지 훅 - 툴팁 모드에서만 사용, 드래그 후 클릭 무시
-  const clickOutsideRef = useClickOutside(() => {
-    if (onClose) onClose();
-  }, displayMode === 'tooltip' && showContent, true);
+  const clickOutsideRef = useClickOutside(
+    () => {
+      if (onClose) onClose();
+    },
+    isTooltipMode && showContent,
+    true
+  );
 
   // 관계 데이터 관리 (슬라이드바 모드에서 사용)
   const nodeId = safeNum(nodeData?.id);
@@ -284,7 +365,7 @@ function UnifiedNodeInfo({
       setError(err.message);
       setIsNodeAppeared(false);
     }
-  }, [data, nodeData, chapterNum, getUnifiedEventInfo, dynamicMaxChapter, actualFilename, elements]);
+  }, [data, nodeData, chapterNum, getUnifiedEventInfo, folderKey, elements]);
 
   // 노드 등장 여부 확인
   useEffect(() => {
@@ -454,7 +535,7 @@ function UnifiedNodeInfo({
       const relationMap = new Map();
       
       
-      json.relations.forEach((rel, index) => {
+      json.relations.forEach((rel) => {
         // id1/id2 또는 source/target 모두 지원
         const source = rel.id1 ?? rel.source;
         const target = rel.id2 ?? rel.target;
@@ -505,7 +586,7 @@ function UnifiedNodeInfo({
       console.error('레이더 차트 데이터 추출 오류:', err);
       return [];
     }
-  }, [nodeData?.id, chapterNum, displayMode, folderKey, elements, eventNum, apiMacroData, apiFineData]);
+  }, [nodeData, chapterNum, displayMode, folderKey, elements, apiMacroData, apiFineData, getUnifiedEventInfo]);
 
   // 연결 상태 확인
   const connectionStatus = useMemo(() => {
@@ -559,67 +640,6 @@ function UnifiedNodeInfo({
     if (!hoveredItem) return null;
     return dataMap.get(hoveredItem);
   }, [hoveredItem, dataMap]);
-
-  // 커스텀 Dot 렌더링 (각 점을 positivity에 따라 다른 색상으로)
-  const CustomDot = React.memo((props) => {
-    const { cx, cy, payload } = props;
-    
-    if (!payload || !cx || !cy) {
-      return null;
-    }
-    
-    const fullData = dataMap.get(payload.name) || payload;
-    const color = getPositivityColor(fullData.positivity);
-    const isHovered = hoveredItem === payload.name;
-    const radius = isHovered ? 8 : 5;
-    
-    // 마우스 감지 영역 크기 (실제 점 크기의 3배)
-    const hoverRadius = Math.max(15, radius * 3);
-    
-    
-    // 마우스 이벤트 핸들러
-    const handleMouseEnterDot = useCallback((e) => {
-      e.stopPropagation();
-      handleMouseEnter(fullData.name, e);
-    }, [fullData.name, handleMouseEnter]);
-    
-    const handleMouseLeaveDot = useCallback((e) => {
-      e.stopPropagation();
-      handleMouseLeave();
-    }, [handleMouseLeave]);
-    
-    return (
-      <g>
-        {/* 투명한 원 - 호버 감지용 (동적 크기) */}
-        <circle
-          cx={cx}
-          cy={cy}
-          r={hoverRadius}
-          fill="transparent"
-          style={{ 
-            cursor: 'pointer', 
-            pointerEvents: 'all',
-            zIndex: 10
-          }}
-          onMouseEnter={handleMouseEnterDot}
-          onMouseLeave={handleMouseLeaveDot}
-        />
-        {/* 실제 표시되는 점 */}
-        <circle
-          cx={cx}
-          cy={cy}
-          r={radius}
-          fill={color}
-          stroke={isHovered ? '#fff' : 'none'}
-          strokeWidth={isHovered ? 2 : 0}
-          style={{ 
-            transition: 'all 0.2s ease',
-            pointerEvents: 'none' // 마우스 이벤트는 투명한 원에서만 처리
-          }}
-        />
-      </g>
-    );
-  });
 
   // z-index 설정
   const zIndexValue = 99999;
@@ -1697,8 +1717,17 @@ function UnifiedNodeInfo({
                         fillOpacity={0.2}
                         strokeWidth={2}
                         dot={(dotProps) => {
-                          const { key, ...propsWithoutKey } = dotProps;
-                          return <CustomDot key={key} {...propsWithoutKey} />;
+                          const { key, ...rest } = dotProps;
+                          return (
+                            <UnifiedNodeRadarDot
+                              key={key}
+                              {...rest}
+                              dataMap={dataMap}
+                              hoveredItem={hoveredItem}
+                              onDotMouseEnter={handleMouseEnter}
+                              onDotMouseLeave={handleMouseLeave}
+                            />
+                          );
                         }}
                         isAnimationActive={false}
                         animationBegin={0}
