@@ -176,7 +176,7 @@ const AdminPage = () => {
   const getUnsummarizedBooks = () =>
     handleApiCall(() => apiClient.get("/books/unsummarized"));
   const getBooksList = () =>
-    handleApiCall(() => apiClient.get(`../books`), true);
+    handleApiCall(() => apiClient.get(`/books`), true);
 
   const uploadMultipleFiles = (endpoint) => {
     if (!bookId || !files || files.length === 0) {
