@@ -103,8 +103,25 @@ const LayoutDashboardIcon = () => (
   </svg>
 );
 
+const BookIcon = () => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    fill="none"
+    viewBox="0 0 24 24"
+    strokeWidth={1.5}
+    stroke="currentColor"
+    className="w-5 h-5"
+  >
+    <path
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25"
+    />
+  </svg>
+);
+
 const AdminPage = () => {
-  // 탭 상태 (dashboard, query, upload, delete)
+  // 탭 상태 (dashboard, books, query, upload, delete)
   const [activeTab, setActiveTab] = useState("dashboard");
 
   // 입력 상태 관리
@@ -117,17 +134,22 @@ const AdminPage = () => {
   const [response, setResponse] = useState(null);
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [books, setBooks] = useState([]);
 
   // 공통 API 호출 함수
-  const handleApiCall = async (apiFunction) => {
+  const handleApiCall = async (apiFunction, updateBooks = false) => {
     setLoading(true);
     setError(null);
-    setResponse(null);
+    if (!updateBooks) setResponse(null);
     try {
       const result = await apiFunction();
       // 백엔드의 ApiResponse 형식에 맞춰 실제 데이터는 result.data.result에 있음.
       if (result.data && result.data.isSuccess) {
-        setResponse(result.data.result);
+        if (updateBooks) {
+          setBooks(result.data.result);
+        } else {
+          setResponse(result.data.result);
+        }
       } else {
         setError(
           result.data || { message: "API 응답 형식이 올바르지 않습니다." },
@@ -153,6 +175,8 @@ const AdminPage = () => {
     handleApiCall(() => apiClient.get("/chapters/unsummarized"));
   const getUnsummarizedBooks = () =>
     handleApiCall(() => apiClient.get("/books/unsummarized"));
+  const getBooksList = () =>
+    handleApiCall(() => apiClient.get(`../books`), true);
 
   const uploadMultipleFiles = (endpoint) => {
     if (!bookId || !files || files.length === 0) {
@@ -230,6 +254,20 @@ const AdminPage = () => {
           >
             <LayoutDashboardIcon />
             <span>대시보드 홈</span>
+          </button>
+          <button
+            onClick={() => {
+              setActiveTab("books");
+              getBooksList();
+            }}
+            className={`w-full flex items-center space-x-3 px-4 py-3 text-sm font-medium rounded-lg transition-colors ${
+              activeTab === "books"
+                ? "bg-indigo-50 text-indigo-700"
+                : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
+            }`}
+          >
+            <BookIcon />
+            <span>도서 목록</span>
           </button>
           <button
             onClick={() => setActiveTab("query")}
@@ -315,6 +353,68 @@ const AdminPage = () => {
             />
           </div>
         </div>
+      </div>
+    </div>
+  );
+
+  const renderBooksSection = () => (
+    <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+      <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+        <div className="flex items-center space-x-2">
+          <BookIcon />
+          <h3 className="text-lg font-semibold text-gray-800">도서 목록</h3>
+        </div>
+        <button
+          onClick={getBooksList}
+          disabled={loading}
+          className="text-xs font-medium text-indigo-600 hover:text-indigo-800 transition-colors"
+        >
+          새로고침
+        </button>
+      </div>
+      <div className="p-6">
+        {books.length === 0 && !loading ? (
+          <div className="text-center py-12 text-gray-500">
+            도서 데이터가 없습니다.
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+            {books.map((book) => (
+              <div
+                key={book.id}
+                onClick={() => {
+                  setBookId(book.id);
+                  // 추후 캐릭터 이미지 생성 상태 확인 페이지로 이동하거나 모달 띄우는 로직 추가
+                  alert(`도서 ID: ${book.id} 선택됨. (기능 준비 중)`);
+                }}
+                className="group cursor-pointer bg-gray-50 rounded-xl border border-gray-200 overflow-hidden hover:shadow-md hover:border-indigo-200 transition-all"
+              >
+                <div className="aspect-[3/4] overflow-hidden bg-gray-200 relative">
+                  {book.cover_img_url ? (
+                    <img
+                      src={book.cover_img_url}
+                      alt={book.title}
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                    />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center text-gray-400">
+                      <BookIcon />
+                    </div>
+                  )}
+                  <div className="absolute top-2 right-2 bg-black/50 text-white text-[10px] px-1.5 py-0.5 rounded">
+                    ID: {book.id}
+                  </div>
+                </div>
+                <div className="p-3">
+                  <h4 className="font-semibold text-sm text-gray-800 truncate mb-1">
+                    {book.title}
+                  </h4>
+                  <p className="text-xs text-gray-500 truncate">{book.author}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -504,6 +604,7 @@ const AdminPage = () => {
           <div className="mb-8">
             <h1 className="text-2xl font-bold text-gray-900">
               {activeTab === "dashboard" && "대시보드 홈"}
+              {activeTab === "books" && "도서 목록"}
               {activeTab === "query" && "데이터 조회"}
               {activeTab === "upload" && "데이터 업로드"}
               {activeTab === "delete" && "데이터 삭제"}
@@ -524,6 +625,7 @@ const AdminPage = () => {
               <div className="lg:col-span-2">{renderDeleteSection()}</div>
             </div>
           )}
+          {activeTab === "books" && renderBooksSection()}
           {activeTab === "query" && renderQuerySection()}
           {activeTab === "upload" && renderUploadSection()}
           {activeTab === "delete" && renderDeleteSection()}
