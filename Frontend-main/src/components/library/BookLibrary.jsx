@@ -5,22 +5,11 @@ import { Heart, BookOpen, Network, MoreVertical, Info, Clock, FileText, Trash2, 
 import BookDetailModal from './BookDetailModal';
 import './BookLibrary.css';
 import { ensureGraphBookCache } from '../../utils/common/cache/chapterEventCache';
-
-function progressQueryValue(book) {
-  return book.progress != null && Number.isFinite(Number(book.progress))
-    ? String(book.progress)
-    : '0';
-}
+import { USER_VIEWER_PREFIX } from '../../utils/navigation/viewerPaths';
 
 function navigateFromLibrary(navigate, book, graphMode) {
-  const params = new URLSearchParams({
-    chapter: '1',
-    page: '1',
-    progress: progressQueryValue(book),
-    graphMode,
-  });
-  const base = graphMode === 'graph' ? '/user/graph' : '/user/viewer';
-  navigate(`${base}/${book.id}?${params.toString()}`, {
+  const base = graphMode === 'graph' ? '/user/graph' : USER_VIEWER_PREFIX;
+  navigate(`${base}/${book.id}`, {
     state: { book, fromLibrary: true, from: { pathname: '/user/mypage' } },
     replace: false,
   });
@@ -313,15 +302,13 @@ const BookCard = memo(({ book, onToggleFavorite, onBookClick, onBookDetailClick,
               <Info size={18} className="book-context-icon" />
               상세 정보
             </button>
-            {!book._isPublic && (
-              <button
-                className="book-context-item book-context-item-danger"
-                onClick={handleDeleteClick}
-              >
-                <Trash2 size={18} className="book-context-icon" />
-                삭제
-              </button>
-            )}
+            <button
+              className="book-context-item book-context-item-danger"
+              onClick={handleDeleteClick}
+            >
+              <Trash2 size={18} className="book-context-icon" />
+              삭제
+            </button>
           </div>
         )}
       </div>

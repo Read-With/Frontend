@@ -11,13 +11,15 @@ import React, {
 import { flushSync } from 'react-dom';
 import { loadCombinedXhtml, loadBookMeta } from '../../../utils/normalizedContent';
 import { defaultSettings } from '../../../utils/common/settingsUtils';
-import { codePointOffsetInBlock } from '../../../utils/common/locatorUtils';
 import {
   sanitizeXhtmlBodyHtml,
   collectSanitizedStyleCssFromDocument,
 } from '../../../utils/viewer/sanitizeXhtml';
+import { getManifestFromCache } from '../../../utils/common/cache/manifestCache';
 
 const BLOCK_SELECTOR = '[data-chapter-index][data-block-index]';
+const xhtmlLoadCache = new Map();
+const XHTML_LOAD_CACHE_VERSION = 'v2';
 
 const getBlockLocator = (el, offset = 0) => {
   const ci = el.getAttribute('data-chapter-index');
@@ -30,18 +32,80 @@ const getBlockLocator = (el, offset = 0) => {
   };
 };
 
-const getSelectionOffsets = (contentEl, startBlock, endBlock) => {
-  const sel = window.getSelection();
-  if (!sel || sel.rangeCount === 0 || !contentEl) return { startOffset: 0, endOffset: 0 };
-  const range = sel.getRangeAt(0);
-  const startOffset = startBlock && contentEl.contains(range.startContainer)
-    ? codePointOffsetInBlock(startBlock, range)
-    : 0;
-  const endOffset = endBlock && contentEl.contains(range.endContainer)
-    ? codePointOffsetInBlock(endBlock, range, { useEnd: true })
-    : 0;
-  return { startOffset, endOffset };
+const resolveChapterFromMetaByPage = (meta, currentPageIndex, totalPages) => {
+  const chapters = Array.isArray(meta?.chapters) ? meta.chapters : [];
+  if (!chapters.length) return null;
+
+  const totalCodePoints = chapters.reduce((sum, chapter) => {
+    const len = Number(chapter?.totalCodePoints ?? 0);
+    return sum + (Number.isFinite(len) && len > 0 ? len : 0);
+  }, 0);
+  if (!Number.isFinite(totalCodePoints) || totalCodePoints <= 0) return null;
+
+  const ratio =
+    totalPages <= 1
+      ? 0
+      : Math.min(1, Math.max(0, Number(currentPageIndex) / Math.max(1, totalPages - 1)));
+  const absolutePos = Math.floor(totalCodePoints * ratio);
+
+  let cumulative = 0;
+  for (const chapter of chapters) {
+    const len = Number(chapter?.totalCodePoints ?? 0);
+    const safeLen = Number.isFinite(len) && len > 0 ? len : 0;
+    const chapterIndex = Number(chapter?.chapterIndex ?? chapter?.chapterIdx ?? chapter?.idx);
+    const start = cumulative;
+    const end = cumulative + safeLen;
+    if (absolutePos >= start && absolutePos < end && Number.isFinite(chapterIndex) && chapterIndex > 0) {
+      return chapterIndex;
+    }
+    cumulative = end;
+  }
+
+  const lastChapter = chapters[chapters.length - 1];
+  const lastChapterIndex = Number(lastChapter?.chapterIndex ?? lastChapter?.chapterIdx ?? lastChapter?.idx);
+  return Number.isFinite(lastChapterIndex) && lastChapterIndex > 0 ? lastChapterIndex : null;
 };
+
+const resolveChapterFromManifestByPage = (manifest, currentPageIndex, totalPages) => {
+  const chapterLengths = Array.isArray(manifest?.progressMetadata?.chapterLengths)
+    ? manifest.progressMetadata.chapterLengths
+    : [];
+  if (!chapterLengths.length) return null;
+
+  const normalized = chapterLengths
+    .map((item) => {
+      const chapterIdx = Number(item?.chapterIdx ?? item?.chapterIndex ?? item?.idx ?? item?.chapter);
+      const length = Number(item?.length ?? item?.codePointLength ?? 0);
+      if (!Number.isFinite(chapterIdx) || chapterIdx < 1) return null;
+      return { chapterIdx, length: Number.isFinite(length) && length > 0 ? length : 0 };
+    })
+    .filter(Boolean)
+    .sort((a, b) => a.chapterIdx - b.chapterIdx);
+
+  if (!normalized.length) return null;
+  const totalLength = normalized.reduce((sum, item) => sum + item.length, 0);
+  if (!Number.isFinite(totalLength) || totalLength <= 0) return null;
+
+  const ratio =
+    totalPages <= 1
+      ? 0
+      : Math.min(1, Math.max(0, Number(currentPageIndex) / Math.max(1, totalPages - 1)));
+  const absolutePos = Math.floor(totalLength * ratio);
+
+  let cumulative = 0;
+  for (const item of normalized) {
+    const start = cumulative;
+    const end = cumulative + item.length;
+    if (absolutePos >= start && absolutePos < end) return item.chapterIdx;
+    cumulative = end;
+  }
+  return normalized[normalized.length - 1]?.chapterIdx ?? null;
+};
+
+const createFallbackLocator = (chapterIndex) => ({
+  startLocator: { chapterIndex, blockIndex: 0, offset: 0 },
+  endLocator: { chapterIndex, blockIndex: 0, offset: 0 },
+});
 
 function parseXhtmlBody(xhtml) {
   const parser = new DOMParser();
@@ -50,6 +114,37 @@ function parseXhtmlBody(xhtml) {
   const rawBody = doc.body ? doc.body.innerHTML : xhtml;
   const bodyHTML = sanitizeXhtmlBodyHtml(rawBody);
   return { styleCss, bodyHTML };
+}
+
+function buildFallbackMetaFromXhtml(xhtml) {
+  try {
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(xhtml, 'text/html');
+    const blocks = doc.querySelectorAll('[data-chapter-index][data-block-index]');
+    if (!blocks.length) return null;
+
+    const byChapter = new Map();
+    blocks.forEach((el) => {
+      const chapterIndex = Number(el.getAttribute('data-chapter-index'));
+      if (!Number.isFinite(chapterIndex)) return;
+      const textLen = (el.textContent || '').length;
+      const prev = byChapter.get(chapterIndex) || 0;
+      byChapter.set(chapterIndex, prev + Math.max(0, textLen));
+    });
+
+    const chapters = [...byChapter.entries()]
+      .sort((a, b) => a[0] - b[0])
+      .map(([chapterIndex, totalCodePoints]) => ({
+        chapterIndex,
+        paragraphStarts: [],
+        paragraphLengths: [],
+        totalCodePoints,
+      }));
+
+    return chapters.length ? { chapters } : null;
+  } catch {
+    return null;
+  }
 }
 
 const XhtmlViewer = forwardRef(
@@ -84,8 +179,18 @@ const XhtmlViewer = forwardRef(
     const lastLocatorRef = useRef(null);
     const metaRef = useRef(null);
     const initialAnchorAppliedRef = useRef(false);
+    const prevBidForInitialRef = useRef(null);
+    const prevInitialChapterRef = useRef(initialChapter);
+    const prevInitialPageRef = useRef(initialPage);
+    const initialPositionAppliedRef = useRef(false);
+    const initialSeekAppliedRef = useRef(false);
     const lineBoundsRef = useRef([]);
     const [lineBoundsVersion, setLineBoundsReady] = useState(0);
+    const lastReportedPagingRef = useRef({
+      totalPages: null,
+      currentPage: null,
+      progress: null,
+    });
 
     const getSnappedOffsetAndHeight = useCallback((pageIdx, pH) => {
       const targetY = pageIdx * pH;
@@ -131,6 +236,16 @@ const XhtmlViewer = forwardRef(
 
     const bid = bookId || book?.id || book?.filename || '';
 
+    useEffect(() => {
+      if (prevBidForInitialRef.current === bid) return;
+      prevBidForInitialRef.current = bid;
+      prevInitialChapterRef.current = initialChapter;
+      prevInitialPageRef.current = initialPage;
+      initialSeekAppliedRef.current = false;
+      initialPositionAppliedRef.current = false;
+      initialAnchorAppliedRef.current = false;
+    }, [bid]);
+
     const emitLocator = useCallback(
       (loc) => {
         if (!loc?.startLocator || JSON.stringify(loc) === JSON.stringify(lastLocatorRef.current)) return;
@@ -150,16 +265,32 @@ const XhtmlViewer = forwardRef(
           setLoading(false);
           return;
         }
+        if (
+          !manifestReady &&
+          !(typeof book?.combinedXhtmlContent === 'string' && book.combinedXhtmlContent.trim()) &&
+          !(typeof book?.combinedXhtmlUrl === 'string' && book.combinedXhtmlUrl.trim())
+        ) {
+          return;
+        }
         setLoading(true);
         setError(null);
         initialAnchorAppliedRef.current = false;
         try {
-          const [raw, meta] = await Promise.all([
-            loadCombinedXhtml(bid, book || {}),
-            loadBookMeta(bid),
-          ]);
+          const hasInline = typeof book?.combinedXhtmlContent === 'string' && book.combinedXhtmlContent.trim().length > 0;
+          const hasUrl = typeof book?.combinedXhtmlUrl === 'string' && book.combinedXhtmlUrl.trim().length > 0;
+          const cacheKey = `${XHTML_LOAD_CACHE_VERSION}::${bid}::${hasInline ? 'inline' : 'no-inline'}::${hasUrl ? 'url' : 'no-url'}`;
+          let loadPromise = xhtmlLoadCache.get(cacheKey);
+          if (!loadPromise) {
+            loadPromise = Promise.all([
+              loadCombinedXhtml(bid, book || {}),
+              loadBookMeta(bid),
+            ]);
+            xhtmlLoadCache.set(cacheKey, loadPromise);
+          }
+          const [raw, meta] = await loadPromise;
           if (cancelled) return;
-          metaRef.current = meta;
+          const fallbackMeta = meta || buildFallbackMetaFromXhtml(raw);
+          metaRef.current = fallbackMeta;
           const { styleCss, bodyHTML } = parseXhtmlBody(raw);
           setXhtmlContent({ styleCss, bodyHTML });
         } catch (e) {
@@ -177,17 +308,29 @@ const XhtmlViewer = forwardRef(
     useEffect(() => {
       const container = containerRef.current;
       if (!container) return;
-      const ro = new ResizeObserver(() => setPageHeight(container.clientHeight));
+      const ro = new ResizeObserver(() => {
+        const next = container.clientHeight;
+        setPageHeight((prev) => (prev === next ? prev : next));
+      });
       ro.observe(container);
-      setPageHeight(container.clientHeight);
+      setPageHeight((prev) => {
+        const next = container.clientHeight;
+        return prev === next ? prev : next;
+      });
       return () => ro.disconnect();
     }, [xhtmlContent]);
 
     useEffect(() => {
       const ruler = rulerRef.current;
       if (!ruler) return;
-      setContentHeight(ruler.offsetHeight);
-      const ro = new ResizeObserver(() => setContentHeight(ruler.offsetHeight));
+      setContentHeight((prev) => {
+        const next = ruler.offsetHeight;
+        return prev === next ? prev : next;
+      });
+      const ro = new ResizeObserver(() => {
+        const next = ruler.offsetHeight;
+        setContentHeight((prev) => (prev === next ? prev : next));
+      });
       ro.observe(ruler);
       return () => ro.disconnect();
     }, [xhtmlContent]);
@@ -212,93 +355,99 @@ const XhtmlViewer = forwardRef(
     }, [xhtmlContent, contentHeight, settings?.fontSize, settings?.lineHeight]);
 
     useEffect(() => {
-      onTotalPagesChange?.(totalPages);
-      onCurrentPageChange?.(currentPage);
-      onProgressChange?.(progress);
+      const prev = lastReportedPagingRef.current;
+      if (prev.totalPages !== totalPages) {
+        onTotalPagesChange?.(totalPages);
+      }
+      if (prev.currentPage !== currentPage) {
+        onCurrentPageChange?.(currentPage);
+      }
+      if (prev.progress !== progress) {
+        onProgressChange?.(progress);
+      }
+      lastReportedPagingRef.current = { totalPages, currentPage, progress };
     }, [totalPages, currentPage, progress, onTotalPagesChange, onCurrentPageChange, onProgressChange]);
 
     useEffect(() => {
       if (!xhtmlContent || !contentRef.current || !containerRef.current) return;
-
       const content = contentRef.current;
       const container = containerRef.current;
-      const blocks = content.querySelectorAll(BLOCK_SELECTOR);
-      if (blocks.length === 0) return;
+      const blocks = Array.from(content.querySelectorAll(BLOCK_SELECTOR));
 
-      const visibleMap = new Map();
-      const io = new IntersectionObserver(
-        (entries) => {
-          const rootBounds = container.getBoundingClientRect();
-          entries.forEach((entry) => {
-            const el = entry.target;
-            const ci = el.getAttribute('data-chapter-index');
-            const bi = el.getAttribute('data-block-index');
-            if (ci == null || bi == null) return;
-            const key = `${ci}-${bi}`;
-            const ratio = entry.intersectionRatio;
-            const rect = entry.boundingClientRect;
-            const top = rect.top - rootBounds.top;
-            const bottom = rect.bottom - rootBounds.top;
-            const prev = visibleMap.get(key);
-            const prevRatio = prev?.ratio ?? 0;
-            visibleMap.set(key, {
-              ratio: Math.max(prevRatio, ratio),
-              top,
-              bottom,
-              el,
-            });
-          });
-        },
-        { root: container, rootMargin: '0px', threshold: [0, 0.25, 0.5, 0.75, 1] }
-      );
-
-      blocks.forEach((b) => io.observe(b));
-
-      const interval = setInterval(() => {
-        const visible = Array.from(visibleMap.entries())
-          .filter(([, v]) => v.ratio > 0)
-          .map(([key, v]) => ({ key, ...v }));
-        if (visible.length === 0) return;
-        visible.sort((a, b) => a.top - b.top);
-        const startEntry = visible[0];
-        const endEntry = visible[visible.length - 1];
-        const startBlock = startEntry.el;
-        const endBlock = endEntry.el;
-        const { startOffset, endOffset } = getSelectionOffsets(content, startBlock, endBlock);
-        const startLoc = getBlockLocator(startBlock, startOffset);
-        const endLoc = getBlockLocator(endBlock, endOffset);
-        if (startLoc && endLoc) {
-          emitLocator({
-            startLocator: startLoc,
-            endLocator: endLoc,
-          });
+      const serverBookId = Number(book?.id);
+      const manifest = Number.isFinite(serverBookId) && serverBookId > 0
+        ? getManifestFromCache(serverBookId)
+        : null;
+      const chapterFromMeta = resolveChapterFromMetaByPage(metaRef.current, currentPageIndex, totalPages);
+      const chapterFromManifest = resolveChapterFromManifestByPage(manifest, currentPageIndex, totalPages);
+      const resolvedChapter = chapterFromManifest ?? chapterFromMeta;
+      const emitResolvedFallback = () => {
+        if (Number.isFinite(resolvedChapter) && resolvedChapter > 0) {
+          emitLocator(createFallbackLocator(resolvedChapter));
         }
-      }, 300);
-
-      return () => {
-        io.disconnect();
-        clearInterval(interval);
       };
-    }, [xhtmlContent, emitLocator]);
+
+      if (!blocks.length) {
+        emitResolvedFallback();
+        return;
+      }
+
+      const root = container.getBoundingClientRect();
+      const visible = blocks
+        .map((el) => {
+          const rect = el.getBoundingClientRect();
+          const top = rect.top - root.top;
+          const bottom = rect.bottom - root.top;
+          const overlap = Math.min(bottom, root.height) - Math.max(top, 0);
+          return { el, top, bottom, overlap };
+        })
+        .filter((item) => item.overlap > 0)
+        .sort((a, b) => a.top - b.top);
+
+      if (!visible.length) {
+        emitResolvedFallback();
+        return;
+      }
+
+      const startBlock = visible[0].el;
+      const endBlock = visible[visible.length - 1].el;
+      const startLoc = getBlockLocator(startBlock, 0);
+      const endLoc = getBlockLocator(endBlock, Math.max(0, (endBlock.textContent || '').length));
+      if (!startLoc || !endLoc) return;
+
+      if (Number.isFinite(resolvedChapter) && resolvedChapter > 0) {
+        startLoc.chapterIndex = resolvedChapter;
+        endLoc.chapterIndex = resolvedChapter;
+      }
+
+      emitLocator({
+        startLocator: startLoc,
+        endLocator: endLoc,
+      });
+    }, [xhtmlContent, currentPageIndex, totalPages, book?.id, emitLocator]);
 
     useEffect(() => {
-      if (!xhtmlContent || !rulerRef.current || !pageHeight || initialAnchorAppliedRef.current) return;
-      const ruler = rulerRef.current;
-      let el = null;
-      const initLoc = initialAnchor?.startLocator ?? initialAnchor?.start ?? initialAnchor;
-      if (initLoc?.chapterIndex != null || initLoc?.chapterIdx != null) {
-        const { chapterIndex: c, blockIndex: b } = initLoc;
-        el = ruler.querySelector(`[data-chapter-index="${c}"][data-block-index="${b ?? 0}"]`);
-      } else if (initialChapter != null) {
-        el = ruler.querySelector(`[data-chapter-index="${initialChapter}"]`);
+      if (!bid) {
+        initialAnchorAppliedRef.current = false;
+        initialPositionAppliedRef.current = false;
+        initialSeekAppliedRef.current = false;
       }
-      if (el) {
-        const top = el.offsetTop;
-        const idx = Math.min(totalPages - 1, Math.max(0, Math.floor(top / pageHeight)));
-        setCurrentPageIndex(idx);
-        initialAnchorAppliedRef.current = true;
-      }
-    }, [xhtmlContent, initialAnchor, initialChapter, totalPages, pageHeight]);
+    }, [bid]);
+
+    const getPageIndexFromTop = useCallback(
+      (top) => {
+        if (!pageHeight) return 0;
+        return Math.min(totalPages - 1, Math.max(0, Math.floor(top / pageHeight)));
+      },
+      [pageHeight, totalPages]
+    );
+
+    const findChapterBlockElement = useCallback(
+      (root, chapter, block = 0) =>
+        root.querySelector(`[data-chapter-index="${chapter}"][data-block-index="${block}"]`) ||
+        root.querySelector(`[data-chapter-index="${chapter}"]`),
+      []
+    );
 
     const goPage = useCallback((direction) => {
       if (direction === 1 && currentPageIndex <= 0) return;
@@ -325,27 +474,74 @@ const XhtmlViewer = forwardRef(
         locator = target.start ?? target.startLocator ?? (Number.isFinite(target.chapterIndex) ? target : null);
       }
       if (!locator) return;
-      const el = rulerRef.current.querySelector(
-        `[data-chapter-index="${locator.chapterIndex}"][data-block-index="${locator.blockIndex ?? 0}"]`
-      );
+      const el = findChapterBlockElement(rulerRef.current, locator.chapterIndex, locator.blockIndex ?? 0);
       if (el) {
-        const top = el.offsetTop;
-        const idx = Math.min(totalPages - 1, Math.max(0, Math.floor(top / pageHeight)));
-        setCurrentPageIndex(idx);
+        setCurrentPageIndex(getPageIndexFromTop(el.offsetTop));
       }
-    }, [pageHeight, totalPages]);
+    }, [pageHeight, findChapterBlockElement, getPageIndexFromTop]);
 
     useEffect(() => {
-      if (!xhtmlContent || initialAnchor) return;
-      if (initialProgress != null && initialProgress > 0) {
-        const pct = Math.min(100, Math.max(0, initialProgress)) / 100;
-        setCurrentPageIndex((_i) => Math.min(totalPages - 1, Math.round(pct * (totalPages - 1))));
-        return;
+      if (!xhtmlContent || !rulerRef.current || !pageHeight || !totalPages) return;
+      if (initialSeekAppliedRef.current) return;
+
+      const ruler = rulerRef.current;
+      let applied = false;
+
+      // 1) initialAnchor 우선
+      const initLoc = initialAnchor?.startLocator ?? initialAnchor?.start ?? initialAnchor;
+      if (initLoc?.chapterIndex != null || initLoc?.chapterIdx != null) {
+        const chapter = Number(initLoc.chapterIndex ?? initLoc.chapterIdx);
+        const block = Number(initLoc.blockIndex ?? 0);
+        const el = findChapterBlockElement(ruler, chapter, block);
+        if (el) {
+          setCurrentPageIndex(getPageIndexFromTop(el.offsetTop));
+          applied = true;
+        }
       }
-      if (Number.isFinite(initialPage) && initialPage >= 1 && totalPages >= 1) {
-        setCurrentPageIndex((_i) => Math.min(totalPages - 1, Math.max(0, initialPage - 1)));
+
+      // 2) initialProgress
+      if (!applied) {
+        const pct = Number(initialProgress);
+        if (Number.isFinite(pct) && pct > 0) {
+          const ratio = Math.min(1, Math.max(0, pct / 100));
+          const idx = Math.min(totalPages - 1, Math.max(0, Math.round(ratio * (totalPages - 1))));
+          setCurrentPageIndex(idx);
+          applied = true;
+        }
       }
-    }, [xhtmlContent, initialAnchor, initialProgress, initialPage, totalPages]);
+
+      // 3) initialPage
+      if (!applied && Number.isFinite(initialPage) && initialPage >= 1) {
+        const idx = Math.min(totalPages - 1, Math.max(0, initialPage - 1));
+        setCurrentPageIndex(idx);
+        applied = true;
+      }
+
+      // 4) initialChapter
+      if (!applied && initialChapter != null && Number.isFinite(Number(initialChapter))) {
+        const el = ruler.querySelector(`[data-chapter-index="${initialChapter}"]`);
+        if (el) {
+          setCurrentPageIndex(getPageIndexFromTop(el.offsetTop));
+          applied = true;
+        }
+      }
+
+      initialAnchorAppliedRef.current = applied;
+      initialPositionAppliedRef.current = applied;
+      initialSeekAppliedRef.current = true;
+      prevInitialChapterRef.current = initialChapter;
+      prevInitialPageRef.current = initialPage;
+    }, [
+      xhtmlContent,
+      totalPages,
+      pageHeight,
+      initialAnchor,
+      initialProgress,
+      initialPage,
+      initialChapter,
+      findChapterBlockElement,
+      getPageIndexFromTop,
+    ]);
 
     useImperativeHandle(ref, () => ({
       prevPage,

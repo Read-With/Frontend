@@ -11,7 +11,7 @@ import { authenticatedRequest } from './authApi';
 export const toggleBookFavorite = async (bookId, favorite) => {
   try {
     const method = favorite ? 'POST' : 'DELETE';
-    const data = await authenticatedRequest(`/favorites/${bookId}`, {
+    const data = await authenticatedRequest(`/v2/favorites/${bookId}`, {
       method,
     });
     return data;
@@ -27,7 +27,9 @@ export const getChapterPovSummaries = async (bookId, chapterIdx) => {
       throw new Error('bookId와 chapterIdx는 필수 매개변수입니다.');
     }
     
-    const data = await authenticatedRequest(`/books/${bookId}/chapters/${chapterIdx}/pov-summaries`);
+    const data = await authenticatedRequest(
+      `/v2/books/${bookId}/chapters/${chapterIdx}/pov-summaries`
+    );
     return data;
   } catch (error) {
     console.error('챕터 시점 요약 조회 실패:', error);

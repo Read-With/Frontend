@@ -1,21 +1,27 @@
 /**
- * 정규화 메타(meta.json 동일 스키마) 로더.
+ * 정규화 메타 로더(v2 manifest 기반).
  * chapters[].chapterIndex, paragraphStarts, paragraphLengths, totalCodePoints
- *
- * 1) GET /api/books/{bookId}/meta (성공 시 15분 TTL 캐시)
- * 2) 실패 시 fetch(`${BASE_URL}books/{bookId}/meta.json`) — 개발·폴백
  */
 
-import { getBookMeta } from '../api/api';
-import { errorUtils } from '../common/errorUtils';
+import { getBookManifest } from '../api/api';
 
 const metaCache = new Map();
 const CACHE_TTL = 1000 * 60 * 15;
+
+function isValidMetaShape(data) {
+  const chapters = Array.isArray(data?.chapters) ? data.chapters : [];
+  if (!chapters.length) return false;
+  return chapters.some((ch) => Number(ch?.chapterIndex) > 0);
+}
 
 function getCached(bookId) {
   const entry = metaCache.get(String(bookId));
   if (!entry) return null;
   if (Date.now() - entry.timestamp > CACHE_TTL) {
+    metaCache.delete(String(bookId));
+    return null;
+  }
+  if (!isValidMetaShape(entry.data)) {
     metaCache.delete(String(bookId));
     return null;
   }
@@ -35,37 +41,48 @@ export async function loadBookMeta(bookId, { useCache = true } = {}) {
     if (cached) return cached;
   }
 
-  const apiRes = await getBookMeta(bookId);
-  if (apiRes?.isSuccess && apiRes?.result) {
-    const data = normalizeMeta(apiRes.result);
+  const manifestRes = await getBookManifest(bookId);
+  if (manifestRes?.isSuccess && manifestRes?.result) {
+    const data = normalizeMetaFromManifest(manifestRes.result);
+    if (!isValidMetaShape(data)) {
+      return null;
+    }
     setCached(key, data);
     return data;
   }
+  return null;
+}
 
-  const base = typeof import.meta.env?.BASE_URL === 'string' ? import.meta.env.BASE_URL : '/';
-  const fallbackUrl = `${base}books/${encodeURIComponent(key)}/meta.json`;
+function toArrayValue(value) {
+  if (Array.isArray(value)) return value;
+  if (typeof value !== 'string' || value.trim() === '') return [];
   try {
-    const res = await fetch(fallbackUrl);
-    if (!res.ok) return null;
-    const raw = await res.json();
-    const data = normalizeMeta(raw);
-    setCached(key, data);
-    return data;
-  } catch (_e) {
-    errorUtils.logWarning('loadBookMeta', 'meta.json fallback 실패', { bookId, fallbackUrl });
-    return null;
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (_error) {
+    return [];
   }
 }
 
-function normalizeMeta(raw) {
+function normalizeMetaFromManifest(raw) {
   if (!raw || typeof raw !== 'object') return null;
   const chapters = Array.isArray(raw.chapters) ? raw.chapters : [];
   return {
-    chapters: chapters.map((ch, i) => ({
-      chapterIndex: ch.chapterIndex ?? ch.chapter_index ?? i,
-      paragraphStarts: ch.paragraphStarts ?? ch.paragraph_starts ?? [],
-      paragraphLengths: ch.paragraphLengths ?? ch.paragraph_lengths ?? [],
-      totalCodePoints: ch.totalCodePoints ?? ch.total_code_points ?? 0
+    chapters: chapters.map((ch) => ({
+      chapterIndex:
+        ch.chapterIdx ??
+        ch.chapterIndex ??
+        ch.idx ??
+        ch.chapter ??
+        ch.number ??
+        0,
+      paragraphStarts: toArrayValue(ch.paragraphStartsJson),
+      paragraphLengths: toArrayValue(ch.paragraphLengthsJson),
+      totalCodePoints:
+        ch.totalCodePoints ??
+        ch.chapterLength ??
+        ch.length ??
+        0,
     }))
   };
 }

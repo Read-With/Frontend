@@ -28,6 +28,7 @@ const flexLabelCenter = {
 
 const ViewerToolbar = ({
   showControls,
+  currentChapter = 1,
   onPrev,
   onNext,
   onAddBookmark,
@@ -73,23 +74,22 @@ const ViewerToolbar = ({
         filename: bookId,
       };
 
-    const currentSearch = location.search || '';
     const currentPathname = location.pathname || `/user/viewer/${bookId}`;
     const previousLocation = previousPage || {
       pathname: currentPathname,
-      search: currentSearch,
+      search: '',
     };
 
     navigate(`/user/graph/${bookId}`, {
       state: {
         book: bookData,
+        selectedChapter: Number(currentChapter) || 1,
         fromLibrary: isFromLibrary,
         from: previousLocation,
-        viewerSearch: currentSearch,
       },
       replace: false,
     });
-  }, [book, bookId, isFromLibrary, location.pathname, location.search, navigate, previousPage]);
+  }, [book, bookId, currentChapter, isFromLibrary, location.pathname, navigate, previousPage]);
 
   const toggleMobileMenu = useCallback(() => {
     setShowMobileMenu((v) => !v);

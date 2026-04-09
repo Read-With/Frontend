@@ -11,11 +11,10 @@ import { useTransitionState } from "../../hooks/ui/useTransitionState";
 import { useProgressAutoSave } from "../../hooks/viewer/useProgressAutoSave";
 import { useTooltipState } from "../../hooks/ui/useTooltipState";
 import { useCachedLocation } from "../../hooks/viewer/useCachedLocation";
-import { getBookProgress, getFineGraph, getBookManifest } from "../../utils/api/api";
+import { getFineGraph, saveProgress } from "../../utils/api/api";
 import { getProgressFromCache } from "../../utils/common/cache/progressCache";
-import { resolveProgressLocator } from "../../utils/common/locatorUtils";
-import { getGraphEventState, getCachedChapterEvents, isGraphBookCacheBuilding, ensureGraphBookCache } from "../../utils/common/cache/chapterEventCache";
-import { getManifestFromCache } from "../../utils/common/cache/manifestCache";
+import { anchorToLocators } from "../../utils/common/locatorUtils";
+import { getGraphEventState, getCachedChapterEvents, getCachedReaderProgress, isGraphBookCacheBuilding, ensureGraphBookCache } from "../../utils/common/cache/chapterEventCache";
 import { 
   getServerBookId,
   eventUtils,
@@ -53,7 +52,9 @@ const ViewerPage = () => {
     handleOpenSettings, handleCloseSettings, handleApplySettings,
     onToggleBookmarkList, handleSliderChange, toggleGraph, handleLocationChange: _handleLocationChange,
     graphState, graphActions, viewerState, searchState, graphFullScreen, setGraphFullScreen: _setGraphFullScreen,
-    previousPage, isFromLibrary, bookId, cleanBookId, savedProgress, exitToMypage,
+    previousPage, isFromLibrary, bookId, cleanBookId, exitToMypage,
+    manifestLoaded,
+    readingFromPath,
   } = useViewerPage();
 
   const bookKey = useMemo(() => {
@@ -104,9 +105,7 @@ const ViewerPage = () => {
     isDataReady
   });
   
-  const [manifestLoaded, setManifestLoaded] = useState(false);
   const [apiError, setApiError] = useState(null);
-  const [initialProgressAnchor, setInitialProgressAnchor] = useState(null);
   
   const updateLoadingState = useCallback((isReady, isLoading, error = null, shouldResetTransition = true) => {
     setIsDataReady(isReady);
@@ -114,6 +113,27 @@ const ViewerPage = () => {
     if (shouldResetTransition) resetTransition();
     setApiError(error);
   }, [setIsDataReady, setLoading, setApiError, resetTransition]);
+
+  const triggerGraphRetry = useCallback((resetInitialGraphEvent = false) => {
+    clearRetryTimeout();
+    setApiError(null);
+    apiCallRef.current = null;
+    if (resetInitialGraphEvent) {
+      initialGraphEventLoadedRef.current = false;
+    }
+    setLoading((prev) => !prev);
+  }, [clearRetryTimeout, setLoading]);
+
+  const buildGraphLoadError = useCallback((details, retryHandler) => ({
+    message: '그래프 데이터를 불러오는데 실패했습니다.',
+    details,
+    retry: retryHandler,
+  }), []);
+
+  const resetGraphOnNotFound = useCallback(() => {
+    clearGraphElements(0, currentChapter);
+    updateLoadingState(true, false);
+  }, [clearGraphElements, currentChapter, updateLoadingState]);
   
   useEffect(() => {
     apiEventCacheRef.current.clear();
@@ -151,7 +171,7 @@ const ViewerPage = () => {
     }
 
     const resolvedIdx = currentEventKey.eventIdx;
-    const currentCachedLocation = cachedLocation;
+    const currentCachedLocation = getCachedReaderProgress(bookKey);
     const cachedChapterIdx = currentCachedLocation ? Number(currentCachedLocation.chapterIdx) : null;
     const cachedEventIdxValue = currentCachedLocation
       ? Number(currentCachedLocation.eventIdx ?? currentCachedLocation.eventNum ?? 0)
@@ -203,7 +223,7 @@ const ViewerPage = () => {
       chapterProgress: currentEvent?.chapterProgress ?? null,
       source: 'runtime'
     });
-  }, [bookKey, currentEventKey, book?.id, currentEvent, cachedLocation, saveLocation]);
+  }, [bookKey, currentEventKey, book?.id, currentEvent, saveLocation]);
 
   const prefetchChapterEventsSequentially = useCallback(async (targetChapter) => {
     if (!book?.id || typeof book.id !== 'number') {
@@ -296,75 +316,13 @@ const ViewerPage = () => {
     };
   }, []);
 
-  const testProgressAPI = useCallback(async () => {
-    const serverBookId = getServerBookId(book);
-    const isServerBook = !!serverBookId;
-
-    if (!isServerBook || !serverBookId) {
-      setManifestLoaded(true);
-      return;
-    }
-
-    try {
-      try {
-        const progressRes = await getBookProgress(serverBookId);
-        if (progressRes?.isSuccess && progressRes?.result) {
-          const loc = resolveProgressLocator(progressRes.result);
-          if (loc) {
-            setInitialProgressAnchor({ startLocator: loc, endLocator: loc });
-          }
-        }
-      } catch (_progressError) {
-        // 조용히 처리
-      }
-
-      let manifest = getManifestFromCache(serverBookId);
-      
-      if (manifest) {
-        setManifestLoaded(true);
-        return;
-      }
-      
-      try {
-        const manifestResponse = await getBookManifest(serverBookId);
-        if (manifestResponse?.isSuccess && manifestResponse?.result) {
-          manifest = manifestResponse.result;
-          setManifestLoaded(true);
-        } else {
-          errorUtils.logWarning('[Viewer] 그래프/매니페스트를 서버에서 가져올 수 없습니다', '', { bookId: serverBookId });
-          setApiError((prev) => prev ?? '그래프 데이터를 서버에서 가져올 수 없습니다.');
-          setManifestLoaded(true);
-        }
-      } catch (manifestError) {
-        const status = manifestError?.status;
-        const message = manifestError?.message || '';
-        const isSilentError = status === 404 || status === 403 || message.includes('404') || message.includes('403');
-        
-        if (!isSilentError) {
-          errorUtils.logWarning('[Viewer] 그래프/매니페스트 조회 실패', message, { status });
-        }
-        setApiError((prev) => prev ?? '그래프 데이터를 서버에서 가져올 수 없습니다.');
-        setManifestLoaded(true);
-      }
-    } catch (error) {
-      errorUtils.logError('[Viewer] Manifest 로드 중 오류', error);
-      setManifestLoaded(true);
-    }
-  }, [book?.id]);
-
-  useEffect(() => {
-    testProgressAPI();
-  }, [testProgressAPI]);
-  
   useEffect(() => {
     setElementsRef.current = setElements;
   }, [setElements]);
 
   useEffect(() => {
-    // book.id 변경 시 완전 초기화
     initialGraphEventLoadedRef.current = false;
     apiCallRef.current = null;
-    setManifestLoaded(false);
     setApiError(null);
   }, [book?.id]);
   
@@ -470,20 +428,8 @@ const ViewerPage = () => {
             return;
           }
           
-          // manifestLoaded가 false인 경우, 캐시 확인으로 빠르게 체크
           if (!manifestLoaded) {
-            const serverBookId = getServerBookId(book);
-            if (serverBookId) {
-              const cachedManifest = getManifestFromCache(serverBookId);
-              if (cachedManifest) {
-                setManifestLoaded(true);
-              } else {
-                return;
-              }
-            } else {
-              setManifestLoaded(true);
-              return;
-            }
+            return;
           }
           
           const apiEventIdx = eventIdxUtils.calculateEventIdxForTransition(
@@ -747,8 +693,7 @@ const ViewerPage = () => {
             const isNotFound = status === 404 || message.includes('404') || message.includes('찾을 수 없습니다');
             
             if (isNotFound) {
-              clearGraphElements(0, currentChapter);
-              updateLoadingState(true, false);
+              resetGraphOnNotFound();
             } else {
               const maxRetries = 3;
               const retryCount = (error.retryCount || 0) + 1;
@@ -758,34 +703,21 @@ const ViewerPage = () => {
                 retryTimeoutRef.current = setTimeout(() => {
                   if (isMounted) {
                     apiCallRef.current = null;
-                    setLoading(prev => !prev);
+                    setLoading((prev) => !prev);
                   }
                   retryTimeoutRef.current = null;
                 }, 1000 * retryCount);
                 
-                setApiError({
-                  message: '그래프 데이터를 불러오는데 실패했습니다.',
-                  details: `${message || '알 수 없는 오류'} (재시도 ${retryCount}/${maxRetries})`,
-                  retry: () => {
-                    clearRetryTimeout();
-                    setApiError(null);
-                    apiCallRef.current = null;
-                    setLoading(prev => !prev);
-                  }
-                });
+                setApiError(buildGraphLoadError(
+                  `${message || '알 수 없는 오류'} (재시도 ${retryCount}/${maxRetries})`,
+                  () => triggerGraphRetry(false)
+                ));
               } else {
                 clearRetryTimeout();
-                setApiError({
-                  message: '그래프 데이터를 불러오는데 실패했습니다.',
-                  details: message || '알 수 없는 오류가 발생했습니다. 잠시 후 다시 시도해주세요.',
-                  retry: () => {
-                    clearRetryTimeout();
-                    setApiError(null);
-                    apiCallRef.current = null;
-                    initialGraphEventLoadedRef.current = false;
-                    setLoading(prev => !prev);
-                  }
-                });
+                setApiError(buildGraphLoadError(
+                  message || '알 수 없는 오류가 발생했습니다. 잠시 후 다시 시도해주세요.',
+                  () => triggerGraphRetry(true)
+                ));
               }
               
               updateLoadingState(true, false);
@@ -931,6 +863,32 @@ const ViewerPage = () => {
     if (shouldReleaseForced) releaseForcedEventIdx();
   }, [currentChapter, setCurrentChapter, setCurrentCharIndex, setCurrentEvent, releaseForcedEventIdx]);
 
+  const handleExitToMypage = useCallback(async () => {
+    try {
+      const serverBookId = getServerBookId(book);
+      if (serverBookId && viewerRef.current?.getCurrentLocator) {
+        const loc = await viewerRef.current.getCurrentLocator();
+        const { startLocator } = anchorToLocators(loc);
+        if (startLocator) {
+          const res = await saveProgress({
+            bookId: String(serverBookId),
+            startLocator,
+            locator: startLocator,
+          });
+          if (!res?.isSuccess) {
+            errorUtils.logWarning('[ViewerPage] 종료 시 진도 저장 실패', res?.message || '응답 실패', {
+              bookId: serverBookId,
+            });
+          }
+        }
+      }
+    } catch (_e) {
+      // 종료 동작은 항상 진행
+    } finally {
+      exitToMypage();
+    }
+  }, [book, viewerRef, exitToMypage]);
+
   // ─── GraphSplitArea 전달 props 메모이제이션 ──────────────────────────────────
   const graphStateProp = useMemo(() => ({
     ...graphState,
@@ -1010,6 +968,7 @@ const ViewerPage = () => {
       <ViewerLayout
         showControls={showToolbar}
         book={book}
+        currentChapter={currentChapter}
         progress={progress}
         setProgress={setProgress}
         onPrev={handlePrevPage}
@@ -1027,7 +986,7 @@ const ViewerPage = () => {
         graphFullScreen={graphFullScreen}
         isFromLibrary={isFromLibrary}
         previousPage={previousPage}
-        onExitToMypage={exitToMypage}
+        onExitToMypage={handleExitToMypage}
         rightSideContent={
           <GraphSplitArea
             graphState={graphStateProp}
@@ -1047,11 +1006,14 @@ const ViewerPage = () => {
         }
       >
         {(() => {
-          const initialProgressFromUrl = savedProgress != null && savedProgress !== '' ? Number(savedProgress) : null;
-          const useProgressForPosition = Number.isFinite(initialProgressFromUrl) && initialProgressFromUrl > 0;
+          const initialProgressFromServer = Number(book?.progress);
+          const resolvedInitialProgress = Number.isFinite(initialProgressFromServer)
+            ? initialProgressFromServer
+            : progress;
+          const useProgressForPosition = Number.isFinite(resolvedInitialProgress) && resolvedInitialProgress > 0;
           const progressKey = cleanBookId ?? bookKey;
           const cachedProgress = getProgressFromCache(progressKey);
-          const anchor = initialProgressAnchor ?? cachedProgress?.anchor ?? undefined;
+          const anchor = readingFromPath ? undefined : (cachedProgress?.anchor ?? undefined);
           return (
             <XhtmlViewer
               key={reloadKey}
@@ -1059,16 +1021,16 @@ const ViewerPage = () => {
               book={book}
               manifestReady={manifestLoaded}
               initialChapter={currentChapter}
-              initialProgress={Number.isFinite(initialProgressFromUrl) ? initialProgressFromUrl : progress}
+              initialProgress={readingFromPath ? 0 : resolvedInitialProgress}
               onProgressChange={setProgress}
-              onCurrentPageChange={(page) => setCurrentPage(page)}
+              onCurrentPageChange={setCurrentPage}
               onTotalPagesChange={setTotalPages}
               onCurrentChapterChange={handleCurrentChapterChange}
               settings={settings}
               onCurrentLineChange={handleCurrentLineChange}
               bookId={progressKey}
               initialAnchor={anchor}
-              initialPage={useProgressForPosition ? undefined : currentPage}
+              initialPage={useProgressForPosition && !readingFromPath ? undefined : currentPage}
             />
           );
         })()}

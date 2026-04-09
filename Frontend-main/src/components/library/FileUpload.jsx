@@ -4,12 +4,20 @@ import { useFileUpload, FILE_CONSTRAINTS } from '../../hooks/books/useFileUpload
 import { getBooks, getBook } from '../../utils/api/booksApi';
 import { getBookManifest } from '../../utils/api/api';
 import { theme } from '../common/theme';
-import { extractXhtmlFileMetadata, xhtmlUploadBasename } from '../../utils/library/xhtmlUploadUtils';
+import { extractEpubFileMetadata, epubUploadBasename } from '../../utils/library/epubUploadUtils';
 import {
   saveLocalBookBuffer,
   saveLocalBookMetadata,
   loadLocalBookBuffer,
 } from '../../utils/library/localBookStorage';
+import { normalizeTitle } from '../../utils/common/stringUtils';
+
+function normalizeAuthorMatch(author) {
+  return (author || '')
+    .toLowerCase()
+    .trim()
+    .replace(/\s+/g, ' ');
+}
 
 const FileUpload = ({ onUploadSuccess, onClose }) => {
   const [dragActive, setDragActive] = useState(false);
@@ -24,20 +32,20 @@ const FileUpload = ({ onUploadSuccess, onClose }) => {
   const [showApprovalPendingModal, setShowApprovalPendingModal] = useState(false);
   const [uploadedBook, setUploadedBook] = useState(null);
   const inputRef = useRef(null);
-  const { uploading, uploadProgress, uploadError, uploadFile, resetUpload, validateXhtmlFile } = useFileUpload();
+  const { uploading, uploadProgress, uploadError, resetUpload, validateEpubFile } = useFileUpload();
 
-  const extractXhtmlMetadata = async (file) => {
+  const extractEpubMetadata = async (file) => {
     try {
       setExtractingMetadata(true);
       return await Promise.race([
-        extractXhtmlFileMetadata(file),
+        extractEpubFileMetadata(file),
         new Promise((_, reject) =>
           setTimeout(() => reject(new Error('Metadata extraction timeout')), 10000)
         ),
       ]);
     } catch {
       return {
-        title: xhtmlUploadBasename(file.name),
+        title: epubUploadBasename(file.name),
         author: 'Unknown',
         language: 'ko',
       };
@@ -49,7 +57,7 @@ const FileUpload = ({ onUploadSuccess, onClose }) => {
   const handleFiles = async (files) => {
     if (files && files.length > 0) {
       const file = files[0];
-      const v = validateXhtmlFile(file);
+      const v = validateEpubFile(file);
       if (!v.valid) {
         alert(v.error);
         return;
@@ -61,7 +69,7 @@ const FileUpload = ({ onUploadSuccess, onClose }) => {
         setStep('metadata');
         
         // 메타데이터 추출은 백그라운드에서 진행
-        const extractedMetadata = await extractXhtmlMetadata(file);
+        const extractedMetadata = await extractEpubMetadata(file);
         setMetadata(prev => ({
           ...prev,
           ...extractedMetadata
@@ -72,7 +80,7 @@ const FileUpload = ({ onUploadSuccess, onClose }) => {
           setSelectedFile(files[0]);
           setMetadata(prev => ({
             ...prev,
-            title: xhtmlUploadBasename(files[0].name),
+            title: epubUploadBasename(files[0].name),
             author: prev.author || 'Unknown',
             language: prev.language || 'ko'
           }));
@@ -88,69 +96,62 @@ const FileUpload = ({ onUploadSuccess, onClose }) => {
     try {
       const arrayBuffer = await selectedFile.arrayBuffer();
 
-      // 1. 업로드 전에 서버 책 목록 확인하여 제목+저자로 매칭
-      let existingBookId = null;
-      try {
-        const booksResponse = await getBooks({});
-        
-        if (booksResponse?.isSuccess && Array.isArray(booksResponse.result)) {
-          const normalizedTitle = (metadata.title || '').trim().toLowerCase();
-          const normalizedAuthor = (metadata.author || '').trim().toLowerCase();
-          
-          // 제목과 저자가 일치하는 책 찾기
-          const matchingBooks = booksResponse.result.filter(book => {
-            const bookTitle = (book.title || '').trim().toLowerCase();
-            const bookAuthor = (book.author || '').trim().toLowerCase();
-            return bookTitle === normalizedTitle && bookAuthor === normalizedAuthor;
-          });
-          
-          if (matchingBooks.length > 0) {
-            // ID가 가장 작은 것부터 비교하여 선택 (가장 오래된 책)
-            // ID를 숫자로 변환하여 정렬
-            const sortedBooks = matchingBooks.sort((a, b) => {
-              const idA = Number(a.id) || 0;
-              const idB = Number(b.id) || 0;
-              return idA - idB; // 오름차순 정렬 (가장 작은 ID가 첫 번째)
-            });
-            
-            // 가장 작은 ID를 가진 책 선택
-            existingBookId = sortedBooks[0].id;
-          }
-        }
-      } catch (error) {
-        console.warn('서버 책 목록 확인 실패, 새로 업로드합니다:', error);
+      // 1. 서버에 새 책을 등록하지 않음 — 제목+저자 완전 일치만 매칭 후 최소 bookId 사용
+      const booksResponse = await getBooks({});
+      if (!booksResponse?.isSuccess || !Array.isArray(booksResponse.result)) {
+        throw new Error(
+          booksResponse?.message || '서버 책 목록을 불러오지 못했습니다. 네트워크와 로그인 상태를 확인해주세요.'
+        );
       }
-      
-      // 2. 기존 책이 있으면 그 ID로만 취급 (새로 업로드하지 않음)
+
+      const titleKey = normalizeTitle(metadata.title || '');
+      const authorKey = normalizeAuthorMatch(metadata.author || '');
+      if (!titleKey || !authorKey) {
+        throw new Error('제목과 저자를 확인해주세요. 서버 책과 정확히 매칭해야 합니다.');
+      }
+
+      // useBooks.reconcileBooks와 동일 기준(제목+저자 key의 최소 id)으로 canonical bookId를 선택
+      const canonicalByKey = new Map();
+      booksResponse.result.forEach((book) => {
+        const numericId = Number(book?.id);
+        if (!Number.isFinite(numericId) || numericId <= 0) return;
+        const tKey = normalizeTitle(book?.title || '');
+        const aKey = normalizeAuthorMatch(book?.author || '');
+        if (!tKey || !aKey) return;
+        const key = `${tKey}::${aKey}`;
+        const existing = canonicalByKey.get(key);
+        if (!existing || numericId < Number(existing.id)) {
+          canonicalByKey.set(key, book);
+        }
+      });
+
+      const matchedKey = `${titleKey}::${authorKey}`;
+      const canonicalBook = canonicalByKey.get(matchedKey);
+      const matchingBooks = booksResponse.result.filter((book) => {
+        const numericId = Number(book?.id);
+        if (!Number.isFinite(numericId) || numericId <= 0) return false;
+        return (
+          normalizeTitle(book.title || '') === titleKey &&
+          normalizeAuthorMatch(book.author || '') === authorKey
+        );
+      });
+
+      if (!canonicalBook) {
+        throw new Error(
+          '서버에 제목+저자가 동일한 책이 없습니다. EPUB는 기존 책과 정확히 일치할 때만 연결됩니다.'
+        );
+      }
+
+      const existingBookId = canonicalBook.id;
+
       let serverBook = null;
-      let finalBookId = existingBookId;
-      
-      if (existingBookId) {
-        // 기존 책 ID 사용 - 새로 업로드하지 않고 기존 ID로만 취급
-        try {
-          const bookResponse = await getBook(existingBookId);
-          if (bookResponse?.isSuccess && bookResponse.result) {
-            serverBook = bookResponse.result;
-          } else {
-            throw new Error('기존 책 정보를 가져올 수 없습니다.');
-          }
-        } catch (error) {
-          throw new Error(`기존 책 정보 가져오기 실패: ${error.message}`);
-        }
+      const finalBookId = existingBookId;
+
+      const bookResponse = await getBook(existingBookId);
+      if (bookResponse?.isSuccess && bookResponse.result) {
+        serverBook = bookResponse.result;
       } else {
-        // 기존 책이 없을 때만 새로 업로드
-        try {
-          const result = await uploadFile(selectedFile, metadata);
-          if (result.success) {
-            serverBook = result.data;
-            setUploadedBook(serverBook);
-            finalBookId = serverBook?.id;
-          } else {
-            throw new Error(result.error || '서버 업로드에 실패했습니다.');
-          }
-        } catch (uploadError) {
-          throw new Error(uploadError.message || '서버 업로드에 실패했습니다. 로그인 상태를 확인해주세요.');
-        }
+        throw new Error(bookResponse?.message || '매칭된 책 정보를 가져올 수 없습니다.');
       }
 
       // 3. bookId 확인
@@ -167,6 +168,7 @@ const FileUpload = ({ onUploadSuccess, onClose }) => {
           chapters: serverBook.chapters || [],
           characters: serverBook.characters || [],
           progressMetadata: serverBook.progressMetadata || {},
+          readerArtifacts: serverBook.readerArtifacts || null,
         };
       } else {
         // manifest 정보가 없으면 가져오기 시도
@@ -178,6 +180,7 @@ const FileUpload = ({ onUploadSuccess, onClose }) => {
               chapters: manifestResponse.result.chapters || [],
               characters: manifestResponse.result.characters || [],
               progressMetadata: manifestResponse.result.progressMetadata || {},
+              readerArtifacts: manifestResponse.result.readerArtifacts || null,
             };
           }
         } catch (error) {
@@ -191,13 +194,13 @@ const FileUpload = ({ onUploadSuccess, onClose }) => {
       const book = {
         id: finalBookId,
         _bookId: finalBookId,
-        title: serverBook?.title || metadata.title || xhtmlUploadBasename(selectedFile.name),
+        title: serverBook?.title || metadata.title || epubUploadBasename(selectedFile.name),
         author: serverBook?.author || metadata.author || 'Unknown',
         language: serverBook?.language || metadata.language || 'ko',
         coverImgUrl: serverBook?.coverImgUrl || serverBook?.coverImage || serverBook?.coverUrl || '',
         coverImage: serverBook?.coverImgUrl || serverBook?.coverImage || serverBook?.coverUrl || '',
         description: serverBook?.description || '',
-        favorite: !!serverBook?.favorite,
+        favorite: !!(serverBook?.isFavorite ?? serverBook?.favorite),
         isLocalOnly: false,
         // 서버에서 가져온 manifest 정보 포함
         ...(manifestData && {
@@ -205,6 +208,9 @@ const FileUpload = ({ onUploadSuccess, onClose }) => {
           chapters: manifestData.chapters,
           characters: manifestData.characters,
           progressMetadata: manifestData.progressMetadata,
+          ...(manifestData.readerArtifacts
+            ? { readerArtifacts: manifestData.readerArtifacts }
+            : {}),
         }),
       };
 
@@ -244,7 +250,7 @@ const FileUpload = ({ onUploadSuccess, onClose }) => {
       // 6. 서버 책 목록 갱신 및 뷰어로 이동
       // onUploadSuccess가 addBook을 호출하여 서버 책 목록을 갱신하고,
       // useBooks에서 서버 책만 표시하므로 자동으로 library에 표시됨
-      // 뷰어는 combined XHTML, IndexedDB는 로컬 백업용
+      // 뷰어는 EPUB, IndexedDB는 로컬 백업용
       onUploadSuccess(book);
       onClose();
     } catch (error) {
@@ -390,7 +396,7 @@ const FileUpload = ({ onUploadSuccess, onClose }) => {
           marginBottom: '8px',
           color: '#333'
         }}>
-          {dragActive ? '파일을 여기에 놓으세요' : 'XHTML/HTML 파일 선택'}
+          {dragActive ? '파일을 여기에 놓으세요' : 'EPUB 파일 선택'}
         </p>
         <p style={{ 
           fontSize: '14px', 
@@ -400,7 +406,7 @@ const FileUpload = ({ onUploadSuccess, onClose }) => {
         }}>
           파일을 드래그하거나 클릭해서 업로드하세요<br/>
           <small style={{ fontSize: '12px', color: '#999' }}>
-            최대 {Math.round(FILE_CONSTRAINTS.MAX_SIZE / (1024 * 1024))}MB, .xhtml · .html · .htm
+            최대 {Math.round(FILE_CONSTRAINTS.MAX_SIZE / (1024 * 1024))}MB, .epub
           </small>
         </p>
       </div>
@@ -422,7 +428,7 @@ const FileUpload = ({ onUploadSuccess, onClose }) => {
         <div style={{ fontSize: '16px', fontWeight: 500 }}>{selectedFile?.name}</div>
         {extractingMetadata && (
           <div style={{ fontSize: '12px', color: '#5C6F5C', marginTop: '8px' }}>
-            📖 XHTML용 메타데이터 추출 중...
+            📖 EPUB 메타데이터 추출 중...
           </div>
         )}
       </div>

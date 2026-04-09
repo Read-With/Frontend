@@ -7,6 +7,15 @@ const normalizeBookId = (bookId) => {
   return Number.isFinite(normalized) ? normalized : null;
 };
 
+/** v2 API 북마크 DTO → UI 호환(rangeBookmark 등) */
+const normalizeBookmarkDto = (b) => {
+  if (!b || typeof b !== 'object') return b;
+  return {
+    ...b,
+    rangeBookmark: !!(b.isRangeBookmark ?? b.rangeBookmark),
+  };
+};
+
 const BOOKMARK_SORT = new Set(['time_desc', 'time_asc']);
 
 export const getBookmarks = async (bookId, sort = 'time_desc') => {
@@ -20,6 +29,9 @@ export const getBookmarks = async (bookId, sort = 'time_desc') => {
     const sortParam = BOOKMARK_SORT.has(sort) ? sort : 'time_desc';
     queryParams.append('sort', sortParam);
     const data = await authenticatedRequest(`/v2/bookmarks?${queryParams.toString()}`);
+    if (data?.isSuccess && Array.isArray(data.result)) {
+      data.result = data.result.map(normalizeBookmarkDto);
+    }
     return data;
   } catch (error) {
     console.error('북마크 목록 조회 실패:', error);
@@ -61,6 +73,9 @@ export const createBookmark = async (bookmarkData) => {
       method: 'POST',
       body: JSON.stringify(dataToSend),
     });
+    if (data?.isSuccess && data.result) {
+      data.result = normalizeBookmarkDto(data.result);
+    }
     return data;
   } catch (error) {
     console.error('북마크 생성 실패:', error);
@@ -81,6 +96,9 @@ export const updateBookmark = async (bookmarkId, updateData) => {
       method: 'PATCH',
       body: JSON.stringify(body),
     });
+    if (data?.isSuccess && data.result) {
+      data.result = normalizeBookmarkDto(data.result);
+    }
     return data;
   } catch (error) {
     console.error('북마크 수정 실패:', error);

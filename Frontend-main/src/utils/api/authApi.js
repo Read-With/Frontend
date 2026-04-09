@@ -9,43 +9,53 @@ import {
 
 const API_BASE_URL = getApiBaseUrl();
 
+function decodeJwtPayload(token) {
+  if (!token || typeof token !== 'string') return null;
+  const segment = token.split('.')[1];
+  if (!segment) return null;
+  try {
+    const base64 = segment.replace(/-/g, '+').replace(/_/g, '/');
+    const pad = (4 - (base64.length % 4)) % 4;
+    const padded = base64 + '='.repeat(pad);
+    return JSON.parse(atob(padded));
+  } catch {
+    return null;
+  }
+}
+
 export const isTokenValid = (token) => {
   if (!token) return false;
-  
-  try {
-    const payload = JSON.parse(atob(token.split('.')[1]));
-    const currentTime = Math.floor(Date.now() / 1000);
-    
-    if (payload.exp && payload.exp < currentTime) {
-      console.warn('⚠️ 토큰이 만료되었습니다:', {
-        exp: payload.exp,
-        currentTime,
-        expired: payload.exp < currentTime
-      });
-      return false;
-    }
-    
-    return true;
-  } catch (error) {
-    console.warn('⚠️ 토큰 파싱 실패:', error);
+
+  const payload = decodeJwtPayload(token);
+  if (!payload) {
+    console.warn('⚠️ 토큰 파싱 실패');
     return false;
   }
+
+  const currentTime = Math.floor(Date.now() / 1000);
+
+  if (payload.exp && payload.exp < currentTime) {
+    console.warn('⚠️ 토큰이 만료되었습니다:', {
+      exp: payload.exp,
+      currentTime,
+      expired: payload.exp < currentTime,
+    });
+    return false;
+  }
+
+  return true;
 };
 
 // 토큰 만료까지 남은 시간 확인 (초 단위)
 export const getTokenExpirationTime = (token) => {
   if (!token) return null;
-  
-  try {
-    const payload = JSON.parse(atob(token.split('.')[1]));
-    if (payload.exp) {
-      const currentTime = Math.floor(Date.now() / 1000);
-      return payload.exp - currentTime;
-    }
-    return null;
-  } catch (_error) {
-    return null;
+
+  const payload = decodeJwtPayload(token);
+  if (payload?.exp) {
+    const currentTime = Math.floor(Date.now() / 1000);
+    return payload.exp - currentTime;
   }
+  return null;
 };
 
 // 토큰이 곧 만료될 예정인지 확인 (기본 5분 전)
@@ -182,6 +192,7 @@ export const refreshToken = async () => {
         'Accept': 'application/json',
         'Refresh-Token': refreshTokenValue,
       },
+      credentials: 'include',
     });
     
     if (!response.ok) {
@@ -227,7 +238,11 @@ let sessionBootstrapPromise = null;
 
 /** 페이지 로드 직후 메모리에 액세스 토큰이 없을 때, 리프레시 토큰으로 한 번 채운다. */
 export async function ensureSessionAccessToken() {
-  if (getStoredAccessToken()) return;
+  const existing = getStoredAccessToken();
+  if (existing && isTokenValid(existing)) return;
+  if (existing && !isTokenValid(existing)) {
+    setStoredAccessToken(null);
+  }
   if (!getStoredRefreshToken()) return;
   if (!sessionBootstrapPromise) {
     sessionBootstrapPromise = (async () => {

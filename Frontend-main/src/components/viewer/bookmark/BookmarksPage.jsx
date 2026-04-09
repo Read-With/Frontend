@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useBookmarks } from '../../../hooks/bookmarks/useBookmarks';
 import { useBookmarkSort } from '../../../hooks/bookmarks/useBookmarkSort';
 import {
@@ -11,6 +11,7 @@ import {
   formatAbsoluteTime,
   parseBookmarkLocation,
 } from '../../../utils/bookmarks/bookmarkUtils';
+import { userViewerPath } from '../../../utils/navigation/viewerPaths';
 
 const sameBookmarkId = (a, b) => String(a) === String(b);
 
@@ -63,11 +64,12 @@ const serializeMemoEntries = (entries) => {
 const BookmarksPage = () => {
   const { filename } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const cleanFilename = filename ? filename.replace(/^\//, '') : null;
   const viewerPath = useMemo(() => {
-    if (cleanFilename) return `/viewer/${cleanFilename}`;
-    if (filename) return `/viewer/${filename.replace(/^\//, '')}`;
-    return '/viewer';
+    if (cleanFilename) return userViewerPath(cleanFilename);
+    if (filename) return userViewerPath(filename.replace(/^\//, ''));
+    return '/mypage';
   }, [cleanFilename, filename]);
   const [newMemo, setNewMemo] = useState({});
   const [editingMemo, setEditingMemo] = useState({ bookmarkId: null, entryIndex: null, text: '' });
@@ -617,7 +619,7 @@ const BookmarksPage = () => {
               boxShadow: '0 2px 8px rgba(108, 142, 255, 0.2)',
               transition: 'all 0.2s ease',
             }}
-            onClick={() => navigate(viewerPath)}
+            onClick={() => navigate(viewerPath, { state: location.state })}
           >
             뷰어로 돌아가기
           </button>

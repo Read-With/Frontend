@@ -1,9 +1,10 @@
 /**
- * 액세스 토큰: 메모리만 사용 — localStorage에 남지 않아 동일 출처 XSS가 저장소만 훑을 때 유출이 줄어듦.
- * 리프레시 토큰: localStorage (멀티 탭·재방문 유지). 완전한 XSS 방어는 httpOnly·Secure 쿠키 세션이 필요하다.
+ * 액세스 토큰: 메모리 + sessionStorage (같은 탭에서 새로고침 시 복원). localStorage에는 두지 않음.
+ * 리프레시 토큰: localStorage (멀티 탭·재방문). 완전한 XSS 방어는 httpOnly·Secure 쿠키 세션이 필요하다.
  */
 
 const KEY_ACCESS = 'accessToken';
+const KEY_SESSION_ACCESS = 'readwith_session_access';
 const KEY_REFRESH = 'refreshToken';
 const KEY_GOOGLE_USER = 'google_user';
 
@@ -26,7 +27,17 @@ function migrateLegacyAccessFromLocalStorage() {
 
 export function getStoredAccessToken() {
   migrateLegacyAccessFromLocalStorage();
-  return memoryAccessToken;
+  if (memoryAccessToken) return memoryAccessToken;
+  try {
+    const fromSs = sessionStorage.getItem(KEY_SESSION_ACCESS);
+    if (fromSs) {
+      memoryAccessToken = fromSs;
+      return fromSs;
+    }
+  } catch {
+    /* ignore */
+  }
+  return null;
 }
 
 export function setStoredAccessToken(token) {
@@ -35,6 +46,7 @@ export function setStoredAccessToken(token) {
     memoryAccessToken = null;
     try {
       localStorage.removeItem(KEY_ACCESS);
+      sessionStorage.removeItem(KEY_SESSION_ACCESS);
     } catch {
       /* ignore */
     }
@@ -43,6 +55,7 @@ export function setStoredAccessToken(token) {
   memoryAccessToken = token;
   try {
     localStorage.removeItem(KEY_ACCESS);
+    sessionStorage.setItem(KEY_SESSION_ACCESS, token);
   } catch {
     /* ignore */
   }
@@ -103,6 +116,7 @@ export function clearAuthTokenStorage() {
     localStorage.removeItem(KEY_ACCESS);
     localStorage.removeItem(KEY_REFRESH);
     localStorage.removeItem(KEY_GOOGLE_USER);
+    sessionStorage.removeItem(KEY_SESSION_ACCESS);
   } catch {
     console.error('localStorage 접근 실패');
   }

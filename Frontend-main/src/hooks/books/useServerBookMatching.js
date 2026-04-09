@@ -1,18 +1,18 @@
 import { useState, useEffect, useRef } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { normalizeTitle } from '../../utils/common/stringUtils';
 import { errorUtils } from '../../utils/viewer/viewerUtils';
 
 /**
  * 서버 책 매칭 훅
- * 로컬에서 열린 책이 서버에 존재하는지 확인하고, 매칭되면 서버 bookId로 URL을 업데이트합니다.
- * 
- * 로컬 XHTML/HTML 원본은 IndexedDB에만 저장, 서버는 메타데이터만 저장
- * bookId로 매칭, 뷰어는 combined XHTML
- * 
+ * 동일 제목+저자 책이 여러 개면 최소 bookId로 리다이렉트합니다.
+ *
  * @param {string} bookId - 현재 URL의 bookId
  * @returns {Object} { serverBook, loadingServerBook, matchedServerBook }
  */
+const normalizeAuthor = (author) => (author || '').toLowerCase().trim().replace(/\s+/g, ' ');
+const serverBookFetchState = new Map();
+
 export function useServerBookMatching(bookId, options = {}) {
   const { skipBookIdRedirectRef } = options;
   const location = useLocation();
@@ -23,7 +23,6 @@ export function useServerBookMatching(bookId, options = {}) {
   const [matchedServerBook, setMatchedServerBook] = useState(null);
   
   const matchedServerBookRef = useRef(null);
-  const prevNormalizedTitleRef = useRef(null);
   
   // matchedServerBook을 ref로 추적하여 의존성 문제 방지
   useEffect(() => {
@@ -33,16 +32,19 @@ export function useServerBookMatching(bookId, options = {}) {
   // 서버에서 책 정보 가져오기 (URL 직접 접근 시)
   useEffect(() => {
     const fetchServerBook = async () => {
-      if (location.state?.book) {
-        return;
-      }
-      
       const numericBookId = parseInt(bookId, 10);
       if (isNaN(numericBookId)) {
         return;
       }
+      if (serverBook?.id === numericBookId) {
+        return;
+      }
+      if (serverBookFetchState.get(numericBookId) === 'inflight') {
+        return;
+      }
       
       setLoadingServerBook(true);
+      serverBookFetchState.set(numericBookId, 'inflight');
       try {
         const { getBook } = await import('../../utils/api/booksApi');
         const response = await getBook(numericBookId);
@@ -50,8 +52,12 @@ export function useServerBookMatching(bookId, options = {}) {
         if (response && response.isSuccess && response.result) {
           const bookData = response.result;
           setServerBook(bookData);
+          serverBookFetchState.set(numericBookId, 'done');
+        } else {
+          serverBookFetchState.delete(numericBookId);
         }
       } catch (error) {
+        serverBookFetchState.delete(numericBookId);
         errorUtils.logError('fetchServerBook', error, { bookId, numericBookId });
       } finally {
         setLoadingServerBook(false);
@@ -61,119 +67,86 @@ export function useServerBookMatching(bookId, options = {}) {
     fetchServerBook();
   }, [bookId, location.state?.book]);
 
-  // 로컬 책과 서버 책 매칭
+  // 제목+저자 기준 최소 bookId를 계산
   useEffect(() => {
-    const stateBook = location.state?.book;
-    if (!stateBook || typeof stateBook.id === 'number') {
-      if (matchedServerBookRef.current) {
-        setMatchedServerBook(null);
-      }
-      prevNormalizedTitleRef.current = null;
+    // 라이브러리에서 클릭한 책은 목록에서 이미 canonical 처리된 id를 신뢰
+    if (location.state?.fromLibrary === true) {
+      setMatchedServerBook(null);
       return;
     }
 
-    const normalizedTitle = normalizeTitle(stateBook.title);
-    if (!normalizedTitle) {
-      if (matchedServerBookRef.current) {
-        setMatchedServerBook(null);
-      }
-      prevNormalizedTitleRef.current = null;
+    const sourceBook = location.state?.book || serverBook;
+    if (!sourceBook?.title || !sourceBook?.author) {
+      setMatchedServerBook(null);
       return;
     }
 
-    // 이미 같은 제목으로 검색했으면 스킵
-    if (prevNormalizedTitleRef.current === normalizedTitle) {
-      const currentMatched = matchedServerBookRef.current;
-      if (
-        currentMatched &&
-        typeof currentMatched.id === 'number' &&
-        normalizeTitle(currentMatched.title) === normalizedTitle
-      ) {
-        return;
-      }
+    const titleKey = normalizeTitle(sourceBook.title);
+    const authorKey = normalizeAuthor(sourceBook.author);
+    if (!titleKey || !authorKey) {
+      setMatchedServerBook(null);
+      return;
     }
 
-    prevNormalizedTitleRef.current = normalizedTitle;
     let cancelled = false;
-
-    const fetchMatchingServerBook = async () => {
+    const resolveCanonical = async () => {
       try {
         const { getBooks } = await import('../../utils/api/booksApi');
-        const response = await getBooks({ q: stateBook.title });
+        const res = await getBooks({});
+        if (cancelled || !res?.isSuccess || !Array.isArray(res.result)) return;
 
-        if (cancelled) {
-          return;
-        }
+        const candidates = res.result
+          .filter((item) => {
+            const id = Number(item?.id);
+            return (
+              Number.isFinite(id) &&
+              id > 0 &&
+              normalizeTitle(item?.title || '') === titleKey &&
+              normalizeAuthor(item?.author || '') === authorKey
+            );
+          })
+          .sort((a, b) => Number(a.id) - Number(b.id));
 
-        if (response?.isSuccess && Array.isArray(response.result)) {
-          const matched = response.result.filter(
-            (item) => normalizeTitle(item.title) === normalizedTitle && typeof item.id === 'number'
-          );
-          
-          if (matched.length > 0) {
-            const sortedMatched = matched.sort((a, b) => {
-              const aId = Number(a?.id) || Number.MAX_SAFE_INTEGER;
-              const bId = Number(b?.id) || Number.MAX_SAFE_INTEGER;
-              return aId - bId;
-            });
-            
-            setMatchedServerBook(sortedMatched[0]);
-            return;
-          }
-        }
-
-        setMatchedServerBook(null);
-      } catch (_error) {
-        if (!cancelled) {
+        if (candidates.length > 0) {
+          setMatchedServerBook(candidates[0]);
+        } else {
           setMatchedServerBook(null);
         }
+      } catch {
+        if (!cancelled) setMatchedServerBook(null);
       }
     };
 
-    fetchMatchingServerBook();
+    resolveCanonical();
+    return () => { cancelled = true; };
+  }, [bookId, location.state?.book, location.state?.fromLibrary, serverBook]);
 
-    return () => {
-      cancelled = true;
-    };
-  }, [location.state?.book]);
-
-  // 매칭된 서버 책으로 URL 업데이트
+  // canonical bookId로 리다이렉트
   useEffect(() => {
-    if (skipBookIdRedirectRef?.current) {
-      return;
-    }
-    if (!location.pathname.includes('/viewer/')) {
-      return;
-    }
-    if (!matchedServerBook || typeof matchedServerBook.id !== 'number') {
-      return;
-    }
+    if (skipBookIdRedirectRef?.current) return;
+    if (!location.pathname.includes('/viewer/')) return;
+    if (!matchedServerBook || typeof matchedServerBook.id !== 'number') return;
 
-    const numericId = matchedServerBook.id;
-    if (`${numericId}` === bookId) {
-      return;
-    }
+    const canonicalId = String(matchedServerBook.id);
+    if (String(bookId) === canonicalId) return;
 
-    const indexedDbKey = String(numericId);
-
-    navigate(`/user/viewer/${numericId}${location.search || ''}`, {
+    navigate(`/user/viewer/${canonicalId}`, {
       replace: true,
       state: {
         ...location.state,
         book: {
           ...matchedServerBook,
-          filename: String(numericId),
-          _indexedDbId: indexedDbKey,
-          _bookId: numericId,
+          filename: canonicalId,
+          _bookId: matchedServerBook.id,
           _needsLoad: true,
           xhtmlPath: undefined,
           filePath: undefined,
           s3Path: undefined,
-          fileUrl: undefined
-        }
-      }
+          fileUrl: undefined,
+        },
+      },
     });
-  }, [matchedServerBook, bookId, location.pathname, location.search, location.state, navigate, skipBookIdRedirectRef]);
+  }, [matchedServerBook, bookId, location.pathname, location.state, navigate, skipBookIdRedirectRef]);
 
   return {
     serverBook,

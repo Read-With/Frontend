@@ -1,6 +1,6 @@
 import { setManifestData, isValidEvent, getManifestFromCache } from '../common/cache/manifestCache';
 import { setAllProgress, setProgressToCache, removeProgressFromCache, getProgressFromCache, getAllProgressFromCache } from '../common/cache/progressCache';
-import { progressPayloadFromData } from '../common/locatorUtils';
+import { progressPayloadFromData, toLocator } from '../common/locatorUtils';
 import { getApiBaseUrl, clearAuthData, getPostLoginHomeUrl } from '../common/authUtils';
 import { getStoredAccessToken } from '../security/authTokenStorage';
 import { isTokenValid, refreshToken, ensureSessionAccessToken } from './authApi';
@@ -209,19 +209,32 @@ const apiRequest = async (url, options = {}, retryCount = 0) => {
   return data;
 };
 
-// 도서 목록 조회
+/** GET/POST /api/v2/books 응답 DTO → UI용 favorite 필드 */
+export const normalizeV2Book = (book) => {
+  if (!book || typeof book !== 'object') return book;
+  return {
+    ...book,
+    favorite: !!(book.isFavorite ?? book.favorite),
+  };
+};
+
+// 도서 목록 조회 (GET /api/v2/books)
 export const getBooks = async (params = {}) => {
   const queryParams = new URLSearchParams();
-  
+
   if (params.q) queryParams.append('q', params.q);
   if (params.language) queryParams.append('language', params.language);
   if (params.sort) queryParams.append('sort', params.sort);
-  if (params.favorite !== undefined) queryParams.append('favorite', params.favorite);
-  
+  if (params.favorite !== undefined) queryParams.append('favorite', String(params.favorite));
+
   const queryString = queryParams.toString();
-  const url = `/api/books${queryString ? `?${queryString}` : ''}`;
-  
-  return apiRequest(url);
+  const url = `/api/v2/books${queryString ? `?${queryString}` : ''}`;
+
+  const data = await apiRequest(url);
+  if (data?.isSuccess && Array.isArray(data.result)) {
+    data.result = data.result.map(normalizeV2Book);
+  }
+  return data;
 };
 
 export const uploadBook = async (formData) => {
@@ -231,22 +244,30 @@ export const uploadBook = async (formData) => {
     console.error('❌ 업로드 실패: 토큰이 없습니다.');
     throw new Error('인증이 필요합니다. 로그인해주세요.');
   }
-  
+
   const tokenValid = isTokenValid(token);
   if (!tokenValid) {
     console.error('❌ 업로드 실패: 토큰이 만료되었습니다.');
     clearAuthData();
     throw new Error('인증이 만료되었습니다. 다시 로그인해주세요.');
   }
-  
-  return apiRequest('/api/books', {
+
+  const data = await apiRequest('/api/v2/books', {
     method: 'POST',
     body: formData,
   });
+  if (data?.isSuccess && data.result) {
+    data.result = normalizeV2Book(data.result);
+  }
+  return data;
 };
 
 export const getBook = async (bookId) => {
-  return apiRequest(`/api/books/${bookId}`);
+  const data = await apiRequest(`/api/v2/books/${bookId}`);
+  if (data?.isSuccess && data.result) {
+    data.result = normalizeV2Book(data.result);
+  }
+  return data;
 };
 
 export const deleteBook = async (bookId) => {
@@ -257,7 +278,10 @@ export const deleteBook = async (bookId) => {
 
 export const getFavorites = async () => {
   try {
-    const response = await apiRequest('/api/favorites');
+    const response = await apiRequest('/api/v2/favorites');
+    if (response?.isSuccess && Array.isArray(response.result)) {
+      response.result = response.result.map(normalizeV2Book);
+    }
     return response;
   } catch (error) {
     console.error('즐겨찾기 목록 조회 실패:', error);
@@ -300,15 +324,18 @@ export const saveProgress = async (progressData) => {
   try {
     const payload = progressPayloadFromData(progressData);
     if (!payload) {
-      throw new Error('bookId와 locator는 필수입니다.');
+      throw new Error('bookId와 읽기 위치(startLocator/locator)는 필수입니다.');
     }
     const response = await apiRequest('/api/v2/progress', {
       method: 'POST',
       body: JSON.stringify(payload),
     });
-    if (response?.isSuccess) {
-      setProgressToCache(response?.result ?? payload);
+    if (!response?.isSuccess) {
+      const error = new Error(response?.message || '독서 진도 저장 실패');
+      error.status = response?.status;
+      throw error;
     }
+    setProgressToCache(response?.result ?? payload);
     return response;
   } catch (error) {
     if (error.status === 403 || error.message?.includes('403') || error.message?.includes('권한')) {
@@ -348,8 +375,7 @@ export const getBookProgress = async (bookId) => {
   try {
     const response = await apiRequest(`/api/v2/progress/${bookId}`);
     if (response?.isSuccess && response.result) {
-      const toCache = progressPayloadFromData(response.result) ? response.result : null;
-      if (toCache) setProgressToCache(toCache);
+      setProgressToCache(response.result);
     }
     return response;
   } catch (error) {
@@ -444,48 +470,30 @@ export const getBookManifest = async (bookId, { forceRefresh = false } = {}) => 
   }
 };
 
-export const getBookMeta = async (bookId) => {
+/**
+ * GET /api/v2/graph/macro
+ * @param uptoChapter legacy 누적 챕터(locator 없을 때)
+ * @param uptoLocator { chapterIndex, blockIndex?, offset? } — 있으면 chapterIndex/blockIndex/offset만 전송
+ */
+export const getMacroGraph = async (bookId, uptoChapter, uptoLocator = null) => {
   if (!bookId) {
-    return {
-      isSuccess: false,
-      code: 'INVALID_INPUT',
-      message: 'bookId는 필수입니다.',
-      result: null
-    };
+    throw new Error('bookId는 필수 매개변수입니다.');
   }
-  try {
-    const response = await apiRequest(`/api/books/${bookId}/meta`);
-    if (response?.isSuccess && response?.result) {
-      return response;
-    }
-    return {
-      isSuccess: false,
-      code: response?.code || 'ERROR',
-      message: response?.message || 'meta 조회 실패',
-      result: null
-    };
-  } catch (error) {
-    if (error.status === 404 || error.message?.includes('404')) {
-      return {
-        isSuccess: false,
-        code: 'NOT_FOUND',
-        message: 'meta를 찾을 수 없습니다',
-        result: null
-      };
-    }
-    console.error('meta 조회 실패:', error);
-    throw error;
-  }
-};
 
-export const getMacroGraph = async (bookId, uptoChapter) => {
-  if (!bookId || uptoChapter === undefined || uptoChapter === null) {
-    throw new Error('bookId와 uptoChapter는 필수 매개변수입니다.');
+  const loc = toLocator(uptoLocator);
+  if (!loc && (uptoChapter === undefined || uptoChapter === null)) {
+    throw new Error('uptoChapter 또는 locator(chapterIndex, blockIndex, offset)는 필수입니다.');
   }
 
   const queryParams = new URLSearchParams();
   queryParams.append('bookId', bookId);
-  queryParams.append('uptoChapter', uptoChapter);
+  if (loc) {
+    queryParams.append('chapterIndex', String(loc.chapterIndex));
+    queryParams.append('blockIndex', String(loc.blockIndex));
+    queryParams.append('offset', String(loc.offset));
+  } else {
+    queryParams.append('uptoChapter', String(uptoChapter));
+  }
   
   try {
     const response = await apiRequest(`/api/v2/graph/macro?${queryParams.toString()}`);
@@ -515,30 +523,46 @@ export const getMacroGraph = async (bookId, uptoChapter) => {
   }
 };
 
-export const getFineGraph = async (bookId, chapterIdx, eventIdx) => {
-  if (!bookId || chapterIdx === undefined || chapterIdx === null || eventIdx === undefined || eventIdx === null) {
-    throw new Error('bookId, chapterIdx, eventIdx는 필수 매개변수입니다.');
+/**
+ * GET /api/v2/graph/fine
+ * @param atLocator { chapterIndex, blockIndex?, offset? } — 있으면 chapterIdx/eventIdx 대신 전송
+ */
+export const getFineGraph = async (bookId, chapterIdx, eventIdx, atLocator = null) => {
+  if (!bookId) {
+    throw new Error('bookId는 필수 매개변수입니다.');
   }
 
-  if (eventIdx < 1) {
-    return createApiResponse(false, 'INVALID_EVENT', '이벤트 인덱스는 1 이상이어야 합니다.', {
-      characters: [],
-      relations: [],
-      event: null
-    }, 'graph-fine');
-  }
-  if (!isValidEvent(bookId, chapterIdx, eventIdx)) {
-    return createApiResponse(false, 'INVALID_EVENT', '해당 이벤트에 대한 데이터가 없습니다.', {
-      characters: [],
-      relations: [],
-      event: null
-    }, 'graph-fine');
+  const loc = toLocator(atLocator);
+  if (!loc) {
+    if (chapterIdx === undefined || chapterIdx === null || eventIdx === undefined || eventIdx === null) {
+      throw new Error('chapterIdx·eventIdx 또는 locator(chapterIndex, blockIndex, offset)는 필수입니다.');
+    }
+    if (eventIdx < 1) {
+      return createApiResponse(false, 'INVALID_EVENT', '이벤트 인덱스는 1 이상이어야 합니다.', {
+        characters: [],
+        relations: [],
+        event: null
+      }, 'graph-fine');
+    }
+    if (!isValidEvent(bookId, chapterIdx, eventIdx)) {
+      return createApiResponse(false, 'INVALID_EVENT', '해당 이벤트에 대한 데이터가 없습니다.', {
+        characters: [],
+        relations: [],
+        event: null
+      }, 'graph-fine');
+    }
   }
 
   const queryParams = new URLSearchParams();
   queryParams.append('bookId', bookId);
-  queryParams.append('chapterIdx', chapterIdx);
-  queryParams.append('eventIdx', eventIdx);
+  if (loc) {
+    queryParams.append('chapterIndex', String(loc.chapterIndex));
+    queryParams.append('blockIndex', String(loc.blockIndex));
+    queryParams.append('offset', String(loc.offset));
+  } else {
+    queryParams.append('chapterIdx', String(chapterIdx));
+    queryParams.append('eventIdx', String(eventIdx));
+  }
   
   try {
     const response = await apiRequest(`/api/v2/graph/fine?${queryParams.toString()}`);
@@ -569,6 +593,7 @@ export const getFineGraph = async (bookId, chapterIdx, eventIdx) => {
 };
 
 export default {
+  normalizeV2Book,
   getBooks,
   uploadBook,
   getBook,
@@ -579,7 +604,6 @@ export default {
   getBookProgress,
   deleteBookProgress,
   getBookManifest,
-  getBookMeta,
   getMacroGraph,
   getFineGraph,
 };

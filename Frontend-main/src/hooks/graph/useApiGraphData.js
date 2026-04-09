@@ -1,5 +1,6 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { getMacroGraph, getFineGraph, getBookManifest } from '../../utils/api/api.js';
+import { readingLocatorFromGraphEvent } from '../../utils/common/locatorUtils';
 import { getManifestFromCache } from '../../utils/common/cache/manifestCache';
 import { getGraphBookCache } from '../../utils/common/cache/chapterEventCache';
 import { resolveMaxChapter } from '../../utils/graph/maxChapterResolver';
@@ -20,6 +21,11 @@ export function useApiGraphData(serverBookId, currentChapter, currentEvent, isAp
   const isMacroGraphLoadingRef = useRef(false);
   const { handleError } = useErrorHandler('API Graph Data');
   const [apiError, setApiError] = useState(null);
+
+  const readingLoc = useMemo(
+    () => readingLocatorFromGraphEvent(currentEvent),
+    [currentEvent],
+  );
 
   const loadManifestData = useCallback(async () => {
     if (!isApiBook || !serverBookId) {
@@ -95,13 +101,15 @@ export function useApiGraphData(serverBookId, currentChapter, currentEvent, isAp
     setApiFineLoading(true);
 
     try {
-      const cacheKey = `graph_macro_${targetBookId}_${currentChapter}`;
+      const cacheKey = readingLoc
+        ? `graph_macro_${targetBookId}_L${readingLoc.chapterIndex}_${readingLoc.blockIndex}_${readingLoc.offset}`
+        : `graph_macro_${targetBookId}_${currentChapter}`;
       await loadGraphDataWithCache({
         bookId: targetBookId,
         chapter: currentChapter,
         eventIdx: null,
         cacheKey,
-        apiCall: () => getMacroGraph(targetBookId, currentChapter),
+        apiCall: () => getMacroGraph(targetBookId, currentChapter, readingLoc || undefined),
         onSuccess: (data) => {
           setApiMacroData(data);
           setApiFineData(data);
@@ -131,7 +139,7 @@ export function useApiGraphData(serverBookId, currentChapter, currentEvent, isAp
       isMacroGraphLoadingRef.current = false;
       setApiFineLoading(false);
     }
-  }, [isApiBook, serverBookId, currentChapter, handleError]);
+  }, [isApiBook, serverBookId, currentChapter, readingLoc, handleError]);
 
   const loadFineGraphData = useCallback(async () => {
     if (!isApiBook || !serverBookId || !apiMacroData) {
@@ -164,13 +172,15 @@ export function useApiGraphData(serverBookId, currentChapter, currentEvent, isAp
     setApiFineLoading(true);
 
     try {
-      const cacheKey = `graph_fine_${targetBookId}_${currentChapter}_${eventIdx}`;
+      const cacheKey = readingLoc
+        ? `graph_fine_${targetBookId}_L${readingLoc.chapterIndex}_${readingLoc.blockIndex}_${readingLoc.offset}`
+        : `graph_fine_${targetBookId}_${currentChapter}_${eventIdx}`;
       await loadGraphDataWithCache({
         bookId: targetBookId,
         chapter: currentChapter,
         eventIdx,
         cacheKey,
-        apiCall: () => getFineGraph(targetBookId, currentChapter, eventIdx),
+        apiCall: () => getFineGraph(targetBookId, currentChapter, eventIdx, readingLoc || undefined),
         macroData: apiMacroData,
         onSuccess: (data) => {
           setApiFineData(data);
@@ -198,7 +208,7 @@ export function useApiGraphData(serverBookId, currentChapter, currentEvent, isAp
     } finally {
       setApiFineLoading(false);
     }
-  }, [isApiBook, serverBookId, currentChapter, currentEvent, apiMacroData, handleError]);
+  }, [isApiBook, serverBookId, currentChapter, currentEvent, readingLoc, apiMacroData, handleError]);
 
   useEffect(() => {
     loadManifestData();

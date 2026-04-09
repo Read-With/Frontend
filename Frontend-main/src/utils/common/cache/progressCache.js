@@ -32,20 +32,44 @@ const saveProgressCacheToStorage = (progressMap) => {
 const toStoredProgress = (item) => {
   if (!item || item.bookId == null) return null;
   const locator = resolveProgressLocator(item);
-  if (!locator) return null;
-  return { bookId: item.bookId, locator };
+  if (locator) return { bookId: item.bookId, locator };
+  if (Number.isFinite(Number(item.startTxtOffset))) {
+    return {
+      bookId: item.bookId,
+      startTxtOffset: Number(item.startTxtOffset),
+      endTxtOffset: Number(item.endTxtOffset) || 0,
+      locatorVersion: item.locatorVersion,
+      updatedAt: item.updatedAt,
+    };
+  }
+  return null;
 };
 
 const fromStoredProgress = (stored) => {
   if (!stored || stored.bookId == null) return null;
   const locator = resolveProgressLocator(stored);
-  const anchor = locator ? { startLocator: locator, endLocator: locator } : undefined;
-  return {
-    bookId: stored.bookId,
-    ...(locator && { locator, startLocator: locator, endLocator: locator }),
-    anchor,
-    chapterIdx: locator?.chapterIndex ?? stored.chapterIdx,
-  };
+  if (locator) {
+    const anchor = { startLocator: locator, endLocator: locator };
+    return {
+      bookId: stored.bookId,
+      locator,
+      startLocator: locator,
+      endLocator: locator,
+      anchor,
+      chapterIdx: locator.chapterIndex ?? stored.chapterIdx,
+      updatedAt: stored.updatedAt,
+    };
+  }
+  if (Number.isFinite(Number(stored.startTxtOffset))) {
+    return {
+      bookId: stored.bookId,
+      startTxtOffset: stored.startTxtOffset,
+      endTxtOffset: stored.endTxtOffset,
+      locatorVersion: stored.locatorVersion,
+      updatedAt: stored.updatedAt,
+    };
+  }
+  return null;
 };
 
 export const setAllProgress = (progressList) => {
@@ -66,13 +90,28 @@ export const setAllProgress = (progressList) => {
 export const setProgressToCache = (progressData) => {
   if (!progressData || progressData.bookId == null) return;
   const payload = progressPayloadFromData(progressData);
-  if (!payload?.locator) return;
+  const locator = payload?.locator ?? resolveProgressLocator(progressData);
   const bookIdStr = String(progressData.bookId);
-  const progress = {
-    bookId: payload.bookId,
-    locator: payload.locator,
-    timestamp: Date.now(),
-  };
+  let progress;
+  if (locator) {
+    progress = {
+      bookId: progressData.bookId,
+      locator,
+      updatedAt: progressData.updatedAt,
+      timestamp: Date.now(),
+    };
+  } else if (Number.isFinite(Number(progressData.startTxtOffset))) {
+    progress = {
+      bookId: progressData.bookId,
+      startTxtOffset: Number(progressData.startTxtOffset),
+      endTxtOffset: Number(progressData.endTxtOffset) || 0,
+      locatorVersion: progressData.locatorVersion,
+      updatedAt: progressData.updatedAt,
+      timestamp: Date.now(),
+    };
+  } else {
+    return;
+  }
   setCacheItem('progressCache', bookIdStr, progress);
   const cached = getProgressCacheFromStorage() || {};
   cached[bookIdStr] = progress;

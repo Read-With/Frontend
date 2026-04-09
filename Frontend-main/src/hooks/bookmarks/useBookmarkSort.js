@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { getLocatorSortKey } from '../../utils/bookmarks/bookmarkUtils';
+import { getBookmarkPositionSortKey } from '../../utils/bookmarks/bookmarkUtils';
 
 export const useBookmarkSort = (bookmarks, sortOrder) => {
   return useMemo(() => {
@@ -7,8 +7,8 @@ export const useBookmarkSort = (bookmarks, sortOrder) => {
     const sorted = [...bookmarks];
     if (sortOrder === 'position') {
       return sorted.sort((a, b) => {
-        const keyA = getLocatorSortKey(a.startLocator) || '';
-        const keyB = getLocatorSortKey(b.startLocator) || '';
+        const keyA = getBookmarkPositionSortKey(a) || '';
+        const keyB = getBookmarkPositionSortKey(b) || '';
         return keyA.localeCompare(keyB);
       });
     }

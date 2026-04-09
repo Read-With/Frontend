@@ -4,7 +4,6 @@ import { useNavigate, useParams, useLocation } from "react-router-dom";
 import GraphTopBar from "./GraphTopBar";
 import ChapterSidebar from "./ChapterSidebar";
 import GraphInfoBar from "./GraphInfoBar";
-import EventControls from "./EventControls";
 import GraphCanvas from "./GraphCanvas";
 import ErrorToast from "../common/ErrorToast";
 import "./RelationGraph.css";
@@ -23,7 +22,6 @@ import { getFolderKeyFromFilename, getLastEventIndexForChapter } from '../../uti
 import {
   processTooltipData,
   calculateLastEventForChapter,
-  formatSearchParams,
   isSidebarElement,
   isDragEndEvent,
   sortElementsById,
@@ -32,6 +30,7 @@ import {
   determineFinalElements
 } from '../../utils/graph/graphUtils.js';
 import { eventUtils, graphDataTransformUtils, getServerBookId } from '../../utils/viewer/viewerUtils';
+import { userViewerPath } from '../../utils/navigation/viewerPaths';
 import useGraphInteractions from "../../hooks/graph/useGraphInteractions";
 import { useChapterPovSummaries } from '../../hooks/viewer/useChapterPovSummaries';
 
@@ -73,31 +72,27 @@ function RelationGraphWrapper() {
   const location = useLocation();
   const book = location.state?.book;
 
-  const initialChapter = useMemo(() => {
-    if (typeof window === 'undefined') {
-      return 1;
-    }
-    try {
-      const searchParams = new URLSearchParams(location.search || '');
-      const chapterParam = Number(searchParams.get('chapter'));
-      if (Number.isFinite(chapterParam) && chapterParam >= 1) {
-        return Math.floor(chapterParam);
-      }
-    } catch (_error) {
-    }
-    return 1;
-  }, [location.search]);
-
   const isBookId = !isNaN(filename) && filename.length > 0;
   const bookId = isBookId ? parseInt(filename) : null;
+  const requestedChapterFromViewer = Number(location.state?.selectedChapter);
 
   const [currentChapter, setCurrentChapter] = useLocalStorageNumber(
     `lastGraphChapter_${filename}`,
-    initialChapter,
-    { forceInitialValue: true }
+    1,
+    { forceInitialValue: false }
   );
   const [currentEvent, setCurrentEvent] = useState(1);
   const [hasShownGraphOnce, setHasShownGraphOnce] = useState(false);
+
+  useEffect(() => {
+    if (!Number.isFinite(requestedChapterFromViewer) || requestedChapterFromViewer < 1) {
+      return;
+    }
+    if (requestedChapterFromViewer !== currentChapter) {
+      setCurrentChapter(requestedChapterFromViewer);
+      setCurrentEvent(1);
+    }
+  }, [requestedChapterFromViewer, currentChapter, setCurrentChapter]);
 
   const serverBookId = useMemo(() => {
     return getServerBookId(book) || bookId || null;
@@ -156,15 +151,13 @@ function RelationGraphWrapper() {
   const locationRef = useRef({
     state: location.state,
     pathname: location.pathname,
-    search: location.search,
   });
   useEffect(() => {
     locationRef.current = {
       state: location.state,
       pathname: location.pathname,
-      search: location.search,
     };
-  }, [location.state, location.pathname, location.search]);
+  }, [location.state, location.pathname]);
 
   const loaderBookKey = useMemo(() => {
     if (isApiBook && serverBookId) {
@@ -358,11 +351,6 @@ function RelationGraphWrapper() {
     filteredElements,
   });
 
-  const handleEventChange = useCallback((eventNum) => {
-    clearAll();
-    setCurrentEvent(eventNum);
-  }, [clearAll, setCurrentEvent]);
-
   const handleClearGraph = useCallback(() => {
     clearAll();
   }, [clearAll]);
@@ -471,25 +459,29 @@ function RelationGraphWrapper() {
   }, [setForceClose]);
 
   const handleBackToViewer = useCallback(() => {
-    const { state, pathname, search } = locationRef.current;
-    const retainedSearch = state?.viewerSearch || '';
-    const nextSearch = formatSearchParams(retainedSearch);
-
+    const { state, pathname } = locationRef.current;
     const nextState = {
       ...(state || {}),
-      from: state?.from || { pathname, search },
-      fromGraph: true,
+      from: state?.from ? { ...state.from, search: '' } : { pathname, search: '' },
     };
 
-    if (book || state?.book) {
-      nextState.book = book || state?.book;
+    const baseBook = book || state?.book;
+    const sid =
+      serverBookId != null && Number.isFinite(Number(serverBookId)) && Number(serverBookId) > 0
+        ? Number(serverBookId)
+        : null;
+    if (baseBook || sid) {
+      nextState.book = {
+        ...(baseBook || {}),
+        ...(sid ? { id: sid, _bookId: sid } : {}),
+      };
     }
 
-    navigate(`/user/viewer/${filename}${nextSearch}`, {
+    navigate(userViewerPath(filename), {
       state: nextState,
       replace: false,
     });
-  }, [navigate, filename, book]);
+  }, [navigate, filename, book, currentChapter, serverBookId]);
 
   const handleGlobalClick = useCallback((e) => {
     if (!activeTooltip || isSidebarClosing) return;
@@ -551,16 +543,6 @@ function RelationGraphWrapper() {
     Array.from({ length: effectiveMaxChapter }, (_, i) => i + 1),
     [effectiveMaxChapter]
   );
-
-  // 현재 챕터의 최대 이벤트 번호: EventControls 상한선에 사용
-  const maxEvent = useMemo(() => calculateLastEventForChapter({
-    isApiBook,
-    manifestChapters: manifestData?.chapters,
-    chapter: currentChapter,
-    filename,
-    getFolderKeyFromFilename,
-    getLastEventIndexForChapter,
-  }), [isApiBook, manifestData?.chapters, currentChapter, filename]);
 
   const isLoading = (isApiBook && (apiFineLoading || isGraphLoading)) || (!isApiBook && (loading || isGraphLoading));
 
@@ -657,14 +639,6 @@ function RelationGraphWrapper() {
           돌아가기
         </button>
       </div>
-
-      {isApiBook && (
-        <EventControls
-          currentEvent={currentEvent}
-          onEventChange={handleEventChange}
-          maxEvent={maxEvent}
-        />
-      )}
 
       <ChapterSidebar
         isSidebarOpen={isSidebarOpen}

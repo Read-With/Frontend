@@ -46,6 +46,13 @@ export const anchorToLocators = (anchor) => {
   };
 };
 
+/** GET /api/v2/graph/* — 이벤트의 anchor에서 읽기 위치 locator 추출 */
+export const readingLocatorFromGraphEvent = (currentEvent) => {
+  if (!currentEvent?.anchor) return null;
+  const { startLocator } = anchorToLocators(currentEvent.anchor);
+  return toLocator(startLocator);
+};
+
 /** 서버 v2 progress·캐시 공통: 단일 reading 위치(locator) 해석 */
 export const resolveProgressLocator = (data) => {
   if (!data || typeof data !== 'object') return null;
@@ -62,7 +69,11 @@ export const progressPayloadFromData = (data) => {
   if (!data?.bookId) return null;
   const locator = resolveProgressLocator(data);
   if (!locator) return null;
-  return { bookId: data.bookId, locator };
+  return {
+    bookId: data.bookId,
+    startLocator: locator,
+    locator,
+  };
 };
 
 /**

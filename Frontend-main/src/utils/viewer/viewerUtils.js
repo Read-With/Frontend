@@ -502,9 +502,30 @@ export const bookUtils = {
    * @returns {Object} 생성된 책 객체
    */
   createBookObject: ({ stateBook, matchedServerBook, serverBook, bookId, loadingServerBook }) => {
+    if (!stateBook && matchedServerBook && typeof matchedServerBook.id === 'number') {
+      const indexedDbKey =
+        bookId != null && String(bookId).trim() !== ''
+          ? String(bookId)
+          : String(matchedServerBook.id);
+
+      return {
+        ...matchedServerBook,
+        filename: String(matchedServerBook.id ?? bookId),
+        _indexedDbId: indexedDbKey,
+        _needsLoad: true,
+        _bookId: matchedServerBook.id,
+        xhtmlPath: undefined,
+        filePath: undefined,
+        s3Path: undefined,
+        fileUrl: undefined
+      };
+    }
+
     if (stateBook) {
       if (matchedServerBook && typeof matchedServerBook.id === 'number') {
-        const indexedDbKey = String(matchedServerBook.id);
+        const indexedDbKey = String(
+          stateBook._indexedDbId ?? stateBook.id ?? stateBook._bookId ?? matchedServerBook.id
+        );
 
         return {
           ...matchedServerBook,
@@ -512,6 +533,25 @@ export const bookUtils = {
           _indexedDbId: indexedDbKey,
           _needsLoad: true,
           _bookId: matchedServerBook.id,
+          xhtmlPath: undefined,
+          filePath: undefined,
+          s3Path: undefined,
+          fileUrl: undefined
+        };
+      }
+
+      if (serverBook && typeof serverBook.id === 'number') {
+        const indexedDbKey = String(
+          stateBook._indexedDbId ?? stateBook.id ?? stateBook._bookId ?? serverBook.id
+        );
+
+        return {
+          ...stateBook,
+          ...serverBook,
+          filename: String(serverBook.id ?? bookId),
+          _indexedDbId: indexedDbKey,
+          _needsLoad: true,
+          _bookId: serverBook.id,
           xhtmlPath: undefined,
           filePath: undefined,
           s3Path: undefined,
@@ -554,14 +594,15 @@ export const bookUtils = {
     
     const numericBookId = parseInt(bookId, 10);
     const indexedDbKey = !isNaN(numericBookId) ? String(numericBookId) : bookId;
+    const resolvedId = loadingServerBook ? null : (!isNaN(numericBookId) ? numericBookId : null);
     
     return {
       title: loadingServerBook ? '로딩 중...' : `Book ${bookId}`,
       filename: bookId,
-      id: !isNaN(numericBookId) ? numericBookId : null,
+      id: resolvedId,
       _needsLoad: true,
       _indexedDbId: indexedDbKey,
-      _bookId: !isNaN(numericBookId) ? numericBookId : bookId,
+      _bookId: resolvedId ?? bookId,
       xhtmlPath: undefined
     };
   }

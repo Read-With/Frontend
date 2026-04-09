@@ -1,9 +1,10 @@
-import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo } from 'react';
 import { useParams, useLocation, useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { useLocalStorage, useLocalStorageNumber } from '../common/useLocalStorage';
 import { useGraphDataLoader } from '../graph/useGraphDataLoader';
 import { useServerBookMatching } from '../books/useServerBookMatching';
+import { useBooksServerQuery } from '../books/useBooksServerQuery';
 import { useViewerUrlParams } from './useViewerUrlParams';
 import { flagsFromGraphMode } from './graphModeFlags';
 import { 
@@ -16,7 +17,10 @@ import {
 import { getFolderKeyFromFilename } from '../../utils/graph/graphData';
 import { useBookmarks } from '../bookmarks/useBookmarks';
 import { getBookManifest } from '../../utils/api/api';
-import { getMaxChapter } from '../../utils/common/cache/manifestCache';
+import { getManifestFromCache, getMaxChapter } from '../../utils/common/cache/manifestCache';
+import { getCachedReaderProgress } from '../../utils/common/cache/chapterEventCache';
+import { getProgressFromCache } from '../../utils/common/cache/progressCache';
+import { userViewerBookmarksPath } from '../../utils/navigation/viewerPaths';
 
 function runViewerPaging(viewerRef, direction) {
   const ref = viewerRef.current;
@@ -35,6 +39,22 @@ function runViewerPaging(viewerRef, direction) {
     );
   }
 }
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const getAnchorLocators = (anchor) => {
+  const startLocator = anchor?.startLocator ?? anchor?.start ?? null;
+  if (!startLocator) return { startLocator: null, endLocator: null };
+  const endLocator = anchor?.endLocator ?? anchor?.end ?? startLocator;
+  return { startLocator, endLocator };
+};
+
+const toAnchorPayload = (anchor) => {
+  const { startLocator, endLocator } = getAnchorLocators(anchor);
+  if (!startLocator) return null;
+  if (anchor?.startLocator) return { startLocator, endLocator };
+  return { start: startLocator, end: endLocator };
+};
 
 export function useViewerPage() {
   const { filename: bookId } = useParams();
@@ -55,16 +75,14 @@ export function useViewerPage() {
     urlSearchParams: _urlSearchParams,
     savedChapter: _savedChapter,
     savedPage: _savedPage,
-    savedProgress,
-    savedGraphMode,
+    savedGraphMode: _savedGraphMode,
     initialGraphMode,
     currentPage,
     setCurrentPage,
     currentChapter,
     setCurrentChapter,
     currentChapterRef: _currentChapterRef,
-    updateURL,
-    prevUrlStateRef
+    readingFromPath,
   } = useViewerUrlParams({ skipHistoryMutationsRef: skipViewerHistoryMutationRef });
 
   // 서버 책 매칭
@@ -73,7 +91,9 @@ export function useViewerPage() {
     loadingServerBook,
     matchedServerBook
   } = useServerBookMatching(bookId, { skipBookIdRedirectRef: skipViewerHistoryMutationRef });
-  
+
+  const { data: serverBooksListData } = useBooksServerQuery();
+
   const viewerRef = useRef(null);
   const [reloadKey, setReloadKey] = useState(0);
   const [failCount, setFailCount] = useState(0);
@@ -87,21 +107,6 @@ export function useViewerPage() {
   
   const [graphFullScreen, setGraphFullScreen] = useState(initialGraphMode.fullScreen);
   const [showGraph, setShowGraph] = useState(initialGraphMode.show);
-  const isInitialMountRef = useRef(true);
-  
-  // savedGraphMode 변경 시 상태 동기화
-  useEffect(() => {
-    if (isInitialMountRef.current) {
-      isInitialMountRef.current = false;
-      return;
-    }
-    const flags = flagsFromGraphMode(savedGraphMode);
-    if (flags) {
-      setGraphFullScreen(flags.fullScreen);
-      setShowGraph(flags.show);
-    }
-  }, [savedGraphMode]);
-  
   
   // useGraphDataLoader는 아래에서 사용됨
   const [currentCharIndex, setCurrentCharIndex] = useState(0);
@@ -133,17 +138,41 @@ export function useViewerPage() {
     removed: [],
     updated: [],
   });
-  
+
+  const [manifestLoaded, setManifestLoaded] = useState(false);
 
   const book = useMemo(() => {
-    return bookUtils.createBookObject({
+    const base = bookUtils.createBookObject({
       stateBook: location.state?.book,
       matchedServerBook,
       serverBook,
       bookId,
       loadingServerBook
     });
-  }, [location.state?.book, matchedServerBook, bookId, serverBook, loadingServerBook]);
+    const idStr = bookId != null ? String(bookId).trim() : '';
+    if (!idStr) return base;
+    const row = (serverBooksListData?.books || []).find((b) => String(b?.id) === idStr);
+    if (!row) return base;
+    const serverP = Number(row.progress);
+    const listProgress = Number.isFinite(serverP)
+      ? Math.min(100, Math.max(0, Math.round(serverP)))
+      : null;
+    let fallbackLocal = null;
+    try {
+      const raw = localStorage.getItem(`progress_${idStr}`);
+      const n = Number(raw);
+      if (Number.isFinite(n)) fallbackLocal = Math.min(100, Math.max(0, n));
+    } catch (_e) {}
+    const progress = listProgress != null ? listProgress : (fallbackLocal ?? 0);
+    return { ...base, progress };
+  }, [
+    location.state?.book,
+    matchedServerBook,
+    bookId,
+    serverBook,
+    loadingServerBook,
+    serverBooksListData?.books,
+  ]);
 
   const isLocalBook = useMemo(() => {
     const numericBookId = Number(book?.id);
@@ -174,8 +203,53 @@ export function useViewerPage() {
 
   const [progress, setProgress] = useLocalStorageNumber(`progress_${cleanBookId}`, 0);
   const [settings, setSettings] = useLocalStorage('xhtml_viewer_settings', defaultSettings);
+  const lastSyncedServerProgressRef = useRef({ bookKey: null, value: null });
 
   const folderKey = useMemo(() => getFolderKeyFromFilename(bookId), [bookId]);
+
+  useEffect(() => {
+    lastSyncedServerProgressRef.current = { bookKey: null, value: null };
+  }, [cleanBookId]);
+
+  useEffect(() => {
+    const p = Number(book?.progress);
+    if (!cleanBookId || !Number.isFinite(p) || p < 0) return;
+    const prev = lastSyncedServerProgressRef.current;
+    if (prev.bookKey === cleanBookId && prev.value === p) return;
+    lastSyncedServerProgressRef.current = { bookKey: cleanBookId, value: p };
+    setProgress(Math.min(100, Math.max(0, Math.round(p))));
+  }, [cleanBookId, book?.progress, setProgress]);
+
+  const readerRestoreRef = useRef({ bookKey: '', applied: false });
+
+  useLayoutEffect(() => {
+    if (!cleanBookId) return;
+    const st = readerRestoreRef.current;
+    if (st.bookKey !== cleanBookId) {
+      st.bookKey = cleanBookId;
+      st.applied = false;
+    }
+    if (st.applied) return;
+    if (readingFromPath) {
+      st.applied = true;
+      return;
+    }
+
+    let ch = null;
+    const pc = getProgressFromCache(cleanBookId);
+    const loc = pc?.startLocator ?? pc?.locator ?? pc?.anchor?.startLocator;
+    const fromLoc = Number(loc?.chapterIndex ?? loc?.chapterIdx);
+    if (Number.isFinite(fromLoc) && fromLoc >= 1) {
+      ch = Math.floor(fromLoc);
+    }
+    if (ch == null) {
+      const rd = getCachedReaderProgress(cleanBookId);
+      const rc = Number(rd?.chapterIdx);
+      if (Number.isFinite(rc) && rc >= 1) ch = Math.floor(rc);
+    }
+    if (ch != null) setCurrentChapter(ch);
+    st.applied = true;
+  }, [cleanBookId, readingFromPath, setCurrentChapter]);
   
   // 그래프 데이터 로더에 서버 bookId 전달 (숫자인 경우만)
   const graphBookId = useMemo(() => {
@@ -199,44 +273,51 @@ export function useViewerPage() {
     error: graphError,
     isDataEmpty
   } = useGraphDataLoader(graphBookId, currentChapter, currentEvent?.eventNum || 1);
-  
-  // maxChapter 설정 (통합)
+
+  const manifestServerBookId = useMemo(
+    () => getServerBookId(book),
+    [book?.id, book?._bookId, getServerBookId]
+  );
+
+  useEffect(() => {
+    if (!manifestServerBookId) {
+      setManifestLoaded(true);
+      return;
+    }
+    setManifestLoaded(false);
+    if (getManifestFromCache(manifestServerBookId)) {
+      setManifestLoaded(true);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        await getBookManifest(manifestServerBookId);
+      } catch (_e) {
+        void 0;
+      } finally {
+        if (!cancelled) setManifestLoaded(true);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [manifestServerBookId]);
+
   useEffect(() => {
     const serverBookId = getServerBookId(book);
-    
     if (serverBookId) {
-      // 서버 책인 경우: manifest 조회 후 캐시 확인
-      const fetchBookInfo = async () => {
-        try {
-          const manifestData = await getBookManifest(serverBookId);
-          if (manifestData && manifestData.isSuccess && manifestData.result) {
-            const cachedMaxChapter = getMaxChapter(serverBookId);
-            if (cachedMaxChapter && cachedMaxChapter > 0) {
-              setMaxChapter(cachedMaxChapter);
-              return;
-            }
-          }
-        } catch (_error) {
-          // 에러 발생 시에도 캐시 확인
-        }
-        
-        // manifest 조회 실패 또는 캐시에 없는 경우
-        const cachedMaxChapter = getMaxChapter(serverBookId);
-        if (cachedMaxChapter && cachedMaxChapter > 0) {
-          setMaxChapter(cachedMaxChapter);
-        } else if (detectedMaxChapter > 0) {
-          setMaxChapter(detectedMaxChapter);
-        }
-      };
-      
-      fetchBookInfo();
-    } else {
-      // 로컬 책인 경우
-      if (detectedMaxChapter > 0) {
+      if (!manifestLoaded) return;
+      const cachedMaxChapter = getMaxChapter(serverBookId);
+      if (cachedMaxChapter && cachedMaxChapter > 0) {
+        setMaxChapter(cachedMaxChapter);
+      } else if (detectedMaxChapter > 0) {
         setMaxChapter(detectedMaxChapter);
       }
+    } else if (detectedMaxChapter > 0) {
+      setMaxChapter(detectedMaxChapter);
     }
-  }, [detectedMaxChapter, book, getServerBookId]);
+  }, [manifestLoaded, book, detectedMaxChapter, getServerBookId]);
   
   // showGraph/graphFullScreen 상태 변경 시 localStorage에 저장
   useEffect(() => {
@@ -284,23 +365,30 @@ export function useViewerPage() {
   // handleLocationChange에서 locator 기반 챕터 업데이트와 중복 방지
   
   // currentChapter가 바뀔 때 즉시 상태 초기화
-  useEffect(() => {
-    // 챕터 변경 시 즉시 currentEvent 초기화하여 로딩 상태 방지
+  const resetGraphTransientState = useCallback((initialChapterDetected) => {
     setCurrentEvent(null);
     setPrevEvent(null);
     setEvents([]);
     setCharacterData(null);
-    // elements는 useGraphDataLoader에서 관리됨
     setIsDataReady(false);
     setIsGraphLoading(true);
-    
-    // 이전 챕터의 유효한 이벤트 참조도 초기화
     prevValidEventRef.current = null;
-    
-    // 초기 챕터 감지 완료 표시
-    setIsInitialChapterDetected(true);
-    
-  }, [currentChapter]);
+    setIsInitialChapterDetected(initialChapterDetected);
+  }, []);
+
+  const waitForViewerMethod = useCallback(async (methodName, maxAttempts = 30, interval = 100) => {
+    let attempts = 0;
+    while (attempts < maxAttempts) {
+      if (viewerRef.current?.[methodName]) return true;
+      await sleep(interval);
+      attempts += 1;
+    }
+    return false;
+  }, []);
+
+  useEffect(() => {
+    resetGraphTransientState(true);
+  }, [currentChapter, resetGraphTransientState]);
   
   // currentEvent가 null이 아닐 때만 이전 값 갱신 (현재 챕터의 이벤트만)
   useEffect(() => {
@@ -337,24 +425,12 @@ export function useViewerPage() {
       const navEntries = performance.getEntriesByType("navigation");
       if (navEntries.length > 0 && navEntries[0].type === "reload") {
         setIsReloading(true);
-        setIsGraphLoading(true);
+        resetGraphTransientState(false);
         
-        // 새로고침 시 모든 상태 초기화
-        setCurrentEvent(null);
-        setPrevEvent(null);
-        setEvents([]);
-        setCharacterData(null);
-        setIsDataReady(false);
-        setIsInitialChapterDetected(false);
-        prevValidEventRef.current = null;
-        
-        // URL 파라미터가 없으면 localStorage에서 그래프 모드 복원
-        if (!savedGraphMode) {
-          const flags = flagsFromGraphMode(loadViewerMode());
-          if (flags) {
-            setGraphFullScreen(flags.fullScreen);
-            setShowGraph(flags.show);
-          }
+        const flags = flagsFromGraphMode(loadViewerMode());
+        if (flags) {
+          setGraphFullScreen(flags.fullScreen);
+          setShowGraph(flags.show);
         }
         
         // 새로고침 완료 후 일정 시간 후에 isReloading을 false로 설정
@@ -366,7 +442,7 @@ export function useViewerPage() {
         return () => clearTimeout(timer);
       }
     }
-  }, [savedGraphMode]);
+  }, [resetGraphTransientState]);
   
   // currentEvent가 변경될 때마다 eventNum 업데이트
   useEffect(() => {
@@ -405,34 +481,34 @@ export function useViewerPage() {
   }, [settings, cleanBookId]);
   
   const onToggleBookmarkList = useCallback(() => {
-    navigate(`/viewer/${bookId}/bookmarks`);
-  }, [navigate, bookId]);
+    navigate(userViewerBookmarksPath(bookId), {
+      state: {
+        ...(location.state || {}),
+        book,
+      },
+    });
+  }, [navigate, bookId, location.state, book]);
   
   const handleSliderChange = useCallback(async (value) => {
     setProgress(value);
-    
+
     // 뷰어가 준비될 때까지 대기 (최대 3초)
     let attempts = 0;
     while (attempts < 30) {
-      if (viewerRef.current?.moveToProgress) {
+      if (await waitForViewerMethod('moveToProgress', 1, 100)) {
         try {
           await viewerRef.current.moveToProgress(value);
           return;
         } catch (e) {
           console.error('프로그레스 이동 실패:', e);
-          // 재시도
-          await new Promise(resolve => setTimeout(resolve, 100));
-          attempts++;
         }
-      } else {
-        await new Promise(resolve => setTimeout(resolve, 100));
-        attempts++;
       }
+      attempts += 1;
     }
-    
+
     // 최종 실패 시 경고만 표시 (새로고침하지 않음)
     console.warn('프로그레스 이동 실패: 뷰어가 준비되지 않았습니다.');
-  }, [setProgress, viewerRef]);
+  }, [setProgress, viewerRef, waitForViewerMethod]);
   
   // 그래프 표시 토글 함수
   const toggleGraph = useCallback(() => {
@@ -450,11 +526,7 @@ export function useViewerPage() {
     const applyAndSync = async () => {
       try {
         // 뷰어 준비 대기 (최대 2초)
-        let attempts = 0;
-        while (attempts < 20 && !viewerRef.current?.applySettings) {
-          await new Promise(resolve => setTimeout(resolve, 100));
-          attempts++;
-        }
+        await waitForViewerMethod('applySettings', 20, 100);
 
         const saved = await viewerRef.current?.getCurrentLocator?.();
         let displayTarget =
@@ -467,11 +539,11 @@ export function useViewerPage() {
                 : null;
 
         viewerRef.current?.applySettings?.();
-        await new Promise(resolve => setTimeout(resolve, 150));
+        await sleep(150);
 
         if (displayTarget && viewerRef.current?.displayAt) {
           await viewerRef.current.displayAt(displayTarget);
-          await new Promise(resolve => setTimeout(resolve, 100));
+          await sleep(100);
         }
       } catch (_e) {
         toast.error('화면 모드 전환 중 오류가 발생했습니다.');
@@ -479,7 +551,7 @@ export function useViewerPage() {
     };
 
     applyAndSync();
-  }, [showGraph, settings, setSettings, viewerRef]);
+  }, [showGraph, settings, setSettings, viewerRef, waitForViewerMethod]);
   
   const handleFitView = useCallback(() => {
     // TODO: 그래프 뷰 포커스 기능 구현 예정
@@ -489,10 +561,9 @@ export function useViewerPage() {
     if (!viewerRef.current) return;
     try {
       const loc = await viewerRef.current.getCurrentLocator?.();
-      const start = loc?.startLocator ?? loc?.start;
+      const { startLocator: start } = getAnchorLocators(loc);
       if (start) {
-        const end = loc?.endLocator ?? loc?.end ?? start;
-        const anchor = loc?.startLocator ? { startLocator: loc.startLocator, endLocator: end } : { start, end };
+        const anchor = toAnchorPayload(loc);
         setCurrentChapter(start.chapterIndex);
         setCurrentEvent({
           anchor,
@@ -506,45 +577,12 @@ export function useViewerPage() {
     } catch (_) {}
   }, []);
   
-  // 상태 변경 시 URL 업데이트
-  useEffect(() => {
-    if (skipViewerHistoryMutationRef.current) {
-      return;
-    }
-    const graphModeValue = graphFullScreen ? 'graph' : (showGraph ? 'split' : 'viewer');
-    const prev = prevUrlStateRef.current;
-    const updates = {};
-
-    if (currentChapter !== prev.chapter) {
-      updates.chapter = currentChapter;
-    }
-    if (currentPage !== prev.page) {
-      updates.page = currentPage;
-    }
-    if (progress !== prev.progress) {
-      updates.progress = progress;
-    }
-    if (graphModeValue !== prev.graphMode) {
-      updates.graphMode = graphModeValue;
-    }
-
-    if (Object.keys(updates).length > 0) {
-      updateURL(updates);
-      prevUrlStateRef.current = {
-        chapter: currentChapter,
-        page: currentPage,
-        progress,
-        graphMode: graphModeValue
-      };
-    }
-  }, [currentChapter, currentPage, progress, graphFullScreen, showGraph, updateURL]);
-
   const exitToMypage = useCallback(() => {
     skipViewerHistoryMutationRef.current = true;
     const prefix = (import.meta.env.BASE_URL || '/').replace(/\/$/, '');
     const path = `${prefix}/mypage`.replace(/\/{2,}/g, '/');
-    window.location.replace(path);
-  }, []);
+    navigate(path, { replace: true });
+  }, [navigate]);
   
   return {
     // 라우터 관련
@@ -578,8 +616,6 @@ export function useViewerPage() {
     settings,
     setSettings,
     
-    savedProgress,
-
     // 챕터 및 이벤트 관련
     currentChapter,
     setCurrentChapter,
@@ -647,6 +683,7 @@ export function useViewerPage() {
     
     // book 정보
     book,
+    manifestLoaded,
     
     // 폴더 키
     folderKey,
@@ -731,6 +768,8 @@ export function useViewerPage() {
     searchState: {
       // 검색 상태는 useGraphSearch 훅에서 관리됨
       // 여기서는 기본 구조만 제공
-    }
+    },
+
+    readingFromPath,
   };
 }

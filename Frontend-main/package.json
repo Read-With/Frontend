@@ -4,9 +4,6 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "generate:public-books": "node scripts/generate-public-books-json.mjs",
-    "predev": "node scripts/generate-public-books-json.mjs",
-    "prebuild": "node scripts/generate-public-books-json.mjs",
     "dev": "vite",
     "build": "vite build",
     "lint": "eslint .",
@@ -30,6 +27,7 @@
     "cytoscape-cose-bilkent": "^4.1.0",
     "graceful-fs": "^4.2.11",
     "isomorphic-dompurify": "^3.7.1",
+    "jszip": "^3.10.1",
     "lru-cache": "^11.2.2",
     "lucide-react": "^0.545.0",
     "prop-types": "^15.8.1",

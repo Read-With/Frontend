@@ -6,6 +6,7 @@ import { getBookManifest, getBookProgress, deleteBookProgress } from '../../util
 import { resolveProgressLocator } from '../../utils/common/locatorUtils';
 import { getManifestFromCache } from '../../utils/common/cache/manifestCache';
 import { getServerBookId } from '../../utils/viewer/viewerUtils';
+import { USER_VIEWER_PREFIX } from '../../utils/navigation/viewerPaths';
 import { toast } from 'react-toastify';
 import './BookDetailModal.css';
 
@@ -105,6 +106,12 @@ const BookDetailModal = memo(({ book, isOpen, onClose, onDelete }) => {
           chapters: normalizedManifest.chapters || manifestData.result.chapters || [],
           characters: normalizedManifest.characters || manifestData.result.characters || [],
           progressMetadata: normalizedManifest.progressMetadata || manifestData.result.progressMetadata || {},
+          ...(normalizedManifest.readerArtifacts || manifestData.result.readerArtifacts
+            ? {
+                readerArtifacts:
+                  normalizedManifest.readerArtifacts || manifestData.result.readerArtifacts,
+              }
+            : {}),
         });
       } else {
         console.warn('API 응답이 성공하지 않았습니다:', manifestData);
@@ -152,7 +159,7 @@ const BookDetailModal = memo(({ book, isOpen, onClose, onDelete }) => {
     [book, getBookIdentifier, onClose, navigate]
   );
 
-  const handleReadClick = useCallback(() => navigateToBookPage('/user/viewer'), [navigateToBookPage]);
+  const handleReadClick = useCallback(() => navigateToBookPage(USER_VIEWER_PREFIX), [navigateToBookPage]);
 
   const handleGraphClick = useCallback(() => navigateToBookPage('/user/graph'), [navigateToBookPage]);
 
@@ -400,6 +407,12 @@ const BookDetailModal = memo(({ book, isOpen, onClose, onDelete }) => {
                           챕터 {progressLocator.chapterIndex} · 블록 {progressLocator.blockIndex} · 오프셋 {progressLocator.offset}
                         </div>
                       )}
+                      {!progressLocator && Number.isFinite(Number(progressInfo.startTxtOffset)) && (
+                        <div className="book-detail-progress-item" style={{ fontSize: '0.9em', color: '#374151' }}>
+                          문서 오프셋 {progressInfo.startTxtOffset}
+                          {progressInfo.locatorVersion ? ` · ${progressInfo.locatorVersion}` : ''}
+                        </div>
+                      )}
                       {progressInfo.updatedAt && (
                         <div className="book-detail-progress-item" style={{ fontSize: '0.8em', color: '#6b7280' }}>
                           갱신: {new Date(progressInfo.updatedAt).toLocaleString()}
@@ -431,22 +444,20 @@ const BookDetailModal = memo(({ book, isOpen, onClose, onDelete }) => {
             >
               그래프
             </button>
-            {!book?._isPublic && (
-              <button
-                className="book-detail-danger-btn"
-                onClick={handleDeleteBook}
-                type="button"
-                aria-label="책 삭제"
-                style={{
-                  backgroundColor: '#dc2626',
-                  color: 'white',
-                  border: '1px solid #dc2626',
-                  marginTop: '8px'
-                }}
-              >
-                삭제
-              </button>
-            )}
+            <button
+              className="book-detail-danger-btn"
+              onClick={handleDeleteBook}
+              type="button"
+              aria-label="책 삭제"
+              style={{
+                backgroundColor: '#dc2626',
+                color: 'white',
+                border: '1px solid #dc2626',
+                marginTop: '8px'
+              }}
+            >
+              삭제
+            </button>
           </div>
         </div>
       </div>

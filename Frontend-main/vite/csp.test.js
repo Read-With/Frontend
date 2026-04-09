@@ -22,4 +22,11 @@ describe('buildContentSecurityPolicy', () => {
     );
     expect(s).toContain('http://api.example.test:8080');
   });
+
+  it('allows readwith CDN for normalized asset fetch (connect-src)', () => {
+    const prod = buildContentSecurityPolicy({}, { dev: false });
+    const dev = buildContentSecurityPolicy({}, { dev: true });
+    expect(prod).toContain('https://cdn.readwith.store');
+    expect(dev).toContain('https://cdn.readwith.store');
+  });
 });

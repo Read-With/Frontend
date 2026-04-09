@@ -139,6 +139,31 @@ const ViewerTopBar = ({
     return null;
   }, [book]);
 
+  const resolvedServerChapter = useMemo(() => {
+    const fromCurrentEvent = Number(currentEvent?.chapter ?? currentEvent?.chapterIdx ?? 0);
+    if (Number.isFinite(fromCurrentEvent) && fromCurrentEvent > 0) {
+      const serverChapter = getChapterData(bookId, fromCurrentEvent);
+      if (serverChapter) {
+        return Number(serverChapter.chapterIdx ?? serverChapter.idx ?? fromCurrentEvent);
+      }
+    }
+
+    const fromPrevEvent = Number(prevValidEvent?.chapter ?? prevValidEvent?.chapterIdx ?? 0);
+    if (Number.isFinite(fromPrevEvent) && fromPrevEvent > 0) {
+      const serverChapter = getChapterData(bookId, fromPrevEvent);
+      if (serverChapter) {
+        return Number(serverChapter.chapterIdx ?? serverChapter.idx ?? fromPrevEvent);
+      }
+    }
+
+    const serverChapter = getChapterData(bookId, currentChapter);
+    if (serverChapter) {
+      return Number(serverChapter.chapterIdx ?? serverChapter.idx ?? currentChapter);
+    }
+
+    return Number(currentChapter) || 1;
+  }, [bookId, currentChapter, currentEvent?.chapter, currentEvent?.chapterIdx, prevValidEvent?.chapter, prevValidEvent?.chapterIdx]);
+
   const folderKey = useMemo(() => {
     if (!filename) return null;
     try {
@@ -260,14 +285,14 @@ const ViewerTopBar = ({
         setHasInitialData(true);
       }
       
-      const progressPercentage = calculateProgress(eventToShow, events, currentChapter);
+      const progressPercentage = calculateProgress(eventToShow, events, resolvedServerChapter);
       const progressWidth = `${Math.round(progressPercentage * 100) / 100}%`;
       setCurrentProgressWidth(progressWidth);
     } else if (!hasInitialData) {
       setCurrentEventInfo(null);
       setCurrentProgressWidth("0%");
     }
-  }, [currentEvent, prevValidEvent, events, currentChapter, calculateProgress, hasInitialData]);
+  }, [currentEvent, prevValidEvent, events, resolvedServerChapter, calculateProgress, hasInitialData]);
   
   React.useEffect(() => {
     const handleChapterChange = (event) => {
@@ -319,7 +344,7 @@ const ViewerTopBar = ({
     return (
       <>
         <span style={CHAPTER_STYLE}>
-          Chapter {currentChapter}
+          Chapter {resolvedServerChapter}
         </span>
 
         <div
@@ -364,7 +389,7 @@ const ViewerTopBar = ({
         </div>
       </>
     );
-  }, [isGraphLoading, currentEventInfo, currentChapter, currentProgressWidth, prevEvent, currentEvent, prevValidEvent, hasInitialData]);
+  }, [isGraphLoading, currentEventInfo, resolvedServerChapter, currentProgressWidth, prevEvent, currentEvent, prevValidEvent, hasInitialData]);
 
   const renderGraphControls = useCallback(() => (
     <GraphControls
