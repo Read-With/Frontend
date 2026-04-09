@@ -15,6 +15,7 @@ export function useProgressAutoSave({ bookKey, currentChapter, currentEvent, del
   const lastPayloadRef = useRef(null);
   const latestPayloadRef = useRef(null);
   const inFlightRef = useRef(false);
+  const initialSavedRef = useRef(false);
 
   const flushProgress = () => {
     const payload = latestPayloadRef.current;
@@ -51,6 +52,7 @@ export function useProgressAutoSave({ bookKey, currentChapter, currentEvent, del
     if (!bookKey) {
       lastPayloadRef.current = null;
       latestPayloadRef.current = null;
+      initialSavedRef.current = false;
       return;
     }
     const anchor = currentEvent?.anchor;
@@ -61,6 +63,11 @@ export function useProgressAutoSave({ bookKey, currentChapter, currentEvent, del
 
     const payload = { bookId: bookKey, startLocator, locator: startLocator };
     latestPayloadRef.current = payload;
+
+    if (!initialSavedRef.current) {
+      initialSavedRef.current = true;
+      flushProgress();
+    }
 
     if (timeoutRef.current) clearTimeout(timeoutRef.current);
     timeoutRef.current = setTimeout(flushProgress, delay);

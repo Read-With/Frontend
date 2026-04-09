@@ -1,4 +1,4 @@
-import { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useParams, useLocation, useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { useLocalStorage, useLocalStorageNumber } from '../common/useLocalStorage';
@@ -18,8 +18,6 @@ import { getFolderKeyFromFilename } from '../../utils/graph/graphData';
 import { useBookmarks } from '../bookmarks/useBookmarks';
 import { getBookManifest } from '../../utils/api/api';
 import { getManifestFromCache, getMaxChapter } from '../../utils/common/cache/manifestCache';
-import { getCachedReaderProgress } from '../../utils/common/cache/chapterEventCache';
-import { getProgressFromCache } from '../../utils/common/cache/progressCache';
 import { userViewerBookmarksPath } from '../../utils/navigation/viewerPaths';
 
 function runViewerPaging(viewerRef, direction) {
@@ -220,37 +218,6 @@ export function useViewerPage() {
     setProgress(Math.min(100, Math.max(0, Math.round(p))));
   }, [cleanBookId, book?.progress, setProgress]);
 
-  const readerRestoreRef = useRef({ bookKey: '', applied: false });
-
-  useLayoutEffect(() => {
-    if (!cleanBookId) return;
-    const st = readerRestoreRef.current;
-    if (st.bookKey !== cleanBookId) {
-      st.bookKey = cleanBookId;
-      st.applied = false;
-    }
-    if (st.applied) return;
-    if (readingFromPath) {
-      st.applied = true;
-      return;
-    }
-
-    let ch = null;
-    const pc = getProgressFromCache(cleanBookId);
-    const loc = pc?.startLocator ?? pc?.locator ?? pc?.anchor?.startLocator;
-    const fromLoc = Number(loc?.chapterIndex ?? loc?.chapterIdx);
-    if (Number.isFinite(fromLoc) && fromLoc >= 1) {
-      ch = Math.floor(fromLoc);
-    }
-    if (ch == null) {
-      const rd = getCachedReaderProgress(cleanBookId);
-      const rc = Number(rd?.chapterIdx);
-      if (Number.isFinite(rc) && rc >= 1) ch = Math.floor(rc);
-    }
-    if (ch != null) setCurrentChapter(ch);
-    st.applied = true;
-  }, [cleanBookId, readingFromPath, setCurrentChapter]);
-  
   // 그래프 데이터 로더에 서버 bookId 전달 (숫자인 경우만)
   const graphBookId = useMemo(() => {
     const serverId = getServerBookId(book);
@@ -527,22 +494,14 @@ export function useViewerPage() {
       try {
         // 뷰어 준비 대기 (최대 2초)
         await waitForViewerMethod('applySettings', 20, 100);
-
-        const saved = await viewerRef.current?.getCurrentLocator?.();
-        let displayTarget =
-          saved?.startLocator
-            ? saved
-            : saved?.start
-              ? { startLocator: saved.start, endLocator: saved.end ?? saved.start }
-              : saved && typeof saved === 'object'
-                ? saved
-                : null;
+        const savedProgress = Number(progress);
+        const hasProgress = Number.isFinite(savedProgress) && savedProgress >= 0;
 
         viewerRef.current?.applySettings?.();
         await sleep(150);
 
-        if (displayTarget && viewerRef.current?.displayAt) {
-          await viewerRef.current.displayAt(displayTarget);
+        if (hasProgress && viewerRef.current?.moveToProgress) {
+          await viewerRef.current.moveToProgress(savedProgress);
           await sleep(100);
         }
       } catch (_e) {
@@ -551,7 +510,7 @@ export function useViewerPage() {
     };
 
     applyAndSync();
-  }, [showGraph, settings, setSettings, viewerRef, waitForViewerMethod]);
+  }, [showGraph, settings, setSettings, viewerRef, waitForViewerMethod, progress]);
   
   const handleFitView = useCallback(() => {
     // TODO: 그래프 뷰 포커스 기능 구현 예정

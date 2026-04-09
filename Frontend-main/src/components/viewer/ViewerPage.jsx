@@ -12,7 +12,6 @@ import { useProgressAutoSave } from "../../hooks/viewer/useProgressAutoSave";
 import { useTooltipState } from "../../hooks/ui/useTooltipState";
 import { useCachedLocation } from "../../hooks/viewer/useCachedLocation";
 import { getFineGraph, saveProgress } from "../../utils/api/api";
-import { getProgressFromCache } from "../../utils/common/cache/progressCache";
 import { anchorToLocators } from "../../utils/common/locatorUtils";
 import { getGraphEventState, getCachedChapterEvents, getCachedReaderProgress, isGraphBookCacheBuilding, ensureGraphBookCache } from "../../utils/common/cache/chapterEventCache";
 import { 
@@ -58,11 +57,11 @@ const ViewerPage = () => {
   } = useViewerPage();
 
   const bookKey = useMemo(() => {
-    const id = bookId ?? book?.id;
+    const id = cleanBookId ?? bookId ?? book?.id;
     if (id == null) return null;
     const trimmed = String(id).trim();
     return trimmed || null;
-  }, [bookId, book?.id]);
+  }, [cleanBookId, bookId, book?.id]);
 
   const { cachedLocation, saveLocation } = useCachedLocation(bookKey);
 
@@ -865,19 +864,18 @@ const ViewerPage = () => {
 
   const handleExitToMypage = useCallback(async () => {
     try {
-      const serverBookId = getServerBookId(book);
-      if (serverBookId && viewerRef.current?.getCurrentLocator) {
+      if (bookKey && viewerRef.current?.getCurrentLocator) {
         const loc = await viewerRef.current.getCurrentLocator();
         const { startLocator } = anchorToLocators(loc);
         if (startLocator) {
           const res = await saveProgress({
-            bookId: String(serverBookId),
+            bookId: String(bookKey),
             startLocator,
             locator: startLocator,
           });
           if (!res?.isSuccess) {
             errorUtils.logWarning('[ViewerPage] 종료 시 진도 저장 실패', res?.message || '응답 실패', {
-              bookId: serverBookId,
+              bookId: bookKey,
             });
           }
         }
@@ -887,7 +885,7 @@ const ViewerPage = () => {
     } finally {
       exitToMypage();
     }
-  }, [book, viewerRef, exitToMypage]);
+  }, [bookKey, viewerRef, exitToMypage]);
 
   // ─── GraphSplitArea 전달 props 메모이제이션 ──────────────────────────────────
   const graphStateProp = useMemo(() => ({
@@ -1010,17 +1008,14 @@ const ViewerPage = () => {
           const resolvedInitialProgress = Number.isFinite(initialProgressFromServer)
             ? initialProgressFromServer
             : progress;
-          const useProgressForPosition = Number.isFinite(resolvedInitialProgress) && resolvedInitialProgress > 0;
           const progressKey = cleanBookId ?? bookKey;
-          const cachedProgress = getProgressFromCache(progressKey);
-          const anchor = readingFromPath ? undefined : (cachedProgress?.anchor ?? undefined);
           return (
             <XhtmlViewer
               key={reloadKey}
               ref={viewerRef}
               book={book}
               manifestReady={manifestLoaded}
-              initialChapter={currentChapter}
+              initialChapter={undefined}
               initialProgress={readingFromPath ? 0 : resolvedInitialProgress}
               onProgressChange={setProgress}
               onCurrentPageChange={setCurrentPage}
@@ -1029,8 +1024,8 @@ const ViewerPage = () => {
               settings={settings}
               onCurrentLineChange={handleCurrentLineChange}
               bookId={progressKey}
-              initialAnchor={anchor}
-              initialPage={useProgressForPosition && !readingFromPath ? undefined : currentPage}
+              initialAnchor={undefined}
+              initialPage={undefined}
             />
           );
         })()}
