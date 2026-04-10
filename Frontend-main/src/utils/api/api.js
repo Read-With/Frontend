@@ -351,7 +351,9 @@ export const saveProgress = async (progressData) => {
   }
 };
 
-export const getBookProgress = async (bookId) => {
+export const getBookProgress = async (bookId, options = {}) => {
+  const skipCache = options?.skipCache === true;
+
   if (!bookId) {
     return {
       isSuccess: false,
@@ -361,15 +363,17 @@ export const getBookProgress = async (bookId) => {
     };
   }
   
-  const cachedProgress = getProgressFromCache(bookId);
-  if (cachedProgress) {
-    return {
-      isSuccess: true,
-      code: 'CACHE_HIT',
-      message: '진도 정보를 로컬 캐시에서 가져왔습니다',
-      result: cachedProgress,
-      fromCache: true
-    };
+  if (!skipCache) {
+    const cachedProgress = getProgressFromCache(bookId);
+    if (cachedProgress) {
+      return {
+        isSuccess: true,
+        code: 'CACHE_HIT',
+        message: '진도 정보를 로컬 캐시에서 가져왔습니다',
+        result: cachedProgress,
+        fromCache: true
+      };
+    }
   }
 
   try {

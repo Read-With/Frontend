@@ -11,8 +11,8 @@ import { useTransitionState } from "../../hooks/ui/useTransitionState";
 import { useProgressAutoSave } from "../../hooks/viewer/useProgressAutoSave";
 import { useTooltipState } from "../../hooks/ui/useTooltipState";
 import { useCachedLocation } from "../../hooks/viewer/useCachedLocation";
-import { getFineGraph, saveProgress } from "../../utils/api/api";
-import { anchorToLocators } from "../../utils/common/locatorUtils";
+import { getFineGraph, saveProgress, getBookProgress } from "../../utils/api/api";
+import { anchorToLocators, resolveProgressLocator } from "../../utils/common/locatorUtils";
 import { getGraphEventState, getCachedChapterEvents, getCachedReaderProgress, isGraphBookCacheBuilding, ensureGraphBookCache } from "../../utils/common/cache/chapterEventCache";
 import { 
   getServerBookId,
@@ -62,6 +62,92 @@ const ViewerPage = () => {
     const trimmed = String(id).trim();
     return trimmed || null;
   }, [cleanBookId, bookId, book?.id]);
+
+  const [serverResumeAnchor, setServerResumeAnchor] = useState(null);
+  const serverResumeAppliedKeyRef = useRef(null);
+  const currentChapterRef = useRef(currentChapter);
+
+  useEffect(() => {
+    currentChapterRef.current = currentChapter;
+  }, [currentChapter]);
+
+  useEffect(() => {
+    serverResumeAppliedKeyRef.current = null;
+    setServerResumeAnchor(null);
+  }, [bookKey]);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!bookKey || readingFromPath) {
+      setServerResumeAnchor(null);
+      return undefined;
+    }
+    const numeric = Number(bookKey);
+    if (!Number.isFinite(numeric) || numeric <= 0) {
+      setServerResumeAnchor(null);
+      return undefined;
+    }
+    const chapterWhenFetchStarted = currentChapter;
+    (async () => {
+      try {
+        const res = await getBookProgress(String(numeric), { skipCache: true });
+        if (cancelled) return;
+        if (Number(currentChapterRef.current) !== Number(chapterWhenFetchStarted)) {
+          setServerResumeAnchor(null);
+          return;
+        }
+        if (!res?.isSuccess || !res?.result) {
+          setServerResumeAnchor(null);
+          return;
+        }
+        const loc = resolveProgressLocator(res.result);
+        if (!loc) {
+          setServerResumeAnchor(null);
+          return;
+        }
+        const anchor = { startLocator: loc, endLocator: loc };
+        setServerResumeAnchor(anchor);
+        setCurrentChapter(loc.chapterIndex);
+      } catch (_e) {
+        if (!cancelled) setServerResumeAnchor(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [bookKey, readingFromPath, setCurrentChapter]);
+
+  useEffect(() => {
+    if (!serverResumeAnchor || readingFromPath) return undefined;
+    const key = JSON.stringify(
+      serverResumeAnchor.startLocator ?? serverResumeAnchor.start ?? null
+    );
+    if (!key || key === 'null') return undefined;
+    if (serverResumeAppliedKeyRef.current === key) return undefined;
+
+    let cancelled = false;
+    let attempts = 0;
+    const maxAttempts = 60;
+    const id = setInterval(() => {
+      if (cancelled || serverResumeAppliedKeyRef.current === key) {
+        clearInterval(id);
+        return;
+      }
+      attempts += 1;
+      try {
+        viewerRef.current?.displayAt?.(serverResumeAnchor);
+        serverResumeAppliedKeyRef.current = key;
+        clearInterval(id);
+      } catch (_e) {
+        void 0;
+      }
+      if (attempts >= maxAttempts) clearInterval(id);
+    }, 100);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, [serverResumeAnchor, readingFromPath, reloadKey]);
 
   const { cachedLocation, saveLocation } = useCachedLocation(bookKey);
 
@@ -1015,8 +1101,8 @@ const ViewerPage = () => {
               ref={viewerRef}
               book={book}
               manifestReady={manifestLoaded}
-              initialChapter={undefined}
-              initialProgress={readingFromPath ? 0 : resolvedInitialProgress}
+              initialChapter={readingFromPath ? currentChapter : undefined}
+              initialProgress={readingFromPath ? undefined : resolvedInitialProgress}
               onProgressChange={setProgress}
               onCurrentPageChange={setCurrentPage}
               onTotalPagesChange={setTotalPages}
@@ -1025,7 +1111,7 @@ const ViewerPage = () => {
               onCurrentLineChange={handleCurrentLineChange}
               bookId={progressKey}
               initialAnchor={undefined}
-              initialPage={undefined}
+              initialPage={readingFromPath ? currentPage : undefined}
             />
           );
         })()}
