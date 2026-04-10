@@ -1,6 +1,7 @@
 /**
- * 정규화 메타 로더(v2 manifest 기반).
- * chapters[].chapterIndex, paragraphStarts, paragraphLengths, totalCodePoints
+ * GET /api/v2/books/{bookId}/manifest 의 result.chapters 를
+ * 뷰어용 메타로 변환한다. (OpenAPI: idx, paragraphStartsJson, paragraphLengthsJson, totalCodePoints)
+ * 출력은 내부적으로 chapterIndex + 배열 필드명을 유지한다.
  */
 
 import { getBookManifest } from '../api/api';
@@ -11,7 +12,10 @@ const CACHE_TTL = 1000 * 60 * 15;
 function isValidMetaShape(data) {
   const chapters = Array.isArray(data?.chapters) ? data.chapters : [];
   if (!chapters.length) return false;
-  return chapters.some((ch) => Number(ch?.chapterIndex) > 0);
+  return chapters.some((ch) => {
+    const idx = Number(ch?.chapterIndex);
+    return Number.isFinite(idx) && idx >= 0;
+  });
 }
 
 function getCached(bookId) {
@@ -70,14 +74,14 @@ function normalizeMetaFromManifest(raw) {
   return {
     chapters: chapters.map((ch) => ({
       chapterIndex:
+        ch.idx ??
         ch.chapterIdx ??
         ch.chapterIndex ??
-        ch.idx ??
         ch.chapter ??
         ch.number ??
         0,
-      paragraphStarts: toArrayValue(ch.paragraphStartsJson),
-      paragraphLengths: toArrayValue(ch.paragraphLengthsJson),
+      paragraphStarts: toArrayValue(ch.paragraphStartsJson ?? ch.paragraphStarts),
+      paragraphLengths: toArrayValue(ch.paragraphLengthsJson ?? ch.paragraphLengths),
       totalCodePoints:
         ch.totalCodePoints ??
         ch.chapterLength ??

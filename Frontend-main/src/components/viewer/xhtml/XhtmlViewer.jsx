@@ -55,7 +55,12 @@ const resolveChapterFromMetaByPage = (meta, currentPageIndex, totalPages) => {
     const chapterIndex = Number(chapter?.chapterIndex ?? chapter?.chapterIdx ?? chapter?.idx);
     const start = cumulative;
     const end = cumulative + safeLen;
-    if (absolutePos >= start && absolutePos < end && Number.isFinite(chapterIndex) && chapterIndex > 0) {
+    if (
+      absolutePos >= start &&
+      absolutePos < end &&
+      Number.isFinite(chapterIndex) &&
+      chapterIndex >= 0
+    ) {
       return chapterIndex;
     }
     cumulative = end;
@@ -63,7 +68,7 @@ const resolveChapterFromMetaByPage = (meta, currentPageIndex, totalPages) => {
 
   const lastChapter = chapters[chapters.length - 1];
   const lastChapterIndex = Number(lastChapter?.chapterIndex ?? lastChapter?.chapterIdx ?? lastChapter?.idx);
-  return Number.isFinite(lastChapterIndex) && lastChapterIndex > 0 ? lastChapterIndex : null;
+  return Number.isFinite(lastChapterIndex) && lastChapterIndex >= 0 ? lastChapterIndex : null;
 };
 
 const resolveChapterFromManifestByPage = (manifest, currentPageIndex, totalPages) => {
