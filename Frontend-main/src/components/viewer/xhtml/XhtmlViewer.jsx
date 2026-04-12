@@ -16,95 +16,196 @@ import {
   collectSanitizedStyleCssFromDocument,
 } from '../../../utils/viewer/sanitizeXhtml';
 import { getManifestFromCache } from '../../../utils/common/cache/manifestCache';
+import { isXhtmlBlocksDebug } from '../../../utils/viewer/xhtmlBlockDebug';
 
-const BLOCK_SELECTOR = '[data-chapter-index][data-block-index]';
 const xhtmlLoadCache = new Map();
 const XHTML_LOAD_CACHE_VERSION = 'v2';
 
-const getBlockLocator = (el, offset = 0) => {
+/** 챕터당 data-chapter-index 노드가 하나뿐이고 data-block-index 없음 → transform 페이징만으로는 항상 같은 노드만 겹침 */
+function isSingleChapterMarkerBlob(el, rulerRoot) {
+  if (!el || !rulerRoot?.querySelectorAll) return false;
+  if (el.getAttribute('data-block-index') != null && el.getAttribute('data-block-index') !== '') {
+    return false;
+  }
+  const ch = el.getAttribute('data-chapter-index');
+  if (ch == null) return false;
+  return rulerRoot.querySelectorAll(`[data-chapter-index="${ch}"]`).length === 1;
+}
+
+/** 이런 DOM에서는 blockIndex에 뷰어 페이지 인덱스를 넣어 저장·복원 (서버 v2 locator 재사용) */
+function shouldEncodePageInBlockIndex(el, rulerRoot, totalPages, pageHeightPx) {
+  if (totalPages <= 1 || !isSingleChapterMarkerBlob(el, rulerRoot)) return false;
+  const ph = pageHeightPx;
+  if (!(ph > 0)) return true;
+  return el.offsetHeight > ph * 1.12;
+}
+
+/** data-block-index 없으면 챕터별 문서 순서로 0,1,2… 합성 (정규화 산출물 편차 대응) */
+function collectBlockEntries(root) {
+  if (!root?.querySelectorAll) return [];
+  const withBlock = Array.from(root.querySelectorAll('[data-chapter-index][data-block-index]'));
+  if (withBlock.length > 0) {
+    return withBlock.map((el) => ({ el, syntheticBlock: null }));
+  }
+  const chapterOnly = Array.from(root.querySelectorAll('[data-chapter-index]'));
+  if (chapterOnly.length === 0) return [];
+  const perChapter = new Map();
+  return chapterOnly.map((el) => {
+    const ch = Number(el.getAttribute('data-chapter-index'));
+    const next = perChapter.get(ch) ?? 0;
+    perChapter.set(ch, next + 1);
+    return { el, syntheticBlock: next };
+  });
+}
+
+/** 숫자 서버 id가 있으면 매니페스트·API 캐시 키와 맞춤 (폴더명만 쓰면 combined 경로 영구 실패하는 책 방지) */
+function resolveLoaderBookId(book, bookIdProp) {
+  const candidates = [bookIdProp, book?.id, book?._bookId];
+  for (const c of candidates) {
+    const n = Number(c);
+    if (Number.isFinite(n) && n > 0) return String(n);
+  }
+  const raw = bookIdProp ?? book?.id ?? book?.filename ?? '';
+  return String(raw).trim();
+}
+
+const getBlockLocator = (el, offset = 0, syntheticBlock = null) => {
   const ci = el.getAttribute('data-chapter-index');
-  const bi = el.getAttribute('data-block-index');
-  if (ci == null || bi == null) return null;
+  if (ci == null || !Number.isFinite(Number(ci))) return null;
+  const rawBi = el.getAttribute('data-block-index');
+  let blockIndex;
+  if (rawBi != null && rawBi !== '') {
+    blockIndex = Number(rawBi);
+  } else if (syntheticBlock != null) {
+    blockIndex = syntheticBlock;
+  } else {
+    blockIndex = 0;
+  }
+  if (!Number.isFinite(blockIndex)) blockIndex = 0;
   return {
     chapterIndex: Number(ci),
-    blockIndex: Number(bi),
+    blockIndex,
     offset: Number.isFinite(offset) ? offset : 0,
   };
+};
+
+/** 페이지 비율 → 챕터 idx (가중치 배열: { chapterIdx, weight }) */
+const resolveChapterByWeightedPageRatio = (weightedChapters, currentPageIndex, totalPages) => {
+  if (!Array.isArray(weightedChapters) || !weightedChapters.length) return null;
+  const totalWeight = weightedChapters.reduce((sum, row) => {
+    const w = Number(row?.weight ?? 0);
+    return sum + (Number.isFinite(w) && w > 0 ? w : 0);
+  }, 0);
+  if (!Number.isFinite(totalWeight) || totalWeight <= 0) return null;
+
+  const ratio =
+    totalPages <= 1
+      ? 0
+      : Math.min(1, Math.max(0, Number(currentPageIndex) / Math.max(1, totalPages - 1)));
+  const absolutePos = Math.floor(totalWeight * ratio);
+
+  let cumulative = 0;
+  for (const row of weightedChapters) {
+    const w = Number(row?.weight ?? 0);
+    const safeW = Number.isFinite(w) && w > 0 ? w : 0;
+    const chapterIdx = Number(row.chapterIdx);
+    const start = cumulative;
+    const end = cumulative + safeW;
+    if (absolutePos >= start && absolutePos < end && Number.isFinite(chapterIdx) && chapterIdx >= 0) {
+      return chapterIdx;
+    }
+    cumulative = end;
+  }
+
+  const last = weightedChapters[weightedChapters.length - 1];
+  const lastIdx = Number(last?.chapterIdx);
+  return Number.isFinite(lastIdx) && lastIdx >= 0 ? lastIdx : null;
 };
 
 const resolveChapterFromMetaByPage = (meta, currentPageIndex, totalPages) => {
   const chapters = Array.isArray(meta?.chapters) ? meta.chapters : [];
   if (!chapters.length) return null;
 
-  const totalCodePoints = chapters.reduce((sum, chapter) => {
-    const len = Number(chapter?.totalCodePoints ?? 0);
-    return sum + (Number.isFinite(len) && len > 0 ? len : 0);
-  }, 0);
-  if (!Number.isFinite(totalCodePoints) || totalCodePoints <= 0) return null;
+  const weighted = chapters
+    .map((chapter) => {
+      const len = Number(chapter?.totalCodePoints ?? 0);
+      const chapterIdx = Number(chapter?.chapterIndex ?? chapter?.chapterIdx ?? chapter?.idx);
+      if (!Number.isFinite(chapterIdx)) return null;
+      return {
+        chapterIdx,
+        weight: Number.isFinite(len) && len > 0 ? len : 0,
+      };
+    })
+    .filter(Boolean);
 
-  const ratio =
-    totalPages <= 1
-      ? 0
-      : Math.min(1, Math.max(0, Number(currentPageIndex) / Math.max(1, totalPages - 1)));
-  const absolutePos = Math.floor(totalCodePoints * ratio);
-
-  let cumulative = 0;
-  for (const chapter of chapters) {
-    const len = Number(chapter?.totalCodePoints ?? 0);
-    const safeLen = Number.isFinite(len) && len > 0 ? len : 0;
-    const chapterIndex = Number(chapter?.chapterIndex ?? chapter?.chapterIdx ?? chapter?.idx);
-    const start = cumulative;
-    const end = cumulative + safeLen;
-    if (
-      absolutePos >= start &&
-      absolutePos < end &&
-      Number.isFinite(chapterIndex) &&
-      chapterIndex >= 0
-    ) {
-      return chapterIndex;
-    }
-    cumulative = end;
-  }
-
-  const lastChapter = chapters[chapters.length - 1];
-  const lastChapterIndex = Number(lastChapter?.chapterIndex ?? lastChapter?.chapterIdx ?? lastChapter?.idx);
-  return Number.isFinite(lastChapterIndex) && lastChapterIndex >= 0 ? lastChapterIndex : null;
+  return resolveChapterByWeightedPageRatio(weighted, currentPageIndex, totalPages);
 };
 
 const resolveChapterFromManifestByPage = (manifest, currentPageIndex, totalPages) => {
-  const chapterLengths = Array.isArray(manifest?.progressMetadata?.chapterLengths)
+  const chapters = Array.isArray(manifest?.chapters) ? manifest.chapters : [];
+  if (!chapters.length) return null;
+
+  const lengths = Array.isArray(manifest?.progressMetadata?.chapterLengths)
     ? manifest.progressMetadata.chapterLengths
     : [];
-  if (!chapterLengths.length) return null;
 
-  const normalized = chapterLengths
-    .map((item) => {
-      const chapterIdx = Number(item?.chapterIdx ?? item?.chapterIndex ?? item?.idx ?? item?.chapter);
-      const length = Number(item?.length ?? item?.codePointLength ?? 0);
+  const resolveLengthFromTable = (ch, listIndex) => {
+    const title = String(ch?.title ?? ch?.chapterTitle ?? '').trim();
+    if (title) {
+      const hit = lengths.find((e) => String(e?.chapterTitle ?? e?.title ?? '').trim() === title);
+      if (hit) {
+        const len = Number(hit.length ?? hit.codePointLength ?? 0);
+        if (Number.isFinite(len) && len > 0) return len;
+      }
+    }
+    const idx = Number(ch?.idx ?? ch?.chapterIdx);
+    const hit = lengths.find((e) => Number(e?.chapterIdx ?? e?.chapterIndex ?? e?.idx) === idx);
+    if (hit) {
+      const len = Number(hit.length ?? hit.codePointLength ?? 0);
+      if (Number.isFinite(len) && len > 0) return len;
+    }
+    if (
+      lengths.length === chapters.length &&
+      listIndex >= 0 &&
+      listIndex < lengths.length &&
+      lengths[listIndex]
+    ) {
+      const len = Number(lengths[listIndex].length ?? lengths[listIndex].codePointLength ?? 0);
+      if (Number.isFinite(len) && len > 0) return len;
+    }
+    return 0;
+  };
+
+  const fromTable = chapters
+    .map((ch, i) => {
+      const chapterIdx = Number(ch?.idx ?? ch?.chapterIdx);
       if (!Number.isFinite(chapterIdx) || chapterIdx < 1) return null;
-      return { chapterIdx, length: Number.isFinite(length) && length > 0 ? length : 0 };
+      const length = lengths.length ? resolveLengthFromTable(ch, i) : 0;
+      return { chapterIdx, weight: length };
     })
-    .filter(Boolean)
-    .sort((a, b) => a.chapterIdx - b.chapterIdx);
+    .filter(Boolean);
 
-  if (!normalized.length) return null;
-  const totalLength = normalized.reduce((sum, item) => sum + item.length, 0);
-  if (!Number.isFinite(totalLength) || totalLength <= 0) return null;
-
-  const ratio =
-    totalPages <= 1
-      ? 0
-      : Math.min(1, Math.max(0, Number(currentPageIndex) / Math.max(1, totalPages - 1)));
-  const absolutePos = Math.floor(totalLength * ratio);
-
-  let cumulative = 0;
-  for (const item of normalized) {
-    const start = cumulative;
-    const end = cumulative + item.length;
-    if (absolutePos >= start && absolutePos < end) return item.chapterIdx;
-    cumulative = end;
+  if (lengths.length > 0 && fromTable.length) {
+    const totalFromTable = fromTable.reduce((s, r) => s + r.weight, 0);
+    if (totalFromTable > 0) {
+      const hit = resolveChapterByWeightedPageRatio(fromTable, currentPageIndex, totalPages);
+      if (hit != null) return hit;
+    }
   }
-  return normalized[normalized.length - 1]?.chapterIdx ?? null;
+
+  const fromCodePoints = chapters
+    .map((ch) => {
+      const chapterIdx = Number(ch?.idx ?? ch?.chapterIdx);
+      if (!Number.isFinite(chapterIdx) || chapterIdx < 1) return null;
+      const len = Number(ch?.totalCodePoints ?? 0);
+      return {
+        chapterIdx,
+        weight: Number.isFinite(len) && len > 0 ? len : 0,
+      };
+    })
+    .filter(Boolean);
+
+  return resolveChapterByWeightedPageRatio(fromCodePoints, currentPageIndex, totalPages);
 };
 
 const createFallbackLocator = (chapterIndex) => ({
@@ -125,11 +226,12 @@ function buildFallbackMetaFromXhtml(xhtml) {
   try {
     const parser = new DOMParser();
     const doc = parser.parseFromString(xhtml, 'text/html');
-    const blocks = doc.querySelectorAll('[data-chapter-index][data-block-index]');
-    if (!blocks.length) return null;
+    const root = doc.body || doc.documentElement;
+    const entries = collectBlockEntries(root);
+    if (!entries.length) return null;
 
     const byChapter = new Map();
-    blocks.forEach((el) => {
+    entries.forEach(({ el }) => {
       const chapterIndex = Number(el.getAttribute('data-chapter-index'));
       if (!Number.isFinite(chapterIndex)) return;
       const textLen = (el.textContent || '').length;
@@ -163,15 +265,13 @@ const XhtmlViewer = forwardRef(
       onCurrentChapterChange,
       onCurrentLineChange,
       settings = defaultSettings,
-      initialChapter,
-      initialProgress,
       initialAnchor,
-      initialPage,
       manifestReady = true,
     },
     ref
   ) => {
     const containerRef = useRef(null);
+    const viewportRef = useRef(null);
     const contentRef = useRef(null);
     const rulerRef = useRef(null);
     const [loading, setLoading] = useState(true);
@@ -182,11 +282,10 @@ const XhtmlViewer = forwardRef(
     const [currentPageIndex, setCurrentPageIndex] = useState(0);
     const touchStartX = useRef(0);
     const lastLocatorRef = useRef(null);
+    const lastEmittedStartLocatorJsonRef = useRef(null);
     const metaRef = useRef(null);
     const initialAnchorAppliedRef = useRef(false);
     const prevBidForInitialRef = useRef(null);
-    const prevInitialChapterRef = useRef(initialChapter);
-    const prevInitialPageRef = useRef(initialPage);
     const initialPositionAppliedRef = useRef(false);
     const initialSeekAppliedRef = useRef(false);
     const lineBoundsRef = useRef([]);
@@ -239,21 +338,24 @@ const XhtmlViewer = forwardRef(
     const currentPage = Math.min(totalPages, currentPageIndex + 1);
     const progress = totalPages <= 1 ? 0 : Math.round((currentPageIndex / (totalPages - 1)) * 100);
 
-    const bid = bookId || book?.id || book?.filename || '';
+    const bid = useMemo(() => resolveLoaderBookId(book, bookId), [book, bookId]);
 
     useEffect(() => {
       if (prevBidForInitialRef.current === bid) return;
       prevBidForInitialRef.current = bid;
-      prevInitialChapterRef.current = initialChapter;
-      prevInitialPageRef.current = initialPage;
       initialSeekAppliedRef.current = false;
       initialPositionAppliedRef.current = false;
       initialAnchorAppliedRef.current = false;
+      lastEmittedStartLocatorJsonRef.current = null;
+      lastLocatorRef.current = null;
     }, [bid]);
 
     const emitLocator = useCallback(
       (loc) => {
-        if (!loc?.startLocator || JSON.stringify(loc) === JSON.stringify(lastLocatorRef.current)) return;
+        if (!loc?.startLocator) return;
+        const startKey = JSON.stringify(loc.startLocator);
+        if (startKey === lastEmittedStartLocatorJsonRef.current) return;
+        lastEmittedStartLocatorJsonRef.current = startKey;
         lastLocatorRef.current = loc;
         const { chapterIndex } = loc.startLocator;
         onCurrentChapterChange?.(chapterIndex);
@@ -275,6 +377,8 @@ const XhtmlViewer = forwardRef(
           !(typeof book?.combinedXhtmlContent === 'string' && book.combinedXhtmlContent.trim()) &&
           !(typeof book?.combinedXhtmlUrl === 'string' && book.combinedXhtmlUrl.trim())
         ) {
+          setLoading(true);
+          setError(null);
           return;
         }
         setLoading(true);
@@ -374,62 +478,99 @@ const XhtmlViewer = forwardRef(
     }, [totalPages, currentPage, progress, onTotalPagesChange, onCurrentPageChange, onProgressChange]);
 
     useEffect(() => {
-      if (!xhtmlContent || !contentRef.current || !containerRef.current) return;
+      if (!xhtmlContent || !contentRef.current || !viewportRef.current) return;
       const content = contentRef.current;
-      const container = containerRef.current;
-      const blocks = Array.from(content.querySelectorAll(BLOCK_SELECTOR));
+      const viewport = viewportRef.current;
+      const blockEntries = collectBlockEntries(content);
 
-      const serverBookId = Number(book?.id);
-      const manifest = Number.isFinite(serverBookId) && serverBookId > 0
-        ? getManifestFromCache(serverBookId)
-        : null;
+      const cacheId = Number(bid);
+      const manifest =
+        Number.isFinite(cacheId) && cacheId > 0 ? getManifestFromCache(cacheId) : null;
       const chapterFromMeta = resolveChapterFromMetaByPage(metaRef.current, currentPageIndex, totalPages);
       const chapterFromManifest = resolveChapterFromManifestByPage(manifest, currentPageIndex, totalPages);
       const resolvedChapter = chapterFromManifest ?? chapterFromMeta;
       const emitResolvedFallback = () => {
-        if (Number.isFinite(resolvedChapter) && resolvedChapter > 0) {
+        if (Number.isFinite(resolvedChapter) && resolvedChapter >= 0) {
           emitLocator(createFallbackLocator(resolvedChapter));
         }
       };
 
-      if (!blocks.length) {
+      if (!blockEntries.length) {
+        if (isXhtmlBlocksDebug()) {
+          console.warn('[XhtmlBlocks]', {
+            bid,
+            currentPageIndex,
+            totalPages,
+            reason: 'DOM에 data-chapter-index 마커 없음',
+          });
+        }
         emitResolvedFallback();
         return;
       }
 
-      const root = container.getBoundingClientRect();
-      const visible = blocks
-        .map((el) => {
+      const root = viewport.getBoundingClientRect();
+      if (root.height < 8) {
+        if (isXhtmlBlocksDebug()) {
+          console.warn('[XhtmlBlocks]', {
+            bid,
+            currentPageIndex,
+            totalPages,
+            reason: '뷰포트 높이 미측정 — 레이아웃 후 재실행 대기',
+            viewportH: Math.round(root.height),
+          });
+        }
+        return;
+      }
+
+      const rulerRoot = rulerRef.current;
+      const phForBlob = typeof pageHeight === 'number' && pageHeight > 0 ? pageHeight : 0;
+      const visible = blockEntries
+        .map(({ el, syntheticBlock }) => {
           const rect = el.getBoundingClientRect();
           const top = rect.top - root.top;
           const bottom = rect.bottom - root.top;
           const overlap = Math.min(bottom, root.height) - Math.max(top, 0);
-          return { el, top, bottom, overlap };
+          return { el, syntheticBlock, top, bottom, overlap };
         })
         .filter((item) => item.overlap > 0)
         .sort((a, b) => a.top - b.top);
 
       if (!visible.length) {
+        if (isXhtmlBlocksDebug()) {
+          console.warn('[XhtmlBlocks]', {
+            bid,
+            currentPageIndex,
+            totalPages,
+            reason: '뷰포트와 겹치는 블록 없음(폴백 locator)',
+            totalBlocks: blockEntries.length,
+            viewportH: Math.round(root.height),
+          });
+        }
         emitResolvedFallback();
         return;
       }
 
-      const startBlock = visible[0].el;
-      const endBlock = visible[visible.length - 1].el;
-      const startLoc = getBlockLocator(startBlock, 0);
-      const endLoc = getBlockLocator(endBlock, Math.max(0, (endBlock.textContent || '').length));
+      const startRow = visible[0];
+      const endRow = visible[visible.length - 1];
+      const pageInBlock =
+        rulerRoot &&
+        visible.length === 1 &&
+        shouldEncodePageInBlockIndex(startRow.el, rulerRoot, totalPages, phForBlob);
+      const startBlockIdx = pageInBlock ? currentPageIndex : startRow.syntheticBlock;
+      const endBlockIdx = pageInBlock ? currentPageIndex : endRow.syntheticBlock;
+      const startLoc = getBlockLocator(startRow.el, 0, startBlockIdx);
+      const endLoc = getBlockLocator(
+        endRow.el,
+        pageInBlock ? 0 : Math.max(0, (endRow.el.textContent || '').length),
+        endBlockIdx
+      );
       if (!startLoc || !endLoc) return;
-
-      if (Number.isFinite(resolvedChapter) && resolvedChapter > 0) {
-        startLoc.chapterIndex = resolvedChapter;
-        endLoc.chapterIndex = resolvedChapter;
-      }
 
       emitLocator({
         startLocator: startLoc,
         endLocator: endLoc,
       });
-    }, [xhtmlContent, currentPageIndex, totalPages, book?.id, emitLocator]);
+    }, [xhtmlContent, currentPageIndex, totalPages, bid, emitLocator, pageHeight]);
 
     useEffect(() => {
       if (!bid) {
@@ -447,12 +588,35 @@ const XhtmlViewer = forwardRef(
       [pageHeight, totalPages]
     );
 
-    const findChapterBlockElement = useCallback(
-      (root, chapter, block = 0) =>
-        root.querySelector(`[data-chapter-index="${chapter}"][data-block-index="${block}"]`) ||
-        root.querySelector(`[data-chapter-index="${chapter}"]`),
-      []
-    );
+    const findChapterBlockElement = useCallback((root, chapter, block = 0) => {
+      const ch = Number(chapter);
+      const b = Number(block);
+      const safeB = Number.isFinite(b) ? b : 0;
+      if (!Number.isFinite(ch)) return null;
+
+      const tryChapter = (c) => {
+        const byBoth = root.querySelector(
+          `[data-chapter-index="${c}"][data-block-index="${safeB}"]`
+        );
+        if (byBoth) return byBoth;
+        const list = Array.from(root.querySelectorAll(`[data-chapter-index="${c}"]`));
+        if (!list.length) return null;
+        const anyBlockAttr = list.some(
+          (el) =>
+            el.getAttribute('data-block-index') != null && el.getAttribute('data-block-index') !== ''
+        );
+        if (anyBlockAttr) {
+          return (
+            list.find((el) => Number(el.getAttribute('data-block-index')) === safeB) ?? null
+          );
+        }
+        return list[safeB] ?? list[0] ?? null;
+      };
+
+      let el = tryChapter(ch);
+      if (!el && ch >= 1) el = tryChapter(ch - 1);
+      return el;
+    }, []);
 
     const goPage = useCallback((direction) => {
       if (direction === 1 && currentPageIndex <= 0) return;
@@ -468,7 +632,12 @@ const XhtmlViewer = forwardRef(
     const nextPage = useCallback(() => goPage(-1), [goPage]);
 
     const displayAt = useCallback((target) => {
-      if (!target || !rulerRef.current || !pageHeight) return;
+      if (!target || !rulerRef.current) return false;
+      const ph =
+        typeof pageHeight === 'number' && pageHeight > 0
+          ? pageHeight
+          : containerRef.current?.clientHeight ?? 0;
+      if (!(ph > 0)) return false;
       let locator = null;
       if (typeof target === 'string' && target.trim().startsWith('{')) {
         try {
@@ -478,55 +647,52 @@ const XhtmlViewer = forwardRef(
       } else if (target && typeof target === 'object') {
         locator = target.start ?? target.startLocator ?? (Number.isFinite(target.chapterIndex) ? target : null);
       }
-      if (!locator) return;
-      const el = findChapterBlockElement(rulerRef.current, locator.chapterIndex, locator.blockIndex ?? 0);
+      if (!locator) return false;
+      const ruler = rulerRef.current;
+      const el = findChapterBlockElement(ruler, locator.chapterIndex, locator.blockIndex ?? 0);
       if (el) {
-        setCurrentPageIndex(getPageIndexFromTop(el.offsetTop));
+        const bi = Number(locator.blockIndex ?? 0);
+        if (
+          ruler &&
+          shouldEncodePageInBlockIndex(el, ruler, totalPages, ph) &&
+          Number.isFinite(bi)
+        ) {
+          setCurrentPageIndex(Math.min(totalPages - 1, Math.max(0, bi)));
+          return true;
+        }
+        const pageIdx = Math.min(totalPages - 1, Math.max(0, Math.floor(el.offsetTop / ph)));
+        setCurrentPageIndex(pageIdx);
+        return true;
       }
-    }, [pageHeight, findChapterBlockElement, getPageIndexFromTop]);
+      return false;
+    }, [pageHeight, totalPages, findChapterBlockElement]);
 
-    useEffect(() => {
-      if (!xhtmlContent || !rulerRef.current || !pageHeight || !totalPages) return;
+    useLayoutEffect(() => {
+      if (!xhtmlContent || !rulerRef.current || !totalPages) return;
+      const container = containerRef.current;
+      const ph =
+        typeof pageHeight === 'number' && pageHeight > 0
+          ? pageHeight
+          : container?.clientHeight ?? 0;
+      if (!(ph > 0)) return;
       if (initialSeekAppliedRef.current) return;
 
       const ruler = rulerRef.current;
       let applied = false;
+      const pageIdxFromTop = (top) =>
+        Math.min(totalPages - 1, Math.max(0, Math.floor(Number(top) / ph)));
 
-      // 1) initialAnchor 우선
       const initLoc = initialAnchor?.startLocator ?? initialAnchor?.start ?? initialAnchor;
       if (initLoc?.chapterIndex != null || initLoc?.chapterIdx != null) {
         const chapter = Number(initLoc.chapterIndex ?? initLoc.chapterIdx);
         const block = Number(initLoc.blockIndex ?? 0);
         const el = findChapterBlockElement(ruler, chapter, block);
         if (el) {
-          setCurrentPageIndex(getPageIndexFromTop(el.offsetTop));
-          applied = true;
-        }
-      }
-
-      // 2) initialProgress
-      if (!applied) {
-        const pct = Number(initialProgress);
-        if (Number.isFinite(pct) && pct > 0) {
-          const ratio = Math.min(1, Math.max(0, pct / 100));
-          const idx = Math.min(totalPages - 1, Math.max(0, Math.round(ratio * (totalPages - 1))));
-          setCurrentPageIndex(idx);
-          applied = true;
-        }
-      }
-
-      // 3) initialPage
-      if (!applied && Number.isFinite(initialPage) && initialPage >= 1) {
-        const idx = Math.min(totalPages - 1, Math.max(0, initialPage - 1));
-        setCurrentPageIndex(idx);
-        applied = true;
-      }
-
-      // 4) initialChapter
-      if (!applied && initialChapter != null && Number.isFinite(Number(initialChapter))) {
-        const el = ruler.querySelector(`[data-chapter-index="${initialChapter}"]`);
-        if (el) {
-          setCurrentPageIndex(getPageIndexFromTop(el.offsetTop));
+          const pageIdx =
+            shouldEncodePageInBlockIndex(el, ruler, totalPages, ph) && Number.isFinite(block)
+              ? Math.min(totalPages - 1, Math.max(0, block))
+              : pageIdxFromTop(el.offsetTop);
+          setCurrentPageIndex(pageIdx);
           applied = true;
         }
       }
@@ -534,18 +700,12 @@ const XhtmlViewer = forwardRef(
       initialAnchorAppliedRef.current = applied;
       initialPositionAppliedRef.current = applied;
       initialSeekAppliedRef.current = true;
-      prevInitialChapterRef.current = initialChapter;
-      prevInitialPageRef.current = initialPage;
     }, [
       xhtmlContent,
       totalPages,
       pageHeight,
       initialAnchor,
-      initialProgress,
-      initialPage,
-      initialChapter,
       findChapterBlockElement,
-      getPageIndexFromTop,
     ]);
 
     useImperativeHandle(ref, () => ({
@@ -631,7 +791,7 @@ const XhtmlViewer = forwardRef(
           }
         `}</style>
         <div ref={rulerRef} className="xhtml-viewer-ruler xhtml-viewer-content" dangerouslySetInnerHTML={contentHtml} aria-hidden />
-        <div style={viewportStyle}>
+        <div ref={viewportRef} style={viewportStyle}>
           <div ref={contentRef} className="xhtml-viewer-content" style={contentStyle} dangerouslySetInnerHTML={contentHtml} />
         </div>
       </div>

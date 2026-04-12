@@ -15,6 +15,7 @@ import {
   getStorage
 } from './cacheManager';
 import { eventUtils } from '../../viewer/viewerUtils';
+import { resolveProgressLocator, toLocator } from '../locatorUtils';
 
 const READER_PROGRESS_CACHE_PREFIX = 'reader_progress_';
 const READER_PROGRESS_MAX_AGE = 3 * 24 * 60 * 60 * 1000;
@@ -368,6 +369,76 @@ const applyElementDiff = (prevElements, diff) => {
   return result;
 };
 
+const manifestFallbackEventFromStructure = (bookId, chapterIdx, eventIdx, manifestStructure) => ({
+  bookId,
+  chapterIdx,
+  eventIdx,
+  characters: [],
+  relations: [],
+  event: {
+    idx: eventIdx,
+    chapterIdx,
+    startTxtOffset: manifestStructure?.startTxtOffset ?? null,
+    endTxtOffset: manifestStructure?.endTxtOffset ?? null,
+    eventId: manifestStructure?.eventId ?? null,
+  },
+  startTxtOffset: manifestStructure?.startTxtOffset ?? null,
+  endTxtOffset: manifestStructure?.endTxtOffset ?? null,
+  eventId: manifestStructure?.eventId ?? null,
+});
+
+const normalizeEventFromFineGraphResponse = (
+  bookId,
+  chapterIdx,
+  eventIdx,
+  response,
+  manifestStructure
+) => {
+  const { characters, relations, event } = response?.result || {};
+  const hasCharacters = Array.isArray(characters) && characters.length > 0;
+  const hasRelations = Array.isArray(relations) && relations.length > 0;
+  const hasEventMeta =
+    event &&
+    (event.eventId !== undefined ||
+      event.event_id !== undefined ||
+      event.name ||
+      event.title ||
+      event.startTxtOffset !== undefined ||
+      event.endTxtOffset !== undefined ||
+      event.startLocator !== undefined ||
+      event.endLocator !== undefined);
+
+  if (!hasCharacters && !hasRelations && !hasEventMeta && !manifestStructure) {
+    return { skip: true, hadGraphData: false };
+  }
+
+  return {
+    skip: false,
+    hadGraphData: hasCharacters || hasRelations || hasEventMeta,
+    event: {
+      bookId,
+      chapterIdx,
+      eventIdx,
+      characters: hasCharacters ? characters.map((character) => deepClone(character)) : [],
+      relations: hasRelations ? relations.map((relation) => deepClone(relation)) : [],
+      event: {
+        idx: eventIdx,
+        chapterIdx,
+        event_id: event?.event_id ?? eventIdx,
+        startTxtOffset: event?.startTxtOffset ?? manifestStructure?.startTxtOffset ?? null,
+        endTxtOffset: event?.endTxtOffset ?? manifestStructure?.endTxtOffset ?? null,
+        startLocator: event?.startLocator,
+        endLocator: event?.endLocator,
+        rawText: event?.rawText ?? null,
+        eventId: event?.eventId ?? event?.id ?? null,
+        ...(event || {}),
+      },
+      startTxtOffset: event?.startTxtOffset ?? manifestStructure?.startTxtOffset ?? null,
+      endTxtOffset: event?.endTxtOffset ?? manifestStructure?.endTxtOffset ?? null,
+      eventId: event?.eventId ?? event?.event_id ?? event?.id ?? manifestStructure?.eventId ?? null,
+    },
+  };
+};
 
 const buildChapterCachePayload = (bookId, chapterIdx, events, source = 'runtime', folderKey = 'api') => {
   const timestamp = Date.now();
@@ -564,19 +635,24 @@ export const normalizeManifestEvents = (bookId, chapterIdx, manifestChapter) => 
 };
 
 const normalizeReaderProgressPayload = (bookKey, payload) => {
-  if (!payload) return null;
+  if (!payload || typeof payload !== 'object') return null;
 
-  const chapterIdxCandidate =
-    payload.chapterIdx ??
-    payload.chapter ??
-    payload.chapterIndex ??
-    payload.chapterNumber ??
-    payload.chapterId;
-  const chapterIdx = Number(chapterIdxCandidate);
+  const resolved = resolveProgressLocator(payload);
+  const startL =
+    (resolved ? toLocator(resolved) ?? resolved : null) ??
+    toLocator(payload.startLocator) ??
+    toLocator(payload.locator);
 
-  if (!Number.isFinite(chapterIdx) || chapterIdx <= 0) {
+  if (!startL || !Number.isFinite(Number(startL.chapterIndex)) || Number(startL.chapterIndex) < 1) {
     return null;
   }
+
+  const endRaw =
+    payload.endLocator ??
+    payload.anchor?.endLocator ??
+    payload.anchor?.end ??
+    startL;
+  const endL = toLocator(endRaw) ?? startL;
 
   const normalizedEventIdx = eventUtils.normalizeEventIdx(payload);
 
@@ -591,17 +667,16 @@ const normalizeReaderProgressPayload = (bookKey, payload) => {
     ? Math.max(Math.min(chapterProgressCandidate, 100), 0)
     : null;
 
-  const normalized = {
+  return {
     key: bookKey,
     bookId: payload.bookId ?? null,
-    chapterIdx: chapterIdx,
+    chapterIdx: Number(startL.chapterIndex),
     eventIdx: normalizedEventIdx,
     eventNum: normalizedEventNum,
     eventId: payload.eventId ?? payload.id ?? null,
-    startLocator:
-      payload.startLocator ?? payload.anchor?.startLocator ?? payload.anchor?.start ?? undefined,
-    endLocator:
-      payload.endLocator ?? payload.anchor?.endLocator ?? payload.anchor?.end ?? undefined,
+    startLocator: startL,
+    endLocator: endL,
+    locator: startL,
     eventName:
       payload.eventName ??
       payload.eventTitle ??
@@ -612,10 +687,8 @@ const normalizeReaderProgressPayload = (bookKey, payload) => {
       null,
     chapterProgress: normalizedChapterProgress,
     source: payload.source ?? 'runtime',
-    timestamp: Date.now()
+    timestamp: Date.now(),
   };
-
-  return normalized;
 };
 
 const getChapterEventCacheKey = (bookId, chapterIdx) => {
@@ -688,7 +761,16 @@ export const getCachedReaderProgress = (bookKey) => {
 
     const timestamp = parsed?.timestamp ?? 0;
 
-    if (!Number.isFinite(Number(parsed?.chapterIdx))) {
+    let chapterIdx = Number(parsed?.chapterIdx);
+    const loc = parsed?.startLocator ?? parsed?.locator;
+    if ((!Number.isFinite(chapterIdx) || chapterIdx <= 0) && loc && typeof loc === 'object') {
+      const fromLoc = Number(loc.chapterIndex ?? loc.chapterIdx);
+      if (Number.isFinite(fromLoc) && fromLoc >= 1) {
+        chapterIdx = fromLoc;
+      }
+    }
+
+    if (!Number.isFinite(chapterIdx) || chapterIdx <= 0) {
       removeFromStorage(cacheKey, 'localStorage');
       return null;
     }
@@ -700,7 +782,7 @@ export const getCachedReaderProgress = (bookKey) => {
 
     return {
       ...parsed,
-      chapterIdx: Number(parsed.chapterIdx),
+      chapterIdx,
       eventIdx: Number.isFinite(Number(parsed.eventIdx)) ? Number(parsed.eventIdx) : null,
       eventNum: Number.isFinite(Number(parsed.eventNum)) ? Number(parsed.eventNum) : null,
       chapterProgress: Number.isFinite(Number(parsed.chapterProgress))
@@ -773,8 +855,7 @@ export const discoverChapterEvents = async (bookId, chapterIdx, forceRefresh = f
         eventId: rawEvent.eventId ?? null,
         startTxtOffset: rawEvent.startTxtOffset ?? null,
         endTxtOffset: rawEvent.endTxtOffset ?? null,
-        rawText: rawEvent.rawText ?? null
-      })).filter(e => e.eventIdx > 0);
+      })).filter((e) => e.eventIdx > 0);
     }
   } catch (error) {
     console.warn('manifest 이벤트 구조 로드 실패:', error);
@@ -798,73 +879,26 @@ export const discoverChapterEvents = async (bookId, chapterIdx, forceRefresh = f
   const collectEvent = async (eventIdx, manifestStructure = null) => {
     try {
       const response = await getFineGraph(bookId, chapterIdx, eventIdx);
-
-      const { characters, relations, event } = response?.result || {};
-      const hasCharacters = Array.isArray(characters) && characters.length > 0;
-      const hasRelations = Array.isArray(relations) && relations.length > 0;
-      const hasEventMeta =
-        event &&
-        (event.eventId !== undefined ||
-          event.event_id !== undefined ||
-          event.name ||
-          event.title ||
-          event.startTxtOffset !== undefined ||
-          event.endTxtOffset !== undefined ||
-          event.startLocator !== undefined ||
-          event.endLocator !== undefined);
-
-      if (!hasCharacters && !hasRelations && !hasEventMeta && !manifestStructure) {
-        return false;
-      }
-
-      const normalizedEvent = {
+      const norm = normalizeEventFromFineGraphResponse(
         bookId,
         chapterIdx,
         eventIdx,
-        characters: hasCharacters ? characters.map((character) => deepClone(character)) : [],
-        relations: hasRelations ? relations.map((relation) => deepClone(relation)) : [],
-        event: {
-          idx: eventIdx,
-          chapterIdx,
-          event_id: event?.event_id ?? eventIdx,
-          startTxtOffset: event?.startTxtOffset ?? manifestStructure?.startTxtOffset ?? null,
-          endTxtOffset: event?.endTxtOffset ?? manifestStructure?.endTxtOffset ?? null,
-          startLocator: event?.startLocator,
-          endLocator: event?.endLocator,
-          rawText: manifestStructure?.rawText ?? event?.rawText ?? null,
-          eventId: event?.eventId ?? event?.id ?? null,
-          ...(event || {})
-        },
-        startTxtOffset: event?.startTxtOffset ?? manifestStructure?.startTxtOffset ?? null,
-        endTxtOffset: event?.endTxtOffset ?? manifestStructure?.endTxtOffset ?? null,
-        eventId: event?.eventId ?? event?.event_id ?? event?.id ?? manifestStructure?.eventId ?? null
-      };
-
-      apiEvents.push(normalizedEvent);
-
+        response,
+        manifestStructure
+      );
+      if (norm.skip) {
+        return false;
+      }
+      apiEvents.push(norm.event);
       await new Promise((resolve) => setTimeout(resolve, 50));
-      return hasCharacters || hasRelations || hasEventMeta;
+      return norm.hadGraphData;
     } catch (error) {
       console.warn(`⚠️ 이벤트 ${eventIdx} API 호출 실패, manifest 구조만 사용:`, error);
 
       if (manifestStructure) {
-        apiEvents.push({
-          bookId,
-          chapterIdx,
-          eventIdx,
-          characters: [],
-          relations: [],
-          event: {
-            idx: eventIdx,
-            chapterIdx,
-            startTxtOffset: manifestStructure.startTxtOffset ?? null,
-            endTxtOffset: manifestStructure.endTxtOffset ?? null,
-            rawText: manifestStructure.rawText ?? null
-          },
-          startTxtOffset: manifestStructure.startTxtOffset ?? null,
-          endTxtOffset: manifestStructure.endTxtOffset ?? null,
-          eventId: null
-        });
+        apiEvents.push(
+          manifestFallbackEventFromStructure(bookId, chapterIdx, eventIdx, manifestStructure)
+        );
         return true;
       }
 
@@ -873,26 +907,52 @@ export const discoverChapterEvents = async (bookId, chapterIdx, forceRefresh = f
   };
 
   if (sortedManifestIndices.length > 0) {
-    for (const eventIdx of sortedManifestIndices) {
-      await collectEvent(eventIdx, manifestEventMap.get(eventIdx));
-    }
-  } else {
-    let eventIdx = 1;
-    let emptyStreak = 0;
-    const EMPTY_STREAK_LIMIT = 2;
-    const MAX_DYNAMIC_SCAN = 500;
-
-    while (eventIdx <= MAX_DYNAMIC_SCAN && emptyStreak < EMPTY_STREAK_LIMIT) {
-      const hadData = await collectEvent(eventIdx, null);
-      if (hadData) {
-        emptyStreak = 0;
-      } else {
-        emptyStreak += 1;
-      }
-      eventIdx += 1;
-    }
+    const summaries = sortedManifestIndices.map((eventIdx) => {
+      const structure = manifestEventMap.get(eventIdx);
+      return {
+        bookId,
+        chapterIdx,
+        eventIdx,
+        eventId: structure?.eventId ?? null,
+        startTxtOffset: structure?.startTxtOffset ?? null,
+        endTxtOffset: structure?.endTxtOffset ?? null,
+        title: null,
+        text: null,
+        hasCharacters: false,
+        hasRelations: false,
+      };
+    });
+    const maxEventIdx = summaries.reduce((m, s) => Math.max(m, s.eventIdx), 0);
+    const manifestOnlyPayload = {
+      bookId,
+      chapterIdx,
+      maxEventIdx,
+      events: summaries.map((s) => deepClone(s)),
+      baseSnapshot: null,
+      diffs: [],
+      eventSummaries: summaries.map((s) => deepClone(s)),
+      timestamp: Date.now(),
+      source: 'manifest-only',
+    };
+    setCachedChapterEvents(bookId, chapterIdx, manifestOnlyPayload);
+    return manifestOnlyPayload;
   }
-  
+
+  let eventIdx = 1;
+  let emptyStreak = 0;
+  const EMPTY_STREAK_LIMIT = 2;
+  const MAX_DYNAMIC_SCAN = 500;
+
+  while (eventIdx <= MAX_DYNAMIC_SCAN && emptyStreak < EMPTY_STREAK_LIMIT) {
+    const hadData = await collectEvent(eventIdx, null);
+    if (hadData) {
+      emptyStreak = 0;
+    } else {
+      emptyStreak += 1;
+    }
+    eventIdx += 1;
+  }
+
   if (!apiEvents.length) {
     console.warn(`⚠️ 챕터 ${chapterIdx}: API 및 manifest 모두에서 이벤트를 찾을 수 없음`);
     const emptyPayload = {
@@ -919,6 +979,69 @@ export const discoverChapterEvents = async (bookId, chapterIdx, forceRefresh = f
 
   setCachedChapterEvents(bookId, chapterIdx, payload);
   return payload;
+};
+
+export const hydrateChapterFineGraph = async (bookId, chapterIdx) => {
+  const cached = getCachedChapterEvents(bookId, chapterIdx);
+  if (!cached || cached.source !== 'manifest-only') {
+    return cached;
+  }
+
+  const summaries = sortEventsByIdx(
+    Array.isArray(cached.events) ? [...cached.events] : []
+  );
+  if (!summaries.length) {
+    return cached;
+  }
+
+  const apiEvents = [];
+
+  for (const summary of summaries) {
+    const eventIdx = Number(summary.eventIdx);
+    if (!Number.isFinite(eventIdx) || eventIdx < 1) {
+      continue;
+    }
+
+    const manifestStructure = {
+      eventIdx,
+      eventId: summary.eventId ?? null,
+      startTxtOffset: summary.startTxtOffset ?? null,
+      endTxtOffset: summary.endTxtOffset ?? null,
+    };
+
+    try {
+      const response = await getFineGraph(bookId, chapterIdx, eventIdx);
+      const norm = normalizeEventFromFineGraphResponse(
+        bookId,
+        chapterIdx,
+        eventIdx,
+        response,
+        manifestStructure
+      );
+      if (!norm.skip) {
+        apiEvents.push(norm.event);
+      } else {
+        apiEvents.push(
+          manifestFallbackEventFromStructure(bookId, chapterIdx, eventIdx, manifestStructure)
+        );
+      }
+    } catch (error) {
+      console.warn(`⚠️ hydrate 이벤트 ${eventIdx} 실패, 메타만 유지:`, error);
+      apiEvents.push(
+        manifestFallbackEventFromStructure(bookId, chapterIdx, eventIdx, manifestStructure)
+      );
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+
+  if (!apiEvents.length) {
+    return cached;
+  }
+
+  const payload = buildChapterCachePayload(bookId, chapterIdx, apiEvents, 'hybrid');
+  setCachedChapterEvents(bookId, chapterIdx, payload);
+  return getCachedChapterEvents(bookId, chapterIdx);
 };
 
 export const reconstructChapterGraphState = (cachePayload, targetEventIdx) => {

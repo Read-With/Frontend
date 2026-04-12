@@ -1,6 +1,13 @@
 import { setManifestData, isValidEvent, getManifestFromCache } from '../common/cache/manifestCache';
-import { setAllProgress, setProgressToCache, removeProgressFromCache, getProgressFromCache, getAllProgressFromCache } from '../common/cache/progressCache';
-import { progressPayloadFromData, toLocator } from '../common/locatorUtils';
+import {
+  setAllProgress,
+  setProgressToCache,
+  removeProgressFromCache,
+  getProgressFromCache,
+  getAllProgressFromCache,
+  normalizeReadingProgressPercent,
+} from '../common/cache/progressCache';
+import { progressPayloadFromData, resolveProgressLocator, toLocator } from '../common/locatorUtils';
 import { getApiBaseUrl, clearAuthData, getPostLoginHomeUrl } from '../common/authUtils';
 import { getStoredAccessToken } from '../security/authTokenStorage';
 import { isTokenValid, refreshToken, ensureSessionAccessToken } from './authApi';
@@ -289,9 +296,11 @@ export const getFavorites = async () => {
   }
 };
 
-export const getAllProgress = async () => {
+export const getAllProgress = async (options = {}) => {
+  const skipCache = options?.skipCache === true;
   const cachedProgress = getAllProgressFromCache();
-  if (cachedProgress && cachedProgress.length > 0) {
+
+  if (!skipCache && cachedProgress && cachedProgress.length > 0) {
     return {
       isSuccess: true,
       code: 'CACHE_HIT',
@@ -335,7 +344,14 @@ export const saveProgress = async (progressData) => {
       error.status = response?.status;
       throw error;
     }
-    setProgressToCache(response?.result ?? payload);
+    const resResult = response?.result && typeof response.result === 'object' ? response.result : null;
+    const cacheRow = resResult ? { ...resResult, bookId: progressData.bookId ?? resResult.bookId } : { ...progressData, ...payload };
+    const pctFromReq = normalizeReadingProgressPercent(progressData);
+    const pctFromRes = normalizeReadingProgressPercent(resResult ?? {});
+    if (pctFromReq != null || pctFromRes != null) {
+      cacheRow.readingProgressPercent = pctFromReq ?? pctFromRes;
+    }
+    setProgressToCache(cacheRow);
     return response;
   } catch (error) {
     if (error.status === 403 || error.message?.includes('403') || error.message?.includes('권한')) {
@@ -379,7 +395,21 @@ export const getBookProgress = async (bookId, options = {}) => {
   try {
     const response = await apiRequest(`/api/v2/progress/${bookId}`);
     if (response?.isSuccess && response.result) {
-      setProgressToCache(response.result);
+      const prev = getProgressFromCache(bookId);
+      const newLoc = resolveProgressLocator(response.result);
+      const prevLoc = resolveProgressLocator(prev ?? {});
+      const sameLoc =
+        newLoc &&
+        prevLoc &&
+        JSON.stringify(newLoc) === JSON.stringify(prevLoc);
+      const pct =
+        normalizeReadingProgressPercent(response.result) ??
+        (sameLoc ? normalizeReadingProgressPercent(prev ?? {}) : null);
+      const row =
+        pct != null
+          ? { ...response.result, readingProgressPercent: pct }
+          : response.result;
+      setProgressToCache(row);
     }
     return response;
   } catch (error) {
@@ -534,6 +564,14 @@ export const getMacroGraph = async (bookId, uptoChapter, uptoLocator = null) => 
 export const getFineGraph = async (bookId, chapterIdx, eventIdx, atLocator = null) => {
   if (!bookId) {
     throw new Error('bookId는 필수 매개변수입니다.');
+  }
+
+  if (!getManifestFromCache(bookId)) {
+    return createApiResponse(false, 'NO_MANIFEST', '매니페스트가 없어 세밀 그래프를 요청하지 않습니다.', {
+      characters: [],
+      relations: [],
+      event: null,
+    }, 'graph-fine');
   }
 
   const loc = toLocator(atLocator);

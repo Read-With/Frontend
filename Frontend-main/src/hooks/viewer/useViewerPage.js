@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useParams, useLocation, useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
-import { useLocalStorage, useLocalStorageNumber } from '../common/useLocalStorage';
+import { useLocalStorage } from '../common/useLocalStorage';
 import { useGraphDataLoader } from '../graph/useGraphDataLoader';
 import { useServerBookMatching } from '../books/useServerBookMatching';
 import { useBooksServerQuery } from '../books/useBooksServerQuery';
@@ -80,7 +80,6 @@ export function useViewerPage() {
     currentChapter,
     setCurrentChapter,
     currentChapterRef: _currentChapterRef,
-    readingFromPath,
   } = useViewerUrlParams({ skipHistoryMutationsRef: skipViewerHistoryMutationRef });
 
   // 서버 책 매칭
@@ -154,15 +153,8 @@ export function useViewerPage() {
     const serverP = Number(row.progress);
     const listProgress = Number.isFinite(serverP)
       ? Math.min(100, Math.max(0, Math.round(serverP)))
-      : null;
-    let fallbackLocal = null;
-    try {
-      const raw = localStorage.getItem(`progress_${idStr}`);
-      const n = Number(raw);
-      if (Number.isFinite(n)) fallbackLocal = Math.min(100, Math.max(0, n));
-    } catch (_e) {}
-    const progress = listProgress != null ? listProgress : (fallbackLocal ?? 0);
-    return { ...base, progress };
+      : 0;
+    return { ...base, progress: listProgress };
   }, [
     location.state?.book,
     matchedServerBook,
@@ -199,7 +191,7 @@ export function useViewerPage() {
     return bookId?.trim() || '';
   }, [book, bookId, getServerBookId]);
 
-  const [progress, setProgress] = useLocalStorageNumber(`progress_${cleanBookId}`, 0);
+  const [progress, setProgress] = useState(0);
   const [settings, setSettings] = useLocalStorage('xhtml_viewer_settings', defaultSettings);
   const lastSyncedServerProgressRef = useRef({ bookKey: null, value: null });
 
@@ -207,6 +199,7 @@ export function useViewerPage() {
 
   useEffect(() => {
     lastSyncedServerProgressRef.current = { bookKey: null, value: null };
+    setProgress(0);
   }, [cleanBookId]);
 
   useEffect(() => {
@@ -492,18 +485,30 @@ export function useViewerPage() {
 
     const applyAndSync = async () => {
       try {
-        // 뷰어 준비 대기 (최대 2초)
         await waitForViewerMethod('applySettings', 20, 100);
-        const savedProgress = Number(progress);
-        const hasProgress = Number.isFinite(savedProgress) && savedProgress >= 0;
+        const locWrap = viewerRef.current?.getCurrentLocator?.();
+        const start = locWrap?.startLocator ?? locWrap?.start;
+        const end = locWrap?.endLocator ?? locWrap?.end ?? start;
 
         viewerRef.current?.applySettings?.();
         await sleep(150);
 
-        if (hasProgress && viewerRef.current?.moveToProgress) {
-          await viewerRef.current.moveToProgress(savedProgress);
-          await sleep(100);
+        if (start && viewerRef.current?.displayAt) {
+          const anchor = { startLocator: start, endLocator: end ?? start };
+          const moved = viewerRef.current.displayAt(anchor);
+          if (!moved) {
+            const pct = Number(progress);
+            if (Number.isFinite(pct) && pct >= 0) {
+              await viewerRef.current.moveToProgress?.(pct);
+            }
+          }
+        } else {
+          const pct = Number(progress);
+          if (Number.isFinite(pct) && pct >= 0) {
+            await viewerRef.current?.moveToProgress?.(pct);
+          }
         }
+        await sleep(100);
       } catch (_e) {
         toast.error('화면 모드 전환 중 오류가 발생했습니다.');
       }
@@ -728,7 +733,5 @@ export function useViewerPage() {
       // 검색 상태는 useGraphSearch 훅에서 관리됨
       // 여기서는 기본 구조만 제공
     },
-
-    readingFromPath,
   };
 }

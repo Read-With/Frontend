@@ -401,6 +401,20 @@ export function removeCacheItem(name, key) {
   }
 }
 
+function clearVolatileCachesOnBeforeUnload() {
+  try {
+    for (const [name, cacheInfo] of cacheRegistry) {
+      const { options } = cacheInfo || {};
+      if (options?.storageKey && options?.persist) {
+        continue;
+      }
+      clearCache(name);
+    }
+  } catch (error) {
+    console.error('beforeunload 캐시 정리 실패:', error);
+  }
+}
+
 if (typeof window !== 'undefined') {
-  window.addEventListener('beforeunload', clearAllCaches);
+  window.addEventListener('beforeunload', clearVolatileCachesOnBeforeUnload);
 }

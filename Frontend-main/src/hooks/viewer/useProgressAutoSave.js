@@ -4,18 +4,32 @@
  * - 디바운스(delay) 및 중복 저장 방지
  */
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { setProgressToCache } from '../../utils/common/cache/progressCache';
 import { anchorToLocators } from '../../utils/common/locatorUtils';
 import { errorUtils } from '../../utils/common/errorUtils';
 import { saveProgress } from '../../utils/api/api';
 
-export function useProgressAutoSave({ bookKey, currentChapter, currentEvent, delay = 2000 }) {
+export function useProgressAutoSave({
+  bookKey,
+  currentChapter,
+  currentEvent,
+  readingProgressPercent,
+  delay = 2000,
+}) {
   const timeoutRef = useRef(null);
   const lastPayloadRef = useRef(null);
   const latestPayloadRef = useRef(null);
   const inFlightRef = useRef(false);
   const initialSavedRef = useRef(false);
+
+  const readingLocatorKey = useMemo(() => {
+    const anchor = currentEvent?.anchor;
+    if (!anchor?.startLocator && !anchor?.start) return '';
+    const { startLocator } = anchorToLocators(anchor);
+    if (!startLocator) return '';
+    return JSON.stringify(startLocator);
+  }, [currentEvent?.anchor]);
 
   const flushProgress = () => {
     const payload = latestPayloadRef.current;
@@ -32,6 +46,11 @@ export function useProgressAutoSave({ bookKey, currentChapter, currentEvent, del
             throw new Error(res?.message || '진도 저장 응답 실패');
           }
           lastPayloadRef.current = payloadKey;
+          const latest = latestPayloadRef.current;
+          const latestKey = latest ? JSON.stringify(latest) : null;
+          if (latestKey && latestKey !== payloadKey) {
+            queueMicrotask(() => flushProgress());
+          }
         })
         .catch((err) => {
           errorUtils.logWarning(
@@ -48,20 +67,35 @@ export function useProgressAutoSave({ bookKey, currentChapter, currentEvent, del
     }
   };
 
+  const prevBookKeyRef = useRef(null);
+
   useEffect(() => {
     if (!bookKey) {
+      prevBookKeyRef.current = null;
       lastPayloadRef.current = null;
       latestPayloadRef.current = null;
       initialSavedRef.current = false;
       return;
     }
-    const anchor = currentEvent?.anchor;
-    if (!anchor?.startLocator && !anchor?.start) return;
+    if (prevBookKeyRef.current !== bookKey) {
+      prevBookKeyRef.current = bookKey;
+      lastPayloadRef.current = null;
+      initialSavedRef.current = false;
+    }
+    if (!readingLocatorKey) return;
 
+    const anchor = currentEvent?.anchor;
     const { startLocator } = anchorToLocators(anchor);
     if (!startLocator) return;
 
-    const payload = { bookId: bookKey, startLocator, locator: startLocator };
+    const payload = {
+      bookId: bookKey,
+      startLocator,
+      locator: startLocator,
+      ...(Number.isFinite(Number(readingProgressPercent))
+        ? { readingProgressPercent: Math.min(100, Math.max(0, Math.round(Number(readingProgressPercent)))) }
+        : {}),
+    };
     latestPayloadRef.current = payload;
 
     if (!initialSavedRef.current) {
@@ -78,7 +112,7 @@ export function useProgressAutoSave({ bookKey, currentChapter, currentEvent, del
         timeoutRef.current = null;
       }
     };
-  }, [bookKey, currentChapter, currentEvent?.anchor, delay]);
+  }, [bookKey, currentChapter, readingLocatorKey, readingProgressPercent, delay]);
 
   useEffect(() => {
     const handlePageHide = () => flushProgress();

@@ -27,7 +27,6 @@ export function useViewerUrlParams(options = {}) {
   }, []);
 
   const parsedPath = useMemo(() => parseViewerReaderSplat(splat), [splat]);
-  const readingFromPath = parsedPath != null;
 
   const [currentPage, setCurrentPage] = useState(() => parsedPath?.page ?? 1);
   const [currentChapter, setCurrentChapter] = useState(() => parsedPath?.chapter ?? 1);
@@ -116,6 +115,5 @@ export function useViewerUrlParams(options = {}) {
     currentChapterRef,
     updateURL,
     prevUrlStateRef,
-    readingFromPath,
   };
 }

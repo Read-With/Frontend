@@ -101,6 +101,8 @@ function GraphSplitArea({
   bookId = null,
   book = null,
   cachedLocation = null,
+  /** 서버 재진입 시 getBookProgress 기반 앵커(이벤트 인덱스 없어도 챕터·locator 확정) */
+  resumeAnchor = null,
 }) {
   const { activeTooltip, onClearTooltip, onSetActiveTooltip, graphClearRef } = tooltipProps;
   const graphContainerRef = useRef(null);
@@ -121,7 +123,25 @@ function GraphSplitArea({
   
   const isApiBook = useMemo(() => bookUtils.isApiBook(book, bookId), [book, bookId]);
 
+  const hasResumeLocator = useMemo(() => {
+    const loc = resumeAnchor?.startLocator ?? resumeAnchor?.start;
+    if (!loc) return false;
+    const ch = Number(loc.chapterIndex ?? loc.chapterIdx);
+    return Number.isFinite(ch) && ch >= 1;
+  }, [resumeAnchor]);
+
   const hasCachedLocation = useMemo(() => {
+    const loc =
+      cachedLocation?.startLocator ??
+      cachedLocation?.locator ??
+      cachedLocation?.anchor?.startLocator ??
+      cachedLocation?.anchor?.start;
+    if (loc && typeof loc === 'object') {
+      const ch = Number(loc.chapterIndex ?? loc.chapterIdx);
+      if (Number.isFinite(ch) && ch >= 1) {
+        return true;
+      }
+    }
     if (!cachedLocation) {
       return false;
     }
@@ -136,15 +156,17 @@ function GraphSplitArea({
     return true;
   }, [cachedLocation, isApiBook]);
 
+  const hasLocationHint = hasCachedLocation || hasResumeLocator;
+
   const isLocationDetermined = useMemo(() => {
     if (!currentChapter || currentChapter < 1) {
-      return hasCachedLocation;
+      return hasLocationHint;
     }
     if (isApiBook && !currentEvent) {
-      return hasCachedLocation;
+      return hasLocationHint;
     }
     return true;
-  }, [currentChapter, currentEvent, isApiBook, hasCachedLocation]);
+  }, [currentChapter, currentEvent, isApiBook, hasLocationHint]);
 
   const filteredMainCharacters = useMemo(
     () => filterMainCharacters(elements, filterStage),

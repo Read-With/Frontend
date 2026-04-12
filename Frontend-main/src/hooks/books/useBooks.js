@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef, useReducer } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { getBook, toggleBookFavorite } from '../../utils/api/booksApi';
 import { normalizeTitle } from '../../utils/common/stringUtils';
@@ -9,6 +9,10 @@ import {
   getAllLocalBookIds,
 } from '../../utils/library/localBookStorage';
 import { useBooksServerQuery } from './useBooksServerQuery';
+import {
+  getProgressFromCache,
+  PROGRESS_CACHE_UPDATED_EVENT,
+} from '../../utils/common/cache/progressCache';
 
 const HIDDEN_SERVER_BOOK_IDS_KEY = 'readwith_hidden_server_book_ids';
 const normalizeAuthor = (author) => (author || '').toLowerCase().trim().replace(/\s+/g, ' ');
@@ -26,6 +30,7 @@ const getLocalProgress = (bookId) => {
 
 export const useBooks = () => {
   const queryClient = useQueryClient();
+  const [progressCacheEpoch, bumpProgressCacheEpoch] = useReducer((n) => n + 1, 0);
   const [hiddenServerBookIds, setHiddenServerBookIds] = useState(() => {
     try {
       const raw = localStorage.getItem(HIDDEN_SERVER_BOOK_IDS_KEY);
@@ -69,6 +74,12 @@ export const useBooks = () => {
   useEffect(() => {
     refreshIndexedDbBookIds();
   }, [refreshIndexedDbBookIds]);
+
+  useEffect(() => {
+    const onProgressCacheUpdated = () => bumpProgressCacheEpoch();
+    window.addEventListener(PROGRESS_CACHE_UPDATED_EVENT, onProgressCacheUpdated);
+    return () => window.removeEventListener(PROGRESS_CACHE_UPDATED_EVENT, onProgressCacheUpdated);
+  }, []);
 
   useEffect(() => {
     const INTERVAL_MS = 15000;
@@ -148,11 +159,16 @@ export const useBooks = () => {
       const serverBook = serverBooksMap.get(bookId);
       if (!serverBook) return;
       const localProgress = getLocalProgress(bookId);
-      const progress = serverBook.progress ?? localProgress ?? 0;
+      const cached = getProgressFromCache(bookId);
+      const cachePct = cached?.readingProgressPercent;
+      const progress =
+        cachePct != null && Number.isFinite(Number(cachePct))
+          ? Math.round(Math.min(100, Math.max(0, Number(cachePct))))
+          : serverBook.progress ?? localProgress ?? 0;
       result.push({ ...serverBook, progress });
     });
     return result;
-  }, [reconciledBooks, indexedDbBookIds]);
+  }, [reconciledBooks, indexedDbBookIds, progressCacheEpoch]);
 
   const toggleFavoriteMutation = useMutation({
     mutationFn: async ({ bookId, favorite }) => toggleBookFavorite(bookId, favorite),

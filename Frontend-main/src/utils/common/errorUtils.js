@@ -36,15 +36,7 @@ export const errorUtils = {
     }
   },
   
-  logSuccess: (context, message, additionalData = {}) => {
-    if (import.meta.env.DEV) {
-      console.log(`✅ [${context}] 성공:`, {
-        message,
-        ...additionalData,
-        timestamp: new Date().toISOString(),
-      });
-    }
-  },
+  logSuccess: (_context, _message, _additionalData = {}) => {},
   
   handleError: (context, error, fallbackValue = null, additionalData = {}) => {
     errorUtils.logError(context, error, additionalData);

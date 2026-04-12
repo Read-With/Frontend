@@ -117,6 +117,15 @@ const normalizeReaderArtifacts = (readerArtifacts) => {
   };
 };
 
+const normalizeChapterTitleKey = (value) => {
+  if (typeof value !== 'string') return '';
+  const t = value.trim();
+  return t;
+};
+
+/**
+ * progressMetadata.chapterLengths: 신규는 chapterTitle, 구버전은 chapterIdx 등 병행 지원.
+ */
 const normalizeProgressMetadata = (progressMetadata) => {
   if (!progressMetadata || typeof progressMetadata !== 'object') {
     return progressMetadata;
@@ -125,10 +134,19 @@ const normalizeProgressMetadata = (progressMetadata) => {
   const chapterLengths = Array.isArray(rawLengths)
     ? rawLengths.map((item) => {
         if (!item || typeof item !== 'object') return null;
+        const titleRaw = item.chapterTitle ?? item.title ?? item.chapterName ?? null;
+        const chapterTitle = normalizeChapterTitleKey(
+          typeof titleRaw === 'string' ? titleRaw : titleRaw != null ? String(titleRaw) : ''
+        );
         const chapterIdx = toNumberOrNull(item.chapterIdx ?? item.chapterIndex ?? item.idx ?? item.chapter);
         const length = toNumberOrNull(item.length ?? item.codePointLength ?? item.chapterLength);
-        if (chapterIdx == null) return null;
-        return { chapterIdx, length: length ?? 0 };
+        if (!chapterTitle && chapterIdx == null) return null;
+        return {
+          ...item,
+          ...(chapterTitle ? { chapterTitle } : {}),
+          ...(chapterIdx != null ? { chapterIdx } : {}),
+          length: length ?? 0,
+        };
       }).filter(Boolean)
     : [];
   const totalLength = toNumberOrNull(progressMetadata.totalLength ?? progressMetadata.totalCodePointLength)
@@ -138,6 +156,60 @@ const normalizeProgressMetadata = (progressMetadata) => {
     chapterLengths,
     totalLength: totalLength || progressMetadata.totalLength || 0,
   };
+};
+
+/** 챕터 본문에 붙은 길이(진도용 폴백) */
+const lengthFromChapterBody = (chapter) => {
+  if (!chapter || typeof chapter !== 'object') return 0;
+  const tcp = toNumberOrNull(chapter.totalCodePoints);
+  if (tcp != null && tcp > 0) return tcp;
+  const sp = toNumberOrNull(chapter.startPos ?? chapter.start);
+  const ep = toNumberOrNull(chapter.endPos ?? chapter.end);
+  if (sp != null && ep != null && ep > sp) return ep - sp;
+  return 0;
+};
+
+/**
+ * progressMetadata.chapterLengths 항목 (제목 → idx → 배열 순서 동일 시 인덱스)
+ */
+const findChapterLengthEntryForChapter = (manifest, chapter) => {
+  if (!chapter || typeof chapter !== 'object') return null;
+  const lengths = manifest?.progressMetadata?.chapterLengths;
+  if (!Array.isArray(lengths) || lengths.length === 0) return null;
+
+  const titleKey = normalizeChapterTitleKey(chapter.title ?? chapter.chapterTitle ?? '');
+  if (titleKey) {
+    const byTitle = lengths.find(
+      (e) => normalizeChapterTitleKey(e.chapterTitle ?? e.title ?? '') === titleKey
+    );
+    if (byTitle) return byTitle;
+  }
+  const idx = toNumberOrNull(chapter.idx ?? chapter.chapterIdx);
+  if (idx != null) {
+    const byIdx = lengths.find(
+      (e) => toNumberOrNull(e.chapterIdx ?? e.chapterIndex ?? e.idx ?? e.chapter) === idx
+    );
+    if (byIdx) return byIdx;
+  }
+  const chs = manifest?.chapters;
+  if (Array.isArray(chs) && idx != null) {
+    const listIndex = chs.findIndex(
+      (ch) => toNumberOrNull(ch?.idx ?? ch?.chapterIdx) === idx
+    );
+    if (listIndex >= 0 && lengths.length === chs.length && lengths[listIndex]) {
+      return lengths[listIndex];
+    }
+  }
+  return null;
+};
+
+/** chapterLengths 매칭 후에도 0이면 totalCodePoints·start/end span 사용 */
+const getEffectiveChapterLengthForProgress = (manifest, chapter) => {
+  if (!chapter) return 0;
+  const entry = findChapterLengthEntryForChapter(manifest, chapter);
+  const fromTable = toNumberOrNull(entry?.length ?? entry?.codePointLength);
+  if (fromTable != null && fromTable > 0) return fromTable;
+  return lengthFromChapterBody(chapter);
 };
 
 const normalizeManifestData = (manifestData) => {
@@ -342,13 +414,19 @@ export const getTotalLength = (bookId) => {
 
 export const getChapterLength = (bookId, chapterIdx) => {
   const manifest = getManifestFromCache(bookId);
-  if (!manifest?.progressMetadata?.chapterLengths) return 0;
+  if (!manifest?.chapters) return 0;
   const targetIdx = toNumberOrNull(chapterIdx);
   if (targetIdx == null) return 0;
-  const chapterLength = manifest.progressMetadata.chapterLengths.find(
-    cl => toNumberOrNull(cl.chapterIdx) === targetIdx
+  const chapterData = getChapterData(bookId, targetIdx);
+  if (!chapterData) return 0;
+  const fromEffective = getEffectiveChapterLengthForProgress(manifest, chapterData);
+  if (fromEffective > 0) return fromEffective;
+  const lengths = manifest.progressMetadata?.chapterLengths;
+  if (!Array.isArray(lengths)) return 0;
+  const row = lengths.find(
+    (cl) => toNumberOrNull(cl.chapterIdx ?? cl.chapterIndex ?? cl.idx) === targetIdx
   );
-  return chapterLength?.length ?? 0;
+  return toNumberOrNull(row?.length) ?? 0;
 };
 
 export const calculateApiChapterProgressFromLocator = (bookId, startLocator, chapterIdx) => {
@@ -368,14 +446,7 @@ export const calculateApiChapterProgressFromLocator = (bookId, startLocator, cha
   if (!chapterData) {
     return { currentChars: 0, totalChars: 0, progress: 0, chapterStartPos: 0 };
   }
-  const extractChapterIdx = (item) => {
-    if (!item) return null;
-    return toNumberOrNull(item.chapterIdx ?? item.idx ?? item.chapter ?? item.number ?? null);
-  };
-  const chapterLengths = Array.isArray(manifest.progressMetadata?.chapterLengths)
-    ? manifest.progressMetadata.chapterLengths
-    : [];
-  const lengthEntry = chapterLengths.find((entry) => extractChapterIdx(entry) === targetChapterIdx);
+  const lengthEntry = findChapterLengthEntryForChapter(manifest, chapterData);
   const fallbackLengthFromEvents = () => {
     if (!Array.isArray(chapterData.events) || chapterData.events.length === 0) return 0;
     const firstEvent = chapterData.events[0];
@@ -388,20 +459,19 @@ export const calculateApiChapterProgressFromLocator = (bookId, startLocator, cha
     const span = chapterData.endPos - chapterData.startPos;
     if (span > 0) totalChars = span;
   }
-  if (totalChars <= 0 && lengthEntry?.length) totalChars = lengthEntry.length;
+  if (totalChars <= 0 && lengthEntry?.length) totalChars = toNumberOrNull(lengthEntry.length) ?? 0;
+  if (totalChars <= 0) {
+    const fromBody = lengthFromChapterBody(chapterData);
+    if (fromBody > 0) totalChars = fromBody;
+  }
   if (totalChars <= 0) totalChars = fallbackLengthFromEvents();
   let chapterStartPos = typeof chapterData.startPos === 'number' ? chapterData.startPos : null;
-  if ((chapterStartPos == null || chapterStartPos <= 0) && targetChapterIdx > 1 && chapterLengths.length > 0) {
-    const sortedLengths = [...chapterLengths].sort((a, b) => {
-      const aIdx = extractChapterIdx(a) ?? 0;
-      const bIdx = extractChapterIdx(b) ?? 0;
-      return aIdx - bIdx;
-    });
+  if ((chapterStartPos == null || chapterStartPos <= 0) && Array.isArray(manifest.chapters)) {
     let cumulative = 0;
-    for (const entry of sortedLengths) {
-      const entryIdx = extractChapterIdx(entry);
-      if (!entryIdx || entryIdx >= targetChapterIdx) break;
-      cumulative += entry.length || 0;
+    for (const ch of manifest.chapters) {
+      const chIdx = toNumberOrNull(ch.idx ?? ch.chapterIdx);
+      if (chIdx === targetChapterIdx) break;
+      cumulative += getEffectiveChapterLengthForProgress(manifest, ch);
     }
     if (cumulative > 0) chapterStartPos = cumulative;
   }

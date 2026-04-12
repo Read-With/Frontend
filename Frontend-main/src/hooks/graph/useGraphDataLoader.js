@@ -4,7 +4,11 @@ import { sortEventsByIdx, normalizeEventIdx, filterEventsUpTo, filterEventsBefor
 import { createCharacterMaps, aggregateCharactersFromEvents, buildNodeWeights } from '../../utils/graph/characterUtils';
 import { convertRelationsToElements, calcGraphDiff } from '../../utils/graph/graphDataUtils';
 import { normalizeRelation, isValidRelation } from '../../utils/graph/relationUtils';
-import { getCachedChapterEvents, reconstructChapterGraphState } from '../../utils/common/cache/chapterEventCache';
+import {
+  getCachedChapterEvents,
+  hydrateChapterFineGraph,
+  reconstructChapterGraphState,
+} from '../../utils/common/cache/chapterEventCache';
 import { getManifestFromCache } from '../../utils/common/cache/manifestCache';
 import { resolveMaxChapter } from '../../utils/graph/maxChapterResolver';
 
@@ -233,8 +237,24 @@ export function useGraphDataLoader(bookId, chapterIdx, eventIdx = null) {
       }
 
       try {
-        const chapterEvents = await getChapterEvents(bookIdNum, chapter);
-        
+        const cacheKey = `${bookIdNum}-${chapter}`;
+        let chapterEvents = await getChapterEvents(bookIdNum, chapter);
+
+        if (checkCancelled(isCancelledRef)) return;
+
+        if (chapterEvents?.source === 'manifest-only') {
+          chapterEventsCacheRef.current.delete(cacheKey);
+          await hydrateChapterFineGraph(bookIdNum, chapter);
+          chapterEvents = getCachedChapterEvents(bookIdNum, chapter);
+          if (chapterEvents) {
+            if (chapterEventsCacheRef.current.size >= MAX_CACHE_SIZE) {
+              const firstKey = chapterEventsCacheRef.current.keys().next().value;
+              chapterEventsCacheRef.current.delete(firstKey);
+            }
+            chapterEventsCacheRef.current.set(cacheKey, chapterEvents);
+          }
+        }
+
         if (checkCancelled(isCancelledRef)) return;
 
         const eventsArray = Array.isArray(chapterEvents?.events)

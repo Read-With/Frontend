@@ -12,7 +12,13 @@ import { useProgressAutoSave } from "../../hooks/viewer/useProgressAutoSave";
 import { useTooltipState } from "../../hooks/ui/useTooltipState";
 import { useCachedLocation } from "../../hooks/viewer/useCachedLocation";
 import { getFineGraph, saveProgress, getBookProgress } from "../../utils/api/api";
-import { anchorToLocators, resolveProgressLocator } from "../../utils/common/locatorUtils";
+import {
+  anchorToLocators,
+  locatorsEqual,
+  progressResultToViewerAnchor,
+  toLocator,
+  viewerResumeAnchorKey,
+} from "../../utils/common/locatorUtils";
 import { getGraphEventState, getCachedChapterEvents, getCachedReaderProgress, isGraphBookCacheBuilding, ensureGraphBookCache } from "../../utils/common/cache/chapterEventCache";
 import { 
   getServerBookId,
@@ -33,11 +39,16 @@ import { convertRelationsToElements, filterRelationsByTimeline } from "../../uti
 import { buildNodeWeights, createCharacterMaps } from "../../utils/graph/characterUtils";
 import { getRelationKeyFromRelation } from "../../utils/graph/relationUtils";
 import { errorUtils } from "../../utils/common/errorUtils";
+import { logServerBookProgress } from "../../utils/viewer/serverProgressDebug";
 import GraphSplitArea from "./GraphSplitArea";
+
+/** 이어보기 displayAt 폴링: 본문·레이아웃 지연 시 간헐 실패 방지 */
+const VIEWER_RESUME_POLL_MS = 100;
+const VIEWER_RESUME_MAX_ATTEMPTS = 150;
 
 const ViewerPage = () => {
   const {
-    viewerRef, reloadKey, progress, setProgress, currentPage, setCurrentPage,
+    viewerRef, reloadKey, setReloadKey, progress, setProgress, currentPage, setCurrentPage,
     totalPages, setTotalPages, showSettingsModal,
     settings, currentChapter, setCurrentChapter, currentEvent, setCurrentEvent,
     events: _events, setEvents, showGraph, elements, setElements, setGraphViewState,
@@ -53,7 +64,6 @@ const ViewerPage = () => {
     graphState, graphActions, viewerState, searchState, graphFullScreen, setGraphFullScreen: _setGraphFullScreen,
     previousPage, isFromLibrary, bookId, cleanBookId, exitToMypage,
     manifestLoaded,
-    readingFromPath,
   } = useViewerPage();
 
   const bookKey = useMemo(() => {
@@ -65,69 +75,83 @@ const ViewerPage = () => {
 
   const [serverResumeAnchor, setServerResumeAnchor] = useState(null);
   const serverResumeAppliedKeyRef = useRef(null);
-  const currentChapterRef = useRef(currentChapter);
+  const reloadKeyBumpedForBookRef = useRef(null);
 
-  useEffect(() => {
-    currentChapterRef.current = currentChapter;
-  }, [currentChapter]);
+  const [serverProgressLoading, setServerProgressLoading] = useState(() => {
+    const numeric = Number(bookId);
+    return Number.isFinite(numeric) && numeric > 0;
+  });
 
+  // bookKey가 바뀔 때(다른 책으로 이동) 상태 초기화 및 서버 locator 기준 진도 fetch
   useEffect(() => {
     serverResumeAppliedKeyRef.current = null;
     setServerResumeAnchor(null);
-  }, [bookKey]);
 
-  useEffect(() => {
-    let cancelled = false;
-    if (!bookKey || readingFromPath) {
-      setServerResumeAnchor(null);
-      return undefined;
-    }
     const numeric = Number(bookKey);
-    if (!Number.isFinite(numeric) || numeric <= 0) {
-      setServerResumeAnchor(null);
-      return undefined;
+    if (!bookKey || !Number.isFinite(numeric) || numeric <= 0) {
+      setServerProgressLoading(false);
+      return;
     }
-    const chapterWhenFetchStarted = currentChapter;
+
+    if (reloadKeyBumpedForBookRef.current !== bookKey) {
+      reloadKeyBumpedForBookRef.current = bookKey;
+      setReloadKey((k) => k + 1);
+    }
+
+    setServerProgressLoading(true);
+    let cancelled = false;
+
     (async () => {
       try {
         const res = await getBookProgress(String(numeric), { skipCache: true });
         if (cancelled) return;
-        if (Number(currentChapterRef.current) !== Number(chapterWhenFetchStarted)) {
-          setServerResumeAnchor(null);
-          return;
-        }
         if (!res?.isSuccess || !res?.result) {
+          logServerBookProgress({
+            bookId: numeric,
+            ok: false,
+            apiResult: res?.result ?? null,
+            code: res?.code,
+            message: res?.message,
+            viewerResumeAnchor: null,
+          });
           setServerResumeAnchor(null);
           return;
         }
-        const loc = resolveProgressLocator(res.result);
-        if (!loc) {
-          setServerResumeAnchor(null);
-          return;
-        }
-        const anchor = { startLocator: loc, endLocator: loc };
+        const anchor = progressResultToViewerAnchor(res.result);
+        logServerBookProgress({
+          bookId: numeric,
+          ok: true,
+          apiResult: res.result,
+          viewerResumeAnchor: anchor,
+        });
         setServerResumeAnchor(anchor);
-        setCurrentChapter(loc.chapterIndex);
-      } catch (_e) {
-        if (!cancelled) setServerResumeAnchor(null);
+      } catch (err) {
+        if (!cancelled) {
+          logServerBookProgress({
+            bookId: numeric,
+            ok: false,
+            error: err?.message || String(err),
+            viewerResumeAnchor: null,
+          });
+          setServerResumeAnchor(null);
+        }
+      } finally {
+        if (!cancelled) setServerProgressLoading(false);
       }
     })();
-    return () => {
-      cancelled = true;
-    };
-  }, [bookKey, readingFromPath, setCurrentChapter]);
 
+    return () => { cancelled = true; };
+  }, [bookKey]);
+
+  // serverResumeAnchor 확정 후 뷰어가 준비되면 해당 위치로 이동 (initialAnchor의 fallback)
   useEffect(() => {
-    if (!serverResumeAnchor || readingFromPath) return undefined;
-    const key = JSON.stringify(
-      serverResumeAnchor.startLocator ?? serverResumeAnchor.start ?? null
-    );
-    if (!key || key === 'null') return undefined;
+    if (!serverResumeAnchor) return undefined;
+    const key = viewerResumeAnchorKey(serverResumeAnchor);
+    if (!key) return undefined;
     if (serverResumeAppliedKeyRef.current === key) return undefined;
 
     let cancelled = false;
     let attempts = 0;
-    const maxAttempts = 60;
     const id = setInterval(() => {
       if (cancelled || serverResumeAppliedKeyRef.current === key) {
         clearInterval(id);
@@ -135,19 +159,21 @@ const ViewerPage = () => {
       }
       attempts += 1;
       try {
-        viewerRef.current?.displayAt?.(serverResumeAnchor);
-        serverResumeAppliedKeyRef.current = key;
-        clearInterval(id);
+        const moved = viewerRef.current?.displayAt?.(serverResumeAnchor);
+        if (moved) {
+          serverResumeAppliedKeyRef.current = key;
+          clearInterval(id);
+        }
       } catch (_e) {
         void 0;
       }
-      if (attempts >= maxAttempts) clearInterval(id);
-    }, 100);
+      if (attempts >= VIEWER_RESUME_MAX_ATTEMPTS) clearInterval(id);
+    }, VIEWER_RESUME_POLL_MS);
     return () => {
       cancelled = true;
       clearInterval(id);
     };
-  }, [serverResumeAnchor, readingFromPath, reloadKey]);
+  }, [serverResumeAnchor, reloadKey]);
 
   const { cachedLocation, saveLocation } = useCachedLocation(bookKey);
 
@@ -240,75 +266,49 @@ const ViewerPage = () => {
   });
 
 
-  const currentEventKey = useMemo(() => {
-    if (!currentEvent || currentEvent.placeholder) return null;
-    if (currentEvent.chapter && Number(currentEvent.chapter) !== Number(currentChapter)) return null;
-    return {
-      chapter: currentChapter,
-      eventIdx: eventUtils.extractRawEventIdx(currentEvent),
-      eventNum: currentEvent.eventNum ?? currentEvent.eventIdx,
-    };
-  }, [currentChapter, currentEvent?.eventNum, currentEvent?.eventIdx, currentEvent?.placeholder, currentEvent?.chapter]);
-
   useEffect(() => {
-    if (!bookKey || !currentEventKey) {
-      return;
-    }
+    if (!bookKey || !currentEvent) return;
 
-    const resolvedIdx = currentEventKey.eventIdx;
-    const currentCachedLocation = getCachedReaderProgress(bookKey);
-    const cachedChapterIdx = currentCachedLocation ? Number(currentCachedLocation.chapterIdx) : null;
-    const cachedEventIdxValue = currentCachedLocation
-      ? Number(currentCachedLocation.eventIdx ?? currentCachedLocation.eventNum ?? 0)
-      : null;
-    const hasCachedEventIdx =
-      cachedEventIdxValue !== null && Number.isFinite(cachedEventIdxValue) && cachedEventIdxValue > 0;
-    const isSameChapter =
-      cachedChapterIdx !== null &&
-      Number.isFinite(cachedChapterIdx) &&
-      cachedChapterIdx > 0 &&
-      Number(cachedChapterIdx) === Number(currentEventKey.chapter);
+    const { startLocator: startL, endLocator: endL } = anchorToLocators(currentEvent.anchor);
+    if (!startL) return;
+
+    const cached = getCachedReaderProgress(bookKey);
     const cachedStart =
-      currentCachedLocation?.startLocator ??
-      currentCachedLocation?.anchor?.startLocator ??
-      currentCachedLocation?.anchor?.start;
-    const keyStart =
-      currentEvent?.anchor?.startLocator ?? currentEvent?.anchor?.start;
-    const sameByLocator = keyStart && cachedStart &&
-      cachedStart.chapterIndex === keyStart.chapterIndex &&
-      (cachedStart.blockIndex ?? 0) === (keyStart.blockIndex ?? 0) &&
-      (cachedStart.offset ?? 0) === (keyStart.offset ?? 0);
-    const isSameEvent =
-      isSameChapter &&
-      hasCachedEventIdx &&
-      cachedEventIdxValue === resolvedIdx &&
-      sameByLocator;
-
-    if (isSameEvent) {
+      toLocator(cached?.startLocator) ??
+      toLocator(cached?.locator) ??
+      null;
+    const evNow = eventUtils.extractRawEventIdx(currentEvent);
+    const evCached = Number(cached?.eventIdx ?? cached?.eventNum ?? 0);
+    if (cachedStart && locatorsEqual(cachedStart, startL) && evNow === evCached) {
       return;
     }
 
-    const anchor = currentEvent?.anchor;
-    const startL = anchor?.startLocator ?? anchor?.start;
-    const endL = anchor?.endLocator ?? anchor?.end ?? startL;
+    const numericBookId =
+      typeof book?.id === 'number'
+        ? book.id
+        : Number.isFinite(Number(bookKey)) && Number(bookKey) > 0
+          ? Number(bookKey)
+          : null;
+
     saveLocation({
-      bookId: typeof book?.id === 'number' ? book.id : null,
-      chapterIdx: currentEventKey.chapter,
-      eventIdx: resolvedIdx,
-      eventNum: currentEventKey.eventNum ?? resolvedIdx,
-      eventId: currentEvent?.event_id ?? currentEvent?.eventId ?? currentEvent?.id ?? null,
-      startLocator: startL ?? undefined,
-      endLocator: endL ?? undefined,
+      bookId: numericBookId,
+      startLocator: startL,
+      endLocator: endL ?? startL,
+      locator: startL,
+      chapterIdx: startL.chapterIndex,
+      eventIdx: eventUtils.normalizeEventIdx(currentEvent),
+      eventNum: currentEvent.eventNum ?? currentEvent.eventIdx ?? eventUtils.normalizeEventIdx(currentEvent),
+      eventId: currentEvent.event_id ?? currentEvent.eventId ?? currentEvent.id ?? null,
       eventName:
-        currentEvent?.event?.name ??
-        currentEvent?.event?.title ??
-        currentEvent?.title ??
-        currentEvent?.name ??
+        currentEvent.event?.name ??
+        currentEvent.event?.title ??
+        currentEvent.title ??
+        currentEvent.name ??
         null,
-      chapterProgress: currentEvent?.chapterProgress ?? null,
-      source: 'runtime'
+      chapterProgress: currentEvent.chapterProgress ?? null,
+      source: 'runtime',
     });
-  }, [bookKey, currentEventKey, book?.id, currentEvent, saveLocation]);
+  }, [bookKey, currentEvent, book?.id, saveLocation]);
 
   const prefetchChapterEventsSequentially = useCallback(async (targetChapter) => {
     if (!book?.id || typeof book.id !== 'number') {
@@ -858,7 +858,8 @@ const ViewerPage = () => {
   useProgressAutoSave({
     bookKey,
     currentChapter,
-    currentEvent
+    currentEvent,
+    readingProgressPercent: progress,
   });
 
   useEffect(() => {
@@ -1086,35 +1087,30 @@ const ViewerPage = () => {
             bookId={bookId}
             book={book}
             cachedLocation={cachedLocation}
+            resumeAnchor={serverResumeAnchor}
           />
         }
       >
-        {(() => {
-          const initialProgressFromServer = Number(book?.progress);
-          const resolvedInitialProgress = Number.isFinite(initialProgressFromServer)
-            ? initialProgressFromServer
-            : progress;
-          const progressKey = cleanBookId ?? bookKey;
-          return (
-            <XhtmlViewer
-              key={reloadKey}
-              ref={viewerRef}
-              book={book}
-              manifestReady={manifestLoaded}
-              initialChapter={readingFromPath ? currentChapter : undefined}
-              initialProgress={readingFromPath ? undefined : resolvedInitialProgress}
-              onProgressChange={setProgress}
-              onCurrentPageChange={setCurrentPage}
-              onTotalPagesChange={setTotalPages}
-              onCurrentChapterChange={handleCurrentChapterChange}
-              settings={settings}
-              onCurrentLineChange={handleCurrentLineChange}
-              bookId={progressKey}
-              initialAnchor={undefined}
-              initialPage={readingFromPath ? currentPage : undefined}
-            />
-          );
-        })()}
+        {serverProgressLoading ? (
+          <div className="flex items-center justify-center w-full h-full bg-white">
+            <span className="text-gray-500 text-sm">읽던 위치를 불러오는 중...</span>
+          </div>
+        ) : (
+          <XhtmlViewer
+            key={reloadKey}
+            ref={viewerRef}
+            book={book}
+            manifestReady={manifestLoaded}
+            initialAnchor={serverResumeAnchor ?? undefined}
+            onProgressChange={setProgress}
+            onCurrentPageChange={setCurrentPage}
+            onTotalPagesChange={setTotalPages}
+            onCurrentChapterChange={handleCurrentChapterChange}
+            settings={settings}
+            onCurrentLineChange={handleCurrentLineChange}
+            bookId={cleanBookId ?? bookKey}
+          />
+        )}
         {showBookmarkList && bookKey && (
           <BookmarkPanel bookId={bookKey} onSelect={handleBookmarkSelect} />
         )}

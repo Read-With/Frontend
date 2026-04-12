@@ -65,14 +65,48 @@ export const resolveProgressLocator = (data) => {
   return toLocator(candidate) ?? candidate;
 };
 
+/** 서버/로컬 progress payload → 뷰어 displayAt·initialAnchor용 대칭 앵커 */
+export const progressResultToViewerAnchor = (data) => {
+  const loc = resolveProgressLocator(data);
+  if (!loc) return null;
+  return { startLocator: loc, endLocator: loc };
+};
+
+/** 재진입 시 동일 위치 중복 적용(displayAt 폴링 등) 방지용 키 */
+export const viewerResumeAnchorKey = (anchor) => {
+  if (!anchor || typeof anchor !== 'object') return '';
+  const loc = anchor.startLocator ?? anchor.start ?? null;
+  if (!loc || typeof loc !== 'object') return '';
+  return JSON.stringify(loc);
+};
+
+/** POST /api/v2/progress — GET 응답과 동일 계열 필드(locatorVersion, endLocator, 숫자 bookId) 맞춤 */
 export const progressPayloadFromData = (data) => {
-  if (!data?.bookId) return null;
+  if (data?.bookId == null || data.bookId === '') return null;
   const locator = resolveProgressLocator(data);
   if (!locator) return null;
+
+  const rawId = data.bookId;
+  const numId = Number(rawId);
+  const bookId =
+    String(rawId).trim() !== '' && Number.isFinite(numId) && numId > 0 ? numId : rawId;
+
+  const endLocator =
+    data.endLocator != null || data.end != null
+      ? toLocator(data.endLocator ?? data.end) ?? { ...locator }
+      : { ...locator };
+
+  const version =
+    typeof data.locatorVersion === 'string' && data.locatorVersion.trim()
+      ? data.locatorVersion.trim()
+      : 'v2';
+
   return {
-    bookId: data.bookId,
-    startLocator: locator,
-    locator,
+    bookId,
+    startLocator: { ...locator },
+    endLocator,
+    locator: { ...locator },
+    locatorVersion: version,
   };
 };
 
