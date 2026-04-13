@@ -36,27 +36,6 @@ function setCached(bookId, data) {
   metaCache.set(String(bookId), { data, timestamp: Date.now() });
 }
 
-export async function loadBookMeta(bookId, { useCache = true } = {}) {
-  if (!bookId) return null;
-
-  const key = String(bookId);
-  if (useCache) {
-    const cached = getCached(key);
-    if (cached) return cached;
-  }
-
-  const manifestRes = await getBookManifest(bookId);
-  if (manifestRes?.isSuccess && manifestRes?.result) {
-    const data = normalizeMetaFromManifest(manifestRes.result);
-    if (!isValidMetaShape(data)) {
-      return null;
-    }
-    setCached(key, data);
-    return data;
-  }
-  return null;
-}
-
 function toArrayValue(value) {
   if (Array.isArray(value)) return value;
   if (typeof value !== 'string' || value.trim() === '') return [];
@@ -87,6 +66,27 @@ function normalizeMetaFromManifest(raw) {
         ch.chapterLength ??
         ch.length ??
         0,
-    }))
+    })),
   };
+}
+
+export async function loadBookMeta(bookId, { useCache = true } = {}) {
+  if (!bookId) return null;
+
+  const key = String(bookId);
+  if (useCache) {
+    const cached = getCached(key);
+    if (cached) return cached;
+  }
+
+  const manifestRes = await getBookManifest(bookId);
+  if (manifestRes?.isSuccess && manifestRes?.result) {
+    const data = normalizeMetaFromManifest(manifestRes.result);
+    if (!isValidMetaShape(data)) {
+      return null;
+    }
+    setCached(key, data);
+    return data;
+  }
+  return null;
 }

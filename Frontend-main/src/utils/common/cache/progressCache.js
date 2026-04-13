@@ -222,6 +222,7 @@ export const removeProgressFromCache = (bookId) => {
     saveProgressCacheToStorage(cached);
   }
   removeLibraryProgressPercentFromLocalStorage(bookIdStr);
+  dispatchProgressCacheUpdated(bookIdStr);
 };
 
 export const getAllProgressFromCache = () => {

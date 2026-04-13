@@ -39,7 +39,6 @@ import { convertRelationsToElements, filterRelationsByTimeline } from "../../uti
 import { buildNodeWeights, createCharacterMaps } from "../../utils/graph/characterUtils";
 import { getRelationKeyFromRelation } from "../../utils/graph/relationUtils";
 import { errorUtils } from "../../utils/common/errorUtils";
-import { logServerBookProgress } from "../../utils/viewer/serverProgressDebug";
 import GraphSplitArea from "./GraphSplitArea";
 
 /** 이어보기 displayAt 폴링: 본문·레이아웃 지연 시 간헐 실패 방지 */
@@ -106,33 +105,13 @@ const ViewerPage = () => {
         const res = await getBookProgress(String(numeric), { skipCache: true });
         if (cancelled) return;
         if (!res?.isSuccess || !res?.result) {
-          logServerBookProgress({
-            bookId: numeric,
-            ok: false,
-            apiResult: res?.result ?? null,
-            code: res?.code,
-            message: res?.message,
-            viewerResumeAnchor: null,
-          });
           setServerResumeAnchor(null);
           return;
         }
         const anchor = progressResultToViewerAnchor(res.result);
-        logServerBookProgress({
-          bookId: numeric,
-          ok: true,
-          apiResult: res.result,
-          viewerResumeAnchor: anchor,
-        });
         setServerResumeAnchor(anchor);
       } catch (err) {
         if (!cancelled) {
-          logServerBookProgress({
-            bookId: numeric,
-            ok: false,
-            error: err?.message || String(err),
-            viewerResumeAnchor: null,
-          });
           setServerResumeAnchor(null);
         }
       } finally {

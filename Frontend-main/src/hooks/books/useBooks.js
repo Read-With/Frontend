@@ -9,24 +9,11 @@ import {
   getAllLocalBookIds,
 } from '../../utils/library/localBookStorage';
 import { useBooksServerQuery } from './useBooksServerQuery';
-import {
-  getProgressFromCache,
-  PROGRESS_CACHE_UPDATED_EVENT,
-} from '../../utils/common/cache/progressCache';
+import { PROGRESS_CACHE_UPDATED_EVENT } from '../../utils/common/cache/progressCache';
+import { resolveLibraryReadingProgressPercent } from '../../utils/library/libraryBookDisplay';
 
 const HIDDEN_SERVER_BOOK_IDS_KEY = 'readwith_hidden_server_book_ids';
 const normalizeAuthor = (author) => (author || '').toLowerCase().trim().replace(/\s+/g, ' ');
-
-const getLocalProgress = (bookId) => {
-  try {
-    const raw = localStorage.getItem(`progress_${bookId}`);
-    if (raw == null) return null;
-    const n = Number(raw);
-    return Number.isFinite(n) ? Math.min(100, Math.max(0, n)) : null;
-  } catch {
-    return null;
-  }
-};
 
 export const useBooks = () => {
   const queryClient = useQueryClient();
@@ -158,13 +145,7 @@ export const useBooks = () => {
       if (hiddenServer.has(bookId)) return;
       const serverBook = serverBooksMap.get(bookId);
       if (!serverBook) return;
-      const localProgress = getLocalProgress(bookId);
-      const cached = getProgressFromCache(bookId);
-      const cachePct = cached?.readingProgressPercent;
-      const progress =
-        cachePct != null && Number.isFinite(Number(cachePct))
-          ? Math.round(Math.min(100, Math.max(0, Number(cachePct))))
-          : serverBook.progress ?? localProgress ?? 0;
+      const progress = resolveLibraryReadingProgressPercent(serverBook);
       result.push({ ...serverBook, progress });
     });
     return result;

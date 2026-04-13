@@ -1,7 +1,11 @@
 import { sortEventsByIdx } from '../../graph/eventUtils';
 import { buildNodeWeights, extractCharacterId } from '../../graph/characterUtils';
 import { getFineGraph, getBookManifest } from '../../api/api';
-import { getChapterData as getManifestChapterData, getManifestFromCache } from './manifestCache';
+import {
+  getChapterData as getManifestChapterData,
+  getManifestFromCache,
+  calculateMaxChapterFromChapters,
+} from './manifestCache';
 import { createCharacterMaps } from '../../graph/characterUtils';
 import { convertRelationsToElements, calcGraphDiff } from '../../graph/graphDataUtils';
 import { 
@@ -16,6 +20,7 @@ import {
 } from './cacheManager';
 import { eventUtils } from '../../viewer/viewerUtils';
 import { resolveProgressLocator, toLocator } from '../locatorUtils';
+import { toNumberOrNull } from '../numberUtils';
 
 const READER_PROGRESS_CACHE_PREFIX = 'reader_progress_';
 const READER_PROGRESS_MAX_AGE = 3 * 24 * 60 * 60 * 1000;
@@ -122,19 +127,11 @@ export const ensureGraphBookCache = async (
       : [];
 
     const normalizedChapterIndices = chapters
-      .map((chapter, index) => {
-        const idxCandidate =
-          chapter?.chapterIdx ??
-          chapter?.idx ??
-          chapter?.chapter ??
-          chapter?.number ??
-          index + 1;
-        const numericIdx = Number(idxCandidate);
-        return Number.isFinite(numericIdx) && numericIdx > 0
-          ? numericIdx
-          : null;
+      .map((chapter) => {
+        const v = toNumberOrNull(chapter?.idx ?? chapter?.chapterIndex);
+        return v != null && v > 0 ? v : null;
       })
-      .filter((idx, idxIndex, self) => idx && self.indexOf(idx) === idxIndex)
+      .filter((idx, idxIndex, self) => idx != null && self.indexOf(idx) === idxIndex)
       .sort((a, b) => a - b);
 
     const chapterSummaries = [];
@@ -171,9 +168,7 @@ export const ensureGraphBookCache = async (
     const summaryPayload = writeGraphBookCache(numericId, {
       bookId: numericId,
       chapters: chapterSummaries,
-      maxChapter: chapterSummaries.length
-        ? Math.max(...chapterSummaries.map((item) => item.chapterIdx))
-        : 0,
+      maxChapter: calculateMaxChapterFromChapters(chapters),
       builtAt: Date.now(),
     });
 

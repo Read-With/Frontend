@@ -5,6 +5,16 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { getBookManifest, getBookProgress, deleteBookProgress } from '../../utils/api/api';
 import { resolveProgressLocator } from '../../utils/common/locatorUtils';
 import { getManifestFromCache } from '../../utils/common/cache/manifestCache';
+import { getProgressFromCache, PROGRESS_CACHE_UPDATED_EVENT } from '../../utils/common/cache/progressCache';
+import {
+  resolveLibraryReadingProgressPercent,
+  formatLibraryRelativeDate,
+} from '../../utils/library/libraryBookDisplay';
+import {
+  formatChapterBadgeFromTitle,
+  formatChapterTocNumericLine,
+  stripRedundantBookTitlePrefix,
+} from '../../utils/viewer/chapterTitleDisplay';
 import { getServerBookId } from '../../utils/viewer/viewerUtils';
 import { USER_VIEWER_PREFIX } from '../../utils/navigation/viewerPaths';
 import { toast } from 'react-toastify';
@@ -22,6 +32,7 @@ const BookDetailModal = memo(({ book, isOpen, onClose, onDelete }) => {
   const [charactersPanelOpen, setCharactersPanelOpen] = useState(true);
   const [chaptersPanelOpen, setChaptersPanelOpen] = useState(true);
   const [bookDeleteConfirm, setBookDeleteConfirm] = useState(false);
+  const [progressCacheTick, setProgressCacheTick] = useState(0);
   const closeButtonRef = useRef(null);
   const lastFocusRef = useRef(null);
 
@@ -46,66 +57,27 @@ const BookDetailModal = memo(({ book, isOpen, onClose, onDelete }) => {
     };
   }, [bookDetails?.characters]);
 
-  const progressLocator = useMemo(
-    () => (progressInfo ? resolveProgressLocator(progressInfo) : null),
-    [progressInfo]
+  const serverBookId = getServerBookId(book);
+  const bookIdStr = serverBookId != null ? String(serverBookId) : null;
+
+  const progressLocator = useMemo(() => {
+    const cached = serverBookId != null ? getProgressFromCache(serverBookId) : null;
+    return resolveProgressLocator(cached || progressInfo);
+  }, [serverBookId, progressInfo, progressCacheTick]);
+
+  const readPercent = useMemo(
+    () => resolveLibraryReadingProgressPercent(book),
+    [book, progressCacheTick]
   );
 
-  const manifestStats = useMemo(() => {
-    const chapters = Array.isArray(bookDetails?.chapters) ? bookDetails.chapters : [];
-    const pm = bookDetails?.progressMetadata;
-    const totalLength = Number(pm?.totalLength);
-    const maxChapter = Number(pm?.maxChapter);
-    return {
-      chapterCount: chapters.length,
-      totalLength: Number.isFinite(totalLength) && totalLength > 0 ? totalLength : null,
-      maxChapter: Number.isFinite(maxChapter) && maxChapter > 0 ? maxChapter : chapters.length,
-    };
-  }, [bookDetails?.chapters, bookDetails?.progressMetadata]);
-
-  const readerMeta = useMemo(() => {
-    const { chapterCount, totalLength, maxChapter } = manifestStats;
-    let readPercent = null;
-    if (totalLength != null && progressInfo && Number.isFinite(Number(progressInfo.startTxtOffset))) {
-      const ratio = Number(progressInfo.startTxtOffset) / totalLength;
-      readPercent = Math.min(100, Math.max(0, Math.round(ratio * 100)));
-    } else if (progressLocator && chapterCount > 0) {
-      const mc = Math.max(1, maxChapter || chapterCount);
-      const ch = progressLocator.chapterIndex;
-      if (Number.isFinite(ch) && ch >= 1) {
-        readPercent = Math.min(100, Math.max(0, Math.round((ch / mc) * 100)));
-      }
-    }
-
-    let lastReadFormatted = null;
-    let lastReadCompact = null;
-    let lastReadAt = null;
-    if (progressInfo?.updatedAt) {
-      const d = new Date(progressInfo.updatedAt);
-      lastReadAt = Number.isNaN(d.getTime()) ? null : d.toISOString();
-      lastReadFormatted = d.toLocaleString('ko-KR', {
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit',
-      });
-      lastReadCompact = d.toLocaleString('ko-KR', {
-        month: 'numeric',
-        day: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-      });
-    }
-
-    return {
-      readPercent,
-      lastReadFormatted,
-      lastReadCompact,
-      lastReadAt,
-      hasReadingRecord: !!progressInfo,
-    };
-  }, [manifestStats, progressInfo, progressLocator]);
+  const libraryRelativeUpdated = book?.updatedAt
+    ? formatLibraryRelativeDate(book.updatedAt)
+    : '';
+  const libraryUpdatedAtIso = (() => {
+    if (!book?.updatedAt) return null;
+    const d = new Date(book.updatedAt);
+    return Number.isNaN(d.getTime()) ? null : d.toISOString();
+  })();
 
   const fetchProgressInfo = useCallback(async () => {
     const serverBookId = getServerBookId(book);
@@ -186,6 +158,17 @@ const BookDetailModal = memo(({ book, isOpen, onClose, onDelete }) => {
       fetchProgressInfo();
     }
   }, [isOpen, book, fetchBookDetails, fetchProgressInfo]);
+
+  useEffect(() => {
+    if (!isOpen || !bookIdStr) return undefined;
+    const onUpd = (e) => {
+      if (String(e.detail?.bookId) === bookIdStr) {
+        setProgressCacheTick((t) => t + 1);
+      }
+    };
+    window.addEventListener(PROGRESS_CACHE_UPDATED_EVENT, onUpd);
+    return () => window.removeEventListener(PROGRESS_CACHE_UPDATED_EVENT, onUpd);
+  }, [isOpen, bookIdStr]);
 
   useEffect(() => {
     if (isOpen && book) {
@@ -354,6 +337,7 @@ const BookDetailModal = memo(({ book, isOpen, onClose, onDelete }) => {
 
   const coverSrc = bookDetails?.coverImgUrl || book?.coverImgUrl;
   const displayTitle = bookDetails?.title || book?.title || '제목 없음';
+  const chapterStripBookTitle = String(bookDetails?.title ?? book?.title ?? '').trim();
   const displayAuthor = bookDetails?.author || book?.author || '저자 정보 없음';
   const coverInitial = (displayTitle || '?').trim().slice(0, 1) || '?';
   const currentChapterIndex = progressLocator?.chapterIndex;
@@ -419,51 +403,43 @@ const BookDetailModal = memo(({ book, isOpen, onClose, onDelete }) => {
                 </div>
               </div>
             )}
-            {!loading && (readerMeta.hasReadingRecord || readerMeta.readPercent != null) && (
+            {!loading && (readPercent > 0 || progressInfo) && (
               <div
                 className="book-detail-reader-meta book-detail-reader-meta--compact"
                 role="region"
                 aria-label="독서 진행"
               >
-                {readerMeta.readPercent != null && (
+                {readPercent > 0 && (
                   <div className="book-detail-reader-progress-row">
                     <div
                       className="book-detail-reader-progress"
                       role="progressbar"
-                      aria-valuenow={readerMeta.readPercent}
+                      aria-valuenow={readPercent}
                       aria-valuemin={0}
                       aria-valuemax={100}
-                      aria-valuetext={`${readerMeta.readPercent}% 읽음`}
-                      aria-label={`읽기 진행 ${readerMeta.readPercent}%`}
+                      aria-valuetext={`${readPercent}% 읽음`}
+                      aria-label={`읽기 진행 ${readPercent}%`}
                     >
                       <div
                         className="book-detail-reader-progress-fill"
-                        style={{ width: `${readerMeta.readPercent}%` }}
+                        style={{ width: `${readPercent}%` }}
                       />
                     </div>
                     <span className="book-detail-reader-progress-pct" aria-hidden="true">
-                      <span className="book-detail-reader-progress-pct-value">
-                        {readerMeta.readPercent}
-                      </span>
-                      %
+                      <span className="book-detail-reader-progress-pct-value">{readPercent}</span>%
                     </span>
                   </div>
                 )}
                 <div className="book-detail-reader-compact-foot">
-                  {readerMeta.lastReadCompact ? (
+                  {libraryRelativeUpdated ? (
                     <time
                       className="book-detail-reader-compact-time"
-                      dateTime={readerMeta.lastReadAt ?? undefined}
-                      title={readerMeta.lastReadFormatted ?? undefined}
-                      aria-label={
-                        readerMeta.lastReadFormatted
-                          ? `마지막으로 읽음 ${readerMeta.lastReadFormatted}`
-                          : undefined
-                      }
+                      dateTime={libraryUpdatedAtIso ?? undefined}
+                      aria-label={`최근 업데이트 ${libraryRelativeUpdated}`}
                     >
-                      {readerMeta.lastReadCompact}
+                      {libraryRelativeUpdated}
                     </time>
-                  ) : readerMeta.hasReadingRecord ? (
+                  ) : progressInfo ? (
                     <span className="book-detail-reader-compact-placeholder">—</span>
                   ) : null}
                   {progressInfo && (
@@ -657,20 +633,19 @@ const BookDetailModal = memo(({ book, isOpen, onClose, onDelete }) => {
                   >
                     <ol className="book-detail-chapters-list">
                       {bookDetails.chapters.map((chapter, index) => {
-                        const chapterTitle =
-                          chapter.title ||
-                          chapter.chapterTitle ||
-                          chapter.name ||
-                          chapter.chapterName ||
-                          '';
-                        const chapterIdx =
-                          chapter.idx ??
-                          chapter.chapterIdx ??
-                          chapter.chapter ??
-                          chapter.number ??
-                          index + 1;
-                        const chapterKey = chapter.id ?? chapter.href ?? `${chapterIdx}-${chapterTitle}`;
-                        const idxNum = Number(chapterIdx);
+                        const rawTitle = String(chapter.title ?? '').trim();
+                        const idxNum = Number(chapter.idx);
+                        const idxStr =
+                          Number.isFinite(idxNum) && idxNum >= 1 ? String(idxNum) : '—';
+                        const tForBadge = rawTitle
+                          ? stripRedundantBookTitlePrefix(rawTitle, chapterStripBookTitle)
+                          : '';
+                        const part = tForBadge ? formatChapterBadgeFromTitle(tForBadge) : idxStr;
+                        const chapterLine = formatChapterTocNumericLine(part, idxStr);
+                        const chapterKey =
+                          chapter.id ??
+                          chapter.href ??
+                          (Number.isFinite(idxNum) ? `ch-${idxNum}` : `ch-row-${index}`);
                         const isCurrent =
                           currentChapterIndex != null &&
                           Number.isFinite(idxNum) &&
@@ -684,9 +659,14 @@ const BookDetailModal = memo(({ book, isOpen, onClose, onDelete }) => {
                                 : 'book-detail-chapter-item'
                             }
                           >
-                            <span className="book-detail-chapter-num">{chapterIdx}</span>
-                            <span className="book-detail-chapter-title">
-                              {chapterTitle || '제목 없음'}
+                            <span className="book-detail-chapter-num">
+                              {Number.isFinite(idxNum) ? idxNum : '—'}
+                            </span>
+                            <span
+                              className="book-detail-chapter-title"
+                              title={rawTitle || undefined}
+                            >
+                              {chapterLine}
                             </span>
                             {isCurrent ? (
                               <button

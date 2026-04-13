@@ -646,6 +646,7 @@ function RelationGraphWrapper() {
         chapterList={chapterList}
         currentChapter={currentChapter}
         onChapterSelect={handleChapterSelect}
+        manifestBookId={isApiBook && serverBookId != null ? serverBookId : null}
       />
 
       <GraphCanvas

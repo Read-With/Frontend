@@ -56,11 +56,7 @@ const normalizeChapter = (chapter, index) => {
     chapter.chapterIdx ?? chapter.chapterIndex ?? chapter.idx ?? chapter.chapter ?? chapter.number ?? index + 1
   );
 
-  const resolvedTitle = chapter.title ?? 
-                       chapter.chapterTitle ?? 
-                       chapter.name ?? 
-                       chapter.chapterName ?? 
-                       null;
+  const resolvedTitle = chapter.title ?? chapter.chapterTitle ?? null;
 
   const normalizedEvents = Array.isArray(chapter.events)
     ? chapter.events
@@ -77,10 +73,12 @@ const normalizeChapter = (chapter, index) => {
   const normalizedStartPos = resolvedStartPos ?? firstEvent?.startPos ?? 0;
   const normalizedEndPos = resolvedEndPos ?? lastEvent?.endPos ?? normalizedStartPos;
 
+  const idxVal = resolvedChapterIdx ?? index + 1;
   return {
     ...chapter,
-    idx: resolvedChapterIdx ?? index + 1,
-    chapterIdx: resolvedChapterIdx ?? index + 1,
+    idx: idxVal,
+    chapterIdx: idxVal,
+    chapterIndex: idxVal,
     title: resolvedTitle,
     chapterTitle: resolvedTitle,
     startPos: normalizedStartPos,
@@ -177,17 +175,17 @@ const findChapterLengthEntryForChapter = (manifest, chapter) => {
   const lengths = manifest?.progressMetadata?.chapterLengths;
   if (!Array.isArray(lengths) || lengths.length === 0) return null;
 
-  const titleKey = normalizeChapterTitleKey(chapter.title ?? chapter.chapterTitle ?? '');
+  const titleKey = normalizeChapterTitleKey(chapter.title ?? '');
   if (titleKey) {
     const byTitle = lengths.find(
-      (e) => normalizeChapterTitleKey(e.chapterTitle ?? e.title ?? '') === titleKey
+      (e) => normalizeChapterTitleKey(e.title ?? e.chapterTitle ?? '') === titleKey
     );
     if (byTitle) return byTitle;
   }
   const idx = toNumberOrNull(chapter.idx ?? chapter.chapterIdx);
   if (idx != null) {
     const byIdx = lengths.find(
-      (e) => toNumberOrNull(e.chapterIdx ?? e.chapterIndex ?? e.idx ?? e.chapter) === idx
+      (e) => toNumberOrNull(e.chapterIdx ?? e.chapterIndex ?? e.idx) === idx
     );
     if (byIdx) return byIdx;
   }
@@ -359,11 +357,11 @@ export const getChapterData = (bookId, chapterIdx) => {
   if (!manifest || !manifest.chapters) return null;
   
   const targetIdx = toNumberOrNull(chapterIdx);
-  return manifest.chapters.find(ch => {
+  return manifest.chapters.find((ch) => {
     if (!ch || typeof ch !== 'object') return false;
-    const idx = toNumberOrNull(ch.idx);
-    const chapterIdxValue = toNumberOrNull(ch.chapterIdx);
-    return idx === targetIdx || chapterIdxValue === targetIdx;
+    const byIdx = toNumberOrNull(ch.idx);
+    if (byIdx === targetIdx) return true;
+    return toNumberOrNull(ch.chapterIdx) === targetIdx;
   }) ?? null;
 };
 
@@ -384,25 +382,27 @@ export const isValidEvent = (bookId, chapterIdx, eventIdx) => {
   return chapterData.events.some(ev => toNumberOrNull(ev.idx) === targetEventIdx);
 };
 
-export const getMaxChapter = (bookId) => {
-  const manifest = getManifestFromCache(bookId);
-  if (!manifest || !manifest.progressMetadata) return 0;
-  
-  return manifest.progressMetadata.maxChapter || 0;
-};
-
+/**
+ * maxChapter: 매니페스트 chapters[].idx 최댓값(11 > 9). 캐시 정규화로 chapterIndex만 있는 경우 보조.
+ */
 export const calculateMaxChapterFromChapters = (chapters) => {
   if (!Array.isArray(chapters) || chapters.length === 0) {
-    return 1;
+    return 0;
   }
-  let maxChapterIdx = 1;
-  for (const chapterInfo of chapters) {
-    const chapterIdx = chapterInfo?.idx || chapterInfo?.chapterIdx || chapterInfo?.chapter || chapterInfo?.index || chapterInfo?.number || chapterInfo?.id;
-    if (typeof chapterIdx === 'number' && !isNaN(chapterIdx) && chapterIdx > 0 && chapterIdx > maxChapterIdx) {
-      maxChapterIdx = chapterIdx;
+  let maxV = -Infinity;
+  for (const ch of chapters) {
+    const v = toNumberOrNull(ch?.idx ?? ch?.chapterIndex);
+    if (v != null) {
+      maxV = Math.max(maxV, v);
     }
   }
-  return maxChapterIdx;
+  return Number.isFinite(maxV) ? maxV : 0;
+};
+
+export const getMaxChapter = (bookId) => {
+  const manifest = getManifestFromCache(bookId);
+  if (!manifest?.chapters) return 0;
+  return calculateMaxChapterFromChapters(manifest.chapters);
 };
 
 export const getTotalLength = (bookId) => {

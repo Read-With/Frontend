@@ -6,6 +6,7 @@ import BookDetailModal from './BookDetailModal';
 import './BookLibrary.css';
 import { ensureGraphBookCache } from '../../utils/common/cache/chapterEventCache';
 import { USER_VIEWER_PREFIX } from '../../utils/navigation/viewerPaths';
+import { formatLibraryRelativeDate } from '../../utils/library/libraryBookDisplay';
 
 function navigateFromLibrary(navigate, book, graphMode) {
   const base = graphMode === 'graph' ? '/user/graph' : USER_VIEWER_PREFIX;
@@ -13,17 +14,6 @@ function navigateFromLibrary(navigate, book, graphMode) {
     state: { book, fromLibrary: true, from: { pathname: '/user/mypage' } },
     replace: false,
   });
-}
-
-function formatLibraryRelativeDate(updatedAt) {
-  const date = new Date(updatedAt);
-  const now = new Date();
-  const diffTime = Math.abs(now - date);
-  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-  if (diffDays === 1) return '오늘';
-  if (diffDays === 2) return '어제';
-  if (diffDays <= 7) return `${diffDays - 1}일 전`;
-  return date.toLocaleDateString('ko-KR', { month: 'short', day: 'numeric' });
 }
 
 const DeleteConfirmModal = ({ isOpen, onClose, onConfirm }) => {
@@ -343,6 +333,14 @@ const BookLibrary = memo(({ books, loading: _loading, error: _loadError, onRetry
   const [selectedBook, setSelectedBook] = useState(null);
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [deleteTargetBook, setDeleteTargetBook] = useState(null);
+
+  useEffect(() => {
+    if (!selectedBook?.id) return;
+    const next = books.find((b) => String(b.id) === String(selectedBook.id));
+    if (next && next !== selectedBook) {
+      setSelectedBook(next);
+    }
+  }, [books, selectedBook]);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
 
   useEffect(() => {

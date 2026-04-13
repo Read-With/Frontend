@@ -3,7 +3,12 @@ import GraphControls from '../graph/GraphControls';
 import EdgeLabelToggle from '../graph/tooltip/EdgeLabelToggle';
 import { getChapterEventCount, getFolderKeyFromFilename } from '../../utils/graph/graphData';
 import { getCachedChapterEvents } from '../../utils/common/cache/chapterEventCache';
-import { getChapterData } from '../../utils/common/cache/manifestCache';
+import { getChapterData, getManifestFromCache } from '../../utils/common/cache/manifestCache';
+import {
+  formatChapterBadgeFromTitle,
+  formatChapterColonLine,
+  stripRedundantBookTitlePrefix,
+} from '../../utils/viewer/chapterTitleDisplay';
 
 // 공통 스타일 상수들
 const LOADING_STYLE = {
@@ -26,6 +31,10 @@ const CHAPTER_STYLE = {
   fontSize: 14,
   fontWeight: 600,
   border: "1px solid #e3e6ef",
+  maxWidth: "min(360px, 42vw)",
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+  whiteSpace: "nowrap",
 };
 
 const EVENT_NUMBER_STYLE = {
@@ -133,11 +142,17 @@ const ViewerTopBar = ({
   const [hasInitialData, setHasInitialData] = React.useState(false);
 
   const bookId = useMemo(() => {
-    if (book && typeof book.id === 'number') {
-      return book.id;
-    }
-    return null;
+    const id = book?.id;
+    const n = Number(id);
+    return Number.isFinite(n) && n > 0 ? n : null;
   }, [book]);
+
+  const stripBookTitle = useMemo(() => {
+    const fromBook = String(book?.title ?? '').trim();
+    if (fromBook) return fromBook;
+    const m = bookId != null ? getManifestFromCache(bookId) : null;
+    return String(m?.book?.title ?? m?.title ?? '').trim();
+  }, [book?.title, bookId]);
 
   const resolvedServerChapter = useMemo(() => {
     const fromCurrentEvent = Number(currentEvent?.chapter ?? currentEvent?.chapterIdx ?? 0);
@@ -163,6 +178,24 @@ const ViewerTopBar = ({
 
     return Number(currentChapter) || 1;
   }, [bookId, currentChapter, currentEvent?.chapter, currentEvent?.chapterIdx, prevValidEvent?.chapter, prevValidEvent?.chapterIdx]);
+
+  const chapterDisplayLabel = useMemo(() => {
+    const idxStr = String(resolvedServerChapter ?? '').trim() || '—';
+    if (!bookId) {
+      return formatChapterColonLine(idxStr);
+    }
+    const ch = getChapterData(bookId, resolvedServerChapter);
+    const t = String(ch?.title ?? '').trim();
+    const tForBadge = t ? stripRedundantBookTitlePrefix(t, stripBookTitle) : '';
+    const part = tForBadge ? formatChapterBadgeFromTitle(tForBadge) : idxStr;
+    return formatChapterColonLine(part);
+  }, [bookId, resolvedServerChapter, stripBookTitle]);
+
+  const chapterTitleTooltip = useMemo(() => {
+    if (!bookId) return undefined;
+    const t = String(getChapterData(bookId, resolvedServerChapter)?.title ?? '').trim();
+    return t || undefined;
+  }, [bookId, resolvedServerChapter]);
 
   const folderKey = useMemo(() => {
     if (!filename) return null;
@@ -343,8 +376,8 @@ const ViewerTopBar = ({
 
     return (
       <>
-        <span style={CHAPTER_STYLE}>
-          Chapter {resolvedServerChapter}
+        <span style={CHAPTER_STYLE} title={chapterTitleTooltip}>
+          {chapterDisplayLabel}
         </span>
 
         <div
@@ -389,7 +422,17 @@ const ViewerTopBar = ({
         </div>
       </>
     );
-  }, [isGraphLoading, currentEventInfo, resolvedServerChapter, currentProgressWidth, prevEvent, currentEvent, prevValidEvent, hasInitialData]);
+  }, [
+    isGraphLoading,
+    currentEventInfo,
+    chapterDisplayLabel,
+    chapterTitleTooltip,
+    currentProgressWidth,
+    prevEvent,
+    currentEvent,
+    prevValidEvent,
+    hasInitialData,
+  ]);
 
   const renderGraphControls = useCallback(() => (
     <GraphControls

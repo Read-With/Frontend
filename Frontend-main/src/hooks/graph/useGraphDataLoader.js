@@ -62,8 +62,7 @@ export function useGraphDataLoader(bookId, chapterIdx, eventIdx = null) {
     }
 
     const manifest = getManifestFromCache(numericBookId);
-    const maxChapter = resolveMaxChapter(numericBookId, manifest);
-    setMaxChapter(maxChapter);
+    setMaxChapter(resolveMaxChapter(numericBookId, manifest));
   }, [numericBookId]);
 
   useEffect(() => {

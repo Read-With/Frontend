@@ -16,7 +16,6 @@ import {
   collectSanitizedStyleCssFromDocument,
 } from '../../../utils/viewer/sanitizeXhtml';
 import { getManifestFromCache } from '../../../utils/common/cache/manifestCache';
-import { isXhtmlBlocksDebug } from '../../../utils/viewer/xhtmlBlockDebug';
 
 const xhtmlLoadCache = new Map();
 const XHTML_LOAD_CACHE_VERSION = 'v2';
@@ -129,7 +128,7 @@ const resolveChapterFromMetaByPage = (meta, currentPageIndex, totalPages) => {
   const weighted = chapters
     .map((chapter) => {
       const len = Number(chapter?.totalCodePoints ?? 0);
-      const chapterIdx = Number(chapter?.chapterIndex ?? chapter?.chapterIdx ?? chapter?.idx);
+      const chapterIdx = Number(chapter?.idx ?? chapter?.chapterIndex ?? chapter?.chapterIdx);
       if (!Number.isFinite(chapterIdx)) return null;
       return {
         chapterIdx,
@@ -150,9 +149,9 @@ const resolveChapterFromManifestByPage = (manifest, currentPageIndex, totalPages
     : [];
 
   const resolveLengthFromTable = (ch, listIndex) => {
-    const title = String(ch?.title ?? ch?.chapterTitle ?? '').trim();
+    const title = String(ch?.title ?? '').trim();
     if (title) {
-      const hit = lengths.find((e) => String(e?.chapterTitle ?? e?.title ?? '').trim() === title);
+      const hit = lengths.find((e) => String(e?.title ?? e?.chapterTitle ?? '').trim() === title);
       if (hit) {
         const len = Number(hit.length ?? hit.codePointLength ?? 0);
         if (Number.isFinite(len) && len > 0) return len;
@@ -496,29 +495,12 @@ const XhtmlViewer = forwardRef(
       };
 
       if (!blockEntries.length) {
-        if (isXhtmlBlocksDebug()) {
-          console.warn('[XhtmlBlocks]', {
-            bid,
-            currentPageIndex,
-            totalPages,
-            reason: 'DOM에 data-chapter-index 마커 없음',
-          });
-        }
         emitResolvedFallback();
         return;
       }
 
       const root = viewport.getBoundingClientRect();
       if (root.height < 8) {
-        if (isXhtmlBlocksDebug()) {
-          console.warn('[XhtmlBlocks]', {
-            bid,
-            currentPageIndex,
-            totalPages,
-            reason: '뷰포트 높이 미측정 — 레이아웃 후 재실행 대기',
-            viewportH: Math.round(root.height),
-          });
-        }
         return;
       }
 
@@ -536,16 +518,6 @@ const XhtmlViewer = forwardRef(
         .sort((a, b) => a.top - b.top);
 
       if (!visible.length) {
-        if (isXhtmlBlocksDebug()) {
-          console.warn('[XhtmlBlocks]', {
-            bid,
-            currentPageIndex,
-            totalPages,
-            reason: '뷰포트와 겹치는 블록 없음(폴백 locator)',
-            totalBlocks: blockEntries.length,
-            viewportH: Math.round(root.height),
-          });
-        }
         emitResolvedFallback();
         return;
       }

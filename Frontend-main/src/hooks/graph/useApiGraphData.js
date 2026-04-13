@@ -2,7 +2,6 @@ import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { getMacroGraph, getFineGraph, getBookManifest } from '../../utils/api/api.js';
 import { readingLocatorFromGraphEvent } from '../../utils/common/locatorUtils';
 import { getManifestFromCache } from '../../utils/common/cache/manifestCache';
-import { getGraphBookCache } from '../../utils/common/cache/chapterEventCache';
 import { resolveMaxChapter } from '../../utils/graph/maxChapterResolver';
 import { loadGraphDataWithCache } from '../../utils/graph/graphDataLoader';
 import { useErrorHandler } from '../common/useErrorHandler';
@@ -37,19 +36,12 @@ export function useApiGraphData(serverBookId, currentChapter, currentEvent, isAp
     setIsGraphLoading(true);
 
     try {
-      const graphCache = getGraphBookCache(targetBookId);
-      const initialMaxChapter = resolveMaxChapter(targetBookId, null, graphCache);
-      
-      if (graphCache?.maxChapter && graphCache.maxChapter > 0) {
-        setApiMaxChapter(graphCache.maxChapter);
-        setIsGraphLoading(false);
-        return;
-      }
+      const initialMaxChapter = resolveMaxChapter(targetBookId, null);
 
       const cachedManifest = getManifestFromCache(targetBookId);
       if (cachedManifest) {
         setManifestData(cachedManifest);
-        const maxChapter = resolveMaxChapter(targetBookId, cachedManifest, graphCache);
+        const maxChapter = resolveMaxChapter(targetBookId, cachedManifest);
         setApiMaxChapter(maxChapter);
         setIsGraphLoading(false);
         return;
@@ -59,7 +51,7 @@ export function useApiGraphData(serverBookId, currentChapter, currentEvent, isAp
 
       if (manifestResponse?.isSuccess && manifestResponse?.result) {
         setManifestData(manifestResponse.result);
-        const maxChapter = resolveMaxChapter(targetBookId, manifestResponse.result, graphCache);
+        const maxChapter = resolveMaxChapter(targetBookId, manifestResponse.result);
         setApiMaxChapter(maxChapter);
         setIsGraphLoading(false);
       } else {
@@ -74,8 +66,7 @@ export function useApiGraphData(serverBookId, currentChapter, currentEvent, isAp
         setApiError(errorInfo);
       }
     } catch (error) {
-      const graphCache = getGraphBookCache(targetBookId);
-      const initialMaxChapter = resolveMaxChapter(targetBookId, null, graphCache);
+      const initialMaxChapter = resolveMaxChapter(targetBookId, null);
       setApiMaxChapter(initialMaxChapter);
       setIsGraphLoading(false);
       const errorInfo = handleError(error, 'Manifest 로드 중 오류', {
