@@ -120,6 +120,51 @@ const BookIcon = () => (
   </svg>
 );
 
+const AdminBookCard = ({ book, setBookId }) => {
+  const [imageError, setImageError] = useState(false);
+  const coverUrl = book.coverImgUrl || book.cover_img_url || book.coverImage || book.coverUrl;
+
+  return (
+    <div
+      onClick={() => {
+        setBookId(book.id);
+        // 추후 캐릭터 이미지 생성 상태 확인 페이지로 이동하거나 모달 띄우는 로직 추가
+        alert(`도서 ID: ${book.id} 선택됨. (기능 준비 중)`);
+      }}
+      className="group cursor-pointer bg-gray-50 rounded-xl border border-gray-200 overflow-hidden hover:shadow-md hover:border-indigo-200 transition-all"
+    >
+      <div className="aspect-[3/4] overflow-hidden bg-gray-200 relative">
+        {coverUrl && !imageError ? (
+          <img
+            src={coverUrl}
+            alt={book.title}
+            onError={() => setImageError(true)}
+            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+          />
+        ) : (
+          <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-gray-100 to-gray-200">
+            <svg width="100%" height="100%" viewBox="0 0 120 180" fill="none">
+              <rect x="15" y="24" width="90" height="132" rx="8" fill="#b0b8c1" />
+              <rect x="27" y="42" width="66" height="96" rx="6" fill="#e8f5e8" />
+              <rect x="33" y="54" width="54" height="9" rx="4" fill="#b0b8c1" />
+              <rect x="33" y="72" width="39" height="9" rx="4" fill="#b0b8c1" />
+            </svg>
+          </div>
+        )}
+        <div className="absolute top-2 right-2 bg-black/50 text-white text-[10px] px-1.5 py-0.5 rounded">
+          ID: {book.id}
+        </div>
+      </div>
+      <div className="p-3">
+        <h4 className="font-semibold text-sm text-gray-800 truncate mb-1">
+          {book.title}
+        </h4>
+        <p className="text-xs text-gray-500 truncate">{book.author}</p>
+      </div>
+    </div>
+  );
+};
+
 const AdminPage = () => {
   // 탭 상태 (dashboard, books, query, upload, delete)
   const [activeTab, setActiveTab] = useState("dashboard");
@@ -380,38 +425,7 @@ const AdminPage = () => {
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
             {books.map((book) => (
-              <div
-                key={book.id}
-                onClick={() => {
-                  setBookId(book.id);
-                  // 추후 캐릭터 이미지 생성 상태 확인 페이지로 이동하거나 모달 띄우는 로직 추가
-                  alert(`도서 ID: ${book.id} 선택됨. (기능 준비 중)`);
-                }}
-                className="group cursor-pointer bg-gray-50 rounded-xl border border-gray-200 overflow-hidden hover:shadow-md hover:border-indigo-200 transition-all"
-              >
-                <div className="aspect-[3/4] overflow-hidden bg-gray-200 relative">
-                  {book.cover_img_url ? (
-                    <img
-                      src={book.cover_img_url}
-                      alt={book.title}
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                    />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center text-gray-400">
-                      <BookIcon />
-                    </div>
-                  )}
-                  <div className="absolute top-2 right-2 bg-black/50 text-white text-[10px] px-1.5 py-0.5 rounded">
-                    ID: {book.id}
-                  </div>
-                </div>
-                <div className="p-3">
-                  <h4 className="font-semibold text-sm text-gray-800 truncate mb-1">
-                    {book.title}
-                  </h4>
-                  <p className="text-xs text-gray-500 truncate">{book.author}</p>
-                </div>
-              </div>
+              <AdminBookCard key={book.id} book={book} setBookId={setBookId} />
             ))}
           </div>
         )}
