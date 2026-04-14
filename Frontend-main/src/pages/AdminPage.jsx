@@ -181,6 +181,7 @@ const AdminPage = () => {
   const [selectedBook, setSelectedBook] = useState(null);
   const [characters, setCharacters] = useState([]);
   const [isViewingCharacters, setIsViewingCharacters] = useState(false);
+  const [zoomedImage, setZoomedImage] = useState(null);
 
   // 공통 API 호출 함수
   const handleApiCall = async (apiFunction, updateState = null) => {
@@ -213,6 +214,12 @@ const AdminPage = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  // 캐릭터 이미지 재생성 핸들러
+  const handleRegenerate = (char) => {
+    alert(`캐릭터 [${char.commonName}] 이미지 재생성 로직을 추가할 예정입니다. (ID: ${char.id})`);
+    // 여기에 나중에 API 호출 로직 추가
   };
 
   // 파일 업로드 핸들러
@@ -496,7 +503,10 @@ const AdminPage = () => {
                     {char.id}
                   </td>
                   <td className="px-6 py-4">
-                    <div className="w-12 h-12 rounded-lg overflow-hidden bg-gray-100 border border-gray-200">
+                    <div 
+                      onClick={() => (char.profileImage || char.profile_image) && setZoomedImage(char.profileImage || char.profile_image)}
+                      className={`w-12 h-12 rounded-lg overflow-hidden bg-gray-100 border border-gray-200 ${(char.profileImage || char.profile_image) ? 'cursor-zoom-in hover:opacity-80 transition-opacity' : ''}`}
+                    >
                       {(char.profileImage || char.profile_image) ? (
                         <img
                           src={char.profileImage || char.profile_image}
@@ -527,19 +537,27 @@ const AdminPage = () => {
                     {char.commonName || char.name}
                   </td>
                   <td className="px-6 py-4 text-sm">
-                    <span
-                      className={`px-2.5 py-1 rounded-full text-xs font-semibold ${
-                        (char.imageGenerationStatus || char.image_generation_status) === "COMPLETED"
-                          ? "bg-green-100 text-green-700"
-                          : (char.imageGenerationStatus || char.image_generation_status) === "GENERATING"
-                            ? "bg-blue-100 text-blue-700 animate-pulse"
-                            : (char.imageGenerationStatus || char.image_generation_status) === "FAILED"
-                              ? "bg-red-100 text-red-700"
-                              : "bg-gray-100 text-gray-600"
-                      }`}
-                    >
-                      {char.imageGenerationStatus || char.image_generation_status || "PENDING"}
-                    </span>
+                    <div className="flex items-center space-x-3">
+                      <span
+                        className={`px-2.5 py-1 rounded-full text-xs font-semibold ${
+                          (char.imageGenerationStatus || char.image_generation_status) === "COMPLETED"
+                            ? "bg-green-100 text-green-700"
+                            : (char.imageGenerationStatus || char.image_generation_status) === "GENERATING"
+                              ? "bg-blue-100 text-blue-700 animate-pulse"
+                              : (char.imageGenerationStatus || char.image_generation_status) === "FAILED"
+                                ? "bg-red-100 text-red-700"
+                                : "bg-gray-100 text-gray-600"
+                        }`}
+                      >
+                        {char.imageGenerationStatus || char.image_generation_status || "PENDING"}
+                      </span>
+                      <button
+                        onClick={() => handleRegenerate(char)}
+                        className="text-[10px] font-bold text-indigo-600 hover:text-indigo-800 uppercase tracking-tighter border border-indigo-200 px-1.5 py-0.5 rounded bg-indigo-50 hover:bg-indigo-100 transition-colors"
+                      >
+                        재생성
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))
@@ -859,6 +877,31 @@ const AdminPage = () => {
           )}
         </div>
       </div>
+
+      {/* 이미지 확대 모달 */}
+      {zoomedImage && (
+        <div 
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm cursor-zoom-out p-4"
+          onClick={() => setZoomedImage(null)}
+        >
+          <div className="relative max-w-4xl max-h-[90vh] flex flex-col items-center">
+            <button 
+              className="absolute -top-12 right-0 text-white hover:text-gray-300 transition-colors"
+              onClick={() => setZoomedImage(null)}
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-8 h-8">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+            <img 
+              src={zoomedImage} 
+              alt="Zoomed Character" 
+              className="max-w-full max-h-full object-contain rounded-lg shadow-2xl animate-in zoom-in-95 duration-200"
+              onClick={(e) => e.stopPropagation()}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 };
