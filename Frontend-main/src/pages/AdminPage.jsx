@@ -120,17 +120,13 @@ const BookIcon = () => (
   </svg>
 );
 
-const AdminBookCard = ({ book, setBookId }) => {
+const AdminBookCard = ({ book, onSelect }) => {
   const [imageError, setImageError] = useState(false);
   const coverUrl = book.coverImgUrl || book.cover_img_url || book.coverImage || book.coverUrl;
 
   return (
     <div
-      onClick={() => {
-        setBookId(book.id);
-        // 추후 캐릭터 이미지 생성 상태 확인 페이지로 이동하거나 모달 띄우는 로직 추가
-        alert(`도서 ID: ${book.id} 선택됨. (기능 준비 중)`);
-      }}
+      onClick={() => onSelect(book)}
       className="group cursor-pointer bg-gray-50 rounded-xl border border-gray-200 overflow-hidden hover:shadow-md hover:border-indigo-200 transition-all"
     >
       <div className="aspect-[3/4] overflow-hidden bg-gray-200 relative">
@@ -181,16 +177,23 @@ const AdminPage = () => {
   const [loading, setLoading] = useState(false);
   const [books, setBooks] = useState([]);
 
+  // 도서별 캐릭터 상태 관리
+  const [selectedBook, setSelectedBook] = useState(null);
+  const [characters, setCharacters] = useState([]);
+  const [isViewingCharacters, setIsViewingCharacters] = useState(false);
+
   // 공통 API 호출 함수
-  const handleApiCall = async (apiFunction, updateBooks = false) => {
+  const handleApiCall = async (apiFunction, updateState = null) => {
     setLoading(true);
     setError(null);
-    if (!updateBooks) setResponse(null);
+    if (!updateState) setResponse(null);
     try {
       const result = await apiFunction();
       // 백엔드의 ApiResponse 형식에 맞춰 실제 데이터는 result.data.result에 있음.
       if (result.data && result.data.isSuccess) {
-        if (updateBooks) {
+        if (typeof updateState === "function") {
+          updateState(result.data.result);
+        } else if (updateState === true) {
           setBooks(result.data.result);
         } else {
           setResponse(result.data.result);
@@ -222,6 +225,15 @@ const AdminPage = () => {
     handleApiCall(() => apiClient.get("/books/unsummarized"));
   const getBooksList = () =>
     handleApiCall(() => apiClient.get(`/books`), true);
+
+  const getBookCharacters = (book) => {
+    setSelectedBook(book);
+    setBookId(book.id);
+    handleApiCall(() => apiClient.get(`/books/${book.id}/characters`), (data) => {
+      setCharacters(data);
+      setIsViewingCharacters(true);
+    });
+  };
 
   const uploadMultipleFiles = (endpoint) => {
     if (!bookId || !files || files.length === 0) {
@@ -290,7 +302,11 @@ const AdminPage = () => {
         </div>
         <div className="flex-1 py-6 px-4 space-y-1">
           <button
-            onClick={() => setActiveTab("dashboard")}
+            onClick={() => {
+              setActiveTab("dashboard");
+              setIsViewingCharacters(false);
+              setSelectedBook(null);
+            }}
             className={`w-full flex items-center space-x-3 px-4 py-3 text-sm font-medium rounded-lg transition-colors ${
               activeTab === "dashboard"
                 ? "bg-indigo-50 text-indigo-700"
@@ -303,6 +319,8 @@ const AdminPage = () => {
           <button
             onClick={() => {
               setActiveTab("books");
+              setIsViewingCharacters(false);
+              setSelectedBook(null);
               getBooksList();
             }}
             className={`w-full flex items-center space-x-3 px-4 py-3 text-sm font-medium rounded-lg transition-colors ${
@@ -315,7 +333,11 @@ const AdminPage = () => {
             <span>도서 목록</span>
           </button>
           <button
-            onClick={() => setActiveTab("query")}
+            onClick={() => {
+              setActiveTab("query");
+              setIsViewingCharacters(false);
+              setSelectedBook(null);
+            }}
             className={`w-full flex items-center space-x-3 px-4 py-3 text-sm font-medium rounded-lg transition-colors ${
               activeTab === "query"
                 ? "bg-indigo-50 text-indigo-700"
@@ -326,7 +348,11 @@ const AdminPage = () => {
             <span>데이터 조회</span>
           </button>
           <button
-            onClick={() => setActiveTab("upload")}
+            onClick={() => {
+              setActiveTab("upload");
+              setIsViewingCharacters(false);
+              setSelectedBook(null);
+            }}
             className={`w-full flex items-center space-x-3 px-4 py-3 text-sm font-medium rounded-lg transition-colors ${
               activeTab === "upload"
                 ? "bg-indigo-50 text-indigo-700"
@@ -337,7 +363,11 @@ const AdminPage = () => {
             <span>데이터 업로드</span>
           </button>
           <button
-            onClick={() => setActiveTab("delete")}
+            onClick={() => {
+              setActiveTab("delete");
+              setIsViewingCharacters(false);
+              setSelectedBook(null);
+            }}
             className={`w-full flex items-center space-x-3 px-4 py-3 text-sm font-medium rounded-lg transition-colors ${
               activeTab === "delete"
                 ? "bg-red-50 text-red-700"
@@ -402,36 +432,162 @@ const AdminPage = () => {
     </div>
   );
 
-  const renderBooksSection = () => (
+  const renderCharactersSection = () => (
     <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
       <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
-        <div className="flex items-center space-x-2">
-          <BookIcon />
-          <h3 className="text-lg font-semibold text-gray-800">도서 목록</h3>
+        <div className="flex items-center space-x-4">
+          <button
+            onClick={() => setIsViewingCharacters(false)}
+            className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              fill="none"
+              viewBox="0 0 24 24"
+              strokeWidth={1.5}
+              stroke="currentColor"
+              className="w-5 h-5"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18"
+              />
+            </svg>
+          </button>
+          <div>
+            <h3 className="text-lg font-semibold text-gray-800">
+              {selectedBook?.title} - 캐릭터 이미지 현황
+            </h3>
+            <p className="text-xs text-gray-500">
+              도서 ID: {selectedBook?.id} | 캐릭터 수: {characters.length}
+            </p>
+          </div>
         </div>
         <button
-          onClick={getBooksList}
+          onClick={() => getBookCharacters(selectedBook)}
           disabled={loading}
           className="text-xs font-medium text-indigo-600 hover:text-indigo-800 transition-colors"
         >
           새로고침
         </button>
       </div>
-      <div className="p-6">
-        {books.length === 0 && !loading ? (
-          <div className="text-center py-12 text-gray-500">
-            도서 데이터가 없습니다.
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-            {books.map((book) => (
-              <AdminBookCard key={book.id} book={book} setBookId={setBookId} />
-            ))}
-          </div>
-        )}
+      <div className="p-0 overflow-x-auto">
+        <table className="w-full text-left border-collapse">
+          <thead>
+            <tr className="bg-gray-50 text-gray-600 text-xs uppercase tracking-wider">
+              <th className="px-6 py-3 font-semibold border-b">ID</th>
+              <th className="px-6 py-3 font-semibold border-b">프로필</th>
+              <th className="px-6 py-3 font-semibold border-b">이름</th>
+              <th className="px-6 py-3 font-semibold border-b">이미지 생성 상태</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-100">
+            {characters.length === 0 ? (
+              <tr>
+                <td colSpan="4" className="px-6 py-12 text-center text-gray-500">
+                  캐릭터 데이터가 없습니다.
+                </td>
+              </tr>
+            ) : (
+              characters.map((char) => (
+                <tr key={char.id} className="hover:bg-gray-50 transition-colors">
+                  <td className="px-6 py-4 text-sm font-mono text-gray-500">
+                    {char.id}
+                  </td>
+                  <td className="px-6 py-4">
+                    <div className="w-12 h-12 rounded-lg overflow-hidden bg-gray-100 border border-gray-200">
+                      {(char.profileImage || char.profile_image) ? (
+                        <img
+                          src={char.profileImage || char.profile_image}
+                          alt={char.commonName || char.name}
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center text-gray-400">
+                          <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            strokeWidth={1.5}
+                            stroke="currentColor"
+                            className="w-6 h-6"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z"
+                            />
+                          </svg>
+                        </div>
+                      )}
+                    </div>
+                  </td>
+                  <td className="px-6 py-4 text-sm font-medium text-gray-800">
+                    {char.commonName || char.name}
+                  </td>
+                  <td className="px-6 py-4 text-sm">
+                    <span
+                      className={`px-2.5 py-1 rounded-full text-xs font-semibold ${
+                        (char.imageGenerationStatus || char.image_generation_status) === "COMPLETED"
+                          ? "bg-green-100 text-green-700"
+                          : (char.imageGenerationStatus || char.image_generation_status) === "GENERATING"
+                            ? "bg-blue-100 text-blue-700 animate-pulse"
+                            : (char.imageGenerationStatus || char.image_generation_status) === "FAILED"
+                              ? "bg-red-100 text-red-700"
+                              : "bg-gray-100 text-gray-600"
+                      }`}
+                    >
+                      {char.imageGenerationStatus || char.image_generation_status || "PENDING"}
+                    </span>
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
       </div>
     </div>
   );
+
+  const renderBooksSection = () => {
+    if (isViewingCharacters) return renderCharactersSection();
+
+    return (
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+        <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+          <div className="flex items-center space-x-2">
+            <BookIcon />
+            <h3 className="text-lg font-semibold text-gray-800">도서 목록</h3>
+          </div>
+          <button
+            onClick={getBooksList}
+            disabled={loading}
+            className="text-xs font-medium text-indigo-600 hover:text-indigo-800 transition-colors"
+          >
+            새로고침
+          </button>
+        </div>
+        <div className="p-6">
+          {books.length === 0 && !loading ? (
+            <div className="text-center py-12 text-gray-500">
+              도서 데이터가 없습니다.
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+              {books.map((book) => (
+                <AdminBookCard
+                  key={book.id}
+                  book={book}
+                  onSelect={getBookCharacters}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  };
 
   const renderQuerySection = () => (
     <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
