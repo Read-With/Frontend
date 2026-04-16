@@ -120,6 +120,47 @@ const BookIcon = () => (
   </svg>
 );
 
+const AdminBookCard = ({ book, onSelect }) => {
+  const [imageError, setImageError] = useState(false);
+  const coverUrl = book.coverImgUrl;
+
+  return (
+    <div
+      onClick={() => onSelect(book)}
+      className="group cursor-pointer bg-gray-50 rounded-xl border border-gray-200 overflow-hidden hover:shadow-md hover:border-indigo-200 transition-all"
+    >
+      <div className="aspect-[3/4] overflow-hidden bg-gray-200 relative">
+        {coverUrl && !imageError ? (
+          <img
+            src={coverUrl}
+            alt={book.title}
+            onError={() => setImageError(true)}
+            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+          />
+        ) : (
+          <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-gray-100 to-gray-200">
+            <svg width="100%" height="100%" viewBox="0 0 120 180" fill="none">
+              <rect x="15" y="24" width="90" height="132" rx="8" fill="#b0b8c1" />
+              <rect x="27" y="42" width="66" height="96" rx="6" fill="#e8f5e8" />
+              <rect x="33" y="54" width="54" height="9" rx="4" fill="#b0b8c1" />
+              <rect x="33" y="72" width="39" height="9" rx="4" fill="#b0b8c1" />
+            </svg>
+          </div>
+        )}
+        <div className="absolute top-2 right-2 bg-black/50 text-white text-[10px] px-1.5 py-0.5 rounded">
+          ID: {book.id}
+        </div>
+      </div>
+      <div className="p-3">
+        <h4 className="font-semibold text-sm text-gray-800 truncate mb-1">
+          {book.title}
+        </h4>
+        <p className="text-xs text-gray-500 truncate">{book.author}</p>
+      </div>
+    </div>
+  );
+};
+
 const AdminPage = () => {
   // 탭 상태 (dashboard, books, query, upload, delete)
   const [activeTab, setActiveTab] = useState("dashboard");
@@ -136,16 +177,24 @@ const AdminPage = () => {
   const [loading, setLoading] = useState(false);
   const [books, setBooks] = useState([]);
 
+  // 도서별 캐릭터 상태 관리
+  const [selectedBook, setSelectedBook] = useState(null);
+  const [characters, setCharacters] = useState([]);
+  const [isViewingCharacters, setIsViewingCharacters] = useState(false);
+  const [zoomedImage, setZoomedImage] = useState(null);
+
   // 공통 API 호출 함수
-  const handleApiCall = async (apiFunction, updateBooks = false) => {
+  const handleApiCall = async (apiFunction, updateState = null) => {
     setLoading(true);
     setError(null);
-    if (!updateBooks) setResponse(null);
+    if (!updateState) setResponse(null);
     try {
       const result = await apiFunction();
       // 백엔드의 ApiResponse 형식에 맞춰 실제 데이터는 result.data.result에 있음.
       if (result.data && result.data.isSuccess) {
-        if (updateBooks) {
+        if (typeof updateState === "function") {
+          updateState(result.data.result);
+        } else if (updateState === true) {
           setBooks(result.data.result);
         } else {
           setResponse(result.data.result);
@@ -167,6 +216,35 @@ const AdminPage = () => {
     }
   };
 
+  // 캐릭터 이미지 재생성 핸들러
+  const handleRegenerate = async (char) => {
+    if (!window.confirm(`캐릭터 [${char.commonName || char.name}]의 이미지를 재생성하시겠습니까?`)) return;
+
+    setLoading(true);
+    setError(null);
+    setResponse(null);
+
+    try {
+      // 백엔드 API 호출: /api/v2/admin/characters/{characterId}/regenerate-image
+      const result = await apiClient.post(`/characters/${char.id}/regenerate-image`);
+      
+      if (result.data && result.data.isSuccess) {
+        alert(`캐릭터 [${char.commonName || char.name}] 이미지 재생성 요청이 성공했습니다.`);
+        // 상태 업데이트를 위해 캐릭터 목록 새로고침
+        if (selectedBook) {
+          getBookCharacters(selectedBook);
+        }
+      } else {
+        setError(result.data || { message: "이미지 재생성 요청에 실패했습니다." });
+      }
+    } catch (err) {
+      console.error("Regenerate Error:", err.response || err);
+      setError(err.response?.data ?? { message: err?.message ?? "An unexpected error occurred." });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // 파일 업로드 핸들러
   const handleFileChange = (e) => setFiles(e.target.files);
 
@@ -177,6 +255,15 @@ const AdminPage = () => {
     handleApiCall(() => apiClient.get("/books/unsummarized"));
   const getBooksList = () =>
     handleApiCall(() => apiClient.get(`/books`), true);
+
+  const getBookCharacters = (book) => {
+    setSelectedBook(book);
+    setBookId(book.id);
+    handleApiCall(() => apiClient.get(`/books/${book.id}/characters`), (data) => {
+      setCharacters(data);
+      setIsViewingCharacters(true);
+    });
+  };
 
   const uploadMultipleFiles = (endpoint) => {
     if (!bookId || !files || files.length === 0) {
@@ -245,7 +332,11 @@ const AdminPage = () => {
         </div>
         <div className="flex-1 py-6 px-4 space-y-1">
           <button
-            onClick={() => setActiveTab("dashboard")}
+            onClick={() => {
+              setActiveTab("dashboard");
+              setIsViewingCharacters(false);
+              setSelectedBook(null);
+            }}
             className={`w-full flex items-center space-x-3 px-4 py-3 text-sm font-medium rounded-lg transition-colors ${
               activeTab === "dashboard"
                 ? "bg-indigo-50 text-indigo-700"
@@ -258,6 +349,8 @@ const AdminPage = () => {
           <button
             onClick={() => {
               setActiveTab("books");
+              setIsViewingCharacters(false);
+              setSelectedBook(null);
               getBooksList();
             }}
             className={`w-full flex items-center space-x-3 px-4 py-3 text-sm font-medium rounded-lg transition-colors ${
@@ -270,7 +363,11 @@ const AdminPage = () => {
             <span>도서 목록</span>
           </button>
           <button
-            onClick={() => setActiveTab("query")}
+            onClick={() => {
+              setActiveTab("query");
+              setIsViewingCharacters(false);
+              setSelectedBook(null);
+            }}
             className={`w-full flex items-center space-x-3 px-4 py-3 text-sm font-medium rounded-lg transition-colors ${
               activeTab === "query"
                 ? "bg-indigo-50 text-indigo-700"
@@ -281,7 +378,11 @@ const AdminPage = () => {
             <span>데이터 조회</span>
           </button>
           <button
-            onClick={() => setActiveTab("upload")}
+            onClick={() => {
+              setActiveTab("upload");
+              setIsViewingCharacters(false);
+              setSelectedBook(null);
+            }}
             className={`w-full flex items-center space-x-3 px-4 py-3 text-sm font-medium rounded-lg transition-colors ${
               activeTab === "upload"
                 ? "bg-indigo-50 text-indigo-700"
@@ -292,7 +393,11 @@ const AdminPage = () => {
             <span>데이터 업로드</span>
           </button>
           <button
-            onClick={() => setActiveTab("delete")}
+            onClick={() => {
+              setActiveTab("delete");
+              setIsViewingCharacters(false);
+              setSelectedBook(null);
+            }}
             className={`w-full flex items-center space-x-3 px-4 py-3 text-sm font-medium rounded-lg transition-colors ${
               activeTab === "delete"
                 ? "bg-red-50 text-red-700"
@@ -357,67 +462,204 @@ const AdminPage = () => {
     </div>
   );
 
-  const renderBooksSection = () => (
-    <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-      <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
-        <div className="flex items-center space-x-2">
-          <BookIcon />
-          <h3 className="text-lg font-semibold text-gray-800">도서 목록</h3>
-        </div>
-        <button
-          onClick={getBooksList}
-          disabled={loading}
-          className="text-xs font-medium text-indigo-600 hover:text-indigo-800 transition-colors"
-        >
-          새로고침
-        </button>
-      </div>
-      <div className="p-6">
-        {books.length === 0 && !loading ? (
-          <div className="text-center py-12 text-gray-500">
-            도서 데이터가 없습니다.
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-            {books.map((book) => (
-              <div
-                key={book.id}
-                onClick={() => {
-                  setBookId(book.id);
-                  // 추후 캐릭터 이미지 생성 상태 확인 페이지로 이동하거나 모달 띄우는 로직 추가
-                  alert(`도서 ID: ${book.id} 선택됨. (기능 준비 중)`);
-                }}
-                className="group cursor-pointer bg-gray-50 rounded-xl border border-gray-200 overflow-hidden hover:shadow-md hover:border-indigo-200 transition-all"
+  const renderCharactersSection = () => {
+    const completedCount = characters.filter(c => (c.imageGenerationStatus || c.image_generation_status) === "COMPLETED").length;
+    const totalCount = characters.length;
+    const percentage = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
+
+    return (
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+        <div className="px-6 py-6 border-b border-gray-100 flex items-center justify-between">
+          <div className="flex items-center space-x-6">
+            <button
+              onClick={() => setIsViewingCharacters(false)}
+              className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                fill="none"
+                viewBox="0 0 24 24"
+                strokeWidth={1.5}
+                stroke="currentColor"
+                className="w-6 h-6 text-gray-400"
               >
-                <div className="aspect-[3/4] overflow-hidden bg-gray-200 relative">
-                  {book.cover_img_url ? (
-                    <img
-                      src={book.cover_img_url}
-                      alt={book.title}
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                    />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center text-gray-400">
-                      <BookIcon />
-                    </div>
-                  )}
-                  <div className="absolute top-2 right-2 bg-black/50 text-white text-[10px] px-1.5 py-0.5 rounded">
-                    ID: {book.id}
-                  </div>
-                </div>
-                <div className="p-3">
-                  <h4 className="font-semibold text-sm text-gray-800 truncate mb-1">
-                    {book.title}
-                  </h4>
-                  <p className="text-xs text-gray-500 truncate">{book.author}</p>
-                </div>
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18"
+                />
+              </svg>
+            </button>
+            <div className="flex flex-col space-y-1">
+              <h3 className="text-xl font-bold text-gray-900">
+                {selectedBook?.title}
+              </h3>
+              <div className="flex items-center space-x-3">
+                <span className="text-xs font-medium text-gray-400 bg-gray-50 px-2 py-0.5 rounded border border-gray-100">
+                  BOOK ID: {selectedBook?.id}
+                </span>
+                <span className="text-xs font-medium text-gray-400 bg-gray-50 px-2 py-0.5 rounded border border-gray-100">
+                  전체 캐릭터: {totalCount}
+                </span>
               </div>
-            ))}
+            </div>
+
+            {/* 시각적인 프로그레스 바 추가 */}
+            <div className="flex flex-col space-y-1.5 min-w-[200px] border-l border-gray-100 pl-6 ml-6">
+              <div className="flex items-baseline justify-between">
+                <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">Image Generation</span>
+                <span className="text-lg font-black text-indigo-600 tracking-tighter">{percentage}%</span>
+              </div>
+              <div className="w-full h-2.5 bg-gray-100 rounded-full overflow-hidden border border-gray-200/50">
+                <div 
+                  className={`h-full transition-all duration-1000 ease-out ${percentage === 100 ? 'bg-green-500' : 'bg-indigo-500'}`}
+                  style={{ width: `${percentage}%` }} 
+                />
+              </div>
+              <p className="text-[13px] text-gray-400 font-medium text-right">
+                {completedCount} / {totalCount} Characters Completed
+              </p>
+            </div>
           </div>
-        )}
+          <button
+            onClick={() => getBookCharacters(selectedBook)}
+            disabled={loading}
+            className="flex items-center space-x-1 px-3 py-1.5 bg-indigo-50 text-indigo-600 rounded-lg hover:bg-indigo-100 transition-colors text-xs font-bold"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
+            </svg>
+            <span>현황 갱신</span>
+          </button>
+        </div>
+        <div className="p-0 overflow-x-auto">
+        <table className="w-full text-left border-collapse">
+          <thead>
+            <tr className="bg-gray-50 text-gray-600 text-xs uppercase tracking-wider">
+              <th className="px-6 py-3 font-semibold border-b">ID</th>
+              <th className="px-6 py-3 font-semibold border-b">프로필</th>
+              <th className="px-6 py-3 font-semibold border-b">이름</th>
+              <th className="px-6 py-3 font-semibold border-b">이미지 생성 상태</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-100">
+            {characters.length === 0 ? (
+              <tr>
+                <td colSpan="4" className="px-6 py-12 text-center text-gray-500">
+                  캐릭터 데이터가 없습니다.
+                </td>
+              </tr>
+            ) : (
+              characters.map((char) => (
+                <tr key={char.id} className="hover:bg-gray-50 transition-colors">
+                  <td className="px-6 py-4 text-sm font-mono text-gray-500">
+                    {char.id}
+                  </td>
+                  <td className="px-6 py-4">
+                    <div 
+                      onClick={() => (char.profileImage) && setZoomedImage(char.profileImage)}
+                      className={`w-12 h-12 rounded-lg overflow-hidden bg-gray-100 border border-gray-200 ${(char.profileImage) ? 'cursor-zoom-in hover:opacity-80 transition-opacity' : ''}`}
+                    >
+                      {(char.profileImage) ? (
+                        <img
+                          src={char.profileImage}
+                          alt={char.commonName || char.name}
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center text-gray-400">
+                          <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            strokeWidth={1.5}
+                            stroke="currentColor"
+                            className="w-6 h-6"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z"
+                            />
+                          </svg>
+                        </div>
+                      )}
+                    </div>
+                  </td>
+                  <td className="px-6 py-4 text-sm font-medium text-gray-800">
+                    {char.commonName || char.name}
+                  </td>
+                  <td className="px-6 py-4 text-sm">
+                    <div className="flex items-center space-x-3">
+                      <span
+                        className={`px-2.5 py-1 rounded-full text-xs font-semibold ${
+                          (char.imageGenerationStatus || char.image_generation_status) === "COMPLETED"
+                            ? "bg-green-100 text-green-700"
+                            : (char.imageGenerationStatus || char.image_generation_status) === "GENERATING"
+                              ? "bg-blue-100 text-blue-700 animate-pulse"
+                              : (char.imageGenerationStatus || char.image_generation_status) === "FAILED"
+                                ? "bg-red-100 text-red-700"
+                                : "bg-gray-100 text-gray-600"
+                        }`}
+                      >
+                        {char.imageGenerationStatus || char.image_generation_status || "PENDING"}
+                      </span>
+                      <button
+                        onClick={() => handleRegenerate(char)}
+                        className="text-[10px] font-bold text-indigo-600 hover:text-indigo-800 uppercase tracking-tighter border border-indigo-200 px-1.5 py-0.5 rounded bg-indigo-50 hover:bg-indigo-100 transition-colors"
+                      >
+                        재생성
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
       </div>
     </div>
   );
+};
+
+  const renderBooksSection = () => {
+    if (isViewingCharacters) return renderCharactersSection();
+
+    return (
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+        <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+          <div className="flex items-center space-x-2">
+            <BookIcon />
+            <h3 className="text-lg font-semibold text-gray-800">도서 목록</h3>
+          </div>
+          <button
+            onClick={getBooksList}
+            disabled={loading}
+            className="text-xs font-medium text-indigo-600 hover:text-indigo-800 transition-colors"
+          >
+            새로고침
+          </button>
+        </div>
+        <div className="p-6">
+          {books.length === 0 && !loading ? (
+            <div className="text-center py-12 text-gray-500">
+              도서 데이터가 없습니다.
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+              {books.map((book) => (
+                <AdminBookCard
+                  key={book.id}
+                  book={book}
+                  onSelect={getBookCharacters}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  };
 
   const renderQuerySection = () => (
     <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
@@ -689,6 +931,31 @@ const AdminPage = () => {
           )}
         </div>
       </div>
+
+      {/* 이미지 확대 모달 */}
+      {zoomedImage && (
+        <div 
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm cursor-zoom-out p-4"
+          onClick={() => setZoomedImage(null)}
+        >
+          <div className="relative max-w-4xl max-h-[90vh] flex flex-col items-center">
+            <button 
+              className="absolute -top-12 right-0 text-white hover:text-gray-300 transition-colors"
+              onClick={() => setZoomedImage(null)}
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-8 h-8">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+            <img 
+              src={zoomedImage} 
+              alt="Zoomed Character" 
+              className="max-w-full max-h-full object-contain rounded-lg shadow-2xl animate-in zoom-in-95 duration-200"
+              onClick={(e) => e.stopPropagation()}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 };
