@@ -122,7 +122,7 @@ const BookIcon = () => (
 
 const AdminBookCard = ({ book, onSelect }) => {
   const [imageError, setImageError] = useState(false);
-  const coverUrl = book.coverImgUrl || book.cover_img_url || book.coverImage || book.coverUrl;
+  const coverUrl = book.coverImgUrl;
 
   return (
     <div
@@ -217,9 +217,32 @@ const AdminPage = () => {
   };
 
   // 캐릭터 이미지 재생성 핸들러
-  const handleRegenerate = (char) => {
-    alert(`캐릭터 [${char.commonName}] 이미지 재생성 로직을 추가할 예정입니다. (ID: ${char.id})`);
-    // 여기에 나중에 API 호출 로직 추가
+  const handleRegenerate = async (char) => {
+    if (!window.confirm(`캐릭터 [${char.commonName || char.name}]의 이미지를 재생성하시겠습니까?`)) return;
+
+    setLoading(true);
+    setError(null);
+    setResponse(null);
+
+    try {
+      // 백엔드 API 호출: /api/v2/admin/characters/{characterId}/regenerate-image
+      const result = await apiClient.post(`/characters/${char.id}/regenerate-image`);
+      
+      if (result.data && result.data.isSuccess) {
+        alert(`캐릭터 [${char.commonName || char.name}] 이미지 재생성 요청이 성공했습니다.`);
+        // 상태 업데이트를 위해 캐릭터 목록 새로고침
+        if (selectedBook) {
+          getBookCharacters(selectedBook);
+        }
+      } else {
+        setError(result.data || { message: "이미지 재생성 요청에 실패했습니다." });
+      }
+    } catch (err) {
+      console.error("Regenerate Error:", err.response || err);
+      setError(err.response?.data ?? { message: err?.message ?? "An unexpected error occurred." });
+    } finally {
+      setLoading(false);
+    }
   };
 
   // 파일 업로드 핸들러
@@ -534,12 +557,12 @@ const AdminPage = () => {
                   </td>
                   <td className="px-6 py-4">
                     <div 
-                      onClick={() => (char.profileImage || char.profile_image) && setZoomedImage(char.profileImage || char.profile_image)}
-                      className={`w-12 h-12 rounded-lg overflow-hidden bg-gray-100 border border-gray-200 ${(char.profileImage || char.profile_image) ? 'cursor-zoom-in hover:opacity-80 transition-opacity' : ''}`}
+                      onClick={() => (char.profileImage) && setZoomedImage(char.profileImage)}
+                      className={`w-12 h-12 rounded-lg overflow-hidden bg-gray-100 border border-gray-200 ${(char.profileImage) ? 'cursor-zoom-in hover:opacity-80 transition-opacity' : ''}`}
                     >
-                      {(char.profileImage || char.profile_image) ? (
+                      {(char.profileImage) ? (
                         <img
-                          src={char.profileImage || char.profile_image}
+                          src={char.profileImage}
                           alt={char.commonName || char.name}
                           className="w-full h-full object-cover"
                         />
