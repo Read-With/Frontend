@@ -439,47 +439,77 @@ const AdminPage = () => {
     </div>
   );
 
-  const renderCharactersSection = () => (
-    <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-      <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
-        <div className="flex items-center space-x-4">
-          <button
-            onClick={() => setIsViewingCharacters(false)}
-            className="p-2 hover:bg-gray-100 rounded-full transition-colors"
-          >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              fill="none"
-              viewBox="0 0 24 24"
-              strokeWidth={1.5}
-              stroke="currentColor"
-              className="w-5 h-5"
+  const renderCharactersSection = () => {
+    const completedCount = characters.filter(c => (c.imageGenerationStatus || c.image_generation_status) === "COMPLETED").length;
+    const totalCount = characters.length;
+    const percentage = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
+
+    return (
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+        <div className="px-6 py-6 border-b border-gray-100 flex items-center justify-between">
+          <div className="flex items-center space-x-6">
+            <button
+              onClick={() => setIsViewingCharacters(false)}
+              className="p-2 hover:bg-gray-100 rounded-full transition-colors"
             >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18"
-              />
-            </svg>
-          </button>
-          <div>
-            <h3 className="text-lg font-semibold text-gray-800">
-              {selectedBook?.title} - 캐릭터 이미지 현황
-            </h3>
-            <p className="text-xs text-gray-500">
-              도서 ID: {selectedBook?.id} | 캐릭터 수: {characters.length}
-            </p>
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                fill="none"
+                viewBox="0 0 24 24"
+                strokeWidth={1.5}
+                stroke="currentColor"
+                className="w-6 h-6 text-gray-400"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18"
+                />
+              </svg>
+            </button>
+            <div className="flex flex-col space-y-1">
+              <h3 className="text-xl font-bold text-gray-900">
+                {selectedBook?.title}
+              </h3>
+              <div className="flex items-center space-x-3">
+                <span className="text-xs font-medium text-gray-400 bg-gray-50 px-2 py-0.5 rounded border border-gray-100">
+                  BOOK ID: {selectedBook?.id}
+                </span>
+                <span className="text-xs font-medium text-gray-400 bg-gray-50 px-2 py-0.5 rounded border border-gray-100">
+                  전체 캐릭터: {totalCount}
+                </span>
+              </div>
+            </div>
+
+            {/* 시각적인 프로그레스 바 추가 */}
+            <div className="flex flex-col space-y-1.5 min-w-[200px] border-l border-gray-100 pl-6 ml-6">
+              <div className="flex items-baseline justify-between">
+                <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">Image Generation</span>
+                <span className="text-lg font-black text-indigo-600 tracking-tighter">{percentage}%</span>
+              </div>
+              <div className="w-full h-2.5 bg-gray-100 rounded-full overflow-hidden border border-gray-200/50">
+                <div 
+                  className={`h-full transition-all duration-1000 ease-out ${percentage === 100 ? 'bg-green-500' : 'bg-indigo-500'}`}
+                  style={{ width: `${percentage}%` }} 
+                />
+              </div>
+              <p className="text-[13px] text-gray-400 font-medium text-right">
+                {completedCount} / {totalCount} Characters Completed
+              </p>
+            </div>
           </div>
+          <button
+            onClick={() => getBookCharacters(selectedBook)}
+            disabled={loading}
+            className="flex items-center space-x-1 px-3 py-1.5 bg-indigo-50 text-indigo-600 rounded-lg hover:bg-indigo-100 transition-colors text-xs font-bold"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
+            </svg>
+            <span>현황 갱신</span>
+          </button>
         </div>
-        <button
-          onClick={() => getBookCharacters(selectedBook)}
-          disabled={loading}
-          className="text-xs font-medium text-indigo-600 hover:text-indigo-800 transition-colors"
-        >
-          새로고침
-        </button>
-      </div>
-      <div className="p-0 overflow-x-auto">
+        <div className="p-0 overflow-x-auto">
         <table className="w-full text-left border-collapse">
           <thead>
             <tr className="bg-gray-50 text-gray-600 text-xs uppercase tracking-wider">
@@ -567,6 +597,7 @@ const AdminPage = () => {
       </div>
     </div>
   );
+};
 
   const renderBooksSection = () => {
     if (isViewingCharacters) return renderCharactersSection();
