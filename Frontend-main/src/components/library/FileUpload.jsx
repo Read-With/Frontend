@@ -5,11 +5,6 @@ import { getBooks, getBook } from '../../utils/api/booksApi';
 import { getBookManifest } from '../../utils/api/api';
 import { theme } from '../common/theme';
 import { extractEpubFileMetadata, epubUploadBasename } from '../../utils/library/epubUploadUtils';
-import {
-  saveLocalBookBuffer,
-  saveLocalBookMetadata,
-  loadLocalBookBuffer,
-} from '../../utils/library/localBookStorage';
 import { normalizeTitle } from '../../utils/common/stringUtils';
 
 function normalizeAuthorMatch(author) {
@@ -94,8 +89,6 @@ const FileUpload = ({ onUploadSuccess, onClose }) => {
     if (!selectedFile) return;
     
     try {
-      const arrayBuffer = await selectedFile.arrayBuffer();
-
       // 1. 서버에 새 책을 등록하지 않음 — 제목+저자 완전 일치만 매칭 후 최소 bookId 사용
       const booksResponse = await getBooks({});
       if (!booksResponse?.isSuccess || !Array.isArray(booksResponse.result)) {
@@ -214,43 +207,7 @@ const FileUpload = ({ onUploadSuccess, onClose }) => {
         }),
       };
 
-      // IndexedDB: 원본 바이너리 + 메타
-      await Promise.all([
-        saveLocalBookBuffer(String(finalBookId), arrayBuffer),
-        saveLocalBookMetadata(String(finalBookId), {
-          title: book.title,
-          author: book.author,
-        }),
-      ]);
-
-      // IndexedDB 저장 완료 확인 (저장이 실제로 완료되었는지 검증)
-      // 최대 10번 재시도 (총 최대 2초 대기)
-      let savedBuffer = null;
-      for (let i = 0; i < 10; i++) {
-        try {
-          savedBuffer = await loadLocalBookBuffer(String(finalBookId));
-          if (savedBuffer && savedBuffer.byteLength > 0) {
-            // 저장 완료 확인됨
-            break;
-          }
-        } catch (_error) {
-          // 에러는 무시하고 재시도
-        }
-        
-        // 저장이 완료되지 않았으면 잠시 대기 후 재시도
-        if (i < 9) {
-          await new Promise(resolve => setTimeout(resolve, 200));
-        }
-      }
-
-      if (!savedBuffer || savedBuffer.byteLength === 0) {
-        throw new Error('IndexedDB에 파일 저장이 완료되지 않았습니다. 다시 시도해주세요.');
-      }
-
       // 6. 서버 책 목록 갱신 및 뷰어로 이동
-      // onUploadSuccess가 addBook을 호출하여 서버 책 목록을 갱신하고,
-      // useBooks에서 서버 책만 표시하므로 자동으로 library에 표시됨
-      // 뷰어는 EPUB, IndexedDB는 로컬 백업용
       onUploadSuccess(book);
       onClose();
     } catch (error) {

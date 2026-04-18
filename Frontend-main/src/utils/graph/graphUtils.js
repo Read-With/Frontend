@@ -558,59 +558,40 @@ export const processTooltipData = (tooltipData, type) => {
 };
 
 /**
- * 챕터의 마지막 이벤트 번호를 계산합니다.
- * @param {Object} options - 계산 옵션
- * @param {boolean} options.isApiBook - API 책 여부
+ * 챕터의 마지막 이벤트 번호를 계산합니다 (서버 매니페스트·캐시 기준).
+ * @param {Object} options
  * @param {Array} options.manifestChapters - Manifest 챕터 목록
- * @param {number|null|undefined} options.manifestBookId - 서버 bookId (있으면 캐시·getChapterData·isValidEvent와 동일 챕터 해석)
+ * @param {number|null|undefined} options.manifestBookId - 서버 bookId
  * @param {number} options.chapter - 챕터 번호
- * @param {string} options.filename - 파일명
  * @returns {number} 마지막 이벤트 번호 (기본값: 1)
  */
-export const calculateLastEventForChapter = ({ 
-  isApiBook, 
-  manifestChapters, 
+export const calculateLastEventForChapter = ({
+  manifestChapters,
   manifestBookId,
-  chapter, 
-  filename,
-  getFolderKeyFromFilename,
-  getLastEventIndexForChapter
+  chapter,
 }) => {
-  if (isApiBook) {
-    if (manifestBookId != null && Number.isFinite(Number(manifestBookId)) && Number(manifestBookId) > 0) {
-      const manifestHint =
-        Array.isArray(manifestChapters) && manifestChapters.length > 0
-          ? { chapters: manifestChapters }
-          : undefined;
-      const fromCache = resolveLastEventIdxForFineGraph(manifestBookId, chapter, manifestHint);
-      if (fromCache != null) {
-        return fromCache;
-      }
+  if (manifestBookId != null && Number.isFinite(Number(manifestBookId)) && Number(manifestBookId) > 0) {
+    const manifestHint =
+      Array.isArray(manifestChapters) && manifestChapters.length > 0
+        ? { chapters: manifestChapters }
+        : undefined;
+    const fromCache = resolveLastEventIdxForFineGraph(manifestBookId, chapter, manifestHint);
+    if (fromCache != null) {
+      return fromCache;
     }
-
-    if (!manifestChapters?.length) return 1;
-
-    const chapterNum = Number(chapter);
-    const chapterInfo = manifestChapters.find(
-      (ch) => ch && typeof ch === 'object' && Number(ch.idx) === chapterNum
-    );
-
-    if (!chapterInfo) return 1;
-
-    const resolved = getLastFineGraphEventIdxFromChapterData(chapterInfo);
-    return resolved != null && resolved >= 1 ? resolved : 1;
-  } else {
-    if (!getFolderKeyFromFilename || !getLastEventIndexForChapter) {
-      console.warn('calculateLastEventForChapter: 로컬 책 처리를 위한 함수가 제공되지 않았습니다');
-      return 1;
-    }
-    
-    const folderKey = getFolderKeyFromFilename(filename);
-    if (!folderKey) return 1;
-    
-    const lastEventIndex = getLastEventIndexForChapter(folderKey, chapter);
-    return lastEventIndex > 0 ? lastEventIndex : 1;
   }
+
+  if (!manifestChapters?.length) return 1;
+
+  const chapterNum = Number(chapter);
+  const chapterInfo = manifestChapters.find(
+    (ch) => ch && typeof ch === 'object' && Number(ch.idx) === chapterNum
+  );
+
+  if (!chapterInfo) return 1;
+
+  const resolved = getLastFineGraphEventIdxFromChapterData(chapterInfo);
+  return resolved != null && resolved >= 1 ? resolved : 1;
 };
 
 /**

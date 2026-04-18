@@ -88,8 +88,7 @@ const CytoscapeGraphUnified = ({
   const safeCyOperation = useCallback((operation, errorMessage) => {
     try {
       return operation();
-    } catch (error) {
-      if (import.meta.env.DEV) console.error(errorMessage, error);
+    } catch {
       return null;
     }
   }, []);
@@ -274,20 +273,17 @@ const CytoscapeGraphUnified = ({
           cyInstance.mount(containerRef.current);
         }
       }
-    } catch (error) {
-      console.error('❌ Cytoscape 인스턴스 생성 실패:', error);
+    } catch {
       return;
     }
     
     if (!cyInstance) {
-      console.error('❌ Cytoscape 인스턴스가 생성되지 않음');
       return;
     }
     
     const cy = cyInstance;
     
     if (!cy || !cy.container()) {
-      console.error('❌ Cytoscape 인스턴스 마운트 실패');
       return;
     }
     

@@ -95,15 +95,6 @@ export function useGraphSearch(elements, onSearchStateChange = null, currentChap
     }
   }, [isResetFromSearch]);
 
-  // 제안 선택 함수
-  const selectSuggestion = useCallback((suggestion, onSelect) => {
-    if (onSelect && suggestion?.label) {
-      onSelect(suggestion.label);
-    }
-    setShowSuggestions(false);
-    setSelectedIndex(-1);
-  }, []);
-
   // 키보드 네비게이션 처리 (화살표 키, Escape 키만 처리)
   const handleKeyDown = useCallback((e, _onSelect) => {
     switch (e.key) {
@@ -181,7 +172,6 @@ export function useGraphSearch(elements, onSearchStateChange = null, currentChap
     suggestions,
     showSuggestions,
     selectedIndex,
-    selectSuggestion,
     handleKeyDown,
     closeSuggestions,
     setShowSuggestions,

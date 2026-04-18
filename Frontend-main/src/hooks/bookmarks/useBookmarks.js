@@ -3,13 +3,10 @@ import { toast } from 'react-toastify';
 import { createBookmark, updateBookmark, deleteBookmark } from '../../utils/api/bookmarksApi';
 import {
   loadBookmarks as loadBookmarksFromManager,
-  loadBookmarksFromLocal,
-  saveBookmarksToLocal,
 } from '../../components/viewer/bookmark/BookmarkManager';
 import {
   createBookmarkTitle,
   createBookmarkData,
-  isValidLocator,
   isSameBookmarkPosition,
 } from '../../utils/bookmarks/bookmarkUtils';
 
@@ -34,7 +31,6 @@ const getBookmarkFriendlyMessage = (err, fallback) => {
 export const useBookmarks = (bookId, options = {}) => {
   const { 
     sort = 'time_desc',
-    isLocalBook = false,
     viewerRef = null,
     setFailCount = null,
     autoFetch = true
@@ -58,43 +54,17 @@ export const useBookmarks = (bookId, options = {}) => {
     setError(null);
     
     try {
-      if (isLocalBook) {
-        const localBookmarks = loadBookmarksFromLocal(bookId);
-        setBookmarks(localBookmarks || []);
-      } else {
-        const bookmarksData = await loadBookmarksFromManager(bookId, sort);
-        setBookmarks(bookmarksData || []);
-      }
+      const bookmarksData = await loadBookmarksFromManager(bookId, sort);
+      setBookmarks(bookmarksData || []);
     } catch (err) {
       setError(getBookmarkFriendlyMessage(err, '북마크 조회 중 오류가 발생했습니다.'));
       setBookmarks([]);
     } finally {
       setLoading(false);
     }
-  }, [bookId, sort, isLocalBook]);
+  }, [bookId, sort]);
 
   const addBookmark = useCallback(async (bookmarkData, mergeIntoBookmark = null) => {
-    const hasLocator = isValidLocator(bookmarkData?.startLocator);
-    if (isLocalBook && typeof bookmarkData === 'object' && hasLocator) {
-      if (!hasBookId(bookId)) {
-        const msg = '책 정보가 없어 북마크를 저장할 수 없습니다.';
-        toast.error(msg);
-        return { success: false, message: msg };
-      }
-      const newBookmark = {
-        id: Date.now().toString(),
-        ...bookmarkData,
-        createdAt: bookmarkData.createdAt || new Date().toISOString(),
-      };
-      setBookmarks((prev) => {
-        const updatedBookmarks = [...prev, newBookmark];
-        saveBookmarksToLocal(bookId, updatedBookmarks);
-        return updatedBookmarks;
-      });
-      toast.success('📖 북마크가 추가되었습니다');
-      return { success: true, bookmark: newBookmark };
-    }
-
     try {
       const response = await createBookmark(bookmarkData);
       if (response.isSuccess) {
@@ -114,7 +84,7 @@ export const useBookmarks = (bookId, options = {}) => {
       toast.error(msg);
       return { success: false, message: msg };
     }
-  }, [bookId, isLocalBook]);
+  }, []);
 
   const modifyBookmark = useCallback(async (bookmarkId, updateData) => {
     try {
@@ -140,21 +110,6 @@ export const useBookmarks = (bookId, options = {}) => {
   const removeBookmark = useCallback(async (bookmarkId) => {
     const idStr = String(bookmarkId);
     try {
-      if (isLocalBook) {
-        if (!hasBookId(bookId)) {
-          const msg = '책 정보가 없어 삭제 상태를 저장할 수 없습니다.';
-          toast.error(msg);
-          return { success: false, message: msg };
-        }
-        setBookmarks((prev) => {
-          const next = prev.filter((b) => String(b.id) !== idStr);
-          saveBookmarksToLocal(bookId, next);
-          return next;
-        });
-        toast.success('북마크가 삭제되었습니다');
-        return { success: true };
-      }
-      
       const response = await deleteBookmark(bookmarkId);
       if (response.isSuccess) {
         setBookmarks(prev => prev.filter(bookmark => String(bookmark.id) !== idStr));
@@ -169,7 +124,7 @@ export const useBookmarks = (bookId, options = {}) => {
       toast.error(msg);
       return { success: false, message: msg };
     }
-  }, [bookId, isLocalBook]);
+  }, [bookId]);
 
   const changeBookmarkColor = useCallback(async (bookmarkId, color) => {
     return await modifyBookmark(bookmarkId, { color });
@@ -229,21 +184,11 @@ export const useBookmarks = (bookId, options = {}) => {
       return;
     }
 
-    if (isLocalBook) {
-      await addBookmark({
-        startLocator,
-        endLocator: endLocator ?? undefined,
-        title: bookmarkTitle,
-        pageNum,
-        chapterNum,
-      });
-    } else {
-      await addBookmark(
-        createBookmarkData(bookId, DEFAULT_VIEWER_BOOKMARK_COLOR, '', startLocator, endLocator),
-        { title: bookmarkTitle, pageNum, chapterNum }
-      );
-    }
-  }, [bookId, isLocalBook, viewerRef, setFailCount, addBookmark, removeBookmark]);
+    await addBookmark(
+      createBookmarkData(bookId, DEFAULT_VIEWER_BOOKMARK_COLOR, '', startLocator, endLocator),
+      { title: bookmarkTitle, pageNum, chapterNum }
+    );
+  }, [bookId, viewerRef, setFailCount, addBookmark, removeBookmark]);
 
   const handleBookmarkSelect = useCallback((target) => {
     viewerRef?.current?.displayAt(target);

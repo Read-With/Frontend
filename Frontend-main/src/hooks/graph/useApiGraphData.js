@@ -15,7 +15,6 @@ export function useApiGraphData(
   serverBookId,
   currentChapter,
   currentEvent,
-  isApiBook,
   forcedChapterEventIdx = null,
   options = {},
 ) {
@@ -45,15 +44,15 @@ export function useApiGraphData(
 
   // ─── Fine graph target key (stale detection) ──────────────────────────────
   const fineTargetKey = useMemo(() => {
-    if (!isApiBook || !serverBookId) return '';
+    if (!serverBookId) return '';
     const evRaw = Number(currentEvent);
     const ev = Number.isFinite(evRaw) && evRaw >= 1 ? evRaw : 1;
     return `${serverBookId}:${currentChapter}:${ev}`;
-  }, [isApiBook, serverBookId, currentChapter, currentEvent]);
+  }, [serverBookId, currentChapter, currentEvent]);
 
   // Reset fine data when chapter/event (or bookId) changes
   useEffect(() => {
-    if (!isApiBook || !serverBookId) {
+    if (!serverBookId) {
       prevFineTargetKeyRef.current = null;
       return;
     }
@@ -66,11 +65,12 @@ export function useApiGraphData(
     }
     fineEpochRef.current += 1;
     isFineGraphLoadingRef.current = false;
+    setApiFineLoading(false);
     setRawFineData(null);
-  }, [isApiBook, serverBookId, fineTargetKey]);
+  }, [serverBookId, fineTargetKey]);
 
   const forcedLocator = useMemo(() => {
-    if (!isApiBook || !serverBookId) return null;
+    if (!serverBookId) return null;
     const chapter = Number(currentChapter);
     const forcedIdx = Number(forcedChapterEventIdx);
     if (!Number.isFinite(chapter) || chapter < 1) return null;
@@ -83,10 +83,10 @@ export function useApiGraphData(
 
     if (resolved) return resolved;
     return { chapterIndex: chapter, blockIndex: 0, offset: 0 };
-  }, [isApiBook, serverBookId, currentChapter, forcedChapterEventIdx, manifestData]);
+  }, [serverBookId, currentChapter, forcedChapterEventIdx, manifestData]);
 
   const loadManifestData = useCallback(async () => {
-    if (!isApiBook || !serverBookId) {
+    if (!serverBookId) {
       setIsGraphLoading(false);
       setManifestReady(true);
       return;
@@ -138,17 +138,19 @@ export function useApiGraphData(
       setIsGraphLoading(false);
       setManifestReady(true);
     }
-  }, [isApiBook, serverBookId, handleError]);
+  }, [serverBookId, handleError]);
 
   useEffect(() => {
-    if (!serverBookId || !isApiBook) return;
+    if (!serverBookId) return;
     setFullMacroData(null);
     setRawFineData(null);
     fineEpochRef.current += 1;
-  }, [serverBookId, isApiBook]);
+    isFineGraphLoadingRef.current = false;
+    setApiFineLoading(false);
+  }, [serverBookId]);
 
   const loadMacroGraphData = useCallback(async () => {
-    if (!isApiBook || !serverBookId) return;
+    if (!serverBookId) return;
     const chapter = Number(currentChapter);
     if (!Number.isFinite(chapter) || chapter < 1) return;
 
@@ -188,14 +190,14 @@ export function useApiGraphData(
     } finally {
       setIsGraphLoading(false);
     }
-  }, [isApiBook, serverBookId, currentChapter, handleError]);
+  }, [serverBookId, currentChapter, handleError]);
 
   const loadFineGraphData = useCallback(async () => {
     if (macroOnly) {
       setApiFineLoading(false);
       return;
     }
-    if (!isApiBook || !serverBookId) {
+    if (!serverBookId) {
       setApiFineLoading(false);
       return;
     }
@@ -263,7 +265,6 @@ export function useApiGraphData(
     }
   }, [
     macroOnly,
-    isApiBook,
     serverBookId,
     currentChapter,
     currentEvent,

@@ -1,4 +1,4 @@
-import { getCharacterImagePath } from './characterUtils';
+import { getCharacterImagePath, extractCharacterId } from './characterUtils';
 
 /**
  * 이벤트 텍스트에서 첫 번째 단어를 추출하는 함수
@@ -88,9 +88,10 @@ function deepEqual(obj1, obj2, depth = 0) {
  * @param {Object} previousRelations - 이전 이벤트의 관계 데이터
  * @param {Object} eventData - 이벤트 데이터 (text 필드 포함)
  * @param {Object} idToProfileImage - ID to profileImage 매핑 (API 책용)
+ * @param {Array|null} charactersOrphanMerge - relations에 없어도 노드로 그릴 캐릭터 배열(Fine API 등)
  * @returns {Array} 그래프 요소 배열
  */
-export function convertRelationsToElements(relations, idToName, idToDesc, idToDescKo, idToMain, idToNames, folderKey, nodeWeights = null, previousRelations = null, eventData = null, idToProfileImage = null) {
+export function convertRelationsToElements(relations, idToName, idToDesc, idToDescKo, idToMain, idToNames, folderKey, nodeWeights = null, previousRelations = null, eventData = null, idToProfileImage = null, charactersOrphanMerge = null) {
   // 매개변수 유효성 검사
   if (!Array.isArray(relations)) {
     return [];
@@ -122,7 +123,20 @@ export function convertRelationsToElements(relations, idToName, idToDesc, idToDe
       }
     });
   });
-  
+
+  if (Array.isArray(charactersOrphanMerge) && charactersOrphanMerge.length > 0) {
+    charactersOrphanMerge.forEach((char) => {
+      if (!char) return;
+      const strId =
+        extractCharacterId(char) ||
+        (char.id != null && String(char.id).trim() !== '' ? String(char.id).trim() : null);
+      if (!strId || strId === '0') return;
+      if (!nodeSet.has(strId)) {
+        nodeSet.add(strId);
+        nodeIds.push(strId);
+      }
+    });
+  }
 
   // id 기반 고정 랜덤 함수 (캐싱으로 성능 개선)
   const randomCache = new Map();
@@ -153,18 +167,17 @@ export function convertRelationsToElements(relations, idToName, idToDesc, idToDe
     return result;
   }
 
-  // 캐릭터 정보가 있는 노드만 필터링 (character 데이터에 존재하는 ID만 허용)
-  const validNodeIds = nodeIds.filter(strId => {
-    const hasName = idToName[strId] && idToName[strId] !== strId;
+  // 캐릭터 매핑에 라벨이 있는 노드만 (이름이 id와 동일해도 표시)
+  const validNodeIds = nodeIds.filter((strId) => {
+    const nameVal = idToName[strId];
+    const hasLabel = nameVal != null && String(nameVal).trim() !== '';
     const hasValidId = strId && strId !== '0' && strId !== 'undefined' && strId !== 'null';
-    
-    // 캐릭터 데이터에 없는 ID는 제외
-    if (!hasName) {
-      nodeSet.delete(strId); // nodeSet에서도 제거
-      console.warn(`캐릭터 데이터에 없는 노드 제외 (ID: ${strId})`);
+
+    if (!hasLabel) {
+      nodeSet.delete(strId);
       return false;
     }
-    
+
     return hasValidId;
   });
   
@@ -206,7 +219,7 @@ export function convertRelationsToElements(relations, idToName, idToDesc, idToDe
       }
       // profileImage가 없으면 imagePath는 null로 유지 (이미지 없음)
     } else {
-      // 로컬 책: 항상 이미지 경로 생성 (이미지 파일 존재 여부는 체크하지 않음)
+      // API 외 키는 캐시된 키 구조를 따르는 이미지 경로를 사용
       imagePath = getCharacterImagePath(folderKey, strId);
     }
     
@@ -627,36 +640,6 @@ function filterWithTargetKeys(sourceSet, targetKeys) {
   return filtered;
 }
 
-export function collectLocalRelationKeys(folderKey, chapterNum, eventNum, targetKeys, getEventDataByIndex, getRelationKeyFromRelation) {
-  const seen = new Set();
-  if (!folderKey || !Number.isFinite(chapterNum) || !Number.isFinite(eventNum) || eventNum < 1) {
-    return seen;
-  }
-
-  for (let idx = 1; idx <= eventNum; idx += 1) {
-    const eventData = getEventDataByIndex(folderKey, chapterNum, idx);
-    const relations = eventData?.relations;
-    if (!Array.isArray(relations) || relations.length === 0) {
-      continue;
-    }
-
-    for (const rel of relations) {
-      const key = getRelationKeyFromRelation(rel);
-      if (!key) {
-        continue;
-      }
-      if (!targetKeys || targetKeys.has(key)) {
-        seen.add(key);
-        if (targetKeys && seen.size === targetKeys.size) {
-          return seen;
-        }
-      }
-    }
-  }
-
-  return seen;
-}
-
 function collectRelationKeysFromGraphState(bookId, chapterNum, eventNum, targetKeys, getGraphEventState, getRelationKeyFromRelation) {
   const seen = new Set();
   if (!bookId || !Number.isFinite(chapterNum) || !Number.isFinite(eventNum) || eventNum < 1) {
@@ -777,14 +760,12 @@ export async function filterRelationsByTimeline({
   relations,
   mode,
   bookId,
-  folderKey,
   chapterNum,
   eventNum,
   cacheRef,
   eventUtils,
   getCachedChapterEvents,
   getGraphEventState,
-  getEventDataByIndex,
   getRelationKeyFromRelation
 }) {
   if (!Array.isArray(relations) || relations.length === 0) {
@@ -814,11 +795,6 @@ export async function filterRelationsByTimeline({
         return relations;
       }
       seenKeys = await collectApiRelationKeys(bookId, chapterNum, eventNum, targetKeys, cacheRef, eventUtils, getCachedChapterEvents, getGraphEventState, getRelationKeyFromRelation);
-    } else if (mode === "local") {
-      if (!folderKey) {
-        return relations;
-      }
-      seenKeys = collectLocalRelationKeys(folderKey, chapterNum, eventNum, targetKeys, getEventDataByIndex, getRelationKeyFromRelation);
     } else {
       return relations;
     }

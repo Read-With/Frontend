@@ -21,9 +21,7 @@ import {
 } from "../../utils/common/locatorUtils";
 import { getGraphEventState, getCachedChapterEvents, getCachedReaderProgress, isGraphBookCacheBuilding, ensureGraphBookCache } from "../../utils/common/cache/chapterEventCache";
 import { 
-  getServerBookId,
   eventUtils,
-  bookUtils,
   graphDataCacheUtils,
   eventIdxUtils,
   graphDataTransformUtils,
@@ -31,10 +29,6 @@ import {
 } from "../../utils/viewer/viewerUtils";
 import { restoreGraphLayout, preloadChapterLayouts } from "../../utils/graph/graphLayoutUtils";
 import { removeBookmarkHighlights } from "./bookmark/BookmarkManager";
-import { 
-  getEventsForChapter,
-  getEventDataByIndex
-} from "../../utils/graph/graphData";
 import { convertRelationsToElements, filterRelationsByTimeline } from "../../utils/graph/graphDataUtils";
 import { buildNodeWeights, createCharacterMaps } from "../../utils/graph/characterUtils";
 import { getRelationKeyFromRelation } from "../../utils/graph/relationUtils";
@@ -401,9 +395,7 @@ const ViewerPage = () => {
     let checkInterval = null;
     
     const discoverEvents = async () => {
-      const isApiBook = bookUtils.isApiBook(book);
-      
-      if (!isApiBook || !book?.id || !currentChapter) {
+      if (!book?.id || typeof book.id !== 'number' || !currentChapter) {
         return;
       }
       
@@ -485,18 +477,15 @@ const ViewerPage = () => {
     let isMounted = true;
     
     const loadGraphData = async () => {
-        const isApiBook = bookUtils.isApiBook(book);
-        
-        if (isApiBook) {
-          if (!book?.id || !currentChapter) {
-            return;
-          }
-          
-          if (!manifestLoaded) {
-            return;
-          }
-          
-          const apiEventIdx = eventIdxUtils.calculateEventIdxForTransition(
+        if (!book?.id || typeof book.id !== 'number' || !currentChapter) {
+          return;
+        }
+
+        if (!manifestLoaded) {
+          return;
+        }
+
+        const apiEventIdx = eventIdxUtils.calculateEventIdxForTransition(
             currentEvent,
             isChapterTransitionRef.current,
             forcedChapterEventIdxRef,
@@ -531,8 +520,8 @@ const ViewerPage = () => {
             return;
           }
           
-          apiCallRef.current = callKey;
-         
+        apiCallRef.current = callKey;
+
         try {
           if (!book?.id || !currentChapter || apiEventIdx < 1) {
             clearGraphElements(0, currentChapter);
@@ -599,7 +588,6 @@ const ViewerPage = () => {
                 eventUtils,
                 getCachedChapterEvents,
                 getGraphEventState,
-                getEventDataByIndex,
                 getRelationKeyFromRelation
               })
             : (resultData.relations || []);
@@ -800,38 +788,6 @@ const ViewerPage = () => {
             }
           }
         }
-        
-        return;
-      }
-      
-      try {
-        setLoading(true);
-        setIsGraphLoading(true);
-        setIsDataReady(false);
-        
-        if (!currentChapter || currentChapter < 1) {
-          updateLoadingState(true, false, null, true);
-          return;
-        }
-        
-        const localEvents = getEventsForChapter(currentChapter, folderKey);
-        
-        if (!isMounted) return;
-        
-        setEvents(localEvents);
-        
-        updateLoadingState(true, false, null, false);
-      } catch (error) {
-        errorUtils.logError('[ViewerPage] 로컬 이벤트 로드 오류', error);
-        if (isMounted) {
-          updateLoadingState(true, false, null, true);
-        }
-      } finally {
-        if (isMounted) {
-          setLoading(false);
-          setIsGraphLoading(false);
-        }
-      }
     };
 
     loadGraphData();
@@ -840,10 +796,10 @@ const ViewerPage = () => {
       isMounted = false;
     };
   }, [
-    book?.id, 
-    currentChapter, 
-    manifestLoaded, 
-    folderKey
+    book?.id,
+    currentChapter,
+    manifestLoaded,
+    currentEvent,
   ]);
 
   useProgressAutoSave({
@@ -868,14 +824,9 @@ const ViewerPage = () => {
     searchTerm, isSearchActive, filteredElements,
     fitNodeIds,
     isResetFromSearch, suggestions, showSuggestions, selectedIndex,
-    selectSuggestion, handleKeyDown, closeSuggestions,
+    handleKeyDown, closeSuggestions,
     handleSearchSubmit, clearSearch, setSearchTerm,
   } = useGraphSearch(elements, null, currentChapterData);
-
-  const memoizedEventsForChapter = useMemo(
-    () => getEventsForChapter(currentChapter, folderKey),
-    [currentChapter, folderKey]
-  );
 
   // ─── JSX용 콜백 ─────────────────────────────────────────────────────────────
   const handleCurrentChapterChange = useCallback((chapter) => {
@@ -969,8 +920,8 @@ const ViewerPage = () => {
   const graphStateProp = useMemo(() => ({
     ...graphState,
     prevValidEvent: currentEvent?.chapter === currentChapter ? currentEvent : null,
-    events: memoizedEventsForChapter,
-  }), [graphState, currentEvent, currentChapter, memoizedEventsForChapter]);
+    events: _events,
+  }), [graphState, currentEvent, currentChapter, _events]);
 
   const searchStateProp = useMemo(() => ({
     ...searchState,
@@ -991,9 +942,8 @@ const ViewerPage = () => {
     clearSearch,
     closeSuggestions,
     onGenerateSuggestions: setSearchTerm,
-    selectSuggestion,
     handleKeyDown,
-  }), [handleSearchSubmit, clearSearch, closeSuggestions, setSearchTerm, selectSuggestion, handleKeyDown]);
+  }), [handleSearchSubmit, clearSearch, closeSuggestions, setSearchTerm, handleKeyDown]);
 
   const tooltipPropsProp = useMemo(() => ({
     activeTooltip,
@@ -1073,8 +1023,6 @@ const ViewerPage = () => {
             tooltipProps={tooltipPropsProp}
             transitionState={transitionState}
             apiError={apiError}
-            isFromLibrary={isFromLibrary}
-            previousPage={previousPage}
             bookId={bookId}
             book={book}
             cachedLocation={cachedLocation}

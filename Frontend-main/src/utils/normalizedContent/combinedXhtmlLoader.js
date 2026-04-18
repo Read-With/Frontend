@@ -5,7 +5,6 @@
  * 1. book.combinedXhtmlContent (직접 전달)
  * 2. book.combinedXhtmlUrl (URL fetch)
  * 3. manifest 캐시의 readerArtifacts.combinedXhtmlPath (getBookManifest 후)
- * 4. {BASE_URL}books/{bookId}/combined.xhtml (public 정적 파일)
  */
 
 import { errorUtils } from '../common/errorUtils';
@@ -34,14 +33,7 @@ export async function loadCombinedXhtml(bookId, book = {}) {
     }
   }
 
-  const base = typeof import.meta.env?.BASE_URL === 'string' ? import.meta.env.BASE_URL : '/';
-  const fallbackUrl = `${base}books/${encodeURIComponent(String(bookId || ''))}/combined.xhtml`;
-  try {
-    const res = await fetch(fallbackUrl);
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    return (await res.text()).trim();
-  } catch (e) {
-    errorUtils.logError('loadCombinedXhtml', e, { fallbackUrl, bookId });
-    throw new Error(`combined.xhtml을 불러올 수 없습니다: ${e.message}`);
-  }
+  const message = 'combined.xhtml URL을 찾을 수 없습니다. 서버 아티팩트 경로를 확인해주세요.';
+  errorUtils.logError('loadCombinedXhtml', new Error(message), { bookId });
+  throw new Error(message);
 }

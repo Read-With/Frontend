@@ -275,7 +275,3 @@ export function createCharacterMapsWithCache(characters) {
     return { idToName: {}, idToDesc: {}, idToDescKo: {}, idToMain: {}, idToNames: {}, idToProfileImage: {} };
   }
 }
-
-export function getCharacterPerspectiveSummary() {
-  return null;
-}

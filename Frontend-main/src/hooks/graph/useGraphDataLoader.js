@@ -153,7 +153,8 @@ export function useGraphDataLoader(bookId, chapterIdx, eventIdx = null) {
       Object.keys(nodeWeights).length ? nodeWeights : null,
       null,
       latestEventMeta,
-      idToProfileImage
+      idToProfileImage,
+      aggregatedCharacters.length > 0 ? aggregatedCharacters : null
     );
 
     return {

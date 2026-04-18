@@ -17,7 +17,6 @@ import { useGraphState } from '../../hooks/graph/useGraphState.js';
 import { useLocalStorageNumber } from '../../hooks/common/useLocalStorage.js';
 import { convertRelationsToElements, filterMainCharacters } from '../../utils/graph/graphDataUtils';
 import { createCharacterMaps, buildNodeWeights } from '../../utils/graph/characterUtils';
-import { getFolderKeyFromFilename, getLastEventIndexForChapter } from '../../utils/graph/graphData';
 import {
   processTooltipData,
   calculateLastEventForChapter,
@@ -133,10 +132,6 @@ function RelationGraphWrapper() {
     setDropdownSelection,
   } = useGraphState();
 
-  const isApiBook = useMemo(() => {
-    return !!serverBookId || (book && book.isFromAPI === true);
-  }, [serverBookId, book?.isFromAPI]);
-
   const {
     manifestData,
     manifestReady,
@@ -152,7 +147,6 @@ function RelationGraphWrapper() {
     serverBookId,
     currentChapter,
     currentEvent,
-    isApiBook,
     forcedChapterEventIdx,
   );
 
@@ -181,27 +175,18 @@ function RelationGraphWrapper() {
     };
   }, [location.state, location.pathname]);
 
-  const loaderBookKey = useMemo(() => {
-    if (isApiBook && serverBookId) {
-      return serverBookId;
-    }
-    return filename || null;
-  }, [isApiBook, serverBookId, filename]);
+  const loaderBookKey = useMemo(() => serverBookId ?? bookId ?? null, [serverBookId, bookId]);
 
   const loaderEventIdx = useMemo(() => {
     return Number.isFinite(currentEvent) && currentEvent > 0 ? currentEvent : null;
   }, [currentEvent]);
 
   const {
-    elements: localElements,
     newNodeIds,
     currentChapterData,
-    eventNum,
-    maxChapter,
-    loading
   } = useGraphDataLoader(loaderBookKey, currentChapter, loaderEventIdx);
 
-  const effectiveMaxChapter = isApiBook ? apiMaxChapter : maxChapter;
+  const effectiveMaxChapter = apiMaxChapter;
 
   const manifestBookTitleStr = useMemo(
     () => String(manifestData?.book?.title ?? '').trim(),
@@ -210,7 +195,7 @@ function RelationGraphWrapper() {
 
   const resolveChapterDisplayTitle = useCallback(
     (chapterNum) => {
-      if (!isApiBook || serverBookId == null || !manifestData) return '';
+      if (serverBookId == null || !manifestData) return '';
       const n = Number(chapterNum);
       if (!Number.isFinite(n) || n < 1) return '';
       const ch = getChapterData(serverBookId, n, manifestData);
@@ -219,7 +204,7 @@ function RelationGraphWrapper() {
       const stripped = stripRedundantBookTitlePrefix(raw, manifestBookTitleStr).trim();
       return stripped || raw;
     },
-    [isApiBook, serverBookId, manifestData, manifestBookTitleStr],
+    [serverBookId, manifestData, manifestBookTitleStr],
   );
 
   const currentChapterTitle = useMemo(
@@ -233,14 +218,14 @@ function RelationGraphWrapper() {
   }, [resolveChapterDisplayTitle, userCurrentChapter]);
 
   useEffect(() => {
-    if (isApiBook && !manifestReady) return;
+    if (!manifestReady) return;
     if (effectiveMaxChapter > 0 && currentChapter > effectiveMaxChapter) {
       setCurrentChapter(effectiveMaxChapter);
     }
-  }, [isApiBook, manifestReady, effectiveMaxChapter, currentChapter, setCurrentChapter]);
+  }, [manifestReady, effectiveMaxChapter, currentChapter, setCurrentChapter]);
 
   useEffect(() => {
-    if (!isApiBook || serverBookId == null || !manifestReady) return;
+    if (serverBookId == null || !manifestReady) return;
     const ch = Number(currentChapter);
     if (!Number.isFinite(ch) || ch < 1) return;
     if (isValidEvent(serverBookId, ch, currentEvent, manifestData)) return;
@@ -249,7 +234,7 @@ function RelationGraphWrapper() {
     if (isValidEvent(serverBookId, ch, next, manifestData)) {
       setCurrentEvent(next);
     }
-  }, [isApiBook, serverBookId, manifestReady, manifestData, currentChapter, currentEvent]);
+  }, [serverBookId, manifestReady, manifestData, currentChapter, currentEvent]);
 
   useEffect(() => {
     const forced = Number(forcedChapterEventIdx);
@@ -278,18 +263,22 @@ function RelationGraphWrapper() {
   }, [apiFineData]);
 
   const apiElements = useMemo(() => {
-    if (!graphApiPayload?.characters || !graphApiPayload?.relations) {
+    if (!graphApiPayload) return [];
+
+    const fineChars = Array.isArray(graphApiPayload.characters) ? graphApiPayload.characters : [];
+    const fineRels = Array.isArray(graphApiPayload.relations) ? graphApiPayload.relations : [];
+    if (fineChars.length === 0 && fineRels.length === 0) {
       return [];
     }
 
     try {
-      const { idToName, idToDesc, idToMain, idToNames, idToProfileImage } = createCharacterMaps(graphApiPayload.characters);
+      const { idToName, idToDesc, idToMain, idToNames, idToProfileImage } = createCharacterMaps(fineChars);
 
       const normalizedEvent = graphDataTransformUtils.normalizeApiEvent(graphApiPayload.event);
-      const nodeWeights = buildNodeWeights(graphApiPayload.characters);
+      const nodeWeights = buildNodeWeights(fineChars);
 
       const convertedElements = convertRelationsToElements(
-        graphApiPayload.relations,
+        fineRels,
         idToName,
         idToDesc,
         idToDesc,
@@ -299,22 +288,17 @@ function RelationGraphWrapper() {
         Object.keys(nodeWeights).length > 0 ? nodeWeights : null,
         null,
         normalizedEvent,
-        idToProfileImage
+        idToProfileImage,
+        fineChars.length > 0 ? fineChars : null
       );
 
       return convertedElements;
-    } catch (error) {
-      console.error('apiElements 변환 실패:', error);
+    } catch {
       return [];
     }
   }, [graphApiPayload]);
 
-  const elements = useMemo(() => {
-    if (isApiBook) {
-      return apiElements.length > 0 ? apiElements : [];
-    }
-    return localElements;
-  }, [isApiBook, apiElements, localElements]);
+  const elements = useMemo(() => (apiElements.length > 0 ? apiElements : []), [apiElements]);
 
   const {
     searchTerm,
@@ -325,7 +309,6 @@ function RelationGraphWrapper() {
     suggestions,
     showSuggestions,
     selectedIndex,
-    selectSuggestion,
     handleKeyDown,
     closeSuggestions,
     handleSearchSubmit,
@@ -457,15 +440,15 @@ function RelationGraphWrapper() {
       clearAll();
     }
     prevChapterNum.current = currentChapter;
-    prevEventNum.current = eventNum;
-  }, [currentChapter, eventNum, isSearchActive, clearSearch, clearAll]);
+    prevEventNum.current = currentEvent;
+  }, [currentChapter, currentEvent, isSearchActive, clearSearch, clearAll]);
 
   // 이벤트 변경 시 선택 효과 제거
   useEffect(() => {
-    if (prevEventNum.current !== undefined && prevEventNum.current !== eventNum) {
+    if (prevEventNum.current !== undefined && prevEventNum.current !== currentEvent) {
       clearAll();
     }
-  }, [eventNum, clearAll]);
+  }, [currentEvent, clearAll]);
 
   const sortedElements = useMemo(() => {
     return sortElementsById(elements);
@@ -516,13 +499,9 @@ function RelationGraphWrapper() {
       setCurrentChapter(chapter);
 
       const lastEventNum = calculateLastEventForChapter({
-        isApiBook,
         manifestChapters: manifestData?.chapters,
         manifestBookId: serverBookId,
         chapter,
-        filename,
-        getFolderKeyFromFilename,
-        getLastEventIndexForChapter
       });
 
       const normalizedLastEventNum = Number.isFinite(Number(lastEventNum)) && Number(lastEventNum) >= 1
@@ -534,10 +513,8 @@ function RelationGraphWrapper() {
   }, [
     currentChapter,
     setCurrentChapter,
-    isApiBook,
     manifestData?.chapters,
     serverBookId,
-    filename,
     clearAll,
     setDropdownSelection,
     setCurrentEvent,
@@ -652,13 +629,13 @@ function RelationGraphWrapper() {
     [effectiveMaxChapter]
   );
 
-  const isLoading = (isApiBook && (apiFineLoading || isGraphLoading)) || (!isApiBook && (loading || isGraphLoading));
+  const isLoading = apiFineLoading || isGraphLoading;
   const isApiGraphEmpty = useMemo(() => {
-    if (!isApiBook || isLoading) return false;
+    if (isLoading) return false;
     const chars = Array.isArray(graphApiPayload?.characters) ? graphApiPayload.characters.length : 0;
     const rels = Array.isArray(graphApiPayload?.relations) ? graphApiPayload.relations.length : 0;
     return chars === 0 && rels === 0;
-  }, [isApiBook, isLoading, graphApiPayload]);
+  }, [isLoading, graphApiPayload]);
 
   useEffect(() => {
     if (!isLoading) {
@@ -679,10 +656,9 @@ function RelationGraphWrapper() {
     onSearchSubmit: handleSearchSubmit,
     onClearSearch: clearSearch,
     onGenerateSuggestions: handleGenerateSuggestions,
-    onSelectSuggestion: selectSuggestion,
     onKeyDown: handleKeyDown,
     onCloseSuggestions: closeSuggestions,
-  }), [handleSearchSubmit, clearSearch, handleGenerateSuggestions, selectSuggestion, handleKeyDown, closeSuggestions]);
+  }), [handleSearchSubmit, clearSearch, handleGenerateSuggestions, handleKeyDown, closeSuggestions]);
 
   // ─── GraphCanvas prop 그룹 ────────────────────────────────────────────────
   const sidebarControl = useMemo(() => ({
@@ -780,8 +756,8 @@ function RelationGraphWrapper() {
         chapterList={chapterList}
         currentChapter={currentChapter}
         onChapterSelect={handleChapterSelect}
-        manifestBookId={isApiBook && serverBookId != null ? serverBookId : null}
-        manifestHint={isApiBook ? manifestData : null}
+        manifestBookId={serverBookId != null ? serverBookId : null}
+        manifestHint={manifestData}
       />
 
       <GraphCanvas
@@ -789,9 +765,9 @@ function RelationGraphWrapper() {
         activeTooltip={activeTooltip}
         cyRef={cyRef}
         chapterNum={currentChapter}
-        currentChapterTitle={isApiBook ? currentChapterTitle : ''}
-        userReadingChapterTitle={isApiBook ? userReadingChapterTitle : ''}
-        eventNum={isApiBook ? Math.max(currentEvent, 1) : eventNum}
+        currentChapterTitle={currentChapterTitle}
+        userReadingChapterTitle={userReadingChapterTitle}
+        eventNum={Math.max(currentEvent, 1)}
         maxChapter={effectiveMaxChapter}
         filename={filename}
         elements={elements}
@@ -803,7 +779,6 @@ function RelationGraphWrapper() {
         isLoading={isLoading}
         hasShownGraphOnce={hasShownGraphOnce}
         onCanvasClick={handleCanvasClick}
-        isApiBook={isApiBook}
         currentChapter={currentChapter}
         currentEvent={currentEvent}
         userCurrentChapter={userCurrentChapter}

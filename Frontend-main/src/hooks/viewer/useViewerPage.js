@@ -164,11 +164,6 @@ export function useViewerPage() {
     serverBooksListData?.books,
   ]);
 
-  const isLocalBook = useMemo(() => {
-    const numericBookId = Number(book?.id);
-    return !Number.isFinite(numericBookId) || numericBookId <= 0;
-  }, [book]);
-
   // 서버 bookId 추출 유틸리티 함수
   const getServerBookId = useCallback((bookObj) => {
     const primaryId = Number(bookObj?.id);
@@ -316,7 +311,6 @@ export function useViewerPage() {
     handleBookmarkSelect,
     handleDeleteBookmark
   } = useBookmarks(cleanBookId, {
-    isLocalBook,
     viewerRef,
     setFailCount
   });

@@ -35,8 +35,7 @@ export function useGraphLayout({
     if (nodes && nodes.length > 0) {
       try {
         cy.fit(nodes, 80);
-      } catch (error) {
-        console.warn('초기 그래프 fit 실패:', error);
+      } catch {
       }
     }
   }, []);

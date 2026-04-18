@@ -138,7 +138,9 @@ async function generateChapterLayout({ folderKey, bookKey, chapterNum, signal })
       folderKey,
       null,
       null,
-      lastEvent
+      lastEvent,
+      null,
+      charactersData
     );
     if (!elements || elements.length === 0) return null;
     

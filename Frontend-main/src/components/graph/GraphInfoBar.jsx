@@ -3,7 +3,6 @@ import PropTypes from 'prop-types';
 import { COLORS } from '../../utils/styles/styles.js';
 
 const GraphInfoBar = memo(function GraphInfoBar({
-  isApiBook,
   apiFineData,
   currentChapter,
   currentChapterTitle = '',
@@ -17,20 +16,16 @@ const GraphInfoBar = memo(function GraphInfoBar({
   const hasEvent = !!apiFineData?.event;
 
   const graphTypeLabel = useMemo(() => {
-    if (!isApiBook) return '로컬 그래프';
     return hasEvent ? '세밀 그래프' : '거시 그래프';
-  }, [isApiBook, hasEvent]);
+  }, [hasEvent]);
 
   const chapterRangeLabel = useMemo(() => {
     const nameOrNum = (n, title) => (title && String(title).trim() ? String(title).trim() : `Chapter ${n}`);
-    if (!isApiBook) {
-      return `Chapter 1 ~ ${currentChapter} 누적`;
-    }
     const curName = nameOrNum(currentChapter, currentChapterTitle);
     return hasEvent
       ? `${curName} · 이벤트 ${currentEvent}`
       : `Chapter 1 ~ ${curName} 누적`;
-  }, [isApiBook, hasEvent, currentChapter, currentChapterTitle, currentEvent]);
+  }, [hasEvent, currentChapter, currentChapterTitle, currentEvent]);
 
   return (
     <div
@@ -75,7 +70,7 @@ const GraphInfoBar = memo(function GraphInfoBar({
         >
           {chapterRangeLabel}
         </div>
-        {isApiBook && userCurrentChapter !== null && (
+        {userCurrentChapter !== null && (
           <div
             style={{
               background: COLORS.primary + '20',
@@ -111,37 +106,21 @@ const GraphInfoBar = memo(function GraphInfoBar({
         <span>
           {filterStage > 0 ? `${relationCount}관계 (필터링됨)` : `${relationCount}관계`}
         </span>
-        {isApiBook && (
-          <>
-            <span>•</span>
-            <span
-              style={{
-                color: COLORS.primary,
-                fontWeight: '600',
-              }}
-            >
-              API
-            </span>
-          </>
-        )}
-        {!isApiBook && (
-          <>
-            <span>•</span>
-            <span
-              style={{
-                color: COLORS.textSecondary,
-                fontWeight: '600',
-              }}
-            >
-              로컬
-            </span>
-          </>
-        )}
+        <>
+          <span>•</span>
+          <span
+            style={{
+              color: COLORS.primary,
+              fontWeight: '600',
+            }}
+          >
+            API
+          </span>
+        </>
       </div>
     </div>
   );
 }, (prevProps, nextProps) => {
-  if (prevProps.isApiBook !== nextProps.isApiBook) return false;
   if (prevProps.currentChapter !== nextProps.currentChapter) return false;
   if (prevProps.currentChapterTitle !== nextProps.currentChapterTitle) return false;
   if (prevProps.currentEvent !== nextProps.currentEvent) return false;
@@ -155,7 +134,6 @@ const GraphInfoBar = memo(function GraphInfoBar({
 });
 
 GraphInfoBar.propTypes = {
-  isApiBook: PropTypes.bool.isRequired,
   apiFineData: PropTypes.shape({
     event: PropTypes.object,
   }),

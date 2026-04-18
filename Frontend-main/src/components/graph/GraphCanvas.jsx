@@ -40,7 +40,7 @@ function GraphLoadingOverlay() {
  *   renderElements  — Cytoscape 렌더링용 최종 데이터 (검색/필터 적용)
  *   povSummaries, apiMacroData, apiFineData, bookId
  *   isLoading, hasShownGraphOnce, onCanvasClick
- *   isApiBook, currentChapter, currentEvent, userCurrentChapter
+ *   currentChapter, currentEvent, userCurrentChapter
  *   nodeCount, relationCount, filterStage
  *
  * 그룹 props:
@@ -68,7 +68,6 @@ function GraphCanvas({
   isLoading,
   hasShownGraphOnce,
   onCanvasClick,
-  isApiBook,
   currentChapter,
   currentEvent,
   userCurrentChapter,
@@ -112,7 +111,6 @@ function GraphCanvas({
         }}
       >
         <GraphInfoBar
-          isApiBook={isApiBook}
           apiFineData={apiFineData}
           currentChapter={currentChapter}
           currentChapterTitle={currentChapterTitle}
@@ -220,7 +218,6 @@ GraphCanvas.propTypes = {
   isLoading: PropTypes.bool.isRequired,
   hasShownGraphOnce: PropTypes.bool.isRequired,
   onCanvasClick: PropTypes.func.isRequired,
-  isApiBook: PropTypes.bool.isRequired,
   currentChapter: PropTypes.number.isRequired,
   currentEvent: PropTypes.number.isRequired,
   userCurrentChapter: PropTypes.number,

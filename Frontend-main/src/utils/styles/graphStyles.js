@@ -94,32 +94,39 @@ export const calculateNodeSize = (baseSize, weight) => {
   return Math.max(calculatedSize, 30);
 };
 
+const baseNodeGraphStyle = {
+  "background-color": COLORS.nodeBackground,
+  "border-width": (ele) => (ele.data("main_character") ? 2 : 1),
+  "border-color": COLORS.nodeBorder,
+  "border-opacity": 1,
+  width: (ele) => calculateNodeSize(8, ele.data("weight")),
+  height: (ele) => calculateNodeSize(8, ele.data("weight")),
+  shape: "ellipse",
+  label: "data(label)",
+  "text-valign": "bottom",
+  "text-halign": "center",
+  "font-size": 12,
+  "font-weight": (ele) => (ele.data("main_character") ? 600 : 400),
+  color: COLORS.nodeText,
+  "text-margin-y": 2,
+  "text-background-color": COLORS.white,
+  "text-background-opacity": 0.8,
+  "text-background-shape": "roundrectangle",
+  "text-background-padding": 2,
+};
+
 // [공통 스타일시트 생성 함수 - 가중치 기반 노드 크기만 사용]
 export const createGraphStylesheet = (edgeStyle, edgeLabelVisible, maxEdgeLabelLength = null) => [
   {
+    selector: "node",
+    style: baseNodeGraphStyle,
+  },
+  {
     selector: "node[image]",
     style: {
-      "background-color": COLORS.nodeBackground,
       "background-image": "data(image)",
       "background-fit": "cover",
       "background-clip": "node",
-      "border-width": (ele) => (ele.data("main_character") ? 2 : 1),
-      "border-color": COLORS.nodeBorder,
-      "border-opacity": 1,
-      width: (ele) => calculateNodeSize(8, ele.data("weight")),
-      height: (ele) => calculateNodeSize(8, ele.data("weight")),
-      shape: "ellipse",
-      label: "data(label)",
-      "text-valign": "bottom",
-      "text-halign": "center",
-      "font-size": 12,
-      "font-weight": (ele) => (ele.data("main_character") ? 600 : 400),
-      color: COLORS.nodeText,
-      "text-margin-y": 2,
-      "text-background-color": COLORS.white,
-      "text-background-opacity": 0.8,
-      "text-background-shape": "roundrectangle",
-      "text-background-padding": 2,
     },
   },
   {

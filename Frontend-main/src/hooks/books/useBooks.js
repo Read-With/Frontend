@@ -2,12 +2,6 @@ import { useState, useEffect, useCallback, useMemo, useRef, useReducer } from 'r
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { getBook, toggleBookFavorite } from '../../utils/api/booksApi';
 import { normalizeTitle } from '../../utils/common/stringUtils';
-import {
-  deleteLocalBookBuffer,
-  deleteLocalBookMetadata,
-  loadLocalBookBuffer,
-  getAllLocalBookIds,
-} from '../../utils/library/localBookStorage';
 import { useBooksServerQuery } from './useBooksServerQuery';
 import { PROGRESS_CACHE_UPDATED_EVENT } from '../../utils/common/cache/progressCache';
 import { resolveLibraryReadingProgressPercent } from '../../utils/library/libraryBookDisplay';
@@ -27,40 +21,10 @@ export const useBooks = () => {
     return new Set();
   });
   const hiddenServerBookIdsRef = useRef(new Set(hiddenServerBookIds));
-  const [indexedDbBookIds, setIndexedDbBookIds] = useState(new Set());
-  const indexedDbBookIdsRef = useRef(new Set());
 
   useEffect(() => {
     hiddenServerBookIdsRef.current = new Set(hiddenServerBookIds);
   }, [hiddenServerBookIds]);
-  useEffect(() => {
-    indexedDbBookIdsRef.current = new Set(indexedDbBookIds);
-  }, [indexedDbBookIds]);
-
-  const refreshIndexedDbBookIds = useCallback(async () => {
-    try {
-      const allBookIds = await getAllLocalBookIds();
-      const bookIdsWithBuffer = new Set();
-      const checkPromises = (allBookIds || []).map(async (bookId) => {
-        try {
-          const buffer = await loadLocalBookBuffer(bookId);
-          return buffer && buffer.byteLength > 0 ? bookId : null;
-        } catch {
-          return null;
-        }
-      });
-      const results = await Promise.all(checkPromises);
-      results.forEach((id) => id && bookIdsWithBuffer.add(id));
-      setIndexedDbBookIds(bookIdsWithBuffer);
-    } catch (e) {
-      console.warn('IndexedDB 책 ID 로드 실패:', e);
-      setIndexedDbBookIds(new Set());
-    }
-  }, []);
-
-  useEffect(() => {
-    refreshIndexedDbBookIds();
-  }, [refreshIndexedDbBookIds]);
 
   useEffect(() => {
     const onProgressCacheUpdated = () => bumpProgressCacheEpoch();
@@ -68,22 +32,7 @@ export const useBooks = () => {
     return () => window.removeEventListener(PROGRESS_CACHE_UPDATED_EVENT, onProgressCacheUpdated);
   }, []);
 
-  useEffect(() => {
-    const INTERVAL_MS = 15000;
-    const id = setInterval(refreshIndexedDbBookIds, INTERVAL_MS);
-    return () => clearInterval(id);
-  }, [refreshIndexedDbBookIds]);
-
-  useEffect(() => {
-    const onVisible = () => {
-      if (document.visibilityState === 'visible') refreshIndexedDbBookIds();
-    };
-    document.addEventListener('visibilitychange', onVisible);
-    return () => document.removeEventListener('visibilitychange', onVisible);
-  }, [refreshIndexedDbBookIds]);
-
   // 서버 책 조회 - React Query 사용
-  // 서버는 메타데이터만, 로컬 원본 버퍼는 IndexedDB; 뷰어는 combined XHTML
   const {
     data: serverBooksData,
     isLoading: isServerLoading,
@@ -124,32 +73,18 @@ export const useBooks = () => {
     return reconcileBooks(serverBooks);
   }, [serverBooksData, reconcileBooks]);
 
-  useEffect(() => {
-    if (!serverBooksData?.books) return;
-    const t = setTimeout(refreshIndexedDbBookIds, 500);
-    return () => clearTimeout(t);
-  }, [serverBooksData, refreshIndexedDbBookIds]);
-
   const books = useMemo(() => {
     const hiddenServer = hiddenServerBookIdsRef.current;
-    const indexedDbIds = indexedDbBookIds;
-
-    const serverBooksMap = new Map();
-    reconciledBooks.forEach((book) => {
-      const idKey = book?.id != null ? `${book.id}` : null;
-      if (idKey) serverBooksMap.set(idKey, book);
-    });
-
-    const result = [];
-    indexedDbIds.forEach((bookId) => {
-      if (hiddenServer.has(bookId)) return;
-      const serverBook = serverBooksMap.get(bookId);
-      if (!serverBook) return;
-      const progress = resolveLibraryReadingProgressPercent(serverBook);
-      result.push({ ...serverBook, progress });
-    });
-    return result;
-  }, [reconciledBooks, indexedDbBookIds, progressCacheEpoch]);
+    return reconciledBooks
+      .filter((book) => {
+        const idKey = book?.id != null ? `${book.id}` : null;
+        return idKey && !hiddenServer.has(idKey);
+      })
+      .map((book) => ({
+        ...book,
+        progress: resolveLibraryReadingProgressPercent(book),
+      }));
+  }, [reconciledBooks, progressCacheEpoch]);
 
   const toggleFavoriteMutation = useMutation({
     mutationFn: async ({ bookId, favorite }) => toggleBookFavorite(bookId, favorite),
@@ -186,17 +121,13 @@ export const useBooks = () => {
   const removeBookMutation = useMutation({
     mutationFn: async (bookId) => {
       const targetBookId = String(bookId);
-      await Promise.all([
-        deleteLocalBookBuffer(targetBookId),
-        deleteLocalBookMetadata(targetBookId),
-      ]);
       const hiddenIds = new Set(hiddenServerBookIdsRef.current);
       hiddenIds.add(targetBookId);
       localStorage.setItem(HIDDEN_SERVER_BOOK_IDS_KEY, JSON.stringify([...hiddenIds]));
       return targetBookId;
     },
     onMutate: async (_bookId) => {
-      // 서버 목록은 변경하지 않음 (로컬 삭제만 처리)
+      // 서버 목록은 변경하지 않음 (클라이언트에서만 숨김)
       await queryClient.cancelQueries({ queryKey: ['books', 'server'] });
       return {};
     },
@@ -220,7 +151,7 @@ export const useBooks = () => {
         const newBookIdStr = newBookId != null ? String(newBookId) : null;
         if (!newBookIdStr) return;
 
-        // 과거에 삭제로 숨김 처리된 bookId라면 업로드(로컬 저장) 시 다시 표시
+        // 과거에 삭제로 숨김 처리된 bookId라면 업로드 후 다시 표시
         setHiddenServerBookIds((prev) => {
           if (!prev.has(newBookIdStr)) return prev;
           const next = new Set(prev);
@@ -228,18 +159,15 @@ export const useBooks = () => {
           localStorage.setItem(HIDDEN_SERVER_BOOK_IDS_KEY, JSON.stringify([...next]));
           return next;
         });
-        setIndexedDbBookIds((prev) => {
-          const next = new Set(prev);
-          next.add(newBookIdStr);
-          return next;
+        queryClient.refetchQueries({
+          queryKey: ['books', 'server'],
+          type: 'active',
         });
-
-        refreshIndexedDbBookIds();
       } catch (e) {
         console.warn('addBook 실패:', e);
       }
     },
-    [queryClient, refreshIndexedDbBookIds],
+    [queryClient],
   );
 
   const fetchBook = useCallback(async (bookId) => {

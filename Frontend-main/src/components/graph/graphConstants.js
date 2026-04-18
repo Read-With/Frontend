@@ -7,3 +7,10 @@ export const GRAPH_LAYOUT_CONSTANTS = {
   TOP_BAR_HEIGHT: 54,
   TOOLTIP_SIDEBAR_WIDTH: 450,
 };
+
+/** 인물 필터 단계 (ViewerTopBar, GraphTopBar 공통) */
+export const GRAPH_CHARACTER_FILTER_STAGE_OPTIONS = [
+  { value: 0, label: '모두 보기' },
+  { value: 1, label: '주요 인물만 보기' },
+  { value: 2, label: '주요 인물과 보기' },
+];

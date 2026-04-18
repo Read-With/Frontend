@@ -3,14 +3,7 @@ import PropTypes from 'prop-types';
 import GraphControls from './GraphControls';
 import EdgeLabelToggle from './tooltip/EdgeLabelToggle';
 import { topBarStyles, COLORS, ANIMATION_VALUES } from '../../utils/styles/styles.js';
-import { GRAPH_LAYOUT_CONSTANTS } from './graphConstants.js';
-
-// ─── 필터 옵션 상수 ────────────────────────────────────────────────────────────
-const FILTER_OPTIONS = [
-  { value: 0, label: '모두 보기' },
-  { value: 1, label: '주요 인물만 보기' },
-  { value: 2, label: '주요 인물과 보기' },
-];
+import { GRAPH_LAYOUT_CONSTANTS, GRAPH_CHARACTER_FILTER_STAGE_OPTIONS } from './graphConstants.js';
 
 // 변하지 않는 select 기본 스타일
 const selectBaseStyle = {
@@ -45,7 +38,7 @@ function CharacterFilterSelect({ value, onChange }) {
       aria-label="인물 필터"
       style={style}
     >
-      {FILTER_OPTIONS.map((opt) => (
+      {GRAPH_CHARACTER_FILTER_STAGE_OPTIONS.map((opt) => (
         <option key={opt.value} value={opt.value}>
           {opt.label}
         </option>
@@ -69,7 +62,7 @@ CharacterFilterSelect.propTypes = {
  * 그룹 props:
  *   searchState   — 검색 상태값 (searchTerm, isSearchActive, suggestions, showSuggestions, selectedIndex)
  *   searchActions — 검색 핸들러 (onSearchSubmit, onClearSearch, onGenerateSuggestions,
- *                                 onSelectSuggestion, onKeyDown, onCloseSuggestions)
+ *                                 onKeyDown, onCloseSuggestions)
  */
 function GraphTopBar({
   isSidebarOpen,
@@ -83,7 +76,7 @@ function GraphTopBar({
   const { searchTerm, isSearchActive, suggestions, showSuggestions, selectedIndex } = searchState;
   const {
     onSearchSubmit, onClearSearch, onGenerateSuggestions,
-    onSelectSuggestion, onKeyDown, onCloseSuggestions,
+    onKeyDown, onCloseSuggestions,
   } = searchActions;
 
   const { SIDEBAR } = GRAPH_LAYOUT_CONSTANTS;
@@ -113,7 +106,6 @@ function GraphTopBar({
           suggestions={suggestions}
           showSuggestions={showSuggestions}
           selectedIndex={selectedIndex}
-          onSelectSuggestion={onSelectSuggestion}
           onKeyDown={onKeyDown}
           onCloseSuggestions={onCloseSuggestions}
           isSearchActive={isSearchActive}
@@ -140,7 +132,6 @@ GraphTopBar.propTypes = {
     onSearchSubmit: PropTypes.func.isRequired,
     onClearSearch: PropTypes.func.isRequired,
     onGenerateSuggestions: PropTypes.func.isRequired,
-    onSelectSuggestion: PropTypes.func.isRequired,
     onKeyDown: PropTypes.func.isRequired,
     onCloseSuggestions: PropTypes.func.isRequired,
   }).isRequired,

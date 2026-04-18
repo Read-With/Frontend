@@ -18,6 +18,7 @@ import { mergeRefs } from "../../../utils/styles/animations";
 import { safeNum, processRelationTagsCached } from "../../../utils/graph/relationUtils";
 import { cleanupRelationUtils } from "../../../utils/common/cleanupUtils";
 import { getMaxChapter } from "../../../utils/common/cache/manifestCache";
+import { getUnifiedEventInfoForEdgeTooltip } from "../../../utils/viewer/eventDisplayUtils.js";
 import "../RelationGraph.css";
 
 /**
@@ -86,32 +87,14 @@ function UnifiedEdgeTooltip({
     setViewMode("info");
   }, [data?.id, data?.source, data?.target]);
 
-  // ViewerTopBar와 동일한 방식으로 이벤트 정보 처리
-  const getUnifiedEventInfo = useCallback(() => {
-    // ViewerTopBar와 동일한 로직: currentEvent || prevValidEvent
-    const eventToShow = currentEvent || prevValidEvent;
-    
-    if (eventToShow) {
-      return {
-        eventNum: eventToShow.eventNum ?? 0,
-        name: eventToShow.name || eventToShow.event_name || "",
-        chapterProgress: eventToShow.chapterProgress,
-        currentChars: eventToShow.currentChars,
-        totalChars: eventToShow.totalChars
-      };
-    }
-    
-    // 이벤트 정보가 없는 경우 기존 로직 사용 (하위 호환성)
-    return { eventNum: eventNum || 0 };
-  }, [currentEvent, prevValidEvent, eventNum]);
-
-
   // source/target을 safeNum으로 변환
   const id1 = safeNum(data.source);
   const id2 = safeNum(data.target);
 
-  // 통합된 이벤트 정보 가져오기
-  const unifiedEventInfo = getUnifiedEventInfo();
+  const unifiedEventInfo = useMemo(
+    () => getUnifiedEventInfoForEdgeTooltip({ currentEvent, prevValidEvent, eventNum }),
+    [currentEvent, prevValidEvent, eventNum],
+  );
 
   // 그래프 온리 페이지 감지 (URL 패턴으로 판단)
   const isGraphOnlyPage = window.location.pathname.includes('/user/graph/');

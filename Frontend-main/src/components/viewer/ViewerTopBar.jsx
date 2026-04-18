@@ -1,7 +1,6 @@
 import React, { useCallback, useMemo } from 'react';
 import GraphControls from '../graph/GraphControls';
 import EdgeLabelToggle from '../graph/tooltip/EdgeLabelToggle';
-import { getChapterEventCount, getFolderKeyFromFilename } from '../../utils/graph/graphData';
 import { getCachedChapterEvents } from '../../utils/common/cache/chapterEventCache';
 import { getChapterData, getManifestFromCache } from '../../utils/common/cache/manifestCache';
 import {
@@ -9,6 +8,8 @@ import {
   formatChapterColonLine,
   stripRedundantBookTitlePrefix,
 } from '../../utils/viewer/chapterTitleDisplay';
+import { pickReadingEvent, viewerTopBarEventLabels } from '../../utils/viewer/eventDisplayUtils';
+import { GRAPH_CHARACTER_FILTER_STAGE_OPTIONS } from '../graph/graphConstants';
 
 // 공통 스타일 상수들
 const LOADING_STYLE = {
@@ -85,20 +86,12 @@ const ViewerTopBar = ({
   viewerState,
   searchState,
   searchActions,
-  isFromLibrary: _isFromLibrary = false,
-  previousPage: _previousPage = null,
 }) => {
 
-  const {
-    navigate: _navigate,
-    filename,
-    book,
-    viewerRef: _viewerRef
-  } = viewerState;
+  const { filename, book } = viewerState;
   
   const {
     currentChapter,
-    maxChapter: _maxChapter,
     currentEvent,
     prevValidEvent,
     prevEvent,
@@ -106,12 +99,10 @@ const ViewerTopBar = ({
     graphFullScreen,
     edgeLabelVisible,
     loading: isGraphLoading,
-    maxChapterEvents: _maxChapterEvents
   } = graphState;
   
   const {
     setCurrentChapter,
-    setGraphFullScreen: _setGraphFullScreen,
     setEdgeLabelVisible,
     filterStage,
     setFilterStage
@@ -121,8 +112,6 @@ const ViewerTopBar = ({
   const {
     searchTerm,
     isSearchActive,
-    elements = [],
-    currentChapterData = null,
     suggestions = [],
     showSuggestions = false,
     selectedIndex = -1
@@ -133,7 +122,6 @@ const ViewerTopBar = ({
     clearSearch,
     closeSuggestions,
     onGenerateSuggestions,
-    selectSuggestion,
     handleKeyDown
   } = searchActions;
 
@@ -197,15 +185,6 @@ const ViewerTopBar = ({
     return t || undefined;
   }, [bookId, resolvedServerChapter]);
 
-  const folderKey = useMemo(() => {
-    if (!filename) return null;
-    try {
-      return getFolderKeyFromFilename(filename);
-    } catch (_error) {
-      return null;
-    }
-  }, [filename]);
-  
   const getTotalEventsForChapter = useCallback((eventsList, chapter) => {
     let totalEvents = 0;
 
@@ -245,17 +224,12 @@ const ViewerTopBar = ({
       }
     }
 
-    if (folderKey) {
-      const localCount = getChapterEventCount(chapter, folderKey);
-      totalEvents = Math.max(totalEvents, localCount);
-    }
-
     if (!Number.isFinite(totalEvents) || totalEvents <= 0) {
       totalEvents = 0;
     }
 
     return totalEvents;
-  }, [bookId, folderKey]);
+  }, [bookId]);
 
   const calculateProgress = useCallback((eventToShow, events, currentChapter) => {
     // 1. chapterProgress가 있는 경우 (가장 정확한 방법)
@@ -301,17 +275,14 @@ const ViewerTopBar = ({
   }, [getTotalEventsForChapter]);
   
   React.useEffect(() => {
-    const eventToShow = currentEvent || prevValidEvent;
+    const eventToShow = pickReadingEvent(currentEvent, prevValidEvent);
     
     if (eventToShow) {
       if (eventToShow.chapter && eventToShow.chapter !== currentChapter) {
         return;
       }
       
-      const eventInfo = {
-        eventNum: eventToShow.eventNum ?? 0,
-        name: eventToShow.name || eventToShow.event_name || ""
-      };
+      const eventInfo = viewerTopBarEventLabels(eventToShow);
       setCurrentEventInfo(eventInfo);
       
       if (!hasInitialData) {
@@ -441,16 +412,13 @@ const ViewerTopBar = ({
       searchTerm={searchTerm}
       isSearchActive={isSearchActive}
       onClearSearch={clearSearch}
-      elements={elements}
-      currentChapterData={currentChapterData}
       onCloseSuggestions={closeSuggestions}
       suggestions={suggestions}
       showSuggestions={showSuggestions}
       selectedIndex={selectedIndex}
-      onSelectSuggestion={selectSuggestion}
       onKeyDown={handleKeyDown}
     />
-  ), [onSearchSubmit, handleGenerateSuggestions, searchTerm, isSearchActive, clearSearch, elements, currentChapterData, closeSuggestions, suggestions, showSuggestions, selectedIndex, selectSuggestion, handleKeyDown]);
+  ), [onSearchSubmit, handleGenerateSuggestions, searchTerm, isSearchActive, clearSearch, closeSuggestions, suggestions, showSuggestions, selectedIndex, handleKeyDown]);
 
   const renderToggleButtons = () => (
     <div
@@ -492,15 +460,11 @@ const ViewerTopBar = ({
         }}
         title="필터링 단계 선택"
       >
-        <option value={0} style={{ color: '#5C6F5C', background: '#fff' }}>
-          모두 보기
-        </option>
-        <option value={1} style={{ color: '#5C6F5C', background: '#fff' }}>
-          주요 인물만 보기
-        </option>
-        <option value={2} style={{ color: '#5C6F5C', background: '#fff' }}>
-          주요 인물과 보기
-        </option>
+        {GRAPH_CHARACTER_FILTER_STAGE_OPTIONS.map((opt) => (
+          <option key={opt.value} value={opt.value} style={{ color: '#5C6F5C', background: '#fff' }}>
+            {opt.label}
+          </option>
+        ))}
       </select>
     </div>
   );

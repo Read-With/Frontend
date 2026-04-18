@@ -503,7 +503,8 @@ const buildChapterCachePayload = (bookId, chapterIdx, events, source = 'runtime'
         Object.keys(nodeWeights).length ? nodeWeights : null,
         null,
         event?.event ?? null,
-        idToProfileImage
+        idToProfileImage,
+        aggregatedCharacters.length > 0 ? aggregatedCharacters : null
       );
     } catch (error) {
       console.error('convertRelationsToElements 실패:', error);

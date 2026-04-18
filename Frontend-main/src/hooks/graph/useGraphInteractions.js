@@ -35,8 +35,7 @@ export default function useGraphInteractions({
     if (immediate) {
       try {
         cy.style().update();
-      } catch (error) {
-        console.debug('forceStyleUpdate 실패:', error);
+      } catch {
       }
     }
   }, []);
@@ -98,8 +97,7 @@ export default function useGraphInteractions({
         
         try {
           cy.style().update();
-        } catch (error) {
-          console.debug('prewarm style update 실패:', error);
+        } catch {
         }
         
         requestAnimationFrame(() => {
@@ -111,13 +109,11 @@ export default function useGraphInteractions({
             });
             cy.style().update();
             prewarmedOnceRef.current = true;
-          } catch (error) {
-            console.debug('prewarm cleanup 실패:', error);
+          } catch {
             prewarmedOnceRef.current = true;
           }
         });
-      } catch (error) {
-        console.debug('prewarm 실행 실패:', error);
+      } catch {
         prewarmedOnceRef.current = true;
       }
     };
@@ -131,23 +127,20 @@ export default function useGraphInteractions({
           try { 
             cy.removeListener('add', 'node', handleFirstElement); 
             cy.removeListener('add', 'edge', handleFirstElement);
-          } catch (error) {
-            console.debug('listener 제거 실패:', error);
+          } catch {
           }
         }
       };
       try { 
         cy.on('add', 'node', handleFirstElement);
         cy.on('add', 'edge', handleFirstElement);
-      } catch (error) {
-        console.debug('listener 등록 실패:', error);
+      } catch {
       }
       return () => {
         try { 
           cy.removeListener('add', 'node', handleFirstElement);
           cy.removeListener('add', 'edge', handleFirstElement);
-        } catch (error) {
-          console.debug('cleanup listener 제거 실패:', error);
+        } catch {
         }
       };
     }
@@ -172,8 +165,7 @@ export default function useGraphInteractions({
       if (typeof node.closedNeighborhood === 'function') {
         try {
           connectedNodes = node.closedNeighborhood().nodes();
-        } catch (error) {
-          console.debug('closedNeighborhood 호출 실패:', error);
+        } catch {
           connectedNodes = cy.collection([node]);
         }
       }
@@ -198,8 +190,7 @@ export default function useGraphInteractions({
       });
 
       forceStyleUpdate(cy, { immediate: true });
-    } catch (error) {
-      console.debug('handleNodeHighlight 실패:', error);
+    } catch {
     }
   }, [cyRef, isSearchActive, filteredElements, forceStyleUpdate]);
 
@@ -267,8 +258,7 @@ export default function useGraphInteractions({
       if (offset !== 0) domX += offset;
 
       return { x: domX, y: domY };
-    } catch (error) {
-      console.debug('calculateTooltipPosition 실패:', error);
+    } catch {
       return { x: 0, y: 0 };
     }
   }, [cyRef]);
@@ -309,8 +299,7 @@ export default function useGraphInteractions({
         }
         
         if (selectedNodeIdRef) selectedNodeIdRef.current = nodeId;
-      } catch (error) {
-        console.debug('tapNodeHandler 실패:', error);
+      } catch {
       }
     },
     [cyRef, handleNodeHighlight, calculateNodePosition, calculateTooltipPosition, selectedNodeIdRef, selectedEdgeIdRef, resetAllStyles]
@@ -380,8 +369,7 @@ export default function useGraphInteractions({
 
         if (selectedEdgeIdRef) selectedEdgeIdRef.current = currentEdgeId;
         if (selectedNodeIdRef) selectedNodeIdRef.current = null;
-      } catch (error) {
-        console.debug('tapEdgeHandler 실패:', error);
+      } catch {
       }
     },
     [cyRef, selectedEdgeIdRef, selectedNodeIdRef, resetAllStyles, calculateTooltipPosition, forceStyleUpdate]
@@ -399,8 +387,7 @@ export default function useGraphInteractions({
       if (selectedNodeIdRef) selectedNodeIdRef.current = null;
       if (selectedEdgeIdRef) selectedEdgeIdRef.current = null;
       resetAllStyles();
-    } catch (error) {
-      console.debug('handleBackgroundClick 실패:', error);
+    } catch {
     }
   }, [strictBackgroundClear, selectedNodeIdRef, selectedEdgeIdRef, resetAllStyles]);
 
@@ -410,8 +397,7 @@ export default function useGraphInteractions({
         if (evt.target === cyRef?.current) {
           handleBackgroundClick();
         }
-      } catch (error) {
-        console.debug('tapBackgroundHandler 실패:', error);
+      } catch {
       }
     },
     [cyRef, handleBackgroundClick]
@@ -422,8 +408,7 @@ export default function useGraphInteractions({
       clearSelectionOnly();
       if (selectedNodeIdRef) selectedNodeIdRef.current = null;
       if (selectedEdgeIdRef) selectedEdgeIdRef.current = null;
-    } catch (error) {
-      console.debug('clearSelectionAndRebind 실패:', error);
+    } catch {
     }
   }, [clearSelectionOnly, selectedNodeIdRef, selectedEdgeIdRef]);
 

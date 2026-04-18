@@ -481,16 +481,6 @@ export const transitionUtils = {
 };
 
 export const bookUtils = {
-  isApiBook: (book, bookId = null) => {
-    if (book && (typeof book.id === 'number' || book.isFromAPI === true)) {
-      return true;
-    }
-    if (bookId && (typeof bookId === 'number' || !isNaN(parseInt(bookId, 10)))) {
-      return true;
-    }
-    return false;
-  },
-
   /**
    * 뷰어 페이지에서 사용할 책 객체를 생성합니다.
    * @param {Object} params - 파라미터 객체
@@ -503,15 +493,9 @@ export const bookUtils = {
    */
   createBookObject: ({ stateBook, matchedServerBook, serverBook, bookId, loadingServerBook }) => {
     if (!stateBook && matchedServerBook && typeof matchedServerBook.id === 'number') {
-      const indexedDbKey =
-        bookId != null && String(bookId).trim() !== ''
-          ? String(bookId)
-          : String(matchedServerBook.id);
-
       return {
         ...matchedServerBook,
         filename: String(matchedServerBook.id ?? bookId),
-        _indexedDbId: indexedDbKey,
         _needsLoad: true,
         _bookId: matchedServerBook.id,
         xhtmlPath: undefined,
@@ -523,14 +507,9 @@ export const bookUtils = {
 
     if (stateBook) {
       if (matchedServerBook && typeof matchedServerBook.id === 'number') {
-        const indexedDbKey = String(
-          stateBook._indexedDbId ?? stateBook.id ?? stateBook._bookId ?? matchedServerBook.id
-        );
-
         return {
           ...matchedServerBook,
           filename: String(matchedServerBook.id ?? bookId),
-          _indexedDbId: indexedDbKey,
           _needsLoad: true,
           _bookId: matchedServerBook.id,
           xhtmlPath: undefined,
@@ -541,15 +520,10 @@ export const bookUtils = {
       }
 
       if (serverBook && typeof serverBook.id === 'number') {
-        const indexedDbKey = String(
-          stateBook._indexedDbId ?? stateBook.id ?? stateBook._bookId ?? serverBook.id
-        );
-
         return {
           ...stateBook,
           ...serverBook,
           filename: String(serverBook.id ?? bookId),
-          _indexedDbId: indexedDbKey,
           _needsLoad: true,
           _bookId: serverBook.id,
           xhtmlPath: undefined,
@@ -559,14 +533,11 @@ export const bookUtils = {
         };
       }
 
-      const stateBookId = stateBook.id || stateBook._bookId || bookId;
-      const indexedDbKey = stateBookId ? String(stateBookId) : null;
       const { xhtmlFile: _xf, xhtmlArrayBuffer: _xb, ...stateRest } = stateBook;
 
       return {
         ...stateRest,
         filename: bookId,
-        _indexedDbId: indexedDbKey,
         _needsLoad: true,
         _bookId: stateBook.id || stateBook._bookId || bookId,
         xhtmlPath: undefined,
@@ -577,13 +548,10 @@ export const bookUtils = {
     }
     
     if (serverBook) {
-      const indexedDbKey = serverBook.id ? String(serverBook.id) : null;
-      
       return {
         ...serverBook,
         filename: bookId,
         _needsLoad: true,
-        _indexedDbId: indexedDbKey,
         _bookId: serverBook.id,
         xhtmlPath: undefined,
         filePath: undefined,
@@ -593,7 +561,6 @@ export const bookUtils = {
     }
     
     const numericBookId = parseInt(bookId, 10);
-    const indexedDbKey = !isNaN(numericBookId) ? String(numericBookId) : bookId;
     const resolvedId = loadingServerBook ? null : (!isNaN(numericBookId) ? numericBookId : null);
     
     return {
@@ -601,7 +568,6 @@ export const bookUtils = {
       filename: bookId,
       id: resolvedId,
       _needsLoad: true,
-      _indexedDbId: indexedDbKey,
       _bookId: resolvedId ?? bookId,
       xhtmlPath: undefined
     };
@@ -794,22 +760,17 @@ export const graphDataTransformUtils = {
       return resultData.elements;
     }
     
-    if (!resultData.characters || !resultData.relations) {
+    const chars = Array.isArray(resultData.characters) ? resultData.characters : [];
+    const rels = Array.isArray(resultData.relations) ? resultData.relations : [];
+    if (chars.length === 0 && rels.length === 0) {
       return [];
     }
-    
-    const hasCharacters = Array.isArray(resultData.characters) && resultData.characters.length > 0;
-    const hasRelations = Array.isArray(resultData.relations) && resultData.relations.length > 0;
-    
-    if (!hasCharacters || !hasRelations) {
-      return [];
-    }
-    
-    const { idToName, idToDesc, idToDescKo, idToMain, idToNames, idToProfileImage } = createCharacterMaps(resultData.characters);
-    const nodeWeights = buildNodeWeights(resultData.characters);
-    
+
+    const { idToName, idToDesc, idToDescKo, idToMain, idToNames, idToProfileImage } = createCharacterMaps(chars);
+    const nodeWeights = buildNodeWeights(chars);
+
     return convertRelationsToElements(
-      resultData.relations,
+      rels,
       idToName,
       idToDesc,
       idToDescKo,
@@ -819,7 +780,8 @@ export const graphDataTransformUtils = {
       Object.keys(nodeWeights).length > 0 ? nodeWeights : null,
       null,
       normalizedEvent,
-      idToProfileImage
+      idToProfileImage,
+      chars.length > 0 ? chars : null
     );
   },
 

@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { useParams } from "react-router-dom";
 import { processRelations, processRelationTags } from "../../../utils/graph/relationUtils.js";
-import { getChapterLastEventNums, getFolderKeyFromFilename, getEventDataByIndex, getDetectedMaxChapter, getCharacterPerspectiveSummary } from "../../../utils/graph/graphData.js";
+import { getFolderKeyFromFilename, getEventDataByIndex, getDetectedMaxChapter } from "../../../utils/graph/graphData.js";
 import { useTooltipPosition } from "../../../hooks/ui/useTooltipPosition.js";
 import { useClickOutside } from "../../../hooks/ui/useClickOutside.js";
 import { useRelationData } from "../../../hooks/graph/useRelationData.jsx";
 import { safeNum } from "../../../utils/graph/relationUtils.js";
 import { mergeRefs } from "../../../utils/styles/animations.js";
+import { getUnifiedEventInfoForNodeTooltip } from "../../../utils/viewer/eventDisplayUtils.js";
 import { COLORS, createButtonStyle, ANIMATION_VALUES, unifiedNodeTooltipStyles, unifiedNodeAnimations } from "../../../utils/styles/styles.js";
 import { extractRadarChartData, getPositivityColor, getPositivityLabel, getConnectionStatus } from "../../../utils/graph/radarChartUtils.js";
 import { Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, ResponsiveContainer } from 'recharts';
@@ -224,29 +225,17 @@ function UnifiedNodeInfo({
   }, [bookId, actualFilename]);
   const { fetchData } = useRelationData('standalone', nodeId, nodeId, chapterNum, eventNum, dynamicMaxChapter, actualFilename, normalizedBookId);
 
-  // ViewerTopBar와 동일한 방식으로 이벤트 정보 처리
-  const getUnifiedEventInfo = useCallback(() => {
-    // ViewerTopBar와 동일한 로직: currentEvent || prevValidEvent
-    const eventToShow = currentEvent || prevValidEvent;
-    
-    if (eventToShow) {
-      return {
-        eventNum: eventToShow.eventNum ?? 0,
-        name: eventToShow.name || eventToShow.event_name || "",
-        chapterProgress: eventToShow.chapterProgress,
-        currentChars: eventToShow.currentChars,
-        totalChars: eventToShow.totalChars
-      };
-    }
-    
-    // 이벤트 정보가 없는 경우 기존 로직 사용 (하위 호환성)
-    if (!eventNum || eventNum === 0) {
-      const lastEventNums = getChapterLastEventNums(folderKey);
-      return { eventNum: lastEventNums[chapterNum - 1] || 1 };
-    }
-    
-    return { eventNum: eventNum || 0 };
-  }, [currentEvent, prevValidEvent, eventNum, chapterNum, folderKey]);
+  const getUnifiedEventInfo = useCallback(
+    () =>
+      getUnifiedEventInfoForNodeTooltip({
+        currentEvent,
+        prevValidEvent,
+        eventNum,
+        chapterNum,
+        folderKey,
+      }),
+    [currentEvent, prevValidEvent, eventNum, chapterNum, folderKey],
+  );
 
   // 노드 등장 여부 확인 함수 (ViewerTopBar 방식 적용)
   const checkNodeAppearance = useCallback(() => {
@@ -269,7 +258,6 @@ function UnifiedNodeInfo({
         return;
       }
 
-      // ViewerTopBar와 동일한 방식으로 이벤트 정보 가져오기
       const unifiedEventInfo = getUnifiedEventInfo();
       const targetEventNum = unifiedEventInfo.eventNum;
 
@@ -401,7 +389,7 @@ function UnifiedNodeInfo({
   const displayDescription = currentDescription;
   const displayHasDescription = !!(displayDescription && displayDescription.trim());
 
-  // 요약 데이터 - API 또는 로컬 데이터에서 가져오기
+  // 요약 데이터 — API(pov-summaries) 우선, 없으면 안내 문구
   const summaryData = useMemo(() => {
     if (!processedNodeData) {
       return { summary: "인물에 대한 요약 정보가 없습니다." };
@@ -431,20 +419,12 @@ function UnifiedNodeInfo({
       }
     }
 
-    // API 데이터가 없는 경우 로컬 데이터 사용
     const currentChapter = chapterNum || 1;
-    const folderKey = getFolderKeyFromFilename(actualFilename);
-    const labelForLocal = processedNodeData.label || processedNodeData.displayName || '';
-
-    const perspectiveSummary = labelForLocal
-      ? getCharacterPerspectiveSummary(folderKey, currentChapter, labelForLocal)
-      : null;
-
-    if (perspectiveSummary) {
-      return { summary: perspectiveSummary };
-    }
-
-    const displayLabel = processedNodeData.displayName || labelForLocal || '인물';
+    const displayLabel =
+      processedNodeData.displayName ||
+      processedNodeData.label ||
+      processedNodeData.common_name ||
+      '인물';
     return {
       summary: `${displayLabel}에 대한 ${currentChapter}장 관점 요약이 아직 준비되지 않았습니다.`,
     };
@@ -479,13 +459,13 @@ function UnifiedNodeInfo({
           const currentNodeId = nodeData.id;
           let targetNodeId = currentNodeId;
           
-          // nodeData.id가 문자열인 경우 (로컬 데이터), 숫자 ID로 변환
+          // nodeData.id가 문자열인 경우 이름 기준으로 숫자 ID 매칭
           if (typeof currentNodeId === 'string') {
             const charName = nodeData.label || nodeData.common_name;
             targetNodeId = nameToIdMap[charName] || currentNodeId;
           }
           
-          // API 데이터를 로컬 형식으로 변환 (중복 제거 포함)
+          // API 관계를 레이더용 형식으로 변환 (중복 제거)
           const relationMap = new Map(); // 중복 관계를 하나로 처리하기 위한 맵
           
           relations.forEach(rel => {
@@ -521,12 +501,11 @@ function UnifiedNodeInfo({
           
           return chartData;
         }
-      } catch (err) {
-        console.error('API 레이더 차트 데이터 추출 오류:', err);
+      } catch {
       }
     }
 
-    // API 데이터가 없는 경우 로컬 데이터 사용 (정제된 데이터 적용)
+    // API 매크로/파인이 없으면 이벤트 캐시 스냅샷으로 보강
     if (!elements || elements.length === 0) {
       return [];
     }
@@ -541,7 +520,7 @@ function UnifiedNodeInfo({
         return [];
       }
 
-      // 로컬 데이터도 중복 제거 적용
+      // 관계 중복 제거
       const relationMap = new Map();
       
       
@@ -552,7 +531,6 @@ function UnifiedNodeInfo({
         
         
         if (!source || !target) {
-          console.warn('유효하지 않은 관계 데이터:', rel);
           return;
         }
         
@@ -572,7 +550,7 @@ function UnifiedNodeInfo({
         }
       });
       
-      // 정제된 로컬 관계 데이터
+      // 정제된 관계 목록
       const finalRelations = Array.from(relationMap.values());
       
       // 현재 이벤트에 등장하는 캐릭터 ID만 필터링
@@ -592,8 +570,7 @@ function UnifiedNodeInfo({
       const chartData = extractRadarChartData(nodeData.id, finalRelations, filteredElements, 8);
       
       return chartData;
-    } catch (err) {
-      console.error('레이더 차트 데이터 추출 오류:', err);
+    } catch {
       return [];
     }
   }, [nodeData, chapterNum, displayMode, folderKey, elements, apiMacroData, apiFineData, getUnifiedEventInfo]);
@@ -936,12 +913,6 @@ function UnifiedNodeInfo({
                   }}
                   crossOrigin="anonymous"
                   onError={(e) => {
-                    console.warn(`이미지 로딩 실패 (API 책):`, {
-                      url: processedNodeData.image,
-                      characterId: processedNodeData.id,
-                      characterName: processedNodeData.displayName,
-                      error: e.target.error
-                    });
                     e.target.style.display = 'none';
                     if (e.target.nextSibling) {
                       e.target.nextSibling.style.display = 'block';
@@ -1244,12 +1215,6 @@ function UnifiedNodeInfo({
                       }}
                       crossOrigin="anonymous"
                       onError={(e) => {
-                        console.warn(`이미지 로딩 실패 (API 책):`, {
-                          url: processedNodeData.image,
-                          characterId: processedNodeData.id,
-                          characterName: processedNodeData.displayName,
-                          error: e.target.error
-                        });
                         e.target.style.display = 'none';
                         if (e.target.nextSibling) {
                           e.target.nextSibling.style.display = 'block';

@@ -210,6 +210,22 @@ export function buildSuggestions(elements, query, currentChapterData = null) {
 }
 
 /**
+ * 제안 목록에서 검색어와 대소문자 무시 완전 일치 항목
+ * @param {Array} suggestions
+ * @param {string} trimmedTerm 공백 제거된 검색어
+ */
+export function findExactSuggestionMatch(suggestions, trimmedTerm) {
+  if (!Array.isArray(suggestions) || !trimmedTerm) return undefined;
+  const t = trimmedTerm.toLowerCase();
+  return suggestions.find(
+    (suggestion) =>
+      suggestion.label?.toLowerCase() === t ||
+      suggestion.common_name?.toLowerCase() === t ||
+      suggestion.names?.some((name) => String(name).toLowerCase() === t),
+  );
+}
+
+/**
  * 그래프 요소 필터링 및 연결 관계 처리
  * @param {Array} elements - 그래프 요소 배열
  * @param {string} searchTerm - 검색어

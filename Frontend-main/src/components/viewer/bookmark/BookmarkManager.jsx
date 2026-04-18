@@ -13,25 +13,6 @@ export const loadBookmarks = async (bookId, sort = 'time_desc') => {
   }
 };
 
-// 로컬 스토리지 백업 함수들 (오프라인 지원용)
-export const saveBookmarksToLocal = (bookId, bookmarks) => {
-  try {
-    localStorage.setItem(`bookmarks_${bookId}`, JSON.stringify(bookmarks));
-    return true;
-  } catch (_error) {
-    return false;
-  }
-};
-
-export const loadBookmarksFromLocal = (bookId) => {
-  try {
-    const stored = localStorage.getItem(`bookmarks_${bookId}`);
-    return stored ? JSON.parse(stored) : [];
-  } catch (_error) {
-    return [];
-  }
-};
-
 export const removeBookmarkHighlights = () => {
   const highlights = document.querySelectorAll('.bookmark-highlight');
   highlights.forEach(highlight => {

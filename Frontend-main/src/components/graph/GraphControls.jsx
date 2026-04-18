@@ -1,6 +1,7 @@
 import React, { useRef, useEffect, useCallback, useState } from "react";
 import { useClickOutside } from "../../hooks/ui/useClickOutside";
 import { graphControlsStyles } from "../../utils/styles/styles.js";
+import { findExactSuggestionMatch } from "../../utils/graph/searchUtils.jsx";
 
 function GraphControls({
   searchTerm,
@@ -10,7 +11,6 @@ function GraphControls({
   suggestions = [],
   showSuggestions = false,
   selectedIndex = -1,
-  onSelectSuggestion: _onSelectSuggestion,
   onKeyDown,
   onCloseSuggestions,
   isSearchActive = false
@@ -89,13 +89,7 @@ function GraphControls({
       e.preventDefault();
       const trimmedTerm = internalSearchTerm.trim();
       if (trimmedTerm.length >= 2) {
-        // 정확히 일치하는 인물이 있는지 확인
-        const exactMatch = suggestions.find(suggestion => 
-          suggestion.label?.toLowerCase() === trimmedTerm.toLowerCase() ||
-          suggestion.common_name?.toLowerCase() === trimmedTerm.toLowerCase() ||
-          suggestion.names?.some(name => String(name).toLowerCase() === trimmedTerm.toLowerCase())
-        );
-        
+        const exactMatch = findExactSuggestionMatch(suggestions, trimmedTerm);
         if (exactMatch) {
           onSearchSubmit(trimmedTerm);
         } else if (suggestions.length > 0) {
@@ -139,17 +133,10 @@ function GraphControls({
     
     const trimmedTerm = internalSearchTerm.trim();
     if (trimmedTerm.length >= 2) {
-      // 정확히 일치하는 인물이 있는지 확인
-      const exactMatch = suggestions.find(suggestion => 
-        suggestion.label?.toLowerCase() === trimmedTerm.toLowerCase() ||
-        suggestion.common_name?.toLowerCase() === trimmedTerm.toLowerCase() ||
-        suggestion.names?.some(name => String(name).toLowerCase() === trimmedTerm.toLowerCase())
-      );
-      
+      const exactMatch = findExactSuggestionMatch(suggestions, trimmedTerm);
       if (exactMatch) {
         onSearchSubmit(trimmedTerm);
       } else if (suggestions.length > 0) {
-        // 정확히 일치하는 인물이 없고 여러 후보가 있으면 토스트 메시지 표시
         showToastMessage("여러 후보가 있습니다. 드롭다운에서 선택해주세요.");
       }
     }
@@ -162,17 +149,10 @@ function GraphControls({
     const trimmedTerm = internalSearchTerm.trim();
     
     if (trimmedTerm.length >= 2) {
-      // 정확히 일치하는 인물이 있는지 확인
-      const exactMatch = suggestions.find(suggestion => 
-        suggestion.label?.toLowerCase() === trimmedTerm.toLowerCase() ||
-        suggestion.common_name?.toLowerCase() === trimmedTerm.toLowerCase() ||
-        suggestion.names?.some(name => String(name).toLowerCase() === trimmedTerm.toLowerCase())
-      );
-      
+      const exactMatch = findExactSuggestionMatch(suggestions, trimmedTerm);
       if (exactMatch) {
         onSearchSubmit(trimmedTerm);
       } else if (suggestions.length > 0) {
-        // 정확히 일치하는 인물이 없고 여러 후보가 있으면 토스트 메시지 표시
         showToastMessage("여러 후보가 있습니다. 드롭다운에서 선택해주세요.");
       }
     }
