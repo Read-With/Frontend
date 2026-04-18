@@ -1,7 +1,6 @@
 /**
- * GET /api/v2/books/{bookId}/manifest 의 result.chapters 를
- * 뷰어용 메타로 변환한다. (OpenAPI: idx, paragraphStartsJson, paragraphLengthsJson, totalCodePoints)
- * 출력은 내부적으로 chapterIndex + 배열 필드명을 유지한다.
+ * GET /api/v2/books/{bookId}/manifest 의 result.chapters → 뷰어용 메타.
+ * v2: idx(≥1), paragraphStartsJson, paragraphLengthsJson, totalCodePoints 만 사용.
  */
 
 import { getBookManifest } from '../api/api';
@@ -14,7 +13,7 @@ function isValidMetaShape(data) {
   if (!chapters.length) return false;
   return chapters.some((ch) => {
     const idx = Number(ch?.chapterIndex);
-    return Number.isFinite(idx) && idx >= 0;
+    return Number.isFinite(idx) && idx >= 1;
   });
 }
 
@@ -51,22 +50,18 @@ function normalizeMetaFromManifest(raw) {
   if (!raw || typeof raw !== 'object') return null;
   const chapters = Array.isArray(raw.chapters) ? raw.chapters : [];
   return {
-    chapters: chapters.map((ch) => ({
-      chapterIndex:
-        ch.idx ??
-        ch.chapterIdx ??
-        ch.chapterIndex ??
-        ch.chapter ??
-        ch.number ??
-        0,
-      paragraphStarts: toArrayValue(ch.paragraphStartsJson ?? ch.paragraphStarts),
-      paragraphLengths: toArrayValue(ch.paragraphLengthsJson ?? ch.paragraphLengths),
-      totalCodePoints:
-        ch.totalCodePoints ??
-        ch.chapterLength ??
-        ch.length ??
-        0,
-    })),
+    chapters: chapters
+      .map((ch) => {
+        const chapterIndex = Number(ch?.idx);
+        if (!Number.isFinite(chapterIndex) || chapterIndex < 1) return null;
+        return {
+          chapterIndex,
+          paragraphStarts: toArrayValue(ch.paragraphStartsJson),
+          paragraphLengths: toArrayValue(ch.paragraphLengthsJson),
+          totalCodePoints: Number(ch.totalCodePoints) || 0,
+        };
+      })
+      .filter(Boolean),
   };
 }
 

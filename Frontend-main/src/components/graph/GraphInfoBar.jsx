@@ -6,8 +6,10 @@ const GraphInfoBar = memo(function GraphInfoBar({
   isApiBook,
   apiFineData,
   currentChapter,
+  currentChapterTitle = '',
   currentEvent,
   userCurrentChapter,
+  userReadingChapterTitle = '',
   nodeCount,
   relationCount,
   filterStage,
@@ -20,13 +22,15 @@ const GraphInfoBar = memo(function GraphInfoBar({
   }, [isApiBook, hasEvent]);
 
   const chapterRangeLabel = useMemo(() => {
+    const nameOrNum = (n, title) => (title && String(title).trim() ? String(title).trim() : `Chapter ${n}`);
     if (!isApiBook) {
       return `Chapter 1 ~ ${currentChapter} 누적`;
     }
+    const curName = nameOrNum(currentChapter, currentChapterTitle);
     return hasEvent
-      ? `Chapter ${currentChapter}, Event ${currentEvent}`
-      : `Chapter 1 ~ ${currentChapter} 누적`;
-  }, [isApiBook, hasEvent, currentChapter, currentEvent]);
+      ? `${curName} · 이벤트 ${currentEvent}`
+      : `Chapter 1 ~ ${curName} 누적`;
+  }, [isApiBook, hasEvent, currentChapter, currentChapterTitle, currentEvent]);
 
   return (
     <div
@@ -81,8 +85,12 @@ const GraphInfoBar = memo(function GraphInfoBar({
               color: COLORS.primary,
               fontWeight: '600',
             }}
+            title={userReadingChapterTitle ? `챕터 ${userCurrentChapter}` : undefined}
           >
-            독서 진행: Chapter {userCurrentChapter}
+            독서 진행:{' '}
+            {userReadingChapterTitle && String(userReadingChapterTitle).trim()
+              ? String(userReadingChapterTitle).trim()
+              : `Chapter ${userCurrentChapter}`}
           </div>
         )}
       </div>
@@ -135,8 +143,10 @@ const GraphInfoBar = memo(function GraphInfoBar({
 }, (prevProps, nextProps) => {
   if (prevProps.isApiBook !== nextProps.isApiBook) return false;
   if (prevProps.currentChapter !== nextProps.currentChapter) return false;
+  if (prevProps.currentChapterTitle !== nextProps.currentChapterTitle) return false;
   if (prevProps.currentEvent !== nextProps.currentEvent) return false;
   if (prevProps.userCurrentChapter !== nextProps.userCurrentChapter) return false;
+  if (prevProps.userReadingChapterTitle !== nextProps.userReadingChapterTitle) return false;
   if (prevProps.nodeCount !== nextProps.nodeCount) return false;
   if (prevProps.relationCount !== nextProps.relationCount) return false;
   if (prevProps.filterStage !== nextProps.filterStage) return false;
@@ -150,8 +160,10 @@ GraphInfoBar.propTypes = {
     event: PropTypes.object,
   }),
   currentChapter: PropTypes.number.isRequired,
+  currentChapterTitle: PropTypes.string,
   currentEvent: PropTypes.number.isRequired,
   userCurrentChapter: PropTypes.number,
+  userReadingChapterTitle: PropTypes.string,
   nodeCount: PropTypes.number.isRequired,
   relationCount: PropTypes.number.isRequired,
   filterStage: PropTypes.number.isRequired,

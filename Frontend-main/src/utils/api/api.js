@@ -1,4 +1,4 @@
-import { setManifestData, isValidEvent, getManifestFromCache } from '../common/cache/manifestCache';
+import { setManifestData, getManifestFromCache } from '../common/cache/manifestCache';
 import {
   setAllProgress,
   setProgressToCache,
@@ -48,6 +48,35 @@ const createApiResponse = (isSuccess, code, message, result, type = 'default') =
   }
 
   return baseResponse;
+};
+
+const hasOwnKeys = (obj) => !!obj && typeof obj === 'object' && !Array.isArray(obj) && Object.keys(obj).length > 0;
+
+const pickResponsePayload = (response) => {
+  if (!response || typeof response !== 'object') return null;
+
+  const resultPayload = response.result;
+  const dataPayload = response.data;
+  const payloadPayload = response.payload;
+
+  if (hasOwnKeys(resultPayload)) return resultPayload;
+  if (hasOwnKeys(dataPayload)) return dataPayload;
+  if (hasOwnKeys(payloadPayload)) return payloadPayload;
+
+  if (resultPayload != null) return resultPayload;
+  if (dataPayload != null) return dataPayload;
+  if (payloadPayload != null) return payloadPayload;
+
+  if (
+    Array.isArray(response.characters) ||
+    Array.isArray(response.relations) ||
+    response.userCurrentChapter !== undefined ||
+    response.event !== undefined
+  ) {
+    return response;
+  }
+
+  return null;
 };
 
 // 통합된 에러 처리 함수
@@ -147,17 +176,6 @@ const apiRequest = async (url, options = {}, retryCount = 0) => {
       const authError = new Error('인증이 만료되었습니다. 다시 로그인해주세요.');
       authError.status = 401;
       throw authError;
-    }
-    
-    if (response.status === 401) {
-      const errorText = await response.clone().text();
-      console.error('❌ 401 Unauthorized 에러:', {
-        url: requestUrl,
-        status: response.status,
-        hasToken: !!token,
-        tokenValid: token ? isTokenValid(token) : false,
-        errorResponse: errorText
-      });
     }
     
     if (response.status === 404 && isSilentError) {
@@ -484,9 +502,10 @@ export const getBookManifest = async (bookId, { forceRefresh = false } = {}) => 
     }
 
     const response = await apiRequest(`/api/v2/books/${bookId}/manifest`);
+    const manifestPayload = pickResponsePayload(response);
 
-    if (response?.isSuccess && response?.result && bookId) {
-      setManifestData(bookId, response.result);
+    if (response?.isSuccess && manifestPayload && bookId) {
+      setManifestData(bookId, manifestPayload);
     }
 
     return response;
@@ -506,18 +525,15 @@ export const getBookManifest = async (bookId, { forceRefresh = false } = {}) => 
 
 /**
  * GET /api/v2/graph/macro
- * @param uptoChapter legacy 누적 챕터(locator 없을 때)
- * @param uptoLocator { chapterIndex, blockIndex?, offset? } — 있으면 chapterIndex/blockIndex/offset만 전송
+ * @param uptoChapter 누적 챕터 상한 (생략 시 전체 반환)
+ * @param uptoLocator { chapterIndex, blockIndex?, offset? } — 있으면 chapter 대신 전송
  */
-export const getMacroGraph = async (bookId, uptoChapter, uptoLocator = null) => {
+export const getMacroGraph = async (bookId, uptoChapter = null, uptoLocator = null) => {
   if (!bookId) {
     throw new Error('bookId는 필수 매개변수입니다.');
   }
 
   const loc = toLocator(uptoLocator);
-  if (!loc && (uptoChapter === undefined || uptoChapter === null)) {
-    throw new Error('uptoChapter 또는 locator(chapterIndex, blockIndex, offset)는 필수입니다.');
-  }
 
   const queryParams = new URLSearchParams();
   queryParams.append('bookId', bookId);
@@ -525,13 +541,14 @@ export const getMacroGraph = async (bookId, uptoChapter, uptoLocator = null) => 
     queryParams.append('chapterIndex', String(loc.chapterIndex));
     queryParams.append('blockIndex', String(loc.blockIndex));
     queryParams.append('offset', String(loc.offset));
-  } else {
+  } else if (uptoChapter !== null && uptoChapter !== undefined) {
     queryParams.append('uptoChapter', String(uptoChapter));
   }
-  
+
   try {
     const response = await apiRequest(`/api/v2/graph/macro?${queryParams.toString()}`);
-    
+    const payload = pickResponsePayload(response);
+
     if (!response || !response.isSuccess) {
       return createApiResponse(false, response?.code || 'ERROR', response?.message || '거시 그래프 조회에 실패했습니다.', {
         userCurrentChapter: 0,
@@ -540,7 +557,7 @@ export const getMacroGraph = async (bookId, uptoChapter, uptoLocator = null) => 
       }, 'graph-macro');
     }
     
-    return createApiResponse(true, 'SUCCESS', '거시 그래프 데이터를 성공적으로 조회했습니다.', response.result || {
+    return createApiResponse(true, 'SUCCESS', '거시 그래프 데이터를 성공적으로 조회했습니다.', payload || {
       userCurrentChapter: 0,
       characters: [],
       relations: []
@@ -566,14 +583,6 @@ export const getFineGraph = async (bookId, chapterIdx, eventIdx, atLocator = nul
     throw new Error('bookId는 필수 매개변수입니다.');
   }
 
-  if (!getManifestFromCache(bookId)) {
-    return createApiResponse(false, 'NO_MANIFEST', '매니페스트가 없어 세밀 그래프를 요청하지 않습니다.', {
-      characters: [],
-      relations: [],
-      event: null,
-    }, 'graph-fine');
-  }
-
   const loc = toLocator(atLocator);
   if (!loc) {
     if (chapterIdx === undefined || chapterIdx === null || eventIdx === undefined || eventIdx === null) {
@@ -581,13 +590,6 @@ export const getFineGraph = async (bookId, chapterIdx, eventIdx, atLocator = nul
     }
     if (eventIdx < 1) {
       return createApiResponse(false, 'INVALID_EVENT', '이벤트 인덱스는 1 이상이어야 합니다.', {
-        characters: [],
-        relations: [],
-        event: null
-      }, 'graph-fine');
-    }
-    if (!isValidEvent(bookId, chapterIdx, eventIdx)) {
-      return createApiResponse(false, 'INVALID_EVENT', '해당 이벤트에 대한 데이터가 없습니다.', {
         characters: [],
         relations: [],
         event: null
@@ -608,6 +610,7 @@ export const getFineGraph = async (bookId, chapterIdx, eventIdx, atLocator = nul
   
   try {
     const response = await apiRequest(`/api/v2/graph/fine?${queryParams.toString()}`);
+    const payload = pickResponsePayload(response);
     
     if (!response || !response.isSuccess) {
       return createApiResponse(false, response?.code || 'ERROR', response?.message || '세밀 그래프 조회에 실패했습니다.', {
@@ -617,7 +620,7 @@ export const getFineGraph = async (bookId, chapterIdx, eventIdx, atLocator = nul
       }, 'graph-fine');
     }
     
-    return createApiResponse(true, 'SUCCESS', '세밀 그래프 데이터를 성공적으로 조회했습니다.', response.result || {
+    return createApiResponse(true, 'SUCCESS', '세밀 그래프 데이터를 성공적으로 조회했습니다.', payload || {
       characters: [],
       relations: [],
       event: null

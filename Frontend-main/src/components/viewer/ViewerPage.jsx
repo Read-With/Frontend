@@ -506,6 +506,21 @@ const ViewerPage = () => {
             getCachedChapterEvents,
             eventUtils
           );
+          const forcedIdx = Number(forcedChapterEventIdxRef.current);
+          const hasForcedIdx = Number.isFinite(forcedIdx) && forcedIdx > 0;
+          const chapterCache = hasForcedIdx ? getCachedChapterEvents(book.id, currentChapter) : null;
+          const forcedEvent = hasForcedIdx
+            ? eventUtils.findEventInCache(chapterCache?.events, forcedIdx)
+            : null;
+          const forcedLocator = hasForcedIdx
+            ? (
+                toLocator(forcedEvent?.event?.startLocator) ??
+                toLocator(forcedEvent?.startLocator) ??
+                toLocator(currentEvent?.anchor?.startLocator) ??
+                toLocator(currentEvent?.anchor?.start) ??
+                { chapterIndex: currentChapter, blockIndex: 0, offset: 0 }
+              )
+            : null;
           
           const callKey = cacheKeyUtils.createEventKey(book.id, currentChapter, apiEventIdx);
           if (apiCallRef.current === callKey) {
@@ -540,7 +555,8 @@ const ViewerPage = () => {
             getGraphEventState,
             eventUtils,
             apiEventCacheRef,
-            hasCalledApiForEvent
+            hasCalledApiForEvent,
+            hasForcedIdx ? forcedLocator : null
           );
 
           if (!isMounted || apiCallRef.current !== callKey) return;
@@ -627,11 +643,7 @@ const ViewerPage = () => {
             apiEventCacheRef.current.set(cacheKey, resultData);
           }
           
-          const normalizedEvent = graphDataTransformUtils.normalizeApiEvent(
-            resultData.event,
-            currentChapter,
-            apiEventIdx
-          );
+          const normalizedEvent = graphDataTransformUtils.normalizeApiEvent(resultData.event);
           
           const convertedElements = graphDataTransformUtils.convertToElements(
             resultData,

@@ -45,8 +45,8 @@ export function normalizeRelation(raw) {
   
   try {
     // Accept various shapes (id1/id2 or source/target)
-    const id1 = safeNum(raw.id1 ?? raw.source);
-    const id2 = safeNum(raw.id2 ?? raw.target);
+    const id1 = safeNum(raw.id1);
+    const id2 = safeNum(raw.id2);
     
     if (isNaN(id1) || isNaN(id2)) {
       return null;

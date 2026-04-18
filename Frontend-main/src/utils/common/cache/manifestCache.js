@@ -1,4 +1,4 @@
-import { toNumberOrNull } from '../numberUtils';
+import { toNumberOrNull, toOneBasedChapterIndexOrNull } from '../numberUtils';
 import { 
   registerCache, 
   getCacheItem, 
@@ -25,78 +25,111 @@ export const getManifestCacheKey = (bookId) => {
   return `${manifestCachePrefix}${bookId}`;
 };
 
-const normalizeEvent = (event, fallbackIdx) => {
-  if (!event) return null;
+/** GET /api/v2/books/{bookId}/manifest — chapters[].paragraphStartsJson / paragraphLengthsJson */
+const parseManifestJsonNumberArray = (value) => {
+  if (Array.isArray(value)) {
+    return value.map((x) => Number(x)).filter((n) => Number.isFinite(n));
+  }
+  if (typeof value !== 'string' || value.trim() === '') return [];
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed.map((x) => Number(x)).filter((n) => Number.isFinite(n)) : [];
+  } catch (_e) {
+    return [];
+  }
+};
 
-  const resolvedIdx = toNumberOrNull(
-    event.idx ?? event.eventIdx ?? event.index ?? event.id ?? fallbackIdx
-  );
-
-  const startPos = toNumberOrNull(event.startTxtOffset);
-  const endPos = toNumberOrNull(event.endTxtOffset);
-
+/** chapters[].events[] — idx, eventId, startTxtOffset, endTxtOffset, rawText */
+const normalizeEvent = (event) => {
+  if (!event || typeof event !== 'object' || Array.isArray(event)) return null;
+  const idx = toNumberOrNull(event.idx);
+  if (idx == null || idx < 1) return null;
+  const start = toNumberOrNull(event.startTxtOffset) ?? 0;
+  const endRaw = toNumberOrNull(event.endTxtOffset);
+  const end = endRaw != null && endRaw >= start ? endRaw : start;
   return {
-    ...event,
-    idx: resolvedIdx ?? fallbackIdx ?? null,
-    eventIdx: resolvedIdx ?? fallbackIdx ?? null,
-    eventId: event.eventId ?? event.id ?? null,
-    startPos: startPos ?? 0,
-    endPos: endPos ?? 0,
-    startTxtOffset: startPos ?? 0,
-    endTxtOffset: endPos ?? 0,
+    idx,
+    eventIdx: idx,
+    eventId: event.eventId != null ? String(event.eventId) : '',
+    startTxtOffset: start,
+    endTxtOffset: end,
+    startPos: start,
+    endPos: end,
+    rawText: typeof event.rawText === 'string' ? event.rawText : '',
   };
 };
 
-const normalizeChapter = (chapter, index) => {
+/** chapters[] — OpenAPI: idx, title, spineHref, paragraphCount, paragraphStartsJson, … */
+const normalizeChapter = (chapter) => {
   if (!chapter || typeof chapter !== 'object' || Array.isArray(chapter)) {
     return null;
   }
+  const idx = toNumberOrNull(chapter.idx);
+  if (idx == null || idx < 1) return null;
 
-  const resolvedChapterIdx = toNumberOrNull(
-    chapter.chapterIdx ?? chapter.chapterIndex ?? chapter.idx ?? chapter.chapter ?? chapter.number ?? index + 1
-  );
-
-  const resolvedTitle = chapter.title ?? chapter.chapterTitle ?? null;
+  const title = typeof chapter.title === 'string' ? chapter.title : '';
+  const paragraphStarts = parseManifestJsonNumberArray(chapter.paragraphStartsJson);
+  const paragraphLengths = parseManifestJsonNumberArray(chapter.paragraphLengthsJson);
+  const paragraphCount = toNumberOrNull(chapter.paragraphCount) ?? 0;
+  const totalCodePoints = toNumberOrNull(chapter.totalCodePoints) ?? 0;
+  const startPos = toNumberOrNull(chapter.startPos) ?? 0;
+  const endPos = toNumberOrNull(chapter.endPos) ?? startPos;
 
   const normalizedEvents = Array.isArray(chapter.events)
-    ? chapter.events
-        .map((event, eventIndex) => normalizeEvent(event, eventIndex + 1))
-        .filter(Boolean)
+    ? chapter.events.map((ev) => normalizeEvent(ev)).filter(Boolean)
     : [];
 
   const firstEvent = normalizedEvents[0] ?? null;
   const lastEvent = normalizedEvents.length > 0 ? normalizedEvents[normalizedEvents.length - 1] : null;
+  const normalizedStartPos = startPos > 0 ? startPos : (firstEvent?.startPos ?? 0);
+  const normalizedEndPos = endPos >= normalizedStartPos ? endPos : (lastEvent?.endPos ?? normalizedStartPos);
 
-  const resolvedStartPos = toNumberOrNull(chapter.startPos ?? chapter.start);
-  const resolvedEndPos = toNumberOrNull(chapter.endPos ?? chapter.end);
-
-  const normalizedStartPos = resolvedStartPos ?? firstEvent?.startPos ?? 0;
-  const normalizedEndPos = resolvedEndPos ?? lastEvent?.endPos ?? normalizedStartPos;
-
-  const idxVal = resolvedChapterIdx ?? index + 1;
   return {
-    ...chapter,
-    idx: idxVal,
-    chapterIdx: idxVal,
-    chapterIndex: idxVal,
-    title: resolvedTitle,
-    chapterTitle: resolvedTitle,
+    idx,
+    chapterIdx: idx,
+    chapterIndex: idx,
+    title,
+    chapterTitle: title,
+    spineHref: chapter.spineHref != null ? String(chapter.spineHref) : '',
+    paragraphCount,
+    paragraphStartsJson: typeof chapter.paragraphStartsJson === 'string' ? chapter.paragraphStartsJson : '',
+    paragraphLengthsJson: typeof chapter.paragraphLengthsJson === 'string' ? chapter.paragraphLengthsJson : '',
+    paragraphStarts,
+    paragraphLengths,
+    totalCodePoints,
     startPos: normalizedStartPos,
     endPos: normalizedEndPos,
+    rawText: typeof chapter.rawText === 'string' ? chapter.rawText : '',
+    summaryText: typeof chapter.summaryText === 'string' ? chapter.summaryText : '',
+    summaryUploadUrl: chapter.summaryUploadUrl != null ? String(chapter.summaryUploadUrl) : '',
+    povSummariesCached: Boolean(chapter.povSummariesCached),
     events: normalizedEvents,
   };
 };
 
+/** characters[] — id, name, names, profileImage, firstChapterIdx, personalityText, profileText, isMainCharacter */
 const normalizeCharacter = (character) => {
   if (!character || typeof character !== 'object' || Array.isArray(character)) {
     return null;
   }
+  const id = toNumberOrNull(character.id);
+  if (id == null) return null;
+  const profileText = typeof character.profileText === 'string' ? character.profileText : '';
+  const personalityText = typeof character.personalityText === 'string' ? character.personalityText : '';
+  const isMain = Boolean(character.isMainCharacter);
   return {
-    ...character,
-    main_character: character.main_character ?? character.isMainCharacter ?? false,
-    profile_text: character.profile_text ?? character.profileText ?? '',
-    description: character.description ?? character.profileText ?? '',
-    description_ko: character.description_ko ?? character.personalityText ?? '',
+    id,
+    name: typeof character.name === 'string' ? character.name : '',
+    names: typeof character.names === 'string' ? character.names : '',
+    profileImage: character.profileImage != null ? String(character.profileImage) : '',
+    firstChapterIdx: toNumberOrNull(character.firstChapterIdx) ?? 0,
+    personalityText,
+    profileText,
+    isMainCharacter: isMain,
+    main_character: isMain,
+    profile_text: profileText,
+    description: profileText,
+    description_ko: personalityText,
   };
 };
 
@@ -115,90 +148,50 @@ const normalizeReaderArtifacts = (readerArtifacts) => {
   };
 };
 
-const normalizeChapterTitleKey = (value) => {
-  if (typeof value !== 'string') return '';
-  const t = value.trim();
-  return t;
-};
-
-/**
- * progressMetadata.chapterLengths: 신규는 chapterTitle, 구버전은 chapterIdx 등 병행 지원.
- */
+/** progressMetadata — maxChapter, chapterLengths[{ chapterIdx, length }], totalLength */
 const normalizeProgressMetadata = (progressMetadata) => {
   if (!progressMetadata || typeof progressMetadata !== 'object') {
     return progressMetadata;
   }
-  const rawLengths = progressMetadata.chapterLengths ?? progressMetadata.chapterCodePointLengths ?? [];
-  const chapterLengths = Array.isArray(rawLengths)
-    ? rawLengths.map((item) => {
-        if (!item || typeof item !== 'object') return null;
-        const titleRaw = item.chapterTitle ?? item.title ?? item.chapterName ?? null;
-        const chapterTitle = normalizeChapterTitleKey(
-          typeof titleRaw === 'string' ? titleRaw : titleRaw != null ? String(titleRaw) : ''
-        );
-        const chapterIdx = toNumberOrNull(item.chapterIdx ?? item.chapterIndex ?? item.idx ?? item.chapter);
-        const length = toNumberOrNull(item.length ?? item.codePointLength ?? item.chapterLength);
-        if (!chapterTitle && chapterIdx == null) return null;
-        return {
-          ...item,
-          ...(chapterTitle ? { chapterTitle } : {}),
-          ...(chapterIdx != null ? { chapterIdx } : {}),
-          length: length ?? 0,
-        };
-      }).filter(Boolean)
-    : [];
-  const totalLength = toNumberOrNull(progressMetadata.totalLength ?? progressMetadata.totalCodePointLength)
-    ?? chapterLengths.reduce((sum, e) => sum + (e?.length ?? 0), 0);
+  const rawLengths = Array.isArray(progressMetadata.chapterLengths) ? progressMetadata.chapterLengths : [];
+  const chapterLengths = rawLengths
+    .map((item) => {
+      if (!item || typeof item !== 'object') return null;
+      const chapterIdx = toNumberOrNull(item.chapterIdx);
+      const length = toNumberOrNull(item.length);
+      if (chapterIdx == null) return null;
+      return { chapterIdx, length: length ?? 0 };
+    })
+    .filter(Boolean);
+  const maxChapter = toNumberOrNull(progressMetadata.maxChapter) ?? 0;
+  const summed = chapterLengths.reduce((sum, e) => sum + (e.length ?? 0), 0);
+  const totalLength = toNumberOrNull(progressMetadata.totalLength) ?? summed;
   return {
-    ...progressMetadata,
+    maxChapter,
     chapterLengths,
-    totalLength: totalLength || progressMetadata.totalLength || 0,
+    totalLength: totalLength > 0 ? totalLength : 0,
   };
 };
 
-/** 챕터 본문에 붙은 길이(진도용 폴백) */
+/** 챕터 본문에 붙은 길이(진도용) — totalCodePoints, startPos/endPos */
 const lengthFromChapterBody = (chapter) => {
   if (!chapter || typeof chapter !== 'object') return 0;
   const tcp = toNumberOrNull(chapter.totalCodePoints);
   if (tcp != null && tcp > 0) return tcp;
-  const sp = toNumberOrNull(chapter.startPos ?? chapter.start);
-  const ep = toNumberOrNull(chapter.endPos ?? chapter.end);
+  const sp = toNumberOrNull(chapter.startPos);
+  const ep = toNumberOrNull(chapter.endPos);
   if (sp != null && ep != null && ep > sp) return ep - sp;
   return 0;
 };
 
-/**
- * progressMetadata.chapterLengths 항목 (제목 → idx → 배열 순서 동일 시 인덱스)
- */
+/** progressMetadata.chapterLengths 에서 chapter.idx 와 chapterIdx 일치 항목 */
 const findChapterLengthEntryForChapter = (manifest, chapter) => {
   if (!chapter || typeof chapter !== 'object') return null;
   const lengths = manifest?.progressMetadata?.chapterLengths;
   if (!Array.isArray(lengths) || lengths.length === 0) return null;
-
-  const titleKey = normalizeChapterTitleKey(chapter.title ?? '');
-  if (titleKey) {
-    const byTitle = lengths.find(
-      (e) => normalizeChapterTitleKey(e.title ?? e.chapterTitle ?? '') === titleKey
-    );
-    if (byTitle) return byTitle;
-  }
-  const idx = toNumberOrNull(chapter.idx ?? chapter.chapterIdx);
-  if (idx != null) {
-    const byIdx = lengths.find(
-      (e) => toNumberOrNull(e.chapterIdx ?? e.chapterIndex ?? e.idx) === idx
-    );
-    if (byIdx) return byIdx;
-  }
-  const chs = manifest?.chapters;
-  if (Array.isArray(chs) && idx != null) {
-    const listIndex = chs.findIndex(
-      (ch) => toNumberOrNull(ch?.idx ?? ch?.chapterIdx) === idx
-    );
-    if (listIndex >= 0 && lengths.length === chs.length && lengths[listIndex]) {
-      return lengths[listIndex];
-    }
-  }
-  return null;
+  const idx = toNumberOrNull(chapter.idx);
+  if (idx == null) return null;
+  return lengths.find((e) => toNumberOrNull(e.chapterIdx) === idx) ?? null;
 };
 
 /** chapterLengths 매칭 후에도 0이면 totalCodePoints·start/end span 사용 */
@@ -217,8 +210,8 @@ const normalizeManifestData = (manifestData) => {
 
   const normalizedChapters = Array.isArray(manifestData.chapters)
     ? manifestData.chapters
-        .map((chapter, index) => normalizeChapter(chapter, index))
-        .filter(ch => ch != null && typeof ch === 'object')
+        .map((chapter) => normalizeChapter(chapter))
+        .filter((ch) => ch != null && typeof ch === 'object')
     : manifestData.chapters;
 
   const progressMetadata = normalizeProgressMetadata(manifestData.progressMetadata);
@@ -352,21 +345,39 @@ export const prefetchManifest = async (bookId, fetcher) => {
   return promise;
 };
 
-export const getChapterData = (bookId, chapterIdx) => {
-  const manifest = getManifestFromCache(bookId);
-  if (!manifest || !manifest.chapters) return null;
-  
-  const targetIdx = toNumberOrNull(chapterIdx);
-  return manifest.chapters.find((ch) => {
-    if (!ch || typeof ch !== 'object') return false;
-    const byIdx = toNumberOrNull(ch.idx);
-    if (byIdx === targetIdx) return true;
-    return toNumberOrNull(ch.chapterIdx) === targetIdx;
-  }) ?? null;
+const manifestChapterMatchesIdx = (ch, targetIdx) => {
+  if (!ch || typeof ch !== 'object' || targetIdx == null) return false;
+  return toNumberOrNull(ch.idx) === targetIdx;
 };
 
-export const getEventData = (bookId, chapterIdx, eventIdx) => {
-  const chapterData = getChapterData(bookId, chapterIdx);
+/**
+ * @param {object|null|undefined} manifest
+ * @param {unknown} chapterIdx
+ */
+export const getChapterDataFromManifest = (manifest, chapterIdx) => {
+  if (!manifest || !Array.isArray(manifest.chapters)) return null;
+  const targetIdx = toOneBasedChapterIndexOrNull(chapterIdx);
+  if (targetIdx == null) return null;
+  return manifest.chapters.find((ch) => manifestChapterMatchesIdx(ch, targetIdx)) ?? null;
+};
+
+/**
+ * @param {string|number} bookId
+ * @param {unknown} chapterIdx
+ * @param {object|null|undefined} manifestOverride - React 등 화면이 들고 있는 매니페스트가 있으면 캐시보다 우선(캐시 미스·TTL 불일치 완화)
+ */
+export const getChapterData = (bookId, chapterIdx, manifestOverride = undefined) => {
+  const useOverride =
+    manifestOverride &&
+    typeof manifestOverride === 'object' &&
+    Array.isArray(manifestOverride.chapters) &&
+    manifestOverride.chapters.length > 0;
+  const manifest = useOverride ? manifestOverride : getManifestFromCache(bookId);
+  return getChapterDataFromManifest(manifest, chapterIdx);
+};
+
+export const getEventData = (bookId, chapterIdx, eventIdx, manifestOverride = undefined) => {
+  const chapterData = getChapterData(bookId, chapterIdx, manifestOverride);
   if (!chapterData || !chapterData.events) return null;
   
   const targetEventIdx = toNumberOrNull(eventIdx);
@@ -374,24 +385,46 @@ export const getEventData = (bookId, chapterIdx, eventIdx) => {
   return chapterData.events.find(ev => toNumberOrNull(ev.idx) === targetEventIdx) ?? null;
 };
 
-export const isValidEvent = (bookId, chapterIdx, eventIdx) => {
-  const chapterData = getChapterData(bookId, chapterIdx);
+export const isValidEvent = (bookId, chapterIdx, eventIdx, manifestOverride = undefined) => {
+  const chapterData = getChapterData(bookId, chapterIdx, manifestOverride);
   if (!chapterData || !chapterData.events) return false;
   const targetEventIdx = toNumberOrNull(eventIdx);
   if (targetEventIdx == null) return false;
   return chapterData.events.some(ev => toNumberOrNull(ev.idx) === targetEventIdx);
 };
 
+/** 세밀 그래프용: 해당 챕터 events[].idx 중 최댓값 (v2 manifest 이벤트) */
+export const getLastFineGraphEventIdxFromChapterData = (chapterData) => {
+  if (!chapterData || typeof chapterData !== 'object') return null;
+  if (!Array.isArray(chapterData.events) || chapterData.events.length === 0) {
+    return 1;
+  }
+  let maxIdx = -Infinity;
+  for (const ev of chapterData.events) {
+    const idx = toNumberOrNull(ev?.idx);
+    if (idx != null && idx >= 1) maxIdx = Math.max(maxIdx, idx);
+  }
+  return Number.isFinite(maxIdx) && maxIdx >= 1 ? maxIdx : 1;
+};
+
 /**
- * maxChapter: 매니페스트 chapters[].idx 최댓값(11 > 9). 캐시 정규화로 chapterIndex만 있는 경우 보조.
+ * getChapterData·isValidEvent와 동일한 챕터 해석(진도/그래프 API 공통).
+ * manifestOverride가 있으면 캐시보다 우선.
  */
+export const resolveLastEventIdxForFineGraph = (bookId, chapterIdx, manifestOverride = undefined) => {
+  const chapterData = getChapterData(bookId, chapterIdx, manifestOverride);
+  if (!chapterData) return null;
+  return getLastFineGraphEventIdxFromChapterData(chapterData);
+};
+
+/** chapters[].idx 최댓값 */
 export const calculateMaxChapterFromChapters = (chapters) => {
   if (!Array.isArray(chapters) || chapters.length === 0) {
     return 0;
   }
   let maxV = -Infinity;
   for (const ch of chapters) {
-    const v = toNumberOrNull(ch?.idx ?? ch?.chapterIndex);
+    const v = toNumberOrNull(ch?.idx);
     if (v != null) {
       maxV = Math.max(maxV, v);
     }
@@ -415,7 +448,7 @@ export const getTotalLength = (bookId) => {
 export const getChapterLength = (bookId, chapterIdx) => {
   const manifest = getManifestFromCache(bookId);
   if (!manifest?.chapters) return 0;
-  const targetIdx = toNumberOrNull(chapterIdx);
+  const targetIdx = toOneBasedChapterIndexOrNull(chapterIdx);
   if (targetIdx == null) return 0;
   const chapterData = getChapterData(bookId, targetIdx);
   if (!chapterData) return 0;
@@ -423,9 +456,7 @@ export const getChapterLength = (bookId, chapterIdx) => {
   if (fromEffective > 0) return fromEffective;
   const lengths = manifest.progressMetadata?.chapterLengths;
   if (!Array.isArray(lengths)) return 0;
-  const row = lengths.find(
-    (cl) => toNumberOrNull(cl.chapterIdx ?? cl.chapterIndex ?? cl.idx) === targetIdx
-  );
+  const row = lengths.find((cl) => toNumberOrNull(cl.chapterIdx) === targetIdx);
   return toNumberOrNull(row?.length) ?? 0;
 };
 
@@ -434,15 +465,11 @@ export const calculateApiChapterProgressFromLocator = (bookId, startLocator, cha
   if (!manifest?.chapters) {
     return { currentChars: 0, totalChars: 0, progress: 0, chapterStartPos: 0 };
   }
-  const targetChapterIdx = toNumberOrNull(chapterIdx);
+  const targetChapterIdx = toOneBasedChapterIndexOrNull(chapterIdx);
   if (targetChapterIdx == null) {
     return { currentChars: 0, totalChars: 0, progress: 0, chapterStartPos: 0 };
   }
-  const chapterData = manifest.chapters.find((ch) => {
-    const idx = toNumberOrNull(ch.idx);
-    const chapterIdxValue = toNumberOrNull(ch.chapterIdx);
-    return idx === targetChapterIdx || chapterIdxValue === targetChapterIdx;
-  });
+  const chapterData = manifest.chapters.find((ch) => toNumberOrNull(ch.idx) === targetChapterIdx);
   if (!chapterData) {
     return { currentChars: 0, totalChars: 0, progress: 0, chapterStartPos: 0 };
   }
@@ -469,7 +496,7 @@ export const calculateApiChapterProgressFromLocator = (bookId, startLocator, cha
   if ((chapterStartPos == null || chapterStartPos <= 0) && Array.isArray(manifest.chapters)) {
     let cumulative = 0;
     for (const ch of manifest.chapters) {
-      const chIdx = toNumberOrNull(ch.idx ?? ch.chapterIdx);
+      const chIdx = toNumberOrNull(ch.idx);
       if (chIdx === targetChapterIdx) break;
       cumulative += getEffectiveChapterLengthForProgress(manifest, ch);
     }
@@ -494,8 +521,9 @@ export const calculateApiChapterProgressFromLocator = (bookId, startLocator, cha
 };
 
 export const findApiEventFromChars = async (bookId, chapterIdx, currentChars, chapterStartPos = 0) => {
-  const targetChapterIdx = toNumberOrNull(chapterIdx);
-  
+  const targetChapterIdx = toOneBasedChapterIndexOrNull(chapterIdx);
+  if (targetChapterIdx == null) return null;
+
   let chapterEvents = null;
   try {
     const { getCachedChapterEvents } = await import('./chapterEventCache');
@@ -513,23 +541,23 @@ export const findApiEventFromChars = async (bookId, chapterIdx, currentChars, ch
   const eventsMap = new Map();
   const upsertEvent = (sourceEvent) => {
     if (!sourceEvent) return;
-    const idx = Number(sourceEvent.eventIdx ?? sourceEvent.idx ?? sourceEvent.eventNum ?? sourceEvent.id);
-    if (!Number.isFinite(idx)) return;
+    const idx = toNumberOrNull(sourceEvent.idx ?? sourceEvent.eventIdx);
+    if (idx == null || idx < 1) return;
 
     const existing = eventsMap.get(idx) ?? {};
     const normalized = { ...existing, ...sourceEvent };
 
-    const startPos = Number(normalized.startTxtOffset ?? normalized.startPos ?? 0);
-    const endPosCandidate = Number(normalized.endTxtOffset ?? normalized.endPos ?? startPos);
-    const endPos = Number.isFinite(endPosCandidate) ? endPosCandidate : startPos;
+    const startPos = toNumberOrNull(normalized.startTxtOffset) ?? toNumberOrNull(normalized.startPos) ?? 0;
+    const endPosCandidate = toNumberOrNull(normalized.endTxtOffset) ?? toNumberOrNull(normalized.endPos) ?? startPos;
+    const endPos = endPosCandidate >= startPos ? endPosCandidate : startPos;
 
-    normalized.startPos = Number.isFinite(startPos) ? startPos : 0;
-    normalized.endPos = endPos >= normalized.startPos ? endPos : normalized.startPos;
-    normalized.startTxtOffset = normalized.startPos;
-    normalized.endTxtOffset = normalized.endPos;
+    normalized.startPos = startPos;
+    normalized.endPos = endPos;
+    normalized.startTxtOffset = startPos;
+    normalized.endTxtOffset = endPos;
 
     normalized.eventIdx = idx;
-    normalized.idx = normalized.idx ?? idx;
+    normalized.idx = idx;
 
     if (!normalized.characters && Array.isArray(sourceEvent.characters)) {
       normalized.characters = sourceEvent.characters;
@@ -556,13 +584,13 @@ export const findApiEventFromChars = async (bookId, chapterIdx, currentChars, ch
   }
   
   const mergedEvents = Array.from(eventsMap.values()).sort((a, b) => {
-    const idxA = Number(a.eventIdx ?? a.idx ?? 0);
-    const idxB = Number(b.eventIdx ?? b.idx ?? 0);
+    const idxA = toNumberOrNull(a.idx) ?? toNumberOrNull(a.eventIdx) ?? 0;
+    const idxB = toNumberOrNull(b.idx) ?? toNumberOrNull(b.eventIdx) ?? 0;
     if (idxA !== idxB) {
       return idxA - idxB;
     }
-    const startA = Number(a.startTxtOffset ?? a.startPos ?? 0);
-    const startB = Number(b.startTxtOffset ?? b.startPos ?? 0);
+    const startA = toNumberOrNull(a.startTxtOffset) ?? toNumberOrNull(a.startPos) ?? 0;
+    const startB = toNumberOrNull(b.startTxtOffset) ?? toNumberOrNull(b.startPos) ?? 0;
     return startA - startB;
   });
   
@@ -571,7 +599,7 @@ export const findApiEventFromChars = async (bookId, chapterIdx, currentChars, ch
 
   let isRelativePositions = false;
   if (firstEvent) {
-    const firstStart = Number(firstEvent.startTxtOffset ?? firstEvent.startPos ?? 0);
+    const firstStart = toNumberOrNull(firstEvent.startTxtOffset) ?? toNumberOrNull(firstEvent.startPos) ?? 0;
     if (base > 0 && firstStart >= 0 && firstStart < base) {
       isRelativePositions = true;
     }
@@ -580,13 +608,13 @@ export const findApiEventFromChars = async (bookId, chapterIdx, currentChars, ch
   const position = isRelativePositions ? currentChars : base + currentChars;
 
   if (firstEvent) {
-    const firstStart = Number(firstEvent.startTxtOffset ?? firstEvent.startPos ?? 0);
-    const firstEndRaw = Number(firstEvent.endTxtOffset ?? firstEvent.endPos ?? firstStart);
+    const firstStart = toNumberOrNull(firstEvent.startTxtOffset) ?? toNumberOrNull(firstEvent.startPos) ?? 0;
+    const firstEndRaw = toNumberOrNull(firstEvent.endTxtOffset) ?? toNumberOrNull(firstEvent.endPos) ?? firstStart;
     const _span = Math.max(firstEndRaw - firstStart, 1);
     if (position <= firstStart) {
       return {
         ...firstEvent,
-        eventIdx: firstEvent.eventIdx ?? firstEvent.idx,
+        eventIdx: toNumberOrNull(firstEvent.idx) ?? toNumberOrNull(firstEvent.eventIdx),
         chapterIdx: targetChapterIdx,
         progress: 0,
         __useRelative: isRelativePositions
@@ -596,8 +624,8 @@ export const findApiEventFromChars = async (bookId, chapterIdx, currentChars, ch
 
   for (let i = 0; i < mergedEvents.length; i++) {
     const event = mergedEvents[i];
-    const eventStartPos = Number(event.startTxtOffset ?? event.startPos ?? 0);
-    const eventEndPosRaw = Number(event.endTxtOffset ?? event.endPos ?? eventStartPos);
+    const eventStartPos = toNumberOrNull(event.startTxtOffset) ?? toNumberOrNull(event.startPos) ?? 0;
+    const eventEndPosRaw = toNumberOrNull(event.endTxtOffset) ?? toNumberOrNull(event.endPos) ?? eventStartPos;
     const eventEndPos = eventEndPosRaw > eventStartPos ? eventEndPosRaw : eventStartPos + 1;
     
     if (position >= eventStartPos && position < eventEndPos) {
@@ -606,7 +634,7 @@ export const findApiEventFromChars = async (bookId, chapterIdx, currentChars, ch
       const clampedProgress = Math.min(Math.max(rawProgress, 0), 100);
       return {
         ...event,
-        eventIdx: event.eventIdx ?? event.idx,
+        eventIdx: toNumberOrNull(event.idx) ?? toNumberOrNull(event.eventIdx),
         chapterIdx: targetChapterIdx,
         progress: clampedProgress,
         __useRelative: isRelativePositions
@@ -618,7 +646,7 @@ export const findApiEventFromChars = async (bookId, chapterIdx, currentChars, ch
     const lastEvent = mergedEvents[mergedEvents.length - 1];
     return {
       ...lastEvent,
-      eventIdx: lastEvent.eventIdx ?? lastEvent.idx,
+      eventIdx: toNumberOrNull(lastEvent.idx) ?? toNumberOrNull(lastEvent.eventIdx),
       chapterIdx: targetChapterIdx,
       progress: 100,
       __useRelative: isRelativePositions

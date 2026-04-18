@@ -676,7 +676,17 @@ export const graphDataCacheUtils = {
     return { resultData: null, usedCache: false };
   },
 
-  getGraphDataFromApiOrCache: async (bookId, chapter, eventIdx, getFineGraph, getGraphEventState, eventUtils, apiEventCacheRef, hasCalledApi) => {
+  getGraphDataFromApiOrCache: async (
+    bookId,
+    chapter,
+    eventIdx,
+    getFineGraph,
+    getGraphEventState,
+    eventUtils,
+    apiEventCacheRef,
+    hasCalledApi,
+    atLocator = null
+  ) => {
     if (!bookId || !chapter || eventIdx < 1) {
       return { resultData: null, usedCache: false };
     }
@@ -688,7 +698,7 @@ export const graphDataCacheUtils = {
       const cachedBeforeApi = getGraphEventState(bookId, chapter, eventIdx);
       if (!cachedBeforeApi) {
         try {
-          const apiResponse = await getFineGraph(bookId, chapter, eventIdx);
+          const apiResponse = await getFineGraph(bookId, chapter, eventIdx, atLocator);
           
           if (apiResponse && (apiResponse.isSuccess !== false)) {
             const apiResult = apiResponse?.result ?? apiResponse?.data ?? null;
@@ -760,32 +770,22 @@ export const graphDataCacheUtils = {
 };
 
 export const graphDataTransformUtils = {
-  normalizeApiEvent: (apiEvent, currentChapter, apiEventIdx) => {
-    if (!apiEvent) return null;
-    const numericFromApi =
-      apiEvent.event_id !== undefined && apiEvent.event_id !== null
-        ? Number(apiEvent.event_id)
-        : NaN;
-    const numericIdx = Number.isFinite(numericFromApi) && numericFromApi > 0
-      ? numericFromApi
-      : (() => {
-          const n = Number(apiEvent.eventIdx ?? apiEvent.idx ?? apiEvent.id);
-          return Number.isFinite(n) && n > 0 ? n : null;
-        })();
-    const resolvedIdx = numericIdx ?? apiEventIdx;
-    const resolvedEventId = apiEvent.eventId ?? resolvedIdx;
-    const resolvedStart = apiEvent.startTxtOffset ?? null;
-    const resolvedEnd = apiEvent.endTxtOffset ?? null;
-
+  /** GET /api/v2/graph/fine 의 result.event — chapterIdx, event_id, eventId, startTxtOffset, endTxtOffset */
+  normalizeApiEvent: (apiEvent) => {
+    if (!apiEvent || typeof apiEvent !== 'object') return null;
+    const eventIdx = Number(apiEvent.event_id);
+    const chapterIdx = Number(apiEvent.chapterIdx);
+    if (!Number.isFinite(eventIdx) || eventIdx < 1) return null;
+    if (!Number.isFinite(chapterIdx) || chapterIdx < 1) return null;
     return {
       ...apiEvent,
-      chapter: apiEvent.chapterIdx ?? currentChapter,
-      chapterIdx: apiEvent.chapterIdx ?? currentChapter,
-      eventNum: resolvedIdx,
-      eventIdx: resolvedIdx,
-      eventId: resolvedEventId,
-      startTxtOffset: resolvedStart,
-      endTxtOffset: resolvedEnd
+      chapter: chapterIdx,
+      chapterIdx,
+      eventNum: eventIdx,
+      eventIdx: eventIdx,
+      eventId: apiEvent.eventId,
+      startTxtOffset: apiEvent.startTxtOffset ?? null,
+      endTxtOffset: apiEvent.endTxtOffset ?? null,
     };
   },
 

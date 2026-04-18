@@ -3,7 +3,7 @@
  * GraphCanvas, GraphTopBar, RelationGraphWrapper에서 공통으로 사용합니다.
  */
 export const GRAPH_LAYOUT_CONSTANTS = {
-  SIDEBAR: { OPEN_WIDTH: 240, CLOSED_WIDTH: 60 },
+  SIDEBAR: { OPEN_WIDTH: 360, CLOSED_WIDTH: 60 },
   TOP_BAR_HEIGHT: 54,
   TOOLTIP_SIDEBAR_WIDTH: 450,
 };

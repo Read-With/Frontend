@@ -403,18 +403,30 @@ function UnifiedNodeInfo({
 
   // 요약 데이터 - API 또는 로컬 데이터에서 가져오기
   const summaryData = useMemo(() => {
-    if (!processedNodeData?.label) {
+    if (!processedNodeData) {
       return { summary: "인물에 대한 요약 정보가 없습니다." };
     }
 
-    // API 관점 요약 데이터가 있는 경우 우선 사용
-    if (povSummaries && povSummaries.povSummaries) {
-      const characterName = processedNodeData.label;
-      const characterSummary = povSummaries.povSummaries.find(
-        summary => summary.characterName === characterName
-      );
-      
-      if (characterSummary && characterSummary.summaryText) {
+    // GET .../pov-summaries — characterId 우선, 없으면 characterName과 표시명 매칭
+    if (povSummaries && Array.isArray(povSummaries.povSummaries) && povSummaries.povSummaries.length > 0) {
+      const nodeId = Number(processedNodeData.id);
+      let characterSummary = null;
+      if (Number.isFinite(nodeId)) {
+        characterSummary = povSummaries.povSummaries.find(
+          (s) => Number(s.characterId) === nodeId
+        );
+      }
+      if (!characterSummary) {
+        const names = [
+          processedNodeData.common_name,
+          processedNodeData.label,
+          processedNodeData.displayName,
+        ].filter((n) => typeof n === 'string' && n.trim() !== '');
+        characterSummary = povSummaries.povSummaries.find((s) =>
+          names.some((n) => n === s.characterName)
+        );
+      }
+      if (characterSummary?.summaryText) {
         return { summary: characterSummary.summaryText };
       }
     }
@@ -422,21 +434,19 @@ function UnifiedNodeInfo({
     // API 데이터가 없는 경우 로컬 데이터 사용
     const currentChapter = chapterNum || 1;
     const folderKey = getFolderKeyFromFilename(actualFilename);
-    
-    // perspective summary 가져오기
-    const perspectiveSummary = getCharacterPerspectiveSummary(
-      folderKey, 
-      currentChapter, 
-      processedNodeData.label
-    );
+    const labelForLocal = processedNodeData.label || processedNodeData.displayName || '';
+
+    const perspectiveSummary = labelForLocal
+      ? getCharacterPerspectiveSummary(folderKey, currentChapter, labelForLocal)
+      : null;
 
     if (perspectiveSummary) {
       return { summary: perspectiveSummary };
     }
 
-    // perspective summary가 없는 경우 기본 메시지
-    return { 
-      summary: `${processedNodeData.label}에 대한 ${currentChapter}장 관점 요약이 아직 준비되지 않았습니다.` 
+    const displayLabel = processedNodeData.displayName || labelForLocal || '인물';
+    return {
+      summary: `${displayLabel}에 대한 ${currentChapter}장 관점 요약이 아직 준비되지 않았습니다.`,
     };
   }, [processedNodeData, chapterNum, actualFilename, povSummaries]);
 

@@ -128,7 +128,7 @@ export const ensureGraphBookCache = async (
 
     const normalizedChapterIndices = chapters
       .map((chapter) => {
-        const v = toNumberOrNull(chapter?.idx ?? chapter?.chapterIndex);
+        const v = toNumberOrNull(chapter?.idx);
         return v != null && v > 0 ? v : null;
       })
       .filter((idx, idxIndex, self) => idx != null && self.indexOf(idx) === idxIndex)
@@ -584,22 +584,16 @@ export const normalizeManifestEvents = (bookId, chapterIdx, manifestChapter) => 
   }
 
   return manifestChapter.events
-    .map((rawEvent, index) => {
+    .map((rawEvent) => {
       if (!rawEvent) return null;
 
-      const rawIdx =
-        rawEvent.idx ??
-        rawEvent.eventIdx ??
-        rawEvent.index ??
-        rawEvent.id ??
-        index + 1;
-      const eventIdx = Number(rawIdx);
-      if (!Number.isFinite(eventIdx) || eventIdx <= 0) {
+      const eventIdx = toNumberOrNull(rawEvent.idx);
+      if (eventIdx == null || eventIdx < 1) {
         return null;
       }
 
-      const startTxtOffset = typeof rawEvent.startTxtOffset === 'number' ? rawEvent.startTxtOffset : null;
-      const endTxtOffset = typeof rawEvent.endTxtOffset === 'number' ? rawEvent.endTxtOffset : null;
+      const startTxtOffset = toNumberOrNull(rawEvent.startTxtOffset);
+      const endTxtOffset = toNumberOrNull(rawEvent.endTxtOffset);
 
       const characters = Array.isArray(rawEvent.characters)
         ? rawEvent.characters.map((character) => deepClone(character))
@@ -623,7 +617,7 @@ export const normalizeManifestEvents = (bookId, chapterIdx, manifestChapter) => 
         },
         startTxtOffset,
         endTxtOffset,
-        eventId: rawEvent.eventId ?? rawEvent.id ?? null
+        eventId: rawEvent.eventId != null ? String(rawEvent.eventId) : null
       };
     })
     .filter(Boolean);

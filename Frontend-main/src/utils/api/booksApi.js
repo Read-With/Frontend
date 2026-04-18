@@ -21,14 +21,23 @@ export const toggleBookFavorite = async (bookId, favorite) => {
   }
 };
 
+/**
+ * GET /api/v2/books/{bookId}/chapters/{chapterIdx}/pov-summaries
+ * chapterIdx: 1-based (path에 정수만 사용)
+ */
 export const getChapterPovSummaries = async (bookId, chapterIdx) => {
   try {
-    if (!bookId || !chapterIdx) {
-      throw new Error('bookId와 chapterIdx는 필수 매개변수입니다.');
+    const bid = Number(bookId);
+    const ch = Number(chapterIdx);
+    if (!Number.isFinite(bid) || bid < 1) {
+      throw new Error('bookId는 1 이상의 정수여야 합니다.');
     }
-    
+    if (!Number.isFinite(ch) || ch < 1) {
+      throw new Error('chapterIdx는 1 이상의 정수여야 합니다.');
+    }
+
     const data = await authenticatedRequest(
-      `/v2/books/${bookId}/chapters/${chapterIdx}/pov-summaries`
+      `/v2/books/${Math.floor(bid)}/chapters/${Math.floor(ch)}/pov-summaries`
     );
     return data;
   } catch (error) {

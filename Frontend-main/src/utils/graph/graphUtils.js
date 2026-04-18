@@ -22,6 +22,11 @@
  * - useGraphInteractions: 그래프 상호작용 로직
  */
 
+import {
+  resolveLastEventIdxForFineGraph,
+  getLastFineGraphEventIdxFromChapterData,
+} from '../common/cache/manifestCache.js';
+
 const GRAPH_CONTAINER_SELECTOR = '.graph-canvas-area';
 
 // 성능 최적화를 위한 캐시 (단일 객체로 관리)
@@ -557,6 +562,7 @@ export const processTooltipData = (tooltipData, type) => {
  * @param {Object} options - 계산 옵션
  * @param {boolean} options.isApiBook - API 책 여부
  * @param {Array} options.manifestChapters - Manifest 챕터 목록
+ * @param {number|null|undefined} options.manifestBookId - 서버 bookId (있으면 캐시·getChapterData·isValidEvent와 동일 챕터 해석)
  * @param {number} options.chapter - 챕터 번호
  * @param {string} options.filename - 파일명
  * @returns {number} 마지막 이벤트 번호 (기본값: 1)
@@ -564,31 +570,35 @@ export const processTooltipData = (tooltipData, type) => {
 export const calculateLastEventForChapter = ({ 
   isApiBook, 
   manifestChapters, 
+  manifestBookId,
   chapter, 
   filename,
   getFolderKeyFromFilename,
   getLastEventIndexForChapter
 }) => {
   if (isApiBook) {
-    if (!manifestChapters) return 1;
-    
-    const chapterInfo = manifestChapters.find(ch => 
-      ch.chapterIdx === chapter || 
-      ch.chapter === chapter || 
-      ch.index === chapter || 
-      ch.number === chapter
-    );
-    
-    if (!chapterInfo) return 1;
-    
-    let eventCount = chapterInfo.eventCount || chapterInfo.events || chapterInfo.event_count || 0;
-    if (Array.isArray(eventCount)) {
-      eventCount = eventCount.length;
-    } else if (typeof eventCount !== 'number' || isNaN(eventCount)) {
-      eventCount = 0;
+    if (manifestBookId != null && Number.isFinite(Number(manifestBookId)) && Number(manifestBookId) > 0) {
+      const manifestHint =
+        Array.isArray(manifestChapters) && manifestChapters.length > 0
+          ? { chapters: manifestChapters }
+          : undefined;
+      const fromCache = resolveLastEventIdxForFineGraph(manifestBookId, chapter, manifestHint);
+      if (fromCache != null) {
+        return fromCache;
+      }
     }
-    
-    return eventCount > 0 ? eventCount : 1;
+
+    if (!manifestChapters?.length) return 1;
+
+    const chapterNum = Number(chapter);
+    const chapterInfo = manifestChapters.find(
+      (ch) => ch && typeof ch === 'object' && Number(ch.idx) === chapterNum
+    );
+
+    if (!chapterInfo) return 1;
+
+    const resolved = getLastFineGraphEventIdxFromChapterData(chapterInfo);
+    return resolved != null && resolved >= 1 ? resolved : 1;
   } else {
     if (!getFolderKeyFromFilename || !getLastEventIndexForChapter) {
       console.warn('calculateLastEventForChapter: 로컬 책 처리를 위한 함수가 제공되지 않았습니다');
@@ -624,10 +634,13 @@ export const isSidebarElement = (event) => {
     return false;
   }
   
-  const sidebarElement = document.querySelector('[data-testid="graph-sidebar"]') || 
-                        document.querySelector('.graph-sidebar') ||
-                        event.target.closest('[data-testid="graph-sidebar"]') ||
-                        event.target.closest('.graph-sidebar');
+  const sidebarElement =
+    document.querySelector('[data-testid="graph-sidebar"]') ||
+    document.querySelector('[data-testid="chapter-sidebar"]') ||
+    document.querySelector('.graph-sidebar') ||
+    event.target.closest('[data-testid="graph-sidebar"]') ||
+    event.target.closest('[data-testid="chapter-sidebar"]') ||
+    event.target.closest('.graph-sidebar');
   
   return sidebarElement && sidebarElement.contains(event.target);
 };

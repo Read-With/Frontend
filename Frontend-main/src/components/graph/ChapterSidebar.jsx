@@ -2,32 +2,36 @@ import React, { useMemo } from 'react';
 import PropTypes from 'prop-types';
 import { sidebarStyles } from '../../utils/styles/styles.js';
 import { ANIMATION_VALUES } from '../../utils/styles/animations';
+import { GRAPH_LAYOUT_CONSTANTS } from './graphConstants.js';
 import { getChapterData, getManifestFromCache } from '../../utils/common/cache/manifestCache';
-import {
-  formatChapterBadgeFromTitle,
-  formatChapterTocNumericLine,
-  stripRedundantBookTitlePrefix,
-} from '../../utils/viewer/chapterTitleDisplay';
+import { stripRedundantBookTitlePrefix } from '../../utils/viewer/chapterTitleDisplay';
 
-function manifestBookTitle(manifestBookId) {
+function manifestBookTitle(manifestBookId, manifestHint) {
+  if (manifestHint && typeof manifestHint === 'object') {
+    const t = String(manifestHint?.book?.title ?? manifestHint?.title ?? '').trim();
+    if (t) return t;
+  }
   if (manifestBookId == null) return '';
   const m = getManifestFromCache(manifestBookId);
   return String(m?.book?.title ?? m?.title ?? '').trim();
 }
 
-function rowChapterLabels(manifestBookId, idx, bookTitle) {
+/** 그래프 단독: 본문은 챕터 제목(매니페스트), 숫자는 배지에만 */
+function rowChapterLabels(manifestBookId, idx, bookTitle, manifestHint) {
   const idxStr = Number.isFinite(idx) && idx >= 1 ? String(idx) : '—';
   if (manifestBookId == null || !Number.isFinite(idx) || idx < 1) {
-    return { display: formatChapterTocNumericLine(idxStr, idxStr), tooltip: idxStr };
+    return { display: `제${idxStr}장`, tooltip: idxStr };
   }
-  const ch = getChapterData(manifestBookId, idx);
-  const t = String(ch?.title ?? '').trim();
-  if (!t) {
-    return { display: formatChapterTocNumericLine(idxStr, idxStr), tooltip: idxStr };
+  const ch = getChapterData(manifestBookId, idx, manifestHint ?? undefined);
+  const rawTitle = String(ch?.title ?? '').trim();
+  if (!rawTitle) {
+    return { display: `제${idxStr}장`, tooltip: `챕터 ${idxStr}` };
   }
-  const forBadge = stripRedundantBookTitlePrefix(t, bookTitle);
-  const part = formatChapterBadgeFromTitle(forBadge);
-  return { display: formatChapterTocNumericLine(part, idxStr), tooltip: t };
+  const displayTitle = stripRedundantBookTitlePrefix(rawTitle, bookTitle).trim() || rawTitle;
+  return {
+    display: displayTitle,
+    tooltip: `챕터 ${idxStr} — ${rawTitle}`,
+  };
 }
 
 function ChapterSidebar({
@@ -37,14 +41,33 @@ function ChapterSidebar({
   currentChapter,
   onChapterSelect,
   manifestBookId = null,
+  manifestHint = null,
 }) {
-  const bookTitle = useMemo(() => manifestBookTitle(manifestBookId), [manifestBookId]);
+  const bookTitle = useMemo(
+    () => manifestBookTitle(manifestBookId, manifestHint),
+    [manifestBookId, manifestHint],
+  );
+  const { OPEN_WIDTH: sidebarOpenW, CLOSED_WIDTH: sidebarClosedW } = GRAPH_LAYOUT_CONSTANTS.SIDEBAR;
+
+  const chapterItems = useMemo(
+    () => chapterList.map((chapter) => {
+      const { display: label, tooltip } = rowChapterLabels(
+        manifestBookId,
+        chapter,
+        bookTitle,
+        manifestHint,
+      );
+      return { chapter, label, tooltip };
+    }),
+    [chapterList, manifestBookId, bookTitle, manifestHint],
+  );
 
   return (
     <div
       data-testid="chapter-sidebar"
       style={{
         ...sidebarStyles.container(isSidebarOpen, ANIMATION_VALUES),
+        width: isSidebarOpen ? `${sidebarOpenW}px` : `${sidebarClosedW}px`,
         position: 'fixed',
         top: 0,
         left: 0,
@@ -70,8 +93,7 @@ function ChapterSidebar({
       </div>
 
       <div style={sidebarStyles.chapterList}>
-        {chapterList.map((chapter) => {
-          const { display: label, tooltip } = rowChapterLabels(manifestBookId, chapter, bookTitle);
+        {chapterItems.map(({ chapter, label, tooltip }) => {
           return (
             <button
               key={chapter}
@@ -111,6 +133,7 @@ ChapterSidebar.propTypes = {
   currentChapter: PropTypes.number.isRequired,
   onChapterSelect: PropTypes.func.isRequired,
   manifestBookId: PropTypes.number,
+  manifestHint: PropTypes.object,
 };
 
 export default ChapterSidebar;

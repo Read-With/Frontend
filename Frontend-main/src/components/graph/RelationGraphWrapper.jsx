@@ -3,7 +3,6 @@ import { useNavigate, useParams, useLocation } from "react-router-dom";
 
 import GraphTopBar from "./GraphTopBar";
 import ChapterSidebar from "./ChapterSidebar";
-import GraphInfoBar from "./GraphInfoBar";
 import GraphCanvas from "./GraphCanvas";
 import ErrorToast from "../common/ErrorToast";
 import "./RelationGraph.css";
@@ -33,6 +32,12 @@ import { eventUtils, graphDataTransformUtils, getServerBookId } from '../../util
 import { userViewerPath } from '../../utils/navigation/viewerPaths';
 import useGraphInteractions from "../../hooks/graph/useGraphInteractions";
 import { useChapterPovSummaries } from '../../hooks/viewer/useChapterPovSummaries';
+import {
+  getChapterData,
+  isValidEvent,
+  resolveLastEventIdxForFineGraph,
+} from '../../utils/common/cache/manifestCache.js';
+import { stripRedundantBookTitlePrefix } from '../../utils/viewer/chapterTitleDisplay';
 
 // ─── 백버튼 스타일 ────────────────────────────────────────────────────────────
 const backButtonStyle = {
@@ -75,23 +80,33 @@ function RelationGraphWrapper() {
   const isBookId = !isNaN(filename) && filename.length > 0;
   const bookId = isBookId ? parseInt(filename) : null;
   const requestedChapterFromViewer = Number(location.state?.selectedChapter);
+  const chapterFromViewer =
+    Number.isFinite(requestedChapterFromViewer) && requestedChapterFromViewer >= 1
+      ? requestedChapterFromViewer
+      : null;
 
   const [currentChapter, setCurrentChapter] = useLocalStorageNumber(
     `lastGraphChapter_${filename}`,
-    1,
-    { forceInitialValue: false }
+    chapterFromViewer ?? 1,
+    { forceInitialValue: chapterFromViewer != null }
   );
   const [currentEvent, setCurrentEvent] = useState(1);
+  const [forcedChapterEventIdx, setForcedChapterEventIdx] = useState(null);
   const [hasShownGraphOnce, setHasShownGraphOnce] = useState(false);
 
+  const appliedRequestedChapterRef = useRef(null);
   useEffect(() => {
     if (!Number.isFinite(requestedChapterFromViewer) || requestedChapterFromViewer < 1) {
+      return;
+    }
+    if (appliedRequestedChapterRef.current === requestedChapterFromViewer) {
       return;
     }
     if (requestedChapterFromViewer !== currentChapter) {
       setCurrentChapter(requestedChapterFromViewer);
       setCurrentEvent(1);
     }
+    appliedRequestedChapterRef.current = requestedChapterFromViewer;
   }, [requestedChapterFromViewer, currentChapter, setCurrentChapter]);
 
   const serverBookId = useMemo(() => {
@@ -124,6 +139,7 @@ function RelationGraphWrapper() {
 
   const {
     manifestData,
+    manifestReady,
     apiMacroData,
     apiFineData,
     apiMaxChapter,
@@ -132,7 +148,13 @@ function RelationGraphWrapper() {
     apiFineLoading,
     apiError,
     clearError: clearApiError,
-  } = useApiGraphData(serverBookId, currentChapter, currentEvent, isApiBook);
+  } = useApiGraphData(
+    serverBookId,
+    currentChapter,
+    currentEvent,
+    isApiBook,
+    forcedChapterEventIdx,
+  );
 
   const { povSummaries } = useChapterPovSummaries(
     serverBookId,
@@ -181,25 +203,93 @@ function RelationGraphWrapper() {
 
   const effectiveMaxChapter = isApiBook ? apiMaxChapter : maxChapter;
 
+  const manifestBookTitleStr = useMemo(
+    () => String(manifestData?.book?.title ?? '').trim(),
+    [manifestData?.book?.title],
+  );
+
+  const resolveChapterDisplayTitle = useCallback(
+    (chapterNum) => {
+      if (!isApiBook || serverBookId == null || !manifestData) return '';
+      const n = Number(chapterNum);
+      if (!Number.isFinite(n) || n < 1) return '';
+      const ch = getChapterData(serverBookId, n, manifestData);
+      const raw = String(ch?.title ?? '').trim();
+      if (!raw) return '';
+      const stripped = stripRedundantBookTitlePrefix(raw, manifestBookTitleStr).trim();
+      return stripped || raw;
+    },
+    [isApiBook, serverBookId, manifestData, manifestBookTitleStr],
+  );
+
+  const currentChapterTitle = useMemo(
+    () => resolveChapterDisplayTitle(currentChapter),
+    [resolveChapterDisplayTitle, currentChapter],
+  );
+
+  const userReadingChapterTitle = useMemo(() => {
+    if (userCurrentChapter == null) return '';
+    return resolveChapterDisplayTitle(userCurrentChapter);
+  }, [resolveChapterDisplayTitle, userCurrentChapter]);
+
   useEffect(() => {
+    if (isApiBook && !manifestReady) return;
     if (effectiveMaxChapter > 0 && currentChapter > effectiveMaxChapter) {
       setCurrentChapter(effectiveMaxChapter);
     }
-  }, [effectiveMaxChapter, currentChapter, setCurrentChapter]);
+  }, [isApiBook, manifestReady, effectiveMaxChapter, currentChapter, setCurrentChapter]);
+
+  useEffect(() => {
+    if (!isApiBook || serverBookId == null || !manifestReady) return;
+    const ch = Number(currentChapter);
+    if (!Number.isFinite(ch) || ch < 1) return;
+    if (isValidEvent(serverBookId, ch, currentEvent, manifestData)) return;
+    const next = resolveLastEventIdxForFineGraph(serverBookId, ch, manifestData);
+    if (next == null || next === currentEvent) return;
+    if (isValidEvent(serverBookId, ch, next, manifestData)) {
+      setCurrentEvent(next);
+    }
+  }, [isApiBook, serverBookId, manifestReady, manifestData, currentChapter, currentEvent]);
+
+  useEffect(() => {
+    const forced = Number(forcedChapterEventIdx);
+    if (!Number.isFinite(forced) || forced < 1) return;
+    if (currentEvent !== forced) {
+      setCurrentEvent(forced);
+    }
+  }, [forcedChapterEventIdx, currentEvent]);
+
+  useEffect(() => {
+    const forced = Number(forcedChapterEventIdx);
+    if (!Number.isFinite(forced) || forced < 1 || !apiFineData) return;
+    const applied = Number(apiFineData?.event?.event_id);
+    if (Number.isFinite(applied) && applied === forced) {
+      setForcedChapterEventIdx(null);
+    }
+  }, [forcedChapterEventIdx, apiFineData]);
+
+  const graphApiPayload = useMemo(() => {
+    const fineChars = Array.isArray(apiFineData?.characters) ? apiFineData.characters : [];
+    const fineRels = Array.isArray(apiFineData?.relations) ? apiFineData.relations : [];
+    if (fineChars.length > 0 || fineRels.length > 0) {
+      return apiFineData;
+    }
+    return null;
+  }, [apiFineData]);
 
   const apiElements = useMemo(() => {
-    if (!apiFineData?.characters || !apiFineData?.relations) {
+    if (!graphApiPayload?.characters || !graphApiPayload?.relations) {
       return [];
     }
 
     try {
-      const { idToName, idToDesc, idToMain, idToNames, idToProfileImage } = createCharacterMaps(apiFineData.characters);
+      const { idToName, idToDesc, idToMain, idToNames, idToProfileImage } = createCharacterMaps(graphApiPayload.characters);
 
-      const normalizedEvent = graphDataTransformUtils.normalizeApiEvent(apiFineData.event, currentChapter, currentEvent);
-      const nodeWeights = buildNodeWeights(apiFineData.characters);
+      const normalizedEvent = graphDataTransformUtils.normalizeApiEvent(graphApiPayload.event);
+      const nodeWeights = buildNodeWeights(graphApiPayload.characters);
 
       const convertedElements = convertRelationsToElements(
-        apiFineData.relations,
+        graphApiPayload.relations,
         idToName,
         idToDesc,
         idToDesc,
@@ -217,10 +307,13 @@ function RelationGraphWrapper() {
       console.error('apiElements 변환 실패:', error);
       return [];
     }
-  }, [apiFineData?.characters, apiFineData?.relations, apiFineData?.event, currentChapter, currentEvent]);
+  }, [graphApiPayload]);
 
   const elements = useMemo(() => {
-    return (isApiBook && apiElements.length > 0) ? apiElements : localElements;
+    if (isApiBook) {
+      return apiElements.length > 0 ? apiElements : [];
+    }
+    return localElements;
   }, [isApiBook, apiElements, localElements]);
 
   const {
@@ -425,15 +518,30 @@ function RelationGraphWrapper() {
       const lastEventNum = calculateLastEventForChapter({
         isApiBook,
         manifestChapters: manifestData?.chapters,
+        manifestBookId: serverBookId,
         chapter,
         filename,
         getFolderKeyFromFilename,
         getLastEventIndexForChapter
       });
 
-      setCurrentEvent(lastEventNum);
+      const normalizedLastEventNum = Number.isFinite(Number(lastEventNum)) && Number(lastEventNum) >= 1
+        ? Number(lastEventNum)
+        : 1;
+      setForcedChapterEventIdx(normalizedLastEventNum);
+      setCurrentEvent(normalizedLastEventNum);
     }
-  }, [currentChapter, setCurrentChapter, isApiBook, manifestData?.chapters, filename, clearAll, setDropdownSelection, setCurrentEvent]);
+  }, [
+    currentChapter,
+    setCurrentChapter,
+    isApiBook,
+    manifestData?.chapters,
+    serverBookId,
+    filename,
+    clearAll,
+    setDropdownSelection,
+    setCurrentEvent,
+  ]);
 
   useEffect(() => {
     if (isDropdownSelection) {
@@ -545,6 +653,12 @@ function RelationGraphWrapper() {
   );
 
   const isLoading = (isApiBook && (apiFineLoading || isGraphLoading)) || (!isApiBook && (loading || isGraphLoading));
+  const isApiGraphEmpty = useMemo(() => {
+    if (!isApiBook || isLoading) return false;
+    const chars = Array.isArray(graphApiPayload?.characters) ? graphApiPayload.characters.length : 0;
+    const rels = Array.isArray(graphApiPayload?.relations) ? graphApiPayload.relations.length : 0;
+    return chars === 0 && rels === 0;
+  }, [isApiBook, isLoading, graphApiPayload]);
 
   useEffect(() => {
     if (!isLoading) {
@@ -611,6 +725,26 @@ function RelationGraphWrapper() {
           duration={5000}
         />
       )}
+      {isApiGraphEmpty && (
+        <div
+          style={{
+            position: 'fixed',
+            top: '50%',
+            left: '50%',
+            transform: 'translate(-50%, -50%)',
+            zIndex: 10003,
+            background: 'rgba(255,255,255,0.96)',
+            border: '1px solid #e5e7eb',
+            borderRadius: 10,
+            padding: '8px 12px',
+            color: '#374151',
+            fontSize: 12,
+            fontWeight: 600,
+          }}
+        >
+          선택한 챕터에 표시할 그래프 데이터가 없습니다.
+        </div>
+      )}
 
       <GraphTopBar
         isSidebarOpen={isSidebarOpen}
@@ -647,6 +781,7 @@ function RelationGraphWrapper() {
         currentChapter={currentChapter}
         onChapterSelect={handleChapterSelect}
         manifestBookId={isApiBook && serverBookId != null ? serverBookId : null}
+        manifestHint={isApiBook ? manifestData : null}
       />
 
       <GraphCanvas
@@ -654,6 +789,8 @@ function RelationGraphWrapper() {
         activeTooltip={activeTooltip}
         cyRef={cyRef}
         chapterNum={currentChapter}
+        currentChapterTitle={isApiBook ? currentChapterTitle : ''}
+        userReadingChapterTitle={isApiBook ? userReadingChapterTitle : ''}
         eventNum={isApiBook ? Math.max(currentEvent, 1) : eventNum}
         maxChapter={effectiveMaxChapter}
         filename={filename}

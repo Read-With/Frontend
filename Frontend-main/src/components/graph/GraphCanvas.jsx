@@ -54,6 +54,8 @@ function GraphCanvas({
   activeTooltip,
   cyRef,
   chapterNum,
+  currentChapterTitle = '',
+  userReadingChapterTitle = '',
   eventNum,
   maxChapter,
   filename,
@@ -113,8 +115,10 @@ function GraphCanvas({
           isApiBook={isApiBook}
           apiFineData={apiFineData}
           currentChapter={currentChapter}
+          currentChapterTitle={currentChapterTitle}
           currentEvent={currentEvent}
           userCurrentChapter={userCurrentChapter}
+          userReadingChapterTitle={userReadingChapterTitle}
           nodeCount={nodeCount}
           relationCount={relationCount}
           filterStage={filterStage}
@@ -186,6 +190,7 @@ function GraphCanvas({
               showRippleEffect={true}
               isDropdownSelection={isDropdownSelection}
               isDataRefreshing={isLoading}
+              currentChapter={currentChapter}
             />
           </div>
         </div>
@@ -201,6 +206,8 @@ GraphCanvas.propTypes = {
   activeTooltip: PropTypes.object,
   cyRef: PropTypes.object.isRequired,
   chapterNum: PropTypes.number.isRequired,
+  currentChapterTitle: PropTypes.string,
+  userReadingChapterTitle: PropTypes.string,
   eventNum: PropTypes.number.isRequired,
   maxChapter: PropTypes.number.isRequired,
   filename: PropTypes.string.isRequired,

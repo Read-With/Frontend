@@ -1,9 +1,12 @@
 import { getManifestFromCache, calculateMaxChapterFromChapters } from '../common/cache/manifestCache';
 
-/** maxChapter: manifest.chapters의 챕터 인덱스 중 최댓값만 사용(그래프 캐시·progressMetadata 미사용). */
+/** v2: progressMetadata.maxChapter 와 chapters[].idx 최댓값 중 더 큰 값(둘 다 없으면 1). */
 export const resolveMaxChapter = (bookId, manifest = null) => {
   const manifestData = manifest ?? (bookId ? getManifestFromCache(bookId) : null);
   const chapters = Array.isArray(manifestData?.chapters) ? manifestData.chapters : [];
-  const m = calculateMaxChapterFromChapters(chapters);
+  const fromChapters = calculateMaxChapterFromChapters(chapters);
+  const declared = Number(manifestData?.progressMetadata?.maxChapter);
+  const fromMeta = Number.isFinite(declared) && declared >= 1 ? declared : 0;
+  const m = Math.max(fromChapters, fromMeta);
   return m > 0 ? m : 1;
 };

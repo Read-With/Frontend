@@ -42,8 +42,15 @@ export const getFallbackData = (bookId, chapter, eventIdx, macroData) => {
   return null;
 };
 
+const hasGraphPayload = (data) => {
+  if (!data || typeof data !== 'object') return false;
+  const chars = Array.isArray(data.characters) ? data.characters.length : 0;
+  const rels = Array.isArray(data.relations) ? data.relations.length : 0;
+  return chars > 0 || rels > 0;
+};
+
 const handleSuccess = (data, onSuccess, cacheKey) => {
-  if (cacheKey && data) {
+  if (cacheKey && hasGraphPayload(data)) {
     saveToLocalStorageCache(cacheKey, data);
   }
   if (onSuccess) {
@@ -105,7 +112,7 @@ export const loadGraphDataWithCache = async ({
   onError,
 }) => {
   const localStorageData = checkLocalStorageCache(cacheKey);
-  if (localStorageData?.characters && localStorageData?.relations) {
+  if (hasGraphPayload(localStorageData)) {
     handleSuccess(localStorageData, onSuccess);
     return { data: localStorageData, source: 'localStorage' };
   }
