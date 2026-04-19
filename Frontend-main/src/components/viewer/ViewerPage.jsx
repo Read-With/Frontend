@@ -20,13 +20,21 @@ import {
   viewerResumeAnchorKey,
 } from "../../utils/common/locatorUtils";
 import { getGraphEventState, getCachedChapterEvents, getCachedReaderProgress, isGraphBookCacheBuilding, ensureGraphBookCache } from "../../utils/common/cache/chapterEventCache";
-import { 
+import {
   eventUtils,
   graphDataCacheUtils,
   eventIdxUtils,
   graphDataTransformUtils,
-  cacheKeyUtils
+  cacheKeyUtils,
+  resolveFineGraphEventOrdinal,
+  getServerBookId,
 } from "../../utils/viewer/viewerUtils";
+import {
+  pickFineGraphResultEvent,
+  resolveDisplayedEventNum,
+  resolveFineGraphEventIdString,
+  resolveViewerGraphEventFromManifest,
+} from "../../utils/viewer/eventDisplayUtils";
 import { restoreGraphLayout, preloadChapterLayouts } from "../../utils/graph/graphLayoutUtils";
 import { removeBookmarkHighlights } from "./bookmark/BookmarkManager";
 import { convertRelationsToElements, filterRelationsByTimeline } from "../../utils/graph/graphDataUtils";
@@ -34,10 +42,100 @@ import { buildNodeWeights, createCharacterMaps } from "../../utils/graph/charact
 import { getRelationKeyFromRelation } from "../../utils/graph/relationUtils";
 import { errorUtils } from "../../utils/common/errorUtils";
 import GraphSplitArea from "./GraphSplitArea";
+import {
+  getProgressFromCache,
+  PROGRESS_CACHE_UPDATED_EVENT,
+  normalizeReadingProgressPercent,
+} from "../../utils/common/cache/progressCache";
 
 /** 이어보기 displayAt 폴링: 본문·레이아웃 지연 시 간헐 실패 방지 */
 const VIEWER_RESUME_POLL_MS = 100;
 const VIEWER_RESUME_MAX_ATTEMPTS = 150;
+
+function progressRowToTopBar(row) {
+  if (!row || typeof row !== "object") {
+    return {
+      eventNum: null,
+      chapterProgress: null,
+      readingProgressPercent: null,
+      eventName: "",
+    };
+  }
+  const explicit = Number(row.eventNum);
+  const fromId = resolveDisplayedEventNum(row);
+  const eventNum =
+    Number.isFinite(explicit) && explicit > 0
+      ? explicit
+      : fromId > 0
+        ? fromId
+        : null;
+  const cp = Number(row.chapterProgress);
+  const pct = normalizeReadingProgressPercent(row);
+  return {
+    eventNum,
+    chapterProgress: Number.isFinite(cp) ? Math.min(100, Math.max(0, cp)) : null,
+    readingProgressPercent: pct,
+    eventName: String(row.eventName ?? row.eventTitle ?? row.name ?? "").trim(),
+  };
+}
+
+/** GET /api/v2/graph/fine result를 줄 단위 이벤트 스냅샷에 병합 (relations-only 시 relFallbackMeta 사용) */
+function mergeNextEventFromFineGraphPayload(nextEvent, payload, relFallbackMeta) {
+  if (!nextEvent || typeof nextEvent !== "object") return { nextEvent, merged: false };
+  const meta = relFallbackMeta && typeof relFallbackMeta === "object" ? relFallbackMeta : {};
+  const chapterIdx = Number(meta.chapterIdx);
+  const off = meta.startTxtOffset;
+  const hasOff = Number.isFinite(off);
+
+  let apiEvent =
+    payload?.event && typeof payload.event === "object" ? payload.event : null;
+  if (
+    !apiEvent &&
+    payload &&
+    Array.isArray(payload.relations) &&
+    payload.relations.length > 0 &&
+    Number.isFinite(chapterIdx) &&
+    chapterIdx >= 1
+  ) {
+    for (const rel of payload.relations) {
+      const n = Number(
+        rel?.eventIdx ?? rel?.eventNum ?? rel?.event_idx ?? rel?.event_id
+      );
+      if (Number.isFinite(n) && n > 0) {
+        apiEvent = {
+          chapterIdx,
+          eventNum: n,
+          event_id: n,
+          ...(hasOff
+            ? {
+                startTxtOffset: off,
+                endTxtOffset: Number.isFinite(meta.endTxtOffset) ? meta.endTxtOffset : off,
+              }
+            : {}),
+        };
+        break;
+      }
+    }
+  }
+  if (!apiEvent || typeof apiEvent !== "object") return { nextEvent, merged: false };
+
+  const normalized = graphDataTransformUtils.normalizeApiEvent(apiEvent);
+  const ord = resolveFineGraphEventOrdinal(apiEvent);
+  let merged = {
+    ...nextEvent,
+    ...(normalized || {}),
+    event: normalized ? { ...apiEvent, ...normalized } : { ...apiEvent },
+  };
+  if (ord) {
+    if (!Number.isFinite(Number(merged.eventNum)) || Number(merged.eventNum) <= 0) {
+      merged = { ...merged, eventNum: ord, eventIdx: ord, event_id: ord };
+    }
+    if (!Number.isFinite(merged.resolvedEventIdx) || merged.resolvedEventIdx <= 0) {
+      merged = { ...merged, resolvedEventIdx: ord };
+    }
+  }
+  return { nextEvent: merged, merged: true };
+}
 
 const ViewerPage = () => {
   const {
@@ -65,6 +163,8 @@ const ViewerPage = () => {
     const trimmed = String(id).trim();
     return trimmed || null;
   }, [cleanBookId, bookId, book?.id]);
+
+  const [progressTopBar, setProgressTopBar] = useState(undefined);
 
   const [serverResumeAnchor, setServerResumeAnchor] = useState(null);
   const serverResumeAppliedKeyRef = useRef(null);
@@ -100,13 +200,16 @@ const ViewerPage = () => {
         if (cancelled) return;
         if (!res?.isSuccess || !res?.result) {
           setServerResumeAnchor(null);
+          setProgressTopBar(progressRowToTopBar(getProgressFromCache(String(numeric))));
           return;
         }
         const anchor = progressResultToViewerAnchor(res.result);
         setServerResumeAnchor(anchor);
+        setProgressTopBar(progressRowToTopBar(res.result));
       } catch (err) {
         if (!cancelled) {
           setServerResumeAnchor(null);
+          setProgressTopBar(progressRowToTopBar(getProgressFromCache(String(numeric))));
         }
       } finally {
         if (!cancelled) setServerProgressLoading(false);
@@ -114,6 +217,23 @@ const ViewerPage = () => {
     })();
 
     return () => { cancelled = true; };
+  }, [bookKey]);
+
+  useEffect(() => {
+    const numeric = Number(bookKey);
+    if (!bookKey || !Number.isFinite(numeric) || numeric <= 0) {
+      return undefined;
+    }
+    const idStr = String(numeric);
+    const sync = () => {
+      setProgressTopBar(progressRowToTopBar(getProgressFromCache(idStr)));
+    };
+    const onCache = (e) => {
+      if (String(e?.detail?.bookId) === idStr) sync();
+    };
+    window.addEventListener(PROGRESS_CACHE_UPDATED_EVENT, onCache);
+    sync();
+    return () => window.removeEventListener(PROGRESS_CACHE_UPDATED_EVENT, onCache);
   }, [bookKey]);
 
   // serverResumeAnchor 확정 후 뷰어가 준비되면 해당 위치로 이동 (initialAnchor의 fallback)
@@ -159,6 +279,8 @@ const ViewerPage = () => {
   const previousGraphDataRef = useRef({ elements: [], eventIdx: 0, chapterIdx: 0 });
   const chapterEventDiscoveryRef = useRef(new Map());
   const retryTimeoutRef = useRef(null);
+  const fineAnchorFetchEpochRef = useRef(0);
+  const lastViewerGraphLoadLogRef = useRef('');
   
   const clearRetryTimeout = useCallback(() => {
     if (retryTimeoutRef.current) {
@@ -251,7 +373,7 @@ const ViewerPage = () => {
       toLocator(cached?.locator) ??
       null;
     const evNow = eventUtils.extractRawEventIdx(currentEvent);
-    const evCached = Number(cached?.eventIdx ?? cached?.eventNum ?? 0);
+    const evCached = Number(cached?.eventNum ?? 0);
     if (cachedStart && locatorsEqual(cachedStart, startL) && evNow === evCached) {
       return;
     }
@@ -269,8 +391,8 @@ const ViewerPage = () => {
       endLocator: endL ?? startL,
       locator: startL,
       chapterIdx: startL.chapterIndex,
-      eventIdx: eventUtils.normalizeEventIdx(currentEvent),
-      eventNum: currentEvent.eventNum ?? currentEvent.eventIdx ?? eventUtils.normalizeEventIdx(currentEvent),
+      eventIdx: Number(currentEvent.eventNum),
+      eventNum: Number(currentEvent.eventNum),
       eventId: currentEvent.event_id ?? currentEvent.eventId ?? currentEvent.id ?? null,
       eventName:
         currentEvent.event?.name ??
@@ -310,12 +432,12 @@ const ViewerPage = () => {
       }
 
       const sortedEvents = [...chapterPayload.events].sort(
-        (a, b) => (Number(a?.eventIdx) || 0) - (Number(b?.eventIdx) || 0)
+        (a, b) => (Number(a?.eventNum) || 0) - (Number(b?.eventNum) || 0)
       );
 
       const normalizedEvents = sortedEvents.reduce((acc, event) => {
-        const normalizedIdx = eventUtils.normalizeEventIdx(event) || 0;
-        if (!normalizedIdx) return acc;
+        const normalizedIdx = Number(event.eventNum);
+        if (!Number.isFinite(normalizedIdx) || normalizedIdx <= 0) return acc;
         const normalizedEvent = {
           ...event.event,
           chapter: targetChapter,
@@ -381,6 +503,7 @@ const ViewerPage = () => {
   useEffect(() => {
     initialGraphEventLoadedRef.current = false;
     apiCallRef.current = null;
+    lastViewerGraphLoadLogRef.current = '';
     setApiError(null);
   }, [book?.id]);
   
@@ -477,7 +600,8 @@ const ViewerPage = () => {
     let isMounted = true;
     
     const loadGraphData = async () => {
-        if (!book?.id || typeof book.id !== 'number' || !currentChapter) {
+        const numericBookId = getServerBookId(book);
+        if (!numericBookId || !currentChapter) {
           return;
         }
 
@@ -485,19 +609,25 @@ const ViewerPage = () => {
           return;
         }
 
-        const apiEventIdx = eventIdxUtils.calculateEventIdxForTransition(
+        let apiEventIdx = eventIdxUtils.calculateEventIdxForTransition(
             currentEvent,
             isChapterTransitionRef.current,
             forcedChapterEventIdxRef,
             chapterTransitionDirectionRef,
-            book.id,
+            numericBookId,
             currentChapter,
             getCachedChapterEvents,
             eventUtils
           );
+          if (!isChapterTransitionRef.current && currentEvent) {
+            const fromM = resolveViewerGraphEventFromManifest(currentEvent, numericBookId);
+            if (fromM.eventId && fromM.eventNum > 0 && fromM.manifestEvent) {
+              apiEventIdx = fromM.eventNum;
+            }
+          }
           const forcedIdx = Number(forcedChapterEventIdxRef.current);
           const hasForcedIdx = Number.isFinite(forcedIdx) && forcedIdx > 0;
-          const chapterCache = hasForcedIdx ? getCachedChapterEvents(book.id, currentChapter) : null;
+          const chapterCache = hasForcedIdx ? getCachedChapterEvents(numericBookId, currentChapter) : null;
           const forcedEvent = hasForcedIdx
             ? eventUtils.findEventInCache(chapterCache?.events, forcedIdx)
             : null;
@@ -511,7 +641,7 @@ const ViewerPage = () => {
               )
             : null;
           
-          const callKey = cacheKeyUtils.createEventKey(book.id, currentChapter, apiEventIdx);
+          const callKey = cacheKeyUtils.createEventKey(numericBookId, currentChapter, apiEventIdx);
           if (apiCallRef.current === callKey) {
             return;
           }
@@ -523,13 +653,13 @@ const ViewerPage = () => {
         apiCallRef.current = callKey;
 
         try {
-          if (!book?.id || !currentChapter || apiEventIdx < 1) {
+          if (!numericBookId || !currentChapter || apiEventIdx < 1) {
             clearGraphElements(0, currentChapter);
             updateLoadingState(true, false);
             return;
           }
           
-          const chapterEventApiKey = cacheKeyUtils.createEventKey(book.id, currentChapter, apiEventIdx);
+          const chapterEventApiKey = cacheKeyUtils.createEventKey(numericBookId, currentChapter, apiEventIdx);
           const hasCalledApiForEvent = initialGraphEventLoadedRef.current === chapterEventApiKey;
           
           if (!hasCalledApiForEvent) {
@@ -537,7 +667,7 @@ const ViewerPage = () => {
           }
 
           let { resultData, usedCache } = await graphDataCacheUtils.getGraphDataFromApiOrCache(
-            book.id,
+            numericBookId,
             currentChapter,
             apiEventIdx,
             getFineGraph,
@@ -559,9 +689,9 @@ const ViewerPage = () => {
           
           // 캐시 사용 시: elements가 있으면 그것을 사용, 없으면 relations+characters 확인
           // API 사용 시: relations+characters 확인
-          const hasGraphData = usedCache 
-            ? (hasCacheElements || (hasApiRelations && hasApiCharacters))
-            : (hasApiRelations && hasApiCharacters);
+          const hasGraphData = usedCache
+            ? hasCacheElements || (hasApiRelations && hasApiCharacters)
+            : hasApiRelations || hasApiCharacters;
           
           if (!hasGraphData) {
             clearGraphElements(apiEventIdx, currentChapter);
@@ -581,7 +711,7 @@ const ViewerPage = () => {
             ? await filterRelationsByTimeline({
                 relations: resultData.relations,
                 mode: "api",
-                bookId: book.id,
+                bookId: numericBookId,
                 chapterNum: currentChapter,
                 eventNum: apiEventIdx,
                 cacheRef: apiEventCacheRef,
@@ -606,9 +736,9 @@ const ViewerPage = () => {
                 return [emptyEvent];
               }
               const updated = prevEvents.map((evt) =>
-                (evt?.eventIdx ?? evt?.eventNum) === apiEventIdx ? { ...evt, ...emptyEvent } : evt
+                Number(evt?.eventNum) === apiEventIdx ? { ...evt, ...emptyEvent } : evt
               );
-              const exists = updated.some((evt) => (evt?.eventIdx ?? evt?.eventNum) === apiEventIdx);
+              const exists = updated.some((evt) => Number(evt?.eventNum) === apiEventIdx);
               if (!exists) {
                 updated.push(emptyEvent);
               }
@@ -630,7 +760,7 @@ const ViewerPage = () => {
           if (apiEventCacheRef.current) {
             apiEventCacheRef.current.set(cacheKey, resultData);
           }
-          
+
           const normalizedEvent = graphDataTransformUtils.normalizeApiEvent(resultData.event);
           
           const convertedElements = graphDataTransformUtils.convertToElements(
@@ -641,6 +771,47 @@ const ViewerPage = () => {
             buildNodeWeights,
             convertRelationsToElements
           );
+
+          if (import.meta.env.DEV && currentEvent && convertedElements.length > 0) {
+            const eventId = resolveFineGraphEventIdString(currentEvent);
+            if (eventId) {
+              const logKey = `${numericBookId}|${currentChapter}|${apiEventIdx}|${eventId}`;
+              if (logKey !== lastViewerGraphLoadLogRef.current) {
+                lastViewerGraphLoadLogRef.current = logKey;
+                const nodeEls = convertedElements.filter((e) => e?.data && !e.data.source);
+                const edgeEls = convertedElements.filter((e) => e?.data?.source);
+                const nodesPreview = nodeEls.slice(0, 12).map((e) => ({
+                  id: e.data.id,
+                  label: e.data.label ?? e.data.name ?? '',
+                }));
+                const edgesPreview = edgeEls.slice(0, 16).map((e) => ({
+                  id: e.data.id,
+                  source: e.data.source,
+                  target: e.data.target,
+                  label: e.data.label ?? '',
+                }));
+                const charPreview = (Array.isArray(resultData.characters) ? resultData.characters : [])
+                  .slice(0, 10)
+                  .map((c) => ({ id: c?.id, name: c?.name }));
+                console.log('[뷰어 그래프 로드]', {
+                  eventId,
+                  chapterIdx: currentChapter,
+                  apiEventIdx,
+                  source: usedCache ? 'cache' : 'api',
+                  nodeCount: nodeEls.length,
+                  edgeCount: edgeEls.length,
+                  charactersPreview: charPreview,
+                  relationsPreview: (filteredRelations || []).slice(0, 8).map((r) => ({
+                    source: r?.source,
+                    target: r?.target,
+                    relation: r?.relation ?? r?.label ?? r?.type,
+                  })),
+                  cytoscapeNodesPreview: nodesPreview,
+                  cytoscapeEdgesPreview: edgesPreview,
+                });
+              }
+            }
+          }
           
           const hasGraphPayload = Array.isArray(resultData?.relations) && resultData.relations.length > 0;
           const hasCharacterPayload = Array.isArray(resultData?.characters) && resultData.characters.length > 0;
@@ -703,7 +874,16 @@ const ViewerPage = () => {
                   return nextEventData;
                 }
 
-                return { ...prev, ...nextEventData };
+                const merged = { ...prev, ...nextEventData };
+                if (
+                  Object.prototype.hasOwnProperty.call(nextEventData, 'event') &&
+                  nextEventData.event == null &&
+                  prev?.event != null &&
+                  typeof prev.event === 'object'
+                ) {
+                  merged.event = prev.event;
+                }
+                return merged;
               });
 
               const appliedIdx = eventUtils.extractRawEventIdx(nextEventData);
@@ -716,11 +896,6 @@ const ViewerPage = () => {
               ) {
                 releaseForcedEventIdx();
               }
-            }
-            
-            // 변환된 elements가 있지만 원본 데이터가 비어있으면 elements 비우기
-            if (!resultData.relations?.length && !resultData.characters?.length && !usedCache) {
-              clearGraphElements(apiEventIdx, currentChapter);
             }
           } else {
             if (!usedCache || !Array.isArray(resultData.elements) || resultData.elements.length === 0) {
@@ -796,7 +971,7 @@ const ViewerPage = () => {
       isMounted = false;
     };
   }, [
-    book?.id,
+    book,
     currentChapter,
     manifestLoaded,
     currentEvent,
@@ -846,50 +1021,145 @@ const ViewerPage = () => {
     setCurrentChapter(chapter);
   }, [currentChapter, startChapterTransition, setCurrentEvent, setCurrentChapter]);
 
-  const handleCurrentLineChange = useCallback((charIndex, _totalEvents, receivedEvent) => {
-    setCurrentCharIndex(charIndex);
-    if (!receivedEvent) return;
+  const handleCurrentLineChange = useCallback(
+    async (charIndex, _totalEvents, receivedEvent) => {
+      setCurrentCharIndex(charIndex);
+      if (!receivedEvent) return;
 
-    const chapter =
-      receivedEvent.chapter ??
-      receivedEvent.anchor?.startLocator?.chapterIndex ??
-      receivedEvent.anchor?.start?.chapterIndex ??
-      null;
-    if (chapter && chapter !== currentChapter) {
-      setCurrentChapter(chapter);
-    }
+      const epoch = (fineAnchorFetchEpochRef.current += 1);
 
-    const forcedIdx = forcedChapterEventIdxRef.current;
-    const rawIdx = eventUtils.extractRawEventIdx(receivedEvent);
-    let shouldReleaseForced = false;
-    let nextEvent = receivedEvent;
-
-    if (Number.isFinite(forcedIdx)) {
-      if (rawIdx > 0 && rawIdx !== forcedIdx) {
-        shouldReleaseForced = true;
-      } else {
-        nextEvent = {
-          ...receivedEvent,
-          eventIdx: forcedIdx,
-          eventNum: forcedIdx,
-          event_id: forcedIdx,
-          resolvedEventIdx: forcedIdx,
-          originalEventIdx: rawIdx || forcedIdx,
-        };
-        shouldReleaseForced = true;
+      const chapter =
+        receivedEvent.chapter ??
+        receivedEvent.anchor?.startLocator?.chapterIndex ??
+        receivedEvent.anchor?.start?.chapterIndex ??
+        null;
+      if (chapter && chapter !== currentChapter) {
+        setCurrentChapter(chapter);
       }
-    }
 
-    const resolvedIdxForEvent = eventUtils.extractRawEventIdx(nextEvent);
-    if (!Number.isFinite(nextEvent.resolvedEventIdx) || nextEvent.resolvedEventIdx <= 0) {
-      nextEvent = {
-        ...nextEvent,
-        resolvedEventIdx: resolvedIdxForEvent > 0 ? resolvedIdxForEvent : undefined,
-      };
-    }
-    setCurrentEvent(nextEvent);
-    if (shouldReleaseForced) releaseForcedEventIdx();
-  }, [currentChapter, setCurrentChapter, setCurrentCharIndex, setCurrentEvent, releaseForcedEventIdx]);
+      const forcedIdx = forcedChapterEventIdxRef.current;
+      const rawIdx = eventUtils.extractRawEventIdx(receivedEvent);
+      let shouldReleaseForced = false;
+      let nextEvent = receivedEvent;
+
+      if (Number.isFinite(forcedIdx)) {
+        if (rawIdx > 0 && rawIdx !== forcedIdx) {
+          shouldReleaseForced = true;
+        } else {
+          nextEvent = {
+            ...receivedEvent,
+            eventIdx: forcedIdx,
+            eventNum: forcedIdx,
+            event_id: forcedIdx,
+            resolvedEventIdx: forcedIdx,
+            originalEventIdx: rawIdx || forcedIdx,
+          };
+          shouldReleaseForced = true;
+        }
+      }
+
+      const resolvedIdxForEvent = eventUtils.extractRawEventIdx(nextEvent);
+      if (!Number.isFinite(nextEvent.resolvedEventIdx) || nextEvent.resolvedEventIdx <= 0) {
+        nextEvent = {
+          ...nextEvent,
+          resolvedEventIdx: resolvedIdxForEvent > 0 ? resolvedIdxForEvent : undefined,
+        };
+      }
+
+      const bid =
+        getServerBookId(book) ??
+        (Number.isFinite(Number(cleanBookId)) && Number(cleanBookId) > 0
+          ? Number(cleanBookId)
+          : null);
+      const atLocator = toLocator(
+        nextEvent.anchor?.startLocator ?? nextEvent.anchor?.start
+      );
+      let fineApiMerged = false;
+      if (bid && atLocator && !pickFineGraphResultEvent(nextEvent)) {
+        try {
+          const res = await getFineGraph(bid, atLocator.chapterIndex, 1, atLocator);
+          if (fineAnchorFetchEpochRef.current !== epoch) return;
+          const ok = res && res.isSuccess !== false;
+          const payload = res?.result ?? res?.data ?? null;
+          if (ok) {
+            const { nextEvent: merged, merged: did } = mergeNextEventFromFineGraphPayload(
+              nextEvent,
+              payload,
+              {
+                chapterIdx: atLocator.chapterIndex,
+                startTxtOffset: atLocator.offset,
+                endTxtOffset: atLocator.offset,
+              }
+            );
+            if (did) {
+              nextEvent = merged;
+              fineApiMerged = true;
+            }
+          }
+        } catch (_e) {
+          void 0;
+        }
+      }
+
+      if (bid && !fineApiMerged) {
+        const fromM = resolveViewerGraphEventFromManifest(nextEvent, bid);
+        if (
+          fromM.chapterIdx >= 1 &&
+          fromM.eventNum > 0 &&
+          fromM.manifestEvent
+        ) {
+          try {
+            const res = await getFineGraph(bid, fromM.chapterIdx, fromM.eventNum, null);
+            if (fineAnchorFetchEpochRef.current !== epoch) return;
+            const ok = res && res.isSuccess !== false;
+            const payload = res?.result ?? res?.data ?? null;
+            if (ok) {
+              const { nextEvent: merged, merged: did } = mergeNextEventFromFineGraphPayload(
+                nextEvent,
+                payload,
+                { chapterIdx: fromM.chapterIdx }
+              );
+              if (did) {
+                nextEvent = merged;
+                fineApiMerged = true;
+              }
+            }
+          } catch (_e) {
+            void 0;
+          }
+        }
+      }
+
+      if (fineAnchorFetchEpochRef.current !== epoch) return;
+
+      setCurrentEvent(nextEvent);
+      setProgressTopBar((prev) => {
+        const base =
+          prev !== undefined && prev !== null && typeof prev === "object"
+            ? { ...prev }
+            : progressRowToTopBar(null);
+        const n = resolveDisplayedEventNum(nextEvent);
+        if (n > 0) base.eventNum = n;
+        const cp = Number(nextEvent.chapterProgress);
+        if (Number.isFinite(cp)) base.chapterProgress = Math.min(100, Math.max(0, cp));
+        const nm = nextEvent.name ?? nextEvent.event_name ?? nextEvent.eventTitle;
+        if (typeof nm === "string" && nm.trim()) base.eventName = nm.trim();
+        const pct = normalizeReadingProgressPercent(nextEvent);
+        if (pct != null) base.readingProgressPercent = pct;
+        return base;
+      });
+      if (shouldReleaseForced) releaseForcedEventIdx();
+    },
+    [
+      book,
+      cleanBookId,
+      currentChapter,
+      setCurrentChapter,
+      setCurrentCharIndex,
+      setCurrentEvent,
+      releaseForcedEventIdx,
+    ]
+  );
 
   const handleExitToMypage = useCallback(async () => {
     try {
@@ -917,11 +1187,21 @@ const ViewerPage = () => {
   }, [bookKey, viewerRef, exitToMypage]);
 
   // ─── GraphSplitArea 전달 props 메모이제이션 ──────────────────────────────────
-  const graphStateProp = useMemo(() => ({
-    ...graphState,
-    prevValidEvent: currentEvent?.chapter === currentChapter ? currentEvent : null,
-    events: _events,
-  }), [graphState, currentEvent, currentChapter, _events]);
+  const graphStateProp = useMemo(() => {
+    let prevValidEvent = null;
+    if (currentEvent) {
+      const evCh = currentEvent.chapter ?? currentEvent.chapterIdx;
+      if (evCh == null || Number(evCh) === Number(currentChapter)) {
+        prevValidEvent = currentEvent;
+      }
+    }
+    return {
+      ...graphState,
+      prevValidEvent,
+      events: _events,
+      progressTopBar,
+    };
+  }, [graphState, currentEvent, currentChapter, _events, progressTopBar]);
 
   const searchStateProp = useMemo(() => ({
     ...searchState,

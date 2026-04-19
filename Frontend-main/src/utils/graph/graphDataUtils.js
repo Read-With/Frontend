@@ -803,13 +803,17 @@ export async function filterRelationsByTimeline({
       return relations;
     }
 
-    return relations.filter((rel) => {
+    const filtered = relations.filter((rel) => {
       const key = getRelationKeyFromRelation(rel);
       if (!key) {
         return true;
       }
       return seenKeys.has(key);
     });
+    if (filtered.length === 0 && relations.length > 0) {
+      return relations;
+    }
+    return filtered;
   } catch (_error) {
     return relations;
   }

@@ -144,7 +144,7 @@ function GraphSplitArea({
     if (!Number.isFinite(cachedChapter) || cachedChapter < 1) {
       return false;
     }
-    const cachedEvent = Number(cachedLocation.eventIdx ?? cachedLocation.eventNum ?? 0);
+    const cachedEvent = Number(cachedLocation.eventNum ?? 0);
     return Number.isFinite(cachedEvent) && cachedEvent > 0;
   }, [cachedLocation]);
 
@@ -254,28 +254,30 @@ function GraphSplitArea({
             onButtonClick={() => window.location.reload()}
           />
         ) : (
-          <GraphContainer
-            ref={graphContainerRef}
-            currentPosition={graphState.currentCharIndex}
-            currentEvent={graphState.currentEvent}
-            currentChapter={graphState.currentChapter}
-            edgeLabelVisible={graphState.edgeLabelVisible}
-            filename={viewerState.filename}
-            elements={finalElements}
-            searchTerm={searchTermValue}
-            isSearchActive={isSearchActiveValue}
-            filteredElements={filteredElementsValue}
-            fitNodeIds={searchFitNodeIds}
-            isResetFromSearch={isResetFromSearchValue}
-            prevValidEvent={prevValidEventForGraph}
-            events={graphState.events || []}
-            activeTooltip={activeTooltip}
-            onClearTooltip={onClearTooltip}
-            onSetActiveTooltip={onSetActiveTooltip}
-            graphClearRef={graphClearRef}
-            isEventTransition={transitionState.type === 'event' && transitionState.inProgress}
-            bookId={book?.id ?? bookId}
-          />
+          <div className="h-full w-full relative" style={{ minHeight: 0, minWidth: 0 }}>
+            <GraphContainer
+              ref={graphContainerRef}
+              currentPosition={graphState.currentCharIndex}
+              currentEvent={graphState.currentEvent}
+              currentChapter={graphState.currentChapter}
+              edgeLabelVisible={graphState.edgeLabelVisible}
+              filename={viewerState.filename}
+              elements={finalElements}
+              searchTerm={searchTermValue}
+              isSearchActive={isSearchActiveValue}
+              filteredElements={filteredElementsValue}
+              fitNodeIds={searchFitNodeIds}
+              isResetFromSearch={isResetFromSearchValue}
+              prevValidEvent={prevValidEventForGraph}
+              events={graphState.events || []}
+              activeTooltip={activeTooltip}
+              onClearTooltip={onClearTooltip}
+              onSetActiveTooltip={onSetActiveTooltip}
+              graphClearRef={graphClearRef}
+              isEventTransition={transitionState.type === 'event' && transitionState.inProgress}
+              bookId={book?.id ?? bookId}
+            />
+          </div>
         )}
       </div>
     </div>

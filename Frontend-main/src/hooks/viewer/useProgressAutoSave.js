@@ -88,6 +88,10 @@ export function useProgressAutoSave({
     const { startLocator } = anchorToLocators(anchor);
     if (!startLocator) return;
 
+    const evn = Number(currentEvent?.eventNum);
+    const chp = Number(currentEvent?.chapterProgress);
+    const evName = currentEvent?.eventName ?? currentEvent?.eventTitle ?? currentEvent?.name;
+
     const payload = {
       bookId: bookKey,
       startLocator,
@@ -95,6 +99,9 @@ export function useProgressAutoSave({
       ...(Number.isFinite(Number(readingProgressPercent))
         ? { readingProgressPercent: Math.min(100, Math.max(0, Math.round(Number(readingProgressPercent)))) }
         : {}),
+      ...(Number.isFinite(evn) && evn > 0 ? { eventNum: evn } : {}),
+      ...(Number.isFinite(chp) ? { chapterProgress: Math.min(100, Math.max(0, chp)) } : {}),
+      ...(typeof evName === 'string' && evName.trim() ? { eventName: evName.trim() } : {}),
     };
     latestPayloadRef.current = payload;
 
@@ -112,7 +119,7 @@ export function useProgressAutoSave({
         timeoutRef.current = null;
       }
     };
-  }, [bookKey, currentChapter, readingLocatorKey, readingProgressPercent, delay]);
+  }, [bookKey, currentChapter, currentEvent, readingLocatorKey, readingProgressPercent, delay]);
 
   useEffect(() => {
     const handlePageHide = () => flushProgress();

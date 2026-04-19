@@ -1,3 +1,4 @@
+/** 뷰어·로컬 스토리지 보조. 챕터 이벤트 본문은 fine API 집계 캐시와 동일 스키마다. */
 import { loadFromStorage, saveToStorage } from '../common/cache/cacheManager';
 import { getCachedChapterEvents, getChapterEventFallbackData } from '../common/cache/chapterEventCache';
 import { eventUtils } from '../viewer/viewerUtils';

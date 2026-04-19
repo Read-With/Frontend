@@ -358,6 +358,7 @@ const XhtmlViewer = forwardRef(
         lastLocatorRef.current = loc;
         const { chapterIndex } = loc.startLocator;
         onCurrentChapterChange?.(chapterIndex);
+        // 이벤트 인덱스 없음(읽기 locator만). fine `result.event` 는 ViewerPage 그래프 로드 후 currentEvent에 합류.
         onCurrentLineChange?.(0, 0, { anchor: loc });
       },
       [onCurrentChapterChange, onCurrentLineChange]

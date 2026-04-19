@@ -39,17 +39,20 @@ const parseManifestJsonNumberArray = (value) => {
   }
 };
 
-/** chapters[].events[] — idx, eventId, startTxtOffset, endTxtOffset, rawText */
+/** chapters[].events[] — idx, eventNum, eventId, startTxtOffset, endTxtOffset, rawText */
 const normalizeEvent = (event) => {
   if (!event || typeof event !== 'object' || Array.isArray(event)) return null;
   const idx = toNumberOrNull(event.idx);
   if (idx == null || idx < 1) return null;
+  const apiNum = toNumberOrNull(event.eventNum);
+  const eventNum = apiNum != null && apiNum >= 1 ? apiNum : idx;
   const start = toNumberOrNull(event.startTxtOffset) ?? 0;
   const endRaw = toNumberOrNull(event.endTxtOffset);
   const end = endRaw != null && endRaw >= start ? endRaw : start;
   return {
     idx,
     eventIdx: idx,
+    eventNum,
     eventId: event.eventId != null ? String(event.eventId) : '',
     startTxtOffset: start,
     endTxtOffset: end,
@@ -201,6 +204,74 @@ const getEffectiveChapterLengthForProgress = (manifest, chapter) => {
   const fromTable = toNumberOrNull(entry?.length ?? entry?.codePointLength);
   if (fromTable != null && fromTable > 0) return fromTable;
   return lengthFromChapterBody(chapter);
+};
+
+/** 챕터 내부 코드포인트 오프셋 → v2 locator (paragraphStarts 우선, 없으면 고정 스텝 근사) */
+const chapterLocalOffsetToLocator = (chapter, local) => {
+  const chIdx = toNumberOrNull(chapter?.idx);
+  if (chIdx == null) return null;
+  const safeLocal = Math.max(0, Math.floor(Number(local)));
+
+  const starts = Array.isArray(chapter?.paragraphStarts) ? chapter.paragraphStarts : [];
+  const lengths = Array.isArray(chapter?.paragraphLengths) ? chapter.paragraphLengths : [];
+
+  if (starts.length > 0) {
+    let block = 0;
+    for (let i = 0; i < starts.length; i++) {
+      const s = toNumberOrNull(starts[i]) ?? 0;
+      if (s <= safeLocal) block = i;
+      else break;
+    }
+    const startInBlock = toNumberOrNull(starts[block]) ?? 0;
+    let offset = Math.max(0, safeLocal - startInBlock);
+    const len = toNumberOrNull(lengths[block]);
+    if (len != null && len > 0) {
+      offset = Math.min(offset, len);
+    }
+    return { chapterIndex: chIdx, blockIndex: block, offset };
+  }
+
+  const APPROX = 3000;
+  const blockIndex = Math.floor(safeLocal / APPROX);
+  const offset = safeLocal % APPROX;
+  return { chapterIndex: chIdx, blockIndex, offset };
+};
+
+/**
+ * GET /api/v2/progress 등에 locator 없이 startTxtOffset만 올 때,
+ * manifest의 챕터 길이 누적을 기준으로 도서 전체 기준 절대 코드포인트 위치를 v2 locator로 근사한다.
+ * (startTxtOffset이 챕터 상대값이면 서버에서 locator를 내려주는 편이 맞다.)
+ */
+export const locatorFromBookAbsoluteOffset = (bookId, absoluteOffset) => {
+  const manifest = getManifestFromCache(bookId);
+  const pos = toNumberOrNull(absoluteOffset);
+  if (!manifest?.chapters?.length || pos == null || pos < 0) return null;
+
+  const chapters = [...manifest.chapters]
+    .filter((ch) => toNumberOrNull(ch?.idx) != null && toNumberOrNull(ch.idx) >= 1)
+    .sort((a, b) => toNumberOrNull(a.idx) - toNumberOrNull(b.idx));
+
+  let cum = 0;
+  let lastChapterWithLen = null;
+  let lastLen = 0;
+
+  for (const ch of chapters) {
+    const L = getEffectiveChapterLengthForProgress(manifest, ch);
+    if (L <= 0) continue;
+    lastChapterWithLen = ch;
+    lastLen = L;
+    const end = cum + L;
+    if (pos < end) {
+      const local = Math.max(0, Math.min(pos - cum, L - 1));
+      return chapterLocalOffsetToLocator(ch, local);
+    }
+    cum = end;
+  }
+
+  if (lastChapterWithLen && lastLen > 0) {
+    return chapterLocalOffsetToLocator(lastChapterWithLen, lastLen - 1);
+  }
+  return null;
 };
 
 const normalizeManifestData = (manifestData) => {
@@ -393,7 +464,9 @@ export const isValidEvent = (bookId, chapterIdx, eventIdx, manifestOverride = un
   return chapterData.events.some(ev => toNumberOrNull(ev.idx) === targetEventIdx);
 };
 
-/** 세밀 그래프용: 해당 챕터 events[].idx 중 최댓값 (v2 manifest 이벤트) */
+/**
+ * v2 manifest 챕터의 이벤트 인덱스 상한(힌트). 그래프 본문은 GET /api/v2/graph/fine.
+ */
 export const getLastFineGraphEventIdxFromChapterData = (chapterData) => {
   if (!chapterData || typeof chapterData !== 'object') return null;
   if (!Array.isArray(chapterData.events) || chapterData.events.length === 0) {
@@ -401,6 +474,11 @@ export const getLastFineGraphEventIdxFromChapterData = (chapterData) => {
   }
   let maxIdx = -Infinity;
   for (const ev of chapterData.events) {
+    const num = toNumberOrNull(ev?.eventNum);
+    if (num != null && num >= 1) {
+      maxIdx = Math.max(maxIdx, num);
+      continue;
+    }
     const idx = toNumberOrNull(ev?.idx);
     if (idx != null && idx >= 1) maxIdx = Math.max(maxIdx, idx);
   }
@@ -408,8 +486,8 @@ export const getLastFineGraphEventIdxFromChapterData = (chapterData) => {
 };
 
 /**
- * getChapterData·isValidEvent와 동일한 챕터 해석(진도/그래프 API 공통).
- * manifestOverride가 있으면 캐시보다 우선.
+ * 매니페스트 기준 마지막 이벤트 인덱스( fine API 호출 시 eventIdx 상한 힌트로 사용 ).
+ * manifestOverride가 있으면 메모리 캐시보다 우선.
  */
 export const resolveLastEventIdxForFineGraph = (bookId, chapterIdx, manifestOverride = undefined) => {
   const chapterData = getChapterData(bookId, chapterIdx, manifestOverride);
@@ -558,6 +636,8 @@ export const findApiEventFromChars = async (bookId, chapterIdx, currentChars, ch
 
     normalized.eventIdx = idx;
     normalized.idx = idx;
+    const apiNum = toNumberOrNull(normalized.eventNum);
+    normalized.eventNum = apiNum != null && apiNum >= 1 ? apiNum : idx;
 
     if (!normalized.characters && Array.isArray(sourceEvent.characters)) {
       normalized.characters = sourceEvent.characters;

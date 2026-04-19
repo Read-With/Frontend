@@ -558,7 +558,8 @@ export const processTooltipData = (tooltipData, type) => {
 };
 
 /**
- * 챕터의 마지막 이벤트 번호를 계산합니다 (서버 매니페스트·캐시 기준).
+ * 챕터의 마지막 이벤트 인덱스(매니페스트 v2 events 기준 힌트).
+ * 실제 관계 데이터는 GET /api/v2/graph/fine 이 원천이며, 여기 값은 유효 범위·UI용이다.
  * @param {Object} options
  * @param {Array} options.manifestChapters - Manifest 챕터 목록
  * @param {number|null|undefined} options.manifestBookId - 서버 bookId
@@ -575,9 +576,9 @@ export const calculateLastEventForChapter = ({
       Array.isArray(manifestChapters) && manifestChapters.length > 0
         ? { chapters: manifestChapters }
         : undefined;
-    const fromCache = resolveLastEventIdxForFineGraph(manifestBookId, chapter, manifestHint);
-    if (fromCache != null) {
-      return fromCache;
+    const fromManifest = resolveLastEventIdxForFineGraph(manifestBookId, chapter, manifestHint);
+    if (fromManifest != null) {
+      return fromManifest;
     }
   }
 

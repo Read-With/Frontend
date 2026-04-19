@@ -133,7 +133,13 @@ const GraphContainer = forwardRef(({
       elements={finalElements}
       newNodeIds={newNodeIds}
       chapterNum={currentChapter}
-      eventNum={currentEvent ? Math.max(1, currentEvent.eventNum) : 1}
+      eventNum={(() => {
+        if (typeof currentEvent === 'number' && Number.isFinite(currentEvent) && currentEvent > 0) {
+          return currentEvent;
+        }
+        const n = Number(currentEvent?.eventNum);
+        return Number.isFinite(n) && n > 0 ? n : 1;
+      })()}
       edgeLabelVisible={edgeLabelVisible}
       filename={filename}
       bookId={bookId}

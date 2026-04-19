@@ -1,7 +1,25 @@
 import { registerCache, getCacheItem, setCacheItem, clearCache, removeCacheItem } from './cacheManager';
 import { progressPayloadFromData, progressResultToViewerAnchor, resolveProgressLocator } from '../locatorUtils';
+import { locatorFromBookAbsoluteOffset } from './manifestCache';
 
 export const PROGRESS_CACHE_UPDATED_EVENT = 'readwith:progress-cache-updated';
+
+/** locator 없이 startTxtOffset만 있을 때 manifest로 v2 locator 보강(캐시·GET 공통) */
+export const ensureProgressRowLocator = (bookIdStr, row) => {
+  if (!row || typeof row !== 'object') return row;
+  if (resolveProgressLocator(row)) return row;
+  const bid = row.bookId != null ? String(row.bookId) : String(bookIdStr ?? '');
+  const abs = Number(row.startTxtOffset);
+  if (!bid || !Number.isFinite(abs) || abs < 0) return row;
+  const loc = locatorFromBookAbsoluteOffset(bid, abs);
+  if (!loc) return row;
+  return {
+    ...row,
+    locator: loc,
+    startLocator: loc,
+    endLocator: loc,
+  };
+};
 
 /** useBooks 마이페이지 % 폴백과 동일 키 — 새로고침 후에도 유지 */
 const libraryProgressStorageKey = (bookIdStr) => `progress_${bookIdStr}`;
@@ -76,7 +94,7 @@ const dispatchProgressCacheUpdated = (bookId) => {
 const toStoredProgress = (item) => {
   if (!item || item.bookId == null) return null;
   const pct = normalizeReadingProgressPercent(item);
-  const locator = resolveProgressLocator(item);
+  const locator = resolveProgressLocator(ensureProgressRowLocator(String(item.bookId), item));
   if (locator) {
     const row = { bookId: item.bookId, locator };
     if (pct != null) row.readingProgressPercent = pct;
@@ -98,28 +116,35 @@ const toStoredProgress = (item) => {
 
 const fromStoredProgress = (stored) => {
   if (!stored || stored.bookId == null) return null;
-  const pct = normalizeReadingProgressPercent(stored);
-  const anchor = progressResultToViewerAnchor(stored);
+  const row = ensureProgressRowLocator(String(stored.bookId), stored);
+  const pct = normalizeReadingProgressPercent(row);
+  const anchor = progressResultToViewerAnchor(row);
   if (anchor) {
     const locator = anchor.startLocator;
+    const evn = Number(row.eventNum);
+    const chp = Number(row.chapterProgress);
+    const evName = row.eventName ?? row.eventTitle ?? row.name;
     return {
-      bookId: stored.bookId,
+      bookId: row.bookId,
       locator,
       startLocator: locator,
       endLocator: anchor.endLocator,
       anchor,
-      chapterIdx: locator.chapterIndex ?? stored.chapterIdx,
-      updatedAt: stored.updatedAt,
+      chapterIdx: locator.chapterIndex ?? row.chapterIdx,
+      updatedAt: row.updatedAt,
       ...(pct != null ? { readingProgressPercent: pct } : {}),
+      ...(Number.isFinite(evn) && evn > 0 ? { eventNum: evn } : {}),
+      ...(Number.isFinite(chp) ? { chapterProgress: Math.min(100, Math.max(0, chp)) } : {}),
+      ...(typeof evName === 'string' && evName.trim() ? { eventName: evName.trim() } : {}),
     };
   }
-  if (Number.isFinite(Number(stored.startTxtOffset))) {
+  if (Number.isFinite(Number(row.startTxtOffset))) {
     return {
-      bookId: stored.bookId,
-      startTxtOffset: stored.startTxtOffset,
-      endTxtOffset: stored.endTxtOffset,
-      locatorVersion: stored.locatorVersion,
-      updatedAt: stored.updatedAt,
+      bookId: row.bookId,
+      startTxtOffset: row.startTxtOffset,
+      endTxtOffset: row.endTxtOffset,
+      locatorVersion: row.locatorVersion,
+      updatedAt: row.updatedAt,
       ...(pct != null ? { readingProgressPercent: pct } : {}),
     };
   }
@@ -163,26 +188,33 @@ export const setAllProgress = (progressList) => {
 
 export const setProgressToCache = (progressData) => {
   if (!progressData || progressData.bookId == null) return;
-  const payload = progressPayloadFromData(progressData);
-  const locator = payload?.locator ?? resolveProgressLocator(progressData);
   const bookIdStr = String(progressData.bookId);
-  const pct = normalizeReadingProgressPercent(progressData);
+  const withLoc = ensureProgressRowLocator(bookIdStr, progressData);
+  const payload = progressPayloadFromData(withLoc);
+  const locator = payload?.locator ?? resolveProgressLocator(withLoc);
+  const pct = normalizeReadingProgressPercent(withLoc);
   let progress;
   if (locator) {
     progress = {
-      bookId: progressData.bookId,
+      bookId: withLoc.bookId,
       locator,
-      updatedAt: progressData.updatedAt,
+      updatedAt: withLoc.updatedAt,
       timestamp: Date.now(),
     };
     if (pct != null) progress.readingProgressPercent = pct;
-  } else if (Number.isFinite(Number(progressData.startTxtOffset))) {
+    const evn = Number(withLoc.eventNum);
+    if (Number.isFinite(evn) && evn > 0) progress.eventNum = evn;
+    const chp = Number(withLoc.chapterProgress);
+    if (Number.isFinite(chp)) progress.chapterProgress = Math.min(100, Math.max(0, chp));
+    const evName = withLoc.eventName ?? withLoc.eventTitle ?? withLoc.name;
+    if (typeof evName === 'string' && evName.trim()) progress.eventName = evName.trim();
+  } else if (Number.isFinite(Number(withLoc.startTxtOffset))) {
     progress = {
-      bookId: progressData.bookId,
-      startTxtOffset: Number(progressData.startTxtOffset),
-      endTxtOffset: Number(progressData.endTxtOffset) || 0,
-      locatorVersion: progressData.locatorVersion,
-      updatedAt: progressData.updatedAt,
+      bookId: withLoc.bookId,
+      startTxtOffset: Number(withLoc.startTxtOffset),
+      endTxtOffset: Number(withLoc.endTxtOffset) || 0,
+      locatorVersion: withLoc.locatorVersion,
+      updatedAt: withLoc.updatedAt,
       timestamp: Date.now(),
     };
     if (pct != null) progress.readingProgressPercent = pct;

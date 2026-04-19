@@ -183,21 +183,16 @@ function UnifiedEdgeTooltip({
     : false;
 
   const currentEventNumber = useMemo(() => {
-    const candidates = [
-      currentEvent?.eventNum,
-      currentEvent?.eventIdx,
-      eventNum
-    ];
-
-    for (const candidate of candidates) {
-      const parsed = Number(candidate);
-      if (Number.isFinite(parsed) && parsed > 0) {
-        return parsed;
-      }
+    const fromCurrent = Number(currentEvent?.eventNum);
+    if (Number.isFinite(fromCurrent) && fromCurrent > 0) {
+      return fromCurrent;
     }
-
+    const fromProp = Number(eventNum);
+    if (Number.isFinite(fromProp) && fromProp > 0) {
+      return fromProp;
+    }
     return 1;
-  }, [currentEvent?.eventNum, currentEvent?.eventIdx, eventNum]);
+  }, [currentEvent?.eventNum, eventNum]);
 
   const extractNumericLabel = useCallback((label) => {
     if (typeof label === 'number' && Number.isFinite(label)) {
@@ -299,7 +294,7 @@ function UnifiedEdgeTooltip({
   const activeEventHasPositivity = useMemo(() => {
     if (chartPairs.length === 0) return false;
     if (isGraphOnlyPage) return true;
-    const currentEventIdx = Number(currentEvent?.eventNum ?? currentEvent?.eventIdx ?? eventNum ?? 0);
+    const currentEventIdx = Number(currentEvent?.eventNum ?? eventNum ?? 0);
     if (!Number.isFinite(currentEventIdx) || currentEventIdx <= 0) {
       return chartPairs.length > 0;
     }

@@ -19,6 +19,10 @@ import { useBookmarks } from '../bookmarks/useBookmarks';
 import { getBookManifest } from '../../utils/api/api';
 import { getManifestFromCache, getMaxChapter } from '../../utils/common/cache/manifestCache';
 import { userViewerBookmarksPath } from '../../utils/navigation/viewerPaths';
+import {
+  pickReadingEvent,
+  resolveViewerGraphEventFromManifest,
+} from '../../utils/viewer/eventDisplayUtils';
 
 function runViewerPaging(viewerRef, direction) {
   const ref = viewerRef.current;
@@ -124,6 +128,7 @@ export function useViewerPage() {
   const [showToolbar, setShowToolbar] = useState(false);
   
   const prevValidEventRef = useRef(null);
+  const lastViewerEventDebugKeyRef = useRef('');
   const prevElementsRef = useRef([]);
   const prevChapterNumRef = useRef();
   const prevEventNumRef = useRef();
@@ -205,6 +210,45 @@ export function useViewerPage() {
     lastSyncedServerProgressRef.current = { bookKey: cleanBookId, value: p };
     setProgress(Math.min(100, Math.max(0, Math.round(p))));
   }, [cleanBookId, book?.progress, setProgress]);
+
+  useEffect(() => {
+    if (!import.meta.env.DEV) return;
+    const reading = pickReadingEvent(currentEvent, prevValidEventRef.current);
+    if (!reading) {
+      lastViewerEventDebugKeyRef.current = '';
+      return;
+    }
+    const manifestBid = Number(getServerBookId(book)) || Number(bookId);
+    const fromManifest =
+      manifestBid > 0
+        ? resolveViewerGraphEventFromManifest(reading, manifestBid)
+        : { eventId: '', manifestEvent: null };
+    if (!fromManifest.eventId) {
+      lastViewerEventDebugKeyRef.current = '';
+      return;
+    }
+    const key = `${bookId}|${fromManifest.eventId}`;
+    if (key === lastViewerEventDebugKeyRef.current) return;
+    lastViewerEventDebugKeyRef.current = key;
+    const me = fromManifest.manifestEvent;
+    const meta =
+      me && typeof me === 'object'
+        ? {
+            eventId: me.eventId,
+            idx: me.idx,
+            eventNum: me.eventNum ?? me.eventIdx,
+            startTxtOffset: me.startTxtOffset,
+            endTxtOffset: me.endTxtOffset,
+          }
+        : null;
+    console.log('[뷰어 이벤트 위치]', {
+      eventId: fromManifest.eventId,
+      matched: !!fromManifest.manifestEvent,
+      chapterIdx: fromManifest.chapterIdx || null,
+      eventNum: fromManifest.eventNum || null,
+      meta,
+    });
+  }, [bookId, currentEvent, book, getServerBookId]);
 
   // 그래프 데이터 로더에 서버 bookId 전달 (숫자인 경우만)
   const graphBookId = useMemo(() => {
@@ -400,9 +444,14 @@ export function useViewerPage() {
   
   // currentEvent가 변경될 때마다 eventNum 업데이트
   useEffect(() => {
-    if (currentEvent) {
-      setEventNum(currentEvent.event_id ?? 0);
+    if (!currentEvent) return;
+    const n = Number(currentEvent.eventNum);
+    if (Number.isFinite(n) && n > 0) {
+      setEventNum(n);
+      return;
     }
+    const idx = Number(currentEvent.eventIdx);
+    setEventNum(Number.isFinite(idx) && idx > 0 ? idx : 0);
   }, [currentEvent]);
   
   const handlePrevPage = useCallback(() => runViewerPaging(viewerRef, 'prev'), []);

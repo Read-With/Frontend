@@ -6,6 +6,7 @@ import {
   getProgressFromCache,
   getAllProgressFromCache,
   normalizeReadingProgressPercent,
+  ensureProgressRowLocator,
 } from '../common/cache/progressCache';
 import { progressPayloadFromData, resolveProgressLocator, toLocator } from '../common/locatorUtils';
 import { getApiBaseUrl, clearAuthData, getPostLoginHomeUrl } from '../common/authUtils';
@@ -397,7 +398,7 @@ export const getBookProgress = async (bookId, options = {}) => {
     };
   }
   
-  if (!skipCache) {
+    if (!skipCache) {
     const cachedProgress = getProgressFromCache(bookId);
     if (cachedProgress) {
       return {
@@ -413,21 +414,26 @@ export const getBookProgress = async (bookId, options = {}) => {
   try {
     const response = await apiRequest(`/api/v2/progress/${bookId}`);
     if (response?.isSuccess && response.result) {
+      const base = { ...response.result };
       const prev = getProgressFromCache(bookId);
-      const newLoc = resolveProgressLocator(response.result);
+      const newLoc = resolveProgressLocator(
+        ensureProgressRowLocator(String(bookId), base)
+      );
       const prevLoc = resolveProgressLocator(prev ?? {});
       const sameLoc =
         newLoc &&
         prevLoc &&
         JSON.stringify(newLoc) === JSON.stringify(prevLoc);
       const pct =
-        normalizeReadingProgressPercent(response.result) ??
+        normalizeReadingProgressPercent(base) ??
         (sameLoc ? normalizeReadingProgressPercent(prev ?? {}) : null);
       const row =
         pct != null
-          ? { ...response.result, readingProgressPercent: pct }
-          : response.result;
+          ? { ...base, readingProgressPercent: pct }
+          : base;
       setProgressToCache(row);
+      const hydrated = getProgressFromCache(bookId);
+      return { ...response, result: hydrated ?? row };
     }
     return response;
   } catch (error) {
@@ -549,7 +555,7 @@ export const getMacroGraph = async (bookId, uptoChapter = null, uptoLocator = nu
     const response = await apiRequest(`/api/v2/graph/macro?${queryParams.toString()}`);
     const payload = pickResponsePayload(response);
 
-    if (!response || !response.isSuccess) {
+    if (!response || response.isSuccess === false) {
       return createApiResponse(false, response?.code || 'ERROR', response?.message || '거시 그래프 조회에 실패했습니다.', {
         userCurrentChapter: 0,
         characters: [],
@@ -612,7 +618,7 @@ export const getFineGraph = async (bookId, chapterIdx, eventIdx, atLocator = nul
     const response = await apiRequest(`/api/v2/graph/fine?${queryParams.toString()}`);
     const payload = pickResponsePayload(response);
     
-    if (!response || !response.isSuccess) {
+    if (!response || response.isSuccess === false) {
       return createApiResponse(false, response?.code || 'ERROR', response?.message || '세밀 그래프 조회에 실패했습니다.', {
         characters: [],
         relations: [],

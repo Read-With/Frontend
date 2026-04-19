@@ -60,6 +60,7 @@ export const resolveProgressLocator = (data) => {
   const candidate =
     data.startLocator ??
     toLocator(data.locator) ??
+    toLocator(data) ??
     (a && (toLocator(a.startLocator) ?? toLocator(a.start) ?? toLocator(a)));
   if (candidate == null) return null;
   return toLocator(candidate) ?? candidate;

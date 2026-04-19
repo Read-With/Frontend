@@ -247,7 +247,7 @@ function RelationGraphWrapper() {
   useEffect(() => {
     const forced = Number(forcedChapterEventIdx);
     if (!Number.isFinite(forced) || forced < 1 || !apiFineData) return;
-    const applied = Number(apiFineData?.event?.event_id);
+    const applied = graphDataTransformUtils.normalizeApiEvent(apiFineData?.event)?.eventNum;
     if (Number.isFinite(applied) && applied === forced) {
       setForcedChapterEventIdx(null);
     }

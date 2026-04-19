@@ -1,15 +1,17 @@
 import React, { useCallback, useMemo } from 'react';
 import GraphControls from '../graph/GraphControls';
 import EdgeLabelToggle from '../graph/tooltip/EdgeLabelToggle';
-import { getCachedChapterEvents } from '../../utils/common/cache/chapterEventCache';
 import { getChapterData, getManifestFromCache } from '../../utils/common/cache/manifestCache';
 import {
   formatChapterBadgeFromTitle,
   formatChapterColonLine,
   stripRedundantBookTitlePrefix,
 } from '../../utils/viewer/chapterTitleDisplay';
-import { pickReadingEvent, viewerTopBarEventLabels } from '../../utils/viewer/eventDisplayUtils';
 import { GRAPH_CHARACTER_FILTER_STAGE_OPTIONS } from '../graph/graphConstants';
+import {
+  pickReadingEvent,
+  resolveViewerGraphEventFromManifest,
+} from '../../utils/viewer/eventDisplayUtils';
 
 // 공통 스타일 상수들
 const LOADING_STYLE = {
@@ -94,11 +96,9 @@ const ViewerTopBar = ({
     currentChapter,
     currentEvent,
     prevValidEvent,
-    prevEvent,
-    events,
     graphFullScreen,
     edgeLabelVisible,
-    loading: isGraphLoading,
+    progressTopBar,
   } = graphState;
   
   const {
@@ -125,10 +125,6 @@ const ViewerTopBar = ({
     handleKeyDown
   } = searchActions;
 
-  const [currentEventInfo, setCurrentEventInfo] = React.useState(null);
-  const [currentProgressWidth, setCurrentProgressWidth] = React.useState("0%");
-  const [hasInitialData, setHasInitialData] = React.useState(false);
-
   const bookId = useMemo(() => {
     const id = book?.id;
     const n = Number(id);
@@ -143,29 +139,12 @@ const ViewerTopBar = ({
   }, [book?.title, bookId]);
 
   const resolvedServerChapter = useMemo(() => {
-    const fromCurrentEvent = Number(currentEvent?.chapter ?? currentEvent?.chapterIdx ?? 0);
-    if (Number.isFinite(fromCurrentEvent) && fromCurrentEvent > 0) {
-      const serverChapter = getChapterData(bookId, fromCurrentEvent);
-      if (serverChapter) {
-        return Number(serverChapter.chapterIdx ?? serverChapter.idx ?? fromCurrentEvent);
-      }
-    }
-
-    const fromPrevEvent = Number(prevValidEvent?.chapter ?? prevValidEvent?.chapterIdx ?? 0);
-    if (Number.isFinite(fromPrevEvent) && fromPrevEvent > 0) {
-      const serverChapter = getChapterData(bookId, fromPrevEvent);
-      if (serverChapter) {
-        return Number(serverChapter.chapterIdx ?? serverChapter.idx ?? fromPrevEvent);
-      }
-    }
-
     const serverChapter = getChapterData(bookId, currentChapter);
     if (serverChapter) {
       return Number(serverChapter.chapterIdx ?? serverChapter.idx ?? currentChapter);
     }
-
     return Number(currentChapter) || 1;
-  }, [bookId, currentChapter, currentEvent?.chapter, currentEvent?.chapterIdx, prevValidEvent?.chapter, prevValidEvent?.chapterIdx]);
+  }, [bookId, currentChapter]);
 
   const chapterDisplayLabel = useMemo(() => {
     const idxStr = String(resolvedServerChapter ?? '').trim() || '—';
@@ -185,119 +164,19 @@ const ViewerTopBar = ({
     return t || undefined;
   }, [bookId, resolvedServerChapter]);
 
-  const getTotalEventsForChapter = useCallback((eventsList, chapter) => {
-    let totalEvents = 0;
-
-    if (Array.isArray(eventsList) && eventsList.length > 0) {
-      const maxFromEvents = eventsList.reduce((maxValue, evt) => {
-        const eventNumber = Number(evt?.eventIdx ?? evt?.eventNum ?? evt?.idx ?? evt?.id ?? 0);
-        return Number.isFinite(eventNumber) ? Math.max(maxValue, eventNumber) : maxValue;
-      }, 0);
-      totalEvents = Math.max(totalEvents, maxFromEvents);
-      totalEvents = Math.max(totalEvents, eventsList.length);
+  const currentProgressWidth = useMemo(() => {
+    if (progressTopBar === undefined) return "0%";
+    const cp = progressTopBar.chapterProgress;
+    if (cp != null && Number.isFinite(cp)) {
+      return `${Math.min(100, Math.max(0, Math.round(cp * 100) / 100))}%`;
     }
-
-    if (bookId) {
-      const cached = getCachedChapterEvents(bookId, chapter);
-      if (cached) {
-        if (Number.isFinite(cached.maxEventIdx)) {
-          totalEvents = Math.max(totalEvents, cached.maxEventIdx);
-        }
-        if (Array.isArray(cached.events) && cached.events.length > 0) {
-          const maxCached = cached.events.reduce((maxValue, evt) => {
-            const eventNumber = Number(evt?.eventIdx ?? evt?.idx ?? evt?.eventNum ?? evt?.id ?? 0);
-            return Number.isFinite(eventNumber) ? Math.max(maxValue, eventNumber) : maxValue;
-          }, 0);
-          totalEvents = Math.max(totalEvents, maxCached);
-          totalEvents = Math.max(totalEvents, cached.events.length);
-        }
-      }
-
-      const manifestChapter = getChapterData(bookId, chapter);
-      if (manifestChapter?.events && manifestChapter.events.length > 0) {
-        const maxManifest = manifestChapter.events.reduce((maxValue, evt) => {
-          const eventNumber = Number(evt?.eventIdx ?? evt?.idx ?? evt?.eventNum ?? evt?.id ?? 0);
-          return Number.isFinite(eventNumber) ? Math.max(maxValue, eventNumber) : maxValue;
-        }, 0);
-        totalEvents = Math.max(totalEvents, maxManifest);
-        totalEvents = Math.max(totalEvents, manifestChapter.events.length);
-      }
+    const rp = progressTopBar.readingProgressPercent;
+    if (rp != null && Number.isFinite(rp)) {
+      return `${Math.min(100, Math.max(0, Math.round(rp * 100) / 100))}%`;
     }
+    return "0%";
+  }, [progressTopBar]);
 
-    if (!Number.isFinite(totalEvents) || totalEvents <= 0) {
-      totalEvents = 0;
-    }
-
-    return totalEvents;
-  }, [bookId]);
-
-  const calculateProgress = useCallback((eventToShow, events, currentChapter) => {
-    // 1. chapterProgress가 있는 경우 (가장 정확한 방법)
-    if (eventToShow.chapterProgress !== undefined) {
-      return Math.min(eventToShow.chapterProgress, 100);
-    }
-    
-    // 2. events 배열이 있는 경우
-    if (events && events.length > 0) {
-      const currentEventIndex = events.findIndex(e => e.eventNum === eventToShow.eventNum);
-      
-      if (currentEventIndex >= 0) {
-        const isLastEvent = currentEventIndex === events.length - 1;
-        return isLastEvent ? 100 : (currentEventIndex / (events.length - 1)) * 100;
-      }
-    }
-    
-    // 3. eventNum만 있는 경우
-    if (eventToShow.eventNum !== undefined) {
-      const eventNumber = Number(eventToShow.eventNum ?? eventToShow.eventIdx ?? 0);
-      const totalEvents = getTotalEventsForChapter(events, currentChapter);
-
-      if (!Number.isFinite(eventNumber) || eventNumber <= 0) {
-        return 0;
-      }
-
-      if (!Number.isFinite(totalEvents) || totalEvents <= 0) {
-        return Math.min(eventNumber * 100, 100);
-      }
-
-      const adjustedTotal = Math.max(totalEvents, eventNumber, 1);
-
-      if (adjustedTotal <= 1) {
-        return eventNumber >= adjustedTotal ? 100 : 0;
-      }
-
-      const clampedEventNumber = Math.min(eventNumber, adjustedTotal);
-      const progressRatio = (clampedEventNumber - 1) / (adjustedTotal - 1);
-      return Math.min(Math.max(progressRatio * 100, 0), 100);
-    }
-    
-    return 0;
-  }, [getTotalEventsForChapter]);
-  
-  React.useEffect(() => {
-    const eventToShow = pickReadingEvent(currentEvent, prevValidEvent);
-    
-    if (eventToShow) {
-      if (eventToShow.chapter && eventToShow.chapter !== currentChapter) {
-        return;
-      }
-      
-      const eventInfo = viewerTopBarEventLabels(eventToShow);
-      setCurrentEventInfo(eventInfo);
-      
-      if (!hasInitialData) {
-        setHasInitialData(true);
-      }
-      
-      const progressPercentage = calculateProgress(eventToShow, events, resolvedServerChapter);
-      const progressWidth = `${Math.round(progressPercentage * 100) / 100}%`;
-      setCurrentProgressWidth(progressWidth);
-    } else if (!hasInitialData) {
-      setCurrentEventInfo(null);
-      setCurrentProgressWidth("0%");
-    }
-  }, [currentEvent, prevValidEvent, events, resolvedServerChapter, calculateProgress, hasInitialData]);
-  
   React.useEffect(() => {
     const handleChapterChange = (event) => {
       if (event.detail && event.detail.chapter !== currentChapter) {
@@ -312,10 +191,6 @@ const ViewerTopBar = ({
     };
   }, [currentChapter, setCurrentChapter]);
   
-  React.useEffect(() => {
-    setHasInitialData(false);
-  }, [currentChapter]);
-  
   // 제안 생성을 위한 별도 함수 (실제 검색은 실행하지 않음)
   const handleGenerateSuggestions = useCallback((searchTerm) => {
     // onGenerateSuggestions prop을 사용하여 제안 생성
@@ -325,9 +200,7 @@ const ViewerTopBar = ({
   }, [onGenerateSuggestions]);
 
   const ChapterEventInfo = useMemo(() => {
-    const shouldShowLoading = isGraphLoading && !hasInitialData;
-    
-    if (shouldShowLoading) {
+    if (progressTopBar === undefined && bookId) {
       return (
         <span style={LOADING_STYLE}>
           로딩중...
@@ -335,15 +208,21 @@ const ViewerTopBar = ({
       );
     }
 
-    const displayEventInfo = currentEventInfo || (hasInitialData ? { eventNum: 0, name: "" } : null);
-    
-    if (!displayEventInfo) {
-      return (
-        <span style={LOADING_STYLE}>
-          로딩중...
-        </span>
-      );
-    }
+    const row = progressTopBar ?? {
+      eventNum: null,
+      chapterProgress: null,
+      readingProgressPercent: null,
+      eventName: "",
+    };
+
+    const reading = pickReadingEvent(currentEvent, prevValidEvent);
+    const panel =
+      bookId != null
+        ? resolveViewerGraphEventFromManifest(reading, bookId)
+        : { title: '', eventNum: 0, eventId: '' };
+    const eventDisplay = panel.eventNum > 0 ? String(panel.eventNum) : "—";
+    const eventTitle = panel.eventId || undefined;
+    const eventNameLabel = panel.title || "";
 
     return (
       <>
@@ -359,29 +238,16 @@ const ViewerTopBar = ({
             gap: 12,
           }}
         >
-          <span
-            style={{
-              ...EVENT_NUMBER_STYLE,
-              transform:
-                prevEvent &&
-                (currentEvent || prevValidEvent) &&
-                prevEvent.eventNum !== (currentEvent || prevValidEvent).eventNum
-                  ? "scale(1.12)"
-                  : "scale(1)",
-            }}
-          >
-            Event {displayEventInfo.eventNum}
+          <span style={EVENT_NUMBER_STYLE} title={eventTitle}>
+            Event {eventDisplay}
           </span>
-          
-          {displayEventInfo.name && (
-            <span
-              style={EVENT_NAME_STYLE}
-              title={displayEventInfo.name}
-            >
-              {displayEventInfo.name}
+
+          {eventNameLabel ? (
+            <span style={EVENT_NAME_STYLE} title={eventNameLabel}>
+              {eventNameLabel}
             </span>
-          )}
-          
+          ) : null}
+
           <div style={PROGRESS_BAR_CONTAINER_STYLE}>
             <div
               style={{
@@ -394,15 +260,13 @@ const ViewerTopBar = ({
       </>
     );
   }, [
-    isGraphLoading,
-    currentEventInfo,
+    progressTopBar,
+    bookId,
     chapterDisplayLabel,
     chapterTitleTooltip,
     currentProgressWidth,
-    prevEvent,
     currentEvent,
     prevValidEvent,
-    hasInitialData,
   ]);
 
   const renderGraphControls = useCallback(() => (
