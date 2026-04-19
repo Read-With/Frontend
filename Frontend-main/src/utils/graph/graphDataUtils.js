@@ -407,7 +407,7 @@ export function calcGraphDiff(prevElements, currElements) {
 }
 
 /**
- * 3단계 필터링 로직 (RelationGraphWrapper와 ViewerPage에서 공통 사용)
+ * 3단계 필터링 로직 (RelationGraphWrapper, GraphSplitArea 등에서 공통 사용)
  * @param {Array} elements - 그래프 요소 배열
  * @param {number} filterStage - 필터링 단계 (0: 전체, 1: 핵심인물만, 2: 핵심인물과 연결된 인물)
  * @returns {Array} 필터링된 요소 배열

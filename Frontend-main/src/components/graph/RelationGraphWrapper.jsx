@@ -15,21 +15,20 @@ import { useGraphDataLoader } from '../../hooks/graph/useGraphDataLoader.js';
 import { useApiGraphData } from '../../hooks/graph/useApiGraphData.js';
 import { useGraphState } from '../../hooks/graph/useGraphState.js';
 import { useLocalStorageNumber } from '../../hooks/common/useLocalStorage.js';
-import { convertRelationsToElements, filterMainCharacters } from '../../utils/graph/graphDataUtils';
+import { convertRelationsToElements } from '../../utils/graph/graphDataUtils';
 import { createCharacterMaps, buildNodeWeights } from '../../utils/graph/characterUtils';
 import {
   processTooltipData,
   calculateLastEventForChapter,
   isSidebarElement,
   isDragEndEvent,
-  sortElementsById,
   calculateNodeCount,
   calculateRelationCount,
-  determineFinalElements
 } from '../../utils/graph/graphUtils.js';
 import { eventUtils, graphDataTransformUtils, getServerBookId } from '../../utils/viewer/viewerUtils';
 import { userViewerPath } from '../../utils/navigation/viewerPaths';
 import useGraphInteractions from "../../hooks/graph/useGraphInteractions";
+import { useGraphElementPipeline } from "../../hooks/graph/useGraphElementPipeline";
 import { useChapterPovSummaries } from '../../hooks/viewer/useChapterPovSummaries';
 import {
   getChapterData,
@@ -450,13 +449,12 @@ function RelationGraphWrapper() {
     }
   }, [currentEvent, clearAll]);
 
-  const sortedElements = useMemo(() => {
-    return sortElementsById(elements);
-  }, [elements]);
-
-  const filteredMainCharacters = useMemo(() => {
-    return filterMainCharacters(elements, filterStage);
-  }, [elements, filterStage]);
+  const { sortedElements, filteredMainCharacters, finalElements } = useGraphElementPipeline({
+    elements,
+    filterStage,
+    isSearchActive,
+    filteredElements,
+  });
 
   const nodeCount = useMemo(() => {
     return calculateNodeCount(elements, filterStage, filteredMainCharacters);
@@ -465,10 +463,6 @@ function RelationGraphWrapper() {
   const relationCount = useMemo(() => {
     return calculateRelationCount(elements, filterStage, filteredMainCharacters, eventUtils);
   }, [filterStage, filteredMainCharacters, elements]);
-
-  const finalElements = useMemo(() => {
-    return determineFinalElements(isSearchActive, filteredElements, sortedElements, filterStage, filteredMainCharacters);
-  }, [isSearchActive, filteredElements, sortedElements, filterStage, filteredMainCharacters]);
 
   const edgeStyle = getEdgeStyleForGraph();
   const stylesheet = useMemo(

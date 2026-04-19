@@ -46,6 +46,54 @@ export const anchorToLocators = (anchor) => {
   };
 };
 
+/**
+ * 뷰어 getCurrentLocator 등에서 온 래퍼를 그래프 placeholder용 anchor로 직렬화.
+ * 원본에 startLocator 키가 있으면 { startLocator, endLocator }, 없으면 { start, end }.
+ */
+export const toEventAnchorPayload = (anchor) => {
+  const { startLocator, endLocator } = anchorToLocators(anchor);
+  if (!startLocator) return null;
+  if (anchor?.startLocator) return { startLocator, endLocator };
+  return { start: startLocator, end: endLocator };
+};
+
+/**
+ * 그래프 분할 패널 로딩 게이트: 서버 재진입 resume 앵커에 유효 챕터 힌트가 있는지.
+ * (resolveProgressLocator와 달리 엄격한 toLocator 정규화 없이 기존 뷰어와 동일 조건만 사용)
+ */
+export function graphPanelHasResumeLocationHint(resumeAnchor) {
+  const loc = resumeAnchor?.startLocator ?? resumeAnchor?.start;
+  if (!loc) return false;
+  const ch = Number(loc.chapterIndex ?? loc.chapterIdx);
+  return Number.isFinite(ch) && ch >= 1;
+}
+
+/**
+ * 그래프 분할 패널 로딩 게이트: 캐시 진행 payload에 locator 또는 chapterIdx+eventNum 힌트가 있는지.
+ */
+export function graphPanelHasCachedLocationHint(cachedLocation) {
+  const loc =
+    cachedLocation?.startLocator ??
+    cachedLocation?.locator ??
+    cachedLocation?.anchor?.startLocator ??
+    cachedLocation?.anchor?.start;
+  if (loc && typeof loc === 'object') {
+    const ch = Number(loc.chapterIndex ?? loc.chapterIdx);
+    if (Number.isFinite(ch) && ch >= 1) {
+      return true;
+    }
+  }
+  if (!cachedLocation) {
+    return false;
+  }
+  const cachedChapter = Number(cachedLocation.chapterIdx);
+  if (!Number.isFinite(cachedChapter) || cachedChapter < 1) {
+    return false;
+  }
+  const cachedEvent = Number(cachedLocation.eventNum ?? 0);
+  return Number.isFinite(cachedEvent) && cachedEvent > 0;
+}
+
 /** GET /api/v2/graph/* — 이벤트의 anchor에서 읽기 위치 locator 추출 */
 export const readingLocatorFromGraphEvent = (currentEvent) => {
   if (!currentEvent?.anchor) return null;

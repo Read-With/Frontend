@@ -26,9 +26,9 @@ function resolveEventIdx(currentEvent) {
  *   - useGraphDataLoader로 데이터를 직접 패칭
  *   - useGraphSearch로 검색 상태를 자체 관리
  *
- * [외부 모드] elements prop이 있을 때 (ViewerPage):
- *   - 상위 컴포넌트에서 데이터와 검색 상태를 모두 주입
- *   - 데이터 로더와 내부 검색 훅을 비활성화
+ * [외부 모드] elements prop이 있을 때 (GraphSplitArea → Viewer 분할):
+ *   - 상위에서 검색·필터까지 반영한 최종 그래프 배열을 elements로 전달해야 함
+ *   - 데이터 로더와 내부 검색 훅은 비활성화되며, elements를 다시 병합하지 않음(이중 규칙 방지)
  */
 const GraphContainer = forwardRef(({
   currentPosition: _currentPosition,
@@ -114,11 +114,14 @@ const GraphContainer = forwardRef(({
   }, [externalFitNodeIds, internalFitNodeIds, effectiveIsSearchActive, effectiveFilteredElements]);
 
   const finalElements = useMemo(() => {
+    if (isExternalMode) {
+      return elements;
+    }
     if (effectiveIsSearchActive && effectiveFilteredElements?.length > 0) {
       return effectiveFilteredElements;
     }
     return elements;
-  }, [effectiveIsSearchActive, effectiveFilteredElements, elements]);
+  }, [isExternalMode, effectiveIsSearchActive, effectiveFilteredElements, elements]);
 
   // ─── 명령형 인터페이스 ─────────────────────────────────────────────────
   // ref를 통해 검색 동작만 노출합니다.

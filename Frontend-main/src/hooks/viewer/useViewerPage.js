@@ -23,6 +23,7 @@ import {
   pickReadingEvent,
   resolveViewerGraphEventFromManifest,
 } from '../../utils/viewer/eventDisplayUtils';
+import { anchorToLocators, toEventAnchorPayload } from '../../utils/common/locatorUtils';
 
 function runViewerPaging(viewerRef, direction) {
   const ref = viewerRef.current;
@@ -43,20 +44,6 @@ function runViewerPaging(viewerRef, direction) {
 }
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-
-const getAnchorLocators = (anchor) => {
-  const startLocator = anchor?.startLocator ?? anchor?.start ?? null;
-  if (!startLocator) return { startLocator: null, endLocator: null };
-  const endLocator = anchor?.endLocator ?? anchor?.end ?? startLocator;
-  return { startLocator, endLocator };
-};
-
-const toAnchorPayload = (anchor) => {
-  const { startLocator, endLocator } = getAnchorLocators(anchor);
-  if (!startLocator) return null;
-  if (anchor?.startLocator) return { startLocator, endLocator };
-  return { start: startLocator, end: endLocator };
-};
 
 export function useViewerPage() {
   const { filename: bookId } = useParams();
@@ -568,9 +555,9 @@ export function useViewerPage() {
     if (!viewerRef.current) return;
     try {
       const loc = await viewerRef.current.getCurrentLocator?.();
-      const { startLocator: start } = getAnchorLocators(loc);
+      const { startLocator: start } = anchorToLocators(loc);
       if (start) {
-        const anchor = toAnchorPayload(loc);
+        const anchor = toEventAnchorPayload(loc);
         setCurrentChapter(start.chapterIndex);
         setCurrentEvent({
           anchor,
