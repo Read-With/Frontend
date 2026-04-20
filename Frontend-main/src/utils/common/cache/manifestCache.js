@@ -1,4 +1,5 @@
 import { toNumberOrNull, toOneBasedChapterIndexOrNull } from '../numberUtils';
+import { toLocator } from '../locatorUtils';
 import { 
   registerCache, 
   getCacheItem, 
@@ -238,6 +239,111 @@ const chapterLocalOffsetToLocator = (chapter, local) => {
 };
 
 /**
+ * v2 locator(blockIndex·offset)를 챕터 rawText 기준 로컬 코드포인트 위치로 환산한다.
+ * paragraphStarts가 있으면 서버 분할과 동일 축을 쓰고, 없으면 chapterLocalOffsetToLocator와 동일한 APPROX 근사.
+ */
+export const chapterLocalCodePointFromLocator = (chapter, locator) => {
+  if (!chapter || typeof chapter !== 'object' || !locator) return 0;
+  const block = Math.max(0, Math.floor(Number(locator.blockIndex) || 0));
+  const off = Math.max(0, Math.floor(Number(locator.offset) || 0));
+  const starts = Array.isArray(chapter.paragraphStarts) ? chapter.paragraphStarts : [];
+  const lengths = Array.isArray(chapter.paragraphLengths) ? chapter.paragraphLengths : [];
+  const total = toNumberOrNull(chapter.totalCodePoints);
+
+  if (starts.length > 0) {
+    const lastIdx = starts.length - 1;
+    if (block > lastIdx) {
+      const lastStart = toNumberOrNull(starts[lastIdx]) ?? 0;
+      const lastLen = toNumberOrNull(lengths[lastIdx]);
+      const endExclusive = lastLen != null && lastLen > 0 ? lastStart + lastLen : lastStart + 1;
+      const capped = Math.max(0, endExclusive - 1);
+      const cap = Number.isFinite(total) && total > 0 ? Math.min(capped, total - 1) : capped;
+      return cap;
+    }
+    const startInBlock = toNumberOrNull(starts[block]) ?? 0;
+    let chapterLocal = startInBlock + off;
+    if (Number.isFinite(total) && total > 0) {
+      chapterLocal = Math.min(chapterLocal, Math.max(0, total - 1));
+    }
+    return Math.max(0, chapterLocal);
+  }
+
+  const APPROX = 3000;
+  let chapterLocal = block * APPROX + off;
+  if (Number.isFinite(total) && total > 0) {
+    chapterLocal = Math.min(chapterLocal, Math.max(0, total - 1));
+  }
+  return Math.max(0, chapterLocal);
+};
+
+const pickManifestEventForChapterLocalOffset = (events, local) => {
+  if (!Array.isArray(events) || events.length === 0) return null;
+  const L = Number.isFinite(local) ? Math.max(0, Math.floor(local)) : 0;
+  const sorted = [...events].sort(
+    (a, b) => (toNumberOrNull(a.startTxtOffset) ?? 0) - (toNumberOrNull(b.startTxtOffset) ?? 0)
+  );
+  for (const ev of sorted) {
+    const s = toNumberOrNull(ev.startTxtOffset) ?? 0;
+    const eRaw = toNumberOrNull(ev.endTxtOffset);
+    const e = eRaw != null && eRaw > s ? eRaw : s + 1;
+    if (L >= s && L < e) return ev;
+  }
+  const first = sorted[0];
+  const firstStart = toNumberOrNull(first.startTxtOffset) ?? 0;
+  if (L < firstStart) return first;
+  return sorted[sorted.length - 1];
+};
+
+/**
+ * GET /api/v2/graph/fine — locator만으로 호출 시 blockIndex 불일치(400)를 피하기 위해
+ * 매니페스트 이벤트 구간(startTxtOffset/endTxtOffset)으로 eventIdx를 정하고 locator는 제거한다.
+ * 강제 이벤트로 eventIdx만 쓰는 경우는 api.getFineGraph의 fineOpts.useCallerEventIdxOnly로 처리.
+ */
+export const resolveFineGraphLocatorToEventParams = (
+  bookId,
+  atLocator,
+  eventIdxFallback = 1,
+  manifestOverride = undefined
+) => {
+  const loc = toLocator(atLocator);
+  if (!loc) {
+    return {
+      chapterIdx: undefined,
+      eventIdx: Math.max(1, Number(eventIdxFallback) || 1),
+      atLocator: null,
+      resolved: false,
+    };
+  }
+
+  const chapterData = getChapterData(bookId, loc.chapterIndex, manifestOverride);
+  const events = chapterData?.events;
+  if (!Array.isArray(events) || events.length === 0) {
+    return {
+      chapterIdx: loc.chapterIndex,
+      eventIdx: Math.max(1, Number(eventIdxFallback) || 1),
+      atLocator: loc,
+      resolved: false,
+    };
+  }
+
+  const local = chapterLocalCodePointFromLocator(chapterData, loc);
+  const picked = pickManifestEventForChapterLocalOffset(events, local);
+  const raw =
+    toNumberOrNull(picked?.eventNum) ??
+    toNumberOrNull(picked?.idx) ??
+    toNumberOrNull(picked?.eventIdx) ??
+    toNumberOrNull(eventIdxFallback);
+  const eventIdx = Number.isFinite(raw) && raw >= 1 ? raw : Math.max(1, Number(eventIdxFallback) || 1);
+
+  return {
+    chapterIdx: loc.chapterIndex,
+    eventIdx,
+    atLocator: null,
+    resolved: true,
+  };
+};
+
+/**
  * GET /api/v2/progress 등에 locator 없이 startTxtOffset만 올 때,
  * manifest의 챕터 길이 누적을 기준으로 도서 전체 기준 절대 코드포인트 위치를 v2 locator로 근사한다.
  * (startTxtOffset이 챕터 상대값이면 서버에서 locator를 내려주는 편이 맞다.)
@@ -447,6 +553,19 @@ export const getChapterData = (bookId, chapterIdx, manifestOverride = undefined)
   return getChapterDataFromManifest(manifest, chapterIdx);
 };
 
+/** POST progress — 서버 blockIndex 검증에 맞게 paragraphStarts 축으로 재매핑 */
+export const normalizeLocatorForServerProgress = (bookId, locator, manifestOverride = undefined) => {
+  const loc = toLocator(locator);
+  if (!loc) return null;
+  const chapter = getChapterData(bookId, loc.chapterIndex, manifestOverride);
+  if (!chapter) return loc;
+  const starts = Array.isArray(chapter.paragraphStarts) ? chapter.paragraphStarts : [];
+  if (starts.length === 0) return loc;
+  const local = chapterLocalCodePointFromLocator(chapter, loc);
+  const out = chapterLocalOffsetToLocator(chapter, local);
+  return out ?? loc;
+};
+
 export const getEventData = (bookId, chapterIdx, eventIdx, manifestOverride = undefined) => {
   const chapterData = getChapterData(bookId, chapterIdx, manifestOverride);
   if (!chapterData || !chapterData.events) return null;
@@ -538,6 +657,7 @@ export const getChapterLength = (bookId, chapterIdx) => {
   return toNumberOrNull(row?.length) ?? 0;
 };
 
+/** 챕터 내 읽기 위치(퍼센트 등). locator→챕터 로컬 오프셋은 chapterLocalCodePointFromLocator와 동일 축. */
 export const calculateApiChapterProgressFromLocator = (bookId, startLocator, chapterIdx) => {
   const manifest = getManifestFromCache(bookId);
   if (!manifest?.chapters) {
@@ -584,9 +704,9 @@ export const calculateApiChapterProgressFromLocator = (bookId, startLocator, cha
   if (!startLocator || Number(startLocator.chapterIndex) !== targetChapterIdx) {
     return { currentChars: 0, totalChars, progress: 0, chapterStartPos };
   }
-  const b = Number(startLocator.blockIndex) || 0;
-  const o = Number(startLocator.offset) || 0;
-  const chapterCurrentChars = totalChars > 0 ? Math.min(b * 3000 + o, totalChars) : b * 3000 + o;
+  const rawLocal = chapterLocalCodePointFromLocator(chapterData, startLocator);
+  const chapterCurrentChars =
+    totalChars > 0 ? Math.min(rawLocal, Math.max(0, totalChars - 1)) : rawLocal;
   const progress = totalChars > 0 ? (chapterCurrentChars / totalChars) * 100 : 0;
   return {
     currentChars: chapterCurrentChars,

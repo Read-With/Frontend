@@ -126,6 +126,20 @@ export function formatChapterColonLine(value) {
 }
 
 /**
+ * 뷰어 상단바: 1부터 시작하는 챕터 순서 + 챕터 이름.
+ * @param {string|number} orderOneBased
+ * @param {string} chapterTitle 표시용 제목(이미 정리된 문자열 권장)
+ * @returns {string}
+ */
+export function formatChapterOrderAndName(orderOneBased, chapterTitle) {
+  const ord = Number(orderOneBased);
+  const o = Number.isFinite(ord) && ord >= 1 ? String(Math.trunc(ord)) : '—';
+  const name = collapseWhitespace(String(chapterTitle ?? '').trim());
+  if (!name) return `chapter ${o}`;
+  return `chapter ${o} : ${name}`;
+}
+
+/**
  * 서재·그래프 전체화면 목차 등: 접두어 없이 숫자만(제목에서 뽑은 아라비아/로마, 없으면 챕터 인덱스).
  * @param {string} part formatChapterBadgeFromTitle 결과 또는 idxStr
  * @param {string} idxStr 챕터 인덱스 문자열

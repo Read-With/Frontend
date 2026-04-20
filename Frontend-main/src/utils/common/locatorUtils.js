@@ -129,7 +129,7 @@ export const viewerResumeAnchorKey = (anchor) => {
   return JSON.stringify(loc);
 };
 
-/** POST /api/v2/progress — GET 응답과 동일 계열 필드(locatorVersion, endLocator, 숫자 bookId) 맞춤 */
+/** POST /api/v2/progress 본문 및 캐시 병합용 — bookId, startLocator, endLocator, locator, locatorVersion */
 export const progressPayloadFromData = (data) => {
   if (data?.bookId == null || data.bookId === '') return null;
   const locator = resolveProgressLocator(data);

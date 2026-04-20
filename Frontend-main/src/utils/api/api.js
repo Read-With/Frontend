@@ -1,4 +1,9 @@
-import { setManifestData, getManifestFromCache } from '../common/cache/manifestCache';
+import {
+  setManifestData,
+  getManifestFromCache,
+  resolveFineGraphLocatorToEventParams,
+  normalizeLocatorForServerProgress,
+} from '../common/cache/manifestCache';
 import {
   setAllProgress,
   setProgressToCache,
@@ -15,7 +20,6 @@ import { isTokenValid, refreshToken, ensureSessionAccessToken } from './authApi'
 
 const API_BASE_URL = getApiBaseUrl();
 
-// 통합된 API 응답 타입 정의
 const createApiResponse = (isSuccess, code, message, result, type = 'default') => {
   const baseResponse = {
     isSuccess,
@@ -24,7 +28,6 @@ const createApiResponse = (isSuccess, code, message, result, type = 'default') =
     result
   };
 
-  // GET /api/v2/graph/macro — userCurrentChapter + characters + relations
   if (type === 'graph-macro') {
     const safe = result ?? {};
     baseResponse.result = {
@@ -36,7 +39,6 @@ const createApiResponse = (isSuccess, code, message, result, type = 'default') =
     return baseResponse;
   }
 
-  // GET /api/v2/graph/fine — characters + relations + event (locator 등)
   if (type === 'graph-fine') {
     const safe = result ?? {};
     baseResponse.result = {
@@ -80,12 +82,9 @@ const pickResponsePayload = (response) => {
   return null;
 };
 
-// 통합된 에러 처리 함수
 const handleApiError = (error, context) => {
   const errorMessage = error.message || '알 수 없는 오류';
   const statusCode = error.status || 'unknown';
-  
-  // HTTP 상태 코드별 에러 메시지
   const statusMessages = {
     400: '잘못된 요청입니다',
     401: '인증이 필요합니다',
@@ -235,7 +234,6 @@ const apiRequest = async (url, options = {}, retryCount = 0) => {
   return data;
 };
 
-/** GET/POST /api/v2/books 응답 DTO → UI용 favorite 필드 */
 export const normalizeV2Book = (book) => {
   if (!book || typeof book !== 'object') return book;
   return {
@@ -244,7 +242,6 @@ export const normalizeV2Book = (book) => {
   };
 };
 
-// 도서 목록 조회 (GET /api/v2/books)
 export const getBooks = async (params = {}) => {
   const queryParams = new URLSearchParams();
 
@@ -348,9 +345,26 @@ export const getAllProgress = async (options = {}) => {
   }
 };
 
+const withLocatorsNormalizedForProgressSave = (progressData) => {
+  if (!progressData?.bookId) return progressData;
+  const bid = String(progressData.bookId);
+  const loc = resolveProgressLocator(progressData);
+  if (!loc) return progressData;
+  const normStart = normalizeLocatorForServerProgress(bid, loc);
+  if (!normStart) return progressData;
+  let normEnd = normStart;
+  if (progressData.endLocator != null || progressData.end != null) {
+    const endRaw = toLocator(progressData.endLocator ?? progressData.end);
+    if (endRaw) {
+      normEnd = normalizeLocatorForServerProgress(bid, endRaw) ?? normStart;
+    }
+  }
+  return { ...progressData, startLocator: normStart, locator: normStart, endLocator: normEnd };
+};
+
 export const saveProgress = async (progressData) => {
   try {
-    const payload = progressPayloadFromData(progressData);
+    const payload = progressPayloadFromData(withLocatorsNormalizedForProgressSave(progressData));
     if (!payload) {
       throw new Error('bookId와 읽기 위치(startLocator/locator)는 필수입니다.');
     }
@@ -397,8 +411,8 @@ export const getBookProgress = async (bookId, options = {}) => {
       result: null
     };
   }
-  
-    if (!skipCache) {
+
+  if (!skipCache) {
     const cachedProgress = getProgressFromCache(bookId);
     if (cachedProgress) {
       return {
@@ -529,11 +543,6 @@ export const getBookManifest = async (bookId, { forceRefresh = false } = {}) => 
   }
 };
 
-/**
- * GET /api/v2/graph/macro
- * @param uptoChapter 누적 챕터 상한 (생략 시 전체 반환)
- * @param uptoLocator { chapterIndex, blockIndex?, offset? } — 있으면 chapter 대신 전송
- */
 export const getMacroGraph = async (bookId, uptoChapter = null, uptoLocator = null) => {
   if (!bookId) {
     throw new Error('bookId는 필수 매개변수입니다.');
@@ -580,21 +589,31 @@ export const getMacroGraph = async (bookId, uptoChapter = null, uptoLocator = nu
   }
 };
 
-/**
- * GET /api/v2/graph/fine
- * @param atLocator { chapterIndex, blockIndex?, offset? } — 있으면 chapterIdx/eventIdx 대신 전송
- */
-export const getFineGraph = async (bookId, chapterIdx, eventIdx, atLocator = null) => {
+export const getFineGraph = async (bookId, chapterIdx, eventIdx, atLocator = null, fineOpts = undefined) => {
   if (!bookId) {
     throw new Error('bookId는 필수 매개변수입니다.');
   }
 
-  const loc = toLocator(atLocator);
+  let loc = fineOpts?.useCallerEventIdxOnly ? null : toLocator(atLocator);
+  let fineChapterIdx = chapterIdx;
+  let fineEventIdx = eventIdx;
+
+  if (loc) {
+    const resolution = resolveFineGraphLocatorToEventParams(bookId, atLocator, eventIdx);
+    fineChapterIdx = resolution.chapterIdx ?? chapterIdx;
+    if (resolution.resolved) {
+      loc = null;
+      fineEventIdx = resolution.eventIdx;
+    } else if (resolution.atLocator) {
+      loc = toLocator(resolution.atLocator) ?? loc;
+    }
+  }
+
   if (!loc) {
-    if (chapterIdx === undefined || chapterIdx === null || eventIdx === undefined || eventIdx === null) {
+    if (fineChapterIdx === undefined || fineChapterIdx === null || fineEventIdx === undefined || fineEventIdx === null) {
       throw new Error('chapterIdx·eventIdx 또는 locator(chapterIndex, blockIndex, offset)는 필수입니다.');
     }
-    if (eventIdx < 1) {
+    if (fineEventIdx < 1) {
       return createApiResponse(false, 'INVALID_EVENT', '이벤트 인덱스는 1 이상이어야 합니다.', {
         characters: [],
         relations: [],
@@ -610,8 +629,8 @@ export const getFineGraph = async (bookId, chapterIdx, eventIdx, atLocator = nul
     queryParams.append('blockIndex', String(loc.blockIndex));
     queryParams.append('offset', String(loc.offset));
   } else {
-    queryParams.append('chapterIdx', String(chapterIdx));
-    queryParams.append('eventIdx', String(eventIdx));
+    queryParams.append('chapterIdx', String(fineChapterIdx));
+    queryParams.append('eventIdx', String(fineEventIdx));
   }
   
   try {

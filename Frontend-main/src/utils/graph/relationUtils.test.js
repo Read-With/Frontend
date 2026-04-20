@@ -7,6 +7,7 @@ import {
   processRelations,
   createRelationKey,
   getRelationKeyFromRelation,
+  relationEventMetaPassthrough,
 } from './relationUtils.js';
 
 describe('relationUtils', () => {
@@ -31,6 +32,7 @@ describe('relationUtils', () => {
   it('isSamePair', () => {
     expect(isSamePair({ id1: 1, id2: 2 }, 2, 1)).toBe(true);
     expect(isSamePair({ id1: 1, id2: 2 }, 1, 3)).toBe(false);
+    expect(isSamePair({ source: '5', target: 6 }, 6, 5)).toBe(true);
   });
 
   it('processRelations', () => {
@@ -45,5 +47,16 @@ describe('relationUtils', () => {
   it('createRelationKey / getRelationKeyFromRelation', () => {
     expect(createRelationKey(2, 1)).toBe('1-2');
     expect(getRelationKeyFromRelation({ source: '3', target: 4 })).toBe('3-4');
+  });
+
+  it('relationEventMetaPassthrough / processRelations keeps event ids', () => {
+    expect(relationEventMetaPassthrough({ id1: 1, id2: 2 })).toEqual({});
+    expect(
+      relationEventMetaPassthrough({ eventNum: 5, event: { eventIdx: 9 } })
+    ).toMatchObject({ eventNum: 5, eventIdx: 9 });
+    const out = processRelations([
+      { id1: 1, id2: 2, relation: ['x'], positivity: 0.2, eventNum: 3 },
+    ]);
+    expect(out[0]).toMatchObject({ id1: 1, id2: 2, eventNum: 3 });
   });
 });

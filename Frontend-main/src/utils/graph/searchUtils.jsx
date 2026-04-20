@@ -323,7 +323,7 @@ export function filterGraphElements(elements, searchTerm, currentChapterData = n
     if (edge?.data?.id !== undefined) {
       uniqueEdges.set(String(edge.data.id), edge);
     } else {
-      uniqueEdges.set(`${edge.data.source}-${edge.data.target}`, edge);
+      uniqueEdges.set(`${edge.data.source}->${edge.data.target}`, edge);
     }
   });
   

@@ -1,10 +1,9 @@
-import React, { useCallback, useMemo } from 'react';
+import React, { useCallback, useMemo, memo } from 'react';
 import GraphControls from '../graph/GraphControls';
 import EdgeLabelToggle from '../graph/tooltip/EdgeLabelToggle';
 import { getChapterData, getManifestFromCache } from '../../utils/common/cache/manifestCache';
 import {
-  formatChapterBadgeFromTitle,
-  formatChapterColonLine,
+  formatChapterOrderAndName,
   stripRedundantBookTitlePrefix,
 } from '../../utils/viewer/chapterTitleDisplay';
 import { GRAPH_CHARACTER_FILTER_STAGE_OPTIONS } from '../graph/graphConstants';
@@ -13,7 +12,6 @@ import {
   resolveViewerGraphEventFromManifest,
 } from '../../utils/viewer/eventDisplayUtils';
 
-// 공통 스타일 상수들
 const LOADING_STYLE = {
   display: "inline-block",
   padding: "4px 16px",
@@ -82,13 +80,13 @@ const PROGRESS_BAR_FILL_STYLE = {
   transition: "width 0.4s cubic-bezier(.4,2,.6,1)",
 };
 
-const ViewerTopBar = ({
+const ViewerTopBar = memo(function ViewerTopBar({
   graphState,
   graphActions,
   viewerState,
   searchState,
   searchActions,
-}) => {
+}) {
 
   const { filename, book } = viewerState;
   
@@ -147,15 +145,10 @@ const ViewerTopBar = ({
   }, [bookId, currentChapter]);
 
   const chapterDisplayLabel = useMemo(() => {
-    const idxStr = String(resolvedServerChapter ?? '').trim() || '—';
-    if (!bookId) {
-      return formatChapterColonLine(idxStr);
-    }
-    const ch = getChapterData(bookId, resolvedServerChapter);
+    const ch = bookId ? getChapterData(bookId, resolvedServerChapter) : null;
     const t = String(ch?.title ?? '').trim();
-    const tForBadge = t ? stripRedundantBookTitlePrefix(t, stripBookTitle) : '';
-    const part = tForBadge ? formatChapterBadgeFromTitle(tForBadge) : idxStr;
-    return formatChapterColonLine(part);
+    const displayName = t ? stripRedundantBookTitlePrefix(t, stripBookTitle) : '';
+    return formatChapterOrderAndName(resolvedServerChapter, displayName);
   }, [bookId, resolvedServerChapter, stripBookTitle]);
 
   const chapterTitleTooltip = useMemo(() => {
@@ -191,9 +184,7 @@ const ViewerTopBar = ({
     };
   }, [currentChapter, setCurrentChapter]);
   
-  // 제안 생성을 위한 별도 함수 (실제 검색은 실행하지 않음)
   const handleGenerateSuggestions = useCallback((searchTerm) => {
-    // onGenerateSuggestions prop을 사용하여 제안 생성
     if (onGenerateSuggestions) {
       onGenerateSuggestions(searchTerm);
     }
@@ -299,7 +290,6 @@ const ViewerTopBar = ({
         onToggle={() => setEdgeLabelVisible(!edgeLabelVisible)}
       />
       
-      {/* 3단계 필터링 드롭다운 */}
       <select
         value={filterStage}
         onChange={(e) => setFilterStage(Number(e.target.value))}
@@ -335,7 +325,6 @@ const ViewerTopBar = ({
   
   return (
     <>
-      {/* 상단바 1: 전체화면 모드일 때 모든 기능이 통합된 상단바 */}
       <div
         style={{
           height: 44,
@@ -349,11 +338,10 @@ const ViewerTopBar = ({
           paddingLeft: 12,
           paddingRight: 12,
           paddingTop: 0,
-          justifyContent: "space-between", // space-between 유지
-          borderBottom: graphFullScreen ? "1px solid #e3e6ef" : "none", // 전체화면일 때만 하단 테두리
+          justifyContent: "space-between",
+          borderBottom: graphFullScreen ? "1px solid #e3e6ef" : "none",
         }}
       >
-        {/* 왼쪽 영역: < 버튼 + 초기화 (분할화면일 때) */}
         <div
           style={{
             display: "flex",
@@ -363,14 +351,11 @@ const ViewerTopBar = ({
             marginRight: 36,
           }}
         >
-          {/* < 전체화면 버튼 */}
           <button
             onClick={() => {
               if (graphFullScreen) {
-                // 그래프 전체화면 -> 분할 화면으로 전환
                 graphActions.setGraphFullScreen(false);
               } else {
-                // 분할 화면 -> 그래프 전체화면으로 전환
                 graphActions.setGraphFullScreen(true);
               }
             }}
@@ -397,11 +382,9 @@ const ViewerTopBar = ({
             {graphFullScreen ? ">" : "<"}
           </button>
 
-          {/* 인물 검색 기능 */}
           {renderGraphControls()}
         </div>
 
-        {/* 중앙 영역: 챕터 + 이벤트 정보 (전체화면일 때만) */}
         {graphFullScreen && (
           <div
             style={{
@@ -415,11 +398,9 @@ const ViewerTopBar = ({
           </div>
         )}
 
-        {/* 오른쪽 영역: 토글 버튼 */}
         {renderToggleButtons()}
       </div>
       
-      {/* 상단바 2: 챕터 + 이벤트 정보 (분할화면일 때만) */}
       {!graphFullScreen && (
         <div
           style={{
@@ -443,6 +424,6 @@ const ViewerTopBar = ({
       )}
     </>
   );
-};
+});
 
 export default ViewerTopBar;

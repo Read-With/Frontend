@@ -1,6 +1,6 @@
 import { registerCache, getCacheItem, setCacheItem, clearCache, removeCacheItem } from './cacheManager';
 import { progressPayloadFromData, progressResultToViewerAnchor, resolveProgressLocator } from '../locatorUtils';
-import { locatorFromBookAbsoluteOffset } from './manifestCache';
+import { locatorFromBookAbsoluteOffset, normalizeLocatorForServerProgress } from './manifestCache';
 
 export const PROGRESS_CACHE_UPDATED_EVENT = 'readwith:progress-cache-updated';
 
@@ -189,7 +189,14 @@ export const setAllProgress = (progressList) => {
 export const setProgressToCache = (progressData) => {
   if (!progressData || progressData.bookId == null) return;
   const bookIdStr = String(progressData.bookId);
-  const withLoc = ensureProgressRowLocator(bookIdStr, progressData);
+  let withLoc = ensureProgressRowLocator(bookIdStr, progressData);
+  const locBefore = resolveProgressLocator(withLoc);
+  if (locBefore) {
+    const norm = normalizeLocatorForServerProgress(bookIdStr, locBefore);
+    if (norm) {
+      withLoc = { ...withLoc, startLocator: norm, locator: norm, endLocator: norm };
+    }
+  }
   const payload = progressPayloadFromData(withLoc);
   const locator = payload?.locator ?? resolveProgressLocator(withLoc);
   const pct = normalizeReadingProgressPercent(withLoc);

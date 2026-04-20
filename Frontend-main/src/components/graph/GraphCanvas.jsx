@@ -6,7 +6,6 @@ import GraphInfoBar from './GraphInfoBar';
 import { graphStyles, COLORS, ANIMATION_VALUES } from '../../utils/styles/styles.js';
 import { GRAPH_LAYOUT_CONSTANTS } from './graphConstants.js';
 
-// ─── 로딩 오버레이 ─────────────────────────────────────────────────────────────
 function GraphLoadingOverlay() {
   return (
     <div
@@ -29,26 +28,6 @@ function GraphLoadingOverlay() {
   );
 }
 
-// ─── GraphCanvas ───────────────────────────────────────────────────────────────
-/**
- * Props 구조
- *
- * 개별 props:
- *   isSidebarOpen, activeTooltip, cyRef
- *   chapterNum, eventNum, maxChapter, filename
- *   elements        — 사이드바 표시용 원본 데이터
- *   renderElements  — Cytoscape 렌더링용 최종 데이터 (검색/필터 적용)
- *   povSummaries, apiMacroData, apiFineData, bookId
- *   isLoading, hasShownGraphOnce, onCanvasClick
- *   currentChapter, currentEvent, userCurrentChapter
- *   nodeCount, relationCount, filterStage
- *
- * 그룹 props:
- *   sidebarControl  — 사이드바 열기/닫기 동작
- *   searchState     — 검색 관련 상태
- *   cytoscapeConfig — Cytoscape 설정값
- *   tooltipHandlers — 툴팁 콜백 및 선택 ref
- */
 function GraphCanvas({
   isSidebarOpen,
   activeTooltip,
@@ -74,7 +53,6 @@ function GraphCanvas({
   nodeCount,
   relationCount,
   filterStage,
-  // ─── 그룹 props ──────────────────────────────────────────
   sidebarControl,
   searchState,
   cytoscapeConfig,
@@ -185,7 +163,6 @@ function GraphCanvas({
               selectedEdgeIdRef={selectedEdgeIdRef}
               strictBackgroundClear={true}
               isResetFromSearch={isResetFromSearch}
-              showRippleEffect={true}
               isDropdownSelection={isDropdownSelection}
               isDataRefreshing={isLoading}
               currentChapter={currentChapter}
@@ -197,9 +174,7 @@ function GraphCanvas({
   );
 }
 
-// ─── PropTypes ─────────────────────────────────────────────────────────────────
 GraphCanvas.propTypes = {
-  // 개별 props
   isSidebarOpen: PropTypes.bool.isRequired,
   activeTooltip: PropTypes.object,
   cyRef: PropTypes.object.isRequired,
@@ -225,7 +200,6 @@ GraphCanvas.propTypes = {
   relationCount: PropTypes.number.isRequired,
   filterStage: PropTypes.number.isRequired,
 
-  // 그룹 props
   sidebarControl: PropTypes.shape({
     isSidebarClosing: PropTypes.bool.isRequired,
     onCloseSidebar: PropTypes.func.isRequired,

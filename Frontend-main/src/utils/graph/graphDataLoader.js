@@ -50,6 +50,15 @@ const hasGraphPayload = (data) => {
   return chars > 0 || rels > 0;
 };
 
+/** `loadGraphDataWithCache` 매크로 분기와 동일 키·조건의 동기 조회(로딩 스피너 지연용) */
+export const hasMacroGraphStorageCache = (bookId, chapter) => {
+  const b = Number(bookId);
+  const ch = Number(chapter);
+  if (!Number.isFinite(b) || b < 1 || !Number.isFinite(ch) || ch < 1) return false;
+  const cacheKey = `graph_macro_${b}_upto_${ch}`;
+  return hasGraphPayload(checkLocalStorageCache(cacheKey));
+};
+
 const handleSuccess = (data, onSuccess, cacheKey) => {
   if (cacheKey && hasGraphPayload(data)) {
     saveToLocalStorageCache(cacheKey, data);

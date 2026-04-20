@@ -3,6 +3,7 @@ import {
   logout as apiLogout,
   refreshToken,
   isTokenExpiringSoon,
+  getProactiveRefreshBufferSeconds,
   isTokenValid,
   ensureSessionAccessToken,
 } from '../../utils/api/authApi';
@@ -36,7 +37,7 @@ const useAuth = () => {
     const checkAndRefreshToken = async () => {
       try {
         const token = getStoredAccessToken();
-        if (token && isTokenExpiringSoon(token, 15 * 60)) {
+        if (token && isTokenExpiringSoon(token, getProactiveRefreshBufferSeconds(token))) {
           await refreshToken();
         }
       } catch (error) {
@@ -44,7 +45,8 @@ const useAuth = () => {
       }
     };
 
-    tokenRefreshIntervalRef.current = setInterval(checkAndRefreshToken, 10 * 60 * 1000);
+    void checkAndRefreshToken();
+    tokenRefreshIntervalRef.current = setInterval(checkAndRefreshToken, 45 * 1000);
 
     return () => {
       if (tokenRefreshIntervalRef.current) {

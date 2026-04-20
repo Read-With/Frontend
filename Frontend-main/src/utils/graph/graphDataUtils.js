@@ -1,4 +1,157 @@
 import { getCharacterImagePath, extractCharacterId } from './characterUtils';
+import { normalizeRelation, isValidRelation, directedEdgeElementId } from './relationUtils';
+
+function undirectedPairKey(s, t) {
+  const a = String(s);
+  const b = String(t);
+  return a < b ? `${a}\x1e${b}` : `${b}\x1e${a}`;
+}
+
+function mergeEdgeLabels(a, b) {
+  const t1 = String(a ?? '').trim();
+  const t2 = String(b ?? '').trim();
+  if (!t2 || t2 === t1) return t1;
+  if (!t1) return t2;
+  return `${t1} / ${t2}`;
+}
+
+function mergePositivity(a, b) {
+  const n1 = Number(a);
+  const n2 = Number(b);
+  const f1 = Number.isFinite(n1);
+  const f2 = Number.isFinite(n2);
+  if (f1 && f2) return (n1 + n2) / 2;
+  if (f1) return n1;
+  if (f2) return n2;
+  return undefined;
+}
+
+function normalizedRelationTagKey(data) {
+  const rel = data?.relation;
+  const arr = Array.isArray(rel) ? rel.map((x) => String(x)) : [];
+  arr.sort();
+  return arr.join('\x1e');
+}
+
+function positivityToken(data) {
+  const n = Number(data?.positivity);
+  return Number.isFinite(n) ? n : null;
+}
+
+/** 역방향 두 간선의 관계(태그·positivity)가 동일한지 — 동일하면 `-` 한 줄로 합침 */
+function relationPayloadEquivalent(d0, d1) {
+  if (normalizedRelationTagKey(d0) !== normalizedRelationTagKey(d1)) {
+    return false;
+  }
+  const p0 = positivityToken(d0);
+  const p1 = positivityToken(d1);
+  if (p0 === null && p1 === null) return true;
+  if (p0 === null || p1 === null) return false;
+  return p0 === p1;
+}
+
+/**
+ * 단방향: id `a->b`, 화살표.
+ * 역방향 쌍 + 관계 동일: id `a-b`, bidirectional(직선 `-`).
+ * 역방향 쌍 + 관계 다름: 두 간선 유지, `reciprocalPair`로 같은 직선 위 `-><-` 겹침.
+ */
+function finalizeDirectedEdges(edgeMap) {
+  const list = Array.from(edgeMap.values());
+  const buckets = new Map();
+  for (const el of list) {
+    const uk = undirectedPairKey(el.data.source, el.data.target);
+    if (!buckets.has(uk)) buckets.set(uk, []);
+    buckets.get(uk).push(el);
+  }
+
+  const out = [];
+  for (const [, group] of buckets) {
+    if (group.length === 1) {
+      const d = { ...group[0].data };
+      delete d.bidirectional;
+      out.push({ data: d });
+      continue;
+    }
+    if (group.length !== 2) {
+      for (const el of group) {
+        const d = { ...el.data };
+        delete d.bidirectional;
+        out.push({ data: d });
+      }
+      continue;
+    }
+    const e0 = group[0];
+    const e1 = group[1];
+    const s0 = e0.data.source;
+    const t0 = e0.data.target;
+    const s1 = e1.data.source;
+    const t1 = e1.data.target;
+    if (s0 === t1 && t0 === s1) {
+      if (relationPayloadEquivalent(e0.data, e1.data)) {
+        const [a, b] = String(s0) <= String(t0) ? [s0, t0] : [t0, s0];
+        const r0 = Array.isArray(e0.data.relation) ? e0.data.relation : [];
+        const r1 = Array.isArray(e1.data.relation) ? e1.data.relation : [];
+        const pos = mergePositivity(e0.data.positivity, e1.data.positivity);
+        const baseData = {
+          id: `${a}-${b}`,
+          source: a,
+          target: b,
+          bidirectional: true,
+          relation: [...new Set([...r0, ...r1])],
+          label: mergeEdgeLabels(e0.data.label, e1.data.label),
+        };
+        if (Number.isFinite(Number(pos))) {
+          baseData.positivity = pos;
+        } else if (e0.data.positivity !== undefined) {
+          baseData.positivity = e0.data.positivity;
+        } else if (e1.data.positivity !== undefined) {
+          baseData.positivity = e1.data.positivity;
+        }
+        out.push({ data: baseData });
+      } else {
+        for (const el of group) {
+          const d = { ...el.data };
+          delete d.bidirectional;
+          d.reciprocalPair = true;
+          out.push({ data: d });
+        }
+      }
+    } else {
+      for (const el of group) {
+        const d = { ...el.data };
+        delete d.bidirectional;
+        out.push({ data: d });
+      }
+    }
+  }
+  return out;
+}
+
+function relationEventIdxFromRaw(raw) {
+  if (!raw || typeof raw !== 'object') return NaN;
+  const nested = raw.event && typeof raw.event === 'object' ? raw.event : null;
+  const n = Number(
+    raw.eventNum ??
+    raw.eventIdx ??
+    raw.event_id ??
+    raw.event_idx ??
+    nested?.eventNum ??
+    nested?.eventIdx ??
+    nested?.event_id
+  );
+  return Number.isFinite(n) ? n : NaN;
+}
+
+function currentEventIdxForPositivity(eventData) {
+  if (!eventData || typeof eventData !== 'object') return NaN;
+  const n = Number(
+    eventData.eventNum ??
+    eventData.eventIdx ??
+    eventData.resolvedEventIdx ??
+    eventData.idx
+  );
+  return Number.isFinite(n) && n > 0 ? n : NaN;
+}
 
 /**
  * 이벤트 텍스트에서 첫 번째 단어를 추출하는 함수
@@ -111,12 +264,13 @@ export function convertRelationsToElements(relations, idToName, idToDesc, idToDe
   
   const relationsArray = relations;
   
-  // 노드 id 수집
   const nodeIds = [];
-  relationsArray.forEach(rel => {
-    [rel.id1, rel.id2].forEach(id => {
-      if (!id) return;
+  relationsArray.forEach((rel) => {
+    const r = normalizeRelation(rel);
+    if (!isValidRelation(r)) return;
+    [r.id1, r.id2].forEach((id) => {
       const strId = String(id);
+      if (!strId || strId === '0') return;
       if (!nodeSet.has(strId)) {
         nodeSet.add(strId);
         nodeIds.push(strId);
@@ -136,6 +290,14 @@ export function convertRelationsToElements(relations, idToName, idToDesc, idToDe
         nodeIds.push(strId);
       }
     });
+  }
+
+  const resolvedIdToName = { ...idToName };
+  for (const strId of nodeSet) {
+    const v = resolvedIdToName[strId];
+    if (v == null || String(v).trim() === '') {
+      resolvedIdToName[strId] = strId;
+    }
   }
 
   // id 기반 고정 랜덤 함수 (캐싱으로 성능 개선)
@@ -167,19 +329,9 @@ export function convertRelationsToElements(relations, idToName, idToDesc, idToDe
     return result;
   }
 
-  // 캐릭터 매핑에 라벨이 있는 노드만 (이름이 id와 동일해도 표시)
-  const validNodeIds = nodeIds.filter((strId) => {
-    const nameVal = idToName[strId];
-    const hasLabel = nameVal != null && String(nameVal).trim() !== '';
-    const hasValidId = strId && strId !== '0' && strId !== 'undefined' && strId !== 'null';
-
-    if (!hasLabel) {
-      nodeSet.delete(strId);
-      return false;
-    }
-
-    return hasValidId;
-  });
+  const validNodeIds = nodeIds.filter(
+    (strId) => strId && strId !== '0' && strId !== 'undefined' && strId !== 'null'
+  );
   
 
   // 노드 가중치 기반 크기 계산
@@ -205,7 +357,7 @@ export function convertRelationsToElements(relations, idToName, idToDesc, idToDe
     const r = radius * (0.7 + 0.3 * (seededRandom(strId, 0, 1000) / 1000));
     const x = centerX + r * Math.cos(angle);
     const y = centerY + r * Math.sin(angle);
-    const commonName = idToName[strId];
+    const commonName = resolvedIdToName[strId];
     const nodeWeight = getNodeWeight(strId);
     
     // 이미지 경로 결정
@@ -246,120 +398,121 @@ export function convertRelationsToElements(relations, idToName, idToDesc, idToDe
     });
   });
 
-  // 이전 이벤트의 관계를 Set으로 변환 (빠른 검색을 위해)
+  /** id1->id2 방향만; 역쌍은 관계 동일 시 `a-b`·bidirectional, 다르면 `a->b`·`b->a` 각각 */
   const previousRelationSet = new Set();
   if (previousRelations && Array.isArray(previousRelations)) {
-    previousRelations.forEach(prevRel => {
-      if (prevRel.id1 && prevRel.id2) {
-        const prevId1 = String(prevRel.id1);
-        const prevId2 = String(prevRel.id2);
-        previousRelationSet.add(`${prevId1}-${prevId2}`);
-        previousRelationSet.add(`${prevId2}-${prevId1}`); // 양방향 관계 고려
-      }
+    previousRelations.forEach((prevRel) => {
+      const pr = normalizeRelation(prevRel);
+      if (!isValidRelation(pr)) return;
+      previousRelationSet.add(directedEdgeElementId(pr.id1, pr.id2));
     });
   }
 
-  // 간선 통합을 위한 Map (노드 쌍을 키로 사용)
   const edgeMap = new Map();
-  
-  // 엣지 추가 및 통합
-  
+  const positivityByEdge = new Map();
+
   relationsArray.forEach((rel) => {
-    
-    if (rel.id1 && rel.id2) {
-      const id1 = String(rel.id1);
-      const id2 = String(rel.id2);
-      
-      // 1. id1 == id2 인 경우 제외
-      if (id1 === id2) {
-        return;
+    const r = normalizeRelation(rel);
+    if (!isValidRelation(r)) return;
+
+    const id1 = String(r.id1);
+    const id2 = String(r.id2);
+
+    if (id1 === id2 || id1 === '0' || id2 === '0') {
+      return;
+    }
+
+    if (!nodeSet.has(id1) || !nodeSet.has(id2)) {
+      return;
+    }
+
+    const source = id1;
+    const target = id2;
+    const edgeKey = directedEdgeElementId(id1, id2);
+
+    const pNum = Number(r.positivity);
+    if (Number.isFinite(pNum)) {
+      let info = positivityByEdge.get(edgeKey);
+      if (!info) {
+        info = { lastFinite: null, lastFromCurrent: null, hasFromCurrent: false };
       }
-      
-      // 2. 노드가 0.0 인 경우 제외
-      if (id1 === '0' || id2 === '0') {
-        return;
+      info.lastFinite = r.positivity;
+      const curEv = currentEventIdxForPositivity(eventData);
+      const relEv = relationEventIdxFromRaw(rel);
+      if (Number.isFinite(curEv) && Number.isFinite(relEv) && relEv === curEv) {
+        info.lastFromCurrent = r.positivity;
+        info.hasFromCurrent = true;
       }
-      
-      // 3. 해당 event에 없는 노드가 포함된 경우 - 더 관대한 처리
-      if (!nodeSet.has(id1) || !nodeSet.has(id2)) {
-        return;
-      }
-      
-      // 노드 쌍을 정규화된 키로 변환 (작은 ID가 앞에 오도록)
-      const edgeKey = id1 < id2 ? `${id1}-${id2}` : `${id2}-${id1}`;
-      const source = id1 < id2 ? id1 : id2;
-      const target = id1 < id2 ? id2 : id1;
-      
-      let relationArray = [];
-      let relationLabel = "";
-      
-      // 이벤트 데이터에서 첫 번째 단어를 가져와서 라벨로 사용
-      if (eventData && eventData.text) {
-        relationLabel = getFirstWordFromEventText(eventData.text);
-      }
-      
-      if (Array.isArray(rel.relation)) {
-        relationArray = rel.relation;
-        // 이벤트 텍스트에서 첫 번째 단어를 가져오지 못한 경우에만 기존 로직 사용
-        if (!relationLabel) {
-          // 이전 이벤트와 비교하여 새로 추가된 관계인지 확인
-          const isNewRelation = !previousRelationSet.has(`${id1}-${id2}`) && !previousRelationSet.has(`${id2}-${id1}`);
-          
-          if (isNewRelation || !previousRelations) {
-            // 새로 추가된 관계이거나 첫 번째 이벤트인 경우: 첫 번째 요소를 라벨로 사용
-            relationLabel = rel.relation[0] || "";
+      positivityByEdge.set(edgeKey, info);
+    }
+
+    let relationArray = [];
+    let relationLabel = "";
+
+    if (eventData && eventData.text) {
+      relationLabel = getFirstWordFromEventText(eventData.text);
+    }
+
+    if (Array.isArray(rel.relation)) {
+      relationArray = rel.relation;
+      if (!relationLabel) {
+        const directedKey = directedEdgeElementId(id1, id2);
+        const isNewRelation = !previousRelationSet.has(directedKey);
+
+        if (isNewRelation || !previousRelations) {
+          relationLabel = rel.relation[0] || "";
+        } else {
+          const prevRel = previousRelations.find((p) => {
+            const pr = normalizeRelation(p);
+            if (!pr) return false;
+            return String(pr.id1) === id1 && String(pr.id2) === id2;
+          });
+
+          if (prevRel && Array.isArray(prevRel.relation)) {
+            const newElements = rel.relation.filter((element) => !prevRel.relation.includes(element));
+            relationLabel = newElements.length > 0 ? newElements[0] : rel.relation[0] || "";
           } else {
-            // 기존 관계인 경우: 이전 이벤트에서의 관계와 비교하여 새로 추가된 요소 찾기
-            const prevRel = previousRelations.find(prevRel => 
-              (String(prevRel.id1) === id1 && String(prevRel.id2) === id2) ||
-              (String(prevRel.id1) === id2 && String(prevRel.id2) === id1)
-            );
-            
-            if (prevRel && Array.isArray(prevRel.relation)) {
-              // 이전 관계에서 새로 추가된 요소 찾기
-              const newElements = rel.relation.filter(element => !prevRel.relation.includes(element));
-              relationLabel = newElements.length > 0 ? newElements[0] : rel.relation[0] || "";
-            } else {
-              relationLabel = rel.relation[0] || "";
-            }
+            relationLabel = rel.relation[0] || "";
           }
-        }
-      } else if (typeof rel.relation === "string") {
-        relationArray = [rel.relation];
-        // 이벤트 텍스트에서 첫 번째 단어를 가져오지 못한 경우에만 기존 값 사용
-        if (!relationLabel) {
-          relationLabel = rel.relation;
         }
       }
-      
-      // 기존 간선이 있는지 확인
-      if (edgeMap.has(edgeKey)) {
-        // 기존 간선에 관계 추가
-        const existingEdge = edgeMap.get(edgeKey);
-        existingEdge.data.relation = [...new Set([...existingEdge.data.relation, ...relationArray])]; // 중복 제거
-        
-        // 새로 추가된 관계가 있으면 라벨을 새로 추가된 관계의 첫 번째 요소로 업데이트
-        if (relationLabel) {
-          existingEdge.data.label = relationLabel;
-        }
-      } else {
-        // 새로운 간선 생성
-        edgeMap.set(edgeKey, {
-          data: {
-            id: edgeKey,
-            source: source,
-            target: target,
-            relation: relationArray,
-            label: relationLabel || "",
-            positivity: rel.positivity,
-          }
-        });
+    } else if (typeof rel.relation === "string") {
+      relationArray = [rel.relation];
+      if (!relationLabel) {
+        relationLabel = rel.relation;
       }
     }
+
+    if (edgeMap.has(edgeKey)) {
+      const existingEdge = edgeMap.get(edgeKey);
+      existingEdge.data.relation = [...new Set([...existingEdge.data.relation, ...relationArray])];
+
+      if (relationLabel) {
+        existingEdge.data.label = relationLabel;
+      }
+    } else {
+      edgeMap.set(edgeKey, {
+        data: {
+          id: edgeKey,
+          source,
+          target,
+          relation: relationArray,
+          label: relationLabel || "",
+        },
+      });
+    }
   });
-  
-  // Map에서 간선들을 배열로 변환
-  edges.push(...Array.from(edgeMap.values()));
+
+  for (const el of edgeMap.values()) {
+    const info = positivityByEdge.get(el.data.id);
+    if (!info) continue;
+    const chosen = info.hasFromCurrent ? info.lastFromCurrent : info.lastFinite;
+    if (chosen != null && Number.isFinite(Number(chosen))) {
+      el.data.positivity = chosen;
+    }
+  }
+
+  edges.push(...finalizeDirectedEdges(edgeMap));
   
   const result = [
     ...nodes.sort((a, b) => a.data.id.localeCompare(b.data.id)),
@@ -404,6 +557,56 @@ export function calcGraphDiff(prevElements, currElements) {
     return dataChanged || posChanged;
   });
   return { added, removed, updated };
+}
+
+/** Cytoscape 동기화 스킵용: 동일 id의 시각적 data만 문자열화 */
+export function visualElementSignature(el) {
+  const d = el?.data;
+  if (!d) return "";
+  if (d.source) {
+    const rel = Array.isArray(d.relation) ? d.relation.join("|") : String(d.relation ?? "");
+    const topo = d.bidirectional ? "b" : d.reciprocalPair ? "r" : "";
+    return `e:${rel}:${d.label ?? ""}:${d.positivity ?? ""}:${d.lineStyle ?? ""}:${d.width ?? ""}:${topo}`;
+  }
+  return `n:${d.label ?? ""}:${d.weight ?? ""}:${d.main ?? ""}:${d.positivity ?? ""}`;
+}
+
+/** props elements가 새 배열이어도 그래프 의미가 동일하면 effect·layout 재실행 생략 */
+export function buildElementsGraphFingerprint(elements) {
+  if (!elements?.length) return "";
+  const rows = elements
+    .map((el) => {
+      const id = el?.data?.id;
+      if (id == null || id === "") return null;
+      const sid = String(id);
+      const d = el?.data;
+      if (!d) return null;
+      const topo = d.source ? `${d.source}|${d.target}` : "";
+      return `${sid}\t${topo}\t${visualElementSignature(el)}`;
+    })
+    .filter(Boolean);
+  rows.sort();
+  return `${elements.length}\n${rows.join("\n")}`;
+}
+
+/** 노드 id + 간선(id·source·target)만으로 골격 동일 여부 판별(라벨·관계문구 변경 시에도 동일하면 펄스 생략) */
+export function buildElementsStructureFingerprint(elements) {
+  if (!elements?.length) return "";
+  const nodeIds = [];
+  const edgeRows = [];
+  for (const el of elements) {
+    const d = el?.data;
+    if (!d || d.id == null || d.id === "") continue;
+    const sid = String(d.id);
+    if (d.source != null && d.target != null) {
+      edgeRows.push(`${sid}\t${String(d.source)}\t${String(d.target)}`);
+    } else {
+      nodeIds.push(sid);
+    }
+  }
+  nodeIds.sort();
+  edgeRows.sort();
+  return `${nodeIds.join("\x1e")}\n${edgeRows.join("\x1e")}`;
 }
 
 /**
@@ -555,11 +758,6 @@ export function detectAndResolveOverlap(cy, nodeSize = 40, onCleanup = null) {
   return hasOverlap;
 }
 
-/**
- * 관계 키 타임라인 필터링 유틸리티
- * ViewerPage에서 사용하는 관계 키 수집 및 필터링 로직
- */
-
 const apiRelationTimelineCache = new WeakMap();
 
 function getApiTimelineCache(cacheRef) {
@@ -627,19 +825,6 @@ function prepareChapterEvents(chapterCache, bookId, chapterNum, eventUtils, getC
   return chapterCache.sortedEvents;
 }
 
-function filterWithTargetKeys(sourceSet, targetKeys) {
-  if (!(targetKeys instanceof Set) || targetKeys.size === 0) {
-    return sourceSet;
-  }
-  const filtered = new Set();
-  for (const key of targetKeys) {
-    if (sourceSet.has(key)) {
-      filtered.add(key);
-    }
-  }
-  return filtered;
-}
-
 function collectRelationKeysFromGraphState(bookId, chapterNum, eventNum, targetKeys, getGraphEventState, getRelationKeyFromRelation) {
   const seen = new Set();
   if (!bookId || !Number.isFinite(chapterNum) || !Number.isFinite(eventNum) || eventNum < 1) {
@@ -679,6 +864,7 @@ function collectRelationKeysFromGraphState(bookId, chapterNum, eventNum, targetK
   return seen;
 }
 
+/** 챕터 이벤트 + `getGraphEventState` + 현재 응답 키를 누적해 타임라인 캐시(`eventSets`, `lastComputedSet`)를 갱신한다. */
 export async function collectApiRelationKeys(bookId, chapterNum, eventNum, targetKeys, cacheRef, eventUtils, getCachedChapterEvents, getGraphEventState, getRelationKeyFromRelation) {
   if (!bookId || !Number.isFinite(chapterNum) || !Number.isFinite(eventNum) || eventNum < 1) {
     return new Set();
@@ -690,7 +876,17 @@ export async function collectApiRelationKeys(bookId, chapterNum, eventNum, targe
   const hasTargetKeys = targetKeys instanceof Set && targetKeys.size > 0;
 
   if (!sortedEvents.length) {
-    const fallbackSet = collectRelationKeysFromGraphState(bookId, chapterNum, eventNum, targetKeys, getGraphEventState, getRelationKeyFromRelation);
+    const graphOnly = collectRelationKeysFromGraphState(
+      bookId,
+      chapterNum,
+      eventNum,
+      targetKeys,
+      getGraphEventState,
+      getRelationKeyFromRelation
+    );
+    const fallbackSet = hasTargetKeys
+      ? new Set([...graphOnly, ...targetKeys])
+      : graphOnly;
     if (chapterCache) {
       chapterCache.eventSets.set(eventNum, fallbackSet);
       if (!chapterCache.lastComputedIdx || eventNum >= chapterCache.lastComputedIdx) {
@@ -698,7 +894,7 @@ export async function collectApiRelationKeys(bookId, chapterNum, eventNum, targe
         chapterCache.lastComputedSet = fallbackSet;
       }
     }
-    return filterWithTargetKeys(fallbackSet, targetKeys);
+    return fallbackSet;
   }
 
   let lastComputedIdx = chapterCache?.lastComputedIdx ?? 0;
@@ -738,24 +934,23 @@ export async function collectApiRelationKeys(bookId, chapterNum, eventNum, targe
   }
 
   chapterCache.lastComputedIdx = lastComputedIdx;
+
+  const graphKeys = collectRelationKeysFromGraphState(
+    bookId,
+    chapterNum,
+    eventNum,
+    null,
+    getGraphEventState,
+    getRelationKeyFromRelation
+  );
+  baseSet = new Set([...baseSet, ...graphKeys, ...(hasTargetKeys ? targetKeys : [])]);
   chapterCache.lastComputedSet = baseSet;
+  chapterCache.eventSets.set(eventNum, baseSet);
 
-  let bestIdx = 0;
-  let bestSet = null;
-  for (const [idx, set] of chapterCache.eventSets) {
-    if (idx <= eventNum && idx >= bestIdx) {
-      bestIdx = idx;
-      bestSet = set;
-    }
-  }
-
-  if (!bestSet) {
-    return new Set();
-  }
-
-  return hasTargetKeys ? filterWithTargetKeys(bestSet, targetKeys) : bestSet;
+  return baseSet;
 }
 
+/** Viewer fine API 경로: 타임라인 캐시 갱신(`collectApiRelationKeys`) 후 `relations` 그대로 반환. */
 export async function filterRelationsByTimeline({
   relations,
   mode,
@@ -789,31 +984,21 @@ export async function filterRelationsByTimeline({
   }
 
   try {
-    let seenKeys = null;
-    if (mode === "api") {
-      if (!bookId) {
-        return relations;
-      }
-      seenKeys = await collectApiRelationKeys(bookId, chapterNum, eventNum, targetKeys, cacheRef, eventUtils, getCachedChapterEvents, getGraphEventState, getRelationKeyFromRelation);
-    } else {
+    if (mode !== "api" || !bookId) {
       return relations;
     }
-
-    if (!(seenKeys instanceof Set)) {
-      return relations;
-    }
-
-    const filtered = relations.filter((rel) => {
-      const key = getRelationKeyFromRelation(rel);
-      if (!key) {
-        return true;
-      }
-      return seenKeys.has(key);
-    });
-    if (filtered.length === 0 && relations.length > 0) {
-      return relations;
-    }
-    return filtered;
+    await collectApiRelationKeys(
+      bookId,
+      chapterNum,
+      eventNum,
+      targetKeys,
+      cacheRef,
+      eventUtils,
+      getCachedChapterEvents,
+      getGraphEventState,
+      getRelationKeyFromRelation
+    );
+    return relations;
   } catch (_error) {
     return relations;
   }

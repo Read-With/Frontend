@@ -152,16 +152,9 @@ export const ensureGraphBookCache = async (
         throw new DOMException('Aborted', 'AbortError');
       }
 
-      const chapterCache = forceRefresh
-        ? null
-        : getCachedChapterEvents(numericId, chapterIdx);
-
+      let chapterCache = forceRefresh ? null : getCachedChapterEvents(numericId, chapterIdx);
       if (!chapterCache) {
-        chapterCache = await discoverChapterEvents(
-          numericId,
-          chapterIdx,
-          true
-        );
+        chapterCache = await discoverChapterEvents(numericId, chapterIdx, true);
       }
 
       if (chapterCache) {

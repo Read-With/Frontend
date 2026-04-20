@@ -1,4 +1,4 @@
-import React, { useRef, useMemo } from "react";
+import React, { useRef, useMemo, memo } from "react";
 import { AlertCircle, AlertTriangle, Inbox, Loader2 } from "lucide-react";
 import GraphContainer from "../graph/GraphContainer";
 import ViewerTopBar from "./ViewerTopBar";
@@ -56,7 +56,7 @@ function normalizeGraphApiError(raw) {
   return raw;
 }
 
-function GraphSplitArea({
+const GraphSplitArea = memo(function GraphSplitArea({
   graphState,
   graphActions,
   viewerState,
@@ -68,7 +68,6 @@ function GraphSplitArea({
   bookId = null,
   book = null,
   cachedLocation = null,
-  /** 서버 재진입 시 getBookProgress 기반 앵커(이벤트 인덱스 없어도 챕터·locator 확정) */
   resumeAnchor = null,
 }) {
   const { activeTooltip, onClearTooltip, onSetActiveTooltip, graphClearRef } = tooltipProps;
@@ -84,7 +83,8 @@ function GraphSplitArea({
     selectedIndex: selectedSuggestionIndex = -1,
   } = searchState;
   
-  const { loading, isReloading, isGraphLoading, graphLoading, isDataReady, isDataEmpty } = viewerState;
+  const { loading, isReloading, isGraphLoading, isFineGraphLoading, graphLoading, isDataReady, isDataEmpty } =
+    viewerState;
   const { elements, currentEvent, currentChapter } = graphState;
   const { filterStage } = graphActions;
 
@@ -122,21 +122,15 @@ function GraphSplitArea({
   const hasCurrentEvent = !!currentEvent;
   const hasElements = elements && Array.isArray(elements) && elements.length > 0;
   
-  // graphLoading이 false이고 isDataEmpty가 true면 데이터 로드 완료 후 데이터 없음 상태
-  // 이 경우 다른 로딩 조건들을 무시하고 데이터 없음 메시지를 우선 표시
   const isDataLoadCompleteAndEmpty = graphLoading === false && isDataEmpty && !hasElements;
-  
-  // 로딩 중인지 확인 (API 호출 중이거나 데이터를 가져오는 중)
-  // 단, 데이터 로드 완료 후 데이터가 없는 경우는 제외
-  const isLoading = isDataLoadCompleteAndEmpty 
-    ? false 
+  const isLoading = isDataLoadCompleteAndEmpty
+    ? false
     : (loading || isReloading || !isLocationDetermined || (!isDataReady && !hasCurrentEvent) || (graphLoading !== false && isGraphLoading));
-  
-  // 로딩 완료 후 데이터가 없는 경우
   const shouldShowEmptyData = isDataLoadCompleteAndEmpty;
   
-  // 요소가 없고 로딩 조건을 만족하면 로딩 UI 표시
-  const shouldShowLoading = !hasElements && isLoading;
+  // fine 그래프가 아직 반영되지 않았으면(이벤트 확정 전) 기존 elements가 있어도 그래프 대신 로딩 — 중간 이벤트 표시 방지
+  const isFineGraphBusy = isFineGraphLoading === true;
+  const shouldShowLoading = (!hasElements && isLoading) || (hasElements && isFineGraphBusy);
 
   const topBarSearchState = useMemo(() => ({
     searchTerm: searchTermValue,
@@ -146,6 +140,12 @@ function GraphSplitArea({
     selectedIndex: selectedSuggestionIndex,
   }), [searchTermValue, isSearchActiveValue, suggestionsValue, showSuggestionsValue, selectedSuggestionIndex]);
 
+  // viewerState 전체를 넘기면 showToolbar 등 무관한 변경으로 TopBar memo가 깨짐
+  const viewerStateForTopBar = useMemo(
+    () => ({ filename: viewerState.filename, book: viewerState.book }),
+    [viewerState.filename, viewerState.book]
+  );
+
   const resolvedApiError = useMemo(() => normalizeGraphApiError(apiError), [apiError]);
 
   return (
@@ -153,7 +153,7 @@ function GraphSplitArea({
       <ViewerTopBar
         graphState={graphState}
         graphActions={graphActions}
-        viewerState={viewerState}
+        viewerState={viewerStateForTopBar}
         searchState={topBarSearchState}
         searchActions={searchActions}
       />
@@ -163,18 +163,22 @@ function GraphSplitArea({
           <GraphNoticePanel
             variant="loading"
             title={
-              !isLocationDetermined
-                ? "위치 정보를 확인하는 중"
-                : transitionState.type === "chapter"
-                  ? "챕터 전환 중"
-                  : "그래프 정보를 불러오는 중"
+              isFineGraphBusy
+                ? "이벤트 반영 중"
+                : !isLocationDetermined
+                  ? "위치 정보를 확인하는 중"
+                  : transitionState.type === "chapter"
+                    ? "챕터 전환 중"
+                    : "그래프 정보를 불러오는 중"
             }
             description={
-              !isLocationDetermined
-                ? "현재 읽고 있는 위치를 파악하고 있습니다. 잠시만 기다려 주세요."
-                : transitionState.type === "chapter"
-                  ? "새 챕터의 이벤트를 준비하고 있습니다."
-                  : "인물 관계 데이터를 불러오고 있습니다."
+              isFineGraphBusy
+                ? "읽기 위치에 맞는 이벤트와 관계 그래프를 확정하는 중입니다."
+                : !isLocationDetermined
+                  ? "현재 읽고 있는 위치를 파악하고 있습니다. 잠시만 기다려 주세요."
+                  : transitionState.type === "chapter"
+                    ? "새 챕터의 이벤트를 준비하고 있습니다."
+                    : "인물 관계 데이터를 불러오고 있습니다."
             }
             icon={<Loader2 className="h-7 w-7 animate-spin" strokeWidth={2} aria-hidden />}
           />
@@ -240,6 +244,6 @@ function GraphSplitArea({
       </div>
     </div>
   );
-}
+});
 
 export default GraphSplitArea;

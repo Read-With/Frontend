@@ -75,6 +75,27 @@ export const getEdgeStyle = (context = 'default') => {
   };
 };
 
+/** reciprocalPair: CytoscapeGraphUnified에서 동기화한 _rjOx/_rjOy 우선(쌍이 동일 중점 사용) */
+function reciprocalPairTargetEndpoint(ele) {
+  try {
+    const ox = ele.data('_rjOx');
+    const oy = ele.data('_rjOy');
+    if (typeof ox === 'number' && typeof oy === 'number' && Number.isFinite(ox) && Number.isFinite(oy)) {
+      return `${ox} ${oy}`;
+    }
+    const s = ele.source();
+    const t = ele.target();
+    if (!s || !t || s.empty?.() || t.empty?.()) return undefined;
+    const sx = s.position('x');
+    const sy = s.position('y');
+    const tx = t.position('x');
+    const ty = t.position('y');
+    return `${(sx - tx) / 2} ${(sy - ty) / 2}`;
+  } catch (_e) {
+    return undefined;
+  }
+}
+
 // 관계 색상 공식 (relationStyles가 임계값·라벨 단일 소스, 여기는 색상만)
 export const getRelationColor = (positivity) => {
   const value = Number.isFinite(positivity) ? Math.max(-1, Math.min(1, positivity)) : 0;
@@ -150,7 +171,25 @@ export const createGraphStylesheet = (edgeStyle, edgeLabelVisible, maxEdgeLabelL
       "text-outline-color": COLORS.white,
       "text-outline-width": 2,
       opacity: 0.85,
+      "target-arrow-shape": "triangle",
+      "target-arrow-color": (ele) => getRelationColor(ele.data("positivity")),
+      "arrow-scale": 1.05,
+      "source-arrow-shape": "none",
+    },
+  },
+  {
+    selector: "edge[?bidirectional]",
+    style: {
+      "curve-style": "straight",
       "target-arrow-shape": "none",
+      "source-arrow-shape": "none",
+    },
+  },
+  {
+    selector: "edge[?reciprocalPair]",
+    style: {
+      "curve-style": "straight",
+      "target-endpoint": (ele) => reciprocalPairTargetEndpoint(ele),
     },
   },
   {

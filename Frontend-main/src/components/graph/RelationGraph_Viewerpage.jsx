@@ -1,11 +1,3 @@
-/**
- * ViewerRelationGraph
- *
- * 뷰어 분할 화면에 표시되는 관계 그래프 컴포넌트입니다.
- *
- * @note 파일명(RelationGraph_Viewerpage.jsx)과 컴포넌트명(ViewerRelationGraph)이
- *       불일치합니다. 추후 ViewerRelationGraph.jsx로 파일명 변경을 권장합니다.
- */
 import React, {
   useRef,
   useMemo,
@@ -18,46 +10,68 @@ import UnifiedEdgeTooltip from "./tooltip/UnifiedEdgeTooltip";
 import "./RelationGraph.css";
 import { getEdgeStyle, createGraphStylesheet } from "../../utils/styles/graphStyles";
 import { graphStyles } from "../../utils/styles/styles";
+import { buildElementsGraphFingerprint } from "../../utils/graph/graphDataUtils.js";
+import { ensureElementsInBounds } from "../../utils/graph/graphUtils.js";
 
-// ─── useAutoFit ────────────────────────────────────────────────────────────────
-/**
- * 챕터/elements 변경 시 그래프를 자동으로 fit합니다.
- * 동일 챕터는 최초 1회만 fit하고 이후에는 사용자 뷰를 유지합니다.
- */
 function useAutoFit(cyRef, elements, chapterNum, isSearchActive) {
-  const fittedChaptersRef = useRef(new Set());
-  const hasFittedOnceRef = useRef(false);
+  const elementsFp = useMemo(
+    () => (elements?.length ? buildElementsGraphFingerprint(elements) : ""),
+    [elements]
+  );
 
   useEffect(() => {
     const cy = cyRef.current;
-    if (!cy) return;
-
-    try { cy.resize(); } catch {}
-
-    if (isSearchActive) return;
+    if (!cy || isSearchActive) return;
 
     const nodes = cy.nodes();
     if (!nodes || nodes.length === 0) return;
 
-    const chapterKey = chapterNum ?? '__default__';
-    if (hasFittedOnceRef.current && fittedChaptersRef.current.has(chapterKey)) return;
+    const container = typeof cy.container === "function" ? cy.container() : null;
+    let cancelled = false;
 
-    fittedChaptersRef.current.add(chapterKey);
-    hasFittedOnceRef.current = true;
-
-    requestAnimationFrame(() => {
+    const runFit = () => {
+      if (cancelled) return;
+      const cyLive = cyRef.current;
+      if (!cyLive) return;
+      try {
+        cyLive.resize();
+      } catch {
+        /* ignore */
+      }
+      try {
+        if (container) ensureElementsInBounds(cyLive, container);
+      } catch {
+        /* ignore */
+      }
       requestAnimationFrame(() => {
-        try { cy.fit(nodes, 80); } catch {}
+        if (cancelled) return;
+        const cy2 = cyRef.current;
+        if (!cy2) return;
+        try {
+          const eles = cy2.elements();
+          if (eles.length > 0) {
+            cy2.fit(eles, 80);
+          }
+        } catch {
+          try {
+            const n = cy2.nodes();
+            if (n.length > 0) cy2.fit(n, 80);
+          } catch {
+            /* ignore */
+          }
+        }
       });
-    });
-  }, [elements, chapterNum, isSearchActive]);
+    };
+
+    const id = requestAnimationFrame(runFit);
+
+    return () => {
+      cancelled = true;
+      cancelAnimationFrame(id);
+    };
+  }, [elementsFp, chapterNum, isSearchActive]);
 }
 
-// ─── useCytoscapeReset ─────────────────────────────────────────────────────────
-/**
- * graphClearRef에 Cytoscape 스타일 초기화 함수를 등록합니다.
- * 툴팁을 닫을 때 노드/엣지 강조 스타일을 원래대로 되돌리는 데 사용됩니다.
- */
 function useCytoscapeReset(cyRef, graphClearRef, selectedNodeIdRef, selectedEdgeIdRef) {
   useEffect(() => {
     if (!graphClearRef) return;
@@ -67,26 +81,32 @@ function useCytoscapeReset(cyRef, graphClearRef, selectedNodeIdRef, selectedEdge
       if (!cy) return;
 
       try {
-        cy.batch(() => {
-          cy.nodes().forEach((node) => {
-            node.removeClass("faded highlighted");
-            node.removeStyle("opacity");
-            node.removeStyle("text-opacity");
-            node.removeStyle("border-color");
-            node.removeStyle("border-width");
-            node.removeStyle("border-opacity");
-            node.removeStyle("border-style");
+        const touched = cy
+          .collection()
+          .union(cy.nodes(".highlighted"))
+          .union(cy.nodes(".faded"))
+          .union(cy.edges(".highlighted"))
+          .union(cy.edges(".faded"));
+        if (touched.length > 0) {
+          cy.batch(() => {
+            touched.removeClass("faded highlighted");
+            touched.nodes().forEach((node) => {
+              node.removeStyle("opacity");
+              node.removeStyle("text-opacity");
+              node.removeStyle("border-color");
+              node.removeStyle("border-width");
+              node.removeStyle("border-opacity");
+              node.removeStyle("border-style");
+            });
+            touched.edges().forEach((edge) => {
+              edge.removeStyle("opacity");
+              edge.removeStyle("text-opacity");
+              edge.removeStyle("width");
+            });
           });
-          cy.edges().forEach((edge) => {
-            edge.removeClass("faded highlighted");
-            edge.removeStyle("opacity");
-            edge.removeStyle("text-opacity");
-            edge.removeStyle("width");
-          });
-        });
-
-        if (typeof cy.style === "function") {
-          try { cy.style().update(); } catch {}
+          if (typeof cy.style === "function") {
+            try { cy.style().update(); } catch {}
+          }
         }
       } catch {}
 
@@ -96,7 +116,6 @@ function useCytoscapeReset(cyRef, graphClearRef, selectedNodeIdRef, selectedEdge
   }, [graphClearRef, cyRef, selectedNodeIdRef, selectedEdgeIdRef]);
 }
 
-// ─── ViewerRelationGraph ───────────────────────────────────────────────────────
 const ViewerRelationGraph = ({
   elements,
   newNodeIds = [],
@@ -125,18 +144,14 @@ const ViewerRelationGraph = ({
   const selectedNodeIdRef = useRef(null);
   const containerRef = useRef(null);
 
-  // ─── 커스텀 훅 ──────────────────────────────────────────────────────────
   useAutoFit(cyRef, elements, chapterNum, isSearchActive);
   useCytoscapeReset(cyRef, graphClearRef, selectedNodeIdRef, selectedEdgeIdRef);
 
-  // ─── 툴팁 닫기 ─────────────────────────────────────────────────────────
-  // 툴팁 팝업과 그래프 강조 스타일을 동시에 초기화합니다.
   const clearTooltipAndGraph = useCallback(() => {
     onClearTooltip?.();
     graphClearRef?.current?.();
   }, [onClearTooltip, graphClearRef]);
 
-  // ─── 툴팁 표시 핸들러 ──────────────────────────────────────────────────
   const onShowNodeTooltip = useCallback(({ node, nodeCenter, mouseX, mouseY }) => {
     if (!onSetActiveTooltip) return;
 
@@ -176,7 +191,6 @@ const ViewerRelationGraph = ({
     });
   }, [onSetActiveTooltip]);
 
-  // ─── 그래프 외부 클릭 시 툴팁 닫기 ────────────────────────────────────
   useEffect(() => {
     if (!activeTooltip) return;
 
@@ -213,11 +227,12 @@ const ViewerRelationGraph = ({
     };
   }, [activeTooltip, clearTooltipAndGraph]);
 
-  const edgeStyle = getEdgeStyle('viewer');
+  const edgeStyleViewer = useMemo(() => getEdgeStyle('viewer'), []);
   const stylesheet = useMemo(
-    () => createGraphStylesheet(edgeStyle, edgeLabelVisible),
-    [edgeStyle, edgeLabelVisible]
+    () => createGraphStylesheet(edgeStyleViewer, edgeLabelVisible),
+    [edgeStyleViewer, edgeLabelVisible]
   );
+  const presetLayout = useMemo(() => ({ name: "preset" }), []);
 
   return (
     <div
@@ -278,7 +293,7 @@ const ViewerRelationGraph = ({
           elements={elements}
           newNodeIds={newNodeIds}
           stylesheet={stylesheet}
-          layout={{ name: 'preset' }}
+          layout={presetLayout}
           cyRef={cyRef}
           nodeSize={10}
           fitNodeIds={fitNodeIds}

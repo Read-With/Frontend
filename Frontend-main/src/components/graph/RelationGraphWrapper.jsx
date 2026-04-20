@@ -37,7 +37,6 @@ import {
 } from '../../utils/common/cache/manifestCache.js';
 import { stripRedundantBookTitlePrefix } from '../../utils/viewer/chapterTitleDisplay';
 
-// ─── 백버튼 스타일 ────────────────────────────────────────────────────────────
 const backButtonStyle = {
   height: 32,
   padding: '0 12px',
@@ -162,7 +161,6 @@ function RelationGraphWrapper() {
   const prevEventNum = useRef();
   const timeoutRef = useRef(null);
 
-  // ─── location 스냅샷: 3개 ref → 1개 ref로 통합 ──────────────────────────
   const locationRef = useRef({
     state: location.state,
     pathname: location.pathname,
@@ -422,15 +420,12 @@ function RelationGraphWrapper() {
     selectedNodeIdRef,
     selectedEdgeIdRef,
     strictBackgroundClear: true,
-    isSearchActive,
-    filteredElements,
   });
 
   const handleClearGraph = useCallback(() => {
     clearAll();
   }, [clearAll]);
 
-  // 챕터 변경 시 검색 초기화 및 선택 효과 제거
   useEffect(() => {
     if (prevChapterNum.current !== undefined && prevChapterNum.current !== currentChapter) {
       if (isSearchActive) {
@@ -442,7 +437,6 @@ function RelationGraphWrapper() {
     prevEventNum.current = currentEvent;
   }, [currentChapter, currentEvent, isSearchActive, clearSearch, clearAll]);
 
-  // 이벤트 변경 시 선택 효과 제거
   useEffect(() => {
     if (prevEventNum.current !== undefined && prevEventNum.current !== currentEvent) {
       clearAll();
@@ -526,7 +520,6 @@ function RelationGraphWrapper() {
     }
   }, [isDropdownSelection, setDropdownSelection]);
 
-  // ─── forceClose 트리거: 두 클릭 핸들러에서 공유 ──────────────────────────
   const triggerForceClose = useCallback(() => {
     if (timeoutRef.current) {
       clearTimeout(timeoutRef.current);
@@ -637,7 +630,6 @@ function RelationGraphWrapper() {
     }
   }, [isLoading]);
 
-  // ─── GraphTopBar prop 그룹 ───────────────────────────────────────────────
   const topBarSearchState = useMemo(() => ({
     searchTerm,
     isSearchActive,
@@ -654,7 +646,6 @@ function RelationGraphWrapper() {
     onCloseSuggestions: closeSuggestions,
   }), [handleSearchSubmit, clearSearch, handleGenerateSuggestions, handleKeyDown, closeSuggestions]);
 
-  // ─── GraphCanvas prop 그룹 ────────────────────────────────────────────────
   const sidebarControl = useMemo(() => ({
     isSidebarClosing,
     onCloseSidebar: closeSidebar,

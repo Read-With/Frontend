@@ -46,7 +46,6 @@ export const isTokenValid = (token) => {
   return true;
 };
 
-// 토큰 만료까지 남은 시간 확인 (초 단위)
 export const getTokenExpirationTime = (token) => {
   if (!token) return null;
 
@@ -65,12 +64,28 @@ export const isTokenExpiringSoon = (token, bufferSeconds = 5 * 60) => {
   return remainingTime < bufferSeconds;
 };
 
+const MAX_REFRESH_BUFFER_SEC = 15 * 60;
+const MIN_REFRESH_BUFFER_SEC = 60;
+
+/** 액세스 JWT TTL에 맞춘 사전 갱신 여유(초). 짧은 TTL에서 주기적 폴링이 빗나가지 않게 최소 60초는 둔다. */
+export function getProactiveRefreshBufferSeconds(token) {
+  const payload = decodeJwtPayload(token);
+  if (!payload?.exp) return MAX_REFRESH_BUFFER_SEC;
+  const now = Math.floor(Date.now() / 1000);
+  const remaining = payload.exp - now;
+  if (remaining <= 0) return MIN_REFRESH_BUFFER_SEC;
+  const issued = typeof payload.iat === 'number' ? payload.iat : null;
+  const ttlForBuffer =
+    issued != null ? Math.max(1, payload.exp - issued) : Math.max(remaining, 1);
+  const fromTtl = Math.floor(ttlForBuffer * 0.22);
+  return Math.min(MAX_REFRESH_BUFFER_SEC, Math.max(MIN_REFRESH_BUFFER_SEC, fromTtl));
+}
+
 export const authenticatedRequest = async (endpoint, options = {}, retryCount = 0) => {
   await ensureSessionAccessToken();
   let token = getStoredAccessToken();
   
-  // 토큰이 곧 만료될 예정이면 미리 갱신 (15분 전)
-  if (token && isTokenExpiringSoon(token, 15 * 60)) {
+  if (token && isTokenExpiringSoon(token, getProactiveRefreshBufferSeconds(token))) {
     try {
       await refreshToken();
       token = getStoredAccessToken();

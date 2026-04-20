@@ -668,3 +668,56 @@ export const determineFinalElements = (isSearchActive, filteredElements, sortedE
   }
   return sortedElements;
 };
+
+/**
+ * reciprocalPair 간선 쌍마다 동일 중점을 한 번만 잡아 target-endpoint용 오프셋(_rjOx/_rjOy)을 갱신한다.
+ * 노드 이동·레이아웃 후에도 두 화살표가 같은 꼭짓점에서 만나게 한다.
+ * @param {import('cytoscape').Core} cy
+ */
+export function syncReciprocalPairJunctionOffsets(cy) {
+  if (!cy || typeof cy.edges !== 'function') return;
+  let edges;
+  try {
+    edges = cy.edges('[?reciprocalPair]');
+  } catch {
+    return;
+  }
+  if (!edges || edges.length === 0) return;
+
+  const pairMap = new Map();
+  edges.forEach((e) => {
+    const sid = String(e.data('source'));
+    const tid = String(e.data('target'));
+    const key = sid < tid ? `${sid}\t${tid}` : `${tid}\t${sid}`;
+    if (!pairMap.has(key)) pairMap.set(key, []);
+    pairMap.get(key).push(e);
+  });
+
+  cy.batch(() => {
+    pairMap.forEach((list) => {
+      if (list.length !== 2) {
+        list.forEach((edge) => {
+          edge.removeData('_rjOx');
+          edge.removeData('_rjOy');
+        });
+        return;
+      }
+      const e0 = list[0];
+      const s = e0.source();
+      const t = e0.target();
+      if (!s || !t || s.empty?.() || t.empty?.()) return;
+      const sx = s.position('x');
+      const sy = s.position('y');
+      const tx = t.position('x');
+      const ty = t.position('y');
+      const mx = (sx + tx) / 2;
+      const my = (sy + ty) / 2;
+      list.forEach((edge) => {
+        const tgt = edge.target();
+        if (!tgt || tgt.empty?.()) return;
+        edge.data('_rjOx', mx - tgt.position('x'));
+        edge.data('_rjOy', my - tgt.position('y'));
+      });
+    });
+  });
+}

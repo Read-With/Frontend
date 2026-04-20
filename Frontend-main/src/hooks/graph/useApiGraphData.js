@@ -1,13 +1,9 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { getMacroGraph, getFineGraph, getBookManifest } from '../../utils/api/api.js';
-import {
-  getManifestFromCache,
-  getEventData,
-} from '../../utils/common/cache/manifestCache';
+import { getManifestFromCache } from '../../utils/common/cache/manifestCache';
 import { resolveMaxChapter } from '../../utils/graph/maxChapterResolver';
-import { loadGraphDataWithCache } from '../../utils/graph/graphDataLoader';
+import { loadGraphDataWithCache, hasMacroGraphStorageCache } from '../../utils/graph/graphDataLoader';
 import { useErrorHandler } from '../common/useErrorHandler';
-import { toLocator, readingLocatorFromGraphEvent, anchorToLocators } from '../../utils/common/locatorUtils';
 
 const ERROR_DISPLAY_DURATION = 5000;
 
@@ -21,8 +17,8 @@ export function useApiGraphData(
   const { macroOnly = false } = options;
   const [manifestData, setManifestData] = useState(null);
   const [manifestReady, setManifestReady] = useState(false);
-  const [fullMacroData, setFullMacroData] = useState(null);  // full-book macro (fetched once per bookId)
-  const [rawFineData, setRawFineData] = useState(null);      // event-level fine graph data
+  const [fullMacroData, setFullMacroData] = useState(null);
+  const [rawFineData, setRawFineData] = useState(null);
   const [apiMaxChapter, setApiMaxChapter] = useState(1);
   const [userCurrentChapter, setUserCurrentChapter] = useState(null);
   const [isGraphLoading, setIsGraphLoading] = useState(false);
@@ -34,7 +30,6 @@ export function useApiGraphData(
   const { handleError } = useErrorHandler('API Graph Data');
   const [apiError, setApiError] = useState(null);
 
-  // GET /api/v2/graph/macro — 응답 그대로 (relations 에 챕터 필드 없음)
   const apiMacroData = useMemo(() => fullMacroData, [fullMacroData]);
 
   const apiFineData = useMemo(() => {
@@ -42,7 +37,6 @@ export function useApiGraphData(
     return rawFineData;
   }, [macroOnly, apiMacroData, rawFineData]);
 
-  // ─── Fine graph target key (stale detection) ──────────────────────────────
   const fineTargetKey = useMemo(() => {
     if (!serverBookId) return '';
     const evRaw = Number(currentEvent);
@@ -50,7 +44,6 @@ export function useApiGraphData(
     return `${serverBookId}:${currentChapter}:${ev}`;
   }, [serverBookId, currentChapter, currentEvent]);
 
-  // Reset fine data when chapter/event (or bookId) changes
   useEffect(() => {
     if (!serverBookId) {
       prevFineTargetKeyRef.current = null;
@@ -69,22 +62,6 @@ export function useApiGraphData(
     setRawFineData(null);
   }, [serverBookId, fineTargetKey]);
 
-  const forcedLocator = useMemo(() => {
-    if (!serverBookId) return null;
-    const chapter = Number(currentChapter);
-    const forcedIdx = Number(forcedChapterEventIdx);
-    if (!Number.isFinite(chapter) || chapter < 1) return null;
-    if (!Number.isFinite(forcedIdx) || forcedIdx < 1) return null;
-
-    const eventData = getEventData(serverBookId, chapter, forcedIdx, manifestData);
-    const fromEventAnchor = readingLocatorFromGraphEvent(eventData);
-    const fromEventField = toLocator(eventData?.startLocator) ?? toLocator(eventData?.locator);
-    const resolved = fromEventAnchor ?? fromEventField;
-
-    if (resolved) return resolved;
-    return { chapterIndex: chapter, blockIndex: 0, offset: 0 };
-  }, [serverBookId, currentChapter, forcedChapterEventIdx, manifestData]);
-
   const loadManifestData = useCallback(async () => {
     if (!serverBookId) {
       setIsGraphLoading(false);
@@ -94,19 +71,21 @@ export function useApiGraphData(
 
     const targetBookId = serverBookId;
     setManifestReady(false);
-    setIsGraphLoading(true);
 
     const initialMaxChapter = resolveMaxChapter(targetBookId, null);
 
-    try {
-      const cachedManifest = getManifestFromCache(targetBookId);
-      if (cachedManifest) {
-        setManifestData(cachedManifest);
-        const maxChapter = resolveMaxChapter(targetBookId, cachedManifest);
-        setApiMaxChapter(maxChapter);
-        return;
-      }
+    const cachedManifest = getManifestFromCache(targetBookId);
+    if (cachedManifest) {
+      setManifestData(cachedManifest);
+      const maxChapter = resolveMaxChapter(targetBookId, cachedManifest);
+      setApiMaxChapter(maxChapter);
+      setManifestReady(true);
+      return;
+    }
 
+    setIsGraphLoading(true);
+
+    try {
       const manifestResponse = await getBookManifest(targetBookId);
 
       if (manifestResponse?.isSuccess && manifestResponse?.result) {
@@ -155,7 +134,15 @@ export function useApiGraphData(
     if (!Number.isFinite(chapter) || chapter < 1) return;
 
     const targetBookId = serverBookId;
-    setIsGraphLoading(true);
+    let loadingKickTimer = null;
+    const warmMacro = hasMacroGraphStorageCache(targetBookId, chapter);
+    if (warmMacro) {
+      loadingKickTimer = globalThis.setTimeout(() => {
+        setIsGraphLoading(true);
+      }, 40);
+    } else {
+      setIsGraphLoading(true);
+    }
 
     try {
       const cacheKey = `graph_macro_${targetBookId}_upto_${chapter}`;
@@ -188,6 +175,9 @@ export function useApiGraphData(
       });
       setApiError(errorInfo);
     } finally {
+      if (loadingKickTimer != null) {
+        globalThis.clearTimeout(loadingKickTimer);
+      }
       setIsGraphLoading(false);
     }
   }, [serverBookId, currentChapter, handleError]);
@@ -233,7 +223,15 @@ export function useApiGraphData(
         chapter: currentChapter,
         eventIdx,
         cacheKey,
-        apiCall: () => getFineGraph(targetBookId, currentChapter, eventIdx, hasForcedIdx ? forcedLocator : null),
+        // 강제 이벤트: locator→이벤트 재해석이 덮어쓰지 않도록 eventIdx 고정 경로만 사용
+        apiCall: () =>
+          getFineGraph(
+            targetBookId,
+            currentChapter,
+            eventIdx,
+            null,
+            hasForcedIdx ? { useCallerEventIdxOnly: true } : undefined
+          ),
         macroData: null,
         onSuccess: (data) => {
           if (epoch !== fineEpochRef.current) return;
@@ -270,7 +268,6 @@ export function useApiGraphData(
     currentEvent,
     handleError,
     forcedChapterEventIdx,
-    forcedLocator,
   ]);
 
   useEffect(() => {

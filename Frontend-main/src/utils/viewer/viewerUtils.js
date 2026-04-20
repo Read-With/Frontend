@@ -1,4 +1,5 @@
 
+import { processRelations, directedEdgeElementId } from '../graph/relationUtils';
 import { errorUtils as commonErrorUtils } from '../common/errorUtils';
 import { storageUtils as commonStorageUtils } from '../common/cache/storageUtils';
 import { settingsUtils as commonSettingsUtils, defaultSettings as commonDefaultSettings, loadSettings as commonLoadSettings } from '../common/settingsUtils';
@@ -90,63 +91,6 @@ export function loadViewerMode() {
   } catch (_error) {
     return null;
   }
-}
-
-function approxCharsFromLocator(startLocator, totalChars) {
-  if (!startLocator || !Number.isFinite(startLocator.chapterIndex)) return 0;
-  const b = Number(startLocator.blockIndex) || 0;
-  const o = Number(startLocator.offset) || 0;
-  const est = b * 3000 + o;
-  return totalChars > 0 ? Math.min(est, totalChars) : est;
-}
-
-export function calculateChapterProgressFromLocator(startLocator, chapterNum, events) {
-  if (!chapterNum || chapterNum < 1 || !events?.length) {
-    return { currentChars: 0, totalChars: 0, progress: 0, eventIndex: -1 };
-  }
-  if (!startLocator || Number(startLocator.chapterIndex) !== Number(chapterNum)) {
-    return { currentChars: 0, totalChars: 0, progress: 0, eventIndex: -1 };
-  }
-  const totalChars = events[events.length - 1]?.endTxtOffset || 0;
-  const currentChars = approxCharsFromLocator(startLocator, totalChars);
-  const progress = totalChars > 0 ? (currentChars / totalChars) * 100 : 0;
-  let eventIndex = -1;
-  for (let i = 0; i < events.length; i++) {
-    if (currentChars >= events[i].startTxtOffset && currentChars < events[i].endTxtOffset) {
-      eventIndex = i;
-      break;
-    }
-  }
-  if (eventIndex < 0 && currentChars >= totalChars) eventIndex = events.length - 1;
-  return {
-    currentChars: Math.round(currentChars),
-    totalChars,
-    progress: Math.round(progress * 100) / 100,
-    eventIndex,
-  };
-}
-
-export function findClosestEventFromLocator(startLocator, chapterNum, events) {
-  if (!events?.length || !chapterNum) return null;
-  const { currentChars } = calculateChapterProgressFromLocator(startLocator, chapterNum, events);
-  for (let i = events.length - 1; i >= 0; i--) {
-    const event = events[i];
-    const start = Number(event.startTxtOffset);
-    const end = Number(event.endTxtOffset);
-    if (currentChars >= start && currentChars < end) {
-      return {
-        ...event,
-        eventNum: Number(event.eventNum),
-        chapter: chapterNum,
-        progress: ((currentChars - start) / (end - start)) * 100,
-      };
-    }
-  }
-  if (currentChars < Number(events[0].startTxtOffset)) {
-    return { ...events[0], eventNum: Number(events[0].eventNum), chapter: chapterNum, progress: 0 };
-  }
-  const last = events[events.length - 1];
-  return { ...last, eventNum: Number(last.eventNum), chapter: chapterNum, progress: 100 };
 }
 
 export function getRefs(xhtmlBookRef, xhtmlViewerRef) {
@@ -631,7 +575,8 @@ export const graphDataCacheUtils = {
     eventUtils,
     apiEventCacheRef,
     hasCalledApi,
-    atLocator = null
+    atLocator = null,
+    fineOpts = undefined
   ) => {
     if (!bookId || !chapter || eventIdx < 1) {
       return { resultData: null, usedCache: false };
@@ -644,7 +589,7 @@ export const graphDataCacheUtils = {
       const cachedBeforeApi = getGraphEventState(bookId, chapter, eventIdx);
       if (!cachedBeforeApi) {
         try {
-          const apiResponse = await getFineGraph(bookId, chapter, eventIdx, atLocator);
+          const apiResponse = await getFineGraph(bookId, chapter, eventIdx, atLocator, fineOpts);
           
           if (apiResponse && (apiResponse.isSuccess !== false)) {
             const apiResult = apiResponse?.result ?? apiResponse?.data ?? null;
@@ -763,13 +708,15 @@ export const graphDataTransformUtils = {
     };
   },
 
+  /** API relations를 processRelations로 id1/id2 정규화 후 Cytoscape 요소로 변환(source/target·무효 항목 제거). */
   convertToElements: (resultData, usedCache, normalizedEvent, createCharacterMaps, buildNodeWeights, convertRelationsToElements) => {
     if (usedCache && Array.isArray(resultData.elements) && resultData.elements.length > 0) {
       return resultData.elements;
     }
-    
+
     const chars = Array.isArray(resultData.characters) ? resultData.characters : [];
-    const rels = Array.isArray(resultData.relations) ? resultData.relations : [];
+    const rawRels = Array.isArray(resultData.relations) ? resultData.relations : [];
+    const rels = processRelations(rawRels);
     if (chars.length === 0 && rels.length === 0) {
       return [];
     }
@@ -797,27 +744,93 @@ export const graphDataTransformUtils = {
     if (prevData.chapterIdx !== currentChapter) {
       return convertedElements;
     }
-    
+
+    const edgeDedupKey = (el) => {
+      const d = el?.data;
+      if (!d) return null;
+      if (d.id != null && String(d.id).trim() !== '') {
+        return String(d.id);
+      }
+      if (d.source != null && d.target != null) {
+        return directedEdgeElementId(d.source, d.target);
+      }
+      return null;
+    };
+
+    const mergeRelationArrays = (a, b) => {
+      const toArr = (v) => {
+        if (Array.isArray(v)) return v;
+        if (v === undefined || v === null || v === '') return [];
+        return [v];
+      };
+      return [...new Set([...toArr(a), ...toArr(b)])];
+    };
+
     if (apiEventIdx > prevData.eventIdx) {
-      const existingNodeIds = new Set(
-        prevData.elements
-          .filter(e => e.data && !e.data.source)
-          .map(e => e.data.id)
+      const prevNodes = (prevData.elements || []).filter((e) => e.data && !e.data.source);
+      const existingNodeIds = new Set(prevNodes.map((e) => e.data.id));
+
+      const newNodes = convertedElements.filter(
+        (e) => e.data && !e.data.source && !existingNodeIds.has(e.data.id)
       );
-      
-      const newNodes = convertedElements.filter(e => 
-        e.data && !e.data.source && !existingNodeIds.has(e.data.id)
-      );
-      
-      const allEdges = convertedElements.filter(e => e.data && e.data.source);
-      
-      return [
-        ...prevData.elements.filter(e => e.data && !e.data.source),
-        ...newNodes,
-        ...allEdges
-      ];
+
+      const prevEdges = (prevData.elements || []).filter((e) => e.data && e.data.source);
+      const newEdges = convertedElements.filter((e) => e.data && e.data.source);
+
+      const edgeByKey = new Map();
+      for (const el of prevEdges) {
+        const key = edgeDedupKey(el);
+        if (key) {
+          edgeByKey.set(key, el);
+        }
+      }
+      for (const el of newEdges) {
+        const key = edgeDedupKey(el);
+        if (!key) {
+          continue;
+        }
+        const prevEl = edgeByKey.get(key);
+        if (!prevEl) {
+          edgeByKey.set(key, el);
+          continue;
+        }
+        const p = prevEl.data || {};
+        const n = el.data || {};
+        const nextPos = Number(n.positivity);
+        const prevPos = Number(p.positivity);
+        const positivity = Number.isFinite(nextPos)
+          ? nextPos
+          : Number.isFinite(prevPos)
+            ? prevPos
+            : 0;
+
+        edgeByKey.set(key, {
+          ...prevEl,
+          ...el,
+          data: {
+            ...p,
+            ...n,
+            relation: mergeRelationArrays(p.relation, n.relation),
+            label: n.label != null && String(n.label).trim() !== '' ? n.label : p.label || '',
+            positivity,
+          },
+        });
+      }
+
+      const mergedEdges = Array.from(edgeByKey.values());
+
+      return [...prevNodes, ...newNodes, ...mergedEdges];
     }
-    
+
+    if (
+      apiEventIdx === prevData.eventIdx &&
+      (!Array.isArray(convertedElements) || convertedElements.length === 0) &&
+      Array.isArray(prevData.elements) &&
+      prevData.elements.length > 0
+    ) {
+      return prevData.elements;
+    }
+
     return convertedElements;
   },
 

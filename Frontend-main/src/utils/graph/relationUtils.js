@@ -44,10 +44,10 @@ export function normalizeRelation(raw) {
   }
   
   try {
-    // Accept various shapes (id1/id2 or source/target)
-    const id1 = safeNum(raw.id1);
-    const id2 = safeNum(raw.id2);
-    
+    // id1/id2 우선, 없으면 source/target (fine·그래프 API 변형)
+    const id1 = safeNum(raw.id1 ?? raw.source);
+    const id2 = safeNum(raw.id2 ?? raw.target);
+
     if (isNaN(id1) || isNaN(id2)) {
       return null;
     }
@@ -99,9 +99,9 @@ export function isSamePair(rel, a, b) {
   if (!rel || typeof rel !== 'object') {
     return false;
   }
-  
-  const r1 = safeNum(rel.id1);
-  const r2 = safeNum(rel.id2);
+
+  const r1 = safeNum(rel.id1 ?? rel.source);
+  const r2 = safeNum(rel.id2 ?? rel.target);
   const s1 = safeNum(a);
   const s2 = safeNum(b);
   
@@ -110,6 +110,29 @@ export function isSamePair(rel, a, b) {
   }
   
   return (r1 === s1 && r2 === s2) || (r1 === s2 && r2 === s1);
+}
+
+/**
+ * 원본 relation에 붙은 이벤트 식별자만 얇게 전달(processRelations·그래프 변환용).
+ * @param {object} raw
+ * @returns {Record<string, *>}
+ */
+export function relationEventMetaPassthrough(raw) {
+  if (!raw || typeof raw !== 'object') {
+    return {};
+  }
+  const nested = raw.event && typeof raw.event === 'object' ? raw.event : null;
+  const pick = (v) => (v !== undefined && v !== null ? v : undefined);
+  const eventNum = pick(raw.eventNum) ?? pick(nested?.eventNum);
+  const eventIdx = pick(raw.eventIdx) ?? pick(nested?.eventIdx);
+  const event_id = pick(raw.event_id) ?? pick(nested?.event_id);
+  const event_idx = pick(raw.event_idx);
+  return {
+    ...(eventNum !== undefined ? { eventNum } : {}),
+    ...(eventIdx !== undefined ? { eventIdx } : {}),
+    ...(event_id !== undefined ? { event_id } : {}),
+    ...(event_idx !== undefined ? { event_idx } : {}),
+  };
 }
 
 export function processRelations(relations) {
@@ -123,15 +146,16 @@ export function processRelations(relations) {
   
   try {
     const processed = relations
-      .map(normalizeRelation)
-      .filter(relation => relation !== null && isValidRelation(relation))
-      .map(r => ({
+      .map((raw) => ({ raw, norm: normalizeRelation(raw) }))
+      .filter(({ norm }) => norm !== null && isValidRelation(norm))
+      .map(({ raw, norm: r }) => ({
         id1: r.id1,
         id2: r.id2,
         positivity: r.positivity,
         relation: r.relation,
         weight: r.weight,
         count: r.count,
+        ...relationEventMetaPassthrough(raw),
       }));
     
     return processed;
@@ -242,6 +266,16 @@ export function isValidRelationsArray(relations) {
   }
   
   return isValidRelationData(relations[0]);
+}
+
+/**
+ * 방향 간선 id (`id1->id2`). 역방향은 별도 간선.
+ * @param {any} fromId
+ * @param {any} toId
+ * @returns {string}
+ */
+export function directedEdgeElementId(fromId, toId) {
+  return `${String(fromId)}->${String(toId)}`;
 }
 
 /**
