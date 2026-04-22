@@ -180,6 +180,11 @@ const CytoscapeGraphUnified = ({
     addedNodeIdsRef.current = new Set();
   }, [cy, isResetFromSearch, showRippleEffect]);
 
+  const reapplySearchFade = useCallback(() => {
+    if (!cy || !isSearchActive || !filteredElements || filteredElements.length === 0) return;
+    applySearchFadeEffect(cy, filteredElements, isSearchActive);
+  }, [cy, isSearchActive, filteredElements]);
+
   const {
     tapNodeHandler: hookTapNodeHandler,
     tapEdgeHandler: hookTapEdgeHandler,
@@ -192,6 +197,7 @@ const CytoscapeGraphUnified = ({
     selectedNodeIdRef,
     selectedEdgeIdRef,
     strictBackgroundClear,
+    onAfterReset: reapplySearchFade,
   });
 
   useEffect(() => {

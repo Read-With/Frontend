@@ -566,22 +566,16 @@ export const normalizeLocatorForServerProgress = (bookId, locator, manifestOverr
   return out ?? loc;
 };
 
-export const getEventData = (bookId, chapterIdx, eventIdx, manifestOverride = undefined) => {
+export const getManifestEventData = (bookId, chapterIdx, eventIdx, manifestOverride = undefined) => {
   const chapterData = getChapterData(bookId, chapterIdx, manifestOverride);
-  if (!chapterData || !chapterData.events) return null;
-  
+  if (!chapterData?.events) return null;
   const targetEventIdx = toNumberOrNull(eventIdx);
   if (targetEventIdx == null) return null;
   return chapterData.events.find(ev => toNumberOrNull(ev.idx) === targetEventIdx) ?? null;
 };
 
-export const isValidEvent = (bookId, chapterIdx, eventIdx, manifestOverride = undefined) => {
-  const chapterData = getChapterData(bookId, chapterIdx, manifestOverride);
-  if (!chapterData || !chapterData.events) return false;
-  const targetEventIdx = toNumberOrNull(eventIdx);
-  if (targetEventIdx == null) return false;
-  return chapterData.events.some(ev => toNumberOrNull(ev.idx) === targetEventIdx);
-};
+export const isValidEvent = (bookId, chapterIdx, eventIdx, manifestOverride = undefined) =>
+  getManifestEventData(bookId, chapterIdx, eventIdx, manifestOverride) !== null;
 
 /**
  * v2 manifest 챕터의 이벤트 인덱스 상한(힌트). 그래프 본문은 GET /api/v2/graph/fine.

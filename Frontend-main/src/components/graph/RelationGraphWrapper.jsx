@@ -146,6 +146,7 @@ function RelationGraphWrapper() {
     currentChapter,
     currentEvent,
     forcedChapterEventIdx,
+    { macroOnly: true },
   );
 
   const { povSummaries } = useChapterPovSummaries(
@@ -179,9 +180,9 @@ function RelationGraphWrapper() {
   }, [currentEvent]);
 
   const {
-    newNodeIds,
     currentChapterData,
   } = useGraphDataLoader(loaderBookKey, currentChapter, loaderEventIdx);
+  const newNodeIds = [];
 
   const effectiveMaxChapter = apiMaxChapter;
 
@@ -269,7 +270,7 @@ function RelationGraphWrapper() {
     }
 
     try {
-      const { idToName, idToDesc, idToMain, idToNames, idToProfileImage } = createCharacterMaps(fineChars);
+      const { idToName, idToDesc, idToDescKo, idToMain, idToNames, idToProfileImage } = createCharacterMaps(fineChars);
 
       const normalizedEvent = graphDataTransformUtils.normalizeApiEvent(graphApiPayload.event);
       const nodeWeights = buildNodeWeights(fineChars);
@@ -278,7 +279,7 @@ function RelationGraphWrapper() {
         fineRels,
         idToName,
         idToDesc,
-        idToDesc,
+        idToDescKo,
         idToMain,
         idToNames,
         'api',
@@ -495,7 +496,6 @@ function RelationGraphWrapper() {
       const normalizedLastEventNum = Number.isFinite(Number(lastEventNum)) && Number(lastEventNum) >= 1
         ? Number(lastEventNum)
         : 1;
-      setForcedChapterEventIdx(normalizedLastEventNum);
       setCurrentEvent(normalizedLastEventNum);
     }
   }, [
@@ -615,6 +615,14 @@ function RelationGraphWrapper() {
     Array.from({ length: effectiveMaxChapter }, (_, i) => i + 1),
     [effectiveMaxChapter]
   );
+
+  useEffect(() => {
+    if (!serverBookId || !apiMacroData) return;
+    console.log(
+      `[Macro API] bookId=${serverBookId} ch=${currentChapter}`,
+      apiMacroData,
+    );
+  }, [apiMacroData, serverBookId, currentChapter]);
 
   const isLoading = apiFineLoading || isGraphLoading;
   const isApiGraphEmpty = useMemo(() => {

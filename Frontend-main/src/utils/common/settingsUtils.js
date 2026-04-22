@@ -17,8 +17,7 @@ export const defaultSettings = {
 
 export function loadSettings() {
   try {
-    let settings = storageUtils.get("xhtml_viewer_settings");
-    const loadedSettings = settings ? JSON.parse(settings) : defaultSettings;
+    const loadedSettings = storageUtils.getJson("xhtml_viewer_settings", defaultSettings);
 
     if (loadedSettings.pageMode === "leftOnly") {
       loadedSettings.pageMode = "double";

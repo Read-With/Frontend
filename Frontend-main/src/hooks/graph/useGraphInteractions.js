@@ -72,12 +72,13 @@ function applyEdgeClickHighlight(cy, edge) {
 
 export default function useGraphInteractions({
   cyRef,
-  onShowNodeTooltip, 
+  onShowNodeTooltip,
   onShowEdgeTooltip,
-  onClearTooltip, 
+  onClearTooltip,
   selectedNodeIdRef,
   selectedEdgeIdRef,
   strictBackgroundClear = false,
+  onAfterReset,
 }) {
   const onShowNodeTooltipRef = useRef(onShowNodeTooltip);
   const onShowEdgeTooltipRef = useRef(onShowEdgeTooltip);
@@ -95,9 +96,13 @@ export default function useGraphInteractions({
     onClearTooltipRef.current = onClearTooltip;
   }, [onClearTooltip]);
 
+  const onAfterResetRef = useRef(onAfterReset);
+  useEffect(() => { onAfterResetRef.current = onAfterReset; }, [onAfterReset]);
+
   const resetAllStyles = useCallback(() => {
     if (!cyRef?.current) return;
     clearHighlightClassesOn(cyRef.current);
+    if (onAfterResetRef.current) onAfterResetRef.current();
   }, [cyRef]);
 
   const clearStyles = useCallback(() => {
@@ -216,6 +221,7 @@ export default function useGraphInteractions({
         }
         
         if (selectedNodeIdRef) selectedNodeIdRef.current = nodeId;
+        if (selectedEdgeIdRef) selectedEdgeIdRef.current = null;
       } catch {
       }
     },

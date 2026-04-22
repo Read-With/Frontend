@@ -1,6 +1,7 @@
 import { registerCache, getCacheItem, setCacheItem, clearCache, removeCacheItem } from './cacheManager';
 import { progressPayloadFromData, progressResultToViewerAnchor, resolveProgressLocator } from '../locatorUtils';
 import { locatorFromBookAbsoluteOffset, normalizeLocatorForServerProgress } from './manifestCache';
+import { progressStorageKey } from '../progressPercentStorage';
 
 export const PROGRESS_CACHE_UPDATED_EVENT = 'readwith:progress-cache-updated';
 
@@ -21,13 +22,10 @@ export const ensureProgressRowLocator = (bookIdStr, row) => {
   };
 };
 
-/** useBooks 마이페이지 % 폴백과 동일 키 — 새로고침 후에도 유지 */
-const libraryProgressStorageKey = (bookIdStr) => `progress_${bookIdStr}`;
-
 const syncLibraryProgressPercentToLocalStorage = (bookIdStr, pct) => {
   if (typeof window === 'undefined' || bookIdStr == null || pct == null) return;
   try {
-    window.localStorage.setItem(libraryProgressStorageKey(bookIdStr), String(pct));
+    window.localStorage.setItem(progressStorageKey(bookIdStr), String(pct));
   } catch {
     void 0;
   }
@@ -36,7 +34,7 @@ const syncLibraryProgressPercentToLocalStorage = (bookIdStr, pct) => {
 const removeLibraryProgressPercentFromLocalStorage = (bookIdStr) => {
   if (typeof window === 'undefined' || bookIdStr == null) return;
   try {
-    window.localStorage.removeItem(libraryProgressStorageKey(bookIdStr));
+    window.localStorage.removeItem(progressStorageKey(bookIdStr));
   } catch {
     void 0;
   }

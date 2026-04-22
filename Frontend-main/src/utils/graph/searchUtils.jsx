@@ -35,6 +35,11 @@ import { registerCache, recordCacheAccess, enforceCacheSizeLimit } from '../comm
 const regexCache = new Map();
 registerCache('regexCache', regexCache, { maxSize: 500, ttl: 300000 });
 
+const buildChapterCharacterIdSet = (currentChapterData) => {
+  if (!currentChapterData?.characters?.length) return null;
+  return new Set(currentChapterData.characters.map(char => String(char.id)));
+};
+
 /**
  * 텍스트를 검색어로 분할하여 하이라이트용 배열로 변환
  * @param {string} text - 원본 텍스트
@@ -144,10 +149,8 @@ export function buildSuggestions(elements, query, currentChapterData = null) {
     
     // 현재 챕터의 캐릭터 데이터가 있는 경우, 해당 챕터에 존재하는 인물만 필터링
     let filteredNodes = characterNodes;
-    if (currentChapterData && currentChapterData.characters && currentChapterData.characters.length > 0) {
-      const chapterCharacterIds = new Set(
-        currentChapterData.characters.map(char => String(char.id))
-      );
+    const chapterCharacterIds = buildChapterCharacterIdSet(currentChapterData);
+    if (chapterCharacterIds) {
       filteredNodes = characterNodes.filter(node => {
         const nodeId = node?.data?.id;
         if (nodeId === undefined || nodeId === null) return false;
@@ -249,11 +252,9 @@ export function filterGraphElements(elements, searchTerm, currentChapterData = n
     const searchLower = searchTerm.toLowerCase();
     
     // 현재 챕터의 캐릭터 데이터가 있는 경우, 해당 챕터에 존재하는 인물만 필터링
+    const chapterCharacterIds = buildChapterCharacterIdSet(currentChapterData);
     let candidateNodes;
-    if (currentChapterData && currentChapterData.characters && currentChapterData.characters.length > 0) {
-      const chapterCharacterIds = new Set(
-        currentChapterData.characters.map(char => String(char.id))
-      );
+    if (chapterCharacterIds) {
       candidateNodes = elements.filter(el => {
         if (el.data.source) return false;
         if (!nodeMatchesQuery(el, searchLower)) return false;

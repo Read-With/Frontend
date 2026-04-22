@@ -236,15 +236,7 @@ const getElementId = (element) => {
   );
 };
 
-const cloneElements = (elements) => {
-  if (!Array.isArray(elements)) return [];
-  return elements.map((element) => deepClone(element));
-};
-
-const cloneCharacters = (characters) => {
-  if (!Array.isArray(characters)) return [];
-  return characters.map((character) => deepClone(character));
-};
+const cloneArray = (arr) => Array.isArray(arr) ? arr.map(deepClone) : [];
 
 
 const safeCompare = (a, b) => {
@@ -510,8 +502,8 @@ const buildChapterCachePayload = (
       convertedElements = [];
     }
 
-    const currentElements = cloneElements(convertedElements);
-    const currentCharacters = cloneCharacters(aggregatedCharacters);
+    const currentElements = cloneArray(convertedElements);
+    const currentCharacters = cloneArray(aggregatedCharacters);
 
     if (index === 0) {
       baseSnapshot = {
@@ -524,8 +516,8 @@ const buildChapterCachePayload = (
     } else {
       const elementDiffRaw = calcGraphDiff(prevElements, convertedElements);
       const elementDiff = {
-        added: cloneElements(elementDiffRaw?.added || []),
-        updated: cloneElements(elementDiffRaw?.updated || []),
+        added: cloneArray(elementDiffRaw?.added || []),
+        updated: cloneArray(elementDiffRaw?.updated || []),
         removedIds: (elementDiffRaw?.removed || [])
           .map((element) => getElementId(element))
           .filter(Boolean)
@@ -975,8 +967,8 @@ export const reconstructChapterGraphState = (cachePayload, targetEventIdx) => {
   const baseIdx = Number(baseSnapshot.eventIdx) || 1;
   const normalizedTarget = Number(targetEventIdx);
 
-  let currentElements = cloneElements(baseSnapshot.elements);
-  let currentCharacters = cloneCharacters(baseSnapshot.characters || []);
+  let currentElements = cloneArray(baseSnapshot.elements);
+  let currentCharacters = cloneArray(baseSnapshot.characters || []);
   let currentEventMeta = baseSnapshot.eventMeta ? deepClone(baseSnapshot.eventMeta) : null;
   let appliedEventIdx = baseIdx;
 
@@ -1069,60 +1061,27 @@ export const clearChapterEventCache = (bookId, chapterIdx) => {
   }
 };
 
+/** bookId 지정 시 해당 책만, 생략 시 전체 챕터 이벤트 캐시 삭제 */
 export const clearAllChapterEventCaches = (bookId) => {
   try {
     const storage = getStorage('localStorage');
     if (!storage) return 0;
-    
-    const keys = Object.keys(storage);
-    const bookIdNum = Number(bookId);
-    if (!Number.isFinite(bookIdNum)) {
-      return 0;
-    }
-    
-    let count = 0;
-    keys.forEach(key => {
-      const segments = key.split('-');
-      if (segments.length === 2) {
-        const [storedBookId, storedChapterIdx] = segments;
-        if (Number(storedBookId) === bookIdNum && Number.isFinite(Number(storedChapterIdx))) {
-          removeFromStorage(key, 'localStorage');
-          count++;
-        }
-      }
-    });
-    
-    return count;
-  } catch (error) {
-    console.error('모든 챕터 이벤트 캐시 삭제 실패:', error);
-    return 0;
-  }
-};
 
-export const clearAllChapterEventCachesGlobally = () => {
-  try {
-    const storage = getStorage('localStorage');
-    if (!storage) return 0;
-    
-    const keys = Object.keys(storage);
+    const bookIdNum = bookId !== undefined ? Number(bookId) : null;
+    if (bookId !== undefined && !Number.isFinite(bookIdNum)) return 0;
+
     let count = 0;
-    keys.forEach(key => {
-      const segments = key.split('-');
-      if (segments.length === 2) {
-        const [storedBookId, storedChapterIdx] = segments;
-        if (
-          Number.isFinite(Number(storedBookId)) &&
-          Number.isFinite(Number(storedChapterIdx))
-        ) {
-          removeFromStorage(key, 'localStorage');
-          count++;
-        }
-      }
+    Object.keys(storage).forEach(key => {
+      const [a, b] = key.split('-');
+      if (!Number.isFinite(Number(a)) || !Number.isFinite(Number(b))) return;
+      if (bookIdNum !== null && Number(a) !== bookIdNum) return;
+      removeFromStorage(key, 'localStorage');
+      count++;
     });
-    
+
     return count;
   } catch (error) {
-    console.error('글로벌 챕터 이벤트 캐시 삭제 실패:', error);
+    console.error('챕터 이벤트 캐시 삭제 실패:', error);
     return 0;
   }
 };

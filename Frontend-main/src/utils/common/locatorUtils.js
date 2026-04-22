@@ -2,6 +2,8 @@
  * v2 표준 Locator: { chapterIndex (1-based), blockIndex (0-based), offset (0-based 코드포인트) }
  */
 
+import { toNumberOrNull as toNumber } from './numberUtils';
+
 export const toLocator = (obj) => {
   if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return null;
   const chapterIndex = toNumber(obj.chapterIndex ?? obj.chapterIdx);
@@ -20,12 +22,6 @@ export const locatorsEqual = (a, b) => {
   const B = toLocator(b);
   if (!A || !B) return false;
   return A.chapterIndex === B.chapterIndex && A.blockIndex === B.blockIndex && A.offset === B.offset;
-};
-
-const toNumber = (v) => {
-  if (v == null) return null;
-  const n = Number(v);
-  return Number.isFinite(n) ? n : null;
 };
 
 export const anchorToLocators = (anchor) => {

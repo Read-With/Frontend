@@ -430,82 +430,63 @@ function UnifiedNodeInfo({
     };
   }, [processedNodeData, chapterNum, actualFilename, povSummaries]);
 
-  // 레이더 차트 데이터 추출 (API 데이터 우선 사용)
+  // 레이더 차트 데이터 추출 (macro API 기반으로 통일)
   const radarChartData = useMemo(() => {
     if (!nodeData?.id || !chapterNum || displayMode !== 'sidebar') {
       return [];
     }
 
-    // API 데이터가 있는 경우 우선 사용
-    if (apiMacroData || apiFineData) {
+    // macro API 데이터 우선 사용
+    if (apiMacroData?.relations && apiMacroData?.characters) {
       try {
-        const apiData = apiMacroData || apiFineData;
-        if (apiData && apiData.relations && apiData.characters) {
-          // API 데이터에서 관계 정보 추출
-          const relations = apiData.relations;
-          const characters = apiData.characters;
-          
-          
-          // 캐릭터 ID를 이름으로 매핑하는 맵 생성
-          const characterMap = {};
-          const nameToIdMap = {};
-          characters.forEach(char => {
-            const charName = char.common_name || char.name;
-            characterMap[char.id] = charName;
-            nameToIdMap[charName] = char.id;
-          });
-          
-          // 현재 노드의 ID를 API 데이터 형식에 맞게 변환
-          const currentNodeId = nodeData.id;
-          let targetNodeId = currentNodeId;
-          
-          // nodeData.id가 문자열인 경우 이름 기준으로 숫자 ID 매칭
-          if (typeof currentNodeId === 'string') {
-            const charName = nodeData.label || nodeData.common_name;
-            targetNodeId = nameToIdMap[charName] || currentNodeId;
-          }
-          
-          // API 관계를 레이더용 형식으로 변환 (중복 제거)
-          const relationMap = new Map(); // 중복 관계를 하나로 처리하기 위한 맵
-          
-          relations.forEach(rel => {
-            // 현재 노드가 관계에 포함되어 있는지 확인
-            const isCurrentNodeId1 = rel.id1 === targetNodeId;
-            const isCurrentNodeId2 = rel.id2 === targetNodeId;
-            
-            if (isCurrentNodeId1 || isCurrentNodeId2) {
-              // 관계의 고유 키 생성 (순서에 관계없이)
-              const key1 = `${rel.id1}-${rel.id2}`;
-              const key2 = `${rel.id2}-${rel.id1}`;
-              
-              // 이미 처리된 관계가 아닌 경우만 추가
-              if (!relationMap.has(key1) && !relationMap.has(key2)) {
-                // extractRadarChartData는 id1/id2를 기대하므로 ID를 그대로 사용
-                relationMap.set(key1, {
-                  id1: rel.id1,
-                  id2: rel.id2,
-                  relation: rel.relation || ['관계'],
-                  count: rel.count || 1,
-                  positivity: rel.positivity || 0
-                });
-              }
-            }
-          });
-          
-          // 최종 관계 데이터 (중복 제거됨)
-          const finalRelations = Array.from(relationMap.values());
-          
-          // extractRadarChartData는 id1/id2 형식을 기대하므로 ID로 직접 전달
-          const chartData = extractRadarChartData(targetNodeId, finalRelations, elements, 8);
-          
-          
-          return chartData;
+        const { relations, characters } = apiMacroData;
+
+        // macro 캐릭터 목록으로 이름 룩업 구조 생성 (elements 의존 제거)
+        const nameToIdMap = {};
+        const macroElements = characters.map(char => {
+          const charName = char.common_name || char.name;
+          nameToIdMap[charName] = char.id;
+          return { data: { id: String(char.id), label: charName, common_name: charName } };
+        });
+
+        // 현재 노드 ID를 macro API 숫자 ID로 변환
+        const currentNodeId = nodeData.id;
+        let targetNodeId = currentNodeId;
+        if (typeof currentNodeId === 'string') {
+          const charName = nodeData.label || nodeData.common_name;
+          targetNodeId = nameToIdMap[charName] ?? currentNodeId;
         }
+
+        // 관계 중복 제거 (순서 무관 키)
+        const relationMap = new Map();
+        relations.forEach(rel => {
+          if (rel.id1 !== targetNodeId && rel.id2 !== targetNodeId) return;
+          const lo = Math.min(rel.id1, rel.id2);
+          const hi = Math.max(rel.id1, rel.id2);
+          const key = `${lo}-${hi}`;
+          if (!relationMap.has(key)) {
+            relationMap.set(key, {
+              id1: rel.id1,
+              id2: rel.id2,
+              relation: rel.relation || ['관계'],
+              count: rel.count || 1,
+              positivity: rel.positivity || 0,
+            });
+          }
+        });
+
+        return extractRadarChartData(
+          targetNodeId,
+          Array.from(relationMap.values()),
+          macroElements,
+          8
+        );
       } catch {
+        return [];
       }
     }
 
-    // API 매크로/파인이 없으면 이벤트 캐시 스냅샷으로 보강
+    // macro API 없으면 이벤트 캐시 스냅샷으로 보강
     if (!elements || elements.length === 0) {
       return [];
     }
@@ -513,67 +494,44 @@ function UnifiedNodeInfo({
     try {
       const unifiedEventInfo = getUnifiedEventInfo();
       const targetEventNum = unifiedEventInfo.eventNum;
-      
       const json = getEventDataByIndex(folderKey, chapterNum, targetEventNum);
-      
-      if (!json || !json.relations) {
-        return [];
-      }
+      if (!json || !json.relations) return [];
 
-      // 관계 중복 제거
       const relationMap = new Map();
-      
-      
       json.relations.forEach((rel) => {
-        // id1/id2 또는 source/target 모두 지원
         const source = rel.id1 ?? rel.source;
         const target = rel.id2 ?? rel.target;
-        
-        
-        if (!source || !target) {
-          return;
-        }
-        
-        // 관계의 고유 키 생성 (순서에 관계없이)
+        if (!source || !target) return;
         const key1 = `${source}-${target}`;
         const key2 = `${target}-${source}`;
-        
-        // 이미 처리된 관계가 아닌 경우만 추가
         if (!relationMap.has(key1) && !relationMap.has(key2)) {
           relationMap.set(key1, {
-            source: source,
-            target: target,
+            source,
+            target,
             relation: rel.relation,
             strength: rel.strength || 1,
-            positivity: rel.positivity || 0
+            positivity: rel.positivity || 0,
           });
         }
       });
-      
-      // 정제된 관계 목록
+
       const finalRelations = Array.from(relationMap.values());
-      
-      // 현재 이벤트에 등장하는 캐릭터 ID만 필터링
       const currentEventCharacterIds = new Set();
       finalRelations.forEach(rel => {
         currentEventCharacterIds.add(String(rel.source));
         currentEventCharacterIds.add(String(rel.target));
       });
-      
-      // 현재 이벤트에 등장하는 캐릭터만 필터링
+
       const filteredElements = elements.filter(el => {
-        if (el.data.source) return false; // 엣지는 제외
-        const nodeId = String(el.data.id);
-        return currentEventCharacterIds.has(nodeId);
+        if (el.data.source) return false;
+        return currentEventCharacterIds.has(String(el.data.id));
       });
-      
-      const chartData = extractRadarChartData(nodeData.id, finalRelations, filteredElements, 8);
-      
-      return chartData;
+
+      return extractRadarChartData(nodeData.id, finalRelations, filteredElements, 8);
     } catch {
       return [];
     }
-  }, [nodeData, chapterNum, displayMode, folderKey, elements, apiMacroData, apiFineData, getUnifiedEventInfo]);
+  }, [nodeData, chapterNum, displayMode, folderKey, elements, apiMacroData, getUnifiedEventInfo]);
 
   // 연결 상태 확인
   const connectionStatus = useMemo(() => {
