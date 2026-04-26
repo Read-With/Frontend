@@ -197,6 +197,7 @@ export const createGraphStylesheet = (edgeStyle, edgeLabelVisible, maxEdgeLabelL
     style: {
       width: 8,
       opacity: 1,
+      "target-endpoint": "outside-to-node",
     },
   },
   {
@@ -221,14 +222,14 @@ export const createGraphStylesheet = (edgeStyle, edgeLabelVisible, maxEdgeLabelL
   {
     selector: "node.faded",
     style: {
-      opacity: 0.05,
-      "text-opacity": 0.02,
+      opacity: 0.14,
+      "text-opacity": 0.1,
     },
   },
   {
     selector: "edge.faded",
     style: {
-      opacity: 0.05,
+      opacity: 0.1,
     },
   },
 ];

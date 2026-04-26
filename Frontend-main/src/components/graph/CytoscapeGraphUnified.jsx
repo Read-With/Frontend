@@ -15,7 +15,8 @@ import {
   ensureElementsInBounds,
   createMouseEventHandlers,
   syncReciprocalPairJunctionOffsets,
-} from "../../utils/graph/graphUtils.js";
+  clearHighlightClassesOn,
+} from "../../utils/graph/graphUtils";
 import { calculateSpiralPlacement, getContainerDimensions } from "../../utils/graph/nodePlacementUtils.js";
 import { calculateNodeSize } from "../../utils/styles/graphStyles.js";
 import useGraphInteractions from "../../hooks/graph/useGraphInteractions.js";
@@ -572,23 +573,20 @@ const CytoscapeGraphUnified = ({
     if (!filteredElements || filteredElements.length === 0) return '';
     return filteredElements.map(e => e.data?.id).filter(Boolean).sort().join(',');
   }, [filteredElements]);
-  
+
+  const prevIsSearchActiveRef = useRef(isSearchActive);
+
   useEffect(() => {
     if (!cy) return;
 
+    const wasSearchActive = prevIsSearchActiveRef.current;
+    prevIsSearchActiveRef.current = isSearchActive;
+
     if (isSearchActive && filteredElements.length > 0) {
       applySearchFadeEffect(cy, filteredElements, isSearchActive);
-    } else if (!isSearchActive) {
-      cy.batch(() => {
-        const faded = cy.collection().union(cy.nodes(".faded")).union(cy.edges(".faded"));
-        if (faded.length > 0) {
-          faded.removeClass("faded");
-          faded.forEach((element) => {
-            element.style("opacity", "");
-            element.style("text-opacity", "");
-          });
-        }
-      });
+    } else if (!isSearchActive && wasSearchActive) {
+      // Only clear when transitioning search OFF — not on every render
+      clearHighlightClassesOn(cy);
     }
   }, [cy, isSearchActive, filteredElementIdsStr]);
 

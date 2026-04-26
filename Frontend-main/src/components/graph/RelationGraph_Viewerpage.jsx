@@ -11,7 +11,8 @@ import "./RelationGraph.css";
 import { getEdgeStyle, createGraphStylesheet } from "../../utils/styles/graphStyles";
 import { graphStyles } from "../../utils/styles/styles";
 import { buildElementsGraphFingerprint } from "../../utils/graph/graphDataUtils.js";
-import { ensureElementsInBounds } from "../../utils/graph/graphUtils.js";
+import { ensureElementsInBounds, clearHighlightClassesOn } from "../../utils/graph/graphUtils";
+import { applySearchFadeEffect } from "../../utils/graph/searchUtils.jsx";
 
 function useAutoFit(cyRef, elements, chapterNum, isSearchActive) {
   const elementsFp = useMemo(
@@ -79,37 +80,10 @@ function useCytoscapeReset(cyRef, graphClearRef, selectedNodeIdRef, selectedEdge
     graphClearRef.current = () => {
       const cy = cyRef.current;
       if (!cy) return;
-
+      clearHighlightClassesOn(cy);
       try {
-        const touched = cy
-          .collection()
-          .union(cy.nodes(".highlighted"))
-          .union(cy.nodes(".faded"))
-          .union(cy.edges(".highlighted"))
-          .union(cy.edges(".faded"));
-        if (touched.length > 0) {
-          cy.batch(() => {
-            touched.removeClass("faded highlighted");
-            touched.nodes().forEach((node) => {
-              node.removeStyle("opacity");
-              node.removeStyle("text-opacity");
-              node.removeStyle("border-color");
-              node.removeStyle("border-width");
-              node.removeStyle("border-opacity");
-              node.removeStyle("border-style");
-            });
-            touched.edges().forEach((edge) => {
-              edge.removeStyle("opacity");
-              edge.removeStyle("text-opacity");
-              edge.removeStyle("width");
-            });
-          });
-          if (typeof cy.style === "function") {
-            try { cy.style().update(); } catch {}
-          }
-        }
+        if (typeof cy.style === "function") cy.style().update();
       } catch {}
-
       if (selectedNodeIdRef) selectedNodeIdRef.current = null;
       if (selectedEdgeIdRef) selectedEdgeIdRef.current = null;
     };
@@ -147,10 +121,19 @@ const ViewerRelationGraph = ({
   useAutoFit(cyRef, elements, chapterNum, isSearchActive);
   useCytoscapeReset(cyRef, graphClearRef, selectedNodeIdRef, selectedEdgeIdRef);
 
+  // Used by useGraphInteractions (background tap): graph is already cleared by resetAllStyles, only clear tooltip
+  const onClearTooltipOnly = useCallback(() => {
+    onClearTooltip?.();
+  }, [onClearTooltip]);
+
+  // Used by external triggers (tooltip close button, document click): must clear both
   const clearTooltipAndGraph = useCallback(() => {
     onClearTooltip?.();
     graphClearRef?.current?.();
-  }, [onClearTooltip, graphClearRef]);
+    if (isSearchActive && filteredElements?.length > 0 && cyRef.current) {
+      applySearchFadeEffect(cyRef.current, filteredElements, isSearchActive);
+    }
+  }, [onClearTooltip, graphClearRef, isSearchActive, filteredElements, cyRef]);
 
   const onShowNodeTooltip = useCallback(({ node, nodeCenter, mouseX, mouseY }) => {
     if (!onSetActiveTooltip) return;
@@ -303,7 +286,7 @@ const ViewerRelationGraph = ({
           isResetFromSearch={isResetFromSearch}
           onShowNodeTooltip={onShowNodeTooltip}
           onShowEdgeTooltip={onShowEdgeTooltip}
-          onClearTooltip={clearTooltipAndGraph}
+          onClearTooltip={onClearTooltipOnly}
           selectedNodeIdRef={selectedNodeIdRef}
           selectedEdgeIdRef={selectedEdgeIdRef}
           strictBackgroundClear={true}

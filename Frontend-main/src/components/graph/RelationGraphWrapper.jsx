@@ -11,6 +11,7 @@ import { createGraphStylesheet, getEdgeStyle, getWideLayout } from "../../utils/
 import { COLORS, ANIMATION_VALUES, createButtonStyle, createAdvancedButtonHandlers } from "../../utils/styles/styles.js";
 import { GRAPH_LAYOUT_CONSTANTS } from './graphConstants.js';
 import { useGraphSearch } from '../../hooks/graph/useGraphSearch.jsx';
+import { applySearchFadeEffect } from '../../utils/graph/searchUtils.jsx';
 import { useGraphDataLoader } from '../../hooks/graph/useGraphDataLoader.js';
 import { useApiGraphData } from '../../hooks/graph/useApiGraphData.js';
 import { useGraphState } from '../../hooks/graph/useGraphState.js';
@@ -24,7 +25,7 @@ import {
   isDragEndEvent,
   calculateNodeCount,
   calculateRelationCount,
-} from '../../utils/graph/graphUtils.js';
+} from '../../utils/graph/graphUtils';
 import { eventUtils, graphDataTransformUtils, getServerBookId } from '../../utils/viewer/viewerUtils';
 import { userViewerPath } from '../../utils/navigation/viewerPaths';
 import useGraphInteractions from "../../hooks/graph/useGraphInteractions";
@@ -555,6 +556,12 @@ function RelationGraphWrapper() {
     });
   }, [navigate, filename, book, currentChapter, serverBookId]);
 
+  const reapplySearchFadeIfActive = useCallback(() => {
+    if (isSearchActive && filteredElements?.length > 0 && cyRef.current) {
+      applySearchFadeEffect(cyRef.current, filteredElements, isSearchActive);
+    }
+  }, [isSearchActive, filteredElements, cyRef]);
+
   const handleGlobalClick = useCallback((e) => {
     if (!activeTooltip || isSidebarClosing) return;
     if (isDragEndEvent(e)) return;
@@ -562,8 +569,9 @@ function RelationGraphWrapper() {
 
     e.stopPropagation();
     clearAll();
+    reapplySearchFadeIfActive();
     triggerForceClose();
-  }, [activeTooltip, isSidebarClosing, clearAll, triggerForceClose]);
+  }, [activeTooltip, isSidebarClosing, clearAll, reapplySearchFadeIfActive, triggerForceClose]);
 
   const handleCanvasClick = useCallback((e) => {
     if (e.target !== e.currentTarget) return;
@@ -572,9 +580,10 @@ function RelationGraphWrapper() {
 
     if (activeTooltip && !isSidebarClosing) {
       clearAll();
+      reapplySearchFadeIfActive();
       triggerForceClose();
     }
-  }, [activeTooltip, isSidebarClosing, clearAll, triggerForceClose]);
+  }, [activeTooltip, isSidebarClosing, clearAll, reapplySearchFadeIfActive, triggerForceClose]);
 
   useEffect(() => {
     if (!activeTooltip || isSidebarClosing) return;

@@ -169,12 +169,10 @@ export const textUtils = {
       .length;
   },
 
-  // 단락별 글자 수 계산
   calculateParagraphChars: (paragraph, element) => {
     return textUtils.countCharacters(paragraph.textContent, element);
   },
 
-  // 이전 단락들의 누적 글자 수 계산
   calculatePreviousParagraphsChars: (paragraphs, currentParagraphNum) => {
     let charCount = 0;
     for (let i = 0; i < currentParagraphNum - 1; i++) {
@@ -186,7 +184,6 @@ export const textUtils = {
     return charCount;
   },
 
-  // 현재 단락의 부분 글자 수 계산
   calculateCurrentParagraphChars: (paragraphs, currentParagraphNum, charOffset) => {
     if (currentParagraphNum > 0 && paragraphs[currentParagraphNum - 1]) {
       const currentParagraph = paragraphs[currentParagraphNum - 1];
@@ -411,7 +408,7 @@ export const bookUtils = {
    * @returns {Object} 생성된 책 객체
    */
   createBookObject: ({ stateBook, matchedServerBook, serverBook, bookId, loadingServerBook }) => {
-    if (!stateBook && matchedServerBook && typeof matchedServerBook.id === 'number') {
+    if (matchedServerBook && typeof matchedServerBook.id === 'number') {
       return {
         ...matchedServerBook,
         filename: String(matchedServerBook.id ?? bookId),
@@ -425,19 +422,6 @@ export const bookUtils = {
     }
 
     if (stateBook) {
-      if (matchedServerBook && typeof matchedServerBook.id === 'number') {
-        return {
-          ...matchedServerBook,
-          filename: String(matchedServerBook.id ?? bookId),
-          _needsLoad: true,
-          _bookId: matchedServerBook.id,
-          xhtmlPath: undefined,
-          filePath: undefined,
-          s3Path: undefined,
-          fileUrl: undefined
-        };
-      }
-
       if (serverBook && typeof serverBook.id === 'number') {
         return {
           ...stateBook,
@@ -539,6 +523,16 @@ export const eventIdxUtils = {
   }
 };
 
+function buildFromCache(cached, convertFn) {
+  const hasElements = Array.isArray(cached.elements) && cached.elements.length > 0;
+  return {
+    characters: cached.characters || [],
+    relations: hasElements ? [] : convertFn(cached.elements || []),
+    event: cached.eventMeta || null,
+    elements: cached.elements || []
+  };
+}
+
 /**
  * 뷰어·분할 그래프용. `resultData.event` 및 reconstruct 의 `eventMeta` 는
  * GET /api/v2/graph/fine 의 result.event 와 동일 계열(캐시 시 스냅샷 키만 eventMeta).
@@ -551,14 +545,8 @@ export const graphDataCacheUtils = {
 
     const cached = getGraphEventState(bookId, chapter, eventIdx);
     if (cached) {
-      const hasElements = Array.isArray(cached.elements) && cached.elements.length > 0;
       return {
-        resultData: {
-          characters: cached.characters || [],
-          relations: hasElements ? [] : eventUtils.convertElementsToRelations(cached.elements || []),
-          event: cached.eventMeta || null,
-          elements: cached.elements || []
-        },
+        resultData: buildFromCache(cached, eventUtils.convertElementsToRelations),
         usedCache: true
       };
     }
@@ -590,7 +578,7 @@ export const graphDataCacheUtils = {
       if (!cachedBeforeApi) {
         try {
           const apiResponse = await getFineGraph(bookId, chapter, eventIdx, atLocator, fineOpts);
-          
+
           if (apiResponse && (apiResponse.isSuccess !== false)) {
             const apiResult = apiResponse?.result ?? apiResponse?.data ?? null;
             if (apiResult) {
@@ -601,7 +589,7 @@ export const graphDataCacheUtils = {
                 elements: null
               };
               usedCache = false;
-              
+
               const cacheKey = `${chapter}-${eventIdx}`;
               if (apiEventCacheRef?.current) {
                 apiEventCacheRef.current.set(cacheKey, resultData);
@@ -624,33 +612,21 @@ export const graphDataCacheUtils = {
     if (!resultData) {
       const cached = getGraphEventState(bookId, chapter, eventIdx);
       if (cached) {
-        const hasElements = Array.isArray(cached.elements) && cached.elements.length > 0;
-        resultData = {
-          characters: cached.characters || [],
-          relations: hasElements ? [] : eventUtils.convertElementsToRelations(cached.elements || []),
-          event: cached.eventMeta || null,
-          elements: cached.elements || []
-        };
+        resultData = buildFromCache(cached, eventUtils.convertElementsToRelations);
         usedCache = true;
       }
     }
 
     if (resultData && !usedCache) {
-      const hasValidData = 
+      const hasValidData =
         (Array.isArray(resultData.characters) && resultData.characters.length > 0) ||
         (Array.isArray(resultData.relations) && resultData.relations.length > 0) ||
         (Array.isArray(resultData.elements) && resultData.elements.length > 0);
-        
+
       if (!hasValidData) {
         const cached = getGraphEventState(bookId, chapter, eventIdx);
         if (cached) {
-          const hasElements = Array.isArray(cached.elements) && cached.elements.length > 0;
-          resultData = {
-            characters: cached.characters || [],
-            relations: hasElements ? [] : eventUtils.convertElementsToRelations(cached.elements || []),
-            event: cached.eventMeta || null,
-            elements: cached.elements || []
-          };
+          resultData = buildFromCache(cached, eventUtils.convertElementsToRelations);
           usedCache = true;
         }
       }

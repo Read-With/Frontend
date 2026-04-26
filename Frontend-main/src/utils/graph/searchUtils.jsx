@@ -5,22 +5,21 @@
  *    - nodeMatchesQuery: 노드가 검색어와 매칭되는지 확인
  *    - buildSuggestions: 검색어 기반 인물 추천 리스트 생성 (최대 8개)
  *    - filterGraphElements: 검색어에 맞는 노드와 연결된 요소들 필터링
- * 
+ *
  * 2. 시각적 효과
  *    - highlightText: 검색어를 텍스트에서 하이라이트 렌더링
  *    - applySearchFadeEffect: 검색 결과 외 요소들을 페이드 아웃
- *    - applySearchHighlight: 클릭된 노드와 연결된 검색 결과 하이라이트
- * 
+ *
  * 3. 검색 결과 처리
  *    - createFilteredElementIds: 필터링된 요소들의 ID 집합 생성
  *    - shouldShowNoSearchResults: 검색 결과 없음 상태 확인
  *    - getNoSearchResultsMessage: 검색 결과 없음 메시지 생성
- * 
+ *
  * 4. 성능 최적화
  *    - regexCache: 정규식 캐싱으로 검색 성능 향상 (최대 500개, TTL 5분)
  *    - clearRegexCache: 정규식 캐시 정리
  *    - cleanupSearchResources: 모든 검색 관련 리소스 정리
- * 
+ *
  * 특징:
  * - 챕터별 필터링 지원 (currentChapterData)
  * - 완전 일치 및 부분 일치 검색
@@ -31,6 +30,7 @@
 
 import React from 'react';
 import { registerCache, recordCacheAccess, enforceCacheSizeLimit } from '../common/cache/cacheManager';
+import { clearHighlightClassesOn } from '../graph/graphUtils';
 
 const regexCache = new Map();
 registerCache('regexCache', regexCache, { maxSize: 500, ttl: 300000 });
@@ -378,11 +378,12 @@ export function highlightText(text, term, highlightStyle = { fontWeight: 'bold',
  */
 export function createFilteredElementIds(filteredElements) {
   if (!Array.isArray(filteredElements) || filteredElements.length === 0) {
-    return new Set();
+    return { nodeIds: new Set(), edgeIds: new Set() };
   }
   
   try {
-    const filteredElementIds = new Set();
+    const nodeIds = new Set();
+    const edgeIds = new Set();
     
     filteredElements.forEach(element => {
       if (!element?.data) {
@@ -392,20 +393,21 @@ export function createFilteredElementIds(filteredElements) {
       
       if (element.data.source) {
         // 간선인 경우
-        filteredElementIds.add(element.data.source);
-        filteredElementIds.add(element.data.target);
+        if (element.data.source != null) nodeIds.add(String(element.data.source));
+        if (element.data.target != null) nodeIds.add(String(element.data.target));
+        if (element.data.id != null) edgeIds.add(String(element.data.id));
       } else {
         // 노드인 경우
-        filteredElementIds.add(element.data.id);
+        if (element.data.id != null) nodeIds.add(String(element.data.id));
       }
     });
     
-    return filteredElementIds;
+    return { nodeIds, edgeIds };
   } catch (error) {
     console.error('createFilteredElementIds 실패:', error, { 
       filteredElementsLength: filteredElements?.length 
     });
-    return new Set();
+    return { nodeIds: new Set(), edgeIds: new Set() };
   }
 }
 
@@ -433,28 +435,18 @@ export function applySearchFadeEffect(cy, filteredElements, isSearchActive, opti
   }
   
   try {
-    const {
-      fadeOpacity = 0.05,
-      textFadeOpacity = 0.02,
-    } = options;
+    const { fadeOpacity: _fadeOpacity, textFadeOpacity: _textFadeOpacity } = options;
 
     // 검색이 비활성화된 경우 모든 페이드 효과 제거
     if (!isSearchActive) {
-      cy.elements().forEach(element => {
-        element.removeClass("faded highlighted");
-        element.style('opacity', '');
-        element.style('text-opacity', '');
-      });
-      
-      const result = {
+      clearHighlightClassesOn(cy);
+      return {
         fadedNodes: 0,
         visibleNodes: cy.nodes().length,
         fadedEdges: 0,
         visibleEdges: cy.edges().length,
         cleanup: () => {}
       };
-      
-      return result;
     }
 
     // 검색이 활성화되었지만 결과가 없는 경우
@@ -471,40 +463,34 @@ export function applySearchFadeEffect(cy, filteredElements, isSearchActive, opti
     }
 
     // 검색 결과에 포함된 요소들의 ID 집합 생성
-    const filteredElementIds = createFilteredElementIds(filteredElements);
+    const { nodeIds: filteredNodeIds, edgeIds: filteredEdgeIds } = createFilteredElementIds(filteredElements);
 
     let fadedNodeCount = 0;
     let visibleNodeCount = 0;
     let fadedEdgeCount = 0;
     let visibleEdgeCount = 0;
 
-    // 검색 결과에 포함되지 않은 모든 노드들을 페이드 아웃
-    cy.nodes().forEach(node => {
-      if (!filteredElementIds.has(node.id())) {
-        node.addClass("faded");
-        node.style('opacity', fadeOpacity);
-        node.style('text-opacity', textFadeOpacity);
-        fadedNodeCount++;
-      } else {
-        node.removeClass("faded");
-        node.style('opacity', '');
-        node.style('text-opacity', '');
-        visibleNodeCount++;
-      }
-    });
+    cy.batch(() => {
+      // 검색 결과에 포함되지 않은 모든 노드들을 페이드 아웃
+      cy.nodes().forEach(node => {
+        if (!filteredNodeIds.has(String(node.id()))) {
+          node.addClass("faded");
+          fadedNodeCount++;
+        } else {
+          node.removeClass("faded");
+          visibleNodeCount++;
+        }
+      });
 
-    // 검색 결과에 포함되지 않은 모든 간선들을 페이드 아웃
-    cy.edges().forEach(edge => {
-      const edgeData = edge.data();
-      if (!filteredElementIds.has(edgeData.source) || !filteredElementIds.has(edgeData.target)) {
-        edge.addClass("faded");
-        edge.style('opacity', fadeOpacity);
-        fadedEdgeCount++;
-      } else {
-        edge.removeClass("faded");
-        edge.style('opacity', '');
-        visibleEdgeCount++;
-      }
+      cy.edges().forEach(edge => {
+        if (!filteredEdgeIds.has(String(edge.id()))) {
+          edge.addClass("faded");
+          fadedEdgeCount++;
+        } else {
+          edge.removeClass("faded");
+          visibleEdgeCount++;
+        }
+      });
     });
 
     const result = {
@@ -512,13 +498,7 @@ export function applySearchFadeEffect(cy, filteredElements, isSearchActive, opti
       visibleNodes: visibleNodeCount,
       fadedEdges: fadedEdgeCount,
       visibleEdges: visibleEdgeCount,
-      cleanup: () => {
-        cy.elements().forEach(element => {
-          element.removeClass("faded highlighted");
-          element.style('opacity', '');
-          element.style('text-opacity', '');
-        });
-      }
+      cleanup: () => { clearHighlightClassesOn(cy); }
     };
     return result;
   } catch (error) {
@@ -531,144 +511,6 @@ export function applySearchFadeEffect(cy, filteredElements, isSearchActive, opti
       visibleNodes: 0,
       fadedEdges: 0,
       visibleEdges: 0,
-      cleanup: () => {}
-    };
-  }
-}
-
-/**
- * 검색 상태에서 노드 클릭 시 하이라이트 효과 적용
- * @param {Object} cy - Cytoscape 인스턴스
- * @param {Object} clickedNode - 클릭된 노드
- * @param {Array} filteredElements - 검색 결과 요소들
- * @param {Object} options - 하이라이트 옵션
- * @returns {Object} 하이라이트 적용 결과 및 cleanup 함수
- */
-export function applySearchHighlight(cy, clickedNode, filteredElements) {
-  if (!cy || typeof cy.elements !== 'function') {
-    console.warn('applySearchHighlight: 유효하지 않은 Cytoscape 인스턴스입니다', { cy });
-    return {
-      success: false,
-      cleanup: () => {}
-    };
-  }
-  
-  if (!clickedNode || typeof clickedNode.id !== 'function') {
-    console.warn('applySearchHighlight: 유효하지 않은 클릭된 노드입니다', { clickedNode });
-    return {
-      success: false,
-      cleanup: () => {}
-    };
-  }
-  
-  if (!Array.isArray(filteredElements) || filteredElements.length === 0) {
-    return {
-      success: false,
-      cleanup: () => {}
-    };
-  }
-  
-  try {
-    const filteredElementIds = createFilteredElementIds(filteredElements);
-    if (!filteredElementIds || filteredElementIds.size === 0) {
-      return {
-        success: false,
-        cleanup: () => {}
-      };
-    }
-
-    const clickedNodeId = clickedNode.id();
-    const highlightedNodeIds = new Set();
-    const highlightedEdgeIds = new Set();
-
-    if (filteredElementIds.has(clickedNodeId)) {
-      const connectedEdges = clickedNode.connectedEdges();
-      highlightedNodeIds.add(clickedNodeId);
-
-      connectedEdges.forEach(edge => {
-        const edgeData = edge.data();
-        const sourceId = edgeData.source;
-        const targetId = edgeData.target;
-        
-        if (filteredElementIds.has(sourceId) && filteredElementIds.has(targetId)) {
-          highlightedEdgeIds.add(edge.id());
-          highlightedNodeIds.add(sourceId);
-          highlightedNodeIds.add(targetId);
-        }
-      });
-    } else {
-      filteredElementIds.forEach(elementId => {
-        const element = cy.getElementById(elementId);
-        if (element.length > 0 && !element.data().source) {
-          highlightedNodeIds.add(elementId);
-          
-          const connectedEdges = element.connectedEdges();
-          connectedEdges.forEach(edge => {
-            const edgeData = edge.data();
-            if (filteredElementIds.has(edgeData.source) && filteredElementIds.has(edgeData.target)) {
-              highlightedEdgeIds.add(edge.id());
-            }
-          });
-        }
-      });
-    }
-
-    const toCollection = (idSet) => {
-      if (!idSet || idSet.size === 0) {
-        return cy.collection();
-      }
-      const elements = [];
-      idSet.forEach((rawId) => {
-        if (!rawId && rawId !== 0) return;
-        const id = String(rawId);
-        const element = cy.getElementById(id);
-        if (element && element.length > 0) {
-          elements.push(element);
-        }
-      });
-      return elements.length ? cy.collection(elements) : cy.collection();
-    };
-
-    const highlightedNodes = highlightedNodeIds.size > 0 ? toCollection(highlightedNodeIds) : cy.collection();
-    const highlightedEdges = highlightedEdgeIds.size > 0 ? toCollection(highlightedEdgeIds) : cy.collection();
-
-    const cyNodes = cy.nodes();
-    const cyEdges = cy.edges();
-
-    cy.batch(() => {
-      cyNodes.removeClass("highlighted faded");
-      cyEdges.removeClass("highlighted faded");
-
-      highlightedNodes.addClass("highlighted");
-      highlightedEdges.addClass("highlighted");
-
-      cyNodes.difference(highlightedNodes).addClass("faded");
-      cyEdges.difference(highlightedEdges).addClass("faded");
-    });
-
-    try {
-      cy.style().update();
-    } catch {}
-
-    return {
-      success: true,
-      highlightedCount: highlightedNodeIds.size + highlightedEdgeIds.size,
-      cleanup: () => {
-        cy.batch(() => {
-          cyNodes.removeClass("highlighted faded");
-          cyEdges.removeClass("highlighted faded");
-        });
-        try {
-          cy.style().update();
-        } catch {}
-      }
-    };
-  } catch (error) {
-    console.error('applySearchHighlight 실패:', error, { 
-      filteredElementsLength: filteredElements?.length 
-    });
-    return {
-      success: false,
       cleanup: () => {}
     };
   }
@@ -740,14 +582,7 @@ export function cleanupSearchResources(cy = null) {
   try {
     clearRegexCache();
     
-    // Cytoscape 인스턴스가 있는 경우 모든 효과 제거
-    if (cy && typeof cy.elements === 'function') {
-      cy.elements().forEach(element => {
-        element.removeClass("faded highlighted");
-        element.style('opacity', '');
-        element.style('text-opacity', '');
-      });
-    }
+    if (cy) clearHighlightClassesOn(cy);
     
     console.info('검색 관련 리소스 정리 완료');
   } catch (error) {

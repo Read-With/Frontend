@@ -83,24 +83,6 @@ function fadeInNewElements(cy, elementsUpdateRef, onComplete, _skipAnimation, ad
     onComplete?.();
     return;
   }
-
-  let coll = cy.collection();
-  ids.forEach((id) => {
-    const e = cy.getElementById(String(id));
-    if (e.length > 0) {
-      coll = coll.union(e);
-    }
-  });
-  if (coll.length === 0) {
-    onComplete?.();
-    return;
-  }
-
-  try {
-    coll.style("opacity", 1);
-  } catch {
-    /* ignore */
-  }
   onComplete?.();
 }
 
@@ -108,20 +90,6 @@ function pulseDataChangedElements(cy, ids, onComplete) {
   if (!cy || !ids?.length) {
     onComplete?.();
     return;
-  }
-  let coll = cy.collection();
-  ids.forEach((id) => {
-    const e = cy.getElementById(String(id));
-    if (e.length > 0) coll = coll.union(e);
-  });
-  if (coll.length === 0) {
-    onComplete?.();
-    return;
-  }
-  try {
-    coll.style("opacity", 1);
-  } catch {
-    /* ignore */
   }
   onComplete?.();
 }

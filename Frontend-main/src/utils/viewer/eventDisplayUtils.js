@@ -61,9 +61,6 @@ export function resolveDisplayedEventNum(event) {
     if (v) return v;
   }
 
-  v = positiveOrZero(event.event_id);
-  if (v) return v;
-
   return eventNumFromStringId(event.event_id);
 }
 

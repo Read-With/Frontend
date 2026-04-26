@@ -721,3 +721,34 @@ export function syncReciprocalPairJunctionOffsets(cy) {
     });
   });
 }
+
+export function clearHighlightClassesOn(cy) {
+  if (!cy) return;
+  try {
+    const touched = cy
+      .collection()
+      .union(cy.nodes(".highlighted"))
+      .union(cy.nodes(".faded"))
+      .union(cy.edges(".highlighted"))
+      .union(cy.edges(".faded"));
+    if (touched.length === 0) return;
+    cy.batch(() => {
+      touched.removeClass("highlighted faded");
+      touched.nodes().forEach((node) => {
+        node.removeStyle("opacity");
+        node.removeStyle("text-opacity");
+        node.removeStyle("border-color");
+        node.removeStyle("border-width");
+        node.removeStyle("border-opacity");
+        node.removeStyle("border-style");
+      });
+      touched.edges().forEach((edge) => {
+        edge.removeStyle("opacity");
+        edge.removeStyle("text-opacity");
+        edge.removeStyle("width");
+      });
+    });
+  } catch {
+    /* ignore */
+  }
+}
