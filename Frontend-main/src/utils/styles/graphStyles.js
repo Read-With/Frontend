@@ -130,10 +130,9 @@ const baseNodeGraphStyle = {
   "font-weight": (ele) => (ele.data("main_character") ? 600 : 400),
   color: COLORS.nodeText,
   "text-margin-y": 2,
-  "text-background-color": COLORS.white,
-  "text-background-opacity": 0.8,
-  "text-background-shape": "roundrectangle",
-  "text-background-padding": 2,
+  "text-background-opacity": 0,
+  "text-outline-color": COLORS.white,
+  "text-outline-width": 2,
 };
 
 // [공통 스타일시트 생성 함수 - 가중치 기반 노드 크기만 사용]
@@ -198,6 +197,8 @@ export const createGraphStylesheet = (edgeStyle, edgeLabelVisible, maxEdgeLabelL
       width: 8,
       opacity: 1,
       "target-endpoint": "outside-to-node",
+      "z-index-compare": "manual",
+      "z-index": 9999,
     },
   },
   {

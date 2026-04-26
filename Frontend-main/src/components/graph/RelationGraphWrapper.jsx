@@ -331,10 +331,10 @@ function RelationGraphWrapper() {
     const availableGraphWidth = window.innerWidth - chapterSidebarWidth - TOOLTIP_SIDEBAR_WIDTH;
     const availableGraphHeight = window.innerHeight - TOP_BAR_HEIGHT;
 
-    const leftOffset = availableGraphWidth * 0.1;
+    const leftOffset = availableGraphWidth * 0.14;
     const centerX = chapterSidebarWidth + (availableGraphWidth / 2) - leftOffset;
 
-    const topOffset = availableGraphHeight * 0.15;
+    const topOffset = availableGraphHeight * 0.06;
     const centerY = TOP_BAR_HEIGHT + (availableGraphHeight / 2) - topOffset;
 
     const elementPos = element.position();
