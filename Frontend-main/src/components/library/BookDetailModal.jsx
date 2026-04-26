@@ -1,11 +1,22 @@
-import React, { useState, useEffect, useMemo, useCallback, memo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef, memo } from 'react';
 import PropTypes from 'prop-types';
 import { useNavigate } from 'react-router-dom';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { getBookManifest, getBookProgress, deleteBookProgress } from '../../utils/api/api';
+import { resolveProgressLocator } from '../../utils/common/locatorUtils';
 import { getManifestFromCache } from '../../utils/common/cache/manifestCache';
-import { deleteLocalBookBuffer } from '../../utils/localBookStorage';
-import { getServerBookId } from '../../utils/viewerUtils';
+import { getProgressFromCache, PROGRESS_CACHE_UPDATED_EVENT } from '../../utils/common/cache/progressCache';
+import {
+  resolveLibraryReadingProgressPercent,
+  formatLibraryRelativeDate,
+} from '../../utils/library/libraryBookDisplay';
+import {
+  formatChapterBadgeFromTitle,
+  formatChapterTocNumericLine,
+  stripRedundantBookTitlePrefix,
+} from '../../utils/viewer/chapterTitleDisplay';
+import { getServerBookId } from '../../utils/viewer/viewerUtils';
+import { USER_VIEWER_PREFIX } from '../../utils/navigation/viewerPaths';
 import { toast } from 'react-toastify';
 import './BookDetailModal.css';
 
@@ -17,28 +28,56 @@ const BookDetailModal = memo(({ book, isOpen, onClose, onDelete }) => {
   const [error, setError] = useState(null);
   const [showMoreCharacters, setShowMoreCharacters] = useState(false);
   const [progressInfo, setProgressInfo] = useState(null);
+  const [coverImgFailed, setCoverImgFailed] = useState(false);
+  const [charactersPanelOpen, setCharactersPanelOpen] = useState(true);
+  const [chaptersPanelOpen, setChaptersPanelOpen] = useState(true);
+  const [bookDeleteConfirm, setBookDeleteConfirm] = useState(false);
+  const [progressCacheTick, setProgressCacheTick] = useState(0);
+  const closeButtonRef = useRef(null);
+  const lastFocusRef = useRef(null);
 
-  // 중복된 인물들 제거 및 주요/일반 인물 분리
-  const uniqueCharacters = useMemo(() => {
-    if (!bookDetails?.characters) return [];
-    
+  const characterLists = useMemo(() => {
+    const raw = bookDetails?.characters;
+    if (!raw?.length) {
+      return { unique: [], sortedMain: [], sortedOther: [] };
+    }
     const seen = new Set();
-    return bookDetails.characters.filter(character => {
-      if (seen.has(character.id)) {
-        return false;
-      }
+    const unique = raw.filter((character) => {
+      if (seen.has(character.id)) return false;
       seen.add(character.id);
       return true;
     });
+    const main = unique.filter((c) => c.isMainCharacter);
+    const other = unique.filter((c) => !c.isMainCharacter);
+    const byName = (a, b) => String(a.name ?? '').localeCompare(String(b.name ?? ''), 'ko');
+    return {
+      unique,
+      sortedMain: [...main].sort(byName),
+      sortedOther: [...other].sort(byName),
+    };
   }, [bookDetails?.characters]);
 
-  const mainCharacters = useMemo(() => {
-    return uniqueCharacters.filter(char => char.isMainCharacter);
-  }, [uniqueCharacters]);
+  const serverBookId = getServerBookId(book);
+  const bookIdStr = serverBookId != null ? String(serverBookId) : null;
 
-  const otherCharacters = useMemo(() => {
-    return uniqueCharacters.filter(char => !char.isMainCharacter);
-  }, [uniqueCharacters]);
+  const progressLocator = useMemo(() => {
+    const cached = serverBookId != null ? getProgressFromCache(serverBookId) : null;
+    return resolveProgressLocator(cached || progressInfo);
+  }, [serverBookId, progressInfo, progressCacheTick]);
+
+  const readPercent = useMemo(
+    () => resolveLibraryReadingProgressPercent(book),
+    [book, progressCacheTick]
+  );
+
+  const libraryRelativeUpdated = book?.updatedAt
+    ? formatLibraryRelativeDate(book.updatedAt)
+    : '';
+  const libraryUpdatedAtIso = (() => {
+    if (!book?.updatedAt) return null;
+    const d = new Date(book.updatedAt);
+    return Number.isNaN(d.getTime()) ? null : d.toISOString();
+  })();
 
   const fetchProgressInfo = useCallback(async () => {
     const serverBookId = getServerBookId(book);
@@ -56,7 +95,8 @@ const BookDetailModal = memo(({ book, isOpen, onClose, onDelete }) => {
         setProgressInfo(null);
       }
     } catch (err) {
-      if (!err.message.includes('404') && !err.message.includes('찾을 수 없습니다')) {
+      const msg = err?.message ?? '';
+      if (!msg.includes('404') && !msg.includes('찾을 수 없습니다')) {
         console.error('Progress 정보를 불러오는데 실패했습니다:', err);
       }
       setProgressInfo(null);
@@ -73,6 +113,7 @@ const BookDetailModal = memo(({ book, isOpen, onClose, onDelete }) => {
 
     setLoading(true);
     setError(null);
+    setBookDetails(book);
 
     try {
       const manifestData = await getBookManifest(serverBookId);
@@ -86,10 +127,15 @@ const BookDetailModal = memo(({ book, isOpen, onClose, onDelete }) => {
         setBookDetails({
           ...book,
           ...bookInfo,
-          // 정규화된 챕터 데이터 사용 (title 필드가 정규화됨)
           chapters: normalizedManifest.chapters || manifestData.result.chapters || [],
           characters: normalizedManifest.characters || manifestData.result.characters || [],
-          progressMetadata: normalizedManifest.progressMetadata || manifestData.result.progressMetadata || {}
+          progressMetadata: normalizedManifest.progressMetadata || manifestData.result.progressMetadata || {},
+          ...(normalizedManifest.readerArtifacts || manifestData.result.readerArtifacts
+            ? {
+                readerArtifacts:
+                  normalizedManifest.readerArtifacts || manifestData.result.readerArtifacts,
+              }
+            : {}),
         });
       } else {
         console.warn('API 응답이 성공하지 않았습니다:', manifestData);
@@ -98,7 +144,7 @@ const BookDetailModal = memo(({ book, isOpen, onClose, onDelete }) => {
       }
     } catch (err) {
       console.error('책 정보를 불러오는데 실패했습니다:', err);
-      const errorMessage = err.message || '책 정보를 불러오는데 실패했습니다.';
+      const errorMessage = err?.message || '책 정보를 불러오는데 실패했습니다.';
       setError(errorMessage);
       setBookDetails(book);
     } finally {
@@ -113,21 +159,89 @@ const BookDetailModal = memo(({ book, isOpen, onClose, onDelete }) => {
     }
   }, [isOpen, book, fetchBookDetails, fetchProgressInfo]);
 
-  // 서버 책만 표시하므로 항상 서버 bookId 사용
-  const getBookIdentifier = useCallback(() => book.id, [book?.id]);
-  
-  const getNavigationState = useCallback(() => ({ book }), [book]);
+  useEffect(() => {
+    if (!isOpen || !bookIdStr) return undefined;
+    const onUpd = (e) => {
+      if (String(e.detail?.bookId) === bookIdStr) {
+        setProgressCacheTick((t) => t + 1);
+      }
+    };
+    window.addEventListener(PROGRESS_CACHE_UPDATED_EVENT, onUpd);
+    return () => window.removeEventListener(PROGRESS_CACHE_UPDATED_EVENT, onUpd);
+  }, [isOpen, bookIdStr]);
 
-  // 네비게이션 핸들러들
-  const handleReadClick = useCallback(() => {
-    onClose();
-    navigate(`/user/viewer/${getBookIdentifier()}`, { state: getNavigationState() });
-  }, [onClose, navigate, getBookIdentifier, getNavigationState]);
+  useEffect(() => {
+    if (isOpen && book) {
+      setShowMoreCharacters(false);
+    }
+  }, [isOpen, book?.id]);
 
-  const handleGraphClick = useCallback(() => {
-    onClose();
-    navigate(`/user/graph/${getBookIdentifier()}`, { state: getNavigationState() });
-  }, [onClose, navigate, getBookIdentifier, getNavigationState]);
+  useEffect(() => {
+    setCoverImgFailed(false);
+  }, [isOpen, book?.id, bookDetails?.coverImgUrl, book?.coverImgUrl]);
+
+  useEffect(() => {
+    if (!isOpen) {
+      setBookDeleteConfirm(false);
+    }
+  }, [isOpen]);
+
+  useEffect(() => {
+    const len = bookDetails?.chapters?.length ?? 0;
+    if (len > 12) {
+      setChaptersPanelOpen(false);
+    } else if (len > 0) {
+      setChaptersPanelOpen(true);
+    }
+  }, [bookDetails?.id, bookDetails?.chapters?.length]);
+
+  useEffect(() => {
+    if (!isOpen) {
+      return undefined;
+    }
+    lastFocusRef.current = document.activeElement;
+    const id = window.requestAnimationFrame(() => {
+      closeButtonRef.current?.focus();
+    });
+    return () => {
+      window.cancelAnimationFrame(id);
+      const prev = lastFocusRef.current;
+      if (prev instanceof HTMLElement && typeof prev.focus === 'function') {
+        try {
+          prev.focus();
+        } catch {
+          /* ignore */
+        }
+      }
+    };
+  }, [isOpen]);
+
+  const getBookIdentifier = useCallback(() => {
+    const id = book?.id ?? getServerBookId(book);
+    return id != null ? String(id) : '';
+  }, [book]);
+
+  const navigateToBookPage = useCallback(
+    (pathPrefix) => {
+      const id = getBookIdentifier();
+      if (!id) {
+        toast.error('책 정보가 없어 이동할 수 없습니다.');
+        return;
+      }
+      onClose();
+      navigate(`${pathPrefix}/${id}`, { state: { book } });
+    },
+    [book, getBookIdentifier, onClose, navigate]
+  );
+
+  const handleReadClick = useCallback(() => navigateToBookPage(USER_VIEWER_PREFIX), [navigateToBookPage]);
+
+  const handleGraphClick = useCallback(() => navigateToBookPage('/user/graph'), [navigateToBookPage]);
+
+  const handleRetryFetch = useCallback(() => {
+    fetchBookDetails();
+    fetchProgressInfo();
+  }, [fetchBookDetails, fetchProgressInfo]);
 
   // 진도 삭제 - useMutation + 낙관적 업데이트
   const deleteProgressMutation = useMutation({
@@ -160,31 +274,31 @@ const BookDetailModal = memo(({ book, isOpen, onClose, onDelete }) => {
       return;
     }
 
-    if (!window.confirm('독서 진도를 삭제하시겠습니까?')) {
+    if (
+      !window.confirm(
+        '저장된 독서 진도가 초기화됩니다. 이 작업은 되돌릴 수 없습니다. 계속할까요?'
+      )
+    ) {
       return;
     }
 
     try {
       await deleteProgressMutation.mutateAsync(serverBookId);
-    } catch (err) {
+    } catch (_err) {
       // 에러는 onError에서 처리
     }
   }, [book, progressInfo, deleteProgressMutation]);
 
-  const handleDeleteBook = useCallback(async () => {
+  const handleConfirmDeleteBook = useCallback(async () => {
     if (!book || !book.id) {
       return;
     }
 
-    if (!window.confirm('이 책을 삭제하시겠습니까?')) {
-      return;
-    }
-
     try {
-      // 모든 책은 서버 API 기반으로 삭제
       if (onDelete) {
         await onDelete(book.id);
         toast.success('책이 삭제되었습니다');
+        setBookDeleteConfirm(false);
         onClose();
       } else {
         toast.error('삭제 기능을 사용할 수 없습니다');
@@ -196,37 +310,55 @@ const BookDetailModal = memo(({ book, isOpen, onClose, onDelete }) => {
   }, [book, onDelete, onClose]);
 
 
-  // ESC 키로 모달 닫기
   useEffect(() => {
     const handleEscape = (e) => {
-      if (e.key === 'Escape' && isOpen) {
-        onClose();
+      if (e.key !== 'Escape' || !isOpen) {
+        return;
       }
+      if (bookDeleteConfirm) {
+        setBookDeleteConfirm(false);
+        return;
+      }
+      onClose();
     };
 
     if (isOpen) {
       document.addEventListener('keydown', handleEscape);
-      document.body.style.overflow = 'hidden'; // 스크롤 방지
+      document.body.style.overflow = 'hidden';
     }
 
     return () => {
       document.removeEventListener('keydown', handleEscape);
       document.body.style.overflow = 'unset';
     };
-  }, [isOpen, onClose]);
+  }, [isOpen, onClose, bookDeleteConfirm]);
 
   if (!isOpen) return null;
 
+  const coverSrc = bookDetails?.coverImgUrl || book?.coverImgUrl;
+  const displayTitle = bookDetails?.title || book?.title || '제목 없음';
+  const chapterStripBookTitle = String(bookDetails?.title ?? book?.title ?? '').trim();
+  const displayAuthor = bookDetails?.author || book?.author || '저자 정보 없음';
+  const coverInitial = (displayTitle || '?').trim().slice(0, 1) || '?';
+  const currentChapterIndex = progressLocator?.chapterIndex;
+
   return (
-    <div 
-      className={`book-detail-modal ${!isOpen ? 'hidden' : ''}`} 
+    <div
+      className="book-detail-modal"
       onClick={onClose}
       role="dialog"
       aria-modal="true"
       aria-labelledby="book-detail-title"
+      aria-describedby="book-detail-modal-desc"
     >
+      <p id="book-detail-modal-desc" className="book-detail-modal-desc">
+        책 표지와 제목, 독서 진도, 등장 인물과 목차를 확인할 수 있습니다.
+      </p>
       <div className="book-detail-content" onClick={(e) => e.stopPropagation()}>
+        <div className="book-detail-sheet-handle" aria-hidden="true" />
+        <p className="book-detail-sheet-hint">바깥 영역을 누르면 닫혀요</p>
         <button
+          ref={closeButtonRef}
           className="book-detail-close-btn"
           onClick={onClose}
           aria-label="모달 닫기"
@@ -236,98 +368,228 @@ const BookDetailModal = memo(({ book, isOpen, onClose, onDelete }) => {
         </button>
 
         <div className="book-detail-header">
-          <div className="book-detail-cover">
-            <img
-              src={bookDetails?.coverImgUrl || book?.coverImgUrl}
-              alt={bookDetails?.title || book?.title}
-              onError={(e) => {
-                e.target.style.display = 'none';
-              }}
-            />
+          <div className="book-detail-cover-wrap">
+            <div className="book-detail-cover">
+              {coverSrc && !coverImgFailed ? (
+                <img
+                  src={coverSrc}
+                  alt={displayTitle}
+                  onError={() => setCoverImgFailed(true)}
+                />
+              ) : null}
+              {(!coverSrc || coverImgFailed) && (
+                <div className="book-detail-cover-placeholder" aria-hidden="true">
+                  <span className="book-detail-cover-placeholder-letter">{coverInitial}</span>
+                </div>
+              )}
+            </div>
           </div>
           <div className="book-detail-info">
-            <h2 id="book-detail-title" className="book-detail-title">
-              {bookDetails?.title || book?.title || '제목 없음'}
-            </h2>
-            <p className="book-detail-author">
-              {bookDetails?.author || book?.author || '저자 정보 없음'}
-            </p>
+            <div className="book-detail-title-row">
+              <h2 id="book-detail-title" className="book-detail-title">
+                {displayTitle}
+              </h2>
+              <span className="book-detail-author">{displayAuthor}</span>
+            </div>
+            {loading && !error && (
+              <div className="book-detail-skeleton" aria-hidden="true">
+                <div className="book-detail-skeleton-line book-detail-skeleton-line--lg" />
+                <div className="book-detail-skeleton-line book-detail-skeleton-line--sm" />
+                <div className="book-detail-skeleton-card">
+                  <div className="book-detail-skeleton-meta-label" />
+                  <div className="book-detail-skeleton-progress-track">
+                    <div className="book-detail-skeleton-progress-fill" />
+                  </div>
+                </div>
+              </div>
+            )}
+            {!loading && (readPercent > 0 || progressInfo) && (
+              <div
+                className="book-detail-reader-meta book-detail-reader-meta--compact"
+                role="region"
+                aria-label="독서 진행"
+              >
+                {readPercent > 0 && (
+                  <div className="book-detail-reader-progress-row">
+                    <div
+                      className="book-detail-reader-progress"
+                      role="progressbar"
+                      aria-valuenow={readPercent}
+                      aria-valuemin={0}
+                      aria-valuemax={100}
+                      aria-valuetext={`${readPercent}% 읽음`}
+                      aria-label={`읽기 진행 ${readPercent}%`}
+                    >
+                      <div
+                        className="book-detail-reader-progress-fill"
+                        style={{ width: `${readPercent}%` }}
+                      />
+                    </div>
+                    <span className="book-detail-reader-progress-pct" aria-hidden="true">
+                      <span className="book-detail-reader-progress-pct-value">{readPercent}</span>%
+                    </span>
+                  </div>
+                )}
+                <div className="book-detail-reader-compact-foot">
+                  {libraryRelativeUpdated ? (
+                    <time
+                      className="book-detail-reader-compact-time"
+                      dateTime={libraryUpdatedAtIso ?? undefined}
+                      aria-label={`최근 업데이트 ${libraryRelativeUpdated}`}
+                    >
+                      {libraryRelativeUpdated}
+                    </time>
+                  ) : progressInfo ? (
+                    <span className="book-detail-reader-compact-placeholder">—</span>
+                  ) : null}
+                  {progressInfo && (
+                    <button
+                      type="button"
+                      className="book-detail-reader-clear-progress"
+                      onClick={handleDeleteProgress}
+                      aria-label="독서 진도 삭제"
+                    >
+                      진도 삭제
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
             {loading && (
               <div className="book-detail-loading" role="status" aria-live="polite">
-                정보를 불러오는 중...
+                <span className="book-detail-loading-dot" aria-hidden />
+                정보를 불러오는 중…
               </div>
             )}
             {error && (
               <div className="book-detail-error" role="alert" aria-live="assertive">
-                {error}
+                <span className="book-detail-error-text">{error}</span>
+                <button
+                  type="button"
+                  className="book-detail-error-retry"
+                  onClick={handleRetryFetch}
+                >
+                  다시 시도
+                </button>
               </div>
             )}
           </div>
-          {bookDetails?.updatedAt && (() => {
-            const date = new Date(bookDetails.updatedAt);
-            const year = date.getFullYear();
-            const month = String(date.getMonth() + 1).padStart(2, '0');
-            const day = String(date.getDate()).padStart(2, '0');
-            const hours = String(date.getHours()).padStart(2, '0');
-            const minutes = String(date.getMinutes()).padStart(2, '0');
-            return (
-              <div className="book-detail-updated-at">
-                {year}. {month}. {day}. {hours}:{minutes}
-              </div>
-            );
-          })()}
         </div>
 
-        <div className="book-detail-body">
-          {bookDetails && (
-            <>
+        <div className="book-detail-scroll">
+          <div className="book-detail-body">
+            {bookDetails && (
+              <>
 
-              {uniqueCharacters && uniqueCharacters.length > 0 && (
-                <div className="book-detail-section">
-                  <div className="book-detail-characters-header">
-                    <div className="book-detail-label">등장 인물</div>
+              {characterLists.unique.length > 0 && (
+                <div className="book-detail-panel">
+                  <div className="book-detail-panel-head">
+                    <h3 className="book-detail-panel-title" id="book-detail-characters-heading">
+                      등장 인물
+                    </h3>
+                    <div className="book-detail-panel-head-actions">
+                      <span className="book-detail-panel-count">{characterLists.unique.length}명</span>
+                      <button
+                        type="button"
+                        className="book-detail-panel-toggle"
+                        onClick={() => setCharactersPanelOpen((o) => !o)}
+                        aria-expanded={charactersPanelOpen}
+                        aria-controls="book-detail-characters-region"
+                        aria-labelledby="book-detail-characters-heading"
+                      >
+                        <span className="book-detail-panel-toggle-sr">
+                          {charactersPanelOpen ? '등장 인물 접기' : '등장 인물 펼치기'}
+                        </span>
+                        <span className="book-detail-panel-chevron" aria-hidden="true" />
+                      </button>
+                    </div>
                   </div>
-                  <div className="book-detail-value">
-                    {/* 주요 인물 - 항상 표시 */}
-                    {mainCharacters.length > 0 && (
-                      <div className="book-detail-characters-list">
-                        {mainCharacters
-                          .sort((a, b) => a.name.localeCompare(b.name))
-                          .map((character) => (
-                            <div 
-                              key={character.id} 
-                              className="book-detail-character-item main-character"
-                            >
-                              <span className="character-name">{character.name}</span>
-                              <span className="character-star" aria-label="주요 인물">⭐</span>
+                  <div
+                    id="book-detail-characters-region"
+                    className={
+                      charactersPanelOpen
+                        ? 'book-detail-panel-body book-detail-panel-body--open'
+                        : 'book-detail-panel-body book-detail-panel-body--closed'
+                    }
+                    role="region"
+                    aria-labelledby="book-detail-characters-heading"
+                    aria-hidden={!charactersPanelOpen}
+                  >
+                    {characterLists.sortedMain.length > 0 && (
+                      <ul className="book-detail-characters-list">
+                        {characterLists.sortedMain.map((character) => (
+                          <li
+                            key={character.id ?? character.name}
+                            className="book-detail-character-item main-character"
+                          >
+                            <div className="book-detail-character-main">
+                              {character.profileImage ? (
+                                <img
+                                  className="book-detail-character-avatar"
+                                  src={character.profileImage}
+                                  alt=""
+                                />
+                              ) : (
+                                <span
+                                  className="book-detail-character-avatar book-detail-character-avatar--placeholder"
+                                  aria-hidden
+                                >
+                                  {(character.name || '?').slice(0, 1)}
+                                </span>
+                              )}
+                              <span className="character-name" title={character.name || undefined}>
+                                {character.name}
+                              </span>
                             </div>
-                          ))}
-                      </div>
+                            <span className="character-badge" aria-label="주요 인물">
+                              주연
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
                     )}
-                    
-                    {/* 일반 인물 - 더보기 버튼으로 제어 */}
-                    {otherCharacters.length > 0 && (
+
+                    {characterLists.sortedOther.length > 0 && (
                       <>
                         {showMoreCharacters && (
-                          <div className="book-detail-characters-list">
-                            {otherCharacters
-                              .sort((a, b) => a.name.localeCompare(b.name))
-                              .map((character) => (
-                                <div 
-                                  key={character.id} 
-                                  className="book-detail-character-item"
-                                >
-                                  <span className="character-name">{character.name}</span>
+                          <ul className="book-detail-characters-list book-detail-characters-list--secondary">
+                            {characterLists.sortedOther.map((character) => (
+                              <li
+                                key={character.id ?? character.name}
+                                className="book-detail-character-item"
+                              >
+                                <div className="book-detail-character-main">
+                                  {character.profileImage ? (
+                                    <img
+                                      className="book-detail-character-avatar"
+                                      src={character.profileImage}
+                                      alt=""
+                                    />
+                                  ) : (
+                                    <span
+                                      className="book-detail-character-avatar book-detail-character-avatar--placeholder"
+                                      aria-hidden
+                                    >
+                                      {(character.name || '?').slice(0, 1)}
+                                    </span>
+                                  )}
+                                  <span className="character-name" title={character.name || undefined}>
+                                    {character.name}
+                                  </span>
                                 </div>
-                              ))}
-                          </div>
+                              </li>
+                            ))}
+                          </ul>
                         )}
                         <button
+                          type="button"
                           className="book-detail-more-btn"
                           onClick={() => setShowMoreCharacters(!showMoreCharacters)}
                           aria-expanded={showMoreCharacters}
                         >
-                          {showMoreCharacters ? '일반 인물 숨기기' : `일반 인물 더보기 (${otherCharacters.length}명)`}
+                          {showMoreCharacters
+                            ? '일반 인물 접기'
+                            : `일반 인물 더보기 · ${characterLists.sortedOther.length}명`}
                         </button>
                       </>
                     )}
@@ -336,107 +598,143 @@ const BookDetailModal = memo(({ book, isOpen, onClose, onDelete }) => {
               )}
 
               {bookDetails.chapters && bookDetails.chapters.length > 0 && (
-                <div className="book-detail-section">
-                  <div className="book-detail-label">챕터 정보</div>
-                  <div className="book-detail-value">
-                    <div className="book-detail-chapters-list">
+                <div className="book-detail-panel">
+                  <div className="book-detail-panel-head">
+                    <h3 className="book-detail-panel-title" id="book-detail-chapters-heading">
+                      목차
+                    </h3>
+                    <div className="book-detail-panel-head-actions">
+                      <span className="book-detail-panel-count">{bookDetails.chapters.length}챕터</span>
+                      <button
+                        type="button"
+                        className="book-detail-panel-toggle"
+                        onClick={() => setChaptersPanelOpen((o) => !o)}
+                        aria-expanded={chaptersPanelOpen}
+                        aria-controls="book-detail-chapters-region"
+                        aria-labelledby="book-detail-chapters-heading"
+                      >
+                        <span className="book-detail-panel-toggle-sr">
+                          {chaptersPanelOpen ? '목차 접기' : '목차 펼치기'}
+                        </span>
+                        <span className="book-detail-panel-chevron" aria-hidden="true" />
+                      </button>
+                    </div>
+                  </div>
+                  <div
+                    id="book-detail-chapters-region"
+                    className={
+                      chaptersPanelOpen
+                        ? 'book-detail-panel-body book-detail-panel-body--open'
+                        : 'book-detail-panel-body book-detail-panel-body--closed'
+                    }
+                    role="region"
+                    aria-labelledby="book-detail-chapters-heading"
+                    aria-hidden={!chaptersPanelOpen}
+                  >
+                    <ol className="book-detail-chapters-list">
                       {bookDetails.chapters.map((chapter, index) => {
-                        const chapterTitle = chapter.title || 
-                                             chapter.chapterTitle || 
-                                             chapter.name || 
-                                             chapter.chapterName ||
-                                             '';
-                        const chapterIdx = chapter.idx || 
-                                         chapter.chapterIdx || 
-                                         chapter.chapter || 
-                                         chapter.number ||
-                                         (index + 1);
+                        const rawTitle = String(chapter.title ?? '').trim();
+                        const idxNum = Number(chapter.idx);
+                        const idxStr =
+                          Number.isFinite(idxNum) && idxNum >= 1 ? String(idxNum) : '—';
+                        const tForBadge = rawTitle
+                          ? stripRedundantBookTitlePrefix(rawTitle, chapterStripBookTitle)
+                          : '';
+                        const part = tForBadge ? formatChapterBadgeFromTitle(tForBadge) : idxStr;
+                        const chapterLine = formatChapterTocNumericLine(part, idxStr);
+                        const chapterKey =
+                          chapter.id ??
+                          chapter.href ??
+                          (Number.isFinite(idxNum) ? `ch-${idxNum}` : `ch-row-${index}`);
+                        const isCurrent =
+                          currentChapterIndex != null &&
+                          Number.isFinite(idxNum) &&
+                          idxNum === currentChapterIndex;
                         return (
-                          <div key={index} className="book-detail-chapter-item">
-                            {chapterIdx}. {chapterTitle || '(제목 없음)'}
-                          </div>
+                          <li
+                            key={chapterKey}
+                            className={
+                              isCurrent
+                                ? 'book-detail-chapter-item book-detail-chapter-item--current'
+                                : 'book-detail-chapter-item'
+                            }
+                          >
+                            <span className="book-detail-chapter-num">
+                              {Number.isFinite(idxNum) ? idxNum : '—'}
+                            </span>
+                            <span
+                              className="book-detail-chapter-title"
+                              title={rawTitle || undefined}
+                            >
+                              {chapterLine}
+                            </span>
+                            {isCurrent ? (
+                              <button
+                                type="button"
+                                className="book-detail-chapter-current-badge"
+                                onClick={handleReadClick}
+                                aria-label="이어 읽기"
+                              >
+                                이어 읽기
+                              </button>
+                            ) : null}
+                          </li>
                         );
                       })}
-                    </div>
+                    </ol>
                   </div>
                 </div>
               )}
 
-              {/* 최근에 읽은 시점 */}
-              {progressInfo && (
-                <div className="book-detail-section">
-                  <div className="book-detail-characters-header">
-                    <div className="book-detail-label">최근에 읽은 시점</div>
-                    <button
-                      className="book-detail-toggle-btn"
-                      onClick={handleDeleteProgress}
-                      style={{ 
-                        color: '#dc2626',
-                        border: '1px solid #fecaca'
-                      }}
-                      aria-label="진도 삭제"
-                    >
-                      삭제
-                    </button>
-                  </div>
-                  <div className="book-detail-value">
-                    <div className="book-detail-progress-info">
-                      {progressInfo.chapterIdx && (
-                        <div className="book-detail-progress-item">
-                          챕터 {progressInfo.chapterIdx}장
-                        </div>
-                      )}
-                      {progressInfo.eventIdx !== undefined && (
-                        <div className="book-detail-progress-item">
-                          이벤트 {progressInfo.eventIdx}
-                        </div>
-                      )}
-                      {(progressInfo.startLocator?.chapterIndex ?? progressInfo.chapterIdx) && (
-                        <div className="book-detail-progress-item" style={{ fontSize: '0.8em', color: '#6b7280' }}>
-                          위치: {progressInfo.startLocator?.chapterIndex ?? progressInfo.chapterIdx}챕터
-                          {Number.isFinite(progressInfo.startLocator?.blockIndex) && ` (block ${progressInfo.startLocator.blockIndex})`}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              )}
+              </>
+            )}
+          </div>
+        </div>
 
-
-            </>
+        <div className="book-detail-footer-stack">
+          <div className="book-detail-actions book-detail-actions--footer">
+          {bookDeleteConfirm ? (
+            <div className="book-detail-delete-confirm" role="group" aria-label="서재에서 책 삭제 확인">
+              <p className="book-detail-delete-confirm-text">
+                서재에서 이 책을 삭제할까요? 이 작업은 되돌릴 수 없습니다.
+              </p>
+              <div className="book-detail-delete-confirm-actions">
+                <button
+                  type="button"
+                  className="book-detail-text-action-btn book-detail-delete-confirm-cancel"
+                  onClick={() => setBookDeleteConfirm(false)}
+                >
+                  취소
+                </button>
+                <button
+                  type="button"
+                  className="book-detail-danger-btn book-detail-danger-btn--solid book-detail-delete-confirm-submit"
+                  onClick={handleConfirmDeleteBook}
+                >
+                  삭제
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="book-detail-footer-row" role="group" aria-label="관계도 및 서재 삭제">
+              <button
+                className="book-detail-secondary-btn"
+                onClick={handleGraphClick}
+                type="button"
+                aria-label="인물 관계도 페이지로 이동"
+              >
+                관계도
+              </button>
+              <button
+                className="book-detail-danger-btn book-detail-danger-btn--inline"
+                onClick={() => setBookDeleteConfirm(true)}
+                type="button"
+                aria-label="서재에서 이 책 삭제"
+              >
+                서재에서 삭제
+              </button>
+            </div>
           )}
-
-          <div className="book-detail-button-group">
-            <button
-              className="book-detail-primary-btn"
-              onClick={handleReadClick}
-              type="button"
-              aria-label="책 읽기 페이지로 이동"
-            >
-              읽기
-            </button>
-            <button
-              className="book-detail-secondary-btn"
-              onClick={handleGraphClick}
-              type="button"
-              aria-label="인물 관계도 페이지로 이동"
-            >
-              그래프
-            </button>
-            <button
-              className="book-detail-danger-btn"
-              onClick={handleDeleteBook}
-              type="button"
-              aria-label="책 삭제"
-              style={{
-                backgroundColor: '#dc2626',
-                color: 'white',
-                border: '1px solid #dc2626',
-                marginTop: '8px'
-              }}
-            >
-              삭제
-            </button>
           </div>
         </div>
       </div>

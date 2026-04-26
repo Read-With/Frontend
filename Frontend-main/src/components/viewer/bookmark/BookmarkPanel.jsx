@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useBookmarks } from '../../../hooks/bookmarks/useBookmarks';
 import { useBookmarkSort } from '../../../hooks/bookmarks/useBookmarkSort';
-import { parseBookmarkLocation, formatDate } from '../../../utils/bookmarkUtils';
+import { parseBookmarkLocation, formatDate } from '../../../utils/bookmarks/bookmarkUtils';
 
 const BookmarkPanel = ({ bookId, onSelect, onDelete }) => {
   const [sortOrder, setSortOrder] = useState('recent');
@@ -10,7 +10,8 @@ const BookmarkPanel = ({ bookId, onSelect, onDelete }) => {
   const sortedBookmarks = useBookmarkSort(bookmarks, sortOrder);
 
   const handleDelete = async (bookmarkId) => {
-    setDeletingId(bookmarkId);
+    const idKey = bookmarkId != null ? String(bookmarkId) : '';
+    setDeletingId(idKey);
     try {
       const result = await removeBookmark(bookmarkId);
       if (result.success && onDelete) onDelete(bookmarkId);
@@ -21,7 +22,11 @@ const BookmarkPanel = ({ bookId, onSelect, onDelete }) => {
   };
 
   return (
-    <div className="absolute right-0 top-16 bg-white shadow-xl border border-gray-200 rounded-xl z-50 w-80 max-h-96 overflow-hidden">
+    <div
+      className="absolute right-0 top-16 bg-white shadow-xl border border-gray-200 rounded-xl z-50 w-80 max-h-96 overflow-hidden"
+      role="complementary"
+      aria-label="북마크 목록"
+    >
       <div className="p-4 border-b border-gray-100 bg-gradient-to-r from-blue-50 to-indigo-50">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-2">
@@ -38,6 +43,7 @@ const BookmarkPanel = ({ bookId, onSelect, onDelete }) => {
             <select
               value={sortOrder}
               onChange={(e) => setSortOrder(e.target.value)}
+              aria-label="북마크 정렬"
               className="text-xs border border-gray-200 rounded px-2 py-1 bg-white focus:outline-none focus:ring-1 focus:ring-blue-500"
             >
               <option value="recent">최신순</option>
@@ -62,78 +68,81 @@ const BookmarkPanel = ({ bookId, onSelect, onDelete }) => {
           </div>
         ) : (
           <ul className="p-2 space-y-1">
-            {sortedBookmarks.map((bookmark, index) => (
+            {sortedBookmarks.map((bookmark, index) => {
+              const idKey = bookmark.id != null ? String(bookmark.id) : '';
+              return (
               <li
                 key={bookmark.id ?? `bm-${index}`}
-                className="group relative"
+                className="group flex items-stretch rounded-lg transition-colors hover:bg-green-50 focus-within:bg-green-50"
               >
                 <button
-                  onClick={() => bookmark.startLocator && onSelect?.({ start: bookmark.startLocator })}
-                  className="w-full text-left p-3 rounded-lg transition-all duration-200 hover:bg-green-50 focus:bg-green-50 focus:outline-none focus:ring-2 focus:ring-green-200"
+                  type="button"
+                  onClick={() => {
+                    if (!bookmark.startLocator) return;
+                    const payload = { start: bookmark.startLocator };
+                    if (bookmark.endLocator) payload.end = bookmark.endLocator;
+                    onSelect?.(payload);
+                  }}
+                  className="flex-1 min-w-0 text-left p-3 rounded-l-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-green-200 focus-visible:ring-inset"
                 >
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center space-x-2 mb-1">
-                        <span className="material-symbols-outlined text-green-500 text-xs mt-0.5 flex-shrink-0">place</span>
-                        <div className="flex flex-col truncate">
-                          <p className="text-sm font-semibold text-gray-800 truncate">
-                            {parseBookmarkLocation(bookmark)}
-                          </p>
-                          <span className="text-xs text-gray-500 truncate">
-                            북마크 #{bookmark.id}
-                          </span>
-                        </div>
-                      </div>
-
-                      {(bookmark.highlightText || bookmark.textSnippet) && (
-                        <p className="text-xs text-gray-600 line-clamp-2 ml-4 mb-2 italic">
-                          “{bookmark.highlightText || bookmark.textSnippet}”
-                        </p>
-                      )}
-
-                      {bookmark.memo && (
-                        <p className="text-xs text-gray-700 line-clamp-2 ml-4 mb-2">
-                          {bookmark.memo}
-                        </p>
-                      )}
-
-                      {!!(bookmark.tags && bookmark.tags.length) && (
-                        <div className="flex flex-wrap gap-1 ml-4 mb-2">
-                          {bookmark.tags.map((tag) => (
-                            <span
-                              key={tag}
-                              className="text-[11px] px-2 py-0.5 rounded-full bg-green-100 text-green-600 font-medium"
-                            >
-                              {tag}
-                            </span>
-                          ))}
-                        </div>
-                      )}
-
-                      <div className="flex items-center space-x-2 ml-4">
-                        <span className="material-symbols-outlined text-gray-400 text-xs">schedule</span>
-                        <span className="text-xs text-gray-500">
-                          {formatDate(bookmark.createdAt ?? bookmark.created_at)}
-                        </span>
-                      </div>
+                  <div className="flex items-center space-x-2 mb-1">
+                    <span className="material-symbols-outlined text-green-500 text-xs mt-0.5 flex-shrink-0">place</span>
+                    <div className="flex flex-col truncate">
+                      <p className="text-sm font-semibold text-gray-800 truncate">
+                        {parseBookmarkLocation(bookmark)}
+                      </p>
+                      <span className="text-xs text-gray-500 truncate">
+                        북마크 #{bookmark.id}
+                      </span>
                     </div>
+                  </div>
 
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleDelete(bookmark.id);
-                      }}
-                      disabled={deletingId === bookmark.id}
-                      className="opacity-0 group-hover:opacity-100 ml-2 p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-md transition-all duration-200 flex-shrink-0 disabled:opacity-50 disabled:pointer-events-none"
-                      title="북마크 삭제"
-                    >
-                      <span className="material-symbols-outlined text-xs">delete</span>
-                    </button>
+                  {(bookmark.highlightText || bookmark.textSnippet) && (
+                    <p className="text-xs text-gray-600 line-clamp-2 ml-4 mb-2 italic">
+                      “{bookmark.highlightText || bookmark.textSnippet}”
+                    </p>
+                  )}
+
+                  {bookmark.memo && (
+                    <p className="text-xs text-gray-700 line-clamp-2 ml-4 mb-2">
+                      {bookmark.memo}
+                    </p>
+                  )}
+
+                  {!!(bookmark.tags && bookmark.tags.length) && (
+                    <div className="flex flex-wrap gap-1 ml-4 mb-2">
+                      {bookmark.tags.map((tag) => (
+                        <span
+                          key={tag}
+                          className="text-[11px] px-2 py-0.5 rounded-full bg-green-100 text-green-600 font-medium"
+                        >
+                          {tag}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+
+                  <div className="flex items-center space-x-2 ml-4">
+                    <span className="material-symbols-outlined text-gray-400 text-xs">schedule</span>
+                    <span className="text-xs text-gray-500">
+                      {formatDate(bookmark.createdAt ?? bookmark.created_at)}
+                    </span>
                   </div>
                 </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleDelete(bookmark.id)}
+                  disabled={idKey !== '' && deletingId === idKey}
+                  className="shrink-0 self-start p-3 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-r-lg transition-all duration-200 opacity-100 sm:opacity-0 sm:pointer-events-none sm:group-hover:opacity-100 sm:group-hover:pointer-events-auto disabled:opacity-50 disabled:pointer-events-none"
+                  title="북마크 삭제"
+                  aria-label="북마크 삭제"
+                >
+                  <span className="material-symbols-outlined text-xs">delete</span>
+                </button>
               </li>
-            ))}
+            );
+            })}
           </ul>
         )}
       </div>

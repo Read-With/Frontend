@@ -1,22 +1,89 @@
 import { useCallback, useRef, useEffect } from "react";
-import { applySearchHighlight } from '../../utils/searchUtils.jsx';
-import { getContainerInfo, calculateCytoscapePosition } from '../../utils/graph/graphUtils';
+import { getContainerInfo, calculateCytoscapePosition, clearHighlightClassesOn } from '../../utils/graph/graphUtils';
+
+function applyNodeClickHighlight(cy, node) {
+  if (!cy || !node || node.length === 0) return;
+  try {
+    clearHighlightClassesOn(cy);
+    const nodeId = String(node.id());
+    const connectedEdges = node.connectedEdges();
+    const directEdges = connectedEdges.filter((edge) => {
+      const sourceId = String(edge.source().id());
+      const targetId = String(edge.target().id());
+
+      // 선택 노드에서 나가는 간선은 항상 유지
+      if (sourceId === nodeId) return true;
+
+      // 선택 노드로 들어오는 간선은, 반대 방향(outgoing) 간선이 있으면 제외
+      if (targetId === nodeId) {
+        const hasReverseOutgoing = connectedEdges.some((candidate) => {
+          const candidateSourceId = String(candidate.source().id());
+          const candidateTargetId = String(candidate.target().id());
+          return candidateSourceId === nodeId && candidateTargetId === sourceId;
+        });
+        return !hasReverseOutgoing;
+      }
+
+      return false;
+    });
+    const keepNodes = node.union(directEdges.connectedNodes());
+    const keepEdges = directEdges;
+    applySelectionFade(cy, keepNodes, keepEdges, node, directEdges);
+  } catch {
+    /* ignore */
+  }
+}
+
+function applyEdgeClickHighlight(cy, edge) {
+  if (!cy || !edge || edge.length === 0) return;
+  try {
+    clearHighlightClassesOn(cy);
+    const endpoints = edge.source().union(edge.target());
+    applySelectionFade(cy, endpoints, edge, endpoints, edge);
+  } catch {
+    /* ignore */
+  }
+}
+
+function applySelectionFade(cy, keepNodes, keepEdges, highlightedNodes, highlightedEdges) {
+  if (!cy) return;
+  const allNodes = cy.nodes();
+  const allEdges = cy.edges();
+  const fadedNodes = cy.nodes().difference(keepNodes);
+  const fadedEdges = cy.edges().difference(keepEdges);
+  cy.batch(() => {
+    // 이전 상태를 먼저 정리해 스타일 충돌을 방지
+    allNodes.removeClass("highlighted faded");
+    allEdges.removeClass("highlighted faded");
+    allNodes.forEach((n) => {
+      n.removeStyle("opacity");
+      n.removeStyle("text-opacity");
+    });
+    allEdges.forEach((e) => {
+      e.removeStyle("opacity");
+    });
+
+    highlightedNodes.addClass("highlighted");
+    highlightedEdges.addClass("highlighted");
+
+    fadedNodes.addClass("faded");
+    fadedEdges.addClass("faded");
+  });
+}
 
 export default function useGraphInteractions({
   cyRef,
-  onShowNodeTooltip, 
+  onShowNodeTooltip,
   onShowEdgeTooltip,
-  onClearTooltip, 
+  onClearTooltip,
   selectedNodeIdRef,
   selectedEdgeIdRef,
   strictBackgroundClear = false,
-  isSearchActive = false, 
-  filteredElements = [], 
+  onAfterReset,
 }) {
   const onShowNodeTooltipRef = useRef(onShowNodeTooltip);
   const onShowEdgeTooltipRef = useRef(onShowEdgeTooltip);
   const onClearTooltipRef = useRef(onClearTooltip);
-  const prewarmedOnceRef = useRef(false);
 
   useEffect(() => {
     onShowNodeTooltipRef.current = onShowNodeTooltip;
@@ -30,178 +97,19 @@ export default function useGraphInteractions({
     onClearTooltipRef.current = onClearTooltip;
   }, [onClearTooltip]);
 
-  const forceStyleUpdate = useCallback((cy, { immediate = true } = {}) => {
-    if (!cy) return;
-    if (immediate) {
-      try {
-        cy.style().update();
-      } catch (error) {
-        console.debug('forceStyleUpdate 실패:', error);
-      }
-    }
-  }, []);
+  const onAfterResetRef = useRef(onAfterReset);
+  useEffect(() => { onAfterResetRef.current = onAfterReset; }, [onAfterReset]);
+
+  const clearSelectionRefs = useCallback(() => {
+    if (selectedNodeIdRef) selectedNodeIdRef.current = null;
+    if (selectedEdgeIdRef) selectedEdgeIdRef.current = null;
+  }, [selectedNodeIdRef, selectedEdgeIdRef]);
 
   const resetAllStyles = useCallback(() => {
     if (!cyRef?.current) return;
-    
-    const cy = cyRef.current;
-    
-    cy.batch(() => {
-      cy.nodes().removeClass("highlighted faded");
-      cy.edges().removeClass("highlighted faded");
-      cy.nodes().removeStyle('opacity');
-      cy.nodes().removeStyle('text-opacity');
-      cy.nodes().removeStyle('border-color');
-      cy.nodes().removeStyle('border-width');
-      cy.nodes().removeStyle('border-opacity');
-      cy.nodes().removeStyle('border-style');
-      cy.edges().removeStyle('opacity');
-      cy.edges().removeStyle('text-opacity');
-      cy.edges().removeStyle('width');
-    });
-    
-    forceStyleUpdate(cy, { immediate: true });
-  }, [cyRef, forceStyleUpdate]);
-
-  const clearStyles = useCallback(() => {
-    resetAllStyles();
-  }, [resetAllStyles]);
-
-  const clearSelectionOnly = useCallback(() => {
-    clearStyles();
-  }, [clearStyles]);
-
-  const clearAll = useCallback(() => {
-    clearStyles();
-  }, [clearStyles]);
-
-  useEffect(() => {
-    const cy = cyRef?.current;
-    if (!cy || prewarmedOnceRef.current) return;
-
-    const doPrewarm = () => {
-      if (prewarmedOnceRef.current) return;
-      try {
-        const nodes = cy.nodes();
-        const edges = cy.edges();
-        
-        if (nodes.length === 0 && edges.length === 0) return;
-        
-        cy.batch(() => {
-          if (nodes.length > 0) {
-            nodes.addClass('highlighted');
-          }
-          if (edges.length > 0) {
-            edges.addClass('highlighted');
-          }
-        });
-        
-        try {
-          cy.style().update();
-        } catch (error) {
-          console.debug('prewarm style update 실패:', error);
-        }
-        
-        requestAnimationFrame(() => {
-          try {
-            cy.style().update();
-            cy.batch(() => {
-              nodes.removeClass('highlighted');
-              edges.removeClass('highlighted');
-            });
-            cy.style().update();
-            prewarmedOnceRef.current = true;
-          } catch (error) {
-            console.debug('prewarm cleanup 실패:', error);
-            prewarmedOnceRef.current = true;
-          }
-        });
-      } catch (error) {
-        console.debug('prewarm 실행 실패:', error);
-        prewarmedOnceRef.current = true;
-      }
-    };
-
-    if (cy.nodes().length > 0 || cy.edges().length > 0) {
-      doPrewarm();
-    } else {
-      const handleFirstElement = () => {
-        if (cy.nodes().length > 0 || cy.edges().length > 0) {
-          doPrewarm();
-          try { 
-            cy.removeListener('add', 'node', handleFirstElement); 
-            cy.removeListener('add', 'edge', handleFirstElement);
-          } catch (error) {
-            console.debug('listener 제거 실패:', error);
-          }
-        }
-      };
-      try { 
-        cy.on('add', 'node', handleFirstElement);
-        cy.on('add', 'edge', handleFirstElement);
-      } catch (error) {
-        console.debug('listener 등록 실패:', error);
-      }
-      return () => {
-        try { 
-          cy.removeListener('add', 'node', handleFirstElement);
-          cy.removeListener('add', 'edge', handleFirstElement);
-        } catch (error) {
-          console.debug('cleanup listener 제거 실패:', error);
-        }
-      };
-    }
+    clearHighlightClassesOn(cyRef.current);
+    if (onAfterResetRef.current) onAfterResetRef.current();
   }, [cyRef]);
-
-  const handleNodeHighlight = useCallback((node) => {
-    try {
-      if (!cyRef?.current) return;
-
-      const cy = cyRef.current;
-
-      if (isSearchActive && filteredElements.length > 0) {
-        applySearchHighlight(cy, node, filteredElements);
-        forceStyleUpdate(cy, { immediate: true });
-        return;
-      }
-
-      const cyNodes = cy.nodes();
-      const cyEdges = cy.edges();
-
-      let connectedNodes = cy.collection([node]);
-      if (typeof node.closedNeighborhood === 'function') {
-        try {
-          connectedNodes = node.closedNeighborhood().nodes();
-        } catch (error) {
-          console.debug('closedNeighborhood 호출 실패:', error);
-          connectedNodes = cy.collection([node]);
-        }
-      }
-
-      let connectedEdges = node.connectedEdges ? node.connectedEdges() : cy.collection();
-      if (!connectedEdges || typeof connectedEdges.length !== 'number') {
-        connectedEdges = cy.collection();
-      }
-
-      cy.batch(() => {
-        cyNodes.removeClass("highlighted faded");
-        cyEdges.removeClass("highlighted faded");
-
-        connectedNodes.addClass("highlighted");
-        connectedEdges.addClass("highlighted");
-
-        const fadedNodes = cyNodes.difference(connectedNodes);
-        const fadedEdges = cyEdges.difference(connectedEdges);
-
-        fadedNodes.addClass("faded");
-        fadedEdges.addClass("faded");
-      });
-
-      forceStyleUpdate(cy, { immediate: true });
-    } catch (error) {
-      console.debug('handleNodeHighlight 실패:', error);
-    }
-  }, [cyRef, isSearchActive, filteredElements, forceStyleUpdate]);
 
   const calculateTooltipPosition = useCallback((element, evt, offset = 0) => {
     try {
@@ -209,7 +117,6 @@ export default function useGraphInteractions({
 
       const { containerRect } = getContainerInfo();
 
-      // 노드/간선 동일: evt 있으면 마우스 위치, 없으면 element 위치 사용
       if (evt?.originalEvent) {
         let domX = evt.originalEvent.clientX - containerRect.left;
         let domY = evt.originalEvent.clientY - containerRect.top;
@@ -252,7 +159,7 @@ export default function useGraphInteractions({
               basePos = { x: 0, y: 0 };
             }
           }
-        } catch (err) {
+        } catch (_err) {
           basePos = { x: 0, y: 0 };
         }
       }
@@ -267,15 +174,10 @@ export default function useGraphInteractions({
       if (offset !== 0) domX += offset;
 
       return { x: domX, y: domY };
-    } catch (error) {
-      console.debug('calculateTooltipPosition 실패:', error);
+    } catch {
       return { x: 0, y: 0 };
     }
   }, [cyRef]);
-
-  const calculateNodePosition = useCallback((node) => {
-    return calculateTooltipPosition(node, null, 0);
-  }, [calculateTooltipPosition]);
 
   const tapNodeHandler = useCallback(
     (evt) => {
@@ -290,36 +192,32 @@ export default function useGraphInteractions({
         const isSameNodeSelected = selectedNodeIdRef?.current === nodeId;
 
         if (isSameNodeSelected) {
-          if (onClearTooltipRef.current) onClearTooltipRef.current();
-          if (selectedNodeIdRef) selectedNodeIdRef.current = null;
-          if (selectedEdgeIdRef) selectedEdgeIdRef.current = null;
           resetAllStyles();
+          if (onClearTooltipRef.current) onClearTooltipRef.current();
+          clearSelectionRefs();
           return;
         }
+
+        applyNodeClickHighlight(cyRef.current, node);
 
         const nodeSize = node.renderedBoundingBox()?.w || 50;
         const offsetX = nodeSize + 200;
         const { x: mouseX, y: mouseY } = calculateTooltipPosition(node, evt, offsetX);
-        const nodeCenter = calculateNodePosition(node);
-
-        handleNodeHighlight(node);
+        const nodeCenter = calculateTooltipPosition(node, null, 0);
 
         if (onShowNodeTooltipRef.current) {
           onShowNodeTooltipRef.current({ node, evt, nodeCenter, mouseX, mouseY });
         }
-        
+
         if (selectedNodeIdRef) selectedNodeIdRef.current = nodeId;
-      } catch (error) {
-        console.debug('tapNodeHandler 실패:', error);
+        if (selectedEdgeIdRef) selectedEdgeIdRef.current = null;
+      } catch {
       }
     },
-    [cyRef, handleNodeHighlight, calculateNodePosition, calculateTooltipPosition, selectedNodeIdRef, selectedEdgeIdRef, resetAllStyles]
+    [cyRef, calculateTooltipPosition, selectedNodeIdRef, selectedEdgeIdRef, resetAllStyles, clearSelectionRefs]
   );
 
-  const nodeDragStartHandler = useCallback((evt) => {
-  }, []);
-
-  const nodeDragEndHandler = useCallback((evt) => {
+  const nodeDragEndHandler = useCallback((_evt) => {
     const dragEndEvent = new CustomEvent('graphDragEnd', {
       detail: { type: 'graphDragEnd', timestamp: Date.now() }
     });
@@ -331,7 +229,6 @@ export default function useGraphInteractions({
       try {
         if (!cyRef?.current) return;
 
-        const cy = cyRef.current;
         const edge = evt.target;
         const edgeData = edge?.data?.();
         if (!edge || !edgeData) return;
@@ -340,39 +237,18 @@ export default function useGraphInteractions({
         const isSameEdgeSelected = selectedEdgeIdRef?.current === currentEdgeId;
 
         if (isSameEdgeSelected) {
-          if (onClearTooltipRef.current) onClearTooltipRef.current();
-          if (selectedEdgeIdRef) selectedEdgeIdRef.current = null;
-          if (selectedNodeIdRef) selectedNodeIdRef.current = null;
           resetAllStyles();
+          if (onClearTooltipRef.current) onClearTooltipRef.current();
+          clearSelectionRefs();
           return;
         }
+
+        applyEdgeClickHighlight(cyRef.current, edge);
 
         const edgeSize = edge.renderedBoundingBox?.()?.w ?? 50;
         const offsetX = edgeSize + 200;
         const { x: mouseX, y: mouseY } = calculateTooltipPosition(edge, evt, offsetX);
         const edgeCenter = calculateTooltipPosition(edge, null, 0);
-
-        const connectedNodes = edge.connectedNodes ? edge.connectedNodes() : cy.collection();
-        const edgeCollection = cy.collection([edge]);
-
-        const cyNodes = cy.nodes();
-        const cyEdges = cy.edges();
-
-        cy.batch(() => {
-          cyNodes.removeClass("highlighted faded");
-          cyEdges.removeClass("highlighted faded");
-
-          connectedNodes.addClass("highlighted");
-          edgeCollection.addClass("highlighted");
-
-          const fadedNodes = cyNodes.difference(connectedNodes);
-          const fadedEdges = cyEdges.difference(edgeCollection);
-
-          fadedNodes.addClass("faded");
-          fadedEdges.addClass("faded");
-        });
-
-        forceStyleUpdate(cy, { immediate: true });
 
         if (onShowEdgeTooltipRef.current) {
           onShowEdgeTooltipRef.current({ edge, evt, edgeCenter, mouseX, mouseY });
@@ -380,11 +256,10 @@ export default function useGraphInteractions({
 
         if (selectedEdgeIdRef) selectedEdgeIdRef.current = currentEdgeId;
         if (selectedNodeIdRef) selectedNodeIdRef.current = null;
-      } catch (error) {
-        console.debug('tapEdgeHandler 실패:', error);
+      } catch {
       }
     },
-    [cyRef, selectedEdgeIdRef, selectedNodeIdRef, resetAllStyles, calculateTooltipPosition, forceStyleUpdate]
+    [cyRef, selectedEdgeIdRef, selectedNodeIdRef, calculateTooltipPosition, resetAllStyles, clearSelectionRefs]
   );
 
   const handleBackgroundClick = useCallback(() => {
@@ -393,16 +268,14 @@ export default function useGraphInteractions({
         const hasSelection = !!(selectedNodeIdRef?.current || selectedEdgeIdRef?.current);
         if (!hasSelection) return;
       }
+      resetAllStyles();
       if (onClearTooltipRef.current) {
         onClearTooltipRef.current();
       }
-      if (selectedNodeIdRef) selectedNodeIdRef.current = null;
-      if (selectedEdgeIdRef) selectedEdgeIdRef.current = null;
-      resetAllStyles();
-    } catch (error) {
-      console.debug('handleBackgroundClick 실패:', error);
+      clearSelectionRefs();
+    } catch {
     }
-  }, [strictBackgroundClear, selectedNodeIdRef, selectedEdgeIdRef, resetAllStyles]);
+  }, [strictBackgroundClear, selectedNodeIdRef, selectedEdgeIdRef, resetAllStyles, clearSelectionRefs]);
 
   const tapBackgroundHandler = useCallback(
     (evt) => {
@@ -410,8 +283,7 @@ export default function useGraphInteractions({
         if (evt.target === cyRef?.current) {
           handleBackgroundClick();
         }
-      } catch (error) {
-        console.debug('tapBackgroundHandler 실패:', error);
+      } catch {
       }
     },
     [cyRef, handleBackgroundClick]
@@ -419,22 +291,18 @@ export default function useGraphInteractions({
 
   const clearSelectionAndRebind = useCallback(() => {
     try {
-      clearSelectionOnly();
-      if (selectedNodeIdRef) selectedNodeIdRef.current = null;
-      if (selectedEdgeIdRef) selectedEdgeIdRef.current = null;
-    } catch (error) {
-      console.debug('clearSelectionAndRebind 실패:', error);
+      resetAllStyles();
+      clearSelectionRefs();
+    } catch {
     }
-  }, [clearSelectionOnly, selectedNodeIdRef, selectedEdgeIdRef]);
+  }, [resetAllStyles, clearSelectionRefs]);
 
   return {
     tapNodeHandler,
     tapEdgeHandler,
     tapBackgroundHandler,
-    nodeDragStartHandler,
     nodeDragEndHandler,
     clearSelection: clearSelectionAndRebind,
-    clearSelectionOnly,
-    clearAll,
+    clearAll: resetAllStyles,
   };
 }

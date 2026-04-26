@@ -1,6 +1,6 @@
 import { clearStyleCache, cleanupRelationStyleResources } from '../styles/relationStyles';
-import { clearRelationCache, cleanupRelationResources } from '../relationUtils';
-import { clearRegexCache, cleanupSearchResources } from '../searchUtils';
+import { clearRelationCache, cleanupRelationResources } from '../graph/relationUtils';
+import { clearRegexCache, cleanupSearchResources } from '../graph/searchUtils.jsx';
 import { clearAllCaches, clearCache, cleanupUnusedCaches, getCacheStats as getCacheStatsFromManager } from './cache/cacheManager';
 
 /**
@@ -153,7 +153,7 @@ export function diagnoseMemoryUsage() {
  * @param {Object} cy - Cytoscape 인스턴스 (선택사항)
  * @returns {Object} 정리 결과
  */
-export function safeCleanup(cy = null) {
+export function safeCleanup(_cy = null) {
   try {
     const diagnosis = diagnoseMemoryUsage();
     

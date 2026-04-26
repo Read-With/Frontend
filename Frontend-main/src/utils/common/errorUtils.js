@@ -27,7 +27,7 @@ export const errorUtils = {
   },
   
   logInfo: (context, message, additionalData = {}) => {
-    if (process.env.NODE_ENV === 'development') {
+    if (import.meta.env.DEV) {
       console.info(`ℹ️ [${context}] 정보:`, {
         message,
         ...additionalData,
@@ -36,15 +36,7 @@ export const errorUtils = {
     }
   },
   
-  logSuccess: (context, message, additionalData = {}) => {
-    if (process.env.NODE_ENV === 'development') {
-      console.log(`✅ [${context}] 성공:`, {
-        message,
-        ...additionalData,
-        timestamp: new Date().toISOString(),
-      });
-    }
-  },
+  logSuccess: (_context, _message, _additionalData = {}) => {},
   
   handleError: (context, error, fallbackValue = null, additionalData = {}) => {
     errorUtils.logError(context, error, additionalData);

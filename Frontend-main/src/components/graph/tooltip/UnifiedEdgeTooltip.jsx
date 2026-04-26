@@ -1,120 +1,80 @@
 import React, { useState, useEffect, useCallback, useMemo } from "react";
-import { Line } from "react-chartjs-2";
-import "chart.js/auto";
+import {
+  ResponsiveContainer,
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip as RechartsTooltip,
+} from "recharts";
 import { useParams } from "react-router-dom";
 import { useTooltipPosition } from "../../../hooks/ui/useTooltipPosition";
 import { useClickOutside } from "../../../hooks/ui/useClickOutside";
 import { useRelationData } from "../../../hooks/graph/useRelationData";
-import { getRelationStyle, getRelationLabels, tooltipStyles } from "../../../utils/styles/relationStyles";
+import { getRelationStyle, tooltipStyles } from "../../../utils/styles/relationStyles";
 import { createButtonStyle, createAdvancedButtonHandlers, COLORS, ANIMATION_VALUES, unifiedNodeTooltipStyles } from "../../../utils/styles/styles";
 import { mergeRefs } from "../../../utils/styles/animations";
-import { safeNum, processRelationTagsCached } from "../../../utils/relationUtils";
+import { safeNum, processRelationTagsCached } from "../../../utils/graph/relationUtils";
 import { cleanupRelationUtils } from "../../../utils/common/cleanupUtils";
 import { getMaxChapter } from "../../../utils/common/cache/manifestCache";
+import { getUnifiedEventInfoForEdgeTooltip } from "../../../utils/viewer/eventDisplayUtils.js";
 import "../RelationGraph.css";
 
-/**
- * 통합 간선 툴팁 컴포넌트
- * @param {object} props - 컴포넌트 props
- * @param {object} props.data - 간선 데이터
- * @param {number} props.x - 초기 X 좌표
- * @param {number} props.y - 초기 Y 좌표
- * @param {function} props.onClose - 닫기 핸들러
- * @param {object} props.sourceNode - 출발 노드
- * @param {object} props.targetNode - 도착 노드
- * @param {object} props.style - 추가 스타일
- * @param {string} props.mode - 'standalone' | 'viewer'
- * @param {string} props.displayMode - 'tooltip' | 'sidebar'
- * @param {number} props.chapterNum - 현재 챕터 번호
- * @param {number} props.eventNum - 현재 이벤트 번호
- * @param {number} props.maxChapter - 최대 챕터 수 (standalone 모드에서만 사용)
- */
 function UnifiedEdgeTooltip({
   data,
   x,
   y,
   onClose,
-  sourceNode,
-  targetNode,
+  sourceNode: _sourceNode,
+  targetNode: _targetNode,
   style,
-  mode = 'standalone', // 'standalone' | 'viewer'
-  displayMode = 'tooltip', // 'tooltip' | 'sidebar'
+  mode = 'standalone',
+  displayMode = 'tooltip',
   chapterNum = 1,
   eventNum = 1,
   maxChapter,
   currentEvent = null,
   prevValidEvent = null,
-  events = [],
-  bookId = null, // API 책 ID
+  events: _events = [],
+  bookId = null,
 }) {
   const { filename } = useParams();
+  const isSidebar = displayMode === 'sidebar';
 
-  // 위치 및 드래그 관리 (사이드바 모드에서는 사용하지 않음)
   const {
     position,
     showContent,
     isDragging,
-    justFinishedDragging,
     tooltipRef,
     handleMouseDown,
-  } = displayMode === 'sidebar' ? {
-    position: { x: 0, y: 0 },
-    showContent: true,
-    isDragging: false,
-    justFinishedDragging: false,
-    tooltipRef: null,
-    handleMouseDown: () => {},
-  } : useTooltipPosition(x, y);
+  } = useTooltipPosition(x, y, { enabled: !isSidebar });
 
-  // 외부 클릭 감지 훅 - 툴팁 외부 클릭 시 닫기 (사이드바 모드에서는 비활성화, 드래그 후 클릭 무시)
-  const clickOutsideRef = displayMode === 'sidebar' ? null : useClickOutside(() => {
-    if (onClose) onClose();
-  }, showContent, true);
+  const clickOutsideRef = useClickOutside(
+    () => {
+      if (onClose) onClose();
+    },
+    !isSidebar && showContent,
+    true
+  );
 
-  // ref 병합은 animations.js에서 import한 함수 사용
-
-  // 뷰 모드: "info" | "chart"
   const [viewMode, setViewMode] = useState("info");
-  
-  // 로딩 상태 관리
   const [isInitialLoad, setIsInitialLoad] = useState(true);
 
-  // 간선이 변경될 때마다 viewMode를 "info"로 리셋
   useEffect(() => {
     setViewMode("info");
   }, [data?.id, data?.source, data?.target]);
-
-  // ViewerTopBar와 동일한 방식으로 이벤트 정보 처리
-  const getUnifiedEventInfo = useCallback(() => {
-    // ViewerTopBar와 동일한 로직: currentEvent || prevValidEvent
-    const eventToShow = currentEvent || prevValidEvent;
-    
-    if (eventToShow) {
-      return {
-        eventNum: eventToShow.eventNum ?? 0,
-        name: eventToShow.name || eventToShow.event_name || "",
-        chapterProgress: eventToShow.chapterProgress,
-        currentChars: eventToShow.currentChars,
-        totalChars: eventToShow.totalChars
-      };
-    }
-    
-    // 이벤트 정보가 없는 경우 기존 로직 사용 (하위 호환성)
-    return { eventNum: eventNum || 0 };
-  }, [currentEvent, prevValidEvent, eventNum]);
-
 
   // source/target을 safeNum으로 변환
   const id1 = safeNum(data.source);
   const id2 = safeNum(data.target);
 
-  // 통합된 이벤트 정보 가져오기
-  const unifiedEventInfo = getUnifiedEventInfo();
+  const unifiedEventInfo = useMemo(
+    () => getUnifiedEventInfoForEdgeTooltip({ currentEvent, prevValidEvent, eventNum }),
+    [currentEvent, prevValidEvent, eventNum],
+  );
 
-  // 그래프 온리 페이지 감지 (URL 패턴으로 판단)
   const isGraphOnlyPage = window.location.pathname.includes('/user/graph/');
-  
-  // 모드 결정: 그래프 온리 페이지에서는 cumulative 모드 사용
   const relationDataMode = useMemo(() => {
     if (mode === 'viewer') {
       return 'viewer';
@@ -154,41 +114,38 @@ function UnifiedEdgeTooltip({
     return 10;
   }, [maxChapter, numericBookId]);
   
-  // 관계 데이터 관리 (그래프 온리 페이지에서는 누적 모드 사용)
   const {
     timeline,
     labels,
     loading,
-    noRelation,
     error: relationError,
     fetchData,
-    getMaxEventCount,
   } = useRelationData(relationDataMode, id1, id2, chapterNum, unifiedEventInfo.eventNum, safeMaxChapterValue, filename, numericBookId);
 
-  // fallback positivity 값 확인 (useEffect 이전에 선언 필요)
-  const hasFallbackPositivity = typeof data?.positivity === 'number' && !Number.isNaN(data.positivity);
-  const clampedFallbackPositivity = hasFallbackPositivity
-    ? Math.max(-1, Math.min(1, data.positivity))
-    : null;
+  /** graphStyles.getRelationColor과 동일: 간선 data.positivity → 막대·라벨 색 통일 */
+  const { graphBarPositivity, chartTimelineFallbackValue } = useMemo(() => {
+    const n = Number(data?.positivity);
+    if (!Number.isFinite(n)) {
+      return { graphBarPositivity: 0, chartTimelineFallbackValue: null };
+    }
+    const clamped = Math.max(-1, Math.min(1, n));
+    return { graphBarPositivity: clamped, chartTimelineFallbackValue: clamped };
+  }, [data?.positivity]);
 
-  // 관계 라벨 배열 생성 (캐시된 함수 사용으로 성능 최적화)
   const relationLabels = processRelationTagsCached(data.relation, data.label);
 
-  // 간선이 변경될 때마다 즉시 데이터 불러오기
   useEffect(() => {
     if (id1 && id2 && numericBookId && chapterNum) {
       fetchData();
     }
   }, [id1, id2, numericBookId, chapterNum, unifiedEventInfo.eventNum, relationDataMode, fetchData]);
 
-  // 초기 로딩 완료 감지
   useEffect(() => {
     if (!loading && isInitialLoad) {
       setIsInitialLoad(false);
     }
   }, [loading, isInitialLoad]);
 
-  // 컴포넌트 언마운트 시 리소스 정리
   useEffect(() => {
     return () => {
       cleanupRelationUtils();
@@ -200,21 +157,16 @@ function UnifiedEdgeTooltip({
     : false;
 
   const currentEventNumber = useMemo(() => {
-    const candidates = [
-      currentEvent?.eventNum,
-      currentEvent?.eventIdx,
-      eventNum
-    ];
-
-    for (const candidate of candidates) {
-      const parsed = Number(candidate);
-      if (Number.isFinite(parsed) && parsed > 0) {
-        return parsed;
-      }
+    const fromCurrent = Number(currentEvent?.eventNum);
+    if (Number.isFinite(fromCurrent) && fromCurrent > 0) {
+      return fromCurrent;
     }
-
+    const fromProp = Number(eventNum);
+    if (Number.isFinite(fromProp) && fromProp > 0) {
+      return fromProp;
+    }
     return 1;
-  }, [currentEvent?.eventNum, currentEvent?.eventIdx, eventNum]);
+  }, [currentEvent?.eventNum, eventNum]);
 
   const extractNumericLabel = useCallback((label) => {
     if (typeof label === 'number' && Number.isFinite(label)) {
@@ -231,25 +183,6 @@ function UnifiedEdgeTooltip({
     }
     return null;
   }, []);
-
-  const earliestNumericLabel = useMemo(() => {
-    if (!timelineHasNumeric || !Array.isArray(labels) || labels.length === 0) {
-      return null;
-    }
-    const length = Math.min(labels.length, timeline.length);
-    for (let i = 0; i < length; i += 1) {
-      const label = labels[i];
-      const value = timeline[i];
-      if (typeof value !== 'number' || Number.isNaN(value)) {
-        continue;
-      }
-      const numericLabel = extractNumericLabel(label);
-      if (Number.isFinite(numericLabel) && numericLabel > 0) {
-        return numericLabel;
-      }
-    }
-    return null;
-  }, [timelineHasNumeric, labels, timeline, extractNumericLabel]);
 
   const effectiveEventColumns = useMemo(() => {
     if (isGraphOnlyPage) return Number.POSITIVE_INFINITY;
@@ -311,9 +244,9 @@ function UnifiedEdgeTooltip({
       }
     }
 
-    if (pairs.length === 0 && clampedFallbackPositivity !== null) {
+    if (pairs.length === 0 && chartTimelineFallbackValue !== null) {
       pairs.push({
-        value: clampedFallbackPositivity,
+        value: chartTimelineFallbackValue,
         label: `E${currentEventNumber || 1}`,
         numericLabel: currentEventNumber || 1,
         isChapterAggregate: false
@@ -327,7 +260,7 @@ function UnifiedEdgeTooltip({
     timeline,
     extractNumericLabel,
     currentEventNumber,
-    clampedFallbackPositivity,
+    chartTimelineFallbackValue,
     isGraphOnlyPage,
     effectiveEventColumns
   ]);
@@ -335,13 +268,24 @@ function UnifiedEdgeTooltip({
   const activeEventHasPositivity = useMemo(() => {
     if (chartPairs.length === 0) return false;
     if (isGraphOnlyPage) return true;
-    const currentEventIdx = Number(currentEvent?.eventNum ?? currentEvent?.eventIdx ?? eventNum ?? 0);
+    const currentEventIdx = Number(currentEvent?.eventNum ?? eventNum ?? 0);
     if (!Number.isFinite(currentEventIdx) || currentEventIdx <= 0) {
       return chartPairs.length > 0;
     }
     const currentLabel = `E${currentEventIdx}`;
-    return chartPairs.some(pair => pair.label === currentLabel || pair.numericLabel === currentEventIdx);
-  }, [chartPairs, currentEvent, eventNum, isGraphOnlyPage]);
+    if (chartPairs.some((pair) => pair.label === currentLabel || pair.numericLabel === currentEventIdx)) {
+      return true;
+    }
+    if (mode === 'viewer') {
+      return chartPairs.some(
+        (pair) =>
+          !pair.isChapterAggregate &&
+          Number.isFinite(pair.numericLabel) &&
+          pair.numericLabel <= currentEventIdx
+      );
+    }
+    return false;
+  }, [chartPairs, currentEvent, eventNum, isGraphOnlyPage, mode]);
 
   const chartPoints = useMemo(() => {
     if (!activeEventHasPositivity) return [];
@@ -376,78 +320,11 @@ function UnifiedEdgeTooltip({
   const effectiveNoRelation = !hasChartData;
   const shouldShowRelationError = !!relationError && !hasChartData;
 
-  const timelinePositivity = useMemo(() => {
-    const validPairs = chartPairs.filter(pair => typeof pair?.value === 'number' && !Number.isNaN(pair.value));
-    if (validPairs.length === 0) {
-      return null;
-    }
+  const positivityForBars = graphBarPositivity;
+  const positivityPercentage = Math.round(graphBarPositivity * 100);
 
-    const getLastEventPair = () => {
-      for (let i = validPairs.length - 1; i >= 0; i -= 1) {
-        const pair = validPairs[i];
-        if (!pair?.isChapterAggregate) {
-          return pair;
-        }
-      }
-      return validPairs[validPairs.length - 1] ?? null;
-    };
+  const relationStyle = getRelationStyle(graphBarPositivity, filename);
 
-    if (mode === 'viewer') {
-      let targetEvent = Number(currentEventNumber || 0);
-
-      if ((!Number.isFinite(targetEvent) || targetEvent <= 0) && validPairs.length > 0) {
-        const firstPair = validPairs.find(pair => !pair.isChapterAggregate && Number.isFinite(pair.numericLabel));
-        if (firstPair?.numericLabel) {
-          targetEvent = firstPair.numericLabel;
-        }
-      }
-
-      if (Number.isFinite(targetEvent) && targetEvent > 0) {
-        for (let i = validPairs.length - 1; i >= 0; i -= 1) {
-          const pair = validPairs[i];
-          if (pair?.isChapterAggregate) continue;
-          if (pair?.numericLabel === targetEvent) {
-            return pair.value;
-          }
-        }
-        for (let i = validPairs.length - 1; i >= 0; i -= 1) {
-          const pair = validPairs[i];
-          if (pair?.isChapterAggregate) continue;
-          if (typeof pair?.numericLabel === 'number' && pair.numericLabel < targetEvent) {
-            return pair.value;
-          }
-        }
-      }
-      const fallbackPair = getLastEventPair();
-      return fallbackPair ? fallbackPair.value : null;
-    }
-
-    const lastPair = getLastEventPair();
-    return lastPair ? lastPair.value : null;
-  }, [chartPairs, mode, currentEventNumber]);
-
-  // effectivePositivity 계산 최적화: fallback 값을 우선 사용하여 즉시 표시
-  const effectivePositivity = useMemo(() => {
-    // timelinePositivity가 있으면 우선 사용 (더 정확한 값)
-    if (typeof timelinePositivity === 'number' && !Number.isNaN(timelinePositivity)) {
-      return Math.max(-1, Math.min(1, timelinePositivity));
-    }
-    // fallback 값을 즉시 사용 (API 응답 대기 없이 표시)
-    if (typeof clampedFallbackPositivity === 'number' && !Number.isNaN(clampedFallbackPositivity)) {
-      return clampedFallbackPositivity;
-    }
-    return null;
-  }, [timelinePositivity, clampedFallbackPositivity]);
-
-  const hasDisplayPositivity = typeof effectivePositivity === 'number' && !Number.isNaN(effectivePositivity);
-  const displayPositivityValue = hasDisplayPositivity ? effectivePositivity : null;
-  const positivityForBars = hasDisplayPositivity ? effectivePositivity : 0;
-  const positivityPercentage = hasDisplayPositivity ? Math.round(effectivePositivity * 100) : null;
-
-  // positivity 값에 따른 색상과 텍스트 결정 (filename 기반)
-  const relationStyle = getRelationStyle(hasDisplayPositivity ? effectivePositivity : 0, filename);
-
-  // utils/styles에서 가져온 버튼 스타일 사용
   const buttonStyles = {
     primary: createButtonStyle(ANIMATION_VALUES, 'primaryEdge'),
     secondary: createButtonStyle(ANIMATION_VALUES, 'secondaryEdge'),
@@ -455,7 +332,6 @@ function UnifiedEdgeTooltip({
     tooltipClose: createButtonStyle(ANIMATION_VALUES, 'tooltipClose')
   };
 
-  // utils/styles에서 가져온 버튼 핸들러 사용
   const buttonHandlers = {
     primary: createAdvancedButtonHandlers('primaryEdge'),
     secondary: createAdvancedButtonHandlers('secondaryEdge'),
@@ -463,7 +339,6 @@ function UnifiedEdgeTooltip({
     tooltipClose: createAdvancedButtonHandlers('tooltipClose')
   };
 
-  // utils/styles에서 가져온 카드 스타일 사용
   const cardStyles = {
     sidebarCard: {
       ...unifiedNodeTooltipStyles.sidebarContainer,
@@ -475,7 +350,6 @@ function UnifiedEdgeTooltip({
     }
   };
 
-  // relationStyles의 기존 스타일을 사용한 진행률 바 렌더링 함수
   const renderProgressBars = (positivity, relationStyle, isSidebar = false) => {
     let p = Math.abs(positivity ?? 0);
     p = p * 100;
@@ -516,7 +390,6 @@ function UnifiedEdgeTooltip({
     });
   };
 
-  // 퍼센트 라벨 렌더링 함수 (utils/styles의 COLORS 사용)
   const renderPercentageLabels = (isSidebar = false) => {
     return [20, 40, 60, 80, 100].map((step, idx) => (
       <span
@@ -535,17 +408,6 @@ function UnifiedEdgeTooltip({
     ));
   };
 
-  // 점 색상 배열 생성 (그래프 온리 페이지에서 라벨에 따라 색상 구분)
-  const getPointBackgroundColors = () => {
-    if (!hasChartData) return [];
-    return chartPairs.map(pair => {
-      if (typeof pair.label === 'string' && pair.label.startsWith('Ch')) {
-        return "#9ca3af";
-      }
-      return "#5C6F5C";
-    });
-  };
-
   const xAxisBounds = useMemo(() => {
     if (chartPoints.length === 0) {
       return { min: 1, max: 1 };
@@ -556,94 +418,75 @@ function UnifiedEdgeTooltip({
     return { min: 1, max: chartPoints.length };
   }, [chartPoints]);
 
-  const chartConfig = {
-    data: {
-      labels: chartLabels,
-      datasets: [
-        {
-          label: "관계 긍정도",
-          data: chartPoints,
-          borderColor: "#5C6F5C",
-          backgroundColor: "rgba(92,111,92,0.1)",
-          pointBackgroundColor: getPointBackgroundColors(),
-          pointBorderColor: getPointBackgroundColors(),
-          pointRadius: 4,
-          pointHoverRadius: 6,
-          fill: true,
-          tension: 0.3,
-          spanGaps: true,
-          parsing: false
-        },
-      ],
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      layout: {
-        padding: 0
-      },
-      scales: {
-        y: {
-          min: -1,
-          max: 1,
-          title: { display: true, text: "긍정도" },
-        },
-        x: {
-          type: 'linear',
-          title: { display: false, text: '' },
-          min: xAxisBounds.min,
-          max: xAxisBounds.max,
-          ticks: {
-            stepSize: 1,
-            callback: (value) => {
-              if (!hasChartData) return '';
-              return xLabelMap[value] ?? '';
-            }
-          }
-        },
-      },
-      plugins: { 
-        legend: { display: false },
-        tooltip: {
-          padding: 10,
-          titleFont: {
-            size: 15
-          },
-          bodyFont: {
-            size: 15
-          },
-          borderRadius: 8,
-          callbacks: {
-            title: function(context) {
-              if (!context?.length) return '';
-              const point = context[0];
-              const label = xLabelMap[Math.round(point.parsed.x)];
-              return label || '';
-            },
-            label: function(context) {
-              const value = context.parsed.y;
-              const percentage = Math.round(value * 100);
-              return `관계 긍정도: ${percentage}%`;
-            }
-          }
-        }
-      },
-    }
-  };
+  const rechartsLineData = useMemo(() => {
+    if (!hasChartData) return [];
+    return chartPoints.map((p, i) => ({
+      x: p.x,
+      y: p.y,
+      label: chartLabels[i] ?? `E${i + 1}`,
+      pointColor:
+        typeof chartPairs[i]?.label === 'string' && chartPairs[i].label.startsWith('Ch')
+          ? '#9ca3af'
+          : '#5C6F5C',
+    }));
+  }, [hasChartData, chartPoints, chartLabels, chartPairs]);
 
-  // 모드별 설정 (통합된 이벤트 정보 사용)
+  const relationTimelineChart = (heightPx) => (
+    <ResponsiveContainer width="100%" height={heightPx}>
+      <LineChart data={rechartsLineData} margin={{ top: 12, right: 16, left: 4, bottom: 8 }}>
+        <CartesianGrid strokeDasharray="3 3" stroke="#eee" />
+        <XAxis
+          type="number"
+          dataKey="x"
+          domain={[xAxisBounds.min, xAxisBounds.max]}
+          ticks={rechartsLineData.map((d) => d.x)}
+          tickFormatter={(v) => (hasChartData ? xLabelMap[Math.round(v)] ?? '' : '')}
+        />
+        <YAxis
+          domain={[-1, 1]}
+          width={44}
+          label={{ value: '긍정도', angle: -90, position: 'insideLeft' }}
+        />
+        <RechartsTooltip
+          formatter={(value) => [`관계 긍정도: ${Math.round(Number(value) * 100)}%`, '']}
+          labelFormatter={(_l, payload) => payload?.[0]?.payload?.label ?? ''}
+        />
+        <Line
+          type="monotone"
+          dataKey="y"
+          stroke="#5C6F5C"
+          strokeWidth={2}
+          dot={(dotProps) => {
+            const { cx, cy, payload, index } = dotProps;
+            if (cx == null || cy == null) return null;
+            const fill = payload?.pointColor ?? '#5C6F5C';
+            return (
+              <circle
+                key={`relation-timeline-dot-${index ?? `${cx}-${cy}`}`}
+                cx={cx}
+                cy={cy}
+                r={4}
+                fill={fill}
+                stroke={fill}
+              />
+            );
+          }}
+          activeDot={{ r: 6 }}
+          connectNulls
+          isAnimationActive={false}
+        />
+      </LineChart>
+    </ResponsiveContainer>
+  );
+
   const zIndex = mode === 'viewer' ? 99999 : 99999;
-  
-  // 모드별 차트 제목 설정
   let chartTitle = "관계 변화 그래프";
   if (mode === 'viewer') {
     chartTitle = `Chapter ${chapterNum} 관계 변화`;
   } else if (isGraphOnlyPage) {
     chartTitle = `Chapter ${chapterNum}까지의 누적 관계 변화`;
   }
-  // 동적으로 최대 챕터 수 계산
 
-  // 사이드바 모드일 때는 완전히 다른 레이아웃 사용
   if (displayMode === 'sidebar') {
     return (
       <div 
@@ -663,7 +506,6 @@ function UnifiedEdgeTooltip({
         }}
         tabIndex={0}
       >
-        {/* 사이드바 헤더 */}
         <div style={{
           padding: '20px 20px 16px 20px',
           borderBottom: `1px solid ${COLORS.border}`,
@@ -694,7 +536,6 @@ function UnifiedEdgeTooltip({
             </button>
           </div>
           
-          {/* 관계 태그들 - 툴팁과 동일한 스타일 */}
           <div style={{
             display: 'flex',
             flexWrap: 'wrap',
@@ -721,8 +562,7 @@ function UnifiedEdgeTooltip({
           </div>
         </div>
 
-        {/* 사이드바 본문 */}
-        <div 
+        <div
           className="sidebar-content"
           style={{
             flex: 1,
@@ -732,8 +572,7 @@ function UnifiedEdgeTooltip({
         >
           {viewMode === "info" ? (
             <div style={{ padding: '20px 0' }}>
-              {/* 관계 긍정도 섹션 */}
-              <div 
+              <div
                 className="sidebar-card"
                 style={{
                   ...cardStyles.sidebarCard,
@@ -761,11 +600,10 @@ function UnifiedEdgeTooltip({
                     color: relationStyle.color,
                     letterSpacing: '-0.025em',
                   }}>
-                    {positivityPercentage !== null ? `${positivityPercentage}%` : "N/A"}
+                    {`${positivityPercentage}%`}
                   </span>
                 </div>
                 
-                {/* 진행률 바 - 공통 함수 사용 */}
                 <div style={{
                   display: 'flex',
                   alignItems: 'flex-end',
@@ -777,7 +615,6 @@ function UnifiedEdgeTooltip({
                   {renderProgressBars(positivityForBars, relationStyle, true)}
                 </div>
                 
-                {/* 퍼센트 라벨 - 공통 함수 사용 */}
                 <div style={{
                   display: 'flex',
                   justifyContent: 'center',
@@ -788,7 +625,6 @@ function UnifiedEdgeTooltip({
                 </div>
               </div>
 
-              {/* 설명 섹션 */}
               {data.explanation && (
                 <div 
                   className="sidebar-card"
@@ -838,7 +674,6 @@ function UnifiedEdgeTooltip({
                 </div>
               )}
 
-              {/* 차트 보기 버튼 - 다른 페이지와 일관성 있는 스타일 */}
               <button
                 onClick={() => setViewMode("chart")}
                 style={{ 
@@ -853,8 +688,7 @@ function UnifiedEdgeTooltip({
             </div>
           ) : (
             <div style={{ padding: '10px 0' }}>
-              {/* 차트 섹션 */}
-              <div 
+              <div
                 className="sidebar-card"
                 style={{
                   ...cardStyles.sidebarCard,
@@ -938,12 +772,11 @@ function UnifiedEdgeTooltip({
                     borderRadius: '8px',
                     padding: '0',
                   }}>
-                    <Line {...chartConfig} />
+                    {relationTimelineChart(352)}
                   </div>
                 )}
               </div>
 
-              {/* 정보 보기 버튼 - 다른 페이지와 일관성 있는 스타일 */}
               <button
                 onClick={() => setViewMode("info")}
                 style={{ 
@@ -962,7 +795,6 @@ function UnifiedEdgeTooltip({
     );
   }
 
-  // 툴팁 모드일 때는 기존 코드 사용
   return (
     <div
       ref={mergeRefs(tooltipRef, clickOutsideRef)}
@@ -986,7 +818,6 @@ function UnifiedEdgeTooltip({
           transform: viewMode === 'chart' ? 'rotateY(180deg)' : 'rotateY(0deg)'
         }}
       >
-        {/* 앞면 */}
         <div className="edge-tooltip-content edge-tooltip-front" style={tooltipStyles.front}>
           <button
             onClick={onClose}
@@ -1088,7 +919,7 @@ function UnifiedEdgeTooltip({
                           {relationStyle.text}
                         </span>
                         <span className="weight-value">
-                          {positivityPercentage !== null ? `${positivityPercentage}%` : "N/A"}
+                          {`${positivityPercentage}%`}
                         </span>
                       </div>
                       <div
@@ -1174,7 +1005,6 @@ function UnifiedEdgeTooltip({
           )}
         </div>
 
-        {/* 뒷면 */}
         <div className="edge-tooltip-content edge-tooltip-back" style={tooltipStyles.back}>
           {viewMode === "chart" && (
             <div style={{ height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
@@ -1310,7 +1140,7 @@ function UnifiedEdgeTooltip({
                     alignItems: 'center',
                     justifyContent: 'center'
                   }}>
-                    <Line {...chartConfig} style={{ height: '100%', width: '100%', maxHeight: '280px' }} />
+                    {relationTimelineChart(280)}
                   </div>
                 </div>
               )}
@@ -1326,6 +1156,7 @@ function UnifiedEdgeTooltip({
                   x축: 챕터별 마지막/이벤트, y축: 관계 긍정도(-1~1)
                 </div>
               )}
+              {!(mode === 'viewer' && effectiveNoRelation) && (
               <div style={{ 
                 flexShrink: 0,
                 paddingTop: '0.75rem', 
@@ -1345,6 +1176,7 @@ function UnifiedEdgeTooltip({
                   간선 정보로 돌아가기
                 </button>
               </div>
+              )}
             </div>
           )}
         </div>
@@ -1353,9 +1185,7 @@ function UnifiedEdgeTooltip({
   );
 }
 
-// 성능 최적화를 위한 React.memo 적용
 export default React.memo(UnifiedEdgeTooltip, (prevProps, nextProps) => {
-  // 주요 props만 비교하여 불필요한 리렌더링 방지
   return (
     prevProps.data === nextProps.data &&
     prevProps.x === nextProps.x &&

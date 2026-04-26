@@ -75,7 +75,7 @@ export function getRelationLabels(relation, label) {
     }
     
     return [];
-  } catch (error) {
+  } catch (_error) {
     return [];
   }
 }

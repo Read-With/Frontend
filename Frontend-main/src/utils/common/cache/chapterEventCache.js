@@ -1,8 +1,12 @@
-import { sortEventsByIdx } from '../../eventUtils';
-import { buildNodeWeights, extractCharacterId } from '../../characterUtils';
+import { sortEventsByIdx } from '../../graph/eventUtils';
+import { buildNodeWeights, extractCharacterId } from '../../graph/characterUtils';
 import { getFineGraph, getBookManifest } from '../../api/api';
-import { getChapterData as getManifestChapterData, getManifestFromCache } from './manifestCache';
-import { createCharacterMaps } from '../../characterUtils';
+import {
+  getChapterData as getManifestChapterData,
+  getManifestFromCache,
+  calculateMaxChapterFromChapters,
+} from './manifestCache';
+import { createCharacterMaps } from '../../graph/characterUtils';
 import { convertRelationsToElements, calcGraphDiff } from '../../graph/graphDataUtils';
 import { 
   registerCache, 
@@ -14,7 +18,20 @@ import {
   getRawFromStorage,
   getStorage
 } from './cacheManager';
-import { eventUtils } from '../../viewerUtils';
+import { eventUtils, resolveFineGraphEventOrdinal } from '../../viewer/viewerUtils';
+import { resolveProgressLocator, toLocator } from '../locatorUtils';
+import { toNumberOrNull } from '../numberUtils';
+
+/**
+ * 뷰어·내장 분할 그래프(단독 그래프 페이지 제외)의 챕터 그래프 캐시 출처.
+ * 행·이벤트 메타는 GET /api/v2/graph/fine 의 result(characters, relations, event)를 집계한 것과 동일 스키마다.
+ */
+export const CHAPTER_GRAPH_CACHE_SOURCE = Object.freeze({
+  API: 'api',
+  EMPTY: 'empty',
+  INVALID: 'invalid',
+  RUNTIME: 'runtime',
+});
 
 const READER_PROGRESS_CACHE_PREFIX = 'reader_progress_';
 const READER_PROGRESS_MAX_AGE = 3 * 24 * 60 * 60 * 1000;
@@ -121,19 +138,11 @@ export const ensureGraphBookCache = async (
       : [];
 
     const normalizedChapterIndices = chapters
-      .map((chapter, index) => {
-        const idxCandidate =
-          chapter?.chapterIdx ??
-          chapter?.idx ??
-          chapter?.chapter ??
-          chapter?.number ??
-          index + 1;
-        const numericIdx = Number(idxCandidate);
-        return Number.isFinite(numericIdx) && numericIdx > 0
-          ? numericIdx
-          : null;
+      .map((chapter) => {
+        const v = toNumberOrNull(chapter?.idx);
+        return v != null && v > 0 ? v : null;
       })
-      .filter((idx, idxIndex, self) => idx && self.indexOf(idx) === idxIndex)
+      .filter((idx, idxIndex, self) => idx != null && self.indexOf(idx) === idxIndex)
       .sort((a, b) => a - b);
 
     const chapterSummaries = [];
@@ -143,16 +152,9 @@ export const ensureGraphBookCache = async (
         throw new DOMException('Aborted', 'AbortError');
       }
 
-      let chapterCache = forceRefresh
-        ? null
-        : getCachedChapterEvents(numericId, chapterIdx);
-
+      let chapterCache = forceRefresh ? null : getCachedChapterEvents(numericId, chapterIdx);
       if (!chapterCache) {
-        chapterCache = await discoverChapterEvents(
-          numericId,
-          chapterIdx,
-          true
-        );
+        chapterCache = await discoverChapterEvents(numericId, chapterIdx, true);
       }
 
       if (chapterCache) {
@@ -170,9 +172,7 @@ export const ensureGraphBookCache = async (
     const summaryPayload = writeGraphBookCache(numericId, {
       bookId: numericId,
       chapters: chapterSummaries,
-      maxChapter: chapterSummaries.length
-        ? Math.max(...chapterSummaries.map((item) => item.chapterIdx))
-        : 0,
+      maxChapter: calculateMaxChapterFromChapters(chapters),
       builtAt: Date.now(),
     });
 
@@ -189,6 +189,7 @@ export const ensureGraphBookCache = async (
   }
 };
 
+/** 특정 eventIdx 시점의 누적 그래프 상태(fine API 기반 캐시에서 복원). */
 export const getGraphEventState = (bookId, chapterIdx, eventIdx) => {
   const chapterPayload = getCachedChapterEvents(bookId, chapterIdx);
   if (!chapterPayload) {
@@ -235,15 +236,7 @@ const getElementId = (element) => {
   );
 };
 
-const cloneElements = (elements) => {
-  if (!Array.isArray(elements)) return [];
-  return elements.map((element) => deepClone(element));
-};
-
-const cloneCharacters = (characters) => {
-  if (!Array.isArray(characters)) return [];
-  return characters.map((character) => deepClone(character));
-};
+const cloneArray = (arr) => Array.isArray(arr) ? arr.map(deepClone) : [];
 
 
 const safeCompare = (a, b) => {
@@ -368,8 +361,72 @@ const applyElementDiff = (prevElements, diff) => {
   return result;
 };
 
+/** GET /api/v2/graph/fine 응답(result) 한 건을 챕터 캐시에 넣을 이벤트 행으로 정규화한다. */
+const normalizeEventFromFineGraphResponse = (
+  bookId,
+  chapterIdx,
+  eventIdx,
+  response,
+  manifestStructure
+) => {
+  const { characters, relations, event } = response?.result || {};
+  const hasCharacters = Array.isArray(characters) && characters.length > 0;
+  const hasRelations = Array.isArray(relations) && relations.length > 0;
+  const hasEventMeta =
+    event &&
+    (event.eventId !== undefined ||
+      event.event_id !== undefined ||
+      event.name ||
+      event.title ||
+      event.startTxtOffset !== undefined ||
+      event.endTxtOffset !== undefined ||
+      event.startLocator !== undefined ||
+      event.endLocator !== undefined);
 
-const buildChapterCachePayload = (bookId, chapterIdx, events, source = 'runtime', folderKey = 'api') => {
+  if (!hasCharacters && !hasRelations && !hasEventMeta && !manifestStructure) {
+    return { skip: true, hadGraphData: false };
+  }
+
+  const ord = event ? resolveFineGraphEventOrdinal(event) : null;
+  const resolvedEventNum = Number.isFinite(ord) && ord > 0 ? ord : eventIdx;
+
+  return {
+    skip: false,
+    hadGraphData: hasCharacters || hasRelations || hasEventMeta,
+    event: {
+      bookId,
+      chapterIdx,
+      eventIdx,
+      eventNum: resolvedEventNum,
+      characters: hasCharacters ? characters.map((character) => deepClone(character)) : [],
+      relations: hasRelations ? relations.map((relation) => deepClone(relation)) : [],
+      event: {
+        idx: eventIdx,
+        chapterIdx,
+        event_id: event?.event_id ?? eventIdx,
+        startTxtOffset: event?.startTxtOffset ?? manifestStructure?.startTxtOffset ?? null,
+        endTxtOffset: event?.endTxtOffset ?? manifestStructure?.endTxtOffset ?? null,
+        startLocator: event?.startLocator,
+        endLocator: event?.endLocator,
+        rawText: event?.rawText ?? null,
+        eventId: event?.eventId ?? event?.id ?? null,
+        ...(event || {}),
+        eventNum: resolvedEventNum,
+      },
+      startTxtOffset: event?.startTxtOffset ?? manifestStructure?.startTxtOffset ?? null,
+      endTxtOffset: event?.endTxtOffset ?? manifestStructure?.endTxtOffset ?? null,
+      eventId: event?.eventId ?? event?.event_id ?? event?.id ?? manifestStructure?.eventId ?? null,
+    },
+  };
+};
+
+const buildChapterCachePayload = (
+  bookId,
+  chapterIdx,
+  events,
+  source = CHAPTER_GRAPH_CACHE_SOURCE.RUNTIME,
+  folderKey = 'api'
+) => {
   const timestamp = Date.now();
   const sortedEvents = sortEventsByIdx(events);
 
@@ -437,28 +494,30 @@ const buildChapterCachePayload = (bookId, chapterIdx, events, source = 'runtime'
         Object.keys(nodeWeights).length ? nodeWeights : null,
         null,
         event?.event ?? null,
-        idToProfileImage
+        idToProfileImage,
+        aggregatedCharacters.length > 0 ? aggregatedCharacters : null
       );
     } catch (error) {
       console.error('convertRelationsToElements 실패:', error);
       convertedElements = [];
     }
 
-    const currentElements = cloneElements(convertedElements);
-    const currentCharacters = cloneCharacters(aggregatedCharacters);
+    const currentElements = cloneArray(convertedElements);
+    const currentCharacters = cloneArray(aggregatedCharacters);
 
     if (index === 0) {
       baseSnapshot = {
         eventIdx: Number(event.eventIdx) || 1,
         elements: currentElements,
         characters: currentCharacters,
+        /** GET /api/v2/graph/fine result.event 스냅샷(정규화·idx 보강 포함) */
         eventMeta: event?.event ? deepClone(event.event) : null
       };
     } else {
       const elementDiffRaw = calcGraphDiff(prevElements, convertedElements);
       const elementDiff = {
-        added: cloneElements(elementDiffRaw?.added || []),
-        updated: cloneElements(elementDiffRaw?.updated || []),
+        added: cloneArray(elementDiffRaw?.added || []),
+        updated: cloneArray(elementDiffRaw?.updated || []),
         removedIds: (elementDiffRaw?.removed || [])
           .map((element) => getElementId(element))
           .filter(Boolean)
@@ -467,6 +526,7 @@ const buildChapterCachePayload = (bookId, chapterIdx, events, source = 'runtime'
 
       diffs.push({
         eventIdx: Number(event.eventIdx) || (baseSnapshot?.eventIdx ?? 1),
+        /** fine API result.event */
         eventMeta: event?.event ? deepClone(event.event) : null,
         elementDiff,
         characterDiff
@@ -476,13 +536,16 @@ const buildChapterCachePayload = (bookId, chapterIdx, events, source = 'runtime'
     prevElements = currentElements;
     prevCharacters = currentCharacters;
 
+    const summaryEventNum = Number(event.eventNum);
+    const summaryIdx = Number(event.eventIdx) || 0;
     eventSummaries.push({
       bookId,
       chapterIdx,
-      eventIdx: Number(event.eventIdx) || 0,
-      eventId: event?.eventId ?? event?.event?.event_id ?? null,
-      start: event?.startPos ?? event?.start ?? null,
-      end: event?.endPos ?? event?.end ?? null,
+      eventIdx: summaryIdx,
+      eventNum: Number.isFinite(summaryEventNum) && summaryEventNum > 0 ? summaryEventNum : summaryIdx,
+      eventId: event?.eventId ?? event?.event?.eventId ?? null,
+      startTxtOffset: event?.startTxtOffset ?? null,
+      endTxtOffset: event?.endTxtOffset ?? null,
       title:
         event?.event?.name ??
         event?.event?.title ??
@@ -512,34 +575,26 @@ const buildChapterCachePayload = (bookId, chapterIdx, events, source = 'runtime'
   };
 };
 
+/**
+ * 매니페스트 챕터의 이벤트 메타만 정규화한다.
+ * 뷰어 그래프 본문은 fine API 전용이며, 이 배열로 그래프를 채우지 않는다.
+ */
 export const normalizeManifestEvents = (bookId, chapterIdx, manifestChapter) => {
   if (!manifestChapter?.events?.length) {
     return [];
   }
 
   return manifestChapter.events
-    .map((rawEvent, index) => {
+    .map((rawEvent) => {
       if (!rawEvent) return null;
 
-      const rawIdx =
-        rawEvent.idx ??
-        rawEvent.eventIdx ??
-        rawEvent.index ??
-        rawEvent.id ??
-        index + 1;
-      const eventIdx = Number(rawIdx);
-      if (!Number.isFinite(eventIdx) || eventIdx <= 0) {
+      const eventIdx = toNumberOrNull(rawEvent.idx);
+      if (eventIdx == null || eventIdx < 1) {
         return null;
       }
 
-      const startPos =
-        typeof rawEvent.startPos === 'number'
-          ? rawEvent.startPos
-          : rawEvent.start ?? null;
-      const endPos =
-        typeof rawEvent.endPos === 'number'
-          ? rawEvent.endPos
-          : rawEvent.end ?? null;
+      const startTxtOffset = toNumberOrNull(rawEvent.startTxtOffset);
+      const endTxtOffset = toNumberOrNull(rawEvent.endTxtOffset);
 
       const characters = Array.isArray(rawEvent.characters)
         ? rawEvent.characters.map((character) => deepClone(character))
@@ -552,66 +607,64 @@ export const normalizeManifestEvents = (bookId, chapterIdx, manifestChapter) => 
         bookId,
         chapterIdx,
         eventIdx,
+        eventNum: eventIdx,
         characters,
         relations,
         event: {
           ...deepClone(rawEvent),
           idx: eventIdx,
           chapterIdx,
-          start: startPos,
-          end: endPos
+          eventNum: eventIdx,
+          startTxtOffset,
+          endTxtOffset
         },
-        startPos,
-        endPos,
-        eventId:
-          rawEvent.eventId ??
-          rawEvent.event_id ??
-          rawEvent.id ??
-          null
+        startTxtOffset,
+        endTxtOffset,
+        eventId: rawEvent.eventId != null ? String(rawEvent.eventId) : null
       };
     })
     .filter(Boolean);
 };
 
 const normalizeReaderProgressPayload = (bookKey, payload) => {
-  if (!payload) return null;
+  if (!payload || typeof payload !== 'object') return null;
 
-  const chapterIdxCandidate =
-    payload.chapterIdx ??
-    payload.chapter ??
-    payload.chapterIndex ??
-    payload.chapterNumber ??
-    payload.chapterId;
-  const chapterIdx = Number(chapterIdxCandidate);
+  const resolved = resolveProgressLocator(payload);
+  const startL =
+    (resolved ? toLocator(resolved) ?? resolved : null) ??
+    toLocator(payload.startLocator) ??
+    toLocator(payload.locator);
 
-  if (!Number.isFinite(chapterIdx) || chapterIdx <= 0) {
+  if (!startL || !Number.isFinite(Number(startL.chapterIndex)) || Number(startL.chapterIndex) < 1) {
     return null;
   }
 
-  const normalizedEventIdx = eventUtils.normalizeEventIdx(payload);
+  const endRaw =
+    payload.endLocator ??
+    payload.anchor?.endLocator ??
+    payload.anchor?.end ??
+    startL;
+  const endL = toLocator(endRaw) ?? startL;
 
   const eventNumCandidate = Number(payload.eventNum);
   const normalizedEventNum =
-    Number.isFinite(eventNumCandidate) && eventNumCandidate > 0
-      ? eventNumCandidate
-      : normalizedEventIdx;
+    Number.isFinite(eventNumCandidate) && eventNumCandidate > 0 ? eventNumCandidate : null;
 
   const chapterProgressCandidate = Number(payload.chapterProgress);
   const normalizedChapterProgress = Number.isFinite(chapterProgressCandidate)
     ? Math.max(Math.min(chapterProgressCandidate, 100), 0)
     : null;
 
-  const normalized = {
+  return {
     key: bookKey,
     bookId: payload.bookId ?? null,
-    chapterIdx: chapterIdx,
-    eventIdx: normalizedEventIdx,
+    chapterIdx: Number(startL.chapterIndex),
+    eventIdx: normalizedEventNum,
     eventNum: normalizedEventNum,
-    eventId: payload.eventId ?? payload.event_id ?? payload.id ?? null,
-    startLocator:
-      payload.startLocator ?? payload.anchor?.startLocator ?? payload.anchor?.start ?? undefined,
-    endLocator:
-      payload.endLocator ?? payload.anchor?.endLocator ?? payload.anchor?.end ?? undefined,
+    eventId: payload.eventId ?? payload.id ?? null,
+    startLocator: startL,
+    endLocator: endL,
+    locator: startL,
     eventName:
       payload.eventName ??
       payload.eventTitle ??
@@ -621,11 +674,9 @@ const normalizeReaderProgressPayload = (bookKey, payload) => {
       (payload.event && (payload.event.name ?? payload.event.title)) ??
       null,
     chapterProgress: normalizedChapterProgress,
-    source: payload.source ?? 'runtime',
-    timestamp: Date.now()
+    source: payload.source ?? CHAPTER_GRAPH_CACHE_SOURCE.RUNTIME,
+    timestamp: Date.now(),
   };
-
-  return normalized;
 };
 
 const getChapterEventCacheKey = (bookId, chapterIdx) => {
@@ -698,7 +749,16 @@ export const getCachedReaderProgress = (bookKey) => {
 
     const timestamp = parsed?.timestamp ?? 0;
 
-    if (!Number.isFinite(Number(parsed?.chapterIdx))) {
+    let chapterIdx = Number(parsed?.chapterIdx);
+    const loc = parsed?.startLocator ?? parsed?.locator;
+    if ((!Number.isFinite(chapterIdx) || chapterIdx <= 0) && loc && typeof loc === 'object') {
+      const fromLoc = Number(loc.chapterIndex ?? loc.chapterIdx);
+      if (Number.isFinite(fromLoc) && fromLoc >= 1) {
+        chapterIdx = fromLoc;
+      }
+    }
+
+    if (!Number.isFinite(chapterIdx) || chapterIdx <= 0) {
       removeFromStorage(cacheKey, 'localStorage');
       return null;
     }
@@ -710,7 +770,7 @@ export const getCachedReaderProgress = (bookKey) => {
 
     return {
       ...parsed,
-      chapterIdx: Number(parsed.chapterIdx),
+      chapterIdx,
       eventIdx: Number.isFinite(Number(parsed.eventIdx)) ? Number(parsed.eventIdx) : null,
       eventNum: Number.isFinite(Number(parsed.eventNum)) ? Number(parsed.eventNum) : null,
       chapterProgress: Number.isFinite(Number(parsed.chapterProgress))
@@ -763,13 +823,13 @@ export const discoverChapterEvents = async (bookId, chapterIdx, forceRefresh = f
       diffs: [],
       eventSummaries: [],
       timestamp: Date.now(),
-      source: 'invalid'
+      source: CHAPTER_GRAPH_CACHE_SOURCE.INVALID
     };
   }
 
   if (!forceRefresh) {
     const cached = getCachedChapterEvents(bookId, chapterIdx);
-    if (cached) {
+    if (cached && cached.source !== 'manifest-only') {
       return cached;
     }
   }
@@ -778,12 +838,19 @@ export const discoverChapterEvents = async (bookId, chapterIdx, forceRefresh = f
   try {
   const manifestChapter = getManifestChapterData(bookId, chapterIdx);
   if (manifestChapter?.events?.length) {
-      manifestEventStructures = manifestChapter.events.map((rawEvent, index) => ({
-        eventIdx: Number(rawEvent.idx ?? rawEvent.eventIdx ?? index + 1),
-        startPos: rawEvent.startPos ?? rawEvent.start ?? null,
-        endPos: rawEvent.endPos ?? rawEvent.end ?? null,
-        rawText: rawEvent.rawText ?? null
-      })).filter(e => e.eventIdx > 0);
+      manifestEventStructures = manifestChapter.events.map((rawEvent, index) => {
+        const eventIdx = Number(rawEvent.idx ?? rawEvent.eventIdx ?? index + 1);
+        const fromApi = Number(rawEvent.eventNum);
+        const eventNum =
+          Number.isFinite(fromApi) && fromApi > 0 ? fromApi : eventIdx;
+        return {
+          eventIdx,
+          eventNum,
+          eventId: rawEvent.eventId ?? null,
+          startTxtOffset: rawEvent.startTxtOffset ?? null,
+          endTxtOffset: rawEvent.endTxtOffset ?? null,
+        };
+      }).filter((e) => e.eventIdx > 0);
     }
   } catch (error) {
     console.warn('manifest 이벤트 구조 로드 실패:', error);
@@ -807,102 +874,59 @@ export const discoverChapterEvents = async (bookId, chapterIdx, forceRefresh = f
   const collectEvent = async (eventIdx, manifestStructure = null) => {
     try {
       const response = await getFineGraph(bookId, chapterIdx, eventIdx);
-
-      const { characters, relations, event } = response?.result || {};
-      const hasCharacters = Array.isArray(characters) && characters.length > 0;
-      const hasRelations = Array.isArray(relations) && relations.length > 0;
-      const hasEventMeta =
-        event &&
-        (event.event_id !== undefined ||
-          event.eventId !== undefined ||
-          event.name ||
-          event.title ||
-          event.start !== undefined ||
-          event.end !== undefined);
-
-      if (!hasCharacters && !hasRelations && !hasEventMeta && !manifestStructure) {
-        return false;
-      }
-
-      const normalizedEvent = {
+      const norm = normalizeEventFromFineGraphResponse(
         bookId,
         chapterIdx,
         eventIdx,
-        characters: hasCharacters ? characters.map((character) => deepClone(character)) : [],
-        relations: hasRelations ? relations.map((relation) => deepClone(relation)) : [],
-        event: {
-          idx: eventIdx,
-          chapterIdx,
-          start: manifestStructure?.startPos ?? manifestStructure?.start ?? event?.start ?? null,
-          end: manifestStructure?.endPos ?? manifestStructure?.end ?? event?.end ?? null,
-          startPos: manifestStructure?.startPos ?? manifestStructure?.start ?? event?.start ?? null,
-          endPos: manifestStructure?.endPos ?? manifestStructure?.end ?? event?.end ?? null,
-          rawText: manifestStructure?.rawText ?? event?.rawText ?? null,
-          event_id: event?.event_id ?? event?.eventId ?? null,
-          ...(event || {})
-        },
-        startPos: manifestStructure?.startPos ?? manifestStructure?.start ?? event?.start ?? null,
-        endPos: manifestStructure?.endPos ?? manifestStructure?.end ?? event?.end ?? null,
-        eventId: event?.event_id ?? event?.eventId ?? null
-      };
-
-      apiEvents.push(normalizedEvent);
-
-      await new Promise((resolve) => setTimeout(resolve, 50));
-      return hasCharacters || hasRelations || hasEventMeta;
-    } catch (error) {
-      console.warn(`⚠️ 이벤트 ${eventIdx} API 호출 실패, manifest 구조만 사용:`, error);
-
-      if (manifestStructure) {
-        apiEvents.push({
-          bookId,
-          chapterIdx,
-          eventIdx,
-          characters: [],
-          relations: [],
-          event: {
-            idx: eventIdx,
-            chapterIdx,
-            start: manifestStructure.startPos ?? manifestStructure.start ?? null,
-            end: manifestStructure.endPos ?? manifestStructure.end ?? null,
-            startPos: manifestStructure.startPos ?? manifestStructure.start ?? null,
-            endPos: manifestStructure.endPos ?? manifestStructure.end ?? null,
-            rawText: manifestStructure.rawText ?? null
-          },
-          startPos: manifestStructure.startPos ?? manifestStructure.start ?? null,
-          endPos: manifestStructure.endPos ?? manifestStructure.end ?? null,
-          eventId: null
-        });
-        return true;
+        response,
+        manifestStructure
+      );
+      if (norm.skip) {
+        return false;
       }
-
+      apiEvents.push(norm.event);
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      return norm.hadGraphData;
+    } catch (error) {
+      console.warn(`⚠️ 이벤트 ${eventIdx} fine 그래프 API 호출 실패:`, error);
       return false;
     }
   };
 
   if (sortedManifestIndices.length > 0) {
     for (const eventIdx of sortedManifestIndices) {
-      await collectEvent(eventIdx, manifestEventMap.get(eventIdx));
+      const manifestStructure = manifestEventMap.get(eventIdx);
+      await collectEvent(eventIdx, manifestStructure);
     }
-  } else {
-    let eventIdx = 1;
-    let emptyStreak = 0;
-    const EMPTY_STREAK_LIMIT = 2;
-    const MAX_DYNAMIC_SCAN = 500;
-
-    while (eventIdx <= MAX_DYNAMIC_SCAN && emptyStreak < EMPTY_STREAK_LIMIT) {
-      const hadData = await collectEvent(eventIdx, null);
-      if (hadData) {
-        emptyStreak = 0;
-      } else {
-        emptyStreak += 1;
-      }
-      eventIdx += 1;
+    if (apiEvents.length > 0) {
+      const payload = buildChapterCachePayload(
+        bookId,
+        chapterIdx,
+        apiEvents,
+        CHAPTER_GRAPH_CACHE_SOURCE.API
+      );
+      setCachedChapterEvents(bookId, chapterIdx, payload);
+      return payload;
     }
   }
-  
+
+  let eventIdx = 1;
+  let emptyStreak = 0;
+  const EMPTY_STREAK_LIMIT = 2;
+  const MAX_DYNAMIC_SCAN = 500;
+
+  while (eventIdx <= MAX_DYNAMIC_SCAN && emptyStreak < EMPTY_STREAK_LIMIT) {
+    const hadData = await collectEvent(eventIdx, null);
+    if (hadData) {
+      emptyStreak = 0;
+    } else {
+      emptyStreak += 1;
+    }
+    eventIdx += 1;
+  }
+
   if (!apiEvents.length) {
-    console.warn(`⚠️ 챕터 ${chapterIdx}: API 및 manifest 모두에서 이벤트를 찾을 수 없음`);
+    console.warn(`⚠️ 챕터 ${chapterIdx}: fine 그래프 API에서 이벤트를 찾을 수 없음`);
     const emptyPayload = {
       bookId,
       chapterIdx,
@@ -912,7 +936,7 @@ export const discoverChapterEvents = async (bookId, chapterIdx, forceRefresh = f
       diffs: [],
       eventSummaries: [],
       timestamp: Date.now(),
-      source: 'empty'
+      source: CHAPTER_GRAPH_CACHE_SOURCE.EMPTY
     };
     setCachedChapterEvents(bookId, chapterIdx, emptyPayload);
     return emptyPayload;
@@ -922,13 +946,14 @@ export const discoverChapterEvents = async (bookId, chapterIdx, forceRefresh = f
     bookId,
     chapterIdx,
     apiEvents,
-    'hybrid'
+    CHAPTER_GRAPH_CACHE_SOURCE.API
   );
 
   setCachedChapterEvents(bookId, chapterIdx, payload);
   return payload;
 };
 
+/** 누적 그래프 상태 복원. baseSnapshot·diffs 의 eventMeta 는 fine 의 result.event 스냅샷이다. */
 export const reconstructChapterGraphState = (cachePayload, targetEventIdx) => {
   if (!cachePayload || typeof cachePayload !== 'object') {
     return null;
@@ -942,8 +967,8 @@ export const reconstructChapterGraphState = (cachePayload, targetEventIdx) => {
   const baseIdx = Number(baseSnapshot.eventIdx) || 1;
   const normalizedTarget = Number(targetEventIdx);
 
-  let currentElements = cloneElements(baseSnapshot.elements);
-  let currentCharacters = cloneCharacters(baseSnapshot.characters || []);
+  let currentElements = cloneArray(baseSnapshot.elements);
+  let currentCharacters = cloneArray(baseSnapshot.characters || []);
   let currentEventMeta = baseSnapshot.eventMeta ? deepClone(baseSnapshot.eventMeta) : null;
   let appliedEventIdx = baseIdx;
 
@@ -1000,9 +1025,10 @@ export const getEventData = async (bookId, chapterIdx, eventIdx) => {
         characters,
         relations,
         event,
-        startPos: event?.start,
-        endPos: event?.end,
-        eventId: event?.event_id
+        startTxtOffset: event?.startTxtOffset,
+        endTxtOffset: event?.endTxtOffset,
+        eventId: event?.eventId ?? event?.event_id,
+        event_id: event?.event_id
       };
     }
   } catch (error) {
@@ -1035,64 +1061,32 @@ export const clearChapterEventCache = (bookId, chapterIdx) => {
   }
 };
 
+/** bookId 지정 시 해당 책만, 생략 시 전체 챕터 이벤트 캐시 삭제 */
 export const clearAllChapterEventCaches = (bookId) => {
   try {
     const storage = getStorage('localStorage');
     if (!storage) return 0;
-    
-    const keys = Object.keys(storage);
-    const bookIdNum = Number(bookId);
-    if (!Number.isFinite(bookIdNum)) {
-      return 0;
-    }
-    
+
+    const bookIdNum = bookId !== undefined ? Number(bookId) : null;
+    if (bookId !== undefined && !Number.isFinite(bookIdNum)) return 0;
+
     let count = 0;
-    keys.forEach(key => {
-      const segments = key.split('-');
-      if (segments.length === 2) {
-        const [storedBookId, storedChapterIdx] = segments;
-        if (Number(storedBookId) === bookIdNum && Number.isFinite(Number(storedChapterIdx))) {
-          removeFromStorage(key, 'localStorage');
-          count++;
-        }
-      }
+    Object.keys(storage).forEach(key => {
+      const [a, b] = key.split('-');
+      if (!Number.isFinite(Number(a)) || !Number.isFinite(Number(b))) return;
+      if (bookIdNum !== null && Number(a) !== bookIdNum) return;
+      removeFromStorage(key, 'localStorage');
+      count++;
     });
-    
+
     return count;
   } catch (error) {
-    console.error('모든 챕터 이벤트 캐시 삭제 실패:', error);
+    console.error('챕터 이벤트 캐시 삭제 실패:', error);
     return 0;
   }
 };
 
-export const clearAllChapterEventCachesGlobally = () => {
-  try {
-    const storage = getStorage('localStorage');
-    if (!storage) return 0;
-    
-    const keys = Object.keys(storage);
-    let count = 0;
-    keys.forEach(key => {
-      const segments = key.split('-');
-      if (segments.length === 2) {
-        const [storedBookId, storedChapterIdx] = segments;
-        if (
-          Number.isFinite(Number(storedBookId)) &&
-          Number.isFinite(Number(storedChapterIdx))
-        ) {
-          removeFromStorage(key, 'localStorage');
-          count++;
-        }
-      }
-    });
-    
-    return count;
-  } catch (error) {
-    console.error('글로벌 챕터 이벤트 캐시 삭제 실패:', error);
-    return 0;
-  }
-};
-
+/** 챕터 캐시에 이미 있는 fine 집계 행만 반환한다(네트워크 호출 없음). */
 export const getChapterEventFallbackData = (bookId, chapterIdx, eventIdx) => {
   const chapterCache = getCachedChapterEvents(bookId, chapterIdx);
   if (chapterCache?.events && Array.isArray(chapterCache.events)) {
@@ -1102,8 +1096,7 @@ export const getChapterEventFallbackData = (bookId, chapterIdx, eventIdx) => {
       return {
         characters: Array.isArray(fallbackEvent.characters) ? fallbackEvent.characters : [],
         relations: Array.isArray(fallbackEvent.relations) ? fallbackEvent.relations : [],
-        event: fallbackEvent.event || null,
-        userCurrentChapter: 0
+        event: fallbackEvent.event || null
       };
     }
   }

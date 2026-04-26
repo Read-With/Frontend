@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { toNumberOrNull } from '../../utils/numberUtils';
-import { isSamePair } from '../../utils/relationUtils';
+import { toNumberOrNull } from '../../utils/common/numberUtils';
+import { isSamePair } from '../../utils/graph/relationUtils';
 import { getFineGraph } from '../../utils/api/api';
-import { registerCache, getCacheItem, setCacheItem, clearCache, enforceCacheSizeLimit } from '../../utils/common/cache/cacheManager';
+import { registerCache, getCacheItem, setCacheItem, enforceCacheSizeLimit } from '../../utils/common/cache/cacheManager';
 
 const CACHE_DURATION = 5 * 60 * 1000;
 const CACHE_PREFIX = 'relation-timeline-';
@@ -66,7 +66,7 @@ function invalidateCache(bookId, chapterNum = null) {
           sessionStorage.removeItem(key);
         }
       }
-    } catch (error) {
+    } catch (_error) {
       // ignore storage errors
     }
   }
@@ -132,7 +132,7 @@ async function fetchApiRelationTimelineCumulativeFromAPI(bookId, id1, id2, selec
           } else {
             right = mid - 1;
           }
-        } catch (error) {
+        } catch (_error) {
           right = mid - 1;
         }
       }
@@ -163,7 +163,7 @@ async function fetchApiRelationTimelineCumulativeFromAPI(bookId, id1, id2, selec
                 });
               }
             }
-          } catch (error) {
+          } catch (_error) {
           }
         }
       }
@@ -230,7 +230,7 @@ async function fetchApiRelationTimelineCumulativeFromAPI(bookId, id1, id2, selec
     ];
 
     return { points, labelInfo };
-  } catch (error) {
+  } catch (_error) {
     return { points: [], labelInfo: [] };
   }
 }
@@ -250,7 +250,7 @@ async function fetchApiRelationTimelineCumulative(bookId, id1, id2, selectedChap
     const result = await fetchApiRelationTimelineCumulativeFromAPI(bookId, id1, id2, selectedChapter);
     setCachedData(cacheKey, result);
     return { ...result, noRelation: (result.points || []).length === 0 };
-  } catch (error) {
+  } catch (_error) {
     return { points: [], labelInfo: [], noRelation: true };
   }
 }
@@ -286,7 +286,7 @@ async function fetchApiRelationTimelineViewer(bookId, id1, id2, chapterNum, even
             firstAppearanceIdx = idx;
           }
         }
-      } catch (error) {
+      } catch (_error) {
         // ignore per-event errors
       }
     }
@@ -312,13 +312,13 @@ async function fetchApiRelationTimelineViewer(bookId, id1, id2, chapterNum, even
             labelInfo.push(`E${idx}`);
           }
         }
-      } catch (error) {
+      } catch (_error) {
         // ignore per-event errors
       }
     }
 
     return { points, labelInfo, noRelation: points.length === 0 };
-  } catch (error) {
+  } catch (_error) {
     return { points: [], labelInfo: [], noRelation: true };
   }
 }
@@ -374,7 +374,7 @@ export function useRelationData(mode, id1, id2, chapterNum, eventNum, maxChapter
       setTimeline(paddedPoints);
       setLabels(paddedLabels);
       setNoRelation(resultNoRelation || paddedPoints.filter((value) => value !== null).length === 0);
-    } catch (err) {
+    } catch (_err) {
       setTimeline([]);
       setLabels([]);
       setNoRelation(true);

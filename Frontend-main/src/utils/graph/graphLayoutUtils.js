@@ -11,13 +11,13 @@
 
 import cytoscape from 'cytoscape';
 import { createStorageKey } from '../../hooks/common/useLocalStorage';
-import { extractEventNodesAndEdges } from '../viewerUtils';
+import { extractEventNodesAndEdges } from '../viewer/viewerUtils';
 import { 
   getDetectedMaxChapter, 
   getCharactersDataFromMaxChapter, 
   getEventsForChapter 
 } from './graphData';
-import { createCharacterMaps } from '../characterUtils';
+import { createCharacterMaps } from './characterUtils';
 import { convertRelationsToElements } from './graphDataUtils';
 import { errorUtils } from '../common/errorUtils';
 
@@ -138,7 +138,9 @@ async function generateChapterLayout({ folderKey, bookKey, chapterNum, signal })
       folderKey,
       null,
       null,
-      lastEvent
+      lastEvent,
+      null,
+      charactersData
     );
     if (!elements || elements.length === 0) return null;
     

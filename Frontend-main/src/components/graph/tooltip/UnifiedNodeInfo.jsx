@@ -1,17 +1,91 @@
-import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { useParams } from "react-router-dom";
-import { processRelations, processRelationTags } from "../../../utils/relationUtils.js";
-import { getChapterLastEventNums, getFolderKeyFromFilename, getEventDataByIndex, getDetectedMaxChapter, getCharacterPerspectiveSummary } from "../../../utils/graph/graphData.js";
+import { processRelations, processRelationTags } from "../../../utils/graph/relationUtils.js";
+import { getFolderKeyFromFilename, getEventDataByIndex, getDetectedMaxChapter } from "../../../utils/graph/graphData.js";
 import { useTooltipPosition } from "../../../hooks/ui/useTooltipPosition.js";
 import { useClickOutside } from "../../../hooks/ui/useClickOutside.js";
 import { useRelationData } from "../../../hooks/graph/useRelationData.jsx";
-import { safeNum } from "../../../utils/relationUtils.js";
+import { safeNum } from "../../../utils/graph/relationUtils.js";
 import { mergeRefs } from "../../../utils/styles/animations.js";
+import { getUnifiedEventInfoForNodeTooltip } from "../../../utils/viewer/eventDisplayUtils.js";
 import { COLORS, createButtonStyle, ANIMATION_VALUES, unifiedNodeTooltipStyles, unifiedNodeAnimations } from "../../../utils/styles/styles.js";
-import { extractRadarChartData, getPositivityColor, getPositivityLabel, getConnectionStatus } from "../../../utils/radarChartUtils.js";
+import { extractRadarChartData, getPositivityColor, getPositivityLabel, getConnectionStatus } from "../../../utils/graph/radarChartUtils.js";
 import { Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, ResponsiveContainer } from 'recharts';
 import "../RelationGraph.css";
 import "./UnifiedNodeInfo.css";
+
+/** 레이더 점 — 부모 내부 정의 시 매 렌더 새 컴포넌트 타입이 되어 Recharts/리conciliation에 불리함 */
+const UnifiedNodeRadarDot = React.memo(function UnifiedNodeRadarDot({
+  cx,
+  cy,
+  payload,
+  dataMap,
+  hoveredItem,
+  onDotMouseEnter,
+  onDotMouseLeave,
+}) {
+  const fullData =
+    payload && payload.name != null
+      ? dataMap.get(payload.name) || payload
+      : null;
+  const dotName = fullData?.name ?? payload?.name;
+
+  const handleMouseEnterDot = useCallback(
+    (e) => {
+      if (!dotName) return;
+      e.stopPropagation();
+      onDotMouseEnter(dotName, e);
+    },
+    [dotName, onDotMouseEnter]
+  );
+
+  const handleMouseLeaveDot = useCallback(
+    (e) => {
+      e.stopPropagation();
+      onDotMouseLeave();
+    },
+    [onDotMouseLeave]
+  );
+
+  if (!payload || cx == null || cy == null || !fullData) {
+    return null;
+  }
+
+  const color = getPositivityColor(fullData.positivity);
+  const isHovered = hoveredItem === payload.name;
+  const radius = isHovered ? 8 : 5;
+  const hoverRadius = Math.max(15, radius * 3);
+
+  return (
+    <g>
+      <circle
+        cx={cx}
+        cy={cy}
+        r={hoverRadius}
+        fill="transparent"
+        style={{
+          cursor: "pointer",
+          pointerEvents: "all",
+          zIndex: 10,
+        }}
+        onMouseEnter={handleMouseEnterDot}
+        onMouseLeave={handleMouseLeaveDot}
+      />
+      <circle
+        cx={cx}
+        cy={cy}
+        r={radius}
+        fill={color}
+        stroke={isHovered ? "#fff" : "none"}
+        strokeWidth={isHovered ? 2 : 0}
+        style={{
+          transition: "all 0.2s ease",
+          pointerEvents: "none",
+        }}
+      />
+    </g>
+  );
+});
 
 function UnifiedNodeInfo({
   displayMode = 'tooltip', // 'tooltip' | 'sidebar'
@@ -120,13 +194,21 @@ function UnifiedNodeInfo({
   }, [nodeData?.id]);
 
 
-  // 툴팁 모드에서만 위치 관리 훅 사용
-  const { position, showContent, isDragging, tooltipRef, handleMouseDown } = useTooltipPosition(x, y);
+  const isTooltipMode = displayMode === 'tooltip';
+  const { position, showContent, isDragging, tooltipRef, handleMouseDown } = useTooltipPosition(
+    x,
+    y,
+    { enabled: isTooltipMode }
+  );
 
   // 외부 클릭 감지 훅 - 툴팁 모드에서만 사용, 드래그 후 클릭 무시
-  const clickOutsideRef = useClickOutside(() => {
-    if (onClose) onClose();
-  }, displayMode === 'tooltip' && showContent, true);
+  const clickOutsideRef = useClickOutside(
+    () => {
+      if (onClose) onClose();
+    },
+    isTooltipMode && showContent,
+    true
+  );
 
   // 관계 데이터 관리 (슬라이드바 모드에서 사용)
   const nodeId = safeNum(nodeData?.id);
@@ -143,29 +225,17 @@ function UnifiedNodeInfo({
   }, [bookId, actualFilename]);
   const { fetchData } = useRelationData('standalone', nodeId, nodeId, chapterNum, eventNum, dynamicMaxChapter, actualFilename, normalizedBookId);
 
-  // ViewerTopBar와 동일한 방식으로 이벤트 정보 처리
-  const getUnifiedEventInfo = useCallback(() => {
-    // ViewerTopBar와 동일한 로직: currentEvent || prevValidEvent
-    const eventToShow = currentEvent || prevValidEvent;
-    
-    if (eventToShow) {
-      return {
-        eventNum: eventToShow.eventNum ?? 0,
-        name: eventToShow.name || eventToShow.event_name || "",
-        chapterProgress: eventToShow.chapterProgress,
-        currentChars: eventToShow.currentChars,
-        totalChars: eventToShow.totalChars
-      };
-    }
-    
-    // 이벤트 정보가 없는 경우 기존 로직 사용 (하위 호환성)
-    if (!eventNum || eventNum === 0) {
-      const lastEventNums = getChapterLastEventNums(folderKey);
-      return { eventNum: lastEventNums[chapterNum - 1] || 1 };
-    }
-    
-    return { eventNum: eventNum || 0 };
-  }, [currentEvent, prevValidEvent, eventNum, chapterNum, folderKey]);
+  const getUnifiedEventInfo = useCallback(
+    () =>
+      getUnifiedEventInfoForNodeTooltip({
+        currentEvent,
+        prevValidEvent,
+        eventNum,
+        chapterNum,
+        folderKey,
+      }),
+    [currentEvent, prevValidEvent, eventNum, chapterNum, folderKey],
+  );
 
   // 노드 등장 여부 확인 함수 (ViewerTopBar 방식 적용)
   const checkNodeAppearance = useCallback(() => {
@@ -188,7 +258,6 @@ function UnifiedNodeInfo({
         return;
       }
 
-      // ViewerTopBar와 동일한 방식으로 이벤트 정보 가져오기
       const unifiedEventInfo = getUnifiedEventInfo();
       const targetEventNum = unifiedEventInfo.eventNum;
 
@@ -284,7 +353,7 @@ function UnifiedNodeInfo({
       setError(err.message);
       setIsNodeAppeared(false);
     }
-  }, [data, nodeData, chapterNum, getUnifiedEventInfo, dynamicMaxChapter, actualFilename, elements]);
+  }, [data, nodeData, chapterNum, getUnifiedEventInfo, folderKey, elements]);
 
   // 노드 등장 여부 확인
   useEffect(() => {
@@ -320,122 +389,104 @@ function UnifiedNodeInfo({
   const displayDescription = currentDescription;
   const displayHasDescription = !!(displayDescription && displayDescription.trim());
 
-  // 요약 데이터 - API 또는 로컬 데이터에서 가져오기
+  // 요약 데이터 — API(pov-summaries) 우선, 없으면 안내 문구
   const summaryData = useMemo(() => {
-    if (!processedNodeData?.label) {
+    if (!processedNodeData) {
       return { summary: "인물에 대한 요약 정보가 없습니다." };
     }
 
-    // API 관점 요약 데이터가 있는 경우 우선 사용
-    if (povSummaries && povSummaries.povSummaries) {
-      const characterName = processedNodeData.label;
-      const characterSummary = povSummaries.povSummaries.find(
-        summary => summary.characterName === characterName
-      );
-      
-      if (characterSummary && characterSummary.summaryText) {
+    // GET .../pov-summaries — characterId 우선, 없으면 characterName과 표시명 매칭
+    if (povSummaries && Array.isArray(povSummaries.povSummaries) && povSummaries.povSummaries.length > 0) {
+      const nodeId = Number(processedNodeData.id);
+      let characterSummary = null;
+      if (Number.isFinite(nodeId)) {
+        characterSummary = povSummaries.povSummaries.find(
+          (s) => Number(s.characterId) === nodeId
+        );
+      }
+      if (!characterSummary) {
+        const names = [
+          processedNodeData.common_name,
+          processedNodeData.label,
+          processedNodeData.displayName,
+        ].filter((n) => typeof n === 'string' && n.trim() !== '');
+        characterSummary = povSummaries.povSummaries.find((s) =>
+          names.some((n) => n === s.characterName)
+        );
+      }
+      if (characterSummary?.summaryText) {
         return { summary: characterSummary.summaryText };
       }
     }
 
-    // API 데이터가 없는 경우 로컬 데이터 사용
     const currentChapter = chapterNum || 1;
-    const folderKey = getFolderKeyFromFilename(actualFilename);
-    
-    // perspective summary 가져오기
-    const perspectiveSummary = getCharacterPerspectiveSummary(
-      folderKey, 
-      currentChapter, 
-      processedNodeData.label
-    );
-
-    if (perspectiveSummary) {
-      return { summary: perspectiveSummary };
-    }
-
-    // perspective summary가 없는 경우 기본 메시지
-    return { 
-      summary: `${processedNodeData.label}에 대한 ${currentChapter}장 관점 요약이 아직 준비되지 않았습니다.` 
+    const displayLabel =
+      processedNodeData.displayName ||
+      processedNodeData.label ||
+      processedNodeData.common_name ||
+      '인물';
+    return {
+      summary: `${displayLabel}에 대한 ${currentChapter}장 관점 요약이 아직 준비되지 않았습니다.`,
     };
   }, [processedNodeData, chapterNum, actualFilename, povSummaries]);
 
-  // 레이더 차트 데이터 추출 (API 데이터 우선 사용)
+  // 레이더 차트 데이터 추출 (macro API 기반으로 통일)
   const radarChartData = useMemo(() => {
     if (!nodeData?.id || !chapterNum || displayMode !== 'sidebar') {
       return [];
     }
 
-    // API 데이터가 있는 경우 우선 사용
-    if (apiMacroData || apiFineData) {
+    // macro API 데이터 우선 사용
+    if (apiMacroData?.relations && apiMacroData?.characters) {
       try {
-        const apiData = apiMacroData || apiFineData;
-        if (apiData && apiData.relations && apiData.characters) {
-          // API 데이터에서 관계 정보 추출
-          const relations = apiData.relations;
-          const characters = apiData.characters;
-          
-          
-          // 캐릭터 ID를 이름으로 매핑하는 맵 생성
-          const characterMap = {};
-          const nameToIdMap = {};
-          characters.forEach(char => {
-            const charName = char.common_name || char.name;
-            characterMap[char.id] = charName;
-            nameToIdMap[charName] = char.id;
-          });
-          
-          // 현재 노드의 ID를 API 데이터 형식에 맞게 변환
-          const currentNodeId = nodeData.id;
-          let targetNodeId = currentNodeId;
-          
-          // nodeData.id가 문자열인 경우 (로컬 데이터), 숫자 ID로 변환
-          if (typeof currentNodeId === 'string') {
-            const charName = nodeData.label || nodeData.common_name;
-            targetNodeId = nameToIdMap[charName] || currentNodeId;
-          }
-          
-          // API 데이터를 로컬 형식으로 변환 (중복 제거 포함)
-          const relationMap = new Map(); // 중복 관계를 하나로 처리하기 위한 맵
-          
-          relations.forEach(rel => {
-            // 현재 노드가 관계에 포함되어 있는지 확인
-            const isCurrentNodeId1 = rel.id1 === targetNodeId;
-            const isCurrentNodeId2 = rel.id2 === targetNodeId;
-            
-            if (isCurrentNodeId1 || isCurrentNodeId2) {
-              // 관계의 고유 키 생성 (순서에 관계없이)
-              const key1 = `${rel.id1}-${rel.id2}`;
-              const key2 = `${rel.id2}-${rel.id1}`;
-              
-              // 이미 처리된 관계가 아닌 경우만 추가
-              if (!relationMap.has(key1) && !relationMap.has(key2)) {
-                // extractRadarChartData는 id1/id2를 기대하므로 ID를 그대로 사용
-                relationMap.set(key1, {
-                  id1: rel.id1,
-                  id2: rel.id2,
-                  relation: rel.relation || ['관계'],
-                  count: rel.count || 1,
-                  positivity: rel.positivity || 0
-                });
-              }
-            }
-          });
-          
-          // 최종 관계 데이터 (중복 제거됨)
-          const finalRelations = Array.from(relationMap.values());
-          
-          // extractRadarChartData는 id1/id2 형식을 기대하므로 ID로 직접 전달
-          const chartData = extractRadarChartData(targetNodeId, finalRelations, elements, 8);
-          
-          
-          return chartData;
+        const { relations, characters } = apiMacroData;
+
+        // macro 캐릭터 목록으로 이름 룩업 구조 생성 (elements 의존 제거)
+        const nameToIdMap = {};
+        const macroElements = characters.map(char => {
+          const charName = char.common_name || char.name;
+          nameToIdMap[charName] = char.id;
+          return { data: { id: String(char.id), label: charName, common_name: charName } };
+        });
+
+        // 현재 노드 ID를 macro API 숫자 ID로 변환
+        const currentNodeId = nodeData.id;
+        let targetNodeId = currentNodeId;
+        if (typeof currentNodeId === 'string') {
+          const charName = nodeData.label || nodeData.common_name;
+          targetNodeId = nameToIdMap[charName] ?? currentNodeId;
         }
-      } catch (err) {
-        console.error('API 레이더 차트 데이터 추출 오류:', err);
+
+        // 관계 중복 제거 (순서 무관 키)
+        const relationMap = new Map();
+        relations.forEach(rel => {
+          if (rel.id1 !== targetNodeId && rel.id2 !== targetNodeId) return;
+          const lo = Math.min(rel.id1, rel.id2);
+          const hi = Math.max(rel.id1, rel.id2);
+          const key = `${lo}-${hi}`;
+          if (!relationMap.has(key)) {
+            relationMap.set(key, {
+              id1: rel.id1,
+              id2: rel.id2,
+              relation: rel.relation || ['관계'],
+              count: rel.count || 1,
+              positivity: rel.positivity || 0,
+            });
+          }
+        });
+
+        return extractRadarChartData(
+          targetNodeId,
+          Array.from(relationMap.values()),
+          macroElements,
+          8
+        );
+      } catch {
+        return [];
       }
     }
 
-    // API 데이터가 없는 경우 로컬 데이터 사용 (정제된 데이터 적용)
+    // macro API 없으면 이벤트 캐시 스냅샷으로 보강
     if (!elements || elements.length === 0) {
       return [];
     }
@@ -443,69 +494,44 @@ function UnifiedNodeInfo({
     try {
       const unifiedEventInfo = getUnifiedEventInfo();
       const targetEventNum = unifiedEventInfo.eventNum;
-      
       const json = getEventDataByIndex(folderKey, chapterNum, targetEventNum);
-      
-      if (!json || !json.relations) {
-        return [];
-      }
+      if (!json || !json.relations) return [];
 
-      // 로컬 데이터도 중복 제거 적용
       const relationMap = new Map();
-      
-      
-      json.relations.forEach((rel, index) => {
-        // id1/id2 또는 source/target 모두 지원
+      json.relations.forEach((rel) => {
         const source = rel.id1 ?? rel.source;
         const target = rel.id2 ?? rel.target;
-        
-        
-        if (!source || !target) {
-          console.warn('유효하지 않은 관계 데이터:', rel);
-          return;
-        }
-        
-        // 관계의 고유 키 생성 (순서에 관계없이)
+        if (!source || !target) return;
         const key1 = `${source}-${target}`;
         const key2 = `${target}-${source}`;
-        
-        // 이미 처리된 관계가 아닌 경우만 추가
         if (!relationMap.has(key1) && !relationMap.has(key2)) {
           relationMap.set(key1, {
-            source: source,
-            target: target,
+            source,
+            target,
             relation: rel.relation,
             strength: rel.strength || 1,
-            positivity: rel.positivity || 0
+            positivity: rel.positivity || 0,
           });
         }
       });
-      
-      // 정제된 로컬 관계 데이터
+
       const finalRelations = Array.from(relationMap.values());
-      
-      // 현재 이벤트에 등장하는 캐릭터 ID만 필터링
       const currentEventCharacterIds = new Set();
       finalRelations.forEach(rel => {
         currentEventCharacterIds.add(String(rel.source));
         currentEventCharacterIds.add(String(rel.target));
       });
-      
-      // 현재 이벤트에 등장하는 캐릭터만 필터링
+
       const filteredElements = elements.filter(el => {
-        if (el.data.source) return false; // 엣지는 제외
-        const nodeId = String(el.data.id);
-        return currentEventCharacterIds.has(nodeId);
+        if (el.data.source) return false;
+        return currentEventCharacterIds.has(String(el.data.id));
       });
-      
-      const chartData = extractRadarChartData(nodeData.id, finalRelations, filteredElements, 8);
-      
-      return chartData;
-    } catch (err) {
-      console.error('레이더 차트 데이터 추출 오류:', err);
+
+      return extractRadarChartData(nodeData.id, finalRelations, filteredElements, 8);
+    } catch {
       return [];
     }
-  }, [nodeData?.id, chapterNum, displayMode, folderKey, elements, eventNum, apiMacroData, apiFineData]);
+  }, [nodeData, chapterNum, displayMode, folderKey, elements, apiMacroData, getUnifiedEventInfo]);
 
   // 연결 상태 확인
   const connectionStatus = useMemo(() => {
@@ -559,67 +585,6 @@ function UnifiedNodeInfo({
     if (!hoveredItem) return null;
     return dataMap.get(hoveredItem);
   }, [hoveredItem, dataMap]);
-
-  // 커스텀 Dot 렌더링 (각 점을 positivity에 따라 다른 색상으로)
-  const CustomDot = React.memo((props) => {
-    const { cx, cy, payload } = props;
-    
-    if (!payload || !cx || !cy) {
-      return null;
-    }
-    
-    const fullData = dataMap.get(payload.name) || payload;
-    const color = getPositivityColor(fullData.positivity);
-    const isHovered = hoveredItem === payload.name;
-    const radius = isHovered ? 8 : 5;
-    
-    // 마우스 감지 영역 크기 (실제 점 크기의 3배)
-    const hoverRadius = Math.max(15, radius * 3);
-    
-    
-    // 마우스 이벤트 핸들러
-    const handleMouseEnterDot = useCallback((e) => {
-      e.stopPropagation();
-      handleMouseEnter(fullData.name, e);
-    }, [fullData.name, handleMouseEnter]);
-    
-    const handleMouseLeaveDot = useCallback((e) => {
-      e.stopPropagation();
-      handleMouseLeave();
-    }, [handleMouseLeave]);
-    
-    return (
-      <g>
-        {/* 투명한 원 - 호버 감지용 (동적 크기) */}
-        <circle
-          cx={cx}
-          cy={cy}
-          r={hoverRadius}
-          fill="transparent"
-          style={{ 
-            cursor: 'pointer', 
-            pointerEvents: 'all',
-            zIndex: 10
-          }}
-          onMouseEnter={handleMouseEnterDot}
-          onMouseLeave={handleMouseLeaveDot}
-        />
-        {/* 실제 표시되는 점 */}
-        <circle
-          cx={cx}
-          cy={cy}
-          r={radius}
-          fill={color}
-          stroke={isHovered ? '#fff' : 'none'}
-          strokeWidth={isHovered ? 2 : 0}
-          style={{ 
-            transition: 'all 0.2s ease',
-            pointerEvents: 'none' // 마우스 이벤트는 투명한 원에서만 처리
-          }}
-        />
-      </g>
-    );
-  });
 
   // z-index 설정
   const zIndexValue = 99999;
@@ -906,12 +871,6 @@ function UnifiedNodeInfo({
                   }}
                   crossOrigin="anonymous"
                   onError={(e) => {
-                    console.warn(`이미지 로딩 실패 (API 책):`, {
-                      url: processedNodeData.image,
-                      characterId: processedNodeData.id,
-                      characterName: processedNodeData.displayName,
-                      error: e.target.error
-                    });
                     e.target.style.display = 'none';
                     if (e.target.nextSibling) {
                       e.target.nextSibling.style.display = 'block';
@@ -1214,12 +1173,6 @@ function UnifiedNodeInfo({
                       }}
                       crossOrigin="anonymous"
                       onError={(e) => {
-                        console.warn(`이미지 로딩 실패 (API 책):`, {
-                          url: processedNodeData.image,
-                          characterId: processedNodeData.id,
-                          characterName: processedNodeData.displayName,
-                          error: e.target.error
-                        });
                         e.target.style.display = 'none';
                         if (e.target.nextSibling) {
                           e.target.nextSibling.style.display = 'block';
@@ -1697,8 +1650,17 @@ function UnifiedNodeInfo({
                         fillOpacity={0.2}
                         strokeWidth={2}
                         dot={(dotProps) => {
-                          const { key, ...propsWithoutKey } = dotProps;
-                          return <CustomDot key={key} {...propsWithoutKey} />;
+                          const { key, ...rest } = dotProps;
+                          return (
+                            <UnifiedNodeRadarDot
+                              key={key}
+                              {...rest}
+                              dataMap={dataMap}
+                              hoveredItem={hoveredItem}
+                              onDotMouseEnter={handleMouseEnter}
+                              onDotMouseLeave={handleMouseLeave}
+                            />
+                          );
                         }}
                         isAnimationActive={false}
                         animationBegin={0}

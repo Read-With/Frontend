@@ -1,44 +1,60 @@
 import { getApiBaseUrl, clearAuthData } from '../common/authUtils';
+import {
+  getStoredAccessToken,
+  setStoredAccessToken,
+  getStoredRefreshToken,
+  setStoredRefreshToken,
+  setStoredGoogleUserJson,
+} from '../security/authTokenStorage';
 
 const API_BASE_URL = getApiBaseUrl();
 
+function decodeJwtPayload(token) {
+  if (!token || typeof token !== 'string') return null;
+  const segment = token.split('.')[1];
+  if (!segment) return null;
+  try {
+    const base64 = segment.replace(/-/g, '+').replace(/_/g, '/');
+    const pad = (4 - (base64.length % 4)) % 4;
+    const padded = base64 + '='.repeat(pad);
+    return JSON.parse(atob(padded));
+  } catch {
+    return null;
+  }
+}
+
 export const isTokenValid = (token) => {
   if (!token) return false;
-  
-  try {
-    const payload = JSON.parse(atob(token.split('.')[1]));
-    const currentTime = Math.floor(Date.now() / 1000);
-    
-    if (payload.exp && payload.exp < currentTime) {
-      console.warn('⚠️ 토큰이 만료되었습니다:', {
-        exp: payload.exp,
-        currentTime,
-        expired: payload.exp < currentTime
-      });
-      return false;
-    }
-    
-    return true;
-  } catch (error) {
-    console.warn('⚠️ 토큰 파싱 실패:', error);
+
+  const payload = decodeJwtPayload(token);
+  if (!payload) {
+    console.warn('⚠️ 토큰 파싱 실패');
     return false;
   }
+
+  const currentTime = Math.floor(Date.now() / 1000);
+
+  if (payload.exp && payload.exp < currentTime) {
+    console.warn('⚠️ 토큰이 만료되었습니다:', {
+      exp: payload.exp,
+      currentTime,
+      expired: payload.exp < currentTime,
+    });
+    return false;
+  }
+
+  return true;
 };
 
-// 토큰 만료까지 남은 시간 확인 (초 단위)
 export const getTokenExpirationTime = (token) => {
   if (!token) return null;
-  
-  try {
-    const payload = JSON.parse(atob(token.split('.')[1]));
-    if (payload.exp) {
-      const currentTime = Math.floor(Date.now() / 1000);
-      return payload.exp - currentTime;
-    }
-    return null;
-  } catch (error) {
-    return null;
+
+  const payload = decodeJwtPayload(token);
+  if (payload?.exp) {
+    const currentTime = Math.floor(Date.now() / 1000);
+    return payload.exp - currentTime;
   }
+  return null;
 };
 
 // 토큰이 곧 만료될 예정인지 확인 (기본 5분 전)
@@ -48,14 +64,31 @@ export const isTokenExpiringSoon = (token, bufferSeconds = 5 * 60) => {
   return remainingTime < bufferSeconds;
 };
 
+const MAX_REFRESH_BUFFER_SEC = 15 * 60;
+const MIN_REFRESH_BUFFER_SEC = 60;
+
+/** 액세스 JWT TTL에 맞춘 사전 갱신 여유(초). 짧은 TTL에서 주기적 폴링이 빗나가지 않게 최소 60초는 둔다. */
+export function getProactiveRefreshBufferSeconds(token) {
+  const payload = decodeJwtPayload(token);
+  if (!payload?.exp) return MAX_REFRESH_BUFFER_SEC;
+  const now = Math.floor(Date.now() / 1000);
+  const remaining = payload.exp - now;
+  if (remaining <= 0) return MIN_REFRESH_BUFFER_SEC;
+  const issued = typeof payload.iat === 'number' ? payload.iat : null;
+  const ttlForBuffer =
+    issued != null ? Math.max(1, payload.exp - issued) : Math.max(remaining, 1);
+  const fromTtl = Math.floor(ttlForBuffer * 0.22);
+  return Math.min(MAX_REFRESH_BUFFER_SEC, Math.max(MIN_REFRESH_BUFFER_SEC, fromTtl));
+}
+
 export const authenticatedRequest = async (endpoint, options = {}, retryCount = 0) => {
-  let token = localStorage.getItem('accessToken');
+  await ensureSessionAccessToken();
+  let token = getStoredAccessToken();
   
-  // 토큰이 곧 만료될 예정이면 미리 갱신 (15분 전)
-  if (token && isTokenExpiringSoon(token, 15 * 60)) {
+  if (token && isTokenExpiringSoon(token, getProactiveRefreshBufferSeconds(token))) {
     try {
       await refreshToken();
-      token = localStorage.getItem('accessToken');
+      token = getStoredAccessToken();
     } catch (error) {
       console.warn('토큰 자동 갱신 실패:', error);
     }
@@ -84,7 +117,7 @@ export const authenticatedRequest = async (endpoint, options = {}, retryCount = 
       try {
         await refreshToken();
         return authenticatedRequest(endpoint, options, retryCount + 1);
-      } catch (refreshError) {
+      } catch (_refreshError) {
         clearAuthData();
         const error = new Error('인증이 만료되었습니다. 다시 로그인해주세요.');
         error.status = 401;
@@ -102,7 +135,7 @@ export const authenticatedRequest = async (endpoint, options = {}, retryCount = 
     let data;
     try {
       data = await response.json();
-    } catch (jsonError) {
+    } catch (_jsonError) {
       const error = new Error('응답을 파싱할 수 없습니다');
       error.status = response.status;
       throw error;
@@ -161,7 +194,7 @@ export const googleLogin = async (code) => {
 
 export const refreshToken = async () => {
   try {
-    const refreshTokenValue = localStorage.getItem('refreshToken');
+    const refreshTokenValue = getStoredRefreshToken();
     
     if (!refreshTokenValue) {
       throw new Error('Refresh Token이 없습니다.');
@@ -174,6 +207,7 @@ export const refreshToken = async () => {
         'Accept': 'application/json',
         'Refresh-Token': refreshTokenValue,
       },
+      credentials: 'include',
     });
     
     if (!response.ok) {
@@ -188,10 +222,10 @@ export const refreshToken = async () => {
     
     if (data.isSuccess && data.result) {
       if (data.result.accessToken) {
-        localStorage.setItem('accessToken', data.result.accessToken);
+        setStoredAccessToken(data.result.accessToken);
       }
       if (data.result.refreshToken) {
-        localStorage.setItem('refreshToken', data.result.refreshToken);
+        setStoredRefreshToken(data.result.refreshToken);
       }
       
       if (data.result.user) {
@@ -202,7 +236,7 @@ export const refreshToken = async () => {
           imageUrl: data.result.user.profileImgUrl || '',
           provider: data.result.user.provider || 'GOOGLE',
         };
-        localStorage.setItem('google_user', JSON.stringify(userData));
+        setStoredGoogleUserJson(JSON.stringify(userData));
       }
       
       return data.result;
@@ -214,6 +248,30 @@ export const refreshToken = async () => {
     throw error;
   }
 };
+
+let sessionBootstrapPromise = null;
+
+/** 페이지 로드 직후 메모리에 액세스 토큰이 없을 때, 리프레시 토큰으로 한 번 채운다. */
+export async function ensureSessionAccessToken() {
+  const existing = getStoredAccessToken();
+  if (existing && isTokenValid(existing)) return;
+  if (existing && !isTokenValid(existing)) {
+    setStoredAccessToken(null);
+  }
+  if (!getStoredRefreshToken()) return;
+  if (!sessionBootstrapPromise) {
+    sessionBootstrapPromise = (async () => {
+      try {
+        await refreshToken();
+      } catch {
+        /* refreshToken이 실패 시 clearAuth 등 처리 */
+      }
+    })().finally(() => {
+      sessionBootstrapPromise = null;
+    });
+  }
+  await sessionBootstrapPromise;
+}
 
 export const checkAuthStatus = async () => {
   try {

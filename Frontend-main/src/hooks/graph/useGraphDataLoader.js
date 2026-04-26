@@ -1,10 +1,13 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { toNumberOrNull } from '../../utils/numberUtils';
-import { sortEventsByIdx, normalizeEventIdx, filterEventsUpTo, filterEventsBefore, getMaxEventIdx } from '../../utils/eventUtils';
-import { createCharacterMaps, aggregateCharactersFromEvents, buildNodeWeights } from '../../utils/characterUtils';
+import { toNumberOrNull } from '../../utils/common/numberUtils';
+import { sortEventsByIdx, normalizeEventIdx, filterEventsUpTo, filterEventsBefore, getMaxEventIdx } from '../../utils/graph/eventUtils';
+import { createCharacterMaps, aggregateCharactersFromEvents, buildNodeWeights } from '../../utils/graph/characterUtils';
 import { convertRelationsToElements, calcGraphDiff } from '../../utils/graph/graphDataUtils';
-import { normalizeRelation, isValidRelation } from '../../utils/relationUtils';
-import { getCachedChapterEvents, reconstructChapterGraphState } from '../../utils/common/cache/chapterEventCache';
+import { normalizeRelation, isValidRelation, relationEventMetaPassthrough } from '../../utils/graph/relationUtils';
+import {
+  getCachedChapterEvents,
+  reconstructChapterGraphState,
+} from '../../utils/common/cache/chapterEventCache';
 import { getManifestFromCache } from '../../utils/common/cache/manifestCache';
 import { resolveMaxChapter } from '../../utils/graph/maxChapterResolver';
 
@@ -58,8 +61,7 @@ export function useGraphDataLoader(bookId, chapterIdx, eventIdx = null) {
     }
 
     const manifest = getManifestFromCache(numericBookId);
-    const maxChapter = resolveMaxChapter(numericBookId, manifest);
-    setMaxChapter(maxChapter);
+    setMaxChapter(resolveMaxChapter(numericBookId, manifest));
   }, [numericBookId]);
 
   useEffect(() => {
@@ -89,6 +91,13 @@ export function useGraphDataLoader(bookId, chapterIdx, eventIdx = null) {
     },
     []
   );
+
+  const isChapterEventsReadySync = useCallback((bookIdNum, chapter) => {
+    if (!bookIdNum || !chapter) return false;
+    const cacheKey = `${bookIdNum}-${chapter}`;
+    if (chapterEventsCacheRef.current.has(cacheKey)) return true;
+    return Boolean(getCachedChapterEvents(bookIdNum, chapter));
+  }, []);
 
   const extractNewNodeIds = useCallback((diff) => {
     return (diff?.added || [])
@@ -134,8 +143,12 @@ export function useGraphDataLoader(bookId, chapterIdx, eventIdx = null) {
     } = createCharacterMaps(aggregatedCharacters);
 
     const normalizedRelations = aggregatedRelations
-      .map((rel) => normalizeRelation(rel))
-      .filter((rel) => isValidRelation(rel));
+      .map((raw) => {
+        const n = normalizeRelation(raw);
+        if (!n || !isValidRelation(n)) return null;
+        return { ...n, ...relationEventMetaPassthrough(raw) };
+      })
+      .filter(Boolean);
 
     const nodeWeights = buildNodeWeights(aggregatedCharacters);
 
@@ -150,7 +163,8 @@ export function useGraphDataLoader(bookId, chapterIdx, eventIdx = null) {
       Object.keys(nodeWeights).length ? nodeWeights : null,
       null,
       latestEventMeta,
-      idToProfileImage
+      idToProfileImage,
+      aggregatedCharacters.length > 0 ? aggregatedCharacters : null
     );
 
     return {
@@ -233,8 +247,9 @@ export function useGraphDataLoader(bookId, chapterIdx, eventIdx = null) {
       }
 
       try {
-        const chapterEvents = await getChapterEvents(bookIdNum, chapter);
-        
+        const cacheKey = `${bookIdNum}-${chapter}`;
+        let chapterEvents = await getChapterEvents(bookIdNum, chapter);
+
         if (checkCancelled(isCancelledRef)) return;
 
         const eventsArray = Array.isArray(chapterEvents?.events)
@@ -318,9 +333,21 @@ export function useGraphDataLoader(bookId, chapterIdx, eventIdx = null) {
     const cancelledRef = { current: false };
     setError(null);
     setIsDataEmpty(false);
-    setLoading(true);
+
+    let loadingKickTimer = null;
+    const warm = isChapterEventsReadySync(numericBookId, chapterIdx);
+    if (warm) {
+      loadingKickTimer = globalThis.setTimeout(() => {
+        if (!cancelledRef.current) setLoading(true);
+      }, 40);
+    } else {
+      setLoading(true);
+    }
 
     loadData(numericBookId, chapterIdx, eventIdx, cancelledRef).finally(() => {
+      if (loadingKickTimer != null) {
+        globalThis.clearTimeout(loadingKickTimer);
+      }
       if (!cancelledRef.current) {
         setLoading(false);
       }
@@ -328,8 +355,11 @@ export function useGraphDataLoader(bookId, chapterIdx, eventIdx = null) {
 
     return () => {
       cancelledRef.current = true;
+      if (loadingKickTimer != null) {
+        globalThis.clearTimeout(loadingKickTimer);
+      }
     };
-  }, [numericBookId, chapterIdx, eventIdx, loadData, resetState]);
+  }, [numericBookId, chapterIdx, eventIdx, loadData, resetState, isChapterEventsReadySync]);
 
   return {
     elements,

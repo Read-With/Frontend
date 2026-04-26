@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { 
   buildSuggestions, 
   filterGraphElements
-} from '../../utils/searchUtils.jsx';
+} from '../../utils/graph/searchUtils.jsx';
 
 export function useGraphSearch(elements, onSearchStateChange = null, currentChapterData = null) {
   const [searchTerm, setSearchTerm] = useState("");
@@ -95,17 +95,8 @@ export function useGraphSearch(elements, onSearchStateChange = null, currentChap
     }
   }, [isResetFromSearch]);
 
-  // 제안 선택 함수
-  const selectSuggestion = useCallback((suggestion, onSelect) => {
-    if (onSelect && suggestion?.label) {
-      onSelect(suggestion.label);
-    }
-    setShowSuggestions(false);
-    setSelectedIndex(-1);
-  }, []);
-
   // 키보드 네비게이션 처리 (화살표 키, Escape 키만 처리)
-  const handleKeyDown = useCallback((e, onSelect) => {
+  const handleKeyDown = useCallback((e, _onSelect) => {
     switch (e.key) {
       case 'ArrowDown':
         if (showSuggestions && suggestions && suggestions.length > 0) {
@@ -181,7 +172,6 @@ export function useGraphSearch(elements, onSearchStateChange = null, currentChap
     suggestions,
     showSuggestions,
     selectedIndex,
-    selectSuggestion,
     handleKeyDown,
     closeSuggestions,
     setShowSuggestions,

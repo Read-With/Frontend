@@ -1,13 +1,23 @@
-import React, { useState, useEffect, memo } from 'react';
+import React, { useState, useEffect, useCallback, memo } from 'react';
 import PropTypes from 'prop-types';
 import { useNavigate } from 'react-router-dom';
-import { Heart, BookOpen, Network, MoreVertical, Info, CheckCircle, Clock, FileText, Trash2, X } from 'lucide-react';
+import { Heart, BookOpen, Network, MoreVertical, Info, Clock, FileText, Trash2, X } from 'lucide-react';
 import BookDetailModal from './BookDetailModal';
 import './BookLibrary.css';
 import { ensureGraphBookCache } from '../../utils/common/cache/chapterEventCache';
+import { USER_VIEWER_PREFIX } from '../../utils/navigation/viewerPaths';
+import { formatLibraryRelativeDate } from '../../utils/library/libraryBookDisplay';
 
-const DeleteConfirmModal = ({ isOpen, onClose, onConfirm, isIndexedDbOnly }) => {
-  React.useEffect(() => {
+function navigateFromLibrary(navigate, book, graphMode) {
+  const base = graphMode === 'graph' ? '/user/graph' : USER_VIEWER_PREFIX;
+  navigate(`${base}/${book.id}`, {
+    state: { book, fromLibrary: true, from: { pathname: '/user/mypage' } },
+    replace: false,
+  });
+}
+
+const DeleteConfirmModal = ({ isOpen, onClose, onConfirm }) => {
+  useEffect(() => {
     if (!isOpen) return;
 
     const handleEscape = (e) => {
@@ -79,10 +89,9 @@ DeleteConfirmModal.propTypes = {
   isOpen: PropTypes.bool.isRequired,
   onClose: PropTypes.func.isRequired,
   onConfirm: PropTypes.func.isRequired,
-  isIndexedDbOnly: PropTypes.bool
 };
 
-const BookCard = ({ book, onToggleFavorite, onBookClick, onBookDetailClick, onShowDeleteModal, viewMode = 'grid' }) => {
+const BookCard = memo(({ book, onToggleFavorite, onBookClick, onBookDetailClick, onShowDeleteModal, viewMode = 'grid' }) => {
   const navigate = useNavigate();
   const [imageError, setImageError] = useState(false);
   const [showContextMenu, setShowContextMenu] = useState(false);
@@ -91,33 +100,12 @@ const BookCard = ({ book, onToggleFavorite, onBookClick, onBookDetailClick, onSh
 
   const handleReadClick = (e) => {
     e.stopPropagation();
-    const progressVal = book.progress != null && Number.isFinite(Number(book.progress)) ? String(book.progress) : '0';
-    const params = new URLSearchParams({
-      chapter: '1',
-      page: '1',
-      progress: progressVal,
-      graphMode: 'viewer'
-    });
-    const bookId = book.id;
-    navigate(`/user/viewer/${bookId}?${params.toString()}`, {
-      state: { book, fromLibrary: true, from: { pathname: '/user/mypage' } },
-      replace: false
-    });
+    navigateFromLibrary(navigate, book, 'viewer');
   };
 
   const handleGraphClick = (e) => {
     e.stopPropagation();
-    const progressVal = book.progress != null && Number.isFinite(Number(book.progress)) ? String(book.progress) : '0';
-    const graphParams = new URLSearchParams({
-      chapter: '1',
-      page: '1',
-      progress: progressVal,
-      graphMode: 'graph'
-    });
-    navigate(`/user/graph/${book.id}?${graphParams.toString()}`, {
-      state: { book, fromLibrary: true, from: { pathname: '/user/mypage' } },
-      replace: false
-    });
+    navigateFromLibrary(navigate, book, 'graph');
   };
 
   useEffect(() => {
@@ -246,17 +234,7 @@ const BookCard = ({ book, onToggleFavorite, onBookClick, onBookDetailClick, onSh
           {book.updatedAt && (
             <span className="book-meta-item">
               <Clock size={14} />
-              {(() => {
-                const date = new Date(book.updatedAt);
-                const now = new Date();
-                const diffTime = Math.abs(now - date);
-                const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-                
-                if (diffDays === 1) return '오늘';
-                if (diffDays === 2) return '어제';
-                if (diffDays <= 7) return `${diffDays - 1}일 전`;
-                return date.toLocaleDateString('ko-KR', { month: 'short', day: 'numeric' });
-              })()}
+              {formatLibraryRelativeDate(book.updatedAt)}
             </span>
           )}
           
@@ -326,7 +304,9 @@ const BookCard = ({ book, onToggleFavorite, onBookClick, onBookDetailClick, onSh
       </div>
     </div>
   );
-};
+});
+
+BookCard.displayName = 'BookCard';
 
 // 공통 book shape 정의 (서버 책만 표시)
 const bookShape = PropTypes.shape({
@@ -346,17 +326,24 @@ BookCard.propTypes = {
   onBookClick: PropTypes.func,
   onBookDetailClick: PropTypes.func,
   onShowDeleteModal: PropTypes.func,
-  onStatusChange: PropTypes.func,
   viewMode: PropTypes.oneOf(['grid', 'list'])
 };
 
-const BookLibrary = memo(({ books, loading, error, onRetry, onToggleFavorite, onBookClick, onStatusChange, onBookDelete, viewMode = 'grid' }) => {
-  const [selectedBook, setSelectedBook] = React.useState(null);
-  const [showDetailModal, setShowDetailModal] = React.useState(false);
-  const [deleteTargetBook, setDeleteTargetBook] = React.useState(null);
-  const [showDeleteModal, setShowDeleteModal] = React.useState(false);
+const BookLibrary = memo(({ books, loading: _loading, error: _loadError, onRetry: _onRetry, onToggleFavorite, onBookClick, onBookDelete, viewMode = 'grid' }) => {
+  const [selectedBook, setSelectedBook] = useState(null);
+  const [showDetailModal, setShowDetailModal] = useState(false);
+  const [deleteTargetBook, setDeleteTargetBook] = useState(null);
 
-  React.useEffect(() => {
+  useEffect(() => {
+    if (!selectedBook?.id) return;
+    const next = books.find((b) => String(b.id) === String(selectedBook.id));
+    if (next && next !== selectedBook) {
+      setSelectedBook(next);
+    }
+  }, [books, selectedBook]);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+
+  useEffect(() => {
     if (!Array.isArray(books) || books.length === 0) {
       return undefined;
     }
@@ -392,30 +379,28 @@ const BookLibrary = memo(({ books, loading, error, onRetry, onToggleFavorite, on
     };
   }, [books]);
 
-  const handleBookDetailClick = (book) => {
+  const handleBookDetailClick = useCallback((book) => {
     setSelectedBook(book);
     setShowDetailModal(true);
-  };
+  }, []);
 
-  const handleCloseDetailModal = () => {
+  const handleCloseDetailModal = useCallback(() => {
     setShowDetailModal(false);
     setSelectedBook(null);
-  };
+  }, []);
 
-  const handleShowDeleteModal = (book) => {
+  const handleShowDeleteModal = useCallback((book) => {
     setDeleteTargetBook(book);
     setShowDeleteModal(true);
-  };
+  }, []);
 
-  const handleCloseDeleteModal = () => {
+  const handleCloseDeleteModal = useCallback(() => {
     setShowDeleteModal(false);
     setDeleteTargetBook(null);
-  };
+  }, []);
 
-  const handleDeleteConfirm = async () => {
-    if (!deleteTargetBook || !deleteTargetBook.id) {
-      return;
-    }
+  const handleDeleteConfirm = useCallback(async () => {
+    if (!deleteTargetBook?.id) return;
 
     setShowDeleteModal(false);
 
@@ -428,14 +413,17 @@ const BookLibrary = memo(({ books, loading, error, onRetry, onToggleFavorite, on
     }
 
     setDeleteTargetBook(null);
-  };
+  }, [deleteTargetBook, onBookDelete]);
 
-  const handleBookDelete = async (bookId) => {
-    if (onBookDelete) {
-      await onBookDelete(bookId);
-    }
-    handleCloseDetailModal();
-  };
+  const handleBookDelete = useCallback(
+    async (bookId) => {
+      if (onBookDelete) {
+        await onBookDelete(bookId);
+      }
+      handleCloseDetailModal();
+    },
+    [onBookDelete, handleCloseDetailModal]
+  );
 
   // BookLibrary 컴포넌트는 이제 그리드 컨테이너 역할만 함
   // 로딩, 에러, 빈 상태는 MyPage에서 처리
@@ -465,12 +453,11 @@ const BookLibrary = memo(({ books, loading, error, onRetry, onToggleFavorite, on
         onDelete={handleBookDelete}
       />
 
-           <DeleteConfirmModal
-             isOpen={showDeleteModal}
-             onClose={handleCloseDeleteModal}
-             onConfirm={handleDeleteConfirm}
-             isIndexedDbOnly={false} // 모든 책은 서버 API 기반
-           />
+      <DeleteConfirmModal
+        isOpen={showDeleteModal}
+        onClose={handleCloseDeleteModal}
+        onConfirm={handleDeleteConfirm}
+      />
     </>
   );
 });

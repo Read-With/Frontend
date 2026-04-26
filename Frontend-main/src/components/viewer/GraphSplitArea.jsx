@@ -1,93 +1,62 @@
-import React from "react";
+import React, { useRef, useMemo, memo } from "react";
+import { AlertCircle, AlertTriangle, Inbox, Loader2 } from "lucide-react";
 import GraphContainer from "../graph/GraphContainer";
 import ViewerTopBar from "./ViewerTopBar";
-import { filterMainCharacters } from "../../utils/graph/graphDataUtils";
-import { bookUtils } from "../../utils/viewerUtils";
+import { useGraphElementPipeline } from "../../hooks/graph/useGraphElementPipeline";
+import {
+  graphPanelHasCachedLocationHint,
+  graphPanelHasResumeLocationHint,
+} from "../../utils/common/locatorUtils";
 
-const loadingContainerStyle = {
-  display: 'flex',
-  flexDirection: 'column',
-  alignItems: 'center',
-  justifyContent: 'center',
-  height: '100%',
-  padding: '20px',
-  textAlign: 'center',
-  backgroundColor: '#f8f9fa',
-  borderRadius: '8px',
-  border: '1px solid #e9ecef'
+const iconShellClass = {
+  loading: "bg-emerald-50 text-[#5C6F5C]",
+  empty: "bg-slate-100 text-slate-500",
+  error: "bg-red-50 text-red-600",
+  warning: "bg-amber-50 text-amber-700",
 };
 
-const loadingIconStyle = {
-  fontSize: '48px',
-  marginBottom: '16px',
-  color: '#5C6F5C',
-  animation: 'spin 1s linear infinite'
-};
-
-const errorIconStyle = {
-  fontSize: '48px',
-  marginBottom: '16px',
-  color: '#dc3545'
-};
-
-const warningIconStyle = {
-  fontSize: '48px',
-  marginBottom: '16px',
-  color: '#6c757d'
-};
-
-const titleStyle = {
-  color: '#495057',
-  marginBottom: '12px',
-  fontSize: '18px',
-  fontWeight: '600'
-};
-
-const descriptionStyle = {
-  color: '#6c757d',
-  marginBottom: '20px',
-  fontSize: '14px',
-  lineHeight: '1.5',
-  wordBreak: 'keep-all'
-};
-
-const retryButtonStyle = {
-  backgroundColor: '#5C6F5C',
-  color: 'white',
-  border: 'none',
-  borderRadius: '6px',
-  padding: '10px 20px',
-  fontSize: '14px',
-  fontWeight: '500',
-  cursor: 'pointer',
-  transition: 'background-color 0.2s'
-};
-
-const retryButtonHoverStyle = '#4A5A4A';
-
-const handleButtonHover = (e, isEntering) => {
-  e.target.style.backgroundColor = isEntering ? retryButtonHoverStyle : retryButtonStyle.backgroundColor;
-};
-
-const ErrorMessage = ({ icon, title, description, buttonText, onButtonClick }) => (
-  <div style={loadingContainerStyle}>
-    <div style={icon === '❌' ? errorIconStyle : warningIconStyle}>{icon}</div>
-    <h3 style={titleStyle}>{title}</h3>
-    <p style={descriptionStyle}>{description}</p>
-    {buttonText && onButtonClick && (
-      <button
-        onClick={onButtonClick}
-        style={retryButtonStyle}
-        onMouseEnter={(e) => handleButtonHover(e, true)}
-        onMouseLeave={(e) => handleButtonHover(e, false)}
+function GraphNoticePanel({ variant, title, description, icon, actions }) {
+  const shell = iconShellClass[variant] ?? iconShellClass.loading;
+  return (
+    <div className="flex h-full w-full items-center justify-center bg-slate-50/90 p-4 sm:p-6">
+      <div
+        className="w-full max-w-md rounded-2xl border border-slate-200/90 bg-white px-6 py-9 text-center shadow-sm sm:px-10 sm:py-10"
+        role={variant === "error" || variant === "warning" ? "alert" : undefined}
       >
-        {buttonText}
-      </button>
-    )}
-  </div>
-);
+        <div
+          className={`mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-full ${shell}`}
+          aria-hidden
+        >
+          {icon}
+        </div>
+        <div className="space-y-2">
+          <h3 className="text-lg font-semibold tracking-tight text-slate-800">{title}</h3>
+          {description ? (
+            <p className="text-sm leading-relaxed text-slate-600 [word-break:keep-all]">{description}</p>
+          ) : null}
+        </div>
+        {actions ? <div className="mt-6 flex flex-col items-center gap-2">{actions}</div> : null}
+      </div>
+    </div>
+  );
+}
 
-function GraphSplitArea({
+const primaryBtnClass =
+  "rounded-lg bg-[#5C6F5C] px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-[#4A5A4A] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#5C6F5C] focus-visible:ring-offset-2";
+
+function normalizeGraphApiError(raw) {
+  if (!raw) return null;
+  if (typeof raw === "string") {
+    return {
+      message: "그래프 데이터를 불러올 수 없습니다",
+      details: raw,
+      retry: null,
+    };
+  }
+  return raw;
+}
+
+const GraphSplitArea = memo(function GraphSplitArea({
   graphState,
   graphActions,
   viewerState,
@@ -96,178 +65,185 @@ function GraphSplitArea({
   tooltipProps,
   transitionState,
   apiError,
-  isFromLibrary = false,
-  previousPage = null,
   bookId = null,
   book = null,
   cachedLocation = null,
+  resumeAnchor = null,
 }) {
   const { activeTooltip, onClearTooltip, onSetActiveTooltip, graphClearRef } = tooltipProps;
-  const graphContainerRef = React.useRef(null);
-  const searchTermValue = searchState?.searchTerm ?? "";
-  const isSearchActiveValue = searchState?.isSearchActive ?? false;
-  const filteredElementsValue = searchState?.filteredElements ?? [];
-  const isResetFromSearchValue = searchState?.isResetFromSearch ?? false;
-  const searchFitNodeIds = searchState?.fitNodeIds ?? [];
-  const suggestionsValue = searchState?.suggestions ?? [];
-  const showSuggestionsValue = searchState?.showSuggestions ?? false;
-  const selectedSuggestionIndex = searchState?.selectedIndex ?? -1;
+  const graphContainerRef = useRef(null);
+  const {
+    searchTerm: searchTermValue = "",
+    isSearchActive: isSearchActiveValue = false,
+    filteredElements: filteredElementsValue = [],
+    isResetFromSearch: isResetFromSearchValue = false,
+    fitNodeIds: searchFitNodeIds = [],
+    suggestions: suggestionsValue = [],
+    showSuggestions: showSuggestionsValue = false,
+    selectedIndex: selectedSuggestionIndex = -1,
+  } = searchState;
   
-  const { loading, isReloading, isGraphLoading, graphLoading, isDataReady, isDataEmpty } = viewerState;
+  const { loading, isReloading, isGraphLoading, isFineGraphLoading, graphLoading, isDataReady, isDataEmpty } =
+    viewerState;
   const { elements, currentEvent, currentChapter } = graphState;
   const { filterStage } = graphActions;
-  
-  const isApiBook = React.useMemo(() => {
-    return bookUtils.isApiBook(book, bookId);
-  }, [book, bookId]);
-  
-  const hasCachedLocation = React.useMemo(() => {
-    if (!cachedLocation) {
-      return false;
-    }
-    const cachedChapter = Number(cachedLocation.chapterIdx);
-    if (!Number.isFinite(cachedChapter) || cachedChapter < 1) {
-      return false;
-    }
-    if (isApiBook) {
-      const cachedEvent = Number(cachedLocation.eventIdx ?? cachedLocation.eventNum ?? 0);
-      return Number.isFinite(cachedEvent) && cachedEvent > 0;
-    }
-    return true;
-  }, [cachedLocation, isApiBook]);
 
-  const isLocationDetermined = React.useMemo(() => {
+  const hasResumeLocator = useMemo(
+    () => graphPanelHasResumeLocationHint(resumeAnchor),
+    [resumeAnchor]
+  );
+
+  const hasCachedLocation = useMemo(
+    () => graphPanelHasCachedLocationHint(cachedLocation),
+    [cachedLocation]
+  );
+
+  const hasLocationHint = hasCachedLocation || hasResumeLocator;
+
+  const isLocationDetermined = useMemo(() => {
     if (!currentChapter || currentChapter < 1) {
-      return hasCachedLocation;
+      return hasLocationHint;
     }
-    if (isApiBook && !currentEvent) {
-      return hasCachedLocation;
+    if (!currentEvent) {
+      return hasLocationHint;
     }
     return true;
-  }, [currentChapter, currentEvent, isApiBook, hasCachedLocation]);
+  }, [currentChapter, currentEvent, hasLocationHint]);
 
-  const filteredMainCharacters = React.useMemo(() => {
-    return filterMainCharacters(elements, filterStage);
-  }, [elements, filterStage]);
+  const { finalElements } = useGraphElementPipeline({
+    elements,
+    filterStage,
+    isSearchActive: isSearchActiveValue,
+    filteredElements: filteredElementsValue,
+  });
 
-  const finalElements = React.useMemo(() => {
-    if (isSearchActiveValue && filteredElementsValue && filteredElementsValue.length > 0) {
-      return filteredElementsValue;
-    }
-    if (filterStage > 0) {
-      return filteredMainCharacters;
-    }
-    return elements;
-  }, [isSearchActiveValue, filteredElementsValue, filterStage, filteredMainCharacters, elements]);
+  const prevValidEventForGraph = graphState.prevValidEvent ?? null;
 
   const hasCurrentEvent = !!currentEvent;
   const hasElements = elements && Array.isArray(elements) && elements.length > 0;
   
-  // graphLoading이 false이고 isDataEmpty가 true면 데이터 로드 완료 후 데이터 없음 상태
-  // 이 경우 다른 로딩 조건들을 무시하고 데이터 없음 메시지를 우선 표시
   const isDataLoadCompleteAndEmpty = graphLoading === false && isDataEmpty && !hasElements;
-  
-  // 로딩 중인지 확인 (API 호출 중이거나 데이터를 가져오는 중)
-  // 단, 데이터 로드 완료 후 데이터가 없는 경우는 제외
-  const isLoading = isDataLoadCompleteAndEmpty 
-    ? false 
-    : (loading || isReloading || !isLocationDetermined || (!isDataReady && isApiBook && !hasCurrentEvent) || (graphLoading !== false && isGraphLoading));
-  
-  // 로딩 완료 후 데이터가 없는 경우
+  const isLoading = isDataLoadCompleteAndEmpty
+    ? false
+    : (loading || isReloading || !isLocationDetermined || (!isDataReady && !hasCurrentEvent) || (graphLoading !== false && isGraphLoading));
   const shouldShowEmptyData = isDataLoadCompleteAndEmpty;
   
-  // 로컬 책의 경우 currentEvent가 없어도 elements가 있으면 그래프 표시
-  // API 책의 경우 currentEvent와 elements가 모두 필요
-  const shouldShowLoading = hasElements ? false : isLoading;
+  // fine 그래프가 아직 반영되지 않았으면(이벤트 확정 전) 기존 elements가 있어도 그래프 대신 로딩 — 중간 이벤트 표시 방지
+  const isFineGraphBusy = isFineGraphLoading === true;
+  const shouldShowLoading = (!hasElements && isLoading) || (hasElements && isFineGraphBusy);
+
+  const topBarSearchState = useMemo(() => ({
+    searchTerm: searchTermValue,
+    isSearchActive: isSearchActiveValue,
+    suggestions: suggestionsValue,
+    showSuggestions: showSuggestionsValue,
+    selectedIndex: selectedSuggestionIndex,
+  }), [searchTermValue, isSearchActiveValue, suggestionsValue, showSuggestionsValue, selectedSuggestionIndex]);
+
+  // viewerState 전체를 넘기면 showToolbar 등 무관한 변경으로 TopBar memo가 깨짐
+  const viewerStateForTopBar = useMemo(
+    () => ({ filename: viewerState.filename, book: viewerState.book }),
+    [viewerState.filename, viewerState.book]
+  );
+
+  const resolvedApiError = useMemo(() => normalizeGraphApiError(apiError), [apiError]);
 
   return (
     <div className="h-full w-full flex flex-col" style={{ minHeight: 0, overflow: "hidden" }}>
       <ViewerTopBar
         graphState={graphState}
         graphActions={graphActions}
-        viewerState={viewerState}
-        searchState={{
-          searchTerm: searchTermValue,
-          isSearchActive: isSearchActiveValue,
-          elements: graphState.elements ?? [],
-          filteredElements: filteredElementsValue,
-          isResetFromSearch: isResetFromSearchValue,
-          fitNodeIds: searchFitNodeIds,
-          suggestions: suggestionsValue,
-          showSuggestions: showSuggestionsValue,
-          selectedIndex: selectedSuggestionIndex,
-        }}
+        viewerState={viewerStateForTopBar}
+        searchState={topBarSearchState}
         searchActions={searchActions}
-        isFromLibrary={isFromLibrary}
-        previousPage={previousPage}
       />
       
       <div style={{ flex: 1, position: "relative", minHeight: 0, minWidth: 0 }}>
         {shouldShowLoading ? (
-          <div style={loadingContainerStyle}>
-            <div style={loadingIconStyle}>⏳</div>
-            <h3 style={titleStyle}>
-              {!isLocationDetermined ? '위치 정보를 확인하는 중...' : 
-               transitionState.type === 'chapter' ? '챕터 전환 중...' : 
-               '그래프 정보를 불러오는 중...'}
-            </h3>
-            <p style={descriptionStyle}>
-              {!isLocationDetermined ? '현재 읽고 있는 위치를 파악하고 있습니다. 잠시만 기다려주세요.' :
-               transitionState.type === 'chapter' ? '새로운 챕터의 이벤트를 준비하고 있습니다.' : 
-               '관계 데이터를 분석하고 있습니다.'}
-            </p>
-          </div>
+          <GraphNoticePanel
+            variant="loading"
+            title={
+              isFineGraphBusy
+                ? "이벤트 반영 중"
+                : !isLocationDetermined
+                  ? "위치 정보를 확인하는 중"
+                  : transitionState.type === "chapter"
+                    ? "챕터 전환 중"
+                    : "그래프 정보를 불러오는 중"
+            }
+            description={
+              isFineGraphBusy
+                ? "읽기 위치에 맞는 이벤트와 관계 그래프를 확정하는 중입니다."
+                : !isLocationDetermined
+                  ? "현재 읽고 있는 위치를 파악하고 있습니다. 잠시만 기다려 주세요."
+                  : transitionState.type === "chapter"
+                    ? "새 챕터의 이벤트를 준비하고 있습니다."
+                    : "인물 관계 데이터를 불러오고 있습니다."
+            }
+            icon={<Loader2 className="h-7 w-7 animate-spin" strokeWidth={2} aria-hidden />}
+          />
         ) : shouldShowEmptyData ? (
-          <div style={loadingContainerStyle}>
-            <div style={warningIconStyle}>📭</div>
-            <h3 style={titleStyle}>아직 이벤트가 없습니다</h3>
-            <p style={descriptionStyle}>
-              현재 챕터에는 그래프 데이터가 없습니다. 이벤트가 생성되면 여기에 표시됩니다.
-            </p>
-          </div>
-        ) : apiError ? (
-          <ErrorMessage 
-            icon="❌" 
-            title={apiError.message} 
-            description={apiError.details}
-            buttonText="다시 시도"
-            onButtonClick={apiError.retry}
+          <GraphNoticePanel
+            variant="empty"
+            title="아직 이벤트가 없습니다"
+            description="이 챕터에는 표시할 그래프 데이터가 없습니다. 이벤트가 생기면 이 영역에 관계가 나타납니다."
+            icon={<Inbox className="h-7 w-7" strokeWidth={1.75} aria-hidden />}
+          />
+        ) : resolvedApiError ? (
+          <GraphNoticePanel
+            variant="error"
+            title={resolvedApiError.message || "문제가 발생했습니다"}
+            description={resolvedApiError.details || "잠시 후 다시 시도해 주세요."}
+            icon={<AlertCircle className="h-7 w-7" strokeWidth={2} aria-hidden />}
+            actions={
+              resolvedApiError.retry ? (
+                <button type="button" className={primaryBtnClass} onClick={resolvedApiError.retry}>
+                  다시 시도
+                </button>
+              ) : null
+            }
           />
         ) : transitionState.error ? (
-          <ErrorMessage 
-            icon="⚠️" 
-            title="일시적인 오류가 발생했습니다" 
-            description="새로고침하면 정상적으로 작동할 것입니다."
-            buttonText="새로고침"
-            onButtonClick={() => window.location.reload()}
+          <GraphNoticePanel
+            variant="warning"
+            title="일시적인 오류가 발생했습니다"
+            description="페이지를 새로고침하면 대부분 정상적으로 돌아옵니다. 문제가 계속되면 잠시 뒤에 다시 열어 주세요."
+            icon={<AlertTriangle className="h-7 w-7" strokeWidth={2} aria-hidden />}
+            actions={
+              <button type="button" className={primaryBtnClass} onClick={() => window.location.reload()}>
+                새로고침
+              </button>
+            }
           />
         ) : (
-          <GraphContainer
-            ref={graphContainerRef}
-            currentPosition={graphState.currentCharIndex}
-            currentEvent={graphState.currentEvent}
-            currentChapter={graphState.currentChapter}
-            edgeLabelVisible={graphState.edgeLabelVisible}
-            filename={viewerState.filename}
-            elements={finalElements}
-            searchTerm={searchTermValue}
-            isSearchActive={isSearchActiveValue}
-            filteredElements={filteredElementsValue}
-            fitNodeIds={searchFitNodeIds}
-            isResetFromSearch={isResetFromSearchValue}
-            prevValidEvent={graphState.currentEvent && graphState.currentEvent.chapter === graphState.currentChapter ? graphState.currentEvent : null}
-            events={graphState.events || []}
-            activeTooltip={activeTooltip}
-            onClearTooltip={onClearTooltip}
-            onSetActiveTooltip={onSetActiveTooltip}
-            graphClearRef={graphClearRef}
-            isEventTransition={transitionState.type === 'event' && transitionState.inProgress}
-            bookId={book?.id ?? bookId}
-          />
+          <div className="h-full w-full relative" style={{ minHeight: 0, minWidth: 0 }}>
+            <GraphContainer
+              ref={graphContainerRef}
+              currentPosition={graphState.currentCharIndex}
+              currentEvent={graphState.currentEvent}
+              currentChapter={graphState.currentChapter}
+              edgeLabelVisible={graphState.edgeLabelVisible}
+              filename={viewerState.filename}
+              elements={finalElements}
+              searchTerm={searchTermValue}
+              isSearchActive={isSearchActiveValue}
+              filteredElements={filteredElementsValue}
+              fitNodeIds={searchFitNodeIds}
+              isResetFromSearch={isResetFromSearchValue}
+              prevValidEvent={prevValidEventForGraph}
+              events={graphState.events || []}
+              activeTooltip={activeTooltip}
+              onClearTooltip={onClearTooltip}
+              onSetActiveTooltip={onSetActiveTooltip}
+              graphClearRef={graphClearRef}
+              isEventTransition={transitionState.type === 'event' && transitionState.inProgress}
+              bookId={book?.id ?? bookId}
+            />
+          </div>
         )}
       </div>
     </div>
   );
-}
+});
 
 export default GraphSplitArea;

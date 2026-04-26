@@ -1,23 +1,103 @@
-/**
- * useGraphLayout.js : 그래프 레이아웃 및 스타일 적용 커스텀 훅
- * 
- * [주요 기능]
- * 1. 레이아웃 실행 및 완료 처리
- * 2. 스타일시트 업데이트
- * 3. 노드 크기 적용
- * 4. 레이아웃 완료 콜백 처리
- * 
- * [사용처]
- * - CytoscapeGraphUnified: 그래프 레이아웃 및 스타일 관리
- */
+import { useEffect, useCallback, useRef } from "react";
+import { ensureElementsInBounds, syncReciprocalPairJunctionOffsets } from "../../utils/graph/graphUtils";
+import { detectAndResolveOverlap } from "../../utils/graph/graphDataUtils";
 
-import { useEffect, useCallback } from 'react';
-import { ensureElementsInBounds } from '../../utils/graph/graphUtils';
-import { detectAndResolveOverlap } from '../../utils/graph/graphDataUtils';
+function scheduleRippleWhenPositionsPainted(cy, triggerRippleForAddedNodes) {
+  let cancelled = false;
+  let fired = false;
+  let fallbackId = 0;
+
+  const run = () => {
+    if (cancelled || fired) return;
+    fired = true;
+    if (fallbackId) {
+      window.clearTimeout(fallbackId);
+      fallbackId = 0;
+    }
+    try {
+      triggerRippleForAddedNodes();
+    } catch {
+      /* ignore */
+    }
+  };
+
+  const cancel = () => {
+    cancelled = true;
+    if (fallbackId) {
+      window.clearTimeout(fallbackId);
+      fallbackId = 0;
+    }
+  };
+
+  fallbackId = window.setTimeout(run, 180);
+
+  const arm = () => {
+    if (cancelled) return;
+    try {
+      cy.one("render", () => {
+        if (cancelled) return;
+        if (fallbackId) {
+          window.clearTimeout(fallbackId);
+          fallbackId = 0;
+        }
+        requestAnimationFrame(() => {
+          if (cancelled) return;
+          requestAnimationFrame(run);
+        });
+      });
+      cy.resize();
+    } catch {
+      if (fallbackId) {
+        window.clearTimeout(fallbackId);
+        fallbackId = 0;
+      }
+      requestAnimationFrame(() => {
+        if (cancelled) return;
+        requestAnimationFrame(run);
+      });
+    }
+  };
+
+  requestAnimationFrame(() => {
+    if (cancelled) return;
+    requestAnimationFrame(() => {
+      if (cancelled) return;
+      requestAnimationFrame(arm);
+    });
+  });
+
+  return cancel;
+}
+
+function fadeInNewElements(cy, elementsUpdateRef, onComplete, _skipAnimation, addSnapshot = null) {
+  const snap = addSnapshot ?? elementsUpdateRef?.current;
+  if (!cy || !snap) {
+    onComplete?.();
+    return;
+  }
+  const { nodesToAdd = [], edgesToAdd = [] } = snap;
+  const ids = [...nodesToAdd, ...edgesToAdd]
+    .map((x) => x?.data?.id)
+    .filter((id) => id != null && id !== "");
+  if (ids.length === 0) {
+    onComplete?.();
+    return;
+  }
+  onComplete?.();
+}
+
+function pulseDataChangedElements(cy, ids, onComplete) {
+  if (!cy || !ids?.length) {
+    onComplete?.();
+    return;
+  }
+  onComplete?.();
+}
 
 export function useGraphLayout({
   cy,
-  elements,
+  elementsFingerprint,
+  elementsLength,
   stylesheet,
   layout,
   elementsUpdateRef,
@@ -29,80 +109,207 @@ export function useGraphLayout({
   setIsInitialLoad,
   containerRef,
 }) {
+  const prevStylesheetRef = useRef(stylesheet);
+  const layoutName =
+    layout && typeof layout === "object" && layout.name != null ? String(layout.name) : "preset";
+
   const fitGraphOnInitialLoad = useCallback((cy) => {
     if (!cy) return;
     const nodes = cy.nodes();
     if (nodes && nodes.length > 0) {
       try {
         cy.fit(nodes, 80);
-      } catch (error) {
-        console.warn('초기 그래프 fit 실패:', error);
+      } catch {
+        /* ignore */
       }
     }
   }, []);
 
-  const handleLayoutComplete = useCallback((cy, triggerRipple, shouldFitOnInitialLoad) => {
-    if (!cy) return;
-    
-    ensureElementsInBounds(cy, containerRef.current);
-    detectAndResolveOverlap(cy);
-    
-    if (shouldFitOnInitialLoad) {
-      fitGraphOnInitialLoad(cy);
-    }
-    
-    if (triggerRipple) triggerRipple();
-    if (onLayoutComplete) onLayoutComplete();
-  }, [onLayoutComplete, containerRef, fitGraphOnInitialLoad]);
+  const handleLayoutComplete = useCallback(
+    (cy, shouldFitOnInitialLoad, options = {}) => {
+      const { skipOverlap = false, skipEnsureBounds = false } = options;
+      if (!cy) return;
+
+      if (!skipEnsureBounds) {
+        ensureElementsInBounds(cy, containerRef.current);
+      }
+      if (!skipOverlap) {
+        detectAndResolveOverlap(cy);
+      }
+
+      if (shouldFitOnInitialLoad) {
+        fitGraphOnInitialLoad(cy);
+      }
+
+      syncReciprocalPairJunctionOffsets(cy);
+      if (onLayoutComplete) onLayoutComplete();
+    },
+    [onLayoutComplete, containerRef, fitGraphOnInitialLoad]
+  );
 
   useEffect(() => {
-    if (!cy || !elements || elements.length === 0) {
+    if (!cy || !elementsLength) {
       return;
     }
 
-    const { nodesToAdd, edgesToAdd, hasChanges } = elementsUpdateRef.current || {};
+    let cancelRipple = () => {};
+
+    const {
+      nodesToAdd = [],
+      edgesToAdd = [],
+      hasChanges = false,
+      dataChangedIds = [],
+      incrementalLayoutScope = false,
+    } = elementsUpdateRef.current || {};
+    const stylesheetChanged = prevStylesheetRef.current !== stylesheet;
+    prevStylesheetRef.current = stylesheet;
+
+    const edgesOnlyIncremental =
+      hasChanges && nodesToAdd.length === 0 && edgesToAdd.length > 0;
+
+    // 이미 그려진 그래프 위에만 얹는 경우: 전체 스타일시트 재적용·뷰 보정을 줄여 전체 깜빡임 방지
+    const styleOnlyIncremental =
+      hasChanges &&
+      !isInitialLoad &&
+      !stylesheetChanged;
+
+    const hasDataOnlyVisualChange = !hasChanges && dataChangedIds.length > 0;
 
     if (hasChanges) {
-      cy.layout({ name: 'preset' }).run();
-      
-      updateStylesheet(cy);
-      if (stylesheet && nodesToAdd && nodesToAdd.length > 0) {
-        applyNodeSizes(cy, cy.nodes());
-      }
-      
-      const completeCallback = () => {
-        handleLayoutComplete(cy, triggerRippleForAddedNodes, isInitialLoad);
-        if (isInitialLoad) {
-          setIsInitialLoad(false);
+      // 새 노드 좌표가 있을 때만 preset 재적용 (간선만 추가면 기존 노드 유지로 깜빡임 감소)
+      if (!edgesOnlyIncremental) {
+        if (incrementalLayoutScope && nodesToAdd.length > 0) {
+          let newColl = cy.collection();
+          nodesToAdd.forEach((n) => {
+            const id = n?.data?.id;
+            if (id == null || id === "") return;
+            const el = cy.getElementById(String(id));
+            if (el.length > 0) newColl = newColl.union(el);
+          });
+          if (newColl.length > 0) {
+            try {
+              cy.layout({ name: "preset", eles: newColl, fit: false, animate: false }).run();
+            } catch {
+              try {
+                cy.layout({ name: "preset" }).run();
+              } catch {
+                /* ignore */
+              }
+            }
+          }
+        } else {
+          cy.layout({ name: "preset" }).run();
         }
+      }
+
+      if (!styleOnlyIncremental) {
+        updateStylesheet(cy);
+      } else if (!edgesOnlyIncremental) {
+        // 새 노드만 있을 때: 전체 시트 재주입은 피하고 규칙만 한 번 갱신
+        try {
+          cy.style().update();
+        } catch {
+          /* ignore */
+        }
+      }
+
+      if (stylesheet && nodesToAdd && nodesToAdd.length > 0) {
+        let newNodes = cy.collection();
+        nodesToAdd.forEach((n) => {
+          const id = n?.data?.id;
+          if (id == null || id === "") return;
+          const el = cy.getElementById(String(id));
+          if (el.length > 0) {
+            newNodes = newNodes.union(el);
+          }
+        });
+        applyNodeSizes(cy, newNodes.length > 0 ? newNodes : cy.nodes());
+      }
+
+      const preserveUnchangedPositions =
+        edgesOnlyIncremental || incrementalLayoutScope;
+
+      const fadeSnapshot = {
+        nodesToAdd: nodesToAdd.slice(),
+        edgesToAdd: edgesToAdd.slice(),
       };
-      
-      if (layout && layout.name !== 'preset') {
+
+      const completeCallback = () => {
+        handleLayoutComplete(cy, isInitialLoad, {
+          skipOverlap: preserveUnchangedPositions,
+          skipEnsureBounds:
+            preserveUnchangedPositions || (styleOnlyIncremental && !incrementalLayoutScope),
+        });
+        fadeInNewElements(
+          cy,
+          elementsUpdateRef,
+          () => {
+            if (nodesToAdd.length > 0 || edgesToAdd.length > 0) {
+              cancelRipple();
+              cancelRipple = scheduleRippleWhenPositionsPainted(
+                cy,
+                triggerRippleForAddedNodes
+              );
+            }
+            if (isInitialLoad) {
+              setIsInitialLoad(false);
+            }
+          },
+          true,
+          fadeSnapshot
+        );
+      };
+
+      if (layout && layoutName !== "preset") {
         const layoutInstance = cy.layout({
           ...layout,
           animationDuration: 800,
-          animationEasing: 'ease-out'
+          animationEasing: "ease-out",
         });
-        layoutInstance.on('layoutstop', () => {
+        layoutInstance.on("layoutstop", () => {
           setTimeout(completeCallback, 200);
         });
         layoutInstance.run();
       } else {
-        setTimeout(completeCallback, 150);
+        requestAnimationFrame(() => {
+          completeCallback();
+        });
       }
-    } else {
-      updateStylesheet(cy);
-      triggerRippleForAddedNodes();
+    } else if (hasDataOnlyVisualChange) {
+      if (stylesheetChanged) {
+        updateStylesheet(cy);
+      }
+      pulseDataChangedElements(cy, dataChangedIds, () => {
+        handleLayoutComplete(cy, false, {
+          skipOverlap: true,
+          skipEnsureBounds: true,
+        });
+      });
       if (isInitialLoad) {
-        fitGraphOnInitialLoad(cy);
         setIsInitialLoad(false);
       }
+    } else {
+      // 토폴로지·데이터 변경 없음: 스타일시트·초기 fit만 (동일 이벤트 페이지 전환 등에서 불필요한 리플로우 방지)
+      if (stylesheetChanged) {
+        updateStylesheet(cy);
+      }
+      if (stylesheetChanged || isInitialLoad) {
+        if (isInitialLoad) {
+          fitGraphOnInitialLoad(cy);
+          setIsInitialLoad(false);
+        }
+      }
     }
+
+    return () => {
+      cancelRipple();
+    };
   }, [
     cy,
-    elements,
+    elementsFingerprint,
+    elementsLength,
     stylesheet,
-    layout,
+    layoutName,
     elementsUpdateRef,
     updateStylesheet,
     applyNodeSizes,
@@ -110,6 +317,6 @@ export function useGraphLayout({
     triggerRippleForAddedNodes,
     isInitialLoad,
     setIsInitialLoad,
-    fitGraphOnInitialLoad
+    fitGraphOnInitialLoad,
   ]);
 }

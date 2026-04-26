@@ -1,7 +1,8 @@
 
-import { errorUtils as commonErrorUtils } from './common/errorUtils';
-import { storageUtils as commonStorageUtils } from './common/cache/storageUtils';
-import { settingsUtils as commonSettingsUtils, defaultSettings as commonDefaultSettings, loadSettings as commonLoadSettings } from './common/settingsUtils';
+import { processRelations, directedEdgeElementId } from '../graph/relationUtils';
+import { errorUtils as commonErrorUtils } from '../common/errorUtils';
+import { storageUtils as commonStorageUtils } from '../common/cache/storageUtils';
+import { settingsUtils as commonSettingsUtils, defaultSettings as commonDefaultSettings, loadSettings as commonLoadSettings } from '../common/settingsUtils';
 export const errorUtils = commonErrorUtils;
 export const storageUtils = commonStorageUtils;
 export const defaultSettings = commonDefaultSettings;
@@ -79,72 +80,17 @@ export function saveViewerMode(mode) {
       return;
     }
     localStorage.setItem("viewer_mode", mode);
-    } catch (error) {
-      return;
-    }
+  } catch (_error) {
+    return;
+  }
 }
 
 export function loadViewerMode() {
   try {
     return localStorage.getItem("viewer_mode");
-    } catch (error) {
-      return null;
-    }
-}
-
-function approxCharsFromLocator(startLocator, totalChars) {
-  if (!startLocator || !Number.isFinite(startLocator.chapterIndex)) return 0;
-  const b = Number(startLocator.blockIndex) || 0;
-  const o = Number(startLocator.offset) || 0;
-  const est = b * 3000 + o;
-  return totalChars > 0 ? Math.min(est, totalChars) : est;
-}
-
-export function calculateChapterProgressFromLocator(startLocator, chapterNum, events) {
-  if (!chapterNum || chapterNum < 1 || !events?.length) {
-    return { currentChars: 0, totalChars: 0, progress: 0, eventIndex: -1 };
+  } catch (_error) {
+    return null;
   }
-  if (!startLocator || Number(startLocator.chapterIndex) !== Number(chapterNum)) {
-    return { currentChars: 0, totalChars: 0, progress: 0, eventIndex: -1 };
-  }
-  const totalChars = events[events.length - 1]?.end || 0;
-  const currentChars = approxCharsFromLocator(startLocator, totalChars);
-  const progress = totalChars > 0 ? (currentChars / totalChars) * 100 : 0;
-  let eventIndex = -1;
-  for (let i = 0; i < events.length; i++) {
-    if (currentChars >= events[i].start && currentChars < events[i].end) {
-      eventIndex = i;
-      break;
-    }
-  }
-  if (eventIndex < 0 && currentChars >= totalChars) eventIndex = events.length - 1;
-  return {
-    currentChars: Math.round(currentChars),
-    totalChars,
-    progress: Math.round(progress * 100) / 100,
-    eventIndex,
-  };
-}
-
-export function findClosestEventFromLocator(startLocator, chapterNum, events) {
-  if (!events?.length || !chapterNum) return null;
-  const { currentChars } = calculateChapterProgressFromLocator(startLocator, chapterNum, events);
-  for (let i = events.length - 1; i >= 0; i--) {
-    const event = events[i];
-    if (currentChars >= event.start && currentChars < event.end) {
-      return {
-        ...event,
-        eventNum: event.event_id ?? 0,
-        chapter: chapterNum,
-        progress: ((currentChars - event.start) / (event.end - event.start)) * 100,
-      };
-    }
-  }
-  if (currentChars < events[0].start) {
-    return { ...events[0], eventNum: events[0].event_id ?? 0, chapter: chapterNum, progress: 0 };
-  }
-  const last = events[events.length - 1];
-  return { ...last, eventNum: last.event_id ?? 0, chapter: chapterNum, progress: 100 };
 }
 
 export function getRefs(xhtmlBookRef, xhtmlViewerRef) {
@@ -168,7 +114,7 @@ export function cleanupNavigation(setIsNavigating, xhtmlViewer, handler) {
 }
 
 export const navigationUtils = {
-  async safeNavigate(xhtmlBook, xhtmlViewer, action, direction = 'next', setIsNavigating, setNavigationError, storageKeys) {
+  async safeNavigate(xhtmlBook, xhtmlViewer, action, _direction = 'next', setIsNavigating, setNavigationError, _storageKeys) {
     if (!xhtmlBook || !xhtmlViewer) {
       errorUtils.logWarning('safeNavigate', '책 또는 XHTML 뷰어가 없습니다', {
         hasXhtmlBook: !!xhtmlBook,
@@ -223,12 +169,10 @@ export const textUtils = {
       .length;
   },
 
-  // 단락별 글자 수 계산
   calculateParagraphChars: (paragraph, element) => {
     return textUtils.countCharacters(paragraph.textContent, element);
   },
 
-  // 이전 단락들의 누적 글자 수 계산
   calculatePreviousParagraphsChars: (paragraphs, currentParagraphNum) => {
     let charCount = 0;
     for (let i = 0; i < currentParagraphNum - 1; i++) {
@@ -240,7 +184,6 @@ export const textUtils = {
     return charCount;
   },
 
-  // 현재 단락의 부분 글자 수 계산
   calculateCurrentParagraphChars: (paragraphs, currentParagraphNum, charOffset) => {
     if (currentParagraphNum > 0 && paragraphs[currentParagraphNum - 1]) {
       const currentParagraph = paragraphs[currentParagraphNum - 1];
@@ -256,46 +199,21 @@ export const eventUtils = {
     if (!event || typeof event !== 'object') {
       return null;
     }
-    
-    const candidates = [
-      event.resolvedEventIdx,
-      event.eventIdx,
-      event.eventNum,
-      event.event_id,
-      event.eventId,
-      event.idx,
-      event.id
-    ];
-    
-    for (const candidate of candidates) {
-      const numeric = Number(candidate);
-      if (Number.isFinite(numeric) && numeric > 0) {
-        return numeric;
-      }
-    }
-    
-    if (event?.event?.eventIdx) {
-      const nestedIdx = Number(event.event.eventIdx);
-      if (Number.isFinite(nestedIdx) && nestedIdx > 0) {
-        return nestedIdx;
-      }
-    }
-    
-    if (event?.event?.idx) {
-      const nestedIdx = Number(event.event.idx);
-      if (Number.isFinite(nestedIdx) && nestedIdx > 0) {
-        return nestedIdx;
-      }
-    }
-    
-    if (event?.originalEventIdx) {
-      const originalIdx = Number(event.originalEventIdx);
-      if (Number.isFinite(originalIdx) && originalIdx > 0) {
-        return originalIdx;
-      }
-    }
-    
-    return null;
+    const tryOne = (v) => {
+      const n = Number(v);
+      return Number.isFinite(n) && n > 0 ? n : null;
+    };
+    return (
+      tryOne(event.eventNum) ??
+      tryOne(event.event_id) ??
+      tryOne(event.eventIdx) ??
+      tryOne(event.idx) ??
+      tryOne(event.resolvedEventIdx) ??
+      tryOne(event.event?.eventNum) ??
+      tryOne(event.event?.event_id) ??
+      tryOne(event.event?.idx) ??
+      tryOne(event.event?.eventIdx)
+    );
   },
 
   extractRawEventIdx: (event) => {
@@ -360,9 +278,16 @@ export const eventUtils = {
     if (!Array.isArray(events) || !Number.isFinite(eventIdx)) {
       return null;
     }
-    return events.find(e => 
-      Number(e.eventIdx) === eventIdx || Number(e.idx) === eventIdx
-    ) || null;
+    return (
+      events.find((e) => {
+        const n = Number(e.eventNum);
+        const i = Number(e.eventIdx);
+        return (
+          (Number.isFinite(n) && n === eventIdx) ||
+          (Number.isFinite(i) && i === eventIdx)
+        );
+      }) || null
+    );
   },
 
   getMaxEventIdx: (chapterCache) => {
@@ -383,16 +308,18 @@ export const eventUtils = {
   },
 
   createEmptyEvent: (currentChapter, eventIdx, eventData = null) => {
+    const fromApi = eventData ? resolveFineGraphEventOrdinal(eventData) : null;
+    const eventNum = Number.isFinite(fromApi) && fromApi > 0 ? fromApi : eventIdx;
     return {
       chapter: currentChapter,
       chapterIdx: currentChapter,
-      eventNum: eventIdx,
-      eventIdx: eventIdx,
-      event_id: eventData?.event_id ?? eventIdx,
+      eventNum,
+      eventIdx: eventNum,
+      eventId: eventData?.eventId ?? eventNum,
       relations: [],
       characters: [],
-      start: eventData?.start ?? null,
-      end: eventData?.end ?? null,
+      startTxtOffset: eventData?.startTxtOffset ?? null,
+      endTxtOffset: eventData?.endTxtOffset ?? null,
       ...(eventData || {})
     };
   },
@@ -470,16 +397,6 @@ export const transitionUtils = {
 };
 
 export const bookUtils = {
-  isApiBook: (book, bookId = null) => {
-    if (book && (typeof book.id === 'number' || book.isFromAPI === true)) {
-      return true;
-    }
-    if (bookId && (typeof bookId === 'number' || !isNaN(parseInt(bookId, 10)))) {
-      return true;
-    }
-    return false;
-  },
-
   /**
    * 뷰어 페이지에서 사용할 책 객체를 생성합니다.
    * @param {Object} params - 파라미터 객체
@@ -491,22 +408,27 @@ export const bookUtils = {
    * @returns {Object} 생성된 책 객체
    */
   createBookObject: ({ stateBook, matchedServerBook, serverBook, bookId, loadingServerBook }) => {
-    const localFile = stateBook?.xhtmlFile;
-    const localBuf = stateBook?.xhtmlArrayBuffer;
-    const hasLocal = !!(localFile || localBuf);
+    if (matchedServerBook && typeof matchedServerBook.id === 'number') {
+      return {
+        ...matchedServerBook,
+        filename: String(matchedServerBook.id ?? bookId),
+        _needsLoad: true,
+        _bookId: matchedServerBook.id,
+        xhtmlPath: undefined,
+        filePath: undefined,
+        s3Path: undefined,
+        fileUrl: undefined
+      };
+    }
 
     if (stateBook) {
-      if (matchedServerBook && typeof matchedServerBook.id === 'number') {
-        const indexedDbKey = String(matchedServerBook.id);
-
+      if (serverBook && typeof serverBook.id === 'number') {
         return {
-          ...matchedServerBook,
-          xhtmlFile: localFile,
-          xhtmlArrayBuffer: localBuf,
-          filename: String(matchedServerBook.id ?? bookId),
-          _indexedDbId: indexedDbKey,
-          _needsLoad: !hasLocal,
-          _bookId: matchedServerBook.id,
+          ...stateBook,
+          ...serverBook,
+          filename: String(serverBook.id ?? bookId),
+          _needsLoad: true,
+          _bookId: serverBook.id,
           xhtmlPath: undefined,
           filePath: undefined,
           s3Path: undefined,
@@ -514,17 +436,12 @@ export const bookUtils = {
         };
       }
 
-      const stateBookId = stateBook.id || stateBook._bookId || bookId;
-      const indexedDbKey = stateBookId ? String(stateBookId) : null;
-      const stateRest = { ...stateBook };
+      const { xhtmlFile: _xf, xhtmlArrayBuffer: _xb, ...stateRest } = stateBook;
 
       return {
         ...stateRest,
-        xhtmlFile: localFile,
-        xhtmlArrayBuffer: localBuf,
         filename: bookId,
-        _indexedDbId: indexedDbKey,
-        _needsLoad: !hasLocal,
+        _needsLoad: true,
         _bookId: stateBook.id || stateBook._bookId || bookId,
         xhtmlPath: undefined,
         filePath: undefined,
@@ -534,13 +451,10 @@ export const bookUtils = {
     }
     
     if (serverBook) {
-      const indexedDbKey = serverBook.id ? String(serverBook.id) : null;
-      
       return {
         ...serverBook,
         filename: bookId,
         _needsLoad: true,
-        _indexedDbId: indexedDbKey,
         _bookId: serverBook.id,
         xhtmlPath: undefined,
         filePath: undefined,
@@ -550,15 +464,14 @@ export const bookUtils = {
     }
     
     const numericBookId = parseInt(bookId, 10);
-    const indexedDbKey = !isNaN(numericBookId) ? String(numericBookId) : bookId;
+    const resolvedId = loadingServerBook ? null : (!isNaN(numericBookId) ? numericBookId : null);
     
     return {
       title: loadingServerBook ? '로딩 중...' : `Book ${bookId}`,
       filename: bookId,
-      id: !isNaN(numericBookId) ? numericBookId : null,
+      id: resolvedId,
       _needsLoad: true,
-      _indexedDbId: indexedDbKey,
-      _bookId: !isNaN(numericBookId) ? numericBookId : bookId,
+      _bookId: resolvedId ?? bookId,
       xhtmlPath: undefined
     };
   }
@@ -566,7 +479,8 @@ export const bookUtils = {
 
 export const eventIdxUtils = {
   calculateEventIdxForTransition: (currentEvent, isChapterTransition, forcedChapterEventIdxRef, chapterTransitionDirectionRef, bookId, currentChapter, getCachedChapterEvents, eventUtils) => {
-    let eventIdx = currentEvent?.eventNum || currentEvent?.eventIdx || 1;
+    const raw = Number(currentEvent?.eventNum);
+    let eventIdx = Number.isFinite(raw) && raw > 0 ? raw : 1;
     
     if (!isChapterTransition) {
       return eventIdx;
@@ -609,6 +523,20 @@ export const eventIdxUtils = {
   }
 };
 
+function buildFromCache(cached, convertFn) {
+  const hasElements = Array.isArray(cached.elements) && cached.elements.length > 0;
+  return {
+    characters: cached.characters || [],
+    relations: hasElements ? [] : convertFn(cached.elements || []),
+    event: cached.eventMeta || null,
+    elements: cached.elements || []
+  };
+}
+
+/**
+ * 뷰어·분할 그래프용. `resultData.event` 및 reconstruct 의 `eventMeta` 는
+ * GET /api/v2/graph/fine 의 result.event 와 동일 계열(캐시 시 스냅샷 키만 eventMeta).
+ */
 export const graphDataCacheUtils = {
   getGraphDataWithFallback: (bookId, chapter, eventIdx, getGraphEventState, eventUtils) => {
     if (!bookId || !chapter || eventIdx < 1) {
@@ -617,14 +545,8 @@ export const graphDataCacheUtils = {
 
     const cached = getGraphEventState(bookId, chapter, eventIdx);
     if (cached) {
-      const hasElements = Array.isArray(cached.elements) && cached.elements.length > 0;
       return {
-        resultData: {
-          characters: cached.characters || [],
-          relations: hasElements ? [] : eventUtils.convertElementsToRelations(cached.elements || []),
-          event: cached.eventMeta || null,
-          elements: cached.elements || []
-        },
+        resultData: buildFromCache(cached, eventUtils.convertElementsToRelations),
         usedCache: true
       };
     }
@@ -632,7 +554,18 @@ export const graphDataCacheUtils = {
     return { resultData: null, usedCache: false };
   },
 
-  getGraphDataFromApiOrCache: async (bookId, chapter, eventIdx, getFineGraph, getGraphEventState, eventUtils, apiEventCacheRef, hasCalledApi) => {
+  getGraphDataFromApiOrCache: async (
+    bookId,
+    chapter,
+    eventIdx,
+    getFineGraph,
+    getGraphEventState,
+    eventUtils,
+    apiEventCacheRef,
+    hasCalledApi,
+    atLocator = null,
+    fineOpts = undefined
+  ) => {
     if (!bookId || !chapter || eventIdx < 1) {
       return { resultData: null, usedCache: false };
     }
@@ -644,8 +577,8 @@ export const graphDataCacheUtils = {
       const cachedBeforeApi = getGraphEventState(bookId, chapter, eventIdx);
       if (!cachedBeforeApi) {
         try {
-          const apiResponse = await getFineGraph(bookId, chapter, eventIdx);
-          
+          const apiResponse = await getFineGraph(bookId, chapter, eventIdx, atLocator, fineOpts);
+
           if (apiResponse && (apiResponse.isSuccess !== false)) {
             const apiResult = apiResponse?.result ?? apiResponse?.data ?? null;
             if (apiResult) {
@@ -656,7 +589,7 @@ export const graphDataCacheUtils = {
                 elements: null
               };
               usedCache = false;
-              
+
               const cacheKey = `${chapter}-${eventIdx}`;
               if (apiEventCacheRef?.current) {
                 apiEventCacheRef.current.set(cacheKey, resultData);
@@ -679,33 +612,21 @@ export const graphDataCacheUtils = {
     if (!resultData) {
       const cached = getGraphEventState(bookId, chapter, eventIdx);
       if (cached) {
-        const hasElements = Array.isArray(cached.elements) && cached.elements.length > 0;
-        resultData = {
-          characters: cached.characters || [],
-          relations: hasElements ? [] : eventUtils.convertElementsToRelations(cached.elements || []),
-          event: cached.eventMeta || null,
-          elements: cached.elements || []
-        };
+        resultData = buildFromCache(cached, eventUtils.convertElementsToRelations);
         usedCache = true;
       }
     }
 
     if (resultData && !usedCache) {
-      const hasValidData = 
+      const hasValidData =
         (Array.isArray(resultData.characters) && resultData.characters.length > 0) ||
         (Array.isArray(resultData.relations) && resultData.relations.length > 0) ||
         (Array.isArray(resultData.elements) && resultData.elements.length > 0);
-        
+
       if (!hasValidData) {
         const cached = getGraphEventState(bookId, chapter, eventIdx);
         if (cached) {
-          const hasElements = Array.isArray(cached.elements) && cached.elements.length > 0;
-          resultData = {
-            characters: cached.characters || [],
-            relations: hasElements ? [] : eventUtils.convertElementsToRelations(cached.elements || []),
-            event: cached.eventMeta || null,
-            elements: cached.elements || []
-          };
+          resultData = buildFromCache(cached, eventUtils.convertElementsToRelations);
           usedCache = true;
         }
       }
@@ -715,43 +636,72 @@ export const graphDataCacheUtils = {
   }
 };
 
+/**
+ * GET /api/v2/graph/fine 의 result.event
+ * 스펙: chapterIdx, eventId(문자열), event_id(숫자), eventNum은 없을 수 있음
+ */
+export function resolveFineGraphEventOrdinal(apiEvent) {
+  if (!apiEvent || typeof apiEvent !== 'object') return null;
+  const fromNum = Number(apiEvent.eventNum);
+  if (Number.isFinite(fromNum) && fromNum > 0) return fromNum;
+  const fromEventId = Number(apiEvent.event_id);
+  if (Number.isFinite(fromEventId) && fromEventId > 0) return fromEventId;
+  const raw = apiEvent.eventId ?? apiEvent.id;
+  if (raw == null) return null;
+  const s = String(raw).trim();
+  if (!s) return null;
+  const direct = Number(s);
+  if (Number.isFinite(direct) && direct > 0) return direct;
+  const eTail = s.match(/[eE](\d+)\s*$/);
+  if (eTail) {
+    const n = Number(eTail[1]);
+    if (Number.isFinite(n) && n > 0) return n;
+  }
+  const lastDigits = s.match(/(\d+)\s*$/);
+  if (lastDigits) {
+    const n = Number(lastDigits[1]);
+    if (Number.isFinite(n) && n > 0) return n;
+  }
+  return null;
+}
+
 export const graphDataTransformUtils = {
-  normalizeApiEvent: (apiEvent, currentChapter, apiEventIdx) => {
-    if (!apiEvent) return null;
-    
+  /** GET /api/v2/graph/fine 의 result.event 정규화 */
+  normalizeApiEvent: (apiEvent) => {
+    if (!apiEvent || typeof apiEvent !== 'object') return null;
+    const chapterIdx = Number(apiEvent.chapterIdx);
+    if (!Number.isFinite(chapterIdx) || chapterIdx < 1) return null;
+    const eventNum = resolveFineGraphEventOrdinal(apiEvent);
+    if (!eventNum) return null;
     return {
-      chapter: apiEvent.chapterIdx ?? currentChapter,
-      chapterIdx: apiEvent.chapterIdx ?? currentChapter,
-      eventNum: apiEvent.event_id ?? apiEventIdx,
-      eventIdx: apiEvent.event_id ?? apiEventIdx,
-      event_id: apiEvent.event_id ?? apiEventIdx,
-      start: apiEvent.start,
-      end: apiEvent.end,
-      ...apiEvent
+      ...apiEvent,
+      chapter: chapterIdx,
+      chapterIdx,
+      eventNum,
+      eventIdx: eventNum,
+      startTxtOffset: apiEvent.startTxtOffset ?? null,
+      endTxtOffset: apiEvent.endTxtOffset ?? null,
     };
   },
 
+  /** API relations를 processRelations로 id1/id2 정규화 후 Cytoscape 요소로 변환(source/target·무효 항목 제거). */
   convertToElements: (resultData, usedCache, normalizedEvent, createCharacterMaps, buildNodeWeights, convertRelationsToElements) => {
     if (usedCache && Array.isArray(resultData.elements) && resultData.elements.length > 0) {
       return resultData.elements;
     }
-    
-    if (!resultData.characters || !resultData.relations) {
+
+    const chars = Array.isArray(resultData.characters) ? resultData.characters : [];
+    const rawRels = Array.isArray(resultData.relations) ? resultData.relations : [];
+    const rels = processRelations(rawRels);
+    if (chars.length === 0 && rels.length === 0) {
       return [];
     }
-    
-    const hasCharacters = Array.isArray(resultData.characters) && resultData.characters.length > 0;
-    const hasRelations = Array.isArray(resultData.relations) && resultData.relations.length > 0;
-    
-    if (!hasCharacters || !hasRelations) {
-      return [];
-    }
-    
-    const { idToName, idToDesc, idToDescKo, idToMain, idToNames, idToProfileImage } = createCharacterMaps(resultData.characters);
-    const nodeWeights = buildNodeWeights(resultData.characters);
-    
+
+    const { idToName, idToDesc, idToDescKo, idToMain, idToNames, idToProfileImage } = createCharacterMaps(chars);
+    const nodeWeights = buildNodeWeights(chars);
+
     return convertRelationsToElements(
-      resultData.relations,
+      rels,
       idToName,
       idToDesc,
       idToDescKo,
@@ -761,7 +711,8 @@ export const graphDataTransformUtils = {
       Object.keys(nodeWeights).length > 0 ? nodeWeights : null,
       null,
       normalizedEvent,
-      idToProfileImage
+      idToProfileImage,
+      chars.length > 0 ? chars : null
     );
   },
 
@@ -769,55 +720,140 @@ export const graphDataTransformUtils = {
     if (prevData.chapterIdx !== currentChapter) {
       return convertedElements;
     }
-    
+
+    const edgeDedupKey = (el) => {
+      const d = el?.data;
+      if (!d) return null;
+      if (d.id != null && String(d.id).trim() !== '') {
+        return String(d.id);
+      }
+      if (d.source != null && d.target != null) {
+        return directedEdgeElementId(d.source, d.target);
+      }
+      return null;
+    };
+
+    const mergeRelationArrays = (a, b) => {
+      const toArr = (v) => {
+        if (Array.isArray(v)) return v;
+        if (v === undefined || v === null || v === '') return [];
+        return [v];
+      };
+      return [...new Set([...toArr(a), ...toArr(b)])];
+    };
+
     if (apiEventIdx > prevData.eventIdx) {
-      const existingNodeIds = new Set(
-        prevData.elements
-          .filter(e => e.data && !e.data.source)
-          .map(e => e.data.id)
+      const prevNodes = (prevData.elements || []).filter((e) => e.data && !e.data.source);
+      const existingNodeIds = new Set(prevNodes.map((e) => e.data.id));
+
+      const newNodes = convertedElements.filter(
+        (e) => e.data && !e.data.source && !existingNodeIds.has(e.data.id)
       );
-      
-      const newNodes = convertedElements.filter(e => 
-        e.data && !e.data.source && !existingNodeIds.has(e.data.id)
-      );
-      
-      const allEdges = convertedElements.filter(e => e.data && e.data.source);
-      
-      return [
-        ...prevData.elements.filter(e => e.data && !e.data.source),
-        ...newNodes,
-        ...allEdges
-      ];
+
+      const prevEdges = (prevData.elements || []).filter((e) => e.data && e.data.source);
+      const newEdges = convertedElements.filter((e) => e.data && e.data.source);
+
+      const edgeByKey = new Map();
+      for (const el of prevEdges) {
+        const key = edgeDedupKey(el);
+        if (key) {
+          edgeByKey.set(key, el);
+        }
+      }
+      for (const el of newEdges) {
+        const key = edgeDedupKey(el);
+        if (!key) {
+          continue;
+        }
+        const prevEl = edgeByKey.get(key);
+        if (!prevEl) {
+          edgeByKey.set(key, el);
+          continue;
+        }
+        const p = prevEl.data || {};
+        const n = el.data || {};
+        const nextPos = Number(n.positivity);
+        const prevPos = Number(p.positivity);
+        const positivity = Number.isFinite(nextPos)
+          ? nextPos
+          : Number.isFinite(prevPos)
+            ? prevPos
+            : 0;
+
+        edgeByKey.set(key, {
+          ...prevEl,
+          ...el,
+          data: {
+            ...p,
+            ...n,
+            relation: mergeRelationArrays(p.relation, n.relation),
+            label: n.label != null && String(n.label).trim() !== '' ? n.label : p.label || '',
+            positivity,
+          },
+        });
+      }
+
+      const mergedEdges = Array.from(edgeByKey.values());
+
+      return [...prevNodes, ...newNodes, ...mergedEdges];
     }
-    
+
+    if (
+      apiEventIdx === prevData.eventIdx &&
+      (!Array.isArray(convertedElements) || convertedElements.length === 0) &&
+      Array.isArray(prevData.elements) &&
+      prevData.elements.length > 0
+    ) {
+      return prevData.elements;
+    }
+
     return convertedElements;
   },
 
   createNextEventData: (normalizedEvent, currentChapter, apiEventIdx, resultData, eventUtils) => {
     const resolvedEventIdx = apiEventIdx;
     const originalEventIdx = normalizedEvent ? eventUtils.extractRawEventIdx(normalizedEvent) : resolvedEventIdx;
-    
+    const apiEventNum = normalizedEvent ? Number(normalizedEvent.eventNum) : NaN;
+    const eventNum =
+      Number.isFinite(apiEventNum) && apiEventNum > 0 ? apiEventNum : resolvedEventIdx;
+
+    const apiEventIdFromPayload = (ev) => {
+      if (!ev || typeof ev !== 'object') return null;
+      if (ev.eventId != null) return ev.eventId;
+      if (ev.event_id != null) return ev.event_id;
+      return null;
+    };
+
     if (normalizedEvent) {
+      const rawId = apiEventIdFromPayload(normalizedEvent);
+      const numericEventId = Number(normalizedEvent.event_id);
       return {
         ...normalizedEvent,
         chapter: normalizedEvent.chapter ?? currentChapter,
         chapterIdx: normalizedEvent.chapterIdx ?? currentChapter,
-        eventNum: resolvedEventIdx,
-        eventIdx: resolvedEventIdx,
-        event_id: resolvedEventIdx,
+        eventNum,
+        eventIdx: eventNum,
+        event_id: Number.isFinite(numericEventId) && numericEventId > 0 ? numericEventId : eventNum,
+        eventId: rawId != null ? rawId : eventNum,
         resolvedEventIdx,
         originalEventIdx,
         relations: resultData.relations || [],
         characters: resultData.characters || []
       };
     }
-    
+
+    const raw = resultData?.event;
+    const parsed = raw ? graphDataTransformUtils.normalizeApiEvent(raw) : null;
+    const rid = apiEventIdFromPayload(raw);
+    const neid = Number(raw?.event_id);
+
     return {
       chapter: currentChapter,
       chapterIdx: currentChapter,
-      eventNum: resolvedEventIdx,
-      eventIdx: resolvedEventIdx,
-      event_id: resolvedEventIdx,
+      eventNum,
+      eventIdx: eventNum,
+      event_id: Number.isFinite(neid) && neid > 0 ? neid : eventNum,
+      eventId: rid != null ? rid : (parsed ? apiEventIdFromPayload(parsed) : null) ?? eventNum,
       resolvedEventIdx,
       originalEventIdx: resolvedEventIdx,
       relations: resultData.relations || [],

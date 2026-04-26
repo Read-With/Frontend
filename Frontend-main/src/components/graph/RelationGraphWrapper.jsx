@@ -3,71 +3,109 @@ import { useNavigate, useParams, useLocation } from "react-router-dom";
 
 import GraphTopBar from "./GraphTopBar";
 import ChapterSidebar from "./ChapterSidebar";
-import GraphInfoBar from "./GraphInfoBar";
-import EventControls from "./EventControls";
-import BackButton from "./BackButton";
 import GraphCanvas from "./GraphCanvas";
 import ErrorToast from "../common/ErrorToast";
 import "./RelationGraph.css";
 
 import { createGraphStylesheet, getEdgeStyle, getWideLayout } from "../../utils/styles/graphStyles";
-import { COLORS } from "../../utils/styles/styles.js";
+import { COLORS, ANIMATION_VALUES, createButtonStyle, createAdvancedButtonHandlers } from "../../utils/styles/styles.js";
+import { GRAPH_LAYOUT_CONSTANTS } from './graphConstants.js';
 import { useGraphSearch } from '../../hooks/graph/useGraphSearch.jsx';
+import { applySearchFadeEffect } from '../../utils/graph/searchUtils.jsx';
 import { useGraphDataLoader } from '../../hooks/graph/useGraphDataLoader.js';
 import { useApiGraphData } from '../../hooks/graph/useApiGraphData.js';
 import { useGraphState } from '../../hooks/graph/useGraphState.js';
 import { useLocalStorageNumber } from '../../hooks/common/useLocalStorage.js';
-import { convertRelationsToElements, filterMainCharacters } from '../../utils/graph/graphDataUtils';
-import { createCharacterMaps, buildNodeWeights } from '../../utils/characterUtils';
-import { getFolderKeyFromFilename, getLastEventIndexForChapter } from '../../utils/graph/graphData';
-import { 
-  processTooltipData, 
+import { convertRelationsToElements } from '../../utils/graph/graphDataUtils';
+import { createCharacterMaps, buildNodeWeights } from '../../utils/graph/characterUtils';
+import {
+  processTooltipData,
   calculateLastEventForChapter,
-  formatSearchParams,
   isSidebarElement,
   isDragEndEvent,
-  sortElementsById,
   calculateNodeCount,
   calculateRelationCount,
-  determineFinalElements
-} from '../../utils/graph/graphUtils.js';
-import { eventUtils, graphDataTransformUtils, getServerBookId } from '../../utils/viewerUtils';
+} from '../../utils/graph/graphUtils';
+import { eventUtils, graphDataTransformUtils, getServerBookId } from '../../utils/viewer/viewerUtils';
+import { userViewerPath } from '../../utils/navigation/viewerPaths';
 import useGraphInteractions from "../../hooks/graph/useGraphInteractions";
+import { useGraphElementPipeline } from "../../hooks/graph/useGraphElementPipeline";
 import { useChapterPovSummaries } from '../../hooks/viewer/useChapterPovSummaries';
+import {
+  getChapterData,
+  isValidEvent,
+  resolveLastEventIdxForFineGraph,
+} from '../../utils/common/cache/manifestCache.js';
+import { stripRedundantBookTitlePrefix } from '../../utils/viewer/chapterTitleDisplay';
+
+const backButtonStyle = {
+  height: 32,
+  padding: '0 12px',
+  borderRadius: 8,
+  border: `1px solid ${COLORS.border}`,
+  background: 'rgba(255, 255, 255, 0.9)',
+  color: COLORS.textPrimary,
+  fontSize: 12,
+  fontWeight: 500,
+  cursor: 'pointer',
+  transition: 'all 0.2s ease',
+  outline: 'none',
+  display: 'flex',
+  alignItems: 'center',
+  gap: 6,
+  boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+  backdropFilter: 'blur(8px)',
+  justifyContent: 'center',
+};
+
+const backButtonContainerStyle = {
+  position: 'fixed',
+  top: '12px',
+  right: '24px',
+  zIndex: 10002,
+  pointerEvents: 'auto',
+};
 
 const getEdgeStyleForGraph = () => getEdgeStyle('graph');
+const graphBackButtonHandlers = createAdvancedButtonHandlers('default');
 
 function RelationGraphWrapper() {
   const navigate = useNavigate();
   const { filename } = useParams();
   const location = useLocation();
   const book = location.state?.book;
-  
-  const initialChapter = useMemo(() => {
-    if (typeof window === 'undefined') {
-      return 1;
-    }
-    try {
-      const searchParams = new URLSearchParams(location.search || '');
-      const chapterParam = Number(searchParams.get('chapter'));
-      if (Number.isFinite(chapterParam) && chapterParam >= 1) {
-        return Math.floor(chapterParam);
-      }
-    } catch (error) {
-    }
-    return 1;
-  }, [location.search]);
-  
+
   const isBookId = !isNaN(filename) && filename.length > 0;
   const bookId = isBookId ? parseInt(filename) : null;
-  
+  const requestedChapterFromViewer = Number(location.state?.selectedChapter);
+  const chapterFromViewer =
+    Number.isFinite(requestedChapterFromViewer) && requestedChapterFromViewer >= 1
+      ? requestedChapterFromViewer
+      : null;
+
   const [currentChapter, setCurrentChapter] = useLocalStorageNumber(
     `lastGraphChapter_${filename}`,
-    initialChapter,
-    { forceInitialValue: true }
+    chapterFromViewer ?? 1,
+    { forceInitialValue: chapterFromViewer != null }
   );
   const [currentEvent, setCurrentEvent] = useState(1);
+  const [forcedChapterEventIdx, setForcedChapterEventIdx] = useState(null);
   const [hasShownGraphOnce, setHasShownGraphOnce] = useState(false);
+
+  const appliedRequestedChapterRef = useRef(null);
+  useEffect(() => {
+    if (!Number.isFinite(requestedChapterFromViewer) || requestedChapterFromViewer < 1) {
+      return;
+    }
+    if (appliedRequestedChapterRef.current === requestedChapterFromViewer) {
+      return;
+    }
+    if (requestedChapterFromViewer !== currentChapter) {
+      setCurrentChapter(requestedChapterFromViewer);
+      setCurrentEvent(1);
+    }
+    appliedRequestedChapterRef.current = requestedChapterFromViewer;
+  }, [requestedChapterFromViewer, currentChapter, setCurrentChapter]);
 
   const serverBookId = useMemo(() => {
     return getServerBookId(book) || bookId || null;
@@ -86,19 +124,16 @@ function RelationGraphWrapper() {
     setIsSidebarClosing,
     toggleSidebar,
     toggleEdgeLabel,
-    clearTooltip,
+    clearTooltip: _clearTooltip,
     startClosing,
     closeSidebar,
     setFilterStage,
     setDropdownSelection,
   } = useGraphState();
 
-  const isApiBook = useMemo(() => {
-    return !!serverBookId || (book && book.isFromAPI === true);
-  }, [serverBookId, book?.isFromAPI]);
-
   const {
     manifestData,
+    manifestReady,
     apiMacroData,
     apiFineData,
     apiMaxChapter,
@@ -107,13 +142,19 @@ function RelationGraphWrapper() {
     apiFineLoading,
     apiError,
     clearError: clearApiError,
-  } = useApiGraphData(serverBookId, currentChapter, currentEvent, isApiBook);
-  
+  } = useApiGraphData(
+    serverBookId,
+    currentChapter,
+    currentEvent,
+    forcedChapterEventIdx,
+    { macroOnly: true },
+  );
+
   const { povSummaries } = useChapterPovSummaries(
-    serverBookId, 
+    serverBookId,
     currentChapter
   );
-  
+
   const cyRef = useRef(null);
   const selectedEdgeIdRef = useRef(null);
   const selectedNodeIdRef = useRef(null);
@@ -122,71 +163,142 @@ function RelationGraphWrapper() {
   const prevEventNum = useRef();
   const timeoutRef = useRef(null);
 
-  const loaderBookKey = useMemo(() => {
-    if (isApiBook && serverBookId) {
-      return serverBookId;
-    }
-    return filename || null;
-  }, [isApiBook, serverBookId, filename]);
+  const locationRef = useRef({
+    state: location.state,
+    pathname: location.pathname,
+  });
+  useEffect(() => {
+    locationRef.current = {
+      state: location.state,
+      pathname: location.pathname,
+    };
+  }, [location.state, location.pathname]);
+
+  const loaderBookKey = useMemo(() => serverBookId ?? bookId ?? null, [serverBookId, bookId]);
 
   const loaderEventIdx = useMemo(() => {
     return Number.isFinite(currentEvent) && currentEvent > 0 ? currentEvent : null;
   }, [currentEvent]);
 
   const {
-    elements: localElements,
-    newNodeIds,
     currentChapterData,
-    eventNum,
-    maxChapter,
-    loading
   } = useGraphDataLoader(loaderBookKey, currentChapter, loaderEventIdx);
+  const newNodeIds = [];
 
-  const effectiveMaxChapter = isApiBook ? apiMaxChapter : maxChapter;
+  const effectiveMaxChapter = apiMaxChapter;
 
+  const manifestBookTitleStr = useMemo(
+    () => String(manifestData?.book?.title ?? '').trim(),
+    [manifestData?.book?.title],
+  );
+
+  const resolveChapterDisplayTitle = useCallback(
+    (chapterNum) => {
+      if (serverBookId == null || !manifestData) return '';
+      const n = Number(chapterNum);
+      if (!Number.isFinite(n) || n < 1) return '';
+      const ch = getChapterData(serverBookId, n, manifestData);
+      const raw = String(ch?.title ?? '').trim();
+      if (!raw) return '';
+      const stripped = stripRedundantBookTitlePrefix(raw, manifestBookTitleStr).trim();
+      return stripped || raw;
+    },
+    [serverBookId, manifestData, manifestBookTitleStr],
+  );
+
+  const currentChapterTitle = useMemo(
+    () => resolveChapterDisplayTitle(currentChapter),
+    [resolveChapterDisplayTitle, currentChapter],
+  );
+
+  const userReadingChapterTitle = useMemo(() => {
+    if (userCurrentChapter == null) return '';
+    return resolveChapterDisplayTitle(userCurrentChapter);
+  }, [resolveChapterDisplayTitle, userCurrentChapter]);
 
   useEffect(() => {
+    if (!manifestReady) return;
     if (effectiveMaxChapter > 0 && currentChapter > effectiveMaxChapter) {
       setCurrentChapter(effectiveMaxChapter);
     }
-  }, [effectiveMaxChapter, currentChapter, setCurrentChapter]);
-  
+  }, [manifestReady, effectiveMaxChapter, currentChapter, setCurrentChapter]);
+
+  useEffect(() => {
+    if (serverBookId == null || !manifestReady) return;
+    const ch = Number(currentChapter);
+    if (!Number.isFinite(ch) || ch < 1) return;
+    if (isValidEvent(serverBookId, ch, currentEvent, manifestData)) return;
+    const next = resolveLastEventIdxForFineGraph(serverBookId, ch, manifestData);
+    if (next == null || next === currentEvent) return;
+    if (isValidEvent(serverBookId, ch, next, manifestData)) {
+      setCurrentEvent(next);
+    }
+  }, [serverBookId, manifestReady, manifestData, currentChapter, currentEvent]);
+
+  useEffect(() => {
+    const forced = Number(forcedChapterEventIdx);
+    if (!Number.isFinite(forced) || forced < 1) return;
+    if (currentEvent !== forced) {
+      setCurrentEvent(forced);
+    }
+  }, [forcedChapterEventIdx, currentEvent]);
+
+  useEffect(() => {
+    const forced = Number(forcedChapterEventIdx);
+    if (!Number.isFinite(forced) || forced < 1 || !apiFineData) return;
+    const applied = graphDataTransformUtils.normalizeApiEvent(apiFineData?.event)?.eventNum;
+    if (Number.isFinite(applied) && applied === forced) {
+      setForcedChapterEventIdx(null);
+    }
+  }, [forcedChapterEventIdx, apiFineData]);
+
+  const graphApiPayload = useMemo(() => {
+    const fineChars = Array.isArray(apiFineData?.characters) ? apiFineData.characters : [];
+    const fineRels = Array.isArray(apiFineData?.relations) ? apiFineData.relations : [];
+    if (fineChars.length > 0 || fineRels.length > 0) {
+      return apiFineData;
+    }
+    return null;
+  }, [apiFineData]);
+
   const apiElements = useMemo(() => {
-    if (!apiFineData?.characters || !apiFineData?.relations) {
+    if (!graphApiPayload) return [];
+
+    const fineChars = Array.isArray(graphApiPayload.characters) ? graphApiPayload.characters : [];
+    const fineRels = Array.isArray(graphApiPayload.relations) ? graphApiPayload.relations : [];
+    if (fineChars.length === 0 && fineRels.length === 0) {
       return [];
     }
-    
+
     try {
-      const { idToName, idToDesc, idToMain, idToNames, idToProfileImage } = createCharacterMaps(apiFineData.characters);
-      
-      const normalizedEvent = graphDataTransformUtils.normalizeApiEvent(apiFineData.event, currentChapter, currentEvent);
-      const nodeWeights = buildNodeWeights(apiFineData.characters);
-      
+      const { idToName, idToDesc, idToDescKo, idToMain, idToNames, idToProfileImage } = createCharacterMaps(fineChars);
+
+      const normalizedEvent = graphDataTransformUtils.normalizeApiEvent(graphApiPayload.event);
+      const nodeWeights = buildNodeWeights(fineChars);
+
       const convertedElements = convertRelationsToElements(
-        apiFineData.relations,
+        fineRels,
         idToName,
         idToDesc,
-        idToDesc,
+        idToDescKo,
         idToMain,
         idToNames,
         'api',
         Object.keys(nodeWeights).length > 0 ? nodeWeights : null,
         null,
         normalizedEvent,
-        idToProfileImage
+        idToProfileImage,
+        fineChars.length > 0 ? fineChars : null
       );
-      
+
       return convertedElements;
-    } catch (error) {
-      console.error('apiElements 변환 실패:', error);
+    } catch {
       return [];
     }
-  }, [apiFineData?.characters, apiFineData?.relations, apiFineData?.event, currentChapter, currentEvent]);
-  
-  const elements = useMemo(() => {
-    return (isApiBook && apiElements.length > 0) ? apiElements : localElements;
-  }, [isApiBook, apiElements, localElements]);
-  
+  }, [graphApiPayload]);
+
+  const elements = useMemo(() => (apiElements.length > 0 ? apiElements : []), [apiElements]);
+
   const {
     searchTerm,
     isSearchActive,
@@ -196,7 +308,6 @@ function RelationGraphWrapper() {
     suggestions,
     showSuggestions,
     selectedIndex,
-    selectSuggestion,
     handleKeyDown,
     closeSuggestions,
     handleSearchSubmit,
@@ -215,22 +326,21 @@ function RelationGraphWrapper() {
     const element = cy.getElementById(elementId);
     if (!element.length) return;
 
-    const topBarHeight = 54;
-    const chapterSidebarWidth = isSidebarOpen ? 240 : 60;
-    const tooltipSidebarWidth = 450;
-    const availableGraphWidth = window.innerWidth - chapterSidebarWidth - tooltipSidebarWidth;
-    const availableGraphHeight = window.innerHeight - topBarHeight;
-    
+    const { TOP_BAR_HEIGHT, TOOLTIP_SIDEBAR_WIDTH, SIDEBAR } = GRAPH_LAYOUT_CONSTANTS;
+    const chapterSidebarWidth = isSidebarOpen ? SIDEBAR.OPEN_WIDTH : SIDEBAR.CLOSED_WIDTH;
+    const availableGraphWidth = window.innerWidth - chapterSidebarWidth - TOOLTIP_SIDEBAR_WIDTH;
+    const availableGraphHeight = window.innerHeight - TOP_BAR_HEIGHT;
+
     const leftOffset = availableGraphWidth * 0.1;
     const centerX = chapterSidebarWidth + (availableGraphWidth / 2) - leftOffset;
-    
+
     const topOffset = availableGraphHeight * 0.15;
-    const centerY = topBarHeight + (availableGraphHeight / 2) - topOffset;
-    
+    const centerY = TOP_BAR_HEIGHT + (availableGraphHeight / 2) - topOffset;
+
     const elementPos = element.position();
     const targetX = centerX - elementPos.x;
     const targetY = centerY - elementPos.y;
-    
+
     cy.animate({
       pan: { x: targetX, y: targetY },
       duration: 500,
@@ -238,14 +348,13 @@ function RelationGraphWrapper() {
     });
   }, [isSidebarOpen]);
 
-
   const onShowNodeTooltip = useCallback(({ node, nodeCenter, mouseX, mouseY }) => {
     setForceClose(false);
     setIsSidebarClosing(false);
     const cy = cyRef.current;
     if (cy) viewBeforeSelectionRef.current = { pan: { ...cy.pan() }, zoom: cy.zoom() };
     const nodeData = node.data();
-    
+
     const tooltipData = {
       type: 'node',
       id: node.id(),
@@ -254,7 +363,7 @@ function RelationGraphWrapper() {
       data: nodeData,
       nodeCenter
     };
-    
+
     const processedTooltipData = processTooltipData(tooltipData, 'node');
     setActiveTooltip(processedTooltipData);
     centerElementBetweenSidebars(node.id(), 'node');
@@ -266,10 +375,10 @@ function RelationGraphWrapper() {
     const cy = cyRef.current;
     if (cy) viewBeforeSelectionRef.current = { pan: { ...cy.pan() }, zoom: cy.zoom() };
     const edgeData = edge.data();
-    
+
     const finalX = mouseX !== undefined ? mouseX : edgeCenter?.x || 0;
     const finalY = mouseY !== undefined ? mouseY : edgeCenter?.y || 0;
-    
+
     const tooltipData = {
       type: 'edge',
       id: edge.id(),
@@ -280,11 +389,11 @@ function RelationGraphWrapper() {
       targetNode: edge.target(),
       edgeCenter,
     };
-    
+
     const processedTooltipData = processTooltipData(tooltipData, 'edge');
-    
+
     setActiveTooltip(processedTooltipData);
-    
+
     centerElementBetweenSidebars(edge.id());
   }, [setForceClose, setIsSidebarClosing, setActiveTooltip, centerElementBetweenSidebars]);
 
@@ -313,20 +422,12 @@ function RelationGraphWrapper() {
     selectedNodeIdRef,
     selectedEdgeIdRef,
     strictBackgroundClear: true,
-    isSearchActive,
-    filteredElements,
   });
-
-  const handleEventChange = useCallback((eventNum) => {
-    clearAll();
-    setCurrentEvent(eventNum);
-  }, [clearAll, setCurrentEvent]);
 
   const handleClearGraph = useCallback(() => {
     clearAll();
   }, [clearAll]);
 
-  // 챕터 변경 시 검색 초기화 및 선택 효과 제거
   useEffect(() => {
     if (prevChapterNum.current !== undefined && prevChapterNum.current !== currentChapter) {
       if (isSearchActive) {
@@ -335,23 +436,21 @@ function RelationGraphWrapper() {
       clearAll();
     }
     prevChapterNum.current = currentChapter;
-    prevEventNum.current = eventNum;
-  }, [currentChapter, eventNum, isSearchActive, clearSearch, clearAll]);
-  
-  // 이벤트 변경 시 선택 효과 제거
+    prevEventNum.current = currentEvent;
+  }, [currentChapter, currentEvent, isSearchActive, clearSearch, clearAll]);
+
   useEffect(() => {
-    if (prevEventNum.current !== undefined && prevEventNum.current !== eventNum) {
+    if (prevEventNum.current !== undefined && prevEventNum.current !== currentEvent) {
       clearAll();
     }
-  }, [eventNum, clearAll]);
+  }, [currentEvent, clearAll]);
 
-  const sortedElements = useMemo(() => {
-    return sortElementsById(elements);
-  }, [elements]);
-
-  const filteredMainCharacters = useMemo(() => {
-    return filterMainCharacters(elements, filterStage);
-  }, [elements, filterStage]);
+  const { sortedElements, filteredMainCharacters, finalElements } = useGraphElementPipeline({
+    elements,
+    filterStage,
+    isSearchActive,
+    filteredElements,
+  });
 
   const nodeCount = useMemo(() => {
     return calculateNodeCount(elements, filterStage, filteredMainCharacters);
@@ -361,10 +460,6 @@ function RelationGraphWrapper() {
     return calculateRelationCount(elements, filterStage, filteredMainCharacters, eventUtils);
   }, [filterStage, filteredMainCharacters, elements]);
 
-  const finalElements = useMemo(() => {
-    return determineFinalElements(isSearchActive, filteredElements, sortedElements, filterStage, filteredMainCharacters);
-  }, [isSearchActive, filteredElements, sortedElements, filterStage, filteredMainCharacters]);
-
   const edgeStyle = getEdgeStyleForGraph();
   const stylesheet = useMemo(
     () => createGraphStylesheet(edgeStyle, edgeLabelVisible),
@@ -372,93 +467,61 @@ function RelationGraphWrapper() {
   );
   const layout = useMemo(() => getWideLayout(), []);
 
-
   useEffect(() => {
     if (activeTooltip && cyRef.current && !isSidebarClosing) {
       const elementId = activeTooltip.id;
-      
+
       const animationDuration = 700;
       const timeoutId = setTimeout(() => {
         centerElementBetweenSidebars(elementId);
       }, animationDuration + 100);
-      
+
       return () => {
         clearTimeout(timeoutId);
       };
     }
   }, [activeTooltip, isSidebarOpen, isSidebarClosing, centerElementBetweenSidebars]);
 
-
   const handleChapterSelect = useCallback((chapter) => {
     if (chapter !== currentChapter) {
       setDropdownSelection(true);
       clearAll();
       setCurrentChapter(chapter);
-      
+
       const lastEventNum = calculateLastEventForChapter({
-        isApiBook,
         manifestChapters: manifestData?.chapters,
+        manifestBookId: serverBookId,
         chapter,
-        filename,
-        getFolderKeyFromFilename,
-        getLastEventIndexForChapter
       });
-      
-      setCurrentEvent(lastEventNum);
+
+      const normalizedLastEventNum = Number.isFinite(Number(lastEventNum)) && Number(lastEventNum) >= 1
+        ? Number(lastEventNum)
+        : 1;
+      setCurrentEvent(normalizedLastEventNum);
     }
-  }, [currentChapter, setCurrentChapter, isApiBook, manifestData?.chapters, filename, clearAll, setDropdownSelection, setCurrentEvent]);
+  }, [
+    currentChapter,
+    setCurrentChapter,
+    manifestData?.chapters,
+    serverBookId,
+    clearAll,
+    setDropdownSelection,
+    setCurrentEvent,
+  ]);
 
   useEffect(() => {
     if (isDropdownSelection) {
       const timeoutId = setTimeout(() => {
         setDropdownSelection(false);
       }, 100);
-      
+
       return () => {
         clearTimeout(timeoutId);
       };
     }
   }, [isDropdownSelection, setDropdownSelection]);
 
-  const locationStateRef = useRef(location.state);
-  const locationPathnameRef = useRef(location.pathname);
-  const locationSearchRef = useRef(location.search);
-  
-  useEffect(() => {
-    locationStateRef.current = location.state;
-    locationPathnameRef.current = location.pathname;
-    locationSearchRef.current = location.search;
-  }, [location.state, location.pathname, location.search]);
-
-  const handleBackToViewer = useCallback(() => {
-    const retainedSearch = locationStateRef.current?.viewerSearch || '';
-    const nextSearch = formatSearchParams(retainedSearch);
-
-    const nextState = {
-      ...(locationStateRef.current || {}),
-      from: (locationStateRef.current && locationStateRef.current.from) || { pathname: locationPathnameRef.current, search: locationSearchRef.current },
-      fromGraph: true,
-    };
-
-    if (book || locationStateRef.current?.book) {
-      nextState.book = book || locationStateRef.current?.book;
-    }
-
-    navigate(`/user/viewer/${filename}${nextSearch}`, {
-      state: nextState,
-      replace: false,
-    });
-  }, [navigate, filename, book]);
-
-
-  const handleGlobalClick = useCallback((e) => {
-    if (!activeTooltip || isSidebarClosing) return;
-    if (isDragEndEvent(e)) return;
-    if (isSidebarElement(e)) return;
-    
-    e.stopPropagation();
-    clearAll();
-    
+  const triggerForceClose = useCallback(() => {
     if (timeoutRef.current) {
       clearTimeout(timeoutRef.current);
     }
@@ -466,30 +529,65 @@ function RelationGraphWrapper() {
       setForceClose(true);
       timeoutRef.current = null;
     }, 100);
-  }, [activeTooltip, isSidebarClosing, clearAll, setForceClose]);
+  }, [setForceClose]);
+
+  const handleBackToViewer = useCallback(() => {
+    const { state, pathname } = locationRef.current;
+    const nextState = {
+      ...(state || {}),
+      from: state?.from ? { ...state.from, search: '' } : { pathname, search: '' },
+    };
+
+    const baseBook = book || state?.book;
+    const sid =
+      serverBookId != null && Number.isFinite(Number(serverBookId)) && Number(serverBookId) > 0
+        ? Number(serverBookId)
+        : null;
+    if (baseBook || sid) {
+      nextState.book = {
+        ...(baseBook || {}),
+        ...(sid ? { id: sid, _bookId: sid } : {}),
+      };
+    }
+
+    navigate(userViewerPath(filename), {
+      state: nextState,
+      replace: false,
+    });
+  }, [navigate, filename, book, currentChapter, serverBookId]);
+
+  const reapplySearchFadeIfActive = useCallback(() => {
+    if (isSearchActive && filteredElements?.length > 0 && cyRef.current) {
+      applySearchFadeEffect(cyRef.current, filteredElements, isSearchActive);
+    }
+  }, [isSearchActive, filteredElements, cyRef]);
+
+  const handleGlobalClick = useCallback((e) => {
+    if (!activeTooltip || isSidebarClosing) return;
+    if (isDragEndEvent(e)) return;
+    if (isSidebarElement(e)) return;
+
+    e.stopPropagation();
+    clearAll();
+    reapplySearchFadeIfActive();
+    triggerForceClose();
+  }, [activeTooltip, isSidebarClosing, clearAll, reapplySearchFadeIfActive, triggerForceClose]);
 
   const handleCanvasClick = useCallback((e) => {
-    if (e.target === e.currentTarget) {
-      e.stopPropagation();
-      if (isDragEndEvent(e)) return;
-      
-      if (activeTooltip && !isSidebarClosing) {
-        clearAll();
-        
-        if (timeoutRef.current) {
-          clearTimeout(timeoutRef.current);
-        }
-        timeoutRef.current = setTimeout(() => {
-          setForceClose(true);
-          timeoutRef.current = null;
-        }, 100);
-      }
+    if (e.target !== e.currentTarget) return;
+    e.stopPropagation();
+    if (isDragEndEvent(e)) return;
+
+    if (activeTooltip && !isSidebarClosing) {
+      clearAll();
+      reapplySearchFadeIfActive();
+      triggerForceClose();
     }
-  }, [activeTooltip, isSidebarClosing, clearAll, setForceClose]);
+  }, [activeTooltip, isSidebarClosing, clearAll, reapplySearchFadeIfActive, triggerForceClose]);
 
   useEffect(() => {
     if (!activeTooltip || isSidebarClosing) return;
-    
+
     const handleDocumentClick = (e) => {
       const graphCanvas = e.target.closest('.graph-canvas-area');
       if (graphCanvas) return;
@@ -500,12 +598,12 @@ function RelationGraphWrapper() {
       e.preventDefault();
       e.stopPropagation();
     };
-    
+
     const timeoutId = setTimeout(() => {
       document.addEventListener('click', handleDocumentClick, true);
       document.addEventListener('dragend', handleDragEnd, true);
     }, 10);
-    
+
     return () => {
       clearTimeout(timeoutId);
       document.removeEventListener('click', handleDocumentClick, true);
@@ -521,34 +619,83 @@ function RelationGraphWrapper() {
       }
     };
   }, []);
-  
-  const chapterList = useMemo(() => 
-    Array.from({ length: effectiveMaxChapter }, (_, i) => i + 1), 
+
+  const chapterList = useMemo(() =>
+    Array.from({ length: effectiveMaxChapter }, (_, i) => i + 1),
     [effectiveMaxChapter]
   );
 
-  // 로딩 상태: 그래프 데이터 로딩 또는 챕터 리스트 준비 대기
-  // 챕터 드롭다운이 표시되려면 effectiveMaxChapter가 준비되어야 함
-  const isLoading = (isApiBook && (apiFineLoading || isGraphLoading)) || (!isApiBook && (loading || isGraphLoading));
-  
+  useEffect(() => {
+    if (!serverBookId || !apiMacroData) return;
+    console.log(
+      `[Macro API] bookId=${serverBookId} ch=${currentChapter}`,
+      apiMacroData,
+    );
+  }, [apiMacroData, serverBookId, currentChapter]);
+
+  const isLoading = apiFineLoading || isGraphLoading;
+  const isApiGraphEmpty = useMemo(() => {
+    if (isLoading) return false;
+    const chars = Array.isArray(graphApiPayload?.characters) ? graphApiPayload.characters.length : 0;
+    const rels = Array.isArray(graphApiPayload?.relations) ? graphApiPayload.relations.length : 0;
+    return chars === 0 && rels === 0;
+  }, [isLoading, graphApiPayload]);
+
   useEffect(() => {
     if (!isLoading) {
       setHasShownGraphOnce(true);
     }
   }, [isLoading]);
 
+  const topBarSearchState = useMemo(() => ({
+    searchTerm,
+    isSearchActive,
+    suggestions,
+    showSuggestions,
+    selectedIndex,
+  }), [searchTerm, isSearchActive, suggestions, showSuggestions, selectedIndex]);
+
+  const topBarSearchActions = useMemo(() => ({
+    onSearchSubmit: handleSearchSubmit,
+    onClearSearch: clearSearch,
+    onGenerateSuggestions: handleGenerateSuggestions,
+    onKeyDown: handleKeyDown,
+    onCloseSuggestions: closeSuggestions,
+  }), [handleSearchSubmit, clearSearch, handleGenerateSuggestions, handleKeyDown, closeSuggestions]);
+
+  const sidebarControl = useMemo(() => ({
+    isSidebarClosing,
+    onCloseSidebar: closeSidebar,
+    onStartClosing: handleStartClosing,
+    onClearGraph: handleClearGraph,
+    forceClose,
+  }), [isSidebarClosing, closeSidebar, handleStartClosing, handleClearGraph, forceClose]);
+
+  const searchState = useMemo(() => ({
+    isSearchActive,
+    filteredElements,
+    searchTerm,
+    fitNodeIds,
+    isResetFromSearch,
+  }), [isSearchActive, filteredElements, searchTerm, fitNodeIds, isResetFromSearch]);
+
+  const cytoscapeConfig = useMemo(() => ({
+    stylesheet,
+    layout,
+    newNodeIds,
+    isDropdownSelection,
+  }), [stylesheet, layout, newNodeIds, isDropdownSelection]);
+
+  const tooltipHandlers = useMemo(() => ({
+    onShowNodeTooltip,
+    onShowEdgeTooltip,
+    onClearTooltip,
+    selectedNodeIdRef,
+    selectedEdgeIdRef,
+  }), [onShowNodeTooltip, onShowEdgeTooltip, onClearTooltip]);
+
   return (
     <div style={{ width: '100vw', height: '100vh', background: COLORS.backgroundLighter, overflow: 'hidden' }}>
-      <style>
-        {`
-          @keyframes loadingProgress {
-            0% { transform: translateX(-100%); }
-            50% { transform: translateX(0%); }
-            100% { transform: translateX(100%); }
-          }
-        `}
-      </style>
-
       {apiError && (
         <ErrorToast
           error={apiError}
@@ -556,31 +703,54 @@ function RelationGraphWrapper() {
           duration={5000}
         />
       )}
+      {isApiGraphEmpty && (
+        <div
+          style={{
+            position: 'fixed',
+            top: '50%',
+            left: '50%',
+            transform: 'translate(-50%, -50%)',
+            zIndex: 10003,
+            background: 'rgba(255,255,255,0.96)',
+            border: '1px solid #e5e7eb',
+            borderRadius: 10,
+            padding: '8px 12px',
+            color: '#374151',
+            fontSize: 12,
+            fontWeight: 600,
+          }}
+        >
+          선택한 챕터에 표시할 그래프 데이터가 없습니다.
+        </div>
+      )}
 
       <GraphTopBar
         isSidebarOpen={isSidebarOpen}
-        searchTerm={searchTerm}
-        onSearchSubmit={handleSearchSubmit}
-        onClearSearch={clearSearch}
-        onGenerateSuggestions={handleGenerateSuggestions}
-        suggestions={suggestions}
-        showSuggestions={showSuggestions}
-        selectedIndex={selectedIndex}
-        onSelectSuggestion={selectSuggestion}
-        onKeyDown={handleKeyDown}
-        onCloseSuggestions={closeSuggestions}
-        isSearchActive={isSearchActive}
+        searchState={topBarSearchState}
+        searchActions={topBarSearchActions}
         edgeLabelVisible={edgeLabelVisible}
         onToggleEdgeLabel={toggleEdgeLabel}
         filterStage={filterStage}
         onFilterChange={setFilterStage}
       />
 
-      <BackButton onBack={handleBackToViewer} />
-
-      {book?.isFromAPI && (
-        <EventControls currentEvent={currentEvent} onEventChange={handleEventChange} />
-      )}
+      <div style={backButtonContainerStyle}>
+        <button
+          type="button"
+          onClick={handleBackToViewer}
+          style={{
+            ...createButtonStyle(ANIMATION_VALUES, 'default'),
+            ...backButtonStyle,
+          }}
+          aria-label="뷰어로 돌아가기"
+          {...graphBackButtonHandlers}
+        >
+          <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>
+            close
+          </span>
+          돌아가기
+        </button>
+      </div>
 
       <ChapterSidebar
         isSidebarOpen={isSidebarOpen}
@@ -588,51 +758,39 @@ function RelationGraphWrapper() {
         chapterList={chapterList}
         currentChapter={currentChapter}
         onChapterSelect={handleChapterSelect}
+        manifestBookId={serverBookId != null ? serverBookId : null}
+        manifestHint={manifestData}
       />
 
       <GraphCanvas
         isSidebarOpen={isSidebarOpen}
         activeTooltip={activeTooltip}
-        isSidebarClosing={isSidebarClosing}
-        onCloseSidebar={closeSidebar}
-        onStartClosing={handleStartClosing}
-        onClearGraph={handleClearGraph}
-        forceClose={forceClose}
+        cyRef={cyRef}
         chapterNum={currentChapter}
-        eventNum={isApiBook ? Math.max(currentEvent, 1) : eventNum}
+        currentChapterTitle={currentChapterTitle}
+        userReadingChapterTitle={userReadingChapterTitle}
+        eventNum={Math.max(currentEvent, 1)}
         maxChapter={effectiveMaxChapter}
         filename={filename}
         elements={elements}
-        isSearchActive={isSearchActive}
-        filteredElements={filteredElements}
-        searchTerm={searchTerm}
+        renderElements={finalElements}
         povSummaries={povSummaries}
         apiMacroData={apiMacroData}
         apiFineData={apiFineData}
         bookId={serverBookId}
-        finalElements={finalElements}
-        newNodeIds={newNodeIds}
-        stylesheet={stylesheet}
-        layout={layout}
-        cyRef={cyRef}
-        fitNodeIds={fitNodeIds}
-        onShowNodeTooltip={onShowNodeTooltip}
-        onShowEdgeTooltip={onShowEdgeTooltip}
-        onClearTooltip={onClearTooltip}
-        selectedNodeIdRef={selectedNodeIdRef}
-        selectedEdgeIdRef={selectedEdgeIdRef}
-        isResetFromSearch={isResetFromSearch}
-        isDropdownSelection={isDropdownSelection}
         isLoading={isLoading}
         hasShownGraphOnce={hasShownGraphOnce}
         onCanvasClick={handleCanvasClick}
-        isApiBook={isApiBook}
         currentChapter={currentChapter}
         currentEvent={currentEvent}
         userCurrentChapter={userCurrentChapter}
         nodeCount={nodeCount}
         relationCount={relationCount}
         filterStage={filterStage}
+        sidebarControl={sidebarControl}
+        searchState={searchState}
+        cytoscapeConfig={cytoscapeConfig}
+        tooltipHandlers={tooltipHandlers}
       />
     </div>
   );

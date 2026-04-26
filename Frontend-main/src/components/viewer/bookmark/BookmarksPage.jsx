@@ -1,5 +1,5 @@
-import React, { useState, useMemo, useCallback } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useBookmarks } from '../../../hooks/bookmarks/useBookmarks';
 import { useBookmarkSort } from '../../../hooks/bookmarks/useBookmarkSort';
 import {
@@ -10,14 +10,17 @@ import {
   formatRelativeTime,
   formatAbsoluteTime,
   parseBookmarkLocation,
-} from '../../../utils/bookmarkUtils';
+} from '../../../utils/bookmarks/bookmarkUtils';
+import { userViewerPath } from '../../../utils/navigation/viewerPaths';
 
-const getLocationLabel = (bookmark) => {
-  return parseBookmarkLocation(bookmark);
-};
+const sameBookmarkId = (a, b) => String(a) === String(b);
 
-const getLocationDetail = (bookmark) => {
-  return parseBookmarkLocation(bookmark);
+const formatLocatorDetail = (bookmark) => {
+  const loc = bookmark?.startLocator;
+  if (!loc || !Number.isFinite(Number(loc.chapterIndex))) return '';
+  const bi = Number.isFinite(Number(loc.blockIndex)) ? loc.blockIndex : 0;
+  const off = Number.isFinite(Number(loc.offset)) ? loc.offset : 0;
+  return `챕터 ${loc.chapterIndex} · 블록 ${bi} · 오프셋 ${off}`;
 };
 
 const getHighlightSnippet = (bookmark) => {
@@ -61,11 +64,12 @@ const serializeMemoEntries = (entries) => {
 const BookmarksPage = () => {
   const { filename } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const cleanFilename = filename ? filename.replace(/^\//, '') : null;
   const viewerPath = useMemo(() => {
-    if (cleanFilename) return `/viewer/${cleanFilename}`;
-    if (filename) return `/viewer/${filename.replace(/^\//, '')}`;
-    return '/viewer';
+    if (cleanFilename) return userViewerPath(cleanFilename);
+    if (filename) return userViewerPath(filename.replace(/^\//, ''));
+    return '/mypage';
   }, [cleanFilename, filename]);
   const [newMemo, setNewMemo] = useState({});
   const [editingMemo, setEditingMemo] = useState({ bookmarkId: null, entryIndex: null, text: '' });
@@ -95,12 +99,16 @@ const BookmarksPage = () => {
     const loc = bookmark.startLocator;
     const locStr = loc && Number.isFinite(loc.chapterIndex) ? `챕터 ${loc.chapterIndex}` : '';
     const candidate = [
+      parseBookmarkLocation(bookmark),
       bookmark.memo,
       bookmark.highlightText,
       bookmark.textSnippet,
       bookmark.chapterTitle,
       locStr,
-    ].filter(Boolean).join(' ').toLowerCase();
+    ]
+      .filter(Boolean)
+      .join(' ')
+      .toLowerCase();
     return candidate.includes(lower);
   }, []);
 
@@ -116,9 +124,9 @@ const BookmarksPage = () => {
   const isFilteredView = searchTerm.trim().length > 0 || selectedTag !== 'all';
 
   const handleDeleteBookmark = async (bookmarkId) => {
-    setNewMemo(prev => ({ ...prev, [bookmarkId]: '' }));
-    if (memoComposer === bookmarkId) setMemoComposer(null);
-    if (editingMemo.bookmarkId === bookmarkId) resetEditingMemo();
+    setNewMemo((prev) => ({ ...prev, [bookmarkId]: '' }));
+    if (memoComposer != null && sameBookmarkId(memoComposer, bookmarkId)) setMemoComposer(null);
+    if (editingMemo.bookmarkId != null && sameBookmarkId(editingMemo.bookmarkId, bookmarkId)) resetEditingMemo();
     const result = await removeBookmark(bookmarkId);
     setDeleteConfirmId(null);
     return result;
@@ -127,11 +135,20 @@ const BookmarksPage = () => {
   const openDeleteConfirm = (bookmarkId) => setDeleteConfirmId(bookmarkId);
   const closeDeleteConfirm = () => setDeleteConfirmId(null);
 
+  useEffect(() => {
+    if (!deleteConfirmId) return undefined;
+    const onKey = (e) => {
+      if (e.key === 'Escape') setDeleteConfirmId(null);
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [deleteConfirmId]);
+
   const handleAddMemo = async (bookmarkId, memoText) => {
     const text = (memoText || '').trim();
     if (!text) return;
     
-    const target = (bookmarks || []).find((bookmark) => bookmark.id === bookmarkId);
+    const target = (bookmarks || []).find((bookmark) => sameBookmarkId(bookmark.id, bookmarkId));
     const existingEntries = target ? parseMemoEntries(target.memo) : [];
     const combinedMemo = serializeMemoEntries([...existingEntries, text]);
 
@@ -152,7 +169,7 @@ const BookmarksPage = () => {
     const { bookmarkId, entryIndex, text } = editingMemo;
     if (!text || !text.trim()) return;
 
-    const target = (bookmarks || []).find((bookmark) => bookmark.id === bookmarkId);
+    const target = (bookmarks || []).find((bookmark) => sameBookmarkId(bookmark.id, bookmarkId));
     const entries = target ? parseMemoEntries(target.memo) : [];
     if (entryIndex == null || entryIndex < 0 || entryIndex >= entries.length) {
       return;
@@ -170,14 +187,14 @@ const BookmarksPage = () => {
   };
 
   const handleOpenMemoComposer = (bookmarkId) => {
-    setMemoComposer((prev) => (prev === bookmarkId ? null : bookmarkId));
-    setNewMemo(prev => ({ ...prev, [bookmarkId]: prev[bookmarkId] || '' }));
+    setMemoComposer((prev) => (prev != null && sameBookmarkId(prev, bookmarkId) ? null : bookmarkId));
+    setNewMemo((prev) => ({ ...prev, [bookmarkId]: prev[bookmarkId] || '' }));
     resetEditingMemo();
   };
 
   const handleCancelMemoComposer = (bookmarkId) => {
-    setMemoComposer((prev) => (prev === bookmarkId ? null : prev));
-    setNewMemo(prev => ({ ...prev, [bookmarkId]: '' }));
+    setMemoComposer((prev) => (prev != null && sameBookmarkId(prev, bookmarkId) ? null : prev));
+    setNewMemo((prev) => ({ ...prev, [bookmarkId]: '' }));
   };
 
   const handleChangeColor = async (bookmarkId, color) => {
@@ -186,11 +203,13 @@ const BookmarksPage = () => {
 
   const renderBookmark = (bookmark) => {
     if (!bookmark) return null;
+    const locatorLine = formatLocatorDetail(bookmark);
     const colorKey = getColorKey(bookmark.color);
     const highlight = getHighlightSnippet(bookmark);
     const memoEntries = parseMemoEntries(bookmark.memo);
-    const isComposerOpen = memoComposer === bookmark.id;
-    const isEditingBookmark = editingMemo.bookmarkId === bookmark.id;
+    const isComposerOpen = memoComposer != null && sameBookmarkId(memoComposer, bookmark.id);
+    const isEditingBookmark =
+      editingMemo.bookmarkId != null && sameBookmarkId(editingMemo.bookmarkId, bookmark.id);
     const tags = bookmark.tags || [];
 
     return (
@@ -216,12 +235,10 @@ const BookmarksPage = () => {
                 auto_stories
               </span>
               <span style={{ fontSize: '1rem', fontWeight: 600, color: '#1f2a44', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                {getLocationLabel(bookmark)}
+                {parseBookmarkLocation(bookmark)}
               </span>
             </div>
-            <span style={{ fontSize: '0.8rem', color: '#6b7280' }}>
-              {getLocationDetail(bookmark)}
-            </span>
+            {locatorLine ? <span style={{ fontSize: '0.8rem', color: '#6b7280' }}>{locatorLine}</span> : null}
             {!!tags.length && (
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem', marginTop: '0.35rem' }}>
                 {tags.map((tag) => (
@@ -558,7 +575,7 @@ const BookmarksPage = () => {
             fontSize: '0.9rem', 
             fontWeight: 600 
           }}>
-            {bookmarks.length}개
+            {(bookmarks ?? []).length}개
           </span>
         </div>
         
@@ -569,6 +586,7 @@ const BookmarksPage = () => {
             <select
               value={sortOrder}
               onChange={(e) => setSortOrder(e.target.value)}
+              aria-label="북마크 정렬"
               style={{
                 padding: '0.4rem 0.8rem',
                 borderRadius: '0.5rem',
@@ -601,11 +619,63 @@ const BookmarksPage = () => {
               boxShadow: '0 2px 8px rgba(108, 142, 255, 0.2)',
               transition: 'all 0.2s ease',
             }}
-            onClick={() => navigate(viewerPath)}
+            onClick={() => navigate(viewerPath, { state: location.state })}
           >
             뷰어로 돌아가기
           </button>
         </div>
+      </div>
+
+      <div
+        style={{
+          marginBottom: '1.25rem',
+          display: 'flex',
+          flexWrap: 'wrap',
+          gap: '0.75rem',
+          alignItems: 'center',
+        }}
+      >
+        <input
+          type="search"
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          placeholder="메모·위치 검색"
+          aria-label="북마크 검색"
+          style={{
+            flex: '1 1 200px',
+            minWidth: 160,
+            maxWidth: 360,
+            padding: '0.45rem 0.75rem',
+            borderRadius: 8,
+            border: '1px solid #e5e7eb',
+            fontSize: '0.9rem',
+            outline: 'none',
+          }}
+        />
+        {availableTags.length > 0 && (
+          <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.9rem', color: '#6b7280' }}>
+            태그
+            <select
+              value={selectedTag}
+              onChange={(e) => setSelectedTag(e.target.value)}
+              aria-label="태그로 필터"
+              style={{
+                padding: '0.4rem 0.65rem',
+                borderRadius: 8,
+                border: '1px solid #e5e7eb',
+                fontSize: '0.9rem',
+                cursor: 'pointer',
+              }}
+            >
+              <option value="all">전체</option>
+              {availableTags.map((tag) => (
+                <option key={tag} value={tag}>
+                  {tag}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
       </div>
 
       {sortedBookmarks.length === 0 ? (
@@ -622,7 +692,11 @@ const BookmarksPage = () => {
             {isFilteredView ? '조건에 맞는 북마크가 없습니다.' : '저장된 북마크가 없습니다.'}
           </p>
           <p>
-            {isFilteredView ? '검색어와 태그를 조정해보세요.' : '책을 읽으면서 북마크를 추가해보세요!'}
+            {isFilteredView
+              ? availableTags.length > 0
+                ? '검색어나 태그 필터를 조정해보세요.'
+                : '검색어를 바꿔보세요.'
+              : '책을 읽으면서 북마크를 추가해보세요!'}
           </p>
         </div>
       ) : (
@@ -633,6 +707,7 @@ const BookmarksPage = () => {
 
       {deleteConfirmId && (
         <div
+          role="presentation"
           style={{
             position: 'fixed',
             inset: 0,
@@ -645,6 +720,9 @@ const BookmarksPage = () => {
           onClick={closeDeleteConfirm}
         >
           <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="bookmark-delete-title"
             style={{
               background: '#fff',
               borderRadius: 16,
@@ -654,7 +732,7 @@ const BookmarksPage = () => {
             }}
             onClick={(e) => e.stopPropagation()}
           >
-            <p style={{ margin: '0 0 1.25rem', fontSize: '1rem', color: '#1f2a44' }}>
+            <p id="bookmark-delete-title" style={{ margin: '0 0 1.25rem', fontSize: '1rem', color: '#1f2a44' }}>
               정말 삭제하시겠습니까?
             </p>
             <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end' }}>

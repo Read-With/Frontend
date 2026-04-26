@@ -1,29 +1,12 @@
-import { getMaxChapter, getManifestFromCache, calculateMaxChapterFromChapters } from '../common/cache/manifestCache';
-import { getGraphBookCache } from '../common/cache/chapterEventCache';
+import { getManifestFromCache, calculateMaxChapterFromChapters } from '../common/cache/manifestCache';
 
-export const resolveMaxChapter = (bookId, manifest = null, graphCache = null) => {
-  if (!bookId) {
-    return 1;
-  }
-
-  const cache = graphCache || getGraphBookCache(bookId);
-  if (cache?.maxChapter && cache.maxChapter > 0) {
-    return cache.maxChapter;
-  }
-
-  const cachedMaxChapter = getMaxChapter(bookId);
-  if (cachedMaxChapter && cachedMaxChapter > 0) {
-    return cachedMaxChapter;
-  }
-
-  const manifestData = manifest || getManifestFromCache(bookId);
-  if (manifestData?.progressMetadata?.maxChapter && manifestData.progressMetadata.maxChapter > 0) {
-    return manifestData.progressMetadata.maxChapter;
-  }
-
-  if (manifestData?.chapters && Array.isArray(manifestData.chapters)) {
-    return calculateMaxChapterFromChapters(manifestData.chapters);
-  }
-
-  return 1;
+/** v2: progressMetadata.maxChapter 와 chapters[].idx 최댓값 중 더 큰 값(둘 다 없으면 1). */
+export const resolveMaxChapter = (bookId, manifest = null) => {
+  const manifestData = manifest ?? (bookId ? getManifestFromCache(bookId) : null);
+  const chapters = Array.isArray(manifestData?.chapters) ? manifestData.chapters : [];
+  const fromChapters = calculateMaxChapterFromChapters(chapters);
+  const declared = Number(manifestData?.progressMetadata?.maxChapter);
+  const fromMeta = Number.isFinite(declared) && declared >= 1 ? declared : 0;
+  const m = Math.max(fromChapters, fromMeta);
+  return m > 0 ? m : 1;
 };

@@ -1,3 +1,9 @@
+@keyframes loadingProgress {
+  0% { transform: translateX(-100%); }
+  50% { transform: translateX(0%); }
+  100% { transform: translateX(100%); }
+}
+
 /* 검색 하이라이트 스타일 */
 .search-highlight {
   background-color: blue !important;

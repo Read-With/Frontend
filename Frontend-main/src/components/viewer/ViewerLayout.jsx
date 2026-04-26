@@ -4,6 +4,7 @@ import ViewerProgressBar from './ui/ViewerProgressbar';
 
 const ViewerLayout = ({
   children,
+  currentChapter,
   progress,
   setProgress,
   showControls,
@@ -22,6 +23,7 @@ const ViewerLayout = ({
   graphFullScreen,
   isFromLibrary = false,
   previousPage = null,
+  onExitToMypage,
 }) => {
 
   useEffect(() => {
@@ -48,6 +50,7 @@ const ViewerLayout = ({
       }}>
         <ViewerToolbar
           showControls={showControls}
+          currentChapter={currentChapter}
           onPrev={onPrev}
           onNext={onNext}
           onAddBookmark={onAddBookmark}
@@ -55,9 +58,11 @@ const ViewerLayout = ({
           onOpenSettings={onOpenSettings}
           onToggleGraph={onToggleGraph}
           showGraph={showGraph}
+          graphFullScreen={graphFullScreen}
           pageMode={pageMode}
           isFromLibrary={isFromLibrary}
           previousPage={previousPage}
+          onExitToMypage={onExitToMypage}
         />
       </div>
 

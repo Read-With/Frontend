@@ -22,6 +22,11 @@
  * - useGraphInteractions: 그래프 상호작용 로직
  */
 
+import {
+  resolveLastEventIdxForFineGraph,
+  getLastFineGraphEventIdxFromChapterData,
+} from '../common/cache/manifestCache.js';
+
 const GRAPH_CONTAINER_SELECTOR = '.graph-canvas-area';
 
 // 성능 최적화를 위한 캐시 (단일 객체로 관리)
@@ -423,7 +428,7 @@ export const ensureElementsInBounds = (cy, container, maxNodes = 1000) => {
   }
 };
 
-export const createMouseEventHandlers = (cy, container) => {
+export const createMouseEventHandlers = (_cy, _container) => {
   const MOVE_THRESHOLD = 3;
   
   const isDraggingRef = { current: false };
@@ -454,7 +459,7 @@ export const createMouseEventHandlers = (cy, container) => {
     }
   };
   
-  const handleMouseUp = (evt) => {
+  const handleMouseUp = (_evt) => {
     if (!isMouseDownRef.current) return;
     
     if (isDraggingRef.current) {
@@ -553,54 +558,41 @@ export const processTooltipData = (tooltipData, type) => {
 };
 
 /**
- * 챕터의 마지막 이벤트 번호를 계산합니다.
- * @param {Object} options - 계산 옵션
- * @param {boolean} options.isApiBook - API 책 여부
+ * 챕터의 마지막 이벤트 인덱스(매니페스트 v2 events 기준 힌트).
+ * 실제 관계 데이터는 GET /api/v2/graph/fine 이 원천이며, 여기 값은 유효 범위·UI용이다.
+ * @param {Object} options
  * @param {Array} options.manifestChapters - Manifest 챕터 목록
+ * @param {number|null|undefined} options.manifestBookId - 서버 bookId
  * @param {number} options.chapter - 챕터 번호
- * @param {string} options.filename - 파일명
  * @returns {number} 마지막 이벤트 번호 (기본값: 1)
  */
-export const calculateLastEventForChapter = ({ 
-  isApiBook, 
-  manifestChapters, 
-  chapter, 
-  filename,
-  getFolderKeyFromFilename,
-  getLastEventIndexForChapter
+export const calculateLastEventForChapter = ({
+  manifestChapters,
+  manifestBookId,
+  chapter,
 }) => {
-  if (isApiBook) {
-    if (!manifestChapters) return 1;
-    
-    const chapterInfo = manifestChapters.find(ch => 
-      ch.chapterIdx === chapter || 
-      ch.chapter === chapter || 
-      ch.index === chapter || 
-      ch.number === chapter
-    );
-    
-    if (!chapterInfo) return 1;
-    
-    let eventCount = chapterInfo.eventCount || chapterInfo.events || chapterInfo.event_count || 0;
-    if (Array.isArray(eventCount)) {
-      eventCount = eventCount.length;
-    } else if (typeof eventCount !== 'number' || isNaN(eventCount)) {
-      eventCount = 0;
+  if (manifestBookId != null && Number.isFinite(Number(manifestBookId)) && Number(manifestBookId) > 0) {
+    const manifestHint =
+      Array.isArray(manifestChapters) && manifestChapters.length > 0
+        ? { chapters: manifestChapters }
+        : undefined;
+    const fromManifest = resolveLastEventIdxForFineGraph(manifestBookId, chapter, manifestHint);
+    if (fromManifest != null) {
+      return fromManifest;
     }
-    
-    return eventCount > 0 ? eventCount : 1;
-  } else {
-    if (!getFolderKeyFromFilename || !getLastEventIndexForChapter) {
-      console.warn('calculateLastEventForChapter: 로컬 책 처리를 위한 함수가 제공되지 않았습니다');
-      return 1;
-    }
-    
-    const folderKey = getFolderKeyFromFilename(filename);
-    if (!folderKey) return 1;
-    
-    const lastEventIndex = getLastEventIndexForChapter(folderKey, chapter);
-    return lastEventIndex > 0 ? lastEventIndex : 1;
   }
+
+  if (!manifestChapters?.length) return 1;
+
+  const chapterNum = Number(chapter);
+  const chapterInfo = manifestChapters.find(
+    (ch) => ch && typeof ch === 'object' && Number(ch.idx) === chapterNum
+  );
+
+  if (!chapterInfo) return 1;
+
+  const resolved = getLastFineGraphEventIdxFromChapterData(chapterInfo);
+  return resolved != null && resolved >= 1 ? resolved : 1;
 };
 
 /**
@@ -624,10 +616,13 @@ export const isSidebarElement = (event) => {
     return false;
   }
   
-  const sidebarElement = document.querySelector('[data-testid="graph-sidebar"]') || 
-                        document.querySelector('.graph-sidebar') ||
-                        event.target.closest('[data-testid="graph-sidebar"]') ||
-                        event.target.closest('.graph-sidebar');
+  const sidebarElement =
+    document.querySelector('[data-testid="graph-sidebar"]') ||
+    document.querySelector('[data-testid="chapter-sidebar"]') ||
+    document.querySelector('.graph-sidebar') ||
+    event.target.closest('[data-testid="graph-sidebar"]') ||
+    event.target.closest('[data-testid="chapter-sidebar"]') ||
+    event.target.closest('.graph-sidebar');
   
   return sidebarElement && sidebarElement.contains(event.target);
 };
@@ -673,3 +668,87 @@ export const determineFinalElements = (isSearchActive, filteredElements, sortedE
   }
   return sortedElements;
 };
+
+/**
+ * reciprocalPair 간선 쌍마다 동일 중점을 한 번만 잡아 target-endpoint용 오프셋(_rjOx/_rjOy)을 갱신한다.
+ * 노드 이동·레이아웃 후에도 두 화살표가 같은 꼭짓점에서 만나게 한다.
+ * @param {import('cytoscape').Core} cy
+ */
+export function syncReciprocalPairJunctionOffsets(cy) {
+  if (!cy || typeof cy.edges !== 'function') return;
+  let edges;
+  try {
+    edges = cy.edges('[?reciprocalPair]');
+  } catch {
+    return;
+  }
+  if (!edges || edges.length === 0) return;
+
+  const pairMap = new Map();
+  edges.forEach((e) => {
+    const sid = String(e.data('source'));
+    const tid = String(e.data('target'));
+    const key = sid < tid ? `${sid}\t${tid}` : `${tid}\t${sid}`;
+    if (!pairMap.has(key)) pairMap.set(key, []);
+    pairMap.get(key).push(e);
+  });
+
+  cy.batch(() => {
+    pairMap.forEach((list) => {
+      if (list.length !== 2) {
+        list.forEach((edge) => {
+          edge.removeData('_rjOx');
+          edge.removeData('_rjOy');
+        });
+        return;
+      }
+      const e0 = list[0];
+      const s = e0.source();
+      const t = e0.target();
+      if (!s || !t || s.empty?.() || t.empty?.()) return;
+      const sx = s.position('x');
+      const sy = s.position('y');
+      const tx = t.position('x');
+      const ty = t.position('y');
+      const mx = (sx + tx) / 2;
+      const my = (sy + ty) / 2;
+      list.forEach((edge) => {
+        const tgt = edge.target();
+        if (!tgt || tgt.empty?.()) return;
+        edge.data('_rjOx', mx - tgt.position('x'));
+        edge.data('_rjOy', my - tgt.position('y'));
+      });
+    });
+  });
+}
+
+export function clearHighlightClassesOn(cy) {
+  if (!cy) return;
+  try {
+    const touched = cy
+      .collection()
+      .union(cy.nodes(".highlighted"))
+      .union(cy.nodes(".faded"))
+      .union(cy.edges(".highlighted"))
+      .union(cy.edges(".faded"));
+    if (touched.length === 0) return;
+    cy.batch(() => {
+      touched.removeClass("highlighted faded");
+      touched.nodes().forEach((node) => {
+        node.removeStyle("opacity");
+        node.removeStyle("text-opacity");
+        node.removeStyle("border-color");
+        node.removeStyle("border-width");
+        node.removeStyle("border-opacity");
+        node.removeStyle("border-style");
+      });
+      touched.edges().forEach((edge) => {
+        edge.removeStyle("opacity");
+        edge.removeStyle("text-opacity");
+        edge.removeStyle("width");
+      });
+    });
+  } catch {
+    /* ignore */
+  }
+}

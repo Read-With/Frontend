@@ -1,4 +1,4 @@
-import { toLocator } from './common/locatorUtils';
+import { toLocator, locatorsEqual } from '../common/locatorUtils';
 
 export const createBookmarkTitle = (pageNum, chapterNum, fallbackIndex = null) => {
   if (pageNum != null && chapterNum != null) return `${pageNum}페이지 (${chapterNum}챕터)`;
@@ -12,14 +12,33 @@ export const parseBookmarkLocation = (bookmark) => {
   const rawTitle = bookmark.title;
   if (rawTitle != null && String(rawTitle).trim()) return String(rawTitle).trim();
   const loc = toLocator(bookmark.startLocator);
-  if (loc) return `${loc.chapterIndex}챕터`;
-  return '';
+  if (!loc) {
+    const off = Number(bookmark.startTxtOffset);
+    if (Number.isFinite(off)) {
+      const range =
+        bookmark.isRangeBookmark ||
+        bookmark.rangeBookmark ||
+        (Number(bookmark.endTxtOffset) > 0 && Number(bookmark.endTxtOffset) !== off);
+      return range ? `문서 오프셋 ${off} · 범위` : `문서 오프셋 ${off}`;
+    }
+    return '';
+  }
+  const base = `${loc.chapterIndex}챕터`;
+  if (bookmark.rangeBookmark || bookmark.isRangeBookmark) return `${base} · 범위`;
+  const end = toLocator(bookmark.endLocator);
+  if (end && !locatorsEqual(loc, end)) return `${base} · 범위`;
+  return base;
 };
 
 export const isValidLocator = (loc) => toLocator(loc) != null;
 
 export const isSameBookmarkPosition = (bookmark, ref) => {
   if (!bookmark || !ref) return false;
+  const ta = Number(bookmark.startTxtOffset);
+  const tb = Number(ref.startTxtOffset);
+  if (Number.isFinite(ta) && Number.isFinite(tb)) {
+    return ta === tb && Number(bookmark.endTxtOffset || 0) === Number(ref.endTxtOffset || 0);
+  }
   const a = toLocator(bookmark.startLocator);
   const b = toLocator(ref.startLocator);
   if (!a || !b) return false;
@@ -30,6 +49,16 @@ export const getLocatorSortKey = (loc) => {
   const n = toLocator(loc);
   if (!n) return '';
   return `${String(n.chapterIndex).padStart(6, '0')}_${String(n.blockIndex).padStart(6, '0')}_${String(n.offset).padStart(8, '0')}`;
+};
+
+/** 위치 정렬: locator 우선, 없으면 v2 startTxtOffset */
+export const getBookmarkPositionSortKey = (bookmark) => {
+  if (!bookmark) return '';
+  const locKey = getLocatorSortKey(bookmark.startLocator);
+  if (locKey) return locKey;
+  const o = Number(bookmark.startTxtOffset);
+  if (Number.isFinite(o)) return `o_${String(o).padStart(12, '0')}`;
+  return '';
 };
 
 const RELATIVE_DAYS_THRESHOLD = 7;
@@ -111,11 +140,11 @@ export const getColorKey = (color) => {
   return 'normal';
 };
 
-export const createBookmarkData = (bookId, color = '#28B532', memo = '', title = null, startLocator = null, endLocator = null) => {
-  const data = { bookId, color, memo, title, createdAt: new Date().toISOString() };
+export const createBookmarkData = (bookId, color = '#28B532', memo = '', startLocator = null, endLocator = null) => {
+  const data = { bookId, color, memo };
   const start = toLocator(startLocator);
   const end = toLocator(endLocator);
   if (start) data.startLocator = start;
-  if (end) data.endLocator = end;
+  if (start && end && !locatorsEqual(start, end)) data.endLocator = end;
   return data;
 };
