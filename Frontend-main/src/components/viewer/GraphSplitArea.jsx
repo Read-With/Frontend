@@ -83,8 +83,7 @@ const GraphSplitArea = memo(function GraphSplitArea({
     selectedIndex: selectedSuggestionIndex = -1,
   } = searchState;
   
-  const { loading, isReloading, isGraphLoading, isFineGraphLoading, graphLoading, isDataReady, isDataEmpty } =
-    viewerState;
+  const { loading, graphPhase, isDataReady, isDataEmpty } = viewerState;
   const { elements, currentEvent, currentChapter } = graphState;
   const { filterStage } = graphActions;
 
@@ -122,14 +121,14 @@ const GraphSplitArea = memo(function GraphSplitArea({
   const hasCurrentEvent = !!currentEvent;
   const hasElements = elements && Array.isArray(elements) && elements.length > 0;
   
-  const isDataLoadCompleteAndEmpty = graphLoading === false && isDataEmpty && !hasElements;
+  const isFineGraphBusy = graphPhase === 'fine';
+  const isGraphIdle = graphPhase === 'idle';
+  const isDataLoadCompleteAndEmpty = isGraphIdle && isDataEmpty && !hasElements;
   const isLoading = isDataLoadCompleteAndEmpty
     ? false
-    : (loading || isReloading || !isLocationDetermined || (!isDataReady && !hasCurrentEvent) || (graphLoading !== false && isGraphLoading));
+    : loading || !isGraphIdle || !isLocationDetermined || (!isDataReady && !hasCurrentEvent);
   const shouldShowEmptyData = isDataLoadCompleteAndEmpty;
-  
   // fine 그래프가 아직 반영되지 않았으면(이벤트 확정 전) 기존 elements가 있어도 그래프 대신 로딩 — 중간 이벤트 표시 방지
-  const isFineGraphBusy = isFineGraphLoading === true;
   const shouldShowLoading = (!hasElements && isLoading) || (hasElements && isFineGraphBusy);
 
   const topBarSearchState = useMemo(() => ({

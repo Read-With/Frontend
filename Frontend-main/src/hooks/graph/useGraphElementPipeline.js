@@ -18,8 +18,8 @@ export function useGraphElementPipeline({
   );
 
   const filteredMainCharacters = useMemo(
-    () => filterMainCharacters(elements, filterStage),
-    [elements, filterStage]
+    () => filterMainCharacters(sortedElements, filterStage),
+    [sortedElements, filterStage]
   );
 
   const finalElements = useMemo(

@@ -6,6 +6,7 @@ import { useGraphDataLoader } from '../graph/useGraphDataLoader';
 import { useServerBookMatching } from '../books/useServerBookMatching';
 import { useBooksServerQuery } from '../books/useBooksServerQuery';
 import { useViewerUrlParams } from './useViewerUrlParams';
+import { useViewerGraphSync } from './useViewerGraphSync';
 import { flagsFromGraphMode } from './graphModeFlags';
 import { 
   defaultSettings, 
@@ -39,7 +40,8 @@ function runViewerPaging(viewerRef, direction) {
   }
 }
 
-const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+// Waits for two animation frames — enough for a layout recalculation to flush to the screen.
+const waitForPaint = () => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
 
 // 매 렌더 새 객체 방지
 const EMPTY_VIEWER_SEARCH_STATE = Object.freeze({});
@@ -110,7 +112,6 @@ export function useViewerPage() {
   const [isFineGraphLoading, setFineGraphLoading] = useState(false);
   const [showToolbar, setShowToolbar] = useState(false);
   
-  const prevValidEventRef = useRef(null);
   const prevElementsRef = useRef([]);
   const prevChapterNumRef = useRef();
   const prevEventNumRef = useRef();
@@ -233,6 +234,15 @@ export function useViewerPage() {
     isDataEmpty
   } = useGraphDataLoader(graphBookId, currentChapter, graphLoaderEventIdx);
 
+  const { prevValidEvent, prevValidEventRef, graphPhase, resetPrevValidEvent } = useViewerGraphSync({
+    currentChapter,
+    currentEvent,
+    isReloading,
+    isFineGraphLoading,
+    isGraphLoading,
+    graphLoading,
+  });
+
   const manifestServerBookId = useMemo(() => {
     const fromBook = getServerBookId(book);
     if (fromBook) return fromBook;
@@ -327,29 +337,29 @@ export function useViewerPage() {
     setCharacterData(null);
     setIsDataReady(false);
     setIsGraphLoading(true);
-    prevValidEventRef.current = null;
+    resetPrevValidEvent();
     setIsInitialChapterDetected(initialChapterDetected);
-  }, []);
+  }, [resetPrevValidEvent]);
 
-  const waitForViewerMethod = useCallback(async (methodName, maxAttempts = 30, interval = 100) => {
-    let attempts = 0;
-    while (attempts < maxAttempts) {
-      if (viewerRef.current?.[methodName]) return true;
-      await sleep(interval);
-      attempts += 1;
-    }
-    return false;
+  const waitForViewerMethod = useCallback((methodName, timeoutMs = 3000) => {
+    if (viewerRef.current?.[methodName]) return Promise.resolve(true);
+    return new Promise((resolve) => {
+      const deadline = Date.now() + timeoutMs;
+      const id = setInterval(() => {
+        if (viewerRef.current?.[methodName]) {
+          clearInterval(id);
+          resolve(true);
+        } else if (Date.now() >= deadline) {
+          clearInterval(id);
+          resolve(false);
+        }
+      }, 100);
+    });
   }, []);
 
   useEffect(() => {
     resetGraphTransientState(true);
   }, [currentChapter, resetGraphTransientState]);
-  
-  useEffect(() => {
-    if (currentEvent && currentEvent.chapter === currentChapter) {
-      prevValidEventRef.current = currentEvent;
-    }
-  }, [currentEvent, currentChapter]);
   
   useEffect(() => {
     eventsRef.current = events;
@@ -441,21 +451,16 @@ export function useViewerPage() {
   
   const handleSliderChange = useCallback(async (value) => {
     setProgress(value);
-
-    let attempts = 0;
-    while (attempts < 30) {
-      if (await waitForViewerMethod('moveToProgress', 1, 100)) {
-        try {
-          await viewerRef.current.moveToProgress(value);
-          return;
-        } catch (e) {
-          console.error('프로그레스 이동 실패:', e);
-        }
-      }
-      attempts += 1;
+    const ready = await waitForViewerMethod('moveToProgress');
+    if (!ready) {
+      console.warn('프로그레스 이동 실패: 뷰어가 준비되지 않았습니다.');
+      return;
     }
-
-    console.warn('프로그레스 이동 실패: 뷰어가 준비되지 않았습니다.');
+    try {
+      await viewerRef.current.moveToProgress(value);
+    } catch (e) {
+      console.error('프로그레스 이동 실패:', e);
+    }
   }, [setProgress, viewerRef, waitForViewerMethod]);
   
   const toggleGraph = useCallback(() => {
@@ -476,7 +481,7 @@ export function useViewerPage() {
         const end = locWrap?.endLocator ?? locWrap?.end ?? start;
 
         viewerRef.current?.applySettings?.();
-        await sleep(150);
+        await waitForPaint();
 
         if (start && viewerRef.current?.displayAt) {
           const anchor = { startLocator: start, endLocator: end ?? start };
@@ -493,7 +498,7 @@ export function useViewerPage() {
             await viewerRef.current?.moveToProgress?.(pct);
           }
         }
-        await sleep(100);
+        await waitForPaint();
       } catch (_e) {
         toast.error('화면 모드 전환 중 오류가 발생했습니다.');
       }
@@ -536,7 +541,7 @@ export function useViewerPage() {
     () => ({
       currentChapter,
       currentEvent,
-      prevValidEvent: prevValidEventRef.current,
+      prevValidEvent,
       elements,
       graphViewState,
       hideIsolated,
@@ -553,6 +558,7 @@ export function useViewerPage() {
     [
       currentChapter,
       currentEvent,
+      prevValidEvent,
       elements,
       graphViewState,
       hideIsolated,
@@ -607,10 +613,7 @@ export function useViewerPage() {
       progress,
       settings,
       loading,
-      isReloading,
-      isGraphLoading,
-      isFineGraphLoading,
-      graphLoading,
+      graphPhase,
       isDataReady,
       showToolbar,
       isDataEmpty,
@@ -624,10 +627,7 @@ export function useViewerPage() {
       progress,
       settings,
       loading,
-      isReloading,
-      isGraphLoading,
-      isFineGraphLoading,
-      graphLoading,
+      graphPhase,
       isDataReady,
       showToolbar,
       isDataEmpty,

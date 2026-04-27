@@ -34,8 +34,7 @@ export function useApiGraphData(
   const [isGraphLoading, setIsGraphLoading] = useState(false);
   const [apiFineLoading, setApiFineLoading] = useState(false);
 
-  const isFineGraphLoadingRef = useRef(false);
-  const fineEpochRef = useRef(0);            // stale-cancellation for fine graph
+  const fineAbortRef = useRef(null);          // AbortController for the in-flight fine graph request
   const prevFineTargetKeyRef = useRef(null);
   const { handleError } = useErrorHandler('API Graph Data');
   const [apiError, setApiError] = useState(null);
@@ -72,7 +71,7 @@ export function useApiGraphData(
     if (prevKey == null) {
       return; // first load — don't wipe anything
     }
-    fineEpochRef.current += 1;
+    fineAbortRef.current?.abort();
     resetFineLoadingState(true);
   }, [serverBookId, fineTargetKey, resetFineLoadingState]);
 
@@ -209,12 +208,7 @@ export function useApiGraphData(
       return;
     }
 
-    if (isFineGraphLoadingRef.current) {
-      return;
-    }
-
     const targetBookId = serverBookId;
-
     const { eventIdx, hasForcedIdx } = resolveFineEventIdx(currentEvent, forcedChapterEventIdx);
 
     if (eventIdx < 1) {
@@ -222,10 +216,13 @@ export function useApiGraphData(
       return;
     }
 
-    isFineGraphLoadingRef.current = true;
-    setApiFineLoading(true);
+    // Cancel any previous in-flight request and start a new one.
+    fineAbortRef.current?.abort();
+    const controller = new AbortController();
+    fineAbortRef.current = controller;
+    const { signal } = controller;
 
-    const epoch = fineEpochRef.current;
+    setApiFineLoading(true);
 
     try {
       const cacheKey = `graph_fine_${targetBookId}_${currentChapter}_${eventIdx}`;
@@ -245,11 +242,11 @@ export function useApiGraphData(
           ),
         macroData: null,
         onSuccess: (data) => {
-          if (epoch !== fineEpochRef.current) return;
+          if (signal.aborted) return;
           setRawFineData(data);
         },
         onError: (error) => {
-          if (epoch !== fineEpochRef.current) return;
+          if (signal.aborted) return;
           const errorInfo = handleError(error, 'Fine Graph 로드 실패', {
             metadata: { bookId: targetBookId, chapter: currentChapter, eventIdx },
             autoClear: false,
@@ -258,16 +255,14 @@ export function useApiGraphData(
         },
       });
     } catch (error) {
-      if (epoch !== fineEpochRef.current) {
-        return;
-      }
+      if (signal.aborted) return;
       const errorInfo = handleError(error, 'Fine Graph 로드 중 예외', {
         metadata: { bookId: targetBookId, chapter: currentChapter, eventIdx },
         autoClear: false,
       });
       setApiError(errorInfo);
     } finally {
-      if (epoch === fineEpochRef.current) {
+      if (!signal.aborted) {
         resetFineLoadingState(false);
       }
     }
@@ -296,6 +291,10 @@ export function useApiGraphData(
     }
     loadFineGraphData();
   }, [macroOnly, loadFineGraphData, resetFineLoadingState]);
+
+  useEffect(() => {
+    return () => { fineAbortRef.current?.abort(); };
+  }, []);
 
   // 현재 챕터 로드 완료 후 다음 챕터를 백그라운드 프리페치
   useEffect(() => {

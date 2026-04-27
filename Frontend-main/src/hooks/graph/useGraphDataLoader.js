@@ -22,14 +22,7 @@ export function useGraphDataLoader(bookId, chapterIdx, eventIdx = null) {
   const [error, setError] = useState(null);
   const [isDataEmpty, setIsDataEmpty] = useState(false);
 
-  const chapterEventsCacheRef = useRef(new Map());
-  const MAX_CACHE_SIZE = 50;
-
-  useEffect(() => {
-    return () => {
-      chapterEventsCacheRef.current.clear();
-    };
-  }, []);
+  const lastComputedRef = useRef({ cacheKey: null, eventIdx: null, elements: [] });
 
   const numericBookId = useMemo(() => {
     const parsed = toNumberOrNull(bookId);
@@ -52,6 +45,7 @@ export function useGraphDataLoader(bookId, chapterIdx, eventIdx = null) {
     setEventNum(0);
     setError(null);
     setIsDataEmpty(false);
+    lastComputedRef.current = { cacheKey: null, eventIdx: null, elements: [] };
   }, []);
 
   const ensureMaxChapter = useCallback(() => {
@@ -70,32 +64,15 @@ export function useGraphDataLoader(bookId, chapterIdx, eventIdx = null) {
   }, [numericBookId, resetState, ensureMaxChapter]);
 
   const getChapterEvents = useCallback(
-    async (bookIdNum, chapter) => {
+    (bookIdNum, chapter) => {
       if (!bookIdNum || !chapter) return null;
-      const cacheKey = `${bookIdNum}-${chapter}`;
-      const cache = chapterEventsCacheRef.current;
-      
-      if (cache.has(cacheKey)) {
-        return cache.get(cacheKey);
-      }
-
-      const result = getCachedChapterEvents(bookIdNum, chapter);
-      if (result) {
-        if (cache.size >= MAX_CACHE_SIZE) {
-          const firstKey = cache.keys().next().value;
-          cache.delete(firstKey);
-        }
-        cache.set(cacheKey, result);
-      }
-      return result;
+      return getCachedChapterEvents(bookIdNum, chapter) ?? null;
     },
     []
   );
 
   const isChapterEventsReadySync = useCallback((bookIdNum, chapter) => {
     if (!bookIdNum || !chapter) return false;
-    const cacheKey = `${bookIdNum}-${chapter}`;
-    if (chapterEventsCacheRef.current.has(cacheKey)) return true;
     return Boolean(getCachedChapterEvents(bookIdNum, chapter));
   }, []);
 
@@ -210,23 +187,28 @@ export function useGraphDataLoader(bookId, chapterIdx, eventIdx = null) {
     };
   }, [extractNewNodeIds, checkCancelled]);
 
-  const processEventsArray = useCallback((eventsArray, targetIdx, isCancelledRef) => {
+  // cachedPrevElements: if the caller already has elements for (targetIdx-1), pass them to skip
+  // a full re-aggregation of previousEvents.
+  const processEventsArray = useCallback((eventsArray, targetIdx, isCancelledRef, cachedPrevElements = null) => {
     if (checkCancelled(isCancelledRef)) return null;
 
     const currentEvents = filterEventsUpTo(eventsArray, targetIdx);
-    const previousEvents = filterEventsBefore(eventsArray, targetIdx);
 
     if (checkCancelled(isCancelledRef)) return null;
 
     const currentPayload = buildGraphPayload(currentEvents);
-    const previousPayload = buildGraphPayload(previousEvents);
+
+    let prevElements;
+    if (cachedPrevElements !== null) {
+      prevElements = cachedPrevElements;
+    } else {
+      const previousEvents = filterEventsBefore(eventsArray, targetIdx);
+      prevElements = buildGraphPayload(previousEvents).elements || [];
+    }
 
     if (checkCancelled(isCancelledRef)) return null;
 
-    const diff = calcGraphDiff(
-      previousPayload.elements || [],
-      currentPayload.elements || []
-    );
+    const diff = calcGraphDiff(prevElements, currentPayload.elements || []);
     const newNodes = extractNewNodeIds(diff);
 
     return {
@@ -248,7 +230,7 @@ export function useGraphDataLoader(bookId, chapterIdx, eventIdx = null) {
 
       try {
         const cacheKey = `${bookIdNum}-${chapter}`;
-        let chapterEvents = await getChapterEvents(bookIdNum, chapter);
+        const chapterEvents = await getChapterEvents(bookIdNum, chapter);
 
         if (checkCancelled(isCancelledRef)) return;
 
@@ -281,6 +263,7 @@ export function useGraphDataLoader(bookId, chapterIdx, eventIdx = null) {
           const diffState = processDiffCacheState(chapterEvents, targetIdx, isCancelledRef);
           if (diffState) {
             if (!checkCancelled(isCancelledRef)) {
+              lastComputedRef.current = { cacheKey, eventIdx: diffState.eventIdx, elements: diffState.elements };
               setElements(diffState.elements);
               setCurrentChapterData({ characters: diffState.characters });
               setNewNodeIds(diffState.newNodes);
@@ -299,8 +282,15 @@ export function useGraphDataLoader(bookId, chapterIdx, eventIdx = null) {
           return;
         }
 
-        const eventsState = processEventsArray(eventsArray, targetIdx, isCancelledRef);
+        const last = lastComputedRef.current;
+        const cachedPrev =
+          last.cacheKey === cacheKey && last.eventIdx === targetIdx - 1
+            ? last.elements
+            : null;
+
+        const eventsState = processEventsArray(eventsArray, targetIdx, isCancelledRef, cachedPrev);
         if (eventsState && !checkCancelled(isCancelledRef)) {
+          lastComputedRef.current = { cacheKey, eventIdx: targetIdx, elements: eventsState.elements };
           setElements(eventsState.elements);
           setCurrentChapterData({ characters: eventsState.characters });
           setNewNodeIds(eventsState.newNodes);
