@@ -20,31 +20,39 @@ registerCache('storageCache', storageCache, {
   persist: true
 });
 
+const getFreshCachedValue = (key, parsed) => {
+  const cached = getCacheItem('storageCache', key);
+  if (!cached || !cached.timestamp || Date.now() - cached.timestamp >= STORAGE_TTL) {
+    return undefined;
+  }
+  return cached.parsed === parsed ? cached.value : undefined;
+};
+
+const setCachedValue = (key, value, parsed) => {
+  setCacheItem('storageCache', key, {
+    value,
+    timestamp: Date.now(),
+    parsed
+  });
+};
+
 export const storageUtils = {
   get: (key) => {
-    const cached = getCacheItem('storageCache', key);
-    if (cached && cached.timestamp && Date.now() - cached.timestamp < STORAGE_TTL) {
-      return cached.value;
+    const cached = getFreshCachedValue(key, false);
+    if (cached !== undefined) {
+      return cached;
     }
     
     const value = getRawFromStorage(key, 'localStorage');
     if (value !== null) {
-      setCacheItem('storageCache', key, {
-        value,
-        timestamp: Date.now(),
-        parsed: false
-      });
+      setCachedValue(key, value, false);
     }
     return value;
   },
   
   set: (key, value) => {
     setRawToStorage(key, value, 'localStorage');
-    setCacheItem('storageCache', key, {
-      value,
-      timestamp: Date.now(),
-      parsed: false
-    });
+    setCachedValue(key, value, false);
   },
   
   remove: (key) => {
@@ -53,26 +61,18 @@ export const storageUtils = {
   },
   
   getJson: (key, defaultValue = {}) => {
-    const cached = getCacheItem('storageCache', key);
-    if (cached && cached.timestamp && Date.now() - cached.timestamp < STORAGE_TTL && cached.parsed) {
-      return cached.value;
+    const cached = getFreshCachedValue(key, true);
+    if (cached !== undefined) {
+      return cached;
     }
     
     try {
       const stored = getRawFromStorage(key, 'localStorage');
       const value = stored ? JSON.parse(stored) : defaultValue;
-      setCacheItem('storageCache', key, {
-        value,
-        timestamp: Date.now(),
-        parsed: true
-      });
+      setCachedValue(key, value, true);
       return value;
     } catch {
-      setCacheItem('storageCache', key, {
-        value: defaultValue,
-        timestamp: Date.now(),
-        parsed: true
-      });
+      setCachedValue(key, defaultValue, true);
       return defaultValue;
     }
   },
@@ -80,11 +80,7 @@ export const storageUtils = {
   setJson: (key, value) => {
     const jsonValue = JSON.stringify(value);
     setRawToStorage(key, jsonValue, 'localStorage');
-    setCacheItem('storageCache', key, {
-      value,
-      timestamp: Date.now(),
-      parsed: true
-    });
+    setCachedValue(key, value, true);
   },
   
   clearCache: () => {

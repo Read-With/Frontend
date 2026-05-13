@@ -102,7 +102,7 @@ function UnifiedNodeInfo({
   prevValidEvent = null,
   povSummaries = null, // API에서 가져온 관점 요약 데이터
   apiMacroData = null, // API 거시 그래프 데이터
-  apiFineData = null, // API 세밀 그래프 데이터
+  apiFineData: _apiFineData = null, // API 세밀 그래프 데이터
   bookId = null,
 }) {
   const { filename: urlFilename } = useParams();

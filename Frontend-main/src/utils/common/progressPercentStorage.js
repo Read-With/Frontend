@@ -1,3 +1,5 @@
+import { clampPercent } from './numberUtils';
+
 /**
  * 뷰어 퍼센트 진도 로컬 키: progress_{bookId} (useLocalStorageNumber와 동일 규칙)
  */
@@ -9,8 +11,7 @@ export function getStoredProgressPercent(bookId) {
   try {
     const raw = localStorage.getItem(progressStorageKey(id));
     if (raw == null) return null;
-    const n = Number(raw);
-    return Number.isFinite(n) ? Math.min(100, Math.max(0, n)) : null;
+    return clampPercent(raw);
   } catch {
     return null;
   }

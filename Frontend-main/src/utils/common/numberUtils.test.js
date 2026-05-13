@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   toNumberOrNull,
   toPositiveNumberOrNull,
+  toPositiveNumberFromId,
   safeParseInt,
   clampNumber,
 } from './numberUtils.js';
@@ -17,6 +18,12 @@ describe('numberUtils', () => {
   it('toPositiveNumberOrNull', () => {
     expect(toPositiveNumberOrNull(0)).toBeNull();
     expect(toPositiveNumberOrNull(3)).toBe(3);
+  });
+
+  it('toPositiveNumberFromId', () => {
+    expect(toPositiveNumberFromId('e12')).toBe(12);
+    expect(toPositiveNumberFromId('chapter-3-event-7')).toBe(7);
+    expect(toPositiveNumberFromId('none')).toBeNull();
   });
 
   it('safeParseInt', () => {

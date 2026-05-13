@@ -8,8 +8,7 @@ import {
 } from '../../utils/viewer/chapterTitleDisplay';
 import { GRAPH_CHARACTER_FILTER_STAGE_OPTIONS } from '../graph/graphConstants';
 import {
-  pickReadingEvent,
-  resolveViewerGraphEventFromManifest,
+  resolveViewerEventDisplayInfo,
 } from '../../utils/viewer/eventDisplayUtils';
 
 const LOADING_STYLE = {
@@ -88,7 +87,7 @@ const ViewerTopBar = memo(function ViewerTopBar({
   searchActions,
 }) {
 
-  const { filename, book } = viewerState;
+  const { book } = viewerState;
   
   const {
     currentChapter,
@@ -97,10 +96,10 @@ const ViewerTopBar = memo(function ViewerTopBar({
     graphFullScreen,
     edgeLabelVisible,
     progressTopBar,
+    maxEventNum,
   } = graphState;
   
   const {
-    setCurrentChapter,
     setEdgeLabelVisible,
     filterStage,
     setFilterStage
@@ -170,20 +169,6 @@ const ViewerTopBar = memo(function ViewerTopBar({
     return "0%";
   }, [progressTopBar]);
 
-  React.useEffect(() => {
-    const handleChapterChange = (event) => {
-      if (event.detail && event.detail.chapter !== currentChapter) {
-        setCurrentChapter(event.detail.chapter);
-      }
-    };
-    
-    window.addEventListener('chapterChange', handleChapterChange);
-    
-    return () => {
-      window.removeEventListener('chapterChange', handleChapterChange);
-    };
-  }, [currentChapter, setCurrentChapter]);
-  
   const handleGenerateSuggestions = useCallback((searchTerm) => {
     if (onGenerateSuggestions) {
       onGenerateSuggestions(searchTerm);
@@ -206,14 +191,19 @@ const ViewerTopBar = memo(function ViewerTopBar({
       eventName: "",
     };
 
-    const reading = pickReadingEvent(currentEvent, prevValidEvent);
-    const panel =
-      bookId != null
-        ? resolveViewerGraphEventFromManifest(reading, bookId)
-        : { title: '', eventNum: 0, eventId: '' };
-    const eventDisplay = panel.eventNum > 0 ? String(panel.eventNum) : "—";
-    const eventTitle = panel.eventId || undefined;
-    const eventNameLabel = panel.title || "";
+    const {
+      eventDisplay,
+      eventTitle,
+      eventNameLabel,
+    } = resolveViewerEventDisplayInfo({
+      currentEvent,
+      prevValidEvent,
+      progressTopBar: row,
+      bookId,
+      currentChapter: resolvedServerChapter,
+      maxEventNum,
+      fallback: 0,
+    });
 
     return (
       <>
@@ -258,6 +248,8 @@ const ViewerTopBar = memo(function ViewerTopBar({
     currentProgressWidth,
     currentEvent,
     prevValidEvent,
+    resolvedServerChapter,
+    maxEventNum,
   ]);
 
   const renderGraphControls = useCallback(() => (

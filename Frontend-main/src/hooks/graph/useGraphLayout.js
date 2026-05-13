@@ -1,5 +1,9 @@
 import { useEffect, useCallback, useRef } from "react";
-import { ensureElementsInBounds, syncReciprocalPairJunctionOffsets } from "../../utils/graph/graphUtils";
+import {
+  ensureElementsInBounds,
+  isGraphContainerSizeReady,
+  syncReciprocalPairJunctionOffsets,
+} from "../../utils/graph/graphUtils";
 import { detectAndResolveOverlap } from "../../utils/graph/graphDataUtils";
 
 function scheduleRippleWhenPositionsPainted(cy, triggerRippleForAddedNodes) {
@@ -131,7 +135,9 @@ export function useGraphLayout({
       if (!cy) return;
 
       if (!skipEnsureBounds) {
-        ensureElementsInBounds(cy, containerRef.current);
+        if (isGraphContainerSizeReady(containerRef.current)) {
+          ensureElementsInBounds(cy, containerRef.current);
+        }
       }
       if (!skipOverlap) {
         detectAndResolveOverlap(cy);

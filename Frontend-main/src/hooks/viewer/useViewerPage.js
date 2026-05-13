@@ -13,7 +13,8 @@ import {
   saveViewerMode, 
   loadViewerMode,
   settingsUtils,
-  bookUtils
+  bookUtils,
+  getServerBookId
 } from '../../utils/viewer/viewerUtils';
 import { getFolderKeyFromFilename } from '../../utils/graph/graphData';
 import { useBookmarks } from '../bookmarks/useBookmarks';
@@ -152,25 +153,13 @@ export function useViewerPage() {
     serverBooksListData?.books,
   ]);
 
-  const getServerBookId = useCallback((bookObj) => {
-    const primaryId = Number(bookObj?.id);
-    if (Number.isFinite(primaryId) && primaryId > 0) {
-      return primaryId;
-    }
-    const fallbackId = Number(bookObj?._bookId);
-    if (Number.isFinite(fallbackId) && fallbackId > 0) {
-      return fallbackId;
-    }
-    return null;
-  }, []);
-
   const cleanBookId = useMemo(() => {
     const serverId = getServerBookId(book);
     if (serverId) {
       return String(serverId);
     }
     return bookId?.trim() || '';
-  }, [book, bookId, getServerBookId]);
+  }, [book, bookId]);
 
   const [progress, setProgress] = useState(0);
   const [settings, setSettings] = useLocalStorage('xhtml_viewer_settings', defaultSettings);
@@ -198,7 +187,7 @@ export function useViewerPage() {
       return String(serverId);
     }
     return bookId;
-  }, [book, bookId, getServerBookId]);
+  }, [book, bookId]);
 
   // currentEvent가 잠깐 null/플레이스홀더일 때 그래프가 1번으로 깜빡이는 것 방지
   const graphLoaderLastGoodRef = useRef({ chapter: 0, eventNum: 1 });
@@ -249,7 +238,7 @@ export function useViewerPage() {
     const fromUrl = Number(bookId);
     if (Number.isFinite(fromUrl) && fromUrl > 0) return fromUrl;
     return null;
-  }, [book, bookId, getServerBookId]);
+  }, [book, bookId]);
 
   useEffect(() => {
     if (!manifestServerBookId) {
@@ -289,7 +278,7 @@ export function useViewerPage() {
     } else if (detectedMaxChapter > 0) {
       setMaxChapter(detectedMaxChapter);
     }
-  }, [manifestLoaded, book, detectedMaxChapter, getServerBookId]);
+  }, [manifestLoaded, book, detectedMaxChapter]);
   
   useEffect(() => {
     if (graphFullScreen) {
@@ -554,6 +543,7 @@ export function useViewerPage() {
       isDataReady,
       isInitialChapterDetected,
       maxChapterEvents,
+      maxEventNum,
     }),
     [
       currentChapter,
@@ -571,6 +561,7 @@ export function useViewerPage() {
       isDataReady,
       isInitialChapterDetected,
       maxChapterEvents,
+      maxEventNum,
     ]
   );
 

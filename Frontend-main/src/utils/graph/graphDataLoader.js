@@ -3,6 +3,7 @@ import { loadFromStorage, saveToStorage, removeFromStorage } from '../common/cac
 import { getCachedChapterEvents, getChapterEventFallbackData } from '../common/cache/chapterEventCache';
 import { eventUtils } from '../viewer/viewerUtils';
 import { errorUtils } from '../common/errorUtils';
+import { toPositiveInt } from './graphNormalizeUtils';
 
 const GRAPH_CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
 
@@ -12,6 +13,9 @@ const macroSessionKey = (bookId, chapter) => `${Number(bookId)}:${Number(chapter
 
 // 진행 중인 API 요청 dedup — 동일 cacheKey의 중복 호출을 단일 Promise로 합침
 const inflightRequests = new Map();
+
+const isValidChapterRef = (bookId, chapter) =>
+  toPositiveInt(bookId) !== null && toPositiveInt(chapter) !== null;
 
 export const hasMacroSessionCache = (bookId, chapter) =>
   macroSessionCache.has(macroSessionKey(bookId, chapter));
@@ -76,11 +80,11 @@ const hasGraphPayload = (data) => {
 
 /** `loadGraphDataWithCache` 매크로 분기와 동일 키·조건의 동기 조회(로딩 스피너 지연용) */
 export const hasMacroGraphStorageCache = (bookId, chapter) => {
-  const b = Number(bookId);
-  const ch = Number(chapter);
-  if (!Number.isFinite(b) || b < 1 || !Number.isFinite(ch) || ch < 1) return false;
-  if (macroSessionCache.has(macroSessionKey(b, ch))) return true;
-  const cacheKey = `graph_macro_${b}_upto_${ch}`;
+  const normalizedBookId = toPositiveInt(bookId);
+  const normalizedChapter = toPositiveInt(chapter);
+  if (!isValidChapterRef(normalizedBookId, normalizedChapter)) return false;
+  if (macroSessionCache.has(macroSessionKey(normalizedBookId, normalizedChapter))) return true;
+  const cacheKey = `graph_macro_${normalizedBookId}_upto_${normalizedChapter}`;
   return hasGraphPayload(checkLocalStorageCache(cacheKey));
 };
 
@@ -141,17 +145,17 @@ const processApiResponse = (response, cacheKey, onSuccess, bookId, chapter, even
 };
 
 export const prefetchMacroGraphToCache = async (bookId, chapter, apiCall) => {
-  const b = Number(bookId);
-  const ch = Number(chapter);
-  if (!Number.isFinite(b) || b < 1 || !Number.isFinite(ch) || ch < 1) return;
-  if (macroSessionCache.has(macroSessionKey(b, ch))) return;
-  const cacheKey = `graph_macro_${b}_upto_${ch}`;
+  const normalizedBookId = toPositiveInt(bookId);
+  const normalizedChapter = toPositiveInt(chapter);
+  if (!isValidChapterRef(normalizedBookId, normalizedChapter)) return;
+  if (macroSessionCache.has(macroSessionKey(normalizedBookId, normalizedChapter))) return;
+  const cacheKey = `graph_macro_${normalizedBookId}_upto_${normalizedChapter}`;
   if (hasGraphPayload(checkLocalStorageCache(cacheKey))) return;
   try {
     const response = await apiCall();
     if (response?.isSuccess && response?.result && hasGraphPayload(response.result)) {
       saveToLocalStorageCache(cacheKey, response.result);
-      saveMacroToSessionCache(b, ch, response.result);
+      saveMacroToSessionCache(normalizedBookId, normalizedChapter, response.result);
     }
   } catch {
     // 프리페치 실패는 조용히 무시

@@ -257,19 +257,24 @@ export const getAllProgress = async (options = {}) => {
 
 const withLocatorsNormalizedForProgressSave = (progressData) => {
   if (!progressData?.bookId) return progressData;
-  const bid = String(progressData.bookId);
-  const loc = resolveProgressLocator(progressData);
-  if (!loc) return progressData;
-  const normStart = normalizeLocatorForServerProgress(bid, loc);
-  if (!normStart) return progressData;
-  let normEnd = normStart;
+  const bookId = String(progressData.bookId);
+  const locator = resolveProgressLocator(progressData);
+  if (!locator) return progressData;
+  const normalizedStartLocator = normalizeLocatorForServerProgress(bookId, locator);
+  if (!normalizedStartLocator) return progressData;
+  let normalizedEndLocator = normalizedStartLocator;
   if (progressData.endLocator != null || progressData.end != null) {
-    const endRaw = toLocator(progressData.endLocator ?? progressData.end);
-    if (endRaw) {
-      normEnd = normalizeLocatorForServerProgress(bid, endRaw) ?? normStart;
+    const endLocator = toLocator(progressData.endLocator ?? progressData.end);
+    if (endLocator) {
+      normalizedEndLocator = normalizeLocatorForServerProgress(bookId, endLocator) ?? normalizedStartLocator;
     }
   }
-  return { ...progressData, startLocator: normStart, locator: normStart, endLocator: normEnd };
+  return {
+    ...progressData,
+    startLocator: normalizedStartLocator,
+    locator: normalizedStartLocator,
+    endLocator: normalizedEndLocator,
+  };
 };
 
 export const saveProgress = async (progressData) => {
@@ -407,13 +412,13 @@ export const getBookManifest = async (bookId, { forceRefresh = false } = {}) => 
 export const getMacroGraph = async (bookId, uptoChapter = null, uptoLocator = null) => {
   if (!bookId) throw new Error('bookId는 필수 매개변수입니다.');
 
-  const loc = toLocator(uptoLocator);
+  const locator = toLocator(uptoLocator);
   const queryParams = new URLSearchParams();
   queryParams.append('bookId', bookId);
-  if (loc) {
-    queryParams.append('chapterIndex', String(loc.chapterIndex));
-    queryParams.append('blockIndex', String(loc.blockIndex));
-    queryParams.append('offset', String(loc.offset));
+  if (locator) {
+    queryParams.append('chapterIndex', String(locator.chapterIndex));
+    queryParams.append('blockIndex', String(locator.blockIndex));
+    queryParams.append('offset', String(locator.offset));
   } else if (uptoChapter !== null && uptoChapter !== undefined) {
     queryParams.append('uptoChapter', String(uptoChapter));
   }
@@ -450,24 +455,24 @@ export const getMacroGraph = async (bookId, uptoChapter = null, uptoLocator = nu
 export const getFineGraph = async (bookId, chapterIdx, eventIdx, atLocator = null, fineOpts = undefined) => {
   if (!bookId) throw new Error('bookId는 필수 매개변수입니다.');
 
-  let loc = fineOpts?.useCallerEventIdxOnly ? null : toLocator(atLocator);
+  let locator = fineOpts?.useCallerEventIdxOnly ? null : toLocator(atLocator);
   let fineChapterIdx = chapterIdx;
   let fineEventIdx = eventIdx;
 
-  if (loc) {
+  if (locator) {
     const resolution = resolveFineGraphLocatorToEventParams(bookId, atLocator, eventIdx);
     fineChapterIdx = resolution.chapterIdx ?? chapterIdx;
     if (resolution.resolved) {
-      loc = null;
+      locator = null;
       fineEventIdx = resolution.eventIdx;
     } else if (resolution.atLocator) {
-      loc = toLocator(resolution.atLocator) ?? loc;
+      locator = toLocator(resolution.atLocator) ?? locator;
     }
   }
 
   const emptyFine = { characters: [], relations: [], event: null };
 
-  if (!loc) {
+  if (!locator) {
     if (
       fineChapterIdx === undefined ||
       fineChapterIdx === null ||
@@ -483,10 +488,10 @@ export const getFineGraph = async (bookId, chapterIdx, eventIdx, atLocator = nul
 
   const queryParams = new URLSearchParams();
   queryParams.append('bookId', bookId);
-  if (loc) {
-    queryParams.append('chapterIndex', String(loc.chapterIndex));
-    queryParams.append('blockIndex', String(loc.blockIndex));
-    queryParams.append('offset', String(loc.offset));
+  if (locator) {
+    queryParams.append('chapterIndex', String(locator.chapterIndex));
+    queryParams.append('blockIndex', String(locator.blockIndex));
+    queryParams.append('offset', String(locator.offset));
   } else {
     queryParams.append('chapterIdx', String(fineChapterIdx));
     queryParams.append('eventIdx', String(fineEventIdx));
@@ -517,20 +522,4 @@ export const getFineGraph = async (bookId, chapterIdx, eventIdx, atLocator = nul
     }
     handleApiError(error, '세밀 그래프 조회 실패');
   }
-};
-
-export default {
-  normalizeV2Book,
-  getBooks,
-  uploadBook,
-  getBook,
-  deleteBook,
-  getFavorites,
-  getAllProgress,
-  saveProgress,
-  getBookProgress,
-  deleteBookProgress,
-  getBookManifest,
-  getMacroGraph,
-  getFineGraph,
 };

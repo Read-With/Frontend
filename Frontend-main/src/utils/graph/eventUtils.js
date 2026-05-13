@@ -1,8 +1,24 @@
 import { toNumberOrNull } from '../common/numberUtils';
+import { toPositiveInt } from './graphNormalizeUtils';
 
 const truncIdx = (value) => {
   const n = toNumberOrNull(value);
   return n === null ? null : Math.trunc(n);
+};
+
+const normalizeTargetIdx = (targetIdx) => {
+  const target = truncIdx(targetIdx);
+  return target === null || target < 0 ? null : target;
+};
+
+const filterEventsByIdx = (events, targetIdx, predicate) => {
+  if (!Array.isArray(events)) return [];
+  const target = normalizeTargetIdx(targetIdx);
+  if (target === null) return [];
+  return events.filter((entry) => {
+    const eventIdx = truncIdx(entry?.eventIdx);
+    return eventIdx !== null && predicate(eventIdx, target);
+  });
 };
 
 /**
@@ -22,26 +38,14 @@ export const sortEventsByIdx = (events) => {
  * 누적 그래프용 — 배열은 sortEventsByIdx 후 넘기는 것이 안전.
  */
 export const filterEventsUpTo = (events, targetIdx) => {
-  if (!Array.isArray(events)) return [];
-  const target = truncIdx(targetIdx);
-  if (target === null || target < 0) return [];
-  return events.filter((entry) => {
-    const e = truncIdx(entry?.eventIdx);
-    return e !== null && e <= target;
-  });
+  return filterEventsByIdx(events, targetIdx, (eventIdx, target) => eventIdx <= target);
 };
 
 /**
  * eventIdx가 숫자인 항목만 대상으로 idx 미만.
  */
 export const filterEventsBefore = (events, targetIdx) => {
-  if (!Array.isArray(events)) return [];
-  const target = truncIdx(targetIdx);
-  if (target === null || target < 0) return [];
-  return events.filter((entry) => {
-    const e = truncIdx(entry?.eventIdx);
-    return e !== null && e < target;
-  });
+  return filterEventsByIdx(events, targetIdx, (eventIdx, target) => eventIdx < target);
 };
 
 export const getMaxEventIdx = (events) => {
@@ -61,7 +65,7 @@ export const getMaxEventIdx = (events) => {
 export const normalizeEventIdx = (requestedIdx, maxIdx) => {
   const maxRaw = toNumberOrNull(maxIdx);
   const hasUpper = maxRaw !== null && Number.isFinite(maxRaw);
-  const maxInt = hasUpper ? Math.max(0, Math.trunc(maxRaw)) : null;
+  const maxInt = hasUpper ? (toPositiveInt(maxRaw, 0) ?? 0) : null;
 
   const reqInt = truncIdx(requestedIdx);
 

@@ -1,4 +1,5 @@
 import { authenticatedRequest } from './authApi';
+import { toOneBasedChapterIndexOrNull } from '../common/numberUtils';
 
 export const normalizeV2Book = (book) => {
   if (!book || typeof book !== 'object') return book;
@@ -74,16 +75,16 @@ export const toggleBookFavorite = async (bookId, favorite) => {
 
 export const getChapterPovSummaries = async (bookId, chapterIdx) => {
   try {
-    const bid = Number(bookId);
-    const ch = Number(chapterIdx);
-    if (!Number.isFinite(bid) || bid < 1) {
+    const normalizedBookId = toOneBasedChapterIndexOrNull(bookId);
+    const normalizedChapterIdx = toOneBasedChapterIndexOrNull(chapterIdx);
+    if (!normalizedBookId) {
       throw new Error('bookId는 1 이상의 정수여야 합니다.');
     }
-    if (!Number.isFinite(ch) || ch < 1) {
+    if (!normalizedChapterIdx) {
       throw new Error('chapterIdx는 1 이상의 정수여야 합니다.');
     }
     const data = await authenticatedRequest(
-      `/v2/books/${Math.floor(bid)}/chapters/${Math.floor(ch)}/pov-summaries`
+      `/v2/books/${normalizedBookId}/chapters/${normalizedChapterIdx}/pov-summaries`
     );
     return data;
   } catch (error) {

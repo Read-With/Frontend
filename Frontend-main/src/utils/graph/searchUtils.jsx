@@ -31,6 +31,7 @@
 import React from 'react';
 import { registerCache, recordCacheAccess, enforceCacheSizeLimit } from '../common/cache/cacheManager';
 import { clearHighlightClassesOn } from '../graph/graphUtils';
+import { isGraphEdgeElement, isGraphNodeElement, uniqueStrings } from './graphNormalizeUtils';
 
 const regexCache = new Map();
 registerCache('regexCache', regexCache, { maxSize: 500, ttl: 300000 });
@@ -145,7 +146,7 @@ export function buildSuggestions(elements, query, currentChapterData = null) {
   
   try {
     const searchLower = trimmed.toLowerCase();
-    const characterNodes = elements.filter(el => !el.data.source);
+    const characterNodes = elements.filter(isGraphNodeElement);
     
     // 현재 챕터의 캐릭터 데이터가 있는 경우, 해당 챕터에 존재하는 인물만 필터링
     let filteredNodes = characterNodes;
@@ -170,9 +171,7 @@ export function buildSuggestions(elements, query, currentChapterData = null) {
       else if (commonName.includes(searchLower)) matchType = 'common_name';
       
       // names 배열에서 중복 제거 (대소문자 구분 없이)
-      const uniqueNames = names.filter((name, index, arr) => 
-        arr.findIndex(n => String(n).toLowerCase() === String(name).toLowerCase()) === index
-      );
+      const uniqueNames = uniqueStrings(names, { caseInsensitive: true });
       
       return {
         id: node.data.id,
@@ -192,11 +191,10 @@ export function buildSuggestions(elements, query, currentChapterData = null) {
       } else {
         // 이미 존재하는 인물의 경우, names 배열을 병합하고 중복 제거
         const existing = acc[existingIndex];
-        const mergedNames = [...(existing.names || []), ...(current.names || [])];
-        const uniqueMergedNames = mergedNames.filter((name, index, arr) => 
-          arr.findIndex(n => String(n).toLowerCase() === String(name).toLowerCase()) === index
+        existing.names = uniqueStrings(
+          [...(existing.names || []), ...(current.names || [])],
+          { caseInsensitive: true }
         );
-        existing.names = uniqueMergedNames;
       }
       return acc;
     }, [])
@@ -256,7 +254,7 @@ export function filterGraphElements(elements, searchTerm, currentChapterData = n
     let candidateNodes;
     if (chapterCharacterIds) {
       candidateNodes = elements.filter(el => {
-        if (el.data.source) return false;
+        if (isGraphEdgeElement(el)) return false;
         if (!nodeMatchesQuery(el, searchLower)) return false;
         const nodeId = el?.data?.id;
         if (nodeId === undefined || nodeId === null) return false;
@@ -264,7 +262,7 @@ export function filterGraphElements(elements, searchTerm, currentChapterData = n
       });
     } else {
       // 챕터 데이터가 없는 경우 기존 로직 사용
-      candidateNodes = elements.filter(el => !el.data.source && nodeMatchesQuery(el, searchLower));
+      candidateNodes = elements.filter(el => isGraphNodeElement(el) && nodeMatchesQuery(el, searchLower));
     }
     
     // 정확히 일치하는 인물을 우선적으로 찾기
@@ -292,7 +290,7 @@ export function filterGraphElements(elements, searchTerm, currentChapterData = n
   
   // 선택된 인물과 연결된 모든 간선 찾기
   const connectedEdges = elements.filter(el => 
-    el.data.source && 
+    isGraphEdgeElement(el) && 
     (el.data.source === matchingNodeId || el.data.target === matchingNodeId)
   );
   
@@ -305,7 +303,7 @@ export function filterGraphElements(elements, searchTerm, currentChapterData = n
   
   // 검색된 노드와 연결된 모든 노드들 추가
   const allConnectedNodes = elements.filter(el => 
-    !el.data.source && 
+    isGraphNodeElement(el) && 
     connectedNodeIds.has(el.data.id)
   );
 
@@ -391,7 +389,7 @@ export function createFilteredElementIds(filteredElements) {
         return;
       }
       
-      if (element.data.source) {
+      if (isGraphEdgeElement(element)) {
         // 간선인 경우
         if (element.data.source != null) nodeIds.add(String(element.data.source));
         if (element.data.target != null) nodeIds.add(String(element.data.target));

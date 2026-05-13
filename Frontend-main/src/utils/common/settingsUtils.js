@@ -15,18 +15,20 @@ export const defaultSettings = {
   showGraph: true,
 };
 
+const SETTINGS_STORAGE_KEY = "xhtml_viewer_settings";
+
+const normalizeSettings = (settings = {}) => {
+  const normalized = { ...defaultSettings, ...settings };
+  if (normalized.pageMode === "leftOnly") {
+    normalized.pageMode = "double";
+  }
+  return normalized;
+};
+
 export function loadSettings() {
   try {
-    const loadedSettings = storageUtils.getJson("xhtml_viewer_settings", defaultSettings);
-
-    if (loadedSettings.pageMode === "leftOnly") {
-      loadedSettings.pageMode = "double";
-    }
-
-    if (loadedSettings.showGraph === undefined) {
-      loadedSettings.showGraph = defaultSettings.showGraph;
-    }
-    storageUtils.set("xhtml_viewer_settings", JSON.stringify(loadedSettings));
+    const loadedSettings = normalizeSettings(storageUtils.getJson(SETTINGS_STORAGE_KEY, defaultSettings));
+    storageUtils.setJson(SETTINGS_STORAGE_KEY, loadedSettings);
 
     return loadedSettings;
   } catch (error) {
@@ -38,7 +40,7 @@ export function loadSettings() {
 
 export function saveSettings(settings) {
   try {
-    storageUtils.set("xhtml_viewer_settings", JSON.stringify(settings));
+    storageUtils.setJson(SETTINGS_STORAGE_KEY, normalizeSettings(settings));
     return { success: true };
   } catch (error) {
     errorUtils.logError('saveSettings', error, { settings });

@@ -17,6 +17,18 @@ const RADIUS_INCREMENT = 2;
 const MAX_ATTEMPTS = 200;
 const ANGLE_INCREMENT = 0.5;
 const FALLBACK_RANGE = 100;
+const MIN_DISTANCE_SQUARED = MIN_DISTANCE * MIN_DISTANCE;
+
+const hasEnoughDistance = (candidate, positions) =>
+  positions.every((pos) => {
+    const dx = candidate.x - pos.x;
+    const dy = candidate.y - pos.y;
+    return dx * dx + dy * dy > MIN_DISTANCE_SQUARED;
+  });
+
+const isWithinContainerBounds = ({ x, y }, containerWidth, containerHeight) =>
+  Math.abs(x) < containerWidth / 2 - CONTAINER_PADDING &&
+  Math.abs(y) < containerHeight / 2 - CONTAINER_PADDING;
 
 /**
  * 스파이럴 패턴으로 노드 위치 계산
@@ -43,19 +55,15 @@ export function calculateSpiralPlacement(newNodes, placedPositions, containerWid
       const angle = (attempts * ANGLE_INCREMENT) % (2 * Math.PI);
       const radius = Math.min(INITIAL_RADIUS + attempts * RADIUS_INCREMENT, maxRadius);
 
-      x = Math.cos(angle) * radius;
-      y = Math.sin(angle) * radius;
+      const candidate = {
+        x: Math.cos(angle) * radius,
+        y: Math.sin(angle) * radius,
+      };
+      x = candidate.x;
+      y = candidate.y;
 
-      const isWithinBounds = 
-        Math.abs(x) < containerWidth / 2 - CONTAINER_PADDING &&
-        Math.abs(y) < containerHeight / 2 - CONTAINER_PADDING;
-
-      if (isWithinBounds) {
-        found = updatedPositions.every(pos => {
-          const dx = x - pos.x;
-          const dy = y - pos.y;
-          return Math.sqrt(dx * dx + dy * dy) > MIN_DISTANCE;
-        });
+      if (isWithinContainerBounds(candidate, containerWidth, containerHeight)) {
+        found = hasEnoughDistance(candidate, updatedPositions);
       }
 
       attempts++;

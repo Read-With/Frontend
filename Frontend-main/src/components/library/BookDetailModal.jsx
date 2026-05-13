@@ -11,8 +11,6 @@ import {
   formatLibraryRelativeDate,
 } from '../../utils/library/libraryBookDisplay';
 import {
-  formatChapterBadgeFromTitle,
-  formatChapterTocNumericLine,
   stripRedundantBookTitlePrefix,
 } from '../../utils/viewer/chapterTitleDisplay';
 import { getServerBookId } from '../../utils/viewer/viewerUtils';
@@ -637,11 +635,10 @@ const BookDetailModal = memo(({ book, isOpen, onClose, onDelete }) => {
                         const idxNum = Number(chapter.idx);
                         const idxStr =
                           Number.isFinite(idxNum) && idxNum >= 1 ? String(idxNum) : '—';
-                        const tForBadge = rawTitle
+                        const normalizedTitle = rawTitle
                           ? stripRedundantBookTitlePrefix(rawTitle, chapterStripBookTitle)
                           : '';
-                        const part = tForBadge ? formatChapterBadgeFromTitle(tForBadge) : idxStr;
-                        const chapterLine = formatChapterTocNumericLine(part, idxStr);
+                        const chapterLine = normalizedTitle || rawTitle || `챕터 ${idxStr}`;
                         const chapterKey =
                           chapter.id ??
                           chapter.href ??

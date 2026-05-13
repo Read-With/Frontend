@@ -59,7 +59,7 @@ function collectBlockEntries(root) {
 
 /** 숫자 서버 id가 있으면 매니페스트·API 캐시 키와 맞춤 (폴더명만 쓰면 combined 경로 영구 실패하는 책 방지) */
 function resolveLoaderBookId(book, bookIdProp) {
-  const candidates = [bookIdProp, book?.id, book?._bookId];
+  const candidates = [book?._bookId, book?.id, bookIdProp];
   for (const c of candidates) {
     const n = Number(c);
     if (Number.isFinite(n) && n > 0) return String(n);
@@ -207,10 +207,27 @@ const resolveChapterFromManifestByPage = (manifest, currentPageIndex, totalPages
   return resolveChapterByWeightedPageRatio(fromCodePoints, currentPageIndex, totalPages);
 };
 
-const createFallbackLocator = (chapterIndex) => ({
-  startLocator: { chapterIndex, blockIndex: 0, offset: 0 },
-  endLocator: { chapterIndex, blockIndex: 0, offset: 0 },
+const createFallbackLocator = (chapterIndex, blockIndex = 0, offset = 0) => ({
+  startLocator: { chapterIndex, blockIndex, offset },
+  endLocator: { chapterIndex, blockIndex, offset },
 });
+
+const resolveChapterCodePointLength = (meta, manifest, chapterIndex) => {
+  const ch = Number(chapterIndex);
+  if (!Number.isFinite(ch) || ch < 1) return 0;
+
+  const mChapters = Array.isArray(manifest?.chapters) ? manifest.chapters : [];
+  const mHit = mChapters.find((row) => Number(row?.idx ?? row?.chapterIdx ?? row?.chapterIndex) === ch);
+  const fromManifest = Number(mHit?.totalCodePoints ?? 0);
+  if (Number.isFinite(fromManifest) && fromManifest > 0) return fromManifest;
+
+  const mmChapters = Array.isArray(meta?.chapters) ? meta.chapters : [];
+  const mmHit = mmChapters.find((row) => Number(row?.chapterIndex ?? row?.idx ?? row?.chapterIdx) === ch);
+  const fromMeta = Number(mmHit?.totalCodePoints ?? 0);
+  if (Number.isFinite(fromMeta) && fromMeta > 0) return fromMeta;
+
+  return 0;
+};
 
 function parseXhtmlBody(xhtml) {
   const parser = new DOMParser();
@@ -281,11 +298,11 @@ const XhtmlViewer = forwardRef(
     const [currentPageIndex, setCurrentPageIndex] = useState(0);
     const touchStartX = useRef(0);
     const lastLocatorRef = useRef(null);
-    const lastEmittedStartLocatorJsonRef = useRef(null);
+    /** 뷰포트 start+end 페어 — end만 바뀌어도 이벤트·챕터 경계 반영해야 함 */
+    const lastEmittedViewportLocatorJsonRef = useRef(null);
     const metaRef = useRef(null);
     const initialAnchorAppliedRef = useRef(false);
     const prevBidForInitialRef = useRef(null);
-    const initialPositionAppliedRef = useRef(false);
     const initialSeekAppliedRef = useRef(false);
     const lineBoundsRef = useRef([]);
     const [lineBoundsVersion, setLineBoundsReady] = useState(0);
@@ -343,21 +360,40 @@ const XhtmlViewer = forwardRef(
       if (prevBidForInitialRef.current === bid) return;
       prevBidForInitialRef.current = bid;
       initialSeekAppliedRef.current = false;
-      initialPositionAppliedRef.current = false;
       initialAnchorAppliedRef.current = false;
-      lastEmittedStartLocatorJsonRef.current = null;
+      lastEmittedViewportLocatorJsonRef.current = null;
       lastLocatorRef.current = null;
     }, [bid]);
 
+    useEffect(() => {
+      if (!xhtmlContent) return;
+      lastEmittedViewportLocatorJsonRef.current = null;
+    }, [xhtmlContent]);
+
     const emitLocator = useCallback(
-      (loc) => {
+      (loc, persistLoc = null) => {
         if (!loc?.startLocator) return;
-        const startKey = JSON.stringify(loc.startLocator);
-        if (startKey === lastEmittedStartLocatorJsonRef.current) return;
-        lastEmittedStartLocatorJsonRef.current = startKey;
-        lastLocatorRef.current = loc;
-        const { chapterIndex } = loc.startLocator;
-        onCurrentChapterChange?.(chapterIndex);
+        const endForKey = loc.endLocator ?? loc.startLocator;
+        const viewportKey = JSON.stringify({
+          start: loc.startLocator,
+          end: endForKey,
+        });
+        if (viewportKey === lastEmittedViewportLocatorJsonRef.current) return;
+        lastEmittedViewportLocatorJsonRef.current = viewportKey;
+        lastLocatorRef.current = persistLoc?.startLocator ? persistLoc : loc;
+        const startCh = Number(loc.startLocator.chapterIndex);
+        const endRaw = loc.endLocator;
+        const endCh =
+          endRaw && typeof endRaw === 'object'
+            ? Number(endRaw.chapterIndex)
+            : NaN;
+        const chapterIndexForSidebar =
+          Number.isFinite(startCh) &&
+          Number.isFinite(endCh) &&
+          endCh === startCh + 1
+            ? endCh
+            : loc.startLocator.chapterIndex;
+        onCurrentChapterChange?.(chapterIndexForSidebar);
         // 이벤트 인덱스 없음(읽기 locator만). fine `result.event` 는 ViewerPage 그래프 로드 후 currentEvent에 합류.
         onCurrentLineChange?.(0, 0, { anchor: loc });
       },
@@ -489,9 +525,41 @@ const XhtmlViewer = forwardRef(
       const chapterFromMeta = resolveChapterFromMetaByPage(metaRef.current, currentPageIndex, totalPages);
       const chapterFromManifest = resolveChapterFromManifestByPage(manifest, currentPageIndex, totalPages);
       const resolvedChapter = chapterFromManifest ?? chapterFromMeta;
+      const chapterCodePointLength = resolveChapterCodePointLength(metaRef.current, manifest, resolvedChapter);
+      const estimateChapterOffsetByPage = () => {
+        if (!Number.isFinite(chapterCodePointLength) || chapterCodePointLength <= 1) return 0;
+        const ratio =
+          totalPages > 1
+            ? Math.min(1, Math.max(0, Number(currentPageIndex) / Math.max(1, totalPages - 1)))
+            : 0;
+        return Math.min(
+          chapterCodePointLength - 1,
+          Math.max(0, Math.floor((chapterCodePointLength - 1) * ratio))
+        );
+      };
+      const shouldEmitFallbackLocator = (chapterIndex, fallbackBlockIndex) => {
+        if (!Number.isFinite(chapterIndex) || chapterIndex < 0) return false;
+        const prev = lastLocatorRef.current?.startLocator;
+        if (!prev) return true;
+        const prevChapter = Number(prev.chapterIndex);
+        const prevBlock = Number(prev.blockIndex ?? 0);
+        if (!Number.isFinite(prevChapter)) return true;
+        if (prevChapter !== chapterIndex) return true;
+        if (!Number.isFinite(prevBlock)) return true;
+        return prevBlock !== fallbackBlockIndex;
+      };
       const emitResolvedFallback = () => {
-        if (Number.isFinite(resolvedChapter) && resolvedChapter >= 0) {
-          emitLocator(createFallbackLocator(resolvedChapter));
+        const fallbackBlockIndex =
+          Number.isFinite(totalPages) && totalPages > 1
+            ? Math.max(0, currentPageIndex)
+            : 0;
+        const fallbackOffset = estimateChapterOffsetByPage();
+        if (
+          Number.isFinite(resolvedChapter) &&
+          resolvedChapter >= 1 &&
+          shouldEmitFallbackLocator(Number(resolvedChapter), fallbackBlockIndex)
+        ) {
+          emitLocator(createFallbackLocator(resolvedChapter, fallbackBlockIndex, fallbackOffset));
         }
       };
 
@@ -529,37 +597,63 @@ const XhtmlViewer = forwardRef(
         rulerRoot &&
         visible.length === 1 &&
         shouldEncodePageInBlockIndex(startRow.el, rulerRoot, totalPages, phForBlob);
-      const startBlockIdx = pageInBlock ? currentPageIndex : startRow.syntheticBlock;
-      const endBlockIdx = pageInBlock ? currentPageIndex : endRow.syntheticBlock;
-      const startLoc = getBlockLocator(startRow.el, 0, startBlockIdx);
-      const endLoc = getBlockLocator(
-        endRow.el,
-        pageInBlock ? 0 : Math.max(0, (endRow.el.textContent || '').length),
-        endBlockIdx
+      const estimateOffsetInSingleBlob = () => {
+        if (!pageInBlock) return 0;
+        const totalCp = chapterCodePointLength;
+        if (!Number.isFinite(totalCp) || totalCp <= 1) return 0;
+        const ratio =
+          totalPages > 1
+            ? Math.min(1, Math.max(0, Number(currentPageIndex) / Math.max(1, totalPages - 1)))
+            : 0;
+        return Math.min(totalCp - 1, Math.max(0, Math.floor((totalCp - 1) * ratio)));
+      };
+      const singleBlobOffset = estimateOffsetInSingleBlob();
+      // 단일 챕터 마커(blob) 구조에서는 blockIndex가 항상 0이 되어
+      // manifest 매핑이 1/max로만 고정될 수 있으므로 페이지 인덱스를 반영한다.
+      const logicalBlockForSingleBlob = pageInBlock ? currentPageIndex : startRow.syntheticBlock;
+      const logicalStartLoc = getBlockLocator(
+        startRow.el,
+        pageInBlock ? singleBlobOffset : 0,
+        logicalBlockForSingleBlob
       );
-      if (!startLoc || !endLoc) return;
+      const logicalEndLoc = getBlockLocator(
+        endRow.el,
+        pageInBlock ? singleBlobOffset : Math.max(0, (endRow.el.textContent || '').length),
+        pageInBlock ? currentPageIndex : endRow.syntheticBlock
+      );
+      if (!logicalStartLoc || !logicalEndLoc) return;
+
+      // 저장/복원용 locator는 기존처럼 page 인코딩을 유지한다.
+      const persistStartLoc = getBlockLocator(startRow.el, pageInBlock ? singleBlobOffset : 0, pageInBlock ? currentPageIndex : startRow.syntheticBlock);
+      const persistEndLoc = getBlockLocator(
+        endRow.el,
+        pageInBlock ? singleBlobOffset : Math.max(0, (endRow.el.textContent || '').length),
+        pageInBlock ? currentPageIndex : endRow.syntheticBlock
+      );
 
       emitLocator({
-        startLocator: startLoc,
-        endLocator: endLoc,
+        startLocator: logicalStartLoc,
+        endLocator: logicalEndLoc,
+      }, {
+        startLocator: persistStartLoc ?? logicalStartLoc,
+        endLocator: persistEndLoc ?? logicalEndLoc,
       });
-    }, [xhtmlContent, currentPageIndex, totalPages, bid, emitLocator, pageHeight]);
+    }, [
+      xhtmlContent,
+      currentPageIndex,
+      totalPages,
+      bid,
+      emitLocator,
+      pageHeight,
+      lineBoundsVersion,
+    ]);
 
     useEffect(() => {
       if (!bid) {
         initialAnchorAppliedRef.current = false;
-        initialPositionAppliedRef.current = false;
         initialSeekAppliedRef.current = false;
       }
     }, [bid]);
-
-    const getPageIndexFromTop = useCallback(
-      (top) => {
-        if (!pageHeight) return 0;
-        return Math.min(totalPages - 1, Math.max(0, Math.floor(top / pageHeight)));
-      },
-      [pageHeight, totalPages]
-    );
 
     const findChapterBlockElement = useCallback((root, chapter, block = 0) => {
       const ch = Number(chapter);
@@ -671,7 +765,6 @@ const XhtmlViewer = forwardRef(
       }
 
       initialAnchorAppliedRef.current = applied;
-      initialPositionAppliedRef.current = applied;
       initialSeekAppliedRef.current = true;
     }, [
       xhtmlContent,

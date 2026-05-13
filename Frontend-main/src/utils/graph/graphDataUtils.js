@@ -1,5 +1,12 @@
 import { getCharacterImagePath, extractCharacterId } from './characterUtils';
-import { normalizeRelation, isValidRelation, directedEdgeElementId } from './relationUtils';
+import { normalizeRelation, isValidRelation, directedEdgeElementId, getRelationKeyFromRelation } from './relationUtils';
+import {
+  getEventIndexFromObject,
+  isGraphEdgeElement,
+  normalizeElementId,
+  sortElementsByDataId,
+  uniqueStrings,
+} from './graphNormalizeUtils';
 
 function undirectedPairKey(s, t) {
   const a = String(s);
@@ -27,10 +34,7 @@ function mergePositivity(a, b) {
 }
 
 function normalizedRelationTagKey(data) {
-  const rel = data?.relation;
-  const arr = Array.isArray(rel) ? rel.map((x) => String(x)) : [];
-  arr.sort();
-  return arr.join('\x1e');
+  return uniqueStrings(Array.isArray(data?.relation) ? data.relation : []).sort().join('\x1e');
 }
 
 function positivityToken(data) {
@@ -97,7 +101,7 @@ function finalizeDirectedEdges(edgeMap) {
           source: a,
           target: b,
           bidirectional: true,
-          relation: [...new Set([...r0, ...r1])],
+          relation: uniqueStrings([...r0, ...r1]),
           label: mergeEdgeLabels(e0.data.label, e1.data.label),
         };
         if (Number.isFinite(Number(pos))) {
@@ -128,28 +132,11 @@ function finalizeDirectedEdges(edgeMap) {
 }
 
 function relationEventIdxFromRaw(raw) {
-  if (!raw || typeof raw !== 'object') return NaN;
-  const nested = raw.event && typeof raw.event === 'object' ? raw.event : null;
-  const n = Number(
-    raw.eventNum ??
-    raw.eventIdx ??
-    raw.event_id ??
-    raw.event_idx ??
-    nested?.eventNum ??
-    nested?.eventIdx ??
-    nested?.event_id
-  );
-  return Number.isFinite(n) ? n : NaN;
+  return getEventIndexFromObject(raw, ['eventNum', 'eventIdx', 'event_id', 'event_idx']);
 }
 
 function currentEventIdxForPositivity(eventData) {
-  if (!eventData || typeof eventData !== 'object') return NaN;
-  const n = Number(
-    eventData.eventNum ??
-    eventData.eventIdx ??
-    eventData.resolvedEventIdx ??
-    eventData.idx
-  );
+  const n = getEventIndexFromObject(eventData, ['eventNum', 'eventIdx', 'resolvedEventIdx', 'idx']);
   return Number.isFinite(n) && n > 0 ? n : NaN;
 }
 
@@ -174,8 +161,8 @@ function getFirstWordFromEventText(text) {
   return firstWord || '';
 }
 
-const validateElements = (elements) => elements?.filter(e => e && (e.id || e.data?.id)) || [];
-const createElementMap = (elements) => new Map(elements.map(e => [e.id || e.data?.id, e]));
+const validateElements = (elements) => elements?.filter(e => e && normalizeElementId(e)) || [];
+const createElementMap = (elements) => new Map(elements.map(e => [normalizeElementId(e), e]));
 
 function deepEqual(obj1, obj2, depth = 0) {
   // 최대 깊이 제한 (무한 재귀 방지)
@@ -485,7 +472,7 @@ export function convertRelationsToElements(relations, idToName, idToDesc, idToDe
 
     if (edgeMap.has(edgeKey)) {
       const existingEdge = edgeMap.get(edgeKey);
-      existingEdge.data.relation = [...new Set([...existingEdge.data.relation, ...relationArray])];
+      existingEdge.data.relation = uniqueStrings([...existingEdge.data.relation, ...relationArray]);
 
       if (relationLabel) {
         existingEdge.data.label = relationLabel;
@@ -515,8 +502,8 @@ export function convertRelationsToElements(relations, idToName, idToDesc, idToDe
   edges.push(...finalizeDirectedEdges(edgeMap));
   
   const result = [
-    ...nodes.sort((a, b) => a.data.id.localeCompare(b.data.id)),
-    ...edges.sort((a, b) => a.data.id.localeCompare(b.data.id))
+    ...sortElementsByDataId(nodes),
+    ...sortElementsByDataId(edges)
   ];
   
   
@@ -543,7 +530,7 @@ export function calcGraphDiff(prevElements, currElements) {
   const removed = validPrevElements.filter(e => !currMap.has(e.id || e.data?.id));
   // 수정: id는 같지만 data 또는 position이 다름
   const updated = validCurrElements.filter(e => {
-    const elementId = e.id || e.data?.id;
+    const elementId = normalizeElementId(e);
     const prev = prevMap.get(elementId);
     if (!prev) return false;
     
@@ -622,7 +609,7 @@ export function filterMainCharacters(elements, filterStage) {
   const coreNodes = elements.filter(el => 
     el.data && 
     el.data.id && 
-    !el.data.source && 
+    !isGraphEdgeElement(el) && 
     el.data.main_character === true
   );
   
@@ -635,9 +622,7 @@ export function filterMainCharacters(elements, filterStage) {
     // 1단계: 핵심인물끼리의 연결만
     filteredNodes = coreNodes;
     filteredEdges = elements.filter(el => 
-      el.data && 
-      el.data.source && 
-      el.data.target &&
+      isGraphEdgeElement(el) &&
       coreNodeIds.has(el.data.source) && 
       coreNodeIds.has(el.data.target)
     );
@@ -645,9 +630,7 @@ export function filterMainCharacters(elements, filterStage) {
     // 2단계: 핵심인물과 핵심인물에 연결된 노드(핵심인물, 비핵심인물) + 간선
     // 핵심 인물과 연결된 간선들 찾기
     const connectedEdges = elements.filter(el => 
-      el.data && 
-      el.data.source && 
-      el.data.target &&
+      isGraphEdgeElement(el) &&
       // 최소 하나의 노드는 핵심 인물이어야 함
       (coreNodeIds.has(el.data.source) || coreNodeIds.has(el.data.target))
     );
@@ -663,7 +646,7 @@ export function filterMainCharacters(elements, filterStage) {
     const connectedNodes = elements.filter(el => 
       el.data && 
       el.data.id && 
-      !el.data.source && 
+      !isGraphEdgeElement(el) && 
       connectedNodeIds.has(el.data.id)
     );
     
@@ -1002,4 +985,96 @@ export async function filterRelationsByTimeline({
   } catch (_error) {
     return relations;
   }
+}
+
+/**
+ * 챕터 이벤트 캐시에 있는 **현재 이벤트 미만** 인덱스의 relations·characters를
+ * 현재 Fine API 결과 위에 올려 한 번에 누적 그래프를 만든다.
+ * (동일 관계 키는 이벤트 순으로 나중 값이 덮어씀)
+ */
+export function expandFinePayloadWithPriorChapterEvents(
+  bookId,
+  chapterNum,
+  currentEventIdx,
+  resultData,
+  getCachedChapterEvents
+) {
+  if (
+    !bookId ||
+    !Number.isFinite(chapterNum) ||
+    chapterNum < 1 ||
+    !Number.isFinite(currentEventIdx) ||
+    currentEventIdx < 1 ||
+    !resultData ||
+    typeof getCachedChapterEvents !== 'function'
+  ) {
+    return { payload: resultData, expanded: false };
+  }
+
+  const chapterPayload = getCachedChapterEvents(bookId, chapterNum);
+  const events = Array.isArray(chapterPayload?.events) ? chapterPayload.events : [];
+  if (events.length === 0) {
+    return { payload: resultData, expanded: false };
+  }
+
+  const resolveIdx = (evt) => getEventIndexFromObject(evt, ['eventNum', 'idx', 'eventIdx']);
+
+  const priorEvents = events
+    .filter((evt) => {
+      const n = resolveIdx(evt);
+      return Number.isFinite(n) && n >= 1 && n < currentEventIdx;
+    })
+    .sort((a, b) => resolveIdx(a) - resolveIdx(b));
+
+  if (priorEvents.length === 0) {
+    return { payload: resultData, expanded: false };
+  }
+
+  const relationByKey = new Map();
+  const addRel = (rel) => {
+    if (rel == null || typeof rel !== 'object') return;
+    const key = getRelationKeyFromRelation(rel);
+    const k = key && String(key).trim() !== '' ? String(key) : `__rel__${relationByKey.size}`;
+    relationByKey.set(k, rel);
+  };
+
+  for (const evt of priorEvents) {
+    const rels = Array.isArray(evt?.relations) ? evt.relations : [];
+    for (const r of rels) {
+      addRel(r);
+    }
+  }
+
+  const currentRels = Array.isArray(resultData.relations) ? resultData.relations : [];
+  for (const r of currentRels) {
+    addRel(r);
+  }
+
+  const charById = new Map();
+  const addChar = (ch) => {
+    if (!ch || typeof ch !== 'object') return;
+    const id = extractCharacterId(ch);
+    if (!id || String(id).trim() === '' || String(id) === '0') return;
+    charById.set(String(id), ch);
+  };
+
+  for (const evt of priorEvents) {
+    const chars = Array.isArray(evt?.characters) ? evt.characters : [];
+    for (const c of chars) {
+      addChar(c);
+    }
+  }
+  const curChars = Array.isArray(resultData.characters) ? resultData.characters : [];
+  for (const c of curChars) {
+    addChar(c);
+  }
+
+  return {
+    payload: {
+      ...resultData,
+      relations: Array.from(relationByKey.values()),
+      characters: Array.from(charById.values()),
+    },
+    expanded: true,
+  };
 }

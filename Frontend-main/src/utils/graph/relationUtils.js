@@ -1,3 +1,6 @@
+import { toFiniteNumber, uniqueStrings } from './graphNormalizeUtils';
+import { registerCache, recordCacheAccess, enforceCacheSizeLimit } from '../common/cache/cacheManager';
+
 /**
  * @typedef {Object} NormalizedRelation
  * @property {number} id1
@@ -9,34 +12,19 @@
  * @property {string} label
  */
 
-export function safeNum(value) {
-  try {
-    if (value === undefined || value === null) {
-      return NaN;
-    }
-    
-    if (typeof value === "number") {
-      return value;
-    }
-    
-    if (typeof value === "string") {
-      const parsed = Number(value);
-      if (isNaN(parsed)) {
-        return NaN;
-      }
-      return parsed;
-    }
-    
-    const converted = Number(String(value));
-    if (isNaN(converted)) {
-      return NaN;
-    }
-    
-    return converted;
-  } catch (_error) {
-    return NaN;
-  }
-}
+export const safeNum = toFiniteNumber;
+
+const normalizeRelationArray = (relation, label = '') => {
+  const values = Array.isArray(relation)
+    ? relation
+    : typeof relation === 'string'
+      ? [relation]
+      : typeof label === 'string'
+        ? label.split(',')
+        : [];
+
+  return uniqueStrings(values);
+};
 
 export function normalizeRelation(raw) {
   if (!raw || typeof raw !== 'object') {
@@ -55,15 +43,7 @@ export function normalizeRelation(raw) {
     const positivity = raw.positivity;
     const weight = raw.weight ?? 1;
     const count = raw.count;
-    let relationArray = [];
-    
-    if (Array.isArray(raw.relation)) {
-      relationArray = raw.relation;
-    } else if (typeof raw.relation === "string") {
-      relationArray = [raw.relation];
-    } else if (raw.relation !== undefined && raw.relation !== null) {
-      relationArray = [];
-    }
+    const relationArray = normalizeRelationArray(raw.relation);
 
     const label = relationArray[0] || (typeof raw.label === "string" ? raw.label : "");
 
@@ -166,41 +146,13 @@ export function processRelations(relations) {
 
 export function processRelationTags(relation, label) {
   try {
-    if (!relation && !label) {
-      return [];
-    }
-    
-    const relArr = Array.isArray(relation)
-      ? relation
-      : (typeof label === 'string' ? label.split(',').map(s => s.trim()).filter(Boolean) : []);
-    
-    if (relArr.length === 0) {
-      return [];
-    }
-    
-    const uniqueRelations = [];
-    const seen = new Set();
-    
-    for (const rel of relArr) {
-      if (typeof rel !== 'string' || rel.length === 0) {
-        continue;
-      }
-      
-      if (!seen.has(rel)) {
-        uniqueRelations.push(rel);
-        seen.add(rel);
-      }
-    }
-    
-    return uniqueRelations;
+    return normalizeRelationArray(relation, label);
   } catch (_error) {
     return [];
   }
 }
 
 // 관계 태그 처리 캐시 (캐시 관리 시스템 통합)
-import { registerCache, recordCacheAccess, enforceCacheSizeLimit } from '../common/cache/cacheManager';
-
 const relationCache = new Map();
 registerCache('relationCache', relationCache, { maxSize: 1000, ttl: 600000 }); // 10분 TTL
 

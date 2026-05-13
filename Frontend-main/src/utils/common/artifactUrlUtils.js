@@ -1,5 +1,7 @@
 import { getApiBaseUrl } from './authUtils';
 
+const trimTrailingSlash = (value) => String(value ?? '').replace(/\/$/, '');
+
 /**
  * 매니페스트 readerArtifacts 등 서버가 준 artifact 경로를 fetch 가능한 URL로 만듭니다.
  * - 절대 http(s) URL은 그대로
@@ -10,7 +12,7 @@ export function resolveApiArtifactUrl(path) {
   const s = String(path).trim();
   if (!s) return '';
   if (/^https?:\/\//i.test(s)) return s;
-  const base = String(getApiBaseUrl() ?? '').replace(/\/$/, '');
+  const base = trimTrailingSlash(getApiBaseUrl());
   if (s.startsWith('/')) {
     return base ? `${base}${s}` : s;
   }

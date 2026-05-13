@@ -1,34 +1,31 @@
 import { getApiBaseUrl } from '../common/authUtils';
 
+export const createEmptyCharacterMaps = () => ({
+  idToName: {},
+  idToDesc: {},
+  idToDescKo: {},
+  idToMain: {},
+  idToNames: {},
+  idToProfileImage: {},
+});
+
 /**
  * 캐릭터 데이터를 ID 기반 매핑 객체로 변환
  * @param {Object} characters - characters 필드가 있거나 배열 직접 전달
  * @returns {{idToName:Object, idToDesc:Object, idToDescKo:Object, idToMain:Object, idToNames:Object, idToProfileImage:Object}}
  */
 export function createCharacterMaps(characters) {
-  const empty = () => ({
-    idToName: {},
-    idToDesc: {},
-    idToDescKo: {},
-    idToMain: {},
-    idToNames: {},
-    idToProfileImage: {},
-  });
   try {
-    const idToName = {};
-    const idToDesc = {};
-    const idToDescKo = {};
-    const idToMain = {};
-    const idToNames = {};
-    const idToProfileImage = {};
+    const maps = createEmptyCharacterMaps();
+    const { idToName, idToDesc, idToDescKo, idToMain, idToNames, idToProfileImage } = maps;
 
     if (!characters) {
-      return { idToName, idToDesc, idToDescKo, idToMain, idToNames, idToProfileImage };
+      return maps;
     }
 
     const characterArray = characters?.characters || characters || [];
     if (!Array.isArray(characterArray)) {
-      return { idToName, idToDesc, idToDescKo, idToMain, idToNames, idToProfileImage };
+      return maps;
     }
 
     let missingProfileImage = 0;
@@ -62,10 +59,10 @@ export function createCharacterMaps(characters) {
       console.debug(`[이미지 없음] 캐릭터 ${missingProfileImage}명 (프로필 이미지 미설정)`);
     }
 
-    return { idToName, idToDesc, idToDescKo, idToMain, idToNames, idToProfileImage };
+    return maps;
   } catch (error) {
     console.error('createCharacterMaps 실패:', error);
-    return empty();
+    return createEmptyCharacterMaps();
   }
 }
 

@@ -1,10 +1,9 @@
 import { authenticatedRequest } from './authApi';
 import { toLocator, locatorsEqual } from '../common/locatorUtils';
+import { toPositiveNumberOrNull } from '../common/numberUtils';
 
 const normalizeBookId = (bookId) => {
-  if (bookId == null || bookId === '') return null;
-  const normalized = Number(bookId);
-  return Number.isFinite(normalized) ? normalized : null;
+  return toPositiveNumberOrNull(bookId);
 };
 
 /** v2 API 북마크 DTO → UI 호환(rangeBookmark 등) */

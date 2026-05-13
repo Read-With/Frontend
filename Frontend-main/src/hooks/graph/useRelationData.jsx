@@ -298,22 +298,26 @@ async function fetchApiRelationTimelineViewer(bookId, id1, id2, chapterNum, even
     const points = [];
     const labelInfo = [];
 
-    for (let idx = firstAppearanceIdx; idx <= eventNum; idx += 1) {
+    for (let idx = 1; idx <= eventNum; idx += 1) {
       try {
         let fineData = cachedEvents.get(idx);
         if (!fineData) {
           fineData = await getFineGraph(bookId, chapterNum, idx);
         }
 
+        let positivityForEvent = 0;
         if (fineData?.result?.relations?.length) {
           const relation = fineData.result.relations.find((rel) => isSamePair(rel, id1, id2));
           if (relation) {
-            points.push(relation.positivity || 0);
-            labelInfo.push(`E${idx}`);
+            positivityForEvent = relation.positivity || 0;
           }
         }
+        points.push(positivityForEvent);
+        labelInfo.push(`E${idx}`);
       } catch (_error) {
-        // ignore per-event errors
+        // 이벤트 단위 오류는 해당 지점을 중립값으로 유지하고 진행
+        points.push(0);
+        labelInfo.push(`E${idx}`);
       }
     }
 

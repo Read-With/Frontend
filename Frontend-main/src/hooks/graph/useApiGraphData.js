@@ -6,22 +6,16 @@ import { loadGraphDataWithCache, hasMacroGraphStorageCache, hasMacroSessionCache
 import { useErrorHandler } from '../common/useErrorHandler';
 
 const ERROR_DISPLAY_DURATION = 5000;
-const resolveFineEventIdx = (currentEvent, forcedChapterEventIdx) => {
+const resolveFineEventIdx = (currentEvent) => {
   const eventNumValue = Number(currentEvent);
-  let eventIdx = Number.isFinite(eventNumValue) && eventNumValue >= 1 ? eventNumValue : 1;
-  const forcedIdx = Number(forcedChapterEventIdx);
-  const hasForcedIdx = Number.isFinite(forcedIdx) && forcedIdx >= 1;
-  if (hasForcedIdx) {
-    eventIdx = forcedIdx;
-  }
-  return { eventIdx, hasForcedIdx };
+  const eventIdx = Number.isFinite(eventNumValue) && eventNumValue >= 1 ? eventNumValue : 1;
+  return eventIdx;
 };
 
 export function useApiGraphData(
   serverBookId,
   currentChapter,
   currentEvent,
-  forcedChapterEventIdx = null,
   options = {},
 ) {
   const { macroOnly = false } = options;
@@ -34,6 +28,8 @@ export function useApiGraphData(
   const [isGraphLoading, setIsGraphLoading] = useState(false);
   const [apiFineLoading, setApiFineLoading] = useState(false);
 
+  const fineEpochRef = useRef(0);
+  const isFineGraphLoadingRef = useRef(false);
   const fineAbortRef = useRef(null);          // AbortController for the in-flight fine graph request
   const prevFineTargetKeyRef = useRef(null);
   const { handleError } = useErrorHandler('API Graph Data');
@@ -209,7 +205,7 @@ export function useApiGraphData(
     }
 
     const targetBookId = serverBookId;
-    const { eventIdx, hasForcedIdx } = resolveFineEventIdx(currentEvent, forcedChapterEventIdx);
+    const eventIdx = resolveFineEventIdx(currentEvent);
 
     if (eventIdx < 1) {
       resetFineLoadingState(false);
@@ -233,13 +229,7 @@ export function useApiGraphData(
         cacheKey,
         // 강제 이벤트: locator→이벤트 재해석이 덮어쓰지 않도록 eventIdx 고정 경로만 사용
         apiCall: () =>
-          getFineGraph(
-            targetBookId,
-            currentChapter,
-            eventIdx,
-            null,
-            hasForcedIdx ? { useCallerEventIdxOnly: true } : undefined
-          ),
+          getFineGraph(targetBookId, currentChapter, eventIdx, null),
         macroData: null,
         onSuccess: (data) => {
           if (signal.aborted) return;
@@ -272,7 +262,6 @@ export function useApiGraphData(
     currentChapter,
     currentEvent,
     handleError,
-    forcedChapterEventIdx,
     resetFineLoadingState,
   ]);
 

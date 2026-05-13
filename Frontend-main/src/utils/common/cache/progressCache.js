@@ -2,6 +2,7 @@ import { registerCache, getCacheItem, setCacheItem, clearCache, removeCacheItem 
 import { progressPayloadFromData, progressResultToViewerAnchor, resolveProgressLocator } from '../locatorUtils';
 import { locatorFromBookAbsoluteOffset, normalizeLocatorForServerProgress } from './manifestCache';
 import { progressStorageKey } from '../progressPercentStorage';
+import { clampNumber, clampPercent as clampPercentValue } from '../numberUtils';
 
 export const PROGRESS_CACHE_UPDATED_EVENT = 'readwith:progress-cache-updated';
 
@@ -9,16 +10,16 @@ export const PROGRESS_CACHE_UPDATED_EVENT = 'readwith:progress-cache-updated';
 export const ensureProgressRowLocator = (bookIdStr, row) => {
   if (!row || typeof row !== 'object') return row;
   if (resolveProgressLocator(row)) return row;
-  const bid = row.bookId != null ? String(row.bookId) : String(bookIdStr ?? '');
+  const resolvedBookId = row.bookId != null ? String(row.bookId) : String(bookIdStr ?? '');
   const abs = Number(row.startTxtOffset);
-  if (!bid || !Number.isFinite(abs) || abs < 0) return row;
-  const loc = locatorFromBookAbsoluteOffset(bid, abs);
-  if (!loc) return row;
+  if (!resolvedBookId || !Number.isFinite(abs) || abs < 0) return row;
+  const locator = locatorFromBookAbsoluteOffset(resolvedBookId, abs);
+  if (!locator) return row;
   return {
     ...row,
-    locator: loc,
-    startLocator: loc,
-    endLocator: loc,
+    locator,
+    startLocator: locator,
+    endLocator: locator,
   };
 };
 
@@ -42,6 +43,10 @@ const removeLibraryProgressPercentFromLocalStorage = (bookIdStr) => {
 
 const PROGRESS_CACHE_KEY = 'readwith_progress_cache';
 const PROGRESS_CACHE_TTL_MS = 1000 * 60 * 60 * 24;
+const clampPercent = (value) => Math.round(clampPercentValue(value, 0));
+const clampProgress = (value) => clampNumber(value, 0, 100);
+const toBookIdString = (bookId) => (bookId == null ? null : String(bookId));
+const getEventName = (data) => data?.eventName ?? data?.eventTitle ?? data?.name;
 
 const progressCache = new Map();
 registerCache('progressCache', progressCache, {
@@ -71,10 +76,12 @@ const saveProgressCacheToStorage = (progressMap) => {
 /** 뷰어·서버에서 온 0–100 진행률(마이페이지 바 연동) */
 export const normalizeReadingProgressPercent = (data) => {
   if (!data || typeof data !== 'object') return null;
-  const r = Number(data.readingProgressPercent);
-  if (Number.isFinite(r)) return Math.min(100, Math.max(0, Math.round(r)));
-  const p = Number(data.progress);
-  if (Number.isFinite(p) && p >= 0 && p <= 100) return Math.min(100, Math.max(0, Math.round(p)));
+  const readingProgressPercent = Number(data.readingProgressPercent);
+  if (Number.isFinite(readingProgressPercent)) return clampPercent(readingProgressPercent);
+  const progressPercent = Number(data.progress);
+  if (Number.isFinite(progressPercent) && progressPercent >= 0 && progressPercent <= 100) {
+    return clampPercent(progressPercent);
+  }
   return null;
 };
 
@@ -121,7 +128,7 @@ const fromStoredProgress = (stored) => {
     const locator = anchor.startLocator;
     const evn = Number(row.eventNum);
     const chp = Number(row.chapterProgress);
-    const evName = row.eventName ?? row.eventTitle ?? row.name;
+    const evName = getEventName(row);
     return {
       bookId: row.bookId,
       locator,
@@ -132,7 +139,7 @@ const fromStoredProgress = (stored) => {
       updatedAt: row.updatedAt,
       ...(pct != null ? { readingProgressPercent: pct } : {}),
       ...(Number.isFinite(evn) && evn > 0 ? { eventNum: evn } : {}),
-      ...(Number.isFinite(chp) ? { chapterProgress: Math.min(100, Math.max(0, chp)) } : {}),
+      ...(Number.isFinite(chp) ? { chapterProgress: clampProgress(chp) } : {}),
       ...(typeof evName === 'string' && evName.trim() ? { eventName: evName.trim() } : {}),
     };
   }
@@ -178,15 +185,15 @@ export const setAllProgress = (progressList) => {
   });
   saveProgressCacheToStorage(progressMap);
   Object.entries(progressMap).forEach(([id, row]) => {
-    const p = normalizeReadingProgressPercent(row ?? {});
-    if (p != null) syncLibraryProgressPercentToLocalStorage(id, p);
+    const progressPercent = normalizeReadingProgressPercent(row ?? {});
+    if (progressPercent != null) syncLibraryProgressPercentToLocalStorage(id, progressPercent);
   });
   Object.keys(progressMap).forEach((id) => dispatchProgressCacheUpdated(id));
 };
 
 export const setProgressToCache = (progressData) => {
   if (!progressData || progressData.bookId == null) return;
-  const bookIdStr = String(progressData.bookId);
+  const bookIdStr = toBookIdString(progressData.bookId);
   let withLoc = ensureProgressRowLocator(bookIdStr, progressData);
   const locBefore = resolveProgressLocator(withLoc);
   if (locBefore) {
@@ -210,8 +217,8 @@ export const setProgressToCache = (progressData) => {
     const evn = Number(withLoc.eventNum);
     if (Number.isFinite(evn) && evn > 0) progress.eventNum = evn;
     const chp = Number(withLoc.chapterProgress);
-    if (Number.isFinite(chp)) progress.chapterProgress = Math.min(100, Math.max(0, chp));
-    const evName = withLoc.eventName ?? withLoc.eventTitle ?? withLoc.name;
+    if (Number.isFinite(chp)) progress.chapterProgress = clampProgress(chp);
+    const evName = getEventName(withLoc);
     if (typeof evName === 'string' && evName.trim()) progress.eventName = evName.trim();
   } else if (Number.isFinite(Number(withLoc.startTxtOffset))) {
     progress = {
@@ -236,7 +243,7 @@ export const setProgressToCache = (progressData) => {
 
 export const getProgressFromCache = (bookId) => {
   if (!bookId) return null;
-  const bookIdStr = String(bookId);
+  const bookIdStr = toBookIdString(bookId);
   let cached = getCacheItem('progressCache', bookIdStr);
   if (!cached) {
     const storageCached = getProgressCacheFromStorage();
@@ -250,7 +257,7 @@ export const getProgressFromCache = (bookId) => {
 
 export const removeProgressFromCache = (bookId) => {
   if (!bookId) return;
-  const bookIdStr = String(bookId);
+  const bookIdStr = toBookIdString(bookId);
   removeCacheItem('progressCache', bookIdStr);
 
   const cached = getProgressCacheFromStorage();

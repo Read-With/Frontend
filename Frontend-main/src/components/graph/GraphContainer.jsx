@@ -2,6 +2,7 @@ import React, { forwardRef, useImperativeHandle, useMemo, useCallback } from "re
 import ViewerRelationGraph from "./RelationGraph_Viewerpage";
 import { useGraphDataLoader } from "../../hooks/graph/useGraphDataLoader.js";
 import { useGraphSearch } from "../../hooks/graph/useGraphSearch.jsx";
+import { resolveViewerDisplayEventNum } from "../../utils/viewer/eventDisplayUtils";
 
 // ─── 헬퍼 ─────────────────────────────────────────────────────────────────────
 /**
@@ -31,7 +32,6 @@ function resolveEventIdx(currentEvent) {
  *   - 데이터 로더와 내부 검색 훅은 비활성화되며, elements를 다시 병합하지 않음(이중 규칙 방지)
  */
 const GraphContainer = forwardRef(({
-  currentPosition: _currentPosition,
   currentEvent,
   currentChapter,
   edgeLabelVisible = true,
@@ -136,13 +136,12 @@ const GraphContainer = forwardRef(({
       elements={finalElements}
       newNodeIds={newNodeIds}
       chapterNum={currentChapter}
-      eventNum={(() => {
-        if (typeof currentEvent === 'number' && Number.isFinite(currentEvent) && currentEvent > 0) {
-          return currentEvent;
-        }
-        const n = Number(currentEvent?.eventNum);
-        return Number.isFinite(n) && n > 0 ? n : 1;
-      })()}
+      eventNum={resolveViewerDisplayEventNum({
+        currentEvent,
+        prevValidEvent,
+        progressTopBar: null,
+        fallback: 0,
+      })}
       edgeLabelVisible={edgeLabelVisible}
       filename={filename}
       bookId={bookId}

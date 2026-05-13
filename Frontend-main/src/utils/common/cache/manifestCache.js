@@ -22,6 +22,23 @@ registerCache('manifestCache', manifestCache, {
 
 const prefetchPromises = new Map();
 
+const toFiniteNumberArray = (values) =>
+  (Array.isArray(values) ? values : [])
+    .map((x) => Number(x))
+    .filter((n) => Number.isFinite(n));
+
+const normalizeTextSpan = (startValue, endValue) => {
+  const start = toNumberOrNull(startValue) ?? 0;
+  const endRaw = toNumberOrNull(endValue);
+  const end = endRaw != null && endRaw >= start ? endRaw : start;
+  return { start, end };
+};
+
+const sortByChapterIdx = (chapters) =>
+  [...(Array.isArray(chapters) ? chapters : [])]
+    .filter((ch) => toNumberOrNull(ch?.idx) != null && toNumberOrNull(ch.idx) >= 1)
+    .sort((a, b) => toNumberOrNull(a.idx) - toNumberOrNull(b.idx));
+
 export const getManifestCacheKey = (bookId) => {
   return `${manifestCachePrefix}${bookId}`;
 };
@@ -29,12 +46,12 @@ export const getManifestCacheKey = (bookId) => {
 /** GET /api/v2/books/{bookId}/manifest — chapters[].paragraphStartsJson / paragraphLengthsJson */
 const parseManifestJsonNumberArray = (value) => {
   if (Array.isArray(value)) {
-    return value.map((x) => Number(x)).filter((n) => Number.isFinite(n));
+    return toFiniteNumberArray(value);
   }
   if (typeof value !== 'string' || value.trim() === '') return [];
   try {
     const parsed = JSON.parse(value);
-    return Array.isArray(parsed) ? parsed.map((x) => Number(x)).filter((n) => Number.isFinite(n)) : [];
+    return toFiniteNumberArray(parsed);
   } catch (_e) {
     return [];
   }
@@ -47,9 +64,7 @@ const normalizeEvent = (event) => {
   if (idx == null || idx < 1) return null;
   const apiNum = toNumberOrNull(event.eventNum);
   const eventNum = apiNum != null && apiNum >= 1 ? apiNum : idx;
-  const start = toNumberOrNull(event.startTxtOffset) ?? 0;
-  const endRaw = toNumberOrNull(event.endTxtOffset);
-  const end = endRaw != null && endRaw >= start ? endRaw : start;
+  const { start, end } = normalizeTextSpan(event.startTxtOffset, event.endTxtOffset);
   return {
     idx,
     eventIdx: idx,
@@ -353,9 +368,7 @@ export const locatorFromBookAbsoluteOffset = (bookId, absoluteOffset) => {
   const pos = toNumberOrNull(absoluteOffset);
   if (!manifest?.chapters?.length || pos == null || pos < 0) return null;
 
-  const chapters = [...manifest.chapters]
-    .filter((ch) => toNumberOrNull(ch?.idx) != null && toNumberOrNull(ch.idx) >= 1)
-    .sort((a, b) => toNumberOrNull(a.idx) - toNumberOrNull(b.idx));
+  const chapters = sortByChapterIdx(manifest.chapters);
 
   let cum = 0;
   let lastChapterWithLen = null;

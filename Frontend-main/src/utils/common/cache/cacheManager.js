@@ -5,6 +5,31 @@ export function getStorage(storageType = 'localStorage') {
   return storageType === 'sessionStorage' ? sessionStorage : localStorage;
 }
 
+const isMapLike = (cache) => cache && typeof cache.get === 'function' && typeof cache.set === 'function';
+
+const getCacheSize = (cache) => {
+  if (!cache) return 0;
+  if (typeof cache.size === 'number') return cache.size;
+  return typeof cache === 'object' ? Object.keys(cache).length : 0;
+};
+
+const getCacheEntries = (cache) => {
+  if (!cache) return [];
+  if (typeof cache.entries === 'function') return Array.from(cache.entries());
+  return typeof cache === 'object' ? Object.entries(cache) : [];
+};
+
+const readFromCache = (cache, key) => (isMapLike(cache) ? cache.get(key) : cache?.[key]);
+
+const writeToCache = (cache, key, value) => {
+  if (!cache) return;
+  if (isMapLike(cache)) {
+    cache.set(key, value);
+  } else {
+    cache[key] = value;
+  }
+};
+
 function deleteFromCache(cache, key) {
   if (!cache) return;
   if (cache.delete) {
@@ -13,6 +38,33 @@ function deleteFromCache(cache, key) {
     delete cache[key];
   }
 }
+
+const clearCacheObject = (cache) => {
+  if (cache && typeof cache.clear === 'function') {
+    cache.clear();
+    return;
+  }
+  if (cache && typeof cache === 'object') {
+    for (const key of Object.keys(cache)) {
+      delete cache[key];
+    }
+  }
+};
+
+const serializeCache = (cache) =>
+  cache instanceof Map ? Object.fromEntries(cache.entries()) : { ...cache };
+
+const persistCache = (cacheInfo) => {
+  const { cache, options } = cacheInfo || {};
+  if (!options?.storageKey || !options?.persist) return;
+  saveToStorage(
+    options.storageKey,
+    { data: serializeCache(cache), timestamp: Date.now() },
+    options.storageType
+  );
+};
+
+const hasOwn = (obj, key) => Object.prototype.hasOwnProperty.call(obj, key);
 
 export function loadFromStorage(storageKey, storageType = 'localStorage') {
   const storage = getStorage(storageType);
@@ -102,7 +154,7 @@ export function registerCache(name, cache, options = {}) {
     if (cacheInfo.options.storageKey && cacheInfo.options.persist) {
       const stored = loadFromStorage(cacheInfo.options.storageKey, cacheInfo.options.storageType);
       if (stored && stored.data) {
-        if (cache instanceof Map) {
+        if (isMapLike(cache)) {
           Object.entries(stored.data).forEach(([key, value]) => {
             cache.set(key, value);
           });
@@ -141,10 +193,10 @@ export function enforceCacheSizeLimit(name) {
     if (!cacheInfo) return;
     
     const { cache, options } = cacheInfo;
-    const currentSize = cache.size || Object.keys(cache).length;
+    const currentSize = getCacheSize(cache);
     
     if (currentSize > options.maxSize) {
-      const entries = Array.from(cache.entries());
+      const entries = getCacheEntries(cache);
       
       entries.sort((a, b) => {
         const aTime = (a[1] && a[1].lastAccess) ? a[1].lastAccess : 0;
@@ -175,31 +227,15 @@ function setupCleanupTimer(name, cacheInfo) {
         const { cache, options } = cacheInfo;
         let hasChanges = false;
         
-        if (cache.size) {
-          for (const [key, value] of cache.entries()) {
-            if (value && typeof value === 'object' && value.timestamp && 
-                (now - value.timestamp) > options.ttl) {
-              deleteFromCache(cache, key);
-              hasChanges = true;
-            }
-          }
-        } else if (cache && typeof cache === 'object') {
-          for (const key of Object.keys(cache)) {
-            const value = cache[key];
-            if (value && typeof value === 'object' && value.timestamp && 
-                (now - value.timestamp) > options.ttl) {
-              deleteFromCache(cache, key);
-              hasChanges = true;
-            }
+        for (const [key, value] of getCacheEntries(cache)) {
+          if (value && typeof value === 'object' && value.timestamp && 
+              (now - value.timestamp) > options.ttl) {
+            deleteFromCache(cache, key);
+            hasChanges = true;
           }
         }
         
-        if (hasChanges && options.storageKey && options.persist) {
-          const data = cache instanceof Map 
-            ? Object.fromEntries(cache.entries())
-            : { ...cache };
-          saveToStorage(options.storageKey, { data, timestamp: Date.now() }, options.storageType);
-        }
+        if (hasChanges) persistCache(cacheInfo);
       } catch (error) {
         console.error(`TTL 캐시 정리 중 오류 (${name}):`, error);
       }
@@ -218,13 +254,7 @@ export function clearCache(name) {
     
     const { cache, cleanupTimer, options } = cacheInfo;
     
-    if (cache && typeof cache.clear === 'function') {
-      cache.clear();
-    } else if (cache && typeof cache === 'object') {
-      for (const key of Object.keys(cache)) {
-        delete cache[key];
-      }
-    }
+    clearCacheObject(cache);
     
     if (cleanupTimer) {
       clearInterval(cleanupTimer);
@@ -272,9 +302,7 @@ export function getCacheStats() {
     
     for (const [name, cacheInfo] of cacheRegistry) {
       const { cache, lastAccess, accessCount } = cacheInfo;
-      const cacheSize = cache && typeof cache.size === 'number' 
-        ? cache.size 
-        : (cache && typeof cache === 'object' ? Object.keys(cache).length : 0);
+      const cacheSize = getCacheSize(cache);
         
       stats[name] = {
         size: cacheSize,
@@ -307,17 +335,13 @@ export function getCacheItem(name, key) {
     if (!cacheInfo) return undefined;
     
     const { cache, options } = cacheInfo;
-    let value = cache.get ? cache.get(key) : cache[key];
+    let value = readFromCache(cache, key);
     
     if (value === undefined && options.storageKey && options.persist) {
       const stored = loadFromStorage(options.storageKey, options.storageType);
-      if (stored && stored.data && stored.data[key]) {
+      if (stored?.data && hasOwn(stored.data, key)) {
         value = stored.data[key];
-        if (cache.set) {
-          cache.set(key, value);
-        } else {
-          cache[key] = value;
-        }
+        writeToCache(cache, key, value);
       }
     }
     
@@ -340,29 +364,27 @@ export function setCacheItem(name, key, value) {
     const cacheInfo = cacheRegistry.get(name);
     if (!cacheInfo) return false;
     
-    const { cache, options } = cacheInfo;
+    const { cache } = cacheInfo;
     
-    const cacheValue = {
-      ...value,
-      lastAccess: Date.now(),
-      timestamp: value.timestamp || Date.now()
-    };
+    const now = Date.now();
+    const cacheValue = value && typeof value === 'object' && !Array.isArray(value)
+      ? {
+          ...value,
+          lastAccess: now,
+          timestamp: value.timestamp || now
+        }
+      : {
+          value,
+          lastAccess: now,
+          timestamp: now
+        };
     
-    if (cache.set) {
-      cache.set(key, cacheValue);
-    } else {
-      cache[key] = cacheValue;
-    }
+    writeToCache(cache, key, cacheValue);
     
     recordCacheAccess(name);
     enforceCacheSizeLimit(name);
     
-    if (options.storageKey && options.persist) {
-      const data = cache instanceof Map 
-        ? Object.fromEntries(cache.entries())
-        : { ...cache };
-      saveToStorage(options.storageKey, { data, timestamp: Date.now() }, options.storageType);
-    }
+    persistCache(cacheInfo);
     
     return true;
   } catch (error) {

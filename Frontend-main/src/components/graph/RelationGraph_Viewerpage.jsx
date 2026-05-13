@@ -10,30 +10,36 @@ import UnifiedEdgeTooltip from "./tooltip/UnifiedEdgeTooltip";
 import "./RelationGraph.css";
 import { getEdgeStyle, createGraphStylesheet } from "../../utils/styles/graphStyles";
 import { graphStyles } from "../../utils/styles/styles";
-import { buildElementsGraphFingerprint } from "../../utils/graph/graphDataUtils.js";
 import { ensureElementsInBounds, clearHighlightClassesOn } from "../../utils/graph/graphUtils";
 import { applySearchFadeEffect } from "../../utils/graph/searchUtils.jsx";
 
-function useAutoFit(cyRef, elements, chapterNum, isSearchActive) {
-  const elementsFp = useMemo(
-    () => (elements?.length ? buildElementsGraphFingerprint(elements) : ""),
-    [elements]
-  );
-
+// Fits the viewport only when the chapter changes (not on every within-chapter event transition).
+// Within-chapter incremental updates preserve existing node positions, so fitting every event
+// would give a "fresh reload" feel even though only a few nodes changed.
+function useAutoFit(cyRef, chapterNum, isSearchActive) {
   useEffect(() => {
     const cy = cyRef.current;
     if (!cy || isSearchActive) return;
 
-    const nodes = cy.nodes();
-    if (!nodes || nodes.length === 0) return;
-
-    const container = typeof cy.container === "function" ? cy.container() : null;
     let cancelled = false;
+    let rafId = 0;
 
-    const runFit = () => {
+    const runFit = (attempt = 0) => {
       if (cancelled) return;
       const cyLive = cyRef.current;
       if (!cyLive) return;
+      const container = typeof cyLive.container === "function" ? cyLive.container() : null;
+      const width = Number(container?.clientWidth ?? 0);
+      const height = Number(container?.clientHeight ?? 0);
+
+      // 그래프 패널이 아직 레이아웃되지 않은 초기 프레임에서는 fit을 미룬다.
+      if (width <= 0 || height <= 0) {
+        if (attempt < 6) {
+          rafId = requestAnimationFrame(() => runFit(attempt + 1));
+        }
+        return;
+      }
+
       try {
         cyLive.resize();
       } catch {
@@ -64,13 +70,13 @@ function useAutoFit(cyRef, elements, chapterNum, isSearchActive) {
       });
     };
 
-    const id = requestAnimationFrame(runFit);
+    rafId = requestAnimationFrame(() => runFit(0));
 
     return () => {
       cancelled = true;
-      cancelAnimationFrame(id);
+      if (rafId) cancelAnimationFrame(rafId);
     };
-  }, [elementsFp, chapterNum, isSearchActive]);
+  }, [chapterNum, isSearchActive]);
 }
 
 function useCytoscapeReset(cyRef, graphClearRef, selectedNodeIdRef, selectedEdgeIdRef) {
@@ -118,7 +124,7 @@ const ViewerRelationGraph = ({
   const selectedNodeIdRef = useRef(null);
   const containerRef = useRef(null);
 
-  useAutoFit(cyRef, elements, chapterNum, isSearchActive);
+  useAutoFit(cyRef, chapterNum, isSearchActive);
   useCytoscapeReset(cyRef, graphClearRef, selectedNodeIdRef, selectedEdgeIdRef);
 
   // Used by useGraphInteractions (background tap): graph is already cleared by resetAllStyles, only clear tooltip

@@ -13,6 +13,7 @@ import { applySearchFadeEffect, shouldShowNoSearchResults, getNoSearchResultsMes
 import {
   createRippleEffect,
   ensureElementsInBounds,
+  isGraphContainerSizeReady,
   createMouseEventHandlers,
   syncReciprocalPairJunctionOffsets,
   clearHighlightClassesOn,
@@ -87,7 +88,7 @@ const CytoscapeGraphUnified = ({
   selectedEdgeIdRef,
   strictBackgroundClear = false,
   showRippleEffect = false,
-  isDropdownSelection = false,
+  isDropdownSelection: _isDropdownSelection = false,
   isDataRefreshing = false,
   currentChapter,
 }) => {
@@ -115,7 +116,7 @@ const CytoscapeGraphUnified = ({
     return [...fitNodeIds].map(String).sort().join("\x1f");
   }, [fitNodeIds]);
 
-  const safeCyOperation = useCallback((operation, errorMessage) => {
+  const safeCyOperation = useCallback((operation, _errorMessage) => {
     try {
       return operation();
     } catch {
@@ -597,6 +598,7 @@ const CytoscapeGraphUnified = ({
       safeCyOperation(() => {
         cy.resize();
         setTimeout(() => {
+          if (!isGraphContainerSizeReady(containerRef.current)) return;
           safeCyOperation(() => {
             ensureElementsInBounds(cy, containerRef.current);
           }, '❌ 요소 경계 조정 실패');

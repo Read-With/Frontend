@@ -8,12 +8,36 @@ import { ensureGraphBookCache } from '../../utils/common/cache/chapterEventCache
 import { USER_VIEWER_PREFIX } from '../../utils/navigation/viewerPaths';
 import { formatLibraryRelativeDate } from '../../utils/library/libraryBookDisplay';
 
+const getNumericBookId = (book) => {
+  const bookId = Number(book?.id);
+  return Number.isFinite(bookId) && bookId > 0 ? bookId : null;
+};
+
+async function prewarmGraphBookCache(book, options = {}) {
+  const bookId = getNumericBookId(book);
+  if (!bookId) return null;
+
+  try {
+    return await ensureGraphBookCache(bookId, options);
+  } catch (error) {
+    if (error?.name !== 'AbortError') {
+      console.warn('도서 그래프 캐시 준비 실패', { bookId, error });
+    }
+    return null;
+  }
+}
+
 function navigateFromLibrary(navigate, book, graphMode) {
   const base = graphMode === 'graph' ? '/user/graph' : USER_VIEWER_PREFIX;
   navigate(`${base}/${book.id}`, {
     state: { book, fromLibrary: true, from: { pathname: '/user/mypage' } },
     replace: false,
   });
+}
+
+async function openBookFromLibrary(navigate, book, graphMode) {
+  await prewarmGraphBookCache(book);
+  navigateFromLibrary(navigate, book, graphMode);
 }
 
 const DeleteConfirmModal = ({ isOpen, onClose, onConfirm }) => {
@@ -91,21 +115,23 @@ DeleteConfirmModal.propTypes = {
   onConfirm: PropTypes.func.isRequired,
 };
 
-const BookCard = memo(({ book, onToggleFavorite, onBookClick, onBookDetailClick, onShowDeleteModal, viewMode = 'grid' }) => {
-  const navigate = useNavigate();
+const BookCard = memo(({ book, onToggleFavorite, onBookClick, onOpenBook, onBookDetailClick, onShowDeleteModal, viewMode = 'grid', openingMode = null }) => {
   const [imageError, setImageError] = useState(false);
   const [showContextMenu, setShowContextMenu] = useState(false);
   const [optimisticFavorite, setOptimisticFavorite] = useState(null);
   const displayFavorite = optimisticFavorite !== null ? optimisticFavorite : !!book.favorite;
+  const isOpeningReader = openingMode === 'viewer';
+  const isOpeningGraph = openingMode === 'graph';
+  const isOpening = Boolean(openingMode);
 
   const handleReadClick = (e) => {
     e.stopPropagation();
-    navigateFromLibrary(navigate, book, 'viewer');
+    onOpenBook?.(book, 'viewer');
   };
 
   const handleGraphClick = (e) => {
     e.stopPropagation();
-    navigateFromLibrary(navigate, book, 'graph');
+    onOpenBook?.(book, 'graph');
   };
 
   useEffect(() => {
@@ -128,7 +154,7 @@ const BookCard = memo(({ book, onToggleFavorite, onBookClick, onBookDetailClick,
     if (onBookClick) {
       onBookClick(book);
     } else {
-      handleReadClick({ stopPropagation: () => {} });
+      onOpenBook?.(book, 'viewer');
     }
   };
 
@@ -259,17 +285,19 @@ const BookCard = memo(({ book, onToggleFavorite, onBookClick, onBookDetailClick,
           className="book-action-btn book-action-primary"
           onClick={handleReadClick}
           title="책 읽기"
+          disabled={isOpening}
         >
           <BookOpen size={16} className="book-action-icon" />
-          읽기
+          {isOpeningReader ? '준비중' : '읽기'}
         </button>
         <button 
           className="book-action-btn book-action-secondary"
           onClick={handleGraphClick}
           title="인물 관계도 보기"
+          disabled={isOpening}
         >
           <Network size={16} className="book-action-icon" />
-          관계도
+          {isOpeningGraph ? '준비중' : '관계도'}
         </button>
       </div>
 
@@ -324,15 +352,19 @@ BookCard.propTypes = {
   book: bookShape.isRequired,
   onToggleFavorite: PropTypes.func,
   onBookClick: PropTypes.func,
+  onOpenBook: PropTypes.func,
   onBookDetailClick: PropTypes.func,
   onShowDeleteModal: PropTypes.func,
-  viewMode: PropTypes.oneOf(['grid', 'list'])
+  viewMode: PropTypes.oneOf(['grid', 'list']),
+  openingMode: PropTypes.oneOf(['viewer', 'graph'])
 };
 
 const BookLibrary = memo(({ books, loading: _loading, error: _loadError, onRetry: _onRetry, onToggleFavorite, onBookClick, onBookDelete, viewMode = 'grid' }) => {
+  const navigate = useNavigate();
   const [selectedBook, setSelectedBook] = useState(null);
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [deleteTargetBook, setDeleteTargetBook] = useState(null);
+  const [openingTarget, setOpeningTarget] = useState(null);
 
   useEffect(() => {
     if (!selectedBook?.id) return;
@@ -353,31 +385,37 @@ const BookLibrary = memo(({ books, loading: _loading, error: _loadError, onRetry
       return undefined;
     }
 
-    let cancelled = false;
+    const abortController = new AbortController();
 
     const initializeSequentially = async () => {
       for (const book of numericBooks) {
-        if (cancelled) break;
-
-        const bookId = Number(book.id);
-        if (!Number.isFinite(bookId)) {
-          continue;
-        }
-
-        try {
-          await ensureGraphBookCache(bookId);
-        } catch (error) {
-          console.warn('도서 캐시 초기화 실패', { bookId, error });
-        }
+        if (abortController.signal.aborted) break;
+        await prewarmGraphBookCache(book, { signal: abortController.signal });
       }
     };
 
     initializeSequentially();
 
     return () => {
-      cancelled = true;
+      abortController.abort();
     };
   }, [books]);
+
+  const handleOpenBook = useCallback(
+    async (book, graphMode) => {
+      const bookId = getNumericBookId(book);
+      const targetKey = bookId ? `${bookId}:${graphMode}` : null;
+      if (targetKey && openingTarget === targetKey) return;
+
+      setOpeningTarget(targetKey);
+      try {
+        await openBookFromLibrary(navigate, book, graphMode);
+      } finally {
+        setOpeningTarget(null);
+      }
+    },
+    [navigate, openingTarget]
+  );
 
   const handleBookDetailClick = useCallback((book) => {
     setSelectedBook(book);
@@ -440,9 +478,15 @@ const BookLibrary = memo(({ books, loading: _loading, error: _loadError, onRetry
           book={book}
           onToggleFavorite={onToggleFavorite}
           onBookClick={onBookClick}
+          onOpenBook={handleOpenBook}
           onBookDetailClick={handleBookDetailClick}
           onShowDeleteModal={handleShowDeleteModal}
           viewMode={viewMode}
+          openingMode={openingTarget === `${Number(book.id)}:viewer`
+            ? 'viewer'
+            : openingTarget === `${Number(book.id)}:graph`
+              ? 'graph'
+              : null}
         />
       ))}
       

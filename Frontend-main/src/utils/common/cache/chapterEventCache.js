@@ -8,6 +8,7 @@ import {
 } from './manifestCache';
 import { createCharacterMaps } from '../../graph/characterUtils';
 import { convertRelationsToElements, calcGraphDiff } from '../../graph/graphDataUtils';
+import { normalizeElementId } from '../../graph/graphNormalizeUtils';
 import { 
   registerCache, 
   getCacheItem, 
@@ -45,10 +46,14 @@ registerCache('graphBookCache', graphBookMemoryCache, {
 });
 const graphBuildPromises = new Map();
 
+const toPositiveNumber = (value) => {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) && numeric > 0 ? numeric : null;
+};
+
 const getGraphBookCacheKey = (bookId) => {
-  if (bookId === null || bookId === undefined) return null;
-  const numeric = Number(bookId);
-  if (!Number.isFinite(numeric) || numeric <= 0) return null;
+  const numeric = toPositiveNumber(bookId);
+  if (numeric === null) return null;
   return `${GRAPH_BOOK_CACHE_PREFIX}${numeric}`;
 };
 
@@ -102,8 +107,8 @@ export const hasGraphBookCache = (bookId) => {
 };
 
 export const isGraphBookCacheBuilding = (bookId) => {
-  const numericId = Number(bookId);
-  if (!Number.isFinite(numericId) || numericId <= 0) {
+  const numericId = toPositiveNumber(bookId);
+  if (numericId === null) {
     return false;
   }
   return graphBuildPromises.has(numericId);
@@ -113,8 +118,8 @@ export const ensureGraphBookCache = async (
   bookId,
   { forceRefresh = false, signal } = {}
 ) => {
-  const numericId = Number(bookId);
-  if (!Number.isFinite(numericId) || numericId <= 0) {
+  const numericId = toPositiveNumber(bookId);
+  if (numericId === null) {
     return null;
   }
 
@@ -227,14 +232,7 @@ const deepClone = (value) => {
   }
 };
 
-const getElementId = (element) => {
-  if (!element) return null;
-  return (
-    element.id ??
-    element.data?.id ??
-    null
-  );
-};
+const getElementId = normalizeElementId;
 
 const cloneArray = (arr) => Array.isArray(arr) ? arr.map(deepClone) : [];
 
@@ -680,9 +678,9 @@ const normalizeReaderProgressPayload = (bookKey, payload) => {
 };
 
 const getChapterEventCacheKey = (bookId, chapterIdx) => {
-  const bookIdNum = Number(bookId);
-  const chapterIdxNum = Number(chapterIdx);
-  if (!Number.isFinite(bookIdNum) || !Number.isFinite(chapterIdxNum) || chapterIdxNum <= 0) {
+  const bookIdNum = toPositiveNumber(bookId);
+  const chapterIdxNum = toPositiveNumber(chapterIdx);
+  if (bookIdNum === null || chapterIdxNum === null) {
     return null;
   }
   return `${bookIdNum}-${chapterIdxNum}`;

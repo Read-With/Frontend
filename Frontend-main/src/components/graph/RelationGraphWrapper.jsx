@@ -34,7 +34,6 @@ import { useChapterPovSummaries } from '../../hooks/viewer/useChapterPovSummarie
 import {
   getChapterData,
   isValidEvent,
-  resolveLastEventIdxForFineGraph,
 } from '../../utils/common/cache/manifestCache.js';
 import { stripRedundantBookTitlePrefix } from '../../utils/viewer/chapterTitleDisplay';
 
@@ -89,7 +88,6 @@ function RelationGraphWrapper() {
     { forceInitialValue: chapterFromViewer != null }
   );
   const [currentEvent, setCurrentEvent] = useState(1);
-  const [forcedChapterEventIdx, setForcedChapterEventIdx] = useState(null);
   const [hasShownGraphOnce, setHasShownGraphOnce] = useState(false);
 
   const appliedRequestedChapterRef = useRef(null);
@@ -142,13 +140,7 @@ function RelationGraphWrapper() {
     apiFineLoading,
     apiError,
     clearError: clearApiError,
-  } = useApiGraphData(
-    serverBookId,
-    currentChapter,
-    currentEvent,
-    forcedChapterEventIdx,
-    { macroOnly: true },
-  );
+  } = useApiGraphData(serverBookId, currentChapter, currentEvent, { macroOnly: true });
 
   const { povSummaries } = useChapterPovSummaries(
     serverBookId,
@@ -183,7 +175,7 @@ function RelationGraphWrapper() {
   const {
     currentChapterData,
   } = useGraphDataLoader(loaderBookKey, currentChapter, loaderEventIdx);
-  const newNodeIds = [];
+  const newNodeIds = useMemo(() => [], []);
 
   const effectiveMaxChapter = apiMaxChapter;
 
@@ -228,29 +220,14 @@ function RelationGraphWrapper() {
     const ch = Number(currentChapter);
     if (!Number.isFinite(ch) || ch < 1) return;
     if (isValidEvent(serverBookId, ch, currentEvent, manifestData)) return;
-    const next = resolveLastEventIdxForFineGraph(serverBookId, ch, manifestData);
-    if (next == null || next === currentEvent) return;
+    const chData = getChapterData(serverBookId, ch, manifestData);
+    const firstEv = Array.isArray(chData?.events) ? chData.events[0] : null;
+    const next = Number(firstEv?.eventNum ?? firstEv?.idx ?? 1);
+    if (!(next > 0) || next === currentEvent) return;
     if (isValidEvent(serverBookId, ch, next, manifestData)) {
       setCurrentEvent(next);
     }
   }, [serverBookId, manifestReady, manifestData, currentChapter, currentEvent]);
-
-  useEffect(() => {
-    const forced = Number(forcedChapterEventIdx);
-    if (!Number.isFinite(forced) || forced < 1) return;
-    if (currentEvent !== forced) {
-      setCurrentEvent(forced);
-    }
-  }, [forcedChapterEventIdx, currentEvent]);
-
-  useEffect(() => {
-    const forced = Number(forcedChapterEventIdx);
-    if (!Number.isFinite(forced) || forced < 1 || !apiFineData) return;
-    const applied = graphDataTransformUtils.normalizeApiEvent(apiFineData?.event)?.eventNum;
-    if (Number.isFinite(applied) && applied === forced) {
-      setForcedChapterEventIdx(null);
-    }
-  }, [forcedChapterEventIdx, apiFineData]);
 
   const graphApiPayload = useMemo(() => {
     const fineChars = Array.isArray(apiFineData?.characters) ? apiFineData.characters : [];
@@ -445,7 +422,7 @@ function RelationGraphWrapper() {
     }
   }, [currentEvent, clearAll]);
 
-  const { sortedElements, filteredMainCharacters, finalElements } = useGraphElementPipeline({
+  const { filteredMainCharacters, finalElements } = useGraphElementPipeline({
     elements,
     filterStage,
     isSearchActive,
@@ -554,7 +531,7 @@ function RelationGraphWrapper() {
       state: nextState,
       replace: false,
     });
-  }, [navigate, filename, book, currentChapter, serverBookId]);
+  }, [navigate, filename, book, serverBookId]);
 
   const reapplySearchFadeIfActive = useCallback(() => {
     if (isSearchActive && filteredElements?.length > 0 && cyRef.current) {

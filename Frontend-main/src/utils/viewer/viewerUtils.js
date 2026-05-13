@@ -1,31 +1,23 @@
 
 import { processRelations, directedEdgeElementId } from '../graph/relationUtils';
+import { isGraphEdgeElement, uniqueStrings } from '../graph/graphNormalizeUtils';
 import { errorUtils as commonErrorUtils } from '../common/errorUtils';
-import { storageUtils as commonStorageUtils } from '../common/cache/storageUtils';
 import { settingsUtils as commonSettingsUtils, defaultSettings as commonDefaultSettings, loadSettings as commonLoadSettings } from '../common/settingsUtils';
+import { toPositiveNumberFromId, toPositiveNumberOrNull } from '../common/numberUtils';
 export const errorUtils = commonErrorUtils;
-export const storageUtils = commonStorageUtils;
 export const defaultSettings = commonDefaultSettings;
 export const loadSettings = commonLoadSettings;
 
 /**
  * 서버 bookId를 가져옵니다.
- * book.id 또는 book._bookId 중 숫자인 값을 우선 사용합니다.
+ * 강제매칭/로컬 표시 객체에서는 `_bookId`가 서버 bookId를 담는다.
+ * `_bookId`가 없을 때만 `book.id`를 사용한다.
  * @param {Object} book - 책 객체
  * @returns {number|null} 서버 bookId (없으면 null)
  */
 export function getServerBookId(book) {
   if (!book) return null;
-  const numId = (v) => (v !== undefined && v !== null && Number.isFinite(Number(v))) ? Number(v) : null;
-  if (book.id !== undefined && book.id !== null) {
-    const n = typeof book.id === 'number' ? book.id : numId(book.id);
-    if (n != null && n > 0) return n;
-  }
-  if (book._bookId !== undefined && book._bookId !== null) {
-    const n = typeof book._bookId === 'number' ? book._bookId : numId(book._bookId);
-    if (n != null && n > 0) return n;
-  }
-  return null;
+  return toPositiveNumberOrNull(book._bookId) ?? toPositiveNumberOrNull(book.id);
 }
 
 export function extractEventNodesAndEdges(event) {
@@ -93,27 +85,27 @@ export function loadViewerMode() {
   }
 }
 
-export function getRefs(xhtmlBookRef, xhtmlViewerRef) {
+function getRefs(xhtmlBookRef, xhtmlViewerRef) {
   return {
     xhtmlBook: xhtmlBookRef?.current,
     xhtmlViewer: xhtmlViewerRef?.current,
   };
 }
 
-export function withRefs(xhtmlBookRef, xhtmlViewerRef, callback) {
+function _withRefs(xhtmlBookRef, xhtmlViewerRef, callback) {
   const { xhtmlBook, xhtmlViewer } = getRefs(xhtmlBookRef, xhtmlViewerRef);
   if (!xhtmlBook || !xhtmlViewer) return null;
   return callback(xhtmlBook, xhtmlViewer);
 }
 
-export function cleanupNavigation(setIsNavigating, xhtmlViewer, handler) {
+function _cleanupNavigation(setIsNavigating, xhtmlViewer, handler) {
   setIsNavigating(false);
   if (xhtmlViewer && handler && typeof xhtmlViewer.off === 'function') {
     xhtmlViewer.off('relocated', handler);
   }
 }
 
-export const navigationUtils = {
+const _navigationUtils = {
   async safeNavigate(xhtmlBook, xhtmlViewer, action, _direction = 'next', setIsNavigating, setNavigationError, _storageKeys) {
     if (!xhtmlBook || !xhtmlViewer) {
       errorUtils.logWarning('safeNavigate', '책 또는 XHTML 뷰어가 없습니다', {
@@ -152,7 +144,7 @@ export const navigationUtils = {
 // settingsUtils는 commonSettingsUtils 사용 (이미 import됨)
 export const settingsUtils = commonSettingsUtils;
 
-export const textUtils = {
+const textUtils = {
   countCharacters: (text, element) => {
     if (!text) return 0;
     
@@ -199,20 +191,18 @@ export const eventUtils = {
     if (!event || typeof event !== 'object') {
       return null;
     }
-    const tryOne = (v) => {
-      const n = Number(v);
-      return Number.isFinite(n) && n > 0 ? n : null;
-    };
     return (
-      tryOne(event.eventNum) ??
-      tryOne(event.event_id) ??
-      tryOne(event.eventIdx) ??
-      tryOne(event.idx) ??
-      tryOne(event.resolvedEventIdx) ??
-      tryOne(event.event?.eventNum) ??
-      tryOne(event.event?.event_id) ??
-      tryOne(event.event?.idx) ??
-      tryOne(event.event?.eventIdx)
+      toPositiveNumberOrNull(event.eventNum) ??
+      toPositiveNumberOrNull(event.event_id) ??
+      toPositiveNumberOrNull(event.eventIdx) ??
+      toPositiveNumberOrNull(event.idx) ??
+      toPositiveNumberOrNull(event.resolvedEventIdx) ??
+      toPositiveNumberOrNull(event.originalEventIdx) ??
+      toPositiveNumberOrNull(event.event?.eventNum) ??
+      toPositiveNumberOrNull(event.event?.event_id) ??
+      toPositiveNumberOrNull(event.event?.eventIdx) ??
+      toPositiveNumberOrNull(event.event?.idx) ??
+      toPositiveNumberOrNull(event.event?.event_idx)
     );
   },
 
@@ -264,14 +254,14 @@ export const eventUtils = {
     if (!Array.isArray(elements)) {
       return [];
     }
-    return elements.filter(el => el?.data && el.data.source && el.data.target);
+    return elements.filter(isGraphEdgeElement);
   },
 
   filterNodes: (elements) => {
     if (!Array.isArray(elements)) {
       return [];
     }
-    return elements.filter(el => el?.data && !el.data.source && !el.data.target);
+    return elements.filter((el) => el?.data && !isGraphEdgeElement(el));
   },
 
   findEventInCache: (events, eventIdx) => {
@@ -280,11 +270,11 @@ export const eventUtils = {
     }
     return (
       events.find((e) => {
-        const n = Number(e.eventNum);
-        const i = Number(e.eventIdx);
+        const eventNum = toPositiveNumberOrNull(e.eventNum);
+        const cachedEventIdx = toPositiveNumberOrNull(e.eventIdx);
         return (
-          (Number.isFinite(n) && n === eventIdx) ||
-          (Number.isFinite(i) && i === eventIdx)
+          eventNum === eventIdx ||
+          cachedEventIdx === eventIdx
         );
       }) || null
     );
@@ -365,7 +355,12 @@ export const eventUtils = {
     }
 
     updatedCurrent.sort((a, b) => eventUtils.extractRawEventIdx(a) - eventUtils.extractRawEventIdx(b));
-    return [...otherChapterEvents, ...updatedCurrent];
+    return [...otherChapterEvents, ...updatedCurrent].sort((a, b) => {
+      const chapterA = Number(a?.chapter ?? a?.chapterIdx ?? 0);
+      const chapterB = Number(b?.chapter ?? b?.chapterIdx ?? 0);
+      if (chapterA !== chapterB) return chapterA - chapterB;
+      return eventUtils.extractRawEventIdx(a) - eventUtils.extractRawEventIdx(b);
+    });
   }
 };
 
@@ -442,7 +437,7 @@ export const bookUtils = {
         ...stateRest,
         filename: bookId,
         _needsLoad: true,
-        _bookId: stateBook.id || stateBook._bookId || bookId,
+        _bookId: stateBook._bookId || stateBook.id || bookId,
         xhtmlPath: undefined,
         filePath: undefined,
         s3Path: undefined,
@@ -477,52 +472,7 @@ export const bookUtils = {
   }
 };
 
-export const eventIdxUtils = {
-  calculateEventIdxForTransition: (currentEvent, isChapterTransition, forcedChapterEventIdxRef, chapterTransitionDirectionRef, bookId, currentChapter, getCachedChapterEvents, eventUtils) => {
-    const raw = Number(currentEvent?.eventNum);
-    let eventIdx = Number.isFinite(raw) && raw > 0 ? raw : 1;
-    
-    if (!isChapterTransition) {
-      return eventIdx;
-    }
-    
-    let forced = forcedChapterEventIdxRef.current;
-    
-    if (forced === 'max') {
-      const chapterCache = getCachedChapterEvents(bookId, currentChapter);
-      const maxEventIdx = eventUtils.getMaxEventIdx(chapterCache);
-      forced = maxEventIdx > 0 ? maxEventIdx : 1;
-      forcedChapterEventIdxRef.current = forced;
-    }
-    
-    if (forced && forced !== 'max' && Number.isFinite(Number(forced))) {
-      eventIdx = Number(forced);
-    } else if (!forced || forced === 'max') {
-      const direction = chapterTransitionDirectionRef.current;
-      if (direction === 'backward') {
-        const chapterCache = getCachedChapterEvents(bookId, currentChapter);
-        const maxEventIdx = eventUtils.getMaxEventIdx(chapterCache);
-        eventIdx = maxEventIdx > 0 ? maxEventIdx : 1;
-        forcedChapterEventIdxRef.current = eventIdx;
-      } else if (direction === 'forward') {
-        eventIdx = 1;
-        forcedChapterEventIdxRef.current = 1;
-      }
-    }
-    
-    return eventIdx;
-  },
-
-  shouldBlockApiCall: (isChapterTransition, forcedChapterEventIdxRef, apiEventIdx) => {
-    if (!isChapterTransition) {
-      return false;
-    }
-    
-    const forced = forcedChapterEventIdxRef.current;
-    return forced && forced !== 'max' && Number.isFinite(Number(forced)) && apiEventIdx !== Number(forced);
-  }
-};
-
+  /** `currentEvent`가 가리키는 이벤트 인덱스(해당 챕터 타임라인 기준). */
 function buildFromCache(cached, convertFn) {
   const hasElements = Array.isArray(cached.elements) && cached.elements.length > 0;
   return {
@@ -581,7 +531,14 @@ export const graphDataCacheUtils = {
 
           if (apiResponse && (apiResponse.isSuccess !== false)) {
             const apiResult = apiResponse?.result ?? apiResponse?.data ?? null;
-            if (apiResult) {
+            if (!apiResult) {
+              console.warn('[FineGraph API] 서버 응답 성공이나 result/data 본문 없음 — 해당 이벤트 페이로드 없을 수 있음', {
+                bookId,
+                chapter,
+                eventIdx,
+                code: apiResponse?.code,
+              });
+            } else {
               resultData = {
                 characters: Array.isArray(apiResult.characters) ? apiResult.characters : [],
                 relations: Array.isArray(apiResult.relations) ? apiResult.relations : [],
@@ -590,15 +547,43 @@ export const graphDataCacheUtils = {
               };
               usedCache = false;
 
+              const relN = resultData.relations.length;
+              const charN = resultData.characters.length;
+              const hasEventMeta = resultData.event != null && typeof resultData.event === 'object';
+              if (relN === 0 && charN === 0 && !hasEventMeta) {
+                console.warn('[FineGraph API] 서버가 빈 그래프 반환(관계·인물·event 메타 없음) — 이벤트 데이터 미비 가능', {
+                  bookId,
+                  chapter,
+                  eventIdx,
+                });
+              }
+
               const cacheKey = `${chapter}-${eventIdx}`;
               if (apiEventCacheRef?.current) {
                 apiEventCacheRef.current.set(cacheKey, resultData);
               }
             }
+          } else if (apiResponse) {
+            console.warn('[FineGraph API] 서버가 실패 응답', {
+              bookId,
+              chapter,
+              eventIdx,
+              isSuccess: apiResponse?.isSuccess,
+              code: apiResponse?.code,
+              message: apiResponse?.message,
+            });
           }
         } catch (apiError) {
           const status = apiError?.status;
-          if (status !== 404 && status !== 403) {
+          if (status === 404) {
+            console.warn('[FineGraph API] 서버에 해당 이벤트 Fine 그래프 리소스 없음(404)', {
+              bookId,
+              chapter,
+              eventIdx,
+            });
+          } else if (status === 403) {
+            console.warn('[FineGraph API] Fine 그래프 접근 거부(403)', { bookId, chapter, eventIdx });
+          } else {
             errorUtils.logWarning('[graphDataCacheUtils] 그래프 데이터 API 호출 실패', apiError?.message || '알 수 없는 오류', {
               bookId,
               chapter,
@@ -642,27 +627,12 @@ export const graphDataCacheUtils = {
  */
 export function resolveFineGraphEventOrdinal(apiEvent) {
   if (!apiEvent || typeof apiEvent !== 'object') return null;
-  const fromNum = Number(apiEvent.eventNum);
-  if (Number.isFinite(fromNum) && fromNum > 0) return fromNum;
-  const fromEventId = Number(apiEvent.event_id);
-  if (Number.isFinite(fromEventId) && fromEventId > 0) return fromEventId;
-  const raw = apiEvent.eventId ?? apiEvent.id;
-  if (raw == null) return null;
-  const s = String(raw).trim();
-  if (!s) return null;
-  const direct = Number(s);
-  if (Number.isFinite(direct) && direct > 0) return direct;
-  const eTail = s.match(/[eE](\d+)\s*$/);
-  if (eTail) {
-    const n = Number(eTail[1]);
-    if (Number.isFinite(n) && n > 0) return n;
-  }
-  const lastDigits = s.match(/(\d+)\s*$/);
-  if (lastDigits) {
-    const n = Number(lastDigits[1]);
-    if (Number.isFinite(n) && n > 0) return n;
-  }
-  return null;
+  return (
+    toPositiveNumberOrNull(apiEvent.eventNum) ??
+    toPositiveNumberOrNull(apiEvent.event_id) ??
+    toPositiveNumberOrNull(apiEvent.eventIdx ?? apiEvent.idx ?? apiEvent.event_idx) ??
+    toPositiveNumberFromId(apiEvent.eventId ?? apiEvent.id)
+  );
 }
 
 export const graphDataTransformUtils = {
@@ -716,8 +686,15 @@ export const graphDataTransformUtils = {
     );
   },
 
+  /**
+   * 같은 챕터에서 이벤트가 진행될 때는 기존 노드·간선(id 기준)을 유지하고,
+   * 이번 응답에만 있는 노드/간선을 합친다. (전체 교체 → 레이아웃 리셋 방지)
+   * 이벤트를 되돌릴 때(apiIdx < prev)만 API 스냅샷으로 갈아탄다.
+   */
   mergeElementsWithPrevious: (convertedElements, prevData, currentChapter, apiEventIdx) => {
-    if (prevData.chapterIdx !== currentChapter) {
+    const prevChapter = Number(prevData.chapterIdx);
+    const curChapter = Number(currentChapter);
+    if (!Number.isFinite(prevChapter) || prevChapter !== curChapter) {
       return convertedElements;
     }
 
@@ -739,75 +716,79 @@ export const graphDataTransformUtils = {
         if (v === undefined || v === null || v === '') return [];
         return [v];
       };
-      return [...new Set([...toArr(a), ...toArr(b)])];
+      return uniqueStrings([...toArr(a), ...toArr(b)]);
     };
 
-    if (apiEventIdx > prevData.eventIdx) {
-      const prevNodes = (prevData.elements || []).filter((e) => e.data && !e.data.source);
-      const existingNodeIds = new Set(prevNodes.map((e) => e.data.id));
+    const conv = Array.isArray(convertedElements) ? convertedElements : [];
+    const prevEls = Array.isArray(prevData.elements) ? prevData.elements : [];
+    const prevIdx = Number(prevData.eventIdx) || 0;
+    const apiIdx = Number(apiEventIdx) || 0;
 
-      const newNodes = convertedElements.filter(
-        (e) => e.data && !e.data.source && !existingNodeIds.has(e.data.id)
-      );
-
-      const prevEdges = (prevData.elements || []).filter((e) => e.data && e.data.source);
-      const newEdges = convertedElements.filter((e) => e.data && e.data.source);
-
-      const edgeByKey = new Map();
-      for (const el of prevEdges) {
-        const key = edgeDedupKey(el);
-        if (key) {
-          edgeByKey.set(key, el);
-        }
-      }
-      for (const el of newEdges) {
-        const key = edgeDedupKey(el);
-        if (!key) {
-          continue;
-        }
-        const prevEl = edgeByKey.get(key);
-        if (!prevEl) {
-          edgeByKey.set(key, el);
-          continue;
-        }
-        const p = prevEl.data || {};
-        const n = el.data || {};
-        const nextPos = Number(n.positivity);
-        const prevPos = Number(p.positivity);
-        const positivity = Number.isFinite(nextPos)
-          ? nextPos
-          : Number.isFinite(prevPos)
-            ? prevPos
-            : 0;
-
-        edgeByKey.set(key, {
-          ...prevEl,
-          ...el,
-          data: {
-            ...p,
-            ...n,
-            relation: mergeRelationArrays(p.relation, n.relation),
-            label: n.label != null && String(n.label).trim() !== '' ? n.label : p.label || '',
-            positivity,
-          },
-        });
-      }
-
-      const mergedEdges = Array.from(edgeByKey.values());
-
-      return [...prevNodes, ...newNodes, ...mergedEdges];
+    if (apiIdx < prevIdx && prevEls.length > 0) {
+      return conv.length > 0 ? conv : prevEls;
     }
 
-    if (
-      apiEventIdx === prevData.eventIdx &&
-      (!Array.isArray(convertedElements) || convertedElements.length === 0) &&
-      Array.isArray(prevData.elements) &&
-      prevData.elements.length > 0
-    ) {
-      return prevData.elements;
+    if (conv.length === 0 && prevEls.length > 0) {
+      return prevEls;
     }
 
-    return convertedElements;
+    if (prevEls.length === 0 || prevIdx === 0) {
+      return conv;
+    }
+
+    const prevNodes = prevEls.filter((e) => e.data && !isGraphEdgeElement(e));
+    const existingNodeIds = new Set(prevNodes.map((e) => e.data.id));
+
+    const newNodes = conv.filter(
+      (e) => e.data && !isGraphEdgeElement(e) && !existingNodeIds.has(e.data.id)
+    );
+
+    const prevEdges = prevEls.filter(isGraphEdgeElement);
+    const newEdges = conv.filter(isGraphEdgeElement);
+
+    const edgeByKey = new Map();
+    for (const el of prevEdges) {
+      const key = edgeDedupKey(el);
+      if (key) {
+        edgeByKey.set(key, el);
+      }
+    }
+    for (const el of newEdges) {
+      const key = edgeDedupKey(el);
+      if (!key) {
+        continue;
+      }
+      const prevEl = edgeByKey.get(key);
+      if (!prevEl) {
+        edgeByKey.set(key, el);
+        continue;
+      }
+      const previousData = prevEl.data || {};
+      const nextData = el.data || {};
+      const nextPos = Number(nextData.positivity);
+      const prevPos = Number(previousData.positivity);
+      const positivity = Number.isFinite(nextPos)
+        ? nextPos
+        : Number.isFinite(prevPos)
+          ? prevPos
+          : 0;
+
+      edgeByKey.set(key, {
+        ...prevEl,
+        ...el,
+        data: {
+          ...previousData,
+          ...nextData,
+          relation: mergeRelationArrays(previousData.relation, nextData.relation),
+          label: nextData.label != null && String(nextData.label).trim() !== '' ? nextData.label : previousData.label || '',
+          positivity,
+        },
+      });
+    }
+
+    const mergedEdges = Array.from(edgeByKey.values());
+
+    return [...prevNodes, ...newNodes, ...mergedEdges];
   },
 
   createNextEventData: (normalizedEvent, currentChapter, apiEventIdx, resultData, eventUtils) => {

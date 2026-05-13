@@ -1,4 +1,6 @@
-// 순환 참조 방지를 위해 하드코딩된 값 사용
+import { ANIMATION_VALUES } from './animations';
+
+// graphStyles는 styles.js에서 다시 re-export되므로 styles.js를 직접 import하지 않는다.
 const COLORS = {
   backgroundLighter: '#f8fafc',
   border: '#e5e7eb',
@@ -14,13 +16,6 @@ const COLORS = {
   edgeText: '#42506b',
   successGreen: '#22c55e',
   highlightBlue: '#5C6F5C',
-};
-
-const ANIMATION_VALUES = {
-  DURATION: {
-    FAST: '0.18s',
-    SLOW: '0.4s',
-  }
 };
 
 export const DEFAULT_LAYOUT = {

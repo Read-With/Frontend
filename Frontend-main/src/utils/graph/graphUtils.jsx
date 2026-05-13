@@ -26,6 +26,7 @@ import {
   resolveLastEventIdxForFineGraph,
   getLastFineGraphEventIdxFromChapterData,
 } from '../common/cache/manifestCache.js';
+import { isGraphNodeElement, sortElementsByDataId } from './graphNormalizeUtils';
 
 const GRAPH_CONTAINER_SELECTOR = '.graph-canvas-area';
 
@@ -383,10 +384,7 @@ export const ensureElementsInBounds = (cy, container, maxNodes = 1000) => {
   const containerWidth = container.clientWidth;
   const containerHeight = container.clientHeight;
   
-  if (containerWidth <= 0 || containerHeight <= 0) {
-    console.warn('ensureElementsInBounds: 컨테이너 크기가 유효하지 않습니다', { containerWidth, containerHeight });
-    return;
-  }
+  if (containerWidth <= 0 || containerHeight <= 0) return;
   
   const padding = 100;
   
@@ -426,6 +424,13 @@ export const ensureElementsInBounds = (cy, container, maxNodes = 1000) => {
   if (needsAdjustment) {
     cy.layout({ name: 'preset' }).run();
   }
+};
+
+export const isGraphContainerSizeReady = (container) => {
+  if (!container) return false;
+  const w = Number(container.clientWidth ?? 0);
+  const h = Number(container.clientHeight ?? 0);
+  return w > 0 && h > 0;
 };
 
 export const createMouseEventHandlers = (_cy, _container) => {
@@ -637,19 +642,14 @@ export const isDragEndEvent = (event) => {
 };
 
 export const sortElementsById = (elements) => {
-  if (!elements || !Array.isArray(elements)) return [];
-  return [...elements].sort((a, b) => {
-    const aId = a.data?.id || '';
-    const bId = b.data?.id || '';
-    return aId.localeCompare(bId);
-  });
+  return sortElementsByDataId(elements);
 };
 
 export const calculateNodeCount = (elements, filterStage, filteredMainCharacters) => {
   if (filterStage > 0) {
-    return filteredMainCharacters.filter(el => el.data && el.data.id && !el.data.source).length;
+    return filteredMainCharacters.filter(isGraphNodeElement).length;
   }
-  return elements.filter(el => el.data && el.data.id && !el.data.source).length;
+  return elements.filter(isGraphNodeElement).length;
 };
 
 export const calculateRelationCount = (elements, filterStage, filteredMainCharacters, eventUtils) => {

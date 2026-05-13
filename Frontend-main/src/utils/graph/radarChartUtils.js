@@ -3,6 +3,7 @@
  * 관계 색/라벨은 relationStyles 단일 소스에서 re-export.
  */
 export { getPositivityColor, getPositivityLabel } from '../styles/relationStyles';
+import { toFiniteNumber } from './graphNormalizeUtils';
 
 /**
  * positivity 값을 0-100 스케일로 변환
@@ -10,10 +11,11 @@ export { getPositivityColor, getPositivityLabel } from '../styles/relationStyles
  * @returns {number} 0 ~ 100 사이의 값
  */
 export const normalizePositivity = (positivity) => {
-  if (positivity === undefined || positivity === null || isNaN(positivity)) {
+  const value = toFiniteNumber(positivity);
+  if (!Number.isFinite(value)) {
     return 50; // 기본값: 중립 (0 -> 50%)
   }
-  return ((positivity + 1) / 2) * 100;
+  return ((value + 1) / 2) * 100;
 };
 
 /**
@@ -51,21 +53,22 @@ export const extractRadarChartData = (nodeId, relations, elements, maxDisplay = 
       const existingData = radarDataMap.get(connectedNodeId);
       
       // 새로운 관계의 절댓값이 더 크면 업데이트 (더 강한 관계 우선)
-      if (!existingData || Math.abs(rel.positivity) > Math.abs(existingData.positivity)) {
+      const positivity = toFiniteNumber(rel.positivity);
+      if (!existingData || Math.abs(positivity) > Math.abs(existingData.positivity)) {
         // 연결된 노드의 이름 찾기
         const connectedNode = elements.find(el => 
           !el.data.source && String(el.data.id) === connectedNodeId
         );
         
-        if (connectedNode && rel.positivity !== undefined) {
+        if (connectedNode && Number.isFinite(positivity)) {
           // 전체 이름 사용
           const fullName = connectedNode.data.label || connectedNode.data.common_name || `인물 ${connectedNodeId}`;
           
           const radarItem = {
             name: fullName,
             fullName: fullName,
-            positivity: rel.positivity,
-            normalizedValue: normalizePositivity(rel.positivity),
+            positivity,
+            normalizedValue: normalizePositivity(positivity),
             relationCount: rel.count || 0,
             relationTags: rel.relation || [],
             connectedNodeId: connectedNodeId

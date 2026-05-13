@@ -10,6 +10,7 @@ import {
 } from '../../utils/common/cache/chapterEventCache';
 import { getManifestFromCache } from '../../utils/common/cache/manifestCache';
 import { resolveMaxChapter } from '../../utils/graph/maxChapterResolver';
+import { graphDataTransformUtils } from '../../utils/viewer/viewerUtils';
 
 export function useGraphDataLoader(bookId, chapterIdx, eventIdx = null) {
   const [elements, setElements] = useState([]);
@@ -21,6 +22,7 @@ export function useGraphDataLoader(bookId, chapterIdx, eventIdx = null) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [isDataEmpty, setIsDataEmpty] = useState(false);
+  const [cacheVersion, setCacheVersion] = useState(0);
 
   const lastComputedRef = useRef({ cacheKey: null, eventIdx: null, elements: [] });
 
@@ -259,17 +261,52 @@ export function useGraphDataLoader(bookId, chapterIdx, eventIdx = null) {
           chapterEvents?.baseSnapshot &&
           Array.isArray(chapterEvents?.diffs);
 
+        console.log('[GraphDataLoader] 로드 시작', {
+          bookId: bookIdNum,
+          chapter,
+          requestedEventIdx,
+          targetIdx,
+          maxEventIdx: maxEventIdxInChapter,
+          totalEvents: eventsArray.length,
+          hasDiffCache,
+        });
+
         if (hasDiffCache) {
           const diffState = processDiffCacheState(chapterEvents, targetIdx, isCancelledRef);
           if (diffState) {
             if (!checkCancelled(isCancelledRef)) {
-              lastComputedRef.current = { cacheKey, eventIdx: diffState.eventIdx, elements: diffState.elements };
-              setElements(diffState.elements);
+              const last = lastComputedRef.current;
+              let nextEls = diffState.elements;
+              if (
+                last.cacheKey === cacheKey &&
+                Number(diffState.eventIdx) >= Number(last.eventIdx || 0)
+              ) {
+                nextEls = graphDataTransformUtils.mergeElementsWithPrevious(
+                  diffState.elements,
+                  {
+                    elements: last.elements,
+                    eventIdx: last.eventIdx,
+                    chapterIdx: chapter,
+                  },
+                  chapter,
+                  diffState.eventIdx
+                );
+              }
+              lastComputedRef.current = { cacheKey, eventIdx: diffState.eventIdx, elements: nextEls };
+              setElements(nextEls);
               setCurrentChapterData({ characters: diffState.characters });
               setNewNodeIds(diffState.newNodes);
               setEventNum(diffState.eventIdx);
               setError(null);
-              setIsDataEmpty(diffState.isEmpty);
+              setIsDataEmpty(false);
+              console.log('[GraphDataLoader] 완료 (diffCache)', {
+                bookId: bookIdNum,
+                chapter,
+                eventIdx: diffState.eventIdx,
+                elementCount: diffState.elements.length,
+                characterCount: diffState.characters.length,
+                newNodeCount: diffState.newNodes.length,
+              });
             }
             return;
           }
@@ -290,13 +327,35 @@ export function useGraphDataLoader(bookId, chapterIdx, eventIdx = null) {
 
         const eventsState = processEventsArray(eventsArray, targetIdx, isCancelledRef, cachedPrev);
         if (eventsState && !checkCancelled(isCancelledRef)) {
-          lastComputedRef.current = { cacheKey, eventIdx: targetIdx, elements: eventsState.elements };
-          setElements(eventsState.elements);
+          const last = lastComputedRef.current;
+          let nextEls = eventsState.elements;
+          if (last.cacheKey === cacheKey && Number(targetIdx) >= Number(last.eventIdx || 0)) {
+            nextEls = graphDataTransformUtils.mergeElementsWithPrevious(
+              eventsState.elements,
+              {
+                elements: last.elements,
+                eventIdx: last.eventIdx,
+                chapterIdx: chapter,
+              },
+              chapter,
+              targetIdx
+            );
+          }
+          lastComputedRef.current = { cacheKey, eventIdx: targetIdx, elements: nextEls };
+          setElements(nextEls);
           setCurrentChapterData({ characters: eventsState.characters });
           setNewNodeIds(eventsState.newNodes);
           setEventNum(eventsState.eventIdx);
           setError(null);
-          setIsDataEmpty(eventsState.isEmpty);
+          setIsDataEmpty(false);
+          console.log('[GraphDataLoader] 완료 (eventsArray)', {
+            bookId: bookIdNum,
+            chapter,
+            eventIdx: eventsState.eventIdx,
+            elementCount: eventsState.elements.length,
+            characterCount: eventsState.characters.length,
+            newNodeCount: eventsState.newNodes.length,
+          });
         }
       } catch (err) {
         if (!checkCancelled(isCancelledRef)) {
@@ -311,6 +370,22 @@ export function useGraphDataLoader(bookId, chapterIdx, eventIdx = null) {
     },
     [getChapterEvents, resetState, setEmptyState, processDiffCacheState, processEventsArray, checkCancelled]
   );
+
+  // When the chapter event cache is not yet available on first load, poll until it is
+  // and bump cacheVersion to re-trigger the main loadData effect.
+  useEffect(() => {
+    if (!numericBookId || !chapterIdx) return;
+    if (isChapterEventsReadySync(numericBookId, chapterIdx)) return;
+
+    const intervalId = globalThis.setInterval(() => {
+      if (isChapterEventsReadySync(numericBookId, chapterIdx)) {
+        globalThis.clearInterval(intervalId);
+        setCacheVersion((v) => v + 1);
+      }
+    }, 300);
+
+    return () => globalThis.clearInterval(intervalId);
+  }, [numericBookId, chapterIdx, isChapterEventsReadySync]);
 
   useEffect(() => {
     if (!numericBookId || !chapterIdx) {
@@ -349,7 +424,7 @@ export function useGraphDataLoader(bookId, chapterIdx, eventIdx = null) {
         globalThis.clearTimeout(loadingKickTimer);
       }
     };
-  }, [numericBookId, chapterIdx, eventIdx, loadData, resetState, isChapterEventsReadySync]);
+  }, [numericBookId, chapterIdx, eventIdx, cacheVersion, loadData, resetState, isChapterEventsReadySync]);
 
   return {
     elements,

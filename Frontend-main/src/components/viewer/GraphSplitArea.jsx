@@ -3,6 +3,7 @@ import { AlertCircle, AlertTriangle, Inbox, Loader2 } from "lucide-react";
 import GraphContainer from "../graph/GraphContainer";
 import ViewerTopBar from "./ViewerTopBar";
 import { useGraphElementPipeline } from "../../hooks/graph/useGraphElementPipeline";
+import { graphStyles } from "../../utils/styles/graphStyles";
 import {
   graphPanelHasCachedLocationHint,
   graphPanelHasResumeLocationHint,
@@ -86,6 +87,8 @@ const GraphSplitArea = memo(function GraphSplitArea({
   const { loading, graphPhase, isDataReady, isDataEmpty } = viewerState;
   const { elements, currentEvent, currentChapter } = graphState;
   const { filterStage } = graphActions;
+  const resolvedEventNum = Number(currentEvent?.eventNum ?? currentEvent?.eventIdx ?? 0);
+  const hasResolvedEvent = Number.isFinite(resolvedEventNum) && resolvedEventNum > 0;
 
   const hasResumeLocator = useMemo(
     () => graphPanelHasResumeLocationHint(resumeAnchor),
@@ -118,18 +121,17 @@ const GraphSplitArea = memo(function GraphSplitArea({
 
   const prevValidEventForGraph = graphState.prevValidEvent ?? null;
 
-  const hasCurrentEvent = !!currentEvent;
-  const hasElements = elements && Array.isArray(elements) && elements.length > 0;
+  const hasCurrentEvent = hasResolvedEvent;
+  const hasElements = Array.isArray(elements) && elements.length > 0;
   
   const isFineGraphBusy = graphPhase === 'fine';
   const isGraphIdle = graphPhase === 'idle';
-  const isDataLoadCompleteAndEmpty = isGraphIdle && isDataEmpty && !hasElements;
+  const isDataLoadCompleteAndEmpty = isGraphIdle && isDataEmpty && !hasElements && !hasResolvedEvent;
   const isLoading = isDataLoadCompleteAndEmpty
     ? false
     : loading || !isGraphIdle || !isLocationDetermined || (!isDataReady && !hasCurrentEvent);
   const shouldShowEmptyData = isDataLoadCompleteAndEmpty;
-  // fine 그래프가 아직 반영되지 않았으면(이벤트 확정 전) 기존 elements가 있어도 그래프 대신 로딩 — 중간 이벤트 표시 방지
-  const shouldShowLoading = (!hasElements && isLoading) || (hasElements && isFineGraphBusy);
+  const shouldShowLoading = !hasElements && isLoading;
 
   const topBarSearchState = useMemo(() => ({
     searchTerm: searchTermValue,
@@ -148,7 +150,12 @@ const GraphSplitArea = memo(function GraphSplitArea({
   const resolvedApiError = useMemo(() => normalizeGraphApiError(apiError), [apiError]);
 
   return (
-    <div className="h-full w-full flex flex-col" style={{ minHeight: 0, overflow: "hidden" }}>
+    <div
+      style={{
+        ...graphStyles.graphPageContainer,
+        height: "100%",
+      }}
+    >
       <ViewerTopBar
         graphState={graphState}
         graphActions={graphActions}
@@ -157,7 +164,13 @@ const GraphSplitArea = memo(function GraphSplitArea({
         searchActions={searchActions}
       />
       
-      <div style={{ flex: 1, position: "relative", minHeight: 0, minWidth: 0 }}>
+      <div
+        style={{
+          ...graphStyles.graphPageInner,
+          minWidth: 0,
+          position: "relative",
+        }}
+      >
         {shouldShowLoading ? (
           <GraphNoticePanel
             variant="loading"
@@ -215,7 +228,15 @@ const GraphSplitArea = memo(function GraphSplitArea({
             }
           />
         ) : (
-          <div className="h-full w-full relative" style={{ minHeight: 0, minWidth: 0 }}>
+          <div
+            className="graph-canvas-area"
+            style={{
+              ...graphStyles.graphArea,
+              flex: 1,
+              minHeight: 0,
+              minWidth: 0,
+            }}
+          >
             <GraphContainer
               ref={graphContainerRef}
               currentPosition={graphState.currentCharIndex}

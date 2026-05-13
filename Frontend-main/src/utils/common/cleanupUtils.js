@@ -3,6 +3,15 @@ import { clearRelationCache, cleanupRelationResources } from '../graph/relationU
 import { clearRegexCache, cleanupSearchResources } from '../graph/searchUtils.jsx';
 import { clearAllCaches, clearCache, cleanupUnusedCaches, getCacheStats as getCacheStatsFromManager } from './cache/cacheManager';
 
+const runCleanup = (label, cleanupFn, fallback) => {
+  try {
+    return cleanupFn();
+  } catch (error) {
+    console.error(`${label} 실패:`, error);
+    return fallback;
+  }
+};
+
 /**
  * 모든 유틸리티 리소스 정리
  * @param {Object} cy - Cytoscape 인스턴스 (선택사항)
@@ -79,11 +88,7 @@ export function cleanupStyleUtils() {
  * @returns {void}
  */
 export function cleanupUnusedUtils(maxAge = 600000) {
-  try {
-    cleanupUnusedCaches(maxAge);
-  } catch (error) {
-    console.error('사용하지 않는 캐시 정리 실패:', error);
-  }
+  return runCleanup('사용하지 않는 캐시 정리', () => cleanupUnusedCaches(maxAge));
 }
 
 /**
@@ -110,12 +115,7 @@ export function cleanupSpecificCache(cacheName) {
  * @returns {Object} 캐시 통계
  */
 export function getCacheStats() {
-  try {
-    return getCacheStatsFromManager();
-  } catch (error) {
-    console.error('캐시 통계 조회 실패:', error);
-    return {};
-  }
+  return runCleanup('캐시 통계 조회', getCacheStatsFromManager, {});
 }
 
 /**

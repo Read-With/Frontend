@@ -1,15 +1,9 @@
 import { getProgressFromCache } from '../common/cache/progressCache';
+import { clampPercent } from '../common/numberUtils';
+import { getStoredProgressPercent } from '../common/progressPercentStorage';
 
 export function getLocalProgressPercent(bookIdStr) {
-  if (bookIdStr == null) return null;
-  try {
-    const raw = localStorage.getItem(`progress_${bookIdStr}`);
-    if (raw == null) return null;
-    const n = Number(raw);
-    return Number.isFinite(n) ? Math.min(100, Math.max(0, n)) : null;
-  } catch {
-    return null;
-  }
+  return getStoredProgressPercent(bookIdStr);
 }
 
 /** 마이페이지 BookCard·useBooks와 동일한 진행률(0–100) */
@@ -20,13 +14,13 @@ export function resolveLibraryReadingProgressPercent(book) {
   const bookIdStr = String(rawId);
   const cached = getProgressFromCache(bookIdStr);
   const cachePct = cached?.readingProgressPercent;
-  if (cachePct != null && Number.isFinite(Number(cachePct))) {
-    return Math.round(Math.min(100, Math.max(0, Number(cachePct))));
-  }
+  const normalizedCachePct = clampPercent(cachePct);
+  if (normalizedCachePct != null) return Math.round(normalizedCachePct);
+
   const listProgress = book.progress;
-  if (listProgress != null && Number.isFinite(Number(listProgress))) {
-    return Math.round(Math.min(100, Math.max(0, Number(listProgress))));
-  }
+  const normalizedListProgress = clampPercent(listProgress);
+  if (normalizedListProgress != null) return Math.round(normalizedListProgress);
+
   return getLocalProgressPercent(bookIdStr) ?? 0;
 }
 

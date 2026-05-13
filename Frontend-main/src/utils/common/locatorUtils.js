@@ -2,7 +2,19 @@
  * v2 표준 Locator: { chapterIndex (1-based), blockIndex (0-based), offset (0-based 코드포인트) }
  */
 
-import { toNumberOrNull as toNumber } from './numberUtils';
+import { isPositiveFiniteNumber, toNumberOrNull as toNumber } from './numberUtils';
+
+const locatorChapterIndex = (locator) => Number(locator?.chapterIndex ?? locator?.chapterIdx);
+
+const hasPositiveChapterHint = (locator) => isPositiveFiniteNumber(locatorChapterIndex(locator));
+
+const firstLocator = (...candidates) => {
+  for (const candidate of candidates) {
+    const loc = toLocator(candidate);
+    if (loc) return loc;
+  }
+  return null;
+};
 
 export const toLocator = (obj) => {
   if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return null;
@@ -27,14 +39,10 @@ export const locatorsEqual = (a, b) => {
 export const anchorToLocators = (anchor) => {
   if (!anchor) return { startLocator: null, endLocator: null };
   const start =
-    toLocator(anchor.startLocator) ??
-    toLocator(anchor.start) ??
-    (Number.isFinite(Number(anchor.chapterIndex)) || Number.isFinite(Number(anchor.chapterIdx)) ? toLocator(anchor) : null);
+    firstLocator(anchor.startLocator, anchor.start) ??
+    (hasPositiveChapterHint(anchor) ? toLocator(anchor) : null);
   const end =
-    toLocator(anchor.endLocator) ??
-    toLocator(anchor.end) ??
-    toLocator(anchor.startLocator) ??
-    toLocator(anchor.start) ??
+    firstLocator(anchor.endLocator, anchor.end, anchor.startLocator, anchor.start) ??
     start;
   return {
     startLocator: start,
@@ -59,9 +67,7 @@ export const toEventAnchorPayload = (anchor) => {
  */
 export function graphPanelHasResumeLocationHint(resumeAnchor) {
   const loc = resumeAnchor?.startLocator ?? resumeAnchor?.start;
-  if (!loc) return false;
-  const ch = Number(loc.chapterIndex ?? loc.chapterIdx);
-  return Number.isFinite(ch) && ch >= 1;
+  return hasPositiveChapterHint(loc);
 }
 
 /**
@@ -74,20 +80,18 @@ export function graphPanelHasCachedLocationHint(cachedLocation) {
     cachedLocation?.anchor?.startLocator ??
     cachedLocation?.anchor?.start;
   if (loc && typeof loc === 'object') {
-    const ch = Number(loc.chapterIndex ?? loc.chapterIdx);
-    if (Number.isFinite(ch) && ch >= 1) {
+    if (hasPositiveChapterHint(loc)) {
       return true;
     }
   }
   if (!cachedLocation) {
     return false;
   }
-  const cachedChapter = Number(cachedLocation.chapterIdx);
-  if (!Number.isFinite(cachedChapter) || cachedChapter < 1) {
+  if (!hasPositiveChapterHint({ chapterIdx: cachedLocation.chapterIdx })) {
     return false;
   }
   const cachedEvent = Number(cachedLocation.eventNum ?? 0);
-  return Number.isFinite(cachedEvent) && cachedEvent > 0;
+  return isPositiveFiniteNumber(cachedEvent);
 }
 
 /** GET /api/v2/graph/* — 이벤트의 anchor에서 읽기 위치 locator 추출 */
@@ -103,9 +107,8 @@ export const resolveProgressLocator = (data) => {
   const a = data.anchor;
   const candidate =
     data.startLocator ??
-    toLocator(data.locator) ??
-    toLocator(data) ??
-    (a && (toLocator(a.startLocator) ?? toLocator(a.start) ?? toLocator(a)));
+    firstLocator(data.locator, data) ??
+    (a && firstLocator(a.startLocator, a.start, a));
   if (candidate == null) return null;
   return toLocator(candidate) ?? candidate;
 };

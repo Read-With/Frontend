@@ -11,7 +11,7 @@
  */
 export const normalizeTitle = (title) => {
   if (!title) return '';
-  return title
+  return String(title)
     .toLowerCase()
     .trim()
     .replace(/\s+/g, ' ')

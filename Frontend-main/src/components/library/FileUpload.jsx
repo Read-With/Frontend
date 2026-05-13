@@ -120,15 +120,6 @@ const FileUpload = ({ onUploadSuccess, onClose }) => {
 
       const matchedKey = `${titleKey}::${authorKey}`;
       const canonicalBook = canonicalByKey.get(matchedKey);
-      const matchingBooks = booksResponse.result.filter((book) => {
-        const numericId = Number(book?.id);
-        if (!Number.isFinite(numericId) || numericId <= 0) return false;
-        return (
-          normalizeTitle(book.title || '') === titleKey &&
-          normalizeAuthorMatch(book.author || '') === authorKey
-        );
-      });
-
       if (!canonicalBook) {
         throw new Error(
           '서버에 제목+저자가 동일한 책이 없습니다. EPUB는 기존 책과 정확히 일치할 때만 연결됩니다.'
