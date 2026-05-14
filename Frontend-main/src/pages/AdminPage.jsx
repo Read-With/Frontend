@@ -120,6 +120,23 @@ const BookIcon = () => (
   </svg>
 );
 
+const ProcessingIcon = () => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    fill="none"
+    viewBox="0 0 24 24"
+    strokeWidth={1.5}
+    stroke="currentColor"
+    className="w-5 h-5"
+  >
+    <path
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99"
+    />
+  </svg>
+);
+
 const AdminBookCard = ({ book, onSelect }) => {
   const [imageError, setImageError] = useState(false);
   const coverUrl = book.coverImgUrl;
@@ -162,7 +179,7 @@ const AdminBookCard = ({ book, onSelect }) => {
 };
 
 const AdminPage = () => {
-  // 탭 상태 (dashboard, books, query, upload, delete)
+  // 탭 상태 (dashboard, books, query, upload, delete, normalization)
   const [activeTab, setActiveTab] = useState("dashboard");
 
   // 입력 상태 관리
@@ -176,6 +193,7 @@ const AdminPage = () => {
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
   const [books, setBooks] = useState([]);
+  const [normalizationJobs, setNormalizationJobs] = useState([]);
 
   // 도서별 캐릭터 상태 관리
   const [selectedBook, setSelectedBook] = useState(null);
@@ -225,12 +243,10 @@ const AdminPage = () => {
     setResponse(null);
 
     try {
-      // 백엔드 API 호출: /api/v2/admin/characters/{characterId}/regenerate-image
       const result = await apiClient.post(`/characters/${char.id}/regenerate-image`);
       
       if (result.data && result.data.isSuccess) {
         alert(`캐릭터 [${char.commonName || char.name}] 이미지 재생성 요청이 성공했습니다.`);
-        // 상태 업데이트를 위해 캐릭터 목록 새로고침
         if (selectedBook) {
           getBookCharacters(selectedBook);
         }
@@ -255,6 +271,16 @@ const AdminPage = () => {
     handleApiCall(() => apiClient.get("/books/unsummarized"));
   const getBooksList = () =>
     handleApiCall(() => apiClient.get(`/books`), true);
+
+  const getNormalizationJobs = () =>
+    handleApiCall(() => apiClient.get("/normalization/jobs/latest"), setNormalizationJobs);
+
+  // TODO: 백엔드 api 구현 필요
+  const retryNormalizationJob = (jobId) =>
+    handleApiCall(() => apiClient.post(`/normalization/jobs/${jobId}/retry`), () => {
+      alert("재시도 요청이 성공했습니다.");
+      getNormalizationJobs();
+    });
 
   const getBookCharacters = (book) => {
     setSelectedBook(book);
@@ -294,7 +320,6 @@ const AdminPage = () => {
   };
 
   const deleteData = (endpoint) => {
-    // 각 엔드포인트에 필요한 파라미터가 있는지 확인
     let finalEndpoint = endpoint;
 
     if (endpoint.includes("{bookId}")) {
@@ -361,6 +386,22 @@ const AdminPage = () => {
           >
             <BookIcon />
             <span>도서 목록</span>
+          </button>
+          <button
+            onClick={() => {
+              setActiveTab("normalization");
+              setIsViewingCharacters(false);
+              setSelectedBook(null);
+              getNormalizationJobs();
+            }}
+            className={`w-full flex items-center space-x-3 px-4 py-3 text-sm font-medium rounded-lg transition-colors ${
+              activeTab === "normalization"
+                ? "bg-indigo-50 text-indigo-700"
+                : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
+            }`}
+          >
+            <ProcessingIcon />
+            <span>정규화 작업</span>
           </button>
           <button
             onClick={() => {
@@ -504,7 +545,6 @@ const AdminPage = () => {
               </div>
             </div>
 
-            {/* 시각적인 프로그레스 바 추가 */}
             <div className="flex flex-col space-y-1.5 min-w-[200px] border-l border-gray-100 pl-6 ml-6">
               <div className="flex items-baseline justify-between">
                 <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">Image Generation</span>
@@ -660,6 +700,83 @@ const AdminPage = () => {
       </div>
     );
   };
+
+  const renderNormalizationSection = () => (
+    <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+      <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+        <div className="flex items-center space-x-2">
+          <ProcessingIcon />
+          <h3 className="text-lg font-semibold text-gray-800">정규화 작업 현황</h3>
+        </div>
+        <button
+          onClick={getNormalizationJobs}
+          disabled={loading}
+          className="text-xs font-medium text-indigo-600 hover:text-indigo-800 transition-colors"
+        >
+          새로고침
+        </button>
+      </div>
+      <div className="p-0 overflow-x-auto">
+        <table className="w-full text-left border-collapse">
+          <thead>
+            <tr className="bg-gray-50 text-gray-600 text-xs uppercase tracking-wider">
+              <th className="px-6 py-3 font-semibold border-b">ID</th>
+              <th className="px-6 py-3 font-semibold border-b">도서명</th>
+              <th className="px-6 py-3 font-semibold border-b">상태</th>
+              <th className="px-6 py-3 font-semibold border-b">생성일시</th>
+              <th className="px-6 py-3 font-semibold border-b">관리</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-100">
+            {normalizationJobs.length === 0 ? (
+              <tr>
+                <td colSpan="5" className="px-6 py-12 text-center text-gray-500">
+                  정규화 작업 내역이 없습니다.
+                </td>
+              </tr>
+            ) : (
+              normalizationJobs.map((job) => (
+                <tr key={job.id} className="hover:bg-gray-50 transition-colors">
+                  <td className="px-6 py-4 text-sm font-mono text-gray-500">{job.id}</td>
+                  <td className="px-6 py-4 text-sm text-gray-800">
+                    {job.bookTitle || job.book_title || `Book ${job.bookId}`}
+                  </td>
+                  <td className="px-6 py-4 text-sm">
+                    <span
+                      className={`px-2 py-1 rounded-full text-xs font-semibold ${
+                        job.status === "COMPLETED"
+                          ? "bg-green-100 text-green-700"
+                          : job.status === "PROCESSING" || job.status === "IN_PROGRESS"
+                            ? "bg-blue-100 text-blue-700 animate-pulse"
+                            : job.status === "FAILED"
+                              ? "bg-red-100 text-red-700"
+                              : "bg-gray-100 text-gray-600"
+                      }`}
+                    >
+                      {job.status}
+                    </span>
+                  </td>
+                  <td className="px-6 py-4 text-sm text-gray-500">
+                    {new Date(job.createdAt || job.created_at).toLocaleString()}
+                  </td>
+                  <td className="px-6 py-4 text-sm">
+                    {job.status === "FAILED" && (
+                      <button
+                        onClick={() => retryNormalizationJob(job.id)}
+                        className="text-indigo-600 hover:text-indigo-800 font-medium"
+                      >
+                        재시도
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
 
   const renderQuerySection = () => (
     <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
@@ -847,6 +964,7 @@ const AdminPage = () => {
             <h1 className="text-2xl font-bold text-gray-900">
               {activeTab === "dashboard" && "대시보드 홈"}
               {activeTab === "books" && "도서 목록"}
+              {activeTab === "normalization" && "정규화 작업"}
               {activeTab === "query" && "데이터 조회"}
               {activeTab === "upload" && "데이터 업로드"}
               {activeTab === "delete" && "데이터 삭제"}
@@ -868,6 +986,7 @@ const AdminPage = () => {
             </div>
           )}
           {activeTab === "books" && renderBooksSection()}
+          {activeTab === "normalization" && renderNormalizationSection()}
           {activeTab === "query" && renderQuerySection()}
           {activeTab === "upload" && renderUploadSection()}
           {activeTab === "delete" && renderDeleteSection()}
