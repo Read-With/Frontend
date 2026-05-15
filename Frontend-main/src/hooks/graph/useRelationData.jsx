@@ -1,8 +1,12 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { toNumberOrNull } from '../../utils/numberUtils';
-import { isSamePair } from '../../utils/relationUtils';
+import { toNumberOrNull } from '../../utils/common/numberUtils';
+import { isSamePair } from '../../utils/graph/relationUtils';
 import { getFineGraph } from '../../utils/api/api';
-import { registerCache, getCacheItem, setCacheItem, clearCache, enforceCacheSizeLimit } from '../../utils/common/cache/cacheManager';
+import {
+  getCachedChapterEvents,
+  reconstructChapterGraphState,
+} from '../../utils/common/cache/chapterEventCache';
+import { registerCache, getCacheItem, setCacheItem, enforceCacheSizeLimit } from '../../utils/common/cache/cacheManager';
 
 const CACHE_DURATION = 5 * 60 * 1000;
 const CACHE_PREFIX = 'relation-timeline-';
@@ -36,6 +40,17 @@ function setCachedData(cacheKey, result) {
   enforceCacheSizeLimit('relationTimelineCache');
 }
 
+function withNoRelation(result, fallbackNoRelation = true) {
+  const safeResult = result ?? { points: [], labelInfo: [] };
+  const points = Array.isArray(safeResult.points) ? safeResult.points : [];
+  return {
+    ...safeResult,
+    points,
+    labelInfo: Array.isArray(safeResult.labelInfo) ? safeResult.labelInfo : [],
+    noRelation: safeResult.noRelation ?? (points.length === 0 ? fallbackNoRelation : false),
+  };
+}
+
 function invalidateCache(bookId, chapterNum = null) {
   const keyPattern =
     chapterNum !== null
@@ -66,7 +81,7 @@ function invalidateCache(bookId, chapterNum = null) {
           sessionStorage.removeItem(key);
         }
       }
-    } catch (error) {
+    } catch (_error) {
       // ignore storage errors
     }
   }
@@ -85,6 +100,52 @@ function padSingleEvent(points, labels) {
     .map((_, index) => (index === 5 ? points[0] : null));
 
   return { points: paddedTimeline, labels: paddedLabels };
+}
+
+function findRelationInElements(elements, id1, id2) {
+  if (!Array.isArray(elements)) return null;
+  return elements.find((element) => {
+    const data = element?.data;
+    if (!data?.source || !data?.target) return false;
+    return isSamePair(data, id1, id2);
+  }) ?? null;
+}
+
+function relationPointFromElement(edgeElement) {
+  const raw = edgeElement?.data?.positivity;
+  const numeric = Number(raw);
+  return Number.isFinite(numeric) ? Math.max(-1, Math.min(1, numeric)) : 0;
+}
+
+function fetchCachedRelationTimelineViewer(bookId, id1, id2, chapterNum, eventNum) {
+  const chapterPayload = getCachedChapterEvents(bookId, chapterNum);
+  if (!chapterPayload?.baseSnapshot) {
+    return null;
+  }
+
+  const points = [];
+  const labelInfo = [];
+  let firstAppearanceIdx = null;
+
+  for (let idx = 1; idx <= eventNum; idx += 1) {
+    const state = reconstructChapterGraphState(chapterPayload, idx);
+    const edge = findRelationInElements(state?.elements, id1, id2);
+
+    if (edge && firstAppearanceIdx === null) {
+      firstAppearanceIdx = idx;
+    }
+
+    if (firstAppearanceIdx !== null) {
+      points.push(edge ? relationPointFromElement(edge) : 0);
+      labelInfo.push(`E${idx}`);
+    }
+  }
+
+  if (firstAppearanceIdx === null) {
+    return { points: [], labelInfo: [], noRelation: true };
+  }
+
+  return { points, labelInfo, noRelation: false };
 }
 
 async function fetchApiRelationTimelineCumulativeFromAPI(bookId, id1, id2, selectedChapter) {
@@ -132,7 +193,7 @@ async function fetchApiRelationTimelineCumulativeFromAPI(bookId, id1, id2, selec
           } else {
             right = mid - 1;
           }
-        } catch (error) {
+        } catch (_error) {
           right = mid - 1;
         }
       }
@@ -163,7 +224,7 @@ async function fetchApiRelationTimelineCumulativeFromAPI(bookId, id1, id2, selec
                 });
               }
             }
-          } catch (error) {
+          } catch (_error) {
           }
         }
       }
@@ -230,7 +291,7 @@ async function fetchApiRelationTimelineCumulativeFromAPI(bookId, id1, id2, selec
     ];
 
     return { points, labelInfo };
-  } catch (error) {
+  } catch (_error) {
     return { points: [], labelInfo: [] };
   }
 }
@@ -243,14 +304,14 @@ async function fetchApiRelationTimelineCumulative(bookId, id1, id2, selectedChap
   const cacheKey = getCacheKey(bookId, selectedChapter, id1, id2);
   const cached = getCachedData(cacheKey);
   if (cached) {
-    return { ...cached, noRelation: (cached.points || []).length === 0 };
+    return withNoRelation(cached);
   }
 
   try {
     const result = await fetchApiRelationTimelineCumulativeFromAPI(bookId, id1, id2, selectedChapter);
     setCachedData(cacheKey, result);
-    return { ...result, noRelation: (result.points || []).length === 0 };
-  } catch (error) {
+    return withNoRelation(result);
+  } catch (_error) {
     return { points: [], labelInfo: [], noRelation: true };
   }
 }
@@ -258,6 +319,11 @@ async function fetchApiRelationTimelineCumulative(bookId, id1, id2, selectedChap
 async function fetchApiRelationTimelineViewer(bookId, id1, id2, chapterNum, eventNum) {
   if (!bookId || chapterNum < 1 || eventNum < 1) {
     return { points: [], labelInfo: [], noRelation: true };
+  }
+
+  const cachedTimeline = fetchCachedRelationTimelineViewer(bookId, id1, id2, chapterNum, eventNum);
+  if (cachedTimeline) {
+    return cachedTimeline;
   }
 
   try {
@@ -286,7 +352,7 @@ async function fetchApiRelationTimelineViewer(bookId, id1, id2, chapterNum, even
             firstAppearanceIdx = idx;
           }
         }
-      } catch (error) {
+      } catch (_error) {
         // ignore per-event errors
       }
     }
@@ -298,27 +364,31 @@ async function fetchApiRelationTimelineViewer(bookId, id1, id2, chapterNum, even
     const points = [];
     const labelInfo = [];
 
-    for (let idx = firstAppearanceIdx; idx <= eventNum; idx += 1) {
+    for (let idx = 1; idx <= eventNum; idx += 1) {
       try {
         let fineData = cachedEvents.get(idx);
         if (!fineData) {
           fineData = await getFineGraph(bookId, chapterNum, idx);
         }
 
+        let positivityForEvent = 0;
         if (fineData?.result?.relations?.length) {
           const relation = fineData.result.relations.find((rel) => isSamePair(rel, id1, id2));
           if (relation) {
-            points.push(relation.positivity || 0);
-            labelInfo.push(`E${idx}`);
+            positivityForEvent = relation.positivity || 0;
           }
         }
-      } catch (error) {
-        // ignore per-event errors
+        points.push(positivityForEvent);
+        labelInfo.push(`E${idx}`);
+      } catch (_error) {
+        // 이벤트 단위 오류는 해당 지점을 중립값으로 유지하고 진행
+        points.push(0);
+        labelInfo.push(`E${idx}`);
       }
     }
 
-    return { points, labelInfo, noRelation: points.length === 0 };
-  } catch (error) {
+    return withNoRelation({ points, labelInfo });
+  } catch (_error) {
     return { points: [], labelInfo: [], noRelation: true };
   }
 }
@@ -374,7 +444,7 @@ export function useRelationData(mode, id1, id2, chapterNum, eventNum, maxChapter
       setTimeline(paddedPoints);
       setLabels(paddedLabels);
       setNoRelation(resultNoRelation || paddedPoints.filter((value) => value !== null).length === 0);
-    } catch (err) {
+    } catch (_err) {
       setTimeline([]);
       setLabels([]);
       setNoRelation(true);

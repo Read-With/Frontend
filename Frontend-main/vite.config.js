@@ -2,12 +2,16 @@ import { defineConfig, loadEnv } from "vite";
 import react from "@vitejs/plugin-react";
 import fs from 'fs';
 import path from 'path';
+import { buildContentSecurityPolicy } from './vite/csp.js';
+import { DEFAULT_DEV_PROXY_TARGET } from './src/utils/common/appEnvDefaults.js';
 
 export default defineConfig(({ mode }) => {
+  const env = loadEnv(mode, process.cwd(), '');
+  const cspForServer = buildContentSecurityPolicy(env, { dev: mode === 'development' });
+  const cspForProdHtml = buildContentSecurityPolicy(env, { dev: false });
+  const proxyTarget = env.VITE_DEV_PROXY_TARGET || DEFAULT_DEV_PROXY_TARGET;
   const envPath = path.resolve(process.cwd(), '.env');
   let clientId = null;
-  const isDev = mode === 'development';
-  
   try {
     if (fs.existsSync(envPath)) {
       const envContent = fs.readFileSync(envPath, 'utf8');
@@ -26,13 +30,23 @@ export default defineConfig(({ mode }) => {
   }
   
   return {
-    plugins: [react()],
+    plugins: [
+      react(),
+      {
+        name: 'inject-csp-meta',
+        transformIndexHtml(html, ctx) {
+          if (ctx.server) return html;
+          const escaped = cspForProdHtml.replace(/"/g, '&quot;');
+          const meta = `\n    <meta http-equiv="Content-Security-Policy" content="${escaped}" />`;
+          return html.replace('<meta charset="UTF-8" />', `<meta charset="UTF-8" />${meta}`);
+        },
+      },
+    ],
     define: {
       'import.meta.env.VITE_GOOGLE_CLIENT_ID': JSON.stringify(clientId),
     },
     optimizeDeps: {
       include: ['react', 'react-dom'],
-      exclude: ['@google-cloud/local-auth', 'googleapis'],
     },
     build: {
       target: 'esnext',
@@ -40,10 +54,8 @@ export default defineConfig(({ mode }) => {
       rollupOptions: {
         output: {
           manualChunks: {
-            vendor: ['react', 'react-dom'],
-            charts: ['recharts', 'react-chartjs-2', 'chart.js'],
+            charts: ['recharts'],
             graph: ['cytoscape', 'cytoscape-cose-bilkent'],
-            ui: ['@ant-design/pro-components', 'antd'],
           },
         },
       },
@@ -57,7 +69,7 @@ export default defineConfig(({ mode }) => {
       // CORS 문제 해결을 위한 프록시 설정 (개발 환경 전용)
       proxy: {
         '/api': {
-          target: 'http://read-with-dev-env.eba-wuzcb2s6.ap-northeast-2.elasticbeanstalk.com',
+          target: proxyTarget,
           changeOrigin: true,
           secure: false,
           ws: false,
@@ -67,38 +79,23 @@ export default defineConfig(({ mode }) => {
             'Connection': 'keep-alive',
           },
           configure: (proxy, options) => {
-            // 요청 전 로깅 및 헤더 확인 (디버깅용)
-            proxy.on('proxyReq', (proxyReq, req, res) => {
+            proxy.on('proxyReq', (proxyReq, req, _res) => {
               if (req.url?.includes('/api/books') && req.method === 'POST') {
                 const authHeader = req.headers['authorization'] || req.headers['Authorization'];
-                console.log('🔄 프록시 요청:', {
-                  url: req.url,
-                  method: req.method,
-                  originalAuthHeader: authHeader ? authHeader.substring(0, 30) + '...' : '없음',
-                  proxyAuthHeader: proxyReq.getHeader('Authorization') ? proxyReq.getHeader('Authorization').substring(0, 30) + '...' : '없음',
-                  allHeaders: Object.keys(proxyReq.getHeaders())
-                });
-                
-                // Authorization 헤더가 없으면 원본 요청에서 가져와서 설정
                 if (!proxyReq.getHeader('Authorization') && authHeader) {
                   proxyReq.setHeader('Authorization', authHeader);
-                  console.log('✅ Authorization 헤더 재설정됨');
                 }
               }
             });
-            proxy.on('proxyRes', (proxyRes, req, res) => {
+            proxy.on('proxyRes', (proxyRes, req, _res) => {
               // 404 에러인 경우 - 데이터가 없을 수 있는 엔드포인트는 조용히 처리
               if (proxyRes.statusCode === 404) {
                 const url = req.url || '';
                 
                 // 데이터가 없을 수 있는 정상적인 404 엔드포인트들
                 const silent404Endpoints = [
-                  '/api/graph/fine',
-                  '/api/graph/macro',
-                  '/api/v2/graph/fine',
-                  '/api/v2/graph/macro',
-                  '/api/progress/',
-                  '/api/v2/progress/',
+                  '/api/v2/graph/',
+                  '/api/v2/progress',
                   '/api/books/',
                   '/api/v2/books/',
                   '/manifest'
@@ -121,7 +118,7 @@ export default defineConfig(({ mode }) => {
                 }
               }
             });
-            proxy.on('error', (err, req, res) => {
+            proxy.on('error', (err, req, _res) => {
               console.error('❌ [프록시 에러]', {
                 메시지: err.message,
                 코드: err.code,
@@ -133,7 +130,7 @@ export default defineConfig(({ mode }) => {
         },
         // Health check용 (백엔드가 /health를 직접 제공하는 경우)
         '/health': {
-          target: 'http://read-with-dev-env.eba-wuzcb2s6.ap-northeast-2.elasticbeanstalk.com',
+          target: proxyTarget,
           changeOrigin: true,
           secure: false,
           ws: false,
@@ -144,7 +141,7 @@ export default defineConfig(({ mode }) => {
         'Cross-Origin-Opener-Policy': 'same-origin-allow-popups',
         'X-Content-Type-Options': 'nosniff',
         'Referrer-Policy': 'strict-origin-when-cross-origin',
-        'Content-Security-Policy': "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://accounts.google.com https://apis.google.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://accounts.google.com blob:; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https: blob:; connect-src 'self' ws://localhost:* http://localhost:8080 https://dev.readwith.store http://read-with-dev-env.eba-wuzcb2s6.ap-northeast-2.elasticbeanstalk.com https://accounts.google.com https://oauth2.googleapis.com https://*.s3.ap-northeast-2.amazonaws.com https://*.s3.amazonaws.com; frame-src 'self' https://accounts.google.com;",
+        'Content-Security-Policy': cspForServer,
       },
       hmr: {
         port: 24678,

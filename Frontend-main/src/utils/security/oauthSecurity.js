@@ -34,6 +34,49 @@ export const validateOAuthState = (receivedState, storedState) => {
   return { isValid: true };
 };
 
+/** Google OAuth authorize 요청 직전 sessionStorage에 저장하는 키 */
+export const GOOGLE_OAUTH_STATE_SESSION_KEY = 'readwith_google_oauth_state';
+
+export function createAndStoreGoogleOAuthState() {
+  const state = generateOAuthState();
+  if (typeof sessionStorage !== 'undefined') {
+    try {
+      sessionStorage.setItem(GOOGLE_OAUTH_STATE_SESSION_KEY, state);
+    } catch {
+      /* quota / private mode */
+    }
+  }
+  return state;
+}
+
+export function clearGoogleOAuthStateSession() {
+  if (typeof sessionStorage !== 'undefined') {
+    try {
+      sessionStorage.removeItem(GOOGLE_OAUTH_STATE_SESSION_KEY);
+    } catch {
+      /* ignore */
+    }
+  }
+}
+
+/**
+ * 콜백 URL의 state와 sessionStorage 값을 비교한 뒤 저장값을 제거한다.
+ * @param {string|null} receivedState
+ */
+export function verifyGoogleOAuthState(receivedState) {
+  let stored = null;
+  if (typeof sessionStorage !== 'undefined') {
+    try {
+      stored = sessionStorage.getItem(GOOGLE_OAUTH_STATE_SESSION_KEY);
+    } catch {
+      return { isValid: false, error: 'OAuth state를 읽을 수 없습니다.' };
+    }
+  }
+  const result = validateOAuthState(receivedState, stored);
+  clearGoogleOAuthStateSession();
+  return result;
+}
+
 // OAuth 코드 형식 검증
 export const validateOAuthCode = (code) => {
   if (!code) {
@@ -41,7 +84,7 @@ export const validateOAuthCode = (code) => {
   }
 
   // Google OAuth 코드는 Base64 URL-safe 문자로 구성됨
-  const pattern = /^[A-Za-z0-9\/\-_]+$/;
+  const pattern = /^[A-Za-z0-9/_-]+$/;
   if (!pattern.test(code)) {
     return { isValid: false, error: '유효하지 않은 인증 코드 형식입니다.' };
   }
@@ -112,7 +155,7 @@ export const validateRedirectUri = (redirectUri) => {
     }
 
     return { isValid: true };
-  } catch (error) {
+  } catch (_error) {
     return { isValid: false, error: '유효하지 않은 URL 형식입니다.' };
   }
 };

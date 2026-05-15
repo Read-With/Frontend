@@ -1,0 +1,260 @@
+import { toFiniteNumber, uniqueStrings } from './graphNormalizeUtils';
+import { registerCache, recordCacheAccess, enforceCacheSizeLimit } from '../common/cache/cacheManager';
+
+/**
+ * @typedef {Object} NormalizedRelation
+ * @property {number} id1
+ * @property {number} id2
+ * @property {*} [positivity]
+ * @property {number} [weight]
+ * @property {*} [count]
+ * @property {string[]} relation
+ * @property {string} label
+ */
+
+export const safeNum = toFiniteNumber;
+
+const normalizeRelationArray = (relation, label = '') => {
+  const values = Array.isArray(relation)
+    ? relation
+    : typeof relation === 'string'
+      ? [relation]
+      : typeof label === 'string'
+        ? label.split(',')
+        : [];
+
+  return uniqueStrings(values);
+};
+
+export function normalizeRelation(raw) {
+  if (!raw || typeof raw !== 'object') {
+    return null;
+  }
+  
+  try {
+    // id1/id2 우선, 없으면 source/target (fine·그래프 API 변형)
+    const id1 = safeNum(raw.id1 ?? raw.source);
+    const id2 = safeNum(raw.id2 ?? raw.target);
+
+    if (isNaN(id1) || isNaN(id2)) {
+      return null;
+    }
+    
+    const positivity = raw.positivity;
+    const weight = raw.weight ?? 1;
+    const count = raw.count;
+    const relationArray = normalizeRelationArray(raw.relation);
+
+    const label = relationArray[0] || (typeof raw.label === "string" ? raw.label : "");
+
+    return { id1, id2, positivity, weight, count, relation: relationArray, label };
+  } catch (_error) {
+    return null;
+  }
+}
+
+export function isValidRelation(normalized) {
+  if (!normalized || typeof normalized !== 'object') {
+    return false;
+  }
+  
+  const { id1, id2 } = normalized;
+  
+  if (!Number.isFinite(id1) || !Number.isFinite(id2)) {
+    return false;
+  }
+  
+  if (id1 === 0 || id2 === 0) {
+    return false;
+  }
+  
+  if (id1 === id2) {
+    return false;
+  }
+  
+  return true;
+}
+
+export function isSamePair(rel, a, b) {
+  if (!rel || typeof rel !== 'object') {
+    return false;
+  }
+
+  const r1 = safeNum(rel.id1 ?? rel.source);
+  const r2 = safeNum(rel.id2 ?? rel.target);
+  const s1 = safeNum(a);
+  const s2 = safeNum(b);
+  
+  if (isNaN(r1) || isNaN(r2) || isNaN(s1) || isNaN(s2)) {
+    return false;
+  }
+  
+  return (r1 === s1 && r2 === s2) || (r1 === s2 && r2 === s1);
+}
+
+/**
+ * 원본 relation에 붙은 이벤트 식별자만 얇게 전달(processRelations·그래프 변환용).
+ * @param {object} raw
+ * @returns {Record<string, *>}
+ */
+export function relationEventMetaPassthrough(raw) {
+  if (!raw || typeof raw !== 'object') {
+    return {};
+  }
+  const nested = raw.event && typeof raw.event === 'object' ? raw.event : null;
+  const pick = (v) => (v !== undefined && v !== null ? v : undefined);
+  const eventNum = pick(raw.eventNum) ?? pick(nested?.eventNum);
+  const eventIdx = pick(raw.eventIdx) ?? pick(nested?.eventIdx);
+  const event_id = pick(raw.event_id) ?? pick(nested?.event_id);
+  const event_idx = pick(raw.event_idx);
+  return {
+    ...(eventNum !== undefined ? { eventNum } : {}),
+    ...(eventIdx !== undefined ? { eventIdx } : {}),
+    ...(event_id !== undefined ? { event_id } : {}),
+    ...(event_idx !== undefined ? { event_idx } : {}),
+  };
+}
+
+export function processRelations(relations) {
+  if (!Array.isArray(relations)) {
+    return [];
+  }
+  
+  if (relations.length === 0) {
+    return [];
+  }
+  
+  try {
+    const processed = relations
+      .map((raw) => ({ raw, norm: normalizeRelation(raw) }))
+      .filter(({ norm }) => norm !== null && isValidRelation(norm))
+      .map(({ raw, norm: r }) => ({
+        id1: r.id1,
+        id2: r.id2,
+        positivity: r.positivity,
+        relation: r.relation,
+        weight: r.weight,
+        count: r.count,
+        ...relationEventMetaPassthrough(raw),
+      }));
+    
+    return processed;
+  } catch (_error) {
+    return [];
+  }
+}
+
+export function processRelationTags(relation, label) {
+  try {
+    return normalizeRelationArray(relation, label);
+  } catch (_error) {
+    return [];
+  }
+}
+
+// 관계 태그 처리 캐시 (캐시 관리 시스템 통합)
+const relationCache = new Map();
+registerCache('relationCache', relationCache, { maxSize: 1000, ttl: 600000 }); // 10분 TTL
+
+export function processRelationTagsCached(relation, label) {
+  try {
+    if (relation === undefined && label === undefined) {
+      return [];
+    }
+    
+    const relationStr = Array.isArray(relation) ? relation.join('|') : String(relation || '');
+    const labelStr = String(label || '');
+    const cacheKey = `${relationStr}::${labelStr}`;
+    
+    recordCacheAccess('relationCache');
+    
+    if (relationCache.has(cacheKey)) {
+      return relationCache.get(cacheKey);
+    }
+    
+    const result = processRelationTags(relation, label);
+    relationCache.set(cacheKey, result);
+    enforceCacheSizeLimit('relationCache');
+    return result;
+  } catch (_error) {
+    return processRelationTags(relation, label);
+  }
+}
+
+export function clearRelationCache() {
+  try {
+    relationCache.clear();
+  } catch (_error) {
+    /* ignore */
+  }
+}
+
+export function cleanupRelationResources() {
+  try {
+    clearRelationCache();
+  } catch (_error) {
+    /* ignore */
+  }
+}
+
+export function isValidRelationData(data) {
+  if (!data || typeof data !== 'object') {
+    return false;
+  }
+  
+  const hasId1 = data.id1 !== undefined || data.source !== undefined;
+  const hasId2 = data.id2 !== undefined || data.target !== undefined;
+  
+  return hasId1 && hasId2;
+}
+
+export function isValidRelationsArray(relations) {
+  if (!Array.isArray(relations)) {
+    return false;
+  }
+  
+  if (relations.length === 0) {
+    return true;
+  }
+  
+  return isValidRelationData(relations[0]);
+}
+
+/**
+ * 방향 간선 id (`id1->id2`). 역방향은 별도 간선.
+ * @param {any} fromId
+ * @param {any} toId
+ * @returns {string}
+ */
+export function directedEdgeElementId(fromId, toId) {
+  return `${String(fromId)}->${String(toId)}`;
+}
+
+/**
+ * 관계 키 생성 (정규화된 ID 쌍으로 고유 키 생성)
+ * @param {any} a - 첫 번째 ID
+ * @param {any} b - 두 번째 ID
+ * @returns {string|null} 관계 키 (min-max 형식) 또는 null
+ */
+export function createRelationKey(a, b) {
+  const first = safeNum(a);
+  const second = safeNum(b);
+  if (!Number.isFinite(first) || !Number.isFinite(second)) {
+    return null;
+  }
+  const min = first <= second ? first : second;
+  const max = first <= second ? second : first;
+  return `${min}-${max}`;
+}
+
+/**
+ * 관계 객체에서 관계 키 추출
+ * @param {Object} relation - 관계 객체 (id1/id2 또는 source/target 포함)
+ * @returns {string|null} 관계 키 또는 null
+ */
+export function getRelationKeyFromRelation(relation) {
+  if (!relation || typeof relation !== "object") {
+    return null;
+  }
+  return createRelationKey(relation.id1 ?? relation.source, relation.id2 ?? relation.target);
+}

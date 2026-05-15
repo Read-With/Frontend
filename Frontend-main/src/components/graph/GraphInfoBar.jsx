@@ -3,11 +3,12 @@ import PropTypes from 'prop-types';
 import { COLORS } from '../../utils/styles/styles.js';
 
 const GraphInfoBar = memo(function GraphInfoBar({
-  isApiBook,
   apiFineData,
   currentChapter,
+  currentChapterTitle = '',
   currentEvent,
   userCurrentChapter,
+  userReadingChapterTitle = '',
   nodeCount,
   relationCount,
   filterStage,
@@ -15,18 +16,16 @@ const GraphInfoBar = memo(function GraphInfoBar({
   const hasEvent = !!apiFineData?.event;
 
   const graphTypeLabel = useMemo(() => {
-    if (!isApiBook) return '로컬 그래프';
     return hasEvent ? '세밀 그래프' : '거시 그래프';
-  }, [isApiBook, hasEvent]);
+  }, [hasEvent]);
 
   const chapterRangeLabel = useMemo(() => {
-    if (!isApiBook) {
-      return `Chapter 1 ~ ${currentChapter} 누적`;
-    }
+    const nameOrNum = (n, title) => (title && String(title).trim() ? String(title).trim() : `Chapter ${n}`);
+    const curName = nameOrNum(currentChapter, currentChapterTitle);
     return hasEvent
-      ? `Chapter ${currentChapter}, Event ${currentEvent}`
-      : `Chapter 1 ~ ${currentChapter} 누적`;
-  }, [isApiBook, hasEvent, currentChapter, currentEvent]);
+      ? `${curName} · 이벤트 ${currentEvent}`
+      : `Chapter 1 ~ ${curName} 누적`;
+  }, [hasEvent, currentChapter, currentChapterTitle, currentEvent]);
 
   return (
     <div
@@ -71,7 +70,7 @@ const GraphInfoBar = memo(function GraphInfoBar({
         >
           {chapterRangeLabel}
         </div>
-        {isApiBook && userCurrentChapter !== null && (
+        {userCurrentChapter !== null && (
           <div
             style={{
               background: COLORS.primary + '20',
@@ -81,8 +80,12 @@ const GraphInfoBar = memo(function GraphInfoBar({
               color: COLORS.primary,
               fontWeight: '600',
             }}
+            title={userReadingChapterTitle ? `챕터 ${userCurrentChapter}` : undefined}
           >
-            독서 진행: Chapter {userCurrentChapter}
+            독서 진행:{' '}
+            {userReadingChapterTitle && String(userReadingChapterTitle).trim()
+              ? String(userReadingChapterTitle).trim()
+              : `Chapter ${userCurrentChapter}`}
           </div>
         )}
       </div>
@@ -103,40 +106,26 @@ const GraphInfoBar = memo(function GraphInfoBar({
         <span>
           {filterStage > 0 ? `${relationCount}관계 (필터링됨)` : `${relationCount}관계`}
         </span>
-        {isApiBook && (
-          <>
-            <span>•</span>
-            <span
-              style={{
-                color: COLORS.primary,
-                fontWeight: '600',
-              }}
-            >
-              API
-            </span>
-          </>
-        )}
-        {!isApiBook && (
-          <>
-            <span>•</span>
-            <span
-              style={{
-                color: COLORS.textSecondary,
-                fontWeight: '600',
-              }}
-            >
-              로컬
-            </span>
-          </>
-        )}
+        <>
+          <span>•</span>
+          <span
+            style={{
+              color: COLORS.primary,
+              fontWeight: '600',
+            }}
+          >
+            API
+          </span>
+        </>
       </div>
     </div>
   );
 }, (prevProps, nextProps) => {
-  if (prevProps.isApiBook !== nextProps.isApiBook) return false;
   if (prevProps.currentChapter !== nextProps.currentChapter) return false;
+  if (prevProps.currentChapterTitle !== nextProps.currentChapterTitle) return false;
   if (prevProps.currentEvent !== nextProps.currentEvent) return false;
   if (prevProps.userCurrentChapter !== nextProps.userCurrentChapter) return false;
+  if (prevProps.userReadingChapterTitle !== nextProps.userReadingChapterTitle) return false;
   if (prevProps.nodeCount !== nextProps.nodeCount) return false;
   if (prevProps.relationCount !== nextProps.relationCount) return false;
   if (prevProps.filterStage !== nextProps.filterStage) return false;
@@ -145,13 +134,14 @@ const GraphInfoBar = memo(function GraphInfoBar({
 });
 
 GraphInfoBar.propTypes = {
-  isApiBook: PropTypes.bool.isRequired,
   apiFineData: PropTypes.shape({
     event: PropTypes.object,
   }),
   currentChapter: PropTypes.number.isRequired,
+  currentChapterTitle: PropTypes.string,
   currentEvent: PropTypes.number.isRequired,
   userCurrentChapter: PropTypes.number,
+  userReadingChapterTitle: PropTypes.string,
   nodeCount: PropTypes.number.isRequired,
   relationCount: PropTypes.number.isRequired,
   filterStage: PropTypes.number.isRequired,

@@ -1,12 +1,20 @@
-import { toNumberOrNull } from '../numberUtils';
-import { sortEventsByIdx } from '../eventUtils';
-import { createCharacterMaps, normalizeCharacterId, aggregateCharactersFromEvents } from '../characterUtils';
-import { getMaxChapter, getChapterData } from '../common/cache/manifestCache';
-import { getCachedChapterEvents, reconstructChapterGraphState, normalizeManifestEvents } from '../common/cache/chapterEventCache';
+/**
+ * `api:{bookId}` 키로 접근하는 이벤트·관계 스냅샷은
+ * GET /api/v2/graph/fine 기반 챕터 캐시(chapterEventCache)에서만 온다(그래프 단독 페이지 제외 흐름).
+ */
+import { toNumberOrNull } from '../common/numberUtils';
+import {
+  createCharacterMaps,
+  normalizeCharacterId,
+  aggregateCharactersFromEvents,
+  createEmptyCharacterMaps,
+} from './characterUtils';
+import { extractApiBookId, toApiFolderKey, toPositiveInt } from './graphNormalizeUtils';
+import { getMaxChapter } from '../common/cache/manifestCache';
+import { getCachedChapterEvents, reconstructChapterGraphState } from '../common/cache/chapterEventCache';
 import { registerCache, getCacheItem, setCacheItem } from '../common/cache/cacheManager';
-import { eventUtils } from '../viewerUtils';
+import { eventUtils } from '../viewer/viewerUtils';
 
-const API_PREFIX = 'api:';
 const CHARACTER_CACHE_LIMIT = 50;
 
 const characterMapsCache = new Map();
@@ -17,25 +25,8 @@ registerCache('characterMapsCache', characterMapsCache, {
   cleanupInterval: 600000
 });
 
-const extractBookId = (folderKeyOrFilename) => {
-  if (!folderKeyOrFilename) return null;
-
-  if (typeof folderKeyOrFilename === 'number') {
-    return Number.isFinite(folderKeyOrFilename) && folderKeyOrFilename > 0
-      ? folderKeyOrFilename
-      : null;
-  }
-
-  const key = String(folderKeyOrFilename).trim();
-  if (!key) return null;
-
-  if (key.startsWith(API_PREFIX)) {
-    const parsed = Number(key.slice(API_PREFIX.length));
-    return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
-  }
-
-  const parsed = Number(key);
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+const normalizePositiveInt = (value, fallback = 0) => {
+  return toPositiveInt(value, fallback);
 };
 
 const getChapterEventsSnapshot = (bookId, chapterIdx) => {
@@ -44,33 +35,26 @@ const getChapterEventsSnapshot = (bookId, chapterIdx) => {
   }
 
   const cachedEvents = getCachedChapterEvents(bookId, chapterIdx);
-  if (cachedEvents?.events?.length) {
+  if (
+    cachedEvents?.events?.length &&
+    cachedEvents.source !== 'manifest-only'
+  ) {
     return cachedEvents;
   }
 
-  const manifestChapter = getChapterData(bookId, chapterIdx);
-  const normalizedEvents = normalizeManifestEvents(bookId, chapterIdx, manifestChapter);
-
-  if (normalizedEvents.length === 0) {
-    return null;
-  }
-
-  return {
-    bookId,
-    chapterIdx,
-    events: normalizedEvents,
-    maxEventIdx: normalizedEvents.reduce((max, ev) => Math.max(max, ev.eventIdx), 0),
-  };
+  return null;
 };
 
+/**
+ * @param {string|number|null|undefined} filename
+ * @returns {string|null} `api:{bookId}` 또는 파싱 불가 시 null
+ */
 export function getFolderKeyFromFilename(filename) {
-  const bookId = extractBookId(filename);
-  if (!bookId) return null;
-  return `${API_PREFIX}${bookId}`;
+  return toApiFolderKey(filename);
 }
 
 export function getDetectedMaxChapter(folderKey) {
-  const bookId = extractBookId(folderKey);
+  const bookId = extractApiBookId(folderKey);
   if (!bookId) return 0;
 
   const manifestMax = getMaxChapter(bookId);
@@ -95,7 +79,7 @@ const convertElementsToRelations = (elements) => {
 };
 
 export function getEventsForChapter(chapter, folderKey) {
-  const bookId = extractBookId(folderKey);
+  const bookId = extractApiBookId(folderKey);
   if (!bookId || !chapter || chapter < 1) {
     return [];
   }
@@ -117,7 +101,7 @@ export function getEventsForChapter(chapter, folderKey) {
       ...event,
       chapter,
       chapterIdx: chapter,
-      eventNum: event.eventIdx ?? event.idx ?? 0,
+      eventNum: normalizePositiveInt(event.eventNum),
       event_id: event.event?.event_id ?? event.eventIdx ?? event.idx ?? 0,
       relations: Array.isArray(event.relations) ? event.relations : [],
       characters: Array.isArray(event.characters) ? event.characters : [],
@@ -126,6 +110,7 @@ export function getEventsForChapter(chapter, folderKey) {
 
   return eventMetas.map((eventMeta) => {
     const targetEventIdx = Number(eventMeta?.eventIdx) || 0;
+    const resolvedEventNum = normalizePositiveInt(eventMeta?.eventNum, targetEventIdx);
     const reconstructed = reconstructChapterGraphState(
       snapshot,
       targetEventIdx
@@ -140,7 +125,7 @@ export function getEventsForChapter(chapter, folderKey) {
       ...eventMeta,
       chapter,
       chapterIdx: chapter,
-      eventNum: targetEventIdx,
+      eventNum: resolvedEventNum,
       event_id:
         reconstructed?.eventMeta?.event_id ??
         eventMeta.eventId ??
@@ -153,7 +138,7 @@ export function getEventsForChapter(chapter, folderKey) {
 }
 
 export function getLastEventIndexForChapter(folderKey, chapter) {
-  const bookId = extractBookId(folderKey);
+  const bookId = extractApiBookId(folderKey);
   if (!bookId || !chapter || chapter < 1) {
     return 0;
   }
@@ -164,7 +149,10 @@ export function getLastEventIndexForChapter(folderKey, chapter) {
   }
 
   if (snapshot?.events?.length) {
-    return snapshot.events.reduce((max, ev) => Math.max(max, ev.eventIdx || 0), 0);
+    return snapshot.events.reduce((max, ev) => {
+      const n = normalizePositiveInt(ev.eventNum);
+      return n > 0 ? Math.max(max, n) : max;
+    }, 0);
   }
 
   return 0;
@@ -197,19 +185,18 @@ export function getMaxEventCount(folderKey) {
 }
 
 export function getEventDataByIndex(folderKey, chapter, eventIndex) {
-  const bookId = extractBookId(folderKey);
+  const bookId = extractApiBookId(folderKey);
   if (!bookId || !chapter || chapter < 1 || !eventIndex || eventIndex < 1) {
     return null;
   }
 
-  const snapshot = getChapterEventsSnapshot(bookId, chapter);
   const events = getEventsForChapter(chapter, folderKey);
   if (!events.length) {
     return null;
   }
 
   const event = events.find(
-    (entry) => toNumberOrNull(entry.eventIdx) === toNumberOrNull(eventIndex)
+    (entry) => toNumberOrNull(entry.eventNum) === toNumberOrNull(eventIndex)
   );
   if (!event) {
     return null;
@@ -230,7 +217,8 @@ export function getEventDataByIndex(folderKey, chapter, eventIndex) {
   return {
     chapter,
     chapterIdx: chapter,
-    eventIdx: event.eventIdx ?? eventIndex,
+    eventIdx: Number(event.eventNum),
+    eventNum: Number(event.eventNum),
     event_id: event.event?.event_id ?? event.eventIdx ?? eventIndex,
     relations: Array.isArray(event.relations) ? event.relations : [],
     characters: Array.isArray(event.characters) ? event.characters : [],
@@ -269,11 +257,7 @@ export function createCharacterMapsWithCache(characters) {
     const maps = createCharacterMaps(characters);
     setCacheItem('characterMapsCache', cacheKey, maps);
     return maps;
-  } catch (error) {
-    return { idToName: {}, idToDesc: {}, idToDescKo: {}, idToMain: {}, idToNames: {}, idToProfileImage: {} };
+  } catch (_error) {
+    return createEmptyCharacterMaps();
   }
-}
-
-export function getCharacterPerspectiveSummary() {
-  return null;
 }

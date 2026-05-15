@@ -1,7 +1,13 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { getContainerInfo, getViewportInfo, calculateCytoscapePosition, constrainToViewport } from '../../utils/graph/graphUtils';
 
-export function useTooltipPosition(initialX, initialY) {
+/**
+ * @param {number|undefined} initialX
+ * @param {number|undefined} initialY
+ * @param {{ enabled?: boolean }} [options] enabled=false일 때 드래그/위치 훅 비활성(사이드바 등)
+ */
+export function useTooltipPosition(initialX, initialY, options = {}) {
+  const enabled = options.enabled !== false;
   const [position, setPosition] = useState({ x: 200, y: 200 });
   const [showContent, setShowContent] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
@@ -11,10 +17,12 @@ export function useTooltipPosition(initialX, initialY) {
   const tooltipRef = useRef(null);
 
   useEffect(() => {
+    if (!enabled) return;
     setShowContent(true);
-  }, []);
+  }, [enabled]);
 
   const handleMouseDown = (e) => {
+    if (!enabled) return;
     if (e.target.closest(".tooltip-close-btn")) return;
     setIsDragging(true);
     const rect = tooltipRef.current.getBoundingClientRect();
@@ -25,7 +33,7 @@ export function useTooltipPosition(initialX, initialY) {
   };
 
   const handleMouseMove = (e) => {
-    if (!isDragging) return;
+    if (!enabled || !isDragging) return;
     const tooltipRect = tooltipRef.current.getBoundingClientRect();
     
     let newX = e.clientX - dragOffset.x;
@@ -37,6 +45,7 @@ export function useTooltipPosition(initialX, initialY) {
   };
 
   const handleMouseUp = () => {
+    if (!enabled) return;
     if (isDragging) {
       setJustFinishedDragging(true);
       
@@ -55,6 +64,7 @@ export function useTooltipPosition(initialX, initialY) {
   };
 
   useEffect(() => {
+    if (!enabled) return;
     if (isDragging) {
       window.addEventListener("mousemove", handleMouseMove);
       window.addEventListener("mouseup", handleMouseUp);
@@ -67,9 +77,10 @@ export function useTooltipPosition(initialX, initialY) {
       window.removeEventListener("mouseup", handleMouseUp);
       document.body.style.userSelect = "";
     };
-  }, [isDragging]);
+  }, [enabled, isDragging]);
 
   useEffect(() => {
+    if (!enabled) return;
     if (
       initialX !== undefined &&
       initialY !== undefined &&
@@ -81,7 +92,22 @@ export function useTooltipPosition(initialX, initialY) {
       const constrained = constrainToViewport(initialX, initialY, tooltipRect.width, tooltipRect.height);
       setPosition(constrained);
     }
-  }, [initialX, initialY, isDragging, hasDragged]);
+  }, [enabled, initialX, initialY, isDragging, hasDragged]);
+
+  if (!enabled) {
+    return {
+      position: { x: 0, y: 0 },
+      showContent: true,
+      isDragging: false,
+      justFinishedDragging: false,
+      tooltipRef,
+      handleMouseDown: () => {},
+      getContainerInfo,
+      getViewportInfo,
+      calculateCytoscapePosition,
+      constrainToViewport,
+    };
+  }
 
   return {
     position,
