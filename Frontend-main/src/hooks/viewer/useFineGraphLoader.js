@@ -72,6 +72,7 @@ export function useFineGraphLoader({
   resetTransition,
 }) {
   const [apiError, setApiError] = useState(null);
+  const setGraphIsDataEmpty = graphActions?.setIsDataEmpty;
   const apiEventCacheRef = useRef(new Map());
   const apiCallRef = useRef(null);
   const fineGraphDebounceTimerRef = useRef(null);
@@ -102,10 +103,66 @@ export function useFineGraphLoader({
     setApiError(error);
   }, [resetTransition, setIsDataReady, setLoading]);
 
-  const clearGraphElements = useCallback((eventIdx, chapterIdx) => {
-    eventUtils.updateGraphDataRef(previousGraphDataRef, [], eventIdx || 0, chapterIdx || 0);
+  const resetAccumulatedGraph = useCallback(() => {
+    eventUtils.updateGraphDataRef(previousGraphDataRef, [], 0, 0);
     setElementsRef.current([]);
+    if (setGraphIsDataEmpty) setGraphIsDataEmpty(true);
+  }, [setGraphIsDataEmpty]);
+
+  const seedPreviousGraphDataFromCache = useCallback((numericBookId, chapterIdx, eventIdx) => {
+    if (!numericBookId || !chapterIdx || eventIdx < 1) return;
+    if (previousGraphDataRef.current?.elements?.length > 0) return;
+
+    const previousEventState =
+      eventIdx > 1
+        ? getGraphEventState(numericBookId, chapterIdx, eventIdx - 1)
+        : null;
+
+    if (previousEventState?.elements?.length > 0) {
+      eventUtils.updateGraphDataRef(
+        previousGraphDataRef,
+        previousEventState.elements,
+        previousEventState.eventIdx || eventIdx - 1,
+        chapterIdx
+      );
+      return;
+    }
+
+    for (let prevChapter = chapterIdx - 1; prevChapter >= 1; prevChapter -= 1) {
+      const chapterPayload = getCachedChapterEvents(numericBookId, prevChapter);
+      const maxEventIdx = Number(chapterPayload?.maxEventIdx) || 0;
+      if (maxEventIdx < 1) continue;
+
+      const previousChapterState = getGraphEventState(numericBookId, prevChapter, maxEventIdx);
+      if (previousChapterState?.elements?.length > 0) {
+        eventUtils.updateGraphDataRef(
+          previousGraphDataRef,
+          previousChapterState.elements,
+          previousChapterState.eventIdx || maxEventIdx,
+          prevChapter
+        );
+        return;
+      }
+    }
   }, []);
+
+  const applyCumulativeElements = useCallback((nextElements, eventIdx, chapterIdx) => {
+    const cumulativeElements = graphDataTransformUtils.mergeElementsWithPrevious(
+      nextElements,
+      previousGraphDataRef.current,
+      chapterIdx,
+      eventIdx
+    );
+    eventUtils.updateGraphDataRef(previousGraphDataRef, cumulativeElements, eventIdx, chapterIdx);
+    setElementsRef.current(cumulativeElements);
+    if (setGraphIsDataEmpty) setGraphIsDataEmpty(cumulativeElements.length === 0);
+    return cumulativeElements;
+  }, [setGraphIsDataEmpty]);
+
+  const applySeededCumulativeElements = useCallback((nextElements, numericBookId, chapterIdx, eventIdx) => {
+    seedPreviousGraphDataFromCache(numericBookId, chapterIdx, eventIdx);
+    return applyCumulativeElements(nextElements, eventIdx, chapterIdx);
+  }, [applyCumulativeElements, seedPreviousGraphDataFromCache]);
 
   const isFineGraphCacheWarm = useCallback((numericBookId, chapter, apiEventIdx) => {
     if (!numericBookId || !chapter || apiEventIdx < 1) return false;
@@ -130,11 +187,6 @@ export function useFineGraphLoader({
     retry: retryHandler,
   }), []);
 
-  const resetGraphOnNotFound = useCallback(() => {
-    clearGraphElements(0, currentChapter);
-    updateLoadingState(true, false);
-  }, [clearGraphElements, currentChapter, updateLoadingState]);
-
   const resolveFineGraphCallContext = useCallback(() => {
     const match = resolveServerEventMatch({
       book,
@@ -144,9 +196,10 @@ export function useFineGraphLoader({
     });
     const numericBookId = Number(match.bookId);
     const apiEventIdx = Number(match.eventIdx ?? 0);
-    if (!numericBookId || !currentChapter) return null;
-    const callKey = cacheKeyUtils.createEventKey(numericBookId, currentChapter, apiEventIdx);
-    return { numericBookId, apiEventIdx, callKey };
+    const graphChapter = Number(match.chapterIdx ?? currentChapter);
+    if (!numericBookId || !graphChapter) return null;
+    const callKey = cacheKeyUtils.createEventKey(numericBookId, graphChapter, apiEventIdx);
+    return { numericBookId, graphChapter, apiEventIdx, callKey };
   }, [book, currentChapter, currentEvent]);
 
   useEffect(() => {
@@ -161,7 +214,8 @@ export function useFineGraphLoader({
     initialGraphEventLoadedRef.current = false;
     apiCallRef.current = null;
     setApiError(null);
-  }, [book?.id]);
+    resetAccumulatedGraph();
+  }, [book?.id, resetAccumulatedGraph]);
 
   useEffect(() => {
     apiCallRef.current = null;
@@ -181,11 +235,11 @@ export function useFineGraphLoader({
     const ctx = resolveFineGraphCallContext();
     if (!ctx || ctx.apiEventIdx < 1) return;
     if (ctx.callKey !== apiCallRef.current) {
-      if (!isFineGraphCacheWarm(ctx.numericBookId, currentChapter, ctx.apiEventIdx)) {
+      if (!isFineGraphCacheWarm(ctx.numericBookId, ctx.graphChapter, ctx.apiEventIdx)) {
         setFineGraphLoading(true);
       }
     }
-  }, [currentChapter, isFineGraphCacheWarm, manifestLoaded, resolveFineGraphCallContext, setFineGraphLoading]);
+  }, [isFineGraphCacheWarm, manifestLoaded, resolveFineGraphCallContext, setFineGraphLoading]);
 
   useEffect(() => {
     let isMounted = true;
@@ -196,8 +250,8 @@ export function useFineGraphLoader({
       const ctx = resolveFineGraphCallContext();
       if (!ctx) return;
 
-      const { numericBookId, apiEventIdx, callKey } = ctx;
-      if (!numericBookId || !currentChapter || apiEventIdx < 1) {
+      const { numericBookId, graphChapter, apiEventIdx, callKey } = ctx;
+      if (!numericBookId || !graphChapter || apiEventIdx < 1) {
         updateLoadingState(true, false);
         return;
       }
@@ -213,7 +267,7 @@ export function useFineGraphLoader({
         if (!isMounted) return;
 
         apiCallRef.current = callKey;
-        const warmFg = isFineGraphCacheWarm(numericBookId, currentChapter, apiEventIdx);
+        const warmFg = isFineGraphCacheWarm(numericBookId, graphChapter, apiEventIdx);
         if (warmFg) {
           fineGraphLoadKickTimerRef.current = globalThis.setTimeout(() => {
             fineGraphLoadKickTimerRef.current = null;
@@ -224,7 +278,7 @@ export function useFineGraphLoader({
         }
 
         try {
-          const chapterEventApiKey = cacheKeyUtils.createEventKey(numericBookId, currentChapter, apiEventIdx);
+          const chapterEventApiKey = cacheKeyUtils.createEventKey(numericBookId, graphChapter, apiEventIdx);
           const hasCalledApiForEvent = initialGraphEventLoadedRef.current === chapterEventApiKey;
           if (!hasCalledApiForEvent) {
             initialGraphEventLoadedRef.current = chapterEventApiKey;
@@ -232,7 +286,7 @@ export function useFineGraphLoader({
 
           const { resultData, usedCache } = await graphDataCacheUtils.getGraphDataFromApiOrCache(
             numericBookId,
-            currentChapter,
+            graphChapter,
             apiEventIdx,
             getFineGraph,
             getGraphEventState,
@@ -251,14 +305,14 @@ export function useFineGraphLoader({
             return;
           }
 
-          const cacheKey = cacheKeyUtils.createCacheKey(currentChapter, apiEventIdx);
+          const cacheKey = cacheKeyUtils.createCacheKey(graphChapter, apiEventIdx);
           const hasCacheElements = Array.isArray(resultData?.elements) && resultData.elements.length > 0;
           const hasApiRelations = Array.isArray(resultData?.relations) && resultData.relations.length > 0;
           const hasApiCharacters = Array.isArray(resultData?.characters) && resultData.characters.length > 0;
           const hasGraphData = hasCacheElements || hasApiRelations || hasApiCharacters;
 
           if (!hasGraphData) {
-            const chapterPayload = getCachedChapterEvents(numericBookId, currentChapter);
+            const chapterPayload = getCachedChapterEvents(numericBookId, graphChapter);
             const chapterEvents = Array.isArray(chapterPayload?.events) ? chapterPayload.events : [];
             const resolveEvtIdx = (evt) =>
               Number(evt?.eventNum ?? evt?.idx ?? evt?.eventIdx ?? evt?.event?.eventNum ?? 0);
@@ -266,14 +320,12 @@ export function useFineGraphLoader({
             const directRelations = Array.isArray(matchedEvent?.relations) ? matchedEvent.relations : [];
             const fallbackFromCache = buildFallbackElementsFromRelations(directRelations);
             if (fallbackFromCache.length > 0 && isMounted) {
-              eventUtils.updateGraphDataRef(previousGraphDataRef, fallbackFromCache, apiEventIdx, currentChapter);
-              setElementsRef.current(fallbackFromCache);
-              if (graphActions.setIsDataEmpty) graphActions.setIsDataEmpty(false);
+              applySeededCumulativeElements(fallbackFromCache, numericBookId, graphChapter, apiEventIdx);
               updateLoadingState(true, false);
               return;
             }
 
-            clearGraphElements(apiEventIdx, currentChapter);
+            applySeededCumulativeElements([], numericBookId, graphChapter, apiEventIdx);
             updateLoadingState(true, false);
             return;
           }
@@ -291,21 +343,18 @@ export function useFineGraphLoader({
             buildNodeWeights,
             convertRelationsToElements
           );
-
-          eventUtils.updateGraphDataRef(previousGraphDataRef, convertedElements, apiEventIdx, currentChapter);
-          setElementsRef.current(convertedElements);
+          applySeededCumulativeElements(convertedElements, numericBookId, graphChapter, apiEventIdx);
           setEvents((prev) => eventUtils.updateEventsInState(
             prev,
             graphDataTransformUtils.createNextEventData(
               normalizedEvent,
-              currentChapter,
+              graphChapter,
               apiEventIdx,
               { ...resultData, relations: resultData.relations || [] },
               eventUtils
             ),
-            currentChapter
+            graphChapter
           ));
-          if (graphActions.setIsDataEmpty) graphActions.setIsDataEmpty(convertedElements.length === 0);
           updateLoadingState(true, false);
         } catch (error) {
           if (!isMounted) return;
@@ -313,7 +362,8 @@ export function useFineGraphLoader({
           const message = error?.message || '';
           const isNotFound = status === 404 || message.includes('404') || message.includes('찾을 수 없습니다');
           if (isNotFound) {
-            resetGraphOnNotFound();
+            applySeededCumulativeElements([], numericBookId, graphChapter, apiEventIdx);
+            updateLoadingState(true, false);
           } else {
             setApiError(buildGraphLoadError(
               message || '알 수 없는 오류가 발생했습니다. 잠시 후 다시 시도해주세요.',
@@ -346,15 +396,13 @@ export function useFineGraphLoader({
     };
   }, [
     buildGraphLoadError,
-    clearGraphElements,
+    applySeededCumulativeElements,
     clearFineGraphDebounceTimer,
     clearRetryTimeout,
     currentChapter,
     currentEvent,
-    graphActions,
     isFineGraphCacheWarm,
     manifestLoaded,
-    resetGraphOnNotFound,
     resolveFineGraphCallContext,
     setEvents,
     setFineGraphLoading,

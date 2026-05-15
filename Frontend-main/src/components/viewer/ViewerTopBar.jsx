@@ -8,7 +8,7 @@ import {
 } from '../../utils/viewer/chapterTitleDisplay';
 import { GRAPH_CHARACTER_FILTER_STAGE_OPTIONS } from '../graph/graphConstants';
 import {
-  resolveViewerEventDisplayInfo,
+  resolveViewerDisplayEventNum,
 } from '../../utils/viewer/eventDisplayUtils';
 
 const LOADING_STYLE = {
@@ -49,21 +49,6 @@ const EVENT_NUMBER_STYLE = {
   transition: "transform 0.3s, background 0.3s",
 };
 
-const EVENT_NAME_STYLE = {
-  display: "inline-block",
-  padding: "4px 12px",
-  borderRadius: 12,
-  background: "#f8f9fc",
-  color: "#5C6F5C",
-  fontSize: 13,
-  fontWeight: 500,
-  border: "1px solid #e3e6ef",
-  maxWidth: "200px",
-  overflow: "hidden",
-  textOverflow: "ellipsis",
-  whiteSpace: "nowrap",
-};
-
 const PROGRESS_BAR_CONTAINER_STYLE = {
   width: 120,
   height: 6,
@@ -87,7 +72,7 @@ const ViewerTopBar = memo(function ViewerTopBar({
   searchActions,
 }) {
 
-  const { book } = viewerState;
+  const { book, progress: viewerProgress } = viewerState;
   
   const {
     currentChapter,
@@ -96,7 +81,6 @@ const ViewerTopBar = memo(function ViewerTopBar({
     graphFullScreen,
     edgeLabelVisible,
     progressTopBar,
-    maxEventNum,
   } = graphState;
   
   const {
@@ -166,8 +150,12 @@ const ViewerTopBar = memo(function ViewerTopBar({
     if (rp != null && Number.isFinite(rp)) {
       return `${Math.min(100, Math.max(0, Math.round(rp * 100) / 100))}%`;
     }
+    const vp = Number(viewerProgress);
+    if (Number.isFinite(vp)) {
+      return `${Math.min(100, Math.max(0, Math.round(vp * 100) / 100))}%`;
+    }
     return "0%";
-  }, [progressTopBar]);
+  }, [progressTopBar, viewerProgress]);
 
   const handleGenerateSuggestions = useCallback((searchTerm) => {
     if (onGenerateSuggestions) {
@@ -188,22 +176,16 @@ const ViewerTopBar = memo(function ViewerTopBar({
       eventNum: null,
       chapterProgress: null,
       readingProgressPercent: null,
-      eventName: "",
     };
 
-    const {
-      eventDisplay,
-      eventTitle,
-      eventNameLabel,
-    } = resolveViewerEventDisplayInfo({
+    const eventNum = resolveViewerDisplayEventNum({
       currentEvent,
       prevValidEvent,
-      progressTopBar: row,
-      bookId,
       currentChapter: resolvedServerChapter,
-      maxEventNum,
+      progressTopBar: row,
       fallback: 0,
     });
+    const eventDisplay = eventNum > 0 ? String(eventNum) : '?';
 
     return (
       <>
@@ -219,15 +201,9 @@ const ViewerTopBar = memo(function ViewerTopBar({
             gap: 12,
           }}
         >
-          <span style={EVENT_NUMBER_STYLE} title={eventTitle}>
+          <span style={EVENT_NUMBER_STYLE}>
             Event {eventDisplay}
           </span>
-
-          {eventNameLabel ? (
-            <span style={EVENT_NAME_STYLE} title={eventNameLabel}>
-              {eventNameLabel}
-            </span>
-          ) : null}
 
           <div style={PROGRESS_BAR_CONTAINER_STYLE}>
             <div
@@ -249,7 +225,6 @@ const ViewerTopBar = memo(function ViewerTopBar({
     currentEvent,
     prevValidEvent,
     resolvedServerChapter,
-    maxEventNum,
   ]);
 
   const renderGraphControls = useCallback(() => (

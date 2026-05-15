@@ -25,6 +25,7 @@ import {
   cacheKeyUtils,
 } from "../../utils/viewer/viewerUtils";
 import {
+  eventMatchesChapter,
   resolveDisplayedEventNum,
 } from "../../utils/viewer/eventDisplayUtils";
 import { restoreGraphLayout, preloadChapterLayouts } from "../../utils/graph/graphLayoutUtils";
@@ -38,6 +39,7 @@ import {
 } from "../../utils/common/cache/progressCache";
 import { resolveViewerLineEvent } from "../../utils/viewer/viewerLineEventResolver";
 import { useFineGraphLoader } from "../../hooks/viewer/useFineGraphLoader";
+import { getEventOrderIdx, sortEventsByIdx } from "../../utils/graph/eventUtils";
 
 // ??곷선癰귣떯由?displayAt ??彛? 癰귣챶揆夷??됱뵠?袁⑹뜍 筌왖????揶쏄쑵肉???쎈솭 獄쎻뫗?
 const VIEWER_RESUME_POLL_MS = 100;
@@ -47,6 +49,8 @@ function progressRowToTopBar(row) {
   if (!row || typeof row !== "object") {
     return {
       eventNum: null,
+      chapter: null,
+      chapterIdx: null,
       chapterProgress: null,
       readingProgressPercent: null,
       eventName: "",
@@ -61,9 +65,12 @@ function progressRowToTopBar(row) {
         ? fromId
         : null;
   const cp = Number(row.chapterProgress);
+  const chapterIdx = Number(row.chapterIdx ?? row.chapter ?? row.chapterNum);
   const pct = normalizeReadingProgressPercent(row);
   return {
     eventNum,
+    chapter: Number.isFinite(chapterIdx) && chapterIdx > 0 ? chapterIdx : null,
+    chapterIdx: Number.isFinite(chapterIdx) && chapterIdx > 0 ? chapterIdx : null,
     chapterProgress: Number.isFinite(cp) ? Math.min(100, Math.max(0, cp)) : null,
     readingProgressPercent: pct,
     eventName: String(row.eventName ?? row.eventTitle ?? row.name ?? "").trim(),
@@ -317,13 +324,11 @@ const ViewerPage = () => {
         return;
       }
 
-      const sortedEvents = [...chapterPayload.events].sort(
-        (a, b) => (Number(a?.eventNum) || 0) - (Number(b?.eventNum) || 0)
-      );
+      const sortedEvents = sortEventsByIdx(chapterPayload.events);
 
       const normalizedEvents = sortedEvents.reduce((acc, event) => {
-        const normalizedIdx = Number(event.eventNum);
-        if (!Number.isFinite(normalizedIdx) || normalizedIdx <= 0) return acc;
+        const normalizedIdx = getEventOrderIdx(event);
+        if (normalizedIdx === null || normalizedIdx <= 0) return acc;
         const normalizedEvent = {
           ...event.event,
           chapter: targetChapter,
@@ -497,6 +502,7 @@ const ViewerPage = () => {
         book,
         cleanBookId,
         eventUtils,
+        previousEvent: currentEvent,
       });
       if (nextChapter && nextChapter !== currentChapter) {
         setCurrentChapter(nextChapter);
@@ -504,19 +510,23 @@ const ViewerPage = () => {
 
       setCurrentEvent(nextEvent);
       setProgressTopBar((prev) => {
-        const base =
+        const previous =
           prev !== undefined && prev !== null && typeof prev === "object"
-            ? { ...prev }
+            ? prev
             : progressRowToTopBar(null);
         const n = resolveDisplayedEventNum(nextEvent);
-        if (n > 0) base.eventNum = n;
         const cp = Number(nextEvent.chapterProgress);
-        if (Number.isFinite(cp)) base.chapterProgress = Math.min(100, Math.max(0, cp));
+        const chapterIdx = Number(nextEvent.chapter ?? nextEvent.chapterIdx);
         const nm = nextEvent.name ?? nextEvent.event_name ?? nextEvent.eventTitle;
-        if (typeof nm === "string" && nm.trim()) base.eventName = nm.trim();
         const pct = normalizeReadingProgressPercent(nextEvent);
-        if (pct != null) base.readingProgressPercent = pct;
-        return base;
+        return {
+          eventNum: n > 0 ? n : null,
+          chapter: Number.isFinite(chapterIdx) && chapterIdx > 0 ? chapterIdx : null,
+          chapterIdx: Number.isFinite(chapterIdx) && chapterIdx > 0 ? chapterIdx : null,
+          chapterProgress: Number.isFinite(cp) ? Math.min(100, Math.max(0, cp)) : null,
+          eventName: typeof nm === "string" ? nm.trim() : "",
+          readingProgressPercent: pct != null ? pct : previous.readingProgressPercent ?? null,
+        };
       });
 
 
@@ -525,6 +535,7 @@ const ViewerPage = () => {
       book,
       cleanBookId,
       currentChapter,
+      currentEvent,
       setCurrentChapter,
       setCurrentCharIndex,
       setCurrentEvent,
@@ -557,10 +568,9 @@ const ViewerPage = () => {
   }, [bookKey, viewerRef, exitToMypage]);
 
   const graphStateProp = useMemo(() => {
-    let prevValidEvent = null;
+    let prevValidEvent = graphState.prevValidEvent ?? null;
     if (currentEvent) {
-      const evCh = currentEvent.chapter ?? currentEvent.chapterIdx;
-      if (evCh == null || Number(evCh) === Number(currentChapter)) {
+      if (eventMatchesChapter(currentEvent, currentChapter)) {
         prevValidEvent = currentEvent;
       }
     }

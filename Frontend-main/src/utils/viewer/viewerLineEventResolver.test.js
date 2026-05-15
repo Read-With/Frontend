@@ -60,4 +60,126 @@ describe('resolveViewerLineEvent', () => {
     expect(result.nextEvent.chapter).toBe(1);
     expect(result.nextEvent.eventNum).toBe(12);
   });
+
+  it('shows the previous chapter last event when moving back to a boundary viewport', () => {
+    const result = resolveViewerLineEvent({
+      receivedEvent: {
+        chapter: 2,
+        chapterIdx: 2,
+        eventNum: 1,
+        anchor: {
+          startLocator: { chapterIndex: 1, blockIndex: 9, offset: 100 },
+          endLocator: { chapterIndex: 2, blockIndex: 0, offset: 5 },
+        },
+      },
+      previousEvent: {
+        chapter: 2,
+        chapterIdx: 2,
+        eventNum: 1,
+      },
+      book: { id: 10 },
+      eventUtils,
+      resolveLocatorToEventParams: (_bookId, locator) => ({
+        chapterIdx: locator.chapterIndex,
+        eventIdx: 12,
+        resolved: true,
+      }),
+    });
+
+    expect(result.nextChapter).toBe(1);
+    expect(result.nextEvent.chapter).toBe(1);
+    expect(result.nextEvent.eventNum).toBe(12);
+  });
+
+  it('does not move to an earlier event inside the same chapter', () => {
+    const receivedEvent = {
+      chapter: 1,
+      chapterIdx: 1,
+      eventNum: 4,
+      eventId: 'event-4',
+      anchor: {
+        startLocator: { chapterIndex: 1, blockIndex: 4, offset: 0 },
+      },
+    };
+
+    const result = resolveViewerLineEvent({
+      receivedEvent,
+      previousEvent: {
+        chapter: 1,
+        chapterIdx: 1,
+        eventNum: 5,
+        eventId: 'event-5',
+        name: 'Event 5',
+      },
+      book: { id: 10 },
+      eventUtils,
+      resolveLocatorToEventParams: (_bookId, locator) => ({
+        chapterIdx: locator.chapterIndex,
+        eventIdx: 4,
+        resolved: true,
+      }),
+    });
+
+    expect(result.nextChapter).toBe(1);
+    expect(result.nextEvent.eventNum).toBe(5);
+    expect(result.nextEvent.eventIdx).toBe(5);
+    expect(result.nextEvent.eventId).toBe('event-5');
+    expect(result.nextEvent.name).toBe('Event 5');
+    expect(result.nextEvent.anchor.startLocator.blockIndex).toBe(4);
+  });
+
+  it('keeps the previous event when the same chapter resolves to an earlier event', () => {
+    const result = resolveViewerLineEvent({
+      receivedEvent: {
+        chapter: 1,
+        chapterIdx: 1,
+        eventNum: 4,
+        anchor: {
+          startLocator: { chapterIndex: 1, blockIndex: 4, offset: 0 },
+        },
+      },
+      previousEvent: {
+        chapter: 1,
+        chapterIdx: 1,
+        eventNum: 5,
+      },
+      book: { id: 10 },
+      eventUtils,
+      resolveLocatorToEventParams: (_bookId, locator) => ({
+        chapterIdx: locator.chapterIndex,
+        eventIdx: 4,
+        resolved: true,
+      }),
+    });
+
+    expect(result.nextEvent.eventNum).toBe(5);
+  });
+
+  it('allows lower event numbers after the resolved chapter changes', () => {
+    const result = resolveViewerLineEvent({
+      receivedEvent: {
+        chapter: 2,
+        chapterIdx: 2,
+        eventNum: 1,
+        anchor: {
+          startLocator: { chapterIndex: 2, blockIndex: 0, offset: 0 },
+        },
+      },
+      previousEvent: {
+        chapter: 1,
+        chapterIdx: 1,
+        eventNum: 5,
+      },
+      book: { id: 10 },
+      eventUtils,
+      resolveLocatorToEventParams: (_bookId, locator) => ({
+        chapterIdx: locator.chapterIndex,
+        eventIdx: 1,
+        resolved: true,
+      }),
+    });
+
+    expect(result.nextChapter).toBe(2);
+    expect(result.nextEvent.eventNum).toBe(1);
+  });
 });

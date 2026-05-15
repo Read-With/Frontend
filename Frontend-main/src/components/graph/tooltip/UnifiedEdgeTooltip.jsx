@@ -119,6 +119,7 @@ function UnifiedEdgeTooltip({
     timeline,
     labels,
     loading,
+    noRelation,
     error: relationError,
     fetchData,
   } = useRelationData(relationDataMode, id1, id2, chapterNum, unifiedEventInfo.eventNum, safeMaxChapterValue, filename, numericBookId);
@@ -134,6 +135,10 @@ function UnifiedEdgeTooltip({
   }, [data?.positivity]);
 
   const relationLabels = processRelationTagsCached(data.relation, data.label);
+  const hasCurrentEdgeRelationData =
+    relationLabels.length > 0 ||
+    Number.isFinite(Number(data?.positivity)) ||
+    (typeof data?.explanation === 'string' && data.explanation.trim().length > 0);
 
   useEffect(() => {
     if (id1 && id2 && numericBookId && chapterNum) {
@@ -309,7 +314,7 @@ function UnifiedEdgeTooltip({
   }, [chartPoints, chartLabels]);
 
   const hasChartData = chartPoints.length > 0;
-  const effectiveNoRelation = !hasChartData;
+  const effectiveNoRelation = noRelation && !hasCurrentEdgeRelationData && !hasChartData;
   const shouldShowRelationError = !!relationError && !hasChartData;
 
   const positivityForBars = graphBarPositivity;

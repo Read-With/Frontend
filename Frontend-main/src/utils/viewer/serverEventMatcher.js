@@ -1,4 +1,4 @@
-import { toLocator } from '../common/locatorUtils';
+import { anchorToLocators, toLocator } from '../common/locatorUtils';
 import { getChapterData, resolveFineGraphLocatorToEventParams } from '../common/cache/manifestCache';
 import { toPositiveNumberOrNull } from '../common/numberUtils';
 import { getServerBookId } from './viewerUtils';
@@ -29,6 +29,10 @@ function pickFineGraphResultEvent(event) {
   return null;
 }
 
+function resolveEventNumber(event) {
+  return toPositiveNumberOrNull(event?.eventNum ?? event?.idx ?? event?.eventIdx);
+}
+
 export function resolveManifestEventMatch(event, bookId) {
   const fineEvent = pickFineGraphResultEvent(event);
   const eventId = fineEvent?.eventId ?? fineEvent?.id;
@@ -50,7 +54,7 @@ export function resolveManifestEventMatch(event, bookId) {
   const chapterData = getChapterData(normalizedBookId, chapterIdx);
   const events = Array.isArray(chapterData?.events) ? chapterData.events : [];
   const manifestEvent = events.find((row) => String(row?.eventId ?? '').trim() === normalizedEventId) ?? null;
-  const eventNum = toPositiveNumberOrNull(manifestEvent?.eventNum ?? manifestEvent?.idx ?? manifestEvent?.eventIdx) ?? 0;
+  const eventNum = resolveEventNumber(manifestEvent) ?? 0;
 
   return {
     title: String(manifestEvent?.eventName ?? manifestEvent?.title ?? manifestEvent?.name ?? '').trim(),
@@ -59,6 +63,21 @@ export function resolveManifestEventMatch(event, bookId) {
     chapterIdx,
     manifestEvent,
   };
+}
+
+function resolveChapterLastManifestEvent(bookId, chapterIdx) {
+  const normalizedBookId = toPositiveNumberOrNull(bookId);
+  const normalizedChapterIdx = toPositiveNumberOrNull(chapterIdx);
+  if (!normalizedBookId || !normalizedChapterIdx) return null;
+
+  const chapterData = getChapterData(normalizedBookId, normalizedChapterIdx);
+  const events = Array.isArray(chapterData?.events) ? chapterData.events : [];
+  return events.reduce((last, event) => {
+    const eventNum = resolveEventNumber(event);
+    if (!eventNum) return last;
+    const lastNum = resolveEventNumber(last) ?? 0;
+    return eventNum >= lastNum ? event : last;
+  }, null);
 }
 
 export function resolveServerEventMatch({
@@ -71,10 +90,17 @@ export function resolveServerEventMatch({
   resolveLocatorToEventParams = resolveFineGraphLocatorToEventParams,
 }) {
   const bookId = resolveViewerServerBookId(book, fallbackBookId);
-  const locator = toLocator(atLocator ?? event?.anchor?.startLocator ?? event?.anchor?.start);
+  const anchorLocators = anchorToLocators(event?.anchor);
+  const locator = toLocator(atLocator) ?? anchorLocators.startLocator;
+  const endLocator = atLocator ? locator : anchorLocators.endLocator;
   const rawEventIdx = toPositiveNumberOrNull(eventUtils?.extractRawEventIdx?.(event));
   const rawChapter = toPositiveNumberOrNull(event?.chapter ?? event?.chapterIdx ?? currentChapter);
   const locatorChapter = toPositiveNumberOrNull(locator?.chapterIndex);
+  const endChapter = toPositiveNumberOrNull(endLocator?.chapterIndex);
+  const spansFromPreviousChapter =
+    locatorChapter != null &&
+    ((rawChapter != null && locatorChapter < rawChapter) ||
+      (endChapter != null && locatorChapter < endChapter));
 
   if (!bookId) {
     return {
@@ -84,6 +110,39 @@ export function resolveServerEventMatch({
       atLocator: locator,
       source: rawEventIdx ? 'event' : 'none',
     };
+  }
+
+  const resolveLocatorMatch = () => {
+    if (!locator) return null;
+    const resolved = resolveLocatorToEventParams(bookId, locator, rawEventIdx ?? 1);
+    const locatorEventIdx = toPositiveNumberOrNull(resolved?.eventIdx);
+    if (!resolved?.resolved || !locatorEventIdx) {
+      return null;
+    }
+    return {
+      bookId,
+      chapterIdx: toPositiveNumberOrNull(resolved.chapterIdx) ?? locatorChapter ?? rawChapter,
+      eventIdx: locatorEventIdx,
+      atLocator: locator,
+      source: 'locator',
+    };
+  };
+
+  if (spansFromPreviousChapter) {
+    const boundaryLastEvent = resolveChapterLastManifestEvent(bookId, locatorChapter);
+    const boundaryLastEventIdx = resolveEventNumber(boundaryLastEvent);
+    if (boundaryLastEventIdx) {
+      return {
+        bookId,
+        chapterIdx: locatorChapter,
+        eventIdx: boundaryLastEventIdx,
+        atLocator: locator,
+        source: 'locator-boundary-last-event',
+        manifestEvent: boundaryLastEvent,
+      };
+    }
+    const locatorMatch = resolveLocatorMatch();
+    if (locatorMatch) return locatorMatch;
   }
 
   const manifestMatch = resolveManifestEventMatch(event, bookId);
@@ -98,19 +157,8 @@ export function resolveServerEventMatch({
     };
   }
 
-  if (locator) {
-    const resolved = resolveLocatorToEventParams(bookId, locator, rawEventIdx ?? 1);
-    const locatorEventIdx = toPositiveNumberOrNull(resolved?.eventIdx);
-    if (resolved?.resolved && locatorEventIdx) {
-      return {
-        bookId,
-        chapterIdx: toPositiveNumberOrNull(resolved.chapterIdx) ?? locatorChapter ?? rawChapter,
-        eventIdx: locatorEventIdx,
-        atLocator: locator,
-        source: 'locator',
-      };
-    }
-  }
+  const locatorMatch = resolveLocatorMatch();
+  if (locatorMatch) return locatorMatch;
 
   return {
     bookId,

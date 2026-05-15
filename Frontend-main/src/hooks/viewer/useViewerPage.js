@@ -8,6 +8,7 @@ import { useBooksServerQuery } from '../books/useBooksServerQuery';
 import { useViewerUrlParams } from './useViewerUrlParams';
 import { useViewerGraphSync } from './useViewerGraphSync';
 import { flagsFromGraphMode } from './graphModeFlags';
+import { resolveViewerGraphTarget } from '../../utils/viewer/graphTargetUtils';
 import { 
   defaultSettings, 
   saveViewerMode, 
@@ -87,7 +88,6 @@ export function useViewerPage() {
   const [totalPages, setTotalPages] = useState(1);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [currentEvent, setCurrentEvent] = useState(null);
-  const [prevEvent, setPrevEvent] = useState(null);
   const [events, setEvents] = useState([]);
   const [maxChapter, setMaxChapter] = useState(1);
   const [isInitialChapterDetected, setIsInitialChapterDetected] = useState(false);
@@ -96,28 +96,20 @@ export function useViewerPage() {
   const [showGraph, setShowGraph] = useState(initialGraphMode.show);
   
   const [currentCharIndex, setCurrentCharIndex] = useState(0);
-  const [currentPageWords, setCurrentPageWords] = useState(0);
-  const [totalChapterWords, setTotalChapterWords] = useState(0);
   const [loading, setLoading] = useState(true);
-  const [chapterText, setChapterText] = useState("");
   const [isDataReady, setIsDataReady] = useState(true);
   const [graphViewState, setGraphViewState] = useState(null);
   const [hideIsolated, setHideIsolated] = useState(true);
   const [edgeLabelVisible, setEdgeLabelVisible] = useState(true);
   const [filterStage, setFilterStage] = useState(0);
-  const [characterData, setCharacterData] = useState(null);
   const [isReloading, setIsReloading] = useState(false);
-  const [eventNum, setEventNum] = useState(0);
   const [isGraphLoading, setIsGraphLoading] = useState(true);
   // 확정 전 중간 이벤트로 그래프를 보이지 않게 할 때 사용
   const [isFineGraphLoading, setFineGraphLoading] = useState(false);
   const [showToolbar, setShowToolbar] = useState(false);
   
   const prevElementsRef = useRef([]);
-  const prevChapterNumRef = useRef();
-  const prevEventNumRef = useRef();
   const eventsRef = useRef([]);
-  const [maxChapterEvents, _setMaxChapterEvents] = useState(new Map());
   
   const [graphDiff, setGraphDiff] = useState({
     added: [],
@@ -191,37 +183,27 @@ export function useViewerPage() {
 
   // currentEvent가 잠깐 null/플레이스홀더일 때 그래프가 1번으로 깜빡이는 것 방지
   const graphLoaderLastGoodRef = useRef({ chapter: 0, eventNum: 1 });
-  const graphLoaderEventIdx = useMemo(() => {
-    const ch = Number(currentChapter);
-    if (!Number.isFinite(ch) || ch < 1) return 1;
-
-    if (currentEvent && typeof currentEvent === 'object') {
-      const evCh = Number(currentEvent.chapter ?? currentEvent.chapterIdx ?? ch);
-      const raw = Number(currentEvent.eventNum ?? currentEvent.eventIdx);
-      if (Number.isFinite(raw) && raw >= 1 && evCh === ch) {
-        graphLoaderLastGoodRef.current = { chapter: ch, eventNum: raw };
-        return raw;
-      }
+  const graphLoaderTarget = useMemo(() => {
+    const target = resolveViewerGraphTarget({
+      currentChapter,
+      currentEvent,
+      lastGood: graphLoaderLastGoodRef.current,
+    });
+    if (currentEvent && target.eventIdx >= 1) {
+      graphLoaderLastGoodRef.current = { chapter: target.chapter, eventNum: target.eventIdx };
     }
-
-    const saved = graphLoaderLastGoodRef.current;
-    if (saved.chapter === ch && saved.eventNum >= 1) return saved.eventNum;
-    return 1;
+    return target;
   }, [currentChapter, currentEvent]);
 
   const {
     elements,
     setElements,
     setIsDataEmpty,
-    newNodeIds,
     currentChapterData,
-    maxEventNum,
-    eventNum: graphEventNum,
     maxChapter: detectedMaxChapter,
     loading: graphLoading,
-    error: graphError,
     isDataEmpty
-  } = useGraphDataLoader(graphBookId, currentChapter, graphLoaderEventIdx);
+  } = useGraphDataLoader(graphBookId, graphLoaderTarget.chapter, graphLoaderTarget.eventIdx);
 
   const { prevValidEvent, prevValidEventRef, graphPhase, resetPrevValidEvent } = useViewerGraphSync({
     currentChapter,
@@ -321,9 +303,7 @@ export function useViewerPage() {
   
   const resetGraphTransientState = useCallback((initialChapterDetected) => {
     setCurrentEvent(null);
-    setPrevEvent(null);
     setEvents([]);
-    setCharacterData(null);
     setIsDataReady(false);
     setIsGraphLoading(true);
     resetPrevValidEvent();
@@ -362,9 +342,7 @@ export function useViewerPage() {
   
   useEffect(() => {
     prevElementsRef.current = elements;
-    prevChapterNumRef.current = currentChapter;
-    prevEventNumRef.current = currentEvent?.eventNum;
-  }, [elements, currentChapter, currentEvent]);
+  }, [elements]);
   
   useEffect(() => {
     if (performance && performance.getEntriesByType) {
@@ -388,17 +366,6 @@ export function useViewerPage() {
       }
     }
   }, [resetGraphTransientState]);
-  
-  useEffect(() => {
-    if (!currentEvent) return;
-    const n = Number(currentEvent.eventNum);
-    if (Number.isFinite(n) && n > 0) {
-      setEventNum(n);
-      return;
-    }
-    const idx = Number(currentEvent.eventIdx);
-    setEventNum(Number.isFinite(idx) && idx > 0 ? idx : 0);
-  }, [currentEvent]);
   
   const handlePrevPage = useCallback(() => runViewerPaging(viewerRef, 'prev'), []);
   const handleNextPage = useCallback(() => runViewerPaging(viewerRef, 'next'), []);
@@ -542,8 +509,6 @@ export function useViewerPage() {
       loading: isGraphLoading,
       isDataReady,
       isInitialChapterDetected,
-      maxChapterEvents,
-      maxEventNum,
     }),
     [
       currentChapter,
@@ -560,8 +525,6 @@ export function useViewerPage() {
       isGraphLoading,
       isDataReady,
       isInitialChapterDetected,
-      maxChapterEvents,
-      maxEventNum,
     ]
   );
 
@@ -651,8 +614,6 @@ export function useViewerPage() {
     setCurrentChapter,
     currentEvent,
     setCurrentEvent,
-    prevEvent,
-    setPrevEvent,
     events,
     setEvents,
     maxChapter,
@@ -672,22 +633,12 @@ export function useViewerPage() {
     setGraphDiff,
     currentCharIndex,
     setCurrentCharIndex,
-    currentPageWords,
-    setCurrentPageWords,
-    totalChapterWords,
-    setTotalChapterWords,
     loading,
     setLoading,
-    chapterText,
-    setChapterText,
     isDataReady,
     setIsDataReady,
-    characterData,
-    setCharacterData,
     isReloading,
     setIsReloading,
-    eventNum,
-    setEventNum,
     isGraphLoading,
     setIsGraphLoading,
     isFineGraphLoading,
@@ -702,19 +653,13 @@ export function useViewerPage() {
     setShowBookmarkList,
     prevValidEventRef,
     prevElementsRef,
-    prevChapterNumRef,
-    prevEventNumRef,
     book,
     manifestLoaded,
     folderKey,
     elements,
-    newNodeIds,
     currentChapterData,
-    maxEventNum,
-    graphEventNum,
     detectedMaxChapter,
     graphLoading,
-    graphError,
     handlePrevPage,
     handleNextPage,
     handleAddBookmark,

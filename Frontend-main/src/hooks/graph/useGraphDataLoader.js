@@ -12,42 +12,73 @@ import { getManifestFromCache } from '../../utils/common/cache/manifestCache';
 import { resolveMaxChapter } from '../../utils/graph/maxChapterResolver';
 import { graphDataTransformUtils } from '../../utils/viewer/viewerUtils';
 
+const createEmptyLastComputedGraph = () => ({
+  cacheKey: null,
+  chapterIdx: null,
+  eventIdx: null,
+  elements: [],
+});
+
+function shouldMergeWithLastComputed(last, cacheKey, chapter, eventIdx) {
+  const lastChapter = Number(last?.chapterIdx);
+  const currentChapter = Number(chapter);
+  if (
+    !last?.elements?.length ||
+    !Number.isFinite(lastChapter) ||
+    !Number.isFinite(currentChapter)
+  ) {
+    return false;
+  }
+
+  return (
+    (last.cacheKey === cacheKey && Number(eventIdx) >= Number(last.eventIdx || 0)) ||
+    currentChapter > lastChapter
+  );
+}
+
+function mergeWithLastComputed(elements, last, cacheKey, chapter, eventIdx) {
+  if (!shouldMergeWithLastComputed(last, cacheKey, chapter, eventIdx)) {
+    return elements;
+  }
+
+  return graphDataTransformUtils.mergeElementsWithPrevious(
+    elements,
+    {
+      elements: last.elements,
+      eventIdx: last.eventIdx,
+      chapterIdx: last.chapterIdx,
+    },
+    chapter,
+    eventIdx
+  );
+}
+
 export function useGraphDataLoader(bookId, chapterIdx, eventIdx = null) {
   const [elements, setElements] = useState([]);
-  const [newNodeIds, setNewNodeIds] = useState([]);
   const [currentChapterData, setCurrentChapterData] = useState(null);
-  const [maxEventNum, setMaxEventNum] = useState(0);
-  const [eventNum, setEventNum] = useState(0);
   const [maxChapter, setMaxChapter] = useState(1);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
   const [isDataEmpty, setIsDataEmpty] = useState(false);
   const [cacheVersion, setCacheVersion] = useState(0);
 
-  const lastComputedRef = useRef({ cacheKey: null, eventIdx: null, elements: [] });
+  const lastComputedRef = useRef(createEmptyLastComputedGraph());
 
   const numericBookId = useMemo(() => {
     const parsed = toNumberOrNull(bookId);
     return parsed && parsed > 0 ? parsed : null;
   }, [bookId]);
 
-  const setEmptyState = useCallback((eventNum = 0) => {
+  const setEmptyState = useCallback(() => {
     setElements([]);
-    setNewNodeIds([]);
     setCurrentChapterData({ characters: [] });
-    setEventNum(eventNum);
     setIsDataEmpty(true);
   }, []);
 
   const resetState = useCallback(() => {
     setElements([]);
-    setNewNodeIds([]);
     setCurrentChapterData(null);
-    setMaxEventNum(0);
-    setEventNum(0);
-    setError(null);
     setIsDataEmpty(false);
-    lastComputedRef.current = { cacheKey: null, eventIdx: null, elements: [] };
+    lastComputedRef.current = createEmptyLastComputedGraph();
   }, []);
 
   const ensureMaxChapter = useCallback(() => {
@@ -236,6 +267,10 @@ export function useGraphDataLoader(bookId, chapterIdx, eventIdx = null) {
 
         if (checkCancelled(isCancelledRef)) return;
 
+        if (!chapterEvents) {
+          return;
+        }
+
         const eventsArray = Array.isArray(chapterEvents?.events)
           ? sortEventsByIdx(chapterEvents.events)
           : [];
@@ -246,13 +281,11 @@ export function useGraphDataLoader(bookId, chapterIdx, eventIdx = null) {
 
         if (checkCancelled(isCancelledRef)) return;
         
-        setMaxEventNum(maxEventIdxInChapter);
-
         const targetIdx = normalizeEventIdx(requestedEventIdx, maxEventIdxInChapter);
 
         if (!maxEventIdxInChapter) {
           if (!checkCancelled(isCancelledRef)) {
-            setEmptyState(targetIdx || 0);
+            setEmptyState();
           }
           return;
         }
@@ -261,52 +294,22 @@ export function useGraphDataLoader(bookId, chapterIdx, eventIdx = null) {
           chapterEvents?.baseSnapshot &&
           Array.isArray(chapterEvents?.diffs);
 
-        console.log('[GraphDataLoader] 로드 시작', {
-          bookId: bookIdNum,
-          chapter,
-          requestedEventIdx,
-          targetIdx,
-          maxEventIdx: maxEventIdxInChapter,
-          totalEvents: eventsArray.length,
-          hasDiffCache,
-        });
-
         if (hasDiffCache) {
           const diffState = processDiffCacheState(chapterEvents, targetIdx, isCancelledRef);
           if (diffState) {
             if (!checkCancelled(isCancelledRef)) {
               const last = lastComputedRef.current;
-              let nextEls = diffState.elements;
-              if (
-                last.cacheKey === cacheKey &&
-                Number(diffState.eventIdx) >= Number(last.eventIdx || 0)
-              ) {
-                nextEls = graphDataTransformUtils.mergeElementsWithPrevious(
-                  diffState.elements,
-                  {
-                    elements: last.elements,
-                    eventIdx: last.eventIdx,
-                    chapterIdx: chapter,
-                  },
-                  chapter,
-                  diffState.eventIdx
-                );
-              }
-              lastComputedRef.current = { cacheKey, eventIdx: diffState.eventIdx, elements: nextEls };
+              const nextEls = mergeWithLastComputed(
+                diffState.elements,
+                last,
+                cacheKey,
+                chapter,
+                diffState.eventIdx
+              );
+              lastComputedRef.current = { cacheKey, chapterIdx: chapter, eventIdx: diffState.eventIdx, elements: nextEls };
               setElements(nextEls);
               setCurrentChapterData({ characters: diffState.characters });
-              setNewNodeIds(diffState.newNodes);
-              setEventNum(diffState.eventIdx);
-              setError(null);
               setIsDataEmpty(false);
-              console.log('[GraphDataLoader] 완료 (diffCache)', {
-                bookId: bookIdNum,
-                chapter,
-                eventIdx: diffState.eventIdx,
-                elementCount: diffState.elements.length,
-                characterCount: diffState.characters.length,
-                newNodeCount: diffState.newNodes.length,
-              });
             }
             return;
           }
@@ -314,7 +317,7 @@ export function useGraphDataLoader(bookId, chapterIdx, eventIdx = null) {
 
         if (!eventsArray.length) {
           if (!checkCancelled(isCancelledRef)) {
-            setEmptyState(targetIdx || 0);
+            setEmptyState();
           }
           return;
         }
@@ -328,43 +331,15 @@ export function useGraphDataLoader(bookId, chapterIdx, eventIdx = null) {
         const eventsState = processEventsArray(eventsArray, targetIdx, isCancelledRef, cachedPrev);
         if (eventsState && !checkCancelled(isCancelledRef)) {
           const last = lastComputedRef.current;
-          let nextEls = eventsState.elements;
-          if (last.cacheKey === cacheKey && Number(targetIdx) >= Number(last.eventIdx || 0)) {
-            nextEls = graphDataTransformUtils.mergeElementsWithPrevious(
-              eventsState.elements,
-              {
-                elements: last.elements,
-                eventIdx: last.eventIdx,
-                chapterIdx: chapter,
-              },
-              chapter,
-              targetIdx
-            );
-          }
-          lastComputedRef.current = { cacheKey, eventIdx: targetIdx, elements: nextEls };
+          const nextEls = mergeWithLastComputed(eventsState.elements, last, cacheKey, chapter, targetIdx);
+          lastComputedRef.current = { cacheKey, chapterIdx: chapter, eventIdx: targetIdx, elements: nextEls };
           setElements(nextEls);
           setCurrentChapterData({ characters: eventsState.characters });
-          setNewNodeIds(eventsState.newNodes);
-          setEventNum(eventsState.eventIdx);
-          setError(null);
           setIsDataEmpty(false);
-          console.log('[GraphDataLoader] 완료 (eventsArray)', {
-            bookId: bookIdNum,
-            chapter,
-            eventIdx: eventsState.eventIdx,
-            elementCount: eventsState.elements.length,
-            characterCount: eventsState.characters.length,
-            newNodeCount: eventsState.newNodes.length,
-          });
         }
-      } catch (err) {
+      } catch {
         if (!checkCancelled(isCancelledRef)) {
-          setEmptyState(0);
-          setError(
-            err?.message
-              ? `그래프 데이터를 불러오는 중 오류가 발생했습니다: ${err.message}`
-              : '그래프 데이터를 불러오는 중 오류가 발생했습니다.'
-          );
+          setEmptyState();
         }
       }
     },
@@ -396,7 +371,6 @@ export function useGraphDataLoader(bookId, chapterIdx, eventIdx = null) {
     }
 
     const cancelledRef = { current: false };
-    setError(null);
     setIsDataEmpty(false);
 
     let loadingKickTimer = null;
@@ -430,13 +404,9 @@ export function useGraphDataLoader(bookId, chapterIdx, eventIdx = null) {
     elements,
     setElements,
     setIsDataEmpty,
-    newNodeIds,
     currentChapterData,
-    maxEventNum,
-    eventNum,
     maxChapter,
     loading,
-    error,
     isDataEmpty
   };
 }

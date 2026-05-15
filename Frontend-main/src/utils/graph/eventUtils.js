@@ -11,12 +11,31 @@ const normalizeTargetIdx = (targetIdx) => {
   return target === null || target < 0 ? null : target;
 };
 
+export const getEventOrderIdx = (event) => {
+  return (
+    truncIdx(event?.eventIdx) ??
+    truncIdx(event?.idx) ??
+    truncIdx(event?.eventNum)
+  );
+};
+
+const compareNullableIdxAsc = (idxA, idxB) => {
+  if (idxA === null && idxB === null) return 0;
+  if (idxA === null) return 1;
+  if (idxB === null) return -1;
+  return idxA - idxB;
+};
+
+export const compareEventsByIdx = (a, b) => {
+  return compareNullableIdxAsc(getEventOrderIdx(a), getEventOrderIdx(b));
+};
+
 const filterEventsByIdx = (events, targetIdx, predicate) => {
   if (!Array.isArray(events)) return [];
   const target = normalizeTargetIdx(targetIdx);
   if (target === null) return [];
   return events.filter((entry) => {
-    const eventIdx = truncIdx(entry?.eventIdx);
+    const eventIdx = getEventOrderIdx(entry);
     return eventIdx !== null && predicate(eventIdx, target);
   });
 };
@@ -26,11 +45,7 @@ const filterEventsByIdx = (events, targetIdx, predicate) => {
  */
 export const sortEventsByIdx = (events) => {
   if (!Array.isArray(events)) return [];
-  return [...events].sort((a, b) => {
-    const idxA = toNumberOrNull(a?.eventIdx) || 0;
-    const idxB = toNumberOrNull(b?.eventIdx) || 0;
-    return idxA - idxB;
-  });
+  return [...events].sort(compareEventsByIdx);
 };
 
 /**
@@ -51,7 +66,7 @@ export const filterEventsBefore = (events, targetIdx) => {
 export const getMaxEventIdx = (events) => {
   if (!Array.isArray(events) || events.length === 0) return 0;
   return events.reduce((max, event) => {
-    const idx = truncIdx(event?.eventIdx);
+    const idx = getEventOrderIdx(event);
     if (idx === null) return max;
     return Math.max(max, idx);
   }, 0);

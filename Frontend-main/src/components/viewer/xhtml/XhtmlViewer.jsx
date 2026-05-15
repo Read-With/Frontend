@@ -9,7 +9,7 @@ import React, {
   useMemo,
 } from 'react';
 import { flushSync } from 'react-dom';
-import { loadCombinedXhtml, loadBookMeta } from '../../../utils/normalizedContent';
+import { loadCombinedXhtml } from '../../../utils/normalizedContent';
 import { defaultSettings } from '../../../utils/common/settingsUtils';
 import {
   sanitizeXhtmlBodyHtml,
@@ -89,7 +89,7 @@ const getBlockLocator = (el, offset = 0, syntheticBlock = null) => {
 };
 
 /** 페이지 비율 → 챕터 idx (가중치 배열: { chapterIdx, weight }) */
-const resolveChapterByWeightedPageRatio = (weightedChapters, currentPageIndex, totalPages) => {
+const resolveChapterPagePositionByWeightedPageRatio = (weightedChapters, currentPageIndex, totalPages) => {
   if (!Array.isArray(weightedChapters) || !weightedChapters.length) return null;
   const totalWeight = weightedChapters.reduce((sum, row) => {
     const w = Number(row?.weight ?? 0);
@@ -111,36 +111,20 @@ const resolveChapterByWeightedPageRatio = (weightedChapters, currentPageIndex, t
     const start = cumulative;
     const end = cumulative + safeW;
     if (absolutePos >= start && absolutePos < end && Number.isFinite(chapterIdx) && chapterIdx >= 0) {
-      return chapterIdx;
+      return {
+        chapterIdx,
+        localRatio: safeW > 1 ? Math.min(1, Math.max(0, (absolutePos - start) / Math.max(1, safeW - 1))) : 0,
+      };
     }
     cumulative = end;
   }
 
   const last = weightedChapters[weightedChapters.length - 1];
   const lastIdx = Number(last?.chapterIdx);
-  return Number.isFinite(lastIdx) && lastIdx >= 0 ? lastIdx : null;
+  return Number.isFinite(lastIdx) && lastIdx >= 0 ? { chapterIdx: lastIdx, localRatio: 1 } : null;
 };
 
-const resolveChapterFromMetaByPage = (meta, currentPageIndex, totalPages) => {
-  const chapters = Array.isArray(meta?.chapters) ? meta.chapters : [];
-  if (!chapters.length) return null;
-
-  const weighted = chapters
-    .map((chapter) => {
-      const len = Number(chapter?.totalCodePoints ?? 0);
-      const chapterIdx = Number(chapter?.idx ?? chapter?.chapterIndex ?? chapter?.chapterIdx);
-      if (!Number.isFinite(chapterIdx)) return null;
-      return {
-        chapterIdx,
-        weight: Number.isFinite(len) && len > 0 ? len : 0,
-      };
-    })
-    .filter(Boolean);
-
-  return resolveChapterByWeightedPageRatio(weighted, currentPageIndex, totalPages);
-};
-
-const resolveChapterFromManifestByPage = (manifest, currentPageIndex, totalPages) => {
+const resolveChapterPagePositionFromManifestByPage = (manifest, currentPageIndex, totalPages) => {
   const chapters = Array.isArray(manifest?.chapters) ? manifest.chapters : [];
   if (!chapters.length) return null;
 
@@ -187,7 +171,7 @@ const resolveChapterFromManifestByPage = (manifest, currentPageIndex, totalPages
   if (lengths.length > 0 && fromTable.length) {
     const totalFromTable = fromTable.reduce((s, r) => s + r.weight, 0);
     if (totalFromTable > 0) {
-      const hit = resolveChapterByWeightedPageRatio(fromTable, currentPageIndex, totalPages);
+      const hit = resolveChapterPagePositionByWeightedPageRatio(fromTable, currentPageIndex, totalPages);
       if (hit != null) return hit;
     }
   }
@@ -204,7 +188,7 @@ const resolveChapterFromManifestByPage = (manifest, currentPageIndex, totalPages
     })
     .filter(Boolean);
 
-  return resolveChapterByWeightedPageRatio(fromCodePoints, currentPageIndex, totalPages);
+  return resolveChapterPagePositionByWeightedPageRatio(fromCodePoints, currentPageIndex, totalPages);
 };
 
 const createFallbackLocator = (chapterIndex, blockIndex = 0, offset = 0) => ({
@@ -212,7 +196,7 @@ const createFallbackLocator = (chapterIndex, blockIndex = 0, offset = 0) => ({
   endLocator: { chapterIndex, blockIndex, offset },
 });
 
-const resolveChapterCodePointLength = (meta, manifest, chapterIndex) => {
+const resolveChapterCodePointLength = (manifest, chapterIndex) => {
   const ch = Number(chapterIndex);
   if (!Number.isFinite(ch) || ch < 1) return 0;
 
@@ -220,11 +204,6 @@ const resolveChapterCodePointLength = (meta, manifest, chapterIndex) => {
   const mHit = mChapters.find((row) => Number(row?.idx ?? row?.chapterIdx ?? row?.chapterIndex) === ch);
   const fromManifest = Number(mHit?.totalCodePoints ?? 0);
   if (Number.isFinite(fromManifest) && fromManifest > 0) return fromManifest;
-
-  const mmChapters = Array.isArray(meta?.chapters) ? meta.chapters : [];
-  const mmHit = mmChapters.find((row) => Number(row?.chapterIndex ?? row?.idx ?? row?.chapterIdx) === ch);
-  const fromMeta = Number(mmHit?.totalCodePoints ?? 0);
-  if (Number.isFinite(fromMeta) && fromMeta > 0) return fromMeta;
 
   return 0;
 };
@@ -236,38 +215,6 @@ function parseXhtmlBody(xhtml) {
   const rawBody = doc.body ? doc.body.innerHTML : xhtml;
   const bodyHTML = sanitizeXhtmlBodyHtml(rawBody);
   return { styleCss, bodyHTML };
-}
-
-function buildFallbackMetaFromXhtml(xhtml) {
-  try {
-    const parser = new DOMParser();
-    const doc = parser.parseFromString(xhtml, 'text/html');
-    const root = doc.body || doc.documentElement;
-    const entries = collectBlockEntries(root);
-    if (!entries.length) return null;
-
-    const byChapter = new Map();
-    entries.forEach(({ el }) => {
-      const chapterIndex = Number(el.getAttribute('data-chapter-index'));
-      if (!Number.isFinite(chapterIndex)) return;
-      const textLen = (el.textContent || '').length;
-      const prev = byChapter.get(chapterIndex) || 0;
-      byChapter.set(chapterIndex, prev + Math.max(0, textLen));
-    });
-
-    const chapters = [...byChapter.entries()]
-      .sort((a, b) => a[0] - b[0])
-      .map(([chapterIndex, totalCodePoints]) => ({
-        chapterIndex,
-        paragraphStarts: [],
-        paragraphLengths: [],
-        totalCodePoints,
-      }));
-
-    return chapters.length ? { chapters } : null;
-  } catch {
-    return null;
-  }
 }
 
 const XhtmlViewer = forwardRef(
@@ -300,7 +247,6 @@ const XhtmlViewer = forwardRef(
     const lastLocatorRef = useRef(null);
     /** 뷰포트 start+end 페어 — end만 바뀌어도 이벤트·챕터 경계 반영해야 함 */
     const lastEmittedViewportLocatorJsonRef = useRef(null);
-    const metaRef = useRef(null);
     const initialAnchorAppliedRef = useRef(false);
     const prevBidForInitialRef = useRef(null);
     const initialSeekAppliedRef = useRef(false);
@@ -371,7 +317,7 @@ const XhtmlViewer = forwardRef(
     }, [xhtmlContent]);
 
     const emitLocator = useCallback(
-      (loc, persistLoc = null) => {
+      (loc, persistLoc = null, linePosition = 0) => {
         if (!loc?.startLocator) return;
         const endForKey = loc.endLocator ?? loc.startLocator;
         const viewportKey = JSON.stringify({
@@ -381,21 +327,9 @@ const XhtmlViewer = forwardRef(
         if (viewportKey === lastEmittedViewportLocatorJsonRef.current) return;
         lastEmittedViewportLocatorJsonRef.current = viewportKey;
         lastLocatorRef.current = persistLoc?.startLocator ? persistLoc : loc;
-        const startCh = Number(loc.startLocator.chapterIndex);
-        const endRaw = loc.endLocator;
-        const endCh =
-          endRaw && typeof endRaw === 'object'
-            ? Number(endRaw.chapterIndex)
-            : NaN;
-        const chapterIndexForSidebar =
-          Number.isFinite(startCh) &&
-          Number.isFinite(endCh) &&
-          endCh === startCh + 1
-            ? endCh
-            : loc.startLocator.chapterIndex;
-        onCurrentChapterChange?.(chapterIndexForSidebar);
+        onCurrentChapterChange?.(loc.startLocator.chapterIndex);
         // 이벤트 인덱스 없음(읽기 locator만). fine `result.event` 는 ViewerPage 그래프 로드 후 currentEvent에 합류.
-        onCurrentLineChange?.(0, 0, { anchor: loc });
+        onCurrentLineChange?.(linePosition, 0, { anchor: loc });
       },
       [onCurrentChapterChange, onCurrentLineChange]
     );
@@ -408,11 +342,7 @@ const XhtmlViewer = forwardRef(
           setLoading(false);
           return;
         }
-        if (
-          !manifestReady &&
-          !(typeof book?.combinedXhtmlContent === 'string' && book.combinedXhtmlContent.trim()) &&
-          !(typeof book?.combinedXhtmlUrl === 'string' && book.combinedXhtmlUrl.trim())
-        ) {
+        if (!manifestReady) {
           setLoading(true);
           setError(null);
           return;
@@ -426,16 +356,11 @@ const XhtmlViewer = forwardRef(
           const cacheKey = `${XHTML_LOAD_CACHE_VERSION}::${bid}::${hasInline ? 'inline' : 'no-inline'}::${hasUrl ? 'url' : 'no-url'}`;
           let loadPromise = xhtmlLoadCache.get(cacheKey);
           if (!loadPromise) {
-            loadPromise = Promise.all([
-              loadCombinedXhtml(bid, book || {}),
-              loadBookMeta(bid),
-            ]);
+            loadPromise = loadCombinedXhtml(bid, book || {});
             xhtmlLoadCache.set(cacheKey, loadPromise);
           }
-          const [raw, meta] = await loadPromise;
+          const raw = await loadPromise;
           if (cancelled) return;
-          const fallbackMeta = meta || buildFallbackMetaFromXhtml(raw);
-          metaRef.current = fallbackMeta;
           const { styleCss, bodyHTML } = parseXhtmlBody(raw);
           setXhtmlContent({ styleCss, bodyHTML });
         } catch (e) {
@@ -522,19 +447,17 @@ const XhtmlViewer = forwardRef(
       const cacheId = Number(bid);
       const manifest =
         Number.isFinite(cacheId) && cacheId > 0 ? getManifestFromCache(cacheId) : null;
-      const chapterFromMeta = resolveChapterFromMetaByPage(metaRef.current, currentPageIndex, totalPages);
-      const chapterFromManifest = resolveChapterFromManifestByPage(manifest, currentPageIndex, totalPages);
-      const resolvedChapter = chapterFromManifest ?? chapterFromMeta;
-      const chapterCodePointLength = resolveChapterCodePointLength(metaRef.current, manifest, resolvedChapter);
+      const chapterPagePosition = resolveChapterPagePositionFromManifestByPage(manifest, currentPageIndex, totalPages);
+      const resolvedChapter = chapterPagePosition?.chapterIdx ?? null;
+      const chapterLocalPageRatio = Number.isFinite(chapterPagePosition?.localRatio)
+        ? Math.min(1, Math.max(0, chapterPagePosition.localRatio))
+        : 0;
+      const chapterCodePointLength = resolveChapterCodePointLength(manifest, resolvedChapter);
       const estimateChapterOffsetByPage = () => {
         if (!Number.isFinite(chapterCodePointLength) || chapterCodePointLength <= 1) return 0;
-        const ratio =
-          totalPages > 1
-            ? Math.min(1, Math.max(0, Number(currentPageIndex) / Math.max(1, totalPages - 1)))
-            : 0;
         return Math.min(
           chapterCodePointLength - 1,
-          Math.max(0, Math.floor((chapterCodePointLength - 1) * ratio))
+          Math.max(0, Math.floor((chapterCodePointLength - 1) * chapterLocalPageRatio))
         );
       };
       const shouldEmitFallbackLocator = (chapterIndex, fallbackBlockIndex) => {
@@ -559,7 +482,7 @@ const XhtmlViewer = forwardRef(
           resolvedChapter >= 1 &&
           shouldEmitFallbackLocator(Number(resolvedChapter), fallbackBlockIndex)
         ) {
-          emitLocator(createFallbackLocator(resolvedChapter, fallbackBlockIndex, fallbackOffset));
+          emitLocator(createFallbackLocator(resolvedChapter, fallbackBlockIndex, fallbackOffset), null, currentPageIndex);
         }
       };
 
@@ -601,10 +524,17 @@ const XhtmlViewer = forwardRef(
         if (!pageInBlock) return 0;
         const totalCp = chapterCodePointLength;
         if (!Number.isFinite(totalCp) || totalCp <= 1) return 0;
+        const elementTop = Number(startRow.el.offsetTop);
+        const elementHeight = Number(startRow.el.offsetHeight);
+        const viewportHeight = Number(currentSnap.visibleHeight || pageHeight || 0);
+        const viewportStartInElement = Number(currentSnap.offsetY) - elementTop;
         const ratio =
-          totalPages > 1
-            ? Math.min(1, Math.max(0, Number(currentPageIndex) / Math.max(1, totalPages - 1)))
-            : 0;
+          Number.isFinite(elementTop) &&
+          Number.isFinite(elementHeight) &&
+          elementHeight > 0 &&
+          Number.isFinite(viewportStartInElement)
+            ? Math.min(1, Math.max(0, viewportStartInElement / Math.max(1, elementHeight - viewportHeight)))
+            : chapterLocalPageRatio;
         return Math.min(totalCp - 1, Math.max(0, Math.floor((totalCp - 1) * ratio)));
       };
       const singleBlobOffset = estimateOffsetInSingleBlob();
@@ -637,7 +567,7 @@ const XhtmlViewer = forwardRef(
       }, {
         startLocator: persistStartLoc ?? logicalStartLoc,
         endLocator: persistEndLoc ?? logicalEndLoc,
-      });
+      }, currentPageIndex);
     }, [
       xhtmlContent,
       currentPageIndex,
@@ -645,6 +575,8 @@ const XhtmlViewer = forwardRef(
       bid,
       emitLocator,
       pageHeight,
+      currentSnap.offsetY,
+      currentSnap.visibleHeight,
       lineBoundsVersion,
     ]);
 

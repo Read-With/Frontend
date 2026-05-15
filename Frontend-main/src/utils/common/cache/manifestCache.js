@@ -1,5 +1,6 @@
 import { toNumberOrNull, toOneBasedChapterIndexOrNull } from '../numberUtils';
 import { toLocator } from '../locatorUtils';
+import { compareEventsByIdx, sortEventsByIdx } from '../../graph/eventUtils';
 import { 
   registerCache, 
   getCacheItem, 
@@ -97,9 +98,10 @@ const normalizeChapter = (chapter) => {
   const normalizedEvents = Array.isArray(chapter.events)
     ? chapter.events.map((ev) => normalizeEvent(ev)).filter(Boolean)
     : [];
+  const sortedEvents = sortEventsByIdx(normalizedEvents);
 
-  const firstEvent = normalizedEvents[0] ?? null;
-  const lastEvent = normalizedEvents.length > 0 ? normalizedEvents[normalizedEvents.length - 1] : null;
+  const firstEvent = sortedEvents[0] ?? null;
+  const lastEvent = sortedEvents.length > 0 ? sortedEvents[sortedEvents.length - 1] : null;
   const normalizedStartPos = startPos > 0 ? startPos : (firstEvent?.startPos ?? 0);
   const normalizedEndPos = endPos >= normalizedStartPos ? endPos : (lastEvent?.endPos ?? normalizedStartPos);
 
@@ -122,7 +124,7 @@ const normalizeChapter = (chapter) => {
     summaryText: typeof chapter.summaryText === 'string' ? chapter.summaryText : '',
     summaryUploadUrl: chapter.summaryUploadUrl != null ? String(chapter.summaryUploadUrl) : '',
     povSummariesCached: Boolean(chapter.povSummariesCached),
-    events: normalizedEvents,
+    events: sortedEvents,
   };
 };
 
@@ -791,11 +793,8 @@ export const findApiEventFromChars = async (bookId, chapterIdx, currentChars, ch
   }
   
   const mergedEvents = Array.from(eventsMap.values()).sort((a, b) => {
-    const idxA = toNumberOrNull(a.idx) ?? toNumberOrNull(a.eventIdx) ?? 0;
-    const idxB = toNumberOrNull(b.idx) ?? toNumberOrNull(b.eventIdx) ?? 0;
-    if (idxA !== idxB) {
-      return idxA - idxB;
-    }
+    const eventOrder = compareEventsByIdx(a, b);
+    if (eventOrder !== 0) return eventOrder;
     const startA = toNumberOrNull(a.startTxtOffset) ?? toNumberOrNull(a.startPos) ?? 0;
     const startB = toNumberOrNull(b.startTxtOffset) ?? toNumberOrNull(b.startPos) ?? 0;
     return startA - startB;

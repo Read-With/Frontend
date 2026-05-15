@@ -2,6 +2,10 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { toNumberOrNull } from '../../utils/common/numberUtils';
 import { isSamePair } from '../../utils/graph/relationUtils';
 import { getFineGraph } from '../../utils/api/api';
+import {
+  getCachedChapterEvents,
+  reconstructChapterGraphState,
+} from '../../utils/common/cache/chapterEventCache';
 import { registerCache, getCacheItem, setCacheItem, enforceCacheSizeLimit } from '../../utils/common/cache/cacheManager';
 
 const CACHE_DURATION = 5 * 60 * 1000;
@@ -34,6 +38,17 @@ function setCachedData(cacheKey, result) {
     timestamp: Date.now()
   });
   enforceCacheSizeLimit('relationTimelineCache');
+}
+
+function withNoRelation(result, fallbackNoRelation = true) {
+  const safeResult = result ?? { points: [], labelInfo: [] };
+  const points = Array.isArray(safeResult.points) ? safeResult.points : [];
+  return {
+    ...safeResult,
+    points,
+    labelInfo: Array.isArray(safeResult.labelInfo) ? safeResult.labelInfo : [],
+    noRelation: safeResult.noRelation ?? (points.length === 0 ? fallbackNoRelation : false),
+  };
 }
 
 function invalidateCache(bookId, chapterNum = null) {
@@ -85,6 +100,52 @@ function padSingleEvent(points, labels) {
     .map((_, index) => (index === 5 ? points[0] : null));
 
   return { points: paddedTimeline, labels: paddedLabels };
+}
+
+function findRelationInElements(elements, id1, id2) {
+  if (!Array.isArray(elements)) return null;
+  return elements.find((element) => {
+    const data = element?.data;
+    if (!data?.source || !data?.target) return false;
+    return isSamePair(data, id1, id2);
+  }) ?? null;
+}
+
+function relationPointFromElement(edgeElement) {
+  const raw = edgeElement?.data?.positivity;
+  const numeric = Number(raw);
+  return Number.isFinite(numeric) ? Math.max(-1, Math.min(1, numeric)) : 0;
+}
+
+function fetchCachedRelationTimelineViewer(bookId, id1, id2, chapterNum, eventNum) {
+  const chapterPayload = getCachedChapterEvents(bookId, chapterNum);
+  if (!chapterPayload?.baseSnapshot) {
+    return null;
+  }
+
+  const points = [];
+  const labelInfo = [];
+  let firstAppearanceIdx = null;
+
+  for (let idx = 1; idx <= eventNum; idx += 1) {
+    const state = reconstructChapterGraphState(chapterPayload, idx);
+    const edge = findRelationInElements(state?.elements, id1, id2);
+
+    if (edge && firstAppearanceIdx === null) {
+      firstAppearanceIdx = idx;
+    }
+
+    if (firstAppearanceIdx !== null) {
+      points.push(edge ? relationPointFromElement(edge) : 0);
+      labelInfo.push(`E${idx}`);
+    }
+  }
+
+  if (firstAppearanceIdx === null) {
+    return { points: [], labelInfo: [], noRelation: true };
+  }
+
+  return { points, labelInfo, noRelation: false };
 }
 
 async function fetchApiRelationTimelineCumulativeFromAPI(bookId, id1, id2, selectedChapter) {
@@ -243,13 +304,13 @@ async function fetchApiRelationTimelineCumulative(bookId, id1, id2, selectedChap
   const cacheKey = getCacheKey(bookId, selectedChapter, id1, id2);
   const cached = getCachedData(cacheKey);
   if (cached) {
-    return { ...cached, noRelation: (cached.points || []).length === 0 };
+    return withNoRelation(cached);
   }
 
   try {
     const result = await fetchApiRelationTimelineCumulativeFromAPI(bookId, id1, id2, selectedChapter);
     setCachedData(cacheKey, result);
-    return { ...result, noRelation: (result.points || []).length === 0 };
+    return withNoRelation(result);
   } catch (_error) {
     return { points: [], labelInfo: [], noRelation: true };
   }
@@ -258,6 +319,11 @@ async function fetchApiRelationTimelineCumulative(bookId, id1, id2, selectedChap
 async function fetchApiRelationTimelineViewer(bookId, id1, id2, chapterNum, eventNum) {
   if (!bookId || chapterNum < 1 || eventNum < 1) {
     return { points: [], labelInfo: [], noRelation: true };
+  }
+
+  const cachedTimeline = fetchCachedRelationTimelineViewer(bookId, id1, id2, chapterNum, eventNum);
+  if (cachedTimeline) {
+    return cachedTimeline;
   }
 
   try {
@@ -321,7 +387,7 @@ async function fetchApiRelationTimelineViewer(bookId, id1, id2, chapterNum, even
       }
     }
 
-    return { points, labelInfo, noRelation: points.length === 0 };
+    return withNoRelation({ points, labelInfo });
   } catch (_error) {
     return { points: [], labelInfo: [], noRelation: true };
   }

@@ -687,16 +687,13 @@ export const graphDataTransformUtils = {
   },
 
   /**
-   * 같은 챕터에서 이벤트가 진행될 때는 기존 노드·간선(id 기준)을 유지하고,
-   * 이번 응답에만 있는 노드/간선을 합친다. (전체 교체 → 레이아웃 리셋 방지)
-   * 이벤트를 되돌릴 때(apiIdx < prev)만 API 스냅샷으로 갈아탄다.
+   * Keep graph elements cumulative as reading progresses. Moving to a later chapter
+   * should retain prior chapter events, while moving backward should not keep future
+   * events mixed into the current graph.
    */
   mergeElementsWithPrevious: (convertedElements, prevData, currentChapter, apiEventIdx) => {
     const prevChapter = Number(prevData.chapterIdx);
     const curChapter = Number(currentChapter);
-    if (!Number.isFinite(prevChapter) || prevChapter !== curChapter) {
-      return convertedElements;
-    }
 
     const edgeDedupKey = (el) => {
       const d = el?.data;
@@ -723,9 +720,13 @@ export const graphDataTransformUtils = {
     const prevEls = Array.isArray(prevData.elements) ? prevData.elements : [];
     const prevIdx = Number(prevData.eventIdx) || 0;
     const apiIdx = Number(apiEventIdx) || 0;
+    const hasComparableChapter = Number.isFinite(prevChapter) && Number.isFinite(curChapter);
+    const isEarlierThanPrevious =
+      hasComparableChapter &&
+      (curChapter < prevChapter || (curChapter === prevChapter && apiIdx > 0 && apiIdx < prevIdx));
 
-    if (apiIdx < prevIdx && prevEls.length > 0) {
-      return conv.length > 0 ? conv : prevEls;
+    if (isEarlierThanPrevious) {
+      return conv;
     }
 
     if (conv.length === 0 && prevEls.length > 0) {

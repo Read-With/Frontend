@@ -8,6 +8,7 @@ import {
   graphPanelHasCachedLocationHint,
   graphPanelHasResumeLocationHint,
 } from "../../utils/common/locatorUtils";
+import { resolveDisplayedEventNum } from "../../utils/viewer/eventDisplayUtils";
 
 const iconShellClass = {
   loading: "bg-emerald-50 text-[#5C6F5C]",
@@ -87,8 +88,7 @@ const GraphSplitArea = memo(function GraphSplitArea({
   const { loading, graphPhase, isDataReady, isDataEmpty } = viewerState;
   const { elements, currentEvent, currentChapter } = graphState;
   const { filterStage } = graphActions;
-  const resolvedEventNum = Number(currentEvent?.eventNum ?? currentEvent?.eventIdx ?? 0);
-  const hasResolvedEvent = Number.isFinite(resolvedEventNum) && resolvedEventNum > 0;
+  const hasResolvedEvent = resolveDisplayedEventNum(currentEvent) > 0;
 
   const hasResumeLocator = useMemo(
     () => graphPanelHasResumeLocationHint(resumeAnchor),
@@ -143,8 +143,8 @@ const GraphSplitArea = memo(function GraphSplitArea({
 
   // viewerState 전체를 넘기면 showToolbar 등 무관한 변경으로 TopBar memo가 깨짐
   const viewerStateForTopBar = useMemo(
-    () => ({ filename: viewerState.filename, book: viewerState.book }),
-    [viewerState.filename, viewerState.book]
+    () => ({ filename: viewerState.filename, book: viewerState.book, progress: viewerState.progress }),
+    [viewerState.filename, viewerState.book, viewerState.progress]
   );
 
   const resolvedApiError = useMemo(() => normalizeGraphApiError(apiError), [apiError]);

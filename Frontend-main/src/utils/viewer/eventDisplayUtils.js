@@ -1,9 +1,23 @@
-import { getChapterData } from '../common/cache/manifestCache';
 import { toPositiveNumberFromId, toPositiveNumberOrNull } from '../common/numberUtils';
-import { resolveManifestEventMatch } from './serverEventMatcher';
 
 function pickReadingEvent(currentEvent, prevValidEvent) {
   return currentEvent || prevValidEvent || null;
+}
+
+export function eventMatchesChapter(event, chapter) {
+  if (!event || typeof event !== 'object') return false;
+  const eventChapter = Number(event.chapter ?? event.chapterIdx);
+  const currentChapter = Number(chapter);
+  return !Number.isFinite(eventChapter) || eventChapter === currentChapter;
+}
+
+function pickReadingEventForChapter(currentEvent, prevValidEvent, currentChapter) {
+  if (currentChapter == null) {
+    return pickReadingEvent(currentEvent, prevValidEvent);
+  }
+  if (eventMatchesChapter(currentEvent, currentChapter)) return currentEvent;
+  if (eventMatchesChapter(prevValidEvent, currentChapter)) return prevValidEvent;
+  return null;
 }
 
 const positiveOrZero = (value) => {
@@ -40,76 +54,23 @@ export function resolveDisplayedEventNum(event) {
   return eventNumFromStringId(event.eventId) || eventNumFromStringId(event.id);
 }
 
-function maxEventNumFromManifest(bookId, chapterIdx) {
-  const normalizedBookId = toPositiveNumberOrNull(bookId);
-  const normalizedChapterIdx = toPositiveNumberOrNull(chapterIdx);
-  if (!normalizedBookId || !normalizedChapterIdx) {
-    return 0;
-  }
-
-  const chapterData = getChapterData(normalizedBookId, normalizedChapterIdx);
-  const events = Array.isArray(chapterData?.events) ? chapterData.events : [];
-  return events.reduce((max, row) => {
-    const eventNum = toPositiveNumberOrNull(row?.eventNum ?? row?.idx ?? row?.eventIdx);
-    return eventNum && eventNum > max ? eventNum : max;
-  }, 0);
-}
-
 export function resolveViewerDisplayEventNum({
   currentEvent,
   prevValidEvent,
+  currentChapter = null,
   progressTopBar,
   fallback = 0,
 }) {
-  const reading = pickReadingEvent(currentEvent, prevValidEvent);
+  const reading = pickReadingEventForChapter(currentEvent, prevValidEvent, currentChapter);
   const fromReading = resolveDisplayedEventNum(reading);
   if (fromReading > 0) return fromReading;
 
-  const fromProgress = toPositiveNumberOrNull(progressTopBar?.eventNum);
-  if (fromProgress) return fromProgress;
+  if (currentChapter == null || eventMatchesChapter(progressTopBar, currentChapter)) {
+    const fromProgress = toPositiveNumberOrNull(progressTopBar?.eventNum);
+    if (fromProgress) return fromProgress;
+  }
 
   return positiveOrZero(fallback);
-}
-
-export function resolveViewerEventDisplayInfo({
-  currentEvent,
-  prevValidEvent,
-  progressTopBar,
-  bookId,
-  currentChapter,
-  maxEventNum,
-  fallback = 0,
-}) {
-  const row = progressTopBar ?? {
-    eventNum: null,
-    chapterProgress: null,
-    readingProgressPercent: null,
-    eventName: '',
-  };
-  const reading = pickReadingEvent(currentEvent, prevValidEvent);
-  const panel = bookId != null
-    ? resolveManifestEventMatch(reading, bookId)
-    : { title: '', eventNum: 0, eventId: '' };
-  const eventNum =
-    resolveViewerDisplayEventNum({ currentEvent, prevValidEvent, progressTopBar: row, fallback }) ||
-    panel.eventNum;
-  const loaderMax = toPositiveNumberOrNull(maxEventNum);
-  const manifestMax = maxEventNumFromManifest(bookId, currentChapter);
-  const totalEventNum = loaderMax || manifestMax;
-  const eventDisplay =
-    eventNum > 0 ? (totalEventNum >= eventNum ? `${eventNum}/${totalEventNum}` : String(eventNum)) : '?';
-  const eventNameFromCurrent = String(
-    reading?.name ?? reading?.event_name ?? reading?.eventTitle ?? ''
-  ).trim();
-  const eventNameFromProgress = String(row.eventName ?? '').trim();
-
-  return {
-    eventNum,
-    totalEventNum,
-    eventDisplay,
-    eventTitle: panel.eventId || undefined,
-    eventNameLabel: panel.title || eventNameFromCurrent || eventNameFromProgress || '',
-  };
 }
 
 function eventFieldsForTooltip(eventToShow) {
