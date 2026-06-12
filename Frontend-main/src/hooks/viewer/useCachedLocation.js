@@ -1,12 +1,9 @@
+/** chapterEventCache 기반 읽기 위치 로드·저장 */
+
 import { useState, useEffect, useCallback } from 'react';
 import { getCachedReaderProgress, setCachedReaderProgress } from '../../utils/common/cache/chapterEventCache';
 import { errorUtils } from '../../utils/common/errorUtils';
 
-/**
- * 캐시된 위치 관리 훅
- * @param {string|null} bookKey - 책 키 (bookId)
- * @returns {Object} 캐시된 위치 상태 및 관리 함수
- */
 export function useCachedLocation(bookKey) {
   const [cachedLocation, setCachedLocation] = useState(null);
 

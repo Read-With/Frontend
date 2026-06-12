@@ -1,4 +1,8 @@
-// 순환 참조 방지를 위해 하드코딩된 값 사용
+/** Cytoscape 스타일시트·레이아웃 상수 */
+
+const DURATION = { FAST: '0.18s', SLOW: '0.4s' };
+
+// graphStyles는 styles.js에서 다시 re-export되므로 styles.js를 직접 import하지 않는다.
 const COLORS = {
   backgroundLighter: '#f8fafc',
   border: '#e5e7eb',
@@ -14,13 +18,6 @@ const COLORS = {
   edgeText: '#42506b',
   successGreen: '#22c55e',
   highlightBlue: '#5C6F5C',
-};
-
-const ANIMATION_VALUES = {
-  DURATION: {
-    FAST: '0.18s',
-    SLOW: '0.4s',
-  }
 };
 
 export const DEFAULT_LAYOUT = {
@@ -75,6 +72,27 @@ export const getEdgeStyle = (context = 'default') => {
   };
 };
 
+/** reciprocalPair: CytoscapeGraphUnified에서 동기화한 _rjOx/_rjOy 우선(쌍이 동일 중점 사용) */
+function reciprocalPairTargetEndpoint(ele) {
+  try {
+    const ox = ele.data('_rjOx');
+    const oy = ele.data('_rjOy');
+    if (typeof ox === 'number' && typeof oy === 'number' && Number.isFinite(ox) && Number.isFinite(oy)) {
+      return `${ox} ${oy}`;
+    }
+    const s = ele.source();
+    const t = ele.target();
+    if (!s || !t || s.empty?.() || t.empty?.()) return undefined;
+    const sx = s.position('x');
+    const sy = s.position('y');
+    const tx = t.position('x');
+    const ty = t.position('y');
+    return `${(sx - tx) / 2} ${(sy - ty) / 2}`;
+  } catch (_e) {
+    return undefined;
+  }
+}
+
 // 관계 색상 공식 (relationStyles가 임계값·라벨 단일 소스, 여기는 색상만)
 export const getRelationColor = (positivity) => {
   const value = Number.isFinite(positivity) ? Math.max(-1, Math.min(1, positivity)) : 0;
@@ -94,32 +112,38 @@ export const calculateNodeSize = (baseSize, weight) => {
   return Math.max(calculatedSize, 30);
 };
 
+const baseNodeGraphStyle = {
+  "background-color": COLORS.nodeBackground,
+  "border-width": (ele) => (ele.data("isMainCharacter") ? 2 : 1),
+  "border-color": COLORS.nodeBorder,
+  "border-opacity": 1,
+  width: (ele) => calculateNodeSize(8, ele.data("weight")),
+  height: (ele) => calculateNodeSize(8, ele.data("weight")),
+  shape: "ellipse",
+  label: "data(label)",
+  "text-valign": "bottom",
+  "text-halign": "center",
+  "font-size": 12,
+  "font-weight": (ele) => (ele.data("isMainCharacter") ? 600 : 400),
+  color: COLORS.nodeText,
+  "text-margin-y": 2,
+  "text-background-opacity": 0,
+  "text-outline-color": COLORS.white,
+  "text-outline-width": 2,
+};
+
 // [공통 스타일시트 생성 함수 - 가중치 기반 노드 크기만 사용]
 export const createGraphStylesheet = (edgeStyle, edgeLabelVisible, maxEdgeLabelLength = null) => [
   {
+    selector: "node",
+    style: baseNodeGraphStyle,
+  },
+  {
     selector: "node[image]",
     style: {
-      "background-color": COLORS.nodeBackground,
       "background-image": "data(image)",
       "background-fit": "cover",
       "background-clip": "node",
-      "border-width": (ele) => (ele.data("main_character") ? 2 : 1),
-      "border-color": COLORS.nodeBorder,
-      "border-opacity": 1,
-      width: (ele) => calculateNodeSize(8, ele.data("weight")),
-      height: (ele) => calculateNodeSize(8, ele.data("weight")),
-      shape: "ellipse",
-      label: "data(label)",
-      "text-valign": "bottom",
-      "text-halign": "center",
-      "font-size": 12,
-      "font-weight": (ele) => (ele.data("main_character") ? 600 : 400),
-      color: COLORS.nodeText,
-      "text-margin-y": 2,
-      "text-background-color": COLORS.white,
-      "text-background-opacity": 0.8,
-      "text-background-shape": "roundrectangle",
-      "text-background-padding": 2,
     },
   },
   {
@@ -143,7 +167,25 @@ export const createGraphStylesheet = (edgeStyle, edgeLabelVisible, maxEdgeLabelL
       "text-outline-color": COLORS.white,
       "text-outline-width": 2,
       opacity: 0.85,
+      "target-arrow-shape": "triangle",
+      "target-arrow-color": (ele) => getRelationColor(ele.data("positivity")),
+      "arrow-scale": 1.05,
+      "source-arrow-shape": "none",
+    },
+  },
+  {
+    selector: "edge[?bidirectional]",
+    style: {
+      "curve-style": "straight",
       "target-arrow-shape": "none",
+      "source-arrow-shape": "none",
+    },
+  },
+  {
+    selector: "edge[?reciprocalPair]",
+    style: {
+      "curve-style": "straight",
+      "target-endpoint": (ele) => reciprocalPairTargetEndpoint(ele),
     },
   },
   {
@@ -151,6 +193,9 @@ export const createGraphStylesheet = (edgeStyle, edgeLabelVisible, maxEdgeLabelL
     style: {
       width: 8,
       opacity: 1,
+      "target-endpoint": "outside-to-node",
+      "z-index-compare": "manual",
+      "z-index": 9999,
     },
   },
   {
@@ -160,7 +205,7 @@ export const createGraphStylesheet = (edgeStyle, edgeLabelVisible, maxEdgeLabelL
       "border-width": 16,
       "border-opacity": 1,
       "transition-property": "border-width, border-color, border-opacity",
-      "transition-duration": ANIMATION_VALUES.DURATION.SLOW,
+      "transition-duration": DURATION.SLOW,
     },
   },
   {
@@ -175,14 +220,14 @@ export const createGraphStylesheet = (edgeStyle, edgeLabelVisible, maxEdgeLabelL
   {
     selector: "node.faded",
     style: {
-      opacity: 0.05,
-      "text-opacity": 0.02,
+      opacity: 0.14,
+      "text-opacity": 0.1,
     },
   },
   {
     selector: "edge.faded",
     style: {
-      opacity: 0.05,
+      opacity: 0.1,
     },
   },
 ];
@@ -250,7 +295,7 @@ export const getGraphControlsStyles = () => ({
     fontSize: '15px',
     color: COLORS.textPrimary,
     background: COLORS.backgroundLight,
-    transition: `all ${ANIMATION_VALUES.DURATION.FAST}`,
+    transition: `all ${DURATION.FAST}`,
     outline: 'none',
     height: '36px',
     padding: '0 12px',
@@ -266,7 +311,7 @@ export const getGraphControlsStyles = () => ({
     fontSize: '14px',
     fontWeight: '600',
     cursor: 'pointer',
-    transition: `all ${ANIMATION_VALUES.DURATION.FAST}`,
+    transition: `all ${DURATION.FAST}`,
     width: '88px',
     height: '36px',
     padding: '0 12px',
@@ -322,7 +367,7 @@ export const getGraphControlsStyles = () => ({
     cursor: 'pointer',
     borderBottom: `1px solid ${COLORS.borderLight}`,
     background: isSelected ? COLORS.backgroundLight : COLORS.white,
-    transition: `background ${ANIMATION_VALUES.DURATION.FAST}`,
+    transition: `background ${DURATION.FAST}`,
   }),
   noResults: {
     padding: '16px 14px',

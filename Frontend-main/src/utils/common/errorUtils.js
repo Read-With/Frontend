@@ -1,3 +1,5 @@
+/** 공통 에러 로깅·handleError 래퍼 */
+
 const getErrorDetails = (error) => {
   return {
     message: error?.message || error?.toString() || '알 수 없는 오류',
@@ -27,18 +29,8 @@ export const errorUtils = {
   },
   
   logInfo: (context, message, additionalData = {}) => {
-    if (process.env.NODE_ENV === 'development') {
+    if (import.meta.env.DEV) {
       console.info(`ℹ️ [${context}] 정보:`, {
-        message,
-        ...additionalData,
-        timestamp: new Date().toISOString(),
-      });
-    }
-  },
-  
-  logSuccess: (context, message, additionalData = {}) => {
-    if (process.env.NODE_ENV === 'development') {
-      console.log(`✅ [${context}] 성공:`, {
         message,
         ...additionalData,
         timestamp: new Date().toISOString(),
@@ -58,16 +50,6 @@ export const errorUtils = {
       error?.name === 'TypeError' ||
       error?.code === 'NETWORK_ERROR'
     );
-  },
-
-  isServerError: (error) => {
-    const status = error?.status || error?.statusCode;
-    return status && status >= 500 && status < 600;
-  },
-
-  isClientError: (error) => {
-    const status = error?.status || error?.statusCode;
-    return status && status >= 400 && status < 500;
   },
 
   getUserFriendlyMessage: (error) => {

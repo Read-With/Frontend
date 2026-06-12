@@ -1,15 +1,10 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import useAuth from '../hooks/auth/useAuth';
 import OAuthCallback from '../components/auth/OAuthCallback';
+import { getGoogleOAuthRedirectUri } from '../utils/common/authUtils';
+import { createAndStoreGoogleOAuthState } from '../utils/security/oauthSecurity';
 import './HomePage.css';
-
-const getApiBaseUrl = () => {
-  if (import.meta.env.DEV) {
-    return '';
-  }
-  return 'https://dev.readwith.store';
-};
 
 // 스크롤 섹션 컴포넌트들
 const HeroSection = () => {
@@ -56,33 +51,24 @@ const HeroSection = () => {
     try {
       // redirect_uri 설정 (로컬/프로덕션 구분)
       // 백엔드가 요청 본문의 redirectUri를 읽을 수 있도록 각 환경에 맞는 값 사용
-      const getRedirectUri = () => {
-        if (import.meta.env.VITE_GOOGLE_REDIRECT_URI) {
-          return import.meta.env.VITE_GOOGLE_REDIRECT_URI;
-        }
-        if (typeof window !== 'undefined') {
-          return `${window.location.origin}/auth/callback`;
-        }
-        return 'https://readwith-frontend.vercel.app/auth/callback';
-      };
-      
-      // 환경변수에서 구글 클라이언트 ID 가져오기
       const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || 'your-google-client-id';
-      const GOOGLE_REDIRECT_URI = getRedirectUri();
+      const GOOGLE_REDIRECT_URI = getGoogleOAuthRedirectUri();
       
       // 구글 OAuth URL 구성
+      const oauthState = createAndStoreGoogleOAuthState();
       const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?` +
         `client_id=${GOOGLE_CLIENT_ID}&` +
         `redirect_uri=${encodeURIComponent(GOOGLE_REDIRECT_URI)}&` +
         `response_type=code&` +
         `scope=email profile&` +
         `access_type=offline&` +
-        `prompt=consent`;
+        `prompt=consent&` +
+        `state=${encodeURIComponent(oauthState)}`;
       
       // 구글 인증 페이지로 리다이렉트
       window.location.href = authUrl;
       
-    } catch (error) {
+    } catch (_err) {
       setIsLoggingIn(false);
       alert('구글 로그인 중 오류가 발생했습니다.');
     }
@@ -249,44 +235,18 @@ export default function HomePage() {
   const { user } = useAuth();
   const [searchParams] = useSearchParams();
   
-  // OAuth 콜백 처리
   const code = searchParams.get('code');
-  const error = searchParams.get('error');
+  const oauthError = searchParams.get('error');
 
-  // OAuth 콜백이 있으면 OAuthCallback 컴포넌트 렌더링
-  if (code || error) {
-    return <OAuthCallback />;
-  }
-
-  // OAuth 오류 처리
-  if (error) {
-    return (
-      <div className="homepage-container">
-        <div className="main-content">
-          <div className="hero-section">
-            <h1 className="hero-title">OAuth 오류</h1>
-            <p className="hero-subtitle">로그인 중 오류가 발생했습니다.</p>
-            <p className="hero-description">
-              오류 코드: {error}
-            </p>
-            <button 
-              className="cta-button"
-              onClick={() => navigate('/')}
-            >
-              홈으로 돌아가기
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // 로그인된 사용자는 마이페이지로 리다이렉트
   useEffect(() => {
-    if (user) {
+    if (user && !code && !oauthError) {
       navigate('/mypage');
     }
-  }, [user, navigate]);
+  }, [user, navigate, code, oauthError]);
+
+  if (code || oauthError) {
+    return <OAuthCallback />;
+  }
 
   return (
     <div className="homepage-container">

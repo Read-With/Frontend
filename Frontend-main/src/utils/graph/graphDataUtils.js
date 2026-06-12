@@ -1,6 +1,140 @@
-import { getCharactersData, createCharacterMapsWithCache } from './graphData';
-import { createCharacterMaps, getCharacterImagePath } from '../characterUtils';
-import { normalizeRelation, isValidRelation } from '../relationUtils';
+import { extractCharacterId } from './characterUtils';
+import { normalizeRelation, isValidRelation, directedEdgeElementId } from './relationUtils';
+import {
+  getEventIndexFromObject,
+  isGraphEdgeElement,
+  normalizeElementId,
+  sortElementsByDataId,
+  uniqueStrings,
+} from './graphUtils';
+
+function undirectedPairKey(s, t) {
+  const a = String(s);
+  const b = String(t);
+  return a < b ? `${a}\x1e${b}` : `${b}\x1e${a}`;
+}
+
+function mergeEdgeLabels(a, b) {
+  const t1 = String(a ?? '').trim();
+  const t2 = String(b ?? '').trim();
+  if (!t2 || t2 === t1) return t1;
+  if (!t1) return t2;
+  return `${t1} / ${t2}`;
+}
+
+function mergePositivity(a, b) {
+  const n1 = Number(a);
+  const n2 = Number(b);
+  const f1 = Number.isFinite(n1);
+  const f2 = Number.isFinite(n2);
+  if (f1 && f2) return (n1 + n2) / 2;
+  if (f1) return n1;
+  if (f2) return n2;
+  return undefined;
+}
+
+function normalizedRelationTagKey(data) {
+  return uniqueStrings(Array.isArray(data?.relation) ? data.relation : []).sort().join('\x1e');
+}
+
+function positivityToken(data) {
+  const n = Number(data?.positivity);
+  return Number.isFinite(n) ? n : null;
+}
+
+/** 역방향 두 간선의 관계(태그·positivity)가 동일한지 — 동일하면 `-` 한 줄로 합침 */
+function relationPayloadEquivalent(d0, d1) {
+  if (normalizedRelationTagKey(d0) !== normalizedRelationTagKey(d1)) {
+    return false;
+  }
+  const p0 = positivityToken(d0);
+  const p1 = positivityToken(d1);
+  if (p0 === null && p1 === null) return true;
+  if (p0 === null || p1 === null) return false;
+  return p0 === p1;
+}
+
+/** 단방향 `a->b` / 동일 역쌍 `a-b` / 다른 역쌍 `reciprocalPair` */
+function finalizeDirectedEdges(edgeMap) {
+  const list = Array.from(edgeMap.values());
+  const buckets = new Map();
+  for (const el of list) {
+    const uk = undirectedPairKey(el.data.source, el.data.target);
+    if (!buckets.has(uk)) buckets.set(uk, []);
+    buckets.get(uk).push(el);
+  }
+
+  const out = [];
+  for (const [, group] of buckets) {
+    if (group.length === 1) {
+      const d = { ...group[0].data };
+      delete d.bidirectional;
+      out.push({ data: d });
+      continue;
+    }
+    if (group.length !== 2) {
+      for (const el of group) {
+        const d = { ...el.data };
+        delete d.bidirectional;
+        out.push({ data: d });
+      }
+      continue;
+    }
+    const e0 = group[0];
+    const e1 = group[1];
+    const s0 = e0.data.source;
+    const t0 = e0.data.target;
+    const s1 = e1.data.source;
+    const t1 = e1.data.target;
+    if (s0 === t1 && t0 === s1) {
+      if (relationPayloadEquivalent(e0.data, e1.data)) {
+        const [a, b] = String(s0) <= String(t0) ? [s0, t0] : [t0, s0];
+        const r0 = Array.isArray(e0.data.relation) ? e0.data.relation : [];
+        const r1 = Array.isArray(e1.data.relation) ? e1.data.relation : [];
+        const pos = mergePositivity(e0.data.positivity, e1.data.positivity);
+        const baseData = {
+          id: `${a}-${b}`,
+          source: a,
+          target: b,
+          bidirectional: true,
+          relation: uniqueStrings([...r0, ...r1]),
+          label: mergeEdgeLabels(e0.data.label, e1.data.label),
+        };
+        if (Number.isFinite(Number(pos))) {
+          baseData.positivity = pos;
+        } else if (e0.data.positivity !== undefined) {
+          baseData.positivity = e0.data.positivity;
+        } else if (e1.data.positivity !== undefined) {
+          baseData.positivity = e1.data.positivity;
+        }
+        out.push({ data: baseData });
+      } else {
+        for (const el of group) {
+          const d = { ...el.data };
+          delete d.bidirectional;
+          d.reciprocalPair = true;
+          out.push({ data: d });
+        }
+      }
+    } else {
+      for (const el of group) {
+        const d = { ...el.data };
+        delete d.bidirectional;
+        out.push({ data: d });
+      }
+    }
+  }
+  return out;
+}
+
+function relationEventIdxFromRaw(raw) {
+  return getEventIndexFromObject(raw, ['eventNum', 'eventIdx', 'event_id', 'event_idx']);
+}
+
+function currentEventIdxForPositivity(eventData) {
+  const n = getEventIndexFromObject(eventData, ['eventNum', 'eventIdx', 'resolvedEventIdx', 'idx']);
+  return Number.isFinite(n) && n > 0 ? n : NaN;
+}
 
 /**
  * 이벤트 텍스트에서 첫 번째 단어를 추출하는 함수
@@ -23,8 +157,8 @@ function getFirstWordFromEventText(text) {
   return firstWord || '';
 }
 
-const validateElements = (elements) => elements?.filter(e => e && (e.id || e.data?.id)) || [];
-const createElementMap = (elements) => new Map(elements.map(e => [e.id || e.data?.id, e]));
+const validateElements = (elements) => elements?.filter(e => e && normalizeElementId(e)) || [];
+const createElementMap = (elements) => new Map(elements.map(e => [normalizeElementId(e), e]));
 
 function deepEqual(obj1, obj2, depth = 0) {
   // 최대 깊이 제한 (무한 재귀 방지)
@@ -90,9 +224,10 @@ function deepEqual(obj1, obj2, depth = 0) {
  * @param {Object} previousRelations - 이전 이벤트의 관계 데이터
  * @param {Object} eventData - 이벤트 데이터 (text 필드 포함)
  * @param {Object} idToProfileImage - ID to profileImage 매핑 (API 책용)
+ * @param {Array|null} charactersOrphanMerge - relations에 없어도 노드로 그릴 캐릭터 배열(Fine API 등)
  * @returns {Array} 그래프 요소 배열
  */
-export function convertRelationsToElements(relations, idToName, idToDesc, idToDescKo, idToMain, idToNames, folderKey, nodeWeights = null, previousRelations = null, eventData = null, idToProfileImage = null) {
+export function convertRelationsToElements(relations, idToName, idToDesc, idToDescKo, idToMain, idToNames, folderKey, nodeWeights = null, previousRelations = null, eventData = null, idToProfileImage = null, charactersOrphanMerge = null) {
   // 매개변수 유효성 검사
   if (!Array.isArray(relations)) {
     return [];
@@ -112,19 +247,41 @@ export function convertRelationsToElements(relations, idToName, idToDesc, idToDe
   
   const relationsArray = relations;
   
-  // 노드 id 수집
   const nodeIds = [];
-  relationsArray.forEach(rel => {
-    [rel.id1, rel.id2].forEach(id => {
-      if (!id) return;
+  relationsArray.forEach((rel) => {
+    const r = normalizeRelation(rel);
+    if (!isValidRelation(r)) return;
+    [r.id1, r.id2].forEach((id) => {
       const strId = String(id);
+      if (!strId || strId === '0') return;
       if (!nodeSet.has(strId)) {
         nodeSet.add(strId);
         nodeIds.push(strId);
       }
     });
   });
-  
+
+  if (Array.isArray(charactersOrphanMerge) && charactersOrphanMerge.length > 0) {
+    charactersOrphanMerge.forEach((char) => {
+      if (!char) return;
+      const strId =
+        extractCharacterId(char) ||
+        (char.id != null && String(char.id).trim() !== '' ? String(char.id).trim() : null);
+      if (!strId || strId === '0') return;
+      if (!nodeSet.has(strId)) {
+        nodeSet.add(strId);
+        nodeIds.push(strId);
+      }
+    });
+  }
+
+  const resolvedIdToName = { ...idToName };
+  for (const strId of nodeSet) {
+    const v = resolvedIdToName[strId];
+    if (v == null || String(v).trim() === '') {
+      resolvedIdToName[strId] = strId;
+    }
+  }
 
   // id 기반 고정 랜덤 함수 (캐싱으로 성능 개선)
   const randomCache = new Map();
@@ -155,20 +312,9 @@ export function convertRelationsToElements(relations, idToName, idToDesc, idToDe
     return result;
   }
 
-  // 캐릭터 정보가 있는 노드만 필터링 (character 데이터에 존재하는 ID만 허용)
-  const validNodeIds = nodeIds.filter(strId => {
-    const hasName = idToName[strId] && idToName[strId] !== strId;
-    const hasValidId = strId && strId !== '0' && strId !== 'undefined' && strId !== 'null';
-    
-    // 캐릭터 데이터에 없는 ID는 제외
-    if (!hasName) {
-      nodeSet.delete(strId); // nodeSet에서도 제거
-      console.warn(`캐릭터 데이터에 없는 노드 제외 (ID: ${strId})`);
-      return false;
-    }
-    
-    return hasValidId;
-  });
+  const validNodeIds = nodeIds.filter(
+    (strId) => strId && strId !== '0' && strId !== 'undefined' && strId !== 'null'
+  );
   
 
   // 노드 가중치 기반 크기 계산
@@ -194,34 +340,24 @@ export function convertRelationsToElements(relations, idToName, idToDesc, idToDe
     const r = radius * (0.7 + 0.3 * (seededRandom(strId, 0, 1000) / 1000));
     const x = centerX + r * Math.cos(angle);
     const y = centerY + r * Math.sin(angle);
-    const commonName = idToName[strId];
+    const commonName = resolvedIdToName[strId];
     const nodeWeight = getNodeWeight(strId);
     
-    // 이미지 경로 결정
     let imagePath = null;
-    
-    if (folderKey === 'api') {
-      // API 책: profileImage가 유효한 경우에만 사용
-      // profileImage가 없으면 이미지 경로를 생성하지 않음 (401 에러 방지)
-      if (idToProfileImage && idToProfileImage[strId] && idToProfileImage[strId].trim() !== '') {
-        imagePath = idToProfileImage[strId];
-      }
-      // profileImage가 없으면 imagePath는 null로 유지 (이미지 없음)
-    } else {
-      // 로컬 책: 항상 이미지 경로 생성 (이미지 파일 존재 여부는 체크하지 않음)
-      imagePath = getCharacterImagePath(folderKey, strId);
+    if (idToProfileImage?.[strId]?.trim?.()) {
+      imagePath = idToProfileImage[strId];
     }
-    
-    // 노드 데이터 생성
+
     const nodeData = {
       id: strId,
       label: commonName,
-      main_character: idToMain[strId] || false,
+      name: commonName,
+      isMainCharacter: idToMain[strId] || false,
       description: idToDesc[strId] || '',
-      description_ko: idToDescKo[strId] || '',
+      personalityText: idToDescKo[strId] || '',
       names: [commonName, ...(Array.isArray(idToNames[strId]) ? idToNames[strId] : [])],
       common_name: commonName,
-      weight: nodeWeight
+      weight: nodeWeight,
     };
     
     // 이미지 경로가 있으면 image 필드 추가
@@ -235,124 +371,125 @@ export function convertRelationsToElements(relations, idToName, idToDesc, idToDe
     });
   });
 
-  // 이전 이벤트의 관계를 Set으로 변환 (빠른 검색을 위해)
+  /** id1->id2 방향만; 역쌍은 관계 동일 시 `a-b`·bidirectional, 다르면 `a->b`·`b->a` 각각 */
   const previousRelationSet = new Set();
   if (previousRelations && Array.isArray(previousRelations)) {
-    previousRelations.forEach(prevRel => {
-      if (prevRel.id1 && prevRel.id2) {
-        const prevId1 = String(prevRel.id1);
-        const prevId2 = String(prevRel.id2);
-        previousRelationSet.add(`${prevId1}-${prevId2}`);
-        previousRelationSet.add(`${prevId2}-${prevId1}`); // 양방향 관계 고려
-      }
+    previousRelations.forEach((prevRel) => {
+      const pr = normalizeRelation(prevRel);
+      if (!isValidRelation(pr)) return;
+      previousRelationSet.add(directedEdgeElementId(pr.id1, pr.id2));
     });
   }
 
-  // 간선 통합을 위한 Map (노드 쌍을 키로 사용)
   const edgeMap = new Map();
-  
-  // 엣지 추가 및 통합
-  
-  relationsArray.forEach((rel, index) => {
-    
-    if (rel.id1 && rel.id2) {
-      const id1 = String(rel.id1);
-      const id2 = String(rel.id2);
-      
-      // 1. id1 == id2 인 경우 제외
-      if (id1 === id2) {
-        return;
+  const positivityByEdge = new Map();
+
+  relationsArray.forEach((rel) => {
+    const r = normalizeRelation(rel);
+    if (!isValidRelation(r)) return;
+
+    const id1 = String(r.id1);
+    const id2 = String(r.id2);
+
+    if (id1 === id2 || id1 === '0' || id2 === '0') {
+      return;
+    }
+
+    if (!nodeSet.has(id1) || !nodeSet.has(id2)) {
+      return;
+    }
+
+    const source = id1;
+    const target = id2;
+    const edgeKey = directedEdgeElementId(id1, id2);
+
+    const pNum = Number(r.positivity);
+    if (Number.isFinite(pNum)) {
+      let info = positivityByEdge.get(edgeKey);
+      if (!info) {
+        info = { lastFinite: null, lastFromCurrent: null, hasFromCurrent: false };
       }
-      
-      // 2. 노드가 0.0 인 경우 제외
-      if (id1 === '0' || id2 === '0') {
-        return;
+      info.lastFinite = r.positivity;
+      const curEv = currentEventIdxForPositivity(eventData);
+      const relEv = relationEventIdxFromRaw(rel);
+      if (Number.isFinite(curEv) && Number.isFinite(relEv) && relEv === curEv) {
+        info.lastFromCurrent = r.positivity;
+        info.hasFromCurrent = true;
       }
-      
-      // 3. 해당 event에 없는 노드가 포함된 경우 - 더 관대한 처리
-      if (!nodeSet.has(id1) || !nodeSet.has(id2)) {
-        return;
-      }
-      
-      // 노드 쌍을 정규화된 키로 변환 (작은 ID가 앞에 오도록)
-      const edgeKey = id1 < id2 ? `${id1}-${id2}` : `${id2}-${id1}`;
-      const source = id1 < id2 ? id1 : id2;
-      const target = id1 < id2 ? id2 : id1;
-      
-      let relationArray = [];
-      let relationLabel = "";
-      
-      // 이벤트 데이터에서 첫 번째 단어를 가져와서 라벨로 사용
-      if (eventData && eventData.text) {
-        relationLabel = getFirstWordFromEventText(eventData.text);
-      }
-      
-      if (Array.isArray(rel.relation)) {
-        relationArray = rel.relation;
-        // 이벤트 텍스트에서 첫 번째 단어를 가져오지 못한 경우에만 기존 로직 사용
-        if (!relationLabel) {
-          // 이전 이벤트와 비교하여 새로 추가된 관계인지 확인
-          const isNewRelation = !previousRelationSet.has(`${id1}-${id2}`) && !previousRelationSet.has(`${id2}-${id1}`);
-          
-          if (isNewRelation || !previousRelations) {
-            // 새로 추가된 관계이거나 첫 번째 이벤트인 경우: 첫 번째 요소를 라벨로 사용
-            relationLabel = rel.relation[0] || "";
+      positivityByEdge.set(edgeKey, info);
+    }
+
+    let relationArray = [];
+    let relationLabel = "";
+
+    if (eventData && eventData.text) {
+      relationLabel = getFirstWordFromEventText(eventData.text);
+    }
+
+    if (Array.isArray(rel.relation)) {
+      relationArray = rel.relation;
+      if (!relationLabel) {
+        const directedKey = directedEdgeElementId(id1, id2);
+        const isNewRelation = !previousRelationSet.has(directedKey);
+
+        if (isNewRelation || !previousRelations) {
+          relationLabel = rel.relation[0] || "";
+        } else {
+          const prevRel = previousRelations.find((p) => {
+            const pr = normalizeRelation(p);
+            if (!pr) return false;
+            return String(pr.id1) === id1 && String(pr.id2) === id2;
+          });
+
+          if (prevRel && Array.isArray(prevRel.relation)) {
+            const newElements = rel.relation.filter((element) => !prevRel.relation.includes(element));
+            relationLabel = newElements.length > 0 ? newElements[0] : rel.relation[0] || "";
           } else {
-            // 기존 관계인 경우: 이전 이벤트에서의 관계와 비교하여 새로 추가된 요소 찾기
-            const prevRel = previousRelations.find(prevRel => 
-              (String(prevRel.id1) === id1 && String(prevRel.id2) === id2) ||
-              (String(prevRel.id1) === id2 && String(prevRel.id2) === id1)
-            );
-            
-            if (prevRel && Array.isArray(prevRel.relation)) {
-              // 이전 관계에서 새로 추가된 요소 찾기
-              const newElements = rel.relation.filter(element => !prevRel.relation.includes(element));
-              relationLabel = newElements.length > 0 ? newElements[0] : rel.relation[0] || "";
-            } else {
-              relationLabel = rel.relation[0] || "";
-            }
+            relationLabel = rel.relation[0] || "";
           }
-        }
-      } else if (typeof rel.relation === "string") {
-        relationArray = [rel.relation];
-        // 이벤트 텍스트에서 첫 번째 단어를 가져오지 못한 경우에만 기존 값 사용
-        if (!relationLabel) {
-          relationLabel = rel.relation;
         }
       }
-      
-      // 기존 간선이 있는지 확인
-      if (edgeMap.has(edgeKey)) {
-        // 기존 간선에 관계 추가
-        const existingEdge = edgeMap.get(edgeKey);
-        existingEdge.data.relation = [...new Set([...existingEdge.data.relation, ...relationArray])]; // 중복 제거
-        
-        // 새로 추가된 관계가 있으면 라벨을 새로 추가된 관계의 첫 번째 요소로 업데이트
-        if (relationLabel) {
-          existingEdge.data.label = relationLabel;
-        }
-      } else {
-        // 새로운 간선 생성
-        edgeMap.set(edgeKey, {
-          data: {
-            id: edgeKey,
-            source: source,
-            target: target,
-            relation: relationArray,
-            label: relationLabel || "",
-            positivity: rel.positivity,
-          }
-        });
+    } else if (typeof rel.relation === "string") {
+      relationArray = [rel.relation];
+      if (!relationLabel) {
+        relationLabel = rel.relation;
       }
     }
+
+    if (edgeMap.has(edgeKey)) {
+      const existingEdge = edgeMap.get(edgeKey);
+      existingEdge.data.relation = uniqueStrings([...existingEdge.data.relation, ...relationArray]);
+
+      if (relationLabel) {
+        existingEdge.data.label = relationLabel;
+      }
+    } else {
+      edgeMap.set(edgeKey, {
+        data: {
+          id: edgeKey,
+          source,
+          target,
+          relation: relationArray,
+          label: relationLabel || "",
+        },
+      });
+    }
   });
-  
-  // Map에서 간선들을 배열로 변환
-  edges.push(...Array.from(edgeMap.values()));
+
+  for (const el of edgeMap.values()) {
+    const info = positivityByEdge.get(el.data.id);
+    if (!info) continue;
+    const chosen = info.hasFromCurrent ? info.lastFromCurrent : info.lastFinite;
+    if (chosen != null && Number.isFinite(Number(chosen))) {
+      el.data.positivity = chosen;
+    }
+  }
+
+  edges.push(...finalizeDirectedEdges(edgeMap));
   
   const result = [
-    ...nodes.sort((a, b) => a.data.id.localeCompare(b.data.id)),
-    ...edges.sort((a, b) => a.data.id.localeCompare(b.data.id))
+    ...sortElementsByDataId(nodes),
+    ...sortElementsByDataId(edges)
   ];
   
   
@@ -379,7 +516,7 @@ export function calcGraphDiff(prevElements, currElements) {
   const removed = validPrevElements.filter(e => !currMap.has(e.id || e.data?.id));
   // 수정: id는 같지만 data 또는 position이 다름
   const updated = validCurrElements.filter(e => {
-    const elementId = e.id || e.data?.id;
+    const elementId = normalizeElementId(e);
     const prev = prevMap.get(elementId);
     if (!prev) return false;
     
@@ -395,8 +532,58 @@ export function calcGraphDiff(prevElements, currElements) {
   return { added, removed, updated };
 }
 
+/** Cytoscape 동기화 스킵용: 동일 id의 시각적 data만 문자열화 */
+export function visualElementSignature(el) {
+  const d = el?.data;
+  if (!d) return "";
+  if (d.source) {
+    const rel = Array.isArray(d.relation) ? d.relation.join("|") : String(d.relation ?? "");
+    const topo = d.bidirectional ? "b" : d.reciprocalPair ? "r" : "";
+    return `e:${rel}:${d.label ?? ""}:${d.positivity ?? ""}:${d.lineStyle ?? ""}:${d.width ?? ""}:${topo}`;
+  }
+  return `n:${d.label ?? ""}:${d.weight ?? ""}:${d.main ?? ""}:${d.positivity ?? ""}`;
+}
+
+/** props elements가 새 배열이어도 그래프 의미가 동일하면 effect·layout 재실행 생략 */
+export function buildElementsGraphFingerprint(elements) {
+  if (!elements?.length) return "";
+  const rows = elements
+    .map((el) => {
+      const id = el?.data?.id;
+      if (id == null || id === "") return null;
+      const sid = String(id);
+      const d = el?.data;
+      if (!d) return null;
+      const topo = d.source ? `${d.source}|${d.target}` : "";
+      return `${sid}\t${topo}\t${visualElementSignature(el)}`;
+    })
+    .filter(Boolean);
+  rows.sort();
+  return `${elements.length}\n${rows.join("\n")}`;
+}
+
+/** 노드 id + 간선(id·source·target)만으로 골격 동일 여부 판별(라벨·관계문구 변경 시에도 동일하면 펄스 생략) */
+export function buildElementsStructureFingerprint(elements) {
+  if (!elements?.length) return "";
+  const nodeIds = [];
+  const edgeRows = [];
+  for (const el of elements) {
+    const d = el?.data;
+    if (!d || d.id == null || d.id === "") continue;
+    const sid = String(d.id);
+    if (d.source != null && d.target != null) {
+      edgeRows.push(`${sid}\t${String(d.source)}\t${String(d.target)}`);
+    } else {
+      nodeIds.push(sid);
+    }
+  }
+  nodeIds.sort();
+  edgeRows.sort();
+  return `${nodeIds.join("\x1e")}\n${edgeRows.join("\x1e")}`;
+}
+
 /**
- * 3단계 필터링 로직 (RelationGraphWrapper와 ViewerPage에서 공통 사용)
+ * 3단계 필터링 로직 (RelationGraphWrapper, GraphSplitArea 등에서 공통 사용)
  * @param {Array} elements - 그래프 요소 배열
  * @param {number} filterStage - 필터링 단계 (0: 전체, 1: 핵심인물만, 2: 핵심인물과 연결된 인물)
  * @returns {Array} 필터링된 요소 배열
@@ -404,26 +591,15 @@ export function calcGraphDiff(prevElements, currElements) {
 export function filterMainCharacters(elements, filterStage) {
   if (filterStage === 0 || !elements) return elements;
   
-  // 핵심 인물 (main_character: true) 노드들
+  // 핵심 인물 (isMainCharacter: true) 노드들
   const coreNodes = elements.filter(el => 
     el.data && 
     el.data.id && 
-    !el.data.source && 
-    el.data.main_character === true
+    !isGraphEdgeElement(el) && 
+    el.data.isMainCharacter === true
   );
   
   const coreNodeIds = new Set(coreNodes.map(node => node.data.id));
-  
-  // 주요 인물 (main_character: false이지만 중요한 인물) 노드들
-  const importantNodes = elements.filter(el => 
-    el.data && 
-    el.data.id && 
-    !el.data.source && 
-    el.data.main_character === false &&
-    el.data.importance && el.data.importance > 0.5 // 중요도 임계값
-  );
-  
-  const importantNodeIds = new Set(importantNodes.map(node => node.data.id));
   
   let filteredNodes = [];
   let filteredEdges = [];
@@ -432,9 +608,7 @@ export function filterMainCharacters(elements, filterStage) {
     // 1단계: 핵심인물끼리의 연결만
     filteredNodes = coreNodes;
     filteredEdges = elements.filter(el => 
-      el.data && 
-      el.data.source && 
-      el.data.target &&
+      isGraphEdgeElement(el) &&
       coreNodeIds.has(el.data.source) && 
       coreNodeIds.has(el.data.target)
     );
@@ -442,9 +616,7 @@ export function filterMainCharacters(elements, filterStage) {
     // 2단계: 핵심인물과 핵심인물에 연결된 노드(핵심인물, 비핵심인물) + 간선
     // 핵심 인물과 연결된 간선들 찾기
     const connectedEdges = elements.filter(el => 
-      el.data && 
-      el.data.source && 
-      el.data.target &&
+      isGraphEdgeElement(el) &&
       // 최소 하나의 노드는 핵심 인물이어야 함
       (coreNodeIds.has(el.data.source) || coreNodeIds.has(el.data.target))
     );
@@ -460,7 +632,7 @@ export function filterMainCharacters(elements, filterStage) {
     const connectedNodes = elements.filter(el => 
       el.data && 
       el.data.id && 
-      !el.data.source && 
+      !isGraphEdgeElement(el) && 
       connectedNodeIds.has(el.data.id)
     );
     
@@ -553,301 +725,4 @@ export function detectAndResolveOverlap(cy, nodeSize = 40, onCleanup = null) {
   }
   
   return hasOverlap;
-}
-
-/**
- * 관계 키 타임라인 필터링 유틸리티
- * ViewerPage에서 사용하는 관계 키 수집 및 필터링 로직
- */
-
-const apiRelationTimelineCache = new WeakMap();
-
-function getApiTimelineCache(cacheRef) {
-  if (!cacheRef) {
-    return null;
-  }
-  let timeline = apiRelationTimelineCache.get(cacheRef);
-  if (!timeline) {
-    timeline = new Map();
-    apiRelationTimelineCache.set(cacheRef, timeline);
-  }
-  return timeline;
-}
-
-function getChapterTimelineCache(timelineCache, bookId, chapterNum) {
-  if (!timelineCache) {
-    return null;
-  }
-  const numericBookId = Number(bookId);
-  const numericChapter = Number(chapterNum);
-  const chapterKey = `${Number.isFinite(numericBookId) ? numericBookId : String(bookId ?? "unknown")}-${Number.isFinite(numericChapter) ? numericChapter : String(chapterNum ?? "unknown")}`;
-
-  if (!timelineCache.has(chapterKey)) {
-    timelineCache.set(chapterKey, {
-      eventSets: new Map(),
-      sortedEvents: null,
-      lastComputedIdx: 0,
-      lastComputedSet: new Set(),
-    });
-  }
-
-  return timelineCache.get(chapterKey);
-}
-
-function prepareChapterEvents(chapterCache, bookId, chapterNum, eventUtils, getCachedChapterEvents) {
-  if (!chapterCache) {
-    return [];
-  }
-
-  if (Array.isArray(chapterCache.sortedEvents)) {
-    return chapterCache.sortedEvents;
-  }
-
-  const cached = getCachedChapterEvents(bookId, chapterNum);
-  if (!cached?.events?.length) {
-    chapterCache.sortedEvents = [];
-    return chapterCache.sortedEvents;
-  }
-
-  const normalized = cached.events
-    .map((event) => {
-      const idx = eventUtils.normalizeEventIdx(event);
-      if (!Number.isFinite(idx) || idx <= 0) {
-        return null;
-      }
-      return {
-        idx,
-        relations: Array.isArray(event?.relations) ? event.relations : [],
-      };
-    })
-    .filter(Boolean)
-    .sort((a, b) => a.idx - b.idx);
-
-  chapterCache.sortedEvents = normalized;
-  return chapterCache.sortedEvents;
-}
-
-function filterWithTargetKeys(sourceSet, targetKeys) {
-  if (!(targetKeys instanceof Set) || targetKeys.size === 0) {
-    return sourceSet;
-  }
-  const filtered = new Set();
-  for (const key of targetKeys) {
-    if (sourceSet.has(key)) {
-      filtered.add(key);
-    }
-  }
-  return filtered;
-}
-
-export function collectLocalRelationKeys(folderKey, chapterNum, eventNum, targetKeys, getEventDataByIndex, getRelationKeyFromRelation) {
-  const seen = new Set();
-  if (!folderKey || !Number.isFinite(chapterNum) || !Number.isFinite(eventNum) || eventNum < 1) {
-    return seen;
-  }
-
-  for (let idx = 1; idx <= eventNum; idx += 1) {
-    const eventData = getEventDataByIndex(folderKey, chapterNum, idx);
-    const relations = eventData?.relations;
-    if (!Array.isArray(relations) || relations.length === 0) {
-      continue;
-    }
-
-    for (const rel of relations) {
-      const key = getRelationKeyFromRelation(rel);
-      if (!key) {
-        continue;
-      }
-      if (!targetKeys || targetKeys.has(key)) {
-        seen.add(key);
-        if (targetKeys && seen.size === targetKeys.size) {
-          return seen;
-        }
-      }
-    }
-  }
-
-  return seen;
-}
-
-function collectRelationKeysFromGraphState(bookId, chapterNum, eventNum, targetKeys, getGraphEventState, getRelationKeyFromRelation) {
-  const seen = new Set();
-  if (!bookId || !Number.isFinite(chapterNum) || !Number.isFinite(eventNum) || eventNum < 1) {
-    return seen;
-  }
-
-  const hasTargetKeys = targetKeys instanceof Set && targetKeys.size > 0;
-  let matchedCount = 0;
-
-  for (let idx = 1; idx <= eventNum; idx += 1) {
-    const state = getGraphEventState(bookId, chapterNum, idx);
-    const result = state
-      ? {
-          relations: state.eventMeta?.relations ?? state.relations ?? [],
-        }
-      : null;
-    const relations = result?.relations;
-    if (!Array.isArray(relations) || relations.length === 0) {
-      continue;
-    }
-
-    for (const rel of relations) {
-      const key = getRelationKeyFromRelation(rel);
-      if (!key || seen.has(key)) {
-        continue;
-      }
-      seen.add(key);
-      if (hasTargetKeys && targetKeys.has(key)) {
-        matchedCount += 1;
-        if (matchedCount === targetKeys.size) {
-          return seen;
-        }
-      }
-    }
-  }
-
-  return seen;
-}
-
-export async function collectApiRelationKeys(bookId, chapterNum, eventNum, targetKeys, cacheRef, eventUtils, getCachedChapterEvents, getGraphEventState, getRelationKeyFromRelation) {
-  if (!bookId || !Number.isFinite(chapterNum) || !Number.isFinite(eventNum) || eventNum < 1) {
-    return new Set();
-  }
-
-  const timelineCache = getApiTimelineCache(cacheRef);
-  const chapterCache = getChapterTimelineCache(timelineCache, bookId, chapterNum);
-  const sortedEvents = prepareChapterEvents(chapterCache, bookId, chapterNum, eventUtils, getCachedChapterEvents);
-  const hasTargetKeys = targetKeys instanceof Set && targetKeys.size > 0;
-
-  if (!sortedEvents.length) {
-    const fallbackSet = collectRelationKeysFromGraphState(bookId, chapterNum, eventNum, targetKeys, getGraphEventState, getRelationKeyFromRelation);
-    if (chapterCache) {
-      chapterCache.eventSets.set(eventNum, fallbackSet);
-      if (!chapterCache.lastComputedIdx || eventNum >= chapterCache.lastComputedIdx) {
-        chapterCache.lastComputedIdx = eventNum;
-        chapterCache.lastComputedSet = fallbackSet;
-      }
-    }
-    return filterWithTargetKeys(fallbackSet, targetKeys);
-  }
-
-  let lastComputedIdx = chapterCache?.lastComputedIdx ?? 0;
-  let baseSet = chapterCache?.lastComputedSet instanceof Set ? chapterCache.lastComputedSet : null;
-
-  if (!baseSet) {
-    const entries = Array.from(chapterCache.eventSets.entries());
-    if (entries.length) {
-      entries.sort((a, b) => a[0] - b[0]);
-      const [latestIdx, latestSet] = entries[entries.length - 1];
-      lastComputedIdx = latestIdx;
-      baseSet = latestSet;
-    } else {
-      baseSet = new Set();
-    }
-  }
-
-  for (const event of sortedEvents) {
-    if (event.idx <= lastComputedIdx) {
-      continue;
-    }
-    if (event.idx > eventNum) {
-      break;
-    }
-
-    const nextSet = new Set(baseSet);
-    for (const rel of event.relations) {
-      const key = getRelationKeyFromRelation(rel);
-      if (key) {
-        nextSet.add(key);
-      }
-    }
-
-    chapterCache.eventSets.set(event.idx, nextSet);
-    baseSet = nextSet;
-    lastComputedIdx = event.idx;
-  }
-
-  chapterCache.lastComputedIdx = lastComputedIdx;
-  chapterCache.lastComputedSet = baseSet;
-
-  let bestIdx = 0;
-  let bestSet = null;
-  for (const [idx, set] of chapterCache.eventSets) {
-    if (idx <= eventNum && idx >= bestIdx) {
-      bestIdx = idx;
-      bestSet = set;
-    }
-  }
-
-  if (!bestSet) {
-    return new Set();
-  }
-
-  return hasTargetKeys ? filterWithTargetKeys(bestSet, targetKeys) : bestSet;
-}
-
-export async function filterRelationsByTimeline({
-  relations,
-  mode,
-  bookId,
-  folderKey,
-  chapterNum,
-  eventNum,
-  cacheRef,
-  eventUtils,
-  getCachedChapterEvents,
-  getGraphEventState,
-  getEventDataByIndex,
-  getRelationKeyFromRelation
-}) {
-  if (!Array.isArray(relations) || relations.length === 0) {
-    return [];
-  }
-
-  if (!Number.isFinite(chapterNum) || chapterNum < 1 || !Number.isFinite(eventNum) || eventNum < 1) {
-    return relations;
-  }
-
-  const targetKeys = new Set();
-  for (const rel of relations) {
-    const key = getRelationKeyFromRelation(rel);
-    if (key) {
-      targetKeys.add(key);
-    }
-  }
-
-  if (targetKeys.size === 0) {
-    return relations;
-  }
-
-  try {
-    let seenKeys = null;
-    if (mode === "api") {
-      if (!bookId) {
-        return relations;
-      }
-      seenKeys = await collectApiRelationKeys(bookId, chapterNum, eventNum, targetKeys, cacheRef, eventUtils, getCachedChapterEvents, getGraphEventState, getRelationKeyFromRelation);
-    } else if (mode === "local") {
-      if (!folderKey) {
-        return relations;
-      }
-      seenKeys = collectLocalRelationKeys(folderKey, chapterNum, eventNum, targetKeys, getEventDataByIndex, getRelationKeyFromRelation);
-    } else {
-      return relations;
-    }
-
-    if (!(seenKeys instanceof Set)) {
-      return relations;
-    }
-
-    return relations.filter((rel) => {
-      const key = getRelationKeyFromRelation(rel);
-      if (!key) {
-        return true;
-      }
-      return seenKeys.has(key);
-    });
-  } catch (error) {
-    return relations;
-  }
 }

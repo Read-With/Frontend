@@ -4,7 +4,7 @@ import { Book, BookOpen, CheckCircle2, Plus, Library, Heart, AlertCircle, Grid3X
 import Header from '../components/common/Header';
 import BookLibrary from '../components/library/BookLibrary';
 import FileUpload from '../components/library/FileUpload';
-import { useBooks } from '../hooks/books/useBooks';
+import { useBooks } from '../hooks/books/bookHooks';
 import useAuth from '../hooks/auth/useAuth';
 import './MyPage.css';
 
@@ -100,7 +100,7 @@ export default function MyPage() {
     const validReading = Math.min(reading, total);
     
     // 즐겨찾기된 책 개수
-    const favorites = books?.filter(book => book.favorite).length || 0;
+    const favorites = books?.filter(book => book.isFavorite).length || 0;
     
     return {
       total,
@@ -115,7 +115,7 @@ export default function MyPage() {
 
     // 탭 필터링
     if (activeTab === 'favorites') {
-      filtered = filtered.filter(b => b.favorite);
+      filtered = filtered.filter(b => b.isFavorite);
     }
 
     // 검색 필터링

@@ -1,0 +1,442 @@
+/** 그래프 노드 검색·필터·페이드 */
+
+import { clearHighlightClassesOn } from './graphUtils';
+import { isGraphEdgeElement, isGraphNodeElement, uniqueStrings } from './graphUtils';
+
+const buildChapterCharacterIdSet = (currentChapterData) => {
+  if (!currentChapterData?.characters?.length) return null;
+  return new Set(currentChapterData.characters.map(char => String(char.id)));
+};
+
+/**
+ * 노드가 검색어와 매칭되는지 확인
+ */
+export function nodeMatchesQuery(node, searchLower) {
+  if (!node?.data || typeof searchLower !== 'string') {
+    console.warn('nodeMatchesQuery: 유효하지 않은 매개변수입니다', { 
+      node: !!node, 
+      hasData: !!node?.data, 
+      searchLower, 
+      type: typeof searchLower 
+    });
+    return false;
+  }
+  
+  try {
+    const label = String(node.data.label || '').toLowerCase();
+    const names = Array.isArray(node.data.names) ? node.data.names : [];
+    const commonName = String(node.data.common_name || '').toLowerCase();
+    
+    return (
+      label.includes(searchLower) ||
+      names.some(name => String(name).toLowerCase().includes(searchLower)) ||
+      commonName.includes(searchLower)
+    );
+  } catch (error) {
+    console.error('nodeMatchesQuery 실패:', error, { node, searchLower });
+    return false;
+  }
+}
+
+/**
+ * 입력된 검색어와 관련된 노드(인물 등)를 찾아 최대 8개 추천 리스트 생성
+ * @param {Array} elements - 그래프 요소 배열
+ * @param {string} query - 검색어
+ * @param {Object} [currentChapterData=null] - 현재 챕터 데이터
+ * @returns {Array} 추천 리스트
+ */
+export function buildSuggestions(elements, query, currentChapterData = null) {
+  if (!Array.isArray(elements)) {
+    console.warn('buildSuggestions: 유효하지 않은 elements 배열입니다', { 
+      elements, 
+      type: typeof elements 
+    });
+    return [];
+  }
+  
+  const trimmed = String(query || '').trim();
+  if (trimmed.length < 2) {
+    return [];
+  }
+  
+  try {
+    const searchLower = trimmed.toLowerCase();
+    const characterNodes = elements.filter(isGraphNodeElement);
+    
+    // 현재 챕터의 캐릭터 데이터가 있는 경우, 해당 챕터에 존재하는 인물만 필터링
+    let filteredNodes = characterNodes;
+    const chapterCharacterIds = buildChapterCharacterIdSet(currentChapterData);
+    if (chapterCharacterIds) {
+      filteredNodes = characterNodes.filter(node => {
+        const nodeId = node?.data?.id;
+        if (nodeId === undefined || nodeId === null) return false;
+        return chapterCharacterIds.has(String(nodeId));
+      });
+    }
+
+    const matches = filteredNodes
+    .filter(node => nodeMatchesQuery(node, searchLower))
+    .map(node => {
+      const label = node.data.label?.toLowerCase() || '';
+      const names = node.data.names || [];
+      const commonName = node.data.common_name?.toLowerCase() || '';
+      let matchType = 'none';
+      if (label.includes(searchLower)) matchType = 'label';
+      else if (names.some(name => String(name).toLowerCase().includes(searchLower))) matchType = 'names';
+      else if (commonName.includes(searchLower)) matchType = 'common_name';
+      
+      // names 배열에서 중복 제거 (대소문자 구분 없이)
+      const uniqueNames = uniqueStrings(names, { caseInsensitive: true });
+      
+      return {
+        id: node.data.id,
+        label: node.data.label,
+        names: uniqueNames,
+        common_name: node.data.common_name,
+        matchType
+      };
+    })
+    // 중복 제거: id 기준으로 중복된 인물 제거
+    .reduce((acc, current) => {
+      const existingIndex = acc.findIndex(item => 
+        item.id === current.id
+      );
+      if (existingIndex === -1) {
+        acc.push(current);
+      } else {
+        // 이미 존재하는 인물의 경우, names 배열을 병합하고 중복 제거
+        const existing = acc[existingIndex];
+        existing.names = uniqueStrings(
+          [...(existing.names || []), ...(current.names || [])],
+          { caseInsensitive: true }
+        );
+      }
+      return acc;
+    }, [])
+    .slice(0, 8);
+    return matches;
+  } catch (error) {
+    console.error('buildSuggestions 실패:', error, { 
+      elementsLength: elements?.length, 
+      query, 
+      hasChapterData: !!currentChapterData 
+    });
+    return [];
+  }
+}
+
+/**
+ * 제안 목록에서 검색어와 대소문자 무시 완전 일치 항목
+ * @param {Array} suggestions
+ * @param {string} trimmedTerm 공백 제거된 검색어
+ */
+export function findExactSuggestionMatch(suggestions, trimmedTerm) {
+  if (!Array.isArray(suggestions) || !trimmedTerm) return undefined;
+  const t = trimmedTerm.toLowerCase();
+  return suggestions.find(
+    (suggestion) =>
+      suggestion.label?.toLowerCase() === t ||
+      suggestion.common_name?.toLowerCase() === t ||
+      suggestion.names?.some((name) => String(name).toLowerCase() === t),
+  );
+}
+
+/**
+ * 그래프 요소 필터링 및 연결 관계 처리
+ * @param {Array} elements - 그래프 요소 배열
+ * @param {string} searchTerm - 검색어
+ * @param {Object} [currentChapterData=null] - 현재 챕터 데이터
+ * @returns {Array} 필터링된 요소 배열
+ */
+export function filterGraphElements(elements, searchTerm, currentChapterData = null) {
+  if (!Array.isArray(elements)) {
+    console.warn('filterGraphElements: 유효하지 않은 elements 배열입니다', { 
+      elements, 
+      type: typeof elements 
+    });
+    return [];
+  }
+  
+  if (!searchTerm || typeof searchTerm !== 'string' || searchTerm.trim().length < 2) {
+    return elements;
+  }
+  
+  try {
+    const searchLower = searchTerm.toLowerCase();
+    
+    // 현재 챕터의 캐릭터 데이터가 있는 경우, 해당 챕터에 존재하는 인물만 필터링
+    const chapterCharacterIds = buildChapterCharacterIdSet(currentChapterData);
+    let candidateNodes;
+    if (chapterCharacterIds) {
+      candidateNodes = elements.filter(el => {
+        if (isGraphEdgeElement(el)) return false;
+        if (!nodeMatchesQuery(el, searchLower)) return false;
+        const nodeId = el?.data?.id;
+        if (nodeId === undefined || nodeId === null) return false;
+        return chapterCharacterIds.has(String(nodeId));
+      });
+    } else {
+      // 챕터 데이터가 없는 경우 기존 로직 사용
+      candidateNodes = elements.filter(el => isGraphNodeElement(el) && nodeMatchesQuery(el, searchLower));
+    }
+    
+    // 정확히 일치하는 인물을 우선적으로 찾기
+    let matchingNode = candidateNodes.find(node => {
+      const label = node.data.label?.toLowerCase() || '';
+      const commonName = node.data.common_name?.toLowerCase() || '';
+      const names = node.data.names || [];
+      
+      return label === searchLower || 
+             commonName === searchLower || 
+             names.some(name => String(name).toLowerCase() === searchLower);
+    });
+    
+    // 완전 일치가 없으면 첫 번째 매칭 선택
+    if (!matchingNode && candidateNodes.length > 0) {
+      matchingNode = candidateNodes[0];
+    }
+  
+  // 매칭된 인물이 없으면 빈 결과 반환
+  if (!matchingNode) {
+    return [];
+  }
+  
+  const matchingNodeId = matchingNode.data.id;
+  
+  // 선택된 인물과 연결된 모든 간선 찾기
+  const connectedEdges = elements.filter(el => 
+    isGraphEdgeElement(el) && 
+    (el.data.source === matchingNodeId || el.data.target === matchingNodeId)
+  );
+  
+  // 연결된 간선의 source와 target 노드들도 포함
+  const connectedNodeIds = new Set([matchingNodeId]);
+  connectedEdges.forEach(edge => {
+    connectedNodeIds.add(edge.data.source);
+    connectedNodeIds.add(edge.data.target);
+  });
+  
+  // 검색된 노드와 연결된 모든 노드들 추가
+  const allConnectedNodes = elements.filter(el => 
+    isGraphNodeElement(el) && 
+    connectedNodeIds.has(el.data.id)
+  );
+
+  const uniqueNodes = new Map();
+  allConnectedNodes.forEach(node => {
+    if (node?.data?.id !== undefined) {
+      uniqueNodes.set(String(node.data.id), node);
+    }
+  });
+  if (matchingNode?.data?.id !== undefined) {
+    uniqueNodes.set(String(matchingNode.data.id), matchingNode);
+  }
+
+  const uniqueEdges = new Map();
+  connectedEdges.forEach(edge => {
+    if (edge?.data?.id !== undefined) {
+      uniqueEdges.set(String(edge.data.id), edge);
+    } else {
+      uniqueEdges.set(`${edge.data.source}->${edge.data.target}`, edge);
+    }
+  });
+  
+    return [...uniqueNodes.values(), ...uniqueEdges.values()];
+  } catch (error) {
+    console.error('filterGraphElements 실패:', error, { 
+      elementsLength: elements?.length, 
+      searchTerm, 
+      hasChapterData: !!currentChapterData 
+    });
+    return [];
+  }
+}
+
+/**
+ * 검색된 요소들의 ID 집합을 생성
+ * @param {Array} filteredElements - 검색 결과 요소들
+ * @returns {Set} 검색된 요소들의 ID 집합
+ */
+export function createFilteredElementIds(filteredElements) {
+  if (!Array.isArray(filteredElements) || filteredElements.length === 0) {
+    return { nodeIds: new Set(), edgeIds: new Set() };
+  }
+  
+  try {
+    const nodeIds = new Set();
+    const edgeIds = new Set();
+    
+    filteredElements.forEach(element => {
+      if (!element?.data) {
+        console.warn('createFilteredElementIds: 유효하지 않은 요소입니다', { element });
+        return;
+      }
+      
+      if (isGraphEdgeElement(element)) {
+        // 간선인 경우
+        if (element.data.source != null) nodeIds.add(String(element.data.source));
+        if (element.data.target != null) nodeIds.add(String(element.data.target));
+        if (element.data.id != null) edgeIds.add(String(element.data.id));
+      } else {
+        // 노드인 경우
+        if (element.data.id != null) nodeIds.add(String(element.data.id));
+      }
+    });
+    
+    return { nodeIds, edgeIds };
+  } catch (error) {
+    console.error('createFilteredElementIds 실패:', error, { 
+      filteredElementsLength: filteredElements?.length 
+    });
+    return { nodeIds: new Set(), edgeIds: new Set() };
+  }
+}
+
+/**
+ * 검색 상태에 따라 그래프 요소들에 페이드 효과 적용
+ * @param {Object} cy - Cytoscape 인스턴스
+ * @param {Array} filteredElements - 검색 결과 요소들
+ * @param {boolean} isSearchActive - 검색 활성 상태
+ * @param {Object} options - 페이드 효과 옵션
+ * @param {number} options.fadeOpacity - 페이드 아웃 투명도 (기본: 0.05)
+ * @param {number} options.textFadeOpacity - 텍스트 페이드 아웃 투명도 (기본: 0.02)
+ * @param {boolean} options.enableLogging - 로깅 활성화 (기본: true)
+ * @returns {Object} 페이드 효과 적용 결과 통계 및 cleanup 함수
+ */
+export function applySearchFadeEffect(cy, filteredElements, isSearchActive, options = {}) {
+  if (!cy || typeof cy.elements !== 'function') {
+    console.warn('applySearchFadeEffect: 유효하지 않은 Cytoscape 인스턴스입니다', { cy });
+    return {
+      fadedNodes: 0,
+      visibleNodes: 0,
+      fadedEdges: 0,
+      visibleEdges: 0,
+      cleanup: () => {}
+    };
+  }
+  
+  try {
+    const { fadeOpacity: _fadeOpacity, textFadeOpacity: _textFadeOpacity } = options;
+
+    // 검색이 비활성화된 경우 모든 페이드 효과 제거
+    if (!isSearchActive) {
+      clearHighlightClassesOn(cy);
+      return {
+        fadedNodes: 0,
+        visibleNodes: cy.nodes().length,
+        fadedEdges: 0,
+        visibleEdges: cy.edges().length,
+        cleanup: () => {}
+      };
+    }
+
+    // 검색이 활성화되었지만 결과가 없는 경우
+    if (!filteredElements || filteredElements.length === 0) {
+      const result = {
+        fadedNodes: 0,
+        visibleNodes: 0,
+        fadedEdges: 0,
+        visibleEdges: 0,
+        cleanup: () => {}
+      };
+      
+      return result;
+    }
+
+    // 검색 결과에 포함된 요소들의 ID 집합 생성
+    const { nodeIds: filteredNodeIds, edgeIds: filteredEdgeIds } = createFilteredElementIds(filteredElements);
+
+    let fadedNodeCount = 0;
+    let visibleNodeCount = 0;
+    let fadedEdgeCount = 0;
+    let visibleEdgeCount = 0;
+
+    cy.batch(() => {
+      // 검색 결과에 포함되지 않은 모든 노드들을 페이드 아웃
+      cy.nodes().forEach(node => {
+        if (!filteredNodeIds.has(String(node.id()))) {
+          node.addClass("faded");
+          fadedNodeCount++;
+        } else {
+          node.removeClass("faded");
+          visibleNodeCount++;
+        }
+      });
+
+      cy.edges().forEach(edge => {
+        if (!filteredEdgeIds.has(String(edge.id()))) {
+          edge.addClass("faded");
+          fadedEdgeCount++;
+        } else {
+          edge.removeClass("faded");
+          visibleEdgeCount++;
+        }
+      });
+    });
+
+    const result = {
+      fadedNodes: fadedNodeCount,
+      visibleNodes: visibleNodeCount,
+      fadedEdges: fadedEdgeCount,
+      visibleEdges: visibleEdgeCount,
+      cleanup: () => { clearHighlightClassesOn(cy); }
+    };
+    return result;
+  } catch (error) {
+    console.error('applySearchFadeEffect 실패:', error, { 
+      isSearchActive, 
+      filteredElementsLength: filteredElements?.length 
+    });
+    return {
+      fadedNodes: 0,
+      visibleNodes: 0,
+      fadedEdges: 0,
+      visibleEdges: 0,
+      cleanup: () => {}
+    };
+  }
+}
+
+/**
+ * 통일된 검색 결과 없음 조건 확인
+ * @param {boolean} isSearchActive - 검색 활성 상태
+ * @param {string} searchTerm - 검색어
+ * @param {Array} fitNodeIds - 검색된 노드 ID 배열
+ * @param {Array} suggestions - 검색 제안 배열
+ * @returns {boolean} 검색 결과 없음 여부
+ */
+export function shouldShowNoSearchResults(isSearchActive, searchTerm, fitNodeIds = [], suggestions = []) {
+  if (typeof isSearchActive !== 'boolean') {
+    console.warn('shouldShowNoSearchResults: isSearchActive이 boolean이 아닙니다', { isSearchActive });
+    return false;
+  }
+  
+  if (!searchTerm || typeof searchTerm !== 'string') {
+    return false;
+  }
+  
+  return isSearchActive && 
+         searchTerm.trim().length > 0 &&
+         (!fitNodeIds || fitNodeIds.length === 0) &&
+         (!suggestions || suggestions.length === 0);
+}
+
+/**
+ * 검색 결과 없음 메시지 생성
+ * @param {string} searchTerm - 검색어
+ * @returns {Object} 메시지 객체
+ */
+export function getNoSearchResultsMessage(searchTerm) {
+  if (!searchTerm || typeof searchTerm !== 'string') {
+    console.warn('getNoSearchResultsMessage: 유효하지 않은 검색어입니다', { searchTerm, type: typeof searchTerm });
+    return {
+      title: "검색 결과가 없습니다",
+      description: "검색어를 입력해주세요."
+    };
+  }
+  
+  return {
+    title: "검색 결과가 없습니다",
+    description: `"${searchTerm}"와 일치하는 인물을 찾을 수 없습니다.`
+  };
+}
