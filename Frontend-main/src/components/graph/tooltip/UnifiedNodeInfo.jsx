@@ -1,15 +1,20 @@
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { useParams } from "react-router-dom";
-import { processRelations, processRelationTags } from "../../../utils/graph/relationUtils.js";
+import {
+  processRelations,
+  processRelationTags,
+  safeNum,
+  extractRadarChartData,
+  getPositivityColor,
+  getPositivityLabel,
+  getConnectionStatus,
+} from "../../../utils/graph/relationUtils.js";
 import { getFolderKeyFromFilename, getEventDataByIndex, getDetectedMaxChapter } from "../../../utils/graph/graphData.js";
-import { useTooltipPosition } from "../../../hooks/ui/useTooltipPosition.js";
-import { useClickOutside } from "../../../hooks/ui/useClickOutside.js";
+import { useTooltipPosition, useClickOutside } from "../../../hooks/ui/tooltipHooks";
 import { useRelationData } from "../../../hooks/graph/useRelationData.jsx";
-import { safeNum } from "../../../utils/graph/relationUtils.js";
-import { mergeRefs } from "../../../utils/styles/animations.js";
-import { getUnifiedEventInfoForNodeTooltip } from "../../../utils/viewer/eventDisplayUtils.js";
+import { mergeRefs } from "../../../utils/styles/styles";
+import { getUnifiedEventInfoForNodeTooltip } from "../../../utils/viewer/viewerEventUtils";
 import { COLORS, createButtonStyle, ANIMATION_VALUES, unifiedNodeTooltipStyles, unifiedNodeAnimations } from "../../../utils/styles/styles.js";
-import { extractRadarChartData, getPositivityColor, getPositivityLabel, getConnectionStatus } from "../../../utils/graph/radarChartUtils.js";
 import { Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, ResponsiveContainer } from 'recharts';
 import "../RelationGraph.css";
 import "./UnifiedNodeInfo.css";

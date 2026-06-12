@@ -1,5 +1,8 @@
-import { authenticatedRequest } from './authApi';
-import { toOneBasedChapterIndexOrNull } from '../common/numberUtils';
+/** v2 books·북마크 API */
+
+import { authenticatedRequest, makeSilentError, isForbiddenError, isNotFoundError } from './authApi';
+import { toLocator, locatorsEqual } from '../common/locatorUtils';
+import { toOneBasedChapterIndexOrNull, toPositiveNumberOrNull } from '../common/numberUtils';
 import { sanitizeAssetUrl } from '../common/artifactUrlUtils';
 
 const BOOK_LIST_SORT_VALUES = new Set(['updatedAt', 'title']);
@@ -27,7 +30,7 @@ const normalizeBookCore = (book) => {
   };
 };
 
-/** GET /api/v2/books, /api/v2/books/{bookId} — 목록·상세 도서 메타 */
+/** v2 books 응답 정규화 (목록·상세) */
 export const normalizeV2Book = (book) => {
   if (!book || typeof book !== 'object') return book;
   return {
@@ -38,7 +41,7 @@ export const normalizeV2Book = (book) => {
   };
 };
 
-/** GET /api/v2/books/{bookId}/manifest — result.book */
+/** manifest result.book 정규화 */
 export const normalizeManifestBook = (book) => {
   if (!book || typeof book !== 'object') return book;
   return {
@@ -48,8 +51,6 @@ export const normalizeManifestBook = (book) => {
       book.summaryUrl != null ? sanitizeAssetUrl(String(book.summaryUrl)) : undefined,
   };
 };
-
-const toSilentError = (code, message) => ({ isSuccess: false, code, message, result: null });
 
 const buildBooksQueryString = (params = {}) => {
   const queryParams = new URLSearchParams();
@@ -65,7 +66,6 @@ const buildBooksQueryString = (params = {}) => {
   return queryParams.toString();
 };
 
-/** GET /api/v2/books — 정규화 완료(노출 가능) 도서 목록 */
 export const getBooks = async (params = {}) => {
   const queryString = buildBooksQueryString(params);
   const data = await authenticatedRequest(`/v2/books${queryString ? `?${queryString}` : ''}`);
@@ -75,11 +75,10 @@ export const getBooks = async (params = {}) => {
   return data;
 };
 
-/** GET /api/v2/books/{bookId} — 정규화 완료(노출 가능) 도서 상세 */
 export const getBook = async (bookId) => {
-  const normalizedBookId = toOneBasedChapterIndexOrNull(bookId);
+  const normalizedBookId = toPositiveNumberOrNull(bookId);
   if (!normalizedBookId) {
-    return toSilentError('INVALID_INPUT', 'bookId는 1 이상의 정수여야 합니다.');
+    return makeSilentError('INVALID_INPUT', 'bookId는 1 이상의 정수여야 합니다.');
   }
 
   try {
@@ -89,15 +88,14 @@ export const getBook = async (bookId) => {
     }
     return data;
   } catch (error) {
-    if (error.status === 404) {
-      return toSilentError('NOT_FOUND', '도서를 찾을 수 없거나 아직 노출 가능한 상태가 아닙니다.');
+    if (isNotFoundError(error)) {
+      return makeSilentError('NOT_FOUND', '도서를 찾을 수 없거나 아직 노출 가능한 상태가 아닙니다.');
     }
-    if (error.status === 403) return toSilentError('FORBIDDEN', '접근 권한이 없습니다');
+    if (isForbiddenError(error)) return makeSilentError('FORBIDDEN', '접근 권한이 없습니다');
     throw error;
   }
 };
 
-/** POST /api/v2/books — EPUB 업로드 */
 export const uploadBook = async (file, metadata = {}) => {
   const formData = new FormData();
   formData.append('file', file);
@@ -118,8 +116,7 @@ export const uploadBook = async (file, metadata = {}) => {
 export const toggleBookFavorite = async (bookId, favorite) => {
   try {
     const method = favorite ? 'POST' : 'DELETE';
-    const data = await authenticatedRequest(`/v2/favorites/${bookId}`, { method });
-    return data;
+    return await authenticatedRequest(`/v2/favorites/${bookId}`, { method });
   } catch (error) {
     console.error('도서 즐겨찾기 토글 실패:', error);
     throw error;
@@ -128,7 +125,7 @@ export const toggleBookFavorite = async (bookId, favorite) => {
 
 export const getChapterPovSummaries = async (bookId, chapterIdx) => {
   try {
-    const normalizedBookId = toOneBasedChapterIndexOrNull(bookId);
+    const normalizedBookId = toPositiveNumberOrNull(bookId);
     const normalizedChapterIdx = toOneBasedChapterIndexOrNull(chapterIdx);
     if (!normalizedBookId) {
       throw new Error('bookId는 1 이상의 정수여야 합니다.');
@@ -136,12 +133,123 @@ export const getChapterPovSummaries = async (bookId, chapterIdx) => {
     if (!normalizedChapterIdx) {
       throw new Error('chapterIdx는 1 이상의 정수여야 합니다.');
     }
-    const data = await authenticatedRequest(
+    return await authenticatedRequest(
       `/v2/books/${normalizedBookId}/chapters/${normalizedChapterIdx}/pov-summaries`
     );
-    return data;
   } catch (error) {
     console.error('챕터 시점 요약 조회 실패:', error);
+    throw error;
+  }
+};
+
+const normalizeBookmarkDto = (b) => {
+  if (!b || typeof b !== 'object') return b;
+  return {
+    ...b,
+    rangeBookmark: !!(b.isRangeBookmark ?? b.rangeBookmark),
+  };
+};
+
+const BOOKMARK_SORT = new Set(['time_desc', 'time_asc']);
+
+export const getBookmarks = async (bookId, sort = 'time_desc') => {
+  const normalizedBookId = toPositiveNumberOrNull(bookId);
+  if (normalizedBookId == null) {
+    throw new Error('유효한 bookId는 필수입니다.');
+  }
+  try {
+    const queryParams = new URLSearchParams();
+    queryParams.append('bookId', String(normalizedBookId));
+    const sortParam = BOOKMARK_SORT.has(sort) ? sort : 'time_desc';
+    queryParams.append('sort', sortParam);
+    const data = await authenticatedRequest(`/v2/bookmarks?${queryParams.toString()}`);
+    if (data?.isSuccess && Array.isArray(data.result)) {
+      data.result = data.result.map(normalizeBookmarkDto);
+    }
+    return data;
+  } catch (error) {
+    console.error('북마크 목록 조회 실패:', error);
+    throw error;
+  }
+};
+
+const buildPatchBody = (updateData) => {
+  const body = {};
+  if (updateData?.color !== undefined) body.color = updateData.color;
+  if (updateData?.memo !== undefined) body.memo = updateData.memo;
+  return body;
+};
+
+export const createBookmark = async (bookmarkData) => {
+  if (!bookmarkData || typeof bookmarkData !== 'object') {
+    throw new Error('bookmarkData는 필수입니다.');
+  }
+  const normalizedBookId = toPositiveNumberOrNull(bookmarkData.bookId);
+  if (normalizedBookId == null) {
+    throw new Error('유효한 bookId는 필수입니다.');
+  }
+  const startLocator = toLocator(bookmarkData.startLocator);
+  if (!startLocator) {
+    throw new Error('startLocator는 필수입니다.');
+  }
+  try {
+    const endLocator = toLocator(bookmarkData.endLocator);
+    const dataToSend = {
+      bookId: normalizedBookId,
+      startLocator,
+      color: bookmarkData.color ?? '#28B532',
+      memo: bookmarkData.memo ?? '',
+    };
+    if (endLocator && !locatorsEqual(startLocator, endLocator)) {
+      dataToSend.endLocator = endLocator;
+    }
+    const data = await authenticatedRequest('/v2/bookmarks', {
+      method: 'POST',
+      body: JSON.stringify(dataToSend),
+    });
+    if (data?.isSuccess && data.result) {
+      data.result = normalizeBookmarkDto(data.result);
+    }
+    return data;
+  } catch (error) {
+    console.error('북마크 생성 실패:', error);
+    throw error;
+  }
+};
+
+export const updateBookmark = async (bookmarkId, updateData) => {
+  if (bookmarkId == null || bookmarkId === '') {
+    throw new Error('bookmarkId는 필수입니다.');
+  }
+  const body = buildPatchBody(updateData);
+  if (Object.keys(body).length === 0) {
+    throw new Error('수정할 color 또는 memo가 필요합니다.');
+  }
+  try {
+    const data = await authenticatedRequest(`/v2/bookmarks/${bookmarkId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+    });
+    if (data?.isSuccess && data.result) {
+      data.result = normalizeBookmarkDto(data.result);
+    }
+    return data;
+  } catch (error) {
+    console.error('북마크 수정 실패:', error);
+    throw error;
+  }
+};
+
+export const deleteBookmark = async (bookmarkId) => {
+  if (bookmarkId == null || bookmarkId === '') {
+    throw new Error('bookmarkId는 필수입니다.');
+  }
+  try {
+    return await authenticatedRequest(`/v2/bookmarks/${bookmarkId}`, {
+      method: 'DELETE',
+    });
+  } catch (error) {
+    console.error('북마크 삭제 실패:', error);
     throw error;
   }
 };

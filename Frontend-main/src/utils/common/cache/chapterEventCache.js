@@ -1,4 +1,4 @@
-import { sortEventsByIdx } from '../../graph/eventUtils';
+import { sortEventsByIdx } from '../../graph/graphData';
 import { buildNodeWeights, extractCharacterId } from '../../graph/characterUtils';
 import { getFineGraph, getBookManifest } from '../../api/api';
 import {
@@ -8,7 +8,7 @@ import {
 } from './manifestCache';
 import { createCharacterMaps } from '../../graph/characterUtils';
 import { convertRelationsToElements, calcGraphDiff } from '../../graph/graphDataUtils';
-import { normalizeElementId } from '../../graph/graphNormalizeUtils';
+import { normalizeElementId } from '../../graph/graphUtils';
 import { 
   registerCache, 
   getCacheItem, 
@@ -17,17 +17,14 @@ import {
   saveToStorage,
   removeFromStorage,
   getRawFromStorage,
-  getStorage
 } from './cacheManager';
 import { eventUtils, resolveFineGraphEventOrdinal } from '../../viewer/viewerUtils';
 import { resolveProgressLocator, toLocator } from '../locatorUtils';
-import { toNumberOrNull } from '../numberUtils';
+import { toNumberOrNull, toPositiveNumberOrNull } from '../numberUtils';
+import { toTrimmedStringOrNull } from '../stringUtils';
 
-/**
- * 뷰어·내장 분할 그래프(단독 그래프 페이지 제외)의 챕터 그래프 캐시 출처.
- * 행·이벤트 메타는 GET /api/v2/graph/fine 의 result(characters, relations, event)를 집계한 것과 동일 스키마다.
- */
-export const CHAPTER_GRAPH_CACHE_SOURCE = Object.freeze({
+/** 챕터 그래프 캐시 출처 (fine graph result 집계와 동일 스키마) */
+const CHAPTER_GRAPH_CACHE_SOURCE = Object.freeze({
   API: 'api',
   EMPTY: 'empty',
   INVALID: 'invalid',
@@ -46,13 +43,8 @@ registerCache('graphBookCache', graphBookMemoryCache, {
 });
 const graphBuildPromises = new Map();
 
-const toPositiveNumber = (value) => {
-  const numeric = Number(value);
-  return Number.isFinite(numeric) && numeric > 0 ? numeric : null;
-};
-
 const getGraphBookCacheKey = (bookId) => {
-  const numeric = toPositiveNumber(bookId);
+  const numeric = toPositiveNumberOrNull(bookId);
   if (numeric === null) return null;
   return `${GRAPH_BOOK_CACHE_PREFIX}${numeric}`;
 };
@@ -98,16 +90,8 @@ const writeGraphBookCache = (bookId, payload) => {
 
 export const getGraphBookCache = (bookId) => readGraphBookCache(bookId);
 
-export const hasGraphBookCache = (bookId) => {
-  const key = getGraphBookCacheKey(bookId);
-  if (!key) return false;
-  const cached = getCacheItem('graphBookCache', key);
-  if (cached) return true;
-  return getRawFromStorage(key, 'localStorage') !== null;
-};
-
 export const isGraphBookCacheBuilding = (bookId) => {
-  const numericId = toPositiveNumber(bookId);
+  const numericId = toPositiveNumberOrNull(bookId);
   if (numericId === null) {
     return false;
   }
@@ -118,7 +102,7 @@ export const ensureGraphBookCache = async (
   bookId,
   { forceRefresh = false, signal } = {}
 ) => {
-  const numericId = toPositiveNumber(bookId);
+  const numericId = toPositiveNumberOrNull(bookId);
   if (numericId === null) {
     return null;
   }
@@ -194,7 +178,7 @@ export const ensureGraphBookCache = async (
   }
 };
 
-/** 특정 eventIdx 시점의 누적 그래프 상태(fine API 기반 캐시에서 복원). */
+/** eventIdx 시점 누적 그래프 상태 복원 */
 export const getGraphEventState = (bookId, chapterIdx, eventIdx) => {
   const chapterPayload = getCachedChapterEvents(bookId, chapterIdx);
   if (!chapterPayload) {
@@ -203,14 +187,8 @@ export const getGraphEventState = (bookId, chapterIdx, eventIdx) => {
   return reconstructChapterGraphState(chapterPayload, eventIdx);
 };
 
-const sanitizeBookKey = (bookKey) => {
-  if (bookKey === null || bookKey === undefined) return null;
-  const normalized = String(bookKey).trim();
-  return normalized.length > 0 ? normalized : null;
-};
-
 const getReaderProgressCacheKey = (bookKey) => {
-  const sanitized = sanitizeBookKey(bookKey);
+  const sanitized = toTrimmedStringOrNull(bookKey);
   if (!sanitized) return null;
   return `${READER_PROGRESS_CACHE_PREFIX}${sanitized}`;
 };
@@ -359,7 +337,7 @@ const applyElementDiff = (prevElements, diff) => {
   return result;
 };
 
-/** GET /api/v2/graph/fine 응답(result) 한 건을 챕터 캐시에 넣을 이벤트 행으로 정규화한다. */
+/** fine graph 응답 한 건 → 챕터 캐시 이벤트 행 */
 const normalizeEventFromFineGraphResponse = (
   bookId,
   chapterIdx,
@@ -508,7 +486,6 @@ const buildChapterCachePayload = (
         eventIdx: Number(event.eventIdx) || 1,
         elements: currentElements,
         characters: currentCharacters,
-        /** GET /api/v2/graph/fine result.event 스냅샷(정규화·idx 보강 포함) */
         eventMeta: event?.event ? deepClone(event.event) : null
       };
     } else {
@@ -524,7 +501,6 @@ const buildChapterCachePayload = (
 
       diffs.push({
         eventIdx: Number(event.eventIdx) || (baseSnapshot?.eventIdx ?? 1),
-        /** fine API result.event */
         eventMeta: event?.event ? deepClone(event.event) : null,
         elementDiff,
         characterDiff
@@ -571,57 +547,6 @@ const buildChapterCachePayload = (
     timestamp,
     source
   };
-};
-
-/**
- * 매니페스트 챕터의 이벤트 메타만 정규화한다.
- * 뷰어 그래프 본문은 fine API 전용이며, 이 배열로 그래프를 채우지 않는다.
- */
-export const normalizeManifestEvents = (bookId, chapterIdx, manifestChapter) => {
-  if (!manifestChapter?.events?.length) {
-    return [];
-  }
-
-  return manifestChapter.events
-    .map((rawEvent) => {
-      if (!rawEvent) return null;
-
-      const eventIdx = toNumberOrNull(rawEvent.idx);
-      if (eventIdx == null || eventIdx < 1) {
-        return null;
-      }
-
-      const startTxtOffset = toNumberOrNull(rawEvent.startTxtOffset);
-      const endTxtOffset = toNumberOrNull(rawEvent.endTxtOffset);
-
-      const characters = Array.isArray(rawEvent.characters)
-        ? rawEvent.characters.map((character) => deepClone(character))
-        : [];
-      const relations = Array.isArray(rawEvent.relations)
-        ? rawEvent.relations.map((relation) => deepClone(relation))
-        : [];
-
-      return {
-        bookId,
-        chapterIdx,
-        eventIdx,
-        eventNum: eventIdx,
-        characters,
-        relations,
-        event: {
-          ...deepClone(rawEvent),
-          idx: eventIdx,
-          chapterIdx,
-          eventNum: eventIdx,
-          startTxtOffset,
-          endTxtOffset
-        },
-        startTxtOffset,
-        endTxtOffset,
-        eventId: rawEvent.eventId != null ? String(rawEvent.eventId) : null
-      };
-    })
-    .filter(Boolean);
 };
 
 const normalizeReaderProgressPayload = (bookKey, payload) => {
@@ -678,8 +603,8 @@ const normalizeReaderProgressPayload = (bookKey, payload) => {
 };
 
 const getChapterEventCacheKey = (bookId, chapterIdx) => {
-  const bookIdNum = toPositiveNumber(bookId);
-  const chapterIdxNum = toPositiveNumber(chapterIdx);
+  const bookIdNum = toPositiveNumberOrNull(bookId);
+  const chapterIdxNum = toPositiveNumberOrNull(chapterIdx);
   if (bookIdNum === null || chapterIdxNum === null) {
     return null;
   }
@@ -786,7 +711,7 @@ export const setCachedReaderProgress = (bookKey, payload) => {
     const cacheKey = getReaderProgressCacheKey(bookKey);
     if (!cacheKey) return null;
 
-    const normalized = normalizeReaderProgressPayload(sanitizeBookKey(bookKey), payload);
+    const normalized = normalizeReaderProgressPayload(toTrimmedStringOrNull(bookKey), payload);
     if (!normalized) return null;
 
     saveToStorage(cacheKey, normalized, 'localStorage');
@@ -794,19 +719,6 @@ export const setCachedReaderProgress = (bookKey, payload) => {
   } catch (error) {
     console.error('독서 위치 캐시 저장 실패:', error);
     return null;
-  }
-};
-
-export const clearCachedReaderProgress = (bookKey) => {
-  try {
-    const cacheKey = getReaderProgressCacheKey(bookKey);
-    if (!cacheKey) return false;
-
-    removeFromStorage(cacheKey, 'localStorage');
-    return true;
-  } catch (error) {
-    console.error('독서 위치 캐시 삭제 실패:', error);
-    return false;
   }
 };
 
@@ -951,7 +863,7 @@ export const discoverChapterEvents = async (bookId, chapterIdx, forceRefresh = f
   return payload;
 };
 
-/** 누적 그래프 상태 복원. baseSnapshot·diffs 의 eventMeta 는 fine 의 result.event 스냅샷이다. */
+/** baseSnapshot + diffs로 eventIdx 시점 그래프 상태 재구성 */
 export const reconstructChapterGraphState = (cachePayload, targetEventIdx) => {
   if (!cachePayload || typeof cachePayload !== 'object') {
     return null;
@@ -1001,90 +913,7 @@ export const reconstructChapterGraphState = (cachePayload, targetEventIdx) => {
   };
 };
 
-export const getEventData = async (bookId, chapterIdx, eventIdx) => {
-  const cached = getCachedChapterEvents(bookId, chapterIdx);
-  
-  if (cached && cached.events) {
-    const event = cached.events.find(e => e.eventIdx === eventIdx);
-    if (event) {
-      return event;
-    }
-  }
-  
-  try {
-    const response = await getFineGraph(bookId, chapterIdx, eventIdx);
-    
-    if (response?.isSuccess && response?.result) {
-      const { characters, relations, event } = response.result;
-      
-      return {
-        eventIdx,
-        chapterIdx,
-        characters,
-        relations,
-        event,
-        startTxtOffset: event?.startTxtOffset,
-        endTxtOffset: event?.endTxtOffset,
-        eventId: event?.eventId ?? event?.event_id,
-        event_id: event?.event_id
-      };
-    }
-  } catch (error) {
-    console.error('이벤트 데이터 가져오기 실패:', error);
-  }
-  
-  return null;
-};
-
-export const getMaxEventIdx = async (bookId, chapterIdx) => {
-  const cached = getCachedChapterEvents(bookId, chapterIdx);
-  
-  if (cached) {
-    return cached.maxEventIdx;
-  }
-  
-  const result = await discoverChapterEvents(bookId, chapterIdx);
-  return result.maxEventIdx;
-};
-
-export const clearChapterEventCache = (bookId, chapterIdx) => {
-  try {
-    const cacheKey = getChapterEventCacheKey(bookId, chapterIdx);
-    if (!cacheKey) return false;
-    removeFromStorage(cacheKey, 'localStorage');
-    return true;
-  } catch (error) {
-    console.error('챕터 이벤트 캐시 삭제 실패:', error);
-    return false;
-  }
-};
-
-/** bookId 지정 시 해당 책만, 생략 시 전체 챕터 이벤트 캐시 삭제 */
-export const clearAllChapterEventCaches = (bookId) => {
-  try {
-    const storage = getStorage('localStorage');
-    if (!storage) return 0;
-
-    const bookIdNum = bookId !== undefined ? Number(bookId) : null;
-    if (bookId !== undefined && !Number.isFinite(bookIdNum)) return 0;
-
-    let count = 0;
-    Object.keys(storage).forEach(key => {
-      const [a, b] = key.split('-');
-      if (!Number.isFinite(Number(a)) || !Number.isFinite(Number(b))) return;
-      if (bookIdNum !== null && Number(a) !== bookIdNum) return;
-      removeFromStorage(key, 'localStorage');
-      count++;
-    });
-
-    return count;
-  } catch (error) {
-    console.error('챕터 이벤트 캐시 삭제 실패:', error);
-    return 0;
-  }
-};
-
-/** 챕터 캐시에 이미 있는 fine 집계 행만 반환한다(네트워크 호출 없음). */
+/** 캐시된 fine 집계 행만 반환 (네트워크 없음) */
 export const getChapterEventFallbackData = (bookId, chapterIdx, eventIdx) => {
   const chapterCache = getCachedChapterEvents(bookId, chapterIdx);
   if (chapterCache?.events && Array.isArray(chapterCache.events)) {

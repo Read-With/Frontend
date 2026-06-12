@@ -1,16 +1,17 @@
-import {
-  DEFAULT_API_BASE_URL,
-  DEFAULT_APP_ORIGIN,
-  DEFAULT_DEV_PROXY_TARGET,
-} from './appEnvDefaults';
+/** 환경 URL·OAuth·인증 정리 (VITE_* 로 덮어쓰기) */
+
 import { clearAuthTokenStorage } from '../security/authTokenStorage';
+import { trimTrailingSlash } from './stringUtils';
+
+export const DEFAULT_API_BASE_URL = 'https://dev.readwith.cloud';
+export const DEFAULT_APP_ORIGIN = 'https://dev.readwith.cloud';
+export const DEFAULT_DEV_PROXY_TARGET =
+  'http://read-with-dev-env.eba-wuzcb2s6.ap-northeast-2.elasticbeanstalk.com';
 
 const envString = (key) => {
   const value = import.meta.env[key];
   return typeof value === 'string' && value.trim() ? value.trim() : '';
 };
-
-const trimTrailingSlash = (value) => String(value ?? '').replace(/\/$/, '');
 
 export const getApiBaseUrl = () => {
   if (import.meta.env.DEV) {

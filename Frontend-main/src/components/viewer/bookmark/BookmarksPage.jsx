@@ -1,7 +1,6 @@
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
-import { useBookmarks } from '../../../hooks/bookmarks/useBookmarks';
-import { useBookmarkSort } from '../../../hooks/bookmarks/useBookmarkSort';
+import { useBookmarks, useBookmarkSort } from '../../../hooks/bookmarks/bookmarkHooks';
 import {
   bookmarkColors,
   bookmarkBorders,

@@ -17,12 +17,12 @@ import {
   createMouseEventHandlers,
   syncReciprocalPairJunctionOffsets,
   clearHighlightClassesOn,
+  calculateSpiralPlacement,
+  getContainerDimensions,
 } from "../../utils/graph/graphUtils";
-import { calculateSpiralPlacement, getContainerDimensions } from "../../utils/graph/nodePlacementUtils.js";
 import { calculateNodeSize } from "../../utils/styles/graphStyles.js";
 import useGraphInteractions from "../../hooks/graph/useGraphInteractions.js";
-import { useGraphLayout } from "../../hooks/graph/useGraphLayout.js";
-import { useCyInstance } from "../../hooks/graph/useCyInstance.js";
+import { useGraphLayout, useCyInstance } from "../../hooks/graph/useGraphLayout";
 import { eventUtils } from "../../utils/viewer/viewerUtils";
 
 const NO_RESULTS_CONTAINER_STYLE = {

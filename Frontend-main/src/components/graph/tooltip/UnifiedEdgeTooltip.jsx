@@ -9,19 +9,18 @@ import {
   Tooltip as RechartsTooltip,
 } from "recharts";
 import { useParams } from "react-router-dom";
-import { useTooltipPosition } from "../../../hooks/ui/useTooltipPosition";
-import { useClickOutside } from "../../../hooks/ui/useClickOutside";
+import { useTooltipPosition, useClickOutside } from "../../../hooks/ui/tooltipHooks";
 import { useRelationData } from "../../../hooks/graph/useRelationData";
 import { getRelationStyle, tooltipStyles } from "../../../utils/styles/relationStyles";
 import { createButtonStyle, createAdvancedButtonHandlers, COLORS, ANIMATION_VALUES, unifiedNodeTooltipStyles } from "../../../utils/styles/styles";
-import { mergeRefs } from "../../../utils/styles/animations";
+import { mergeRefs } from "../../../utils/styles/styles";
 import { safeNum, processRelationTagsCached } from "../../../utils/graph/relationUtils";
-import { cleanupRelationUtils } from "../../../utils/common/cleanupUtils";
+import { cleanupRelationUtils } from "../../../utils/graph/relationUtils";
 import { getMaxChapter } from "../../../utils/common/cache/manifestCache";
 import {
   getUnifiedEventInfoForEdgeTooltip,
   resolveViewerDisplayEventNum,
-} from "../../../utils/viewer/eventDisplayUtils.js";
+} from "../../../utils/viewer/viewerEventUtils";
 import "../RelationGraph.css";
 
 function UnifiedEdgeTooltip({

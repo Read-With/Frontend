@@ -6,10 +6,10 @@ import XhtmlViewer from "./xhtml/XhtmlViewer";
 import BookmarkPanel from "./bookmark/BookmarkPanel";
 import ViewerSettings from "./ui/ViewerSettings";
 import { useViewerPage } from "../../hooks/viewer/useViewerPage";
-import { useGraphSearch } from "../../hooks/graph/useGraphSearch";
-import { useTransitionState } from "../../hooks/ui/useTransitionState";
+import { useGraphSearch } from "../../hooks/graph/graphViewHooks";
+import { useTransitionState } from "../../hooks/ui/viewerPageHooks";
 import { useProgressAutoSave } from "../../hooks/viewer/useProgressAutoSave";
-import { useTooltipState } from "../../hooks/ui/useTooltipState";
+import { useTooltipState } from "../../hooks/ui/viewerPageHooks";
 import { useCachedLocation } from "../../hooks/viewer/useCachedLocation";
 import { saveProgress, getBookProgress } from "../../utils/api/api";
 import {
@@ -27,9 +27,10 @@ import {
 import {
   eventMatchesChapter,
   resolveDisplayedEventNum,
-} from "../../utils/viewer/eventDisplayUtils";
+  resolveViewerLineEvent,
+} from "../../utils/viewer/viewerEventUtils";
 import { restoreGraphLayout, preloadChapterLayouts } from "../../utils/graph/graphLayoutUtils";
-import { removeBookmarkHighlights } from "./bookmark/BookmarkManager";
+import { removeBookmarkHighlights } from "../../utils/bookmarks/bookmarkUtils";
 import { errorUtils } from "../../utils/common/errorUtils";
 import GraphSplitArea from "./GraphSplitArea";
 import {
@@ -37,11 +38,9 @@ import {
   PROGRESS_CACHE_UPDATED_EVENT,
   normalizeReadingProgressPercent,
 } from "../../utils/common/cache/progressCache";
-import { resolveViewerLineEvent } from "../../utils/viewer/viewerLineEventResolver";
 import { useFineGraphLoader } from "../../hooks/viewer/useFineGraphLoader";
-import { getEventOrderIdx, sortEventsByIdx } from "../../utils/graph/eventUtils";
+import { getEventOrderIdx, sortEventsByIdx } from "../../utils/graph/graphData";
 
-// ??곷선癰귣떯由?displayAt ??彛? 癰귣챶揆夷??됱뵠?袁⑹뜍 筌왖????揶쏄쑵肉???쎈솭 獄쎻뫗?
 const VIEWER_RESUME_POLL_MS = 100;
 const VIEWER_RESUME_MAX_ATTEMPTS = 150;
 

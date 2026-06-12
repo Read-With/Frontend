@@ -1,14 +1,13 @@
+/** 뷰어 페이지: URL·책·그래프·북마크·설정 오케스트레이션 */
+
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useParams, useLocation, useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { useLocalStorage } from '../common/useLocalStorage';
 import { useGraphDataLoader } from '../graph/useGraphDataLoader';
-import { useServerBookMatching } from '../books/useServerBookMatching';
-import { useBooksServerQuery } from '../books/useBooksServerQuery';
-import { useViewerUrlParams } from './useViewerUrlParams';
-import { useViewerGraphSync } from './useViewerGraphSync';
-import { flagsFromGraphMode } from './graphModeFlags';
-import { resolveViewerGraphTarget } from '../../utils/viewer/graphTargetUtils';
+import { useServerBookMatching, useBooksServerQuery } from '../books/bookHooks';
+import { useViewerUrlParams, flagsFromGraphMode } from './useViewerUrlParams';
+import { resolveViewerGraphTarget } from '../../utils/viewer/viewerUtils';
 import { 
   defaultSettings, 
   saveViewerMode, 
@@ -18,7 +17,7 @@ import {
   getServerBookId
 } from '../../utils/viewer/viewerUtils';
 import { getFolderKeyFromFilename } from '../../utils/graph/graphData';
-import { useBookmarks } from '../bookmarks/useBookmarks';
+import { useBookmarks } from '../bookmarks/bookmarkHooks';
 import { getBookManifest } from '../../utils/api/api';
 import { getManifestFromCache, getMaxChapter } from '../../utils/common/cache/manifestCache';
 import { userViewerBookmarksPath } from '../../utils/navigation/viewerPaths';
@@ -205,14 +204,27 @@ export function useViewerPage() {
     isDataEmpty
   } = useGraphDataLoader(graphBookId, graphLoaderTarget.chapter, graphLoaderTarget.eventIdx);
 
-  const { prevValidEvent, prevValidEventRef, graphPhase, resetPrevValidEvent } = useViewerGraphSync({
-    currentChapter,
-    currentEvent,
-    isReloading,
-    isFineGraphLoading,
-    isGraphLoading,
-    graphLoading,
-  });
+  const [prevValidEvent, setPrevValidEvent] = useState(null);
+  const prevValidEventRef = useRef(null);
+
+  const resetPrevValidEvent = useCallback(() => {
+    prevValidEventRef.current = null;
+    setPrevValidEvent(null);
+  }, []);
+
+  useEffect(() => {
+    if (currentEvent && currentEvent.chapter === currentChapter) {
+      prevValidEventRef.current = currentEvent;
+      setPrevValidEvent(currentEvent);
+    }
+  }, [currentEvent, currentChapter]);
+
+  const graphPhase = useMemo(() => {
+    if (isReloading) return 'reloading';
+    if (isFineGraphLoading) return 'fine';
+    if (isGraphLoading || graphLoading !== false) return 'loading';
+    return 'idle';
+  }, [isReloading, isFineGraphLoading, isGraphLoading, graphLoading]);
 
   const manifestServerBookId = useMemo(() => {
     const fromBook = getServerBookId(book);

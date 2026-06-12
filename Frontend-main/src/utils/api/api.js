@@ -1,3 +1,5 @@
+/** manifest·progress·relationship-graph API */
+
 import {
   setManifestData,
   getManifestFromCache,
@@ -16,13 +18,23 @@ import { progressPayloadFromData, resolveProgressLocator, toLocator } from '../c
 import { getApiBaseUrl, clearAuthData, getPostLoginHomeUrl } from '../common/authUtils';
 import { getStoredAccessToken } from '../security/authTokenStorage';
 import { isTokenValid, refreshToken, ensureSessionAccessToken } from './authApi';
+import { makeSilentError, isForbiddenError, isNotFoundError } from './authApi';
+
 const API_BASE_URL = getApiBaseUrl();
 
 const RELATIONSHIP_GRAPH_PATH = '/relationship-graph';
 
 const isRelationshipGraphApiUrl = (url) => url.includes(RELATIONSHIP_GRAPH_PATH);
 
-const makeSilentError = (code, message) => ({ isSuccess: false, code, message, result: null });
+const PROGRESS_FORBIDDEN = makeSilentError('FORBIDDEN', '해당 책에 접근할 권한이 없습니다');
+const PROGRESS_NOT_FOUND = makeSilentError('NOT_FOUND', '진도 정보를 찾을 수 없습니다');
+
+const handleProgressApiError = (error, logContext) => {
+  if (isForbiddenError(error)) return PROGRESS_FORBIDDEN;
+  if (isNotFoundError(error)) return PROGRESS_NOT_FOUND;
+  if (logContext) console.error(logContext, error);
+  throw error;
+};
 
 const createApiResponse = (isSuccess, code, message, result, type = 'default') => {
   const baseResponse = { isSuccess, code, message, result };
@@ -294,9 +306,7 @@ export const saveProgress = async (progressData) => {
     setProgressToCache(cacheRow);
     return response;
   } catch (error) {
-    if (error.status === 403 || error.message?.includes('403') || error.message?.includes('권한')) {
-      return makeSilentError('FORBIDDEN', '해당 책에 접근할 권한이 없습니다');
-    }
+    if (isForbiddenError(error)) return PROGRESS_FORBIDDEN;
     console.error('독서 진도 저장 실패:', error);
     throw error;
   }
@@ -339,13 +349,7 @@ export const getBookProgress = async (bookId, options = {}) => {
     }
     return response;
   } catch (error) {
-    if (error.status === 403 || error.message?.includes('403') || error.message?.includes('권한')) {
-      return makeSilentError('FORBIDDEN', '해당 책에 접근할 권한이 없습니다');
-    }
-    if (error.status === 404 || error.message?.includes('404') || error.message?.includes('찾을 수 없습니다')) {
-      return makeSilentError('NOT_FOUND', '진도 정보를 찾을 수 없습니다');
-    }
-    throw error;
+    return handleProgressApiError(error);
   }
 };
 
@@ -358,14 +362,7 @@ export const deleteBookProgress = async (bookId) => {
     }
     return response;
   } catch (error) {
-    if (error.status === 403 || error.message?.includes('403') || error.message?.includes('권한')) {
-      return makeSilentError('FORBIDDEN', '해당 책에 접근할 권한이 없습니다');
-    }
-    if (error.status === 404 || error.message?.includes('404') || error.message?.includes('찾을 수 없습니다')) {
-      return makeSilentError('NOT_FOUND', '진도 정보를 찾을 수 없습니다');
-    }
-    console.error('독서 진도 삭제 실패:', error);
-    throw error;
+    return handleProgressApiError(error, '독서 진도 삭제 실패:');
   }
 };
 
@@ -399,10 +396,10 @@ export const getBookManifest = async (bookId, { forceRefresh = false } = {}) => 
     }
     return response;
   } catch (error) {
-    if (error.status === 400 || error.message?.includes('400')) {
+    if (error.status === 400 || String(error?.message ?? '').includes('400')) {
       return makeSilentError('BAD_REQUEST', '잘못된 요청입니다.');
     }
-    if (error.status === 404 || error.message?.includes('404') || error.message?.includes('찾을 수 없습니다')) {
+    if (isNotFoundError(error)) {
       return makeSilentError(
         'NOT_FOUND',
         '도서를 찾을 수 없거나 아직 노출 가능한 상태가 아닙니다.'

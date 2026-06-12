@@ -9,11 +9,11 @@ import { getProgressFromCache, PROGRESS_CACHE_UPDATED_EVENT } from '../../utils/
 import {
   resolveLibraryReadingProgressPercent,
   formatLibraryRelativeDate,
-} from '../../utils/library/libraryBookDisplay';
+} from '../../utils/library/libraryUtils';
 import {
   stripRedundantBookTitlePrefix,
 } from '../../utils/viewer/chapterTitleDisplay';
-import AuthenticatedImage from '../common/AuthenticatedImage';
+import AuthenticatedImage from './AuthenticatedImage';
 import { getServerBookId } from '../../utils/viewer/viewerUtils';
 import { USER_VIEWER_PREFIX } from '../../utils/navigation/viewerPaths';
 import { toast } from 'react-toastify';

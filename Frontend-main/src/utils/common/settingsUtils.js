@@ -1,9 +1,6 @@
-/**
- * 설정 관리 유틸리티
- * viewerUtils.js와 ViewerSettings.jsx의 설정 로직을 통합
- */
+/** XhtmlViewer 설정 저장·로드·적용 */
 
-import { storageUtils } from './cache/storageUtils';
+import { storageUtils } from './cache/cacheManager';
 import { errorUtils } from './errorUtils';
 
 export const defaultSettings = {

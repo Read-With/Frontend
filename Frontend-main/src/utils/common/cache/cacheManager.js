@@ -282,53 +282,6 @@ export function clearAllCaches() {
   }
 }
 
-export function cleanupUnusedCaches(maxAge = 600000) {
-  try {
-    const now = Date.now();
-    
-    for (const [name, cacheInfo] of cacheRegistry) {
-      if ((now - cacheInfo.lastAccess) > maxAge) {
-        clearCache(name);
-      }
-    }
-  } catch (error) {
-    console.error('사용하지 않는 캐시 정리 실패:', error);
-  }
-}
-
-export function getCacheStats() {
-  try {
-    const stats = {};
-    
-    for (const [name, cacheInfo] of cacheRegistry) {
-      const { cache, lastAccess, accessCount } = cacheInfo;
-      const cacheSize = getCacheSize(cache);
-        
-      stats[name] = {
-        size: cacheSize,
-        lastAccess: new Date(lastAccess).toISOString(),
-        accessCount: accessCount || 0,
-        age: Date.now() - lastAccess,
-        hasTimer: !!cacheInfo.cleanupTimer
-      };
-    }
-    
-    return stats;
-  } catch (error) {
-    console.error('캐시 통계 조회 실패:', error);
-    return {};
-  }
-}
-
-export function unregisterCache(name) {
-  try {
-    clearCache(name);
-    cacheRegistry.delete(name);
-  } catch (error) {
-    console.error(`캐시 등록 해제 실패 (${name}):`, error);
-  }
-}
-
 export function getCacheItem(name, key) {
   try {
     const cacheInfo = cacheRegistry.get(name);
@@ -440,3 +393,82 @@ function clearVolatileCachesOnBeforeUnload() {
 if (typeof window !== 'undefined') {
   window.addEventListener('beforeunload', clearVolatileCachesOnBeforeUnload);
 }
+
+// --- TTL 메모리 캐시가 있는 localStorage 래퍼 (설정 등) ---
+
+const STORAGE_TTL = 5 * 60 * 1000;
+const storageCache = new Map();
+registerCache('storageCache', storageCache, {
+  maxSize: 50,
+  ttl: STORAGE_TTL,
+  cleanupInterval: 300000,
+  storageKey: 'storageCache_data',
+  storageType: 'localStorage',
+  persist: true,
+});
+
+const getFreshCachedValue = (key, parsed) => {
+  const cached = getCacheItem('storageCache', key);
+  if (!cached || !cached.timestamp || Date.now() - cached.timestamp >= STORAGE_TTL) {
+    return undefined;
+  }
+  return cached.parsed === parsed ? cached.value : undefined;
+};
+
+const setCachedValue = (key, value, parsed) => {
+  setCacheItem('storageCache', key, {
+    value,
+    timestamp: Date.now(),
+    parsed,
+  });
+};
+
+export const storageUtils = {
+  get: (key) => {
+    const cached = getFreshCachedValue(key, false);
+    if (cached !== undefined) {
+      return cached;
+    }
+    const value = getRawFromStorage(key, 'localStorage');
+    if (value !== null) {
+      setCachedValue(key, value, false);
+    }
+    return value;
+  },
+
+  set: (key, value) => {
+    setRawToStorage(key, value, 'localStorage');
+    setCachedValue(key, value, false);
+  },
+
+  remove: (key) => {
+    removeFromStorage(key, 'localStorage');
+    removeCacheItem('storageCache', key);
+  },
+
+  getJson: (key, defaultValue = {}) => {
+    const cached = getFreshCachedValue(key, true);
+    if (cached !== undefined) {
+      return cached;
+    }
+    try {
+      const stored = getRawFromStorage(key, 'localStorage');
+      const value = stored ? JSON.parse(stored) : defaultValue;
+      setCachedValue(key, value, true);
+      return value;
+    } catch {
+      setCachedValue(key, defaultValue, true);
+      return defaultValue;
+    }
+  },
+
+  setJson: (key, value) => {
+    const jsonValue = JSON.stringify(value);
+    setRawToStorage(key, jsonValue, 'localStorage');
+    setCachedValue(key, value, true);
+  },
+
+  clearCache: () => {
+    clearCache('storageCache');
+  },
+};

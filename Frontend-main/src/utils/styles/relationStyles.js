@@ -59,28 +59,6 @@ export function getPositivityLabel(positivity) {
 }
 
 /**
- * 관계 라벨 배열을 생성하는 함수
- * @param {array|string} relation - 관계 데이터 (배열 또는 문자열)
- * @param {string} label - 백업용 라벨 문자열
- * @returns {array} 관계 라벨 배열
- */
-export function getRelationLabels(relation, label) {
-  try {
-    if (Array.isArray(relation)) {
-      return relation.filter(item => typeof item === 'string' && item.trim());
-    }
-    
-    if (typeof label === 'string') {
-      return label.split(',').map(s => s.trim()).filter(Boolean);
-    }
-    
-    return [];
-  } catch (_error) {
-    return [];
-  }
-}
-
-/**
  * 툴팁 기본 스타일 설정
  */
 export const tooltipStyles = {
@@ -162,15 +140,4 @@ export function clearStyleCache() {
  */
 export function cleanupRelationStyleResources() {
   clearStyleCache();
-}
-
-/**
- * 현재 임계값 정보를 반환하는 디버깅 함수
- * @returns {Object} 현재 임계값 정보
- */
-export function getClassificationInfo() {
-  return {
-    thresholds: { ...HARDCODED_THRESHOLDS },
-    cacheSize: styleCache.size
-  };
 }

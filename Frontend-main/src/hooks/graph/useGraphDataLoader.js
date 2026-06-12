@@ -1,6 +1,15 @@
+/** 챕터·이벤트 캐시 기반 그래프 elements 로드·diff */
+
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { toNumberOrNull } from '../../utils/common/numberUtils';
-import { sortEventsByIdx, normalizeEventIdx, filterEventsUpTo, filterEventsBefore, getMaxEventIdx } from '../../utils/graph/eventUtils';
+import {
+  sortEventsByIdx,
+  normalizeEventIdx,
+  filterEventsUpTo,
+  filterEventsBefore,
+  getMaxEventIdx,
+  resolveMaxChapter,
+} from '../../utils/graph/graphData';
 import { createCharacterMaps, aggregateCharactersFromEvents, buildNodeWeights } from '../../utils/graph/characterUtils';
 import { convertRelationsToElements, calcGraphDiff } from '../../utils/graph/graphDataUtils';
 import { normalizeRelation, isValidRelation, relationEventMetaPassthrough } from '../../utils/graph/relationUtils';
@@ -9,7 +18,6 @@ import {
   reconstructChapterGraphState,
 } from '../../utils/common/cache/chapterEventCache';
 import { getManifestFromCache } from '../../utils/common/cache/manifestCache';
-import { resolveMaxChapter } from '../../utils/graph/maxChapterResolver';
 import { graphDataTransformUtils } from '../../utils/viewer/viewerUtils';
 
 const createEmptyLastComputedGraph = () => ({

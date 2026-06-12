@@ -1,13 +1,14 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+/** 북마크 CRUD·뷰어 추가·정렬 */
+
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { toast } from 'react-toastify';
-import { createBookmark, updateBookmark, deleteBookmark } from '../../utils/api/bookmarksApi';
-import {
-  loadBookmarks as loadBookmarksFromManager,
-} from '../../components/viewer/bookmark/BookmarkManager';
+import { createBookmark, updateBookmark, deleteBookmark } from '../../utils/api/booksApi';
 import {
   createBookmarkTitle,
   createBookmarkData,
   isSameBookmarkPosition,
+  getBookmarkPositionSortKey,
+  loadBookmarks as loadBookmarksFromApi,
 } from '../../utils/bookmarks/bookmarkUtils';
 
 const DEFAULT_VIEWER_BOOKMARK_COLOR = '#28B532';
@@ -20,28 +21,52 @@ const getErrorMessage = (err, fallback) =>
 const getBookmarkFriendlyMessage = (err, fallback) => {
   if (!err) return fallback;
   const status = err.status || err.statusCode;
-  if (status === 404)
+  if (status === 404) {
     return '북마크 기능이 아직 준비되지 않았거나 연결 경로를 찾을 수 없습니다. 잠시 후 다시 시도해 주세요.';
+  }
   const msg = (err?.message || '').toLowerCase();
-  if (msg.includes('failed to fetch') || msg.includes('network') || msg.includes('networkerror'))
+  if (msg.includes('failed to fetch') || msg.includes('network') || msg.includes('networkerror')) {
     return '연결을 확인한 뒤 다시 시도해 주세요.';
+  }
   return getErrorMessage(err, fallback);
 };
 
+export const useBookmarkSort = (bookmarks, sortOrder) => {
+  return useMemo(() => {
+    if (!bookmarks || bookmarks.length === 0) return [];
+    const sorted = [...bookmarks];
+    if (sortOrder === 'position') {
+      return sorted.sort((a, b) => {
+        const keyA = getBookmarkPositionSortKey(a) || '';
+        const keyB = getBookmarkPositionSortKey(b) || '';
+        return keyA.localeCompare(keyB);
+      });
+    }
+    const factor = sortOrder === 'oldest' ? 1 : -1;
+    return sorted.sort((a, b) => {
+      const dateA = new Date(a.createdAt || a.created_at || 0).getTime();
+      const dateB = new Date(b.createdAt || b.created_at || 0).getTime();
+      return (dateA - dateB) * factor;
+    });
+  }, [bookmarks, sortOrder]);
+};
+
 export const useBookmarks = (bookId, options = {}) => {
-  const { 
+  const {
     sort = 'time_desc',
     viewerRef = null,
     setFailCount = null,
-    autoFetch = true
+    autoFetch = true,
   } = typeof options === 'string' ? { sort: options } : options;
-  
+
   const [bookmarks, setBookmarks] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [showBookmarkList, setShowBookmarkList] = useState(false);
   const bookmarksRef = useRef(bookmarks);
-  useEffect(() => { bookmarksRef.current = bookmarks; }, [bookmarks]);
+  useEffect(() => {
+    bookmarksRef.current = bookmarks;
+  }, [bookmarks]);
 
   const fetchBookmarks = useCallback(async () => {
     if (!bookId) {
@@ -49,12 +74,12 @@ export const useBookmarks = (bookId, options = {}) => {
       setError(null);
       return;
     }
-    
+
     setLoading(true);
     setError(null);
-    
+
     try {
-      const bookmarksData = await loadBookmarksFromManager(bookId, sort);
+      const bookmarksData = await loadBookmarksFromApi(bookId, sort);
       setBookmarks(bookmarksData || []);
     } catch (err) {
       setError(getBookmarkFriendlyMessage(err, '북마크 조회 중 오류가 발생했습니다.'));
@@ -91,9 +116,11 @@ export const useBookmarks = (bookId, options = {}) => {
       const response = await updateBookmark(bookmarkId, updateData);
       if (response.isSuccess) {
         const idStr = String(bookmarkId);
-        setBookmarks(prev => prev.map(bookmark =>
-          String(bookmark.id) === idStr ? { ...bookmark, ...response.result } : bookmark
-        ));
+        setBookmarks((prev) =>
+          prev.map((bookmark) =>
+            String(bookmark.id) === idStr ? { ...bookmark, ...response.result } : bookmark
+          )
+        );
         toast.success('변경사항이 저장되었습니다');
         return { success: true, bookmark: response.result };
       }
@@ -112,7 +139,7 @@ export const useBookmarks = (bookId, options = {}) => {
     try {
       const response = await deleteBookmark(bookmarkId);
       if (response.isSuccess) {
-        setBookmarks(prev => prev.filter(bookmark => String(bookmark.id) !== idStr));
+        setBookmarks((prev) => prev.filter((bookmark) => String(bookmark.id) !== idStr));
         toast.success('북마크가 삭제되었습니다');
         return { success: true };
       }
@@ -124,21 +151,21 @@ export const useBookmarks = (bookId, options = {}) => {
       toast.error(msg);
       return { success: false, message: msg };
     }
-  }, [bookId]);
+  }, []);
 
-  const changeBookmarkColor = useCallback(async (bookmarkId, color) => {
-    return await modifyBookmark(bookmarkId, { color });
-  }, [modifyBookmark]);
+  const changeBookmarkColor = useCallback(
+    async (bookmarkId, color) => modifyBookmark(bookmarkId, { color }),
+    [modifyBookmark]
+  );
 
-  const changeBookmarkMemo = useCallback(async (bookmarkId, memo) => {
-    return await modifyBookmark(bookmarkId, { memo });
-  }, [modifyBookmark]);
+  const changeBookmarkMemo = useCallback(
+    async (bookmarkId, memo) => modifyBookmark(bookmarkId, { memo }),
+    [modifyBookmark]
+  );
 
-
-  // 북마크 추가 (뷰어: getCurrentLocator 우선, locator만 저장)
   const handleAddBookmark = useCallback(async () => {
     if (!viewerRef?.current) {
-      toast.error("❗ 페이지가 아직 준비되지 않았어요. 다시 불러옵니다...");
+      toast.error('❗ 페이지가 아직 준비되지 않았어요. 다시 불러옵니다...');
       if (setFailCount) setFailCount((cnt) => cnt + 1);
       return;
     }
@@ -157,11 +184,11 @@ export const useBookmarks = (bookId, options = {}) => {
         if (Number.isFinite(startLocator.offset)) pageNum = startLocator.offset + 1;
       }
     } catch {
-      void 0;
+      /* ignore */
     }
 
     if (!startLocator) {
-      toast.error("❗ 페이지 정보를 읽을 수 없습니다. 다시 불러옵니다...");
+      toast.error('❗ 페이지 정보를 읽을 수 없습니다. 다시 불러옵니다...');
       if (setFailCount) setFailCount((cnt) => cnt + 1);
       return;
     }
@@ -190,12 +217,14 @@ export const useBookmarks = (bookId, options = {}) => {
     );
   }, [bookId, viewerRef, setFailCount, addBookmark, removeBookmark]);
 
-  const handleBookmarkSelect = useCallback((target) => {
-    viewerRef?.current?.displayAt(target);
-    setShowBookmarkList(false);
-  }, [viewerRef]);
+  const handleBookmarkSelect = useCallback(
+    (target) => {
+      viewerRef?.current?.displayAt(target);
+      setShowBookmarkList(false);
+    },
+    [viewerRef]
+  );
 
-  // 호환성을 위해 handleRemoveBookmark, handleDeleteBookmark 노출
   const handleRemoveBookmark = removeBookmark;
   const handleDeleteBookmark = removeBookmark;
 
@@ -221,7 +250,6 @@ export const useBookmarks = (bookId, options = {}) => {
     changeBookmarkMemo,
   };
 
-  // 뷰어 특화 기능이 있으면 추가로 노출
   if (viewerRef) {
     returnValue.handleAddBookmark = handleAddBookmark;
     returnValue.handleRemoveBookmark = handleRemoveBookmark;
@@ -229,7 +257,7 @@ export const useBookmarks = (bookId, options = {}) => {
     returnValue.handleBookmarkSelect = handleBookmarkSelect;
     returnValue.showBookmarkList = showBookmarkList;
     returnValue.setShowBookmarkList = setShowBookmarkList;
-    returnValue.bookmarksLoading = loading; // 호환성을 위해
+    returnValue.bookmarksLoading = loading;
   }
 
   return returnValue;

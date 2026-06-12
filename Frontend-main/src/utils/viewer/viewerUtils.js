@@ -1,20 +1,14 @@
+/** 뷰어: bookId·이벤트·그래프 캐시·설정 re-export */
 
 import { processRelations, directedEdgeElementId } from '../graph/relationUtils';
-import { isGraphEdgeElement, uniqueStrings } from '../graph/graphNormalizeUtils';
-import { errorUtils as commonErrorUtils } from '../common/errorUtils';
+import { isGraphEdgeElement, uniqueStrings } from '../graph/graphUtils';
+import { errorUtils } from '../common/errorUtils';
 import { settingsUtils as commonSettingsUtils, defaultSettings as commonDefaultSettings, loadSettings as commonLoadSettings } from '../common/settingsUtils';
 import { toPositiveNumberFromId, toPositiveNumberOrNull } from '../common/numberUtils';
-export const errorUtils = commonErrorUtils;
 export const defaultSettings = commonDefaultSettings;
 export const loadSettings = commonLoadSettings;
 
-/**
- * 서버 bookId를 가져옵니다.
- * 강제매칭/로컬 표시 객체에서는 `_bookId`가 서버 bookId를 담는다.
- * `_bookId`가 없을 때만 `book.id`를 사용한다.
- * @param {Object} book - 책 객체
- * @returns {number|null} 서버 bookId (없으면 null)
- */
+/** 서버 bookId (_bookId 우선, 없으면 book.id) */
 export function getServerBookId(book) {
   if (!book) return null;
   return toPositiveNumberOrNull(book._bookId) ?? toPositiveNumberOrNull(book.id);
@@ -194,40 +188,6 @@ export const eventUtils = {
     );
   },
 
-  getMaxEventIdx: (chapterCache) => {
-    if (!chapterCache) {
-      return 0;
-    }
-    
-    const maxEventIdx = Number(chapterCache?.maxEventIdx);
-    if (Number.isFinite(maxEventIdx) && maxEventIdx > 0) {
-      return maxEventIdx;
-    }
-    
-    if (Array.isArray(chapterCache?.events)) {
-      return chapterCache.events.length;
-    }
-    
-    return 0;
-  },
-
-  createEmptyEvent: (currentChapter, eventIdx, eventData = null) => {
-    const fromApi = eventData ? resolveFineGraphEventOrdinal(eventData) : null;
-    const eventNum = Number.isFinite(fromApi) && fromApi > 0 ? fromApi : eventIdx;
-    return {
-      chapter: currentChapter,
-      chapterIdx: currentChapter,
-      eventNum,
-      eventIdx: eventNum,
-      eventId: eventData?.eventId ?? eventNum,
-      relations: [],
-      characters: [],
-      startTxtOffset: eventData?.startTxtOffset ?? null,
-      endTxtOffset: eventData?.endTxtOffset ?? null,
-      ...(eventData || {})
-    };
-  },
-
   updateGraphDataRef: (ref, elements, eventIdx, chapterIdx) => {
     if (!ref || !ref.current) {
       return;
@@ -306,16 +266,7 @@ export const transitionUtils = {
 };
 
 export const bookUtils = {
-  /**
-   * 뷰어 페이지에서 사용할 책 객체를 생성합니다.
-   * @param {Object} params - 파라미터 객체
-   * @param {Object|null} params.stateBook - location.state에서 전달된 책 객체
-   * @param {Object|null} params.matchedServerBook - 서버에서 매칭된 책 객체
-   * @param {Object|null} params.serverBook - 서버에서 직접 가져온 책 객체
-   * @param {string} params.bookId - URL 파라미터의 bookId
-   * @param {boolean} params.loadingServerBook - 서버 책 로딩 중 여부
-   * @returns {Object} 생성된 책 객체
-   */
+  /** 뷰어용 책 객체 생성 (state·서버 매칭·URL bookId 우선순위) */
   createBookObject: ({ stateBook, matchedServerBook, serverBook, bookId, loadingServerBook }) => {
     if (matchedServerBook && typeof matchedServerBook.id === 'number') {
       return {
@@ -386,7 +337,7 @@ export const bookUtils = {
   }
 };
 
-  /** `currentEvent`가 가리키는 이벤트 인덱스(해당 챕터 타임라인 기준). */
+/** 캐시 행 → fine API result 형태 변환 */
 function buildFromCache(cached, convertFn) {
   const hasElements = Array.isArray(cached.elements) && cached.elements.length > 0;
   return {
@@ -397,10 +348,7 @@ function buildFromCache(cached, convertFn) {
   };
 }
 
-/**
- * 뷰어·분할 그래프용. `resultData.event` 및 reconstruct 의 `eventMeta` 는
- * GET /api/v2/graph/fine 의 result.event 와 동일 계열(캐시 시 스냅샷 키만 eventMeta).
- */
+/** fine graph API 또는 챕터 캐시에서 그래프 데이터 조회 */
 export const graphDataCacheUtils = {
   getGraphDataFromApiOrCache: async (
     bookId,
@@ -519,10 +467,7 @@ export const graphDataCacheUtils = {
   }
 };
 
-/**
- * GET /api/v2/graph/fine 의 result.event
- * 스펙: chapterIdx, eventId(문자열), event_id(숫자), eventNum은 없을 수 있음
- */
+/** fine graph result.event에서 이벤트 순번 추출 (eventNum·event_id·eventId 등) */
 export function resolveFineGraphEventOrdinal(apiEvent) {
   if (!apiEvent || typeof apiEvent !== 'object') return null;
   return (
@@ -534,7 +479,7 @@ export function resolveFineGraphEventOrdinal(apiEvent) {
 }
 
 export const graphDataTransformUtils = {
-  /** GET /api/v2/graph/fine 의 result.event 정규화 */
+  /** fine graph result.event 정규화 */
   normalizeApiEvent: (apiEvent) => {
     if (!apiEvent || typeof apiEvent !== 'object') return null;
     const chapterIdx = Number(apiEvent.chapterIdx);
@@ -552,7 +497,7 @@ export const graphDataTransformUtils = {
     };
   },
 
-  /** API relations를 processRelations로 id1/id2 정규화 후 Cytoscape 요소로 변환(source/target·무효 항목 제거). */
+  /** relations → Cytoscape elements (캐시에 elements 있으면 그대로 사용) */
   convertToElements: (resultData, usedCache, normalizedEvent, createCharacterMaps, buildNodeWeights, convertRelationsToElements) => {
     if (usedCache && Array.isArray(resultData.elements) && resultData.elements.length > 0) {
       return resultData.elements;
@@ -584,11 +529,7 @@ export const graphDataTransformUtils = {
     );
   },
 
-  /**
-   * Keep graph elements cumulative as reading progresses. Moving to a later chapter
-   * should retain prior chapter events, while moving backward should not keep future
-   * events mixed into the current graph.
-   */
+  /** 읽기 진행에 따라 그래프 누적 병합 (뒤로 이동 시 이후 이벤트 제외) */
   mergeElementsWithPrevious: (convertedElements, prevData, currentChapter, apiEventIdx) => {
     const prevChapter = Number(prevData.chapterIdx);
     const curChapter = Number(currentChapter);
@@ -741,3 +682,25 @@ export const graphDataTransformUtils = {
     };
   }
 };
+
+/** 현재 읽기 이벤트·lastGood 기준 그래프 타깃 챕터·이벤트 */
+export function resolveViewerGraphTarget({ currentChapter, currentEvent, lastGood = null }) {
+  const ch = Number(currentChapter);
+  const fallbackChapter = Number.isFinite(ch) && ch >= 1 ? ch : 1;
+
+  if (currentEvent && typeof currentEvent === 'object') {
+    const eventChapter = Number(currentEvent.chapter ?? currentEvent.chapterIdx ?? fallbackChapter);
+    const eventIdx = Number(currentEvent.eventNum ?? currentEvent.eventIdx);
+    if (Number.isFinite(eventChapter) && eventChapter >= 1 && Number.isFinite(eventIdx) && eventIdx >= 1) {
+      return { chapter: eventChapter, eventIdx };
+    }
+  }
+
+  const savedChapter = Number(lastGood?.chapter);
+  const savedEventIdx = Number(lastGood?.eventNum ?? lastGood?.eventIdx);
+  if (savedChapter === fallbackChapter && Number.isFinite(savedEventIdx) && savedEventIdx >= 1) {
+    return { chapter: fallbackChapter, eventIdx: savedEventIdx };
+  }
+
+  return { chapter: fallbackChapter, eventIdx: 1 };
+}

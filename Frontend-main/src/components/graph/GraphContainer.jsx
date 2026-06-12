@@ -1,14 +1,23 @@
-import React, { forwardRef, useImperativeHandle, useMemo, useCallback } from "react";
-import ViewerRelationGraph from "./RelationGraph_Viewerpage";
-import { useGraphDataLoader } from "../../hooks/graph/useGraphDataLoader.js";
-import { useGraphSearch } from "../../hooks/graph/useGraphSearch.jsx";
-import { resolveViewerDisplayEventNum } from "../../utils/viewer/eventDisplayUtils";
+import React, {
+  forwardRef,
+  useRef,
+  useMemo,
+  useEffect,
+  useCallback,
+  useImperativeHandle,
+} from 'react';
+import CytoscapeGraphUnified from './CytoscapeGraphUnified';
+import UnifiedNodeInfo from './tooltip/UnifiedNodeInfo';
+import UnifiedEdgeTooltip from './tooltip/UnifiedEdgeTooltip';
+import './RelationGraph.css';
+import { getEdgeStyle, createGraphStylesheet } from '../../utils/styles/graphStyles';
+import { graphStyles } from '../../utils/styles/styles';
+import { ensureElementsInBounds, clearHighlightClassesOn } from '../../utils/graph/graphUtils';
+import { applySearchFadeEffect } from '../../utils/graph/searchUtils.jsx';
+import { useGraphDataLoader } from '../../hooks/graph/useGraphDataLoader.js';
+import { useGraphSearch } from '../../hooks/graph/graphViewHooks';
+import { resolveViewerDisplayEventNum } from '../../utils/viewer/viewerEventUtils';
 
-// ─── 헬퍼 ─────────────────────────────────────────────────────────────────────
-/**
- * currentEvent에서 이벤트 인덱스 숫자를 추출합니다.
- * currentEvent는 숫자이거나 { eventNum } 객체일 수 있습니다.
- */
 function resolveEventIdx(currentEvent) {
   if (typeof currentEvent?.eventNum === 'number' && currentEvent.eventNum > 0) {
     return currentEvent.eventNum;
@@ -19,18 +28,308 @@ function resolveEventIdx(currentEvent) {
   return null;
 }
 
-// ─── GraphContainer ────────────────────────────────────────────────────────────
-/**
- * 두 가지 모드를 지원합니다.
- *
- * [내부 모드] elements prop이 없을 때:
- *   - useGraphDataLoader로 데이터를 직접 패칭
- *   - useGraphSearch로 검색 상태를 자체 관리
- *
- * [외부 모드] elements prop이 있을 때 (GraphSplitArea → Viewer 분할):
- *   - 상위에서 검색·필터까지 반영한 최종 그래프 배열을 elements로 전달해야 함
- *   - 데이터 로더와 내부 검색 훅은 비활성화되며, elements를 다시 병합하지 않음(이중 규칙 방지)
- */
+function buildViewportFitKey({ chapterNum, eventNum, elements }) {
+  if (!Array.isArray(elements) || elements.length === 0) return '';
+  const elementIds = elements
+    .map((element) => element?.data?.id)
+    .filter((id) => id != null && id !== '')
+    .map(String)
+    .sort()
+    .join('\x1f');
+  return `${chapterNum ?? ''}:${eventNum ?? ''}:${elementIds}`;
+}
+
+function useAutoFit(cyRef, viewportFitKey, isSearchActive, isEventTransition) {
+  useEffect(() => {
+    const cy = cyRef.current;
+    if (!cy || isSearchActive || isEventTransition || !viewportFitKey) return;
+
+    let cancelled = false;
+    let rafId = 0;
+
+    const runFit = (attempt = 0) => {
+      if (cancelled) return;
+      const cyLive = cyRef.current;
+      if (!cyLive) return;
+      const container = typeof cyLive.container === 'function' ? cyLive.container() : null;
+      const width = Number(container?.clientWidth ?? 0);
+      const height = Number(container?.clientHeight ?? 0);
+
+      if (width <= 0 || height <= 0) {
+        if (attempt < 6) {
+          rafId = requestAnimationFrame(() => runFit(attempt + 1));
+        }
+        return;
+      }
+
+      try {
+        cyLive.resize();
+      } catch {
+        /* ignore */
+      }
+      try {
+        if (container) ensureElementsInBounds(cyLive, container);
+      } catch {
+        /* ignore */
+      }
+      requestAnimationFrame(() => {
+        if (cancelled) return;
+        const cy2 = cyRef.current;
+        if (!cy2) return;
+        try {
+          const nodes = cy2.nodes(':visible');
+          if (nodes.length > 0) {
+            cy2.fit(nodes, 80);
+          }
+        } catch {
+          try {
+            const n = cy2.nodes();
+            if (n.length > 0) cy2.fit(n, 80);
+          } catch {
+            /* ignore */
+          }
+        }
+      });
+    };
+
+    rafId = requestAnimationFrame(() => runFit(0));
+
+    return () => {
+      cancelled = true;
+      if (rafId) cancelAnimationFrame(rafId);
+    };
+  }, [cyRef, viewportFitKey, isSearchActive, isEventTransition]);
+}
+
+function useCytoscapeReset(cyRef, graphClearRef, selectedNodeIdRef, selectedEdgeIdRef) {
+  useEffect(() => {
+    if (!graphClearRef) return;
+
+    graphClearRef.current = () => {
+      const cy = cyRef.current;
+      if (!cy) return;
+      clearHighlightClassesOn(cy);
+      try {
+        if (typeof cy.style === 'function') cy.style().update();
+      } catch {}
+      if (selectedNodeIdRef) selectedNodeIdRef.current = null;
+      if (selectedEdgeIdRef) selectedEdgeIdRef.current = null;
+    };
+  }, [graphClearRef, cyRef, selectedNodeIdRef, selectedEdgeIdRef]);
+}
+
+const ViewerRelationGraph = ({
+  elements,
+  newNodeIds = [],
+  chapterNum,
+  eventNum,
+  edgeLabelVisible = true,
+  maxChapter,
+  filename,
+  fitNodeIds,
+  searchTerm,
+  isSearchActive,
+  filteredElements,
+  isResetFromSearch,
+  currentEvent = null,
+  prevValidEvent = null,
+  events = [],
+  activeTooltip = null,
+  onClearTooltip = null,
+  onSetActiveTooltip = null,
+  graphClearRef = null,
+  isEventTransition: _isEventTransition = false,
+  bookId = null,
+}) => {
+  const cyRef = useRef(null);
+  const selectedEdgeIdRef = useRef(null);
+  const selectedNodeIdRef = useRef(null);
+  const containerRef = useRef(null);
+  const viewportFitKey = useMemo(
+    () => buildViewportFitKey({ chapterNum, eventNum, elements }),
+    [chapterNum, eventNum, elements]
+  );
+
+  useAutoFit(cyRef, viewportFitKey, isSearchActive, _isEventTransition);
+  useCytoscapeReset(cyRef, graphClearRef, selectedNodeIdRef, selectedEdgeIdRef);
+
+  const onClearTooltipOnly = useCallback(() => {
+    onClearTooltip?.();
+  }, [onClearTooltip]);
+
+  const clearTooltipAndGraph = useCallback(() => {
+    onClearTooltip?.();
+    graphClearRef?.current?.();
+    if (isSearchActive && filteredElements?.length > 0 && cyRef.current) {
+      applySearchFadeEffect(cyRef.current, filteredElements, isSearchActive);
+    }
+  }, [onClearTooltip, graphClearRef, isSearchActive, filteredElements, cyRef]);
+
+  const onShowNodeTooltip = useCallback(({ node, nodeCenter, mouseX, mouseY }) => {
+    if (!onSetActiveTooltip) return;
+
+    const nodeData = node.data();
+
+    let names = nodeData.names;
+    if (typeof names === 'string') {
+      try { names = JSON.parse(names); } catch { names = [names]; }
+    }
+
+    let main = nodeData.main;
+    if (typeof main === 'string') main = main === 'true';
+
+    onSetActiveTooltip({
+      type: 'node',
+      ...nodeData,
+      names,
+      main,
+      nodeCenter,
+      x: mouseX ?? nodeCenter?.x ?? 0,
+      y: mouseY ?? nodeCenter?.y ?? 0,
+    });
+  }, [onSetActiveTooltip]);
+
+  const onShowEdgeTooltip = useCallback(({ edge, edgeCenter, mouseX, mouseY }) => {
+    if (!onSetActiveTooltip) return;
+
+    onSetActiveTooltip({
+      type: 'edge',
+      id: edge.id(),
+      data: edge.data(),
+      sourceNode: edge.source(),
+      targetNode: edge.target(),
+      edgeCenter,
+      x: mouseX ?? edgeCenter?.x ?? 0,
+      y: mouseY ?? edgeCenter?.y ?? 0,
+    });
+  }, [onSetActiveTooltip]);
+
+  useEffect(() => {
+    if (!activeTooltip) return;
+
+    const handleDocumentClick = (event) => {
+      const isInsideTooltip =
+        !!event.target.closest('.graph-node-tooltip') ||
+        !!event.target.closest('.edge-tooltip-container');
+      if (isInsideTooltip) return;
+
+      const isInsideGraph =
+        containerRef.current && containerRef.current.contains(event.target);
+      if (isInsideGraph) return;
+
+      const isDragEnd = event?.detail?.type === 'graphDragEnd';
+      if (isDragEnd) return;
+
+      clearTooltipAndGraph();
+    };
+
+    const handleGraphDragEnd = (event) => {
+      event.preventDefault?.();
+      event.stopPropagation?.();
+    };
+
+    const timeoutId = setTimeout(() => {
+      document.addEventListener('click', handleDocumentClick, true);
+      document.addEventListener('graphDragEnd', handleGraphDragEnd, true);
+    }, 20);
+
+    return () => {
+      clearTimeout(timeoutId);
+      document.removeEventListener('click', handleDocumentClick, true);
+      document.removeEventListener('graphDragEnd', handleGraphDragEnd, true);
+    };
+  }, [activeTooltip, clearTooltipAndGraph]);
+
+  const edgeStyleViewer = useMemo(() => getEdgeStyle('viewer'), []);
+  const stylesheet = useMemo(
+    () => createGraphStylesheet(edgeStyleViewer, edgeLabelVisible),
+    [edgeStyleViewer, edgeLabelVisible]
+  );
+  const presetLayout = useMemo(() => ({ name: 'preset' }), []);
+
+  return (
+    <div
+      ref={containerRef}
+      className="relation-graph-container"
+      style={graphStyles.container}
+    >
+      <div
+        style={graphStyles.tooltipContainer}
+        onClick={(e) => e.stopPropagation()}
+      >
+        {activeTooltip?.type === 'node' && (
+          <UnifiedNodeInfo
+            key={`node-tooltip-${activeTooltip.id}`}
+            displayMode="tooltip"
+            data={activeTooltip}
+            x={activeTooltip.x}
+            y={activeTooltip.y}
+            nodeCenter={activeTooltip.nodeCenter}
+            onClose={clearTooltipAndGraph}
+            inViewer={true}
+            chapterNum={chapterNum}
+            eventNum={eventNum}
+            maxChapter={maxChapter}
+            filename={filename}
+            elements={elements}
+            style={graphStyles.tooltipStyle}
+            currentEvent={currentEvent}
+            prevValidEvent={prevValidEvent}
+            events={events}
+          />
+        )}
+        {activeTooltip?.type === 'edge' && (
+          <UnifiedEdgeTooltip
+            key={`edge-tooltip-${activeTooltip.id}`}
+            data={activeTooltip.data}
+            x={activeTooltip.x}
+            y={activeTooltip.y}
+            onClose={clearTooltipAndGraph}
+            sourceNode={activeTooltip.sourceNode}
+            targetNode={activeTooltip.targetNode}
+            mode="viewer"
+            chapterNum={chapterNum}
+            eventNum={eventNum}
+            maxChapter={maxChapter}
+            filename={filename}
+            style={graphStyles.tooltipStyle}
+            currentEvent={currentEvent}
+            prevValidEvent={prevValidEvent}
+            events={events}
+            bookId={bookId}
+          />
+        )}
+      </div>
+
+      <div className="graph-canvas-area" style={graphStyles.graphArea}>
+        <CytoscapeGraphUnified
+          elements={elements}
+          newNodeIds={newNodeIds}
+          stylesheet={stylesheet}
+          layout={presetLayout}
+          cyRef={cyRef}
+          nodeSize={10}
+          fitNodeIds={fitNodeIds}
+          searchTerm={searchTerm}
+          isSearchActive={isSearchActive}
+          filteredElements={filteredElements}
+          isResetFromSearch={isResetFromSearch}
+          currentChapter={chapterNum}
+          onShowNodeTooltip={onShowNodeTooltip}
+          onShowEdgeTooltip={onShowEdgeTooltip}
+          onClearTooltip={onClearTooltipOnly}
+          selectedNodeIdRef={selectedNodeIdRef}
+          selectedEdgeIdRef={selectedEdgeIdRef}
+          strictBackgroundClear={true}
+          showRippleEffect={true}
+        />
+      </div>
+    </div>
+  );
+};
+
+const MemoViewerRelationGraph = React.memo(ViewerRelationGraph);
+
 const GraphContainer = forwardRef(({
   currentEvent,
   currentChapter,
@@ -52,14 +351,8 @@ const GraphContainer = forwardRef(({
   isResetFromSearch: externalIsResetFromSearch,
   bookId = null,
 }, ref) => {
-
-  // ─── 모드 결정 ───────────────────────────────────────────────────────────
-  // externalElements 제공 여부가 두 모드를 구분하는 유일한 기준입니다.
-  // 외부 elements가 있으면 search state도 항상 외부에서 함께 주입됩니다.
   const isExternalMode = Boolean(externalElements);
 
-  // ─── 데이터 로더 (내부 모드 전용) ──────────────────────────────────────
-  // 외부 모드에서는 null을 전달해 로더를 비활성화합니다.
   const {
     elements: internalElements,
     newNodeIds,
@@ -72,15 +365,12 @@ const GraphContainer = forwardRef(({
 
   const elements = externalElements || internalElements;
 
-  // ─── 검색 상태 변경 콜백 ────────────────────────────────────────────────
   const handleSearchStateChange = useCallback((searchState) => {
     if (onSearchStateChange) {
       onSearchStateChange({ ...searchState, currentChapterData });
     }
   }, [onSearchStateChange, currentChapterData]);
 
-  // ─── 검색 훅 (내부 모드 전용) ─────────────────────────────────────────
-  // 외부 모드에서는 빈 배열을 전달해 훅을 비활성화합니다.
   const {
     searchTerm: internalSearchTerm,
     isSearchActive: internalIsSearchActive,
@@ -95,9 +385,8 @@ const GraphContainer = forwardRef(({
     currentChapterData,
   );
 
-  // ─── 유효 검색 상태 ────────────────────────────────────────────────────
-  const effectiveSearchTerm       = externalSearchTerm       ?? internalSearchTerm;
-  const effectiveIsSearchActive   = externalIsSearchActive   ?? internalIsSearchActive;
+  const effectiveSearchTerm = externalSearchTerm ?? internalSearchTerm;
+  const effectiveIsSearchActive = externalIsSearchActive ?? internalIsSearchActive;
   const effectiveFilteredElements = externalFilteredElements ?? internalFilteredElements;
   const effectiveIsResetFromSearch = externalIsResetFromSearch ?? internalIsResetFromSearch;
 
@@ -123,16 +412,13 @@ const GraphContainer = forwardRef(({
     return elements;
   }, [isExternalMode, effectiveIsSearchActive, effectiveFilteredElements, elements]);
 
-  // ─── 명령형 인터페이스 ─────────────────────────────────────────────────
-  // ref를 통해 검색 동작만 노출합니다.
-  // 검색 상태(searchTerm, isSearchActive)는 onSearchStateChange 콜백으로 전달합니다.
   useImperativeHandle(ref, () => ({
     handleSearchSubmit: isExternalMode ? () => {} : handleSearchSubmit,
-    clearSearch:        isExternalMode ? () => {} : clearSearch,
+    clearSearch: isExternalMode ? () => {} : clearSearch,
   }), [isExternalMode, handleSearchSubmit, clearSearch]);
 
   return (
-    <ViewerRelationGraph
+    <MemoViewerRelationGraph
       elements={finalElements}
       newNodeIds={newNodeIds}
       chapterNum={currentChapter}

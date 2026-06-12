@@ -1,3 +1,5 @@
+/** 훅 내부 API 에러 상태·자동 클리어 */
+
 import { useState, useCallback, useRef } from 'react';
 import { errorUtils } from '../../utils/common/errorUtils';
 

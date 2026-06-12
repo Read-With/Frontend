@@ -1,24 +1,28 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import PropTypes from "prop-types";
 import { useNavigate, useParams, useLocation } from "react-router-dom";
 
 import GraphTopBar from "./GraphTopBar";
 import ChapterSidebar from "./ChapterSidebar";
 import GraphCanvas from "./GraphCanvas";
-import ErrorToast from "../common/ErrorToast";
 import "./RelationGraph.css";
 
 import { createGraphStylesheet, getEdgeStyle, getWideLayout } from "../../utils/styles/graphStyles";
 import { COLORS, ANIMATION_VALUES, createButtonStyle, createAdvancedButtonHandlers } from "../../utils/styles/styles.js";
 import { GRAPH_LAYOUT_CONSTANTS } from './graphConstants.js';
-import { useGraphSearch } from '../../hooks/graph/useGraphSearch.jsx';
+import { errorUtils } from '../../utils/common/errorUtils';
+import {
+  useGraphSearch,
+  useGraphState,
+  useGraphElementPipeline,
+} from '../../hooks/graph/graphViewHooks';
 import { applySearchFadeEffect } from '../../utils/graph/searchUtils.jsx';
-import { useGraphDataLoader } from '../../hooks/graph/useGraphDataLoader.js';
-import { useApiGraphData } from '../../hooks/graph/useApiGraphData.js';
-import { useGraphState } from '../../hooks/graph/useGraphState.js';
+import { useGraphDataLoader } from '../../hooks/graph/useGraphDataLoader';
+import { useApiGraphData } from '../../hooks/graph/useApiGraphData';
 import { useLocalStorageNumber } from '../../hooks/common/useLocalStorage.js';
 import { convertRelationsToElements } from '../../utils/graph/graphDataUtils';
 import { createCharacterMaps, buildNodeWeights } from '../../utils/graph/characterUtils';
-import { resolveGraphElementsProfileImages } from '../../utils/common/authAssetLoader';
+import { resolveGraphElementsProfileImages } from '../../utils/common/artifactUrlUtils';
 import {
   processTooltipData,
   calculateLastEventForChapter,
@@ -30,7 +34,6 @@ import {
 import { eventUtils, graphDataTransformUtils, getServerBookId } from '../../utils/viewer/viewerUtils';
 import { userViewerPath } from '../../utils/navigation/viewerPaths';
 import useGraphInteractions from "../../hooks/graph/useGraphInteractions";
-import { useGraphElementPipeline } from "../../hooks/graph/useGraphElementPipeline";
 import { useChapterPovSummaries } from '../../hooks/viewer/useChapterPovSummaries';
 import {
   getChapterData,
@@ -68,6 +71,97 @@ const backButtonContainerStyle = {
 
 const getEdgeStyleForGraph = () => getEdgeStyle('graph');
 const graphBackButtonHandlers = createAdvancedButtonHandlers('default');
+
+function ErrorToast({ error, onClose, duration = 5000 }) {
+  useEffect(() => {
+    if (error && duration > 0) {
+      const timer = setTimeout(() => {
+        onClose();
+      }, duration);
+      return () => clearTimeout(timer);
+    }
+  }, [error, duration, onClose]);
+
+  if (!error) return null;
+
+  const userFriendlyMessage = errorUtils.getUserFriendlyMessage(error);
+
+  return (
+    <div
+      role="alert"
+      aria-live="assertive"
+      style={{
+        position: 'fixed',
+        top: '80px',
+        right: '24px',
+        zIndex: 10003,
+        background: 'rgba(220, 38, 38, 0.95)',
+        color: '#fff',
+        padding: '12px 16px',
+        borderRadius: '8px',
+        boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
+        minWidth: '300px',
+        maxWidth: '500px',
+        display: 'flex',
+        alignItems: 'flex-start',
+        gap: '12px',
+        animation: 'slideInRight 0.3s ease-out',
+      }}
+    >
+      <style>
+        {`
+          @keyframes slideInRight {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+          }
+        `}
+      </style>
+      <span className="material-symbols-outlined" style={{ fontSize: '20px', flexShrink: 0 }}>
+        error
+      </span>
+      <div style={{ flex: 1 }}>
+        <div style={{ fontWeight: 600, marginBottom: '4px', fontSize: '14px' }}>
+          오류 발생
+        </div>
+        <div style={{ fontSize: '13px', lineHeight: '1.4', opacity: 0.95 }}>
+          {userFriendlyMessage}
+        </div>
+      </div>
+      <button
+        onClick={onClose}
+        style={{
+          background: 'transparent',
+          border: 'none',
+          color: '#fff',
+          cursor: 'pointer',
+          padding: '4px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          opacity: 0.8,
+          transition: 'opacity 0.2s',
+        }}
+        onMouseEnter={(e) => { e.currentTarget.style.opacity = '1'; }}
+        onMouseLeave={(e) => { e.currentTarget.style.opacity = '0.8'; }}
+        aria-label="오류 메시지 닫기"
+      >
+        <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>
+          close
+        </span>
+      </button>
+    </div>
+  );
+}
+
+ErrorToast.propTypes = {
+  error: PropTypes.oneOfType([
+    PropTypes.string,
+    PropTypes.object,
+    PropTypes.instanceOf(Error),
+  ]),
+  onClose: PropTypes.func.isRequired,
+  duration: PropTypes.number,
+};
 
 function RelationGraphWrapper() {
   const navigate = useNavigate();

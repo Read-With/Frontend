@@ -1,40 +1,7 @@
-/**
- * 검색 유틸리티 (Search Utils)
- * 주요 기능:
- * 1. 검색 및 필터링
- *    - nodeMatchesQuery: 노드가 검색어와 매칭되는지 확인
- *    - buildSuggestions: 검색어 기반 인물 추천 리스트 생성 (최대 8개)
- *    - filterGraphElements: 검색어에 맞는 노드와 연결된 요소들 필터링
- *
- * 2. 시각적 효과
- *    - highlightText: 검색어를 텍스트에서 하이라이트 렌더링
- *    - applySearchFadeEffect: 검색 결과 외 요소들을 페이드 아웃
- *
- * 3. 검색 결과 처리
- *    - createFilteredElementIds: 필터링된 요소들의 ID 집합 생성
- *    - shouldShowNoSearchResults: 검색 결과 없음 상태 확인
- *    - getNoSearchResultsMessage: 검색 결과 없음 메시지 생성
- *
- * 4. 성능 최적화
- *    - regexCache: 정규식 캐싱으로 검색 성능 향상 (최대 500개, TTL 5분)
- *    - clearRegexCache: 정규식 캐시 정리
- *    - cleanupSearchResources: 모든 검색 관련 리소스 정리
- *
- * 특징:
- * - 챕터별 필터링 지원 (currentChapterData)
- * - 완전 일치 및 부분 일치 검색
- * - label, common_name, names 배열 검색 지원
- * - 에러 처리 및 입력 검증 완비
- * - cleanup 함수 패턴으로 메모리 관리
- */
+/** 그래프 노드 검색·필터·페이드 */
 
-import React from 'react';
-import { registerCache, recordCacheAccess, enforceCacheSizeLimit } from '../common/cache/cacheManager';
-import { clearHighlightClassesOn } from '../graph/graphUtils';
-import { isGraphEdgeElement, isGraphNodeElement, uniqueStrings } from './graphNormalizeUtils';
-
-const regexCache = new Map();
-registerCache('regexCache', regexCache, { maxSize: 500, ttl: 300000 });
+import { clearHighlightClassesOn } from './graphUtils';
+import { isGraphEdgeElement, isGraphNodeElement, uniqueStrings } from './graphUtils';
 
 const buildChapterCharacterIdSet = (currentChapterData) => {
   if (!currentChapterData?.characters?.length) return null;
@@ -42,59 +9,7 @@ const buildChapterCharacterIdSet = (currentChapterData) => {
 };
 
 /**
- * 텍스트를 검색어로 분할하여 하이라이트용 배열로 변환
- * @param {string} text - 원본 텍스트
- * @param {string} query - 검색어
- * @returns {Array} 분할된 텍스트 배열
- */
-function highlightParts(text, query) {
-  if (!query || !text) {
-    return [text];
-  }
-  
-  try {
-    const cacheKey = query.toLowerCase();
-    recordCacheAccess('regexCache');
-    
-    let regex = regexCache.get(cacheKey);
-    
-    if (!regex) {
-      regex = new RegExp(`(${escapeRegExp(query)})`, 'gi');
-      regexCache.set(cacheKey, regex);
-      enforceCacheSizeLimit('regexCache');
-    }
-    
-    return String(text).split(regex).filter(Boolean);
-  } catch (error) {
-    console.error('highlightParts 실패:', error, { text, query });
-    return [text];
-  }
-}
-
-/**
- * 정규식 특수 문자를 이스케이프하는 함수
- * @param {string} s - 이스케이프할 문자열
- * @returns {string} 이스케이프된 문자열
- */
-function escapeRegExp(s) {
-  if (!s || typeof s !== 'string') {
-    console.warn('escapeRegExp: 유효하지 않은 입력입니다', { s, type: typeof s });
-    return '';
-  }
-  
-  try {
-    return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  } catch (error) {
-    console.error('escapeRegExp 실패:', error, { s });
-    return s;
-  }
-}
-
-/**
- * 노드가 검색어와 매칭되는지 확인하는 함수
- * @param {Object} node - 검사할 노드 객체
- * @param {string} searchLower - 소문자로 변환된 검색어
- * @returns {boolean} 매칭 여부
+ * 노드가 검색어와 매칭되는지 확인
  */
 export function nodeMatchesQuery(node, searchLower) {
   if (!node?.data || typeof searchLower !== 'string') {
@@ -338,38 +253,6 @@ export function filterGraphElements(elements, searchTerm, currentChapterData = n
 }
 
 /**
- * 텍스트 하이라이트 렌더링 함수
- * @param {string} text - 원본 텍스트
- * @param {string} term - 하이라이트할 검색어
- * @param {Object} [highlightStyle] - 하이라이트 스타일
- * @returns {Array} JSX 요소 배열
- */
-export function highlightText(text, term, highlightStyle = { fontWeight: 'bold', color: '#5C6F5C' }) {
-  if (!text || typeof text !== 'string') {
-    console.warn('highlightText: 유효하지 않은 텍스트입니다', { text, type: typeof text });
-    return [<span key="0">{text || ''}</span>];
-  }
-  
-  if (!term || typeof term !== 'string') {
-    return [<span key="0">{text}</span>];
-  }
-  
-  try {
-    const parts = highlightParts(text, term);
-    return parts.map((part, index) =>
-      part.toLowerCase && term && part.toLowerCase() === term.toLowerCase() ? (
-        <span key={index} style={highlightStyle}>{part}</span>
-      ) : (
-        <span key={index}>{part}</span>
-      )
-    );
-  } catch (error) {
-    console.error('highlightText 실패:', error, { text, term });
-    return [<span key="0">{text}</span>];
-  }
-}
-
-/**
  * 검색된 요소들의 ID 집합을 생성
  * @param {Array} filteredElements - 검색 결과 요소들
  * @returns {Set} 검색된 요소들의 ID 집합
@@ -556,34 +439,4 @@ export function getNoSearchResultsMessage(searchTerm) {
     title: "검색 결과가 없습니다",
     description: `"${searchTerm}"와 일치하는 인물을 찾을 수 없습니다.`
   };
-}
-
-/**
- * 정규식 캐시 정리 함수
- * @returns {void}
- */
-export function clearRegexCache() {
-  try {
-    regexCache.clear();
-    console.info('regexCache 정리 완료');
-  } catch (error) {
-    console.error('clearRegexCache 실패:', error);
-  }
-}
-
-/**
- * 모든 검색 관련 리소스 정리 함수
- * @param {Object} cy - Cytoscape 인스턴스 (선택사항)
- * @returns {void}
- */
-export function cleanupSearchResources(cy = null) {
-  try {
-    clearRegexCache();
-    
-    if (cy) clearHighlightClassesOn(cy);
-    
-    console.info('검색 관련 리소스 정리 완료');
-  } catch (error) {
-    console.error('cleanupSearchResources 실패:', error);
-  }
 }

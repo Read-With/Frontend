@@ -1,3 +1,5 @@
+/** 인증·토큰 갱신·authenticatedFetch */
+
 import { getApiBaseUrl, clearAuthData } from '../common/authUtils';
 import {
   getStoredAccessToken,
@@ -8,6 +10,28 @@ import {
 } from '../security/authTokenStorage';
 
 const API_BASE_URL = getApiBaseUrl();
+
+export const makeSilentError = (code, message) => ({
+  isSuccess: false,
+  code,
+  message,
+  result: null,
+});
+
+export const isForbiddenError = (error) =>
+  error?.status === 403 ||
+  String(error?.message ?? '').includes('403') ||
+  String(error?.message ?? '').includes('권한');
+
+export const isNotFoundError = (error) =>
+  error?.status === 404 ||
+  String(error?.message ?? '').includes('404') ||
+  String(error?.message ?? '').includes('찾을 수 없습니다');
+
+const JSON_ACCEPT_HEADERS = {
+  'Content-Type': 'application/json',
+  Accept: 'application/json',
+};
 
 function decodeJwtPayload(token) {
   if (!token || typeof token !== 'string') return null;
@@ -57,7 +81,7 @@ export const getTokenExpirationTime = (token) => {
   return null;
 };
 
-// 토큰이 곧 만료될 예정인지 확인 (기본 5분 전)
+/** 만료 bufferSeconds 전이면 true (기본 5분) */
 export const isTokenExpiringSoon = (token, bufferSeconds = 5 * 60) => {
   const remainingTime = getTokenExpirationTime(token);
   if (remainingTime === null) return false;
@@ -67,7 +91,7 @@ export const isTokenExpiringSoon = (token, bufferSeconds = 5 * 60) => {
 const MAX_REFRESH_BUFFER_SEC = 15 * 60;
 const MIN_REFRESH_BUFFER_SEC = 60;
 
-/** 액세스 JWT TTL에 맞춘 사전 갱신 여유(초). 짧은 TTL에서 주기적 폴링이 빗나가지 않게 최소 60초는 둔다. */
+/** 액세스 JWT TTL 기반 사전 갱신 여유(초, 최소 60) */
 export function getProactiveRefreshBufferSeconds(token) {
   const payload = decodeJwtPayload(token);
   if (!payload?.exp) return MAX_REFRESH_BUFFER_SEC;
@@ -81,19 +105,41 @@ export function getProactiveRefreshBufferSeconds(token) {
   return Math.min(MAX_REFRESH_BUFFER_SEC, Math.max(MIN_REFRESH_BUFFER_SEC, fromTtl));
 }
 
+const createAuthExpiredError = () => {
+  const error = new Error('인증이 만료되었습니다. 다시 로그인해주세요.');
+  error.status = 401;
+  return error;
+};
+
+async function refreshAccessTokenIfExpiringSoon() {
+  let token = getStoredAccessToken();
+  if (!token || !isTokenExpiringSoon(token, getProactiveRefreshBufferSeconds(token))) {
+    return token;
+  }
+  try {
+    await refreshToken();
+    token = getStoredAccessToken();
+  } catch (error) {
+    console.warn('토큰 자동 갱신 실패:', error);
+  }
+  return token;
+}
+
+async function fetchPublicAuthJson(path, options = {}) {
+  const response = await fetch(`${API_BASE_URL}/api${path}`, {
+    ...options,
+    headers: { ...JSON_ACCEPT_HEADERS, ...options.headers },
+  });
+  if (!response.ok) {
+    throw new Error(`API 요청 실패: ${response.status}`);
+  }
+  return response.json();
+}
+
 export const authenticatedRequest = async (endpoint, options = {}, retryCount = 0) => {
   await ensureSessionAccessToken();
-  let token = getStoredAccessToken();
-  
-  if (token && isTokenExpiringSoon(token, getProactiveRefreshBufferSeconds(token))) {
-    try {
-      await refreshToken();
-      token = getStoredAccessToken();
-    } catch (error) {
-      console.warn('토큰 자동 갱신 실패:', error);
-    }
-  }
-  
+  const token = await refreshAccessTokenIfExpiringSoon();
+
   const isFormData = options.body instanceof FormData;
   const defaultHeaders = {
     ...(!isFormData && { 'Content-Type': 'application/json' }),
@@ -111,7 +157,7 @@ export const authenticatedRequest = async (endpoint, options = {}, retryCount = 
       ...options.headers,
     },
   });
-  
+
   if (!response.ok) {
     if (response.status === 401 && retryCount === 0) {
       try {
@@ -119,19 +165,15 @@ export const authenticatedRequest = async (endpoint, options = {}, retryCount = 
         return authenticatedRequest(endpoint, options, retryCount + 1);
       } catch (_refreshError) {
         clearAuthData();
-        const error = new Error('인증이 만료되었습니다. 다시 로그인해주세요.');
-        error.status = 401;
-        throw error;
+        throw createAuthExpiredError();
       }
     }
-    
+
     if (response.status === 401) {
       clearAuthData();
-      const error = new Error('인증이 만료되었습니다. 다시 로그인해주세요.');
-      error.status = 401;
-      throw error;
+      throw createAuthExpiredError();
     }
-    
+
     let data;
     try {
       data = await response.json();
@@ -140,30 +182,18 @@ export const authenticatedRequest = async (endpoint, options = {}, retryCount = 
       error.status = response.status;
       throw error;
     }
-    
+
     const error = new Error(data.message || `API 요청 실패: ${response.status}`);
     error.status = response.status;
     throw error;
   }
-  
+
   return response.json();
 };
 
 export const getGoogleAuthUrl = async () => {
   try {
-    const response = await fetch(`${API_BASE_URL}/api/auth/google/url`, {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-      },
-    });
-    
-    if (!response.ok) {
-      throw new Error(`API 요청 실패: ${response.status}`);
-    }
-    
-    return response.json();
+    return await fetchPublicAuthJson('/auth/google/url', { method: 'GET' });
   } catch (error) {
     console.error('구글 인증 URL 생성 실패:', error);
     return null;
@@ -172,20 +202,10 @@ export const getGoogleAuthUrl = async () => {
 
 export const googleLogin = async (code) => {
   try {
-    const response = await fetch(`${API_BASE_URL}/api/auth/google`, {
+    return await fetchPublicAuthJson('/auth/google', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-      },
       body: JSON.stringify({ code }),
     });
-    
-    if (!response.ok) {
-      throw new Error(`API 요청 실패: ${response.status}`);
-    }
-    
-    return response.json();
   } catch (error) {
     console.error('구글 로그인 실패:', error);
     throw error;
@@ -195,21 +215,20 @@ export const googleLogin = async (code) => {
 export const refreshToken = async () => {
   try {
     const refreshTokenValue = getStoredRefreshToken();
-    
+
     if (!refreshTokenValue) {
       throw new Error('Refresh Token이 없습니다.');
     }
-    
+
     const response = await fetch(`${API_BASE_URL}/api/auth/refresh`, {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
+        ...JSON_ACCEPT_HEADERS,
         'Refresh-Token': refreshTokenValue,
       },
       credentials: 'include',
     });
-    
+
     if (!response.ok) {
       if (response.status === 401) {
         clearAuthData();
@@ -217,9 +236,9 @@ export const refreshToken = async () => {
       }
       throw new Error(`토큰 갱신 실패: ${response.status}`);
     }
-    
+
     const data = await response.json();
-    
+
     if (data.isSuccess && data.result) {
       if (data.result.accessToken) {
         setStoredAccessToken(data.result.accessToken);
@@ -227,7 +246,7 @@ export const refreshToken = async () => {
       if (data.result.refreshToken) {
         setStoredRefreshToken(data.result.refreshToken);
       }
-      
+
       if (data.result.user) {
         const userData = {
           id: data.result.user.id.toString(),
@@ -238,10 +257,10 @@ export const refreshToken = async () => {
         };
         setStoredGoogleUserJson(JSON.stringify(userData));
       }
-      
+
       return data.result;
     }
-    
+
     throw new Error(data.message || '토큰 갱신 실패');
   } catch (error) {
     console.error('토큰 갱신 실패:', error);
@@ -249,19 +268,10 @@ export const refreshToken = async () => {
   }
 };
 
-/** JWT를 붙여 임의 URL(정규화 자산 /public 등)을 fetch합니다. */
+/** JWT를 붙여 임의 URL(/public 자산 등) fetch */
 export async function authenticatedFetch(url, options = {}, retryCount = 0) {
   await ensureSessionAccessToken();
-  let token = getStoredAccessToken();
-
-  if (token && isTokenExpiringSoon(token, getProactiveRefreshBufferSeconds(token))) {
-    try {
-      await refreshToken();
-      token = getStoredAccessToken();
-    } catch (error) {
-      console.warn('토큰 자동 갱신 실패:', error);
-    }
-  }
+  const token = await refreshAccessTokenIfExpiringSoon();
 
   const headers = {
     Accept: 'application/json, text/html, application/xhtml+xml, */*',
@@ -282,9 +292,7 @@ export async function authenticatedFetch(url, options = {}, retryCount = 0) {
       return authenticatedFetch(url, options, retryCount + 1);
     } catch (_refreshError) {
       clearAuthData();
-      const error = new Error('인증이 만료되었습니다. 다시 로그인해주세요.');
-      error.status = 401;
-      throw error;
+      throw createAuthExpiredError();
     }
   }
 
@@ -293,7 +301,7 @@ export async function authenticatedFetch(url, options = {}, retryCount = 0) {
 
 let sessionBootstrapPromise = null;
 
-/** 페이지 로드 직후 메모리에 액세스 토큰이 없을 때, 리프레시 토큰으로 한 번 채운다. */
+/** 액세스 토큰 없을 때 리프레시로 세션 부트스트랩 */
 export async function ensureSessionAccessToken() {
   const existing = getStoredAccessToken();
   if (existing && isTokenValid(existing)) return;
@@ -306,7 +314,7 @@ export async function ensureSessionAccessToken() {
       try {
         await refreshToken();
       } catch {
-        /* refreshToken이 실패 시 clearAuth 등 처리 */
+        /* refresh 실패 시 refreshToken 내부에서 clearAuth 처리 */
       }
     })().finally(() => {
       sessionBootstrapPromise = null;
@@ -317,8 +325,7 @@ export async function ensureSessionAccessToken() {
 
 export const checkAuthStatus = async () => {
   try {
-    const data = await authenticatedRequest('/auth/status');
-    return data;
+    return await authenticatedRequest('/auth/status');
   } catch (error) {
     console.error('인증 상태 확인 실패:', error);
     return null;
@@ -327,8 +334,7 @@ export const checkAuthStatus = async () => {
 
 export const getCurrentUser = async () => {
   try {
-    const data = await authenticatedRequest('/auth/me');
-    return data;
+    return await authenticatedRequest('/auth/me');
   } catch (error) {
     console.error('사용자 정보 조회 실패:', error);
     return null;

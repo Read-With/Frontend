@@ -1,16 +1,18 @@
+/** fine graph API 로드·캐시·elements 누적 병합 */
+
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { getFineGraph } from '../../utils/api/api';
 import { getGraphEventState, getCachedChapterEvents } from '../../utils/common/cache/chapterEventCache';
 import { buildNodeWeights, createCharacterMaps } from '../../utils/graph/characterUtils';
 import { convertRelationsToElements } from '../../utils/graph/graphDataUtils';
-import { resolveGraphElementsProfileImages } from '../../utils/common/authAssetLoader';
+import { resolveGraphElementsProfileImages } from '../../utils/common/artifactUrlUtils';
 import {
   cacheKeyUtils,
   eventUtils,
   graphDataCacheUtils,
   graphDataTransformUtils,
 } from '../../utils/viewer/viewerUtils';
-import { resolveServerEventMatch } from '../../utils/viewer/serverEventMatcher';
+import { resolveServerEventMatch } from '../../utils/viewer/viewerEventUtils';
 
 function buildFallbackElementsFromRelations(relationsInput) {
   const relations = Array.isArray(relationsInput) ? relationsInput : [];

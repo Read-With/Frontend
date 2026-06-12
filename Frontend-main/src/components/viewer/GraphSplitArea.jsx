@@ -2,13 +2,13 @@ import React, { useRef, useMemo, memo } from "react";
 import { AlertCircle, AlertTriangle, Inbox, Loader2 } from "lucide-react";
 import GraphContainer from "../graph/GraphContainer";
 import ViewerTopBar from "./ViewerTopBar";
-import { useGraphElementPipeline } from "../../hooks/graph/useGraphElementPipeline";
+import { useGraphElementPipeline } from "../../hooks/graph/graphViewHooks";
 import { graphStyles } from "../../utils/styles/graphStyles";
 import {
   graphPanelHasCachedLocationHint,
   graphPanelHasResumeLocationHint,
 } from "../../utils/common/locatorUtils";
-import { resolveDisplayedEventNum } from "../../utils/viewer/eventDisplayUtils";
+import { resolveDisplayedEventNum } from "../../utils/viewer/viewerEventUtils";
 
 const iconShellClass = {
   loading: "bg-emerald-50 text-[#5C6F5C]",

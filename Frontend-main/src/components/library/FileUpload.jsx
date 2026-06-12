@@ -7,7 +7,7 @@ import {
   epubUploadBasename,
   EPUB_FILE_CONSTRAINTS,
   validateEpubFile,
-} from '../../utils/library/epubUploadUtils';
+} from '../../utils/library/libraryUtils';
 import { normalizeTitle } from '../../utils/common/stringUtils';
 
 function normalizeAuthorMatch(author) {

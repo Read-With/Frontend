@@ -1,8 +1,15 @@
+/** macro/fine graph API·manifest 로드 (RelationGraph 전용) */
+
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { getMacroGraph, getFineGraph, getBookManifest } from '../../utils/api/api.js';
 import { getManifestFromCache } from '../../utils/common/cache/manifestCache';
-import { resolveMaxChapter } from '../../utils/graph/maxChapterResolver';
-import { loadGraphDataWithCache, hasMacroGraphStorageCache, hasMacroSessionCache, prefetchMacroGraphToCache } from '../../utils/graph/graphDataLoader';
+import {
+  resolveMaxChapter,
+  loadGraphDataWithCache,
+  hasMacroGraphStorageCache,
+  hasMacroSessionCache,
+  prefetchMacroGraphToCache,
+} from '../../utils/graph/graphData';
 import { useErrorHandler } from '../common/useErrorHandler';
 
 const ERROR_DISPLAY_DURATION = 5000;

@@ -3,7 +3,7 @@ import react from "@vitejs/plugin-react";
 import fs from 'fs';
 import path from 'path';
 import { buildContentSecurityPolicy } from './vite/csp.js';
-import { DEFAULT_DEV_PROXY_TARGET } from './src/utils/common/appEnvDefaults.js';
+import { DEFAULT_DEV_PROXY_TARGET } from './src/utils/common/authUtils.js';
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
@@ -11,7 +11,8 @@ export default defineConfig(({ mode }) => {
   const cspForProdHtml = buildContentSecurityPolicy(env, { dev: false });
   const proxyTarget =
     env.VITE_DEV_PROXY_TARGET || env.VITE_API_BASE_URL || DEFAULT_DEV_PROXY_TARGET;
-  const publicProxyTarget = env.VITE_CDN_BASE_URL || proxyTarget;
+  const publicProxyTarget =
+    env.VITE_CDN_BASE_URL || env.VITE_API_BASE_URL || proxyTarget;
   const envPath = path.resolve(process.cwd(), '.env');
   let clientId = null;
   try {

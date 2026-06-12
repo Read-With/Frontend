@@ -1,3 +1,5 @@
+/** 챕터 POV 요약 API 조회 */
+
 import { useState, useEffect, useCallback } from 'react';
 import { getChapterPovSummaries } from '../../utils/api/booksApi';
 

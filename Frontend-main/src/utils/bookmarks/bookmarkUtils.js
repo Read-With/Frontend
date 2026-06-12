@@ -1,3 +1,6 @@
+/** 북마크 표시·locator·색상 팔레트·목록 로드 */
+
+import { getBookmarks } from '../api/booksApi';
 import { toLocator, locatorsEqual } from '../common/locatorUtils';
 
 export const createBookmarkTitle = (pageNum, chapterNum, fallbackIndex = null) => {
@@ -43,7 +46,7 @@ export const isSameBookmarkPosition = (bookmark, ref) => {
   return a.chapterIndex === b.chapterIndex && a.blockIndex === b.blockIndex && a.offset === b.offset;
 };
 
-export const getLocatorSortKey = (loc) => {
+const getLocatorSortKey = (loc) => {
   const n = toLocator(loc);
   if (!n) return '';
   return `${String(n.chapterIndex).padStart(6, '0')}_${String(n.blockIndex).padStart(6, '0')}_${String(n.offset).padStart(8, '0')}`;
@@ -121,17 +124,6 @@ export const colorOptions = [
   { key: 'highlight', label: '강조', color: bookmarkColors.highlight, border: bookmarkBorders.highlight, icon: 'styler' },
 ];
 
-export const bookmarkColorPalette = [
-  { value: '#28B532', label: '기본', preview: '#28B532' },
-  { value: '#FF6B6B', label: '빨강', preview: '#FF6B6B' },
-  { value: '#4ECDC4', label: '청록', preview: '#4ECDC4' },
-  { value: '#45B7D1', label: '파랑', preview: '#45B7D1' },
-  { value: '#96CEB4', label: '연두', preview: '#96CEB4' },
-  { value: '#FFEAA7', label: '노랑', preview: '#FFEAA7' },
-  { value: '#DDA0DD', label: '보라', preview: '#DDA0DD' },
-  { value: '#FFB347', label: '주황', preview: '#FFB347' },
-];
-
 export const getColorKey = (color) => {
   if (color === bookmarkColors.important) return 'important';
   if (color === bookmarkColors.highlight) return 'highlight';
@@ -145,4 +137,28 @@ export const createBookmarkData = (bookId, color = '#28B532', memo = '', startLo
   if (start) data.startLocator = start;
   if (start && end && !locatorsEqual(start, end)) data.endLocator = end;
   return data;
+};
+
+export const loadBookmarks = async (bookId, sort = 'time_desc') => {
+  try {
+    const response = await getBookmarks(bookId, sort);
+    if (response.isSuccess) {
+      const list = response.result;
+      return Array.isArray(list) ? list : [];
+    }
+    return [];
+  } catch (_error) {
+    return [];
+  }
+};
+
+export const removeBookmarkHighlights = () => {
+  document.querySelectorAll('.bookmark-highlight').forEach((highlight) => {
+    highlight.classList.remove('bookmark-highlight');
+    highlight.style.backgroundColor = '';
+    highlight.style.opacity = '';
+    highlight.style.borderRadius = '';
+    highlight.style.padding = '';
+    highlight.style.margin = '';
+  });
 };

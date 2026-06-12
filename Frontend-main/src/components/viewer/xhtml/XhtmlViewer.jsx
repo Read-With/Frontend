@@ -9,18 +9,19 @@ import React, {
   useMemo,
 } from 'react';
 import { flushSync } from 'react-dom';
-import { loadCombinedXhtml } from '../../../utils/normalizedContent';
+import { loadCombinedXhtml } from '../../../utils/normalizedContent/combinedXhtmlLoader';
 import { defaultSettings } from '../../../utils/common/settingsUtils';
 import {
   sanitizeXhtmlBodyHtml,
   collectSanitizedStyleCssFromDocument,
 } from '../../../utils/viewer/sanitizeXhtml';
 import { getManifestFromCache } from '../../../utils/common/cache/manifestCache';
+import { errorUtils } from '../../../utils/common/errorUtils';
 
 const xhtmlLoadCache = new Map();
-const XHTML_LOAD_CACHE_VERSION = 'v2';
+const XHTML_LOAD_CACHE_VERSION = 'v3';
 
-/** 챕터당 data-chapter-index 노드가 하나뿐이고 data-block-index 없음 → transform 페이징만으로는 항상 같은 노드만 겹침 */
+/** 챕터당 단일 마커 노드(data-block-index 없음) 여부 */
 function isSingleChapterMarkerBlob(el, rulerRoot) {
   if (!el || !rulerRoot?.querySelectorAll) return false;
   if (el.getAttribute('data-block-index') != null && el.getAttribute('data-block-index') !== '') {
@@ -31,7 +32,7 @@ function isSingleChapterMarkerBlob(el, rulerRoot) {
   return rulerRoot.querySelectorAll(`[data-chapter-index="${ch}"]`).length === 1;
 }
 
-/** 이런 DOM에서는 blockIndex에 뷰어 페이지 인덱스를 넣어 저장·복원 (서버 v2 locator 재사용) */
+/** 단일 마커·다페이지일 때 blockIndex에 페이지 인덱스 인코딩 */
 function shouldEncodePageInBlockIndex(el, rulerRoot, totalPages, pageHeightPx) {
   if (totalPages <= 1 || !isSingleChapterMarkerBlob(el, rulerRoot)) return false;
   const ph = pageHeightPx;
@@ -39,7 +40,7 @@ function shouldEncodePageInBlockIndex(el, rulerRoot, totalPages, pageHeightPx) {
   return el.offsetHeight > ph * 1.12;
 }
 
-/** data-block-index 없으면 챕터별 문서 순서로 0,1,2… 합성 (정규화 산출물 편차 대응) */
+/** data-block-index 없으면 챕터별 문서 순서로 blockIndex 합성 */
 function collectBlockEntries(root) {
   if (!root?.querySelectorAll) return [];
   const withBlock = Array.from(root.querySelectorAll('[data-chapter-index][data-block-index]'));
@@ -57,7 +58,7 @@ function collectBlockEntries(root) {
   });
 }
 
-/** 숫자 서버 id가 있으면 매니페스트·API 캐시 키와 맞춤 (폴더명만 쓰면 combined 경로 영구 실패하는 책 방지) */
+/** 숫자 서버 bookId 우선 (매니페스트·캐시 키 일치) */
 function resolveLoaderBookId(book, bookIdProp) {
   const candidates = [book?._bookId, book?.id, bookIdProp];
   for (const c of candidates) {
@@ -88,7 +89,7 @@ const getBlockLocator = (el, offset = 0, syntheticBlock = null) => {
   };
 };
 
-/** 페이지 비율 → 챕터 idx (가중치 배열: { chapterIdx, weight }) */
+/** 페이지 비율 → chapterIdx (weightedChapters 가중치 기준) */
 const resolveChapterPagePositionByWeightedPageRatio = (weightedChapters, currentPageIndex, totalPages) => {
   if (!Array.isArray(weightedChapters) || !weightedChapters.length) return null;
   const totalWeight = weightedChapters.reduce((sum, row) => {
@@ -245,7 +246,7 @@ const XhtmlViewer = forwardRef(
     const [currentPageIndex, setCurrentPageIndex] = useState(0);
     const touchStartX = useRef(0);
     const lastLocatorRef = useRef(null);
-    /** 뷰포트 start+end 페어 — end만 바뀌어도 이벤트·챕터 경계 반영해야 함 */
+    /** 뷰포트 start+end 페어 중복 emit 방지 */
     const lastEmittedViewportLocatorJsonRef = useRef(null);
     const initialAnchorAppliedRef = useRef(false);
     const prevBidForInitialRef = useRef(null);
@@ -328,7 +329,7 @@ const XhtmlViewer = forwardRef(
         lastEmittedViewportLocatorJsonRef.current = viewportKey;
         lastLocatorRef.current = persistLoc?.startLocator ? persistLoc : loc;
         onCurrentChapterChange?.(loc.startLocator.chapterIndex);
-        // 이벤트 인덱스 없음(읽기 locator만). fine `result.event` 는 ViewerPage 그래프 로드 후 currentEvent에 합류.
+        // eventIdx 없이 읽기 locator만 전달 (이벤트 메타는 그래프 로드 후 별도)
         onCurrentLineChange?.(linePosition, 0, { anchor: loc });
       },
       [onCurrentChapterChange, onCurrentLineChange]
@@ -354,7 +355,10 @@ const XhtmlViewer = forwardRef(
           const cacheKey = `${XHTML_LOAD_CACHE_VERSION}::${bid}`;
           let loadPromise = xhtmlLoadCache.get(cacheKey);
           if (!loadPromise) {
-            loadPromise = loadCombinedXhtml(bid);
+            loadPromise = loadCombinedXhtml(bid).catch((err) => {
+              xhtmlLoadCache.delete(cacheKey);
+              throw err;
+            });
             xhtmlLoadCache.set(cacheKey, loadPromise);
           }
           const raw = await loadPromise;
@@ -363,7 +367,11 @@ const XhtmlViewer = forwardRef(
           setXhtmlContent({ styleCss, bodyHTML });
         } catch (e) {
           if (!cancelled) {
-            setError(e?.message || '로드 실패');
+            setError(
+              e?.status === 404
+                ? '정규화 본문을 찾을 수 없습니다. 잠시 후 다시 시도하거나 재정규화가 필요할 수 있습니다.'
+                : errorUtils.getUserFriendlyMessage(e) || e?.message || '로드 실패'
+            );
           }
         } finally {
           if (!cancelled) setLoading(false);
@@ -536,8 +544,7 @@ const XhtmlViewer = forwardRef(
         return Math.min(totalCp - 1, Math.max(0, Math.floor((totalCp - 1) * ratio)));
       };
       const singleBlobOffset = estimateOffsetInSingleBlob();
-      // 단일 챕터 마커(blob) 구조에서는 blockIndex가 항상 0이 되어
-      // manifest 매핑이 1/max로만 고정될 수 있으므로 페이지 인덱스를 반영한다.
+      // 단일 마커 blob: blockIndex에 페이지 인덱스 반영 (manifest 비율 고정 방지)
       const logicalBlockForSingleBlob = pageInBlock ? currentPageIndex : startRow.syntheticBlock;
       const logicalStartLoc = getBlockLocator(
         startRow.el,
@@ -551,7 +558,7 @@ const XhtmlViewer = forwardRef(
       );
       if (!logicalStartLoc || !logicalEndLoc) return;
 
-      // 저장/복원용 locator는 기존처럼 page 인코딩을 유지한다.
+      // persist locator도 동일한 page 인코딩 사용
       const persistStartLoc = getBlockLocator(startRow.el, pageInBlock ? singleBlobOffset : 0, pageInBlock ? currentPageIndex : startRow.syntheticBlock);
       const persistEndLoc = getBlockLocator(
         endRow.el,

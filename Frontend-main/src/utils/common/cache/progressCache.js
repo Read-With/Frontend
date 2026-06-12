@@ -1,10 +1,45 @@
-import { registerCache, getCacheItem, setCacheItem, clearCache, removeCacheItem } from './cacheManager';
+import { registerCache, getCacheItem, setCacheItem, removeCacheItem } from './cacheManager';
 import { progressPayloadFromData, progressResultToViewerAnchor, resolveProgressLocator } from '../locatorUtils';
 import { locatorFromBookAbsoluteOffset, normalizeLocatorForServerProgress } from './manifestCache';
-import { progressStorageKey } from '../progressPercentStorage';
 import { clampNumber, clampPercent as clampPercentValue } from '../numberUtils';
+import { toStringOrNull, toTrimmedStringOrNull } from '../stringUtils';
 
 export const PROGRESS_CACHE_UPDATED_EVENT = 'readwith:progress-cache-updated';
+
+/** 마이페이지 진행률 바용 progress_{bookId} localStorage */
+export const progressStorageKey = (bookId) => `progress_${bookId}`;
+
+export function getStoredProgressPercent(bookId) {
+  const id = toTrimmedStringOrNull(bookId);
+  if (!id) return null;
+  try {
+    const raw = localStorage.getItem(progressStorageKey(id));
+    if (raw == null) return null;
+    return clampPercentValue(raw);
+  } catch {
+    return null;
+  }
+}
+
+function setStoredProgressPercent(bookId, percent) {
+  const id = toTrimmedStringOrNull(bookId);
+  if (!id || percent == null || typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(progressStorageKey(id), String(percent));
+  } catch {
+    void 0;
+  }
+}
+
+function removeStoredProgressPercent(bookId) {
+  const id = toTrimmedStringOrNull(bookId);
+  if (!id || typeof window === 'undefined') return;
+  try {
+    localStorage.removeItem(progressStorageKey(id));
+  } catch {
+    void 0;
+  }
+}
 
 /** locator 없이 startTxtOffset만 있을 때 manifest로 v2 locator 보강(캐시·GET 공통) */
 export const ensureProgressRowLocator = (bookIdStr, row) => {
@@ -23,29 +58,11 @@ export const ensureProgressRowLocator = (bookIdStr, row) => {
   };
 };
 
-const syncLibraryProgressPercentToLocalStorage = (bookIdStr, pct) => {
-  if (typeof window === 'undefined' || bookIdStr == null || pct == null) return;
-  try {
-    window.localStorage.setItem(progressStorageKey(bookIdStr), String(pct));
-  } catch {
-    void 0;
-  }
-};
-
-const removeLibraryProgressPercentFromLocalStorage = (bookIdStr) => {
-  if (typeof window === 'undefined' || bookIdStr == null) return;
-  try {
-    window.localStorage.removeItem(progressStorageKey(bookIdStr));
-  } catch {
-    void 0;
-  }
-};
-
 const PROGRESS_CACHE_KEY = 'readwith_progress_cache';
 const PROGRESS_CACHE_TTL_MS = 1000 * 60 * 60 * 24;
 const clampPercent = (value) => Math.round(clampPercentValue(value, 0));
 const clampProgress = (value) => clampNumber(value, 0, 100);
-const toBookIdString = (bookId) => (bookId == null ? null : String(bookId));
+const toBookIdString = toStringOrNull;
 const getEventName = (data) => data?.eventName ?? data?.eventTitle ?? data?.name;
 
 const progressCache = new Map();
@@ -156,41 +173,6 @@ const fromStoredProgress = (stored) => {
   return null;
 };
 
-export const setAllProgress = (progressList) => {
-  if (!Array.isArray(progressList)) return;
-  const rawExisting = getProgressCacheFromStorage() || {};
-  const existingFlat = {};
-  Object.keys(rawExisting).forEach((k) => {
-    if (k === 'all') return;
-    existingFlat[k] = rawExisting[k];
-  });
-  const progressMap = { ...existingFlat };
-  progressList.forEach((progress) => {
-    if (progress && progress.bookId != null) {
-      const id = String(progress.bookId);
-      const stored = toStoredProgress(progress);
-      if (!stored) return;
-      const prev = progressMap[id];
-      const prevPct = normalizeReadingProgressPercent(prev ?? {});
-      const newPct = normalizeReadingProgressPercent(stored);
-      const merged = prev && typeof prev === 'object' ? { ...prev, ...stored } : { ...stored };
-      if (newPct != null) merged.readingProgressPercent = newPct;
-      else if (prevPct != null) merged.readingProgressPercent = prevPct;
-      progressMap[id] = merged;
-    }
-  });
-  Object.entries(progressMap).forEach(([bookId, row]) => {
-    if (!row || typeof row !== 'object') return;
-    setCacheItem('progressCache', bookId, { ...row, timestamp: Date.now() });
-  });
-  saveProgressCacheToStorage(progressMap);
-  Object.entries(progressMap).forEach(([id, row]) => {
-    const progressPercent = normalizeReadingProgressPercent(row ?? {});
-    if (progressPercent != null) syncLibraryProgressPercentToLocalStorage(id, progressPercent);
-  });
-  Object.keys(progressMap).forEach((id) => dispatchProgressCacheUpdated(id));
-};
-
 export const setProgressToCache = (progressData) => {
   if (!progressData || progressData.bookId == null) return;
   const bookIdStr = toBookIdString(progressData.bookId);
@@ -237,7 +219,7 @@ export const setProgressToCache = (progressData) => {
   const cached = getProgressCacheFromStorage() || {};
   cached[bookIdStr] = progress;
   saveProgressCacheToStorage(cached);
-  if (pct != null) syncLibraryProgressPercentToLocalStorage(bookIdStr, pct);
+  if (pct != null) setStoredProgressPercent(bookIdStr, pct);
   dispatchProgressCacheUpdated(progressData.bookId);
 };
 
@@ -265,30 +247,6 @@ export const removeProgressFromCache = (bookId) => {
     delete cached[bookIdStr];
     saveProgressCacheToStorage(cached);
   }
-  removeLibraryProgressPercentFromLocalStorage(bookIdStr);
+  removeStoredProgressPercent(bookIdStr);
   dispatchProgressCacheUpdated(bookIdStr);
-};
-
-export const getAllProgressFromCache = () => {
-  const cached = getProgressCacheFromStorage();
-  const allProgress = [];
-  const seen = new Set();
-
-  const pushUnique = (bookId, row) => {
-    if (!row || seen.has(bookId)) return;
-    const restored = fromStoredProgress(row);
-    if (restored) {
-      allProgress.push(restored);
-      seen.add(bookId);
-    }
-  };
-
-  progressCache.forEach?.((value, bookId) => pushUnique(bookId, value));
-  Object.entries(cached ?? {}).forEach(([bookId, progress]) => pushUnique(bookId, progress));
-
-  return allProgress;
-};
-
-export const clearProgressCache = () => {
-  clearCache('progressCache');
 };

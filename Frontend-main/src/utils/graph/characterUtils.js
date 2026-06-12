@@ -10,11 +10,7 @@ export const createEmptyCharacterMaps = () => ({
   idToProfileImage: {},
 });
 
-/**
- * 캐릭터 데이터를 ID 기반 매핑 객체로 변환
- * @param {Object} characters - characters 필드가 있거나 배열 직접 전달
- * @returns {{idToName:Object, idToDesc:Object, idToDescKo:Object, idToMain:Object, idToNames:Object, idToProfileImage:Object}}
- */
+/** 캐릭터 배열 → id 기반 lookup 맵 */
 export function createCharacterMaps(characters) {
   try {
     const maps = createEmptyCharacterMaps();
@@ -67,10 +63,6 @@ export function createCharacterMaps(characters) {
   }
 }
 
-/**
- * @param {string} profileImage
- * @returns {string|null}
- */
 function validateAndNormalizeProfileImageUrl(profileImage) {
   if (!profileImage || typeof profileImage !== 'string') {
     return null;
@@ -123,9 +115,7 @@ export function extractCharacterId(character) {
   return normalizeCharacterId(candidate);
 }
 
-/**
- * 이벤트별 캐릭터를 ID 기준으로 병합 (빈 필드는 이전 값 유지)
- */
+/** 이벤트별 캐릭터 ID 병합 (빈 필드는 이전 값 유지) */
 export function aggregateCharactersFromEvents(eventList) {
   const charactersMap = new Map();
 
@@ -155,9 +145,7 @@ export function aggregateCharactersFromEvents(eventList) {
   return charactersMap;
 }
 
-/**
- * weight 또는 count가 숫자인 항목만 포함. 동일 ID는 배열 순서상 마지막 항목으로 덮어씀.
- */
+/** weight·count → nodeWeights 맵 */
 export function buildNodeWeights(characters) {
   const nodeWeights = {};
 

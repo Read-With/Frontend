@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react';
 import PropTypes from 'prop-types';
 import { sidebarStyles } from '../../utils/styles/styles.js';
-import { ANIMATION_VALUES } from '../../utils/styles/animations';
+import { ANIMATION_VALUES } from '../../utils/styles/styles';
 import { GRAPH_LAYOUT_CONSTANTS } from './graphConstants.js';
 import { getChapterData, getManifestFromCache } from '../../utils/common/cache/manifestCache';
 import { stripRedundantBookTitlePrefix } from '../../utils/viewer/chapterTitleDisplay';
@@ -16,7 +16,6 @@ function manifestBookTitle(manifestBookId, manifestHint) {
   return String(m?.book?.title ?? m?.title ?? '').trim();
 }
 
-/** 그래프 단독: 본문은 챕터 제목(매니페스트), 숫자는 배지에만 */
 function rowChapterLabels(manifestBookId, idx, bookTitle, manifestHint) {
   const idxStr = Number.isFinite(idx) && idx >= 1 ? String(idx) : '—';
   if (manifestBookId == null || !Number.isFinite(idx) || idx < 1) {

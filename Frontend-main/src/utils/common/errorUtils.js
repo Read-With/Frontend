@@ -1,3 +1,5 @@
+/** 공통 에러 로깅·handleError 래퍼 */
+
 const getErrorDetails = (error) => {
   return {
     message: error?.message || error?.toString() || '알 수 없는 오류',

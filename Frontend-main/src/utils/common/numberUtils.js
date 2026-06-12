@@ -1,5 +1,3 @@
-// 숫자 변환 유틸리티
-
 export const toNumberOrNull = (value) => {
   if (value === null || value === undefined) return null;
   const num = Number(value);

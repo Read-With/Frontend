@@ -1,11 +1,9 @@
 import React from 'react';
 import PropTypes from 'prop-types';
-import GraphControls from './GraphControls';
-import EdgeLabelToggle from './tooltip/EdgeLabelToggle';
+import GraphControls, { EdgeLabelToggle } from './GraphControls';
 import { topBarStyles, COLORS, ANIMATION_VALUES } from '../../utils/styles/styles.js';
 import { GRAPH_LAYOUT_CONSTANTS, GRAPH_CHARACTER_FILTER_STAGE_OPTIONS } from './graphConstants.js';
 
-// 변하지 않는 select 기본 스타일
 const selectBaseStyle = {
   height: 32,
   padding: '0 12px',
@@ -18,7 +16,6 @@ const selectBaseStyle = {
   minWidth: 120,
 };
 
-// ─── CharacterFilterSelect ─────────────────────────────────────────────────────
 function CharacterFilterSelect({ value, onChange }) {
   const isActive = value > 0;
   const style = {
@@ -52,18 +49,6 @@ CharacterFilterSelect.propTypes = {
   onChange: PropTypes.func.isRequired,
 };
 
-// ─── GraphTopBar ───────────────────────────────────────────────────────────────
-/**
- * Props 구조
- *
- * 개별 props:
- *   isSidebarOpen, edgeLabelVisible, onToggleEdgeLabel, filterStage, onFilterChange
- *
- * 그룹 props:
- *   searchState   — 검색 상태값 (searchTerm, isSearchActive, suggestions, showSuggestions, selectedIndex)
- *   searchActions — 검색 핸들러 (onSearchSubmit, onClearSearch, onGenerateSuggestions,
- *                                 onKeyDown, onCloseSuggestions)
- */
 function GraphTopBar({
   isSidebarOpen,
   searchState,

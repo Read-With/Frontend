@@ -1,12 +1,12 @@
 import { extractCharacterId } from './characterUtils';
-import { normalizeRelation, isValidRelation, directedEdgeElementId, getRelationKeyFromRelation } from './relationUtils';
+import { normalizeRelation, isValidRelation, directedEdgeElementId } from './relationUtils';
 import {
   getEventIndexFromObject,
   isGraphEdgeElement,
   normalizeElementId,
   sortElementsByDataId,
   uniqueStrings,
-} from './graphNormalizeUtils';
+} from './graphUtils';
 
 function undirectedPairKey(s, t) {
   const a = String(s);
@@ -54,11 +54,7 @@ function relationPayloadEquivalent(d0, d1) {
   return p0 === p1;
 }
 
-/**
- * 단방향: id `a->b`, 화살표.
- * 역방향 쌍 + 관계 동일: id `a-b`, bidirectional(직선 `-`).
- * 역방향 쌍 + 관계 다름: 두 간선 유지, `reciprocalPair`로 같은 직선 위 `-><-` 겹침.
- */
+/** 단방향 `a->b` / 동일 역쌍 `a-b` / 다른 역쌍 `reciprocalPair` */
 function finalizeDirectedEdges(edgeMap) {
   const list = Array.from(edgeMap.values());
   const buckets = new Map();

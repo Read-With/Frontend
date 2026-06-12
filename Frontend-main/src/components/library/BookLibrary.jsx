@@ -3,11 +3,11 @@ import PropTypes from 'prop-types';
 import { useNavigate } from 'react-router-dom';
 import { Heart, BookOpen, Network, MoreVertical, Info, Clock, FileText, Trash2, X } from 'lucide-react';
 import BookDetailModal from './BookDetailModal';
-import AuthenticatedImage from '../common/AuthenticatedImage';
+import AuthenticatedImage from './AuthenticatedImage';
 import './BookLibrary.css';
 import { ensureGraphBookCache } from '../../utils/common/cache/chapterEventCache';
 import { USER_VIEWER_PREFIX } from '../../utils/navigation/viewerPaths';
-import { formatLibraryRelativeDate } from '../../utils/library/libraryBookDisplay';
+import { formatLibraryRelativeDate } from '../../utils/library/libraryUtils';
 
 const getNumericBookId = (book) => {
   const bookId = Number(book?.id);

@@ -1,6 +1,5 @@
 import React, { useCallback, useMemo, memo } from 'react';
-import GraphControls from '../graph/GraphControls';
-import EdgeLabelToggle from '../graph/tooltip/EdgeLabelToggle';
+import GraphControls, { EdgeLabelToggle } from '../graph/GraphControls';
 import { getChapterData, getManifestFromCache } from '../../utils/common/cache/manifestCache';
 import {
   formatChapterOrderAndName,
@@ -9,7 +8,7 @@ import {
 import { GRAPH_CHARACTER_FILTER_STAGE_OPTIONS } from '../graph/graphConstants';
 import {
   resolveViewerDisplayEventNum,
-} from '../../utils/viewer/eventDisplayUtils';
+} from '../../utils/viewer/viewerEventUtils';
 
 const LOADING_STYLE = {
   display: "inline-block",

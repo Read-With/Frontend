@@ -1,4 +1,6 @@
-import { ANIMATION_VALUES } from './animations';
+/** Cytoscape 스타일시트·레이아웃 상수 */
+
+const DURATION = { FAST: '0.18s', SLOW: '0.4s' };
 
 // graphStyles는 styles.js에서 다시 re-export되므로 styles.js를 직접 import하지 않는다.
 const COLORS = {
@@ -203,7 +205,7 @@ export const createGraphStylesheet = (edgeStyle, edgeLabelVisible, maxEdgeLabelL
       "border-width": 16,
       "border-opacity": 1,
       "transition-property": "border-width, border-color, border-opacity",
-      "transition-duration": ANIMATION_VALUES.DURATION.SLOW,
+      "transition-duration": DURATION.SLOW,
     },
   },
   {
@@ -293,7 +295,7 @@ export const getGraphControlsStyles = () => ({
     fontSize: '15px',
     color: COLORS.textPrimary,
     background: COLORS.backgroundLight,
-    transition: `all ${ANIMATION_VALUES.DURATION.FAST}`,
+    transition: `all ${DURATION.FAST}`,
     outline: 'none',
     height: '36px',
     padding: '0 12px',
@@ -309,7 +311,7 @@ export const getGraphControlsStyles = () => ({
     fontSize: '14px',
     fontWeight: '600',
     cursor: 'pointer',
-    transition: `all ${ANIMATION_VALUES.DURATION.FAST}`,
+    transition: `all ${DURATION.FAST}`,
     width: '88px',
     height: '36px',
     padding: '0 12px',
@@ -365,7 +367,7 @@ export const getGraphControlsStyles = () => ({
     cursor: 'pointer',
     borderBottom: `1px solid ${COLORS.borderLight}`,
     background: isSelected ? COLORS.backgroundLight : COLORS.white,
-    transition: `background ${ANIMATION_VALUES.DURATION.FAST}`,
+    transition: `background ${DURATION.FAST}`,
   }),
   noResults: {
     padding: '16px 14px',

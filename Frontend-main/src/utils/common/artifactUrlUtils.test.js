@@ -6,6 +6,8 @@ import {
   resolveApiArtifactUrl,
   resolveAssetFetchUrl,
   sanitizeAssetUrl,
+  extractBookIdFromPublicAssetUrl,
+  isPublicCoverAssetPath,
 } from './artifactUrlUtils';
 
 vi.mock('./authUtils', () => ({
@@ -85,6 +87,22 @@ describe('resolveApiArtifactUrl', () => {
       )
     ).toBe('/public/books/13/normalizations/x/combined.xhtml');
   });
+
+  it('resolves /public relative path with API base in dev', () => {
+    vi.stubEnv('DEV', true);
+    expect(
+      resolveApiArtifactUrl('/public/books/13/normalizations/x/combined.xhtml')
+    ).toBe('/public/books/13/normalizations/x/combined.xhtml');
+  });
+
+  it('resolves path without leading slash via API base', () => {
+    vi.stubEnv('DEV', false);
+    expect(
+      resolveApiArtifactUrl('public/books/13/normalizations/x/combined.xhtml')
+    ).toBe(
+      'https://dev.readwith.cloud/public/books/13/normalizations/x/combined.xhtml'
+    );
+  });
 });
 
 describe('preferDevPublicProxyPath', () => {
@@ -99,5 +117,30 @@ describe('preferDevPublicProxyPath', () => {
     expect(preferDevPublicProxyPath(input)).toBe(
       '/public/books/13/normalizations/x/combined.xhtml'
     );
+  });
+});
+
+describe('extractBookIdFromPublicAssetUrl', () => {
+  it('extracts book id from public asset paths', () => {
+    expect(
+      extractBookIdFromPublicAssetUrl(
+        'https://dev.readwith.cloud/public/books/13/covers/x/cover.jpg'
+      )
+    ).toBe(13);
+    expect(extractBookIdFromPublicAssetUrl('/public/books/7/normalizations/x/combined.xhtml')).toBe(
+      7
+    );
+    expect(extractBookIdFromPublicAssetUrl('https://example.com/x')).toBeNull();
+  });
+});
+
+describe('isPublicCoverAssetPath', () => {
+  it('detects cover asset paths', () => {
+    expect(
+      isPublicCoverAssetPath('https://dev.readwith.cloud/public/books/1/covers/x/cover.jpg')
+    ).toBe(true);
+    expect(
+      isPublicCoverAssetPath('https://dev.readwith.cloud/public/books/1/normalizations/x/combined.xhtml')
+    ).toBe(false);
   });
 });

@@ -1,36 +1,88 @@
-/**
- * graphUtils.js : Cytoscape 그래프 관련 유틸리티 함수 모음
- * 
- * [주요 기능]
- * 1. 좌표 변환: Cytoscape 좌표 ↔ DOM 좌표 상호 변환
- * 2. 뷰포트 관리: 컨테이너 및 뷰포트 정보 캐싱 (100ms)
- * 3. 위치 제약: 요소를 화면 경계 내로 제한
- * 4. 이벤트 처리: 마우스 이벤트 핸들러 생성 및 관리
- * 5. UI 효과: 리플 애니메이션 생성
- * 6. 데이터 처리: 툴팁 데이터 정규화 (API 응답 → 컴포넌트)
- * 
- * [성능 최적화]
- * - DOM 조회 결과를 100ms 동안 캐싱하여 불필요한 재계산 방지
- * - 리사이즈 이벤트 디바운싱으로 과도한 재계산 방지
- * - 노드 수 제한으로 대규모 그래프 성능 보장
- * 
- * [사용처]
- * - CytoscapeGraphUnified: 그래프 렌더링 및 상호작용
- * - RelationGraphWrapper: 관계 그래프 툴팁 처리
- * - ViewerPage: 뷰어 페이지 툴팁 처리
- * - useTooltipPosition: 툴팁 위치 계산
- * - useGraphInteractions: 그래프 상호작용 로직
- */
+/** 그래프 요소 정규화·Cytoscape 좌표·뷰포트·툴팁 */
 
 import {
   resolveLastEventIdxForFineGraph,
   getLastFineGraphEventIdxFromChapterData,
 } from '../common/cache/manifestCache.js';
-import { isGraphNodeElement, sortElementsByDataId } from './graphNormalizeUtils';
+
+const API_PREFIX = 'api:';
+
+export const toFiniteNumber = (value) => {
+  if (value === undefined || value === null) return NaN;
+  const converted = typeof value === 'number' ? value : Number(value);
+  return Number.isFinite(converted) ? converted : NaN;
+};
+
+export const toPositiveNumber = (value) => {
+  const parsed = toFiniteNumber(value);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+};
+
+export const toPositiveInt = (value, fallback = null) => {
+  const parsed = toFiniteNumber(value);
+  return Number.isFinite(parsed) && parsed >= 1 ? Math.trunc(parsed) : fallback;
+};
+
+export const extractApiBookId = (folderKeyOrFilename) => {
+  if (!folderKeyOrFilename) return null;
+  if (typeof folderKeyOrFilename === 'number') {
+    return toPositiveNumber(folderKeyOrFilename);
+  }
+  const key = String(folderKeyOrFilename).trim();
+  if (!key) return null;
+  return toPositiveNumber(key.startsWith(API_PREFIX) ? key.slice(API_PREFIX.length) : key);
+};
+
+export const toApiFolderKey = (folderKeyOrFilename) => {
+  const bookId = extractApiBookId(folderKeyOrFilename);
+  return bookId ? `${API_PREFIX}${bookId}` : null;
+};
+
+export const normalizeElementId = (element) => element?.id ?? element?.data?.id ?? null;
+
+export const isGraphEdgeElement = (element) =>
+  Boolean(element?.data && element.data.source !== undefined && element.data.target !== undefined);
+
+export const isGraphNodeElement = (element) =>
+  Boolean(element?.data && element.data.id !== undefined && !isGraphEdgeElement(element));
+
+export const sortElementsByDataId = (elements) => {
+  if (!Array.isArray(elements)) return [];
+  return [...elements].sort((a, b) =>
+    String(a?.data?.id ?? '').localeCompare(String(b?.data?.id ?? ''))
+  );
+};
+
+export const uniqueStrings = (values, { caseInsensitive = false } = {}) => {
+  const seen = new Set();
+  const result = [];
+  for (const value of values || []) {
+    const str = String(value ?? '').trim();
+    const key = caseInsensitive ? str.toLowerCase() : str;
+    if (!str || seen.has(key)) continue;
+    seen.add(key);
+    result.push(str);
+  }
+  return result;
+};
+
+export const getEventIndexFromObject = (value, fields = []) => {
+  if (!value || typeof value !== 'object') return NaN;
+  const nested = value.event && typeof value.event === 'object' ? value.event : null;
+  const defaultFields = ['eventNum', 'eventIdx', 'resolvedEventIdx', 'idx', 'event_id', 'event_idx'];
+  for (const field of [...fields, ...defaultFields]) {
+    const direct = toFiniteNumber(value[field]);
+    if (Number.isFinite(direct)) return direct;
+    if (nested) {
+      const nestedValue = toFiniteNumber(nested[field]);
+      if (Number.isFinite(nestedValue)) return nestedValue;
+    }
+  }
+  return NaN;
+};
 
 const GRAPH_CONTAINER_SELECTOR = '.graph-canvas-area';
 
-// 성능 최적화를 위한 캐시 (단일 객체로 관리)
 const cache = {
   container: { data: null, timestamp: 0 },
   viewport: { data: null, timestamp: 0 }
@@ -88,7 +140,6 @@ export const getContainerInfo = () => {
   try {
     const now = Date.now();
     
-    // 캐시가 유효한지 확인
     if (cache.container.data && (now - cache.container.timestamp) < CACHE_DURATION) {
       return cache.container.data;
     }
@@ -484,15 +535,7 @@ export const processTooltipData = (tooltipData, type) => {
   }
 };
 
-/**
- * 챕터의 마지막 이벤트 인덱스(매니페스트 v2 events 기준 힌트).
- * 실제 관계 데이터는 GET /api/v2/graph/fine 이 원천이며, 여기 값은 유효 범위·UI용이다.
- * @param {Object} options
- * @param {Array} options.manifestChapters - Manifest 챕터 목록
- * @param {number|null|undefined} options.manifestBookId - 서버 bookId
- * @param {number} options.chapter - 챕터 번호
- * @returns {number} 마지막 이벤트 번호 (기본값: 1)
- */
+/** 챕터 마지막 이벤트 인덱스 (manifest 힌트, UI·범위용) */
 export const calculateLastEventForChapter = ({
   manifestChapters,
   manifestBookId,
@@ -522,11 +565,6 @@ export const calculateLastEventForChapter = ({
   return resolved != null && resolved >= 1 ? resolved : 1;
 };
 
-/**
- * 이벤트가 사이드바 요소 내부인지 확인합니다.
- * @param {Event} event - DOM 이벤트
- * @returns {boolean} 사이드바 요소 내부 여부
- */
 export const isSidebarElement = (event) => {
   if (!event || !event.target) {
     return false;
@@ -543,11 +581,6 @@ export const isSidebarElement = (event) => {
   return sidebarElement && sidebarElement.contains(event.target);
 };
 
-/**
- * 이벤트가 드래그 종료 이벤트인지 확인합니다.
- * @param {Event} event - DOM 이벤트
- * @returns {boolean} 드래그 종료 이벤트 여부
- */
 export const isDragEndEvent = (event) => {
   return event.detail && event.detail.type === 'dragend';
 };
@@ -580,11 +613,7 @@ export const determineFinalElements = (isSearchActive, filteredElements, sortedE
   return sortedElements;
 };
 
-/**
- * reciprocalPair 간선 쌍마다 동일 중점을 한 번만 잡아 target-endpoint용 오프셋(_rjOx/_rjOy)을 갱신한다.
- * 노드 이동·레이아웃 후에도 두 화살표가 같은 꼭짓점에서 만나게 한다.
- * @param {import('cytoscape').Core} cy
- */
+/** reciprocalPair 간선 쌍의 junction 오프셋(_rjOx/_rjOy) 동기화 */
 export function syncReciprocalPairJunctionOffsets(cy) {
   if (!cy || typeof cy.edges !== 'function') return;
   let edges;
@@ -662,4 +691,65 @@ export function clearHighlightClassesOn(cy) {
   } catch {
     /* ignore */
   }
+}
+
+const PLACEMENT_NODE_SIZE = 40;
+const PLACEMENT_MIN_DISTANCE = PLACEMENT_NODE_SIZE * 3.2;
+const PLACEMENT_PADDING = 80;
+const PLACEMENT_MIN_DIST_SQ = PLACEMENT_MIN_DISTANCE * PLACEMENT_MIN_DISTANCE;
+
+const hasEnoughPlacementDistance = (candidate, positions) =>
+  positions.every((pos) => {
+    const dx = candidate.x - pos.x;
+    const dy = candidate.y - pos.y;
+    return dx * dx + dy * dy > PLACEMENT_MIN_DIST_SQ;
+  });
+
+const isWithinPlacementBounds = ({ x, y }, containerWidth, containerHeight) =>
+  Math.abs(x) < containerWidth / 2 - PLACEMENT_PADDING &&
+  Math.abs(y) < containerHeight / 2 - PLACEMENT_PADDING;
+
+/** 신규 노드 스파이럴 배치 */
+export function calculateSpiralPlacement(newNodes, placedPositions, containerWidth, containerHeight) {
+  if (!newNodes?.length) return newNodes;
+
+  const maxRadius = Math.min(containerWidth, containerHeight) / 2 - PLACEMENT_PADDING;
+  const updatedPositions = [...placedPositions];
+
+  newNodes.forEach((node) => {
+    let found = false;
+    let x;
+    let y;
+    let attempts = 0;
+    const maxAttempts = 200;
+
+    while (!found && attempts < maxAttempts) {
+      const angle = (attempts * 0.5) % (2 * Math.PI);
+      const radius = Math.min(50 + attempts * 2, maxRadius);
+      const candidate = { x: Math.cos(angle) * radius, y: Math.sin(angle) * radius };
+      x = candidate.x;
+      y = candidate.y;
+
+      if (isWithinPlacementBounds(candidate, containerWidth, containerHeight)) {
+        found = hasEnoughPlacementDistance(candidate, updatedPositions);
+      }
+      attempts += 1;
+    }
+
+    if (!found) {
+      x = (Math.random() - 0.5) * 100;
+      y = (Math.random() - 0.5) * 100;
+    }
+
+    node.position = { x, y };
+    updatedPositions.push({ x, y });
+  });
+
+  return newNodes;
+}
+
+export function getContainerDimensions(container) {
+  const width = container?.clientWidth || 800;
+  const height = container?.clientHeight || 600;
+  return { width, height, maxRadius: Math.min(width, height) / 2 - PLACEMENT_PADDING };
 }

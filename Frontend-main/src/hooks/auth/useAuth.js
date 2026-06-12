@@ -1,3 +1,5 @@
+/** 인증: 토큰 갱신·Google 프로필·로그인/로그아웃 */
+
 import { useState, useEffect, useRef } from 'react';
 import {
   logout as apiLogout,

@@ -1,3 +1,5 @@
+/** Cytoscape 탭·드래그·선택 하이라이트 */
+
 import { useCallback, useRef, useEffect } from "react";
 import { getContainerInfo, calculateCytoscapePosition, clearHighlightClassesOn } from '../../utils/graph/graphUtils';
 

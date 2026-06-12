@@ -1,7 +1,4 @@
-/**
- * v2 표준 Locator: { chapterIndex (1-based), blockIndex (0-based), offset (0-based 코드포인트) }
- */
-
+/** v2 locator: chapterIndex(1-based), blockIndex·offset(0-based 코드포인트) */
 import { isPositiveFiniteNumber, toNumberOrNull as toNumber } from './numberUtils';
 
 const locatorChapterIndex = (locator) => Number(locator?.chapterIndex ?? locator?.chapterIdx);
@@ -50,30 +47,19 @@ export const anchorToLocators = (anchor) => {
   };
 };
 
-/**
- * 뷰어 getCurrentLocator 등에서 온 래퍼를 그래프 placeholder용 anchor로 직렬화.
- * 원본에 startLocator 키가 있으면 { startLocator, endLocator }, 없으면 { start, end }.
- */
-export const toEventAnchorPayload = (anchor) => {
+/** anchor → 그래프 placeholder용 payload (startLocator 키 유무에 따라 키 이름 분기) */export const toEventAnchorPayload = (anchor) => {
   const { startLocator, endLocator } = anchorToLocators(anchor);
   if (!startLocator) return null;
   if (anchor?.startLocator) return { startLocator, endLocator };
   return { start: startLocator, end: endLocator };
 };
 
-/**
- * 그래프 분할 패널 로딩 게이트: 서버 재진입 resume 앵커에 유효 챕터 힌트가 있는지.
- * (resolveProgressLocator와 달리 엄격한 toLocator 정규화 없이 기존 뷰어와 동일 조건만 사용)
- */
-export function graphPanelHasResumeLocationHint(resumeAnchor) {
+/** resume 앵커에 유효 chapter 힌트가 있는지 (toLocator 정규화 없이 chapterIndex만 검사) */export function graphPanelHasResumeLocationHint(resumeAnchor) {
   const loc = resumeAnchor?.startLocator ?? resumeAnchor?.start;
   return hasPositiveChapterHint(loc);
 }
 
-/**
- * 그래프 분할 패널 로딩 게이트: 캐시 진행 payload에 locator 또는 chapterIdx+eventNum 힌트가 있는지.
- */
-export function graphPanelHasCachedLocationHint(cachedLocation) {
+/** 캐시 progress에 locator 또는 chapterIdx+eventNum 힌트가 있는지 */export function graphPanelHasCachedLocationHint(cachedLocation) {
   const loc =
     cachedLocation?.startLocator ??
     cachedLocation?.locator ??
@@ -94,14 +80,7 @@ export function graphPanelHasCachedLocationHint(cachedLocation) {
   return isPositiveFiniteNumber(cachedEvent);
 }
 
-/** GET /api/v2/graph/* — 이벤트의 anchor에서 읽기 위치 locator 추출 */
-export const readingLocatorFromGraphEvent = (currentEvent) => {
-  if (!currentEvent?.anchor) return null;
-  const { startLocator } = anchorToLocators(currentEvent.anchor);
-  return toLocator(startLocator);
-};
-
-/** 서버 v2 progress·캐시 공통: 단일 reading 위치(locator) 해석 */
+/** progress·캐시 payload에서 단일 reading locator 해석 */
 export const resolveProgressLocator = (data) => {
   if (!data || typeof data !== 'object') return null;
   const a = data.anchor;
@@ -113,14 +92,14 @@ export const resolveProgressLocator = (data) => {
   return toLocator(candidate) ?? candidate;
 };
 
-/** 서버/로컬 progress payload → 뷰어 displayAt·initialAnchor용 대칭 앵커 */
+/** progress payload → 뷰어용 { startLocator, endLocator } (동일 위치) */
 export const progressResultToViewerAnchor = (data) => {
   const loc = resolveProgressLocator(data);
   if (!loc) return null;
   return { startLocator: loc, endLocator: loc };
 };
 
-/** 재진입 시 동일 위치 중복 적용(displayAt 폴링 등) 방지용 키 */
+/** 동일 resume 위치 중복 적용 방지 키 */
 export const viewerResumeAnchorKey = (anchor) => {
   if (!anchor || typeof anchor !== 'object') return '';
   const loc = anchor.startLocator ?? anchor.start ?? null;
@@ -128,7 +107,7 @@ export const viewerResumeAnchorKey = (anchor) => {
   return JSON.stringify(loc);
 };
 
-/** POST /api/v2/progress 본문 및 캐시 병합용 — bookId, startLocator, endLocator, locator, locatorVersion */
+/** POST /api/v2/progress 및 캐시 병합용 payload 생성 */
 export const progressPayloadFromData = (data) => {
   if (data?.bookId == null || data.bookId === '') return null;
   const locator = resolveProgressLocator(data);
@@ -158,14 +137,7 @@ export const progressPayloadFromData = (data) => {
   };
 };
 
-/**
- * 블록 요소 내 Range의 start 또는 end 위치까지의 코드포인트 수(0-based) 반환.
- * @param {Element} blockEl - data-chapter-index, data-block-index 있는 블록 요소
- * @param {Range|null} range - 선택 범위. null이면 0 반환
- * @param {{ useEnd?: boolean }} opts - useEnd: true면 range 끝(focus) 기준
- * @returns {number} 0 이상, 블록 텍스트 길이 이하
- */
-export const codePointOffsetInBlock = (blockEl, range, opts = {}) => {
+/** 블록 내 range 시작/끝까지 코드포인트 오프셋 (0-based, opts.useEnd로 끝 기준) */export const codePointOffsetInBlock = (blockEl, range, opts = {}) => {
   if (!blockEl || !range) return 0;
   const useEnd = opts.useEnd === true;
   const doc = blockEl.ownerDocument;

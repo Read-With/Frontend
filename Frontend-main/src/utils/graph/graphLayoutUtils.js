@@ -1,13 +1,4 @@
-/**
- * graphLayoutUtils.js : 그래프 레이아웃 관련 유틸리티 함수 모음
- * 
- * [주요 기능]
- * 1. 레이아웃 복원: 저장된 그래프 레이아웃을 복원하여 뷰 상태에 적용
- * 2. 레이아웃 사전 로드: 챕터별 그래프 레이아웃을 미리 생성하여 저장
- * 
- * [사용처]
- * - ViewerPage: 그래프 레이아웃 복원 및 사전 로드
- */
+/** 그래프 레이아웃 복원·챕터별 사전 로드 */
 
 import cytoscape from 'cytoscape';
 import { createStorageKey } from '../../hooks/common/useLocalStorage';
@@ -21,12 +12,6 @@ import { createCharacterMaps } from './characterUtils';
 import { convertRelationsToElements } from './graphDataUtils';
 import { errorUtils } from '../common/errorUtils';
 
-/**
- * 그래프 레이아웃 복원
- * @param {Object} currentEvent - 현재 이벤트 객체
- * @param {number} currentChapter - 현재 챕터 번호
- * @returns {Object|null} 복원된 레이아웃 객체 (실패 시 null)
- */
 export function restoreGraphLayout(currentEvent, currentChapter) {
   if (!currentEvent || typeof currentEvent !== 'object') {
     return null;

@@ -1,3 +1,5 @@
+/** 간선 툴팁: 관계 타임라인 API·캐시 */
+
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { toNumberOrNull } from '../../utils/common/numberUtils';
 import { isSamePair } from '../../utils/graph/relationUtils';

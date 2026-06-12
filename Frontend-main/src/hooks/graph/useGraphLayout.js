@@ -1,10 +1,21 @@
-import { useEffect, useCallback, useRef } from "react";
+/** Cytoscape 레이아웃·인스턴스 (preset/ripple/경계 보정) */
+
+import { useEffect, useCallback, useRef, useMemo } from "react";
 import {
   ensureElementsInBounds,
   isGraphContainerSizeReady,
   syncReciprocalPairJunctionOffsets,
 } from "../../utils/graph/graphUtils";
 import { detectAndResolveOverlap } from "../../utils/graph/graphDataUtils";
+
+export function useCyInstance(cyRef, isReady = true) {
+  return useMemo(() => {
+    if (!isReady) return null;
+    const cy = cyRef?.current;
+    if (!cy || typeof cy.container !== "function") return null;
+    return cy;
+  }, [cyRef, isReady]);
+}
 
 function scheduleRippleWhenPositionsPainted(cy, triggerRippleForAddedNodes) {
   let cancelled = false;

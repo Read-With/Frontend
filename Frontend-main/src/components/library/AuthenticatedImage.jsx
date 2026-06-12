@@ -1,7 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import PropTypes from 'prop-types';
-import { isProtectedPublicAsset, sanitizeAssetUrl } from '../../utils/common/artifactUrlUtils';
-import { fetchAuthenticatedAssetBlobUrl } from '../../utils/common/authAssetLoader';
+import {
+  fetchAuthenticatedAssetBlobUrl,
+  isProtectedPublicAsset,
+  sanitizeAssetUrl,
+} from '../../utils/common/artifactUrlUtils';
 
 const AuthenticatedImage = ({
   src,

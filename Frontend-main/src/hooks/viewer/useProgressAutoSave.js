@@ -1,8 +1,4 @@
-/**
- * useProgressAutoSave.js : 진도 자동 저장 훅 (v2 locator 전용)
- * - 캐시 + 서버(POST /api/v2/progress) 전송
- * - 디바운스(delay) 및 중복 저장 방지
- */
+/** 진도 자동 저장: 캐시 + 서버(v2 locator), 디바운스·중복 방지 */
 
 import { useEffect, useMemo, useRef } from 'react';
 import { setProgressToCache } from '../../utils/common/cache/progressCache';

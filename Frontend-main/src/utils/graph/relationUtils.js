@@ -1,5 +1,10 @@
-import { toFiniteNumber, uniqueStrings } from './graphNormalizeUtils';
+/** 관계 정규화·태그 캐시·레이더 차트 데이터 */
+
+import { toFiniteNumber, uniqueStrings, isGraphNodeElement } from './graphUtils';
 import { registerCache, recordCacheAccess, enforceCacheSizeLimit } from '../common/cache/cacheManager';
+import { clearStyleCache, cleanupRelationStyleResources } from '../styles/relationStyles';
+
+export { getPositivityColor, getPositivityLabel } from '../styles/relationStyles';
 
 /**
  * @typedef {Object} NormalizedRelation
@@ -97,11 +102,7 @@ export function isSamePair(rel, a, b) {
   return (r1 === s1 && r2 === s2) || (r1 === s2 && r2 === s1);
 }
 
-/**
- * 원본 relation에 붙은 이벤트 식별자만 얇게 전달(processRelations·그래프 변환용).
- * @param {object} raw
- * @returns {Record<string, *>}
- */
+/** relation 원본의 이벤트 식별자만 전달 */
 export function relationEventMetaPassthrough(raw) {
   if (!raw || typeof raw !== 'object') {
     return {};
@@ -157,7 +158,6 @@ export function processRelationTags(relation, label) {
   }
 }
 
-// 관계 태그 처리 캐시 (캐시 관리 시스템 통합)
 const relationCache = new Map();
 registerCache('relationCache', relationCache, { maxSize: 1000, ttl: 600000 }); // 10분 TTL
 
@@ -202,22 +202,24 @@ export function cleanupRelationResources() {
   }
 }
 
-/**
- * 방향 간선 id (`id1->id2`). 역방향은 별도 간선.
- * @param {any} fromId
- * @param {any} toId
- * @returns {string}
- */
+/** 관계·스타일 캐시 일괄 정리 (툴팁 닫을 때) */
+export function cleanupRelationUtils() {
+  try {
+    clearRelationCache();
+    clearStyleCache();
+    cleanupRelationResources();
+    cleanupRelationStyleResources();
+  } catch (error) {
+    console.error('관계 유틸리티 정리 실패:', error);
+  }
+}
+
+/** 방향 간선 element id (`id1->id2`) */
 export function directedEdgeElementId(fromId, toId) {
   return `${String(fromId)}->${String(toId)}`;
 }
 
-/**
- * 관계 키 생성 (정규화된 ID 쌍으로 고유 키 생성)
- * @param {any} a - 첫 번째 ID
- * @param {any} b - 두 번째 ID
- * @returns {string|null} 관계 키 (min-max 형식) 또는 null
- */
+/** 무방향 관계 키 (`min-max`) */
 export function createRelationKey(a, b) {
   const first = safeNum(a);
   const second = safeNum(b);
@@ -229,14 +231,81 @@ export function createRelationKey(a, b) {
   return `${min}-${max}`;
 }
 
-/**
- * 관계 객체에서 관계 키 추출
- * @param {Object} relation - 관계 객체 (id1/id2 포함)
- * @returns {string|null} 관계 키 또는 null
- */
 export function getRelationKeyFromRelation(relation) {
   if (!relation || typeof relation !== "object") {
     return null;
   }
   return createRelationKey(relation.id1, relation.id2);
 }
+
+export const normalizePositivity = (positivity) => {
+  const value = toFiniteNumber(positivity);
+  if (!Number.isFinite(value)) return 50;
+  return ((value + 1) / 2) * 100;
+};
+
+export const extractRadarChartData = (nodeId, relations, elements, maxDisplay = 8) => {
+  if (!nodeId || !relations || !Array.isArray(relations)) return [];
+
+  const targetNodeId = String(nodeId);
+  const radarDataMap = new Map();
+
+  relations.forEach((rel) => {
+    const id1 = String(rel.id1);
+    const id2 = String(rel.id2);
+    let connectedNodeId = null;
+    if (id1 === targetNodeId) connectedNodeId = id2;
+    else if (id2 === targetNodeId) connectedNodeId = id1;
+
+    if (!connectedNodeId) return;
+
+    const existingData = radarDataMap.get(connectedNodeId);
+    const positivity = toFiniteNumber(rel.positivity);
+    if (!existingData || Math.abs(positivity) > Math.abs(existingData.positivity)) {
+      const connectedNode = elements.find(
+        (el) => isGraphNodeElement(el) && String(el.data.id) === connectedNodeId
+      );
+      if (connectedNode && Number.isFinite(positivity)) {
+        const fullName =
+          connectedNode.data.label || connectedNode.data.common_name || `인물 ${connectedNodeId}`;
+        radarDataMap.set(connectedNodeId, {
+          name: fullName,
+          fullName,
+          positivity,
+          normalizedValue: normalizePositivity(positivity),
+          relationCount: rel.count || 0,
+          relationTags: rel.relation || [],
+          connectedNodeId,
+        });
+      }
+    }
+  });
+
+  const radarData = Array.from(radarDataMap.values());
+  radarData.sort((a, b) => Math.abs(b.positivity) - Math.abs(a.positivity));
+  return radarData.slice(0, maxDisplay);
+};
+
+export const getConnectionStatus = (radarData) => {
+  const connectionCount = radarData.length;
+  if (connectionCount === 0) {
+    return {
+      status: 'no_connections',
+      message: '연결된 인물이 없습니다.',
+      suggestion: '다른 인물을 선택하거나 다른 챕터를 확인해보세요.',
+    };
+  }
+  if (connectionCount <= 2) {
+    return {
+      status: 'few_connections',
+      message: `연결된 인물이 ${connectionCount}명입니다.`,
+      suggestion: '관계가 적은 인물입니다. 다른 인물을 선택하거나 다른 챕터를 확인해보세요.',
+      connectionCount,
+    };
+  }
+  return {
+    status: 'sufficient_connections',
+    message: `연결된 인물이 ${connectionCount}명입니다.`,
+    connectionCount,
+  };
+};

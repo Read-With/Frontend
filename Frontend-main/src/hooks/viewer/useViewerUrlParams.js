@@ -1,16 +1,20 @@
+/** 뷰어 URL·graphMode: `/user/viewer/:id/c/:chapter/p/:page` 경로 동기화 */
+
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { loadViewerMode, loadSettings } from '../../utils/viewer/viewerUtils';
-import { flagsFromGraphMode } from './graphModeFlags';
 import {
   parseViewerReaderSplat,
   userViewerReadingPath,
 } from '../../utils/navigation/viewerPaths';
 
-/**
- * 뷰어 URL: `/user/viewer/:id` 또는 `/user/viewer/:id/c/:chapter/p/:page` (쿼리 없음).
- * chapter/page/graphMode는 graphMode만 스토리지; 읽기 위치는 경로와 상태로 동기화.
- */
+export function flagsFromGraphMode(mode) {
+  if (mode === 'graph') return { fullScreen: true, show: true };
+  if (mode === 'split') return { fullScreen: false, show: true };
+  if (mode === 'viewer') return { fullScreen: false, show: false };
+  return null;
+}
+
 export function useViewerUrlParams(options = {}) {
   const { skipHistoryMutationsRef } = options;
   const { filename, '*': splat } = useParams();
