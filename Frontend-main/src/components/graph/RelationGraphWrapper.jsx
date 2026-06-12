@@ -18,6 +18,7 @@ import { useGraphState } from '../../hooks/graph/useGraphState.js';
 import { useLocalStorageNumber } from '../../hooks/common/useLocalStorage.js';
 import { convertRelationsToElements } from '../../utils/graph/graphDataUtils';
 import { createCharacterMaps, buildNodeWeights } from '../../utils/graph/characterUtils';
+import { resolveGraphElementsProfileImages } from '../../utils/common/authAssetLoader';
 import {
   processTooltipData,
   calculateLastEventForChapter,
@@ -274,7 +275,25 @@ function RelationGraphWrapper() {
     }
   }, [graphApiPayload]);
 
-  const elements = useMemo(() => (apiElements.length > 0 ? apiElements : []), [apiElements]);
+  const [elements, setElements] = useState([]);
+
+  useEffect(() => {
+    if (!apiElements.length) {
+      setElements([]);
+      return undefined;
+    }
+
+    let cancelled = false;
+    setElements(apiElements);
+
+    resolveGraphElementsProfileImages(apiElements).then((resolved) => {
+      if (!cancelled) setElements(resolved);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [apiElements]);
 
   const {
     searchTerm,

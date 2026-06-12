@@ -2,6 +2,30 @@ import JSZip from 'jszip';
 
 const DC_NS = 'http://purl.org/dc/elements/1.1/';
 
+export const EPUB_FILE_CONSTRAINTS = {
+  MAX_SIZE: 50 * 1024 * 1024,
+  ALLOWED_TYPES: ['application/epub+zip', 'application/epub'],
+  ALLOWED_EXTENSIONS: ['.epub'],
+  ACCEPT_ATTRIBUTE: '.epub,application/epub+zip,application/epub',
+};
+
+function isAllowedEpubFile(file) {
+  const name = (file.name || '').toLowerCase();
+  if (EPUB_FILE_CONSTRAINTS.ALLOWED_EXTENSIONS.some((ext) => name.endsWith(ext))) return true;
+  if (file.type && EPUB_FILE_CONSTRAINTS.ALLOWED_TYPES.includes(file.type)) return true;
+  return false;
+}
+
+export function validateEpubFile(file) {
+  if (!isAllowedEpubFile(file)) {
+    return { valid: false, error: '.epub 파일만 업로드할 수 있습니다.' };
+  }
+  if (file.size > EPUB_FILE_CONSTRAINTS.MAX_SIZE) {
+    return { valid: false, error: '파일 크기는 50MB를 초과할 수 없습니다.' };
+  }
+  return { valid: true, error: null };
+}
+
 export function epubUploadBasename(filename) {
   return String(filename || '').replace(/\.epub$/i, '').trim() || filename;
 }

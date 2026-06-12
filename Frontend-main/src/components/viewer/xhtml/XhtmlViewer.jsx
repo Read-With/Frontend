@@ -351,12 +351,10 @@ const XhtmlViewer = forwardRef(
         setError(null);
         initialAnchorAppliedRef.current = false;
         try {
-          const hasInline = typeof book?.combinedXhtmlContent === 'string' && book.combinedXhtmlContent.trim().length > 0;
-          const hasUrl = typeof book?.combinedXhtmlUrl === 'string' && book.combinedXhtmlUrl.trim().length > 0;
-          const cacheKey = `${XHTML_LOAD_CACHE_VERSION}::${bid}::${hasInline ? 'inline' : 'no-inline'}::${hasUrl ? 'url' : 'no-url'}`;
+          const cacheKey = `${XHTML_LOAD_CACHE_VERSION}::${bid}`;
           let loadPromise = xhtmlLoadCache.get(cacheKey);
           if (!loadPromise) {
-            loadPromise = loadCombinedXhtml(bid, book || {});
+            loadPromise = loadCombinedXhtml(bid);
             xhtmlLoadCache.set(cacheKey, loadPromise);
           }
           const raw = await loadPromise;
@@ -373,7 +371,7 @@ const XhtmlViewer = forwardRef(
       };
       load();
       return () => { cancelled = true; };
-    }, [bid, book?.combinedXhtmlContent, book?.combinedXhtmlUrl, manifestReady]);
+    }, [bid, manifestReady]);
 
     useEffect(() => {
       const container = containerRef.current;

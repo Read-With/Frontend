@@ -112,7 +112,7 @@ export const calculateNodeSize = (baseSize, weight) => {
 
 const baseNodeGraphStyle = {
   "background-color": COLORS.nodeBackground,
-  "border-width": (ele) => (ele.data("main_character") ? 2 : 1),
+  "border-width": (ele) => (ele.data("isMainCharacter") ? 2 : 1),
   "border-color": COLORS.nodeBorder,
   "border-opacity": 1,
   width: (ele) => calculateNodeSize(8, ele.data("weight")),
@@ -122,7 +122,7 @@ const baseNodeGraphStyle = {
   "text-valign": "bottom",
   "text-halign": "center",
   "font-size": 12,
-  "font-weight": (ele) => (ele.data("main_character") ? 600 : 400),
+  "font-weight": (ele) => (ele.data("isMainCharacter") ? 600 : 400),
   color: COLORS.nodeText,
   "text-margin-y": 2,
   "text-background-opacity": 0,

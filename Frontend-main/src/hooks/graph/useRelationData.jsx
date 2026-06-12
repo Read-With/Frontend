@@ -51,42 +51,6 @@ function withNoRelation(result, fallbackNoRelation = true) {
   };
 }
 
-function invalidateCache(bookId, chapterNum = null) {
-  const keyPattern =
-    chapterNum !== null
-      ? `${CACHE_PREFIX}${bookId}-${chapterNum}-`
-      : `${CACHE_PREFIX}${bookId}-`;
-
-  if (relationTimelineCache.forEach) {
-    const keysToDelete = [];
-    relationTimelineCache.forEach((value, key) => {
-      if (key.startsWith(keyPattern)) {
-        keysToDelete.push(key);
-      }
-    });
-    keysToDelete.forEach(key => {
-      if (relationTimelineCache.delete) {
-        relationTimelineCache.delete(key);
-      } else {
-        delete relationTimelineCache[key];
-      }
-    });
-  }
-  
-  if (typeof sessionStorage !== 'undefined') {
-    try {
-      for (let i = 0; i < sessionStorage.length; i += 1) {
-        const key = sessionStorage.key(i);
-        if (key && key.startsWith(keyPattern)) {
-          sessionStorage.removeItem(key);
-        }
-      }
-    } catch (_error) {
-      // ignore storage errors
-    }
-  }
-}
-
 function padSingleEvent(points, labels) {
   if (!Array.isArray(points) || !Array.isArray(labels) || points.length !== 1) {
     return { points, labels };
@@ -470,9 +434,5 @@ export function useRelationData(mode, id1, id2, chapterNum, eventNum, maxChapter
     }),
     [timeline, labels, loading, noRelation, error, fetchData, maxEventCount]
   );
-}
-
-export function clearRelationTimelineCache(bookId, chapterNum = null) {
-  invalidateCache(bookId, chapterNum);
 }
 

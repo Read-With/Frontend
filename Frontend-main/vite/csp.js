@@ -58,11 +58,10 @@ export function buildContentSecurityPolicy(env, { dev }) {
     'https://oauth2.googleapis.com',
     'https://*.s3.ap-northeast-2.amazonaws.com',
     'https://*.s3.amazonaws.com',
-    'https://cdn.readwith.store',
   ]);
 
-  const apiOrigin = (env.VITE_API_BASE_URL || '').trim() || DEFAULT_API_BASE_URL;
-  if (apiOrigin) connect.add(apiOrigin);
+  addConnectOrigins(connect, env.VITE_API_BASE_URL || DEFAULT_API_BASE_URL);
+  addConnectOrigins(connect, env.VITE_CDN_BASE_URL);
 
   if (dev) {
     connect.add('ws://localhost:*');

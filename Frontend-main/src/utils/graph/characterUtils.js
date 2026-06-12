@@ -1,4 +1,5 @@
 import { getApiBaseUrl } from '../common/authUtils';
+import { sanitizeAssetUrl } from '../common/artifactUrlUtils';
 
 export const createEmptyCharacterMaps = () => ({
   idToName: {},
@@ -38,9 +39,9 @@ export function createCharacterMaps(characters) {
         char.common_name ||
         char.name ||
         (Array.isArray(char.names) ? char.names[0] : id);
-      idToDesc[id] = char.description || char.profile_text || '';
-      idToDescKo[id] = char.description_ko || '';
-      idToMain[id] = char.main_character || false;
+      idToDesc[id] = char.description || char.profileText || '';
+      idToDescKo[id] = char.personalityText || '';
+      idToMain[id] = !!char.isMainCharacter;
       idToNames[id] = char.names || [];
 
       if (char.profileImage) {
@@ -66,23 +67,16 @@ export function createCharacterMaps(characters) {
   }
 }
 
-export function getCharacterImagePath(folderKey, characterId) {
-  if (!folderKey || !characterId) {
-    return '';
-  }
-  return `/${folderKey}/${characterId}.png`;
-}
-
 /**
  * @param {string} profileImage
  * @returns {string|null}
  */
-export function validateAndNormalizeProfileImageUrl(profileImage) {
+function validateAndNormalizeProfileImageUrl(profileImage) {
   if (!profileImage || typeof profileImage !== 'string') {
     return null;
   }
 
-  const trimmed = profileImage.trim();
+  const trimmed = sanitizeAssetUrl(profileImage.trim());
   if (trimmed === '') {
     return null;
   }
@@ -116,25 +110,6 @@ export function validateAndNormalizeProfileImageUrl(profileImage) {
   return null;
 }
 
-export function safeId(id) {
-  try {
-    if (id === null || id === undefined) {
-      return '0';
-    }
-
-    const parsed = parseInt(id, 10);
-    if (isNaN(parsed)) {
-      console.warn(`safeId: 유효하지 않은 ID 값 (${id}), 0으로 대체`);
-      return '0';
-    }
-
-    return String(parsed);
-  } catch (error) {
-    console.error(`safeId 변환 실패 (${id}):`, error);
-    return '0';
-  }
-}
-
 export function normalizeCharacterId(id) {
   if (id === undefined || id === null) return null;
   const numId = Number(id);
@@ -144,14 +119,7 @@ export function normalizeCharacterId(id) {
 
 export function extractCharacterId(character) {
   if (!character || typeof character !== 'object') return null;
-  const candidate =
-    character.id ??
-    character.characterId ??
-    character.character_id ??
-    character.char_id ??
-    character.pk ??
-    character.node_id ??
-    null;
+  const candidate = character.id ?? null;
   return normalizeCharacterId(candidate);
 }
 

@@ -194,52 +194,6 @@ export const calculateCytoscapePosition = (pos, cyRef) => {
   }
 };
 
-export const convertMouseToCytoscapePosition = (evt, cyRef) => {
-  try {
-    const { valid, cy } = validateCytoscapeRef(cyRef);
-    if (!valid) {
-      console.warn('convertMouseToCytoscapePosition: cyRef.current가 없습니다');
-      return { x: 0, y: 0 };
-    }
-    
-    if (!evt || typeof evt.clientX !== 'number' || typeof evt.clientY !== 'number') {
-      console.warn('convertMouseToCytoscapePosition: 유효하지 않은 이벤트 객체입니다', evt);
-      return { x: 0, y: 0 };
-    }
-    
-    const { container, containerRect } = getContainerInfo();
-    
-    if (!container) {
-      console.warn('convertMouseToCytoscapePosition: 그래프 컨테이너를 찾을 수 없습니다');
-      return { x: 0, y: 0 };
-    }
-    
-    const clientX = evt.clientX - containerRect.left;
-    const clientY = evt.clientY - containerRect.top;
-    
-    const pan = cy.pan();
-    const zoom = cy.zoom();
-    
-    if (!validatePan(pan)) {
-      console.warn('convertMouseToCytoscapePosition: 유효하지 않은 pan 값입니다', pan);
-      return { x: 0, y: 0 };
-    }
-    
-    if (!validateZoom(zoom)) {
-      console.warn('convertMouseToCytoscapePosition: 유효하지 않은 zoom 값입니다', zoom);
-      return { x: 0, y: 0 };
-    }
-    
-    const cyX = (clientX - pan.x) / zoom;
-    const cyY = (clientY - pan.y) / zoom;
-    
-    return { x: cyX, y: cyY };
-  } catch (error) {
-    console.error('convertMouseToCytoscapePosition 실패:', error, { evt: !!evt, cyRef: !!cyRef?.current });
-    return { x: 0, y: 0 };
-  }
-};
-
 export const constrainToViewport = (x, y, elementWidth = 0, elementHeight = 0) => {
   try {
     if (typeof x !== 'number' || typeof y !== 'number') {
@@ -284,40 +238,15 @@ export const invalidateCache = () => {
 
 // 윈도우 리사이즈 시 캐시 자동 무효화
 let resizeTimeout = null;
-let resizeHandler = null;
 
 if (typeof window !== 'undefined') {
-  resizeHandler = () => {
+  window.addEventListener('resize', () => {
     clearTimeout(resizeTimeout);
     resizeTimeout = setTimeout(() => {
       invalidateCache();
     }, 100);
-  };
-  window.addEventListener('resize', resizeHandler);
+  });
 }
-
-export const cleanupResizeListener = () => {
-  if (typeof window !== 'undefined' && resizeHandler) {
-    window.removeEventListener('resize', resizeHandler);
-    resizeHandler = null;
-  }
-  if (resizeTimeout) {
-    clearTimeout(resizeTimeout);
-    resizeTimeout = null;
-  }
-};
-
-export const getCacheStatus = () => {
-  const now = Date.now();
-  return {
-    hasContainerCache: !!cache.container.data,
-    hasViewportCache: !!cache.viewport.data,
-    containerCacheAge: now - cache.container.timestamp,
-    viewportCacheAge: now - cache.viewport.timestamp,
-    isContainerCacheValid: (now - cache.container.timestamp) < CACHE_DURATION,
-    isViewportCacheValid: (now - cache.viewport.timestamp) < CACHE_DURATION
-  };
-};
 
 export const createRippleEffect = (container, x, y, cyRef, duration = 500) => {
   if (!container) {
@@ -514,20 +443,13 @@ export const processTooltipData = (tooltipData, type) => {
       
       const names = parseJsonSafely(nodeData.names);
       
-      // main_character 필드 처리 (boolean으로 정규화)
-      let mainCharacter = nodeData.main_character ?? nodeData.main;
-      if (typeof mainCharacter === "string") {
-        mainCharacter = mainCharacter === "true";
-      }
-      mainCharacter = !!mainCharacter;
-      
       return {
         ...tooltipData,
         names: names,
-        main_character: mainCharacter,
-        common_name: nodeData.common_name || nodeData.label,
+        isMainCharacter: !!nodeData.isMainCharacter,
+        common_name: nodeData.common_name || nodeData.name || nodeData.label,
         description: nodeData.description || '',
-        description_ko: nodeData.description_ko || '',
+        personalityText: nodeData.personalityText || '',
         image: nodeData.image || '',
         weight: nodeData.weight || 1
       };
@@ -598,17 +520,6 @@ export const calculateLastEventForChapter = ({
 
   const resolved = getLastFineGraphEventIdxFromChapterData(chapterInfo);
   return resolved != null && resolved >= 1 ? resolved : 1;
-};
-
-/**
- * 검색 파라미터를 포맷팅합니다.
- * @param {string} retainedSearch - 보존된 검색 파라미터
- * @returns {string} 포맷팅된 검색 파라미터
- */
-export const formatSearchParams = (retainedSearch) => {
-  if (!retainedSearch) return '';
-  
-  return retainedSearch.startsWith('?') ? retainedSearch : `?${retainedSearch}`;
 };
 
 /**

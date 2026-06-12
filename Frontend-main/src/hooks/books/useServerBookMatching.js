@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { normalizeTitle } from '../../utils/common/stringUtils';
-import { errorUtils } from '../../utils/viewer/viewerUtils';
+import { errorUtils } from '../../utils/common/errorUtils';
 
 /**
  * 서버 책 매칭 훅

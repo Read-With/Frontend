@@ -54,10 +54,7 @@ export const useBooks = () => {
       const dedupeKey = `${titleKey}::${authorKey}`;
       if (!titleKey || !authorKey) return;
 
-      const normalized = {
-        ...book,
-        favorite: !!(book.isFavorite ?? book.favorite),
-      };
+      const normalized = { ...book, isFavorite: !!book.isFavorite };
       const existing = deduped.get(dedupeKey);
       if (!existing || numericId < Number(existing.id)) {
         deduped.set(dedupeKey, normalized);
@@ -97,7 +94,7 @@ export const useBooks = () => {
         return {
           ...old,
           books: (old.books || []).map((book) =>
-            String(book?.id) === idStr ? { ...book, favorite } : book
+            String(book?.id) === idStr ? { ...book, isFavorite: favorite } : book
           ),
         };
       });

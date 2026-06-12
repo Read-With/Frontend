@@ -1,0 +1,103 @@
+import { describe, it, expect, vi, afterEach } from 'vitest';
+import {
+  rewriteLegacyAssetUrl,
+  stripWrongApiPublicPrefix,
+  preferDevPublicProxyPath,
+  resolveApiArtifactUrl,
+  resolveAssetFetchUrl,
+  sanitizeAssetUrl,
+} from './artifactUrlUtils';
+
+vi.mock('./authUtils', () => ({
+  getApiBaseUrl: () => 'https://dev.readwith.cloud',
+}));
+
+describe('stripWrongApiPublicPrefix', () => {
+  it('fixes mistaken /api/public paths', () => {
+    expect(stripWrongApiPublicPrefix('/api/public/books/1/x.html')).toBe(
+      '/public/books/1/x.html'
+    );
+  });
+});
+
+describe('rewriteLegacyAssetUrl', () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it('rewrites cdn.readwith.store to API base origin', () => {
+    vi.stubEnv('DEV', false);
+    const input =
+      'https://cdn.readwith.store/public/books/17/covers/x/cover.jpg';
+    expect(rewriteLegacyAssetUrl(input)).toBe(
+      'https://dev.readwith.cloud/public/books/17/covers/x/cover.jpg'
+    );
+  });
+});
+
+describe('sanitizeAssetUrl', () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it('does not add dev proxy path', () => {
+    vi.stubEnv('DEV', true);
+    const input =
+      'https://cdn.readwith.store/public/books/13/normalizations/x/combined.xhtml';
+    expect(sanitizeAssetUrl(input)).toBe(
+      'https://dev.readwith.cloud/public/books/13/normalizations/x/combined.xhtml'
+    );
+  });
+});
+
+describe('resolveAssetFetchUrl', () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it('dev: uses /public proxy path', () => {
+    vi.stubEnv('DEV', true);
+    const input =
+      'https://cdn.readwith.store/public/books/13/normalizations/x/combined.xhtml';
+    expect(resolveAssetFetchUrl(input)).toBe(
+      '/public/books/13/normalizations/x/combined.xhtml'
+    );
+  });
+
+  it('repairs stale /api/public cache paths in dev', () => {
+    vi.stubEnv('DEV', true);
+    expect(resolveAssetFetchUrl('/api/public/books/13/x/combined.xhtml')).toBe(
+      '/public/books/13/x/combined.xhtml'
+    );
+  });
+});
+
+describe('resolveApiArtifactUrl', () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it('uses fetch URL pipeline', () => {
+    vi.stubEnv('DEV', true);
+    expect(
+      resolveApiArtifactUrl(
+        'https://cdn.readwith.store/public/books/13/normalizations/x/combined.xhtml'
+      )
+    ).toBe('/public/books/13/normalizations/x/combined.xhtml');
+  });
+});
+
+describe('preferDevPublicProxyPath', () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it('returns /public relative path in dev', () => {
+    vi.stubEnv('DEV', true);
+    const input =
+      'https://dev.readwith.cloud/public/books/13/normalizations/x/combined.xhtml';
+    expect(preferDevPublicProxyPath(input)).toBe(
+      '/public/books/13/normalizations/x/combined.xhtml'
+    );
+  });
+});

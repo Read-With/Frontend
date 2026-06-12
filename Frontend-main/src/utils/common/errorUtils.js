@@ -36,8 +36,6 @@ export const errorUtils = {
     }
   },
   
-  logSuccess: (_context, _message, _additionalData = {}) => {},
-  
   handleError: (context, error, fallbackValue = null, additionalData = {}) => {
     errorUtils.logError(context, error, additionalData);
     return fallbackValue;
@@ -50,16 +48,6 @@ export const errorUtils = {
       error?.name === 'TypeError' ||
       error?.code === 'NETWORK_ERROR'
     );
-  },
-
-  isServerError: (error) => {
-    const status = error?.status || error?.statusCode;
-    return status && status >= 500 && status < 600;
-  },
-
-  isClientError: (error) => {
-    const status = error?.status || error?.statusCode;
-    return status && status >= 400 && status < 500;
   },
 
   getUserFriendlyMessage: (error) => {

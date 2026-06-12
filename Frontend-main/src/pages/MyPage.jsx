@@ -100,7 +100,7 @@ export default function MyPage() {
     const validReading = Math.min(reading, total);
     
     // 즐겨찾기된 책 개수
-    const favorites = books?.filter(book => book.favorite).length || 0;
+    const favorites = books?.filter(book => book.isFavorite).length || 0;
     
     return {
       total,
@@ -115,7 +115,7 @@ export default function MyPage() {
 
     // 탭 필터링
     if (activeTab === 'favorites') {
-      filtered = filtered.filter(b => b.favorite);
+      filtered = filtered.filter(b => b.isFavorite);
     }
 
     // 검색 필터링

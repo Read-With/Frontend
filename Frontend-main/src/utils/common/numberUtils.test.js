@@ -3,7 +3,6 @@ import {
   toNumberOrNull,
   toPositiveNumberOrNull,
   toPositiveNumberFromId,
-  safeParseInt,
   clampNumber,
 } from './numberUtils.js';
 
@@ -24,11 +23,6 @@ describe('numberUtils', () => {
     expect(toPositiveNumberFromId('e12')).toBe(12);
     expect(toPositiveNumberFromId('chapter-3-event-7')).toBe(7);
     expect(toPositiveNumberFromId('none')).toBeNull();
-  });
-
-  it('safeParseInt', () => {
-    expect(safeParseInt('7')).toBe(7);
-    expect(safeParseInt('bad', 2)).toBe(2);
   });
 
   it('clampNumber', () => {

@@ -1,4 +1,4 @@
-import { getCharacterImagePath, extractCharacterId } from './characterUtils';
+import { extractCharacterId } from './characterUtils';
 import { normalizeRelation, isValidRelation, directedEdgeElementId, getRelationKeyFromRelation } from './relationUtils';
 import {
   getEventIndexFromObject,
@@ -347,31 +347,21 @@ export function convertRelationsToElements(relations, idToName, idToDesc, idToDe
     const commonName = resolvedIdToName[strId];
     const nodeWeight = getNodeWeight(strId);
     
-    // 이미지 경로 결정
     let imagePath = null;
-    
-    if (folderKey === 'api') {
-      // API 책: profileImage가 유효한 경우에만 사용
-      // profileImage가 없으면 이미지 경로를 생성하지 않음 (401 에러 방지)
-      if (idToProfileImage && idToProfileImage[strId] && idToProfileImage[strId].trim() !== '') {
-        imagePath = idToProfileImage[strId];
-      }
-      // profileImage가 없으면 imagePath는 null로 유지 (이미지 없음)
-    } else {
-      // API 외 키는 캐시된 키 구조를 따르는 이미지 경로를 사용
-      imagePath = getCharacterImagePath(folderKey, strId);
+    if (idToProfileImage?.[strId]?.trim?.()) {
+      imagePath = idToProfileImage[strId];
     }
-    
-    // 노드 데이터 생성
+
     const nodeData = {
       id: strId,
       label: commonName,
-      main_character: idToMain[strId] || false,
+      name: commonName,
+      isMainCharacter: idToMain[strId] || false,
       description: idToDesc[strId] || '',
-      description_ko: idToDescKo[strId] || '',
+      personalityText: idToDescKo[strId] || '',
       names: [commonName, ...(Array.isArray(idToNames[strId]) ? idToNames[strId] : [])],
       common_name: commonName,
-      weight: nodeWeight
+      weight: nodeWeight,
     };
     
     // 이미지 경로가 있으면 image 필드 추가
@@ -605,12 +595,12 @@ export function buildElementsStructureFingerprint(elements) {
 export function filterMainCharacters(elements, filterStage) {
   if (filterStage === 0 || !elements) return elements;
   
-  // 핵심 인물 (main_character: true) 노드들
+  // 핵심 인물 (isMainCharacter: true) 노드들
   const coreNodes = elements.filter(el => 
     el.data && 
     el.data.id && 
     !isGraphEdgeElement(el) && 
-    el.data.main_character === true
+    el.data.isMainCharacter === true
   );
   
   const coreNodeIds = new Set(coreNodes.map(node => node.data.id));
@@ -739,342 +729,4 @@ export function detectAndResolveOverlap(cy, nodeSize = 40, onCleanup = null) {
   }
   
   return hasOverlap;
-}
-
-const apiRelationTimelineCache = new WeakMap();
-
-function getApiTimelineCache(cacheRef) {
-  if (!cacheRef) {
-    return null;
-  }
-  let timeline = apiRelationTimelineCache.get(cacheRef);
-  if (!timeline) {
-    timeline = new Map();
-    apiRelationTimelineCache.set(cacheRef, timeline);
-  }
-  return timeline;
-}
-
-function getChapterTimelineCache(timelineCache, bookId, chapterNum) {
-  if (!timelineCache) {
-    return null;
-  }
-  const numericBookId = Number(bookId);
-  const numericChapter = Number(chapterNum);
-  const chapterKey = `${Number.isFinite(numericBookId) ? numericBookId : String(bookId ?? "unknown")}-${Number.isFinite(numericChapter) ? numericChapter : String(chapterNum ?? "unknown")}`;
-
-  if (!timelineCache.has(chapterKey)) {
-    timelineCache.set(chapterKey, {
-      eventSets: new Map(),
-      sortedEvents: null,
-      lastComputedIdx: 0,
-      lastComputedSet: new Set(),
-    });
-  }
-
-  return timelineCache.get(chapterKey);
-}
-
-function prepareChapterEvents(chapterCache, bookId, chapterNum, eventUtils, getCachedChapterEvents) {
-  if (!chapterCache) {
-    return [];
-  }
-
-  if (Array.isArray(chapterCache.sortedEvents)) {
-    return chapterCache.sortedEvents;
-  }
-
-  const cached = getCachedChapterEvents(bookId, chapterNum);
-  if (!cached?.events?.length) {
-    chapterCache.sortedEvents = [];
-    return chapterCache.sortedEvents;
-  }
-
-  const normalized = cached.events
-    .map((event) => {
-      const idx = eventUtils.normalizeEventIdx(event);
-      if (!Number.isFinite(idx) || idx <= 0) {
-        return null;
-      }
-      return {
-        idx,
-        relations: Array.isArray(event?.relations) ? event.relations : [],
-      };
-    })
-    .filter(Boolean)
-    .sort((a, b) => a.idx - b.idx);
-
-  chapterCache.sortedEvents = normalized;
-  return chapterCache.sortedEvents;
-}
-
-function collectRelationKeysFromGraphState(bookId, chapterNum, eventNum, targetKeys, getGraphEventState, getRelationKeyFromRelation) {
-  const seen = new Set();
-  if (!bookId || !Number.isFinite(chapterNum) || !Number.isFinite(eventNum) || eventNum < 1) {
-    return seen;
-  }
-
-  const hasTargetKeys = targetKeys instanceof Set && targetKeys.size > 0;
-  let matchedCount = 0;
-
-  for (let idx = 1; idx <= eventNum; idx += 1) {
-    const state = getGraphEventState(bookId, chapterNum, idx);
-    const result = state
-      ? {
-          relations: state.eventMeta?.relations ?? state.relations ?? [],
-        }
-      : null;
-    const relations = result?.relations;
-    if (!Array.isArray(relations) || relations.length === 0) {
-      continue;
-    }
-
-    for (const rel of relations) {
-      const key = getRelationKeyFromRelation(rel);
-      if (!key || seen.has(key)) {
-        continue;
-      }
-      seen.add(key);
-      if (hasTargetKeys && targetKeys.has(key)) {
-        matchedCount += 1;
-        if (matchedCount === targetKeys.size) {
-          return seen;
-        }
-      }
-    }
-  }
-
-  return seen;
-}
-
-/** 챕터 이벤트 + `getGraphEventState` + 현재 응답 키를 누적해 타임라인 캐시(`eventSets`, `lastComputedSet`)를 갱신한다. */
-export async function collectApiRelationKeys(bookId, chapterNum, eventNum, targetKeys, cacheRef, eventUtils, getCachedChapterEvents, getGraphEventState, getRelationKeyFromRelation) {
-  if (!bookId || !Number.isFinite(chapterNum) || !Number.isFinite(eventNum) || eventNum < 1) {
-    return new Set();
-  }
-
-  const timelineCache = getApiTimelineCache(cacheRef);
-  const chapterCache = getChapterTimelineCache(timelineCache, bookId, chapterNum);
-  const sortedEvents = prepareChapterEvents(chapterCache, bookId, chapterNum, eventUtils, getCachedChapterEvents);
-  const hasTargetKeys = targetKeys instanceof Set && targetKeys.size > 0;
-
-  if (!sortedEvents.length) {
-    const graphOnly = collectRelationKeysFromGraphState(
-      bookId,
-      chapterNum,
-      eventNum,
-      targetKeys,
-      getGraphEventState,
-      getRelationKeyFromRelation
-    );
-    const fallbackSet = hasTargetKeys
-      ? new Set([...graphOnly, ...targetKeys])
-      : graphOnly;
-    if (chapterCache) {
-      chapterCache.eventSets.set(eventNum, fallbackSet);
-      if (!chapterCache.lastComputedIdx || eventNum >= chapterCache.lastComputedIdx) {
-        chapterCache.lastComputedIdx = eventNum;
-        chapterCache.lastComputedSet = fallbackSet;
-      }
-    }
-    return fallbackSet;
-  }
-
-  let lastComputedIdx = chapterCache?.lastComputedIdx ?? 0;
-  let baseSet = chapterCache?.lastComputedSet instanceof Set ? chapterCache.lastComputedSet : null;
-
-  if (!baseSet) {
-    const entries = Array.from(chapterCache.eventSets.entries());
-    if (entries.length) {
-      entries.sort((a, b) => a[0] - b[0]);
-      const [latestIdx, latestSet] = entries[entries.length - 1];
-      lastComputedIdx = latestIdx;
-      baseSet = latestSet;
-    } else {
-      baseSet = new Set();
-    }
-  }
-
-  for (const event of sortedEvents) {
-    if (event.idx <= lastComputedIdx) {
-      continue;
-    }
-    if (event.idx > eventNum) {
-      break;
-    }
-
-    const nextSet = new Set(baseSet);
-    for (const rel of event.relations) {
-      const key = getRelationKeyFromRelation(rel);
-      if (key) {
-        nextSet.add(key);
-      }
-    }
-
-    chapterCache.eventSets.set(event.idx, nextSet);
-    baseSet = nextSet;
-    lastComputedIdx = event.idx;
-  }
-
-  chapterCache.lastComputedIdx = lastComputedIdx;
-
-  const graphKeys = collectRelationKeysFromGraphState(
-    bookId,
-    chapterNum,
-    eventNum,
-    null,
-    getGraphEventState,
-    getRelationKeyFromRelation
-  );
-  baseSet = new Set([...baseSet, ...graphKeys, ...(hasTargetKeys ? targetKeys : [])]);
-  chapterCache.lastComputedSet = baseSet;
-  chapterCache.eventSets.set(eventNum, baseSet);
-
-  return baseSet;
-}
-
-/** Viewer fine API 경로: 타임라인 캐시 갱신(`collectApiRelationKeys`) 후 `relations` 그대로 반환. */
-export async function filterRelationsByTimeline({
-  relations,
-  mode,
-  bookId,
-  chapterNum,
-  eventNum,
-  cacheRef,
-  eventUtils,
-  getCachedChapterEvents,
-  getGraphEventState,
-  getRelationKeyFromRelation
-}) {
-  if (!Array.isArray(relations) || relations.length === 0) {
-    return [];
-  }
-
-  if (!Number.isFinite(chapterNum) || chapterNum < 1 || !Number.isFinite(eventNum) || eventNum < 1) {
-    return relations;
-  }
-
-  const targetKeys = new Set();
-  for (const rel of relations) {
-    const key = getRelationKeyFromRelation(rel);
-    if (key) {
-      targetKeys.add(key);
-    }
-  }
-
-  if (targetKeys.size === 0) {
-    return relations;
-  }
-
-  try {
-    if (mode !== "api" || !bookId) {
-      return relations;
-    }
-    await collectApiRelationKeys(
-      bookId,
-      chapterNum,
-      eventNum,
-      targetKeys,
-      cacheRef,
-      eventUtils,
-      getCachedChapterEvents,
-      getGraphEventState,
-      getRelationKeyFromRelation
-    );
-    return relations;
-  } catch (_error) {
-    return relations;
-  }
-}
-
-/**
- * 챕터 이벤트 캐시에 있는 **현재 이벤트 미만** 인덱스의 relations·characters를
- * 현재 Fine API 결과 위에 올려 한 번에 누적 그래프를 만든다.
- * (동일 관계 키는 이벤트 순으로 나중 값이 덮어씀)
- */
-export function expandFinePayloadWithPriorChapterEvents(
-  bookId,
-  chapterNum,
-  currentEventIdx,
-  resultData,
-  getCachedChapterEvents
-) {
-  if (
-    !bookId ||
-    !Number.isFinite(chapterNum) ||
-    chapterNum < 1 ||
-    !Number.isFinite(currentEventIdx) ||
-    currentEventIdx < 1 ||
-    !resultData ||
-    typeof getCachedChapterEvents !== 'function'
-  ) {
-    return { payload: resultData, expanded: false };
-  }
-
-  const chapterPayload = getCachedChapterEvents(bookId, chapterNum);
-  const events = Array.isArray(chapterPayload?.events) ? chapterPayload.events : [];
-  if (events.length === 0) {
-    return { payload: resultData, expanded: false };
-  }
-
-  const resolveIdx = (evt) => getEventIndexFromObject(evt, ['eventNum', 'idx', 'eventIdx']);
-
-  const priorEvents = events
-    .filter((evt) => {
-      const n = resolveIdx(evt);
-      return Number.isFinite(n) && n >= 1 && n < currentEventIdx;
-    })
-    .sort((a, b) => resolveIdx(a) - resolveIdx(b));
-
-  if (priorEvents.length === 0) {
-    return { payload: resultData, expanded: false };
-  }
-
-  const relationByKey = new Map();
-  const addRel = (rel) => {
-    if (rel == null || typeof rel !== 'object') return;
-    const key = getRelationKeyFromRelation(rel);
-    const k = key && String(key).trim() !== '' ? String(key) : `__rel__${relationByKey.size}`;
-    relationByKey.set(k, rel);
-  };
-
-  for (const evt of priorEvents) {
-    const rels = Array.isArray(evt?.relations) ? evt.relations : [];
-    for (const r of rels) {
-      addRel(r);
-    }
-  }
-
-  const currentRels = Array.isArray(resultData.relations) ? resultData.relations : [];
-  for (const r of currentRels) {
-    addRel(r);
-  }
-
-  const charById = new Map();
-  const addChar = (ch) => {
-    if (!ch || typeof ch !== 'object') return;
-    const id = extractCharacterId(ch);
-    if (!id || String(id).trim() === '' || String(id) === '0') return;
-    charById.set(String(id), ch);
-  };
-
-  for (const evt of priorEvents) {
-    const chars = Array.isArray(evt?.characters) ? evt.characters : [];
-    for (const c of chars) {
-      addChar(c);
-    }
-  }
-  const curChars = Array.isArray(resultData.characters) ? resultData.characters : [];
-  for (const c of curChars) {
-    addChar(c);
-  }
-
-  return {
-    payload: {
-      ...resultData,
-      relations: Array.from(relationByKey.values()),
-      characters: Array.from(charById.values()),
-    },
-    expanded: true,
-  };
 }

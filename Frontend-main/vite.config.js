@@ -9,7 +9,9 @@ export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
   const cspForServer = buildContentSecurityPolicy(env, { dev: mode === 'development' });
   const cspForProdHtml = buildContentSecurityPolicy(env, { dev: false });
-  const proxyTarget = env.VITE_DEV_PROXY_TARGET || DEFAULT_DEV_PROXY_TARGET;
+  const proxyTarget =
+    env.VITE_DEV_PROXY_TARGET || env.VITE_API_BASE_URL || DEFAULT_DEV_PROXY_TARGET;
+  const publicProxyTarget = env.VITE_CDN_BASE_URL || proxyTarget;
   const envPath = path.resolve(process.cwd(), '.env');
   let clientId = null;
   try {
@@ -80,11 +82,9 @@ export default defineConfig(({ mode }) => {
           },
           configure: (proxy, options) => {
             proxy.on('proxyReq', (proxyReq, req, _res) => {
-              if (req.url?.includes('/api/books') && req.method === 'POST') {
-                const authHeader = req.headers['authorization'] || req.headers['Authorization'];
-                if (!proxyReq.getHeader('Authorization') && authHeader) {
-                  proxyReq.setHeader('Authorization', authHeader);
-                }
+              const authHeader = req.headers['authorization'] || req.headers['Authorization'];
+              if (authHeader && !proxyReq.getHeader('Authorization')) {
+                proxyReq.setHeader('Authorization', authHeader);
               }
             });
             proxy.on('proxyRes', (proxyRes, req, _res) => {
@@ -94,7 +94,8 @@ export default defineConfig(({ mode }) => {
                 
                 // 데이터가 없을 수 있는 정상적인 404 엔드포인트들
                 const silent404Endpoints = [
-                  '/api/v2/graph/',
+                  '/relationship-graph',
+                  '/relationship-deltas',
                   '/api/v2/progress',
                   '/api/books/',
                   '/api/v2/books/',
@@ -134,6 +135,20 @@ export default defineConfig(({ mode }) => {
           changeOrigin: true,
           secure: false,
           ws: false,
+        },
+        '/public': {
+          target: publicProxyTarget,
+          changeOrigin: true,
+          secure: publicProxyTarget.startsWith('https'),
+          ws: false,
+          configure: (proxy) => {
+            proxy.on('proxyReq', (proxyReq, req) => {
+              const authHeader = req.headers['authorization'] || req.headers['Authorization'];
+              if (authHeader && !proxyReq.getHeader('Authorization')) {
+                proxyReq.setHeader('Authorization', authHeader);
+              }
+            });
+          },
         },
       },
       // Google OAuth를 위한 보안 헤더 설정

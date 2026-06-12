@@ -13,6 +13,7 @@ import {
 import {
   stripRedundantBookTitlePrefix,
 } from '../../utils/viewer/chapterTitleDisplay';
+import AuthenticatedImage from '../common/AuthenticatedImage';
 import { getServerBookId } from '../../utils/viewer/viewerUtils';
 import { USER_VIEWER_PREFIX } from '../../utils/navigation/viewerPaths';
 import { toast } from 'react-toastify';
@@ -369,7 +370,7 @@ const BookDetailModal = memo(({ book, isOpen, onClose, onDelete }) => {
           <div className="book-detail-cover-wrap">
             <div className="book-detail-cover">
               {coverSrc && !coverImgFailed ? (
-                <img
+                <AuthenticatedImage
                   src={coverSrc}
                   alt={displayTitle}
                   onError={() => setCoverImgFailed(true)}
@@ -522,7 +523,7 @@ const BookDetailModal = memo(({ book, isOpen, onClose, onDelete }) => {
                           >
                             <div className="book-detail-character-main">
                               {character.profileImage ? (
-                                <img
+                                <AuthenticatedImage
                                   className="book-detail-character-avatar"
                                   src={character.profileImage}
                                   alt=""
@@ -558,7 +559,7 @@ const BookDetailModal = memo(({ book, isOpen, onClose, onDelete }) => {
                               >
                                 <div className="book-detail-character-main">
                                   {character.profileImage ? (
-                                    <img
+                                    <AuthenticatedImage
                                       className="book-detail-character-avatar"
                                       src={character.profileImage}
                                       alt=""

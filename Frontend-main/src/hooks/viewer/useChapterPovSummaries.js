@@ -79,5 +79,3 @@ export const useChapterPovSummaries = (bookId, chapterIdx) => {
     refetch: fetchPovSummaries,
   };
 };
-
-export default useChapterPovSummaries;

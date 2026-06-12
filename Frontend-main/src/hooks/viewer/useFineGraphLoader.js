@@ -3,6 +3,7 @@ import { getFineGraph } from '../../utils/api/api';
 import { getGraphEventState, getCachedChapterEvents } from '../../utils/common/cache/chapterEventCache';
 import { buildNodeWeights, createCharacterMaps } from '../../utils/graph/characterUtils';
 import { convertRelationsToElements } from '../../utils/graph/graphDataUtils';
+import { resolveGraphElementsProfileImages } from '../../utils/common/authAssetLoader';
 import {
   cacheKeyUtils,
   eventUtils,
@@ -17,8 +18,8 @@ function buildFallbackElementsFromRelations(relationsInput) {
 
   const nodeIds = new Set();
   relations.forEach((rel) => {
-    const source = rel?.source ?? rel?.id1;
-    const target = rel?.target ?? rel?.id2;
+    const source = rel?.id1;
+    const target = rel?.id2;
     if (source != null && String(source).trim() !== '') nodeIds.add(String(source));
     if (target != null && String(target).trim() !== '') nodeIds.add(String(target));
   });
@@ -29,18 +30,18 @@ function buildFallbackElementsFromRelations(relationsInput) {
 
   const edges = relations
     .map((rel, idx) => {
-      const source = rel?.source ?? rel?.id1;
-      const target = rel?.target ?? rel?.id2;
+      const source = rel?.id1;
+      const target = rel?.id2;
       if (source == null || target == null) return null;
       const s = String(source).trim();
       const t = String(target).trim();
       if (!s || !t) return null;
       const relationArr = Array.isArray(rel?.relation)
         ? rel.relation
-        : rel?.relation != null && rel?.relation !== ''
-          ? [rel.relation]
+        : Array.isArray(rel?.latestLabels)
+          ? rel.latestLabels
           : [];
-      const label = String(rel?.label ?? rel?.type ?? relationArr[0] ?? '').trim();
+      const label = String(relationArr[0] ?? '').trim();
       return {
         data: {
           id: `${s}-${t}-${idx}`,
@@ -155,6 +156,9 @@ export function useFineGraphLoader({
     );
     eventUtils.updateGraphDataRef(previousGraphDataRef, cumulativeElements, eventIdx, chapterIdx);
     setElementsRef.current(cumulativeElements);
+    void resolveGraphElementsProfileImages(cumulativeElements).then((resolved) => {
+      setElementsRef.current(resolved);
+    });
     if (setGraphIsDataEmpty) setGraphIsDataEmpty(cumulativeElements.length === 0);
     return cumulativeElements;
   }, [setGraphIsDataEmpty]);

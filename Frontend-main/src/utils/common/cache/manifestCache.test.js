@@ -3,7 +3,7 @@ import { getManifestCacheKey } from './manifestCache.js';
 
 describe('manifestCache', () => {
   it('getManifestCacheKey', () => {
-    expect(getManifestCacheKey(42)).toBe('manifest_cache_42');
-    expect(getManifestCacheKey('7')).toBe('manifest_cache_7');
+    expect(getManifestCacheKey(42)).toBe('manifest_cache_v2_42');
+    expect(getManifestCacheKey('7')).toBe('manifest_cache_v2_7');
   });
 });

@@ -3,6 +3,7 @@ import PropTypes from 'prop-types';
 import { useNavigate } from 'react-router-dom';
 import { Heart, BookOpen, Network, MoreVertical, Info, Clock, FileText, Trash2, X } from 'lucide-react';
 import BookDetailModal from './BookDetailModal';
+import AuthenticatedImage from '../common/AuthenticatedImage';
 import './BookLibrary.css';
 import { ensureGraphBookCache } from '../../utils/common/cache/chapterEventCache';
 import { USER_VIEWER_PREFIX } from '../../utils/navigation/viewerPaths';
@@ -119,7 +120,7 @@ const BookCard = memo(({ book, onToggleFavorite, onBookClick, onOpenBook, onBook
   const [imageError, setImageError] = useState(false);
   const [showContextMenu, setShowContextMenu] = useState(false);
   const [optimisticFavorite, setOptimisticFavorite] = useState(null);
-  const displayFavorite = optimisticFavorite !== null ? optimisticFavorite : !!book.favorite;
+  const displayFavorite = optimisticFavorite !== null ? optimisticFavorite : !!book.isFavorite;
   const isOpeningReader = openingMode === 'viewer';
   const isOpeningGraph = openingMode === 'graph';
   const isOpening = Boolean(openingMode);
@@ -136,7 +137,7 @@ const BookCard = memo(({ book, onToggleFavorite, onBookClick, onOpenBook, onBook
 
   useEffect(() => {
     setOptimisticFavorite(null);
-  }, [book.favorite]);
+  }, [book.isFavorite]);
 
   const handleFavoriteClick = async (e) => {
     e.stopPropagation();
@@ -181,9 +182,9 @@ const BookCard = memo(({ book, onToggleFavorite, onBookClick, onOpenBook, onBook
   const renderBookImage = () => {
     if (book.coverImgUrl && !imageError) {
       return (
-        <img 
-          src={book.coverImgUrl} 
-          alt={book.title} 
+        <AuthenticatedImage
+          src={book.coverImgUrl}
+          alt={book.title}
           className="book-image"
           onError={() => setImageError(true)}
           onLoad={() => setImageError(false)}
@@ -342,7 +343,7 @@ const bookShape = PropTypes.shape({
   title: PropTypes.string.isRequired,
   author: PropTypes.string.isRequired,
   coverImgUrl: PropTypes.string,
-  favorite: PropTypes.bool,
+  isFavorite: PropTypes.bool,
   readingStatus: PropTypes.string,
   progress: PropTypes.number,
   updatedAt: PropTypes.string

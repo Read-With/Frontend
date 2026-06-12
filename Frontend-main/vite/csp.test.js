@@ -23,10 +23,18 @@ describe('buildContentSecurityPolicy', () => {
     expect(s).toContain('http://api.example.test:8080');
   });
 
-  it('allows readwith CDN for normalized asset fetch (connect-src)', () => {
-    const prod = buildContentSecurityPolicy({}, { dev: false });
-    const dev = buildContentSecurityPolicy({}, { dev: true });
-    expect(prod).toContain('https://cdn.readwith.store');
-    expect(dev).toContain('https://cdn.readwith.store');
+  it('allows API base origin for normalized fetch (connect-src)', () => {
+    const prod = buildContentSecurityPolicy(
+      { VITE_API_BASE_URL: 'https://dev.readwith.cloud' },
+      { dev: false }
+    );
+    const dev = buildContentSecurityPolicy(
+      { VITE_API_BASE_URL: 'https://dev.readwith.cloud' },
+      { dev: true }
+    );
+    expect(prod).toContain('https://dev.readwith.cloud');
+    expect(dev).toContain('https://dev.readwith.cloud');
+    expect(prod).not.toContain('readwith.store');
+    expect(dev).not.toContain('readwith.store');
   });
 });

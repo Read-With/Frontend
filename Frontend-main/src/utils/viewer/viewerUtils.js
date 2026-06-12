@@ -98,93 +98,7 @@ function _withRefs(xhtmlBookRef, xhtmlViewerRef, callback) {
   return callback(xhtmlBook, xhtmlViewer);
 }
 
-function _cleanupNavigation(setIsNavigating, xhtmlViewer, handler) {
-  setIsNavigating(false);
-  if (xhtmlViewer && handler && typeof xhtmlViewer.off === 'function') {
-    xhtmlViewer.off('relocated', handler);
-  }
-}
-
-const _navigationUtils = {
-  async safeNavigate(xhtmlBook, xhtmlViewer, action, _direction = 'next', setIsNavigating, setNavigationError, _storageKeys) {
-    if (!xhtmlBook || !xhtmlViewer) {
-      errorUtils.logWarning('safeNavigate', '책 또는 XHTML 뷰어가 없습니다', {
-        hasXhtmlBook: !!xhtmlBook,
-        hasXhtmlViewer: !!xhtmlViewer,
-      });
-      setNavigationError('뷰어가 준비되지 않았습니다.');
-      return { success: false, error: '책 또는 XHTML 뷰어 없음' };
-    }
-    
-    setIsNavigating(true);
-    setNavigationError(null);
-
-    try {
-      const result = await action();
-      
-      if (!result || !result.success) {
-        const errorMsg = result?.error || '페이지 이동에 실패했습니다.';
-        setNavigationError(errorMsg);
-        return result || { success: false, error: errorMsg };
-      }
-      
-      return result;
-      
-    } catch (error) {
-      errorUtils.logError('safeNavigate', error);
-      const errorMsg = '페이지 이동 중 오류가 발생했습니다.';
-      setNavigationError(errorMsg);
-      return { success: false, error: errorMsg };
-    } finally {
-      setIsNavigating(false);
-    }
-  }
-};
-
-// settingsUtils는 commonSettingsUtils 사용 (이미 import됨)
 export const settingsUtils = commonSettingsUtils;
-
-const textUtils = {
-  countCharacters: (text, element) => {
-    if (!text) return 0;
-    
-    if (element) {
-      const excludedClasses = ['.pg-boilerplate', '.pgheader', '.toc', '.dedication', '.epigraph'];
-      if (excludedClasses.some(cls => element.closest(cls))) {
-        return 0;
-      }
-    }
-
-    return text
-      .replace(/[\s\n\r\t]/g, '')
-      .replace(/[^a-zA-Z가-힣]/g, '')
-      .length;
-  },
-
-  calculateParagraphChars: (paragraph, element) => {
-    return textUtils.countCharacters(paragraph.textContent, element);
-  },
-
-  calculatePreviousParagraphsChars: (paragraphs, currentParagraphNum) => {
-    let charCount = 0;
-    for (let i = 0; i < currentParagraphNum - 1; i++) {
-      const paragraph = paragraphs[i];
-      if (paragraph) {
-        charCount += textUtils.calculateParagraphChars(paragraph, paragraph);
-      }
-    }
-    return charCount;
-  },
-
-  calculateCurrentParagraphChars: (paragraphs, currentParagraphNum, charOffset) => {
-    if (currentParagraphNum > 0 && paragraphs[currentParagraphNum - 1]) {
-      const currentParagraph = paragraphs[currentParagraphNum - 1];
-      const currentParagraphChars = textUtils.calculateParagraphChars(currentParagraph, currentParagraph);
-      return Math.min(charOffset, currentParagraphChars);
-    }
-    return 0;
-  }
-};
 
 export const eventUtils = {
   normalizeEventIdx: (event) => {
@@ -488,22 +402,6 @@ function buildFromCache(cached, convertFn) {
  * GET /api/v2/graph/fine 의 result.event 와 동일 계열(캐시 시 스냅샷 키만 eventMeta).
  */
 export const graphDataCacheUtils = {
-  getGraphDataWithFallback: (bookId, chapter, eventIdx, getGraphEventState, eventUtils) => {
-    if (!bookId || !chapter || eventIdx < 1) {
-      return { resultData: null, usedCache: false };
-    }
-
-    const cached = getGraphEventState(bookId, chapter, eventIdx);
-    if (cached) {
-      return {
-        resultData: buildFromCache(cached, eventUtils.convertElementsToRelations),
-        usedCache: true
-      };
-    }
-
-    return { resultData: null, usedCache: false };
-  },
-
   getGraphDataFromApiOrCache: async (
     bookId,
     chapter,

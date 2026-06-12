@@ -94,16 +94,16 @@ export const authenticatedRequest = async (endpoint, options = {}, retryCount = 
     }
   }
   
+  const isFormData = options.body instanceof FormData;
   const defaultHeaders = {
-    'Content-Type': 'application/json',
-    'Accept': 'application/json',
+    ...(!isFormData && { 'Content-Type': 'application/json' }),
+    Accept: 'application/json',
   };
-  
-  // 토큰이 있으면 Authorization 헤더 추가
+
   if (token) {
-    defaultHeaders['Authorization'] = `Bearer ${token}`;
+    defaultHeaders.Authorization = `Bearer ${token}`;
   }
-  
+
   const response = await fetch(`${API_BASE_URL}/api${endpoint}`, {
     ...options,
     headers: {
@@ -248,6 +248,48 @@ export const refreshToken = async () => {
     throw error;
   }
 };
+
+/** JWT를 붙여 임의 URL(정규화 자산 /public 등)을 fetch합니다. */
+export async function authenticatedFetch(url, options = {}, retryCount = 0) {
+  await ensureSessionAccessToken();
+  let token = getStoredAccessToken();
+
+  if (token && isTokenExpiringSoon(token, getProactiveRefreshBufferSeconds(token))) {
+    try {
+      await refreshToken();
+      token = getStoredAccessToken();
+    } catch (error) {
+      console.warn('토큰 자동 갱신 실패:', error);
+    }
+  }
+
+  const headers = {
+    Accept: 'application/json, text/html, application/xhtml+xml, */*',
+    ...options.headers,
+  };
+  if (token) {
+    headers.Authorization = `Bearer ${token}`;
+  }
+
+  const response = await fetch(url, {
+    ...options,
+    headers,
+  });
+
+  if (response.status === 401 && retryCount === 0) {
+    try {
+      await refreshToken();
+      return authenticatedFetch(url, options, retryCount + 1);
+    } catch (_refreshError) {
+      clearAuthData();
+      const error = new Error('인증이 만료되었습니다. 다시 로그인해주세요.');
+      error.status = 401;
+      throw error;
+    }
+  }
+
+  return response;
+}
 
 let sessionBootstrapPromise = null;
 

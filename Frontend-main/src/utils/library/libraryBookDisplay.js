@@ -2,7 +2,7 @@ import { getProgressFromCache } from '../common/cache/progressCache';
 import { clampPercent } from '../common/numberUtils';
 import { getStoredProgressPercent } from '../common/progressPercentStorage';
 
-export function getLocalProgressPercent(bookIdStr) {
+function getLocalProgressPercent(bookIdStr) {
   return getStoredProgressPercent(bookIdStr);
 }
 

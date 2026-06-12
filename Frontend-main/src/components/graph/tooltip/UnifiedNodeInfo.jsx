@@ -376,14 +376,14 @@ function UnifiedNodeInfo({
       names: processRelationTags(nodeData.names || [], nodeData.common_name),
       displayName: nodeData.common_name || nodeData.label || "Unknown",
       hasImage: !!nodeData.image,
-      isMainCharacter: !!nodeData.main_character,
+      isMainCharacter: !!nodeData.isMainCharacter,
     };
   }, [nodeData]);
 
   // 한글 description만 표시
   const currentDescription = useMemo(() => {
     if (!nodeData) return '';
-    return nodeData.description_ko || nodeData.description || '';
+    return nodeData.personalityText || nodeData.description || '';
   }, [nodeData]);
 
   const displayDescription = currentDescription;

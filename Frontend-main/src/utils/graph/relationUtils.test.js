@@ -32,7 +32,6 @@ describe('relationUtils', () => {
   it('isSamePair', () => {
     expect(isSamePair({ id1: 1, id2: 2 }, 2, 1)).toBe(true);
     expect(isSamePair({ id1: 1, id2: 2 }, 1, 3)).toBe(false);
-    expect(isSamePair({ source: '5', target: 6 }, 6, 5)).toBe(true);
   });
 
   it('processRelations', () => {
@@ -46,7 +45,7 @@ describe('relationUtils', () => {
 
   it('createRelationKey / getRelationKeyFromRelation', () => {
     expect(createRelationKey(2, 1)).toBe('1-2');
-    expect(getRelationKeyFromRelation({ source: '3', target: 4 })).toBe('3-4');
+    expect(getRelationKeyFromRelation({ id1: 3, id2: 4 })).toBe('3-4');
   });
 
   it('relationEventMetaPassthrough / processRelations keeps event ids', () => {

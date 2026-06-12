@@ -1,3 +1,5 @@
+import { normalizeManifestBook } from '../../api/booksApi';
+import { sanitizeAssetUrl } from '../artifactUrlUtils';
 import { toNumberOrNull, toOneBasedChapterIndexOrNull } from '../numberUtils';
 import { toLocator } from '../locatorUtils';
 import { compareEventsByIdx, sortEventsByIdx } from '../../graph/eventUtils';
@@ -11,8 +13,25 @@ import {
   removeFromStorage
 } from './cacheManager';
 
-const manifestCachePrefix = 'manifest_cache_';
+const manifestCachePrefix = 'manifest_cache_v2_';
 const MANIFEST_TTL_MS = 1000 * 60 * 15;
+
+function migrateLegacyManifestStorage() {
+  if (typeof localStorage === 'undefined') return;
+  try {
+    const keysToRemove = [];
+    for (let i = 0; i < localStorage.length; i += 1) {
+      const key = localStorage.key(i);
+      if (key?.startsWith('manifest_cache_') && !key.startsWith(manifestCachePrefix)) {
+        keysToRemove.push(key);
+      }
+    }
+    keysToRemove.forEach((key) => localStorage.removeItem(key));
+  } catch {
+    /* ignore */
+  }
+}
+migrateLegacyManifestStorage();
 
 const manifestCache = new Map();
 registerCache('manifestCache', manifestCache, {
@@ -122,10 +141,32 @@ const normalizeChapter = (chapter) => {
     endPos: normalizedEndPos,
     rawText: typeof chapter.rawText === 'string' ? chapter.rawText : '',
     summaryText: typeof chapter.summaryText === 'string' ? chapter.summaryText : '',
-    summaryUploadUrl: chapter.summaryUploadUrl != null ? String(chapter.summaryUploadUrl) : '',
+    summaryUploadUrl:
+      chapter.summaryUploadUrl != null
+        ? sanitizeAssetUrl(String(chapter.summaryUploadUrl))
+        : '',
     povSummariesCached: Boolean(chapter.povSummariesCached),
     events: sortedEvents,
   };
+};
+
+const parseCharacterNames = (names) => {
+  if (Array.isArray(names)) {
+    return names.map((n) => String(n).trim()).filter(Boolean);
+  }
+  if (typeof names !== 'string' || !names.trim()) return [];
+  try {
+    const parsed = JSON.parse(names);
+    if (Array.isArray(parsed)) {
+      return parsed.map((n) => String(n).trim()).filter(Boolean);
+    }
+  } catch (_e) {
+    /* plain string */
+  }
+  if (names.includes(',')) {
+    return names.split(',').map((n) => n.trim()).filter(Boolean);
+  }
+  return [names.trim()];
 };
 
 /** characters[] — id, name, names, profileImage, firstChapterIdx, personalityText, profileText, isMainCharacter */
@@ -138,19 +179,19 @@ const normalizeCharacter = (character) => {
   const profileText = typeof character.profileText === 'string' ? character.profileText : '';
   const personalityText = typeof character.personalityText === 'string' ? character.personalityText : '';
   const isMain = Boolean(character.isMainCharacter);
+  const names = parseCharacterNames(character.names);
   return {
     id,
     name: typeof character.name === 'string' ? character.name : '',
-    names: typeof character.names === 'string' ? character.names : '',
-    profileImage: character.profileImage != null ? String(character.profileImage) : '',
+    names,
+    profileImage:
+      character.profileImage != null
+        ? sanitizeAssetUrl(String(character.profileImage))
+        : '',
     firstChapterIdx: toNumberOrNull(character.firstChapterIdx) ?? 0,
     personalityText,
     profileText,
     isMainCharacter: isMain,
-    main_character: isMain,
-    profile_text: profileText,
-    description: profileText,
-    description_ko: personalityText,
   };
 };
 
@@ -158,13 +199,16 @@ const normalizeReaderArtifacts = (readerArtifacts) => {
   if (!readerArtifacts || typeof readerArtifacts !== 'object' || Array.isArray(readerArtifacts)) {
     return readerArtifacts;
   }
-  const path = readerArtifacts.combinedXhtmlPath ?? '';
+  const path =
+    typeof readerArtifacts.combinedXhtmlPath === 'string'
+      ? sanitizeAssetUrl(readerArtifacts.combinedXhtmlPath)
+      : '';
   const dataAttributes = Array.isArray(readerArtifacts.dataAttributes)
     ? readerArtifacts.dataAttributes
     : [];
   return {
     ...readerArtifacts,
-    ...(typeof path === 'string' && path ? { combinedXhtmlPath: path } : {}),
+    ...(path ? { combinedXhtmlPath: path } : {}),
     dataAttributes,
   };
 };
@@ -312,8 +356,8 @@ const pickManifestEventForChapterLocalOffset = (events, local) => {
 };
 
 /**
- * GET /api/v2/graph/fine — locator만으로 호출 시 blockIndex 불일치(400)를 피하기 위해
- * 매니페스트 이벤트 구간(startTxtOffset/endTxtOffset)으로 eventIdx를 정하고 locator는 제거한다.
+ * GET /api/v2/books/{bookId}/relationship-graph — locator만으로 호출 시 blockIndex 불일치(400)를 피하기 위해
+ * 매니페스트 이벤트 구간(startTxtOffset/endTxtOffset)으로 eventIdx를 정하고 chapterIndex·eventId로 호출한다.
  * 강제 이벤트로 eventIdx만 쓰는 경우는 api.getFineGraph의 fineOpts.useCallerEventIdxOnly로 처리.
  */
 export const resolveFineGraphLocatorToEventParams = (
@@ -417,7 +461,7 @@ const normalizeManifestData = (manifestData) => {
 
   const book =
     manifestData.book && typeof manifestData.book === 'object' && !Array.isArray(manifestData.book)
-      ? { ...manifestData.book }
+      ? normalizeManifestBook(manifestData.book)
       : manifestData.book;
 
   return {
@@ -467,14 +511,14 @@ export const getManifestFromCache = (bookId) => {
   const key = String(bookId);
   const cachedInMemory = getCacheItem('manifestCache', key);
   if (cachedInMemory && !isExpired(cachedInMemory.timestamp)) {
-    return cachedInMemory.data;
+    return normalizeManifestData(cachedInMemory.data);
   }
 
   const cacheKey = getManifestCacheKey(bookId);
   const fromStorage = loadFromStorage(cacheKey, 'localStorage');
   if (fromStorage && !isExpired(fromStorage.timestamp)) {
     setCacheItem('manifestCache', key, fromStorage);
-    return fromStorage.data;
+    return normalizeManifestData(fromStorage.data);
   }
 
   return null;
@@ -593,7 +637,7 @@ export const isValidEvent = (bookId, chapterIdx, eventIdx, manifestOverride = un
   getManifestEventData(bookId, chapterIdx, eventIdx, manifestOverride) !== null;
 
 /**
- * v2 manifest 챕터의 이벤트 인덱스 상한(힌트). 그래프 본문은 GET /api/v2/graph/fine.
+ * v2 manifest 챕터의 이벤트 인덱스 상한(힌트). 그래프 본문은 GET /api/v2/books/{bookId}/relationship-graph.
  */
 export const getLastFineGraphEventIdxFromChapterData = (chapterData) => {
   if (!chapterData || typeof chapterData !== 'object') return null;

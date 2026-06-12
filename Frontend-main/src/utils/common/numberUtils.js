@@ -46,11 +46,6 @@ export const toOneBasedChapterIndexOrNull = (value) => {
   return t === num ? t : null;
 };
 
-export const safeParseInt = (value, fallback = 0) => {
-  const num = toNumberOrNull(value);
-  return num !== null ? Math.trunc(num) : fallback;
-};
-
 export const clampNumber = (value, min, max) => {
   const num = toNumberOrNull(value);
   if (num === null) return min;

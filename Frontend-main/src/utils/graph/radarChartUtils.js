@@ -36,9 +36,8 @@ export const extractRadarChartData = (nodeId, relations, elements, maxDisplay = 
 
   // 선택된 노드와 연결된 모든 관계 찾기
   relations.forEach((rel) => {
-    // id1/id2 또는 source/target 모두 지원
-    const id1 = String(rel.id1 ?? rel.source);
-    const id2 = String(rel.id2 ?? rel.target);
+    const id1 = String(rel.id1);
+    const id2 = String(rel.id2);
     
     let connectedNodeId = null;
     

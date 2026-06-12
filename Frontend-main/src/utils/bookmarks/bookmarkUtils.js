@@ -30,8 +30,6 @@ export const parseBookmarkLocation = (bookmark) => {
   return base;
 };
 
-export const isValidLocator = (loc) => toLocator(loc) != null;
-
 export const isSameBookmarkPosition = (bookmark, ref) => {
   if (!bookmark || !ref) return false;
   const ta = Number(bookmark.startTxtOffset);

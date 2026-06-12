@@ -32,9 +32,8 @@ export function normalizeRelation(raw) {
   }
   
   try {
-    // id1/id2 우선, 없으면 source/target (fine·그래프 API 변형)
-    const id1 = safeNum(raw.id1 ?? raw.source);
-    const id2 = safeNum(raw.id2 ?? raw.target);
+    const id1 = safeNum(raw.id1);
+    const id2 = safeNum(raw.id2);
 
     if (isNaN(id1) || isNaN(id2)) {
       return null;
@@ -43,7 +42,13 @@ export function normalizeRelation(raw) {
     const positivity = raw.positivity;
     const weight = raw.weight ?? 1;
     const count = raw.count;
-    const relationArray = normalizeRelationArray(raw.relation);
+    const relationSource =
+      Array.isArray(raw.relation) && raw.relation.length > 0
+        ? raw.relation
+        : Array.isArray(raw.latestLabels) && raw.latestLabels.length > 0
+          ? raw.latestLabels
+          : raw.relation;
+    const relationArray = normalizeRelationArray(relationSource);
 
     const label = relationArray[0] || (typeof raw.label === "string" ? raw.label : "");
 
@@ -80,8 +85,8 @@ export function isSamePair(rel, a, b) {
     return false;
   }
 
-  const r1 = safeNum(rel.id1 ?? rel.source);
-  const r2 = safeNum(rel.id2 ?? rel.target);
+  const r1 = safeNum(rel.id1);
+  const r2 = safeNum(rel.id2);
   const s1 = safeNum(a);
   const s2 = safeNum(b);
   
@@ -197,29 +202,6 @@ export function cleanupRelationResources() {
   }
 }
 
-export function isValidRelationData(data) {
-  if (!data || typeof data !== 'object') {
-    return false;
-  }
-  
-  const hasId1 = data.id1 !== undefined || data.source !== undefined;
-  const hasId2 = data.id2 !== undefined || data.target !== undefined;
-  
-  return hasId1 && hasId2;
-}
-
-export function isValidRelationsArray(relations) {
-  if (!Array.isArray(relations)) {
-    return false;
-  }
-  
-  if (relations.length === 0) {
-    return true;
-  }
-  
-  return isValidRelationData(relations[0]);
-}
-
 /**
  * 방향 간선 id (`id1->id2`). 역방향은 별도 간선.
  * @param {any} fromId
@@ -249,12 +231,12 @@ export function createRelationKey(a, b) {
 
 /**
  * 관계 객체에서 관계 키 추출
- * @param {Object} relation - 관계 객체 (id1/id2 또는 source/target 포함)
+ * @param {Object} relation - 관계 객체 (id1/id2 포함)
  * @returns {string|null} 관계 키 또는 null
  */
 export function getRelationKeyFromRelation(relation) {
   if (!relation || typeof relation !== "object") {
     return null;
   }
-  return createRelationKey(relation.id1 ?? relation.source, relation.id2 ?? relation.target);
+  return createRelationKey(relation.id1, relation.id2);
 }
