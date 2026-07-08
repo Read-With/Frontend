@@ -49,9 +49,16 @@ const HeroSection = () => {
   const handleGoogleLogin = async () => {
     setIsLoggingIn(true);
     try {
-      // redirect_uri 설정 (로컬/프로덕션 구분)
-      // 백엔드가 요청 본문의 redirectUri를 읽을 수 있도록 각 환경에 맞는 값 사용
-      const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || 'your-google-client-id';
+      const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID;
+      if (!GOOGLE_CLIENT_ID || GOOGLE_CLIENT_ID === 'your-google-client-id') {
+        setIsLoggingIn(false);
+        alert(
+          'Google OAuth Client ID가 설정되지 않았습니다.\n' +
+            '로컬: Frontend-main/.env의 VITE_GOOGLE_CLIENT_ID 확인\n' +
+            '배포: Vercel 환경 변수에 VITE_GOOGLE_CLIENT_ID 등록 후 재배포'
+        );
+        return;
+      }
       const GOOGLE_REDIRECT_URI = getGoogleOAuthRedirectUri();
       
       // 구글 OAuth URL 구성

@@ -1,7 +1,5 @@
 import { defineConfig, loadEnv } from "vite";
 import react from "@vitejs/plugin-react";
-import fs from 'fs';
-import path from 'path';
 import { buildContentSecurityPolicy } from './vite/csp.js';
 import { DEFAULT_DEV_PROXY_TARGET } from './src/utils/common/authUtils.js';
 
@@ -13,24 +11,7 @@ export default defineConfig(({ mode }) => {
     env.VITE_DEV_PROXY_TARGET || env.VITE_API_BASE_URL || DEFAULT_DEV_PROXY_TARGET;
   const publicProxyTarget =
     env.VITE_CDN_BASE_URL || env.VITE_API_BASE_URL || proxyTarget;
-  const envPath = path.resolve(process.cwd(), '.env');
-  let clientId = null;
-  try {
-    if (fs.existsSync(envPath)) {
-      const envContent = fs.readFileSync(envPath, 'utf8');
-      const lines = envContent.split('\n');
-      
-      for (const line of lines) {
-        const cleanLine = line.replace(/^\uFEFF/, '').trim();
-        if (cleanLine.startsWith('VITE_GOOGLE_CLIENT_ID=')) {
-          clientId = cleanLine.split('=')[1].trim();
-          break;
-        }
-      }
-    }
-  } catch (error) {
-    console.error('환경변수 파일 읽기 실패:', error);
-  }
+  const clientId = env.VITE_GOOGLE_CLIENT_ID?.trim() || null;
   
   return {
     plugins: [
