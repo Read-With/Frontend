@@ -56,6 +56,7 @@ export function buildContentSecurityPolicy(env, { dev }) {
     "'self'",
     'https://accounts.google.com',
     'https://oauth2.googleapis.com',
+    'https://cdn.readwith.cloud',
     'https://*.s3.ap-northeast-2.amazonaws.com',
     'https://*.s3.amazonaws.com',
   ]);
