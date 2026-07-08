@@ -4,6 +4,7 @@ import { clearAuthTokenStorage } from '../security/authTokenStorage';
 import { trimTrailingSlash } from './stringUtils';
 
 export const DEFAULT_API_BASE_URL = 'https://readwith-be.onrender.com';
+export const DEFAULT_CDN_BASE_URL = 'https://cdn.readwith.cloud';
 export const DEFAULT_APP_ORIGIN = 'https://readwith-frontend.vercel.app';
 export const DEFAULT_DEV_PROXY_TARGET =
   'http://read-with-dev-env.eba-wuzcb2s6.ap-northeast-2.elasticbeanstalk.com';

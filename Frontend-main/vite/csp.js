@@ -6,7 +6,7 @@
  * - connect-src: CDN(정규화 combined.xhtml 등), VITE_API_BASE_URL (미설정 시 authUtils 기본값), VITE_DEV_PROXY_TARGET, VITE_CSP_CONNECT_EXTRA
  */
 
-import { DEFAULT_API_BASE_URL } from '../src/utils/common/authUtils.js';
+import { DEFAULT_API_BASE_URL, DEFAULT_CDN_BASE_URL } from '../src/utils/common/authUtils.js';
 
 function addConnectOrigins(set, rawUrl) {
   if (!rawUrl || typeof rawUrl !== 'string') return;
@@ -61,7 +61,7 @@ export function buildContentSecurityPolicy(env, { dev }) {
   ]);
 
   addConnectOrigins(connect, env.VITE_API_BASE_URL || DEFAULT_API_BASE_URL);
-  addConnectOrigins(connect, env.VITE_CDN_BASE_URL);
+  addConnectOrigins(connect, env.VITE_CDN_BASE_URL || DEFAULT_CDN_BASE_URL);
 
   if (dev) {
     connect.add('ws://localhost:*');
