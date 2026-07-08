@@ -5,21 +5,6 @@ import { getBook } from '../api/booksApi';
 import { getApiBaseUrl, DEFAULT_API_BASE_URL } from './authUtils';
 import { trimTrailingSlash } from './stringUtils';
 
-const LEGACY_ASSET_HOSTS = new Set([
-  'cdn.readwith.store',
-  'cdn.readwith.cloud',
-]);
-
-function getPublicAssetOrigin() {
-  const fromEnv = import.meta.env.VITE_CDN_BASE_URL;
-  if (typeof fromEnv === 'string' && fromEnv.trim()) {
-    return trimTrailingSlash(fromEnv.trim());
-  }
-  const apiBase = trimTrailingSlash(getApiBaseUrl());
-  if (apiBase) return apiBase;
-  return DEFAULT_API_BASE_URL;
-}
-
 /** /api/public/ → /public/ 보정 */
 export function stripWrongApiPublicPrefix(url) {
   if (url == null) return '';
@@ -31,7 +16,7 @@ export function isProtectedPublicAsset(url) {
   const s = String(url).trim();
   if (!s) return false;
   if (s.startsWith('/public/')) return true;
-  return /readwith\.(cloud|store)\/public\//i.test(s);
+  return /readwith\.cloud\/public\//i.test(s);
 }
 
 /** /public/books/{id}/... 경로에서 bookId 추출 */
@@ -51,21 +36,27 @@ export function isPublicCoverAssetPath(url) {
 
 export function rewriteLegacyAssetUrl(url) {
   if (url == null) return '';
-  let s = stripWrongApiPublicPrefix(String(url).trim());
+  const s = stripWrongApiPublicPrefix(String(url).trim());
   if (!s) return '';
   try {
     const parsed = new URL(s.startsWith('//') ? `https:${s}` : s);
-    if (LEGACY_ASSET_HOSTS.has(parsed.hostname.toLowerCase())) {
-      const origin = getPublicAssetOrigin();
-      return `${origin}${parsed.pathname}${parsed.search}${parsed.hash}`;
-    }
     return s.startsWith('//') ? parsed.href : s;
   } catch {
     return s;
   }
 }
 
-/** 저장·표시용 URL (레거시 CDN 호스트 치환) */
+function getPublicAssetOrigin() {
+  const fromEnv = import.meta.env.VITE_CDN_BASE_URL;
+  if (typeof fromEnv === 'string' && fromEnv.trim()) {
+    return trimTrailingSlash(fromEnv.trim());
+  }
+  const apiBase = trimTrailingSlash(getApiBaseUrl());
+  if (apiBase) return apiBase;
+  return DEFAULT_API_BASE_URL;
+}
+
+/** 저장·표시용 URL (/api/public 보정·프로토콜 상대 URL 정규화) */
 export function sanitizeAssetUrl(url) {
   if (url == null) return '';
   const s = String(url).trim();

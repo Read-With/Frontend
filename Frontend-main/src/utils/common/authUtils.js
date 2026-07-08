@@ -3,8 +3,8 @@
 import { clearAuthTokenStorage } from '../security/authTokenStorage';
 import { trimTrailingSlash } from './stringUtils';
 
-export const DEFAULT_API_BASE_URL = 'https://dev.readwith.cloud';
-export const DEFAULT_APP_ORIGIN = 'https://dev.readwith.cloud';
+export const DEFAULT_API_BASE_URL = 'https://readwith-be.onrender.com';
+export const DEFAULT_APP_ORIGIN = 'https://readwith-frontend.vercel.app';
 export const DEFAULT_DEV_PROXY_TARGET =
   'http://read-with-dev-env.eba-wuzcb2s6.ap-northeast-2.elasticbeanstalk.com';
 
@@ -26,25 +26,31 @@ export const getApiBaseUrl = () => {
 
 /**
  * Google OAuth 승인 후 돌아올 프론트 콜백 URL (Google 콘솔·백엔드와 일치)
- * 우선순위: VITE_GOOGLE_REDIRECT_URI → (개발: 현재 origin + BASE_URL) → VITE_APP_ORIGIN/auth/callback → 기본
+ * 우선순위: 브라우저 origin + /auth/callback → VITE_GOOGLE_REDIRECT_URI → VITE_APP_ORIGIN → 기본
  */
 export const getGoogleOAuthRedirectUri = () => {
+  const basePath = import.meta.env.BASE_URL || '/';
+  const buildCallbackUri = (origin) => {
+    const prefix = basePath.endsWith('/') ? basePath : `${basePath}/`;
+    const path = `${prefix}auth/callback`.replace(/\/{2,}/g, '/');
+    return `${trimTrailingSlash(origin)}${path}`;
+  };
+
+  if (typeof window !== 'undefined' && window.location?.origin) {
+    return buildCallbackUri(window.location.origin);
+  }
+
   const explicit = envString('VITE_GOOGLE_REDIRECT_URI');
   if (explicit) {
     return explicit;
   }
-  const basePath = import.meta.env.BASE_URL || '/';
-  if (import.meta.env.DEV && typeof window !== 'undefined') {
-    const origin = window.location.origin;
-    const prefix = basePath.endsWith('/') ? basePath : `${basePath}/`;
-    const path = `${prefix}auth/callback`.replace(/\/{2,}/g, '/');
-    return `${origin}${path}`;
-  }
+
   const appOrigin = envString('VITE_APP_ORIGIN');
   if (appOrigin) {
-    return `${trimTrailingSlash(appOrigin)}/auth/callback`;
+    return buildCallbackUri(appOrigin);
   }
-  return `${DEFAULT_APP_ORIGIN}/auth/callback`;
+
+  return buildCallbackUri(DEFAULT_APP_ORIGIN);
 };
 
 /** 만료·로그아웃 후 이동할 앱 루트 */

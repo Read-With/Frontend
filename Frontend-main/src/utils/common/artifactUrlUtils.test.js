@@ -23,16 +23,17 @@ describe('stripWrongApiPublicPrefix', () => {
 });
 
 describe('rewriteLegacyAssetUrl', () => {
-  afterEach(() => {
-    vi.unstubAllEnvs();
+  it('keeps cdn.readwith.cloud URLs unchanged', () => {
+    const input =
+      'https://cdn.readwith.cloud/public/books/17/normalizations/x/combined.xhtml';
+    expect(rewriteLegacyAssetUrl(input)).toBe(input);
   });
 
-  it('rewrites cdn.readwith.store to API base origin', () => {
-    vi.stubEnv('DEV', false);
+  it('normalizes protocol-relative URLs', () => {
     const input =
-      'https://cdn.readwith.store/public/books/17/covers/x/cover.jpg';
+      '//cdn.readwith.cloud/public/books/17/covers/x/cover.jpg';
     expect(rewriteLegacyAssetUrl(input)).toBe(
-      'https://dev.readwith.cloud/public/books/17/covers/x/cover.jpg'
+      'https://cdn.readwith.cloud/public/books/17/covers/x/cover.jpg'
     );
   });
 });
@@ -42,13 +43,11 @@ describe('sanitizeAssetUrl', () => {
     vi.unstubAllEnvs();
   });
 
-  it('does not add dev proxy path', () => {
+  it('passes through CDN URLs unchanged', () => {
     vi.stubEnv('DEV', true);
     const input =
-      'https://cdn.readwith.store/public/books/13/normalizations/x/combined.xhtml';
-    expect(sanitizeAssetUrl(input)).toBe(
-      'https://dev.readwith.cloud/public/books/13/normalizations/x/combined.xhtml'
-    );
+      'https://cdn.readwith.cloud/public/books/13/normalizations/x/combined.xhtml';
+    expect(sanitizeAssetUrl(input)).toBe(input);
   });
 });
 
@@ -59,8 +58,9 @@ describe('resolveAssetFetchUrl', () => {
 
   it('dev: uses /public proxy path', () => {
     vi.stubEnv('DEV', true);
+    vi.stubEnv('VITE_CDN_BASE_URL', 'https://cdn.readwith.cloud');
     const input =
-      'https://cdn.readwith.store/public/books/13/normalizations/x/combined.xhtml';
+      'https://cdn.readwith.cloud/public/books/13/normalizations/x/combined.xhtml';
     expect(resolveAssetFetchUrl(input)).toBe(
       '/public/books/13/normalizations/x/combined.xhtml'
     );
@@ -81,15 +81,17 @@ describe('resolveApiArtifactUrl', () => {
 
   it('uses fetch URL pipeline', () => {
     vi.stubEnv('DEV', true);
+    vi.stubEnv('VITE_CDN_BASE_URL', 'https://cdn.readwith.cloud');
     expect(
       resolveApiArtifactUrl(
-        'https://cdn.readwith.store/public/books/13/normalizations/x/combined.xhtml'
+        'https://cdn.readwith.cloud/public/books/13/normalizations/x/combined.xhtml'
       )
     ).toBe('/public/books/13/normalizations/x/combined.xhtml');
   });
 
   it('resolves /public relative path with API base in dev', () => {
     vi.stubEnv('DEV', true);
+    vi.stubEnv('VITE_CDN_BASE_URL', 'https://dev.readwith.cloud');
     expect(
       resolveApiArtifactUrl('/public/books/13/normalizations/x/combined.xhtml')
     ).toBe('/public/books/13/normalizations/x/combined.xhtml');
@@ -112,6 +114,7 @@ describe('preferDevPublicProxyPath', () => {
 
   it('returns /public relative path in dev', () => {
     vi.stubEnv('DEV', true);
+    vi.stubEnv('VITE_CDN_BASE_URL', 'https://dev.readwith.cloud');
     const input =
       'https://dev.readwith.cloud/public/books/13/normalizations/x/combined.xhtml';
     expect(preferDevPublicProxyPath(input)).toBe(
