@@ -1,11 +1,15 @@
-import React, { useCallback, useState, useEffect, useMemo } from 'react';
-import GraphControls from '../graph/GraphControls';
-import EdgeLabelToggle from '../graph/tooltip/EdgeLabelToggle';
-import { getChapterEventCount, getFolderKeyFromFilename } from '../../utils/graph/graphData';
-import { getCachedChapterEvents } from '../../utils/common/cache/chapterEventCache';
-import { getChapterData } from '../../utils/common/cache/manifestCache';
+import React, { useCallback, useMemo, memo } from 'react';
+import GraphControls, { EdgeLabelToggle } from '../graph/GraphControls';
+import { getChapterData, getManifestFromCache } from '../../utils/common/cache/manifestCache';
+import {
+  formatChapterOrderAndName,
+  stripRedundantBookTitlePrefix,
+} from '../../utils/viewer/chapterTitleDisplay';
+import { GRAPH_CHARACTER_FILTER_STAGE_OPTIONS } from '../graph/graphConstants';
+import {
+  resolveViewerDisplayEventNum,
+} from '../../utils/viewer/viewerEventUtils';
 
-// 공통 스타일 상수들
 const LOADING_STYLE = {
   display: "inline-block",
   padding: "4px 16px",
@@ -26,6 +30,10 @@ const CHAPTER_STYLE = {
   fontSize: 14,
   fontWeight: 600,
   border: "1px solid #e3e6ef",
+  maxWidth: "min(360px, 42vw)",
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+  whiteSpace: "nowrap",
 };
 
 const EVENT_NUMBER_STYLE = {
@@ -38,21 +46,6 @@ const EVENT_NUMBER_STYLE = {
   fontWeight: 600,
   boxShadow: "0 2px 8px rgba(92,111,92,0.13)",
   transition: "transform 0.3s, background 0.3s",
-};
-
-const EVENT_NAME_STYLE = {
-  display: "inline-block",
-  padding: "4px 12px",
-  borderRadius: 12,
-  background: "#f8f9fc",
-  color: "#5C6F5C",
-  fontSize: 13,
-  fontWeight: 500,
-  border: "1px solid #e3e6ef",
-  maxWidth: "200px",
-  overflow: "hidden",
-  textOverflow: "ellipsis",
-  whiteSpace: "nowrap",
 };
 
 const PROGRESS_BAR_CONTAINER_STYLE = {
@@ -70,39 +63,26 @@ const PROGRESS_BAR_FILL_STYLE = {
   transition: "width 0.4s cubic-bezier(.4,2,.6,1)",
 };
 
-const ViewerTopBar = ({
+const ViewerTopBar = memo(function ViewerTopBar({
   graphState,
   graphActions,
   viewerState,
   searchState,
   searchActions,
-  isFromLibrary = false,
-  previousPage = null,
-}) => {
+}) {
 
-  const {
-    navigate,
-    filename,
-    book,
-    viewerRef
-  } = viewerState;
+  const { book, progress: viewerProgress } = viewerState;
   
   const {
     currentChapter,
-    maxChapter,
     currentEvent,
     prevValidEvent,
-    prevEvent,
-    events,
     graphFullScreen,
     edgeLabelVisible,
-    loading: isGraphLoading,
-    maxChapterEvents
+    progressTopBar,
   } = graphState;
   
   const {
-    setCurrentChapter,
-    setGraphFullScreen,
     setEdgeLabelVisible,
     filterStage,
     setFilterStage
@@ -112,8 +92,6 @@ const ViewerTopBar = ({
   const {
     searchTerm,
     isSearchActive,
-    elements = [],
-    currentChapterData = null,
     suggestions = [],
     showSuggestions = false,
     selectedIndex = -1
@@ -124,181 +102,68 @@ const ViewerTopBar = ({
     clearSearch,
     closeSuggestions,
     onGenerateSuggestions,
-    selectSuggestion,
     handleKeyDown
   } = searchActions;
 
-  const [currentEventInfo, setCurrentEventInfo] = React.useState(null);
-  const [currentProgressWidth, setCurrentProgressWidth] = React.useState("0%");
-  const [hasInitialData, setHasInitialData] = React.useState(false);
-
   const bookId = useMemo(() => {
-    if (book && typeof book.id === 'number') {
-      return book.id;
-    }
-    return null;
+    const id = book?.id;
+    const n = Number(id);
+    return Number.isFinite(n) && n > 0 ? n : null;
   }, [book]);
 
-  const folderKey = useMemo(() => {
-    if (!filename) return null;
-    try {
-      return getFolderKeyFromFilename(filename);
-    } catch (error) {
-      return null;
+  const stripBookTitle = useMemo(() => {
+    const fromBook = String(book?.title ?? '').trim();
+    if (fromBook) return fromBook;
+    const m = bookId != null ? getManifestFromCache(bookId) : null;
+    return String(m?.book?.title ?? m?.title ?? '').trim();
+  }, [book?.title, bookId]);
+
+  const resolvedServerChapter = useMemo(() => {
+    const serverChapter = getChapterData(bookId, currentChapter);
+    if (serverChapter) {
+      return Number(serverChapter.chapterIdx ?? serverChapter.idx ?? currentChapter);
     }
-  }, [filename]);
-  
-  const getTotalEventsForChapter = useCallback((eventsList, chapter) => {
-    let totalEvents = 0;
+    return Number(currentChapter) || 1;
+  }, [bookId, currentChapter]);
 
-    if (Array.isArray(eventsList) && eventsList.length > 0) {
-      const maxFromEvents = eventsList.reduce((maxValue, evt) => {
-        const eventNumber = Number(evt?.eventIdx ?? evt?.eventNum ?? evt?.idx ?? evt?.id ?? 0);
-        return Number.isFinite(eventNumber) ? Math.max(maxValue, eventNumber) : maxValue;
-      }, 0);
-      totalEvents = Math.max(totalEvents, maxFromEvents);
-      totalEvents = Math.max(totalEvents, eventsList.length);
+  const chapterDisplayLabel = useMemo(() => {
+    const ch = bookId ? getChapterData(bookId, resolvedServerChapter) : null;
+    const t = String(ch?.title ?? '').trim();
+    const displayName = t ? stripRedundantBookTitlePrefix(t, stripBookTitle) : '';
+    return formatChapterOrderAndName(resolvedServerChapter, displayName);
+  }, [bookId, resolvedServerChapter, stripBookTitle]);
+
+  const chapterTitleTooltip = useMemo(() => {
+    if (!bookId) return undefined;
+    const t = String(getChapterData(bookId, resolvedServerChapter)?.title ?? '').trim();
+    return t || undefined;
+  }, [bookId, resolvedServerChapter]);
+
+  const currentProgressWidth = useMemo(() => {
+    if (progressTopBar === undefined) return "0%";
+    const cp = progressTopBar.chapterProgress;
+    if (cp != null && Number.isFinite(cp)) {
+      return `${Math.min(100, Math.max(0, Math.round(cp * 100) / 100))}%`;
     }
-
-    if (bookId) {
-      const cached = getCachedChapterEvents(bookId, chapter);
-      if (cached) {
-        if (Number.isFinite(cached.maxEventIdx)) {
-          totalEvents = Math.max(totalEvents, cached.maxEventIdx);
-        }
-        if (Array.isArray(cached.events) && cached.events.length > 0) {
-          const maxCached = cached.events.reduce((maxValue, evt) => {
-            const eventNumber = Number(evt?.eventIdx ?? evt?.idx ?? evt?.eventNum ?? evt?.id ?? 0);
-            return Number.isFinite(eventNumber) ? Math.max(maxValue, eventNumber) : maxValue;
-          }, 0);
-          totalEvents = Math.max(totalEvents, maxCached);
-          totalEvents = Math.max(totalEvents, cached.events.length);
-        }
-      }
-
-      const manifestChapter = getChapterData(bookId, chapter);
-      if (manifestChapter?.events && manifestChapter.events.length > 0) {
-        const maxManifest = manifestChapter.events.reduce((maxValue, evt) => {
-          const eventNumber = Number(evt?.eventIdx ?? evt?.idx ?? evt?.eventNum ?? evt?.id ?? 0);
-          return Number.isFinite(eventNumber) ? Math.max(maxValue, eventNumber) : maxValue;
-        }, 0);
-        totalEvents = Math.max(totalEvents, maxManifest);
-        totalEvents = Math.max(totalEvents, manifestChapter.events.length);
-      }
+    const rp = progressTopBar.readingProgressPercent;
+    if (rp != null && Number.isFinite(rp)) {
+      return `${Math.min(100, Math.max(0, Math.round(rp * 100) / 100))}%`;
     }
-
-    if (folderKey) {
-      const localCount = getChapterEventCount(chapter, folderKey);
-      totalEvents = Math.max(totalEvents, localCount);
+    const vp = Number(viewerProgress);
+    if (Number.isFinite(vp)) {
+      return `${Math.min(100, Math.max(0, Math.round(vp * 100) / 100))}%`;
     }
+    return "0%";
+  }, [progressTopBar, viewerProgress]);
 
-    if (!Number.isFinite(totalEvents) || totalEvents <= 0) {
-      totalEvents = 0;
-    }
-
-    return totalEvents;
-  }, [bookId, folderKey]);
-
-  const calculateProgress = useCallback((eventToShow, events, currentChapter) => {
-    // 1. chapterProgress가 있는 경우 (가장 정확한 방법)
-    if (eventToShow.chapterProgress !== undefined) {
-      return Math.min(eventToShow.chapterProgress, 100);
-    }
-    
-    // 2. events 배열이 있는 경우
-    if (events && events.length > 0) {
-      const currentEventIndex = events.findIndex(e => e.eventNum === eventToShow.eventNum);
-      
-      if (currentEventIndex >= 0) {
-        const isLastEvent = currentEventIndex === events.length - 1;
-        return isLastEvent ? 100 : (currentEventIndex / (events.length - 1)) * 100;
-      }
-    }
-    
-    // 3. eventNum만 있는 경우
-    if (eventToShow.eventNum !== undefined) {
-      const eventNumber = Number(eventToShow.eventNum ?? eventToShow.eventIdx ?? 0);
-      const totalEvents = getTotalEventsForChapter(events, currentChapter);
-
-      if (!Number.isFinite(eventNumber) || eventNumber <= 0) {
-        return 0;
-      }
-
-      if (!Number.isFinite(totalEvents) || totalEvents <= 0) {
-        return Math.min(eventNumber * 100, 100);
-      }
-
-      const adjustedTotal = Math.max(totalEvents, eventNumber, 1);
-
-      if (adjustedTotal <= 1) {
-        return eventNumber >= adjustedTotal ? 100 : 0;
-      }
-
-      const clampedEventNumber = Math.min(eventNumber, adjustedTotal);
-      const progressRatio = (clampedEventNumber - 1) / (adjustedTotal - 1);
-      return Math.min(Math.max(progressRatio * 100, 0), 100);
-    }
-    
-    return 0;
-  }, [getTotalEventsForChapter]);
-  
-  React.useEffect(() => {
-    const eventToShow = currentEvent || prevValidEvent;
-    
-    if (eventToShow) {
-      if (eventToShow.chapter && eventToShow.chapter !== currentChapter) {
-        return;
-      }
-      
-      const eventInfo = {
-        eventNum: eventToShow.eventNum ?? 0,
-        name: eventToShow.name || eventToShow.event_name || ""
-      };
-      setCurrentEventInfo(eventInfo);
-      
-      if (!hasInitialData) {
-        setHasInitialData(true);
-      }
-      
-      const progressPercentage = calculateProgress(eventToShow, events, currentChapter);
-      const progressWidth = `${Math.round(progressPercentage * 100) / 100}%`;
-      setCurrentProgressWidth(progressWidth);
-    } else if (!hasInitialData) {
-      setCurrentEventInfo(null);
-      setCurrentProgressWidth("0%");
-    }
-  }, [currentEvent, prevValidEvent, events, currentChapter, calculateProgress, hasInitialData]);
-  
-  React.useEffect(() => {
-    const handleChapterChange = (event) => {
-      if (event.detail && event.detail.chapter !== currentChapter) {
-        setCurrentChapter(event.detail.chapter);
-      }
-    };
-    
-    window.addEventListener('chapterChange', handleChapterChange);
-    
-    return () => {
-      window.removeEventListener('chapterChange', handleChapterChange);
-    };
-  }, [currentChapter, setCurrentChapter]);
-  
-  React.useEffect(() => {
-    setHasInitialData(false);
-  }, [currentChapter]);
-  
-  // 제안 생성을 위한 별도 함수 (실제 검색은 실행하지 않음)
   const handleGenerateSuggestions = useCallback((searchTerm) => {
-    // onGenerateSuggestions prop을 사용하여 제안 생성
     if (onGenerateSuggestions) {
       onGenerateSuggestions(searchTerm);
     }
   }, [onGenerateSuggestions]);
 
   const ChapterEventInfo = useMemo(() => {
-    const shouldShowLoading = isGraphLoading && !hasInitialData;
-    
-    if (shouldShowLoading) {
+    if (progressTopBar === undefined && bookId) {
       return (
         <span style={LOADING_STYLE}>
           로딩중...
@@ -306,20 +171,25 @@ const ViewerTopBar = ({
       );
     }
 
-    const displayEventInfo = currentEventInfo || (hasInitialData ? { eventNum: 0, name: "" } : null);
-    
-    if (!displayEventInfo) {
-      return (
-        <span style={LOADING_STYLE}>
-          로딩중...
-        </span>
-      );
-    }
+    const row = progressTopBar ?? {
+      eventNum: null,
+      chapterProgress: null,
+      readingProgressPercent: null,
+    };
+
+    const eventNum = resolveViewerDisplayEventNum({
+      currentEvent,
+      prevValidEvent,
+      currentChapter: resolvedServerChapter,
+      progressTopBar: row,
+      fallback: 0,
+    });
+    const eventDisplay = eventNum > 0 ? String(eventNum) : '?';
 
     return (
       <>
-        <span style={CHAPTER_STYLE}>
-          Chapter {currentChapter}
+        <span style={CHAPTER_STYLE} title={chapterTitleTooltip}>
+          {chapterDisplayLabel}
         </span>
 
         <div
@@ -330,29 +200,10 @@ const ViewerTopBar = ({
             gap: 12,
           }}
         >
-          <span
-            style={{
-              ...EVENT_NUMBER_STYLE,
-              transform:
-                prevEvent &&
-                (currentEvent || prevValidEvent) &&
-                prevEvent.eventNum !== (currentEvent || prevValidEvent).eventNum
-                  ? "scale(1.12)"
-                  : "scale(1)",
-            }}
-          >
-            Event {displayEventInfo.eventNum}
+          <span style={EVENT_NUMBER_STYLE}>
+            Event {eventDisplay}
           </span>
-          
-          {displayEventInfo.name && (
-            <span
-              style={EVENT_NAME_STYLE}
-              title={displayEventInfo.name}
-            >
-              {displayEventInfo.name}
-            </span>
-          )}
-          
+
           <div style={PROGRESS_BAR_CONTAINER_STYLE}>
             <div
               style={{
@@ -364,7 +215,16 @@ const ViewerTopBar = ({
         </div>
       </>
     );
-  }, [isGraphLoading, currentEventInfo, currentChapter, currentProgressWidth, prevEvent, currentEvent, prevValidEvent, hasInitialData]);
+  }, [
+    progressTopBar,
+    bookId,
+    chapterDisplayLabel,
+    chapterTitleTooltip,
+    currentProgressWidth,
+    currentEvent,
+    prevValidEvent,
+    resolvedServerChapter,
+  ]);
 
   const renderGraphControls = useCallback(() => (
     <GraphControls
@@ -373,16 +233,13 @@ const ViewerTopBar = ({
       searchTerm={searchTerm}
       isSearchActive={isSearchActive}
       onClearSearch={clearSearch}
-      elements={elements}
-      currentChapterData={currentChapterData}
       onCloseSuggestions={closeSuggestions}
       suggestions={suggestions}
       showSuggestions={showSuggestions}
       selectedIndex={selectedIndex}
-      onSelectSuggestion={selectSuggestion}
       onKeyDown={handleKeyDown}
     />
-  ), [onSearchSubmit, handleGenerateSuggestions, searchTerm, isSearchActive, clearSearch, elements, currentChapterData, closeSuggestions, suggestions, showSuggestions, selectedIndex, selectSuggestion, handleKeyDown]);
+  ), [onSearchSubmit, handleGenerateSuggestions, searchTerm, isSearchActive, clearSearch, closeSuggestions, suggestions, showSuggestions, selectedIndex, handleKeyDown]);
 
   const renderToggleButtons = () => (
     <div
@@ -399,7 +256,6 @@ const ViewerTopBar = ({
         onToggle={() => setEdgeLabelVisible(!edgeLabelVisible)}
       />
       
-      {/* 3단계 필터링 드롭다운 */}
       <select
         value={filterStage}
         onChange={(e) => setFilterStage(Number(e.target.value))}
@@ -424,22 +280,17 @@ const ViewerTopBar = ({
         }}
         title="필터링 단계 선택"
       >
-        <option value={0} style={{ color: '#5C6F5C', background: '#fff' }}>
-          모두 보기
-        </option>
-        <option value={1} style={{ color: '#5C6F5C', background: '#fff' }}>
-          주요 인물만 보기
-        </option>
-        <option value={2} style={{ color: '#5C6F5C', background: '#fff' }}>
-          주요 인물과 보기
-        </option>
+        {GRAPH_CHARACTER_FILTER_STAGE_OPTIONS.map((opt) => (
+          <option key={opt.value} value={opt.value} style={{ color: '#5C6F5C', background: '#fff' }}>
+            {opt.label}
+          </option>
+        ))}
       </select>
     </div>
   );
   
   return (
     <>
-      {/* 상단바 1: 전체화면 모드일 때 모든 기능이 통합된 상단바 */}
       <div
         style={{
           height: 44,
@@ -453,11 +304,10 @@ const ViewerTopBar = ({
           paddingLeft: 12,
           paddingRight: 12,
           paddingTop: 0,
-          justifyContent: "space-between", // space-between 유지
-          borderBottom: graphFullScreen ? "1px solid #e3e6ef" : "none", // 전체화면일 때만 하단 테두리
+          justifyContent: "space-between",
+          borderBottom: graphFullScreen ? "1px solid #e3e6ef" : "none",
         }}
       >
-        {/* 왼쪽 영역: < 버튼 + 초기화 (분할화면일 때) */}
         <div
           style={{
             display: "flex",
@@ -467,14 +317,11 @@ const ViewerTopBar = ({
             marginRight: 36,
           }}
         >
-          {/* < 전체화면 버튼 */}
           <button
             onClick={() => {
               if (graphFullScreen) {
-                // 그래프 전체화면 -> 분할 화면으로 전환
                 graphActions.setGraphFullScreen(false);
               } else {
-                // 분할 화면 -> 그래프 전체화면으로 전환
                 graphActions.setGraphFullScreen(true);
               }
             }}
@@ -501,11 +348,9 @@ const ViewerTopBar = ({
             {graphFullScreen ? ">" : "<"}
           </button>
 
-          {/* 인물 검색 기능 */}
           {renderGraphControls()}
         </div>
 
-        {/* 중앙 영역: 챕터 + 이벤트 정보 (전체화면일 때만) */}
         {graphFullScreen && (
           <div
             style={{
@@ -519,11 +364,9 @@ const ViewerTopBar = ({
           </div>
         )}
 
-        {/* 오른쪽 영역: 토글 버튼 */}
         {renderToggleButtons()}
       </div>
       
-      {/* 상단바 2: 챕터 + 이벤트 정보 (분할화면일 때만) */}
       {!graphFullScreen && (
         <div
           style={{
@@ -547,6 +390,6 @@ const ViewerTopBar = ({
       )}
     </>
   );
-};
+});
 
 export default ViewerTopBar;

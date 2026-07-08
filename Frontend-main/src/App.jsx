@@ -1,5 +1,5 @@
 import React from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate, useParams, Outlet } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Outlet } from 'react-router-dom';
 import ViewerPage from './components/viewer/ViewerPage';
 import BookmarksPage from './components/viewer/bookmark/BookmarksPage';
 import RelationGraphWrapper from './components/graph/RelationGraphWrapper';
@@ -10,7 +10,6 @@ import AdminPage from './pages/AdminPage';
 import ProtectedRoute from './components/auth/ProtectedRoute';
 import OAuthCallback from './components/auth/OAuthCallback';
 
-// 그래프 컴포넌트를 유지하는 레이아웃
 const GraphLayout = () => {
   return (
     <div style={{ position: 'relative', width: '100%', height: '100%' }}>
@@ -30,18 +29,12 @@ const AppContent = () => {
           <MyPage />
         </ProtectedRoute>
       } />
-      <Route path="/viewer/:filename/*" element={
-        <ProtectedRoute>
-          <ViewerPage />
-        </ProtectedRoute>
-      } />
-      <Route path="/viewer/:filename/bookmarks" element={
+      <Route path="/user/viewer/:filename/bookmarks" element={
         <ProtectedRoute>
           <BookmarksPage />
         </ProtectedRoute>
       } />
-      <Route path="/viewer/:filename/relations" element={<RelationRedirect />} />
-      <Route path="/user/viewer/:filename" element={
+      <Route path="/user/viewer/:filename/*" element={
         <ProtectedRoute>
           <ViewerPage />
         </ProtectedRoute>
@@ -52,21 +45,10 @@ const AppContent = () => {
             <RelationGraphWrapper />
           </ProtectedRoute>
         } />
-        <Route path="/user/graph/:bookId" element={
-          <ProtectedRoute>
-            <RelationGraphWrapper />
-          </ProtectedRoute>
-        } />
       </Route>
     </Routes>
   );
 };
-
-function RelationRedirect() {
-  const { filename } = useParams();
-  return <Navigate to={`/user/graph/${filename}`} replace />;
-}
-
 
 const App = () => {
   return (

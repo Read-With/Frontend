@@ -1,9 +1,6 @@
-/**
- * 설정 관리 유틸리티
- * viewerUtils.js와 ViewerSettings.jsx의 설정 로직을 통합
- */
+/** XhtmlViewer 설정 저장·로드·적용 */
 
-import { storageUtils } from './cache/storageUtils';
+import { storageUtils } from './cache/cacheManager';
 import { errorUtils } from './errorUtils';
 
 export const defaultSettings = {
@@ -15,19 +12,20 @@ export const defaultSettings = {
   showGraph: true,
 };
 
+const SETTINGS_STORAGE_KEY = "xhtml_viewer_settings";
+
+const normalizeSettings = (settings = {}) => {
+  const normalized = { ...defaultSettings, ...settings };
+  if (normalized.pageMode === "leftOnly") {
+    normalized.pageMode = "double";
+  }
+  return normalized;
+};
+
 export function loadSettings() {
   try {
-    let settings = storageUtils.get("xhtml_viewer_settings");
-    const loadedSettings = settings ? JSON.parse(settings) : defaultSettings;
-
-    if (loadedSettings.pageMode === "leftOnly") {
-      loadedSettings.pageMode = "double";
-    }
-
-    if (loadedSettings.showGraph === undefined) {
-      loadedSettings.showGraph = defaultSettings.showGraph;
-    }
-    storageUtils.set("xhtml_viewer_settings", JSON.stringify(loadedSettings));
+    const loadedSettings = normalizeSettings(storageUtils.getJson(SETTINGS_STORAGE_KEY, defaultSettings));
+    storageUtils.setJson(SETTINGS_STORAGE_KEY, loadedSettings);
 
     return loadedSettings;
   } catch (error) {
@@ -39,7 +37,7 @@ export function loadSettings() {
 
 export function saveSettings(settings) {
   try {
-    storageUtils.set("xhtml_viewer_settings", JSON.stringify(settings));
+    storageUtils.setJson(SETTINGS_STORAGE_KEY, normalizeSettings(settings));
     return { success: true };
   } catch (error) {
     errorUtils.logError('saveSettings', error, { settings });
@@ -52,7 +50,7 @@ export const settingsUtils = {
   loadSettings,
   saveSettings,
   
-  applySettings(newSettings, prevSettings, setSettings, setShowGraph, setReloadKey, viewerRef, cleanFilename) {
+  applySettings(newSettings, prevSettings, setSettings, setShowGraph, setReloadKey, viewerRef, _cleanFilename) {
     const currentSettings = { ...prevSettings };
     setSettings(newSettings);
     setShowGraph(newSettings.showGraph);

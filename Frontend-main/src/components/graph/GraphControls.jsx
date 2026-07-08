@@ -1,6 +1,57 @@
 import React, { useRef, useEffect, useCallback, useState } from "react";
-import { useClickOutside } from "../../hooks/ui/useClickOutside";
+import { useClickOutside } from "../../hooks/ui/tooltipHooks";
 import { graphControlsStyles } from "../../utils/styles/styles.js";
+import { findExactSuggestionMatch } from "../../utils/graph/searchUtils.jsx";
+
+export function EdgeLabelToggle({ visible, onToggle }) {
+  return (
+    <div style={{
+      display: 'flex',
+      alignItems: 'center',
+      gap: '8px',
+      padding: '4px 8px',
+      borderRadius: '6px',
+      background: '#f8fafc',
+      border: '1px solid #e7eaf7',
+    }}>
+      <span style={{
+        fontSize: '15px',
+        fontWeight: '500',
+        color: '#5C6F5C',
+        whiteSpace: 'nowrap',
+      }}>
+        간선 라벨
+      </span>
+      <button
+        onClick={onToggle}
+        style={{
+          width: '32px',
+          height: '18px',
+          borderRadius: '9px',
+          border: 'none',
+          background: visible ? '#5C6F5C' : '#e2e8f0',
+          position: 'relative',
+          cursor: 'pointer',
+          transition: 'background-color 0.2s ease',
+          outline: 'none',
+        }}
+        title={visible ? '간선 라벨 숨기기' : '간선 라벨 보이기'}
+      >
+        <div style={{
+          width: '14px',
+          height: '14px',
+          borderRadius: '50%',
+          background: '#fff',
+          position: 'absolute',
+          top: '2px',
+          left: visible ? '16px' : '2px',
+          transition: 'left 0.2s ease',
+          boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
+        }} />
+      </button>
+    </div>
+  );
+}
 
 function GraphControls({
   searchTerm,
@@ -10,7 +61,6 @@ function GraphControls({
   suggestions = [],
   showSuggestions = false,
   selectedIndex = -1,
-  onSelectSuggestion,
   onKeyDown,
   onCloseSuggestions,
   isSearchActive = false
@@ -89,13 +139,7 @@ function GraphControls({
       e.preventDefault();
       const trimmedTerm = internalSearchTerm.trim();
       if (trimmedTerm.length >= 2) {
-        // 정확히 일치하는 인물이 있는지 확인
-        const exactMatch = suggestions.find(suggestion => 
-          suggestion.label?.toLowerCase() === trimmedTerm.toLowerCase() ||
-          suggestion.common_name?.toLowerCase() === trimmedTerm.toLowerCase() ||
-          suggestion.names?.some(name => String(name).toLowerCase() === trimmedTerm.toLowerCase())
-        );
-        
+        const exactMatch = findExactSuggestionMatch(suggestions, trimmedTerm);
         if (exactMatch) {
           onSearchSubmit(trimmedTerm);
         } else if (suggestions.length > 0) {
@@ -139,17 +183,10 @@ function GraphControls({
     
     const trimmedTerm = internalSearchTerm.trim();
     if (trimmedTerm.length >= 2) {
-      // 정확히 일치하는 인물이 있는지 확인
-      const exactMatch = suggestions.find(suggestion => 
-        suggestion.label?.toLowerCase() === trimmedTerm.toLowerCase() ||
-        suggestion.common_name?.toLowerCase() === trimmedTerm.toLowerCase() ||
-        suggestion.names?.some(name => String(name).toLowerCase() === trimmedTerm.toLowerCase())
-      );
-      
+      const exactMatch = findExactSuggestionMatch(suggestions, trimmedTerm);
       if (exactMatch) {
         onSearchSubmit(trimmedTerm);
       } else if (suggestions.length > 0) {
-        // 정확히 일치하는 인물이 없고 여러 후보가 있으면 토스트 메시지 표시
         showToastMessage("여러 후보가 있습니다. 드롭다운에서 선택해주세요.");
       }
     }
@@ -162,17 +199,10 @@ function GraphControls({
     const trimmedTerm = internalSearchTerm.trim();
     
     if (trimmedTerm.length >= 2) {
-      // 정확히 일치하는 인물이 있는지 확인
-      const exactMatch = suggestions.find(suggestion => 
-        suggestion.label?.toLowerCase() === trimmedTerm.toLowerCase() ||
-        suggestion.common_name?.toLowerCase() === trimmedTerm.toLowerCase() ||
-        suggestion.names?.some(name => String(name).toLowerCase() === trimmedTerm.toLowerCase())
-      );
-      
+      const exactMatch = findExactSuggestionMatch(suggestions, trimmedTerm);
       if (exactMatch) {
         onSearchSubmit(trimmedTerm);
       } else if (suggestions.length > 0) {
-        // 정확히 일치하는 인물이 없고 여러 후보가 있으면 토스트 메시지 표시
         showToastMessage("여러 후보가 있습니다. 드롭다운에서 선택해주세요.");
       }
     }

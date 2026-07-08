@@ -1,75 +1,376 @@
-import React, { useEffect, useState, forwardRef, useImperativeHandle, useMemo, useCallback } from "react";
-import ViewerRelationGraph from "./RelationGraph_Viewerpage";
-import { useGraphDataLoader } from "../../hooks/graph/useGraphDataLoader.js";
-import { useGraphSearch } from "../../hooks/graph/useGraphSearch.jsx";
+import React, {
+  forwardRef,
+  useRef,
+  useMemo,
+  useEffect,
+  useCallback,
+  useImperativeHandle,
+} from 'react';
+import CytoscapeGraphUnified from './CytoscapeGraphUnified';
+import UnifiedNodeInfo from './tooltip/UnifiedNodeInfo';
+import UnifiedEdgeTooltip from './tooltip/UnifiedEdgeTooltip';
+import './RelationGraph.css';
+import { getEdgeStyle, createGraphStylesheet } from '../../utils/styles/graphStyles';
+import { graphStyles } from '../../utils/styles/styles';
+import { ensureElementsInBounds, clearHighlightClassesOn } from '../../utils/graph/graphUtils';
+import { applySearchFadeEffect } from '../../utils/graph/searchUtils.jsx';
+import { useGraphDataLoader } from '../../hooks/graph/useGraphDataLoader.js';
+import { useGraphSearch } from '../../hooks/graph/graphViewHooks';
+import { resolveViewerDisplayEventNum } from '../../utils/viewer/viewerEventUtils';
 
-const GraphContainer = forwardRef(({
-  currentPosition,
-  currentEvent,
-  currentChapter,
+function resolveEventIdx(currentEvent) {
+  if (typeof currentEvent?.eventNum === 'number' && currentEvent.eventNum > 0) {
+    return currentEvent.eventNum;
+  }
+  if (typeof currentEvent === 'number' && currentEvent > 0) {
+    return currentEvent;
+  }
+  return null;
+}
+
+function buildViewportFitKey({ chapterNum, eventNum, elements }) {
+  if (!Array.isArray(elements) || elements.length === 0) return '';
+  const elementIds = elements
+    .map((element) => element?.data?.id)
+    .filter((id) => id != null && id !== '')
+    .map(String)
+    .sort()
+    .join('\x1f');
+  return `${chapterNum ?? ''}:${eventNum ?? ''}:${elementIds}`;
+}
+
+function useAutoFit(cyRef, viewportFitKey, isSearchActive, isEventTransition) {
+  useEffect(() => {
+    const cy = cyRef.current;
+    if (!cy || isSearchActive || isEventTransition || !viewportFitKey) return;
+
+    let cancelled = false;
+    let rafId = 0;
+
+    const runFit = (attempt = 0) => {
+      if (cancelled) return;
+      const cyLive = cyRef.current;
+      if (!cyLive) return;
+      const container = typeof cyLive.container === 'function' ? cyLive.container() : null;
+      const width = Number(container?.clientWidth ?? 0);
+      const height = Number(container?.clientHeight ?? 0);
+
+      if (width <= 0 || height <= 0) {
+        if (attempt < 6) {
+          rafId = requestAnimationFrame(() => runFit(attempt + 1));
+        }
+        return;
+      }
+
+      try {
+        cyLive.resize();
+      } catch {
+        /* ignore */
+      }
+      try {
+        if (container) ensureElementsInBounds(cyLive, container);
+      } catch {
+        /* ignore */
+      }
+      requestAnimationFrame(() => {
+        if (cancelled) return;
+        const cy2 = cyRef.current;
+        if (!cy2) return;
+        try {
+          const nodes = cy2.nodes(':visible');
+          if (nodes.length > 0) {
+            cy2.fit(nodes, 80);
+          }
+        } catch {
+          try {
+            const n = cy2.nodes();
+            if (n.length > 0) cy2.fit(n, 80);
+          } catch {
+            /* ignore */
+          }
+        }
+      });
+    };
+
+    rafId = requestAnimationFrame(() => runFit(0));
+
+    return () => {
+      cancelled = true;
+      if (rafId) cancelAnimationFrame(rafId);
+    };
+  }, [cyRef, viewportFitKey, isSearchActive, isEventTransition]);
+}
+
+function useCytoscapeReset(cyRef, graphClearRef, selectedNodeIdRef, selectedEdgeIdRef) {
+  useEffect(() => {
+    if (!graphClearRef) return;
+
+    graphClearRef.current = () => {
+      const cy = cyRef.current;
+      if (!cy) return;
+      clearHighlightClassesOn(cy);
+      try {
+        if (typeof cy.style === 'function') cy.style().update();
+      } catch {}
+      if (selectedNodeIdRef) selectedNodeIdRef.current = null;
+      if (selectedEdgeIdRef) selectedEdgeIdRef.current = null;
+    };
+  }, [graphClearRef, cyRef, selectedNodeIdRef, selectedEdgeIdRef]);
+}
+
+const ViewerRelationGraph = ({
+  elements,
+  newNodeIds = [],
+  chapterNum,
+  eventNum,
   edgeLabelVisible = true,
-  onSearchStateChange,
-  onElementsUpdate,
+  maxChapter,
   filename,
-  elements: externalElements, 
+  fitNodeIds,
+  searchTerm,
+  isSearchActive,
+  filteredElements,
+  isResetFromSearch,
+  currentEvent = null,
   prevValidEvent = null,
   events = [],
   activeTooltip = null,
   onClearTooltip = null,
   onSetActiveTooltip = null,
   graphClearRef = null,
-  isEventTransition = false, // 이벤트 전환 상태
+  isEventTransition: _isEventTransition = false,
+  bookId = null,
+}) => {
+  const cyRef = useRef(null);
+  const selectedEdgeIdRef = useRef(null);
+  const selectedNodeIdRef = useRef(null);
+  const containerRef = useRef(null);
+  const viewportFitKey = useMemo(
+    () => buildViewportFitKey({ chapterNum, eventNum, elements }),
+    [chapterNum, eventNum, elements]
+  );
+
+  useAutoFit(cyRef, viewportFitKey, isSearchActive, _isEventTransition);
+  useCytoscapeReset(cyRef, graphClearRef, selectedNodeIdRef, selectedEdgeIdRef);
+
+  const onClearTooltipOnly = useCallback(() => {
+    onClearTooltip?.();
+  }, [onClearTooltip]);
+
+  const clearTooltipAndGraph = useCallback(() => {
+    onClearTooltip?.();
+    graphClearRef?.current?.();
+    if (isSearchActive && filteredElements?.length > 0 && cyRef.current) {
+      applySearchFadeEffect(cyRef.current, filteredElements, isSearchActive);
+    }
+  }, [onClearTooltip, graphClearRef, isSearchActive, filteredElements, cyRef]);
+
+  const onShowNodeTooltip = useCallback(({ node, nodeCenter, mouseX, mouseY }) => {
+    if (!onSetActiveTooltip) return;
+
+    const nodeData = node.data();
+
+    let names = nodeData.names;
+    if (typeof names === 'string') {
+      try { names = JSON.parse(names); } catch { names = [names]; }
+    }
+
+    let main = nodeData.main;
+    if (typeof main === 'string') main = main === 'true';
+
+    onSetActiveTooltip({
+      type: 'node',
+      ...nodeData,
+      names,
+      main,
+      nodeCenter,
+      x: mouseX ?? nodeCenter?.x ?? 0,
+      y: mouseY ?? nodeCenter?.y ?? 0,
+    });
+  }, [onSetActiveTooltip]);
+
+  const onShowEdgeTooltip = useCallback(({ edge, edgeCenter, mouseX, mouseY }) => {
+    if (!onSetActiveTooltip) return;
+
+    onSetActiveTooltip({
+      type: 'edge',
+      id: edge.id(),
+      data: edge.data(),
+      sourceNode: edge.source(),
+      targetNode: edge.target(),
+      edgeCenter,
+      x: mouseX ?? edgeCenter?.x ?? 0,
+      y: mouseY ?? edgeCenter?.y ?? 0,
+    });
+  }, [onSetActiveTooltip]);
+
+  useEffect(() => {
+    if (!activeTooltip) return;
+
+    const handleDocumentClick = (event) => {
+      const isInsideTooltip =
+        !!event.target.closest('.graph-node-tooltip') ||
+        !!event.target.closest('.edge-tooltip-container');
+      if (isInsideTooltip) return;
+
+      const isInsideGraph =
+        containerRef.current && containerRef.current.contains(event.target);
+      if (isInsideGraph) return;
+
+      const isDragEnd = event?.detail?.type === 'graphDragEnd';
+      if (isDragEnd) return;
+
+      clearTooltipAndGraph();
+    };
+
+    const handleGraphDragEnd = (event) => {
+      event.preventDefault?.();
+      event.stopPropagation?.();
+    };
+
+    const timeoutId = setTimeout(() => {
+      document.addEventListener('click', handleDocumentClick, true);
+      document.addEventListener('graphDragEnd', handleGraphDragEnd, true);
+    }, 20);
+
+    return () => {
+      clearTimeout(timeoutId);
+      document.removeEventListener('click', handleDocumentClick, true);
+      document.removeEventListener('graphDragEnd', handleGraphDragEnd, true);
+    };
+  }, [activeTooltip, clearTooltipAndGraph]);
+
+  const edgeStyleViewer = useMemo(() => getEdgeStyle('viewer'), []);
+  const stylesheet = useMemo(
+    () => createGraphStylesheet(edgeStyleViewer, edgeLabelVisible),
+    [edgeStyleViewer, edgeLabelVisible]
+  );
+  const presetLayout = useMemo(() => ({ name: 'preset' }), []);
+
+  return (
+    <div
+      ref={containerRef}
+      className="relation-graph-container"
+      style={graphStyles.container}
+    >
+      <div
+        style={graphStyles.tooltipContainer}
+        onClick={(e) => e.stopPropagation()}
+      >
+        {activeTooltip?.type === 'node' && (
+          <UnifiedNodeInfo
+            key={`node-tooltip-${activeTooltip.id}`}
+            displayMode="tooltip"
+            data={activeTooltip}
+            x={activeTooltip.x}
+            y={activeTooltip.y}
+            nodeCenter={activeTooltip.nodeCenter}
+            onClose={clearTooltipAndGraph}
+            inViewer={true}
+            chapterNum={chapterNum}
+            eventNum={eventNum}
+            maxChapter={maxChapter}
+            filename={filename}
+            elements={elements}
+            style={graphStyles.tooltipStyle}
+            currentEvent={currentEvent}
+            prevValidEvent={prevValidEvent}
+            events={events}
+          />
+        )}
+        {activeTooltip?.type === 'edge' && (
+          <UnifiedEdgeTooltip
+            key={`edge-tooltip-${activeTooltip.id}`}
+            data={activeTooltip.data}
+            x={activeTooltip.x}
+            y={activeTooltip.y}
+            onClose={clearTooltipAndGraph}
+            sourceNode={activeTooltip.sourceNode}
+            targetNode={activeTooltip.targetNode}
+            mode="viewer"
+            chapterNum={chapterNum}
+            eventNum={eventNum}
+            maxChapter={maxChapter}
+            filename={filename}
+            style={graphStyles.tooltipStyle}
+            currentEvent={currentEvent}
+            prevValidEvent={prevValidEvent}
+            events={events}
+            bookId={bookId}
+          />
+        )}
+      </div>
+
+      <div className="graph-canvas-area" style={graphStyles.graphArea}>
+        <CytoscapeGraphUnified
+          elements={elements}
+          newNodeIds={newNodeIds}
+          stylesheet={stylesheet}
+          layout={presetLayout}
+          cyRef={cyRef}
+          nodeSize={10}
+          fitNodeIds={fitNodeIds}
+          searchTerm={searchTerm}
+          isSearchActive={isSearchActive}
+          filteredElements={filteredElements}
+          isResetFromSearch={isResetFromSearch}
+          currentChapter={chapterNum}
+          onShowNodeTooltip={onShowNodeTooltip}
+          onShowEdgeTooltip={onShowEdgeTooltip}
+          onClearTooltip={onClearTooltipOnly}
+          selectedNodeIdRef={selectedNodeIdRef}
+          selectedEdgeIdRef={selectedEdgeIdRef}
+          strictBackgroundClear={true}
+          showRippleEffect={true}
+        />
+      </div>
+    </div>
+  );
+};
+
+const MemoViewerRelationGraph = React.memo(ViewerRelationGraph);
+
+const GraphContainer = forwardRef(({
+  currentEvent,
+  currentChapter,
+  edgeLabelVisible = true,
+  onSearchStateChange,
+  filename,
+  elements: externalElements,
+  prevValidEvent = null,
+  events = [],
+  activeTooltip = null,
+  onClearTooltip = null,
+  onSetActiveTooltip = null,
+  graphClearRef = null,
+  isEventTransition = false,
   searchTerm: externalSearchTerm,
   isSearchActive: externalIsSearchActive,
   filteredElements: externalFilteredElements,
   fitNodeIds: externalFitNodeIds,
   isResetFromSearch: externalIsResetFromSearch,
   bookId = null,
-  ...rest
 }, ref) => {
+  const isExternalMode = Boolean(externalElements);
 
-  // ViewerPage에서는 externalElements를 사용하므로 useGraphDataLoader 비활성화
   const {
     elements: internalElements,
     newNodeIds,
     currentChapterData,
-    loading,
-    error
   } = useGraphDataLoader(
-    externalElements ? null : (bookId ?? filename ?? null),
-    externalElements ? null : currentChapter,
-    externalElements ? null : (
-      typeof currentEvent?.eventNum === 'number' && currentEvent.eventNum > 0
-        ? currentEvent.eventNum
-        : (
-          typeof currentEvent === 'number' && currentEvent > 0
-            ? currentEvent
-            : null
-        )
-    )
+    isExternalMode ? null : (bookId ?? filename ?? null),
+    isExternalMode ? null : currentChapter,
+    isExternalMode ? null : resolveEventIdx(currentEvent),
   );
 
-  // 외부에서 전달받은 elements가 있으면 그것을 사용, 없으면 내부 로더 사용
   const elements = externalElements || internalElements;
 
-  // 검색 상태 변경 콜백
   const handleSearchStateChange = useCallback((searchState) => {
     if (onSearchStateChange) {
-      onSearchStateChange({
-        ...searchState,
-        currentChapterData
-      });
+      onSearchStateChange({ ...searchState, currentChapterData });
     }
   }, [onSearchStateChange, currentChapterData]);
 
-  // 외부에서 elements를 전달받은 경우 자체 검색 기능 비활성화
-  const shouldUseInternalSearch =
-    externalSearchTerm === undefined &&
-    externalIsSearchActive === undefined &&
-    externalFilteredElements === undefined &&
-    externalFitNodeIds === undefined;
-  
-  // useGraphSearch 훅을 사용하여 검색 기능 구현 (외부 elements가 없을 때만)
   const {
     searchTerm: internalSearchTerm,
     isSearchActive: internalIsSearchActive,
@@ -77,11 +378,11 @@ const GraphContainer = forwardRef(({
     fitNodeIds: internalFitNodeIds,
     isResetFromSearch: internalIsResetFromSearch,
     handleSearchSubmit,
-    clearSearch
+    clearSearch,
   } = useGraphSearch(
-    shouldUseInternalSearch ? (elements || []) : [],
+    isExternalMode ? [] : (elements || []),
     handleSearchStateChange,
-    currentChapterData
+    currentChapterData,
   );
 
   const effectiveSearchTerm = externalSearchTerm ?? internalSearchTerm;
@@ -90,45 +391,46 @@ const GraphContainer = forwardRef(({
   const effectiveIsResetFromSearch = externalIsResetFromSearch ?? internalIsResetFromSearch;
 
   const effectiveFitNodeIds = useMemo(() => {
-    if (Array.isArray(externalFitNodeIds)) {
-      return externalFitNodeIds;
-    }
-    if (Array.isArray(internalFitNodeIds) && internalFitNodeIds.length > 0) {
-      return internalFitNodeIds;
-    }
+    if (Array.isArray(externalFitNodeIds)) return externalFitNodeIds;
+    if (Array.isArray(internalFitNodeIds) && internalFitNodeIds.length > 0) return internalFitNodeIds;
     if (effectiveIsSearchActive && Array.isArray(effectiveFilteredElements) && effectiveFilteredElements.length > 0) {
       const ids = effectiveFilteredElements
-        .filter((el) => el && el.data && !el.data.source && el.data.id !== undefined && el.data.id !== null)
+        .filter((el) => el?.data && !el.data.source && el.data.id != null)
         .map((el) => el.data.id);
       return Array.from(new Set(ids));
     }
     return [];
   }, [externalFitNodeIds, internalFitNodeIds, effectiveIsSearchActive, effectiveFilteredElements]);
 
-  // 검색된 요소들 또는 원래 요소들 사용
   const finalElements = useMemo(() => {
+    if (isExternalMode) {
+      return elements;
+    }
     if (effectiveIsSearchActive && effectiveFilteredElements?.length > 0) {
       return effectiveFilteredElements;
     }
     return elements;
-  }, [effectiveIsSearchActive, effectiveFilteredElements, elements]);
+  }, [isExternalMode, effectiveIsSearchActive, effectiveFilteredElements, elements]);
 
-  // ref를 통해 외부에서 접근할 수 있는 함수들 노출
   useImperativeHandle(ref, () => ({
-    searchTerm: effectiveSearchTerm,
-    isSearchActive: effectiveIsSearchActive,
-    handleSearchSubmit: shouldUseInternalSearch ? handleSearchSubmit : (() => {}),
-    clearSearch: shouldUseInternalSearch ? clearSearch : (() => {})
-  }), [effectiveSearchTerm, effectiveIsSearchActive, handleSearchSubmit, clearSearch, shouldUseInternalSearch]);
+    handleSearchSubmit: isExternalMode ? () => {} : handleSearchSubmit,
+    clearSearch: isExternalMode ? () => {} : clearSearch,
+  }), [isExternalMode, handleSearchSubmit, clearSearch]);
 
   return (
-    <ViewerRelationGraph
+    <MemoViewerRelationGraph
       elements={finalElements}
       newNodeIds={newNodeIds}
       chapterNum={currentChapter}
-      eventNum={currentEvent ? Math.max(1, currentEvent.eventNum) : 1}
+      eventNum={resolveViewerDisplayEventNum({
+        currentEvent,
+        prevValidEvent,
+        progressTopBar: null,
+        fallback: 0,
+      })}
       edgeLabelVisible={edgeLabelVisible}
       filename={filename}
+      bookId={bookId}
       fitNodeIds={effectiveFitNodeIds}
       searchTerm={effectiveSearchTerm}
       isSearchActive={effectiveIsSearchActive}
@@ -142,9 +444,10 @@ const GraphContainer = forwardRef(({
       onSetActiveTooltip={onSetActiveTooltip}
       graphClearRef={graphClearRef}
       isEventTransition={isEventTransition}
-      {...rest}
     />
   );
 });
+
+GraphContainer.displayName = 'GraphContainer';
 
 export default GraphContainer;

@@ -1,5 +1,40 @@
-// animations.js에서 애니메이션 관련 함수들 import
-import { createSlideAnimation, ANIMATION_VALUES } from './animations';
+/** 공통 UI 스타일·애니메이션·색상 상수 */
+
+export const ANIMATION_VALUES = {
+  EASE: 'ease',
+  EASE_OUT: 'cubic-bezier(0.4, 0, 0.2, 1)',
+  EASE_IN_OUT: 'cubic-bezier(0.4, 2, 0.6, 1)',
+  DURATION: {
+    FAST: '0.18s',
+    NORMAL: '0.3s',
+    SLOW: '0.4s',
+  },
+};
+
+export function createSlideAnimation(isOpen, animationValues, translateX = -10) {
+  return {
+    opacity: isOpen ? 1 : 0,
+    transform: isOpen ? 'translateX(0)' : `translateX(${translateX}px)`,
+    transition: `all ${animationValues.DURATION.NORMAL} ${animationValues.EASE_OUT}`,
+    whiteSpace: 'nowrap',
+    overflow: 'hidden',
+    width: isOpen ? 'auto' : '0px',
+    display: 'inline-block',
+    minWidth: isOpen ? 'auto' : '0px',
+  };
+}
+
+export function mergeRefs(...refs) {
+  return (element) => {
+    refs.forEach((ref) => {
+      if (typeof ref === 'function') {
+        ref(element);
+      } else if (ref != null) {
+        ref.current = element;
+      }
+    });
+  };
+}
 
 const COLORS = {
   primary: '#5C6F5C',
@@ -550,7 +585,7 @@ export const containerStyles = {
 export { graphStyles, graphControlsStyles } from './graphStyles';
 
 // 기본 상수들
-export { COLORS, BREAKPOINTS, ANIMATION_VALUES };
+export { COLORS, BREAKPOINTS };
 
 // UnifiedNodeInfo 전용 툴팁 스타일
 export const unifiedNodeTooltipStyles = {

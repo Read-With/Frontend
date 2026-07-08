@@ -1,3 +1,5 @@
+/** localStorage 동기화 훅 + 그래프·뷰어 storage key */
+
 import { useState, useEffect, useCallback } from 'react';
 
 const normalizeKeySegment = (value) => {

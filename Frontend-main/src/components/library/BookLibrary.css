@@ -317,6 +317,17 @@
   left: 100%;
 }
 
+.book-action-btn:disabled {
+  cursor: wait;
+  opacity: 0.72;
+  transform: none;
+  box-shadow: none;
+}
+
+.book-action-btn:disabled::before {
+  display: none;
+}
+
 .book-action-primary {
   background: linear-gradient(135deg, #5C6F5C, #7A8A7A);
   color: white;
