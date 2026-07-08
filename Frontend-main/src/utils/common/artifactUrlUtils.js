@@ -83,12 +83,46 @@ export function preferDevPublicProxyPath(url) {
   return s;
 }
 
+const CDN_PUBLIC_HOST = 'cdn.readwith.cloud';
+
+/** CDN(CloudFront)은 ACAO 미설정 → 프로덕션 authenticated fetch는 API /public 경유 */
+function routeProtectedPublicAssetThroughApi(url) {
+  if (import.meta.env.DEV || url == null) return url;
+  const s = String(url).trim();
+  if (!s || !isProtectedPublicAsset(s)) return url;
+
+  const apiBase = trimTrailingSlash(getApiBaseUrl());
+  if (!apiBase) return url;
+
+  let apiOrigin;
+  try {
+    apiOrigin = new URL(apiBase).origin;
+  } catch {
+    return url;
+  }
+
+  try {
+    const parsed = new URL(s.startsWith('/') ? `${apiBase}${s}` : s);
+    const resource = `${parsed.pathname}${parsed.search}${parsed.hash}`;
+    if (!resource.startsWith('/public/')) return url;
+    if (parsed.origin === apiOrigin) {
+      return s.startsWith('/') ? `${apiBase}${resource}` : url;
+    }
+    if (parsed.hostname.toLowerCase() === CDN_PUBLIC_HOST || s.startsWith('/public/')) {
+      return `${apiBase}${resource}`;
+    }
+  } catch {
+    return url;
+  }
+  return url;
+}
+
 /** authenticatedFetch용 URL */
 export function resolveAssetFetchUrl(url) {
   if (url == null) return '';
   const s = String(url).trim();
   if (!s) return '';
-  return preferDevPublicProxyPath(sanitizeAssetUrl(s));
+  return routeProtectedPublicAssetThroughApi(preferDevPublicProxyPath(sanitizeAssetUrl(s)));
 }
 
 /** manifest·API 아티팩트 경로 → fetch URL */

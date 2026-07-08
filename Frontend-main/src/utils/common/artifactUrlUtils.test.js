@@ -72,6 +72,15 @@ describe('resolveAssetFetchUrl', () => {
       '/public/books/13/x/combined.xhtml'
     );
   });
+
+  it('production: routes CDN public assets through API (CORS)', () => {
+    vi.stubEnv('DEV', false);
+    const input =
+      'https://cdn.readwith.cloud/public/books/13/normalizations/x/combined.xhtml';
+    expect(resolveAssetFetchUrl(input)).toBe(
+      'https://dev.readwith.cloud/public/books/13/normalizations/x/combined.xhtml'
+    );
+  });
 });
 
 describe('resolveApiArtifactUrl', () => {

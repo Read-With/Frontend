@@ -1,4 +1,4 @@
-/** manifest combinedXhtmlPath → authenticatedFetch로 본문 로드 */
+/** manifest combinedXhtmlPath → API/CDN 경유 fetch로 본문 로드 */
 import { errorUtils } from '../common/errorUtils';
 import { getManifestFromCache } from '../common/cache/manifestCache';
 import { resolveApiArtifactUrl } from '../common/artifactUrlUtils';
