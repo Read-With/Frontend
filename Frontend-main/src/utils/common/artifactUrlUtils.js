@@ -85,32 +85,18 @@ export function preferDevPublicProxyPath(url) {
 
 const CDN_PUBLIC_HOST = 'cdn.readwith.cloud';
 
-/** CDN(CloudFront)은 ACAO 미설정 → 프로덕션 authenticated fetch는 API /public 경유 */
-function routeProtectedPublicAssetThroughApi(url) {
+/** 프로덕션: CDN 절대 URL → 동일 출처 /public/* (Vercel rewrite → CDN). dev는 Vite 프록시 */
+function routeProtectedPublicAssetForSameOriginProxy(url) {
   if (import.meta.env.DEV || url == null) return url;
   const s = String(url).trim();
   if (!s || !isProtectedPublicAsset(s)) return url;
 
-  const apiBase = trimTrailingSlash(getApiBaseUrl());
-  if (!apiBase) return url;
-
-  let apiOrigin;
   try {
-    apiOrigin = new URL(apiBase).origin;
-  } catch {
-    return url;
-  }
-
-  try {
-    const parsed = new URL(s.startsWith('/') ? `${apiBase}${s}` : s);
+    const parsed = new URL(s.startsWith('/') ? `https://${CDN_PUBLIC_HOST}${s}` : s);
     const resource = `${parsed.pathname}${parsed.search}${parsed.hash}`;
     if (!resource.startsWith('/public/')) return url;
-    if (parsed.origin === apiOrigin) {
-      return s.startsWith('/') ? `${apiBase}${resource}` : url;
-    }
-    if (parsed.hostname.toLowerCase() === CDN_PUBLIC_HOST || s.startsWith('/public/')) {
-      return `${apiBase}${resource}`;
-    }
+    if (s.startsWith('/public/')) return resource;
+    if (parsed.hostname.toLowerCase() === CDN_PUBLIC_HOST) return resource;
   } catch {
     return url;
   }
@@ -122,7 +108,7 @@ export function resolveAssetFetchUrl(url) {
   if (url == null) return '';
   const s = String(url).trim();
   if (!s) return '';
-  return routeProtectedPublicAssetThroughApi(preferDevPublicProxyPath(sanitizeAssetUrl(s)));
+  return routeProtectedPublicAssetForSameOriginProxy(preferDevPublicProxyPath(sanitizeAssetUrl(s)));
 }
 
 /** manifest·API 아티팩트 경로 → fetch URL */
@@ -135,6 +121,9 @@ export function resolveApiArtifactUrl(path) {
   }
   const base = trimTrailingSlash(getApiBaseUrl());
   if (s.startsWith('/')) {
+    if (s.startsWith('/public/')) {
+      return resolveAssetFetchUrl(s);
+    }
     if (base) return resolveAssetFetchUrl(`${base}${s}`);
     return resolveAssetFetchUrl(s);
   }

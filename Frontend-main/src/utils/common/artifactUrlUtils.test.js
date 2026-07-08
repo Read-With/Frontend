@@ -73,12 +73,12 @@ describe('resolveAssetFetchUrl', () => {
     );
   });
 
-  it('production: routes CDN public assets through API (CORS)', () => {
+  it('production: routes CDN public assets to same-origin /public proxy', () => {
     vi.stubEnv('DEV', false);
     const input =
       'https://cdn.readwith.cloud/public/books/13/normalizations/x/combined.xhtml';
     expect(resolveAssetFetchUrl(input)).toBe(
-      'https://dev.readwith.cloud/public/books/13/normalizations/x/combined.xhtml'
+      '/public/books/13/normalizations/x/combined.xhtml'
     );
   });
 });
