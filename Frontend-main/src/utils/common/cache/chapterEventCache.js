@@ -1,12 +1,18 @@
 import { sortEventsByIdx } from '../../graph/graphData';
-import { buildNodeWeights, extractCharacterId } from '../../graph/characterUtils';
+import {
+  aggregateCharactersFromEvents,
+  buildNodeWeightsFromEvents,
+  createCharacterMaps,
+  extractCharacterId,
+  toNodeWeightsOrNull,
+} from '../../graph/characterUtils';
 import { getFineGraph, getBookManifest } from '../../api/api';
 import {
   getChapterData as getManifestChapterData,
   getManifestFromCache,
   calculateMaxChapterFromChapters,
+  resolveFineGraphEventToLocator,
 } from './manifestCache';
-import { createCharacterMaps } from '../../graph/characterUtils';
 import { convertRelationsToElements, calcGraphDiff } from '../../graph/graphDataUtils';
 import { normalizeElementId } from '../../graph/graphUtils';
 import { 
@@ -18,7 +24,7 @@ import {
   removeFromStorage,
   getRawFromStorage,
 } from './cacheManager';
-import { eventUtils, resolveFineGraphEventOrdinal } from '../../viewer/viewerUtils';
+import { eventUtils, cacheKeyUtils } from '../../viewer/viewerCoreStateUtils';
 import { resolveProgressLocator, toLocator } from '../locatorUtils';
 import { toNumberOrNull, toPositiveNumberOrNull } from '../numberUtils';
 import { toTrimmedStringOrNull } from '../stringUtils';
@@ -42,6 +48,13 @@ registerCache('graphBookCache', graphBookMemoryCache, {
   cleanupInterval: 3600000
 });
 const graphBuildPromises = new Map();
+const chapterDiscoverPromises = new Map();
+
+const getChapterDiscoverKey = (bookId, chapterIdx) => `${bookId}-${chapterIdx}`;
+
+export const isChapterEventsDiscovering = (bookId, chapterIdx) => {
+  return chapterDiscoverPromises.has(getChapterDiscoverKey(bookId, chapterIdx));
+};
 
 const getGraphBookCacheKey = (bookId) => {
   const numeric = toPositiveNumberOrNull(bookId);
@@ -350,8 +363,7 @@ const normalizeEventFromFineGraphResponse = (
   const hasRelations = Array.isArray(relations) && relations.length > 0;
   const hasEventMeta =
     event &&
-    (event.eventId !== undefined ||
-      event.event_id !== undefined ||
+    (eventUtils.resolveEventId(event) !== null ||
       event.name ||
       event.title ||
       event.startTxtOffset !== undefined ||
@@ -363,7 +375,7 @@ const normalizeEventFromFineGraphResponse = (
     return { skip: true, hadGraphData: false };
   }
 
-  const ord = event ? resolveFineGraphEventOrdinal(event) : null;
+  const ord = event ? eventUtils.resolveEventOrdinal(event) : null;
   const resolvedEventNum = Number.isFinite(ord) && ord > 0 ? ord : eventIdx;
 
   return {
@@ -379,19 +391,18 @@ const normalizeEventFromFineGraphResponse = (
       event: {
         idx: eventIdx,
         chapterIdx,
-        event_id: event?.event_id ?? eventIdx,
+        eventId: eventUtils.resolveEventId(event) ?? eventIdx,
         startTxtOffset: event?.startTxtOffset ?? manifestStructure?.startTxtOffset ?? null,
         endTxtOffset: event?.endTxtOffset ?? manifestStructure?.endTxtOffset ?? null,
         startLocator: event?.startLocator,
         endLocator: event?.endLocator,
         rawText: event?.rawText ?? null,
-        eventId: event?.eventId ?? event?.id ?? null,
         ...(event || {}),
         eventNum: resolvedEventNum,
       },
       startTxtOffset: event?.startTxtOffset ?? manifestStructure?.startTxtOffset ?? null,
       endTxtOffset: event?.endTxtOffset ?? manifestStructure?.endTxtOffset ?? null,
-      eventId: event?.eventId ?? event?.event_id ?? event?.id ?? manifestStructure?.eventId ?? null,
+      eventId: eventUtils.resolveEventId(event) ?? manifestStructure?.eventId ?? null,
     },
   };
 };
@@ -421,7 +432,6 @@ const buildChapterCachePayload = (
   }
 
   const aggregatedRelations = [];
-  const aggregatedCharactersMap = new Map();
   const diffs = [];
   const eventSummaries = [];
   let baseSnapshot = null;
@@ -430,21 +440,17 @@ const buildChapterCachePayload = (
 
   sortedEvents.forEach((event, index) => {
     const relations = Array.isArray(event?.relations) ? event.relations : [];
+    const rawCharacters = Array.isArray(event?.characters) ? event.characters : [];
     relations.forEach((relation) => aggregatedRelations.push(deepClone(relation)));
 
-    const rawCharacters = Array.isArray(event?.characters) ? event.characters : [];
-    rawCharacters.forEach((character) => {
-      const id = extractCharacterId(character);
-      if (!id) return;
-      aggregatedCharactersMap.set(id, deepClone(character));
-    });
-
-    const aggregatedCharacters = Array.from(aggregatedCharactersMap.values());
-    aggregatedCharacters.sort((a, b) => {
-      const idA = extractCharacterId(a) || '';
-      const idB = extractCharacterId(b) || '';
-      return idA.localeCompare(idB);
-    });
+    const eventsUpToCurrent = sortedEvents.slice(0, index + 1);
+    const aggregatedCharacters = Array.from(aggregateCharactersFromEvents(eventsUpToCurrent).values())
+      .sort((a, b) => {
+        const idA = extractCharacterId(a) || '';
+        const idB = extractCharacterId(b) || '';
+        return idA.localeCompare(idB);
+      });
+    const nodeWeights = buildNodeWeightsFromEvents(eventsUpToCurrent);
 
     const {
       idToName,
@@ -454,8 +460,6 @@ const buildChapterCachePayload = (
       idToNames,
       idToProfileImage
     } = createCharacterMaps(aggregatedCharacters);
-
-    const nodeWeights = buildNodeWeights(aggregatedCharacters);
 
     let convertedElements = [];
     try {
@@ -467,7 +471,7 @@ const buildChapterCachePayload = (
         idToMain,
         idToNames,
         folderKey,
-        Object.keys(nodeWeights).length ? nodeWeights : null,
+        toNodeWeightsOrNull(nodeWeights),
         null,
         event?.event ?? null,
         idToProfileImage,
@@ -482,8 +486,9 @@ const buildChapterCachePayload = (
     const currentCharacters = cloneArray(aggregatedCharacters);
 
     if (index === 0) {
+      const currentEventIdx = eventUtils.extractRawEventIdx(event) || 1;
       baseSnapshot = {
-        eventIdx: Number(event.eventIdx) || 1,
+        eventIdx: currentEventIdx,
         elements: currentElements,
         characters: currentCharacters,
         eventMeta: event?.event ? deepClone(event.event) : null
@@ -499,8 +504,9 @@ const buildChapterCachePayload = (
       };
       const characterDiff = computeCharacterDiff(prevCharacters, aggregatedCharacters);
 
+      const currentEventIdx = eventUtils.extractRawEventIdx(event) || (baseSnapshot?.eventIdx ?? 1);
       diffs.push({
-        eventIdx: Number(event.eventIdx) || (baseSnapshot?.eventIdx ?? 1),
+        eventIdx: currentEventIdx,
         eventMeta: event?.event ? deepClone(event.event) : null,
         elementDiff,
         characterDiff
@@ -517,7 +523,7 @@ const buildChapterCachePayload = (
       chapterIdx,
       eventIdx: summaryIdx,
       eventNum: Number.isFinite(summaryEventNum) && summaryEventNum > 0 ? summaryEventNum : summaryIdx,
-      eventId: event?.eventId ?? event?.event?.eventId ?? null,
+      eventId: eventUtils.resolveEventId(event) ?? eventUtils.resolveEventId(event?.event) ?? null,
       startTxtOffset: event?.startTxtOffset ?? null,
       endTxtOffset: event?.endTxtOffset ?? null,
       title:
@@ -532,7 +538,7 @@ const buildChapterCachePayload = (
   });
 
   const maxEventIdx = sortedEvents.reduce((max, event) => {
-    const idx = Number(event?.eventIdx) || 0;
+    const idx = eventUtils.extractRawEventIdx(event) || 0;
     return idx > max ? idx : max;
   }, 0);
 
@@ -545,7 +551,8 @@ const buildChapterCachePayload = (
     diffs,
     eventSummaries,
     timestamp,
-    source
+    source,
+    rawEvents: sortedEvents.map((event) => deepClone(event)),
   };
 };
 
@@ -608,7 +615,7 @@ const getChapterEventCacheKey = (bookId, chapterIdx) => {
   if (bookIdNum === null || chapterIdxNum === null) {
     return null;
   }
-  return `${bookIdNum}-${chapterIdxNum}`;
+  return cacheKeyUtils.createChapterKey(bookIdNum, chapterIdxNum);
 };
 
 export const getCachedChapterEvents = (bookId, chapterIdx) => {
@@ -650,6 +657,7 @@ export const setCachedChapterEvents = (bookId, chapterIdx, eventData) => {
       baseSnapshot: eventData.baseSnapshot ? deepClone(eventData.baseSnapshot) : null,
       diffs: Array.isArray(eventData.diffs) ? deepClone(eventData.diffs) : [],
       eventSummaries: Array.isArray(eventData.eventSummaries) ? deepClone(eventData.eventSummaries) : [],
+      rawEvents: Array.isArray(eventData.rawEvents) ? deepClone(eventData.rawEvents) : [],
       timestamp: Number(eventData.timestamp) || Date.now(),
       source: eventData.source || null
     };
@@ -722,7 +730,16 @@ export const setCachedReaderProgress = (bookKey, payload) => {
   }
 };
 
-export const discoverChapterEvents = async (bookId, chapterIdx, forceRefresh = false) => {
+export const discoverChapterEvents = async (
+  bookId,
+  chapterIdx,
+  forceRefresh = false,
+  options = {}
+) => {
+  const { urgent = false, maxEventIdx = null, onPartialCache = null } = options;
+  const cappedMaxEventIdx = Number.isFinite(Number(maxEventIdx)) && Number(maxEventIdx) > 0
+    ? Number(maxEventIdx)
+    : null;
   if (!bookId || !chapterIdx || chapterIdx < 1) {
     return {
       bookId,
@@ -740,23 +757,42 @@ export const discoverChapterEvents = async (bookId, chapterIdx, forceRefresh = f
   if (!forceRefresh) {
     const cached = getCachedChapterEvents(bookId, chapterIdx);
     if (cached && cached.source !== 'manifest-only') {
-      return cached;
+      const cachedMax = Number(cached.maxEventIdx) || 0;
+      if (!cappedMaxEventIdx || cachedMax >= cappedMaxEventIdx) {
+        return cached;
+      }
     }
   }
+
+  const discoverKey = getChapterDiscoverKey(bookId, chapterIdx);
+  if (!forceRefresh && chapterDiscoverPromises.has(discoverKey)) {
+    return chapterDiscoverPromises.get(discoverKey);
+  }
+
+  const discoverPromise = (async () => {
+  const existingCache = !forceRefresh ? getCachedChapterEvents(bookId, chapterIdx) : null;
+  const apiEvents = Array.isArray(existingCache?.rawEvents)
+    ? existingCache.rawEvents.map((event) => deepClone(event))
+    : [];
+  const fetchedEventIdxSet = new Set(
+    apiEvents
+      .map((event) => eventUtils.extractRawEventIdx(event) || 0)
+      .filter((idx) => idx > 0)
+  );
   
   let manifestEventStructures = [];
   try {
   const manifestChapter = getManifestChapterData(bookId, chapterIdx);
   if (manifestChapter?.events?.length) {
       manifestEventStructures = manifestChapter.events.map((rawEvent, index) => {
-        const eventIdx = Number(rawEvent.idx ?? rawEvent.eventIdx ?? index + 1);
+        const eventIdx = eventUtils.extractRawEventIdx(rawEvent) || Number(index + 1);
         const fromApi = Number(rawEvent.eventNum);
         const eventNum =
           Number.isFinite(fromApi) && fromApi > 0 ? fromApi : eventIdx;
         return {
           eventIdx,
           eventNum,
-          eventId: rawEvent.eventId ?? null,
+          eventId: eventUtils.resolveEventId(rawEvent),
           startTxtOffset: rawEvent.startTxtOffset ?? null,
           endTxtOffset: rawEvent.endTxtOffset ?? null,
         };
@@ -766,7 +802,23 @@ export const discoverChapterEvents = async (bookId, chapterIdx, forceRefresh = f
     console.warn('manifest 이벤트 구조 로드 실패:', error);
   }
 
-  const apiEvents = [];
+  const publishPartialCache = () => {
+    if (!apiEvents.length) return;
+    const payload = buildChapterCachePayload(
+      bookId,
+      chapterIdx,
+      apiEvents,
+      CHAPTER_GRAPH_CACHE_SOURCE.API
+    );
+    setCachedChapterEvents(bookId, chapterIdx, payload);
+    if (typeof onPartialCache === 'function') {
+      try {
+        onPartialCache(payload);
+      } catch (error) {
+        console.warn('onPartialCache 콜백 실패:', error);
+      }
+    }
+  };
 
   const manifestEventMap = new Map();
   const manifestEventIndices = [];
@@ -783,7 +835,8 @@ export const discoverChapterEvents = async (bookId, chapterIdx, forceRefresh = f
 
   const collectEvent = async (eventIdx, manifestStructure = null) => {
     try {
-      const response = await getFineGraph(bookId, chapterIdx, eventIdx);
+      const atLocator = resolveFineGraphEventToLocator(bookId, chapterIdx, eventIdx);
+      const response = await getFineGraph(bookId, chapterIdx, eventIdx, atLocator);
       const norm = normalizeEventFromFineGraphResponse(
         bookId,
         chapterIdx,
@@ -795,7 +848,10 @@ export const discoverChapterEvents = async (bookId, chapterIdx, forceRefresh = f
         return false;
       }
       apiEvents.push(norm.event);
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      fetchedEventIdxSet.add(eventIdx);
+      if (!urgent) {
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      }
       return norm.hadGraphData;
     } catch (error) {
       console.warn(`⚠️ 이벤트 ${eventIdx} fine 그래프 API 호출 실패:`, error);
@@ -804,33 +860,44 @@ export const discoverChapterEvents = async (bookId, chapterIdx, forceRefresh = f
   };
 
   if (sortedManifestIndices.length > 0) {
-    for (const eventIdx of sortedManifestIndices) {
+    const indicesToFetch = cappedMaxEventIdx != null
+      ? sortedManifestIndices.filter((idx) => idx <= cappedMaxEventIdx)
+      : sortedManifestIndices;
+
+    for (const eventIdx of indicesToFetch) {
+      if (fetchedEventIdxSet.has(eventIdx)) {
+        continue;
+      }
       const manifestStructure = manifestEventMap.get(eventIdx);
       await collectEvent(eventIdx, manifestStructure);
+      publishPartialCache();
     }
     if (apiEvents.length > 0) {
-      const payload = buildChapterCachePayload(
+      return getCachedChapterEvents(bookId, chapterIdx) ?? buildChapterCachePayload(
         bookId,
         chapterIdx,
         apiEvents,
         CHAPTER_GRAPH_CACHE_SOURCE.API
       );
-      setCachedChapterEvents(bookId, chapterIdx, payload);
-      return payload;
     }
   }
 
-  let eventIdx = 1;
+  let eventIdx = fetchedEventIdxSet.size > 0
+    ? Math.max(...fetchedEventIdxSet) + 1
+    : 1;
   let emptyStreak = 0;
   const EMPTY_STREAK_LIMIT = 2;
-  const MAX_DYNAMIC_SCAN = 500;
+  const MAX_DYNAMIC_SCAN = cappedMaxEventIdx ?? 500;
 
   while (eventIdx <= MAX_DYNAMIC_SCAN && emptyStreak < EMPTY_STREAK_LIMIT) {
-    const hadData = await collectEvent(eventIdx, null);
-    if (hadData) {
-      emptyStreak = 0;
-    } else {
-      emptyStreak += 1;
+    if (!fetchedEventIdxSet.has(eventIdx)) {
+      const hadData = await collectEvent(eventIdx, null);
+      publishPartialCache();
+      if (hadData) {
+        emptyStreak = 0;
+      } else {
+        emptyStreak += 1;
+      }
     }
     eventIdx += 1;
   }
@@ -861,7 +928,72 @@ export const discoverChapterEvents = async (bookId, chapterIdx, forceRefresh = f
 
   setCachedChapterEvents(bookId, chapterIdx, payload);
   return payload;
+  })();
+
+  chapterDiscoverPromises.set(discoverKey, discoverPromise);
+  try {
+    return await discoverPromise;
+  } finally {
+    chapterDiscoverPromises.delete(discoverKey);
+  }
 };
+
+/** 읽기 위치 기준으로 필요한 이벤트만 선행 캐시 */
+export const prefetchChapterEvents = (bookId, chapterIdx, throughEventIdx) => {
+  const through = Number(throughEventIdx);
+  if (!bookId || !chapterIdx || !Number.isFinite(through) || through < 1) {
+    return Promise.resolve(null);
+  }
+  return discoverChapterEvents(bookId, chapterIdx, false, {
+    urgent: true,
+    maxEventIdx: through,
+  });
+};
+
+const hasUsableChapterCache = (bookId, chapterIdx) => {
+  const cached = getCachedChapterEvents(bookId, chapterIdx);
+  if (!cached) return false;
+  if (cached.source === CHAPTER_GRAPH_CACHE_SOURCE.INVALID) return false;
+  if (cached.source === 'manifest-only') return false;
+  return true;
+};
+
+/** 챕터 이벤트 캐시 확보 (재시도 포함, UI 무관) */
+export async function ensureChapterEventsDiscovered(
+  bookId,
+  chapter,
+  { maxAttempts = 2, onPartialCache = null } = {}
+) {
+  if (!bookId || !chapter || chapter < 1) {
+    return { success: false, reason: 'invalid_args' };
+  }
+  if (hasUsableChapterCache(bookId, chapter)) {
+    return { success: true, isEmpty: !getCachedChapterEvents(bookId, chapter)?.events?.length };
+  }
+
+  let lastError = null;
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    try {
+      await discoverChapterEvents(bookId, chapter, attempt > 0, {
+        urgent: true,
+        onPartialCache,
+      });
+      if (hasUsableChapterCache(bookId, chapter)) {
+        return {
+          success: true,
+          isEmpty: !getCachedChapterEvents(bookId, chapter)?.events?.length,
+        };
+      }
+    } catch (error) {
+      lastError = error;
+    }
+  }
+
+  if (lastError) {
+    return { success: false, reason: 'api_error', error: lastError };
+  }
+  return { success: false, reason: 'cache_missing' };
+}
 
 /** baseSnapshot + diffs로 eventIdx 시점 그래프 상태 재구성 */
 export const reconstructChapterGraphState = (cachePayload, targetEventIdx) => {
@@ -916,16 +1048,35 @@ export const reconstructChapterGraphState = (cachePayload, targetEventIdx) => {
 /** 캐시된 fine 집계 행만 반환 (네트워크 없음) */
 export const getChapterEventFallbackData = (bookId, chapterIdx, eventIdx) => {
   const chapterCache = getCachedChapterEvents(bookId, chapterIdx);
-  if (chapterCache?.events && Array.isArray(chapterCache.events)) {
-    const fallbackEvent = eventUtils.findEventInCache(chapterCache.events, eventIdx);
-    
-    if (fallbackEvent && (fallbackEvent.characters || fallbackEvent.relations)) {
+  if (!chapterCache) return null;
+
+  const reconstructed = reconstructChapterGraphState(chapterCache, eventIdx);
+  if (reconstructed) {
+    const characters = reconstructed.characters || [];
+    const elements = reconstructed.elements || [];
+    if (characters.length || elements.length) {
+      const relations = eventUtils.convertElementsToRelations(elements, {
+        includeLabel: true,
+        includeCount: false,
+        positivityDefault: null,
+      });
       return {
-        characters: Array.isArray(fallbackEvent.characters) ? fallbackEvent.characters : [],
-        relations: Array.isArray(fallbackEvent.relations) ? fallbackEvent.relations : [],
-        event: fallbackEvent.event || null
+        characters,
+        relations,
+        event: reconstructed.eventMeta || null,
       };
     }
   }
+
+  const rawEvents = Array.isArray(chapterCache.rawEvents) ? chapterCache.rawEvents : [];
+  const fallbackEvent = eventUtils.findEventInCache(rawEvents, eventIdx);
+  if (fallbackEvent && (fallbackEvent.characters?.length || fallbackEvent.relations?.length)) {
+    return {
+      characters: Array.isArray(fallbackEvent.characters) ? fallbackEvent.characters : [],
+      relations: Array.isArray(fallbackEvent.relations) ? fallbackEvent.relations : [],
+      event: fallbackEvent.event || null,
+    };
+  }
+
   return null;
 };

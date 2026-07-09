@@ -20,8 +20,10 @@ import { applySearchFadeEffect } from '../../utils/graph/searchUtils.jsx';
 import { useGraphDataLoader } from '../../hooks/graph/useGraphDataLoader';
 import { useApiGraphData } from '../../hooks/graph/useApiGraphData';
 import { useLocalStorageNumber } from '../../hooks/common/useLocalStorage.js';
+import { resolveServerBookIdOrFallback, resolveEventIdxOrFallback } from '../../hooks/common/hooksShared';
 import { convertRelationsToElements } from '../../utils/graph/graphDataUtils';
-import { createCharacterMaps, buildNodeWeights } from '../../utils/graph/characterUtils';
+import { createCharacterMaps, buildNodeWeights, extractNodeWeightsFromElements } from '../../utils/graph/characterUtils';
+import { getGraphEventState } from '../../utils/common/cache/chapterEventCache';
 import { resolveGraphElementsProfileImages } from '../../utils/common/artifactUrlUtils';
 import {
   processTooltipData,
@@ -31,10 +33,15 @@ import {
   calculateNodeCount,
   calculateRelationCount,
 } from '../../utils/graph/graphUtils';
-import { eventUtils, graphDataTransformUtils, getServerBookId } from '../../utils/viewer/viewerUtils';
+import { eventUtils } from '../../utils/viewer/viewerCoreStateUtils';
+import {
+  convertFineGraphToElements,
+  hasFineGraphPayload,
+} from '../../utils/viewer/viewerGraphUtils';
+import { resolveChapterSidebarWidth } from './graphShared';
 import { userViewerPath } from '../../utils/navigation/viewerPaths';
 import useGraphInteractions from "../../hooks/graph/useGraphInteractions";
-import { useChapterPovSummaries } from '../../hooks/viewer/useChapterPovSummaries';
+import { useChapterPovSummaries } from '../../hooks/graph/useChapterPovSummaries';
 import {
   getChapterData,
   isValidEvent,
@@ -69,7 +76,6 @@ const backButtonContainerStyle = {
   pointerEvents: 'auto',
 };
 
-const getEdgeStyleForGraph = () => getEdgeStyle('graph');
 const graphBackButtonHandlers = createAdvancedButtonHandlers('default');
 
 function ErrorToast({ error, onClose, duration = 5000 }) {
@@ -200,9 +206,10 @@ function RelationGraphWrapper() {
     appliedRequestedChapterRef.current = requestedChapterFromViewer;
   }, [requestedChapterFromViewer, currentChapter, setCurrentChapter]);
 
-  const serverBookId = useMemo(() => {
-    return getServerBookId(book) || bookId || null;
-  }, [book?.id, book?._bookId, bookId]);
+  const serverBookId = useMemo(
+    () => resolveServerBookIdOrFallback(book, bookId),
+    [book, bookId],
+  );
 
   const {
     isSidebarOpen,
@@ -261,18 +268,15 @@ function RelationGraphWrapper() {
     };
   }, [location.state, location.pathname]);
 
-  const loaderBookKey = useMemo(() => serverBookId ?? bookId ?? null, [serverBookId, bookId]);
-
-  const loaderEventIdx = useMemo(() => {
-    return Number.isFinite(currentEvent) && currentEvent > 0 ? currentEvent : null;
-  }, [currentEvent]);
+  const loaderEventIdx = useMemo(
+    () => resolveEventIdxOrFallback(currentEvent, null),
+    [currentEvent],
+  );
 
   const {
     currentChapterData,
-  } = useGraphDataLoader(loaderBookKey, currentChapter, loaderEventIdx);
+  } = useGraphDataLoader(serverBookId, currentChapter, loaderEventIdx);
   const newNodeIds = useMemo(() => [], []);
-
-  const effectiveMaxChapter = apiMaxChapter;
 
   const manifestBookTitleStr = useMemo(
     () => String(manifestData?.book?.title ?? '').trim(),
@@ -305,10 +309,10 @@ function RelationGraphWrapper() {
 
   useEffect(() => {
     if (!manifestReady) return;
-    if (effectiveMaxChapter > 0 && currentChapter > effectiveMaxChapter) {
-      setCurrentChapter(effectiveMaxChapter);
+    if (apiMaxChapter > 0 && currentChapter > apiMaxChapter) {
+      setCurrentChapter(apiMaxChapter);
     }
-  }, [manifestReady, effectiveMaxChapter, currentChapter, setCurrentChapter]);
+  }, [manifestReady, apiMaxChapter, currentChapter, setCurrentChapter]);
 
   useEffect(() => {
     if (serverBookId == null || !manifestReady) return;
@@ -317,7 +321,7 @@ function RelationGraphWrapper() {
     if (isValidEvent(serverBookId, ch, currentEvent, manifestData)) return;
     const chData = getChapterData(serverBookId, ch, manifestData);
     const firstEv = Array.isArray(chData?.events) ? chData.events[0] : null;
-    const next = Number(firstEv?.eventNum ?? firstEv?.idx ?? 1);
+    const next = eventUtils.extractRawEventIdx(firstEv) || 1;
     if (!(next > 0) || next === currentEvent) return;
     if (isValidEvent(serverBookId, ch, next, manifestData)) {
       setCurrentEvent(next);
@@ -325,49 +329,31 @@ function RelationGraphWrapper() {
   }, [serverBookId, manifestReady, manifestData, currentChapter, currentEvent]);
 
   const graphApiPayload = useMemo(() => {
-    const fineChars = Array.isArray(apiFineData?.characters) ? apiFineData.characters : [];
-    const fineRels = Array.isArray(apiFineData?.relations) ? apiFineData.relations : [];
-    if (fineChars.length > 0 || fineRels.length > 0) {
-      return apiFineData;
-    }
-    return null;
+    if (!apiFineData || !hasFineGraphPayload(apiFineData)) return null;
+    return apiFineData;
   }, [apiFineData]);
 
   const apiElements = useMemo(() => {
     if (!graphApiPayload) return [];
 
-    const fineChars = Array.isArray(graphApiPayload.characters) ? graphApiPayload.characters : [];
-    const fineRels = Array.isArray(graphApiPayload.relations) ? graphApiPayload.relations : [];
-    if (fineChars.length === 0 && fineRels.length === 0) {
-      return [];
-    }
-
     try {
-      const { idToName, idToDesc, idToDescKo, idToMain, idToNames, idToProfileImage } = createCharacterMaps(fineChars);
+      const previousEventState =
+        serverBookId && currentEvent > 1
+          ? getGraphEventState(serverBookId, currentChapter, currentEvent - 1)
+          : null;
+      const previousNodeWeights = extractNodeWeightsFromElements(previousEventState?.elements);
 
-      const normalizedEvent = graphDataTransformUtils.normalizeApiEvent(graphApiPayload.event);
-      const nodeWeights = buildNodeWeights(fineChars);
-
-      const convertedElements = convertRelationsToElements(
-        fineRels,
-        idToName,
-        idToDesc,
-        idToDescKo,
-        idToMain,
-        idToNames,
-        'api',
-        Object.keys(nodeWeights).length > 0 ? nodeWeights : null,
-        null,
-        normalizedEvent,
-        idToProfileImage,
-        fineChars.length > 0 ? fineChars : null
-      );
-
-      return convertedElements;
+      return convertFineGraphToElements(
+        graphApiPayload,
+        currentChapter,
+        currentEvent,
+        { createCharacterMaps, buildNodeWeights, convertRelationsToElements },
+        previousNodeWeights
+      ).elements;
     } catch {
       return [];
     }
-  }, [graphApiPayload]);
+  }, [graphApiPayload, serverBookId, currentChapter, currentEvent]);
 
   const [elements, setElements] = useState([]);
 
@@ -416,8 +402,8 @@ function RelationGraphWrapper() {
     const element = cy.getElementById(elementId);
     if (!element.length) return;
 
-    const { TOP_BAR_HEIGHT, TOOLTIP_SIDEBAR_WIDTH, SIDEBAR } = GRAPH_LAYOUT_CONSTANTS;
-    const chapterSidebarWidth = isSidebarOpen ? SIDEBAR.OPEN_WIDTH : SIDEBAR.CLOSED_WIDTH;
+    const { TOP_BAR_HEIGHT, TOOLTIP_SIDEBAR_WIDTH } = GRAPH_LAYOUT_CONSTANTS;
+    const chapterSidebarWidth = resolveChapterSidebarWidth(isSidebarOpen);
     const availableGraphWidth = window.innerWidth - chapterSidebarWidth - TOOLTIP_SIDEBAR_WIDTH;
     const availableGraphHeight = window.innerHeight - TOP_BAR_HEIGHT;
 
@@ -550,7 +536,7 @@ function RelationGraphWrapper() {
     return calculateRelationCount(elements, filterStage, filteredMainCharacters, eventUtils);
   }, [filterStage, filteredMainCharacters, elements]);
 
-  const edgeStyle = getEdgeStyleForGraph();
+  const edgeStyle = getEdgeStyle('graph');
   const stylesheet = useMemo(
     () => createGraphStylesheet(edgeStyle, edgeLabelVisible),
     [edgeStyle, edgeLabelVisible]
@@ -711,8 +697,8 @@ function RelationGraphWrapper() {
   }, []);
 
   const chapterList = useMemo(() =>
-    Array.from({ length: effectiveMaxChapter }, (_, i) => i + 1),
-    [effectiveMaxChapter]
+    Array.from({ length: apiMaxChapter }, (_, i) => i + 1),
+    [apiMaxChapter]
   );
 
   useEffect(() => {
@@ -860,7 +846,7 @@ function RelationGraphWrapper() {
         currentChapterTitle={currentChapterTitle}
         userReadingChapterTitle={userReadingChapterTitle}
         eventNum={Math.max(currentEvent, 1)}
-        maxChapter={effectiveMaxChapter}
+        maxChapter={apiMaxChapter}
         filename={filename}
         elements={elements}
         renderElements={finalElements}

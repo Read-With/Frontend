@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import {
   toNumberOrNull,
+  toFiniteNumber,
+  toPositiveInt,
   toPositiveNumberOrNull,
   toPositiveNumberFromId,
   clampNumber,
@@ -17,6 +19,18 @@ describe('numberUtils', () => {
   it('toPositiveNumberOrNull', () => {
     expect(toPositiveNumberOrNull(0)).toBeNull();
     expect(toPositiveNumberOrNull(3)).toBe(3);
+  });
+
+  it('toFiniteNumber', () => {
+    expect(Number.isNaN(toFiniteNumber(undefined))).toBe(true);
+    expect(toFiniteNumber(3)).toBe(3);
+    expect(toFiniteNumber('4')).toBe(4);
+  });
+
+  it('toPositiveInt', () => {
+    expect(toPositiveInt(0)).toBeNull();
+    expect(toPositiveInt(2.9)).toBe(2);
+    expect(toPositiveInt('bad', 1)).toBe(1);
   });
 
   it('toPositiveNumberFromId', () => {

@@ -2,7 +2,6 @@
 import { toNumberOrNull } from '../common/numberUtils';
 import { errorUtils } from '../common/errorUtils';
 import {
-  normalizeCharacterId,
   aggregateCharactersFromEvents,
 } from './characterUtils';
 import { extractApiBookId, toApiFolderKey, toPositiveInt } from './graphUtils';
@@ -21,7 +20,7 @@ import {
   saveToStorage,
   removeFromStorage,
 } from '../common/cache/cacheManager';
-import { eventUtils } from '../viewer/viewerUtils';
+import { eventUtils, cacheKeyUtils, MACRO_GRAPH_STORAGE_KEY_RE } from '../viewer/viewerCoreStateUtils';
 
 const getChapterEventsSnapshot = (bookId, chapterIdx) => {
   if (!bookId || !chapterIdx || chapterIdx < 1) {
@@ -67,6 +66,106 @@ const convertElementsToRelations = (elements) => {
   });
 };
 
+const isLegacyRawEventRow = (event) =>
+  Boolean(
+    (event?.event && typeof event.event === 'object') ||
+    Array.isArray(event?.relations) ||
+    Array.isArray(event?.characters)
+  );
+
+const mapLegacyOrSummaryEvent = (event, targetChapter) => {
+  const normalizedIdx = getEventOrderIdx(event);
+  if (normalizedIdx === null || normalizedIdx <= 0) return null;
+
+  if (isLegacyRawEventRow(event)) {
+    const resolvedEventNum = toPositiveInt(event.eventNum, normalizedIdx);
+    return {
+      ...(event.event && typeof event.event === 'object' ? event.event : {}),
+      ...event,
+      chapter: targetChapter,
+      chapterIdx: targetChapter,
+      eventIdx: normalizedIdx,
+      eventNum: resolvedEventNum,
+      eventId: eventUtils.resolveEventId(event) ?? normalizedIdx,
+      resolvedEventIdx: normalizedIdx,
+      originalEventIdx: normalizedIdx,
+      relations: Array.isArray(event.relations) ? event.relations : [],
+      characters: Array.isArray(event.characters) ? event.characters : [],
+      start: event?.startPos ?? event?.start ?? event?.startTxtOffset ?? null,
+      end: event?.endPos ?? event?.end ?? event?.endTxtOffset ?? null,
+    };
+  }
+
+  const title = event.title ?? null;
+  const resolvedEventNum = toPositiveInt(event.eventNum, normalizedIdx);
+  return {
+    chapter: targetChapter,
+    chapterIdx: targetChapter,
+    eventIdx: normalizedIdx,
+    eventNum: resolvedEventNum,
+    eventId: eventUtils.resolveEventId(event) ?? event.eventId ?? normalizedIdx,
+    resolvedEventIdx: normalizedIdx,
+    originalEventIdx: normalizedIdx,
+    startTxtOffset: event.startTxtOffset ?? null,
+    endTxtOffset: event.endTxtOffset ?? null,
+    start: event.startTxtOffset ?? null,
+    end: event.endTxtOffset ?? null,
+    title,
+    name: title,
+    eventName: title,
+    eventTitle: title,
+    text: event.text ?? null,
+    relations: [],
+    characters: [],
+  };
+};
+
+function buildEventsFromChapterCache(chapterPayload, targetChapter) {
+  if (!chapterPayload || !Array.isArray(chapterPayload.events) || !chapterPayload.events.length) {
+    return [];
+  }
+
+  const hasDiffCache =
+    chapterPayload.baseSnapshot && Array.isArray(chapterPayload.diffs);
+  const eventMetas = chapterPayload.events;
+
+  if (!hasDiffCache) {
+    return eventMetas
+      .map((event) => mapLegacyOrSummaryEvent(event, targetChapter))
+      .filter(Boolean);
+  }
+
+  return eventMetas.map((eventMeta) => {
+    const targetEventIdx = Number(eventMeta?.eventIdx) || 0;
+    const resolvedEventNum = toPositiveInt(eventMeta?.eventNum, targetEventIdx);
+    const reconstructed = reconstructChapterGraphState(chapterPayload, targetEventIdx);
+
+    const characters = reconstructed?.characters || [];
+    const relations = convertElementsToRelations(reconstructed?.elements || []);
+    const title = eventMeta.title ?? reconstructed?.eventMeta?.name ?? reconstructed?.eventMeta?.title ?? null;
+
+    return {
+      ...eventMeta,
+      chapter: targetChapter,
+      chapterIdx: targetChapter,
+      eventNum: resolvedEventNum,
+      eventId:
+        eventUtils.resolveEventId(reconstructed?.eventMeta) ??
+        eventUtils.resolveEventId(eventMeta) ??
+        targetEventIdx,
+      event: reconstructed?.eventMeta ?? eventMeta?.event ?? null,
+      title,
+      name: title,
+      eventName: title,
+      eventTitle: title,
+      relations,
+      characters,
+      start: eventMeta.startTxtOffset ?? reconstructed?.eventMeta?.startTxtOffset ?? null,
+      end: eventMeta.endTxtOffset ?? reconstructed?.eventMeta?.endTxtOffset ?? null,
+    };
+  });
+}
+
 export function getEventsForChapter(chapter, folderKey) {
   const bookId = extractApiBookId(folderKey);
   if (!bookId || !chapter || chapter < 1) {
@@ -78,52 +177,7 @@ export function getEventsForChapter(chapter, folderKey) {
     return [];
   }
 
-  const hasDiffCache =
-    snapshot.baseSnapshot && Array.isArray(snapshot.diffs);
-
-  const eventMetas = Array.isArray(snapshot.events)
-    ? snapshot.events
-    : [];
-
-  if (!hasDiffCache) {
-    return eventMetas.map((event) => ({
-      ...event,
-      chapter,
-      chapterIdx: chapter,
-      eventNum: toPositiveInt(event.eventNum, 0),
-      event_id: event.event?.event_id ?? event.eventIdx ?? event.idx ?? 0,
-      relations: Array.isArray(event.relations) ? event.relations : [],
-      characters: Array.isArray(event.characters) ? event.characters : [],
-    }));
-  }
-
-  return eventMetas.map((eventMeta) => {
-    const targetEventIdx = Number(eventMeta?.eventIdx) || 0;
-    const resolvedEventNum = toPositiveInt(eventMeta?.eventNum, targetEventIdx);
-    const reconstructed = reconstructChapterGraphState(
-      snapshot,
-      targetEventIdx
-    );
-
-    const characters = reconstructed?.characters || [];
-    const relations = convertElementsToRelations(
-      reconstructed?.elements || []
-    );
-
-    return {
-      ...eventMeta,
-      chapter,
-      chapterIdx: chapter,
-      eventNum: resolvedEventNum,
-      event_id:
-        reconstructed?.eventMeta?.event_id ??
-        eventMeta.eventId ??
-        targetEventIdx,
-      event: reconstructed?.eventMeta ?? eventMeta?.event ?? null,
-      relations,
-      characters,
-    };
-  });
+  return buildEventsFromChapterCache(snapshot, chapter);
 }
 
 export function getEventDataByIndex(folderKey, chapter, eventIndex) {
@@ -138,34 +192,22 @@ export function getEventDataByIndex(folderKey, chapter, eventIndex) {
   }
 
   const event = events.find(
-    (entry) => toNumberOrNull(entry.eventNum) === toNumberOrNull(eventIndex)
+    (entry) => eventUtils.extractRawEventIdx(entry) === toNumberOrNull(eventIndex)
   );
   if (!event) {
     return null;
   }
 
-  const nodeWeights = {};
-  if (Array.isArray(event.characters)) {
-    event.characters.forEach((character) => {
-      const id = normalizeCharacterId(character?.id);
-      if (!id) return;
-      nodeWeights[id] = {
-        weight: typeof character.weight === 'number' ? character.weight : null,
-        count: typeof character.count === 'number' ? character.count : null,
-      };
-    });
-  }
-
+  const resolvedEventIdx = eventUtils.extractRawEventIdx(event) || Number(eventIndex);
   return {
     chapter,
     chapterIdx: chapter,
-    eventIdx: Number(event.eventNum),
-    eventNum: Number(event.eventNum),
-    event_id: event.event?.event_id ?? event.eventIdx ?? eventIndex,
+    eventIdx: resolvedEventIdx,
+    eventNum: resolvedEventIdx,
+    eventId: eventUtils.resolveEventId(event) ?? resolvedEventIdx,
     relations: Array.isArray(event.relations) ? event.relations : [],
     characters: Array.isArray(event.characters) ? event.characters : [],
     event: event.event || null,
-    node_weights_accum: Object.keys(nodeWeights).length ? nodeWeights : null,
   };
 }
 
@@ -212,7 +254,7 @@ const compareNullableIdxAsc = (idxA, idxB) => {
   return idxA - idxB;
 };
 
-export const compareEventsByIdx = (a, b) =>
+const compareEventsByIdx = (a, b) =>
   compareNullableIdxAsc(getEventOrderIdx(a), getEventOrderIdx(b));
 
 const filterEventsByIdx = (events, targetIdx, predicate) => {
@@ -230,6 +272,44 @@ export const sortEventsByIdx = (events) => {
   return [...events].sort(compareEventsByIdx);
 };
 
+/** 챕터 이벤트 캐시 → events state에 병합 */
+export function mergeChapterCacheEventsIntoState(prevEvents, chapterPayload, targetChapter) {
+  if (!chapterPayload || !Array.isArray(chapterPayload.events)) {
+    return { merged: false, events: prevEvents };
+  }
+
+  const enrichedEvents = buildEventsFromChapterCache(chapterPayload, targetChapter);
+  if (!enrichedEvents.length) {
+    return { merged: false, events: prevEvents };
+  }
+
+  let merged = false;
+  let nextEvents = prevEvents;
+  enrichedEvents.forEach((normalizedEvent) => {
+    merged = true;
+    nextEvents = eventUtils.updateEventsInState(nextEvents, normalizedEvent, targetChapter);
+  });
+
+  return { merged, events: nextEvents };
+}
+
+/** 챕터 이벤트 캐시 → events state에 병합 (React setState용) */
+export function applyChapterEventsFromCache(prevEvents, bookId, targetChapter) {
+  const chapterPayload = getCachedChapterEvents(bookId, targetChapter);
+  if (!chapterPayload || !Array.isArray(chapterPayload.events)) {
+    return { applied: false, hasPayload: false, isEmpty: false, events: prevEvents };
+  }
+  if (!chapterPayload.events.length) {
+    return { applied: false, hasPayload: true, isEmpty: true, events: prevEvents };
+  }
+  const { merged, events } = mergeChapterCacheEventsIntoState(
+    prevEvents,
+    chapterPayload,
+    targetChapter
+  );
+  return { applied: merged, hasPayload: true, isEmpty: false, events };
+}
+
 export const filterEventsUpTo = (events, targetIdx) =>
   filterEventsByIdx(events, targetIdx, (eventIdx, target) => eventIdx <= target);
 
@@ -245,7 +325,7 @@ export const getMaxEventIdx = (events) => {
   }, 0);
 };
 
-export const normalizeEventIdx = (requestedIdx, maxIdx) => {
+export const clampEventIdxToMax = (requestedIdx, maxIdx) => {
   const maxRaw = toNumberOrNull(maxIdx);
   const hasUpper = maxRaw !== null && Number.isFinite(maxRaw);
   const maxInt = hasUpper ? (toPositiveInt(maxRaw, 0) ?? 0) : null;
@@ -264,23 +344,21 @@ export const normalizeEventIdx = (requestedIdx, maxIdx) => {
 
 const GRAPH_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 const macroSessionCache = new Map();
-const macroSessionKey = (bookId, chapter) => `${Number(bookId)}:${Number(chapter)}`;
 const inflightRequests = new Map();
-const MACRO_KEY_RE = /^graph_macro_(\d+)_upto_(\d+)$/;
 
 const isValidChapterRef = (bookId, chapter) =>
   toPositiveInt(bookId) !== null && toPositiveInt(chapter) !== null;
 
 export const hasMacroSessionCache = (bookId, chapter) =>
-  macroSessionCache.has(macroSessionKey(bookId, chapter));
+  macroSessionCache.has(cacheKeyUtils.macroSession(bookId, chapter));
 
 const getMacroFromSessionCache = (bookId, chapter) =>
-  macroSessionCache.get(macroSessionKey(bookId, chapter));
+  macroSessionCache.get(cacheKeyUtils.macroSession(bookId, chapter));
 
 const saveMacroToSessionCache = (bookId, chapter, data) =>
-  macroSessionCache.set(macroSessionKey(bookId, chapter), data);
+  macroSessionCache.set(cacheKeyUtils.macroSession(bookId, chapter), data);
 
-export const checkLocalStorageCache = (cacheKey) => {
+const checkLocalStorageCache = (cacheKey) => {
   const data = loadFromStorage(cacheKey, 'localStorage');
   if (!data) return null;
   if (data._savedAt && Date.now() - data._savedAt > GRAPH_CACHE_TTL_MS) {
@@ -290,16 +368,32 @@ export const checkLocalStorageCache = (cacheKey) => {
   return data;
 };
 
-export const saveToLocalStorageCache = (cacheKey, data) => {
+const saveToLocalStorageCache = (cacheKey, data) => {
   saveToStorage(cacheKey, { ...data, _savedAt: Date.now() }, 'localStorage');
 };
 
 export const checkChapterEventsCache = (bookId, chapter, eventIdx) => {
   const chapterCache = getCachedChapterEvents(bookId, chapter);
-  if (!chapterCache?.events || !Array.isArray(chapterCache.events)) return null;
+  if (!chapterCache) return null;
 
-  const targetEvent = eventUtils.findEventInCache(chapterCache.events, eventIdx);
-  if (!targetEvent || (!targetEvent.characters && !targetEvent.relations)) return null;
+  const reconstructed = reconstructChapterGraphState(chapterCache, eventIdx);
+  if (reconstructed) {
+    const characters = reconstructed.characters || [];
+    const relations = convertElementsToRelations(reconstructed.elements || []);
+    if (characters.length || relations.length) {
+      return {
+        characters,
+        relations,
+        event: reconstructed.eventMeta || null,
+      };
+    }
+  }
+
+  const rawEvents = Array.isArray(chapterCache.rawEvents) ? chapterCache.rawEvents : [];
+  const targetEvent = eventUtils.findEventInCache(rawEvents, eventIdx);
+  if (!targetEvent || (!targetEvent.characters?.length && !targetEvent.relations?.length)) {
+    return null;
+  }
 
   return {
     characters: Array.isArray(targetEvent.characters) ? targetEvent.characters : [],
@@ -325,15 +419,15 @@ export const hasMacroGraphStorageCache = (bookId, chapter) => {
   const normalizedBookId = toPositiveInt(bookId);
   const normalizedChapter = toPositiveInt(chapter);
   if (!isValidChapterRef(normalizedBookId, normalizedChapter)) return false;
-  if (macroSessionCache.has(macroSessionKey(normalizedBookId, normalizedChapter))) return true;
-  const cacheKey = `graph_macro_${normalizedBookId}_upto_${normalizedChapter}`;
+  if (macroSessionCache.has(cacheKeyUtils.macroSession(normalizedBookId, normalizedChapter))) return true;
+  const cacheKey = cacheKeyUtils.macroGraphStorage(normalizedBookId, normalizedChapter);
   return hasGraphPayload(checkLocalStorageCache(cacheKey));
 };
 
 const handleLoaderSuccess = (data, onSuccess, cacheKey) => {
   if (cacheKey && hasGraphPayload(data)) {
     saveToLocalStorageCache(cacheKey, data);
-    const m = MACRO_KEY_RE.exec(cacheKey);
+    const m = MACRO_GRAPH_STORAGE_KEY_RE.exec(cacheKey);
     if (m) saveMacroToSessionCache(m[1], m[2], data);
   }
   onSuccess?.(data);
@@ -368,8 +462,8 @@ export const prefetchMacroGraphToCache = async (bookId, chapter, apiCall) => {
   const normalizedBookId = toPositiveInt(bookId);
   const normalizedChapter = toPositiveInt(chapter);
   if (!isValidChapterRef(normalizedBookId, normalizedChapter)) return;
-  if (macroSessionCache.has(macroSessionKey(normalizedBookId, normalizedChapter))) return;
-  const cacheKey = `graph_macro_${normalizedBookId}_upto_${normalizedChapter}`;
+  if (macroSessionCache.has(cacheKeyUtils.macroSession(normalizedBookId, normalizedChapter))) return;
+  const cacheKey = cacheKeyUtils.macroGraphStorage(normalizedBookId, normalizedChapter);
   if (hasGraphPayload(checkLocalStorageCache(cacheKey))) return;
   try {
     const response = await apiCall();
@@ -392,7 +486,7 @@ export const loadGraphDataWithCache = async ({
   onSuccess,
   onError,
 }) => {
-  const macroMatch = cacheKey && MACRO_KEY_RE.exec(cacheKey);
+  const macroMatch = cacheKey && MACRO_GRAPH_STORAGE_KEY_RE.exec(cacheKey);
   if (macroMatch) {
     const sessionData = getMacroFromSessionCache(macroMatch[1], macroMatch[2]);
     if (hasGraphPayload(sessionData)) {

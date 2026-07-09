@@ -20,10 +20,12 @@ import {
   calculateSpiralPlacement,
   getContainerDimensions,
 } from "../../utils/graph/graphUtils";
-import { calculateNodeSize } from "../../utils/styles/graphStyles.js";
+import {
+  applyNormalizedNodeSizes,
+} from "../../utils/styles/graphStyles.js";
 import useGraphInteractions from "../../hooks/graph/useGraphInteractions.js";
 import { useGraphLayout, useCyInstance } from "../../hooks/graph/useGraphLayout";
-import { eventUtils } from "../../utils/viewer/viewerUtils";
+import { eventUtils } from "../../utils/viewer/viewerCoreStateUtils";
 
 const NO_RESULTS_CONTAINER_STYLE = {
   position: 'absolute',
@@ -143,15 +145,7 @@ const CytoscapeGraphUnified = ({
   }, [stylesheet, safeCyOperation]);
 
   const applyNodeSizes = useCallback((cy, nodes, scale = 1) => {
-    if (!cy || !nodes) return;
-    nodes.forEach(node => {
-      const weight = node.data('weight');
-      const size = calculateNodeSize(8, weight) * scale;
-      node.style({
-        'width': size,
-        'height': size
-      });
-    });
+    applyNormalizedNodeSizes(cy, { scaledNodes: nodes, scale });
   }, []);
 
   const triggerRippleForAddedNodes = useCallback(() => {
@@ -258,7 +252,6 @@ const CytoscapeGraphUnified = ({
           userPanningEnabled: true,
           minZoom: 0.2,
           maxZoom: 2.4,
-          wheelSensitivity: 0.4,
           autoungrabify: false,
           autolock: false,
           autounselectify: false,

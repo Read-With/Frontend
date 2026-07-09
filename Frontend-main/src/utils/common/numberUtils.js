@@ -4,9 +4,20 @@ export const toNumberOrNull = (value) => {
   return Number.isFinite(num) ? num : null;
 };
 
+export const toFiniteNumber = (value) => {
+  if (value === undefined || value === null) return NaN;
+  const converted = typeof value === 'number' ? value : Number(value);
+  return Number.isFinite(converted) ? converted : NaN;
+};
+
 export const toPositiveNumberOrNull = (value) => {
   const num = toNumberOrNull(value);
   return num && num > 0 ? num : null;
+};
+
+export const toPositiveInt = (value, fallback = null) => {
+  const parsed = toFiniteNumber(value);
+  return Number.isFinite(parsed) && parsed >= 1 ? Math.trunc(parsed) : fallback;
 };
 
 export const toPositiveNumberFromId = (value) => {

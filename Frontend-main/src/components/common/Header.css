@@ -16,7 +16,13 @@
   overflow: hidden;
 }
 
-.user-topbar-avatar {
+.header-brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.header-brand-icon {
   width: 32px;
   height: 32px;
   background: transparent;
@@ -29,18 +35,18 @@
   font-size: 24px;
   padding-bottom: 2px;
 }
-.user-topbar-title {
+
+.header-brand-text,
+.header-brand-separator,
+.header-user-name {
   font-family: var(--font-family-primary);
   font-weight: 600;
   font-size: 16px;
-  line-height: 1;
   color: #3E4F2F;
-  white-space: nowrap;
-  margin-top: 0.5rem;
 }
+
 .user-topbar-logout {
   font-family: var(--font-family-primary);
-  font-weight: 500;
   font-size: 14px;
   color: #586544;
   cursor: pointer;
@@ -66,134 +72,18 @@
   transform: scale(0.98);
 }
 
-/* 왼쪽 영역 */
 .user-topbar-left {
   display: flex;
   align-items: center;
   gap: 12px;
 }
 
-.user-topbar-brand {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.brand-text {
-  font-family: var(--font-family-primary);
-  font-weight: 600;
-  font-size: 16px;
-  color: #3E4F2F;
-}
-
-.brand-separator {
-  font-family: var(--font-family-primary);
-  font-weight: 600;
-  font-size: 16px;
-  color: #3E4F2F;
-}
-
-.user-name {
-  font-family: var(--font-family-primary);
-  font-weight: 600;
-  font-size: 16px;
-  color: #3E4F2F;
-}
-
-/* 오른쪽 영역 */
 .user-topbar-right {
   display: flex;
   align-items: center;
   gap: 16px;
 }
 
-
-/* 인증 헤더 (로그인 전) */
-.header-auth {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 64px;
-  background: #D4D4C3;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 0 32px;
-  z-index: 1000;
-  box-shadow: 0 2px 8px rgba(62, 79, 47, 0.08);
-}
-
-.header-left {
-  display: flex;
-  align-items: center;
-}
-
-.header-logo {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.logo-icon {
-  font-size: 28px;
-  color: #3E4F2F;
-}
-
-.logo-text {
-  font-size: 22px;
-  font-weight: 600;
-  color: #3E4F2F;
-}
-
-.header-right {
-  display: flex;
-  align-items: center;
-}
-
-/* Google 로그인 */
-.google-login-container {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 8px;
-}
-
-.google-login-button {
-  background: #f0fdf4;
-  border: 1px solid #22c55e;
-  border-radius: 8px;
-  padding: 12px 24px;
-  font-size: 14px;
-  font-weight: 500;
-  color: #15803d;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  transition: all 0.2s ease;
-  box-shadow: 0 2px 4px rgba(34, 197, 94, 0.1);
-}
-
-.google-login-button:hover {
-  box-shadow: 0 4px 8px rgba(34, 197, 94, 0.2);
-  transform: translateY(-1px);
-  background: #dcfce7;
-  border-color: #16a34a;
-  color: #166534;
-}
-
-.google-login-button:active {
-  transform: translateY(0);
-}
-
-.login-error {
-  color: #717B59;
-  font-size: 12px;
-  text-align: center;
-}
-
-/* 반응형 디자인 */
 @media (max-width: 768px) {
   .user-topbar {
     padding: 8px 16px;
@@ -205,13 +95,9 @@
     gap: 8px;
   }
 
-  .user-topbar-avatar {
+  .header-brand-icon {
     width: 28px;
     height: 28px;
-  }
-
-  .user-topbar-title {
-    font-size: 14px;
   }
 
   .user-topbar-logout {
@@ -222,20 +108,6 @@
   .user-topbar-logout span {
     display: none;
   }
-
-  .header-auth {
-    height: 56px;
-    padding: 0 20px;
-  }
-
-  .logo-text {
-    font-size: 18px;
-  }
-
-  .google-login-button {
-    padding: 10px 20px;
-    font-size: 13px;
-  }
 }
 
 @media (max-width: 480px) {
@@ -243,29 +115,11 @@
     padding: 6px 12px;
   }
 
-  .user-topbar-title {
-    font-size: 13px;
-  }
-
   .user-topbar-logout {
     padding: 5px 10px;
   }
+}
 
-  .header-auth {
-    height: 52px;
-    padding: 0 16px;
-  }
-
-  .logo-icon {
-    font-size: 24px;
-  }
-
-  .logo-text {
-    font-size: 16px;
-  }
-} 
-
-/* 로그아웃 확인 다이얼로그 */
 .logout-confirm-overlay {
   position: fixed;
   top: 0;
@@ -358,4 +212,4 @@
 .logout-confirm-logout:active,
 .logout-confirm-cancel:active {
   transform: scale(0.98);
-} 
+}

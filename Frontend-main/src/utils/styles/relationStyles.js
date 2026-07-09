@@ -1,71 +1,73 @@
-import { getRelationColor } from './graphStyles';
+import { clampPositivity, getRelationColor } from './graphStyles';
 import { COLORS, ANIMATION_VALUES, createButtonStyle } from './styles';
 
 const styleCache = new Map();
 
-// 하드코딩된 임계값
-const HARDCODED_THRESHOLDS = {
-  veryPositive: 0.6,   // 0.6 이상
-  positive: 0.2,       // 0.2 이상
-  neutral: -0.2,       // -0.2 이상
-  negative: -0.6       // -0.6 이상
+const POSITIVITY_THRESHOLDS = {
+  veryPositive: 0.6,
+  positive: 0.2,
+  neutral: -0.2,
+  negative: -0.6,
 };
 
-/**
- * positivity 값을 기반으로 관계 스타일 계산
- * @param {number} positivity - 관계의 긍정성 값
- * @returns {Object} 스타일 객체
- */
-function calculateStyle(positivity) {
-  const value = typeof positivity === 'number' && !Number.isNaN(positivity)
-    ? Math.max(-1, Math.min(1, positivity))
-    : 0;
-  
-  const color = getRelationColor(value);
-  
-  if (value >= HARDCODED_THRESHOLDS.veryPositive) return { color, text: "매우 긍정적" };
-  if (value >= HARDCODED_THRESHOLDS.positive) return { color, text: "긍정적" };
-  if (value >= HARDCODED_THRESHOLDS.neutral) return { color, text: "중립적" };
-  if (value >= HARDCODED_THRESHOLDS.negative) return { color, text: "부정적" };
-  return { color, text: "매우 부정적" };
+const POSITIVITY_LABELS = [
+  { min: POSITIVITY_THRESHOLDS.veryPositive, text: '매우 긍정적' },
+  { min: POSITIVITY_THRESHOLDS.positive, text: '긍정적' },
+  { min: POSITIVITY_THRESHOLDS.neutral, text: '중립적' },
+  { min: POSITIVITY_THRESHOLDS.negative, text: '부정적' },
+];
+
+function resolvePositivityLabel(value) {
+  const match = POSITIVITY_LABELS.find((entry) => value >= entry.min);
+  return match?.text ?? '매우 부정적';
 }
 
-/**
- * positivity 값을 기반으로 관계 스타일 가져오기
- * @param {number} positivity - 관계의 긍정성 값
- * @returns {Object} 스타일 객체
- */
+function calculateStyle(positivity) {
+  const value = clampPositivity(positivity);
+  return {
+    color: getRelationColor(value),
+    text: resolvePositivityLabel(value),
+  };
+}
+
 export function getRelationStyle(positivity) {
-  const key = Math.round(positivity * 100) / 100;
-  
+  const key = Math.round(clampPositivity(positivity) * 100) / 100;
+
   if (styleCache.has(key)) {
     return styleCache.get(key);
   }
-  
+
   const result = calculateStyle(positivity);
   styleCache.set(key, result);
   return result;
 }
 
-/** 관계 색상/라벨 단일 소스. 노드·엣지 툴팁 등에서 사용 */
 export function getPositivityColor(positivity) {
-  const value = (positivity === undefined || positivity === null || isNaN(positivity)) ? 0 : positivity;
-  return getRelationStyle(value).color;
+  return getRelationStyle(positivity).color;
 }
 
 export function getPositivityLabel(positivity) {
-  if (positivity === undefined || positivity === null || isNaN(positivity)) return '정보 없음';
+  if (positivity === undefined || positivity === null || Number.isNaN(positivity)) {
+    return '정보 없음';
+  }
   return getRelationStyle(positivity).text;
 }
 
-/**
- * 툴팁 기본 스타일 설정
- */
+const tooltipFlipFace = {
+  backfaceVisibility: 'hidden',
+  position: 'absolute',
+  width: '100%',
+  height: 360,
+  minHeight: 360,
+  top: 0,
+  left: 0,
+};
+
 export const tooltipStyles = {
   container: {
-    position: "fixed",
+    position: 'fixed',
     zIndex: 99999,
-    width: "500px",
+    width: '500px',
     perspective: '1200px',
   },
   flipInner: {
@@ -76,24 +78,10 @@ export const tooltipStyles = {
     transition: `transform ${ANIMATION_VALUES.DURATION.SLOW} ${ANIMATION_VALUES.EASE_OUT}`,
     transformStyle: 'preserve-3d',
   },
-  front: {
-    backfaceVisibility: 'hidden',
-    position: 'absolute',
-    width: '100%',
-    height: 360,
-    minHeight: 360,
-    top: 0,
-    left: 0,
-  },
+  front: tooltipFlipFace,
   back: {
-    backfaceVisibility: 'hidden',
+    ...tooltipFlipFace,
     transform: 'rotateY(180deg)',
-    position: 'absolute',
-    width: '100%',
-    height: 360,
-    minHeight: 360,
-    top: 0,
-    left: 0,
   },
   header: {
     background: COLORS.white,
@@ -117,7 +105,7 @@ export const tooltipStyles = {
     opacity: 1,
     transition: `background ${ANIMATION_VALUES.DURATION.NORMAL}`,
     border: `1.5px solid ${COLORS.border}`,
-    boxSizing: "border-box",
+    boxSizing: 'border-box',
     marginBottom: 0,
   },
   button: {
@@ -126,18 +114,6 @@ export const tooltipStyles = {
   },
 };
 
-/**
- * 스타일 캐시 정리 함수
- * @returns {void}
- */
 export function clearStyleCache() {
   styleCache.clear();
-}
-
-/**
- * 모든 관계 스타일 관련 리소스 정리 함수
- * @returns {void}
- */
-export function cleanupRelationStyleResources() {
-  clearStyleCache();
 }

@@ -12,211 +12,30 @@ import { flushSync } from 'react-dom';
 import { loadCombinedXhtml } from '../../../utils/normalizedContent/combinedXhtmlLoader';
 import { defaultSettings } from '../../../utils/common/settingsUtils';
 import {
-  sanitizeXhtmlBodyHtml,
-  collectSanitizedStyleCssFromDocument,
-} from '../../../utils/viewer/sanitizeXhtml';
-import { getManifestFromCache } from '../../../utils/common/cache/manifestCache';
+  absoluteOffsetFromReadingProgressPercent,
+  locatorFromBookAbsoluteOffset,
+} from '../../../utils/common/cache/manifestCache';
+import {
+  resolveMetricsFromLocator,
+  toReadingLocatorKey,
+  toReadingLocatorKeyFromAnchor,
+} from '../../../utils/viewer/viewerEventProgressUtils';
 import { errorUtils } from '../../../utils/common/errorUtils';
-
-const xhtmlLoadCache = new Map();
-const XHTML_LOAD_CACHE_VERSION = 'v3';
-
-/** 챕터당 단일 마커 노드(data-block-index 없음) 여부 */
-function isSingleChapterMarkerBlob(el, rulerRoot) {
-  if (!el || !rulerRoot?.querySelectorAll) return false;
-  if (el.getAttribute('data-block-index') != null && el.getAttribute('data-block-index') !== '') {
-    return false;
-  }
-  const ch = el.getAttribute('data-chapter-index');
-  if (ch == null) return false;
-  return rulerRoot.querySelectorAll(`[data-chapter-index="${ch}"]`).length === 1;
-}
-
-/** 단일 마커·다페이지일 때 blockIndex에 페이지 인덱스 인코딩 */
-function shouldEncodePageInBlockIndex(el, rulerRoot, totalPages, pageHeightPx) {
-  if (totalPages <= 1 || !isSingleChapterMarkerBlob(el, rulerRoot)) return false;
-  const ph = pageHeightPx;
-  if (!(ph > 0)) return true;
-  return el.offsetHeight > ph * 1.12;
-}
-
-/** data-block-index 없으면 챕터별 문서 순서로 blockIndex 합성 */
-function collectBlockEntries(root) {
-  if (!root?.querySelectorAll) return [];
-  const withBlock = Array.from(root.querySelectorAll('[data-chapter-index][data-block-index]'));
-  if (withBlock.length > 0) {
-    return withBlock.map((el) => ({ el, syntheticBlock: null }));
-  }
-  const chapterOnly = Array.from(root.querySelectorAll('[data-chapter-index]'));
-  if (chapterOnly.length === 0) return [];
-  const perChapter = new Map();
-  return chapterOnly.map((el) => {
-    const ch = Number(el.getAttribute('data-chapter-index'));
-    const next = perChapter.get(ch) ?? 0;
-    perChapter.set(ch, next + 1);
-    return { el, syntheticBlock: next };
-  });
-}
-
-/** 숫자 서버 bookId 우선 (매니페스트·캐시 키 일치) */
-function resolveLoaderBookId(book, bookIdProp) {
-  const candidates = [book?._bookId, book?.id, bookIdProp];
-  for (const c of candidates) {
-    const n = Number(c);
-    if (Number.isFinite(n) && n > 0) return String(n);
-  }
-  const raw = bookIdProp ?? book?.id ?? book?.filename ?? '';
-  return String(raw).trim();
-}
-
-const getBlockLocator = (el, offset = 0, syntheticBlock = null) => {
-  const ci = el.getAttribute('data-chapter-index');
-  if (ci == null || !Number.isFinite(Number(ci))) return null;
-  const rawBi = el.getAttribute('data-block-index');
-  let blockIndex;
-  if (rawBi != null && rawBi !== '') {
-    blockIndex = Number(rawBi);
-  } else if (syntheticBlock != null) {
-    blockIndex = syntheticBlock;
-  } else {
-    blockIndex = 0;
-  }
-  if (!Number.isFinite(blockIndex)) blockIndex = 0;
-  return {
-    chapterIndex: Number(ci),
-    blockIndex,
-    offset: Number.isFinite(offset) ? offset : 0,
-  };
-};
-
-/** 페이지 비율 → chapterIdx (weightedChapters 가중치 기준) */
-const resolveChapterPagePositionByWeightedPageRatio = (weightedChapters, currentPageIndex, totalPages) => {
-  if (!Array.isArray(weightedChapters) || !weightedChapters.length) return null;
-  const totalWeight = weightedChapters.reduce((sum, row) => {
-    const w = Number(row?.weight ?? 0);
-    return sum + (Number.isFinite(w) && w > 0 ? w : 0);
-  }, 0);
-  if (!Number.isFinite(totalWeight) || totalWeight <= 0) return null;
-
-  const ratio =
-    totalPages <= 1
-      ? 0
-      : Math.min(1, Math.max(0, Number(currentPageIndex) / Math.max(1, totalPages - 1)));
-  const absolutePos = Math.floor(totalWeight * ratio);
-
-  let cumulative = 0;
-  for (const row of weightedChapters) {
-    const w = Number(row?.weight ?? 0);
-    const safeW = Number.isFinite(w) && w > 0 ? w : 0;
-    const chapterIdx = Number(row.chapterIdx);
-    const start = cumulative;
-    const end = cumulative + safeW;
-    if (absolutePos >= start && absolutePos < end && Number.isFinite(chapterIdx) && chapterIdx >= 0) {
-      return {
-        chapterIdx,
-        localRatio: safeW > 1 ? Math.min(1, Math.max(0, (absolutePos - start) / Math.max(1, safeW - 1))) : 0,
-      };
-    }
-    cumulative = end;
-  }
-
-  const last = weightedChapters[weightedChapters.length - 1];
-  const lastIdx = Number(last?.chapterIdx);
-  return Number.isFinite(lastIdx) && lastIdx >= 0 ? { chapterIdx: lastIdx, localRatio: 1 } : null;
-};
-
-const resolveChapterPagePositionFromManifestByPage = (manifest, currentPageIndex, totalPages) => {
-  const chapters = Array.isArray(manifest?.chapters) ? manifest.chapters : [];
-  if (!chapters.length) return null;
-
-  const lengths = Array.isArray(manifest?.progressMetadata?.chapterLengths)
-    ? manifest.progressMetadata.chapterLengths
-    : [];
-
-  const resolveLengthFromTable = (ch, listIndex) => {
-    const title = String(ch?.title ?? '').trim();
-    if (title) {
-      const hit = lengths.find((e) => String(e?.title ?? e?.chapterTitle ?? '').trim() === title);
-      if (hit) {
-        const len = Number(hit.length ?? hit.codePointLength ?? 0);
-        if (Number.isFinite(len) && len > 0) return len;
-      }
-    }
-    const idx = Number(ch?.idx ?? ch?.chapterIdx);
-    const hit = lengths.find((e) => Number(e?.chapterIdx ?? e?.chapterIndex ?? e?.idx) === idx);
-    if (hit) {
-      const len = Number(hit.length ?? hit.codePointLength ?? 0);
-      if (Number.isFinite(len) && len > 0) return len;
-    }
-    if (
-      lengths.length === chapters.length &&
-      listIndex >= 0 &&
-      listIndex < lengths.length &&
-      lengths[listIndex]
-    ) {
-      const len = Number(lengths[listIndex].length ?? lengths[listIndex].codePointLength ?? 0);
-      if (Number.isFinite(len) && len > 0) return len;
-    }
-    return 0;
-  };
-
-  const fromTable = chapters
-    .map((ch, i) => {
-      const chapterIdx = Number(ch?.idx ?? ch?.chapterIdx);
-      if (!Number.isFinite(chapterIdx) || chapterIdx < 1) return null;
-      const length = lengths.length ? resolveLengthFromTable(ch, i) : 0;
-      return { chapterIdx, weight: length };
-    })
-    .filter(Boolean);
-
-  if (lengths.length > 0 && fromTable.length) {
-    const totalFromTable = fromTable.reduce((s, r) => s + r.weight, 0);
-    if (totalFromTable > 0) {
-      const hit = resolveChapterPagePositionByWeightedPageRatio(fromTable, currentPageIndex, totalPages);
-      if (hit != null) return hit;
-    }
-  }
-
-  const fromCodePoints = chapters
-    .map((ch) => {
-      const chapterIdx = Number(ch?.idx ?? ch?.chapterIdx);
-      if (!Number.isFinite(chapterIdx) || chapterIdx < 1) return null;
-      const len = Number(ch?.totalCodePoints ?? 0);
-      return {
-        chapterIdx,
-        weight: Number.isFinite(len) && len > 0 ? len : 0,
-      };
-    })
-    .filter(Boolean);
-
-  return resolveChapterPagePositionByWeightedPageRatio(fromCodePoints, currentPageIndex, totalPages);
-};
-
-const createFallbackLocator = (chapterIndex, blockIndex = 0, offset = 0) => ({
-  startLocator: { chapterIndex, blockIndex, offset },
-  endLocator: { chapterIndex, blockIndex, offset },
-});
-
-const resolveChapterCodePointLength = (manifest, chapterIndex) => {
-  const ch = Number(chapterIndex);
-  if (!Number.isFinite(ch) || ch < 1) return 0;
-
-  const mChapters = Array.isArray(manifest?.chapters) ? manifest.chapters : [];
-  const mHit = mChapters.find((row) => Number(row?.idx ?? row?.chapterIdx ?? row?.chapterIndex) === ch);
-  const fromManifest = Number(mHit?.totalCodePoints ?? 0);
-  if (Number.isFinite(fromManifest) && fromManifest > 0) return fromManifest;
-
-  return 0;
-};
-
-function parseXhtmlBody(xhtml) {
-  const parser = new DOMParser();
-  const doc = parser.parseFromString(xhtml, 'text/html');
-  const styleCss = collectSanitizedStyleCssFromDocument(doc);
-  const rawBody = doc.body ? doc.body.innerHTML : xhtml;
-  const bodyHTML = sanitizeXhtmlBodyHtml(rawBody);
-  return { styleCss, bodyHTML };
-}
+import {
+  loadCachedXhtmlContent,
+  XHTML_CACHE_INVALIDATED_EVENT,
+} from '../../../utils/viewer/xhtmlLoadCache';
+import { resolveViewerBookKey, resolveServerBookIdOrFallback } from '../../../hooks/common/hooksShared';
+import { getManifestFromCache } from '../../../utils/common/cache/manifestCache';
+import {
+  collectBlockEntries,
+  computeLineBoundsFromRuler,
+  contentPaddingFromMargin,
+  normalizeLocatorTarget,
+  parseXhtmlBody,
+  resolvePageIndexFromLocator,
+  resolveViewportLocatorEmit,
+} from '../../../utils/viewer/xhtmlViewerLocatorUtils';
 
 const XhtmlViewer = forwardRef(
   (
@@ -226,7 +45,6 @@ const XhtmlViewer = forwardRef(
       onProgressChange,
       onCurrentPageChange,
       onTotalPagesChange,
-      onCurrentChapterChange,
       onCurrentLineChange,
       settings = defaultSettings,
       initialAnchor,
@@ -244,19 +62,18 @@ const XhtmlViewer = forwardRef(
     const [pageHeight, setPageHeight] = useState(0);
     const [contentHeight, setContentHeight] = useState(0);
     const [currentPageIndex, setCurrentPageIndex] = useState(0);
+    const [reloadNonce, setReloadNonce] = useState(0);
     const touchStartX = useRef(0);
     const lastLocatorRef = useRef(null);
-    /** 뷰포트 start+end 페어 중복 emit 방지 */
     const lastEmittedViewportLocatorJsonRef = useRef(null);
-    const initialAnchorAppliedRef = useRef(false);
     const prevBidForInitialRef = useRef(null);
     const initialSeekAppliedRef = useRef(false);
+    const lastInitialAnchorKeyRef = useRef('');
     const lineBoundsRef = useRef([]);
     const [lineBoundsVersion, setLineBoundsReady] = useState(0);
     const lastReportedPagingRef = useRef({
       totalPages: null,
       currentPage: null,
-      progress: null,
     });
 
     const getSnappedOffsetAndHeight = useCallback((pageIdx, pH) => {
@@ -282,9 +99,13 @@ const XhtmlViewer = forwardRef(
       return { offsetY, visibleHeight };
     }, []);
 
+    const totalPages = Math.max(1, pageHeight ? Math.ceil(contentHeight / pageHeight) : 1);
+    const safePageIndex = Math.min(Math.max(0, currentPageIndex), Math.max(0, totalPages - 1));
+    const currentPage = safePageIndex + 1;
+
     const currentSnap = useMemo(
-      () => getSnappedOffsetAndHeight(currentPageIndex, pageHeight || 1),
-      [currentPageIndex, pageHeight, lineBoundsVersion, getSnappedOffsetAndHeight]
+      () => getSnappedOffsetAndHeight(safePageIndex, pageHeight || 1),
+      [safePageIndex, pageHeight, lineBoundsVersion, getSnappedOffsetAndHeight]
     );
 
     const contentHtml = useMemo(() => (xhtmlContent ? { __html: xhtmlContent.bodyHTML } : { __html: '' }), [xhtmlContent]);
@@ -297,17 +118,40 @@ const XhtmlViewer = forwardRef(
       [currentSnap.offsetY]
     );
 
-    const totalPages = Math.max(1, pageHeight ? Math.ceil(contentHeight / pageHeight) : 1);
-    const currentPage = Math.min(totalPages, currentPageIndex + 1);
-    const progress = totalPages <= 1 ? 0 : Math.round((currentPageIndex / (totalPages - 1)) * 100);
+    const bid = useMemo(() => resolveViewerBookKey(book, bookId), [book, bookId]);
 
-    const bid = useMemo(() => resolveLoaderBookId(book, bookId), [book, bookId]);
+    const manifest = useMemo(() => {
+      const cacheId = resolveServerBookIdOrFallback(book, bid);
+      if (!cacheId) return null;
+      return getManifestFromCache(cacheId);
+    }, [book, bid]);
+
+    const contentPadding = useMemo(
+      () => contentPaddingFromMargin(settings?.margin ?? defaultSettings.margin),
+      [settings?.margin]
+    );
+
+    const recomputeLineBounds = useCallback(() => {
+      const ruler = rulerRef.current;
+      if (!ruler) return;
+      lineBoundsRef.current = computeLineBoundsFromRuler(ruler);
+      setLineBoundsReady((v) => v + 1);
+    }, []);
+
+    const refreshContentHeight = useCallback(() => {
+      const ruler = rulerRef.current;
+      if (!ruler) return;
+      setContentHeight((prev) => {
+        const next = ruler.offsetHeight;
+        return prev === next ? prev : next;
+      });
+    }, []);
 
     useEffect(() => {
       if (prevBidForInitialRef.current === bid) return;
       prevBidForInitialRef.current = bid;
       initialSeekAppliedRef.current = false;
-      initialAnchorAppliedRef.current = false;
+      lastInitialAnchorKeyRef.current = '';
       lastEmittedViewportLocatorJsonRef.current = null;
       lastLocatorRef.current = null;
     }, [bid]);
@@ -317,23 +161,45 @@ const XhtmlViewer = forwardRef(
       lastEmittedViewportLocatorJsonRef.current = null;
     }, [xhtmlContent]);
 
+    useEffect(() => {
+      if (currentPageIndex === safePageIndex) return;
+      setCurrentPageIndex(safePageIndex);
+    }, [currentPageIndex, safePageIndex]);
+
     const emitLocator = useCallback(
       (loc, persistLoc = null, linePosition = 0) => {
         if (!loc?.startLocator) return;
         const endForKey = loc.endLocator ?? loc.startLocator;
-        const viewportKey = JSON.stringify({
-          start: loc.startLocator,
-          end: endForKey,
-        });
-        if (viewportKey === lastEmittedViewportLocatorJsonRef.current) return;
-        lastEmittedViewportLocatorJsonRef.current = viewportKey;
-        lastLocatorRef.current = persistLoc?.startLocator ? persistLoc : loc;
-        onCurrentChapterChange?.(loc.startLocator.chapterIndex);
-        // eventIdx 없이 읽기 locator만 전달 (이벤트 메타는 그래프 로드 후 별도)
-        onCurrentLineChange?.(linePosition, 0, { anchor: loc });
+        const viewportKey = toReadingLocatorKey(loc.startLocator, endForKey);
+        const locatorUnchanged = viewportKey === lastEmittedViewportLocatorJsonRef.current;
+
+        if (!locatorUnchanged) {
+          lastEmittedViewportLocatorJsonRef.current = viewportKey;
+          lastLocatorRef.current = persistLoc?.startLocator ? persistLoc : loc;
+          onCurrentLineChange?.(linePosition, 0, { anchor: loc });
+        }
+
+        const saveLoc = lastLocatorRef.current?.startLocator ?? loc.startLocator;
+        const metrics =
+          bid && saveLoc
+            ? resolveMetricsFromLocator(bid, saveLoc, { metricsReady: manifestReady })
+            : null;
+        if (metrics?.readingProgressPercent != null) {
+          onProgressChange?.(metrics.readingProgressPercent);
+        }
       },
-      [onCurrentChapterChange, onCurrentLineChange]
+      [onCurrentLineChange, bid, onProgressChange, manifestReady]
     );
+
+    useEffect(() => {
+      if (!bid || typeof window === 'undefined') return undefined;
+      const onInvalidate = (e) => {
+        if (String(e?.detail?.bookId) !== String(bid)) return;
+        setReloadNonce((n) => n + 1);
+      };
+      window.addEventListener(XHTML_CACHE_INVALIDATED_EVENT, onInvalidate);
+      return () => window.removeEventListener(XHTML_CACHE_INVALIDATED_EVENT, onInvalidate);
+    }, [bid]);
 
     useEffect(() => {
       let cancelled = false;
@@ -350,21 +216,10 @@ const XhtmlViewer = forwardRef(
         }
         setLoading(true);
         setError(null);
-        initialAnchorAppliedRef.current = false;
         try {
-          const cacheKey = `${XHTML_LOAD_CACHE_VERSION}::${bid}`;
-          let loadPromise = xhtmlLoadCache.get(cacheKey);
-          if (!loadPromise) {
-            loadPromise = loadCombinedXhtml(bid).catch((err) => {
-              xhtmlLoadCache.delete(cacheKey);
-              throw err;
-            });
-            xhtmlLoadCache.set(cacheKey, loadPromise);
-          }
-          const raw = await loadPromise;
+          const parsed = await loadCachedXhtmlContent(bid, loadCombinedXhtml, parseXhtmlBody);
           if (cancelled) return;
-          const { styleCss, bodyHTML } = parseXhtmlBody(raw);
-          setXhtmlContent({ styleCss, bodyHTML });
+          setXhtmlContent(parsed);
         } catch (e) {
           if (!cancelled) {
             setError(
@@ -379,7 +234,7 @@ const XhtmlViewer = forwardRef(
       };
       load();
       return () => { cancelled = true; };
-    }, [bid, manifestReady]);
+    }, [bid, manifestReady, reloadNonce]);
 
     useEffect(() => {
       const container = containerRef.current;
@@ -399,36 +254,16 @@ const XhtmlViewer = forwardRef(
     useEffect(() => {
       const ruler = rulerRef.current;
       if (!ruler) return;
-      setContentHeight((prev) => {
-        const next = ruler.offsetHeight;
-        return prev === next ? prev : next;
-      });
-      const ro = new ResizeObserver(() => {
-        const next = ruler.offsetHeight;
-        setContentHeight((prev) => (prev === next ? prev : next));
-      });
+      refreshContentHeight();
+      const ro = new ResizeObserver(() => refreshContentHeight());
       ro.observe(ruler);
       return () => ro.disconnect();
-    }, [xhtmlContent]);
+    }, [xhtmlContent, contentPadding.padding, settings?.fontSize, settings?.lineHeight, settings?.fontFamily, refreshContentHeight]);
 
     useLayoutEffect(() => {
-      const ruler = rulerRef.current;
-      if (!xhtmlContent || !ruler || !ruler.firstChild) return;
-      try {
-        const range = document.createRange();
-        range.selectNodeContents(ruler);
-        const rects = range.getClientRects();
-        const rulerRect = ruler.getBoundingClientRect();
-        const bounds = Array.from(rects)
-          .map((r) => ({ top: r.top - rulerRect.top, bottom: r.bottom - rulerRect.top }))
-          .filter((b) => b.bottom > b.top)
-          .sort((a, b) => a.top - b.top);
-        lineBoundsRef.current = bounds;
-        setLineBoundsReady((v) => v + 1);
-      } catch {
-        lineBoundsRef.current = [];
-      }
-    }, [xhtmlContent, contentHeight, settings?.fontSize, settings?.lineHeight]);
+      if (!xhtmlContent || !rulerRef.current) return;
+      recomputeLineBounds();
+    }, [xhtmlContent, contentHeight, settings?.fontSize, settings?.lineHeight, settings?.fontFamily, contentPadding.padding, recomputeLineBounds]);
 
     useEffect(() => {
       const prev = lastReportedPagingRef.current;
@@ -438,290 +273,151 @@ const XhtmlViewer = forwardRef(
       if (prev.currentPage !== currentPage) {
         onCurrentPageChange?.(currentPage);
       }
-      if (prev.progress !== progress) {
-        onProgressChange?.(progress);
-      }
-      lastReportedPagingRef.current = { totalPages, currentPage, progress };
-    }, [totalPages, currentPage, progress, onTotalPagesChange, onCurrentPageChange, onProgressChange]);
+      lastReportedPagingRef.current = { totalPages, currentPage };
+    }, [
+      totalPages,
+      currentPage,
+      onTotalPagesChange,
+      onCurrentPageChange,
+    ]);
 
     useEffect(() => {
       if (!xhtmlContent || !contentRef.current || !viewportRef.current) return;
-      const content = contentRef.current;
-      const viewport = viewportRef.current;
-      const blockEntries = collectBlockEntries(content);
 
-      const cacheId = Number(bid);
-      const manifest =
-        Number.isFinite(cacheId) && cacheId > 0 ? getManifestFromCache(cacheId) : null;
-      const chapterPagePosition = resolveChapterPagePositionFromManifestByPage(manifest, currentPageIndex, totalPages);
-      const resolvedChapter = chapterPagePosition?.chapterIdx ?? null;
-      const chapterLocalPageRatio = Number.isFinite(chapterPagePosition?.localRatio)
-        ? Math.min(1, Math.max(0, chapterPagePosition.localRatio))
-        : 0;
-      const chapterCodePointLength = resolveChapterCodePointLength(manifest, resolvedChapter);
-      const estimateChapterOffsetByPage = () => {
-        if (!Number.isFinite(chapterCodePointLength) || chapterCodePointLength <= 1) return 0;
-        return Math.min(
-          chapterCodePointLength - 1,
-          Math.max(0, Math.floor((chapterCodePointLength - 1) * chapterLocalPageRatio))
-        );
-      };
-      const shouldEmitFallbackLocator = (chapterIndex, fallbackBlockIndex) => {
-        if (!Number.isFinite(chapterIndex) || chapterIndex < 0) return false;
-        const prev = lastLocatorRef.current?.startLocator;
-        if (!prev) return true;
-        const prevChapter = Number(prev.chapterIndex);
-        const prevBlock = Number(prev.blockIndex ?? 0);
-        if (!Number.isFinite(prevChapter)) return true;
-        if (prevChapter !== chapterIndex) return true;
-        if (!Number.isFinite(prevBlock)) return true;
-        return prevBlock !== fallbackBlockIndex;
-      };
-      const emitResolvedFallback = () => {
-        const fallbackBlockIndex =
-          Number.isFinite(totalPages) && totalPages > 1
-            ? Math.max(0, currentPageIndex)
-            : 0;
-        const fallbackOffset = estimateChapterOffsetByPage();
-        if (
-          Number.isFinite(resolvedChapter) &&
-          resolvedChapter >= 1 &&
-          shouldEmitFallbackLocator(Number(resolvedChapter), fallbackBlockIndex)
-        ) {
-          emitLocator(createFallbackLocator(resolvedChapter, fallbackBlockIndex, fallbackOffset), null, currentPageIndex);
-        }
-      };
+      const result = resolveViewportLocatorEmit({
+        blockEntries: collectBlockEntries(contentRef.current),
+        viewportRect: viewportRef.current.getBoundingClientRect(),
+        rulerRoot: rulerRef.current,
+        manifest,
+        currentPageIndex: safePageIndex,
+        totalPages,
+        pageHeight,
+        snapOffsetY: currentSnap.offsetY,
+        snapVisibleHeight: currentSnap.visibleHeight,
+        prevStartLocator: lastLocatorRef.current?.startLocator ?? null,
+      });
 
-      if (!blockEntries.length) {
-        emitResolvedFallback();
-        return;
-      }
-
-      const root = viewport.getBoundingClientRect();
-      if (root.height < 8) {
-        return;
-      }
-
-      const rulerRoot = rulerRef.current;
-      const phForBlob = typeof pageHeight === 'number' && pageHeight > 0 ? pageHeight : 0;
-      const visible = blockEntries
-        .map(({ el, syntheticBlock }) => {
-          const rect = el.getBoundingClientRect();
-          const top = rect.top - root.top;
-          const bottom = rect.bottom - root.top;
-          const overlap = Math.min(bottom, root.height) - Math.max(top, 0);
-          return { el, syntheticBlock, top, bottom, overlap };
-        })
-        .filter((item) => item.overlap > 0)
-        .sort((a, b) => a.top - b.top);
-
-      if (!visible.length) {
-        emitResolvedFallback();
-        return;
-      }
-
-      const startRow = visible[0];
-      const endRow = visible[visible.length - 1];
-      const pageInBlock =
-        rulerRoot &&
-        visible.length === 1 &&
-        shouldEncodePageInBlockIndex(startRow.el, rulerRoot, totalPages, phForBlob);
-      const estimateOffsetInSingleBlob = () => {
-        if (!pageInBlock) return 0;
-        const totalCp = chapterCodePointLength;
-        if (!Number.isFinite(totalCp) || totalCp <= 1) return 0;
-        const elementTop = Number(startRow.el.offsetTop);
-        const elementHeight = Number(startRow.el.offsetHeight);
-        const viewportHeight = Number(currentSnap.visibleHeight || pageHeight || 0);
-        const viewportStartInElement = Number(currentSnap.offsetY) - elementTop;
-        const ratio =
-          Number.isFinite(elementTop) &&
-          Number.isFinite(elementHeight) &&
-          elementHeight > 0 &&
-          Number.isFinite(viewportStartInElement)
-            ? Math.min(1, Math.max(0, viewportStartInElement / Math.max(1, elementHeight - viewportHeight)))
-            : chapterLocalPageRatio;
-        return Math.min(totalCp - 1, Math.max(0, Math.floor((totalCp - 1) * ratio)));
-      };
-      const singleBlobOffset = estimateOffsetInSingleBlob();
-      // 단일 마커 blob: blockIndex에 페이지 인덱스 반영 (manifest 비율 고정 방지)
-      const logicalBlockForSingleBlob = pageInBlock ? currentPageIndex : startRow.syntheticBlock;
-      const logicalStartLoc = getBlockLocator(
-        startRow.el,
-        pageInBlock ? singleBlobOffset : 0,
-        logicalBlockForSingleBlob
-      );
-      const logicalEndLoc = getBlockLocator(
-        endRow.el,
-        pageInBlock ? singleBlobOffset : Math.max(0, (endRow.el.textContent || '').length),
-        pageInBlock ? currentPageIndex : endRow.syntheticBlock
-      );
-      if (!logicalStartLoc || !logicalEndLoc) return;
-
-      // persist locator도 동일한 page 인코딩 사용
-      const persistStartLoc = getBlockLocator(startRow.el, pageInBlock ? singleBlobOffset : 0, pageInBlock ? currentPageIndex : startRow.syntheticBlock);
-      const persistEndLoc = getBlockLocator(
-        endRow.el,
-        pageInBlock ? singleBlobOffset : Math.max(0, (endRow.el.textContent || '').length),
-        pageInBlock ? currentPageIndex : endRow.syntheticBlock
-      );
-
-      emitLocator({
-        startLocator: logicalStartLoc,
-        endLocator: logicalEndLoc,
-      }, {
-        startLocator: persistStartLoc ?? logicalStartLoc,
-        endLocator: persistEndLoc ?? logicalEndLoc,
-      }, currentPageIndex);
+      if (result.kind !== 'emit') return;
+      emitLocator(result.loc, result.persistLoc, result.linePosition);
     }, [
       xhtmlContent,
-      currentPageIndex,
+      safePageIndex,
       totalPages,
-      bid,
       emitLocator,
       pageHeight,
       currentSnap.offsetY,
       currentSnap.visibleHeight,
       lineBoundsVersion,
+      manifest,
     ]);
 
     useEffect(() => {
       if (!bid) {
-        initialAnchorAppliedRef.current = false;
         initialSeekAppliedRef.current = false;
+        lastInitialAnchorKeyRef.current = '';
       }
     }, [bid]);
 
-    const findChapterBlockElement = useCallback((root, chapter, block = 0) => {
-      const ch = Number(chapter);
-      const b = Number(block);
-      const safeB = Number.isFinite(b) ? b : 0;
-      if (!Number.isFinite(ch)) return null;
+    const resolvePageHeight = useCallback(() => {
+      if (typeof pageHeight === 'number' && pageHeight > 0) return pageHeight;
+      return containerRef.current?.clientHeight ?? 0;
+    }, [pageHeight]);
 
-      const tryChapter = (c) => {
-        const byBoth = root.querySelector(
-          `[data-chapter-index="${c}"][data-block-index="${safeB}"]`
-        );
-        if (byBoth) return byBoth;
-        const list = Array.from(root.querySelectorAll(`[data-chapter-index="${c}"]`));
-        if (!list.length) return null;
-        const anyBlockAttr = list.some(
-          (el) =>
-            el.getAttribute('data-block-index') != null && el.getAttribute('data-block-index') !== ''
-        );
-        if (anyBlockAttr) {
-          return (
-            list.find((el) => Number(el.getAttribute('data-block-index')) === safeB) ?? null
-          );
-        }
-        return list[safeB] ?? list[0] ?? null;
-      };
-
-      let el = tryChapter(ch);
-      if (!el && ch >= 1) el = tryChapter(ch - 1);
-      return el;
-    }, []);
-
-    const goPage = useCallback((direction) => {
-      if (direction === 1 && currentPageIndex <= 0) return;
-      if (direction === -1 && currentPageIndex >= totalPages - 1) return;
+    const goPageByDelta = useCallback((delta) => {
+      if (!delta) return;
       flushSync(() => {
-        setCurrentPageIndex((i) =>
-          direction === -1 ? Math.min(totalPages - 1, i + 1) : Math.max(0, i - 1)
-        );
+        setCurrentPageIndex((i) => {
+          const next = i + delta;
+          if (next < 0 || next >= totalPages) return i;
+          return next;
+        });
       });
-    }, [currentPageIndex, totalPages]);
+    }, [totalPages]);
 
-    const prevPage = useCallback(() => goPage(1), [goPage]);
-    const nextPage = useCallback(() => goPage(-1), [goPage]);
+    const prevPage = useCallback(() => goPageByDelta(-1), [goPageByDelta]);
+    const nextPage = useCallback(() => goPageByDelta(1), [goPageByDelta]);
 
     const displayAt = useCallback((target) => {
-      if (!target || !rulerRef.current) return false;
-      const ph =
-        typeof pageHeight === 'number' && pageHeight > 0
-          ? pageHeight
-          : containerRef.current?.clientHeight ?? 0;
-      if (!(ph > 0)) return false;
-      let locator = null;
-      if (typeof target === 'string' && target.trim().startsWith('{')) {
-        try {
-          const parsed = JSON.parse(target);
-          locator = parsed?.start ?? parsed?.startLocator ?? (Number.isFinite(parsed?.chapterIndex) ? parsed : null);
-        } catch (_) {}
-      } else if (target && typeof target === 'object') {
-        locator = target.start ?? target.startLocator ?? (Number.isFinite(target.chapterIndex) ? target : null);
-      }
-      if (!locator) return false;
       const ruler = rulerRef.current;
-      const el = findChapterBlockElement(ruler, locator.chapterIndex, locator.blockIndex ?? 0);
-      if (el) {
-        const bi = Number(locator.blockIndex ?? 0);
-        if (
-          ruler &&
-          shouldEncodePageInBlockIndex(el, ruler, totalPages, ph) &&
-          Number.isFinite(bi)
-        ) {
-          setCurrentPageIndex(Math.min(totalPages - 1, Math.max(0, bi)));
-          return true;
-        }
-        const pageIdx = Math.min(totalPages - 1, Math.max(0, Math.floor(el.offsetTop / ph)));
-        setCurrentPageIndex(pageIdx);
-        return true;
-      }
-      return false;
-    }, [pageHeight, totalPages, findChapterBlockElement]);
+      if (!target || !ruler) return false;
+
+      const ph = resolvePageHeight();
+      if (!(ph > 0)) return false;
+
+      const locator = normalizeLocatorTarget(target);
+      if (!locator) return false;
+
+      const pageIdx = resolvePageIndexFromLocator({
+        locator,
+        ruler,
+        manifest,
+        totalPages,
+        pageHeightPx: ph,
+      });
+      if (pageIdx == null) return false;
+
+      setCurrentPageIndex(pageIdx);
+      return true;
+    }, [resolvePageHeight, totalPages, manifest]);
 
     useLayoutEffect(() => {
       if (!xhtmlContent || !rulerRef.current || !totalPages) return;
-      const container = containerRef.current;
-      const ph =
-        typeof pageHeight === 'number' && pageHeight > 0
-          ? pageHeight
-          : container?.clientHeight ?? 0;
+
+      const ph = resolvePageHeight();
       if (!(ph > 0)) return;
-      if (initialSeekAppliedRef.current) return;
+
+      const anchorKey = toReadingLocatorKeyFromAnchor(initialAnchor);
+      if (!anchorKey) return;
+
+      if (initialSeekAppliedRef.current && lastInitialAnchorKeyRef.current === anchorKey) return;
 
       const ruler = rulerRef.current;
-      let applied = false;
-      const pageIdxFromTop = (top) =>
-        Math.min(totalPages - 1, Math.max(0, Math.floor(Number(top) / ph)));
-
       const initLoc = initialAnchor?.startLocator ?? initialAnchor?.start ?? initialAnchor;
-      if (initLoc?.chapterIndex != null || initLoc?.chapterIdx != null) {
-        const chapter = Number(initLoc.chapterIndex ?? initLoc.chapterIdx);
-        const block = Number(initLoc.blockIndex ?? 0);
-        const el = findChapterBlockElement(ruler, chapter, block);
-        if (el) {
-          const pageIdx =
-            shouldEncodePageInBlockIndex(el, ruler, totalPages, ph) && Number.isFinite(block)
-              ? Math.min(totalPages - 1, Math.max(0, block))
-              : pageIdxFromTop(el.offsetTop);
-          setCurrentPageIndex(pageIdx);
-          applied = true;
-        }
-      }
+      if (initLoc?.chapterIndex == null && initLoc?.chapterIdx == null) return;
 
-      initialAnchorAppliedRef.current = applied;
-      initialSeekAppliedRef.current = true;
+      const pageIdx = resolvePageIndexFromLocator({
+        locator: initLoc,
+        ruler,
+        manifest,
+        totalPages,
+        pageHeightPx: ph,
+      });
+
+      if (pageIdx != null) {
+        setCurrentPageIndex(pageIdx);
+        lastInitialAnchorKeyRef.current = anchorKey;
+        initialSeekAppliedRef.current = true;
+      }
     }, [
       xhtmlContent,
       totalPages,
       pageHeight,
       initialAnchor,
-      findChapterBlockElement,
+      manifest,
+      resolvePageHeight,
     ]);
+
+    const applySettings = useCallback(() => {
+      recomputeLineBounds();
+      refreshContentHeight();
+    }, [recomputeLineBounds, refreshContentHeight]);
 
     useImperativeHandle(ref, () => ({
       prevPage,
       nextPage,
       getCurrentLocator: () => lastLocatorRef.current,
       moveToProgress: (pct) => {
-        const idx = Math.min(totalPages - 1, Math.max(0, Math.round((pct / 100) * (totalPages - 1))));
-        setCurrentPageIndex(idx);
+        const numericBid = Number(bid);
+        if (!Number.isFinite(numericBid) || numericBid <= 0) return;
+        const abs = absoluteOffsetFromReadingProgressPercent(numericBid, pct);
+        const loc = locatorFromBookAbsoluteOffset(numericBid, abs);
+        if (loc) {
+          displayAt({ startLocator: loc, endLocator: loc });
+        }
       },
       displayAt,
-      applySettings: () => {},
-    }), [prevPage, nextPage, totalPages, displayAt]);
+      applySettings,
+    }), [prevPage, nextPage, displayAt, applySettings, bid]);
 
     const handleKeyDown = useCallback((e) => {
       if (e.target.closest('input, textarea, [contenteditable]')) return;
@@ -749,14 +445,14 @@ const XhtmlViewer = forwardRef(
 
     if (loading) {
       return (
-        <div className="flex items-center justify-center w-full h-full text-gray-600">
+        <div className="flex items-center justify-center w-full h-full text-gray-600" role="status" aria-live="polite">
           로딩 중...
         </div>
       );
     }
     if (error) {
       return (
-        <div className="flex items-center justify-center w-full h-full text-red-600">
+        <div className="flex items-center justify-center w-full h-full text-red-600" role="alert">
           {error}
         </div>
       );
@@ -768,12 +464,23 @@ const XhtmlViewer = forwardRef(
     const lineHeight = settings?.lineHeight ?? 1.5;
 
     return (
-      <div ref={containerRef} className="w-full h-full overflow-hidden bg-white relative" tabIndex={0} onKeyDown={handleKeyDown} onWheel={(e) => e.preventDefault()} onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd} style={{ touchAction: 'pan-y' }}>
+      <div
+        ref={containerRef}
+        className="w-full h-full overflow-hidden bg-white relative"
+        tabIndex={0}
+        role="region"
+        aria-label={`책 본문 뷰어, ${currentPage} / ${totalPages} 페이지`}
+        onKeyDown={handleKeyDown}
+        onWheel={(e) => e.preventDefault()}
+        onTouchStart={handleTouchStart}
+        onTouchEnd={handleTouchEnd}
+        style={{ touchAction: 'pan-y' }}
+      >
         {styleCss ? <style>{styleCss}</style> : null}
         <style>{`
           .xhtml-viewer-content {
-            padding: 24px;
-            padding-bottom: 32px;
+            padding: ${contentPadding.padding}px;
+            padding-bottom: ${contentPadding.paddingBottom}px;
             box-sizing: border-box;
             width: 100%;
             max-width: 100%;

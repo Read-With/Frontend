@@ -5,15 +5,15 @@ import {
   processRelationTags,
   safeNum,
   extractRadarChartData,
-  getPositivityColor,
-  getPositivityLabel,
   getConnectionStatus,
 } from "../../../utils/graph/relationUtils.js";
+import { getPositivityColor, getPositivityLabel } from "../../../utils/styles/relationStyles.js";
 import { getFolderKeyFromFilename, getEventDataByIndex, getDetectedMaxChapter } from "../../../utils/graph/graphData.js";
 import { useTooltipPosition, useClickOutside } from "../../../hooks/ui/tooltipHooks";
 import { useRelationData } from "../../../hooks/graph/useRelationData.jsx";
 import { mergeRefs } from "../../../utils/styles/styles";
-import { getUnifiedEventInfoForNodeTooltip } from "../../../utils/viewer/viewerEventUtils";
+import { getUnifiedEventInfoForTooltip } from "../../../utils/viewer/viewerEventProgressUtils";
+import { resolveTooltipBookId, isGraphOnlyGraphPage } from "../graphShared";
 import { COLORS, createButtonStyle, ANIMATION_VALUES, unifiedNodeTooltipStyles, unifiedNodeAnimations } from "../../../utils/styles/styles.js";
 import { Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, ResponsiveContainer } from 'recharts';
 import "../RelationGraph.css";
@@ -217,29 +217,15 @@ function UnifiedNodeInfo({
 
   // 관계 데이터 관리 (슬라이드바 모드에서 사용)
   const nodeId = safeNum(nodeData?.id);
-  const normalizedBookId = useMemo(() => {
-    if (bookId !== null && bookId !== undefined) {
-      const parsed = Number(bookId);
-      if (Number.isFinite(parsed) && parsed > 0) return parsed;
-    }
-    if (actualFilename) {
-      const parsed = Number(actualFilename);
-      if (Number.isFinite(parsed) && parsed > 0) return parsed;
-    }
-    return null;
-  }, [bookId, actualFilename]);
-  const { fetchData } = useRelationData('standalone', nodeId, nodeId, chapterNum, eventNum, dynamicMaxChapter, actualFilename, normalizedBookId);
+  const numericBookId = useMemo(
+    () => resolveTooltipBookId(bookId, actualFilename),
+    [bookId, actualFilename],
+  );
+  const { fetchData } = useRelationData('standalone', nodeId, nodeId, chapterNum, eventNum, dynamicMaxChapter, actualFilename, numericBookId);
 
-  const getUnifiedEventInfo = useCallback(
-    () =>
-      getUnifiedEventInfoForNodeTooltip({
-        currentEvent,
-        prevValidEvent,
-        eventNum,
-        chapterNum,
-        folderKey,
-      }),
-    [currentEvent, prevValidEvent, eventNum, chapterNum, folderKey],
+  const unifiedEventInfo = useMemo(
+    () => getUnifiedEventInfoForTooltip({ currentEvent, prevValidEvent, eventNum }),
+    [currentEvent, prevValidEvent, eventNum],
   );
 
   // 노드 등장 여부 확인 함수 (ViewerTopBar 방식 적용)
@@ -263,7 +249,6 @@ function UnifiedNodeInfo({
         return;
       }
 
-      const unifiedEventInfo = getUnifiedEventInfo();
       const targetEventNum = unifiedEventInfo.eventNum;
 
       const json = getEventDataByIndex(folderKey, chapterNum, targetEventNum);
@@ -358,7 +343,7 @@ function UnifiedNodeInfo({
       setError(err.message);
       setIsNodeAppeared(false);
     }
-  }, [data, nodeData, chapterNum, getUnifiedEventInfo, folderKey, elements]);
+  }, [data, nodeData, chapterNum, unifiedEventInfo, folderKey, elements]);
 
   // 노드 등장 여부 확인
   useEffect(() => {
@@ -391,8 +376,7 @@ function UnifiedNodeInfo({
     return nodeData.personalityText || nodeData.description || '';
   }, [nodeData]);
 
-  const displayDescription = currentDescription;
-  const displayHasDescription = !!(displayDescription && displayDescription.trim());
+  const displayHasDescription = !!(currentDescription && currentDescription.trim());
 
   // 요약 데이터 — API(pov-summaries) 우선, 없으면 안내 문구
   const summaryData = useMemo(() => {
@@ -497,7 +481,6 @@ function UnifiedNodeInfo({
     }
 
     try {
-      const unifiedEventInfo = getUnifiedEventInfo();
       const targetEventNum = unifiedEventInfo.eventNum;
       const json = getEventDataByIndex(folderKey, chapterNum, targetEventNum);
       if (!json || !json.relations) return [];
@@ -536,7 +519,7 @@ function UnifiedNodeInfo({
     } catch {
       return [];
     }
-  }, [nodeData, chapterNum, displayMode, folderKey, elements, apiMacroData, getUnifiedEventInfo]);
+  }, [nodeData, chapterNum, displayMode, folderKey, elements, apiMacroData, unifiedEventInfo]);
 
   // 연결 상태 확인
   const connectionStatus = useMemo(() => {
@@ -654,7 +637,7 @@ function UnifiedNodeInfo({
   }
 
   // 거시 그래프 모드에서는 등장 여부 체크를 하지 않음
-  const isGraphOnlyPage = window.location.pathname.includes('/user/graph/');
+  const isGraphOnlyPage = isGraphOnlyGraphPage();
   
   // 노드가 현재 챕터/이벤트에서 등장하지 않는 경우 (거시 그래프가 아닌 경우에만)
   if (!isGraphOnlyPage && !isNodeAppeared) {
@@ -722,16 +705,11 @@ function UnifiedNodeInfo({
             wordBreak: 'keep-all',
           }}
         >
-          {(() => {
-            const unifiedEventInfo = getUnifiedEventInfo();
-            if (unifiedEventInfo.name) {
-              return `챕터 ${chapterNum} 이벤트 "${unifiedEventInfo.name}"에서는 등장하지 않습니다`;
-            } else if (unifiedEventInfo.eventNum) {
-              return `챕터 ${chapterNum} 이벤트 ${unifiedEventInfo.eventNum}에서는 등장하지 않습니다`;
-            } else {
-              return `챕터 ${chapterNum}에서는 등장하지 않습니다`;
-            }
-          })()}
+          {unifiedEventInfo.name
+            ? `챕터 ${chapterNum} 이벤트 "${unifiedEventInfo.name}"에서는 등장하지 않습니다`
+            : unifiedEventInfo.eventNum
+              ? `챕터 ${chapterNum} 이벤트 ${unifiedEventInfo.eventNum}에서는 등장하지 않습니다`
+              : `챕터 ${chapterNum}에서는 등장하지 않습니다`}
         </p>
       </div>
     );
@@ -1005,7 +983,7 @@ function UnifiedNodeInfo({
       >
         {displayHasDescription ? (
           <span>
-            {displayDescription}
+            {currentDescription}
           </span>
         ) : (
           <span style={{ color: COLORS.textSecondary }}>설명 정보가 없습니다.</span>
@@ -1260,7 +1238,7 @@ function UnifiedNodeInfo({
                       letterSpacing: '-0.01em',
                       wordBreak: 'keep-all',
                     }}>
-                      {displayDescription}
+                      {currentDescription}
                     </p>
                   </div>
                 )}

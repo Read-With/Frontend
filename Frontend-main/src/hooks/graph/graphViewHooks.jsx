@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { buildSuggestions, filterGraphElements } from '../../utils/graph/searchUtils.jsx';
 import { filterMainCharacters } from '../../utils/graph/graphDataUtils';
-import { determineFinalElements, sortElementsById } from '../../utils/graph/graphUtils';
+import { determineFinalElements, sortElementsByDataId } from '../../utils/graph/graphUtils';
 
 export function useGraphState() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
@@ -68,7 +68,7 @@ export function useGraphElementPipeline({
   filteredElements,
 }) {
   const sortedElements = useMemo(
-    () => sortElementsById(elements),
+    () => sortElementsByDataId(elements),
     [elements]
   );
 
@@ -236,6 +236,33 @@ export function useGraphSearch(elements, onSearchStateChange = null, currentChap
     return isSearchActive && filteredElements?.length > 0 ? filteredElements : (elements || []);
   }, [isSearchActive, filteredElements, elements]);
 
+  const searchPanelState = useMemo(
+    () => ({
+      ...currentSearchState,
+      isResetFromSearch,
+    }),
+    [currentSearchState, isResetFromSearch]
+  );
+
+  const searchState = useMemo(
+    () => ({
+      ...searchPanelState,
+      elements: elements || [],
+    }),
+    [searchPanelState, elements]
+  );
+
+  const searchActions = useMemo(
+    () => ({
+      onSearchSubmit: handleSearchSubmit,
+      clearSearch,
+      closeSuggestions,
+      onGenerateSuggestions: setSearchTerm,
+      handleKeyDown,
+    }),
+    [handleSearchSubmit, clearSearch, closeSuggestions, setSearchTerm, handleKeyDown]
+  );
+
   return {
     searchTerm,
     isSearchActive,
@@ -243,6 +270,9 @@ export function useGraphSearch(elements, onSearchStateChange = null, currentChap
     fitNodeIds,
     finalElements: searchFinalElements,
     isResetFromSearch,
+    searchPanelState,
+    searchState,
+    searchActions,
     handleSearchSubmit,
     clearSearch,
     setSearchTerm,

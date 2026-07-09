@@ -2,8 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import useAuth from '../hooks/auth/useAuth';
 import OAuthCallback from '../components/auth/OAuthCallback';
-import { getGoogleOAuthRedirectUri } from '../utils/common/authUtils';
-import { createAndStoreGoogleOAuthState } from '../utils/security/oauthSecurity';
+import { isGoogleClientIdConfigured, startGoogleOAuthLogin } from '../utils/common/authUtils';
 import './HomePage.css';
 
 // 스크롤 섹션 컴포넌트들
@@ -49,8 +48,7 @@ const HeroSection = () => {
   const handleGoogleLogin = async () => {
     setIsLoggingIn(true);
     try {
-      const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID;
-      if (!GOOGLE_CLIENT_ID || GOOGLE_CLIENT_ID === 'your-google-client-id') {
+      if (!isGoogleClientIdConfigured()) {
         setIsLoggingIn(false);
         alert(
           'Google OAuth Client ID가 설정되지 않았습니다.\n' +
@@ -59,22 +57,11 @@ const HeroSection = () => {
         );
         return;
       }
-      const GOOGLE_REDIRECT_URI = getGoogleOAuthRedirectUri();
-      
-      // 구글 OAuth URL 구성
-      const oauthState = createAndStoreGoogleOAuthState();
-      const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?` +
-        `client_id=${GOOGLE_CLIENT_ID}&` +
-        `redirect_uri=${encodeURIComponent(GOOGLE_REDIRECT_URI)}&` +
-        `response_type=code&` +
-        `scope=email profile&` +
-        `access_type=offline&` +
-        `prompt=consent&` +
-        `state=${encodeURIComponent(oauthState)}`;
-      
-      // 구글 인증 페이지로 리다이렉트
-      window.location.href = authUrl;
-      
+      const result = startGoogleOAuthLogin();
+      if (!result?.ok) {
+        setIsLoggingIn(false);
+        alert(result.error || '구글 로그인을 시작할 수 없습니다.');
+      }
     } catch (_err) {
       setIsLoggingIn(false);
       alert('구글 로그인 중 오류가 발생했습니다.');

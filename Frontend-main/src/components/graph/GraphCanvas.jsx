@@ -5,16 +5,17 @@ import UnifiedNodeInfo from './tooltip/UnifiedNodeInfo';
 import UnifiedEdgeTooltip from './tooltip/UnifiedEdgeTooltip';
 import { graphStyles, COLORS, ANIMATION_VALUES } from '../../utils/styles/styles.js';
 import { GRAPH_LAYOUT_CONSTANTS } from './graphConstants.js';
+import { resolveChapterSidebarWidth } from './graphShared.js';
 
 const SIDEBAR_WIDTH = 480;
-const TOP_OFFSET = 54;
+const { TOP_BAR_HEIGHT } = GRAPH_LAYOUT_CONSTANTS;
 const ANIMATION_DURATION = 700;
 
 const sidebarBaseStyle = {
   position: 'fixed',
-  top: `${TOP_OFFSET}px`,
+  top: `${TOP_BAR_HEIGHT}px`,
   width: `${SIDEBAR_WIDTH}px`,
-  height: `calc(100vh - ${TOP_OFFSET}px)`,
+  height: `calc(100vh - ${TOP_BAR_HEIGHT}px)`,
   background: '#fff',
   borderRadius: '0px',
   boxShadow: '2px 0 8px rgba(0,0,0,0.06)',
@@ -365,8 +366,7 @@ function GraphCanvas({
   const { stylesheet, layout, newNodeIds, isDropdownSelection } = cytoscapeConfig;
   const { onShowNodeTooltip, onShowEdgeTooltip, onClearTooltip, selectedNodeIdRef, selectedEdgeIdRef } = tooltipHandlers;
 
-  const { SIDEBAR } = GRAPH_LAYOUT_CONSTANTS;
-  const sidebarLeft = isSidebarOpen ? SIDEBAR.OPEN_WIDTH : SIDEBAR.CLOSED_WIDTH;
+  const sidebarLeft = resolveChapterSidebarWidth(isSidebarOpen);
 
   return (
     <div
@@ -453,7 +453,6 @@ function GraphCanvas({
               stylesheet={stylesheet}
               layout={layout}
               cyRef={cyRef}
-              nodeSize={10}
               fitNodeIds={fitNodeIds}
               searchTerm={searchTerm}
               isSearchActive={isSearchActive}

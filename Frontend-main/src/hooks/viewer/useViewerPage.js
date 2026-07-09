@@ -1,27 +1,28 @@
-/** 뷰어 페이지: URL·책·그래프·북마크·설정 오케스트레이션 */
+/** 뷰어 페이지: URL·책·북마크·설정·진도·그래프 파이프라인 오케스트레이션 */
 
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useParams, useLocation, useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { useLocalStorage } from '../common/useLocalStorage';
-import { useGraphDataLoader } from '../graph/useGraphDataLoader';
-import { useServerBookMatching, useBooksServerQuery } from '../books/bookHooks';
-import { useViewerUrlParams, flagsFromGraphMode } from './useViewerUrlParams';
-import { resolveViewerGraphTarget } from '../../utils/viewer/viewerUtils';
-import { 
-  defaultSettings, 
-  saveViewerMode, 
-  loadViewerMode,
-  settingsUtils,
+import { useServerBookMatching } from '../books/bookHooks';
+import { useViewerUrlParams } from './useViewerUrlParams';
+import { useViewerManifest } from './useViewerManifest';
+import { useViewerGraphState } from './useViewerGraphState';
+import { useViewerProgress } from './useViewerProgress';
+import { useViewerTransition } from './useViewerTransition';
+import { useViewerGraphPipeline } from './useViewerGraphPipeline';
+import { useProgressAutoSave } from './useProgressAutoSave';
+import { defaultSettings, settingsUtils } from '../../utils/common/settingsUtils';
+import {
   bookUtils,
-  getServerBookId
-} from '../../utils/viewer/viewerUtils';
+  waitForPaint,
+  waitForViewerMethod,
+} from '../../utils/viewer/viewerCoreStateUtils';
+import { resolveServerBookIdOrFallback, resolveViewerBookKey } from '../common/hooksShared';
+import { anchorToLocators } from '../../utils/common/locatorUtils';
 import { getFolderKeyFromFilename } from '../../utils/graph/graphData';
 import { useBookmarks } from '../bookmarks/bookmarkHooks';
-import { getBookManifest } from '../../utils/api/api';
-import { getManifestFromCache, getMaxChapter } from '../../utils/common/cache/manifestCache';
 import { userViewerBookmarksPath } from '../../utils/navigation/viewerPaths';
-import { anchorToLocators, toEventAnchorPayload } from '../../utils/common/locatorUtils';
 
 function runViewerPaging(viewerRef, direction) {
   const ref = viewerRef.current;
@@ -41,12 +42,6 @@ function runViewerPaging(viewerRef, direction) {
   }
 }
 
-// Waits for two animation frames — enough for a layout recalculation to flush to the screen.
-const waitForPaint = () => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
-
-// 매 렌더 새 객체 방지
-const EMPTY_VIEWER_SEARCH_STATE = Object.freeze({});
-
 export function useViewerPage() {
   const { filename: bookId } = useParams();
   const location = useLocation();
@@ -61,16 +56,10 @@ export function useViewerPage() {
   const isFromLibrary = previousPage?.pathname === '/user/mypage' || location.state?.fromLibrary === true;
 
   const {
-    urlSearchParams: _urlSearchParams,
-    savedChapter: _savedChapter,
-    savedPage: _savedPage,
-    savedGraphMode: _savedGraphMode,
-    initialGraphMode,
     currentPage,
     setCurrentPage,
     currentChapter,
     setCurrentChapter,
-    currentChapterRef: _currentChapterRef,
   } = useViewerUrlParams({ skipHistoryMutationsRef: skipViewerHistoryMutationRef });
 
   const {
@@ -79,317 +68,157 @@ export function useViewerPage() {
     matchedServerBook
   } = useServerBookMatching(bookId, { skipBookIdRedirectRef: skipViewerHistoryMutationRef });
 
-  const { data: serverBooksListData } = useBooksServerQuery();
-
   const viewerRef = useRef(null);
   const [reloadKey, setReloadKey] = useState(0);
   const [failCount, setFailCount] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
-  const [currentEvent, setCurrentEvent] = useState(null);
-  const [events, setEvents] = useState([]);
-  const [maxChapter, setMaxChapter] = useState(1);
-  const [isInitialChapterDetected, setIsInitialChapterDetected] = useState(false);
-  
-  const [graphFullScreen, setGraphFullScreen] = useState(initialGraphMode.fullScreen);
-  const [showGraph, setShowGraph] = useState(initialGraphMode.show);
-  
-  const [currentCharIndex, setCurrentCharIndex] = useState(0);
-  const [loading, setLoading] = useState(true);
-  const [isDataReady, setIsDataReady] = useState(true);
-  const [graphViewState, setGraphViewState] = useState(null);
-  const [hideIsolated, setHideIsolated] = useState(true);
-  const [edgeLabelVisible, setEdgeLabelVisible] = useState(true);
-  const [filterStage, setFilterStage] = useState(0);
-  const [isReloading, setIsReloading] = useState(false);
-  const [isGraphLoading, setIsGraphLoading] = useState(true);
-  // 확정 전 중간 이벤트로 그래프를 보이지 않게 할 때 사용
-  const [isFineGraphLoading, setFineGraphLoading] = useState(false);
   const [showToolbar, setShowToolbar] = useState(false);
-  
-  const prevElementsRef = useRef([]);
-  const eventsRef = useRef([]);
-  
-  const [graphDiff, setGraphDiff] = useState({
-    added: [],
-    removed: [],
-    updated: [],
-  });
 
-  const [manifestLoaded, setManifestLoaded] = useState(false);
+  const book = useMemo(
+    () =>
+      bookUtils.createBookObject({
+        stateBook: location.state?.book,
+        matchedServerBook,
+        serverBook,
+        bookId,
+        loadingServerBook,
+      }),
+    [location.state?.book, matchedServerBook, bookId, serverBook, loadingServerBook]
+  );
 
-  const book = useMemo(() => {
-    const base = bookUtils.createBookObject({
-      stateBook: location.state?.book,
-      matchedServerBook,
-      serverBook,
-      bookId,
-      loadingServerBook
-    });
-    const idStr = bookId != null ? String(bookId).trim() : '';
-    if (!idStr) return base;
-    const row = (serverBooksListData?.books || []).find((b) => String(b?.id) === idStr);
-    if (!row) return base;
-    const serverP = Number(row.progress);
-    const listProgress = Number.isFinite(serverP)
-      ? Math.min(100, Math.max(0, Math.round(serverP)))
-      : 0;
-    return { ...base, progress: listProgress };
-  }, [
-    location.state?.book,
-    matchedServerBook,
-    bookId,
-    serverBook,
-    loadingServerBook,
-    serverBooksListData?.books,
-  ]);
+  const bookKey = useMemo(
+    () => resolveViewerBookKey(book, bookId) || null,
+    [book, bookId]
+  );
 
-  const cleanBookId = useMemo(() => {
-    const serverId = getServerBookId(book);
-    if (serverId) {
-      return String(serverId);
-    }
-    return bookId?.trim() || '';
-  }, [book, bookId]);
-
-  const [progress, setProgress] = useState(0);
+  const [progress, setProgress] = useState(null);
   const [settings, setSettings] = useLocalStorage('xhtml_viewer_settings', defaultSettings);
-  const lastSyncedServerProgressRef = useRef({ bookKey: null, value: null });
 
   const folderKey = useMemo(() => getFolderKeyFromFilename(bookId), [bookId]);
 
   useEffect(() => {
-    lastSyncedServerProgressRef.current = { bookKey: null, value: null };
-    setProgress(0);
-  }, [cleanBookId]);
-
-  useEffect(() => {
-    const p = Number(book?.progress);
-    if (!cleanBookId || !Number.isFinite(p) || p < 0) return;
-    const prev = lastSyncedServerProgressRef.current;
-    if (prev.bookKey === cleanBookId && prev.value === p) return;
-    lastSyncedServerProgressRef.current = { bookKey: cleanBookId, value: p };
-    setProgress(Math.min(100, Math.max(0, Math.round(p))));
-  }, [cleanBookId, book?.progress, setProgress]);
-
-  const graphBookId = useMemo(() => {
-    const serverId = getServerBookId(book);
-    if (serverId) {
-      return String(serverId);
-    }
-    return bookId;
-  }, [book, bookId]);
-
-  // currentEvent가 잠깐 null/플레이스홀더일 때 그래프가 1번으로 깜빡이는 것 방지
-  const graphLoaderLastGoodRef = useRef({ chapter: 0, eventNum: 1 });
-  const graphLoaderTarget = useMemo(() => {
-    const target = resolveViewerGraphTarget({
-      currentChapter,
-      currentEvent,
-      lastGood: graphLoaderLastGoodRef.current,
-    });
-    if (currentEvent && target.eventIdx >= 1) {
-      graphLoaderLastGoodRef.current = { chapter: target.chapter, eventNum: target.eventIdx };
-    }
-    return target;
-  }, [currentChapter, currentEvent]);
+    setProgress(null);
+  }, [bookKey]);
 
   const {
-    elements,
+    currentEvent,
+    setCurrentEvent,
+    setEvents,
     setElements,
-    setIsDataEmpty,
-    currentChapterData,
-    maxChapter: detectedMaxChapter,
-    loading: graphLoading,
-    isDataEmpty
-  } = useGraphDataLoader(graphBookId, graphLoaderTarget.chapter, graphLoaderTarget.eventIdx);
+    setGraphViewState,
+    setCurrentCharIndex,
+    setIsDataReady,
+    setIsGraphLoading,
+    setFineGraphLoading,
+    setShowGraph,
+    graphState,
+    graphActions,
+    graphViewerState,
+    searchState,
+    searchActions,
+  } = useViewerGraphState({ currentChapter, setCurrentChapter, bookKey });
 
-  const [prevValidEvent, setPrevValidEvent] = useState(null);
-  const prevValidEventRef = useRef(null);
+  const manifestServerBookId = useMemo(
+    () => resolveServerBookIdOrFallback(book, bookId),
+    [book, bookId]
+  );
 
-  const resetPrevValidEvent = useCallback(() => {
-    prevValidEventRef.current = null;
-    setPrevValidEvent(null);
-  }, []);
+  const { manifestLoaded } = useViewerManifest(manifestServerBookId);
 
-  useEffect(() => {
-    if (currentEvent && currentEvent.chapter === currentChapter) {
-      prevValidEventRef.current = currentEvent;
-      setPrevValidEvent(currentEvent);
-    }
-  }, [currentEvent, currentChapter]);
+  const {
+    progressTopBar,
+    setProgressTopBar,
+    progressMetricsReady,
+    readingLocatorKey,
+    serverResumeAnchor,
+    applyReadingLocator,
+    updateReadingPercent,
+    markViewerPageReady,
+    isViewerPageReady,
+  } = useViewerProgress({
+    bookKey,
+    manifestLoaded,
+    progress,
+    setProgress,
+    setReloadKey,
+    viewerRef,
+    reloadKey,
+  });
 
-  const graphPhase = useMemo(() => {
-    if (isReloading) return 'reloading';
-    if (isFineGraphLoading) return 'fine';
-    if (isGraphLoading || graphLoading !== false) return 'loading';
-    return 'idle';
-  }, [isReloading, isFineGraphLoading, isGraphLoading, graphLoading]);
+  const { fineGraphLoading, graphPhase, isDataReady } = graphViewerState;
 
-  const manifestServerBookId = useMemo(() => {
-    const fromBook = getServerBookId(book);
-    if (fromBook) return fromBook;
-    const fromUrl = Number(bookId);
-    if (Number.isFinite(fromUrl) && fromUrl > 0) return fromUrl;
-    return null;
-  }, [book, bookId]);
+  const { transitionState, resetTransition } = useViewerTransition({
+    currentEvent,
+    currentChapter,
+    fineGraphLoading,
+    isReloading: graphPhase === 'reloading',
+    graphPhase,
+    isDataReady,
+  });
 
-  useEffect(() => {
-    if (!manifestServerBookId) {
-      setManifestLoaded(true);
-      return;
-    }
-    setManifestLoaded(false);
-    if (getManifestFromCache(manifestServerBookId)) {
-      setManifestLoaded(true);
-      return;
-    }
-    let cancelled = false;
-    (async () => {
-      try {
-        await getBookManifest(manifestServerBookId);
-      } catch (_e) {
-        void 0;
-      } finally {
-        if (!cancelled) setManifestLoaded(true);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [manifestServerBookId]);
+  const { graphApiError } = useViewerGraphPipeline({
+    book,
+    currentChapter,
+    currentEvent,
+    graphActions,
+    manifestLoaded,
+    isViewerPageReady,
+    resetTransition,
+    setElements,
+    setEvents,
+    setIsGraphLoading,
+    setFineGraphLoading,
+    setIsDataReady,
+  });
 
-  useEffect(() => {
-    const serverBookId = getServerBookId(book);
-    if (serverBookId) {
-      if (!manifestLoaded) return;
-      const cachedMaxChapter = getMaxChapter(serverBookId);
-      if (cachedMaxChapter && cachedMaxChapter > 0) {
-        setMaxChapter(cachedMaxChapter);
-      } else if (detectedMaxChapter > 0) {
-        setMaxChapter(detectedMaxChapter);
-      }
-    } else if (detectedMaxChapter > 0) {
-      setMaxChapter(detectedMaxChapter);
-    }
-  }, [manifestLoaded, book, detectedMaxChapter]);
-  
-  useEffect(() => {
-    if (graphFullScreen) {
-      saveViewerMode("graph");
-    } else if (showGraph) {
-      saveViewerMode("split");
-    } else {
-      saveViewerMode("viewer");
-    }
-  }, [showGraph, graphFullScreen]);
+  const { cachedLocation, flushProgressAsync } = useProgressAutoSave({
+    bookId: bookKey,
+    currentEvent,
+    readingLocatorKey,
+    getCurrentLocator: () => viewerRef.current?.getCurrentLocator?.(),
+    metricsReady: progressMetricsReady,
+  });
 
-  
+  const graphStateWithProgress = useMemo(
+    () => ({ ...graphState, progressTopBar, progressMetricsReady }),
+    [graphState, progressTopBar, progressMetricsReady]
+  );
+
   useEffect(() => {
     if (failCount >= 2) {
-      toast.info("🔄 계속 실패하면 브라우저 새로고침을 해주세요!");
+      toast.info('🔄 계속 실패하면 브라우저 새로고침을 해주세요!');
     }
   }, [failCount]);
-  
+
   useEffect(() => {
-    document.body.style.overflow = "hidden";
+    document.body.style.overflow = 'hidden';
     return () => {
-      document.body.style.overflow = "auto";
+      document.body.style.overflow = 'auto';
     };
   }, []);
-  
+
   const {
     bookmarks,
-    setBookmarks,
-    loading: bookmarksLoading,
     showBookmarkList,
-    setShowBookmarkList,
     handleAddBookmark,
-    handleRemoveBookmark: _handleRemoveBookmark,
     handleBookmarkSelect,
-    handleDeleteBookmark
-  } = useBookmarks(cleanBookId, {
+  } = useBookmarks(bookKey, {
     viewerRef,
     setFailCount
   });
-  
-  const resetGraphTransientState = useCallback((initialChapterDetected) => {
-    setCurrentEvent(null);
-    setEvents([]);
-    setIsDataReady(false);
-    setIsGraphLoading(true);
-    resetPrevValidEvent();
-    setIsInitialChapterDetected(initialChapterDetected);
-  }, [resetPrevValidEvent]);
 
-  const waitForViewerMethod = useCallback((methodName, timeoutMs = 3000) => {
-    if (viewerRef.current?.[methodName]) return Promise.resolve(true);
-    return new Promise((resolve) => {
-      const deadline = Date.now() + timeoutMs;
-      const id = setInterval(() => {
-        if (viewerRef.current?.[methodName]) {
-          clearInterval(id);
-          resolve(true);
-        } else if (Date.now() >= deadline) {
-          clearInterval(id);
-          resolve(false);
-        }
-      }, 100);
-    });
-  }, []);
-
-  useEffect(() => {
-    resetGraphTransientState(true);
-  }, [currentChapter, resetGraphTransientState]);
-  
-  useEffect(() => {
-    eventsRef.current = events;
-  }, [events]);
-
-  useEffect(() => {
-    if (!graphLoading) {
-      setIsGraphLoading(false);
-    }
-  }, [elements, graphLoading, isDataEmpty]);
-  
-  useEffect(() => {
-    prevElementsRef.current = elements;
-  }, [elements]);
-  
-  useEffect(() => {
-    if (performance && performance.getEntriesByType) {
-      const navEntries = performance.getEntriesByType("navigation");
-      if (navEntries.length > 0 && navEntries[0].type === "reload") {
-        setIsReloading(true);
-        resetGraphTransientState(false);
-        
-        const flags = flagsFromGraphMode(loadViewerMode());
-        if (flags) {
-          setGraphFullScreen(flags.fullScreen);
-          setShowGraph(flags.show);
-        }
-        
-        const timer = setTimeout(() => {
-          setIsReloading(false);
-          setIsGraphLoading(false);
-        }, 1000);
-        
-        return () => clearTimeout(timer);
-      }
-    }
-  }, [resetGraphTransientState]);
-  
   const handlePrevPage = useCallback(() => runViewerPaging(viewerRef, 'prev'), []);
   const handleNextPage = useCallback(() => runViewerPaging(viewerRef, 'next'), []);
-  
+
   const handleOpenSettings = useCallback(() => {
     setShowSettingsModal(true);
   }, []);
-  
+
   const handleCloseSettings = useCallback(() => {
     setShowSettingsModal(false);
   }, []);
-  
+
   const handleApplySettings = useCallback((newSettings) => {
     const result = settingsUtils.applySettings(
       newSettings,
@@ -398,16 +227,16 @@ export function useViewerPage() {
       setShowGraph,
       setReloadKey,
       viewerRef,
-      cleanBookId
+      bookKey
     );
-    
+
     if (result.success) {
       toast.success(result.message);
     } else {
       toast.error(result.message);
     }
-  }, [settings, cleanBookId]);
-  
+  }, [settings, bookKey, setShowGraph]);
+
   const onToggleBookmarkList = useCallback(() => {
     navigate(userViewerBookmarksPath(bookId), {
       state: {
@@ -416,37 +245,34 @@ export function useViewerPage() {
       },
     });
   }, [navigate, bookId, location.state, book]);
-  
+
   const handleSliderChange = useCallback(async (value) => {
     setProgress(value);
-    const ready = await waitForViewerMethod('moveToProgress');
+    const ready = await waitForViewerMethod(viewerRef, 'moveToProgress');
     if (!ready) {
-      console.warn('프로그레스 이동 실패: 뷰어가 준비되지 않았습니다.');
       return;
     }
     try {
       await viewerRef.current.moveToProgress(value);
-    } catch (e) {
-      console.error('프로그레스 이동 실패:', e);
-    }
-  }, [setProgress, viewerRef, waitForViewerMethod]);
-  
-  const toggleGraph = useCallback(() => {
-    const newShowGraph = !showGraph;
-    setShowGraph(newShowGraph);
+    } catch {}
+  }, []);
 
-    const updatedSettings = {
-      ...settings,
-      showGraph: newShowGraph,
-    };
-    setSettings(updatedSettings);
+  const toggleGraph = useCallback(() => {
+    setShowGraph((prevShowGraph) => {
+      const newShowGraph = !prevShowGraph;
+      setSettings((prevSettings) => ({
+        ...prevSettings,
+        showGraph: newShowGraph,
+      }));
+      return newShowGraph;
+    });
 
     const applyAndSync = async () => {
       try {
-        await waitForViewerMethod('applySettings', 20, 100);
-        const locWrap = viewerRef.current?.getCurrentLocator?.();
-        const start = locWrap?.startLocator ?? locWrap?.start;
-        const end = locWrap?.endLocator ?? locWrap?.end ?? start;
+        await waitForViewerMethod(viewerRef, 'applySettings');
+        const { startLocator: start, endLocator: end } = anchorToLocators(
+          viewerRef.current?.getCurrentLocator?.()
+        );
 
         viewerRef.current?.applySettings?.();
         await waitForPaint();
@@ -467,37 +293,14 @@ export function useViewerPage() {
           }
         }
         await waitForPaint();
-      } catch (_e) {
+      } catch {
         toast.error('화면 모드 전환 중 오류가 발생했습니다.');
       }
     };
 
     applyAndSync();
-  }, [showGraph, settings, setSettings, viewerRef, waitForViewerMethod, progress]);
-  
-  const handleFitView = useCallback(() => {
-  }, []);
-  
-  const handleLocationChange = useCallback(async () => {
-    if (!viewerRef.current) return;
-    try {
-      const loc = await viewerRef.current.getCurrentLocator?.();
-      const { startLocator: start } = anchorToLocators(loc);
-      if (start) {
-        const anchor = toEventAnchorPayload(loc);
-        setCurrentChapter(start.chapterIndex);
-        setCurrentEvent({
-          anchor,
-          chapter: start.chapterIndex,
-          chapterIdx: start.chapterIndex,
-          eventIdx: 1,
-          eventNum: 1,
-          placeholder: true,
-        });
-      }
-    } catch (_) {}
-  }, []);
-  
+  }, [setSettings, setShowGraph, progress]);
+
   const exitToMypage = useCallback(() => {
     skipViewerHistoryMutationRef.current = true;
     const prefix = (import.meta.env.BASE_URL || '/').replace(/\/$/, '');
@@ -505,72 +308,10 @@ export function useViewerPage() {
     navigate(path, { replace: true });
   }, [navigate]);
 
-  const graphState = useMemo(
-    () => ({
-      currentChapter,
-      currentEvent,
-      prevValidEvent,
-      elements,
-      graphViewState,
-      hideIsolated,
-      edgeLabelVisible,
-      graphDiff,
-      currentCharIndex,
-      graphFullScreen,
-      showGraph,
-      loading: isGraphLoading,
-      isDataReady,
-      isInitialChapterDetected,
-    }),
-    [
-      currentChapter,
-      currentEvent,
-      prevValidEvent,
-      elements,
-      graphViewState,
-      hideIsolated,
-      edgeLabelVisible,
-      graphDiff,
-      currentCharIndex,
-      graphFullScreen,
-      showGraph,
-      isGraphLoading,
-      isDataReady,
-      isInitialChapterDetected,
-    ]
-  );
-
-  const graphActions = useMemo(
-    () => ({
-      setCurrentChapter,
-      setGraphFullScreen,
-      setShowGraph,
-      setHideIsolated,
-      setEdgeLabelVisible,
-      handleFitView,
-      setElements,
-      setIsDataEmpty,
-      filterStage,
-      setFilterStage,
-    }),
-    [
-      setCurrentChapter,
-      setGraphFullScreen,
-      setShowGraph,
-      setHideIsolated,
-      setEdgeLabelVisible,
-      handleFitView,
-      setElements,
-      setIsDataEmpty,
-      filterStage,
-      setFilterStage,
-    ]
-  );
-
   const viewerState = useMemo(
     () => ({
-      filename: bookId,
-      bookId,
+      bookKey,
+      routeBookId: bookId,
       navigate,
       viewerRef,
       book,
@@ -578,13 +319,11 @@ export function useViewerPage() {
       totalPages,
       progress,
       settings,
-      loading,
-      graphPhase,
-      isDataReady,
       showToolbar,
-      isDataEmpty,
+      ...graphViewerState,
     }),
     [
+      bookKey,
       bookId,
       navigate,
       book,
@@ -592,86 +331,31 @@ export function useViewerPage() {
       totalPages,
       progress,
       settings,
-      loading,
-      graphPhase,
-      isDataReady,
       showToolbar,
-      isDataEmpty,
+      graphViewerState,
     ]
   );
 
   return {
-    filename: bookId,
-    bookId,
-    location,
-    navigate,
-    previousPage,
-    isFromLibrary,
     viewerRef,
     reloadKey,
-    setReloadKey,
-    failCount,
-    setFailCount,
-    progress,
-    setProgress,
-    currentPage,
-    setCurrentPage,
-    totalPages,
-    setTotalPages,
     showSettingsModal,
-    setShowSettingsModal,
-    settings,
-    setSettings,
-    currentChapter,
+    setProgress,
+    setCurrentPage,
+    setTotalPages,
     setCurrentChapter,
-    currentEvent,
     setCurrentEvent,
-    events,
-    setEvents,
-    maxChapter,
-    setMaxChapter,
-    graphFullScreen,
-    setGraphFullScreen,
-    showGraph,
-    setShowGraph,
-    setElements,
-    graphViewState,
     setGraphViewState,
-    hideIsolated,
-    setHideIsolated,
-    edgeLabelVisible,
-    setEdgeLabelVisible,
-    graphDiff,
-    setGraphDiff,
-    currentCharIndex,
     setCurrentCharIndex,
-    loading,
-    setLoading,
-    isDataReady,
-    setIsDataReady,
-    isReloading,
-    setIsReloading,
-    isGraphLoading,
-    setIsGraphLoading,
-    isFineGraphLoading,
-    setFineGraphLoading,
-    showToolbar,
     setShowToolbar,
-    cleanBookId,
     bookmarks,
-    setBookmarks,
-    bookmarksLoading,
     showBookmarkList,
-    setShowBookmarkList,
-    prevValidEventRef,
-    prevElementsRef,
     book,
+    bookKey,
     manifestLoaded,
     folderKey,
-    elements,
-    currentChapterData,
-    detectedMaxChapter,
-    graphLoading,
+    previousPage,
+    isFromLibrary,
     handlePrevPage,
     handleNextPage,
     handleAddBookmark,
@@ -681,14 +365,24 @@ export function useViewerPage() {
     handleApplySettings,
     onToggleBookmarkList,
     handleSliderChange,
-    handleDeleteBookmark,
     toggleGraph,
-    handleFitView,
-    handleLocationChange,
     exitToMypage,
     graphState,
+    graphStateWithProgress,
     graphActions,
     viewerState,
-    searchState: EMPTY_VIEWER_SEARCH_STATE,
+    searchState,
+    searchActions,
+    setProgressTopBar,
+    progressMetricsReady,
+    readingLocatorKey,
+    serverResumeAnchor,
+    applyReadingLocator,
+    updateReadingPercent,
+    markViewerPageReady,
+    cachedLocation,
+    transitionState,
+    graphApiError,
+    flushProgressAsync,
   };
 }

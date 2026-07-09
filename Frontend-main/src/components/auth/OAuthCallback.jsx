@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import useAuth from '../../hooks/auth/useAuth';
 import {
@@ -22,16 +22,34 @@ const OAuthCallback = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { login } = useAuth();
+  const handledRef = useRef(false);
 
   useEffect(() => {
     const handleOAuthCallback = async () => {
+      let inflightKey = null;
       try {
-      if (isProcessing || isCompleted) {
+      if (handledRef.current || isProcessing || isCompleted) {
         return;
       }
-      
+
       const code = searchParams.get('code');
       const oauthErrorParam = searchParams.get('error');
+      const oauthState = searchParams.get('state');
+
+      if (!code && !oauthErrorParam) {
+        setIsLoading(false);
+        return;
+      }
+
+      inflightKey = code ? `oauth_inflight_${code}` : null;
+      if (inflightKey && sessionStorage.getItem(inflightKey) === '1') {
+        return;
+      }
+      if (inflightKey) {
+        sessionStorage.setItem(inflightKey, '1');
+      }
+
+      handledRef.current = true;
 
       if (oauthErrorParam && !code) {
         clearGoogleOAuthStateSession();
@@ -52,8 +70,9 @@ const OAuthCallback = () => {
         return;
       }
 
-      const stateCheck = verifyGoogleOAuthState(searchParams.get('state'));
+      const stateCheck = verifyGoogleOAuthState(oauthState);
       if (!stateCheck.isValid) {
+        if (inflightKey) sessionStorage.removeItem(inflightKey);
         setError(stateCheck.error || 'OAuth state 검증에 실패했습니다. 다시 로그인해주세요.');
         setIsLoading(false);
         return;
@@ -274,8 +293,10 @@ OAuth 로그인을 다시 시도해주세요.`);
             
             login(frontendUserData);
             setIsCompleted(true);
-            
+
             localStorage.removeItem('oauth_processed_code');
+            clearGoogleOAuthStateSession();
+            if (inflightKey) sessionStorage.removeItem(inflightKey);
             
             navigate('/mypage');
           } else {
@@ -473,6 +494,7 @@ OAuth 로그인을 다시 시도해주세요.`);
         setIsProcessing(false);
       }
       } catch (outerError) {
+        if (inflightKey) sessionStorage.removeItem(inflightKey);
         setError(`처리 실패: ${outerError.message}`);
         setIsLoading(false);
         setIsProcessing(false);
@@ -483,7 +505,7 @@ OAuth 로그인을 다시 시도해주세요.`);
       setError(`초기화 실패: ${err.message}`);
       setIsLoading(false);
     });
-  }, []);
+  }, [searchParams, isProcessing, isCompleted, login, navigate]);
 
   if (isLoading || isProcessing) {
     return (
@@ -616,6 +638,8 @@ OAuth 로그인을 다시 시도해주세요.`);
                 ? `해결 방법: 백엔드 서버에서 CORS 설정이 필요합니다. 백엔드 개발자에게 ${typeof window !== 'undefined' ? window.location.origin : '현재 프론트 주소'}을(를) 허용하도록 CORS 설정을 요청하세요.`
                 : error.includes('이미 등록된 Google 계정')
                 ? '해결 방법: 이미 가입된 Google 계정입니다. 다른 Google 계정으로 로그인하거나, 기존 계정의 비밀번호를 찾아 로그인하세요. 문제가 지속되면 관리자에게 문의하세요.'
+                : error.includes('State 파라미터') || error.includes('OAuth state')
+                ? '해결 방법: 홈에서 Google 로그인을 다시 시도해주세요. 시크릿 모드라면 일반 창에서 시도하거나, localhost와 127.0.0.1 주소를 섞어 쓰지 않았는지 확인해주세요.'
                 : '해결 방법: 백엔드 서버가 실행 중인지 확인하고, Google OAuth 설정을 확인해주세요.'}
             </p>
           </div>

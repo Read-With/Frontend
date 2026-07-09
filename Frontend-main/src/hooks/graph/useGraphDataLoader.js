@@ -1,16 +1,16 @@
 /** 챕터·이벤트 캐시 기반 그래프 elements 로드·diff */
 
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { toNumberOrNull } from '../../utils/common/numberUtils';
 import {
   sortEventsByIdx,
-  normalizeEventIdx,
+  clampEventIdxToMax,
   filterEventsUpTo,
   filterEventsBefore,
   getMaxEventIdx,
   resolveMaxChapter,
 } from '../../utils/graph/graphData';
-import { createCharacterMaps, aggregateCharactersFromEvents, buildNodeWeights } from '../../utils/graph/characterUtils';
+import { createCharacterMaps, aggregateCharactersFromEvents, buildNodeWeightsFromEvents, toNodeWeightsOrNull } from '../../utils/graph/characterUtils';
+import { resolvePositiveBookId } from '../common/hooksShared';
 import { convertRelationsToElements, calcGraphDiff } from '../../utils/graph/graphDataUtils';
 import { normalizeRelation, isValidRelation, relationEventMetaPassthrough } from '../../utils/graph/relationUtils';
 import {
@@ -18,7 +18,7 @@ import {
   reconstructChapterGraphState,
 } from '../../utils/common/cache/chapterEventCache';
 import { getManifestFromCache } from '../../utils/common/cache/manifestCache';
-import { graphDataTransformUtils } from '../../utils/viewer/viewerUtils';
+import { graphDataTransformUtils } from '../../utils/viewer/viewerGraphUtils';
 
 const createEmptyLastComputedGraph = () => ({
   cacheKey: null,
@@ -71,10 +71,7 @@ export function useGraphDataLoader(bookId, chapterIdx, eventIdx = null) {
 
   const lastComputedRef = useRef(createEmptyLastComputedGraph());
 
-  const numericBookId = useMemo(() => {
-    const parsed = toNumberOrNull(bookId);
-    return parsed && parsed > 0 ? parsed : null;
-  }, [bookId]);
+  const numericBookId = useMemo(() => resolvePositiveBookId(bookId), [bookId]);
 
   const setEmptyState = useCallback(() => {
     setElements([]);
@@ -168,7 +165,7 @@ export function useGraphDataLoader(bookId, chapterIdx, eventIdx = null) {
       })
       .filter(Boolean);
 
-    const nodeWeights = buildNodeWeights(aggregatedCharacters);
+    const nodeWeights = buildNodeWeightsFromEvents(eventList);
 
     const elements = convertRelationsToElements(
       normalizedRelations,
@@ -178,7 +175,7 @@ export function useGraphDataLoader(bookId, chapterIdx, eventIdx = null) {
       idToMain,
       idToNames,
       'api',
-      Object.keys(nodeWeights).length ? nodeWeights : null,
+      toNodeWeightsOrNull(nodeWeights),
       null,
       latestEventMeta,
       idToProfileImage,
@@ -289,7 +286,7 @@ export function useGraphDataLoader(bookId, chapterIdx, eventIdx = null) {
 
         if (checkCancelled(isCancelledRef)) return;
         
-        const targetIdx = normalizeEventIdx(requestedEventIdx, maxEventIdxInChapter);
+        const targetIdx = clampEventIdxToMax(requestedEventIdx, maxEventIdxInChapter);
 
         if (!maxEventIdxInChapter) {
           if (!checkCancelled(isCancelledRef)) {
@@ -365,7 +362,7 @@ export function useGraphDataLoader(bookId, chapterIdx, eventIdx = null) {
         globalThis.clearInterval(intervalId);
         setCacheVersion((v) => v + 1);
       }
-    }, 300);
+    }, 80);
 
     return () => globalThis.clearInterval(intervalId);
   }, [numericBookId, chapterIdx, isChapterEventsReadySync]);
@@ -380,21 +377,11 @@ export function useGraphDataLoader(bookId, chapterIdx, eventIdx = null) {
 
     const cancelledRef = { current: false };
     setIsDataEmpty(false);
-
-    let loadingKickTimer = null;
-    const warm = isChapterEventsReadySync(numericBookId, chapterIdx);
-    if (warm) {
-      loadingKickTimer = globalThis.setTimeout(() => {
-        if (!cancelledRef.current) setLoading(true);
-      }, 40);
-    } else {
+    if (!isChapterEventsReadySync(numericBookId, chapterIdx)) {
       setLoading(true);
     }
 
     loadData(numericBookId, chapterIdx, eventIdx, cancelledRef).finally(() => {
-      if (loadingKickTimer != null) {
-        globalThis.clearTimeout(loadingKickTimer);
-      }
       if (!cancelledRef.current) {
         setLoading(false);
       }
@@ -402,9 +389,6 @@ export function useGraphDataLoader(bookId, chapterIdx, eventIdx = null) {
 
     return () => {
       cancelledRef.current = true;
-      if (loadingKickTimer != null) {
-        globalThis.clearTimeout(loadingKickTimer);
-      }
     };
   }, [numericBookId, chapterIdx, eventIdx, cacheVersion, loadData, resetState, isChapterEventsReadySync]);
 

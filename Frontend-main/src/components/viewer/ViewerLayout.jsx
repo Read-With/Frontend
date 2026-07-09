@@ -89,15 +89,20 @@ const flexLabelCenter = {
 
 const ViewerProgressBar = memo(function ViewerProgressBar({
   showControls,
-  progress = 0,
+  progress = null,
   setProgress,
   onSliderChange,
   currentPage = 1,
   totalPages = 1,
+  progressMetricsReady = true,
 }) {
-  const clamped = Math.max(0, Math.min(progress, 100));
+  const hasProgress = progress != null && Number.isFinite(Number(progress));
+  const clamped = hasProgress ? Math.max(0, Math.min(Number(progress), 100)) : 0;
+  const percentLabel =
+    progressMetricsReady && hasProgress ? `${Math.round(clamped)}%` : '계산중';
 
   const onChange = (e) => {
+    if (!progressMetricsReady) return;
     const value = Number(e.target.value);
     if (setProgress) setProgress(value);
     if (onSliderChange) onSliderChange(value);
@@ -124,6 +129,7 @@ const ViewerProgressBar = memo(function ViewerProgressBar({
         max="100"
         value={clamped}
         onChange={onChange}
+        disabled={!progressMetricsReady}
         style={{
           width: '60%',
           accentColor: progressBarColor,
@@ -133,12 +139,15 @@ const ViewerProgressBar = memo(function ViewerProgressBar({
           boxShadow: '0 1px 6px rgba(79,109,222,0.07)',
           outline: 'none',
           appearance: 'none',
+          opacity: progressMetricsReady ? 1 : 0.55,
+          cursor: progressMetricsReady ? 'pointer' : 'not-allowed',
         }}
         aria-label="진행률 슬라이더"
+        aria-busy={!progressMetricsReady}
         className="progressbar-slider"
       />
       <span style={{ fontWeight: 700, color: progressBarColor, fontSize: '1.08rem', minWidth: 60, textAlign: 'right' }}>
-        {clamped}%
+        {percentLabel}
       </span>
       <style>{PROGRESS_SLIDER_CSS}</style>
     </div>
@@ -150,6 +159,7 @@ function ViewerToolbar({
   currentChapter = 1,
   onPrev,
   onNext,
+  isBookmarked = false,
   onAddBookmark,
   onToggleBookmarkList,
   onOpenSettings,
@@ -298,9 +308,9 @@ function ViewerToolbar({
               </button>
             </div>
             <div className="toolbar-group" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginRight: '1rem' }}>
-              <button type="button" onClick={onAddBookmark} className="xhtml-toolbar-btn" aria-label="북마크" title="현재 위치에 북마크 추가" style={{ ...TOOLBAR_BTN, width: '7rem' }} onMouseOver={onBtnOver} onMouseOut={onBtnOut}>
+              <button type="button" onClick={onAddBookmark} className="xhtml-toolbar-btn" aria-label="북마크" title={isBookmarked ? '현재 위치 북마크 제거' : '현재 위치에 북마크 추가'} style={{ ...TOOLBAR_BTN, width: '7rem' }} onMouseOver={onBtnOver} onMouseOut={onBtnOut}>
                 <span style={flexLabelCenter}>
-                  <span className="material-symbols-outlined" style={iconMb}>bookmark_add</span>
+                  <span className="material-symbols-outlined" style={iconMb}>{isBookmarked ? 'bookmark' : 'bookmark_add'}</span>
                   북마크
                 </span>
               </button>
@@ -381,8 +391,8 @@ function ViewerToolbar({
       {showMobileMenu && (
         <div className="absolute top-full left-0 right-0 bg-white border-t border-gray-200 shadow-lg z-50 animate-slide-up">
           <div className="p-4 grid grid-cols-2 gap-3">
-            <button type="button" onClick={onAddBookmark} className={mobileMenuClass} style={TOOLBAR_BTN} onMouseOver={onBtnOver} onMouseOut={onBtnOut} title="현재 위치에 북마크 추가">
-              <span className="material-symbols-outlined">bookmark_add</span>
+            <button type="button" onClick={onAddBookmark} className={mobileMenuClass} style={TOOLBAR_BTN} onMouseOver={onBtnOver} onMouseOut={onBtnOut} title={isBookmarked ? '현재 위치 북마크 제거' : '현재 위치에 북마크 추가'}>
+              <span className="material-symbols-outlined">{isBookmarked ? 'bookmark' : 'bookmark_add'}</span>
               <span className="text-sm font-semibold">북마크</span>
             </button>
             <button type="button" onClick={onToggleBookmarkList} className={mobileMenuClass} style={TOOLBAR_BTN} onMouseOver={onBtnOver} onMouseOut={onBtnOut} title="북마크 목록 보기">
@@ -429,9 +439,11 @@ function ViewerLayout({
   currentChapter,
   progress,
   setProgress,
+  progressMetricsReady = true,
   showControls,
   onPrev,
   onNext,
+  isBookmarked = false,
   onAddBookmark,
   onToggleBookmarkList,
   onOpenSettings,
@@ -472,6 +484,7 @@ function ViewerLayout({
           currentChapter={currentChapter}
           onPrev={onPrev}
           onNext={onNext}
+          isBookmarked={isBookmarked}
           onAddBookmark={onAddBookmark}
           onToggleBookmarkList={onToggleBookmarkList}
           onOpenSettings={onOpenSettings}
@@ -531,6 +544,7 @@ function ViewerLayout({
           onSliderChange={onSliderChange}
           currentPage={currentPage}
           totalPages={totalPages}
+          progressMetricsReady={progressMetricsReady}
         />
       </div>
     </div>

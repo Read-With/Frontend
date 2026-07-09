@@ -2,18 +2,18 @@ import { describe, it, expect } from 'vitest';
 import {
   filterEventsBefore,
   filterEventsUpTo,
-  getFolderKeyFromFilename,
   getMaxEventIdx,
   sortEventsByIdx,
 } from './graphData.js';
+import { toApiFolderKey } from './graphUtils.jsx';
 
 describe('graphData', () => {
-  it('getFolderKeyFromFilename', () => {
-    expect(getFolderKeyFromFilename('12')).toBe('api:12');
-    expect(getFolderKeyFromFilename('api:9')).toBe('api:9');
-    expect(getFolderKeyFromFilename(5)).toBe('api:5');
-    expect(getFolderKeyFromFilename('')).toBeNull();
-    expect(getFolderKeyFromFilename('0')).toBeNull();
+  it('toApiFolderKey', () => {
+    expect(toApiFolderKey('12')).toBe('api:12');
+    expect(toApiFolderKey('api:9')).toBe('api:9');
+    expect(toApiFolderKey(5)).toBe('api:5');
+    expect(toApiFolderKey('')).toBeNull();
+    expect(toApiFolderKey('0')).toBeNull();
   });
 
   it('sorts chapter events by eventIdx ascending and keeps missing indexes last', () => {

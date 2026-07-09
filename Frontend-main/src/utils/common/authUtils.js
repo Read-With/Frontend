@@ -1,6 +1,7 @@
 /** 환경 URL·OAuth·인증 정리 (VITE_* 로 덮어쓰기) */
 
 import { clearAuthTokenStorage } from '../security/authTokenStorage';
+import { createAndStoreGoogleOAuthState, secureLog } from '../security/oauthSecurity';
 import { trimTrailingSlash } from './stringUtils';
 
 export const DEFAULT_API_BASE_URL = 'https://readwith-be.onrender.com';
@@ -90,3 +91,60 @@ export const getDevBackendHintUrl = () => {
 export const clearAuthData = () => {
   clearAuthTokenStorage();
 };
+
+const INVALID_GOOGLE_CLIENT_IDS = new Set([
+  'CLIENT_ID',
+  'your_google_client_id_here',
+  'your-google-client-id',
+]);
+
+export function isGoogleClientIdConfigured() {
+  const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
+  return Boolean(clientId && !INVALID_GOOGLE_CLIENT_IDS.has(clientId));
+}
+
+export function buildGoogleOAuthAuthUrl() {
+  const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
+  const redirectUri = getGoogleOAuthRedirectUri();
+  const oauthState = createAndStoreGoogleOAuthState();
+
+  return (
+    `https://accounts.google.com/o/oauth2/v2/auth?` +
+    `client_id=${clientId}&` +
+    `redirect_uri=${encodeURIComponent(redirectUri)}&` +
+    `response_type=code&` +
+    `scope=email profile&` +
+    `access_type=offline&` +
+    `prompt=consent&` +
+    `state=${encodeURIComponent(oauthState)}`
+  );
+}
+
+/** Google OAuth 로그인 페이지로 이동. 실패 시 { ok: false, error } 반환 */
+export function startGoogleOAuthLogin() {
+  if (!isGoogleClientIdConfigured()) {
+    return {
+      ok: false,
+      error:
+        'Google OAuth 설정이 올바르지 않습니다. .env 파일에 VITE_GOOGLE_CLIENT_ID를 설정해주세요.',
+    };
+  }
+
+  const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
+  const redirectUri = getGoogleOAuthRedirectUri();
+
+  secureLog('Google OAuth 로그인 시작', {
+    clientId: `${clientId.substring(0, 10)}...`,
+    redirectUri,
+  });
+
+  try {
+    window.location.href = buildGoogleOAuthAuthUrl();
+  } catch (error) {
+    return {
+      ok: false,
+      error: error?.message || 'Google OAuth를 시작할 수 없습니다.',
+    };
+  }
+  return { ok: true };
+}

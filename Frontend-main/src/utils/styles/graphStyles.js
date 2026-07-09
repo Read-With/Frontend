@@ -1,17 +1,19 @@
-/** Cytoscape 스타일시트·레이아웃 상수 */
+/** Cytoscape 스타일시트·레이아웃·노드 크기 유틸 */
 
+import { isValidNodeWeight } from '../graph/characterUtils.js';
+
+// styles.js가 graphStyles를 re-export하므로 styles.js를 import하지 않는다.
 const DURATION = { FAST: '0.18s', SLOW: '0.4s' };
 
-// graphStyles는 styles.js에서 다시 re-export되므로 styles.js를 직접 import하지 않는다.
 const COLORS = {
   backgroundLighter: '#f8fafc',
-  border: '#e5e7eb',
-  textPrimary: '#5C6F5C',
   backgroundLight: '#f8f9fc',
+  border: '#e5e7eb',
+  borderLight: '#e3e6ef',
+  textPrimary: '#5C6F5C',
+  textSecondary: '#6c757d',
   primary: '#5C6F5C',
   white: '#ffffff',
-  textSecondary: '#6c757d',
-  borderLight: '#e3e6ef',
   nodeBackground: '#eee',
   nodeBorder: '#5B7BA0',
   nodeText: '#444',
@@ -20,82 +22,70 @@ const COLORS = {
   highlightBlue: '#5C6F5C',
 };
 
-export const DEFAULT_LAYOUT = {
-  name: "preset",
-  padding: 40,
-  nodeRepulsion: 20000,
-  idealEdgeLength: 300,
-  animate: false,
-  fit: true,
-  randomize: false,
-  nodeOverlap: 0,
-  avoidOverlap: true,
-  nodeSeparation: 60,
-  randomSeed: 42,
-  componentSpacing: 300,
-  boundingBox: undefined // 컨테이너 크기에 맞춰 자동 조정
+export const NODE_SIZE_MIN = 30;
+export const NODE_SIZE_MAX = 80;
+
+const EDGE_TEXT_STYLE = {
+  color: COLORS.edgeText,
+  'text-background-color': COLORS.white,
+  'text-background-opacity': 0.85,
+  'text-background-shape': 'roundrectangle',
+  'text-background-padding': 2,
+  'text-outline-color': COLORS.white,
+  'text-outline-width': 2,
 };
 
-export const SEARCH_LAYOUT = {
-  name: "cose",
-  padding: 5,
-  nodeRepulsion: 2500,
-  idealEdgeLength: 135,
-  animate: true,
-  animationDuration: 200,
-  fit: true,
-  randomize: false,
-  nodeOverlap: 0,
-  avoidOverlap: true,
-  nodeSeparation: 20,
-  randomSeed: 42,
-  gravity: 0.3,
-  refresh: 10,
-  componentSpacing: 110,
-  coolingFactor: 0.8,
-  initialTemp: 100
+const baseNodeGraphStyle = {
+  'background-color': COLORS.nodeBackground,
+  'border-width': (ele) => (ele.data('isMainCharacter') ? 2 : 1),
+  'border-color': COLORS.nodeBorder,
+  'border-opacity': 1,
+  width: NODE_SIZE_MIN,
+  height: NODE_SIZE_MIN,
+  shape: 'ellipse',
+  label: 'data(label)',
+  'text-valign': 'bottom',
+  'text-halign': 'center',
+  'font-size': 12,
+  'font-weight': (ele) => (ele.data('isMainCharacter') ? 600 : 400),
+  color: COLORS.nodeText,
+  'text-margin-y': 2,
+  'text-background-opacity': 0,
+  'text-outline-color': COLORS.white,
+  'text-outline-width': 2,
 };
 
-// [와이드 레이아웃 설정]
-export const getWideLayout = () => {
-  return { name: 'preset' };
+const graphControlActionButtonStyle = {
+  background: COLORS.white,
+  color: COLORS.textPrimary,
+  border: `1px solid ${COLORS.border}`,
+  boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+  '&:hover': {
+    background: COLORS.backgroundLight,
+    transform: 'translateY(-1px)',
+    boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+  },
 };
 
-export const getEdgeStyle = (context = 'default') => {
-  const edgeWidth = 5;
-  const isViewer = context === 'viewer';
-  const isGraphPage = typeof window !== 'undefined' && window.location?.pathname?.includes('/user/graph/');
-  
+export const getWideLayout = () => ({ name: 'preset' });
+
+export const getEdgeStyle = (_context = 'default') => {
+  const isGraphPage =
+    typeof window !== 'undefined' && window.location?.pathname?.includes('/user/graph/');
+
   return {
-    width: edgeWidth,
-    fontSize: isGraphPage ? 12 : (isViewer ? 10 : 10)
+    width: 5,
+    fontSize: isGraphPage ? 12 : 10,
   };
 };
 
-/** reciprocalPair: CytoscapeGraphUnified에서 동기화한 _rjOx/_rjOy 우선(쌍이 동일 중점 사용) */
-function reciprocalPairTargetEndpoint(ele) {
-  try {
-    const ox = ele.data('_rjOx');
-    const oy = ele.data('_rjOy');
-    if (typeof ox === 'number' && typeof oy === 'number' && Number.isFinite(ox) && Number.isFinite(oy)) {
-      return `${ox} ${oy}`;
-    }
-    const s = ele.source();
-    const t = ele.target();
-    if (!s || !t || s.empty?.() || t.empty?.()) return undefined;
-    const sx = s.position('x');
-    const sy = s.position('y');
-    const tx = t.position('x');
-    const ty = t.position('y');
-    return `${(sx - tx) / 2} ${(sy - ty) / 2}`;
-  } catch (_e) {
-    return undefined;
-  }
+export function clampPositivity(positivity) {
+  const value = Number(positivity);
+  return Number.isFinite(value) ? Math.max(-1, Math.min(1, value)) : 0;
 }
 
-// 관계 색상 공식 (relationStyles가 임계값·라벨 단일 소스, 여기는 색상만)
 export const getRelationColor = (positivity) => {
-  const value = Number.isFinite(positivity) ? Math.max(-1, Math.min(1, positivity)) : 0;
+  const value = clampPositivity(positivity);
   const normalized = (value + 1) / 2;
   const eased = 0.5 + 0.5 * Math.sin((normalized - 0.5) * Math.PI);
   const hue = 120 * eased;
@@ -104,143 +94,183 @@ export const getRelationColor = (positivity) => {
   return `hsl(${hue}, ${saturation}%, ${lightness}%)`;
 };
 
-// 노드 크기 계산 함수 (기본 크기 10 × 가중치, 최소값 보장)
-export const calculateNodeSize = (baseSize, weight) => {
-  const defaultSize = 40;
-  if (!weight || weight <= 0) return defaultSize;
-  const calculatedSize = Math.round(10 * weight);
-  return Math.max(calculatedSize, 30);
-};
+export function computeWeightRange(weights) {
+  const valid = (Array.isArray(weights) ? weights : []).filter(isValidNodeWeight);
+  if (valid.length === 0) return { min: 0, max: 0 };
+  return { min: Math.min(...valid), max: Math.max(...valid) };
+}
 
-const baseNodeGraphStyle = {
-  "background-color": COLORS.nodeBackground,
-  "border-width": (ele) => (ele.data("isMainCharacter") ? 2 : 1),
-  "border-color": COLORS.nodeBorder,
-  "border-opacity": 1,
-  width: (ele) => calculateNodeSize(8, ele.data("weight")),
-  height: (ele) => calculateNodeSize(8, ele.data("weight")),
-  shape: "ellipse",
-  label: "data(label)",
-  "text-valign": "bottom",
-  "text-halign": "center",
-  "font-size": 12,
-  "font-weight": (ele) => (ele.data("isMainCharacter") ? 600 : 400),
-  color: COLORS.nodeText,
-  "text-margin-y": 2,
-  "text-background-opacity": 0,
-  "text-outline-color": COLORS.white,
-  "text-outline-width": 2,
-};
+export function normalizeWeightToUnit(weight, minWeight, maxWeight) {
+  if (!isValidNodeWeight(weight)) return 0;
+  if (typeof minWeight !== 'number' || typeof maxWeight !== 'number') return 0;
+  if (minWeight >= maxWeight) return 1;
+  return (weight - minWeight) / (maxWeight - minWeight);
+}
 
-// [공통 스타일시트 생성 함수 - 가중치 기반 노드 크기만 사용]
+export function calculateNodeSizeFromNormalized(
+  normalized,
+  minPx = NODE_SIZE_MIN,
+  maxPx = NODE_SIZE_MAX
+) {
+  const ratio = Math.max(0, Math.min(1, Number(normalized) || 0));
+  return Math.round(minPx + ratio * (maxPx - minPx));
+}
+
+export function calculateNodeSizeFromWeight(
+  weight,
+  weightMin,
+  weightMax,
+  minPx = NODE_SIZE_MIN,
+  maxPx = NODE_SIZE_MAX
+) {
+  return calculateNodeSizeFromNormalized(
+    normalizeWeightToUnit(weight, weightMin, weightMax),
+    minPx,
+    maxPx
+  );
+}
+
+export function applyNormalizedNodeSizes(cy, { scaledNodes = null, scale = 1 } = {}) {
+  if (!cy) return;
+
+  const allNodes = cy.nodes();
+  if (!allNodes.length) return;
+
+  const weightRange = computeWeightRange(allNodes.map((node) => node.data('weight')));
+  const scaledIds =
+    scale !== 1 && scaledNodes
+      ? new Set(scaledNodes.map((node) => node.id()))
+      : null;
+
+  allNodes.forEach((node) => {
+    const baseSize = calculateNodeSizeFromWeight(
+      node.data('weight'),
+      weightRange.min,
+      weightRange.max
+    );
+    const size = scaledIds?.has(node.id()) ? Math.round(baseSize * scale) : baseSize;
+    node.style({ width: size, height: size });
+  });
+}
+
+function reciprocalPairTargetEndpoint(ele) {
+  try {
+    const ox = ele.data('_rjOx');
+    const oy = ele.data('_rjOy');
+    if (typeof ox === 'number' && typeof oy === 'number' && Number.isFinite(ox) && Number.isFinite(oy)) {
+      return `${ox} ${oy}`;
+    }
+
+    const source = ele.source();
+    const target = ele.target();
+    if (!source || !target || source.empty?.() || target.empty?.()) return undefined;
+
+    const sx = source.position('x');
+    const sy = source.position('y');
+    const tx = target.position('x');
+    const ty = target.position('y');
+    return `${(sx - tx) / 2} ${(sy - ty) / 2}`;
+  } catch {
+    return undefined;
+  }
+}
+
+function formatEdgeLabel(ele, edgeLabelVisible, maxEdgeLabelLength) {
+  const label = ele.data('label') || '';
+  if (!edgeLabelVisible) return '';
+  if (maxEdgeLabelLength && label.length > maxEdgeLabelLength) {
+    return `${label.slice(0, maxEdgeLabelLength)}...`;
+  }
+  return label;
+}
+
+function edgePositivityColor(ele) {
+  return getRelationColor(ele.data('positivity'));
+}
+
 export const createGraphStylesheet = (edgeStyle, edgeLabelVisible, maxEdgeLabelLength = null) => [
+  { selector: 'node', style: baseNodeGraphStyle },
   {
-    selector: "node",
-    style: baseNodeGraphStyle,
-  },
-  {
-    selector: "node[image]",
+    selector: 'node[image]',
     style: {
-      "background-image": "data(image)",
-      "background-fit": "cover",
-      "background-clip": "node",
+      'background-image': 'data(image)',
+      'background-fit': 'cover',
+      'background-clip': 'node',
     },
   },
   {
-    selector: "edge",
+    selector: 'edge',
     style: {
       width: edgeStyle.width,
-      "line-color": (ele) => getRelationColor(ele.data("positivity")),
-      "curve-style": "bezier",
-      label: (ele) => {
-        const label = ele.data('label') || '';
-        if (!edgeLabelVisible) return '';
-        return maxEdgeLabelLength && label.length > maxEdgeLabelLength ? label.slice(0, maxEdgeLabelLength) + '...' : label;
-      },
-      "font-size": edgeStyle.fontSize,
-      "text-rotation": "autorotate",
-      color: COLORS.edgeText,
-      "text-background-color": COLORS.white,
-      "text-background-opacity": 0.85,
-      "text-background-shape": "roundrectangle",
-      "text-background-padding": 2,
-      "text-outline-color": COLORS.white,
-      "text-outline-width": 2,
+      'line-color': edgePositivityColor,
+      'curve-style': 'bezier',
+      label: (ele) => formatEdgeLabel(ele, edgeLabelVisible, maxEdgeLabelLength),
+      'font-size': edgeStyle.fontSize,
+      'text-rotation': 'autorotate',
+      ...EDGE_TEXT_STYLE,
       opacity: 0.85,
-      "target-arrow-shape": "triangle",
-      "target-arrow-color": (ele) => getRelationColor(ele.data("positivity")),
-      "arrow-scale": 1.05,
-      "source-arrow-shape": "none",
+      'target-arrow-shape': 'triangle',
+      'target-arrow-color': edgePositivityColor,
+      'arrow-scale': 1.05,
+      'source-arrow-shape': 'none',
     },
   },
   {
-    selector: "edge[?bidirectional]",
+    selector: 'edge[?bidirectional]',
     style: {
-      "curve-style": "straight",
-      "target-arrow-shape": "none",
-      "source-arrow-shape": "none",
+      'curve-style': 'straight',
+      'target-arrow-shape': 'none',
+      'source-arrow-shape': 'none',
     },
   },
   {
-    selector: "edge[?reciprocalPair]",
+    selector: 'edge[?reciprocalPair]',
     style: {
-      "curve-style": "straight",
-      "target-endpoint": (ele) => reciprocalPairTargetEndpoint(ele),
+      'curve-style': 'straight',
+      'target-endpoint': reciprocalPairTargetEndpoint,
     },
   },
   {
-    selector: "edge.highlighted",
+    selector: 'edge.highlighted',
     style: {
       width: 8,
       opacity: 1,
-      "target-endpoint": "outside-to-node",
-      "z-index-compare": "manual",
-      "z-index": 9999,
+      'target-endpoint': 'outside-to-node',
+      'z-index-compare': 'manual',
+      'z-index': 9999,
     },
   },
   {
-    selector: "node.cytoscape-node-appear",
+    selector: 'node.cytoscape-node-appear',
     style: {
-      "border-color": COLORS.successGreen,
-      "border-width": 16,
-      "border-opacity": 1,
-      "transition-property": "border-width, border-color, border-opacity",
-      "transition-duration": DURATION.SLOW,
+      'border-color': COLORS.successGreen,
+      'border-width': 16,
+      'border-opacity': 1,
+      'transition-property': 'border-width, border-color, border-opacity',
+      'transition-duration': DURATION.SLOW,
     },
   },
   {
-    selector: "node.highlighted",
+    selector: 'node.highlighted',
     style: {
-      "border-color": COLORS.highlightBlue,
-      "border-width": 4,
-      "border-opacity": 1,
-      "border-style": "solid",
+      'border-color': COLORS.highlightBlue,
+      'border-width': 4,
+      'border-opacity': 1,
+      'border-style': 'solid',
     },
   },
   {
-    selector: "node.faded",
-    style: {
-      opacity: 0.14,
-      "text-opacity": 0.1,
-    },
+    selector: 'node.faded',
+    style: { opacity: 0.14, 'text-opacity': 0.1 },
   },
   {
-    selector: "edge.faded",
-    style: {
-      opacity: 0.1,
-    },
+    selector: 'edge.faded',
+    style: { opacity: 0.1 },
   },
 ];
 
-/**
- * 그래프 관련 공통 스타일
- */
-export const getGraphStyles = () => ({
-  container: {
-    width: '100%', 
-    height: '100%', 
-    position: 'relative' 
-  },
+export const graphStyles = {
+  container: { width: '100%', height: '100%', position: 'relative' },
   tooltipContainer: {
     position: 'absolute',
     top: 0,
@@ -250,42 +280,29 @@ export const getGraphStyles = () => ({
     pointerEvents: 'none',
     zIndex: 9998,
   },
-  tooltipStyle: {
-    pointerEvents: 'auto' 
-  },
-  graphArea: {
-    position: 'relative', 
-    width: '100%', 
-    height: '100%' 
-  },
-
+  tooltipStyle: { pointerEvents: 'auto' },
+  graphArea: { position: 'relative', width: '100%', height: '100%' },
   graphPageContainer: {
-    width: '100%', 
-    height: '100vh', 
-    overflow: 'hidden', 
-    position: 'relative', 
+    width: '100%',
+    height: '100vh',
+    overflow: 'hidden',
+    position: 'relative',
     backgroundColor: COLORS.backgroundLighter,
     display: 'flex',
-    flexDirection: 'column'
+    flexDirection: 'column',
   },
   graphPageInner: {
-    position: 'relative', 
-    width: '100%', 
+    position: 'relative',
+    width: '100%',
     height: '100%',
     flex: 1,
     display: 'flex',
     flexDirection: 'column',
-    minHeight: 0
+    minHeight: 0,
   },
-});
+};
 
-// 하위 호환성을 위한 별칭
-export const graphStyles = getGraphStyles();
-
-/**
- * GraphControls 컴포넌트 스타일
- */
-export const getGraphControlsStyles = () => ({
+export const graphControlsStyles = {
   input: {
     width: '220px',
     minWidth: '220px',
@@ -317,28 +334,8 @@ export const getGraphControlsStyles = () => ({
     padding: '0 12px',
     flexShrink: 0,
   },
-  searchButton: {
-    background: '#ffffff',
-    color: COLORS.textPrimary,
-    border: `1px solid ${COLORS.border}`,
-    boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
-    '&:hover': {
-      background: '#f8f9fc',
-      transform: 'translateY(-1px)',
-      boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
-    }
-  },
-  resetButton: {
-    background: '#ffffff',
-    color: COLORS.textPrimary,
-    border: `1px solid ${COLORS.border}`,
-    boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
-    '&:hover': {
-      background: '#f8f9fc',
-      transform: 'translateY(-1px)',
-      boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
-    }
-  },
+  searchButton: graphControlActionButtonStyle,
+  resetButton: graphControlActionButtonStyle,
   form: {
     display: 'flex',
     alignItems: 'center',
@@ -374,24 +371,21 @@ export const getGraphControlsStyles = () => ({
     textAlign: 'center',
     color: COLORS.textSecondary,
     fontSize: '12px',
-    fontStyle: 'italic'
+    fontStyle: 'italic',
   },
   header: {
-    padding: '8px 14px', 
-    fontSize: '11px', 
-    color: COLORS.textSecondary, 
+    padding: '8px 14px',
+    fontSize: '11px',
+    color: COLORS.textSecondary,
     background: COLORS.backgroundLight,
     borderBottom: `1px solid ${COLORS.border}`,
-    fontWeight: '700'
+    fontWeight: '700',
   },
   container: {
-    position: 'relative', 
+    position: 'relative',
     display: 'inline-block',
     width: 'auto',
     minWidth: '200px',
-    zIndex: 1000
-  }
-});
-
-// 하위 호환성을 위한 별칭
-export const graphControlsStyles = getGraphControlsStyles();
+    zIndex: 1000,
+  },
+};

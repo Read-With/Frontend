@@ -1,13 +1,10 @@
 /** 라이브러리: 진행률·날짜 표시, EPUB 업로드 검증·메타 추출 */
 
 import JSZip from 'jszip';
-import {
-  getProgressFromCache,
-  getStoredProgressPercent,
-} from '../common/cache/progressCache';
+import { getProgressFromCache } from '../common/cache/progressCache';
 import { clampPercent } from '../common/numberUtils';
 
-/** 마이페이지 BookCard·useBooks와 동일한 진행률(0–100) */
+/** 마이페이지 BookCard·useBooks — locator 기반 캐시 진도만 사용 */
 export function resolveLibraryReadingProgressPercent(book) {
   if (book == null) return 0;
   const rawId = book.id ?? book._bookId;
@@ -16,11 +13,7 @@ export function resolveLibraryReadingProgressPercent(book) {
   const cached = getProgressFromCache(bookIdStr);
   const normalizedCachePct = clampPercent(cached?.readingProgressPercent);
   if (normalizedCachePct != null) return Math.round(normalizedCachePct);
-
-  const normalizedListProgress = clampPercent(book.progress);
-  if (normalizedListProgress != null) return Math.round(normalizedListProgress);
-
-  return getStoredProgressPercent(bookIdStr) ?? 0;
+  return 0;
 }
 
 export function formatLibraryRelativeDate(updatedAt) {

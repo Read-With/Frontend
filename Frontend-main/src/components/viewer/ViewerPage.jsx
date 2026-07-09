@@ -1,4 +1,4 @@
-﻿import React, { useRef, useState, useEffect, useCallback, useMemo } from "react";
+﻿import React, { useRef, useEffect, useCallback, useMemo } from "react";
 import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import ViewerLayout from "./ViewerLayout";
@@ -6,658 +6,243 @@ import XhtmlViewer from "./xhtml/XhtmlViewer";
 import BookmarkPanel from "./bookmark/BookmarkPanel";
 import ViewerSettings from "./ui/ViewerSettings";
 import { useViewerPage } from "../../hooks/viewer/useViewerPage";
-import { useGraphSearch } from "../../hooks/graph/graphViewHooks";
-import { useTransitionState } from "../../hooks/ui/viewerPageHooks";
-import { useProgressAutoSave } from "../../hooks/viewer/useProgressAutoSave";
-import { useTooltipState } from "../../hooks/ui/viewerPageHooks";
-import { useCachedLocation } from "../../hooks/viewer/useCachedLocation";
-import { saveProgress, getBookProgress } from "../../utils/api/api";
-import {
-  anchorToLocators,
-  locatorsEqual,
-  progressResultToViewerAnchor,
-  toLocator,
-  viewerResumeAnchorKey,
-} from "../../utils/common/locatorUtils";
-import { getCachedChapterEvents, getCachedReaderProgress, isGraphBookCacheBuilding, ensureGraphBookCache } from "../../utils/common/cache/chapterEventCache";
-import {
-  eventUtils,
-  cacheKeyUtils,
-} from "../../utils/viewer/viewerUtils";
-import {
-  eventMatchesChapter,
-  resolveDisplayedEventNum,
-  resolveViewerLineEvent,
-} from "../../utils/viewer/viewerEventUtils";
+import { useTooltipState } from "../../hooks/ui/tooltipHooks";
+import { anchorToLocators } from "../../utils/common/locatorUtils";
+import { eventUtils } from "../../utils/viewer/viewerCoreStateUtils";
+import { resolveViewerLineEvent } from "../../utils/viewer/viewerEventProgressUtils";
 import { restoreGraphLayout, preloadChapterLayouts } from "../../utils/graph/graphLayoutUtils";
-import { removeBookmarkHighlights } from "../../utils/bookmarks/bookmarkUtils";
+import { isSameBookmarkPosition } from "../../utils/bookmarks/bookmarkUtils";
 import { errorUtils } from "../../utils/common/errorUtils";
 import GraphSplitArea from "./GraphSplitArea";
 import {
-  getProgressFromCache,
-  PROGRESS_CACHE_UPDATED_EVENT,
-  normalizeReadingProgressPercent,
-} from "../../utils/common/cache/progressCache";
-import { useFineGraphLoader } from "../../hooks/viewer/useFineGraphLoader";
-import { getEventOrderIdx, sortEventsByIdx } from "../../utils/graph/graphData";
+  parseReadingLocatorKey,
+  patchTopBarFromLineEvent,
+} from "../../utils/viewer/viewerEventProgressUtils";
 
-const VIEWER_RESUME_POLL_MS = 100;
-const VIEWER_RESUME_MAX_ATTEMPTS = 150;
-
-function progressRowToTopBar(row) {
-  if (!row || typeof row !== "object") {
-    return {
-      eventNum: null,
-      chapter: null,
-      chapterIdx: null,
-      chapterProgress: null,
-      readingProgressPercent: null,
-      eventName: "",
-    };
-  }
-  const explicit = Number(row.eventNum);
-  const fromId = resolveDisplayedEventNum(row);
-  const eventNum =
-    Number.isFinite(explicit) && explicit > 0
-      ? explicit
-      : fromId > 0
-        ? fromId
-        : null;
-  const cp = Number(row.chapterProgress);
-  const chapterIdx = Number(row.chapterIdx ?? row.chapter ?? row.chapterNum);
-  const pct = normalizeReadingProgressPercent(row);
-  return {
-    eventNum,
-    chapter: Number.isFinite(chapterIdx) && chapterIdx > 0 ? chapterIdx : null,
-    chapterIdx: Number.isFinite(chapterIdx) && chapterIdx > 0 ? chapterIdx : null,
-    chapterProgress: Number.isFinite(cp) ? Math.min(100, Math.max(0, cp)) : null,
-    readingProgressPercent: pct,
-    eventName: String(row.eventName ?? row.eventTitle ?? row.name ?? "").trim(),
-  };
-}
+const TOOLBAR_REVEAL_ZONE_PX = 72;
 
 const ViewerPage = () => {
   const {
-    viewerRef, reloadKey, setReloadKey, progress, setProgress, currentPage, setCurrentPage,
-    totalPages, setTotalPages, showSettingsModal,
-    settings, currentChapter, setCurrentChapter, currentEvent, setCurrentEvent,
-    events: _events, setEvents, showGraph, elements, setElements, setGraphViewState,
+    viewerRef,
+    reloadKey,
+    showSettingsModal,
+    setProgress,
+    setCurrentPage,
+    setTotalPages,
+    setCurrentChapter,
+    setCurrentEvent,
+    setGraphViewState,
     setCurrentCharIndex,
-    loading, setLoading,
-    isDataReady, setIsDataReady, isReloading,
-    isGraphLoading, setIsGraphLoading, setFineGraphLoading, showToolbar, setShowToolbar,
-    bookmarks, showBookmarkList,
-    prevElementsRef, book, folderKey, currentChapterData,
-    handlePrevPage, handleNextPage, handleAddBookmark, handleBookmarkSelect,
-    handleOpenSettings, handleCloseSettings, handleApplySettings,
-    onToggleBookmarkList, handleSliderChange, toggleGraph,
-    graphState, graphActions, viewerState, searchState, graphFullScreen,
-    previousPage, isFromLibrary, bookId, cleanBookId, exitToMypage,
+    setShowToolbar,
+    bookmarks,
+    showBookmarkList,
+    book,
+    folderKey,
+    bookKey,
     manifestLoaded,
+    handlePrevPage,
+    handleNextPage,
+    handleAddBookmark,
+    handleBookmarkSelect,
+    handleOpenSettings,
+    handleCloseSettings,
+    handleApplySettings,
+    onToggleBookmarkList,
+    handleSliderChange,
+    toggleGraph,
+    exitToMypage,
+    graphState,
+    graphStateWithProgress,
+    graphActions,
+    viewerState,
+    searchState,
+    searchActions,
+    previousPage,
+    isFromLibrary,
+    setProgressTopBar,
+    progressMetricsReady,
+    readingLocatorKey,
+    serverResumeAnchor,
+    applyReadingLocator,
+    updateReadingPercent,
+    markViewerPageReady,
+    cachedLocation,
+    transitionState,
+    graphApiError,
+    flushProgressAsync,
   } = useViewerPage();
 
-  const bookKey = useMemo(() => {
-    const id = cleanBookId ?? bookId ?? book?.id;
-    if (id == null) return null;
-    const trimmed = String(id).trim();
-    return trimmed || null;
-  }, [cleanBookId, bookId, book?.id]);
-
-  const [progressTopBar, setProgressTopBar] = useState(undefined);
-
-  const [serverResumeAnchor, setServerResumeAnchor] = useState(null);
-  const serverResumeAppliedKeyRef = useRef(null);
-  const reloadKeyBumpedForBookRef = useRef(null);
-
-  useEffect(() => {
-    serverResumeAppliedKeyRef.current = null;
-
-    const numeric = Number(bookKey);
-    if (!bookKey || !Number.isFinite(numeric) || numeric <= 0) {
-      setServerResumeAnchor(null);
-      return;
-    }
-
-    if (reloadKeyBumpedForBookRef.current !== bookKey) {
-      reloadKeyBumpedForBookRef.current = bookKey;
-      setReloadKey((k) => k + 1);
-    }
-
-    const idStr = String(numeric);
-    const applyCachedProgress = () => {
-      const row = getProgressFromCache(idStr);
-      setProgressTopBar(progressRowToTopBar(row));
-      setServerResumeAnchor(progressResultToViewerAnchor(row));
-    };
-    applyCachedProgress();
-
-    let cancelled = false;
-    (async () => {
-      try {
-        const res = await getBookProgress(idStr, { skipCache: false });
-        if (cancelled) return;
-        if (!res?.isSuccess || !res?.result) {
-          applyCachedProgress();
-          return;
-        }
-        const anchor = progressResultToViewerAnchor(res.result);
-        setServerResumeAnchor(anchor);
-        setProgressTopBar(progressRowToTopBar(res.result));
-      } catch (_err) {
-        if (!cancelled) applyCachedProgress();
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [bookKey]);
-
-  useEffect(() => {
-    const numeric = Number(bookKey);
-    if (!bookKey || !Number.isFinite(numeric) || numeric <= 0) {
-      return undefined;
-    }
-    const idStr = String(numeric);
-    const sync = () => {
-      setProgressTopBar(progressRowToTopBar(getProgressFromCache(idStr)));
-    };
-    const onCache = (e) => {
-      if (String(e?.detail?.bookId) === idStr) sync();
-    };
-    window.addEventListener(PROGRESS_CACHE_UPDATED_EVENT, onCache);
-    sync();
-    return () => window.removeEventListener(PROGRESS_CACHE_UPDATED_EVENT, onCache);
-  }, [bookKey]);
-
-  useEffect(() => {
-    if (!serverResumeAnchor) return undefined;
-    const key = viewerResumeAnchorKey(serverResumeAnchor);
-    if (!key) return undefined;
-    if (serverResumeAppliedKeyRef.current === key) return undefined;
-
-    let cancelled = false;
-    let attempts = 0;
-    const id = setInterval(() => {
-      if (cancelled || serverResumeAppliedKeyRef.current === key) {
-        clearInterval(id);
-        return;
-      }
-      attempts += 1;
-      try {
-        const moved = viewerRef.current?.displayAt?.(serverResumeAnchor);
-        if (moved) {
-          serverResumeAppliedKeyRef.current = key;
-          clearInterval(id);
-        }
-      } catch (_e) {
-        void 0;
-      }
-      if (attempts >= VIEWER_RESUME_MAX_ATTEMPTS) clearInterval(id);
-    }, VIEWER_RESUME_POLL_MS);
-    return () => {
-      cancelled = true;
-      clearInterval(id);
-    };
-  }, [serverResumeAnchor, reloadKey]);
-
-  const { cachedLocation, saveLocation } = useCachedLocation(bookKey);
-
-  const graphClearRef = useRef(null);
-  const sequentialPrefetchStatusRef = useRef(new Map());
-  const chapterEventDiscoveryRef = useRef(new Map());
-  // True after the viewer fires handleCurrentLineChange for the first time per chapter,
-  // meaning the page transition is complete and content is visible.
-  const isViewerPageReadyRef = useRef(false);
-  const [isViewerPageReady, setIsViewerPageReady] = useState(false);
+  const { currentChapter, currentEvent, showGraph, graphFullScreen } = graphState;
   const {
-    transitionState,
-    resetTransition
-  } = useTransitionState({
-    currentEvent,
-    currentChapter,
-    loading,
-    isReloading,
-    isGraphLoading,
-    isDataReady
-  });
-  const { apiError, setApiError } = useFineGraphLoader({
-    book,
-    currentChapter,
-    currentEvent,
-    graphActions,
-    manifestLoaded,
-    resetTransition,
-    setElements,
-    setEvents,
-    setFineGraphLoading,
-    setIsDataReady,
-    setLoading,
-  });
+    progress,
+    settings,
+    currentPage,
+    totalPages,
+    showToolbar,
+    isDataReady,
+  } = viewerState;
 
-  // Reset the viewer-ready flag whenever the book or chapter changes so that
-  // discoverEvents waits for the next handleCurrentLineChange before fetching.
+  const readingChapterRef = useRef(currentChapter);
+  const lastRestoredLayoutKeyRef = useRef("");
+  const showToolbarRef = useRef(showToolbar);
+  const graphClearRef = useRef(null);
+
   useEffect(() => {
-    isViewerPageReadyRef.current = false;
-    setIsViewerPageReady(false);
-  }, [book?.id, currentChapter]);
+    readingChapterRef.current = currentChapter;
+  }, [currentChapter]);
+
+  useEffect(() => {
+    showToolbarRef.current = showToolbar;
+  }, [showToolbar]);
+
+  useEffect(() => {
+    lastRestoredLayoutKeyRef.current = "";
+  }, [bookKey, currentChapter]);
+
+  useEffect(() => {
+    const handleMouseMove = (event) => {
+      const next = event.clientY <= TOOLBAR_REVEAL_ZONE_PX;
+      if (showToolbarRef.current !== next) {
+        setShowToolbar(next);
+      }
+    };
+    window.addEventListener("mousemove", handleMouseMove);
+    return () => window.removeEventListener("mousemove", handleMouseMove);
+  }, [setShowToolbar]);
 
   const {
     activeTooltip,
     handleClearTooltip,
-    handleSetActiveTooltip
+    handleSetActiveTooltip,
   } = useTooltipState({
     onError: () => {
-      toast.error("??꾨샍 ??뽯뻻???얜챷?ｅ첎? 獄쏆뮇源??됰뮸??덈뼄. ??륁뵠筌왖????덉쨮?⑥쥙臾???곻폒?紐꾩뒄.", {
+      toast.error("노드 정보를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.", {
         autoClose: 2000,
         closeOnClick: true,
-        pauseOnHover: true
+        pauseOnHover: true,
       });
     },
-    graphClearRef
+    graphClearRef,
   });
 
-
-  useEffect(() => {
-    if (!bookKey || !currentEvent) return;
-
-    const { startLocator: startL, endLocator: endL } = anchorToLocators(currentEvent.anchor);
-    if (!startL) return;
-
-    const cached = getCachedReaderProgress(bookKey);
-    const cachedStart =
-      toLocator(cached?.startLocator) ??
-      toLocator(cached?.locator) ??
-      null;
-    const evNow = eventUtils.extractRawEventIdx(currentEvent);
-    const evCached = Number(cached?.eventNum ?? 0);
-    if (cachedStart && locatorsEqual(cachedStart, startL) && evNow === evCached) {
-      return;
-    }
-
-    const numericBookId = Number(bookKey);
-
-    saveLocation({
-      bookId: Number.isFinite(numericBookId) && numericBookId > 0 ? numericBookId : null,
-      startLocator: startL,
-      endLocator: endL ?? startL,
-      locator: startL,
-      chapterIdx: startL.chapterIndex,
-      eventIdx: Number(currentEvent.eventNum),
-      eventNum: Number(currentEvent.eventNum),
-      eventId: currentEvent.event_id ?? currentEvent.eventId ?? currentEvent.id ?? null,
-      eventName:
-        currentEvent.event?.name ??
-        currentEvent.event?.title ??
-        currentEvent.title ??
-        currentEvent.name ??
-        null,
-      chapterProgress: currentEvent.chapterProgress ?? null,
-      source: 'runtime',
-    });
-  }, [bookKey, currentEvent, saveLocation]);
-
-  const prefetchChapterEventsSequentially = useCallback(async (targetChapter) => {
-    if (!book?.id || typeof book.id !== 'number') {
-      return;
-    }
-
-    if (!targetChapter || targetChapter < 1) {
-      return;
-    }
-
-    const bookId = book.id;
-    const key = cacheKeyUtils.createChapterKey(bookId, targetChapter);
-    const status = sequentialPrefetchStatusRef.current.get(key);
-
-    if (status === 'running' || status === 'completed') {
-      return;
-    }
-
-    sequentialPrefetchStatusRef.current.set(key, 'running');
-
-    try {
-      const chapterPayload = getCachedChapterEvents(bookId, targetChapter);
-      if (!chapterPayload || !Array.isArray(chapterPayload.events)) {
-        sequentialPrefetchStatusRef.current.set(key, 'completed');
-        return;
-      }
-
-      const sortedEvents = sortEventsByIdx(chapterPayload.events);
-
-      const normalizedEvents = sortedEvents.reduce((acc, event) => {
-        const normalizedIdx = getEventOrderIdx(event);
-        if (normalizedIdx === null || normalizedIdx <= 0) return acc;
-        const normalizedEvent = {
-          ...event.event,
-          chapter: targetChapter,
-          chapterIdx: targetChapter,
-          eventIdx: normalizedIdx,
-          eventNum: normalizedIdx,
-          event_id: normalizedIdx,
-          resolvedEventIdx: normalizedIdx,
-          originalEventIdx: normalizedIdx,
-          relations: Array.isArray(event.relations) ? event.relations : [],
-          characters: Array.isArray(event.characters) ? event.characters : [],
-          start: event?.startPos ?? event?.start ?? null,
-          end: event?.endPos ?? event?.end ?? null,
-        };
-        return eventUtils.updateEventsInState(acc, normalizedEvent, targetChapter);
-      }, []);
-
-      setEvents((prev) =>
-        normalizedEvents.length > 0
-          ? normalizedEvents.reduce((p, evt) => eventUtils.updateEventsInState(p, evt, targetChapter), prev)
-          : prev
-      );
-
-      sequentialPrefetchStatusRef.current.set(key, 'completed');
-    } catch (error) {
-      errorUtils.logError('[ViewerPage] 筌?벤苑???源??????嚥≪뮆諭?餓???살첒', error);
-      sequentialPrefetchStatusRef.current.delete(key);
-    }
-  }, [book?.id, setEvents]);
-
-  useEffect(() => {
-    if (!book?.id || typeof book.id !== 'number') {
-      return;
-    }
-
-    if (!currentChapter || currentChapter < 1) {
-      return;
-    }
-
-    prefetchChapterEventsSequentially(currentChapter);
-  }, [book?.id, currentChapter, prefetchChapterEventsSequentially]);
-
-  useEffect(() => {
-    return () => {
-      if (sequentialPrefetchStatusRef.current) {
-        sequentialPrefetchStatusRef.current.clear();
-      }
-      if (chapterEventDiscoveryRef.current) {
-        chapterEventDiscoveryRef.current.clear();
-      }
-    };
-  }, []);
-
-  useEffect(() => {
-    // Wait until the viewer has rendered its first frame for this chapter.
-    if (!isViewerPageReady) return;
-
-    let isMounted = true;
-    let checkInterval = null;
-    const applyDiscoveryState = (loadingState, errorState = null) => {
-      if (!isMounted) return;
-      setIsGraphLoading(loadingState);
-      setApiError(errorState);
-    };
-
-    const discoverEvents = async () => {
-      if (!book?.id || typeof book.id !== 'number' || !currentChapter) {
-        return;
-      }
-      
-      const discoveryKey = cacheKeyUtils.createChapterKey(book.id, currentChapter);
-      const currentStatus = chapterEventDiscoveryRef.current.get(discoveryKey);
-      if (currentStatus === 'completed' || currentStatus === 'loading') {
-        return;
-      }
-      
-      const cached = getCachedChapterEvents(book.id, currentChapter);
-      if (cached) {
-        chapterEventDiscoveryRef.current.set(discoveryKey, 'completed');
-        applyDiscoveryState(false, null);
-        return;
-      }
-
-      let isBuilding = isGraphBookCacheBuilding(book.id);
-      if (!isBuilding) {
-        chapterEventDiscoveryRef.current.set(discoveryKey, 'loading');
-        applyDiscoveryState(true, null);
-        ensureGraphBookCache(book.id).catch(() => {});
-      }
-
-      if (isBuilding || chapterEventDiscoveryRef.current.get(discoveryKey) === 'loading') {
-        applyDiscoveryState(true, null);
-        checkInterval = setInterval(() => {
-          if (!isMounted) {
-            if (checkInterval) clearInterval(checkInterval);
-            return;
-          }
-          const stillBuilding = isGraphBookCacheBuilding(book.id);
-          const nowCached = getCachedChapterEvents(book.id, currentChapter);
-          if (nowCached) {
-            chapterEventDiscoveryRef.current.set(discoveryKey, 'completed');
-            if (checkInterval) clearInterval(checkInterval);
-            applyDiscoveryState(false, null);
-          } else if (!stillBuilding) {
-            chapterEventDiscoveryRef.current.set(discoveryKey, 'missing');
-            if (checkInterval) clearInterval(checkInterval);
-            // 筌?Ŋ??沃섎챷?????燁살꼶梨???살첒揶쎛 ?袁⑤뻷: fine API 筌욊낯???野껋럥以덃에??④쑴??筌욊쑵六??뺣뼄.
-            applyDiscoveryState(false, null);
-          }
-        }, 200);
-        return;
-      }
-
-      chapterEventDiscoveryRef.current.set(discoveryKey, 'missing');
-      // 筌?Ŋ?녶첎? ??곷선????源???紐껊쑔??疫꿸퀡而?fine API 鈺곌퀬???揶쎛?館釉??
-      applyDiscoveryState(false, null);
-    };
-    
-    discoverEvents();
-    
-    return () => {
-      isMounted = false;
-      if (checkInterval) {
-        clearInterval(checkInterval);
-      }
-    };
-  }, [book?.id, currentChapter, isViewerPageReady, setIsGraphLoading, setApiError]);
-
-  useProgressAutoSave({
-    bookId: bookKey,
-    currentEvent,
-    progress,
-    getCurrentLocator: () => viewerRef.current?.getCurrentLocator?.(),
-    saveLocation,
-  });
-
-  useEffect(() => {
-    if (!bookmarks?.length) return undefined;
-    const timer = setTimeout(() => {
-      removeBookmarkHighlights();
-    }, 500);
-    return () => {
-      clearTimeout(timer);
-      removeBookmarkHighlights();
-    };
-  }, [bookmarks, currentChapter]);
-  const {
-    searchTerm, isSearchActive, filteredElements,
-    fitNodeIds,
-    isResetFromSearch, suggestions, showSuggestions, selectedIndex,
-    handleKeyDown, closeSuggestions,
-    handleSearchSubmit, clearSearch, setSearchTerm,
-  } = useGraphSearch(elements, null, currentChapterData);
-
-  const handleCurrentChapterChange = useCallback((chapter) => {
-    setCurrentChapter(chapter);
-  }, [setCurrentChapter]);
+  const isBookmarked = useMemo(() => {
+    if (!bookmarks?.length || !readingLocatorKey) return false;
+    const { start, end } = parseReadingLocatorKey(readingLocatorKey);
+    if (!start) return false;
+    return bookmarks.some((bookmark) =>
+      isSameBookmarkPosition(bookmark, { startLocator: start, endLocator: end ?? start })
+    );
+  }, [bookmarks, readingLocatorKey]);
 
   const handleCurrentLineChange = useCallback(
-    async (charIndex, _totalEvents, receivedEvent) => {
+    (charIndex, _totalEvents, receivedEvent) => {
       setCurrentCharIndex(charIndex);
       if (!receivedEvent) return;
 
-      if (!isViewerPageReadyRef.current) {
-        isViewerPageReadyRef.current = true;
-        setIsViewerPageReady(true);
-      }
+      markViewerPageReady();
 
       const { nextEvent, nextChapter } = resolveViewerLineEvent({
         receivedEvent,
         book,
-        cleanBookId,
-        eventUtils,
-        previousEvent: currentEvent,
+        bookKey,
       });
-      if (nextChapter && nextChapter !== currentChapter) {
-        setCurrentChapter(nextChapter);
+
+      const { startLocator: lineLocator, endLocator: lineEnd } = anchorToLocators(
+        receivedEvent?.anchor ?? nextEvent?.anchor
+      );
+
+      const locatorChapter = Number(lineLocator?.chapterIndex);
+      const resolvedChapter =
+        nextChapter ??
+        (Number.isFinite(locatorChapter) && locatorChapter > 0 ? locatorChapter : null);
+
+      if (resolvedChapter && resolvedChapter !== readingChapterRef.current) {
+        setCurrentChapter(resolvedChapter);
       }
 
       setCurrentEvent(nextEvent);
-      setProgressTopBar((prev) => {
-        const previous =
-          prev !== undefined && prev !== null && typeof prev === "object"
-            ? prev
-            : progressRowToTopBar(null);
-        const n = resolveDisplayedEventNum(nextEvent);
-        const cp = Number(nextEvent.chapterProgress);
-        const chapterIdx = Number(nextEvent.chapter ?? nextEvent.chapterIdx);
-        const nm = nextEvent.name ?? nextEvent.event_name ?? nextEvent.eventTitle;
-        const pct = normalizeReadingProgressPercent(nextEvent);
-        return {
-          eventNum: n > 0 ? n : null,
-          chapter: Number.isFinite(chapterIdx) && chapterIdx > 0 ? chapterIdx : null,
-          chapterIdx: Number.isFinite(chapterIdx) && chapterIdx > 0 ? chapterIdx : null,
-          chapterProgress: Number.isFinite(cp) ? Math.min(100, Math.max(0, cp)) : null,
-          eventName: typeof nm === "string" ? nm.trim() : "",
-          readingProgressPercent: pct != null ? pct : previous.readingProgressPercent ?? null,
-        };
-      });
-
-
+      applyReadingLocator(lineLocator, lineEnd);
+      setProgressTopBar((prev) => patchTopBarFromLineEvent(prev, nextEvent, lineLocator));
     },
     [
       book,
-      cleanBookId,
-      currentChapter,
-      currentEvent,
+      bookKey,
+      markViewerPageReady,
       setCurrentChapter,
       setCurrentCharIndex,
       setCurrentEvent,
+      applyReadingLocator,
+      setProgressTopBar,
     ]
   );
 
   const handleExitToMypage = useCallback(async () => {
     try {
-      if (bookKey && viewerRef.current?.getCurrentLocator) {
-        const loc = await viewerRef.current.getCurrentLocator();
-        const { startLocator } = anchorToLocators(loc);
-        if (startLocator) {
-          const res = await saveProgress({
-            bookId: String(bookKey),
-            startLocator,
-            locator: startLocator,
-          });
-          if (!res?.isSuccess) {
-            errorUtils.logWarning('[ViewerPage] ?ル굝利???筌욊쑬猷???????쎈솭', res?.message || '?臾먮뼗 ??쎈솭', {
-              bookId: bookKey,
-            });
-          }
-        }
+      const res = await flushProgressAsync();
+      if (res && res.isSuccess === false && !res.skipped && !res.deduped) {
+        errorUtils.logWarning(
+          "[ViewerPage] 마이페이지 이동 전 진도 저장 실패",
+          res?.message || "알 수 없는 오류",
+          { bookId: bookKey }
+        );
       }
-    } catch (_e) {
-      void 0;
+    } catch {
+      /* 저장 실패해도 이탈 */
     } finally {
       exitToMypage();
     }
-  }, [bookKey, viewerRef, exitToMypage]);
+  }, [bookKey, flushProgressAsync, exitToMypage]);
 
-  const graphStateProp = useMemo(() => {
-    let prevValidEvent = graphState.prevValidEvent ?? null;
-    if (currentEvent) {
-      if (eventMatchesChapter(currentEvent, currentChapter)) {
-        prevValidEvent = currentEvent;
-      }
-    }
-    return {
-      ...graphState,
-      prevValidEvent,
-      events: _events,
-      progressTopBar,
-    };
-  }, [graphState, currentEvent, currentChapter, _events, progressTopBar]);
-
-  const searchStateProp = useMemo(() => ({
-    ...searchState,
-    searchTerm,
-    isSearchActive,
-    elements,
-    filteredElements,
-    isResetFromSearch,
-    fitNodeIds,
-    suggestions,
-    showSuggestions,
-    selectedIndex,
-  }), [searchState, searchTerm, isSearchActive, elements, filteredElements,
-      isResetFromSearch, fitNodeIds, suggestions, showSuggestions, selectedIndex]);
-
-  const searchActionsProp = useMemo(() => ({
-    onSearchSubmit: handleSearchSubmit,
-    clearSearch,
-    closeSuggestions,
-    onGenerateSuggestions: setSearchTerm,
-    handleKeyDown,
-  }), [handleSearchSubmit, clearSearch, closeSuggestions, setSearchTerm, handleKeyDown]);
-
-  const tooltipPropsProp = useMemo(() => ({
-    activeTooltip,
-    onClearTooltip: handleClearTooltip,
-    onSetActiveTooltip: handleSetActiveTooltip,
-    graphClearRef,
-  }), [activeTooltip, handleClearTooltip, handleSetActiveTooltip]);
+  const tooltipProps = useMemo(
+    () => ({
+      activeTooltip,
+      onClearTooltip: handleClearTooltip,
+      onSetActiveTooltip: handleSetActiveTooltip,
+      graphClearRef,
+    }),
+    [activeTooltip, handleClearTooltip, handleSetActiveTooltip]
+  );
 
   useEffect(() => {
     if (!isDataReady || !currentEvent) return;
-    
+
+    const eventNum = eventUtils.resolveEventOrdinal(currentEvent) ?? 0;
+    const layoutKey = `${currentChapter}:${eventNum}`;
+    if (lastRestoredLayoutKeyRef.current === layoutKey) return;
+
     const restoredLayout = restoreGraphLayout(currentEvent, currentChapter);
     if (restoredLayout) {
+      lastRestoredLayoutKeyRef.current = layoutKey;
       setGraphViewState(restoredLayout);
     }
-  }, [isDataReady, currentEvent, currentChapter]);
+  }, [isDataReady, currentEvent, currentChapter, setGraphViewState]);
 
   useEffect(() => {
-    if (!elements) return;
-    prevElementsRef.current = elements;
-  }, [elements]);
+    if (!folderKey || !bookKey) return;
 
-  useEffect(() => {
-    if (!folderKey || !bookKey) {
-      return;
-    }
-    
     const abortController = new AbortController();
-    
     preloadChapterLayouts({
       folderKey,
       bookKey,
-      signal: abortController.signal
+      signal: abortController.signal,
     });
-    
+
     return () => {
       abortController.abort();
     };
   }, [folderKey, bookKey]);
 
-
   return (
-    <div
-      className="h-screen"
-      onMouseEnter={() => setShowToolbar(true)}
-      onMouseLeave={() => setShowToolbar(false)}
-    >
+    <div className="h-screen">
       <ViewerLayout
         showControls={showToolbar}
-        book={book}
         currentChapter={currentChapter}
         progress={progress}
         setProgress={setProgress}
+        progressMetricsReady={progressMetricsReady}
         onPrev={handlePrevPage}
         onNext={handleNextPage}
-        isBookmarked={false}
+        isBookmarked={isBookmarked}
         onToggleBookmarkList={onToggleBookmarkList}
         onAddBookmark={handleAddBookmark}
         onOpenSettings={handleOpenSettings}
@@ -673,16 +258,14 @@ const ViewerPage = () => {
         onExitToMypage={handleExitToMypage}
         rightSideContent={
           <GraphSplitArea
-            graphState={graphStateProp}
+            graphState={graphStateWithProgress}
             graphActions={graphActions}
             viewerState={viewerState}
-            searchState={searchStateProp}
-            searchActions={searchActionsProp}
-            tooltipProps={tooltipPropsProp}
+            searchState={searchState}
+            searchActions={searchActions}
+            tooltipProps={tooltipProps}
             transitionState={transitionState}
-            apiError={apiError}
-            bookId={bookId}
-            book={book}
+            apiError={graphApiError}
             cachedLocation={cachedLocation}
             resumeAnchor={serverResumeAnchor}
           />
@@ -694,13 +277,12 @@ const ViewerPage = () => {
           book={book}
           manifestReady={manifestLoaded}
           initialAnchor={serverResumeAnchor ?? undefined}
-          onProgressChange={setProgress}
+          onProgressChange={updateReadingPercent}
           onCurrentPageChange={setCurrentPage}
           onTotalPagesChange={setTotalPages}
-          onCurrentChapterChange={handleCurrentChapterChange}
           settings={settings}
           onCurrentLineChange={handleCurrentLineChange}
-          bookId={cleanBookId ?? bookKey}
+          bookId={bookKey}
         />
         {showBookmarkList && bookKey && (
           <BookmarkPanel bookId={bookKey} onSelect={handleBookmarkSelect} />
@@ -720,7 +302,6 @@ const ViewerPage = () => {
         newestOnTop
         closeOnClick
       />
-      
     </div>
   );
 };

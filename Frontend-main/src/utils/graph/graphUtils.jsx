@@ -4,24 +4,16 @@ import {
   resolveLastEventIdxForFineGraph,
   getLastFineGraphEventIdxFromChapterData,
 } from '../common/cache/manifestCache.js';
+import {
+  toFiniteNumber,
+  toPositiveInt,
+  toPositiveNumberOrNull,
+} from '../common/numberUtils';
 
 const API_PREFIX = 'api:';
 
-export const toFiniteNumber = (value) => {
-  if (value === undefined || value === null) return NaN;
-  const converted = typeof value === 'number' ? value : Number(value);
-  return Number.isFinite(converted) ? converted : NaN;
-};
-
-export const toPositiveNumber = (value) => {
-  const parsed = toFiniteNumber(value);
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
-};
-
-export const toPositiveInt = (value, fallback = null) => {
-  const parsed = toFiniteNumber(value);
-  return Number.isFinite(parsed) && parsed >= 1 ? Math.trunc(parsed) : fallback;
-};
+export { toFiniteNumber, toPositiveInt };
+export const toPositiveNumber = toPositiveNumberOrNull;
 
 export const extractApiBookId = (folderKeyOrFilename) => {
   if (!folderKeyOrFilename) return null;
@@ -64,21 +56,6 @@ export const uniqueStrings = (values, { caseInsensitive = false } = {}) => {
     result.push(str);
   }
   return result;
-};
-
-export const getEventIndexFromObject = (value, fields = []) => {
-  if (!value || typeof value !== 'object') return NaN;
-  const nested = value.event && typeof value.event === 'object' ? value.event : null;
-  const defaultFields = ['eventNum', 'eventIdx', 'resolvedEventIdx', 'idx', 'event_id', 'event_idx'];
-  for (const field of [...fields, ...defaultFields]) {
-    const direct = toFiniteNumber(value[field]);
-    if (Number.isFinite(direct)) return direct;
-    if (nested) {
-      const nestedValue = toFiniteNumber(nested[field]);
-      if (Number.isFinite(nestedValue)) return nestedValue;
-    }
-  }
-  return NaN;
 };
 
 const GRAPH_CONTAINER_SELECTOR = '.graph-canvas-area';
@@ -583,10 +560,6 @@ export const isSidebarElement = (event) => {
 
 export const isDragEndEvent = (event) => {
   return event.detail && event.detail.type === 'dragend';
-};
-
-export const sortElementsById = (elements) => {
-  return sortElementsByDataId(elements);
 };
 
 export const calculateNodeCount = (elements, filterStage, filteredMainCharacters) => {

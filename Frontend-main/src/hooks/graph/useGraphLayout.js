@@ -230,17 +230,8 @@ export function useGraphLayout({
         }
       }
 
-      if (stylesheet && nodesToAdd && nodesToAdd.length > 0) {
-        let newNodes = cy.collection();
-        nodesToAdd.forEach((n) => {
-          const id = n?.data?.id;
-          if (id == null || id === "") return;
-          const el = cy.getElementById(String(id));
-          if (el.length > 0) {
-            newNodes = newNodes.union(el);
-          }
-        });
-        applyNodeSizes(cy, newNodes.length > 0 ? newNodes : cy.nodes());
+      if (stylesheet) {
+        applyNodeSizes(cy);
       }
 
       const preserveUnchangedPositions =
@@ -296,6 +287,9 @@ export function useGraphLayout({
       if (stylesheetChanged) {
         updateStylesheet(cy);
       }
+      if (stylesheet) {
+        applyNodeSizes(cy);
+      }
       pulseDataChangedElements(cy, dataChangedIds, () => {
         handleLayoutComplete(cy, false, {
           skipOverlap: true,
@@ -311,6 +305,9 @@ export function useGraphLayout({
         updateStylesheet(cy);
       }
       if (stylesheetChanged || isInitialLoad) {
+        if (stylesheet) {
+          applyNodeSizes(cy);
+        }
         if (isInitialLoad) {
           fitGraphOnInitialLoad(cy);
           setIsInitialLoad(false);

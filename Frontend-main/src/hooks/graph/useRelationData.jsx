@@ -1,9 +1,15 @@
 /** 간선 툴팁: 관계 타임라인 API·캐시 */
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { toNumberOrNull } from '../../utils/common/numberUtils';
 import { isSamePair } from '../../utils/graph/relationUtils';
 import { getFineGraph } from '../../utils/api/api';
+import { cacheKeyUtils, eventUtils } from '../../utils/viewer/viewerCoreStateUtils';
+import {
+  hasFineGraphEventSlot,
+  pickFineGraphResult,
+} from '../../utils/viewer/viewerGraphUtils';
+import { resolvePositiveBookId } from '../common/hooksShared';
+import { resolveFineGraphEventToLocator } from '../../utils/common/cache/manifestCache';
 import {
   getCachedChapterEvents,
   reconstructChapterGraphState,
@@ -73,7 +79,8 @@ function findRelationInElements(elements, id1, id2) {
   return elements.find((element) => {
     const data = element?.data;
     if (!data?.source || !data?.target) return false;
-    return isSamePair(data, id1, id2);
+    const pair = eventUtils.resolveRelationNodeIds(data);
+    return isSamePair(pair, id1, id2);
   }) ?? null;
 }
 
@@ -124,11 +131,12 @@ async function fetchApiRelationTimelineCumulativeFromAPI(bookId, id1, id2, selec
     const chapterRelationCache = new Map(); // key: chapter -> { relationEvents, firstIdx, lastIdx }
 
     const fetchEventData = async (chapter, eventIdx) => {
-      const cacheKey = `${chapter}-${eventIdx}`;
+      const cacheKey = cacheKeyUtils.createCacheKey(chapter, eventIdx);
       if (eventCache.has(cacheKey)) {
         return eventCache.get(cacheKey);
       }
-      const data = await getFineGraph(bookId, chapter, eventIdx);
+      const atLocator = resolveFineGraphEventToLocator(bookId, chapter, eventIdx);
+      const data = await getFineGraph(bookId, chapter, eventIdx, atLocator);
       eventCache.set(cacheKey, data);
       return data;
     };
@@ -146,12 +154,10 @@ async function fetchApiRelationTimelineCumulativeFromAPI(bookId, id1, id2, selec
         const mid = Math.floor((left + right) / 2);
         try {
           const searchData = await fetchEventData(chapter, mid);
+          const searchResult = pickFineGraphResult(searchData);
           const hasRealData =
             searchData?.isSuccess &&
-            searchData?.result &&
-            (searchData.result.characters ||
-              (searchData.result.relations && searchData.result.relations.length > 0) ||
-              searchData.result.event);
+            hasFineGraphEventSlot(searchResult);
 
           if (hasRealData) {
             chapterLastEventIdx = mid;
@@ -170,19 +176,17 @@ async function fetchApiRelationTimelineCumulativeFromAPI(bookId, id1, id2, selec
         for (let idx = 1; idx <= chapterLastEventIdx; idx += 1) {
           try {
             const fineData = await fetchEventData(chapter, idx);
+            const fineResult = pickFineGraphResult(fineData);
             const hasRealData =
               fineData?.isSuccess &&
-              fineData?.result &&
-              (fineData.result.characters ||
-                (fineData.result.relations && fineData.result.relations.length > 0) ||
-                fineData.result.event);
+              hasFineGraphEventSlot(fineResult);
 
             if (!hasRealData) {
               continue;
             }
 
-            if (fineData?.result?.relations?.length) {
-              const relation = fineData.result.relations.find((rel) => isSamePair(rel, id1, id2));
+            if (Array.isArray(fineResult?.relations) && fineResult.relations.length > 0) {
+              const relation = fineResult.relations.find((rel) => isSamePair(rel, id1, id2));
               if (relation) {
                 relationEvents.push({
                   idx,
@@ -298,22 +302,21 @@ async function fetchApiRelationTimelineViewer(bookId, id1, id2, chapterNum, even
 
     for (let idx = 1; idx <= eventNum; idx += 1) {
       try {
-        const fineData = await getFineGraph(bookId, chapterNum, idx);
+        const atLocator = resolveFineGraphEventToLocator(bookId, chapterNum, idx);
+        const fineData = await getFineGraph(bookId, chapterNum, idx, atLocator);
         cachedEvents.set(idx, fineData);
+        const fineResult = pickFineGraphResult(fineData);
 
         const hasRealData =
           fineData?.isSuccess &&
-          fineData?.result &&
-          (fineData.result.characters ||
-            (fineData.result.relations && fineData.result.relations.length > 0) ||
-            fineData.result.event);
+          hasFineGraphEventSlot(fineResult);
 
         if (!hasRealData) {
           continue;
         }
 
-        if (firstAppearanceIdx === null && fineData.result.relations?.length) {
-          const relation = fineData.result.relations.find((rel) => isSamePair(rel, id1, id2));
+        if (firstAppearanceIdx === null && Array.isArray(fineResult?.relations)) {
+          const relation = fineResult.relations.find((rel) => isSamePair(rel, id1, id2));
           if (relation) {
             firstAppearanceIdx = idx;
           }
@@ -334,12 +337,14 @@ async function fetchApiRelationTimelineViewer(bookId, id1, id2, chapterNum, even
       try {
         let fineData = cachedEvents.get(idx);
         if (!fineData) {
-          fineData = await getFineGraph(bookId, chapterNum, idx);
+          const atLocator = resolveFineGraphEventToLocator(bookId, chapterNum, idx);
+          fineData = await getFineGraph(bookId, chapterNum, idx, atLocator);
         }
+        const fineResult = pickFineGraphResult(fineData);
 
         let positivityForEvent = 0;
-        if (fineData?.result?.relations?.length) {
-          const relation = fineData.result.relations.find((rel) => isSamePair(rel, id1, id2));
+        if (Array.isArray(fineResult?.relations) && fineResult.relations.length > 0) {
+          const relation = fineResult.relations.find((rel) => isSamePair(rel, id1, id2));
           if (relation) {
             positivityForEvent = relation.positivity || 0;
           }
@@ -366,10 +371,7 @@ export function useRelationData(mode, id1, id2, chapterNum, eventNum, maxChapter
   const [noRelation, setNoRelation] = useState(false);
   const [error, setError] = useState(null);
 
-  const numericBookId = useMemo(() => {
-    const parsed = toNumberOrNull(bookId);
-    return parsed && parsed > 0 ? parsed : null;
-  }, [bookId]);
+  const numericBookId = useMemo(() => resolvePositiveBookId(bookId), [bookId]);
 
   const maxEventCount = useMemo(() => {
     const nonNullPoints = Array.isArray(timeline)
@@ -406,6 +408,17 @@ export function useRelationData(mode, id1, id2, chapterNum, eventNum, maxChapter
 
       const { points, labelInfo, noRelation: resultNoRelation } = result;
       const { points: paddedPoints, labels: paddedLabels } = padSingleEvent(points, labelInfo);
+
+      console.log('[useRelationData] event graph data', {
+        mode,
+        bookId: numericBookId,
+        chapterNum,
+        eventNum: eventNum ? Math.max(1, eventNum) : 1,
+        pair: { id1, id2 },
+        timeline: paddedPoints,
+        labels: paddedLabels,
+        noRelation: resultNoRelation || paddedPoints.filter((value) => value !== null).length === 0,
+      });
 
       setTimeline(paddedPoints);
       setLabels(paddedLabels);

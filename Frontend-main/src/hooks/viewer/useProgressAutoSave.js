@@ -1,113 +1,247 @@
 /** 진도 자동 저장: 캐시 + 서버(v2 locator), 디바운스·중복 방지 */
 
-import { useEffect, useMemo, useRef } from 'react';
-import { setProgressToCache } from '../../utils/common/cache/progressCache';
-import { anchorToLocators } from '../../utils/common/locatorUtils';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import {
+  getProgressFromCache,
+  removeProgressFromCache,
+  setProgressToCache,
+} from '../../utils/common/cache/progressCache';
+import {
+  getCachedReaderProgress,
+  setCachedReaderProgress,
+} from '../../utils/common/cache/chapterEventCache';
 import { errorUtils } from '../../utils/common/errorUtils';
-import { saveProgress } from '../../utils/api/api';
+import { saveProgress, saveProgressKeepalive } from '../../utils/api/api';
+import {
+  buildProgressPayload,
+  buildSaveLocationPayload,
+  resolveMetricsFromLocator,
+  resolveReadingLocators,
+} from '../../utils/viewer/viewerEventProgressUtils';
 
 export function useProgressAutoSave({
-  bookKey,
-  currentChapter,
+  bookId,
   currentEvent,
-  readingProgressPercent,
+  readingLocatorKey = '',
+  getCurrentLocator,
+  metricsReady = true,
   delay = 2000,
 }) {
+  const [cachedLocation, setCachedLocation] = useState(null);
+
+  useEffect(() => {
+    if (!bookId) {
+      setCachedLocation(null);
+      return;
+    }
+    try {
+      setCachedLocation(getCachedReaderProgress(bookId));
+    } catch (error) {
+      errorUtils.logWarning(
+        '[useProgressAutoSave] 캐시된 위치 정보를 불러오는데 실패했습니다',
+        error.message
+      );
+      setCachedLocation(null);
+    }
+  }, [bookId]);
+
+  const saveLocation = useCallback((progressData) => {
+    if (!bookId) return null;
+    try {
+      const stored = setCachedReaderProgress(bookId, progressData);
+      if (stored) setCachedLocation(stored);
+      return stored;
+    } catch (error) {
+      errorUtils.logWarning(
+        '[useProgressAutoSave] 캐시된 위치 정보를 저장하는데 실패했습니다',
+        error.message
+      );
+      return null;
+    }
+  }, [bookId]);
   const timeoutRef = useRef(null);
   const lastPayloadRef = useRef(null);
   const latestPayloadRef = useRef(null);
-  const inFlightRef = useRef(false);
+  const latestLocationPayloadRef = useRef(null);
   const initialSavedRef = useRef(false);
-
-  const readingLocatorKey = useMemo(() => {
-    const anchor = currentEvent?.anchor;
-    if (!anchor?.startLocator && !anchor?.start) return '';
-    const { startLocator } = anchorToLocators(anchor);
-    if (!startLocator) return '';
-    return JSON.stringify(startLocator);
-  }, [currentEvent?.anchor]);
-
-  const flushProgress = () => {
-    const payload = latestPayloadRef.current;
-    if (!payload) return;
-    const payloadKey = JSON.stringify(payload);
-    if (lastPayloadRef.current === payloadKey || inFlightRef.current) return;
-
-    try {
-      setProgressToCache(payload);
-      inFlightRef.current = true;
-      saveProgress(payload)
-        .then((res) => {
-          if (!res?.isSuccess) {
-            throw new Error(res?.message || '진도 저장 응답 실패');
-          }
-          lastPayloadRef.current = payloadKey;
-          const latest = latestPayloadRef.current;
-          const latestKey = latest ? JSON.stringify(latest) : null;
-          if (latestKey && latestKey !== payloadKey) {
-            queueMicrotask(() => flushProgress());
-          }
-        })
-        .catch((err) => {
-          errorUtils.logWarning(
-            '[useProgressAutoSave] 서버 저장 실패',
-            err?.message ?? (typeof err === 'string' ? err : '')
-          );
-        })
-        .finally(() => {
-          inFlightRef.current = false;
-        });
-    } catch (error) {
-      const msg = error?.message ?? (typeof error === 'string' ? error : '알 수 없는 오류');
-      errorUtils.logWarning('[useProgressAutoSave] 진도 자동 저장 실패', msg);
-    }
-  };
-
-  const prevBookKeyRef = useRef(null);
+  const pagehideFlushedRef = useRef(false);
+  const prevMetricsReadyRef = useRef(metricsReady);
+  const flushChainRef = useRef(Promise.resolve());
+  const getCurrentLocatorRef = useRef(getCurrentLocator);
+  const saveLocationRef = useRef(saveLocation);
+  const currentEventRef = useRef(currentEvent);
+  const bookIdRef = useRef(bookId);
+  const metricsReadyRef = useRef(metricsReady);
+  const runFlushRef = useRef(null);
+  const refreshLatestPayloadRef = useRef(null);
 
   useEffect(() => {
-    if (!bookKey) {
-      prevBookKeyRef.current = null;
-      lastPayloadRef.current = null;
-      latestPayloadRef.current = null;
-      initialSavedRef.current = false;
+    getCurrentLocatorRef.current = getCurrentLocator;
+    saveLocationRef.current = saveLocation;
+    currentEventRef.current = currentEvent;
+    bookIdRef.current = bookId;
+    metricsReadyRef.current = metricsReady;
+  }, [getCurrentLocator, saveLocation, currentEvent, bookId, metricsReady]);
+
+  const refreshLatestPayload = useCallback(() => {
+    const id = bookIdRef.current;
+    if (!id) return null;
+
+    const { startLocator, endLocator } = resolveReadingLocators(
+      getCurrentLocatorRef.current,
+      currentEventRef.current
+    );
+    if (!startLocator) return null;
+
+    const metrics = resolveMetricsFromLocator(id, startLocator, {
+      metricsReady: metricsReadyRef.current,
+    });
+    const payload = buildProgressPayload(
+      id,
+      startLocator,
+      endLocator,
+      currentEventRef.current,
+      metrics
+    );
+    if (!payload) return null;
+
+    latestPayloadRef.current = payload;
+    latestLocationPayloadRef.current = buildSaveLocationPayload(
+      id,
+      startLocator,
+      endLocator,
+      currentEventRef.current,
+      metrics
+    );
+    return payload;
+  }, []);
+
+  const resetAutoSaveState = useCallback(() => {
+    lastPayloadRef.current = null;
+    latestPayloadRef.current = null;
+    latestLocationPayloadRef.current = null;
+    initialSavedRef.current = false;
+    pagehideFlushedRef.current = false;
+    flushChainRef.current = Promise.resolve();
+  }, []);
+
+  /** progressCache만 낙관적 갱신 (서버 성공 전) */
+  const applyProgressCache = useCallback((payload) => {
+    setProgressToCache(payload);
+  }, []);
+
+  /** 서버 저장 성공 후 reader progress 캐시 동기화 */
+  const commitReaderLocation = useCallback((locationPayload) => {
+    if (locationPayload) {
+      saveLocationRef.current?.(locationPayload);
+    }
+  }, []);
+
+  /** 페이지 이탈 시 로컬 캐시 모두 즉시 반영 */
+  const applyLocalProgressForExit = useCallback((payload, locationPayload) => {
+    commitReaderLocation(locationPayload);
+    applyProgressCache(payload);
+  }, [applyProgressCache, commitReaderLocation]);
+
+  const runFlushOnce = useCallback(async (resolve) => {
+    const payload = latestPayloadRef.current;
+    const id = bookIdRef.current;
+    if (!payload) {
+      const skipped = { isSuccess: true, skipped: true };
+      resolve?.(skipped);
+      return skipped;
+    }
+
+    const payloadKey = JSON.stringify(payload);
+    if (lastPayloadRef.current === payloadKey) {
+      const deduped = { isSuccess: true, deduped: true };
+      resolve?.(deduped);
+      return deduped;
+    }
+
+    const prevCached = id ? getProgressFromCache(id) : null;
+    const locationPayload = latestLocationPayloadRef.current;
+
+    try {
+      applyProgressCache(payload);
+      const res = await saveProgress(payload);
+      if (!res?.isSuccess) {
+        throw new Error(res?.message || '진도 저장 응답 실패');
+      }
+
+      commitReaderLocation(locationPayload);
+      lastPayloadRef.current = payloadKey;
+
+      const latest = latestPayloadRef.current;
+      const latestKey = latest ? JSON.stringify(latest) : null;
+      if (latestKey && latestKey !== payloadKey) {
+        queueMicrotask(() => runFlushRef.current?.());
+      }
+
+      resolve?.(res);
+      return res;
+    } catch (err) {
+      if (id) {
+        if (prevCached) setProgressToCache(prevCached);
+        else removeProgressFromCache(id);
+      }
+      errorUtils.logWarning(
+        '[useProgressAutoSave] 서버 저장 실패',
+        err?.message ?? (typeof err === 'string' ? err : '')
+      );
+      const failure = { isSuccess: false, message: err?.message };
+      resolve?.(failure);
+      return failure;
+    }
+  }, [applyProgressCache, commitReaderLocation]);
+
+  const runFlush = useCallback((resolve) => {
+    flushChainRef.current = flushChainRef.current
+      .catch(() => {})
+      .then(() => runFlushOnce(resolve));
+  }, [runFlushOnce]);
+
+  runFlushRef.current = runFlush;
+  refreshLatestPayloadRef.current = refreshLatestPayload;
+
+  const flushProgressAsync = useCallback(() => {
+    refreshLatestPayload();
+    return new Promise((resolve) => {
+      runFlush(resolve);
+    });
+  }, [refreshLatestPayload, runFlush]);
+
+  const prevBookIdRef = useRef(null);
+
+  useEffect(() => {
+    if (!bookId) {
+      prevBookIdRef.current = null;
+      prevMetricsReadyRef.current = metricsReady;
+      resetAutoSaveState();
       return;
     }
-    if (prevBookKeyRef.current !== bookKey) {
-      prevBookKeyRef.current = bookKey;
-      lastPayloadRef.current = null;
-      initialSavedRef.current = false;
+    if (prevBookIdRef.current !== bookId) {
+      prevBookIdRef.current = bookId;
+      prevMetricsReadyRef.current = metricsReady;
+      resetAutoSaveState();
     }
-    if (!readingLocatorKey) return;
 
-    const anchor = currentEvent?.anchor;
-    const { startLocator } = anchorToLocators(anchor);
-    if (!startLocator) return;
+    const metricsJustBecameReady = metricsReady && !prevMetricsReadyRef.current;
+    prevMetricsReadyRef.current = metricsReady;
 
-    const evn = Number(currentEvent?.eventNum);
-    const chp = Number(currentEvent?.chapterProgress);
-    const evName = currentEvent?.eventName ?? currentEvent?.eventTitle ?? currentEvent?.name;
+    refreshLatestPayload();
 
-    const payload = {
-      bookId: bookKey,
-      startLocator,
-      locator: startLocator,
-      ...(Number.isFinite(Number(readingProgressPercent))
-        ? { readingProgressPercent: Math.min(100, Math.max(0, Math.round(Number(readingProgressPercent)))) }
-        : {}),
-      ...(Number.isFinite(evn) && evn > 0 ? { eventNum: evn } : {}),
-      ...(Number.isFinite(chp) ? { chapterProgress: Math.min(100, Math.max(0, chp)) } : {}),
-      ...(typeof evName === 'string' && evName.trim() ? { eventName: evName.trim() } : {}),
-    };
-    latestPayloadRef.current = payload;
+    if (!latestPayloadRef.current) return;
 
     if (!initialSavedRef.current) {
       initialSavedRef.current = true;
-      flushProgress();
+      runFlush();
+    } else if (metricsJustBecameReady) {
+      runFlush();
     }
 
     if (timeoutRef.current) clearTimeout(timeoutRef.current);
-    timeoutRef.current = setTimeout(flushProgress, delay);
+    timeoutRef.current = setTimeout(() => runFlush(), delay);
 
     return () => {
       if (timeoutRef.current) {
@@ -115,26 +249,48 @@ export function useProgressAutoSave({
         timeoutRef.current = null;
       }
     };
-  }, [bookKey, currentChapter, currentEvent, readingLocatorKey, readingProgressPercent, delay]);
+  }, [bookId, currentEvent, readingLocatorKey, metricsReady, delay, refreshLatestPayload, runFlush, resetAutoSaveState]);
 
   useEffect(() => {
-    const handlePageHide = () => flushProgress();
-    const handleBeforeUnload = () => flushProgress();
+    const handlePageHide = () => {
+      if (pagehideFlushedRef.current) return;
+      refreshLatestPayload();
+      const payload = latestPayloadRef.current;
+      if (!payload) return;
+      pagehideFlushedRef.current = true;
+      const locationPayload = latestLocationPayloadRef.current;
+      applyLocalProgressForExit(payload, locationPayload);
+      const ok = saveProgressKeepalive(payload);
+      if (ok) {
+        lastPayloadRef.current = JSON.stringify(payload);
+      } else {
+        errorUtils.logWarning('[useProgressAutoSave] keepalive 저장 요청 생성 실패', String(bookIdRef.current ?? ''));
+      }
+    };
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'hidden') {
-        flushProgress();
+        handlePageHide();
       }
     };
 
     window.addEventListener('pagehide', handlePageHide);
-    window.addEventListener('beforeunload', handleBeforeUnload);
+    window.addEventListener('beforeunload', handlePageHide);
     document.addEventListener('visibilitychange', handleVisibilityChange);
 
     return () => {
       window.removeEventListener('pagehide', handlePageHide);
-      window.removeEventListener('beforeunload', handleBeforeUnload);
+      window.removeEventListener('beforeunload', handlePageHide);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
-      flushProgress();
+      pagehideFlushedRef.current = false;
+    };
+  }, [refreshLatestPayload, applyLocalProgressForExit]);
+
+  useEffect(() => {
+    return () => {
+      refreshLatestPayloadRef.current?.();
+      runFlushRef.current?.();
     };
   }, []);
+
+  return { flushProgressAsync, cachedLocation };
 }

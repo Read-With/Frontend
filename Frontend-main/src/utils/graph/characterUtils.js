@@ -115,6 +115,101 @@ export function extractCharacterId(character) {
   return normalizeCharacterId(candidate);
 }
 
+export function isValidNodeWeight(weight) {
+  return typeof weight === 'number' && Number.isFinite(weight) && weight > 0;
+}
+
+function isValidNodeCount(count) {
+  return typeof count === 'number' && Number.isFinite(count) && count > 0;
+}
+
+export function isNodeWeightEntryVisible(entry) {
+  return Boolean(entry && isValidNodeWeight(entry.weight) && isValidNodeCount(entry.count));
+}
+
+export function resolveNodeWeightAndCount(char, previousEntry = null) {
+  const rawWeight = typeof char?.weight === 'number' ? char.weight : null;
+  const hasCountField = typeof char?.count === 'number';
+  const rawCount = hasCountField ? char.count : null;
+
+  const weight = isValidNodeWeight(rawWeight)
+    ? rawWeight
+    : (previousEntry && isValidNodeWeight(previousEntry.weight) ? previousEntry.weight : null);
+
+  let count = null;
+  if (hasCountField) {
+    count = isValidNodeCount(rawCount) ? rawCount : null;
+  } else if (previousEntry && isValidNodeCount(previousEntry.count)) {
+    count = previousEntry.count;
+  }
+
+  return { weight, count };
+}
+
+function cloneNodeWeightsMap(nodeWeights) {
+  if (!nodeWeights || typeof nodeWeights !== 'object') return {};
+  return Object.fromEntries(
+    Object.entries(nodeWeights)
+      .filter(([, entry]) => isNodeWeightEntryVisible(entry))
+      .map(([id, entry]) => [id, { weight: entry.weight, count: entry.count }])
+  );
+}
+
+/** 캐릭터 병합 시 weight·count는 직전 값 유지 */
+export function mergeCharacterRecord(prev, char) {
+  const filled = Object.fromEntries(
+    Object.entries(char).filter(([, v]) => v !== undefined && v !== null && v !== '')
+  );
+  const merged = { ...prev, ...filled };
+  const { weight, count } = resolveNodeWeightAndCount(merged, prev);
+
+  if (isValidNodeWeight(weight)) {
+    merged.weight = weight;
+  } else {
+    delete merged.weight;
+  }
+
+  if (isValidNodeCount(count)) {
+    merged.count = count;
+  } else if (typeof merged.count !== 'number') {
+    delete merged.count;
+  }
+
+  return merged;
+}
+
+/** Cytoscape elements → nodeWeights 맵 */
+export function extractNodeWeightsFromElements(elements) {
+  const nodeWeights = {};
+  if (!Array.isArray(elements)) return nodeWeights;
+
+  elements.forEach((el) => {
+    const data = el?.data;
+    if (!data || data.source != null) return;
+    const id = normalizeCharacterId(data.id);
+    if (!id) return;
+    const entry = { weight: data.weight, count: data.count };
+    if (isNodeWeightEntryVisible(entry)) {
+      nodeWeights[id] = entry;
+    }
+  });
+
+  return nodeWeights;
+}
+
+/** 이벤트 순서대로 weight·count 누적 (직전 이벤트 상속) */
+export function buildNodeWeightsFromEvents(eventList) {
+  let nodeWeights = {};
+  if (!Array.isArray(eventList)) return nodeWeights;
+
+  eventList.forEach((entry) => {
+    const characters = Array.isArray(entry?.characters) ? entry.characters : [];
+    nodeWeights = buildNodeWeights(characters, nodeWeights);
+  });
+
+  return nodeWeights;
+}
+
 /** 이벤트별 캐릭터 ID 병합 (빈 필드는 이전 값 유지) */
 export function aggregateCharactersFromEvents(eventList) {
   const charactersMap = new Map();
@@ -135,19 +230,16 @@ export function aggregateCharactersFromEvents(eventList) {
         charactersMap.set(id, { ...char });
         return;
       }
-      const filled = Object.fromEntries(
-        Object.entries(char).filter(([, v]) => v !== undefined && v !== null && v !== '')
-      );
-      charactersMap.set(id, { ...prev, ...filled });
+      charactersMap.set(id, mergeCharacterRecord(prev, char));
     });
   });
 
   return charactersMap;
 }
 
-/** weight·count → nodeWeights 맵 */
-export function buildNodeWeights(characters) {
-  const nodeWeights = {};
+/** weight·count → nodeWeights 맵 (직전 weight·count 상속, 없으면 노드 비표시) */
+export function buildNodeWeights(characters, previousNodeWeights = null) {
+  const nodeWeights = cloneNodeWeightsMap(previousNodeWeights);
 
   if (!Array.isArray(characters)) return nodeWeights;
 
@@ -156,16 +248,21 @@ export function buildNodeWeights(characters) {
     const id = normalizeCharacterId(char.id);
     if (!id) return;
 
-    const weight = typeof char.weight === 'number' ? char.weight : null;
-    const count = typeof char.count === 'number' ? char.count : null;
+    const previousEntry = nodeWeights[id] ?? null;
+    const { weight, count } = resolveNodeWeightAndCount(char, previousEntry);
 
-    if (weight !== null || count !== null) {
-      nodeWeights[id] = {
-        weight: weight ?? 3,
-        count: count ?? 0,
-      };
+    if (isValidNodeWeight(weight) && isValidNodeCount(count)) {
+      nodeWeights[id] = { weight, count };
+    } else {
+      delete nodeWeights[id];
     }
   });
 
   return nodeWeights;
+}
+
+/** 빈 nodeWeights 맵은 null로 통일 (convertRelationsToElements 인자용) */
+export function toNodeWeightsOrNull(nodeWeights) {
+  if (!nodeWeights || typeof nodeWeights !== 'object') return null;
+  return Object.keys(nodeWeights).length > 0 ? nodeWeights : null;
 }

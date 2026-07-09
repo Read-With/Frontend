@@ -2,9 +2,7 @@
 
 import { toFiniteNumber, uniqueStrings, isGraphNodeElement } from './graphUtils';
 import { registerCache, recordCacheAccess, enforceCacheSizeLimit } from '../common/cache/cacheManager';
-import { clearStyleCache, cleanupRelationStyleResources } from '../styles/relationStyles';
-
-export { getPositivityColor, getPositivityLabel } from '../styles/relationStyles';
+import { clearStyleCache } from '../styles/relationStyles';
 
 /**
  * @typedef {Object} NormalizedRelation
@@ -16,8 +14,6 @@ export { getPositivityColor, getPositivityLabel } from '../styles/relationStyles
  * @property {string[]} relation
  * @property {string} label
  */
-
-export const safeNum = toFiniteNumber;
 
 const normalizeRelationArray = (relation, label = '') => {
   const values = Array.isArray(relation)
@@ -37,8 +33,8 @@ export function normalizeRelation(raw) {
   }
   
   try {
-    const id1 = safeNum(raw.id1);
-    const id2 = safeNum(raw.id2);
+    const id1 = toFiniteNumber(raw.id1);
+    const id2 = toFiniteNumber(raw.id2);
 
     if (isNaN(id1) || isNaN(id2)) {
       return null;
@@ -90,10 +86,10 @@ export function isSamePair(rel, a, b) {
     return false;
   }
 
-  const r1 = safeNum(rel.id1);
-  const r2 = safeNum(rel.id2);
-  const s1 = safeNum(a);
-  const s2 = safeNum(b);
+  const r1 = toFiniteNumber(rel.id1);
+  const r2 = toFiniteNumber(rel.id2);
+  const s1 = toFiniteNumber(a);
+  const s2 = toFiniteNumber(b);
   
   if (isNaN(r1) || isNaN(r2) || isNaN(s1) || isNaN(s2)) {
     return false;
@@ -109,15 +105,27 @@ export function relationEventMetaPassthrough(raw) {
   }
   const nested = raw.event && typeof raw.event === 'object' ? raw.event : null;
   const pick = (v) => (v !== undefined && v !== null ? v : undefined);
-  const eventNum = pick(raw.eventNum) ?? pick(nested?.eventNum);
-  const eventIdx = pick(raw.eventIdx) ?? pick(nested?.eventIdx);
-  const event_id = pick(raw.event_id) ?? pick(nested?.event_id);
-  const event_idx = pick(raw.event_idx);
+  const chapterIdx =
+    pick(raw.chapterIdx) ??
+    pick(raw.chapter) ??
+    pick(raw.chapter_idx) ??
+    pick(nested?.chapterIdx) ??
+    pick(nested?.chapter) ??
+    pick(nested?.chapter_idx);
+  const eventNum = pick(raw.eventNum) ?? pick(raw.event_num) ?? pick(nested?.eventNum) ?? pick(nested?.event_num);
+  const eventIdx = pick(raw.eventIdx) ?? pick(raw.event_idx) ?? pick(nested?.eventIdx) ?? pick(nested?.event_idx);
+  const eventId =
+    pick(raw.eventId) ??
+    pick(raw.event_id) ??
+    pick(raw.id) ??
+    pick(nested?.eventId) ??
+    pick(nested?.event_id) ??
+    pick(nested?.id);
   return {
+    ...(chapterIdx !== undefined ? { chapterIdx } : {}),
     ...(eventNum !== undefined ? { eventNum } : {}),
     ...(eventIdx !== undefined ? { eventIdx } : {}),
-    ...(event_id !== undefined ? { event_id } : {}),
-    ...(event_idx !== undefined ? { event_idx } : {}),
+    ...(eventId !== undefined ? { eventId } : {}),
   };
 }
 
@@ -186,17 +194,11 @@ export function processRelationTagsCached(relation, label) {
   }
 }
 
-export function clearRelationCache() {
+export const safeNum = toFiniteNumber;
+
+function clearRelationCache() {
   try {
     relationCache.clear();
-  } catch (_error) {
-    /* ignore */
-  }
-}
-
-export function cleanupRelationResources() {
-  try {
-    clearRelationCache();
   } catch (_error) {
     /* ignore */
   }
@@ -207,8 +209,7 @@ export function cleanupRelationUtils() {
   try {
     clearRelationCache();
     clearStyleCache();
-    cleanupRelationResources();
-    cleanupRelationStyleResources();
+    clearStyleCache();
   } catch (error) {
     console.error('관계 유틸리티 정리 실패:', error);
   }
@@ -217,25 +218,6 @@ export function cleanupRelationUtils() {
 /** 방향 간선 element id (`id1->id2`) */
 export function directedEdgeElementId(fromId, toId) {
   return `${String(fromId)}->${String(toId)}`;
-}
-
-/** 무방향 관계 키 (`min-max`) */
-export function createRelationKey(a, b) {
-  const first = safeNum(a);
-  const second = safeNum(b);
-  if (!Number.isFinite(first) || !Number.isFinite(second)) {
-    return null;
-  }
-  const min = first <= second ? first : second;
-  const max = first <= second ? second : first;
-  return `${min}-${max}`;
-}
-
-export function getRelationKeyFromRelation(relation) {
-  if (!relation || typeof relation !== "object") {
-    return null;
-  }
-  return createRelationKey(relation.id1, relation.id2);
 }
 
 export const normalizePositivity = (positivity) => {

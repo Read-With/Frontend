@@ -123,6 +123,39 @@ export const toggleBookFavorite = async (bookId, favorite) => {
   }
 };
 
+export function normalizeChapterPovSummariesResult(raw) {
+  if (!raw || typeof raw !== 'object') {
+    return {
+      bookId: null,
+      chapterIdx: null,
+      chapterTitle: '',
+      povSummaries: [],
+    };
+  }
+  const rows = Array.isArray(raw.povSummaries) ? raw.povSummaries : [];
+  const povSummaries = rows
+    .map((row) => {
+      if (!row || typeof row !== 'object') return null;
+      const characterId = Number(row.characterId);
+      if (!Number.isFinite(characterId)) return null;
+      return {
+        characterId,
+        characterName: typeof row.characterName === 'string' ? row.characterName : '',
+        summaryText: typeof row.summaryText === 'string' ? row.summaryText : '',
+        isMainCharacter: Boolean(row.isMainCharacter),
+      };
+    })
+    .filter(Boolean);
+  const bookIdNum = Number(raw.bookId);
+  const chapterIdxNum = Number(raw.chapterIdx);
+  return {
+    bookId: Number.isFinite(bookIdNum) && bookIdNum >= 1 ? bookIdNum : null,
+    chapterIdx: Number.isFinite(chapterIdxNum) && chapterIdxNum >= 1 ? chapterIdxNum : null,
+    chapterTitle: typeof raw.chapterTitle === 'string' ? raw.chapterTitle : '',
+    povSummaries,
+  };
+}
+
 export const getChapterPovSummaries = async (bookId, chapterIdx) => {
   try {
     const normalizedBookId = toPositiveNumberOrNull(bookId);

@@ -1,8 +1,8 @@
 /** 그래프 레이아웃 복원·챕터별 사전 로드 */
 
 import cytoscape from 'cytoscape';
-import { createStorageKey } from '../../hooks/common/useLocalStorage';
-import { extractEventNodesAndEdges } from '../viewer/viewerUtils';
+import { STORAGE_KEYS } from '../../hooks/common/useLocalStorage';
+import { extractEventNodesAndEdges } from '../viewer/viewerCoreStateUtils';
 import { 
   getDetectedMaxChapter, 
   getCharactersDataFromMaxChapter, 
@@ -26,7 +26,7 @@ export function restoreGraphLayout(currentEvent, currentChapter) {
     const currentEventNum = typeof currentEvent.eventNum === 'number' ? currentEvent.eventNum : 0;
     
     for (let eventNum = 0; eventNum <= currentEventNum; eventNum++) {
-      const eventKey = createStorageKey.graphEventLayout(currentChapter, eventNum);
+      const eventKey = STORAGE_KEYS.graphEventLayout(currentChapter, eventNum);
       const eventLayoutStr = localStorage.getItem(eventKey);
       
       if (eventLayoutStr) {
@@ -81,7 +81,7 @@ async function generateChapterLayout({ folderKey, bookKey, chapterNum, signal })
     return null;
   }
 
-  const storageKey = createStorageKey.chapterNodePositions(bookKey, chapterNum);
+  const storageKey = STORAGE_KEYS.chapterNodePositions(bookKey, chapterNum);
   if (localStorage.getItem(storageKey)) {
     return null;
   }

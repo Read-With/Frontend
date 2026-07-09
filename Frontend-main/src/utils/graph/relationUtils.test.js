@@ -1,22 +1,13 @@
 import { describe, it, expect } from 'vitest';
 import {
-  safeNum,
   normalizeRelation,
   isValidRelation,
   isSamePair,
   processRelations,
-  createRelationKey,
-  getRelationKeyFromRelation,
   relationEventMetaPassthrough,
 } from './relationUtils.js';
 
 describe('relationUtils', () => {
-  it('safeNum', () => {
-    expect(Number.isNaN(safeNum(undefined))).toBe(true);
-    expect(safeNum(3)).toBe(3);
-    expect(safeNum('4')).toBe(4);
-  });
-
   it('normalizeRelation', () => {
     expect(normalizeRelation(null)).toBeNull();
     const r = normalizeRelation({ id1: 1, id2: 2, relation: ['a'], weight: 2 });
@@ -41,11 +32,6 @@ describe('relationUtils', () => {
     ]);
     expect(out).toHaveLength(1);
     expect(out[0]).toMatchObject({ id1: 1, id2: 2 });
-  });
-
-  it('createRelationKey / getRelationKeyFromRelation', () => {
-    expect(createRelationKey(2, 1)).toBe('1-2');
-    expect(getRelationKeyFromRelation({ id1: 3, id2: 4 })).toBe('3-4');
   });
 
   it('relationEventMetaPassthrough / processRelations keeps event ids', () => {

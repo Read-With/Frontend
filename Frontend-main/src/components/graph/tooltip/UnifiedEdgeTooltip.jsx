@@ -18,9 +18,9 @@ import { safeNum, processRelationTagsCached } from "../../../utils/graph/relatio
 import { cleanupRelationUtils } from "../../../utils/graph/relationUtils";
 import { getMaxChapter } from "../../../utils/common/cache/manifestCache";
 import {
-  getUnifiedEventInfoForEdgeTooltip,
-  resolveViewerDisplayEventNum,
-} from "../../../utils/viewer/viewerEventUtils";
+  resolveEventOrdinalForDisplay,
+} from "../../../utils/viewer/viewerEventProgressUtils";
+import { resolveTooltipBookId, isGraphOnlyGraphPage } from "../graphShared";
 import "../RelationGraph.css";
 
 function UnifiedEdgeTooltip({
@@ -69,12 +69,18 @@ function UnifiedEdgeTooltip({
   const id1 = safeNum(data.source);
   const id2 = safeNum(data.target);
 
-  const unifiedEventInfo = useMemo(
-    () => getUnifiedEventInfoForEdgeTooltip({ currentEvent, prevValidEvent, eventNum }),
+  const displayEventNum = useMemo(
+    () =>
+      resolveEventOrdinalForDisplay({
+        currentEvent,
+        prevValidEvent,
+        progressTopBar: null,
+        fallback: eventNum,
+      }),
     [currentEvent, prevValidEvent, eventNum],
   );
 
-  const isGraphOnlyPage = window.location.pathname.includes('/user/graph/');
+  const isGraphOnlyPage = isGraphOnlyGraphPage();
   const relationDataMode = useMemo(() => {
     if (mode === 'viewer') {
       return 'viewer';
@@ -85,21 +91,10 @@ function UnifiedEdgeTooltip({
     return mode;
   }, [mode, isGraphOnlyPage, displayMode, bookId]);
 
-  const numericBookId = useMemo(() => {
-    if (bookId !== null && bookId !== undefined) {
-      const parsed = Number(bookId);
-      if (Number.isFinite(parsed) && parsed > 0) {
-        return parsed;
-      }
-    }
-    if (filename) {
-      const parsed = Number(filename);
-      if (Number.isFinite(parsed) && parsed > 0) {
-        return parsed;
-      }
-    }
-    return null;
-  }, [bookId, filename]);
+  const numericBookId = useMemo(
+    () => resolveTooltipBookId(bookId, filename),
+    [bookId, filename],
+  );
 
   const safeMaxChapterValue = useMemo(() => {
     if (maxChapter && maxChapter > 0) {
@@ -121,7 +116,7 @@ function UnifiedEdgeTooltip({
     noRelation,
     error: relationError,
     fetchData,
-  } = useRelationData(relationDataMode, id1, id2, chapterNum, unifiedEventInfo.eventNum, safeMaxChapterValue, filename, numericBookId);
+  } = useRelationData(relationDataMode, id1, id2, chapterNum, displayEventNum, safeMaxChapterValue, filename, numericBookId);
 
   /** graphStyles.getRelationColor과 동일: 간선 data.positivity → 막대·라벨 색 통일 */
   const { graphBarPositivity, chartTimelineFallbackValue } = useMemo(() => {
@@ -143,7 +138,7 @@ function UnifiedEdgeTooltip({
     if (id1 && id2 && numericBookId && chapterNum) {
       fetchData();
     }
-  }, [id1, id2, numericBookId, chapterNum, unifiedEventInfo.eventNum, relationDataMode, fetchData]);
+  }, [id1, id2, numericBookId, chapterNum, displayEventNum, relationDataMode, fetchData]);
 
   useEffect(() => {
     return () => {
@@ -154,15 +149,6 @@ function UnifiedEdgeTooltip({
   const timelineHasNumeric = Array.isArray(timeline)
     ? timeline.some(value => typeof value === 'number' && !Number.isNaN(value))
     : false;
-
-  const currentEventNumber = useMemo(() => {
-    return resolveViewerDisplayEventNum({
-      currentEvent,
-      prevValidEvent,
-      progressTopBar: null,
-      fallback: eventNum,
-    });
-  }, [currentEvent, prevValidEvent, eventNum]);
 
   const extractNumericLabel = useCallback((label) => {
     if (typeof label === 'number' && Number.isFinite(label)) {
@@ -183,13 +169,13 @@ function UnifiedEdgeTooltip({
   const effectiveEventColumns = useMemo(() => {
     if (isGraphOnlyPage) return Number.POSITIVE_INFINITY;
 
-    const candidate = Number(currentEventNumber);
+    const candidate = Number(displayEventNum);
     if (Number.isFinite(candidate) && candidate > 0) {
       return candidate;
     }
 
     return Number.POSITIVE_INFINITY;
-  }, [isGraphOnlyPage, currentEventNumber]);
+  }, [isGraphOnlyPage, displayEventNum]);
 
   const chartPairs = useMemo(() => {
     const pairs = [];
@@ -243,8 +229,8 @@ function UnifiedEdgeTooltip({
     if (pairs.length === 0 && chartTimelineFallbackValue !== null) {
       pairs.push({
         value: chartTimelineFallbackValue,
-        label: `E${currentEventNumber || 1}`,
-        numericLabel: currentEventNumber || 1,
+        label: `E${displayEventNum || 1}`,
+        numericLabel: displayEventNum || 1,
         isChapterAggregate: false
       });
     }
@@ -255,7 +241,7 @@ function UnifiedEdgeTooltip({
     labels,
     timeline,
     extractNumericLabel,
-    currentEventNumber,
+    displayEventNum,
     chartTimelineFallbackValue,
     isGraphOnlyPage,
     effectiveEventColumns
@@ -264,7 +250,7 @@ function UnifiedEdgeTooltip({
   const activeEventHasPositivity = useMemo(() => {
     if (chartPairs.length === 0) return false;
     if (isGraphOnlyPage) return true;
-    const currentEventIdx = Number(currentEventNumber);
+    const currentEventIdx = Number(displayEventNum);
     if (!Number.isFinite(currentEventIdx) || currentEventIdx <= 0) {
       return chartPairs.length > 0;
     }
@@ -281,7 +267,7 @@ function UnifiedEdgeTooltip({
       );
     }
     return false;
-  }, [chartPairs, currentEventNumber, isGraphOnlyPage, mode]);
+  }, [chartPairs, displayEventNum, isGraphOnlyPage, mode]);
 
   const chartPoints = useMemo(() => {
     if (!activeEventHasPositivity) return [];

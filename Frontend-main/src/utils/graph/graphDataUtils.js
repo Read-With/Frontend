@@ -1,12 +1,12 @@
-import { extractCharacterId } from './characterUtils';
+import { extractCharacterId, isNodeWeightEntryVisible } from './characterUtils';
 import { normalizeRelation, isValidRelation, directedEdgeElementId } from './relationUtils';
 import {
-  getEventIndexFromObject,
   isGraphEdgeElement,
   normalizeElementId,
   sortElementsByDataId,
   uniqueStrings,
 } from './graphUtils';
+import { eventUtils } from '../viewer/viewerCoreStateUtils';
 
 function undirectedPairKey(s, t) {
   const a = String(s);
@@ -127,13 +127,59 @@ function finalizeDirectedEdges(edgeMap) {
   return out;
 }
 
-function relationEventIdxFromRaw(raw) {
-  return getEventIndexFromObject(raw, ['eventNum', 'eventIdx', 'event_id', 'event_idx']);
+function manifestEventIdxFromRaw(raw) {
+  const idx = eventUtils.extractRawEventIdx(raw);
+  return idx > 0 ? idx : NaN;
 }
 
-function currentEventIdxForPositivity(eventData) {
-  const n = getEventIndexFromObject(eventData, ['eventNum', 'eventIdx', 'resolvedEventIdx', 'idx']);
-  return Number.isFinite(n) && n > 0 ? n : NaN;
+function toPositiveIntOrNaN(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return NaN;
+  const i = Math.trunc(n);
+  return i > 0 ? i : NaN;
+}
+
+function isRelationVisibleAtEvent(rel, eventData) {
+  if (!eventData || typeof eventData !== 'object') return true;
+
+  const targetChapter = toPositiveIntOrNaN(
+    eventUtils.resolveChapterIdx(eventData) ?? eventData.chapterIdx ?? eventData.chapter
+  );
+  const targetEventIdx = toPositiveIntOrNaN(eventUtils.extractRawEventIdx(eventData));
+
+  const relationChapter = toPositiveIntOrNaN(
+    rel?.chapterIdx ??
+      rel?.chapter ??
+      rel?.chapter_idx ??
+      rel?.event?.chapterIdx ??
+      rel?.event?.chapter ??
+      rel?.event?.chapter_idx
+  );
+  const relationEventIdx = toPositiveIntOrNaN(
+    rel?.eventIdx ??
+      rel?.eventNum ??
+      rel?.event_idx ??
+      rel?.event_id ??
+      rel?.event?.eventIdx ??
+      rel?.event?.eventNum ??
+      rel?.event?.event_idx ??
+      rel?.event?.event_id
+  );
+
+  if (Number.isFinite(targetChapter) && Number.isFinite(relationChapter)) {
+    if (relationChapter > targetChapter) return false;
+    if (relationChapter < targetChapter) return true;
+    if (Number.isFinite(targetEventIdx) && Number.isFinite(relationEventIdx)) {
+      return relationEventIdx <= targetEventIdx;
+    }
+    return true;
+  }
+
+  if (Number.isFinite(targetEventIdx) && Number.isFinite(relationEventIdx)) {
+    return relationEventIdx <= targetEventIdx;
+  }
+
+  return true;
 }
 
 /**
@@ -220,7 +266,7 @@ function deepEqual(obj1, obj2, depth = 0) {
  * @param {Object} idToMain - ID to main character 매핑
  * @param {Object} idToNames - ID to names array 매핑
  * @param {string} folderKey - 폴더 키 (이미지 경로용)
- * @param {Object} nodeWeights - 노드 가중치 정보 (node_weights_accum)
+ * @param {Object} nodeWeights - 노드 가중치 정보
  * @param {Object} previousRelations - 이전 이벤트의 관계 데이터
  * @param {Object} eventData - 이벤트 데이터 (text 필드 포함)
  * @param {Object} idToProfileImage - ID to profileImage 매핑 (API 책용)
@@ -317,31 +363,20 @@ export function convertRelationsToElements(relations, idToName, idToDesc, idToDe
   );
   
 
-  // 노드 가중치 기반 크기 계산
-  const getNodeWeight = (nodeId) => {
-    if (!nodeWeights) {
-      return 3;
-    }
-    if (nodeWeights[nodeId]) {
-      const weight = nodeWeights[nodeId].weight;
-      if (typeof weight === 'number' && weight > 0) {
-        return weight;
-      }
-    }
-    return 3;
-  };
+  const visibleNodeIds = validNodeIds.filter((nodeId) => isNodeWeightEntryVisible(nodeWeights?.[nodeId]));
+  const visibleNodeIdSet = new Set(visibleNodeIds);
 
   // 원 배치 좌표 계산
   const centerX = 500;
   const centerY = 350;
   const radius = 320;
-  validNodeIds.forEach((strId) => {
+  visibleNodeIds.forEach((strId) => {
     const angle = seededRandom(strId, 0, 360) * Math.PI / 180;
     const r = radius * (0.7 + 0.3 * (seededRandom(strId, 0, 1000) / 1000));
     const x = centerX + r * Math.cos(angle);
     const y = centerY + r * Math.sin(angle);
     const commonName = resolvedIdToName[strId];
-    const nodeWeight = getNodeWeight(strId);
+    const { weight: nodeWeight, count: nodeCount } = nodeWeights[strId];
     
     let imagePath = null;
     if (idToProfileImage?.[strId]?.trim?.()) {
@@ -358,6 +393,7 @@ export function convertRelationsToElements(relations, idToName, idToDesc, idToDe
       names: [commonName, ...(Array.isArray(idToNames[strId]) ? idToNames[strId] : [])],
       common_name: commonName,
       weight: nodeWeight,
+      count: nodeCount,
     };
     
     // 이미지 경로가 있으면 image 필드 추가
@@ -387,6 +423,7 @@ export function convertRelationsToElements(relations, idToName, idToDesc, idToDe
   relationsArray.forEach((rel) => {
     const r = normalizeRelation(rel);
     if (!isValidRelation(r)) return;
+    if (!isRelationVisibleAtEvent(rel, eventData)) return;
 
     const id1 = String(r.id1);
     const id2 = String(r.id2);
@@ -396,6 +433,10 @@ export function convertRelationsToElements(relations, idToName, idToDesc, idToDe
     }
 
     if (!nodeSet.has(id1) || !nodeSet.has(id2)) {
+      return;
+    }
+
+    if (!visibleNodeIdSet.has(id1) || !visibleNodeIdSet.has(id2)) {
       return;
     }
 
@@ -410,8 +451,8 @@ export function convertRelationsToElements(relations, idToName, idToDesc, idToDe
         info = { lastFinite: null, lastFromCurrent: null, hasFromCurrent: false };
       }
       info.lastFinite = r.positivity;
-      const curEv = currentEventIdxForPositivity(eventData);
-      const relEv = relationEventIdxFromRaw(rel);
+      const curEv = manifestEventIdxFromRaw(eventData);
+      const relEv = manifestEventIdxFromRaw(rel);
       if (Number.isFinite(curEv) && Number.isFinite(relEv) && relEv === curEv) {
         info.lastFromCurrent = r.positivity;
         info.hasFromCurrent = true;
@@ -541,7 +582,7 @@ export function visualElementSignature(el) {
     const topo = d.bidirectional ? "b" : d.reciprocalPair ? "r" : "";
     return `e:${rel}:${d.label ?? ""}:${d.positivity ?? ""}:${d.lineStyle ?? ""}:${d.width ?? ""}:${topo}`;
   }
-  return `n:${d.label ?? ""}:${d.weight ?? ""}:${d.main ?? ""}:${d.positivity ?? ""}`;
+  return `n:${d.label ?? ""}:${d.weight ?? ""}:${d.count ?? ""}:${d.main ?? ""}:${d.positivity ?? ""}`;
 }
 
 /** props elements가 새 배열이어도 그래프 의미가 동일하면 effect·layout 재실행 생략 */

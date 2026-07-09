@@ -16,17 +16,9 @@ import { ensureElementsInBounds, clearHighlightClassesOn } from '../../utils/gra
 import { applySearchFadeEffect } from '../../utils/graph/searchUtils.jsx';
 import { useGraphDataLoader } from '../../hooks/graph/useGraphDataLoader.js';
 import { useGraphSearch } from '../../hooks/graph/graphViewHooks';
-import { resolveViewerDisplayEventNum } from '../../utils/viewer/viewerEventUtils';
-
-function resolveEventIdx(currentEvent) {
-  if (typeof currentEvent?.eventNum === 'number' && currentEvent.eventNum > 0) {
-    return currentEvent.eventNum;
-  }
-  if (typeof currentEvent === 'number' && currentEvent > 0) {
-    return currentEvent;
-  }
-  return null;
-}
+import { resolveEventIdxOrFallback } from '../../hooks/common/hooksShared';
+import { eventUtils } from '../../utils/viewer/viewerCoreStateUtils';
+import { resolveEventOrdinalForDisplay } from '../../utils/viewer/viewerEventProgressUtils';
 
 function buildViewportFitKey({ chapterNum, eventNum, elements }) {
   if (!Array.isArray(elements) || elements.length === 0) return '';
@@ -308,7 +300,6 @@ const ViewerRelationGraph = ({
           stylesheet={stylesheet}
           layout={presetLayout}
           cyRef={cyRef}
-          nodeSize={10}
           fitNodeIds={fitNodeIds}
           searchTerm={searchTerm}
           isSearchActive={isSearchActive}
@@ -360,7 +351,7 @@ const GraphContainer = forwardRef(({
   } = useGraphDataLoader(
     isExternalMode ? null : (bookId ?? filename ?? null),
     isExternalMode ? null : currentChapter,
-    isExternalMode ? null : resolveEventIdx(currentEvent),
+    isExternalMode ? null : resolveEventIdxOrFallback(currentEvent, null),
   );
 
   const elements = externalElements || internalElements;
@@ -394,9 +385,9 @@ const GraphContainer = forwardRef(({
     if (Array.isArray(externalFitNodeIds)) return externalFitNodeIds;
     if (Array.isArray(internalFitNodeIds) && internalFitNodeIds.length > 0) return internalFitNodeIds;
     if (effectiveIsSearchActive && Array.isArray(effectiveFilteredElements) && effectiveFilteredElements.length > 0) {
-      const ids = effectiveFilteredElements
-        .filter((el) => el?.data && !el.data.source && el.data.id != null)
-        .map((el) => el.data.id);
+      const ids = eventUtils.filterNodes(effectiveFilteredElements)
+        .map((el) => el.data.id)
+        .filter((id) => id != null);
       return Array.from(new Set(ids));
     }
     return [];
@@ -422,7 +413,7 @@ const GraphContainer = forwardRef(({
       elements={finalElements}
       newNodeIds={newNodeIds}
       chapterNum={currentChapter}
-      eventNum={resolveViewerDisplayEventNum({
+      eventNum={resolveEventOrdinalForDisplay({
         currentEvent,
         prevValidEvent,
         progressTopBar: null,

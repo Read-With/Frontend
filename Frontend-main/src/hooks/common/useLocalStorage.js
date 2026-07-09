@@ -16,40 +16,21 @@ const isStringStorageKey = (key) => {
 };
 
 export const STORAGE_KEYS = {
-  CHAPTER_NODE_POSITIONS: (bookKey, chapter) => {
+  chapterNodePositions: (bookKey, chapter) => {
     const bookSegment = normalizeKeySegment(bookKey);
     const chapterSegment = normalizeKeySegment(chapter) ?? 'unknown';
     return bookSegment
       ? `chapter_node_positions_${bookSegment}_${chapterSegment}`
       : `chapter_node_positions_${chapterSegment}`;
   },
-  GRAPH_EVENT_LAYOUT: (chapter, eventNum) => `graph_event_layout_chapter_${chapter}_event_${eventNum}`,
-  GRAPH_PARTIAL_LAYOUT: (chapter) => `graph_partial_layout_chapter_${chapter}`,
-  PREV_CHAPTER: (filename) => `readwith_${filename}_prevChapter`,
-  NEXT_PAGE: (filename) => `readwith_${filename}_nextPage`,
-  PREV_PAGE: (filename) => `readwith_${filename}_prevPage`,
-  TOTAL_LENGTH: (bookId) => `totalLength_${bookId}`,
-  CHAPTER_LENGTHS: (bookId) => `chapterLengths_${bookId}`,
-  CHAPTER: (filename) => `readwith_${filename}_chapter`,
-};
-
-export const createStorageKey = {
-  chapterNodePositions: (bookKey, chapter) => STORAGE_KEYS.CHAPTER_NODE_POSITIONS(bookKey, chapter),
-  
-  // 이벤트별 레이아웃 키 생성
-  graphEventLayout: (chapter, eventNum) => STORAGE_KEYS.GRAPH_EVENT_LAYOUT(chapter, eventNum),
-  
-  // 챕터별 부분 레이아웃 키 생성
-  graphPartialLayout: (chapter) => STORAGE_KEYS.GRAPH_PARTIAL_LAYOUT(chapter),
-  
-  prevChapter: (filename) => STORAGE_KEYS.PREV_CHAPTER(filename),
-  nextPage: (filename) => STORAGE_KEYS.NEXT_PAGE(filename),
-  prevPage: (filename) => STORAGE_KEYS.PREV_PAGE(filename),
-  
-  // 책 관련 키 생성
-  totalLength: (bookId) => STORAGE_KEYS.TOTAL_LENGTH(bookId),
-  chapterLengths: (bookId) => STORAGE_KEYS.CHAPTER_LENGTHS(bookId),
-  chapter: (filename) => STORAGE_KEYS.CHAPTER(filename),
+  graphEventLayout: (chapter, eventNum) => `graph_event_layout_chapter_${chapter}_event_${eventNum}`,
+  graphPartialLayout: (chapter) => `graph_partial_layout_chapter_${chapter}`,
+  prevChapter: (filename) => `readwith_${filename}_prevChapter`,
+  nextPage: (filename) => `readwith_${filename}_nextPage`,
+  prevPage: (filename) => `readwith_${filename}_prevPage`,
+  totalLength: (bookId) => `totalLength_${bookId}`,
+  chapterLengths: (bookId) => `chapterLengths_${bookId}`,
+  chapter: (filename) => `readwith_${filename}_chapter`,
 };
 
 export function useLocalStorage(key, initialValue) {

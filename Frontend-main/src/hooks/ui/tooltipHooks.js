@@ -1,11 +1,12 @@
-/** 툴팁: 외부 클릭 감지·드래그 위치 (그래프 드래그 후 클릭 무시 포함) */
+/** 툴팁: 외부 클릭 감지·드래그 위치·활성 툴팁 상태 */
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import {
   getContainerInfo,
   getViewportInfo,
   calculateCytoscapePosition,
   constrainToViewport,
+  processTooltipData,
 } from '../../utils/graph/graphUtils';
 
 let globalDragState = {
@@ -82,6 +83,86 @@ export function useClickOutside(callback, enabled = true, ignoreDrag = false) {
   }, [callback, enabled, ignoreDrag]);
 
   return ref;
+}
+
+export function useTooltipState({
+  onError = null,
+  graphClearRef = null,
+  clearDelay = 150,
+  errorCheckDelay = 220,
+} = {}) {
+  const [activeTooltip, setActiveTooltip] = useState(null);
+  const tooltipTimeoutRef = useRef(null);
+  const lastTooltipOpenAtRef = useRef(0);
+  const activeTooltipRef = useRef(null);
+  const onErrorRef = useRef(onError);
+  const graphClearRefRef = useRef(graphClearRef);
+
+  useEffect(() => {
+    onErrorRef.current = onError;
+    graphClearRefRef.current = graphClearRef;
+  }, [onError, graphClearRef]);
+
+  useEffect(() => {
+    activeTooltipRef.current = activeTooltip;
+  }, [activeTooltip]);
+
+  const handleClearTooltip = useCallback(() => {
+    if (tooltipTimeoutRef.current) {
+      clearTimeout(tooltipTimeoutRef.current);
+      tooltipTimeoutRef.current = null;
+    }
+
+    const now = Date.now();
+    if (now - lastTooltipOpenAtRef.current < clearDelay) {
+      return;
+    }
+
+    setActiveTooltip(null);
+    if (graphClearRefRef.current?.current) {
+      graphClearRefRef.current.current();
+    }
+  }, [clearDelay]);
+
+  const handleSetActiveTooltip = useCallback((tooltipData) => {
+    if (tooltipTimeoutRef.current) {
+      clearTimeout(tooltipTimeoutRef.current);
+      tooltipTimeoutRef.current = null;
+    }
+
+    const processedTooltipData = processTooltipData(tooltipData, tooltipData.type);
+    lastTooltipOpenAtRef.current = Date.now();
+    setActiveTooltip(processedTooltipData);
+
+    if (onErrorRef.current) {
+      const timeoutId = setTimeout(() => {
+        if (!activeTooltipRef.current) {
+          onErrorRef.current();
+        }
+        if (tooltipTimeoutRef.current === timeoutId) {
+          tooltipTimeoutRef.current = null;
+        }
+      }, errorCheckDelay);
+      tooltipTimeoutRef.current = timeoutId;
+    }
+  }, [errorCheckDelay]);
+
+  useEffect(() => {
+    return () => {
+      if (tooltipTimeoutRef.current) {
+        clearTimeout(tooltipTimeoutRef.current);
+        tooltipTimeoutRef.current = null;
+      }
+    };
+  }, []);
+
+  return {
+    activeTooltip,
+    setActiveTooltip,
+    handleClearTooltip,
+    handleSetActiveTooltip,
+    activeTooltipRef,
+  };
 }
 
 export function useTooltipPosition(initialX, initialY, options = {}) {
