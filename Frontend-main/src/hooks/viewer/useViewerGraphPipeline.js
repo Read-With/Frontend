@@ -29,19 +29,35 @@ function isStaleLoad(generationRef, generation, activeCallKeyRef, callKey) {
 }
 
 function usePipelineRefs() {
-  return {
-    setElementsRef: useRef(null),
-    applyTokenRef: useRef(0),
-    hasVisibleElementsRef: useRef(false),
-    chapterSyncStatusRef: useRef(new Map()),
-    chapterEventDiscoveryRef: useRef(new Map()),
-    activeDiscoveryRunRef: useRef(0),
-    activeCallKeyRef: useRef(null),
-    apiFetchedCallKeyRef: useRef(null),
-    cacheAppliedCallKeyRef: useRef(null),
-    loadGenerationRef: useRef(0),
-    graphScopeRef: useRef({ bookId: null, chapter: null }),
-  };
+  const setElementsRef = useRef(null);
+  const applyTokenRef = useRef(0);
+  const hasVisibleElementsRef = useRef(false);
+  const chapterSyncStatusRef = useRef(new Map());
+  const chapterEventDiscoveryRef = useRef(new Map());
+  const activeDiscoveryRunRef = useRef(0);
+  const activeCallKeyRef = useRef(null);
+  const apiFetchedCallKeyRef = useRef(null);
+  const cacheAppliedCallKeyRef = useRef(null);
+  const loadGenerationRef = useRef(0);
+  const graphScopeRef = useRef({ bookId: null, chapter: null });
+
+  const refsRef = useRef(null);
+  if (!refsRef.current) {
+    refsRef.current = {
+      setElementsRef,
+      applyTokenRef,
+      hasVisibleElementsRef,
+      chapterSyncStatusRef,
+      chapterEventDiscoveryRef,
+      activeDiscoveryRunRef,
+      activeCallKeyRef,
+      apiFetchedCallKeyRef,
+      cacheAppliedCallKeyRef,
+      loadGenerationRef,
+      graphScopeRef,
+    };
+  }
+  return refsRef.current;
 }
 
 /** 캐시/API 결과 → elements·events 커밋 */

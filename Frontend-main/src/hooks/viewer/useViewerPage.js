@@ -23,6 +23,7 @@ import { anchorToLocators } from '../../utils/common/locatorUtils';
 import { getFolderKeyFromFilename } from '../../utils/graph/graphData';
 import { useBookmarks } from '../bookmarks/bookmarkHooks';
 import { userViewerBookmarksPath } from '../../utils/navigation/viewerPaths';
+import { debugChapterGraphFromServer } from '../../utils/viewer/debugChapterGraph';
 
 function runViewerPaging(viewerRef, direction) {
   const ref = viewerRef.current;
@@ -125,6 +126,16 @@ export function useViewerPage() {
   );
 
   const { manifestLoaded } = useViewerManifest(manifestServerBookId);
+
+  useEffect(() => {
+    if (!import.meta.env.DEV) return;
+    const serverBookId = book?.id ?? manifestServerBookId;
+    if (!manifestLoaded || !serverBookId) return;
+
+    const readwith = window.__readwith ?? (window.__readwith = {});
+    readwith.debugChapterGraph = (chapterIdx = 1, options) =>
+      debugChapterGraphFromServer(serverBookId, chapterIdx, options);
+  }, [manifestLoaded, book?.id, manifestServerBookId]);
 
   const {
     progressTopBar,
