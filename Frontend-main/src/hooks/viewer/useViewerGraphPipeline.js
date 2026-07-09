@@ -173,6 +173,10 @@ function useGraphCacheApply({
       DEFAULT_GRAPH_TRANSFORM_DEPS
     );
 
+    // commitGraphState는 useLayoutEffect 안에서 동기 리렌더를 유발할 수 있으므로
+    // ref를 먼저 설정해 중복 적용 루프를 막는다.
+    refs.cacheAppliedCallKeyRef.current = callKey;
+
     commitGraphState({
       graphChapter: chapter,
       apiEventIdx: eventIdx,
@@ -181,7 +185,6 @@ function useGraphCacheApply({
       characters: resolved.characters,
       relations: resolved.relations,
     });
-    refs.cacheAppliedCallKeyRef.current = callKey;
     return true;
   }, [commitGraphState, refs]);
 
@@ -345,10 +348,13 @@ function useGraphFineLoad({
   const [retryGeneration, setRetryGeneration] = useState(0);
 
   const finishFineLoading = useCallback((isReady, isLoading, error = null, shouldResetTransition = true) => {
-    setIsDataReady(isReady);
-    setFineGraphLoading(isLoading);
+    setIsDataReady((prev) => (prev === isReady ? prev : isReady));
+    setFineGraphLoading((prev) => (prev === isLoading ? prev : isLoading));
     if (shouldResetTransition) resetTransition();
-    setApiError(error);
+    setApiError((prev) => {
+      if (error == null && prev == null) return prev;
+      return error;
+    });
   }, [resetTransition, setIsDataReady, setFineGraphLoading]);
 
   const resetFineGraphSession = useCallback((scope) => {
@@ -434,9 +440,12 @@ function useGraphFineLoad({
     if (!ctx || ctx.eventIdx < 1) return;
     if (ctx.callKey === refs.activeCallKeyRef.current) return;
 
-    ensureCacheOrPending(ctx.bookId, ctx.chapter, ctx.eventIdx, ctx.callKey, {
+    const cacheApplied = ensureCacheOrPending(ctx.bookId, ctx.chapter, ctx.eventIdx, ctx.callKey, {
       finalizeOnCache: true,
     });
+    if (cacheApplied) {
+      refs.activeCallKeyRef.current = ctx.callKey;
+    }
   }, [ensureCacheOrPending, manifestLoaded, resolveCallContext, refs]);
 
   useEffect(() => {
@@ -568,13 +577,16 @@ export function useViewerGraphPipeline({
   });
 
   const finishFineLoadingRef = useRef(null);
+  const invokeFinishFineLoading = useCallback((...args) => {
+    finishFineLoadingRef.current?.(...args);
+  }, []);
 
   const cacheLayer = useGraphCacheApply({
     book,
     setEvents,
     setIsDataReady,
     setFineGraphLoading,
-    finishFineLoading: (...args) => finishFineLoadingRef.current?.(...args),
+    finishFineLoading: invokeFinishFineLoading,
     refs,
     commitGraphState,
   });

@@ -155,7 +155,13 @@ export const INITIAL_TRANSITION_STATE = {
 
 export const transitionUtils = {
   getInitialState: () => ({ ...INITIAL_TRANSITION_STATE }),
-  reset: (setTransitionState) => setTransitionState({ ...INITIAL_TRANSITION_STATE }),
+  reset: (setTransitionState) => {
+    setTransitionState((prev) => (
+      prev.type == null && !prev.inProgress && !prev.error && prev.direction == null
+        ? prev
+        : { ...INITIAL_TRANSITION_STATE }
+    ));
+  },
 };
 
 export function resolveServerBookId(book) {
