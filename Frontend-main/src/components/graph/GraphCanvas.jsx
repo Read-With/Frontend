@@ -4,12 +4,13 @@ import CytoscapeGraphUnified from './CytoscapeGraphUnified';
 import UnifiedNodeInfo from './tooltip/UnifiedNodeInfo';
 import UnifiedEdgeTooltip from './tooltip/UnifiedEdgeTooltip';
 import { graphStyles, COLORS, ANIMATION_VALUES } from '../../utils/styles/styles.js';
-import { GRAPH_LAYOUT_CONSTANTS } from './graphConstants.js';
-import { resolveChapterSidebarWidth } from './graphShared.js';
+import { GRAPH_LAYOUT_CONSTANTS, resolveChapterSidebarWidth } from './graphShared.js';
 
-const SIDEBAR_WIDTH = 480;
-const { TOP_BAR_HEIGHT } = GRAPH_LAYOUT_CONSTANTS;
-const ANIMATION_DURATION = 700;
+const {
+  TOP_BAR_HEIGHT,
+  TOOLTIP_SIDEBAR_WIDTH: SIDEBAR_WIDTH,
+  ANIMATION_MS: ANIMATION_DURATION,
+} = GRAPH_LAYOUT_CONSTANTS;
 
 const sidebarBaseStyle = {
   position: 'fixed',
@@ -127,15 +128,6 @@ const GraphInfoBar = memo(function GraphInfoBar({
       </div>
     </div>
   );
-}, (prevProps, nextProps) => {
-  if (prevProps.currentChapter !== nextProps.currentChapter) return false;
-  if (prevProps.currentChapterTitle !== nextProps.currentChapterTitle) return false;
-  if (prevProps.userCurrentChapter !== nextProps.userCurrentChapter) return false;
-  if (prevProps.userReadingChapterTitle !== nextProps.userReadingChapterTitle) return false;
-  if (prevProps.nodeCount !== nextProps.nodeCount) return false;
-  if (prevProps.relationCount !== nextProps.relationCount) return false;
-  if (prevProps.filterStage !== nextProps.filterStage) return false;
-  return true;
 });
 
 GraphInfoBar.propTypes = {
@@ -157,7 +149,7 @@ function GraphSidebar({
   elements = [],
   onStartClosing,
   onClearGraph,
-  forceClose,
+  isSidebarClosing = false,
   povSummaries = null,
   apiBookGraphData = null,
   bookId = null,
@@ -172,16 +164,11 @@ function GraphSidebar({
     right: isClosing || !isVisible ? `-${SIDEBAR_WIDTH}px` : '0px',
   }), [isClosing, isVisible]);
 
-  const handleClose = useCallback(() => {
-    if (onClearGraph && !forceClose) {
-      onClearGraph();
-    }
+  const runCloseAnimation = useCallback(() => {
     if (animationTimeoutRef.current) {
       clearTimeout(animationTimeoutRef.current);
       animationTimeoutRef.current = null;
     }
-    onStartClosing?.();
-
     setIsClosing(true);
     animationTimeoutRef.current = setTimeout(() => {
       onClose();
@@ -189,7 +176,13 @@ function GraphSidebar({
       setIsVisible(false);
       animationTimeoutRef.current = null;
     }, ANIMATION_DURATION);
-  }, [onClearGraph, forceClose, onStartClosing, onClose]);
+  }, [onClose]);
+
+  const handleClose = useCallback(() => {
+    onClearGraph?.();
+    onStartClosing?.();
+    runCloseAnimation();
+  }, [onClearGraph, onStartClosing, runCloseAnimation]);
 
   useEffect(() => {
     const prevActiveTooltip = previousActiveTooltipRef.current;
@@ -222,10 +215,10 @@ function GraphSidebar({
   }, [activeTooltip, onClose]);
 
   useEffect(() => {
-    if (forceClose && !isClosing) {
-      handleClose();
+    if (isSidebarClosing && !isClosing) {
+      runCloseAnimation();
     }
-  }, [forceClose, isClosing, handleClose]);
+  }, [isSidebarClosing, isClosing, runCloseAnimation]);
 
   useEffect(() => () => {
     if (animationTimeoutRef.current) {
@@ -266,7 +259,7 @@ function GraphSidebar({
         onClose={handleClose}
         chapterNum={chapterNum}
         eventNum={eventNum}
-        displayMode="sidebar"
+        variant="graphPage"
         bookId={bookId}
       />
     </div>
@@ -301,7 +294,7 @@ function GraphCanvas({
   tooltipHandlers,
   graphClearRef,
 }) {
-  const { isSidebarClosing, onCloseSidebar, onStartClosing, onClearGraph, forceClose } = sidebarControl;
+  const { isSidebarClosing, onCloseSidebar, onStartClosing, onClearGraph } = sidebarControl;
   const { isSearchActive, filteredElements, searchTerm, fitNodeIds, isResetFromSearch } = searchState;
   const { stylesheet, layout } = cytoscapeConfig;
   const { onShowNodeTooltip, onShowEdgeTooltip, onClearTooltip, selectedNodeIdRef, selectedEdgeIdRef } = tooltipHandlers;
@@ -355,7 +348,7 @@ function GraphCanvas({
               onClose={onCloseSidebar}
               onStartClosing={onStartClosing}
               onClearGraph={onClearGraph}
-              forceClose={forceClose}
+              isSidebarClosing={isSidebarClosing}
               chapterNum={chapterNum}
               eventNum={eventNum}
               filename={filename}
@@ -418,7 +411,7 @@ GraphCanvas.propTypes = {
   filename: PropTypes.string.isRequired,
   elements: PropTypes.array.isRequired,
   renderElements: PropTypes.array.isRequired,
-  povSummaries: PropTypes.array,
+  povSummaries: PropTypes.any,
   apiBookGraphData: PropTypes.object,
   bookId: PropTypes.number,
   isLoading: PropTypes.bool.isRequired,
@@ -429,34 +422,11 @@ GraphCanvas.propTypes = {
   nodeCount: PropTypes.number.isRequired,
   relationCount: PropTypes.number.isRequired,
   filterStage: PropTypes.number.isRequired,
-  sidebarControl: PropTypes.shape({
-    isSidebarClosing: PropTypes.bool.isRequired,
-    onCloseSidebar: PropTypes.func.isRequired,
-    onStartClosing: PropTypes.func.isRequired,
-    onClearGraph: PropTypes.func.isRequired,
-    forceClose: PropTypes.bool.isRequired,
-  }).isRequired,
-  searchState: PropTypes.shape({
-    isSearchActive: PropTypes.bool.isRequired,
-    filteredElements: PropTypes.array,
-    searchTerm: PropTypes.string.isRequired,
-    fitNodeIds: PropTypes.array,
-    isResetFromSearch: PropTypes.bool.isRequired,
-  }).isRequired,
-  cytoscapeConfig: PropTypes.shape({
-    stylesheet: PropTypes.array.isRequired,
-    layout: PropTypes.object.isRequired,
-  }).isRequired,
-  tooltipHandlers: PropTypes.shape({
-    onShowNodeTooltip: PropTypes.func.isRequired,
-    onShowEdgeTooltip: PropTypes.func.isRequired,
-    onClearTooltip: PropTypes.func.isRequired,
-    selectedNodeIdRef: PropTypes.object.isRequired,
-    selectedEdgeIdRef: PropTypes.object.isRequired,
-  }).isRequired,
-  graphClearRef: PropTypes.shape({
-    current: PropTypes.func,
-  }),
+  sidebarControl: PropTypes.object.isRequired,
+  searchState: PropTypes.object.isRequired,
+  cytoscapeConfig: PropTypes.object.isRequired,
+  tooltipHandlers: PropTypes.object.isRequired,
+  graphClearRef: PropTypes.object,
 };
 
 export default React.memo(GraphCanvas);

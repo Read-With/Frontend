@@ -1,5 +1,4 @@
 import { getFineGraph, getBookManifest } from '../../api/api';
-import { sortEventsByIdx } from '../../graph/graphData';
 import {
   aggregateCharactersFromEvents,
   buildNodeWeightsFromEvents,
@@ -113,11 +112,10 @@ const buildChapterCachePayload = (
   bookId,
   chapterIdx,
   events,
-  source = CHAPTER_GRAPH_CACHE_SOURCE.RUNTIME,
-  folderKey = 'api'
+  source = CHAPTER_GRAPH_CACHE_SOURCE.RUNTIME
 ) => {
   const timestamp = Date.now();
-  const sortedEvents = sortEventsByIdx(events);
+  const sortedEvents = eventUtils.sortEventsByIdx(events);
   if (!sortedEvents.length) {
     return {
       bookId,
@@ -154,20 +152,18 @@ const buildChapterCachePayload = (
 
     let convertedElements = [];
     try {
-      convertedElements = convertRelationsToElements(
-        aggregatedRelations,
+      convertedElements = convertRelationsToElements({
+        relations: aggregatedRelations,
         idToName,
         idToDesc,
         idToDescKo,
         idToMain,
         idToNames,
-        folderKey,
-        toNodeWeightsOrNull(nodeWeights),
-        null,
-        event?.event ?? null,
+        nodeWeights: toNodeWeightsOrNull(nodeWeights),
+        eventData: event?.event ?? null,
         idToProfileImage,
-        aggregatedCharacters.length > 0 ? aggregatedCharacters : null
-      );
+        charactersOrphanMerge: aggregatedCharacters.length > 0 ? aggregatedCharacters : null,
+      });
     } catch (error) {
       console.error('convertRelationsToElements 실패:', error);
     }
@@ -254,7 +250,7 @@ export const reconstructChapterGraphState = (cachePayload, targetEventIdx) => {
     };
   }
 
-  sortEventsByIdx(cachePayload.diffs || []).forEach((diff) => {
+  eventUtils.sortEventsByIdx(cachePayload.diffs || []).forEach((diff) => {
     const diffIdx = Number(diff?.eventIdx);
     if (!Number.isFinite(diffIdx) || diffIdx > normalizedTarget) return;
     currentElements = applyElementDiff(currentElements, diff?.elementDiff);

@@ -31,7 +31,7 @@ async function prewarmGraphBookCache(book, options = {}) {
 function navigateFromLibrary(navigate, book, graphMode) {
   const base = graphMode === 'graph' ? '/user/graph' : USER_VIEWER_PREFIX;
   navigate(`${base}/${book.id}`, {
-    state: { book, fromLibrary: true, from: { pathname: '/user/mypage' } },
+    state: { book, fromLibrary: true, from: { pathname: '/mypage' } },
     replace: false,
   });
 }

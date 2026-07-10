@@ -55,7 +55,7 @@ export function useViewerPage() {
   }, [bookId]);
 
   const previousPage = location.state?.from || null;
-  const isFromLibrary = previousPage?.pathname === '/user/mypage' || location.state?.fromLibrary === true;
+  const isFromLibrary = previousPage?.pathname === '/mypage' || location.state?.fromLibrary === true;
 
   const {
     currentPage,

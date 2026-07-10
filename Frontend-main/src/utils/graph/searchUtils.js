@@ -296,17 +296,27 @@ export function applySearchFadeEffect(cy, filteredElements, isSearchActive) {
       };
     }
 
-    // 검색이 활성화되었지만 결과가 없는 경우
+    // 검색 활성 + 결과 없음 → 전체 페이드 (결과 없음 UI와 맞춤)
     if (!filteredElements || filteredElements.length === 0) {
-      const result = {
-        fadedNodes: 0,
+      let fadedNodeCount = 0;
+      let fadedEdgeCount = 0;
+      cy.batch(() => {
+        cy.nodes().forEach((node) => {
+          node.addClass('faded');
+          fadedNodeCount += 1;
+        });
+        cy.edges().forEach((edge) => {
+          edge.addClass('faded');
+          fadedEdgeCount += 1;
+        });
+      });
+      return {
+        fadedNodes: fadedNodeCount,
         visibleNodes: 0,
-        fadedEdges: 0,
+        fadedEdges: fadedEdgeCount,
         visibleEdges: 0,
-        cleanup: () => {}
+        cleanup: () => { clearHighlightClassesOn(cy); },
       };
-      
-      return result;
     }
 
     // 검색 결과에 포함된 요소들의 ID 집합 생성

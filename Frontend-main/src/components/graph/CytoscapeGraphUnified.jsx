@@ -9,12 +9,11 @@ import {
   buildElementsStructureFingerprint,
   visualElementSignature,
 } from "../../utils/graph/graphDataUtils.js";
-import { applySearchFadeEffect, shouldShowNoSearchResults, getNoSearchResultsMessage } from "../../utils/graph/searchUtils.jsx";
+import { applySearchFadeEffect, shouldShowNoSearchResults, getNoSearchResultsMessage } from "../../utils/graph/searchUtils.js";
 import {
   createRippleEffect,
   ensureElementsInBounds,
   isGraphContainerSizeReady,
-  createMouseEventHandlers,
   syncReciprocalPairJunctionOffsets,
   clearHighlightClassesOn,
   calculateSpiralPlacement,
@@ -74,7 +73,6 @@ const CytoscapeGraphUnified = ({
   fitNodeIds,
   style = {},
   cyRef: externalCyRef,
-  onLayoutComplete,
   searchTerm = "",
   isSearchActive = false,
   filteredElements = [],
@@ -173,8 +171,8 @@ const CytoscapeGraphUnified = ({
   }, [cy, isResetFromSearch, showRippleEffect]);
 
   const reapplySearchFade = useCallback(() => {
-    if (!cy || !isSearchActive || !filteredElements || filteredElements.length === 0) return;
-    applySearchFadeEffect(cy, filteredElements, isSearchActive);
+    if (!cy || !isSearchActive) return;
+    applySearchFadeEffect(cy, filteredElements || [], true);
   }, [cy, isSearchActive, filteredElements]);
 
   const {
@@ -283,15 +281,7 @@ const CytoscapeGraphUnified = ({
     if (!cy || !cy.container()) {
       return;
     }
-    
-    const container = containerRef.current;
-    const mouseHandlers = createMouseEventHandlers(cy, container);
-    const { handleMouseDown, handleMouseMove, handleMouseUp, isDraggingRef } = mouseHandlers;
-    
-    container.addEventListener('mousedown', handleMouseDown);
-    container.addEventListener('mousemove', handleMouseMove);
-    container.addEventListener('mouseup', handleMouseUp);
-    
+
     const handleDragFreeOn = () => {
       setTimeout(() => {
         detectAndResolveOverlap(cy);
@@ -301,7 +291,6 @@ const CytoscapeGraphUnified = ({
     const handleDrag = (evt) => {
       const node = evt.target;
       node.style('transition-property', 'none');
-      isDraggingRef.current = true;
       syncReciprocalPairJunctionOffsets(cy);
     };
 
@@ -314,8 +303,6 @@ const CytoscapeGraphUnified = ({
         detail: { type: 'graphDragEnd', timestamp: Date.now() }
       });
       document.dispatchEvent(dragEndEvent);
-      
-      isDraggingRef.current = false;
     };
 
     const handleReciprocalJunction = () => {
@@ -336,10 +323,6 @@ const CytoscapeGraphUnified = ({
       cy.removeListener('drag', 'node', handleDrag);
       cy.removeListener('dragfree', 'node', handleDragFree);
       cy.removeListener('position', 'node', handleReciprocalJunction);
-      
-      container.removeEventListener('mousedown', handleMouseDown);
-      container.removeEventListener('mousemove', handleMouseMove);
-      container.removeEventListener('mouseup', handleMouseUp);
     };
   }, [externalCyRef]);
 
@@ -528,7 +511,6 @@ const CytoscapeGraphUnified = ({
     updateStylesheet,
     applyNodeSizes,
     triggerRippleForAddedNodes,
-    onLayoutComplete,
     isInitialLoad,
     setIsInitialLoad,
     containerRef,
@@ -568,10 +550,9 @@ const CytoscapeGraphUnified = ({
     const wasSearchActive = prevIsSearchActiveRef.current;
     prevIsSearchActiveRef.current = isSearchActive;
 
-    if (isSearchActive && filteredElements.length > 0) {
-      applySearchFadeEffect(cy, filteredElements, isSearchActive);
-    } else if (!isSearchActive && wasSearchActive) {
-      // Only clear when transitioning search OFF — not on every render
+    if (isSearchActive) {
+      applySearchFadeEffect(cy, filteredElements || [], true);
+    } else if (wasSearchActive) {
       clearHighlightClassesOn(cy);
     }
   }, [cy, isSearchActive, filteredElementIdsStr]);
@@ -670,7 +651,6 @@ CytoscapeGraphUnified.propTypes = {
   cyRef: PropTypes.shape({
     current: PropTypes.object,
   }).isRequired,
-  onLayoutComplete: PropTypes.func,
   searchTerm: PropTypes.string,
   isSearchActive: PropTypes.bool,
   filteredElements: PropTypes.arrayOf(elementShape),

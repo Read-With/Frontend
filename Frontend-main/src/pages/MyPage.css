@@ -556,8 +556,8 @@
   background: #F5F1E6;
   border-radius: 0 0 20px 20px;
   box-shadow: 0 4px 24px rgba(62, 79, 47, 0.08);
-  padding: 40px 32px;
-  min-height: 360px;
+  padding: 28px 32px;
+  min-height: 0;
 }
 
 .books-grid {
@@ -576,112 +576,85 @@
   gap: 24px;
 }
 
-/* ==================== Empty State ==================== */
-.empty-state {
-  text-align: center;
-  padding: 80px 20px;
-  color: #586544;
-}
-
-.empty-icon {
-  margin-bottom: 24px;
-  color: #3E4F2F;
-  opacity: 0.4;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-}
-
-.empty-title {
-  font-size: 1.8rem;
-  font-weight: 700;
-  margin-bottom: 12px;
-  color: #3E4F2F;
-}
-
-.empty-description {
-  font-size: 1.1rem;
-  line-height: 1.7;
-  color: #586544;
-  max-width: 480px;
-  margin: 0 auto 32px;
-  text-align: center;
-}
-
-/* ==================== 빈 서재 웰컴 패널 ==================== */
+/* ==================== 빈 서재 / 빈 필터 웰컴 패널 ==================== */
 .empty-welcome {
-  padding: 40px 32px 48px;
+  padding: 16px 20px 20px;
+  min-height: 280px;
+  display: flex;
+  align-items: center;
+  box-sizing: border-box;
 }
 
 .empty-welcome-content {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 32px;
-  align-items: center;
+  gap: 20px;
+  align-items: stretch;
   max-width: 900px;
   margin: 0 auto;
+  width: 100%;
+  min-height: 240px;
+}
+
+.empty-welcome-content--text-only {
+  grid-template-columns: 1fr;
+  max-width: 480px;
+  min-height: 0;
+  justify-items: center;
+}
+
+.empty-welcome-content--text-only .empty-welcome-info {
+  text-align: center;
+  align-items: center;
+}
+
+.empty-welcome-content--text-only .empty-welcome-description {
+  margin-bottom: 0;
+  min-height: 0;
 }
 
 .empty-welcome-info {
   text-align: left;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
 }
 
 .empty-welcome-icon {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 72px;
-  height: 72px;
-  border-radius: 20px;
+  width: 56px;
+  height: 56px;
+  border-radius: 16px;
   background: rgba(62, 79, 47, 0.08);
   color: #3E4F2F;
-  margin-bottom: 20px;
+  margin-bottom: 10px;
 }
 
 .empty-welcome-title {
-  font-size: 1.75rem;
+  font-size: 1.45rem;
   font-weight: 700;
   color: #3E4F2F;
-  margin-bottom: 12px;
+  margin-bottom: 6px;
 }
 
 .empty-welcome-description {
-  font-size: 1rem;
-  line-height: 1.7;
-  color: #586544;
-  margin-bottom: 24px;
-}
-
-.empty-welcome-features {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.empty-welcome-features li {
-  display: flex;
-  align-items: center;
-  gap: 10px;
   font-size: 0.95rem;
-  font-weight: 600;
-  color: #3E4F2F;
-}
-
-.empty-welcome-features li svg {
-  flex-shrink: 0;
+  line-height: 1.5;
   color: #586544;
+  margin-bottom: 0;
+  min-height: calc(0.95rem * 1.5 * 2);
 }
 
-.empty-welcome-upload {
+.empty-welcome-upload,
+.empty-welcome-cta {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  padding: 48px 32px;
+  gap: 4px;
+  padding: 24px 24px;
   border: 2px dashed #B3B6A0;
   border-radius: 20px;
   background: rgba(255, 255, 255, 0.5);
@@ -689,9 +662,15 @@
   transition: all 0.2s ease;
   text-align: center;
   min-height: 240px;
+  height: 100%;
+  width: 100%;
+  font: inherit;
+  color: inherit;
+  box-sizing: border-box;
 }
 
-.empty-welcome-upload:hover {
+.empty-welcome-upload:hover,
+.empty-welcome-cta:hover {
   border-color: #3E4F2F;
   background: rgba(62, 79, 47, 0.04);
   box-shadow: 0 8px 24px rgba(62, 79, 47, 0.1);
@@ -701,47 +680,32 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 64px;
-  height: 64px;
+  width: 48px;
+  height: 48px;
   border-radius: 50%;
   background: var(--primary-gradient);
   color: white;
-  margin-bottom: 8px;
+  margin-bottom: 2px;
 }
 
-.empty-welcome-upload strong {
-  font-size: 1.15rem;
+.empty-welcome-upload strong,
+.empty-welcome-cta strong {
+  font-size: 1.1rem;
   font-weight: 700;
   color: #3E4F2F;
 }
 
-.empty-welcome-upload span {
-  font-size: 0.95rem;
+.empty-welcome-upload span,
+.empty-welcome-cta span {
+  font-size: 0.9rem;
   color: #586544;
+  max-width: 220px;
 }
 
 .empty-welcome-upload small {
-  font-size: 0.8rem;
+  font-size: 0.75rem;
   color: #717B59;
-  margin-top: 4px;
-}
-
-.empty-cta-button {
-  padding: 16px 36px;
-  font-size: 1.1rem;
-  font-weight: 700;
-  background: var(--primary-gradient);
-  color: white;
-  border: none;
-  border-radius: 50px;
-  cursor: pointer;
-  transition: all 0.3s ease;
-  box-shadow: 0 8px 24px rgba(62, 79, 47, 0.3);
-}
-
-.empty-cta-button:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 12px 32px rgba(62, 79, 47, 0.4);
+  margin-top: 2px;
 }
 
 /* ==================== 로딩 및 에러 상태 ==================== */
@@ -917,25 +881,24 @@
   }
 
   .empty-welcome {
-    padding: 28px 20px 36px;
+    padding: 12px 12px 16px;
+    min-height: 0;
   }
 
   .empty-welcome-content {
     grid-template-columns: 1fr;
-    gap: 24px;
+    gap: 16px;
+    min-height: 0;
   }
 
   .empty-welcome-info {
     text-align: center;
   }
 
-  .empty-welcome-features {
-    align-items: center;
-  }
-
-  .empty-welcome-upload {
-    min-height: 200px;
-    padding: 36px 24px;
+  .empty-welcome-upload,
+  .empty-welcome-cta {
+    min-height: 180px;
+    padding: 20px 20px;
   }
 }
 

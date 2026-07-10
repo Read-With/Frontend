@@ -1,8 +1,7 @@
 /** 챕터·이벤트 스냅샷, eventIdx 유틸, 매크로 그래프 캐시 로더 */
-import { toNumberOrNull } from '../common/valueUtils';
+import { toNumberOrNull, toPositiveInt } from '../common/valueUtils';
 import { errorUtils } from '../common/errorUtils';
 import { extractApiBookId } from './graphUtils';
-import { toPositiveInt } from '../common/valueUtils';
 import {
   getCachedChapterEvents,
   getChapterEventFallbackData,
@@ -47,8 +46,8 @@ const isLegacyRawEventRow = (event) =>
   );
 
 const mapLegacyOrSummaryEvent = (event, targetChapter) => {
-  const normalizedIdx = getEventOrderIdx(event);
-  if (normalizedIdx === null || normalizedIdx <= 0) return null;
+  const normalizedIdx = eventUtils.resolveEventOrdinal(event);
+  if (normalizedIdx == null || normalizedIdx <= 0) return null;
 
   if (isLegacyRawEventRow(event)) {
     const resolvedEventNum = toPositiveInt(event.eventNum, normalizedIdx);
@@ -190,48 +189,6 @@ export function getEventDataByIndex(folderKey, chapter, eventIndex) {
   };
 }
 
-// --- eventIdx 정렬·필터 ---
-
-const truncEventIdx = (value) => {
-  const n = toNumberOrNull(value);
-  return n === null ? null : Math.trunc(n);
-};
-
-const normalizeTargetIdx = (targetIdx) => {
-  const target = truncEventIdx(targetIdx);
-  return target === null || target < 0 ? null : target;
-};
-
-const getEventOrderIdx = (event) =>
-  truncEventIdx(event?.eventIdx) ??
-  truncEventIdx(event?.idx) ??
-  truncEventIdx(event?.eventNum);
-
-const compareNullableIdxAsc = (idxA, idxB) => {
-  if (idxA === null && idxB === null) return 0;
-  if (idxA === null) return 1;
-  if (idxB === null) return -1;
-  return idxA - idxB;
-};
-
-const compareEventsByIdx = (a, b) =>
-  compareNullableIdxAsc(getEventOrderIdx(a), getEventOrderIdx(b));
-
-const filterEventsByIdx = (events, targetIdx, predicate) => {
-  if (!Array.isArray(events)) return [];
-  const target = normalizeTargetIdx(targetIdx);
-  if (target === null) return [];
-  return events.filter((entry) => {
-    const eventIdx = getEventOrderIdx(entry);
-    return eventIdx !== null && predicate(eventIdx, target);
-  });
-};
-
-export const sortEventsByIdx = (events) => {
-  if (!Array.isArray(events)) return [];
-  return [...events].sort(compareEventsByIdx);
-};
-
 /** 챕터 이벤트 캐시 → events state에 병합 */
 function mergeChapterCacheEventsIntoState(
   prevEvents,
@@ -284,36 +241,6 @@ export function applyChapterEventsFromCache(
   );
   return { applied: merged, hasPayload: true, isEmpty: false, events };
 }
-
-export const filterEventsUpTo = (events, targetIdx) =>
-  filterEventsByIdx(events, targetIdx, (eventIdx, target) => eventIdx <= target);
-
-export const filterEventsBefore = (events, targetIdx) =>
-  filterEventsByIdx(events, targetIdx, (eventIdx, target) => eventIdx < target);
-
-export const getMaxEventIdx = (events) => {
-  if (!Array.isArray(events) || events.length === 0) return 0;
-  return events.reduce((max, event) => {
-    const idx = getEventOrderIdx(event);
-    if (idx === null) return max;
-    return Math.max(max, idx);
-  }, 0);
-};
-
-export const clampEventIdxToMax = (requestedIdx, maxIdx) => {
-  const maxRaw = toNumberOrNull(maxIdx);
-  const hasUpper = maxRaw !== null && Number.isFinite(maxRaw);
-  const maxInt = hasUpper ? (toPositiveInt(maxRaw, 0) ?? 0) : null;
-  const reqInt = truncEventIdx(requestedIdx);
-
-  if (hasUpper && maxInt === 0) return 0;
-  if (!hasUpper) {
-    if (reqInt !== null && reqInt >= 1) return reqInt;
-    return 1;
-  }
-  if (reqInt === null || reqInt < 1) return maxInt;
-  return Math.min(reqInt, maxInt);
-};
 
 // --- 매크로 그래프 세션·localStorage 캐시 ---
 

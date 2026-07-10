@@ -19,7 +19,7 @@ import { processRelationTags, cleanupRelationUtils } from "../../../utils/graph/
 import {
   resolveEventOrdinalForDisplay,
 } from "../../../utils/viewer/viewerEventProgressUtils";
-import { resolveTooltipBookId, isGraphOnlyGraphPage } from "../graphShared";
+import { resolveTooltipBookId } from "../graphShared";
 import "../RelationGraph.css";
 
 function UnifiedEdgeTooltip({
@@ -28,6 +28,7 @@ function UnifiedEdgeTooltip({
   y,
   onClose,
   style,
+  variant,
   mode = 'standalone',
   displayMode = 'tooltip',
   chapterNum = 1,
@@ -37,7 +38,11 @@ function UnifiedEdgeTooltip({
   bookId = null,
 }) {
   const { filename } = useParams();
-  const isSidebar = displayMode === 'sidebar';
+  const resolvedVariant =
+    variant
+    ?? (displayMode === 'sidebar' ? 'graphPage' : mode === 'viewer' ? 'viewer' : 'graphPage');
+  const isSidebar = resolvedVariant === 'graphPage';
+  const isViewer = resolvedVariant === 'viewer';
 
   const {
     position,
@@ -75,16 +80,7 @@ function UnifiedEdgeTooltip({
     [currentEvent, prevValidEvent, eventNum],
   );
 
-  const isGraphOnlyPage = isGraphOnlyGraphPage();
-  const relationDataMode = useMemo(() => {
-    if (mode === 'viewer') {
-      return 'viewer';
-    }
-    if (isGraphOnlyPage || displayMode === 'sidebar' || bookId) {
-      return 'cumulative';
-    }
-    return mode;
-  }, [mode, isGraphOnlyPage, displayMode, bookId]);
+  const relationDataMode = isViewer ? 'viewer' : 'cumulative';
 
   const numericBookId = useMemo(
     () => resolveTooltipBookId(bookId, filename),
@@ -143,7 +139,7 @@ function UnifiedEdgeTooltip({
   }, []);
 
   const effectiveEventColumns = useMemo(() => {
-    if (isGraphOnlyPage) return Number.POSITIVE_INFINITY;
+    if (!isViewer) return Number.POSITIVE_INFINITY;
 
     const candidate = Number(displayEventNum);
     if (Number.isFinite(candidate) && candidate > 0) {
@@ -151,7 +147,7 @@ function UnifiedEdgeTooltip({
     }
 
     return Number.POSITIVE_INFINITY;
-  }, [isGraphOnlyPage, displayEventNum]);
+  }, [isViewer, displayEventNum]);
 
   const chartPairs = useMemo(() => {
     const pairs = [];
@@ -189,7 +185,7 @@ function UnifiedEdgeTooltip({
           continue;
         }
 
-        if (!isGraphOnlyPage && Number.isFinite(effectiveEventColumns) && numericLabel > effectiveEventColumns) {
+        if (isViewer && Number.isFinite(effectiveEventColumns) && numericLabel > effectiveEventColumns) {
           continue;
         }
 
@@ -219,13 +215,13 @@ function UnifiedEdgeTooltip({
     extractNumericLabel,
     displayEventNum,
     chartTimelineFallbackValue,
-    isGraphOnlyPage,
+    isViewer,
     effectiveEventColumns
   ]);
 
   const activeEventHasPositivity = useMemo(() => {
     if (chartPairs.length === 0) return false;
-    if (isGraphOnlyPage) return true;
+    if (!isViewer) return true;
     const currentEventIdx = Number(displayEventNum);
     if (!Number.isFinite(currentEventIdx) || currentEventIdx <= 0) {
       return chartPairs.length > 0;
@@ -234,16 +230,13 @@ function UnifiedEdgeTooltip({
     if (chartPairs.some((pair) => pair.label === currentLabel || pair.numericLabel === currentEventIdx)) {
       return true;
     }
-    if (mode === 'viewer') {
-      return chartPairs.some(
-        (pair) =>
-          !pair.isChapterAggregate &&
-          Number.isFinite(pair.numericLabel) &&
-          pair.numericLabel <= currentEventIdx
-      );
-    }
-    return false;
-  }, [chartPairs, displayEventNum, isGraphOnlyPage, mode]);
+    return chartPairs.some(
+      (pair) =>
+        !pair.isChapterAggregate &&
+        Number.isFinite(pair.numericLabel) &&
+        pair.numericLabel <= currentEventIdx
+    );
+  }, [chartPairs, displayEventNum, isViewer]);
 
   const chartPoints = useMemo(() => {
     if (!activeEventHasPositivity) return [];
@@ -356,7 +349,7 @@ function UnifiedEdgeTooltip({
           width: isSidebar ? '80px' : 80,
           textAlign: 'center',
           fontSize: isSidebar ? '12px' : 12,
-          color: isSidebar ? COLORS.textSecondary : COLORS.textSecondary,
+          color: COLORS.textSecondary,
           display: 'inline-block',
           lineHeight: '1.2',
         }}
@@ -364,6 +357,249 @@ function UnifiedEdgeTooltip({
         {step}%
       </span>
     ));
+  };
+
+  const renderPositivityMeter = (isSidebarMode = false) => (
+    <>
+      <div
+        style={
+          isSidebarMode
+            ? {
+                display: 'flex',
+                alignItems: 'flex-end',
+                gap: '4px',
+                height: '28px',
+                margin: '16px 0 8px 0',
+                justifyContent: 'center',
+              }
+            : {
+                display: 'flex',
+                alignItems: 'flex-end',
+                gap: '0.2rem',
+                height: '1.4rem',
+                margin: '0.5rem 0 0.25rem 0',
+                justifyContent: 'center',
+              }
+        }
+      >
+        {renderProgressBars(positivityForBars, relationStyle, isSidebarMode)}
+      </div>
+      <div
+        style={
+          isSidebarMode
+            ? {
+                display: 'flex',
+                justifyContent: 'center',
+                gap: '4px',
+                marginBottom: '8px',
+              }
+            : {
+                display: 'flex',
+                justifyContent: 'center',
+                gap: '0.2rem',
+                marginBottom: '0.25rem',
+              }
+        }
+      >
+        {renderPercentageLabels(isSidebarMode)}
+      </div>
+    </>
+  );
+
+  const explanationParts = useMemo(() => {
+    if (typeof data?.explanation !== 'string' || !data.explanation) {
+      return { hasExplanation: false, primary: null, secondary: null };
+    }
+    const [primary, secondary] = data.explanation.split('|');
+    return {
+      hasExplanation: true,
+      primary: primary ?? '',
+      secondary: secondary || null,
+    };
+  }, [data?.explanation]);
+
+  const renderExplanationBody = (variant = 'tooltip') => {
+    if (!explanationParts.hasExplanation) return null;
+
+    if (variant === 'sidebar') {
+      return (
+        <div
+          style={{
+            borderLeft: `4px solid ${relationStyle.color}`,
+            paddingLeft: '16px',
+          }}
+        >
+          <p
+            style={{
+              margin: '0 0 8px 0',
+              fontSize: '14px',
+              lineHeight: '1.6',
+              color: COLORS.textPrimary,
+              fontWeight: '500',
+              letterSpacing: '-0.01em',
+              wordBreak: 'keep-all',
+            }}
+          >
+            {explanationParts.primary}
+          </p>
+          {explanationParts.secondary && (
+            <p
+              style={{
+                margin: 0,
+                fontSize: '14px',
+                lineHeight: '1.6',
+                color: COLORS.textSecondary,
+                letterSpacing: '-0.01em',
+                wordBreak: 'keep-all',
+              }}
+            >
+              {explanationParts.secondary}
+            </p>
+          )}
+        </div>
+      );
+    }
+
+    return (
+      <div className="relation-explanation" style={{ width: '100%' }}>
+        <div
+          className="quote-box"
+          style={{ borderLeft: `0.25rem solid ${relationStyle.color}` }}
+        >
+          <strong>{explanationParts.primary}</strong>
+        </div>
+        {explanationParts.secondary && (
+          <p className="explanation-text">{explanationParts.secondary}</p>
+        )}
+      </div>
+    );
+  };
+
+  const renderTooltipStatusPanel = ({
+    message,
+    messageColor = '#64748b',
+    fontSize = '1rem',
+    maxWidth = '17.5rem',
+    includeOuterWidth = false,
+    footer,
+  }) => (
+    <div
+      style={{
+        height: '100%',
+        display: 'flex',
+        flexDirection: 'column',
+        justifyContent: 'center',
+        alignItems: 'center',
+        padding: '1rem',
+        ...(includeOuterWidth
+          ? { width: 'calc(100% - 40px)', margin: '0 auto' }
+          : { minHeight: 0 }),
+      }}
+    >
+      <div
+        style={{
+          flex: 1,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
+      >
+        <div
+          style={{
+            textAlign: 'center',
+            color: messageColor,
+            fontSize,
+            maxWidth,
+            lineHeight: '1.5',
+            wordBreak: 'keep-all',
+          }}
+        >
+          {message}
+        </div>
+      </div>
+      {footer}
+    </div>
+  );
+
+  const renderSidebarChartLoading = () => (
+    <div
+      style={{
+        textAlign: 'center',
+        padding: '60px 20px',
+        color: COLORS.textSecondary,
+        fontSize: '14px',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        gap: '12px',
+      }}
+    >
+      <div
+        style={{
+          width: '32px',
+          height: '32px',
+          border: '3px solid #e5e7eb',
+          borderTop: '3px solid #5C6F5C',
+          borderRadius: '50%',
+          animation: 'spin 1s linear infinite',
+        }}
+      />
+      <span>데이터를 불러오는 중...</span>
+    </div>
+  );
+
+  const renderSidebarChartError = () => (
+    <div
+      style={{
+        textAlign: 'center',
+        padding: '60px 20px',
+        color: '#ef4444',
+        fontSize: '14px',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        gap: '12px',
+      }}
+    >
+      <div
+        style={{
+          width: '32px',
+          height: '32px',
+          borderRadius: '50%',
+          backgroundColor: '#fef2f2',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          fontSize: '18px',
+        }}
+      >
+        ⚠️
+      </div>
+      <span>데이터를 불러올 수 없습니다</span>
+      <button
+        onClick={fetchData}
+        style={{
+          ...buttonStyles.secondary,
+          fontSize: '12px',
+          padding: '6px 12px',
+        }}
+        {...buttonHandlers.secondary}
+      >
+        다시 시도
+      </button>
+    </div>
+  );
+
+  const tooltipActionBarStyle = {
+    flexShrink: 0,
+    paddingTop: '0.5rem',
+    paddingBottom: isViewer ? '0.5rem' : '0.75rem',
+    textAlign: 'center',
+    display: 'flex',
+    justifyContent: 'center',
+    alignItems: 'center',
+    width: 'calc(100% - 40px)',
+    margin: '0 auto',
   };
 
   const xAxisBounds = useMemo(() => {
@@ -437,15 +673,15 @@ function UnifiedEdgeTooltip({
     </ResponsiveContainer>
   );
 
-  const zIndex = mode === 'viewer' ? 99999 : 99999;
+  const zIndex = 99999;
   let chartTitle = "관계 변화 그래프";
-  if (mode === 'viewer') {
+  if (isViewer) {
     chartTitle = `Chapter ${chapterNum} 관계 변화`;
-  } else if (isGraphOnlyPage) {
+  } else {
     chartTitle = `Chapter ${chapterNum}까지의 누적 관계 변화`;
   }
 
-  if (displayMode === 'sidebar') {
+  if (isSidebar) {
     return (
       <div 
         style={{
@@ -562,28 +798,10 @@ function UnifiedEdgeTooltip({
                   </span>
                 </div>
                 
-                <div style={{
-                  display: 'flex',
-                  alignItems: 'flex-end',
-                  gap: '4px',
-                  height: '28px',
-                  margin: '16px 0 8px 0',
-                  justifyContent: 'center',
-                }}>
-                  {renderProgressBars(positivityForBars, relationStyle, true)}
-                </div>
-                
-                <div style={{
-                  display: 'flex',
-                  justifyContent: 'center',
-                  gap: '4px',
-                  marginBottom: '8px',
-                }}>
-                  {renderPercentageLabels(true)}
-                </div>
+                {renderPositivityMeter(true)}
               </div>
 
-              {data.explanation && (
+              {explanationParts.hasExplanation && (
                 <div 
                   className="sidebar-card"
                   style={{
@@ -601,34 +819,7 @@ function UnifiedEdgeTooltip({
                   }}>
                     관계 설명
                   </h4>
-                  <div style={{
-                    borderLeft: `4px solid ${relationStyle.color}`,
-                    paddingLeft: '16px',
-                  }}>
-                    <p style={{
-                      margin: '0 0 8px 0',
-                      fontSize: '14px',
-                      lineHeight: '1.6',
-                      color: COLORS.textPrimary,
-                      fontWeight: '500',
-                      letterSpacing: '-0.01em',
-                      wordBreak: 'keep-all',
-                    }}>
-                      {data.explanation.split("|")[0]}
-                    </p>
-                    {data.explanation.split("|")[1] && (
-                      <p style={{
-                        margin: 0,
-                        fontSize: '14px',
-                        lineHeight: '1.6',
-                        color: COLORS.textSecondary,
-                        letterSpacing: '-0.01em',
-                        wordBreak: 'keep-all',
-                      }}>
-                        {data.explanation.split("|")[1]}
-                      </p>
-                    )}
-                  </div>
+                  {renderExplanationBody('sidebar')}
                 </div>
               )}
 
@@ -666,62 +857,9 @@ function UnifiedEdgeTooltip({
                 </h4>
                 
                 {loading ? (
-                  <div style={{
-                    textAlign: 'center',
-                    padding: '60px 20px',
-                    color: COLORS.textSecondary,
-                    fontSize: '14px',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    gap: '12px',
-                  }}>
-                    <div style={{
-                      width: '32px',
-                      height: '32px',
-                      border: '3px solid #e5e7eb',
-                      borderTop: '3px solid #5C6F5C',
-                      borderRadius: '50%',
-                      animation: 'spin 1s linear infinite',
-                    }}></div>
-                    <span>데이터를 불러오는 중...</span>
-                  </div>
+                  renderSidebarChartLoading()
                 ) : relationError ? (
-                  <div style={{
-                    textAlign: 'center',
-                    padding: '60px 20px',
-                    color: '#ef4444',
-                    fontSize: '14px',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    gap: '12px',
-                  }}>
-                    <div style={{
-                      width: '32px',
-                      height: '32px',
-                      borderRadius: '50%',
-                      backgroundColor: '#fef2f2',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      fontSize: '18px',
-                    }}>
-                      ⚠️
-                    </div>
-                    <span>데이터를 불러올 수 없습니다</span>
-                    <button
-                      onClick={fetchData}
-                      style={{
-                        ...buttonStyles.secondary,
-                        fontSize: '12px',
-                        padding: '6px 12px',
-                      }}
-                      {...buttonHandlers.secondary}
-                    >
-                      다시 시도
-                    </button>
-                  </div>
+                  renderSidebarChartError()
                 ) : (
                   <div style={{ 
                     height: '352px',
@@ -787,71 +925,41 @@ function UnifiedEdgeTooltip({
           </button>
           {viewMode === "info" && (
             <div style={{ height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-              {(mode === 'viewer' && effectiveNoRelation) ? (
-                <div style={{ 
-                  height: '100%',
-                  display: 'flex', 
-                  flexDirection: 'column',
-                  justifyContent: 'center',
-                  alignItems: 'center', 
-                  padding: '1rem',
-                  width: 'calc(100% - 40px)',
-                  margin: '0 auto'
-                }}>
-                  <div style={{ 
-                    flex: 1,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center'
-                  }}>
-                    <div style={{ 
-                      textAlign: "center", 
-                      color: "#64748b", 
-                      fontSize: 16,
-                      maxWidth: '280px',
-                      lineHeight: '1.5',
-                      wordBreak: 'keep-all'
-                    }}>
-                      관계 형성이 이뤄지지 않았습니다
-                    </div>
-                  </div>
-                  <div
-                    className="edge-tooltip-actions"
-                    style={{ 
-                      marginTop: 'auto', 
-                      paddingTop: '0.5rem', 
-                      paddingBottom: mode === 'viewer' ? '0.5rem' : '0.75rem', 
-                      textAlign: "center",
-                      display: 'flex',
-                      justifyContent: 'center',
-                      alignItems: 'center',
-                      width: 'calc(100% - 40px)',
-                      margin: '0 auto'
-                    }}
-                  >
-                    <button
-                      className="relation-change-chart-btn edge-tooltip-animated-btn"
-                      style={buttonStyles.primary}
-                      onClick={() => setViewMode("chart")}
-                      {...buttonHandlers.primary}
+              {(isViewer && effectiveNoRelation) ? (
+                renderTooltipStatusPanel({
+                  message: '관계 형성이 이뤄지지 않았습니다',
+                  fontSize: 16,
+                  maxWidth: '280px',
+                  includeOuterWidth: true,
+                  footer: (
+                    <div
+                      className="edge-tooltip-actions"
+                      style={{ ...tooltipActionBarStyle, marginTop: 'auto' }}
                     >
-                      관계 변화 그래프
-                    </button>
-                  </div>
-                </div>
+                      <button
+                        className="relation-change-chart-btn edge-tooltip-animated-btn"
+                        style={buttonStyles.primary}
+                        onClick={() => setViewMode("chart")}
+                        {...buttonHandlers.primary}
+                      >
+                        관계 변화 그래프
+                      </button>
+                    </div>
+                  ),
+                })
               ) : (
                 <div style={{ 
                   height: '100%',
                   display: 'flex', 
                   flexDirection: 'column', 
                   overflow: 'hidden',
-                  padding: mode === 'viewer' ? '0.5rem 0.25rem' : '0.5rem'
+                  padding: isViewer ? '0.5rem 0.25rem' : '0.5rem'
                 }}>
                   <div 
                     className="edge-tooltip-header" 
                     style={{ 
                       ...tooltipStyles.header, 
-                      padding: mode === 'viewer' ? '0.75rem 0.5rem' : '0.75rem',
+                      padding: isViewer ? '0.75rem 0.5rem' : '0.75rem',
                       width: 'calc(100% - 40px)',
                       margin: '0 auto',
                       flexShrink: 0
@@ -880,31 +988,10 @@ function UnifiedEdgeTooltip({
                           {`${positivityPercentage}%`}
                         </span>
                       </div>
-                      <div
-                        style={{
-                          display: "flex",
-                          alignItems: "flex-end",
-                          gap: '0.2rem',
-                          height: '1.4rem',
-                          margin: "0.5rem 0 0.25rem 0",
-                          justifyContent: "center",
-                        }}
-                      >
-                        {renderProgressBars(positivityForBars, relationStyle, false)}
-                      </div>
-                      <div
-                        style={{
-                          display: "flex",
-                          justifyContent: "center",
-                          gap: '0.2rem',
-                          marginBottom: '0.25rem',
-                        }}
-                      >
-                        {renderPercentageLabels(false)}
-                      </div>
+                      {renderPositivityMeter(false)}
                     </div>
                   </div>
-                  {data.explanation && (
+                  {explanationParts.hasExplanation && (
                     <div 
                       className="edge-tooltip-body" 
                       style={{ 
@@ -913,40 +1000,18 @@ function UnifiedEdgeTooltip({
                         display: 'flex', 
                         alignItems: 'flex-start', 
                         justifyContent: 'center',
-                        padding: mode === 'viewer' ? '0.5rem 0.5rem' : '0.5rem',
+                        padding: isViewer ? '0.5rem 0.5rem' : '0.5rem',
                         width: 'calc(100% - 40px)',
                         margin: '0 auto',
                         minHeight: 0
                       }}
                     >
-                      <div className="relation-explanation" style={{ width: '100%' }}>
-                        <div
-                          className="quote-box"
-                          style={{ borderLeft: `0.25rem solid ${relationStyle.color}` }}
-                        >
-                          <strong>{data.explanation.split("|")[0]}</strong>
-                        </div>
-                        {data.explanation.split("|")[1] && (
-                          <p className="explanation-text">
-                            {data.explanation.split("|")[1]}
-                          </p>
-                        )}
-                      </div>
+                      {renderExplanationBody('tooltip')}
                     </div>
                   )}
                   <div
                     className="edge-tooltip-actions"
-                    style={{ 
-                      flexShrink: 0,
-                      paddingTop: '0.5rem', 
-                      paddingBottom: mode === 'viewer' ? '0.5rem' : '0.75rem', 
-                      textAlign: "center",
-                      display: 'flex',
-                      justifyContent: 'center',
-                      alignItems: 'center',
-                      width: 'calc(100% - 40px)',
-                      margin: '0 auto'
-                    }}
+                    style={tooltipActionBarStyle}
                   >
                     <button
                       className="relation-change-chart-btn edge-tooltip-animated-btn"
@@ -987,103 +1052,40 @@ function UnifiedEdgeTooltip({
                   불러오는 중...
                 </div>
               ) : shouldShowRelationError ? (
-                <div style={{ 
-                  height: '100%',
-                  display: 'flex', 
-                  flexDirection: 'column',
-                  justifyContent: 'center',
-                  alignItems: 'center', 
-                  padding: '1rem',
-                  minHeight: 0
-                }}>
-                  <div style={{ 
-                    flex: 1,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center'
-                  }}>
-                    <div style={{ 
-                      textAlign: "center", 
-                      color: "#ef4444", 
-                      fontSize: '1rem',
-                      maxWidth: '17.5rem',
-                      lineHeight: '1.5',
-                      wordBreak: 'keep-all'
-                    }}>
-                      데이터를 불러올 수 없습니다
+                renderTooltipStatusPanel({
+                  message: '데이터를 불러올 수 없습니다',
+                  messageColor: '#ef4444',
+                  footer: (
+                    <div style={tooltipActionBarStyle}>
+                      <button
+                        onClick={fetchData}
+                        style={buttonStyles.secondary}
+                        {...buttonHandlers.secondary}
+                      >
+                        다시 시도
+                      </button>
                     </div>
-                  </div>
-                  <div style={{ 
-                    flexShrink: 0,
-                    paddingTop: '0.5rem', 
-                    paddingBottom: mode === 'viewer' ? '0.5rem' : '0.75rem', 
-                    textAlign: "center",
-                    display: 'flex',
-                    justifyContent: 'center',
-                    alignItems: 'center',
-                    width: 'calc(100% - 40px)',
-                    margin: '0 auto'
-                  }}>
-                    <button
-                      onClick={fetchData}
-                      style={buttonStyles.secondary}
-                      {...buttonHandlers.secondary}
-                    >
-                      다시 시도
-                    </button>
-                  </div>
-                </div>
-              ) : (mode === 'viewer' && effectiveNoRelation) ? (
-                <div style={{ 
-                  height: '100%',
-                  display: 'flex', 
-                  flexDirection: 'column',
-                  justifyContent: 'center',
-                  alignItems: 'center', 
-                  padding: '1rem',
-                  minHeight: 0
-                }}>
-                  <div style={{ 
-                    flex: 1,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center'
-                  }}>
-                    <div style={{ 
-                      textAlign: "center", 
-                      color: "#64748b", 
-                      fontSize: '1rem',
-                      maxWidth: '17.5rem',
-                      lineHeight: '1.5',
-                      wordBreak: 'keep-all'
-                    }}>
-                      관계 형성이 이뤄지지 않았습니다
+                  ),
+                })
+              ) : (isViewer && effectiveNoRelation) ? (
+                renderTooltipStatusPanel({
+                  message: '관계 형성이 이뤄지지 않았습니다',
+                  footer: (
+                    <div style={tooltipActionBarStyle}>
+                      <button
+                        style={buttonStyles.secondary}
+                        onClick={() => setViewMode("info")}
+                        {...buttonHandlers.secondary}
+                      >
+                        간선 정보로 돌아가기
+                      </button>
                     </div>
-                  </div>
-                  <div style={{ 
-                    flexShrink: 0,
-                    paddingTop: '0.5rem', 
-                    paddingBottom: mode === 'viewer' ? '0.5rem' : '0.75rem', 
-                    textAlign: "center",
-                    display: 'flex',
-                    justifyContent: 'center',
-                    alignItems: 'center',
-                    width: 'calc(100% - 40px)',
-                    margin: '0 auto'
-                  }}>
-                    <button
-                      style={buttonStyles.secondary}
-                      onClick={() => setViewMode("info")}
-                      {...buttonHandlers.secondary}
-                    >
-                      간선 정보로 돌아가기
-                    </button>
-                  </div>
-                </div>
+                  ),
+                })
               ) : (
                 <div style={{ 
                   flex: 1,
-                  padding: mode === 'viewer' ? '0.5rem 0' : '0.5rem 0',
+                  padding: '0.5rem 0',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
@@ -1102,7 +1104,7 @@ function UnifiedEdgeTooltip({
                   </div>
                 </div>
               )}
-              {mode === 'standalone' && !loading && !shouldShowRelationError && !(mode === 'viewer' && effectiveNoRelation) && (
+              {!isViewer && !loading && !shouldShowRelationError && (
                 <div style={{ 
                   fontSize: '0.8125rem', 
                   color: "#64748b", 
@@ -1114,17 +1116,10 @@ function UnifiedEdgeTooltip({
                   x축: 챕터별 마지막/이벤트, y축: 관계 긍정도(-1~1)
                 </div>
               )}
-              {!(mode === 'viewer' && effectiveNoRelation) && (
+              {!(isViewer && effectiveNoRelation) && (
               <div style={{ 
-                flexShrink: 0,
-                paddingTop: '0.75rem', 
-                paddingBottom: mode === 'viewer' ? '0.5rem' : '0.75rem', 
-                textAlign: "center",
-                display: 'flex',
-                justifyContent: 'center',
-                alignItems: 'center',
-                width: 'calc(100% - 40px)',
-                margin: '0 auto'
+                ...tooltipActionBarStyle,
+                paddingTop: '0.75rem',
               }}>
                 <button
                   style={buttonStyles.secondary}
@@ -1152,6 +1147,7 @@ export default React.memo(UnifiedEdgeTooltip, (prevProps, nextProps) => {
     prevProps.prevValidEvent === nextProps.prevValidEvent &&
     prevProps.chapterNum === nextProps.chapterNum &&
     prevProps.eventNum === nextProps.eventNum &&
+    prevProps.variant === nextProps.variant &&
     prevProps.mode === nextProps.mode &&
     prevProps.displayMode === nextProps.displayMode
   );

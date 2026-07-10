@@ -134,12 +134,15 @@ function isRelationVisibleAtEvent(rel, eventData) {
   const targetChapter = toPositiveIntOrNaN(
     eventUtils.resolveChapterIdx(eventData) ?? eventData.chapterIdx ?? eventData.chapter
   );
-  const targetEventIdx = toPositiveIntOrNaN(eventUtils.resolveEventNum(eventData));
+  const targetEventIdx = toPositiveIntOrNaN(eventUtils.resolveEventOrdinal(eventData));
 
   const meta = relationEventMetaPassthrough(rel);
   const relationChapter = toPositiveIntOrNaN(meta.chapterIdx);
   const relationEventIdx = toPositiveIntOrNaN(
-    meta.eventIdx ?? meta.eventNum ?? rel?.event_id ?? rel?.event?.event_id
+    eventUtils.resolveEventOrdinal(rel) ??
+    eventUtils.resolveEventOrdinal(meta) ??
+    rel?.event_id ??
+    rel?.event?.event_id
   );
 
   if (Number.isFinite(targetChapter) && Number.isFinite(relationChapter)) {
@@ -183,94 +186,87 @@ const validateElements = (elements) => elements?.filter(e => e && normalizeEleme
 const createElementMap = (elements) => new Map(elements.map(e => [normalizeElementId(e), e]));
 
 function deepEqual(obj1, obj2, depth = 0) {
-  // 최대 깊이 제한 (무한 재귀 방지)
   const MAX_DEPTH = 10;
   if (depth > MAX_DEPTH) {
     return obj1 === obj2;
   }
-  
+
   if (obj1 === obj2) return true;
   if (obj1 == null || obj2 == null) return false;
   if (typeof obj1 !== typeof obj2) return false;
-  
+
   if (typeof obj1 !== 'object') return obj1 === obj2;
-  
-  // 배열인 경우 빠른 비교
+
   if (Array.isArray(obj1) && Array.isArray(obj2)) {
     if (obj1.length !== obj2.length) return false;
-    // 큰 배열의 경우 성능 최적화
-    if (obj1.length > 100) {
-      // 큰 배열은 참조 비교로 대체
-      return obj1 === obj2;
-    }
     for (let i = 0; i < obj1.length; i++) {
       if (!deepEqual(obj1[i], obj2[i], depth + 1)) return false;
     }
     return true;
   }
-  
-  // 객체인 경우
+
+  if (Array.isArray(obj1) !== Array.isArray(obj2)) return false;
+
   const keys1 = Object.keys(obj1);
   const keys2 = Object.keys(obj2);
-  
+
   if (keys1.length !== keys2.length) return false;
-  
-  // 큰 객체의 경우 성능 최적화
-  if (keys1.length > 50) {
-    // 큰 객체는 참조 비교로 대체
-    return obj1 === obj2;
-  }
-  
-  // Set을 사용하여 키 존재 여부를 O(1)로 확인
+
   const keys2Set = new Set(keys2);
-  
+
   for (const key of keys1) {
     if (!keys2Set.has(key)) return false;
     if (!deepEqual(obj1[key], obj2[key], depth + 1)) return false;
   }
-  
+
   return true;
 }
 
 
 
 /**
- * 관계 데이터를 그래프 요소로 변환 (새로운 JSON 구조 대응)
- * @param {Array} relations - 관계 데이터 배열
- * @param {Object} idToName - ID to name 매핑
- * @param {Object} idToDesc - ID to description 매핑
- * @param {Object} idToMain - ID to main character 매핑
- * @param {Object} idToNames - ID to names array 매핑
- * @param {string} folderKey - 폴더 키 (이미지 경로용)
- * @param {Object} nodeWeights - 노드 가중치 정보
- * @param {Object} previousRelations - 이전 이벤트의 관계 데이터
- * @param {Object} eventData - 이벤트 데이터 (text 필드 포함)
- * @param {Object} idToProfileImage - ID to profileImage 매핑 (API 책용)
- * @param {Array|null} charactersOrphanMerge - relations에 없어도 노드로 그릴 캐릭터 배열(Fine API 등)
- * @returns {Array} 그래프 요소 배열
+ * 관계 데이터를 그래프 요소로 변환
+ * @param {Object} params
+ * @param {Array} params.relations
+ * @param {Object} params.idToName
+ * @param {Object} [params.idToDesc]
+ * @param {Object} [params.idToDescKo]
+ * @param {Object} [params.idToMain]
+ * @param {Object} [params.idToNames]
+ * @param {Object|null} [params.nodeWeights]
+ * @param {Array|null} [params.previousRelations]
+ * @param {Object|null} [params.eventData]
+ * @param {Object|null} [params.idToProfileImage]
+ * @param {Array|null} [params.charactersOrphanMerge]
+ * @returns {Array}
  */
-export function convertRelationsToElements(relations, idToName, idToDesc, idToDescKo, idToMain, idToNames, folderKey, nodeWeights = null, previousRelations = null, eventData = null, idToProfileImage = null, charactersOrphanMerge = null) {
-  // 매개변수 유효성 검사
+export function convertRelationsToElements({
+  relations,
+  idToName,
+  idToDesc = {},
+  idToDescKo = {},
+  idToMain = {},
+  idToNames = {},
+  nodeWeights = null,
+  previousRelations = null,
+  eventData = null,
+  idToProfileImage = null,
+  charactersOrphanMerge = null,
+} = {}) {
   if (!Array.isArray(relations)) {
     return [];
   }
-  
+
   if (!idToName || typeof idToName !== 'object') {
-    return [];
-  }
-  
-  if (!folderKey || typeof folderKey !== 'string') {
     return [];
   }
 
   const nodeSet = new Set();
   const nodes = [];
   const edges = [];
-  
-  const relationsArray = relations;
-  
+
   const nodeIds = [];
-  relationsArray.forEach((rel) => {
+  relations.forEach((rel) => {
     const r = normalizeRelation(rel);
     if (!isValidRelation(r)) return;
     [r.id1, r.id2].forEach((id) => {
@@ -305,14 +301,13 @@ export function convertRelationsToElements(relations, idToName, idToDesc, idToDe
     }
   }
 
-  // id 기반 고정 랜덤 함수 (캐싱으로 성능 개선)
   const randomCache = new Map();
   function seededRandom(id, min, max) {
     const cacheKey = `${id}-${min}-${max}`;
     if (randomCache.has(cacheKey)) {
       return randomCache.get(cacheKey);
     }
-    
+
     let hash = 0;
     for (let i = 0; i < id.length; i++) {
       hash = ((hash << 5) - hash) + id.charCodeAt(i);
@@ -320,16 +315,14 @@ export function convertRelationsToElements(relations, idToName, idToDesc, idToDe
     }
     const seed = Math.abs(hash) % 10000;
     const result = min + (seed % (max - min));
-    
-    // 캐시 크기 제한 (메모리 누수 방지) - 캐시 저장 전에 체크
+
     const MAX_CACHE_SIZE = 500;
     if (randomCache.size >= MAX_CACHE_SIZE) {
-      // 전체 캐시를 지우는 대신 절반만 지우기
       const entries = Array.from(randomCache.entries());
       const toDelete = entries.slice(0, Math.floor(MAX_CACHE_SIZE / 2));
       toDelete.forEach(([key]) => randomCache.delete(key));
     }
-    
+
     randomCache.set(cacheKey, result);
     return result;
   }
@@ -337,12 +330,10 @@ export function convertRelationsToElements(relations, idToName, idToDesc, idToDe
   const validNodeIds = nodeIds.filter(
     (strId) => strId && strId !== '0' && strId !== 'undefined' && strId !== 'null'
   );
-  
 
   const visibleNodeIds = validNodeIds.filter((nodeId) => isNodeWeightEntryVisible(nodeWeights?.[nodeId]));
   const visibleNodeIdSet = new Set(visibleNodeIds);
 
-  // 원 배치 좌표 계산
   const centerX = 500;
   const centerY = 350;
   const radius = 320;
@@ -353,7 +344,7 @@ export function convertRelationsToElements(relations, idToName, idToDesc, idToDe
     const y = centerY + r * Math.sin(angle);
     const commonName = resolvedIdToName[strId];
     const { weight: nodeWeight, count: nodeCount } = nodeWeights[strId];
-    
+
     let imagePath = null;
     if (idToProfileImage?.[strId]?.trim?.()) {
       imagePath = idToProfileImage[strId];
@@ -371,12 +362,11 @@ export function convertRelationsToElements(relations, idToName, idToDesc, idToDe
       weight: nodeWeight,
       count: nodeCount,
     };
-    
-    // 이미지 경로가 있으면 image 필드 추가
+
     if (imagePath && imagePath.trim() !== '') {
       nodeData.image = imagePath;
     }
-    
+
     nodes.push({
       data: nodeData,
       position: { x, y }
@@ -396,7 +386,7 @@ export function convertRelationsToElements(relations, idToName, idToDesc, idToDe
   const edgeMap = new Map();
   const positivityByEdge = new Map();
 
-  relationsArray.forEach((rel) => {
+  relations.forEach((rel) => {
     const r = normalizeRelation(rel);
     if (!isValidRelation(r)) return;
     if (!isRelationVisibleAtEvent(rel, eventData)) return;
@@ -503,14 +493,11 @@ export function convertRelationsToElements(relations, idToName, idToDesc, idToDe
   }
 
   edges.push(...finalizeDirectedEdges(edgeMap));
-  
-  const result = [
+
+  return [
     ...sortElementsByDataId(nodes),
     ...sortElementsByDataId(edges)
   ];
-  
-  
-  return result;
 }
 
 

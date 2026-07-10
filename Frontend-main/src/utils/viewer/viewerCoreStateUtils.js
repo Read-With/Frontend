@@ -1,11 +1,12 @@
 /** 뷰어 코어 유틸 (book·mode·cache key·event 필드·전환·async) */
 
-import { errorUtils } from '../common/errorUtils';
 import {
   loadSettings,
 } from '../common/settingsUtils';
-import { isGraphEdgeElement } from '../graph/graphUtils';
 import { resolveChapterIndex, toPositiveNumberFromId, toPositiveNumberOrNull } from '../common/valueUtils';
+
+const isGraphEdgeElement = (element) =>
+  Boolean(element?.data && element.data.source !== undefined && element.data.target !== undefined);
 
 function normalizeEventIdx(event) {
   if (!event || typeof event !== 'object') return null;
@@ -80,13 +81,26 @@ export const eventUtils = {
     return idx > 0 ? idx : fallback;
   },
 
+  /** eventOrdinal 오름차순 정렬 (없는 값은 뒤로) */
+  sortEventsByIdx(events) {
+    if (!Array.isArray(events)) return [];
+    return [...events].sort((a, b) => {
+      const idxA = eventUtils.resolveEventOrdinal(a);
+      const idxB = eventUtils.resolveEventOrdinal(b);
+      if (idxA == null && idxB == null) return 0;
+      if (idxA == null) return 1;
+      if (idxB == null) return -1;
+      return idxA - idxB;
+    });
+  },
+
   convertElementsToRelations: (elements, options = {}) => {
     if (!Array.isArray(elements) || elements.length === 0) return [];
 
     const { includeLabel = false, includeCount = true, positivityDefault = null } = options;
 
     return elements
-      .filter((el) => el?.data?.source && el?.data?.target)
+      .filter(isGraphEdgeElement)
       .map((edge) => {
         const relation = {
           id1: edge.data.source,
@@ -156,7 +170,7 @@ export const eventUtils = {
   },
 };
 
-export const INITIAL_TRANSITION_STATE = {
+const INITIAL_TRANSITION_STATE = {
   type: null,
   inProgress: false,
   error: false,
@@ -197,7 +211,7 @@ export function saveViewerMode(mode) {
   }
 }
 
-export function loadViewerMode() {
+function loadViewerMode() {
   try {
     return localStorage.getItem('viewer_mode');
   } catch (_error) {
@@ -258,8 +272,6 @@ export const cacheKeyUtils = {
   createEventKey: (bookId, chapter, eventIdx) => `${bookId}-${chapter}-${eventIdx}`,
   createCacheKey: (chapter, eventIdx) => `${chapter}-${eventIdx}`,
   macroGraphStorage: (bookId, chapter) => `graph_macro_${Number(bookId)}_upto_${Number(chapter)}`,
-  fineGraphStorage: (bookId, chapter, eventIdx) =>
-    `graph_fine_${Number(bookId)}_${Number(chapter)}_${Number(eventIdx)}`,
   macroSession: (bookId, chapter) => `${Number(bookId)}:${Number(chapter)}`,
 };
 

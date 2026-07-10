@@ -7,7 +7,6 @@ import {
   toPositiveInt,
 } from '../valueUtils';
 import { toLocator } from '../locatorUtils';
-import { sortEventsByIdx } from '../../graph/graphData';
 import { eventUtils } from '../../viewer/viewerCoreStateUtils';
 import {
   registerCache,
@@ -79,7 +78,7 @@ const normalizeChapter = (chapter) => {
   const normalizedEvents = Array.isArray(chapter.events)
     ? chapter.events.map((ev) => normalizeEvent(ev)).filter(Boolean)
     : [];
-  const sortedEvents = sortEventsByIdx(normalizedEvents);
+  const sortedEvents = eventUtils.sortEventsByIdx(normalizedEvents);
   const firstEvent = sortedEvents[0] ?? null;
   const lastEvent = sortedEvents.length > 0 ? sortedEvents[sortedEvents.length - 1] : null;
   const normalizedStartPos = startPos > 0 ? startPos : (firstEvent?.startPos ?? 0);

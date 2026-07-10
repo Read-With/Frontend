@@ -1,7 +1,7 @@
 /** 그래프 뷰: 검색·필터 파이프라인·사이드바 UI 상태 */
 
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { buildSuggestions, filterGraphElements } from '../../utils/graph/searchUtils.jsx';
+import { buildSuggestions, filterGraphElements } from '../../utils/graph/searchUtils.js';
 import { filterMainCharacters } from '../../utils/graph/graphDataUtils';
 import { sortElementsByDataId } from '../../utils/graph/graphUtils';
 
@@ -10,7 +10,6 @@ export function useGraphState() {
   const [edgeLabelVisible, setEdgeLabelVisible] = useState(true);
   const [activeTooltip, setActiveTooltip] = useState(null);
   const [isSidebarClosing, setIsSidebarClosing] = useState(false);
-  const [forceClose, setForceClose] = useState(false);
   const [filterStage, setFilterStage] = useState(0);
 
   const toggleSidebar = useCallback(() => {
@@ -27,7 +26,6 @@ export function useGraphState() {
 
   const closeSidebar = useCallback(() => {
     setActiveTooltip(null);
-    setForceClose(false);
     setIsSidebarClosing(false);
   }, []);
 
@@ -36,11 +34,9 @@ export function useGraphState() {
     edgeLabelVisible,
     activeTooltip,
     isSidebarClosing,
-    forceClose,
     filterStage,
     setActiveTooltip,
     setIsSidebarClosing,
-    setForceClose,
     setFilterStage,
     toggleSidebar,
     toggleEdgeLabel,
@@ -94,6 +90,7 @@ export function useGraphSearch(elements, currentChapterData = null) {
   const [suggestions, setSuggestions] = useState([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(-1);
+  const suppressSuggestionsRef = useRef(false);
 
   const elementsRef = useRef(elements);
   const currentChapterDataRef = useRef(currentChapterData);
@@ -128,10 +125,12 @@ export function useGraphSearch(elements, currentChapterData = null) {
 
   const handleSearchSubmit = useCallback((term) => {
     const trimmedTerm = term.trim();
+    suppressSuggestionsRef.current = true;
     setSearchTerm(term);
     setIsSearchActive(!!trimmedTerm);
     setIsResetFromSearch(false);
     setShowSuggestions(false);
+    setSelectedIndex(-1);
 
     const currentElements = elementsRef.current;
     const chapterData = currentChapterDataRef.current;
@@ -154,6 +153,7 @@ export function useGraphSearch(elements, currentChapterData = null) {
   }, []);
 
   const clearSearch = useCallback(() => {
+    suppressSuggestionsRef.current = false;
     setSearchTerm('');
     setFilteredElements([]);
     setFitNodeIds([]);
@@ -179,8 +179,15 @@ export function useGraphSearch(elements, currentChapterData = null) {
       currentChapterDataRef.current
     );
     setSuggestions(matches);
-    setShowSuggestions(matches.length > 0);
     setSelectedIndex(-1);
+
+    if (suppressSuggestionsRef.current) {
+      suppressSuggestionsRef.current = false;
+      setShowSuggestions(false);
+      return;
+    }
+
+    setShowSuggestions(true);
   }, [searchTerm, elements]);
 
   useEffect(() => {
@@ -222,6 +229,17 @@ export function useGraphSearch(elements, currentChapterData = null) {
     setSelectedIndex(-1);
   }, []);
 
+  const onGenerateSuggestions = useCallback((term) => {
+    suppressSuggestionsRef.current = false;
+    setSearchTerm(term);
+    if (term.trim().length >= 2) {
+      setShowSuggestions(true);
+    } else {
+      setShowSuggestions(false);
+      setSelectedIndex(-1);
+    }
+  }, []);
+
   const currentSearchState = useMemo(
     () => ({
       searchTerm,
@@ -241,10 +259,11 @@ export function useGraphSearch(elements, currentChapterData = null) {
       onSearchSubmit: handleSearchSubmit,
       clearSearch,
       closeSuggestions,
-      onGenerateSuggestions: setSearchTerm,
+      onGenerateSuggestions,
       handleKeyDown,
+      onSelectedIndexChange: setSelectedIndex,
     }),
-    [handleSearchSubmit, clearSearch, closeSuggestions, setSearchTerm, handleKeyDown]
+    [handleSearchSubmit, clearSearch, closeSuggestions, onGenerateSuggestions, handleKeyDown]
   );
 
   return {

@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Book, BookOpen, Plus, Library, Heart, AlertCircle, Grid3X3, List, Network, Upload } from 'lucide-react';
+import { Book, Plus, Library, Heart, AlertCircle, Grid3X3, List, Upload } from 'lucide-react';
 import Header from '../components/common/Header';
 import BookLibrary from '../components/library/BookLibrary';
 import FileUpload from '../components/library/FileUpload';
@@ -322,22 +322,9 @@ export default function MyPage() {
                         <h2 className="empty-welcome-title">내 서재가 비어 있어요</h2>
                         <p className="empty-welcome-description">
                           EPUB 파일을 업로드하면 XHTML 뷰어에서 바로 읽고,
+                          <br />
                           인물 관계도도 함께 확인할 수 있어요.
                         </p>
-                        <ul className="empty-welcome-features">
-                          <li>
-                            <BookOpen size={18} />
-                            <span>XHTML 뷰어로 읽기</span>
-                          </li>
-                          <li>
-                            <Network size={18} />
-                            <span>인물 관계도 탐색</span>
-                          </li>
-                          <li>
-                            <Heart size={18} />
-                            <span>즐겨찾기 & 독서 진도 저장</span>
-                          </li>
-                        </ul>
                       </div>
                       <div
                         className="empty-welcome-upload"
@@ -363,28 +350,24 @@ export default function MyPage() {
                     </div>
                   </div>
                 ) : filteredBooks.length === 0 ? (
-                  <div className="empty-state">
-                    <div className="empty-icon">
-                      {isSearching ? <Library size={80} strokeWidth={1.5} /> :
-                       <Heart size={80} strokeWidth={1.5} />}
+                  <div className="empty-welcome">
+                    <div className="empty-welcome-content empty-welcome-content--text-only">
+                      <div className="empty-welcome-info">
+                        <div className="empty-welcome-icon">
+                          {isSearching
+                            ? <Library size={48} strokeWidth={1.5} />
+                            : <Heart size={48} strokeWidth={1.5} />}
+                        </div>
+                        <h2 className="empty-welcome-title">
+                          {isSearching ? '검색 결과가 없습니다' : '즐겨찾기한 책이 없어요'}
+                        </h2>
+                        <p className="empty-welcome-description">
+                          {isSearching
+                            ? `"${searchQuery}"에 대한 검색 결과가 없습니다. 다른 키워드로 검색해보세요.`
+                            : '책 카드의 하트를 눌러 추가할 수 있어요.'}
+                        </p>
+                      </div>
                     </div>
-                    <h2 className="empty-title">
-                      {isSearching ? '검색 결과가 없습니다' : '즐겨찾기한 책이 없어요'}
-                    </h2>
-                    <p className="empty-description">
-                      {isSearching
-                        ? `"${searchQuery}"에 대한 검색 결과가 없습니다. 다른 키워드로 검색해보세요.`
-                        : '즐겨찾기한 책이 아직 없어요. 책 카드의 하트를 눌러 추가할 수 있어요.'}
-                    </p>
-                    {isSearching ? (
-                      <button type="button" className="empty-cta-button" onClick={handleShowAll}>
-                        전체 도서 보기
-                      </button>
-                    ) : (
-                      <button type="button" className="empty-cta-button" onClick={() => setActiveTab('all')}>
-                        전체 도서 보기
-                      </button>
-                    )}
                   </div>
                 ) : (
                   <div className={`books-grid ${viewMode === 'list' ? 'list-view' : 'grid-view'}`}>

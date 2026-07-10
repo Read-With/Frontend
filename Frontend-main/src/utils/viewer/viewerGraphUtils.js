@@ -265,20 +265,18 @@ export const graphDataTransformUtils = {
       createCharacterMaps(chars);
     const nodeWeights = buildNodeWeights(chars, previousNodeWeights);
 
-    return convertRelationsToElements(
-      rels,
+    return convertRelationsToElements({
+      relations: rels,
       idToName,
       idToDesc,
       idToDescKo,
       idToMain,
       idToNames,
-      'api',
-      toNodeWeightsOrNull(nodeWeights),
-      null,
-      normalizedEvent,
+      nodeWeights: toNodeWeightsOrNull(nodeWeights),
+      eventData: normalizedEvent,
       idToProfileImage,
-      chars.length > 0 ? chars : null
-    );
+      charactersOrphanMerge: chars.length > 0 ? chars : null,
+    });
   },
 
   mergeElementsWithPrevious: (convertedElements, prevData, currentChapter, apiEventIdx) => {

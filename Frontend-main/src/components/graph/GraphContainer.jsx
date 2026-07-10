@@ -90,26 +90,32 @@ function useAutoFit(cyRef, viewportFitKey, isSearchActive, isEventTransition) {
   }, [cyRef, viewportFitKey, isSearchActive, isEventTransition]);
 }
 
-const ViewerRelationGraph = ({
-  elements,
-  chapterNum,
-  eventNum,
+const GraphContainer = ({
+  currentEvent,
+  currentChapter,
   edgeLabelVisible = true,
   filename,
-  fitNodeIds,
-  searchTerm,
-  isSearchActive,
-  filteredElements,
-  isResetFromSearch,
-  currentEvent = null,
+  elements = [],
   prevValidEvent = null,
   activeTooltip = null,
   onClearTooltip = null,
   onSetActiveTooltip = null,
   graphClearRef = null,
-  isEventTransition: _isEventTransition = false,
+  isEventTransition = false,
+  searchTerm = '',
+  isSearchActive = false,
+  filteredElements = [],
+  fitNodeIds = [],
+  isResetFromSearch = false,
   bookId = null,
 }) => {
+  const chapterNum = currentChapter;
+  const eventNum = resolveEventOrdinalForDisplay({
+    currentEvent,
+    prevValidEvent,
+    progressTopBar: null,
+    fallback: 0,
+  });
   const cyRef = useRef(null);
   const selectedEdgeIdRef = useRef(null);
   const selectedNodeIdRef = useRef(null);
@@ -119,7 +125,7 @@ const ViewerRelationGraph = ({
     [chapterNum, eventNum, elements]
   );
 
-  useAutoFit(cyRef, viewportFitKey, isSearchActive, _isEventTransition);
+  useAutoFit(cyRef, viewportFitKey, isSearchActive, isEventTransition);
 
   const clearTooltipAndGraph = useCallback(() => {
     onClearTooltip?.();
@@ -158,7 +164,6 @@ const ViewerRelationGraph = ({
   return (
     <div
       ref={containerRef}
-      className="relation-graph-container"
       style={graphStyles.container}
     >
       <div
@@ -188,7 +193,7 @@ const ViewerRelationGraph = ({
             x={activeTooltip.x}
             y={activeTooltip.y}
             onClose={clearTooltipAndGraph}
-            mode="viewer"
+            variant="viewer"
             chapterNum={chapterNum}
             eventNum={eventNum}
             style={graphStyles.tooltipStyle}
@@ -225,54 +230,4 @@ const ViewerRelationGraph = ({
   );
 };
 
-const MemoViewerRelationGraph = React.memo(ViewerRelationGraph);
-
-function GraphContainer({
-  currentEvent,
-  currentChapter,
-  edgeLabelVisible = true,
-  filename,
-  elements = [],
-  prevValidEvent = null,
-  activeTooltip = null,
-  onClearTooltip = null,
-  onSetActiveTooltip = null,
-  graphClearRef = null,
-  isEventTransition = false,
-  searchTerm = '',
-  isSearchActive = false,
-  filteredElements = [],
-  fitNodeIds = [],
-  isResetFromSearch = false,
-  bookId = null,
-}) {
-  return (
-    <MemoViewerRelationGraph
-      elements={elements}
-      chapterNum={currentChapter}
-      eventNum={resolveEventOrdinalForDisplay({
-        currentEvent,
-        prevValidEvent,
-        progressTopBar: null,
-        fallback: 0,
-      })}
-      edgeLabelVisible={edgeLabelVisible}
-      filename={filename}
-      bookId={bookId}
-      fitNodeIds={fitNodeIds}
-      searchTerm={searchTerm}
-      isSearchActive={isSearchActive}
-      filteredElements={filteredElements}
-      isResetFromSearch={isResetFromSearch}
-      currentEvent={currentEvent}
-      prevValidEvent={prevValidEvent}
-      activeTooltip={activeTooltip}
-      onClearTooltip={onClearTooltip}
-      onSetActiveTooltip={onSetActiveTooltip}
-      graphClearRef={graphClearRef}
-      isEventTransition={isEventTransition}
-    />
-  );
-}
-
-export default GraphContainer;
+export default React.memo(GraphContainer);

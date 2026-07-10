@@ -6,7 +6,7 @@ import {
   formatChapterOrderAndName,
   stripRedundantBookTitlePrefix,
 } from '../../utils/viewer/chapterTitleDisplay';
-import { GRAPH_CHARACTER_FILTER_STAGE_OPTIONS } from '../graph/graphConstants';
+import { GRAPH_CHARACTER_FILTER_STAGE_OPTIONS } from '../graph/graphShared';
 import {
   resolveEventOrdinalForDisplay,
 } from '../../utils/viewer/viewerEventProgressUtils';
@@ -110,7 +110,8 @@ const ViewerTopBar = memo(function ViewerTopBar({
     clearSearch,
     closeSuggestions,
     onGenerateSuggestions,
-    handleKeyDown
+    handleKeyDown,
+    onSelectedIndexChange,
   } = searchActions;
 
   const bookId = useMemo(() => {
@@ -238,9 +239,10 @@ const ViewerTopBar = memo(function ViewerTopBar({
       suggestions={suggestions}
       showSuggestions={showSuggestions}
       selectedIndex={selectedIndex}
+      onSelectedIndexChange={onSelectedIndexChange}
       onKeyDown={handleKeyDown}
     />
-  ), [onSearchSubmit, handleGenerateSuggestions, searchTerm, isSearchActive, clearSearch, closeSuggestions, suggestions, showSuggestions, selectedIndex, handleKeyDown]);
+  ), [onSearchSubmit, handleGenerateSuggestions, searchTerm, isSearchActive, clearSearch, closeSuggestions, suggestions, showSuggestions, selectedIndex, onSelectedIndexChange, handleKeyDown]);
 
   const renderToggleButtons = () => (
     <div

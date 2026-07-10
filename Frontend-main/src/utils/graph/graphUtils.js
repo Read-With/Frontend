@@ -108,13 +108,6 @@ const parseJsonSafely = (value) => {
   }
 };
 
-const resetMouseState = (refs) => {
-  if (refs.isMouseDownRef) refs.isMouseDownRef.current = false;
-  if (refs.mouseDownTimeRef) refs.mouseDownTimeRef.current = 0;
-  if (refs.hasMovedRef) refs.hasMovedRef.current = false;
-  if (refs.isDraggingRef) refs.isDraggingRef.current = false;
-};
-
 export const getContainerInfo = () => {
   try {
     const now = Date.now();
@@ -390,78 +383,6 @@ export const isGraphContainerSizeReady = (container) => {
   const w = Number(container.clientWidth ?? 0);
   const h = Number(container.clientHeight ?? 0);
   return w > 0 && h > 0;
-};
-
-export const createMouseEventHandlers = (_cy, _container) => {
-  const MOVE_THRESHOLD = 3;
-  
-  const isDraggingRef = { current: false };
-  const prevMouseDownPositionRef = { current: { x: 0, y: 0 } };
-  const mouseDownTimeRef = { current: 0 };
-  const hasMovedRef = { current: false };
-  const isMouseDownRef = { current: false };
-  
-  const handleMouseDown = (evt) => {
-    if (evt.target !== evt.currentTarget) return;
-    
-    isMouseDownRef.current = true;
-    mouseDownTimeRef.current = Date.now();
-    prevMouseDownPositionRef.current = { x: evt.clientX, y: evt.clientY };
-    hasMovedRef.current = false;
-    isDraggingRef.current = false;
-  };
-  
-  const handleMouseMove = (evt) => {
-    if (!isMouseDownRef.current) return;
-    
-    const deltaX = Math.abs(evt.clientX - prevMouseDownPositionRef.current.x);
-    const deltaY = Math.abs(evt.clientY - prevMouseDownPositionRef.current.y);
-    
-    if (deltaX > MOVE_THRESHOLD || deltaY > MOVE_THRESHOLD) {
-      hasMovedRef.current = true;
-      isDraggingRef.current = true;
-    }
-  };
-  
-  const handleMouseUp = (_evt) => {
-    if (!isMouseDownRef.current) return;
-    
-    if (isDraggingRef.current) {
-      resetMouseState({
-        isMouseDownRef,
-        mouseDownTimeRef,
-        hasMovedRef,
-        isDraggingRef
-      });
-      return;
-    }
-    
-    resetMouseState({
-      isMouseDownRef,
-      mouseDownTimeRef,
-      hasMovedRef,
-      isDraggingRef
-    });
-  };
-  
-  const cleanup = () => {
-    resetMouseState({
-      isMouseDownRef,
-      mouseDownTimeRef,
-      hasMovedRef,
-      isDraggingRef
-    });
-    prevMouseDownPositionRef.current = { x: 0, y: 0 };
-  };
-  
-  return {
-    handleMouseDown,
-    handleMouseMove,
-    handleMouseUp,
-    isDraggingRef,
-    isMouseDownRef,
-    cleanup
-  };
 };
 
 export const processTooltipData = (tooltipData, type) => {
