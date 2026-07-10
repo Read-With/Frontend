@@ -155,22 +155,22 @@
 
 .oauth-callback-error-message {
   margin: 0 0 20px;
-  max-width: 640px;
+  width: max-content;
+  max-width: none;
   font-size: 0.9375rem;
-  line-height: 1.65;
+  line-height: 1.4;
   color: rgba(255, 255, 255, 0.92);
-  white-space: pre-wrap;
-  word-break: break-word;
-  max-height: 280px;
-  overflow-y: auto;
+  white-space: nowrap;
 }
 
 .oauth-callback-error-tip {
   margin: 0 0 24px;
   padding: 12px 14px;
-  max-width: 640px;
+  width: max-content;
+  max-width: none;
+  white-space: nowrap;
   font-size: 0.8125rem;
-  line-height: 1.55;
+  line-height: 1.4;
   border-radius: 4px;
 }
 
