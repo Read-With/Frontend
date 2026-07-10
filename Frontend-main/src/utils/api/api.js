@@ -3,7 +3,9 @@
 import {
   setManifestData,
   getManifestFromCache,
-  getManifestEventData,
+  getChapterData,
+  findManifestEventInChapter,
+  locatorFromChapterLocalOffset,
   resolveFineGraphLocatorToEventParams,
   normalizeLocatorForServerProgress,
 } from '../common/cache/manifestCache';
@@ -11,14 +13,21 @@ import {
   setProgressToCache,
   removeProgressFromCache,
   getProgressFromCache,
-  normalizeReadingProgressPercent,
   ensureProgressRowLocator,
 } from '../common/cache/progressCache';
+import { normalizeReadingProgressPercent } from '../viewer/viewerEventProgressUtils';
 import { progressPayloadFromData, resolveProgressLocator, toLocator } from '../common/locatorUtils';
-import { getApiBaseUrl, clearAuthData, getPostLoginHomeUrl } from '../common/authUtils';
+import { resolveChapterIndex } from '../common/valueUtils';
+import { getApiBaseUrl, clearAuthData, getPostLoginHomeUrl } from '../common/urlUtils';
 import { getStoredAccessToken } from '../security/authTokenStorage';
-import { isTokenValid, refreshToken, ensureSessionAccessToken } from './authApi';
-import { makeSilentError, isForbiddenError, isNotFoundError } from './authApi';
+import {
+  isTokenValid,
+  refreshToken,
+  ensureSessionAccessToken,
+  makeSilentError,
+  isForbiddenError,
+  isNotFoundError,
+} from './authApi';
 
 const API_BASE_URL = getApiBaseUrl();
 
@@ -39,7 +48,7 @@ const handleProgressApiError = (error, logContext) => {
 const createApiResponse = (isSuccess, code, message, result, type = 'default') => {
   const baseResponse = { isSuccess, code, message, result };
 
-  if (type === 'graph-macro') {
+  if (type === 'graph-book-scope') {
     const safe = result ?? {};
     baseResponse.result = {
       ...safe,
@@ -53,13 +62,8 @@ const createApiResponse = (isSuccess, code, message, result, type = 'default') =
   }
 
   if (type === 'graph-fine') {
-    const safe = result ?? {};
-    baseResponse.result = {
-      ...safe,
-      characters: Array.isArray(safe.characters) ? safe.characters : [],
-      relations: Array.isArray(safe.relations) ? safe.relations : [],
-      event: safe.event ?? null,
-    };
+    const safe = normalizeRelationshipGraphResult(result);
+    baseResponse.result = safe;
     return baseResponse;
   }
 
@@ -69,20 +73,16 @@ const createApiResponse = (isSuccess, code, message, result, type = 'default') =
 const hasOwnKeys = (obj) =>
   !!obj && typeof obj === 'object' && !Array.isArray(obj) && Object.keys(obj).length > 0;
 
-const pickResponsePayload = (response) => {
+const pickResponseResult = (response) => {
   if (!response || typeof response !== 'object') return null;
 
-  const resultPayload = response.result;
-  const dataPayload = response.data;
-  const payloadPayload = response.payload;
+  const resultCandidates = [response.result, response.data, response.payload];
 
-  if (hasOwnKeys(resultPayload)) return resultPayload;
-  if (hasOwnKeys(dataPayload)) return dataPayload;
-  if (hasOwnKeys(payloadPayload)) return payloadPayload;
+  const richResult = resultCandidates.find((candidate) => hasOwnKeys(candidate));
+  if (richResult) return richResult;
 
-  if (resultPayload != null) return resultPayload;
-  if (dataPayload != null) return dataPayload;
-  if (payloadPayload != null) return payloadPayload;
+  const scalarResult = resultCandidates.find((candidate) => candidate != null);
+  if (scalarResult != null) return scalarResult;
 
   if (
     Array.isArray(response.characters) ||
@@ -97,6 +97,15 @@ const pickResponsePayload = (response) => {
   return null;
 };
 
+const toUnifiedApiResponse = (response, { defaultCode = 'SUCCESS', defaultMessage = '', defaultResult = null } = {}) => {
+  const safe = response && typeof response === 'object' ? response : {};
+  const isSuccess = typeof safe.isSuccess === 'boolean' ? safe.isSuccess : true;
+  const code = safe.code ?? defaultCode;
+  const message = safe.message ?? defaultMessage;
+  const result = safe.result ?? defaultResult;
+  return { ...safe, isSuccess, code, message, result };
+};
+
 const appendRelationshipGraphLocatorParams = (queryParams, locator) => {
   if (!locator) return;
   queryParams.append('chapterIndex', String(locator.chapterIndex));
@@ -104,36 +113,48 @@ const appendRelationshipGraphLocatorParams = (queryParams, locator) => {
   if (locator.offset != null) queryParams.append('offset', String(locator.offset));
 };
 
-const resolveManifestEventMeta = (bookId, chapterIdx, eventIdx) => {
-  const ev = getManifestEventData(bookId, chapterIdx, eventIdx);
-  if (!ev) return null;
+const emptyRelationshipGraphResult = (overrides = {}) => ({
+  bookId: null,
+  chapterIndex: null,
+  scope: 'book',
+  eventId: null,
+  characters: [],
+  relations: [],
+  ...overrides,
+});
+
+/** relationship-graph API result — 서버 필드 유지, 배열만 정규화 */
+const normalizeRelationshipGraphResult = (payload) => {
+  if (!payload || typeof payload !== 'object') {
+    return emptyRelationshipGraphResult();
+  }
   return {
-    chapterIdx,
-    eventIdx: ev.idx ?? eventIdx,
-    eventNum: ev.eventNum ?? ev.idx ?? eventIdx,
-    eventId: ev.eventId || String(eventIdx),
-    startTxtOffset: ev.startTxtOffset ?? null,
-    endTxtOffset: ev.endTxtOffset ?? null,
+    ...payload,
+    scope: payload.scope ?? 'book',
+    eventId: payload.eventId ?? null,
+    characters: Array.isArray(payload.characters) ? payload.characters : [],
+    relations: Array.isArray(payload.relations) ? payload.relations : [],
   };
 };
 
-const enrichFineGraphPayload = (bookId, chapterIdx, eventIdx, payload) => {
-  if (!payload || typeof payload !== 'object') return payload;
-  const manifestEvent = chapterIdx != null && eventIdx != null
-    ? resolveManifestEventMeta(bookId, chapterIdx, eventIdx)
-    : null;
-  const event =
-    payload.event ??
-    manifestEvent ??
-    (chapterIdx != null && eventIdx != null
-      ? {
-          chapterIdx,
-          eventIdx,
-          eventNum: eventIdx,
-          eventId: payload.eventId ?? String(eventIdx),
-        }
-      : null);
-  return { ...payload, event };
+/** 서버 eventId가 null이면 manifest locator 매칭으로 보강 */
+const applyManifestEventIdFallback = (bookId, chapterIdx, eventIdx, result) => {
+  if (!result || typeof result !== 'object') return result;
+  const current = result.eventId;
+  if (current != null && String(current).trim() !== '') return result;
+
+  const manifestEvent = findManifestEventInChapter(bookId, chapterIdx, { eventIdx });
+  const manifestEventId = manifestEvent?.eventId ?? manifestEvent?.id;
+  if (manifestEventId == null || String(manifestEventId).trim() === '') {
+    return result;
+  }
+
+  return {
+    ...result,
+    bookId: result.bookId ?? Number(bookId),
+    chapterIndex: resolveChapterIndex(result) ?? Number(chapterIdx),
+    eventId: String(manifestEventId).trim(),
+  };
 };
 
 const handleApiError = (error, context) => {
@@ -293,22 +314,49 @@ export const saveProgress = async (progressData) => {
       error.status = response?.status;
       throw error;
     }
-    const resResult =
+    const serverResult =
       response?.result && typeof response.result === 'object' ? response.result : null;
-    const cacheRow = resResult
-      ? { ...resResult, bookId: progressData.bookId ?? resResult.bookId }
+    const cacheRow = serverResult
+      ? { ...serverResult, bookId: progressData.bookId ?? serverResult.bookId }
       : { ...progressData, ...payload };
-    const pctFromReq = normalizeReadingProgressPercent(progressData);
-    const pctFromRes = normalizeReadingProgressPercent(resResult ?? {});
+    const bookId = progressData.bookId ?? serverResult?.bookId;
+    const pctFromReq = normalizeReadingProgressPercent(progressData, { bookId });
+    const pctFromRes = normalizeReadingProgressPercent(serverResult ?? {}, { bookId });
     if (pctFromReq != null || pctFromRes != null) {
       cacheRow.readingProgressPercent = pctFromReq ?? pctFromRes;
     }
     setProgressToCache(cacheRow);
-    return response;
+    return toUnifiedApiResponse(
+      { ...response, result: response?.result ?? cacheRow },
+      { defaultMessage: '독서 진도를 저장했습니다.' }
+    );
   } catch (error) {
     if (isForbiddenError(error)) return PROGRESS_FORBIDDEN;
     console.error('독서 진도 저장 실패:', error);
     throw error;
+  }
+};
+
+export const saveProgressKeepalive = (progressData) => {
+  try {
+    const payload = progressPayloadFromData(withLocatorsNormalizedForProgressSave(progressData));
+    if (!payload) return false;
+    const token = getStoredAccessToken();
+    const requestUrl = `${API_BASE_URL}/api/v2/progress`;
+
+    fetch(requestUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify(payload),
+      keepalive: true,
+    }).catch(() => void 0);
+
+    return true;
+  } catch {
+    return false;
   }
 };
 
@@ -320,13 +368,13 @@ export const getBookProgress = async (bookId, options = {}) => {
   if (!skipCache) {
     const cachedProgress = getProgressFromCache(bookId);
     if (cachedProgress) {
-      return {
+      return toUnifiedApiResponse({
         isSuccess: true,
         code: 'CACHE_HIT',
         message: '진도 정보를 로컬 캐시에서 가져왔습니다',
         result: cachedProgress,
         fromCache: true,
-      };
+      });
     }
   }
 
@@ -340,14 +388,17 @@ export const getBookProgress = async (bookId, options = {}) => {
       const sameLoc =
         newLoc && prevLoc && JSON.stringify(newLoc) === JSON.stringify(prevLoc);
       const pct =
-        normalizeReadingProgressPercent(base) ??
-        (sameLoc ? normalizeReadingProgressPercent(prev ?? {}) : null);
+        normalizeReadingProgressPercent(base, { bookId }) ??
+        (sameLoc ? normalizeReadingProgressPercent(prev ?? {}, { bookId }) : null);
       const row = pct != null ? { ...base, readingProgressPercent: pct } : base;
       setProgressToCache(row);
       const hydrated = getProgressFromCache(bookId);
-      return { ...response, result: hydrated ?? row };
+      return toUnifiedApiResponse(
+        { ...response, result: hydrated ?? row },
+        { defaultMessage: '진도 정보를 조회했습니다.' }
+      );
     }
-    return response;
+    return toUnifiedApiResponse(response, { defaultMessage: '진도 정보를 조회했습니다.' });
   } catch (error) {
     return handleProgressApiError(error);
   }
@@ -360,7 +411,10 @@ export const deleteBookProgress = async (bookId) => {
     if (response?.isSuccess) {
       removeProgressFromCache(bookId);
     }
-    return response;
+    return toUnifiedApiResponse(response, {
+      defaultMessage: '독서 진도를 삭제했습니다.',
+      defaultResult: null,
+    });
   } catch (error) {
     return handleProgressApiError(error, '독서 진도 삭제 실패:');
   }
@@ -376,25 +430,25 @@ export const getBookManifest = async (bookId, { forceRefresh = false } = {}) => 
     if (!forceRefresh) {
       const cached = getManifestFromCache(numericBookId);
       if (cached) {
-        return {
+        return toUnifiedApiResponse({
           isSuccess: true,
           code: 'CACHE_HIT',
           message: 'Manifest loaded from cache',
           result: cached,
           fromCache: true,
-        };
+        });
       }
     }
     const response = await apiRequest(`/api/v2/books/${numericBookId}/manifest`);
-    const manifestPayload = pickResponsePayload(response);
-    if (response?.isSuccess && manifestPayload) {
-      const normalized = setManifestData(numericBookId, manifestPayload);
-      return {
-        ...response,
-        result: normalized ?? manifestPayload,
-      };
+    const result = pickResponseResult(response);
+    if (response?.isSuccess && result) {
+      const normalized = setManifestData(numericBookId, result);
+      return toUnifiedApiResponse(
+        { ...response, result: normalized ?? result },
+        { defaultMessage: 'Manifest loaded successfully' }
+      );
     }
-    return response;
+    return toUnifiedApiResponse(response, { defaultMessage: 'Manifest loaded successfully' });
   } catch (error) {
     if (error.status === 400 || String(error?.message ?? '').includes('400')) {
       return makeSilentError('BAD_REQUEST', '잘못된 요청입니다.');
@@ -410,7 +464,7 @@ export const getBookManifest = async (bookId, { forceRefresh = false } = {}) => 
   }
 };
 
-export const getMacroGraph = async (bookId, uptoChapter = null, uptoLocator = null) => {
+export const getBookScopeRelationshipGraph = async (bookId, uptoChapter = null, uptoLocator = null) => {
   if (!bookId) throw new Error('bookId는 필수 매개변수입니다.');
 
   const locator = toLocator(uptoLocator);
@@ -422,91 +476,94 @@ export const getMacroGraph = async (bookId, uptoChapter = null, uptoLocator = nu
     queryParams.append('chapterIndex', String(uptoChapter));
   }
 
-  const emptyMacro = { characters: [], relations: [] };
+  const emptyBookGraph = { characters: [], relations: [] };
 
   try {
     const response = await apiRequest(
       `/api/v2/books/${bookId}/relationship-graph?${queryParams.toString()}`
     );
-    const payload = pickResponsePayload(response);
+    const result = pickResponseResult(response);
     if (!response || response.isSuccess === false) {
       return createApiResponse(
         false,
         response?.code || 'ERROR',
-        response?.message || '거시 그래프 조회에 실패했습니다.',
-        emptyMacro,
-        'graph-macro'
+        response?.message || '책 범위 관계 그래프 조회에 실패했습니다.',
+        emptyBookGraph,
+        'graph-book-scope'
       );
     }
-    return createApiResponse(
+    return toUnifiedApiResponse(createApiResponse(
       true,
       'SUCCESS',
-      '거시 그래프 데이터를 성공적으로 조회했습니다.',
-      payload || emptyMacro,
-      'graph-macro'
-    );
+      '책 범위 관계 그래프 데이터를 성공적으로 조회했습니다.',
+      result || emptyBookGraph,
+      'graph-book-scope'
+    ));
   } catch (error) {
     if (error.status === 404) {
-      return createApiResponse(false, 'NOT_FOUND', '거시 그래프 데이터를 찾을 수 없습니다.', emptyMacro, 'graph-macro');
+      return toUnifiedApiResponse(
+        createApiResponse(false, 'NOT_FOUND', '책 범위 관계 그래프 데이터를 찾을 수 없습니다.', emptyBookGraph, 'graph-book-scope')
+      );
     }
-    handleApiError(error, '거시 그래프 조회 실패');
+    handleApiError(error, '책 범위 관계 그래프 조회 실패');
   }
 };
 
-export const getFineGraph = async (bookId, chapterIdx, eventIdx, atLocator = null, fineOpts = undefined) => {
+export const getFineGraph = async (bookId, chapterIdx, eventIdx, atLocator = null) => {
   if (!bookId) throw new Error('bookId는 필수 매개변수입니다.');
 
-  let locator = fineOpts?.useCallerEventIdxOnly ? null : toLocator(atLocator);
-  let fineChapterIdx = chapterIdx;
-  let fineEventIdx = eventIdx;
+  const fallbackEventIdx = Math.max(1, Number(eventIdx) || 1);
+  let locator = toLocator(atLocator);
+  let resolvedChapter = Number(chapterIdx);
+  let resolvedEventIdx = fallbackEventIdx;
 
-  if (locator) {
-    const resolution = resolveFineGraphLocatorToEventParams(bookId, atLocator, eventIdx);
-    fineChapterIdx = resolution.chapterIdx ?? chapterIdx;
-    if (resolution.resolved) {
-      locator = null;
-      fineEventIdx = resolution.eventIdx;
-    } else if (resolution.atLocator) {
-      locator = toLocator(resolution.atLocator) ?? locator;
+  if (!locator) {
+    const chapterData = getChapterData(bookId, chapterIdx);
+    const manifestEvent = findManifestEventInChapter(bookId, chapterIdx, { eventIdx: fallbackEventIdx });
+    const eventStartOffset = Number(manifestEvent?.startTxtOffset);
+    if (chapterData) {
+      if (Number.isFinite(eventStartOffset) && eventStartOffset >= 0) {
+        locator = locatorFromChapterLocalOffset(chapterData, eventStartOffset);
+      }
+      if (!locator) {
+        locator = locatorFromChapterLocalOffset(chapterData, 0);
+      }
     }
   }
 
-  const emptyFine = { characters: [], relations: [], event: null };
+  if (locator) {
+    const resolution = resolveFineGraphLocatorToEventParams(bookId, locator, fallbackEventIdx);
+    resolvedChapter = Number(resolution.chapterIdx ?? chapterIdx);
+    resolvedEventIdx = Number(resolution.eventIdx ?? fallbackEventIdx);
+    locator = toLocator(resolution.atLocator) ?? locator;
+  }
+
+  const emptyFine = emptyRelationshipGraphResult();
 
   if (!locator) {
-    if (
-      fineChapterIdx === undefined ||
-      fineChapterIdx === null ||
-      fineEventIdx === undefined ||
-      fineEventIdx === null
-    ) {
-      throw new Error('chapterIdx·eventIdx 또는 locator(chapterIndex, blockIndex, offset)는 필수입니다.');
-    }
-    if (fineEventIdx < 1) {
-      return createApiResponse(false, 'INVALID_EVENT', '이벤트 인덱스는 1 이상이어야 합니다.', emptyFine, 'graph-fine');
-    }
+    return createApiResponse(
+      false,
+      'INVALID_LOCATOR',
+      'locator(chapterIndex, blockIndex, offset)가 필요합니다.',
+      emptyFine,
+      'graph-fine'
+    );
   }
 
   const queryParams = new URLSearchParams();
   queryParams.append('scope', 'book');
-  if (locator) {
-    appendRelationshipGraphLocatorParams(queryParams, locator);
-  } else {
-    queryParams.append('chapterIndex', String(fineChapterIdx));
-    const manifestEvent = getManifestEventData(bookId, fineChapterIdx, fineEventIdx);
-    const eventId = manifestEvent?.eventId || String(fineEventIdx);
-    queryParams.append('eventId', eventId);
-  }
+  appendRelationshipGraphLocatorParams(queryParams, locator);
 
   try {
     const response = await apiRequest(
       `/api/v2/books/${bookId}/relationship-graph?${queryParams.toString()}`
     );
-    const payload = enrichFineGraphPayload(
+    const raw = normalizeRelationshipGraphResult(pickResponseResult(response));
+    const result = applyManifestEventIdFallback(
       bookId,
-      fineChapterIdx,
-      fineEventIdx,
-      pickResponsePayload(response)
+      resolvedChapter,
+      resolvedEventIdx,
+      raw
     );
     if (!response || response.isSuccess === false) {
       return createApiResponse(
@@ -517,17 +574,54 @@ export const getFineGraph = async (bookId, chapterIdx, eventIdx, atLocator = nul
         'graph-fine'
       );
     }
-    return createApiResponse(
+    return toUnifiedApiResponse(createApiResponse(
       true,
       'SUCCESS',
       '세밀 그래프 데이터를 성공적으로 조회했습니다.',
-      payload || emptyFine,
+      result || emptyFine,
       'graph-fine'
-    );
+    ));
   } catch (error) {
     if (error.status === 404) {
-      return createApiResponse(false, 'NOT_FOUND', '해당 이벤트에 대한 데이터를 찾을 수 없습니다.', emptyFine, 'graph-fine');
+      return toUnifiedApiResponse(
+        createApiResponse(false, 'NOT_FOUND', '해당 이벤트에 대한 데이터를 찾을 수 없습니다.', emptyFine, 'graph-fine')
+      );
     }
     handleApiError(error, '세밀 그래프 조회 실패');
   }
+};
+
+export const debugFineGraphEventRange = async (
+  bookId,
+  chapterIdx,
+  startEventIdx = 1,
+  endEventIdx = 5
+) => {
+  const start = Math.max(1, Number(startEventIdx) || 1);
+  const end = Math.max(start, Number(endEventIdx) || 5);
+  const rows = [];
+
+  for (let idx = start; idx <= end; idx += 1) {
+    const response = await getFineGraph(bookId, chapterIdx, idx);
+    const result = response?.result ?? {};
+    const relations = Array.isArray(result?.relations) ? result.relations : [];
+    rows.push({
+      eventIdx: idx,
+      isSuccess: Boolean(response?.isSuccess),
+      code: response?.code ?? '',
+      relationCount: relations.length,
+      eventId: result?.eventId ?? null,
+      chapterIndex: result?.chapterIndex ?? null,
+      scope: result?.scope ?? null,
+    });
+  }
+
+  console.log('[FineGraph 1~5 Server Check]', {
+    bookId,
+    chapterIdx,
+    range: `${start}-${end}`,
+    rows,
+  });
+
+  return rows;
 };

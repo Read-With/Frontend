@@ -1,14 +1,11 @@
-import React, { useRef, useMemo, memo } from "react";
+import React, { useMemo, useEffect, useState, useRef, memo } from "react";
 import { AlertCircle, AlertTriangle, Inbox, Loader2 } from "lucide-react";
 import GraphContainer from "../graph/GraphContainer";
 import ViewerTopBar from "./ViewerTopBar";
-import { useGraphElementPipeline } from "../../hooks/graph/graphViewHooks";
+import { useGraphElementPipeline } from "../../hooks/graph/useGraphViewHooks";
 import { graphStyles } from "../../utils/styles/graphStyles";
-import {
-  graphPanelHasCachedLocationHint,
-  graphPanelHasResumeLocationHint,
-} from "../../utils/common/locatorUtils";
-import { resolveDisplayedEventNum } from "../../utils/viewer/viewerEventUtils";
+import { hasGraphPanelLocationHint } from "../../utils/common/locatorUtils";
+import { eventUtils } from "../../utils/viewer/viewerCoreStateUtils";
 
 const iconShellClass = {
   loading: "bg-emerald-50 text-[#5C6F5C]",
@@ -45,6 +42,7 @@ function GraphNoticePanel({ variant, title, description, icon, actions }) {
 
 const primaryBtnClass =
   "rounded-lg bg-[#5C6F5C] px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-[#4A5A4A] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#5C6F5C] focus-visible:ring-offset-2";
+const EVENT_OVERLAY_MIN_MS = 0;
 
 function normalizeGraphApiError(raw) {
   if (!raw) return null;
@@ -67,36 +65,30 @@ const GraphSplitArea = memo(function GraphSplitArea({
   tooltipProps,
   transitionState,
   apiError,
-  bookId = null,
-  book = null,
   cachedLocation = null,
   resumeAnchor = null,
 }) {
   const { activeTooltip, onClearTooltip, onSetActiveTooltip, graphClearRef } = tooltipProps;
-  const graphContainerRef = useRef(null);
   const {
     searchTerm: searchTermValue = "",
     isSearchActive: isSearchActiveValue = false,
     filteredElements: filteredElementsValue = [],
     isResetFromSearch: isResetFromSearchValue = false,
     fitNodeIds: searchFitNodeIds = [],
-    suggestions: suggestionsValue = [],
-    showSuggestions: showSuggestionsValue = false,
-    selectedIndex: selectedSuggestionIndex = -1,
   } = searchState;
-  
-  const { loading, graphPhase, isDataReady, isDataEmpty } = viewerState;
-  const { elements, currentEvent, currentChapter } = graphState;
+
+  const { graphPhase, isDataReady, isDataEmpty, book, bookKey, routeBookId } = viewerState;
+  const { elements, currentEvent, currentChapter, prevValidEvent } = graphState;
   const { filterStage } = graphActions;
-  const hasResolvedEvent = resolveDisplayedEventNum(currentEvent) > 0;
+  const hasResolvedEvent = eventUtils.resolveEventNum(currentEvent) > 0;
 
   const hasResumeLocator = useMemo(
-    () => graphPanelHasResumeLocationHint(resumeAnchor),
+    () => hasGraphPanelLocationHint(resumeAnchor),
     [resumeAnchor]
   );
 
   const hasCachedLocation = useMemo(
-    () => graphPanelHasCachedLocationHint(cachedLocation),
+    () => hasGraphPanelLocationHint(cachedLocation, { requireEventNum: true }),
     [cachedLocation]
   );
 
@@ -119,33 +111,60 @@ const GraphSplitArea = memo(function GraphSplitArea({
     filteredElements: filteredElementsValue,
   });
 
-  const prevValidEventForGraph = graphState.prevValidEvent ?? null;
-
   const hasCurrentEvent = hasResolvedEvent;
   const hasElements = Array.isArray(elements) && elements.length > 0;
   
   const isFineGraphBusy = graphPhase === 'fine';
   const isGraphIdle = graphPhase === 'idle';
+  const rawTransitionOverlay =
+    !hasElements &&
+    (isFineGraphBusy || (transitionState.type === "event" && transitionState.inProgress));
+  const [showTransitionOverlay, setShowTransitionOverlay] = useState(false);
+  const overlayShownAtRef = useRef(0);
+  const overlayHideTimerRef = useRef(null);
+  useEffect(() => {
+    if (rawTransitionOverlay) {
+      if (overlayHideTimerRef.current) {
+        clearTimeout(overlayHideTimerRef.current);
+        overlayHideTimerRef.current = null;
+      }
+      if (!showTransitionOverlay) {
+        overlayShownAtRef.current = Date.now();
+        setShowTransitionOverlay(true);
+      }
+      return undefined;
+    }
+
+    if (!showTransitionOverlay) return undefined;
+    const elapsed = Date.now() - overlayShownAtRef.current;
+    const remaining = Math.max(0, EVENT_OVERLAY_MIN_MS - elapsed);
+    overlayHideTimerRef.current = setTimeout(() => {
+      setShowTransitionOverlay(false);
+      overlayHideTimerRef.current = null;
+    }, remaining);
+    return () => {
+      if (overlayHideTimerRef.current) {
+        clearTimeout(overlayHideTimerRef.current);
+        overlayHideTimerRef.current = null;
+      }
+    };
+  }, [rawTransitionOverlay, showTransitionOverlay]);
+
+  useEffect(() => {
+    return () => {
+      if (overlayHideTimerRef.current) {
+        clearTimeout(overlayHideTimerRef.current);
+      }
+    };
+  }, []);
   const isDataLoadCompleteAndEmpty = isGraphIdle && isDataEmpty && !hasElements && !hasResolvedEvent;
   const isLoading = isDataLoadCompleteAndEmpty
     ? false
-    : loading || !isGraphIdle || !isLocationDetermined || (!isDataReady && !hasCurrentEvent);
+    : hasElements
+      ? (!isLocationDetermined || (!isDataReady && !hasCurrentEvent))
+      : (!isGraphIdle || !isLocationDetermined || (!isDataReady && !hasCurrentEvent));
   const shouldShowEmptyData = isDataLoadCompleteAndEmpty;
   const shouldShowLoading = !hasElements && isLoading;
-
-  const topBarSearchState = useMemo(() => ({
-    searchTerm: searchTermValue,
-    isSearchActive: isSearchActiveValue,
-    suggestions: suggestionsValue,
-    showSuggestions: showSuggestionsValue,
-    selectedIndex: selectedSuggestionIndex,
-  }), [searchTermValue, isSearchActiveValue, suggestionsValue, showSuggestionsValue, selectedSuggestionIndex]);
-
-  // viewerState 전체를 넘기면 showToolbar 등 무관한 변경으로 TopBar memo가 깨짐
-  const viewerStateForTopBar = useMemo(
-    () => ({ filename: viewerState.filename, book: viewerState.book, progress: viewerState.progress }),
-    [viewerState.filename, viewerState.book, viewerState.progress]
-  );
 
   const resolvedApiError = useMemo(() => normalizeGraphApiError(apiError), [apiError]);
 
@@ -159,8 +178,8 @@ const GraphSplitArea = memo(function GraphSplitArea({
       <ViewerTopBar
         graphState={graphState}
         graphActions={graphActions}
-        viewerState={viewerStateForTopBar}
-        searchState={topBarSearchState}
+        viewerState={{ book }}
+        searchState={searchState}
         searchActions={searchActions}
       />
       
@@ -235,30 +254,41 @@ const GraphSplitArea = memo(function GraphSplitArea({
               flex: 1,
               minHeight: 0,
               minWidth: 0,
+              position: "relative",
             }}
           >
             <GraphContainer
-              ref={graphContainerRef}
-              currentPosition={graphState.currentCharIndex}
               currentEvent={graphState.currentEvent}
               currentChapter={graphState.currentChapter}
               edgeLabelVisible={graphState.edgeLabelVisible}
-              filename={viewerState.filename}
+              filename={routeBookId ?? bookKey ?? ''}
               elements={finalElements}
               searchTerm={searchTermValue}
               isSearchActive={isSearchActiveValue}
               filteredElements={filteredElementsValue}
               fitNodeIds={searchFitNodeIds}
               isResetFromSearch={isResetFromSearchValue}
-              prevValidEvent={prevValidEventForGraph}
-              events={graphState.events || []}
+              prevValidEvent={prevValidEvent ?? null}
               activeTooltip={activeTooltip}
               onClearTooltip={onClearTooltip}
               onSetActiveTooltip={onSetActiveTooltip}
               graphClearRef={graphClearRef}
               isEventTransition={transitionState.type === 'event' && transitionState.inProgress}
-              bookId={book?.id ?? bookId}
+              bookId={book?.id ?? bookKey}
             />
+            {showTransitionOverlay ? (
+              <div
+                className="absolute inset-0 z-20 flex items-center justify-center bg-slate-50/90"
+                role="status"
+                aria-live="polite"
+                aria-label="그래프 전환 중"
+              >
+                <div className="flex items-center gap-2 rounded-lg bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm">
+                  <Loader2 className="h-4 w-4 animate-spin" strokeWidth={2} aria-hidden />
+                  <span>이벤트 반영 중</span>
+                </div>
+              </div>
+            ) : null}
           </div>
         )}
       </div>

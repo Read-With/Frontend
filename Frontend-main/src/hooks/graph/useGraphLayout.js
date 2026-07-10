@@ -84,31 +84,6 @@ function scheduleRippleWhenPositionsPainted(cy, triggerRippleForAddedNodes) {
   return cancel;
 }
 
-function fadeInNewElements(cy, elementsUpdateRef, onComplete, _skipAnimation, addSnapshot = null) {
-  const snap = addSnapshot ?? elementsUpdateRef?.current;
-  if (!cy || !snap) {
-    onComplete?.();
-    return;
-  }
-  const { nodesToAdd = [], edgesToAdd = [] } = snap;
-  const ids = [...nodesToAdd, ...edgesToAdd]
-    .map((x) => x?.data?.id)
-    .filter((id) => id != null && id !== "");
-  if (ids.length === 0) {
-    onComplete?.();
-    return;
-  }
-  onComplete?.();
-}
-
-function pulseDataChangedElements(cy, ids, onComplete) {
-  if (!cy || !ids?.length) {
-    onComplete?.();
-    return;
-  }
-  onComplete?.();
-}
-
 export function useGraphLayout({
   cy,
   elementsFingerprint,
@@ -230,26 +205,12 @@ export function useGraphLayout({
         }
       }
 
-      if (stylesheet && nodesToAdd && nodesToAdd.length > 0) {
-        let newNodes = cy.collection();
-        nodesToAdd.forEach((n) => {
-          const id = n?.data?.id;
-          if (id == null || id === "") return;
-          const el = cy.getElementById(String(id));
-          if (el.length > 0) {
-            newNodes = newNodes.union(el);
-          }
-        });
-        applyNodeSizes(cy, newNodes.length > 0 ? newNodes : cy.nodes());
+      if (stylesheet) {
+        applyNodeSizes(cy);
       }
 
       const preserveUnchangedPositions =
         edgesOnlyIncremental || incrementalLayoutScope;
-
-      const fadeSnapshot = {
-        nodesToAdd: nodesToAdd.slice(),
-        edgesToAdd: edgesToAdd.slice(),
-      };
 
       const completeCallback = () => {
         handleLayoutComplete(cy, isInitialLoad, {
@@ -257,24 +218,16 @@ export function useGraphLayout({
           skipEnsureBounds:
             preserveUnchangedPositions || (styleOnlyIncremental && !incrementalLayoutScope),
         });
-        fadeInNewElements(
-          cy,
-          elementsUpdateRef,
-          () => {
-            if (nodesToAdd.length > 0 || edgesToAdd.length > 0) {
-              cancelRipple();
-              cancelRipple = scheduleRippleWhenPositionsPainted(
-                cy,
-                triggerRippleForAddedNodes
-              );
-            }
-            if (isInitialLoad) {
-              setIsInitialLoad(false);
-            }
-          },
-          true,
-          fadeSnapshot
-        );
+        if (nodesToAdd.length > 0 || edgesToAdd.length > 0) {
+          cancelRipple();
+          cancelRipple = scheduleRippleWhenPositionsPainted(
+            cy,
+            triggerRippleForAddedNodes
+          );
+        }
+        if (isInitialLoad) {
+          setIsInitialLoad(false);
+        }
       };
 
       if (layout && layoutName !== "preset") {
@@ -296,11 +249,12 @@ export function useGraphLayout({
       if (stylesheetChanged) {
         updateStylesheet(cy);
       }
-      pulseDataChangedElements(cy, dataChangedIds, () => {
-        handleLayoutComplete(cy, false, {
-          skipOverlap: true,
-          skipEnsureBounds: true,
-        });
+      if (stylesheet) {
+        applyNodeSizes(cy);
+      }
+      handleLayoutComplete(cy, false, {
+        skipOverlap: true,
+        skipEnsureBounds: true,
       });
       if (isInitialLoad) {
         setIsInitialLoad(false);
@@ -311,6 +265,9 @@ export function useGraphLayout({
         updateStylesheet(cy);
       }
       if (stylesheetChanged || isInitialLoad) {
+        if (stylesheet) {
+          applyNodeSizes(cy);
+        }
         if (isInitialLoad) {
           fitGraphOnInitialLoad(cy);
           setIsInitialLoad(false);

@@ -1,10 +1,8 @@
 import React, {
-  forwardRef,
   useRef,
   useMemo,
   useEffect,
   useCallback,
-  useImperativeHandle,
 } from 'react';
 import CytoscapeGraphUnified from './CytoscapeGraphUnified';
 import UnifiedNodeInfo from './tooltip/UnifiedNodeInfo';
@@ -12,21 +10,12 @@ import UnifiedEdgeTooltip from './tooltip/UnifiedEdgeTooltip';
 import './RelationGraph.css';
 import { getEdgeStyle, createGraphStylesheet } from '../../utils/styles/graphStyles';
 import { graphStyles } from '../../utils/styles/styles';
-import { ensureElementsInBounds, clearHighlightClassesOn } from '../../utils/graph/graphUtils';
-import { applySearchFadeEffect } from '../../utils/graph/searchUtils.jsx';
-import { useGraphDataLoader } from '../../hooks/graph/useGraphDataLoader.js';
-import { useGraphSearch } from '../../hooks/graph/graphViewHooks';
-import { resolveViewerDisplayEventNum } from '../../utils/viewer/viewerEventUtils';
-
-function resolveEventIdx(currentEvent) {
-  if (typeof currentEvent?.eventNum === 'number' && currentEvent.eventNum > 0) {
-    return currentEvent.eventNum;
-  }
-  if (typeof currentEvent === 'number' && currentEvent > 0) {
-    return currentEvent;
-  }
-  return null;
-}
+import { ensureElementsInBounds, buildTooltipPayload, processTooltipData, createTooltipTapHandlers } from '../../utils/graph/graphUtils';
+import {
+  useGraphOutsideDismiss,
+  shouldIgnoreViewerOutsideClick,
+} from '../../hooks/graph/useGraphOutsideDismiss';
+import { resolveEventOrdinalForDisplay } from '../../utils/viewer/viewerEventProgressUtils';
 
 function buildViewportFitKey({ chapterNum, eventNum, elements }) {
   if (!Array.isArray(elements) || elements.length === 0) return '';
@@ -101,46 +90,32 @@ function useAutoFit(cyRef, viewportFitKey, isSearchActive, isEventTransition) {
   }, [cyRef, viewportFitKey, isSearchActive, isEventTransition]);
 }
 
-function useCytoscapeReset(cyRef, graphClearRef, selectedNodeIdRef, selectedEdgeIdRef) {
-  useEffect(() => {
-    if (!graphClearRef) return;
-
-    graphClearRef.current = () => {
-      const cy = cyRef.current;
-      if (!cy) return;
-      clearHighlightClassesOn(cy);
-      try {
-        if (typeof cy.style === 'function') cy.style().update();
-      } catch {}
-      if (selectedNodeIdRef) selectedNodeIdRef.current = null;
-      if (selectedEdgeIdRef) selectedEdgeIdRef.current = null;
-    };
-  }, [graphClearRef, cyRef, selectedNodeIdRef, selectedEdgeIdRef]);
-}
-
-const ViewerRelationGraph = ({
-  elements,
-  newNodeIds = [],
-  chapterNum,
-  eventNum,
+const GraphContainer = ({
+  currentEvent,
+  currentChapter,
   edgeLabelVisible = true,
-  maxChapter,
   filename,
-  fitNodeIds,
-  searchTerm,
-  isSearchActive,
-  filteredElements,
-  isResetFromSearch,
-  currentEvent = null,
+  elements = [],
   prevValidEvent = null,
-  events = [],
   activeTooltip = null,
   onClearTooltip = null,
   onSetActiveTooltip = null,
   graphClearRef = null,
-  isEventTransition: _isEventTransition = false,
+  isEventTransition = false,
+  searchTerm = '',
+  isSearchActive = false,
+  filteredElements = [],
+  fitNodeIds = [],
+  isResetFromSearch = false,
   bookId = null,
 }) => {
+  const chapterNum = currentChapter;
+  const eventNum = resolveEventOrdinalForDisplay({
+    currentEvent,
+    prevValidEvent,
+    progressTopBar: null,
+    fallback: 0,
+  });
   const cyRef = useRef(null);
   const selectedEdgeIdRef = useRef(null);
   const selectedNodeIdRef = useRef(null);
@@ -150,95 +125,34 @@ const ViewerRelationGraph = ({
     [chapterNum, eventNum, elements]
   );
 
-  useAutoFit(cyRef, viewportFitKey, isSearchActive, _isEventTransition);
-  useCytoscapeReset(cyRef, graphClearRef, selectedNodeIdRef, selectedEdgeIdRef);
-
-  const onClearTooltipOnly = useCallback(() => {
-    onClearTooltip?.();
-  }, [onClearTooltip]);
+  useAutoFit(cyRef, viewportFitKey, isSearchActive, isEventTransition);
 
   const clearTooltipAndGraph = useCallback(() => {
     onClearTooltip?.();
     graphClearRef?.current?.();
-    if (isSearchActive && filteredElements?.length > 0 && cyRef.current) {
-      applySearchFadeEffect(cyRef.current, filteredElements, isSearchActive);
-    }
-  }, [onClearTooltip, graphClearRef, isSearchActive, filteredElements, cyRef]);
+  }, [onClearTooltip, graphClearRef]);
 
-  const onShowNodeTooltip = useCallback(({ node, nodeCenter, mouseX, mouseY }) => {
+  const handleTooltipTap = useCallback((tapPayload, type) => {
     if (!onSetActiveTooltip) return;
-
-    const nodeData = node.data();
-
-    let names = nodeData.names;
-    if (typeof names === 'string') {
-      try { names = JSON.parse(names); } catch { names = [names]; }
-    }
-
-    let main = nodeData.main;
-    if (typeof main === 'string') main = main === 'true';
-
-    onSetActiveTooltip({
-      type: 'node',
-      ...nodeData,
-      names,
-      main,
-      nodeCenter,
-      x: mouseX ?? nodeCenter?.x ?? 0,
-      y: mouseY ?? nodeCenter?.y ?? 0,
-    });
+    onSetActiveTooltip(processTooltipData(buildTooltipPayload(tapPayload, type), type));
   }, [onSetActiveTooltip]);
 
-  const onShowEdgeTooltip = useCallback(({ edge, edgeCenter, mouseX, mouseY }) => {
-    if (!onSetActiveTooltip) return;
+  const { onShowNodeTooltip, onShowEdgeTooltip } = useMemo(
+    () => createTooltipTapHandlers(handleTooltipTap),
+    [handleTooltipTap],
+  );
 
-    onSetActiveTooltip({
-      type: 'edge',
-      id: edge.id(),
-      data: edge.data(),
-      sourceNode: edge.source(),
-      targetNode: edge.target(),
-      edgeCenter,
-      x: mouseX ?? edgeCenter?.x ?? 0,
-      y: mouseY ?? edgeCenter?.y ?? 0,
-    });
-  }, [onSetActiveTooltip]);
+  const shouldIgnoreOutsideClick = useCallback(
+    (event) => shouldIgnoreViewerOutsideClick(event, containerRef),
+    [containerRef],
+  );
 
-  useEffect(() => {
-    if (!activeTooltip) return;
-
-    const handleDocumentClick = (event) => {
-      const isInsideTooltip =
-        !!event.target.closest('.graph-node-tooltip') ||
-        !!event.target.closest('.edge-tooltip-container');
-      if (isInsideTooltip) return;
-
-      const isInsideGraph =
-        containerRef.current && containerRef.current.contains(event.target);
-      if (isInsideGraph) return;
-
-      const isDragEnd = event?.detail?.type === 'graphDragEnd';
-      if (isDragEnd) return;
-
-      clearTooltipAndGraph();
-    };
-
-    const handleGraphDragEnd = (event) => {
-      event.preventDefault?.();
-      event.stopPropagation?.();
-    };
-
-    const timeoutId = setTimeout(() => {
-      document.addEventListener('click', handleDocumentClick, true);
-      document.addEventListener('graphDragEnd', handleGraphDragEnd, true);
-    }, 20);
-
-    return () => {
-      clearTimeout(timeoutId);
-      document.removeEventListener('click', handleDocumentClick, true);
-      document.removeEventListener('graphDragEnd', handleGraphDragEnd, true);
-    };
-  }, [activeTooltip, clearTooltipAndGraph]);
+  useGraphOutsideDismiss({
+    enabled: !!activeTooltip,
+    onDismiss: clearTooltipAndGraph,
+    shouldIgnoreClick: shouldIgnoreOutsideClick,
+    attachDelayMs: 20,
+  });
 
   const edgeStyleViewer = useMemo(() => getEdgeStyle('viewer'), []);
   const stylesheet = useMemo(
@@ -250,7 +164,6 @@ const ViewerRelationGraph = ({
   return (
     <div
       ref={containerRef}
-      className="relation-graph-container"
       style={graphStyles.container}
     >
       <div
@@ -264,18 +177,13 @@ const ViewerRelationGraph = ({
             data={activeTooltip}
             x={activeTooltip.x}
             y={activeTooltip.y}
-            nodeCenter={activeTooltip.nodeCenter}
             onClose={clearTooltipAndGraph}
-            inViewer={true}
             chapterNum={chapterNum}
             eventNum={eventNum}
-            maxChapter={maxChapter}
             filename={filename}
             elements={elements}
-            style={graphStyles.tooltipStyle}
             currentEvent={currentEvent}
             prevValidEvent={prevValidEvent}
-            events={events}
           />
         )}
         {activeTooltip?.type === 'edge' && (
@@ -285,17 +193,12 @@ const ViewerRelationGraph = ({
             x={activeTooltip.x}
             y={activeTooltip.y}
             onClose={clearTooltipAndGraph}
-            sourceNode={activeTooltip.sourceNode}
-            targetNode={activeTooltip.targetNode}
-            mode="viewer"
+            variant="viewer"
             chapterNum={chapterNum}
             eventNum={eventNum}
-            maxChapter={maxChapter}
-            filename={filename}
             style={graphStyles.tooltipStyle}
             currentEvent={currentEvent}
             prevValidEvent={prevValidEvent}
-            events={events}
             bookId={bookId}
           />
         )}
@@ -304,11 +207,9 @@ const ViewerRelationGraph = ({
       <div className="graph-canvas-area" style={graphStyles.graphArea}>
         <CytoscapeGraphUnified
           elements={elements}
-          newNodeIds={newNodeIds}
           stylesheet={stylesheet}
           layout={presetLayout}
           cyRef={cyRef}
-          nodeSize={10}
           fitNodeIds={fitNodeIds}
           searchTerm={searchTerm}
           isSearchActive={isSearchActive}
@@ -317,9 +218,10 @@ const ViewerRelationGraph = ({
           currentChapter={chapterNum}
           onShowNodeTooltip={onShowNodeTooltip}
           onShowEdgeTooltip={onShowEdgeTooltip}
-          onClearTooltip={onClearTooltipOnly}
+          onClearTooltip={onClearTooltip}
           selectedNodeIdRef={selectedNodeIdRef}
           selectedEdgeIdRef={selectedEdgeIdRef}
+          graphClearRef={graphClearRef}
           strictBackgroundClear={true}
           showRippleEffect={true}
         />
@@ -328,126 +230,4 @@ const ViewerRelationGraph = ({
   );
 };
 
-const MemoViewerRelationGraph = React.memo(ViewerRelationGraph);
-
-const GraphContainer = forwardRef(({
-  currentEvent,
-  currentChapter,
-  edgeLabelVisible = true,
-  onSearchStateChange,
-  filename,
-  elements: externalElements,
-  prevValidEvent = null,
-  events = [],
-  activeTooltip = null,
-  onClearTooltip = null,
-  onSetActiveTooltip = null,
-  graphClearRef = null,
-  isEventTransition = false,
-  searchTerm: externalSearchTerm,
-  isSearchActive: externalIsSearchActive,
-  filteredElements: externalFilteredElements,
-  fitNodeIds: externalFitNodeIds,
-  isResetFromSearch: externalIsResetFromSearch,
-  bookId = null,
-}, ref) => {
-  const isExternalMode = Boolean(externalElements);
-
-  const {
-    elements: internalElements,
-    newNodeIds,
-    currentChapterData,
-  } = useGraphDataLoader(
-    isExternalMode ? null : (bookId ?? filename ?? null),
-    isExternalMode ? null : currentChapter,
-    isExternalMode ? null : resolveEventIdx(currentEvent),
-  );
-
-  const elements = externalElements || internalElements;
-
-  const handleSearchStateChange = useCallback((searchState) => {
-    if (onSearchStateChange) {
-      onSearchStateChange({ ...searchState, currentChapterData });
-    }
-  }, [onSearchStateChange, currentChapterData]);
-
-  const {
-    searchTerm: internalSearchTerm,
-    isSearchActive: internalIsSearchActive,
-    filteredElements: internalFilteredElements,
-    fitNodeIds: internalFitNodeIds,
-    isResetFromSearch: internalIsResetFromSearch,
-    handleSearchSubmit,
-    clearSearch,
-  } = useGraphSearch(
-    isExternalMode ? [] : (elements || []),
-    handleSearchStateChange,
-    currentChapterData,
-  );
-
-  const effectiveSearchTerm = externalSearchTerm ?? internalSearchTerm;
-  const effectiveIsSearchActive = externalIsSearchActive ?? internalIsSearchActive;
-  const effectiveFilteredElements = externalFilteredElements ?? internalFilteredElements;
-  const effectiveIsResetFromSearch = externalIsResetFromSearch ?? internalIsResetFromSearch;
-
-  const effectiveFitNodeIds = useMemo(() => {
-    if (Array.isArray(externalFitNodeIds)) return externalFitNodeIds;
-    if (Array.isArray(internalFitNodeIds) && internalFitNodeIds.length > 0) return internalFitNodeIds;
-    if (effectiveIsSearchActive && Array.isArray(effectiveFilteredElements) && effectiveFilteredElements.length > 0) {
-      const ids = effectiveFilteredElements
-        .filter((el) => el?.data && !el.data.source && el.data.id != null)
-        .map((el) => el.data.id);
-      return Array.from(new Set(ids));
-    }
-    return [];
-  }, [externalFitNodeIds, internalFitNodeIds, effectiveIsSearchActive, effectiveFilteredElements]);
-
-  const finalElements = useMemo(() => {
-    if (isExternalMode) {
-      return elements;
-    }
-    if (effectiveIsSearchActive && effectiveFilteredElements?.length > 0) {
-      return effectiveFilteredElements;
-    }
-    return elements;
-  }, [isExternalMode, effectiveIsSearchActive, effectiveFilteredElements, elements]);
-
-  useImperativeHandle(ref, () => ({
-    handleSearchSubmit: isExternalMode ? () => {} : handleSearchSubmit,
-    clearSearch: isExternalMode ? () => {} : clearSearch,
-  }), [isExternalMode, handleSearchSubmit, clearSearch]);
-
-  return (
-    <MemoViewerRelationGraph
-      elements={finalElements}
-      newNodeIds={newNodeIds}
-      chapterNum={currentChapter}
-      eventNum={resolveViewerDisplayEventNum({
-        currentEvent,
-        prevValidEvent,
-        progressTopBar: null,
-        fallback: 0,
-      })}
-      edgeLabelVisible={edgeLabelVisible}
-      filename={filename}
-      bookId={bookId}
-      fitNodeIds={effectiveFitNodeIds}
-      searchTerm={effectiveSearchTerm}
-      isSearchActive={effectiveIsSearchActive}
-      filteredElements={effectiveFilteredElements}
-      isResetFromSearch={effectiveIsResetFromSearch}
-      currentEvent={currentEvent}
-      prevValidEvent={prevValidEvent}
-      events={events}
-      activeTooltip={activeTooltip}
-      onClearTooltip={onClearTooltip}
-      onSetActiveTooltip={onSetActiveTooltip}
-      graphClearRef={graphClearRef}
-      isEventTransition={isEventTransition}
-    />
-  );
-});
-
-GraphContainer.displayName = 'GraphContainer';
-
-export default GraphContainer;
+export default React.memo(GraphContainer);

@@ -1,18 +1,16 @@
 /** 그래프 뷰: 검색·필터 파이프라인·사이드바 UI 상태 */
 
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { buildSuggestions, filterGraphElements } from '../../utils/graph/searchUtils.jsx';
+import { buildSuggestions, filterGraphElements } from '../../utils/graph/searchUtils.js';
 import { filterMainCharacters } from '../../utils/graph/graphDataUtils';
-import { determineFinalElements, sortElementsById } from '../../utils/graph/graphUtils';
+import { sortElementsByDataId } from '../../utils/graph/graphUtils';
 
 export function useGraphState() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [edgeLabelVisible, setEdgeLabelVisible] = useState(true);
   const [activeTooltip, setActiveTooltip] = useState(null);
   const [isSidebarClosing, setIsSidebarClosing] = useState(false);
-  const [forceClose, setForceClose] = useState(false);
   const [filterStage, setFilterStage] = useState(0);
-  const [isDropdownSelection, setIsDropdownSelection] = useState(false);
 
   const toggleSidebar = useCallback(() => {
     setIsSidebarOpen((prev) => !prev);
@@ -22,22 +20,13 @@ export function useGraphState() {
     setEdgeLabelVisible((prev) => !prev);
   }, []);
 
-  const clearTooltip = useCallback(() => {
-    setForceClose(true);
-  }, []);
-
   const startClosing = useCallback(() => {
     setIsSidebarClosing(true);
   }, []);
 
   const closeSidebar = useCallback(() => {
     setActiveTooltip(null);
-    setForceClose(false);
     setIsSidebarClosing(false);
-  }, []);
-
-  const setDropdownSelection = useCallback((value) => {
-    setIsDropdownSelection(value);
   }, []);
 
   return {
@@ -45,19 +34,14 @@ export function useGraphState() {
     edgeLabelVisible,
     activeTooltip,
     isSidebarClosing,
-    forceClose,
     filterStage,
-    isDropdownSelection,
     setActiveTooltip,
     setIsSidebarClosing,
-    setForceClose,
     setFilterStage,
     toggleSidebar,
     toggleEdgeLabel,
-    clearTooltip,
     startClosing,
     closeSidebar,
-    setDropdownSelection,
   };
 }
 
@@ -68,7 +52,7 @@ export function useGraphElementPipeline({
   filteredElements,
 }) {
   const sortedElements = useMemo(
-    () => sortElementsById(elements),
+    () => sortElementsByDataId(elements),
     [elements]
   );
 
@@ -77,28 +61,26 @@ export function useGraphElementPipeline({
     [sortedElements, filterStage]
   );
 
-  const finalElements = useMemo(
-    () =>
-      determineFinalElements(
-        isSearchActive,
-        filteredElements,
-        sortedElements,
-        filterStage,
-        filteredMainCharacters
-      ),
-    [
-      isSearchActive,
-      filteredElements,
-      sortedElements,
-      filterStage,
-      filteredMainCharacters,
-    ]
-  );
+  const finalElements = useMemo(() => {
+    if (isSearchActive) {
+      return filteredElements ?? [];
+    }
+    if (filterStage > 0) {
+      return filteredMainCharacters;
+    }
+    return sortedElements;
+  }, [
+    isSearchActive,
+    filteredElements,
+    sortedElements,
+    filterStage,
+    filteredMainCharacters,
+  ]);
 
-  return { sortedElements, filteredMainCharacters, finalElements };
+  return { filteredMainCharacters, finalElements };
 }
 
-export function useGraphSearch(elements, onSearchStateChange = null, currentChapterData = null) {
+export function useGraphSearch(elements, currentChapterData = null) {
   const [searchTerm, setSearchTerm] = useState('');
   const [filteredElements, setFilteredElements] = useState([]);
   const [fitNodeIds, setFitNodeIds] = useState([]);
@@ -108,11 +90,7 @@ export function useGraphSearch(elements, onSearchStateChange = null, currentChap
   const [suggestions, setSuggestions] = useState([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(-1);
-
-  const onSearchStateChangeRef = useRef(onSearchStateChange);
-  useEffect(() => {
-    onSearchStateChangeRef.current = onSearchStateChange;
-  }, [onSearchStateChange]);
+  const suppressSuggestionsRef = useRef(false);
 
   const elementsRef = useRef(elements);
   const currentChapterDataRef = useRef(currentChapterData);
@@ -125,12 +103,34 @@ export function useGraphSearch(elements, onSearchStateChange = null, currentChap
     currentChapterDataRef.current = currentChapterData;
   }, [currentChapterData]);
 
+  useEffect(() => {
+    if (!isSearchActive) return;
+    const trimmedTerm = searchTerm.trim();
+    if (!trimmedTerm) return;
+
+    const filtered = filterGraphElements(
+      elements,
+      trimmedTerm,
+      currentChapterDataRef.current
+    );
+    setFilteredElements(filtered || []);
+    setFitNodeIds(
+      filtered
+        ? filtered
+            .filter((el) => !el.data.source && el.data.id != null)
+            .map((el) => String(el.data.id))
+        : []
+    );
+  }, [elements, isSearchActive, searchTerm]);
+
   const handleSearchSubmit = useCallback((term) => {
     const trimmedTerm = term.trim();
+    suppressSuggestionsRef.current = true;
     setSearchTerm(term);
     setIsSearchActive(!!trimmedTerm);
     setIsResetFromSearch(false);
     setShowSuggestions(false);
+    setSelectedIndex(-1);
 
     const currentElements = elementsRef.current;
     const chapterData = currentChapterDataRef.current;
@@ -138,7 +138,13 @@ export function useGraphSearch(elements, onSearchStateChange = null, currentChap
     if (trimmedTerm && currentElements) {
       const filtered = filterGraphElements(currentElements, trimmedTerm, chapterData);
       setFilteredElements(filtered || []);
-      setFitNodeIds(filtered ? filtered.filter((el) => !el.data.source).map((el) => el.data.id) : []);
+      setFitNodeIds(
+        filtered
+          ? filtered
+              .filter((el) => !el.data.source && el.data.id != null)
+              .map((el) => String(el.data.id))
+          : []
+      );
     } else {
       setFilteredElements(currentElements || []);
       setFitNodeIds([]);
@@ -147,6 +153,7 @@ export function useGraphSearch(elements, onSearchStateChange = null, currentChap
   }, []);
 
   const clearSearch = useCallback(() => {
+    suppressSuggestionsRef.current = false;
     setSearchTerm('');
     setFilteredElements([]);
     setFitNodeIds([]);
@@ -167,14 +174,21 @@ export function useGraphSearch(elements, onSearchStateChange = null, currentChap
     }
 
     const matches = buildSuggestions(
-      elementsRef.current,
+      elements,
       trimmedTerm,
       currentChapterDataRef.current
     );
     setSuggestions(matches);
-    setShowSuggestions(matches.length > 0);
     setSelectedIndex(-1);
-  }, [searchTerm]);
+
+    if (suppressSuggestionsRef.current) {
+      suppressSuggestionsRef.current = false;
+      setShowSuggestions(false);
+      return;
+    }
+
+    setShowSuggestions(true);
+  }, [searchTerm, elements]);
 
   useEffect(() => {
     if (isResetFromSearch) {
@@ -215,6 +229,17 @@ export function useGraphSearch(elements, onSearchStateChange = null, currentChap
     setSelectedIndex(-1);
   }, []);
 
+  const onGenerateSuggestions = useCallback((term) => {
+    suppressSuggestionsRef.current = false;
+    setSearchTerm(term);
+    if (term.trim().length >= 2) {
+      setShowSuggestions(true);
+    } else {
+      setShowSuggestions(false);
+      setSelectedIndex(-1);
+    }
+  }, []);
+
   const currentSearchState = useMemo(
     () => ({
       searchTerm,
@@ -224,35 +249,25 @@ export function useGraphSearch(elements, onSearchStateChange = null, currentChap
       suggestions,
       showSuggestions,
       selectedIndex,
+      isResetFromSearch,
     }),
-    [searchTerm, isSearchActive, filteredElements, fitNodeIds, suggestions, showSuggestions, selectedIndex]
+    [searchTerm, isSearchActive, filteredElements, fitNodeIds, suggestions, showSuggestions, selectedIndex, isResetFromSearch]
   );
 
-  useEffect(() => {
-    onSearchStateChangeRef.current?.(currentSearchState);
-  }, [currentSearchState]);
-
-  const searchFinalElements = useMemo(() => {
-    return isSearchActive && filteredElements?.length > 0 ? filteredElements : (elements || []);
-  }, [isSearchActive, filteredElements, elements]);
+  const searchActions = useMemo(
+    () => ({
+      onSearchSubmit: handleSearchSubmit,
+      clearSearch,
+      closeSuggestions,
+      onGenerateSuggestions,
+      handleKeyDown,
+      onSelectedIndexChange: setSelectedIndex,
+    }),
+    [handleSearchSubmit, clearSearch, closeSuggestions, onGenerateSuggestions, handleKeyDown]
+  );
 
   return {
-    searchTerm,
-    isSearchActive,
-    filteredElements,
-    fitNodeIds,
-    finalElements: searchFinalElements,
-    isResetFromSearch,
-    handleSearchSubmit,
-    clearSearch,
-    setSearchTerm,
-    setIsSearchActive,
-    suggestions,
-    showSuggestions,
-    selectedIndex,
-    handleKeyDown,
-    closeSuggestions,
-    setShowSuggestions,
-    setSelectedIndex,
+    searchState: currentSearchState,
+    searchActions,
   };
 }

@@ -1,19 +1,13 @@
-/** 뷰어 URL·graphMode: `/user/viewer/:id/c/:chapter/p/:page` 경로 동기화 */
+/** 뷰어 URL: `/user/viewer/:id/c/:chapter/p/:page` 경로 동기화 */
 
-import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
-import { loadViewerMode, loadSettings } from '../../utils/viewer/viewerUtils';
 import {
   parseViewerReaderSplat,
   userViewerReadingPath,
 } from '../../utils/navigation/viewerPaths';
 
-export function flagsFromGraphMode(mode) {
-  if (mode === 'graph') return { fullScreen: true, show: true };
-  if (mode === 'split') return { fullScreen: false, show: true };
-  if (mode === 'viewer') return { fullScreen: false, show: false };
-  return null;
-}
+const DEFAULT_READING_POSITION = { chapter: 1, page: 1 };
 
 export function useViewerUrlParams(options = {}) {
   const { skipHistoryMutationsRef } = options;
@@ -21,35 +15,24 @@ export function useViewerUrlParams(options = {}) {
   const navigate = useNavigate();
   const location = useLocation();
 
-  const initialGraphMode = useMemo(() => {
-    return (
-      flagsFromGraphMode(loadViewerMode()) ?? {
-        fullScreen: false,
-        show: loadSettings().showGraph,
-      }
-    );
-  }, []);
-
   const parsedPath = useMemo(() => parseViewerReaderSplat(splat), [splat]);
 
-  const [currentPage, setCurrentPage] = useState(() => parsedPath?.page ?? 1);
-  const [currentChapter, setCurrentChapter] = useState(() => parsedPath?.chapter ?? 1);
+  const [currentPage, setCurrentPage] = useState(() => parsedPath?.page ?? DEFAULT_READING_POSITION.page);
+  const [currentChapter, setCurrentChapter] = useState(() => parsedPath?.chapter ?? DEFAULT_READING_POSITION.chapter);
   const internalNavigationRef = useRef(false);
   const initializedBookRef = useRef(null);
 
-  const currentChapterRef = useRef(1);
-  const currentPageRef = useRef(1);
+  const currentChapterRef = useRef(DEFAULT_READING_POSITION.chapter);
+  const currentPageRef = useRef(DEFAULT_READING_POSITION.page);
 
   useEffect(() => {
     currentChapterRef.current = currentChapter;
-  }, [currentChapter]);
-
-  useEffect(() => {
     currentPageRef.current = currentPage;
-  }, [currentPage]);
+  }, [currentChapter, currentPage]);
 
   useEffect(() => {
     if (!filename) return;
+
     const isBookChanged = initializedBookRef.current !== filename;
     if (isBookChanged) {
       initializedBookRef.current = filename;
@@ -57,19 +40,17 @@ export function useViewerUrlParams(options = {}) {
         setCurrentChapter(parsedPath.chapter);
         setCurrentPage(parsedPath.page);
       } else {
-        setCurrentChapter(1);
-        setCurrentPage(1);
+        setCurrentChapter(DEFAULT_READING_POSITION.chapter);
+        setCurrentPage(DEFAULT_READING_POSITION.page);
       }
       return;
     }
 
-    // 내부 상태 변경으로 navigate 된 경우 URL -> 상태 역동기화로 덮어쓰지 않음
     if (internalNavigationRef.current) {
       internalNavigationRef.current = false;
       return;
     }
 
-    // 외부 탐색(직접 URL 입력/뒤로가기)인 경우만 반영
     if (parsedPath) {
       if (parsedPath.chapter !== currentChapterRef.current) {
         setCurrentChapter(parsedPath.chapter);
@@ -77,8 +58,16 @@ export function useViewerUrlParams(options = {}) {
       if (parsedPath.page !== currentPageRef.current) {
         setCurrentPage(parsedPath.page);
       }
+      return;
     }
-  }, [filename, parsedPath?.chapter, parsedPath?.page]);
+
+    if (currentChapterRef.current !== DEFAULT_READING_POSITION.chapter) {
+      setCurrentChapter(DEFAULT_READING_POSITION.chapter);
+    }
+    if (currentPageRef.current !== DEFAULT_READING_POSITION.page) {
+      setCurrentPage(DEFAULT_READING_POSITION.page);
+    }
+  }, [filename, splat, parsedPath]);
 
   const targetReadingPath = useMemo(() => {
     if (!filename) return null;
@@ -93,31 +82,10 @@ export function useViewerUrlParams(options = {}) {
     navigate(targetReadingPath, { replace: true });
   }, [targetReadingPath, location.pathname, navigate, filename, skipHistoryMutationsRef]);
 
-  const updateURL = useCallback(() => {}, []);
-
-  const prevUrlStateRef = useRef({
-    chapter: null,
-    page: null,
-    graphMode: null,
-  });
-
-  const urlSearchParams = useMemo(
-    () => ({ chapter: null, page: null, graphMode: null }),
-    []
-  );
-
   return {
-    urlSearchParams,
-    savedChapter: null,
-    savedPage: null,
-    savedGraphMode: null,
-    initialGraphMode,
     currentPage,
     setCurrentPage,
     currentChapter,
     setCurrentChapter,
-    currentChapterRef,
-    updateURL,
-    prevUrlStateRef,
   };
 }

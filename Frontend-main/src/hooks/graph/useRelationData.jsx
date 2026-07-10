@@ -1,9 +1,15 @@
 /** 간선 툴팁: 관계 타임라인 API·캐시 */
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
-import { toNumberOrNull } from '../../utils/common/numberUtils';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { isSamePair } from '../../utils/graph/relationUtils';
 import { getFineGraph } from '../../utils/api/api';
+import { cacheKeyUtils, eventUtils } from '../../utils/viewer/viewerCoreStateUtils';
+import {
+  hasFineGraphEventSlot,
+  pickFineGraphResult,
+} from '../../utils/viewer/viewerGraphUtils';
+import { resolvePositiveBookId } from '../common/hooksShared';
+import { resolveFineGraphEventToLocator, resolveLastEventIdxForFineGraph } from '../../utils/common/cache/manifestCache';
 import {
   getCachedChapterEvents,
   reconstructChapterGraphState,
@@ -73,7 +79,8 @@ function findRelationInElements(elements, id1, id2) {
   return elements.find((element) => {
     const data = element?.data;
     if (!data?.source || !data?.target) return false;
-    return isSamePair(data, id1, id2);
+    const pair = eventUtils.resolveRelationNodeIds(data);
+    return isSamePair(pair, id1, id2);
   }) ?? null;
 }
 
@@ -114,94 +121,223 @@ function fetchCachedRelationTimelineViewer(bookId, id1, id2, chapterNum, eventNu
   return { points, labelInfo, noRelation: false };
 }
 
+const PROBE_EVENT_HARD_MAX = 512;
+
+function emptyChapterRelationResult() {
+  return { relationEvents: [], firstIdx: null, lastIdx: null };
+}
+
+function toChapterRelationResult(relationEvents) {
+  return {
+    relationEvents,
+    firstIdx: relationEvents.length ? relationEvents[0].idx : null,
+    lastIdx: relationEvents.length ? relationEvents[relationEvents.length - 1].idx : null,
+  };
+}
+
+function collectRelationEventsFromChapterCache(chapterPayload, id1, id2, lastEventIdx, lastOnly) {
+  const relationEvents = [];
+
+  if (lastOnly) {
+    for (let idx = lastEventIdx; idx >= 1; idx -= 1) {
+      const state = reconstructChapterGraphState(chapterPayload, idx);
+      const edge = findRelationInElements(state?.elements, id1, id2);
+      if (edge) {
+        relationEvents.push({ idx, positivity: relationPointFromElement(edge) });
+        break;
+      }
+    }
+    return toChapterRelationResult(relationEvents);
+  }
+
+  for (let idx = 1; idx <= lastEventIdx; idx += 1) {
+    const state = reconstructChapterGraphState(chapterPayload, idx);
+    const edge = findRelationInElements(state?.elements, id1, id2);
+    if (!edge) continue;
+    relationEvents.push({ idx, positivity: relationPointFromElement(edge) });
+  }
+
+  return toChapterRelationResult(relationEvents);
+}
+
+async function probeLastEventIdxByApi(fetchEventData, chapter) {
+  let low = 1;
+  let high = 1;
+  let lastGood = 0;
+
+  while (high <= PROBE_EVENT_HARD_MAX) {
+    try {
+      const searchData = await fetchEventData(chapter, high);
+      const searchResult = pickFineGraphResult(searchData);
+      const hasRealData =
+        searchData?.isSuccess &&
+        hasFineGraphEventSlot(searchResult);
+
+      if (hasRealData) {
+        lastGood = high;
+        low = high + 1;
+        high *= 2;
+      } else {
+        break;
+      }
+    } catch (_error) {
+      break;
+    }
+  }
+
+  if (lastGood === 0) return 0;
+
+  let left = low;
+  let right = Math.min(high - 1, PROBE_EVENT_HARD_MAX);
+  let chapterLastEventIdx = lastGood;
+
+  while (left <= right) {
+    const mid = Math.floor((left + right) / 2);
+    try {
+      const searchData = await fetchEventData(chapter, mid);
+      const searchResult = pickFineGraphResult(searchData);
+      const hasRealData =
+        searchData?.isSuccess &&
+        hasFineGraphEventSlot(searchResult);
+
+      if (hasRealData) {
+        chapterLastEventIdx = mid;
+        left = mid + 1;
+      } else {
+        right = mid - 1;
+      }
+    } catch (_error) {
+      right = mid - 1;
+    }
+  }
+
+  return chapterLastEventIdx;
+}
+
+async function resolveChapterLastEventIdx(bookId, chapter, fetchEventData) {
+  const fromManifest = resolveLastEventIdxForFineGraph(bookId, chapter);
+  if (Number.isFinite(fromManifest) && fromManifest >= 1) {
+    return fromManifest;
+  }
+
+  const cached = getCachedChapterEvents(bookId, chapter);
+  const cachedMax = Number(cached?.maxEventIdx);
+  if (Number.isFinite(cachedMax) && cachedMax >= 1) {
+    return cachedMax;
+  }
+
+  return probeLastEventIdxByApi(fetchEventData, chapter);
+}
+
 async function fetchApiRelationTimelineCumulativeFromAPI(bookId, id1, id2, selectedChapter) {
   if (!bookId || selectedChapter < 1) {
     return { points: [], labelInfo: [] };
   }
 
   try {
-    const eventCache = new Map(); // key: `${chapter}-${eventIdx}`
-    const chapterRelationCache = new Map(); // key: chapter -> { relationEvents, firstIdx, lastIdx }
+    const eventCache = new Map();
+    const chapterRelationCache = new Map();
 
     const fetchEventData = async (chapter, eventIdx) => {
-      const cacheKey = `${chapter}-${eventIdx}`;
+      const cacheKey = cacheKeyUtils.createCacheKey(chapter, eventIdx);
       if (eventCache.has(cacheKey)) {
         return eventCache.get(cacheKey);
       }
-      const data = await getFineGraph(bookId, chapter, eventIdx);
+      const atLocator = resolveFineGraphEventToLocator(bookId, chapter, eventIdx);
+      const data = await getFineGraph(bookId, chapter, eventIdx, atLocator);
       eventCache.set(cacheKey, data);
       return data;
     };
 
-    const getRelationEventsForChapter = async (chapter) => {
-      if (chapterRelationCache.has(chapter)) {
-        return chapterRelationCache.get(chapter);
+    const getRelationEventsForChapter = async (chapter, { lastOnly = false } = {}) => {
+      const cacheKey = `${chapter}:${lastOnly ? 'last' : 'all'}`;
+      if (chapterRelationCache.has(cacheKey)) {
+        return chapterRelationCache.get(cacheKey);
       }
 
-      let chapterLastEventIdx = 0;
-      let left = 1;
-      let right = 100;
+      const chapterPayload = getCachedChapterEvents(bookId, chapter);
+      if (chapterPayload?.baseSnapshot) {
+        const cachedMax = Number(chapterPayload.maxEventIdx);
+        const lastEventIdx =
+          Number.isFinite(cachedMax) && cachedMax >= 1
+            ? cachedMax
+            : await resolveChapterLastEventIdx(bookId, chapter, fetchEventData);
 
-      while (left <= right) {
-        const mid = Math.floor((left + right) / 2);
-        try {
-          const searchData = await fetchEventData(chapter, mid);
-          const hasRealData =
-            searchData?.isSuccess &&
-            searchData?.result &&
-            (searchData.result.characters ||
-              (searchData.result.relations && searchData.result.relations.length > 0) ||
-              searchData.result.event);
-
-          if (hasRealData) {
-            chapterLastEventIdx = mid;
-            left = mid + 1;
-          } else {
-            right = mid - 1;
-          }
-        } catch (_error) {
-          right = mid - 1;
+        if (!(lastEventIdx > 0)) {
+          const empty = emptyChapterRelationResult();
+          chapterRelationCache.set(cacheKey, empty);
+          return empty;
         }
+
+        const fromCache = collectRelationEventsFromChapterCache(
+          chapterPayload,
+          id1,
+          id2,
+          lastEventIdx,
+          lastOnly
+        );
+        chapterRelationCache.set(cacheKey, fromCache);
+        return fromCache;
       }
 
+      const chapterLastEventIdx = await resolveChapterLastEventIdx(bookId, chapter, fetchEventData);
       const relationEvents = [];
 
       if (chapterLastEventIdx > 0) {
-        for (let idx = 1; idx <= chapterLastEventIdx; idx += 1) {
-          try {
-            const fineData = await fetchEventData(chapter, idx);
-            const hasRealData =
-              fineData?.isSuccess &&
-              fineData?.result &&
-              (fineData.result.characters ||
-                (fineData.result.relations && fineData.result.relations.length > 0) ||
-                fineData.result.event);
+        if (lastOnly) {
+          for (let idx = chapterLastEventIdx; idx >= 1; idx -= 1) {
+            try {
+              const fineData = await fetchEventData(chapter, idx);
+              const fineResult = pickFineGraphResult(fineData);
+              const hasRealData =
+                fineData?.isSuccess &&
+                hasFineGraphEventSlot(fineResult);
 
-            if (!hasRealData) {
-              continue;
-            }
+              if (!hasRealData) continue;
 
-            if (fineData?.result?.relations?.length) {
-              const relation = fineData.result.relations.find((rel) => isSamePair(rel, id1, id2));
-              if (relation) {
-                relationEvents.push({
-                  idx,
-                  positivity: relation.positivity || 0,
-                });
+              if (Array.isArray(fineResult?.relations) && fineResult.relations.length > 0) {
+                const relation = fineResult.relations.find((rel) => isSamePair(rel, id1, id2));
+                if (relation) {
+                  relationEvents.push({
+                    idx,
+                    positivity: relation.positivity || 0,
+                  });
+                  break;
+                }
               }
+            } catch (_error) {
+              // continue probing earlier events
             }
-          } catch (_error) {
+          }
+        } else {
+          for (let idx = 1; idx <= chapterLastEventIdx; idx += 1) {
+            try {
+              const fineData = await fetchEventData(chapter, idx);
+              const fineResult = pickFineGraphResult(fineData);
+              const hasRealData =
+                fineData?.isSuccess &&
+                hasFineGraphEventSlot(fineResult);
+
+              if (!hasRealData) continue;
+
+              if (Array.isArray(fineResult?.relations) && fineResult.relations.length > 0) {
+                const relation = fineResult.relations.find((rel) => isSamePair(rel, id1, id2));
+                if (relation) {
+                  relationEvents.push({
+                    idx,
+                    positivity: relation.positivity || 0,
+                  });
+                }
+              }
+            } catch (_error) {
+              // skip event
+            }
           }
         }
       }
 
-      const chapterResult = {
-        relationEvents,
-        firstIdx: relationEvents.length ? relationEvents[0].idx : null,
-        lastIdx: relationEvents.length ? relationEvents[relationEvents.length - 1].idx : null,
-      };
-
-      chapterRelationCache.set(chapter, chapterResult);
+      const chapterResult = toChapterRelationResult(relationEvents);
+      chapterRelationCache.set(cacheKey, chapterResult);
       return chapterResult;
     };
 
@@ -210,7 +346,8 @@ async function fetchApiRelationTimelineCumulativeFromAPI(bookId, id1, id2, selec
     let currentChapterPairs = [];
 
     for (let chapter = 1; chapter <= selectedChapter; chapter += 1) {
-      const { relationEvents } = await getRelationEventsForChapter(chapter);
+      const lastOnly = chapter < selectedChapter;
+      const { relationEvents } = await getRelationEventsForChapter(chapter, { lastOnly });
       if (!relationEvents || relationEvents.length === 0) {
         continue;
       }
@@ -275,7 +412,9 @@ async function fetchApiRelationTimelineCumulative(bookId, id1, id2, selectedChap
 
   try {
     const result = await fetchApiRelationTimelineCumulativeFromAPI(bookId, id1, id2, selectedChapter);
-    setCachedData(cacheKey, result);
+    if (Array.isArray(result?.points) && result.points.length > 0) {
+      setCachedData(cacheKey, result);
+    }
     return withNoRelation(result);
   } catch (_error) {
     return { points: [], labelInfo: [], noRelation: true };
@@ -298,22 +437,21 @@ async function fetchApiRelationTimelineViewer(bookId, id1, id2, chapterNum, even
 
     for (let idx = 1; idx <= eventNum; idx += 1) {
       try {
-        const fineData = await getFineGraph(bookId, chapterNum, idx);
+        const atLocator = resolveFineGraphEventToLocator(bookId, chapterNum, idx);
+        const fineData = await getFineGraph(bookId, chapterNum, idx, atLocator);
         cachedEvents.set(idx, fineData);
+        const fineResult = pickFineGraphResult(fineData);
 
         const hasRealData =
           fineData?.isSuccess &&
-          fineData?.result &&
-          (fineData.result.characters ||
-            (fineData.result.relations && fineData.result.relations.length > 0) ||
-            fineData.result.event);
+          hasFineGraphEventSlot(fineResult);
 
         if (!hasRealData) {
           continue;
         }
 
-        if (firstAppearanceIdx === null && fineData.result.relations?.length) {
-          const relation = fineData.result.relations.find((rel) => isSamePair(rel, id1, id2));
+        if (firstAppearanceIdx === null && Array.isArray(fineResult?.relations)) {
+          const relation = fineResult.relations.find((rel) => isSamePair(rel, id1, id2));
           if (relation) {
             firstAppearanceIdx = idx;
           }
@@ -330,16 +468,18 @@ async function fetchApiRelationTimelineViewer(bookId, id1, id2, chapterNum, even
     const points = [];
     const labelInfo = [];
 
-    for (let idx = 1; idx <= eventNum; idx += 1) {
+    for (let idx = firstAppearanceIdx; idx <= eventNum; idx += 1) {
       try {
         let fineData = cachedEvents.get(idx);
         if (!fineData) {
-          fineData = await getFineGraph(bookId, chapterNum, idx);
+          const atLocator = resolveFineGraphEventToLocator(bookId, chapterNum, idx);
+          fineData = await getFineGraph(bookId, chapterNum, idx, atLocator);
         }
+        const fineResult = pickFineGraphResult(fineData);
 
         let positivityForEvent = 0;
-        if (fineData?.result?.relations?.length) {
-          const relation = fineData.result.relations.find((rel) => isSamePair(rel, id1, id2));
+        if (Array.isArray(fineResult?.relations) && fineResult.relations.length > 0) {
+          const relation = fineResult.relations.find((rel) => isSamePair(rel, id1, id2));
           if (relation) {
             positivityForEvent = relation.positivity || 0;
           }
@@ -347,7 +487,6 @@ async function fetchApiRelationTimelineViewer(bookId, id1, id2, chapterNum, even
         points.push(positivityForEvent);
         labelInfo.push(`E${idx}`);
       } catch (_error) {
-        // 이벤트 단위 오류는 해당 지점을 중립값으로 유지하고 진행
         points.push(0);
         labelInfo.push(`E${idx}`);
       }
@@ -359,34 +498,28 @@ async function fetchApiRelationTimelineViewer(bookId, id1, id2, chapterNum, even
   }
 }
 
-export function useRelationData(mode, id1, id2, chapterNum, eventNum, maxChapter, filename, bookId = null) {
+export function useRelationData(mode, id1, id2, chapterNum, eventNum, bookId = null) {
   const [timeline, setTimeline] = useState([]);
   const [labels, setLabels] = useState([]);
   const [loading, setLoading] = useState(false);
   const [noRelation, setNoRelation] = useState(false);
   const [error, setError] = useState(null);
+  const requestIdRef = useRef(0);
 
-  const numericBookId = useMemo(() => {
-    const parsed = toNumberOrNull(bookId);
-    return parsed && parsed > 0 ? parsed : null;
-  }, [bookId]);
-
-  const maxEventCount = useMemo(() => {
-    const nonNullPoints = Array.isArray(timeline)
-      ? timeline.filter((value) => value !== null && value !== undefined).length
-      : 0;
-    return Math.max(nonNullPoints || 1, 1);
-  }, [timeline]);
+  const numericBookId = useMemo(() => resolvePositiveBookId(bookId), [bookId]);
 
   const fetchData = useCallback(async () => {
     if (!numericBookId || !id1 || !id2 || !chapterNum) {
+      requestIdRef.current += 1;
       setTimeline([]);
       setLabels([]);
       setNoRelation(true);
       setError('필수 매개변수가 누락되었습니다.');
+      setLoading(false);
       return;
     }
 
+    const requestId = ++requestIdRef.current;
     setLoading(true);
     setError(null);
 
@@ -404,6 +537,8 @@ export function useRelationData(mode, id1, id2, chapterNum, eventNum, maxChapter
         );
       }
 
+      if (requestId !== requestIdRef.current) return;
+
       const { points, labelInfo, noRelation: resultNoRelation } = result;
       const { points: paddedPoints, labels: paddedLabels } = padSingleEvent(points, labelInfo);
 
@@ -411,17 +546,23 @@ export function useRelationData(mode, id1, id2, chapterNum, eventNum, maxChapter
       setLabels(paddedLabels);
       setNoRelation(resultNoRelation || paddedPoints.filter((value) => value !== null).length === 0);
     } catch (_err) {
+      if (requestId !== requestIdRef.current) return;
       setTimeline([]);
       setLabels([]);
       setNoRelation(true);
       setError('데이터를 가져오는 중 오류가 발생했습니다.');
     } finally {
-      setLoading(false);
+      if (requestId === requestIdRef.current) {
+        setLoading(false);
+      }
     }
   }, [numericBookId, id1, id2, chapterNum, eventNum, mode]);
 
   useEffect(() => {
     fetchData();
+    return () => {
+      requestIdRef.current += 1;
+    };
   }, [fetchData]);
 
   return useMemo(
@@ -432,9 +573,8 @@ export function useRelationData(mode, id1, id2, chapterNum, eventNum, maxChapter
       noRelation,
       error,
       fetchData,
-      getMaxEventCount: () => maxEventCount,
     }),
-    [timeline, labels, loading, noRelation, error, fetchData, maxEventCount]
+    [timeline, labels, loading, noRelation, error, fetchData]
   );
 }
 

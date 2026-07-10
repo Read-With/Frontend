@@ -5,7 +5,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { getBook, getBooks, toggleBookFavorite } from '../../utils/api/booksApi';
 import { getBookManifest } from '../../utils/api/api';
-import { normalizeTitle } from '../../utils/common/stringUtils';
+import { normalizeTitle } from '../../utils/common/valueUtils';
 import { errorUtils } from '../../utils/common/errorUtils';
 import { prefetchManifest } from '../../utils/common/cache/manifestCache';
 import { PROGRESS_CACHE_UPDATED_EVENT } from '../../utils/common/cache/progressCache';
@@ -250,17 +250,16 @@ export const useBooks = () => {
   }, [serverBooksData, reconcileBooks]);
 
   const books = useMemo(() => {
-    const hiddenServer = hiddenServerBookIdsRef.current;
     return reconciledBooks
       .filter((book) => {
         const idKey = book?.id != null ? `${book.id}` : null;
-        return idKey && !hiddenServer.has(idKey);
+        return idKey && !hiddenServerBookIds.has(idKey);
       })
       .map((book) => ({
         ...book,
         progress: resolveLibraryReadingProgressPercent(book),
       }));
-  }, [reconciledBooks, progressCacheEpoch]);
+  }, [reconciledBooks, progressCacheEpoch, hiddenServerBookIds]);
 
   const toggleFavoriteMutation = useMutation({
     mutationFn: async ({ bookId, favorite }) => toggleBookFavorite(bookId, favorite),
@@ -293,25 +292,18 @@ export const useBooks = () => {
   });
 
   const removeBookMutation = useMutation({
-    mutationFn: async (bookId) => {
-      const targetBookId = String(bookId);
-      const hiddenIds = new Set(hiddenServerBookIdsRef.current);
-      hiddenIds.add(targetBookId);
-      localStorage.setItem(HIDDEN_SERVER_BOOK_IDS_KEY, JSON.stringify([...hiddenIds]));
-      return targetBookId;
-    },
-    onMutate: async () => {
+    mutationFn: async (bookId) => String(bookId),
+    onMutate: async (bookId) => {
       await queryClient.cancelQueries({ queryKey: ['books', 'server'] });
+      const targetBookId = String(bookId);
+      setHiddenServerBookIds((prev) => {
+        const next = new Set(prev);
+        next.add(targetBookId);
+        hiddenServerBookIdsRef.current = next;
+        localStorage.setItem(HIDDEN_SERVER_BOOK_IDS_KEY, JSON.stringify([...next]));
+        return next;
+      });
       return {};
-    },
-    onSuccess: (deletedBookId) => {
-      if (!isNaN(Number(deletedBookId))) {
-        setHiddenServerBookIds((prev) => {
-          const next = new Set(prev);
-          next.add(deletedBookId);
-          return next;
-        });
-      }
     },
   });
 
@@ -322,16 +314,48 @@ export const useBooks = () => {
         const newBookIdStr = newBookId != null ? String(newBookId) : null;
         if (!newBookIdStr) return;
 
+        const bookToAdd = {
+          ...newBook,
+          id: Number.isFinite(Number(newBookId)) ? Number(newBookId) : newBookId,
+          isFavorite: !!newBook.isFavorite,
+        };
+
         setHiddenServerBookIds((prev) => {
           if (!prev.has(newBookIdStr)) return prev;
           const next = new Set(prev);
           next.delete(newBookIdStr);
+          hiddenServerBookIdsRef.current = next;
           localStorage.setItem(HIDDEN_SERVER_BOOK_IDS_KEY, JSON.stringify([...next]));
           return next;
         });
-        queryClient.refetchQueries({
+
+        const mergeBookIntoCache = (old) => {
+          if (!old) {
+            return { books: [bookToAdd], needsAuth: false };
+          }
+          const list = old.books || [];
+          const idx = list.findIndex((b) => String(b?.id) === newBookIdStr);
+          if (idx >= 0) {
+            const next = list.slice();
+            next[idx] = { ...list[idx], ...bookToAdd };
+            return { ...old, books: next };
+          }
+          return { ...old, books: [...list, bookToAdd] };
+        };
+
+        // 업로드 직후 목록에 바로 보이도록 캐시에 반영
+        queryClient.setQueryData(['books', 'server'], mergeBookIntoCache);
+
+        await queryClient.refetchQueries({
           queryKey: ['books', 'server'],
           type: 'active',
+        });
+
+        // 서버 목록에 아직 없으면(분석 전 미노출 등) 업로드 결과 유지
+        queryClient.setQueryData(['books', 'server'], (old) => {
+          const list = old?.books || [];
+          if (list.some((b) => String(b?.id) === newBookIdStr)) return old;
+          return mergeBookIntoCache(old);
         });
       } catch (e) {
         console.warn('addBook 실패:', e);

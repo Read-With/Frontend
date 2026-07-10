@@ -3,21 +3,174 @@ import { useParams } from "react-router-dom";
 import {
   processRelations,
   processRelationTags,
-  safeNum,
   extractRadarChartData,
-  getPositivityColor,
-  getPositivityLabel,
   getConnectionStatus,
 } from "../../../utils/graph/relationUtils.js";
-import { getFolderKeyFromFilename, getEventDataByIndex, getDetectedMaxChapter } from "../../../utils/graph/graphData.js";
+import { getPositivityColor, getPositivityLabel } from "../../../utils/styles/relationStyles.js";
+import { toApiFolderKey, undirectedPairKey } from "../../../utils/graph/graphUtils.js";
+import { getEventDataByIndex } from "../../../utils/graph/graphData.js";
 import { useTooltipPosition, useClickOutside } from "../../../hooks/ui/tooltipHooks";
-import { useRelationData } from "../../../hooks/graph/useRelationData.jsx";
 import { mergeRefs } from "../../../utils/styles/styles";
-import { getUnifiedEventInfoForNodeTooltip } from "../../../utils/viewer/viewerEventUtils";
+import { getUnifiedEventInfoForTooltip } from "../../../utils/viewer/viewerEventProgressUtils";
+import { isGraphOnlyGraphPage } from "../graphShared";
 import { COLORS, createButtonStyle, ANIMATION_VALUES, unifiedNodeTooltipStyles, unifiedNodeAnimations } from "../../../utils/styles/styles.js";
 import { Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, ResponsiveContainer } from 'recharts';
 import "../RelationGraph.css";
-import "./UnifiedNodeInfo.css";
+
+function resolveNodeDataFromProp(data) {
+  if (data && (data.id || data.label)) return data;
+  if (data && data.data) return data.data;
+  return { id: data?.id, label: data?.label };
+}
+
+function handleProfileImageError(e) {
+  e.target.style.display = "none";
+  if (e.target.nextSibling) {
+    e.target.nextSibling.style.display = "block";
+  }
+}
+
+function NodeTooltipShell({
+  children,
+  shellRef,
+  className = "graph-node-tooltip",
+  containerStyle,
+  position,
+  zIndex,
+  showContent,
+  isDragging,
+  handleMouseDown,
+  transition,
+  closeButton = null,
+}) {
+  return (
+    <div
+      ref={shellRef}
+      className={className}
+      style={{
+        ...containerStyle,
+        left: position.x,
+        top: position.y,
+        zIndex,
+        ...(showContent !== undefined
+          ? {
+              opacity: showContent ? 1 : 0,
+              transition,
+              cursor: isDragging ? "grabbing" : "grab",
+            }
+          : null),
+      }}
+      onMouseDown={handleMouseDown}
+    >
+      {closeButton}
+      {children}
+    </div>
+  );
+}
+
+function NodeSidebarStatusShell({ children, color = COLORS.textSecondary }) {
+  return (
+    <div
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "center",
+        height: "100%",
+        padding: "2.5rem 1rem",
+        textAlign: "center",
+        color,
+      }}
+    >
+      {children}
+    </div>
+  );
+}
+
+function NodeProfileAvatar({ processedNodeData, variant = "tooltip" }) {
+  const hasImage = !!processedNodeData?.hasImage;
+  const displayName = processedNodeData?.displayName || "character";
+
+  if (variant === "sidebar") {
+    return (
+      <div
+        style={{
+          width: "7.5rem",
+          height: "7.5rem",
+          borderRadius: "50%",
+          background: "#e6e8f0",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          margin: "0 auto 1.25rem auto",
+          boxShadow: "0 0.25rem 0.75rem rgba(108,142,255,0.15)",
+          overflow: "hidden",
+        }}
+      >
+        {hasImage ? (
+          <img
+            src={processedNodeData.image}
+            alt={displayName}
+            style={{
+              width: "100%",
+              height: "100%",
+              objectFit: "cover",
+              borderRadius: "50%",
+            }}
+            crossOrigin="anonymous"
+            onError={handleProfileImageError}
+          />
+        ) : null}
+        <svg
+          width="80"
+          height="80"
+          viewBox="0 0 80 80"
+          fill="none"
+          style={{ display: hasImage ? "none" : "block" }}
+        >
+          <circle cx="40" cy="40" r="40" fill="#e5e7eb" />
+          <ellipse cx="40" cy="32" rx="16" ry="16" fill="#bdbdbd" />
+          <ellipse cx="40" cy="56" rx="24" ry="12" fill="#bdbdbd" />
+        </svg>
+      </div>
+    );
+  }
+
+  return (
+    <div className="profile-image-placeholder">
+      <div className="profile-img">
+        {hasImage ? (
+          <img
+            src={processedNodeData.image}
+            alt={displayName}
+            style={{
+              width: "4.6875rem",
+              height: "4.6875rem",
+              objectFit: "cover",
+              borderRadius: "50%",
+              border: "0.125rem solid #e0e0e0",
+              background: "#faf7f2",
+              boxShadow: "0 0.125rem 0.5rem rgba(0,0,0,0.03)",
+            }}
+            crossOrigin="anonymous"
+            onError={handleProfileImageError}
+          />
+        ) : null}
+        <svg
+          width="42"
+          height="42"
+          viewBox="0 0 42 42"
+          fill="none"
+          style={{ display: hasImage ? "none" : "block" }}
+        >
+          <circle cx="21" cy="21" r="21" fill="#e5e7eb" />
+          <ellipse cx="21" cy="16" rx="9" ry="9" fill="#bdbdbd" />
+          <ellipse cx="21" cy="33" rx="13" ry="7" fill="#bdbdbd" />
+        </svg>
+      </div>
+    </div>
+  );
+}
 
 /** 레이더 점 — 부모 내부 정의 시 매 렌더 새 컴포넌트 타입이 되어 Recharts/리conciliation에 불리함 */
 const UnifiedNodeRadarDot = React.memo(function UnifiedNodeRadarDot({
@@ -100,43 +253,21 @@ function UnifiedNodeInfo({
   onClose,
   chapterNum,
   eventNum,
-  maxChapter,
   elements = [],
   filename,
   currentEvent = null,
   prevValidEvent = null,
   povSummaries = null, // API에서 가져온 관점 요약 데이터
-  apiMacroData = null, // API 거시 그래프 데이터
-  apiFineData: _apiFineData = null, // API 세밀 그래프 데이터
-  bookId = null,
+  apiBookGraphData = null, // relationship-graph (scope=book) 데이터
 }) {
   const { filename: urlFilename } = useParams();
   const actualFilename = filename || urlFilename;
 
-  // maxChapter를 동적으로 계산
-  const folderKey = getFolderKeyFromFilename(actualFilename);
-  const dynamicMaxChapter = maxChapter || getDetectedMaxChapter(folderKey);
+  const folderKey = toApiFolderKey(actualFilename);
+  const [nodeData, setNodeData] = useState(() => resolveNodeDataFromProp(data));
 
-  // 데이터가 중첩되어 있는 경우 처리
-  const [nodeData, setNodeData] = useState(() => {
-    if (data && (data.id || data.label)) {
-      return data;
-    }
-    if (data && data.data) {
-      return data.data;
-    }
-    return { id: data?.id, label: data?.label };
-  });
-
-  // data prop이 변경될 때 nodeData 업데이트
   useEffect(() => {
-    if (data && (data.id || data.label)) {
-      setNodeData(data);
-    } else if (data && data.data) {
-      setNodeData(data.data);
-    } else {
-      setNodeData({ id: data?.id, label: data?.label });
-    }
+    setNodeData(resolveNodeDataFromProp(data));
   }, [data]);
 
   const [isNodeAppeared, setIsNodeAppeared] = useState(false);
@@ -215,55 +346,27 @@ function UnifiedNodeInfo({
     true
   );
 
-  // 관계 데이터 관리 (슬라이드바 모드에서 사용)
-  const nodeId = safeNum(nodeData?.id);
-  const normalizedBookId = useMemo(() => {
-    if (bookId !== null && bookId !== undefined) {
-      const parsed = Number(bookId);
-      if (Number.isFinite(parsed) && parsed > 0) return parsed;
-    }
-    if (actualFilename) {
-      const parsed = Number(actualFilename);
-      if (Number.isFinite(parsed) && parsed > 0) return parsed;
-    }
-    return null;
-  }, [bookId, actualFilename]);
-  const { fetchData } = useRelationData('standalone', nodeId, nodeId, chapterNum, eventNum, dynamicMaxChapter, actualFilename, normalizedBookId);
-
-  const getUnifiedEventInfo = useCallback(
-    () =>
-      getUnifiedEventInfoForNodeTooltip({
-        currentEvent,
-        prevValidEvent,
-        eventNum,
-        chapterNum,
-        folderKey,
-      }),
-    [currentEvent, prevValidEvent, eventNum, chapterNum, folderKey],
+  const unifiedEventInfo = useMemo(
+    () => getUnifiedEventInfoForTooltip({ currentEvent, prevValidEvent, eventNum }),
+    [currentEvent, prevValidEvent, eventNum],
   );
 
-  // 노드 등장 여부 확인 함수 (ViewerTopBar 방식 적용)
+  // 노드 등장 여부 확인 (Viewer tooltip만). sidebar / graph-only는 스킵
   const checkNodeAppearance = useCallback(() => {
+    if (displayMode === 'sidebar' || isGraphOnlyGraphPage()) {
+      setIsNodeAppeared(true);
+      setError(null);
+      return;
+    }
+
     try {
       setIsNodeAppeared(false);
       setError(null);
 
-      const syncNodeDataState = () => {
-        if (data && (data.id || data.label)) {
-          setNodeData(data);
-        } else if (data && data.data) {
-          setNodeData(data.data);
-        } else {
-          setNodeData({ id: data?.id, label: data?.label });
-        }
-      };
-
       if (!data || !chapterNum || chapterNum <= 0) {
-        syncNodeDataState();
         return;
       }
 
-      const unifiedEventInfo = getUnifiedEventInfo();
       const targetEventNum = unifiedEventInfo.eventNum;
 
       const json = getEventDataByIndex(folderKey, chapterNum, targetEventNum);
@@ -328,7 +431,6 @@ function UnifiedNodeInfo({
 
       if (!json || !json.relations) {
         setIsNodeAppeared(appearedInElements);
-        syncNodeDataState();
         return;
       }
 
@@ -353,24 +455,16 @@ function UnifiedNodeInfo({
       const appeared = appearedInCharacters || appearedInRelations || appearedInElements;
 
       setIsNodeAppeared(appeared);
-      syncNodeDataState();
     } catch (err) {
       setError(err.message);
       setIsNodeAppeared(false);
     }
-  }, [data, nodeData, chapterNum, getUnifiedEventInfo, folderKey, elements]);
+  }, [data, nodeData, chapterNum, unifiedEventInfo, folderKey, elements, displayMode]);
 
   // 노드 등장 여부 확인
   useEffect(() => {
     checkNodeAppearance();
   }, [checkNodeAppearance]);
-
-  // 슬라이드바 모드에서 관계 데이터 가져오기
-  useEffect(() => {
-    if (displayMode === 'sidebar' && nodeData && nodeData.id) {
-      fetchData();
-    }
-  }, [displayMode, nodeData, fetchData]);
 
   // 메모이제이션된 데이터 처리
   const processedNodeData = useMemo(() => {
@@ -391,8 +485,7 @@ function UnifiedNodeInfo({
     return nodeData.personalityText || nodeData.description || '';
   }, [nodeData]);
 
-  const displayDescription = currentDescription;
-  const displayHasDescription = !!(displayDescription && displayDescription.trim());
+  const displayHasDescription = !!(currentDescription && currentDescription.trim());
 
   // 요약 데이터 — API(pov-summaries) 우선, 없으면 안내 문구
   const summaryData = useMemo(() => {
@@ -433,28 +526,28 @@ function UnifiedNodeInfo({
     return {
       summary: `${displayLabel}에 대한 ${currentChapter}장 관점 요약이 아직 준비되지 않았습니다.`,
     };
-  }, [processedNodeData, chapterNum, actualFilename, povSummaries]);
+  }, [processedNodeData, chapterNum, povSummaries]);
 
-  // 레이더 차트 데이터 추출 (macro API 기반으로 통일)
+  // 레이더 차트 데이터 추출 (relationship-graph book scope 기반)
   const radarChartData = useMemo(() => {
     if (!nodeData?.id || !chapterNum || displayMode !== 'sidebar') {
       return [];
     }
 
-    // macro API 데이터 우선 사용
-    if (apiMacroData?.relations && apiMacroData?.characters) {
+    // relationship-graph 데이터 우선 사용
+    if (apiBookGraphData?.relations && apiBookGraphData?.characters) {
       try {
-        const { relations, characters } = apiMacroData;
+        const { relations, characters } = apiBookGraphData;
 
-        // macro 캐릭터 목록으로 이름 룩업 구조 생성 (elements 의존 제거)
+        // 캐릭터 목록으로 이름 룩업 구조 생성 (elements 의존 제거)
         const nameToIdMap = {};
-        const macroElements = characters.map(char => {
+        const bookGraphElements = characters.map(char => {
           const charName = char.common_name || char.name;
           nameToIdMap[charName] = char.id;
           return { data: { id: String(char.id), label: charName, common_name: charName } };
         });
 
-        // 현재 노드 ID를 macro API 숫자 ID로 변환
+        // 현재 노드 ID를 relationship-graph 숫자 ID로 변환
         const currentNodeId = nodeData.id;
         let targetNodeId = currentNodeId;
         if (typeof currentNodeId === 'string') {
@@ -466,9 +559,7 @@ function UnifiedNodeInfo({
         const relationMap = new Map();
         relations.forEach(rel => {
           if (rel.id1 !== targetNodeId && rel.id2 !== targetNodeId) return;
-          const lo = Math.min(rel.id1, rel.id2);
-          const hi = Math.max(rel.id1, rel.id2);
-          const key = `${lo}-${hi}`;
+          const key = undirectedPairKey(rel.id1, rel.id2);
           if (!relationMap.has(key)) {
             relationMap.set(key, {
               id1: rel.id1,
@@ -483,7 +574,7 @@ function UnifiedNodeInfo({
         return extractRadarChartData(
           targetNodeId,
           Array.from(relationMap.values()),
-          macroElements,
+          bookGraphElements,
           8
         );
       } catch {
@@ -491,13 +582,12 @@ function UnifiedNodeInfo({
       }
     }
 
-    // macro API 없으면 이벤트 캐시 스냅샷으로 보강
+    // relationship-graph 없으면 이벤트 캐시 스냅샷으로 보강
     if (!elements || elements.length === 0) {
       return [];
     }
 
     try {
-      const unifiedEventInfo = getUnifiedEventInfo();
       const targetEventNum = unifiedEventInfo.eventNum;
       const json = getEventDataByIndex(folderKey, chapterNum, targetEventNum);
       if (!json || !json.relations) return [];
@@ -536,7 +626,7 @@ function UnifiedNodeInfo({
     } catch {
       return [];
     }
-  }, [nodeData, chapterNum, displayMode, folderKey, elements, apiMacroData, getUnifiedEventInfo]);
+  }, [nodeData, chapterNum, displayMode, folderKey, elements, apiBookGraphData, unifiedEventInfo]);
 
   // 연결 상태 확인
   const connectionStatus = useMemo(() => {
@@ -618,46 +708,29 @@ function UnifiedNodeInfo({
       </div>
     );
 
-    if (displayMode === 'tooltip') {
+    if (isTooltipMode) {
       return (
-        <div
-          ref={tooltipRef}
+        <NodeTooltipShell
+          shellRef={tooltipRef}
           className="graph-node-tooltip error"
-          style={{
-            ...unifiedNodeTooltipStyles.errorContainer,
-            left: position.x,
-            top: position.y,
-            zIndex: zIndexValue,
-          }}
+          containerStyle={unifiedNodeTooltipStyles.errorContainer}
+          position={position}
+          zIndex={zIndexValue}
         >
           {errorContent}
-        </div>
-      );
-    } else {
-      return (
-        <div
-          style={{
-            display: "flex",
-            flexDirection: "column",
-            alignItems: "center",
-            justifyContent: "center",
-            height: "100%",
-            padding: "40px 20px",
-            textAlign: "center",
-            color: "#d32f2f",
-          }}
-        >
-          {errorContent}
-        </div>
+        </NodeTooltipShell>
       );
     }
+
+    return (
+      <NodeSidebarStatusShell color="#d32f2f">
+        {errorContent}
+      </NodeSidebarStatusShell>
+    );
   }
 
-  // 거시 그래프 모드에서는 등장 여부 체크를 하지 않음
-  const isGraphOnlyPage = window.location.pathname.includes('/user/graph/');
-  
-  // 노드가 현재 챕터/이벤트에서 등장하지 않는 경우 (거시 그래프가 아닌 경우에만)
-  if (!isGraphOnlyPage && !isNodeAppeared) {
+  // 노드가 현재 챕터/이벤트에서 등장하지 않는 경우 (Viewer tooltip만)
+  if (!isNodeAppeared) {
     const notAppearedContent = (
       <div
         style={{
@@ -665,9 +738,9 @@ function UnifiedNodeInfo({
           flexDirection: "column",
           alignItems: "center",
           justifyContent: "center",
-          padding: displayMode === 'tooltip' ? "2.5rem 1.5rem" : "2.5rem 1rem",
+          padding: "2.5rem 1.5rem",
           textAlign: "center",
-          minHeight: displayMode === 'tooltip' ? "12.5rem" : "auto",
+          minHeight: "12.5rem",
         }}
       >
         <div
@@ -722,36 +795,26 @@ function UnifiedNodeInfo({
             wordBreak: 'keep-all',
           }}
         >
-          {(() => {
-            const unifiedEventInfo = getUnifiedEventInfo();
-            if (unifiedEventInfo.name) {
-              return `챕터 ${chapterNum} 이벤트 "${unifiedEventInfo.name}"에서는 등장하지 않습니다`;
-            } else if (unifiedEventInfo.eventNum) {
-              return `챕터 ${chapterNum} 이벤트 ${unifiedEventInfo.eventNum}에서는 등장하지 않습니다`;
-            } else {
-              return `챕터 ${chapterNum}에서는 등장하지 않습니다`;
-            }
-          })()}
+          {unifiedEventInfo.name
+            ? `챕터 ${chapterNum} 이벤트 "${unifiedEventInfo.name}"에서는 등장하지 않습니다`
+            : unifiedEventInfo.eventNum
+              ? `챕터 ${chapterNum} 이벤트 ${unifiedEventInfo.eventNum}에서는 등장하지 않습니다`
+              : `챕터 ${chapterNum}에서는 등장하지 않습니다`}
         </p>
       </div>
     );
 
-    if (displayMode === 'tooltip') {
-      return (
-        <div
-          ref={mergeRefs(tooltipRef, clickOutsideRef)}
-          className="graph-node-tooltip"
-          style={{
-            ...unifiedNodeTooltipStyles.notAppearedContainer,
-            left: position.x,
-            top: position.y,
-            zIndex: zIndexValue,
-            opacity: showContent ? 1 : 0,
-            transition: unifiedNodeAnimations.tooltipSimpleTransition(isDragging),
-            cursor: isDragging ? "grabbing" : "grab",
-          }}
-          onMouseDown={handleMouseDown}
-        >
+    return (
+      <NodeTooltipShell
+        shellRef={mergeRefs(tooltipRef, clickOutsideRef)}
+        containerStyle={unifiedNodeTooltipStyles.notAppearedContainer}
+        position={position}
+        zIndex={zIndexValue}
+        showContent={showContent}
+        isDragging={isDragging}
+        handleMouseDown={handleMouseDown}
+        transition={unifiedNodeAnimations.tooltipSimpleTransition(isDragging)}
+        closeButton={(
           <button
             onClick={onClose}
             className="tooltip-close-btn"
@@ -764,45 +827,16 @@ function UnifiedNodeInfo({
           >
             &times;
           </button>
-          {notAppearedContent}
-        </div>
-      );
-    } else {
-      return (
-        <div
-          style={{
-            display: "flex",
-            flexDirection: "column",
-            alignItems: "center",
-            justifyContent: "center",
-            height: "100%",
-            padding: "2.5rem 1rem",
-            textAlign: "center",
-            color: COLORS.textSecondary,
-          }}
-        >
-          {notAppearedContent}
-        </div>
-      );
-    }
+        )}
+      >
+        {notAppearedContent}
+      </NodeTooltipShell>
+    );
   }
 
   // 기본 노드 정보 콘텐츠
   const nodeInfoContent = (
-    <div
-      className={`tooltip-content business-card tooltip-front`}
-      style={{
-        backfaceVisibility: "hidden",
-        position: "relative",
-        width: "100%",
-        height: "auto",
-        minHeight: "17.5rem",
-        transform: "rotateY(0deg)",
-        display: "flex",
-        flexDirection: "column",
-        padding: 0,
-      }}
-    >
+    <div className="tooltip-content business-card tooltip-front">
       {/* X 버튼 - 툴팁과 슬라이드바 모드 모두에서 표시 */}
       <button
         onClick={onClose}
@@ -833,69 +867,7 @@ function UnifiedNodeInfo({
             width: "100%",
           }}
         >
-          <div
-            className="profile-image-placeholder"
-            style={{
-              width: "4.6875rem",
-              height: "4.6875rem",
-              borderRadius: "50%",
-              background: "#e6e8f0",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              marginBottom: "0.75rem",
-              marginLeft: "1.3125rem",
-              boxShadow: "0 0.125rem 0.5rem rgba(108,142,255,0.10)",
-            }}
-          >
-            <div
-              className="profile-img"
-              style={{
-                display: "flex",
-                justifyContent: "center",
-                alignItems: "center",
-                width: "3rem",
-                height: "3rem",
-                margin: "0 auto 0.5625rem auto",
-                borderRadius: "50%",
-                background: "#f4f4f4",
-              }}
-            >
-              {processedNodeData?.hasImage ? (
-                <img
-                  src={processedNodeData.image}
-                  alt={processedNodeData.displayName || "character"}
-                  style={{
-                    width: "4.6875rem",
-                    height: "4.6875rem",
-                    objectFit: "cover",
-                    borderRadius: "50%",
-                    border: "0.125rem solid #e0e0e0",
-                    background: "#faf7f2",
-                    boxShadow: "0 0.125rem 0.5rem rgba(0,0,0,0.03)",
-                  }}
-                  crossOrigin="anonymous"
-                  onError={(e) => {
-                    e.target.style.display = 'none';
-                    if (e.target.nextSibling) {
-                      e.target.nextSibling.style.display = 'block';
-                    }
-                  }}
-                />
-              ) : null}
-              <svg 
-                width="42" 
-                height="42" 
-                viewBox="0 0 42 42" 
-                fill="none"
-                style={{ display: processedNodeData?.hasImage ? 'none' : 'block' }}
-              >
-                <circle cx="21" cy="21" r="21" fill="#e5e7eb" />
-                <ellipse cx="21" cy="16" rx="9" ry="9" fill="#bdbdbd" />
-                <ellipse cx="21" cy="33" rx="13" ry="7" fill="#bdbdbd" />
-              </svg>
-            </div>
-          </div>
+          <NodeProfileAvatar processedNodeData={processedNodeData} variant="tooltip" />
           <div
             style={{
               display: "flex",
@@ -990,22 +962,10 @@ function UnifiedNodeInfo({
         }}
       />
       
-      <div
-        className="business-card-description"
-        style={{
-          color: "#333",
-          fontSize: "0.875rem",
-          minHeight: "2.625rem",
-          margin: "1.3125rem 1.75rem 0 1.75rem",
-          textAlign: "left",
-          lineHeight: 1.6,
-          fontWeight: 400,
-          wordBreak: 'keep-all',
-        }}
-      >
+      <div className="business-card-description">
         {displayHasDescription ? (
           <span>
-            {displayDescription}
+            {currentDescription}
           </span>
         ) : (
           <span style={{ color: COLORS.textSecondary }}>설명 정보가 없습니다.</span>
@@ -1025,25 +985,23 @@ function UnifiedNodeInfo({
   );
 
   // 툴팁 모드 렌더링
-  if (displayMode === 'tooltip') {
+  if (isTooltipMode) {
     return (
-      <div
-        ref={mergeRefs(tooltipRef, clickOutsideRef)}
-        className={`graph-node-tooltip`}
-        style={{
+      <NodeTooltipShell
+        shellRef={mergeRefs(tooltipRef, clickOutsideRef)}
+        containerStyle={{
           ...unifiedNodeTooltipStyles.tooltipContainer,
-          left: position.x,
-          top: position.y,
-          zIndex: zIndexValue,
-          opacity: showContent ? 1 : 0,
-          transition: unifiedNodeAnimations.tooltipComplexTransition(isDragging),
-          cursor: isDragging ? "grabbing" : "grab",
           transform: "rotateY(0deg)",
         }}
-        onMouseDown={handleMouseDown}
+        position={position}
+        zIndex={zIndexValue}
+        showContent={showContent}
+        isDragging={isDragging}
+        handleMouseDown={handleMouseDown}
+        transition={unifiedNodeAnimations.tooltipComplexTransition(isDragging)}
       >
         {nodeInfoContent}
-      </div>
+      </NodeTooltipShell>
     );
   }
 
@@ -1152,51 +1110,7 @@ function UnifiedNodeInfo({
                 textAlign: 'center',
                 marginBottom: '1.25rem',
               }}>
-                <div
-                  style={{
-                    width: '7.5rem',
-                    height: '7.5rem',
-                    borderRadius: '50%',
-                    background: '#e6e8f0',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    margin: '0 auto 1.25rem auto',
-                    boxShadow: '0 0.25rem 0.75rem rgba(108,142,255,0.15)',
-                    overflow: 'hidden',
-                  }}
-                >
-                  {processedNodeData?.hasImage ? (
-                    <img
-                      src={processedNodeData.image}
-                      alt={processedNodeData.displayName || "character"}
-                      style={{
-                        width: '100%',
-                        height: '100%',
-                        objectFit: 'cover',
-                        borderRadius: '50%',
-                      }}
-                      crossOrigin="anonymous"
-                      onError={(e) => {
-                        e.target.style.display = 'none';
-                        if (e.target.nextSibling) {
-                          e.target.nextSibling.style.display = 'block';
-                        }
-                      }}
-                    />
-                  ) : null}
-                  <svg 
-                    width="80" 
-                    height="80" 
-                    viewBox="0 0 80 80" 
-                    fill="none"
-                    style={{ display: processedNodeData?.hasImage ? 'none' : 'block' }}
-                  >
-                    <circle cx="40" cy="40" r="40" fill="#e5e7eb" />
-                    <ellipse cx="40" cy="32" rx="16" ry="16" fill="#bdbdbd" />
-                    <ellipse cx="40" cy="56" rx="24" ry="12" fill="#bdbdbd" />
-                  </svg>
-                </div>
+                <NodeProfileAvatar processedNodeData={processedNodeData} variant="sidebar" />
                 
                 <h4 style={{
                   fontSize: '1.25rem',
@@ -1260,7 +1174,7 @@ function UnifiedNodeInfo({
                       letterSpacing: '-0.01em',
                       wordBreak: 'keep-all',
                     }}>
-                      {displayDescription}
+                      {currentDescription}
                     </p>
                   </div>
                 )}
@@ -1884,11 +1798,7 @@ function UnifiedNodeInfo({
                       minWidth: '250px',
                       maxWidth: '350px'
                     }}
-                    onMouseEnter={() => {
-                      // 툴팁에 마우스가 들어오면 호버 상태 유지
-                    }}
                     onMouseLeave={() => {
-                      // 툴팁에서 마우스가 나가면 즉시 툴팁 숨김
                       setHoveredItem(null);
                     }}
                   >

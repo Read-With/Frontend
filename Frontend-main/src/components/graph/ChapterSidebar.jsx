@@ -2,9 +2,8 @@ import React, { useMemo } from 'react';
 import PropTypes from 'prop-types';
 import { sidebarStyles } from '../../utils/styles/styles.js';
 import { ANIMATION_VALUES } from '../../utils/styles/styles';
-import { GRAPH_LAYOUT_CONSTANTS } from './graphConstants.js';
-import { getChapterData, getManifestFromCache } from '../../utils/common/cache/manifestCache';
-import { stripRedundantBookTitlePrefix } from '../../utils/viewer/chapterTitleDisplay';
+import { GRAPH_LAYOUT_CONSTANTS, getChapterTitleParts } from './graphShared';
+import { getManifestFromCache } from '../../utils/common/cache/manifestCache';
 
 function manifestBookTitle(manifestBookId, manifestHint) {
   if (manifestHint && typeof manifestHint === 'object') {
@@ -18,18 +17,16 @@ function manifestBookTitle(manifestBookId, manifestHint) {
 
 function rowChapterLabels(manifestBookId, idx, bookTitle, manifestHint) {
   const idxStr = Number.isFinite(idx) && idx >= 1 ? String(idx) : '—';
-  if (manifestBookId == null || !Number.isFinite(idx) || idx < 1) {
-    return { display: `제${idxStr}장`, tooltip: idxStr };
+  const { raw, display } = getChapterTitleParts(manifestBookId, idx, bookTitle, manifestHint);
+  if (!display) {
+    return {
+      display: `제${idxStr}장`,
+      tooltip: manifestBookId == null || !Number.isFinite(idx) || idx < 1 ? idxStr : `챕터 ${idxStr}`,
+    };
   }
-  const ch = getChapterData(manifestBookId, idx, manifestHint ?? undefined);
-  const rawTitle = String(ch?.title ?? '').trim();
-  if (!rawTitle) {
-    return { display: `제${idxStr}장`, tooltip: `챕터 ${idxStr}` };
-  }
-  const displayTitle = stripRedundantBookTitlePrefix(rawTitle, bookTitle).trim() || rawTitle;
   return {
-    display: displayTitle,
-    tooltip: `챕터 ${idxStr} — ${rawTitle}`,
+    display,
+    tooltip: `챕터 ${idxStr} — ${raw}`,
   };
 }
 

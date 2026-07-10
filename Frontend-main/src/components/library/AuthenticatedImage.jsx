@@ -4,7 +4,7 @@ import {
   fetchAuthenticatedAssetBlobUrl,
   isProtectedPublicAsset,
   sanitizeAssetUrl,
-} from '../../utils/common/artifactUrlUtils';
+} from '../../utils/common/urlUtils';
 
 const AuthenticatedImage = ({
   src,

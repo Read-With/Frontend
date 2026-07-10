@@ -1,18 +1,15 @@
-import { extractCharacterId } from './characterUtils';
-import { normalizeRelation, isValidRelation, directedEdgeElementId } from './relationUtils';
+import { extractCharacterId, isNodeWeightEntryVisible } from './characterUtils';
+import { normalizeRelation, isValidRelation, directedEdgeElementId, relationEventMetaPassthrough } from './relationUtils';
 import {
-  getEventIndexFromObject,
   isGraphEdgeElement,
+  isGraphNodeElement,
   normalizeElementId,
   sortElementsByDataId,
+  undirectedPairKey,
   uniqueStrings,
 } from './graphUtils';
-
-function undirectedPairKey(s, t) {
-  const a = String(s);
-  const b = String(t);
-  return a < b ? `${a}\x1e${b}` : `${b}\x1e${a}`;
-}
+import { eventUtils } from '../viewer/viewerCoreStateUtils';
+import { toPositiveInt } from '../common/valueUtils';
 
 function mergeEdgeLabels(a, b) {
   const t1 = String(a ?? '').trim();
@@ -127,13 +124,41 @@ function finalizeDirectedEdges(edgeMap) {
   return out;
 }
 
-function relationEventIdxFromRaw(raw) {
-  return getEventIndexFromObject(raw, ['eventNum', 'eventIdx', 'event_id', 'event_idx']);
+function toPositiveIntOrNaN(value) {
+  return toPositiveInt(value) ?? NaN;
 }
 
-function currentEventIdxForPositivity(eventData) {
-  const n = getEventIndexFromObject(eventData, ['eventNum', 'eventIdx', 'resolvedEventIdx', 'idx']);
-  return Number.isFinite(n) && n > 0 ? n : NaN;
+function isRelationVisibleAtEvent(rel, eventData) {
+  if (!eventData || typeof eventData !== 'object') return true;
+
+  const targetChapter = toPositiveIntOrNaN(
+    eventUtils.resolveChapterIdx(eventData) ?? eventData.chapterIdx ?? eventData.chapter
+  );
+  const targetEventIdx = toPositiveIntOrNaN(eventUtils.resolveEventOrdinal(eventData));
+
+  const meta = relationEventMetaPassthrough(rel);
+  const relationChapter = toPositiveIntOrNaN(meta.chapterIdx);
+  const relationEventIdx = toPositiveIntOrNaN(
+    eventUtils.resolveEventOrdinal(rel) ??
+    eventUtils.resolveEventOrdinal(meta) ??
+    rel?.event_id ??
+    rel?.event?.event_id
+  );
+
+  if (Number.isFinite(targetChapter) && Number.isFinite(relationChapter)) {
+    if (relationChapter > targetChapter) return false;
+    if (relationChapter < targetChapter) return true;
+    if (Number.isFinite(targetEventIdx) && Number.isFinite(relationEventIdx)) {
+      return relationEventIdx <= targetEventIdx;
+    }
+    return true;
+  }
+
+  if (Number.isFinite(targetEventIdx) && Number.isFinite(relationEventIdx)) {
+    return relationEventIdx <= targetEventIdx;
+  }
+
+  return true;
 }
 
 /**
@@ -161,94 +186,87 @@ const validateElements = (elements) => elements?.filter(e => e && normalizeEleme
 const createElementMap = (elements) => new Map(elements.map(e => [normalizeElementId(e), e]));
 
 function deepEqual(obj1, obj2, depth = 0) {
-  // 최대 깊이 제한 (무한 재귀 방지)
   const MAX_DEPTH = 10;
   if (depth > MAX_DEPTH) {
     return obj1 === obj2;
   }
-  
+
   if (obj1 === obj2) return true;
   if (obj1 == null || obj2 == null) return false;
   if (typeof obj1 !== typeof obj2) return false;
-  
+
   if (typeof obj1 !== 'object') return obj1 === obj2;
-  
-  // 배열인 경우 빠른 비교
+
   if (Array.isArray(obj1) && Array.isArray(obj2)) {
     if (obj1.length !== obj2.length) return false;
-    // 큰 배열의 경우 성능 최적화
-    if (obj1.length > 100) {
-      // 큰 배열은 참조 비교로 대체
-      return obj1 === obj2;
-    }
     for (let i = 0; i < obj1.length; i++) {
       if (!deepEqual(obj1[i], obj2[i], depth + 1)) return false;
     }
     return true;
   }
-  
-  // 객체인 경우
+
+  if (Array.isArray(obj1) !== Array.isArray(obj2)) return false;
+
   const keys1 = Object.keys(obj1);
   const keys2 = Object.keys(obj2);
-  
+
   if (keys1.length !== keys2.length) return false;
-  
-  // 큰 객체의 경우 성능 최적화
-  if (keys1.length > 50) {
-    // 큰 객체는 참조 비교로 대체
-    return obj1 === obj2;
-  }
-  
-  // Set을 사용하여 키 존재 여부를 O(1)로 확인
+
   const keys2Set = new Set(keys2);
-  
+
   for (const key of keys1) {
     if (!keys2Set.has(key)) return false;
     if (!deepEqual(obj1[key], obj2[key], depth + 1)) return false;
   }
-  
+
   return true;
 }
 
 
 
 /**
- * 관계 데이터를 그래프 요소로 변환 (새로운 JSON 구조 대응)
- * @param {Array} relations - 관계 데이터 배열
- * @param {Object} idToName - ID to name 매핑
- * @param {Object} idToDesc - ID to description 매핑
- * @param {Object} idToMain - ID to main character 매핑
- * @param {Object} idToNames - ID to names array 매핑
- * @param {string} folderKey - 폴더 키 (이미지 경로용)
- * @param {Object} nodeWeights - 노드 가중치 정보 (node_weights_accum)
- * @param {Object} previousRelations - 이전 이벤트의 관계 데이터
- * @param {Object} eventData - 이벤트 데이터 (text 필드 포함)
- * @param {Object} idToProfileImage - ID to profileImage 매핑 (API 책용)
- * @param {Array|null} charactersOrphanMerge - relations에 없어도 노드로 그릴 캐릭터 배열(Fine API 등)
- * @returns {Array} 그래프 요소 배열
+ * 관계 데이터를 그래프 요소로 변환
+ * @param {Object} params
+ * @param {Array} params.relations
+ * @param {Object} params.idToName
+ * @param {Object} [params.idToDesc]
+ * @param {Object} [params.idToDescKo]
+ * @param {Object} [params.idToMain]
+ * @param {Object} [params.idToNames]
+ * @param {Object|null} [params.nodeWeights]
+ * @param {Array|null} [params.previousRelations]
+ * @param {Object|null} [params.eventData]
+ * @param {Object|null} [params.idToProfileImage]
+ * @param {Array|null} [params.charactersOrphanMerge]
+ * @returns {Array}
  */
-export function convertRelationsToElements(relations, idToName, idToDesc, idToDescKo, idToMain, idToNames, folderKey, nodeWeights = null, previousRelations = null, eventData = null, idToProfileImage = null, charactersOrphanMerge = null) {
-  // 매개변수 유효성 검사
+export function convertRelationsToElements({
+  relations,
+  idToName,
+  idToDesc = {},
+  idToDescKo = {},
+  idToMain = {},
+  idToNames = {},
+  nodeWeights = null,
+  previousRelations = null,
+  eventData = null,
+  idToProfileImage = null,
+  charactersOrphanMerge = null,
+} = {}) {
   if (!Array.isArray(relations)) {
     return [];
   }
-  
+
   if (!idToName || typeof idToName !== 'object') {
-    return [];
-  }
-  
-  if (!folderKey || typeof folderKey !== 'string') {
     return [];
   }
 
   const nodeSet = new Set();
   const nodes = [];
   const edges = [];
-  
-  const relationsArray = relations;
-  
+
   const nodeIds = [];
-  relationsArray.forEach((rel) => {
+  relations.forEach((rel) => {
     const r = normalizeRelation(rel);
     if (!isValidRelation(r)) return;
     [r.id1, r.id2].forEach((id) => {
@@ -283,14 +301,13 @@ export function convertRelationsToElements(relations, idToName, idToDesc, idToDe
     }
   }
 
-  // id 기반 고정 랜덤 함수 (캐싱으로 성능 개선)
   const randomCache = new Map();
   function seededRandom(id, min, max) {
     const cacheKey = `${id}-${min}-${max}`;
     if (randomCache.has(cacheKey)) {
       return randomCache.get(cacheKey);
     }
-    
+
     let hash = 0;
     for (let i = 0; i < id.length; i++) {
       hash = ((hash << 5) - hash) + id.charCodeAt(i);
@@ -298,16 +315,14 @@ export function convertRelationsToElements(relations, idToName, idToDesc, idToDe
     }
     const seed = Math.abs(hash) % 10000;
     const result = min + (seed % (max - min));
-    
-    // 캐시 크기 제한 (메모리 누수 방지) - 캐시 저장 전에 체크
+
     const MAX_CACHE_SIZE = 500;
     if (randomCache.size >= MAX_CACHE_SIZE) {
-      // 전체 캐시를 지우는 대신 절반만 지우기
       const entries = Array.from(randomCache.entries());
       const toDelete = entries.slice(0, Math.floor(MAX_CACHE_SIZE / 2));
       toDelete.forEach(([key]) => randomCache.delete(key));
     }
-    
+
     randomCache.set(cacheKey, result);
     return result;
   }
@@ -315,34 +330,21 @@ export function convertRelationsToElements(relations, idToName, idToDesc, idToDe
   const validNodeIds = nodeIds.filter(
     (strId) => strId && strId !== '0' && strId !== 'undefined' && strId !== 'null'
   );
-  
 
-  // 노드 가중치 기반 크기 계산
-  const getNodeWeight = (nodeId) => {
-    if (!nodeWeights) {
-      return 3;
-    }
-    if (nodeWeights[nodeId]) {
-      const weight = nodeWeights[nodeId].weight;
-      if (typeof weight === 'number' && weight > 0) {
-        return weight;
-      }
-    }
-    return 3;
-  };
+  const visibleNodeIds = validNodeIds.filter((nodeId) => isNodeWeightEntryVisible(nodeWeights?.[nodeId]));
+  const visibleNodeIdSet = new Set(visibleNodeIds);
 
-  // 원 배치 좌표 계산
   const centerX = 500;
   const centerY = 350;
   const radius = 320;
-  validNodeIds.forEach((strId) => {
+  visibleNodeIds.forEach((strId) => {
     const angle = seededRandom(strId, 0, 360) * Math.PI / 180;
     const r = radius * (0.7 + 0.3 * (seededRandom(strId, 0, 1000) / 1000));
     const x = centerX + r * Math.cos(angle);
     const y = centerY + r * Math.sin(angle);
     const commonName = resolvedIdToName[strId];
-    const nodeWeight = getNodeWeight(strId);
-    
+    const { weight: nodeWeight, count: nodeCount } = nodeWeights[strId];
+
     let imagePath = null;
     if (idToProfileImage?.[strId]?.trim?.()) {
       imagePath = idToProfileImage[strId];
@@ -358,13 +360,13 @@ export function convertRelationsToElements(relations, idToName, idToDesc, idToDe
       names: [commonName, ...(Array.isArray(idToNames[strId]) ? idToNames[strId] : [])],
       common_name: commonName,
       weight: nodeWeight,
+      count: nodeCount,
     };
-    
-    // 이미지 경로가 있으면 image 필드 추가
+
     if (imagePath && imagePath.trim() !== '') {
       nodeData.image = imagePath;
     }
-    
+
     nodes.push({
       data: nodeData,
       position: { x, y }
@@ -384,9 +386,10 @@ export function convertRelationsToElements(relations, idToName, idToDesc, idToDe
   const edgeMap = new Map();
   const positivityByEdge = new Map();
 
-  relationsArray.forEach((rel) => {
+  relations.forEach((rel) => {
     const r = normalizeRelation(rel);
     if (!isValidRelation(r)) return;
+    if (!isRelationVisibleAtEvent(rel, eventData)) return;
 
     const id1 = String(r.id1);
     const id2 = String(r.id2);
@@ -396,6 +399,10 @@ export function convertRelationsToElements(relations, idToName, idToDesc, idToDe
     }
 
     if (!nodeSet.has(id1) || !nodeSet.has(id2)) {
+      return;
+    }
+
+    if (!visibleNodeIdSet.has(id1) || !visibleNodeIdSet.has(id2)) {
       return;
     }
 
@@ -410,8 +417,8 @@ export function convertRelationsToElements(relations, idToName, idToDesc, idToDe
         info = { lastFinite: null, lastFromCurrent: null, hasFromCurrent: false };
       }
       info.lastFinite = r.positivity;
-      const curEv = currentEventIdxForPositivity(eventData);
-      const relEv = relationEventIdxFromRaw(rel);
+      const curEv = eventUtils.resolveEventNum(eventData) || NaN;
+      const relEv = eventUtils.resolveEventNum(rel) || NaN;
       if (Number.isFinite(curEv) && Number.isFinite(relEv) && relEv === curEv) {
         info.lastFromCurrent = r.positivity;
         info.hasFromCurrent = true;
@@ -486,14 +493,11 @@ export function convertRelationsToElements(relations, idToName, idToDesc, idToDe
   }
 
   edges.push(...finalizeDirectedEdges(edgeMap));
-  
-  const result = [
+
+  return [
     ...sortElementsByDataId(nodes),
     ...sortElementsByDataId(edges)
   ];
-  
-  
-  return result;
 }
 
 
@@ -541,7 +545,7 @@ export function visualElementSignature(el) {
     const topo = d.bidirectional ? "b" : d.reciprocalPair ? "r" : "";
     return `e:${rel}:${d.label ?? ""}:${d.positivity ?? ""}:${d.lineStyle ?? ""}:${d.width ?? ""}:${topo}`;
   }
-  return `n:${d.label ?? ""}:${d.weight ?? ""}:${d.main ?? ""}:${d.positivity ?? ""}`;
+  return `n:${d.label ?? ""}:${d.weight ?? ""}:${d.count ?? ""}:${d.isMainCharacter ?? ""}:${d.positivity ?? ""}`;
 }
 
 /** props elements가 새 배열이어도 그래프 의미가 동일하면 effect·layout 재실행 생략 */
@@ -571,7 +575,7 @@ export function buildElementsStructureFingerprint(elements) {
     const d = el?.data;
     if (!d || d.id == null || d.id === "") continue;
     const sid = String(d.id);
-    if (d.source != null && d.target != null) {
+    if (isGraphEdgeElement(el)) {
       edgeRows.push(`${sid}\t${String(d.source)}\t${String(d.target)}`);
     } else {
       nodeIds.push(sid);
@@ -592,10 +596,8 @@ export function filterMainCharacters(elements, filterStage) {
   if (filterStage === 0 || !elements) return elements;
   
   // 핵심 인물 (isMainCharacter: true) 노드들
-  const coreNodes = elements.filter(el => 
-    el.data && 
-    el.data.id && 
-    !isGraphEdgeElement(el) && 
+  const coreNodes = elements.filter(el =>
+    isGraphNodeElement(el) &&
     el.data.isMainCharacter === true
   );
   
@@ -629,10 +631,8 @@ export function filterMainCharacters(elements, filterStage) {
     });
     
     // 핵심 인물과 연결된 모든 노드들
-    const connectedNodes = elements.filter(el => 
-      el.data && 
-      el.data.id && 
-      !isGraphEdgeElement(el) && 
+    const connectedNodes = elements.filter(el =>
+      isGraphNodeElement(el) &&
       connectedNodeIds.has(el.data.id)
     );
     
@@ -647,10 +647,9 @@ export function filterMainCharacters(elements, filterStage) {
  * 노드 겹침 감지 및 자동 조정
  * @param {Object} cy - Cytoscape 인스턴스
  * @param {number} nodeSize - 노드 크기
- * @param {Function} onCleanup - 정리 함수 (컴포넌트 언마운트 시 호출)
  * @returns {boolean} 겹침이 있었는지 여부
  */
-export function detectAndResolveOverlap(cy, nodeSize = 40, onCleanup = null) {
+export function detectAndResolveOverlap(cy, nodeSize = 40) {
   if (!cy) {
     return false;
   }
@@ -663,7 +662,6 @@ export function detectAndResolveOverlap(cy, nodeSize = 40, onCleanup = null) {
   const NODE_SIZE = nodeSize;
   const MIN_DISTANCE = NODE_SIZE * 1.0;
   let hasOverlap = false;
-  const timers = [];
   
   // 성능 최적화: 노드가 많을 때는 겹침 감지를 건너뜀
   const MAX_NODES_FOR_OVERLAP_DETECTION = 100;
@@ -707,21 +705,12 @@ export function detectAndResolveOverlap(cy, nodeSize = 40, onCleanup = null) {
         node1.addClass('bounce-effect');
         node2.addClass('bounce-effect');
         
-        const timer = setTimeout(() => {
+        setTimeout(() => {
           if (node1 && node1.removeClass) node1.removeClass('bounce-effect');
           if (node2 && node2.removeClass) node2.removeClass('bounce-effect');
         }, 300);
-        
-        timers.push(timer);
       }
     }
-  }
-  
-  // 정리 함수가 제공되면 타이머들을 저장
-  if (onCleanup && typeof onCleanup === 'function') {
-    onCleanup(() => {
-      timers.forEach(timer => clearTimeout(timer));
-    });
   }
   
   return hasOverlap;

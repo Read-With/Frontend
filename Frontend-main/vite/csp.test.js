@@ -37,4 +37,9 @@ describe('buildContentSecurityPolicy', () => {
     expect(prod).not.toContain('readwith.store');
     expect(dev).not.toContain('readwith.store');
   });
+
+  it('always allows CDN origin for combined.xhtml fetch (connect-src)', () => {
+    const prod = buildContentSecurityPolicy({}, { dev: false });
+    expect(prod).toContain('https://cdn.readwith.cloud');
+  });
 });

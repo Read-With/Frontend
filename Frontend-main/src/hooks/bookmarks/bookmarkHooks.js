@@ -225,9 +225,6 @@ export const useBookmarks = (bookId, options = {}) => {
     [viewerRef]
   );
 
-  const handleRemoveBookmark = removeBookmark;
-  const handleDeleteBookmark = removeBookmark;
-
   useEffect(() => {
     if (!bookId) {
       setBookmarks([]);
@@ -252,8 +249,6 @@ export const useBookmarks = (bookId, options = {}) => {
 
   if (viewerRef) {
     returnValue.handleAddBookmark = handleAddBookmark;
-    returnValue.handleRemoveBookmark = handleRemoveBookmark;
-    returnValue.handleDeleteBookmark = handleDeleteBookmark;
     returnValue.handleBookmarkSelect = handleBookmarkSelect;
     returnValue.showBookmarkList = showBookmarkList;
     returnValue.setShowBookmarkList = setShowBookmarkList;

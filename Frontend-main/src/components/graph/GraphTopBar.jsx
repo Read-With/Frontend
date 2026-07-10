@@ -2,7 +2,7 @@ import React from 'react';
 import PropTypes from 'prop-types';
 import GraphControls, { EdgeLabelToggle } from './GraphControls';
 import { topBarStyles, COLORS, ANIMATION_VALUES } from '../../utils/styles/styles.js';
-import { GRAPH_LAYOUT_CONSTANTS, GRAPH_CHARACTER_FILTER_STAGE_OPTIONS } from './graphConstants.js';
+import { GRAPH_CHARACTER_FILTER_STAGE_OPTIONS, resolveChapterSidebarWidth } from './graphShared.js';
 
 const selectBaseStyle = {
   height: 32,
@@ -61,11 +61,10 @@ function GraphTopBar({
   const { searchTerm, isSearchActive, suggestions, showSuggestions, selectedIndex } = searchState;
   const {
     onSearchSubmit, onClearSearch, onGenerateSuggestions,
-    onKeyDown, onCloseSuggestions,
+    onKeyDown, onCloseSuggestions, onSelectedIndexChange,
   } = searchActions;
 
-  const { SIDEBAR } = GRAPH_LAYOUT_CONSTANTS;
-  const sidebarLeft = isSidebarOpen ? SIDEBAR.OPEN_WIDTH : SIDEBAR.CLOSED_WIDTH;
+  const sidebarLeft = resolveChapterSidebarWidth(isSidebarOpen);
 
   return (
     <div
@@ -91,6 +90,7 @@ function GraphTopBar({
           suggestions={suggestions}
           showSuggestions={showSuggestions}
           selectedIndex={selectedIndex}
+          onSelectedIndexChange={onSelectedIndexChange}
           onKeyDown={onKeyDown}
           onCloseSuggestions={onCloseSuggestions}
           isSearchActive={isSearchActive}
@@ -119,6 +119,7 @@ GraphTopBar.propTypes = {
     onGenerateSuggestions: PropTypes.func.isRequired,
     onKeyDown: PropTypes.func.isRequired,
     onCloseSuggestions: PropTypes.func.isRequired,
+    onSelectedIndexChange: PropTypes.func,
   }).isRequired,
   edgeLabelVisible: PropTypes.bool.isRequired,
   onToggleEdgeLabel: PropTypes.func.isRequired,

@@ -4,17 +4,19 @@ import CytoscapeGraphUnified from './CytoscapeGraphUnified';
 import UnifiedNodeInfo from './tooltip/UnifiedNodeInfo';
 import UnifiedEdgeTooltip from './tooltip/UnifiedEdgeTooltip';
 import { graphStyles, COLORS, ANIMATION_VALUES } from '../../utils/styles/styles.js';
-import { GRAPH_LAYOUT_CONSTANTS } from './graphConstants.js';
+import { GRAPH_LAYOUT_CONSTANTS, resolveChapterSidebarWidth } from './graphShared.js';
 
-const SIDEBAR_WIDTH = 480;
-const TOP_OFFSET = 54;
-const ANIMATION_DURATION = 700;
+const {
+  TOP_BAR_HEIGHT,
+  TOOLTIP_SIDEBAR_WIDTH: SIDEBAR_WIDTH,
+  ANIMATION_MS: ANIMATION_DURATION,
+} = GRAPH_LAYOUT_CONSTANTS;
 
 const sidebarBaseStyle = {
   position: 'fixed',
-  top: `${TOP_OFFSET}px`,
+  top: `${TOP_BAR_HEIGHT}px`,
   width: `${SIDEBAR_WIDTH}px`,
-  height: `calc(100vh - ${TOP_OFFSET}px)`,
+  height: `calc(100vh - ${TOP_BAR_HEIGHT}px)`,
   background: '#fff',
   borderRadius: '0px',
   boxShadow: '2px 0 8px rgba(0,0,0,0.06)',
@@ -22,16 +24,6 @@ const sidebarBaseStyle = {
   zIndex: 99999,
   overflow: 'hidden',
   transition: `right ${ANIMATION_DURATION}ms cubic-bezier(0.4, 0, 0.2, 1)`,
-};
-
-const noRelationsOverlayStyle = {
-  display: 'flex',
-  flexDirection: 'column',
-  alignItems: 'center',
-  justifyContent: 'center',
-  padding: '40px 20px',
-  textAlign: 'center',
-  color: '#6b7280',
 };
 
 function GraphLoadingOverlay() {
@@ -57,29 +49,19 @@ function GraphLoadingOverlay() {
 }
 
 const GraphInfoBar = memo(function GraphInfoBar({
-  apiFineData,
   currentChapter,
   currentChapterTitle = '',
-  currentEvent,
   userCurrentChapter,
   userReadingChapterTitle = '',
   nodeCount,
   relationCount,
   filterStage,
 }) {
-  const hasEvent = !!apiFineData?.event;
-
-  const graphTypeLabel = useMemo(() => {
-    return hasEvent ? '세밀 그래프' : '거시 그래프';
-  }, [hasEvent]);
-
   const chapterRangeLabel = useMemo(() => {
     const nameOrNum = (n, title) => (title && String(title).trim() ? String(title).trim() : `Chapter ${n}`);
     const curName = nameOrNum(currentChapter, currentChapterTitle);
-    return hasEvent
-      ? `${curName} · 이벤트 ${currentEvent}`
-      : `Chapter 1 ~ ${curName} 누적`;
-  }, [hasEvent, currentChapter, currentChapterTitle, currentEvent]);
+    return `Chapter 1 ~ ${curName} 누적`;
+  }, [currentChapter, currentChapterTitle]);
 
   return (
     <div
@@ -97,7 +79,7 @@ const GraphInfoBar = memo(function GraphInfoBar({
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
         <h2 style={{ margin: 0, fontSize: '16px', fontWeight: '600', color: COLORS.textPrimary }}>
-          {graphTypeLabel}
+          거시 그래프
         </h2>
         <div style={{
           background: COLORS.backgroundLight,
@@ -143,31 +125,14 @@ const GraphInfoBar = memo(function GraphInfoBar({
         <span>
           {filterStage > 0 ? `${relationCount}관계 (필터링됨)` : `${relationCount}관계`}
         </span>
-        <>
-          <span>•</span>
-          <span style={{ color: COLORS.primary, fontWeight: '600' }}>API</span>
-        </>
       </div>
     </div>
   );
-}, (prevProps, nextProps) => {
-  if (prevProps.currentChapter !== nextProps.currentChapter) return false;
-  if (prevProps.currentChapterTitle !== nextProps.currentChapterTitle) return false;
-  if (prevProps.currentEvent !== nextProps.currentEvent) return false;
-  if (prevProps.userCurrentChapter !== nextProps.userCurrentChapter) return false;
-  if (prevProps.userReadingChapterTitle !== nextProps.userReadingChapterTitle) return false;
-  if (prevProps.nodeCount !== nextProps.nodeCount) return false;
-  if (prevProps.relationCount !== nextProps.relationCount) return false;
-  if (prevProps.filterStage !== nextProps.filterStage) return false;
-  if (!!prevProps.apiFineData?.event !== !!nextProps.apiFineData?.event) return false;
-  return true;
 });
 
 GraphInfoBar.propTypes = {
-  apiFineData: PropTypes.shape({ event: PropTypes.object }),
   currentChapter: PropTypes.number.isRequired,
   currentChapterTitle: PropTypes.string,
-  currentEvent: PropTypes.number.isRequired,
   userCurrentChapter: PropTypes.number,
   userReadingChapterTitle: PropTypes.string,
   nodeCount: PropTypes.number.isRequired,
@@ -180,19 +145,13 @@ function GraphSidebar({
   onClose,
   chapterNum,
   eventNum,
-  maxChapter,
-  hasNoRelations = false,
   filename,
   elements = [],
-  isSearchActive = false,
-  filteredElements = [],
-  searchTerm = '',
   onStartClosing,
   onClearGraph,
-  forceClose,
+  isSidebarClosing = false,
   povSummaries = null,
-  apiMacroData = null,
-  apiFineData = null,
+  apiBookGraphData = null,
   bookId = null,
 }) {
   const [isClosing, setIsClosing] = useState(false);
@@ -205,16 +164,11 @@ function GraphSidebar({
     right: isClosing || !isVisible ? `-${SIDEBAR_WIDTH}px` : '0px',
   }), [isClosing, isVisible]);
 
-  const handleClose = useCallback(() => {
-    if (onClearGraph && !forceClose) {
-      onClearGraph();
-    }
+  const runCloseAnimation = useCallback(() => {
     if (animationTimeoutRef.current) {
       clearTimeout(animationTimeoutRef.current);
       animationTimeoutRef.current = null;
     }
-    onStartClosing?.();
-
     setIsClosing(true);
     animationTimeoutRef.current = setTimeout(() => {
       onClose();
@@ -222,12 +176,18 @@ function GraphSidebar({
       setIsVisible(false);
       animationTimeoutRef.current = null;
     }, ANIMATION_DURATION);
-  }, [onClearGraph, forceClose, onStartClosing, onClose]);
+  }, [onClose]);
+
+  const handleClose = useCallback(() => {
+    onClearGraph?.();
+    onStartClosing?.();
+    runCloseAnimation();
+  }, [onClearGraph, onStartClosing, runCloseAnimation]);
 
   useEffect(() => {
     const prevActiveTooltip = previousActiveTooltipRef.current;
 
-    if ((activeTooltip || hasNoRelations) && !prevActiveTooltip) {
+    if (activeTooltip && !prevActiveTooltip) {
       if (animationTimeoutRef.current) {
         clearTimeout(animationTimeoutRef.current);
         animationTimeoutRef.current = null;
@@ -242,7 +202,7 @@ function GraphSidebar({
       });
     }
 
-    if (!activeTooltip && !hasNoRelations && prevActiveTooltip) {
+    if (!activeTooltip && prevActiveTooltip) {
       setIsClosing(true);
       animationTimeoutRef.current = setTimeout(() => {
         onClose();
@@ -252,13 +212,13 @@ function GraphSidebar({
     }
 
     previousActiveTooltipRef.current = activeTooltip;
-  }, [activeTooltip, hasNoRelations, onClose]);
+  }, [activeTooltip, onClose]);
 
   useEffect(() => {
-    if (forceClose && !isClosing) {
-      handleClose();
+    if (isSidebarClosing && !isClosing) {
+      runCloseAnimation();
     }
-  }, [forceClose, isClosing, handleClose]);
+  }, [isSidebarClosing, isClosing, runCloseAnimation]);
 
   useEffect(() => () => {
     if (animationTimeoutRef.current) {
@@ -266,22 +226,8 @@ function GraphSidebar({
     }
   }, []);
 
-  if (!isVisible && !isClosing && !activeTooltip && !hasNoRelations) {
+  if (!isVisible && !isClosing && !activeTooltip) {
     return null;
-  }
-
-  if (hasNoRelations) {
-    return (
-      <div style={{ ...sidebarStyle, ...noRelationsOverlayStyle }} data-testid="graph-sidebar">
-        <div style={{ fontSize: 48, marginBottom: 16, opacity: 0.5 }}>📊</div>
-        <h3 style={{ fontSize: 18, fontWeight: 600, marginBottom: 8, color: '#374151' }}>
-          관계 데이터가 없습니다
-        </h3>
-        <p style={{ fontSize: 14, lineHeight: 1.5, maxWidth: 280 }}>
-          현재 챕터와 이벤트에서 인물 간의 관계 정보가 없습니다.
-        </p>
-      </div>
-    );
   }
 
   if (!activeTooltip) {
@@ -293,19 +239,14 @@ function GraphSidebar({
       <div style={sidebarStyle} data-testid="graph-sidebar">
         <UnifiedNodeInfo
           displayMode="sidebar"
-          data={activeTooltip.data}
+          data={activeTooltip}
           onClose={handleClose}
           chapterNum={chapterNum}
           eventNum={eventNum}
-          maxChapter={maxChapter}
           elements={elements}
-          isSearchActive={isSearchActive}
-          filteredElements={filteredElements}
-          searchTerm={searchTerm}
           filename={filename}
           povSummaries={povSummaries}
-          apiMacroData={apiMacroData}
-          apiFineData={apiFineData}
+          apiBookGraphData={apiBookGraphData}
         />
       </div>
     );
@@ -315,15 +256,10 @@ function GraphSidebar({
     <div style={sidebarStyle} data-testid="graph-sidebar">
       <UnifiedEdgeTooltip
         data={activeTooltip.data}
-        sourceNode={activeTooltip.sourceNode}
-        targetNode={activeTooltip.targetNode}
         onClose={handleClose}
         chapterNum={chapterNum}
         eventNum={eventNum}
-        maxChapter={maxChapter}
-        elements={elements}
-        displayMode="sidebar"
-        filename={filename}
+        variant="graphPage"
         bookId={bookId}
       />
     </div>
@@ -338,19 +274,16 @@ function GraphCanvas({
   currentChapterTitle = '',
   userReadingChapterTitle = '',
   eventNum,
-  maxChapter,
   filename,
   elements,
   renderElements,
   povSummaries,
-  apiMacroData,
-  apiFineData,
+  apiBookGraphData,
   bookId,
   isLoading,
   hasShownGraphOnce,
   onCanvasClick,
   currentChapter,
-  currentEvent,
   userCurrentChapter,
   nodeCount,
   relationCount,
@@ -359,14 +292,14 @@ function GraphCanvas({
   searchState,
   cytoscapeConfig,
   tooltipHandlers,
+  graphClearRef,
 }) {
-  const { isSidebarClosing, onCloseSidebar, onStartClosing, onClearGraph, forceClose } = sidebarControl;
+  const { isSidebarClosing, onCloseSidebar, onStartClosing, onClearGraph } = sidebarControl;
   const { isSearchActive, filteredElements, searchTerm, fitNodeIds, isResetFromSearch } = searchState;
-  const { stylesheet, layout, newNodeIds, isDropdownSelection } = cytoscapeConfig;
+  const { stylesheet, layout } = cytoscapeConfig;
   const { onShowNodeTooltip, onShowEdgeTooltip, onClearTooltip, selectedNodeIdRef, selectedEdgeIdRef } = tooltipHandlers;
 
-  const { SIDEBAR } = GRAPH_LAYOUT_CONSTANTS;
-  const sidebarLeft = isSidebarOpen ? SIDEBAR.OPEN_WIDTH : SIDEBAR.CLOSED_WIDTH;
+  const sidebarLeft = resolveChapterSidebarWidth(isSidebarOpen);
 
   return (
     <div
@@ -391,10 +324,8 @@ function GraphCanvas({
         }}
       >
         <GraphInfoBar
-          apiFineData={apiFineData}
           currentChapter={currentChapter}
           currentChapterTitle={currentChapterTitle}
-          currentEvent={currentEvent}
           userCurrentChapter={userCurrentChapter}
           userReadingChapterTitle={userReadingChapterTitle}
           nodeCount={nodeCount}
@@ -417,18 +348,13 @@ function GraphCanvas({
               onClose={onCloseSidebar}
               onStartClosing={onStartClosing}
               onClearGraph={onClearGraph}
-              forceClose={forceClose}
+              isSidebarClosing={isSidebarClosing}
               chapterNum={chapterNum}
               eventNum={eventNum}
-              maxChapter={maxChapter}
               filename={filename}
               elements={elements}
-              isSearchActive={isSearchActive}
-              filteredElements={filteredElements}
-              searchTerm={searchTerm}
               povSummaries={povSummaries}
-              apiMacroData={apiMacroData}
-              apiFineData={apiFineData}
+              apiBookGraphData={apiBookGraphData}
               bookId={bookId}
             />
           )}
@@ -449,11 +375,9 @@ function GraphCanvas({
 
             <CytoscapeGraphUnified
               elements={renderElements}
-              newNodeIds={newNodeIds}
               stylesheet={stylesheet}
               layout={layout}
               cyRef={cyRef}
-              nodeSize={10}
               fitNodeIds={fitNodeIds}
               searchTerm={searchTerm}
               isSearchActive={isSearchActive}
@@ -463,9 +387,9 @@ function GraphCanvas({
               onClearTooltip={onClearTooltip}
               selectedNodeIdRef={selectedNodeIdRef}
               selectedEdgeIdRef={selectedEdgeIdRef}
+              graphClearRef={graphClearRef}
               strictBackgroundClear={true}
               isResetFromSearch={isResetFromSearch}
-              isDropdownSelection={isDropdownSelection}
               isDataRefreshing={isLoading}
               currentChapter={currentChapter}
             />
@@ -484,50 +408,25 @@ GraphCanvas.propTypes = {
   currentChapterTitle: PropTypes.string,
   userReadingChapterTitle: PropTypes.string,
   eventNum: PropTypes.number.isRequired,
-  maxChapter: PropTypes.number.isRequired,
   filename: PropTypes.string.isRequired,
   elements: PropTypes.array.isRequired,
   renderElements: PropTypes.array.isRequired,
-  povSummaries: PropTypes.array,
-  apiMacroData: PropTypes.object,
-  apiFineData: PropTypes.object,
+  povSummaries: PropTypes.any,
+  apiBookGraphData: PropTypes.object,
   bookId: PropTypes.number,
   isLoading: PropTypes.bool.isRequired,
   hasShownGraphOnce: PropTypes.bool.isRequired,
   onCanvasClick: PropTypes.func.isRequired,
   currentChapter: PropTypes.number.isRequired,
-  currentEvent: PropTypes.number.isRequired,
   userCurrentChapter: PropTypes.number,
   nodeCount: PropTypes.number.isRequired,
   relationCount: PropTypes.number.isRequired,
   filterStage: PropTypes.number.isRequired,
-  sidebarControl: PropTypes.shape({
-    isSidebarClosing: PropTypes.bool.isRequired,
-    onCloseSidebar: PropTypes.func.isRequired,
-    onStartClosing: PropTypes.func.isRequired,
-    onClearGraph: PropTypes.func.isRequired,
-    forceClose: PropTypes.bool.isRequired,
-  }).isRequired,
-  searchState: PropTypes.shape({
-    isSearchActive: PropTypes.bool.isRequired,
-    filteredElements: PropTypes.array,
-    searchTerm: PropTypes.string.isRequired,
-    fitNodeIds: PropTypes.array,
-    isResetFromSearch: PropTypes.bool.isRequired,
-  }).isRequired,
-  cytoscapeConfig: PropTypes.shape({
-    stylesheet: PropTypes.array.isRequired,
-    layout: PropTypes.object.isRequired,
-    newNodeIds: PropTypes.array.isRequired,
-    isDropdownSelection: PropTypes.bool.isRequired,
-  }).isRequired,
-  tooltipHandlers: PropTypes.shape({
-    onShowNodeTooltip: PropTypes.func.isRequired,
-    onShowEdgeTooltip: PropTypes.func.isRequired,
-    onClearTooltip: PropTypes.func.isRequired,
-    selectedNodeIdRef: PropTypes.object.isRequired,
-    selectedEdgeIdRef: PropTypes.object.isRequired,
-  }).isRequired,
+  sidebarControl: PropTypes.object.isRequired,
+  searchState: PropTypes.object.isRequired,
+  cytoscapeConfig: PropTypes.object.isRequired,
+  tooltipHandlers: PropTypes.object.isRequired,
+  graphClearRef: PropTypes.object,
 };
 
 export default React.memo(GraphCanvas);

@@ -9,21 +9,22 @@ import {
   buildElementsStructureFingerprint,
   visualElementSignature,
 } from "../../utils/graph/graphDataUtils.js";
-import { applySearchFadeEffect, shouldShowNoSearchResults, getNoSearchResultsMessage } from "../../utils/graph/searchUtils.jsx";
+import { applySearchFadeEffect, shouldShowNoSearchResults, getNoSearchResultsMessage } from "../../utils/graph/searchUtils.js";
 import {
   createRippleEffect,
   ensureElementsInBounds,
   isGraphContainerSizeReady,
-  createMouseEventHandlers,
   syncReciprocalPairJunctionOffsets,
   clearHighlightClassesOn,
   calculateSpiralPlacement,
   getContainerDimensions,
 } from "../../utils/graph/graphUtils";
-import { calculateNodeSize } from "../../utils/styles/graphStyles.js";
+import {
+  applyNormalizedNodeSizes,
+} from "../../utils/styles/graphStyles.js";
 import useGraphInteractions from "../../hooks/graph/useGraphInteractions.js";
 import { useGraphLayout, useCyInstance } from "../../hooks/graph/useGraphLayout";
-import { eventUtils } from "../../utils/viewer/viewerUtils";
+import { eventUtils } from "../../utils/viewer/viewerCoreStateUtils";
 
 const NO_RESULTS_CONTAINER_STYLE = {
   position: 'absolute',
@@ -69,14 +70,9 @@ const CytoscapeGraphUnified = ({
   elements,
   stylesheet = [],
   layout = DEFAULT_LAYOUT,
-  tapNodeHandler,
-  tapEdgeHandler,
-  tapBackgroundHandler,
   fitNodeIds,
   style = {},
   cyRef: externalCyRef,
-  newNodeIds: _newNodeIds = [],
-  onLayoutComplete,
   searchTerm = "",
   isSearchActive = false,
   filteredElements = [],
@@ -87,8 +83,8 @@ const CytoscapeGraphUnified = ({
   selectedNodeIdRef,
   selectedEdgeIdRef,
   strictBackgroundClear = false,
+  graphClearRef = null,
   showRippleEffect = false,
-  isDropdownSelection: _isDropdownSelection = false,
   isDataRefreshing = false,
   currentChapter,
 }) => {
@@ -143,15 +139,7 @@ const CytoscapeGraphUnified = ({
   }, [stylesheet, safeCyOperation]);
 
   const applyNodeSizes = useCallback((cy, nodes, scale = 1) => {
-    if (!cy || !nodes) return;
-    nodes.forEach(node => {
-      const weight = node.data('weight');
-      const size = calculateNodeSize(8, weight) * scale;
-      node.style({
-        'width': size,
-        'height': size
-      });
-    });
+    applyNormalizedNodeSizes(cy, { scaledNodes: nodes, scale });
   }, []);
 
   const triggerRippleForAddedNodes = useCallback(() => {
@@ -183,14 +171,15 @@ const CytoscapeGraphUnified = ({
   }, [cy, isResetFromSearch, showRippleEffect]);
 
   const reapplySearchFade = useCallback(() => {
-    if (!cy || !isSearchActive || !filteredElements || filteredElements.length === 0) return;
-    applySearchFadeEffect(cy, filteredElements, isSearchActive);
+    if (!cy || !isSearchActive) return;
+    applySearchFadeEffect(cy, filteredElements || [], true);
   }, [cy, isSearchActive, filteredElements]);
 
   const {
-    tapNodeHandler: hookTapNodeHandler,
-    tapEdgeHandler: hookTapEdgeHandler,
-    tapBackgroundHandler: hookTapBackgroundHandler,
+    tapNodeHandler,
+    tapEdgeHandler,
+    tapBackgroundHandler,
+    clearSelection,
   } = useGraphInteractions({
     cyRef: externalCyRef,
     onShowNodeTooltip,
@@ -201,6 +190,14 @@ const CytoscapeGraphUnified = ({
     strictBackgroundClear,
     onAfterReset: reapplySearchFade,
   });
+
+  useEffect(() => {
+    if (!graphClearRef) return undefined;
+    graphClearRef.current = clearSelection;
+    return () => {
+      graphClearRef.current = null;
+    };
+  }, [graphClearRef, clearSelection]);
 
   useEffect(() => {
     if (isEmpty(elements)) return;
@@ -258,7 +255,6 @@ const CytoscapeGraphUnified = ({
           userPanningEnabled: true,
           minZoom: 0.2,
           maxZoom: 2.4,
-          wheelSensitivity: 0.4,
           autoungrabify: false,
           autolock: false,
           autounselectify: false,
@@ -285,15 +281,7 @@ const CytoscapeGraphUnified = ({
     if (!cy || !cy.container()) {
       return;
     }
-    
-    const container = containerRef.current;
-    const mouseHandlers = createMouseEventHandlers(cy, container);
-    const { handleMouseDown, handleMouseMove, handleMouseUp, isDraggingRef } = mouseHandlers;
-    
-    container.addEventListener('mousedown', handleMouseDown);
-    container.addEventListener('mousemove', handleMouseMove);
-    container.addEventListener('mouseup', handleMouseUp);
-    
+
     const handleDragFreeOn = () => {
       setTimeout(() => {
         detectAndResolveOverlap(cy);
@@ -303,7 +291,6 @@ const CytoscapeGraphUnified = ({
     const handleDrag = (evt) => {
       const node = evt.target;
       node.style('transition-property', 'none');
-      isDraggingRef.current = true;
       syncReciprocalPairJunctionOffsets(cy);
     };
 
@@ -316,8 +303,6 @@ const CytoscapeGraphUnified = ({
         detail: { type: 'graphDragEnd', timestamp: Date.now() }
       });
       document.dispatchEvent(dragEndEvent);
-      
-      isDraggingRef.current = false;
     };
 
     const handleReciprocalJunction = () => {
@@ -338,39 +323,21 @@ const CytoscapeGraphUnified = ({
       cy.removeListener('drag', 'node', handleDrag);
       cy.removeListener('dragfree', 'node', handleDragFree);
       cy.removeListener('position', 'node', handleReciprocalJunction);
-      
-      container.removeEventListener('mousedown', handleMouseDown);
-      container.removeEventListener('mousemove', handleMouseMove);
-      container.removeEventListener('mouseup', handleMouseUp);
     };
   }, [externalCyRef]);
-
-  const handleBackgroundTap = useCallback((evt) => {
-    if (!cy || evt.target !== cy) return;
-    const bgHandler = tapBackgroundHandler || hookTapBackgroundHandler;
-    if (bgHandler) bgHandler(evt);
-  }, [cy, tapBackgroundHandler, hookTapBackgroundHandler]);
 
   useEffect(() => {
     if (!cy) return;
 
-    const nodeHandler = tapNodeHandler || hookTapNodeHandler;
-    const edgeHandler = tapEdgeHandler || hookTapEdgeHandler;
-
     cy.off('tap');
-
-    if (nodeHandler) {
-      cy.on("tap", "node", nodeHandler);
-    }
-    if (edgeHandler) {
-      cy.on("tap", "edge", edgeHandler);
-    }
-    cy.on("tap", handleBackgroundTap);
+    cy.on('tap', 'node', tapNodeHandler);
+    cy.on('tap', 'edge', tapEdgeHandler);
+    cy.on('tap', tapBackgroundHandler);
 
     return () => {
       cy.off('tap');
     };
-  }, [cy, tapNodeHandler, tapEdgeHandler, hookTapNodeHandler, hookTapEdgeHandler, handleBackgroundTap]);
+  }, [cy, tapNodeHandler, tapEdgeHandler, tapBackgroundHandler]);
 
   const elementsUpdateRef = useRef(EMPTY_ELEMENTS_UPDATE);
 
@@ -544,7 +511,6 @@ const CytoscapeGraphUnified = ({
     updateStylesheet,
     applyNodeSizes,
     triggerRippleForAddedNodes,
-    onLayoutComplete,
     isInitialLoad,
     setIsInitialLoad,
     containerRef,
@@ -555,7 +521,8 @@ const CytoscapeGraphUnified = ({
 
     cy.batch(() => {
       if (fitNodeIds && fitNodeIds.length > 0) {
-        const nodes = cy.nodes().filter(n => fitNodeIds.includes(n.id()));
+        const fitIdSet = new Set(fitNodeIds.map(String));
+        const nodes = cy.nodes().filter((n) => fitIdSet.has(n.id()));
         if (nodes.length > 0) {
           cy.fit(nodes, 60);
           const prevHl = cy.nodes(".search-highlight");
@@ -583,10 +550,9 @@ const CytoscapeGraphUnified = ({
     const wasSearchActive = prevIsSearchActiveRef.current;
     prevIsSearchActiveRef.current = isSearchActive;
 
-    if (isSearchActive && filteredElements.length > 0) {
-      applySearchFadeEffect(cy, filteredElements, isSearchActive);
-    } else if (!isSearchActive && wasSearchActive) {
-      // Only clear when transitioning search OFF — not on every render
+    if (isSearchActive) {
+      applySearchFadeEffect(cy, filteredElements || [], true);
+    } else if (wasSearchActive) {
       clearHighlightClassesOn(cy);
     }
   }, [cy, isSearchActive, filteredElementIdsStr]);
@@ -680,16 +646,11 @@ CytoscapeGraphUnified.propTypes = {
   elements: PropTypes.arrayOf(elementShape).isRequired,
   stylesheet: PropTypes.arrayOf(PropTypes.object),
   layout: layoutShape,
-  tapNodeHandler: PropTypes.func,
-  tapEdgeHandler: PropTypes.func,
-  tapBackgroundHandler: PropTypes.func,
   fitNodeIds: PropTypes.arrayOf(PropTypes.oneOfType([PropTypes.string, PropTypes.number])),
   style: PropTypes.object,
   cyRef: PropTypes.shape({
     current: PropTypes.object,
   }).isRequired,
-  newNodeIds: PropTypes.arrayOf(PropTypes.oneOfType([PropTypes.string, PropTypes.number])),
-  onLayoutComplete: PropTypes.func,
   searchTerm: PropTypes.string,
   isSearchActive: PropTypes.bool,
   filteredElements: PropTypes.arrayOf(elementShape),
@@ -704,8 +665,10 @@ CytoscapeGraphUnified.propTypes = {
     current: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
   }),
   strictBackgroundClear: PropTypes.bool,
+  graphClearRef: PropTypes.shape({
+    current: PropTypes.func,
+  }),
   showRippleEffect: PropTypes.bool,
-  isDropdownSelection: PropTypes.bool,
   isDataRefreshing: PropTypes.bool,
   currentChapter: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
 };

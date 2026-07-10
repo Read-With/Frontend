@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 import PropTypes from 'prop-types';
 import { getBooks, getBook, uploadBook } from '../../utils/api/booksApi';
 import { getBookManifest } from '../../utils/api/api';
@@ -8,7 +8,7 @@ import {
   EPUB_FILE_CONSTRAINTS,
   validateEpubFile,
 } from '../../utils/library/libraryUtils';
-import { normalizeTitle } from '../../utils/common/stringUtils';
+import { normalizeTitle } from '../../utils/common/valueUtils';
 
 function normalizeAuthorMatch(author) {
   return (author || '')
@@ -17,7 +17,7 @@ function normalizeAuthorMatch(author) {
     .replace(/\s+/g, ' ');
 }
 
-const FileUpload = ({ onUploadSuccess, onClose }) => {
+const FileUpload = ({ onUploadSuccess, onClose, initialFile = null }) => {
   const [dragActive, setDragActive] = useState(false);
   const [selectedFile, setSelectedFile] = useState(null);
   const [metadata, setMetadata] = useState({
@@ -27,7 +27,10 @@ const FileUpload = ({ onUploadSuccess, onClose }) => {
   });
   const [step, setStep] = useState('select'); // 'select' or 'metadata'
   const [extractingMetadata, setExtractingMetadata] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const inputRef = useRef(null);
+  const initialFileHandled = useRef(false);
+  const uploadingRef = useRef(false);
 
   const extractEpubMetadata = async (file) => {
     try {
@@ -85,16 +88,30 @@ const FileUpload = ({ onUploadSuccess, onClose }) => {
     }
   };
 
-  const handleUpload = async () => {
-    if (!selectedFile) return;
-    
-    try {
-      const titleKey = normalizeTitle(metadata.title || '');
-      const authorKey = normalizeAuthorMatch(metadata.author || '');
-      if (!titleKey || !authorKey) {
-        throw new Error('제목과 저자를 확인해주세요.');
-      }
+  useEffect(() => {
+    if (!initialFile) {
+      initialFileHandled.current = false;
+      return;
+    }
+    if (initialFileHandled.current) return;
+    initialFileHandled.current = true;
+    handleFiles([initialFile]);
+  }, [initialFile]);
 
+  const handleUpload = async () => {
+    if (!selectedFile || uploadingRef.current) return;
+
+    const titleKey = normalizeTitle(metadata.title || '');
+    const authorKey = normalizeAuthorMatch(metadata.author || '');
+    if (!titleKey || !authorKey) {
+      alert('제목과 저자를 확인해주세요.');
+      return;
+    }
+
+    uploadingRef.current = true;
+    setUploading(true);
+
+    try {
       let serverBook = null;
       let bookId = null;
 
@@ -169,10 +186,14 @@ const FileUpload = ({ onUploadSuccess, onClose }) => {
     } catch (error) {
       console.error('업로드 처리 실패:', error);
       alert(`업로드 처리 중 오류가 발생했습니다: ${error.message}`);
+    } finally {
+      uploadingRef.current = false;
+      setUploading(false);
     }
   };
 
   const handleBack = () => {
+    if (uploadingRef.current) return;
     setStep('select');
     setSelectedFile(null);
     setMetadata({
@@ -270,6 +291,7 @@ const FileUpload = ({ onUploadSuccess, onClose }) => {
   };
 
   const handleOverlayClick = (e) => {
+    if (uploadingRef.current) return;
     if (e.target === e.currentTarget) {
       onClose();
     }
@@ -411,26 +433,29 @@ const FileUpload = ({ onUploadSuccess, onClose }) => {
       <div style={{ display: 'flex', gap: '12px', marginTop: '24px' }}>
         <button 
           onClick={handleBack}
+          disabled={uploading}
           style={{
             ...closeButtonStyle,
-            flex: 1
+            flex: 1,
+            opacity: uploading ? 0.6 : 1,
+            cursor: uploading ? 'not-allowed' : 'pointer'
           }}
         >
           뒤로
         </button>
         <button 
           onClick={handleUpload}
-          disabled={!metadata.title || !metadata.author || extractingMetadata}
+          disabled={!metadata.title || !metadata.author || extractingMetadata || uploading}
           style={{
             ...closeButtonStyle,
             flex: 1,
-            backgroundColor: (!metadata.title || !metadata.author || extractingMetadata) ? '#ccc' : '#5C6F5C',
+            backgroundColor: (!metadata.title || !metadata.author || extractingMetadata || uploading) ? '#ccc' : '#5C6F5C',
             color: 'white',
             border: 'none',
-            cursor: (!metadata.title || !metadata.author || extractingMetadata) ? 'not-allowed' : 'pointer'
+            cursor: (!metadata.title || !metadata.author || extractingMetadata || uploading) ? 'not-allowed' : 'pointer'
           }}
         >
-          {extractingMetadata ? '메타데이터 추출 중...' : '업로드'}
+          {uploading ? '업로드 중...' : extractingMetadata ? '메타데이터 추출 중...' : '업로드'}
         </button>
       </div>
     </div>
@@ -466,7 +491,8 @@ const FileUpload = ({ onUploadSuccess, onClose }) => {
 
 FileUpload.propTypes = {
   onUploadSuccess: PropTypes.func.isRequired,
-  onClose: PropTypes.func.isRequired
+  onClose: PropTypes.func.isRequired,
+  initialFile: PropTypes.instanceOf(File),
 };
 
 export default FileUpload;

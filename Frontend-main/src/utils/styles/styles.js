@@ -217,90 +217,71 @@ export const createButtonStyle = (animationValues, variant = 'default') => {
 
 /**
  * 통일된 버튼 hover 효과 핸들러
- * @param {string} variant - 버튼 variant
- * @returns {Object} hover 이벤트 핸들러 객체
  */
-export const createAdvancedButtonHandlers = (variant) => {
-  if (variant === 'primaryAdvanced') {
-    return {
-      onMouseOver: (e) => {
-        e.currentTarget.style.transform = 'translateY(-2px)';
-        e.currentTarget.style.boxShadow = `0 8px 20px ${COLORS.primary}59`;
-      },
-      onMouseOut: (e) => {
-        e.currentTarget.style.transform = 'translateY(0)';
-        e.currentTarget.style.boxShadow = `0 4px 12px ${COLORS.primary}40`;
-      }
-    };
-  }
-  
-  if (variant === 'primary') {
-    return {
-      onMouseEnter: (e) => {
-        e.target.style.background = COLORS.blueHover;
-        e.target.style.borderColor = COLORS.blueHover;
-      },
-      onMouseLeave: (e) => {
-        e.target.style.background = COLORS.blue;
-        e.target.style.borderColor = COLORS.blue;
-      }
-    };
-  }
-  
-  if (variant === 'secondary') {
-    return {
-      onMouseEnter: (e) => {
-        e.target.style.background = COLORS.grayHover;
-        e.target.style.borderColor = COLORS.grayHover;
-      },
-      onMouseLeave: (e) => {
-        e.target.style.background = COLORS.gray;
-        e.target.style.borderColor = COLORS.gray;
-      }
-    };
-  }
-  
-  if (variant === 'default') {
-    return {
-      onMouseEnter: (e) => {
-        e.target.style.background = COLORS.lightGray;
-        e.target.style.borderColor = COLORS.lightGrayBorder;
-      },
-      onMouseLeave: (e) => {
-        e.target.style.background = COLORS.white;
-        e.target.style.borderColor = COLORS.border;
-      }
-    };
-  }
-  
-  if (variant === 'close') {
-    return {
-      onMouseEnter: (e) => {
-        e.target.style.background = COLORS.lightGray;
-        e.target.style.borderColor = COLORS.lightGrayBorder;
-      },
-      onMouseLeave: (e) => {
-        e.target.style.background = COLORS.white;
-        e.target.style.borderColor = COLORS.border;
-      }
-    };
-  }
-  
-  if (variant === 'tooltipClose') {
-    return {
-      onMouseEnter: (e) => {
-        e.target.style.color = COLORS.primary;
-        e.target.style.backgroundColor = 'rgba(92, 111, 92, 0.1)';
-      },
-      onMouseLeave: (e) => {
-        e.target.style.color = COLORS.tooltipClose;
-        e.target.style.backgroundColor = 'transparent';
-      }
-    };
-  }
-  
-  return {};
+const ADVANCED_BUTTON_HANDLERS = {
+  primaryAdvanced: {
+    onMouseOver: (e) => {
+      e.currentTarget.style.transform = 'translateY(-2px)';
+      e.currentTarget.style.boxShadow = `0 8px 20px ${COLORS.primary}59`;
+    },
+    onMouseOut: (e) => {
+      e.currentTarget.style.transform = 'translateY(0)';
+      e.currentTarget.style.boxShadow = `0 4px 12px ${COLORS.primary}40`;
+    },
+  },
+  primary: {
+    onMouseEnter: (e) => {
+      e.target.style.background = COLORS.blueHover;
+      e.target.style.borderColor = COLORS.blueHover;
+    },
+    onMouseLeave: (e) => {
+      e.target.style.background = COLORS.blue;
+      e.target.style.borderColor = COLORS.blue;
+    },
+  },
+  secondary: {
+    onMouseEnter: (e) => {
+      e.target.style.background = COLORS.grayHover;
+      e.target.style.borderColor = COLORS.grayHover;
+    },
+    onMouseLeave: (e) => {
+      e.target.style.background = COLORS.gray;
+      e.target.style.borderColor = COLORS.gray;
+    },
+  },
+  default: {
+    onMouseEnter: (e) => {
+      e.target.style.background = COLORS.lightGray;
+      e.target.style.borderColor = COLORS.lightGrayBorder;
+    },
+    onMouseLeave: (e) => {
+      e.target.style.background = COLORS.white;
+      e.target.style.borderColor = COLORS.border;
+    },
+  },
+  close: {
+    onMouseEnter: (e) => {
+      e.target.style.background = COLORS.lightGray;
+      e.target.style.borderColor = COLORS.lightGrayBorder;
+    },
+    onMouseLeave: (e) => {
+      e.target.style.background = COLORS.white;
+      e.target.style.borderColor = COLORS.border;
+    },
+  },
+  tooltipClose: {
+    onMouseEnter: (e) => {
+      e.target.style.color = COLORS.primary;
+      e.target.style.backgroundColor = 'rgba(92, 111, 92, 0.1)';
+    },
+    onMouseLeave: (e) => {
+      e.target.style.color = COLORS.tooltipClose;
+      e.target.style.backgroundColor = 'transparent';
+    },
+  },
 };
+
+export const createAdvancedButtonHandlers = (variant) => ADVANCED_BUTTON_HANDLERS[variant] ?? {};
 
 /**
  * 조건부 애니메이션 생성 함수
@@ -462,11 +443,10 @@ export const sidebarStyles = {
   },
 };
 
-// 상단바 공통 스타일
 export const topBarStyles = {
   container: {
     width: '100%',
-    background: '#fff',
+    background: COLORS.background,
     boxShadow: '0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.04)',
     zIndex: 1000,
     display: 'flex',
@@ -509,9 +489,9 @@ export const topBarStyles = {
     height: 40,
     padding: '0 16px',
     borderRadius: 8,
-    border: '1.5px solid #e3e6ef',
-    background: '#fff',
-    color: '#5C6F5C',
+    border: `1.5px solid ${COLORS.borderLight}`,
+    background: COLORS.background,
+    color: COLORS.textPrimary,
     fontSize: 14,
     fontWeight: 600,
     cursor: 'pointer',
@@ -525,12 +505,12 @@ export const topBarStyles = {
   title: {
     fontSize: 16,
     fontWeight: 600,
-    color: '#5C6F5C',
+    color: COLORS.textPrimary,
     margin: 0,
   },
   subtitle: {
     fontSize: 12,
-    color: '#6c757d',
+    color: COLORS.textSecondary,
     margin: 0,
     marginTop: 2,
   },
@@ -538,9 +518,9 @@ export const topBarStyles = {
     height: 40,
     width: 40,
     borderRadius: 8,
-    border: '1.5px solid #e3e6ef',
-    background: '#fff',
-    color: '#5C6F5C',
+    border: `1.5px solid ${COLORS.borderLight}`,
+    background: COLORS.background,
+    color: COLORS.textPrimary,
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -552,7 +532,6 @@ export const topBarStyles = {
   }),
 };
 
-// 로딩/에러 컨테이너 스타일
 export const containerStyles = {
   loading: {
     width: '100%',
@@ -561,7 +540,7 @@ export const containerStyles = {
     alignItems: 'center',
     justifyContent: 'center',
     fontSize: 20,
-    color: '#5C6F5C',
+    color: COLORS.textPrimary,
   },
   error: {
     width: '100%',
@@ -570,14 +549,14 @@ export const containerStyles = {
     alignItems: 'center',
     justifyContent: 'center',
     fontSize: 16,
-    color: '#ef4444',
+    color: COLORS.error,
     textAlign: 'center',
     padding: '20px',
   },
   controlsContainer: {
     padding: '8px 16px',
-    background: '#f8f9fc',
-    borderBottom: '1px solid #e5e7eb',
+    background: COLORS.backgroundLight,
+    borderBottom: `1px solid ${COLORS.border}`,
   },
 };
 

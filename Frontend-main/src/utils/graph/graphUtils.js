@@ -4,33 +4,20 @@ import {
   resolveLastEventIdxForFineGraph,
   getLastFineGraphEventIdxFromChapterData,
 } from '../common/cache/manifestCache.js';
+import {
+  toPositiveNumberOrNull,
+} from '../common/valueUtils';
 
 const API_PREFIX = 'api:';
-
-export const toFiniteNumber = (value) => {
-  if (value === undefined || value === null) return NaN;
-  const converted = typeof value === 'number' ? value : Number(value);
-  return Number.isFinite(converted) ? converted : NaN;
-};
-
-export const toPositiveNumber = (value) => {
-  const parsed = toFiniteNumber(value);
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
-};
-
-export const toPositiveInt = (value, fallback = null) => {
-  const parsed = toFiniteNumber(value);
-  return Number.isFinite(parsed) && parsed >= 1 ? Math.trunc(parsed) : fallback;
-};
 
 export const extractApiBookId = (folderKeyOrFilename) => {
   if (!folderKeyOrFilename) return null;
   if (typeof folderKeyOrFilename === 'number') {
-    return toPositiveNumber(folderKeyOrFilename);
+    return toPositiveNumberOrNull(folderKeyOrFilename);
   }
   const key = String(folderKeyOrFilename).trim();
   if (!key) return null;
-  return toPositiveNumber(key.startsWith(API_PREFIX) ? key.slice(API_PREFIX.length) : key);
+  return toPositiveNumberOrNull(key.startsWith(API_PREFIX) ? key.slice(API_PREFIX.length) : key);
 };
 
 export const toApiFolderKey = (folderKeyOrFilename) => {
@@ -45,6 +32,13 @@ export const isGraphEdgeElement = (element) =>
 
 export const isGraphNodeElement = (element) =>
   Boolean(element?.data && element.data.id !== undefined && !isGraphEdgeElement(element));
+
+/** 무방향 노드 쌍 키 (순서 무관) */
+export function undirectedPairKey(s, t) {
+  const a = String(s);
+  const b = String(t);
+  return a < b ? `${a}\x1e${b}` : `${b}\x1e${a}`;
+}
 
 export const sortElementsByDataId = (elements) => {
   if (!Array.isArray(elements)) return [];
@@ -64,21 +58,6 @@ export const uniqueStrings = (values, { caseInsensitive = false } = {}) => {
     result.push(str);
   }
   return result;
-};
-
-export const getEventIndexFromObject = (value, fields = []) => {
-  if (!value || typeof value !== 'object') return NaN;
-  const nested = value.event && typeof value.event === 'object' ? value.event : null;
-  const defaultFields = ['eventNum', 'eventIdx', 'resolvedEventIdx', 'idx', 'event_id', 'event_idx'];
-  for (const field of [...fields, ...defaultFields]) {
-    const direct = toFiniteNumber(value[field]);
-    if (Number.isFinite(direct)) return direct;
-    if (nested) {
-      const nestedValue = toFiniteNumber(nested[field]);
-      if (Number.isFinite(nestedValue)) return nestedValue;
-    }
-  }
-  return NaN;
 };
 
 const GRAPH_CONTAINER_SELECTOR = '.graph-canvas-area';
@@ -127,13 +106,6 @@ const parseJsonSafely = (value) => {
   } catch {
     return value;
   }
-};
-
-const resetMouseState = (refs) => {
-  if (refs.isMouseDownRef) refs.isMouseDownRef.current = false;
-  if (refs.mouseDownTimeRef) refs.mouseDownTimeRef.current = 0;
-  if (refs.hasMovedRef) refs.hasMovedRef.current = false;
-  if (refs.isDraggingRef) refs.isDraggingRef.current = false;
 };
 
 export const getContainerInfo = () => {
@@ -280,7 +252,7 @@ export const constrainToViewport = (x, y, elementWidth = 0, elementHeight = 0) =
   }
 };
 
-export const invalidateCache = () => {
+const invalidateCache = () => {
   cache.container.data = null;
   cache.container.timestamp = 0;
   cache.viewport.data = null;
@@ -413,96 +385,25 @@ export const isGraphContainerSizeReady = (container) => {
   return w > 0 && h > 0;
 };
 
-export const createMouseEventHandlers = (_cy, _container) => {
-  const MOVE_THRESHOLD = 3;
-  
-  const isDraggingRef = { current: false };
-  const prevMouseDownPositionRef = { current: { x: 0, y: 0 } };
-  const mouseDownTimeRef = { current: 0 };
-  const hasMovedRef = { current: false };
-  const isMouseDownRef = { current: false };
-  
-  const handleMouseDown = (evt) => {
-    if (evt.target !== evt.currentTarget) return;
-    
-    isMouseDownRef.current = true;
-    mouseDownTimeRef.current = Date.now();
-    prevMouseDownPositionRef.current = { x: evt.clientX, y: evt.clientY };
-    hasMovedRef.current = false;
-    isDraggingRef.current = false;
-  };
-  
-  const handleMouseMove = (evt) => {
-    if (!isMouseDownRef.current) return;
-    
-    const deltaX = Math.abs(evt.clientX - prevMouseDownPositionRef.current.x);
-    const deltaY = Math.abs(evt.clientY - prevMouseDownPositionRef.current.y);
-    
-    if (deltaX > MOVE_THRESHOLD || deltaY > MOVE_THRESHOLD) {
-      hasMovedRef.current = true;
-      isDraggingRef.current = true;
-    }
-  };
-  
-  const handleMouseUp = (_evt) => {
-    if (!isMouseDownRef.current) return;
-    
-    if (isDraggingRef.current) {
-      resetMouseState({
-        isMouseDownRef,
-        mouseDownTimeRef,
-        hasMovedRef,
-        isDraggingRef
-      });
-      return;
-    }
-    
-    resetMouseState({
-      isMouseDownRef,
-      mouseDownTimeRef,
-      hasMovedRef,
-      isDraggingRef
-    });
-  };
-  
-  const cleanup = () => {
-    resetMouseState({
-      isMouseDownRef,
-      mouseDownTimeRef,
-      hasMovedRef,
-      isDraggingRef
-    });
-    prevMouseDownPositionRef.current = { x: 0, y: 0 };
-  };
-  
-  return {
-    handleMouseDown,
-    handleMouseMove,
-    handleMouseUp,
-    isDraggingRef,
-    isMouseDownRef,
-    cleanup
-  };
-};
-
 export const processTooltipData = (tooltipData, type) => {
   if (!tooltipData) return null;
   
   try {
     if (type === 'node') {
-      const nodeData = tooltipData;
-      
-      const names = parseJsonSafely(nodeData.names);
-      
+      const nodeFields = tooltipData.data ?? tooltipData;
+
+      const names = parseJsonSafely(nodeFields.names);
+
       return {
         ...tooltipData,
-        names: names,
-        isMainCharacter: !!nodeData.isMainCharacter,
-        common_name: nodeData.common_name || nodeData.name || nodeData.label,
-        description: nodeData.description || '',
-        personalityText: nodeData.personalityText || '',
-        image: nodeData.image || '',
-        weight: nodeData.weight || 1
+        ...nodeFields,
+        names,
+        isMainCharacter: !!nodeFields.isMainCharacter,
+        common_name: nodeFields.common_name || nodeFields.name || nodeFields.label,
+        description: nodeFields.description || '',
+        personalityText: nodeFields.personalityText || '',
+        image: nodeFields.image || '',
+        weight: nodeFields.weight || 1,
       };
       
     } else if (type === 'edge') {
@@ -534,6 +435,44 @@ export const processTooltipData = (tooltipData, type) => {
     return tooltipData;
   }
 };
+
+function resolveTooltipCoords(mouseX, mouseY, center) {
+  return {
+    x: mouseX ?? center?.x ?? 0,
+    y: mouseY ?? center?.y ?? 0,
+  };
+}
+
+/** 탭 이벤트 → 툴팁용 payload */
+export function buildTooltipPayload(tapPayload, type) {
+  const isNode = type === 'node';
+  const element = isNode ? tapPayload.node : tapPayload.edge;
+  const center = isNode ? tapPayload.nodeCenter : tapPayload.edgeCenter;
+  const { x, y } = resolveTooltipCoords(tapPayload.mouseX, tapPayload.mouseY, center);
+  const data = element.data();
+
+  return {
+    type,
+    id: element.id(),
+    x,
+    y,
+    data,
+    ...(isNode
+      ? { nodeCenter: center }
+      : {
+          sourceNode: element.source(),
+          targetNode: element.target(),
+          edgeCenter: center,
+        }),
+  };
+}
+
+export function createTooltipTapHandlers(onTap) {
+  return {
+    onShowNodeTooltip: (tapPayload) => onTap(tapPayload, 'node'),
+    onShowEdgeTooltip: (tapPayload) => onTap(tapPayload, 'edge'),
+  };
+}
 
 /** 챕터 마지막 이벤트 인덱스 (manifest 힌트, UI·범위용) */
 export const calculateLastEventForChapter = ({
@@ -581,38 +520,6 @@ export const isSidebarElement = (event) => {
   return sidebarElement && sidebarElement.contains(event.target);
 };
 
-export const isDragEndEvent = (event) => {
-  return event.detail && event.detail.type === 'dragend';
-};
-
-export const sortElementsById = (elements) => {
-  return sortElementsByDataId(elements);
-};
-
-export const calculateNodeCount = (elements, filterStage, filteredMainCharacters) => {
-  if (filterStage > 0) {
-    return filteredMainCharacters.filter(isGraphNodeElement).length;
-  }
-  return elements.filter(isGraphNodeElement).length;
-};
-
-export const calculateRelationCount = (elements, filterStage, filteredMainCharacters, eventUtils) => {
-  if (filterStage > 0) {
-    return eventUtils.filterEdges(filteredMainCharacters).length;
-  }
-  return eventUtils.filterEdges(elements).length;
-};
-
-export const determineFinalElements = (isSearchActive, filteredElements, sortedElements, filterStage, filteredMainCharacters) => {
-  if (isSearchActive && filteredElements && filteredElements.length > 0) {
-    return filteredElements;
-  }
-  if (filterStage > 0) {
-    return filteredMainCharacters;
-  }
-  return sortedElements;
-};
-
 /** reciprocalPair 간선 쌍의 junction 오프셋(_rjOx/_rjOy) 동기화 */
 export function syncReciprocalPairJunctionOffsets(cy) {
   if (!cy || typeof cy.edges !== 'function') return;
@@ -626,9 +533,9 @@ export function syncReciprocalPairJunctionOffsets(cy) {
 
   const pairMap = new Map();
   edges.forEach((e) => {
-    const sid = String(e.data('source'));
-    const tid = String(e.data('target'));
-    const key = sid < tid ? `${sid}\t${tid}` : `${tid}\t${sid}`;
+    const sid = e.data('source');
+    const tid = e.data('target');
+    const key = undirectedPairKey(sid, tid);
     if (!pairMap.has(key)) pairMap.set(key, []);
     pairMap.get(key).push(e);
   });
@@ -751,5 +658,5 @@ export function calculateSpiralPlacement(newNodes, placedPositions, containerWid
 export function getContainerDimensions(container) {
   const width = container?.clientWidth || 800;
   const height = container?.clientHeight || 600;
-  return { width, height, maxRadius: Math.min(width, height) / 2 - PLACEMENT_PADDING };
+  return { width, height };
 }

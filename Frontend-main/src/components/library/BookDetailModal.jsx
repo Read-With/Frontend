@@ -14,7 +14,7 @@ import {
   stripRedundantBookTitlePrefix,
 } from '../../utils/viewer/chapterTitleDisplay';
 import AuthenticatedImage from './AuthenticatedImage';
-import { getServerBookId } from '../../utils/viewer/viewerUtils';
+import { resolveServerBookId } from '../../utils/viewer/viewerCoreStateUtils';
 import { USER_VIEWER_PREFIX } from '../../utils/navigation/viewerPaths';
 import { toast } from 'react-toastify';
 import './BookDetailModal.css';
@@ -56,7 +56,7 @@ const BookDetailModal = memo(({ book, isOpen, onClose, onDelete }) => {
     };
   }, [bookDetails?.characters]);
 
-  const serverBookId = getServerBookId(book);
+  const serverBookId = resolveServerBookId(book);
   const bookIdStr = serverBookId != null ? String(serverBookId) : null;
 
   const progressLocator = useMemo(() => {
@@ -79,7 +79,7 @@ const BookDetailModal = memo(({ book, isOpen, onClose, onDelete }) => {
   })();
 
   const fetchProgressInfo = useCallback(async () => {
-    const serverBookId = getServerBookId(book);
+    const serverBookId = resolveServerBookId(book);
     
     if (!serverBookId) {
       setProgressInfo(null);
@@ -103,7 +103,7 @@ const BookDetailModal = memo(({ book, isOpen, onClose, onDelete }) => {
   }, [book]);
 
   const fetchBookDetails = useCallback(async () => {
-    const serverBookId = getServerBookId(book);
+    const serverBookId = resolveServerBookId(book);
     
     if (!serverBookId) {
       setBookDetails(book);
@@ -216,7 +216,7 @@ const BookDetailModal = memo(({ book, isOpen, onClose, onDelete }) => {
   }, [isOpen]);
 
   const getBookIdentifier = useCallback(() => {
-    const id = book?.id ?? getServerBookId(book);
+    const id = book?.id ?? resolveServerBookId(book);
     return id != null ? String(id) : '';
   }, [book]);
 
@@ -267,7 +267,7 @@ const BookDetailModal = memo(({ book, isOpen, onClose, onDelete }) => {
   });
 
   const handleDeleteProgress = useCallback(async () => {
-    const serverBookId = getServerBookId(book);
+    const serverBookId = resolveServerBookId(book);
     
     if (!serverBookId || !progressInfo) {
       return;

@@ -1,6 +1,25 @@
+export const MANIFEST_CACHE_PREFIX = 'manifest_cache_v2_';
+export const MANIFEST_TTL_MS = 15 * 60 * 1000;
+
+export const PROGRESS_CACHE_KEY = 'readwith_progress_cache';
+export const PROGRESS_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+
+export const GRAPH_BOOK_CACHE_PREFIX = 'graph_cache_';
+export const CHAPTER_EVENT_CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+
+export const READER_PROGRESS_CACHE_PREFIX = 'reader_progress_';
+export const READER_PROGRESS_MAX_AGE_MS = 3 * 24 * 60 * 60 * 1000;
+
+export const CHAPTER_GRAPH_CACHE_SOURCE = Object.freeze({
+  API: 'api',
+  EMPTY: 'empty',
+  INVALID: 'invalid',
+  RUNTIME: 'runtime',
+});
+
 const cacheRegistry = new Map();
 
-export function getStorage(storageType = 'localStorage') {
+function getStorage(storageType = 'localStorage') {
   if (typeof window === 'undefined') return null;
   return storageType === 'sessionStorage' ? sessionStorage : localStorage;
 }
@@ -105,6 +124,38 @@ export function removeFromStorage(storageKey, storageType = 'localStorage') {
   } catch (error) {
     console.error(`스토리지 삭제 실패 (${storageKey}):`, error);
   }
+}
+
+/** timestamp 기반 TTL 검사 후 만료 시 스토리지 항목 제거 */
+export function loadTtlStorage(storageKey, maxAgeMs, storageType = 'localStorage') {
+  const data = loadFromStorage(storageKey, storageType);
+  if (!data) return null;
+
+  const age = Date.now() - (data.timestamp || 0);
+  if (maxAgeMs > 0 && age > maxAgeMs) {
+    removeFromStorage(storageKey, storageType);
+    return null;
+  }
+
+  return data;
+}
+
+/** timestamp를 보장하며 스토리지에 저장 */
+export function saveTtlStorage(storageKey, data, storageType = 'localStorage') {
+  const payload = {
+    ...data,
+    timestamp: data?.timestamp ?? Date.now(),
+  };
+  saveToStorage(storageKey, payload, storageType);
+  return payload;
+}
+
+/** 메모리 캐시 미스 시 스토리지에서 로드해 캐시에 적재 */
+export function hydrateCacheFromStorage(cacheName, storageKey, storageType = 'localStorage') {
+  const stored = loadFromStorage(storageKey, storageType);
+  if (!stored) return null;
+  setCacheItem(cacheName, storageKey, stored);
+  return stored;
 }
 
 export function getRawFromStorage(storageKey, storageType = 'localStorage') {
@@ -269,16 +320,6 @@ export function clearCache(name) {
     cacheInfo.accessCount = 0;
   } catch (error) {
     console.error(`캐시 정리 실패 (${name}):`, error);
-  }
-}
-
-export function clearAllCaches() {
-  try {
-    for (const [name] of cacheRegistry) {
-      clearCache(name);
-    }
-  } catch (error) {
-    console.error('모든 캐시 정리 실패:', error);
   }
 }
 
@@ -466,9 +507,5 @@ export const storageUtils = {
     const jsonValue = JSON.stringify(value);
     setRawToStorage(key, jsonValue, 'localStorage');
     setCachedValue(key, value, true);
-  },
-
-  clearCache: () => {
-    clearCache('storageCache');
   },
 };

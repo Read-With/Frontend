@@ -1,14 +1,15 @@
 import React, { useCallback, useMemo, memo } from 'react';
 import GraphControls, { EdgeLabelToggle } from '../graph/GraphControls';
 import { getChapterData, getManifestFromCache } from '../../utils/common/cache/manifestCache';
+import { resolveChapterIndex } from '../../utils/common/valueUtils';
 import {
   formatChapterOrderAndName,
   stripRedundantBookTitlePrefix,
 } from '../../utils/viewer/chapterTitleDisplay';
-import { GRAPH_CHARACTER_FILTER_STAGE_OPTIONS } from '../graph/graphConstants';
+import { GRAPH_CHARACTER_FILTER_STAGE_OPTIONS } from '../graph/graphShared';
 import {
-  resolveViewerDisplayEventNum,
-} from '../../utils/viewer/viewerEventUtils';
+  resolveEventOrdinalForDisplay,
+} from '../../utils/viewer/viewerEventProgressUtils';
 
 const LOADING_STYLE = {
   display: "inline-block",
@@ -71,7 +72,7 @@ const ViewerTopBar = memo(function ViewerTopBar({
   searchActions,
 }) {
 
-  const { book, progress: viewerProgress } = viewerState;
+  const { book } = viewerState;
   
   const {
     currentChapter,
@@ -80,7 +81,14 @@ const ViewerTopBar = memo(function ViewerTopBar({
     graphFullScreen,
     edgeLabelVisible,
     progressTopBar,
+    progressMetricsReady = true,
   } = graphState;
+
+  const isProgressPending =
+    Boolean(book?.id) &&
+    !progressMetricsReady &&
+    (progressTopBar?.readingProgressPercent == null ||
+      !Number.isFinite(Number(progressTopBar?.readingProgressPercent)));
   
   const {
     setEdgeLabelVisible,
@@ -102,7 +110,8 @@ const ViewerTopBar = memo(function ViewerTopBar({
     clearSearch,
     closeSuggestions,
     onGenerateSuggestions,
-    handleKeyDown
+    handleKeyDown,
+    onSelectedIndexChange,
   } = searchActions;
 
   const bookId = useMemo(() => {
@@ -121,7 +130,7 @@ const ViewerTopBar = memo(function ViewerTopBar({
   const resolvedServerChapter = useMemo(() => {
     const serverChapter = getChapterData(bookId, currentChapter);
     if (serverChapter) {
-      return Number(serverChapter.chapterIdx ?? serverChapter.idx ?? currentChapter);
+      return resolveChapterIndex(serverChapter) ?? Number(currentChapter);
     }
     return Number(currentChapter) || 1;
   }, [bookId, currentChapter]);
@@ -140,21 +149,13 @@ const ViewerTopBar = memo(function ViewerTopBar({
   }, [bookId, resolvedServerChapter]);
 
   const currentProgressWidth = useMemo(() => {
-    if (progressTopBar === undefined) return "0%";
-    const cp = progressTopBar.chapterProgress;
-    if (cp != null && Number.isFinite(cp)) {
-      return `${Math.min(100, Math.max(0, Math.round(cp * 100) / 100))}%`;
-    }
+    if (progressTopBar === undefined || isProgressPending) return "0%";
     const rp = progressTopBar.readingProgressPercent;
     if (rp != null && Number.isFinite(rp)) {
       return `${Math.min(100, Math.max(0, Math.round(rp * 100) / 100))}%`;
     }
-    const vp = Number(viewerProgress);
-    if (Number.isFinite(vp)) {
-      return `${Math.min(100, Math.max(0, Math.round(vp * 100) / 100))}%`;
-    }
     return "0%";
-  }, [progressTopBar, viewerProgress]);
+  }, [progressTopBar, isProgressPending]);
 
   const handleGenerateSuggestions = useCallback((searchTerm) => {
     if (onGenerateSuggestions) {
@@ -163,10 +164,10 @@ const ViewerTopBar = memo(function ViewerTopBar({
   }, [onGenerateSuggestions]);
 
   const ChapterEventInfo = useMemo(() => {
-    if (progressTopBar === undefined && bookId) {
+    if ((progressTopBar === undefined || isProgressPending) && bookId) {
       return (
         <span style={LOADING_STYLE}>
-          로딩중...
+          계산중...
         </span>
       );
     }
@@ -177,7 +178,7 @@ const ViewerTopBar = memo(function ViewerTopBar({
       readingProgressPercent: null,
     };
 
-    const eventNum = resolveViewerDisplayEventNum({
+    const eventNum = resolveEventOrdinalForDisplay({
       currentEvent,
       prevValidEvent,
       currentChapter: resolvedServerChapter,
@@ -224,6 +225,7 @@ const ViewerTopBar = memo(function ViewerTopBar({
     currentEvent,
     prevValidEvent,
     resolvedServerChapter,
+    isProgressPending,
   ]);
 
   const renderGraphControls = useCallback(() => (
@@ -237,9 +239,10 @@ const ViewerTopBar = memo(function ViewerTopBar({
       suggestions={suggestions}
       showSuggestions={showSuggestions}
       selectedIndex={selectedIndex}
+      onSelectedIndexChange={onSelectedIndexChange}
       onKeyDown={handleKeyDown}
     />
-  ), [onSearchSubmit, handleGenerateSuggestions, searchTerm, isSearchActive, clearSearch, closeSuggestions, suggestions, showSuggestions, selectedIndex, handleKeyDown]);
+  ), [onSearchSubmit, handleGenerateSuggestions, searchTerm, isSearchActive, clearSearch, closeSuggestions, suggestions, showSuggestions, selectedIndex, onSelectedIndexChange, handleKeyDown]);
 
   const renderToggleButtons = () => (
     <div

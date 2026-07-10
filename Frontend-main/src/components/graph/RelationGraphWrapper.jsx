@@ -9,37 +9,47 @@ import "./RelationGraph.css";
 
 import { createGraphStylesheet, getEdgeStyle, getWideLayout } from "../../utils/styles/graphStyles";
 import { COLORS, ANIMATION_VALUES, createButtonStyle, createAdvancedButtonHandlers } from "../../utils/styles/styles.js";
-import { GRAPH_LAYOUT_CONSTANTS } from './graphConstants.js';
+import {
+  GRAPH_LAYOUT_CONSTANTS,
+  resolveChapterSidebarWidth,
+  resolveChapterDisplayTitle as resolveSharedChapterDisplayTitle,
+} from './graphShared';
 import { errorUtils } from '../../utils/common/errorUtils';
 import {
   useGraphSearch,
   useGraphState,
   useGraphElementPipeline,
-} from '../../hooks/graph/graphViewHooks';
-import { applySearchFadeEffect } from '../../utils/graph/searchUtils.jsx';
-import { useGraphDataLoader } from '../../hooks/graph/useGraphDataLoader';
+} from '../../hooks/graph/useGraphViewHooks';
 import { useApiGraphData } from '../../hooks/graph/useApiGraphData';
 import { useLocalStorageNumber } from '../../hooks/common/useLocalStorage.js';
+import { resolveServerBookIdOrFallback } from '../../hooks/common/hooksShared';
 import { convertRelationsToElements } from '../../utils/graph/graphDataUtils';
-import { createCharacterMaps, buildNodeWeights } from '../../utils/graph/characterUtils';
-import { resolveGraphElementsProfileImages } from '../../utils/common/artifactUrlUtils';
+import { createCharacterMaps, buildNodeWeights, extractNodeWeightsFromElements } from '../../utils/graph/characterUtils';
+import { getGraphEventState } from '../../utils/common/cache/chapterEventCache';
+import { resolveGraphElementsProfileImages } from '../../utils/common/urlUtils';
 import {
-  processTooltipData,
   calculateLastEventForChapter,
-  isSidebarElement,
-  isDragEndEvent,
-  calculateNodeCount,
-  calculateRelationCount,
+  processTooltipData,
+  buildTooltipPayload,
+  createTooltipTapHandlers,
+  isGraphNodeElement,
 } from '../../utils/graph/graphUtils';
-import { eventUtils, graphDataTransformUtils, getServerBookId } from '../../utils/viewer/viewerUtils';
+import { eventUtils } from '../../utils/viewer/viewerCoreStateUtils';
+import {
+  convertFineGraphToElements,
+  hasFineGraphPayload,
+} from '../../utils/viewer/viewerGraphUtils';
 import { userViewerPath } from '../../utils/navigation/viewerPaths';
-import useGraphInteractions from "../../hooks/graph/useGraphInteractions";
-import { useChapterPovSummaries } from '../../hooks/viewer/useChapterPovSummaries';
+import {
+  useGraphOutsideDismiss,
+  isGraphDragEndEvent,
+  shouldIgnoreGraphPageOutsideClick,
+} from '../../hooks/graph/useGraphOutsideDismiss';
+import { useChapterPovSummaries } from '../../hooks/graph/useChapterPovSummaries';
 import {
   getChapterData,
-  isValidEvent,
+  findManifestEventInChapter,
 } from '../../utils/common/cache/manifestCache.js';
-import { stripRedundantBookTitlePrefix } from '../../utils/viewer/chapterTitleDisplay';
 
 const backButtonStyle = {
   height: 32,
@@ -69,7 +79,6 @@ const backButtonContainerStyle = {
   pointerEvents: 'auto',
 };
 
-const getEdgeStyleForGraph = () => getEdgeStyle('graph');
 const graphBackButtonHandlers = createAdvancedButtonHandlers('default');
 
 function ErrorToast({ error, onClose, duration = 5000 }) {
@@ -87,67 +96,21 @@ function ErrorToast({ error, onClose, duration = 5000 }) {
   const userFriendlyMessage = errorUtils.getUserFriendlyMessage(error);
 
   return (
-    <div
-      role="alert"
-      aria-live="assertive"
-      style={{
-        position: 'fixed',
-        top: '80px',
-        right: '24px',
-        zIndex: 10003,
-        background: 'rgba(220, 38, 38, 0.95)',
-        color: '#fff',
-        padding: '12px 16px',
-        borderRadius: '8px',
-        boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
-        minWidth: '300px',
-        maxWidth: '500px',
-        display: 'flex',
-        alignItems: 'flex-start',
-        gap: '12px',
-        animation: 'slideInRight 0.3s ease-out',
-      }}
-    >
-      <style>
-        {`
-          @keyframes slideInRight {
-            from { transform: translateX(100%); opacity: 0; }
-            to { transform: translateX(0); opacity: 1; }
-          }
-        `}
-      </style>
-      <span className="material-symbols-outlined" style={{ fontSize: '20px', flexShrink: 0 }}>
+    <div className="graph-error-toast" role="alert" aria-live="assertive">
+      <span className="material-symbols-outlined graph-error-toast__icon">
         error
       </span>
-      <div style={{ flex: 1 }}>
-        <div style={{ fontWeight: 600, marginBottom: '4px', fontSize: '14px' }}>
-          오류 발생
-        </div>
-        <div style={{ fontSize: '13px', lineHeight: '1.4', opacity: 0.95 }}>
-          {userFriendlyMessage}
-        </div>
+      <div className="graph-error-toast__body">
+        <div className="graph-error-toast__title">오류 발생</div>
+        <div className="graph-error-toast__message">{userFriendlyMessage}</div>
       </div>
       <button
+        type="button"
+        className="graph-error-toast__close"
         onClick={onClose}
-        style={{
-          background: 'transparent',
-          border: 'none',
-          color: '#fff',
-          cursor: 'pointer',
-          padding: '4px',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          opacity: 0.8,
-          transition: 'opacity 0.2s',
-        }}
-        onMouseEnter={(e) => { e.currentTarget.style.opacity = '1'; }}
-        onMouseLeave={(e) => { e.currentTarget.style.opacity = '0.8'; }}
         aria-label="오류 메시지 닫기"
       >
-        <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>
-          close
-        </span>
+        <span className="material-symbols-outlined">close</span>
       </button>
     </div>
   );
@@ -200,42 +163,36 @@ function RelationGraphWrapper() {
     appliedRequestedChapterRef.current = requestedChapterFromViewer;
   }, [requestedChapterFromViewer, currentChapter, setCurrentChapter]);
 
-  const serverBookId = useMemo(() => {
-    return getServerBookId(book) || bookId || null;
-  }, [book?.id, book?._bookId, bookId]);
+  const serverBookId = useMemo(
+    () => resolveServerBookIdOrFallback(book, bookId),
+    [book, bookId],
+  );
 
   const {
     isSidebarOpen,
     edgeLabelVisible,
     activeTooltip,
     isSidebarClosing,
-    forceClose,
     filterStage,
-    isDropdownSelection,
     setActiveTooltip,
-    setForceClose,
     setIsSidebarClosing,
     toggleSidebar,
     toggleEdgeLabel,
-    clearTooltip: _clearTooltip,
     startClosing,
     closeSidebar,
     setFilterStage,
-    setDropdownSelection,
   } = useGraphState();
 
   const {
     manifestData,
     manifestReady,
-    apiMacroData,
-    apiFineData,
+    apiBookGraphData,
     apiMaxChapter,
     userCurrentChapter,
     isGraphLoading,
-    apiFineLoading,
     apiError,
     clearError: clearApiError,
-  } = useApiGraphData(serverBookId, currentChapter, currentEvent, { macroOnly: true });
+  } = useApiGraphData(serverBookId, currentChapter);
 
   const { povSummaries } = useChapterPovSummaries(
     serverBookId,
@@ -243,12 +200,12 @@ function RelationGraphWrapper() {
   );
 
   const cyRef = useRef(null);
+  const graphClearRef = useRef(null);
   const selectedEdgeIdRef = useRef(null);
   const selectedNodeIdRef = useRef(null);
   const viewBeforeSelectionRef = useRef(null);
   const prevChapterNum = useRef(currentChapter);
   const prevEventNum = useRef();
-  const timeoutRef = useRef(null);
 
   const locationRef = useRef({
     state: location.state,
@@ -260,366 +217,6 @@ function RelationGraphWrapper() {
       pathname: location.pathname,
     };
   }, [location.state, location.pathname]);
-
-  const loaderBookKey = useMemo(() => serverBookId ?? bookId ?? null, [serverBookId, bookId]);
-
-  const loaderEventIdx = useMemo(() => {
-    return Number.isFinite(currentEvent) && currentEvent > 0 ? currentEvent : null;
-  }, [currentEvent]);
-
-  const {
-    currentChapterData,
-  } = useGraphDataLoader(loaderBookKey, currentChapter, loaderEventIdx);
-  const newNodeIds = useMemo(() => [], []);
-
-  const effectiveMaxChapter = apiMaxChapter;
-
-  const manifestBookTitleStr = useMemo(
-    () => String(manifestData?.book?.title ?? '').trim(),
-    [manifestData?.book?.title],
-  );
-
-  const resolveChapterDisplayTitle = useCallback(
-    (chapterNum) => {
-      if (serverBookId == null || !manifestData) return '';
-      const n = Number(chapterNum);
-      if (!Number.isFinite(n) || n < 1) return '';
-      const ch = getChapterData(serverBookId, n, manifestData);
-      const raw = String(ch?.title ?? '').trim();
-      if (!raw) return '';
-      const stripped = stripRedundantBookTitlePrefix(raw, manifestBookTitleStr).trim();
-      return stripped || raw;
-    },
-    [serverBookId, manifestData, manifestBookTitleStr],
-  );
-
-  const currentChapterTitle = useMemo(
-    () => resolveChapterDisplayTitle(currentChapter),
-    [resolveChapterDisplayTitle, currentChapter],
-  );
-
-  const userReadingChapterTitle = useMemo(() => {
-    if (userCurrentChapter == null) return '';
-    return resolveChapterDisplayTitle(userCurrentChapter);
-  }, [resolveChapterDisplayTitle, userCurrentChapter]);
-
-  useEffect(() => {
-    if (!manifestReady) return;
-    if (effectiveMaxChapter > 0 && currentChapter > effectiveMaxChapter) {
-      setCurrentChapter(effectiveMaxChapter);
-    }
-  }, [manifestReady, effectiveMaxChapter, currentChapter, setCurrentChapter]);
-
-  useEffect(() => {
-    if (serverBookId == null || !manifestReady) return;
-    const ch = Number(currentChapter);
-    if (!Number.isFinite(ch) || ch < 1) return;
-    if (isValidEvent(serverBookId, ch, currentEvent, manifestData)) return;
-    const chData = getChapterData(serverBookId, ch, manifestData);
-    const firstEv = Array.isArray(chData?.events) ? chData.events[0] : null;
-    const next = Number(firstEv?.eventNum ?? firstEv?.idx ?? 1);
-    if (!(next > 0) || next === currentEvent) return;
-    if (isValidEvent(serverBookId, ch, next, manifestData)) {
-      setCurrentEvent(next);
-    }
-  }, [serverBookId, manifestReady, manifestData, currentChapter, currentEvent]);
-
-  const graphApiPayload = useMemo(() => {
-    const fineChars = Array.isArray(apiFineData?.characters) ? apiFineData.characters : [];
-    const fineRels = Array.isArray(apiFineData?.relations) ? apiFineData.relations : [];
-    if (fineChars.length > 0 || fineRels.length > 0) {
-      return apiFineData;
-    }
-    return null;
-  }, [apiFineData]);
-
-  const apiElements = useMemo(() => {
-    if (!graphApiPayload) return [];
-
-    const fineChars = Array.isArray(graphApiPayload.characters) ? graphApiPayload.characters : [];
-    const fineRels = Array.isArray(graphApiPayload.relations) ? graphApiPayload.relations : [];
-    if (fineChars.length === 0 && fineRels.length === 0) {
-      return [];
-    }
-
-    try {
-      const { idToName, idToDesc, idToDescKo, idToMain, idToNames, idToProfileImage } = createCharacterMaps(fineChars);
-
-      const normalizedEvent = graphDataTransformUtils.normalizeApiEvent(graphApiPayload.event);
-      const nodeWeights = buildNodeWeights(fineChars);
-
-      const convertedElements = convertRelationsToElements(
-        fineRels,
-        idToName,
-        idToDesc,
-        idToDescKo,
-        idToMain,
-        idToNames,
-        'api',
-        Object.keys(nodeWeights).length > 0 ? nodeWeights : null,
-        null,
-        normalizedEvent,
-        idToProfileImage,
-        fineChars.length > 0 ? fineChars : null
-      );
-
-      return convertedElements;
-    } catch {
-      return [];
-    }
-  }, [graphApiPayload]);
-
-  const [elements, setElements] = useState([]);
-
-  useEffect(() => {
-    if (!apiElements.length) {
-      setElements([]);
-      return undefined;
-    }
-
-    let cancelled = false;
-    setElements(apiElements);
-
-    resolveGraphElementsProfileImages(apiElements).then((resolved) => {
-      if (!cancelled) setElements(resolved);
-    });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [apiElements]);
-
-  const {
-    searchTerm,
-    isSearchActive,
-    filteredElements,
-    fitNodeIds,
-    isResetFromSearch,
-    suggestions,
-    showSuggestions,
-    selectedIndex,
-    handleKeyDown,
-    closeSuggestions,
-    handleSearchSubmit,
-    clearSearch,
-    setSearchTerm,
-  } = useGraphSearch(elements, null, currentChapterData);
-
-  const handleGenerateSuggestions = useCallback((searchTerm) => {
-    setSearchTerm(searchTerm);
-  }, [setSearchTerm]);
-
-  const centerElementBetweenSidebars = useCallback((elementId) => {
-    const cy = cyRef.current;
-    if (!cy) return;
-
-    const element = cy.getElementById(elementId);
-    if (!element.length) return;
-
-    const { TOP_BAR_HEIGHT, TOOLTIP_SIDEBAR_WIDTH, SIDEBAR } = GRAPH_LAYOUT_CONSTANTS;
-    const chapterSidebarWidth = isSidebarOpen ? SIDEBAR.OPEN_WIDTH : SIDEBAR.CLOSED_WIDTH;
-    const availableGraphWidth = window.innerWidth - chapterSidebarWidth - TOOLTIP_SIDEBAR_WIDTH;
-    const availableGraphHeight = window.innerHeight - TOP_BAR_HEIGHT;
-
-    const leftOffset = availableGraphWidth * 0.14;
-    const centerX = chapterSidebarWidth + (availableGraphWidth / 2) - leftOffset;
-
-    const topOffset = availableGraphHeight * 0.06;
-    const centerY = TOP_BAR_HEIGHT + (availableGraphHeight / 2) - topOffset;
-
-    const elementPos = element.position();
-    const targetX = centerX - elementPos.x;
-    const targetY = centerY - elementPos.y;
-
-    cy.animate({
-      pan: { x: targetX, y: targetY },
-      duration: 500,
-      easing: 'ease-in'
-    });
-  }, [isSidebarOpen]);
-
-  const onShowNodeTooltip = useCallback(({ node, nodeCenter, mouseX, mouseY }) => {
-    setForceClose(false);
-    setIsSidebarClosing(false);
-    const cy = cyRef.current;
-    if (cy) viewBeforeSelectionRef.current = { pan: { ...cy.pan() }, zoom: cy.zoom() };
-    const nodeData = node.data();
-
-    const tooltipData = {
-      type: 'node',
-      id: node.id(),
-      x: mouseX,
-      y: mouseY,
-      data: nodeData,
-      nodeCenter
-    };
-
-    const processedTooltipData = processTooltipData(tooltipData, 'node');
-    setActiveTooltip(processedTooltipData);
-    centerElementBetweenSidebars(node.id(), 'node');
-  }, [setForceClose, setIsSidebarClosing, setActiveTooltip, centerElementBetweenSidebars]);
-
-  const onShowEdgeTooltip = useCallback(({ edge, edgeCenter, mouseX, mouseY }) => {
-    setForceClose(false);
-    setIsSidebarClosing(false);
-    const cy = cyRef.current;
-    if (cy) viewBeforeSelectionRef.current = { pan: { ...cy.pan() }, zoom: cy.zoom() };
-    const edgeData = edge.data();
-
-    const finalX = mouseX !== undefined ? mouseX : edgeCenter?.x || 0;
-    const finalY = mouseY !== undefined ? mouseY : edgeCenter?.y || 0;
-
-    const tooltipData = {
-      type: 'edge',
-      id: edge.id(),
-      x: finalX,
-      y: finalY,
-      data: edgeData,
-      sourceNode: edge.source(),
-      targetNode: edge.target(),
-      edgeCenter,
-    };
-
-    const processedTooltipData = processTooltipData(tooltipData, 'edge');
-
-    setActiveTooltip(processedTooltipData);
-
-    centerElementBetweenSidebars(edge.id());
-  }, [setForceClose, setIsSidebarClosing, setActiveTooltip, centerElementBetweenSidebars]);
-
-  const onClearTooltip = useCallback(() => {
-    closeSidebar();
-    const stored = viewBeforeSelectionRef.current;
-    const cy = cyRef.current;
-    if (stored && cy) {
-      viewBeforeSelectionRef.current = null;
-      cy.animate({
-        pan: stored.pan,
-        zoom: stored.zoom,
-      }, { duration: 500, easing: 'ease-in' });
-    }
-  }, [closeSidebar]);
-
-  const handleStartClosing = startClosing;
-
-  const {
-    clearAll,
-  } = useGraphInteractions({
-    cyRef,
-    onShowNodeTooltip,
-    onShowEdgeTooltip,
-    onClearTooltip,
-    selectedNodeIdRef,
-    selectedEdgeIdRef,
-    strictBackgroundClear: true,
-  });
-
-  const handleClearGraph = useCallback(() => {
-    clearAll();
-  }, [clearAll]);
-
-  useEffect(() => {
-    if (prevChapterNum.current !== undefined && prevChapterNum.current !== currentChapter) {
-      if (isSearchActive) {
-        clearSearch();
-      }
-      clearAll();
-    }
-    prevChapterNum.current = currentChapter;
-    prevEventNum.current = currentEvent;
-  }, [currentChapter, currentEvent, isSearchActive, clearSearch, clearAll]);
-
-  useEffect(() => {
-    if (prevEventNum.current !== undefined && prevEventNum.current !== currentEvent) {
-      clearAll();
-    }
-  }, [currentEvent, clearAll]);
-
-  const { filteredMainCharacters, finalElements } = useGraphElementPipeline({
-    elements,
-    filterStage,
-    isSearchActive,
-    filteredElements,
-  });
-
-  const nodeCount = useMemo(() => {
-    return calculateNodeCount(elements, filterStage, filteredMainCharacters);
-  }, [filterStage, filteredMainCharacters, elements]);
-
-  const relationCount = useMemo(() => {
-    return calculateRelationCount(elements, filterStage, filteredMainCharacters, eventUtils);
-  }, [filterStage, filteredMainCharacters, elements]);
-
-  const edgeStyle = getEdgeStyleForGraph();
-  const stylesheet = useMemo(
-    () => createGraphStylesheet(edgeStyle, edgeLabelVisible),
-    [edgeStyle, edgeLabelVisible]
-  );
-  const layout = useMemo(() => getWideLayout(), []);
-
-  useEffect(() => {
-    if (activeTooltip && cyRef.current && !isSidebarClosing) {
-      const elementId = activeTooltip.id;
-
-      const animationDuration = 700;
-      const timeoutId = setTimeout(() => {
-        centerElementBetweenSidebars(elementId);
-      }, animationDuration + 100);
-
-      return () => {
-        clearTimeout(timeoutId);
-      };
-    }
-  }, [activeTooltip, isSidebarOpen, isSidebarClosing, centerElementBetweenSidebars]);
-
-  const handleChapterSelect = useCallback((chapter) => {
-    if (chapter !== currentChapter) {
-      setDropdownSelection(true);
-      clearAll();
-      setCurrentChapter(chapter);
-
-      const lastEventNum = calculateLastEventForChapter({
-        manifestChapters: manifestData?.chapters,
-        manifestBookId: serverBookId,
-        chapter,
-      });
-
-      const normalizedLastEventNum = Number.isFinite(Number(lastEventNum)) && Number(lastEventNum) >= 1
-        ? Number(lastEventNum)
-        : 1;
-      setCurrentEvent(normalizedLastEventNum);
-    }
-  }, [
-    currentChapter,
-    setCurrentChapter,
-    manifestData?.chapters,
-    serverBookId,
-    clearAll,
-    setDropdownSelection,
-    setCurrentEvent,
-  ]);
-
-  useEffect(() => {
-    if (isDropdownSelection) {
-      const timeoutId = setTimeout(() => {
-        setDropdownSelection(false);
-      }, 100);
-
-      return () => {
-        clearTimeout(timeoutId);
-      };
-    }
-  }, [isDropdownSelection, setDropdownSelection]);
-
-  const triggerForceClose = useCallback(() => {
-    if (timeoutRef.current) {
-      clearTimeout(timeoutRef.current);
-    }
-    timeoutRef.current = setTimeout(() => {
-      setForceClose(true);
-      timeoutRef.current = null;
-    }, 100);
-  }, [setForceClose]);
 
   const handleBackToViewer = useCallback(() => {
     const { state, pathname } = locationRef.current;
@@ -646,84 +243,300 @@ function RelationGraphWrapper() {
     });
   }, [navigate, filename, book, serverBookId]);
 
-  const reapplySearchFadeIfActive = useCallback(() => {
-    if (isSearchActive && filteredElements?.length > 0 && cyRef.current) {
-      applySearchFadeEffect(cyRef.current, filteredElements, isSearchActive);
+  const currentChapterData = useMemo(
+    () => ({
+      characters: Array.isArray(apiBookGraphData?.characters)
+        ? apiBookGraphData.characters
+        : [],
+    }),
+    [apiBookGraphData],
+  );
+
+  const manifestBookTitleStr = useMemo(
+    () => String(manifestData?.book?.title ?? '').trim(),
+    [manifestData?.book?.title],
+  );
+
+  const resolveChapterDisplayTitle = useCallback(
+    (chapterNum) =>
+      resolveSharedChapterDisplayTitle(
+        serverBookId,
+        chapterNum,
+        manifestBookTitleStr,
+        manifestData,
+      ),
+    [serverBookId, manifestData, manifestBookTitleStr],
+  );
+
+  const currentChapterTitle = useMemo(
+    () => resolveChapterDisplayTitle(currentChapter),
+    [resolveChapterDisplayTitle, currentChapter],
+  );
+
+  const userReadingChapterTitle = useMemo(() => {
+    if (userCurrentChapter == null) return '';
+    return resolveChapterDisplayTitle(userCurrentChapter);
+  }, [resolveChapterDisplayTitle, userCurrentChapter]);
+
+  useEffect(() => {
+    if (!manifestReady) return;
+    if (apiMaxChapter > 0 && currentChapter > apiMaxChapter) {
+      setCurrentChapter(apiMaxChapter);
     }
-  }, [isSearchActive, filteredElements, cyRef]);
+  }, [manifestReady, apiMaxChapter, currentChapter, setCurrentChapter]);
 
-  const handleGlobalClick = useCallback((e) => {
-    if (!activeTooltip || isSidebarClosing) return;
-    if (isDragEndEvent(e)) return;
-    if (isSidebarElement(e)) return;
+  useEffect(() => {
+    if (serverBookId == null || !manifestReady) return;
+    const ch = Number(currentChapter);
+    if (!Number.isFinite(ch) || ch < 1) return;
+    if (findManifestEventInChapter(serverBookId, ch, { eventIdx: currentEvent }, manifestData)) return;
+    const chData = getChapterData(serverBookId, ch, manifestData);
+    const firstEv = Array.isArray(chData?.events) ? chData.events[0] : null;
+    const next = eventUtils.resolveEventNum(firstEv) || 1;
+    if (!(next > 0) || next === currentEvent) return;
+    if (findManifestEventInChapter(serverBookId, ch, { eventIdx: next }, manifestData)) {
+      setCurrentEvent(next);
+    }
+  }, [serverBookId, manifestReady, manifestData, currentChapter, currentEvent]);
 
-    e.stopPropagation();
-    clearAll();
-    reapplySearchFadeIfActive();
-    triggerForceClose();
-  }, [activeTooltip, isSidebarClosing, clearAll, reapplySearchFadeIfActive, triggerForceClose]);
+  const graphApiPayload = useMemo(() => {
+    if (!apiBookGraphData || !hasFineGraphPayload(apiBookGraphData)) return null;
+    return apiBookGraphData;
+  }, [apiBookGraphData]);
+
+  const apiElements = useMemo(() => {
+    if (!graphApiPayload) return [];
+
+    try {
+      const previousEventState =
+        serverBookId && currentEvent > 1
+          ? getGraphEventState(serverBookId, currentChapter, currentEvent - 1)
+          : null;
+      const previousNodeWeights = extractNodeWeightsFromElements(previousEventState?.elements);
+
+      return convertFineGraphToElements(
+        graphApiPayload,
+        currentChapter,
+        currentEvent,
+        { createCharacterMaps, buildNodeWeights, convertRelationsToElements },
+        previousNodeWeights
+      ).elements;
+    } catch {
+      return [];
+    }
+  }, [graphApiPayload, serverBookId, currentChapter, currentEvent]);
+
+  const [elements, setElements] = useState([]);
+
+  useEffect(() => {
+    if (!apiElements.length) {
+      setElements([]);
+      return undefined;
+    }
+
+    let cancelled = false;
+    setElements(apiElements);
+
+    resolveGraphElementsProfileImages(apiElements).then((resolved) => {
+      if (!cancelled) setElements(resolved);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [apiElements]);
+
+  const { searchState: graphSearchState, searchActions } = useGraphSearch(
+    elements,
+    currentChapterData,
+  );
+  const {
+    searchTerm,
+    isSearchActive,
+    filteredElements,
+    fitNodeIds,
+    isResetFromSearch,
+    suggestions,
+    showSuggestions,
+    selectedIndex,
+  } = graphSearchState;
+  const {
+    onSearchSubmit: handleSearchSubmit,
+    clearSearch,
+    closeSuggestions,
+    onGenerateSuggestions: setSearchTerm,
+    handleKeyDown,
+    onSelectedIndexChange,
+  } = searchActions;
+
+  const centerElementBetweenSidebars = useCallback((elementId) => {
+    const cy = cyRef.current;
+    if (!cy) return;
+
+    const element = cy.getElementById(elementId);
+    if (!element.length) return;
+
+    const { TOP_BAR_HEIGHT, TOOLTIP_SIDEBAR_WIDTH } = GRAPH_LAYOUT_CONSTANTS;
+    const chapterSidebarWidth = resolveChapterSidebarWidth(isSidebarOpen);
+    const availableGraphWidth = window.innerWidth - chapterSidebarWidth - TOOLTIP_SIDEBAR_WIDTH;
+    const availableGraphHeight = window.innerHeight - TOP_BAR_HEIGHT;
+
+    const leftOffset = availableGraphWidth * 0.14;
+    const centerX = chapterSidebarWidth + (availableGraphWidth / 2) - leftOffset;
+
+    const topOffset = availableGraphHeight * 0.06;
+    const centerY = TOP_BAR_HEIGHT + (availableGraphHeight / 2) - topOffset;
+
+    const elementPos = element.position();
+    const targetX = centerX - elementPos.x;
+    const targetY = centerY - elementPos.y;
+
+    cy.animate({
+      pan: { x: targetX, y: targetY },
+      duration: 500,
+      easing: 'ease-in'
+    });
+  }, [isSidebarOpen]);
+
+  const openElementTooltip = useCallback((tapPayload, type) => {
+    setIsSidebarClosing(false);
+    const cy = cyRef.current;
+    if (cy) viewBeforeSelectionRef.current = { pan: { ...cy.pan() }, zoom: cy.zoom() };
+
+    const processedTooltipData = processTooltipData(buildTooltipPayload(tapPayload, type), type);
+    setActiveTooltip(processedTooltipData);
+  }, [setIsSidebarClosing, setActiveTooltip]);
+
+  const { onShowNodeTooltip, onShowEdgeTooltip } = useMemo(
+    () => createTooltipTapHandlers(openElementTooltip),
+    [openElementTooltip],
+  );
+
+  const onClearTooltip = useCallback(() => {
+    closeSidebar();
+    const stored = viewBeforeSelectionRef.current;
+    const cy = cyRef.current;
+    if (stored && cy) {
+      viewBeforeSelectionRef.current = null;
+      cy.animate({
+        pan: stored.pan,
+        zoom: stored.zoom,
+      }, { duration: 500, easing: 'ease-in' });
+    }
+  }, [closeSidebar]);
+
+  const clearGraphSelection = useCallback(() => {
+    graphClearRef.current?.();
+  }, []);
+
+  useEffect(() => {
+    const chapterChanged =
+      prevChapterNum.current !== undefined && prevChapterNum.current !== currentChapter;
+    const eventChanged =
+      prevEventNum.current !== undefined && prevEventNum.current !== currentEvent;
+
+    if (chapterChanged) {
+      if (isSearchActive) clearSearch();
+      clearGraphSelection();
+    } else if (eventChanged) {
+      clearGraphSelection();
+    }
+
+    prevChapterNum.current = currentChapter;
+    prevEventNum.current = currentEvent;
+  }, [currentChapter, currentEvent, isSearchActive, clearSearch, clearGraphSelection]);
+
+  const { filteredMainCharacters, finalElements } = useGraphElementPipeline({
+    elements,
+    filterStage,
+    isSearchActive,
+    filteredElements,
+  });
+
+  const nodeCount = useMemo(() => {
+    const source = filterStage > 0 ? filteredMainCharacters : elements;
+    return source.filter(isGraphNodeElement).length;
+  }, [filterStage, filteredMainCharacters, elements]);
+
+  const relationCount = useMemo(() => {
+    const source = filterStage > 0 ? filteredMainCharacters : elements;
+    return eventUtils.filterEdges(source).length;
+  }, [filterStage, filteredMainCharacters, elements]);
+
+  const edgeStyle = getEdgeStyle('graph');
+  const stylesheet = useMemo(
+    () => createGraphStylesheet(edgeStyle, edgeLabelVisible),
+    [edgeStyle, edgeLabelVisible]
+  );
+  const layout = useMemo(() => getWideLayout(), []);
+
+  useEffect(() => {
+    if (activeTooltip && cyRef.current && !isSidebarClosing) {
+      const elementId = activeTooltip.id;
+
+      const timeoutId = setTimeout(() => {
+        centerElementBetweenSidebars(elementId);
+      }, GRAPH_LAYOUT_CONSTANTS.ANIMATION_MS + 100);
+
+      return () => {
+        clearTimeout(timeoutId);
+      };
+    }
+  }, [activeTooltip, isSidebarOpen, isSidebarClosing, centerElementBetweenSidebars]);
+
+  const handleChapterSelect = useCallback((chapter) => {
+    if (chapter !== currentChapter) {
+      clearGraphSelection();
+      setCurrentChapter(chapter);
+
+      const lastEventNum = calculateLastEventForChapter({
+        manifestChapters: manifestData?.chapters,
+        manifestBookId: serverBookId,
+        chapter,
+      });
+
+      const normalizedLastEventNum = Number.isFinite(Number(lastEventNum)) && Number(lastEventNum) >= 1
+        ? Number(lastEventNum)
+        : 1;
+      setCurrentEvent(normalizedLastEventNum);
+    }
+  }, [
+    currentChapter,
+    setCurrentChapter,
+    manifestData?.chapters,
+    serverBookId,
+    clearGraphSelection,
+    setCurrentEvent,
+  ]);
+
+  const dismissActiveTooltip = useCallback(() => {
+    clearGraphSelection();
+    startClosing();
+  }, [clearGraphSelection, startClosing]);
 
   const handleCanvasClick = useCallback((e) => {
     if (e.target !== e.currentTarget) return;
     e.stopPropagation();
-    if (isDragEndEvent(e)) return;
+    if (isGraphDragEndEvent(e)) return;
 
     if (activeTooltip && !isSidebarClosing) {
-      clearAll();
-      reapplySearchFadeIfActive();
-      triggerForceClose();
+      dismissActiveTooltip();
     }
-  }, [activeTooltip, isSidebarClosing, clearAll, reapplySearchFadeIfActive, triggerForceClose]);
+  }, [activeTooltip, isSidebarClosing, dismissActiveTooltip]);
 
-  useEffect(() => {
-    if (!activeTooltip || isSidebarClosing) return;
-
-    const handleDocumentClick = (e) => {
-      const graphCanvas = e.target.closest('.graph-canvas-area');
-      if (graphCanvas) return;
-      handleGlobalClick(e);
-    };
-
-    const handleDragEnd = (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-    };
-
-    const timeoutId = setTimeout(() => {
-      document.addEventListener('click', handleDocumentClick, true);
-      document.addEventListener('dragend', handleDragEnd, true);
-    }, 10);
-
-    return () => {
-      clearTimeout(timeoutId);
-      document.removeEventListener('click', handleDocumentClick, true);
-      document.removeEventListener('dragend', handleDragEnd, true);
-    };
-  }, [activeTooltip, isSidebarClosing, handleGlobalClick]);
-
-  useEffect(() => {
-    return () => {
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current);
-        timeoutRef.current = null;
-      }
-    };
-  }, []);
+  useGraphOutsideDismiss({
+    enabled: !!(activeTooltip && !isSidebarClosing),
+    onDismiss: dismissActiveTooltip,
+    shouldIgnoreClick: shouldIgnoreGraphPageOutsideClick,
+    blockDragEndEvents: true,
+  });
 
   const chapterList = useMemo(() =>
-    Array.from({ length: effectiveMaxChapter }, (_, i) => i + 1),
-    [effectiveMaxChapter]
+    Array.from({ length: apiMaxChapter }, (_, i) => i + 1),
+    [apiMaxChapter]
   );
 
-  useEffect(() => {
-    if (!serverBookId || !apiMacroData) return;
-    console.log(
-      `[Macro API] bookId=${serverBookId} ch=${currentChapter}`,
-      apiMacroData,
-    );
-  }, [apiMacroData, serverBookId, currentChapter]);
-
-  const isLoading = apiFineLoading || isGraphLoading;
+  const isLoading = isGraphLoading;
   const isApiGraphEmpty = useMemo(() => {
     if (isLoading) return false;
     const chars = Array.isArray(graphApiPayload?.characters) ? graphApiPayload.characters.length : 0;
@@ -736,53 +549,6 @@ function RelationGraphWrapper() {
       setHasShownGraphOnce(true);
     }
   }, [isLoading]);
-
-  const topBarSearchState = useMemo(() => ({
-    searchTerm,
-    isSearchActive,
-    suggestions,
-    showSuggestions,
-    selectedIndex,
-  }), [searchTerm, isSearchActive, suggestions, showSuggestions, selectedIndex]);
-
-  const topBarSearchActions = useMemo(() => ({
-    onSearchSubmit: handleSearchSubmit,
-    onClearSearch: clearSearch,
-    onGenerateSuggestions: handleGenerateSuggestions,
-    onKeyDown: handleKeyDown,
-    onCloseSuggestions: closeSuggestions,
-  }), [handleSearchSubmit, clearSearch, handleGenerateSuggestions, handleKeyDown, closeSuggestions]);
-
-  const sidebarControl = useMemo(() => ({
-    isSidebarClosing,
-    onCloseSidebar: closeSidebar,
-    onStartClosing: handleStartClosing,
-    onClearGraph: handleClearGraph,
-    forceClose,
-  }), [isSidebarClosing, closeSidebar, handleStartClosing, handleClearGraph, forceClose]);
-
-  const searchState = useMemo(() => ({
-    isSearchActive,
-    filteredElements,
-    searchTerm,
-    fitNodeIds,
-    isResetFromSearch,
-  }), [isSearchActive, filteredElements, searchTerm, fitNodeIds, isResetFromSearch]);
-
-  const cytoscapeConfig = useMemo(() => ({
-    stylesheet,
-    layout,
-    newNodeIds,
-    isDropdownSelection,
-  }), [stylesheet, layout, newNodeIds, isDropdownSelection]);
-
-  const tooltipHandlers = useMemo(() => ({
-    onShowNodeTooltip,
-    onShowEdgeTooltip,
-    onClearTooltip,
-    selectedNodeIdRef,
-    selectedEdgeIdRef,
-  }), [onShowNodeTooltip, onShowEdgeTooltip, onClearTooltip]);
 
   return (
     <div style={{ width: '100vw', height: '100vh', background: COLORS.backgroundLighter, overflow: 'hidden' }}>
@@ -816,8 +582,21 @@ function RelationGraphWrapper() {
 
       <GraphTopBar
         isSidebarOpen={isSidebarOpen}
-        searchState={topBarSearchState}
-        searchActions={topBarSearchActions}
+        searchState={{
+          searchTerm,
+          isSearchActive,
+          suggestions,
+          showSuggestions,
+          selectedIndex,
+        }}
+        searchActions={{
+          onSearchSubmit: handleSearchSubmit,
+          onClearSearch: clearSearch,
+          onGenerateSuggestions: setSearchTerm,
+          onKeyDown: handleKeyDown,
+          onCloseSuggestions: closeSuggestions,
+          onSelectedIndexChange,
+        }}
         edgeLabelVisible={edgeLabelVisible}
         onToggleEdgeLabel={toggleEdgeLabel}
         filterStage={filterStage}
@@ -860,27 +639,45 @@ function RelationGraphWrapper() {
         currentChapterTitle={currentChapterTitle}
         userReadingChapterTitle={userReadingChapterTitle}
         eventNum={Math.max(currentEvent, 1)}
-        maxChapter={effectiveMaxChapter}
         filename={filename}
         elements={elements}
         renderElements={finalElements}
         povSummaries={povSummaries}
-        apiMacroData={apiMacroData}
-        apiFineData={apiFineData}
+        apiBookGraphData={apiBookGraphData}
         bookId={serverBookId}
         isLoading={isLoading}
         hasShownGraphOnce={hasShownGraphOnce}
         onCanvasClick={handleCanvasClick}
         currentChapter={currentChapter}
-        currentEvent={currentEvent}
         userCurrentChapter={userCurrentChapter}
         nodeCount={nodeCount}
         relationCount={relationCount}
         filterStage={filterStage}
-        sidebarControl={sidebarControl}
-        searchState={searchState}
-        cytoscapeConfig={cytoscapeConfig}
-        tooltipHandlers={tooltipHandlers}
+        sidebarControl={{
+          isSidebarClosing,
+          onCloseSidebar: closeSidebar,
+          onStartClosing: startClosing,
+          onClearGraph: clearGraphSelection,
+        }}
+        searchState={{
+          isSearchActive,
+          filteredElements,
+          searchTerm,
+          fitNodeIds,
+          isResetFromSearch,
+        }}
+        cytoscapeConfig={{
+          stylesheet,
+          layout,
+        }}
+        tooltipHandlers={{
+          onShowNodeTooltip,
+          onShowEdgeTooltip,
+          onClearTooltip,
+          selectedNodeIdRef,
+          selectedEdgeIdRef,
+        }}
+        graphClearRef={graphClearRef}
       />
     </div>
   );
