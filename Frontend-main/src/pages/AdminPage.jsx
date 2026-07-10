@@ -297,12 +297,17 @@ const AdminPage = () => {
   const getJobLogs = () =>
     handleApiCall(() => apiClient.get("/jobs/logs/latest"), setJobLogs);
 
-  // TODO: 백엔드 api 구현 필요
-  const retryNormalizationJob = (jobId) =>
-    handleApiCall(() => apiClient.post(`/normalization/jobs/${jobId}/retry`), () => {
-      alert("재시도 요청이 성공했습니다.");
-      getNormalizationJobs();
-    });
+  // 실패한 정규화 Job 재시도 API 호출
+  const retryNormalizationJob = (jobId) => {
+    if (!window.confirm(`ID #${jobId} 정규화 작업을 재시도하시겠습니까?`)) return;
+    handleApiCall(
+      () => apiClient.post(`/normalization/jobs/${jobId}/retry`),
+      () => {
+        alert("재시도 요청이 성공했습니다.");
+        getNormalizationJobs();
+      }
+    );
+  };
 
   const getBookCharacters = (book) => {
     setSelectedBook(book);
@@ -798,14 +803,12 @@ const AdminPage = () => {
                     {new Date(job.createdAt || job.created_at).toLocaleString()}
                   </td>
                   <td className="px-6 py-4 text-sm">
-                    {job.status === "FAILED" && (
-                      <button
-                        onClick={() => retryNormalizationJob(job.id)}
-                        className="text-indigo-600 hover:text-indigo-800 font-medium"
-                      >
-                        재시도
-                      </button>
-                    )}
+                    <button
+                      onClick={() => retryNormalizationJob(job.id)}
+                      className="text-indigo-600 hover:text-indigo-800 font-medium"
+                    >
+                      재시도
+                    </button>
                   </td>
                 </tr>
               ))
