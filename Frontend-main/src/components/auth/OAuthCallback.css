@@ -66,18 +66,19 @@
 
 .oauth-callback-title {
   margin: 0 0 10px;
-  font-size: clamp(1.05rem, 3.8vw, 1.25rem);
+  font-size: clamp(1.05rem, 3.8vw, 1.75rem);
   font-weight: 600;
   color: #fefefe;
   letter-spacing: 0.02em;
-  line-height: 1.45;
+  line-height: 1.55;
 }
 
 .oauth-callback-detail {
   margin: 0;
-  font-size: clamp(0.925rem, 2.4vw, 1.0625rem);
-  line-height: 1.75;
-  letter-spacing: 0.04em;
+  font-size: clamp(0.85rem, 2.2vw, 1.125rem);
+  font-weight: 400;
+  line-height: 1.85;
+  letter-spacing: 0.02em;
   color: rgba(255, 255, 255, 0.9);
   word-break: keep-all;
 }
@@ -113,8 +114,10 @@
   width: max-content;
   max-width: none;
   white-space: nowrap;
-  font-size: 0.8125rem;
-  line-height: 1.4;
+  font-size: clamp(0.925rem, 2.4vw, 1.0625rem);
+  font-weight: 400;
+  line-height: 1.75;
+  letter-spacing: 0.04em;
   color: rgba(255, 255, 255, 0.92);
   background: rgba(255, 255, 255, 0.1);
   border-radius: 4px;
@@ -148,8 +151,10 @@
 
 .oauth-callback-error-title {
   margin: 0 0 12px;
-  font-size: clamp(1.05rem, 3.8vw, 1.25rem);
+  font-size: clamp(1.05rem, 3.8vw, 1.75rem);
   font-weight: 600;
+  letter-spacing: 0.02em;
+  line-height: 1.55;
   color: #fecaca;
 }
 
@@ -157,8 +162,10 @@
   margin: 0 0 20px;
   width: max-content;
   max-width: none;
-  font-size: 0.9375rem;
-  line-height: 1.4;
+  font-size: clamp(0.85rem, 2.2vw, 1.125rem);
+  font-weight: 400;
+  line-height: 1.85;
+  letter-spacing: 0.02em;
   color: rgba(255, 255, 255, 0.92);
   white-space: nowrap;
 }
@@ -169,8 +176,10 @@
   width: max-content;
   max-width: none;
   white-space: nowrap;
-  font-size: 0.8125rem;
-  line-height: 1.4;
+  font-size: clamp(0.925rem, 2.4vw, 1.0625rem);
+  font-weight: 400;
+  line-height: 1.75;
+  letter-spacing: 0.04em;
   border-radius: 4px;
 }
 

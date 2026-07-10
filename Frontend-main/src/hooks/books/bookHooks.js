@@ -314,6 +314,12 @@ export const useBooks = () => {
         const newBookIdStr = newBookId != null ? String(newBookId) : null;
         if (!newBookIdStr) return;
 
+        const bookToAdd = {
+          ...newBook,
+          id: Number.isFinite(Number(newBookId)) ? Number(newBookId) : newBookId,
+          isFavorite: !!newBook.isFavorite,
+        };
+
         setHiddenServerBookIds((prev) => {
           if (!prev.has(newBookIdStr)) return prev;
           const next = new Set(prev);
@@ -322,9 +328,34 @@ export const useBooks = () => {
           localStorage.setItem(HIDDEN_SERVER_BOOK_IDS_KEY, JSON.stringify([...next]));
           return next;
         });
-        queryClient.refetchQueries({
+
+        const mergeBookIntoCache = (old) => {
+          if (!old) {
+            return { books: [bookToAdd], needsAuth: false };
+          }
+          const list = old.books || [];
+          const idx = list.findIndex((b) => String(b?.id) === newBookIdStr);
+          if (idx >= 0) {
+            const next = list.slice();
+            next[idx] = { ...list[idx], ...bookToAdd };
+            return { ...old, books: next };
+          }
+          return { ...old, books: [...list, bookToAdd] };
+        };
+
+        // 업로드 직후 목록에 바로 보이도록 캐시에 반영
+        queryClient.setQueryData(['books', 'server'], mergeBookIntoCache);
+
+        await queryClient.refetchQueries({
           queryKey: ['books', 'server'],
           type: 'active',
+        });
+
+        // 서버 목록에 아직 없으면(분석 전 미노출 등) 업로드 결과 유지
+        queryClient.setQueryData(['books', 'server'], (old) => {
+          const list = old?.books || [];
+          if (list.some((b) => String(b?.id) === newBookIdStr)) return old;
+          return mergeBookIntoCache(old);
         });
       } catch (e) {
         console.warn('addBook 실패:', e);
