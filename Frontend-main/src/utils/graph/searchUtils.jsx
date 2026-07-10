@@ -1,41 +1,51 @@
 /** 그래프 노드 검색·필터·페이드 */
 
-import { clearHighlightClassesOn } from './graphUtils';
-import { isGraphEdgeElement, isGraphNodeElement, uniqueStrings } from './graphUtils';
+import { clearHighlightClassesOn, isGraphEdgeElement, isGraphNodeElement, uniqueStrings } from './graphUtils';
 
 const buildChapterCharacterIdSet = (currentChapterData) => {
   if (!currentChapterData?.characters?.length) return null;
   return new Set(currentChapterData.characters.map(char => String(char.id)));
 };
 
-/**
- * 노드가 검색어와 매칭되는지 확인
- */
-export function nodeMatchesQuery(node, searchLower) {
-  if (!node?.data || typeof searchLower !== 'string') {
-    console.warn('nodeMatchesQuery: 유효하지 않은 매개변수입니다', { 
-      node: !!node, 
-      hasData: !!node?.data, 
-      searchLower, 
-      type: typeof searchLower 
-    });
-    return false;
-  }
-  
+function filterNodesByChapter(nodes, currentChapterData) {
+  const chapterCharacterIds = buildChapterCharacterIdSet(currentChapterData);
+  if (!chapterCharacterIds) return nodes;
+  return nodes.filter((node) => {
+    const nodeId = node?.data?.id;
+    if (nodeId === undefined || nodeId === null) return false;
+    return chapterCharacterIds.has(String(nodeId));
+  });
+}
+
+function getNodeMatchType(node, searchLower) {
+  if (!node?.data || typeof searchLower !== 'string') return null;
   try {
     const label = String(node.data.label || '').toLowerCase();
+    if (label.includes(searchLower)) return 'label';
     const names = Array.isArray(node.data.names) ? node.data.names : [];
+    if (names.some((name) => String(name).toLowerCase().includes(searchLower))) return 'names';
     const commonName = String(node.data.common_name || '').toLowerCase();
-    
-    return (
-      label.includes(searchLower) ||
-      names.some(name => String(name).toLowerCase().includes(searchLower)) ||
-      commonName.includes(searchLower)
-    );
+    if (commonName.includes(searchLower)) return 'common_name';
+    return null;
   } catch (error) {
-    console.error('nodeMatchesQuery 실패:', error, { node, searchLower });
-    return false;
+    console.error('getNodeMatchType 실패:', error, { node, searchLower });
+    return null;
   }
+}
+
+function nodeMatchesQuery(node, searchLower) {
+  return getNodeMatchType(node, searchLower) !== null;
+}
+
+function nodeExactMatchesQuery(nodeOrSuggestion, searchLower) {
+  const label = nodeOrSuggestion?.data?.label ?? nodeOrSuggestion?.label;
+  const commonName = nodeOrSuggestion?.data?.common_name ?? nodeOrSuggestion?.common_name;
+  const names = nodeOrSuggestion?.data?.names ?? nodeOrSuggestion?.names ?? [];
+  return (
+    String(label || '').toLowerCase() === searchLower ||
+    String(commonName || '').toLowerCase() === searchLower ||
+    (Array.isArray(names) && names.some((name) => String(name).toLowerCase() === searchLower))
+  );
 }
 
 /**
@@ -61,31 +71,17 @@ export function buildSuggestions(elements, query, currentChapterData = null) {
   
   try {
     const searchLower = trimmed.toLowerCase();
-    const characterNodes = elements.filter(isGraphNodeElement);
-    
-    // 현재 챕터의 캐릭터 데이터가 있는 경우, 해당 챕터에 존재하는 인물만 필터링
-    let filteredNodes = characterNodes;
-    const chapterCharacterIds = buildChapterCharacterIdSet(currentChapterData);
-    if (chapterCharacterIds) {
-      filteredNodes = characterNodes.filter(node => {
-        const nodeId = node?.data?.id;
-        if (nodeId === undefined || nodeId === null) return false;
-        return chapterCharacterIds.has(String(nodeId));
-      });
-    }
+    const filteredNodes = filterNodesByChapter(
+      elements.filter(isGraphNodeElement),
+      currentChapterData
+    );
 
     const matches = filteredNodes
-    .filter(node => nodeMatchesQuery(node, searchLower))
     .map(node => {
-      const label = node.data.label?.toLowerCase() || '';
+      const matchType = getNodeMatchType(node, searchLower);
+      if (!matchType) return null;
+
       const names = node.data.names || [];
-      const commonName = node.data.common_name?.toLowerCase() || '';
-      let matchType = 'none';
-      if (label.includes(searchLower)) matchType = 'label';
-      else if (names.some(name => String(name).toLowerCase().includes(searchLower))) matchType = 'names';
-      else if (commonName.includes(searchLower)) matchType = 'common_name';
-      
-      // names 배열에서 중복 제거 (대소문자 구분 없이)
       const uniqueNames = uniqueStrings(names, { caseInsensitive: true });
       
       return {
@@ -96,6 +92,7 @@ export function buildSuggestions(elements, query, currentChapterData = null) {
         matchType
       };
     })
+    .filter(Boolean)
     // 중복 제거: id 기준으로 중복된 인물 제거
     .reduce((acc, current) => {
       const existingIndex = acc.findIndex(item => 
@@ -133,12 +130,7 @@ export function buildSuggestions(elements, query, currentChapterData = null) {
 export function findExactSuggestionMatch(suggestions, trimmedTerm) {
   if (!Array.isArray(suggestions) || !trimmedTerm) return undefined;
   const t = trimmedTerm.toLowerCase();
-  return suggestions.find(
-    (suggestion) =>
-      suggestion.label?.toLowerCase() === t ||
-      suggestion.common_name?.toLowerCase() === t ||
-      suggestion.names?.some((name) => String(name).toLowerCase() === t),
-  );
+  return suggestions.find((suggestion) => nodeExactMatchesQuery(suggestion, t));
 }
 
 /**
@@ -163,33 +155,13 @@ export function filterGraphElements(elements, searchTerm, currentChapterData = n
   
   try {
     const searchLower = searchTerm.toLowerCase();
-    
-    // 현재 챕터의 캐릭터 데이터가 있는 경우, 해당 챕터에 존재하는 인물만 필터링
-    const chapterCharacterIds = buildChapterCharacterIdSet(currentChapterData);
-    let candidateNodes;
-    if (chapterCharacterIds) {
-      candidateNodes = elements.filter(el => {
-        if (isGraphEdgeElement(el)) return false;
-        if (!nodeMatchesQuery(el, searchLower)) return false;
-        const nodeId = el?.data?.id;
-        if (nodeId === undefined || nodeId === null) return false;
-        return chapterCharacterIds.has(String(nodeId));
-      });
-    } else {
-      // 챕터 데이터가 없는 경우 기존 로직 사용
-      candidateNodes = elements.filter(el => isGraphNodeElement(el) && nodeMatchesQuery(el, searchLower));
-    }
+    const candidateNodes = filterNodesByChapter(
+      elements.filter((el) => isGraphNodeElement(el) && nodeMatchesQuery(el, searchLower)),
+      currentChapterData
+    );
     
     // 정확히 일치하는 인물을 우선적으로 찾기
-    let matchingNode = candidateNodes.find(node => {
-      const label = node.data.label?.toLowerCase() || '';
-      const commonName = node.data.common_name?.toLowerCase() || '';
-      const names = node.data.names || [];
-      
-      return label === searchLower || 
-             commonName === searchLower || 
-             names.some(name => String(name).toLowerCase() === searchLower);
-    });
+    let matchingNode = candidateNodes.find((node) => nodeExactMatchesQuery(node, searchLower));
     
     // 완전 일치가 없으면 첫 번째 매칭 선택
     if (!matchingNode && candidateNodes.length > 0) {
@@ -255,9 +227,9 @@ export function filterGraphElements(elements, searchTerm, currentChapterData = n
 /**
  * 검색된 요소들의 ID 집합을 생성
  * @param {Array} filteredElements - 검색 결과 요소들
- * @returns {Set} 검색된 요소들의 ID 집합
+ * @returns {{ nodeIds: Set, edgeIds: Set }} 검색된 요소들의 ID 집합
  */
-export function createFilteredElementIds(filteredElements) {
+function createFilteredElementIds(filteredElements) {
   if (!Array.isArray(filteredElements) || filteredElements.length === 0) {
     return { nodeIds: new Set(), edgeIds: new Set() };
   }
@@ -297,13 +269,9 @@ export function createFilteredElementIds(filteredElements) {
  * @param {Object} cy - Cytoscape 인스턴스
  * @param {Array} filteredElements - 검색 결과 요소들
  * @param {boolean} isSearchActive - 검색 활성 상태
- * @param {Object} options - 페이드 효과 옵션
- * @param {number} options.fadeOpacity - 페이드 아웃 투명도 (기본: 0.05)
- * @param {number} options.textFadeOpacity - 텍스트 페이드 아웃 투명도 (기본: 0.02)
- * @param {boolean} options.enableLogging - 로깅 활성화 (기본: true)
  * @returns {Object} 페이드 효과 적용 결과 통계 및 cleanup 함수
  */
-export function applySearchFadeEffect(cy, filteredElements, isSearchActive, options = {}) {
+export function applySearchFadeEffect(cy, filteredElements, isSearchActive) {
   if (!cy || typeof cy.elements !== 'function') {
     console.warn('applySearchFadeEffect: 유효하지 않은 Cytoscape 인스턴스입니다', { cy });
     return {
@@ -316,8 +284,6 @@ export function applySearchFadeEffect(cy, filteredElements, isSearchActive, opti
   }
   
   try {
-    const { fadeOpacity: _fadeOpacity, textFadeOpacity: _textFadeOpacity } = options;
-
     // 검색이 비활성화된 경우 모든 페이드 효과 제거
     if (!isSearchActive) {
       clearHighlightClassesOn(cy);

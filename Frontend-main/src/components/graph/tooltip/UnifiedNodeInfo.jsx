@@ -3,17 +3,16 @@ import { useParams } from "react-router-dom";
 import {
   processRelations,
   processRelationTags,
-  safeNum,
   extractRadarChartData,
   getConnectionStatus,
 } from "../../../utils/graph/relationUtils.js";
 import { getPositivityColor, getPositivityLabel } from "../../../utils/styles/relationStyles.js";
-import { getFolderKeyFromFilename, getEventDataByIndex, getDetectedMaxChapter } from "../../../utils/graph/graphData.js";
+import { toApiFolderKey, undirectedPairKey } from "../../../utils/graph/graphUtils.jsx";
+import { getEventDataByIndex } from "../../../utils/graph/graphData.js";
 import { useTooltipPosition, useClickOutside } from "../../../hooks/ui/tooltipHooks";
-import { useRelationData } from "../../../hooks/graph/useRelationData.jsx";
 import { mergeRefs } from "../../../utils/styles/styles";
 import { getUnifiedEventInfoForTooltip } from "../../../utils/viewer/viewerEventProgressUtils";
-import { resolveTooltipBookId, isGraphOnlyGraphPage } from "../graphShared";
+import { isGraphOnlyGraphPage } from "../graphShared";
 import { COLORS, createButtonStyle, ANIMATION_VALUES, unifiedNodeTooltipStyles, unifiedNodeAnimations } from "../../../utils/styles/styles.js";
 import { Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, ResponsiveContainer } from 'recharts';
 import "../RelationGraph.css";
@@ -100,23 +99,17 @@ function UnifiedNodeInfo({
   onClose,
   chapterNum,
   eventNum,
-  maxChapter,
   elements = [],
   filename,
   currentEvent = null,
   prevValidEvent = null,
   povSummaries = null, // API에서 가져온 관점 요약 데이터
   apiBookGraphData = null, // relationship-graph (scope=book) 데이터
-  apiFineData: _apiFineData = null, // API 세밀 그래프 데이터
-  bookId = null,
 }) {
   const { filename: urlFilename } = useParams();
   const actualFilename = filename || urlFilename;
 
-  // maxChapter를 동적으로 계산
-  const folderKey = getFolderKeyFromFilename(actualFilename);
-  const dynamicMaxChapter = maxChapter || getDetectedMaxChapter(folderKey);
-
+  const folderKey = toApiFolderKey(actualFilename);
   // 데이터가 중첩되어 있는 경우 처리
   const [nodeData, setNodeData] = useState(() => {
     if (data && (data.id || data.label)) {
@@ -214,14 +207,6 @@ function UnifiedNodeInfo({
     isTooltipMode && showContent,
     true
   );
-
-  // 관계 데이터 관리 (슬라이드바 모드에서 사용)
-  const nodeId = safeNum(nodeData?.id);
-  const numericBookId = useMemo(
-    () => resolveTooltipBookId(bookId, actualFilename),
-    [bookId, actualFilename],
-  );
-  const { fetchData } = useRelationData('standalone', nodeId, nodeId, chapterNum, eventNum, dynamicMaxChapter, actualFilename, numericBookId);
 
   const unifiedEventInfo = useMemo(
     () => getUnifiedEventInfoForTooltip({ currentEvent, prevValidEvent, eventNum }),
@@ -350,13 +335,6 @@ function UnifiedNodeInfo({
     checkNodeAppearance();
   }, [checkNodeAppearance]);
 
-  // 슬라이드바 모드에서 관계 데이터 가져오기
-  useEffect(() => {
-    if (displayMode === 'sidebar' && nodeData && nodeData.id) {
-      fetchData();
-    }
-  }, [displayMode, nodeData, fetchData]);
-
   // 메모이제이션된 데이터 처리
   const processedNodeData = useMemo(() => {
     if (!nodeData) return null;
@@ -450,9 +428,7 @@ function UnifiedNodeInfo({
         const relationMap = new Map();
         relations.forEach(rel => {
           if (rel.id1 !== targetNodeId && rel.id2 !== targetNodeId) return;
-          const lo = Math.min(rel.id1, rel.id2);
-          const hi = Math.max(rel.id1, rel.id2);
-          const key = `${lo}-${hi}`;
+          const key = undirectedPairKey(rel.id1, rel.id2);
           if (!relationMap.has(key)) {
             relationMap.set(key, {
               id1: rel.id1,

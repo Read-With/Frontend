@@ -14,9 +14,8 @@ import { useRelationData } from "../../../hooks/graph/useRelationData";
 import { getRelationStyle, tooltipStyles } from "../../../utils/styles/relationStyles";
 import { createButtonStyle, createAdvancedButtonHandlers, COLORS, ANIMATION_VALUES, unifiedNodeTooltipStyles } from "../../../utils/styles/styles";
 import { mergeRefs } from "../../../utils/styles/styles";
-import { safeNum, processRelationTagsCached } from "../../../utils/graph/relationUtils";
-import { cleanupRelationUtils } from "../../../utils/graph/relationUtils";
-import { getMaxChapter } from "../../../utils/common/cache/manifestCache";
+import { toFiniteNumber } from "../../../utils/common/valueUtils";
+import { processRelationTags, cleanupRelationUtils } from "../../../utils/graph/relationUtils";
 import {
   resolveEventOrdinalForDisplay,
 } from "../../../utils/viewer/viewerEventProgressUtils";
@@ -28,14 +27,11 @@ function UnifiedEdgeTooltip({
   x,
   y,
   onClose,
-  sourceNode: _sourceNode,
-  targetNode: _targetNode,
   style,
   mode = 'standalone',
   displayMode = 'tooltip',
   chapterNum = 1,
   eventNum = 1,
-  maxChapter,
   currentEvent = null,
   prevValidEvent = null,
   bookId = null,
@@ -65,9 +61,8 @@ function UnifiedEdgeTooltip({
     setViewMode("info");
   }, [data?.id, data?.source, data?.target]);
 
-  // source/target을 safeNum으로 변환
-  const id1 = safeNum(data.source);
-  const id2 = safeNum(data.target);
+  const id1 = toFiniteNumber(data.source);
+  const id2 = toFiniteNumber(data.target);
 
   const displayEventNum = useMemo(
     () =>
@@ -96,19 +91,6 @@ function UnifiedEdgeTooltip({
     [bookId, filename],
   );
 
-  const safeMaxChapterValue = useMemo(() => {
-    if (maxChapter && maxChapter > 0) {
-      return maxChapter;
-    }
-    if (numericBookId) {
-      const manifestMax = getMaxChapter(numericBookId);
-      if (manifestMax && manifestMax > 0) {
-        return manifestMax;
-      }
-    }
-    return 10;
-  }, [maxChapter, numericBookId]);
-  
   const {
     timeline,
     labels,
@@ -116,7 +98,7 @@ function UnifiedEdgeTooltip({
     noRelation,
     error: relationError,
     fetchData,
-  } = useRelationData(relationDataMode, id1, id2, chapterNum, displayEventNum, safeMaxChapterValue, filename, numericBookId);
+  } = useRelationData(relationDataMode, id1, id2, chapterNum, displayEventNum, numericBookId);
 
   /** graphStyles.getRelationColor과 동일: 간선 data.positivity → 막대·라벨 색 통일 */
   const { graphBarPositivity, chartTimelineFallbackValue } = useMemo(() => {
@@ -128,17 +110,11 @@ function UnifiedEdgeTooltip({
     return { graphBarPositivity: clamped, chartTimelineFallbackValue: clamped };
   }, [data?.positivity]);
 
-  const relationLabels = processRelationTagsCached(data.relation, data.label);
+  const relationLabels = processRelationTags(data.relation, data.label);
   const hasCurrentEdgeRelationData =
     relationLabels.length > 0 ||
     Number.isFinite(Number(data?.positivity)) ||
     (typeof data?.explanation === 'string' && data.explanation.trim().length > 0);
-
-  useEffect(() => {
-    if (id1 && id2 && numericBookId && chapterNum) {
-      fetchData();
-    }
-  }, [id1, id2, numericBookId, chapterNum, displayEventNum, relationDataMode, fetchData]);
 
   useEffect(() => {
     return () => {

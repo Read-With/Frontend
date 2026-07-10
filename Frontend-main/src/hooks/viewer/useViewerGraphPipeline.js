@@ -9,7 +9,7 @@ import {
 } from '../../utils/common/cache/chapterEventCache';
 import { applyChapterEventsFromCache } from '../../utils/graph/graphData';
 import { errorUtils } from '../../utils/common/errorUtils';
-import { cacheKeyUtils, eventUtils, buildViewerActionError, resolveEventIdxOrFallback } from '../../utils/viewer/viewerCoreStateUtils';
+import { cacheKeyUtils, eventUtils, buildViewerActionError } from '../../utils/viewer/viewerCoreStateUtils';
 import {
   commitVisibleGraphElements,
   DEFAULT_GRAPH_TRANSFORM_DEPS,
@@ -255,7 +255,7 @@ function useGraphChapterDiscovery({
   useEffect(() => {
     if (!book?.id || typeof book.id !== 'number') return;
     if (!currentChapter || currentChapter < 1) return;
-    const throughEventIdx = resolveEventIdxOrFallback(currentEvent, null);
+    const throughEventIdx = eventUtils.resolveEventNum(currentEvent, null);
     syncEventsFromCache(currentChapter, { throughEventIdx });
   }, [book?.id, currentChapter, currentEvent, syncEventsFromCache]);
 
@@ -263,7 +263,7 @@ function useGraphChapterDiscovery({
     if (!isViewerPageReady) return undefined;
     if (!book?.id || typeof book.id !== 'number' || !currentChapter) return undefined;
 
-    const throughEventIdx = resolveEventIdxOrFallback(currentEvent, null);
+    const throughEventIdx = eventUtils.resolveEventNum(currentEvent, null);
     if (!throughEventIdx || throughEventIdx < 1) return undefined;
 
     const runId = ++refs.activeDiscoveryRunRef.current;

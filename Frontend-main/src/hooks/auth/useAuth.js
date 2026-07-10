@@ -9,7 +9,7 @@ import {
   isTokenValid,
   ensureSessionAccessToken,
 } from '../../utils/api/authApi';
-import { clearAuthData, getPostLoginHomeUrl, isOAuthCallbackRoute } from '../../utils/common/authUtils';
+import { clearAuthData, getPostLoginHomeUrl, isOAuthCallbackRoute } from '../../utils/common/urlUtils';
 import {
   getStoredAccessToken,
   setStoredAccessToken,

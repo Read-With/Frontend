@@ -1,6 +1,7 @@
 import React, { useCallback, useMemo, memo } from 'react';
 import GraphControls, { EdgeLabelToggle } from '../graph/GraphControls';
 import { getChapterData, getManifestFromCache } from '../../utils/common/cache/manifestCache';
+import { resolveChapterIndex } from '../../utils/common/valueUtils';
 import {
   formatChapterOrderAndName,
   stripRedundantBookTitlePrefix,
@@ -128,7 +129,7 @@ const ViewerTopBar = memo(function ViewerTopBar({
   const resolvedServerChapter = useMemo(() => {
     const serverChapter = getChapterData(bookId, currentChapter);
     if (serverChapter) {
-      return Number(serverChapter.chapterIdx ?? serverChapter.idx ?? currentChapter);
+      return resolveChapterIndex(serverChapter) ?? Number(currentChapter);
     }
     return Number(currentChapter) || 1;
   }, [bookId, currentChapter]);

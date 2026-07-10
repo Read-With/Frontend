@@ -11,15 +11,17 @@ import {
   parseBookmarkLocation,
 } from '../../../utils/bookmarks/bookmarkUtils';
 import { userViewerPath } from '../../../utils/navigation/viewerPaths';
+import { resolveChapterIndex } from '../../../utils/common/valueUtils';
 
 const sameBookmarkId = (a, b) => String(a) === String(b);
 
 const formatLocatorDetail = (bookmark) => {
   const loc = bookmark?.startLocator;
-  if (!loc || !Number.isFinite(Number(loc.chapterIndex))) return '';
+  const chapter = resolveChapterIndex(loc);
+  if (chapter == null) return '';
   const bi = Number.isFinite(Number(loc.blockIndex)) ? loc.blockIndex : 0;
   const off = Number.isFinite(Number(loc.offset)) ? loc.offset : 0;
-  return `챕터 ${loc.chapterIndex} · 블록 ${bi} · 오프셋 ${off}`;
+  return `챕터 ${chapter} · 블록 ${bi} · 오프셋 ${off}`;
 };
 
 const getHighlightSnippet = (bookmark) => {
@@ -96,7 +98,8 @@ const BookmarksPage = () => {
     if (!term) return true;
     const lower = term.toLowerCase();
     const loc = bookmark.startLocator;
-    const locStr = loc && Number.isFinite(loc.chapterIndex) ? `챕터 ${loc.chapterIndex}` : '';
+    const chapter = resolveChapterIndex(loc);
+    const locStr = chapter != null ? `챕터 ${chapter}` : '';
     const candidate = [
       parseBookmarkLocation(bookmark),
       bookmark.memo,

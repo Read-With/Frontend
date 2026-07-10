@@ -1,7 +1,7 @@
 /** 뷰어 그래프 UI·파이프라인 상태 */
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { useGraphSearch } from '../graph/graphViewHooks';
+import { useGraphSearch } from '../graph/useGraphViewHooks';
 import { eventMatchesChapter } from '../../utils/viewer/viewerEventProgressUtils';
 import { aggregateCharactersFromEvents } from '../../utils/graph/characterUtils';
 import {
@@ -22,7 +22,6 @@ export function useViewerGraphState({ currentChapter, setCurrentChapter, bookKey
 
   const [currentCharIndex, setCurrentCharIndex] = useState(0);
   const [isDataReady, setIsDataReady] = useState(false);
-  const [graphViewState, setGraphViewState] = useState(null);
   const [edgeLabelVisible, setEdgeLabelVisible] = useState(true);
   const [filterStage, setFilterStage] = useState(0);
   const [isReloading, setIsReloading] = useState(false);
@@ -55,7 +54,7 @@ export function useViewerGraphState({ currentChapter, setCurrentChapter, bookKey
     return 'idle';
   }, [isReloading, isFineGraphLoading, isGraphLoading]);
 
-  const { searchState, searchActions } = useGraphSearch(elements, null, currentChapterData);
+  const { searchState, searchActions } = useGraphSearch(elements, currentChapterData);
 
   useEffect(() => {
     if (graphFullScreen) {
@@ -122,7 +121,6 @@ export function useViewerGraphState({ currentChapter, setCurrentChapter, bookKey
       prevValidEvent,
       events,
       elements,
-      graphViewState,
       edgeLabelVisible,
       currentCharIndex,
       graphFullScreen,
@@ -134,7 +132,6 @@ export function useViewerGraphState({ currentChapter, setCurrentChapter, bookKey
       prevValidEvent,
       events,
       elements,
-      graphViewState,
       edgeLabelVisible,
       currentCharIndex,
       graphFullScreen,
@@ -180,7 +177,6 @@ export function useViewerGraphState({ currentChapter, setCurrentChapter, bookKey
     setCurrentEvent,
     setEvents,
     setElements,
-    setGraphViewState,
     setCurrentCharIndex,
     setIsDataReady,
     setIsGraphLoading,

@@ -5,7 +5,23 @@ import {
   loadSettings,
 } from '../common/settingsUtils';
 import { isGraphEdgeElement } from '../graph/graphUtils';
-import { toPositiveNumberFromId, toPositiveNumberOrNull } from '../common/numberUtils';
+import { resolveChapterIndex, toPositiveNumberFromId, toPositiveNumberOrNull } from '../common/valueUtils';
+
+function normalizeEventIdx(event) {
+  if (!event || typeof event !== 'object') return null;
+  return (
+    toPositiveNumberOrNull(event.eventNum) ??
+    toPositiveNumberOrNull(event.eventIdx) ??
+    toPositiveNumberOrNull(event.idx) ??
+    toPositiveNumberFromId(event.eventId) ??
+    toPositiveNumberOrNull(event.resolvedEventIdx) ??
+    toPositiveNumberOrNull(event.originalEventIdx) ??
+    toPositiveNumberOrNull(event.event?.eventNum) ??
+    toPositiveNumberOrNull(event.event?.eventIdx) ??
+    toPositiveNumberOrNull(event.event?.idx) ??
+    toPositiveNumberFromId(event.event?.eventId)
+  );
+}
 
 export const eventUtils = {
   resolveRelationNodeIds: (relation) => {
@@ -31,44 +47,38 @@ export const eventUtils = {
 
   resolveChapterIdx: (event) => {
     if (!event || typeof event !== 'object') return null;
+    const fromIndex = toPositiveNumberOrNull(resolveChapterIndex(event));
+    if (fromIndex) return fromIndex;
+    const fromChapter = toPositiveNumberOrNull(event.chapter);
+    if (fromChapter) return fromChapter;
+    const nested = event.event;
+    if (!nested || typeof nested !== 'object') return null;
     return (
-      toPositiveNumberOrNull(event.chapterIdx) ??
-      toPositiveNumberOrNull(event.chapter) ??
-      toPositiveNumberOrNull(event.event?.chapterIdx) ??
-      toPositiveNumberOrNull(event.event?.chapter)
-    );
-  },
-
-  normalizeEventIdx: (event) => {
-    if (!event || typeof event !== 'object') return null;
-    return (
-      toPositiveNumberOrNull(event.eventNum) ??
-      toPositiveNumberOrNull(event.eventIdx) ??
-      toPositiveNumberOrNull(event.idx) ??
-      toPositiveNumberFromId(event.eventId) ??
-      toPositiveNumberOrNull(event.resolvedEventIdx) ??
-      toPositiveNumberOrNull(event.originalEventIdx) ??
-      toPositiveNumberOrNull(event.event?.eventNum) ??
-      toPositiveNumberOrNull(event.event?.eventIdx) ??
-      toPositiveNumberOrNull(event.event?.idx) ??
-      toPositiveNumberFromId(event.event?.eventId)
+      toPositiveNumberOrNull(resolveChapterIndex(nested)) ??
+      toPositiveNumberOrNull(nested.chapter)
     );
   },
 
   resolveEventOrdinal(event) {
     if (!event || typeof event !== 'object') return null;
-    const direct = this.normalizeEventIdx(event);
+    const direct = normalizeEventIdx(event);
     if (direct) return direct;
 
     const inner = event.event;
     if (inner && typeof inner === 'object') {
-      const fromInner = this.normalizeEventIdx(inner) ?? toPositiveNumberFromId(this.resolveEventId(inner));
+      const fromInner = normalizeEventIdx(inner) ?? toPositiveNumberFromId(eventUtils.resolveEventId(inner));
       if (fromInner) return fromInner;
     }
-    return toPositiveNumberFromId(this.resolveEventId(event));
+    return toPositiveNumberFromId(eventUtils.resolveEventId(event));
   },
 
-  extractRawEventIdx: (event) => eventUtils.resolveEventOrdinal(event) ?? 0,
+  resolveEventNum(event, fallback = 0) {
+    if (typeof event === 'number' && Number.isFinite(event) && event > 0) {
+      return Math.trunc(event);
+    }
+    const idx = eventUtils.resolveEventOrdinal(event) ?? 0;
+    return idx > 0 ? idx : fallback;
+  },
 
   convertElementsToRelations: (elements, options = {}) => {
     if (!Array.isArray(elements) || elements.length === 0) return [];
@@ -104,7 +114,7 @@ export const eventUtils = {
   findEventInCache: (events, eventIdx) => {
     if (!Array.isArray(events) || !Number.isFinite(eventIdx)) return null;
     return (
-      events.find((e) => eventUtils.extractRawEventIdx(e) === eventIdx) || null
+      events.find((e) => eventUtils.resolveEventNum(e) === eventIdx) || null
     );
   },
 
@@ -122,9 +132,9 @@ export const eventUtils = {
       (evt) => Number(eventUtils.resolveChapterIdx(evt)) === targetChapter
     );
 
-    const targetIdx = eventUtils.extractRawEventIdx(newEvent);
+    const targetIdx = eventUtils.resolveEventNum(newEvent);
     const existingIdx = currentChapterEvents.findIndex(
-      (evt) => eventUtils.extractRawEventIdx(evt) === targetIdx
+      (evt) => eventUtils.resolveEventNum(evt) === targetIdx
     );
 
     let updatedCurrent = [];
@@ -136,12 +146,12 @@ export const eventUtils = {
       updatedCurrent = [...currentChapterEvents, newEvent];
     }
 
-    updatedCurrent.sort((a, b) => eventUtils.extractRawEventIdx(a) - eventUtils.extractRawEventIdx(b));
+    updatedCurrent.sort((a, b) => eventUtils.resolveEventNum(a) - eventUtils.resolveEventNum(b));
     return [...otherChapterEvents, ...updatedCurrent].sort((a, b) => {
       const chapterA = Number(eventUtils.resolveChapterIdx(a) ?? 0);
       const chapterB = Number(eventUtils.resolveChapterIdx(b) ?? 0);
       if (chapterA !== chapterB) return chapterA - chapterB;
-      return eventUtils.extractRawEventIdx(a) - eventUtils.extractRawEventIdx(b);
+      return eventUtils.resolveEventNum(a) - eventUtils.resolveEventNum(b);
     });
   },
 };
@@ -176,67 +186,6 @@ export function resolveViewerBookKey(book, routeBookId = null, { trimRoute = tru
   const raw = routeBookId ?? book?.id ?? book?.filename ?? '';
   const str = String(raw);
   return trimRoute ? str.trim() : str;
-}
-
-/** 이벤트 객체·숫자에서 eventIdx 추출, 없으면 fallback */
-export function resolveEventIdxOrFallback(currentEvent, fallback = null) {
-  if (typeof currentEvent === 'number' && Number.isFinite(currentEvent) && currentEvent > 0) {
-    return currentEvent;
-  }
-  const idx = eventUtils.extractRawEventIdx(currentEvent);
-  if (idx > 0) return idx;
-  return fallback;
-}
-
-export function extractEventNodesAndEdges(event) {
-  if (!event || typeof event !== 'object') {
-    errorUtils.logWarning('extractEventNodesAndEdges', '유효하지 않은 이벤트 객체입니다', {
-      event,
-      type: typeof event,
-    });
-    return { nodes: new Set(), edges: new Set() };
-  }
-
-  try {
-    const nodes = new Set();
-    const edges = new Set();
-
-    if (Array.isArray(event.relations)) {
-      for (const rel of event.relations) {
-        if (!rel || typeof rel !== 'object') {
-          errorUtils.logWarning('extractEventNodesAndEdges', '유효하지 않은 관계 객체입니다', { rel });
-          continue;
-        }
-
-        const { id1, id2 } = eventUtils.resolveRelationNodeIds(rel);
-
-        if (id1) nodes.add(String(id1));
-        if (id2) nodes.add(String(id2));
-        if (id1 && id2) edges.add(`${id1}-${id2}`);
-      }
-    }
-
-    if (event.importance && typeof event.importance === 'object') {
-      for (const id of Object.keys(event.importance)) {
-        if (id) nodes.add(String(id));
-      }
-    }
-
-    if (Array.isArray(event.new_appearances)) {
-      for (const id of event.new_appearances) {
-        if (id) nodes.add(String(id));
-      }
-    }
-
-    return { nodes, edges };
-  } catch (error) {
-    return errorUtils.handleError(
-      'extractEventNodesAndEdges',
-      error,
-      { nodes: new Set(), edges: new Set() },
-      { event }
-    );
-  }
 }
 
 export function saveViewerMode(mode) {

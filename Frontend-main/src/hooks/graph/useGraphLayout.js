@@ -84,31 +84,6 @@ function scheduleRippleWhenPositionsPainted(cy, triggerRippleForAddedNodes) {
   return cancel;
 }
 
-function fadeInNewElements(cy, elementsUpdateRef, onComplete, _skipAnimation, addSnapshot = null) {
-  const snap = addSnapshot ?? elementsUpdateRef?.current;
-  if (!cy || !snap) {
-    onComplete?.();
-    return;
-  }
-  const { nodesToAdd = [], edgesToAdd = [] } = snap;
-  const ids = [...nodesToAdd, ...edgesToAdd]
-    .map((x) => x?.data?.id)
-    .filter((id) => id != null && id !== "");
-  if (ids.length === 0) {
-    onComplete?.();
-    return;
-  }
-  onComplete?.();
-}
-
-function pulseDataChangedElements(cy, ids, onComplete) {
-  if (!cy || !ids?.length) {
-    onComplete?.();
-    return;
-  }
-  onComplete?.();
-}
-
 export function useGraphLayout({
   cy,
   elementsFingerprint,
@@ -237,35 +212,22 @@ export function useGraphLayout({
       const preserveUnchangedPositions =
         edgesOnlyIncremental || incrementalLayoutScope;
 
-      const fadeSnapshot = {
-        nodesToAdd: nodesToAdd.slice(),
-        edgesToAdd: edgesToAdd.slice(),
-      };
-
       const completeCallback = () => {
         handleLayoutComplete(cy, isInitialLoad, {
           skipOverlap: preserveUnchangedPositions,
           skipEnsureBounds:
             preserveUnchangedPositions || (styleOnlyIncremental && !incrementalLayoutScope),
         });
-        fadeInNewElements(
-          cy,
-          elementsUpdateRef,
-          () => {
-            if (nodesToAdd.length > 0 || edgesToAdd.length > 0) {
-              cancelRipple();
-              cancelRipple = scheduleRippleWhenPositionsPainted(
-                cy,
-                triggerRippleForAddedNodes
-              );
-            }
-            if (isInitialLoad) {
-              setIsInitialLoad(false);
-            }
-          },
-          true,
-          fadeSnapshot
-        );
+        if (nodesToAdd.length > 0 || edgesToAdd.length > 0) {
+          cancelRipple();
+          cancelRipple = scheduleRippleWhenPositionsPainted(
+            cy,
+            triggerRippleForAddedNodes
+          );
+        }
+        if (isInitialLoad) {
+          setIsInitialLoad(false);
+        }
       };
 
       if (layout && layoutName !== "preset") {
@@ -290,11 +252,9 @@ export function useGraphLayout({
       if (stylesheet) {
         applyNodeSizes(cy);
       }
-      pulseDataChangedElements(cy, dataChangedIds, () => {
-        handleLayoutComplete(cy, false, {
-          skipOverlap: true,
-          skipEnsureBounds: true,
-        });
+      handleLayoutComplete(cy, false, {
+        skipOverlap: true,
+        skipEnsureBounds: true,
       });
       if (isInitialLoad) {
         setIsInitialLoad(false);

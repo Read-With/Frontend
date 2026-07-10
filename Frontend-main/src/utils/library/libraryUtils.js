@@ -2,7 +2,7 @@
 
 import JSZip from 'jszip';
 import { getProgressFromCache } from '../common/cache/progressCache';
-import { clampPercent } from '../common/numberUtils';
+import { clampPercent } from '../common/valueUtils';
 
 /** 마이페이지 BookCard·useBooks — locator 기반 캐시 진도만 사용 */
 export function resolveLibraryReadingProgressPercent(book) {

@@ -1,97 +1,52 @@
-/** book-scope/fine graph API·manifest 로드 (RelationGraph 전용) */
+/** book-scope 그래프 API·manifest 로드 (RelationGraph 전용) */
 
-import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { getBookScopeRelationshipGraph, getFineGraph } from '../../utils/api/api.js';
-import { anchorToLocators } from '../../utils/common/locatorUtils';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { getBookScopeRelationshipGraph } from '../../utils/api/api.js';
 import {
-  resolveMaxChapter,
   loadGraphDataWithCache,
   hasMacroGraphStorageCache,
   hasMacroSessionCache,
   prefetchMacroGraphToCache,
 } from '../../utils/graph/graphData';
+import { getMaxChapter } from '../../utils/common/cache/manifestCache';
 import { useErrorHandler } from '../common/useErrorHandler';
-import { resolveEventIdxOrFallback } from '../common/hooksShared';
 import { ensureBookManifest } from '../common/manifestEnsure';
 import { cacheKeyUtils } from '../../utils/viewer/viewerCoreStateUtils';
 
 const ERROR_DISPLAY_DURATION = 5000;
 
-export function useApiGraphData(
-  serverBookId,
-  currentChapter,
-  currentEvent,
-  options = {},
-) {
-  const { macroOnly = false } = options;
+export function useApiGraphData(serverBookId, currentChapter) {
   const [manifestData, setManifestData] = useState(null);
   const [manifestReady, setManifestReady] = useState(false);
   const [fullMacroData, setFullMacroData] = useState(null);
-  const [rawFineData, setRawFineData] = useState(null);
   const [apiMaxChapter, setApiMaxChapter] = useState(1);
   const [userCurrentChapter, setUserCurrentChapter] = useState(null);
   const [isGraphLoading, setIsGraphLoading] = useState(false);
-  const [apiFineLoading, setApiFineLoading] = useState(false);
-
-  const fineEpochRef = useRef(0);
-  const isFineGraphLoadingRef = useRef(false);
-  const fineAbortRef = useRef(null);          // AbortController for the in-flight fine graph request
-  const prevFineTargetKeyRef = useRef(null);
   const { handleError } = useErrorHandler('API Graph Data');
   const [apiError, setApiError] = useState(null);
-
-  const resetFineLoadingState = useCallback((clearFineData = false) => {
-    isFineGraphLoadingRef.current = false;
-    setApiFineLoading(false);
-    if (clearFineData) {
-      setRawFineData(null);
-    }
-  }, []);
-
-  const apiFineData = useMemo(() => {
-    if (macroOnly) return fullMacroData;
-    return rawFineData;
-  }, [macroOnly, fullMacroData, rawFineData]);
-
-  const fineTargetKey = useMemo(() => {
-    if (!serverBookId) return '';
-    const chapterIdx = Number(currentChapter);
-    const safeChapterIdx = Number.isFinite(chapterIdx) && chapterIdx >= 1 ? chapterIdx : 1;
-    const eventIdx = resolveEventIdxOrFallback(currentEvent, 1);
-    return `${serverBookId}:${safeChapterIdx}:${eventIdx}`;
-  }, [serverBookId, currentChapter, currentEvent]);
-
-  useEffect(() => {
-    if (!serverBookId) {
-      prevFineTargetKeyRef.current = null;
-      return;
-    }
-    if (!fineTargetKey) return;
-    const prevKey = prevFineTargetKeyRef.current;
-    if (prevKey === fineTargetKey) return;
-    prevFineTargetKeyRef.current = fineTargetKey;
-    if (prevKey == null) {
-      return; // first load — don't wipe anything
-    }
-    fineAbortRef.current?.abort();
-    resetFineLoadingState(true);
-  }, [serverBookId, fineTargetKey, resetFineLoadingState]);
+  const macroRequestIdRef = useRef(0);
+  const manifestRequestIdRef = useRef(0);
 
   const loadManifestData = useCallback(async () => {
     if (!serverBookId) {
+      manifestRequestIdRef.current += 1;
+      setManifestData(null);
       setManifestReady(true);
       return;
     }
 
+    const requestId = ++manifestRequestIdRef.current;
     const targetBookId = serverBookId;
     setManifestReady(false);
-    const initialMaxChapter = resolveMaxChapter(targetBookId, null);
+    const initialMaxChapter = getMaxChapter(targetBookId, null, { fallback: 1 });
 
     const outcome = await ensureBookManifest(targetBookId);
+    if (requestId !== manifestRequestIdRef.current) return;
 
     if (outcome.manifest) {
       setManifestData(outcome.manifest);
-      setApiMaxChapter(resolveMaxChapter(targetBookId, outcome.manifest));
+      setApiMaxChapter(getMaxChapter(targetBookId, outcome.manifest, { fallback: 1 }));
+      setApiError(null);
     } else if (!outcome.ok && !outcome.skipped) {
       setApiMaxChapter(initialMaxChapter);
       if (outcome.error) {
@@ -111,36 +66,46 @@ export function useApiGraphData(
       }
     }
 
-    setManifestReady(true);
+    if (requestId === manifestRequestIdRef.current) {
+      setManifestReady(true);
+    }
   }, [serverBookId, handleError]);
 
   useEffect(() => {
     if (!serverBookId) return;
     setFullMacroData(null);
-    setRawFineData(null);
-    fineEpochRef.current += 1;
-    resetFineLoadingState(false);
-  }, [serverBookId, resetFineLoadingState]);
+    setUserCurrentChapter(null);
+    setManifestData(null);
+    setManifestReady(false);
+  }, [serverBookId]);
 
   useEffect(() => {
     if (!serverBookId) return;
-    // 세션 캐시가 있으면 clear 스킵 — loadMacroGraphData가 즉시 덮어씀
     if (!hasMacroSessionCache(serverBookId, currentChapter)) {
       setFullMacroData(null);
     }
   }, [serverBookId, currentChapter]);
 
   const loadMacroGraphData = useCallback(async () => {
-    if (!serverBookId) return;
+    if (!serverBookId) {
+      setIsGraphLoading(false);
+      return;
+    }
     const chapter = Number(currentChapter);
-    if (!Number.isFinite(chapter) || chapter < 1) return;
+    if (!Number.isFinite(chapter) || chapter < 1) {
+      setIsGraphLoading(false);
+      return;
+    }
 
+    const requestId = ++macroRequestIdRef.current;
     const targetBookId = serverBookId;
     let loadingKickTimer = null;
     const warmMacro = hasMacroGraphStorageCache(targetBookId, chapter);
     if (warmMacro) {
       loadingKickTimer = globalThis.setTimeout(() => {
-        setIsGraphLoading(true);
+        if (requestId === macroRequestIdRef.current) {
+          setIsGraphLoading(true);
+        }
       }, 40);
     } else {
       setIsGraphLoading(true);
@@ -155,12 +120,15 @@ export function useApiGraphData(
         cacheKey,
         apiCall: () => getBookScopeRelationshipGraph(targetBookId, chapter, null),
         onSuccess: (data) => {
+          if (requestId !== macroRequestIdRef.current) return;
+          setApiError(null);
           setFullMacroData(data);
           if (data.userCurrentChapter !== undefined) {
             setUserCurrentChapter(data.userCurrentChapter);
           }
         },
         onError: (error) => {
+          if (requestId !== macroRequestIdRef.current) return;
           setFullMacroData(null);
           const errorInfo = handleError(error, '책 범위 관계 그래프 로드 실패', {
             metadata: { bookId: targetBookId, uptoChapter: chapter },
@@ -170,6 +138,7 @@ export function useApiGraphData(
         },
       });
     } catch (error) {
+      if (requestId !== macroRequestIdRef.current) return;
       setFullMacroData(null);
       const errorInfo = handleError(error, '책 범위 관계 그래프 로드 중 예외', {
         metadata: { bookId: targetBookId },
@@ -180,113 +149,26 @@ export function useApiGraphData(
       if (loadingKickTimer != null) {
         globalThis.clearTimeout(loadingKickTimer);
       }
-      setIsGraphLoading(false);
+      if (requestId === macroRequestIdRef.current) {
+        setIsGraphLoading(false);
+      }
     }
   }, [serverBookId, currentChapter, handleError]);
 
-  const loadFineGraphData = useCallback(async () => {
-    if (macroOnly) {
-      resetFineLoadingState(false);
-      return;
-    }
-    if (!manifestReady) {
-      resetFineLoadingState(false);
-      return;
-    }
-    if (!serverBookId) {
-      resetFineLoadingState(false);
-      return;
-    }
-
-    const targetBookId = serverBookId;
-    const chapterIdx = Number(currentChapter);
-    if (!Number.isFinite(chapterIdx) || chapterIdx < 1) {
-      resetFineLoadingState(false);
-      return;
-    }
-    const eventIdx = resolveEventIdxOrFallback(currentEvent, 1);
-    const atLocator = anchorToLocators(currentEvent?.anchor).startLocator;
-
-    if (eventIdx < 1) {
-      resetFineLoadingState(false);
-      return;
-    }
-
-    // Cancel any previous in-flight request and start a new one.
-    fineAbortRef.current?.abort();
-    const controller = new AbortController();
-    fineAbortRef.current = controller;
-    const { signal } = controller;
-
-    setApiFineLoading(true);
-
-    try {
-      const cacheKey = cacheKeyUtils.fineGraphStorage(targetBookId, chapterIdx, eventIdx);
-      await loadGraphDataWithCache({
-        bookId: targetBookId,
-        chapter: chapterIdx,
-        eventIdx,
-        cacheKey,
-        // 강제 이벤트: locator→이벤트 재해석이 덮어쓰지 않도록 eventIdx 고정 경로만 사용
-        apiCall: () =>
-          getFineGraph(targetBookId, chapterIdx, eventIdx, atLocator),
-        macroData: null,
-        onSuccess: (data) => {
-          if (signal.aborted) return;
-          setRawFineData(data);
-        },
-        onError: (error) => {
-          if (signal.aborted) return;
-          const errorInfo = handleError(error, 'Fine Graph 로드 실패', {
-            metadata: { bookId: targetBookId, chapterIdx, eventIdx },
-            autoClear: false,
-          });
-          setApiError(errorInfo);
-        },
-      });
-    } catch (error) {
-      if (signal.aborted) return;
-      const errorInfo = handleError(error, 'Fine Graph 로드 중 예외', {
-        metadata: { bookId: targetBookId, chapterIdx, eventIdx },
-        autoClear: false,
-      });
-      setApiError(errorInfo);
-    } finally {
-      if (!signal.aborted) {
-        resetFineLoadingState(false);
-      }
-    }
-  }, [
-    macroOnly,
-    manifestReady,
-    serverBookId,
-    currentChapter,
-    currentEvent,
-    handleError,
-    resetFineLoadingState,
-  ]);
-
   useEffect(() => {
     loadManifestData();
+    return () => {
+      manifestRequestIdRef.current += 1;
+    };
   }, [loadManifestData]);
 
   useEffect(() => {
     loadMacroGraphData();
+    return () => {
+      macroRequestIdRef.current += 1;
+    };
   }, [loadMacroGraphData]);
 
-  useEffect(() => {
-    if (macroOnly) {
-      resetFineLoadingState(false);
-      return;
-    }
-    loadFineGraphData();
-  }, [macroOnly, loadFineGraphData, resetFineLoadingState]);
-
-  useEffect(() => {
-    return () => { fineAbortRef.current?.abort(); };
-  }, []);
-
-  // 현재 챕터 로드 완료 후 다음 챕터를 백그라운드 프리페치
   useEffect(() => {
     if (!serverBookId || !fullMacroData || apiMaxChapter <= 1) return;
     const nextCh = Number(currentChapter) + 1;
@@ -308,11 +190,9 @@ export function useApiGraphData(
     manifestData,
     manifestReady,
     apiBookGraphData: fullMacroData,
-    apiFineData,
     apiMaxChapter,
     userCurrentChapter,
     isGraphLoading,
-    apiFineLoading,
     apiError,
     clearError: () => setApiError(null),
   };

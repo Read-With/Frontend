@@ -15,22 +15,22 @@ import {
   useGraphSearch,
   useGraphState,
   useGraphElementPipeline,
-} from '../../hooks/graph/graphViewHooks';
-import { useGraphDataLoader } from '../../hooks/graph/useGraphDataLoader';
+} from '../../hooks/graph/useGraphViewHooks';
 import { useApiGraphData } from '../../hooks/graph/useApiGraphData';
 import { useLocalStorageNumber } from '../../hooks/common/useLocalStorage.js';
-import { resolveServerBookIdOrFallback, resolveEventIdxOrFallback } from '../../hooks/common/hooksShared';
+import { resolveServerBookIdOrFallback } from '../../hooks/common/hooksShared';
 import { convertRelationsToElements } from '../../utils/graph/graphDataUtils';
 import { createCharacterMaps, buildNodeWeights, extractNodeWeightsFromElements } from '../../utils/graph/characterUtils';
 import { getGraphEventState } from '../../utils/common/cache/chapterEventCache';
-import { resolveGraphElementsProfileImages } from '../../utils/common/artifactUrlUtils';
+import { resolveGraphElementsProfileImages } from '../../utils/common/urlUtils';
 import {
   calculateLastEventForChapter,
-  calculateNodeCount,
-  calculateRelationCount,
+  processTooltipData,
+  buildTooltipPayload,
+  createTooltipTapHandlers,
+  isGraphNodeElement,
 } from '../../utils/graph/graphUtils';
 import { eventUtils } from '../../utils/viewer/viewerCoreStateUtils';
-import { buildProcessedTooltip, createTooltipTapHandlers } from '../../utils/graph/graphTooltipUtils';
 import {
   convertFineGraphToElements,
   hasFineGraphPayload,
@@ -45,7 +45,7 @@ import {
 import { useChapterPovSummaries } from '../../hooks/graph/useChapterPovSummaries';
 import {
   getChapterData,
-  isValidEvent,
+  findManifestEventInChapter,
 } from '../../utils/common/cache/manifestCache.js';
 import { stripRedundantBookTitlePrefix } from '../../utils/viewer/chapterTitleDisplay';
 
@@ -219,7 +219,6 @@ function RelationGraphWrapper() {
     isSidebarClosing,
     forceClose,
     filterStage,
-    isDropdownSelection,
     setActiveTooltip,
     setForceClose,
     setIsSidebarClosing,
@@ -228,21 +227,18 @@ function RelationGraphWrapper() {
     startClosing,
     closeSidebar,
     setFilterStage,
-    setDropdownSelection,
   } = useGraphState();
 
   const {
     manifestData,
     manifestReady,
     apiBookGraphData,
-    apiFineData,
     apiMaxChapter,
     userCurrentChapter,
     isGraphLoading,
-    apiFineLoading,
     apiError,
     clearError: clearApiError,
-  } = useApiGraphData(serverBookId, currentChapter, currentEvent, { macroOnly: true });
+  } = useApiGraphData(serverBookId, currentChapter);
 
   const { povSummaries } = useChapterPovSummaries(
     serverBookId,
@@ -269,15 +265,14 @@ function RelationGraphWrapper() {
     };
   }, [location.state, location.pathname]);
 
-  const loaderEventIdx = useMemo(
-    () => resolveEventIdxOrFallback(currentEvent, null),
-    [currentEvent],
+  const currentChapterData = useMemo(
+    () => ({
+      characters: Array.isArray(apiBookGraphData?.characters)
+        ? apiBookGraphData.characters
+        : [],
+    }),
+    [apiBookGraphData],
   );
-
-  const {
-    currentChapterData,
-  } = useGraphDataLoader(serverBookId, currentChapter, loaderEventIdx);
-  const newNodeIds = useMemo(() => [], []);
 
   const manifestBookTitleStr = useMemo(
     () => String(manifestData?.book?.title ?? '').trim(),
@@ -319,20 +314,20 @@ function RelationGraphWrapper() {
     if (serverBookId == null || !manifestReady) return;
     const ch = Number(currentChapter);
     if (!Number.isFinite(ch) || ch < 1) return;
-    if (isValidEvent(serverBookId, ch, currentEvent, manifestData)) return;
+    if (findManifestEventInChapter(serverBookId, ch, { eventIdx: currentEvent }, manifestData)) return;
     const chData = getChapterData(serverBookId, ch, manifestData);
     const firstEv = Array.isArray(chData?.events) ? chData.events[0] : null;
-    const next = eventUtils.extractRawEventIdx(firstEv) || 1;
+    const next = eventUtils.resolveEventNum(firstEv) || 1;
     if (!(next > 0) || next === currentEvent) return;
-    if (isValidEvent(serverBookId, ch, next, manifestData)) {
+    if (findManifestEventInChapter(serverBookId, ch, { eventIdx: next }, manifestData)) {
       setCurrentEvent(next);
     }
   }, [serverBookId, manifestReady, manifestData, currentChapter, currentEvent]);
 
   const graphApiPayload = useMemo(() => {
-    if (!apiFineData || !hasFineGraphPayload(apiFineData)) return null;
-    return apiFineData;
-  }, [apiFineData]);
+    if (!apiBookGraphData || !hasFineGraphPayload(apiBookGraphData)) return null;
+    return apiBookGraphData;
+  }, [apiBookGraphData]);
 
   const apiElements = useMemo(() => {
     if (!graphApiPayload) return [];
@@ -376,6 +371,10 @@ function RelationGraphWrapper() {
     };
   }, [apiElements]);
 
+  const { searchState: graphSearchState, searchActions } = useGraphSearch(
+    elements,
+    currentChapterData,
+  );
   const {
     searchTerm,
     isSearchActive,
@@ -385,16 +384,14 @@ function RelationGraphWrapper() {
     suggestions,
     showSuggestions,
     selectedIndex,
-    handleKeyDown,
-    closeSuggestions,
-    handleSearchSubmit,
+  } = graphSearchState;
+  const {
+    onSearchSubmit: handleSearchSubmit,
     clearSearch,
-    setSearchTerm,
-  } = useGraphSearch(elements, null, currentChapterData);
-
-  const handleGenerateSuggestions = useCallback((searchTerm) => {
-    setSearchTerm(searchTerm);
-  }, [setSearchTerm]);
+    closeSuggestions,
+    onGenerateSuggestions: setSearchTerm,
+    handleKeyDown,
+  } = searchActions;
 
   const centerElementBetweenSidebars = useCallback((elementId) => {
     const cy = cyRef.current;
@@ -431,7 +428,7 @@ function RelationGraphWrapper() {
     const cy = cyRef.current;
     if (cy) viewBeforeSelectionRef.current = { pan: { ...cy.pan() }, zoom: cy.zoom() };
 
-    const processedTooltipData = buildProcessedTooltip(tapPayload, type);
+    const processedTooltipData = processTooltipData(buildTooltipPayload(tapPayload, type), type);
     setActiveTooltip(processedTooltipData);
     centerElementBetweenSidebars(processedTooltipData.id);
   }, [setForceClose, setIsSidebarClosing, setActiveTooltip, centerElementBetweenSidebars]);
@@ -483,11 +480,13 @@ function RelationGraphWrapper() {
   });
 
   const nodeCount = useMemo(() => {
-    return calculateNodeCount(elements, filterStage, filteredMainCharacters);
+    const source = filterStage > 0 ? filteredMainCharacters : elements;
+    return source.filter(isGraphNodeElement).length;
   }, [filterStage, filteredMainCharacters, elements]);
 
   const relationCount = useMemo(() => {
-    return calculateRelationCount(elements, filterStage, filteredMainCharacters, eventUtils);
+    const source = filterStage > 0 ? filteredMainCharacters : elements;
+    return eventUtils.filterEdges(source).length;
   }, [filterStage, filteredMainCharacters, elements]);
 
   const edgeStyle = getEdgeStyle('graph');
@@ -514,7 +513,6 @@ function RelationGraphWrapper() {
 
   const handleChapterSelect = useCallback((chapter) => {
     if (chapter !== currentChapter) {
-      setDropdownSelection(true);
       clearGraphSelection();
       setCurrentChapter(chapter);
 
@@ -535,21 +533,8 @@ function RelationGraphWrapper() {
     manifestData?.chapters,
     serverBookId,
     clearGraphSelection,
-    setDropdownSelection,
     setCurrentEvent,
   ]);
-
-  useEffect(() => {
-    if (isDropdownSelection) {
-      const timeoutId = setTimeout(() => {
-        setDropdownSelection(false);
-      }, 100);
-
-      return () => {
-        clearTimeout(timeoutId);
-      };
-    }
-  }, [isDropdownSelection, setDropdownSelection]);
 
   const triggerForceClose = useCallback(() => {
     if (timeoutRef.current) {
@@ -622,7 +607,7 @@ function RelationGraphWrapper() {
     [apiMaxChapter]
   );
 
-  const isLoading = apiFineLoading || isGraphLoading;
+  const isLoading = isGraphLoading;
   const isApiGraphEmpty = useMemo(() => {
     if (isLoading) return false;
     const chars = Array.isArray(graphApiPayload?.characters) ? graphApiPayload.characters.length : 0;
@@ -647,10 +632,10 @@ function RelationGraphWrapper() {
   const topBarSearchActions = useMemo(() => ({
     onSearchSubmit: handleSearchSubmit,
     onClearSearch: clearSearch,
-    onGenerateSuggestions: handleGenerateSuggestions,
+    onGenerateSuggestions: setSearchTerm,
     onKeyDown: handleKeyDown,
     onCloseSuggestions: closeSuggestions,
-  }), [handleSearchSubmit, clearSearch, handleGenerateSuggestions, handleKeyDown, closeSuggestions]);
+  }), [handleSearchSubmit, clearSearch, setSearchTerm, handleKeyDown, closeSuggestions]);
 
   const sidebarControl = useMemo(() => ({
     isSidebarClosing,
@@ -671,9 +656,7 @@ function RelationGraphWrapper() {
   const cytoscapeConfig = useMemo(() => ({
     stylesheet,
     layout,
-    newNodeIds,
-    isDropdownSelection,
-  }), [stylesheet, layout, newNodeIds, isDropdownSelection]);
+  }), [stylesheet, layout]);
 
   const tooltipHandlers = useMemo(() => ({
     onShowNodeTooltip,
@@ -759,19 +742,16 @@ function RelationGraphWrapper() {
         currentChapterTitle={currentChapterTitle}
         userReadingChapterTitle={userReadingChapterTitle}
         eventNum={Math.max(currentEvent, 1)}
-        maxChapter={apiMaxChapter}
         filename={filename}
         elements={elements}
         renderElements={finalElements}
         povSummaries={povSummaries}
         apiBookGraphData={apiBookGraphData}
-        apiFineData={apiFineData}
         bookId={serverBookId}
         isLoading={isLoading}
         hasShownGraphOnce={hasShownGraphOnce}
         onCanvasClick={handleCanvasClick}
         currentChapter={currentChapter}
-        currentEvent={currentEvent}
         userCurrentChapter={userCurrentChapter}
         nodeCount={nodeCount}
         relationCount={relationCount}

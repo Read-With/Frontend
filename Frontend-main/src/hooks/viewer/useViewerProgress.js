@@ -10,8 +10,8 @@ import { canResolveProgressMetrics } from '../../utils/common/cache/manifestCach
 import { viewerResumeAnchorKey } from '../../utils/common/locatorUtils';
 import { errorUtils } from '../../utils/common/errorUtils';
 import { delay } from '../../utils/viewer/viewerCoreStateUtils';
+import { clampPercent } from '../../utils/common/valueUtils';
 import {
-  clampProgressPercent,
   progressRowToTopBar,
   resolveMetricsFromLocator,
   resolveMetricsFromReadingLocatorKey,
@@ -250,7 +250,7 @@ export function useViewerProgress({
   useEffect(() => {
     if (!bookKey) return;
 
-    const pct = clampProgressPercent(progress);
+    const pct = clampPercent(progress);
     const nextCp =
       liveChapterProgressRef.current ??
       resolveMetricsFromReadingLocatorKey(bookKey, readingLocatorKey, {
@@ -289,7 +289,7 @@ export function useViewerProgress({
 
   const updateReadingPercent = useCallback(
     (percent) => {
-      const pct = clampProgressPercent(percent);
+      const pct = clampPercent(percent);
       if (pct != null) {
         setProgress(pct);
       }

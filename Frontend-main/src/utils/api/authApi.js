@@ -1,6 +1,6 @@
 /** 인증·토큰 갱신·authenticatedFetch */
 
-import { getApiBaseUrl, clearAuthData } from '../common/authUtils';
+import { getApiBaseUrl, clearAuthData } from '../common/urlUtils';
 import {
   getStoredAccessToken,
   setStoredAccessToken,
@@ -8,8 +8,6 @@ import {
   setStoredRefreshToken,
   setStoredGoogleUserJson,
 } from '../security/authTokenStorage';
-
-const API_BASE_URL = getApiBaseUrl();
 
 export const makeSilentError = (code, message) => ({
   isSuccess: false,
@@ -126,7 +124,7 @@ async function refreshAccessTokenIfExpiringSoon() {
 }
 
 async function fetchPublicAuthJson(path, options = {}) {
-  const response = await fetch(`${API_BASE_URL}/api${path}`, {
+  const response = await fetch(`${getApiBaseUrl()}/api${path}`, {
     ...options,
     headers: { ...JSON_ACCEPT_HEADERS, ...options.headers },
   });
@@ -136,39 +134,51 @@ async function fetchPublicAuthJson(path, options = {}) {
   return response.json();
 }
 
-export const authenticatedRequest = async (endpoint, options = {}, retryCount = 0) => {
+async function authorizedFetch(url, options = {}, retryCount = 0) {
   await ensureSessionAccessToken();
   const token = await refreshAccessTokenIfExpiringSoon();
 
   const isFormData = options.body instanceof FormData;
-  const defaultHeaders = {
-    ...(!isFormData && { 'Content-Type': 'application/json' }),
-    Accept: 'application/json',
+  const headers = {
+    Accept: options.acceptHeader ?? 'application/json',
+    ...(!isFormData && options.skipJsonContentType !== true && { 'Content-Type': 'application/json' }),
+    ...options.headers,
   };
-
   if (token) {
-    defaultHeaders.Authorization = `Bearer ${token}`;
+    headers.Authorization = `Bearer ${token}`;
   }
 
-  const response = await fetch(`${API_BASE_URL}/api${endpoint}`, {
-    ...options,
+  const { acceptHeader: _a, skipJsonContentType: _s, ...fetchOptions } = options;
+  const response = await fetch(url, {
+    ...fetchOptions,
     headers: {
-      ...defaultHeaders,
-      ...options.headers,
+      ...headers,
+      ...fetchOptions.headers,
     },
   });
 
-  if (!response.ok) {
-    if (response.status === 401 && retryCount === 0) {
-      try {
-        await refreshToken();
-        return authenticatedRequest(endpoint, options, retryCount + 1);
-      } catch (_refreshError) {
-        clearAuthData();
-        throw createAuthExpiredError();
-      }
+  if (response.status === 401 && retryCount === 0) {
+    try {
+      await refreshToken();
+      return authorizedFetch(url, options, retryCount + 1);
+    } catch (_refreshError) {
+      clearAuthData();
+      throw createAuthExpiredError();
     }
+  }
 
+  return response;
+}
+
+export const authenticatedRequest = async (endpoint, options = {}) => {
+  const isFormData = options.body instanceof FormData;
+  const response = await authorizedFetch(`${getApiBaseUrl()}/api${endpoint}`, {
+    ...options,
+    skipJsonContentType: isFormData,
+    acceptHeader: 'application/json',
+  });
+
+  if (!response.ok) {
     if (response.status === 401) {
       clearAuthData();
       throw createAuthExpiredError();
@@ -221,7 +231,7 @@ export const refreshToken = async (options = {}) => {
       throw new Error('Refresh Token이 없습니다.');
     }
 
-    const response = await fetch(`${API_BASE_URL}/api/auth/refresh`, {
+    const response = await fetch(`${getApiBaseUrl()}/api/auth/refresh`, {
       method: 'POST',
       headers: {
         ...JSON_ACCEPT_HEADERS,
@@ -272,34 +282,12 @@ export const refreshToken = async (options = {}) => {
 };
 
 /** JWT를 붙여 임의 URL(/public 자산 등) fetch */
-export async function authenticatedFetch(url, options = {}, retryCount = 0) {
-  await ensureSessionAccessToken();
-  const token = await refreshAccessTokenIfExpiringSoon();
-
-  const headers = {
-    Accept: 'application/json, text/html, application/xhtml+xml, */*',
-    ...options.headers,
-  };
-  if (token) {
-    headers.Authorization = `Bearer ${token}`;
-  }
-
-  const response = await fetch(url, {
+export async function authenticatedFetch(url, options = {}) {
+  return authorizedFetch(url, {
     ...options,
-    headers,
+    skipJsonContentType: true,
+    acceptHeader: 'application/json, text/html, application/xhtml+xml, */*',
   });
-
-  if (response.status === 401 && retryCount === 0) {
-    try {
-      await refreshToken();
-      return authenticatedFetch(url, options, retryCount + 1);
-    } catch (_refreshError) {
-      clearAuthData();
-      throw createAuthExpiredError();
-    }
-  }
-
-  return response;
 }
 
 let sessionBootstrapPromise = null;

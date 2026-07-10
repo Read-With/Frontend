@@ -1,10 +1,8 @@
 import React, {
-  forwardRef,
   useRef,
   useMemo,
   useEffect,
   useCallback,
-  useImperativeHandle,
 } from 'react';
 import CytoscapeGraphUnified from './CytoscapeGraphUnified';
 import UnifiedNodeInfo from './tooltip/UnifiedNodeInfo';
@@ -12,16 +10,11 @@ import UnifiedEdgeTooltip from './tooltip/UnifiedEdgeTooltip';
 import './RelationGraph.css';
 import { getEdgeStyle, createGraphStylesheet } from '../../utils/styles/graphStyles';
 import { graphStyles } from '../../utils/styles/styles';
-import { ensureElementsInBounds } from '../../utils/graph/graphUtils';
-import { buildTooltipPayload, createTooltipTapHandlers } from '../../utils/graph/graphTooltipUtils';
+import { ensureElementsInBounds, buildTooltipPayload, processTooltipData, createTooltipTapHandlers } from '../../utils/graph/graphUtils';
 import {
   useGraphOutsideDismiss,
   shouldIgnoreViewerOutsideClick,
 } from '../../hooks/graph/useGraphOutsideDismiss';
-import { useGraphDataLoader } from '../../hooks/graph/useGraphDataLoader.js';
-import { useGraphSearch } from '../../hooks/graph/graphViewHooks';
-import { resolveEventIdxOrFallback } from '../../hooks/common/hooksShared';
-import { eventUtils } from '../../utils/viewer/viewerCoreStateUtils';
 import { resolveEventOrdinalForDisplay } from '../../utils/viewer/viewerEventProgressUtils';
 
 function buildViewportFitKey({ chapterNum, eventNum, elements }) {
@@ -99,11 +92,9 @@ function useAutoFit(cyRef, viewportFitKey, isSearchActive, isEventTransition) {
 
 const ViewerRelationGraph = ({
   elements,
-  newNodeIds = [],
   chapterNum,
   eventNum,
   edgeLabelVisible = true,
-  maxChapter,
   filename,
   fitNodeIds,
   searchTerm,
@@ -112,7 +103,6 @@ const ViewerRelationGraph = ({
   isResetFromSearch,
   currentEvent = null,
   prevValidEvent = null,
-  events = [],
   activeTooltip = null,
   onClearTooltip = null,
   onSetActiveTooltip = null,
@@ -138,7 +128,7 @@ const ViewerRelationGraph = ({
 
   const handleTooltipTap = useCallback((tapPayload, type) => {
     if (!onSetActiveTooltip) return;
-    onSetActiveTooltip(buildTooltipPayload(tapPayload, type));
+    onSetActiveTooltip(processTooltipData(buildTooltipPayload(tapPayload, type), type));
   }, [onSetActiveTooltip]);
 
   const { onShowNodeTooltip, onShowEdgeTooltip } = useMemo(
@@ -182,18 +172,13 @@ const ViewerRelationGraph = ({
             data={activeTooltip}
             x={activeTooltip.x}
             y={activeTooltip.y}
-            nodeCenter={activeTooltip.nodeCenter}
             onClose={clearTooltipAndGraph}
-            inViewer={true}
             chapterNum={chapterNum}
             eventNum={eventNum}
-            maxChapter={maxChapter}
             filename={filename}
             elements={elements}
-            style={graphStyles.tooltipStyle}
             currentEvent={currentEvent}
             prevValidEvent={prevValidEvent}
-            events={events}
           />
         )}
         {activeTooltip?.type === 'edge' && (
@@ -203,17 +188,12 @@ const ViewerRelationGraph = ({
             x={activeTooltip.x}
             y={activeTooltip.y}
             onClose={clearTooltipAndGraph}
-            sourceNode={activeTooltip.sourceNode}
-            targetNode={activeTooltip.targetNode}
             mode="viewer"
             chapterNum={chapterNum}
             eventNum={eventNum}
-            maxChapter={maxChapter}
-            filename={filename}
             style={graphStyles.tooltipStyle}
             currentEvent={currentEvent}
             prevValidEvent={prevValidEvent}
-            events={events}
             bookId={bookId}
           />
         )}
@@ -222,7 +202,6 @@ const ViewerRelationGraph = ({
       <div className="graph-canvas-area" style={graphStyles.graphArea}>
         <CytoscapeGraphUnified
           elements={elements}
-          newNodeIds={newNodeIds}
           stylesheet={stylesheet}
           layout={presetLayout}
           cyRef={cyRef}
@@ -248,97 +227,28 @@ const ViewerRelationGraph = ({
 
 const MemoViewerRelationGraph = React.memo(ViewerRelationGraph);
 
-const GraphContainer = forwardRef(({
+function GraphContainer({
   currentEvent,
   currentChapter,
   edgeLabelVisible = true,
-  onSearchStateChange,
   filename,
-  elements: externalElements,
+  elements = [],
   prevValidEvent = null,
-  events = [],
   activeTooltip = null,
   onClearTooltip = null,
   onSetActiveTooltip = null,
   graphClearRef = null,
   isEventTransition = false,
-  searchTerm: externalSearchTerm,
-  isSearchActive: externalIsSearchActive,
-  filteredElements: externalFilteredElements,
-  fitNodeIds: externalFitNodeIds,
-  isResetFromSearch: externalIsResetFromSearch,
+  searchTerm = '',
+  isSearchActive = false,
+  filteredElements = [],
+  fitNodeIds = [],
+  isResetFromSearch = false,
   bookId = null,
-}, ref) => {
-  const isExternalMode = Boolean(externalElements);
-
-  const {
-    elements: internalElements,
-    newNodeIds,
-    currentChapterData,
-  } = useGraphDataLoader(
-    isExternalMode ? null : (bookId ?? filename ?? null),
-    isExternalMode ? null : currentChapter,
-    isExternalMode ? null : resolveEventIdxOrFallback(currentEvent, null),
-  );
-
-  const elements = externalElements || internalElements;
-
-  const handleSearchStateChange = useCallback((searchState) => {
-    if (onSearchStateChange) {
-      onSearchStateChange({ ...searchState, currentChapterData });
-    }
-  }, [onSearchStateChange, currentChapterData]);
-
-  const {
-    searchTerm: internalSearchTerm,
-    isSearchActive: internalIsSearchActive,
-    filteredElements: internalFilteredElements,
-    fitNodeIds: internalFitNodeIds,
-    isResetFromSearch: internalIsResetFromSearch,
-    handleSearchSubmit,
-    clearSearch,
-  } = useGraphSearch(
-    isExternalMode ? [] : (elements || []),
-    handleSearchStateChange,
-    currentChapterData,
-  );
-
-  const effectiveSearchTerm = externalSearchTerm ?? internalSearchTerm;
-  const effectiveIsSearchActive = externalIsSearchActive ?? internalIsSearchActive;
-  const effectiveFilteredElements = externalFilteredElements ?? internalFilteredElements;
-  const effectiveIsResetFromSearch = externalIsResetFromSearch ?? internalIsResetFromSearch;
-
-  const effectiveFitNodeIds = useMemo(() => {
-    if (Array.isArray(externalFitNodeIds)) return externalFitNodeIds;
-    if (Array.isArray(internalFitNodeIds) && internalFitNodeIds.length > 0) return internalFitNodeIds;
-    if (effectiveIsSearchActive && Array.isArray(effectiveFilteredElements) && effectiveFilteredElements.length > 0) {
-      const ids = eventUtils.filterNodes(effectiveFilteredElements)
-        .map((el) => el.data.id)
-        .filter((id) => id != null);
-      return Array.from(new Set(ids));
-    }
-    return [];
-  }, [externalFitNodeIds, internalFitNodeIds, effectiveIsSearchActive, effectiveFilteredElements]);
-
-  const finalElements = useMemo(() => {
-    if (isExternalMode) {
-      return elements;
-    }
-    if (effectiveIsSearchActive && effectiveFilteredElements?.length > 0) {
-      return effectiveFilteredElements;
-    }
-    return elements;
-  }, [isExternalMode, effectiveIsSearchActive, effectiveFilteredElements, elements]);
-
-  useImperativeHandle(ref, () => ({
-    handleSearchSubmit: isExternalMode ? () => {} : handleSearchSubmit,
-    clearSearch: isExternalMode ? () => {} : clearSearch,
-  }), [isExternalMode, handleSearchSubmit, clearSearch]);
-
+}) {
   return (
     <MemoViewerRelationGraph
-      elements={finalElements}
-      newNodeIds={newNodeIds}
+      elements={elements}
       chapterNum={currentChapter}
       eventNum={resolveEventOrdinalForDisplay({
         currentEvent,
@@ -349,14 +259,13 @@ const GraphContainer = forwardRef(({
       edgeLabelVisible={edgeLabelVisible}
       filename={filename}
       bookId={bookId}
-      fitNodeIds={effectiveFitNodeIds}
-      searchTerm={effectiveSearchTerm}
-      isSearchActive={effectiveIsSearchActive}
-      filteredElements={effectiveFilteredElements}
-      isResetFromSearch={effectiveIsResetFromSearch}
+      fitNodeIds={fitNodeIds}
+      searchTerm={searchTerm}
+      isSearchActive={isSearchActive}
+      filteredElements={filteredElements}
+      isResetFromSearch={isResetFromSearch}
       currentEvent={currentEvent}
       prevValidEvent={prevValidEvent}
-      events={events}
       activeTooltip={activeTooltip}
       onClearTooltip={onClearTooltip}
       onSetActiveTooltip={onSetActiveTooltip}
@@ -364,8 +273,6 @@ const GraphContainer = forwardRef(({
       isEventTransition={isEventTransition}
     />
   );
-});
-
-GraphContainer.displayName = 'GraphContainer';
+}
 
 export default GraphContainer;

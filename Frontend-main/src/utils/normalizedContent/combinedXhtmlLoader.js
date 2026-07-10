@@ -1,7 +1,7 @@
 /** manifest combinedXhtmlPath → API/CDN 경유 fetch로 본문 로드 */
 import { errorUtils } from '../common/errorUtils';
 import { getManifestFromCache } from '../common/cache/manifestCache';
-import { resolveApiArtifactUrl } from '../common/artifactUrlUtils';
+import { resolveApiArtifactUrl } from '../common/urlUtils';
 import { authenticatedFetch } from '../api/authApi';
 import { getBookManifest } from '../api/api';
 

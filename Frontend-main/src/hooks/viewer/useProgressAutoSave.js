@@ -5,11 +5,9 @@ import {
   getProgressFromCache,
   removeProgressFromCache,
   setProgressToCache,
-} from '../../utils/common/cache/progressCache';
-import {
   getCachedReaderProgress,
   setCachedReaderProgress,
-} from '../../utils/common/cache/chapterEventCache';
+} from '../../utils/common/cache/progressCache';
 import { errorUtils } from '../../utils/common/errorUtils';
 import { saveProgress, saveProgressKeepalive } from '../../utils/api/api';
 import {

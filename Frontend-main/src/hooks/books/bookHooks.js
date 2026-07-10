@@ -5,7 +5,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { getBook, getBooks, toggleBookFavorite } from '../../utils/api/booksApi';
 import { getBookManifest } from '../../utils/api/api';
-import { normalizeTitle } from '../../utils/common/stringUtils';
+import { normalizeTitle } from '../../utils/common/valueUtils';
 import { errorUtils } from '../../utils/common/errorUtils';
 import { prefetchManifest } from '../../utils/common/cache/manifestCache';
 import { PROGRESS_CACHE_UPDATED_EVENT } from '../../utils/common/cache/progressCache';

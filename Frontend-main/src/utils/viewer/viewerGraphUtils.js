@@ -4,12 +4,13 @@ import { processRelations, directedEdgeElementId } from '../graph/relationUtils'
 import { uniqueStrings } from '../graph/graphUtils';
 import { buildNodeWeights, createCharacterMaps, toNodeWeightsOrNull } from '../graph/characterUtils';
 import { convertRelationsToElements } from '../graph/graphDataUtils';
-import { resolveGraphElementsProfileImages } from '../common/artifactUrlUtils';
+import { resolveGraphElementsProfileImages } from '../common/urlUtils';
 import {
   getGraphEventState,
   getChapterEventFallbackData,
 } from '../common/cache/chapterEventCache';
-import { cacheKeyUtils, eventUtils, resolveEventIdxOrFallback } from './viewerCoreStateUtils';
+import { resolveChapterIndex } from '../common/valueUtils';
+import { cacheKeyUtils, eventUtils } from './viewerCoreStateUtils';
 import { resolveServerEventMatch } from './viewerEventProgressUtils';
 
 export const DEFAULT_GRAPH_TRANSFORM_DEPS = {
@@ -41,7 +42,7 @@ export function resolveFineGraphCallContext({ book, currentChapter, currentEvent
     directChapter >= 1 ? directChapter
       : matchedChapter >= 1 ? matchedChapter
         : Number(currentChapter);
-  const eventIdx = resolveEventIdxOrFallback(
+  const eventIdx = eventUtils.resolveEventNum(
     currentEvent,
     matchedEvent >= 1 ? matchedEvent : 0
   );
@@ -224,7 +225,7 @@ export function elementsFromGraphEventState(
 export const graphDataTransformUtils = {
   normalizeApiEvent: (apiEvent) => {
     if (!apiEvent || typeof apiEvent !== 'object') return null;
-    const chapterIdx = Number(apiEvent.chapterIdx ?? apiEvent.chapterIndex);
+    const chapterIdx = resolveChapterIndex(apiEvent);
     if (!Number.isFinite(chapterIdx) || chapterIdx < 1) return null;
     const eventNum = eventUtils.resolveEventOrdinal(apiEvent);
     if (!eventNum) return null;
@@ -281,7 +282,7 @@ export const graphDataTransformUtils = {
   },
 
   mergeElementsWithPrevious: (convertedElements, prevData, currentChapter, apiEventIdx) => {
-    const prevChapter = Number(prevData.chapterIdx);
+    const prevChapter = resolveChapterIndex(prevData);
     const curChapter = Number(currentChapter);
 
     const edgeDedupKey = (el) => {
@@ -372,7 +373,7 @@ export const graphDataTransformUtils = {
   createNextEventData: (normalizedEvent, currentChapter, apiEventIdx, resultData) => {
     const resolvedEventIdx = apiEventIdx;
     const originalEventIdx = normalizedEvent
-      ? eventUtils.extractRawEventIdx(normalizedEvent)
+      ? eventUtils.resolveEventNum(normalizedEvent)
       : resolvedEventIdx;
     const apiEventNum = normalizedEvent ? Number(normalizedEvent.eventNum) : NaN;
     const eventNum = Number.isFinite(apiEventNum) && apiEventNum > 0 ? apiEventNum : resolvedEventIdx;

@@ -8,7 +8,7 @@ import {
   EPUB_FILE_CONSTRAINTS,
   validateEpubFile,
 } from '../../utils/library/libraryUtils';
-import { normalizeTitle } from '../../utils/common/stringUtils';
+import { normalizeTitle } from '../../utils/common/valueUtils';
 
 function normalizeAuthorMatch(author) {
   return (author || '')

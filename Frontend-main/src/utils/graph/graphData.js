@@ -1,15 +1,8 @@
 /** 챕터·이벤트 스냅샷, eventIdx 유틸, 매크로 그래프 캐시 로더 */
-import { toNumberOrNull } from '../common/numberUtils';
+import { toNumberOrNull } from '../common/valueUtils';
 import { errorUtils } from '../common/errorUtils';
-import {
-  aggregateCharactersFromEvents,
-} from './characterUtils';
-import { extractApiBookId, toApiFolderKey, toPositiveInt } from './graphUtils';
-import {
-  getMaxChapter,
-  getManifestFromCache,
-  calculateMaxChapterFromChapters,
-} from '../common/cache/manifestCache';
+import { extractApiBookId } from './graphUtils';
+import { toPositiveInt } from '../common/valueUtils';
 import {
   getCachedChapterEvents,
   getChapterEventFallbackData,
@@ -37,26 +30,6 @@ const getChapterEventsSnapshot = (bookId, chapterIdx) => {
 
   return null;
 };
-
-export const getFolderKeyFromFilename = toApiFolderKey;
-
-/** manifest chapters·progressMetadata.maxChapter 중 큰 값 (없으면 1) */
-export const resolveMaxChapter = (bookId, manifest = null) => {
-  const manifestData = manifest ?? (bookId ? getManifestFromCache(bookId) : null);
-  const chapters = Array.isArray(manifestData?.chapters) ? manifestData.chapters : [];
-  const fromChapters = calculateMaxChapterFromChapters(chapters);
-  const fromMeta = toPositiveInt(manifestData?.progressMetadata?.maxChapter, 0);
-  const m = Math.max(fromChapters, fromMeta);
-  return m > 0 ? m : 1;
-};
-
-export function getDetectedMaxChapter(folderKey) {
-  const bookId = extractApiBookId(folderKey);
-  if (!bookId) return 0;
-
-  const manifestMax = getMaxChapter(bookId);
-  return manifestMax && manifestMax > 0 ? manifestMax : 0;
-}
 
 const convertElementsToRelations = (elements) => {
   return eventUtils.convertElementsToRelations(elements, {
@@ -172,7 +145,7 @@ function buildEventsFromChapterCache(chapterPayload, targetChapter, throughEvent
   });
 }
 
-export function getEventsForChapter(chapter, folderKey) {
+function getEventsForChapter(chapter, folderKey) {
   const bookId = extractApiBookId(folderKey);
   if (!bookId || !chapter || chapter < 1) {
     return [];
@@ -198,13 +171,13 @@ export function getEventDataByIndex(folderKey, chapter, eventIndex) {
   }
 
   const event = events.find(
-    (entry) => eventUtils.extractRawEventIdx(entry) === toNumberOrNull(eventIndex)
+    (entry) => eventUtils.resolveEventNum(entry) === toNumberOrNull(eventIndex)
   );
   if (!event) {
     return null;
   }
 
-  const resolvedEventIdx = eventUtils.extractRawEventIdx(event) || Number(eventIndex);
+  const resolvedEventIdx = eventUtils.resolveEventNum(event) || Number(eventIndex);
   return {
     chapter,
     chapterIdx: chapter,
@@ -215,25 +188,6 @@ export function getEventDataByIndex(folderKey, chapter, eventIndex) {
     characters: Array.isArray(event.characters) ? event.characters : [],
     event: event.event || null,
   };
-}
-
-function getCharactersData(folderKey, chapter) {
-  const events = getEventsForChapter(chapter, folderKey);
-  if (!events.length) {
-    return { characters: [] };
-  }
-
-  const characterMap = aggregateCharactersFromEvents(events);
-
-  return { characters: Array.from(characterMap.values()) };
-}
-
-export function getCharactersDataFromMaxChapter(folderKey) {
-  const maxChapter = getDetectedMaxChapter(folderKey);
-  if (!maxChapter || maxChapter < 1) {
-    return null;
-  }
-  return getCharactersData(folderKey, maxChapter);
 }
 
 // --- eventIdx 정렬·필터 ---
@@ -248,7 +202,7 @@ const normalizeTargetIdx = (targetIdx) => {
   return target === null || target < 0 ? null : target;
 };
 
-export const getEventOrderIdx = (event) =>
+const getEventOrderIdx = (event) =>
   truncEventIdx(event?.eventIdx) ??
   truncEventIdx(event?.idx) ??
   truncEventIdx(event?.eventNum);
@@ -279,7 +233,7 @@ export const sortEventsByIdx = (events) => {
 };
 
 /** 챕터 이벤트 캐시 → events state에 병합 */
-export function mergeChapterCacheEventsIntoState(
+function mergeChapterCacheEventsIntoState(
   prevEvents,
   chapterPayload,
   targetChapter,
@@ -393,7 +347,7 @@ const saveToLocalStorageCache = (cacheKey, data) => {
   saveToStorage(cacheKey, { ...data, _savedAt: Date.now() }, 'localStorage');
 };
 
-export const checkChapterEventsCache = (bookId, chapter, eventIdx) => {
+const checkChapterEventsCache = (bookId, chapter, eventIdx) => {
   const chapterCache = getCachedChapterEvents(bookId, chapter);
   if (!chapterCache) return null;
 
@@ -423,7 +377,7 @@ export const checkChapterEventsCache = (bookId, chapter, eventIdx) => {
   };
 };
 
-export const getFallbackData = (bookId, chapter, eventIdx, macroData) => {
+const getFallbackData = (bookId, chapter, eventIdx, macroData) => {
   const fallbackEventData = getChapterEventFallbackData(bookId, chapter, eventIdx);
   if (fallbackEventData) return fallbackEventData;
   return macroData ?? null;

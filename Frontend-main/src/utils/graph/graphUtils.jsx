@@ -5,24 +5,19 @@ import {
   getLastFineGraphEventIdxFromChapterData,
 } from '../common/cache/manifestCache.js';
 import {
-  toFiniteNumber,
-  toPositiveInt,
   toPositiveNumberOrNull,
-} from '../common/numberUtils';
+} from '../common/valueUtils';
 
 const API_PREFIX = 'api:';
-
-export { toFiniteNumber, toPositiveInt };
-export const toPositiveNumber = toPositiveNumberOrNull;
 
 export const extractApiBookId = (folderKeyOrFilename) => {
   if (!folderKeyOrFilename) return null;
   if (typeof folderKeyOrFilename === 'number') {
-    return toPositiveNumber(folderKeyOrFilename);
+    return toPositiveNumberOrNull(folderKeyOrFilename);
   }
   const key = String(folderKeyOrFilename).trim();
   if (!key) return null;
-  return toPositiveNumber(key.startsWith(API_PREFIX) ? key.slice(API_PREFIX.length) : key);
+  return toPositiveNumberOrNull(key.startsWith(API_PREFIX) ? key.slice(API_PREFIX.length) : key);
 };
 
 export const toApiFolderKey = (folderKeyOrFilename) => {
@@ -37,6 +32,13 @@ export const isGraphEdgeElement = (element) =>
 
 export const isGraphNodeElement = (element) =>
   Boolean(element?.data && element.data.id !== undefined && !isGraphEdgeElement(element));
+
+/** 무방향 노드 쌍 키 (순서 무관) */
+export function undirectedPairKey(s, t) {
+  const a = String(s);
+  const b = String(t);
+  return a < b ? `${a}\x1e${b}` : `${b}\x1e${a}`;
+}
 
 export const sortElementsByDataId = (elements) => {
   if (!Array.isArray(elements)) return [];
@@ -257,7 +259,7 @@ export const constrainToViewport = (x, y, elementWidth = 0, elementHeight = 0) =
   }
 };
 
-export const invalidateCache = () => {
+const invalidateCache = () => {
   cache.container.data = null;
   cache.container.timestamp = 0;
   cache.viewport.data = null;
@@ -513,6 +515,44 @@ export const processTooltipData = (tooltipData, type) => {
   }
 };
 
+function resolveTooltipCoords(mouseX, mouseY, center) {
+  return {
+    x: mouseX ?? center?.x ?? 0,
+    y: mouseY ?? center?.y ?? 0,
+  };
+}
+
+/** 탭 이벤트 → 툴팁용 payload */
+export function buildTooltipPayload(tapPayload, type) {
+  const isNode = type === 'node';
+  const element = isNode ? tapPayload.node : tapPayload.edge;
+  const center = isNode ? tapPayload.nodeCenter : tapPayload.edgeCenter;
+  const { x, y } = resolveTooltipCoords(tapPayload.mouseX, tapPayload.mouseY, center);
+  const data = element.data();
+
+  return {
+    type,
+    id: element.id(),
+    x,
+    y,
+    data,
+    ...(isNode
+      ? { nodeCenter: center }
+      : {
+          sourceNode: element.source(),
+          targetNode: element.target(),
+          edgeCenter: center,
+        }),
+  };
+}
+
+export function createTooltipTapHandlers(onTap) {
+  return {
+    onShowNodeTooltip: (tapPayload) => onTap(tapPayload, 'node'),
+    onShowEdgeTooltip: (tapPayload) => onTap(tapPayload, 'edge'),
+  };
+}
+
 /** 챕터 마지막 이벤트 인덱스 (manifest 힌트, UI·범위용) */
 export const calculateLastEventForChapter = ({
   manifestChapters,
@@ -559,30 +599,6 @@ export const isSidebarElement = (event) => {
   return sidebarElement && sidebarElement.contains(event.target);
 };
 
-export const calculateNodeCount = (elements, filterStage, filteredMainCharacters) => {
-  if (filterStage > 0) {
-    return filteredMainCharacters.filter(isGraphNodeElement).length;
-  }
-  return elements.filter(isGraphNodeElement).length;
-};
-
-export const calculateRelationCount = (elements, filterStage, filteredMainCharacters, eventUtils) => {
-  if (filterStage > 0) {
-    return eventUtils.filterEdges(filteredMainCharacters).length;
-  }
-  return eventUtils.filterEdges(elements).length;
-};
-
-export const determineFinalElements = (isSearchActive, filteredElements, sortedElements, filterStage, filteredMainCharacters) => {
-  if (isSearchActive && filteredElements && filteredElements.length > 0) {
-    return filteredElements;
-  }
-  if (filterStage > 0) {
-    return filteredMainCharacters;
-  }
-  return sortedElements;
-};
-
 /** reciprocalPair 간선 쌍의 junction 오프셋(_rjOx/_rjOy) 동기화 */
 export function syncReciprocalPairJunctionOffsets(cy) {
   if (!cy || typeof cy.edges !== 'function') return;
@@ -596,9 +612,9 @@ export function syncReciprocalPairJunctionOffsets(cy) {
 
   const pairMap = new Map();
   edges.forEach((e) => {
-    const sid = String(e.data('source'));
-    const tid = String(e.data('target'));
-    const key = sid < tid ? `${sid}\t${tid}` : `${tid}\t${sid}`;
+    const sid = e.data('source');
+    const tid = e.data('target');
+    const key = undirectedPairKey(sid, tid);
     if (!pairMap.has(key)) pairMap.set(key, []);
     pairMap.get(key).push(e);
   });
@@ -721,5 +737,5 @@ export function calculateSpiralPlacement(newNodes, placedPositions, containerWid
 export function getContainerDimensions(container) {
   const width = container?.clientWidth || 800;
   const height = container?.clientHeight || 600;
-  return { width, height, maxRadius: Math.min(width, height) / 2 - PLACEMENT_PADDING };
+  return { width, height };
 }

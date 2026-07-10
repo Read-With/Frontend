@@ -74,7 +74,6 @@ const CytoscapeGraphUnified = ({
   fitNodeIds,
   style = {},
   cyRef: externalCyRef,
-  newNodeIds: _newNodeIds = [],
   onLayoutComplete,
   searchTerm = "",
   isSearchActive = false,
@@ -88,7 +87,6 @@ const CytoscapeGraphUnified = ({
   strictBackgroundClear = false,
   graphClearRef = null,
   showRippleEffect = false,
-  isDropdownSelection: _isDropdownSelection = false,
   isDataRefreshing = false,
   currentChapter,
 }) => {
@@ -541,7 +539,8 @@ const CytoscapeGraphUnified = ({
 
     cy.batch(() => {
       if (fitNodeIds && fitNodeIds.length > 0) {
-        const nodes = cy.nodes().filter(n => fitNodeIds.includes(n.id()));
+        const fitIdSet = new Set(fitNodeIds.map(String));
+        const nodes = cy.nodes().filter((n) => fitIdSet.has(n.id()));
         if (nodes.length > 0) {
           cy.fit(nodes, 60);
           const prevHl = cy.nodes(".search-highlight");
@@ -671,7 +670,6 @@ CytoscapeGraphUnified.propTypes = {
   cyRef: PropTypes.shape({
     current: PropTypes.object,
   }).isRequired,
-  newNodeIds: PropTypes.arrayOf(PropTypes.oneOfType([PropTypes.string, PropTypes.number])),
   onLayoutComplete: PropTypes.func,
   searchTerm: PropTypes.string,
   isSearchActive: PropTypes.bool,
@@ -691,7 +689,6 @@ CytoscapeGraphUnified.propTypes = {
     current: PropTypes.func,
   }),
   showRippleEffect: PropTypes.bool,
-  isDropdownSelection: PropTypes.bool,
   isDataRefreshing: PropTypes.bool,
   currentChapter: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
 };

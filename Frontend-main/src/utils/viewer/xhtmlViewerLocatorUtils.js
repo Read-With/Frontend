@@ -6,8 +6,8 @@ import {
   getChapterDataFromManifest,
   getEffectiveChapterLengthForProgress,
   locatorFromChapterLocalOffset,
-  manifestChapterIndex,
 } from '../common/cache/manifestCache';
+import { resolveChapterIndex } from '../common/valueUtils';
 
 /** 챕터당 단일 마커 노드(data-block-index 없음) 여부 */
 function isSingleChapterMarkerBlob(el, rulerRoot) {
@@ -113,7 +113,7 @@ const resolveChapterPagePositionFromManifestByPage = (manifest, currentPageIndex
 
   const weighted = chapters
     .map((ch) => {
-      const chapterIdx = manifestChapterIndex(ch);
+      const chapterIdx = resolveChapterIndex(ch);
       if (!Number.isFinite(chapterIdx) || chapterIdx < 1) return null;
       const weight = getEffectiveChapterLengthForProgress(manifest, ch);
       return weight > 0 ? { chapterIdx, weight } : null;
@@ -133,7 +133,7 @@ const resolveChapterCodePointLength = (manifest, chapterIndex) => {
   if (!Number.isFinite(ch) || ch < 1) return 0;
 
   const mChapters = Array.isArray(manifest?.chapters) ? manifest.chapters : [];
-  const mHit = mChapters.find((row) => manifestChapterIndex(row) === ch);
+  const mHit = mChapters.find((row) => resolveChapterIndex(row) === ch);
   if (!mHit) return 0;
 
   return getEffectiveChapterLengthForProgress(manifest, mHit);
@@ -142,7 +142,7 @@ const resolveChapterCodePointLength = (manifest, chapterIndex) => {
 /** 단일-blob 챕터 locator → 페이지 인덱스 (신규: block=0+offset, 레거시: block=page) */
 function pageIndexFromChapterLocator(manifest, locator, totalPages, el, ruler, pageHeightPx) {
   const total = Math.max(1, Number(totalPages) || 1);
-  const chapter = Number(locator?.chapterIndex ?? locator?.chapterIdx);
+  const chapter = resolveChapterIndex(locator);
   const block = Number(locator?.blockIndex ?? 0);
   const off = Number(locator?.offset ?? 0);
   if (!Number.isFinite(chapter) || chapter < 1) return null;
@@ -204,13 +204,13 @@ export function normalizeLocatorTarget(target) {
   if (typeof target === 'string' && target.trim().startsWith('{')) {
     try {
       const parsed = JSON.parse(target);
-      return parsed?.start ?? parsed?.startLocator ?? (Number.isFinite(parsed?.chapterIndex) ? parsed : null);
+      return parsed?.start ?? parsed?.startLocator ?? (resolveChapterIndex(parsed) != null ? parsed : null);
     } catch {
       return null;
     }
   }
   if (typeof target === 'object') {
-    return target.start ?? target.startLocator ?? (Number.isFinite(target.chapterIndex) ? target : null);
+    return target.start ?? target.startLocator ?? (resolveChapterIndex(target) != null ? target : null);
   }
   return null;
 }
@@ -225,7 +225,7 @@ export function resolvePageIndexFromLocator({
 }) {
   if (!locator || !ruler) return null;
 
-  const chapter = Number(locator.chapterIndex ?? locator.chapterIdx);
+  const chapter = resolveChapterIndex(locator);
   const block = Number(locator.blockIndex ?? 0);
   if (!Number.isFinite(chapter)) return null;
 
@@ -312,7 +312,7 @@ export function resolveViewportLocatorEmit({
   const shouldEmitFallbackLocator = (chapterIndex, fallbackOffset) => {
     if (!Number.isFinite(chapterIndex) || chapterIndex < 0) return false;
     if (!prevStartLocator) return true;
-    const prevChapter = Number(prevStartLocator.chapterIndex);
+    const prevChapter = resolveChapterIndex(prevStartLocator);
     const prevOffset = Number(prevStartLocator.offset ?? 0);
     if (!Number.isFinite(prevChapter)) return true;
     if (prevChapter !== chapterIndex) return true;

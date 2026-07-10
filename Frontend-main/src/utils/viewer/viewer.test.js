@@ -22,7 +22,7 @@ vi.mock('../common/cache/manifestCache.js', async (importOriginal) => {
 import { resolveProgressMetricsFromLocator } from '../common/cache/manifestCache.js';
 
 const eventUtils = {
-  extractRawEventIdx: (event) => Number(event?.eventNum ?? event?.eventIdx ?? 0),
+  resolveEventNum: (event) => Number(event?.eventNum ?? event?.eventIdx ?? 0),
 };
 
 const locator = { chapterIndex: 1, blockIndex: 0, offset: 10 };

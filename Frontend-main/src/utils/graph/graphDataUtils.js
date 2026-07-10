@@ -1,18 +1,15 @@
 import { extractCharacterId, isNodeWeightEntryVisible } from './characterUtils';
-import { normalizeRelation, isValidRelation, directedEdgeElementId } from './relationUtils';
+import { normalizeRelation, isValidRelation, directedEdgeElementId, relationEventMetaPassthrough } from './relationUtils';
 import {
   isGraphEdgeElement,
+  isGraphNodeElement,
   normalizeElementId,
   sortElementsByDataId,
+  undirectedPairKey,
   uniqueStrings,
 } from './graphUtils';
 import { eventUtils } from '../viewer/viewerCoreStateUtils';
-
-function undirectedPairKey(s, t) {
-  const a = String(s);
-  const b = String(t);
-  return a < b ? `${a}\x1e${b}` : `${b}\x1e${a}`;
-}
+import { toPositiveInt } from '../common/valueUtils';
 
 function mergeEdgeLabels(a, b) {
   const t1 = String(a ?? '').trim();
@@ -127,16 +124,8 @@ function finalizeDirectedEdges(edgeMap) {
   return out;
 }
 
-function manifestEventIdxFromRaw(raw) {
-  const idx = eventUtils.extractRawEventIdx(raw);
-  return idx > 0 ? idx : NaN;
-}
-
 function toPositiveIntOrNaN(value) {
-  const n = Number(value);
-  if (!Number.isFinite(n)) return NaN;
-  const i = Math.trunc(n);
-  return i > 0 ? i : NaN;
+  return toPositiveInt(value) ?? NaN;
 }
 
 function isRelationVisibleAtEvent(rel, eventData) {
@@ -145,25 +134,12 @@ function isRelationVisibleAtEvent(rel, eventData) {
   const targetChapter = toPositiveIntOrNaN(
     eventUtils.resolveChapterIdx(eventData) ?? eventData.chapterIdx ?? eventData.chapter
   );
-  const targetEventIdx = toPositiveIntOrNaN(eventUtils.extractRawEventIdx(eventData));
+  const targetEventIdx = toPositiveIntOrNaN(eventUtils.resolveEventNum(eventData));
 
-  const relationChapter = toPositiveIntOrNaN(
-    rel?.chapterIdx ??
-      rel?.chapter ??
-      rel?.chapter_idx ??
-      rel?.event?.chapterIdx ??
-      rel?.event?.chapter ??
-      rel?.event?.chapter_idx
-  );
+  const meta = relationEventMetaPassthrough(rel);
+  const relationChapter = toPositiveIntOrNaN(meta.chapterIdx);
   const relationEventIdx = toPositiveIntOrNaN(
-    rel?.eventIdx ??
-      rel?.eventNum ??
-      rel?.event_idx ??
-      rel?.event_id ??
-      rel?.event?.eventIdx ??
-      rel?.event?.eventNum ??
-      rel?.event?.event_idx ??
-      rel?.event?.event_id
+    meta.eventIdx ?? meta.eventNum ?? rel?.event_id ?? rel?.event?.event_id
   );
 
   if (Number.isFinite(targetChapter) && Number.isFinite(relationChapter)) {
@@ -451,8 +427,8 @@ export function convertRelationsToElements(relations, idToName, idToDesc, idToDe
         info = { lastFinite: null, lastFromCurrent: null, hasFromCurrent: false };
       }
       info.lastFinite = r.positivity;
-      const curEv = manifestEventIdxFromRaw(eventData);
-      const relEv = manifestEventIdxFromRaw(rel);
+      const curEv = eventUtils.resolveEventNum(eventData) || NaN;
+      const relEv = eventUtils.resolveEventNum(rel) || NaN;
       if (Number.isFinite(curEv) && Number.isFinite(relEv) && relEv === curEv) {
         info.lastFromCurrent = r.positivity;
         info.hasFromCurrent = true;
@@ -582,7 +558,7 @@ export function visualElementSignature(el) {
     const topo = d.bidirectional ? "b" : d.reciprocalPair ? "r" : "";
     return `e:${rel}:${d.label ?? ""}:${d.positivity ?? ""}:${d.lineStyle ?? ""}:${d.width ?? ""}:${topo}`;
   }
-  return `n:${d.label ?? ""}:${d.weight ?? ""}:${d.count ?? ""}:${d.main ?? ""}:${d.positivity ?? ""}`;
+  return `n:${d.label ?? ""}:${d.weight ?? ""}:${d.count ?? ""}:${d.isMainCharacter ?? ""}:${d.positivity ?? ""}`;
 }
 
 /** props elements가 새 배열이어도 그래프 의미가 동일하면 effect·layout 재실행 생략 */
@@ -612,7 +588,7 @@ export function buildElementsStructureFingerprint(elements) {
     const d = el?.data;
     if (!d || d.id == null || d.id === "") continue;
     const sid = String(d.id);
-    if (d.source != null && d.target != null) {
+    if (isGraphEdgeElement(el)) {
       edgeRows.push(`${sid}\t${String(d.source)}\t${String(d.target)}`);
     } else {
       nodeIds.push(sid);
@@ -633,10 +609,8 @@ export function filterMainCharacters(elements, filterStage) {
   if (filterStage === 0 || !elements) return elements;
   
   // 핵심 인물 (isMainCharacter: true) 노드들
-  const coreNodes = elements.filter(el => 
-    el.data && 
-    el.data.id && 
-    !isGraphEdgeElement(el) && 
+  const coreNodes = elements.filter(el =>
+    isGraphNodeElement(el) &&
     el.data.isMainCharacter === true
   );
   
@@ -670,10 +644,8 @@ export function filterMainCharacters(elements, filterStage) {
     });
     
     // 핵심 인물과 연결된 모든 노드들
-    const connectedNodes = elements.filter(el => 
-      el.data && 
-      el.data.id && 
-      !isGraphEdgeElement(el) && 
+    const connectedNodes = elements.filter(el =>
+      isGraphNodeElement(el) &&
       connectedNodeIds.has(el.data.id)
     );
     
@@ -688,10 +660,9 @@ export function filterMainCharacters(elements, filterStage) {
  * 노드 겹침 감지 및 자동 조정
  * @param {Object} cy - Cytoscape 인스턴스
  * @param {number} nodeSize - 노드 크기
- * @param {Function} onCleanup - 정리 함수 (컴포넌트 언마운트 시 호출)
  * @returns {boolean} 겹침이 있었는지 여부
  */
-export function detectAndResolveOverlap(cy, nodeSize = 40, onCleanup = null) {
+export function detectAndResolveOverlap(cy, nodeSize = 40) {
   if (!cy) {
     return false;
   }
@@ -704,7 +675,6 @@ export function detectAndResolveOverlap(cy, nodeSize = 40, onCleanup = null) {
   const NODE_SIZE = nodeSize;
   const MIN_DISTANCE = NODE_SIZE * 1.0;
   let hasOverlap = false;
-  const timers = [];
   
   // 성능 최적화: 노드가 많을 때는 겹침 감지를 건너뜀
   const MAX_NODES_FOR_OVERLAP_DETECTION = 100;
@@ -748,21 +718,12 @@ export function detectAndResolveOverlap(cy, nodeSize = 40, onCleanup = null) {
         node1.addClass('bounce-effect');
         node2.addClass('bounce-effect');
         
-        const timer = setTimeout(() => {
+        setTimeout(() => {
           if (node1 && node1.removeClass) node1.removeClass('bounce-effect');
           if (node2 && node2.removeClass) node2.removeClass('bounce-effect');
         }, 300);
-        
-        timers.push(timer);
       }
     }
-  }
-  
-  // 정리 함수가 제공되면 타이머들을 저장
-  if (onCleanup && typeof onCleanup === 'function') {
-    onCleanup(() => {
-      timers.forEach(timer => clearTimeout(timer));
-    });
   }
   
   return hasOverlap;

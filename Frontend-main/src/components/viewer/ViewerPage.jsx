@@ -8,9 +8,8 @@ import ViewerSettings from "./ui/ViewerSettings";
 import { useViewerPage } from "../../hooks/viewer/useViewerPage";
 import { useTooltipState } from "../../hooks/ui/tooltipHooks";
 import { anchorToLocators } from "../../utils/common/locatorUtils";
-import { eventUtils } from "../../utils/viewer/viewerCoreStateUtils";
+import { resolveChapterIndex } from "../../utils/common/valueUtils";
 import { resolveViewerLineEvent } from "../../utils/viewer/viewerEventProgressUtils";
-import { restoreGraphLayout, preloadChapterLayouts } from "../../utils/graph/graphLayoutUtils";
 import { isSameBookmarkPosition } from "../../utils/bookmarks/bookmarkUtils";
 import { errorUtils } from "../../utils/common/errorUtils";
 import GraphSplitArea from "./GraphSplitArea";
@@ -31,13 +30,11 @@ const ViewerPage = () => {
     setTotalPages,
     setCurrentChapter,
     setCurrentEvent,
-    setGraphViewState,
     setCurrentCharIndex,
     setShowToolbar,
     bookmarks,
     showBookmarkList,
     book,
-    folderKey,
     bookKey,
     manifestLoaded,
     handlePrevPage,
@@ -72,18 +69,16 @@ const ViewerPage = () => {
     flushProgressAsync,
   } = useViewerPage();
 
-  const { currentChapter, currentEvent, showGraph, graphFullScreen } = graphState;
+  const { currentChapter, showGraph, graphFullScreen } = graphState;
   const {
     progress,
     settings,
     currentPage,
     totalPages,
     showToolbar,
-    isDataReady,
   } = viewerState;
 
   const readingChapterRef = useRef(currentChapter);
-  const lastRestoredLayoutKeyRef = useRef("");
   const showToolbarRef = useRef(showToolbar);
   const graphClearRef = useRef(null);
 
@@ -94,10 +89,6 @@ const ViewerPage = () => {
   useEffect(() => {
     showToolbarRef.current = showToolbar;
   }, [showToolbar]);
-
-  useEffect(() => {
-    lastRestoredLayoutKeyRef.current = "";
-  }, [bookKey, currentChapter]);
 
   useEffect(() => {
     const handleMouseMove = (event) => {
@@ -151,7 +142,7 @@ const ViewerPage = () => {
         receivedEvent?.anchor ?? nextEvent?.anchor
       );
 
-      const locatorChapter = Number(lineLocator?.chapterIndex);
+      const locatorChapter = resolveChapterIndex(lineLocator);
       const resolvedChapter =
         nextChapter ??
         (Number.isFinite(locatorChapter) && locatorChapter > 0 ? locatorChapter : null);
@@ -202,35 +193,6 @@ const ViewerPage = () => {
     }),
     [activeTooltip, handleClearTooltip, handleSetActiveTooltip]
   );
-
-  useEffect(() => {
-    if (!isDataReady || !currentEvent) return;
-
-    const eventNum = eventUtils.resolveEventOrdinal(currentEvent) ?? 0;
-    const layoutKey = `${currentChapter}:${eventNum}`;
-    if (lastRestoredLayoutKeyRef.current === layoutKey) return;
-
-    const restoredLayout = restoreGraphLayout(currentEvent, currentChapter);
-    if (restoredLayout) {
-      lastRestoredLayoutKeyRef.current = layoutKey;
-      setGraphViewState(restoredLayout);
-    }
-  }, [isDataReady, currentEvent, currentChapter, setGraphViewState]);
-
-  useEffect(() => {
-    if (!folderKey || !bookKey) return;
-
-    const abortController = new AbortController();
-    preloadChapterLayouts({
-      folderKey,
-      bookKey,
-      signal: abortController.signal,
-    });
-
-    return () => {
-      abortController.abort();
-    };
-  }, [folderKey, bookKey]);
 
   return (
     <div className="h-screen">

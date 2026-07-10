@@ -3,10 +3,10 @@
  * - 개발: Vite HMR·@vite/client용 script-src 에 unsafe-inline / unsafe-eval
  * - 프로덕션 빌드: 동일 도메인 모듈 + OAuth·Speed Insights 등 허용 도메인만 (스크립트는 엄격)
  * - style-src: React 인라인 style 등으로 unsafe-inline 유지
- * - connect-src: CDN(정규화 combined.xhtml 등), VITE_API_BASE_URL (미설정 시 authUtils 기본값), VITE_DEV_PROXY_TARGET, VITE_CSP_CONNECT_EXTRA
+ * - connect-src: CDN(정규화 combined.xhtml 등), VITE_API_BASE_URL (미설정 시 urlUtils 기본값), VITE_DEV_PROXY_TARGET, VITE_CSP_CONNECT_EXTRA
  */
 
-import { DEFAULT_API_BASE_URL, DEFAULT_CDN_BASE_URL } from '../src/utils/common/authUtils.js';
+import { DEFAULT_API_BASE_URL, DEFAULT_CDN_BASE_URL } from '../src/utils/common/urlUtils.js';
 
 function addConnectOrigins(set, rawUrl) {
   if (!rawUrl || typeof rawUrl !== 'string') return;

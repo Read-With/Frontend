@@ -1,13 +1,10 @@
-import React, { useRef, useMemo, useEffect, useState, memo } from "react";
+import React, { useMemo, useEffect, useState, useRef, memo } from "react";
 import { AlertCircle, AlertTriangle, Inbox, Loader2 } from "lucide-react";
 import GraphContainer from "../graph/GraphContainer";
 import ViewerTopBar from "./ViewerTopBar";
-import { useGraphElementPipeline } from "../../hooks/graph/graphViewHooks";
+import { useGraphElementPipeline } from "../../hooks/graph/useGraphViewHooks";
 import { graphStyles } from "../../utils/styles/graphStyles";
-import {
-  graphPanelHasCachedLocationHint,
-  graphPanelHasResumeLocationHint,
-} from "../../utils/common/locatorUtils";
+import { hasGraphPanelLocationHint } from "../../utils/common/locatorUtils";
 import { eventUtils } from "../../utils/viewer/viewerCoreStateUtils";
 
 const iconShellClass = {
@@ -72,7 +69,6 @@ const GraphSplitArea = memo(function GraphSplitArea({
   resumeAnchor = null,
 }) {
   const { activeTooltip, onClearTooltip, onSetActiveTooltip, graphClearRef } = tooltipProps;
-  const graphContainerRef = useRef(null);
   const {
     searchTerm: searchTermValue = "",
     isSearchActive: isSearchActiveValue = false,
@@ -84,15 +80,15 @@ const GraphSplitArea = memo(function GraphSplitArea({
   const { graphPhase, isDataReady, isDataEmpty, book, bookKey, routeBookId } = viewerState;
   const { elements, currentEvent, currentChapter, prevValidEvent } = graphState;
   const { filterStage } = graphActions;
-  const hasResolvedEvent = (eventUtils.resolveEventOrdinal(currentEvent) ?? 0) > 0;
+  const hasResolvedEvent = eventUtils.resolveEventNum(currentEvent) > 0;
 
   const hasResumeLocator = useMemo(
-    () => graphPanelHasResumeLocationHint(resumeAnchor),
+    () => hasGraphPanelLocationHint(resumeAnchor),
     [resumeAnchor]
   );
 
   const hasCachedLocation = useMemo(
-    () => graphPanelHasCachedLocationHint(cachedLocation),
+    () => hasGraphPanelLocationHint(cachedLocation, { requireEventNum: true }),
     [cachedLocation]
   );
 
@@ -262,8 +258,6 @@ const GraphSplitArea = memo(function GraphSplitArea({
             }}
           >
             <GraphContainer
-              ref={graphContainerRef}
-              currentPosition={graphState.currentCharIndex}
               currentEvent={graphState.currentEvent}
               currentChapter={graphState.currentChapter}
               edgeLabelVisible={graphState.edgeLabelVisible}
@@ -275,7 +269,6 @@ const GraphSplitArea = memo(function GraphSplitArea({
               fitNodeIds={searchFitNodeIds}
               isResetFromSearch={isResetFromSearchValue}
               prevValidEvent={prevValidEvent ?? null}
-              events={graphState.events || []}
               activeTooltip={activeTooltip}
               onClearTooltip={onClearTooltip}
               onSetActiveTooltip={onSetActiveTooltip}

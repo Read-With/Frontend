@@ -1,6 +1,6 @@
 /** 뷰어 경로: 쿼리 없음. 읽기 위치는 `/user/viewer/:id/c/:chapter/p/:page` */
 
-import { toOneBasedChapterIndexOrNull } from '../common/numberUtils';
+import { toOneBasedChapterIndexOrNull } from '../common/valueUtils';
 
 export const USER_VIEWER_PREFIX = '/user/viewer';
 

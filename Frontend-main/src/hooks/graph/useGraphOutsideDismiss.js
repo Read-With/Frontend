@@ -1,7 +1,8 @@
 /** 그래프 외부 클릭 시 툴팁·선택 해제 */
 
-import { useEffect, useCallback, useRef } from 'react';
+import { useEffect, useCallback } from 'react';
 import { isSidebarElement } from '../../utils/graph/graphUtils';
+import { useLatestRef } from '../common/hooksShared';
 
 export function isGraphDragEndEvent(event) {
   const type = event?.detail?.type;
@@ -21,12 +22,6 @@ export function shouldIgnoreViewerOutsideClick(event, containerRef) {
   if (containerRef?.current?.contains(event.target)) return true;
   if (isGraphDragEndEvent(event)) return true;
   return false;
-}
-
-function useLatestRef(value) {
-  const ref = useRef(value);
-  ref.current = value;
-  return ref;
 }
 
 /**

@@ -18,9 +18,10 @@ import {
   waitForPaint,
   waitForViewerMethod,
 } from '../../utils/viewer/viewerCoreStateUtils';
-import { resolveServerBookIdOrFallback, resolveViewerBookKey, resolveEventIdxOrFallback } from '../common/hooksShared';
+import { resolveServerBookIdOrFallback, resolveViewerBookKey } from '../common/hooksShared';
+import { eventUtils } from '../../utils/viewer/viewerCoreStateUtils';
 import { anchorToLocators } from '../../utils/common/locatorUtils';
-import { getFolderKeyFromFilename } from '../../utils/graph/graphData';
+import { toApiFolderKey } from '../../utils/graph/graphUtils';
 import { useBookmarks } from '../bookmarks/bookmarkHooks';
 import { userViewerBookmarksPath } from '../../utils/navigation/viewerPaths';
 import { debugChapterGraphFromServer } from '../../utils/viewer/debugChapterGraph';
@@ -96,7 +97,7 @@ export function useViewerPage() {
   const [progress, setProgress] = useState(null);
   const [settings, setSettings] = useLocalStorage('xhtml_viewer_settings', defaultSettings);
 
-  const folderKey = useMemo(() => getFolderKeyFromFilename(bookId), [bookId]);
+  const folderKey = useMemo(() => toApiFolderKey(bookId), [bookId]);
   const chapterEventDebugKeyRef = useRef(null);
 
   useEffect(() => {
@@ -109,7 +110,6 @@ export function useViewerPage() {
     setCurrentEvent,
     setEvents,
     setElements,
-    setGraphViewState,
     setCurrentCharIndex,
     setIsDataReady,
     setIsGraphLoading,
@@ -181,14 +181,14 @@ export function useViewerPage() {
     if (!manifestLoaded || !serverBookId || !isDataReady) return;
 
     const chapterIdx = Number(currentChapter);
-    const throughEventIdx = resolveEventIdxOrFallback(currentEvent, null);
+    const throughEventIdx = eventUtils.resolveEventNum(currentEvent, null);
     if (!Number.isFinite(chapterIdx) || chapterIdx < 1) return;
     if (!throughEventIdx || throughEventIdx < 1) return;
 
     const readwith = window.__readwith ?? (window.__readwith = {});
     readwith.debugChapterGraph = (chapter = chapterIdx, options = {}) =>
       debugChapterGraphFromServer(serverBookId, chapter, {
-        throughEventIdx: resolveEventIdxOrFallback(currentEvent, throughEventIdx),
+        throughEventIdx: eventUtils.resolveEventNum(currentEvent, throughEventIdx),
         ...options,
       });
 
@@ -382,7 +382,6 @@ export function useViewerPage() {
     setTotalPages,
     setCurrentChapter,
     setCurrentEvent,
-    setGraphViewState,
     setCurrentCharIndex,
     setShowToolbar,
     bookmarks,

@@ -8,8 +8,6 @@ import {
 
 export function useChapterPovSummaries(bookId, chapterIdx) {
   const [povSummaries, setPovSummaries] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
   const requestIdRef = useRef(0);
 
   const fetchPovSummaries = useCallback(async () => {
@@ -24,26 +22,17 @@ export function useChapterPovSummaries(bookId, chapterIdx) {
     const requestId = ++requestIdRef.current;
 
     try {
-      setLoading(true);
-      setError(null);
-
       const response = await getChapterPovSummaries(bid, ch);
       if (requestId !== requestIdRef.current) return;
 
       if (response.isSuccess) {
         setPovSummaries(normalizeChapterPovSummariesResult(response.result));
       } else {
-        throw new Error(response.message || '챕터 시점 요약 조회에 실패했습니다.');
+        setPovSummaries(null);
       }
-    } catch (err) {
+    } catch {
       if (requestId !== requestIdRef.current) return;
-      const errorMessage = err.message || '챕터 시점 요약 조회에 실패했습니다.';
-      setError(errorMessage);
       setPovSummaries(null);
-    } finally {
-      if (requestId === requestIdRef.current) {
-        setLoading(false);
-      }
     }
   }, [bookId, chapterIdx]);
 
@@ -54,10 +43,5 @@ export function useChapterPovSummaries(bookId, chapterIdx) {
     };
   }, [fetchPovSummaries]);
 
-  return {
-    povSummaries,
-    loading,
-    error,
-    refetch: fetchPovSummaries,
-  };
+  return { povSummaries };
 }

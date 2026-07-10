@@ -2,13 +2,6 @@
 
 import { useState, useEffect, useCallback } from 'react';
 
-const normalizeKeySegment = (value) => {
-  if (value === undefined || value === null) return null;
-  const trimmed = String(value).trim();
-  if (!trimmed) return null;
-  return trimmed.replace(/[^a-zA-Z0-9_-]/g, '_');
-};
-
 const STRING_STORAGE_KEY_SUFFIXES = ['_prevChapter', '_nextPage', '_prevPage'];
 
 const isStringStorageKey = (key) => {
@@ -16,15 +9,6 @@ const isStringStorageKey = (key) => {
 };
 
 export const STORAGE_KEYS = {
-  chapterNodePositions: (bookKey, chapter) => {
-    const bookSegment = normalizeKeySegment(bookKey);
-    const chapterSegment = normalizeKeySegment(chapter) ?? 'unknown';
-    return bookSegment
-      ? `chapter_node_positions_${bookSegment}_${chapterSegment}`
-      : `chapter_node_positions_${chapterSegment}`;
-  },
-  graphEventLayout: (chapter, eventNum) => `graph_event_layout_chapter_${chapter}_event_${eventNum}`,
-  graphPartialLayout: (chapter) => `graph_partial_layout_chapter_${chapter}`,
   prevChapter: (filename) => `readwith_${filename}_prevChapter`,
   nextPage: (filename) => `readwith_${filename}_nextPage`,
   prevPage: (filename) => `readwith_${filename}_prevPage`,

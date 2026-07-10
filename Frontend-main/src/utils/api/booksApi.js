@@ -2,8 +2,8 @@
 
 import { authenticatedRequest, makeSilentError, isForbiddenError, isNotFoundError } from './authApi';
 import { toLocator, locatorsEqual } from '../common/locatorUtils';
-import { toOneBasedChapterIndexOrNull, toPositiveNumberOrNull } from '../common/numberUtils';
-import { sanitizeAssetUrl } from '../common/artifactUrlUtils';
+import { toOneBasedChapterIndexOrNull, toPositiveNumberOrNull } from '../common/valueUtils';
+import { sanitizeAssetUrl } from '../common/urlUtils';
 
 const BOOK_LIST_SORT_VALUES = new Set(['updatedAt', 'title']);
 

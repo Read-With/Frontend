@@ -1,13 +1,8 @@
 /** Cytoscape 탭·드래그·선택 하이라이트 */
 
-import { useCallback, useRef, useMemo } from "react";
+import { useCallback, useMemo } from "react";
 import { getContainerInfo, calculateCytoscapePosition, clearHighlightClassesOn } from '../../utils/graph/graphUtils';
-
-function useLatestRef(value) {
-  const ref = useRef(value);
-  ref.current = value;
-  return ref;
-}
+import { useLatestRef } from '../common/hooksShared';
 
 function applyNodeClickHighlight(cy, node) {
   if (!cy || !node || node.length === 0) return;

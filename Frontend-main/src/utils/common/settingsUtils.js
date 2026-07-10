@@ -46,10 +46,6 @@ export function saveSettings(settings) {
 }
 
 export const settingsUtils = {
-  defaultSettings,
-  loadSettings,
-  saveSettings,
-  
   applySettings(newSettings, prevSettings, setSettings, setShowGraph, setReloadKey, viewerRef, _cleanFilename) {
     const currentSettings = { ...prevSettings };
     setSettings(newSettings);

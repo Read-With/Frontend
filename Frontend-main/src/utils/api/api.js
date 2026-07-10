@@ -3,8 +3,8 @@
 import {
   setManifestData,
   getManifestFromCache,
-  getManifestEventData,
   getChapterData,
+  findManifestEventInChapter,
   locatorFromChapterLocalOffset,
   resolveFineGraphLocatorToEventParams,
   normalizeLocatorForServerProgress,
@@ -17,7 +17,8 @@ import {
 } from '../common/cache/progressCache';
 import { normalizeReadingProgressPercent } from '../viewer/viewerEventProgressUtils';
 import { progressPayloadFromData, resolveProgressLocator, toLocator } from '../common/locatorUtils';
-import { getApiBaseUrl, clearAuthData, getPostLoginHomeUrl } from '../common/authUtils';
+import { resolveChapterIndex } from '../common/valueUtils';
+import { getApiBaseUrl, clearAuthData, getPostLoginHomeUrl } from '../common/urlUtils';
 import { getStoredAccessToken } from '../security/authTokenStorage';
 import {
   isTokenValid,
@@ -142,7 +143,7 @@ const applyManifestEventIdFallback = (bookId, chapterIdx, eventIdx, result) => {
   const current = result.eventId;
   if (current != null && String(current).trim() !== '') return result;
 
-  const manifestEvent = getManifestEventData(bookId, chapterIdx, eventIdx);
+  const manifestEvent = findManifestEventInChapter(bookId, chapterIdx, { eventIdx });
   const manifestEventId = manifestEvent?.eventId ?? manifestEvent?.id;
   if (manifestEventId == null || String(manifestEventId).trim() === '') {
     return result;
@@ -151,7 +152,7 @@ const applyManifestEventIdFallback = (bookId, chapterIdx, eventIdx, result) => {
   return {
     ...result,
     bookId: result.bookId ?? Number(bookId),
-    chapterIndex: result.chapterIndex ?? Number(chapterIdx),
+    chapterIndex: resolveChapterIndex(result) ?? Number(chapterIdx),
     eventId: String(manifestEventId).trim(),
   };
 };
@@ -518,7 +519,7 @@ export const getFineGraph = async (bookId, chapterIdx, eventIdx, atLocator = nul
 
   if (!locator) {
     const chapterData = getChapterData(bookId, chapterIdx);
-    const manifestEvent = getManifestEventData(bookId, chapterIdx, fallbackEventIdx);
+    const manifestEvent = findManifestEventInChapter(bookId, chapterIdx, { eventIdx: fallbackEventIdx });
     const eventStartOffset = Number(manifestEvent?.startTxtOffset);
     if (chapterData) {
       if (Number.isFinite(eventStartOffset) && eventStartOffset >= 0) {

@@ -1,7 +1,7 @@
-import { getApiBaseUrl } from '../common/authUtils';
-import { sanitizeAssetUrl } from '../common/artifactUrlUtils';
+import { getApiBaseUrl, sanitizeAssetUrl } from '../common/urlUtils';
+import { isGraphNodeElement } from './graphUtils';
 
-export const createEmptyCharacterMaps = () => ({
+const createEmptyCharacterMaps = () => ({
   idToName: {},
   idToDesc: {},
   idToDescKo: {},
@@ -102,7 +102,7 @@ function validateAndNormalizeProfileImageUrl(profileImage) {
   return null;
 }
 
-export function normalizeCharacterId(id) {
+function normalizeCharacterId(id) {
   if (id === undefined || id === null) return null;
   const numId = Number(id);
   if (!Number.isFinite(numId)) return null;
@@ -127,7 +127,7 @@ export function isNodeWeightEntryVisible(entry) {
   return Boolean(entry && isValidNodeWeight(entry.weight) && isValidNodeCount(entry.count));
 }
 
-export function resolveNodeWeightAndCount(char, previousEntry = null) {
+function resolveNodeWeightAndCount(char, previousEntry = null) {
   const rawWeight = typeof char?.weight === 'number' ? char.weight : null;
   const hasCountField = typeof char?.count === 'number';
   const rawCount = hasCountField ? char.count : null;
@@ -184,8 +184,8 @@ export function extractNodeWeightsFromElements(elements) {
   if (!Array.isArray(elements)) return nodeWeights;
 
   elements.forEach((el) => {
-    const data = el?.data;
-    if (!data || data.source != null) return;
+    if (!isGraphNodeElement(el)) return;
+    const data = el.data;
     const id = normalizeCharacterId(data.id);
     if (!id) return;
     const entry = { weight: data.weight, count: data.count };

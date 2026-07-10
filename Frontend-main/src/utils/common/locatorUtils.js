@@ -1,9 +1,11 @@
 /** v2 locator: chapterIndex(1-based), blockIndex·offset(0-based 코드포인트) */
-import { isPositiveFiniteNumber, toNumberOrNull as toNumber } from './numberUtils';
+import {
+  isPositiveFiniteNumber,
+  resolveChapterIndex,
+  toNumberOrNull as toNumber,
+} from './valueUtils';
 
-const locatorChapterIndex = (locator) => Number(locator?.chapterIndex ?? locator?.chapterIdx);
-
-const hasPositiveChapterHint = (locator) => isPositiveFiniteNumber(locatorChapterIndex(locator));
+const hasPositiveChapterHint = (locator) => isPositiveFiniteNumber(resolveChapterIndex(locator));
 
 const firstLocator = (...candidates) => {
   for (const candidate of candidates) {
@@ -13,9 +15,21 @@ const firstLocator = (...candidates) => {
   return null;
 };
 
+const extractLocationHint = (payload) => {
+  if (!payload || typeof payload !== 'object') return null;
+  return (
+    payload.startLocator ??
+    payload.locator ??
+    payload.anchor?.startLocator ??
+    payload.anchor?.start ??
+    payload.start ??
+    null
+  );
+};
+
 export const toLocator = (obj) => {
   if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return null;
-  const chapterIndex = toNumber(obj.chapterIndex ?? obj.chapterIdx);
+  const chapterIndex = resolveChapterIndex(obj);
   const blockIndex = toNumber(obj.blockIndex);
   const offset = toNumber(obj.offset);
   if (chapterIndex == null || chapterIndex < 1) return null;
@@ -47,37 +61,22 @@ export const anchorToLocators = (anchor) => {
   };
 };
 
-/** anchor → 그래프 placeholder용 payload (startLocator 키 유무에 따라 키 이름 분기) */export const toEventAnchorPayload = (anchor) => {
-  const { startLocator, endLocator } = anchorToLocators(anchor);
-  if (!startLocator) return null;
-  if (anchor?.startLocator) return { startLocator, endLocator };
-  return { start: startLocator, end: endLocator };
-};
-
-/** resume 앵커에 유효 chapter 힌트가 있는지 (toLocator 정규화 없이 chapterIndex만 검사) */export function graphPanelHasResumeLocationHint(resumeAnchor) {
-  const loc = resumeAnchor?.startLocator ?? resumeAnchor?.start;
-  return hasPositiveChapterHint(loc);
-}
-
-/** 캐시 progress에 locator 또는 chapterIdx+eventNum 힌트가 있는지 */export function graphPanelHasCachedLocationHint(cachedLocation) {
-  const loc =
-    cachedLocation?.startLocator ??
-    cachedLocation?.locator ??
-    cachedLocation?.anchor?.startLocator ??
-    cachedLocation?.anchor?.start;
-  if (loc && typeof loc === 'object') {
-    if (hasPositiveChapterHint(loc)) {
-      return true;
-    }
+/**
+ * 그래프 패널 위치 힌트 여부.
+ * requireEventNum: true면 chapterIdx+eventNum 폴백(캐시), false면 locator만(resume).
+ */
+export function hasGraphPanelLocationHint(payload, { requireEventNum = false } = {}) {
+  const loc = extractLocationHint(payload);
+  if (loc && typeof loc === 'object' && hasPositiveChapterHint(loc)) {
+    return true;
   }
-  if (!cachedLocation) {
+  if (!requireEventNum || !payload || typeof payload !== 'object') {
     return false;
   }
-  if (!hasPositiveChapterHint({ chapterIdx: cachedLocation.chapterIdx })) {
+  if (!isPositiveFiniteNumber(resolveChapterIndex(payload))) {
     return false;
   }
-  const cachedEvent = Number(cachedLocation.eventNum ?? 0);
-  return isPositiveFiniteNumber(cachedEvent);
+  return isPositiveFiniteNumber(Number(payload.eventNum ?? 0));
 }
 
 /** progress·캐시 payload에서 단일 reading locator 해석 */
@@ -135,32 +134,4 @@ export const progressPayloadFromData = (data) => {
     locator: { ...locator },
     locatorVersion: version,
   };
-};
-
-/** 블록 내 range 시작/끝까지 코드포인트 오프셋 (0-based, opts.useEnd로 끝 기준) */export const codePointOffsetInBlock = (blockEl, range, opts = {}) => {
-  if (!blockEl || !range) return 0;
-  const useEnd = opts.useEnd === true;
-  const doc = blockEl.ownerDocument;
-  if (!doc) return 0;
-  try {
-    const blockRange = doc.createRange();
-    blockRange.selectNodeContents(blockEl);
-    const container = useEnd ? range.endContainer : range.startContainer;
-    const offset = useEnd ? range.endOffset : range.startOffset;
-    if (!blockEl.contains(container)) return 0;
-    const cmp = blockRange.comparePoint(container, offset);
-    if (cmp < 0) return 0;
-    if (cmp > 0) return blockCodePointLength(blockEl);
-    const prefixRange = doc.createRange();
-    prefixRange.setStart(blockRange.startContainer, blockRange.startOffset);
-    prefixRange.setEnd(container, offset);
-    return blockCodePointLength(prefixRange);
-  } catch {
-    return 0;
-  }
-};
-
-const blockCodePointLength = (nodeOrRange) => {
-  const text = nodeOrRange.toString?.() ?? (nodeOrRange.textContent || '');
-  return [...text].length;
 };

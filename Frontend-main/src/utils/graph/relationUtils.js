@@ -1,6 +1,7 @@
 /** 관계 정규화·태그 캐시·레이더 차트 데이터 */
 
-import { toFiniteNumber, uniqueStrings, isGraphNodeElement } from './graphUtils';
+import { toFiniteNumber } from '../common/valueUtils';
+import { uniqueStrings, isGraphNodeElement, undirectedPairKey } from './graphUtils';
 import { registerCache, recordCacheAccess, enforceCacheSizeLimit } from '../common/cache/cacheManager';
 import { clearStyleCache } from '../styles/relationStyles';
 
@@ -95,7 +96,7 @@ export function isSamePair(rel, a, b) {
     return false;
   }
   
-  return (r1 === s1 && r2 === s2) || (r1 === s2 && r2 === s1);
+  return undirectedPairKey(r1, r2) === undirectedPairKey(s1, s2);
 }
 
 /** relation 원본의 이벤트 식별자만 전달 */
@@ -158,43 +159,38 @@ export function processRelations(relations) {
   }
 }
 
-export function processRelationTags(relation, label) {
-  try {
-    return normalizeRelationArray(relation, label);
-  } catch (_error) {
-    return [];
-  }
-}
-
 const relationCache = new Map();
 registerCache('relationCache', relationCache, { maxSize: 1000, ttl: 600000 }); // 10분 TTL
 
-export function processRelationTagsCached(relation, label) {
+/** 관계 태그 정규화 (캐시) */
+export function processRelationTags(relation, label) {
   try {
     if (relation === undefined && label === undefined) {
       return [];
     }
-    
+
     const relationStr = Array.isArray(relation) ? relation.join('|') : String(relation || '');
     const labelStr = String(label || '');
     const cacheKey = `${relationStr}::${labelStr}`;
-    
+
     recordCacheAccess('relationCache');
-    
+
     if (relationCache.has(cacheKey)) {
       return relationCache.get(cacheKey);
     }
-    
-    const result = processRelationTags(relation, label);
+
+    const result = normalizeRelationArray(relation, label);
     relationCache.set(cacheKey, result);
     enforceCacheSizeLimit('relationCache');
     return result;
   } catch (_error) {
-    return processRelationTags(relation, label);
+    try {
+      return normalizeRelationArray(relation, label);
+    } catch {
+      return [];
+    }
   }
 }
-
-export const safeNum = toFiniteNumber;
 
 function clearRelationCache() {
   try {
@@ -209,7 +205,6 @@ export function cleanupRelationUtils() {
   try {
     clearRelationCache();
     clearStyleCache();
-    clearStyleCache();
   } catch (error) {
     console.error('관계 유틸리티 정리 실패:', error);
   }
@@ -220,7 +215,7 @@ export function directedEdgeElementId(fromId, toId) {
   return `${String(fromId)}->${String(toId)}`;
 }
 
-export const normalizePositivity = (positivity) => {
+const normalizePositivity = (positivity) => {
   const value = toFiniteNumber(positivity);
   if (!Number.isFinite(value)) return 50;
   return ((value + 1) / 2) * 100;
