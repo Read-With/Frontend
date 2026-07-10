@@ -360,7 +360,7 @@ BookCard.propTypes = {
   openingMode: PropTypes.oneOf(['viewer', 'graph'])
 };
 
-const BookLibrary = memo(({ books, loading: _loading, error: _loadError, onRetry: _onRetry, onToggleFavorite, onBookClick, onBookDelete, viewMode = 'grid' }) => {
+const BookLibrary = memo(({ books, onToggleFavorite, onBookDelete, viewMode = 'grid' }) => {
   const navigate = useNavigate();
   const [selectedBook, setSelectedBook] = useState(null);
   const [showDetailModal, setShowDetailModal] = useState(false);
@@ -478,7 +478,6 @@ const BookLibrary = memo(({ books, loading: _loading, error: _loadError, onRetry
           key={`${book.title}-${book.id}`} 
           book={book}
           onToggleFavorite={onToggleFavorite}
-          onBookClick={onBookClick}
           onOpenBook={handleOpenBook}
           onBookDetailClick={handleBookDetailClick}
           onShowDeleteModal={handleShowDeleteModal}
@@ -509,11 +508,7 @@ const BookLibrary = memo(({ books, loading: _loading, error: _loadError, onRetry
 
 BookLibrary.propTypes = {
   books: PropTypes.arrayOf(bookShape).isRequired,
-  loading: PropTypes.bool.isRequired,
-  error: PropTypes.string,
-  onRetry: PropTypes.func,
   onToggleFavorite: PropTypes.func,
-  onBookClick: PropTypes.func,
   onBookDelete: PropTypes.func,
   viewMode: PropTypes.oneOf(['grid', 'list'])
 };

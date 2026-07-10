@@ -22,10 +22,6 @@ export function useGraphState() {
     setEdgeLabelVisible((prev) => !prev);
   }, []);
 
-  const clearTooltip = useCallback(() => {
-    setForceClose(true);
-  }, []);
-
   const startClosing = useCallback(() => {
     setIsSidebarClosing(true);
   }, []);
@@ -54,7 +50,6 @@ export function useGraphState() {
     setFilterStage,
     toggleSidebar,
     toggleEdgeLabel,
-    clearTooltip,
     startClosing,
     closeSidebar,
     setDropdownSelection,

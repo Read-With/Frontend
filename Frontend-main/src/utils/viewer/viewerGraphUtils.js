@@ -5,6 +5,10 @@ import { uniqueStrings } from '../graph/graphUtils';
 import { buildNodeWeights, createCharacterMaps, toNodeWeightsOrNull } from '../graph/characterUtils';
 import { convertRelationsToElements } from '../graph/graphDataUtils';
 import { resolveGraphElementsProfileImages } from '../common/artifactUrlUtils';
+import {
+  getGraphEventState,
+  getChapterEventFallbackData,
+} from '../common/cache/chapterEventCache';
 import { cacheKeyUtils, eventUtils, resolveEventIdxOrFallback } from './viewerCoreStateUtils';
 import { resolveServerEventMatch } from './viewerEventProgressUtils';
 
@@ -124,7 +128,7 @@ export function convertFineGraphToElements(
   return {
     elements: converted.elements,
     normalizedEvent: converted.normalizedEvent,
-    eventMeta: fineResult?.event ?? null,
+    eventMeta: fineResult?.event ?? fallbackEventMeta(chapter, eventIdx),
     characters: converted.characters,
     relations: converted.relations,
   };
@@ -156,9 +160,9 @@ export function pickFineGraphResult(response) {
   return result && typeof result === 'object' ? result : null;
 }
 
-/** 이벤트 슬롯 존재 여부 (이진 검색·타임라인용 — event 메타만 있어도 true) */
+/** relationship-graph 응답에 그래프 본문이 있는지 */
 export function hasFineGraphEventSlot(result) {
-  return Boolean(result?.event) || hasFineGraphPayload(result);
+  return hasFineGraphPayload(result);
 }
 
 /** graph event state 캐시 스냅샷 (표시 가능한 payload만) */
@@ -167,6 +171,30 @@ export function getCachedGraphSnapshot(bookId, chapter, eventIdx, getGraphEventS
   const cached = getGraphEventState(bookId, chapter, eventIdx);
   if (!hasGraphCachePayload(cached)) return null;
   return cached;
+}
+
+/** event 1~eventIdx 누적 그래프 (표시용) */
+export function resolveCumulativeGraphForDisplay(
+  bookId,
+  chapter,
+  eventIdx,
+  deps = DEFAULT_GRAPH_TRANSFORM_DEPS
+) {
+  const cached = getCachedGraphSnapshot(bookId, chapter, eventIdx, getGraphEventState);
+  if (!cached) return null;
+
+  const resolved = elementsFromGraphEventState(cached, chapter, eventIdx, deps);
+  const fallback = getChapterEventFallbackData(bookId, chapter, eventIdx);
+
+  return {
+    elements: resolved.elements,
+    eventMeta: resolved.eventMeta ?? fallback?.event ?? null,
+    characters: resolved.characters?.length
+      ? resolved.characters
+      : (fallback?.characters ?? []),
+    relations: fallback?.relations ?? resolved.relations ?? [],
+    normalizedEvent: resolved.normalizedEvent ?? null,
+  };
 }
 
 /** graph event state 캐시 → elements·메타 (elements 없으면 characters로 변환) */
@@ -196,7 +224,7 @@ export function elementsFromGraphEventState(
 export const graphDataTransformUtils = {
   normalizeApiEvent: (apiEvent) => {
     if (!apiEvent || typeof apiEvent !== 'object') return null;
-    const chapterIdx = Number(apiEvent.chapterIdx);
+    const chapterIdx = Number(apiEvent.chapterIdx ?? apiEvent.chapterIndex);
     if (!Number.isFinite(chapterIdx) || chapterIdx < 1) return null;
     const eventNum = eventUtils.resolveEventOrdinal(apiEvent);
     if (!eventNum) return null;
@@ -204,6 +232,7 @@ export const graphDataTransformUtils = {
       ...apiEvent,
       chapter: chapterIdx,
       chapterIdx,
+      chapterIndex: chapterIdx,
       eventNum,
       eventIdx: eventNum,
       startTxtOffset: apiEvent.startTxtOffset ?? null,

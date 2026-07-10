@@ -250,17 +250,16 @@ export const useBooks = () => {
   }, [serverBooksData, reconcileBooks]);
 
   const books = useMemo(() => {
-    const hiddenServer = hiddenServerBookIdsRef.current;
     return reconciledBooks
       .filter((book) => {
         const idKey = book?.id != null ? `${book.id}` : null;
-        return idKey && !hiddenServer.has(idKey);
+        return idKey && !hiddenServerBookIds.has(idKey);
       })
       .map((book) => ({
         ...book,
         progress: resolveLibraryReadingProgressPercent(book),
       }));
-  }, [reconciledBooks, progressCacheEpoch]);
+  }, [reconciledBooks, progressCacheEpoch, hiddenServerBookIds]);
 
   const toggleFavoriteMutation = useMutation({
     mutationFn: async ({ bookId, favorite }) => toggleBookFavorite(bookId, favorite),
@@ -293,25 +292,18 @@ export const useBooks = () => {
   });
 
   const removeBookMutation = useMutation({
-    mutationFn: async (bookId) => {
-      const targetBookId = String(bookId);
-      const hiddenIds = new Set(hiddenServerBookIdsRef.current);
-      hiddenIds.add(targetBookId);
-      localStorage.setItem(HIDDEN_SERVER_BOOK_IDS_KEY, JSON.stringify([...hiddenIds]));
-      return targetBookId;
-    },
-    onMutate: async () => {
+    mutationFn: async (bookId) => String(bookId),
+    onMutate: async (bookId) => {
       await queryClient.cancelQueries({ queryKey: ['books', 'server'] });
+      const targetBookId = String(bookId);
+      setHiddenServerBookIds((prev) => {
+        const next = new Set(prev);
+        next.add(targetBookId);
+        hiddenServerBookIdsRef.current = next;
+        localStorage.setItem(HIDDEN_SERVER_BOOK_IDS_KEY, JSON.stringify([...next]));
+        return next;
+      });
       return {};
-    },
-    onSuccess: (deletedBookId) => {
-      if (!isNaN(Number(deletedBookId))) {
-        setHiddenServerBookIds((prev) => {
-          const next = new Set(prev);
-          next.add(deletedBookId);
-          return next;
-        });
-      }
     },
   });
 
@@ -326,6 +318,7 @@ export const useBooks = () => {
           if (!prev.has(newBookIdStr)) return prev;
           const next = new Set(prev);
           next.delete(newBookIdStr);
+          hiddenServerBookIdsRef.current = next;
           localStorage.setItem(HIDDEN_SERVER_BOOK_IDS_KEY, JSON.stringify([...next]));
           return next;
         });

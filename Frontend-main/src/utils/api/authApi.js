@@ -212,7 +212,8 @@ export const googleLogin = async (code) => {
   }
 };
 
-export const refreshToken = async () => {
+export const refreshToken = async (options = {}) => {
+  const { silent = false } = options;
   try {
     const refreshTokenValue = getStoredRefreshToken();
 
@@ -263,7 +264,9 @@ export const refreshToken = async () => {
 
     throw new Error(data.message || '토큰 갱신 실패');
   } catch (error) {
-    console.error('토큰 갱신 실패:', error);
+    if (!silent) {
+      console.error('토큰 갱신 실패:', error);
+    }
     throw error;
   }
 };
@@ -312,7 +315,7 @@ export async function ensureSessionAccessToken() {
   if (!sessionBootstrapPromise) {
     sessionBootstrapPromise = (async () => {
       try {
-        await refreshToken();
+        await refreshToken({ silent: true });
       } catch {
         /* refresh 실패 시 refreshToken 내부에서 clearAuth 처리 */
       }

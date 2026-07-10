@@ -1,11 +1,12 @@
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Book, BookOpen, CheckCircle2, Plus, Library, Heart, AlertCircle, Grid3X3, List } from 'lucide-react';
+import { Book, BookOpen, Plus, Library, Heart, AlertCircle, Grid3X3, List, Network, Upload } from 'lucide-react';
 import Header from '../components/common/Header';
 import BookLibrary from '../components/library/BookLibrary';
 import FileUpload from '../components/library/FileUpload';
 import { useBooks } from '../hooks/books/bookHooks';
 import useAuth from '../hooks/auth/useAuth';
+import { EPUB_FILE_CONSTRAINTS, validateEpubFile } from '../utils/library/libraryUtils';
 import './MyPage.css';
 
 export default function MyPage() {
@@ -13,6 +14,7 @@ export default function MyPage() {
   const { books, loading, error, retryFetch, addBook, toggleFavorite, removeBook } = useBooks();
   const { user } = useAuth();
   const [showUpload, setShowUpload] = useState(false);
+  const [pendingUploadFile, setPendingUploadFile] = useState(null);
   const [activeTab, setActiveTab] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [searchInput, setSearchInput] = useState(''); // 검색 입력 필드용
@@ -23,7 +25,27 @@ export default function MyPage() {
   const handleUploadSuccess = useCallback((newBook) => {
     addBook(newBook);
     setShowUpload(false);
+    setPendingUploadFile(null);
   }, [addBook]);
+
+  const handleCloseUpload = useCallback(() => {
+    setShowUpload(false);
+    setPendingUploadFile(null);
+  }, []);
+
+  const openUploadWithFile = useCallback((file) => {
+    if (!file) {
+      setShowUpload(true);
+      return;
+    }
+    const validation = validateEpubFile(file);
+    if (!validation.valid) {
+      alert(validation.error);
+      return;
+    }
+    setPendingUploadFile(file);
+    setShowUpload(true);
+  }, []);
 
   // 검색 실행 함수
   const handleSearch = useCallback(() => {
@@ -48,9 +70,7 @@ export default function MyPage() {
   }, [handleSearch]);
 
 
-  const getDisplayName = useCallback(() => {
-    return user?.name || '사용자';
-  }, [user?.name]);
+  const displayName = user?.name || '사용자';
 
   useEffect(() => {
     if (error && (error.includes('인증이 필요합니다') || error.includes('인증'))) {
@@ -111,7 +131,7 @@ export default function MyPage() {
 
   // 탭별 필터링 - 메모이제이션
   const filteredBooks = useMemo(() => {
-    let filtered = books || [];
+    let filtered = [...(books || [])];
 
     // 탭 필터링
     if (activeTab === 'favorites') {
@@ -150,28 +170,20 @@ export default function MyPage() {
     return filtered;
   }, [books, activeTab, searchQuery, sortBy]);
 
+  const isLibraryEmpty =
+    !loading && !error && books.length === 0 && activeTab === 'all' && !isSearching;
+
   return (
     <>
-      <style>
-        {`
-          .mypage-root body {
-            overflow: auto !important;
-            position: static !important;
-          }
-          .mypage-root html {
-            overflow: auto !important;
-          }
-        `}
-      </style>
-      <Header userNickname={getDisplayName()} />
+      <Header userNickname={displayName} />
       <div className="mypage-root">
         <div className="mypage-main">
           {/* 히어로 배너 */}
           <section className="hero-banner">
             <div className="hero-content">
               <div className="hero-left">
-                <h1 className="hero-title">ReadWith</h1>
-                <p className="hero-subtitle">안녕하세요, {getDisplayName()}님!</p>
+                <h1 className="hero-title" lang="en">ReadWith</h1>
+                <p className="hero-subtitle">안녕하세요, {displayName}님!</p>
                 <p className="hero-description">
                   모든 독서의 순간이 쌓여, 당신만의 이야기가 됩니다.
                 </p>
@@ -218,6 +230,7 @@ export default function MyPage() {
               </nav>
 
               {/* 검색 및 필터 */}
+              {books.length > 0 && (
               <div className="search-filter-bar">
                 <div className="search-input-wrapper">
                   <input
@@ -277,6 +290,7 @@ export default function MyPage() {
                   </div>
                 </div>
               </div>
+              )}
 
               {/* 책 목록 */}
               <div className="books-grid-section">
@@ -298,33 +312,77 @@ export default function MyPage() {
                       </button>
                     )}
                   </div>
+                ) : isLibraryEmpty ? (
+                  <div className="empty-welcome">
+                    <div className="empty-welcome-content">
+                      <div className="empty-welcome-info">
+                        <div className="empty-welcome-icon">
+                          <Library size={48} strokeWidth={1.5} />
+                        </div>
+                        <h2 className="empty-welcome-title">내 서재가 비어 있어요</h2>
+                        <p className="empty-welcome-description">
+                          EPUB 파일을 업로드하면 XHTML 뷰어에서 바로 읽고,
+                          인물 관계도도 함께 확인할 수 있어요.
+                        </p>
+                        <ul className="empty-welcome-features">
+                          <li>
+                            <BookOpen size={18} />
+                            <span>XHTML 뷰어로 읽기</span>
+                          </li>
+                          <li>
+                            <Network size={18} />
+                            <span>인물 관계도 탐색</span>
+                          </li>
+                          <li>
+                            <Heart size={18} />
+                            <span>즐겨찾기 & 독서 진도 저장</span>
+                          </li>
+                        </ul>
+                      </div>
+                      <div
+                        className="empty-welcome-upload"
+                        onClick={() => openUploadWithFile(null)}
+                        role="button"
+                        tabIndex={0}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            openUploadWithFile(null);
+                          }
+                        }}
+                      >
+                        <div className="empty-welcome-upload-icon">
+                          <Upload size={32} strokeWidth={1.5} />
+                        </div>
+                        <strong>EPUB 파일 업로드</strong>
+                        <span>파일을 드래그하거나 클릭하세요</span>
+                        <small>
+                          최대 {Math.round(EPUB_FILE_CONSTRAINTS.MAX_SIZE / (1024 * 1024))}MB · .epub
+                        </small>
+                      </div>
+                    </div>
+                  </div>
                 ) : filteredBooks.length === 0 ? (
                   <div className="empty-state">
                     <div className="empty-icon">
-                      {activeTab === 'all' ? <Library size={80} strokeWidth={1.5} /> : 
+                      {isSearching ? <Library size={80} strokeWidth={1.5} /> :
                        <Heart size={80} strokeWidth={1.5} />}
                     </div>
                     <h2 className="empty-title">
-                      {isSearching ? '검색 결과가 없습니다' :
-                       activeTab === 'all' ? '아직 책이 없네요!' :
-                       activeTab === 'favorites' ? '즐겨찾기한 책이 없어요' :
-                       '즐겨찾기한 책이 없어요'}
+                      {isSearching ? '검색 결과가 없습니다' : '즐겨찾기한 책이 없어요'}
                     </h2>
                     <p className="empty-description">
-                      {isSearching 
+                      {isSearching
                         ? `"${searchQuery}"에 대한 검색 결과가 없습니다. 다른 키워드로 검색해보세요.`
-                        : activeTab === 'all' 
-                        ? '우측 하단의 + 버튼으로 책을 추가하세요. XHTML 뷰어에서 바로 읽을 수 있어요.'
-                        : activeTab === 'favorites'
-                        ? '즐겨찾기한 책이 아직 없어요. 책을 즐겨찾기하면 여기에 표시됩니다.'
-                        : '해당하는 책이 없습니다.'}
+                        : '즐겨찾기한 책이 아직 없어요. 책 카드의 하트를 눌러 추가할 수 있어요.'}
                     </p>
-                    {activeTab === 'all' && !searchQuery && (
-                      <button
-                        className="empty-cta-button"
-                        onClick={() => setShowUpload(true)}
-                      >
-                        첫 번째 책 추가하기
+                    {isSearching ? (
+                      <button type="button" className="empty-cta-button" onClick={handleShowAll}>
+                        전체 도서 보기
+                      </button>
+                    ) : (
+                      <button type="button" className="empty-cta-button" onClick={() => setActiveTab('all')}>
+                        전체 도서 보기
                       </button>
                     )}
                   </div>
@@ -332,13 +390,21 @@ export default function MyPage() {
                   <div className={`books-grid ${viewMode === 'list' ? 'list-view' : 'grid-view'}`}>
                     <BookLibrary
                       books={filteredBooks}
-                      loading={false}
-                      error={null}
-                      onRetry={retryFetch}
                       onToggleFavorite={toggleFavorite}
                       onBookDelete={removeBook}
                       viewMode={viewMode}
                     />
+                    <button
+                      type="button"
+                      className={`add-book-card${viewMode === 'list' ? ' list-view' : ''}`}
+                      onClick={() => openUploadWithFile(null)}
+                      aria-label="책 추가"
+                    >
+                      <span className="add-book-card-icon">
+                        <Plus size={viewMode === 'list' ? 28 : 36} strokeWidth={2} />
+                      </span>
+                      <span className="add-book-card-label">책 추가</span>
+                    </button>
                   </div>
                 )}
               </div>
@@ -346,20 +412,11 @@ export default function MyPage() {
           </div>
         </div>
 
-        {/* 플로팅 업로드 버튼 */}
-        <button
-          className="floating-upload-btn"
-          onClick={() => setShowUpload(true)}
-          title="새 책 업로드"
-        >
-          <Plus size={28} strokeWidth={2.5} />
-        </button>
-
-        {/* 업로드 모달 */}
         {showUpload && (
           <FileUpload
+            initialFile={pendingUploadFile}
             onUploadSuccess={handleUploadSuccess}
-            onClose={() => setShowUpload(false)}
+            onClose={handleCloseUpload}
           />
         )}
       </div>

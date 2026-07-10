@@ -18,7 +18,7 @@ import {
   waitForPaint,
   waitForViewerMethod,
 } from '../../utils/viewer/viewerCoreStateUtils';
-import { resolveServerBookIdOrFallback, resolveViewerBookKey } from '../common/hooksShared';
+import { resolveServerBookIdOrFallback, resolveViewerBookKey, resolveEventIdxOrFallback } from '../common/hooksShared';
 import { anchorToLocators } from '../../utils/common/locatorUtils';
 import { getFolderKeyFromFilename } from '../../utils/graph/graphData';
 import { useBookmarks } from '../bookmarks/bookmarkHooks';
@@ -97,9 +97,11 @@ export function useViewerPage() {
   const [settings, setSettings] = useLocalStorage('xhtml_viewer_settings', defaultSettings);
 
   const folderKey = useMemo(() => getFolderKeyFromFilename(bookId), [bookId]);
+  const chapterEventDebugKeyRef = useRef(null);
 
   useEffect(() => {
     setProgress(null);
+    chapterEventDebugKeyRef.current = null;
   }, [bookKey]);
 
   const {
@@ -126,16 +128,6 @@ export function useViewerPage() {
   );
 
   const { manifestLoaded } = useViewerManifest(manifestServerBookId);
-
-  useEffect(() => {
-    if (!import.meta.env.DEV) return;
-    const serverBookId = book?.id ?? manifestServerBookId;
-    if (!manifestLoaded || !serverBookId) return;
-
-    const readwith = window.__readwith ?? (window.__readwith = {});
-    readwith.debugChapterGraph = (chapterIdx = 1, options) =>
-      debugChapterGraphFromServer(serverBookId, chapterIdx, options);
-  }, [manifestLoaded, book?.id, manifestServerBookId]);
 
   const {
     progressTopBar,
@@ -182,6 +174,40 @@ export function useViewerPage() {
     setFineGraphLoading,
     setIsDataReady,
   });
+
+  useEffect(() => {
+    if (!import.meta.env.DEV) return;
+    const serverBookId = book?.id ?? manifestServerBookId;
+    if (!manifestLoaded || !serverBookId || !isDataReady) return;
+
+    const chapterIdx = Number(currentChapter);
+    const throughEventIdx = resolveEventIdxOrFallback(currentEvent, null);
+    if (!Number.isFinite(chapterIdx) || chapterIdx < 1) return;
+    if (!throughEventIdx || throughEventIdx < 1) return;
+
+    const readwith = window.__readwith ?? (window.__readwith = {});
+    readwith.debugChapterGraph = (chapter = chapterIdx, options = {}) =>
+      debugChapterGraphFromServer(serverBookId, chapter, {
+        throughEventIdx: resolveEventIdxOrFallback(currentEvent, throughEventIdx),
+        ...options,
+      });
+
+    const debugKey = `${serverBookId}:${chapterIdx}:${throughEventIdx}`;
+    if (chapterEventDebugKeyRef.current === debugKey) return;
+    chapterEventDebugKeyRef.current = debugKey;
+
+    debugChapterGraphFromServer(serverBookId, chapterIdx, {
+      throughEventIdx,
+      logEachEvent: true,
+    });
+  }, [
+    manifestLoaded,
+    book?.id,
+    manifestServerBookId,
+    currentChapter,
+    currentEvent,
+    isDataReady,
+  ]);
 
   const { cachedLocation, flushProgressAsync } = useProgressAutoSave({
     bookId: bookKey,

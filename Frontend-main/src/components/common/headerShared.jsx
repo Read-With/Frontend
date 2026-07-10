@@ -12,7 +12,7 @@ export function HeaderBrand({ userName = null }) {
       <div className="header-brand-icon" aria-hidden>
         📖
       </div>
-      <span className="header-brand-text">ReadWith</span>
+      <span className="header-brand-text" lang="en">ReadWith</span>
       {userName != null && (
         <>
           <span className="header-brand-separator">:</span>

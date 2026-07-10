@@ -47,7 +47,7 @@ const handleProgressApiError = (error, logContext) => {
 const createApiResponse = (isSuccess, code, message, result, type = 'default') => {
   const baseResponse = { isSuccess, code, message, result };
 
-  if (type === 'graph-macro') {
+  if (type === 'graph-book-scope') {
     const safe = result ?? {};
     baseResponse.result = {
       ...safe,
@@ -61,13 +61,8 @@ const createApiResponse = (isSuccess, code, message, result, type = 'default') =
   }
 
   if (type === 'graph-fine') {
-    const safe = result ?? {};
-    baseResponse.result = {
-      ...safe,
-      characters: Array.isArray(safe.characters) ? safe.characters : [],
-      relations: Array.isArray(safe.relations) ? safe.relations : [],
-      event: safe.event ?? null,
-    };
+    const safe = normalizeRelationshipGraphResult(result);
+    baseResponse.result = safe;
     return baseResponse;
   }
 
@@ -117,43 +112,48 @@ const appendRelationshipGraphLocatorParams = (queryParams, locator) => {
   if (locator.offset != null) queryParams.append('offset', String(locator.offset));
 };
 
-const resolveManifestEventMeta = (bookId, chapterIdx, eventIdx) => {
-  const ev = getManifestEventData(bookId, chapterIdx, eventIdx);
-  if (!ev) return null;
-  const resolvedEventIdx = ev.eventIdx ?? ev.idx ?? eventIdx;
+const emptyRelationshipGraphResult = (overrides = {}) => ({
+  bookId: null,
+  chapterIndex: null,
+  scope: 'book',
+  eventId: null,
+  characters: [],
+  relations: [],
+  ...overrides,
+});
+
+/** relationship-graph API result — 서버 필드 유지, 배열만 정규화 */
+const normalizeRelationshipGraphResult = (payload) => {
+  if (!payload || typeof payload !== 'object') {
+    return emptyRelationshipGraphResult();
+  }
   return {
-    chapterIdx,
-    eventIdx: resolvedEventIdx,
-    eventNum: ev.eventNum ?? resolvedEventIdx,
-    eventId: ev.eventId || String(resolvedEventIdx),
-    startTxtOffset: ev.startTxtOffset ?? null,
-    endTxtOffset: ev.endTxtOffset ?? null,
+    ...payload,
+    scope: payload.scope ?? 'book',
+    eventId: payload.eventId ?? null,
+    characters: Array.isArray(payload.characters) ? payload.characters : [],
+    relations: Array.isArray(payload.relations) ? payload.relations : [],
   };
 };
 
-const enrichFineGraphPayload = (bookId, chapterIdx, eventIdx, payload) => {
-  if (!payload || typeof payload !== 'object') return payload;
-  const payloadEventId =
-    payload.eventId ??
-    payload.id ??
-    payload.event?.eventId ??
-    payload.event?.id ??
-    null;
-  const manifestEvent = chapterIdx != null && eventIdx != null
-    ? resolveManifestEventMeta(bookId, chapterIdx, eventIdx)
-    : null;
-  const event =
-    payload.event ??
-    manifestEvent ??
-    (chapterIdx != null && eventIdx != null
-      ? {
-          chapterIdx,
-          eventIdx,
-          eventNum: eventIdx,
-          eventId: payloadEventId ?? String(eventIdx),
-        }
-      : null);
-  return { ...payload, event };
+/** 서버 eventId가 null이면 manifest locator 매칭으로 보강 */
+const applyManifestEventIdFallback = (bookId, chapterIdx, eventIdx, result) => {
+  if (!result || typeof result !== 'object') return result;
+  const current = result.eventId;
+  if (current != null && String(current).trim() !== '') return result;
+
+  const manifestEvent = getManifestEventData(bookId, chapterIdx, eventIdx);
+  const manifestEventId = manifestEvent?.eventId ?? manifestEvent?.id;
+  if (manifestEventId == null || String(manifestEventId).trim() === '') {
+    return result;
+  }
+
+  return {
+    ...result,
+    bookId: result.bookId ?? Number(bookId),
+    chapterIndex: result.chapterIndex ?? Number(chapterIdx),
+    eventId: String(manifestEventId).trim(),
+  };
 };
 
 const handleApiError = (error, context) => {
@@ -463,7 +463,7 @@ export const getBookManifest = async (bookId, { forceRefresh = false } = {}) => 
   }
 };
 
-export const getMacroGraph = async (bookId, uptoChapter = null, uptoLocator = null) => {
+export const getBookScopeRelationshipGraph = async (bookId, uptoChapter = null, uptoLocator = null) => {
   if (!bookId) throw new Error('bookId는 필수 매개변수입니다.');
 
   const locator = toLocator(uptoLocator);
@@ -475,7 +475,7 @@ export const getMacroGraph = async (bookId, uptoChapter = null, uptoLocator = nu
     queryParams.append('chapterIndex', String(uptoChapter));
   }
 
-  const emptyMacro = { characters: [], relations: [] };
+  const emptyBookGraph = { characters: [], relations: [] };
 
   try {
     const response = await apiRequest(
@@ -486,25 +486,25 @@ export const getMacroGraph = async (bookId, uptoChapter = null, uptoLocator = nu
       return createApiResponse(
         false,
         response?.code || 'ERROR',
-        response?.message || '거시 그래프 조회에 실패했습니다.',
-        emptyMacro,
-        'graph-macro'
+        response?.message || '책 범위 관계 그래프 조회에 실패했습니다.',
+        emptyBookGraph,
+        'graph-book-scope'
       );
     }
     return toUnifiedApiResponse(createApiResponse(
       true,
       'SUCCESS',
-      '거시 그래프 데이터를 성공적으로 조회했습니다.',
-      result || emptyMacro,
-      'graph-macro'
+      '책 범위 관계 그래프 데이터를 성공적으로 조회했습니다.',
+      result || emptyBookGraph,
+      'graph-book-scope'
     ));
   } catch (error) {
     if (error.status === 404) {
       return toUnifiedApiResponse(
-        createApiResponse(false, 'NOT_FOUND', '거시 그래프 데이터를 찾을 수 없습니다.', emptyMacro, 'graph-macro')
+        createApiResponse(false, 'NOT_FOUND', '책 범위 관계 그래프 데이터를 찾을 수 없습니다.', emptyBookGraph, 'graph-book-scope')
       );
     }
-    handleApiError(error, '거시 그래프 조회 실패');
+    handleApiError(error, '책 범위 관계 그래프 조회 실패');
   }
 };
 
@@ -513,8 +513,8 @@ export const getFineGraph = async (bookId, chapterIdx, eventIdx, atLocator = nul
 
   const fallbackEventIdx = Math.max(1, Number(eventIdx) || 1);
   let locator = toLocator(atLocator);
-  let fineChapterIdx = chapterIdx;
-  let fineEventIdx = fallbackEventIdx;
+  let resolvedChapter = Number(chapterIdx);
+  let resolvedEventIdx = fallbackEventIdx;
 
   if (!locator) {
     const chapterData = getChapterData(bookId, chapterIdx);
@@ -532,12 +532,12 @@ export const getFineGraph = async (bookId, chapterIdx, eventIdx, atLocator = nul
 
   if (locator) {
     const resolution = resolveFineGraphLocatorToEventParams(bookId, locator, fallbackEventIdx);
-    fineChapterIdx = resolution.chapterIdx ?? chapterIdx;
-    fineEventIdx = resolution.eventIdx ?? fallbackEventIdx;
+    resolvedChapter = Number(resolution.chapterIdx ?? chapterIdx);
+    resolvedEventIdx = Number(resolution.eventIdx ?? fallbackEventIdx);
     locator = toLocator(resolution.atLocator) ?? locator;
   }
 
-  const emptyFine = { characters: [], relations: [], event: null };
+  const emptyFine = emptyRelationshipGraphResult();
 
   if (!locator) {
     return createApiResponse(
@@ -557,11 +557,12 @@ export const getFineGraph = async (bookId, chapterIdx, eventIdx, atLocator = nul
     const response = await apiRequest(
       `/api/v2/books/${bookId}/relationship-graph?${queryParams.toString()}`
     );
-    const result = enrichFineGraphPayload(
+    const raw = normalizeRelationshipGraphResult(pickResponseResult(response));
+    const result = applyManifestEventIdFallback(
       bookId,
-      fineChapterIdx,
-      fineEventIdx,
-      pickResponseResult(response)
+      resolvedChapter,
+      resolvedEventIdx,
+      raw
     );
     if (!response || response.isSuccess === false) {
       return createApiResponse(
@@ -608,7 +609,9 @@ export const debugFineGraphEventRange = async (
       isSuccess: Boolean(response?.isSuccess),
       code: response?.code ?? '',
       relationCount: relations.length,
-      event: result?.event ?? null,
+      eventId: result?.eventId ?? null,
+      chapterIndex: result?.chapterIndex ?? null,
+      scope: result?.scope ?? null,
     });
   }
 

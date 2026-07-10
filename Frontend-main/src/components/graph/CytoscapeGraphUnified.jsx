@@ -71,9 +71,6 @@ const CytoscapeGraphUnified = ({
   elements,
   stylesheet = [],
   layout = DEFAULT_LAYOUT,
-  tapNodeHandler,
-  tapEdgeHandler,
-  tapBackgroundHandler,
   fitNodeIds,
   style = {},
   cyRef: externalCyRef,
@@ -89,6 +86,7 @@ const CytoscapeGraphUnified = ({
   selectedNodeIdRef,
   selectedEdgeIdRef,
   strictBackgroundClear = false,
+  graphClearRef = null,
   showRippleEffect = false,
   isDropdownSelection: _isDropdownSelection = false,
   isDataRefreshing = false,
@@ -182,9 +180,10 @@ const CytoscapeGraphUnified = ({
   }, [cy, isSearchActive, filteredElements]);
 
   const {
-    tapNodeHandler: hookTapNodeHandler,
-    tapEdgeHandler: hookTapEdgeHandler,
-    tapBackgroundHandler: hookTapBackgroundHandler,
+    tapNodeHandler,
+    tapEdgeHandler,
+    tapBackgroundHandler,
+    clearSelection,
   } = useGraphInteractions({
     cyRef: externalCyRef,
     onShowNodeTooltip,
@@ -195,6 +194,14 @@ const CytoscapeGraphUnified = ({
     strictBackgroundClear,
     onAfterReset: reapplySearchFade,
   });
+
+  useEffect(() => {
+    if (!graphClearRef) return undefined;
+    graphClearRef.current = clearSelection;
+    return () => {
+      graphClearRef.current = null;
+    };
+  }, [graphClearRef, clearSelection]);
 
   useEffect(() => {
     if (isEmpty(elements)) return;
@@ -338,32 +345,18 @@ const CytoscapeGraphUnified = ({
     };
   }, [externalCyRef]);
 
-  const handleBackgroundTap = useCallback((evt) => {
-    if (!cy || evt.target !== cy) return;
-    const bgHandler = tapBackgroundHandler || hookTapBackgroundHandler;
-    if (bgHandler) bgHandler(evt);
-  }, [cy, tapBackgroundHandler, hookTapBackgroundHandler]);
-
   useEffect(() => {
     if (!cy) return;
 
-    const nodeHandler = tapNodeHandler || hookTapNodeHandler;
-    const edgeHandler = tapEdgeHandler || hookTapEdgeHandler;
-
     cy.off('tap');
-
-    if (nodeHandler) {
-      cy.on("tap", "node", nodeHandler);
-    }
-    if (edgeHandler) {
-      cy.on("tap", "edge", edgeHandler);
-    }
-    cy.on("tap", handleBackgroundTap);
+    cy.on('tap', 'node', tapNodeHandler);
+    cy.on('tap', 'edge', tapEdgeHandler);
+    cy.on('tap', tapBackgroundHandler);
 
     return () => {
       cy.off('tap');
     };
-  }, [cy, tapNodeHandler, tapEdgeHandler, hookTapNodeHandler, hookTapEdgeHandler, handleBackgroundTap]);
+  }, [cy, tapNodeHandler, tapEdgeHandler, tapBackgroundHandler]);
 
   const elementsUpdateRef = useRef(EMPTY_ELEMENTS_UPDATE);
 
@@ -673,9 +666,6 @@ CytoscapeGraphUnified.propTypes = {
   elements: PropTypes.arrayOf(elementShape).isRequired,
   stylesheet: PropTypes.arrayOf(PropTypes.object),
   layout: layoutShape,
-  tapNodeHandler: PropTypes.func,
-  tapEdgeHandler: PropTypes.func,
-  tapBackgroundHandler: PropTypes.func,
   fitNodeIds: PropTypes.arrayOf(PropTypes.oneOfType([PropTypes.string, PropTypes.number])),
   style: PropTypes.object,
   cyRef: PropTypes.shape({
@@ -697,6 +687,9 @@ CytoscapeGraphUnified.propTypes = {
     current: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
   }),
   strictBackgroundClear: PropTypes.bool,
+  graphClearRef: PropTypes.shape({
+    current: PropTypes.func,
+  }),
   showRippleEffect: PropTypes.bool,
   isDropdownSelection: PropTypes.bool,
   isDataRefreshing: PropTypes.bool,

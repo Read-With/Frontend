@@ -120,14 +120,20 @@ const mapLegacyOrSummaryEvent = (event, targetChapter) => {
   };
 };
 
-function buildEventsFromChapterCache(chapterPayload, targetChapter) {
+function buildEventsFromChapterCache(chapterPayload, targetChapter, throughEventIdx = null) {
   if (!chapterPayload || !Array.isArray(chapterPayload.events) || !chapterPayload.events.length) {
     return [];
   }
 
   const hasDiffCache =
     chapterPayload.baseSnapshot && Array.isArray(chapterPayload.diffs);
-  const eventMetas = chapterPayload.events;
+  const through = Number(throughEventIdx);
+  const eventMetas = (Number.isFinite(through) && through > 0
+    ? chapterPayload.events.filter((event) => {
+        const idx = Number(event?.eventIdx) || 0;
+        return idx > 0 && idx <= through;
+      })
+    : chapterPayload.events);
 
   if (!hasDiffCache) {
     return eventMetas
@@ -273,12 +279,21 @@ export const sortEventsByIdx = (events) => {
 };
 
 /** 챕터 이벤트 캐시 → events state에 병합 */
-export function mergeChapterCacheEventsIntoState(prevEvents, chapterPayload, targetChapter) {
+export function mergeChapterCacheEventsIntoState(
+  prevEvents,
+  chapterPayload,
+  targetChapter,
+  throughEventIdx = null
+) {
   if (!chapterPayload || !Array.isArray(chapterPayload.events)) {
     return { merged: false, events: prevEvents };
   }
 
-  const enrichedEvents = buildEventsFromChapterCache(chapterPayload, targetChapter);
+  const enrichedEvents = buildEventsFromChapterCache(
+    chapterPayload,
+    targetChapter,
+    throughEventIdx
+  );
   if (!enrichedEvents.length) {
     return { merged: false, events: prevEvents };
   }
@@ -294,7 +309,12 @@ export function mergeChapterCacheEventsIntoState(prevEvents, chapterPayload, tar
 }
 
 /** 챕터 이벤트 캐시 → events state에 병합 (React setState용) */
-export function applyChapterEventsFromCache(prevEvents, bookId, targetChapter) {
+export function applyChapterEventsFromCache(
+  prevEvents,
+  bookId,
+  targetChapter,
+  throughEventIdx = null
+) {
   const chapterPayload = getCachedChapterEvents(bookId, targetChapter);
   if (!chapterPayload || !Array.isArray(chapterPayload.events)) {
     return { applied: false, hasPayload: false, isEmpty: false, events: prevEvents };
@@ -305,7 +325,8 @@ export function applyChapterEventsFromCache(prevEvents, bookId, targetChapter) {
   const { merged, events } = mergeChapterCacheEventsIntoState(
     prevEvents,
     chapterPayload,
-    targetChapter
+    targetChapter,
+    throughEventIdx
   );
   return { applied: merged, hasPayload: true, isEmpty: false, events };
 }

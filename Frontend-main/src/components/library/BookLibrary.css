@@ -32,19 +32,7 @@
   border-color: rgba(79, 109, 222, 0.2);
 }
 
-/* 리스트 뷰에서도 동일한 호버 효과 적용 */
-.book-card.list-view:hover {
-  transform: translateY(-8px);
-  box-shadow: 0 12px 32px rgba(79, 109, 222, 0.15);
-  border-color: rgba(79, 109, 222, 0.2);
-}
-
 .book-card:hover::before {
-  opacity: 1;
-}
-
-/* 리스트 뷰에서도 상단 그라데이션 바 효과 적용 */
-.book-card.list-view:hover::before {
   opacity: 1;
 }
 
@@ -68,11 +56,6 @@
 }
 
 .book-card:hover .book-image-container {
-  transform: scale(1.05);
-}
-
-/* 리스트 뷰에서도 이미지 스케일 효과 적용 */
-.book-card.list-view:hover .book-image-container {
   transform: scale(1.05);
 }
 
@@ -159,19 +142,6 @@
 }
 
 .book-favorite-btn.favorited:hover {
-  background: rgba(255, 107, 107, 0.15);
-  border-color: rgba(255, 107, 107, 0.5);
-  transform: scale(1.2);
-}
-
-/* 리스트 뷰에서도 즐겨찾기 버튼 호버 효과 적용 */
-.book-card.list-view .book-favorite-btn:hover {
-  transform: scale(1.15);
-  background: white;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-}
-
-.book-card.list-view .book-favorite-btn.favorited:hover {
   background: rgba(255, 107, 107, 0.15);
   border-color: rgba(255, 107, 107, 0.5);
   transform: scale(1.2);
@@ -406,13 +376,6 @@
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 }
 
-/* 리스트 뷰에서도 컨텍스트 메뉴 호버 효과 적용 */
-.book-card.list-view .book-context-trigger:hover {
-  background: white;
-  transform: scale(1.1);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-}
-
 .book-context-dropdown {
   position: absolute;
   top: 44px;
@@ -600,37 +563,6 @@
 
 .delete-confirm-delete:hover {
   background: #b91c1c;
-}
-
-/* ==================== 빈 상태 스타일 (BookLibrary 내부) ==================== */
-.book-library-empty {
-  text-align: center;
-  padding: 80px 20px;
-}
-
-.book-library-empty-icon {
-  font-size: 5rem;
-  margin-bottom: 24px;
-  opacity: 0.6;
-}
-
-.book-library-empty-title {
-  font-size: 1.5rem;
-  font-weight: 700;
-  color: #333;
-  margin-bottom: 12px;
-}
-
-.book-library-empty-description {
-  font-size: 1.05rem;
-  color: #666;
-  line-height: 1.6;
-}
-
-/* ==================== 로딩 스피너 ==================== */
-.book-library-loading {
-  text-align: center;
-  padding: 80px 20px;
 }
 
 /* ==================== 리스트 뷰 스타일 ==================== */
@@ -913,21 +845,5 @@
     padding: 10px 12px;
     font-size: 0.85rem;
     gap: 8px;
-  }
-
-  .book-library-empty {
-    padding: 60px 16px;
-  }
-
-  .book-library-empty-icon {
-    font-size: 4rem;
-  }
-
-  .book-library-empty-title {
-    font-size: 1.3rem;
-  }
-
-  .book-library-empty-description {
-    font-size: 0.95rem;
   }
 }

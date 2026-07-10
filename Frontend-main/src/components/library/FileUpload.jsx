@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 import PropTypes from 'prop-types';
 import { getBooks, getBook, uploadBook } from '../../utils/api/booksApi';
 import { getBookManifest } from '../../utils/api/api';
@@ -17,7 +17,7 @@ function normalizeAuthorMatch(author) {
     .replace(/\s+/g, ' ');
 }
 
-const FileUpload = ({ onUploadSuccess, onClose }) => {
+const FileUpload = ({ onUploadSuccess, onClose, initialFile = null }) => {
   const [dragActive, setDragActive] = useState(false);
   const [selectedFile, setSelectedFile] = useState(null);
   const [metadata, setMetadata] = useState({
@@ -28,6 +28,7 @@ const FileUpload = ({ onUploadSuccess, onClose }) => {
   const [step, setStep] = useState('select'); // 'select' or 'metadata'
   const [extractingMetadata, setExtractingMetadata] = useState(false);
   const inputRef = useRef(null);
+  const initialFileHandled = useRef(false);
 
   const extractEpubMetadata = async (file) => {
     try {
@@ -84,6 +85,16 @@ const FileUpload = ({ onUploadSuccess, onClose }) => {
       }
     }
   };
+
+  useEffect(() => {
+    if (!initialFile) {
+      initialFileHandled.current = false;
+      return;
+    }
+    if (initialFileHandled.current) return;
+    initialFileHandled.current = true;
+    handleFiles([initialFile]);
+  }, [initialFile]);
 
   const handleUpload = async () => {
     if (!selectedFile) return;
@@ -466,7 +477,8 @@ const FileUpload = ({ onUploadSuccess, onClose }) => {
 
 FileUpload.propTypes = {
   onUploadSuccess: PropTypes.func.isRequired,
-  onClose: PropTypes.func.isRequired
+  onClose: PropTypes.func.isRequired,
+  initialFile: PropTypes.instanceOf(File),
 };
 
 export default FileUpload;

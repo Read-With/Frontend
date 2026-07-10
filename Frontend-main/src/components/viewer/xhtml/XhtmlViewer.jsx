@@ -487,7 +487,7 @@ const XhtmlViewer = forwardRef(
             min-width: 0;
             font-size: ${baseFontSize}%;
             line-height: ${lineHeight};
-            font-family: ${settings?.fontFamily || 'Noto Serif KR'}, serif;
+            font-family: ${settings?.fontFamily || 'Noto Serif KR'}, 'Noto Serif', Georgia, serif;
             overflow-wrap: break-word;
             word-break: break-word;
           }

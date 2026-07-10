@@ -12,8 +12,12 @@ import UnifiedEdgeTooltip from './tooltip/UnifiedEdgeTooltip';
 import './RelationGraph.css';
 import { getEdgeStyle, createGraphStylesheet } from '../../utils/styles/graphStyles';
 import { graphStyles } from '../../utils/styles/styles';
-import { ensureElementsInBounds, clearHighlightClassesOn } from '../../utils/graph/graphUtils';
-import { applySearchFadeEffect } from '../../utils/graph/searchUtils.jsx';
+import { ensureElementsInBounds } from '../../utils/graph/graphUtils';
+import { buildTooltipPayload, createTooltipTapHandlers } from '../../utils/graph/graphTooltipUtils';
+import {
+  useGraphOutsideDismiss,
+  shouldIgnoreViewerOutsideClick,
+} from '../../hooks/graph/useGraphOutsideDismiss';
 import { useGraphDataLoader } from '../../hooks/graph/useGraphDataLoader.js';
 import { useGraphSearch } from '../../hooks/graph/graphViewHooks';
 import { resolveEventIdxOrFallback } from '../../hooks/common/hooksShared';
@@ -93,23 +97,6 @@ function useAutoFit(cyRef, viewportFitKey, isSearchActive, isEventTransition) {
   }, [cyRef, viewportFitKey, isSearchActive, isEventTransition]);
 }
 
-function useCytoscapeReset(cyRef, graphClearRef, selectedNodeIdRef, selectedEdgeIdRef) {
-  useEffect(() => {
-    if (!graphClearRef) return;
-
-    graphClearRef.current = () => {
-      const cy = cyRef.current;
-      if (!cy) return;
-      clearHighlightClassesOn(cy);
-      try {
-        if (typeof cy.style === 'function') cy.style().update();
-      } catch {}
-      if (selectedNodeIdRef) selectedNodeIdRef.current = null;
-      if (selectedEdgeIdRef) selectedEdgeIdRef.current = null;
-    };
-  }, [graphClearRef, cyRef, selectedNodeIdRef, selectedEdgeIdRef]);
-}
-
 const ViewerRelationGraph = ({
   elements,
   newNodeIds = [],
@@ -143,94 +130,33 @@ const ViewerRelationGraph = ({
   );
 
   useAutoFit(cyRef, viewportFitKey, isSearchActive, _isEventTransition);
-  useCytoscapeReset(cyRef, graphClearRef, selectedNodeIdRef, selectedEdgeIdRef);
-
-  const onClearTooltipOnly = useCallback(() => {
-    onClearTooltip?.();
-  }, [onClearTooltip]);
 
   const clearTooltipAndGraph = useCallback(() => {
     onClearTooltip?.();
     graphClearRef?.current?.();
-    if (isSearchActive && filteredElements?.length > 0 && cyRef.current) {
-      applySearchFadeEffect(cyRef.current, filteredElements, isSearchActive);
-    }
-  }, [onClearTooltip, graphClearRef, isSearchActive, filteredElements, cyRef]);
+  }, [onClearTooltip, graphClearRef]);
 
-  const onShowNodeTooltip = useCallback(({ node, nodeCenter, mouseX, mouseY }) => {
+  const handleTooltipTap = useCallback((tapPayload, type) => {
     if (!onSetActiveTooltip) return;
-
-    const nodeData = node.data();
-
-    let names = nodeData.names;
-    if (typeof names === 'string') {
-      try { names = JSON.parse(names); } catch { names = [names]; }
-    }
-
-    let main = nodeData.main;
-    if (typeof main === 'string') main = main === 'true';
-
-    onSetActiveTooltip({
-      type: 'node',
-      ...nodeData,
-      names,
-      main,
-      nodeCenter,
-      x: mouseX ?? nodeCenter?.x ?? 0,
-      y: mouseY ?? nodeCenter?.y ?? 0,
-    });
+    onSetActiveTooltip(buildTooltipPayload(tapPayload, type));
   }, [onSetActiveTooltip]);
 
-  const onShowEdgeTooltip = useCallback(({ edge, edgeCenter, mouseX, mouseY }) => {
-    if (!onSetActiveTooltip) return;
+  const { onShowNodeTooltip, onShowEdgeTooltip } = useMemo(
+    () => createTooltipTapHandlers(handleTooltipTap),
+    [handleTooltipTap],
+  );
 
-    onSetActiveTooltip({
-      type: 'edge',
-      id: edge.id(),
-      data: edge.data(),
-      sourceNode: edge.source(),
-      targetNode: edge.target(),
-      edgeCenter,
-      x: mouseX ?? edgeCenter?.x ?? 0,
-      y: mouseY ?? edgeCenter?.y ?? 0,
-    });
-  }, [onSetActiveTooltip]);
+  const shouldIgnoreOutsideClick = useCallback(
+    (event) => shouldIgnoreViewerOutsideClick(event, containerRef),
+    [containerRef],
+  );
 
-  useEffect(() => {
-    if (!activeTooltip) return;
-
-    const handleDocumentClick = (event) => {
-      const isInsideTooltip =
-        !!event.target.closest('.graph-node-tooltip') ||
-        !!event.target.closest('.edge-tooltip-container');
-      if (isInsideTooltip) return;
-
-      const isInsideGraph =
-        containerRef.current && containerRef.current.contains(event.target);
-      if (isInsideGraph) return;
-
-      const isDragEnd = event?.detail?.type === 'graphDragEnd';
-      if (isDragEnd) return;
-
-      clearTooltipAndGraph();
-    };
-
-    const handleGraphDragEnd = (event) => {
-      event.preventDefault?.();
-      event.stopPropagation?.();
-    };
-
-    const timeoutId = setTimeout(() => {
-      document.addEventListener('click', handleDocumentClick, true);
-      document.addEventListener('graphDragEnd', handleGraphDragEnd, true);
-    }, 20);
-
-    return () => {
-      clearTimeout(timeoutId);
-      document.removeEventListener('click', handleDocumentClick, true);
-      document.removeEventListener('graphDragEnd', handleGraphDragEnd, true);
-    };
-  }, [activeTooltip, clearTooltipAndGraph]);
+  useGraphOutsideDismiss({
+    enabled: !!activeTooltip,
+    onDismiss: clearTooltipAndGraph,
+    shouldIgnoreClick: shouldIgnoreOutsideClick,
+    attachDelayMs: 20,
+  });
 
   const edgeStyleViewer = useMemo(() => getEdgeStyle('viewer'), []);
   const stylesheet = useMemo(
@@ -308,9 +234,10 @@ const ViewerRelationGraph = ({
           currentChapter={chapterNum}
           onShowNodeTooltip={onShowNodeTooltip}
           onShowEdgeTooltip={onShowEdgeTooltip}
-          onClearTooltip={onClearTooltipOnly}
+          onClearTooltip={onClearTooltip}
           selectedNodeIdRef={selectedNodeIdRef}
           selectedEdgeIdRef={selectedEdgeIdRef}
+          graphClearRef={graphClearRef}
           strictBackgroundClear={true}
           showRippleEffect={true}
         />

@@ -106,7 +106,7 @@ function UnifiedNodeInfo({
   currentEvent = null,
   prevValidEvent = null,
   povSummaries = null, // API에서 가져온 관점 요약 데이터
-  apiMacroData = null, // API 거시 그래프 데이터
+  apiBookGraphData = null, // relationship-graph (scope=book) 데이터
   apiFineData: _apiFineData = null, // API 세밀 그래프 데이터
   bookId = null,
 }) {
@@ -419,26 +419,26 @@ function UnifiedNodeInfo({
     };
   }, [processedNodeData, chapterNum, actualFilename, povSummaries]);
 
-  // 레이더 차트 데이터 추출 (macro API 기반으로 통일)
+  // 레이더 차트 데이터 추출 (relationship-graph book scope 기반)
   const radarChartData = useMemo(() => {
     if (!nodeData?.id || !chapterNum || displayMode !== 'sidebar') {
       return [];
     }
 
-    // macro API 데이터 우선 사용
-    if (apiMacroData?.relations && apiMacroData?.characters) {
+    // relationship-graph 데이터 우선 사용
+    if (apiBookGraphData?.relations && apiBookGraphData?.characters) {
       try {
-        const { relations, characters } = apiMacroData;
+        const { relations, characters } = apiBookGraphData;
 
-        // macro 캐릭터 목록으로 이름 룩업 구조 생성 (elements 의존 제거)
+        // 캐릭터 목록으로 이름 룩업 구조 생성 (elements 의존 제거)
         const nameToIdMap = {};
-        const macroElements = characters.map(char => {
+        const bookGraphElements = characters.map(char => {
           const charName = char.common_name || char.name;
           nameToIdMap[charName] = char.id;
           return { data: { id: String(char.id), label: charName, common_name: charName } };
         });
 
-        // 현재 노드 ID를 macro API 숫자 ID로 변환
+        // 현재 노드 ID를 relationship-graph 숫자 ID로 변환
         const currentNodeId = nodeData.id;
         let targetNodeId = currentNodeId;
         if (typeof currentNodeId === 'string') {
@@ -467,7 +467,7 @@ function UnifiedNodeInfo({
         return extractRadarChartData(
           targetNodeId,
           Array.from(relationMap.values()),
-          macroElements,
+          bookGraphElements,
           8
         );
       } catch {
@@ -475,7 +475,7 @@ function UnifiedNodeInfo({
       }
     }
 
-    // macro API 없으면 이벤트 캐시 스냅샷으로 보강
+    // relationship-graph 없으면 이벤트 캐시 스냅샷으로 보강
     if (!elements || elements.length === 0) {
       return [];
     }
@@ -519,7 +519,7 @@ function UnifiedNodeInfo({
     } catch {
       return [];
     }
-  }, [nodeData, chapterNum, displayMode, folderKey, elements, apiMacroData, unifiedEventInfo]);
+  }, [nodeData, chapterNum, displayMode, folderKey, elements, apiBookGraphData, unifiedEventInfo]);
 
   // 연결 상태 확인
   const connectionStatus = useMemo(() => {

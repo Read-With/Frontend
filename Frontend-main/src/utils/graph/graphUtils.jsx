@@ -467,19 +467,20 @@ export const processTooltipData = (tooltipData, type) => {
   
   try {
     if (type === 'node') {
-      const nodeData = tooltipData;
-      
-      const names = parseJsonSafely(nodeData.names);
-      
+      const nodeFields = tooltipData.data ?? tooltipData;
+
+      const names = parseJsonSafely(nodeFields.names);
+
       return {
         ...tooltipData,
-        names: names,
-        isMainCharacter: !!nodeData.isMainCharacter,
-        common_name: nodeData.common_name || nodeData.name || nodeData.label,
-        description: nodeData.description || '',
-        personalityText: nodeData.personalityText || '',
-        image: nodeData.image || '',
-        weight: nodeData.weight || 1
+        ...nodeFields,
+        names,
+        isMainCharacter: !!nodeFields.isMainCharacter,
+        common_name: nodeFields.common_name || nodeFields.name || nodeFields.label,
+        description: nodeFields.description || '',
+        personalityText: nodeFields.personalityText || '',
+        image: nodeFields.image || '',
+        weight: nodeFields.weight || 1,
       };
       
     } else if (type === 'edge') {
@@ -556,10 +557,6 @@ export const isSidebarElement = (event) => {
     event.target.closest('.graph-sidebar');
   
   return sidebarElement && sidebarElement.contains(event.target);
-};
-
-export const isDragEndEvent = (event) => {
-  return event.detail && event.detail.type === 'dragend';
 };
 
 export const calculateNodeCount = (elements, filterStage, filteredMainCharacters) => {

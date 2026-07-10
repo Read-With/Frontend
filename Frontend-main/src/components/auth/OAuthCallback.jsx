@@ -11,6 +11,7 @@ import {
   getApiBaseUrl,
   getGoogleOAuthRedirectUri,
   getDevBackendHintUrl,
+  buildGoogleRedirectUriMismatchMessage,
 } from '../../utils/common/authUtils';
 
 const OAuthCallback = () => {
@@ -229,36 +230,6 @@ const OAuthCallback = () => {
           throw new Error(`서버 응답 오류: ${response.status} - ${errorText}`);
         }
 
-        if (response.status === 401) {
-          try {
-            const errorData = await response.clone().json();
-            
-            if (errorData.code === 'COMMON401') {
-              throw new Error(`인증이 필요합니다 (COMMON401).
-
-백엔드 응답:
-- 코드: ${errorData.code}
-- 메시지: ${errorData.message}
-
-가능한 원인:
-1. OAuth 인증 코드가 유효하지 않거나 만료되었습니다
-2. 백엔드가 Google OAuth 토큰 교환에 실패했습니다
-3. 백엔드의 GOOGLE_REDIRECT_URI 환경 변수가 일치하지 않습니다
-
-해결 방법:
-- OAuth 로그인을 다시 시도해주세요
-- 백엔드 개발자에게 GOOGLE_REDIRECT_URI 환경 변수 확인 요청
-- 백엔드 서버 로그에서 Google OAuth 토큰 교환 오류 확인`);
-            }
-          } catch (_parseError) {
-          }
-          
-          throw new Error(`인증이 필요합니다 (401 Unauthorized).
-
-백엔드에서 인증을 확인하지 못했습니다.
-OAuth 로그인을 다시 시도해주세요.`);
-        }
-        
         const data = await response.json();
         
         if (!data || typeof data !== 'object') {
@@ -321,76 +292,11 @@ OAuth 로그인을 다시 시도해주세요.`);
           }
           
           if (data.code === 'AUTH4001') {
-            if (data.message && data.message.includes('redirect_uri_mismatch')) {
-              const actualRedirectUri = getGoogleOAuthRedirectUri();
-              const isLocalDev = import.meta.env.DEV;
-              
-              const errorMessage = isLocalDev
-                ? `리다이렉트 URI 불일치 오류 (로컬 개발 환경)
-
-🔍 현재 상황:
-- 프론트엔드에서 사용한 URI: ${actualRedirectUri}
-- 프론트엔드가 요청 본문에 redirectUri를 포함했습니다
-- 백엔드가 Google과 토큰 교환 시 다른 redirectUri를 사용한 것으로 보입니다
-
-📋 해결 방법:
-
-1. ✅ Google Cloud Console 설정 확인:
-   - https://console.cloud.google.com 접속
-   - 프로젝트 선택 → API 및 서비스 → 사용자 인증 정보
-   - OAuth 2.0 클라이언트 ID 클릭
-   - "승인된 리디렉션 URI"에 다음 URI가 등록되어 있는지 확인:
-     ${actualRedirectUri}
-   - 등록되어 있지 않다면 추가
-
-2. 🔧 백엔드 개발자에게 확인 요청:
-   - 백엔드가 POST /api/auth/google 요청 본문에서 redirectUri를 읽는지 확인
-   - 현재 프론트엔드는 요청 본문에 redirectUri를 포함했습니다
-   - 백엔드가 환경 변수만 사용한다면 로컬 개발 환경 지원을 위해 수정 필요
-   - 또는 백엔드가 요청 본문의 redirectUri를 우선 사용하도록 수정 필요
-
-3. 🔄 백엔드 수정 (백엔드 개발자 작업):
-   - GoogleLoginRequestDTO에 redirectUri 필드 추가 (optional)
-   - 요청 본문에 redirectUri가 있으면 그것을 사용
-   - 없으면 환경 변수 GOOGLE_REDIRECT_URI 사용
-
-⚠️ 중요:
-- 로컬 개발 환경: 프론트엔드 redirectUri = ${actualRedirectUri}
-- 백엔드가 Google과 토큰 교환 시 사용하는 redirectUri도 동일해야 합니다`
-                : `리다이렉트 URI 불일치 오류 (프로덕션)
-
-🔍 현재 상황:
-- 프론트엔드에서 사용한 URI: ${actualRedirectUri}
-- 백엔드는 환경 변수 GOOGLE_REDIRECT_URI를 사용합니다
-
-📋 해결 방법:
-
-1. ✅ Google Cloud Console 설정:
-   - https://console.cloud.google.com 접속
-   - 프로젝트 선택 → API 및 서비스 → 사용자 인증 정보
-   - OAuth 2.0 클라이언트 ID 클릭
-   - "승인된 리디렉션 URI"에 다음 URI 추가:
-     ${actualRedirectUri}
-
-2. 🔧 백엔드 환경 변수 확인 필요 (백엔드 개발자에게 요청):
-   - 배포 서버의 GOOGLE_REDIRECT_URI 환경 변수 값 확인
-   - 프론트엔드가 사용하는 URI: ${actualRedirectUri}
-   - ⚠️ 이 두 값이 정확히 일치해야 합니다
-
-3. 🔄 백엔드 환경 변수 수정 (백엔드 개발자 작업):
-   - GOOGLE_REDIRECT_URI 환경 변수를 ${actualRedirectUri}로 변경
-   - 환경 변수 변경 후 서버 재시작
-
-⚠️ 중요 주의사항:
-- URL 끝의 슬래시(/) 차이도 불일치로 인식됩니다
-- http vs https 차이도 불일치로 인식됩니다
-- 포트 번호까지 정확히 일치해야 합니다
-- 대소문자도 정확히 일치해야 합니다`;
-
-              throw new Error(errorMessage);
+            if (data.message?.includes('redirect_uri_mismatch')) {
+              throw new Error(buildGoogleRedirectUriMismatchMessage());
             }
-            
-            if (data.message && data.message.includes('Duplicate entry')) {
+
+            if (data.message?.includes('Duplicate entry')) {
               if (data.message.includes('provider_uid') || data.message.includes('UK423ot3bb0fm0mhtmh1t59my3o')) {
                 throw new Error('이미 등록된 Google 계정입니다. 다른 계정으로 로그인하거나 관리자에게 문의하세요.');
               }
@@ -420,42 +326,10 @@ OAuth 로그인을 다시 시도해주세요.`);
             throw new Error('사용자 정보 처리 실패입니다. Google 사용자 정보를 가져올 수 없습니다.');
           }
           
-          if (data.message && data.message.includes('redirect_uri_mismatch')) {
-            const actualRedirectUri = getGoogleOAuthRedirectUri();
-
-            throw new Error(`리다이렉트 URI 불일치 오류 (redirect_uri_mismatch)
-
-🔍 현재 상황:
-- 프론트엔드에서 사용한 URI: ${actualRedirectUri}
-- 백엔드는 환경 변수 GOOGLE_REDIRECT_URI를 사용합니다
-
-📋 해결 방법:
-
-1. ✅ Google Cloud Console 설정:
-   - https://console.cloud.google.com 접속
-   - 프로젝트 선택 → API 및 서비스 → 사용자 인증 정보
-   - OAuth 2.0 클라이언트 ID 클릭
-   - "승인된 리디렉션 URI"에 다음 URI 추가:
-     ${actualRedirectUri}
-
-2. 🔧 백엔드 환경 변수 확인 필요 (백엔드 개발자에게 요청):
-   - 배포 서버의 GOOGLE_REDIRECT_URI 환경 변수 값 확인
-   - 현재 설정된 값: ? (백엔드 개발자에게 확인 필요)
-   - 프론트엔드가 사용하는 URI: ${actualRedirectUri}
-   - ⚠️ 이 두 값이 정확히 일치해야 합니다
-
-3. 🔄 백엔드 환경 변수 수정 (백엔드 개발자 작업):
-   - GOOGLE_REDIRECT_URI 환경 변수를 ${actualRedirectUri}로 변경
-   - 환경 변수 변경 후 서버 재시작
-
-⚠️ 중요 주의사항:
-- URL 끝의 슬래시(/) 차이도 불일치로 인식됩니다
-  예: ${actualRedirectUri} (O) vs ${actualRedirectUri}/ (X)
-- http vs https 차이도 불일치로 인식됩니다
-- 포트 번호까지 정확히 일치해야 합니다
-- 대소문자도 정확히 일치해야 합니다`);
+          if (data.message?.includes('redirect_uri_mismatch')) {
+            throw new Error(buildGoogleRedirectUriMismatchMessage());
           }
-          
+
           if (!isSuccess && data.message) {
             throw new Error(data.message || '인증 실패');
           }

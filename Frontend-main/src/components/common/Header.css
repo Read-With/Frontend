@@ -39,7 +39,6 @@
 .header-brand-text,
 .header-brand-separator,
 .header-user-name {
-  font-family: var(--font-family-primary);
   font-weight: 600;
   font-size: 16px;
   color: #3E4F2F;

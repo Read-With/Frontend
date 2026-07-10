@@ -1,92 +1,24 @@
 import React from 'react';
-import { Navigate, useLocation } from 'react-router-dom';
+import { Navigate } from 'react-router-dom';
 import useAuth from '../../hooks/auth/useAuth';
-
-function LoadingSpinner({ size = 'medium', message = '로딩 중...', type = 'default' }) {
-  const sizeStyles = (() => {
-    switch (size) {
-      case 'small':
-        return { width: '24px', height: '24px', borderWidth: '3px' };
-      case 'large':
-        return { width: '64px', height: '64px', borderWidth: '6px' };
-      default:
-        return { width: '40px', height: '40px', borderWidth: '4px' };
-    }
-  })();
-
-  if (type === 'dots') {
-    return (
-      <div className="flex flex-col items-center justify-center space-y-4 animate-fade-in">
-        <div className="flex space-x-2">
-          {[0, 1, 2].map((i) => (
-            <div
-              key={i}
-              className="w-3 h-3 bg-blue-500 rounded-full animate-bounce"
-              style={{ animationDelay: `${i * 0.2}s` }}
-            />
-          ))}
-        </div>
-        {message && (
-          <p className="text-gray-600 text-sm font-medium animate-pulse">{message}</p>
-        )}
-      </div>
-    );
-  }
-
-  if (type === 'pulse') {
-    return (
-      <div className="flex flex-col items-center justify-center space-y-4 animate-fade-in">
-        <div
-          className="bg-blue-500 rounded-full animate-enhanced-pulse"
-          style={{ width: sizeStyles.width, height: sizeStyles.height }}
-        />
-        {message && (
-          <p className="text-gray-600 text-sm font-medium animate-pulse">{message}</p>
-        )}
-      </div>
-    );
-  }
-
-  return (
-    <div className="flex flex-col items-center justify-center space-y-4 animate-fade-in">
-      <div className="relative">
-        <div
-          className="border-gray-200 rounded-full animate-spin"
-          style={{
-            ...sizeStyles,
-            borderStyle: 'solid',
-            borderTopColor: '#5C6F5C',
-          }}
-        />
-        <div
-          className="absolute inset-0 border-2 border-blue-300 rounded-full animate-enhanced-pulse opacity-30"
-          style={{
-            top: sizeStyles.borderWidth,
-            left: sizeStyles.borderWidth,
-            right: sizeStyles.borderWidth,
-            bottom: sizeStyles.borderWidth,
-          }}
-        />
-      </div>
-      {message && (
-        <p className="text-gray-600 text-sm font-medium animate-pulse text-center max-w-xs">
-          {message}
-        </p>
-      )}
-    </div>
-  );
-}
 
 const ProtectedRoute = ({ children }) => {
   const { isAuthenticated, isLoading } = useAuth();
-  const location = useLocation();
 
   if (isLoading) {
-    return <LoadingSpinner />;
+    return (
+      <div className="flex min-h-screen items-center justify-center">
+        <div
+          className="h-10 w-10 animate-spin rounded-full border-4 border-gray-200"
+          style={{ borderTopColor: '#5C6F5C' }}
+          aria-label="로딩 중"
+        />
+      </div>
+    );
   }
 
   if (!isAuthenticated()) {
-    return <Navigate to="/" state={{ from: location }} replace />;
+    return <Navigate to="/" replace />;
   }
 
   return children;

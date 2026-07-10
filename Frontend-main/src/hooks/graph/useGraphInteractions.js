@@ -1,7 +1,13 @@
 /** Cytoscape 탭·드래그·선택 하이라이트 */
 
-import { useCallback, useRef, useEffect } from "react";
+import { useCallback, useRef, useMemo } from "react";
 import { getContainerInfo, calculateCytoscapePosition, clearHighlightClassesOn } from '../../utils/graph/graphUtils';
+
+function useLatestRef(value) {
+  const ref = useRef(value);
+  ref.current = value;
+  return ref;
+}
 
 function applyNodeClickHighlight(cy, node) {
   if (!cy || !node || node.length === 0) return;
@@ -13,10 +19,8 @@ function applyNodeClickHighlight(cy, node) {
       const sourceId = String(edge.source().id());
       const targetId = String(edge.target().id());
 
-      // 선택 노드에서 나가는 간선은 항상 유지
       if (sourceId === nodeId) return true;
 
-      // 선택 노드로 들어오는 간선은, 반대 방향(outgoing) 간선이 있으면 제외
       if (targetId === nodeId) {
         const hasReverseOutgoing = connectedEdges.some((candidate) => {
           const candidateSourceId = String(candidate.source().id());
@@ -29,8 +33,7 @@ function applyNodeClickHighlight(cy, node) {
       return false;
     });
     const keepNodes = node.union(directEdges.connectedNodes());
-    const keepEdges = directEdges;
-    applySelectionFade(cy, keepNodes, keepEdges, node, directEdges);
+    applySelectionFade(cy, keepNodes, directEdges, node, directEdges);
   } catch {
     /* ignore */
   }
@@ -54,7 +57,6 @@ function applySelectionFade(cy, keepNodes, keepEdges, highlightedNodes, highligh
   const fadedNodes = cy.nodes().difference(keepNodes);
   const fadedEdges = cy.edges().difference(keepEdges);
   cy.batch(() => {
-    // 이전 상태를 먼저 정리해 스타일 충돌을 방지
     allNodes.removeClass("highlighted faded");
     allEdges.removeClass("highlighted faded");
     allNodes.forEach((n) => {
@@ -73,6 +75,13 @@ function applySelectionFade(cy, keepNodes, keepEdges, highlightedNodes, highligh
   });
 }
 
+function formatTapShowArgs(kind, element, evt, center, mouseX, mouseY) {
+  if (kind === 'node') {
+    return { node: element, evt, nodeCenter: center, mouseX, mouseY };
+  }
+  return { edge: element, evt, edgeCenter: center, mouseX, mouseY };
+}
+
 export default function useGraphInteractions({
   cyRef,
   onShowNodeTooltip,
@@ -83,24 +92,10 @@ export default function useGraphInteractions({
   strictBackgroundClear = false,
   onAfterReset,
 }) {
-  const onShowNodeTooltipRef = useRef(onShowNodeTooltip);
-  const onShowEdgeTooltipRef = useRef(onShowEdgeTooltip);
-  const onClearTooltipRef = useRef(onClearTooltip);
-
-  useEffect(() => {
-    onShowNodeTooltipRef.current = onShowNodeTooltip;
-  }, [onShowNodeTooltip]);
-
-  useEffect(() => {
-    onShowEdgeTooltipRef.current = onShowEdgeTooltip;
-  }, [onShowEdgeTooltip]);
-
-  useEffect(() => {
-    onClearTooltipRef.current = onClearTooltip;
-  }, [onClearTooltip]);
-
-  const onAfterResetRef = useRef(onAfterReset);
-  useEffect(() => { onAfterResetRef.current = onAfterReset; }, [onAfterReset]);
+  const onShowNodeTooltipRef = useLatestRef(onShowNodeTooltip);
+  const onShowEdgeTooltipRef = useLatestRef(onShowEdgeTooltip);
+  const onClearTooltipRef = useLatestRef(onClearTooltip);
+  const onAfterResetRef = useLatestRef(onAfterReset);
 
   const clearSelectionRefs = useCallback(() => {
     if (selectedNodeIdRef) selectedNodeIdRef.current = null;
@@ -110,7 +105,7 @@ export default function useGraphInteractions({
   const resetAllStyles = useCallback(() => {
     if (!cyRef?.current) return;
     clearHighlightClassesOn(cyRef.current);
-    if (onAfterResetRef.current) onAfterResetRef.current();
+    onAfterResetRef.current?.();
   }, [cyRef]);
 
   const calculateTooltipPosition = useCallback((element, evt, offset = 0) => {
@@ -161,7 +156,7 @@ export default function useGraphInteractions({
               basePos = { x: 0, y: 0 };
             }
           }
-        } catch (_err) {
+        } catch {
           basePos = { x: 0, y: 0 };
         }
       }
@@ -181,121 +176,82 @@ export default function useGraphInteractions({
     }
   }, [cyRef]);
 
-  const tapNodeHandler = useCallback(
-    (evt) => {
+  const createTapHandler = useCallback((kind) => {
+    const isNode = kind === 'node';
+    const applyHighlight = isNode ? applyNodeClickHighlight : applyEdgeClickHighlight;
+    const selectedIdRef = isNode ? selectedNodeIdRef : selectedEdgeIdRef;
+    const peerSelectedIdRef = isNode ? selectedEdgeIdRef : selectedNodeIdRef;
+    const onShowTooltipRef = isNode ? onShowNodeTooltipRef : onShowEdgeTooltipRef;
+
+    return (evt) => {
       try {
         if (!cyRef?.current) return;
 
-        const node = evt.target;
-        const nodeData = node?.data?.();
-        if (!node || !nodeData) return;
+        const element = evt.target;
+        const elementData = element?.data?.();
+        if (!element || !elementData) return;
 
-        const nodeId = node.id();
-        const isSameNodeSelected = selectedNodeIdRef?.current === nodeId;
-
-        if (isSameNodeSelected) {
+        const elementId = element.id();
+        if (selectedIdRef?.current === elementId) {
           resetAllStyles();
-          if (onClearTooltipRef.current) onClearTooltipRef.current();
+          onClearTooltipRef.current?.();
           clearSelectionRefs();
           return;
         }
 
-        applyNodeClickHighlight(cyRef.current, node);
+        applyHighlight(cyRef.current, element);
 
-        const nodeSize = node.renderedBoundingBox()?.w || 50;
-        const offsetX = nodeSize + 200;
-        const { x: mouseX, y: mouseY } = calculateTooltipPosition(node, evt, offsetX);
-        const nodeCenter = calculateTooltipPosition(node, null, 0);
+        const bbox = element.renderedBoundingBox?.();
+        const offsetX = (bbox?.w ?? 50) + 200;
+        const { x: mouseX, y: mouseY } = calculateTooltipPosition(element, evt, offsetX);
+        const center = calculateTooltipPosition(element, null, 0);
 
-        if (onShowNodeTooltipRef.current) {
-          onShowNodeTooltipRef.current({ node, evt, nodeCenter, mouseX, mouseY });
-        }
+        onShowTooltipRef.current?.(
+          formatTapShowArgs(kind, element, evt, center, mouseX, mouseY),
+        );
 
-        if (selectedNodeIdRef) selectedNodeIdRef.current = nodeId;
-        if (selectedEdgeIdRef) selectedEdgeIdRef.current = null;
+        if (selectedIdRef) selectedIdRef.current = elementId;
+        if (peerSelectedIdRef) peerSelectedIdRef.current = null;
       } catch {
+        /* ignore */
       }
-    },
-    [cyRef, calculateTooltipPosition, selectedNodeIdRef, selectedEdgeIdRef, resetAllStyles, clearSelectionRefs]
-  );
+    };
+  }, [
+    cyRef,
+    selectedNodeIdRef,
+    selectedEdgeIdRef,
+    onShowNodeTooltipRef,
+    onShowEdgeTooltipRef,
+    onClearTooltipRef,
+    calculateTooltipPosition,
+    resetAllStyles,
+    clearSelectionRefs,
+  ]);
 
-  const nodeDragEndHandler = useCallback((_evt) => {
-    const dragEndEvent = new CustomEvent('graphDragEnd', {
-      detail: { type: 'graphDragEnd', timestamp: Date.now() }
-    });
-    document.dispatchEvent(dragEndEvent);
-  }, []);
+  const tapNodeHandler = useMemo(() => createTapHandler('node'), [createTapHandler]);
+  const tapEdgeHandler = useMemo(() => createTapHandler('edge'), [createTapHandler]);
 
-  const tapEdgeHandler = useCallback(
-    (evt) => {
-      try {
-        if (!cyRef?.current) return;
-
-        const edge = evt.target;
-        const edgeData = edge?.data?.();
-        if (!edge || !edgeData) return;
-
-        const currentEdgeId = edge.id();
-        const isSameEdgeSelected = selectedEdgeIdRef?.current === currentEdgeId;
-
-        if (isSameEdgeSelected) {
-          resetAllStyles();
-          if (onClearTooltipRef.current) onClearTooltipRef.current();
-          clearSelectionRefs();
-          return;
-        }
-
-        applyEdgeClickHighlight(cyRef.current, edge);
-
-        const edgeSize = edge.renderedBoundingBox?.()?.w ?? 50;
-        const offsetX = edgeSize + 200;
-        const { x: mouseX, y: mouseY } = calculateTooltipPosition(edge, evt, offsetX);
-        const edgeCenter = calculateTooltipPosition(edge, null, 0);
-
-        if (onShowEdgeTooltipRef.current) {
-          onShowEdgeTooltipRef.current({ edge, evt, edgeCenter, mouseX, mouseY });
-        }
-
-        if (selectedEdgeIdRef) selectedEdgeIdRef.current = currentEdgeId;
-        if (selectedNodeIdRef) selectedNodeIdRef.current = null;
-      } catch {
-      }
-    },
-    [cyRef, selectedEdgeIdRef, selectedNodeIdRef, calculateTooltipPosition, resetAllStyles, clearSelectionRefs]
-  );
-
-  const handleBackgroundClick = useCallback(() => {
+  const tapBackgroundHandler = useCallback((evt) => {
     try {
+      if (evt.target !== cyRef?.current) return;
       if (strictBackgroundClear) {
         const hasSelection = !!(selectedNodeIdRef?.current || selectedEdgeIdRef?.current);
         if (!hasSelection) return;
       }
       resetAllStyles();
-      if (onClearTooltipRef.current) {
-        onClearTooltipRef.current();
-      }
+      onClearTooltipRef.current?.();
       clearSelectionRefs();
     } catch {
+      /* ignore */
     }
-  }, [strictBackgroundClear, selectedNodeIdRef, selectedEdgeIdRef, resetAllStyles, clearSelectionRefs]);
+  }, [cyRef, strictBackgroundClear, selectedNodeIdRef, selectedEdgeIdRef, resetAllStyles, clearSelectionRefs, onClearTooltipRef]);
 
-  const tapBackgroundHandler = useCallback(
-    (evt) => {
-      try {
-        if (evt.target === cyRef?.current) {
-          handleBackgroundClick();
-        }
-      } catch {
-      }
-    },
-    [cyRef, handleBackgroundClick]
-  );
-
-  const clearSelectionAndRebind = useCallback(() => {
+  const clearSelection = useCallback(() => {
     try {
       resetAllStyles();
       clearSelectionRefs();
     } catch {
+      /* ignore */
     }
   }, [resetAllStyles, clearSelectionRefs]);
 
@@ -303,8 +259,6 @@ export default function useGraphInteractions({
     tapNodeHandler,
     tapEdgeHandler,
     tapBackgroundHandler,
-    nodeDragEndHandler,
-    clearSelection: clearSelectionAndRebind,
-    clearAll: resetAllStyles,
+    clearSelection,
   };
 }

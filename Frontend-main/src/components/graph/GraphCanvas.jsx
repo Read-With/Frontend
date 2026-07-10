@@ -192,7 +192,7 @@ function GraphSidebar({
   onClearGraph,
   forceClose,
   povSummaries = null,
-  apiMacroData = null,
+  apiBookGraphData = null,
   apiFineData = null,
   bookId = null,
 }) {
@@ -305,7 +305,7 @@ function GraphSidebar({
           searchTerm={searchTerm}
           filename={filename}
           povSummaries={povSummaries}
-          apiMacroData={apiMacroData}
+          apiBookGraphData={apiBookGraphData}
           apiFineData={apiFineData}
         />
       </div>
@@ -344,7 +344,7 @@ function GraphCanvas({
   elements,
   renderElements,
   povSummaries,
-  apiMacroData,
+  apiBookGraphData,
   apiFineData,
   bookId,
   isLoading,
@@ -360,6 +360,7 @@ function GraphCanvas({
   searchState,
   cytoscapeConfig,
   tooltipHandlers,
+  graphClearRef,
 }) {
   const { isSidebarClosing, onCloseSidebar, onStartClosing, onClearGraph, forceClose } = sidebarControl;
   const { isSearchActive, filteredElements, searchTerm, fitNodeIds, isResetFromSearch } = searchState;
@@ -427,7 +428,7 @@ function GraphCanvas({
               filteredElements={filteredElements}
               searchTerm={searchTerm}
               povSummaries={povSummaries}
-              apiMacroData={apiMacroData}
+              apiBookGraphData={apiBookGraphData}
               apiFineData={apiFineData}
               bookId={bookId}
             />
@@ -462,6 +463,7 @@ function GraphCanvas({
               onClearTooltip={onClearTooltip}
               selectedNodeIdRef={selectedNodeIdRef}
               selectedEdgeIdRef={selectedEdgeIdRef}
+              graphClearRef={graphClearRef}
               strictBackgroundClear={true}
               isResetFromSearch={isResetFromSearch}
               isDropdownSelection={isDropdownSelection}
@@ -488,7 +490,7 @@ GraphCanvas.propTypes = {
   elements: PropTypes.array.isRequired,
   renderElements: PropTypes.array.isRequired,
   povSummaries: PropTypes.array,
-  apiMacroData: PropTypes.object,
+  apiBookGraphData: PropTypes.object,
   apiFineData: PropTypes.object,
   bookId: PropTypes.number,
   isLoading: PropTypes.bool.isRequired,
@@ -527,6 +529,9 @@ GraphCanvas.propTypes = {
     selectedNodeIdRef: PropTypes.object.isRequired,
     selectedEdgeIdRef: PropTypes.object.isRequired,
   }).isRequired,
+  graphClearRef: PropTypes.shape({
+    current: PropTypes.func,
+  }),
 };
 
 export default React.memo(GraphCanvas);

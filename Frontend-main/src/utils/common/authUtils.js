@@ -92,13 +92,20 @@ export const clearAuthData = () => {
   clearAuthTokenStorage();
 };
 
+/** Google OAuth 코드 교환 중인 콜백 페이지인지 */
+export const isOAuthCallbackRoute = () => {
+  if (typeof window === 'undefined') return false;
+  const path = window.location.pathname.replace(/\/+$/, '') || '/';
+  return path.endsWith('/auth/callback');
+};
+
 const INVALID_GOOGLE_CLIENT_IDS = new Set([
   'CLIENT_ID',
   'your_google_client_id_here',
   'your-google-client-id',
 ]);
 
-export function isGoogleClientIdConfigured() {
+function isGoogleClientIdConfigured() {
   const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
   return Boolean(clientId && !INVALID_GOOGLE_CLIENT_IDS.has(clientId));
 }
@@ -130,12 +137,9 @@ export function startGoogleOAuthLogin() {
     };
   }
 
-  const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
-  const redirectUri = getGoogleOAuthRedirectUri();
-
   secureLog('Google OAuth 로그인 시작', {
-    clientId: `${clientId.substring(0, 10)}...`,
-    redirectUri,
+    clientId: `${import.meta.env.VITE_GOOGLE_CLIENT_ID.substring(0, 10)}...`,
+    redirectUri: getGoogleOAuthRedirectUri(),
   });
 
   try {
@@ -147,4 +151,27 @@ export function startGoogleOAuthLogin() {
     };
   }
   return { ok: true };
+}
+
+/** Google OAuth redirect_uri_mismatch 안내 메시지 */
+export function buildGoogleRedirectUriMismatchMessage(isLocalDev = import.meta.env.DEV) {
+  const actualRedirectUri = getGoogleOAuthRedirectUri();
+
+  if (isLocalDev) {
+    return `리다이렉트 URI 불일치 오류 (로컬 개발 환경)
+
+프론트엔드 redirectUri: ${actualRedirectUri}
+
+1. Google Cloud Console의 승인된 리디렉션 URI에 위 주소를 등록하세요.
+2. 백엔드가 POST /api/auth/google 요청 본문의 redirectUri를 사용하는지 확인하세요.
+3. 백엔드 GOOGLE_REDIRECT_URI가 프론트엔드와 동일한지 확인하세요.`;
+  }
+
+  return `리다이렉트 URI 불일치 오류 (redirect_uri_mismatch)
+
+프론트엔드 redirectUri: ${actualRedirectUri}
+
+1. Google Cloud Console의 승인된 리디렉션 URI에 위 주소를 등록하세요.
+2. 배포 서버 GOOGLE_REDIRECT_URI 환경 변수가 위 주소와 정확히 일치하는지 확인하세요.
+3. URL 끝 슬래시, http/https, 포트 번호까지 일치해야 합니다.`;
 }

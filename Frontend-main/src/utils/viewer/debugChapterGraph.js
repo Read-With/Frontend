@@ -1,23 +1,15 @@
-import { getBookManifest } from '../api/api';
-import {
-  discoverChapterEvents,
-  getGraphEventState,
-} from '../common/cache/chapterEventCache';
-import { eventUtils } from './viewerCoreStateUtils';
+import { getBookManifest, getFineGraph } from '../api/api';
+import { resolveFineGraphEventToLocator } from '../common/cache/manifestCache';
 
-const findRawEvent = (rawEvents, eventIdx) => {
-  if (!Array.isArray(rawEvents)) return null;
-  return rawEvents.find((event) => eventUtils.extractRawEventIdx(event) === eventIdx) ?? null;
-};
-
-/** 챕터 이벤트 1~끝 fine graph를 서버에서 조회해 콘솔에 출력 */
+/** event 1 ~ throughEventIdx — Fine Graph API response.result 날것 출력 (캐시·누적 가공 없음) */
 export async function debugChapterGraphFromServer(
   bookId,
   chapterIdx = 1,
-  { forceRefresh = true, logEachEvent = true } = {}
+  { throughEventIdx = null, logEachEvent = true } = {}
 ) {
   const numericBookId = Number(bookId);
   const numericChapter = Number(chapterIdx);
+  const through = Number(throughEventIdx);
 
   if (!Number.isFinite(numericBookId) || numericBookId <= 0) {
     console.warn('[debugChapterGraph] 유효한 bookId가 필요합니다.', { bookId });
@@ -27,48 +19,49 @@ export async function debugChapterGraphFromServer(
     console.warn('[debugChapterGraph] 유효한 chapterIdx가 필요합니다.', { chapterIdx });
     return null;
   }
-
-  console.log(`[debugChapterGraph] ch${numericChapter} 서버 조회 시작`, { bookId: numericBookId });
-
-  await getBookManifest(numericBookId);
-  const payload = await discoverChapterEvents(numericBookId, numericChapter, forceRefresh);
-  const maxEventIdx = Number(payload?.maxEventIdx) || 0;
-
-  if (!maxEventIdx) {
-    console.warn(`[debugChapterGraph] ch${numericChapter}: 이벤트 없음`, payload);
-    return { bookId: numericBookId, chapterIdx: numericChapter, maxEventIdx: 0, events: [] };
+  if (!Number.isFinite(through) || through < 1) {
+    console.warn('[debugChapterGraph] throughEventIdx(현재 event)가 필요합니다.', { throughEventIdx });
+    return null;
   }
 
-  const events = [];
+  console.log(
+    `[debugChapterGraph] ch${numericChapter} Fine Graph API 날것 (event 1~${through})`,
+    { bookId: numericBookId }
+  );
 
-  for (let eventIdx = 1; eventIdx <= maxEventIdx; eventIdx += 1) {
-    const graphState = getGraphEventState(numericBookId, numericChapter, eventIdx);
-    const rawEvent = findRawEvent(payload.rawEvents, eventIdx);
+  await getBookManifest(numericBookId);
 
-    const characters = graphState?.characters ?? rawEvent?.characters ?? [];
-    const relations = rawEvent?.relations ?? [];
-    const elements = graphState?.elements ?? [];
+  const rows = [];
+
+  for (let eventIdx = 1; eventIdx <= through; eventIdx += 1) {
+    const atLocator = resolveFineGraphEventToLocator(numericBookId, numericChapter, eventIdx);
+    const response = await getFineGraph(numericBookId, numericChapter, eventIdx, atLocator);
+    const raw = response?.result ?? null;
 
     const row = {
       eventIdx,
-      eventMeta: graphState?.eventMeta ?? rawEvent?.event ?? null,
-      characters,
-      relations,
-      elements,
-      counts: {
-        characters: characters.length,
-        relations: relations.length,
-        elements: elements.length,
-      },
+      locator: atLocator,
+      isSuccess: Boolean(response?.isSuccess),
+      code: response?.code ?? '',
+      message: response?.message ?? '',
+      raw,
     };
-    events.push(row);
+    rows.push(row);
 
     if (logEachEvent) {
-      console.group(`[debugChapterGraph] ch${numericChapter} event ${eventIdx}/${maxEventIdx}`);
-      console.log('eventMeta', row.eventMeta);
-      console.log('characters', row.characters);
-      console.log('relations', row.relations);
-      console.log('elements (graph nodes/edges)', row.elements);
+      console.group(
+        `[debugChapterGraph] ch${numericChapter} event ${eventIdx} API 날것`
+      );
+      console.log('locator', atLocator);
+      console.log('response', response);
+      console.log('result (날것)', raw);
+      if (raw) {
+        console.log('characters', raw.characters);
+        console.log('relations', raw.relations);
+        console.log('scope', raw.scope);
+        console.log('eventId', raw.eventId);
+        console.log('chapterIndex', raw.chapterIndex);
+      }
       console.groupEnd();
     }
   }
@@ -76,23 +69,25 @@ export async function debugChapterGraphFromServer(
   const summary = {
     bookId: numericBookId,
     chapterIdx: numericChapter,
-    maxEventIdx,
-    totalEvents: events.length,
-    eventSummaries: payload.eventSummaries ?? [],
-    events,
+    throughEventIdx: through,
+    totalEvents: rows.length,
+    rows,
   };
 
   console.log(
-    `[debugChapterGraph] ch${numericChapter} 완료 (event 1~${maxEventIdx})`,
+    `[debugChapterGraph] ch${numericChapter} 완료 — event 1~${through} API 날것`,
     summary
   );
   console.table(
-    events.map((event) => ({
-      eventIdx: event.eventIdx,
-      characters: event.counts.characters,
-      relations: event.counts.relations,
-      elements: event.counts.elements,
-      title: event.eventMeta?.name ?? event.eventMeta?.title ?? '',
+    rows.map((row) => ({
+      eventIdx: row.eventIdx,
+      isSuccess: row.isSuccess,
+      code: row.code,
+      chapterIndex: row.raw?.chapterIndex ?? '',
+      scope: row.raw?.scope ?? '',
+      eventId: row.raw?.eventId ?? '',
+      characters: Array.isArray(row.raw?.characters) ? row.raw.characters.length : 0,
+      relations: Array.isArray(row.raw?.relations) ? row.raw.relations.length : 0,
     }))
   );
 

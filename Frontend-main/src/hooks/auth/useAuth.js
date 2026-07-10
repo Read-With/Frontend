@@ -9,7 +9,7 @@ import {
   isTokenValid,
   ensureSessionAccessToken,
 } from '../../utils/api/authApi';
-import { clearAuthData, getPostLoginHomeUrl } from '../../utils/common/authUtils';
+import { clearAuthData, getPostLoginHomeUrl, isOAuthCallbackRoute } from '../../utils/common/authUtils';
 import {
   getStoredAccessToken,
   setStoredAccessToken,
@@ -36,6 +36,8 @@ const useAuth = () => {
   const tokenRefreshIntervalRef = useRef(null);
 
   useEffect(() => {
+    if (isOAuthCallbackRoute()) return;
+
     const checkAndRefreshToken = async () => {
       try {
         const token = getStoredAccessToken();
@@ -67,6 +69,11 @@ const useAuth = () => {
 
     (async () => {
       try {
+        if (isOAuthCallbackRoute()) {
+          if (!cancelled) setIsLoading(false);
+          return;
+        }
+
         const savedUser = getStoredGoogleUserJson();
         let profile = null;
 

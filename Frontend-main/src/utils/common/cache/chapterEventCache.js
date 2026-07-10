@@ -350,7 +350,7 @@ const applyElementDiff = (prevElements, diff) => {
   return result;
 };
 
-/** fine graph 응답 한 건 → 챕터 캐시 이벤트 행 */
+/** fine graph 응답 한 건 → 챕터 캐시 이벤트 행 (서버 result 스키마 + manifest 보조) */
 const normalizeEventFromFineGraphResponse = (
   bookId,
   chapterIdx,
@@ -358,51 +358,70 @@ const normalizeEventFromFineGraphResponse = (
   response,
   manifestStructure
 ) => {
-  const { characters, relations, event } = response?.result || {};
+  const result = response?.result || {};
+  const { characters, relations, event: nestedEvent } = result;
   const hasCharacters = Array.isArray(characters) && characters.length > 0;
   const hasRelations = Array.isArray(relations) && relations.length > 0;
-  const hasEventMeta =
-    event &&
-    (eventUtils.resolveEventId(event) !== null ||
-      event.name ||
-      event.title ||
-      event.startTxtOffset !== undefined ||
-      event.endTxtOffset !== undefined ||
-      event.startLocator !== undefined ||
-      event.endLocator !== undefined);
+  const hasManifestMeta = Boolean(manifestStructure);
+  const hasNestedEventMeta =
+    nestedEvent &&
+    typeof nestedEvent === 'object' &&
+    (eventUtils.resolveEventId(nestedEvent) !== null ||
+      nestedEvent.name ||
+      nestedEvent.title ||
+      nestedEvent.startTxtOffset !== undefined ||
+      nestedEvent.endTxtOffset !== undefined ||
+      nestedEvent.startLocator !== undefined ||
+      nestedEvent.endLocator !== undefined);
 
-  if (!hasCharacters && !hasRelations && !hasEventMeta && !manifestStructure) {
+  if (!hasCharacters && !hasRelations && !hasNestedEventMeta && !hasManifestMeta) {
     return { skip: true, hadGraphData: false };
   }
 
-  const ord = event ? eventUtils.resolveEventOrdinal(event) : null;
-  const resolvedEventNum = Number.isFinite(ord) && ord > 0 ? ord : eventIdx;
+  const resolvedChapterIdx =
+    Number(result.chapterIndex ?? result.chapterIdx ?? chapterIdx) || chapterIdx;
+  const ord = nestedEvent ? eventUtils.resolveEventOrdinal(nestedEvent) : null;
+  const resolvedEventNum =
+    Number.isFinite(ord) && ord > 0
+      ? ord
+      : Number(manifestStructure?.eventNum ?? manifestStructure?.eventIdx ?? eventIdx);
+  const resolvedEventId =
+    result.eventId ??
+    eventUtils.resolveEventId(nestedEvent) ??
+    manifestStructure?.eventId ??
+    null;
 
   return {
     skip: false,
-    hadGraphData: hasCharacters || hasRelations || hasEventMeta,
+    hadGraphData: hasCharacters || hasRelations || hasNestedEventMeta || hasManifestMeta,
     event: {
-      bookId,
-      chapterIdx,
+      bookId: Number(result.bookId) || bookId,
+      chapterIdx: resolvedChapterIdx,
       eventIdx,
       eventNum: resolvedEventNum,
       characters: hasCharacters ? characters.map((character) => deepClone(character)) : [],
       relations: hasRelations ? relations.map((relation) => deepClone(relation)) : [],
+      scope: result.scope ?? 'book',
       event: {
         idx: eventIdx,
-        chapterIdx,
-        eventId: eventUtils.resolveEventId(event) ?? eventIdx,
-        startTxtOffset: event?.startTxtOffset ?? manifestStructure?.startTxtOffset ?? null,
-        endTxtOffset: event?.endTxtOffset ?? manifestStructure?.endTxtOffset ?? null,
-        startLocator: event?.startLocator,
-        endLocator: event?.endLocator,
-        rawText: event?.rawText ?? null,
-        ...(event || {}),
+        chapterIdx: resolvedChapterIdx,
+        chapterIndex: resolvedChapterIdx,
+        eventId: resolvedEventId ?? eventIdx,
+        startTxtOffset:
+          nestedEvent?.startTxtOffset ?? manifestStructure?.startTxtOffset ?? null,
+        endTxtOffset:
+          nestedEvent?.endTxtOffset ?? manifestStructure?.endTxtOffset ?? null,
+        startLocator: nestedEvent?.startLocator,
+        endLocator: nestedEvent?.endLocator,
+        rawText: nestedEvent?.rawText ?? null,
+        ...(nestedEvent && typeof nestedEvent === 'object' ? nestedEvent : {}),
         eventNum: resolvedEventNum,
       },
-      startTxtOffset: event?.startTxtOffset ?? manifestStructure?.startTxtOffset ?? null,
-      endTxtOffset: event?.endTxtOffset ?? manifestStructure?.endTxtOffset ?? null,
-      eventId: eventUtils.resolveEventId(event) ?? manifestStructure?.eventId ?? null,
+      startTxtOffset:
+        nestedEvent?.startTxtOffset ?? manifestStructure?.startTxtOffset ?? null,
+      endTxtOffset:
+        nestedEvent?.endTxtOffset ?? manifestStructure?.endTxtOffset ?? null,
+      eventId: resolvedEventId,
     },
   };
 };
@@ -958,16 +977,24 @@ const hasUsableChapterCache = (bookId, chapterIdx) => {
   return true;
 };
 
+const hasUsableChapterCacheThrough = (bookId, chapterIdx, throughEventIdx = null) => {
+  if (!hasUsableChapterCache(bookId, chapterIdx)) return false;
+  const through = Number(throughEventIdx);
+  if (!Number.isFinite(through) || through < 1) return true;
+  const cachedMax = Number(getCachedChapterEvents(bookId, chapterIdx)?.maxEventIdx) || 0;
+  return cachedMax >= through;
+};
+
 /** 챕터 이벤트 캐시 확보 (재시도 포함, UI 무관) */
 export async function ensureChapterEventsDiscovered(
   bookId,
   chapter,
-  { maxAttempts = 2, onPartialCache = null } = {}
+  { maxAttempts = 2, onPartialCache = null, throughEventIdx = null } = {}
 ) {
   if (!bookId || !chapter || chapter < 1) {
     return { success: false, reason: 'invalid_args' };
   }
-  if (hasUsableChapterCache(bookId, chapter)) {
+  if (hasUsableChapterCacheThrough(bookId, chapter, throughEventIdx)) {
     return { success: true, isEmpty: !getCachedChapterEvents(bookId, chapter)?.events?.length };
   }
 
@@ -976,9 +1003,10 @@ export async function ensureChapterEventsDiscovered(
     try {
       await discoverChapterEvents(bookId, chapter, attempt > 0, {
         urgent: true,
+        maxEventIdx: throughEventIdx,
         onPartialCache,
       });
-      if (hasUsableChapterCache(bookId, chapter)) {
+      if (hasUsableChapterCacheThrough(bookId, chapter, throughEventIdx)) {
         return {
           success: true,
           isEmpty: !getCachedChapterEvents(bookId, chapter)?.events?.length,

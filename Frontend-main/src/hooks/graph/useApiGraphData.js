@@ -1,7 +1,7 @@
-/** macro/fine graph API·manifest 로드 (RelationGraph 전용) */
+/** book-scope/fine graph API·manifest 로드 (RelationGraph 전용) */
 
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { getMacroGraph, getFineGraph } from '../../utils/api/api.js';
+import { getBookScopeRelationshipGraph, getFineGraph } from '../../utils/api/api.js';
 import { anchorToLocators } from '../../utils/common/locatorUtils';
 import {
   resolveMaxChapter,
@@ -153,7 +153,7 @@ export function useApiGraphData(
         chapter,
         eventIdx: null,
         cacheKey,
-        apiCall: () => getMacroGraph(targetBookId, chapter, null),
+        apiCall: () => getBookScopeRelationshipGraph(targetBookId, chapter, null),
         onSuccess: (data) => {
           setFullMacroData(data);
           if (data.userCurrentChapter !== undefined) {
@@ -162,7 +162,7 @@ export function useApiGraphData(
         },
         onError: (error) => {
           setFullMacroData(null);
-          const errorInfo = handleError(error, 'Macro Graph 로드 실패', {
+          const errorInfo = handleError(error, '책 범위 관계 그래프 로드 실패', {
             metadata: { bookId: targetBookId, uptoChapter: chapter },
             autoClear: false,
           });
@@ -171,7 +171,7 @@ export function useApiGraphData(
       });
     } catch (error) {
       setFullMacroData(null);
-      const errorInfo = handleError(error, 'Macro Graph 로드 중 예외', {
+      const errorInfo = handleError(error, '책 범위 관계 그래프 로드 중 예외', {
         metadata: { bookId: targetBookId },
         autoClear: false,
       });
@@ -292,7 +292,7 @@ export function useApiGraphData(
     const nextCh = Number(currentChapter) + 1;
     if (nextCh > apiMaxChapter) return;
     if (hasMacroSessionCache(serverBookId, nextCh)) return;
-    prefetchMacroGraphToCache(serverBookId, nextCh, () => getMacroGraph(serverBookId, nextCh, null));
+    prefetchMacroGraphToCache(serverBookId, nextCh, () => getBookScopeRelationshipGraph(serverBookId, nextCh, null));
   }, [serverBookId, currentChapter, fullMacroData, apiMaxChapter]);
 
   useEffect(() => {
@@ -307,7 +307,7 @@ export function useApiGraphData(
   return {
     manifestData,
     manifestReady,
-    apiMacroData: fullMacroData,
+    apiBookGraphData: fullMacroData,
     apiFineData,
     apiMaxChapter,
     userCurrentChapter,

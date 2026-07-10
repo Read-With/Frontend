@@ -9,16 +9,16 @@ import {
 } from '../../utils/common/cache/chapterEventCache';
 import { applyChapterEventsFromCache } from '../../utils/graph/graphData';
 import { errorUtils } from '../../utils/common/errorUtils';
-import { cacheKeyUtils, eventUtils, buildViewerActionError } from '../../utils/viewer/viewerCoreStateUtils';
+import { cacheKeyUtils, eventUtils, buildViewerActionError, resolveEventIdxOrFallback } from '../../utils/viewer/viewerCoreStateUtils';
 import {
   commitVisibleGraphElements,
   DEFAULT_GRAPH_TRANSFORM_DEPS,
-  elementsFromGraphEventState,
   convertFineGraphToElements,
   fallbackEventMeta,
   getCachedGraphSnapshot,
   graphDataTransformUtils,
   requestFineGraph,
+  resolveCumulativeGraphForDisplay,
   resolveFineGraphCallContext,
 } from '../../utils/viewer/viewerGraphUtils';
 
@@ -127,7 +127,7 @@ function useGraphCacheApply({
   refs,
   commitGraphState,
 }) {
-  const syncEventsFromCache = useCallback((targetChapter, { force = false } = {}) => {
+  const syncEventsFromCache = useCallback((targetChapter, { force = false, throughEventIdx = null } = {}) => {
     if (!book?.id || typeof book.id !== 'number') return false;
     if (!targetChapter || targetChapter < 1) return false;
 
@@ -142,7 +142,12 @@ function useGraphCacheApply({
       const syncResult = { result: null };
 
       setEvents((prev) => {
-        syncResult.result = applyChapterEventsFromCache(prev, book.id, targetChapter);
+        syncResult.result = applyChapterEventsFromCache(
+          prev,
+          book.id,
+          targetChapter,
+          throughEventIdx
+        );
         if (!syncResult.result.hasPayload) return prev;
         return syncResult.result.events;
       });
@@ -179,18 +184,9 @@ function useGraphCacheApply({
   const tryApplyCache = useCallback((bookId, chapter, eventIdx, callKey) => {
     if (refs.cacheAppliedCallKeyRef.current === callKey) return true;
 
-    const cached = getCachedGraphSnapshot(bookId, chapter, eventIdx, getGraphEventState);
-    if (!cached) return false;
+    const resolved = resolveCumulativeGraphForDisplay(bookId, chapter, eventIdx);
+    if (!resolved) return false;
 
-    const resolved = elementsFromGraphEventState(
-      cached,
-      chapter,
-      eventIdx,
-      DEFAULT_GRAPH_TRANSFORM_DEPS
-    );
-
-    // commitGraphState는 useLayoutEffect 안에서 동기 리렌더를 유발할 수 있으므로
-    // ref를 먼저 설정해 중복 적용 루프를 막는다.
     refs.cacheAppliedCallKeyRef.current = callKey;
 
     commitGraphState({
@@ -198,6 +194,7 @@ function useGraphCacheApply({
       apiEventIdx: eventIdx,
       elements: resolved.elements,
       eventMeta: resolved.eventMeta,
+      normalizedEvent: resolved.normalizedEvent ?? undefined,
       characters: resolved.characters,
       relations: resolved.relations,
     });
@@ -235,6 +232,7 @@ function useGraphCacheApply({
 function useGraphChapterDiscovery({
   book,
   currentChapter,
+  currentEvent,
   isViewerPageReady,
   setIsGraphLoading,
   syncEventsFromCache,
@@ -257,12 +255,16 @@ function useGraphChapterDiscovery({
   useEffect(() => {
     if (!book?.id || typeof book.id !== 'number') return;
     if (!currentChapter || currentChapter < 1) return;
-    syncEventsFromCache(currentChapter);
-  }, [book?.id, currentChapter, syncEventsFromCache]);
+    const throughEventIdx = resolveEventIdxOrFallback(currentEvent, null);
+    syncEventsFromCache(currentChapter, { throughEventIdx });
+  }, [book?.id, currentChapter, currentEvent, syncEventsFromCache]);
 
   useEffect(() => {
     if (!isViewerPageReady) return undefined;
     if (!book?.id || typeof book.id !== 'number' || !currentChapter) return undefined;
+
+    const throughEventIdx = resolveEventIdxOrFallback(currentEvent, null);
+    if (!throughEventIdx || throughEventIdx < 1) return undefined;
 
     const runId = ++refs.activeDiscoveryRunRef.current;
     const discoveryKey = cacheKeyUtils.createChapterKey(book.id, currentChapter);
@@ -275,22 +277,23 @@ function useGraphChapterDiscovery({
     };
 
     const runDiscovery = async () => {
-      const existing = refs.chapterEventDiscoveryRef.current.get(discoveryKey);
-      if (existing === 'completed') {
+      const existingThrough = refs.chapterEventDiscoveryRef.current.get(discoveryKey);
+      if (typeof existingThrough === 'number' && existingThrough >= throughEventIdx) {
         setDiscoveryError(null);
-        syncEventsFromCache(currentChapter, { force: true });
+        syncEventsFromCache(currentChapter, { force: true, throughEventIdx });
         return;
       }
-      if (existing === 'loading') return;
+      if (existingThrough === 'loading') return;
 
       refs.chapterEventDiscoveryRef.current.set(discoveryKey, 'loading');
       applyDiscoveryLoading(true);
       setDiscoveryError(null);
 
       const outcome = await ensureChapterEventsDiscovered(book.id, currentChapter, {
+        throughEventIdx,
         onPartialCache: () => {
           if (isStale()) return;
-          syncEventsFromCache(currentChapter, { force: true });
+          syncEventsFromCache(currentChapter, { force: true, throughEventIdx });
         },
       });
 
@@ -300,10 +303,10 @@ function useGraphChapterDiscovery({
       }
 
       if (outcome.success) {
-        refs.chapterEventDiscoveryRef.current.set(discoveryKey, 'completed');
+        refs.chapterEventDiscoveryRef.current.set(discoveryKey, throughEventIdx);
         applyDiscoveryLoading(false);
         setDiscoveryError(null);
-        syncEventsFromCache(currentChapter, { force: true });
+        syncEventsFromCache(currentChapter, { force: true, throughEventIdx });
         return;
       }
 
@@ -332,6 +335,7 @@ function useGraphChapterDiscovery({
   }, [
     book?.id,
     currentChapter,
+    currentEvent,
     discoveryRetryToken,
     isViewerPageReady,
     retryDiscovery,
@@ -401,8 +405,36 @@ function useGraphFineLoad({
     [book, currentChapter, currentEvent]
   );
 
-  const applyApiResult = useCallback((ctx, fineResult) => {
+  const applyApiResult = useCallback(async (ctx, fineResult) => {
     const { bookId, chapter, eventIdx } = ctx;
+
+    await prefetchChapterEvents(bookId, chapter, eventIdx);
+
+    const cumulative = resolveCumulativeGraphForDisplay(bookId, chapter, eventIdx);
+    if (cumulative) {
+      if (import.meta.env.DEV) {
+        console.log('[ViewerGraph] cumulative graph data', {
+          bookId,
+          chapter,
+          eventIdx,
+          cumulativeThrough: `1~${eventIdx}`,
+          elements: cumulative.elements,
+        });
+      }
+
+      commitGraphState({
+        graphChapter: chapter,
+        apiEventIdx: eventIdx,
+        elements: cumulative.elements,
+        normalizedEvent: cumulative.normalizedEvent ?? undefined,
+        eventMeta: cumulative.eventMeta,
+        characters: cumulative.characters,
+        relations: cumulative.relations,
+      });
+      prefetchAhead(bookId, chapter, eventIdx);
+      return;
+    }
+
     const converted = convertFineGraphToElements(
       fineResult,
       chapter,
@@ -411,7 +443,7 @@ function useGraphFineLoad({
     );
 
     if (import.meta.env.DEV) {
-      console.log('[ViewerGraph] visible graph data', { bookId, chapter, eventIdx, elements: converted.elements });
+      console.log('[ViewerGraph] fine graph fallback', { bookId, chapter, eventIdx, elements: converted.elements });
     }
 
     commitGraphState({
@@ -530,7 +562,7 @@ function useGraphFineLoad({
           return;
         }
 
-        applyApiResult(ctx, result);
+        await applyApiResult(ctx, result);
         finishFineLoading(true, false);
       } catch (error) {
         if (refs.loadGenerationRef.current !== generation) return;
@@ -610,6 +642,7 @@ export function useViewerGraphPipeline({
   const discovery = useGraphChapterDiscovery({
     book,
     currentChapter,
+    currentEvent,
     isViewerPageReady,
     setIsGraphLoading,
     syncEventsFromCache: cacheLayer.syncEventsFromCache,
