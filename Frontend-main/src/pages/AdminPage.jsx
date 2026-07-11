@@ -120,6 +120,40 @@ const BookIcon = () => (
   </svg>
 );
 
+const ProcessingIcon = () => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    fill="none"
+    viewBox="0 0 24 24"
+    strokeWidth={1.5}
+    stroke="currentColor"
+    className="w-5 h-5"
+  >
+    <path
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99"
+    />
+  </svg>
+);
+
+const ListBulletIcon = () => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    fill="none"
+    viewBox="0 0 24 24"
+    strokeWidth={1.5}
+    stroke="currentColor"
+    className="w-5 h-5"
+  >
+    <path
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      d="M8.25 6.75h12M8.25 12h12m-12 5.25h12M3.75 6.75h.007v.008H3.75V6.75zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zM3.75 12h.007v.008H3.75V12zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm-.375 5.25h.007v.008H3.75v-.008zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z"
+    />
+  </svg>
+);
+
 const AdminBookCard = ({ book, onSelect }) => {
   const [imageError, setImageError] = useState(false);
   const coverUrl = book.coverImgUrl;
@@ -162,7 +196,7 @@ const AdminBookCard = ({ book, onSelect }) => {
 };
 
 const AdminPage = () => {
-  // 탭 상태 (dashboard, books, query, upload, delete)
+  // 탭 상태 (dashboard, books, query, upload, delete, normalization)
   const [activeTab, setActiveTab] = useState("dashboard");
 
   // 입력 상태 관리
@@ -176,12 +210,15 @@ const AdminPage = () => {
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
   const [books, setBooks] = useState([]);
+  const [normalizationJobs, setNormalizationJobs] = useState([]);
+  const [jobLogs, setJobLogs] = useState([]);
 
   // 도서별 캐릭터 상태 관리
   const [selectedBook, setSelectedBook] = useState(null);
   const [characters, setCharacters] = useState([]);
   const [isViewingCharacters, setIsViewingCharacters] = useState(false);
   const [zoomedImage, setZoomedImage] = useState(null);
+  const [selectedLogPayload, setSelectedLogPayload] = useState(null);
 
   // 공통 API 호출 함수
   const handleApiCall = async (apiFunction, updateState = null) => {
@@ -225,12 +262,10 @@ const AdminPage = () => {
     setResponse(null);
 
     try {
-      // 백엔드 API 호출: /api/v2/admin/characters/{characterId}/regenerate-image
       const result = await apiClient.post(`/characters/${char.id}/regenerate-image`);
       
       if (result.data && result.data.isSuccess) {
         alert(`캐릭터 [${char.commonName || char.name}] 이미지 재생성 요청이 성공했습니다.`);
-        // 상태 업데이트를 위해 캐릭터 목록 새로고침
         if (selectedBook) {
           getBookCharacters(selectedBook);
         }
@@ -255,6 +290,24 @@ const AdminPage = () => {
     handleApiCall(() => apiClient.get("/books/unsummarized"));
   const getBooksList = () =>
     handleApiCall(() => apiClient.get(`/books`), true);
+
+  const getNormalizationJobs = () =>
+    handleApiCall(() => apiClient.get("/normalization/jobs/latest"), setNormalizationJobs);
+
+  const getJobLogs = () =>
+    handleApiCall(() => apiClient.get("/jobs/logs/latest"), setJobLogs);
+
+  // 실패한 정규화 Job 재시도 API 호출
+  const retryNormalizationJob = (jobId) => {
+    if (!window.confirm(`ID #${jobId} 정규화 작업을 재시도하시겠습니까?`)) return;
+    handleApiCall(
+      () => apiClient.post(`/normalization/jobs/${jobId}/retry`),
+      () => {
+        alert("재시도 요청이 성공했습니다.");
+        getNormalizationJobs();
+      }
+    );
+  };
 
   const getBookCharacters = (book) => {
     setSelectedBook(book);
@@ -294,7 +347,6 @@ const AdminPage = () => {
   };
 
   const deleteData = (endpoint) => {
-    // 각 엔드포인트에 필요한 파라미터가 있는지 확인
     let finalEndpoint = endpoint;
 
     if (endpoint.includes("{bookId}")) {
@@ -361,6 +413,38 @@ const AdminPage = () => {
           >
             <BookIcon />
             <span>도서 목록</span>
+          </button>
+          <button
+            onClick={() => {
+              setActiveTab("normalization");
+              setIsViewingCharacters(false);
+              setSelectedBook(null);
+              getNormalizationJobs();
+            }}
+            className={`w-full flex items-center space-x-3 px-4 py-3 text-sm font-medium rounded-lg transition-colors ${
+              activeTab === "normalization"
+                ? "bg-indigo-50 text-indigo-700"
+                : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
+            }`}
+          >
+            <ProcessingIcon />
+            <span>정규화 작업</span>
+          </button>
+          <button
+            onClick={() => {
+              setActiveTab("logs");
+              setIsViewingCharacters(false);
+              setSelectedBook(null);
+              getJobLogs();
+            }}
+            className={`w-full flex items-center space-x-3 px-4 py-3 text-sm font-medium rounded-lg transition-colors ${
+              activeTab === "logs"
+                ? "bg-indigo-50 text-indigo-700"
+                : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
+            }`}
+          >
+            <ListBulletIcon />
+            <span>작업 로그</span>
           </button>
           <button
             onClick={() => {
@@ -504,7 +588,6 @@ const AdminPage = () => {
               </div>
             </div>
 
-            {/* 시각적인 프로그레스 바 추가 */}
             <div className="flex flex-col space-y-1.5 min-w-[200px] border-l border-gray-100 pl-6 ml-6">
               <div className="flex items-baseline justify-between">
                 <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">Image Generation</span>
@@ -660,6 +743,167 @@ const AdminPage = () => {
       </div>
     );
   };
+
+  const renderNormalizationSection = () => (
+    <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+      <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+        <div className="flex items-center space-x-2">
+          <ProcessingIcon />
+          <h3 className="text-lg font-semibold text-gray-800">정규화 작업 현황</h3>
+        </div>
+        <button
+          onClick={getNormalizationJobs}
+          disabled={loading}
+          className="text-xs font-medium text-indigo-600 hover:text-indigo-800 transition-colors"
+        >
+          새로고침
+        </button>
+      </div>
+      <div className="p-0 overflow-x-auto">
+        <table className="w-full text-left border-collapse">
+          <thead>
+            <tr className="bg-gray-50 text-gray-600 text-xs uppercase tracking-wider">
+              <th className="px-6 py-3 font-semibold border-b">ID</th>
+              <th className="px-6 py-3 font-semibold border-b">도서명</th>
+              <th className="px-6 py-3 font-semibold border-b">상태</th>
+              <th className="px-6 py-3 font-semibold border-b">생성일시</th>
+              <th className="px-6 py-3 font-semibold border-b">관리</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-100">
+            {normalizationJobs.length === 0 ? (
+              <tr>
+                <td colSpan="5" className="px-6 py-12 text-center text-gray-500">
+                  정규화 작업 내역이 없습니다.
+                </td>
+              </tr>
+            ) : (
+              normalizationJobs.map((job) => (
+                <tr key={job.id} className="hover:bg-gray-50 transition-colors">
+                  <td className="px-6 py-4 text-sm font-mono text-gray-500">{job.id}</td>
+                  <td className="px-6 py-4 text-sm text-gray-800">
+                    {job.bookTitle || job.book_title || `Book ${job.bookId}`}
+                  </td>
+                  <td className="px-6 py-4 text-sm">
+                    <span
+                      className={`px-2 py-1 rounded-full text-xs font-semibold ${
+                        job.status === "COMPLETED"
+                          ? "bg-green-100 text-green-700"
+                          : job.status === "PROCESSING" || job.status === "IN_PROGRESS"
+                            ? "bg-blue-100 text-blue-700 animate-pulse"
+                            : job.status === "FAILED"
+                              ? "bg-red-100 text-red-700"
+                              : "bg-gray-100 text-gray-600"
+                      }`}
+                    >
+                      {job.status}
+                    </span>
+                  </td>
+                  <td className="px-6 py-4 text-sm text-gray-500">
+                    {new Date(job.createdAt || job.created_at).toLocaleString()}
+                  </td>
+                  <td className="px-6 py-4 text-sm">
+                    <button
+                      onClick={() => retryNormalizationJob(job.id)}
+                      className="text-indigo-600 hover:text-indigo-800 font-medium"
+                    >
+                      재시도
+                    </button>
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+
+  const renderLogsSection = () => (
+    <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+      <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+        <div className="flex items-center space-x-2">
+          <ListBulletIcon />
+          <h3 className="text-lg font-semibold text-gray-800">최신 작업 로그</h3>
+        </div>
+        <button
+          onClick={getJobLogs}
+          disabled={loading}
+          className="text-xs font-medium text-indigo-600 hover:text-indigo-800 transition-colors"
+        >
+          새로고침
+        </button>
+      </div>
+      <div className="p-0 overflow-x-auto">
+        <table className="w-full text-left border-collapse">
+          <thead>
+            <tr className="bg-gray-50 text-gray-600 text-xs uppercase tracking-wider">
+              <th className="px-6 py-3 font-semibold border-b">ID</th>
+              <th className="px-6 py-3 font-semibold border-b">Job ID</th>
+              <th className="px-6 py-3 font-semibold border-b">도서명</th>
+              <th className="px-6 py-3 font-semibold border-b">단계</th>
+              <th className="px-6 py-3 font-semibold border-b text-center">레벨</th>
+              <th className="px-6 py-3 font-semibold border-b">메시지</th>
+              <th className="px-6 py-3 font-semibold border-b">생성일시</th>
+              <th className="px-6 py-3 font-semibold border-b text-center">상세</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-100">
+            {jobLogs.length === 0 ? (
+              <tr>
+                <td colSpan="8" className="px-6 py-12 text-center text-gray-500">
+                  로그 데이터가 없습니다.
+                </td>
+              </tr>
+            ) : (
+              jobLogs.map((log) => (
+                <tr key={log.id} className="hover:bg-gray-50 transition-colors">
+                  <td className="px-6 py-4 text-xs font-mono text-gray-400">{log.id}</td>
+                  <td className="px-6 py-4 text-sm font-medium text-indigo-600">#{log.jobId}</td>
+                  <td className="px-6 py-4 text-sm text-gray-800 max-w-[150px] truncate" title={log.bookTitle}>
+                    {log.bookTitle}
+                  </td>
+                  <td className="px-6 py-4 text-xs font-bold text-gray-500">{log.step}</td>
+                  <td className="px-6 py-4 text-sm text-center">
+                    <span
+                      className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                        log.level === "ERROR"
+                          ? "bg-red-100 text-red-700"
+                          : log.level === "WARN"
+                            ? "bg-amber-100 text-amber-700"
+                            : "bg-blue-50 text-blue-600"
+                      }`}
+                    >
+                      {log.level}
+                    </span>
+                  </td>
+                  <td className="px-6 py-4 text-sm text-gray-600 max-w-[300px] truncate" title={log.message}>
+                    {log.message}
+                  </td>
+                  <td className="px-6 py-4 text-xs text-gray-400">
+                    {new Date(log.createdAt).toLocaleString()}
+                  </td>
+                  <td className="px-6 py-4 text-sm text-center">
+                    {log.payloadJson && (
+                      <button
+                        onClick={() => setSelectedLogPayload(log.payloadJson)}
+                        className="text-gray-400 hover:text-indigo-600 transition-colors"
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                        </svg>
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
 
   const renderQuerySection = () => (
     <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
@@ -847,6 +1091,8 @@ const AdminPage = () => {
             <h1 className="text-2xl font-bold text-gray-900">
               {activeTab === "dashboard" && "대시보드 홈"}
               {activeTab === "books" && "도서 목록"}
+              {activeTab === "normalization" && "정규화 작업"}
+              {activeTab === "logs" && "작업 로그"}
               {activeTab === "query" && "데이터 조회"}
               {activeTab === "upload" && "데이터 업로드"}
               {activeTab === "delete" && "데이터 삭제"}
@@ -868,6 +1114,8 @@ const AdminPage = () => {
             </div>
           )}
           {activeTab === "books" && renderBooksSection()}
+          {activeTab === "normalization" && renderNormalizationSection()}
+          {activeTab === "logs" && renderLogsSection()}
           {activeTab === "query" && renderQuerySection()}
           {activeTab === "upload" && renderUploadSection()}
           {activeTab === "delete" && renderDeleteSection()}
@@ -953,6 +1201,44 @@ const AdminPage = () => {
               className="max-w-full max-h-full object-contain rounded-lg shadow-2xl animate-in zoom-in-95 duration-200"
               onClick={(e) => e.stopPropagation()}
             />
+          </div>
+        </div>
+      )}
+
+      {/* JSON 페이로드 모달 */}
+      {selectedLogPayload && (
+        <div 
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4"
+          onClick={() => setSelectedLogPayload(null)}
+        >
+          <div 
+            className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[80vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-200"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between bg-gray-50">
+              <h3 className="text-lg font-bold text-gray-800">Payload 상세 정보</h3>
+              <button 
+                onClick={() => setSelectedLogPayload(null)}
+                className="text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-6 h-6">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <div className="p-6 overflow-auto">
+              <div className="bg-gray-900 rounded-lg p-4 font-mono text-sm text-green-400 overflow-x-auto">
+                <pre>{JSON.stringify(JSON.parse(selectedLogPayload), null, 2)}</pre>
+              </div>
+            </div>
+            <div className="px-6 py-4 border-t border-gray-100 flex justify-end">
+              <button 
+                onClick={() => setSelectedLogPayload(null)}
+                className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 font-medium transition-colors"
+              >
+                닫기
+              </button>
+            </div>
           </div>
         </div>
       )}
