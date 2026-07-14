@@ -219,7 +219,8 @@ const AdminPage = () => {
   const [isViewingCharacters, setIsViewingCharacters] = useState(false);
   const [zoomedImage, setZoomedImage] = useState(null);
   const [selectedLogPayload, setSelectedLogPayload] = useState(null);
-
+  const [imageGenerationStatus, setImageGenerationStatus] = useState(null);
+  
   // 공통 API 호출 함수
   const handleApiCall = async (apiFunction, updateState = null) => {
     setLoading(true);
@@ -309,9 +310,27 @@ const AdminPage = () => {
     );
   };
 
+  const getImageGenerationStatus = async (bookId) => {
+    try {
+        const result = await apiClient.get(
+            `/image-generation/books/${bookId}`
+        );
+
+        if (result.data?.isSuccess) {
+            setImageGenerationStatus(result.data.result);
+        } else {
+            setImageGenerationStatus(null);
+        }
+    } catch (e) {
+        console.error(e);
+        setImageGenerationStatus(null);
+    }
+  };
+
   const getBookCharacters = (book) => {
     setSelectedBook(book);
     setBookId(book.id);
+    getImageGenerationStatus(book.id);
     handleApiCall(() => apiClient.get(`/books/${book.id}/characters`), (data) => {
       setCharacters(data);
       setIsViewingCharacters(true);
@@ -615,6 +634,95 @@ const AdminPage = () => {
             <span>현황 갱신</span>
           </button>
         </div>
+
+        {imageGenerationStatus && (
+          <div className="m-6 mb-4 rounded-xl border border-gray-200 bg-gray-50 p-5">
+            <h4 className="text-lg font-semibold mb-4">
+              이미지 생성 현황
+            </h4>
+            <div className="grid grid-cols-2 gap-4 text-sm">
+              <div>
+                <div className="font-semibold text-gray-600">
+                  전체 상태
+                </div>
+                <div className="mt-1 text-indigo-600 font-bold">
+                    {imageGenerationStatus.status}
+                </div>
+            </div>
+            <div>
+              <div className="font-semibold text-gray-600">
+                다음 작업
+              </div>
+              <div className="mt-1">
+                {imageGenerationStatus.nextAction}
+              </div>
+            </div>
+            <div>
+              <div className="font-semibold text-gray-600">
+                대표 캐릭터
+              </div>
+              <div className="mt-1">
+                {imageGenerationStatus.referenceCharacter?.name ?? "-"}
+              </div>
+            </div>
+            <div>
+              <div className="font-semibold text-gray-600">
+                선택된 후보
+              </div>
+              <div className="mt-1">
+                {imageGenerationStatus.selectedReferenceCandidateId ?? "없음"}
+              </div>
+            </div>
+        </div>
+
+        {imageGenerationStatus.referenceCandidates?.length > 0 && (
+          <div className="mt-6">
+            <h5 className="text-sm font-semibold mb-3">
+              대표 후보 이미지
+            </h5>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              {imageGenerationStatus.referenceCandidates.map(candidate => (
+                <div
+                  key={candidate.id}
+                  className={`rounded-lg border overflow-hidden bg-white ${
+                    candidate.id === imageGenerationStatus.selectedReferenceCandidateId
+                      ? "border-indigo-500 ring-2 ring-indigo-200"
+                      : "border-gray-200"
+                  }`}
+                >
+                  <div className="aspect-square bg-gray-100">
+                    {candidate.imageUrl ? (
+                      <img
+                        src={candidate.imageUrl}
+                        alt={`slot-${candidate.slotNo}`}
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center text-xs text-gray-400">
+                        이미지 없음
+                      </div>
+                    )}
+                  </div>
+                  <div className="p-3">
+                    <div className="text-xs text-gray-500">
+                      Slot {candidate.slotNo}
+                    </div>
+                    <div className="font-semibold mt-1">
+                      {candidate.status}
+                    </div>
+                    {candidate.failureCode && (
+                      <div className="text-xs text-red-500 mt-1">
+                        {candidate.failureCode}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    )}
         <div className="p-0 overflow-x-auto">
         <table className="w-full text-left border-collapse">
           <thead>
