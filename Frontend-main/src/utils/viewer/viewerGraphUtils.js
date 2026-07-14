@@ -4,7 +4,7 @@ import { processRelations } from '../graph/relationUtils';
 import { buildNodeWeights, createCharacterMaps, toNodeWeightsOrNull } from '../graph/characterUtils';
 import { convertRelationsToElements } from '../graph/graphDataUtils';
 import { hasGraphPayload } from '../graph/graphData';
-import { resolveGraphElementsProfileImages } from '../common/urlUtils';
+import { resolveGraphElementsProfileImages } from '../common/assetUrlFetch';
 import {
   getGraphEventState,
   getChapterEventFallbackData,
