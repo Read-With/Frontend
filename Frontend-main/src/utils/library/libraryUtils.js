@@ -1,6 +1,5 @@
 /** 라이브러리: 진행률·날짜 표시, EPUB 업로드 검증·메타 추출 */
 
-import JSZip from 'jszip';
 import { getProgressFromCache } from '../common/cache/progressCache';
 import { clampPercent } from '../common/valueUtils';
 
@@ -83,6 +82,7 @@ export async function extractEpubFileMetadata(file) {
     language: 'ko',
   };
   try {
+    const { default: JSZip } = await import('jszip');
     const buf = await file.arrayBuffer();
     const zip = await JSZip.loadAsync(buf);
     const containerEntry = zip.file('META-INF/container.xml');

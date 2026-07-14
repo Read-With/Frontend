@@ -34,12 +34,14 @@ export default defineConfig(({ mode }) => {
     },
     build: {
       target: 'esnext',
-      minify: 'terser',
+      minify: 'esbuild',
       rollupOptions: {
         output: {
           manualChunks: {
+            'react-vendor': ['react', 'react-dom', 'react-router-dom'],
+            query: ['@tanstack/react-query'],
             charts: ['recharts'],
-            graph: ['cytoscape', 'cytoscape-cose-bilkent'],
+            graph: ['cytoscape', 'cytoscape-cose-bilkent', 'react-cytoscapejs'],
           },
         },
       },

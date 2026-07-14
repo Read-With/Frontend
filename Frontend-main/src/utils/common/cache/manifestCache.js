@@ -9,6 +9,7 @@ import {
 } from '../valueUtils';
 import { toLocator, locatorsEqual, resolveProgressLocator } from '../locatorUtils';
 import { eventUtils } from '../../viewer/viewerCoreStateUtils';
+import { invalidateCachedXhtml } from '../../viewer/xhtmlLoadCache.js';
 import {
   registerCache,
   getCacheItem,
@@ -655,11 +656,11 @@ export const invalidateManifest = (bookId) => {
   removeCacheItem('manifestCache', key);
   const cacheKey = getManifestCacheKey(bookId);
   removeFromStorage(cacheKey, 'localStorage');
-  import('../../viewer/xhtmlLoadCache.js')
-    .then(({ invalidateCachedXhtml }) => {
-      invalidateCachedXhtml(bookId);
-    })
-    .catch(() => {});
+  try {
+    invalidateCachedXhtml(bookId);
+  } catch {
+    /* ignore */
+  }
 };
 
 export const prefetchManifest = async (bookId, fetcher) => {
