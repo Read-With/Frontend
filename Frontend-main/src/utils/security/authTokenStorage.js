@@ -3,6 +3,8 @@
  * 리프레시 토큰: localStorage (멀티 탭·재방문). 완전한 XSS 방어는 httpOnly·Secure 쿠키 세션이 필요하다.
  */
 
+import { clearBooksCache } from '../common/cache/cacheManager';
+
 const KEY_ACCESS = 'accessToken';
 const KEY_SESSION_ACCESS = 'readwith_session_access';
 const KEY_REFRESH = 'refreshToken';
@@ -112,6 +114,7 @@ export function removeStoredGoogleUser() {
 export function clearAuthTokenStorage() {
   memoryAccessToken = null;
   legacyAccessMigrated = false;
+  clearBooksCache();
   try {
     localStorage.removeItem(KEY_ACCESS);
     localStorage.removeItem(KEY_REFRESH);
@@ -121,3 +124,6 @@ export function clearAuthTokenStorage() {
     console.error('localStorage 접근 실패');
   }
 }
+
+/** clearAuthTokenStorage 별칭 — authApi 등에서 urlUtils 순환 없이 사용 */
+export const clearAuthData = clearAuthTokenStorage;

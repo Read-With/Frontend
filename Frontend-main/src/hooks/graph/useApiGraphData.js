@@ -52,7 +52,6 @@ export function useApiGraphData(serverBookId, currentChapter) {
       if (outcome.error) {
         const errorInfo = handleError(outcome.error, 'Manifest 로드 중 오류', {
           metadata: { bookId: targetBookId },
-          autoClear: false,
         });
         setApiError(errorInfo);
       } else {
@@ -60,7 +59,6 @@ export function useApiGraphData(serverBookId, currentChapter) {
         manifestError.status = outcome.response?.code || null;
         const errorInfo = handleError(manifestError, 'Manifest API 응답 실패', {
           metadata: { bookId: targetBookId, response: outcome.response },
-          autoClear: false,
         });
         setApiError(errorInfo);
       }
@@ -132,7 +130,6 @@ export function useApiGraphData(serverBookId, currentChapter) {
           setFullMacroData(null);
           const errorInfo = handleError(error, '책 범위 관계 그래프 로드 실패', {
             metadata: { bookId: targetBookId, uptoChapter: chapter },
-            autoClear: false,
           });
           setApiError(errorInfo);
         },
@@ -142,7 +139,6 @@ export function useApiGraphData(serverBookId, currentChapter) {
       setFullMacroData(null);
       const errorInfo = handleError(error, '책 범위 관계 그래프 로드 중 예외', {
         metadata: { bookId: targetBookId },
-        autoClear: false,
       });
       setApiError(errorInfo);
     } finally {

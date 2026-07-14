@@ -7,7 +7,7 @@ import {
   findManifestEventInChapter,
   locatorFromChapterLocalOffset,
   resolveFineGraphLocatorToEventParams,
-  normalizeLocatorForServerProgress,
+  withNormalizedProgressLocators,
 } from '../common/cache/manifestCache';
 import {
   setProgressToCache,
@@ -16,24 +16,18 @@ import {
   ensureProgressRowLocator,
 } from '../common/cache/progressCache';
 import { normalizeReadingProgressPercent } from '../viewer/viewerEventProgressUtils';
-import { progressPayloadFromData, resolveProgressLocator, toLocator } from '../common/locatorUtils';
+import { progressPayloadFromData, resolveProgressLocator, toLocator, locatorsEqual } from '../common/locatorUtils';
 import { resolveChapterIndex } from '../common/valueUtils';
-import { getApiBaseUrl, clearAuthData, getPostLoginHomeUrl } from '../common/urlUtils';
+import { getApiBaseUrl } from '../common/urlUtils';
 import { getStoredAccessToken } from '../security/authTokenStorage';
 import {
-  isTokenValid,
-  refreshToken,
-  ensureSessionAccessToken,
+  authenticatedRequest,
   makeSilentError,
   isForbiddenError,
   isNotFoundError,
 } from './authApi';
 
-const API_BASE_URL = getApiBaseUrl();
-
-const RELATIONSHIP_GRAPH_PATH = '/relationship-graph';
-
-const isRelationshipGraphApiUrl = (url) => url.includes(RELATIONSHIP_GRAPH_PATH);
+const SOFT_FAIL_403_404 = [403, 404];
 
 const PROGRESS_FORBIDDEN = makeSilentError('FORBIDDEN', '해당 책에 접근할 권한이 없습니다');
 const PROGRESS_NOT_FOUND = makeSilentError('NOT_FOUND', '진도 정보를 찾을 수 없습니다');
@@ -62,8 +56,7 @@ const createApiResponse = (isSuccess, code, message, result, type = 'default') =
   }
 
   if (type === 'graph-fine') {
-    const safe = normalizeRelationshipGraphResult(result);
-    baseResponse.result = safe;
+    baseResponse.result = normalizeRelationshipGraphResult(result);
     return baseResponse;
   }
 
@@ -173,131 +166,48 @@ const handleApiError = (error, context) => {
   throw new Error(`${context}: ${statusMessage} (${statusCode}) - ${errorMessage}`);
 };
 
-const apiRequest = async (url, options = {}, retryCount = 0) => {
-  await ensureSessionAccessToken();
-  const token = getStoredAccessToken();
-
-  if (isRelationshipGraphApiUrl(url)) {
-    const tokenValid = isTokenValid(token);
-    if (token && !tokenValid) {
-      console.error('❌ 토큰이 유효하지 않습니다. 다시 로그인해주세요.');
-      clearAuthData();
-      window.location.href = getPostLoginHomeUrl();
-      return;
-    }
+/** relationship-graph 공통 요청 */
+const requestRelationshipGraph = async (bookId, { locator = null, chapterIndex = null } = {}) => {
+  const queryParams = new URLSearchParams();
+  queryParams.append('scope', 'book');
+  if (locator) {
+    appendRelationshipGraphLocatorParams(queryParams, locator);
+  } else if (chapterIndex !== null && chapterIndex !== undefined) {
+    queryParams.append('chapterIndex', String(chapterIndex));
   }
 
-  const isFormData = options.body instanceof FormData;
-
-  const defaultHeaders = {
-    ...(!isFormData && { 'Content-Type': 'application/json' }),
-    ...(token && { Authorization: `Bearer ${token}` }),
-  };
-
-  const config = {
-    ...options,
-    headers: { ...defaultHeaders, ...options.headers },
-  };
-
-  const requestUrl = `${API_BASE_URL}${url}`;
-
-  const silentErrorEndpoints = [
-    RELATIONSHIP_GRAPH_PATH,
-    '/api/v2/progress',
-    '/api/v2/books/',
-    '/manifest',
-  ];
-  const isSilentError = silentErrorEndpoints.some((endpoint) => url.includes(endpoint));
-
-  const response = await fetch(requestUrl, config);
-
-  if (response.status === 401 && retryCount === 0) {
-    const errorText = await response.clone().text();
-    console.error('❌ 401 Unauthorized 에러 (토큰 갱신 시도):', {
-      url: requestUrl,
-      status: response.status,
-      hasToken: !!token,
-      tokenValid: token ? isTokenValid(token) : false,
-      errorResponse: errorText,
-    });
-    try {
-      await refreshToken();
-      return apiRequest(url, options, retryCount + 1);
-    } catch (_refreshError) {
-      clearAuthData();
-      const authError = new Error('인증이 만료되었습니다. 다시 로그인해주세요.');
-      authError.status = 401;
-      throw authError;
-    }
-  }
-
-  if (response.status === 401 && retryCount > 0) {
-    const errorText = await response.clone().text();
-    console.error('❌ 401 Unauthorized 에러 (토큰 갱신 후 재시도 실패):', {
-      url: requestUrl,
-      status: response.status,
-      errorResponse: errorText,
-    });
-    clearAuthData();
-    const authError = new Error('인증이 만료되었습니다. 다시 로그인해주세요.');
-    authError.status = 401;
-    throw authError;
-  }
-
-  if (response.status === 404 && isSilentError) return makeSilentError('NOT_FOUND', '데이터를 찾을 수 없습니다');
-  if (response.status === 403 && isSilentError) return makeSilentError('FORBIDDEN', '접근 권한이 없습니다');
-
-  let data;
-  try {
-    data = await response.json();
-  } catch (_jsonError) {
-    if (response.status === 403 && isSilentError) return makeSilentError('FORBIDDEN', '접근 권한이 없습니다');
-    const error = new Error('응답을 파싱할 수 없습니다');
-    error.status = response.status;
-    throw error;
-  }
-
-  if (!response.ok) {
-    if (isRelationshipGraphApiUrl(url)) {
-      if (response.status !== 404 && response.status !== 403) {
-        console.error('❌ 관계 그래프 API 에러:', {
-          status: response.status,
-          statusText: response.statusText,
-          url: requestUrl,
-          response: data,
-          hasToken: !!token,
-        });
-      }
-    }
-    const error = new Error(data.message || 'API 요청 실패');
-    error.status = response.status;
-    throw error;
-  }
-
-  return data;
+  const response = await authenticatedRequest(
+    `/v2/books/${bookId}/relationship-graph?${queryParams.toString()}`,
+    { softFailStatuses: SOFT_FAIL_403_404 }
+  );
+  return { response, result: pickResponseResult(response) };
 };
 
-const withLocatorsNormalizedForProgressSave = (progressData) => {
-  if (!progressData?.bookId) return progressData;
-  const bookId = String(progressData.bookId);
-  const locator = resolveProgressLocator(progressData);
-  if (!locator) return progressData;
-  const normalizedStartLocator = normalizeLocatorForServerProgress(bookId, locator);
-  if (!normalizedStartLocator) return progressData;
-  let normalizedEndLocator = normalizedStartLocator;
-  if (progressData.endLocator != null || progressData.end != null) {
-    const endLocator = toLocator(progressData.endLocator ?? progressData.end);
-    if (endLocator) {
-      normalizedEndLocator = normalizeLocatorForServerProgress(bookId, endLocator) ?? normalizedStartLocator;
-    }
+const toGraphApiResponse = ({
+  response,
+  result,
+  empty,
+  type,
+  successMessage,
+  notFoundMessage,
+  errorMessage,
+}) => {
+  if (!response || response.isSuccess === false) {
+    const code = response?.code || 'ERROR';
+    const message =
+      code === 'NOT_FOUND'
+        ? notFoundMessage
+        : response?.message || errorMessage;
+    const body = createApiResponse(false, code, message, empty, type);
+    return code === 'NOT_FOUND' ? toUnifiedApiResponse(body) : body;
   }
-  return {
-    ...progressData,
-    startLocator: normalizedStartLocator,
-    locator: normalizedStartLocator,
-    endLocator: normalizedEndLocator,
-  };
+  return toUnifiedApiResponse(
+    createApiResponse(true, 'SUCCESS', successMessage, result || empty, type)
+  );
 };
+
+const withLocatorsNormalizedForProgressSave = (progressData) =>
+  withNormalizedProgressLocators(progressData);
 
 export const saveProgress = async (progressData) => {
   try {
@@ -305,10 +215,12 @@ export const saveProgress = async (progressData) => {
     if (!payload) {
       throw new Error('bookId와 읽기 위치(startLocator/locator)는 필수입니다.');
     }
-    const response = await apiRequest('/api/v2/progress', {
+    const response = await authenticatedRequest('/v2/progress', {
       method: 'POST',
       body: JSON.stringify(payload),
+      softFailStatuses: SOFT_FAIL_403_404,
     });
+    if (response?.code === 'FORBIDDEN') return PROGRESS_FORBIDDEN;
     if (!response?.isSuccess) {
       const error = new Error(response?.message || '독서 진도 저장 실패');
       error.status = response?.status;
@@ -342,7 +254,7 @@ export const saveProgressKeepalive = (progressData) => {
     const payload = progressPayloadFromData(withLocatorsNormalizedForProgressSave(progressData));
     if (!payload) return false;
     const token = getStoredAccessToken();
-    const requestUrl = `${API_BASE_URL}/api/v2/progress`;
+    const requestUrl = `${getApiBaseUrl()}/api/v2/progress`;
 
     fetch(requestUrl, {
       method: 'POST',
@@ -379,14 +291,17 @@ export const getBookProgress = async (bookId, options = {}) => {
   }
 
   try {
-    const response = await apiRequest(`/api/v2/progress/${bookId}`);
+    const response = await authenticatedRequest(`/v2/progress/${bookId}`, {
+      softFailStatuses: SOFT_FAIL_403_404,
+    });
+    if (response?.code === 'FORBIDDEN') return PROGRESS_FORBIDDEN;
+    if (response?.code === 'NOT_FOUND') return PROGRESS_NOT_FOUND;
     if (response?.isSuccess && response.result) {
       const base = { ...response.result };
       const prev = getProgressFromCache(bookId);
       const newLoc = resolveProgressLocator(ensureProgressRowLocator(String(bookId), base));
       const prevLoc = resolveProgressLocator(prev ?? {});
-      const sameLoc =
-        newLoc && prevLoc && JSON.stringify(newLoc) === JSON.stringify(prevLoc);
+      const sameLoc = newLoc && prevLoc && locatorsEqual(newLoc, prevLoc);
       const pct =
         normalizeReadingProgressPercent(base, { bookId }) ??
         (sameLoc ? normalizeReadingProgressPercent(prev ?? {}, { bookId }) : null);
@@ -407,7 +322,12 @@ export const getBookProgress = async (bookId, options = {}) => {
 export const deleteBookProgress = async (bookId) => {
   try {
     if (!bookId) throw new Error('bookId는 필수 매개변수입니다.');
-    const response = await apiRequest(`/api/v2/progress/${bookId}`, { method: 'DELETE' });
+    const response = await authenticatedRequest(`/v2/progress/${bookId}`, {
+      method: 'DELETE',
+      softFailStatuses: SOFT_FAIL_403_404,
+    });
+    if (response?.code === 'FORBIDDEN') return PROGRESS_FORBIDDEN;
+    if (response?.code === 'NOT_FOUND') return PROGRESS_NOT_FOUND;
     if (response?.isSuccess) {
       removeProgressFromCache(bookId);
     }
@@ -439,7 +359,18 @@ export const getBookManifest = async (bookId, { forceRefresh = false } = {}) => 
         });
       }
     }
-    const response = await apiRequest(`/api/v2/books/${numericBookId}/manifest`);
+    const response = await authenticatedRequest(`/v2/books/${numericBookId}/manifest`, {
+      softFailStatuses: SOFT_FAIL_403_404,
+    });
+    if (response?.code === 'NOT_FOUND') {
+      return makeSilentError(
+        'NOT_FOUND',
+        '도서를 찾을 수 없거나 아직 노출 가능한 상태가 아닙니다.'
+      );
+    }
+    if (response?.code === 'FORBIDDEN') {
+      return makeSilentError('FORBIDDEN', '접근 권한이 없습니다');
+    }
     const result = pickResponseResult(response);
     if (response?.isSuccess && result) {
       const normalized = setManifestData(numericBookId, result);
@@ -468,41 +399,32 @@ export const getBookScopeRelationshipGraph = async (bookId, uptoChapter = null, 
   if (!bookId) throw new Error('bookId는 필수 매개변수입니다.');
 
   const locator = toLocator(uptoLocator);
-  const queryParams = new URLSearchParams();
-  queryParams.append('scope', 'book');
-  if (locator) {
-    appendRelationshipGraphLocatorParams(queryParams, locator);
-  } else if (uptoChapter !== null && uptoChapter !== undefined) {
-    queryParams.append('chapterIndex', String(uptoChapter));
-  }
-
   const emptyBookGraph = { characters: [], relations: [] };
 
   try {
-    const response = await apiRequest(
-      `/api/v2/books/${bookId}/relationship-graph?${queryParams.toString()}`
-    );
-    const result = pickResponseResult(response);
-    if (!response || response.isSuccess === false) {
-      return createApiResponse(
-        false,
-        response?.code || 'ERROR',
-        response?.message || '책 범위 관계 그래프 조회에 실패했습니다.',
-        emptyBookGraph,
-        'graph-book-scope'
-      );
-    }
-    return toUnifiedApiResponse(createApiResponse(
-      true,
-      'SUCCESS',
-      '책 범위 관계 그래프 데이터를 성공적으로 조회했습니다.',
-      result || emptyBookGraph,
-      'graph-book-scope'
-    ));
+    const { response, result } = await requestRelationshipGraph(bookId, {
+      locator,
+      chapterIndex: locator ? null : uptoChapter,
+    });
+    return toGraphApiResponse({
+      response,
+      result,
+      empty: emptyBookGraph,
+      type: 'graph-book-scope',
+      successMessage: '책 범위 관계 그래프 데이터를 성공적으로 조회했습니다.',
+      notFoundMessage: '책 범위 관계 그래프 데이터를 찾을 수 없습니다.',
+      errorMessage: '책 범위 관계 그래프 조회에 실패했습니다.',
+    });
   } catch (error) {
     if (error.status === 404) {
       return toUnifiedApiResponse(
-        createApiResponse(false, 'NOT_FOUND', '책 범위 관계 그래프 데이터를 찾을 수 없습니다.', emptyBookGraph, 'graph-book-scope')
+        createApiResponse(
+          false,
+          'NOT_FOUND',
+          '책 범위 관계 그래프 데이터를 찾을 수 없습니다.',
+          emptyBookGraph,
+          'graph-book-scope'
+        )
       );
     }
     handleApiError(error, '책 범위 관계 그래프 조회 실패');
@@ -550,78 +472,35 @@ export const getFineGraph = async (bookId, chapterIdx, eventIdx, atLocator = nul
     );
   }
 
-  const queryParams = new URLSearchParams();
-  queryParams.append('scope', 'book');
-  appendRelationshipGraphLocatorParams(queryParams, locator);
-
   try {
-    const response = await apiRequest(
-      `/api/v2/books/${bookId}/relationship-graph?${queryParams.toString()}`
-    );
-    const raw = normalizeRelationshipGraphResult(pickResponseResult(response));
+    const { response, result: rawResult } = await requestRelationshipGraph(bookId, { locator });
     const result = applyManifestEventIdFallback(
       bookId,
       resolvedChapter,
       resolvedEventIdx,
-      raw
+      normalizeRelationshipGraphResult(rawResult)
     );
-    if (!response || response.isSuccess === false) {
-      return createApiResponse(
-        false,
-        response?.code || 'ERROR',
-        response?.message || '세밀 그래프 조회에 실패했습니다.',
-        emptyFine,
-        'graph-fine'
-      );
-    }
-    return toUnifiedApiResponse(createApiResponse(
-      true,
-      'SUCCESS',
-      '세밀 그래프 데이터를 성공적으로 조회했습니다.',
-      result || emptyFine,
-      'graph-fine'
-    ));
+    return toGraphApiResponse({
+      response,
+      result,
+      empty: emptyFine,
+      type: 'graph-fine',
+      successMessage: '세밀 그래프 데이터를 성공적으로 조회했습니다.',
+      notFoundMessage: '해당 이벤트에 대한 데이터를 찾을 수 없습니다.',
+      errorMessage: '세밀 그래프 조회에 실패했습니다.',
+    });
   } catch (error) {
     if (error.status === 404) {
       return toUnifiedApiResponse(
-        createApiResponse(false, 'NOT_FOUND', '해당 이벤트에 대한 데이터를 찾을 수 없습니다.', emptyFine, 'graph-fine')
+        createApiResponse(
+          false,
+          'NOT_FOUND',
+          '해당 이벤트에 대한 데이터를 찾을 수 없습니다.',
+          emptyFine,
+          'graph-fine'
+        )
       );
     }
     handleApiError(error, '세밀 그래프 조회 실패');
   }
-};
-
-export const debugFineGraphEventRange = async (
-  bookId,
-  chapterIdx,
-  startEventIdx = 1,
-  endEventIdx = 5
-) => {
-  const start = Math.max(1, Number(startEventIdx) || 1);
-  const end = Math.max(start, Number(endEventIdx) || 5);
-  const rows = [];
-
-  for (let idx = start; idx <= end; idx += 1) {
-    const response = await getFineGraph(bookId, chapterIdx, idx);
-    const result = response?.result ?? {};
-    const relations = Array.isArray(result?.relations) ? result.relations : [];
-    rows.push({
-      eventIdx: idx,
-      isSuccess: Boolean(response?.isSuccess),
-      code: response?.code ?? '',
-      relationCount: relations.length,
-      eventId: result?.eventId ?? null,
-      chapterIndex: result?.chapterIndex ?? null,
-      scope: result?.scope ?? null,
-    });
-  }
-
-  console.log('[FineGraph 1~5 Server Check]', {
-    bookId,
-    chapterIdx,
-    range: `${start}-${end}`,
-    rows,
-  });
-
-  return rows;
 };

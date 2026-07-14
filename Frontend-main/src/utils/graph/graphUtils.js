@@ -271,7 +271,7 @@ if (typeof window !== 'undefined') {
   });
 }
 
-export const createRippleEffect = (container, x, y, cyRef, duration = 500) => {
+export const createRippleEffect = (container, x, y, duration = 500) => {
   if (!container) {
     console.warn('createRippleEffect: 컨테이너가 없습니다');
     return () => {};
@@ -285,24 +285,8 @@ export const createRippleEffect = (container, x, y, cyRef, duration = 500) => {
   const ripple = document.createElement('div');
   ripple.className = 'ripple-effect';
   ripple.style.position = 'absolute';
-  
-  let domX, domY;
-  if (cyRef?.current) {
-    const cy = cyRef.current;
-    const pan = cy.pan();
-    const zoom = cy.zoom();
-    const { containerRect } = getContainerInfo();
-    
-    // Cytoscape 좌표를 DOM 좌표로 정확히 변환 (calculateCytoscapePosition과 일관성 유지)
-    domX = x * zoom + pan.x + containerRect.left;
-    domY = y * zoom + pan.y + containerRect.top;
-  } else {
-    domX = x;
-    domY = y;
-  }
-  
-  ripple.style.left = `${domX - 50}px`;
-  ripple.style.top = `${domY - 50}px`;
+  ripple.style.left = `${x - 50}px`;
+  ripple.style.top = `${y - 50}px`;
   ripple.style.pointerEvents = 'none';
   ripple.style.zIndex = '1000';
   

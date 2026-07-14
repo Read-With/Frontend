@@ -1,6 +1,6 @@
 import { LRUCache } from 'lru-cache';
 
-export const XHTML_LOAD_CACHE_VERSION = 'v4';
+const XHTML_LOAD_CACHE_VERSION = 'v4';
 export const XHTML_CACHE_INVALIDATED_EVENT = 'readwith:xhtml-cache-invalidated';
 const MAX_CACHED_BOOKS = 5;
 
@@ -12,12 +12,12 @@ function getXhtmlLoadCacheKey(bid) {
 }
 
 /** bookId에 해당하는 XHTML 로드 캐시를 제거하고, 갱신 이벤트를 broadcast한다. */
-export function invalidateCachedXhtml(bid, { silent = false } = {}) {
+export function invalidateCachedXhtml(bid) {
   const cacheKey = getXhtmlLoadCacheKey(bid);
   if (!cacheKey) return false;
   const existed = cache.has(cacheKey);
   cache.delete(cacheKey);
-  if (!silent && typeof window !== 'undefined') {
+  if (typeof window !== 'undefined') {
     window.dispatchEvent(
       new CustomEvent(XHTML_CACHE_INVALIDATED_EVENT, { detail: { bookId: String(bid).trim() } })
     );

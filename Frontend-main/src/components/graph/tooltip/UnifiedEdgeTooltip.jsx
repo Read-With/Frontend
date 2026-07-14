@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from "react";
+import { memo, useState, useEffect, useCallback, useMemo } from "react";
 import {
   ResponsiveContainer,
   LineChart,
@@ -12,8 +12,15 @@ import { useParams } from "react-router-dom";
 import { useTooltipPosition, useClickOutside } from "../../../hooks/ui/tooltipHooks";
 import { useRelationData } from "../../../hooks/graph/useRelationData";
 import { getRelationStyle, tooltipStyles } from "../../../utils/styles/relationStyles";
-import { createButtonStyle, createAdvancedButtonHandlers, COLORS, ANIMATION_VALUES, unifiedNodeTooltipStyles } from "../../../utils/styles/styles";
-import { mergeRefs } from "../../../utils/styles/styles";
+import { clampPositivity } from "../../../utils/styles/graphStyles";
+import {
+  createButtonStyle,
+  createAdvancedButtonHandlers,
+  COLORS,
+  ANIMATION_VALUES,
+  unifiedNodeTooltipStyles,
+  mergeRefs,
+} from "../../../utils/styles/styles";
 import { toFiniteNumber } from "../../../utils/common/valueUtils";
 import { processRelationTags, cleanupRelationUtils } from "../../../utils/graph/relationUtils";
 import {
@@ -28,9 +35,7 @@ function UnifiedEdgeTooltip({
   y,
   onClose,
   style,
-  variant,
-  mode = 'standalone',
-  displayMode = 'tooltip',
+  variant = 'graphPage',
   chapterNum = 1,
   eventNum = 1,
   currentEvent = null,
@@ -38,11 +43,8 @@ function UnifiedEdgeTooltip({
   bookId = null,
 }) {
   const { filename } = useParams();
-  const resolvedVariant =
-    variant
-    ?? (displayMode === 'sidebar' ? 'graphPage' : mode === 'viewer' ? 'viewer' : 'graphPage');
-  const isSidebar = resolvedVariant === 'graphPage';
-  const isViewer = resolvedVariant === 'viewer';
+  const isSidebar = variant === 'graphPage';
+  const isViewer = variant === 'viewer';
 
   const {
     position,
@@ -102,7 +104,7 @@ function UnifiedEdgeTooltip({
     if (!Number.isFinite(n)) {
       return { graphBarPositivity: 0, chartTimelineFallbackValue: null };
     }
-    const clamped = Math.max(-1, Math.min(1, n));
+    const clamped = clampPositivity(n);
     return { graphBarPositivity: clamped, chartTimelineFallbackValue: clamped };
   }, [data?.positivity]);
 
@@ -162,7 +164,7 @@ function UnifiedEdgeTooltip({
           continue;
         }
 
-        const normalizedValue = Math.max(-1, Math.min(1, value));
+        const normalizedValue = clampPositivity(value);
 
         if (
           typeof label === 'string' &&
@@ -279,15 +281,15 @@ function UnifiedEdgeTooltip({
   const buttonStyles = {
     primary: createButtonStyle(ANIMATION_VALUES, 'primaryEdge'),
     secondary: createButtonStyle(ANIMATION_VALUES, 'secondaryEdge'),
-    close: createButtonStyle(ANIMATION_VALUES, 'closeEdge'),
-    tooltipClose: createButtonStyle(ANIMATION_VALUES, 'tooltipClose')
+    close: createButtonStyle(ANIMATION_VALUES, 'tooltipClose'),
+    tooltipClose: createButtonStyle(ANIMATION_VALUES, 'tooltipClose'),
   };
 
   const buttonHandlers = {
     primary: createAdvancedButtonHandlers('primaryEdge'),
     secondary: createAdvancedButtonHandlers('secondaryEdge'),
-    close: createAdvancedButtonHandlers('closeEdge'),
-    tooltipClose: createAdvancedButtonHandlers('tooltipClose')
+    close: createAdvancedButtonHandlers('tooltipClose'),
+    tooltipClose: createAdvancedButtonHandlers('tooltipClose'),
   };
 
   const cardStyles = {
@@ -538,8 +540,8 @@ function UnifiedEdgeTooltip({
         style={{
           width: '32px',
           height: '32px',
-          border: '3px solid #e5e7eb',
-          borderTop: '3px solid #5C6F5C',
+          border: `3px solid ${COLORS.border}`,
+          borderTop: `3px solid ${COLORS.primary}`,
           borderRadius: '50%',
           animation: 'spin 1s linear infinite',
         }}
@@ -621,7 +623,7 @@ function UnifiedEdgeTooltip({
       pointColor:
         typeof chartPairs[i]?.label === 'string' && chartPairs[i].label.startsWith('Ch')
           ? '#9ca3af'
-          : '#5C6F5C',
+          : COLORS.primary,
     }));
   }, [hasChartData, chartPoints, chartLabels, chartPairs]);
 
@@ -648,12 +650,12 @@ function UnifiedEdgeTooltip({
         <Line
           type="monotone"
           dataKey="y"
-          stroke="#5C6F5C"
+          stroke={COLORS.primary}
           strokeWidth={2}
           dot={(dotProps) => {
             const { cx, cy, payload, index } = dotProps;
             if (cx == null || cy == null) return null;
-            const fill = payload?.pointColor ?? '#5C6F5C';
+            const fill = payload?.pointColor ?? COLORS.primary;
             return (
               <circle
                 key={`relation-timeline-dot-${index ?? `${cx}-${cy}`}`}
@@ -937,7 +939,7 @@ function UnifiedEdgeTooltip({
                       style={{ ...tooltipActionBarStyle, marginTop: 'auto' }}
                     >
                       <button
-                        className="relation-change-chart-btn edge-tooltip-animated-btn"
+                        className="relation-change-chart-btn"
                         style={buttonStyles.primary}
                         onClick={() => setViewMode("chart")}
                         {...buttonHandlers.primary}
@@ -1014,7 +1016,7 @@ function UnifiedEdgeTooltip({
                     style={tooltipActionBarStyle}
                   >
                     <button
-                      className="relation-change-chart-btn edge-tooltip-animated-btn"
+                      className="relation-change-chart-btn"
                       style={buttonStyles.primary}
                       onClick={() => setViewMode("chart")}
                       {...buttonHandlers.primary}
@@ -1138,7 +1140,7 @@ function UnifiedEdgeTooltip({
   );
 }
 
-export default React.memo(UnifiedEdgeTooltip, (prevProps, nextProps) => {
+export default memo(UnifiedEdgeTooltip, (prevProps, nextProps) => {
   return (
     prevProps.data === nextProps.data &&
     prevProps.x === nextProps.x &&
@@ -1148,7 +1150,6 @@ export default React.memo(UnifiedEdgeTooltip, (prevProps, nextProps) => {
     prevProps.chapterNum === nextProps.chapterNum &&
     prevProps.eventNum === nextProps.eventNum &&
     prevProps.variant === nextProps.variant &&
-    prevProps.mode === nextProps.mode &&
-    prevProps.displayMode === nextProps.displayMode
+    prevProps.bookId === nextProps.bookId
   );
 });

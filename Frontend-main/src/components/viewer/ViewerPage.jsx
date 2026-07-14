@@ -1,22 +1,21 @@
-﻿import React, { useRef, useEffect, useCallback, useMemo } from "react";
-import { ToastContainer, toast } from "react-toastify";
-import "react-toastify/dist/ReactToastify.css";
+﻿import { useRef, useEffect, useCallback, useMemo, useState } from "react";
+import { toast } from "react-toastify";
 import ViewerLayout from "./ViewerLayout";
 import XhtmlViewer from "./xhtml/XhtmlViewer";
-import BookmarkPanel from "./bookmark/BookmarkPanel";
 import ViewerSettings from "./ui/ViewerSettings";
 import { useViewerPage } from "../../hooks/viewer/useViewerPage";
 import { useTooltipState } from "../../hooks/ui/tooltipHooks";
 import { anchorToLocators } from "../../utils/common/locatorUtils";
 import { resolveChapterIndex } from "../../utils/common/valueUtils";
-import { resolveViewerLineEvent } from "../../utils/viewer/viewerEventProgressUtils";
-import { isSameBookmarkPosition } from "../../utils/bookmarks/bookmarkUtils";
-import { errorUtils } from "../../utils/common/errorUtils";
-import GraphSplitArea from "./GraphSplitArea";
 import {
+  resolveViewerLineEvent,
   parseReadingLocatorKey,
   patchTopBarFromLineEvent,
 } from "../../utils/viewer/viewerEventProgressUtils";
+import { isSameBookmarkPosition, normalizeBookmarkLocators } from "../../utils/bookmarks/bookmarkUtils";
+import { errorUtils } from "../../utils/common/errorUtils";
+import GraphSplitArea from "./GraphSplitArea";
+import "./bookmark/BookmarksPage.css";
 
 const TOOLBAR_REVEAL_ZONE_PX = 72;
 
@@ -30,17 +29,16 @@ const ViewerPage = () => {
     setTotalPages,
     setCurrentChapter,
     setCurrentEvent,
-    setCurrentCharIndex,
     setShowToolbar,
     bookmarks,
-    showBookmarkList,
     book,
     bookKey,
     manifestLoaded,
     handlePrevPage,
     handleNextPage,
     handleAddBookmark,
-    handleBookmarkSelect,
+    removeBookmark,
+    isBookmarkMutating,
     handleOpenSettings,
     handleCloseSettings,
     handleApplySettings,
@@ -61,13 +59,16 @@ const ViewerPage = () => {
     readingLocatorKey,
     serverResumeAnchor,
     applyReadingLocator,
-    updateReadingPercent,
     markViewerPageReady,
+    isViewerPageReady,
+    isResumePending,
     cachedLocation,
     transitionState,
     graphApiError,
     flushProgressAsync,
   } = useViewerPage();
+
+  const [toolbarDeleteConfirmId, setToolbarDeleteConfirmId] = useState(null);
 
   const { currentChapter, showGraph, graphFullScreen } = graphState;
   const {
@@ -77,6 +78,9 @@ const ViewerPage = () => {
     totalPages,
     showToolbar,
   } = viewerState;
+
+  const suppressViewport =
+    !isViewerPageReady && (isResumePending || Boolean(serverResumeAnchor));
 
   const readingChapterRef = useRef(currentChapter);
   const showToolbarRef = useRef(showToolbar);
@@ -101,33 +105,59 @@ const ViewerPage = () => {
     return () => window.removeEventListener("mousemove", handleMouseMove);
   }, [setShowToolbar]);
 
+  useEffect(() => {
+    if (!toolbarDeleteConfirmId) return undefined;
+    const onKey = (e) => {
+      if (e.key === "Escape") setToolbarDeleteConfirmId(null);
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [toolbarDeleteConfirmId]);
+
+  const onAddBookmark = useCallback(async () => {
+    const result = await handleAddBookmark();
+    if (result?.needsConfirm) {
+      setToolbarDeleteConfirmId(result.bookmarkId);
+    }
+  }, [handleAddBookmark]);
+
+  const confirmToolbarDelete = useCallback(async () => {
+    if (toolbarDeleteConfirmId == null) return;
+    await removeBookmark(toolbarDeleteConfirmId);
+    setToolbarDeleteConfirmId(null);
+  }, [toolbarDeleteConfirmId, removeBookmark]);
+
   const {
     activeTooltip,
     handleClearTooltip,
     handleSetActiveTooltip,
   } = useTooltipState({
     onError: () => {
-      toast.error("노드 정보를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.", {
-        autoClose: 2000,
-        closeOnClick: true,
-        pauseOnHover: true,
-      });
+      toast.error("노드 정보를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.");
     },
     graphClearRef,
   });
 
   const isBookmarked = useMemo(() => {
-    if (!bookmarks?.length || !readingLocatorKey) return false;
+    if (!bookmarks?.length || !readingLocatorKey || !bookKey) return false;
     const { start, end } = parseReadingLocatorKey(readingLocatorKey);
     if (!start) return false;
-    return bookmarks.some((bookmark) =>
-      isSameBookmarkPosition(bookmark, { startLocator: start, endLocator: end ?? start })
+    const { startLocator, endLocator } = normalizeBookmarkLocators(
+      bookKey,
+      start,
+      end ?? start
     );
-  }, [bookmarks, readingLocatorKey]);
+    if (!startLocator) return false;
+    return bookmarks.some((bookmark) =>
+      isSameBookmarkPosition(bookmark, {
+        startLocator,
+        endLocator: endLocator ?? startLocator,
+      })
+    );
+  }, [bookmarks, readingLocatorKey, bookKey]);
 
   const handleCurrentLineChange = useCallback(
-    (charIndex, _totalEvents, receivedEvent) => {
-      setCurrentCharIndex(charIndex);
+    (receivedEvent) => {
       if (!receivedEvent) return;
 
       markViewerPageReady();
@@ -160,7 +190,6 @@ const ViewerPage = () => {
       bookKey,
       markViewerPageReady,
       setCurrentChapter,
-      setCurrentCharIndex,
       setCurrentEvent,
       applyReadingLocator,
       setProgressTopBar,
@@ -206,14 +235,13 @@ const ViewerPage = () => {
         onNext={handleNextPage}
         isBookmarked={isBookmarked}
         onToggleBookmarkList={onToggleBookmarkList}
-        onAddBookmark={handleAddBookmark}
+        onAddBookmark={onAddBookmark}
         onOpenSettings={handleOpenSettings}
         onSliderChange={handleSliderChange}
         currentPage={currentPage}
         totalPages={totalPages}
         showGraph={showGraph}
         onToggleGraph={toggleGraph}
-        pageMode={settings.pageMode}
         graphFullScreen={graphFullScreen}
         isFromLibrary={isFromLibrary}
         previousPage={previousPage}
@@ -238,18 +266,16 @@ const ViewerPage = () => {
           ref={viewerRef}
           book={book}
           manifestReady={manifestLoaded}
-          initialAnchor={serverResumeAnchor ?? undefined}
-          onProgressChange={updateReadingPercent}
           onCurrentPageChange={setCurrentPage}
           onTotalPagesChange={setTotalPages}
           settings={settings}
           onCurrentLineChange={handleCurrentLineChange}
           bookId={bookKey}
+          suppressViewport={suppressViewport}
+          suppressMessage={
+            serverResumeAnchor ? '읽던 위치로 이동 중...' : '로딩 중...'
+          }
         />
-        {showBookmarkList && bookKey && (
-          <BookmarkPanel bookId={bookKey} onSelect={handleBookmarkSelect} />
-        )}
-
         <ViewerSettings
           isOpen={showSettingsModal}
           onClose={handleCloseSettings}
@@ -257,13 +283,44 @@ const ViewerPage = () => {
           currentSettings={settings}
         />
       </ViewerLayout>
-      <ToastContainer
-        position="bottom-center"
-        autoClose={1500}
-        hideProgressBar
-        newestOnTop
-        closeOnClick
-      />
+
+      {toolbarDeleteConfirmId != null && (
+        <div
+          className="bm-confirm-overlay"
+          role="presentation"
+          onClick={() => setToolbarDeleteConfirmId(null)}
+        >
+          <div
+            className="bm-confirm-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="viewer-bookmark-delete-title"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <p id="viewer-bookmark-delete-title" className="bm-confirm-title">
+              현재 위치의 북마크를 삭제하시겠습니까?
+            </p>
+            <div className="bm-confirm-actions">
+              <button
+                type="button"
+                className="bm-btn bm-btn-ghost"
+                onClick={() => setToolbarDeleteConfirmId(null)}
+                disabled={isBookmarkMutating}
+              >
+                취소
+              </button>
+              <button
+                type="button"
+                className="bm-btn bm-btn-danger"
+                onClick={confirmToolbarDelete}
+                disabled={isBookmarkMutating}
+              >
+                삭제
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

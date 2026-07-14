@@ -8,18 +8,16 @@ import {
   shouldApplyCacheSnapshot,
   toReadingLocatorKey,
 } from './viewerEventProgressUtils.js';
-import { invalidateManifest, setManifestData } from '../common/cache/manifestCache.js';
+import { invalidateManifest, setManifestData, resolveProgressMetricsFromLocator } from '../common/cache/manifestCache.js';
+import { resolvePageIndexFromLocator } from './xhtmlViewerLocatorUtils.js';
 
 vi.mock('../common/cache/manifestCache.js', async (importOriginal) => {
   const actual = await importOriginal();
   return {
     ...actual,
     resolveProgressMetricsFromLocator: vi.fn(),
-    readingProgressPercentFromLocator: vi.fn(),
   };
 });
-
-import { resolveProgressMetricsFromLocator } from '../common/cache/manifestCache.js';
 
 const eventUtils = {
   resolveEventNum: (event) => Number(event?.eventNum ?? event?.eventIdx ?? 0),
@@ -229,6 +227,70 @@ describe('viewer utils', () => {
       });
       expect(result.nextEvent.eventNum).toBe(4);
       expect(result.nextEvent.name).not.toBe('Event 5');
+    });
+  });
+
+  describe('resolvePageIndexFromLocator (single-blob chapters)', () => {
+    it('maps chapter-local ratio within that chapter element, not whole-book pages', () => {
+      const ch1 = {
+        getAttribute: (name) => (name === 'data-chapter-index' ? '1' : null),
+        hasAttribute: () => false,
+        offsetTop: 0,
+        offsetHeight: 1000,
+      };
+      const ch2 = {
+        getAttribute: (name) => (name === 'data-chapter-index' ? '2' : null),
+        hasAttribute: () => false,
+        offsetTop: 1000,
+        offsetHeight: 1000,
+      };
+      const chapters = [ch1, ch2];
+      const ruler = {
+        querySelector(sel) {
+          const m = String(sel).match(/data-chapter-index="(\d+)"/);
+          if (!m) return null;
+          if (String(sel).includes('data-block-index')) return null;
+          return chapters.find((el) => el.getAttribute('data-chapter-index') === m[1]) ?? null;
+        },
+        querySelectorAll(sel) {
+          const m = String(sel).match(/data-chapter-index="(\d+)"/);
+          if (!m) return [];
+          if (String(sel).includes('[data-block-index]')) return [];
+          return chapters.filter((el) => el.getAttribute('data-chapter-index') === m[1]);
+        },
+      };
+
+      const manifest = {
+        chapters: [
+          {
+            idx: 1,
+            totalCodePoints: 1001,
+            paragraphStarts: [0],
+            paragraphLengths: [1001],
+          },
+          {
+            idx: 2,
+            totalCodePoints: 1001,
+            paragraphStarts: [0],
+            paragraphLengths: [1001],
+          },
+        ],
+      };
+
+      const pageHeight = 100;
+      const totalPages = 20;
+      // 챕터2 로컬 50% → scrollY = 1000 + 0.5*(1000-100) = 1450 → page 14
+      const pageIdx = resolvePageIndexFromLocator({
+        locator: { chapterIndex: 2, blockIndex: 0, offset: 500 },
+        ruler,
+        manifest,
+        totalPages,
+        pageHeightPx: pageHeight,
+      });
+
+      expect(pageIdx).toBe(14);
+      // 예전 버그: 책 전체 ratio → page 10
+      expect(pageIdx).not.toBe(10);
     });
   });
 });

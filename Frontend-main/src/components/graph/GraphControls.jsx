@@ -1,6 +1,6 @@
-import React, { useRef, useCallback, useState } from "react";
+import { useCallback, useState } from "react";
 import { useClickOutside } from "../../hooks/ui/tooltipHooks";
-import { graphControlsStyles } from "../../utils/styles/styles.js";
+import { graphControlsStyles, COLORS } from "../../utils/styles/styles.js";
 import { findExactSuggestionMatch } from "../../utils/graph/searchUtils.js";
 
 export function EdgeLabelToggle({ visible, onToggle }) {
@@ -11,13 +11,13 @@ export function EdgeLabelToggle({ visible, onToggle }) {
       gap: '8px',
       padding: '4px 8px',
       borderRadius: '6px',
-      background: '#f8fafc',
+      background: COLORS.backgroundLighter,
       border: '1px solid #e7eaf7',
     }}>
       <span style={{
         fontSize: '15px',
         fontWeight: '500',
-        color: '#5C6F5C',
+        color: COLORS.primary,
         whiteSpace: 'nowrap',
       }}>
         간선 라벨
@@ -29,7 +29,7 @@ export function EdgeLabelToggle({ visible, onToggle }) {
           height: '18px',
           borderRadius: '9px',
           border: 'none',
-          background: visible ? '#5C6F5C' : '#e2e8f0',
+          background: visible ? COLORS.primary : '#e2e8f0',
           position: 'relative',
           cursor: 'pointer',
           transition: 'background-color 0.2s ease',
@@ -68,7 +68,6 @@ function GraphControls({
 }) {
   const [showToast, setShowToast] = useState(false);
   const [toastMessage, setToastMessage] = useState("");
-  const inputRef = useRef(null);
   const trimmedTerm = (searchTerm || "").trim();
   const canShowDropdown = showSuggestions && trimmedTerm.length >= 2;
 
@@ -142,7 +141,7 @@ function GraphControls({
           top: '0',
           left: '100%',
           marginLeft: '12px',
-          background: '#5C6F5C',
+          background: COLORS.primary,
           color: '#fff',
           padding: '12px 24px',
           borderRadius: '8px',
@@ -179,7 +178,6 @@ function GraphControls({
         onSubmit={handleFormSubmit}
       >
         <input
-          ref={inputRef}
           style={graphControlsStyles.input}
           type="text"
           placeholder="인물 검색"
@@ -187,7 +185,7 @@ function GraphControls({
           onChange={handleInputChange}
           onKeyDown={handleKeyDown}
           onFocus={(e) => {
-            e.target.style.borderColor = '#5C6F5C';
+            e.target.style.borderColor = COLORS.primary;
             e.target.style.background = '#fff';
             e.target.style.boxShadow = '0 0 0 2px rgba(92, 111, 92, 0.1)';
             if (trimmedTerm.length >= 2) {
@@ -299,7 +297,7 @@ function GraphControls({
                     <div style={{
                       fontWeight: '900',
                       fontSize: '20px',
-                      color: '#5C6F5C',
+                      color: COLORS.primary,
                       marginBottom: '8px',
                     }}>
                       {suggestion.label || suggestion.common_name || 'Unknown'}
@@ -375,7 +373,7 @@ function GraphControls({
               <div style={{
                 fontWeight: '700',
                 marginBottom: '6px',
-                color: '#5C6F5C',
+                color: COLORS.primary,
                 fontSize: '16px',
               }}>
                 검색 결과 없음

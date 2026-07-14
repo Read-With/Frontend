@@ -1,4 +1,4 @@
-import { getApiBaseUrl, sanitizeAssetUrl } from '../common/urlUtils';
+import { sanitizeAssetUrl, resolveApiArtifactUrl } from '../common/urlUtils';
 import { isGraphNodeElement } from './graphUtils';
 
 const createEmptyCharacterMaps = () => ({
@@ -94,8 +94,7 @@ function validateAndNormalizeProfileImageUrl(profileImage) {
   }
 
   if (trimmed.startsWith('/')) {
-    const apiBaseUrl = getApiBaseUrl();
-    return apiBaseUrl ? `${apiBaseUrl.replace(/\/$/, '')}${trimmed}` : trimmed;
+    return resolveApiArtifactUrl(trimmed) || trimmed;
   }
 
   console.warn(`[이미지 검증] 유효하지 않은 이미지 URL 형식: ${trimmed}`);

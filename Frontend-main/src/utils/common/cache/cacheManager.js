@@ -4,6 +4,9 @@ export const MANIFEST_TTL_MS = 15 * 60 * 1000;
 export const PROGRESS_CACHE_KEY = 'readwith_progress_cache';
 export const PROGRESS_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 
+const BOOKS_CACHE_KEY = 'readwith_books_server_cache';
+const BOOKS_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+
 export const GRAPH_BOOK_CACHE_PREFIX = 'graph_cache_';
 export const CHAPTER_EVENT_CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 
@@ -98,7 +101,7 @@ export function loadFromStorage(storageKey, storageType = 'localStorage') {
       return null;
     }
     return parsed;
-  } catch (_error) {
+  } catch {
     storage.removeItem(storageKey);
     return null;
   }
@@ -150,6 +153,25 @@ export function saveTtlStorage(storageKey, data, storageType = 'localStorage') {
   return payload;
 }
 
+/** 마이페이지 책 목록 persist */
+export function readBooksCache() {
+  const stored = loadTtlStorage(BOOKS_CACHE_KEY, BOOKS_CACHE_TTL_MS);
+  if (!stored || !Array.isArray(stored.books)) return null;
+  return {
+    books: stored.books,
+    updatedAt: Number(stored.timestamp) || Date.now(),
+  };
+}
+
+export function writeBooksCache(books) {
+  if (!Array.isArray(books)) return;
+  saveTtlStorage(BOOKS_CACHE_KEY, { books });
+}
+
+export function clearBooksCache() {
+  removeFromStorage(BOOKS_CACHE_KEY);
+}
+
 /** 메모리 캐시 미스 시 스토리지에서 로드해 캐시에 적재 */
 export function hydrateCacheFromStorage(cacheName, storageKey, storageType = 'localStorage') {
   const stored = loadFromStorage(storageKey, storageType);
@@ -158,18 +180,18 @@ export function hydrateCacheFromStorage(cacheName, storageKey, storageType = 'lo
   return stored;
 }
 
-export function getRawFromStorage(storageKey, storageType = 'localStorage') {
+function getRawFromStorage(storageKey, storageType = 'localStorage') {
   const storage = getStorage(storageType);
   if (!storage) return null;
   
   try {
     return storage.getItem(storageKey);
-  } catch (_error) {
+  } catch {
     return null;
   }
 }
 
-export function setRawToStorage(storageKey, value, storageType = 'localStorage') {
+function setRawToStorage(storageKey, value, storageType = 'localStorage') {
   const storage = getStorage(storageType);
   if (!storage) return;
   
@@ -475,16 +497,6 @@ export const storageUtils = {
       setCachedValue(key, value, false);
     }
     return value;
-  },
-
-  set: (key, value) => {
-    setRawToStorage(key, value, 'localStorage');
-    setCachedValue(key, value, false);
-  },
-
-  remove: (key) => {
-    removeFromStorage(key, 'localStorage');
-    removeCacheItem('storageCache', key);
   },
 
   getJson: (key, defaultValue = {}) => {

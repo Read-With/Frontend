@@ -1,96 +1,137 @@
-/** 북마크 표시·locator·색상 팔레트·목록 로드 */
+/** 북마크 표시·locator·색상 팔레트 (API 호출 없음) */
 
-import { getBookmarks } from '../api/booksApi';
-import { toLocator, locatorsEqual } from '../common/locatorUtils';
+import { toLocator, locatorsEqual, toViewerResumeAnchor } from '../common/locatorUtils';
+import { toPositiveNumberOrNull } from '../common/valueUtils';
+import { resolveViewerBookKey } from '../viewer/viewerCoreStateUtils';
+import {
+  getChapterData,
+  locatorToBookAbsoluteOffset,
+  normalizeStartEndLocatorsForServer,
+  resolveProgressMetricsFromLocator,
+} from '../common/cache/manifestCache';
 
-export const createBookmarkTitle = (pageNum, chapterNum, fallbackIndex = null) => {
-  if (pageNum != null && chapterNum != null) return `${pageNum}페이지 (${chapterNum}챕터)`;
-  if (pageNum != null) return `${pageNum}페이지`;
-  if (chapterNum != null) return `${chapterNum}챕터`;
-  return fallbackIndex !== null ? `북마크 ${fallbackIndex}` : '';
+export const clientSortToApiSort = (sortOrder) =>
+  sortOrder === 'oldest' ? 'time_asc' : 'time_desc';
+
+export const resolveBookmarkApiBookId = (book, routeBookId = null) =>
+  toPositiveNumberOrNull(resolveViewerBookKey(book, routeBookId));
+
+/** 뷰어 locator → 서버 paragraphStarts 축 (비교·생성 공통) */
+export const normalizeBookmarkLocators = (bookId, startLocator, endLocator = null) =>
+  normalizeStartEndLocatorsForServer(bookId, startLocator, endLocator);
+
+/** 북마크 → 뷰어 resumeAnchor (진도 preferred resume와 동일 헬퍼) */
+export const bookmarkToResumeAnchor = (bookmark) =>
+  toViewerResumeAnchor({
+    startLocator: bookmark?.startLocator,
+    endLocator: bookmark?.endLocator,
+  });
+
+/** 북마크 추가 전: 해당 챕터 paragraphStarts가 있어야 서버 offset 검증을 통과함 */
+export const isBookmarkAxisReady = (bookId, locator) => {
+  const loc = toLocator(locator);
+  if (!loc || bookId == null || bookId === '') return false;
+  const chapter = getChapterData(bookId, loc.chapterIndex);
+  return Array.isArray(chapter?.paragraphStarts) && chapter.paragraphStarts.length > 0;
 };
 
-export const parseBookmarkLocation = (bookmark) => {
+const isBookmarkRange = (bookmark, startLoc, endLoc) =>
+  !!(
+    bookmark?.rangeBookmark ||
+    (endLoc && startLoc && !locatorsEqual(startLoc, endLoc))
+  );
+
+/** 진도 메트릭과 동일한 축으로 위치 라벨 생성 */
+export const parseBookmarkLocation = (bookmark, bookId = null) => {
   if (!bookmark) return '';
-  const rawTitle = bookmark.title;
-  if (rawTitle != null && String(rawTitle).trim()) return String(rawTitle).trim();
   const loc = toLocator(bookmark.startLocator);
   if (!loc) {
     const off = Number(bookmark.startTxtOffset);
-    if (Number.isFinite(off)) {
-      const range =
-        bookmark.isRangeBookmark ||
-        bookmark.rangeBookmark ||
-        (Number(bookmark.endTxtOffset) > 0 && Number(bookmark.endTxtOffset) !== off);
-      return range ? `문서 오프셋 ${off} · 범위` : `문서 오프셋 ${off}`;
-    }
-    return '';
+    if (!Number.isFinite(off)) return '';
+    const isRange =
+      bookmark.rangeBookmark ||
+      (Number(bookmark.endTxtOffset) > 0 && Number(bookmark.endTxtOffset) !== off);
+    return isRange ? `문서 오프셋 ${off} · 범위` : `문서 오프셋 ${off}`;
   }
-  const base = `${loc.chapterIndex}챕터`;
-  if (bookmark.rangeBookmark || bookmark.isRangeBookmark) return `${base} · 범위`;
+
   const end = toLocator(bookmark.endLocator);
-  if (end && !locatorsEqual(loc, end)) return `${base} · 범위`;
-  return base;
+  const metrics =
+    bookId != null && bookId !== ''
+      ? resolveProgressMetricsFromLocator(bookId, loc)
+      : null;
+
+  let base;
+  if (metrics?.chapterProgress != null) {
+    base = `${loc.chapterIndex}챕터 · ${metrics.chapterProgress}%`;
+  } else {
+    base = `${loc.chapterIndex}챕터 · 블록 ${loc.blockIndex}`;
+  }
+  return isBookmarkRange(bookmark, loc, end) ? `${base} · 범위` : base;
+};
+
+export const formatBookmarkLocatorDetail = (bookmark, bookId = null) => {
+  const loc = toLocator(bookmark?.startLocator);
+  if (!loc) return '';
+  const metrics =
+    bookId != null && bookId !== ''
+      ? resolveProgressMetricsFromLocator(bookId, loc)
+      : null;
+  if (metrics?.readingProgressPercent != null && metrics?.chapterProgress != null) {
+    return `전체 ${metrics.readingProgressPercent}% · 챕터 ${metrics.chapterProgress}%`;
+  }
+  return `챕터 ${loc.chapterIndex} · 블록 ${loc.blockIndex} · 오프셋 ${loc.offset}`;
 };
 
 export const isSameBookmarkPosition = (bookmark, ref) => {
   if (!bookmark || !ref) return false;
-  const ta = Number(bookmark.startTxtOffset);
-  const tb = Number(ref.startTxtOffset);
-  if (Number.isFinite(ta) && Number.isFinite(tb)) {
-    return ta === tb && Number(bookmark.endTxtOffset || 0) === Number(ref.endTxtOffset || 0);
-  }
-  const a = toLocator(bookmark.startLocator);
-  const b = toLocator(ref.startLocator);
-  if (!a || !b) return false;
-  return a.chapterIndex === b.chapterIndex && a.blockIndex === b.blockIndex && a.offset === b.offset;
+
+  const aStart = toLocator(bookmark.startLocator);
+  const bStart = toLocator(ref.startLocator);
+  if (!aStart || !bStart || !locatorsEqual(aStart, bStart)) return false;
+  return locatorsEqual(
+    toLocator(bookmark.endLocator) ?? aStart,
+    toLocator(ref.endLocator) ?? bStart
+  );
 };
 
-const getLocatorSortKey = (loc) => {
-  const n = toLocator(loc);
-  if (!n) return '';
-  return `${String(n.chapterIndex).padStart(6, '0')}_${String(n.blockIndex).padStart(6, '0')}_${String(n.offset).padStart(8, '0')}`;
-};
-
-/** 위치 정렬: locator 우선, 없으면 v2 startTxtOffset */
-export const getBookmarkPositionSortKey = (bookmark) => {
+/** 진도 absolute offset 기준으로 정렬 키 */
+function getBookmarkPositionSortKey(bookmark, bookId = null) {
   if (!bookmark) return '';
-  const locKey = getLocatorSortKey(bookmark.startLocator);
-  if (locKey) return locKey;
+  const loc = toLocator(bookmark.startLocator);
+  if (loc && bookId != null && bookId !== '') {
+    const abs = locatorToBookAbsoluteOffset(bookId, loc);
+    if (abs != null) return `a_${String(abs).padStart(12, '0')}`;
+  }
+  if (loc) {
+    return `${String(loc.chapterIndex).padStart(6, '0')}_${String(loc.blockIndex).padStart(6, '0')}_${String(loc.offset).padStart(8, '0')}`;
+  }
   const o = Number(bookmark.startTxtOffset);
-  if (Number.isFinite(o)) return `o_${String(o).padStart(12, '0')}`;
-  return '';
+  return Number.isFinite(o) ? `o_${String(o).padStart(12, '0')}` : '';
+}
+
+export const sortBookmarks = (bookmarks, sortOrder, bookId = null) => {
+  if (!bookmarks?.length) return [];
+  if (sortOrder !== 'position') return bookmarks;
+  return [...bookmarks].sort((a, b) =>
+    getBookmarkPositionSortKey(a, bookId).localeCompare(getBookmarkPositionSortKey(b, bookId))
+  );
 };
 
 const RELATIVE_DAYS_THRESHOLD = 7;
 
-const formatRelativeCore = (value) => {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return { valid: false, date: null };
-  const now = new Date();
-  const diffMs = now.getTime() - date.getTime();
-  const diffMin = Math.floor(diffMs / (1000 * 60));
-  if (diffMin < 1) return { valid: true, relative: '방금 전', date };
-  if (diffMin < 60) return { valid: true, relative: `${diffMin}분 전`, date };
-  const diffHour = Math.floor(diffMin / 60);
-  if (diffHour < 24) return { valid: true, relative: `${diffHour}시간 전`, date };
-  const diffDay = Math.floor(diffHour / 24);
-  if (diffDay < RELATIVE_DAYS_THRESHOLD) return { valid: true, relative: `${diffDay}일 전`, date };
-  return { valid: true, relative: null, date };
-};
-
-const formatBookmarkTime = (value, withTimeForPast) => {
+export const formatRelativeTime = (value) => {
   if (!value) return '';
-  const result = formatRelativeCore(value);
-  if (!result.valid) return '';
-  if (result.relative) return result.relative;
-  const opts = withTimeForPast
-    ? { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }
-    : { month: 'short', day: 'numeric' };
-  return result.date.toLocaleString('ko-KR', opts);
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  const diffMin = Math.floor((Date.now() - date.getTime()) / (1000 * 60));
+  if (diffMin < 1) return '방금 전';
+  if (diffMin < 60) return `${diffMin}분 전`;
+  const diffHour = Math.floor(diffMin / 60);
+  if (diffHour < 24) return `${diffHour}시간 전`;
+  const diffDay = Math.floor(diffHour / 24);
+  if (diffDay < RELATIVE_DAYS_THRESHOLD) return `${diffDay}일 전`;
+  return date.toLocaleString('ko-KR', { month: 'short', day: 'numeric' });
 };
-
-export const formatRelativeTime = (value) => formatBookmarkTime(value, false);
 
 export const formatAbsoluteTime = (value) => {
   if (!value) return '';
@@ -104,8 +145,6 @@ export const formatAbsoluteTime = (value) => {
   });
 };
 
-export const formatDate = (value) => formatBookmarkTime(value, true);
-
 export const bookmarkColors = {
   normal: '#f4f7ff',
   important: '#fff3c2',
@@ -118,47 +157,25 @@ export const bookmarkBorders = {
   highlight: '#5C6F5C',
 };
 
+const DEFAULT_BOOKMARK_COLOR = bookmarkColors.normal;
+
 export const colorOptions = [
-  { key: 'normal', label: '기본', color: bookmarkColors.normal, border: bookmarkBorders.normal, icon: 'bookmark' },
-  { key: 'important', label: '중요', color: bookmarkColors.important, border: bookmarkBorders.important, icon: 'grade' },
-  { key: 'highlight', label: '강조', color: bookmarkColors.highlight, border: bookmarkBorders.highlight, icon: 'styler' },
+  { key: 'normal', label: '기본', color: bookmarkColors.normal, border: bookmarkBorders.normal },
+  { key: 'important', label: '중요', color: bookmarkColors.important, border: bookmarkBorders.important },
+  { key: 'highlight', label: '강조', color: bookmarkColors.highlight, border: bookmarkBorders.highlight },
 ];
 
-export const getColorKey = (color) => {
-  if (color === bookmarkColors.important) return 'important';
-  if (color === bookmarkColors.highlight) return 'highlight';
-  return 'normal';
-};
+export const getColorKey = (color) =>
+  colorOptions.find((option) => option.color === color)?.key ?? 'normal';
 
-export const createBookmarkData = (bookId, color = '#28B532', memo = '', startLocator = null, endLocator = null) => {
-  const data = { bookId, color, memo };
-  const start = toLocator(startLocator);
-  const end = toLocator(endLocator);
+export const createBookmarkData = (bookId, startLocator, endLocator = null) => {
+  const { startLocator: start, endLocator: end } = normalizeBookmarkLocators(
+    bookId,
+    startLocator,
+    endLocator
+  );
+  const data = { bookId, color: DEFAULT_BOOKMARK_COLOR, memo: '' };
   if (start) data.startLocator = start;
-  if (start && end && !locatorsEqual(start, end)) data.endLocator = end;
+  if (end) data.endLocator = end;
   return data;
-};
-
-export const loadBookmarks = async (bookId, sort = 'time_desc') => {
-  try {
-    const response = await getBookmarks(bookId, sort);
-    if (response.isSuccess) {
-      const list = response.result;
-      return Array.isArray(list) ? list : [];
-    }
-    return [];
-  } catch (_error) {
-    return [];
-  }
-};
-
-export const removeBookmarkHighlights = () => {
-  document.querySelectorAll('.bookmark-highlight').forEach((highlight) => {
-    highlight.classList.remove('bookmark-highlight');
-    highlight.style.backgroundColor = '';
-    highlight.style.opacity = '';
-    highlight.style.borderRadius = '';
-    highlight.style.padding = '';
-    highlight.style.margin = '';
-  });
 };

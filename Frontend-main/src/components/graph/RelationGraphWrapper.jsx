@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import PropTypes from "prop-types";
 import { useNavigate, useParams, useLocation } from "react-router-dom";
 
@@ -26,7 +26,6 @@ import { resolveServerBookIdOrFallback } from '../../hooks/common/hooksShared';
 import { convertRelationsToElements } from '../../utils/graph/graphDataUtils';
 import { createCharacterMaps, buildNodeWeights, extractNodeWeightsFromElements } from '../../utils/graph/characterUtils';
 import { getGraphEventState } from '../../utils/common/cache/chapterEventCache';
-import { resolveGraphElementsProfileImages } from '../../utils/common/urlUtils';
 import {
   calculateLastEventForChapter,
   processTooltipData,
@@ -38,6 +37,7 @@ import { eventUtils } from '../../utils/viewer/viewerCoreStateUtils';
 import {
   convertFineGraphToElements,
   hasFineGraphPayload,
+  commitVisibleGraphElements,
 } from '../../utils/viewer/viewerGraphUtils';
 import { userViewerPath } from '../../utils/navigation/viewerPaths';
 import {
@@ -327,23 +327,18 @@ function RelationGraphWrapper() {
   }, [graphApiPayload, serverBookId, currentChapter, currentEvent]);
 
   const [elements, setElements] = useState([]);
+  const profileApplyTokenRef = useRef(0);
 
   useEffect(() => {
     if (!apiElements.length) {
+      profileApplyTokenRef.current += 1;
       setElements([]);
-      return undefined;
+      return;
     }
 
-    let cancelled = false;
-    setElements(apiElements);
-
-    resolveGraphElementsProfileImages(apiElements).then((resolved) => {
-      if (!cancelled) setElements(resolved);
+    commitVisibleGraphElements(setElements, apiElements, {
+      applyTokenRef: profileApplyTokenRef,
     });
-
-    return () => {
-      cancelled = true;
-    };
   }, [apiElements]);
 
   const { searchState: graphSearchState, searchActions } = useGraphSearch(
@@ -556,7 +551,6 @@ function RelationGraphWrapper() {
         <ErrorToast
           error={apiError}
           onClose={clearApiError}
-          duration={5000}
         />
       )}
       {isApiGraphEmpty && (

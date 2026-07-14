@@ -1,11 +1,12 @@
 /** 뷰어 이벤트 매칭·manifest·진도·TopBar·저장 payload */
 
 import {
-  anchorToLocators,
   toLocator,
   progressResultToViewerAnchor,
   locatorsEqual,
   resolveProgressLocator,
+  toViewerResumeAnchor,
+  anchorToLocators,
 } from '../common/locatorUtils';
 import {
   findManifestEventInChapter,
@@ -26,15 +27,12 @@ function progressPercentFromData(data, options, pickValue) {
   return value != null ? clampPercent(value) : null;
 }
 
-function resolveSaveMetrics(bookId, startLocator, metrics) {
-  return metrics ?? resolveProgressMetricsFromLocator(bookId, startLocator);
-}
-
 export function resolveProgressEventName(source) {
   if (!source || typeof source !== 'object') return '';
   const name =
     source.eventName ??
     source.eventTitle ??
+    source.eventLabel ??
     source.name ??
     source.event_name ??
     source.event?.name ??
@@ -85,29 +83,19 @@ export function getUnifiedEventInfoForTooltip({ currentEvent, prevValidEvent, ev
   return {
     eventNum: eventUtils.resolveEventNum(eventToShow),
     name: resolveProgressEventName(eventToShow),
-    chapterProgress: eventToShow.chapterProgress,
-    currentChars: eventToShow.currentChars,
-    totalChars: eventToShow.totalChars,
   };
 }
 
 function pickFineGraphResultEvent(event) {
   if (!event || typeof event !== 'object') return null;
   const inner = event.event;
-  if (
-    inner &&
-    typeof inner === 'object' &&
-    (inner.chapterIdx != null ||
-      inner.chapter != null ||
-      inner.eventId != null ||
-      inner.eventNum != null)
-  ) {
+  const hasIdentity = (obj) => obj.eventId != null || obj.eventNum != null;
+  const hasChapter = (obj) => obj.chapterIdx != null || obj.chapter != null;
+
+  if (inner && typeof inner === 'object' && (hasChapter(inner) || hasIdentity(inner))) {
     return inner;
   }
-  if (
-    eventUtils.resolveChapterIdx(event) != null &&
-    (event.eventId != null || event.eventNum != null)
-  ) {
+  if (eventUtils.resolveChapterIdx(event) != null && hasIdentity(event)) {
     return event;
   }
   return null;
@@ -122,25 +110,27 @@ function resolveManifestEventMatch(event, bookId) {
   const normalizedEventId = eventId == null ? '' : String(eventId).trim();
   const normalizedBookId = toPositiveNumberOrNull(bookId);
   if (!normalizedBookId || !chapterIdx || !normalizedEventId) {
-    return {
-      title: '',
-      eventNum: 0,
-      eventId: normalizedEventId,
-      chapterIdx: chapterIdx ?? 0,
-      manifestEvent: null,
-    };
+    return { eventNum: 0, chapterIdx: chapterIdx ?? 0, manifestEvent: null };
   }
 
   const manifestEvent = findManifestEventInChapter(normalizedBookId, chapterIdx, {
     eventId: normalizedEventId,
   });
-
   return {
-    title: resolveProgressEventName(manifestEvent),
     eventNum: eventUtils.resolveEventNum(manifestEvent),
-    eventId: normalizedEventId,
     chapterIdx,
     manifestEvent,
+  };
+}
+
+function eventMatchResult({ bookId, chapterIdx, eventIdx, atLocator, source, manifestEvent }) {
+  return {
+    bookId,
+    chapterIdx,
+    eventIdx,
+    atLocator,
+    source,
+    ...(manifestEvent ? { manifestEvent } : {}),
   };
 }
 
@@ -166,69 +156,59 @@ export function resolveServerEventMatch({
     ((rawChapter != null && locatorChapter < rawChapter) ||
       (endChapter != null && locatorChapter < endChapter));
 
-  if (!bookId) {
-    return {
-      bookId: null,
+  const fallbackMatch = () =>
+    eventMatchResult({
+      bookId: bookId ?? null,
       chapterIdx: locatorChapter ?? rawChapter,
       eventIdx: rawEventIdx,
       atLocator: locator,
       source: rawEventIdx ? 'event' : 'none',
-    };
-  }
+    });
 
-  const resolveLocatorMatch = () => {
-    if (!locator) return null;
-    const resolved = resolveLocatorToEventParams(bookId, locator, rawEventIdx ?? 1);
-    const locatorEventIdx = toPositiveNumberOrNull(resolved?.eventIdx);
-    if (!resolved?.resolved || !locatorEventIdx) return null;
-    return {
-      bookId,
-      chapterIdx: toPositiveNumberOrNull(resolved.chapterIdx) ?? locatorChapter ?? rawChapter,
-      eventIdx: locatorEventIdx,
-      atLocator: locator,
-      source: 'locator',
-    };
-  };
+  if (!bookId) return fallbackMatch();
 
   if (spansFromPreviousChapter) {
     const boundaryLastEvent = getLastManifestEventInChapter(bookId, locatorChapter);
     const boundaryLastEventIdx = eventUtilsRef.resolveEventNum(boundaryLastEvent);
     if (boundaryLastEventIdx) {
-      return {
+      return eventMatchResult({
         bookId,
         chapterIdx: locatorChapter,
         eventIdx: boundaryLastEventIdx,
         atLocator: locator,
         source: 'locator-boundary-last-event',
         manifestEvent: boundaryLastEvent,
-      };
+      });
     }
-    const locatorMatch = resolveLocatorMatch();
-    if (locatorMatch) return locatorMatch;
   }
 
-  const locatorMatch = resolveLocatorMatch();
-  if (locatorMatch) return locatorMatch;
+  if (locator) {
+    const resolved = resolveLocatorToEventParams(bookId, locator, rawEventIdx ?? 1);
+    const locatorEventIdx = toPositiveNumberOrNull(resolved?.eventIdx);
+    if (resolved?.resolved && locatorEventIdx) {
+      return eventMatchResult({
+        bookId,
+        chapterIdx: toPositiveNumberOrNull(resolved.chapterIdx) ?? locatorChapter ?? rawChapter,
+        eventIdx: locatorEventIdx,
+        atLocator: locator,
+        source: 'locator',
+      });
+    }
+  }
 
   const manifestMatch = resolveManifestEventMatch(event, bookId);
   if (manifestMatch.eventNum > 0) {
-    return {
+    return eventMatchResult({
       bookId,
       chapterIdx: manifestMatch.chapterIdx || locatorChapter || rawChapter,
       eventIdx: manifestMatch.eventNum,
       atLocator: locator,
       source: 'manifest-event-id',
       manifestEvent: manifestMatch.manifestEvent,
-    };
+    });
   }
 
-  return {
-    bookId,
-    chapterIdx: locatorChapter ?? rawChapter,
-    eventIdx: rawEventIdx,
-    atLocator: locator,
-    source: rawEventIdx ? 'event' : 'none',
-  };
+  return fallbackMatch();
 }
 
 function applyChapterEventIndex(eventObj, eventIdx) {
@@ -286,6 +266,7 @@ export function resolveViewerLineEvent({
     nextEvent = { ...nextEvent, chapter: resolvedChapter, chapterIdx: resolvedChapter };
   }
   if (resolvedEventIdx > 0) nextEvent = applyChapterEventIndex(nextEvent, resolvedEventIdx);
+
   const manifestEvent =
     match.manifestEvent ??
     findManifestEventInChapter(
@@ -305,7 +286,7 @@ export function resolveViewerLineEvent({
 
 // --- 진도·TopBar·저장 payload ---
 
-export const EMPTY_PROGRESS_TOP_BAR = {
+const EMPTY_PROGRESS_TOP_BAR = {
   eventNum: null,
   chapterIdx: null,
   chapterProgress: null,
@@ -331,18 +312,6 @@ export function toReadingLocatorKey(startLocator, endLocator) {
   if (!start) return '';
   const end = toLocator(endLocator) ?? start;
   return JSON.stringify({ start, end });
-}
-
-/** anchor·locator 래퍼 → readingLocatorKey ({ start, end } JSON) */
-export function toReadingLocatorKeyFromAnchor(anchor) {
-  const { startLocator, endLocator } = anchorToLocators(anchor);
-  return toReadingLocatorKey(startLocator, endLocator);
-}
-
-export function toReadingLocatorKeyFromRow(row) {
-  const loc = toLocator(row?.startLocator ?? row?.locator);
-  if (!loc) return '';
-  return toReadingLocatorKey(loc, row?.endLocator ?? loc);
 }
 
 export function parseReadingLocatorKey(readingLocatorKey) {
@@ -371,20 +340,23 @@ export function resolveMetricsFromReadingLocatorKey(bookKey, readingLocatorKey, 
 
 export function progressRowToTopBar(row, bookId = null) {
   if (!row || typeof row !== 'object') return { ...EMPTY_PROGRESS_TOP_BAR };
+
   const explicit = Number(row.eventNum);
   const fromId = eventUtils.resolveEventNum(row);
   const eventNum =
     Number.isFinite(explicit) && explicit > 0 ? explicit : fromId > 0 ? fromId : null;
+
   const loc = toLocator(row.startLocator ?? row.locator ?? row.anchor?.startLocator);
-  const metrics = bookId && loc ? resolveProgressMetricsFromLocator(bookId, loc) : null;
-  const chapterIdx = Number(
+  const metrics = resolveMetricsFromLocator(bookId, loc);
+  const chapterIdx = toPositiveNumberOrNull(
     eventUtils.resolveChapterIdx(row) ??
       toPositiveNumberOrNull(row.chapterNum) ??
       loc?.chapterIndex
   );
+
   return {
     eventNum,
-    chapterIdx: Number.isFinite(chapterIdx) && chapterIdx > 0 ? chapterIdx : null,
+    chapterIdx,
     chapterProgress: metrics?.chapterProgress ?? null,
     readingProgressPercent: metrics?.readingProgressPercent ?? null,
     eventName: resolveProgressEventName(row),
@@ -393,16 +365,17 @@ export function progressRowToTopBar(row, bookId = null) {
 
 export function patchTopBarFromLineEvent(prev, nextEvent, lineLocator = null) {
   const previous =
-    prev !== undefined && prev !== null && typeof prev === 'object'
-      ? prev
-      : { ...EMPTY_PROGRESS_TOP_BAR };
+    prev != null && typeof prev === 'object' ? prev : { ...EMPTY_PROGRESS_TOP_BAR };
   const eventNum = eventUtils.resolveEventNum(nextEvent);
-  const chapterIdx =
-    eventUtils.resolveChapterIdx(nextEvent) ?? toPositiveNumberOrNull(resolveChapterIndex(lineLocator));
+  const chapterIdx = toPositiveNumberOrNull(
+    eventUtils.resolveChapterIdx(nextEvent) ??
+      toPositiveNumberOrNull(resolveChapterIndex(lineLocator))
+  );
+
   return {
     ...previous,
     eventNum: eventNum > 0 ? eventNum : null,
-    chapterIdx: Number.isFinite(chapterIdx) && chapterIdx > 0 ? chapterIdx : null,
+    chapterIdx,
     eventName: resolveProgressEventName(nextEvent),
   };
 }
@@ -413,7 +386,10 @@ export function snapshotFromProgressRow(row, bookId) {
   return {
     topBar,
     anchor: progressResultToViewerAnchor(row),
-    readingLocatorKey: toReadingLocatorKeyFromRow(row),
+    readingLocatorKey: toReadingLocatorKey(
+      row?.startLocator ?? row?.locator,
+      row?.endLocator
+    ),
     readingProgressPercent: topBar.readingProgressPercent,
   };
 }
@@ -431,61 +407,59 @@ export function shouldApplyCacheSnapshot(snapshot, liveLocatorKey, isViewerPageR
 export function resolveReadingLocators(getCurrentLocator, currentEvent) {
   const fromViewer = getCurrentLocator?.();
   if (fromViewer) {
-    const { startLocator, endLocator } = anchorToLocators(fromViewer);
-    if (startLocator) return { startLocator, endLocator: endLocator ?? startLocator };
+    const pair = toViewerResumeAnchor(fromViewer);
+    if (pair?.startLocator) return pair;
   }
-  const { startLocator, endLocator } = anchorToLocators(currentEvent?.anchor);
-  return { startLocator, endLocator: endLocator ?? startLocator };
+  return toViewerResumeAnchor(currentEvent?.anchor) ?? { startLocator: null, endLocator: null };
 }
 
 function buildLocatorPayloadBase(bookId, startLocator, endLocator, currentEvent, metrics) {
   if (!bookId || !startLocator) return null;
   return {
-    resolvedMetrics: resolveSaveMetrics(bookId, startLocator, metrics),
-    end: endLocator ?? startLocator,
-    evName: resolveProgressEventName(currentEvent),
+    startLocator,
+    endLocator: endLocator ?? startLocator,
+    locator: startLocator,
+    resolvedMetrics: metrics ?? resolveProgressMetricsFromLocator(bookId, startLocator),
+    eventName: resolveProgressEventName(currentEvent),
+    eventNum: Number(currentEvent?.eventNum),
   };
 }
 
 export function buildProgressPayload(bookId, startLocator, endLocator, currentEvent, metrics = null) {
   const base = buildLocatorPayloadBase(bookId, startLocator, endLocator, currentEvent, metrics);
   if (!base) return null;
-  const { resolvedMetrics, end, evName } = base;
-  const evn = Number(currentEvent?.eventNum);
 
+  const { resolvedMetrics, eventName, eventNum, ...locs } = base;
   return {
     bookId: String(bookId),
-    startLocator,
-    endLocator: end,
-    locator: startLocator,
+    ...locs,
     ...(resolvedMetrics?.readingProgressPercent != null
       ? { readingProgressPercent: resolvedMetrics.readingProgressPercent }
       : {}),
     ...(resolvedMetrics?.chapterProgress != null
       ? { chapterProgress: resolvedMetrics.chapterProgress }
       : {}),
-    ...(Number.isFinite(evn) && evn > 0 ? { eventNum: evn } : {}),
-    ...(evName ? { eventName: evName } : {}),
+    ...(Number.isFinite(eventNum) && eventNum > 0 ? { eventNum } : {}),
+    ...(eventName ? { eventName } : {}),
   };
 }
 
 export function buildSaveLocationPayload(bookId, startLocator, endLocator, currentEvent, metrics = null) {
   const base = buildLocatorPayloadBase(bookId, startLocator, endLocator, currentEvent, metrics);
   if (!base) return null;
-  const { resolvedMetrics, end, evName } = base;
-  const numericBookId = Number(bookId);
 
+  const numericBookId = Number(bookId);
   return {
     bookId: Number.isFinite(numericBookId) && numericBookId > 0 ? numericBookId : null,
-    startLocator,
-    endLocator: end,
-    locator: startLocator,
-    chapterIdx: startLocator.chapterIndex,
-    eventIdx: Number(currentEvent?.eventNum),
-    eventNum: Number(currentEvent?.eventNum),
+    startLocator: base.startLocator,
+    endLocator: base.endLocator,
+    locator: base.locator,
+    chapterIdx: base.startLocator.chapterIndex,
+    eventIdx: base.eventNum,
+    eventNum: base.eventNum,
     eventId: eventUtils.resolveEventId(currentEvent),
-    eventName: evName || null,
-    chapterProgress: resolvedMetrics?.chapterProgress ?? null,
+    eventName: base.eventName || null,
+    chapterProgress: base.resolvedMetrics?.chapterProgress ?? null,
     source: 'runtime',
   };
 }

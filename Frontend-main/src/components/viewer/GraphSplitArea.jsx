@@ -1,5 +1,5 @@
-import React, { useMemo, useEffect, useState, useRef, memo } from "react";
-import { AlertCircle, AlertTriangle, Inbox, Loader2 } from "lucide-react";
+import { useMemo, useEffect, useState, useRef, memo } from "react";
+import { AlertCircle, Inbox, Loader2 } from "lucide-react";
 import GraphContainer from "../graph/GraphContainer";
 import ViewerTopBar from "./ViewerTopBar";
 import { useGraphElementPipeline } from "../../hooks/graph/useGraphViewHooks";
@@ -42,7 +42,6 @@ function GraphNoticePanel({ variant, title, description, icon, actions }) {
 
 const primaryBtnClass =
   "rounded-lg bg-[#5C6F5C] px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-[#4A5A4A] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#5C6F5C] focus-visible:ring-offset-2";
-const EVENT_OVERLAY_MIN_MS = 0;
 
 function normalizeGraphApiError(raw) {
   if (!raw) return null;
@@ -120,7 +119,6 @@ const GraphSplitArea = memo(function GraphSplitArea({
     !hasElements &&
     (isFineGraphBusy || (transitionState.type === "event" && transitionState.inProgress));
   const [showTransitionOverlay, setShowTransitionOverlay] = useState(false);
-  const overlayShownAtRef = useRef(0);
   const overlayHideTimerRef = useRef(null);
   useEffect(() => {
     if (rawTransitionOverlay) {
@@ -129,19 +127,16 @@ const GraphSplitArea = memo(function GraphSplitArea({
         overlayHideTimerRef.current = null;
       }
       if (!showTransitionOverlay) {
-        overlayShownAtRef.current = Date.now();
         setShowTransitionOverlay(true);
       }
       return undefined;
     }
 
     if (!showTransitionOverlay) return undefined;
-    const elapsed = Date.now() - overlayShownAtRef.current;
-    const remaining = Math.max(0, EVENT_OVERLAY_MIN_MS - elapsed);
     overlayHideTimerRef.current = setTimeout(() => {
       setShowTransitionOverlay(false);
       overlayHideTimerRef.current = null;
-    }, remaining);
+    }, 0);
     return () => {
       if (overlayHideTimerRef.current) {
         clearTimeout(overlayHideTimerRef.current);
@@ -232,18 +227,6 @@ const GraphSplitArea = memo(function GraphSplitArea({
                   다시 시도
                 </button>
               ) : null
-            }
-          />
-        ) : transitionState.error ? (
-          <GraphNoticePanel
-            variant="warning"
-            title="일시적인 오류가 발생했습니다"
-            description="페이지를 새로고침하면 대부분 정상적으로 돌아옵니다. 문제가 계속되면 잠시 뒤에 다시 열어 주세요."
-            icon={<AlertTriangle className="h-7 w-7" strokeWidth={2} aria-hidden />}
-            actions={
-              <button type="button" className={primaryBtnClass} onClick={() => window.location.reload()}>
-                새로고침
-              </button>
             }
           />
         ) : (

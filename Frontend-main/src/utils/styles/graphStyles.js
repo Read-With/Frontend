@@ -2,10 +2,17 @@
 
 import { isValidNodeWeight } from '../graph/characterUtils.js';
 
-// styles.js가 graphStyles를 re-export하므로 styles.js를 import하지 않는다.
-const DURATION = { FAST: '0.18s', SLOW: '0.4s' };
+// styles.js가 이 모듈을 re-export하므로 styles.js를 import하지 않는다.
+// DURATION/공유 팔레트는 여기서 export하고 styles.js가 확장한다.
 
-const COLORS = {
+export const STYLE_DURATION = {
+  FAST: '0.18s',
+  NORMAL: '0.3s',
+  SLOW: '0.4s',
+};
+
+/** 그래프·UI 공유 팔레트 (+ Cytoscape 전용 키) */
+export const GRAPH_COLORS = {
   backgroundLighter: '#f8fafc',
   backgroundLight: '#f8f9fc',
   border: '#e5e7eb',
@@ -21,6 +28,9 @@ const COLORS = {
   successGreen: '#22c55e',
   highlightBlue: '#5C6F5C',
 };
+
+const COLORS = GRAPH_COLORS;
+const DURATION = STYLE_DURATION;
 
 export const NODE_SIZE_MIN = 30;
 export const NODE_SIZE_MAX = 80;
@@ -69,15 +79,11 @@ const graphControlActionButtonStyle = {
 
 export const getWideLayout = () => ({ name: 'preset' });
 
-export const getEdgeStyle = (_context = 'default') => {
-  const isGraphPage =
-    typeof window !== 'undefined' && window.location?.pathname?.includes('/user/graph/');
-
-  return {
-    width: 5,
-    fontSize: isGraphPage ? 12 : 10,
-  };
-};
+/** @param {'graph'|'viewer'|'default'} [context='default'] graph 페이지는 라벨 fontSize 12 */
+export const getEdgeStyle = (context = 'default') => ({
+  width: 5,
+  fontSize: context === 'graph' ? 12 : 10,
+});
 
 export function clampPositivity(positivity) {
   const value = Number(positivity);
@@ -341,45 +347,6 @@ export const graphControlsStyles = {
     alignItems: 'center',
     gap: '8px',
     flexWrap: 'wrap',
-  },
-  dropdown: {
-    position: 'absolute',
-    top: '100%',
-    left: '0',
-    right: '0',
-    background: COLORS.white,
-    border: `1px solid ${COLORS.border}`,
-    borderRadius: '8px',
-    boxShadow: '0 4px 16px rgba(0, 0, 0, 0.1)',
-    zIndex: 1,
-    maxHeight: '300px',
-    overflowY: 'auto',
-    marginTop: '4px',
-    minWidth: '200px',
-    width: '100%',
-    display: 'block',
-  },
-  suggestionItem: (isSelected) => ({
-    padding: '12px 14px',
-    cursor: 'pointer',
-    borderBottom: `1px solid ${COLORS.borderLight}`,
-    background: isSelected ? COLORS.backgroundLight : COLORS.white,
-    transition: `background ${DURATION.FAST}`,
-  }),
-  noResults: {
-    padding: '16px 14px',
-    textAlign: 'center',
-    color: COLORS.textSecondary,
-    fontSize: '12px',
-    fontStyle: 'italic',
-  },
-  header: {
-    padding: '8px 14px',
-    fontSize: '11px',
-    color: COLORS.textSecondary,
-    background: COLORS.backgroundLight,
-    borderBottom: `1px solid ${COLORS.border}`,
-    fontWeight: '700',
   },
   container: {
     position: 'relative',

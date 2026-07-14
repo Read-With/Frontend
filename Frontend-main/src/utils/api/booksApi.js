@@ -1,9 +1,11 @@
 /** v2 books·북마크 API */
 
 import { authenticatedRequest, makeSilentError, isForbiddenError, isNotFoundError } from './authApi';
-import { toLocator, locatorsEqual } from '../common/locatorUtils';
 import { toOneBasedChapterIndexOrNull, toPositiveNumberOrNull } from '../common/valueUtils';
 import { sanitizeAssetUrl } from '../common/urlUtils';
+import { normalizeStartEndLocatorsForServer } from '../common/cache/manifestCache';
+
+const DEFAULT_BOOKMARK_COLOR = '#f4f7ff';
 
 const BOOK_LIST_SORT_VALUES = new Set(['updatedAt', 'title']);
 
@@ -31,7 +33,7 @@ const normalizeBookCore = (book) => {
 };
 
 /** v2 books 응답 정규화 (목록·상세) */
-export const normalizeV2Book = (book) => {
+const normalizeV2Book = (book) => {
   if (!book || typeof book !== 'object') return book;
   return {
     ...book,
@@ -206,6 +208,14 @@ export const getBookmarks = async (bookId, sort = 'time_desc') => {
   }
 };
 
+export const loadBookmarks = async (bookId, sort = 'time_desc') => {
+  const response = await getBookmarks(bookId, sort);
+  if (response?.isSuccess) {
+    return Array.isArray(response.result) ? response.result : [];
+  }
+  throw new Error(response?.message || '북마크 목록을 불러오지 못했습니다.');
+};
+
 const buildPatchBody = (updateData) => {
   const body = {};
   if (updateData?.color !== undefined) body.color = updateData.color;
@@ -221,19 +231,22 @@ export const createBookmark = async (bookmarkData) => {
   if (normalizedBookId == null) {
     throw new Error('유효한 bookId는 필수입니다.');
   }
-  const startLocator = toLocator(bookmarkData.startLocator);
+  const { startLocator, endLocator } = normalizeStartEndLocatorsForServer(
+    normalizedBookId,
+    bookmarkData.startLocator,
+    bookmarkData.endLocator
+  );
   if (!startLocator) {
     throw new Error('startLocator는 필수입니다.');
   }
   try {
-    const endLocator = toLocator(bookmarkData.endLocator);
     const dataToSend = {
       bookId: normalizedBookId,
       startLocator,
-      color: bookmarkData.color ?? '#28B532',
+      color: bookmarkData.color ?? DEFAULT_BOOKMARK_COLOR,
       memo: bookmarkData.memo ?? '',
     };
-    if (endLocator && !locatorsEqual(startLocator, endLocator)) {
+    if (endLocator) {
       dataToSend.endLocator = endLocator;
     }
     const data = await authenticatedRequest('/v2/bookmarks', {

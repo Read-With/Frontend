@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState, useCallback, useMemo } from "react";
+import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import PropTypes from "prop-types";
 import cytoscape from "cytoscape";
 import "./RelationGraph.css";
@@ -71,7 +71,6 @@ const CytoscapeGraphUnified = ({
   stylesheet = [],
   layout = DEFAULT_LAYOUT,
   fitNodeIds,
-  style = {},
   cyRef: externalCyRef,
   searchTerm = "",
   isSearchActive = false,
@@ -112,7 +111,7 @@ const CytoscapeGraphUnified = ({
     return [...fitNodeIds].map(String).sort().join("\x1f");
   }, [fitNodeIds]);
 
-  const safeCyOperation = useCallback((operation, _errorMessage) => {
+  const safeCyOperation = useCallback((operation) => {
     try {
       return operation();
     } catch {
@@ -135,7 +134,7 @@ const CytoscapeGraphUnified = ({
       cy.style(stylesheet);
       cy.style().update();
       return true;
-    }, '❌ 스타일시트 적용 실패');
+    });
   }, [stylesheet, safeCyOperation]);
 
   const applyNodeSizes = useCallback((cy, nodes, scale = 1) => {
@@ -162,7 +161,7 @@ const CytoscapeGraphUnified = ({
       if (cyNode && cyNode.length > 0) {
         const position = cyNode.renderedPosition();
         if (position && typeof position.x === 'number' && typeof position.y === 'number') {
-          createRippleEffect(containerRef.current, position.x, position.y, null);
+          createRippleEffect(containerRef.current, position.x, position.y);
         }
       }
     });
@@ -172,7 +171,7 @@ const CytoscapeGraphUnified = ({
 
   const reapplySearchFade = useCallback(() => {
     if (!cy || !isSearchActive) return;
-    applySearchFadeEffect(cy, filteredElements || [], true);
+    applySearchFadeEffect(cy, filteredElements || []);
   }, [cy, isSearchActive, filteredElements]);
 
   const {
@@ -222,8 +221,7 @@ const CytoscapeGraphUnified = ({
     }
 
     const diff = safeCyOperation(
-      () => calcGraphDiff(previousElementsRef.current, elements),
-      '❌ 그래프 diff 계산 실패'
+      () => calcGraphDiff(previousElementsRef.current, elements)
     );
 
     if (diff) {
@@ -551,7 +549,7 @@ const CytoscapeGraphUnified = ({
     prevIsSearchActiveRef.current = isSearchActive;
 
     if (isSearchActive) {
-      applySearchFadeEffect(cy, filteredElements || [], true);
+      applySearchFadeEffect(cy, filteredElements || []);
     } else if (wasSearchActive) {
       clearHighlightClassesOn(cy);
     }
@@ -567,9 +565,9 @@ const CytoscapeGraphUnified = ({
           if (!isGraphContainerSizeReady(containerRef.current)) return;
           safeCyOperation(() => {
             ensureElementsInBounds(cy, containerRef.current);
-          }, '❌ 요소 경계 조정 실패');
+          });
         }, 100);
-      }, '❌ 그래프 리사이즈 실패');
+      });
     };
     
     window.addEventListener("resize", handleResize);
@@ -580,7 +578,6 @@ const CytoscapeGraphUnified = ({
     width: "100%",
     height: "100%",
     background: "#ffffff",
-    ...style,
     position: "relative",
     overflow: "hidden",
     zIndex: 1,
@@ -591,7 +588,7 @@ const CytoscapeGraphUnified = ({
     alignItems: "center",
     justifyContent: "center",
     boxSizing: "border-box",
-  }), [style, isGraphVisible]);
+  }), [isGraphVisible]);
 
   const shouldShowNoResults = shouldShowNoSearchResults(isSearchActive, searchTerm, fitNodeIds);
   const noResultsMessage = shouldShowNoResults ? (() => {
@@ -647,7 +644,6 @@ CytoscapeGraphUnified.propTypes = {
   stylesheet: PropTypes.arrayOf(PropTypes.object),
   layout: layoutShape,
   fitNodeIds: PropTypes.arrayOf(PropTypes.oneOfType([PropTypes.string, PropTypes.number])),
-  style: PropTypes.object,
   cyRef: PropTypes.shape({
     current: PropTypes.object,
   }).isRequired,

@@ -13,7 +13,7 @@ const getCombinedXhtmlFetchUrl = (bookId) => {
   return path ? resolveApiArtifactUrl(path) : '';
 };
 
-const fetchCombinedXhtmlText = async (url, bookId) => {
+const fetchCombinedXhtmlText = async (url) => {
   const res = await authenticatedFetch(url);
   if (!res.ok) {
     const err = new Error(
@@ -35,7 +35,7 @@ export async function loadCombinedXhtml(bookId) {
   const url = getCombinedXhtmlFetchUrl(bookId);
   if (typeof url === 'string' && url.trim()) {
     try {
-      return await fetchCombinedXhtmlText(url, bookId);
+      return await fetchCombinedXhtmlText(url);
     } catch (e) {
       if (e?.status !== 404) {
         errorUtils.logError('loadCombinedXhtml', e, { url, bookId });
@@ -45,7 +45,7 @@ export async function loadCombinedXhtml(bookId) {
         await getBookManifest(bookId, { forceRefresh: true });
         const retryUrl = getCombinedXhtmlFetchUrl(bookId);
         if (!retryUrl.trim()) throw e;
-        return await fetchCombinedXhtmlText(retryUrl, bookId);
+        return await fetchCombinedXhtmlText(retryUrl);
       } catch (retryErr) {
         if (retryErr?.status !== 404) {
           errorUtils.logError('loadCombinedXhtml', retryErr, { url, bookId, retried: true });

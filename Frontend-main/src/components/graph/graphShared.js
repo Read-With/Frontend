@@ -6,6 +6,8 @@ import {
 import { getChapterData } from '../../utils/common/cache/manifestCache';
 import { stripRedundantBookTitlePrefix } from '../../utils/viewer/chapterTitleDisplay';
 
+import { USER_GRAPH_PREFIX } from '../../utils/navigation/viewerPaths';
+
 export const GRAPH_LAYOUT_CONSTANTS = {
   SIDEBAR: { OPEN_WIDTH: 360, CLOSED_WIDTH: 60 },
   TOP_BAR_HEIGHT: 54,
@@ -25,7 +27,7 @@ export function resolveTooltipBookId(bookId, filename) {
 }
 
 export function isGraphOnlyGraphPage() {
-  return typeof window !== 'undefined' && window.location.pathname.includes('/user/graph/');
+  return typeof window !== 'undefined' && window.location.pathname.includes(`${USER_GRAPH_PREFIX}/`);
 }
 
 export function resolveChapterSidebarWidth(isSidebarOpen) {

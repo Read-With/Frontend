@@ -1,34 +1,12 @@
-/** localStorage 동기화 훅 + 그래프·뷰어 storage key */
+/** localStorage 동기화 훅 */
 
 import { useState, useEffect, useCallback } from 'react';
 
-const STRING_STORAGE_KEY_SUFFIXES = ['_prevChapter', '_nextPage', '_prevPage'];
-
-const isStringStorageKey = (key) => {
-  return STRING_STORAGE_KEY_SUFFIXES.some(suffix => key.includes(suffix));
-};
-
-export const STORAGE_KEYS = {
-  prevChapter: (filename) => `readwith_${filename}_prevChapter`,
-  nextPage: (filename) => `readwith_${filename}_nextPage`,
-  prevPage: (filename) => `readwith_${filename}_prevPage`,
-  totalLength: (bookId) => `totalLength_${bookId}`,
-  chapterLengths: (bookId) => `chapterLengths_${bookId}`,
-  chapter: (filename) => `readwith_${filename}_chapter`,
-};
-
 export function useLocalStorage(key, initialValue) {
-  const isStringKey = isStringStorageKey(key);
-  
   const [storedValue, setStoredValue] = useState(() => {
     try {
       const item = localStorage.getItem(key);
       if (!item) return initialValue;
-      
-      if (isStringKey) {
-        return item;
-      }
-      
       return JSON.parse(item);
     } catch (error) {
       console.error(`[useLocalStorage] 초기값 로드 실패 (key: ${key}):`, error);
@@ -41,32 +19,23 @@ export function useLocalStorage(key, initialValue) {
     const previousValue = storedValue;
     
     try {
-      if (isStringKey) {
-        localStorage.setItem(key, valueToStore);
-      } else {
-        localStorage.setItem(key, JSON.stringify(valueToStore));
-      }
-      
+      localStorage.setItem(key, JSON.stringify(valueToStore));
       setStoredValue(valueToStore);
       
       window.dispatchEvent(new CustomEvent('localStorageChange', {
-        detail: { key, newValue: isStringKey ? valueToStore : JSON.stringify(valueToStore) }
+        detail: { key, newValue: JSON.stringify(valueToStore) }
       }));
     } catch (error) {
       console.error(`[useLocalStorage] 저장 실패 (key: ${key}):`, error);
       setStoredValue(previousValue);
     }
-  }, [key, storedValue, isStringKey]);
+  }, [key, storedValue]);
 
   useEffect(() => {
     const handleStorageChange = (e) => {
       if (e.key === key && e.newValue !== null) {
         try {
-          if (isStringKey) {
-            setStoredValue(e.newValue);
-          } else {
-            setStoredValue(JSON.parse(e.newValue));
-          }
+          setStoredValue(JSON.parse(e.newValue));
         } catch (error) {
           console.error(`[useLocalStorage] storage 이벤트 처리 실패 (key: ${key}):`, error);
         }
@@ -86,7 +55,7 @@ export function useLocalStorage(key, initialValue) {
       window.removeEventListener('storage', handleStorageChange);
       window.removeEventListener('localStorageChange', handleCustomStorageChange);
     };
-  }, [key, isStringKey]);
+  }, [key]);
 
   return [storedValue, setValue];
 }

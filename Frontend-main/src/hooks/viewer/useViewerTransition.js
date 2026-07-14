@@ -1,42 +1,49 @@
 /** 뷰어 페이지: 챕터/이벤트 전환 상태 */
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { transitionUtils } from '../../utils/viewer/viewerCoreStateUtils';
+
+const INITIAL_TRANSITION = Object.freeze({ type: null, inProgress: false });
+const EVENT_TRANSITION_FALLBACK_MS = 50;
+
+function createInitialTransition() {
+  return { ...INITIAL_TRANSITION };
+}
+
+function resetTransitionState(setTransitionState) {
+  setTransitionState((prev) => (
+    prev.type == null && !prev.inProgress
+      ? prev
+      : createInitialTransition()
+  ));
+}
+
+function isEventIdentityChanged(prev, next) {
+  return prev.eventNum !== next.eventNum || prev.chapter !== next.chapter;
+}
 
 export function useViewerTransition({
   currentEvent,
   currentChapter,
-  fineGraphLoading,
-  isReloading,
-  graphPhase,
   isDataReady,
 }) {
-  const [transitionState, setTransitionState] = useState(transitionUtils.getInitialState);
-
+  const [transitionState, setTransitionState] = useState(createInitialTransition);
   const prevEventRef = useRef(null);
   const prevChapterRef = useRef(null);
 
+  const resetTransition = useCallback(() => {
+    resetTransitionState(setTransitionState);
+  }, []);
+
   useEffect(() => {
     let timeoutId = null;
+    const prev = prevEventRef.current;
 
-    if (currentEvent && prevEventRef.current) {
-      const prevEvent = prevEventRef.current;
-      const isEventChanged =
-        prevEvent.eventNum !== currentEvent.eventNum ||
-        prevEvent.chapter !== currentEvent.chapter;
-
-      if (isEventChanged) {
-        setTransitionState({
-          type: 'event',
-          inProgress: true,
-          error: false,
-          direction: null,
-        });
-
-        timeoutId = setTimeout(() => {
-          transitionUtils.reset(setTransitionState);
-        }, 50);
-      }
+    if (currentEvent && prev && isEventIdentityChanged(prev, currentEvent)) {
+      setTransitionState({ type: 'event', inProgress: true });
+      timeoutId = setTimeout(
+        () => resetTransitionState(setTransitionState),
+        EVENT_TRANSITION_FALLBACK_MS
+      );
     }
 
     if (currentEvent) {
@@ -44,46 +51,22 @@ export function useViewerTransition({
     }
 
     return () => {
-      if (timeoutId) {
-        clearTimeout(timeoutId);
-      }
+      if (timeoutId) clearTimeout(timeoutId);
     };
   }, [currentEvent]);
 
   useEffect(() => {
     if (prevChapterRef.current !== null && prevChapterRef.current !== currentChapter) {
-      setTransitionState({
-        type: 'chapter',
-        inProgress: true,
-        error: false,
-        direction: null,
-      });
+      setTransitionState({ type: 'chapter', inProgress: true });
     }
     prevChapterRef.current = currentChapter;
   }, [currentChapter]);
 
   useEffect(() => {
     if (isDataReady && transitionState.type === 'event' && transitionState.inProgress) {
-      transitionUtils.reset(setTransitionState);
+      resetTransitionState(setTransitionState);
     }
   }, [isDataReady, transitionState.type, transitionState.inProgress]);
-
-  useEffect(() => {
-    if (
-      fineGraphLoading ||
-      isReloading ||
-      graphPhase === 'loading' ||
-      graphPhase === 'reloading' ||
-      !isDataReady ||
-      transitionState.type === 'chapter'
-    ) {
-      setTransitionState((prev) => (prev.error ? { ...prev, error: false } : prev));
-    }
-  }, [currentEvent, currentChapter, fineGraphLoading, isReloading, graphPhase, isDataReady, transitionState.type]);
-
-  const resetTransition = useCallback(() => {
-    transitionUtils.reset(setTransitionState);
-  }, []);
 
   return {
     transitionState,

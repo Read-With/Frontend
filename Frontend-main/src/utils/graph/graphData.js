@@ -45,6 +45,24 @@ const isLegacyRawEventRow = (event) =>
     Array.isArray(event?.characters)
   );
 
+const withEventTitleAliases = (title) => {
+  const t = title ?? null;
+  return { title: t, name: t, eventName: t, eventTitle: t };
+};
+
+const withEventOffsetFields = (start, end, { alsoTxtOffset = false } = {}) => {
+  const s = start ?? null;
+  const e = end ?? null;
+  return alsoTxtOffset
+    ? { startTxtOffset: s, endTxtOffset: e, start: s, end: e }
+    : { start: s, end: e };
+};
+
+const graphPayloadFromReconstructed = (reconstructed) => ({
+  characters: reconstructed?.characters || [],
+  relations: convertElementsToRelations(reconstructed?.elements || []),
+});
+
 const mapLegacyOrSummaryEvent = (event, targetChapter) => {
   const normalizedIdx = eventUtils.resolveEventOrdinal(event);
   if (normalizedIdx == null || normalizedIdx <= 0) return null;
@@ -63,8 +81,10 @@ const mapLegacyOrSummaryEvent = (event, targetChapter) => {
       originalEventIdx: normalizedIdx,
       relations: Array.isArray(event.relations) ? event.relations : [],
       characters: Array.isArray(event.characters) ? event.characters : [],
-      start: event?.startPos ?? event?.start ?? event?.startTxtOffset ?? null,
-      end: event?.endPos ?? event?.end ?? event?.endTxtOffset ?? null,
+      ...withEventOffsetFields(
+        event?.startPos ?? event?.start ?? event?.startTxtOffset,
+        event?.endPos ?? event?.end ?? event?.endTxtOffset
+      ),
     };
   }
 
@@ -78,14 +98,8 @@ const mapLegacyOrSummaryEvent = (event, targetChapter) => {
     eventId: eventUtils.resolveEventId(event) ?? event.eventId ?? normalizedIdx,
     resolvedEventIdx: normalizedIdx,
     originalEventIdx: normalizedIdx,
-    startTxtOffset: event.startTxtOffset ?? null,
-    endTxtOffset: event.endTxtOffset ?? null,
-    start: event.startTxtOffset ?? null,
-    end: event.endTxtOffset ?? null,
-    title,
-    name: title,
-    eventName: title,
-    eventTitle: title,
+    ...withEventOffsetFields(event.startTxtOffset, event.endTxtOffset, { alsoTxtOffset: true }),
+    ...withEventTitleAliases(title),
     text: event.text ?? null,
     relations: [],
     characters: [],
@@ -117,9 +131,7 @@ function buildEventsFromChapterCache(chapterPayload, targetChapter, throughEvent
     const targetEventIdx = Number(eventMeta?.eventIdx) || 0;
     const resolvedEventNum = toPositiveInt(eventMeta?.eventNum, targetEventIdx);
     const reconstructed = reconstructChapterGraphState(chapterPayload, targetEventIdx);
-
-    const characters = reconstructed?.characters || [];
-    const relations = convertElementsToRelations(reconstructed?.elements || []);
+    const { characters, relations } = graphPayloadFromReconstructed(reconstructed);
     const title = eventMeta.title ?? reconstructed?.eventMeta?.name ?? reconstructed?.eventMeta?.title ?? null;
 
     return {
@@ -132,14 +144,13 @@ function buildEventsFromChapterCache(chapterPayload, targetChapter, throughEvent
         eventUtils.resolveEventId(eventMeta) ??
         targetEventIdx,
       event: reconstructed?.eventMeta ?? eventMeta?.event ?? null,
-      title,
-      name: title,
-      eventName: title,
-      eventTitle: title,
+      ...withEventTitleAliases(title),
       relations,
       characters,
-      start: eventMeta.startTxtOffset ?? reconstructed?.eventMeta?.startTxtOffset ?? null,
-      end: eventMeta.endTxtOffset ?? reconstructed?.eventMeta?.endTxtOffset ?? null,
+      ...withEventOffsetFields(
+        eventMeta.startTxtOffset ?? reconstructed?.eventMeta?.startTxtOffset,
+        eventMeta.endTxtOffset ?? reconstructed?.eventMeta?.endTxtOffset
+      ),
     };
   });
 }
@@ -280,8 +291,7 @@ const checkChapterEventsCache = (bookId, chapter, eventIdx) => {
 
   const reconstructed = reconstructChapterGraphState(chapterCache, eventIdx);
   if (reconstructed) {
-    const characters = reconstructed.characters || [];
-    const relations = convertElementsToRelations(reconstructed.elements || []);
+    const { characters, relations } = graphPayloadFromReconstructed(reconstructed);
     if (characters.length || relations.length) {
       return {
         characters,
@@ -304,13 +314,12 @@ const checkChapterEventsCache = (bookId, chapter, eventIdx) => {
   };
 };
 
-const getFallbackData = (bookId, chapter, eventIdx, macroData) => {
-  const fallbackEventData = getChapterEventFallbackData(bookId, chapter, eventIdx);
-  if (fallbackEventData) return fallbackEventData;
-  return macroData ?? null;
+const getFallbackData = (bookId, chapter, eventIdx) => {
+  return getChapterEventFallbackData(bookId, chapter, eventIdx) ?? null;
 };
 
-const hasGraphPayload = (data) => {
+/** characters 또는 relations가 하나라도 있으면 true (fine/macro 공용) */
+export const hasGraphPayload = (data) => {
   if (!data || typeof data !== 'object') return false;
   const chars = Array.isArray(data.characters) ? data.characters.length : 0;
   const rels = Array.isArray(data.relations) ? data.relations.length : 0;
@@ -335,15 +344,15 @@ const handleLoaderSuccess = (data, onSuccess, cacheKey) => {
   onSuccess?.(data);
 };
 
-const handleLoaderFallback = (bookId, chapter, eventIdx, macroData, onSuccess, logMessage) => {
-  const fallbackData = getFallbackData(bookId, chapter, eventIdx, macroData);
+const handleLoaderFallback = (bookId, chapter, eventIdx, onSuccess, logMessage) => {
+  const fallbackData = getFallbackData(bookId, chapter, eventIdx);
   if (!fallbackData) return null;
   errorUtils.logInfo('GraphDataLoader', logMessage, { bookId, chapter, eventIdx, source: 'fallback' });
   onSuccess?.(fallbackData);
   return { data: fallbackData, source: 'fallback' };
 };
 
-const processApiResponse = (response, cacheKey, onSuccess, bookId, chapter, eventIdx, macroData, onError) => {
+const processApiResponse = (response, cacheKey, onSuccess, bookId, chapter, eventIdx, onError) => {
   if (response?.isSuccess && response?.result) {
     handleLoaderSuccess(response.result, onSuccess, cacheKey);
     return { data: response.result, source: 'api' };
@@ -353,7 +362,7 @@ const processApiResponse = (response, cacheKey, onSuccess, bookId, chapter, even
   apiError.status = response?.code || null;
   errorUtils.logWarning('GraphDataLoader', 'API 응답 실패', { bookId, chapter, eventIdx, response });
 
-  const fallbackResult = handleLoaderFallback(bookId, chapter, eventIdx, macroData, onSuccess, '폴백 데이터 사용');
+  const fallbackResult = handleLoaderFallback(bookId, chapter, eventIdx, onSuccess, '폴백 데이터 사용');
   if (fallbackResult) return fallbackResult;
 
   onError?.(apiError);
@@ -384,7 +393,6 @@ export const loadGraphDataWithCache = async ({
   eventIdx,
   cacheKey,
   apiCall,
-  macroData = null,
   onSuccess,
   onError,
 }) => {
@@ -422,7 +430,7 @@ export const loadGraphDataWithCache = async ({
       }
     }
     const response = await requestPromise;
-    return processApiResponse(response, cacheKey, onSuccess, bookId, chapter, eventIdx, macroData, onError);
+    return processApiResponse(response, cacheKey, onSuccess, bookId, chapter, eventIdx, onError);
   } catch (error) {
     if (cacheKey) inflightRequests.delete(cacheKey);
     errorUtils.logError('GraphDataLoader', error, { bookId, chapter, eventIdx, cacheKey });
@@ -431,7 +439,6 @@ export const loadGraphDataWithCache = async ({
       bookId,
       chapter,
       eventIdx,
-      macroData,
       onSuccess,
       '에러 후 폴백 데이터 사용'
     );

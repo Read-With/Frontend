@@ -1,8 +1,6 @@
 /** 환경 URL·OAuth·공개 자산 URL 정규화·fetch */
 
-import { authenticatedFetch } from '../api/authApi';
-import { getBook } from '../api/booksApi';
-import { clearAuthTokenStorage } from '../security/authTokenStorage';
+import { clearAuthData } from '../security/authTokenStorage';
 import { createAndStoreGoogleOAuthState, secureLog } from '../security/oauthSecurity';
 import { trimTrailingSlash } from './valueUtils';
 
@@ -12,7 +10,13 @@ const DEFAULT_APP_ORIGIN = 'https://readwith-frontend.vercel.app';
 export const DEFAULT_DEV_PROXY_TARGET =
   'http://read-with-dev-env.eba-wuzcb2s6.ap-northeast-2.elasticbeanstalk.com';
 
-const CDN_PUBLIC_HOST = 'cdn.readwith.cloud';
+const CDN_PUBLIC_HOST = (() => {
+  try {
+    return new URL(DEFAULT_CDN_BASE_URL).host;
+  } catch {
+    return 'cdn.readwith.cloud';
+  }
+})();
 
 const envString = (key) => {
   const value = import.meta.env[key];
@@ -86,9 +90,7 @@ export const getDevBackendHintUrl = () => {
   }
 };
 
-export const clearAuthData = () => {
-  clearAuthTokenStorage();
-};
+export { clearAuthData };
 
 export const isOAuthCallbackRoute = () => {
   if (typeof window === 'undefined') return false;
@@ -112,6 +114,7 @@ export function buildGoogleOAuthAuthUrl() {
   const redirectUri = getGoogleOAuthRedirectUri();
   const oauthState = createAndStoreGoogleOAuthState();
 
+  // 백엔드가 token 교환에 code_verifier를 넘기기 전까지 PKCE 미사용
   return (
     `https://accounts.google.com/o/oauth2/v2/auth?` +
     `client_id=${clientId}&` +
@@ -119,7 +122,7 @@ export function buildGoogleOAuthAuthUrl() {
     `response_type=code&` +
     `scope=email profile&` +
     `access_type=offline&` +
-    `prompt=consent&` +
+    `prompt=select_account&` +
     `state=${encodeURIComponent(oauthState)}`
   );
 }
@@ -318,6 +321,7 @@ const buildCoverRefreshSource = (sanitized) => {
   const bookId = extractBookIdFromPublicAssetUrl(sanitized);
   if (!bookId) return null;
   return async () => {
+    const { getBook } = await import('../api/booksApi');
     const res = await getBook(bookId);
     return res?.isSuccess ? res.result?.coverImgUrl : null;
   };
@@ -348,6 +352,7 @@ const fetchProtectedBlobUrl = async (sourceUrl) => {
 
   const request = (async () => {
     try {
+      const { authenticatedFetch } = await import('../api/authApi');
       const res = await authenticatedFetch(fetchUrl);
       if (!res.ok) {
         if (res.status === 404) {
@@ -598,16 +603,15 @@ export function getOAuthErrorTip(error) {
   if (error.includes('이미 등록된 Google 계정')) {
     return '다른 Google 계정으로 시도하거나, 기존 계정으로 로그인해 보세요.';
   }
-  if (error.includes('State 파라미터') || error.includes('OAuth state')) {
+  if (
+    error.includes('State 파라미터') ||
+    error.includes('OAuth state') ||
+    error.includes('이미 처리된 로그인') ||
+    error.includes('유효한 로그인 정보') ||
+    error.includes('invalid_grant') ||
+    error.includes('code verifier')
+  ) {
     return '홈에서 Google 로그인을 다시 시도해 주세요.';
   }
   return '네트워크 연결과 Google OAuth 설정을 확인한 뒤 다시 시도해 주세요.';
-}
-
-export function getOAuthErrorTipTone(error) {
-  if (!error) return 'warn';
-  if (error.includes('CORS') || error.includes('이미 등록된 Google 계정')) {
-    return 'danger';
-  }
-  return 'warn';
 }

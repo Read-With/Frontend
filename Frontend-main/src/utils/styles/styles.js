@@ -1,17 +1,13 @@
 /** 공통 UI 스타일·애니메이션·색상 상수 */
 
+import { GRAPH_COLORS, STYLE_DURATION } from './graphStyles';
+
 export const ANIMATION_VALUES = {
-  EASE: 'ease',
   EASE_OUT: 'cubic-bezier(0.4, 0, 0.2, 1)',
-  EASE_IN_OUT: 'cubic-bezier(0.4, 2, 0.6, 1)',
-  DURATION: {
-    FAST: '0.18s',
-    NORMAL: '0.3s',
-    SLOW: '0.4s',
-  },
+  DURATION: STYLE_DURATION,
 };
 
-export function createSlideAnimation(isOpen, animationValues, translateX = -10) {
+function createSlideAnimation(isOpen, animationValues, translateX = -10) {
   return {
     opacity: isOpen ? 1 : 0,
     transform: isOpen ? 'translateX(0)' : `translateX(${translateX}px)`,
@@ -37,42 +33,14 @@ export function mergeRefs(...refs) {
 }
 
 const COLORS = {
-  primary: '#5C6F5C',
+  ...GRAPH_COLORS,
   primaryLight: '#E8F5E8',
-  textPrimary: '#5C6F5C',
-  textSecondary: '#6c757d',
-  border: '#e5e7eb',
-  borderLight: '#e3e6ef',
   background: '#fff',
-  backgroundLight: '#f8f9fc',
-  backgroundLighter: '#f8fafc',
   error: '#ef4444',
-  success: '#10b981',
-  warning: '#f59e0b',
-  // 추가 색상 상수들
-  blue: '#5C6F5C',
-  blueHover: '#4A5A4A',
-  gray: '#6b7280',
-  grayHover: '#4b5563',
+  darkText: GRAPH_COLORS.primary,
+  tooltipClose: '#bfc8e2',
   lightGray: '#f9fafb',
   lightGrayBorder: '#d1d5db',
-  white: '#ffffff',
-  darkText: '#5C6F5C',
-  tooltipClose: '#bfc8e2',
-  // 그래프 전용 색상들
-  nodeBackground: '#eee',
-  nodeBorder: '#5B7BA0',
-  nodeText: '#444',
-  edgeText: '#42506b',
-  successGreen: '#22c55e',
-  highlightBlue: '#5C6F5C',
-};
-
-const BREAKPOINTS = {
-  mobile: '480px',
-  tablet: '768px',
-  desktop: '1024px',
-  wide: '1200px',
 };
 
 const createFocusStyle = () => ({
@@ -113,31 +81,6 @@ export const createButtonStyle = (animationValues, variant = 'default') => {
       color: COLORS.darkText,
       border: `1px solid ${COLORS.border}`,
     },
-    primary: {
-      background: COLORS.blue,
-      color: COLORS.white,
-      border: `1px solid ${COLORS.blue}`,
-    },
-    secondary: {
-      background: COLORS.gray,
-      color: COLORS.white,
-      border: `1px solid ${COLORS.gray}`,
-    },
-    // 특수 버튼들
-    close: {
-      position: 'absolute',
-      top: '8px',
-      right: '8px',
-      background: COLORS.white,
-      color: COLORS.darkText,
-      border: `1px solid ${COLORS.border}`,
-      borderRadius: '6px',
-      width: '32px',
-      height: '32px',
-      padding: '0',
-      fontSize: '16px',
-      zIndex: 100,
-    },
     tooltipClose: {
       background: 'none',
       border: 'none',
@@ -152,22 +95,6 @@ export const createButtonStyle = (animationValues, variant = 'default') => {
       padding: '0',
       borderRadius: '4px',
     },
-    // 기존 고급 스타일 유지
-    primaryAdvanced: {
-      background: `linear-gradient(135deg, ${COLORS.primary} 0%, ${COLORS.primary} 100%)`,
-      color: COLORS.white,
-      border: 'none',
-      borderRadius: '12px',
-      padding: '14px 28px',
-      fontSize: '15px',
-      fontWeight: '600',
-      boxShadow: `0 4px 12px ${COLORS.primary}40`,
-      position: 'relative',
-      overflow: 'hidden',
-      transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-      height: 'auto',
-    },
-    // relationStyles.js 전용 버튼들
     primaryEdge: {
       background: COLORS.primary,
       color: COLORS.white,
@@ -196,21 +123,10 @@ export const createButtonStyle = (animationValues, variant = 'default') => {
       margin: '0 auto',
       display: 'inline-block',
     },
-    closeEdge: {
-      background: 'none',
-      border: 'none',
-      fontSize: '18px',
-      color: COLORS.tooltipClose,
-      position: 'absolute',
-      top: '14px',
-      right: '14px',
-      zIndex: 2,
-      width: '24px',
-      height: '24px',
-      padding: '0',
-      borderRadius: '4px',
-    },
   };
+
+  // closeEdge는 tooltipClose와 동일 (호환 alias)
+  variants.closeEdge = variants.tooltipClose;
 
   return { ...baseStyle, ...variants[variant] };
 };
@@ -219,47 +135,7 @@ export const createButtonStyle = (animationValues, variant = 'default') => {
  * 통일된 버튼 hover 효과 핸들러
  */
 const ADVANCED_BUTTON_HANDLERS = {
-  primaryAdvanced: {
-    onMouseOver: (e) => {
-      e.currentTarget.style.transform = 'translateY(-2px)';
-      e.currentTarget.style.boxShadow = `0 8px 20px ${COLORS.primary}59`;
-    },
-    onMouseOut: (e) => {
-      e.currentTarget.style.transform = 'translateY(0)';
-      e.currentTarget.style.boxShadow = `0 4px 12px ${COLORS.primary}40`;
-    },
-  },
-  primary: {
-    onMouseEnter: (e) => {
-      e.target.style.background = COLORS.blueHover;
-      e.target.style.borderColor = COLORS.blueHover;
-    },
-    onMouseLeave: (e) => {
-      e.target.style.background = COLORS.blue;
-      e.target.style.borderColor = COLORS.blue;
-    },
-  },
-  secondary: {
-    onMouseEnter: (e) => {
-      e.target.style.background = COLORS.grayHover;
-      e.target.style.borderColor = COLORS.grayHover;
-    },
-    onMouseLeave: (e) => {
-      e.target.style.background = COLORS.gray;
-      e.target.style.borderColor = COLORS.gray;
-    },
-  },
   default: {
-    onMouseEnter: (e) => {
-      e.target.style.background = COLORS.lightGray;
-      e.target.style.borderColor = COLORS.lightGrayBorder;
-    },
-    onMouseLeave: (e) => {
-      e.target.style.background = COLORS.white;
-      e.target.style.borderColor = COLORS.border;
-    },
-  },
-  close: {
     onMouseEnter: (e) => {
       e.target.style.background = COLORS.lightGray;
       e.target.style.borderColor = COLORS.lightGrayBorder;
@@ -281,28 +157,12 @@ const ADVANCED_BUTTON_HANDLERS = {
   },
 };
 
+ADVANCED_BUTTON_HANDLERS.closeEdge = ADVANCED_BUTTON_HANDLERS.tooltipClose;
+
 export const createAdvancedButtonHandlers = (variant) => ADVANCED_BUTTON_HANDLERS[variant] ?? {};
 
-/**
- * 조건부 애니메이션 생성 함수
- * @param {boolean} condition - 애니메이션 비활성화 조건
- * @param {string} normalTransition - 정상 상태의 transition
- * @param {string} disabledTransition - 비활성화 상태의 transition
- * @returns {string} 조건에 따른 transition 값
- */
-export const createConditionalTransition = (condition, normalTransition, disabledTransition = 'none') => {
+const createConditionalTransition = (condition, normalTransition, disabledTransition = 'none') => {
   return condition ? disabledTransition : normalTransition;
-};
-
-/**
- * 복합 애니메이션 생성 함수
- * @param {Array<string>} properties - 애니메이션할 속성들
- * @param {string} duration - 애니메이션 지속 시간
- * @param {string} easing - 애니메이션 이징 함수
- * @returns {string} 복합 transition 값
- */
-export const createComplexTransition = (properties, duration, easing) => {
-  return properties.map(prop => `${prop} ${duration} ${easing}`).join(', ');
 };
 
 // 반응형 사이드바 너비
@@ -401,46 +261,6 @@ export const sidebarStyles = {
     minHeight: '24px',
   }),
   chapterText: (isOpen, animationValues) => createSlideAnimation(isOpen, animationValues),
-  chapterTitle: (isOpen, animationValues) => ({
-    ...createSlideAnimation(isOpen, animationValues),
-    fontSize: '12px',
-    color: COLORS.textSecondary,
-    marginTop: '2px',
-  }),
-  content: (isOpen, animationValues) => ({
-    flex: 1,
-    padding: isOpen ? '16px' : '8px',
-    overflowY: 'auto',
-    overflowX: 'hidden',
-    transition: `padding ${animationValues.DURATION.NORMAL} ${animationValues.EASE_OUT}`,
-  }),
-  footer: {
-    padding: '16px',
-    borderTop: `1px solid ${COLORS.border}`,
-    background: COLORS.backgroundLight,
-    flexShrink: 0,
-  },
-  footerButton: {
-    width: '100%',
-    height: '40px',
-    border: `1px solid ${COLORS.primary}`,
-    borderRadius: '6px',
-    background: COLORS.background,
-    color: COLORS.primary,
-    fontSize: '14px',
-    fontWeight: '500',
-    cursor: 'pointer',
-    transition: 'all 0.2s ease',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: '8px',
-    ...createFocusStyle(),
-  },
-  footerButtonHover: {
-    background: COLORS.primary,
-    color: COLORS.background,
-  },
 };
 
 export const topBarStyles = {
@@ -470,101 +290,12 @@ export const topBarStyles = {
     overflow: 'visible',
     flexWrap: 'nowrap',
   },
-  centerSection: {
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    justifyContent: 'center',
-    flex: 1,
-    textAlign: 'center',
-  },
-  rightSection: {
-    display: 'flex',
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    flexShrink: 0,
-  },
-  backButton: {
-    height: 40,
-    padding: '0 16px',
-    borderRadius: 8,
-    border: `1.5px solid ${COLORS.borderLight}`,
-    background: COLORS.background,
-    color: COLORS.textPrimary,
-    fontSize: 14,
-    fontWeight: 600,
-    cursor: 'pointer',
-    transition: 'all 0.2s ease',
-    outline: 'none',
-    display: 'flex',
-    alignItems: 'center',
-    gap: 6,
-    boxShadow: '0 2px 4px rgba(0,0,0,0.05)',
-  },
-  title: {
-    fontSize: 16,
-    fontWeight: 600,
-    color: COLORS.textPrimary,
-    margin: 0,
-  },
-  subtitle: {
-    fontSize: 12,
-    color: COLORS.textSecondary,
-    margin: 0,
-    marginTop: 2,
-  },
-  closeButton: (animationValues) => ({
-    height: 40,
-    width: 40,
-    borderRadius: 8,
-    border: `1.5px solid ${COLORS.borderLight}`,
-    background: COLORS.background,
-    color: COLORS.textPrimary,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    cursor: 'pointer',
-    transition: `all ${animationValues.DURATION.FAST} ease`,
-    outline: 'none',
-    fontSize: 16,
-    boxShadow: '0 2px 4px rgba(0,0,0,0.05)',
-  }),
-};
-
-export const containerStyles = {
-  loading: {
-    width: '100%',
-    height: '100%',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    fontSize: 20,
-    color: COLORS.textPrimary,
-  },
-  error: {
-    width: '100%',
-    height: '100%',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    fontSize: 16,
-    color: COLORS.error,
-    textAlign: 'center',
-    padding: '20px',
-  },
-  controlsContainer: {
-    padding: '8px 16px',
-    background: COLORS.backgroundLight,
-    borderBottom: `1px solid ${COLORS.border}`,
-  },
 };
 
 // 그래프 관련 스타일은 graphStyles.js에서 import
 export { graphStyles, graphControlsStyles } from './graphStyles';
 
-// 기본 상수들
-export { COLORS, BREAKPOINTS };
+export { COLORS };
 
 // UnifiedNodeInfo 전용 툴팁 스타일
 export const unifiedNodeTooltipStyles = {
@@ -631,21 +362,13 @@ export const unifiedNodeTooltipStyles = {
 
 // UnifiedNodeInfo 전용 애니메이션 스타일
 export const unifiedNodeAnimations = {
-  // 툴팁 단순 전환 (opacity만)
   tooltipSimpleTransition: (isDragging) => 
     createConditionalTransition(isDragging, `opacity ${ANIMATION_VALUES.DURATION.NORMAL}`, 'none'),
   
-  // 툴팁 복합 전환 (opacity + transform) - UnifiedNodeInfo의 실제 사용 패턴 반영
   tooltipComplexTransition: (isDragging) => 
     createConditionalTransition(
       isDragging, 
       `opacity ${ANIMATION_VALUES.DURATION.NORMAL}, transform ${ANIMATION_VALUES.DURATION.SLOW}`, 
       'none'
     ),
-  
-  // 버튼 hover 전환
-  buttonHoverTransition: `all ${ANIMATION_VALUES.DURATION.FAST} ${ANIMATION_VALUES.EASE}`,
-  
-  // 사이드바 닫기 버튼 전환
-  sidebarCloseTransition: `all ${ANIMATION_VALUES.DURATION.FAST} ${ANIMATION_VALUES.EASE}`,
 };

@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback, useEffect } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Book, Plus, Library, Heart, AlertCircle, Grid3X3, List, Upload } from 'lucide-react';
 import Header from '../components/common/Header';
@@ -6,15 +6,14 @@ import BookLibrary from '../components/library/BookLibrary';
 import FileUpload from '../components/library/FileUpload';
 import { useBooks } from '../hooks/books/bookHooks';
 import useAuth from '../hooks/auth/useAuth';
-import { EPUB_FILE_CONSTRAINTS, validateEpubFile } from '../utils/library/libraryUtils';
+import { EPUB_FILE_CONSTRAINTS } from '../utils/library/libraryUtils';
 import './MyPage.css';
 
 export default function MyPage() {
   const navigate = useNavigate();
-  const { books, loading, error, retryFetch, addBook, toggleFavorite, removeBook } = useBooks();
+  const { books, loading, error, refetch, addBook, toggleFavorite, removeBook } = useBooks();
   const { user } = useAuth();
   const [showUpload, setShowUpload] = useState(false);
-  const [pendingUploadFile, setPendingUploadFile] = useState(null);
   const [activeTab, setActiveTab] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [searchInput, setSearchInput] = useState(''); // 검색 입력 필드용
@@ -24,26 +23,9 @@ export default function MyPage() {
 
   const handleUploadSuccess = useCallback((newBook) => {
     addBook(newBook);
-    setShowUpload(false);
-    setPendingUploadFile(null);
   }, [addBook]);
 
-  const handleCloseUpload = useCallback(() => {
-    setShowUpload(false);
-    setPendingUploadFile(null);
-  }, []);
-
-  const openUploadWithFile = useCallback((file) => {
-    if (!file) {
-      setShowUpload(true);
-      return;
-    }
-    const validation = validateEpubFile(file);
-    if (!validation.valid) {
-      alert(validation.error);
-      return;
-    }
-    setPendingUploadFile(file);
+  const openUpload = useCallback(() => {
     setShowUpload(true);
   }, []);
 
@@ -303,10 +285,10 @@ export default function MyPage() {
                   <div className="error-container">
                     <AlertCircle size={32} strokeWidth={2} className="error-icon" />
                     <div className="error-message">{error}</div>
-                    {retryFetch && (
+                    {refetch && (
                       <button
                         className="retry-button"
-                        onClick={retryFetch}
+                        onClick={refetch}
                       >
                         다시 시도
                       </button>
@@ -327,18 +309,18 @@ export default function MyPage() {
                         </p>
                       </div>
                       <div
-                        className="empty-welcome-upload"
-                        onClick={() => openUploadWithFile(null)}
+                        className="epub-dropzone empty-welcome-upload"
+                        onClick={openUpload}
                         role="button"
                         tabIndex={0}
                         onKeyDown={(e) => {
                           if (e.key === 'Enter' || e.key === ' ') {
                             e.preventDefault();
-                            openUploadWithFile(null);
+                            openUpload();
                           }
                         }}
                       >
-                        <div className="empty-welcome-upload-icon">
+                        <div className="epub-dropzone-icon" aria-hidden>
                           <Upload size={32} strokeWidth={1.5} />
                         </div>
                         <strong>EPUB 파일 업로드</strong>
@@ -380,7 +362,7 @@ export default function MyPage() {
                     <button
                       type="button"
                       className={`add-book-card${viewMode === 'list' ? ' list-view' : ''}`}
-                      onClick={() => openUploadWithFile(null)}
+                      onClick={openUpload}
                       aria-label="책 추가"
                     >
                       <span className="add-book-card-icon">
@@ -397,9 +379,8 @@ export default function MyPage() {
 
         {showUpload && (
           <FileUpload
-            initialFile={pendingUploadFile}
             onUploadSuccess={handleUploadSuccess}
-            onClose={handleCloseUpload}
+            onClose={() => setShowUpload(false)}
           />
         )}
       </div>
