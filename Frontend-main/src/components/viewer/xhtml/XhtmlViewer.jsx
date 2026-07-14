@@ -1,4 +1,4 @@
-import React, {
+import {
   useRef,
   useImperativeHandle,
   forwardRef,
@@ -14,11 +14,10 @@ import { defaultSettings } from '../../../utils/common/settingsUtils';
 import {
   absoluteOffsetFromReadingProgressPercent,
   locatorFromBookAbsoluteOffset,
+  getManifestFromCache,
 } from '../../../utils/common/cache/manifestCache';
 import {
-  resolveMetricsFromLocator,
   toReadingLocatorKey,
-  toReadingLocatorKeyFromAnchor,
 } from '../../../utils/viewer/viewerEventProgressUtils';
 import { errorUtils } from '../../../utils/common/errorUtils';
 import {
@@ -26,7 +25,6 @@ import {
   XHTML_CACHE_INVALIDATED_EVENT,
 } from '../../../utils/viewer/xhtmlLoadCache';
 import { resolveViewerBookKey, resolveServerBookIdOrFallback } from '../../../hooks/common/hooksShared';
-import { getManifestFromCache } from '../../../utils/common/cache/manifestCache';
 import {
   collectBlockEntries,
   computeLineBoundsFromRuler,
@@ -42,13 +40,14 @@ const XhtmlViewer = forwardRef(
     {
       book,
       bookId,
-      onProgressChange,
       onCurrentPageChange,
       onTotalPagesChange,
       onCurrentLineChange,
       settings = defaultSettings,
-      initialAnchor,
       manifestReady = true,
+      /** resume 점프 전 본문 깜빡임 방지(레이아웃·ruler는 유지) */
+      suppressViewport = false,
+      suppressMessage = '로딩 중...',
     },
     ref
   ) => {
@@ -56,6 +55,7 @@ const XhtmlViewer = forwardRef(
     const viewportRef = useRef(null);
     const contentRef = useRef(null);
     const rulerRef = useRef(null);
+    const pendingDisplayRef = useRef(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
     const [xhtmlContent, setXhtmlContent] = useState(null);
@@ -66,9 +66,7 @@ const XhtmlViewer = forwardRef(
     const touchStartX = useRef(0);
     const lastLocatorRef = useRef(null);
     const lastEmittedViewportLocatorJsonRef = useRef(null);
-    const prevBidForInitialRef = useRef(null);
-    const initialSeekAppliedRef = useRef(false);
-    const lastInitialAnchorKeyRef = useRef('');
+    const prevBidRef = useRef(null);
     const lineBoundsRef = useRef([]);
     const [lineBoundsVersion, setLineBoundsReady] = useState(0);
     const lastReportedPagingRef = useRef({
@@ -148,10 +146,8 @@ const XhtmlViewer = forwardRef(
     }, []);
 
     useEffect(() => {
-      if (prevBidForInitialRef.current === bid) return;
-      prevBidForInitialRef.current = bid;
-      initialSeekAppliedRef.current = false;
-      lastInitialAnchorKeyRef.current = '';
+      if (prevBidRef.current === bid) return;
+      prevBidRef.current = bid;
       lastEmittedViewportLocatorJsonRef.current = null;
       lastLocatorRef.current = null;
     }, [bid]);
@@ -167,28 +163,17 @@ const XhtmlViewer = forwardRef(
     }, [currentPageIndex, safePageIndex]);
 
     const emitLocator = useCallback(
-      (loc, persistLoc = null, linePosition = 0) => {
+      (loc) => {
         if (!loc?.startLocator) return;
         const endForKey = loc.endLocator ?? loc.startLocator;
         const viewportKey = toReadingLocatorKey(loc.startLocator, endForKey);
-        const locatorUnchanged = viewportKey === lastEmittedViewportLocatorJsonRef.current;
+        if (viewportKey === lastEmittedViewportLocatorJsonRef.current) return;
 
-        if (!locatorUnchanged) {
-          lastEmittedViewportLocatorJsonRef.current = viewportKey;
-          lastLocatorRef.current = persistLoc?.startLocator ? persistLoc : loc;
-          onCurrentLineChange?.(linePosition, 0, { anchor: loc });
-        }
-
-        const saveLoc = lastLocatorRef.current?.startLocator ?? loc.startLocator;
-        const metrics =
-          bid && saveLoc
-            ? resolveMetricsFromLocator(bid, saveLoc, { metricsReady: manifestReady })
-            : null;
-        if (metrics?.readingProgressPercent != null) {
-          onProgressChange?.(metrics.readingProgressPercent);
-        }
+        lastEmittedViewportLocatorJsonRef.current = viewportKey;
+        lastLocatorRef.current = loc;
+        onCurrentLineChange?.({ anchor: loc });
       },
-      [onCurrentLineChange, bid, onProgressChange, manifestReady]
+      [onCurrentLineChange]
     );
 
     useEffect(() => {
@@ -298,7 +283,7 @@ const XhtmlViewer = forwardRef(
       });
 
       if (result.kind !== 'emit') return;
-      emitLocator(result.loc, result.persistLoc, result.linePosition);
+      emitLocator(result.loc);
     }, [
       xhtmlContent,
       safePageIndex,
@@ -310,13 +295,6 @@ const XhtmlViewer = forwardRef(
       lineBoundsVersion,
       manifest,
     ]);
-
-    useEffect(() => {
-      if (!bid) {
-        initialSeekAppliedRef.current = false;
-        lastInitialAnchorKeyRef.current = '';
-      }
-    }, [bid]);
 
     const resolvePageHeight = useCallback(() => {
       if (typeof pageHeight === 'number' && pageHeight > 0) return pageHeight;
@@ -338,8 +316,11 @@ const XhtmlViewer = forwardRef(
     const nextPage = useCallback(() => goPageByDelta(1), [goPageByDelta]);
 
     const displayAt = useCallback((target) => {
+      if (!target) return false;
+      pendingDisplayRef.current = target;
+
       const ruler = rulerRef.current;
-      if (!target || !ruler) return false;
+      if (!ruler) return false;
 
       const ph = resolvePageHeight();
       if (!(ph > 0)) return false;
@@ -356,48 +337,19 @@ const XhtmlViewer = forwardRef(
       });
       if (pageIdx == null) return false;
 
+      pendingDisplayRef.current = null;
       setCurrentPageIndex(pageIdx);
       return true;
     }, [resolvePageHeight, totalPages, manifest]);
 
+    // 레이아웃(ruler·pageHeight) 준비되면 대기 중이던 resume displayAt 재시도
     useLayoutEffect(() => {
-      if (!xhtmlContent || !rulerRef.current || !totalPages) return;
+      const pending = pendingDisplayRef.current;
+      if (!pending) return;
+      displayAt(pending);
+    }, [xhtmlContent, pageHeight, contentHeight, lineBoundsVersion, totalPages, manifest, displayAt]);
 
-      const ph = resolvePageHeight();
-      if (!(ph > 0)) return;
-
-      const anchorKey = toReadingLocatorKeyFromAnchor(initialAnchor);
-      if (!anchorKey) return;
-
-      if (initialSeekAppliedRef.current && lastInitialAnchorKeyRef.current === anchorKey) return;
-
-      const ruler = rulerRef.current;
-      const initLoc = initialAnchor?.startLocator ?? initialAnchor?.start ?? initialAnchor;
-      if (initLoc?.chapterIndex == null && initLoc?.chapterIdx == null) return;
-
-      const pageIdx = resolvePageIndexFromLocator({
-        locator: initLoc,
-        ruler,
-        manifest,
-        totalPages,
-        pageHeightPx: ph,
-      });
-
-      if (pageIdx != null) {
-        setCurrentPageIndex(pageIdx);
-        lastInitialAnchorKeyRef.current = anchorKey;
-        initialSeekAppliedRef.current = true;
-      }
-    }, [
-      xhtmlContent,
-      totalPages,
-      pageHeight,
-      initialAnchor,
-      manifest,
-      resolvePageHeight,
-    ]);
-
-    const applySettings = useCallback(() => {
+    const refreshLayout = useCallback(() => {
       recomputeLineBounds();
       refreshContentHeight();
     }, [recomputeLineBounds, refreshContentHeight]);
@@ -408,16 +360,15 @@ const XhtmlViewer = forwardRef(
       getCurrentLocator: () => lastLocatorRef.current,
       moveToProgress: (pct) => {
         const numericBid = Number(bid);
-        if (!Number.isFinite(numericBid) || numericBid <= 0) return;
+        if (!Number.isFinite(numericBid) || numericBid <= 0) return false;
         const abs = absoluteOffsetFromReadingProgressPercent(numericBid, pct);
         const loc = locatorFromBookAbsoluteOffset(numericBid, abs);
-        if (loc) {
-          displayAt({ startLocator: loc, endLocator: loc });
-        }
+        if (!loc) return false;
+        return displayAt({ startLocator: loc, endLocator: loc });
       },
       displayAt,
-      applySettings,
-    }), [prevPage, nextPage, displayAt, applySettings, bid]);
+      refreshLayout,
+    }), [prevPage, nextPage, displayAt, refreshLayout, bid]);
 
     const handleKeyDown = useCallback((e) => {
       if (e.target.closest('input, textarea, [contenteditable]')) return;
@@ -470,6 +421,7 @@ const XhtmlViewer = forwardRef(
         tabIndex={0}
         role="region"
         aria-label={`책 본문 뷰어, ${currentPage} / ${totalPages} 페이지`}
+        aria-busy={suppressViewport || undefined}
         onKeyDown={handleKeyDown}
         onWheel={(e) => e.preventDefault()}
         onTouchStart={handleTouchStart}
@@ -501,9 +453,24 @@ const XhtmlViewer = forwardRef(
           }
         `}</style>
         <div ref={rulerRef} className="xhtml-viewer-ruler xhtml-viewer-content" dangerouslySetInnerHTML={contentHtml} aria-hidden />
-        <div ref={viewportRef} style={viewportStyle}>
+        <div
+          ref={viewportRef}
+          style={{
+            ...viewportStyle,
+            visibility: suppressViewport ? 'hidden' : undefined,
+          }}
+        >
           <div ref={contentRef} className="xhtml-viewer-content" style={contentStyle} dangerouslySetInnerHTML={contentHtml} />
         </div>
+        {suppressViewport ? (
+          <div
+            className="absolute inset-0 flex items-center justify-center bg-white text-gray-600"
+            role="status"
+            aria-live="polite"
+          >
+            {suppressMessage}
+          </div>
+        ) : null}
       </div>
     );
   }

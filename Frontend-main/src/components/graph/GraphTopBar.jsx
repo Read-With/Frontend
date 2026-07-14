@@ -1,4 +1,3 @@
-import React from 'react';
 import PropTypes from 'prop-types';
 import GraphControls, { EdgeLabelToggle } from './GraphControls';
 import { topBarStyles, COLORS, ANIMATION_VALUES } from '../../utils/styles/styles.js';

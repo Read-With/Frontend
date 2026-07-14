@@ -1,0 +1,171 @@
+/* ViewerSettings modal */
+
+.viewer-settings-overlay {
+  position: fixed;
+  inset: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+}
+
+.viewer-settings-dialog {
+  background-color: #fff;
+  border-radius: 12px;
+  padding: 24px;
+  width: 90%;
+  max-width: 500px;
+  max-height: 80vh;
+  overflow-y: auto;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+}
+
+.viewer-settings-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.viewer-settings-title {
+  margin: 0;
+  font-size: 1.5rem;
+  font-weight: bold;
+  color: #5c6f5c;
+}
+
+.viewer-settings-section {
+  margin-bottom: 24px;
+}
+
+.viewer-settings-section-title {
+  margin: 0 0 12px;
+  font-size: 1.1rem;
+  font-weight: bold;
+  color: #5c6f5c;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.viewer-settings-mode-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.viewer-settings-mode-btn {
+  border: 1px solid #5c6f5c;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  text-align: left;
+  width: 100%;
+  justify-content: flex-start;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background-color 0.2s ease, color 0.2s ease;
+  background-color: #fff;
+  color: #5c6f5c;
+  font-weight: normal;
+}
+
+.viewer-settings-mode-btn:hover {
+  background-color: #f0fdf4;
+}
+
+.viewer-settings-mode-btn.is-selected {
+  background-color: #5c6f5c;
+  color: #fff;
+  font-weight: bold;
+}
+
+.viewer-settings-mode-btn.is-selected:hover {
+  background-color: #4a5a4a;
+}
+
+.viewer-settings-step-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+}
+
+.viewer-settings-step-row > div {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+}
+
+.viewer-settings-step-row input[type='range'] {
+  width: 100%;
+  margin: 0;
+}
+
+.viewer-settings-step-btn {
+  flex-shrink: 0;
+}
+
+.viewer-settings-step-value {
+  flex-shrink: 0;
+  min-width: 60px;
+  text-align: right;
+}
+
+.viewer-settings-step-btn,
+.viewer-settings-outline-btn,
+.viewer-settings-close-btn {
+  background-color: #fff;
+  color: #5c6f5c;
+  border: 1px solid #5c6f5c;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.viewer-settings-step-btn:hover,
+.viewer-settings-outline-btn:hover,
+.viewer-settings-close-btn:hover {
+  background-color: #f0fdf4;
+}
+
+.viewer-settings-step-btn {
+  padding: 8px 12px;
+  font-weight: bold;
+}
+
+.viewer-settings-outline-btn {
+  padding: 10px 20px;
+}
+
+.viewer-settings-close-btn {
+  padding: 8px 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.viewer-settings-apply-btn {
+  background-color: #5c6f5c;
+  color: #fff;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: bold;
+  transition: background-color 0.2s ease;
+}
+
+.viewer-settings-apply-btn:hover {
+  background-color: #4a5a4a;
+}
+
+.viewer-settings-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 24px;
+}

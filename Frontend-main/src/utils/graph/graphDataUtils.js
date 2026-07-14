@@ -234,7 +234,6 @@ function deepEqual(obj1, obj2, depth = 0) {
  * @param {Object} [params.idToMain]
  * @param {Object} [params.idToNames]
  * @param {Object|null} [params.nodeWeights]
- * @param {Array|null} [params.previousRelations]
  * @param {Object|null} [params.eventData]
  * @param {Object|null} [params.idToProfileImage]
  * @param {Array|null} [params.charactersOrphanMerge]
@@ -248,7 +247,6 @@ export function convertRelationsToElements({
   idToMain = {},
   idToNames = {},
   nodeWeights = null,
-  previousRelations = null,
   eventData = null,
   idToProfileImage = null,
   charactersOrphanMerge = null,
@@ -374,15 +372,6 @@ export function convertRelationsToElements({
   });
 
   /** id1->id2 방향만; 역쌍은 관계 동일 시 `a-b`·bidirectional, 다르면 `a->b`·`b->a` 각각 */
-  const previousRelationSet = new Set();
-  if (previousRelations && Array.isArray(previousRelations)) {
-    previousRelations.forEach((prevRel) => {
-      const pr = normalizeRelation(prevRel);
-      if (!isValidRelation(pr)) return;
-      previousRelationSet.add(directedEdgeElementId(pr.id1, pr.id2));
-    });
-  }
-
   const edgeMap = new Map();
   const positivityByEdge = new Map();
 
@@ -436,25 +425,7 @@ export function convertRelationsToElements({
     if (Array.isArray(rel.relation)) {
       relationArray = rel.relation;
       if (!relationLabel) {
-        const directedKey = directedEdgeElementId(id1, id2);
-        const isNewRelation = !previousRelationSet.has(directedKey);
-
-        if (isNewRelation || !previousRelations) {
-          relationLabel = rel.relation[0] || "";
-        } else {
-          const prevRel = previousRelations.find((p) => {
-            const pr = normalizeRelation(p);
-            if (!pr) return false;
-            return String(pr.id1) === id1 && String(pr.id2) === id2;
-          });
-
-          if (prevRel && Array.isArray(prevRel.relation)) {
-            const newElements = rel.relation.filter((element) => !prevRel.relation.includes(element));
-            relationLabel = newElements.length > 0 ? newElements[0] : rel.relation[0] || "";
-          } else {
-            relationLabel = rel.relation[0] || "";
-          }
-        }
+        relationLabel = rel.relation[0] || "";
       }
     } else if (typeof rel.relation === "string") {
       relationArray = [rel.relation];
@@ -587,6 +558,36 @@ export function buildElementsStructureFingerprint(elements) {
 }
 
 /**
+ * seed 노드에 연결된 edge(+endpoint 노드) 서브그래프.
+ * @param {'any'|'both'} [options.seedEdgeMode='any'] any=한쪽만 seed, both=양끝 모두 seed
+ * @param {boolean} [options.includeIsolatedSeeds=true] seed에 간선이 없어도 노드 포함
+ */
+export function expandConnectedSubgraph(
+  elements,
+  seedNodeIds,
+  { seedEdgeMode = 'any', includeIsolatedSeeds = true } = {}
+) {
+  if (!Array.isArray(elements) || !seedNodeIds?.size) return [];
+
+  const seeds = seedNodeIds instanceof Set ? seedNodeIds : new Set(seedNodeIds);
+  const connectedEdges = elements.filter((el) => {
+    if (!isGraphEdgeElement(el)) return false;
+    const sIn = seeds.has(el.data.source);
+    const tIn = seeds.has(el.data.target);
+    return seedEdgeMode === 'both' ? sIn && tIn : sIn || tIn;
+  });
+
+  const nodeIds = includeIsolatedSeeds ? new Set(seeds) : new Set();
+  connectedEdges.forEach((edge) => {
+    if (edge.data.source != null) nodeIds.add(edge.data.source);
+    if (edge.data.target != null) nodeIds.add(edge.data.target);
+  });
+
+  const nodes = elements.filter((el) => isGraphNodeElement(el) && nodeIds.has(el.data.id));
+  return [...nodes, ...connectedEdges];
+}
+
+/**
  * 3단계 필터링 로직 (RelationGraphWrapper, GraphSplitArea 등에서 공통 사용)
  * @param {Array} elements - 그래프 요소 배열
  * @param {number} filterStage - 필터링 단계 (0: 전체, 1: 핵심인물만, 2: 핵심인물과 연결된 인물)
@@ -594,53 +595,25 @@ export function buildElementsStructureFingerprint(elements) {
  */
 export function filterMainCharacters(elements, filterStage) {
   if (filterStage === 0 || !elements) return elements;
-  
-  // 핵심 인물 (isMainCharacter: true) 노드들
-  const coreNodes = elements.filter(el =>
-    isGraphNodeElement(el) &&
-    el.data.isMainCharacter === true
+
+  const coreNodes = elements.filter(
+    (el) => isGraphNodeElement(el) && el.data.isMainCharacter === true
   );
-  
-  const coreNodeIds = new Set(coreNodes.map(node => node.data.id));
-  
-  let filteredNodes = [];
-  let filteredEdges = [];
-  
+  const coreNodeIds = new Set(coreNodes.map((node) => node.data.id));
+
   if (filterStage === 1) {
-    // 1단계: 핵심인물끼리의 연결만
-    filteredNodes = coreNodes;
-    filteredEdges = elements.filter(el => 
-      isGraphEdgeElement(el) &&
-      coreNodeIds.has(el.data.source) && 
-      coreNodeIds.has(el.data.target)
-    );
-  } else if (filterStage === 2) {
-    // 2단계: 핵심인물과 핵심인물에 연결된 노드(핵심인물, 비핵심인물) + 간선
-    // 핵심 인물과 연결된 간선들 찾기
-    const connectedEdges = elements.filter(el => 
-      isGraphEdgeElement(el) &&
-      // 최소 하나의 노드는 핵심 인물이어야 함
-      (coreNodeIds.has(el.data.source) || coreNodeIds.has(el.data.target))
-    );
-    
-    // 연결된 노드들의 ID 수집
-    const connectedNodeIds = new Set();
-    connectedEdges.forEach(edge => {
-      if (edge.data.source) connectedNodeIds.add(edge.data.source);
-      if (edge.data.target) connectedNodeIds.add(edge.data.target);
+    return expandConnectedSubgraph(elements, coreNodeIds, {
+      seedEdgeMode: 'both',
+      includeIsolatedSeeds: true,
     });
-    
-    // 핵심 인물과 연결된 모든 노드들
-    const connectedNodes = elements.filter(el =>
-      isGraphNodeElement(el) &&
-      connectedNodeIds.has(el.data.id)
-    );
-    
-    filteredNodes = connectedNodes;
-    filteredEdges = connectedEdges;
   }
-  
-  return [...filteredNodes, ...filteredEdges];
+  if (filterStage === 2) {
+    return expandConnectedSubgraph(elements, coreNodeIds, {
+      seedEdgeMode: 'any',
+      includeIsolatedSeeds: false,
+    });
+  }
+  return elements;
 }
 
 /**

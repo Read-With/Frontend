@@ -91,6 +91,14 @@ export const resolveProgressLocator = (data) => {
   return toLocator(candidate) ?? candidate;
 };
 
+/** 뷰어 displayAt / preferred resume용 앵커 (진도·북마크 공용) */
+export const toViewerResumeAnchor = (payload) => {
+  if (!payload || typeof payload !== 'object') return null;
+  const { startLocator, endLocator } = anchorToLocators(payload);
+  if (!startLocator) return null;
+  return { startLocator, endLocator: endLocator ?? startLocator };
+};
+
 /** progress payload → 뷰어용 { startLocator, endLocator } (동일 위치) */
 export const progressResultToViewerAnchor = (data) => {
   const loc = resolveProgressLocator(data);
@@ -101,9 +109,9 @@ export const progressResultToViewerAnchor = (data) => {
 /** 동일 resume 위치 중복 적용 방지 키 */
 export const viewerResumeAnchorKey = (anchor) => {
   if (!anchor || typeof anchor !== 'object') return '';
-  const loc = anchor.startLocator ?? anchor.start ?? null;
-  if (!loc || typeof loc !== 'object') return '';
-  return JSON.stringify(loc);
+  const loc = toLocator(anchor.startLocator ?? anchor.start ?? null);
+  if (!loc) return '';
+  return `${loc.chapterIndex}:${loc.blockIndex}:${loc.offset}`;
 };
 
 /** POST /api/v2/progress 및 캐시 병합용 payload 생성 */

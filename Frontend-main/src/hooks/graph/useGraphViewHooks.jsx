@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { buildSuggestions, filterGraphElements } from '../../utils/graph/searchUtils.js';
 import { filterMainCharacters } from '../../utils/graph/graphDataUtils';
-import { sortElementsByDataId } from '../../utils/graph/graphUtils';
+import { sortElementsByDataId, isGraphNodeElement } from '../../utils/graph/graphUtils';
 
 export function useGraphState() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
@@ -117,7 +117,7 @@ export function useGraphSearch(elements, currentChapterData = null) {
     setFitNodeIds(
       filtered
         ? filtered
-            .filter((el) => !el.data.source && el.data.id != null)
+            .filter((el) => isGraphNodeElement(el) && el.data.id != null)
             .map((el) => String(el.data.id))
         : []
     );
@@ -141,7 +141,7 @@ export function useGraphSearch(elements, currentChapterData = null) {
       setFitNodeIds(
         filtered
           ? filtered
-              .filter((el) => !el.data.source && el.data.id != null)
+              .filter((el) => isGraphNodeElement(el) && el.data.id != null)
               .map((el) => String(el.data.id))
           : []
       );

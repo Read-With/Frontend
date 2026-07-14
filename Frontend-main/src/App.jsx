@@ -1,5 +1,6 @@
-import React from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { ToastContainer } from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.css';
 import ViewerPage from './components/viewer/ViewerPage';
 import BookmarksPage from './components/viewer/bookmark/BookmarksPage';
 import RelationGraphWrapper from './components/graph/RelationGraphWrapper';
@@ -9,15 +10,16 @@ import HomePage from './pages/HomePage';
 import AdminPage from './pages/AdminPage';
 import ProtectedRoute from './components/auth/ProtectedRoute';
 import OAuthCallback from './components/auth/OAuthCallback';
+import { AuthProvider } from './hooks/auth/useAuth';
 
 const AppContent = () => {
   return (
     <Routes>
       <Route path="/" element={<HomePage />} />
       <Route path="/auth/callback" element={<OAuthCallback />} />
-      <Route path="/admin" element={<AdminPage />} />
 
       <Route element={<ProtectedRoute />}>
+        <Route path="/admin" element={<AdminPage />} />
         <Route path="/mypage" element={<MyPage />} />
         <Route path="/user/viewer/:filename/bookmarks" element={<BookmarksPage />} />
         <Route path="/user/viewer/:filename/*" element={<ViewerPage />} />
@@ -31,7 +33,20 @@ const App = () => {
   return (
     <RecoilRoot>
       <Router>
-        <AppContent />
+        <AuthProvider>
+          <AppContent />
+          <ToastContainer
+            position="bottom-center"
+            autoClose={2200}
+            hideProgressBar
+            newestOnTop
+            closeOnClick
+            pauseOnHover
+            draggable={false}
+            theme="light"
+            limit={3}
+          />
+        </AuthProvider>
       </Router>
     </RecoilRoot>
   );

@@ -319,21 +319,19 @@ const writeGraphBookCache = (bookId, payload) => {
 
 const getGraphBookCache = (bookId) => readGraphBookCache(bookId);
 
-export const ensureGraphBookCache = async (bookId, { forceRefresh = false, signal } = {}) => {
+export const ensureGraphBookCache = async (bookId, { signal } = {}) => {
   const numericId = toPositiveNumberOrNull(bookId);
   if (numericId === null) return null;
 
-  if (!forceRefresh) {
-    const existing = getGraphBookCache(numericId);
-    if (existing) return existing;
-  }
+  const existing = getGraphBookCache(numericId);
+  if (existing) return existing;
 
   if (graphBuildPromises.has(numericId)) {
     return graphBuildPromises.get(numericId);
   }
 
   const buildPromise = (async () => {
-    await getBookManifest(numericId, { forceRefresh });
+    await getBookManifest(numericId, { forceRefresh: false });
     const manifest = getManifestFromCache(numericId);
 
     const chapters = Array.isArray(manifest?.chapters) ? manifest.chapters : [];
@@ -353,7 +351,7 @@ export const ensureGraphBookCache = async (bookId, { forceRefresh = false, signa
         throw new DOMException('Aborted', 'AbortError');
       }
 
-      let chapterCache = forceRefresh ? null : getCachedChapterEvents(numericId, chapterIdx);
+      let chapterCache = getCachedChapterEvents(numericId, chapterIdx);
       if (!chapterCache) {
         chapterCache = await discoverChapterEvents(numericId, chapterIdx, true);
       }
@@ -739,15 +737,16 @@ const hasUsableChapterCacheThrough = (bookId, chapterIdx, throughEventIdx = null
 export async function ensureChapterEventsDiscovered(
   bookId,
   chapter,
-  { maxAttempts = 2, onPartialCache = null, throughEventIdx = null } = {}
+  { onPartialCache = null, throughEventIdx = null } = {}
 ) {
   if (!bookId || !chapter || chapter < 1) {
     return { success: false, reason: 'invalid_args' };
   }
   if (hasUsableChapterCacheThrough(bookId, chapter, throughEventIdx)) {
-    return { success: true, isEmpty: !getCachedChapterEvents(bookId, chapter)?.events?.length };
+    return { success: true };
   }
 
+  const maxAttempts = 2;
   let lastError = null;
   for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
     try {
@@ -757,10 +756,7 @@ export async function ensureChapterEventsDiscovered(
         onPartialCache,
       });
       if (hasUsableChapterCacheThrough(bookId, chapter, throughEventIdx)) {
-        return {
-          success: true,
-          isEmpty: !getCachedChapterEvents(bookId, chapter)?.events?.length,
-        };
+        return { success: true };
       }
     } catch (error) {
       lastError = error;

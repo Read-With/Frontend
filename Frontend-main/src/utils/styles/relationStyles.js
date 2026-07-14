@@ -1,5 +1,5 @@
 import { clampPositivity, getRelationColor } from './graphStyles';
-import { COLORS, ANIMATION_VALUES, createButtonStyle } from './styles';
+import { COLORS, ANIMATION_VALUES } from './styles';
 
 const styleCache = new Map();
 
@@ -107,10 +107,6 @@ export const tooltipStyles = {
     border: `1.5px solid ${COLORS.border}`,
     boxSizing: 'border-box',
     marginBottom: 0,
-  },
-  button: {
-    primary: createButtonStyle(ANIMATION_VALUES, 'primaryEdge'),
-    secondary: createButtonStyle(ANIMATION_VALUES, 'secondaryEdge'),
   },
 };
 

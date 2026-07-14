@@ -5,8 +5,9 @@ import {
   toNumberOrNull,
   toOneBasedChapterIndexOrNull,
   toPositiveInt,
+  clampPercent,
 } from '../valueUtils';
-import { toLocator } from '../locatorUtils';
+import { toLocator, locatorsEqual, resolveProgressLocator } from '../locatorUtils';
 import { eventUtils } from '../../viewer/viewerCoreStateUtils';
 import {
   registerCache,
@@ -511,7 +512,7 @@ const percentFromOffsetInLength = (offset, length) => {
   if (!(length > 0) || !Number.isFinite(offset)) return null;
   if (length <= 1) return offset > 0 ? 100 : 0;
   const local = Math.min(Math.max(0, offset), length - 1);
-  return Math.min(100, Math.max(0, Math.round((local / (length - 1)) * 100)));
+  return clampPercent((local / (length - 1)) * 100);
 };
 
 export const canResolveProgressMetrics = (bookId, manifestOverride = undefined) => {
@@ -522,6 +523,10 @@ export const canResolveProgressMetrics = (bookId, manifestOverride = undefined) 
 
 export const locatorFromChapterLocalOffset = (chapter, local) =>
   chapterLocalOffsetToLocator(chapter, local);
+
+/** locator → 챕터 로컬 코드포인트 (진도·북마크 resume 공용) */
+export const chapterLocalOffsetFromLocator = (chapter, locator) =>
+  chapterLocalForProgress(chapter, locator);
 
 export const locatorToBookAbsoluteOffset = (bookId, locator, manifestOverride = undefined) => {
   const loc = toLocator(locator);
@@ -735,6 +740,49 @@ export const normalizeLocatorForServerProgress = (bookId, locator, manifestOverr
   const local = chapterLocalCodePointFromLocator(chapter, loc);
   const out = chapterLocalOffsetToLocator(chapter, local);
   return out ?? loc;
+};
+
+/** start/end locator 서버 축 정규화 (진도·북마크 공용). 동일하면 endLocator=null */
+export const normalizeStartEndLocatorsForServer = (
+  bookId,
+  startLocator,
+  endLocator = null,
+  manifestOverride = undefined
+) => {
+  const start =
+    normalizeLocatorForServerProgress(bookId, startLocator, manifestOverride) ??
+    toLocator(startLocator);
+  if (!start) return { startLocator: null, endLocator: null };
+
+  const endRaw = toLocator(endLocator) ?? start;
+  const end =
+    normalizeLocatorForServerProgress(bookId, endRaw, manifestOverride) ?? endRaw;
+
+  return {
+    startLocator: start,
+    endLocator: locatorsEqual(start, end) ? null : end,
+  };
+};
+
+/** progress 저장/캐시용 — end가 없으면 start로 채움 */
+export const withNormalizedProgressLocators = (progressData, manifestOverride = undefined) => {
+  if (!progressData?.bookId) return progressData;
+  const bookId = String(progressData.bookId);
+  const locator = resolveProgressLocator(progressData);
+  if (!locator) return progressData;
+  const { startLocator, endLocator } = normalizeStartEndLocatorsForServer(
+    bookId,
+    locator,
+    progressData.endLocator ?? progressData.end ?? null,
+    manifestOverride
+  );
+  if (!startLocator) return progressData;
+  return {
+    ...progressData,
+    startLocator,
+    locator: startLocator,
+    endLocator: endLocator ?? startLocator,
+  };
 };
 
 const manifestEventIndex = (event) => {

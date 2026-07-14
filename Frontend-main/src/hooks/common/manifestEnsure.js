@@ -1,7 +1,9 @@
-/** manifest 캐시 miss 시 API fetch — viewer·graph 훅 공통 */
+/** manifest 캐시 miss 시 API fetch + 로드 게이트 훅 — viewer·graph 공통 */
 
+import { useState, useEffect } from 'react';
 import { getBookManifest } from '../../utils/api/api';
 import { getManifestFromCache } from '../../utils/common/cache/manifestCache';
+import { errorUtils } from '../../utils/common/errorUtils';
 
 /**
  * @param {number|string|null|undefined} bookId
@@ -41,4 +43,46 @@ export async function ensureBookManifest(bookId) {
       error,
     };
   }
+}
+
+/**
+ * 뷰어/그래프용 manifest 준비 게이트.
+ * fail-open: 로드 실패해도 true로 두어 이후 metrics·fine graph가 막히지 않게 함.
+ */
+export function useManifestLoaded(bookId) {
+  const [manifestLoaded, setManifestLoaded] = useState(
+    () => !bookId || Boolean(getManifestFromCache(bookId))
+  );
+
+  useEffect(() => {
+    if (!bookId) {
+      setManifestLoaded(true);
+      return undefined;
+    }
+
+    if (getManifestFromCache(bookId)) {
+      setManifestLoaded(true);
+      return undefined;
+    }
+
+    let cancelled = false;
+    setManifestLoaded(false);
+
+    void ensureBookManifest(bookId).then((outcome) => {
+      if (cancelled) return;
+      if (!outcome.ok && !outcome.skipped) {
+        errorUtils.logWarning(
+          '[useManifestLoaded] manifest 로드 실패',
+          outcome.error?.message ?? outcome.response?.message ?? '알 수 없는 오류'
+        );
+      }
+      setManifestLoaded(true);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [bookId]);
+
+  return manifestLoaded;
 }

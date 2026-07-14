@@ -1,36 +1,50 @@
-import React, { useRef, useState, useEffect } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import PropTypes from 'prop-types';
+import { Upload, X, Loader2 } from 'lucide-react';
+import { useQueryClient } from '@tanstack/react-query';
 import { getBooks, getBook, uploadBook } from '../../utils/api/booksApi';
-import { getBookManifest } from '../../utils/api/api';
 import {
   extractEpubFileMetadata,
   epubUploadBasename,
   EPUB_FILE_CONSTRAINTS,
   validateEpubFile,
 } from '../../utils/library/libraryUtils';
-import { normalizeTitle } from '../../utils/common/valueUtils';
+import { normalizeTitle, normalizeAuthor } from '../../utils/common/valueUtils';
+import { BOOKS_QUERY_KEY, findCanonicalBook } from '../../hooks/books/bookHooks';
+import './BookDetailModal.css';
+import './FileUpload.css';
 
-function normalizeAuthorMatch(author) {
-  return (author || '')
-    .toLowerCase()
-    .trim()
-    .replace(/\s+/g, ' ');
-}
+const EMPTY_METADATA = { title: '', author: '', language: 'ko' };
+const MAX_MB = Math.round(EPUB_FILE_CONSTRAINTS.MAX_SIZE / (1024 * 1024));
 
-const FileUpload = ({ onUploadSuccess, onClose, initialFile = null }) => {
+const METADATA_FIELDS = [
+  { key: 'title', label: '제목 *', id: 'file-upload-title-input', placeholder: '책 제목을 입력하세요' },
+  { key: 'author', label: '저자 *', id: 'file-upload-author-input', placeholder: '저자명을 입력하세요' },
+];
+
+const FileUpload = ({ onUploadSuccess, onClose }) => {
+  const queryClient = useQueryClient();
   const [dragActive, setDragActive] = useState(false);
   const [selectedFile, setSelectedFile] = useState(null);
-  const [metadata, setMetadata] = useState({
-    title: '',
-    author: '',
-    language: 'ko'
-  });
-  const [step, setStep] = useState('select'); // 'select' or 'metadata'
+  const [metadata, setMetadata] = useState(EMPTY_METADATA);
+  const [step, setStep] = useState('select');
   const [extractingMetadata, setExtractingMetadata] = useState(false);
   const [uploading, setUploading] = useState(false);
   const inputRef = useRef(null);
-  const initialFileHandled = useRef(false);
   const uploadingRef = useRef(false);
+
+  useEffect(() => {
+    const handleEscape = (e) => {
+      if (e.key !== 'Escape' || uploadingRef.current) return;
+      onClose();
+    };
+    document.addEventListener('keydown', handleEscape);
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.removeEventListener('keydown', handleEscape);
+      document.body.style.overflow = 'unset';
+    };
+  }, [onClose]);
 
   const extractEpubMetadata = async (file) => {
     try {
@@ -53,135 +67,66 @@ const FileUpload = ({ onUploadSuccess, onClose, initialFile = null }) => {
   };
 
   const handleFiles = async (files) => {
-    if (files && files.length > 0) {
-      const file = files[0];
-      const v = validateEpubFile(file);
-      if (!v.valid) {
-        alert(v.error);
-        return;
-      }
-      try {
-        setSelectedFile(file);
-        
-        // 파일 선택 후 즉시 메타데이터 단계로 이동 (UI 블로킹 방지)
-        setStep('metadata');
-        
-        // 메타데이터 추출은 백그라운드에서 진행
-        const extractedMetadata = await extractEpubMetadata(file);
-        setMetadata(prev => ({
-          ...prev,
-          ...extractedMetadata
-        }));
-      } catch (_error) {
-        // 에러 발생 시에도 메타데이터 단계로 이동
-        if (!selectedFile && files && files.length > 0) {
-          setSelectedFile(files[0]);
-          setMetadata(prev => ({
-            ...prev,
-            title: epubUploadBasename(files[0].name),
-            author: prev.author || 'Unknown',
-            language: prev.language || 'ko'
-          }));
-          setStep('metadata');
-        }
-      }
-    }
-  };
-
-  useEffect(() => {
-    if (!initialFile) {
-      initialFileHandled.current = false;
+    if (!files?.length) return;
+    const file = files[0];
+    const v = validateEpubFile(file);
+    if (!v.valid) {
+      alert(v.error);
       return;
     }
-    if (initialFileHandled.current) return;
-    initialFileHandled.current = true;
-    handleFiles([initialFile]);
-  }, [initialFile]);
+    setSelectedFile(file);
+    setStep('metadata');
+    const extracted = await extractEpubMetadata(file);
+    setMetadata((prev) => ({ ...prev, ...extracted }));
+  };
+
+  const resolveServerBook = async () => {
+    const titleKey = normalizeTitle(metadata.title || '');
+    const authorKey = normalizeAuthor(metadata.author || '');
+    if (!titleKey || !authorKey) {
+      throw new Error('제목과 저자를 확인해주세요.');
+    }
+
+    let books = queryClient.getQueryData(BOOKS_QUERY_KEY)?.books;
+    if (!Array.isArray(books)) {
+      const res = await getBooks({});
+      books = res?.isSuccess && Array.isArray(res.result) ? res.result : [];
+    }
+
+    const canonical = findCanonicalBook(books, titleKey, authorKey);
+    if (canonical) {
+      const bookResponse = await getBook(canonical.id);
+      if (!bookResponse?.isSuccess || !bookResponse.result) {
+        throw new Error(bookResponse?.message || '매칭된 책 정보를 가져올 수 없습니다.');
+      }
+      return bookResponse.result;
+    }
+
+    const uploadResponse = await uploadBook(selectedFile, {
+      title: metadata.title,
+      author: metadata.author,
+      language: metadata.language || 'ko',
+    });
+    if (!uploadResponse?.isSuccess || !uploadResponse.result) {
+      throw new Error(uploadResponse?.message || 'EPUB 업로드에 실패했습니다.');
+    }
+    return uploadResponse.result;
+  };
 
   const handleUpload = async () => {
     if (!selectedFile || uploadingRef.current) return;
-
-    const titleKey = normalizeTitle(metadata.title || '');
-    const authorKey = normalizeAuthorMatch(metadata.author || '');
-    if (!titleKey || !authorKey) {
-      alert('제목과 저자를 확인해주세요.');
-      return;
-    }
 
     uploadingRef.current = true;
     setUploading(true);
 
     try {
-      let serverBook = null;
-      let bookId = null;
-
-      const booksResponse = await getBooks({});
-      if (booksResponse?.isSuccess && Array.isArray(booksResponse.result)) {
-        const canonicalByKey = new Map();
-        booksResponse.result.forEach((book) => {
-          const numericId = Number(book?.id);
-          if (!Number.isFinite(numericId) || numericId <= 0) return;
-          const tKey = normalizeTitle(book?.title || '');
-          const aKey = normalizeAuthorMatch(book?.author || '');
-          if (!tKey || !aKey) return;
-          const key = `${tKey}::${aKey}`;
-          const existing = canonicalByKey.get(key);
-          if (!existing || numericId < Number(existing.id)) {
-            canonicalByKey.set(key, book);
-          }
-        });
-
-        const matchedKey = `${titleKey}::${authorKey}`;
-        const canonicalBook = canonicalByKey.get(matchedKey);
-        if (canonicalBook) {
-          bookId = canonicalBook.id;
-        }
-      }
-
-      if (!bookId) {
-        const uploadResponse = await uploadBook(selectedFile, {
-          title: metadata.title,
-          author: metadata.author,
-          language: metadata.language || 'ko',
-        });
-        if (!uploadResponse?.isSuccess || !uploadResponse.result) {
-          throw new Error(uploadResponse?.message || 'EPUB 업로드에 실패했습니다.');
-        }
-        serverBook = uploadResponse.result;
-        bookId = serverBook.id;
-      } else {
-        const bookResponse = await getBook(bookId);
-        if (!bookResponse?.isSuccess || !bookResponse.result) {
-          throw new Error(bookResponse?.message || '매칭된 책 정보를 가져올 수 없습니다.');
-        }
-        serverBook = bookResponse.result;
-      }
-      let manifestData = null;
-      try {
-        const manifestResponse = await getBookManifest(bookId, { forceRefresh: false });
-        if (manifestResponse?.isSuccess && manifestResponse?.result) {
-          manifestData = manifestResponse.result;
-        }
-      } catch (error) {
-        if (error.status !== 404 && !error.message?.includes('404')) {
-          console.warn('Manifest 정보를 가져오지 못했습니다:', error);
-        }
-      }
-
-      const book = {
+      const serverBook = await resolveServerBook();
+      const bookId = serverBook.id;
+      onUploadSuccess({
         ...serverBook,
         id: bookId,
         _bookId: bookId,
-        isLocalOnly: false,
-        ...(manifestData && {
-          chapters: manifestData.chapters,
-          characters: manifestData.characters,
-          progressMetadata: manifestData.progressMetadata,
-          ...(manifestData.readerArtifacts ? { readerArtifacts: manifestData.readerArtifacts } : {}),
-        }),
-      };
-
-      onUploadSuccess(book);
+      });
       onClose();
     } catch (error) {
       console.error('업로드 처리 실패:', error);
@@ -196,293 +141,171 @@ const FileUpload = ({ onUploadSuccess, onClose, initialFile = null }) => {
     if (uploadingRef.current) return;
     setStep('select');
     setSelectedFile(null);
-    setMetadata({
-      title: '',
-      author: '',
-      language: 'ko'
-    });
+    setMetadata(EMPTY_METADATA);
   };
 
-  const handleDrag = (e) => {
+  const setDrag = (active) => (e) => {
     e.preventDefault();
     e.stopPropagation();
-    if (e.type === 'dragenter' || e.type === 'dragover') {
-      setDragActive(true);
-    } else if (e.type === 'dragleave') {
-      setDragActive(false);
-    }
+    setDragActive(active);
   };
 
   const handleDrop = (e) => {
     e.preventDefault();
     e.stopPropagation();
     setDragActive(false);
-    
-    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-      handleFiles(e.dataTransfer.files);
-    }
+    if (e.dataTransfer.files?.length) handleFiles(e.dataTransfer.files);
   };
 
-  const handleChange = (e) => {
-    e.preventDefault();
-    if (e.target.files && e.target.files.length > 0) {
-      handleFiles(e.target.files);
-    }
-  };
-
-  const onButtonClick = () => {
-    inputRef.current?.click();
-  };
-
-  const overlayStyle = {
-    position: 'fixed',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: 'rgba(0, 0, 0, 0.4)',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    zIndex: 1000
-  };
-
-  const modalStyle = {
-    background: '#fff',
-    borderRadius: '12px',
-    padding: '32px',
-    maxWidth: '480px',
-    width: '90%',
-    maxHeight: '80vh',
-    overflow: 'auto',
-    boxShadow: '0 4px 20px rgba(0, 0, 0, 0.15)',
-    border: '1px solid #e0e0e0'
-  };
-
-  const titleStyle = {
-    fontSize: '24px',
-    fontWeight: 600,
-    color: '#333',
-    marginBottom: '24px',
-    textAlign: 'center'
-  };
-
-  const dropZoneStyle = {
-    border: `2px dashed ${dragActive ? '#5C6F5C' : '#ccc'}`,
-    borderRadius: '8px',
-    padding: '40px 24px',
-    textAlign: 'center',
-    cursor: 'pointer',
-    backgroundColor: dragActive ? '#f8f9ff' : '#fafafa',
-    transition: 'all 0.2s ease',
-    marginBottom: '20px'
-  };
-
-  const closeButtonStyle = {
-    background: '#f5f5f5',
-    border: '1px solid #ddd',
-    color: '#666',
-    borderRadius: '6px',
-    padding: '10px 20px',
-    fontSize: '14px',
-    fontWeight: 500,
-    cursor: 'pointer',
-    transition: 'background-color 0.2s ease'
-  };
-
-  const handleOverlayClick = (e) => {
-    if (uploadingRef.current) return;
-    if (e.target === e.currentTarget) {
-      onClose();
-    }
-  };
-
-  const renderSelectStep = () => (
-    <>
-      <div
-        style={dropZoneStyle}
-        onDragEnter={handleDrag}
-        onDragLeave={handleDrag}
-        onDragOver={handleDrag}
-        onDrop={handleDrop}
-        onClick={onButtonClick}
-      >
-        <div style={{ 
-          fontSize: '24px', 
-          marginBottom: '12px',
-          color: '#666'
-        }}>
-          📁
-        </div>
-        <p style={{ 
-          fontSize: '16px', 
-          fontWeight: 500,
-          marginBottom: '8px',
-          color: '#333'
-        }}>
-          {dragActive ? '파일을 여기에 놓으세요' : 'EPUB 파일 선택'}
-        </p>
-        <p style={{ 
-          fontSize: '14px', 
-          color: '#666',
-          lineHeight: '1.4',
-          margin: '0'
-        }}>
-          파일을 드래그하거나 클릭해서 업로드하세요<br/>
-          <small style={{ fontSize: '12px', color: '#999' }}>
-            최대 {Math.round(EPUB_FILE_CONSTRAINTS.MAX_SIZE / (1024 * 1024))}MB, .epub
-          </small>
-        </p>
-      </div>
-    
-      <input
-        ref={inputRef}
-        type="file"
-        accept={EPUB_FILE_CONSTRAINTS.ACCEPT_ATTRIBUTE}
-        style={{ display: 'none' }}
-        onChange={handleChange}
-      />
-    </>
-  );
-
-  const renderMetadataStep = () => (
-    <div>
-      <div style={{ marginBottom: '20px', padding: '16px', backgroundColor: '#f8f9fa', borderRadius: '8px' }}>
-        <div style={{ fontSize: '14px', color: '#666', marginBottom: '4px' }}>선택된 파일:</div>
-        <div style={{ fontSize: '16px', fontWeight: 500 }}>{selectedFile?.name}</div>
-        {extractingMetadata && (
-          <div style={{ fontSize: '12px', color: '#5C6F5C', marginTop: '8px' }}>
-            📖 EPUB 메타데이터 추출 중...
-          </div>
-        )}
-      </div>
-      
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-        <div>
-          <label style={{ display: 'block', fontSize: '14px', fontWeight: 500, marginBottom: '8px', color: '#333' }}>
-            제목 *
-          </label>
-          <input
-            type="text"
-            value={metadata.title}
-            onChange={(e) => setMetadata(prev => ({ ...prev, title: e.target.value }))}
-            disabled={extractingMetadata}
-            style={{
-              width: '100%',
-              padding: '12px',
-              border: '1px solid #ddd',
-              borderRadius: '6px',
-              fontSize: '14px',
-              boxSizing: 'border-box',
-              backgroundColor: extractingMetadata ? '#f5f5f5' : 'white',
-              cursor: extractingMetadata ? 'not-allowed' : 'text'
-            }}
-            placeholder={extractingMetadata ? '메타데이터 추출 중...' : '책 제목을 입력하세요'}
-          />
-        </div>
-        
-        <div>
-          <label style={{ display: 'block', fontSize: '14px', fontWeight: 500, marginBottom: '8px', color: '#333' }}>
-            저자 *
-          </label>
-          <input
-            type="text"
-            value={metadata.author}
-            onChange={(e) => setMetadata(prev => ({ ...prev, author: e.target.value }))}
-            disabled={extractingMetadata}
-            style={{
-              width: '100%',
-              padding: '12px',
-              border: '1px solid #ddd',
-              borderRadius: '6px',
-              fontSize: '14px',
-              boxSizing: 'border-box',
-              backgroundColor: extractingMetadata ? '#f5f5f5' : 'white',
-              cursor: extractingMetadata ? 'not-allowed' : 'text'
-            }}
-            placeholder={extractingMetadata ? '메타데이터 추출 중...' : '저자명을 입력하세요'}
-          />
-        </div>
-        
-        <div>
-          <label style={{ display: 'block', fontSize: '14px', fontWeight: 500, marginBottom: '8px', color: '#333' }}>
-            언어
-          </label>
-          <select
-            value={metadata.language}
-            onChange={(e) => setMetadata(prev => ({ ...prev, language: e.target.value }))}
-            style={{
-              width: '100%',
-              padding: '12px',
-              border: '1px solid #ddd',
-              borderRadius: '6px',
-              fontSize: '14px',
-              boxSizing: 'border-box',
-              backgroundColor: 'white'
-            }}
-          >
-            <option value="ko">한국어</option>
-            <option value="en">English</option>
-            <option value="ja">日本語</option>
-            <option value="zh">中文</option>
-          </select>
-        </div>
-
-      </div>
-      
-      <div style={{ display: 'flex', gap: '12px', marginTop: '24px' }}>
-        <button 
-          onClick={handleBack}
-          disabled={uploading}
-          style={{
-            ...closeButtonStyle,
-            flex: 1,
-            opacity: uploading ? 0.6 : 1,
-            cursor: uploading ? 'not-allowed' : 'pointer'
-          }}
-        >
-          뒤로
-        </button>
-        <button 
-          onClick={handleUpload}
-          disabled={!metadata.title || !metadata.author || extractingMetadata || uploading}
-          style={{
-            ...closeButtonStyle,
-            flex: 1,
-            backgroundColor: (!metadata.title || !metadata.author || extractingMetadata || uploading) ? '#ccc' : '#5C6F5C',
-            color: 'white',
-            border: 'none',
-            cursor: (!metadata.title || !metadata.author || extractingMetadata || uploading) ? 'not-allowed' : 'pointer'
-          }}
-        >
-          {uploading ? '업로드 중...' : extractingMetadata ? '메타데이터 추출 중...' : '업로드'}
-        </button>
-      </div>
-    </div>
-  );
+  const openFilePicker = () => inputRef.current?.click();
+  const canSubmit =
+    Boolean(metadata.title && metadata.author) && !extractingMetadata && !uploading;
+  const extractingPlaceholder = extractingMetadata ? '메타데이터 추출 중...' : undefined;
 
   return (
-    <div style={overlayStyle} onClick={handleOverlayClick}>
-      <div style={modalStyle}>
-        <h2 style={titleStyle}>파일 업로드</h2>
+    <div
+      className="book-detail-modal"
+      onClick={(e) => {
+        if (!uploadingRef.current && e.target === e.currentTarget) onClose();
+      }}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="file-upload-title"
+      aria-describedby="file-upload-desc"
+    >
+      <p id="file-upload-desc" className="book-detail-modal-desc">
+        EPUB 파일을 선택하고 제목·저자를 확인한 뒤 업로드합니다.
+      </p>
 
-        {step === 'select' ? renderSelectStep() : renderMetadataStep()}
+      <div className="file-upload-content">
+        <button
+          type="button"
+          className="book-detail-close-btn"
+          onClick={onClose}
+          disabled={uploading}
+          aria-label="닫기"
+        >
+          <X size={18} strokeWidth={2} />
+        </button>
 
-        {step === 'select' && (
-          <div style={{ textAlign: 'center', marginTop: '24px' }}>
-            <button
-              style={closeButtonStyle}
-              onClick={onClose}
-              onMouseEnter={(e) => {
-                e.target.style.backgroundColor = '#e9ecef';
-              }}
-              onMouseLeave={(e) => {
-                e.target.style.backgroundColor = '#f5f5f5';
+        <h2 id="file-upload-title" className="file-upload-title">
+          {step === 'select' ? '파일 업로드' : '책 정보 확인'}
+        </h2>
+
+        {step === 'select' ? (
+          <>
+            <div
+              className={`epub-dropzone${dragActive ? ' is-active' : ''}`}
+              onDragEnter={setDrag(true)}
+              onDragLeave={setDrag(false)}
+              onDragOver={setDrag(true)}
+              onDrop={handleDrop}
+              onClick={openFilePicker}
+              role="button"
+              tabIndex={0}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  openFilePicker();
+                }
               }}
             >
-              취소
-            </button>
-          </div>
+              <div className="epub-dropzone-icon" aria-hidden>
+                <Upload size={22} strokeWidth={1.75} />
+              </div>
+              <strong>{dragActive ? '파일을 여기에 놓으세요' : 'EPUB 파일 선택'}</strong>
+              <span>파일을 드래그하거나 클릭해서 업로드하세요</span>
+              <small>최대 {MAX_MB}MB · .epub</small>
+            </div>
+
+            <input
+              ref={inputRef}
+              type="file"
+              accept={EPUB_FILE_CONSTRAINTS.ACCEPT_ATTRIBUTE}
+              className="file-upload-file-input"
+              onChange={(e) => {
+                if (e.target.files?.length) handleFiles(e.target.files);
+              }}
+            />
+
+            <div className="file-upload-actions file-upload-actions--select">
+              <button type="button" className="book-detail-secondary-btn" onClick={onClose}>
+                취소
+              </button>
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="file-upload-file-card">
+              <div className="file-upload-file-label">선택된 파일</div>
+              <div className="file-upload-file-name">{selectedFile?.name}</div>
+              {extractingMetadata && (
+                <div className="file-upload-extracting">
+                  <Loader2 size={14} className="animate-spin" aria-hidden />
+                  EPUB 메타데이터 추출 중...
+                </div>
+              )}
+            </div>
+
+            <div className="file-upload-fields">
+              {METADATA_FIELDS.map(({ key, label, id, placeholder }) => (
+                <div className="file-upload-field" key={key}>
+                  <label htmlFor={id}>{label}</label>
+                  <input
+                    id={id}
+                    type="text"
+                    value={metadata[key]}
+                    onChange={(e) => setMetadata((prev) => ({ ...prev, [key]: e.target.value }))}
+                    disabled={extractingMetadata}
+                    placeholder={extractingPlaceholder || placeholder}
+                  />
+                </div>
+              ))}
+
+              <div className="file-upload-field">
+                <label htmlFor="file-upload-language-input">언어</label>
+                <select
+                  id="file-upload-language-input"
+                  value={metadata.language}
+                  onChange={(e) => setMetadata((prev) => ({ ...prev, language: e.target.value }))}
+                  disabled={extractingMetadata || uploading}
+                >
+                  <option value="ko">한국어</option>
+                  <option value="en">English</option>
+                  <option value="ja">日本語</option>
+                  <option value="zh">中文</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="file-upload-actions">
+              <button
+                type="button"
+                className="book-detail-secondary-btn"
+                onClick={handleBack}
+                disabled={uploading}
+              >
+                뒤로
+              </button>
+              <button
+                type="button"
+                className="file-upload-btn-primary"
+                onClick={handleUpload}
+                disabled={!canSubmit}
+              >
+                {uploading ? (
+                  <>
+                    <Loader2 size={16} className="animate-spin" aria-hidden />
+                    업로드 중...
+                  </>
+                ) : extractingMetadata ? (
+                  '메타데이터 추출 중...'
+                ) : (
+                  '업로드'
+                )}
+              </button>
+            </div>
+          </>
         )}
       </div>
     </div>
@@ -492,7 +315,6 @@ const FileUpload = ({ onUploadSuccess, onClose, initialFile = null }) => {
 FileUpload.propTypes = {
   onUploadSuccess: PropTypes.func.isRequired,
   onClose: PropTypes.func.isRequired,
-  initialFile: PropTypes.instanceOf(File),
 };
 
 export default FileUpload;

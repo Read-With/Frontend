@@ -1,81 +1,110 @@
 /** 뷰어 페이지: URL·책·북마크·설정·진도·그래프 파이프라인 오케스트레이션 */
 
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { useParams, useLocation, useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
-import { useLocalStorage } from '../common/useLocalStorage';
 import { useServerBookMatching } from '../books/bookHooks';
 import { useViewerUrlParams } from './useViewerUrlParams';
-import { useViewerManifest } from './useViewerManifest';
 import { useViewerGraphState } from './useViewerGraphState';
 import { useViewerProgress } from './useViewerProgress';
 import { useViewerTransition } from './useViewerTransition';
 import { useViewerGraphPipeline } from './useViewerGraphPipeline';
 import { useProgressAutoSave } from './useProgressAutoSave';
-import { defaultSettings, settingsUtils } from '../../utils/common/settingsUtils';
+import { useManifestLoaded } from '../common/manifestEnsure';
+import {
+  loadSettings,
+  normalizeSettings,
+  saveSettings,
+  SETTINGS_STORAGE_KEY,
+} from '../../utils/common/settingsUtils';
 import {
   bookUtils,
-  waitForPaint,
   waitForViewerMethod,
 } from '../../utils/viewer/viewerCoreStateUtils';
+import {
+  runViewerPaging,
+  restoreViewerPosition,
+} from '../../utils/viewer/viewerPageNavUtils';
 import { resolveServerBookIdOrFallback, resolveViewerBookKey } from '../common/hooksShared';
-import { eventUtils } from '../../utils/viewer/viewerCoreStateUtils';
-import { anchorToLocators } from '../../utils/common/locatorUtils';
-import { toApiFolderKey } from '../../utils/graph/graphUtils';
+import { toViewerResumeAnchor } from '../../utils/common/locatorUtils';
+import { resolveChapterIndex } from '../../utils/common/valueUtils';
 import { useBookmarks } from '../bookmarks/bookmarkHooks';
 import { userViewerBookmarksPath } from '../../utils/navigation/viewerPaths';
-import { debugChapterGraphFromServer } from '../../utils/viewer/debugChapterGraph';
 
-function runViewerPaging(viewerRef, direction) {
-  const ref = viewerRef.current;
-  if (!ref) {
-    toast.error('뷰어가 아직 준비되지 않았습니다. 잠시 후 다시 시도해주세요.');
-    return;
-  }
-  try {
-    if (direction === 'prev') ref.prevPage();
-    else ref.nextPage();
-  } catch {
-    toast.error(
-      direction === 'prev'
-        ? '이전 페이지로 이동할 수 없습니다.'
-        : '다음 페이지로 이동할 수 없습니다.'
-    );
-  }
+function resolveMypagePath() {
+  const prefix = (import.meta.env.BASE_URL || '/').replace(/\/$/, '');
+  return `${prefix}/mypage`.replace(/\/{2,}/g, '/');
+}
+
+function usePersistedViewerSettings() {
+  const [settings, setSettingsState] = useState(() => loadSettings());
+
+  const setSettings = useCallback((value) => {
+    let saveResult = { success: true };
+    setSettingsState((prev) => {
+      const next = normalizeSettings(typeof value === 'function' ? value(prev) : value);
+      saveResult = saveSettings(next);
+      return saveResult.success ? next : prev;
+    });
+    return saveResult;
+  }, []);
+
+  useEffect(() => {
+    const onStorage = (e) => {
+      if (e.key !== SETTINGS_STORAGE_KEY || e.newValue == null) return;
+      try {
+        setSettingsState(normalizeSettings(JSON.parse(e.newValue)));
+      } catch {
+        /* ignore */
+      }
+    };
+    window.addEventListener('storage', onStorage);
+    return () => window.removeEventListener('storage', onStorage);
+  }, []);
+
+  return [settings, setSettings];
 }
 
 export function useViewerPage() {
-  const { filename: bookId } = useParams();
   const location = useLocation();
   const navigate = useNavigate();
   const skipViewerHistoryMutationRef = useRef(false);
+  const viewerRef = useRef(null);
+
+  const [urlSyncEnabled, setUrlSyncEnabled] = useState(false);
+
+  const {
+    filename: bookId,
+    currentPage,
+    setCurrentPage,
+    currentChapter,
+    setCurrentChapter,
+  } = useViewerUrlParams({
+    skipHistoryMutationsRef: skipViewerHistoryMutationRef,
+    urlSyncEnabled,
+  });
 
   useEffect(() => {
     skipViewerHistoryMutationRef.current = false;
+    setUrlSyncEnabled(false);
   }, [bookId]);
 
   const previousPage = location.state?.from || null;
   const isFromLibrary = previousPage?.pathname === '/mypage' || location.state?.fromLibrary === true;
 
   const {
-    currentPage,
-    setCurrentPage,
-    currentChapter,
-    setCurrentChapter,
-  } = useViewerUrlParams({ skipHistoryMutationsRef: skipViewerHistoryMutationRef });
-
-  const {
     serverBook,
     loadingServerBook,
-    matchedServerBook
+    matchedServerBook,
   } = useServerBookMatching(bookId, { skipBookIdRedirectRef: skipViewerHistoryMutationRef });
 
-  const viewerRef = useRef(null);
   const [reloadKey, setReloadKey] = useState(0);
   const [failCount, setFailCount] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [showToolbar, setShowToolbar] = useState(false);
+  const [progress, setProgress] = useState(null);
+  const [settings, setSettings] = usePersistedViewerSettings();
 
   const book = useMemo(
     () =>
@@ -94,15 +123,8 @@ export function useViewerPage() {
     [book, bookId]
   );
 
-  const [progress, setProgress] = useState(null);
-  const [settings, setSettings] = useLocalStorage('xhtml_viewer_settings', defaultSettings);
-
-  const folderKey = useMemo(() => toApiFolderKey(bookId), [bookId]);
-  const chapterEventDebugKeyRef = useRef(null);
-
   useEffect(() => {
     setProgress(null);
-    chapterEventDebugKeyRef.current = null;
   }, [bookKey]);
 
   const {
@@ -110,24 +132,39 @@ export function useViewerPage() {
     setCurrentEvent,
     setEvents,
     setElements,
-    setCurrentCharIndex,
     setIsDataReady,
     setIsGraphLoading,
     setFineGraphLoading,
-    setShowGraph,
     graphState,
     graphActions,
     graphViewerState,
     searchState,
     searchActions,
-  } = useViewerGraphState({ currentChapter, setCurrentChapter, bookKey });
+  } = useViewerGraphState({
+    currentChapter,
+    bookKey,
+    showGraph: settings.showGraph,
+  });
 
   const manifestServerBookId = useMemo(
     () => resolveServerBookIdOrFallback(book, bookId),
     [book, bookId]
   );
+  const manifestLoaded = useManifestLoaded(manifestServerBookId);
 
-  const { manifestLoaded } = useViewerManifest(manifestServerBookId);
+  const preferredResumeAnchor = useMemo(
+    () => toViewerResumeAnchor(location.state?.resumeAnchor),
+    [location.state]
+  );
+
+  const clearPreferredResumeAnchor = useCallback(() => {
+    if (!location.state?.resumeAnchor) return;
+    const { resumeAnchor: _removed, ...rest } = location.state;
+    navigate(
+      { pathname: location.pathname, search: location.search },
+      { replace: true, state: Object.keys(rest).length ? rest : undefined }
+    );
+  }, [location.pathname, location.search, location.state, navigate]);
 
   const {
     progressTopBar,
@@ -136,9 +173,9 @@ export function useViewerPage() {
     readingLocatorKey,
     serverResumeAnchor,
     applyReadingLocator,
-    updateReadingPercent,
     markViewerPageReady,
     isViewerPageReady,
+    isResumePending,
   } = useViewerProgress({
     bookKey,
     manifestLoaded,
@@ -147,16 +184,35 @@ export function useViewerPage() {
     setReloadKey,
     viewerRef,
     reloadKey,
+    preferredResumeAnchor,
+    onPreferredResumeApplied: clearPreferredResumeAnchor,
+    // 숫자 bookId가 아직 없을 때만 매칭 대기 (이미 숫자면 진도 fetch를 막지 않음)
+    awaitingBookId: Boolean(
+      loadingServerBook && bookKey && !(Number(bookKey) > 0)
+    ),
   });
 
-  const { fineGraphLoading, graphPhase, isDataReady } = graphViewerState;
+  const effectiveResumeAnchor = preferredResumeAnchor ?? serverResumeAnchor;
+
+  // resume 완료 전 URL 챕터를 앵커 기준으로 시드 (urlSync 켜질 때 c/1로 튕기지 않도록)
+  useEffect(() => {
+    if (isViewerPageReady) return;
+    const chapter = resolveChapterIndex(
+      effectiveResumeAnchor?.startLocator ?? effectiveResumeAnchor?.start
+    );
+    if (!(Number.isFinite(chapter) && chapter > 0)) return;
+    setCurrentChapter((prev) => (prev === chapter ? prev : chapter));
+  }, [effectiveResumeAnchor, isViewerPageReady, setCurrentChapter]);
+
+  useEffect(() => {
+    setUrlSyncEnabled(isViewerPageReady);
+  }, [isViewerPageReady]);
+
+  const { isDataReady } = graphViewerState;
 
   const { transitionState, resetTransition } = useViewerTransition({
     currentEvent,
     currentChapter,
-    fineGraphLoading,
-    isReloading: graphPhase === 'reloading',
-    graphPhase,
     isDataReady,
   });
 
@@ -164,7 +220,7 @@ export function useViewerPage() {
     book,
     currentChapter,
     currentEvent,
-    graphActions,
+    setIsDataEmpty: graphActions.setIsDataEmpty,
     manifestLoaded,
     isViewerPageReady,
     resetTransition,
@@ -175,56 +231,25 @@ export function useViewerPage() {
     setIsDataReady,
   });
 
-  useEffect(() => {
-    if (!import.meta.env.DEV) return;
-    const serverBookId = book?.id ?? manifestServerBookId;
-    if (!manifestLoaded || !serverBookId || !isDataReady) return;
-
-    const chapterIdx = Number(currentChapter);
-    const throughEventIdx = eventUtils.resolveEventNum(currentEvent, null);
-    if (!Number.isFinite(chapterIdx) || chapterIdx < 1) return;
-    if (!throughEventIdx || throughEventIdx < 1) return;
-
-    const readwith = window.__readwith ?? (window.__readwith = {});
-    readwith.debugChapterGraph = (chapter = chapterIdx, options = {}) =>
-      debugChapterGraphFromServer(serverBookId, chapter, {
-        throughEventIdx: eventUtils.resolveEventNum(currentEvent, throughEventIdx),
-        ...options,
-      });
-
-    const debugKey = `${serverBookId}:${chapterIdx}:${throughEventIdx}`;
-    if (chapterEventDebugKeyRef.current === debugKey) return;
-    chapterEventDebugKeyRef.current = debugKey;
-
-    debugChapterGraphFromServer(serverBookId, chapterIdx, {
-      throughEventIdx,
-      logEachEvent: true,
-    });
-  }, [
-    manifestLoaded,
-    book?.id,
-    manifestServerBookId,
-    currentChapter,
-    currentEvent,
-    isDataReady,
-  ]);
-
   const { cachedLocation, flushProgressAsync } = useProgressAutoSave({
     bookId: bookKey,
     currentEvent,
     readingLocatorKey,
     getCurrentLocator: () => viewerRef.current?.getCurrentLocator?.(),
     metricsReady: progressMetricsReady,
+    canPersist: isViewerPageReady,
   });
 
-  const graphStateWithProgress = useMemo(
-    () => ({ ...graphState, progressTopBar, progressMetricsReady }),
-    [graphState, progressTopBar, progressMetricsReady]
-  );
+  const {
+    bookmarks,
+    handleAddBookmark,
+    removeBookmark,
+    isMutating: isBookmarkMutating,
+  } = useBookmarks(bookKey, { viewerRef, setFailCount });
 
   useEffect(() => {
     if (failCount >= 2) {
-      toast.info('🔄 계속 실패하면 브라우저 새로고침을 해주세요!');
+      toast.info('계속 실패하면 브라우저를 새로고침해 주세요.');
     }
   }, [failCount]);
 
@@ -235,122 +260,74 @@ export function useViewerPage() {
     };
   }, []);
 
-  const {
-    bookmarks,
-    showBookmarkList,
-    handleAddBookmark,
-    handleBookmarkSelect,
-  } = useBookmarks(bookKey, {
-    viewerRef,
-    setFailCount
-  });
+  const handleApplySettings = useCallback(
+    (newSettings) => {
+      const normalized = normalizeSettings(newSettings);
+      const graphChanged = normalized.showGraph !== settings.showGraph;
+      const result = setSettings(normalized);
+      if (!result.success) {
+        toast.error(result.message);
+        return;
+      }
+      if (graphChanged) setReloadKey((k) => k + 1);
+      toast.success('설정이 적용되었습니다');
+    },
+    [settings.showGraph, setSettings]
+  );
 
-  const handlePrevPage = useCallback(() => runViewerPaging(viewerRef, 'prev'), []);
-  const handleNextPage = useCallback(() => runViewerPaging(viewerRef, 'next'), []);
-
-  const handleOpenSettings = useCallback(() => {
-    setShowSettingsModal(true);
-  }, []);
-
-  const handleCloseSettings = useCallback(() => {
-    setShowSettingsModal(false);
-  }, []);
-
-  const handleApplySettings = useCallback((newSettings) => {
-    const result = settingsUtils.applySettings(
-      newSettings,
-      settings,
-      setSettings,
-      setShowGraph,
-      setReloadKey,
-      viewerRef,
-      bookKey
-    );
-
-    if (result.success) {
-      toast.success(result.message);
-    } else {
-      toast.error(result.message);
+  const toggleGraph = useCallback(async () => {
+    const newShowGraph = !settings.showGraph;
+    const result = setSettings((prev) => ({ ...prev, showGraph: newShowGraph }));
+    if (!result.success) {
+      toast.error(result.message || '설정 저장 중 오류가 발생했습니다.');
+      return;
     }
-  }, [settings, bookKey, setShowGraph]);
 
-  const onToggleBookmarkList = useCallback(() => {
-    navigate(userViewerBookmarksPath(bookId), {
-      state: {
-        ...(location.state || {}),
-        book,
-      },
-    });
-  }, [navigate, bookId, location.state, book]);
+    try {
+      const ready = await waitForViewerMethod(viewerRef, 'refreshLayout');
+      if (!ready) return;
+      await restoreViewerPosition(viewerRef, progress);
+    } catch {
+      toast.error('화면 모드 전환 중 오류가 발생했습니다.');
+    }
+  }, [settings.showGraph, setSettings, progress]);
 
   const handleSliderChange = useCallback(async (value) => {
     setProgress(value);
     const ready = await waitForViewerMethod(viewerRef, 'moveToProgress');
-    if (!ready) {
-      return;
-    }
+    if (!ready) return;
     try {
       await viewerRef.current.moveToProgress(value);
-    } catch {}
+    } catch {
+      /* ignore seek errors */
+    }
   }, []);
 
-  const toggleGraph = useCallback(() => {
-    setShowGraph((prevShowGraph) => {
-      const newShowGraph = !prevShowGraph;
-      setSettings((prevSettings) => ({
-        ...prevSettings,
-        showGraph: newShowGraph,
-      }));
-      return newShowGraph;
+  const onToggleBookmarkList = useCallback(() => {
+    navigate(userViewerBookmarksPath(bookKey || bookId), {
+      state: { ...(location.state || {}), book },
     });
-
-    const applyAndSync = async () => {
-      try {
-        await waitForViewerMethod(viewerRef, 'applySettings');
-        const { startLocator: start, endLocator: end } = anchorToLocators(
-          viewerRef.current?.getCurrentLocator?.()
-        );
-
-        viewerRef.current?.applySettings?.();
-        await waitForPaint();
-
-        if (start && viewerRef.current?.displayAt) {
-          const anchor = { startLocator: start, endLocator: end ?? start };
-          const moved = viewerRef.current.displayAt(anchor);
-          if (!moved) {
-            const pct = Number(progress);
-            if (Number.isFinite(pct) && pct >= 0) {
-              await viewerRef.current.moveToProgress?.(pct);
-            }
-          }
-        } else {
-          const pct = Number(progress);
-          if (Number.isFinite(pct) && pct >= 0) {
-            await viewerRef.current?.moveToProgress?.(pct);
-          }
-        }
-        await waitForPaint();
-      } catch {
-        toast.error('화면 모드 전환 중 오류가 발생했습니다.');
-      }
-    };
-
-    applyAndSync();
-  }, [setSettings, setShowGraph, progress]);
+  }, [navigate, bookKey, bookId, location.state, book]);
 
   const exitToMypage = useCallback(() => {
     skipViewerHistoryMutationRef.current = true;
-    const prefix = (import.meta.env.BASE_URL || '/').replace(/\/$/, '');
-    const path = `${prefix}/mypage`.replace(/\/{2,}/g, '/');
-    navigate(path, { replace: true });
+    navigate(resolveMypagePath(), { replace: true });
   }, [navigate]);
+
+  const handlePrevPage = useCallback(() => runViewerPaging(viewerRef, 'prev'), []);
+  const handleNextPage = useCallback(() => runViewerPaging(viewerRef, 'next'), []);
+  const handleOpenSettings = useCallback(() => setShowSettingsModal(true), []);
+  const handleCloseSettings = useCallback(() => setShowSettingsModal(false), []);
+
+  const graphStateWithProgress = useMemo(
+    () => ({ ...graphState, progressTopBar, progressMetricsReady }),
+    [graphState, progressTopBar, progressMetricsReady]
+  );
 
   const viewerState = useMemo(
     () => ({
       bookKey,
       routeBookId: bookId,
-      navigate,
-      viewerRef,
       book,
       currentPage,
       totalPages,
@@ -362,7 +339,6 @@ export function useViewerPage() {
     [
       bookKey,
       bookId,
-      navigate,
       book,
       currentPage,
       totalPages,
@@ -382,20 +358,18 @@ export function useViewerPage() {
     setTotalPages,
     setCurrentChapter,
     setCurrentEvent,
-    setCurrentCharIndex,
     setShowToolbar,
     bookmarks,
-    showBookmarkList,
     book,
     bookKey,
     manifestLoaded,
-    folderKey,
     previousPage,
     isFromLibrary,
     handlePrevPage,
     handleNextPage,
     handleAddBookmark,
-    handleBookmarkSelect,
+    removeBookmark,
+    isBookmarkMutating,
     handleOpenSettings,
     handleCloseSettings,
     handleApplySettings,
@@ -412,10 +386,11 @@ export function useViewerPage() {
     setProgressTopBar,
     progressMetricsReady,
     readingLocatorKey,
-    serverResumeAnchor,
+    serverResumeAnchor: effectiveResumeAnchor,
     applyReadingLocator,
-    updateReadingPercent,
     markViewerPageReady,
+    isViewerPageReady,
+    isResumePending,
     cachedLocation,
     transitionState,
     graphApiError,

@@ -63,45 +63,33 @@ export default defineConfig(({ mode }) => {
             'Connection': 'keep-alive',
           },
           configure: (proxy, options) => {
-            proxy.on('proxyReq', (proxyReq, req, _res) => {
+            proxy.on('proxyReq', (proxyReq, req) => {
               const authHeader = req.headers['authorization'] || req.headers['Authorization'];
               if (authHeader && !proxyReq.getHeader('Authorization')) {
                 proxyReq.setHeader('Authorization', authHeader);
               }
             });
-            proxy.on('proxyRes', (proxyRes, req, _res) => {
-              // 404 에러인 경우 - 데이터가 없을 수 있는 엔드포인트는 조용히 처리
-              if (proxyRes.statusCode === 404) {
-                const url = req.url || '';
-                
-                // 데이터가 없을 수 있는 정상적인 404 엔드포인트들
-                const silent404Endpoints = [
-                  '/relationship-graph',
-                  '/relationship-deltas',
-                  '/api/v2/progress',
-                  '/api/books/',
-                  '/api/v2/books/',
-                  '/manifest'
-                ];
-                
-                const isSilent404 = silent404Endpoints.some(endpoint => url.includes(endpoint));
-                
-                if (isSilent404) {
-                  // 데이터 부재로 정상적인 상황이므로 로깅하지 않음
-                  // 디버그가 필요할 때만 활성화
-                  // console.debug('⚠️ [404] 데이터 없음 (정상):', url);
-                } else {
-                  // 다른 엔드포인트의 404는 에러로 로깅
-                  console.error('🔴 [404 에러] 백엔드에서 경로를 찾지 못함:', {
-                    요청경로: url,
-                    전체URL: `${options.target}${url}`,
-                    백엔드서버: options.target,
-                    메시지: '백엔드 서버에 해당 엔드포인트가 존재하지 않거나 경로가 다를 수 있습니다.'
-                  });
-                }
-              }
+            proxy.on('proxyRes', (proxyRes, req) => {
+              if (proxyRes.statusCode !== 404) return;
+
+              const url = req.url || '';
+              const silent404Endpoints = [
+                '/relationship-graph',
+                '/api/v2/progress',
+                '/api/v2/books/',
+                '/manifest'
+              ];
+
+              if (silent404Endpoints.some((endpoint) => url.includes(endpoint))) return;
+
+              console.error('🔴 [404 에러] 백엔드에서 경로를 찾지 못함:', {
+                요청경로: url,
+                전체URL: `${options.target}${url}`,
+                백엔드서버: options.target,
+                메시지: '백엔드 서버에 해당 엔드포인트가 존재하지 않거나 경로가 다를 수 있습니다.'
+              });
             });
-            proxy.on('error', (err, req, _res) => {
+            proxy.on('error', (err, req) => {
               console.error('❌ [프록시 에러]', {
                 메시지: err.message,
                 코드: err.code,

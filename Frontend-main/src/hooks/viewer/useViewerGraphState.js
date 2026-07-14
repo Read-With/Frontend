@@ -6,21 +6,50 @@ import { eventMatchesChapter } from '../../utils/viewer/viewerEventProgressUtils
 import { aggregateCharactersFromEvents } from '../../utils/graph/characterUtils';
 import {
   saveViewerMode,
-  resolveInitialGraphMode,
+  resolveInitialGraphFullScreen,
   eventUtils,
 } from '../../utils/viewer/viewerCoreStateUtils';
 
-export function useViewerGraphState({ currentChapter, setCurrentChapter, bookKey }) {
-  const initialGraphMode = useMemo(() => resolveInitialGraphMode(), []);
+const HARD_RELOAD_SETTLE_MS = 1000;
+
+function deriveGraphPhase({ isReloading, isFineGraphLoading, isGraphLoading }) {
+  if (isReloading) return 'reloading';
+  if (isFineGraphLoading) return 'fine';
+  if (isGraphLoading) return 'loading';
+  return 'idle';
+}
+
+function resolvePersistedViewerMode(graphFullScreen, showGraph) {
+  if (graphFullScreen) return 'graph';
+  if (showGraph) return 'split';
+  return 'viewer';
+}
+
+function isHardNavigationReload() {
+  if (!performance?.getEntriesByType) return false;
+  const [entry] = performance.getEntriesByType('navigation');
+  return entry?.type === 'reload';
+}
+
+/** showGraph는 settings(SSOT). 이 훅은 UI 반영·fullscreen persist만 담당 */
+export function useViewerGraphState({
+  currentChapter,
+  bookKey,
+  showGraph,
+}) {
+  const initialFullScreen = useMemo(
+    () => resolveInitialGraphFullScreen(showGraph),
+    // 마운트 시 1회: viewer_mode의 graph 전체화면 복원
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    []
+  );
 
   const [currentEvent, setCurrentEvent] = useState(null);
   const [events, setEvents] = useState([]);
   const [prevValidEvent, setPrevValidEvent] = useState(null);
 
-  const [graphFullScreen, setGraphFullScreen] = useState(initialGraphMode.fullScreen);
-  const [showGraph, setShowGraph] = useState(initialGraphMode.show);
+  const [graphFullScreen, setGraphFullScreen] = useState(initialFullScreen);
 
-  const [currentCharIndex, setCurrentCharIndex] = useState(0);
   const [isDataReady, setIsDataReady] = useState(false);
   const [edgeLabelVisible, setEdgeLabelVisible] = useState(true);
   const [filterStage, setFilterStage] = useState(0);
@@ -37,34 +66,35 @@ export function useViewerGraphState({ currentChapter, setCurrentChapter, bookKey
     const chapterEvents = events.filter(
       (evt) => Number(eventUtils.resolveChapterIdx(evt)) === Number(currentChapter)
     );
-    const charactersMap = aggregateCharactersFromEvents(chapterEvents);
-    return { characters: Array.from(charactersMap.values()) };
+    return { characters: Array.from(aggregateCharactersFromEvents(chapterEvents).values()) };
   }, [events, currentChapter]);
 
-  useEffect(() => {
-    if (currentEvent && eventMatchesChapter(currentEvent, currentChapter)) {
-      setPrevValidEvent(currentEvent);
-    }
-  }, [currentEvent, currentChapter]);
-
-  const graphPhase = useMemo(() => {
-    if (isReloading) return 'reloading';
-    if (isFineGraphLoading) return 'fine';
-    if (isGraphLoading) return 'loading';
-    return 'idle';
-  }, [isReloading, isFineGraphLoading, isGraphLoading]);
+  const graphPhase = useMemo(
+    () => deriveGraphPhase({ isReloading, isFineGraphLoading, isGraphLoading }),
+    [isReloading, isFineGraphLoading, isGraphLoading]
+  );
 
   const { searchState, searchActions } = useGraphSearch(elements, currentChapterData);
 
   useEffect(() => {
-    if (graphFullScreen) {
-      saveViewerMode('graph');
-    } else if (showGraph) {
-      saveViewerMode('split');
-    } else {
-      saveViewerMode('viewer');
-    }
+    saveViewerMode(resolvePersistedViewerMode(graphFullScreen, showGraph));
   }, [showGraph, graphFullScreen]);
+
+  // 그래프 숨김 시 전체화면 잔류로 뷰어 width 0% 되는 것 방지
+  useEffect(() => {
+    if (!showGraph && graphFullScreen) setGraphFullScreen(false);
+  }, [showGraph, graphFullScreen]);
+
+  // 챕터에 맞는 이벤트만 prevValid로 유지, 불일치 시 클리어
+  useEffect(() => {
+    if (!currentEvent) return;
+    if (eventMatchesChapter(currentEvent, currentChapter)) {
+      setPrevValidEvent(currentEvent);
+      return;
+    }
+    setCurrentEvent(null);
+    setPrevValidEvent(null);
+  }, [currentChapter, currentEvent]);
 
   const resetGraphPipelineState = useCallback(() => {
     setEvents([]);
@@ -76,8 +106,8 @@ export function useViewerGraphState({ currentChapter, setCurrentChapter, bookKey
 
   const resetGraphTransientState = useCallback(() => {
     setCurrentEvent(null);
-    resetGraphPipelineState();
     setPrevValidEvent(null);
+    resetGraphPipelineState();
   }, [resetGraphPipelineState]);
 
   useEffect(() => {
@@ -85,33 +115,20 @@ export function useViewerGraphState({ currentChapter, setCurrentChapter, bookKey
   }, [currentChapter, bookKey, resetGraphPipelineState]);
 
   useEffect(() => {
-    if (!currentEvent) return;
-    if (!eventMatchesChapter(currentEvent, currentChapter)) {
-      setCurrentEvent(null);
-      setPrevValidEvent(null);
-    }
-  }, [currentChapter, currentEvent]);
+    if (!isHardNavigationReload()) return undefined;
 
-  useEffect(() => {
-    if (performance && performance.getEntriesByType) {
-      const navEntries = performance.getEntriesByType('navigation');
-      if (navEntries.length > 0 && navEntries[0].type === 'reload') {
-        setIsReloading(true);
-        resetGraphTransientState();
+    setIsReloading(true);
+    resetGraphTransientState();
 
-        const flags = resolveInitialGraphMode();
-        setGraphFullScreen(flags.fullScreen);
-        setShowGraph(flags.show);
+    // settings.showGraph가 SSOT — 하드 리로드 시 fullscreen만 viewer_mode에서 복원
+    setGraphFullScreen(resolveInitialGraphFullScreen());
 
-        const timer = setTimeout(() => {
-          setIsReloading(false);
-          setIsGraphLoading(false);
-        }, 1000);
+    const timer = setTimeout(() => {
+      setIsReloading(false);
+      setIsGraphLoading(false);
+    }, HARD_RELOAD_SETTLE_MS);
 
-        return () => clearTimeout(timer);
-      }
-    }
-    return undefined;
+    return () => clearTimeout(timer);
   }, [resetGraphTransientState]);
 
   const graphState = useMemo(
@@ -119,21 +136,17 @@ export function useViewerGraphState({ currentChapter, setCurrentChapter, bookKey
       currentChapter,
       currentEvent,
       prevValidEvent,
-      events,
       elements,
       edgeLabelVisible,
-      currentCharIndex,
       graphFullScreen,
-      showGraph,
+      showGraph: Boolean(showGraph),
     }),
     [
       currentChapter,
       currentEvent,
       prevValidEvent,
-      events,
       elements,
       edgeLabelVisible,
-      currentCharIndex,
       graphFullScreen,
       showGraph,
     ]
@@ -141,21 +154,15 @@ export function useViewerGraphState({ currentChapter, setCurrentChapter, bookKey
 
   const graphActions = useMemo(
     () => ({
-      setCurrentChapter,
       setGraphFullScreen,
-      setShowGraph,
       setEdgeLabelVisible,
-      setElements,
       setIsDataEmpty,
       filterStage,
       setFilterStage,
     }),
     [
-      setCurrentChapter,
       setGraphFullScreen,
-      setShowGraph,
       setEdgeLabelVisible,
-      setElements,
       setIsDataEmpty,
       filterStage,
       setFilterStage,
@@ -164,12 +171,11 @@ export function useViewerGraphState({ currentChapter, setCurrentChapter, bookKey
 
   const graphViewerState = useMemo(
     () => ({
-      fineGraphLoading: isFineGraphLoading,
       graphPhase,
       isDataReady,
       isDataEmpty,
     }),
-    [isFineGraphLoading, graphPhase, isDataReady, isDataEmpty]
+    [graphPhase, isDataReady, isDataEmpty]
   );
 
   return {
@@ -177,11 +183,9 @@ export function useViewerGraphState({ currentChapter, setCurrentChapter, bookKey
     setCurrentEvent,
     setEvents,
     setElements,
-    setCurrentCharIndex,
     setIsDataReady,
     setIsGraphLoading,
     setFineGraphLoading,
-    setShowGraph,
     graphState,
     graphActions,
     graphViewerState,

@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, memo } from 'react';
+import { useCallback, useMemo, memo } from 'react';
 import GraphControls, { EdgeLabelToggle } from '../graph/GraphControls';
 import { getChapterData, getManifestFromCache } from '../../utils/common/cache/manifestCache';
 import { resolveChapterIndex } from '../../utils/common/valueUtils';
@@ -174,8 +174,6 @@ const ViewerTopBar = memo(function ViewerTopBar({
 
     const row = progressTopBar ?? {
       eventNum: null,
-      chapterProgress: null,
-      readingProgressPercent: null,
     };
 
     const eventNum = resolveEventOrdinalForDisplay({

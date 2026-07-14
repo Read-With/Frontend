@@ -1,55 +1,137 @@
 /** 책: 서버 목록 쿼리·라이브러리·뷰어 URL canonical 매칭 */
 
-import { useState, useEffect, useCallback, useMemo, useRef, useReducer } from 'react';
+import { useState, useEffect, useCallback, useMemo, useReducer } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { getBook, getBooks, toggleBookFavorite } from '../../utils/api/booksApi';
 import { getBookManifest } from '../../utils/api/api';
-import { normalizeTitle } from '../../utils/common/valueUtils';
+import { normalizeTitle, normalizeAuthor } from '../../utils/common/valueUtils';
 import { errorUtils } from '../../utils/common/errorUtils';
 import { prefetchManifest } from '../../utils/common/cache/manifestCache';
+import { readBooksCache, writeBooksCache } from '../../utils/common/cache/cacheManager';
 import { PROGRESS_CACHE_UPDATED_EVENT } from '../../utils/common/cache/progressCache';
 import { resolveLibraryReadingProgressPercent } from '../../utils/library/libraryUtils';
 import { getStoredAccessToken } from '../../utils/security/authTokenStorage';
 import { ensureSessionAccessToken } from '../../utils/api/authApi';
+import { userViewerPath } from '../../utils/navigation/viewerPaths';
 
-const HIDDEN_SERVER_BOOK_IDS_KEY = 'readwith_hidden_server_book_ids';
-const normalizeAuthor = (author) => (author || '').toLowerCase().trim().replace(/\s+/g, ' ');
-const serverBookFetchState = new Map();
+export const BOOKS_QUERY_KEY = ['books', 'server'];
 
-export function useBooksServerQuery() {
+const HIDDEN_BOOK_IDS_KEY = 'readwith_hidden_server_book_ids';
+const BOOKS_QUERY_OPTIONS = {
+  staleTime: 5 * 60 * 1000,
+  gcTime: 60 * 60 * 1000,
+  retry: 1,
+};
+
+const bookFetchState = new Map();
+
+function readHiddenBookIds() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(HIDDEN_BOOK_IDS_KEY) || '[]');
+    return new Set(Array.isArray(parsed) ? parsed.map((id) => `${id}`) : []);
+  } catch {
+    return new Set();
+  }
+}
+
+function writeHiddenBookIds(ids) {
+  localStorage.setItem(HIDDEN_BOOK_IDS_KEY, JSON.stringify([...ids]));
+}
+
+function reconcileBooks(fetchedBooks) {
+  if (!Array.isArray(fetchedBooks)) return [];
+
+  const deduped = new Map();
+  for (const book of fetchedBooks) {
+    const numericId = Number(book?.id);
+    if (!Number.isFinite(numericId) || numericId <= 0) continue;
+
+    const titleKey = normalizeTitle(book?.title || '');
+    const authorKey = normalizeAuthor(book?.author || '');
+    if (!titleKey || !authorKey) continue;
+
+    const dedupeKey = `${titleKey}::${authorKey}`;
+    const normalized = { ...book, isFavorite: !!book.isFavorite };
+    const existing = deduped.get(dedupeKey);
+    if (!existing || numericId < Number(existing.id)) {
+      deduped.set(dedupeKey, normalized);
+    }
+  }
+  return Array.from(deduped.values());
+}
+
+export function findCanonicalBook(books, titleKey, authorKey) {
+  return books
+    .filter((item) => {
+      const id = Number(item?.id);
+      return (
+        Number.isFinite(id) &&
+        id > 0 &&
+        normalizeTitle(item?.title || '') === titleKey &&
+        normalizeAuthor(item?.author || '') === authorKey
+      );
+    })
+    .sort((a, b) => Number(a.id) - Number(b.id))[0] ?? null;
+}
+
+function prefetchBookManifests(books) {
+  for (const book of books) {
+    const id = Number(book?.id);
+    if (!Number.isFinite(id) || id <= 0) continue;
+    prefetchManifest(id, (bookId) => getBookManifest(bookId, { forceRefresh: false })).catch(
+      () => {}
+    );
+  }
+}
+
+async function fetchBooksQuery() {
+  await ensureSessionAccessToken();
+  if (!getStoredAccessToken()) {
+    return { books: [], needsAuth: true };
+  }
+
+  const response = await getBooks({});
+  if (!response?.isSuccess) {
+    throw new Error(response?.message || '책 정보를 불러올 수 없습니다.');
+  }
+
+  const books = response.result || [];
+  writeBooksCache(books);
+  prefetchBookManifests(books);
+  return { books, needsAuth: false };
+}
+
+function getBooksQueryInitialData() {
+  const cached = readBooksCache();
+  if (!cached) return null;
+  return {
+    initialData: { books: cached.books, needsAuth: false },
+    initialDataUpdatedAt: cached.updatedAt,
+  };
+}
+
+function invalidateBooksQuery(queryClient) {
+  return queryClient.invalidateQueries({ queryKey: BOOKS_QUERY_KEY });
+}
+
+export function prefetchBooks(queryClient) {
+  if (!queryClient) return Promise.resolve();
+  return queryClient.prefetchQuery({
+    queryKey: BOOKS_QUERY_KEY,
+    queryFn: fetchBooksQuery,
+    ...BOOKS_QUERY_OPTIONS,
+  });
+}
+
+function useBooksQuery() {
+  const [initial] = useState(getBooksQueryInitialData);
+
   return useQuery({
-    queryKey: ['books', 'server'],
-    queryFn: async () => {
-      await ensureSessionAccessToken();
-      const token = getStoredAccessToken();
-      if (!token) {
-        return { books: [], needsAuth: true };
-      }
-
-      const response = await getBooks({});
-      if (!response?.isSuccess) {
-        throw new Error(response?.message || '책 정보를 불러올 수 없습니다.');
-      }
-
-      const fetched = response.result || [];
-
-      fetched.forEach((book) => {
-        if (book?.id && Number.isFinite(Number(book.id))) {
-          const numericId = Number(book.id);
-          if (numericId > 0) {
-            prefetchManifest(numericId, (id) => getBookManifest(id, { forceRefresh: false })).catch(
-              () => {}
-            );
-          }
-        }
-      });
-
-      return { books: fetched, needsAuth: false };
-    },
-    staleTime: 5 * 60 * 1000,
-    gcTime: 30 * 60 * 1000,
-    retry: 1,
+    queryKey: BOOKS_QUERY_KEY,
+    queryFn: fetchBooksQuery,
+    ...BOOKS_QUERY_OPTIONS,
+    ...(initial || {}),
   });
 }
 
@@ -58,52 +140,43 @@ export function useServerBookMatching(bookId, options = {}) {
   const { skipBookIdRedirectRef } = options;
   const location = useLocation();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
 
   const [serverBook, setServerBook] = useState(null);
   const [loadingServerBook, setLoadingServerBook] = useState(false);
   const [matchedServerBook, setMatchedServerBook] = useState(null);
 
-  const matchedServerBookRef = useRef(null);
-
   useEffect(() => {
-    matchedServerBookRef.current = matchedServerBook;
-  }, [matchedServerBook]);
+    const numericBookId = parseInt(bookId, 10);
+    if (isNaN(numericBookId) || serverBook?.id === numericBookId) return;
+    if (bookFetchState.get(numericBookId) === 'inflight') return;
 
-  useEffect(() => {
-    const fetchServerBook = async () => {
-      const numericBookId = parseInt(bookId, 10);
-      if (isNaN(numericBookId)) {
-        return;
-      }
-      if (serverBook?.id === numericBookId) {
-        return;
-      }
-      if (serverBookFetchState.get(numericBookId) === 'inflight') {
-        return;
-      }
+    let cancelled = false;
+    setLoadingServerBook(true);
+    bookFetchState.set(numericBookId, 'inflight');
 
-      setLoadingServerBook(true);
-      serverBookFetchState.set(numericBookId, 'inflight');
-      try {
-        const response = await getBook(numericBookId);
-
-        if (response && response.isSuccess && response.result) {
-          const bookData = response.result;
-          setServerBook(bookData);
-          serverBookFetchState.set(numericBookId, 'done');
+    getBook(numericBookId)
+      .then((response) => {
+        if (cancelled) return;
+        if (response?.isSuccess && response.result) {
+          setServerBook(response.result);
+          bookFetchState.set(numericBookId, 'done');
         } else {
-          serverBookFetchState.delete(numericBookId);
+          bookFetchState.delete(numericBookId);
         }
-      } catch (error) {
-        serverBookFetchState.delete(numericBookId);
+      })
+      .catch((error) => {
+        bookFetchState.delete(numericBookId);
         errorUtils.logError('fetchServerBook', error, { bookId, numericBookId });
-      } finally {
-        setLoadingServerBook(false);
-      }
-    };
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingServerBook(false);
+      });
 
-    fetchServerBook();
-  }, [bookId, location.state?.book]);
+    return () => {
+      cancelled = true;
+    };
+  }, [bookId, location.state?.book, serverBook?.id]);
 
   useEffect(() => {
     if (location.state?.fromLibrary === true) {
@@ -112,13 +185,8 @@ export function useServerBookMatching(bookId, options = {}) {
     }
 
     const sourceBook = location.state?.book || serverBook;
-    if (!sourceBook?.title || !sourceBook?.author) {
-      setMatchedServerBook(null);
-      return;
-    }
-
-    const titleKey = normalizeTitle(sourceBook.title);
-    const authorKey = normalizeAuthor(sourceBook.author);
+    const titleKey = normalizeTitle(sourceBook?.title || '');
+    const authorKey = normalizeAuthor(sourceBook?.author || '');
     if (!titleKey || !authorKey) {
       setMatchedServerBook(null);
       return;
@@ -127,26 +195,13 @@ export function useServerBookMatching(bookId, options = {}) {
     let cancelled = false;
     const resolveCanonical = async () => {
       try {
-        const res = await getBooks({});
-        if (cancelled || !res?.isSuccess || !Array.isArray(res.result)) return;
-
-        const candidates = res.result
-          .filter((item) => {
-            const id = Number(item?.id);
-            return (
-              Number.isFinite(id) &&
-              id > 0 &&
-              normalizeTitle(item?.title || '') === titleKey &&
-              normalizeAuthor(item?.author || '') === authorKey
-            );
-          })
-          .sort((a, b) => Number(a.id) - Number(b.id));
-
-        if (candidates.length > 0) {
-          setMatchedServerBook(candidates[0]);
-        } else {
-          setMatchedServerBook(null);
+        let books = queryClient.getQueryData(BOOKS_QUERY_KEY)?.books;
+        if (!Array.isArray(books)) {
+          const res = await getBooks({});
+          books = res?.isSuccess && Array.isArray(res.result) ? res.result : null;
         }
+        if (cancelled || !books) return;
+        setMatchedServerBook(findCanonicalBook(books, titleKey, authorKey));
       } catch {
         if (!cancelled) setMatchedServerBook(null);
       }
@@ -156,7 +211,7 @@ export function useServerBookMatching(bookId, options = {}) {
     return () => {
       cancelled = true;
     };
-  }, [bookId, location.state?.book, location.state?.fromLibrary, serverBook]);
+  }, [bookId, location.state?.book, location.state?.fromLibrary, serverBook, queryClient]);
 
   useEffect(() => {
     if (skipBookIdRedirectRef?.current) return;
@@ -166,7 +221,7 @@ export function useServerBookMatching(bookId, options = {}) {
     const canonicalId = String(matchedServerBook.id);
     if (String(bookId) === canonicalId) return;
 
-    navigate(`/user/viewer/${canonicalId}`, {
+    navigate(userViewerPath(canonicalId), {
       replace: true,
       state: {
         ...location.state,
@@ -194,19 +249,7 @@ export function useServerBookMatching(bookId, options = {}) {
 export const useBooks = () => {
   const queryClient = useQueryClient();
   const [progressCacheEpoch, bumpProgressCacheEpoch] = useReducer((n) => n + 1, 0);
-  const [hiddenServerBookIds, setHiddenServerBookIds] = useState(() => {
-    try {
-      const raw = localStorage.getItem(HIDDEN_SERVER_BOOK_IDS_KEY);
-      const parsed = raw ? JSON.parse(raw) : [];
-      if (Array.isArray(parsed)) return new Set(parsed.map((id) => `${id}`));
-    } catch (_e) {}
-    return new Set();
-  });
-  const hiddenServerBookIdsRef = useRef(new Set(hiddenServerBookIds));
-
-  useEffect(() => {
-    hiddenServerBookIdsRef.current = new Set(hiddenServerBookIds);
-  }, [hiddenServerBookIds]);
+  const [hiddenBookIds, setHiddenBookIds] = useState(readHiddenBookIds);
 
   useEffect(() => {
     const onProgressCacheUpdated = () => bumpProgressCacheEpoch();
@@ -214,59 +257,23 @@ export const useBooks = () => {
     return () => window.removeEventListener(PROGRESS_CACHE_UPDATED_EVENT, onProgressCacheUpdated);
   }, []);
 
-  const {
-    data: serverBooksData,
-    isLoading: isServerLoading,
-    error: serverError,
-    refetch: refetchServer,
-  } = useBooksServerQuery();
-
-  const reconcileBooks = useCallback((fetchedBooks) => {
-    if (!Array.isArray(fetchedBooks)) return [];
-
-    const deduped = new Map();
-
-    fetchedBooks.forEach((book) => {
-      const numericId = Number(book?.id);
-      if (!Number.isFinite(numericId) || numericId <= 0) return;
-      const titleKey = normalizeTitle(book?.title || '');
-      const authorKey = normalizeAuthor(book?.author || '');
-      const dedupeKey = `${titleKey}::${authorKey}`;
-      if (!titleKey || !authorKey) return;
-
-      const normalized = { ...book, isFavorite: !!book.isFavorite };
-      const existing = deduped.get(dedupeKey);
-      if (!existing || numericId < Number(existing.id)) {
-        deduped.set(dedupeKey, normalized);
-      }
-    });
-
-    return Array.from(deduped.values());
-  }, []);
-
-  const reconciledBooks = useMemo(() => {
-    const serverBooks = serverBooksData?.books || [];
-    return reconcileBooks(serverBooks);
-  }, [serverBooksData, reconcileBooks]);
+  const { data, isLoading, error: queryError, refetch } = useBooksQuery();
 
   const books = useMemo(() => {
-    return reconciledBooks
-      .filter((book) => {
-        const idKey = book?.id != null ? `${book.id}` : null;
-        return idKey && !hiddenServerBookIds.has(idKey);
-      })
+    return reconcileBooks(data?.books)
+      .filter((book) => book?.id != null && !hiddenBookIds.has(`${book.id}`))
       .map((book) => ({
         ...book,
         progress: resolveLibraryReadingProgressPercent(book),
       }));
-  }, [reconciledBooks, progressCacheEpoch, hiddenServerBookIds]);
+  }, [data, progressCacheEpoch, hiddenBookIds]);
 
   const toggleFavoriteMutation = useMutation({
-    mutationFn: async ({ bookId, favorite }) => toggleBookFavorite(bookId, favorite),
+    mutationFn: ({ bookId, favorite }) => toggleBookFavorite(bookId, favorite),
     onMutate: async ({ bookId, favorite }) => {
-      await queryClient.cancelQueries({ queryKey: ['books', 'server'] });
-      const previousServerBooks = queryClient.getQueryData(['books', 'server']);
-      queryClient.setQueryData(['books', 'server'], (old) => {
+      await queryClient.cancelQueries({ queryKey: BOOKS_QUERY_KEY });
+      const previous = queryClient.getQueryData(BOOKS_QUERY_KEY);
+      queryClient.setQueryData(BOOKS_QUERY_KEY, (old) => {
         if (!old) return old;
         const idStr = String(bookId);
         return {
@@ -276,86 +283,69 @@ export const useBooks = () => {
           ),
         };
       });
-      return { previousServerBooks };
+      return { previous };
     },
-    onError: (_err, _variables, context) => {
-      if (context?.previousServerBooks) {
-        queryClient.setQueryData(['books', 'server'], context.previousServerBooks);
+    onError: (_err, _vars, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(BOOKS_QUERY_KEY, context.previous);
       }
     },
     onSettled: () => {
-      queryClient.refetchQueries({
-        queryKey: ['books', 'server'],
-        type: 'active',
-      });
+      void invalidateBooksQuery(queryClient);
     },
   });
 
-  const removeBookMutation = useMutation({
-    mutationFn: async (bookId) => String(bookId),
-    onMutate: async (bookId) => {
-      await queryClient.cancelQueries({ queryKey: ['books', 'server'] });
-      const targetBookId = String(bookId);
-      setHiddenServerBookIds((prev) => {
-        const next = new Set(prev);
-        next.add(targetBookId);
-        hiddenServerBookIdsRef.current = next;
-        localStorage.setItem(HIDDEN_SERVER_BOOK_IDS_KEY, JSON.stringify([...next]));
-        return next;
-      });
-      return {};
-    },
-  });
+  const removeBook = useCallback((bookId) => {
+    setHiddenBookIds((prev) => {
+      const next = new Set(prev);
+      next.add(String(bookId));
+      writeHiddenBookIds(next);
+      return next;
+    });
+  }, []);
 
   const addBook = useCallback(
     async (newBook) => {
+      const newBookId = newBook?.id ?? newBook?._bookId;
+      const idStr = newBookId != null ? String(newBookId) : null;
+      if (!idStr) return;
+
+      const bookToAdd = {
+        ...newBook,
+        id: Number.isFinite(Number(newBookId)) ? Number(newBookId) : newBookId,
+        isFavorite: !!newBook.isFavorite,
+      };
+
+      setHiddenBookIds((prev) => {
+        if (!prev.has(idStr)) return prev;
+        const next = new Set(prev);
+        next.delete(idStr);
+        writeHiddenBookIds(next);
+        return next;
+      });
+
+      const merge = (old) => {
+        if (!old) return { books: [bookToAdd], needsAuth: false };
+        const list = old.books || [];
+        const idx = list.findIndex((b) => String(b?.id) === idStr);
+        if (idx >= 0) {
+          const next = list.slice();
+          next[idx] = { ...list[idx], ...bookToAdd };
+          return { ...old, books: next };
+        }
+        return { ...old, books: [...list, bookToAdd] };
+      };
+
       try {
-        const newBookId = newBook?.id ?? newBook?._bookId;
-        const newBookIdStr = newBookId != null ? String(newBookId) : null;
-        if (!newBookIdStr) return;
-
-        const bookToAdd = {
-          ...newBook,
-          id: Number.isFinite(Number(newBookId)) ? Number(newBookId) : newBookId,
-          isFavorite: !!newBook.isFavorite,
-        };
-
-        setHiddenServerBookIds((prev) => {
-          if (!prev.has(newBookIdStr)) return prev;
-          const next = new Set(prev);
-          next.delete(newBookIdStr);
-          hiddenServerBookIdsRef.current = next;
-          localStorage.setItem(HIDDEN_SERVER_BOOK_IDS_KEY, JSON.stringify([...next]));
-          return next;
-        });
-
-        const mergeBookIntoCache = (old) => {
-          if (!old) {
-            return { books: [bookToAdd], needsAuth: false };
-          }
-          const list = old.books || [];
-          const idx = list.findIndex((b) => String(b?.id) === newBookIdStr);
-          if (idx >= 0) {
-            const next = list.slice();
-            next[idx] = { ...list[idx], ...bookToAdd };
-            return { ...old, books: next };
-          }
-          return { ...old, books: [...list, bookToAdd] };
-        };
-
-        // 업로드 직후 목록에 바로 보이도록 캐시에 반영
-        queryClient.setQueryData(['books', 'server'], mergeBookIntoCache);
-
-        await queryClient.refetchQueries({
-          queryKey: ['books', 'server'],
-          type: 'active',
-        });
+        queryClient.setQueryData(BOOKS_QUERY_KEY, merge);
+        await invalidateBooksQuery(queryClient);
 
         // 서버 목록에 아직 없으면(분석 전 미노출 등) 업로드 결과 유지
-        queryClient.setQueryData(['books', 'server'], (old) => {
-          const list = old?.books || [];
-          if (list.some((b) => String(b?.id) === newBookIdStr)) return old;
-          return mergeBookIntoCache(old);
+        queryClient.setQueryData(BOOKS_QUERY_KEY, (old) => {
+          if ((old?.books || []).some((b) => String(b?.id) === idStr)) return old;
+          const next = merge(old);
+          writeBooksCache(next.books);
+          return next;
         });
       } catch (e) {
         console.warn('addBook 실패:', e);
@@ -364,45 +354,19 @@ export const useBooks = () => {
     [queryClient]
   );
 
-  const fetchBook = useCallback(async (bookId) => {
-    const response = await getBook(bookId);
-    if (response?.isSuccess) {
-      return response.result;
-    }
-    throw new Error(response?.message || '도서 정보를 불러올 수 없습니다.');
-  }, []);
-
-  const loading = isServerLoading;
-  const error =
-    serverError?.message || (serverBooksData?.needsAuth ? '인증이 필요합니다. 로그인해주세요.' : null);
-
-  const retryFetch = useCallback(() => {
-    refetchServer();
-  }, [refetchServer]);
-
   const toggleFavorite = useCallback(
-    async (bookId, favorite) => {
-      await toggleFavoriteMutation.mutateAsync({ bookId, favorite });
-    },
+    (bookId, favorite) => toggleFavoriteMutation.mutateAsync({ bookId, favorite }),
     [toggleFavoriteMutation]
-  );
-
-  const removeBook = useCallback(
-    async (bookId) => {
-      await removeBookMutation.mutateAsync(bookId);
-    },
-    [removeBookMutation]
   );
 
   return {
     books,
-    loading,
-    error,
-    retryFetch,
+    loading: isLoading,
+    error:
+      queryError?.message || (data?.needsAuth ? '인증이 필요합니다. 로그인해주세요.' : null),
+    refetch,
     removeBook,
     toggleFavorite,
-    fetchBook,
     addBook,
-    allServerBooks: serverBooksData?.books || [],
   };
 };

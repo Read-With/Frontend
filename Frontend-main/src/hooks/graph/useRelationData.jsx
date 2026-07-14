@@ -1,15 +1,16 @@
-/** 간선 툴팁: 관계 타임라인 API·캐시 */
+/** ?? ?�?: ?�??�?�???API�?? */
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { isSamePair } from '../../utils/graph/relationUtils';
 import { getFineGraph } from '../../utils/api/api';
 import { cacheKeyUtils, eventUtils } from '../../utils/viewer/viewerCoreStateUtils';
 import {
-  hasFineGraphEventSlot,
+  hasFineGraphPayload,
   pickFineGraphResult,
 } from '../../utils/viewer/viewerGraphUtils';
 import { resolvePositiveBookId } from '../common/hooksShared';
 import { resolveFineGraphEventToLocator, resolveLastEventIdxForFineGraph } from '../../utils/common/cache/manifestCache';
+import { clampPositivity } from '../../utils/styles/graphStyles';
 import {
   getCachedChapterEvents,
   reconstructChapterGraphState,
@@ -87,7 +88,7 @@ function findRelationInElements(elements, id1, id2) {
 function relationPointFromElement(edgeElement) {
   const raw = edgeElement?.data?.positivity;
   const numeric = Number(raw);
-  return Number.isFinite(numeric) ? Math.max(-1, Math.min(1, numeric)) : 0;
+  return Number.isFinite(numeric) ? clampPositivity(numeric) : 0;
 }
 
 function fetchCachedRelationTimelineViewer(bookId, id1, id2, chapterNum, eventNum) {
@@ -171,7 +172,7 @@ async function probeLastEventIdxByApi(fetchEventData, chapter) {
       const searchResult = pickFineGraphResult(searchData);
       const hasRealData =
         searchData?.isSuccess &&
-        hasFineGraphEventSlot(searchResult);
+        hasFineGraphPayload(searchResult);
 
       if (hasRealData) {
         lastGood = high;
@@ -180,7 +181,7 @@ async function probeLastEventIdxByApi(fetchEventData, chapter) {
       } else {
         break;
       }
-    } catch (_error) {
+    } catch {
       break;
     }
   }
@@ -198,7 +199,7 @@ async function probeLastEventIdxByApi(fetchEventData, chapter) {
       const searchResult = pickFineGraphResult(searchData);
       const hasRealData =
         searchData?.isSuccess &&
-        hasFineGraphEventSlot(searchResult);
+        hasFineGraphPayload(searchResult);
 
       if (hasRealData) {
         chapterLastEventIdx = mid;
@@ -206,7 +207,7 @@ async function probeLastEventIdxByApi(fetchEventData, chapter) {
       } else {
         right = mid - 1;
       }
-    } catch (_error) {
+    } catch {
       right = mid - 1;
     }
   }
@@ -291,7 +292,7 @@ async function fetchApiRelationTimelineCumulativeFromAPI(bookId, id1, id2, selec
               const fineResult = pickFineGraphResult(fineData);
               const hasRealData =
                 fineData?.isSuccess &&
-                hasFineGraphEventSlot(fineResult);
+                hasFineGraphPayload(fineResult);
 
               if (!hasRealData) continue;
 
@@ -305,7 +306,7 @@ async function fetchApiRelationTimelineCumulativeFromAPI(bookId, id1, id2, selec
                   break;
                 }
               }
-            } catch (_error) {
+            } catch {
               // continue probing earlier events
             }
           }
@@ -316,7 +317,7 @@ async function fetchApiRelationTimelineCumulativeFromAPI(bookId, id1, id2, selec
               const fineResult = pickFineGraphResult(fineData);
               const hasRealData =
                 fineData?.isSuccess &&
-                hasFineGraphEventSlot(fineResult);
+                hasFineGraphPayload(fineResult);
 
               if (!hasRealData) continue;
 
@@ -329,7 +330,7 @@ async function fetchApiRelationTimelineCumulativeFromAPI(bookId, id1, id2, selec
                   });
                 }
               }
-            } catch (_error) {
+            } catch {
               // skip event
             }
           }
@@ -394,7 +395,7 @@ async function fetchApiRelationTimelineCumulativeFromAPI(bookId, id1, id2, selec
     ];
 
     return { points, labelInfo };
-  } catch (_error) {
+  } catch {
     return { points: [], labelInfo: [] };
   }
 }
@@ -416,7 +417,7 @@ async function fetchApiRelationTimelineCumulative(bookId, id1, id2, selectedChap
       setCachedData(cacheKey, result);
     }
     return withNoRelation(result);
-  } catch (_error) {
+  } catch {
     return { points: [], labelInfo: [], noRelation: true };
   }
 }
@@ -444,7 +445,7 @@ async function fetchApiRelationTimelineViewer(bookId, id1, id2, chapterNum, even
 
         const hasRealData =
           fineData?.isSuccess &&
-          hasFineGraphEventSlot(fineResult);
+          hasFineGraphPayload(fineResult);
 
         if (!hasRealData) {
           continue;
@@ -456,7 +457,7 @@ async function fetchApiRelationTimelineViewer(bookId, id1, id2, chapterNum, even
             firstAppearanceIdx = idx;
           }
         }
-      } catch (_error) {
+      } catch {
         // ignore per-event errors
       }
     }
@@ -486,14 +487,14 @@ async function fetchApiRelationTimelineViewer(bookId, id1, id2, chapterNum, even
         }
         points.push(positivityForEvent);
         labelInfo.push(`E${idx}`);
-      } catch (_error) {
+      } catch {
         points.push(0);
         labelInfo.push(`E${idx}`);
       }
     }
 
     return withNoRelation({ points, labelInfo });
-  } catch (_error) {
+  } catch {
     return { points: [], labelInfo: [], noRelation: true };
   }
 }
@@ -514,7 +515,7 @@ export function useRelationData(mode, id1, id2, chapterNum, eventNum, bookId = n
       setTimeline([]);
       setLabels([]);
       setNoRelation(true);
-      setError('필수 매개변수가 누락되었습니다.');
+      setError('?�? ????��? ?�??�??�???');
       setLoading(false);
       return;
     }
@@ -545,12 +546,12 @@ export function useRelationData(mode, id1, id2, chapterNum, eventNum, bookId = n
       setTimeline(paddedPoints);
       setLabels(paddedLabels);
       setNoRelation(resultNoRelation || paddedPoints.filter((value) => value !== null).length === 0);
-    } catch (_err) {
+    } catch {
       if (requestId !== requestIdRef.current) return;
       setTimeline([]);
       setLabels([]);
       setNoRelation(true);
-      setError('데이터를 가져오는 중 오류가 발생했습니다.');
+      setError('?�??��? ??�???�??�?? ???�??�?.');
     } finally {
       if (requestId === requestIdRef.current) {
         setLoading(false);

@@ -1,6 +1,7 @@
 /** 그래프 노드 검색·필터·페이드 */
 
-import { clearHighlightClassesOn, isGraphEdgeElement, isGraphNodeElement, uniqueStrings } from './graphUtils';
+import { isGraphEdgeElement, isGraphNodeElement, uniqueStrings, clearHighlightClassesOn } from './graphUtils';
+import { expandConnectedSubgraph } from './graphDataUtils';
 
 const buildChapterCharacterIdSet = (currentChapterData) => {
   if (!currentChapterData?.characters?.length) return null;
@@ -172,48 +173,11 @@ export function filterGraphElements(elements, searchTerm, currentChapterData = n
   if (!matchingNode) {
     return [];
   }
-  
-  const matchingNodeId = matchingNode.data.id;
-  
-  // 선택된 인물과 연결된 모든 간선 찾기
-  const connectedEdges = elements.filter(el => 
-    isGraphEdgeElement(el) && 
-    (el.data.source === matchingNodeId || el.data.target === matchingNodeId)
-  );
-  
-  // 연결된 간선의 source와 target 노드들도 포함
-  const connectedNodeIds = new Set([matchingNodeId]);
-  connectedEdges.forEach(edge => {
-    connectedNodeIds.add(edge.data.source);
-    connectedNodeIds.add(edge.data.target);
-  });
-  
-  // 검색된 노드와 연결된 모든 노드들 추가
-  const allConnectedNodes = elements.filter(el => 
-    isGraphNodeElement(el) && 
-    connectedNodeIds.has(el.data.id)
-  );
 
-  const uniqueNodes = new Map();
-  allConnectedNodes.forEach(node => {
-    if (node?.data?.id !== undefined) {
-      uniqueNodes.set(String(node.data.id), node);
-    }
+  return expandConnectedSubgraph(elements, new Set([matchingNode.data.id]), {
+    seedEdgeMode: 'any',
+    includeIsolatedSeeds: true,
   });
-  if (matchingNode?.data?.id !== undefined) {
-    uniqueNodes.set(String(matchingNode.data.id), matchingNode);
-  }
-
-  const uniqueEdges = new Map();
-  connectedEdges.forEach(edge => {
-    if (edge?.data?.id !== undefined) {
-      uniqueEdges.set(String(edge.data.id), edge);
-    } else {
-      uniqueEdges.set(`${edge.data.source}->${edge.data.target}`, edge);
-    }
-  });
-  
-    return [...uniqueNodes.values(), ...uniqueEdges.values()];
   } catch (error) {
     console.error('filterGraphElements 실패:', error, { 
       elementsLength: elements?.length, 
@@ -265,111 +229,52 @@ function createFilteredElementIds(filteredElements) {
 }
 
 /**
- * 검색 상태에 따라 그래프 요소들에 페이드 효과 적용
+ * 검색 결과에 따라 그래프 요소들에 페이드 효과 적용
  * @param {Object} cy - Cytoscape 인스턴스
  * @param {Array} filteredElements - 검색 결과 요소들
- * @param {boolean} isSearchActive - 검색 활성 상태
- * @returns {Object} 페이드 효과 적용 결과 통계 및 cleanup 함수
  */
-export function applySearchFadeEffect(cy, filteredElements, isSearchActive) {
+export function applySearchFadeEffect(cy, filteredElements) {
   if (!cy || typeof cy.elements !== 'function') {
     console.warn('applySearchFadeEffect: 유효하지 않은 Cytoscape 인스턴스입니다', { cy });
-    return {
-      fadedNodes: 0,
-      visibleNodes: 0,
-      fadedEdges: 0,
-      visibleEdges: 0,
-      cleanup: () => {}
-    };
+    return;
   }
   
   try {
-    // 검색이 비활성화된 경우 모든 페이드 효과 제거
-    if (!isSearchActive) {
-      clearHighlightClassesOn(cy);
-      return {
-        fadedNodes: 0,
-        visibleNodes: cy.nodes().length,
-        fadedEdges: 0,
-        visibleEdges: cy.edges().length,
-        cleanup: () => {}
-      };
-    }
+    clearHighlightClassesOn(cy);
 
     // 검색 활성 + 결과 없음 → 전체 페이드 (결과 없음 UI와 맞춤)
     if (!filteredElements || filteredElements.length === 0) {
-      let fadedNodeCount = 0;
-      let fadedEdgeCount = 0;
       cy.batch(() => {
         cy.nodes().forEach((node) => {
           node.addClass('faded');
-          fadedNodeCount += 1;
         });
         cy.edges().forEach((edge) => {
           edge.addClass('faded');
-          fadedEdgeCount += 1;
         });
       });
-      return {
-        fadedNodes: fadedNodeCount,
-        visibleNodes: 0,
-        fadedEdges: fadedEdgeCount,
-        visibleEdges: 0,
-        cleanup: () => { clearHighlightClassesOn(cy); },
-      };
+      return;
     }
 
     // 검색 결과에 포함된 요소들의 ID 집합 생성
     const { nodeIds: filteredNodeIds, edgeIds: filteredEdgeIds } = createFilteredElementIds(filteredElements);
 
-    let fadedNodeCount = 0;
-    let visibleNodeCount = 0;
-    let fadedEdgeCount = 0;
-    let visibleEdgeCount = 0;
-
     cy.batch(() => {
-      // 검색 결과에 포함되지 않은 모든 노드들을 페이드 아웃
       cy.nodes().forEach(node => {
         if (!filteredNodeIds.has(String(node.id()))) {
           node.addClass("faded");
-          fadedNodeCount++;
-        } else {
-          node.removeClass("faded");
-          visibleNodeCount++;
         }
       });
 
       cy.edges().forEach(edge => {
         if (!filteredEdgeIds.has(String(edge.id()))) {
           edge.addClass("faded");
-          fadedEdgeCount++;
-        } else {
-          edge.removeClass("faded");
-          visibleEdgeCount++;
         }
       });
     });
-
-    const result = {
-      fadedNodes: fadedNodeCount,
-      visibleNodes: visibleNodeCount,
-      fadedEdges: fadedEdgeCount,
-      visibleEdges: visibleEdgeCount,
-      cleanup: () => { clearHighlightClassesOn(cy); }
-    };
-    return result;
   } catch (error) {
     console.error('applySearchFadeEffect 실패:', error, { 
-      isSearchActive, 
       filteredElementsLength: filteredElements?.length 
     });
-    return {
-      fadedNodes: 0,
-      visibleNodes: 0,
-      fadedEdges: 0,
-      visibleEdges: 0,
-      cleanup: () => {}
-    };
   }
 }
 
@@ -378,10 +283,9 @@ export function applySearchFadeEffect(cy, filteredElements, isSearchActive) {
  * @param {boolean} isSearchActive - 검색 활성 상태
  * @param {string} searchTerm - 검색어
  * @param {Array} fitNodeIds - 검색된 노드 ID 배열
- * @param {Array} suggestions - 검색 제안 배열
  * @returns {boolean} 검색 결과 없음 여부
  */
-export function shouldShowNoSearchResults(isSearchActive, searchTerm, fitNodeIds = [], suggestions = []) {
+export function shouldShowNoSearchResults(isSearchActive, searchTerm, fitNodeIds = []) {
   if (typeof isSearchActive !== 'boolean') {
     console.warn('shouldShowNoSearchResults: isSearchActive이 boolean이 아닙니다', { isSearchActive });
     return false;
@@ -393,8 +297,7 @@ export function shouldShowNoSearchResults(isSearchActive, searchTerm, fitNodeIds
   
   return isSearchActive && 
          searchTerm.trim().length > 0 &&
-         (!fitNodeIds || fitNodeIds.length === 0) &&
-         (!suggestions || suggestions.length === 0);
+         (!fitNodeIds || fitNodeIds.length === 0);
 }
 
 /**
