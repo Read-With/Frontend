@@ -220,7 +220,8 @@ const AdminPage = () => {
   const [zoomedImage, setZoomedImage] = useState(null);
   const [selectedLogPayload, setSelectedLogPayload] = useState(null);
   const [imageGenerationStatus, setImageGenerationStatus] = useState(null);
-  
+  const [isGeneratingReference, setIsGeneratingReference] = useState(false);
+
   // 공통 API 호출 함수
   const handleApiCall = async (apiFunction, updateState = null) => {
     setLoading(true);
@@ -324,6 +325,26 @@ const AdminPage = () => {
     } catch (e) {
         console.error(e);
         setImageGenerationStatus(null);
+    }
+  };
+
+  const generateReferenceCandidates = async () => {
+    if (!selectedBook) return;
+    const confirmed = window.confirm(
+        "대표 캐릭터 후보사진을 생성하시겠습니까?\n\n기존 후보사진은 새 후보사진으로 덮어쓰게 됩니다."
+    );
+
+    if (!confirmed) return;
+    try {
+        setIsGeneratingReference(true);
+        await apiClient.post(
+            `/image-generation/books/${selectedBook.id}/reference-candidates`
+        );
+        await getImageGenerationStatus(selectedBook.id);
+    } catch (e) {
+        console.error(e);
+    } finally {
+        setIsGeneratingReference(false);
     }
   };
 
@@ -632,6 +653,18 @@ const AdminPage = () => {
               <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
             </svg>
             <span>현황 갱신</span>
+          </button>
+        </div>
+
+        <div className="px-6 pt-6 flex justify-end">
+          <button
+            onClick={generateReferenceCandidates}
+            disabled={isGeneratingReference}
+            className="px-5 py-2 rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition"
+          >
+            {isGeneratingReference
+              ? "후보사진 생성 중..."
+              : "후보사진 생성"}
           </button>
         </div>
 
