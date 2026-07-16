@@ -1,0 +1,111 @@
+/* 업로드/삭제 대상 도서 드롭다운 */
+
+.admin-params-card {
+  margin-bottom: 1.5rem;
+}
+
+.admin-params-card__toggle {
+  width: 100%;
+  padding: 1rem 1.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  text-align: left;
+  background-color: rgb(249 250 251 / 0.5);
+  border: none;
+  border-bottom: 1px solid transparent;
+  cursor: pointer;
+  transition:
+    background-color 300ms ease-out,
+    border-color 300ms ease-out;
+}
+
+.admin-params-card__toggle:hover {
+  background-color: rgb(249 250 251);
+}
+
+.admin-params-card__toggle.is-open {
+  border-bottom-color: #f3f4f6;
+}
+
+.admin-params-card__toggle-text {
+  min-width: 0;
+}
+
+.admin-params-card__title {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+  color: #1f2937;
+}
+
+.admin-params-card__summary {
+  margin: 0;
+  font-size: 0.75rem;
+  line-height: 1rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-height: 0;
+  margin-top: 0;
+  opacity: 0;
+  transition:
+    max-height 300ms ease-out,
+    margin-top 300ms ease-out,
+    opacity 300ms ease-out;
+}
+
+.admin-params-card__summary.is-visible {
+  max-height: 1.5rem;
+  margin-top: 0.125rem;
+  opacity: 1;
+}
+
+.admin-params-card__summary.is-selected {
+  color: #4f46e5;
+}
+
+.admin-params-card__summary.is-empty {
+  color: #9ca3af;
+}
+
+.admin-params-card__chevron {
+  width: 1.25rem;
+  height: 1.25rem;
+  flex-shrink: 0;
+  color: #9ca3af;
+  transition: transform 300ms ease-out;
+}
+
+.admin-params-card__chevron.is-open {
+  transform: rotate(180deg);
+}
+
+.admin-params-card__panel {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 300ms ease-out;
+}
+
+.admin-params-card__panel.is-open {
+  grid-template-rows: 1fr;
+}
+
+.admin-params-card__panel-clip {
+  overflow: hidden;
+  min-height: 0;
+}
+
+.admin-params-card__panel-body {
+  padding: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  opacity: 0;
+  transition: opacity 300ms ease-out;
+}
+
+.admin-params-card__panel-body.is-open {
+  opacity: 1;
+}

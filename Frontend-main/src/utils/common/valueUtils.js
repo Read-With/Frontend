@@ -27,6 +27,10 @@ export const normalizeTitle = (title) => {
     .replace(/\s/g, '');
 };
 
+/** 저자 비교용 정규화 */
+export const normalizeAuthor = (author) =>
+  (author || '').toLowerCase().trim().replace(/\s+/g, ' ');
+
 export const toFiniteNumber = (value) => {
   if (value === undefined || value === null) return NaN;
   const converted = typeof value === 'number' ? value : Number(value);

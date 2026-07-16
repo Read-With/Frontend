@@ -1,4 +1,5 @@
-import React, {
+import {
+  memo,
   useRef,
   useMemo,
   useEffect,
@@ -8,8 +9,7 @@ import CytoscapeGraphUnified from './CytoscapeGraphUnified';
 import UnifiedNodeInfo from './tooltip/UnifiedNodeInfo';
 import UnifiedEdgeTooltip from './tooltip/UnifiedEdgeTooltip';
 import './RelationGraph.css';
-import { getEdgeStyle, createGraphStylesheet } from '../../utils/styles/graphStyles';
-import { graphStyles } from '../../utils/styles/styles';
+import { getEdgeStyle, createGraphStylesheet, graphStyles } from '../../utils/styles/graphStyles';
 import { ensureElementsInBounds, buildTooltipPayload, processTooltipData, createTooltipTapHandlers } from '../../utils/graph/graphUtils';
 import {
   useGraphOutsideDismiss,
@@ -230,4 +230,4 @@ const GraphContainer = ({
   );
 };
 
-export default React.memo(GraphContainer);
+export default memo(GraphContainer);

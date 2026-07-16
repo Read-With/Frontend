@@ -1,8 +1,6 @@
 /** 환경 URL·OAuth·공개 자산 URL 정규화·fetch */
 
-import { authenticatedFetch } from '../api/authApi';
-import { getBook } from '../api/booksApi';
-import { clearAuthTokenStorage } from '../security/authTokenStorage';
+import { clearAuthData } from '../security/authTokenStorage';
 import { createAndStoreGoogleOAuthState, secureLog } from '../security/oauthSecurity';
 import { trimTrailingSlash } from './valueUtils';
 
@@ -12,7 +10,13 @@ const DEFAULT_APP_ORIGIN = 'https://readwith-frontend.vercel.app';
 export const DEFAULT_DEV_PROXY_TARGET =
   'http://read-with-dev-env.eba-wuzcb2s6.ap-northeast-2.elasticbeanstalk.com';
 
-const CDN_PUBLIC_HOST = 'cdn.readwith.cloud';
+const CDN_PUBLIC_HOST = (() => {
+  try {
+    return new URL(DEFAULT_CDN_BASE_URL).host;
+  } catch {
+    return 'cdn.readwith.cloud';
+  }
+})();
 
 const envString = (key) => {
   const value = import.meta.env[key];
@@ -86,9 +90,7 @@ export const getDevBackendHintUrl = () => {
   }
 };
 
-export const clearAuthData = () => {
-  clearAuthTokenStorage();
-};
+export { clearAuthData };
 
 export const isOAuthCallbackRoute = () => {
   if (typeof window === 'undefined') return false;
@@ -112,6 +114,7 @@ export function buildGoogleOAuthAuthUrl() {
   const redirectUri = getGoogleOAuthRedirectUri();
   const oauthState = createAndStoreGoogleOAuthState();
 
+  // 백엔드가 token 교환에 code_verifier를 넘기기 전까지 PKCE 미사용
   return (
     `https://accounts.google.com/o/oauth2/v2/auth?` +
     `client_id=${clientId}&` +
@@ -119,7 +122,7 @@ export function buildGoogleOAuthAuthUrl() {
     `response_type=code&` +
     `scope=email profile&` +
     `access_type=offline&` +
-    `prompt=consent&` +
+    `prompt=select_account&` +
     `state=${encodeURIComponent(oauthState)}`
   );
 }
@@ -182,20 +185,6 @@ export function isProtectedPublicAsset(url) {
   if (!s) return false;
   if (s.startsWith('/public/')) return true;
   return /readwith\.cloud\/public\//i.test(s);
-}
-
-function extractBookIdFromPublicAssetUrl(url) {
-  const s = sanitizeAssetUrl(url);
-  if (!s) return null;
-  const match = s.match(/\/books\/(\d+)\//);
-  if (!match) return null;
-  const id = Number(match[1]);
-  return Number.isFinite(id) && id > 0 ? id : null;
-}
-
-function isPublicCoverAssetPath(url) {
-  const s = sanitizeAssetUrl(url);
-  return !!s && /\/covers\//.test(s);
 }
 
 function rewriteLegacyAssetUrl(url) {
@@ -288,136 +277,6 @@ export function resolveApiArtifactUrl(path) {
     return resolveAssetFetchUrl(`${base}/${s}`);
   }
   return resolveAssetFetchUrl(`/${s}`);
-}
-
-const blobUrlCache = new Map();
-const inFlightRequests = new Map();
-const failedFetchUrls = new Map();
-const FAILED_FETCH_TTL_MS = 60_000;
-
-const isFailedRecently = (fetchUrl) => {
-  const failedAt = failedFetchUrls.get(fetchUrl);
-  if (!failedAt) return false;
-  if (Date.now() - failedAt > FAILED_FETCH_TTL_MS) {
-    failedFetchUrls.delete(fetchUrl);
-    return false;
-  }
-  return true;
-};
-
-const markFetchFailed = (fetchUrl) => {
-  failedFetchUrls.set(fetchUrl, Date.now());
-};
-
-const clearFetchFailed = (fetchUrl) => {
-  if (fetchUrl) failedFetchUrls.delete(fetchUrl);
-};
-
-const buildCoverRefreshSource = (sanitized) => {
-  if (!isPublicCoverAssetPath(sanitized)) return null;
-  const bookId = extractBookIdFromPublicAssetUrl(sanitized);
-  if (!bookId) return null;
-  return async () => {
-    const res = await getBook(bookId);
-    return res?.isSuccess ? res.result?.coverImgUrl : null;
-  };
-};
-
-const fetchProtectedBlobUrl = async (sourceUrl) => {
-  const sanitized = sanitizeAssetUrl(sourceUrl);
-  if (!sanitized) return null;
-
-  if (!isProtectedPublicAsset(sanitized)) {
-    return sanitized;
-  }
-
-  const fetchUrl = resolveApiArtifactUrl(sanitized);
-  if (!fetchUrl) return null;
-
-  if (blobUrlCache.has(fetchUrl)) {
-    return blobUrlCache.get(fetchUrl);
-  }
-
-  if (isFailedRecently(fetchUrl)) {
-    return null;
-  }
-
-  if (inFlightRequests.has(fetchUrl)) {
-    return inFlightRequests.get(fetchUrl);
-  }
-
-  const request = (async () => {
-    try {
-      const res = await authenticatedFetch(fetchUrl);
-      if (!res.ok) {
-        if (res.status === 404) {
-          markFetchFailed(fetchUrl);
-        }
-        return null;
-      }
-      const blob = await res.blob();
-      const blobUrl = URL.createObjectURL(blob);
-      blobUrlCache.set(fetchUrl, blobUrl);
-      clearFetchFailed(fetchUrl);
-      return blobUrl;
-    } catch {
-      return null;
-    } finally {
-      inFlightRequests.delete(fetchUrl);
-    }
-  })();
-
-  inFlightRequests.set(fetchUrl, request);
-  return request;
-};
-
-export async function fetchAuthenticatedAssetBlobUrl(sourceUrl, options = {}) {
-  const sanitized = sanitizeAssetUrl(sourceUrl);
-  if (!sanitized) return null;
-
-  const result = await fetchProtectedBlobUrl(sourceUrl);
-  if (result) return result;
-
-  const refreshSource = options.refreshSource ?? buildCoverRefreshSource(sanitized);
-  if (typeof refreshSource !== 'function') {
-    return null;
-  }
-
-  try {
-    const refreshed = await refreshSource();
-    if (typeof refreshed !== 'string' || !refreshed.trim()) {
-      return null;
-    }
-
-    const prevFetchUrl = resolveApiArtifactUrl(sanitized);
-    const nextSanitized = sanitizeAssetUrl(refreshed);
-    const nextFetchUrl = resolveApiArtifactUrl(nextSanitized);
-    clearFetchFailed(prevFetchUrl);
-    if (nextFetchUrl !== prevFetchUrl) {
-      clearFetchFailed(nextFetchUrl);
-    }
-
-    if (nextSanitized === sanitized) {
-      return fetchProtectedBlobUrl(sourceUrl);
-    }
-    return fetchProtectedBlobUrl(refreshed);
-  } catch {
-    return null;
-  }
-}
-
-export async function resolveGraphElementsProfileImages(elements) {
-  if (!Array.isArray(elements) || elements.length === 0) return elements;
-
-  return Promise.all(
-    elements.map(async (el) => {
-      const image = el?.data?.image;
-      if (!image || !isProtectedPublicAsset(image)) return el;
-      const blobUrl = await fetchAuthenticatedAssetBlobUrl(image);
-      if (!blobUrl) return el;
-      return { ...el, data: { ...el.data, image: blobUrl } };
-    })
-  );
 }
 
 const OAUTH_AUTH_ERROR_MESSAGES = {
@@ -598,16 +457,15 @@ export function getOAuthErrorTip(error) {
   if (error.includes('이미 등록된 Google 계정')) {
     return '다른 Google 계정으로 시도하거나, 기존 계정으로 로그인해 보세요.';
   }
-  if (error.includes('State 파라미터') || error.includes('OAuth state')) {
+  if (
+    error.includes('State 파라미터') ||
+    error.includes('OAuth state') ||
+    error.includes('이미 처리된 로그인') ||
+    error.includes('유효한 로그인 정보') ||
+    error.includes('invalid_grant') ||
+    error.includes('code verifier')
+  ) {
     return '홈에서 Google 로그인을 다시 시도해 주세요.';
   }
   return '네트워크 연결과 Google OAuth 설정을 확인한 뒤 다시 시도해 주세요.';
-}
-
-export function getOAuthErrorTipTone(error) {
-  if (!error) return 'warn';
-  if (error.includes('CORS') || error.includes('이미 등록된 Google 계정')) {
-    return 'danger';
-  }
-  return 'warn';
 }

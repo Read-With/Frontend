@@ -1,12 +1,13 @@
 /** 인증·토큰 갱신·authenticatedFetch */
 
-import { getApiBaseUrl, clearAuthData } from '../common/urlUtils';
+import { getApiBaseUrl } from '../common/urlUtils';
 import {
   getStoredAccessToken,
   setStoredAccessToken,
   getStoredRefreshToken,
   setStoredRefreshToken,
   setStoredGoogleUserJson,
+  clearAuthData,
 } from '../security/authTokenStorage';
 
 export const makeSilentError = (code, message) => ({
@@ -68,7 +69,7 @@ export const isTokenValid = (token) => {
   return true;
 };
 
-export const getTokenExpirationTime = (token) => {
+const getTokenExpirationTime = (token) => {
   if (!token) return null;
 
   const payload = decodeJwtPayload(token);
@@ -123,17 +124,6 @@ async function refreshAccessTokenIfExpiringSoon() {
   return token;
 }
 
-async function fetchPublicAuthJson(path, options = {}) {
-  const response = await fetch(`${getApiBaseUrl()}/api${path}`, {
-    ...options,
-    headers: { ...JSON_ACCEPT_HEADERS, ...options.headers },
-  });
-  if (!response.ok) {
-    throw new Error(`API 요청 실패: ${response.status}`);
-  }
-  return response.json();
-}
-
 async function authorizedFetch(url, options = {}, retryCount = 0) {
   await ensureSessionAccessToken();
   const token = await refreshAccessTokenIfExpiringSoon();
@@ -161,7 +151,7 @@ async function authorizedFetch(url, options = {}, retryCount = 0) {
     try {
       await refreshToken();
       return authorizedFetch(url, options, retryCount + 1);
-    } catch (_refreshError) {
+    } catch {
       clearAuthData();
       throw createAuthExpiredError();
     }
@@ -170,10 +160,16 @@ async function authorizedFetch(url, options = {}, retryCount = 0) {
   return response;
 }
 
+/**
+ * @param {string} endpoint `/v2/...` 형태 (`/api` prefix는 내부에서 붙임)
+ * @param {object} [options]
+ * @param {number[]} [options.softFailStatuses] throw 대신 makeSilentError를 반환할 HTTP 상태
+ */
 export const authenticatedRequest = async (endpoint, options = {}) => {
-  const isFormData = options.body instanceof FormData;
+  const { softFailStatuses = [], ...requestOptions } = options;
+  const isFormData = requestOptions.body instanceof FormData;
   const response = await authorizedFetch(`${getApiBaseUrl()}/api${endpoint}`, {
-    ...options,
+    ...requestOptions,
     skipJsonContentType: isFormData,
     acceptHeader: 'application/json',
   });
@@ -184,10 +180,20 @@ export const authenticatedRequest = async (endpoint, options = {}) => {
       throw createAuthExpiredError();
     }
 
+    if (softFailStatuses.includes(response.status)) {
+      if (response.status === 404) {
+        return makeSilentError('NOT_FOUND', '데이터를 찾을 수 없습니다');
+      }
+      if (response.status === 403) {
+        return makeSilentError('FORBIDDEN', '접근 권한이 없습니다');
+      }
+      return makeSilentError('ERROR', `API 요청 실패: ${response.status}`);
+    }
+
     let data;
     try {
       data = await response.json();
-    } catch (_jsonError) {
+    } catch {
       const error = new Error('응답을 파싱할 수 없습니다');
       error.status = response.status;
       throw error;
@@ -199,27 +205,6 @@ export const authenticatedRequest = async (endpoint, options = {}) => {
   }
 
   return response.json();
-};
-
-export const getGoogleAuthUrl = async () => {
-  try {
-    return await fetchPublicAuthJson('/auth/google/url', { method: 'GET' });
-  } catch (error) {
-    console.error('구글 인증 URL 생성 실패:', error);
-    return null;
-  }
-};
-
-export const googleLogin = async (code) => {
-  try {
-    return await fetchPublicAuthJson('/auth/google', {
-      method: 'POST',
-      body: JSON.stringify({ code }),
-    });
-  } catch (error) {
-    console.error('구글 로그인 실패:', error);
-    throw error;
-  }
 };
 
 export const refreshToken = async (options = {}) => {
@@ -313,24 +298,6 @@ export async function ensureSessionAccessToken() {
   }
   await sessionBootstrapPromise;
 }
-
-export const checkAuthStatus = async () => {
-  try {
-    return await authenticatedRequest('/auth/status');
-  } catch (error) {
-    console.error('인증 상태 확인 실패:', error);
-    return null;
-  }
-};
-
-export const getCurrentUser = async () => {
-  try {
-    return await authenticatedRequest('/auth/me');
-  } catch (error) {
-    console.error('사용자 정보 조회 실패:', error);
-    return null;
-  }
-};
 
 export const logout = async () => {
   try {

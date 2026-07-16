@@ -1,6 +1,15 @@
-/** 인증: 토큰 갱신·Google 프로필·로그인/로그아웃 */
+/** 인증: 토큰 갱신·Google 프로필·로그인/로그아웃 (공유 Context) */
 
-import { useState, useEffect, useRef } from 'react';
+import {
+  createContext,
+  createElement,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import {
   logout as apiLogout,
   refreshToken,
@@ -9,7 +18,7 @@ import {
   isTokenValid,
   ensureSessionAccessToken,
 } from '../../utils/api/authApi';
-import { clearAuthData, getPostLoginHomeUrl, isOAuthCallbackRoute } from '../../utils/common/urlUtils';
+import { getPostLoginHomeUrl, isOAuthCallbackRoute } from '../../utils/common/urlUtils';
 import {
   getStoredAccessToken,
   setStoredAccessToken,
@@ -18,7 +27,10 @@ import {
   getStoredGoogleUserJson,
   setStoredGoogleUserJson,
   removeStoredGoogleUser,
+  clearAuthData,
 } from '../../utils/security/authTokenStorage';
+
+const AuthContext = createContext(null);
 
 function profileFromUserData(userData) {
   return {
@@ -30,13 +42,13 @@ function profileFromUserData(userData) {
   };
 }
 
-const useAuth = () => {
+function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const tokenRefreshIntervalRef = useRef(null);
 
   useEffect(() => {
-    if (isOAuthCallbackRoute()) return;
+    if (isOAuthCallbackRoute()) return undefined;
 
     const checkAndRefreshToken = async () => {
       try {
@@ -138,7 +150,7 @@ const useAuth = () => {
     };
   }, []);
 
-  const login = (userData) => {
+  const login = useCallback((userData) => {
     const profile = profileFromUserData(userData);
     setUser(profile);
 
@@ -153,19 +165,18 @@ const useAuth = () => {
     } catch {
       /* ignore */
     }
-  };
+  }, []);
 
-  const logout = async () => {
+  const logout = useCallback(async () => {
     await apiLogout();
-
     setUser(null);
 
     if (window.google?.accounts?.id) {
       window.google.accounts.id.disableAutoSelect();
     }
-  };
+  }, []);
 
-  const isAuthenticated = () => {
+  const isAuthenticated = useCallback(() => {
     if (!user) return false;
 
     try {
@@ -175,15 +186,29 @@ const useAuth = () => {
     } catch {
       return false;
     }
-  };
+  }, [user]);
 
-  return {
-    user,
-    isLoading,
-    login,
-    logout,
-    isAuthenticated,
-  };
-};
+  const value = useMemo(
+    () => ({
+      user,
+      isLoading,
+      login,
+      logout,
+      isAuthenticated,
+    }),
+    [user, isLoading, login, logout, isAuthenticated],
+  );
 
+  return createElement(AuthContext.Provider, { value }, children);
+}
+
+function useAuth() {
+  const ctx = useContext(AuthContext);
+  if (!ctx) {
+    throw new Error('useAuth는 AuthProvider 안에서만 사용할 수 있습니다.');
+  }
+  return ctx;
+}
+
+export { AuthProvider };
 export default useAuth;

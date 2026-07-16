@@ -2,12 +2,12 @@
 
 import { useEffect, useRef, useState, useCallback } from 'react';
 import {
-  getContainerInfo,
-  getViewportInfo,
-  calculateCytoscapePosition,
   constrainToViewport,
   processTooltipData,
 } from '../../utils/graph/graphUtils';
+
+const TOOLTIP_CLEAR_DELAY_MS = 150;
+const TOOLTIP_ERROR_CHECK_DELAY_MS = 220;
 
 let globalDragState = {
   isDragging: false,
@@ -88,8 +88,6 @@ export function useClickOutside(callback, enabled = true, ignoreDrag = false) {
 export function useTooltipState({
   onError = null,
   graphClearRef = null,
-  clearDelay = 150,
-  errorCheckDelay = 220,
 } = {}) {
   const [activeTooltip, setActiveTooltip] = useState(null);
   const tooltipTimeoutRef = useRef(null);
@@ -114,7 +112,7 @@ export function useTooltipState({
     }
 
     const now = Date.now();
-    if (now - lastTooltipOpenAtRef.current < clearDelay) {
+    if (now - lastTooltipOpenAtRef.current < TOOLTIP_CLEAR_DELAY_MS) {
       return;
     }
 
@@ -122,7 +120,7 @@ export function useTooltipState({
     if (graphClearRefRef.current?.current) {
       graphClearRefRef.current.current();
     }
-  }, [clearDelay]);
+  }, []);
 
   const handleSetActiveTooltip = useCallback((tooltipData) => {
     if (tooltipTimeoutRef.current) {
@@ -142,10 +140,10 @@ export function useTooltipState({
         if (tooltipTimeoutRef.current === timeoutId) {
           tooltipTimeoutRef.current = null;
         }
-      }, errorCheckDelay);
+      }, TOOLTIP_ERROR_CHECK_DELAY_MS);
       tooltipTimeoutRef.current = timeoutId;
     }
-  }, [errorCheckDelay]);
+  }, []);
 
   useEffect(() => {
     return () => {
@@ -158,10 +156,8 @@ export function useTooltipState({
 
   return {
     activeTooltip,
-    setActiveTooltip,
     handleClearTooltip,
     handleSetActiveTooltip,
-    activeTooltipRef,
   };
 }
 
@@ -172,7 +168,6 @@ export function useTooltipPosition(initialX, initialY, options = {}) {
   const [isDragging, setIsDragging] = useState(false);
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
   const [hasDragged, setHasDragged] = useState(false);
-  const [justFinishedDragging, setJustFinishedDragging] = useState(false);
   const tooltipRef = useRef(null);
 
   useEffect(() => {
@@ -206,15 +201,11 @@ export function useTooltipPosition(initialX, initialY, options = {}) {
   const handleMouseUp = () => {
     if (!enabled) return;
     if (isDragging) {
-      setJustFinishedDragging(true);
       document.dispatchEvent(
         new CustomEvent('dragend', {
           detail: { type: 'dragend', timestamp: Date.now() },
         })
       );
-      setTimeout(() => {
-        setJustFinishedDragging(false);
-      }, 150);
     }
     setIsDragging(false);
   };
@@ -255,13 +246,8 @@ export function useTooltipPosition(initialX, initialY, options = {}) {
       position: { x: 0, y: 0 },
       showContent: true,
       isDragging: false,
-      justFinishedDragging: false,
       tooltipRef,
       handleMouseDown: () => {},
-      getContainerInfo,
-      getViewportInfo,
-      calculateCytoscapePosition,
-      constrainToViewport,
     };
   }
 
@@ -269,12 +255,7 @@ export function useTooltipPosition(initialX, initialY, options = {}) {
     position,
     showContent,
     isDragging,
-    justFinishedDragging,
     tooltipRef,
     handleMouseDown,
-    getContainerInfo,
-    getViewportInfo,
-    calculateCytoscapePosition,
-    constrainToViewport,
   };
 }

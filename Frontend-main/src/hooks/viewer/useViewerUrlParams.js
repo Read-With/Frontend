@@ -4,45 +4,40 @@ import { useState, useEffect, useRef, useMemo } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import {
   parseViewerReaderSplat,
+  resolveViewerReadingPosition,
   userViewerReadingPath,
 } from '../../utils/navigation/viewerPaths';
 
-const DEFAULT_READING_POSITION = { chapter: 1, page: 1 };
-
 export function useViewerUrlParams(options = {}) {
-  const { skipHistoryMutationsRef } = options;
+  const { skipHistoryMutationsRef, urlSyncEnabled = true } = options;
   const { filename, '*': splat } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
 
   const parsedPath = useMemo(() => parseViewerReaderSplat(splat), [splat]);
+  const initialPosition = resolveViewerReadingPosition(parsedPath);
 
-  const [currentPage, setCurrentPage] = useState(() => parsedPath?.page ?? DEFAULT_READING_POSITION.page);
-  const [currentChapter, setCurrentChapter] = useState(() => parsedPath?.chapter ?? DEFAULT_READING_POSITION.chapter);
+  const [currentPage, setCurrentPage] = useState(initialPosition.page);
+  const [currentChapter, setCurrentChapter] = useState(initialPosition.chapter);
+
   const internalNavigationRef = useRef(false);
   const initializedBookRef = useRef(null);
-
-  const currentChapterRef = useRef(DEFAULT_READING_POSITION.chapter);
-  const currentPageRef = useRef(DEFAULT_READING_POSITION.page);
+  const positionRef = useRef(initialPosition);
 
   useEffect(() => {
-    currentChapterRef.current = currentChapter;
-    currentPageRef.current = currentPage;
+    positionRef.current = { chapter: currentChapter, page: currentPage };
   }, [currentChapter, currentPage]);
 
+  // URL(splat) → 로컬 chapter/page. 내부 navigate로 바뀐 URL은 한 번 무시
   useEffect(() => {
     if (!filename) return;
 
-    const isBookChanged = initializedBookRef.current !== filename;
-    if (isBookChanged) {
+    const next = resolveViewerReadingPosition(parsedPath);
+
+    if (initializedBookRef.current !== filename) {
       initializedBookRef.current = filename;
-      if (parsedPath) {
-        setCurrentChapter(parsedPath.chapter);
-        setCurrentPage(parsedPath.page);
-      } else {
-        setCurrentChapter(DEFAULT_READING_POSITION.chapter);
-        setCurrentPage(DEFAULT_READING_POSITION.page);
-      }
+      setCurrentChapter(next.chapter);
+      setCurrentPage(next.page);
       return;
     }
 
@@ -51,38 +46,35 @@ export function useViewerUrlParams(options = {}) {
       return;
     }
 
-    if (parsedPath) {
-      if (parsedPath.chapter !== currentChapterRef.current) {
-        setCurrentChapter(parsedPath.chapter);
-      }
-      if (parsedPath.page !== currentPageRef.current) {
-        setCurrentPage(parsedPath.page);
-      }
-      return;
-    }
-
-    if (currentChapterRef.current !== DEFAULT_READING_POSITION.chapter) {
-      setCurrentChapter(DEFAULT_READING_POSITION.chapter);
-    }
-    if (currentPageRef.current !== DEFAULT_READING_POSITION.page) {
-      setCurrentPage(DEFAULT_READING_POSITION.page);
-    }
-  }, [filename, splat, parsedPath]);
+    const { chapter, page } = positionRef.current;
+    if (next.chapter !== chapter) setCurrentChapter(next.chapter);
+    if (next.page !== page) setCurrentPage(next.page);
+  }, [filename, parsedPath]);
 
   const targetReadingPath = useMemo(() => {
     if (!filename) return null;
     return userViewerReadingPath(filename, currentChapter, currentPage);
   }, [filename, currentChapter, currentPage]);
 
+  // 로컬 chapter/page → URL (replace). resume 완료 전·mypage 퇴장 등은 차단
   useEffect(() => {
     if (!targetReadingPath || !filename) return;
+    if (!urlSyncEnabled) return;
     if (skipHistoryMutationsRef?.current) return;
     if (location.pathname === targetReadingPath) return;
     internalNavigationRef.current = true;
     navigate(targetReadingPath, { replace: true });
-  }, [targetReadingPath, location.pathname, navigate, filename, skipHistoryMutationsRef]);
+  }, [
+    targetReadingPath,
+    location.pathname,
+    navigate,
+    filename,
+    skipHistoryMutationsRef,
+    urlSyncEnabled,
+  ]);
 
   return {
+    filename,
     currentPage,
     setCurrentPage,
     currentChapter,

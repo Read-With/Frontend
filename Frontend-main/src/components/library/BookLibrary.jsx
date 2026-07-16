@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, memo } from 'react';
+import { useState, useEffect, useCallback, memo } from 'react';
 import PropTypes from 'prop-types';
 import { useNavigate } from 'react-router-dom';
 import { Heart, BookOpen, Network, MoreVertical, Info, Clock, FileText, Trash2, X } from 'lucide-react';
@@ -6,7 +6,7 @@ import BookDetailModal from './BookDetailModal';
 import AuthenticatedImage from './AuthenticatedImage';
 import './BookLibrary.css';
 import { ensureGraphBookCache } from '../../utils/common/cache/chapterEventCache';
-import { USER_VIEWER_PREFIX } from '../../utils/navigation/viewerPaths';
+import { USER_VIEWER_PREFIX, USER_GRAPH_PREFIX } from '../../utils/navigation/viewerPaths';
 import { formatLibraryRelativeDate } from '../../utils/library/libraryUtils';
 
 const getNumericBookId = (book) => {
@@ -29,7 +29,7 @@ async function prewarmGraphBookCache(book, options = {}) {
 }
 
 function navigateFromLibrary(navigate, book, graphMode) {
-  const base = graphMode === 'graph' ? '/user/graph' : USER_VIEWER_PREFIX;
+  const base = graphMode === 'graph' ? USER_GRAPH_PREFIX : USER_VIEWER_PREFIX;
   navigate(`${base}/${book.id}`, {
     state: { book, fromLibrary: true, from: { pathname: '/mypage' } },
     replace: false,
@@ -116,7 +116,7 @@ DeleteConfirmModal.propTypes = {
   onConfirm: PropTypes.func.isRequired,
 };
 
-const BookCard = memo(({ book, onToggleFavorite, onBookClick, onOpenBook, onBookDetailClick, onShowDeleteModal, viewMode = 'grid', openingMode = null }) => {
+const BookCard = memo(({ book, onToggleFavorite, onOpenBook, onBookDetailClick, onShowDeleteModal, viewMode = 'grid', openingMode = null }) => {
   const [imageError, setImageError] = useState(false);
   const [showContextMenu, setShowContextMenu] = useState(false);
   const [optimisticFavorite, setOptimisticFavorite] = useState(null);
@@ -152,11 +152,7 @@ const BookCard = memo(({ book, onToggleFavorite, onBookClick, onOpenBook, onBook
   };
 
   const handleCardClick = () => {
-    if (onBookClick) {
-      onBookClick(book);
-    } else {
-      onOpenBook?.(book, 'viewer');
-    }
+    onOpenBook?.(book, 'viewer');
   };
 
   const handleDetailClick = (e) => {
@@ -206,7 +202,7 @@ const BookCard = memo(({ book, onToggleFavorite, onBookClick, onOpenBook, onBook
 
   return (
     <div 
-      className={`book-card ${viewMode === 'list' ? 'list-view' : 'grid-view'}`}
+      className={`book-card${viewMode === 'list' ? ' list-view' : ''}`}
       onMouseLeave={() => setShowContextMenu(false)}
       onClick={handleCardClick}
     >
@@ -344,7 +340,6 @@ const bookShape = PropTypes.shape({
   author: PropTypes.string.isRequired,
   coverImgUrl: PropTypes.string,
   isFavorite: PropTypes.bool,
-  readingStatus: PropTypes.string,
   progress: PropTypes.number,
   updatedAt: PropTypes.string
 });
@@ -352,7 +347,6 @@ const bookShape = PropTypes.shape({
 BookCard.propTypes = {
   book: bookShape.isRequired,
   onToggleFavorite: PropTypes.func,
-  onBookClick: PropTypes.func,
   onOpenBook: PropTypes.func,
   onBookDetailClick: PropTypes.func,
   onShowDeleteModal: PropTypes.func,
@@ -464,9 +458,6 @@ const BookLibrary = memo(({ books, onToggleFavorite, onBookDelete, viewMode = 'g
     [onBookDelete, handleCloseDetailModal]
   );
 
-  // BookLibrary 컴포넌트는 이제 그리드 컨테이너 역할만 함
-  // 로딩, 에러, 빈 상태는 MyPage에서 처리
-  // books가 없거나 빈 배열이면 빈 fragment 반환 (null 대신)
   if (!books || books.length === 0) {
     return null;
   }
@@ -495,6 +486,7 @@ const BookLibrary = memo(({ books, onToggleFavorite, onBookDelete, viewMode = 'g
         isOpen={showDetailModal}
         onClose={handleCloseDetailModal}
         onDelete={handleBookDelete}
+        viewMode={viewMode}
       />
 
       <DeleteConfirmModal

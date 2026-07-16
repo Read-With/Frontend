@@ -1,9 +1,10 @@
-import React, { useState, useEffect, useMemo, useCallback, useRef, memo } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef, memo } from 'react';
 import PropTypes from 'prop-types';
 import { useNavigate } from 'react-router-dom';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { getBookManifest, getBookProgress, deleteBookProgress } from '../../utils/api/api';
 import { resolveProgressLocator } from '../../utils/common/locatorUtils';
+import { BOOKS_QUERY_KEY } from '../../hooks/books/bookHooks';
 import { getManifestFromCache } from '../../utils/common/cache/manifestCache';
 import { getProgressFromCache, PROGRESS_CACHE_UPDATED_EVENT } from '../../utils/common/cache/progressCache';
 import {
@@ -15,11 +16,11 @@ import {
 } from '../../utils/viewer/chapterTitleDisplay';
 import AuthenticatedImage from './AuthenticatedImage';
 import { resolveServerBookId } from '../../utils/viewer/viewerCoreStateUtils';
-import { USER_VIEWER_PREFIX } from '../../utils/navigation/viewerPaths';
+import { USER_VIEWER_PREFIX, USER_GRAPH_PREFIX } from '../../utils/navigation/viewerPaths';
 import { toast } from 'react-toastify';
 import './BookDetailModal.css';
 
-const BookDetailModal = memo(({ book, isOpen, onClose, onDelete }) => {
+const BookDetailModal = memo(({ book, isOpen, onClose, onDelete, viewMode = 'grid' }) => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [bookDetails, setBookDetails] = useState(null);
@@ -235,7 +236,7 @@ const BookDetailModal = memo(({ book, isOpen, onClose, onDelete }) => {
 
   const handleReadClick = useCallback(() => navigateToBookPage(USER_VIEWER_PREFIX), [navigateToBookPage]);
 
-  const handleGraphClick = useCallback(() => navigateToBookPage('/user/graph'), [navigateToBookPage]);
+  const handleGraphClick = useCallback(() => navigateToBookPage(USER_GRAPH_PREFIX), [navigateToBookPage]);
 
   const handleRetryFetch = useCallback(() => {
     fetchBookDetails();
@@ -254,7 +255,7 @@ const BookDetailModal = memo(({ book, isOpen, onClose, onDelete }) => {
     onSuccess: () => {
       toast.success('독서 진도가 삭제되었습니다');
       // 책 목록 무효화 (진도율 업데이트)
-      queryClient.invalidateQueries({ queryKey: ['books', 'server'] });
+      queryClient.invalidateQueries({ queryKey: BOOKS_QUERY_KEY });
     },
     onError: (err, variables, context) => {
       // 롤백
@@ -283,7 +284,7 @@ const BookDetailModal = memo(({ book, isOpen, onClose, onDelete }) => {
 
     try {
       await deleteProgressMutation.mutateAsync(serverBookId);
-    } catch (_err) {
+    } catch {
       // 에러는 onError에서 처리
     }
   }, [book, progressInfo, deleteProgressMutation]);
@@ -340,6 +341,125 @@ const BookDetailModal = memo(({ book, isOpen, onClose, onDelete }) => {
   const displayAuthor = bookDetails?.author || book?.author || '저자 정보 없음';
   const coverInitial = (displayTitle || '?').trim().slice(0, 1) || '?';
   const currentChapterIndex = progressLocator?.chapterIndex;
+  const isListView = viewMode === 'list';
+  const hasProgress = readPercent > 0 || !!progressInfo;
+
+  const coverBlock = (
+    <div className="book-detail-cover-wrap">
+      <div className="book-detail-cover">
+        {coverSrc && !coverImgFailed ? (
+          <AuthenticatedImage
+            src={coverSrc}
+            alt={displayTitle}
+            onError={() => setCoverImgFailed(true)}
+          />
+        ) : null}
+        {(!coverSrc || coverImgFailed) && (
+          <div className="book-detail-cover-placeholder" aria-hidden="true">
+            <span className="book-detail-cover-placeholder-letter">{coverInitial}</span>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+
+  const titleBlock = (
+    <div className="book-detail-title-row">
+      <h2 id="book-detail-title" className="book-detail-title">
+        {displayTitle}
+      </h2>
+      <span className="book-detail-author">{displayAuthor}</span>
+    </div>
+  );
+
+  const progressSkeleton = (
+    <div className="book-detail-skeleton" aria-hidden="true">
+      <div className="book-detail-skeleton-line book-detail-skeleton-line--lg" />
+      <div className="book-detail-skeleton-line book-detail-skeleton-line--sm" />
+      <div className="book-detail-skeleton-card">
+        <div className="book-detail-skeleton-meta-label" />
+        <div className="book-detail-skeleton-progress-track">
+          <div className="book-detail-skeleton-progress-fill" />
+        </div>
+      </div>
+    </div>
+  );
+
+  const progressMeta = (
+    <div
+      className="book-detail-reader-meta book-detail-reader-meta--compact"
+      role="region"
+      aria-label="독서 진행"
+    >
+      {readPercent > 0 && (
+        <div className="book-detail-reader-progress-row">
+          <div
+            className="book-detail-reader-progress"
+            role="progressbar"
+            aria-valuenow={readPercent}
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuetext={`${readPercent}% 읽음`}
+            aria-label={`읽기 진행 ${readPercent}%`}
+          >
+            <div
+              className="book-detail-reader-progress-fill"
+              style={{ width: `${readPercent}%` }}
+            />
+          </div>
+          <span className="book-detail-reader-progress-pct" aria-hidden="true">
+            <span className="book-detail-reader-progress-pct-value">{readPercent}</span>%
+          </span>
+        </div>
+      )}
+      <div className="book-detail-reader-compact-foot">
+        {libraryRelativeUpdated ? (
+          <time
+            className="book-detail-reader-compact-time"
+            dateTime={libraryUpdatedAtIso ?? undefined}
+            aria-label={`최근 업데이트 ${libraryRelativeUpdated}`}
+          >
+            {libraryRelativeUpdated}
+          </time>
+        ) : progressInfo ? (
+          <span className="book-detail-reader-compact-placeholder">—</span>
+        ) : null}
+        {progressInfo && (
+          <button
+            type="button"
+            className="book-detail-reader-clear-progress"
+            onClick={handleDeleteProgress}
+            aria-label="독서 진도 삭제"
+          >
+            진도 삭제
+          </button>
+        )}
+      </div>
+    </div>
+  );
+
+  const statusBlocks = (
+    <>
+      {loading && (
+        <div className="book-detail-loading" role="status" aria-live="polite">
+          <span className="book-detail-loading-dot" aria-hidden />
+          정보를 불러오는 중…
+        </div>
+      )}
+      {error && (
+        <div className="book-detail-error" role="alert" aria-live="assertive">
+          <span className="book-detail-error-text">{error}</span>
+          <button
+            type="button"
+            className="book-detail-error-retry"
+            onClick={handleRetryFetch}
+          >
+            다시 시도
+          </button>
+        </div>
+      )}
+    </>
+  );
 
   return (
     <div
@@ -353,7 +473,10 @@ const BookDetailModal = memo(({ book, isOpen, onClose, onDelete }) => {
       <p id="book-detail-modal-desc" className="book-detail-modal-desc">
         책 표지와 제목, 독서 진도, 등장 인물과 목차를 확인할 수 있습니다.
       </p>
-      <div className="book-detail-content" onClick={(e) => e.stopPropagation()}>
+      <div
+        className={`book-detail-content${isListView ? ' book-detail-content--list' : ''}`}
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="book-detail-sheet-handle" aria-hidden="true" />
         <p className="book-detail-sheet-hint">바깥 영역을 누르면 닫혀요</p>
         <button
@@ -366,112 +489,13 @@ const BookDetailModal = memo(({ book, isOpen, onClose, onDelete }) => {
           ×
         </button>
 
-        <div className="book-detail-header">
-          <div className="book-detail-cover-wrap">
-            <div className="book-detail-cover">
-              {coverSrc && !coverImgFailed ? (
-                <AuthenticatedImage
-                  src={coverSrc}
-                  alt={displayTitle}
-                  onError={() => setCoverImgFailed(true)}
-                />
-              ) : null}
-              {(!coverSrc || coverImgFailed) && (
-                <div className="book-detail-cover-placeholder" aria-hidden="true">
-                  <span className="book-detail-cover-placeholder-letter">{coverInitial}</span>
-                </div>
-              )}
-            </div>
-          </div>
+        <div className={`book-detail-header${isListView ? ' book-detail-header--list' : ''}`}>
+          {coverBlock}
           <div className="book-detail-info">
-            <div className="book-detail-title-row">
-              <h2 id="book-detail-title" className="book-detail-title">
-                {displayTitle}
-              </h2>
-              <span className="book-detail-author">{displayAuthor}</span>
-            </div>
-            {loading && !error && (
-              <div className="book-detail-skeleton" aria-hidden="true">
-                <div className="book-detail-skeleton-line book-detail-skeleton-line--lg" />
-                <div className="book-detail-skeleton-line book-detail-skeleton-line--sm" />
-                <div className="book-detail-skeleton-card">
-                  <div className="book-detail-skeleton-meta-label" />
-                  <div className="book-detail-skeleton-progress-track">
-                    <div className="book-detail-skeleton-progress-fill" />
-                  </div>
-                </div>
-              </div>
-            )}
-            {!loading && (readPercent > 0 || progressInfo) && (
-              <div
-                className="book-detail-reader-meta book-detail-reader-meta--compact"
-                role="region"
-                aria-label="독서 진행"
-              >
-                {readPercent > 0 && (
-                  <div className="book-detail-reader-progress-row">
-                    <div
-                      className="book-detail-reader-progress"
-                      role="progressbar"
-                      aria-valuenow={readPercent}
-                      aria-valuemin={0}
-                      aria-valuemax={100}
-                      aria-valuetext={`${readPercent}% 읽음`}
-                      aria-label={`읽기 진행 ${readPercent}%`}
-                    >
-                      <div
-                        className="book-detail-reader-progress-fill"
-                        style={{ width: `${readPercent}%` }}
-                      />
-                    </div>
-                    <span className="book-detail-reader-progress-pct" aria-hidden="true">
-                      <span className="book-detail-reader-progress-pct-value">{readPercent}</span>%
-                    </span>
-                  </div>
-                )}
-                <div className="book-detail-reader-compact-foot">
-                  {libraryRelativeUpdated ? (
-                    <time
-                      className="book-detail-reader-compact-time"
-                      dateTime={libraryUpdatedAtIso ?? undefined}
-                      aria-label={`최근 업데이트 ${libraryRelativeUpdated}`}
-                    >
-                      {libraryRelativeUpdated}
-                    </time>
-                  ) : progressInfo ? (
-                    <span className="book-detail-reader-compact-placeholder">—</span>
-                  ) : null}
-                  {progressInfo && (
-                    <button
-                      type="button"
-                      className="book-detail-reader-clear-progress"
-                      onClick={handleDeleteProgress}
-                      aria-label="독서 진도 삭제"
-                    >
-                      진도 삭제
-                    </button>
-                  )}
-                </div>
-              </div>
-            )}
-            {loading && (
-              <div className="book-detail-loading" role="status" aria-live="polite">
-                <span className="book-detail-loading-dot" aria-hidden />
-                정보를 불러오는 중…
-              </div>
-            )}
-            {error && (
-              <div className="book-detail-error" role="alert" aria-live="assertive">
-                <span className="book-detail-error-text">{error}</span>
-                <button
-                  type="button"
-                  className="book-detail-error-retry"
-                  onClick={handleRetryFetch}
-                >
-                  다시 시도
-                </button>
-              </div>
-            )}
+            {titleBlock}
+            {loading && !error && progressSkeleton}
+            {!loading && hasProgress && progressMeta}
+            {statusBlocks}
           </div>
         </div>
 
@@ -744,7 +768,8 @@ BookDetailModal.propTypes = {
   book: PropTypes.object,
   isOpen: PropTypes.bool.isRequired,
   onClose: PropTypes.func.isRequired,
-  onDelete: PropTypes.func
+  onDelete: PropTypes.func,
+  viewMode: PropTypes.oneOf(['grid', 'list']),
 };
 
 BookDetailModal.displayName = 'BookDetailModal';

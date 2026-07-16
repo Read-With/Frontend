@@ -5,6 +5,7 @@ import {
 } from '../common/settingsUtils';
 import { resolveChapterIndex, toPositiveNumberFromId, toPositiveNumberOrNull } from '../common/valueUtils';
 
+/** graphUtils.isGraphEdgeElement와 동일 — graphUtils import 순환 방지용 로컬 판별 */
 const isGraphEdgeElement = (element) =>
   Boolean(element?.data && element.data.source !== undefined && element.data.target !== undefined);
 
@@ -132,12 +133,7 @@ export const eventUtils = {
     );
   },
 
-  updateEventsInState: (prevEvents, newEvent, targetChapter, shouldSkip = false) => {
-    if (shouldSkip) {
-      const previous = Array.isArray(prevEvents) ? prevEvents : [];
-      return previous.filter((evt) => Number(eventUtils.resolveChapterIdx(evt)) !== targetChapter);
-    }
-
+  updateEventsInState: (prevEvents, newEvent, targetChapter) => {
     const previous = Array.isArray(prevEvents) ? prevEvents : [];
     const otherChapterEvents = previous.filter(
       (evt) => Number(eventUtils.resolveChapterIdx(evt)) !== targetChapter
@@ -170,24 +166,6 @@ export const eventUtils = {
   },
 };
 
-const INITIAL_TRANSITION_STATE = {
-  type: null,
-  inProgress: false,
-  error: false,
-  direction: null,
-};
-
-export const transitionUtils = {
-  getInitialState: () => ({ ...INITIAL_TRANSITION_STATE }),
-  reset: (setTransitionState) => {
-    setTransitionState((prev) => (
-      prev.type == null && !prev.inProgress && !prev.error && prev.direction == null
-        ? prev
-        : { ...INITIAL_TRANSITION_STATE }
-    ));
-  },
-};
-
 export function resolveServerBookId(book) {
   if (!book) return null;
   return toPositiveNumberOrNull(book._bookId) ?? toPositiveNumberOrNull(book.id);
@@ -206,7 +184,7 @@ export function saveViewerMode(mode) {
   try {
     if (!mode || typeof mode !== 'string') return;
     localStorage.setItem('viewer_mode', mode);
-  } catch (_error) {
+  } catch {
     return;
   }
 }
@@ -214,25 +192,14 @@ export function saveViewerMode(mode) {
 function loadViewerMode() {
   try {
     return localStorage.getItem('viewer_mode');
-  } catch (_error) {
+  } catch {
     return null;
   }
 }
 
-function flagsFromGraphMode(mode) {
-  if (mode === 'graph') return { fullScreen: true, show: true };
-  if (mode === 'split') return { fullScreen: false, show: true };
-  if (mode === 'viewer') return { fullScreen: false, show: false };
-  return null;
-}
-
-export function resolveInitialGraphMode() {
-  return (
-    flagsFromGraphMode(loadViewerMode()) ?? {
-      fullScreen: false,
-      show: loadSettings().showGraph,
-    }
-  );
+/** showGraph는 settings SSOT. viewer_mode는 전체화면(graph) 여부만 복원. */
+export function resolveInitialGraphFullScreen(showGraph = loadSettings().showGraph) {
+  return Boolean(showGraph) && loadViewerMode() === 'graph';
 }
 
 export function buildViewerActionError(message, details, retry) {

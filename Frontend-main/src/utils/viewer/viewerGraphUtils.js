@@ -1,15 +1,15 @@
 /** 뷰어 그래프 유틸: API/캐시 조회·변환·타깃 계산 */
 
-import { processRelations, directedEdgeElementId } from '../graph/relationUtils';
-import { uniqueStrings } from '../graph/graphUtils';
+import { processRelations } from '../graph/relationUtils';
 import { buildNodeWeights, createCharacterMaps, toNodeWeightsOrNull } from '../graph/characterUtils';
 import { convertRelationsToElements } from '../graph/graphDataUtils';
-import { resolveGraphElementsProfileImages } from '../common/urlUtils';
+import { hasGraphPayload } from '../graph/graphData';
+import { resolveGraphElementsProfileImages } from '../common/assetUrlFetch';
 import {
   getGraphEventState,
   getChapterEventFallbackData,
 } from '../common/cache/chapterEventCache';
-import { resolveChapterIndex } from '../common/valueUtils';
+import { resolveChapterIndex, toPositiveInt } from '../common/valueUtils';
 import { cacheKeyUtils, eventUtils } from './viewerCoreStateUtils';
 import { resolveServerEventMatch } from './viewerEventProgressUtils';
 
@@ -18,6 +18,10 @@ export const DEFAULT_GRAPH_TRANSFORM_DEPS = {
   buildNodeWeights,
   convertRelationsToElements,
 };
+
+function asArray(value) {
+  return Array.isArray(value) ? value : [];
+}
 
 /** elements 설정 + 프로필 이미지 비동기 resolve (stale guard 지원) */
 export function commitVisibleGraphElements(setElements, nextElements, { applyTokenRef } = {}) {
@@ -35,27 +39,26 @@ export function commitVisibleGraphElements(setElements, nextElements, { applyTok
 export function resolveFineGraphCallContext({ book, currentChapter, currentEvent }) {
   const match = resolveServerEventMatch({ book, currentChapter, event: currentEvent });
   const bookId = Number(match.bookId);
-  const directChapter = Number(eventUtils.resolveChapterIdx(currentEvent) ?? 0);
-  const matchedChapter = Number(match.chapterIdx ?? 0);
-  const matchedEvent = Number(match.eventIdx ?? 0);
   const chapter =
-    directChapter >= 1 ? directChapter
-      : matchedChapter >= 1 ? matchedChapter
-        : Number(currentChapter);
-  const eventIdx = eventUtils.resolveEventNum(
-    currentEvent,
-    matchedEvent >= 1 ? matchedEvent : 0
-  );
+    toPositiveInt(eventUtils.resolveChapterIdx(currentEvent), 0) ||
+    toPositiveInt(match.chapterIdx, 0) ||
+    Number(currentChapter);
+  const eventIdx = eventUtils.resolveEventNum(currentEvent, toPositiveInt(match.eventIdx, 0));
 
   if (!bookId || !chapter) return null;
 
-  const callKey = cacheKeyUtils.createEventKey(bookId, chapter, eventIdx);
-  return { bookId, chapter, eventIdx, callKey, atLocator: match.atLocator ?? null };
+  return {
+    bookId,
+    chapter,
+    eventIdx,
+    callKey: cacheKeyUtils.createEventKey(bookId, chapter, eventIdx),
+    atLocator: match.atLocator ?? null,
+  };
 }
 
 function hasNonEmptyArrays(obj, keys) {
   if (!obj || typeof obj !== 'object') return false;
-  return keys.some((key) => (Array.isArray(obj[key]) ? obj[key] : []).length > 0);
+  return keys.some((key) => asArray(obj[key]).length > 0);
 }
 
 function isFineGraphNotFoundError(error) {
@@ -86,32 +89,30 @@ export async function requestFineGraph(getFineGraph, bookId, chapter, eventIdx, 
   }
 }
 
-/** fine graph API result → cytoscape elements + 메타 */
+/** characters/relations(+event) 소스 → cytoscape elements + 메타 */
 function convertGraphSourceToElements(
   source,
   chapter,
   eventIdx,
-  deps,
-  { previousNodeWeights = null, relationsOverride = null } = {}
+  deps = DEFAULT_GRAPH_TRANSFORM_DEPS,
+  previousNodeWeights = null
 ) {
-  const eventMeta = source.eventMeta ?? source.event ?? null;
-  const characters = Array.isArray(source.characters) ? source.characters : [];
-  const relations = relationsOverride ?? (Array.isArray(source.relations) ? source.relations : []);
+  const eventMeta = source?.eventMeta ?? source?.event ?? null;
+  const characters = asArray(source?.characters);
+  const relations = asArray(source?.relations);
   const normalizedEvent = graphDataTransformUtils.normalizeApiEvent(
     eventMeta ?? fallbackEventMeta(chapter, eventIdx)
   );
   const elements = graphDataTransformUtils.convertToElements(
     { characters, relations, event: eventMeta },
-    false,
     normalizedEvent,
-    deps.createCharacterMaps,
-    deps.buildNodeWeights,
-    deps.convertRelationsToElements,
+    deps,
     previousNodeWeights
   );
   return { elements, normalizedEvent, eventMeta, characters, relations };
 }
 
+/** fine graph API result → cytoscape elements + 메타 */
 export function convertFineGraphToElements(
   fineResult,
   chapter,
@@ -124,20 +125,13 @@ export function convertFineGraphToElements(
     chapter,
     eventIdx,
     deps,
-    { previousNodeWeights, relationsOverride: fineResult?.relations || [] }
+    previousNodeWeights
   );
   return {
-    elements: converted.elements,
-    normalizedEvent: converted.normalizedEvent,
+    ...converted,
+    // fine API는 .event 필드가 SSOT (eventMeta 무시)
     eventMeta: fineResult?.event ?? fallbackEventMeta(chapter, eventIdx),
-    characters: converted.characters,
-    relations: converted.relations,
   };
-}
-
-/** graph event state 캐시에 표시 가능한 데이터가 있는지 */
-function hasGraphCachePayload(cached) {
-  return hasNonEmptyArrays(cached, ['elements', 'characters']);
 }
 
 export function fallbackEventMeta(chapter, eventIdx) {
@@ -152,7 +146,7 @@ export function fallbackEventMeta(chapter, eventIdx) {
 
 /** fine graph API 응답에 표시 가능한 데이터가 있는지 */
 export function hasFineGraphPayload(result) {
-  return hasNonEmptyArrays(result, ['relations', 'characters']);
+  return hasGraphPayload(result);
 }
 
 /** fine graph API 응답에서 result 객체 추출 */
@@ -161,17 +155,26 @@ export function pickFineGraphResult(response) {
   return result && typeof result === 'object' ? result : null;
 }
 
-/** relationship-graph 응답에 그래프 본문이 있는지 */
-export function hasFineGraphEventSlot(result) {
-  return hasFineGraphPayload(result);
+/** graph event state 캐시 스냅샷 (표시 가능한 payload만) */
+export function getCachedGraphSnapshot(bookId, chapter, eventIdx, getGraphEventStateFn) {
+  if (!bookId || !chapter || eventIdx < 1) return null;
+  const cached = getGraphEventStateFn(bookId, chapter, eventIdx);
+  if (!hasNonEmptyArrays(cached, ['elements', 'characters'])) return null;
+  return cached;
 }
 
-/** graph event state 캐시 스냅샷 (표시 가능한 payload만) */
-export function getCachedGraphSnapshot(bookId, chapter, eventIdx, getGraphEventState) {
-  if (!bookId || !chapter || eventIdx < 1) return null;
-  const cached = getGraphEventState(bookId, chapter, eventIdx);
-  if (!hasGraphCachePayload(cached)) return null;
-  return cached;
+/** graph event state 캐시 → elements·메타 (elements 없으면 characters로 변환) */
+function elementsFromGraphEventState(cached, chapter, eventIdx, deps) {
+  const elements = asArray(cached.elements);
+  const eventMeta = cached.eventMeta ?? null;
+  const characters = asArray(cached.characters);
+
+  if (elements.length > 0) {
+    return { elements, eventMeta, characters, relations: [] };
+  }
+
+  const converted = convertGraphSourceToElements(cached, chapter, eventIdx, deps);
+  return { elements: converted.elements, eventMeta, characters, relations: [] };
 }
 
 /** event 1~eventIdx 누적 그래프 (표시용) */
@@ -190,36 +193,12 @@ export function resolveCumulativeGraphForDisplay(
   return {
     elements: resolved.elements,
     eventMeta: resolved.eventMeta ?? fallback?.event ?? null,
-    characters: resolved.characters?.length
+    characters: resolved.characters.length
       ? resolved.characters
       : (fallback?.characters ?? []),
-    relations: fallback?.relations ?? resolved.relations ?? [],
+    relations: fallback?.relations ?? resolved.relations,
     normalizedEvent: resolved.normalizedEvent ?? null,
   };
-}
-
-/** graph event state 캐시 → elements·메타 (elements 없으면 characters로 변환) */
-export function elementsFromGraphEventState(
-  cached,
-  chapter,
-  eventIdx,
-  deps = DEFAULT_GRAPH_TRANSFORM_DEPS
-) {
-  const elements = Array.isArray(cached.elements) ? cached.elements : [];
-  const eventMeta = cached.eventMeta ?? null;
-  const characters = Array.isArray(cached.characters) ? cached.characters : [];
-
-  if (elements.length > 0) {
-    return { elements, eventMeta, characters, relations: [] };
-  }
-
-  const converted = convertGraphSourceToElements(
-    cached,
-    chapter,
-    eventIdx,
-    deps
-  );
-  return { elements: converted.elements, eventMeta, characters, relations: [] };
 }
 
 export const graphDataTransformUtils = {
@@ -241,31 +220,16 @@ export const graphDataTransformUtils = {
     };
   },
 
-  convertToElements: (
-    resultData,
-    usedCache,
-    normalizedEvent,
-    createCharacterMaps,
-    buildNodeWeights,
-    convertRelationsToElements,
-    previousNodeWeights = null
-  ) => {
-    if (usedCache && Array.isArray(resultData.elements) && resultData.elements.length > 0) {
-      return resultData.elements;
-    }
-
-    const chars = Array.isArray(resultData.characters) ? resultData.characters : [];
-    const rawRels = Array.isArray(resultData.relations) ? resultData.relations : [];
-    const rels = processRelations(rawRels);
-    if (chars.length === 0 && rels.length === 0) {
-      return [];
-    }
+  convertToElements: (resultData, normalizedEvent, deps, previousNodeWeights = null) => {
+    const chars = asArray(resultData.characters);
+    const rels = processRelations(asArray(resultData.relations));
+    if (chars.length === 0 && rels.length === 0) return [];
 
     const { idToName, idToDesc, idToDescKo, idToMain, idToNames, idToProfileImage } =
-      createCharacterMaps(chars);
-    const nodeWeights = buildNodeWeights(chars, previousNodeWeights);
+      deps.createCharacterMaps(chars);
+    const nodeWeights = deps.buildNodeWeights(chars, previousNodeWeights);
 
-    return convertRelationsToElements({
+    return deps.convertRelationsToElements({
       relations: rels,
       idToName,
       idToDesc,
@@ -279,134 +243,37 @@ export const graphDataTransformUtils = {
     });
   },
 
-  mergeElementsWithPrevious: (convertedElements, prevData, currentChapter, apiEventIdx) => {
-    const prevChapter = resolveChapterIndex(prevData);
-    const curChapter = Number(currentChapter);
-
-    const edgeDedupKey = (el) => {
-      const d = el?.data;
-      if (!d) return null;
-      if (d.id != null && String(d.id).trim() !== '') {
-        return String(d.id);
-      }
-      if (d.source != null && d.target != null) {
-        return directedEdgeElementId(d.source, d.target);
-      }
-      return null;
-    };
-
-    const mergeRelationArrays = (a, b) => {
-      const toArr = (v) => {
-        if (Array.isArray(v)) return v;
-        if (v === undefined || v === null || v === '') return [];
-        return [v];
-      };
-      return uniqueStrings([...toArr(a), ...toArr(b)]);
-    };
-
-    const conv = Array.isArray(convertedElements) ? convertedElements : [];
-    const prevEls = Array.isArray(prevData.elements) ? prevData.elements : [];
-    const prevIdx = Number(prevData.eventIdx) || 0;
-    const apiIdx = Number(apiEventIdx) || 0;
-    const hasComparableChapter = Number.isFinite(prevChapter) && Number.isFinite(curChapter);
-    const isDifferentChapter = hasComparableChapter && curChapter !== prevChapter;
-    const isEarlierThanPrevious =
-      hasComparableChapter &&
-      (curChapter < prevChapter || (curChapter === prevChapter && apiIdx > 0 && apiIdx < prevIdx));
-    if (isDifferentChapter || isEarlierThanPrevious) {
-      return conv;
-    }
-    if (conv.length === 0 && prevEls.length > 0) {
-      return prevEls;
-    }
-    if (prevEls.length === 0 || prevIdx === 0) {
-      return conv;
-    }
-
-    const prevNodes = eventUtils.filterNodes(prevEls);
-    const existingNodeIds = new Set(prevNodes.map((e) => e.data.id));
-    const newNodes = eventUtils.filterNodes(conv).filter((e) => !existingNodeIds.has(e.data.id));
-
-    const prevEdges = eventUtils.filterEdges(prevEls);
-    const newEdges = eventUtils.filterEdges(conv);
-    const edgeByKey = new Map();
-    for (const el of prevEdges) {
-      const key = edgeDedupKey(el);
-      if (key) edgeByKey.set(key, el);
-    }
-    for (const el of newEdges) {
-      const key = edgeDedupKey(el);
-      if (!key) continue;
-      const prevEl = edgeByKey.get(key);
-      if (!prevEl) {
-        edgeByKey.set(key, el);
-        continue;
-      }
-      const previousData = prevEl.data || {};
-      const nextData = el.data || {};
-      const nextPos = Number(nextData.positivity);
-      const prevPos = Number(previousData.positivity);
-      const positivity = Number.isFinite(nextPos) ? nextPos : Number.isFinite(prevPos) ? prevPos : 0;
-
-      edgeByKey.set(key, {
-        ...prevEl,
-        ...el,
-        data: {
-          ...previousData,
-          ...nextData,
-          relation: mergeRelationArrays(previousData.relation, nextData.relation),
-          label:
-            nextData.label != null && String(nextData.label).trim() !== ''
-              ? nextData.label
-              : previousData.label || '',
-          positivity,
-        },
-      });
-    }
-
-    const mergedEdges = Array.from(edgeByKey.values());
-    return [...prevNodes, ...newNodes, ...mergedEdges];
-  },
-
   createNextEventData: (normalizedEvent, currentChapter, apiEventIdx, resultData) => {
-    const resolvedEventIdx = apiEventIdx;
+    const apiEventNum = normalizedEvent ? Number(normalizedEvent.eventNum) : NaN;
+    const eventNum = Number.isFinite(apiEventNum) && apiEventNum > 0 ? apiEventNum : apiEventIdx;
     const originalEventIdx = normalizedEvent
       ? eventUtils.resolveEventNum(normalizedEvent)
-      : resolvedEventIdx;
-    const apiEventNum = normalizedEvent ? Number(normalizedEvent.eventNum) : NaN;
-    const eventNum = Number.isFinite(apiEventNum) && apiEventNum > 0 ? apiEventNum : resolvedEventIdx;
+      : apiEventIdx;
     const relations = resultData.relations || [];
     const characters = resultData.characters || [];
 
-    const buildEventPayload = (base, rawId) => ({
+    const withEventFields = (base, rawId) => ({
       ...base,
       chapter: eventUtils.resolveChapterIdx(base) ?? currentChapter,
       chapterIdx: eventUtils.resolveChapterIdx(base) ?? currentChapter,
       eventNum,
       eventIdx: eventNum,
       eventId: rawId != null ? rawId : eventNum,
-      resolvedEventIdx,
-      originalEventIdx: base === normalizedEvent ? originalEventIdx : resolvedEventIdx,
+      resolvedEventIdx: apiEventIdx,
+      originalEventIdx,
       relations,
       characters,
     });
 
     if (normalizedEvent) {
-      return buildEventPayload(
-        normalizedEvent,
-        eventUtils.resolveEventId(normalizedEvent)
-      );
+      return withEventFields(normalizedEvent, eventUtils.resolveEventId(normalizedEvent));
     }
 
     const raw = resultData?.event;
     const parsed = raw ? graphDataTransformUtils.normalizeApiEvent(raw) : null;
-    return buildEventPayload(
-      {
-        chapter: currentChapter,
-        chapterIdx: currentChapter,
-      },
-      eventUtils.resolveEventId(raw) ?? (parsed ? eventUtils.resolveEventId(parsed) : null)
+    return withEventFields(
+      { chapter: currentChapter, chapterIdx: currentChapter },
+      eventUtils.resolveEventId(raw) ?? eventUtils.resolveEventId(parsed)
     );
   },
 };
-
