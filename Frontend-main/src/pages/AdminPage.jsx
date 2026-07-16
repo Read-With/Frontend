@@ -641,6 +641,8 @@ const AdminPage = () => {
   const [isViewingCharacters, setIsViewingCharacters] = useState(false);
   const [zoomedImage, setZoomedImage] = useState(null);
   const [selectedLogPayload, setSelectedLogPayload] = useState(null);
+  const [imageGenerationStatus, setImageGenerationStatus] = useState(null);
+  const [isGeneratingReference, setIsGeneratingReference] = useState(false);
 
   const loadingSeqRef = useRef(0);
   const charsRequestRef = useRef(0);
@@ -967,20 +969,59 @@ const AdminPage = () => {
       errorMessage: "작업 로그를 불러오지 못했습니다.",
     });
 
+  const getImageGenerationStatus = async (bookId) => {
+    try {
+        const result = await apiClient.get(
+            `/image-generation/books/${bookId}`
+        );
+
+        if (result.data?.isSuccess) {
+            setImageGenerationStatus(result.data.result);
+        } else {
+            setImageGenerationStatus(null);
+        }
+    } catch (e) {
+        console.error(e);
+        setImageGenerationStatus(null);
+    }
+  };
+
+  const generateReferenceCandidates = async () => {
+    if (!selectedBook) return;
+    const confirmed = window.confirm(
+        "대표 캐릭터 후보사진을 생성하시겠습니까?\n\n기존 후보사진은 새 후보사진으로 덮어쓰게 됩니다."
+    );
+
+    if (!confirmed) return;
+    try {
+        setIsGeneratingReference(true);
+        await apiClient.post(
+            `/image-generation/books/${selectedBook.id}/reference-candidates`
+        );
+        await getImageGenerationStatus(selectedBook.id);
+    } catch (e) {
+        console.error(e);
+    } finally {
+        setIsGeneratingReference(false);
+    }
+  };
+
   const getBookCharacters = (book) => {
     const requestId = ++charsRequestRef.current;
     setSelectedBook(book);
-    setBookId(String(book.id));
-    setStatusFilter("ALL");
-    handleApiCall(`chars-${book.id}`, () => apiClient.get(`/books/${book.id}/characters`), {
-      shouldApply: () => requestId === charsRequestRef.current,
-      updateState: (data) => {
-        setCharacters(toArray(data));
-        setIsViewingCharacters(true);
-      },
-      showResultPanel: false,
-      notifySuccess: false,
-    });
+setBookId(String(book.id));
+setStatusFilter("ALL");
+getImageGenerationStatus(book.id);
+
+handleApiCall(`chars-${book.id}`, () => apiClient.get(`/books/${book.id}/characters`), {
+  shouldApply: () => requestId === charsRequestRef.current,
+  updateState: (data) => {
+    setCharacters(toArray(data));
+    setIsViewingCharacters(true);
+  },
+  showResultPanel: false,
+  notifySuccess: false,
+});
   };
 
   const selectBookForParams = (book) => {
@@ -1676,6 +1717,107 @@ const AdminPage = () => {
             </button>
           ))}
         </div>
+
+        <div className="px-6 pt-6 flex justify-end">
+          <button
+            onClick={generateReferenceCandidates}
+            disabled={isGeneratingReference}
+            className="px-5 py-2 rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition"
+          >
+            {isGeneratingReference
+              ? "후보사진 생성 중..."
+              : "후보사진 생성"}
+          </button>
+        </div>
+
+        {imageGenerationStatus && (
+          <div className="m-6 mb-4 rounded-xl border border-gray-200 bg-gray-50 p-5">
+            <h4 className="text-lg font-semibold mb-4">
+              이미지 생성 현황
+            </h4>
+            <div className="grid grid-cols-2 gap-4 text-sm">
+              <div>
+                <div className="font-semibold text-gray-600">
+                  전체 상태
+                </div>
+                <div className="mt-1 text-indigo-600 font-bold">
+                    {imageGenerationStatus.status}
+                </div>
+            </div>
+            <div>
+              <div className="font-semibold text-gray-600">
+                다음 작업
+              </div>
+              <div className="mt-1">
+                {imageGenerationStatus.nextAction}
+              </div>
+            </div>
+            <div>
+              <div className="font-semibold text-gray-600">
+                대표 캐릭터
+              </div>
+              <div className="mt-1">
+                {imageGenerationStatus.referenceCharacter?.name ?? "-"}
+              </div>
+            </div>
+            <div>
+              <div className="font-semibold text-gray-600">
+                선택된 후보
+              </div>
+              <div className="mt-1">
+                {imageGenerationStatus.selectedReferenceCandidateId ?? "없음"}
+              </div>
+            </div>
+        </div>
+
+        {imageGenerationStatus.referenceCandidates?.length > 0 && (
+          <div className="mt-6">
+            <h5 className="text-sm font-semibold mb-3">
+              대표 후보 이미지
+            </h5>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              {imageGenerationStatus.referenceCandidates.map(candidate => (
+                <div
+                  key={candidate.id}
+                  className={`rounded-lg border overflow-hidden bg-white ${
+                    candidate.id === imageGenerationStatus.selectedReferenceCandidateId
+                      ? "border-indigo-500 ring-2 ring-indigo-200"
+                      : "border-gray-200"
+                  }`}
+                >
+                  <div className="aspect-square bg-gray-100">
+                    {candidate.imageUrl ? (
+                      <img
+                        src={candidate.imageUrl}
+                        alt={`slot-${candidate.slotNo}`}
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center text-xs text-gray-400">
+                        이미지 없음
+                      </div>
+                    )}
+                  </div>
+                  <div className="p-3">
+                    <div className="text-xs text-gray-500">
+                      Slot {candidate.slotNo}
+                    </div>
+                    <div className="font-semibold mt-1">
+                      {candidate.status}
+                    </div>
+                    {candidate.failureCode && (
+                      <div className="text-xs text-red-500 mt-1">
+                        {candidate.failureCode}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    )}
         <div className="p-0 overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <thead>
