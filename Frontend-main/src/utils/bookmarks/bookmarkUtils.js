@@ -1,7 +1,6 @@
 /** 북마크 표시·locator·색상 팔레트 (API 호출 없음) */
 
-import { toLocator, locatorsEqual, toViewerResumeAnchor } from '../common/locatorUtils';
-import { toPositiveNumberOrNull } from '../common/valueUtils';
+import { toLocator, locatorsEqual, toViewerResumeAnchor, toPositiveNumberOrNull } from '../common/valueUtils';
 import { resolveViewerBookKey } from '../viewer/viewerCoreStateUtils';
 import {
   getChapterData,

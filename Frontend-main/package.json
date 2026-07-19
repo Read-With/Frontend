@@ -7,8 +7,6 @@
     "dev": "vite",
     "build": "vite build",
     "lint": "eslint .",
-    "test": "vitest run",
-    "test:watch": "vitest",
     "preview": "vite preview",
     "clean": "rm -rf node_modules/.vite dist && npm run clean:cache",
     "clean:cache": "npx rimraf node_modules/.cache",
@@ -53,8 +51,7 @@
     "picomatch": "^4.0.4",
     "postcss": "^8.5.6",
     "rollup": "^4.60.0",
-    "vite": "^6.2.0",
-    "vitest": "^3.2.4"
+    "vite": "^6.2.0"
   },
   "overrides": {
     "flatted": "^3.4.2",

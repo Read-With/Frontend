@@ -1,10 +1,7 @@
 /** 툴팁: 외부 클릭 감지·드래그 위치·활성 툴팁 상태 */
 
 import { useEffect, useRef, useState, useCallback } from 'react';
-import {
-  constrainToViewport,
-  processTooltipData,
-} from '../../utils/graph/graphUtils';
+import { constrainToGraphCanvas } from '../../utils/graph/graphUtils';
 
 const TOOLTIP_CLEAR_DELAY_MS = 150;
 const TOOLTIP_ERROR_CHECK_DELAY_MS = 220;
@@ -128,9 +125,9 @@ export function useTooltipState({
       tooltipTimeoutRef.current = null;
     }
 
-    const processedTooltipData = processTooltipData(tooltipData, tooltipData.type);
+    // processTooltipData는 openTooltipFromTap에서 이미 수행
     lastTooltipOpenAtRef.current = Date.now();
-    setActiveTooltip(processedTooltipData);
+    setActiveTooltip(tooltipData);
 
     if (onErrorRef.current) {
       const timeoutId = setTimeout(() => {
@@ -166,9 +163,10 @@ export function useTooltipPosition(initialX, initialY, options = {}) {
   const [position, setPosition] = useState({ x: 200, y: 200 });
   const [showContent, setShowContent] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
-  const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
   const [hasDragged, setHasDragged] = useState(false);
   const tooltipRef = useRef(null);
+  const dragOffsetRef = useRef({ x: 0, y: 0 });
+  const isDraggingRef = useRef(false);
 
   useEffect(() => {
     if (!enabled) return;
@@ -177,48 +175,62 @@ export function useTooltipPosition(initialX, initialY, options = {}) {
 
   const handleMouseDown = (e) => {
     if (!enabled) return;
-    if (e.target.closest('.tooltip-close-btn')) return;
-    setIsDragging(true);
+    if (e.button !== 0) return;
+    if (
+      e.target.closest(
+        '.tooltip-close-btn, button, a, input, textarea, select, [role="button"]'
+      )
+    ) {
+      return;
+    }
+    if (!tooltipRef.current) return;
+
+    e.preventDefault();
+    e.stopPropagation();
+
     const rect = tooltipRef.current.getBoundingClientRect();
-    setDragOffset({
+    dragOffsetRef.current = {
       x: e.clientX - rect.left,
       y: e.clientY - rect.top,
-    });
-  };
-
-  const handleMouseMove = (e) => {
-    if (!enabled || !isDragging) return;
-    const tooltipRect = tooltipRef.current.getBoundingClientRect();
-
-    const newX = e.clientX - dragOffset.x;
-    const newY = e.clientY - dragOffset.y;
-
-    const constrained = constrainToViewport(newX, newY, tooltipRect.width, tooltipRect.height);
-    setPosition(constrained);
-    setHasDragged(true);
-  };
-
-  const handleMouseUp = () => {
-    if (!enabled) return;
-    if (isDragging) {
-      document.dispatchEvent(
-        new CustomEvent('dragend', {
-          detail: { type: 'dragend', timestamp: Date.now() },
-        })
-      );
-    }
-    setIsDragging(false);
+    };
+    isDraggingRef.current = true;
+    setIsDragging(true);
   };
 
   useEffect(() => {
-    if (!enabled) return;
-    if (isDragging) {
-      window.addEventListener('mousemove', handleMouseMove);
-      window.addEventListener('mouseup', handleMouseUp);
-      document.body.style.userSelect = 'none';
-    } else {
-      document.body.style.userSelect = '';
-    }
+    if (!enabled || !isDragging) return undefined;
+
+    const handleMouseMove = (e) => {
+      if (!isDraggingRef.current || !tooltipRef.current) return;
+      const tooltipRect = tooltipRef.current.getBoundingClientRect();
+      const newX = e.clientX - dragOffsetRef.current.x;
+      const newY = e.clientY - dragOffsetRef.current.y;
+      const constrained = constrainToGraphCanvas(
+        newX,
+        newY,
+        tooltipRect.width,
+        tooltipRect.height
+      );
+      setPosition(constrained);
+      setHasDragged(true);
+    };
+
+    const handleMouseUp = () => {
+      if (isDraggingRef.current) {
+        document.dispatchEvent(
+          new CustomEvent('dragend', {
+            detail: { type: 'dragend', timestamp: Date.now() },
+          })
+        );
+      }
+      isDraggingRef.current = false;
+      setIsDragging(false);
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+    document.body.style.userSelect = 'none';
+
     return () => {
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
@@ -236,7 +248,12 @@ export function useTooltipPosition(initialX, initialY, options = {}) {
       !hasDragged
     ) {
       const tooltipRect = tooltipRef.current.getBoundingClientRect();
-      const constrained = constrainToViewport(initialX, initialY, tooltipRect.width, tooltipRect.height);
+      const constrained = constrainToGraphCanvas(
+        initialX,
+        initialY,
+        tooltipRect.width,
+        tooltipRect.height
+      );
       setPosition(constrained);
     }
   }, [enabled, initialX, initialY, isDragging, hasDragged]);

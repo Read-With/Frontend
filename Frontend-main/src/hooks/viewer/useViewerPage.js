@@ -5,10 +5,8 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { useServerBookMatching } from '../books/bookHooks';
 import { useViewerUrlParams } from './useViewerUrlParams';
-import { useViewerGraphState } from './useViewerGraphState';
 import { useViewerProgress } from './useViewerProgress';
-import { useViewerTransition } from './useViewerTransition';
-import { useViewerGraphPipeline } from './useViewerGraphPipeline';
+import { useViewerGraphState, useViewerGraphPipeline } from './useViewerGraphPipeline';
 import { useProgressAutoSave } from './useProgressAutoSave';
 import { useManifestLoaded } from '../common/manifestEnsure';
 import {
@@ -16,20 +14,78 @@ import {
   normalizeSettings,
   saveSettings,
   SETTINGS_STORAGE_KEY,
-} from '../../utils/common/settingsUtils';
+} from '../../utils/common/errorUtils';
 import {
   bookUtils,
   waitForViewerMethod,
-} from '../../utils/viewer/viewerCoreStateUtils';
-import {
   runViewerPaging,
   restoreViewerPosition,
-} from '../../utils/viewer/viewerPageNavUtils';
+} from '../../utils/viewer/viewerCoreStateUtils';
 import { resolveServerBookIdOrFallback, resolveViewerBookKey } from '../common/hooksShared';
-import { toViewerResumeAnchor } from '../../utils/common/locatorUtils';
-import { resolveChapterIndex } from '../../utils/common/valueUtils';
+import { toViewerResumeAnchor, resolveChapterIndex } from '../../utils/common/valueUtils';
 import { useBookmarks } from '../bookmarks/bookmarkHooks';
-import { userViewerBookmarksPath } from '../../utils/navigation/viewerPaths';
+import { userViewerBookmarksPath } from '../../utils/common/urlUtils';
+
+const EVENT_TRANSITION_FALLBACK_MS = 50;
+
+function idleTransition() {
+  return { type: null, inProgress: false };
+}
+
+function resetTransitionState(setTransitionState) {
+  setTransitionState((prev) => (
+    prev.type == null && !prev.inProgress ? prev : idleTransition()
+  ));
+}
+
+/** 챕터/이벤트 전환 상태 */
+function useViewerTransition({ currentEvent, currentChapter, isDataReady }) {
+  const [transitionState, setTransitionState] = useState(idleTransition);
+  const prevEventRef = useRef(null);
+  const prevChapterRef = useRef(null);
+
+  const resetTransition = useCallback(() => {
+    resetTransitionState(setTransitionState);
+  }, []);
+
+  useEffect(() => {
+    let timeoutId = null;
+    const prev = prevEventRef.current;
+
+    if (
+      currentEvent &&
+      prev &&
+      (prev.eventNum !== currentEvent.eventNum || prev.chapter !== currentEvent.chapter)
+    ) {
+      setTransitionState({ type: 'event', inProgress: true });
+      timeoutId = setTimeout(
+        () => resetTransitionState(setTransitionState),
+        EVENT_TRANSITION_FALLBACK_MS
+      );
+    }
+
+    if (currentEvent) prevEventRef.current = currentEvent;
+
+    return () => {
+      if (timeoutId) clearTimeout(timeoutId);
+    };
+  }, [currentEvent]);
+
+  useEffect(() => {
+    if (prevChapterRef.current !== null && prevChapterRef.current !== currentChapter) {
+      setTransitionState({ type: 'chapter', inProgress: true });
+    }
+    prevChapterRef.current = currentChapter;
+  }, [currentChapter]);
+
+  useEffect(() => {
+    if (isDataReady && transitionState.type === 'event' && transitionState.inProgress) {
+      resetTransitionState(setTransitionState);
+    }
+  }, [isDataReady, transitionState.type, transitionState.inProgress]);
+
+  return { transitionState, resetTransition };
+}
 
 function resolveMypagePath() {
   const prefix = (import.meta.env.BASE_URL || '/').replace(/\/$/, '');
@@ -134,7 +190,7 @@ export function useViewerPage() {
     setElements,
     setIsDataReady,
     setIsGraphLoading,
-    setFineGraphLoading,
+    setEventGraphLoading,
     graphState,
     graphActions,
     graphViewerState,
@@ -208,12 +264,10 @@ export function useViewerPage() {
     setUrlSyncEnabled(isViewerPageReady);
   }, [isViewerPageReady]);
 
-  const { isDataReady } = graphViewerState;
-
   const { transitionState, resetTransition } = useViewerTransition({
     currentEvent,
     currentChapter,
-    isDataReady,
+    isDataReady: graphViewerState.isDataReady,
   });
 
   const { graphApiError } = useViewerGraphPipeline({
@@ -227,7 +281,7 @@ export function useViewerPage() {
     setElements,
     setEvents,
     setIsGraphLoading,
-    setFineGraphLoading,
+    setEventGraphLoading,
     setIsDataReady,
   });
 
@@ -262,9 +316,9 @@ export function useViewerPage() {
 
   const handleApplySettings = useCallback(
     (newSettings) => {
-      const normalized = normalizeSettings(newSettings);
-      const graphChanged = normalized.showGraph !== settings.showGraph;
-      const result = setSettings(normalized);
+      const next = normalizeSettings(newSettings);
+      const graphChanged = next.showGraph !== settings.showGraph;
+      const result = setSettings(next);
       if (!result.success) {
         toast.error(result.message);
         return;
@@ -316,8 +370,6 @@ export function useViewerPage() {
 
   const handlePrevPage = useCallback(() => runViewerPaging(viewerRef, 'prev'), []);
   const handleNextPage = useCallback(() => runViewerPaging(viewerRef, 'next'), []);
-  const handleOpenSettings = useCallback(() => setShowSettingsModal(true), []);
-  const handleCloseSettings = useCallback(() => setShowSettingsModal(false), []);
 
   const graphStateWithProgress = useMemo(
     () => ({ ...graphState, progressTopBar, progressMetricsReady }),
@@ -353,6 +405,7 @@ export function useViewerPage() {
     viewerRef,
     reloadKey,
     showSettingsModal,
+    setShowSettingsModal,
     setProgress,
     setCurrentPage,
     setTotalPages,
@@ -360,8 +413,6 @@ export function useViewerPage() {
     setCurrentEvent,
     setShowToolbar,
     bookmarks,
-    book,
-    bookKey,
     manifestLoaded,
     previousPage,
     isFromLibrary,
@@ -370,21 +421,17 @@ export function useViewerPage() {
     handleAddBookmark,
     removeBookmark,
     isBookmarkMutating,
-    handleOpenSettings,
-    handleCloseSettings,
     handleApplySettings,
     onToggleBookmarkList,
     handleSliderChange,
     toggleGraph,
     exitToMypage,
-    graphState,
     graphStateWithProgress,
     graphActions,
     viewerState,
     searchState,
     searchActions,
     setProgressTopBar,
-    progressMetricsReady,
     readingLocatorKey,
     serverResumeAnchor: effectiveResumeAnchor,
     applyReadingLocator,

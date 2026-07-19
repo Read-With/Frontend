@@ -1,5 +1,5 @@
 /** OAuth 검증·state·PKCE·dev 디버그 (Self-XSS 방지)
- * PKCE helpers(generateCodeVerifier 등)는 백엔드 PKCE 연동 전까지 dormant — 삭제하지 말 것.
+ * PKCE helpers는 백엔드 PKCE 연동 전까지 dormant — 삭제하지 말 것.
  */
 
 const GOOGLE_OAUTH_STATE_SESSION_KEY = 'readwith_google_oauth_state';
@@ -12,11 +12,9 @@ const validateOAuthState = (receivedState, storedState) => {
   if (!receivedState || !storedState) {
     return { isValid: false, error: 'State 파라미터가 없습니다.' };
   }
-
   if (receivedState !== storedState) {
     return { isValid: false, error: 'State 파라미터가 일치하지 않습니다.' };
   }
-
   return { isValid: true };
 };
 
@@ -58,6 +56,14 @@ function sessionRemove(...keys) {
   }
 }
 
+function sessionStoreOrThrow(key, value, label) {
+  try {
+    sessionSet(key, value);
+  } catch (error) {
+    throw new Error(`${label}를 저장할 수 없습니다. ${error?.message || ''}`.trim());
+  }
+}
+
 /** @deprecated dormant — 백엔드 PKCE 미사용 */
 export function generateCodeVerifier() {
   const bytes = new Uint8Array(32);
@@ -74,14 +80,8 @@ export async function generateCodeChallenge(verifier) {
 
 export function createAndStoreGoogleOAuthState() {
   const state = generateOAuthState();
-  try {
-    sessionSet(GOOGLE_OAUTH_STATE_SESSION_KEY, state);
-    sessionRemove(GOOGLE_OAUTH_STATE_VERIFIED_KEY);
-  } catch (error) {
-    throw new Error(
-      `OAuth state를 저장할 수 없습니다. ${error?.message || ''}`.trim(),
-    );
-  }
+  sessionStoreOrThrow(GOOGLE_OAUTH_STATE_SESSION_KEY, state, 'OAuth state');
+  sessionRemove(GOOGLE_OAUTH_STATE_VERIFIED_KEY);
   return state;
 }
 
@@ -89,13 +89,7 @@ export function createAndStoreGoogleOAuthState() {
 export async function createAndStoreGoogleOAuthPkce() {
   const verifier = generateCodeVerifier();
   const challenge = await generateCodeChallenge(verifier);
-  try {
-    sessionSet(GOOGLE_OAUTH_PKCE_VERIFIER_KEY, verifier);
-  } catch (error) {
-    throw new Error(
-      `PKCE verifier를 저장할 수 없습니다. ${error?.message || ''}`.trim(),
-    );
-  }
+  sessionStoreOrThrow(GOOGLE_OAUTH_PKCE_VERIFIER_KEY, verifier, 'PKCE verifier');
   return { verifier, challenge };
 }
 
@@ -125,21 +119,11 @@ export function verifyGoogleOAuthState(receivedState) {
     };
   }
 
-  try {
-    if (sessionGet(GOOGLE_OAUTH_STATE_VERIFIED_KEY) === receivedState) {
-      return { isValid: true };
-    }
-  } catch {
-    return { isValid: false, error: 'OAuth state를 읽을 수 없습니다.' };
+  if (sessionGet(GOOGLE_OAUTH_STATE_VERIFIED_KEY) === receivedState) {
+    return { isValid: true };
   }
 
-  let stored = null;
-  try {
-    stored = sessionGet(GOOGLE_OAUTH_STATE_SESSION_KEY);
-  } catch {
-    return { isValid: false, error: 'OAuth state를 읽을 수 없습니다.' };
-  }
-
+  const stored = sessionGet(GOOGLE_OAUTH_STATE_SESSION_KEY);
   if (!stored) {
     return {
       isValid: false,
@@ -150,8 +134,8 @@ export function verifyGoogleOAuthState(receivedState) {
 
   const result = validateOAuthState(receivedState, stored);
   if (result.isValid) {
+    sessionRemove(GOOGLE_OAUTH_STATE_SESSION_KEY);
     try {
-      sessionRemove(GOOGLE_OAUTH_STATE_SESSION_KEY);
       sessionSet(GOOGLE_OAUTH_STATE_VERIFIED_KEY, receivedState);
     } catch {
       /* ignore */
@@ -165,15 +149,13 @@ export const validateUserData = (userData) => {
     return { isValid: false, error: '사용자 데이터가 없습니다.' };
   }
 
-  const requiredFields = ['id', 'email'];
-  for (const field of requiredFields) {
+  for (const field of ['id', 'email']) {
     if (!userData[field]) {
       return { isValid: false, error: `필수 사용자 정보가 없습니다: ${field}` };
     }
   }
 
-  const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  if (!emailPattern.test(userData.email)) {
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(userData.email)) {
     return { isValid: false, error: '유효하지 않은 이메일 형식입니다.' };
   }
 
@@ -181,19 +163,16 @@ export const validateUserData = (userData) => {
 };
 
 function maskSensitiveData(data) {
-  if (!data || typeof data !== 'object') {
-    return data;
-  }
+  if (!data || typeof data !== 'object') return data;
   const masked = { ...data };
   const sensitiveFields = ['code', 'token', 'password', 'secret', 'key', 'id', 'verifier'];
   for (const [key, value] of Object.entries(masked)) {
-    if (sensitiveFields.some((field) => key.toLowerCase().includes(field))) {
-      if (typeof value === 'string' && value.length > 10) {
-        masked[key] = `${value.substring(0, 6)}...${value.substring(value.length - 4)}`;
-      } else if (typeof value === 'string') {
-        masked[key] = '*'.repeat(value.length);
-      }
-    }
+    if (!sensitiveFields.some((field) => key.toLowerCase().includes(field))) continue;
+    if (typeof value !== 'string') continue;
+    masked[key] =
+      value.length > 10
+        ? `${value.substring(0, 6)}...${value.substring(value.length - 4)}`
+        : '*'.repeat(value.length);
   }
   return masked;
 }

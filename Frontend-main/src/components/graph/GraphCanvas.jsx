@@ -4,7 +4,7 @@ import CytoscapeGraphUnified from './CytoscapeGraphUnified';
 import UnifiedNodeInfo from './tooltip/UnifiedNodeInfo';
 import UnifiedEdgeTooltip from './tooltip/UnifiedEdgeTooltip';
 import { graphStyles, COLORS, ANIMATION_VALUES } from '../../utils/styles/styles.js';
-import { GRAPH_LAYOUT_CONSTANTS, resolveChapterSidebarWidth } from './graphShared.js';
+import { GRAPH_LAYOUT_CONSTANTS, resolveChapterSidebarWidth } from '../../utils/graph/graphUtils.js';
 
 const {
   TOP_BAR_HEIGHT,
@@ -26,26 +26,67 @@ const sidebarBaseStyle = {
   transition: `right ${ANIMATION_DURATION}ms cubic-bezier(0.4, 0, 0.2, 1)`,
 };
 
+const loadingOverlayStyle = {
+  position: 'absolute',
+  inset: 0,
+  background: 'rgba(255, 255, 255, 0.75)',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  zIndex: 10,
+  fontSize: '16px',
+  fontWeight: 600,
+  color: COLORS.primary,
+  letterSpacing: '0.02em',
+};
+
+const canvasShellStyle = {
+  position: 'fixed',
+  top: 0,
+  right: 0,
+  bottom: 0,
+  overflow: 'hidden',
+  display: 'flex',
+  flexDirection: 'column',
+  transition: `left ${ANIMATION_VALUES.DURATION.SLOW} ${ANIMATION_VALUES.EASE_OUT}`,
+};
+
+const pageContainerStyle = {
+  ...graphStyles.graphPageContainer,
+  display: 'flex',
+  flexDirection: 'column',
+  height: '100%',
+};
+
+const pageInnerStyle = {
+  ...graphStyles.graphPageInner,
+  flex: 1,
+  display: 'flex',
+  flexDirection: 'column',
+  position: 'relative',
+};
+
+const canvasAreaStyle = {
+  ...graphStyles.graphArea,
+  flex: 1,
+  minHeight: 0,
+  position: 'relative',
+};
+
+function chapterLabel(n, title) {
+  const trimmed = String(title ?? '').trim();
+  return trimmed || `Chapter ${n}`;
+}
+
+function clearTimeoutRef(timeoutRef) {
+  if (timeoutRef.current) {
+    clearTimeout(timeoutRef.current);
+    timeoutRef.current = null;
+  }
+}
+
 function GraphLoadingOverlay() {
-  return (
-    <div
-      style={{
-        position: 'absolute',
-        inset: 0,
-        background: 'rgba(255, 255, 255, 0.75)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        zIndex: 10,
-        fontSize: '16px',
-        fontWeight: 600,
-        color: COLORS.primary,
-        letterSpacing: '0.02em',
-      }}
-    >
-      그래프 업데이트 중...
-    </div>
-  );
+  return <div style={loadingOverlayStyle}>그래프 업데이트 중...</div>;
 }
 
 const GraphInfoBar = memo(function GraphInfoBar({
@@ -57,11 +98,9 @@ const GraphInfoBar = memo(function GraphInfoBar({
   relationCount,
   filterStage,
 }) {
-  const chapterRangeLabel = useMemo(() => {
-    const nameOrNum = (n, title) => (title && String(title).trim() ? String(title).trim() : `Chapter ${n}`);
-    const curName = nameOrNum(currentChapter, currentChapterTitle);
-    return `Chapter 1 ~ ${curName} 누적`;
-  }, [currentChapter, currentChapterTitle]);
+  const chapterRangeLabel = `Chapter 1 ~ ${chapterLabel(currentChapter, currentChapterTitle)} 누적`;
+  const readingLabel = chapterLabel(userCurrentChapter, userReadingChapterTitle);
+  const filterSuffix = filterStage > 0 ? ' (필터링됨)' : '';
 
   return (
     <div
@@ -91,7 +130,7 @@ const GraphInfoBar = memo(function GraphInfoBar({
         }}>
           {chapterRangeLabel}
         </div>
-        {userCurrentChapter !== null && (
+        {userCurrentChapter != null && (
           <div
             style={{
               background: COLORS.primary + '20',
@@ -101,12 +140,9 @@ const GraphInfoBar = memo(function GraphInfoBar({
               color: COLORS.primary,
               fontWeight: '600',
             }}
-            title={userReadingChapterTitle ? `챕터 ${userCurrentChapter}` : undefined}
+            title={`챕터 ${userCurrentChapter}`}
           >
-            독서 진행:{' '}
-            {userReadingChapterTitle && String(userReadingChapterTitle).trim()
-              ? String(userReadingChapterTitle).trim()
-              : `Chapter ${userCurrentChapter}`}
+            독서 진행: {readingLabel}
           </div>
         )}
       </div>
@@ -118,13 +154,9 @@ const GraphInfoBar = memo(function GraphInfoBar({
         color: COLORS.textSecondary,
         fontWeight: '500',
       }}>
-        <span>
-          {filterStage > 0 ? `${nodeCount}명 (필터링됨)` : `${nodeCount}명`}
-        </span>
+        <span>{nodeCount}명{filterSuffix}</span>
         <span>•</span>
-        <span>
-          {filterStage > 0 ? `${relationCount}관계 (필터링됨)` : `${relationCount}관계`}
-        </span>
+        <span>{relationCount}관계{filterSuffix}</span>
       </div>
     </div>
   );
@@ -143,7 +175,7 @@ GraphInfoBar.propTypes = {
 function GraphSidebar({
   activeTooltip,
   onClose,
-  chapterNum,
+  currentChapter,
   eventNum,
   filename,
   elements = [],
@@ -164,19 +196,18 @@ function GraphSidebar({
     right: isClosing || !isVisible ? `-${SIDEBAR_WIDTH}px` : '0px',
   }), [isClosing, isVisible]);
 
-  const runCloseAnimation = useCallback(() => {
-    if (animationTimeoutRef.current) {
-      clearTimeout(animationTimeoutRef.current);
-      animationTimeoutRef.current = null;
-    }
-    setIsClosing(true);
-    animationTimeoutRef.current = setTimeout(() => {
-      onClose();
-      setIsClosing(false);
-      setIsVisible(false);
-      animationTimeoutRef.current = null;
-    }, ANIMATION_DURATION);
+  const finishClose = useCallback(() => {
+    onClose();
+    setIsClosing(false);
+    setIsVisible(false);
+    animationTimeoutRef.current = null;
   }, [onClose]);
+
+  const runCloseAnimation = useCallback(() => {
+    clearTimeoutRef(animationTimeoutRef);
+    setIsClosing(true);
+    animationTimeoutRef.current = setTimeout(finishClose, ANIMATION_DURATION);
+  }, [finishClose]);
 
   const handleClose = useCallback(() => {
     onClearGraph?.();
@@ -188,31 +219,18 @@ function GraphSidebar({
     const prevActiveTooltip = previousActiveTooltipRef.current;
 
     if (activeTooltip && !prevActiveTooltip) {
-      if (animationTimeoutRef.current) {
-        clearTimeout(animationTimeoutRef.current);
-        animationTimeoutRef.current = null;
-      }
+      clearTimeoutRef(animationTimeoutRef);
       setIsClosing(false);
       setIsVisible(false);
-
       requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-          setIsVisible(true);
-        });
+        requestAnimationFrame(() => setIsVisible(true));
       });
-    }
-
-    if (!activeTooltip && prevActiveTooltip) {
-      setIsClosing(true);
-      animationTimeoutRef.current = setTimeout(() => {
-        onClose();
-        setIsClosing(false);
-        setIsVisible(false);
-      }, ANIMATION_DURATION);
+    } else if (!activeTooltip && prevActiveTooltip) {
+      runCloseAnimation();
     }
 
     previousActiveTooltipRef.current = activeTooltip;
-  }, [activeTooltip, onClose]);
+  }, [activeTooltip, runCloseAnimation]);
 
   useEffect(() => {
     if (isSidebarClosing && !isClosing) {
@@ -220,48 +238,45 @@ function GraphSidebar({
     }
   }, [isSidebarClosing, isClosing, runCloseAnimation]);
 
-  useEffect(() => () => {
-    if (animationTimeoutRef.current) {
-      clearTimeout(animationTimeoutRef.current);
-    }
-  }, []);
+  useEffect(() => () => clearTimeoutRef(animationTimeoutRef), []);
 
   if (!isVisible && !isClosing && !activeTooltip) {
     return null;
   }
 
-  if (!activeTooltip) {
-    return <div style={sidebarStyle} data-testid="graph-sidebar" />;
-  }
-
-  if (activeTooltip.type === 'node') {
-    return (
-      <div style={sidebarStyle} data-testid="graph-sidebar">
-        <UnifiedNodeInfo
-          displayMode="sidebar"
-          data={activeTooltip}
-          onClose={handleClose}
-          chapterNum={chapterNum}
-          eventNum={eventNum}
-          elements={elements}
-          filename={filename}
-          povSummaries={povSummaries}
-          apiBookGraphData={apiBookGraphData}
-        />
-      </div>
+  let tooltipContent = null;
+  if (activeTooltip?.type === 'node') {
+    tooltipContent = (
+      <UnifiedNodeInfo
+        displayMode="sidebar"
+        data={activeTooltip}
+        onClose={handleClose}
+        chapterNum={currentChapter}
+        eventNum={eventNum}
+        elements={elements}
+        filename={filename}
+        povSummaries={povSummaries}
+        apiBookGraphData={apiBookGraphData}
+      />
+    );
+  } else if (activeTooltip) {
+    tooltipContent = (
+      <UnifiedEdgeTooltip
+        data={activeTooltip.data}
+        onClose={handleClose}
+        chapterNum={currentChapter}
+        eventNum={eventNum}
+        variant="graphPage"
+        bookId={bookId}
+        sourceEndpoint={activeTooltip.sourceEndpoint}
+        targetEndpoint={activeTooltip.targetEndpoint}
+      />
     );
   }
 
   return (
     <div style={sidebarStyle} data-testid="graph-sidebar">
-      <UnifiedEdgeTooltip
-        data={activeTooltip.data}
-        onClose={handleClose}
-        chapterNum={chapterNum}
-        eventNum={eventNum}
-        variant="graphPage"
-        bookId={bookId}
-      />
+      {tooltipContent}
     </div>
   );
 }
@@ -270,7 +285,6 @@ function GraphCanvas({
   isSidebarOpen,
   activeTooltip,
   cyRef,
-  chapterNum,
   currentChapterTitle = '',
   userReadingChapterTitle = '',
   eventNum,
@@ -296,33 +310,24 @@ function GraphCanvas({
 }) {
   const { isSidebarClosing, onCloseSidebar, onStartClosing, onClearGraph } = sidebarControl;
   const { isSearchActive, filteredElements, searchTerm, fitNodeIds, isResetFromSearch } = searchState;
-  const { stylesheet, layout } = cytoscapeConfig;
-  const { onShowNodeTooltip, onShowEdgeTooltip, onClearTooltip, selectedNodeIdRef, selectedEdgeIdRef } = tooltipHandlers;
+  const { stylesheet } = cytoscapeConfig;
+  const {
+    onShowNodeTooltip,
+    onShowEdgeTooltip,
+    onClearTooltip,
+    selectedElementRef,
+  } = tooltipHandlers;
 
-  const sidebarLeft = resolveChapterSidebarWidth(isSidebarOpen);
+  const showSidebar = !!(activeTooltip || isSidebarClosing);
 
   return (
     <div
       style={{
-        position: 'fixed',
-        top: 0,
-        left: `${sidebarLeft}px`,
-        right: 0,
-        bottom: 0,
-        transition: `left ${ANIMATION_VALUES.DURATION.SLOW} ${ANIMATION_VALUES.EASE_OUT}`,
-        overflow: 'hidden',
-        display: 'flex',
-        flexDirection: 'column',
+        ...canvasShellStyle,
+        left: `${resolveChapterSidebarWidth(isSidebarOpen)}px`,
       }}
     >
-      <div
-        style={{
-          ...graphStyles.graphPageContainer,
-          display: 'flex',
-          flexDirection: 'column',
-          height: '100%',
-        }}
-      >
+      <div style={pageContainerStyle}>
         <GraphInfoBar
           currentChapter={currentChapter}
           currentChapterTitle={currentChapterTitle}
@@ -333,23 +338,15 @@ function GraphCanvas({
           filterStage={filterStage}
         />
 
-        <div
-          style={{
-            ...graphStyles.graphPageInner,
-            flex: 1,
-            display: 'flex',
-            flexDirection: 'column',
-            position: 'relative',
-          }}
-        >
-          {(activeTooltip || isSidebarClosing) && (
+        <div style={pageInnerStyle}>
+          {showSidebar && (
             <GraphSidebar
               activeTooltip={activeTooltip}
               onClose={onCloseSidebar}
               onStartClosing={onStartClosing}
               onClearGraph={onClearGraph}
               isSidebarClosing={isSidebarClosing}
-              chapterNum={chapterNum}
+              currentChapter={currentChapter}
               eventNum={eventNum}
               filename={filename}
               elements={elements}
@@ -364,19 +361,13 @@ function GraphCanvas({
             onClick={onCanvasClick}
             role="application"
             aria-label="관계 그래프 캔버스"
-            style={{
-              ...graphStyles.graphArea,
-              flex: 1,
-              minHeight: 0,
-              position: 'relative',
-            }}
+            style={canvasAreaStyle}
           >
             {isLoading && hasShownGraphOnce && <GraphLoadingOverlay />}
 
             <CytoscapeGraphUnified
               elements={renderElements}
               stylesheet={stylesheet}
-              layout={layout}
               cyRef={cyRef}
               fitNodeIds={fitNodeIds}
               searchTerm={searchTerm}
@@ -385,13 +376,12 @@ function GraphCanvas({
               onShowNodeTooltip={onShowNodeTooltip}
               onShowEdgeTooltip={onShowEdgeTooltip}
               onClearTooltip={onClearTooltip}
-              selectedNodeIdRef={selectedNodeIdRef}
-              selectedEdgeIdRef={selectedEdgeIdRef}
+              selectedElementRef={selectedElementRef}
               graphClearRef={graphClearRef}
-              strictBackgroundClear={true}
               isResetFromSearch={isResetFromSearch}
               isDataRefreshing={isLoading}
               currentChapter={currentChapter}
+              showRippleEffect
             />
           </div>
         </div>
@@ -404,7 +394,6 @@ GraphCanvas.propTypes = {
   isSidebarOpen: PropTypes.bool.isRequired,
   activeTooltip: PropTypes.object,
   cyRef: PropTypes.object.isRequired,
-  chapterNum: PropTypes.number.isRequired,
   currentChapterTitle: PropTypes.string,
   userReadingChapterTitle: PropTypes.string,
   eventNum: PropTypes.number.isRequired,

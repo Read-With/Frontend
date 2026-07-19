@@ -1,5 +1,4 @@
 import { extractCharacterId, isNodeWeightEntryVisible } from './characterUtils';
-import { normalizeRelation, isValidRelation, directedEdgeElementId, relationEventMetaPassthrough } from './relationUtils';
 import {
   isGraphEdgeElement,
   isGraphNodeElement,
@@ -7,9 +6,14 @@ import {
   sortElementsByDataId,
   undirectedPairKey,
   uniqueStrings,
+  normalizeRelation,
+  isValidRelation,
+  relationEventMetaPassthrough,
 } from './graphUtils';
 import { eventUtils } from '../viewer/viewerCoreStateUtils';
 import { toPositiveInt } from '../common/valueUtils';
+
+const directedEdgeElementId = (fromId, toId) => `${String(fromId)}->${String(toId)}`;
 
 function mergeEdgeLabels(a, b) {
   const t1 = String(a ?? '').trim();
@@ -674,14 +678,6 @@ export function detectAndResolveOverlap(cy, nodeSize = 40) {
         // 위치 캐시 업데이트
         nodePositions[i].pos = { x: newX1, y: newY1 };
         nodePositions[j].pos = { x: newX2, y: newY2 };
-        
-        node1.addClass('bounce-effect');
-        node2.addClass('bounce-effect');
-        
-        setTimeout(() => {
-          if (node1 && node1.removeClass) node1.removeClass('bounce-effect');
-          if (node2 && node2.removeClass) node2.removeClass('bounce-effect');
-        }, 300);
       }
     }
   }

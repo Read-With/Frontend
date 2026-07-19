@@ -7,7 +7,7 @@ import {
   setProgressToCache,
   getCachedReaderProgress,
   setCachedReaderProgress,
-} from '../../utils/common/cache/progressCache';
+} from '../../utils/common/cache/manifestCache';
 import { errorUtils } from '../../utils/common/errorUtils';
 import { saveProgress, saveProgressKeepalive } from '../../utils/api/api';
 import {
@@ -18,6 +18,7 @@ import {
 } from '../../utils/viewer/viewerEventProgressUtils';
 
 const AUTO_SAVE_DELAY_MS = 2000;
+const LOG_PREFIX = '[useProgressAutoSave]';
 
 function payloadFingerprint(payload) {
   return payload ? JSON.stringify(payload) : null;
@@ -25,6 +26,15 @@ function payloadFingerprint(payload) {
 
 function flushResult(extra = {}) {
   return { isSuccess: true, ...extra };
+}
+
+function settle(resolve, result) {
+  resolve?.(result);
+  return result;
+}
+
+function logWarn(message, detail) {
+  errorUtils.logWarning(`${LOG_PREFIX} ${message}`, detail);
 }
 
 /** pagehide / beforeunload / visibility hidden 공통 구독 */
@@ -61,10 +71,7 @@ export function useProgressAutoSave({
     try {
       setCachedLocation(getCachedReaderProgress(bookId));
     } catch (error) {
-      errorUtils.logWarning(
-        '[useProgressAutoSave] 캐시된 위치 정보를 불러오는데 실패했습니다',
-        error.message
-      );
+      logWarn('캐시된 위치 정보를 불러오는데 실패했습니다', error.message);
       setCachedLocation(null);
     }
   }, [bookId]);
@@ -76,10 +83,7 @@ export function useProgressAutoSave({
       if (stored) setCachedLocation(stored);
       return stored;
     } catch (error) {
-      errorUtils.logWarning(
-        '[useProgressAutoSave] 캐시된 위치 정보를 저장하는데 실패했습니다',
-        error.message
-      );
+      logWarn('캐시된 위치 정보를 저장하는데 실패했습니다', error.message);
       return null;
     }
   }, [bookId]);
@@ -93,26 +97,7 @@ export function useProgressAutoSave({
   const prevMetricsReadyRef = useRef(metricsReady);
   const prevBookIdRef = useRef(null);
   const flushChainRef = useRef(Promise.resolve());
-  const runFlushRef = useRef(null);
-  const refreshLatestPayloadRef = useRef(null);
-
-  // effect/flush/unmount에서 최신 props를 읽기 위한 미러 (stale closure 방지)
-  const liveRef = useRef({
-    getCurrentLocator,
-    saveLocation,
-    currentEvent,
-    bookId,
-    metricsReady,
-    canPersist,
-  });
-  liveRef.current = {
-    getCurrentLocator,
-    saveLocation,
-    currentEvent,
-    bookId,
-    metricsReady,
-    canPersist,
-  };
+  const liveRef = useRef({});
 
   const refreshLatestPayload = useCallback(() => {
     const { bookId: id, getCurrentLocator: getLocator, currentEvent: event, metricsReady: ready } =
@@ -146,27 +131,19 @@ export function useProgressAutoSave({
     flushChainRef.current = Promise.resolve();
   }, []);
 
-  const commitLocalCaches = useCallback((payload, locationPayload) => {
-    if (locationPayload) {
-      liveRef.current.saveLocation?.(locationPayload);
-    }
+  const applyLocalCaches = useCallback((payload, locationPayload) => {
+    if (locationPayload) liveRef.current.saveLocation?.(locationPayload);
     setProgressToCache(payload);
   }, []);
 
   const runFlushOnce = useCallback(async (resolve) => {
     const payload = latestPayloadRef.current;
     const id = liveRef.current.bookId;
-    if (!payload) {
-      const skipped = flushResult({ skipped: true });
-      resolve?.(skipped);
-      return skipped;
-    }
+    if (!payload) return settle(resolve, flushResult({ skipped: true }));
 
     const payloadKey = payloadFingerprint(payload);
     if (lastPayloadRef.current === payloadKey) {
-      const deduped = flushResult({ deduped: true });
-      resolve?.(deduped);
-      return deduped;
+      return settle(resolve, flushResult({ deduped: true }));
     }
 
     const prevCached = id ? getProgressFromCache(id) : null;
@@ -179,30 +156,22 @@ export function useProgressAutoSave({
         throw new Error(res?.message || '진도 저장 응답 실패');
       }
 
-      if (locationPayload) {
-        liveRef.current.saveLocation?.(locationPayload);
-      }
+      if (locationPayload) liveRef.current.saveLocation?.(locationPayload);
       lastPayloadRef.current = payloadKey;
 
       const latestKey = payloadFingerprint(latestPayloadRef.current);
       if (latestKey && latestKey !== payloadKey) {
-        queueMicrotask(() => runFlushRef.current?.());
+        queueMicrotask(() => liveRef.current.runFlush?.());
       }
 
-      resolve?.(res);
-      return res;
+      return settle(resolve, res);
     } catch (err) {
       if (id) {
         if (prevCached) setProgressToCache(prevCached);
         else removeProgressFromCache(id);
       }
-      errorUtils.logWarning(
-        '[useProgressAutoSave] 서버 저장 실패',
-        err?.message ?? (typeof err === 'string' ? err : '')
-      );
-      const failure = { isSuccess: false, message: err?.message };
-      resolve?.(failure);
-      return failure;
+      logWarn('서버 저장 실패', err?.message ?? (typeof err === 'string' ? err : ''));
+      return settle(resolve, { isSuccess: false, message: err?.message });
     }
   }, []);
 
@@ -212,17 +181,23 @@ export function useProgressAutoSave({
       .then(() => runFlushOnce(resolve));
   }, [runFlushOnce]);
 
-  runFlushRef.current = runFlush;
-  refreshLatestPayloadRef.current = refreshLatestPayload;
+  liveRef.current = {
+    getCurrentLocator,
+    saveLocation,
+    currentEvent,
+    bookId,
+    metricsReady,
+    canPersist,
+    refreshLatestPayload,
+    runFlush,
+  };
 
   const flushProgressAsync = useCallback(() => {
     if (!liveRef.current.canPersist) {
       return Promise.resolve(flushResult({ skipped: true }));
     }
     refreshLatestPayload();
-    return new Promise((resolve) => {
-      runFlush(resolve);
-    });
+    return new Promise((resolve) => runFlush(resolve));
   }, [refreshLatestPayload, runFlush]);
 
   useEffect(() => {
@@ -275,15 +250,12 @@ export function useProgressAutoSave({
       if (!payload) return;
 
       pagehideFlushedRef.current = true;
-      commitLocalCaches(payload, latestLocationPayloadRef.current);
+      applyLocalCaches(payload, latestLocationPayloadRef.current);
       const ok = saveProgressKeepalive(payload);
       if (ok) {
         lastPayloadRef.current = payloadFingerprint(payload);
       } else {
-        errorUtils.logWarning(
-          '[useProgressAutoSave] keepalive 저장 요청 생성 실패',
-          String(liveRef.current.bookId ?? '')
-        );
+        logWarn('keepalive 저장 요청 생성 실패', String(liveRef.current.bookId ?? ''));
       }
     };
 
@@ -292,13 +264,13 @@ export function useProgressAutoSave({
       unsubscribe();
       pagehideFlushedRef.current = false;
     };
-  }, [refreshLatestPayload, commitLocalCaches]);
+  }, [refreshLatestPayload, applyLocalCaches]);
 
   useEffect(() => {
     return () => {
       if (!liveRef.current.canPersist) return;
-      refreshLatestPayloadRef.current?.();
-      runFlushRef.current?.();
+      liveRef.current.refreshLatestPayload?.();
+      liveRef.current.runFlush?.();
     };
   }, []);
 

@@ -1,73 +1,55 @@
 /** Cytoscape 탭·드래그·선택 하이라이트 */
 
 import { useCallback, useMemo } from "react";
-import { getContainerInfo, calculateCytoscapePosition, clearHighlightClassesOn } from '../../utils/graph/graphUtils';
+import {
+  clearHighlightClassesOn,
+  clearReciprocalEndpointBypass,
+  fitGraphToNodes,
+  getSelectionFocusElements,
+  placeTooltipInCanvasAwayFromFocus,
+} from '../../utils/graph/graphUtils';
 import { useLatestRef } from '../common/hooksShared';
 
-function applyNodeClickHighlight(cy, node) {
-  if (!cy || !node || node.length === 0) return;
-  try {
-    clearHighlightClassesOn(cy);
-    const nodeId = String(node.id());
-    const connectedEdges = node.connectedEdges();
-    const directEdges = connectedEdges.filter((edge) => {
-      const sourceId = String(edge.source().id());
-      const targetId = String(edge.target().id());
-
-      if (sourceId === nodeId) return true;
-
-      if (targetId === nodeId) {
-        const hasReverseOutgoing = connectedEdges.some((candidate) => {
-          const candidateSourceId = String(candidate.source().id());
-          const candidateTargetId = String(candidate.target().id());
-          return candidateSourceId === nodeId && candidateTargetId === sourceId;
-        });
-        return !hasReverseOutgoing;
-      }
-
-      return false;
-    });
-    const keepNodes = node.union(directEdges.connectedNodes());
-    applySelectionFade(cy, keepNodes, directEdges, node, directEdges);
-  } catch {
-    /* ignore */
-  }
+function isCyNode(element) {
+  return typeof element?.isNode === 'function' ? element.isNode() : false;
 }
 
-function applyEdgeClickHighlight(cy, edge) {
-  if (!cy || !edge || edge.length === 0) return;
-  try {
-    clearHighlightClassesOn(cy);
-    const endpoints = edge.source().union(edge.target());
-    applySelectionFade(cy, endpoints, edge, endpoints, edge);
-  } catch {
-    /* ignore */
-  }
+function isFinitePoint(point) {
+  return (
+    point &&
+    typeof point.x === 'number' &&
+    typeof point.y === 'number' &&
+    Number.isFinite(point.x) &&
+    Number.isFinite(point.y)
+  );
 }
 
-function applySelectionFade(cy, keepNodes, keepEdges, highlightedNodes, highlightedEdges) {
+function applySelectionFade(cy, keepNodes, keepEdges, highlightedNodes = keepNodes, highlightedEdges = keepEdges) {
   if (!cy) return;
-  const allNodes = cy.nodes();
-  const allEdges = cy.edges();
+  clearHighlightClassesOn(cy);
   const fadedNodes = cy.nodes().difference(keepNodes);
   const fadedEdges = cy.edges().difference(keepEdges);
   cy.batch(() => {
-    allNodes.removeClass("highlighted faded");
-    allEdges.removeClass("highlighted faded");
-    allNodes.forEach((n) => {
-      n.removeStyle("opacity");
-      n.removeStyle("text-opacity");
-    });
-    allEdges.forEach((e) => {
-      e.removeStyle("opacity");
-    });
-
     highlightedNodes.addClass("highlighted");
     highlightedEdges.addClass("highlighted");
-
     fadedNodes.addClass("faded");
     fadedEdges.addClass("faded");
+    highlightedEdges.forEach((edge) => {
+      if (edge.data("reciprocalPair")) clearReciprocalEndpointBypass(edge);
+    });
   });
+}
+
+function applySelectionHighlight(cy, element) {
+  if (!cy || !element || element.length === 0) return;
+  const focus = getSelectionFocusElements(cy, element);
+  if (!focus?.length) return;
+
+  if (isCyNode(element)) {
+    applySelectionFade(cy, focus.nodes(), focus.edges(), element, focus.edges());
+    return;
+  }
+  applySelectionFade(cy, focus.nodes(), focus.edges());
 }
 
 function formatTapShowArgs(kind, element, evt, center, mouseX, mouseY) {
@@ -77,14 +59,62 @@ function formatTapShowArgs(kind, element, evt, center, mouseX, mouseY) {
   return { edge: element, evt, edgeCenter: center, mouseX, mouseY };
 }
 
-export default function useGraphInteractions({
+function getEdgeRenderedCenter(element) {
+  try {
+    const midpoint = typeof element.midpoint === 'function' ? element.midpoint() : null;
+    if (isFinitePoint(midpoint)) return midpoint;
+  } catch {
+    /* fall through */
+  }
+
+  const source = element.source?.();
+  const target = element.target?.();
+  if (!source?.length || !target?.length) return null;
+
+  const sourcePos = source.renderedPosition();
+  const targetPos = target.renderedPosition();
+  if (!isFinitePoint(sourcePos) || !isFinitePoint(targetPos)) return null;
+
+  return {
+    x: (sourcePos.x + targetPos.x) / 2,
+    y: (sourcePos.y + targetPos.y) / 2,
+  };
+}
+
+function getCyContainerOrigin(cy) {
+  try {
+    const cyRect = cy.container()?.getBoundingClientRect?.();
+    if (cyRect) return { left: cyRect.left, top: cyRect.top };
+  } catch {
+    /* ignore */
+  }
+  return { left: 0, top: 0 };
+}
+
+/**
+ * 노드: 클릭/렌더 좌표 + bbox offset (사이드바와 겹침 완화)
+ * 엣지: focus 집합 기준 캔버스 내 배치
+ */
+function resolveTooltipAnchor(cy, kind, element, evt, calculateTooltipPosition) {
+  if (kind === 'edge') {
+    const focus = getSelectionFocusElements(cy, element);
+    return placeTooltipInCanvasAwayFromFocus({ cy, focusEles: focus });
+  }
+  const bbox = element.renderedBoundingBox?.();
+  const offsetX = (bbox?.w ?? 50) + 200;
+  return calculateTooltipPosition(element, evt, offsetX);
+}
+
+/**
+ * @param {object} options
+ * @param {{ current: null | { kind: 'node'|'edge', id: string } }} options.selectedElementRef
+ */
+export function useGraphInteractions({
   cyRef,
   onShowNodeTooltip,
   onShowEdgeTooltip,
   onClearTooltip,
-  selectedNodeIdRef,
-  selectedEdgeIdRef,
-  strictBackgroundClear = false,
+  selectedElementRef,
   onAfterReset,
 }) {
   const onShowNodeTooltipRef = useLatestRef(onShowNodeTooltip);
@@ -93,167 +123,131 @@ export default function useGraphInteractions({
   const onAfterResetRef = useLatestRef(onAfterReset);
 
   const clearSelectionRefs = useCallback(() => {
-    if (selectedNodeIdRef) selectedNodeIdRef.current = null;
-    if (selectedEdgeIdRef) selectedEdgeIdRef.current = null;
-  }, [selectedNodeIdRef, selectedEdgeIdRef]);
+    if (selectedElementRef) selectedElementRef.current = null;
+  }, [selectedElementRef]);
 
   const resetAllStyles = useCallback(() => {
     if (!cyRef?.current) return;
     clearHighlightClassesOn(cyRef.current);
     onAfterResetRef.current?.();
-  }, [cyRef]);
+  }, [cyRef, onAfterResetRef]);
+
+  const dismissSelection = useCallback(() => {
+    resetAllStyles();
+    onClearTooltipRef.current?.();
+    clearSelectionRefs();
+  }, [resetAllStyles, clearSelectionRefs, onClearTooltipRef]);
+
+  const reapplySelectionHighlight = useCallback(() => {
+    const cy = cyRef?.current;
+    const selected = selectedElementRef?.current;
+    if (!cy || !selected?.id) return;
+
+    const el = cy.getElementById(String(selected.id));
+    if (el.length > 0) applySelectionHighlight(cy, el);
+  }, [cyRef, selectedElementRef]);
 
   const calculateTooltipPosition = useCallback((element, evt, offset = 0) => {
     try {
-      if (!cyRef?.current) return { x: 0, y: 0 };
-
-      const { containerRect } = getContainerInfo();
+      const cy = cyRef?.current;
+      if (!cy) return { x: 0, y: 0 };
 
       if (evt?.originalEvent) {
-        let domX = evt.originalEvent.clientX - containerRect.left;
-        let domY = evt.originalEvent.clientY - containerRect.top;
-        if (offset !== 0) domX += offset;
-        return { x: domX, y: domY };
+        return {
+          x: evt.originalEvent.clientX + offset,
+          y: evt.originalEvent.clientY,
+        };
       }
 
-      const isNode = typeof element.renderedPosition === 'function';
-      let basePos;
-      if (isNode) {
-        const rendered = element.renderedPosition();
-        if (rendered && typeof rendered.x === 'number' && typeof rendered.y === 'number') {
-          basePos = rendered;
-        } else {
-          const pos = element.position();
-          basePos = pos && typeof pos.x === 'number' && typeof pos.y === 'number' ? pos : { x: 0, y: 0 };
-        }
-      } else {
-        try {
-          const midpoint = element.midpoint();
-          if (midpoint && typeof midpoint.x === 'number' && typeof midpoint.y === 'number') {
-            basePos = midpoint;
-          } else {
-            const source = element.source();
-            const target = element.target();
-            if (source && target) {
-              const sourcePos = source.renderedPosition ? source.renderedPosition() : source.position();
-              const targetPos = target.renderedPosition ? target.renderedPosition() : target.position();
-              if (sourcePos && targetPos &&
-                  typeof sourcePos.x === 'number' && typeof sourcePos.y === 'number' &&
-                  typeof targetPos.x === 'number' && typeof targetPos.y === 'number') {
-                basePos = {
-                  x: (sourcePos.x + targetPos.x) / 2,
-                  y: (sourcePos.y + targetPos.y) / 2
-                };
-              } else {
-                basePos = { x: 0, y: 0 };
-              }
-            } else {
-              basePos = { x: 0, y: 0 };
-            }
-          }
-        } catch {
-          basePos = { x: 0, y: 0 };
-        }
-      }
+      const basePos = isCyNode(element)
+        ? element.renderedPosition()
+        : getEdgeRenderedCenter(element);
+      if (!isFinitePoint(basePos)) return { x: 0, y: 0 };
 
-      if (!basePos || typeof basePos.x !== 'number' || typeof basePos.y !== 'number') {
-        return { x: 0, y: 0 };
-      }
-
-      const position = calculateCytoscapePosition(basePos, cyRef);
-      let domX = position.x - containerRect.left;
-      let domY = position.y - containerRect.top;
-      if (offset !== 0) domX += offset;
-
-      return { x: domX, y: domY };
+      const { left, top } = getCyContainerOrigin(cy);
+      return {
+        x: left + basePos.x + offset,
+        y: top + basePos.y,
+      };
     } catch {
       return { x: 0, y: 0 };
     }
   }, [cyRef]);
 
-  const createTapHandler = useCallback((kind) => {
-    const isNode = kind === 'node';
-    const applyHighlight = isNode ? applyNodeClickHighlight : applyEdgeClickHighlight;
-    const selectedIdRef = isNode ? selectedNodeIdRef : selectedEdgeIdRef;
-    const peerSelectedIdRef = isNode ? selectedEdgeIdRef : selectedNodeIdRef;
-    const onShowTooltipRef = isNode ? onShowNodeTooltipRef : onShowEdgeTooltipRef;
+  const selectElement = useCallback((kind, element) => {
+    const cy = cyRef?.current;
+    if (!cy) return false;
+    try {
+      applySelectionHighlight(cy, element);
+    } catch {
+      return false;
+    }
+    if (selectedElementRef) {
+      selectedElementRef.current = { kind, id: String(element.id()) };
+    }
+    return true;
+  }, [cyRef, selectedElementRef]);
 
-    return (evt) => {
-      try {
-        if (!cyRef?.current) return;
+  const showElementTooltip = useCallback((kind, element, evt) => {
+    const cy = cyRef?.current;
+    if (!cy) return;
+    const onShowTooltipRef = kind === 'node' ? onShowNodeTooltipRef : onShowEdgeTooltipRef;
+    const center = calculateTooltipPosition(element, null, 0);
+    const anchor = resolveTooltipAnchor(cy, kind, element, evt, calculateTooltipPosition);
+    onShowTooltipRef.current?.(
+      formatTapShowArgs(kind, element, evt, center, anchor.x, anchor.y),
+    );
+  }, [cyRef, onShowNodeTooltipRef, onShowEdgeTooltipRef, calculateTooltipPosition]);
 
-        const element = evt.target;
-        const elementData = element?.data?.();
-        if (!element || !elementData) return;
+  const createTapHandler = useCallback((kind) => (evt) => {
+    if (!cyRef?.current) return;
 
-        const elementId = element.id();
-        if (selectedIdRef?.current === elementId) {
-          resetAllStyles();
-          onClearTooltipRef.current?.();
-          clearSelectionRefs();
-          return;
-        }
+    const element = evt.target;
+    if (!element || typeof element.data !== 'function' || !element.data()) return;
 
-        applyHighlight(cyRef.current, element);
+    const elementId = String(element.id());
+    const prev = selectedElementRef?.current;
+    if (prev?.kind === kind && String(prev.id) === elementId) {
+      dismissSelection();
+      return;
+    }
 
-        const bbox = element.renderedBoundingBox?.();
-        const offsetX = (bbox?.w ?? 50) + 200;
-        const { x: mouseX, y: mouseY } = calculateTooltipPosition(element, evt, offsetX);
-        const center = calculateTooltipPosition(element, null, 0);
+    if (!selectElement(kind, element)) return;
 
-        onShowTooltipRef.current?.(
-          formatTapShowArgs(kind, element, evt, center, mouseX, mouseY),
-        );
-
-        if (selectedIdRef) selectedIdRef.current = elementId;
-        if (peerSelectedIdRef) peerSelectedIdRef.current = null;
-      } catch {
-        /* ignore */
-      }
-    };
-  }, [
-    cyRef,
-    selectedNodeIdRef,
-    selectedEdgeIdRef,
-    onShowNodeTooltipRef,
-    onShowEdgeTooltipRef,
-    onClearTooltipRef,
-    calculateTooltipPosition,
-    resetAllStyles,
-    clearSelectionRefs,
-  ]);
+    try {
+      showElementTooltip(kind, element, evt);
+    } catch {
+      /* focus는 유지, 툴팁만 실패 */
+    }
+  }, [cyRef, selectedElementRef, dismissSelection, selectElement, showElementTooltip]);
 
   const tapNodeHandler = useMemo(() => createTapHandler('node'), [createTapHandler]);
   const tapEdgeHandler = useMemo(() => createTapHandler('edge'), [createTapHandler]);
 
   const tapBackgroundHandler = useCallback((evt) => {
-    try {
-      if (evt.target !== cyRef?.current) return;
-      if (strictBackgroundClear) {
-        const hasSelection = !!(selectedNodeIdRef?.current || selectedEdgeIdRef?.current);
-        if (!hasSelection) return;
-      }
-      resetAllStyles();
-      onClearTooltipRef.current?.();
-      clearSelectionRefs();
-    } catch {
-      /* ignore */
-    }
-  }, [cyRef, strictBackgroundClear, selectedNodeIdRef, selectedEdgeIdRef, resetAllStyles, clearSelectionRefs, onClearTooltipRef]);
+    if (evt.target !== cyRef?.current) return;
+    if (!selectedElementRef?.current) return;
+    dismissSelection();
+  }, [cyRef, selectedElementRef, dismissSelection]);
 
-  const clearSelection = useCallback(() => {
-    try {
-      resetAllStyles();
-      clearSelectionRefs();
-    } catch {
-      /* ignore */
-    }
-  }, [resetAllStyles, clearSelectionRefs]);
+  /**
+   * @param {{ fitViewport?: boolean }} [options]
+   * fitViewport 기본 true — 챕터/이벤트 전환 등에서는 false
+   */
+  const clearSelection = useCallback((options = {}) => {
+    const fitViewport = options?.fitViewport !== false;
+    resetAllStyles();
+    clearSelectionRefs();
+    if (fitViewport) fitGraphToNodes(cyRef?.current, { duration: 500 });
+  }, [cyRef, resetAllStyles, clearSelectionRefs]);
 
   return {
     tapNodeHandler,
     tapEdgeHandler,
     tapBackgroundHandler,
     clearSelection,
+    reapplySelectionHighlight,
   };
 }
+
+export default useGraphInteractions;

@@ -9,8 +9,7 @@ import {
   useMemo,
 } from 'react';
 import { flushSync } from 'react-dom';
-import { loadCombinedXhtml } from '../../../utils/normalizedContent/combinedXhtmlLoader';
-import { defaultSettings } from '../../../utils/common/settingsUtils';
+import { defaultSettings, errorUtils } from '../../../utils/common/errorUtils';
 import {
   absoluteOffsetFromReadingProgressPercent,
   locatorFromBookAbsoluteOffset,
@@ -19,16 +18,16 @@ import {
 import {
   toReadingLocatorKey,
 } from '../../../utils/viewer/viewerEventProgressUtils';
-import { errorUtils } from '../../../utils/common/errorUtils';
 import {
   loadCachedXhtmlContent,
   XHTML_CACHE_INVALIDATED_EVENT,
-} from '../../../utils/viewer/xhtmlLoadCache';
+} from '../../../utils/common/cache/cacheManager';
 import { resolveViewerBookKey, resolveServerBookIdOrFallback } from '../../../hooks/common/hooksShared';
 import {
   collectBlockEntries,
   computeLineBoundsFromRuler,
   contentPaddingFromMargin,
+  loadCombinedXhtml,
   normalizeLocatorTarget,
   parseXhtmlBody,
   resolvePageIndexFromLocator,

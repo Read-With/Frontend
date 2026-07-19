@@ -1,4 +1,4 @@
-/** 뷰어 URL: `/user/viewer/:id/c/:chapter/p/:page` 경로 동기화 */
+/** ?? URL: `/user/viewer/:id/c/:chapter/p/:page` ?? ??? */
 
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
@@ -6,7 +6,7 @@ import {
   parseViewerReaderSplat,
   resolveViewerReadingPosition,
   userViewerReadingPath,
-} from '../../utils/navigation/viewerPaths';
+} from '../../utils/common/urlUtils';
 
 export function useViewerUrlParams(options = {}) {
   const { skipHistoryMutationsRef, urlSyncEnabled = true } = options;
@@ -28,7 +28,7 @@ export function useViewerUrlParams(options = {}) {
     positionRef.current = { chapter: currentChapter, page: currentPage };
   }, [currentChapter, currentPage]);
 
-  // URL(splat) → 로컬 chapter/page. 내부 navigate로 바뀐 URL은 한 번 무시
+  // URL(splat) ? ?? chapter/page. ?? navigate? ?? URL? ? ? ??
   useEffect(() => {
     if (!filename) return;
 
@@ -56,7 +56,7 @@ export function useViewerUrlParams(options = {}) {
     return userViewerReadingPath(filename, currentChapter, currentPage);
   }, [filename, currentChapter, currentPage]);
 
-  // 로컬 chapter/page → URL (replace). resume 완료 전·mypage 퇴장 등은 차단
+  // ?? chapter/page ? URL (replace). resume ?? ?�mypage ?? ?? ??
   useEffect(() => {
     if (!targetReadingPath || !filename) return;
     if (!urlSyncEnabled) return;

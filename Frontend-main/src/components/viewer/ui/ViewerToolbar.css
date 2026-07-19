@@ -29,3 +29,63 @@
   outline: 2px solid #3b82f6;
   outline-offset: 2px;
 }
+
+/* 진행률 슬라이더 */
+.progressbar-slider {
+  outline: none;
+}
+.progressbar-slider:focus {
+  outline: none;
+}
+.progressbar-slider::-webkit-slider-runnable-track {
+  height: 6px;
+  border-radius: 8px;
+  background: #e7eaf7;
+}
+.progressbar-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #fff;
+  border: 2.5px solid #5C6F5C;
+  box-shadow: 0 2px 8px rgba(92, 111, 92, 0.13);
+  margin-top: -4px;
+  transition: border 0.18s, box-shadow 0.18s;
+}
+.progressbar-slider:focus::-webkit-slider-thumb {
+  border: 2.5px solid #22336b;
+  box-shadow: 0 0 0 4px #bfc8e6;
+}
+.progressbar-slider::-moz-range-thumb {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #fff;
+  border: 2.5px solid #5C6F5C;
+  box-shadow: 0 2px 8px rgba(92, 111, 92, 0.13);
+  transition: border 0.18s, box-shadow 0.18s;
+}
+.progressbar-slider:focus::-moz-range-thumb {
+  border: 2.5px solid #22336b;
+  box-shadow: 0 0 0 4px #bfc8e6;
+}
+.progressbar-slider::-ms-thumb {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #fff;
+  border: 2.5px solid #5C6F5C;
+  box-shadow: 0 2px 8px rgba(92, 111, 92, 0.13);
+  transition: border 0.18s, box-shadow 0.18s;
+}
+.progressbar-slider:focus::-ms-thumb {
+  border: 2.5px solid #22336b;
+  box-shadow: 0 0 0 4px #bfc8e6;
+}
+.progressbar-slider::-ms-fill-lower,
+.progressbar-slider::-ms-fill-upper {
+  background: #e7eaf7;
+  border-radius: 8px;
+}

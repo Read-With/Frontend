@@ -7,13 +7,12 @@ import { getBook, getBooks, toggleBookFavorite } from '../../utils/api/booksApi'
 import { getBookManifest } from '../../utils/api/api';
 import { normalizeTitle, normalizeAuthor } from '../../utils/common/valueUtils';
 import { errorUtils } from '../../utils/common/errorUtils';
-import { prefetchManifest } from '../../utils/common/cache/manifestCache';
+import { prefetchManifest, PROGRESS_CACHE_UPDATED_EVENT } from '../../utils/common/cache/manifestCache';
 import { readBooksCache, writeBooksCache } from '../../utils/common/cache/cacheManager';
-import { PROGRESS_CACHE_UPDATED_EVENT } from '../../utils/common/cache/progressCache';
 import { resolveLibraryReadingProgressPercent } from '../../utils/library/libraryUtils';
 import { getStoredAccessToken } from '../../utils/security/authTokenStorage';
 import { ensureSessionAccessToken } from '../../utils/api/authApi';
-import { userViewerPath } from '../../utils/navigation/viewerPaths';
+import { userViewerPath } from '../../utils/common/urlUtils';
 
 export const BOOKS_QUERY_KEY = ['books', 'server'];
 

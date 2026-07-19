@@ -1,14 +1,75 @@
 import {
   collectSanitizedStyleCssFromDocument,
   sanitizeXhtmlBodyHtml,
-} from './sanitizeXhtml';
+} from '../common/cache/cacheManager';
 import {
   getChapterDataFromManifest,
   getEffectiveChapterLengthForProgress,
   locatorFromChapterLocalOffset,
   chapterLocalOffsetFromLocator,
+  getManifestFromCache,
 } from '../common/cache/manifestCache';
 import { resolveChapterIndex } from '../common/valueUtils';
+import { errorUtils } from '../common/errorUtils';
+import { resolveApiArtifactUrl } from '../common/urlUtils';
+import { authenticatedFetch } from '../api/authApi';
+import { getBookManifest } from '../api/api';
+
+const XHTML_NOT_FOUND_MESSAGE =
+  '정규화 본문을 찾을 수 없습니다. 잠시 후 다시 시도하거나 재정규화가 필요할 수 있습니다.';
+
+function getCombinedXhtmlFetchUrl(bookId) {
+  const path = getManifestFromCache(bookId)?.readerArtifacts?.combinedXhtmlPath;
+  return path ? resolveApiArtifactUrl(path) : '';
+}
+
+async function fetchCombinedXhtmlText(url) {
+  const res = await authenticatedFetch(url);
+  if (!res.ok) {
+    const err = new Error(
+      res.status === 404 ? XHTML_NOT_FOUND_MESSAGE : `HTTP ${res.status}`
+    );
+    err.status = res.status;
+    throw err;
+  }
+  return (await res.text()).trim();
+}
+
+/** manifest combinedXhtmlPath → API/CDN 경유 fetch로 본문 로드 */
+export async function loadCombinedXhtml(bookId) {
+  if (bookId == null || String(bookId).trim() === '') {
+    const message = '책 ID가 없습니다.';
+    errorUtils.logError('loadCombinedXhtml', new Error(message), { bookId });
+    throw new Error(message);
+  }
+
+  const url = getCombinedXhtmlFetchUrl(bookId);
+  if (typeof url === 'string' && url.trim()) {
+    try {
+      return await fetchCombinedXhtmlText(url);
+    } catch (e) {
+      if (e?.status !== 404) {
+        errorUtils.logError('loadCombinedXhtml', e, { url, bookId });
+        throw e;
+      }
+      try {
+        await getBookManifest(bookId, { forceRefresh: true });
+        const retryUrl = getCombinedXhtmlFetchUrl(bookId);
+        if (!retryUrl.trim()) throw e;
+        return await fetchCombinedXhtmlText(retryUrl);
+      } catch (retryErr) {
+        if (retryErr?.status !== 404) {
+          errorUtils.logError('loadCombinedXhtml', retryErr, { url, bookId, retried: true });
+        }
+        throw retryErr;
+      }
+    }
+  }
+
+  const message = 'combined.xhtml URL을 찾을 수 없습니다. 서버 아티팩트 경로를 확인해주세요.';
+  errorUtils.logError('loadCombinedXhtml', new Error(message), { bookId });
+  throw new Error(message);
+}
 
 function clamp01(n) {
   return Math.min(1, Math.max(0, Number(n) || 0));
@@ -67,20 +128,28 @@ function shouldEncodePageInBlockIndex(el, rulerRoot, totalPages, pageHeightPx) {
   return el.offsetHeight > pageHeightPx * 1.12;
 }
 
-/** data-block-index 없으면 챕터별 문서 순서로 blockIndex 합성 */
+/** 모든 챕터 마커 포함. block-index 없으면 챕터별 순서로 합성(기존 attr과 충돌 없게 max+1부터) */
 export function collectBlockEntries(root) {
   if (!root?.querySelectorAll) return [];
-  const withBlock = Array.from(root.querySelectorAll('[data-chapter-index][data-block-index]'));
-  if (withBlock.length > 0) {
-    return withBlock.map((el) => ({ el, syntheticBlock: null }));
-  }
-  const chapterOnly = Array.from(root.querySelectorAll('[data-chapter-index]'));
-  if (chapterOnly.length === 0) return [];
-  const perChapter = new Map();
-  return chapterOnly.map((el) => {
+  const chapterEls = Array.from(root.querySelectorAll('[data-chapter-index]'));
+  if (!chapterEls.length) return [];
+
+  const nextSynthetic = new Map();
+  for (const el of chapterEls) {
+    if (!hasBlockIndexAttr(el)) continue;
     const ch = Number(el.getAttribute('data-chapter-index'));
-    const next = perChapter.get(ch) ?? 0;
-    perChapter.set(ch, next + 1);
+    const bi = Number(el.getAttribute('data-block-index'));
+    if (!Number.isFinite(ch) || !Number.isFinite(bi)) continue;
+    nextSynthetic.set(ch, Math.max(nextSynthetic.get(ch) ?? 0, bi + 1));
+  }
+
+  return chapterEls.map((el) => {
+    if (hasBlockIndexAttr(el)) {
+      return { el, syntheticBlock: null };
+    }
+    const ch = Number(el.getAttribute('data-chapter-index'));
+    const next = nextSynthetic.get(ch) ?? 0;
+    nextSynthetic.set(ch, next + 1);
     return { el, syntheticBlock: next };
   });
 }
@@ -89,9 +158,8 @@ function getBlockLocator(el, offset = 0, syntheticBlock = null) {
   const ci = el.getAttribute('data-chapter-index');
   if (ci == null || !Number.isFinite(Number(ci))) return null;
 
-  const rawBi = el.getAttribute('data-block-index');
   let blockIndex = 0;
-  if (rawBi != null && rawBi !== '') blockIndex = Number(rawBi);
+  if (hasBlockIndexAttr(el)) blockIndex = Number(el.getAttribute('data-block-index'));
   else if (syntheticBlock != null) blockIndex = syntheticBlock;
   if (!Number.isFinite(blockIndex)) blockIndex = 0;
 
@@ -166,13 +234,8 @@ function createFallbackLocator(chapterIndex, offset = 0) {
 }
 
 function resolveChapterCodePointLength(manifest, chapterIndex) {
-  const ch = Number(chapterIndex);
-  if (!Number.isFinite(ch) || ch < 1) return 0;
-
-  const mHit = (Array.isArray(manifest?.chapters) ? manifest.chapters : []).find(
-    (row) => resolveChapterIndex(row) === ch
-  );
-  return mHit ? getEffectiveChapterLengthForProgress(manifest, mHit) : 0;
+  const chapterData = getChapterDataFromManifest(manifest, chapterIndex);
+  return chapterData ? getEffectiveChapterLengthForProgress(manifest, chapterData) : 0;
 }
 
 export function parseXhtmlBody(xhtml) {
@@ -189,11 +252,6 @@ function findChapterBlockElement(root, chapter, block = 0) {
   if (!Number.isFinite(ch) || !root?.querySelector) return null;
 
   const tryChapter = (c) => {
-    const byBoth = root.querySelector(
-      `[data-chapter-index="${c}"][data-block-index="${safeB}"]`
-    );
-    if (byBoth) return byBoth;
-
     const list = Array.from(root.querySelectorAll(`[data-chapter-index="${c}"]`));
     if (!list.length) return null;
     if (list.some(hasBlockIndexAttr)) {
@@ -202,17 +260,31 @@ function findChapterBlockElement(root, chapter, block = 0) {
     return list[safeB] ?? list[0] ?? null;
   };
 
-  return tryChapter(ch) ?? (ch >= 1 ? tryChapter(ch - 1) : null);
-}
+  const hit = tryChapter(ch);
+  if (hit) return hit;
 
-function unwrapLocatorObject(obj) {
-  if (!obj || typeof obj !== 'object') return null;
-  return obj.start ?? obj.startLocator ?? (resolveChapterIndex(obj) != null ? obj : null);
+  // 0-based DOM 호환: 해당 챕터 마커가 전혀 없을 때만 ch-1 시도
+  if (ch >= 1 && !root.querySelector(`[data-chapter-index="${ch}"]`)) {
+    return tryChapter(ch - 1);
+  }
+  return null;
 }
 
 export function normalizeLocatorTarget(target) {
   if (!target || typeof target !== 'object') return null;
-  return unwrapLocatorObject(target);
+  return target.start ?? target.startLocator ?? (resolveChapterIndex(target) != null ? target : null);
+}
+
+/** locator → 요소 로컬 비율 (paragraphStarts 우선, 없으면 text offset) */
+function localRatioFromLocator(chapterData, locator, el, totalCp, { requirePositiveOffset = false } = {}) {
+  if (hasParagraphStarts(chapterData) && totalCp > 1) {
+    return chapterLocalOffsetFromLocator(chapterData, locator) / (totalCp - 1);
+  }
+  const offset = Number(locator.offset ?? 0);
+  if (requirePositiveOffset && !(offset > 0)) return null;
+  const textLen = (el?.textContent || '').length;
+  if (textLen > 1) return clamp01(offset / (textLen - 1));
+  return null;
 }
 
 /** locator → 페이지 인덱스 (displayAt·초기 seek 공용) */
@@ -234,23 +306,16 @@ export function resolvePageIndexFromLocator({
   if (!(ph > 0)) return null;
 
   const chapterData = getChapterDataFromManifest(manifest, chapter);
-  const totalCp = resolveChapterCodePointLength(manifest, chapter);
+  const totalCp = chapterData
+    ? getEffectiveChapterLengthForProgress(manifest, chapterData)
+    : 0;
   const el0 = findChapterBlockElement(ruler, chapter, 0);
   const elBlock = findChapterBlockElement(ruler, chapter, block);
 
   // 단일 blob / 블록 미매칭: 챕터 로컬 비율을 해당 챕터 요소 구간으로 매핑
   if (totalCp > 1 && el0 && (isSingleChapterMarkerBlob(el0, ruler) || !elBlock)) {
-    let ratio = null;
-    if (hasParagraphStarts(chapterData)) {
-      ratio = chapterLocalOffsetFromLocator(chapterData, locator) / (totalCp - 1);
-    } else {
-      const offset = Number(locator.offset ?? 0);
-      const textLen = (el0.textContent || '').length;
-      if (textLen > 1) ratio = clamp01(offset / (textLen - 1));
-    }
-    if (ratio != null) {
-      return pageIndexFromElementLocalRatio(el0, ratio, ph, total);
-    }
+    const ratio = localRatioFromLocator(chapterData, locator, el0, totalCp);
+    if (ratio != null) return pageIndexFromElementLocalRatio(el0, ratio, ph, total);
     return pageIndexFromScrollY(el0.offsetTop, ph, total);
   }
 
@@ -258,17 +323,10 @@ export function resolvePageIndexFromLocator({
   if (!el) return null;
 
   if (el.offsetHeight > ph) {
-    let ratio = null;
-    if (hasParagraphStarts(chapterData) && totalCp > 1) {
-      ratio = chapterLocalOffsetFromLocator(chapterData, locator) / (totalCp - 1);
-    } else {
-      const offset = Number(locator.offset ?? 0);
-      const textLen = (el.textContent || '').length;
-      if (offset > 0 && textLen > 1) ratio = offset / (textLen - 1);
-    }
-    if (ratio != null) {
-      return pageIndexFromElementLocalRatio(el, ratio, ph, total);
-    }
+    const ratio = localRatioFromLocator(chapterData, locator, el, totalCp, {
+      requirePositiveOffset: true,
+    });
+    if (ratio != null) return pageIndexFromElementLocalRatio(el, ratio, ph, total);
   }
 
   return pageIndexFromScrollY(el.offsetTop, ph, total);
@@ -395,9 +453,13 @@ export function resolveViewportLocatorEmit({
   }
 
   const startOffset = pageInBlock ? singleBlobOffset : 0;
-  const endOffset = pageInBlock
-    ? singleBlobOffset
-    : Math.max(0, (endRow.el.textContent || '').length);
+  let endOffset = singleBlobOffset;
+  if (!pageInBlock) {
+    const textLen = Math.max(0, (endRow.el.textContent || '').length);
+    const elHeight = Math.max(1, endRow.bottom - endRow.top);
+    const depthInEl = Math.min(endRow.bottom, viewportRect.height) - endRow.top;
+    endOffset = offsetFromRatio(textLen, clamp01(depthInEl / elHeight));
+  }
   const logicalStartLoc = getBlockLocator(
     startRow.el,
     startOffset,

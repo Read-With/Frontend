@@ -1,52 +1,102 @@
-﻿import { useRef, useEffect, useCallback, useMemo, useState } from "react";
-import { toast } from "react-toastify";
-import ViewerLayout from "./ViewerLayout";
-import XhtmlViewer from "./xhtml/XhtmlViewer";
-import ViewerSettings from "./ui/ViewerSettings";
-import { useViewerPage } from "../../hooks/viewer/useViewerPage";
-import { useTooltipState } from "../../hooks/ui/tooltipHooks";
-import { anchorToLocators } from "../../utils/common/locatorUtils";
-import { resolveChapterIndex } from "../../utils/common/valueUtils";
+﻿import { useRef, useEffect, useCallback, useMemo, useState } from 'react';
+import { toast } from 'react-toastify';
+import ViewerLayout from './ViewerLayout';
+import XhtmlViewer from './xhtml/XhtmlViewer';
+import ViewerSettings from './ui/ViewerSettings';
+import { useViewerPage } from '../../hooks/viewer/useViewerPage';
+import { useTooltipState } from '../../hooks/ui/tooltipHooks';
+import { anchorToLocators, resolveChapterIndex } from '../../utils/common/valueUtils';
 import {
   resolveViewerLineEvent,
   parseReadingLocatorKey,
   patchTopBarFromLineEvent,
-} from "../../utils/viewer/viewerEventProgressUtils";
-import { isSameBookmarkPosition, normalizeBookmarkLocators } from "../../utils/bookmarks/bookmarkUtils";
-import { errorUtils } from "../../utils/common/errorUtils";
-import GraphSplitArea from "./GraphSplitArea";
-import "./bookmark/BookmarksPage.css";
+} from '../../utils/viewer/viewerEventProgressUtils';
+import { isSameBookmarkPosition, normalizeBookmarkLocators } from '../../utils/bookmarks/bookmarkUtils';
+import { errorUtils } from '../../utils/common/errorUtils';
+import GraphSplitArea from './GraphSplitArea';
+import '../../pages/BookmarksPage.css';
 
 const TOOLBAR_REVEAL_ZONE_PX = 72;
+
+function BookmarkDeleteConfirm({
+  open,
+  busy,
+  onCancel,
+  onConfirm,
+}) {
+  useEffect(() => {
+    if (!open) return undefined;
+    const onKey = (e) => {
+      if (e.key === 'Escape') onCancel();
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [open, onCancel]);
+
+  if (!open) return null;
+
+  return (
+    <div
+      className="bm-confirm-overlay"
+      role="presentation"
+      onClick={onCancel}
+    >
+      <div
+        className="bm-confirm-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="viewer-bookmark-delete-title"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <p id="viewer-bookmark-delete-title" className="bm-confirm-title">
+          현재 위치의 북마크를 삭제하시겠습니까?
+        </p>
+        <div className="bm-confirm-actions">
+          <button
+            type="button"
+            className="bm-btn bm-btn-ghost"
+            onClick={onCancel}
+            disabled={busy}
+          >
+            취소
+          </button>
+          <button
+            type="button"
+            className="bm-btn bm-btn-danger"
+            onClick={onConfirm}
+            disabled={busy}
+          >
+            삭제
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 const ViewerPage = () => {
   const {
     viewerRef,
     reloadKey,
     showSettingsModal,
-    setProgress,
+    setShowSettingsModal,
     setCurrentPage,
     setTotalPages,
     setCurrentChapter,
     setCurrentEvent,
     setShowToolbar,
     bookmarks,
-    book,
-    bookKey,
     manifestLoaded,
     handlePrevPage,
     handleNextPage,
     handleAddBookmark,
     removeBookmark,
     isBookmarkMutating,
-    handleOpenSettings,
-    handleCloseSettings,
     handleApplySettings,
     onToggleBookmarkList,
     handleSliderChange,
     toggleGraph,
     exitToMypage,
-    graphState,
     graphStateWithProgress,
     graphActions,
     viewerState,
@@ -55,7 +105,6 @@ const ViewerPage = () => {
     previousPage,
     isFromLibrary,
     setProgressTopBar,
-    progressMetricsReady,
     readingLocatorKey,
     serverResumeAnchor,
     applyReadingLocator,
@@ -70,8 +119,15 @@ const ViewerPage = () => {
 
   const [toolbarDeleteConfirmId, setToolbarDeleteConfirmId] = useState(null);
 
-  const { currentChapter, showGraph, graphFullScreen } = graphState;
   const {
+    currentChapter,
+    showGraph,
+    graphFullScreen,
+    progressMetricsReady,
+  } = graphStateWithProgress;
+  const {
+    book,
+    bookKey,
     progress,
     settings,
     currentPage,
@@ -83,36 +139,38 @@ const ViewerPage = () => {
     !isViewerPageReady && (isResumePending || Boolean(serverResumeAnchor));
 
   const readingChapterRef = useRef(currentChapter);
+  readingChapterRef.current = currentChapter;
+
   const showToolbarRef = useRef(showToolbar);
+  showToolbarRef.current = showToolbar;
+
   const graphClearRef = useRef(null);
 
   useEffect(() => {
-    readingChapterRef.current = currentChapter;
-  }, [currentChapter]);
-
-  useEffect(() => {
-    showToolbarRef.current = showToolbar;
-  }, [showToolbar]);
-
-  useEffect(() => {
-    const handleMouseMove = (event) => {
-      const next = event.clientY <= TOOLBAR_REVEAL_ZONE_PX;
+    const onMouseMove = (event) => {
+      const nearTop = event.clientY <= TOOLBAR_REVEAL_ZONE_PX;
+      const nearBottom =
+        event.clientY >= window.innerHeight - TOOLBAR_REVEAL_ZONE_PX;
+      const next = nearTop || nearBottom;
       if (showToolbarRef.current !== next) {
         setShowToolbar(next);
       }
     };
-    window.addEventListener("mousemove", handleMouseMove);
-    return () => window.removeEventListener("mousemove", handleMouseMove);
+    window.addEventListener('mousemove', onMouseMove);
+    return () => window.removeEventListener('mousemove', onMouseMove);
   }, [setShowToolbar]);
 
-  useEffect(() => {
-    if (!toolbarDeleteConfirmId) return undefined;
-    const onKey = (e) => {
-      if (e.key === "Escape") setToolbarDeleteConfirmId(null);
-    };
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [toolbarDeleteConfirmId]);
+  const dismissDeleteConfirm = useCallback(() => {
+    setToolbarDeleteConfirmId(null);
+  }, []);
+
+  const openSettings = useCallback(() => {
+    setShowSettingsModal(true);
+  }, [setShowSettingsModal]);
+
+  const closeSettings = useCallback(() => {
+    setShowSettingsModal(false);
+  }, [setShowSettingsModal]);
 
   const onAddBookmark = useCallback(async () => {
     const result = await handleAddBookmark();
@@ -127,14 +185,16 @@ const ViewerPage = () => {
     setToolbarDeleteConfirmId(null);
   }, [toolbarDeleteConfirmId, removeBookmark]);
 
+  const onTooltipError = useCallback(() => {
+    toast.error('노드 정보를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.');
+  }, []);
+
   const {
     activeTooltip,
     handleClearTooltip,
     handleSetActiveTooltip,
   } = useTooltipState({
-    onError: () => {
-      toast.error("노드 정보를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.");
-    },
+    onError: onTooltipError,
     graphClearRef,
   });
 
@@ -199,10 +259,10 @@ const ViewerPage = () => {
   const handleExitToMypage = useCallback(async () => {
     try {
       const res = await flushProgressAsync();
-      if (res && res.isSuccess === false && !res.skipped && !res.deduped) {
+      if (res?.isSuccess === false && !res.skipped && !res.deduped) {
         errorUtils.logWarning(
-          "[ViewerPage] 마이페이지 이동 전 진도 저장 실패",
-          res?.message || "알 수 없는 오류",
+          '[ViewerPage] 마이페이지 이동 전 진도 저장 실패',
+          res?.message || '알 수 없는 오류',
           { bookId: bookKey }
         );
       }
@@ -223,20 +283,49 @@ const ViewerPage = () => {
     [activeTooltip, handleClearTooltip, handleSetActiveTooltip]
   );
 
+  const rightSideContent = useMemo(() => {
+    if (!showGraph) return null;
+    return (
+      <GraphSplitArea
+        graphState={graphStateWithProgress}
+        graphActions={graphActions}
+        viewerState={viewerState}
+        searchState={searchState}
+        searchActions={searchActions}
+        tooltipProps={tooltipProps}
+        transitionState={transitionState}
+        apiError={graphApiError}
+        cachedLocation={cachedLocation}
+        resumeAnchor={serverResumeAnchor}
+      />
+    );
+  }, [
+    showGraph,
+    graphStateWithProgress,
+    graphActions,
+    viewerState,
+    searchState,
+    searchActions,
+    tooltipProps,
+    transitionState,
+    graphApiError,
+    cachedLocation,
+    serverResumeAnchor,
+  ]);
+
   return (
     <div className="h-screen">
       <ViewerLayout
         showControls={showToolbar}
         currentChapter={currentChapter}
         progress={progress}
-        setProgress={setProgress}
         progressMetricsReady={progressMetricsReady}
         onPrev={handlePrevPage}
         onNext={handleNextPage}
         isBookmarked={isBookmarked}
         onToggleBookmarkList={onToggleBookmarkList}
         onAddBookmark={onAddBookmark}
-        onOpenSettings={handleOpenSettings}
+        onOpenSettings={openSettings}
         onSliderChange={handleSliderChange}
         currentPage={currentPage}
         totalPages={totalPages}
@@ -246,20 +335,7 @@ const ViewerPage = () => {
         isFromLibrary={isFromLibrary}
         previousPage={previousPage}
         onExitToMypage={handleExitToMypage}
-        rightSideContent={
-          <GraphSplitArea
-            graphState={graphStateWithProgress}
-            graphActions={graphActions}
-            viewerState={viewerState}
-            searchState={searchState}
-            searchActions={searchActions}
-            tooltipProps={tooltipProps}
-            transitionState={transitionState}
-            apiError={graphApiError}
-            cachedLocation={cachedLocation}
-            resumeAnchor={serverResumeAnchor}
-          />
-        }
+        rightSideContent={rightSideContent}
       >
         <XhtmlViewer
           key={reloadKey}
@@ -278,49 +354,18 @@ const ViewerPage = () => {
         />
         <ViewerSettings
           isOpen={showSettingsModal}
-          onClose={handleCloseSettings}
+          onClose={closeSettings}
           onApplySettings={handleApplySettings}
           currentSettings={settings}
         />
       </ViewerLayout>
 
-      {toolbarDeleteConfirmId != null && (
-        <div
-          className="bm-confirm-overlay"
-          role="presentation"
-          onClick={() => setToolbarDeleteConfirmId(null)}
-        >
-          <div
-            className="bm-confirm-dialog"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="viewer-bookmark-delete-title"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <p id="viewer-bookmark-delete-title" className="bm-confirm-title">
-              현재 위치의 북마크를 삭제하시겠습니까?
-            </p>
-            <div className="bm-confirm-actions">
-              <button
-                type="button"
-                className="bm-btn bm-btn-ghost"
-                onClick={() => setToolbarDeleteConfirmId(null)}
-                disabled={isBookmarkMutating}
-              >
-                취소
-              </button>
-              <button
-                type="button"
-                className="bm-btn bm-btn-danger"
-                onClick={confirmToolbarDelete}
-                disabled={isBookmarkMutating}
-              >
-                삭제
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <BookmarkDeleteConfirm
+        open={toolbarDeleteConfirmId != null}
+        busy={isBookmarkMutating}
+        onCancel={dismissDeleteConfirm}
+        onConfirm={confirmToolbarDelete}
+      />
     </div>
   );
 };

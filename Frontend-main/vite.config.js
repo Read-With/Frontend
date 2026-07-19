@@ -76,7 +76,7 @@ export default defineConfig(({ mode }) => {
 
               const url = req.url || '';
               const silent404Endpoints = [
-                '/relationship-graph',
+                '/relationship-deltas',
                 '/api/v2/progress',
                 '/api/v2/books/',
                 '/manifest'

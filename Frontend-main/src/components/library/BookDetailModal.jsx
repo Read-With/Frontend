@@ -3,20 +3,23 @@ import PropTypes from 'prop-types';
 import { useNavigate } from 'react-router-dom';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { getBookManifest, getBookProgress, deleteBookProgress } from '../../utils/api/api';
-import { resolveProgressLocator } from '../../utils/common/locatorUtils';
+import { resolveProgressLocator } from '../../utils/common/valueUtils';
 import { BOOKS_QUERY_KEY } from '../../hooks/books/bookHooks';
-import { getManifestFromCache } from '../../utils/common/cache/manifestCache';
-import { getProgressFromCache, PROGRESS_CACHE_UPDATED_EVENT } from '../../utils/common/cache/progressCache';
+import {
+  getManifestFromCache,
+  getProgressFromCache,
+  PROGRESS_CACHE_UPDATED_EVENT,
+} from '../../utils/common/cache/manifestCache';
 import {
   resolveLibraryReadingProgressPercent,
   formatLibraryRelativeDate,
 } from '../../utils/library/libraryUtils';
-import {
-  stripRedundantBookTitlePrefix,
-} from '../../utils/viewer/chapterTitleDisplay';
 import AuthenticatedImage from './AuthenticatedImage';
-import { resolveServerBookId } from '../../utils/viewer/viewerCoreStateUtils';
-import { USER_VIEWER_PREFIX, USER_GRAPH_PREFIX } from '../../utils/navigation/viewerPaths';
+import {
+  resolveServerBookId,
+  stripRedundantBookTitlePrefix,
+} from '../../utils/viewer/viewerCoreStateUtils';
+import { USER_VIEWER_PREFIX, USER_GRAPH_PREFIX } from '../../utils/common/urlUtils';
 import { toast } from 'react-toastify';
 import './BookDetailModal.css';
 
@@ -96,8 +99,8 @@ const BookDetailModal = memo(({ book, isOpen, onClose, onDelete, viewMode = 'gri
       }
     } catch (err) {
       const msg = err?.message ?? '';
-      if (!msg.includes('404') && !msg.includes('찾을 수 없습니다')) {
-        console.error('Progress 정보를 불러오는데 실패했습니다:', err);
+      if (!msg.includes('404') && !msg.includes('?? ? ????')) {
+        console.error('Progress ??? ????? ??????:', err);
       }
       setProgressInfo(null);
     }
@@ -119,10 +122,10 @@ const BookDetailModal = memo(({ book, isOpen, onClose, onDelete, viewMode = 'gri
       const manifestData = await getBookManifest(serverBookId);
       
       if (manifestData && manifestData.isSuccess && manifestData.result) {
-        // 정규화된 manifest 데이터 가져오기 (캐시에서 가져오면 정규화됨)
+        // ???? manifest ??? ???? (???? ???? ????)
         const normalizedManifest = getManifestFromCache(serverBookId) || manifestData.result;
         
-        // API 응답 구조에 맞게 데이터 처리
+        // API ?? ??? ?? ??? ??
         const bookInfo = normalizedManifest.book || manifestData.result.book || {};
         setBookDetails({
           ...book,
@@ -138,13 +141,13 @@ const BookDetailModal = memo(({ book, isOpen, onClose, onDelete, viewMode = 'gri
             : {}),
         });
       } else {
-        console.warn('API 응답이 성공하지 않았습니다:', manifestData);
+        console.warn('API ??? ???? ?????:', manifestData);
         setBookDetails(book);
-        setError('책의 상세 정보를 불러올 수 없습니다. 기본 정보만 표시됩니다.');
+        setError('?? ?? ??? ??? ? ????. ?? ??? ?????.');
       }
     } catch (err) {
-      console.error('책 정보를 불러오는데 실패했습니다:', err);
-      const errorMessage = err?.message || '책 정보를 불러오는데 실패했습니다.';
+      console.error('? ??? ????? ??????:', err);
+      const errorMessage = err?.message || '? ??? ????? ??????.';
       setError(errorMessage);
       setBookDetails(book);
     } finally {
@@ -225,7 +228,7 @@ const BookDetailModal = memo(({ book, isOpen, onClose, onDelete, viewMode = 'gri
     (pathPrefix) => {
       const id = getBookIdentifier();
       if (!id) {
-        toast.error('책 정보가 없어 이동할 수 없습니다.');
+        toast.error('? ??? ?? ??? ? ????.');
         return;
       }
       onClose();
@@ -243,27 +246,27 @@ const BookDetailModal = memo(({ book, isOpen, onClose, onDelete, viewMode = 'gri
     fetchProgressInfo();
   }, [fetchBookDetails, fetchProgressInfo]);
 
-  // 진도 삭제 - useMutation + 낙관적 업데이트
+  // ?? ?? - useMutation + ??? ????
   const deleteProgressMutation = useMutation({
     mutationFn: (bookId) => deleteBookProgress(bookId),
     onMutate: async () => {
-      // 낙관적 업데이트 - 즉시 UI 반영
+      // ??? ???? - ?? UI ??
       const previousProgress = progressInfo;
       setProgressInfo(null);
       return { previousProgress };
     },
     onSuccess: () => {
-      toast.success('독서 진도가 삭제되었습니다');
-      // 책 목록 무효화 (진도율 업데이트)
+      toast.success('?? ??? ???????');
+      // ? ?? ??? (??? ????)
       queryClient.invalidateQueries({ queryKey: BOOKS_QUERY_KEY });
     },
     onError: (err, variables, context) => {
-      // 롤백
+      // ??
       if (context?.previousProgress) {
         setProgressInfo(context.previousProgress);
       }
-      console.error('독서 진도 삭제 실패:', err);
-      toast.error('독서 진도 삭제에 실패했습니다');
+      console.error('?? ?? ?? ??:', err);
+      toast.error('?? ?? ??? ??????');
     },
   });
 
@@ -276,7 +279,7 @@ const BookDetailModal = memo(({ book, isOpen, onClose, onDelete, viewMode = 'gri
 
     if (
       !window.confirm(
-        '저장된 독서 진도가 초기화됩니다. 이 작업은 되돌릴 수 없습니다. 계속할까요?'
+        '??? ?? ??? ??????. ? ??? ??? ? ????. ??????'
       )
     ) {
       return;
@@ -285,7 +288,7 @@ const BookDetailModal = memo(({ book, isOpen, onClose, onDelete, viewMode = 'gri
     try {
       await deleteProgressMutation.mutateAsync(serverBookId);
     } catch {
-      // 에러는 onError에서 처리
+      // ??? onError?? ??
     }
   }, [book, progressInfo, deleteProgressMutation]);
 
@@ -297,15 +300,15 @@ const BookDetailModal = memo(({ book, isOpen, onClose, onDelete, viewMode = 'gri
     try {
       if (onDelete) {
         await onDelete(book.id);
-        toast.success('책이 삭제되었습니다');
+        toast.success('?? ???????');
         setBookDeleteConfirm(false);
         onClose();
       } else {
-        toast.error('삭제 기능을 사용할 수 없습니다');
+        toast.error('?? ??? ??? ? ????');
       }
     } catch (err) {
-      console.error('책 삭제 실패:', err);
-      toast.error('책 삭제에 실패했습니다');
+      console.error('? ?? ??:', err);
+      toast.error('? ??? ??????');
     }
   }, [book, onDelete, onClose]);
 
@@ -336,9 +339,9 @@ const BookDetailModal = memo(({ book, isOpen, onClose, onDelete, viewMode = 'gri
   if (!isOpen) return null;
 
   const coverSrc = bookDetails?.coverImgUrl || book?.coverImgUrl;
-  const displayTitle = bookDetails?.title || book?.title || '제목 없음';
+  const displayTitle = bookDetails?.title || book?.title || '?? ??';
   const chapterStripBookTitle = String(bookDetails?.title ?? book?.title ?? '').trim();
-  const displayAuthor = bookDetails?.author || book?.author || '저자 정보 없음';
+  const displayAuthor = bookDetails?.author || book?.author || '?? ?? ??';
   const coverInitial = (displayTitle || '?').trim().slice(0, 1) || '?';
   const currentChapterIndex = progressLocator?.chapterIndex;
   const isListView = viewMode === 'list';
@@ -389,7 +392,7 @@ const BookDetailModal = memo(({ book, isOpen, onClose, onDelete, viewMode = 'gri
     <div
       className="book-detail-reader-meta book-detail-reader-meta--compact"
       role="region"
-      aria-label="독서 진행"
+      aria-label="?? ??"
     >
       {readPercent > 0 && (
         <div className="book-detail-reader-progress-row">
@@ -399,8 +402,8 @@ const BookDetailModal = memo(({ book, isOpen, onClose, onDelete, viewMode = 'gri
             aria-valuenow={readPercent}
             aria-valuemin={0}
             aria-valuemax={100}
-            aria-valuetext={`${readPercent}% 읽음`}
-            aria-label={`읽기 진행 ${readPercent}%`}
+            aria-valuetext={`${readPercent}% ??`}
+            aria-label={`?? ?? ${readPercent}%`}
           >
             <div
               className="book-detail-reader-progress-fill"
@@ -417,21 +420,21 @@ const BookDetailModal = memo(({ book, isOpen, onClose, onDelete, viewMode = 'gri
           <time
             className="book-detail-reader-compact-time"
             dateTime={libraryUpdatedAtIso ?? undefined}
-            aria-label={`최근 업데이트 ${libraryRelativeUpdated}`}
+            aria-label={`?? ???? ${libraryRelativeUpdated}`}
           >
             {libraryRelativeUpdated}
           </time>
         ) : progressInfo ? (
-          <span className="book-detail-reader-compact-placeholder">—</span>
+          <span className="book-detail-reader-compact-placeholder">?</span>
         ) : null}
         {progressInfo && (
           <button
             type="button"
             className="book-detail-reader-clear-progress"
             onClick={handleDeleteProgress}
-            aria-label="독서 진도 삭제"
+            aria-label="?? ?? ??"
           >
-            진도 삭제
+            ?? ??
           </button>
         )}
       </div>
@@ -443,7 +446,7 @@ const BookDetailModal = memo(({ book, isOpen, onClose, onDelete, viewMode = 'gri
       {loading && (
         <div className="book-detail-loading" role="status" aria-live="polite">
           <span className="book-detail-loading-dot" aria-hidden />
-          정보를 불러오는 중…
+          ??? ???? ??
         </div>
       )}
       {error && (
@@ -454,7 +457,7 @@ const BookDetailModal = memo(({ book, isOpen, onClose, onDelete, viewMode = 'gri
             className="book-detail-error-retry"
             onClick={handleRetryFetch}
           >
-            다시 시도
+            ?? ??
           </button>
         </div>
       )}
@@ -471,22 +474,22 @@ const BookDetailModal = memo(({ book, isOpen, onClose, onDelete, viewMode = 'gri
       aria-describedby="book-detail-modal-desc"
     >
       <p id="book-detail-modal-desc" className="book-detail-modal-desc">
-        책 표지와 제목, 독서 진도, 등장 인물과 목차를 확인할 수 있습니다.
+        ? ??? ??, ?? ??, ?? ??? ??? ??? ? ????.
       </p>
       <div
         className={`book-detail-content${isListView ? ' book-detail-content--list' : ''}`}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="book-detail-sheet-handle" aria-hidden="true" />
-        <p className="book-detail-sheet-hint">바깥 영역을 누르면 닫혀요</p>
+        <p className="book-detail-sheet-hint">?? ??? ??? ???</p>
         <button
           ref={closeButtonRef}
           className="book-detail-close-btn"
           onClick={onClose}
-          aria-label="모달 닫기"
+          aria-label="?? ??"
           type="button"
         >
-          ×
+          ?
         </button>
 
         <div className={`book-detail-header${isListView ? ' book-detail-header--list' : ''}`}>
@@ -508,10 +511,10 @@ const BookDetailModal = memo(({ book, isOpen, onClose, onDelete, viewMode = 'gri
                 <div className="book-detail-panel">
                   <div className="book-detail-panel-head">
                     <h3 className="book-detail-panel-title" id="book-detail-characters-heading">
-                      등장 인물
+                      ?? ??
                     </h3>
                     <div className="book-detail-panel-head-actions">
-                      <span className="book-detail-panel-count">{characterLists.unique.length}명</span>
+                      <span className="book-detail-panel-count">{characterLists.unique.length}?</span>
                       <button
                         type="button"
                         className="book-detail-panel-toggle"
@@ -521,7 +524,7 @@ const BookDetailModal = memo(({ book, isOpen, onClose, onDelete, viewMode = 'gri
                         aria-labelledby="book-detail-characters-heading"
                       >
                         <span className="book-detail-panel-toggle-sr">
-                          {charactersPanelOpen ? '등장 인물 접기' : '등장 인물 펼치기'}
+                          {charactersPanelOpen ? '?? ?? ??' : '?? ?? ???'}
                         </span>
                         <span className="book-detail-panel-chevron" aria-hidden="true" />
                       </button>
@@ -564,8 +567,8 @@ const BookDetailModal = memo(({ book, isOpen, onClose, onDelete, viewMode = 'gri
                                 {character.name}
                               </span>
                             </div>
-                            <span className="character-badge" aria-label="주요 인물">
-                              주연
+                            <span className="character-badge" aria-label="?? ??">
+                              ??
                             </span>
                           </li>
                         ))}
@@ -611,8 +614,8 @@ const BookDetailModal = memo(({ book, isOpen, onClose, onDelete, viewMode = 'gri
                           aria-expanded={showMoreCharacters}
                         >
                           {showMoreCharacters
-                            ? '일반 인물 접기'
-                            : `일반 인물 더보기 · ${characterLists.sortedOther.length}명`}
+                            ? '?? ?? ??'
+                            : `?? ?? ??? ? ${characterLists.sortedOther.length}?`}
                         </button>
                       </>
                     )}
@@ -624,10 +627,10 @@ const BookDetailModal = memo(({ book, isOpen, onClose, onDelete, viewMode = 'gri
                 <div className="book-detail-panel">
                   <div className="book-detail-panel-head">
                     <h3 className="book-detail-panel-title" id="book-detail-chapters-heading">
-                      목차
+                      ??
                     </h3>
                     <div className="book-detail-panel-head-actions">
-                      <span className="book-detail-panel-count">{bookDetails.chapters.length}챕터</span>
+                      <span className="book-detail-panel-count">{bookDetails.chapters.length}??</span>
                       <button
                         type="button"
                         className="book-detail-panel-toggle"
@@ -637,7 +640,7 @@ const BookDetailModal = memo(({ book, isOpen, onClose, onDelete, viewMode = 'gri
                         aria-labelledby="book-detail-chapters-heading"
                       >
                         <span className="book-detail-panel-toggle-sr">
-                          {chaptersPanelOpen ? '목차 접기' : '목차 펼치기'}
+                          {chaptersPanelOpen ? '?? ??' : '?? ???'}
                         </span>
                         <span className="book-detail-panel-chevron" aria-hidden="true" />
                       </button>
@@ -659,11 +662,11 @@ const BookDetailModal = memo(({ book, isOpen, onClose, onDelete, viewMode = 'gri
                         const rawTitle = String(chapter.title ?? '').trim();
                         const idxNum = Number(chapter.idx);
                         const idxStr =
-                          Number.isFinite(idxNum) && idxNum >= 1 ? String(idxNum) : '—';
+                          Number.isFinite(idxNum) && idxNum >= 1 ? String(idxNum) : '?';
                         const normalizedTitle = rawTitle
                           ? stripRedundantBookTitlePrefix(rawTitle, chapterStripBookTitle)
                           : '';
-                        const chapterLine = normalizedTitle || rawTitle || `챕터 ${idxStr}`;
+                        const chapterLine = normalizedTitle || rawTitle || `?? ${idxStr}`;
                         const chapterKey =
                           chapter.id ??
                           chapter.href ??
@@ -682,7 +685,7 @@ const BookDetailModal = memo(({ book, isOpen, onClose, onDelete, viewMode = 'gri
                             }
                           >
                             <span className="book-detail-chapter-num">
-                              {Number.isFinite(idxNum) ? idxNum : '—'}
+                              {Number.isFinite(idxNum) ? idxNum : '?'}
                             </span>
                             <span
                               className="book-detail-chapter-title"
@@ -695,9 +698,9 @@ const BookDetailModal = memo(({ book, isOpen, onClose, onDelete, viewMode = 'gri
                                 type="button"
                                 className="book-detail-chapter-current-badge"
                                 onClick={handleReadClick}
-                                aria-label="이어 읽기"
+                                aria-label="?? ??"
                               >
-                                이어 읽기
+                                ?? ??
                               </button>
                             ) : null}
                           </li>
@@ -716,9 +719,9 @@ const BookDetailModal = memo(({ book, isOpen, onClose, onDelete, viewMode = 'gri
         <div className="book-detail-footer-stack">
           <div className="book-detail-actions book-detail-actions--footer">
           {bookDeleteConfirm ? (
-            <div className="book-detail-delete-confirm" role="group" aria-label="서재에서 책 삭제 확인">
+            <div className="book-detail-delete-confirm" role="group" aria-label="???? ? ?? ??">
               <p className="book-detail-delete-confirm-text">
-                서재에서 이 책을 삭제할까요? 이 작업은 되돌릴 수 없습니다.
+                ???? ? ?? ?????? ? ??? ??? ? ????.
               </p>
               <div className="book-detail-delete-confirm-actions">
                 <button
@@ -726,34 +729,34 @@ const BookDetailModal = memo(({ book, isOpen, onClose, onDelete, viewMode = 'gri
                   className="book-detail-text-action-btn book-detail-delete-confirm-cancel"
                   onClick={() => setBookDeleteConfirm(false)}
                 >
-                  취소
+                  ??
                 </button>
                 <button
                   type="button"
                   className="book-detail-danger-btn book-detail-danger-btn--solid book-detail-delete-confirm-submit"
                   onClick={handleConfirmDeleteBook}
                 >
-                  삭제
+                  ??
                 </button>
               </div>
             </div>
           ) : (
-            <div className="book-detail-footer-row" role="group" aria-label="관계도 및 서재 삭제">
+            <div className="book-detail-footer-row" role="group" aria-label="??? ? ?? ??">
               <button
                 className="book-detail-secondary-btn"
                 onClick={handleGraphClick}
                 type="button"
-                aria-label="인물 관계도 페이지로 이동"
+                aria-label="?? ??? ???? ??"
               >
-                관계도
+                ???
               </button>
               <button
                 className="book-detail-danger-btn book-detail-danger-btn--inline"
                 onClick={() => setBookDeleteConfirm(true)}
                 type="button"
-                aria-label="서재에서 이 책 삭제"
+                aria-label="???? ? ? ??"
               >
-                서재에서 삭제
+                ???? ??
               </button>
             </div>
           )}

@@ -155,7 +155,7 @@ function cloneNodeWeightsMap(nodeWeights) {
 }
 
 /** 캐릭터 병합 시 weight·count는 직전 값 유지 */
-export function mergeCharacterRecord(prev, char) {
+function mergeCharacterRecord(prev, char) {
   const filled = Object.fromEntries(
     Object.entries(char).filter(([, v]) => v !== undefined && v !== null && v !== '')
   );
@@ -191,19 +191,6 @@ export function extractNodeWeightsFromElements(elements) {
     if (isNodeWeightEntryVisible(entry)) {
       nodeWeights[id] = entry;
     }
-  });
-
-  return nodeWeights;
-}
-
-/** 이벤트 순서대로 weight·count 누적 (직전 이벤트 상속) */
-export function buildNodeWeightsFromEvents(eventList) {
-  let nodeWeights = {};
-  if (!Array.isArray(eventList)) return nodeWeights;
-
-  eventList.forEach((entry) => {
-    const characters = Array.isArray(entry?.characters) ? entry.characters : [];
-    nodeWeights = buildNodeWeights(characters, nodeWeights);
   });
 
   return nodeWeights;

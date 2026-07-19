@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import useAuth from '../../hooks/auth/useAuth';
 import {
@@ -15,7 +15,7 @@ import {
   normalizeOAuthFetchError,
   getOAuthErrorTip,
 } from '../../utils/common/urlUtils';
-import { GoogleIcon } from '../common/headerShared';
+import { GoogleIcon } from '../common/Header';
 import './OAuthCallback.css';
 
 const LOADING_PHASES = [
@@ -25,6 +25,10 @@ const LOADING_PHASES = [
 ];
 
 const OAUTH_ERROR_SUMMARY_MAX = 140;
+const PROCESSED_CODE_KEY = 'oauth_processed_code';
+
+/** StrictMode 리마운트에서도 같은 code 교환을 공유 */
+const oauthExchangeByCode = new Map();
 
 function splitOAuthErrorDisplay(error) {
   const cleaned = String(error || '')
@@ -43,29 +47,15 @@ function splitOAuthErrorDisplay(error) {
     };
   }
 
-  return { summary: cleaned || '알 수 없는 오류가 발생했습니다.', detail: null };
+  const summary = (cleaned || '알 수 없는 오류가 발생했습니다.').replace(/\.\s+/g, '.\n');
+  return { summary, detail: null };
 }
 
-const PROCESSED_CODE_KEY = 'oauth_processed_code';
-/** StrictMode 리마운트에서도 같은 code 교환을 공유 */
-const oauthExchangeByCode = new Map();
-
-function inflightKeyFor(code) {
-  return `oauth_inflight_${code}`;
-}
-
-function clearOAuthAttemptArtifacts(code) {
+function clearOAuthAttemptArtifacts() {
   try {
     localStorage.removeItem(PROCESSED_CODE_KEY);
   } catch {
     /* ignore */
-  }
-  if (code) {
-    try {
-      sessionStorage.removeItem(inflightKeyFor(code));
-    } catch {
-      /* ignore */
-    }
   }
   clearGoogleOAuthStateSession();
 }
@@ -160,11 +150,18 @@ async function exchangeGoogleAuthCode(code) {
   }
 }
 
+function stripOAuthCallbackParams() {
+  if (!window.history?.replaceState) return;
+  const cleanUrl = new URL(window.location.href);
+  cleanUrl.searchParams.delete('code');
+  cleanUrl.searchParams.delete('state');
+  cleanUrl.searchParams.delete('error');
+  window.history.replaceState({}, document.title, cleanUrl.toString());
+}
+
 const OAuthCallback = () => {
   const [error, setError] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [isCompleted, setIsCompleted] = useState(false);
   const [loadingPhase, setLoadingPhase] = useState(0);
 
   const navigate = useNavigate();
@@ -172,34 +169,23 @@ const OAuthCallback = () => {
   const { login } = useAuth();
 
   useEffect(() => {
-    if (!isLoading && !isProcessing) return undefined;
+    if (!isLoading) return undefined;
 
     const intervalId = window.setInterval(() => {
       setLoadingPhase((prev) => Math.min(prev + 1, LOADING_PHASES.length - 1));
     }, 4500);
 
     return () => window.clearInterval(intervalId);
-  }, [isLoading, isProcessing]);
-
-  const loadingCopy = useMemo(() => {
-    if (isCompleted) {
-      return {
-        title: '로그인 완료',
-        detail: '마이페이지로 이동하고 있어요.',
-      };
-    }
-    return LOADING_PHASES[loadingPhase];
-  }, [isCompleted, loadingPhase]);
+  }, [isLoading]);
 
   useEffect(() => {
     let cancelled = false;
 
-    const finishError = (message, code) => {
-      clearOAuthAttemptArtifacts(code);
+    const finishError = (message) => {
+      clearOAuthAttemptArtifacts();
       if (!cancelled) {
         setError(message);
         setIsLoading(false);
-        setIsProcessing(false);
       }
     };
 
@@ -209,27 +195,12 @@ const OAuthCallback = () => {
       const oauthState = searchParams.get('state');
 
       if (!code && !oauthErrorParam) {
-        if (!cancelled) {
-          setError('유효한 로그인 정보가 없습니다. 홈에서 Google 로그인을 다시 시도해 주세요.');
-          setIsLoading(false);
-        }
+        finishError('유효한 로그인 정보가 없습니다.');
         return;
       }
 
       if (oauthErrorParam && !code) {
-        clearGoogleOAuthStateSession();
-        if (!cancelled) {
-          setError(resolveOAuthUrlError(oauthErrorParam));
-          setIsLoading(false);
-        }
-        return;
-      }
-
-      if (!code) {
-        if (!cancelled) {
-          setError('인증 코드를 받지 못했습니다. 홈에서 다시 로그인해 주세요.');
-          setIsLoading(false);
-        }
+        finishError(resolveOAuthUrlError(oauthErrorParam));
         return;
       }
 
@@ -237,7 +208,6 @@ const OAuthCallback = () => {
       if (!stateCheck.isValid) {
         finishError(
           stateCheck.error || 'OAuth state 검증에 실패했습니다. 다시 로그인해주세요.',
-          code,
         );
         return;
       }
@@ -247,55 +217,31 @@ const OAuthCallback = () => {
       if (!joiningExisting) {
         try {
           if (localStorage.getItem(PROCESSED_CODE_KEY) === code) {
-            finishError(
-              '이미 처리된 로그인 요청입니다. 홈에서 Google 로그인을 다시 시도해 주세요.',
-              code,
-            );
+            finishError('이미 처리된 로그인 요청입니다.');
             return;
           }
-        } catch {
-          /* ignore */
-        }
-
-        try {
-          sessionStorage.setItem(inflightKeyFor(code), '1');
           localStorage.setItem(PROCESSED_CODE_KEY, code);
         } catch {
           /* ignore */
         }
       }
 
-      if (!cancelled) setIsProcessing(true);
-
       try {
-        if (window.history?.replaceState) {
-          const cleanUrl = new URL(window.location.href);
-          cleanUrl.searchParams.delete('code');
-          cleanUrl.searchParams.delete('state');
-          cleanUrl.searchParams.delete('error');
-          window.history.replaceState({}, document.title, cleanUrl.toString());
-        }
+        stripOAuthCallbackParams();
 
         const frontendUserData = await exchangeGoogleAuthCode(code);
         if (cancelled) return;
 
         login(frontendUserData);
-        setIsCompleted(true);
-        clearOAuthAttemptArtifacts(code);
-        setIsLoading(false);
-        setIsProcessing(false);
+        clearOAuthAttemptArtifacts();
         navigate('/mypage', { replace: true });
       } catch (err) {
-        finishError(normalizeOAuthFetchError(err), code);
+        finishError(normalizeOAuthFetchError(err));
       }
     };
 
     handleOAuthCallback().catch((err) => {
-      if (!cancelled) {
-        setError(`초기화 실패: ${err.message}`);
-        setIsLoading(false);
-        setIsProcessing(false);
-      }
+      finishError(`초기화 실패: ${err.message}`);
     });
 
     return () => {
@@ -303,14 +249,11 @@ const OAuthCallback = () => {
     };
   }, [searchParams, login, navigate]);
 
-  if (isLoading || isProcessing) {
+  if (isLoading) {
+    const { title, detail } = LOADING_PHASES[loadingPhase];
+
     return (
-      <OAuthCallbackShell
-        variant={isCompleted ? 'oauth-callback-content--success' : ''}
-        role="status"
-        ariaLive="polite"
-        ariaBusy="true"
-      >
+      <OAuthCallbackShell role="status" ariaLive="polite" ariaBusy="true">
         <div className="oauth-callback-icon-wrap" aria-hidden="true">
           <div className="oauth-callback-icon-ring" />
           <div className="oauth-callback-google-badge">
@@ -318,29 +261,25 @@ const OAuthCallback = () => {
           </div>
         </div>
 
-        <h1 className="oauth-callback-title">{loadingCopy.title}</h1>
-        <p className="oauth-callback-detail">{loadingCopy.detail}</p>
+        <h1 className="oauth-callback-title">{title}</h1>
+        <p className="oauth-callback-detail">{detail}</p>
 
         <ol className="oauth-callback-steps" aria-hidden="true">
-          {LOADING_PHASES.map((_, index) => {
-            const isActive = !isCompleted && index === loadingPhase;
-            const isDone = isCompleted || index < loadingPhase;
-            return (
-              <li
-                key={index}
-                className={[
-                  'oauth-callback-step',
-                  isActive ? 'is-active' : '',
-                  isDone ? 'is-done' : '',
-                ]
-                  .filter(Boolean)
-                  .join(' ')}
-              />
-            );
-          })}
+          {LOADING_PHASES.map((_, index) => (
+            <li
+              key={index}
+              className={[
+                'oauth-callback-step',
+                index === loadingPhase ? 'is-active' : '',
+                index < loadingPhase ? 'is-done' : '',
+              ]
+                .filter(Boolean)
+                .join(' ')}
+            />
+          ))}
         </ol>
 
-        {loadingPhase >= LOADING_PHASES.length - 1 && !isCompleted ? (
+        {loadingPhase >= LOADING_PHASES.length - 1 ? (
           <p className="oauth-callback-hint is-visible">
             첫 로그인이거나 서버가 깨어나는 중이면 10~20초 정도 걸릴 수 있어요.
           </p>

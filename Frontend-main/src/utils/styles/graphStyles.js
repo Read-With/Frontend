@@ -32,8 +32,8 @@ export const GRAPH_COLORS = {
 const COLORS = GRAPH_COLORS;
 const DURATION = STYLE_DURATION;
 
-export const NODE_SIZE_MIN = 30;
-export const NODE_SIZE_MAX = 80;
+const NODE_SIZE_MIN = 30;
+const NODE_SIZE_MAX = 80;
 
 const EDGE_TEXT_STYLE = {
   color: COLORS.edgeText,
@@ -77,7 +77,11 @@ const graphControlActionButtonStyle = {
   },
 };
 
-export const getWideLayout = () => ({ name: 'preset' });
+export const PRESET_LAYOUT = Object.freeze({
+  name: 'preset',
+  fit: false,
+  animate: false,
+});
 
 /** @param {'graph'|'viewer'|'default'} [context='default'] graph 페이지는 라벨 fontSize 12 */
 export const getEdgeStyle = (context = 'default') => ({
@@ -100,35 +104,25 @@ export const getRelationColor = (positivity) => {
   return `hsl(${hue}, ${saturation}%, ${lightness}%)`;
 };
 
-export function computeWeightRange(weights) {
+function computeWeightRange(weights) {
   const valid = (Array.isArray(weights) ? weights : []).filter(isValidNodeWeight);
   if (valid.length === 0) return { min: 0, max: 0 };
   return { min: Math.min(...valid), max: Math.max(...valid) };
 }
 
-export function normalizeWeightToUnit(weight, minWeight, maxWeight) {
+function normalizeWeightToUnit(weight, minWeight, maxWeight) {
   if (!isValidNodeWeight(weight)) return 0;
   if (typeof minWeight !== 'number' || typeof maxWeight !== 'number') return 0;
   if (minWeight >= maxWeight) return 1;
   return (weight - minWeight) / (maxWeight - minWeight);
 }
 
-export function calculateNodeSizeFromNormalized(
-  normalized,
-  minPx = NODE_SIZE_MIN,
-  maxPx = NODE_SIZE_MAX
-) {
+function calculateNodeSizeFromNormalized(normalized, minPx = NODE_SIZE_MIN, maxPx = NODE_SIZE_MAX) {
   const ratio = Math.max(0, Math.min(1, Number(normalized) || 0));
   return Math.round(minPx + ratio * (maxPx - minPx));
 }
 
-export function calculateNodeSizeFromWeight(
-  weight,
-  weightMin,
-  weightMax,
-  minPx = NODE_SIZE_MIN,
-  maxPx = NODE_SIZE_MAX
-) {
+function calculateNodeSizeFromWeight(weight, weightMin, weightMax, minPx = NODE_SIZE_MIN, maxPx = NODE_SIZE_MAX) {
   return calculateNodeSizeFromNormalized(
     normalizeWeightToUnit(weight, weightMin, weightMax),
     minPx,
@@ -157,28 +151,6 @@ export function applyNormalizedNodeSizes(cy, { scaledNodes = null, scale = 1 } =
     const size = scaledIds?.has(node.id()) ? Math.round(baseSize * scale) : baseSize;
     node.style({ width: size, height: size });
   });
-}
-
-function reciprocalPairTargetEndpoint(ele) {
-  try {
-    const ox = ele.data('_rjOx');
-    const oy = ele.data('_rjOy');
-    if (typeof ox === 'number' && typeof oy === 'number' && Number.isFinite(ox) && Number.isFinite(oy)) {
-      return `${ox} ${oy}`;
-    }
-
-    const source = ele.source();
-    const target = ele.target();
-    if (!source || !target || source.empty?.() || target.empty?.()) return undefined;
-
-    const sx = source.position('x');
-    const sy = source.position('y');
-    const tx = target.position('x');
-    const ty = target.position('y');
-    return `${(sx - tx) / 2} ${(sy - ty) / 2}`;
-  } catch {
-    return undefined;
-  }
 }
 
 function formatEdgeLabel(ele, edgeLabelVisible, maxEdgeLabelLength) {
@@ -219,6 +191,7 @@ export const createGraphStylesheet = (edgeStyle, edgeLabelVisible, maxEdgeLabelL
       'target-arrow-color': edgePositivityColor,
       'arrow-scale': 1.05,
       'source-arrow-shape': 'none',
+      'overlay-padding': 8,
     },
   },
   {
@@ -230,10 +203,10 @@ export const createGraphStylesheet = (edgeStyle, edgeLabelVisible, maxEdgeLabelL
     },
   },
   {
+    // target-endpoint는 syncReciprocalPairJunctionOffsets bypass가 담당
     selector: 'edge[?reciprocalPair]',
     style: {
       'curve-style': 'straight',
-      'target-endpoint': reciprocalPairTargetEndpoint,
     },
   },
   {
@@ -244,6 +217,12 @@ export const createGraphStylesheet = (edgeStyle, edgeLabelVisible, maxEdgeLabelL
       'target-endpoint': 'outside-to-node',
       'z-index-compare': 'manual',
       'z-index': 9999,
+    },
+  },
+  {
+    selector: 'edge.highlighted[?reciprocalPair]',
+    style: {
+      'curve-style': 'bezier',
     },
   },
   {
@@ -286,7 +265,6 @@ export const graphStyles = {
     pointerEvents: 'none',
     zIndex: 9998,
   },
-  tooltipStyle: { pointerEvents: 'auto' },
   graphArea: { position: 'relative', width: '100%', height: '100%' },
   graphPageContainer: {
     width: '100%',

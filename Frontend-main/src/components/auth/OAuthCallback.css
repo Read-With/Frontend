@@ -64,7 +64,8 @@
   height: 22px;
 }
 
-.oauth-callback-title {
+.oauth-callback-title,
+.oauth-callback-error-title {
   margin: 0 0 10px;
   font-size: clamp(1.05rem, 3.8vw, 1.75rem);
   font-weight: 600;
@@ -73,7 +74,12 @@
   line-height: 1.55;
 }
 
-.oauth-callback-detail {
+.oauth-callback-error-title {
+  margin-bottom: 12px;
+}
+
+.oauth-callback-detail,
+.oauth-callback-error-message {
   margin: 0;
   font-size: clamp(0.85rem, 2.2vw, 1.125rem);
   font-weight: 400;
@@ -81,6 +87,10 @@
   letter-spacing: 0.02em;
   color: rgba(255, 255, 255, 0.9);
   word-break: keep-all;
+}
+
+.oauth-callback-error-message {
+  white-space: pre-line;
 }
 
 .oauth-callback-steps {
@@ -109,11 +119,11 @@
 }
 
 .oauth-callback-hint {
-  margin: 20px 0 0;
-  padding: 12px 14px;
   width: max-content;
   max-width: none;
   white-space: nowrap;
+  margin: 20px 0 0;
+  padding: 12px 14px;
   font-size: clamp(0.925rem, 2.4vw, 1.0625rem);
   font-weight: 400;
   line-height: 1.75;
@@ -126,12 +136,6 @@
 
 .oauth-callback-hint.is-visible {
   animation: oauth-callback-fade-in 0.4s ease;
-}
-
-.oauth-callback-content--success .oauth-callback-icon-ring {
-  border-color: rgba(255, 255, 255, 0.25);
-  border-top-color: #fefefe;
-  animation-duration: 1.1s;
 }
 
 .oauth-callback-content--error .oauth-callback-body {
@@ -157,37 +161,14 @@
   color: #fecaca;
 }
 
-.oauth-callback-error-title {
-  margin: 0 0 12px;
-  font-size: clamp(1.05rem, 3.8vw, 1.75rem);
-  font-weight: 600;
-  letter-spacing: 0.02em;
-  line-height: 1.55;
-  color: #fefefe;
-}
-
-.oauth-callback-error-message {
-  margin: 0;
-  max-width: 100%;
-  font-size: clamp(0.85rem, 2.2vw, 1.125rem);
-  font-weight: 400;
-  line-height: 1.85;
-  letter-spacing: 0.02em;
-  color: rgba(255, 255, 255, 0.9);
-  word-break: keep-all;
-  overflow-wrap: anywhere;
-}
-
 .oauth-callback-error-tip {
   margin: 16px 0 0;
-  max-width: 100%;
   font-size: clamp(0.85rem, 2.2vw, 1rem);
   font-weight: 400;
   line-height: 1.75;
   letter-spacing: 0.03em;
   color: rgba(255, 255, 255, 0.72);
   word-break: keep-all;
-  overflow-wrap: anywhere;
 }
 
 .oauth-callback-error-details {

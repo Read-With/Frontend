@@ -1,6 +1,6 @@
 /** 라이브러리: 진행률·날짜 표시, EPUB 업로드 검증·메타 추출 */
 
-import { getProgressFromCache } from '../common/cache/progressCache';
+import { getProgressFromCache } from '../common/cache/manifestCache';
 import { clampPercent } from '../common/valueUtils';
 
 /** 마이페이지 BookCard·useBooks — locator 기반 캐시 진도만 사용 */

@@ -1,7 +1,7 @@
 import { useState, useMemo, useCallback, useEffect } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { toast } from 'react-toastify';
-import { useBookmarks } from '../../../hooks/bookmarks/bookmarkHooks';
+import { useBookmarks } from '../hooks/bookmarks/bookmarkHooks';
 import {
   bookmarkColors,
   bookmarkBorders,
@@ -14,9 +14,9 @@ import {
   bookmarkToResumeAnchor,
   resolveBookmarkApiBookId,
   sortBookmarks,
-} from '../../../utils/bookmarks/bookmarkUtils';
-import { userViewerPath, userViewerBookmarksPath, userViewerReadingPath } from '../../../utils/navigation/viewerPaths';
-import { resolveChapterIndex } from '../../../utils/common/valueUtils';
+} from '../utils/bookmarks/bookmarkUtils';
+import { userViewerPath, userViewerBookmarksPath, userViewerReadingPath } from '../utils/common/urlUtils';
+import { resolveChapterIndex } from '../utils/common/valueUtils';
 import './BookmarksPage.css';
 
 const sameId = (a, b) => String(a) === String(b);
@@ -59,6 +59,11 @@ const BookmarksPage = () => {
   const [composerText, setComposerText] = useState('');
   const [editingMemo, setEditingMemo] = useState(EMPTY_EDIT);
   const [deleteConfirmId, setDeleteConfirmId] = useState(null);
+
+  const closeComposer = () => {
+    setComposerId(null);
+    setComposerText('');
+  };
 
   useEffect(() => {
     if (apiBookId == null || !cleanFilename) return;
@@ -129,10 +134,7 @@ const BookmarksPage = () => {
   );
 
   const clearMemoUiForBookmark = (bookmarkId) => {
-    if (composerId != null && sameId(composerId, bookmarkId)) {
-      setComposerId(null);
-      setComposerText('');
-    }
+    if (composerId != null && sameId(composerId, bookmarkId)) closeComposer();
     if (editingMemo.bookmarkId != null && sameId(editingMemo.bookmarkId, bookmarkId)) {
       setEditingMemo(EMPTY_EDIT);
     }
@@ -168,10 +170,7 @@ const BookmarksPage = () => {
     const text = composerText.trim();
     if (!text) return;
     const result = await updateMemoEntries(bookmarkId, (entries) => [...entries, text]);
-    if (result.success) {
-      setComposerId(null);
-      setComposerText('');
-    }
+    if (result.success) closeComposer();
   };
 
   const handleEditMemoSave = async () => {
@@ -201,6 +200,8 @@ const BookmarksPage = () => {
       setEditingMemo(EMPTY_EDIT);
     }
   };
+
+  const stopCard = (e) => e.stopPropagation();
 
   const renderBookmark = (bookmark) => {
     if (!bookmark) return null;
@@ -268,7 +269,7 @@ const BookmarksPage = () => {
                           <input
                             className="bm-input"
                             value={editingMemo.text}
-                            onClick={(e) => e.stopPropagation()}
+                            onClick={stopCard}
                             onChange={(e) =>
                               setEditingMemo((prev) => ({ ...prev, text: e.target.value }))
                             }
@@ -288,7 +289,7 @@ const BookmarksPage = () => {
                             className="bm-btn bm-btn-primary"
                             disabled={isMutating}
                             onClick={(e) => {
-                              e.stopPropagation();
+                              stopCard(e);
                               handleEditMemoSave();
                             }}
                           >
@@ -299,7 +300,7 @@ const BookmarksPage = () => {
                             className="bm-btn bm-btn-ghost"
                             disabled={isMutating}
                             onClick={(e) => {
-                              e.stopPropagation();
+                              stopCard(e);
                               setEditingMemo(EMPTY_EDIT);
                             }}
                           >
@@ -314,9 +315,8 @@ const BookmarksPage = () => {
                             className="bm-btn-text"
                             disabled={isMutating}
                             onClick={(e) => {
-                              e.stopPropagation();
-                              setComposerId(null);
-                              setComposerText('');
+                              stopCard(e);
+                              closeComposer();
                               setEditingMemo({
                                 bookmarkId: bookmark.id,
                                 entryIndex,
@@ -331,7 +331,7 @@ const BookmarksPage = () => {
                             className="bm-btn-text bm-btn-text-danger"
                             disabled={isMutating}
                             onClick={(e) => {
-                              e.stopPropagation();
+                              stopCard(e);
                               handleDeleteMemoEntry(bookmark.id, entryIndex);
                             }}
                           >
@@ -353,7 +353,7 @@ const BookmarksPage = () => {
               <input
                 className="bm-input"
                 value={composerText}
-                onClick={(e) => e.stopPropagation()}
+                onClick={stopCard}
                 onChange={(e) => setComposerText(e.target.value)}
                 onKeyDown={(e) => {
                   e.stopPropagation();
@@ -370,7 +370,7 @@ const BookmarksPage = () => {
                 className="bm-btn bm-btn-primary"
                 disabled={isMutating}
                 onClick={(e) => {
-                  e.stopPropagation();
+                  stopCard(e);
                   handleAddMemo(bookmark.id);
                 }}
               >
@@ -381,9 +381,8 @@ const BookmarksPage = () => {
                 className="bm-btn bm-btn-ghost"
                 disabled={isMutating}
                 onClick={(e) => {
-                  e.stopPropagation();
-                  setComposerId(null);
-                  setComposerText('');
+                  stopCard(e);
+                  closeComposer();
                 }}
               >
                 닫기
@@ -395,9 +394,9 @@ const BookmarksPage = () => {
               className="bm-btn-pill"
               disabled={isMutating}
               onClick={(e) => {
-                e.stopPropagation();
+                stopCard(e);
                 setEditingMemo(EMPTY_EDIT);
-                setComposerId((prev) => (prev != null && sameId(prev, bookmark.id) ? null : bookmark.id));
+                setComposerId(bookmark.id);
                 setComposerText('');
               }}
             >
@@ -420,7 +419,7 @@ const BookmarksPage = () => {
                   '--bm-swatch-border': option.border,
                 }}
                 onClick={(e) => {
-                  e.stopPropagation();
+                  stopCard(e);
                   if (!isMutating) patchBookmark(bookmark.id, { color: option.color });
                 }}
               />
@@ -432,7 +431,7 @@ const BookmarksPage = () => {
             className="bm-btn-danger"
             disabled={isMutating}
             onClick={(e) => {
-              e.stopPropagation();
+              stopCard(e);
               setDeleteConfirmId(bookmark.id);
             }}
           >
@@ -546,7 +545,7 @@ const BookmarksPage = () => {
             role="dialog"
             aria-modal="true"
             aria-labelledby="bookmark-delete-title"
-            onClick={(e) => e.stopPropagation()}
+            onClick={stopCard}
           >
             <p id="bookmark-delete-title" className="bm-confirm-title">
               정말 삭제하시겠습니까?

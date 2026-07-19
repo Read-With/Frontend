@@ -1,39 +1,282 @@
 import { memo, useState, useEffect, useCallback, useMemo } from "react";
 import { useParams } from "react-router-dom";
-import {
-  processRelations,
-  processRelationTags,
-  extractRadarChartData,
-  getConnectionStatus,
-} from "../../../utils/graph/relationUtils.js";
+import { processRelations, processRelationTags, extractRadarChartData, extractApiBookId, undirectedPairKey } from "../../../utils/graph/graphUtils.js";
 import { getPositivityColor, getPositivityLabel } from "../../../utils/styles/relationStyles.js";
-import { toApiFolderKey, undirectedPairKey } from "../../../utils/graph/graphUtils.js";
 import { getEventDataByIndex } from "../../../utils/graph/graphData.js";
 import { useTooltipPosition, useClickOutside } from "../../../hooks/ui/tooltipHooks";
 import { getUnifiedEventInfoForTooltip } from "../../../utils/viewer/viewerEventProgressUtils";
-import { isGraphOnlyGraphPage } from "../graphShared";
-import {
-  COLORS,
-  createButtonStyle,
-  ANIMATION_VALUES,
-  unifiedNodeTooltipStyles,
-  unifiedNodeAnimations,
-  mergeRefs,
-} from "../../../utils/styles/styles.js";
+import { toNumberOrNull } from "../../../utils/common/valueUtils.js";
+import { USER_GRAPH_PREFIX } from "../../../utils/common/urlUtils";
+import { COLORS, createButtonStyle, mergeRefs, unifiedNodeTooltipStyles, unifiedNodeAnimations } from "../../../utils/styles/styles.js";
 import { Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, ResponsiveContainer } from 'recharts';
-import "../RelationGraph.css";
+import './tooltip.css';
 
-function resolveNodeDataFromProp(data) {
-  if (data && (data.id || data.label)) return data;
-  if (data && data.data) return data.data;
-  return { id: data?.id, label: data?.label };
+const Z_INDEX_TOOLTIP = 99999;
+const SUMMARY = { COLLAPSED: 'collapsed', WARNING: 'warning', CONTENT: 'content' };
+
+function normalizeToString(value) {
+  if (value == null) return "";
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? String(Math.trunc(value)) : "";
+  }
+  return String(value).trim();
+}
+
+function buildProcessedNode(data) {
+  const raw = (data && (data.id || data.label))
+    ? data
+    : (data?.data || { id: data?.id, label: data?.label });
+  if (!raw) return null;
+
+  const description = String(raw.personalityText || raw.description || '').trim();
+  return {
+    ...raw,
+    names: processRelationTags(raw.names || [], raw.common_name),
+    displayName: raw.common_name || raw.label || "Unknown",
+    hasImage: !!raw.image,
+    isMainCharacter: !!raw.isMainCharacter,
+    description,
+  };
+}
+
+function buildIdentityContext(nodeLike) {
+  const normalizedNodeId = normalizeToString(nodeLike?.id);
+  return {
+    normalizedNodeId,
+    nodeIdNum: toNumberOrNull(normalizedNodeId),
+    normalizedNodeName: normalizeToString(
+      nodeLike?.common_name ?? nodeLike?.label ?? nodeLike?.name
+    ),
+  };
+}
+
+function isSameIdentifier(candidate, idCtx) {
+  if (!candidate) return false;
+  const candidateId =
+    candidate.id ??
+    candidate.character_id ??
+    candidate.characterId ??
+    candidate.char_id ??
+    candidate.pk ??
+    candidate.node_id;
+  const candidateName =
+    candidate.common_name ?? candidate.name ?? candidate.label ?? candidate.displayName;
+
+  const candidateIdStr = normalizeToString(candidateId);
+  if (candidateIdStr && idCtx.normalizedNodeId && candidateIdStr === idCtx.normalizedNodeId) {
+    return true;
+  }
+
+  const candidateIdNum = toNumberOrNull(candidateIdStr);
+  if (candidateIdNum !== null && idCtx.nodeIdNum !== null && candidateIdNum === idCtx.nodeIdNum) {
+    return true;
+  }
+
+  const candidateNameStr = normalizeToString(candidateName);
+  return !!(
+    candidateNameStr &&
+    idCtx.normalizedNodeName &&
+    candidateNameStr === idCtx.normalizedNodeName
+  );
+}
+
+function collectUndirectedRelations(rawRelations, targetNodeId = null) {
+  const relationMap = new Map();
+  const targetStr = targetNodeId != null ? String(targetNodeId) : null;
+
+  rawRelations.forEach((rel) => {
+    const id1 = rel.id1 ?? rel.source;
+    const id2 = rel.id2 ?? rel.target;
+    if (id1 == null || id2 == null) return;
+    if (targetStr != null && String(id1) !== targetStr && String(id2) !== targetStr) return;
+
+    const key = undirectedPairKey(id1, id2);
+    if (relationMap.has(key)) return;
+
+    relationMap.set(key, {
+      id1,
+      id2,
+      relation: rel.relation || ['관계'],
+      count: rel.count || rel.strength || 1,
+      positivity: rel.positivity || 0,
+    });
+  });
+
+  return Array.from(relationMap.values());
+}
+
+function positivityDisplay(positivity) {
+  return {
+    color: getPositivityColor(positivity),
+    label: getPositivityLabel(positivity || 0),
+    percent: Math.round((positivity || 0) * 100),
+  };
+}
+
+/** viewer tooltip: 현재 이벤트에 노드 등장 여부 */
+function checkNodeAppearance({ isSidebar, data, node, chapterNum, folderKey, eventNum, elements }) {
+  const isGraphOnlyPage =
+    typeof window !== 'undefined' && window.location.pathname.includes(`${USER_GRAPH_PREFIX}/`);
+  if (isSidebar || isGraphOnlyPage) {
+    return { appeared: true, error: null };
+  }
+  if (!data || !chapterNum || chapterNum <= 0) {
+    return { appeared: false, error: null };
+  }
+
+  try {
+    const json = getEventDataByIndex(folderKey, chapterNum, eventNum);
+    const idCtx = buildIdentityContext({
+      id: node?.id ?? data?.id ?? data?.data?.id,
+      common_name:
+        node?.common_name ??
+        node?.label ??
+        data?.common_name ??
+        data?.label ??
+        data?.data?.common_name ??
+        data?.data?.label,
+    });
+
+    const inElements = Array.isArray(elements) && elements.some((el) => {
+      if (!el || el.data?.source) return false;
+      return isSameIdentifier(
+        { id: el.data?.id ?? el.id, name: el.data?.common_name ?? el.data?.label },
+        idCtx,
+      );
+    });
+
+    if (!json?.relations) {
+      return { appeared: inElements, error: null };
+    }
+
+    const relations = processRelations(json.relations);
+    const inCharacters = Array.isArray(json.characters)
+      && json.characters.some((c) => isSameIdentifier(c, idCtx));
+    const inRelations = relations.some(
+      (rel) =>
+        isSameIdentifier({ id: rel.id1, name: rel.name1 }, idCtx) ||
+        isSameIdentifier({ id: rel.id2, name: rel.name2 }, idCtx),
+    );
+
+    return { appeared: inCharacters || inRelations || inElements, error: null };
+  } catch (err) {
+    return { appeared: false, error: err.message };
+  }
+}
+
+function resolvePovSummary(node, chapterNum, povSummaries) {
+  if (!node) return "인물에 대한 요약 정보가 없습니다.";
+
+  const list = povSummaries?.povSummaries;
+  if (Array.isArray(list) && list.length > 0) {
+    const nodeId = Number(node.id);
+    let match = Number.isFinite(nodeId)
+      ? list.find((s) => Number(s.characterId) === nodeId)
+      : null;
+    if (!match) {
+      const names = [node.common_name, node.label, node.displayName]
+        .filter((n) => typeof n === 'string' && n.trim() !== '');
+      match = list.find((s) => names.some((n) => n === s.characterName));
+    }
+    if (match?.summaryText) return match.summaryText;
+  }
+
+  return `${node.displayName}에 대한 ${chapterNum || 1}장 관점 요약이 아직 준비되지 않았습니다.`;
+}
+
+function buildRadarChartData({
+  node,
+  chapterNum,
+  isSidebar,
+  apiBookGraphData,
+  elements,
+  folderKey,
+  eventNum,
+}) {
+  if (!node?.id || !chapterNum || !isSidebar) return [];
+
+  try {
+    if (apiBookGraphData?.relations && apiBookGraphData?.characters) {
+      const { relations, characters } = apiBookGraphData;
+      const nameToIdMap = {};
+      const bookElements = characters.map((char) => {
+        const charName = char.common_name || char.name;
+        nameToIdMap[charName] = char.id;
+        return { data: { id: String(char.id), label: charName, common_name: charName } };
+      });
+
+      const targetNodeId = typeof node.id === 'string'
+        ? (nameToIdMap[node.label || node.common_name] ?? node.id)
+        : node.id;
+
+      return extractRadarChartData(
+        targetNodeId,
+        collectUndirectedRelations(relations, targetNodeId),
+        bookElements,
+        8,
+      );
+    }
+
+    if (!elements?.length) return [];
+
+    const json = getEventDataByIndex(folderKey, chapterNum, eventNum);
+    if (!json?.relations) return [];
+
+    const relations = collectUndirectedRelations(json.relations);
+    const ids = new Set(relations.flatMap((rel) => [String(rel.id1), String(rel.id2)]));
+    const filtered = elements.filter(
+      (el) => !el.data.source && ids.has(String(el.data.id)),
+    );
+    return extractRadarChartData(node.id, relations, filtered, 8);
+  } catch {
+    return [];
+  }
 }
 
 function handleProfileImageError(e) {
   e.target.style.display = "none";
-  if (e.target.nextSibling) {
-    e.target.nextSibling.style.display = "block";
-  }
+  if (e.target.nextSibling) e.target.nextSibling.style.display = "block";
+}
+
+function PersonSilhouette({ size = 48, circleFill = "#e5e7eb", bodyFill = "#bdbdbd" }) {
+  const cx = size / 2;
+  return (
+    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} fill="none">
+      <circle cx={cx} cy={cx} r={cx} fill={circleFill} />
+      <ellipse cx={cx} cy={size * 0.375} rx={size * 0.21} ry={size * 0.21} fill={bodyFill} />
+      <ellipse cx={cx} cy={size * 0.79} rx={size * 0.29} ry={size * 0.17} fill={bodyFill} />
+    </svg>
+  );
+}
+
+function TooltipCloseButton({ onClose, ariaLabel, className, style: extraStyle }) {
+  return (
+    <button
+      type="button"
+      onClick={onClose}
+      aria-label={ariaLabel}
+      className={['tooltip-close-btn', className].filter(Boolean).join(' ')}
+      style={{ ...createButtonStyle('tooltipClose'), ...extraStyle }}
+    >
+      &times;
+    </button>
+  );
+}
+
+function ActionButton({ variant = 'secondary', onClick, children, ariaLabel, title, minWidth }) {
+  const isPrimary = variant === 'primary';
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={ariaLabel}
+      title={title}
+      className={`tooltip-action-btn tooltip-action-btn--${isPrimary ? 'primary' : 'secondary'}`}
+      style={minWidth ? { minWidth } : undefined}
+    >
+      {children}
+    </button>
+  );
 }
 
 function NodeTooltipShell({
@@ -74,124 +317,106 @@ function NodeTooltipShell({
   );
 }
 
-function NodeSidebarStatusShell({ children, color = COLORS.textSecondary }) {
+function CenteredStatus({ children, color = COLORS.textSecondary, fullHeight = true }) {
   return (
     <div
-      style={{
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-        justifyContent: "center",
-        height: "100%",
-        padding: "2.5rem 1rem",
-        textAlign: "center",
-        color,
-      }}
+      className={`tooltip-centered-status${fullHeight ? '' : ' tooltip-centered-status--compact'}`}
+      style={{ '--status-color': color }}
     >
       {children}
     </div>
   );
 }
 
-function NodeProfileAvatar({ processedNodeData, variant = "tooltip" }) {
-  const hasImage = !!processedNodeData?.hasImage;
-  const displayName = processedNodeData?.displayName || "character";
+function ConnectionStatusPanel({ children }) {
+  return <div className="tooltip-connection-panel">{children}</div>;
+}
 
-  if (variant === "sidebar") {
-    return (
-      <div
-        style={{
-          width: "7.5rem",
-          height: "7.5rem",
-          borderRadius: "50%",
-          background: "#e6e8f0",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          margin: "0 auto 1.25rem auto",
-          boxShadow: "0 0.25rem 0.75rem rgba(108,142,255,0.15)",
-          overflow: "hidden",
-        }}
-      >
-        {hasImage ? (
-          <img
-            src={processedNodeData.image}
-            alt={displayName}
-            style={{
-              width: "100%",
-              height: "100%",
-              objectFit: "cover",
-              borderRadius: "50%",
-            }}
-            crossOrigin="anonymous"
-            onError={handleProfileImageError}
-          />
-        ) : null}
-        <svg
-          width="80"
-          height="80"
-          viewBox="0 0 80 80"
-          fill="none"
-          style={{ display: hasImage ? "none" : "block" }}
+function RelationTagsRow({ tags, compact = false }) {
+  if (!tags?.length) return null;
+  return (
+    <div className={`tooltip-relation-tags${compact ? ' tooltip-relation-tags--compact' : ''}`}>
+      {tags.map((tag, i) => (
+        <span
+          key={i}
+          className={`tooltip-relation-tag${compact ? ' tooltip-relation-tag--compact' : ''}`}
         >
-          <circle cx="40" cy="40" r="40" fill="#e5e7eb" />
-          <ellipse cx="40" cy="32" rx="16" ry="16" fill="#bdbdbd" />
-          <ellipse cx="40" cy="56" rx="24" ry="12" fill="#bdbdbd" />
-        </svg>
+          {tag}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function NameWithDot({ name, positivity, dotSize = 14, fontSize = '1.1rem' }) {
+  const { color } = positivityDisplay(positivity);
+  return (
+    <div
+      className="tooltip-name-with-dot"
+      style={{ '--dot-color': color, '--dot-size': `${dotSize}px`, '--name-font-size': fontSize }}
+    >
+      <div className="tooltip-name-dot" />
+      <span className="tooltip-name-label">{name}</span>
+    </div>
+  );
+}
+
+function PositivityChip({ positivity, layout = 'row' }) {
+  const { color, label, percent } = positivityDisplay(positivity);
+  const style = { '--pos-color': color };
+
+  if (layout === 'card') {
+    return (
+      <div className="tooltip-positivity-chip tooltip-positivity-chip--card" style={style}>
+        <span className="tooltip-positivity-label">{label}</span>
+        <div className="tooltip-positivity-percent">
+          <span className="tooltip-positivity-percent-value">{percent}</span>
+          <span className="tooltip-positivity-percent-unit">%</span>
+        </div>
       </div>
     );
   }
 
   return (
+    <div className="tooltip-positivity-chip" style={style}>
+      <span className="tooltip-positivity-label">{label}</span>
+      <div className="tooltip-positivity-percent">{percent}%</div>
+    </div>
+  );
+}
+
+function NodeProfileAvatar({ node }) {
+  const hasImage = !!node?.hasImage;
+  return (
     <div className="profile-image-placeholder">
       <div className="profile-img">
         {hasImage ? (
           <img
-            src={processedNodeData.image}
-            alt={displayName}
-            style={{
-              width: "4.6875rem",
-              height: "4.6875rem",
-              objectFit: "cover",
-              borderRadius: "50%",
-              border: "0.125rem solid #e0e0e0",
-              background: "#faf7f2",
-              boxShadow: "0 0.125rem 0.5rem rgba(0,0,0,0.03)",
-            }}
+            src={node.image}
+            alt={node?.displayName || "character"}
             crossOrigin="anonymous"
             onError={handleProfileImageError}
           />
         ) : null}
-        <svg
-          width="42"
-          height="42"
-          viewBox="0 0 42 42"
-          fill="none"
-          style={{ display: hasImage ? "none" : "block" }}
-        >
-          <circle cx="21" cy="21" r="21" fill="#e5e7eb" />
-          <ellipse cx="21" cy="16" rx="9" ry="9" fill="#bdbdbd" />
-          <ellipse cx="21" cy="33" rx="13" ry="7" fill="#bdbdbd" />
-        </svg>
+        <div style={{ display: hasImage ? "none" : "block" }}>
+          <PersonSilhouette size={48} />
+        </div>
       </div>
     </div>
   );
 }
 
-/** 레이더 점 — 부모 내부 정의 시 매 렌더 새 컴포넌트 타입이 되어 Recharts/리conciliation에 불리함 */
 const UnifiedNodeRadarDot = memo(function UnifiedNodeRadarDot({
   cx,
   cy,
   payload,
   dataMap,
-  hoveredItem,
+  hoveredName,
   onDotMouseEnter,
   onDotMouseLeave,
 }) {
   const fullData =
-    payload && payload.name != null
-      ? dataMap.get(payload.name) || payload
-      : null;
+    payload?.name != null ? (dataMap.get(payload.name) || payload) : null;
   const dotName = fullData?.name ?? payload?.name;
 
   const handleMouseEnterDot = useCallback(
@@ -211,27 +436,20 @@ const UnifiedNodeRadarDot = memo(function UnifiedNodeRadarDot({
     [onDotMouseLeave]
   );
 
-  if (!payload || cx == null || cy == null || !fullData) {
-    return null;
-  }
+  if (!payload || cx == null || cy == null || !fullData) return null;
 
-  const color = getPositivityColor(fullData.positivity);
-  const isHovered = hoveredItem === payload.name;
+  const { color } = positivityDisplay(fullData.positivity);
+  const isHovered = hoveredName === payload.name;
   const radius = isHovered ? 8 : 5;
-  const hoverRadius = Math.max(15, radius * 3);
 
   return (
     <g>
       <circle
         cx={cx}
         cy={cy}
-        r={hoverRadius}
+        r={Math.max(15, radius * 3)}
         fill="transparent"
-        style={{
-          cursor: "pointer",
-          pointerEvents: "all",
-          zIndex: 10,
-        }}
+        style={{ cursor: "pointer", pointerEvents: "all", zIndex: 10 }}
         onMouseEnter={handleMouseEnterDot}
         onMouseLeave={handleMouseLeaveDot}
       />
@@ -242,17 +460,67 @@ const UnifiedNodeRadarDot = memo(function UnifiedNodeRadarDot({
         fill={color}
         stroke={isHovered ? "#fff" : "none"}
         strokeWidth={isHovered ? 2 : 0}
-        style={{
-          transition: "all 0.2s ease",
-          pointerEvents: "none",
-        }}
+        style={{ transition: "all 0.2s ease", pointerEvents: "none" }}
       />
     </g>
   );
 });
 
+function FewConnectionsList({ radarChartData }) {
+  return (
+    <div className="tooltip-few-list">
+      <div className="tooltip-few-list-title">연결된 인물</div>
+
+      <div className="tooltip-few-list-items">
+        {radarChartData.map((item, index) => (
+          <div key={index} className="tooltip-few-list-card">
+            <NameWithDot name={item.name} positivity={item.positivity} />
+            <PositivityChip positivity={item.positivity} />
+            <RelationTagsRow tags={item.relationTags} />
+          </div>
+        ))}
+      </div>
+
+      <div className="tooltip-few-list-hint">
+        <div>현재 연결된 인물이 적어 그리드 차트로 표시하기 어려운 상황입니다.</div>
+        <div>더 풍부한 관계 분석을 위해 다른 챕터나 이벤트를 확인해보시기 바랍니다.</div>
+      </div>
+    </div>
+  );
+}
+
+function HoveredRelationPopup({ item, x, y, onClose }) {
+  const { color } = positivityDisplay(item.positivity);
+
+  return (
+    <div
+      className="tooltip-hover-popup"
+      style={{
+        left: `${Math.min(x + 15, window.innerWidth - 350)}px`,
+        top: `${Math.max(y - 15, 10)}px`,
+        '--pos-color': color,
+      }}
+      onMouseLeave={onClose}
+    >
+      <div className="tooltip-hover-popup-title">
+        <NameWithDot name={item.name} positivity={item.positivity} dotSize={8} />
+      </div>
+      <PositivityChip positivity={item.positivity} layout="card" />
+      {item.relationTags?.length > 0 && (
+        <div className="tooltip-hover-popup-tags">
+          <div className="tooltip-hover-popup-tags-label">
+            <div className="tooltip-hover-popup-tags-dot" />
+            관계 태그
+          </div>
+          <RelationTagsRow tags={item.relationTags} compact />
+        </div>
+      )}
+    </div>
+  );
+}
+
 function UnifiedNodeInfo({
-  displayMode = 'tooltip', // 'tooltip' | 'sidebar'
+  displayMode = 'tooltip',
   data,
   x,
   y,
@@ -263,417 +531,141 @@ function UnifiedNodeInfo({
   filename,
   currentEvent = null,
   prevValidEvent = null,
-  povSummaries = null, // API에서 가져온 관점 요약 데이터
-  apiBookGraphData = null, // relationship-graph (scope=book) 데이터
+  povSummaries = null,
+  apiBookGraphData = null,
 }) {
   const { filename: urlFilename } = useParams();
-  const actualFilename = filename || urlFilename;
+  const isSidebar = displayMode === 'sidebar';
+  const apiBookId = extractApiBookId(filename || urlFilename);
+  const folderKey = apiBookId ? `api:${apiBookId}` : null;
+  const node = useMemo(() => buildProcessedNode(data), [data]);
 
-  const folderKey = toApiFolderKey(actualFilename);
-  const [nodeData, setNodeData] = useState(() => resolveNodeDataFromProp(data));
-
-  useEffect(() => {
-    setNodeData(resolveNodeDataFromProp(data));
-  }, [data]);
-
-  const [isNodeAppeared, setIsNodeAppeared] = useState(false);
+  const [appeared, setAppeared] = useState(false);
   const [error, setError] = useState(null);
-  const [isWarningExpanded, setIsWarningExpanded] = useState(false); // 경고 화면 펼침 여부
-  const [showSummary, setShowSummary] = useState(false); // 실제 내용 표시 여부
-  const [isModalOpen, setIsModalOpen] = useState(false); // 확대 화면 모달 상태
-  const [hoveredItem, setHoveredItem] = useState(null); // 호버된 아이템
-  const [hoverPosition, setHoverPosition] = useState({ x: 0, y: 0 }); // 호버 위치
+  const [summaryStage, setSummaryStage] = useState(SUMMARY.COLLAPSED);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [hover, setHover] = useState(null);
 
-  // 모달 핸들러
-  const handleOpenModal = useCallback(() => {
-    setIsModalOpen(true);
-  }, []);
-
-  const handleCloseModal = useCallback(() => {
+  const clearHover = useCallback(() => setHover(null), []);
+  const closeModal = useCallback(() => {
     setIsModalOpen(false);
-    setHoveredItem(null); // 모달 닫을 때 호버 상태 초기화
+    clearHover();
+  }, [clearHover]);
+  const onRadarHoverEnter = useCallback((name, event) => {
+    setHover({ name, x: event.clientX, y: event.clientY });
   }, []);
 
-  // 마우스 오버 핸들러
-  const handleMouseEnter = useCallback((name, event) => {
-    setHoveredItem(name);
-    setHoverPosition({
-      x: event.clientX,
-      y: event.clientY
-    });
-  }, []);
-
-  const handleMouseLeave = useCallback(() => {
-    // 즉시 호버 상태 해제
-    setHoveredItem(null);
-  }, []);
-
-  // ESC 키로 모달 닫기
   useEffect(() => {
-    const handleKeyDown = (event) => {
-      if (event.key === 'Escape' && isModalOpen) {
-        handleCloseModal();
-      }
-    };
-
-    if (isModalOpen) {
-      document.addEventListener('keydown', handleKeyDown);
-      document.body.style.overflow = 'hidden';
-    }
-
+    if (!isModalOpen) return undefined;
+    const onKeyDown = (e) => { if (e.key === 'Escape') closeModal(); };
+    document.addEventListener('keydown', onKeyDown);
+    document.body.style.overflow = 'hidden';
     return () => {
-      document.removeEventListener('keydown', handleKeyDown);
+      document.removeEventListener('keydown', onKeyDown);
       document.body.style.overflow = 'unset';
     };
-  }, [isModalOpen, handleCloseModal]);
+  }, [isModalOpen, closeModal]);
 
-  // 인물이 변경될 때마다 모든 상태 초기화
   useEffect(() => {
-    setIsWarningExpanded(false);
-    setShowSummary(false);
+    setSummaryStage(SUMMARY.COLLAPSED);
     setIsModalOpen(false);
-    setHoveredItem(null);
-  }, [nodeData?.id]);
+    clearHover();
+  }, [node?.id, clearHover]);
 
-
-  const isTooltipMode = displayMode === 'tooltip';
   const { position, showContent, isDragging, tooltipRef, handleMouseDown } = useTooltipPosition(
-    x,
-    y,
-    { enabled: isTooltipMode }
+    x, y, { enabled: !isSidebar }
   );
 
-  // 외부 클릭 감지 훅 - 툴팁 모드에서만 사용, 드래그 후 클릭 무시
   const clickOutsideRef = useClickOutside(
-    () => {
-      if (onClose) onClose();
-    },
-    isTooltipMode && showContent,
+    () => { if (onClose) onClose(); },
+    !isSidebar && showContent,
     true
   );
 
-  const unifiedEventInfo = useMemo(
+  const eventInfo = useMemo(
     () => getUnifiedEventInfoForTooltip({ currentEvent, prevValidEvent, eventNum }),
     [currentEvent, prevValidEvent, eventNum],
   );
 
-  // 노드 등장 여부 확인 (Viewer tooltip만). sidebar / graph-only는 스킵
-  const checkNodeAppearance = useCallback(() => {
-    if (displayMode === 'sidebar' || isGraphOnlyGraphPage()) {
-      setIsNodeAppeared(true);
-      setError(null);
-      return;
-    }
-
-    try {
-      setIsNodeAppeared(false);
-      setError(null);
-
-      if (!data || !chapterNum || chapterNum <= 0) {
-        return;
-      }
-
-      const targetEventNum = unifiedEventInfo.eventNum;
-
-      const json = getEventDataByIndex(folderKey, chapterNum, targetEventNum);
-
-      const normalizeToString = (value) => {
-        if (value === undefined || value === null) return "";
-        if (typeof value === "number") {
-          if (!Number.isFinite(value)) return "";
-          return String(Math.trunc(value));
-        }
-        return String(value).trim();
-      };
-
-      const parseToFiniteNumber = (value) => {
-        const num = Number(value);
-        return Number.isFinite(num) ? num : null;
-      };
-
-      const rawNodeId = data?.id ?? data?.data?.id ?? nodeData?.id;
-      const normalizedNodeId = normalizeToString(rawNodeId);
-      const nodeIdNum = parseToFiniteNumber(normalizedNodeId);
-      const normalizedNodeName = normalizeToString(
-        data?.common_name ??
-        data?.label ??
-        data?.data?.common_name ??
-        data?.data?.label ??
-        nodeData?.common_name ??
-        nodeData?.label
-      );
-
-      const isSameIdentifier = (candidate) => {
-        if (!candidate) return false;
-        const candidateId = candidate.id ?? candidate.character_id ?? candidate.characterId ?? candidate.char_id ?? candidate.pk ?? candidate.node_id;
-        const candidateName = candidate.common_name ?? candidate.name ?? candidate.label ?? candidate.displayName;
-
-        const candidateIdStr = normalizeToString(candidateId);
-        if (candidateIdStr && normalizedNodeId && candidateIdStr === normalizedNodeId) {
-          return true;
-        }
-
-        const candidateIdNum = parseToFiniteNumber(candidateIdStr);
-        if (candidateIdNum !== null && nodeIdNum !== null && candidateIdNum === nodeIdNum) {
-          return true;
-        }
-
-        const candidateNameStr = normalizeToString(candidateName);
-        if (candidateNameStr && normalizedNodeName && candidateNameStr === normalizedNodeName) {
-          return true;
-        }
-
-        return false;
-      };
-
-      const appearedInElements = Array.isArray(elements) && elements.length > 0
-        ? elements.some((element) => {
-            if (!element || element.data?.source) return false;
-            const elementId = element.data?.id ?? element.id;
-            const elementName = element.data?.common_name ?? element.data?.label;
-            return isSameIdentifier({ id: elementId, name: elementName });
-          })
-        : false;
-
-      if (!json || !json.relations) {
-        setIsNodeAppeared(appearedInElements);
-        return;
-      }
-
-      const processedRelations = processRelations(json.relations);
-
-      const appearedInCharacters = Array.isArray(json.characters)
-        ? json.characters.some((character) => isSameIdentifier(character))
-        : false;
-
-      const appearedInRelations = processedRelations.some((rel) => {
-        const id1Num = parseToFiniteNumber(rel.id1);
-        const id2Num = parseToFiniteNumber(rel.id2);
-        if (nodeIdNum !== null) {
-          return id1Num === nodeIdNum || id2Num === nodeIdNum;
-        }
-        return (
-          (normalizedNodeId && (normalizeToString(rel.id1) === normalizedNodeId || normalizeToString(rel.id2) === normalizedNodeId)) ||
-          (normalizedNodeName && (normalizeToString(rel.name1) === normalizedNodeName || normalizeToString(rel.name2) === normalizedNodeName))
-        );
-      });
-
-      const appeared = appearedInCharacters || appearedInRelations || appearedInElements;
-
-      setIsNodeAppeared(appeared);
-    } catch (err) {
-      setError(err.message);
-      setIsNodeAppeared(false);
-    }
-  }, [data, nodeData, chapterNum, unifiedEventInfo, folderKey, elements, displayMode]);
-
-  // 노드 등장 여부 확인
   useEffect(() => {
-    checkNodeAppearance();
-  }, [checkNodeAppearance]);
+    const result = checkNodeAppearance({
+      isSidebar,
+      data,
+      node,
+      chapterNum,
+      folderKey,
+      eventNum: eventInfo.eventNum,
+      elements,
+    });
+    setAppeared(result.appeared);
+    setError(result.error);
+  }, [data, node, chapterNum, eventInfo, folderKey, elements, isSidebar]);
 
-  // 메모이제이션된 데이터 처리
-  const processedNodeData = useMemo(() => {
-    if (!nodeData) return null;
+  const summaryText = useMemo(
+    () => resolvePovSummary(node, chapterNum, povSummaries),
+    [node, chapterNum, povSummaries],
+  );
 
-    return {
-      ...nodeData,
-      names: processRelationTags(nodeData.names || [], nodeData.common_name),
-      displayName: nodeData.common_name || nodeData.label || "Unknown",
-      hasImage: !!nodeData.image,
-      isMainCharacter: !!nodeData.isMainCharacter,
-    };
-  }, [nodeData]);
+  const radarChartData = useMemo(
+    () =>
+      buildRadarChartData({
+        node,
+        chapterNum,
+        isSidebar,
+        apiBookGraphData,
+        elements,
+        folderKey,
+        eventNum: eventInfo.eventNum,
+      }),
+    [node, chapterNum, isSidebar, folderKey, elements, apiBookGraphData, eventInfo],
+  );
 
-  // 한글 description만 표시
-  const currentDescription = useMemo(() => {
-    if (!nodeData) return '';
-    return nodeData.personalityText || nodeData.description || '';
-  }, [nodeData]);
-
-  const displayHasDescription = !!(currentDescription && currentDescription.trim());
-
-  // 요약 데이터 — API(pov-summaries) 우선, 없으면 안내 문구
-  const summaryData = useMemo(() => {
-    if (!processedNodeData) {
-      return { summary: "인물에 대한 요약 정보가 없습니다." };
-    }
-
-    // GET .../pov-summaries — characterId 우선, 없으면 characterName과 표시명 매칭
-    if (povSummaries && Array.isArray(povSummaries.povSummaries) && povSummaries.povSummaries.length > 0) {
-      const nodeId = Number(processedNodeData.id);
-      let characterSummary = null;
-      if (Number.isFinite(nodeId)) {
-        characterSummary = povSummaries.povSummaries.find(
-          (s) => Number(s.characterId) === nodeId
-        );
-      }
-      if (!characterSummary) {
-        const names = [
-          processedNodeData.common_name,
-          processedNodeData.label,
-          processedNodeData.displayName,
-        ].filter((n) => typeof n === 'string' && n.trim() !== '');
-        characterSummary = povSummaries.povSummaries.find((s) =>
-          names.some((n) => n === s.characterName)
-        );
-      }
-      if (characterSummary?.summaryText) {
-        return { summary: characterSummary.summaryText };
-      }
-    }
-
-    const currentChapter = chapterNum || 1;
-    const displayLabel =
-      processedNodeData.displayName ||
-      processedNodeData.label ||
-      processedNodeData.common_name ||
-      '인물';
-    return {
-      summary: `${displayLabel}에 대한 ${currentChapter}장 관점 요약이 아직 준비되지 않았습니다.`,
-    };
-  }, [processedNodeData, chapterNum, povSummaries]);
-
-  // 레이더 차트 데이터 추출 (relationship-graph book scope 기반)
-  const radarChartData = useMemo(() => {
-    if (!nodeData?.id || !chapterNum || displayMode !== 'sidebar') {
-      return [];
-    }
-
-    // relationship-graph 데이터 우선 사용
-    if (apiBookGraphData?.relations && apiBookGraphData?.characters) {
-      try {
-        const { relations, characters } = apiBookGraphData;
-
-        // 캐릭터 목록으로 이름 룩업 구조 생성 (elements 의존 제거)
-        const nameToIdMap = {};
-        const bookGraphElements = characters.map(char => {
-          const charName = char.common_name || char.name;
-          nameToIdMap[charName] = char.id;
-          return { data: { id: String(char.id), label: charName, common_name: charName } };
-        });
-
-        // 현재 노드 ID를 relationship-graph 숫자 ID로 변환
-        const currentNodeId = nodeData.id;
-        let targetNodeId = currentNodeId;
-        if (typeof currentNodeId === 'string') {
-          const charName = nodeData.label || nodeData.common_name;
-          targetNodeId = nameToIdMap[charName] ?? currentNodeId;
-        }
-
-        // 관계 중복 제거 (순서 무관 키)
-        const relationMap = new Map();
-        relations.forEach(rel => {
-          if (rel.id1 !== targetNodeId && rel.id2 !== targetNodeId) return;
-          const key = undirectedPairKey(rel.id1, rel.id2);
-          if (!relationMap.has(key)) {
-            relationMap.set(key, {
-              id1: rel.id1,
-              id2: rel.id2,
-              relation: rel.relation || ['관계'],
-              count: rel.count || 1,
-              positivity: rel.positivity || 0,
-            });
-          }
-        });
-
-        return extractRadarChartData(
-          targetNodeId,
-          Array.from(relationMap.values()),
-          bookGraphElements,
-          8
-        );
-      } catch {
-        return [];
-      }
-    }
-
-    // relationship-graph 없으면 이벤트 캐시 스냅샷으로 보강
-    if (!elements || elements.length === 0) {
-      return [];
-    }
-
-    try {
-      const targetEventNum = unifiedEventInfo.eventNum;
-      const json = getEventDataByIndex(folderKey, chapterNum, targetEventNum);
-      if (!json || !json.relations) return [];
-
-      const relationMap = new Map();
-      json.relations.forEach((rel) => {
-        const source = rel.id1 ?? rel.source;
-        const target = rel.id2 ?? rel.target;
-        if (!source || !target) return;
-        const key1 = `${source}-${target}`;
-        const key2 = `${target}-${source}`;
-        if (!relationMap.has(key1) && !relationMap.has(key2)) {
-          relationMap.set(key1, {
-            source,
-            target,
-            relation: rel.relation,
-            strength: rel.strength || 1,
-            positivity: rel.positivity || 0,
-          });
-        }
-      });
-
-      const finalRelations = Array.from(relationMap.values());
-      const currentEventCharacterIds = new Set();
-      finalRelations.forEach(rel => {
-        currentEventCharacterIds.add(String(rel.source));
-        currentEventCharacterIds.add(String(rel.target));
-      });
-
-      const filteredElements = elements.filter(el => {
-        if (el.data.source) return false;
-        return currentEventCharacterIds.has(String(el.data.id));
-      });
-
-      return extractRadarChartData(nodeData.id, finalRelations, filteredElements, 8);
-    } catch {
-      return [];
-    }
-  }, [nodeData, chapterNum, displayMode, folderKey, elements, apiBookGraphData, unifiedEventInfo]);
-
-  // 연결 상태 확인
-  const connectionStatus = useMemo(() => {
-    return getConnectionStatus(radarChartData);
+  const connectionKind = useMemo(() => {
+    const n = radarChartData.length;
+    if (n === 0) return 'no_connections';
+    if (n <= 2) return 'few_connections';
+    return 'sufficient_connections';
   }, [radarChartData]);
 
-  // 데이터 Map 생성 (빠른 검색용)
   const dataMap = useMemo(() => {
     const map = new Map();
-    radarChartData.forEach(item => {
-      map.set(item.name, item);
-    });
+    radarChartData.forEach((item) => map.set(item.name, item));
     return map;
   }, [radarChartData]);
 
-  // 축 라벨 커스터마이징
-  const renderPolarAngleAxis = ({ payload, x, y, cx, cy }) => {
-    const dataPoint = dataMap.get(payload.value);
-    const color = (dataPoint && dataPoint.positivity !== undefined) 
-      ? getPositivityColor(dataPoint.positivity) 
+  const hoveredItem = hover ? dataMap.get(hover.name) : null;
+  const isWarning = summaryStage === SUMMARY.WARNING;
+  const isContent = summaryStage === SUMMARY.CONTENT;
+
+  const floatingShell = {
+    shellRef: mergeRefs(tooltipRef, clickOutsideRef),
+    position,
+    zIndex: Z_INDEX_TOOLTIP,
+    showContent,
+    isDragging,
+    handleMouseDown,
+  };
+
+  const renderPolarAngleAxis = ({ payload, x: tickX, y: tickY, cx, cy }) => {
+    const point = dataMap.get(payload.value);
+    const color = point?.positivity !== undefined
+      ? positivityDisplay(point.positivity).color
       : COLORS.textPrimary;
-    const isHovered = hoveredItem === payload.value;
-    
-    const dx = x - cx;
-    const dy = y - cy;
-    const distance = Math.sqrt(dx * dx + dy * dy);
-    const nameLength = payload.value ? payload.value.length : 0;
-    const offset = Math.max(40, 25 + (nameLength * 2));
-    const scale = (distance + offset) / distance;
-    const newX = cx + dx * scale;
-    const newY = cy + dy * scale;
-    
+    const active = hover?.name === payload.value;
+    const dx = tickX - cx;
+    const dy = tickY - cy;
+    const distance = Math.sqrt(dx * dx + dy * dy) || 1;
+    const scale = (distance + Math.max(40, 25 + ((payload.value?.length || 0) * 2))) / distance;
+
     return (
       <text
-        x={newX}
-        y={newY}
+        x={cx + dx * scale}
+        y={cy + dy * scale}
         textAnchor="middle"
         dominantBaseline="middle"
-        fill={isHovered ? color : COLORS.textPrimary}
-        fontSize={isHovered ? 18 : 16}
-        fontWeight={isHovered ? 700 : 600}
+        fill={active ? color : COLORS.textPrimary}
+        fontSize={active ? 18 : 16}
+        fontWeight={active ? 700 : 600}
         style={{ transition: 'all 0.2s ease' }}
       >
         {payload.value}
@@ -681,1254 +673,307 @@ function UnifiedNodeInfo({
     );
   };
 
-  // 호버된 아이템의 데이터 가져오기
-  const hoveredData = useMemo(() => {
-    if (!hoveredItem) return null;
-    return dataMap.get(hoveredItem);
-  }, [hoveredItem, dataMap]);
+  const renderModalRadarBody = () => {
+    if (connectionKind === 'sufficient_connections') {
+      return (
+        <ResponsiveContainer width="100%" height="100%">
+          <RadarChart
+            data={radarChartData}
+            margin={{ top: 60, right: 60, bottom: 60, left: 60 }}
+            style={{ outline: 'none' }}
+          >
+            <style>{`
+              svg:focus, svg *:focus { outline: none !important; }
+              * { animation: none !important; transition: none !important; }
+            `}</style>
+            <PolarGrid stroke={COLORS.border} />
+            <PolarAngleAxis dataKey="name" tick={renderPolarAngleAxis} />
+            <PolarRadiusAxis
+              angle={90}
+              domain={[0, 100]}
+              tick={{ fontSize: 14, fill: COLORS.textSecondary, fontWeight: 600 }}
+              tickCount={5}
+              tickFormatter={(v) => (((v / 100) * 2) - 1).toFixed(1)}
+            />
+            <Radar
+              name={node?.displayName}
+              dataKey="normalizedValue"
+              stroke="#9ca3af"
+              fill="#e5e7eb"
+              fillOpacity={0.2}
+              strokeWidth={2}
+              dot={(dotProps) => {
+                const { key, ...rest } = dotProps;
+                return (
+                  <UnifiedNodeRadarDot
+                    key={key}
+                    {...rest}
+                    dataMap={dataMap}
+                    hoveredName={hover?.name}
+                    onDotMouseEnter={onRadarHoverEnter}
+                    onDotMouseLeave={clearHover}
+                  />
+                );
+              }}
+              isAnimationActive={false}
+            />
+          </RadarChart>
+        </ResponsiveContainer>
+      );
+    }
 
-  // z-index 설정
-  const zIndexValue = 99999;
+    return (
+      <ConnectionStatusPanel>
+        {connectionKind === 'few_connections' && radarChartData.length > 0 ? (
+          <FewConnectionsList radarChartData={radarChartData} />
+        ) : (
+          <div className="tooltip-empty-connections">
+            다른 인물을 선택하거나 다른 챕터를 확인해보세요.
+          </div>
+        )}
+      </ConnectionStatusPanel>
+    );
+  };
 
-  // 에러가 있는 경우 에러 메시지 표시
   if (error) {
     const errorContent = (
-      <div style={{ textAlign: "center", color: COLORS.error }}>
-        <h4 style={{ margin: "0 0 0.5rem 0" }}>오류가 발생했습니다</h4>
-        <p style={{ margin: 0, fontSize: "0.875rem" }}>{error}</p>
-        <button
-          onClick={onClose}
-          style={{
-            marginTop: "1rem",
-            padding: "0.5rem 1rem",
-            background: COLORS.error,
-            color: "white",
-            border: "none",
-            borderRadius: "0.5rem",
-            cursor: "pointer",
-            ...createButtonStyle(ANIMATION_VALUES, 'default')
-          }}
-        >
+      <div className="tooltip-error-block">
+        <h4 className="tooltip-error-title">오류가 발생했습니다</h4>
+        <p className="tooltip-error-msg">{error}</p>
+        <button type="button" onClick={onClose} className="tooltip-error-close-btn">
           닫기
         </button>
       </div>
     );
 
-    if (isTooltipMode) {
+    if (!isSidebar) {
       return (
         <NodeTooltipShell
           shellRef={tooltipRef}
           className="graph-node-tooltip error"
           containerStyle={unifiedNodeTooltipStyles.errorContainer}
           position={position}
-          zIndex={zIndexValue}
+          zIndex={Z_INDEX_TOOLTIP}
         >
           {errorContent}
         </NodeTooltipShell>
       );
     }
 
-    return (
-      <NodeSidebarStatusShell color="#d32f2f">
-        {errorContent}
-      </NodeSidebarStatusShell>
-    );
+    return <CenteredStatus color="#d32f2f">{errorContent}</CenteredStatus>;
   }
 
-  // 노드가 현재 챕터/이벤트에서 등장하지 않는 경우 (Viewer tooltip만)
-  if (!isNodeAppeared) {
-    const notAppearedContent = (
-      <div
-        style={{
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
-          justifyContent: "center",
-          padding: "2.5rem 1.5rem",
-          textAlign: "center",
-          minHeight: "12.5rem",
-        }}
-      >
-        <div
-          style={{
-            width: "5rem",
-            height: "5rem",
-            borderRadius: "50%",
-            background: COLORS.backgroundLight,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            marginBottom: "1.25rem",
-            border: `0.125rem solid ${COLORS.border}`,
-          }}
-        >
-          <svg width="40" height="40" viewBox="0 0 40 40" fill="none">
-            <circle cx="20" cy="20" r="20" fill={COLORS.border} />
-            <ellipse cx="20" cy="16" rx="8" ry="8" fill={COLORS.textSecondary} />
-            <ellipse cx="20" cy="32" rx="12" ry="6" fill={COLORS.textSecondary} />
-          </svg>
-        </div>
-
-        <h3
-          style={{
-            fontSize: "1.25rem",
-            fontWeight: 700,
-            color: COLORS.textPrimary,
-            marginBottom: "0.5rem",
-          }}
-        >
-          {processedNodeData?.displayName}
-        </h3>
-
-        <p
-          style={{
-            fontSize: "1rem",
-            color: COLORS.textSecondary,
-            lineHeight: 1.5,
-            marginBottom: 0,
-            wordBreak: 'keep-all',
-          }}
-        >
-          아직 등장하지 않은 인물입니다
-        </p>
-
-        <p
-          style={{
-            fontSize: "0.875rem",
-            color: COLORS.textSecondary,
-            lineHeight: 1.4,
-            marginTop: "0.5rem",
-            wordBreak: 'keep-all',
-          }}
-        >
-          {unifiedEventInfo.name
-            ? `챕터 ${chapterNum} 이벤트 "${unifiedEventInfo.name}"에서는 등장하지 않습니다`
-            : unifiedEventInfo.eventNum
-              ? `챕터 ${chapterNum} 이벤트 ${unifiedEventInfo.eventNum}에서는 등장하지 않습니다`
-              : `챕터 ${chapterNum}에서는 등장하지 않습니다`}
-        </p>
-      </div>
-    );
+  if (!appeared) {
+    const eventHint = eventInfo.name
+      ? `챕터 ${chapterNum} 이벤트 "${eventInfo.name}"에서는 등장하지 않습니다`
+      : eventInfo.eventNum
+        ? `챕터 ${chapterNum} 이벤트 ${eventInfo.eventNum}에서는 등장하지 않습니다`
+        : `챕터 ${chapterNum}에서는 등장하지 않습니다`;
 
     return (
       <NodeTooltipShell
-        shellRef={mergeRefs(tooltipRef, clickOutsideRef)}
+        {...floatingShell}
         containerStyle={unifiedNodeTooltipStyles.notAppearedContainer}
-        position={position}
-        zIndex={zIndexValue}
-        showContent={showContent}
-        isDragging={isDragging}
-        handleMouseDown={handleMouseDown}
         transition={unifiedNodeAnimations.tooltipSimpleTransition(isDragging)}
         closeButton={(
-          <button
-            onClick={onClose}
-            className="tooltip-close-btn"
-            style={{
-              ...createButtonStyle(ANIMATION_VALUES, 'tooltipClose'),
-              top: "1.125rem",
-              right: "1.125rem",
-              fontSize: "1.375rem",
-            }}
-          >
-            &times;
-          </button>
+          <TooltipCloseButton
+            onClose={onClose}
+            className="tooltip-close-btn--offset"
+          />
         )}
       >
-        {notAppearedContent}
+        <CenteredStatus fullHeight={false}>
+          <div className="tooltip-not-appeared-avatar">
+            <PersonSilhouette
+              size={40}
+              circleFill={COLORS.border}
+              bodyFill={COLORS.textSecondary}
+            />
+          </div>
+          <h3 className="tooltip-not-appeared-title">{node?.displayName}</h3>
+          <p className="tooltip-not-appeared-msg">아직 등장하지 않은 인물입니다</p>
+          <p className="tooltip-not-appeared-hint">{eventHint}</p>
+        </CenteredStatus>
       </NodeTooltipShell>
     );
   }
 
-  // 기본 노드 정보 콘텐츠
-  const nodeInfoContent = (
-    <div className="tooltip-content business-card tooltip-front">
-      {/* X 버튼 - 툴팁과 슬라이드바 모드 모두에서 표시 */}
-      <button
-        onClick={onClose}
-        className="tooltip-close-btn"
-        style={createButtonStyle(ANIMATION_VALUES, 'tooltipClose')}
-      >
-        &times;
-      </button>
-      
-      <div
-        style={{
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "stretch",
-          padding: "1.75rem 0 0 0",
-          borderTopLeftRadius: "0.9375rem",
-          borderTopRightRadius: "0.9375rem",
-          background: "#f1f5f9",
-        }}
-      >
-        <div
-          style={{
-            display: "flex",
-            flexDirection: "row",
-            alignItems: "flex-start",
-            justifyContent: "flex-start",
-            gap: "1.3125rem",
-            width: "100%",
-          }}
-        >
-          <NodeProfileAvatar processedNodeData={processedNodeData} variant="tooltip" />
-          <div
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              alignItems: "flex-start",
-              justifyContent: "center",
-              minWidth: 0,
-            }}
-          >
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: "0.5rem",
-                marginTop: "0.75rem",
-                marginBottom: "0.1875rem",
-              }}
-            >
-              <span
-                style={{
-                  fontWeight: 800,
-                  fontSize: "1.25rem",
-                  color: COLORS.textPrimary,
-                  letterSpacing: "0.03125rem",
-                  maxWidth: "10.3125rem",
-                  overflow: "hidden",
-                  textOverflow: "ellipsis",
-                  whiteSpace: "nowrap",
-                }}
-              >
-                {processedNodeData?.displayName}
-              </span>
-
-              {processedNodeData?.isMainCharacter && (
-                <span
-                  style={{
-                    background: COLORS.primary,
-                    color: "#fff",
-                    borderRadius: "0.6875rem",
-                    fontSize: "0.75rem",
-                    padding: "0.125rem 0.5625rem",
-                    marginLeft: "0.125rem",
-                    fontWeight: 700,
-                    boxShadow: `0 0.125rem 0.5rem ${COLORS.primary}26`,
-                  }}
-                >
-                  주요 인물
-                </span>
-              )}
-            </div>
-
-            {processedNodeData?.names && processedNodeData.names.length > 0 && (
-              <div
-                style={{
-                  marginTop: "0.125rem",
-                  marginBottom: "0.125rem",
-                  display: "flex",
-                  gap: "0.3125rem",
-                  flexWrap: "wrap",
-                  justifyContent: "flex-start",
-                }}
-              >
-                {processedNodeData.names
-                  .filter(name => name !== processedNodeData.common_name)
-                  .map((name, i) => (
-                    <span
-                      key={i}
-                      style={{
-                        background: COLORS.backgroundLight,
-                        color: COLORS.textPrimary,
-                        borderRadius: "0.5625rem",
-                        fontSize: "0.75rem",
-                        padding: "0.125rem 0.5625rem",
-                        border: `0.0625rem solid ${COLORS.border}`,
-                        fontWeight: 500,
-                      }}
-                    >
-                      {name}
-                    </span>
-                  ))}
-              </div>
+  const nodeHeaderAndDescription = (
+    <>
+      <div className="node-tooltip-header">
+        <NodeProfileAvatar node={node} />
+        <div className="node-tooltip-identity">
+          <div className="node-tooltip-name-row">
+            <span className="node-tooltip-name">{node?.displayName}</span>
+            {node?.isMainCharacter && (
+              <span className="node-tooltip-badge">주요 인물</span>
             )}
           </div>
+          {node?.names?.length > 0 && (
+            <div className="node-tooltip-aliases">
+              {node.names
+                .filter((name) => name !== node.common_name)
+                .map((name, i) => (
+                  <span key={i} className="relation-tag">{name}</span>
+                ))}
+            </div>
+          )}
         </div>
       </div>
-      
-      <hr
-        style={{
-          margin: "0.875rem 0 0 0",
-          border: 0,
-          borderTop: "0.0625rem solid #f0f2f8",
-        }}
-      />
-      
       <div className="business-card-description">
-        {displayHasDescription ? (
-          <span>
-            {currentDescription}
-          </span>
+        {node?.description ? (
+          <span>{node.description}</span>
         ) : (
-          <span style={{ color: COLORS.textSecondary }}>설명 정보가 없습니다.</span>
+          <span className="tooltip-desc-empty">설명 정보가 없습니다.</span>
         )}
       </div>
-      
-      
-      <hr
-        style={{
-          margin: "0.875rem 0 0 0",
-          border: 0,
-          borderTop: "0.0625rem solid #f0f2f8",
-        }}
-      />
-      <div style={{ flex: 1, marginBottom: "1.25rem" }} />
-    </div>
+    </>
   );
 
-  // 툴팁 모드 렌더링
-  if (isTooltipMode) {
+  if (!isSidebar) {
     return (
       <NodeTooltipShell
-        shellRef={mergeRefs(tooltipRef, clickOutsideRef)}
-        containerStyle={{
-          ...unifiedNodeTooltipStyles.tooltipContainer,
-          transform: "rotateY(0deg)",
-        }}
-        position={position}
-        zIndex={zIndexValue}
-        showContent={showContent}
-        isDragging={isDragging}
-        handleMouseDown={handleMouseDown}
+        {...floatingShell}
+        containerStyle={unifiedNodeTooltipStyles.tooltipContainer}
         transition={unifiedNodeAnimations.tooltipComplexTransition(isDragging)}
       >
-        {nodeInfoContent}
+        <div className="tooltip-content business-card">
+          <TooltipCloseButton onClose={onClose} />
+          {nodeHeaderAndDescription}
+        </div>
       </NodeTooltipShell>
     );
   }
 
-  // 슬라이드바 모드 렌더링
-  if (displayMode === 'sidebar') {
-    return (
-      <div
-        style={unifiedNodeTooltipStyles.sidebarContainer}
-      >
-        {/* 사이드바 헤더 */}
-        <div style={{
-          padding: '1rem 1rem 0.75rem 1rem',
-          borderBottom: '0.0625rem solid #e5e7eb',
-          background: '#fff',
-        }}>
-          <div style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            marginBottom: '0',
-          }}>
-            {/* 인물 이름과 배지 */}
-            <div style={{
-              display: 'flex',
-              flexDirection: 'row',
-              alignItems: 'center',
-              gap: '0.25rem',
-              flex: 1,
-            }}>
-              <span style={{
-                fontSize: '1.25rem',
-                fontWeight: '700',
-                color: COLORS.textPrimary,
-                letterSpacing: '-0.025em',
-              }}>
-                {processedNodeData?.displayName}
-              </span>
-              {processedNodeData?.isMainCharacter && (
-                <span style={{
-                  background: COLORS.primary,
-                  color: '#fff',
-                  borderRadius: '0.75rem',
-                  fontSize: '0.75rem',
-                  padding: '0.25rem 0.75rem',
-                  fontWeight: '600',
-                  boxShadow: `0 0.125rem 0.25rem ${COLORS.primary}33`,
-                }}>
-                  주요 인물
-                </span>
+  return (
+    <div className="graph-sidebar-panel">
+      <TooltipCloseButton onClose={onClose} ariaLabel="사이드바 닫기" />
+
+      <div className="graph-sidebar-body">
+        {nodeHeaderAndDescription}
+
+        <div
+          className={`sidebar-section tooltip-summary-section tooltip-summary-section--${
+            isWarning ? 'warning' : isContent ? 'content' : 'collapsed'
+          }`}
+          role="region"
+          aria-label="인물 시점 요약"
+        >
+          <button
+            type="button"
+            onClick={() =>
+              setSummaryStage((s) =>
+                s === SUMMARY.COLLAPSED ? SUMMARY.WARNING : SUMMARY.COLLAPSED
+              )
+            }
+            className="summary-toggle-btn"
+          >
+            <h4 className="tooltip-section-title">해당 인물 시점의 요약</h4>
+            <span
+              className={`tooltip-summary-chevron${
+                summaryStage !== SUMMARY.COLLAPSED ? ' tooltip-summary-chevron--open' : ''
+              }`}
+            >
+              ▼
+            </span>
+          </button>
+
+          <div
+            className={`tooltip-collapsible tooltip-collapsible--warning${
+              isWarning ? ' is-open' : ''
+            }`}
+          >
+            <div className="tooltip-spoiler-body">
+              <h3 className={`tooltip-spoiler-title${isWarning ? ' is-fading' : ''}`}>
+                스포일러 포함
+              </h3>
+              <p className={`tooltip-spoiler-text${isWarning ? ' is-fading' : ''}`}>
+                스토리의 중요한 내용을 담고 있습니다.
+                <br />
+                내용을 확인하시겠습니까?
+              </p>
+              <div className={`tooltip-spoiler-actions${isWarning ? ' is-fading' : ''}`}>
+                <ActionButton
+                  onClick={() => setSummaryStage(SUMMARY.COLLAPSED)}
+                  ariaLabel="접기"
+                  title="접기"
+                >
+                  취소
+                </ActionButton>
+                <ActionButton
+                  variant="primary"
+                  onClick={() => setSummaryStage(SUMMARY.CONTENT)}
+                  ariaLabel="스포일러 내용 확인하기"
+                >
+                  확인하고 보기
+                </ActionButton>
+              </div>
+            </div>
+          </div>
+
+          <div
+            className={`tooltip-collapsible tooltip-collapsible--content${
+              isContent ? ' is-open' : ''
+            }`}
+            aria-hidden={!isContent}
+          >
+            <div className="tooltip-summary-content">
+              <div className="tooltip-summary-quote">
+                <p className={`tooltip-summary-text${isContent ? ' is-animated' : ''}`}>
+                  {summaryText}
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div
+          className="sidebar-section tooltip-analysis-section"
+          role="region"
+          aria-label="관계 분석"
+        >
+          <button
+            type="button"
+            onClick={() => setIsModalOpen(true)}
+            className="relation-analysis-btn"
+          >
+            <div className="tooltip-analysis-copy">
+              <h4 className="tooltip-section-title">인물 관계 분석</h4>
+              <p className="tooltip-analysis-desc">
+                {node?.displayName}와 연결된 인물들과의 관계를 시각화합니다
+              </p>
+            </div>
+            <span className="tooltip-analysis-plus">+</span>
+          </button>
+        </div>
+      </div>
+
+      {isModalOpen && (
+        <div className="modal-overlay" onClick={closeModal}>
+          <div className="modal-container" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2 className="tooltip-modal-title">관계도 - 확대화면</h2>
+              <button type="button" onClick={closeModal} className="modal-close-btn">
+                ×
+              </button>
+            </div>
+
+            <div className="tooltip-modal-body">
+              {renderModalRadarBody()}
+              {hoveredItem && (
+                <HoveredRelationPopup
+                  item={hoveredItem}
+                  x={hover.x}
+                  y={hover.y}
+                  onClose={clearHover}
+                />
               )}
             </div>
-            
-            <button
-              onClick={onClose}
-              aria-label="사이드바 닫기"
-              className="sidebar-close-btn"
-              onMouseOver={(e) => {
-                e.currentTarget.style.background = COLORS.backgroundLight;
-                e.currentTarget.style.color = COLORS.textPrimary;
-              }}
-              onMouseOut={(e) => {
-                e.currentTarget.style.background = 'none';
-                e.currentTarget.style.color = COLORS.textSecondary;
-              }}
-              onFocus={(e) => {
-                e.currentTarget.style.background = COLORS.backgroundLight;
-                e.currentTarget.style.color = COLORS.textPrimary;
-                e.currentTarget.style.outline = `0.125rem solid ${COLORS.primary}`;
-                e.currentTarget.style.outlineOffset = '0.125rem';
-              }}
-              onBlur={(e) => {
-                e.currentTarget.style.background = 'none';
-                e.currentTarget.style.color = COLORS.textSecondary;
-                e.currentTarget.style.outline = 'none';
-              }}
-            >
-              ×
-            </button>
           </div>
         </div>
-
-        {/* 사이드바 본문 */}
-        <div 
-          className="sidebar-content"
-          style={{
-            flex: 1,
-            overflow: 'auto',
-            padding: '0 1rem',
-          }}
-        >
-          <div style={{ padding: '1rem 0' }}>
-            {/* 통합 프로필 및 설명 섹션 */}
-            <div 
-              className="sidebar-card"
-              style={{
-                background: '#fff',
-                borderRadius: '0.75rem',
-                padding: '1rem',
-                marginBottom: '1rem',
-                border: `0.0625rem solid ${COLORS.border}`,
-                boxShadow: '0 0.0625rem 0.1875rem rgba(0,0,0,0.05)',
-              }}
-            >
-              {/* 프로필 이미지 */}
-              <div style={{
-                textAlign: 'center',
-                marginBottom: '1.25rem',
-              }}>
-                <NodeProfileAvatar processedNodeData={processedNodeData} variant="sidebar" />
-                
-                <h4 style={{
-                  fontSize: '1.25rem',
-                  fontWeight: '700',
-                  color: COLORS.textPrimary,
-                  margin: '0 0 0.5rem 0',
-                  letterSpacing: '-0.025em',
-                }}>
-                  {processedNodeData?.displayName}
-                </h4>
-                
-                {processedNodeData?.names && processedNodeData.names.length > 0 && (
-                  <div style={{
-                    display: 'flex',
-                    flexWrap: 'wrap',
-                    gap: '0.5rem',
-                    justifyContent: 'center',
-                    marginTop: '0.75rem',
-                  }}>
-                    {processedNodeData.names
-                      .filter(name => name !== processedNodeData.common_name)
-                      .map((name, i) => (
-                        <span
-                          key={i}
-                          style={{
-                            background: COLORS.backgroundLight,
-                            color: COLORS.textPrimary,
-                            borderRadius: '0.75rem',
-                            fontSize: '0.8125rem',
-                            padding: '0.25rem 0.75rem',
-                            border: `0.0625rem solid ${COLORS.border}`,
-                            fontWeight: '500',
-                          }}
-                        >
-                          {name}
-                        </span>
-                      ))}
-                  </div>
-                )}
-              </div>
-
-              {/* 인물 설명 */}
-              <div style={{
-                borderTop: '0.0625rem solid #e5e7eb',
-                paddingTop: '1.25rem',
-                minHeight: displayHasDescription ? 'auto' : '0',
-                height: displayHasDescription ? 'auto' : '0',
-                overflow: 'hidden',
-                transition: 'height 0.3s ease, min-height 0.3s ease',
-              }}>
-                {displayHasDescription && (
-                  <div style={{
-                    borderLeft: `0.25rem solid ${COLORS.primary}`,
-                    paddingLeft: '1.25rem',
-                  }}>
-                    <p style={{
-                      margin: 0,
-                      fontSize: '0.875rem',
-                      lineHeight: '1.6',
-                      color: COLORS.textPrimary,
-                      letterSpacing: '-0.01em',
-                      wordBreak: 'keep-all',
-                    }}>
-                      {currentDescription}
-                    </p>
-                  </div>
-                )}
-              </div>
-            </div>
-
-
-            {/* 요약 섹션 - 3단계 접근 방식 */}
-            <div 
-              className="sidebar-card"
-              style={{
-                background: '#fff',
-                borderRadius: '0.75rem',
-                padding: '1rem',
-                marginBottom: '1rem',
-                border: `0.0625rem solid ${COLORS.border}`,
-                boxShadow: '0 0.0625rem 0.1875rem rgba(0,0,0,0.05)',
-                overflow: 'hidden',
-                position: 'relative',
-                minHeight: '70px',
-                height: (isWarningExpanded && !showSummary) ? '440px' : 
-                       showSummary ? 'auto' : '60px',
-                transition: 'height 0.4s cubic-bezier(0.4, 0, 0.2, 1)',
-              }}
-              role="region"
-              aria-label="인물 시점 요약"
-            >
-              {/* 1단계: 접힌 제목 헤더 */}
-              <button
-                onClick={() => {
-                  if (showSummary || isWarningExpanded) {
-                    // 펼쳐진 상태 → 언제나 접기
-                    setShowSummary(false);
-                    setIsWarningExpanded(false);
-                  } else {
-                    // 접힌 상태 → 경고 화면 펼침
-                    setIsWarningExpanded(true);
-                  }
-                }}
-                className="summary-toggle-btn"
-                style={{
-                  borderBottom: 'none',
-                }}
-                onMouseEnter={(e) => {
-                  if (!showSummary) {
-                    e.currentTarget.style.background = COLORS.backgroundLight;
-                  }
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.background = 'transparent';
-                }}
-              >
-                <h4 style={{
-                  fontSize: '1rem',
-                  fontWeight: '700',
-                  color: COLORS.textPrimary,
-                  margin: '0.25rem 0 0.25rem 0',
-                  letterSpacing: '-0.025em',
-                  textAlign: 'left',
-                  lineHeight: '1.2',
-                  flex: 1,
-                }}>
-                  해당 인물 시점의 요약
-                </h4>
-                
-                <span style={{
-                  fontSize: '1.25rem',
-                  transform: (isWarningExpanded || showSummary) ? 'rotate(180deg)' : 'rotate(0deg)',
-                  transition: 'transform 0.3s ease',
-                  display: 'inline-block',
-                  color: COLORS.primary,
-                  flexShrink: 0,
-                  marginLeft: '0.5rem',
-                  lineHeight: '1',
-                }}>
-                  ▼
-                </span>
-              </button>
-              
-              {/* 2단계: 경고 화면 */}
-              <div style={{
-                height: (isWarningExpanded && !showSummary) ? '350px' : '0',
-                opacity: (isWarningExpanded && !showSummary) ? 1 : 0,
-                overflow: 'hidden',
-                transition: 'height 0.4s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.35s ease-in-out',
-                transitionDelay: (isWarningExpanded && !showSummary) ? '0.15s' : '0s',
-              }}>
-                <div style={{
-                  padding: '1.5rem 1rem 1rem 1rem',
-                  textAlign: 'center',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  minHeight: '300px',
-                }}>
-                  
-                   {/* 경고 제목 */}
-                   <h3 style={{
-                     fontSize: '1.25rem',
-                     fontWeight: '700',
-                     color: COLORS.textPrimary,
-                     margin: '0 0 0.75rem 0',
-                     letterSpacing: '-0.025em',
-                     textAlign: 'center',
-                     width: '100%',
-                     animation: (isWarningExpanded && !showSummary) ? 'fadeIn 0.4s ease-in-out' : 'none',
-                   }}>
-                     스포일러 포함
-                   </h3>
-                  
-                  {/* 경고 설명 */}
-                  <p style={{
-                    fontSize: '0.9375rem',
-                    lineHeight: '1.7',
-                    color: COLORS.textPrimary,
-                    letterSpacing: '-0.01em',
-                    whiteSpace: 'pre-wrap',
-                    margin: '0 0 1rem 0',
-                    wordBreak: 'keep-all',
-                    textAlign: 'center',
-                    width: '100%',
-                    animation: (isWarningExpanded && !showSummary) ? 'fadeIn 0.4s ease-in-out' : 'none',
-                  }}>
-                    스토리의 중요한 내용을 담고 있습니다.
-                    <br />
-                    내용을 확인하시겠습니까?
-                  </p>
-                  
-                  {/* 버튼 그룹 */}
-                  <div style={{
-                    display: 'flex',
-                    gap: '1rem',
-                    justifyContent: 'center',
-                    alignItems: 'center',
-                    width: '100%',
-                    flexWrap: 'wrap',
-                    animation: (isWarningExpanded && !showSummary) ? 'fadeIn 0.4s ease-in-out' : 'none',
-                  }}>
-                    {/* 취소 버튼 - 경고 화면 접기 */}
-                    <button
-                      onClick={() => setIsWarningExpanded(false)}
-                      aria-label="접기"
-                      title="접기"
-                      style={{
-                        padding: '0.625rem 1.25rem',
-                        background: '#fff',
-                        color: COLORS.textSecondary,
-                        border: `0.0625rem solid ${COLORS.border}`,
-                        borderRadius: '0.5rem',
-                        fontSize: '0.875rem',
-                        fontWeight: '600',
-                        cursor: 'pointer',
-                        transition: 'all 0.2s ease',
-                        minWidth: '6rem',
-                      }}
-                      onMouseEnter={(e) => {
-                        e.currentTarget.style.background = COLORS.backgroundLight;
-                        e.currentTarget.style.borderColor = COLORS.textSecondary;
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.background = '#fff';
-                        e.currentTarget.style.borderColor = COLORS.border;
-                      }}
-                    >
-                      취소
-                    </button>
-                    
-                    {/* 확인 버튼 */}
-                    <button
-                      onClick={() => setShowSummary(true)}
-                      aria-label="스포일러 내용 확인하기"
-                      style={{
-                        padding: '0.625rem 1.25rem',
-                        background: COLORS.primary,
-                        color: '#fff',
-                        border: 'none',
-                        borderRadius: '0.5rem',
-                        fontSize: '0.875rem',
-                        fontWeight: '600',
-                        cursor: 'pointer',
-                        transition: 'all 0.2s ease',
-                        boxShadow: '0 0.125rem 0.375rem rgba(92, 111, 92, 0.3)',
-                        minWidth: '9rem',
-                      }}
-                      onMouseEnter={(e) => {
-                        e.currentTarget.style.background = '#4A5A4A';
-                        e.currentTarget.style.transform = 'translateY(-2px)';
-                        e.currentTarget.style.boxShadow = '0 0.375rem 0.75rem rgba(92, 111, 92, 0.4)';
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.background = COLORS.primary;
-                        e.currentTarget.style.transform = 'translateY(0)';
-                        e.currentTarget.style.boxShadow = '0 0.125rem 0.375rem rgba(92, 111, 92, 0.3)';
-                      }}
-                    >
-                      확인하고 보기
-                    </button>
-                  </div>
-                </div>
-              </div>
-              
-              {/* 3단계: 실제 요약 내용 */}
-              <div 
-                style={{
-                  height: showSummary ? 'auto' : '0',
-                  opacity: showSummary ? 1 : 0,
-                  overflow: 'hidden',
-                  transition: 'height 0.4s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.35s ease-in-out',
-                  transitionDelay: showSummary ? '0.15s' : '0s',
-                }}
-                aria-hidden={!showSummary}
-              >
-                <div style={{
-                  marginTop: '1rem',
-                  marginBottom: '0.5rem',
-                }}>
-                   <div style={{
-                     borderLeft: `0.25rem solid ${COLORS.primary}`,
-                     paddingLeft: '1.25rem',
-                   }}>
-                   <p style={{
-                     margin: 0,
-                     fontSize: '0.95rem',
-                     lineHeight: '2.0',
-                     color: COLORS.textPrimary,
-                     letterSpacing: '-0.01em',
-                     whiteSpace: 'pre-wrap',
-                     wordBreak: 'keep-all',
-                     background: 'rgba(247, 250, 252, 0.8)',
-                     borderRadius: '0.5rem',
-                     animation: showSummary ? 'fadeIn 0.4s ease-in-out' : 'none',
-                   }}>
-                     {summaryData.summary}
-                   </p>
-                   </div>
-                </div>
-              </div>
-            </div>
-
-            {/* 관계 분석 레이더 차트 섹션 */}
-            <div 
-              className="sidebar-card"
-              style={{
-                background: '#fff',
-                borderRadius: '0.75rem',
-                marginBottom: '1rem',
-                border: `0.0625rem solid ${COLORS.border}`,
-                boxShadow: '0 0.0625rem 0.1875rem rgba(0,0,0,0.05)',
-                overflow: 'hidden',
-                minHeight: '40px', // 최소 높이 줄임
-                height: 'auto',
-              }}
-              role="region"
-              aria-label="관계 분석"
-            >
-              {/* 헤더 버튼 */}
-              <button
-                onClick={handleOpenModal}
-                className="relation-analysis-btn"
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.background = COLORS.backgroundLight;
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.background = 'transparent';
-                }}
-              >
-                <div style={{ textAlign: 'left' }}>
-                  <h4 style={{
-                    fontSize: '1rem',
-                    fontWeight: '700',
-                    color: COLORS.textPrimary,
-                    margin: '0.25rem 0 0.25rem 0',
-                    letterSpacing: '-0.025em',
-                    lineHeight: '1.2',
-                  }}>
-                    인물 관계 분석
-                  </h4>
-                  <p style={{
-                    fontSize: '0.8rem',
-                    color: COLORS.textSecondary,
-                    margin: 0,
-                    lineHeight: '1.4',
-                    wordBreak: 'keep-all',
-                  }}>
-                    {processedNodeData?.displayName}와 연결된 인물들과의 관계를 시각화합니다
-                  </p>
-                </div>
-                
-                <span style={{
-                  fontSize: '1.25rem',
-                  display: 'inline-block',
-                  color: COLORS.primary,
-                  flexShrink: 0,
-                  marginLeft: '1rem',
-                }}>
-                  +
-                </span>
-              </button>
-
-            </div>
-          </div>
-        </div>
-
-        {/* 확대 화면 모달 */}
-        {isModalOpen && (
-          <div
-            className="modal-overlay"
-            onClick={handleCloseModal}
-          >
-            <div
-              className="modal-container"
-              onClick={(e) => e.stopPropagation()}
-            >
-              {/* 모달 헤더 */}
-              <div className="modal-header">
-                <h2
-                  style={{
-                    margin: 0,
-                    fontSize: '1.5rem',
-                    fontWeight: '700',
-                    color: COLORS.textPrimary,
-                  }}
-                >
-                  관계도 - 확대화면
-                </h2>
-                <button
-                  onClick={handleCloseModal}
-                  className="modal-close-btn"
-                  onMouseEnter={(e) => {
-                    e.target.style.background = COLORS.backgroundLight;
-                    e.target.style.color = COLORS.textPrimary;
-                  }}
-                  onMouseLeave={(e) => {
-                    e.target.style.background = 'none';
-                    e.target.style.color = COLORS.textSecondary;
-                  }}
-                >
-                  ×
-                </button>
-              </div>
-
-               {/* 확대된 차트 */}
-               <div style={{ 
-                 flex: 1, 
-                 display: 'flex', 
-                 alignItems: 'stretch', 
-                 justifyContent: 'stretch',
-                 minHeight: 0,
-                 overflow: 'hidden'
-               }}>
-                 {connectionStatus.status === 'sufficient_connections' ? (
-                   <ResponsiveContainer width="100%" height="100%">
-                     <RadarChart 
-                       data={radarChartData} 
-                       margin={{ top: 60, right: 60, bottom: 60, left: 60 }}
-                       style={{ outline: 'none' }}
-                     >
-                      <style>{`
-                        svg:focus {
-                          outline: none !important;
-                        }
-                        svg *:focus {
-                          outline: none !important;
-                        }
-                        * {
-                          animation: none !important;
-                          transition: none !important;
-                        }
-                      `}</style>
-                      <PolarGrid stroke={COLORS.border} />
-                      <PolarAngleAxis 
-                        dataKey="name" 
-                        tick={renderPolarAngleAxis}
-                      />
-                      <PolarRadiusAxis 
-                        angle={90} 
-                        domain={[0, 100]} 
-                        tick={{ fontSize: 14, fill: COLORS.textSecondary, fontWeight: 600 }}
-                        tickCount={5}
-                        tickFormatter={(value) => {
-                          // normalizedValue (0-100)를 원래 positivity (-1~1)로 역변환
-                          const originalValue = ((value / 100) * 2) - 1;
-                          return originalValue.toFixed(1);
-                        }}
-                      />
-                      <Radar
-                        name={processedNodeData?.displayName}
-                        dataKey="normalizedValue"
-                        stroke="#9ca3af"
-                        fill="#e5e7eb"
-                        fillOpacity={0.2}
-                        strokeWidth={2}
-                        dot={(dotProps) => {
-                          const { key, ...rest } = dotProps;
-                          return (
-                            <UnifiedNodeRadarDot
-                              key={key}
-                              {...rest}
-                              dataMap={dataMap}
-                              hoveredItem={hoveredItem}
-                              onDotMouseEnter={handleMouseEnter}
-                              onDotMouseLeave={handleMouseLeave}
-                            />
-                          );
-                        }}
-                        isAnimationActive={false}
-                        animationBegin={0}
-                        animationDuration={0}
-                      />
-                    </RadarChart>
-                  </ResponsiveContainer>
-                 ) : connectionStatus.status === 'few_connections' ? (
-                   <div style={{
-                     padding: '1rem',
-                     background: COLORS.backgroundLight,
-                     borderRadius: '0.75rem',
-                     border: `1px solid ${COLORS.border}`,
-                     width: '100%',
-                     height: '100%',
-                     display: 'flex',
-                     flexDirection: 'column',
-                     alignItems: 'center',
-                     justifyContent: 'flex-start',
-                     textAlign: 'center',
-                     overflowY: 'auto',
-                     paddingTop: '2rem'
-                   }}>
-                    {radarChartData.length > 0 && (
-                        <div style={{ 
-                          background: COLORS.background,
-                          borderRadius: '0.75rem',
-                          border: `1px solid ${COLORS.borderLight}`,
-                          padding: '0.5rem',
-                          width: '100%',
-                          maxWidth: '500px'
-                        }}>
-                         <div style={{ 
-                           fontSize: '1.2rem', 
-                           fontWeight: '700', 
-                           marginBottom: '1rem',
-                           color: COLORS.textPrimary,
-                           textAlign: 'center'
-                         }}>
-                           연결된 인물
-                         </div>
-                        
-                        <div style={{ 
-                          display: 'flex', 
-                          flexDirection: 'column', 
-                          gap: '1rem'
-                        }}>
-                          {radarChartData.map((item, index) => (
-                             <div key={index} style={{ 
-                               display: 'grid',
-                               gridTemplateColumns: '1fr auto',
-                               gridTemplateRows: 'auto auto',
-                               gap: '0.75rem',
-                               padding: '1rem',
-                               background: '#ffffff',
-                               borderRadius: '0.5rem',
-                               border: `1px solid ${COLORS.borderLight}`,
-                               fontSize: '1rem',
-                               boxShadow: '0 2px 4px rgba(0,0,0,0.05)'
-                             }}>
-                               {/* 인물 이름 (왼쪽 위) */}
-                               <div style={{ 
-                                 display: 'flex', 
-                                 alignItems: 'center', 
-                                 gap: '1rem'
-                               }}>
-                                 <div style={{
-                                   width: '14px',
-                                   height: '14px',
-                                   borderRadius: '50%',
-                                   background: getPositivityColor(item.positivity)
-                                 }} />
-                                 <span style={{ 
-                                   color: COLORS.textPrimary,
-                                   fontWeight: '700',
-                                   fontSize: '1.1rem'
-                                 }}>
-                                   {item.name}
-                                 </span>
-                               </div>
-                               
-                               {/* 관계도 정보 (오른쪽 위) */}
-                               <div style={{ 
-                                 display: 'flex',
-                                 alignItems: 'center',
-                                 gap: '1rem'
-                               }}>
-                                 <span style={{ 
-                                   color: getPositivityColor(item.positivity),
-                                   fontWeight: '700',
-                                   padding: '0.5rem 0.75rem',
-                                   background: `${getPositivityColor(item.positivity)}20`,
-                                   borderRadius: '0.5rem',
-                                   fontSize: '0.9rem'
-                                 }}>
-                                   {getPositivityLabel(item.positivity)}
-                                 </span>
-                                 
-                                 <div style={{
-                                   fontSize: '1.1rem',
-                                   color: COLORS.textSecondary,
-                                   fontWeight: '700',
-                                   padding: '0.5rem 0.75rem',
-                                   background: COLORS.backgroundLight,
-                                   borderRadius: '0.5rem'
-                                 }}>
-                                   {Math.round(item.positivity * 100)}%
-                                 </div>
-                               </div>
-                               
-                               {/* 관계 태그 (왼쪽 아래, 전체 너비) */}
-                               {item.relationTags && item.relationTags.length > 0 && (
-                                 <div style={{ 
-                                   display: 'flex', 
-                                   flexWrap: 'wrap', 
-                                   gap: '0.75rem',
-                                   gridColumn: '1 / -1'
-                                 }}>
-                                   {item.relationTags.map((tag, tagIndex) => (
-                                     <span
-                                       key={tagIndex}
-                                       style={{
-                                         background: COLORS.backgroundLight,
-                                         color: COLORS.textPrimary,
-                                         padding: '0.25rem 0.5rem',
-                                         borderRadius: '0.5rem',
-                                         fontSize: '0.8rem',
-                                         border: `1px solid ${COLORS.border}`,
-                                         fontWeight: '600',
-                                       }}
-                                     >
-                                       {tag}
-                                     </span>
-                                   ))}
-                                 </div>
-                               )}
-                            </div>
-                          ))}
-                        </div>
-                        
-                        <div style={{
-                          marginTop: '0.75rem',
-                          padding: '0.75rem',
-                          background: COLORS.backgroundLight,
-                          borderRadius: '0.5rem',
-                          border: '1px solid #e5e7eb',
-                          textAlign: 'center'
-                        }}>
-                          <div                           style={{
-                            fontSize: '0.9rem',
-                            color: COLORS.textPrimary,
-                            fontWeight: '600',
-                            lineHeight: '1.4',
-                            wordBreak: 'keep-all'
-                          }}>
-                            <div>현재 연결된 인물이 적어 그리드 차트로 표시하기 어려운 상황입니다.</div>
-                            <div>더 풍부한 관계 분석을 위해 다른 챕터나 이벤트를 확인해보시기 바랍니다.</div>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                 ) : (
-                   <div style={{
-                     padding: '1rem',
-                     background: COLORS.backgroundLight,
-                     borderRadius: '0.75rem',
-                     border: `1px solid ${COLORS.border}`,
-                     width: '100%',
-                     height: '100%',
-                     display: 'flex',
-                     flexDirection: 'column',
-                     alignItems: 'center',
-                     justifyContent: 'flex-start',
-                     textAlign: 'center',
-                     overflowY: 'auto',
-                     paddingTop: '2rem'
-                   }}>
-                     <div style={{
-                       padding: '1rem',
-                       background: COLORS.background,
-                       borderRadius: '0.5rem',
-                       border: '1px solid #e5e7eb'
-                     }}>
-                       <div style={{
-                         fontSize: '0.8rem',
-                         color: COLORS.textSecondary,
-                         lineHeight: '1.4',
-                         wordBreak: 'keep-all'
-                       }}>
-                         다른 인물을 선택하거나 다른 챕터를 확인해보세요.
-                       </div>
-                     </div>
-                  </div>
-                )}
-
-                {/* 마우스 오버 정보창 */}
-                {hoveredData && (
-                  <div
-                    className="hover-tooltip"
-                    style={{
-                      position: 'fixed',
-                      left: `${Math.min(hoverPosition.x + 15, window.innerWidth - 350)}px`,
-                      top: `${Math.max(hoverPosition.y - 15, 10)}px`,
-                      zIndex: 10000,
-                      pointerEvents: 'auto',
-                      transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-                      opacity: 1,
-                      transform: 'scale(1)',
-                      background: 'linear-gradient(135deg, #ffffff 0%, #f8fafc 100%)',
-                      borderRadius: '12px',
-                      padding: '16px',
-                      boxShadow: '0 10px 25px rgba(0,0,0,0.1), 0 4px 10px rgba(0,0,0,0.05)',
-                      border: `1px solid ${getPositivityColor(hoveredData.positivity)}20`,
-                      backdropFilter: 'blur(10px)',
-                      minWidth: '250px',
-                      maxWidth: '350px'
-                    }}
-                    onMouseLeave={() => {
-                      setHoveredItem(null);
-                    }}
-                  >
-                     {/* 인물 이름 */}
-                     <div style={{ 
-                       fontWeight: '800', 
-                       fontSize: '1.1rem', 
-                       marginBottom: '12px', 
-                       color: COLORS.textPrimary,
-                       letterSpacing: '-0.02em',
-                       display: 'flex',
-                       alignItems: 'center',
-                       gap: '8px'
-                     }}>
-                       <div style={{
-                         width: '8px',
-                         height: '8px',
-                         borderRadius: '50%',
-                         background: getPositivityColor(hoveredData.positivity),
-                         flexShrink: 0
-                       }} />
-                       {hoveredData.name}
-                     </div>
-                    
-                     {/* 관계도 점수 */}
-                     <div style={{ 
-                       display: 'flex', 
-                       alignItems: 'center',
-                       justifyContent: 'space-between',
-                       padding: '12px 16px',
-                       background: `linear-gradient(135deg, ${getPositivityColor(hoveredData.positivity)}15 0%, ${getPositivityColor(hoveredData.positivity)}08 100%)`,
-                       borderRadius: '10px',
-                       border: `1px solid ${getPositivityColor(hoveredData.positivity)}30`,
-                       marginBottom: '12px'
-                     }}>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                        <span style={{ 
-                          fontSize: '0.8rem',
-                          color: getPositivityColor(hoveredData.positivity),
-                          fontWeight: '600',
-                          textTransform: 'uppercase',
-                          letterSpacing: '0.5px'
-                        }}>
-                          {getPositivityLabel(hoveredData.positivity || 0)}
-                        </span>
-                      </div>
-                      <div style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '4px'
-                      }}>
-                        <span style={{ 
-                          fontWeight: '800', 
-                          color: getPositivityColor(hoveredData.positivity), 
-                          fontSize: '1.5rem',
-                          lineHeight: 1
-                        }}>
-                          {Math.round((hoveredData.positivity || 0) * 100)}
-                        </span>
-                        <span style={{ 
-                          fontWeight: '700', 
-                          color: getPositivityColor(hoveredData.positivity), 
-                          fontSize: '1rem',
-                          lineHeight: 1
-                        }}>
-                          %
-                        </span>
-                      </div>
-                    </div>
-                    
-                     {hoveredData.relationTags && hoveredData.relationTags.length > 0 && (
-                       <div style={{ 
-                         marginTop: '8px', 
-                         paddingTop: '12px', 
-                         borderTop: `1px solid ${COLORS.borderLight}40`
-                       }}>
-                         <div style={{ 
-                           fontSize: '0.8rem', 
-                           color: COLORS.textSecondary, 
-                           marginBottom: '8px',
-                           fontWeight: '600',
-                           display: 'flex',
-                           alignItems: 'center',
-                           gap: '6px'
-                         }}>
-                           <div style={{
-                             width: '4px',
-                             height: '4px',
-                             borderRadius: '50%',
-                             background: COLORS.textSecondary
-                           }} />
-                           관계 태그
-                         </div>
-                         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-                           {hoveredData.relationTags.map((tag, i) => (
-                             <span
-                               key={i}
-                               style={{
-                                 background: COLORS.backgroundLight,
-                                 color: COLORS.textPrimary,
-                                 padding: '4px 8px',
-                                 borderRadius: '6px',
-                                 fontSize: '0.7rem',
-                                 border: `1px solid ${COLORS.border}`,
-                                 fontWeight: '500',
-                                 textTransform: 'uppercase',
-                                 letterSpacing: '0.3px'
-                               }}
-                             >
-                               {tag}
-                             </span>
-                           ))}
-                         </div>
-                       </div>
-                     )}
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
-    );
-  }
+      )}
+    </div>
+  );
 }
 
 export default memo(UnifiedNodeInfo);
