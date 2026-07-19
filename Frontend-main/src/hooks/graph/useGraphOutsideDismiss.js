@@ -25,12 +25,14 @@ export function shouldIgnoreGraphPageOutsideClick(event) {
   if (isGraphDragEndEvent(event)) return true;
   if (isSidebarElement(event)) return true;
   if (event.target.closest?.('.graph-canvas-area')) return true;
+  if (event.target.closest?.('.modal-overlay')) return true;
   return false;
 }
 
 export function shouldIgnoreViewerOutsideClick(event) {
   if (event.target.closest?.('.graph-node-tooltip')) return true;
   if (event.target.closest?.('.edge-tooltip-container')) return true;
+  if (event.target.closest?.('.modal-overlay')) return true;
   // 캔버스 클릭은 Cytoscape tap/background 핸들러가 담당
   return shouldIgnoreCanvasOrDragEnd(event);
 }

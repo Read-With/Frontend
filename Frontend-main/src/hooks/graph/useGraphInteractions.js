@@ -241,12 +241,41 @@ export function useGraphInteractions({
     if (fitViewport) fitGraphToNodes(cyRef?.current, { duration: 500 });
   }, [cyRef, resetAllStyles, clearSelectionRefs]);
 
+  const selectNodeByIdOrName = useCallback((idOrName) => {
+    const cy = cyRef?.current;
+    if (!cy || idOrName == null || idOrName === '') return false;
+
+    let element = cy.getElementById(String(idOrName));
+    if (!element?.length) {
+      const key = String(idOrName);
+      element = cy.nodes().filter((ele) => {
+        const d = ele.data() || {};
+        return (
+          String(d.id) === key ||
+          d.common_name === key ||
+          d.label === key ||
+          d.name === key
+        );
+      });
+    }
+    if (!element?.length) return false;
+
+    if (!selectElement('node', element)) return false;
+    try {
+      showElementTooltip('node', element, null);
+    } catch {
+      /* focus는 유지 */
+    }
+    return true;
+  }, [cyRef, selectElement, showElementTooltip]);
+
   return {
     tapNodeHandler,
     tapEdgeHandler,
     tapBackgroundHandler,
     clearSelection,
     reapplySelectionHighlight,
+    selectNodeByIdOrName,
   };
 }
 

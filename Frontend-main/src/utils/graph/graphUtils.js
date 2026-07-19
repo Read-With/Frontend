@@ -1243,6 +1243,7 @@ export const extractRadarChartData = (nodeId, relations, elements, maxDisplay = 
         const name =
           connectedNode.data.label || connectedNode.data.common_name || `인물 ${connectedNodeId}`;
         radarDataMap.set(connectedNodeId, {
+          id: connectedNodeId,
           name,
           positivity,
           normalizedValue: ((positivity + 1) / 2) * 100,

@@ -493,11 +493,43 @@
   margin-left: 1rem;
 }
 
+.tooltip-analysis-cta-label {
+  flex-shrink: 0;
+  margin-left: 0.75rem;
+  padding: 0.35rem 0.75rem;
+  border-radius: 0.5rem;
+  background: #5C6F5C;
+  color: #fff;
+  font-size: 0.8rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.tooltip-analysis-badge {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 0.5rem;
+  padding: 0.1rem 0.45rem;
+  border-radius: 999px;
+  background: #E8F5E8;
+  color: #5C6F5C;
+  font-size: 0.7rem;
+  font-weight: 700;
+  vertical-align: middle;
+}
+
+.tooltip-analysis-section--compact {
+  margin-top: 0.75rem;
+  border-top: 1px solid #e5e7eb;
+  padding-top: 0.5rem;
+}
+
 .tooltip-modal-title {
   margin: 0;
-  font-size: 1.5rem;
+  font-size: 1.35rem;
   font-weight: 700;
   color: #5C6F5C;
+  word-break: keep-all;
 }
 
 .tooltip-modal-body {

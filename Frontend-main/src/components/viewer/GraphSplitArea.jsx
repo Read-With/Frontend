@@ -119,6 +119,7 @@ const GraphContainer = memo(function GraphContainer({
   });
   const cyRef = useRef(null);
   const selectedElementRef = useRef(null);
+  const graphSelectNodeRef = useRef(null);
   const viewportRefitKey = useMemo(
     () => `${currentChapter ?? ''}:${eventNum ?? ''}`,
     [currentChapter, eventNum]
@@ -144,6 +145,10 @@ const GraphContainer = memo(function GraphContainer({
       duration: 400,
       ...(isEdge ? { panTarget: getEdgeFocusPanTarget(cy) } : {}),
     });
+  }, []);
+
+  const handleSelectRelatedNode = useCallback((idOrName) => {
+    return graphSelectNodeRef.current?.(idOrName) ?? false;
   }, []);
 
   const { onShowNodeTooltip, onShowEdgeTooltip } = useGraphTooltipSelection({
@@ -182,6 +187,7 @@ const GraphContainer = memo(function GraphContainer({
             elements={elements}
             currentEvent={currentEvent}
             prevValidEvent={prevValidEvent}
+            onSelectRelatedNode={handleSelectRelatedNode}
           />
         )}
         {activeTooltip?.type === 'edge' && (
@@ -221,6 +227,7 @@ const GraphContainer = memo(function GraphContainer({
           onClearTooltip={onClearTooltip}
           selectedElementRef={selectedElementRef}
           graphClearRef={graphClearRef}
+          graphSelectNodeRef={graphSelectNodeRef}
           showRippleEffect
         />
       </div>

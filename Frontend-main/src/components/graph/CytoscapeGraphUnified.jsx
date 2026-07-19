@@ -90,6 +90,7 @@ const CytoscapeGraphUnified = ({
   onClearTooltip,
   selectedElementRef,
   graphClearRef = null,
+  graphSelectNodeRef = null,
   showRippleEffect = false,
   isDataRefreshing = false,
   currentChapter,
@@ -199,6 +200,7 @@ const CytoscapeGraphUnified = ({
     tapBackgroundHandler,
     clearSelection,
     reapplySelectionHighlight,
+    selectNodeByIdOrName,
   } = useGraphInteractions({
     cyRef: externalCyRef,
     onShowNodeTooltip,
@@ -215,6 +217,14 @@ const CytoscapeGraphUnified = ({
       graphClearRef.current = null;
     };
   }, [graphClearRef, clearSelection]);
+
+  useEffect(() => {
+    if (!graphSelectNodeRef) return undefined;
+    graphSelectNodeRef.current = selectNodeByIdOrName;
+    return () => {
+      graphSelectNodeRef.current = null;
+    };
+  }, [graphSelectNodeRef, selectNodeByIdOrName]);
 
   // viewport/챕터 키가 바뀌면 초기 fit·추적 상태만 리셋. ripple용 addedNodeIds는 elements update의 nodesToAdd가 설정
   useEffect(() => {
@@ -687,6 +697,9 @@ CytoscapeGraphUnified.propTypes = {
     ]),
   }),
   graphClearRef: PropTypes.shape({
+    current: PropTypes.func,
+  }),
+  graphSelectNodeRef: PropTypes.shape({
     current: PropTypes.func,
   }),
   showRippleEffect: PropTypes.bool,

@@ -262,6 +262,7 @@ function RelationGraphWrapper() {
   const appliedRequestedChapterRef = useRef(null);
   const cyRef = useRef(null);
   const graphClearRef = useRef(null);
+  const graphSelectNodeRef = useRef(null);
   const selectedElementRef = useRef(null);
   const prevChapterNum = useRef(currentChapter);
   const prevEventNum = useRef();
@@ -517,6 +518,15 @@ function RelationGraphWrapper() {
     setCurrentEvent(Number.isFinite(normalized) && normalized >= 1 ? normalized : 1);
   }, [currentChapter, setCurrentChapter, manifestData?.chapters, serverBookId, clearGraphSelection]);
 
+  const handleSelectRelatedNode = useCallback((idOrName) => {
+    cancelClosing();
+    return graphSelectNodeRef.current?.(idOrName) ?? false;
+  }, [cancelClosing]);
+
+  const handleOpenChapterSidebar = useCallback(() => {
+    if (!isSidebarOpen) toggleSidebar();
+  }, [isSidebarOpen, toggleSidebar]);
+
   const handleCanvasClick = useCallback((e) => {
     if (e.target !== e.currentTarget) return;
     e.stopPropagation();
@@ -620,6 +630,9 @@ function RelationGraphWrapper() {
           selectedElementRef,
         }}
         graphClearRef={graphClearRef}
+        graphSelectNodeRef={graphSelectNodeRef}
+        onSelectRelatedNode={handleSelectRelatedNode}
+        onOpenChapterSidebar={handleOpenChapterSidebar}
       />
     </div>
   );

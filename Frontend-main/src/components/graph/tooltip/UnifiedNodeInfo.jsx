@@ -1,18 +1,34 @@
-import { memo, useState, useEffect, useCallback, useMemo } from "react";
+import { memo, useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useParams } from "react-router-dom";
-import { processRelations, processRelationTags, extractRadarChartData, extractApiBookId, undirectedPairKey } from "../../../utils/graph/graphUtils.js";
-import { getPositivityColor, getPositivityLabel } from "../../../utils/styles/relationStyles.js";
+import {
+  processRelations,
+  processRelationTags,
+  extractRadarChartData,
+  extractApiBookId,
+  undirectedPairKey,
+  isGraphNodeElement,
+} from "../../../utils/graph/graphUtils.js";
 import { getEventDataByIndex } from "../../../utils/graph/graphData.js";
 import { useTooltipPosition, useClickOutside } from "../../../hooks/ui/tooltipHooks";
 import { getUnifiedEventInfoForTooltip } from "../../../utils/viewer/viewerEventProgressUtils";
 import { toNumberOrNull } from "../../../utils/common/valueUtils.js";
 import { USER_GRAPH_PREFIX } from "../../../utils/common/urlUtils";
-import { COLORS, createButtonStyle, mergeRefs, unifiedNodeTooltipStyles, unifiedNodeAnimations } from "../../../utils/styles/styles.js";
-import { Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, ResponsiveContainer } from 'recharts';
+import {
+  COLORS,
+  createButtonStyle,
+  mergeRefs,
+  unifiedNodeTooltipStyles,
+  unifiedNodeAnimations,
+} from "../../../utils/styles/styles.js";
+import RelationAnalysisModal from './RelationAnalysisModal.jsx';
 import './tooltip.css';
+import '../RelationGraph.css';
 
 const Z_INDEX_TOOLTIP = 99999;
 const SUMMARY = { COLLAPSED: 'collapsed', WARNING: 'warning', CONTENT: 'content' };
+
+/** 뷰어처럼 key remount 되어도 분석 모달을 유지하기 위한 플래그 */
+let pendingKeepAnalysisOpen = false;
 
 function normalizeToString(value) {
   if (value == null) return "";
@@ -105,15 +121,6 @@ function collectUndirectedRelations(rawRelations, targetNodeId = null) {
   return Array.from(relationMap.values());
 }
 
-function positivityDisplay(positivity) {
-  return {
-    color: getPositivityColor(positivity),
-    label: getPositivityLabel(positivity || 0),
-    percent: Math.round((positivity || 0) * 100),
-  };
-}
-
-/** viewer tooltip: 현재 이벤트에 노드 등장 여부 */
 function checkNodeAppearance({ isSidebar, data, node, chapterNum, folderKey, eventNum, elements }) {
   const isGraphOnlyPage =
     typeof window !== 'undefined' && window.location.pathname.includes(`${USER_GRAPH_PREFIX}/`);
@@ -187,13 +194,12 @@ function resolvePovSummary(node, chapterNum, povSummaries) {
 function buildRadarChartData({
   node,
   chapterNum,
-  isSidebar,
   apiBookGraphData,
   elements,
   folderKey,
   eventNum,
 }) {
-  if (!node?.id || !chapterNum || !isSidebar) return [];
+  if (!node?.id || !chapterNum) return [];
 
   try {
     if (apiBookGraphData?.relations && apiBookGraphData?.characters) {
@@ -219,6 +225,27 @@ function buildRadarChartData({
 
     if (!elements?.length) return [];
 
+    const edgeRels = elements
+      .filter((el) => el?.data?.source && el?.data?.target)
+      .map((el) => ({
+        id1: el.data.source,
+        id2: el.data.target,
+        relation: el.data.relation || ['관계'],
+        count: el.data.count || el.data.strength || 1,
+        positivity: el.data.positivity || 0,
+      }));
+
+    if (edgeRels.length > 0) {
+      const nodeElements = elements.filter((el) => isGraphNodeElement(el));
+      return extractRadarChartData(
+        node.id,
+        collectUndirectedRelations(edgeRels, node.id),
+        nodeElements,
+        8,
+      );
+    }
+
+    if (!folderKey) return [];
     const json = getEventDataByIndex(folderKey, chapterNum, eventNum);
     if (!json?.relations) return [];
 
@@ -231,6 +258,54 @@ function buildRadarChartData({
   } catch {
     return [];
   }
+}
+
+function buildRecommendedNodes({ elements, apiBookGraphData, excludeId, limit = 3 }) {
+  const exclude = excludeId != null ? String(excludeId) : null;
+  const degree = new Map();
+
+  const bump = (id) => {
+    const key = String(id);
+    if (exclude && key === exclude) return;
+    degree.set(key, (degree.get(key) || 0) + 1);
+  };
+
+  if (apiBookGraphData?.relations?.length) {
+    apiBookGraphData.relations.forEach((rel) => {
+      bump(rel.id1 ?? rel.source);
+      bump(rel.id2 ?? rel.target);
+    });
+  } else if (Array.isArray(elements)) {
+    elements.forEach((el) => {
+      if (!el?.data?.source || !el?.data?.target) return;
+      bump(el.data.source);
+      bump(el.data.target);
+    });
+  }
+
+  const nameById = new Map();
+  if (apiBookGraphData?.characters?.length) {
+    apiBookGraphData.characters.forEach((char) => {
+      nameById.set(String(char.id), char.common_name || char.name || `인물 ${char.id}`);
+    });
+  }
+  if (Array.isArray(elements)) {
+    elements.forEach((el) => {
+      if (!isGraphNodeElement(el)) return;
+      const id = String(el.data.id);
+      nameById.set(id, el.data.common_name || el.data.label || nameById.get(id) || `인물 ${id}`);
+    });
+  }
+
+  return [...degree.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, limit)
+    .map(([id, count]) => ({
+      id,
+      name: nameById.get(id) || `인물 ${id}`,
+      positivity: 0,
+      relationTags: [`연결 ${count}`],
+    }));
 }
 
 function handleProfileImageError(e) {
@@ -328,63 +403,6 @@ function CenteredStatus({ children, color = COLORS.textSecondary, fullHeight = t
   );
 }
 
-function ConnectionStatusPanel({ children }) {
-  return <div className="tooltip-connection-panel">{children}</div>;
-}
-
-function RelationTagsRow({ tags, compact = false }) {
-  if (!tags?.length) return null;
-  return (
-    <div className={`tooltip-relation-tags${compact ? ' tooltip-relation-tags--compact' : ''}`}>
-      {tags.map((tag, i) => (
-        <span
-          key={i}
-          className={`tooltip-relation-tag${compact ? ' tooltip-relation-tag--compact' : ''}`}
-        >
-          {tag}
-        </span>
-      ))}
-    </div>
-  );
-}
-
-function NameWithDot({ name, positivity, dotSize = 14, fontSize = '1.1rem' }) {
-  const { color } = positivityDisplay(positivity);
-  return (
-    <div
-      className="tooltip-name-with-dot"
-      style={{ '--dot-color': color, '--dot-size': `${dotSize}px`, '--name-font-size': fontSize }}
-    >
-      <div className="tooltip-name-dot" />
-      <span className="tooltip-name-label">{name}</span>
-    </div>
-  );
-}
-
-function PositivityChip({ positivity, layout = 'row' }) {
-  const { color, label, percent } = positivityDisplay(positivity);
-  const style = { '--pos-color': color };
-
-  if (layout === 'card') {
-    return (
-      <div className="tooltip-positivity-chip tooltip-positivity-chip--card" style={style}>
-        <span className="tooltip-positivity-label">{label}</span>
-        <div className="tooltip-positivity-percent">
-          <span className="tooltip-positivity-percent-value">{percent}</span>
-          <span className="tooltip-positivity-percent-unit">%</span>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="tooltip-positivity-chip" style={style}>
-      <span className="tooltip-positivity-label">{label}</span>
-      <div className="tooltip-positivity-percent">{percent}%</div>
-    </div>
-  );
-}
-
 function NodeProfileAvatar({ node }) {
   const hasImage = !!node?.hasImage;
   return (
@@ -406,115 +424,36 @@ function NodeProfileAvatar({ node }) {
   );
 }
 
-const UnifiedNodeRadarDot = memo(function UnifiedNodeRadarDot({
-  cx,
-  cy,
-  payload,
-  dataMap,
-  hoveredName,
-  onDotMouseEnter,
-  onDotMouseLeave,
+function RelationAnalysisCta({
+  node,
+  connectionCount,
+  onOpen,
+  buttonRef,
+  compact = false,
 }) {
-  const fullData =
-    payload?.name != null ? (dataMap.get(payload.name) || payload) : null;
-  const dotName = fullData?.name ?? payload?.name;
-
-  const handleMouseEnterDot = useCallback(
-    (e) => {
-      if (!dotName) return;
-      e.stopPropagation();
-      onDotMouseEnter(dotName, e);
-    },
-    [dotName, onDotMouseEnter]
-  );
-
-  const handleMouseLeaveDot = useCallback(
-    (e) => {
-      e.stopPropagation();
-      onDotMouseLeave();
-    },
-    [onDotMouseLeave]
-  );
-
-  if (!payload || cx == null || cy == null || !fullData) return null;
-
-  const { color } = positivityDisplay(fullData.positivity);
-  const isHovered = hoveredName === payload.name;
-  const radius = isHovered ? 8 : 5;
-
-  return (
-    <g>
-      <circle
-        cx={cx}
-        cy={cy}
-        r={Math.max(15, radius * 3)}
-        fill="transparent"
-        style={{ cursor: "pointer", pointerEvents: "all", zIndex: 10 }}
-        onMouseEnter={handleMouseEnterDot}
-        onMouseLeave={handleMouseLeaveDot}
-      />
-      <circle
-        cx={cx}
-        cy={cy}
-        r={radius}
-        fill={color}
-        stroke={isHovered ? "#fff" : "none"}
-        strokeWidth={isHovered ? 2 : 0}
-        style={{ transition: "all 0.2s ease", pointerEvents: "none" }}
-      />
-    </g>
-  );
-});
-
-function FewConnectionsList({ radarChartData }) {
-  return (
-    <div className="tooltip-few-list">
-      <div className="tooltip-few-list-title">연결된 인물</div>
-
-      <div className="tooltip-few-list-items">
-        {radarChartData.map((item, index) => (
-          <div key={index} className="tooltip-few-list-card">
-            <NameWithDot name={item.name} positivity={item.positivity} />
-            <PositivityChip positivity={item.positivity} />
-            <RelationTagsRow tags={item.relationTags} />
-          </div>
-        ))}
-      </div>
-
-      <div className="tooltip-few-list-hint">
-        <div>현재 연결된 인물이 적어 그리드 차트로 표시하기 어려운 상황입니다.</div>
-        <div>더 풍부한 관계 분석을 위해 다른 챕터나 이벤트를 확인해보시기 바랍니다.</div>
-      </div>
-    </div>
-  );
-}
-
-function HoveredRelationPopup({ item, x, y, onClose }) {
-  const { color } = positivityDisplay(item.positivity);
-
   return (
     <div
-      className="tooltip-hover-popup"
-      style={{
-        left: `${Math.min(x + 15, window.innerWidth - 350)}px`,
-        top: `${Math.max(y - 15, 10)}px`,
-        '--pos-color': color,
-      }}
-      onMouseLeave={onClose}
+      className={`sidebar-section tooltip-analysis-section${compact ? ' tooltip-analysis-section--compact' : ''}`}
+      role="region"
+      aria-label="관계 분석"
     >
-      <div className="tooltip-hover-popup-title">
-        <NameWithDot name={item.name} positivity={item.positivity} dotSize={8} />
-      </div>
-      <PositivityChip positivity={item.positivity} layout="card" />
-      {item.relationTags?.length > 0 && (
-        <div className="tooltip-hover-popup-tags">
-          <div className="tooltip-hover-popup-tags-label">
-            <div className="tooltip-hover-popup-tags-dot" />
-            관계 태그
-          </div>
-          <RelationTagsRow tags={item.relationTags} compact />
+      <button
+        ref={buttonRef}
+        type="button"
+        onClick={onOpen}
+        className="relation-analysis-btn"
+      >
+        <div className="tooltip-analysis-copy">
+          <h4 className="tooltip-section-title">
+            인물 관계 분석
+            <span className="tooltip-analysis-badge">관계 {connectionCount}</span>
+          </h4>
+          <p className="tooltip-analysis-desc">
+            {node?.displayName}와 연결된 인물과의 관계를 시각화합니다
+          </p>
         </div>
-      )}
+        <span className="tooltip-analysis-cta-label">분석 보기</span>
+      </button>
     </div>
   );
 }
@@ -533,6 +472,8 @@ function UnifiedNodeInfo({
   prevValidEvent = null,
   povSummaries = null,
   apiBookGraphData = null,
+  onSelectRelatedNode = null,
+  onOpenChapterSidebar = null,
 }) {
   const { filename: urlFilename } = useParams();
   const isSidebar = displayMode === 'sidebar';
@@ -543,34 +484,43 @@ function UnifiedNodeInfo({
   const [appeared, setAppeared] = useState(false);
   const [error, setError] = useState(null);
   const [summaryStage, setSummaryStage] = useState(SUMMARY.COLLAPSED);
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [hover, setHover] = useState(null);
+  const [isModalOpen, setIsModalOpen] = useState(() => {
+    if (pendingKeepAnalysisOpen) {
+      pendingKeepAnalysisOpen = false;
+      return true;
+    }
+    return false;
+  });
+  const keepModalOpenRef = useRef(false);
+  const analysisBtnRef = useRef(null);
 
-  const clearHover = useCallback(() => setHover(null), []);
+  const openModal = useCallback(() => setIsModalOpen(true), []);
   const closeModal = useCallback(() => {
+    pendingKeepAnalysisOpen = false;
     setIsModalOpen(false);
-    clearHover();
-  }, [clearHover]);
-  const onRadarHoverEnter = useCallback((name, event) => {
-    setHover({ name, x: event.clientX, y: event.clientY });
   }, []);
 
-  useEffect(() => {
-    if (!isModalOpen) return undefined;
-    const onKeyDown = (e) => { if (e.key === 'Escape') closeModal(); };
-    document.addEventListener('keydown', onKeyDown);
-    document.body.style.overflow = 'hidden';
-    return () => {
-      document.removeEventListener('keydown', onKeyDown);
-      document.body.style.overflow = 'unset';
-    };
-  }, [isModalOpen, closeModal]);
+  const handleSelectRelatedNode = useCallback((idOrName, options = {}) => {
+    if (!onSelectRelatedNode) return false;
+    if (options.keepAnalysisOpen) {
+      keepModalOpenRef.current = true;
+      pendingKeepAnalysisOpen = true;
+    } else {
+      pendingKeepAnalysisOpen = false;
+      keepModalOpenRef.current = false;
+    }
+    return onSelectRelatedNode(idOrName, options);
+  }, [onSelectRelatedNode]);
 
   useEffect(() => {
     setSummaryStage(SUMMARY.COLLAPSED);
-    setIsModalOpen(false);
-    clearHover();
-  }, [node?.id, clearHover]);
+    if (keepModalOpenRef.current) {
+      keepModalOpenRef.current = false;
+      setIsModalOpen(true);
+    } else {
+      setIsModalOpen(false);
+    }
+  }, [node?.id]);
 
   const { position, showContent, isDragging, tooltipRef, handleMouseDown } = useTooltipPosition(
     x, y, { enabled: !isSidebar }
@@ -578,7 +528,7 @@ function UnifiedNodeInfo({
 
   const clickOutsideRef = useClickOutside(
     () => { if (onClose) onClose(); },
-    !isSidebar && showContent,
+    !isSidebar && showContent && !isModalOpen,
     true
   );
 
@@ -611,13 +561,12 @@ function UnifiedNodeInfo({
       buildRadarChartData({
         node,
         chapterNum,
-        isSidebar,
         apiBookGraphData,
         elements,
         folderKey,
         eventNum: eventInfo.eventNum,
       }),
-    [node, chapterNum, isSidebar, folderKey, elements, apiBookGraphData, eventInfo],
+    [node, chapterNum, folderKey, elements, apiBookGraphData, eventInfo],
   );
 
   const connectionKind = useMemo(() => {
@@ -627,13 +576,16 @@ function UnifiedNodeInfo({
     return 'sufficient_connections';
   }, [radarChartData]);
 
-  const dataMap = useMemo(() => {
-    const map = new Map();
-    radarChartData.forEach((item) => map.set(item.name, item));
-    return map;
-  }, [radarChartData]);
+  const recommendedNodes = useMemo(
+    () => buildRecommendedNodes({
+      elements,
+      apiBookGraphData,
+      excludeId: node?.id,
+      limit: 3,
+    }),
+    [elements, apiBookGraphData, node?.id],
+  );
 
-  const hoveredItem = hover ? dataMap.get(hover.name) : null;
   const isWarning = summaryStage === SUMMARY.WARNING;
   const isContent = summaryStage === SUMMARY.CONTENT;
 
@@ -646,94 +598,24 @@ function UnifiedNodeInfo({
     handleMouseDown,
   };
 
-  const renderPolarAngleAxis = ({ payload, x: tickX, y: tickY, cx, cy }) => {
-    const point = dataMap.get(payload.value);
-    const color = point?.positivity !== undefined
-      ? positivityDisplay(point.positivity).color
-      : COLORS.textPrimary;
-    const active = hover?.name === payload.value;
-    const dx = tickX - cx;
-    const dy = tickY - cy;
-    const distance = Math.sqrt(dx * dx + dy * dy) || 1;
-    const scale = (distance + Math.max(40, 25 + ((payload.value?.length || 0) * 2))) / distance;
-
-    return (
-      <text
-        x={cx + dx * scale}
-        y={cy + dy * scale}
-        textAnchor="middle"
-        dominantBaseline="middle"
-        fill={active ? color : COLORS.textPrimary}
-        fontSize={active ? 18 : 16}
-        fontWeight={active ? 700 : 600}
-        style={{ transition: 'all 0.2s ease' }}
-      >
-        {payload.value}
-      </text>
-    );
-  };
-
-  const renderModalRadarBody = () => {
-    if (connectionKind === 'sufficient_connections') {
-      return (
-        <ResponsiveContainer width="100%" height="100%">
-          <RadarChart
-            data={radarChartData}
-            margin={{ top: 60, right: 60, bottom: 60, left: 60 }}
-            style={{ outline: 'none' }}
-          >
-            <style>{`
-              svg:focus, svg *:focus { outline: none !important; }
-              * { animation: none !important; transition: none !important; }
-            `}</style>
-            <PolarGrid stroke={COLORS.border} />
-            <PolarAngleAxis dataKey="name" tick={renderPolarAngleAxis} />
-            <PolarRadiusAxis
-              angle={90}
-              domain={[0, 100]}
-              tick={{ fontSize: 14, fill: COLORS.textSecondary, fontWeight: 600 }}
-              tickCount={5}
-              tickFormatter={(v) => (((v / 100) * 2) - 1).toFixed(1)}
-            />
-            <Radar
-              name={node?.displayName}
-              dataKey="normalizedValue"
-              stroke="#9ca3af"
-              fill="#e5e7eb"
-              fillOpacity={0.2}
-              strokeWidth={2}
-              dot={(dotProps) => {
-                const { key, ...rest } = dotProps;
-                return (
-                  <UnifiedNodeRadarDot
-                    key={key}
-                    {...rest}
-                    dataMap={dataMap}
-                    hoveredName={hover?.name}
-                    onDotMouseEnter={onRadarHoverEnter}
-                    onDotMouseLeave={clearHover}
-                  />
-                );
-              }}
-              isAnimationActive={false}
-            />
-          </RadarChart>
-        </ResponsiveContainer>
-      );
-    }
-
-    return (
-      <ConnectionStatusPanel>
-        {connectionKind === 'few_connections' && radarChartData.length > 0 ? (
-          <FewConnectionsList radarChartData={radarChartData} />
-        ) : (
-          <div className="tooltip-empty-connections">
-            다른 인물을 선택하거나 다른 챕터를 확인해보세요.
-          </div>
-        )}
-      </ConnectionStatusPanel>
-    );
-  };
+  const analysisModal = isModalOpen ? (
+    <RelationAnalysisModal
+      node={node}
+      chapterNum={chapterNum}
+      chapterScopeLabel={
+        isSidebar
+          ? (chapterNum != null ? `챕터 1–${chapterNum} 누적` : null)
+          : (chapterNum != null ? `챕터 ${chapterNum}` : null)
+      }
+      radarChartData={radarChartData}
+      connectionKind={connectionKind}
+      recommendedNodes={recommendedNodes}
+      onClose={closeModal}
+      onSelectRelatedNode={onSelectRelatedNode ? handleSelectRelatedNode : null}
+      onOpenChapterSidebar={onOpenChapterSidebar}
+      returnFocusRef={analysisBtnRef}
+    />
+  ) : null;
 
   if (error) {
     const errorContent = (
@@ -832,16 +714,26 @@ function UnifiedNodeInfo({
 
   if (!isSidebar) {
     return (
-      <NodeTooltipShell
-        {...floatingShell}
-        containerStyle={unifiedNodeTooltipStyles.tooltipContainer}
-        transition={unifiedNodeAnimations.tooltipComplexTransition(isDragging)}
-      >
-        <div className="tooltip-content business-card">
-          <TooltipCloseButton onClose={onClose} />
-          {nodeHeaderAndDescription}
-        </div>
-      </NodeTooltipShell>
+      <>
+        <NodeTooltipShell
+          {...floatingShell}
+          containerStyle={unifiedNodeTooltipStyles.tooltipContainer}
+          transition={unifiedNodeAnimations.tooltipComplexTransition(isDragging)}
+        >
+          <div className="tooltip-content business-card">
+            <TooltipCloseButton onClose={onClose} />
+            {nodeHeaderAndDescription}
+            <RelationAnalysisCta
+              node={node}
+              connectionCount={radarChartData.length}
+              onOpen={openModal}
+              buttonRef={analysisBtnRef}
+              compact
+            />
+          </div>
+        </NodeTooltipShell>
+        {analysisModal}
+      </>
     );
   }
 
@@ -927,51 +819,15 @@ function UnifiedNodeInfo({
           </div>
         </div>
 
-        <div
-          className="sidebar-section tooltip-analysis-section"
-          role="region"
-          aria-label="관계 분석"
-        >
-          <button
-            type="button"
-            onClick={() => setIsModalOpen(true)}
-            className="relation-analysis-btn"
-          >
-            <div className="tooltip-analysis-copy">
-              <h4 className="tooltip-section-title">인물 관계 분석</h4>
-              <p className="tooltip-analysis-desc">
-                {node?.displayName}와 연결된 인물들과의 관계를 시각화합니다
-              </p>
-            </div>
-            <span className="tooltip-analysis-plus">+</span>
-          </button>
-        </div>
+        <RelationAnalysisCta
+          node={node}
+          connectionCount={radarChartData.length}
+          onOpen={openModal}
+          buttonRef={analysisBtnRef}
+        />
       </div>
 
-      {isModalOpen && (
-        <div className="modal-overlay" onClick={closeModal}>
-          <div className="modal-container" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <h2 className="tooltip-modal-title">관계도 - 확대화면</h2>
-              <button type="button" onClick={closeModal} className="modal-close-btn">
-                ×
-              </button>
-            </div>
-
-            <div className="tooltip-modal-body">
-              {renderModalRadarBody()}
-              {hoveredItem && (
-                <HoveredRelationPopup
-                  item={hoveredItem}
-                  x={hover.x}
-                  y={hover.y}
-                  onClose={clearHover}
-                />
-              )}
-            </div>
-          </div>
-        </div>
-      )}
+      {analysisModal}
     </div>
   );
 }

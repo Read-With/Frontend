@@ -185,6 +185,8 @@ function GraphSidebar({
   povSummaries = null,
   apiBookGraphData = null,
   bookId = null,
+  onSelectRelatedNode = null,
+  onOpenChapterSidebar = null,
 }) {
   const [isClosing, setIsClosing] = useState(false);
   const [isVisible, setIsVisible] = useState(false);
@@ -257,6 +259,8 @@ function GraphSidebar({
         filename={filename}
         povSummaries={povSummaries}
         apiBookGraphData={apiBookGraphData}
+        onSelectRelatedNode={onSelectRelatedNode}
+        onOpenChapterSidebar={onOpenChapterSidebar}
       />
     );
   } else if (activeTooltip) {
@@ -307,6 +311,9 @@ function GraphCanvas({
   cytoscapeConfig,
   tooltipHandlers,
   graphClearRef,
+  graphSelectNodeRef = null,
+  onSelectRelatedNode = null,
+  onOpenChapterSidebar = null,
 }) {
   const { isSidebarClosing, onCloseSidebar, onStartClosing, onClearGraph } = sidebarControl;
   const { isSearchActive, filteredElements, searchTerm, fitNodeIds, isResetFromSearch } = searchState;
@@ -353,6 +360,8 @@ function GraphCanvas({
               povSummaries={povSummaries}
               apiBookGraphData={apiBookGraphData}
               bookId={bookId}
+              onSelectRelatedNode={onSelectRelatedNode}
+              onOpenChapterSidebar={onOpenChapterSidebar}
             />
           )}
 
@@ -378,6 +387,7 @@ function GraphCanvas({
               onClearTooltip={onClearTooltip}
               selectedElementRef={selectedElementRef}
               graphClearRef={graphClearRef}
+              graphSelectNodeRef={graphSelectNodeRef}
               isResetFromSearch={isResetFromSearch}
               isDataRefreshing={isLoading}
               currentChapter={currentChapter}
@@ -416,6 +426,9 @@ GraphCanvas.propTypes = {
   cytoscapeConfig: PropTypes.object.isRequired,
   tooltipHandlers: PropTypes.object.isRequired,
   graphClearRef: PropTypes.object,
+  graphSelectNodeRef: PropTypes.object,
+  onSelectRelatedNode: PropTypes.func,
+  onOpenChapterSidebar: PropTypes.func,
 };
 
 export default memo(GraphCanvas);
