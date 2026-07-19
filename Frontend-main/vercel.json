@@ -1,12 +1,3 @@
 {
-  "rewrites": [
-    {
-      "source": "/public/:path*",
-      "destination": "https://cdn.readwith.cloud/public/:path*"
-    },
-    {
-      "source": "/((?!api/).*)",
-      "destination": "/index.html"
-    }
-  ]
+  "rewrites": [{ "source": "/(.*)", "destination": "/" }]
 }
