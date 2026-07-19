@@ -1,7 +1,10 @@
-import { getFineGraph, getBookManifest } from '../../api/api';
 import {
-  aggregateCharactersFromEvents,
-  buildNodeWeightsFromEvents,
+  getBookManifest,
+  sortDeltasForAccumulate,
+  createDeltaAccumulateWalker,
+} from '../../api/api';
+import {
+  buildNodeWeights,
   createCharacterMaps,
   extractCharacterId,
   toNodeWeightsOrNull,
@@ -12,7 +15,9 @@ import {
   getChapterData,
   getManifestFromCache,
   calculateMaxChapterFromChapters,
-  resolveFineGraphEventToLocator,
+  findManifestEventInChapter,
+  getLastManifestEventInChapter,
+  listBookManifestEventIds,
 } from './manifestCache';
 import {
   registerCache,
@@ -26,9 +31,19 @@ import {
   CHAPTER_GRAPH_CACHE_SOURCE,
 } from './cacheManager';
 import { eventUtils, cacheKeyUtils } from '../../viewer/viewerCoreStateUtils';
-import { deepClone, resolveChapterIndex, toNumberOrNull, toPositiveNumberOrNull } from '../valueUtils';
+import {
+  deepClone,
+  resolveChapterIndex,
+  toNumberOrNull,
+  toPositiveNumberOrNull,
+  toTrimmedStringOrNull,
+} from '../valueUtils';
 
 const cloneArray = (arr) => (Array.isArray(arr) ? arr.map(deepClone) : []);
+
+/** manifest / structure 이벤트에서 eventId 추출 */
+const resolveManifestEventId = (ev) =>
+  toTrimmedStringOrNull(eventUtils.resolveEventId(ev) ?? ev?.eventId ?? ev?.id);
 
 const safeCompare = (a, b) => {
   if (a === b) return true;
@@ -130,7 +145,6 @@ const buildChapterCachePayload = (
     };
   }
 
-  const aggregatedRelations = [];
   const diffs = [];
   const eventSummaries = [];
   let baseSnapshot = null;
@@ -138,22 +152,17 @@ const buildChapterCachePayload = (
   let prevCharacters = [];
 
   sortedEvents.forEach((event, index) => {
+    // API는 이벤트별 누적 스냅샷을 주므로 이어 붙이지 않고 해당 시점 값을 그대로 사용
     const relations = Array.isArray(event?.relations) ? event.relations : [];
-    const rawCharacters = Array.isArray(event?.characters) ? event.characters : [];
-    relations.forEach((relation) => aggregatedRelations.push(deepClone(relation)));
-
-    const eventsUpToCurrent = sortedEvents.slice(0, index + 1);
-    const aggregatedCharacters = Array.from(aggregateCharactersFromEvents(eventsUpToCurrent).values()).sort(
-      (a, b) => (extractCharacterId(a) || '').localeCompare(extractCharacterId(b) || '')
-    );
-    const nodeWeights = buildNodeWeightsFromEvents(eventsUpToCurrent);
+    const snapshotCharacters = Array.isArray(event?.characters) ? event.characters : [];
+    const nodeWeights = buildNodeWeights(snapshotCharacters);
     const { idToName, idToDesc, idToDescKo, idToMain, idToNames, idToProfileImage } =
-      createCharacterMaps(aggregatedCharacters);
+      createCharacterMaps(snapshotCharacters);
 
     let convertedElements = [];
     try {
       convertedElements = convertRelationsToElements({
-        relations: aggregatedRelations,
+        relations,
         idToName,
         idToDesc,
         idToDescKo,
@@ -162,14 +171,14 @@ const buildChapterCachePayload = (
         nodeWeights: toNodeWeightsOrNull(nodeWeights),
         eventData: event?.event ?? null,
         idToProfileImage,
-        charactersOrphanMerge: aggregatedCharacters.length > 0 ? aggregatedCharacters : null,
+        charactersOrphanMerge: snapshotCharacters.length > 0 ? snapshotCharacters : null,
       });
     } catch (error) {
       console.error('convertRelationsToElements 실패:', error);
     }
 
     const currentElements = cloneArray(convertedElements);
-    const currentCharacters = cloneArray(aggregatedCharacters);
+    const currentCharacters = cloneArray(snapshotCharacters);
     if (index === 0) {
       baseSnapshot = {
         eventIdx: eventUtils.resolveEventNum(event) || 1,
@@ -187,7 +196,7 @@ const buildChapterCachePayload = (
           updated: cloneArray(elementDiffRaw?.updated || []),
           removedIds: (elementDiffRaw?.removed || []).map((element) => normalizeElementId(element)).filter(Boolean),
         },
-        characterDiff: computeCharacterDiff(prevCharacters, aggregatedCharacters),
+        characterDiff: computeCharacterDiff(prevCharacters, snapshotCharacters),
       });
     }
     prevElements = currentElements;
@@ -205,7 +214,7 @@ const buildChapterCachePayload = (
       endTxtOffset: event?.endTxtOffset ?? null,
       title: event?.event?.name ?? event?.event?.title ?? event?.event?.eventName ?? null,
       text: event?.event?.text ?? null,
-      hasCharacters: rawCharacters.length > 0,
+      hasCharacters: snapshotCharacters.length > 0,
       hasRelations: relations.length > 0,
     });
   });
@@ -317,13 +326,11 @@ const writeGraphBookCache = (bookId, payload) => {
   return normalized;
 };
 
-const getGraphBookCache = (bookId) => readGraphBookCache(bookId);
-
 export const ensureGraphBookCache = async (bookId, { signal } = {}) => {
   const numericId = toPositiveNumberOrNull(bookId);
   if (numericId === null) return null;
 
-  const existing = getGraphBookCache(numericId);
+  const existing = readGraphBookCache(numericId);
   if (existing) return existing;
 
   if (graphBuildPromises.has(numericId)) {
@@ -353,7 +360,7 @@ export const ensureGraphBookCache = async (bookId, { signal } = {}) => {
 
       let chapterCache = getCachedChapterEvents(numericId, chapterIdx);
       if (!chapterCache) {
-        chapterCache = await discoverChapterEvents(numericId, chapterIdx, true);
+        chapterCache = await discoverChapterEvents(numericId, chapterIdx, false);
       }
 
       if (chapterCache) {
@@ -390,16 +397,16 @@ export const getGraphEventState = (bookId, chapterIdx, eventIdx) => {
   return reconstructChapterGraphState(chapterPayload, eventIdx);
 };
 
-/** fine graph 응답 한 건 → 챕터 캐시 이벤트 행 */
-const normalizeEventFromFineGraphResponse = (
+/** deltas 누적 graph 결과 한 건 → 챕터 캐시 이벤트 행 */
+const normalizeEventFromDeltasGraphResult = (
   bookId,
   chapterIdx,
   eventIdx,
-  response,
+  result,
   manifestStructure
 ) => {
-  const result = response?.result || {};
-  const { characters, relations, event: nestedEvent } = result;
+  const safe = result && typeof result === 'object' ? result : {};
+  const { characters, relations, event: nestedEvent } = safe;
   const hasCharacters = Array.isArray(characters) && characters.length > 0;
   const hasRelations = Array.isArray(relations) && relations.length > 0;
   const hasManifestMeta = Boolean(manifestStructure);
@@ -415,32 +422,30 @@ const normalizeEventFromFineGraphResponse = (
       nestedEvent.endLocator !== undefined);
 
   if (!hasCharacters && !hasRelations && !hasNestedEventMeta && !hasManifestMeta) {
-    return { skip: true, hadGraphData: false };
+    return { skip: true };
   }
 
-  const resolvedChapterIdx = resolveChapterIndex(result) ?? chapterIdx;
+  const resolvedChapterIdx = resolveChapterIndex(safe) ?? chapterIdx;
   const ord = nestedEvent ? eventUtils.resolveEventOrdinal(nestedEvent) : null;
   const resolvedEventNum =
     Number.isFinite(ord) && ord > 0
       ? ord
       : Number(manifestStructure?.eventNum ?? manifestStructure?.eventIdx ?? eventIdx);
   const resolvedEventId =
-    result.eventId ??
+    safe.eventId ??
     eventUtils.resolveEventId(nestedEvent) ??
     manifestStructure?.eventId ??
     null;
 
   return {
     skip: false,
-    hadGraphData: hasCharacters || hasRelations || hasNestedEventMeta || hasManifestMeta,
     event: {
-      bookId: Number(result.bookId) || bookId,
+      bookId: Number(safe.bookId) || bookId,
       chapterIdx: resolvedChapterIdx,
       eventIdx,
       eventNum: resolvedEventNum,
       characters: hasCharacters ? characters.map((character) => deepClone(character)) : [],
       relations: hasRelations ? relations.map((relation) => deepClone(relation)) : [],
-      scope: result.scope ?? 'book',
       event: {
         idx: eventIdx,
         chapterIdx: resolvedChapterIdx,
@@ -514,7 +519,7 @@ const discoverChapterEvents = async (
   forceRefresh = false,
   options = {}
 ) => {
-  const { urgent = false, maxEventIdx = null, onPartialCache = null } = options;
+  const { maxEventIdx = null, onPartialCache = null } = options;
   const cappedMaxEventIdx =
     Number.isFinite(Number(maxEventIdx)) && Number(maxEventIdx) > 0 ? Number(maxEventIdx) : null;
 
@@ -544,7 +549,14 @@ const discoverChapterEvents = async (
 
   const discoverKey = getChapterDiscoverKey(bookId, chapterIdx);
   if (!forceRefresh && chapterDiscoverPromises.has(discoverKey)) {
-    return chapterDiscoverPromises.get(discoverKey);
+    await chapterDiscoverPromises.get(discoverKey);
+    const cached = getCachedChapterEvents(bookId, chapterIdx);
+    const cachedMax = Number(cached?.maxEventIdx) || 0;
+    if (cached && cached.source !== 'manifest-only') {
+      if (!cappedMaxEventIdx || cachedMax >= cappedMaxEventIdx) {
+        return cached;
+      }
+    }
   }
 
   const discoverPromise = (async () => {
@@ -608,28 +620,123 @@ const discoverChapterEvents = async (
 
     const sortedManifestIndices = manifestEventIndices.sort((a, b) => a - b);
 
-    const collectEvent = async (eventIdx, manifestStructure = null) => {
-      try {
-        const atLocator = resolveFineGraphEventToLocator(bookId, chapterIdx, eventIdx);
-        const response = await getFineGraph(bookId, chapterIdx, eventIdx, atLocator);
-        const norm = normalizeEventFromFineGraphResponse(
-          bookId,
-          chapterIdx,
-          eventIdx,
-          response,
-          manifestStructure
+    const appendSnapshotEvent = (eventIdx, manifestStructure, snapshot) => {
+      const norm = normalizeEventFromDeltasGraphResult(
+        bookId,
+        chapterIdx,
+        eventIdx,
+        snapshot,
+        manifestStructure
+      );
+      if (norm.skip) return false;
+      apiEvents.push(norm.event);
+      fetchedEventIdxSet.add(eventIdx);
+      return true;
+    };
+
+    /** 정렬된 deltas → 이벤트 스냅샷 증분 적재 (through 우선 + 백필) */
+    const appendEventsFromSortedDeltas = async (
+      sourceBookId,
+      sortedDeltas,
+      eventEntries,
+      chapterEventIdOrder
+    ) => {
+      if (!eventEntries.length) return;
+
+      const walkerOpts = { chapterIndex: chapterIdx, chapterEventIdOrder };
+      const lastEntry = eventEntries[eventEntries.length - 1];
+
+      // Phase 1: through 이벤트 우선
+      if (lastEntry?.eventId && !fetchedEventIdxSet.has(lastEntry.eventIdx)) {
+        const throughWalker = createDeltaAccumulateWalker(sourceBookId, sortedDeltas, walkerOpts);
+        appendSnapshotEvent(
+          lastEntry.eventIdx,
+          lastEntry.structure,
+          throughWalker.snapshotThrough(lastEntry.eventId)
         );
-        if (norm.skip) return false;
-        apiEvents.push(norm.event);
-        fetchedEventIdxSet.add(eventIdx);
-        if (!urgent) {
-          await new Promise((resolve) => setTimeout(resolve, 50));
-        }
-        return norm.hadGraphData;
-      } catch (error) {
-        console.warn(`⚠️ 이벤트 ${eventIdx} fine 그래프 API 호출 실패:`, error);
-        return false;
+        publishPartialCache();
       }
+
+      // Phase 2: 전체 구간 백필
+      const walker = createDeltaAccumulateWalker(sourceBookId, sortedDeltas, walkerOpts);
+      let appended = 0;
+      for (let i = 0; i < eventEntries.length; i += 1) {
+        const { eventIdx, eventId, structure } = eventEntries[i];
+
+        // 이미 캐시에 있으면 finalize(비김) 생략하고 누적 커서만 전진
+        if (fetchedEventIdxSet.has(eventIdx)) {
+          if (eventId) walker.advanceThrough(eventId);
+          if (i > 0 && i % 16 === 0) await Promise.resolve();
+          continue;
+        }
+
+        let snapshot;
+        if (!eventId) {
+          const prev = apiEvents
+            .filter((ev) => (eventUtils.resolveEventNum(ev) || 0) < eventIdx)
+            .sort(
+              (a, b) =>
+                (eventUtils.resolveEventNum(a) || 0) - (eventUtils.resolveEventNum(b) || 0)
+            )
+            .at(-1);
+          snapshot = {
+            bookId: sourceBookId,
+            chapterIndex: chapterIdx,
+            eventId: null,
+            characters: Array.isArray(prev?.characters) ? deepClone(prev.characters) : [],
+            relations: Array.isArray(prev?.relations) ? deepClone(prev.relations) : [],
+            event: {
+              chapterIndex: chapterIdx,
+              chapterIdx,
+              eventId: null,
+              startTxtOffset: structure?.startTxtOffset ?? null,
+              endTxtOffset: structure?.endTxtOffset ?? null,
+            },
+          };
+        } else {
+          snapshot = walker.snapshotThrough(eventId);
+        }
+
+        appendSnapshotEvent(eventIdx, structure, snapshot);
+        appended += 1;
+
+        if (i > 0 && i % 8 === 0) await Promise.resolve();
+      }
+      if (appended > 0) publishPartialCache();
+    };
+
+    /** 1회 deltas fetch 후 증분 누적 */
+    const collectEventsFromDeltas = async (indicesToFetch) => {
+      if (!indicesToFetch.length) return;
+
+      let fetched;
+      try {
+        fetched = await ensureBookRelationshipDeltas(bookId, {
+          chapterIndex: chapterIdx,
+        });
+      } catch (error) {
+        console.warn(`⚠️ 챕터 ${chapterIdx} relationship-deltas 조회 실패:`, error);
+        return;
+      }
+
+      if (!fetched?.isSuccess && !fetched?.deltas?.length) return;
+
+      const eventEntries = indicesToFetch.map((eventIdx) => {
+        const structure = manifestEventMap.get(eventIdx) ?? null;
+        return {
+          eventIdx,
+          eventId: resolveManifestEventId(structure),
+          structure,
+        };
+      });
+      const chapterEventIdOrder = eventEntries.map((e) => e.eventId).filter(Boolean);
+      const sortedDeltas = sortDeltasForAccumulate(fetched.deltas, chapterEventIdOrder);
+      await appendEventsFromSortedDeltas(
+        fetched.bookId ?? bookId,
+        sortedDeltas,
+        eventEntries,
+        chapterEventIdOrder
+      );
     };
 
     if (sortedManifestIndices.length > 0) {
@@ -637,12 +744,7 @@ const discoverChapterEvents = async (
         ? sortedManifestIndices.filter((idx) => idx <= cappedMaxEventIdx)
         : sortedManifestIndices;
 
-      for (const eventIdx of indicesToFetch) {
-        if (fetchedEventIdxSet.has(eventIdx)) continue;
-        const manifestStructure = manifestEventMap.get(eventIdx);
-        await collectEvent(eventIdx, manifestStructure);
-        publishPartialCache();
-      }
+      await collectEventsFromDeltas(indicesToFetch);
       if (apiEvents.length > 0) {
         return (
           getCachedChapterEvents(bookId, chapterIdx) ??
@@ -651,37 +753,48 @@ const discoverChapterEvents = async (
       }
     }
 
-    let eventIdx = fetchedEventIdxSet.size > 0 ? Math.max(...fetchedEventIdxSet) + 1 : 1;
-    let emptyStreak = 0;
-    const EMPTY_STREAK_LIMIT = 2;
-    const MAX_DYNAMIC_SCAN = cappedMaxEventIdx ?? 500;
-
-    while (eventIdx <= MAX_DYNAMIC_SCAN && emptyStreak < EMPTY_STREAK_LIMIT) {
-      if (!fetchedEventIdxSet.has(eventIdx)) {
-        const hadData = await collectEvent(eventIdx, null);
-        publishPartialCache();
-        if (hadData) {
-          emptyStreak = 0;
-        } else {
-          emptyStreak += 1;
+    // manifest 이벤트 없을 때: 챕터 단위 deltas + 로컬 누적
+    try {
+      const fetched = await ensureBookRelationshipDeltas(bookId, {
+        chapterIndex: chapterIdx,
+      });
+      const deltas = Array.isArray(fetched?.deltas) ? fetched.deltas : [];
+      if (deltas.length > 0) {
+        const sortedDeltas = sortDeltasForAccumulate(deltas);
+        const seenIds = [];
+        for (const delta of sortedDeltas) {
+          const eventId = typeof delta?.eventId === 'string' ? delta.eventId.trim() : '';
+          if (!eventId || seenIds.includes(eventId)) continue;
+          // 해당 챕터 delta만 (chapterIndex가 있으면 필터)
+          const deltaChapter = Number(delta?.chapterIndex);
+          if (Number.isFinite(deltaChapter) && deltaChapter !== chapterIdx) continue;
+          seenIds.push(eventId);
         }
+        const idsToBuild = cappedMaxEventIdx ? seenIds.slice(0, cappedMaxEventIdx) : seenIds;
+        const eventEntries = idsToBuild.map((eventId, index) => ({
+          eventIdx: index + 1,
+          eventId,
+          structure: { eventIdx: index + 1, eventId },
+        }));
+        await appendEventsFromSortedDeltas(
+          fetched.bookId ?? bookId,
+          sortedDeltas,
+          eventEntries,
+          idsToBuild
+        );
       }
-      eventIdx += 1;
+    } catch (error) {
+      console.warn(`⚠️ 챕터 ${chapterIdx} relationship-deltas(챕터) 조회 실패:`, error);
     }
 
     if (!apiEvents.length) {
-      console.warn(`⚠️ 챕터 ${chapterIdx}: fine 그래프 API에서 이벤트를 찾을 수 없음`);
-      const emptyPayload = {
+      console.warn(`⚠️ 챕터 ${chapterIdx}: relationship-deltas에서 이벤트를 찾을 수 없음`);
+      const emptyPayload = buildChapterCachePayload(
         bookId,
         chapterIdx,
-        maxEventIdx: 0,
-        events: [],
-        baseSnapshot: null,
-        diffs: [],
-        eventSummaries: [],
-        timestamp: Date.now(),
-        source: CHAPTER_GRAPH_CACHE_SOURCE.EMPTY,
-      };
+        [],
+        CHAPTER_GRAPH_CACHE_SOURCE.EMPTY
+      );
       setCachedChapterEvents(bookId, chapterIdx, emptyPayload);
       return emptyPayload;
     }
@@ -712,7 +825,6 @@ export const prefetchChapterEvents = (bookId, chapterIdx, throughEventIdx) => {
     return Promise.resolve(null);
   }
   return discoverChapterEvents(bookId, chapterIdx, false, {
-    urgent: true,
     maxEventIdx: through,
   });
 };
@@ -733,7 +845,7 @@ const hasUsableChapterCacheThrough = (bookId, chapterIdx, throughEventIdx = null
   return cachedMax >= through;
 };
 
-/** 챕터 이벤트 캐시 확보 (재시도 포함, UI 무관) */
+/** 챕터 이벤트 캐시 확보. through 시점이 준비되면 즉시 success (백필은 백그라운드 계속). */
 export async function ensureChapterEventsDiscovered(
   bookId,
   chapter,
@@ -750,13 +862,30 @@ export async function ensureChapterEventsDiscovered(
   let lastError = null;
   for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
     try {
-      await discoverChapterEvents(bookId, chapter, attempt > 0, {
-        urgent: true,
+      const discoverPromise = discoverChapterEvents(bookId, chapter, attempt > 0, {
         maxEventIdx: throughEventIdx,
         onPartialCache,
       });
-      if (hasUsableChapterCacheThrough(bookId, chapter, throughEventIdx)) {
-        return { success: true };
+
+      // through 캐시가 생기는 순간 반환 (전체 이벤트 백필 완료를 기다리지 않음)
+      for (;;) {
+        if (hasUsableChapterCacheThrough(bookId, chapter, throughEventIdx)) {
+          return { success: true };
+        }
+
+        const race = await Promise.race([
+          discoverPromise.then((payload) => ({ type: 'done', payload })),
+          new Promise((resolve) => {
+            setTimeout(() => resolve({ type: 'tick' }), 16);
+          }),
+        ]);
+
+        if (race.type === 'done') {
+          if (hasUsableChapterCacheThrough(bookId, chapter, throughEventIdx)) {
+            return { success: true };
+          }
+          break;
+        }
       }
     } catch (error) {
       lastError = error;
@@ -804,3 +933,145 @@ export const getChapterEventFallbackData = (bookId, chapterIdx, eventIdx) => {
 
   return null;
 };
+
+const bookDeltasCache = new Map();
+const bookDeltasInflight = new Map();
+
+const toBookKey = (bookId) => {
+  const n = Number(bookId);
+  return Number.isFinite(n) && n > 0 ? n : bookId;
+};
+
+const toChapterIndexOrNull = (value) => {
+  const n = Number(value);
+  return Number.isFinite(n) && n >= 1 ? Math.floor(n) : null;
+};
+
+const loadFetchRelationshipDeltasList = async () => {
+  const mod = await import('../../api/api');
+  return mod.fetchRelationshipDeltasList;
+};
+
+export const clearBookRelationshipDeltas = (bookId) => {
+  const key = toBookKey(bookId);
+  bookDeltasCache.delete(key);
+  bookDeltasInflight.delete(key);
+};
+
+const cacheCoversThrough = (cached, throughEventId, bookId) => {
+  if (!cached || !Array.isArray(cached.deltas)) return false;
+  const through = toTrimmedStringOrNull(throughEventId);
+  if (!through) return true;
+  const cachedTo = toTrimmedStringOrNull(cached.toEventId);
+  if (!cachedTo) return false;
+  if (cachedTo === through) return true;
+  const order = listBookManifestEventIds(bookId);
+  const iCached = order.indexOf(cachedTo);
+  const iThrough = order.indexOf(through);
+  if (iCached >= 0 && iThrough >= 0) return iCached >= iThrough;
+  return cached.deltas.some((d) => toTrimmedStringOrNull(d?.eventId) === through);
+};
+
+const cacheCoversChapter = (cached, chapterIndex, bookId) => {
+  const ch = toChapterIndexOrNull(chapterIndex);
+  if (!cached || ch == null) return false;
+  const covered = toChapterIndexOrNull(cached.coveredThroughChapter);
+  if (covered != null && covered >= ch) return true;
+  const lastId = resolveManifestEventId(getLastManifestEventInChapter(bookId, ch));
+  return lastId ? cacheCoversThrough(cached, lastId, bookId) : false;
+};
+
+const mergeDeltasByEventId = (baseDeltas, nextDeltas) => {
+  const merged = Array.isArray(baseDeltas) ? [...baseDeltas] : [];
+  const seen = new Set(merged.map((d) => toTrimmedStringOrNull(d?.eventId)).filter(Boolean));
+  for (const delta of Array.isArray(nextDeltas) ? nextDeltas : []) {
+    if (!delta || typeof delta !== 'object') continue;
+    const id = toTrimmedStringOrNull(delta.eventId);
+    if (id && seen.has(id)) continue;
+    if (id) seen.add(id);
+    merged.push(delta);
+  }
+  return merged;
+};
+
+const buildCacheEntry = (
+  bookId,
+  deltas,
+  { toEventId = null, coveredThroughChapter = null, response = null, isSuccess = true } = {}
+) => ({
+  bookId,
+  deltas: Array.isArray(deltas) ? deltas : [],
+  toEventId: toTrimmedStringOrNull(toEventId),
+  coveredThroughChapter: toChapterIndexOrNull(coveredThroughChapter),
+  response,
+  isSuccess: isSuccess !== false,
+});
+
+const fetchAndStoreByChapter = async (key, uptoChapter) => {
+  const fetchRelationshipDeltasList = await loadFetchRelationshipDeltasList();
+  let current = bookDeltasCache.get(key);
+  if (current && cacheCoversChapter(current, uptoChapter, key)) return current;
+
+  const covered = toChapterIndexOrNull(current?.coveredThroughChapter) ?? 0;
+  const startChapter = Math.max(1, covered + 1);
+
+  for (let ch = startChapter; ch <= uptoChapter; ch += 1) {
+    if (current && cacheCoversChapter(current, ch, key)) continue;
+
+    const fetched = await fetchRelationshipDeltasList(key, { chapterIndex: ch });
+    const chapterLastId = resolveManifestEventId(getLastManifestEventInChapter(key, ch));
+    current = buildCacheEntry(
+      fetched.bookId ?? key,
+      mergeDeltasByEventId(current?.deltas, fetched.deltas),
+      {
+        toEventId: chapterLastId || current?.toEventId || null,
+        coveredThroughChapter: ch,
+        response: fetched.response,
+        isSuccess: fetched.isSuccess,
+      }
+    );
+    bookDeltasCache.set(key, current);
+  }
+
+  return current ?? buildCacheEntry(key, []);
+};
+
+/** 책 deltas 확보 — chapterIndex(1..N) 챕터 단위 조회 */
+export async function ensureBookRelationshipDeltas(bookId, { chapterIndex = null } = {}) {
+  if (!bookId) throw new Error('bookId는 필수 매개변수입니다.');
+
+  const key = toBookKey(bookId);
+  const ch = toChapterIndexOrNull(chapterIndex);
+  if (ch == null) {
+    const error = new Error('chapterIndex가 필요합니다.');
+    error.status = 400;
+    throw error;
+  }
+
+  for (;;) {
+    const existing = bookDeltasCache.get(key);
+    if (existing && cacheCoversChapter(existing, ch, key)) {
+      return existing;
+    }
+
+    const waitInflight = bookDeltasInflight.get(key);
+    if (waitInflight) {
+      try {
+        await waitInflight;
+      } catch {
+        // 실패해도 아래에서 재시도
+      }
+      continue;
+    }
+
+    const run = fetchAndStoreByChapter(key, ch);
+    bookDeltasInflight.set(key, run);
+    try {
+      return await run;
+    } finally {
+      if (bookDeltasInflight.get(key) === run) {
+        bookDeltasInflight.delete(key);
+      }
+    }
+  }
+}

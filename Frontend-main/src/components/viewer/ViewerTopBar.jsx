@@ -1,68 +1,141 @@
-import { useCallback, useMemo, memo } from 'react';
-import GraphControls, { EdgeLabelToggle } from '../graph/GraphControls';
+import { useMemo, memo } from 'react';
+import GraphControls, { EdgeLabelToggle, CharacterFilterSegmented } from '../graph/GraphControls';
 import { getChapterData, getManifestFromCache } from '../../utils/common/cache/manifestCache';
-import { resolveChapterIndex } from '../../utils/common/valueUtils';
+import { resolveChapterIndex, toPositiveNumberOrNull } from '../../utils/common/valueUtils';
 import {
   formatChapterOrderAndName,
   stripRedundantBookTitlePrefix,
-} from '../../utils/viewer/chapterTitleDisplay';
-import { GRAPH_CHARACTER_FILTER_STAGE_OPTIONS } from '../graph/graphShared';
-import {
-  resolveEventOrdinalForDisplay,
-} from '../../utils/viewer/viewerEventProgressUtils';
+} from '../../utils/viewer/viewerCoreStateUtils';
+import { resolveEventOrdinalForDisplay } from '../../utils/viewer/viewerEventProgressUtils';
 
 const LOADING_STYLE = {
-  display: "inline-block",
-  padding: "4px 16px",
+  display: 'inline-block',
+  padding: '4px 16px',
   borderRadius: 16,
-  background: "#f3f4f6",
-  color: "#9ca3af",
+  background: '#f3f4f6',
+  color: '#9ca3af',
   fontSize: 14,
   fontWeight: 600,
-  border: "1px solid #e3e6ef",
+  border: '1px solid #e3e6ef',
 };
 
 const CHAPTER_STYLE = {
-  display: "inline-block",
-  padding: "4px 12px",
+  display: 'inline-block',
+  padding: '4px 12px',
   borderRadius: 16,
-  background: "#E8F5E8",
-  color: "#5C6F5C",
+  background: '#E8F5E8',
+  color: '#5C6F5C',
   fontSize: 14,
   fontWeight: 600,
-  border: "1px solid #e3e6ef",
-  maxWidth: "min(360px, 42vw)",
-  overflow: "hidden",
-  textOverflow: "ellipsis",
-  whiteSpace: "nowrap",
+  border: '1px solid #e3e6ef',
+  maxWidth: 'min(360px, 42vw)',
+  overflow: 'hidden',
+  textOverflow: 'ellipsis',
+  whiteSpace: 'nowrap',
 };
 
 const EVENT_NUMBER_STYLE = {
-  display: "inline-block",
-  padding: "4px 16px",
+  display: 'inline-block',
+  padding: '4px 16px',
   borderRadius: 16,
-  background: "#5C6F5C",
-  color: "#fff",
+  background: '#5C6F5C',
+  color: '#fff',
   fontSize: 14,
   fontWeight: 600,
-  boxShadow: "0 2px 8px rgba(92,111,92,0.13)",
-  transition: "transform 0.3s, background 0.3s",
+  boxShadow: '0 2px 8px rgba(92,111,92,0.13)',
+  transition: 'transform 0.3s, background 0.3s',
 };
 
 const PROGRESS_BAR_CONTAINER_STYLE = {
   width: 120,
   height: 6,
-  background: "#e3e6ef",
+  background: '#e3e6ef',
   borderRadius: 3,
-  overflow: "hidden",
+  overflow: 'hidden',
 };
 
 const PROGRESS_BAR_FILL_STYLE = {
-  height: "100%",
-  background: "linear-gradient(90deg, #5C6F5C 0%, #6B7B6B 100%)",
+  height: '100%',
+  background: 'linear-gradient(90deg, #5C6F5C 0%, #6B7B6B 100%)',
   borderRadius: 3,
-  transition: "width 0.4s cubic-bezier(.4,2,.6,1)",
+  transition: 'width 0.4s cubic-bezier(.4,2,.6,1)',
 };
+
+const BAR_BASE_STYLE = {
+  height: 44,
+  flexShrink: 0,
+  display: 'flex',
+  flexDirection: 'row',
+  alignItems: 'center',
+  width: '100%',
+  marginBottom: 0,
+  paddingLeft: 12,
+  paddingRight: 12,
+  paddingTop: 0,
+};
+
+const ROW_STYLE = {
+  display: 'flex',
+  flexDirection: 'row',
+  alignItems: 'center',
+};
+
+const FULLSCREEN_BTN_STYLE = {
+  height: 28,
+  width: 28,
+  minWidth: 28,
+  minHeight: 28,
+  borderRadius: '6px',
+  border: '1.5px solid #e3e6ef',
+  background: '#fff',
+  color: '#22336b',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  fontSize: 16,
+  cursor: 'pointer',
+  boxShadow: '0 2px 8px rgba(108,142,255,0.07)',
+  transition: 'background 0.18s, color 0.18s, box-shadow 0.18s, transform 0.13s',
+};
+
+function ChapterEventInfo({
+  bookId,
+  isProgressPending,
+  progressTopBar,
+  currentEvent,
+  prevValidEvent,
+  resolvedServerChapter,
+  chapterDisplayLabel,
+  chapterTitleTooltip,
+  currentProgressWidth,
+}) {
+  if ((progressTopBar === undefined || isProgressPending) && bookId) {
+    return <span style={LOADING_STYLE}>계산중...</span>;
+  }
+
+  const eventNum = resolveEventOrdinalForDisplay({
+    currentEvent,
+    prevValidEvent,
+    currentChapter: resolvedServerChapter,
+    progressTopBar: progressTopBar ?? { eventNum: null },
+    fallback: 0,
+  });
+  const eventDisplay = eventNum > 0 ? String(eventNum) : '?';
+
+  return (
+    <>
+      <span style={CHAPTER_STYLE} title={chapterTitleTooltip}>
+        {chapterDisplayLabel}
+      </span>
+      <div style={{ ...ROW_STYLE, gap: 12 }}>
+        <span style={EVENT_NUMBER_STYLE}>Event {eventDisplay}</span>
+        <div style={PROGRESS_BAR_CONTAINER_STYLE}>
+          <div style={{ ...PROGRESS_BAR_FILL_STYLE, width: currentProgressWidth }} />
+        </div>
+      </div>
+    </>
+  );
+}
 
 const ViewerTopBar = memo(function ViewerTopBar({
   graphState,
@@ -71,9 +144,8 @@ const ViewerTopBar = memo(function ViewerTopBar({
   searchState,
   searchActions,
 }) {
-
   const { book } = viewerState;
-  
+
   const {
     currentChapter,
     currentEvent,
@@ -84,27 +156,21 @@ const ViewerTopBar = memo(function ViewerTopBar({
     progressMetricsReady = true,
   } = graphState;
 
-  const isProgressPending =
-    Boolean(book?.id) &&
-    !progressMetricsReady &&
-    (progressTopBar?.readingProgressPercent == null ||
-      !Number.isFinite(Number(progressTopBar?.readingProgressPercent)));
-  
   const {
+    setGraphFullScreen,
     setEdgeLabelVisible,
     filterStage,
-    setFilterStage
+    setFilterStage,
   } = graphActions;
 
-  
   const {
     searchTerm,
     isSearchActive,
     suggestions = [],
     showSuggestions = false,
-    selectedIndex = -1
+    selectedIndex = -1,
   } = searchState;
-  
+
   const {
     onSearchSubmit,
     clearSearch,
@@ -114,11 +180,7 @@ const ViewerTopBar = memo(function ViewerTopBar({
     onSelectedIndexChange,
   } = searchActions;
 
-  const bookId = useMemo(() => {
-    const id = book?.id;
-    const n = Number(id);
-    return Number.isFinite(n) && n > 0 ? n : null;
-  }, [book]);
+  const bookId = useMemo(() => toPositiveNumberOrNull(book?.id), [book?.id]);
 
   const stripBookTitle = useMemo(() => {
     const fromBook = String(book?.title ?? '').trim();
@@ -127,266 +189,126 @@ const ViewerTopBar = memo(function ViewerTopBar({
     return String(m?.book?.title ?? m?.title ?? '').trim();
   }, [book?.title, bookId]);
 
-  const resolvedServerChapter = useMemo(() => {
-    const serverChapter = getChapterData(bookId, currentChapter);
-    if (serverChapter) {
-      return resolveChapterIndex(serverChapter) ?? Number(currentChapter);
+  const chapterMeta = useMemo(() => {
+    const fallbackChapter = Number(currentChapter) || 1;
+    if (bookId == null) {
+      return {
+        resolvedServerChapter: fallbackChapter,
+        chapterDisplayLabel: formatChapterOrderAndName(fallbackChapter, ''),
+        chapterTitleTooltip: undefined,
+      };
     }
-    return Number(currentChapter) || 1;
-  }, [bookId, currentChapter]);
 
-  const chapterDisplayLabel = useMemo(() => {
-    const ch = bookId ? getChapterData(bookId, resolvedServerChapter) : null;
-    const t = String(ch?.title ?? '').trim();
-    const displayName = t ? stripRedundantBookTitlePrefix(t, stripBookTitle) : '';
-    return formatChapterOrderAndName(resolvedServerChapter, displayName);
-  }, [bookId, resolvedServerChapter, stripBookTitle]);
+    const byCurrent = getChapterData(bookId, currentChapter);
+    const resolvedFromData = byCurrent ? resolveChapterIndex(byCurrent) : null;
+    const resolvedServerChapter = resolvedFromData ?? fallbackChapter;
+    const ch =
+      byCurrent && (resolvedFromData == null || resolvedFromData === Number(currentChapter))
+        ? byCurrent
+        : getChapterData(bookId, resolvedServerChapter);
 
-  const chapterTitleTooltip = useMemo(() => {
-    if (!bookId) return undefined;
-    const t = String(getChapterData(bookId, resolvedServerChapter)?.title ?? '').trim();
-    return t || undefined;
-  }, [bookId, resolvedServerChapter]);
+    const rawTitle = String(ch?.title ?? '').trim();
+    const displayName = rawTitle ? stripRedundantBookTitlePrefix(rawTitle, stripBookTitle) : '';
+
+    return {
+      resolvedServerChapter,
+      chapterDisplayLabel: formatChapterOrderAndName(resolvedServerChapter, displayName),
+      chapterTitleTooltip: rawTitle || undefined,
+    };
+  }, [bookId, currentChapter, stripBookTitle]);
+
+  const isProgressPending =
+    Boolean(bookId) &&
+    !progressMetricsReady &&
+    (progressTopBar?.readingProgressPercent == null ||
+      !Number.isFinite(Number(progressTopBar?.readingProgressPercent)));
 
   const currentProgressWidth = useMemo(() => {
-    if (progressTopBar === undefined || isProgressPending) return "0%";
+    if (progressTopBar === undefined || isProgressPending) return '0%';
     const rp = progressTopBar.readingProgressPercent;
     if (rp != null && Number.isFinite(rp)) {
       return `${Math.min(100, Math.max(0, Math.round(rp * 100) / 100))}%`;
     }
-    return "0%";
+    return '0%';
   }, [progressTopBar, isProgressPending]);
 
-  const handleGenerateSuggestions = useCallback((searchTerm) => {
-    if (onGenerateSuggestions) {
-      onGenerateSuggestions(searchTerm);
-    }
-  }, [onGenerateSuggestions]);
+  const fullscreenLabel = graphFullScreen
+    ? '분할 화면으로 전환'
+    : '그래프 전체화면으로 전환';
 
-  const ChapterEventInfo = useMemo(() => {
-    if ((progressTopBar === undefined || isProgressPending) && bookId) {
-      return (
-        <span style={LOADING_STYLE}>
-          계산중...
-        </span>
-      );
-    }
-
-    const row = progressTopBar ?? {
-      eventNum: null,
-    };
-
-    const eventNum = resolveEventOrdinalForDisplay({
-      currentEvent,
-      prevValidEvent,
-      currentChapter: resolvedServerChapter,
-      progressTopBar: row,
-      fallback: 0,
-    });
-    const eventDisplay = eventNum > 0 ? String(eventNum) : '?';
-
-    return (
-      <>
-        <span style={CHAPTER_STYLE} title={chapterTitleTooltip}>
-          {chapterDisplayLabel}
-        </span>
-
-        <div
-          style={{
-            display: "flex",
-            flexDirection: "row",
-            alignItems: "center",
-            gap: 12,
-          }}
-        >
-          <span style={EVENT_NUMBER_STYLE}>
-            Event {eventDisplay}
-          </span>
-
-          <div style={PROGRESS_BAR_CONTAINER_STYLE}>
-            <div
-              style={{
-                ...PROGRESS_BAR_FILL_STYLE,
-                width: currentProgressWidth,
-              }}
-            />
-          </div>
-        </div>
-      </>
-    );
-  }, [
-    progressTopBar,
-    bookId,
-    chapterDisplayLabel,
-    chapterTitleTooltip,
-    currentProgressWidth,
-    currentEvent,
-    prevValidEvent,
-    resolvedServerChapter,
-    isProgressPending,
-  ]);
-
-  const renderGraphControls = useCallback(() => (
-    <GraphControls
-      onSearchSubmit={onSearchSubmit}
-      onGenerateSuggestions={handleGenerateSuggestions}
-      searchTerm={searchTerm}
-      isSearchActive={isSearchActive}
-      onClearSearch={clearSearch}
-      onCloseSuggestions={closeSuggestions}
-      suggestions={suggestions}
-      showSuggestions={showSuggestions}
-      selectedIndex={selectedIndex}
-      onSelectedIndexChange={onSelectedIndexChange}
-      onKeyDown={handleKeyDown}
+  const chapterEventInfo = (
+    <ChapterEventInfo
+      bookId={bookId}
+      isProgressPending={isProgressPending}
+      progressTopBar={progressTopBar}
+      currentEvent={currentEvent}
+      prevValidEvent={prevValidEvent}
+      resolvedServerChapter={chapterMeta.resolvedServerChapter}
+      chapterDisplayLabel={chapterMeta.chapterDisplayLabel}
+      chapterTitleTooltip={chapterMeta.chapterTitleTooltip}
+      currentProgressWidth={currentProgressWidth}
     />
-  ), [onSearchSubmit, handleGenerateSuggestions, searchTerm, isSearchActive, clearSearch, closeSuggestions, suggestions, showSuggestions, selectedIndex, onSelectedIndexChange, handleKeyDown]);
-
-  const renderToggleButtons = () => (
-    <div
-      style={{
-        display: "flex",
-        flexDirection: "row",
-        alignItems: "center",
-        gap: 12,
-        marginRight: 24,
-      }}
-    >
-      <EdgeLabelToggle
-        visible={edgeLabelVisible}
-        onToggle={() => setEdgeLabelVisible(!edgeLabelVisible)}
-      />
-      
-      <select
-        value={filterStage}
-        onChange={(e) => setFilterStage(Number(e.target.value))}
-        style={{
-          height: 32,
-          padding: '0 12px',
-          borderRadius: 8,
-          border: `1px solid ${filterStage > 0 ? '#5C6F5C' : '#e5e7eb'}`,
-          background: filterStage > 0 ? '#5C6F5C' : '#fff',
-          color: filterStage > 0 ? '#fff' : '#5C6F5C',
-          fontSize: 14,
-          fontWeight: 500,
-          cursor: 'pointer',
-          transition: 'all 0.2s ease',
-          outline: 'none',
-          display: 'flex',
-          alignItems: 'center',
-          gap: 6,
-          boxShadow: filterStage > 0 ? '0 2px 8px rgba(92,111,92,0.25)' : '0 2px 8px rgba(0,0,0,0.1)',
-          justifyContent: 'center',
-          minWidth: 120,
-        }}
-        title="필터링 단계 선택"
-      >
-        {GRAPH_CHARACTER_FILTER_STAGE_OPTIONS.map((opt) => (
-          <option key={opt.value} value={opt.value} style={{ color: '#5C6F5C', background: '#fff' }}>
-            {opt.label}
-          </option>
-        ))}
-      </select>
-    </div>
   );
-  
+
   return (
     <>
       <div
         style={{
-          height: 44,
-          flexShrink: 0,
-          display: "flex",
-          flexDirection: "row",
-          alignItems: "center",
-          width: "100%",
-          marginBottom: 0,
+          ...BAR_BASE_STYLE,
           gap: 0,
-          paddingLeft: 12,
-          paddingRight: 12,
-          paddingTop: 0,
-          justifyContent: "space-between",
-          borderBottom: graphFullScreen ? "1px solid #e3e6ef" : "none",
+          justifyContent: 'space-between',
+          borderBottom: graphFullScreen ? '1px solid #e3e6ef' : 'none',
         }}
       >
-        <div
-          style={{
-            display: "flex",
-            flexDirection: "row",
-            alignItems: "center",
-            gap: 12,
-            marginRight: 36,
-          }}
-        >
+        <div style={{ ...ROW_STYLE, gap: 12, marginRight: 36 }}>
           <button
-            onClick={() => {
-              if (graphFullScreen) {
-                graphActions.setGraphFullScreen(false);
-              } else {
-                graphActions.setGraphFullScreen(true);
-              }
-            }}
-            style={{
-              height: 28,
-              width: 28,
-              minWidth: 28,
-              minHeight: 28,
-              borderRadius: "6px",
-              border: "1.5px solid #e3e6ef",
-              background: "#fff",
-              color: "#22336b",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              fontSize: 16,
-              cursor: "pointer",
-              boxShadow: "0 2px 8px rgba(108,142,255,0.07)",
-              transition:
-                "background 0.18s, color 0.18s, box-shadow 0.18s, transform 0.13s",
-            }}
-            title={graphFullScreen ? "분할 화면으로 전환" : "그래프 전체화면으로 전환"}
+            type="button"
+            aria-label={fullscreenLabel}
+            title={fullscreenLabel}
+            onClick={() => setGraphFullScreen(!graphFullScreen)}
+            style={FULLSCREEN_BTN_STYLE}
           >
-            {graphFullScreen ? ">" : "<"}
+            {graphFullScreen ? '>' : '<'}
           </button>
 
-          {renderGraphControls()}
+          <GraphControls
+            onSearchSubmit={onSearchSubmit}
+            onGenerateSuggestions={onGenerateSuggestions}
+            searchTerm={searchTerm}
+            isSearchActive={isSearchActive}
+            onClearSearch={clearSearch}
+            onCloseSuggestions={closeSuggestions}
+            suggestions={suggestions}
+            showSuggestions={showSuggestions}
+            selectedIndex={selectedIndex}
+            onSelectedIndexChange={onSelectedIndexChange}
+            onKeyDown={handleKeyDown}
+          />
         </div>
 
         {graphFullScreen && (
-          <div
-            style={{
-              display: "flex",
-              flexDirection: "row",
-              alignItems: "center",
-              gap: 16,
-            }}
-          >
-            {ChapterEventInfo}
-          </div>
+          <div style={{ ...ROW_STYLE, gap: 16 }}>{chapterEventInfo}</div>
         )}
 
-        {renderToggleButtons()}
+        <div style={{ ...ROW_STYLE, gap: 12, marginRight: 24 }}>
+          <EdgeLabelToggle
+            visible={edgeLabelVisible}
+            onToggle={() => setEdgeLabelVisible(!edgeLabelVisible)}
+          />
+          <CharacterFilterSegmented value={filterStage} onChange={setFilterStage} />
+        </div>
       </div>
-      
+
       {!graphFullScreen && (
         <div
           style={{
-            height: 44,
-            flexShrink: 0,
-            display: "flex",
-            flexDirection: "row",
-            alignItems: "center",
-            width: "100%",
-            marginBottom: 0,
-            paddingLeft: 12,
-            paddingRight: 12,
-            paddingTop: 0,
-            justifyContent: "center",
-            borderTop: "1px solid #e3e6ef",
-            borderBottom: "1px solid #e3e6ef",
+            ...BAR_BASE_STYLE,
+            justifyContent: 'center',
+            borderTop: '1px solid #e3e6ef',
+            borderBottom: '1px solid #e3e6ef',
           }}
         >
-          {ChapterEventInfo}
+          {chapterEventInfo}
         </div>
       )}
     </>

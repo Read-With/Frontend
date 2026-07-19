@@ -1,12 +1,3 @@
-@keyframes spin {
-  0% {
-    transform: rotate(0deg);
-  }
-  100% {
-    transform: rotate(360deg);
-  }
-}
-
 /* 그래프 캔버스 영역 */
 .graph-canvas-area {
   transition: all 0.02s ease-out;
@@ -29,125 +20,121 @@
   flex: 1;
 }
 
-/* Edge Tooltip */
-.edge-tooltip-container {
-  min-width: 450px;
-  max-width: 600px;
-  width: 500px;
-  height: 360px;
-  min-height: 360px;
-  max-height: 360px;
-  background-color: white;
-  border-radius: 8px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
-  padding: 0;
-  pointer-events: auto;
-  overflow: hidden;
-}
-
-.edge-tooltip-content {
-  background: white;
-  border-radius: 12px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
-  overflow: hidden;
-  height: 100%;
+/* Cytoscape 인스턴스 + 줌/검색 UI (부모 .graph-canvas-area 안에서 포지셔닝) */
+.graph-cy-shell {
+  position: relative;
   width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  flex: 1;
+  overflow: hidden;
 }
 
-.edge-tooltip-header {
-  padding: 16px;
-  background: #E8F5E8;
-  border-bottom: 1px solid #eaedf2;
+.graph-cy-container {
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
 }
 
-.relation-weight {
-  margin-top: 12px;
-  padding: 16px;
-  background: #E8F5E8;
-  border-radius: 8px;
-}
-
-.weight-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 16px;
-  padding: 0 4px;
-}
-
-.weight-label {
-  font-size: 14px;
-  font-weight: 600;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.weight-label::before {
-  content: "•";
-  font-size: 20px;
-  line-height: 1;
-}
-
-.weight-value {
-  font-size: 14px;
-  font-weight: 600;
-  color: #5C6F5C;
-  padding: 2px 8px;
-  background: white;
+.graph-no-results {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: rgba(255, 255, 255, 0.95);
+  padding: 20px 30px;
   border-radius: 12px;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+  border: 1px solid #e3e6ef;
+  z-index: 1000;
+  text-align: center;
+  max-width: 300px;
 }
 
-.edge-tooltip-body {
-  padding: 16px;
+.graph-no-results-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: #64748b;
+  margin-bottom: 8px;
 }
 
-.edge-tooltip-body::-webkit-scrollbar {
-  width: 6px;
-}
-
-.edge-tooltip-body::-webkit-scrollbar-track {
-  background: #f1f4f8;
-  border-radius: 3px;
-}
-
-.edge-tooltip-body::-webkit-scrollbar-thumb {
-  background: #c7cad1;
-  border-radius: 3px;
-}
-
-.edge-tooltip-body::-webkit-scrollbar-thumb:hover {
-  background: #a0a4ad;
-}
-
-.relation-tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-bottom: 12px;
-}
-
-.relation-tag {
-  padding: 6px 12px;
-  border-radius: 6px;
-  font-size: 13px;
-  font-weight: 500;
-  color: currentColor;
-}
-
-.relation-explanation {
-  margin-top: 16px;
-  padding-top: 16px;
-  border-top: 1px solid #eaedf2;
-}
-
-.relation-explanation p {
-  margin: 0;
+.graph-no-results-description {
   font-size: 14px;
-  line-height: 1.6;
-  color: #4b5563;
-  white-space: pre-wrap;
+  color: #94a3b8;
+  line-height: 1.4;
+}
+
+.graph-zoom-controls {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 20;
+  display: flex;
+  gap: 4px;
+}
+
+.graph-zoom-btn {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid #e3e6ef;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.95);
+  color: #334155;
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 1;
+  cursor: pointer;
+  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.08);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.graph-zoom-btn:hover {
+  background: #f8fafc;
+  border-color: #cbd5e1;
+}
+
+.graph-zoom-btn:active {
+  background: #f1f5f9;
+}
+
+/* Edge / Node floating tooltip chrome */
+.edge-tooltip-container,
+.graph-node-tooltip {
+  width: 420px;
+  max-width: 420px;
+  height: auto;
+  max-height: 420px;
+  background: #ffffff;
+  border-radius: 0.9375rem;
+  box-shadow: 0 0.5rem 1.5rem rgba(0, 0, 0, 0.15), 0 0.25rem 0.75rem rgba(0, 0, 0, 0.1);
+  border: 0.0625rem solid #e5e7eb;
+  overflow: hidden;
+  pointer-events: auto;
+  cursor: grab;
+  display: flex;
+  flex-direction: column;
+}
+
+.edge-tooltip-container {
+  /* client 좌표(left/top) 기준 — relative면 패널 밖으로 밀려 안 보임 */
+  position: fixed;
+  z-index: 99999;
+}
+
+.graph-node-tooltip {
+  position: fixed;
+  z-index: 99999;
+}
+
+.edge-tooltip-container:active,
+.graph-node-tooltip:active {
+  cursor: grabbing;
 }
 
 .graph-node-tooltip[style*="cursor: grabbing"],
@@ -157,110 +144,336 @@
   transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
 
-.edge-tooltip-container .tooltip-close-btn {
-  position: absolute;
-  top: 16px;
-  right: 16px;
-  background: rgba(255, 255, 255, 0.9);
-  border: none;
+.edge-tooltip-content {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-height: 420px;
+}
+
+.edge-tooltip-header {
+  padding: 18px 20px 12px;
+  background: #ffffff;
+  flex-shrink: 0;
+}
+
+.edge-tooltip-endpoints {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  padding-right: 32px;
+}
+
+.edge-tooltip-endpoint {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  flex: 1;
+}
+
+.edge-tooltip-endpoint-avatar {
   width: 28px;
   height: 28px;
-  border-radius: 14px;
+  border-radius: 50%;
+  object-fit: cover;
+  background: #e5e7eb;
+  flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 20px;
-  color: #7A8A7A;
-  cursor: pointer;
-  transition: all 0.2s;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  font-size: 11px;
+  font-weight: 600;
+  color: #6b7280;
 }
 
-.edge-tooltip-container .tooltip-close-btn:hover {
-  background: #fff;
+.edge-tooltip-endpoint-name {
+  font-size: 16px;
+  font-weight: 700;
+  color: #1f2937;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.edge-tooltip-endpoint-arrow {
+  flex-shrink: 0;
+  color: #6b7280;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.edge-chart-panel {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.edge-chart-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: #1f2937;
+  text-align: center;
+  letter-spacing: -0.01em;
+}
+
+.edge-chart-plot {
+  width: 100%;
+}
+
+.edge-chart-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 120px;
+  padding: 16px;
+  text-align: center;
+}
+
+.edge-chart-empty-title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: #64748b;
+}
+
+.edge-chart-empty-value {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.edge-tooltip-tabs {
+  display: flex;
+  position: relative;
+  gap: 0;
+  border-bottom: 1px solid #e5e7eb;
+  margin: 0 20px;
+  flex-shrink: 0;
+}
+
+.edge-tooltip-tab {
+  flex: 1;
+  padding: 8px 0;
+  border: none;
+  background: transparent;
+  font-size: 13px;
+  font-weight: 500;
+  color: #9ca3af;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  transition: color 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+  z-index: 1;
+}
+
+.edge-tooltip-tab:hover {
+  color: #4b5563;
+}
+
+.edge-tooltip-tab.active {
+  color: #1f2937;
+  font-weight: 600;
+}
+
+.edge-tooltip-tab-indicator {
+  position: absolute;
+  left: 0;
+  bottom: -1px;
+  width: 50%;
+  height: 2px;
+  background: #1f2937;
+  border-radius: 1px;
+  transform: translateX(0);
+  transition: transform 0.28s cubic-bezier(0.4, 0, 0.2, 1);
+  pointer-events: none;
+}
+
+.edge-tooltip-tab-indicator.chart {
+  transform: translateX(100%);
+}
+
+.edge-tooltip-panel {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  padding: 16px 20px 20px;
+}
+
+.edge-tooltip-panel-swap {
+  animation: edgeTooltipPanelIn 0.28s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@keyframes edgeTooltipPanelIn {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.relation-weight {
+  margin-top: 8px;
+}
+
+.positivity-track {
+  width: 100%;
+  height: 8px;
+  border-radius: 4px;
+  background: #e5e7eb;
+  overflow: hidden;
+  margin-top: 6px;
+}
+
+.positivity-fill {
+  height: 100%;
+  border-radius: 4px;
+  transition: width 0.2s ease;
+}
+
+.weight-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.weight-label {
+  font-size: 13px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.weight-value {
+  font-size: 13px;
+  font-weight: 600;
+  color: inherit;
+}
+
+.edge-tooltip-body {
+  padding: 0;
+  margin-top: 10px;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  max-height: 160px;
+}
+
+.relation-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.relation-tag {
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  background: #eef1f6;
+  color: #42506b;
+  display: inline-block;
+  line-height: 1.2;
+}
+
+.relation-explanation p,
+.explanation-text {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.6;
+  color: #4b5563;
+  white-space: pre-wrap;
+}
+
+.explanation-text {
+  margin-top: 6px;
+}
+
+.edge-tooltip-skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px 0;
+}
+
+.edge-tooltip-skeleton-line {
+  height: 10px;
+  border-radius: 4px;
+  background: linear-gradient(90deg, #f3f4f6 25%, #e5e7eb 50%, #f3f4f6 75%);
+  background-size: 200% 100%;
+  animation: edgeTooltipShimmer 1.2s ease-in-out infinite;
+}
+
+.edge-tooltip-skeleton-line.short {
+  width: 60%;
+}
+
+.edge-tooltip-status {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 28px 16px;
+  text-align: center;
+  color: #64748b;
+  font-size: 13px;
+  line-height: 1.5;
+  word-break: keep-all;
+}
+
+@keyframes edgeTooltipShimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+.graph-node-tooltip .tooltip-close-btn,
+.edge-tooltip-container .tooltip-close-btn,
+.graph-sidebar-panel .tooltip-close-btn {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 18px;
+  color: #6b7280;
+  transition: all 0.2s ease;
+  z-index: 10;
+  padding: 0;
+}
+
+.graph-node-tooltip .tooltip-close-btn:hover,
+.edge-tooltip-container .tooltip-close-btn:hover,
+.graph-sidebar-panel .tooltip-close-btn:hover {
+  background: rgba(92, 111, 92, 0.1);
   color: #5C6F5C;
-  transform: scale(1.05);
 }
 
 .quote-box {
   background-color: #f5f5f5;
-  border-left: 4px solid #4caf50;
-  padding: 12px 16px;
-  margin-bottom: 12px;
+  border-left-width: 4px;
+  border-left-style: solid;
+  padding: 10px 12px;
+  margin-bottom: 8px;
   border-radius: 4px;
-}
-
-.explanation-text {
-  color: #666;
-  font-size: 14px;
-  line-height: 1.5;
-  margin-top: 8px;
-}
-
-.tooltip-content.business-card {
-  width: 100%;
-  height: 100%;
-  background: white;
-  border-radius: 12px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
-  display: flex;
-  flex-direction: column;
-}
-
-.tooltip-front {
-  backface-visibility: hidden;
-  transition: transform 0.2s ease-in-out;
-  width: 100%;
-  height: 100%;
-  position: absolute;
-  top: 0;
-  left: 0;
-}
-
-.edge-tooltip-flip {
-  perspective: 1200px;
-}
-
-.edge-tooltip-flip-inner {
-  position: relative;
-  width: 100%;
-  height: 100%;
-  transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-  transform-style: preserve-3d;
-}
-
-.edge-tooltip-flip.flipped .edge-tooltip-flip-inner {
-  transform: rotateY(180deg);
-}
-
-.edge-tooltip-front,
-.edge-tooltip-back {
-  backface-visibility: hidden;
-  position: absolute;
-  width: 100%;
-  height: 100%;
-  top: 0;
-  left: 0;
-}
-
-.edge-tooltip-back {
-  transform: rotateY(180deg);
-}
-
-.bounce-effect {
-  animation: bounce 0.1s ease-out;
-}
-
-@keyframes bounce {
-  0% {
-    transform: scale(1);
-  }
-  50% {
-    transform: scale(1.1);
-  }
-  100% {
-    transform: scale(1);
-  }
 }
 
 .ripple-effect {
@@ -302,171 +515,327 @@
   }
 }
 
-.sidebar-content {
-  flex: 1;
-  overflow: auto;
-  padding: 0 1.5rem;
+/* 그래프 사이드바 */
+.graph-sidebar-panel {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: #ffffff;
+  overflow: hidden;
+  font-family: var(--font-family-primary);
 }
 
-.sidebar-content::-webkit-scrollbar {
+.graph-sidebar-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.graph-sidebar-body .business-card-description {
+  max-height: none;
+  flex: 0 0 auto;
+  font-size: 15px;
+  line-height: 1.65;
+}
+
+.sidebar-section {
+  background: transparent;
+  border: none;
+  border-top: 1px solid #e5e7eb;
+  border-radius: 0;
+  box-shadow: none;
+  padding: 16px 20px;
+  margin: 0;
+}
+
+.edge-tooltip-content--sidebar {
+  height: 100%;
+  max-height: none;
+  flex: 1;
+  min-height: 0;
+}
+
+.edge-tooltip-panel--sidebar {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  max-height: none;
+}
+
+.edge-tooltip-body::-webkit-scrollbar,
+.graph-sidebar-body::-webkit-scrollbar,
+.edge-tooltip-panel--sidebar::-webkit-scrollbar {
   width: 6px;
 }
 
-.sidebar-content::-webkit-scrollbar-track {
+.edge-tooltip-body::-webkit-scrollbar-track,
+.graph-sidebar-body::-webkit-scrollbar-track,
+.edge-tooltip-panel--sidebar::-webkit-scrollbar-track {
   background: #f8f9fa;
   border-radius: 3px;
 }
 
-.sidebar-content::-webkit-scrollbar-thumb {
+.edge-tooltip-body::-webkit-scrollbar-thumb,
+.graph-sidebar-body::-webkit-scrollbar-thumb,
+.edge-tooltip-panel--sidebar::-webkit-scrollbar-thumb {
   background: #d1d5db;
   border-radius: 3px;
-  transition: background-color 0.2s ease;
 }
 
-.sidebar-content::-webkit-scrollbar-thumb:hover {
+.edge-tooltip-body::-webkit-scrollbar-thumb:hover,
+.graph-sidebar-body::-webkit-scrollbar-thumb:hover,
+.edge-tooltip-panel--sidebar::-webkit-scrollbar-thumb:hover {
   background: #9ca3af;
 }
 
-.sidebar-card {
-  background: #fff;
-  border-radius: 0.75rem;
-  padding: 1.5rem;
-  margin-bottom: 1.5rem;
-  border: 0.0625rem solid #e5e7eb;
-  box-shadow: 0 0.0625rem 0.1875rem rgba(0, 0, 0, 0.05);
-  transition: all 0.2s ease;
-}
-
-.sidebar-card:hover {
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
-  transform: translateY(-1px);
-}
-
 /* Node tooltip */
-.graph-node-tooltip {
-  position: absolute;
-  background: #ffffff;
-  border-radius: 0.9375rem;
-  box-shadow: 0 0.5rem 1.5rem rgba(0, 0, 0, 0.15), 0 0.25rem 0.75rem rgba(0, 0, 0, 0.1);
-  border: 0.0625rem solid #e5e7eb;
-  max-width: 22.5rem;
-  min-width: 20rem;
-  z-index: 99999;
-  overflow: hidden;
-  backdrop-filter: blur(8px);
-}
-
-.graph-node-tooltip.error {
-  background: #fef2f2;
-  border-color: #fca5a5;
-  box-shadow: 0 0.5rem 1.5rem rgba(239, 68, 68, 0.15);
-}
-
-.graph-node-tooltip .tooltip-close-btn {
-  position: absolute;
-  top: 0.75rem;
-  right: 0.75rem;
-  background: rgba(255, 255, 255, 0.9);
-  border: none;
-  border-radius: 50%;
-  width: 2rem;
-  height: 2rem;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  font-size: 1.125rem;
-  color: #6b7280;
-  transition: all 0.2s ease;
-  z-index: 10;
-}
-
-.graph-node-tooltip .tooltip-close-btn:hover {
-  background: #f3f4f6;
-  color: #374151;
-  transform: scale(1.1);
-}
-
-.tooltip-content {
+.tooltip-content.business-card {
   position: relative;
   width: 100%;
   height: auto;
-  min-height: 17.5rem;
+  max-height: 420px;
   display: flex;
   flex-direction: column;
   padding: 0;
+  overflow: hidden;
 }
 
-.business-card {
-  backface-visibility: hidden;
-  transform: rotateY(0deg);
+.node-tooltip-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 18px 44px 14px 20px;
+  background: #ffffff;
+  flex-shrink: 0;
 }
 
 .profile-image-placeholder {
-  width: 4.6875rem;
-  height: 4.6875rem;
+  width: 48px;
+  height: 48px;
   border-radius: 50%;
   background: #e6e8f0;
   display: flex;
   align-items: center;
   justify-content: center;
-  margin-bottom: 0.75rem;
-  margin-left: 1.3125rem;
-  box-shadow: 0 0.125rem 0.5rem rgba(108, 142, 255, 0.10);
+  margin: 0;
+  overflow: hidden;
+  flex-shrink: 0;
 }
 
 .profile-img {
   display: flex;
   justify-content: center;
   align-items: center;
-  width: 3rem;
-  height: 3rem;
-  margin: 0 auto 0.5625rem auto;
+  width: 100%;
+  height: 100%;
+  margin: 0;
   border-radius: 50%;
   background: #f4f4f4;
+  overflow: hidden;
+}
+
+.profile-img img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 50%;
+  display: block;
+}
+
+.node-tooltip-identity {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  min-width: 0;
+  flex: 1;
+  gap: 6px;
+}
+
+.node-tooltip-name-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  width: 100%;
+}
+
+.node-tooltip-name {
+  font-weight: 700;
+  font-size: 15px;
+  color: #1f2937;
+  letter-spacing: -0.01em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+
+/* 사이드바: 노드/엣지 타이포 */
+.graph-sidebar-panel .node-tooltip-name {
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.graph-sidebar-panel .node-tooltip-aliases .relation-tag {
+  font-size: 14px;
+  font-weight: 600;
+  padding: 5px 11px;
+}
+
+.edge-tooltip-content--sidebar .edge-tooltip-header {
+  padding: 22px 48px 16px 24px;
+}
+
+.edge-tooltip-content--sidebar .edge-tooltip-endpoints {
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 4px;
+  padding-right: 0;
+}
+
+.edge-tooltip-content--sidebar .edge-tooltip-endpoint {
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.edge-tooltip-content--sidebar .edge-tooltip-endpoint-avatar {
+  width: 36px;
+  height: 36px;
+  font-size: 13px;
+  margin-top: 2px;
+}
+
+.edge-tooltip-content--sidebar .edge-tooltip-endpoint-name {
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1.35;
+  white-space: normal;
+  overflow: hidden;
+  text-overflow: unset;
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.edge-tooltip-content--sidebar .edge-tooltip-endpoint-arrow {
+  font-size: 18px;
+  font-weight: 600;
+  align-self: center;
+  padding: 0 2px;
+}
+
+.edge-tooltip-content--sidebar .edge-tooltip-body {
+  max-height: none;
+}
+
+.edge-tooltip-content--sidebar .edge-chart-panel {
+  margin-top: 28px;
+  padding-top: 28px;
+  border-top: 1px solid #e5e7eb;
+}
+
+.edge-tooltip-content--sidebar .relation-tag {
+  font-size: 14px;
+  font-weight: 600;
+  padding: 5px 11px;
+}
+
+.edge-tooltip-content--sidebar .relation-tags {
+  margin-bottom: 14px;
+  gap: 8px;
+}
+
+.edge-tooltip-content--sidebar .relation-weight {
+  margin-top: 14px;
+}
+
+.edge-tooltip-content--sidebar .weight-header {
+  gap: 24px;
+}
+
+.edge-tooltip-content--sidebar .weight-label,
+.edge-tooltip-content--sidebar .weight-value {
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.edge-tooltip-content--sidebar .weight-value {
+  margin-left: auto;
+  padding-left: 12px;
+}
+
+.edge-tooltip-content--sidebar .quote-box,
+.edge-tooltip-content--sidebar .quote-box strong {
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.5;
+}
+
+.edge-tooltip-content--sidebar .relation-explanation p,
+.edge-tooltip-content--sidebar .explanation-text {
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.edge-tooltip-content--sidebar .edge-chart-title {
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.edge-tooltip-content--sidebar .edge-chart-empty-title {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.edge-tooltip-content--sidebar .edge-chart-empty-value {
+  font-size: 22px;
+  font-weight: 700;
+}
+
+.edge-tooltip-content--sidebar .edge-tooltip-status {
+  font-size: 14px;
+}
+
+.node-tooltip-badge {
+  background: #5C6F5C;
+  color: #fff;
+  border-radius: 999px;
+  font-size: 11px;
+  padding: 2px 8px;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.node-tooltip-aliases {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
 }
 
 .business-card-description {
-  color: #333;
-  font-size: 0.875rem;
-  min-height: 2.625rem;
-  margin: 1.3125rem 1.75rem 0 1.75rem;
+  color: #374151;
+  font-size: 13px;
+  margin: 0;
+  padding: 16px 20px 20px;
   text-align: left;
   line-height: 1.6;
   font-weight: 400;
   word-break: keep-all;
+  overflow-y: auto;
+  flex: 1;
+  border-top: 1px solid #e5e7eb;
+  max-height: 280px;
 }
 
-.sidebar-close-btn {
-  background: none;
-  border: none;
-  font-size: 1.5rem;
-  color: #6b7280;
-  cursor: pointer;
-  padding: 0.5rem;
-  border-radius: 0.375rem;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: all 0.2s ease;
-  width: 2.5rem;
-  height: 2.5rem;
-  margin-left: 1rem;
-}
-
-.sidebar-close-btn:hover {
-  background: #f3f4f6;
-  color: #374151;
-}
-
-.sidebar-close-btn:focus {
-  background: #f3f4f6;
-  color: #374151;
-  outline: 0.125rem solid #5C6F5C;
-  outline-offset: 0.125rem;
-}
-
-.summary-toggle-btn {
+.summary-toggle-btn,
+.relation-analysis-btn {
   width: 100%;
   padding: 0.25rem 0.5rem;
   background: transparent;
@@ -480,33 +849,14 @@
   margin: 0;
 }
 
-.summary-toggle-btn:hover {
-  background: #E8F5E8;
-}
-
-.relation-analysis-btn {
-  width: 100%;
-  padding: 0.25rem 0.5rem;
-  background: transparent;
-  border: none;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  transition: background 0.2s ease;
-  box-sizing: border-box;
-}
-
+.summary-toggle-btn:hover,
 .relation-analysis-btn:hover {
   background: #E8F5E8;
 }
 
 .modal-overlay {
   position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
+  inset: 0;
   background: rgba(0, 0, 0, 0.8);
   z-index: 999999;
   display: flex;
@@ -559,20 +909,6 @@
   color: #374151;
 }
 
-.hover-tooltip {
-  position: fixed;
-  padding: 1.25rem 1.5rem;
-  background: rgba(255, 255, 255, 0.98);
-  border-radius: 0.75rem;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2), 0 2px 8px rgba(0, 0, 0, 0.1);
-  z-index: 999999;
-  backdrop-filter: blur(8px);
-  pointer-events: none;
-  min-width: 320px;
-  max-width: 400px;
-  min-height: 160px;
-}
-
 @keyframes fadeIn {
   from {
     opacity: 0;
@@ -586,8 +922,8 @@
 
 @media (max-width: 768px) {
   .graph-node-tooltip {
-    max-width: 18rem;
-    min-width: 16rem;
+    width: min(420px, calc(100vw - 24px));
+    max-width: min(420px, calc(100vw - 24px));
   }
 
   .modal-container {
@@ -599,8 +935,8 @@
 
 @media (max-width: 480px) {
   .graph-node-tooltip {
-    max-width: 16rem;
-    min-width: 14rem;
+    width: min(420px, calc(100vw - 16px));
+    max-width: min(420px, calc(100vw - 16px));
   }
 
   .modal-container {

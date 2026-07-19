@@ -1,7 +1,9 @@
 import { useCallback, useState } from "react";
+import PropTypes from "prop-types";
 import { useClickOutside } from "../../hooks/ui/tooltipHooks";
-import { graphControlsStyles, COLORS } from "../../utils/styles/styles.js";
+import { graphControlsStyles, topBarStyles, COLORS, ANIMATION_VALUES } from "../../utils/styles/styles.js";
 import { findExactSuggestionMatch } from "../../utils/graph/searchUtils.js";
+import { GRAPH_CHARACTER_FILTER_STAGE_OPTIONS, resolveChapterSidebarWidth } from "../../utils/graph/graphUtils.js";
 
 export function EdgeLabelToggle({ visible, onToggle }) {
   return (
@@ -49,6 +51,57 @@ export function EdgeLabelToggle({ visible, onToggle }) {
           boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
         }} />
       </button>
+    </div>
+  );
+}
+
+/** 인물 필터: 주요 | 주변 | 전체 */
+export function CharacterFilterSegmented({ value, onChange }) {
+  return (
+    <div
+      role="radiogroup"
+      aria-label="인물 필터"
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        height: 32,
+        padding: 2,
+        borderRadius: 8,
+        background: COLORS.backgroundLighter,
+        border: `1px solid ${COLORS.border}`,
+        boxShadow: '0 2px 8px rgba(0,0,0,0.06)',
+      }}
+    >
+      {GRAPH_CHARACTER_FILTER_STAGE_OPTIONS.map((opt) => {
+        const selected = value === opt.value;
+        return (
+          <button
+            key={opt.value}
+            type="button"
+            role="radio"
+            aria-checked={selected}
+            title={opt.title}
+            onClick={() => onChange(opt.value)}
+            style={{
+              height: 28,
+              minWidth: 44,
+              padding: '0 10px',
+              border: 'none',
+              borderRadius: 6,
+              background: selected ? COLORS.primary : 'transparent',
+              color: selected ? '#fff' : COLORS.textPrimary,
+              fontSize: 13,
+              fontWeight: selected ? 700 : 500,
+              cursor: 'pointer',
+              transition: 'background-color 0.15s ease, color 0.15s ease',
+              outline: 'none',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {opt.label}
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -395,3 +448,81 @@ function GraphControls({
 }
 
 export default GraphControls;
+
+export function GraphTopBar({
+  isSidebarOpen,
+  searchState,
+  searchActions,
+  edgeLabelVisible,
+  onToggleEdgeLabel,
+  filterStage,
+  onFilterChange,
+}) {
+  const { searchTerm, isSearchActive, suggestions, showSuggestions, selectedIndex } = searchState;
+  const {
+    onSearchSubmit, onClearSearch, onGenerateSuggestions,
+    onKeyDown, onCloseSuggestions, onSelectedIndexChange,
+  } = searchActions;
+
+  const sidebarLeft = resolveChapterSidebarWidth(isSidebarOpen);
+
+  return (
+    <div
+      style={{
+        ...topBarStyles.container,
+        position: 'fixed',
+        top: 0,
+        left: `${sidebarLeft}px`,
+        right: 0,
+        zIndex: 10000,
+        transition: `left ${ANIMATION_VALUES.DURATION.SLOW} ${ANIMATION_VALUES.EASE_OUT}`,
+        background: 'rgba(255, 255, 255, 0.95)',
+        backdropFilter: 'blur(8px)',
+        borderBottom: `1px solid ${COLORS.border}`,
+      }}
+    >
+      <div style={topBarStyles.leftSection}>
+        <GraphControls
+          searchTerm={searchTerm}
+          onSearchSubmit={onSearchSubmit}
+          onClearSearch={onClearSearch}
+          onGenerateSuggestions={onGenerateSuggestions}
+          suggestions={suggestions}
+          showSuggestions={showSuggestions}
+          selectedIndex={selectedIndex}
+          onSelectedIndexChange={onSelectedIndexChange}
+          onKeyDown={onKeyDown}
+          onCloseSuggestions={onCloseSuggestions}
+          isSearchActive={isSearchActive}
+        />
+
+        <EdgeLabelToggle visible={edgeLabelVisible} onToggle={onToggleEdgeLabel} />
+
+        <CharacterFilterSegmented value={filterStage} onChange={onFilterChange} />
+      </div>
+    </div>
+  );
+}
+
+GraphTopBar.propTypes = {
+  isSidebarOpen: PropTypes.bool.isRequired,
+  searchState: PropTypes.shape({
+    searchTerm: PropTypes.string.isRequired,
+    isSearchActive: PropTypes.bool.isRequired,
+    suggestions: PropTypes.arrayOf(PropTypes.any).isRequired,
+    showSuggestions: PropTypes.bool.isRequired,
+    selectedIndex: PropTypes.number.isRequired,
+  }).isRequired,
+  searchActions: PropTypes.shape({
+    onSearchSubmit: PropTypes.func.isRequired,
+    onClearSearch: PropTypes.func.isRequired,
+    onGenerateSuggestions: PropTypes.func.isRequired,
+    onKeyDown: PropTypes.func.isRequired,
+    onCloseSuggestions: PropTypes.func.isRequired,
+    onSelectedIndexChange: PropTypes.func,
+  }).isRequired,
+  edgeLabelVisible: PropTypes.bool.isRequired,
+  onToggleEdgeLabel: PropTypes.func.isRequired,
+  filterStage: PropTypes.number.isRequired,
+  onFilterChange: PropTypes.func.isRequired,
+};

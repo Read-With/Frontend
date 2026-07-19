@@ -7,15 +7,17 @@ import {
   resolveProgressLocator,
   toViewerResumeAnchor,
   anchorToLocators,
-} from '../common/locatorUtils';
+  clampPercent,
+  resolveChapterIndex,
+  toPositiveNumberOrNull,
+} from '../common/valueUtils';
 import {
   findManifestEventInChapter,
   getLastManifestEventInChapter,
-  resolveFineGraphLocatorToEventParams,
+  resolveLocatorToEventParams as resolveManifestLocatorToEventParams,
   resolveProgressMetricsFromLocator,
   readingProgressPercentFromLocator,
 } from '../common/cache/manifestCache';
-import { clampPercent, resolveChapterIndex, toPositiveNumberOrNull } from '../common/valueUtils';
 import { eventUtils, resolveServerBookId } from './viewerCoreStateUtils';
 
 function progressPercentFromData(data, options, pickValue) {
@@ -25,6 +27,14 @@ function progressPercentFromData(data, options, pickValue) {
   if (bookId == null || !locator) return null;
   const value = pickValue(bookId, locator);
   return value != null ? clampPercent(value) : null;
+}
+
+function chapterIdxOf(source) {
+  return toPositiveNumberOrNull(eventUtils.resolveChapterIdx(source));
+}
+
+function positiveEventNum(source) {
+  return toPositiveNumberOrNull(eventUtils.resolveEventNum(source));
 }
 
 export function resolveProgressEventName(source) {
@@ -86,7 +96,7 @@ export function getUnifiedEventInfoForTooltip({ currentEvent, prevValidEvent, ev
   };
 }
 
-function pickFineGraphResultEvent(event) {
+function pickEventIdentityPayload(event) {
   if (!event || typeof event !== 'object') return null;
   const inner = event.event;
   const hasIdentity = (obj) => obj.eventId != null || obj.eventNum != null;
@@ -102,11 +112,9 @@ function pickFineGraphResultEvent(event) {
 }
 
 function resolveManifestEventMatch(event, bookId) {
-  const fineEvent = pickFineGraphResultEvent(event);
-  const eventId = eventUtils.resolveEventId(fineEvent);
-  const chapterIdx = toPositiveNumberOrNull(
-    eventUtils.resolveChapterIdx(fineEvent) ?? eventUtils.resolveChapterIdx(event)
-  );
+  const identity = pickEventIdentityPayload(event);
+  const eventId = eventUtils.resolveEventId(identity);
+  const chapterIdx = chapterIdxOf(identity) ?? chapterIdxOf(event);
   const normalizedEventId = eventId == null ? '' : String(eventId).trim();
   const normalizedBookId = toPositiveNumberOrNull(bookId);
   if (!normalizedBookId || !chapterIdx || !normalizedEventId) {
@@ -139,16 +147,14 @@ export function resolveServerEventMatch({
   fallbackBookId = null,
   currentChapter = null,
   event,
-  eventUtils: eventUtilsRef = eventUtils,
   atLocator = null,
-  resolveLocatorToEventParams = resolveFineGraphLocatorToEventParams,
 }) {
   const bookId = resolveServerBookId(book) ?? toPositiveNumberOrNull(fallbackBookId);
   const anchorLocators = anchorToLocators(event?.anchor);
   const locator = toLocator(atLocator) ?? anchorLocators.startLocator;
   const endLocator = atLocator ? locator : anchorLocators.endLocator;
-  const rawEventIdx = toPositiveNumberOrNull(eventUtilsRef.resolveEventNum(event));
-  const rawChapter = toPositiveNumberOrNull(eventUtils.resolveChapterIdx(event) ?? currentChapter);
+  const rawEventIdx = positiveEventNum(event);
+  const rawChapter = chapterIdxOf(event) ?? toPositiveNumberOrNull(currentChapter);
   const locatorChapter = toPositiveNumberOrNull(resolveChapterIndex(locator));
   const endChapter = toPositiveNumberOrNull(resolveChapterIndex(endLocator));
   const spansFromPreviousChapter =
@@ -169,7 +175,7 @@ export function resolveServerEventMatch({
 
   if (spansFromPreviousChapter) {
     const boundaryLastEvent = getLastManifestEventInChapter(bookId, locatorChapter);
-    const boundaryLastEventIdx = eventUtilsRef.resolveEventNum(boundaryLastEvent);
+    const boundaryLastEventIdx = eventUtils.resolveEventNum(boundaryLastEvent);
     if (boundaryLastEventIdx) {
       return eventMatchResult({
         bookId,
@@ -183,7 +189,7 @@ export function resolveServerEventMatch({
   }
 
   if (locator) {
-    const resolved = resolveLocatorToEventParams(bookId, locator, rawEventIdx ?? 1);
+    const resolved = resolveManifestLocatorToEventParams(bookId, locator, rawEventIdx ?? 1);
     const locatorEventIdx = toPositiveNumberOrNull(resolved?.eventIdx);
     if (resolved?.resolved && locatorEventIdx) {
       return eventMatchResult({
@@ -237,13 +243,7 @@ function applyResolvedEventMetadata(eventObj, manifestEvent) {
   };
 }
 
-export function resolveViewerLineEvent({
-  receivedEvent,
-  book,
-  bookKey,
-  eventUtils: eventUtilsRef = eventUtils,
-  resolveLocatorToEventParams = resolveFineGraphLocatorToEventParams,
-}) {
+export function resolveViewerLineEvent({ receivedEvent, book, bookKey }) {
   if (!receivedEvent || typeof receivedEvent !== 'object') {
     return { nextEvent: receivedEvent, nextChapter: null, atLocator: null };
   }
@@ -253,8 +253,6 @@ export function resolveViewerLineEvent({
     book,
     fallbackBookId: bookKey,
     event: nextEvent,
-    eventUtils: eventUtilsRef,
-    resolveLocatorToEventParams,
   });
   const resolvedEventIdx = toPositiveNumberOrNull(match.eventIdx) ?? 0;
   const resolvedChapter = toPositiveNumberOrNull(match.chapterIdx) ?? 0;
@@ -293,6 +291,10 @@ const EMPTY_PROGRESS_TOP_BAR = {
   readingProgressPercent: null,
   eventName: '',
 };
+
+function emptyTopBar() {
+  return { ...EMPTY_PROGRESS_TOP_BAR };
+}
 
 export function normalizeReadingProgressPercent(data, options = {}) {
   return progressPercentFromData(data, options, (bookId, locator) =>
@@ -339,7 +341,7 @@ export function resolveMetricsFromReadingLocatorKey(bookKey, readingLocatorKey, 
 }
 
 export function progressRowToTopBar(row, bookId = null) {
-  if (!row || typeof row !== 'object') return { ...EMPTY_PROGRESS_TOP_BAR };
+  if (!row || typeof row !== 'object') return emptyTopBar();
 
   const explicit = Number(row.eventNum);
   const fromId = eventUtils.resolveEventNum(row);
@@ -348,11 +350,8 @@ export function progressRowToTopBar(row, bookId = null) {
 
   const loc = toLocator(row.startLocator ?? row.locator ?? row.anchor?.startLocator);
   const metrics = resolveMetricsFromLocator(bookId, loc);
-  const chapterIdx = toPositiveNumberOrNull(
-    eventUtils.resolveChapterIdx(row) ??
-      toPositiveNumberOrNull(row.chapterNum) ??
-      loc?.chapterIndex
-  );
+  const chapterIdx =
+    chapterIdxOf(row) ?? toPositiveNumberOrNull(row.chapterNum) ?? toPositiveNumberOrNull(loc?.chapterIndex);
 
   return {
     eventNum,
@@ -364,13 +363,10 @@ export function progressRowToTopBar(row, bookId = null) {
 }
 
 export function patchTopBarFromLineEvent(prev, nextEvent, lineLocator = null) {
-  const previous =
-    prev != null && typeof prev === 'object' ? prev : { ...EMPTY_PROGRESS_TOP_BAR };
+  const previous = prev != null && typeof prev === 'object' ? prev : emptyTopBar();
   const eventNum = eventUtils.resolveEventNum(nextEvent);
-  const chapterIdx = toPositiveNumberOrNull(
-    eventUtils.resolveChapterIdx(nextEvent) ??
-      toPositiveNumberOrNull(resolveChapterIndex(lineLocator))
-  );
+  const chapterIdx =
+    chapterIdxOf(nextEvent) ?? toPositiveNumberOrNull(resolveChapterIndex(lineLocator));
 
   return {
     ...previous,

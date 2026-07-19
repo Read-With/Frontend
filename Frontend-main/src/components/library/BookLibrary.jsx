@@ -6,7 +6,7 @@ import BookDetailModal from './BookDetailModal';
 import AuthenticatedImage from './AuthenticatedImage';
 import './BookLibrary.css';
 import { ensureGraphBookCache } from '../../utils/common/cache/chapterEventCache';
-import { USER_VIEWER_PREFIX, USER_GRAPH_PREFIX } from '../../utils/navigation/viewerPaths';
+import { USER_VIEWER_PREFIX, USER_GRAPH_PREFIX } from '../../utils/common/urlUtils';
 import { formatLibraryRelativeDate } from '../../utils/library/libraryUtils';
 
 const getNumericBookId = (book) => {

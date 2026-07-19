@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import useAuth from '../hooks/auth/useAuth';
 import { startGoogleOAuthLogin } from '../utils/common/urlUtils';
-import { GoogleIcon } from '../components/common/headerShared';
+import { GoogleIcon } from '../components/common/Header';
 import './HomePage.css';
 
 export default function HomePage() {

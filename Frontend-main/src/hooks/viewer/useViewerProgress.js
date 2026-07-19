@@ -5,16 +5,15 @@ import { getBookProgress } from '../../utils/api/api';
 import {
   getProgressFromCache,
   PROGRESS_CACHE_UPDATED_EVENT,
-} from '../../utils/common/cache/progressCache';
-import { canResolveProgressMetrics } from '../../utils/common/cache/manifestCache';
-import { viewerResumeAnchorKey } from '../../utils/common/locatorUtils';
+  canResolveProgressMetrics,
+} from '../../utils/common/cache/manifestCache';
+import { viewerResumeAnchorKey, clampPercent } from '../../utils/common/valueUtils';
 import { errorUtils } from '../../utils/common/errorUtils';
 import {
   delay,
   waitForPaint,
   waitForViewerMethod,
 } from '../../utils/viewer/viewerCoreStateUtils';
-import { clampPercent } from '../../utils/common/valueUtils';
 import {
   progressRowToTopBar,
   resolveMetricsFromLocator,

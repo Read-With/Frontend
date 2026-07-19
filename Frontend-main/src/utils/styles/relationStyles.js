@@ -1,5 +1,4 @@
 import { clampPositivity, getRelationColor } from './graphStyles';
-import { COLORS, ANIMATION_VALUES } from './styles';
 
 const styleCache = new Map();
 
@@ -22,22 +21,18 @@ function resolvePositivityLabel(value) {
   return match?.text ?? '매우 부정적';
 }
 
-function calculateStyle(positivity) {
-  const value = clampPositivity(positivity);
-  return {
-    color: getRelationColor(value),
-    text: resolvePositivityLabel(value),
-  };
-}
-
 export function getRelationStyle(positivity) {
-  const key = Math.round(clampPositivity(positivity) * 100) / 100;
+  const value = clampPositivity(positivity);
+  const key = Math.round(value * 100) / 100;
 
   if (styleCache.has(key)) {
     return styleCache.get(key);
   }
 
-  const result = calculateStyle(positivity);
+  const result = {
+    color: getRelationColor(value),
+    text: resolvePositivityLabel(value),
+  };
   styleCache.set(key, result);
   return result;
 }
@@ -53,60 +48,11 @@ export function getPositivityLabel(positivity) {
   return getRelationStyle(positivity).text;
 }
 
-const tooltipFlipFace = {
-  backfaceVisibility: 'hidden',
-  position: 'absolute',
-  width: '100%',
-  height: 360,
-  minHeight: 360,
-  top: 0,
-  left: 0,
-};
-
+/** 플로팅 위치만 — 카드 chrome은 CSS(.edge-tooltip-container) */
 export const tooltipStyles = {
   container: {
     position: 'fixed',
     zIndex: 99999,
-    width: '500px',
-    perspective: '1200px',
-  },
-  flipInner: {
-    position: 'relative',
-    width: '100%',
-    minHeight: 360,
-    height: 360,
-    transition: `transform ${ANIMATION_VALUES.DURATION.SLOW} ${ANIMATION_VALUES.EASE_OUT}`,
-    transformStyle: 'preserve-3d',
-  },
-  front: tooltipFlipFace,
-  back: {
-    ...tooltipFlipFace,
-    transform: 'rotateY(180deg)',
-  },
-  header: {
-    background: COLORS.white,
-    borderBottom: 'none',
-    padding: '0.75rem',
-  },
-  relationTag: {
-    background: COLORS.borderLight,
-    color: COLORS.textPrimary,
-    borderRadius: '0.5rem',
-    padding: '0.25rem 0.75rem',
-    fontSize: '0.8125rem',
-    fontWeight: 500,
-    display: 'inline-block',
-    lineHeight: 1.2,
-  },
-  progressBar: {
-    width: 80,
-    height: 20,
-    borderRadius: '0.375rem',
-    opacity: 1,
-    transition: `background ${ANIMATION_VALUES.DURATION.NORMAL}`,
-    border: `1.5px solid ${COLORS.border}`,
-    boxSizing: 'border-box',
-    marginBottom: 0,
   },
 };
 

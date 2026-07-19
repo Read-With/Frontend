@@ -1,8 +1,8 @@
-/** 환경 URL·OAuth·공개 자산 URL 정규화·fetch */
+/** 환경 URL·OAuth·공개 자산 URL 정규화·fetch·뷰어/그래프 경로 */
 
 import { clearAuthData } from '../security/authTokenStorage';
 import { createAndStoreGoogleOAuthState, secureLog } from '../security/oauthSecurity';
-import { trimTrailingSlash } from './valueUtils';
+import { trimTrailingSlash, toOneBasedChapterIndexOrNull } from './valueUtils';
 
 export const DEFAULT_API_BASE_URL = 'https://readwith-be.onrender.com';
 export const DEFAULT_CDN_BASE_URL = 'https://cdn.readwith.cloud';
@@ -469,3 +469,63 @@ export function getOAuthErrorTip(error) {
   }
   return '네트워크 연결과 Google OAuth 설정을 확인한 뒤 다시 시도해 주세요.';
 }
+
+/** 뷰어·그래프 경로: 쿼리 없음. 읽기 위치는 `/user/viewer/:id/c/:chapter/p/:page` */
+
+export const USER_VIEWER_PREFIX = '/user/viewer';
+export const USER_GRAPH_PREFIX = '/user/graph';
+
+const DEFAULT_VIEWER_READING_POSITION = Object.freeze({ chapter: 1, page: 1 });
+const READER_SPLAT_RE = /^c\/(\d+)\/p\/(\d+)$/;
+
+function sanitizeViewerBookId(bookId) {
+  return bookId != null ? String(bookId).replace(/^\/+/, '').trim() : '';
+}
+
+function prefixedBookPath(prefix, bookId) {
+  const id = sanitizeViewerBookId(bookId);
+  return id ? `${prefix}/${id}` : prefix;
+}
+
+export function parseViewerReaderSplat(splat) {
+  if (splat == null || splat === '') return null;
+  const normalizedSplat = String(splat).replace(/^\/+|\/+$/g, '');
+  if (!normalizedSplat) return null;
+  const match = normalizedSplat.match(READER_SPLAT_RE);
+  if (!match) return null;
+  const chapter = toOneBasedChapterIndexOrNull(match[1]);
+  const page = toOneBasedChapterIndexOrNull(match[2]);
+  if (!chapter || !page) return null;
+  return { chapter, page };
+}
+
+/** splat 파싱 결과 → 챕터/페이지. 없거나 불완전하면 기본 위치 */
+export function resolveViewerReadingPosition(parsedPath) {
+  return {
+    chapter: parsedPath?.chapter ?? DEFAULT_VIEWER_READING_POSITION.chapter,
+    page: parsedPath?.page ?? DEFAULT_VIEWER_READING_POSITION.page,
+  };
+}
+
+export function userViewerPath(bookId) {
+  return prefixedBookPath(USER_VIEWER_PREFIX, bookId);
+}
+
+export function userViewerReadingPath(bookId, chapter, page) {
+  const base = userViewerPath(bookId);
+  const normalizedChapter = toOneBasedChapterIndexOrNull(chapter);
+  const normalizedPage = toOneBasedChapterIndexOrNull(page);
+  if (!normalizedChapter || !normalizedPage) return base;
+  return `${base}/c/${normalizedChapter}/p/${normalizedPage}`;
+}
+
+export function userViewerBookmarksPath(bookId) {
+  const id = sanitizeViewerBookId(bookId);
+  if (!id) return `${USER_VIEWER_PREFIX}/bookmarks`;
+  return `${USER_VIEWER_PREFIX}/${id}/bookmarks`;
+}
+
+export function userGraphPath(bookId) {
+  return prefixedBookPath(USER_GRAPH_PREFIX, bookId);
+}
+

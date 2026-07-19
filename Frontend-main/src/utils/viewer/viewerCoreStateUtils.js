@@ -1,13 +1,20 @@
-/** 뷰어 코어 유틸 (book·mode·cache key·event 필드·전환·async) */
+/** 뷰어 코어 유틸 (book·mode·cache key·event 필드·전환·async·페이지 네비·챕터 제목) */
 
+import { toast } from 'react-toastify';
 import {
   loadSettings,
-} from '../common/settingsUtils';
-import { resolveChapterIndex, toPositiveNumberFromId, toPositiveNumberOrNull } from '../common/valueUtils';
+} from '../common/errorUtils';
+import { resolveChapterIndex, toPositiveNumberFromId, toPositiveNumberOrNull, anchorToLocators } from '../common/valueUtils';
 
 /** graphUtils.isGraphEdgeElement와 동일 — graphUtils import 순환 방지용 로컬 판별 */
 const isGraphEdgeElement = (element) =>
   Boolean(element?.data && element.data.source !== undefined && element.data.target !== undefined);
+
+function nonEmptyId(value) {
+  if (value === undefined || value === null) return null;
+  const s = String(value).trim();
+  return s !== '' ? value : null;
+}
 
 function normalizeEventIdx(event) {
   if (!event || typeof event !== 'object') return null;
@@ -25,6 +32,25 @@ function normalizeEventIdx(event) {
   );
 }
 
+function chapterNumOf(event) {
+  return Number(eventUtils.resolveChapterIdx(event));
+}
+
+function chapterNumOrZero(event) {
+  return Number(eventUtils.resolveChapterIdx(event) ?? 0);
+}
+
+function compareByEventNum(a, b) {
+  return eventUtils.resolveEventNum(a) - eventUtils.resolveEventNum(b);
+}
+
+function compareByChapterThenEvent(a, b) {
+  const chapterA = chapterNumOrZero(a);
+  const chapterB = chapterNumOrZero(b);
+  if (chapterA !== chapterB) return chapterA - chapterB;
+  return compareByEventNum(a, b);
+}
+
 export const eventUtils = {
   resolveRelationNodeIds: (relation) => {
     if (!relation || typeof relation !== 'object') return { id1: null, id2: null };
@@ -38,13 +64,11 @@ export const eventUtils = {
 
   resolveEventId: (event) => {
     if (!event || typeof event !== 'object') return null;
-    const direct = event.eventId ?? event.id;
-    if (direct !== undefined && direct !== null && String(direct).trim() !== '') return direct;
+    const direct = nonEmptyId(event.eventId ?? event.id);
+    if (direct != null) return direct;
     const nested = event.event;
     if (!nested || typeof nested !== 'object') return null;
-    const nestedId = nested.eventId ?? nested.id;
-    if (nestedId !== undefined && nestedId !== null && String(nestedId).trim() !== '') return nestedId;
-    return null;
+    return nonEmptyId(nested.eventId ?? nested.id);
   },
 
   resolveChapterIdx: (event) => {
@@ -128,18 +152,16 @@ export const eventUtils = {
 
   findEventInCache: (events, eventIdx) => {
     if (!Array.isArray(events) || !Number.isFinite(eventIdx)) return null;
-    return (
-      events.find((e) => eventUtils.resolveEventNum(e) === eventIdx) || null
-    );
+    return events.find((e) => eventUtils.resolveEventNum(e) === eventIdx) || null;
   },
 
   updateEventsInState: (prevEvents, newEvent, targetChapter) => {
     const previous = Array.isArray(prevEvents) ? prevEvents : [];
     const otherChapterEvents = previous.filter(
-      (evt) => Number(eventUtils.resolveChapterIdx(evt)) !== targetChapter
+      (evt) => chapterNumOf(evt) !== targetChapter
     );
     const currentChapterEvents = previous.filter(
-      (evt) => Number(eventUtils.resolveChapterIdx(evt)) === targetChapter
+      (evt) => chapterNumOf(evt) === targetChapter
     );
 
     const targetIdx = eventUtils.resolveEventNum(newEvent);
@@ -147,22 +169,15 @@ export const eventUtils = {
       (evt) => eventUtils.resolveEventNum(evt) === targetIdx
     );
 
-    let updatedCurrent = [];
-    if (existingIdx >= 0) {
-      updatedCurrent = currentChapterEvents.map((evt, idx) =>
-        idx === existingIdx ? { ...evt, ...newEvent } : evt
-      );
-    } else {
-      updatedCurrent = [...currentChapterEvents, newEvent];
-    }
+    const updatedCurrent =
+      existingIdx >= 0
+        ? currentChapterEvents.map((evt, idx) =>
+            idx === existingIdx ? { ...evt, ...newEvent } : evt
+          )
+        : [...currentChapterEvents, newEvent];
 
-    updatedCurrent.sort((a, b) => eventUtils.resolveEventNum(a) - eventUtils.resolveEventNum(b));
-    return [...otherChapterEvents, ...updatedCurrent].sort((a, b) => {
-      const chapterA = Number(eventUtils.resolveChapterIdx(a) ?? 0);
-      const chapterB = Number(eventUtils.resolveChapterIdx(b) ?? 0);
-      if (chapterA !== chapterB) return chapterA - chapterB;
-      return eventUtils.resolveEventNum(a) - eventUtils.resolveEventNum(b);
-    });
+    updatedCurrent.sort(compareByEventNum);
+    return [...otherChapterEvents, ...updatedCurrent].sort(compareByChapterThenEvent);
   },
 };
 
@@ -234,6 +249,49 @@ export function waitForViewerMethod(viewerRef, methodName, timeoutMs = 3000) {
   });
 }
 
+export function runViewerPaging(viewerRef, direction) {
+  const ref = viewerRef.current;
+  if (!ref) {
+    toast.error('뷰어가 아직 준비되지 않았습니다. 잠시 후 다시 시도해주세요.');
+    return;
+  }
+  try {
+    if (direction === 'prev') ref.prevPage();
+    else ref.nextPage();
+  } catch {
+    toast.error(
+      direction === 'prev'
+        ? '이전 페이지로 이동할 수 없습니다.'
+        : '다음 페이지로 이동할 수 없습니다.'
+    );
+  }
+}
+
+export async function restoreViewerPosition(viewerRef, progress) {
+  const { startLocator: start, endLocator: end } = anchorToLocators(
+    viewerRef.current?.getCurrentLocator?.()
+  );
+  viewerRef.current?.refreshLayout?.();
+  await waitForPaint();
+
+  if (start && viewerRef.current?.displayAt) {
+    const moved = viewerRef.current.displayAt({
+      startLocator: start,
+      endLocator: end ?? start,
+    });
+    if (moved) {
+      await waitForPaint();
+      return;
+    }
+  }
+
+  const pct = Number(progress);
+  if (Number.isFinite(pct) && pct >= 0) {
+    await viewerRef.current?.moveToProgress?.(pct);
+  }
+  await waitForPaint();
+}
+
 export const cacheKeyUtils = {
   createChapterKey: (bookId, chapter) => `${bookId}-${chapter}`,
   createEventKey: (bookId, chapter, eventIdx) => `${bookId}-${chapter}-${eventIdx}`,
@@ -291,3 +349,34 @@ export const bookUtils = {
     };
   },
 };
+
+function collapseWhitespace(s) {
+  return String(s).trim().replace(/\s+/g, ' ');
+}
+
+/** 챕터 제목 앞이 책 제목과 같으면 나머지만 반환 (MS/한컴 NFC·NFD 정규화) */
+export function stripRedundantBookTitlePrefix(chapterTitle, bookTitle) {
+  const ch = collapseWhitespace(String(chapterTitle ?? '')).normalize('NFC');
+  const book = collapseWhitespace(String(bookTitle ?? '')).normalize('NFC');
+  if (!ch || !book) return ch;
+
+  const chL = ch.toLowerCase();
+  const bookL = book.toLowerCase();
+
+  if (chL === bookL) return ch;
+  if (!chL.startsWith(bookL)) return ch;
+
+  let rest = ch.slice(book.length).trim();
+  rest = rest.replace(/^[-–—:|]+\s*/, '').trim();
+  if (!rest) return ch;
+  return rest;
+}
+
+/** 상단바: "chapter {순서} : {이름}" */
+export function formatChapterOrderAndName(orderOneBased, chapterTitle) {
+  const ord = Number(orderOneBased);
+  const o = Number.isFinite(ord) && ord >= 1 ? String(Math.trunc(ord)) : '—';
+  const name = collapseWhitespace(String(chapterTitle ?? ''));
+  if (!name) return `chapter ${o}`;
+  return `chapter ${o} : ${name}`;
+}

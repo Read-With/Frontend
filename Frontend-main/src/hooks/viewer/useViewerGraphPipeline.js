@@ -1,59 +1,251 @@
-/** 뷰어 그래프 파이프라인: 챕터 이벤트 discovery + fine graph 로드 */
+/** 뷰어 그래프: UI 상태 + 챕터 이벤트 discovery·캐시 기반 로드 */
 
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { getFineGraph } from '../../utils/api/api';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   ensureChapterEventsDiscovered,
+  getCachedChapterEvents,
   getGraphEventState,
   prefetchChapterEvents,
+  clearBookRelationshipDeltas,
 } from '../../utils/common/cache/chapterEventCache';
 import { applyChapterEventsFromCache } from '../../utils/graph/graphData';
+import { aggregateCharactersFromEvents } from '../../utils/graph/characterUtils';
 import { errorUtils } from '../../utils/common/errorUtils';
-import { cacheKeyUtils, eventUtils, buildViewerActionError } from '../../utils/viewer/viewerCoreStateUtils';
+import {
+  cacheKeyUtils,
+  eventUtils,
+  buildViewerActionError,
+  saveViewerMode,
+  resolveInitialGraphFullScreen,
+} from '../../utils/viewer/viewerCoreStateUtils';
 import {
   commitVisibleGraphElements,
-  DEFAULT_GRAPH_TRANSFORM_DEPS,
-  convertFineGraphToElements,
   fallbackEventMeta,
   getCachedGraphSnapshot,
   graphDataTransformUtils,
-  requestFineGraph,
   resolveCumulativeGraphForDisplay,
-  resolveFineGraphCallContext,
+  resolveGraphCallContext,
 } from '../../utils/viewer/viewerGraphUtils';
+import { eventMatchesChapter } from '../../utils/viewer/viewerEventProgressUtils';
+import { useGraphSearch } from '../graph/useGraphViewHooks';
 
 const PREFETCH_AHEAD_EVENTS = 2;
+const HARD_RELOAD_SETTLE_MS = 1000;
+const DISCOVERY_WAIT_MS = 30000;
+const DISCOVERY_POLL_MS = 16;
+const LOG_PREFIX = '[useViewerGraphPipeline]';
 
-function isStaleLoad(generationRef, generation, activeCallKeyRef, callKey) {
-  return generationRef.current !== generation || activeCallKeyRef.current !== callKey;
+function deriveGraphPhase({ isReloading, isEventGraphLoading, isGraphLoading }) {
+  if (isReloading) return 'reloading';
+  if (isEventGraphLoading) return 'event';
+  if (isGraphLoading) return 'loading';
+  return 'idle';
 }
 
-function logViewerGraphDev(label, payload) {
-  if (import.meta.env.DEV) {
-    console.log(`[ViewerGraph] ${label}`, payload);
-  }
+function resolvePersistedViewerMode(graphFullScreen, showGraph) {
+  if (graphFullScreen) return 'graph';
+  if (showGraph) return 'split';
+  return 'viewer';
+}
+
+function isHardNavigationReload() {
+  if (!performance?.getEntriesByType) return false;
+  const [entry] = performance.getEntriesByType('navigation');
+  return entry?.type === 'reload';
 }
 
 function isNumericBookId(bookId) {
   return typeof bookId === 'number';
 }
 
+function logPipelineError(message, error) {
+  errorUtils.logError(`${LOG_PREFIX} ${message}`, error);
+}
+
+function getCachedMaxEventIdx(bookId, chapter) {
+  return Number(getCachedChapterEvents(bookId, chapter)?.maxEventIdx) || 0;
+}
+
+async function awaitPendingDiscovery(pending) {
+  if (!pending) return false;
+  try {
+    await pending;
+  } catch {
+    /* discovery 쪽에서 에러 상태 기록 */
+  }
+  return true;
+}
+
+/** 캐시 max 또는 discovery status로 through 커버리지 판정 */
+function resolveDiscoveryCoverage(refs, bookId, chapter, eventIdx) {
+  if (getCachedMaxEventIdx(bookId, chapter) >= eventIdx) {
+    return { ready: true };
+  }
+  const status = refs.chapterEventDiscoveryRef.current.get(
+    cacheKeyUtils.createChapterKey(bookId, chapter)
+  );
+  if (typeof status === 'number' && status >= eventIdx) return { ready: true };
+  if (status === 'missing') return { ready: false, reason: 'missing' };
+  return null;
+}
+
 function clearChapterPipelineMaps(refs) {
   refs.chapterSyncStatusRef.current.clear();
   refs.chapterEventDiscoveryRef.current.clear();
+  refs.chapterDiscoveryPromiseRef.current.clear();
 }
 
-function toCommitGraphArgs(chapter, eventIdx, source, { nullNormalizedAsUndefined = false } = {}) {
+function toCommitGraphArgs(chapter, eventIdx, source) {
   return {
     graphChapter: chapter,
     apiEventIdx: eventIdx,
     elements: source.elements,
     eventMeta: source.eventMeta,
-    normalizedEvent: nullNormalizedAsUndefined
-      ? (source.normalizedEvent ?? undefined)
-      : source.normalizedEvent,
+    normalizedEvent: source.normalizedEvent ?? undefined,
     characters: source.characters,
     relations: source.relations,
+  };
+}
+
+/** showGraph는 settings(SSOT). UI 반영·fullscreen persist만 담당 */
+export function useViewerGraphState({
+  currentChapter,
+  bookKey,
+  showGraph,
+}) {
+  const [currentEvent, setCurrentEvent] = useState(null);
+  const [events, setEvents] = useState([]);
+  const [prevValidEvent, setPrevValidEvent] = useState(null);
+  const [graphFullScreen, setGraphFullScreen] = useState(() =>
+    resolveInitialGraphFullScreen(showGraph)
+  );
+  const [isDataReady, setIsDataReady] = useState(false);
+  const [edgeLabelVisible, setEdgeLabelVisible] = useState(true);
+  const [filterStage, setFilterStage] = useState(0);
+  const [isReloading, setIsReloading] = useState(false);
+  const [isGraphLoading, setIsGraphLoading] = useState(true);
+  const [isEventGraphLoading, setEventGraphLoading] = useState(false);
+  const [elements, setElements] = useState([]);
+  const [isDataEmpty, setIsDataEmpty] = useState(false);
+
+  const currentChapterData = useMemo(() => {
+    if (!currentChapter || !Array.isArray(events) || events.length === 0) {
+      return { characters: [] };
+    }
+    const chapterEvents = events.filter(
+      (evt) => Number(eventUtils.resolveChapterIdx(evt)) === Number(currentChapter)
+    );
+    return { characters: Array.from(aggregateCharactersFromEvents(chapterEvents).values()) };
+  }, [events, currentChapter]);
+
+  const graphPhase = useMemo(
+    () => deriveGraphPhase({ isReloading, isEventGraphLoading, isGraphLoading }),
+    [isReloading, isEventGraphLoading, isGraphLoading]
+  );
+
+  const { searchState, searchActions } = useGraphSearch(elements, currentChapterData);
+
+  useEffect(() => {
+    saveViewerMode(resolvePersistedViewerMode(graphFullScreen, showGraph));
+  }, [showGraph, graphFullScreen]);
+
+  useEffect(() => {
+    if (!showGraph && graphFullScreen) setGraphFullScreen(false);
+  }, [showGraph, graphFullScreen]);
+
+  useEffect(() => {
+    if (!currentEvent) return;
+    if (eventMatchesChapter(currentEvent, currentChapter)) {
+      setPrevValidEvent(currentEvent);
+      return;
+    }
+    setCurrentEvent(null);
+    setPrevValidEvent(null);
+  }, [currentChapter, currentEvent]);
+
+  const resetGraphPipelineState = useCallback(() => {
+    setEvents([]);
+    setElements([]);
+    setIsDataEmpty(true);
+    setIsDataReady(false);
+    setIsGraphLoading(true);
+  }, []);
+
+  const resetGraphTransientState = useCallback(() => {
+    setCurrentEvent(null);
+    setPrevValidEvent(null);
+    resetGraphPipelineState();
+  }, [resetGraphPipelineState]);
+
+  useEffect(() => {
+    resetGraphPipelineState();
+  }, [currentChapter, bookKey, resetGraphPipelineState]);
+
+  useEffect(() => {
+    if (!isHardNavigationReload()) return undefined;
+
+    setIsReloading(true);
+    resetGraphTransientState();
+    setGraphFullScreen(resolveInitialGraphFullScreen());
+
+    const timer = setTimeout(() => {
+      setIsReloading(false);
+      setIsGraphLoading(false);
+    }, HARD_RELOAD_SETTLE_MS);
+
+    return () => clearTimeout(timer);
+  }, [resetGraphTransientState]);
+
+  const graphState = useMemo(
+    () => ({
+      currentChapter,
+      currentEvent,
+      prevValidEvent,
+      elements,
+      edgeLabelVisible,
+      graphFullScreen,
+      showGraph: Boolean(showGraph),
+    }),
+    [
+      currentChapter,
+      currentEvent,
+      prevValidEvent,
+      elements,
+      edgeLabelVisible,
+      graphFullScreen,
+      showGraph,
+    ]
+  );
+
+  const graphActions = useMemo(
+    () => ({
+      setGraphFullScreen,
+      setEdgeLabelVisible,
+      setIsDataEmpty,
+      filterStage,
+      setFilterStage,
+    }),
+    [filterStage]
+  );
+
+  const graphViewerState = useMemo(
+    () => ({ graphPhase, isDataReady, isDataEmpty }),
+    [graphPhase, isDataReady, isDataEmpty]
+  );
+
+  return {
+    currentEvent,
+    setCurrentEvent,
+    setEvents,
+    setElements,
+    setIsDataReady,
+    setIsGraphLoading,
+    setEventGraphLoading,
+    graphState,
+    graphActions,
+    graphViewerState,
+    searchState,
+    searchActions,
   };
 }
 
@@ -63,9 +255,9 @@ function usePipelineRefs() {
   const hasVisibleElementsRef = useRef(false);
   const chapterSyncStatusRef = useRef(new Map());
   const chapterEventDiscoveryRef = useRef(new Map());
+  const chapterDiscoveryPromiseRef = useRef(new Map());
   const activeDiscoveryRunRef = useRef(0);
   const activeCallKeyRef = useRef(null);
-  const apiFetchedCallKeyRef = useRef(null);
   const cacheAppliedCallKeyRef = useRef(null);
   const loadGenerationRef = useRef(0);
   const graphScopeRef = useRef({ bookId: null, chapter: null });
@@ -78,9 +270,9 @@ function usePipelineRefs() {
       hasVisibleElementsRef,
       chapterSyncStatusRef,
       chapterEventDiscoveryRef,
+      chapterDiscoveryPromiseRef,
       activeDiscoveryRunRef,
       activeCallKeyRef,
-      apiFetchedCallKeyRef,
       cacheAppliedCallKeyRef,
       loadGenerationRef,
       graphScopeRef,
@@ -89,7 +281,6 @@ function usePipelineRefs() {
   return refsRef.current;
 }
 
-/** 캐시/API 결과 → elements·events 커밋 */
 function useGraphElementApply({ setElements, setEvents, setGraphIsDataEmpty, refs }) {
   useEffect(() => {
     refs.setElementsRef.current = setElements;
@@ -102,7 +293,7 @@ function useGraphElementApply({ setElements, setEvents, setGraphIsDataEmpty, ref
       { applyTokenRef: refs.applyTokenRef }
     );
     refs.hasVisibleElementsRef.current = visibleElements.length > 0;
-    if (setGraphIsDataEmpty) setGraphIsDataEmpty(visibleElements.length === 0);
+    setGraphIsDataEmpty?.(visibleElements.length === 0);
     return visibleElements;
   }, [setGraphIsDataEmpty, refs]);
 
@@ -110,7 +301,7 @@ function useGraphElementApply({ setElements, setEvents, setGraphIsDataEmpty, ref
     refs.applyTokenRef.current += 1;
     refs.hasVisibleElementsRef.current = false;
     refs.setElementsRef.current([]);
-    if (setGraphIsDataEmpty) setGraphIsDataEmpty(true);
+    setGraphIsDataEmpty?.(true);
   }, [setGraphIsDataEmpty, refs]);
 
   const commitGraphState = useCallback(({
@@ -129,29 +320,28 @@ function useGraphElementApply({ setElements, setEvents, setGraphIsDataEmpty, ref
 
     setVisibleElements(elements);
 
-    if (normalizedEvent) {
-      setEvents((prev) => eventUtils.updateEventsInState(
-        prev,
-        graphDataTransformUtils.createNextEventData(
-          normalizedEvent,
-          graphChapter,
-          apiEventIdx,
-          { relations, characters, event: eventMeta ?? null }
-        ),
-        graphChapter
-      ));
-    }
+    if (!normalizedEvent) return;
+
+    setEvents((prev) => eventUtils.updateEventsInState(
+      prev,
+      graphDataTransformUtils.createNextEventData(
+        normalizedEvent,
+        graphChapter,
+        apiEventIdx,
+        { relations, characters, event: eventMeta ?? null }
+      ),
+      graphChapter
+    ));
   }, [setEvents, setVisibleElements]);
 
   return { setVisibleElements, clearGraphElements, commitGraphState };
 }
 
-/** chapterEventCache 스냅샷 적용·동기화 */
 function useGraphCacheApply({
   book,
   setEvents,
   setIsDataReady,
-  setFineGraphLoading,
+  setEventGraphLoading,
   finishFineLoading,
   refs,
   commitGraphState,
@@ -167,20 +357,12 @@ function useGraphCacheApply({
     refs.chapterSyncStatusRef.current.set(key, 'running');
 
     try {
-      const syncResult = { result: null };
-
+      let result = null;
       setEvents((prev) => {
-        syncResult.result = applyChapterEventsFromCache(
-          prev,
-          book.id,
-          targetChapter,
-          throughEventIdx
-        );
-        if (!syncResult.result.hasPayload) return prev;
-        return syncResult.result.events;
+        result = applyChapterEventsFromCache(prev, book.id, targetChapter, throughEventIdx);
+        return result.hasPayload ? result.events : prev;
       });
 
-      const { result } = syncResult;
       if (!result?.hasPayload) {
         refs.chapterSyncStatusRef.current.set(key, 'pending');
         return false;
@@ -191,7 +373,7 @@ function useGraphCacheApply({
       return didApply;
     } catch (error) {
       refs.chapterSyncStatusRef.current.delete(key);
-      errorUtils.logError('[useViewerGraphPipeline] 챕터 이벤트 동기화 실패', error);
+      logPipelineError('챕터 이벤트 동기화 실패', error);
       return false;
     }
   }, [book?.id, setEvents, refs]);
@@ -202,11 +384,10 @@ function useGraphCacheApply({
 
   const markPendingLoad = useCallback((bookId, chapter, eventIdx) => {
     if (getCachedGraphSnapshot(bookId, chapter, eventIdx, getGraphEventState)) return;
-    if (!refs.hasVisibleElementsRef.current) {
-      setIsDataReady(false);
-      setFineGraphLoading(true);
-    }
-  }, [setIsDataReady, setFineGraphLoading, refs]);
+    if (refs.hasVisibleElementsRef.current) return;
+    setIsDataReady(false);
+    setEventGraphLoading(true);
+  }, [setIsDataReady, setEventGraphLoading, refs]);
 
   const tryApplyCache = useCallback((bookId, chapter, eventIdx, callKey) => {
     if (refs.cacheAppliedCallKeyRef.current === callKey) return true;
@@ -215,38 +396,24 @@ function useGraphCacheApply({
     if (!resolved) return false;
 
     refs.cacheAppliedCallKeyRef.current = callKey;
-    commitGraphState(toCommitGraphArgs(chapter, eventIdx, resolved, {
-      nullNormalizedAsUndefined: true,
-    }));
+    commitGraphState(toCommitGraphArgs(chapter, eventIdx, resolved));
     return true;
   }, [commitGraphState, refs]);
 
   const ensureCacheOrPending = useCallback((bookId, chapter, eventIdx, callKey, { finalizeOnCache = false } = {}) => {
-    const cacheApplied = tryApplyCache(bookId, chapter, eventIdx, callKey);
-    if (cacheApplied) {
-      prefetchAhead(bookId, chapter, eventIdx);
-      if (finalizeOnCache) finishFineLoading(true, false, null, false);
-    } else {
+    const hit = tryApplyCache(bookId, chapter, eventIdx, callKey);
+    if (!hit) {
       markPendingLoad(bookId, chapter, eventIdx);
+      return false;
     }
-    return cacheApplied;
+    prefetchAhead(bookId, chapter, eventIdx);
+    if (finalizeOnCache) finishFineLoading(true, false, null, false);
+    return true;
   }, [finishFineLoading, markPendingLoad, prefetchAhead, tryApplyCache]);
 
-  const shouldSkipApi = useCallback((cacheApplied, atLocator, callKey) => {
-    if (!cacheApplied) return false;
-    if (refs.apiFetchedCallKeyRef.current === callKey) return true;
-    return !atLocator;
-  }, [refs]);
-
-  return {
-    syncEventsFromCache,
-    prefetchAhead,
-    ensureCacheOrPending,
-    shouldSkipApi,
-  };
+  return { syncEventsFromCache, ensureCacheOrPending };
 }
 
-/** 챕터 이벤트 discovery */
 function useGraphChapterDiscovery({
   book,
   currentChapter,
@@ -264,6 +431,7 @@ function useGraphChapterDiscovery({
 
     const chapterKey = cacheKeyUtils.createChapterKey(book.id, currentChapter);
     refs.chapterEventDiscoveryRef.current.delete(chapterKey);
+    refs.chapterDiscoveryPromiseRef.current.delete(chapterKey);
     refs.chapterSyncStatusRef.current.delete(chapterKey);
     setDiscoveryError(null);
     setIsGraphLoading(true);
@@ -272,13 +440,13 @@ function useGraphChapterDiscovery({
 
   useEffect(() => {
     if (!isNumericBookId(book?.id) || !currentChapter || currentChapter < 1) return;
-    const throughEventIdx = eventUtils.resolveEventNum(currentEvent, null);
-    syncEventsFromCache(currentChapter, { throughEventIdx });
+    syncEventsFromCache(currentChapter, {
+      throughEventIdx: eventUtils.resolveEventNum(currentEvent, null),
+    });
   }, [book?.id, currentChapter, currentEvent, syncEventsFromCache]);
 
   useEffect(() => {
-    if (!isViewerPageReady) return undefined;
-    if (!isNumericBookId(book?.id) || !currentChapter) return undefined;
+    if (!isViewerPageReady || !isNumericBookId(book?.id) || !currentChapter) return undefined;
 
     const throughEventIdx = eventUtils.resolveEventNum(currentEvent, null);
     if (!throughEventIdx || throughEventIdx < 1) return undefined;
@@ -288,46 +456,78 @@ function useGraphChapterDiscovery({
     let cancelled = false;
     const isStale = () => cancelled || runId !== refs.activeDiscoveryRunRef.current;
 
-    const applyDiscoveryLoading = (loadingState) => {
-      if (!isStale()) setIsGraphLoading(loadingState);
+    const setLoading = (loading) => {
+      if (!isStale()) setIsGraphLoading(loading);
+    };
+
+    const markCovered = () => {
+      refs.chapterEventDiscoveryRef.current.set(discoveryKey, throughEventIdx);
+      setLoading(false);
+      setDiscoveryError(null);
+      syncEventsFromCache(currentChapter, { force: true, throughEventIdx });
     };
 
     const runDiscovery = async () => {
-      const existingThrough = refs.chapterEventDiscoveryRef.current.get(discoveryKey);
-      if (typeof existingThrough === 'number' && existingThrough >= throughEventIdx) {
-        setDiscoveryError(null);
+      const forceSync = () =>
         syncEventsFromCache(currentChapter, { force: true, throughEventIdx });
-        return;
+
+      while (!isStale()) {
+        const existingThrough = refs.chapterEventDiscoveryRef.current.get(discoveryKey);
+        if (typeof existingThrough === 'number' && existingThrough >= throughEventIdx) {
+          setDiscoveryError(null);
+          forceSync();
+          return;
+        }
+
+        if (!(await awaitPendingDiscovery(refs.chapterDiscoveryPromiseRef.current.get(discoveryKey)))) {
+          break;
+        }
       }
-      if (existingThrough === 'loading') return;
+
+      if (isStale()) return;
 
       refs.chapterEventDiscoveryRef.current.set(discoveryKey, 'loading');
-      applyDiscoveryLoading(true);
+      setLoading(true);
       setDiscoveryError(null);
 
-      const outcome = await ensureChapterEventsDiscovered(book.id, currentChapter, {
+      const discoveryPromise = ensureChapterEventsDiscovered(book.id, currentChapter, {
         throughEventIdx,
         onPartialCache: () => {
           if (isStale()) return;
-          syncEventsFromCache(currentChapter, { force: true, throughEventIdx });
+          forceSync();
+          if (getCachedMaxEventIdx(book.id, currentChapter) >= throughEventIdx) {
+            refs.chapterEventDiscoveryRef.current.set(discoveryKey, throughEventIdx);
+            setLoading(false);
+            setDiscoveryError(null);
+          }
         },
       });
 
+      refs.chapterDiscoveryPromiseRef.current.set(discoveryKey, discoveryPromise);
+
+      let outcome;
+      try {
+        outcome = await discoveryPromise;
+      } finally {
+        if (refs.chapterDiscoveryPromiseRef.current.get(discoveryKey) === discoveryPromise) {
+          refs.chapterDiscoveryPromiseRef.current.delete(discoveryKey);
+        }
+      }
+
       if (isStale()) {
-        refs.chapterEventDiscoveryRef.current.delete(discoveryKey);
+        if (refs.chapterEventDiscoveryRef.current.get(discoveryKey) === 'loading') {
+          refs.chapterEventDiscoveryRef.current.delete(discoveryKey);
+        }
         return;
       }
 
       if (outcome.success) {
-        refs.chapterEventDiscoveryRef.current.set(discoveryKey, throughEventIdx);
-        applyDiscoveryLoading(false);
-        setDiscoveryError(null);
-        syncEventsFromCache(currentChapter, { force: true, throughEventIdx });
+        markCovered();
         return;
       }
 
       refs.chapterEventDiscoveryRef.current.set(discoveryKey, 'missing');
-      applyDiscoveryLoading(false);
+      setLoading(false);
       setDiscoveryError(buildViewerActionError(
         '챕터 이벤트를 불러오지 못했습니다.',
         outcome.reason === 'api_error'
@@ -337,7 +537,7 @@ function useGraphChapterDiscovery({
       ));
 
       if (outcome.reason === 'api_error') {
-        errorUtils.logError('[useViewerGraphPipeline] 챕터 이벤트 discovery 실패', outcome.error);
+        logPipelineError('챕터 이벤트 discovery 실패', outcome.error);
       }
     };
 
@@ -345,8 +545,12 @@ function useGraphChapterDiscovery({
 
     return () => {
       cancelled = true;
-      refs.chapterEventDiscoveryRef.current.delete(discoveryKey);
-      setIsGraphLoading(false);
+      if (
+        refs.chapterEventDiscoveryRef.current.get(discoveryKey) === 'loading' &&
+        !refs.chapterDiscoveryPromiseRef.current.has(discoveryKey)
+      ) {
+        refs.chapterEventDiscoveryRef.current.delete(discoveryKey);
+      }
     };
   }, [
     book?.id,
@@ -360,135 +564,100 @@ function useGraphChapterDiscovery({
     refs,
   ]);
 
-  return { discoveryError, retryDiscovery };
+  return { discoveryError };
 }
 
-/** fine graph API 로드 */
 function useGraphFineLoad({
-  book,
-  currentChapter,
-  currentEvent,
-  manifestLoaded,
-  resetTransition,
-  setIsDataReady,
-  setFineGraphLoading,
+  target,
+  ready,
+  loading,
   refs,
   clearGraphElements,
   setVisibleElements,
-  commitGraphState,
   ensureCacheOrPending,
-  shouldSkipApi,
-  prefetchAhead,
 }) {
+  const { book, currentChapter, currentEvent } = target;
+  const manifestLoaded = ready.manifest;
+  const isViewerPageReady = ready.viewer;
+  const { resetTransition, setIsDataReady, setEventGraphLoading } = loading;
+
   const [apiError, setApiError] = useState(null);
   const [retryGeneration, setRetryGeneration] = useState(0);
 
   const finishFineLoading = useCallback((isReady, isLoading, error = null, shouldResetTransition = true) => {
     setIsDataReady((prev) => (prev === isReady ? prev : isReady));
-    setFineGraphLoading((prev) => (prev === isLoading ? prev : isLoading));
+    setEventGraphLoading((prev) => (prev === isLoading ? prev : isLoading));
     if (shouldResetTransition) resetTransition();
-    setApiError((prev) => {
-      if (error == null && prev == null) return prev;
-      return error;
-    });
-  }, [resetTransition, setIsDataReady, setFineGraphLoading]);
+    setApiError((prev) => (error == null && prev == null ? prev : error));
+  }, [resetTransition, setIsDataReady, setEventGraphLoading]);
 
-  const clearActiveGraphKeys = useCallback(({ resetApiFetched = false } = {}) => {
+  const clearActiveGraphKeys = useCallback(() => {
     refs.activeCallKeyRef.current = null;
     refs.cacheAppliedCallKeyRef.current = null;
-    if (resetApiFetched) refs.apiFetchedCallKeyRef.current = null;
   }, [refs]);
 
-  const resetFineGraphSession = useCallback((scope) => {
-    clearActiveGraphKeys({ resetApiFetched: true });
-    if (scope === 'book') {
-      setApiError(null);
-      clearGraphElements();
-    }
-  }, [clearActiveGraphKeys, clearGraphElements]);
-
-  const triggerGraphRetry = useCallback((resetApiFetched = false) => {
+  const triggerGraphRetry = useCallback(() => {
     setApiError(null);
-    clearActiveGraphKeys({ resetApiFetched });
-    setFineGraphLoading(true);
+    clearActiveGraphKeys();
+    setEventGraphLoading(true);
     setRetryGeneration((n) => n + 1);
-  }, [clearActiveGraphKeys, setFineGraphLoading]);
+  }, [clearActiveGraphKeys, setEventGraphLoading]);
 
   const resolveCallContext = useCallback(
-    () => resolveFineGraphCallContext({ book, currentChapter, currentEvent }),
+    () => resolveGraphCallContext({ book, currentChapter, currentEvent }),
     [book, currentChapter, currentEvent]
   );
 
-  const applyApiResult = useCallback(async (ctx, fineResult) => {
-    const { bookId, chapter, eventIdx } = ctx;
-
-    await prefetchChapterEvents(bookId, chapter, eventIdx);
-
-    const cumulative = resolveCumulativeGraphForDisplay(bookId, chapter, eventIdx);
-    if (cumulative) {
-      logViewerGraphDev('cumulative graph data', {
-        bookId,
-        chapter,
-        eventIdx,
-        cumulativeThrough: `1~${eventIdx}`,
-        elements: cumulative.elements,
-      });
-      commitGraphState(toCommitGraphArgs(chapter, eventIdx, cumulative, {
-        nullNormalizedAsUndefined: true,
-      }));
-    } else {
-      const converted = convertFineGraphToElements(
-        fineResult,
-        chapter,
-        eventIdx,
-        DEFAULT_GRAPH_TRANSFORM_DEPS
-      );
-      logViewerGraphDev('fine graph fallback', {
-        bookId,
-        chapter,
-        eventIdx,
-        elements: converted.elements,
-      });
-      commitGraphState(toCommitGraphArgs(chapter, eventIdx, converted));
-    }
-
-    prefetchAhead(bookId, chapter, eventIdx);
-  }, [commitGraphState, prefetchAhead]);
-
   const failFineLoad = useCallback((error) => {
-    refs.apiFetchedCallKeyRef.current = null;
-    refs.activeCallKeyRef.current = null;
+    clearActiveGraphKeys();
     finishFineLoading(
       true,
       false,
       buildViewerActionError(
         '그래프 데이터를 불러오지 못했습니다.',
         error?.message || '알 수 없는 오류가 발생했습니다. 잠시 후 다시 시도해주세요.',
-        () => triggerGraphRetry(true)
+        triggerGraphRetry
       )
     );
-  }, [finishFineLoading, refs, triggerGraphRetry]);
+  }, [clearActiveGraphKeys, finishFineLoading, triggerGraphRetry]);
+
+  const waitForDiscovery = useCallback(async (bookId, chapter, eventIdx) => {
+    const discoveryKey = cacheKeyUtils.createChapterKey(bookId, chapter);
+    const deadline = Date.now() + DISCOVERY_WAIT_MS;
+
+    while (Date.now() < deadline) {
+      const coverage = resolveDiscoveryCoverage(refs, bookId, chapter, eventIdx);
+      if (coverage) return coverage;
+
+      if (await awaitPendingDiscovery(refs.chapterDiscoveryPromiseRef.current.get(discoveryKey))) {
+        continue;
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, DISCOVERY_POLL_MS));
+    }
+
+    return { ready: false, reason: 'timeout' };
+  }, [refs]);
 
   useEffect(() => {
     const bookId = book?.id ?? null;
     const chapter = currentChapter ?? null;
     const prev = refs.graphScopeRef.current;
+    const bookChanged = prev.bookId !== bookId;
+    const chapterChanged = prev.chapter !== chapter;
 
-    if (prev.bookId !== bookId) {
-      refs.graphScopeRef.current = { bookId, chapter };
-      clearChapterPipelineMaps(refs);
-      setApiError(null);
-      resetFineGraphSession('book');
-      return;
+    if (!bookChanged && !chapterChanged) return;
+
+    if (bookChanged && prev.bookId != null) {
+      clearBookRelationshipDeltas(prev.bookId);
     }
 
-    if (prev.chapter !== chapter) {
-      refs.graphScopeRef.current.chapter = chapter;
-      clearChapterPipelineMaps(refs);
-      setApiError(null);
-      resetFineGraphSession('chapter');
-    }
-  }, [book?.id, currentChapter, resetFineGraphSession, refs]);
+    refs.graphScopeRef.current = { bookId, chapter };
+    clearChapterPipelineMaps(refs);
+    setApiError(null);
+    clearActiveGraphKeys();
+    if (bookChanged) clearGraphElements();
+  }, [book?.id, currentChapter, clearActiveGraphKeys, clearGraphElements, refs]);
 
   useLayoutEffect(() => {
     if (!manifestLoaded) return;
@@ -497,23 +666,24 @@ function useGraphFineLoad({
     if (!ctx || ctx.eventIdx < 1) return;
     if (ctx.callKey === refs.activeCallKeyRef.current) return;
 
-    const cacheApplied = ensureCacheOrPending(ctx.bookId, ctx.chapter, ctx.eventIdx, ctx.callKey, {
+    if (ensureCacheOrPending(ctx.bookId, ctx.chapter, ctx.eventIdx, ctx.callKey, {
       finalizeOnCache: true,
-    });
-    if (cacheApplied) {
+    })) {
       refs.activeCallKeyRef.current = ctx.callKey;
     }
   }, [ensureCacheOrPending, manifestLoaded, resolveCallContext, refs]);
 
+  const canFineLoad = manifestLoaded && isViewerPageReady;
+
   useEffect(() => {
     const generation = ++refs.loadGenerationRef.current;
 
-    if (!manifestLoaded) return undefined;
+    if (!canFineLoad) return undefined;
 
     const ctx = resolveCallContext();
     if (!ctx) return undefined;
 
-    const { bookId, chapter, eventIdx, callKey, atLocator } = ctx;
+    const { bookId, chapter, eventIdx, callKey } = ctx;
     if (!bookId || !chapter || eventIdx < 1) {
       finishFineLoading(true, false);
       return undefined;
@@ -521,74 +691,60 @@ function useGraphFineLoad({
 
     if (refs.activeCallKeyRef.current === callKey) return undefined;
 
-    const runFetch = async () => {
+    const isCurrent = () =>
+      refs.loadGenerationRef.current === generation &&
+      refs.activeCallKeyRef.current === callKey;
+
+    const runLoad = async () => {
       if (refs.loadGenerationRef.current !== generation) return;
 
       refs.activeCallKeyRef.current = callKey;
 
-      const cacheApplied = ensureCacheOrPending(bookId, chapter, eventIdx, callKey);
-
-      if (shouldSkipApi(cacheApplied, atLocator, callKey)) {
+      if (ensureCacheOrPending(bookId, chapter, eventIdx, callKey)) {
         finishFineLoading(true, false, null, false);
         return;
       }
 
       try {
-        refs.apiFetchedCallKeyRef.current = callKey;
+        const waited = await waitForDiscovery(bookId, chapter, eventIdx);
+        if (!isCurrent()) return;
 
-        const { success, result, notFound, error } = await requestFineGraph(
-          getFineGraph,
-          bookId,
-          chapter,
-          eventIdx,
-          atLocator
-        );
-
-        if (isStaleLoad(refs.loadGenerationRef, generation, refs.activeCallKeyRef, callKey)) {
-          if (refs.loadGenerationRef.current !== generation) {
-            refs.activeCallKeyRef.current = null;
-            refs.apiFetchedCallKeyRef.current = null;
-          }
+        if (ensureCacheOrPending(bookId, chapter, eventIdx, callKey)) {
+          finishFineLoading(true, false);
           return;
         }
 
-        if (!success) {
-          if (!cacheApplied && (notFound || !error)) {
-            setVisibleElements([]);
-          }
-          if (notFound || !error) {
-            finishFineLoading(true, false);
-            return;
-          }
-          failFineLoad(error);
+        if (!waited.ready) {
+          failFineLoad(new Error(
+            waited.reason === 'timeout'
+              ? '챕터 이벤트 준비를 기다리는 중 시간이 초과되었습니다.'
+              : '챕터 이벤트 캐시가 없습니다.'
+          ));
           return;
         }
 
-        await applyApiResult(ctx, result);
+        setVisibleElements([]);
         finishFineLoading(true, false);
       } catch (error) {
-        if (refs.loadGenerationRef.current !== generation) return;
+        if (!isCurrent()) return;
         failFineLoad(error);
       }
     };
 
-    queueMicrotask(runFetch);
+    queueMicrotask(runLoad);
 
     return () => {
       refs.loadGenerationRef.current += 1;
     };
   }, [
-    applyApiResult,
-    currentChapter,
-    currentEvent,
+    canFineLoad,
+    ensureCacheOrPending,
     failFineLoad,
     finishFineLoading,
-    ensureCacheOrPending,
-    manifestLoaded,
     resolveCallContext,
     retryGeneration,
     setVisibleElements,
-    shouldSkipApi,
+    waitForDiscovery,
     refs,
   ]);
 
@@ -605,7 +761,7 @@ export function useViewerGraphPipeline({
   setElements,
   setEvents,
   setIsGraphLoading,
-  setFineGraphLoading,
+  setEventGraphLoading,
   setIsDataReady,
   resetTransition,
 }) {
@@ -623,44 +779,50 @@ export function useViewerGraphPipeline({
     finishFineLoadingRef.current?.(...args);
   }, []);
 
-  const cacheLayer = useGraphCacheApply({
+  const { syncEventsFromCache, ensureCacheOrPending } = useGraphCacheApply({
     book,
     setEvents,
     setIsDataReady,
-    setFineGraphLoading,
+    setEventGraphLoading,
     finishFineLoading: invokeFinishFineLoading,
     refs,
     commitGraphState,
   });
 
-  const discovery = useGraphChapterDiscovery({
+  const { discoveryError } = useGraphChapterDiscovery({
     book,
     currentChapter,
     currentEvent,
     isViewerPageReady,
     setIsGraphLoading,
-    syncEventsFromCache: cacheLayer.syncEventsFromCache,
+    syncEventsFromCache,
     refs,
   });
 
-  const fineLoad = useGraphFineLoad({
-    book,
-    currentChapter,
-    currentEvent,
-    manifestLoaded,
-    resetTransition,
-    setIsDataReady,
-    setFineGraphLoading,
+  const fineTarget = useMemo(
+    () => ({ book, currentChapter, currentEvent }),
+    [book, currentChapter, currentEvent]
+  );
+  const fineReady = useMemo(
+    () => ({ manifest: manifestLoaded, viewer: isViewerPageReady }),
+    [manifestLoaded, isViewerPageReady]
+  );
+  const fineLoading = useMemo(
+    () => ({ resetTransition, setIsDataReady, setEventGraphLoading }),
+    [resetTransition, setIsDataReady, setEventGraphLoading]
+  );
+
+  const { apiError, finishFineLoading } = useGraphFineLoad({
+    target: fineTarget,
+    ready: fineReady,
+    loading: fineLoading,
     refs,
     clearGraphElements,
     setVisibleElements,
-    commitGraphState,
-    ensureCacheOrPending: cacheLayer.ensureCacheOrPending,
-    shouldSkipApi: cacheLayer.shouldSkipApi,
-    prefetchAhead: cacheLayer.prefetchAhead,
+    ensureCacheOrPending,
   });
 
-  finishFineLoadingRef.current = fineLoad.finishFineLoading;
+  finishFineLoadingRef.current = finishFineLoading;
 
-  return { graphApiError: discovery.discoveryError ?? fineLoad.apiError };
+  return { graphApiError: discoveryError ?? apiError };
 }

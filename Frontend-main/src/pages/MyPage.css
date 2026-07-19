@@ -1,10 +1,8 @@
-/* CSS 변수 정의 */
 :root {
   --primary-gradient: linear-gradient(135deg, #3E4F2F, #586544);
   --hero-gradient: linear-gradient(135deg, #3E4F2F 0%, #586544 50%, #717B59 100%);
 }
 
-/* ==================== 전역 설정 ==================== */
 .mypage-root {
   background: linear-gradient(135deg, #F5F1E6 0%, #B3B6A0 100%);
   min-height: 100vh;
@@ -27,7 +25,6 @@
   max-width: 100vw;
 }
 
-/* ==================== 히어로 배너 섹션 ==================== */
 .hero-banner {
   width: 100%;
   background: var(--hero-gradient);
@@ -41,11 +38,8 @@
 .hero-banner::before {
   content: '';
   position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: 
+  inset: 0;
+  background:
     radial-gradient(circle at 20% 50%, rgba(255, 255, 255, 0.1) 0%, transparent 50%),
     radial-gradient(circle at 80% 80%, rgba(255, 255, 255, 0.1) 0%, transparent 50%);
   pointer-events: none;
@@ -73,7 +67,7 @@
   line-height: 1.1;
   letter-spacing: -0.03em;
   text-shadow: 0 2px 20px rgba(0, 0, 0, 0.1);
-  color: #ffffff !important;
+  color: #ffffff;
   margin-bottom: 1.5rem;
 }
 
@@ -81,24 +75,20 @@
   font-size: 1.5rem;
   font-weight: 200;
   margin-bottom: 0.25rem;
-  color: #ffffff !important;
-  opacity: 1 !important;
+  color: #ffffff;
 }
 
-/* MyPage 전용 hero-description 스타일 */
 .mypage-root .hero-description {
-  font-size: 1.1rem !important;
-  line-height: 1.7 !important;
-  color: #ffffff !important;
-  margin-bottom: 1rem !important;
-  max-width: 500px !important;
-  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.15) !important;
-  opacity: 1 !important;
-  font-weight: 400 !important;
-  text-align: left !important;
+  font-size: 1.1rem;
+  line-height: 1.7;
+  color: #ffffff;
+  margin-bottom: 1rem;
+  max-width: 500px;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+  font-weight: 400;
+  text-align: left;
 }
 
-/* ==================== 독서 통계 카드 ==================== */
 .hero-stats {
   display: flex;
   justify-content: center;
@@ -131,14 +121,10 @@
   left: 0;
   right: 0;
   height: 4px;
+  background: linear-gradient(90deg, #3E4F2F, #586544);
   opacity: 0;
   transition: opacity 0.3s ease;
 }
-
-.stat-card-total::before {
-  background: linear-gradient(90deg, #3E4F2F, #586544);
-}
-
 
 .stat-card:hover {
   transform: translateY(-4px);
@@ -149,7 +135,6 @@
   opacity: 1;
 }
 
-/* SVG 아이콘 스타일 */
 .stat-icon-wrapper {
   display: flex;
   flex-direction: column;
@@ -185,12 +170,8 @@
   line-height: 1;
   margin-bottom: 0;
   display: block;
-}
-
-.stat-card-total .stat-number {
   color: #3E4F2F;
 }
-
 
 .stat-content {
   display: flex;
@@ -230,8 +211,6 @@
   box-shadow: 0 2px 8px rgba(62, 79, 47, 0.3);
 }
 
-
-/* ==================== 컨텐츠 영역 ==================== */
 .content-container {
   width: 100%;
   max-width: 1200px;
@@ -242,7 +221,6 @@
   box-sizing: border-box;
 }
 
-/* ==================== 탭 네비게이션 ==================== */
 .tabs-container {
   background: #F5F1E6;
   border-radius: 20px 20px 0 0;
@@ -362,7 +340,6 @@
   box-shadow: 0 2px 8px rgba(62, 79, 47, 0.3);
 }
 
-/* ==================== 검색 및 필터 바 ==================== */
 .search-filter-bar {
   background: #F5F1E6;
   padding: 24px 32px;
@@ -444,7 +421,6 @@
   box-shadow: 0 0 0 4px rgba(62, 79, 47, 0.1);
 }
 
-
 .search-button {
   position: absolute;
   right: 8px;
@@ -504,8 +480,6 @@
   box-shadow: 0 0 0 4px rgba(62, 79, 47, 0.1);
 }
 
-
-/* ==================== 책 그리드 ==================== */
 .books-grid-section {
   background: #F5F1E6;
   border-radius: 0 0 20px 20px;
@@ -530,7 +504,6 @@
   gap: 24px;
 }
 
-/* ==================== 빈 서재 / 빈 필터 웰컴 패널 ==================== */
 .empty-welcome {
   padding: 16px 20px 20px;
   min-height: 280px;
@@ -619,7 +592,6 @@
   max-width: 220px;
 }
 
-/* ==================== 로딩 및 에러 상태 ==================== */
 .loading-container {
   display: flex;
   flex-direction: column;
@@ -681,7 +653,6 @@
   transform: translateY(-1px);
 }
 
-/* ==================== 반응형 디자인 ==================== */
 @media (max-width: 1024px) {
   .hero-content {
     flex-direction: column;
@@ -692,12 +663,6 @@
   .hero-stats {
     width: 100%;
     max-width: 100%;
-  }
-}
-
-@media (max-width: 900px) {
-  .hero-stats {
-    gap: 20px;
   }
 }
 
@@ -712,10 +677,6 @@
 
   .hero-subtitle {
     font-size: 1.2rem;
-  }
-
-  .hero-stats {
-    gap: 16px;
   }
 
   .content-container {
@@ -791,7 +752,7 @@
 
   .empty-welcome-upload {
     min-height: 180px;
-    padding: 20px 20px;
+    padding: 20px;
   }
 }
 

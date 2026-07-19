@@ -43,7 +43,7 @@ const COLORS = {
   lightGrayBorder: '#d1d5db',
 };
 
-const createFocusStyle = () => ({
+const FOCUS_STYLE = {
   '&:focus': {
     outline: `2px solid ${COLORS.primary}`,
     outlineOffset: '2px',
@@ -52,10 +52,22 @@ const createFocusStyle = () => ({
     outline: `2px solid ${COLORS.primary}`,
     outlineOffset: '2px',
   },
-});
+};
+
+const EDGE_BUTTON_SHARED = {
+  borderRadius: '0.5rem',
+  padding: '0.5rem 1.375rem',
+  fontWeight: 600,
+  fontSize: '0.9375rem',
+  cursor: 'pointer',
+  boxShadow: `0 0.125rem 0.5rem ${COLORS.primary}20`,
+  transition: `background ${ANIMATION_VALUES.DURATION.FAST}, color ${ANIMATION_VALUES.DURATION.FAST}, box-shadow ${ANIMATION_VALUES.DURATION.FAST}, transform 0.13s`,
+  margin: '0 auto',
+  display: 'inline-block',
+};
 
 // 통일된 버튼 스타일 (xhtml-toolbar-btn 기준)
-export const createButtonStyle = (animationValues, variant = 'default') => {
+export const createButtonStyle = (variant = 'default') => {
   const baseStyle = {
     display: 'flex',
     alignItems: 'center',
@@ -72,7 +84,7 @@ export const createButtonStyle = (animationValues, variant = 'default') => {
     transition: 'all 0.2s ease',
     height: '40px',
     outline: 'none',
-    ...createFocusStyle(),
+    ...FOCUS_STYLE,
   };
 
   const variants = {
@@ -95,38 +107,13 @@ export const createButtonStyle = (animationValues, variant = 'default') => {
       padding: '0',
       borderRadius: '4px',
     },
-    primaryEdge: {
-      background: COLORS.primary,
-      color: COLORS.white,
-      border: 'none',
-      borderRadius: '0.5rem',
-      padding: '0.5rem 1.375rem',
-      fontWeight: 600,
-      fontSize: '0.9375rem',
-      cursor: 'pointer',
-      boxShadow: `0 0.125rem 0.5rem ${COLORS.primary}20`,
-      transition: `background ${ANIMATION_VALUES.DURATION.FAST}, color ${ANIMATION_VALUES.DURATION.FAST}, box-shadow ${ANIMATION_VALUES.DURATION.FAST}, transform 0.13s`,
-      margin: '0 auto',
-      display: 'inline-block',
-    },
     secondaryEdge: {
+      ...EDGE_BUTTON_SHARED,
       background: COLORS.white,
       color: COLORS.primary,
       border: `1.5px solid ${COLORS.primary}`,
-      borderRadius: '0.5rem',
-      padding: '0.5rem 1.375rem',
-      fontWeight: 600,
-      fontSize: '0.9375rem',
-      cursor: 'pointer',
-      boxShadow: `0 0.125rem 0.5rem ${COLORS.primary}20`,
-      transition: `background ${ANIMATION_VALUES.DURATION.FAST}, color ${ANIMATION_VALUES.DURATION.FAST}, box-shadow ${ANIMATION_VALUES.DURATION.FAST}, transform 0.13s`,
-      margin: '0 auto',
-      display: 'inline-block',
     },
   };
-
-  // closeEdge는 tooltipClose와 동일 (호환 alias)
-  variants.closeEdge = variants.tooltipClose;
 
   return { ...baseStyle, ...variants[variant] };
 };
@@ -157,13 +144,10 @@ const ADVANCED_BUTTON_HANDLERS = {
   },
 };
 
-ADVANCED_BUTTON_HANDLERS.closeEdge = ADVANCED_BUTTON_HANDLERS.tooltipClose;
-
 export const createAdvancedButtonHandlers = (variant) => ADVANCED_BUTTON_HANDLERS[variant] ?? {};
 
-const createConditionalTransition = (condition, normalTransition, disabledTransition = 'none') => {
-  return condition ? disabledTransition : normalTransition;
-};
+const createConditionalTransition = (condition, normalTransition, disabledTransition = 'none') =>
+  condition ? disabledTransition : normalTransition;
 
 // 반응형 사이드바 너비
 const getResponsiveSidebarWidth = (isOpen, isMobile = false) => {
@@ -202,8 +186,8 @@ export const sidebarStyles = {
     overflow: 'hidden',
     flexShrink: 0,
   },
-  toggleButton: (animationValues) => ({
-    ...createButtonStyle(animationValues, 'default'),
+  toggleButton: () => ({
+    ...createButtonStyle('default'),
     width: '36px',
     height: '36px',
     fontSize: '16px',
@@ -241,7 +225,7 @@ export const sidebarStyles = {
     justifyContent: isOpen ? 'flex-start' : 'center',
     position: 'relative',
     overflow: 'hidden',
-    ...createFocusStyle(),
+    ...FOCUS_STYLE,
   }),
   chapterNumber: (isSelected, animationValues) => ({
     width: '24px',
@@ -297,78 +281,61 @@ export { graphStyles, graphControlsStyles } from './graphStyles';
 
 export { COLORS };
 
+const FIXED_TOOLTIP_BASE = {
+  position: 'fixed',
+  zIndex: 99999,
+  width: 420,
+  maxWidth: 420,
+  background: COLORS.background,
+  pointerEvents: 'auto',
+};
+
 // UnifiedNodeInfo 전용 툴팁 스타일
 export const unifiedNodeTooltipStyles = {
-  // 툴팁 모드 컨테이너
   tooltipContainer: {
-    position: "fixed",
-    zIndex: 99999,
-    width: 500,
-    minWidth: 500,
-    maxWidth: 500,
-    height: "auto",
-    minHeight: 280,
-    background: COLORS.background,
-    borderRadius: 10,
-    boxShadow: `0 8px 4px ${COLORS.primary}21, 0 1.5px 8px rgba(0,0,0,0.04)`,
+    ...FIXED_TOOLTIP_BASE,
+    height: 'auto',
+    maxHeight: 420,
+    minHeight: 'unset',
+    borderRadius: 15,
+    boxShadow: '0 0.5rem 1.5rem rgba(0, 0, 0, 0.15), 0 0.25rem 0.75rem rgba(0, 0, 0, 0.1)',
     padding: 0,
-    border: `1.5px solid ${COLORS.border}`,
-    animation: "fadeIn 0.4s ease-out",
-    transformStyle: "preserve-3d",
+    border: `1px solid ${COLORS.border}`,
   },
-  
-  // 사이드바 모드 컨테이너
-  sidebarContainer: {
-    width: '100%',
-    height: '100%',
-    display: 'flex',
-    flexDirection: 'column',
-    background: COLORS.background,
-    overflow: 'hidden',
-    fontFamily: 'var(--font-family-primary)',
-  },
-  
-  // 에러 툴팁 컨테이너
+
   errorContainer: {
-    position: "fixed",
-    zIndex: 99999,
-    width: 500,
+    ...FIXED_TOOLTIP_BASE,
     minHeight: 150,
-    background: COLORS.background,
-    borderRadius: 12,
-    boxShadow: "0 4px 16px rgba(0,0,0,0.1)",
-    padding: "20px",
-    border: `1px solid ${COLORS.error}40`,
-    animation: "scaleIn 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
-  },
-  
-  // 등장하지 않은 인물 툴팁
-  notAppearedContainer: {
-    position: "fixed",
-    zIndex: 99999,
-    opacity: 1,
-    transition: "opacity 0.3s",
-    cursor: "grab",
-    width: 500,
-    minHeight: 150,
-    background: COLORS.background,
-    borderRadius: 20,
-    boxShadow: `0 8px 32px ${COLORS.primary}21, 0 1.5px 8px rgba(0,0,0,0.04)`,
+    maxHeight: 420,
+    borderRadius: 15,
+    boxShadow: '0 0.5rem 1.5rem rgba(0, 0, 0, 0.15), 0 0.25rem 0.75rem rgba(0, 0, 0, 0.1)',
     padding: 0,
-    border: `1.5px solid ${COLORS.border}`,
-    animation: "scaleIn 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
+    border: `1px solid ${COLORS.error}40`,
+  },
+
+  notAppearedContainer: {
+    ...FIXED_TOOLTIP_BASE,
+    opacity: 1,
+    transition: 'opacity 0.3s',
+    cursor: 'grab',
+    minHeight: 150,
+    maxHeight: 420,
+    borderRadius: 15,
+    boxShadow: '0 0.5rem 1.5rem rgba(0, 0, 0, 0.15), 0 0.25rem 0.75rem rgba(0, 0, 0, 0.1)',
+    padding: 0,
+    border: `1px solid ${COLORS.border}`,
   },
 };
 
 // UnifiedNodeInfo 전용 애니메이션 스타일
 export const unifiedNodeAnimations = {
-  tooltipSimpleTransition: (isDragging) => 
+  tooltipSimpleTransition: (isDragging) =>
     createConditionalTransition(isDragging, `opacity ${ANIMATION_VALUES.DURATION.NORMAL}`, 'none'),
-  
-  tooltipComplexTransition: (isDragging) => 
+
+  tooltipComplexTransition: (isDragging) =>
     createConditionalTransition(
-      isDragging, 
-      `opacity ${ANIMATION_VALUES.DURATION.NORMAL}, transform ${ANIMATION_VALUES.DURATION.SLOW}`, 
+      isDragging,
+      `opacity ${ANIMATION_VALUES.DURATION.NORMAL}, transform ${ANIMATION_VALUES.DURATION.SLOW}`,
       'none'
     ),
 };

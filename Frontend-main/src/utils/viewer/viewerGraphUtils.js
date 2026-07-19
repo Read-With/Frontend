@@ -1,9 +1,8 @@
 /** 뷰어 그래프 유틸: API/캐시 조회·변환·타깃 계산 */
 
-import { processRelations } from '../graph/relationUtils';
+import { processRelations } from '../graph/graphUtils';
 import { buildNodeWeights, createCharacterMaps, toNodeWeightsOrNull } from '../graph/characterUtils';
 import { convertRelationsToElements } from '../graph/graphDataUtils';
-import { hasGraphPayload } from '../graph/graphData';
 import { resolveGraphElementsProfileImages } from '../common/assetUrlFetch';
 import {
   getGraphEventState,
@@ -35,8 +34,8 @@ export function commitVisibleGraphElements(setElements, nextElements, { applyTok
   return visibleElements;
 }
 
-/** fine graph API 호출 컨텍스트 (book/chapter/eventIdx/callKey) */
-export function resolveFineGraphCallContext({ book, currentChapter, currentEvent }) {
+/** deltas 누적 graph 호출 컨텍스트 (book/chapter/eventIdx/callKey) */
+export function resolveGraphCallContext({ book, currentChapter, currentEvent }) {
   const match = resolveServerEventMatch({ book, currentChapter, event: currentEvent });
   const bookId = Number(match.bookId);
   const chapter =
@@ -52,85 +51,6 @@ export function resolveFineGraphCallContext({ book, currentChapter, currentEvent
     chapter,
     eventIdx,
     callKey: cacheKeyUtils.createEventKey(bookId, chapter, eventIdx),
-    atLocator: match.atLocator ?? null,
-  };
-}
-
-function hasNonEmptyArrays(obj, keys) {
-  if (!obj || typeof obj !== 'object') return false;
-  return keys.some((key) => asArray(obj[key]).length > 0);
-}
-
-function isFineGraphNotFoundError(error) {
-  const message = error?.message || '';
-  return error?.status === 404 || message.includes('404') || message.includes('찾을 수 없습니다');
-}
-
-/** fine graph API 요청 + payload 검증 */
-export async function requestFineGraph(getFineGraph, bookId, chapter, eventIdx, atLocator = null) {
-  try {
-    const response = await getFineGraph(bookId, chapter, eventIdx, atLocator);
-    const result = pickFineGraphResult(response);
-    return {
-      success: Boolean(response?.isSuccess && hasFineGraphPayload(result)),
-      response,
-      result,
-      notFound: false,
-      error: null,
-    };
-  } catch (error) {
-    return {
-      success: false,
-      response: null,
-      result: null,
-      notFound: isFineGraphNotFoundError(error),
-      error,
-    };
-  }
-}
-
-/** characters/relations(+event) 소스 → cytoscape elements + 메타 */
-function convertGraphSourceToElements(
-  source,
-  chapter,
-  eventIdx,
-  deps = DEFAULT_GRAPH_TRANSFORM_DEPS,
-  previousNodeWeights = null
-) {
-  const eventMeta = source?.eventMeta ?? source?.event ?? null;
-  const characters = asArray(source?.characters);
-  const relations = asArray(source?.relations);
-  const normalizedEvent = graphDataTransformUtils.normalizeApiEvent(
-    eventMeta ?? fallbackEventMeta(chapter, eventIdx)
-  );
-  const elements = graphDataTransformUtils.convertToElements(
-    { characters, relations, event: eventMeta },
-    normalizedEvent,
-    deps,
-    previousNodeWeights
-  );
-  return { elements, normalizedEvent, eventMeta, characters, relations };
-}
-
-/** fine graph API result → cytoscape elements + 메타 */
-export function convertFineGraphToElements(
-  fineResult,
-  chapter,
-  eventIdx,
-  deps = DEFAULT_GRAPH_TRANSFORM_DEPS,
-  previousNodeWeights = null
-) {
-  const converted = convertGraphSourceToElements(
-    fineResult,
-    chapter,
-    eventIdx,
-    deps,
-    previousNodeWeights
-  );
-  return {
-    ...converted,
-    // fine API는 .event 필드가 SSOT (eventMeta 무시)
-    eventMeta: fineResult?.event ?? fallbackEventMeta(chapter, eventIdx),
   };
 }
 
@@ -144,13 +64,29 @@ export function fallbackEventMeta(chapter, eventIdx) {
   };
 }
 
-/** fine graph API 응답에 표시 가능한 데이터가 있는지 */
-export function hasFineGraphPayload(result) {
-  return hasGraphPayload(result);
+/** API/캐시 graph payload → cytoscape elements + 메타 */
+export function convertGraphSourceToElements(
+  source,
+  chapter,
+  eventIdx,
+  deps = DEFAULT_GRAPH_TRANSFORM_DEPS,
+  previousNodeWeights = null
+) {
+  const eventMeta = source?.event ?? source?.eventMeta ?? fallbackEventMeta(chapter, eventIdx);
+  const characters = asArray(source?.characters);
+  const relations = asArray(source?.relations);
+  const normalizedEvent = graphDataTransformUtils.normalizeApiEvent(eventMeta);
+  const elements = graphDataTransformUtils.convertToElements(
+    { characters, relations, event: eventMeta },
+    normalizedEvent,
+    deps,
+    previousNodeWeights
+  );
+  return { elements, normalizedEvent, eventMeta, characters, relations };
 }
 
-/** fine graph API 응답에서 result 객체 추출 */
-export function pickFineGraphResult(response) {
+/** API 응답에서 result 객체 추출 */
+export function pickGraphApiResult(response) {
   const result = response?.result;
   return result && typeof result === 'object' ? result : null;
 }
@@ -159,22 +95,11 @@ export function pickFineGraphResult(response) {
 export function getCachedGraphSnapshot(bookId, chapter, eventIdx, getGraphEventStateFn) {
   if (!bookId || !chapter || eventIdx < 1) return null;
   const cached = getGraphEventStateFn(bookId, chapter, eventIdx);
-  if (!hasNonEmptyArrays(cached, ['elements', 'characters'])) return null;
-  return cached;
-}
-
-/** graph event state 캐시 → elements·메타 (elements 없으면 characters로 변환) */
-function elementsFromGraphEventState(cached, chapter, eventIdx, deps) {
-  const elements = asArray(cached.elements);
-  const eventMeta = cached.eventMeta ?? null;
-  const characters = asArray(cached.characters);
-
-  if (elements.length > 0) {
-    return { elements, eventMeta, characters, relations: [] };
+  if (!cached || typeof cached !== 'object') return null;
+  if (asArray(cached.elements).length === 0 && asArray(cached.characters).length === 0) {
+    return null;
   }
-
-  const converted = convertGraphSourceToElements(cached, chapter, eventIdx, deps);
-  return { elements: converted.elements, eventMeta, characters, relations: [] };
+  return cached;
 }
 
 /** event 1~eventIdx 누적 그래프 (표시용) */
@@ -187,7 +112,19 @@ export function resolveCumulativeGraphForDisplay(
   const cached = getCachedGraphSnapshot(bookId, chapter, eventIdx, getGraphEventState);
   if (!cached) return null;
 
-  const resolved = elementsFromGraphEventState(cached, chapter, eventIdx, deps);
+  const cachedElements = asArray(cached.elements);
+  const characters = asArray(cached.characters);
+  const resolved =
+    cachedElements.length > 0
+      ? {
+          elements: cachedElements,
+          eventMeta: cached.eventMeta ?? null,
+          characters,
+          relations: [],
+          normalizedEvent: null,
+        }
+      : convertGraphSourceToElements(cached, chapter, eventIdx, deps);
+
   const fallback = getChapterEventFallbackData(bookId, chapter, eventIdx);
 
   return {
