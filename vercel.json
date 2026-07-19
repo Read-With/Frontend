@@ -1,4 +1,8 @@
 {
+  "framework": "vite",
+  "installCommand": "npm install --prefix Frontend-main",
+  "buildCommand": "npm run build --prefix Frontend-main",
+  "outputDirectory": "Frontend-main/dist",
   "rewrites": [
     {
       "source": "/public/:path*",
