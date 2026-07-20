@@ -6,7 +6,7 @@ import { filterMainCharacters } from '../../utils/graph/graphDataUtils';
 import { sortElementsByDataId, isGraphNodeElement } from '../../utils/graph/graphUtils';
 
 /** CytoscapeGraphUnified: clear 직후 ripple 억제 구간과 맞춤 */
-export const SEARCH_RESET_FLAG_MS = 500;
+const SEARCH_RESET_FLAG_MS = 500;
 
 export function useGraphState() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);

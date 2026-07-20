@@ -2,7 +2,7 @@ import { memo, useState, useEffect, useMemo } from "react";
 import {ResponsiveContainer, LineChart, CartesianGrid, ReferenceLine, Tooltip as RechartsTooltip, Line, XAxis, YAxis,} from "recharts";
 import { useParams } from "react-router-dom";
 import { useTooltipPosition, useClickOutside } from "../../../hooks/ui/tooltipHooks";
-import { useRelationData } from "../../../hooks/graph/useRelationData";
+import { useRelationData } from "../../../hooks/graph/useApiGraphData";
 import { getRelationStyle, tooltipStyles } from "../../../utils/styles/relationStyles";
 import { clampPositivity } from "../../../utils/styles/graphStyles";
 import { COLORS, ANIMATION_VALUES, mergeRefs } from "../../../utils/styles/styles";

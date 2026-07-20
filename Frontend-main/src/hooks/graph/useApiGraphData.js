@@ -1,14 +1,41 @@
-/** book-scope 그래프 API·manifest 로드 (RelationGraph 전용) */
+/** book-scope 그래프 API·manifest·POV·관계 타임라인 (RelationGraph 전용) */
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { getBookScopeRelationshipGraph } from '../../utils/api/api.js';
-import { loadGraphDataWithCache, hasMacroGraphStorageCache, hasMacroSessionCache, prefetchMacroGraphToCache } from '../../utils/graph/graphData';
+import {
+  getChapterPovSummaries,
+  normalizeChapterPovSummariesResult,
+} from '../../utils/api/booksApi';
+import {
+  loadGraphDataWithCache,
+  hasMacroGraphStorageCache,
+  hasMacroSessionCache,
+  prefetchMacroGraphToCache,
+  padSingleEvent,
+  fetchRelationTimelineCumulative,
+  fetchRelationTimelineViewer,
+} from '../../utils/graph/graphData';
 import { getMaxChapter } from '../../utils/common/cache/manifestCache';
-import { useErrorHandler } from '../common/useErrorHandler';
-import { ensureBookManifest } from '../common/manifestEnsure';
+import { toPositiveNumberOrNull } from '../../utils/common/valueUtils';
+import { useErrorHandler, ensureBookManifest } from '../common/hooksShared';
 import { cacheKeyUtils } from '../../utils/viewer/viewerCoreStateUtils';
 
 const ERROR_DISPLAY_DURATION = 5000;
+const povInflight = new Map();
+
+function fetchChapterPovSummariesOnce(bid, ch) {
+  const key = `${bid}:${ch}`;
+  const existing = povInflight.get(key);
+  if (existing) return existing;
+
+  const pending = getChapterPovSummaries(bid, ch).finally(() => {
+    if (povInflight.get(key) === pending) {
+      povInflight.delete(key);
+    }
+  });
+  povInflight.set(key, pending);
+  return pending;
+}
 
 export function useApiGraphData(serverBookId, currentChapter) {
   const [manifestData, setManifestData] = useState(null);
@@ -195,4 +222,152 @@ export function useApiGraphData(serverBookId, currentChapter) {
     error: apiError,
     clearError,
   };
+}
+
+export function useChapterPovSummaries(bookId, chapterIdx) {
+  const [povSummaries, setPovSummaries] = useState(null);
+  const [error, setError] = useState(null);
+  const requestIdRef = useRef(0);
+
+  useEffect(() => {
+    const bid = Number(bookId);
+    const ch = Number(chapterIdx);
+    if (!Number.isFinite(bid) || bid < 1 || !Number.isFinite(ch) || ch < 1) {
+      setPovSummaries(null);
+      setError(null);
+      return undefined;
+    }
+
+    const requestId = ++requestIdRef.current;
+    setError(null);
+
+    const fetchSummaries = async () => {
+      try {
+        const response = await fetchChapterPovSummariesOnce(bid, ch);
+        if (requestId !== requestIdRef.current) return;
+
+        if (response.isSuccess) {
+          setPovSummaries(normalizeChapterPovSummariesResult(response.result));
+          setError(null);
+        } else {
+          setPovSummaries(null);
+          setError(response.message || 'POV 요약을 불러오지 못했습니다.');
+        }
+      } catch (err) {
+        if (requestId !== requestIdRef.current) return;
+        setPovSummaries(null);
+        setError(err?.message || 'POV 요약을 불러오는 중 오류가 발생했습니다.');
+      }
+    };
+
+    void fetchSummaries();
+
+    return () => {
+      requestIdRef.current += 1;
+    };
+  }, [bookId, chapterIdx]);
+
+  return { povSummaries, error };
+}
+
+function buildRelationFetchKey(mode, bookId, id1, id2, chapterNum, eventNum) {
+  return `${mode}:${bookId}:${id1}:${id2}:${chapterNum}:${eventNum ?? ''}`;
+}
+
+export function useRelationData(mode, id1, id2, chapterNum, eventNum, bookId = null) {
+  const [timeline, setTimeline] = useState([]);
+  const [labels, setLabels] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [noRelation, setNoRelation] = useState(false);
+  const [error, setError] = useState(null);
+  const requestIdRef = useRef(0);
+  const lastSuccessKeyRef = useRef('');
+
+  const numericBookId = useMemo(() => toPositiveNumberOrNull(bookId), [bookId]);
+
+  const resetEmpty = useCallback((message, { bumpRequest = true } = {}) => {
+    if (bumpRequest) requestIdRef.current += 1;
+    lastSuccessKeyRef.current = '';
+    setTimeline([]);
+    setLabels([]);
+    setNoRelation(true);
+    setError(message);
+    setLoading(false);
+  }, []);
+
+  const fetchData = useCallback(async (options = {}) => {
+    const force = options?.force === true;
+
+    if (!numericBookId || !id1 || !id2 || !chapterNum) {
+      resetEmpty('관계 타임라인을 불러올 수 없습니다.');
+      return;
+    }
+
+    const normalizedEvent = eventNum ? Math.max(1, eventNum) : 1;
+    const fetchKey = buildRelationFetchKey(
+      mode,
+      numericBookId,
+      id1,
+      id2,
+      chapterNum,
+      normalizedEvent
+    );
+
+    if (!force && lastSuccessKeyRef.current === fetchKey) {
+      return;
+    }
+
+    const requestId = ++requestIdRef.current;
+    setLoading(true);
+    setError(null);
+
+    try {
+      const result =
+        mode === 'cumulative'
+          ? await fetchRelationTimelineCumulative(numericBookId, id1, id2, chapterNum)
+          : await fetchRelationTimelineViewer(
+              numericBookId,
+              id1,
+              id2,
+              chapterNum,
+              normalizedEvent
+            );
+
+      if (requestId !== requestIdRef.current) return;
+
+      const { points, labelInfo, noRelation: resultNoRelation } = result;
+      const { points: paddedPoints, labels: paddedLabels } = padSingleEvent(points, labelInfo);
+
+      setTimeline(paddedPoints);
+      setLabels(paddedLabels);
+      setNoRelation(resultNoRelation || paddedPoints.filter((value) => value !== null).length === 0);
+      lastSuccessKeyRef.current = fetchKey;
+    } catch {
+      if (requestId !== requestIdRef.current) return;
+      resetEmpty('관계 데이터를 불러오는 중 오류가 발생했습니다.', { bumpRequest: false });
+    } finally {
+      if (requestId === requestIdRef.current) setLoading(false);
+    }
+  }, [numericBookId, id1, id2, chapterNum, eventNum, mode, resetEmpty]);
+
+  useEffect(() => {
+    void fetchData();
+    return () => {
+      requestIdRef.current += 1;
+    };
+  }, [fetchData]);
+
+  const retryFetch = useCallback(() => fetchData({ force: true }), [fetchData]);
+
+  return useMemo(
+    () => ({
+      timeline,
+      labels,
+      loading,
+      noRelation,
+      error,
+      fetchData: retryFetch,
+    }),
+    [timeline, labels, loading, noRelation, error, retryFetch]
+  );
 }

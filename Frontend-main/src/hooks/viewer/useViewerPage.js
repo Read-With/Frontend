@@ -1,14 +1,13 @@
 /** 뷰어 페이지: URL·책·북마크·설정·진도·그래프 파이프라인 오케스트레이션 */
 
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { useServerBookMatching } from '../books/bookHooks';
-import { useViewerUrlParams } from './useViewerUrlParams';
 import { useViewerProgress } from './useViewerProgress';
 import { useViewerGraphState, useViewerGraphPipeline } from './useViewerGraphPipeline';
 import { useProgressAutoSave } from './useProgressAutoSave';
-import { useManifestLoaded } from '../common/manifestEnsure';
+import { useManifestLoaded, resolveServerBookIdOrFallback } from '../common/hooksShared';
 import {
   loadSettings,
   normalizeSettings,
@@ -20,11 +19,16 @@ import {
   waitForViewerMethod,
   runViewerPaging,
   restoreViewerPosition,
+  resolveViewerBookKey,
 } from '../../utils/viewer/viewerCoreStateUtils';
-import { resolveServerBookIdOrFallback, resolveViewerBookKey } from '../common/hooksShared';
 import { toViewerResumeAnchor, resolveChapterIndex } from '../../utils/common/valueUtils';
 import { useBookmarks } from '../bookmarks/bookmarkHooks';
-import { userViewerBookmarksPath } from '../../utils/common/urlUtils';
+import {
+  parseViewerReaderSplat,
+  resolveViewerReadingPosition,
+  userViewerReadingPath,
+  userViewerBookmarksPath,
+} from '../../utils/common/urlUtils';
 
 const EVENT_TRANSITION_FALLBACK_MS = 50;
 
@@ -36,6 +40,81 @@ function resetTransitionState(setTransitionState) {
   setTransitionState((prev) => (
     prev.type == null && !prev.inProgress ? prev : idleTransition()
   ));
+}
+
+/** URL: `/user/viewer/:id/c/:chapter/p/:page` 동기화 */
+function useViewerUrlParams(options = {}) {
+  const { skipHistoryMutationsRef, urlSyncEnabled = true } = options;
+  const { filename, '*': splat } = useParams();
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  const parsedPath = useMemo(() => parseViewerReaderSplat(splat), [splat]);
+  const initialPosition = resolveViewerReadingPosition(parsedPath);
+
+  const [currentPage, setCurrentPage] = useState(initialPosition.page);
+  const [currentChapter, setCurrentChapter] = useState(initialPosition.chapter);
+
+  const internalNavigationRef = useRef(false);
+  const initializedBookRef = useRef(null);
+  const positionRef = useRef(initialPosition);
+
+  useEffect(() => {
+    positionRef.current = { chapter: currentChapter, page: currentPage };
+  }, [currentChapter, currentPage]);
+
+  // URL(splat) → chapter/page. 내부 navigate로 바뀐 URL은 역동기화 스킵
+  useEffect(() => {
+    if (!filename) return;
+
+    const next = resolveViewerReadingPosition(parsedPath);
+
+    if (initializedBookRef.current !== filename) {
+      initializedBookRef.current = filename;
+      setCurrentChapter(next.chapter);
+      setCurrentPage(next.page);
+      return;
+    }
+
+    if (internalNavigationRef.current) {
+      internalNavigationRef.current = false;
+      return;
+    }
+
+    const { chapter, page } = positionRef.current;
+    if (next.chapter !== chapter) setCurrentChapter(next.chapter);
+    if (next.page !== page) setCurrentPage(next.page);
+  }, [filename, parsedPath]);
+
+  const targetReadingPath = useMemo(() => {
+    if (!filename) return null;
+    return userViewerReadingPath(filename, currentChapter, currentPage);
+  }, [filename, currentChapter, currentPage]);
+
+  // chapter/page → URL (replace). resume·mypage 이탈 중에는 생략
+  useEffect(() => {
+    if (!targetReadingPath || !filename) return;
+    if (!urlSyncEnabled) return;
+    if (skipHistoryMutationsRef?.current) return;
+    if (location.pathname === targetReadingPath) return;
+    internalNavigationRef.current = true;
+    navigate(targetReadingPath, { replace: true });
+  }, [
+    targetReadingPath,
+    location.pathname,
+    navigate,
+    filename,
+    skipHistoryMutationsRef,
+    urlSyncEnabled,
+  ]);
+
+  return {
+    filename,
+    currentPage,
+    setCurrentPage,
+    currentChapter,
+    setCurrentChapter,
+  };
 }
 
 /** 챕터/이벤트 전환 상태 */

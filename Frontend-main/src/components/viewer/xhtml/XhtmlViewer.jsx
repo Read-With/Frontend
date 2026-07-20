@@ -22,7 +22,8 @@ import {
   loadCachedXhtmlContent,
   XHTML_CACHE_INVALIDATED_EVENT,
 } from '../../../utils/common/cache/cacheManager';
-import { resolveViewerBookKey, resolveServerBookIdOrFallback } from '../../../hooks/common/hooksShared';
+import { resolveServerBookIdOrFallback } from '../../../hooks/common/hooksShared';
+import { resolveViewerBookKey } from '../../../utils/viewer/viewerCoreStateUtils';
 import {
   collectBlockEntries,
   computeLineBoundsFromRuler,

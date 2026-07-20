@@ -23,8 +23,10 @@ import {
   applyNormalizedNodeSizes,
   PRESET_LAYOUT,
 } from "../../utils/styles/graphStyles.js";
-import useGraphInteractions from "../../hooks/graph/useGraphInteractions.js";
-import { useGraphLayout, useCyInstance } from "../../hooks/graph/useGraphLayout";
+import useGraphInteractions, {
+  useGraphLayout,
+  useCyInstance,
+} from "../../hooks/graph/useGraphInteractions.js";
 import { eventUtils } from "../../utils/viewer/viewerCoreStateUtils";
 
 function GraphZoomControls({ cy }) {

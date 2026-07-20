@@ -20,9 +20,8 @@ import {
   useGraphState,
   useGraphElementPipeline,
 } from '../../hooks/graph/useGraphViewHooks';
-import { useApiGraphData } from '../../hooks/graph/useApiGraphData';
-import { useLocalStorageNumber } from '../../hooks/common/useLocalStorage.js';
-import { resolveServerBookIdOrFallback } from '../../hooks/common/hooksShared';
+import { useApiGraphData, useChapterPovSummaries } from '../../hooks/graph/useApiGraphData';
+import { resolveServerBookIdOrFallback, useLocalStorageNumber } from '../../hooks/common/hooksShared';
 import { convertRelationsToElements } from '../../utils/graph/graphDataUtils';
 import { createCharacterMaps, buildNodeWeights, extractNodeWeightsFromElements } from '../../utils/graph/characterUtils';
 import { getGraphEventState } from '../../utils/common/cache/chapterEventCache';
@@ -44,8 +43,7 @@ import {
   isGraphDragEndEvent,
   shouldIgnoreGraphPageOutsideClick,
   useGraphTooltipSelection,
-} from '../../hooks/graph/useGraphOutsideDismiss';
-import { useChapterPovSummaries } from '../../hooks/graph/useChapterPovSummaries';
+} from '../../hooks/graph/useGraphInteractions';
 import {
   getChapterData,
   findManifestEventInChapter,

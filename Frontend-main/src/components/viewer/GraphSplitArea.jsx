@@ -13,7 +13,7 @@ import {
 import {
   shouldIgnoreViewerOutsideClick,
   useGraphTooltipSelection,
-} from '../../hooks/graph/useGraphOutsideDismiss';
+} from '../../hooks/graph/useGraphInteractions';
 import { resolveEventOrdinalForDisplay } from '../../utils/viewer/viewerEventProgressUtils';
 import { hasGraphPanelLocationHint } from '../../utils/common/valueUtils';
 import { eventUtils } from '../../utils/viewer/viewerCoreStateUtils';
