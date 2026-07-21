@@ -17,13 +17,39 @@ import {
   resolveReadingLocators,
 } from '../../utils/viewer/viewerEventProgressUtils';
 
+const AUTO_SAVE_DELAY_MS = 2000;
+
+function payloadFingerprint(payload) {
+  return payload ? JSON.stringify(payload) : null;
+}
+
+function flushResult(extra = {}) {
+  return { isSuccess: true, ...extra };
+}
+
+/** pagehide / beforeunload / visibility hidden 공통 구독 */
+function subscribePageExit(onExit) {
+  const onVisibility = () => {
+    if (document.visibilityState === 'hidden') onExit();
+  };
+  window.addEventListener('pagehide', onExit);
+  window.addEventListener('beforeunload', onExit);
+  document.addEventListener('visibilitychange', onVisibility);
+  return () => {
+    window.removeEventListener('pagehide', onExit);
+    window.removeEventListener('beforeunload', onExit);
+    document.removeEventListener('visibilitychange', onVisibility);
+  };
+}
+
 export function useProgressAutoSave({
   bookId,
   currentEvent,
   readingLocatorKey = '',
   getCurrentLocator,
   metricsReady = true,
-  delay = 2000,
+  /** resume 완료 전(맨 앞 오탐) 저장 방지 */
+  canPersist = true,
 }) {
   const [cachedLocation, setCachedLocation] = useState(null);
 
@@ -57,6 +83,7 @@ export function useProgressAutoSave({
       return null;
     }
   }, [bookId]);
+
   const timeoutRef = useRef(null);
   const lastPayloadRef = useRef(null);
   const latestPayloadRef = useRef(null);
@@ -64,43 +91,39 @@ export function useProgressAutoSave({
   const initialSavedRef = useRef(false);
   const pagehideFlushedRef = useRef(false);
   const prevMetricsReadyRef = useRef(metricsReady);
+  const prevBookIdRef = useRef(null);
   const flushChainRef = useRef(Promise.resolve());
-  const getCurrentLocatorRef = useRef(getCurrentLocator);
-  const saveLocationRef = useRef(saveLocation);
-  const currentEventRef = useRef(currentEvent);
-  const bookIdRef = useRef(bookId);
-  const metricsReadyRef = useRef(metricsReady);
   const runFlushRef = useRef(null);
   const refreshLatestPayloadRef = useRef(null);
 
-  useEffect(() => {
-    getCurrentLocatorRef.current = getCurrentLocator;
-    saveLocationRef.current = saveLocation;
-    currentEventRef.current = currentEvent;
-    bookIdRef.current = bookId;
-    metricsReadyRef.current = metricsReady;
-  }, [getCurrentLocator, saveLocation, currentEvent, bookId, metricsReady]);
+  // effect/flush/unmount에서 최신 props를 읽기 위한 미러 (stale closure 방지)
+  const liveRef = useRef({
+    getCurrentLocator,
+    saveLocation,
+    currentEvent,
+    bookId,
+    metricsReady,
+    canPersist,
+  });
+  liveRef.current = {
+    getCurrentLocator,
+    saveLocation,
+    currentEvent,
+    bookId,
+    metricsReady,
+    canPersist,
+  };
 
   const refreshLatestPayload = useCallback(() => {
-    const id = bookIdRef.current;
+    const { bookId: id, getCurrentLocator: getLocator, currentEvent: event, metricsReady: ready } =
+      liveRef.current;
     if (!id) return null;
 
-    const { startLocator, endLocator } = resolveReadingLocators(
-      getCurrentLocatorRef.current,
-      currentEventRef.current
-    );
+    const { startLocator, endLocator } = resolveReadingLocators(getLocator, event);
     if (!startLocator) return null;
 
-    const metrics = resolveMetricsFromLocator(id, startLocator, {
-      metricsReady: metricsReadyRef.current,
-    });
-    const payload = buildProgressPayload(
-      id,
-      startLocator,
-      endLocator,
-      currentEventRef.current,
-      metrics
-    );
+    const metrics = resolveMetricsFromLocator(id, startLocator, { metricsReady: ready });
+    const payload = buildProgressPayload(id, startLocator, endLocator, event, metrics);
     if (!payload) return null;
 
     latestPayloadRef.current = payload;
@@ -108,7 +131,7 @@ export function useProgressAutoSave({
       id,
       startLocator,
       endLocator,
-      currentEventRef.current,
+      event,
       metrics
     );
     return payload;
@@ -123,36 +146,25 @@ export function useProgressAutoSave({
     flushChainRef.current = Promise.resolve();
   }, []);
 
-  /** progressCache만 낙관적 갱신 (서버 성공 전) */
-  const applyProgressCache = useCallback((payload) => {
+  const commitLocalCaches = useCallback((payload, locationPayload) => {
+    if (locationPayload) {
+      liveRef.current.saveLocation?.(locationPayload);
+    }
     setProgressToCache(payload);
   }, []);
 
-  /** 서버 저장 성공 후 reader progress 캐시 동기화 */
-  const commitReaderLocation = useCallback((locationPayload) => {
-    if (locationPayload) {
-      saveLocationRef.current?.(locationPayload);
-    }
-  }, []);
-
-  /** 페이지 이탈 시 로컬 캐시 모두 즉시 반영 */
-  const applyLocalProgressForExit = useCallback((payload, locationPayload) => {
-    commitReaderLocation(locationPayload);
-    applyProgressCache(payload);
-  }, [applyProgressCache, commitReaderLocation]);
-
   const runFlushOnce = useCallback(async (resolve) => {
     const payload = latestPayloadRef.current;
-    const id = bookIdRef.current;
+    const id = liveRef.current.bookId;
     if (!payload) {
-      const skipped = { isSuccess: true, skipped: true };
+      const skipped = flushResult({ skipped: true });
       resolve?.(skipped);
       return skipped;
     }
 
-    const payloadKey = JSON.stringify(payload);
+    const payloadKey = payloadFingerprint(payload);
     if (lastPayloadRef.current === payloadKey) {
-      const deduped = { isSuccess: true, deduped: true };
+      const deduped = flushResult({ deduped: true });
       resolve?.(deduped);
       return deduped;
     }
@@ -161,17 +173,18 @@ export function useProgressAutoSave({
     const locationPayload = latestLocationPayloadRef.current;
 
     try {
-      applyProgressCache(payload);
+      setProgressToCache(payload);
       const res = await saveProgress(payload);
       if (!res?.isSuccess) {
         throw new Error(res?.message || '진도 저장 응답 실패');
       }
 
-      commitReaderLocation(locationPayload);
+      if (locationPayload) {
+        liveRef.current.saveLocation?.(locationPayload);
+      }
       lastPayloadRef.current = payloadKey;
 
-      const latest = latestPayloadRef.current;
-      const latestKey = latest ? JSON.stringify(latest) : null;
+      const latestKey = payloadFingerprint(latestPayloadRef.current);
       if (latestKey && latestKey !== payloadKey) {
         queueMicrotask(() => runFlushRef.current?.());
       }
@@ -191,7 +204,7 @@ export function useProgressAutoSave({
       resolve?.(failure);
       return failure;
     }
-  }, [applyProgressCache, commitReaderLocation]);
+  }, []);
 
   const runFlush = useCallback((resolve) => {
     flushChainRef.current = flushChainRef.current
@@ -203,43 +216,39 @@ export function useProgressAutoSave({
   refreshLatestPayloadRef.current = refreshLatestPayload;
 
   const flushProgressAsync = useCallback(() => {
+    if (!liveRef.current.canPersist) {
+      return Promise.resolve(flushResult({ skipped: true }));
+    }
     refreshLatestPayload();
     return new Promise((resolve) => {
       runFlush(resolve);
     });
   }, [refreshLatestPayload, runFlush]);
 
-  const prevBookIdRef = useRef(null);
-
   useEffect(() => {
-    if (!bookId) {
-      prevBookIdRef.current = null;
+    const bookChanged = prevBookIdRef.current !== bookId;
+    if (!bookId || bookChanged) {
+      prevBookIdRef.current = bookId || null;
       prevMetricsReadyRef.current = metricsReady;
       resetAutoSaveState();
-      return;
+      if (!bookId) return undefined;
     }
-    if (prevBookIdRef.current !== bookId) {
-      prevBookIdRef.current = bookId;
-      prevMetricsReadyRef.current = metricsReady;
-      resetAutoSaveState();
-    }
+
+    if (!canPersist) return undefined;
 
     const metricsJustBecameReady = metricsReady && !prevMetricsReadyRef.current;
     prevMetricsReadyRef.current = metricsReady;
 
     refreshLatestPayload();
+    if (!latestPayloadRef.current) return undefined;
 
-    if (!latestPayloadRef.current) return;
-
-    if (!initialSavedRef.current) {
+    if (!initialSavedRef.current || metricsJustBecameReady) {
       initialSavedRef.current = true;
-      runFlush();
-    } else if (metricsJustBecameReady) {
       runFlush();
     }
 
     if (timeoutRef.current) clearTimeout(timeoutRef.current);
-    timeoutRef.current = setTimeout(() => runFlush(), delay);
+    timeoutRef.current = setTimeout(() => runFlush(), AUTO_SAVE_DELAY_MS);
 
     return () => {
       if (timeoutRef.current) {
@@ -247,44 +256,47 @@ export function useProgressAutoSave({
         timeoutRef.current = null;
       }
     };
-  }, [bookId, currentEvent, readingLocatorKey, metricsReady, delay, refreshLatestPayload, runFlush, resetAutoSaveState]);
+  }, [
+    bookId,
+    currentEvent,
+    readingLocatorKey,
+    metricsReady,
+    canPersist,
+    refreshLatestPayload,
+    runFlush,
+    resetAutoSaveState,
+  ]);
 
   useEffect(() => {
     const handlePageHide = () => {
-      if (pagehideFlushedRef.current) return;
+      if (pagehideFlushedRef.current || !liveRef.current.canPersist) return;
       refreshLatestPayload();
       const payload = latestPayloadRef.current;
       if (!payload) return;
+
       pagehideFlushedRef.current = true;
-      const locationPayload = latestLocationPayloadRef.current;
-      applyLocalProgressForExit(payload, locationPayload);
+      commitLocalCaches(payload, latestLocationPayloadRef.current);
       const ok = saveProgressKeepalive(payload);
       if (ok) {
-        lastPayloadRef.current = JSON.stringify(payload);
+        lastPayloadRef.current = payloadFingerprint(payload);
       } else {
-        errorUtils.logWarning('[useProgressAutoSave] keepalive 저장 요청 생성 실패', String(bookIdRef.current ?? ''));
-      }
-    };
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'hidden') {
-        handlePageHide();
+        errorUtils.logWarning(
+          '[useProgressAutoSave] keepalive 저장 요청 생성 실패',
+          String(liveRef.current.bookId ?? '')
+        );
       }
     };
 
-    window.addEventListener('pagehide', handlePageHide);
-    window.addEventListener('beforeunload', handlePageHide);
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-
+    const unsubscribe = subscribePageExit(handlePageHide);
     return () => {
-      window.removeEventListener('pagehide', handlePageHide);
-      window.removeEventListener('beforeunload', handlePageHide);
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      unsubscribe();
       pagehideFlushedRef.current = false;
     };
-  }, [refreshLatestPayload, applyLocalProgressForExit]);
+  }, [refreshLatestPayload, commitLocalCaches]);
 
   useEffect(() => {
     return () => {
+      if (!liveRef.current.canPersist) return;
       refreshLatestPayloadRef.current?.();
       runFlushRef.current?.();
     };

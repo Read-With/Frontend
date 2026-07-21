@@ -1,7 +1,6 @@
-import React, { useMemo } from 'react';
+import { useMemo } from 'react';
 import PropTypes from 'prop-types';
-import { sidebarStyles } from '../../utils/styles/styles.js';
-import { ANIMATION_VALUES } from '../../utils/styles/styles';
+import { sidebarStyles, ANIMATION_VALUES } from '../../utils/styles/styles.js';
 import { GRAPH_LAYOUT_CONSTANTS, getChapterTitleParts } from './graphShared';
 import { getManifestFromCache } from '../../utils/common/cache/manifestCache';
 

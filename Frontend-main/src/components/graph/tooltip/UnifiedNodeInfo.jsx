@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from "react";
+import { memo, useState, useEffect, useCallback, useMemo } from "react";
 import { useParams } from "react-router-dom";
 import {
   processRelations,
@@ -10,10 +10,16 @@ import { getPositivityColor, getPositivityLabel } from "../../../utils/styles/re
 import { toApiFolderKey, undirectedPairKey } from "../../../utils/graph/graphUtils.js";
 import { getEventDataByIndex } from "../../../utils/graph/graphData.js";
 import { useTooltipPosition, useClickOutside } from "../../../hooks/ui/tooltipHooks";
-import { mergeRefs } from "../../../utils/styles/styles";
 import { getUnifiedEventInfoForTooltip } from "../../../utils/viewer/viewerEventProgressUtils";
 import { isGraphOnlyGraphPage } from "../graphShared";
-import { COLORS, createButtonStyle, ANIMATION_VALUES, unifiedNodeTooltipStyles, unifiedNodeAnimations } from "../../../utils/styles/styles.js";
+import {
+  COLORS,
+  createButtonStyle,
+  ANIMATION_VALUES,
+  unifiedNodeTooltipStyles,
+  unifiedNodeAnimations,
+  mergeRefs,
+} from "../../../utils/styles/styles.js";
 import { Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, ResponsiveContainer } from 'recharts';
 import "../RelationGraph.css";
 
@@ -173,7 +179,7 @@ function NodeProfileAvatar({ processedNodeData, variant = "tooltip" }) {
 }
 
 /** 레이더 점 — 부모 내부 정의 시 매 렌더 새 컴포넌트 타입이 되어 Recharts/리conciliation에 불리함 */
-const UnifiedNodeRadarDot = React.memo(function UnifiedNodeRadarDot({
+const UnifiedNodeRadarDot = memo(function UnifiedNodeRadarDot({
   cx,
   cy,
   payload,
@@ -1163,7 +1169,7 @@ function UnifiedNodeInfo({
               }}>
                 {displayHasDescription && (
                   <div style={{
-                    borderLeft: '0.25rem solid #5C6F5C',
+                    borderLeft: `0.25rem solid ${COLORS.primary}`,
                     paddingLeft: '1.25rem',
                   }}>
                     <p style={{
@@ -1925,4 +1931,4 @@ function UnifiedNodeInfo({
   }
 }
 
-export default React.memo(UnifiedNodeInfo);
+export default memo(UnifiedNodeInfo);

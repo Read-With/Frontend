@@ -55,7 +55,7 @@ export function normalizeRelation(raw) {
     const label = relationArray[0] || (typeof raw.label === "string" ? raw.label : "");
 
     return { id1, id2, positivity, weight, count, relation: relationArray, label };
-  } catch (_error) {
+  } catch {
     return null;
   }
 }
@@ -154,7 +154,7 @@ export function processRelations(relations) {
       }));
     
     return processed;
-  } catch (_error) {
+  } catch {
     return [];
   }
 }
@@ -183,7 +183,7 @@ export function processRelationTags(relation, label) {
     relationCache.set(cacheKey, result);
     enforceCacheSizeLimit('relationCache');
     return result;
-  } catch (_error) {
+  } catch {
     try {
       return normalizeRelationArray(relation, label);
     } catch {
@@ -195,7 +195,7 @@ export function processRelationTags(relation, label) {
 function clearRelationCache() {
   try {
     relationCache.clear();
-  } catch (_error) {
+  } catch {
     /* ignore */
   }
 }
@@ -243,16 +243,13 @@ export const extractRadarChartData = (nodeId, relations, elements, maxDisplay = 
         (el) => isGraphNodeElement(el) && String(el.data.id) === connectedNodeId
       );
       if (connectedNode && Number.isFinite(positivity)) {
-        const fullName =
+        const name =
           connectedNode.data.label || connectedNode.data.common_name || `인물 ${connectedNodeId}`;
         radarDataMap.set(connectedNodeId, {
-          name: fullName,
-          fullName,
+          name,
           positivity,
           normalizedValue: normalizePositivity(positivity),
-          relationCount: rel.count || 0,
           relationTags: rel.relation || [],
-          connectedNodeId,
         });
       }
     }
@@ -266,23 +263,10 @@ export const extractRadarChartData = (nodeId, relations, elements, maxDisplay = 
 export const getConnectionStatus = (radarData) => {
   const connectionCount = radarData.length;
   if (connectionCount === 0) {
-    return {
-      status: 'no_connections',
-      message: '연결된 인물이 없습니다.',
-      suggestion: '다른 인물을 선택하거나 다른 챕터를 확인해보세요.',
-    };
+    return { status: 'no_connections' };
   }
   if (connectionCount <= 2) {
-    return {
-      status: 'few_connections',
-      message: `연결된 인물이 ${connectionCount}명입니다.`,
-      suggestion: '관계가 적은 인물입니다. 다른 인물을 선택하거나 다른 챕터를 확인해보세요.',
-      connectionCount,
-    };
+    return { status: 'few_connections' };
   }
-  return {
-    status: 'sufficient_connections',
-    message: `연결된 인물이 ${connectionCount}명입니다.`,
-    connectionCount,
-  };
+  return { status: 'sufficient_connections' };
 };

@@ -1,9 +1,18 @@
-import React from 'react';
+import { useEffect } from 'react';
 import { Navigate, Outlet } from 'react-router-dom';
+import { useQueryClient } from '@tanstack/react-query';
 import useAuth from '../../hooks/auth/useAuth';
+import { prefetchBooks } from '../../hooks/books/bookHooks';
 
-const ProtectedRoute = ({ children }) => {
+const ProtectedRoute = () => {
   const { isAuthenticated, isLoading } = useAuth();
+  const queryClient = useQueryClient();
+  const ready = !isLoading && isAuthenticated();
+
+  useEffect(() => {
+    if (!ready) return;
+    void prefetchBooks(queryClient);
+  }, [ready, queryClient]);
 
   if (isLoading) {
     return (
@@ -17,11 +26,11 @@ const ProtectedRoute = ({ children }) => {
     );
   }
 
-  if (!isAuthenticated()) {
+  if (!ready) {
     return <Navigate to="/" replace />;
   }
 
-  return children ?? <Outlet />;
+  return <Outlet />;
 };
 
 export default ProtectedRoute;

@@ -1,5 +1,7 @@
-import React, { useState, useEffect, useMemo, useCallback, memo } from 'react';
+import { useState, useEffect, useMemo, useCallback, memo } from 'react';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
+import { findViewerModeOption } from '../../utils/common/settingsUtils';
+import { userViewerPath, userGraphPath } from '../../utils/navigation/viewerPaths';
 import './ui/ViewerToolbar.css';
 
 const progressBarColor = '#5C6F5C';
@@ -165,7 +167,6 @@ function ViewerToolbar({
   onOpenSettings,
   onToggleGraph,
   showGraph,
-  pageMode,
   isFromLibrary = false,
   previousPage = null,
   onExitToMypage,
@@ -184,12 +185,8 @@ function ViewerToolbar({
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
 
-  const viewModeText = useMemo(() => {
-    if (pageMode === 'single') {
-      return showGraph ? '단일 뷰어&그래프 모드' : '단일 뷰어모드';
-    }
-    return '분할 뷰어모드';
-  }, [pageMode, showGraph]);
+  const viewMode = useMemo(() => findViewerModeOption(showGraph), [showGraph]);
+
 
   const handleGraphClick = useCallback(() => {
     const bookData =
@@ -203,13 +200,13 @@ function ViewerToolbar({
         filename: bookId,
       };
 
-    const currentPathname = location.pathname || `/user/viewer/${bookId}`;
+    const currentPathname = location.pathname || userViewerPath(bookId);
     const previousLocation = previousPage || {
       pathname: currentPathname,
       search: '',
     };
 
-    navigate(`/user/graph/${bookId}`, {
+    navigate(userGraphPath(bookId), {
       state: {
         book: bookData,
         selectedChapter: Number(currentChapter) || 1,
@@ -284,7 +281,7 @@ function ViewerToolbar({
             </button>
           </div>
           <div className="flex-1 text-center">
-            <span className="text-xs text-gray-600 font-medium">{viewModeText}</span>
+            <span className="text-xs text-gray-600 font-medium">{viewMode.label}</span>
           </div>
           <button type="button" onClick={toggleMobileMenu} className="p-2 rounded-lg transition-colors" style={TOOLBAR_BTN} onMouseOver={onBtnOver} onMouseOut={onBtnOut} title="메뉴">
             <span className="material-symbols-outlined">menu</span>
@@ -314,7 +311,7 @@ function ViewerToolbar({
                   북마크
                 </span>
               </button>
-              <button type="button" onClick={onToggleBookmarkList} className="xhtml-toolbar-btn" aria-label="북마크 목록" title="북마크 목록 보기/숨기기" style={{ ...TOOLBAR_BTN, width: '9rem' }} onMouseOver={onBtnOver} onMouseOut={onBtnOut}>
+              <button type="button" onClick={onToggleBookmarkList} className="xhtml-toolbar-btn" aria-label="북마크 목록" title="북마크 목록 열기" style={{ ...TOOLBAR_BTN, width: '9rem' }} onMouseOver={onBtnOver} onMouseOut={onBtnOut}>
                 <span style={flexLabelCenter}>
                   <span className="material-symbols-outlined" style={iconMb}>bookmarks</span>
                   북마크 목록
@@ -347,13 +344,11 @@ function ViewerToolbar({
                   <span style={{ fontWeight: '600' }}>화면 모드</span>
                 </span>
               </button>
-              <div className="current-view-mode" title={viewModeText} style={viewModeBadgeStyle}>
-                {pageMode === 'single' ? (
-                  <span className="material-symbols-outlined" style={{ ...iconMb, fontWeight: 'bold' }}>view_column</span>
-                ) : (
-                  <span className="material-symbols-outlined" style={{ ...iconMb, fontWeight: 'bold' }}>view_column_2</span>
-                )}
-                <span style={{ fontWeight: '600' }}>{viewModeText}</span>
+              <div className="current-view-mode" title={viewMode.label} style={viewModeBadgeStyle}>
+                <span className="material-symbols-outlined" style={{ ...iconMb, fontWeight: 'bold' }}>
+                  {viewMode.icon}
+                </span>
+                <span style={{ fontWeight: '600' }}>{viewMode.label}</span>
               </div>
             </div>
           </div>
@@ -389,7 +384,7 @@ function ViewerToolbar({
       )}
 
       {showMobileMenu && (
-        <div className="absolute top-full left-0 right-0 bg-white border-t border-gray-200 shadow-lg z-50 animate-slide-up">
+        <div className="absolute top-full left-0 right-0 bg-white border-t border-gray-200 shadow-lg z-50">
           <div className="p-4 grid grid-cols-2 gap-3">
             <button type="button" onClick={onAddBookmark} className={mobileMenuClass} style={TOOLBAR_BTN} onMouseOver={onBtnOver} onMouseOut={onBtnOut} title={isBookmarked ? '현재 위치 북마크 제거' : '현재 위치에 북마크 추가'}>
               <span className="material-symbols-outlined">{isBookmarked ? 'bookmark' : 'bookmark_add'}</span>
@@ -453,7 +448,6 @@ function ViewerLayout({
   showGraph,
   onToggleGraph,
   rightSideContent,
-  pageMode,
   graphFullScreen,
   isFromLibrary = false,
   previousPage = null,
@@ -467,7 +461,7 @@ function ViewerLayout({
     return () => {
       window.clearTimeout(resizeEvent);
     };
-  }, [showGraph, graphFullScreen, pageMode]);
+  }, [showGraph, graphFullScreen]);
 
   const chromeHiddenStyle = {
     opacity: graphFullScreen ? 0 : 1,
@@ -490,8 +484,6 @@ function ViewerLayout({
           onOpenSettings={onOpenSettings}
           onToggleGraph={onToggleGraph}
           showGraph={showGraph}
-          graphFullScreen={graphFullScreen}
-          pageMode={pageMode}
           isFromLibrary={isFromLibrary}
           previousPage={previousPage}
           onExitToMypage={onExitToMypage}

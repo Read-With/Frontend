@@ -1,4 +1,4 @@
-import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import PropTypes from 'prop-types';
 import CytoscapeGraphUnified from './CytoscapeGraphUnified';
 import UnifiedNodeInfo from './tooltip/UnifiedNodeInfo';
@@ -429,4 +429,4 @@ GraphCanvas.propTypes = {
   graphClearRef: PropTypes.object,
 };
 
-export default React.memo(GraphCanvas);
+export default memo(GraphCanvas);
