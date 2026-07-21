@@ -221,6 +221,7 @@ const AdminPage = () => {
   const [selectedLogPayload, setSelectedLogPayload] = useState(null);
   const [imageGenerationStatus, setImageGenerationStatus] = useState(null);
   const [isGeneratingReference, setIsGeneratingReference] = useState(false);
+  const [isSelectingReference, setIsSelectingReference] = useState(false);
 
   // 공통 API 호출 함수
   const handleApiCall = async (apiFunction, updateState = null) => {
@@ -345,6 +346,30 @@ const AdminPage = () => {
         console.error(e);
     } finally {
         setIsGeneratingReference(false);
+    }
+  };
+
+  const selectReferenceCandidate = async (candidateId) => {
+    if (!selectedBook) return;
+
+    const confirmed = window.confirm(
+        "이 후보 이미지를 대표 이미지로 선택하시겠습니까?\n\n선택 후 나머지 캐릭터 이미지 생성(Batch fan-out)이 시작됩니다."
+    );
+
+    if (!confirmed) return;
+
+    try {
+        setIsSelectingReference(true);
+        const result = await apiClient.post(
+            `/image-generation/books/${selectedBook.id}/reference-candidates/${candidateId}/select`
+        );
+        if (result.data?.isSuccess) {
+            setImageGenerationStatus(result.data.result);
+        }
+    } catch (e) {
+        console.error(e);
+    } finally {
+        setIsSelectingReference(false);
     }
   };
 
@@ -717,7 +742,7 @@ const AdminPage = () => {
               {imageGenerationStatus.referenceCandidates.map(candidate => (
                 <div
                   key={candidate.id}
-                  className={`rounded-lg border overflow-hidden bg-white ${
+                  className={`rounded-lg border overflow-hidden bg-white transition cursor-pointer hover:shadow-md ${
                     candidate.id === imageGenerationStatus.selectedReferenceCandidateId
                       ? "border-indigo-500 ring-2 ring-indigo-200"
                       : "border-gray-200"
@@ -728,7 +753,11 @@ const AdminPage = () => {
                       <img
                         src={candidate.imageUrl}
                         alt={`slot-${candidate.slotNo}`}
-                        className="w-full h-full object-cover"
+                        className="w-full h-full object-cover cursor-zoom-in"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setZoomedImage(candidate.imageUrl);
+                        }}
                       />
                     ) : (
                       <div className="w-full h-full flex items-center justify-center text-xs text-gray-400">
@@ -748,6 +777,29 @@ const AdminPage = () => {
                         {candidate.failureCode}
                       </div>
                     )}
+                  </div>
+                  <div className="mt-3">
+                    <button
+                      onClick={() => selectReferenceCandidate(candidate.id)}
+                      disabled={
+                        isSelectingReference ||
+                        candidate.id === imageGenerationStatus.selectedReferenceCandidateId ||
+                        candidate.status === "FAILED"
+                      }
+                      className={`w-full rounded-md px-3 py-2 text-sm font-medium transition ${
+                        candidate.id === imageGenerationStatus.selectedReferenceCandidateId
+                          ? "bg-gray-300 text-gray-600 cursor-not-allowed"
+                          : candidate.status === "FAILED"
+                          ? "bg-red-100 text-red-500 cursor-not-allowed"
+                          : "bg-indigo-600 text-white hover:bg-indigo-700"
+                      }`}
+                    >
+                      {candidate.id === imageGenerationStatus.selectedReferenceCandidateId
+                        ? "선택됨"
+                        : candidate.status === "FAILED"
+                        ? "선택 불가"
+                        : "대표사진 선택"}
+                    </button>
                   </div>
                 </div>
               ))}
