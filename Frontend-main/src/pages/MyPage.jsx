@@ -1,7 +1,6 @@
 import { useState, useMemo, useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Book, Plus, Library, Heart, AlertCircle, Grid3X3, List, Upload } from 'lucide-react';
-import Header from '../components/common/Header';
+import { Book, Plus, Library, Heart, AlertCircle, Grid3X3, List, Upload, LogOut } from 'lucide-react';
 import BookLibrary from '../components/library/BookLibrary';
 import FileUpload from '../components/library/FileUpload';
 import { useBooks } from '../hooks/books/bookHooks';
@@ -19,6 +18,102 @@ const SORT_OPTIONS = [
   { value: 'progress', label: '진행률 높은 순' },
   { value: 'lastRead', label: '최근 읽은 순' },
 ];
+
+function resolveHeaderDisplayName(userNickname, user) {
+  if (userNickname) return userNickname;
+  if (user?.name) return user.name;
+  return 'User';
+}
+
+function HeaderBrand({ userName = null }) {
+  return (
+    <div className="header-brand">
+      <div className="header-brand-icon" aria-hidden>
+        📖
+      </div>
+      <span className="header-brand-text" lang="en">ReadWith</span>
+      {userName != null && (
+        <>
+          <span className="header-brand-separator">:</span>
+          <span className="header-user-name">{userName}</span>
+        </>
+      )}
+    </div>
+  );
+}
+
+function LogoutConfirmDialog({ open, onConfirm, onCancel }) {
+  useEffect(() => {
+    if (!open) return undefined;
+
+    const handleEscape = (event) => {
+      if (event.key === 'Escape') {
+        onCancel();
+      }
+    };
+
+    document.addEventListener('keydown', handleEscape);
+    document.body.style.overflow = 'hidden';
+
+    return () => {
+      document.removeEventListener('keydown', handleEscape);
+      document.body.style.overflow = 'unset';
+    };
+  }, [open, onCancel]);
+
+  if (!open) return null;
+
+  return (
+    <div className="logout-confirm-overlay" onClick={onCancel}>
+      <div className="logout-confirm-dialog" onClick={(event) => event.stopPropagation()}>
+        <h3 className="logout-confirm-title">로그아웃</h3>
+        <p className="logout-confirm-message">정말 로그아웃 하시겠습니까?</p>
+        <div className="logout-confirm-buttons">
+          <button type="button" className="logout-confirm-cancel" onClick={onCancel}>
+            취소
+          </button>
+          <button type="button" className="logout-confirm-logout" onClick={onConfirm}>
+            로그아웃
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Header({ userNickname }) {
+  const navigate = useNavigate();
+  const { user, logout } = useAuth();
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+  const displayName = resolveHeaderDisplayName(userNickname, user);
+
+  const handleLogoutConfirm = async () => {
+    await logout();
+    setShowLogoutConfirm(false);
+    navigate('/');
+  };
+
+  return (
+    <div className="user-topbar">
+      <div className="user-topbar-left">
+        <HeaderBrand userName={displayName} />
+      </div>
+
+      <div className="user-topbar-right">
+        <button type="button" className="user-topbar-logout" onClick={() => setShowLogoutConfirm(true)}>
+          <LogOut size={16} strokeWidth={2} />
+          <span>Logout</span>
+        </button>
+      </div>
+
+      <LogoutConfirmDialog
+        open={showLogoutConfirm}
+        onConfirm={handleLogoutConfirm}
+        onCancel={() => setShowLogoutConfirm(false)}
+      />
+    </div>
+  );
+}
 
 function compareBooks(a, b, sortBy) {
   switch (sortBy) {

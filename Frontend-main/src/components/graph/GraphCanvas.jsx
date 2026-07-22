@@ -1,8 +1,8 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import PropTypes from 'prop-types';
 import CytoscapeGraphUnified from './CytoscapeGraphUnified';
-import UnifiedNodeInfo from './tooltip/UnifiedNodeInfo';
-import UnifiedEdgeTooltip from './tooltip/UnifiedEdgeTooltip';
+import UnifiedNodeInfo from './UnifiedNodeInfo';
+import UnifiedEdgeTooltip from './UnifiedEdgeTooltip';
 import { graphStyles, COLORS, ANIMATION_VALUES } from '../../utils/styles/styles.js';
 import { GRAPH_LAYOUT_CONSTANTS, resolveChapterSidebarWidth } from '../../utils/graph/graphCore.js';
 

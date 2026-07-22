@@ -5,8 +5,7 @@ import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { useServerBookMatching } from '../books/bookHooks';
 import { useViewerProgress, useProgressAutoSave } from './useViewerProgress';
-import { useViewerGraphState } from './useViewerGraphState';
-import { useViewerGraphPipeline } from './useViewerGraphPipeline';
+import { useViewerGraphState, useViewerGraphPipeline } from './useViewerGraph';
 import { useManifestLoaded, resolveServerBookIdOrFallback } from '../common/hooksShared';
 import { bookUtils, resolveViewerBookKey } from '../../utils/viewer/viewerCore';
 import {

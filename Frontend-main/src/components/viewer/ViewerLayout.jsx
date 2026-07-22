@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, useCallback, memo } from 'react';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import { findViewerModeOption } from '../../utils/viewer/viewerSession';
 import { userViewerPath, userGraphPath } from '../../utils/common/urlUtils';
-import './ui/ViewerToolbar.css';
+import './ViewerToolbar.css';
 
 const PROGRESS_BAR_COLOR = '#5C6F5C';
 const PROGRESS_BAR_BG = '#e7eaf7';

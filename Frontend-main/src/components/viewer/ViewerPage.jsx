@@ -1,8 +1,8 @@
 import { useRef, useEffect, useCallback, useMemo, useState } from 'react';
 import { toast } from 'react-toastify';
 import ViewerLayout from './ViewerLayout';
-import XhtmlViewer from './xhtml/XhtmlViewer';
-import ViewerSettings from './ui/ViewerSettings';
+import XhtmlViewer from './XhtmlViewer';
+import ViewerSettings from './ViewerSettings';
 import { useViewerPage } from '../../hooks/viewer/useViewerPage';
 import { useTooltipState } from '../../hooks/ui/tooltipHooks';
 import { anchorToLocators, resolveChapterIndex } from '../../utils/common/valueUtils';

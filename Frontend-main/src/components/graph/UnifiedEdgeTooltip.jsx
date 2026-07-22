@@ -1,16 +1,18 @@
 import { memo, useState, useEffect, useMemo } from "react";
 import {ResponsiveContainer, LineChart, CartesianGrid, ReferenceLine, Tooltip as RechartsTooltip, Line, XAxis, YAxis,} from "recharts";
 import { useParams } from "react-router-dom";
-import { useTooltipPosition, useClickOutside, TooltipGraphZoomControls } from "../../../hooks/ui/tooltipHooks";
-import { useRelationData } from "../../../hooks/graph/useApiGraphData";
-import { getRelationStyle, tooltipStyles } from "../../../utils/styles/relationStyles";
-import { clampPositivity } from "../../../utils/styles/graphStyles";
-import { COLORS, ANIMATION_VALUES, mergeRefs } from "../../../utils/styles/styles";
-import { toFiniteNumber, toPositiveNumberOrNull } from "../../../utils/common/valueUtils";
-import { processRelationTags, cleanupRelationUtils } from "../../../utils/graph/graphCore";
-import { resolveEventOrdinalForDisplay } from "../../../utils/viewer/viewerSession";
-import { isLongEdgeTimeline, annotateSignificantEdgePoints, getSparseEdgeTickValues, formatEdgeTimelineDisplayLabel } from "../../../utils/graph/graphCy";
-import './tooltip.css';
+import { useTooltipPosition, useClickOutside, TooltipGraphZoomControls } from "../../hooks/ui/tooltipHooks";
+import { useRelationData } from "../../hooks/graph/useApiGraphData";
+import { getRelationStyle, tooltipStyles } from "../../utils/styles/relationStyles";
+import { clampPositivity } from "../../utils/styles/graphStyles";
+import { COLORS, ANIMATION_VALUES, mergeRefs } from "../../utils/styles/styles";
+import { toFiniteNumber, toPositiveNumberOrNull } from "../../utils/common/valueUtils";
+import { processRelationTags, cleanupRelationUtils } from "../../utils/graph/graphCore";
+import { resolveEventOrdinalForDisplay } from "../../utils/viewer/viewerSession";
+import { isLongEdgeTimeline, annotateSignificantEdgePoints, getSparseEdgeTickValues, formatEdgeTimelineDisplayLabel } from "../../utils/graph/graphCy";
+import './RelationGraph.css';
+
+const NO_RELATION_MESSAGE = '이 위치에서는 표시할 관계가 없습니다.';
 
 function extractNumericLabel(label) {
   if (typeof label === 'number' && Number.isFinite(label)) {

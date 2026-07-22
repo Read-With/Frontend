@@ -1,4 +1,4 @@
-/** 뷰어 그래프: 챕터 이벤트 discovery·캐시 기반 로드 */
+/** 뷰어 그래프: UI 상태·검색·mode persist + 챕터 이벤트 discovery·캐시 로드 */
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { getGraphEventState } from '../../utils/graph/graphModel';
@@ -9,11 +9,17 @@ import {
   clearBookRelationshipDeltas,
 } from '../../utils/graph/graphFetch';
 import { errorUtils } from '../../utils/common/urlUtils';
-import { cacheKeyUtils, eventUtils } from '../../utils/viewer/viewerCore';
+import { cacheKeyUtils, deriveGraphPhase, eventUtils } from '../../utils/viewer/viewerCore';
 import {
+  saveViewerMode,
+  resolveInitialGraphFullScreen,
+  resolvePersistedViewerMode,
+  isHardNavigationReload,
+  eventMatchesChapter,
   buildViewerActionError,
 } from '../../utils/viewer/viewerSession';
 import {
+  buildChapterCharacterSearchData,
   commitVisibleGraphElements,
   fallbackEventMeta,
   getCachedGraphSnapshot,
@@ -29,7 +35,156 @@ import {
   clearViewerGraphPipelineMaps,
   resolvePipelineBookId,
 } from '../../utils/viewer/viewerGraph';
+import { useGraphSearch, useGraphDisplayToggles } from '../graph/useGraphViewState';
 import { useAsyncRequestGuard } from '../common/hooksShared';
+
+const { HARD_RELOAD_SETTLE_MS } = VIEWER_GRAPH_PIPELINE;
+
+export function useViewerGraphState({
+  currentChapter,
+  bookKey,
+  showGraph,
+}) {
+  const [currentEvent, setCurrentEvent] = useState(null);
+  const [events, setEvents] = useState([]);
+  const [prevValidEvent, setPrevValidEvent] = useState(null);
+  const [graphFullScreen, setGraphFullScreen] = useState(() =>
+    resolveInitialGraphFullScreen(showGraph),
+  );
+  const [isDataReady, setIsDataReady] = useState(false);
+  const {
+    edgeLabelVisible,
+    setEdgeLabelVisible,
+    filterStage,
+    setFilterStage,
+  } = useGraphDisplayToggles();
+  const [isReloading, setIsReloading] = useState(false);
+  const [isGraphLoading, setIsGraphLoading] = useState(true);
+  const [isEventGraphLoading, setEventGraphLoading] = useState(false);
+  const [elements, setElements] = useState([]);
+  const [isDataEmpty, setIsDataEmpty] = useState(false);
+
+  const currentChapterData = useMemo(
+    () => buildChapterCharacterSearchData(events, currentChapter),
+    [events, currentChapter],
+  );
+
+  const graphPhase = useMemo(
+    () => deriveGraphPhase({ isReloading, isEventGraphLoading, isGraphLoading }),
+    [isReloading, isEventGraphLoading, isGraphLoading],
+  );
+
+  const { searchState, searchActions } = useGraphSearch(elements, currentChapterData);
+
+  useEffect(() => {
+    saveViewerMode(resolvePersistedViewerMode(graphFullScreen, showGraph));
+  }, [showGraph, graphFullScreen]);
+
+  useEffect(() => {
+    if (!showGraph && graphFullScreen) setGraphFullScreen(false);
+  }, [showGraph, graphFullScreen]);
+
+  useEffect(() => {
+    if (!currentEvent) return;
+    if (eventMatchesChapter(currentEvent, currentChapter)) {
+      setPrevValidEvent(currentEvent);
+      return;
+    }
+    setCurrentEvent(null);
+    setPrevValidEvent(null);
+  }, [currentChapter, currentEvent]);
+
+  const resetGraphPipelineState = useCallback(() => {
+    setEvents([]);
+    setElements([]);
+    setIsDataEmpty(true);
+    setIsDataReady(false);
+    setIsGraphLoading(true);
+  }, []);
+
+  const resetGraphTransientState = useCallback(() => {
+    setCurrentEvent(null);
+    setPrevValidEvent(null);
+    resetGraphPipelineState();
+  }, [resetGraphPipelineState]);
+
+  // 책 변경만 hard reset. 챕터 전환은 이전 그래프를 유지(stale-while-revalidate)
+  useEffect(() => {
+    resetGraphPipelineState();
+  }, [bookKey, resetGraphPipelineState]);
+
+  // 챕터 전환: 빈 화면/로딩 강제 대신 ready만 내려 파이프라인이 교체
+  useEffect(() => {
+    setIsDataReady(false);
+  }, [currentChapter]);
+
+  useEffect(() => {
+    if (!isHardNavigationReload()) return undefined;
+
+    setIsReloading(true);
+    resetGraphTransientState();
+    setGraphFullScreen(resolveInitialGraphFullScreen());
+
+    const timer = setTimeout(() => {
+      setIsReloading(false);
+      setIsGraphLoading(false);
+    }, HARD_RELOAD_SETTLE_MS);
+
+    return () => clearTimeout(timer);
+  }, [resetGraphTransientState]);
+
+  const graphState = useMemo(
+    () => ({
+      currentChapter,
+      currentEvent,
+      prevValidEvent,
+      elements,
+      edgeLabelVisible,
+      graphFullScreen,
+      showGraph: Boolean(showGraph),
+    }),
+    [
+      currentChapter,
+      currentEvent,
+      prevValidEvent,
+      elements,
+      edgeLabelVisible,
+      graphFullScreen,
+      showGraph,
+    ],
+  );
+
+  const graphActions = useMemo(
+    () => ({
+      setGraphFullScreen,
+      setEdgeLabelVisible,
+      setIsDataEmpty,
+      filterStage,
+      setFilterStage,
+    }),
+    [filterStage],
+  );
+
+  const graphViewerState = useMemo(
+    () => ({ graphPhase, isDataReady, isDataEmpty }),
+    [graphPhase, isDataReady, isDataEmpty],
+  );
+
+  return {
+    currentEvent,
+    setCurrentEvent,
+    setEvents,
+    setElements,
+    setIsDataReady,
+    setIsGraphLoading,
+    setEventGraphLoading,
+    graphState,
+    graphActions,
+    graphViewerState,
+    searchState,
+    searchActions,
+  };
+}
 
 const LOG_PREFIX = '[useViewerGraphPipeline]';
 const {

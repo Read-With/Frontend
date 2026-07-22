@@ -2,12 +2,25 @@ import { useState, useEffect, useCallback, memo } from 'react';
 import PropTypes from 'prop-types';
 import { useNavigate } from 'react-router-dom';
 import { Heart, BookOpen, Network, MoreVertical, Info, Clock, FileText, Trash2, X } from 'lucide-react';
-import BookDetailModal from './BookDetailModal';
-import AuthenticatedImage from './AuthenticatedImage';
+import BookDetailModal, { AuthenticatedImage } from './BookDetailModal';
 import './BookLibrary.css';
 import { ensureGraphBookCache } from '../../utils/graph/graphFetch';
 import { USER_VIEWER_PREFIX, USER_GRAPH_PREFIX } from '../../utils/common/urlUtils';
-import { formatLibraryRelativeDate } from '../../utils/library/libraryUtils';
+import {
+  formatLibraryRelativeDate,
+  attachLibraryModalChrome,
+  makeOpeningTargetKey,
+  getOpeningMode,
+} from '../../utils/library/libraryUtils';
+
+const COVER_PLACEHOLDER_SVG = (
+  <svg width="100%" height="100%" viewBox="0 0 120 180" fill="none">
+    <rect x="15" y="24" width="90" height="132" rx="8" fill="#b0b8c1" />
+    <rect x="27" y="42" width="66" height="96" rx="6" fill="#e8f5e8" />
+    <rect x="33" y="54" width="54" height="9" rx="4" fill="#b0b8c1" />
+    <rect x="33" y="72" width="39" height="9" rx="4" fill="#b0b8c1" />
+  </svg>
+);
 
 const getNumericBookId = (book) => {
   const bookId = Number(book?.id);
@@ -43,21 +56,8 @@ async function openBookFromLibrary(navigate, book, graphMode) {
 
 const DeleteConfirmModal = ({ isOpen, onClose, onConfirm }) => {
   useEffect(() => {
-    if (!isOpen) return;
-
-    const handleEscape = (e) => {
-      if (e.key === 'Escape') {
-        onClose();
-      }
-    };
-
-    document.addEventListener('keydown', handleEscape);
-    document.body.style.overflow = 'hidden';
-
-    return () => {
-      document.removeEventListener('keydown', handleEscape);
-      document.body.style.overflow = 'unset';
-    };
+    if (!isOpen) return undefined;
+    return attachLibraryModalChrome({ onClose });
   }, [isOpen, onClose]);
 
   if (!isOpen) return null;
@@ -190,12 +190,7 @@ const BookCard = memo(({ book, onToggleFavorite, onOpenBook, onBookDetailClick, 
     
     return (
       <div className="book-image-placeholder">
-        <svg width="100%" height="100%" viewBox="0 0 120 180" fill="none">
-          <rect x="15" y="24" width="90" height="132" rx="8" fill="#b0b8c1" />
-          <rect x="27" y="42" width="66" height="96" rx="6" fill="#e8f5e8" />
-          <rect x="33" y="54" width="54" height="9" rx="4" fill="#b0b8c1" />
-          <rect x="33" y="72" width="39" height="9" rx="4" fill="#b0b8c1" />
-        </svg>
+        {COVER_PLACEHOLDER_SVG}
       </div>
     );
   };
@@ -360,6 +355,7 @@ const BookLibrary = memo(({ books, onToggleFavorite, onBookDelete, viewMode = 'g
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [deleteTargetBook, setDeleteTargetBook] = useState(null);
   const [openingTarget, setOpeningTarget] = useState(null);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
 
   useEffect(() => {
     if (!selectedBook?.id) return;
@@ -368,7 +364,6 @@ const BookLibrary = memo(({ books, onToggleFavorite, onBookDelete, viewMode = 'g
       setSelectedBook(next);
     }
   }, [books, selectedBook]);
-  const [showDeleteModal, setShowDeleteModal] = useState(false);
 
   useEffect(() => {
     if (!Array.isArray(books) || books.length === 0) {
@@ -399,7 +394,7 @@ const BookLibrary = memo(({ books, onToggleFavorite, onBookDelete, viewMode = 'g
   const handleOpenBook = useCallback(
     async (book, graphMode) => {
       const bookId = getNumericBookId(book);
-      const targetKey = bookId ? `${bookId}:${graphMode}` : null;
+      const targetKey = makeOpeningTargetKey(bookId, graphMode);
       if (targetKey && openingTarget === targetKey) return;
 
       setOpeningTarget(targetKey);
@@ -473,11 +468,7 @@ const BookLibrary = memo(({ books, onToggleFavorite, onBookDelete, viewMode = 'g
           onBookDetailClick={handleBookDetailClick}
           onShowDeleteModal={handleShowDeleteModal}
           viewMode={viewMode}
-          openingMode={openingTarget === `${Number(book.id)}:viewer`
-            ? 'viewer'
-            : openingTarget === `${Number(book.id)}:graph`
-              ? 'graph'
-              : null}
+          openingMode={getOpeningMode(openingTarget, book.id)}
         />
       ))}
       

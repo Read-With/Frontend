@@ -9,18 +9,18 @@ import {
   useMemo,
 } from 'react';
 import { flushSync } from 'react-dom';
-import { errorUtils } from '../../../utils/common/urlUtils';
+import { errorUtils } from '../../utils/common/urlUtils';
 import {
   absoluteOffsetFromReadingProgressPercent,
   locatorFromBookAbsoluteOffset,
   getManifestFromCache,
-} from '../../../utils/common/cache/manifestCache';
+} from '../../utils/common/cache/manifestCache';
 import {
   toReadingLocatorKey,
   defaultSettings,
-} from '../../../utils/viewer/viewerSession';
-import { resolveServerBookIdOrFallback } from '../../../hooks/common/hooksShared';
-import { resolveViewerBookKey } from '../../../utils/viewer/viewerCore';
+} from '../../utils/viewer/viewerSession';
+import { resolveServerBookIdOrFallback } from '../../hooks/common/hooksShared';
+import { resolveViewerBookKey } from '../../utils/viewer/viewerCore';
 import {
   collectBlockEntries,
   computeLineBoundsFromRuler,
@@ -32,7 +32,7 @@ import {
   resolveViewportLocatorEmit,
   loadCachedXhtmlContent,
   XHTML_CACHE_INVALIDATED_EVENT,
-} from '../../../utils/viewer/viewerLocator';
+} from '../../utils/viewer/viewerLocator';
 
 const XhtmlViewer = forwardRef(
   (
