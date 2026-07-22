@@ -56,15 +56,15 @@ code {
 
 /* 폰트 로드 완료 시 표시 */
 html.fonts-loaded .material-symbols-outlined {
-  font-size: 24px;
+  font-size: 1.5rem;
   opacity: 1;
 }
 
 /* react-toastify — ViewerSettings 등 브랜드(#5C6F5C)에 맞춤 */
 .Toastify__toast-container {
   z-index: 10050;
-  width: min(420px, calc(100vw - 32px));
-  padding: 0 16px 20px;
+  width: min(26.25rem, calc(100vw - 2rem));
+  padding: 0 1rem 1.25rem;
 }
 
 .Toastify__toast {
@@ -74,12 +74,12 @@ html.fonts-loaded .material-symbols-outlined {
   line-height: 1.45;
   color: #2f3b2f;
   background: #fff;
-  border: 1px solid #d7e0d7;
-  border-radius: 12px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.12);
-  min-height: 48px;
-  padding: 12px 14px;
-  margin-bottom: 10px;
+  border: 0.0625rem solid #d7e0d7;
+  border-radius: 0.75rem;
+  box-shadow: 0 0.25rem 1.25rem rgba(0, 0, 0, 0.12);
+  min-height: 3rem;
+  padding: 0.75rem 0.875rem;
+  margin-bottom: 0.625rem;
 }
 
 .Toastify__toast-body {
@@ -90,7 +90,7 @@ html.fonts-loaded .material-symbols-outlined {
 
 .Toastify__toast-icon {
   width: 1.25rem;
-  margin-inline-end: 10px;
+  margin-inline-end: 0.625rem;
 }
 
 .Toastify__close-button {

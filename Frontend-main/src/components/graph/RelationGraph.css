@@ -44,50 +44,50 @@
   left: 50%;
   transform: translate(-50%, -50%);
   background: rgba(255, 255, 255, 0.95);
-  padding: 20px 30px;
-  border-radius: 12px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
-  border: 1px solid #e3e6ef;
+  padding: 1.25rem 1.875rem;
+  border-radius: 0.75rem;
+  box-shadow: 0 0.25rem 1.25rem rgba(0, 0, 0, 0.1);
+  border: 0.0625rem solid #e3e6ef;
   z-index: 1000;
   text-align: center;
-  max-width: 300px;
+  max-width: 18.75rem;
 }
 
 .graph-no-results-title {
-  font-size: 18px;
+  font-size: 1.125rem;
   font-weight: 600;
   color: #64748b;
-  margin-bottom: 8px;
+  margin-bottom: 0.5rem;
 }
 
 .graph-no-results-description {
-  font-size: 14px;
+  font-size: 0.875rem;
   color: #94a3b8;
   line-height: 1.4;
 }
 
 .graph-zoom-controls {
   position: absolute;
-  top: 12px;
-  right: 12px;
+  top: 0.75rem;
+  right: 0.75rem;
   z-index: 20;
   display: flex;
-  gap: 4px;
+  gap: 0.25rem;
 }
 
 .graph-zoom-btn {
-  width: 32px;
-  height: 32px;
+  width: 2rem;
+  height: 2rem;
   padding: 0;
-  border: 1px solid #e3e6ef;
-  border-radius: 8px;
+  border: 0.0625rem solid #e3e6ef;
+  border-radius: 0.5rem;
   background: rgba(255, 255, 255, 0.95);
   color: #334155;
-  font-size: 18px;
+  font-size: 1.125rem;
   font-weight: 600;
   line-height: 1;
   cursor: pointer;
-  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.08);
+  box-shadow: 0 0.0625rem 0.25rem rgba(15, 23, 42, 0.08);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -109,23 +109,23 @@
   right: 2.75rem;
   z-index: 10;
   display: flex;
-  gap: 4px;
+  gap: 0.25rem;
 }
 
 .tooltip-graph-zoom-controls .graph-zoom-btn {
-  width: 28px;
-  height: 28px;
-  font-size: 16px;
-  border-radius: 7px;
+  width: 1.75rem;
+  height: 1.75rem;
+  font-size: 1rem;
+  border-radius: 0.4375rem;
 }
 
 /* Edge / Node floating tooltip chrome */
 .edge-tooltip-container,
 .graph-node-tooltip {
-  width: 420px;
-  max-width: 420px;
+  width: 26.25rem;
+  max-width: 26.25rem;
   height: auto;
-  max-height: 420px;
+  max-height: 26.25rem;
   background: #ffffff;
   border-radius: 0.9375rem;
   box-shadow: 0 0.5rem 1.5rem rgba(0, 0, 0, 0.15), 0 0.25rem 0.75rem rgba(0, 0, 0, 0.1);
@@ -155,7 +155,7 @@
 
 .graph-node-tooltip[style*="cursor: grabbing"],
 .edge-tooltip-container[style*="cursor: grabbing"] {
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+  box-shadow: 0 0.5rem 1.5rem rgba(0, 0, 0, 0.15);
   transform: scale(1.02);
   transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
@@ -164,11 +164,11 @@
   display: flex;
   flex-direction: column;
   width: 100%;
-  max-height: 420px;
+  max-height: 26.25rem;
 }
 
 .edge-tooltip-header {
-  padding: 18px 20px 12px;
+  padding: 1.125rem 1.25rem 0.75rem;
   background: #ffffff;
   flex-shrink: 0;
 }
@@ -176,22 +176,22 @@
 .edge-tooltip-endpoints {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-bottom: 12px;
-  padding-right: 32px;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+  padding-right: 2rem;
 }
 
 .edge-tooltip-endpoint {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 0.375rem;
   min-width: 0;
   flex: 1;
 }
 
 .edge-tooltip-endpoint-avatar {
-  width: 28px;
-  height: 28px;
+  width: 1.75rem;
+  height: 1.75rem;
   border-radius: 50%;
   object-fit: cover;
   background: #e5e7eb;
@@ -199,13 +199,13 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 11px;
+  font-size: 0.6875rem;
   font-weight: 600;
   color: #6b7280;
 }
 
 .edge-tooltip-endpoint-name {
-  font-size: 16px;
+  font-size: 1rem;
   font-weight: 700;
   color: #1f2937;
   white-space: nowrap;
@@ -216,7 +216,7 @@
 .edge-tooltip-endpoint-arrow {
   flex-shrink: 0;
   color: #6b7280;
-  font-size: 15px;
+  font-size: 0.9375rem;
   font-weight: 600;
 }
 
@@ -224,11 +224,11 @@
   width: 100%;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 0.75rem;
 }
 
 .edge-chart-title {
-  font-size: 15px;
+  font-size: 0.9375rem;
   font-weight: 700;
   color: #1f2937;
   text-align: center;
@@ -244,22 +244,22 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 6px;
-  min-height: 120px;
-  padding: 16px;
+  gap: 0.375rem;
+  min-height: 7.5rem;
+  padding: 1rem;
   text-align: center;
 }
 
 .edge-chart-empty-title {
   margin: 0;
-  font-size: 13px;
+  font-size: 0.8125rem;
   font-weight: 600;
   color: #64748b;
 }
 
 .edge-chart-empty-value {
   margin: 0;
-  font-size: 20px;
+  font-size: 1.25rem;
   font-weight: 700;
 }
 
@@ -267,21 +267,21 @@
   display: flex;
   position: relative;
   gap: 0;
-  border-bottom: 1px solid #e5e7eb;
-  margin: 0 20px;
+  border-bottom: 0.0625rem solid #e5e7eb;
+  margin: 0 1.25rem;
   flex-shrink: 0;
 }
 
 .edge-tooltip-tab {
   flex: 1;
-  padding: 8px 0;
+  padding: 0.5rem 0;
   border: none;
   background: transparent;
-  font-size: 13px;
+  font-size: 0.8125rem;
   font-weight: 500;
   color: #9ca3af;
   cursor: pointer;
-  border-bottom: 2px solid transparent;
+  border-bottom: 0.125rem solid transparent;
   transition: color 0.22s cubic-bezier(0.4, 0, 0.2, 1);
   z-index: 1;
 }
@@ -298,11 +298,11 @@
 .edge-tooltip-tab-indicator {
   position: absolute;
   left: 0;
-  bottom: -1px;
+  bottom: -0.0625rem;
   width: 50%;
-  height: 2px;
+  height: 0.125rem;
   background: #1f2937;
-  border-radius: 1px;
+  border-radius: 0.0625rem;
   transform: translateX(0);
   transition: transform 0.28s cubic-bezier(0.4, 0, 0.2, 1);
   pointer-events: none;
@@ -318,7 +318,7 @@
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  padding: 16px 20px 20px;
+  padding: 1rem 1.25rem 1.25rem;
 }
 
 .edge-tooltip-panel-swap {
@@ -328,7 +328,7 @@
 @keyframes edgeTooltipPanelIn {
   from {
     opacity: 0;
-    transform: translateY(6px);
+    transform: translateY(0.375rem);
   }
   to {
     opacity: 1;
@@ -337,21 +337,21 @@
 }
 
 .relation-weight {
-  margin-top: 8px;
+  margin-top: 0.5rem;
 }
 
 .positivity-track {
   width: 100%;
-  height: 8px;
-  border-radius: 4px;
+  height: 0.5rem;
+  border-radius: 0.25rem;
   background: #e5e7eb;
   overflow: hidden;
-  margin-top: 6px;
+  margin-top: 0.375rem;
 }
 
 .positivity-fill {
   height: 100%;
-  border-radius: 4px;
+  border-radius: 0.25rem;
   transition: width 0.2s ease;
 }
 
@@ -359,43 +359,43 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 8px;
+  gap: 0.5rem;
 }
 
 .weight-label {
-  font-size: 13px;
+  font-size: 0.8125rem;
   font-weight: 600;
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 0.375rem;
 }
 
 .weight-value {
-  font-size: 13px;
+  font-size: 0.8125rem;
   font-weight: 600;
   color: inherit;
 }
 
 .edge-tooltip-body {
   padding: 0;
-  margin-top: 10px;
+  margin-top: 0.625rem;
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  max-height: 160px;
+  max-height: 10rem;
 }
 
 .relation-tags {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
-  margin-bottom: 8px;
+  gap: 0.375rem;
+  margin-bottom: 0.5rem;
 }
 
 .relation-tag {
-  padding: 4px 10px;
-  border-radius: 6px;
-  font-size: 12px;
+  padding: 0.25rem 0.625rem;
+  border-radius: 0.375rem;
+  font-size: 0.75rem;
   font-weight: 500;
   background: #eef1f6;
   color: #42506b;
@@ -406,26 +406,26 @@
 .relation-explanation p,
 .explanation-text {
   margin: 0;
-  font-size: 13px;
+  font-size: 0.8125rem;
   line-height: 1.6;
   color: #4b5563;
   white-space: pre-wrap;
 }
 
 .explanation-text {
-  margin-top: 6px;
+  margin-top: 0.375rem;
 }
 
 .edge-tooltip-skeleton {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding: 8px 0;
+  gap: 0.5rem;
+  padding: 0.5rem 0;
 }
 
 .edge-tooltip-skeleton-line {
-  height: 10px;
-  border-radius: 4px;
+  height: 0.625rem;
+  border-radius: 0.25rem;
   background: linear-gradient(90deg, #f3f4f6 25%, #e5e7eb 50%, #f3f4f6 75%);
   background-size: 200% 100%;
   animation: edgeTooltipShimmer 1.2s ease-in-out infinite;
@@ -440,11 +440,11 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 10px;
-  padding: 28px 16px;
+  gap: 0.625rem;
+  padding: 1.75rem 1rem;
   text-align: center;
   color: #64748b;
-  font-size: 13px;
+  font-size: 0.8125rem;
   line-height: 1.5;
   word-break: keep-all;
 }
@@ -462,14 +462,14 @@
   right: 1rem;
   background: transparent;
   border: none;
-  border-radius: 4px;
-  width: 24px;
-  height: 24px;
+  border-radius: 0.25rem;
+  width: 1.5rem;
+  height: 1.5rem;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  font-size: 18px;
+  font-size: 1.125rem;
   color: #6b7280;
   transition: all 0.2s ease;
   z-index: 10;
@@ -485,17 +485,17 @@
 
 .quote-box {
   background-color: #f5f5f5;
-  border-left-width: 4px;
+  border-left-width: 0.25rem;
   border-left-style: solid;
-  padding: 10px 12px;
-  margin-bottom: 8px;
-  border-radius: 4px;
+  padding: 0.625rem 0.75rem;
+  margin-bottom: 0.5rem;
+  border-radius: 0.25rem;
 }
 
 .ripple-effect {
   position: absolute;
-  width: 100px;
-  height: 100px;
+  width: 6.25rem;
+  height: 6.25rem;
   pointer-events: none;
   overflow: visible;
 }
@@ -512,7 +512,7 @@
   transform: translate(-50%, -50%);
   opacity: 0.6;
   animation: ripple 0.5s ease-out;
-  box-shadow: 0 0 10px rgba(92, 111, 92, 0.2);
+  box-shadow: 0 0 0.625rem rgba(92, 111, 92, 0.2);
 }
 
 @keyframes ripple {
@@ -525,8 +525,8 @@
     opacity: 0.4;
   }
   100% {
-    width: 100px;
-    height: 100px;
+    width: 6.25rem;
+    height: 6.25rem;
     opacity: 0;
   }
 }
@@ -554,17 +554,17 @@
 .graph-sidebar-body .business-card-description {
   max-height: none;
   flex: 0 0 auto;
-  font-size: 15px;
+  font-size: 0.9375rem;
   line-height: 1.65;
 }
 
 .sidebar-section {
   background: transparent;
   border: none;
-  border-top: 1px solid #e5e7eb;
+  border-top: 0.0625rem solid #e5e7eb;
   border-radius: 0;
   box-shadow: none;
-  padding: 16px 20px;
+  padding: 1rem 1.25rem;
   margin: 0;
 }
 
@@ -585,21 +585,21 @@
 .edge-tooltip-body::-webkit-scrollbar,
 .graph-sidebar-body::-webkit-scrollbar,
 .edge-tooltip-panel--sidebar::-webkit-scrollbar {
-  width: 6px;
+  width: 0.375rem;
 }
 
 .edge-tooltip-body::-webkit-scrollbar-track,
 .graph-sidebar-body::-webkit-scrollbar-track,
 .edge-tooltip-panel--sidebar::-webkit-scrollbar-track {
   background: #f8f9fa;
-  border-radius: 3px;
+  border-radius: 0.1875rem;
 }
 
 .edge-tooltip-body::-webkit-scrollbar-thumb,
 .graph-sidebar-body::-webkit-scrollbar-thumb,
 .edge-tooltip-panel--sidebar::-webkit-scrollbar-thumb {
   background: #d1d5db;
-  border-radius: 3px;
+  border-radius: 0.1875rem;
 }
 
 .edge-tooltip-body::-webkit-scrollbar-thumb:hover,
@@ -613,7 +613,7 @@
   position: relative;
   width: 100%;
   height: auto;
-  max-height: 420px;
+  max-height: 26.25rem;
   display: flex;
   flex-direction: column;
   padding: 0;
@@ -623,15 +623,15 @@
 .node-tooltip-header {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 18px 44px 14px 20px;
+  gap: 0.75rem;
+  padding: 1.125rem 2.75rem 0.875rem 1.25rem;
   background: #ffffff;
   flex-shrink: 0;
 }
 
 .profile-image-placeholder {
-  width: 48px;
-  height: 48px;
+  width: 3rem;
+  height: 3rem;
   border-radius: 50%;
   background: #e6e8f0;
   display: flex;
@@ -669,20 +669,20 @@
   justify-content: center;
   min-width: 0;
   flex: 1;
-  gap: 6px;
+  gap: 0.375rem;
 }
 
 .node-tooltip-name-row {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 0.5rem;
   min-width: 0;
   width: 100%;
 }
 
 .node-tooltip-name {
   font-weight: 700;
-  font-size: 15px;
+  font-size: 0.9375rem;
   color: #1f2937;
   letter-spacing: -0.01em;
   overflow: hidden;
@@ -693,41 +693,41 @@
 
 /* 사이드바: 노드/엣지 타이포 */
 .graph-sidebar-panel .node-tooltip-name {
-  font-size: 20px;
+  font-size: 1.25rem;
   font-weight: 700;
 }
 
 .graph-sidebar-panel .node-tooltip-aliases .relation-tag {
-  font-size: 14px;
+  font-size: 0.875rem;
   font-weight: 600;
-  padding: 5px 11px;
+  padding: 0.3125rem 0.6875rem;
 }
 
 .edge-tooltip-content--sidebar .edge-tooltip-header {
-  padding: 22px 48px 16px 24px;
+  padding: 1.375rem 3rem 1rem 1.5rem;
 }
 
 .edge-tooltip-content--sidebar .edge-tooltip-endpoints {
   align-items: flex-start;
-  gap: 12px;
-  margin-bottom: 4px;
+  gap: 0.75rem;
+  margin-bottom: 0.25rem;
   padding-right: 0;
 }
 
 .edge-tooltip-content--sidebar .edge-tooltip-endpoint {
   align-items: flex-start;
-  gap: 10px;
+  gap: 0.625rem;
 }
 
 .edge-tooltip-content--sidebar .edge-tooltip-endpoint-avatar {
-  width: 36px;
-  height: 36px;
-  font-size: 13px;
-  margin-top: 2px;
+  width: 2.25rem;
+  height: 2.25rem;
+  font-size: 0.8125rem;
+  margin-top: 0.125rem;
 }
 
 .edge-tooltip-content--sidebar .edge-tooltip-endpoint-name {
-  font-size: 18px;
+  font-size: 1.125rem;
   font-weight: 700;
   line-height: 1.35;
   white-space: normal;
@@ -741,10 +741,10 @@
 }
 
 .edge-tooltip-content--sidebar .edge-tooltip-endpoint-arrow {
-  font-size: 18px;
+  font-size: 1.125rem;
   font-weight: 600;
   align-self: center;
-  padding: 0 2px;
+  padding: 0 0.125rem;
 }
 
 .edge-tooltip-content--sidebar .edge-tooltip-body {
@@ -752,102 +752,102 @@
 }
 
 .edge-tooltip-content--sidebar .edge-chart-panel {
-  margin-top: 28px;
-  padding-top: 28px;
-  border-top: 1px solid #e5e7eb;
+  margin-top: 1.75rem;
+  padding-top: 1.75rem;
+  border-top: 0.0625rem solid #e5e7eb;
 }
 
 .edge-tooltip-content--sidebar .relation-tag {
-  font-size: 14px;
+  font-size: 0.875rem;
   font-weight: 600;
-  padding: 5px 11px;
+  padding: 0.3125rem 0.6875rem;
 }
 
 .edge-tooltip-content--sidebar .relation-tags {
-  margin-bottom: 14px;
-  gap: 8px;
+  margin-bottom: 0.875rem;
+  gap: 0.5rem;
 }
 
 .edge-tooltip-content--sidebar .relation-weight {
-  margin-top: 14px;
+  margin-top: 0.875rem;
 }
 
 .edge-tooltip-content--sidebar .weight-header {
-  gap: 24px;
+  gap: 1.5rem;
 }
 
 .edge-tooltip-content--sidebar .weight-label,
 .edge-tooltip-content--sidebar .weight-value {
-  font-size: 15px;
+  font-size: 0.9375rem;
   font-weight: 700;
 }
 
 .edge-tooltip-content--sidebar .weight-value {
   margin-left: auto;
-  padding-left: 12px;
+  padding-left: 0.75rem;
 }
 
 .edge-tooltip-content--sidebar .quote-box,
 .edge-tooltip-content--sidebar .quote-box strong {
-  font-size: 15px;
+  font-size: 0.9375rem;
   font-weight: 700;
   line-height: 1.5;
 }
 
 .edge-tooltip-content--sidebar .relation-explanation p,
 .edge-tooltip-content--sidebar .explanation-text {
-  font-size: 14px;
+  font-size: 0.875rem;
   line-height: 1.6;
 }
 
 .edge-tooltip-content--sidebar .edge-chart-title {
-  font-size: 16px;
+  font-size: 1rem;
   font-weight: 700;
 }
 
 .edge-tooltip-content--sidebar .edge-chart-empty-title {
-  font-size: 14px;
+  font-size: 0.875rem;
   font-weight: 600;
 }
 
 .edge-tooltip-content--sidebar .edge-chart-empty-value {
-  font-size: 22px;
+  font-size: 1.375rem;
   font-weight: 700;
 }
 
 .edge-tooltip-content--sidebar .edge-tooltip-status {
-  font-size: 14px;
+  font-size: 0.875rem;
 }
 
 .node-tooltip-badge {
   background: #5C6F5C;
   color: #fff;
-  border-radius: 999px;
-  font-size: 11px;
-  padding: 2px 8px;
+  border-radius: 62.4375rem;
+  font-size: 0.6875rem;
+  padding: 0.125rem 0.5rem;
   font-weight: 600;
   flex-shrink: 0;
 }
 
 .node-tooltip-aliases {
   display: flex;
-  gap: 6px;
+  gap: 0.375rem;
   flex-wrap: wrap;
 }
 
 .business-card-description {
   color: #374151;
-  font-size: 13px;
+  font-size: 0.8125rem;
   margin: 0;
-  padding: 16px 20px 20px;
+  padding: 1rem 1.25rem 1.25rem;
   text-align: left;
   line-height: 1.6;
   font-weight: 400;
   word-break: keep-all;
   overflow-y: auto;
   flex: 1;
-  border-top: 1px solid #e5e7eb;
-  max-height: 280px;
+  border-top: 0.0625rem solid #e5e7eb;
+  max-height: 17.5rem;
 }
 
 .summary-toggle-btn,
@@ -887,10 +887,10 @@
   padding: 1.5rem 1.75rem;
   max-width: 94vw;
   max-height: 92vh;
-  width: 1100px;
-  height: 780px;
+  width: 68.75rem;
+  height: 48.75rem;
   position: relative;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 1.25rem 3.75rem rgba(0, 0, 0, 0.3);
   display: flex;
   flex-direction: column;
 }
@@ -902,7 +902,7 @@
   gap: 1rem;
   margin-bottom: 0.75rem;
   padding-bottom: 0.85rem;
-  border-bottom: 2px solid #e5e7eb;
+  border-bottom: 0.125rem solid #e5e7eb;
 }
 
 .relation-modal-header-main {
@@ -914,7 +914,7 @@
 
 .relation-modal-avatar {
   flex-shrink: 0;
-  border-radius: 999px;
+  border-radius: 62.4375rem;
   overflow: hidden;
   background: #e5e7eb;
 }
@@ -941,7 +941,7 @@
   display: inline-flex;
   align-items: center;
   padding: 0.15rem 0.55rem;
-  border-radius: 999px;
+  border-radius: 62.4375rem;
   background: #f3f4f6;
   color: #4b5563;
   font-size: 0.75rem;
@@ -963,7 +963,7 @@
 .relation-modal-nav-btn {
   width: 2rem;
   height: 2rem;
-  border: 1px solid #e5e7eb;
+  border: 0.0625rem solid #e5e7eb;
   border-radius: 0.4rem;
   background: #fff;
   color: #5C6F5C;
@@ -996,8 +996,8 @@
 
 .relation-modal-legend-gradient {
   flex: 1;
-  height: 8px;
-  border-radius: 999px;
+  height: 0.5rem;
+  border-radius: 62.4375rem;
   background: linear-gradient(90deg, #dc2626 0%, #e5e7eb 50%, #16a34a 100%);
 }
 
@@ -1014,16 +1014,16 @@
 .relation-modal-chart {
   flex: 1.2;
   min-width: 0;
-  min-height: 360px;
-  border: 1px solid #e5e7eb;
+  min-height: 22.5rem;
+  border: 0.0625rem solid #e5e7eb;
   border-radius: 0.75rem;
   background: #fafbfc;
 }
 
 .relation-modal-side {
   flex: 0.9;
-  min-width: 280px;
-  max-width: 380px;
+  min-width: 17.5rem;
+  max-width: 23.75rem;
   display: flex;
   flex-direction: column;
   gap: 0.65rem;
@@ -1065,7 +1065,7 @@
   grid-template-rows: auto auto;
   gap: 0.35rem 0.5rem;
   padding: 0.7rem 0.8rem;
-  border: 1px solid #e5e7eb;
+  border: 0.0625rem solid #e5e7eb;
   border-radius: 0.55rem;
   background: #fff;
   cursor: pointer;
@@ -1090,7 +1090,7 @@
 }
 
 .relation-modal-detail {
-  border: 1px solid #e5e7eb;
+  border: 0.0625rem solid #e5e7eb;
   border-radius: 0.55rem;
   padding: 0.75rem;
   background: #f8fafc;
@@ -1130,7 +1130,7 @@
 .relation-modal-action-btn--secondary {
   background: #fff;
   color: #5C6F5C;
-  border: 1px solid #5C6F5C;
+  border: 0.0625rem solid #5C6F5C;
 }
 
 .relation-modal-action-btn--secondary:hover {
@@ -1161,7 +1161,7 @@
 @keyframes fadeIn {
   from {
     opacity: 0;
-    transform: translateY(10px);
+    transform: translateY(0.625rem);
   }
   to {
     opacity: 1;
@@ -1169,7 +1169,7 @@
   }
 }
 
-@media (max-width: 900px) {
+@media (max-width: 56.25rem) {
   .relation-modal-body.has-chart {
     flex-direction: column;
   }
@@ -1181,14 +1181,14 @@
   }
 
   .relation-modal-chart {
-    min-height: 240px;
+    min-height: 15rem;
   }
 }
 
-@media (max-width: 768px) {
+@media (max-width: 48rem) {
   .graph-node-tooltip {
-    width: min(420px, calc(100vw - 24px));
-    max-width: min(420px, calc(100vw - 24px));
+    width: min(26.25rem, calc(100vw - 1.5rem));
+    max-width: min(26.25rem, calc(100vw - 1.5rem));
   }
 
   .modal-container {
@@ -1202,10 +1202,10 @@
   }
 }
 
-@media (max-width: 480px) {
+@media (max-width: 30rem) {
   .graph-node-tooltip {
-    width: min(420px, calc(100vw - 16px));
-    max-width: min(420px, calc(100vw - 16px));
+    width: min(26.25rem, calc(100vw - 1rem));
+    max-width: min(26.25rem, calc(100vw - 1rem));
   }
 
   .modal-container {
@@ -1228,24 +1228,24 @@
 
 .graph-error-toast {
   position: fixed;
-  top: 80px;
-  right: 24px;
+  top: 5rem;
+  right: 1.5rem;
   z-index: 10003;
   background: rgba(220, 38, 38, 0.95);
   color: #fff;
-  padding: 12px 16px;
-  border-radius: 8px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-  min-width: 300px;
-  max-width: 500px;
+  padding: 0.75rem 1rem;
+  border-radius: 0.5rem;
+  box-shadow: 0 0.25rem 0.75rem rgba(0, 0, 0, 0.15);
+  min-width: 18.75rem;
+  max-width: 31.25rem;
   display: flex;
   align-items: flex-start;
-  gap: 12px;
+  gap: 0.75rem;
   animation: graphErrorToastSlideIn 0.3s ease-out;
 }
 
 .graph-error-toast__icon {
-  font-size: 20px;
+  font-size: 1.25rem;
   flex-shrink: 0;
 }
 
@@ -1255,12 +1255,12 @@
 
 .graph-error-toast__title {
   font-weight: 600;
-  margin-bottom: 4px;
-  font-size: 14px;
+  margin-bottom: 0.25rem;
+  font-size: 0.875rem;
 }
 
 .graph-error-toast__message {
-  font-size: 13px;
+  font-size: 0.8125rem;
   line-height: 1.4;
   opacity: 0.95;
 }
@@ -1270,7 +1270,7 @@
   border: none;
   color: #fff;
   cursor: pointer;
-  padding: 4px;
+  padding: 0.25rem;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1283,5 +1283,5 @@
 }
 
 .graph-error-toast__close .material-symbols-outlined {
-  font-size: 18px;
+  font-size: 1.125rem;
 }

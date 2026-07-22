@@ -12,20 +12,20 @@
 
 .viewer-settings-dialog {
   background-color: #fff;
-  border-radius: 12px;
-  padding: 24px;
+  border-radius: 0.75rem;
+  padding: 1.5rem;
   width: 90%;
-  max-width: 500px;
+  max-width: 31.25rem;
   max-height: 80vh;
   overflow-y: auto;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+  box-shadow: 0 0.25rem 1.25rem rgba(0, 0, 0, 0.15);
 }
 
 .viewer-settings-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 20px;
+  margin-bottom: 1.25rem;
 }
 
 .viewer-settings-title {
@@ -36,35 +36,35 @@
 }
 
 .viewer-settings-section {
-  margin-bottom: 24px;
+  margin-bottom: 1.5rem;
 }
 
 .viewer-settings-section-title {
-  margin: 0 0 12px;
+  margin: 0 0 0.75rem;
   font-size: 1.1rem;
   font-weight: bold;
   color: #5c6f5c;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 0.5rem;
 }
 
 .viewer-settings-mode-list {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 0.5rem;
 }
 
 .viewer-settings-mode-btn {
-  border: 1px solid #5c6f5c;
+  border: 0.0625rem solid #5c6f5c;
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 12px 16px;
+  gap: 0.5rem;
+  padding: 0.75rem 1rem;
   text-align: left;
   width: 100%;
   justify-content: flex-start;
-  border-radius: 8px;
+  border-radius: 0.5rem;
   cursor: pointer;
   transition: background-color 0.2s ease, color 0.2s ease;
   background-color: #fff;
@@ -89,7 +89,7 @@
 .viewer-settings-step-row {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 0.75rem;
   width: 100%;
 }
 
@@ -111,7 +111,7 @@
 
 .viewer-settings-step-value {
   flex-shrink: 0;
-  min-width: 60px;
+  min-width: 3.75rem;
   text-align: right;
 }
 
@@ -120,8 +120,8 @@
 .viewer-settings-close-btn {
   background-color: #fff;
   color: #5c6f5c;
-  border: 1px solid #5c6f5c;
-  border-radius: 8px;
+  border: 0.0625rem solid #5c6f5c;
+  border-radius: 0.5rem;
   cursor: pointer;
   transition: background-color 0.2s ease;
 }
@@ -133,16 +133,16 @@
 }
 
 .viewer-settings-step-btn {
-  padding: 8px 12px;
+  padding: 0.5rem 0.75rem;
   font-weight: bold;
 }
 
 .viewer-settings-outline-btn {
-  padding: 10px 20px;
+  padding: 0.625rem 1.25rem;
 }
 
 .viewer-settings-close-btn {
-  padding: 8px 12px;
+  padding: 0.5rem 0.75rem;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -152,8 +152,8 @@
   background-color: #5c6f5c;
   color: #fff;
   border: none;
-  padding: 10px 20px;
-  border-radius: 8px;
+  padding: 0.625rem 1.25rem;
+  border-radius: 0.5rem;
   cursor: pointer;
   font-weight: bold;
   transition: background-color 0.2s ease;
@@ -166,6 +166,6 @@
 .viewer-settings-actions {
   display: flex;
   justify-content: flex-end;
-  gap: 12px;
-  margin-top: 24px;
+  gap: 0.75rem;
+  margin-top: 1.5rem;
 }
