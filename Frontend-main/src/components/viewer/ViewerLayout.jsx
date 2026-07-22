@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useCallback, memo } from 'react';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
-import { findViewerModeOption } from '../../utils/common/errorUtils';
+import { findViewerModeOption } from '../../utils/viewer/viewerSession';
 import { userViewerPath, userGraphPath } from '../../utils/common/urlUtils';
 import './ui/ViewerToolbar.css';
 

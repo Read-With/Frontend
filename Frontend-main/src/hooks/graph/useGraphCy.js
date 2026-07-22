@@ -1,115 +1,26 @@
-/** Cytoscape 탭·선택·레이아웃·인스턴스·툴팁 dismiss */
+/** Cytoscape 런타임: tap·선택·layout·instance·tooltip dismiss */
 
-import { useCallback, useMemo, useEffect, useRef } from "react";
+import { useCallback, useMemo, useEffect, useRef } from 'react';
 import {
+  applySelectionHighlight,
+  buildTapShowArgs,
+  calculateGraphTooltipPosition,
   clearHighlightClassesOn,
-  clearReciprocalEndpointBypass,
   ensureElementsInBounds,
   fitGraphToNodes,
-  getSelectionFocusElements,
+  isGraphDragEndEvent,
   isGraphContainerSizeReady,
   isSidebarElement,
   openTooltipFromTap,
-  placeTooltipInCanvasAwayFromFocus,
+  resolveGraphTooltipAnchor,
   syncReciprocalPairJunctionOffsets,
-} from '../../utils/graph/graphUtils';
-import { detectAndResolveOverlap } from '../../utils/graph/graphDataUtils';
+} from '../../utils/graph/graphCy';
+import { detectAndResolveOverlap } from '../../utils/graph/graphModel';
 import { PRESET_LAYOUT } from '../../utils/styles/graphStyles';
 import { useLatestRef } from '../common/hooksShared';
 
-function isCyNode(element) {
-  return typeof element?.isNode === 'function' ? element.isNode() : false;
-}
-
-function isFinitePoint(point) {
-  return (
-    point &&
-    typeof point.x === 'number' &&
-    typeof point.y === 'number' &&
-    Number.isFinite(point.x) &&
-    Number.isFinite(point.y)
-  );
-}
-
-function applySelectionFade(cy, keepNodes, keepEdges, highlightedNodes = keepNodes, highlightedEdges = keepEdges) {
-  if (!cy) return;
-  clearHighlightClassesOn(cy);
-  const fadedNodes = cy.nodes().difference(keepNodes);
-  const fadedEdges = cy.edges().difference(keepEdges);
-  cy.batch(() => {
-    highlightedNodes.addClass("highlighted");
-    highlightedEdges.addClass("highlighted");
-    fadedNodes.addClass("faded");
-    fadedEdges.addClass("faded");
-    highlightedEdges.forEach((edge) => {
-      if (edge.data("reciprocalPair")) clearReciprocalEndpointBypass(edge);
-    });
-  });
-}
-
-function applySelectionHighlight(cy, element) {
-  if (!cy || !element || element.length === 0) return;
-  const focus = getSelectionFocusElements(cy, element);
-  if (!focus?.length) return;
-
-  if (isCyNode(element)) {
-    applySelectionFade(cy, focus.nodes(), focus.edges(), element, focus.edges());
-    return;
-  }
-  applySelectionFade(cy, focus.nodes(), focus.edges());
-}
-
-function formatTapShowArgs(kind, element, evt, center, mouseX, mouseY) {
-  if (kind === 'node') {
-    return { node: element, evt, nodeCenter: center, mouseX, mouseY };
-  }
-  return { edge: element, evt, edgeCenter: center, mouseX, mouseY };
-}
-
-function getEdgeRenderedCenter(element) {
-  try {
-    const midpoint = typeof element.midpoint === 'function' ? element.midpoint() : null;
-    if (isFinitePoint(midpoint)) return midpoint;
-  } catch {
-    /* fall through */
-  }
-
-  const source = element.source?.();
-  const target = element.target?.();
-  if (!source?.length || !target?.length) return null;
-
-  const sourcePos = source.renderedPosition();
-  const targetPos = target.renderedPosition();
-  if (!isFinitePoint(sourcePos) || !isFinitePoint(targetPos)) return null;
-
-  return {
-    x: (sourcePos.x + targetPos.x) / 2,
-    y: (sourcePos.y + targetPos.y) / 2,
-  };
-}
-
-function getCyContainerOrigin(cy) {
-  try {
-    const cyRect = cy.container()?.getBoundingClientRect?.();
-    if (cyRect) return { left: cyRect.left, top: cyRect.top };
-  } catch {
-    /* ignore */
-  }
-  return { left: 0, top: 0 };
-}
-
-/**
- * 노드: 클릭/렌더 좌표 + bbox offset (사이드바와 겹침 완화)
- * 엣지: focus 집합 기준 캔버스 내 배치
- */
-function resolveTooltipAnchor(cy, kind, element, evt, calculateTooltipPosition) {
-  if (kind === 'edge') {
-    const focus = getSelectionFocusElements(cy, element);
-    return placeTooltipInCanvasAwayFromFocus({ cy, focusEles: focus });
-  }
-  const bbox = element.renderedBoundingBox?.();
-  const offsetX = (bbox?.w ?? 50) + 200;
-  return calculateTooltipPosition(element, evt, offsetX);
+function toCyId(value) {
+  return String(value);
 }
 
 /**
@@ -139,47 +50,24 @@ export function useGraphInteractions({
     onAfterResetRef.current?.();
   }, [cyRef, onAfterResetRef]);
 
-  const dismissSelection = useCallback(() => {
+  const clearHighlightAndSelectionRef = useCallback(() => {
     resetAllStyles();
-    onClearTooltipRef.current?.();
     clearSelectionRefs();
-  }, [resetAllStyles, clearSelectionRefs, onClearTooltipRef]);
+  }, [resetAllStyles, clearSelectionRefs]);
+
+  const dismissSelection = useCallback(() => {
+    clearHighlightAndSelectionRef();
+    onClearTooltipRef.current?.();
+  }, [clearHighlightAndSelectionRef, onClearTooltipRef]);
 
   const reapplySelectionHighlight = useCallback(() => {
     const cy = cyRef?.current;
     const selected = selectedElementRef?.current;
     if (!cy || !selected?.id) return;
 
-    const el = cy.getElementById(String(selected.id));
+    const el = cy.getElementById(toCyId(selected.id));
     if (el.length > 0) applySelectionHighlight(cy, el);
   }, [cyRef, selectedElementRef]);
-
-  const calculateTooltipPosition = useCallback((element, evt, offset = 0) => {
-    try {
-      const cy = cyRef?.current;
-      if (!cy) return { x: 0, y: 0 };
-
-      if (evt?.originalEvent) {
-        return {
-          x: evt.originalEvent.clientX + offset,
-          y: evt.originalEvent.clientY,
-        };
-      }
-
-      const basePos = isCyNode(element)
-        ? element.renderedPosition()
-        : getEdgeRenderedCenter(element);
-      if (!isFinitePoint(basePos)) return { x: 0, y: 0 };
-
-      const { left, top } = getCyContainerOrigin(cy);
-      return {
-        x: left + basePos.x + offset,
-        y: top + basePos.y,
-      };
-    } catch {
-      return { x: 0, y: 0 };
-    }
-  }, [cyRef]);
 
   const selectElement = useCallback((kind, element) => {
     const cy = cyRef?.current;
@@ -190,7 +78,7 @@ export function useGraphInteractions({
       return false;
     }
     if (selectedElementRef) {
-      selectedElementRef.current = { kind, id: String(element.id()) };
+      selectedElementRef.current = { kind, id: toCyId(element.id()) };
     }
     return true;
   }, [cyRef, selectedElementRef]);
@@ -199,12 +87,12 @@ export function useGraphInteractions({
     const cy = cyRef?.current;
     if (!cy) return;
     const onShowTooltipRef = kind === 'node' ? onShowNodeTooltipRef : onShowEdgeTooltipRef;
-    const center = calculateTooltipPosition(element, null, 0);
-    const anchor = resolveTooltipAnchor(cy, kind, element, evt, calculateTooltipPosition);
+    const center = calculateGraphTooltipPosition(cy, element, null, 0);
+    const anchor = resolveGraphTooltipAnchor(cy, kind, element, evt);
     onShowTooltipRef.current?.(
-      formatTapShowArgs(kind, element, evt, center, anchor.x, anchor.y),
+      buildTapShowArgs(kind, element, evt, center, anchor.x, anchor.y),
     );
-  }, [cyRef, onShowNodeTooltipRef, onShowEdgeTooltipRef, calculateTooltipPosition]);
+  }, [cyRef, onShowNodeTooltipRef, onShowEdgeTooltipRef]);
 
   const selectAndShowTooltip = useCallback((kind, element, evt) => {
     if (!selectElement(kind, element)) return false;
@@ -222,9 +110,9 @@ export function useGraphInteractions({
     const element = evt.target;
     if (!element || typeof element.data !== 'function' || !element.data()) return;
 
-    const elementId = String(element.id());
+    const elementId = toCyId(element.id());
     const prev = selectedElementRef?.current;
-    if (prev?.kind === kind && String(prev.id) === elementId) {
+    if (prev?.kind === kind && toCyId(prev.id) === elementId) {
       dismissSelection();
       return;
     }
@@ -247,22 +135,21 @@ export function useGraphInteractions({
    */
   const clearSelection = useCallback((options = {}) => {
     const fitViewport = options?.fitViewport !== false;
-    resetAllStyles();
-    clearSelectionRefs();
+    clearHighlightAndSelectionRef();
     if (fitViewport) fitGraphToNodes(cyRef?.current, { duration: 500 });
-  }, [cyRef, resetAllStyles, clearSelectionRefs]);
+  }, [cyRef, clearHighlightAndSelectionRef]);
 
   const selectNodeByIdOrName = useCallback((idOrName) => {
     const cy = cyRef?.current;
     if (!cy || idOrName == null || idOrName === '') return false;
 
-    let element = cy.getElementById(String(idOrName));
+    const key = toCyId(idOrName);
+    let element = cy.getElementById(key);
     if (!element?.length) {
-      const key = String(idOrName);
       element = cy.nodes().filter((ele) => {
         const d = ele.data() || {};
         return (
-          String(d.id) === key ||
+          toCyId(d.id) === key ||
           d.common_name === key ||
           d.label === key ||
           d.name === key
@@ -292,7 +179,7 @@ export function useCyInstance(cyRef, isReady = true) {
   return useMemo(() => {
     if (!isReady) return null;
     const cy = cyRef?.current;
-    if (!cy || typeof cy.container !== "function") return null;
+    if (!cy || typeof cy.container !== 'function') return null;
     return cy;
   }, [cyRef, isReady]);
 }
@@ -342,7 +229,7 @@ function scheduleRippleWhenPositionsPainted(cy, triggerRippleForAddedNodes) {
   fallbackId = window.setTimeout(run, 180);
 
   try {
-    cy.one("render", () => {
+    cy.one('render', () => {
       if (done) return;
       requestAnimationFrame(run);
     });
@@ -391,7 +278,7 @@ export function useGraphLayout({
       }
       syncReciprocalPairJunctionOffsets(cyInstance);
     },
-    [containerRef]
+    [containerRef],
   );
 
   useEffect(() => {
@@ -407,7 +294,6 @@ export function useGraphLayout({
       incrementalLayoutScope = false,
     } = elementsUpdateRef.current || {};
 
-    // 소비 후 비워 isInitialLoad 등으로 effect가 다시 돌아도 layout/style을 재실행하지 않음
     elementsUpdateRef.current = {
       nodesToAdd: [],
       edgesToAdd: [],
@@ -454,8 +340,8 @@ export function useGraphLayout({
           let newColl = cy.collection();
           nodesToAdd.forEach((n) => {
             const id = n?.data?.id;
-            if (id == null || id === "") return;
-            const el = cy.getElementById(String(id));
+            if (id == null || id === '') return;
+            const el = cy.getElementById(toCyId(id));
             if (el.length > 0) newColl = newColl.union(el);
           });
           runPresetLayout(cy, newColl);
@@ -486,7 +372,7 @@ export function useGraphLayout({
           cancelRipple();
           cancelRipple = scheduleRippleWhenPositionsPainted(
             cy,
-            triggerRippleForAddedNodes
+            triggerRippleForAddedNodes,
           );
         }
         finishInitialLoad();
@@ -505,7 +391,6 @@ export function useGraphLayout({
     return () => {
       cancelRipple();
     };
-    // elementsUpdateRef는 안정 ref — current만 소비하므로 deps 제외
   }, [
     cy,
     elementsFingerprint,
@@ -520,13 +405,12 @@ export function useGraphLayout({
   ]);
 }
 
-/** 툴팁 연 직후 같은 클릭으로 dismiss 되는 것 방지 */
 const GRAPH_OUTSIDE_DISMISS_ATTACH_DELAY_MS = 10;
 
-export function isGraphDragEndEvent(event) {
-  const type = event?.detail?.type;
-  return type === 'graphDragEnd' || type === 'dragend';
-}
+const VIEWER_OUTSIDE_IGNORE_SELECTORS = [
+  '.graph-node-tooltip',
+  '.edge-tooltip-container',
+];
 
 function eventClosest(event, selector) {
   return Boolean(event.target.closest?.(selector));
@@ -536,28 +420,23 @@ function shouldIgnoreCanvasOrDragEnd(event) {
   return eventClosest(event, '.graph-canvas-area') || isGraphDragEndEvent(event);
 }
 
-export function shouldIgnoreGraphPageOutsideClick(event) {
-  if (isSidebarElement(event)) return true;
+function shouldIgnoreOutsideClick(event, { ignoreSidebar = false, extraSelectors = [] } = {}) {
+  if (ignoreSidebar && isSidebarElement(event)) return true;
   if (eventClosest(event, '.modal-overlay')) return true;
+  for (const selector of extraSelectors) {
+    if (eventClosest(event, selector)) return true;
+  }
   return shouldIgnoreCanvasOrDragEnd(event);
+}
+
+export function shouldIgnoreGraphPageOutsideClick(event) {
+  return shouldIgnoreOutsideClick(event, { ignoreSidebar: true });
 }
 
 export function shouldIgnoreViewerOutsideClick(event) {
-  if (eventClosest(event, '.graph-node-tooltip')) return true;
-  if (eventClosest(event, '.edge-tooltip-container')) return true;
-  if (eventClosest(event, '.modal-overlay')) return true;
-  return shouldIgnoreCanvasOrDragEnd(event);
+  return shouldIgnoreOutsideClick(event, { extraSelectors: VIEWER_OUTSIDE_IGNORE_SELECTORS });
 }
 
-/**
- * 반환값 없는 fire-and-forget 훅.
- * @param {object} options
- * @param {boolean} options.enabled
- * @param {(event: Event) => void} options.onDismiss
- * @param {(event: Event) => boolean} options.shouldIgnoreClick
- * @param {number} [options.attachDelayMs]
- * @param {boolean} [options.blockDragEndEvents=false]
- */
 function useGraphOutsideDismiss({
   enabled,
   onDismiss,
@@ -603,19 +482,6 @@ function useGraphOutsideDismiss({
   }, [enabled, shouldIgnoreRef, onDismissRef, attachDelayMs, blockDragEndEvents]);
 }
 
-/**
- * @param {object} options
- * @param {object|null} options.activeTooltip
- * @param {(tooltip: object) => void} [options.onSetActiveTooltip]
- * @param {() => void} [options.onBeforeOpen]
- * @param {(elementId: string) => void} options.centerSelection id만 전달
- * @param {number} options.focusDelayMs
- * @param {boolean} [options.tooltipOpen=false] 포커스·outside dismiss 공통 활성 플래그
- * @param {() => void} options.onDismiss
- * @param {(event: Event) => boolean} options.shouldIgnoreClick
- * @param {number} [options.attachDelayMs]
- * @param {boolean} [options.blockDragEndEvents]
- */
 export function useGraphTooltipSelection({
   activeTooltip,
   onSetActiveTooltip,
@@ -631,7 +497,7 @@ export function useGraphTooltipSelection({
   const centerSelectionRef = useLatestRef(centerSelection);
   const focusTooltipId =
     activeTooltip?.id != null && activeTooltip.id !== ''
-      ? String(activeTooltip.id)
+      ? toCyId(activeTooltip.id)
       : '';
 
   const openElementTooltip = useCallback((tapPayload, type) => {
@@ -640,11 +506,12 @@ export function useGraphTooltipSelection({
     onSetActiveTooltip(openTooltipFromTap(tapPayload, type));
   }, [onBeforeOpen, onSetActiveTooltip]);
 
-  const { onShowNodeTooltip, onShowEdgeTooltip } = useMemo(
-    () => ({
-      onShowNodeTooltip: (tapPayload) => openElementTooltip(tapPayload, 'node'),
-      onShowEdgeTooltip: (tapPayload) => openElementTooltip(tapPayload, 'edge'),
-    }),
+  const onShowNodeTooltip = useCallback(
+    (tapPayload) => openElementTooltip(tapPayload, 'node'),
+    [openElementTooltip],
+  );
+  const onShowEdgeTooltip = useCallback(
+    (tapPayload) => openElementTooltip(tapPayload, 'edge'),
     [openElementTooltip],
   );
 
@@ -666,5 +533,3 @@ export function useGraphTooltipSelection({
 
   return { onShowNodeTooltip, onShowEdgeTooltip };
 }
-
-export default useGraphInteractions;

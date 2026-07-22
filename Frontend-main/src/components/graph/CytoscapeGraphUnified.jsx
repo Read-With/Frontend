@@ -6,9 +6,11 @@ import {
   buildElementsGraphFingerprint,
   buildElementsStructureFingerprint,
   visualElementSignature,
-} from "../../utils/graph/graphDataUtils.js";
-import { applySearchFadeEffect, shouldShowNoSearchResults, getNoSearchResultsMessage } from "../../utils/graph/searchUtils.js";
+} from "../../utils/graph/graphModel.js";
 import {
+  applySearchFadeEffect,
+  shouldShowNoSearchResults,
+  getNoSearchResultsMessage,
   createRippleEffect,
   ensureElementsInBounds,
   isGraphContainerSizeReady,
@@ -17,17 +19,18 @@ import {
   calculateSpiralPlacement,
   fitGraphToNodes,
   zoomGraphByFactor,
-  GRAPH_ZOOM,
-} from "../../utils/graph/graphUtils";
+} from "../../utils/graph/graphCy.js";
+import { GRAPH_ZOOM } from "../../utils/graph/graphCore.js";
 import {
   applyNormalizedNodeSizes,
   PRESET_LAYOUT,
 } from "../../utils/styles/graphStyles.js";
-import useGraphInteractions, {
+import {
+  useGraphInteractions,
   useGraphLayout,
   useCyInstance,
-} from "../../hooks/graph/useGraphInteractions.js";
-import { eventUtils } from "../../utils/viewer/viewerCoreStateUtils";
+} from '../../hooks/graph/useGraphCy.js';
+import { eventUtils } from "../../utils/viewer/viewerCore";
 
 function GraphZoomControls({ cy }) {
   const handleZoom = useCallback((e, factor) => {

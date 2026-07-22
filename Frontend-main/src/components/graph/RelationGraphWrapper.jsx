@@ -13,37 +13,40 @@ import {
   resolveChapterSidebarWidth,
   resolveChapterDisplayTitle,
   buildChapterSidebarItems,
-} from '../../utils/graph/graphUtils';
-import { errorUtils } from '../../utils/common/errorUtils';
+  calculateLastEventForChapter,
+  isGraphNodeElement,
+} from '../../utils/graph/graphCore';
+import {
+  isGraphDragEndEvent,
+  fitGraphToNodes,
+  centerSelectionOnElementId,
+} from '../../utils/graph/graphCy';
+import { errorUtils, userViewerPath } from '../../utils/common/urlUtils';
 import {
   useGraphSearch,
   useGraphState,
   useGraphElementPipeline,
-} from '../../hooks/graph/useGraphViewHooks';
+} from '../../hooks/graph/useGraphViewState';
 import { useApiGraphData, useChapterPovSummaries } from '../../hooks/graph/useApiGraphData';
 import { resolveServerBookIdOrFallback, useLocalStorageNumber } from '../../hooks/common/hooksShared';
-import { convertRelationsToElements } from '../../utils/graph/graphDataUtils';
-import { createCharacterMaps, buildNodeWeights, extractNodeWeightsFromElements } from '../../utils/graph/characterUtils';
-import { getGraphEventState } from '../../utils/common/cache/chapterEventCache';
 import {
-  calculateLastEventForChapter,
-  isGraphNodeElement,
-  fitGraphToNodes,
-  centerSelectionOnElementId,
-} from '../../utils/graph/graphUtils';
-import { eventUtils } from '../../utils/viewer/viewerCoreStateUtils';
-import { hasGraphPayload } from '../../utils/graph/graphData';
+  createCharacterMaps,
+  buildNodeWeights,
+  extractNodeWeightsFromElements,
+  convertRelationsToElements,
+  getGraphEventState,
+} from '../../utils/graph/graphModel';
+import { eventUtils } from '../../utils/viewer/viewerCore';
+import { hasGraphPayload } from '../../utils/graph/graphFetch';
 import {
   convertGraphSourceToElements,
   commitVisibleGraphElements,
-} from '../../utils/viewer/viewerGraphUtils';
-import { userViewerPath } from '../../utils/common/urlUtils';
+} from '../../utils/viewer/viewerGraph';
 import { toPositiveNumberOrNull } from '../../utils/common/valueUtils';
 import {
-  isGraphDragEndEvent,
   shouldIgnoreGraphPageOutsideClick,
   useGraphTooltipSelection,
-} from '../../hooks/graph/useGraphInteractions';
+} from '../../hooks/graph/useGraphCy';
 import {
   getChapterData,
   findManifestEventInChapter,

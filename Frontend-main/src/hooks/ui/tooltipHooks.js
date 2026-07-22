@@ -1,7 +1,7 @@
 /** 툴팁: 외부 클릭 감지·드래그 위치·활성 툴팁 상태 */
 
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { constrainToGraphCanvas } from '../../utils/graph/graphUtils';
+import { constrainToGraphCanvas } from '../../utils/graph/graphCy';
 
 const TOOLTIP_CLEAR_DELAY_MS = 150;
 const TOOLTIP_ERROR_CHECK_DELAY_MS = 220;

@@ -2,14 +2,14 @@ import { useState, useEffect, useMemo, useCallback, useRef, memo } from 'react';
 import PropTypes from 'prop-types';
 import { useNavigate } from 'react-router-dom';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { getBookManifest, getBookProgress, deleteBookProgress } from '../../utils/api/api';
+import { getBookManifest, getBookProgress, deleteBookProgress } from '../../utils/api/booksApi';
 import { resolveProgressLocator } from '../../utils/common/valueUtils';
 import { BOOKS_QUERY_KEY } from '../../hooks/books/bookHooks';
+import { getManifestFromCache } from '../../utils/common/cache/manifestCache';
 import {
-  getManifestFromCache,
   getProgressFromCache,
   PROGRESS_CACHE_UPDATED_EVENT,
-} from '../../utils/common/cache/manifestCache';
+} from '../../utils/common/cache/progressCache';
 import {
   resolveLibraryReadingProgressPercent,
   formatLibraryRelativeDate,
@@ -18,7 +18,7 @@ import AuthenticatedImage from './AuthenticatedImage';
 import {
   resolveServerBookId,
   stripRedundantBookTitlePrefix,
-} from '../../utils/viewer/viewerCoreStateUtils';
+} from '../../utils/viewer/viewerCore';
 import { USER_VIEWER_PREFIX, USER_GRAPH_PREFIX } from '../../utils/common/urlUtils';
 import { toast } from 'react-toastify';
 import './BookDetailModal.css';

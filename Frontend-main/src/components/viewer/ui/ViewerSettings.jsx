@@ -3,7 +3,7 @@ import {
   defaultSettings,
   normalizeSettings,
   VIEWER_MODE_OPTIONS,
-} from '../../../utils/common/errorUtils';
+} from '../../../utils/viewer/viewerSession';
 import './ViewerSettings.css';
 
 const FOCUSABLE_SELECTOR =

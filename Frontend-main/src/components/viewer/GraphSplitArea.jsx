@@ -4,19 +4,19 @@ import CytoscapeGraphUnified from '../graph/CytoscapeGraphUnified';
 import UnifiedNodeInfo from '../graph/tooltip/UnifiedNodeInfo';
 import UnifiedEdgeTooltip from '../graph/tooltip/UnifiedEdgeTooltip';
 import ViewerTopBar from './ViewerTopBar';
-import { useGraphElementPipeline } from '../../hooks/graph/useGraphViewHooks';
+import { useGraphElementPipeline } from '../../hooks/graph/useGraphViewState';
 import { getEdgeStyle, createGraphStylesheet, graphStyles } from '../../utils/styles/graphStyles';
 import {
   centerSelectionOnElementId,
   getEdgeFocusPanTarget,
-} from '../../utils/graph/graphUtils';
+} from '../../utils/graph/graphCy';
 import {
   shouldIgnoreViewerOutsideClick,
   useGraphTooltipSelection,
-} from '../../hooks/graph/useGraphInteractions';
-import { resolveEventOrdinalForDisplay } from '../../utils/viewer/viewerEventProgressUtils';
+} from '../../hooks/graph/useGraphCy';
+import { resolveEventOrdinalForDisplay } from '../../utils/viewer/viewerSession';
 import { hasGraphPanelLocationHint } from '../../utils/common/valueUtils';
-import { eventUtils } from '../../utils/viewer/viewerCoreStateUtils';
+import { eventUtils } from '../../utils/viewer/viewerCore';
 import '../graph/RelationGraph.css';
 
 const iconShellClass = {

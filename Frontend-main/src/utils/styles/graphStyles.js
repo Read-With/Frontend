@@ -1,6 +1,6 @@
 /** Cytoscape 스타일시트·레이아웃·노드 크기 유틸 */
 
-import { isValidNodeWeight } from '../graph/characterUtils.js';
+import { isValidNodeWeight } from '../graph/graphModel.js';
 
 // styles.js가 이 모듈을 re-export하므로 styles.js를 import하지 않는다.
 // DURATION/공유 팔레트는 여기서 export하고 styles.js가 확장한다.

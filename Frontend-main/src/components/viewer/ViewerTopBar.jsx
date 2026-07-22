@@ -5,8 +5,8 @@ import { resolveChapterIndex, toPositiveNumberOrNull } from '../../utils/common/
 import {
   formatChapterOrderAndName,
   stripRedundantBookTitlePrefix,
-} from '../../utils/viewer/viewerCoreStateUtils';
-import { resolveEventOrdinalForDisplay } from '../../utils/viewer/viewerEventProgressUtils';
+} from '../../utils/viewer/viewerCore';
+import { resolveEventOrdinalForDisplay } from '../../utils/viewer/viewerSession';
 
 const LOADING_STYLE = {
   display: 'inline-block',

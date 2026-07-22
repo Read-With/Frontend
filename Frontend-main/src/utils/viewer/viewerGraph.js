@@ -1,16 +1,20 @@
-/** 뷰어 그래프 유틸: API/캐시 조회·변환·타깃 계산 */
+/** 뷰어 그래프 파이프라인: API/캐시 조회·변환·타깃 계산 */
 
-import { processRelations } from '../graph/graphUtils';
-import { buildNodeWeights, createCharacterMaps, toNodeWeightsOrNull } from '../graph/characterUtils';
-import { convertRelationsToElements } from '../graph/graphDataUtils';
-import { resolveGraphElementsProfileImages } from '../common/assetUrlFetch';
+import { processRelations } from '../graph/graphCore';
 import {
+  buildNodeWeights,
+  createCharacterMaps,
+  toNodeWeightsOrNull,
+  aggregateCharactersFromEvents,
+  convertRelationsToElements,
   getGraphEventState,
   getChapterEventFallbackData,
-} from '../common/cache/chapterEventCache';
-import { resolveChapterIndex, toPositiveInt } from '../common/valueUtils';
-import { cacheKeyUtils, eventUtils } from './viewerCoreStateUtils';
-import { resolveServerEventMatch } from './viewerEventProgressUtils';
+  getCachedChapterEvents,
+} from '../graph/graphModel';
+import { resolveGraphElementsProfileImages } from '../common/urlUtils';
+import { resolveChapterIndex, toPositiveInt, toPositiveNumberOrNull } from '../common/valueUtils';
+import { cacheKeyUtils, eventUtils } from './viewerCore';
+import { resolveServerEventMatch } from './viewerSession';
 
 export const DEFAULT_GRAPH_TRANSFORM_DEPS = {
   createCharacterMaps,
@@ -52,6 +56,72 @@ export function resolveGraphCallContext({ book, currentChapter, currentEvent }) 
     eventIdx,
     callKey: cacheKeyUtils.createEventKey(bookId, chapter, eventIdx),
   };
+}
+
+export const VIEWER_GRAPH_PIPELINE = {
+  PREFETCH_AHEAD_EVENTS: 2,
+  HARD_RELOAD_SETTLE_MS: 1000,
+  DISCOVERY_WAIT_MS: 30000,
+  DISCOVERY_POLL_MS: 16,
+};
+
+export function getCachedChapterMaxEventIdx(bookId, chapter) {
+  return Number(getCachedChapterEvents(bookId, chapter)?.maxEventIdx) || 0;
+}
+
+export function buildChapterCharacterSearchData(events, currentChapter) {
+  if (!currentChapter || !Array.isArray(events) || events.length === 0) {
+    return { characters: [] };
+  }
+  const chapterEvents = events.filter(
+    (evt) => Number(eventUtils.resolveChapterIdx(evt)) === Number(currentChapter),
+  );
+  return { characters: Array.from(aggregateCharactersFromEvents(chapterEvents).values()) };
+}
+
+export function toCommitGraphArgs(chapter, eventIdx, source) {
+  return {
+    graphChapter: chapter,
+    apiEventIdx: eventIdx,
+    elements: source.elements,
+    eventMeta: source.eventMeta,
+    normalizedEvent: source.normalizedEvent ?? undefined,
+    characters: source.characters,
+    relations: source.relations,
+  };
+}
+
+export async function awaitPendingChapterDiscovery(pending) {
+  if (!pending) return false;
+  try {
+    await pending;
+  } catch {
+    /* discovery 쪽에서 에러 상태 기록 */
+  }
+  return true;
+}
+
+/** 캐시 max 또는 discovery status로 through 커버리지 판정 */
+export function resolveChapterDiscoveryCoverage(refs, bookId, chapter, eventIdx) {
+  if (getCachedChapterMaxEventIdx(bookId, chapter) >= eventIdx) {
+    return { ready: true };
+  }
+  const status = refs.chapterEventDiscoveryRef.current.get(
+    cacheKeyUtils.createChapterKey(bookId, chapter),
+  );
+  if (typeof status === 'number' && status >= eventIdx) return { ready: true };
+  if (status === 'missing') return { ready: false, reason: 'missing' };
+  return null;
+}
+
+export function clearViewerGraphPipelineMaps(refs) {
+  refs.chapterSyncStatusRef.current.clear();
+  refs.chapterEventDiscoveryRef.current.clear();
+  refs.chapterDiscoveryPromiseRef.current.clear();
+}
+
+export function resolvePipelineBookId(book) {
+  return toPositiveNumberOrNull(book?.id);
 }
 
 export function fallbackEventMeta(chapter, eventIdx) {
@@ -186,8 +256,8 @@ export const graphDataTransformUtils = {
     const originalEventIdx = normalizedEvent
       ? eventUtils.resolveEventNum(normalizedEvent)
       : apiEventIdx;
-    const relations = resultData.relations || [];
-    const characters = resultData.characters || [];
+    const relations = asArray(resultData.relations);
+    const characters = asArray(resultData.characters);
 
     const withEventFields = (base, rawId) => ({
       ...base,

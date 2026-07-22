@@ -1,13 +1,13 @@
 /** 북마크 표시·locator·색상 팔레트 (API 호출 없음) */
 
 import { toLocator, locatorsEqual, toViewerResumeAnchor, toPositiveNumberOrNull } from '../common/valueUtils';
-import { resolveViewerBookKey } from '../viewer/viewerCoreStateUtils';
+import { resolveViewerBookKey } from '../viewer/viewerCore';
 import {
   getChapterData,
   locatorToBookAbsoluteOffset,
-  normalizeStartEndLocatorsForServer,
   resolveProgressMetricsFromLocator,
 } from '../common/cache/manifestCache';
+import { normalizeStartEndLocatorsForServer } from '../common/cache/progressCache';
 
 export const clientSortToApiSort = (sortOrder) =>
   sortOrder === 'oldest' ? 'time_asc' : 'time_desc';

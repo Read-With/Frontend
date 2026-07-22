@@ -1,13 +1,7 @@
-/** 챕터·이벤트 스냅샷, eventIdx 유틸, 매크로 그래프 캐시 로더, relation timeline */
+/** 챕터·이벤트 스냅샷, 매크로 그래프 캐시 로더, relation timeline fetch */
 import { toNumberOrNull, toPositiveInt, toTrimmedStringOrNull } from '../common/valueUtils';
-import { errorUtils } from '../common/errorUtils';
-import { extractApiBookId, isSamePair } from './graphUtils';
-import {
-  getCachedChapterEvents,
-  getChapterEventFallbackData,
-  reconstructChapterGraphState,
-  ensureBookRelationshipDeltas,
-} from '../common/cache/chapterEventCache';
+import { errorUtils } from '../common/urlUtils';
+import { extractApiBookId, isSamePair, isGraphEdgeElement } from './graphCore';
 import {
   loadFromStorage,
   saveToStorage,
@@ -17,38 +11,46 @@ import {
   setCacheItem,
   enforceCacheSizeLimit,
 } from '../common/cache/cacheManager';
-import { eventUtils, cacheKeyUtils, MACRO_GRAPH_STORAGE_KEY_RE } from '../viewer/viewerCoreStateUtils';
-import { accumulateDeltasToGraphResult, resolveChapterEventIdOrder } from '../api/api';
+import { eventUtils, cacheKeyUtils, MACRO_GRAPH_STORAGE_KEY_RE } from '../viewer/viewerCore';
+import { accumulateDeltasToGraphResult, resolveChapterEventIdOrder } from '../api/graphApi';
 import {
   findManifestEventInChapter,
   resolveLastEventIdxForChapter,
 } from '../common/cache/manifestCache';
 import { clampPositivity } from '../styles/graphStyles';
-import { pickGraphApiResult } from '../viewer/viewerGraphUtils';
+import { pickGraphApiResult } from '../viewer/viewerGraph';
 
-const getChapterEventsSnapshot = (bookId, chapterIdx) => {
-  if (!bookId || !chapterIdx || chapterIdx < 1) {
-    return null;
-  }
+import {
+  getCachedChapterEvents,
+  getChapterEventFallbackData,
+  reconstructChapterGraphState,
+  ensureBookRelationshipDeltas,
+} from './graphModel';
 
-  const cachedEvents = getCachedChapterEvents(bookId, chapterIdx);
-  if (
-    cachedEvents?.events?.length &&
-    cachedEvents.source !== 'manifest-only'
-  ) {
-    return cachedEvents;
-  }
+export {
+  getCachedChapterEvents,
+  ensureBookRelationshipDeltas,
+  prefetchChapterEvents,
+  ensureChapterEventsDiscovered,
+  ensureGraphBookCache,
+  clearBookRelationshipDeltas,
+} from './graphModel';
 
-  return null;
+const asArray = (value) => (Array.isArray(value) ? value : []);
+
+const ELEMENTS_TO_RELATIONS_OPTS = {
+  includeLabel: true,
+  includeCount: false,
+  positivityDefault: null,
 };
 
-const convertElementsToRelations = (elements) => {
-  return eventUtils.convertElementsToRelations(elements, {
-    includeLabel: true,
-    includeCount: false,
-    positivityDefault: null
-  });
-};
+const graphPayloadFromReconstructed = (reconstructed) => ({
+  characters: asArray(reconstructed?.characters),
+  relations: eventUtils.convertElementsToRelations(
+    asArray(reconstructed?.elements),
+    ELEMENTS_TO_RELATIONS_OPTS
+  ),
+});
 
 const isLegacyRawEventRow = (event) =>
   Boolean(
@@ -70,29 +72,33 @@ const withEventOffsetFields = (start, end, { alsoTxtOffset = false } = {}) => {
     : { start: s, end: e };
 };
 
-const graphPayloadFromReconstructed = (reconstructed) => ({
-  characters: reconstructed?.characters || [],
-  relations: convertElementsToRelations(reconstructed?.elements || []),
-});
+function baseChapterEventFields(targetChapter, eventIdx, eventNum, eventId) {
+  return {
+    chapter: targetChapter,
+    chapterIdx: targetChapter,
+    eventIdx,
+    eventNum,
+    eventId,
+    resolvedEventIdx: eventIdx,
+    originalEventIdx: eventIdx,
+  };
+}
 
 const mapLegacyOrSummaryEvent = (event, targetChapter) => {
-  const normalizedIdx = eventUtils.resolveEventOrdinal(event);
-  if (normalizedIdx == null || normalizedIdx <= 0) return null;
+  const eventIdx = eventUtils.resolveEventOrdinal(event);
+  if (eventIdx == null || eventIdx <= 0) return null;
+
+  const eventNum = toPositiveInt(event.eventNum, eventIdx);
+  const eventId = eventUtils.resolveEventId(event) ?? event.eventId ?? eventIdx;
+  const base = baseChapterEventFields(targetChapter, eventIdx, eventNum, eventId);
 
   if (isLegacyRawEventRow(event)) {
-    const resolvedEventNum = toPositiveInt(event.eventNum, normalizedIdx);
     return {
       ...(event.event && typeof event.event === 'object' ? event.event : {}),
       ...event,
-      chapter: targetChapter,
-      chapterIdx: targetChapter,
-      eventIdx: normalizedIdx,
-      eventNum: resolvedEventNum,
-      eventId: eventUtils.resolveEventId(event) ?? normalizedIdx,
-      resolvedEventIdx: normalizedIdx,
-      originalEventIdx: normalizedIdx,
-      relations: Array.isArray(event.relations) ? event.relations : [],
-      characters: Array.isArray(event.characters) ? event.characters : [],
+      ...base,
+      relations: asArray(event.relations),
+      characters: asArray(event.characters),
       ...withEventOffsetFields(
         event?.startPos ?? event?.start ?? event?.startTxtOffset,
         event?.endPos ?? event?.end ?? event?.endTxtOffset
@@ -100,18 +106,10 @@ const mapLegacyOrSummaryEvent = (event, targetChapter) => {
     };
   }
 
-  const title = event.title ?? null;
-  const resolvedEventNum = toPositiveInt(event.eventNum, normalizedIdx);
   return {
-    chapter: targetChapter,
-    chapterIdx: targetChapter,
-    eventIdx: normalizedIdx,
-    eventNum: resolvedEventNum,
-    eventId: eventUtils.resolveEventId(event) ?? event.eventId ?? normalizedIdx,
-    resolvedEventIdx: normalizedIdx,
-    originalEventIdx: normalizedIdx,
+    ...base,
     ...withEventOffsetFields(event.startTxtOffset, event.endTxtOffset, { alsoTxtOffset: true }),
-    ...withEventTitleAliases(title),
+    ...withEventTitleAliases(event.title ?? null),
     text: event.text ?? null,
     relations: [],
     characters: [],
@@ -119,42 +117,35 @@ const mapLegacyOrSummaryEvent = (event, targetChapter) => {
 };
 
 function buildEventsFromChapterCache(chapterPayload, targetChapter, throughEventIdx = null) {
-  if (!chapterPayload || !Array.isArray(chapterPayload.events) || !chapterPayload.events.length) {
-    return [];
-  }
+  if (!chapterPayload?.events?.length) return [];
 
-  const hasDiffCache =
-    chapterPayload.baseSnapshot && Array.isArray(chapterPayload.diffs);
+  const hasDiffCache = chapterPayload.baseSnapshot && Array.isArray(chapterPayload.diffs);
   const through = Number(throughEventIdx);
-  const eventMetas = (Number.isFinite(through) && through > 0
+  const eventMetas = Number.isFinite(through) && through > 0
     ? chapterPayload.events.filter((event) => {
         const idx = Number(event?.eventIdx) || 0;
         return idx > 0 && idx <= through;
       })
-    : chapterPayload.events);
+    : chapterPayload.events;
 
   if (!hasDiffCache) {
-    return eventMetas
-      .map((event) => mapLegacyOrSummaryEvent(event, targetChapter))
-      .filter(Boolean);
+    return eventMetas.map((event) => mapLegacyOrSummaryEvent(event, targetChapter)).filter(Boolean);
   }
 
   return eventMetas.map((eventMeta) => {
-    const targetEventIdx = Number(eventMeta?.eventIdx) || 0;
-    const resolvedEventNum = toPositiveInt(eventMeta?.eventNum, targetEventIdx);
-    const reconstructed = reconstructChapterGraphState(chapterPayload, targetEventIdx);
+    const eventIdx = Number(eventMeta?.eventIdx) || 0;
+    const eventNum = toPositiveInt(eventMeta?.eventNum, eventIdx);
+    const reconstructed = reconstructChapterGraphState(chapterPayload, eventIdx);
     const { characters, relations } = graphPayloadFromReconstructed(reconstructed);
     const title = eventMeta.title ?? reconstructed?.eventMeta?.name ?? reconstructed?.eventMeta?.title ?? null;
 
     return {
       ...eventMeta,
-      chapter: targetChapter,
-      chapterIdx: targetChapter,
-      eventNum: resolvedEventNum,
-      eventId:
+      ...baseChapterEventFields(targetChapter, eventIdx, eventNum, (
         eventUtils.resolveEventId(reconstructed?.eventMeta) ??
         eventUtils.resolveEventId(eventMeta) ??
-        targetEventIdx,
+        eventIdx
+      )),
       event: reconstructed?.eventMeta ?? eventMeta?.event ?? null,
       ...withEventTitleAliases(title),
       relations,
@@ -169,14 +160,10 @@ function buildEventsFromChapterCache(chapterPayload, targetChapter, throughEvent
 
 function getEventsForChapter(chapter, folderKey) {
   const bookId = extractApiBookId(folderKey);
-  if (!bookId || !chapter || chapter < 1) {
-    return [];
-  }
+  if (!bookId || !chapter || chapter < 1) return [];
 
-  const snapshot = getChapterEventsSnapshot(bookId, chapter);
-  if (!snapshot) {
-    return [];
-  }
+  const snapshot = getCachedChapterEvents(bookId, chapter);
+  if (!snapshot?.events?.length || snapshot.source === 'manifest-only') return [];
 
   return buildEventsFromChapterCache(snapshot, chapter);
 }
@@ -201,45 +188,13 @@ export function getEventDataByIndex(folderKey, chapter, eventIndex) {
 
   const resolvedEventIdx = eventUtils.resolveEventNum(event) || Number(eventIndex);
   return {
-    chapter,
-    chapterIdx: chapter,
-    eventIdx: resolvedEventIdx,
-    eventNum: resolvedEventIdx,
-    eventId: eventUtils.resolveEventId(event) ?? resolvedEventIdx,
-    relations: Array.isArray(event.relations) ? event.relations : [],
-    characters: Array.isArray(event.characters) ? event.characters : [],
+    ...baseChapterEventFields(chapter, resolvedEventIdx, resolvedEventIdx, (
+      eventUtils.resolveEventId(event) ?? resolvedEventIdx
+    )),
+    relations: asArray(event.relations),
+    characters: asArray(event.characters),
     event: event.event || null,
   };
-}
-
-/** 챕터 이벤트 캐시 → events state에 병합 */
-function mergeChapterCacheEventsIntoState(
-  prevEvents,
-  chapterPayload,
-  targetChapter,
-  throughEventIdx = null
-) {
-  if (!chapterPayload || !Array.isArray(chapterPayload.events)) {
-    return { merged: false, events: prevEvents };
-  }
-
-  const enrichedEvents = buildEventsFromChapterCache(
-    chapterPayload,
-    targetChapter,
-    throughEventIdx
-  );
-  if (!enrichedEvents.length) {
-    return { merged: false, events: prevEvents };
-  }
-
-  let merged = false;
-  let nextEvents = prevEvents;
-  enrichedEvents.forEach((normalizedEvent) => {
-    merged = true;
-    nextEvents = eventUtils.updateEventsInState(nextEvents, normalizedEvent, targetChapter);
-  });
-
-  return { merged, events: nextEvents };
 }
 
 /** 챕터 이벤트 캐시 → events state에 병합 (React setState용) */
@@ -250,19 +205,23 @@ export function applyChapterEventsFromCache(
   throughEventIdx = null
 ) {
   const chapterPayload = getCachedChapterEvents(bookId, targetChapter);
-  if (!chapterPayload || !Array.isArray(chapterPayload.events)) {
+  if (!chapterPayload?.events) {
     return { applied: false, hasPayload: false, isEmpty: false, events: prevEvents };
   }
   if (!chapterPayload.events.length) {
     return { applied: false, hasPayload: true, isEmpty: true, events: prevEvents };
   }
-  const { merged, events } = mergeChapterCacheEventsIntoState(
-    prevEvents,
-    chapterPayload,
-    targetChapter,
-    throughEventIdx
+
+  const enrichedEvents = buildEventsFromChapterCache(chapterPayload, targetChapter, throughEventIdx);
+  if (!enrichedEvents.length) {
+    return { applied: false, hasPayload: true, isEmpty: false, events: prevEvents };
+  }
+
+  const events = enrichedEvents.reduce(
+    (acc, normalizedEvent) => eventUtils.updateEventsInState(acc, normalizedEvent, targetChapter),
+    prevEvents
   );
-  return { applied: merged, hasPayload: true, isEmpty: false, events };
+  return { applied: true, hasPayload: true, isEmpty: false, events };
 }
 
 // --- 매크로 그래프 세션·localStorage 캐시 ---
@@ -318,39 +277,26 @@ const checkChapterEventsCache = (bookId, chapter, eventIdx) => {
 
   const reconstructed = reconstructChapterGraphState(chapterCache, eventIdx);
   if (reconstructed) {
-    const { characters, relations } = graphPayloadFromReconstructed(reconstructed);
-    if (characters.length || relations.length) {
-      return {
-        characters,
-        relations,
-        event: reconstructed.eventMeta || null,
-      };
+    const payload = graphPayloadFromReconstructed(reconstructed);
+    if (hasGraphPayload(payload)) {
+      return { ...payload, event: reconstructed.eventMeta || null };
     }
   }
 
-  const rawEvents = Array.isArray(chapterCache.rawEvents) ? chapterCache.rawEvents : [];
-  const targetEvent = eventUtils.findEventInCache(rawEvents, eventIdx);
-  if (!targetEvent || (!targetEvent.characters?.length && !targetEvent.relations?.length)) {
-    return null;
-  }
+  const targetEvent = eventUtils.findEventInCache(asArray(chapterCache.rawEvents), eventIdx);
+  if (!hasGraphPayload(targetEvent)) return null;
 
   return {
-    characters: Array.isArray(targetEvent.characters) ? targetEvent.characters : [],
-    relations: Array.isArray(targetEvent.relations) ? targetEvent.relations : [],
+    characters: asArray(targetEvent.characters),
+    relations: asArray(targetEvent.relations),
     event: targetEvent.event || null,
   };
-};
-
-const getFallbackData = (bookId, chapter, eventIdx) => {
-  return getChapterEventFallbackData(bookId, chapter, eventIdx) ?? null;
 };
 
 /** characters 또는 relations가 하나라도 있으면 true (fine/macro 공용) */
 export const hasGraphPayload = (data) => {
   if (!data || typeof data !== 'object') return false;
-  const chars = Array.isArray(data.characters) ? data.characters.length : 0;
-  const rels = Array.isArray(data.relations) ? data.relations.length : 0;
-  return chars > 0 || rels > 0;
+  return asArray(data.characters).length > 0 || asArray(data.relations).length > 0;
 };
 
 export const hasMacroGraphStorageCache = (bookId, chapter) => {
@@ -372,11 +318,18 @@ const handleLoaderSuccess = (data, onSuccess, cacheKey) => {
 };
 
 const handleLoaderFallback = (bookId, chapter, eventIdx, onSuccess, logMessage) => {
-  const fallbackData = getFallbackData(bookId, chapter, eventIdx);
+  const fallbackData = getChapterEventFallbackData(bookId, chapter, eventIdx) ?? null;
   if (!fallbackData) return null;
   errorUtils.logInfo('GraphDataLoader', logMessage, { bookId, chapter, eventIdx, source: 'fallback' });
   onSuccess?.(fallbackData);
   return { data: fallbackData, source: 'fallback' };
+};
+
+const tryLoaderFallback = (bookId, chapter, eventIdx, onSuccess, onError, logMessage, error) => {
+  const fallbackResult = handleLoaderFallback(bookId, chapter, eventIdx, onSuccess, logMessage);
+  if (fallbackResult) return fallbackResult;
+  onError?.(error);
+  return { data: null, source: error ? 'error' : 'none' };
 };
 
 const processApiResponse = (response, cacheKey, onSuccess, bookId, chapter, eventIdx, onError) => {
@@ -391,7 +344,6 @@ const processApiResponse = (response, cacheKey, onSuccess, bookId, chapter, even
 
   const fallbackResult = handleLoaderFallback(bookId, chapter, eventIdx, onSuccess, '폴백 데이터 사용');
   if (fallbackResult) return fallbackResult;
-
   onError?.(apiError);
   return { data: null, source: 'none' };
 };
@@ -453,18 +405,15 @@ export const loadGraphDataWithCache = async ({
   } catch (error) {
     if (cacheKey) inflightRequests.delete(cacheKey);
     errorUtils.logError('GraphDataLoader', error, { bookId, chapter, eventIdx, cacheKey });
-
-    const fallbackResult = handleLoaderFallback(
+    return tryLoaderFallback(
       bookId,
       chapter,
       eventIdx,
       onSuccess,
-      '에러 후 폴백 데이터 사용'
+      onError,
+      '에러 후 폴백 데이터 사용',
+      error
     );
-    if (fallbackResult) return fallbackResult;
-
-    onError?.(error);
-    return { data: null, source: 'error' };
   }
 };
 
@@ -494,34 +443,28 @@ export function buildGraphResponseFromDeltas(
   const eventId = toTrimmedStringOrNull(
     eventUtils.resolveEventId(structure) ?? structure?.eventId
   );
+  const isSuccess = deltasBundle.isSuccess !== false;
+  const makeResponse = (result) => ({ isSuccess, code: 'SUCCESS', result });
 
   if (!eventId) {
     const prev = previousResult?.result;
-    const snapshot = {
+    return makeResponse({
       bookId: deltasBundle.bookId ?? bookId,
       chapterIndex: chapter,
       eventId: null,
-      characters: Array.isArray(prev?.characters) ? prev.characters : [],
-      relations: Array.isArray(prev?.relations) ? prev.relations : [],
+      characters: asArray(prev?.characters),
+      relations: asArray(prev?.relations),
       event: { chapterIndex: chapter, chapterIdx: chapter, eventId: null },
-    };
-    return {
-      isSuccess: deltasBundle.isSuccess !== false,
-      code: 'SUCCESS',
-      result: snapshot,
-    };
+    });
   }
 
-  const snapshot = accumulateDeltasToGraphResult(deltasBundle.bookId ?? bookId, deltasBundle.deltas, {
-    chapterIndex: chapter,
-    throughEventId: eventId,
-    chapterEventIdOrder,
-  });
-  return {
-    isSuccess: deltasBundle.isSuccess !== false,
-    code: 'SUCCESS',
-    result: snapshot,
-  };
+  return makeResponse(
+    accumulateDeltasToGraphResult(deltasBundle.bookId ?? bookId, deltasBundle.deltas, {
+      chapterIndex: chapter,
+      throughEventId: eventId,
+      chapterEventIdOrder,
+    })
+  );
 }
 
 export function getRelationTimelineCacheKey(bookId, chapterNum, id1, id2) {
@@ -529,11 +472,7 @@ export function getRelationTimelineCacheKey(bookId, chapterNum, id1, id2) {
 }
 
 export function getCachedRelationTimeline(cacheKey) {
-  const cached = getCacheItem('relationTimelineCache', cacheKey);
-  if (cached && cached.result) {
-    return cached.result;
-  }
-  return null;
+  return getCacheItem('relationTimelineCache', cacheKey)?.result ?? null;
 }
 
 export function setCachedRelationTimeline(cacheKey, result) {
@@ -545,18 +484,17 @@ export function setCachedRelationTimeline(cacheKey, result) {
 }
 
 export function findRelationInResult(relations, id1, id2) {
-  if (!Array.isArray(relations) || relations.length === 0) return null;
-  return relations.find((rel) => isSamePair(rel, id1, id2)) ?? null;
+  const list = asArray(relations);
+  if (!list.length) return null;
+  return list.find((rel) => isSamePair(rel, id1, id2)) ?? null;
 }
 
 export function findRelationInElements(elements, id1, id2) {
   if (!Array.isArray(elements)) return null;
   return (
     elements.find((element) => {
-      const data = element?.data;
-      if (!data?.source || !data?.target) return false;
-      const pair = eventUtils.resolveRelationNodeIds(data);
-      return isSamePair(pair, id1, id2);
+      if (!isGraphEdgeElement(element)) return false;
+      return isSamePair(eventUtils.resolveRelationNodeIds(element.data), id1, id2);
     }) ?? null
   );
 }
@@ -583,144 +521,22 @@ export function padSingleEvent(points, labels) {
     return { points, labels };
   }
 
-  const paddedLabels = Array(11)
-    .fill('')
-    .map((_, index) => (index === 5 ? labels[0] : ''));
-  const paddedTimeline = Array(11)
-    .fill(null)
-    .map((_, index) => (index === 5 ? points[0] : null));
-
-  return { points: paddedTimeline, labels: paddedLabels };
+  return {
+    points: Array.from({ length: 11 }, (_, index) => (index === 5 ? points[0] : null)),
+    labels: Array.from({ length: 11 }, (_, index) => (index === 5 ? labels[0] : '')),
+  };
 }
 
-/** 간선 관계 타임라인 차트 UX */
-const EDGE_CHART_UX = {
-  LONG_THRESHOLD: 12,
-  /** positivity -1~1 기준 유의미 변화 */
-  SIGNIFICANT_DELTA: 0.15,
-};
-
-export function isLongEdgeTimeline(pointCount) {
-  return pointCount >= EDGE_CHART_UX.LONG_THRESHOLD;
-}
-
-/** 변곡·시작점에 isSignificant 표시 */
-export function annotateSignificantEdgePoints(pairs, delta = EDGE_CHART_UX.SIGNIFICANT_DELTA) {
-  if (!Array.isArray(pairs)) return [];
-  return pairs.map((pair, i) => {
-    if (i === 0 || i === pairs.length - 1) {
-      return { ...pair, isSignificant: true };
-    }
-    const prev = pairs[i - 1]?.value;
-    const cur = pair?.value;
-    if (typeof prev !== 'number' || typeof cur !== 'number') {
-      return { ...pair, isSignificant: false };
-    }
-    return {
-      ...pair,
-      isSignificant: Math.abs(cur - prev) >= delta,
-    };
-  });
-}
-
-/**
- * X축 라벨용 tick.
- * 챕터가 많아도 겹치지 않도록 개수를 제한하고 간격을 유지한다.
- * (항상: 첫·끝·현재 / 챕터는 균등 샘플)
- */
-export function getSparseEdgeTickValues(lineData, { maxTicks = 6 } = {}) {
-  if (!Array.isArray(lineData) || lineData.length === 0) return [];
-  if (lineData.length <= maxTicks) {
-    return lineData.map((d) => d.x);
-  }
-
-  const byX = new Map(lineData.map((d) => [d.x, d]));
-  const chosen = new Set();
-
-  chosen.add(lineData[0].x);
-  chosen.add(lineData[lineData.length - 1].x);
-  lineData.forEach((d) => {
-    if (d.isCurrent) chosen.add(d.x);
-  });
-
-  const chapters = lineData.filter((d) => d.isChapter);
-  if (chapters.length > 0) {
-    const chapterBudget = Math.max(2, maxTicks - chosen.size);
-    if (chapters.length <= chapterBudget) {
-      chapters.forEach((d) => chosen.add(d.x));
-    } else {
-      chosen.add(chapters[0].x);
-      chosen.add(chapters[chapters.length - 1].x);
-      const innerSlots = Math.max(0, chapterBudget - 2);
-      for (let i = 1; i <= innerSlots; i += 1) {
-        const idx = Math.round((i * (chapters.length - 1)) / (innerSlots + 1));
-        chosen.add(chapters[idx].x);
-      }
-    }
-  }
-
-  if (chosen.size < 3) {
-    chosen.add(lineData[Math.floor(lineData.length / 2)].x);
-  }
-
-  const sorted = [...chosen].sort((a, b) => a - b);
-  const minGap = Math.max(1, Math.floor(lineData.length / maxTicks));
-  const thinned = [];
-
-  sorted.forEach((x) => {
-    const point = byX.get(x);
-    if (thinned.length === 0) {
-      thinned.push(x);
-      return;
-    }
-    const prevX = thinned[thinned.length - 1];
-    if (x - prevX >= minGap) {
-      thinned.push(x);
-      return;
-    }
-    const prev = byX.get(prevX);
-    const preferCurrent = point?.isCurrent && !prev?.isCurrent;
-    const preferEnd =
-      x === lineData[lineData.length - 1].x && prevX !== lineData[lineData.length - 1].x;
-    if (preferCurrent || preferEnd) {
-      thinned[thinned.length - 1] = x;
-    }
-  });
-
-  if (thinned[0] !== lineData[0].x) thinned.unshift(lineData[0].x);
-  const lastX = lineData[lineData.length - 1].x;
-  if (thinned[thinned.length - 1] !== lastX) thinned.push(lastX);
-
-  return [...new Set(thinned)].sort((a, b) => a - b);
-}
-
-/**
- * 차트 표시용 라벨. E12 → event 12, Ch는 유지.
- */
-export function formatEdgeTimelineDisplayLabel(label, numericLabel, fallbackIndex = 0) {
-  if (typeof label === 'string') {
-    const trimmed = label.trim();
-    if (/^Ch\d+/i.test(trimmed)) return trimmed;
-    const eventMatch = trimmed.match(/^E(\d+)$/i);
-    if (eventMatch) return `event ${eventMatch[1]}`;
-  }
-  if (Number.isFinite(numericLabel) && numericLabel > 0) {
-    return `event ${numericLabel}`;
-  }
-  return `event ${fallbackIndex + 1}`;
-}
 
 /** relation timeline fetch (캐시·deltas·API probe) */
 
 const PROBE_EVENT_HARD_MAX = 512;
 const timelineInflight = new Map();
 
-function emptyTimeline() {
-  return { points: [], labelInfo: [] };
-}
-
-function emptyNoRelation() {
-  return { points: [], labelInfo: [], noRelation: true };
+function emptyTimeline({ noRelation = false } = {}) {
+  return noRelation
+    ? { points: [], labelInfo: [], noRelation: true }
+    : { points: [], labelInfo: [] };
 }
 
 function withTimelineInflight(cacheKey, run) {
@@ -746,65 +562,96 @@ function pickSuccessfulResult(data) {
 
 function relationEventFromApiResult(fineData, id1, id2, idx) {
   const fineResult = pickSuccessfulResult(fineData);
-  if (!fineResult || !Array.isArray(fineResult.relations) || fineResult.relations.length === 0) {
-    return null;
-  }
-  const relation = findRelationInResult(fineResult.relations, id1, id2);
+  const relation = findRelationInResult(asArray(fineResult?.relations), id1, id2);
   if (!relation) return null;
   return { idx, positivity: relation.positivity || 0 };
+}
+
+function findEdgeInReconstructedChapter(chapterPayload, eventIdx, id1, id2) {
+  return findRelationInElements(
+    reconstructChapterGraphState(chapterPayload, eventIdx)?.elements,
+    id1,
+    id2
+  );
+}
+
+function collectIndexedRelationEvents(lastEventIdx, lastOnly, getEdgeAt) {
+  const relationEvents = [];
+  const indices = lastOnly
+    ? Array.from({ length: lastEventIdx }, (_, i) => lastEventIdx - i)
+    : Array.from({ length: lastEventIdx }, (_, i) => i + 1);
+
+  for (const idx of indices) {
+    const edge = getEdgeAt(idx);
+    if (!edge) continue;
+    relationEvents.push({ idx, positivity: relationPointFromElement(edge) });
+    if (lastOnly) break;
+  }
+  return relationEvents;
+}
+
+function collectRelationEventsFromChapterCache(chapterPayload, id1, id2, lastEventIdx, lastOnly) {
+  return collectIndexedRelationEvents(
+    lastEventIdx,
+    lastOnly,
+    (idx) => findEdgeInReconstructedChapter(chapterPayload, idx, id1, id2)
+  );
+}
+
+function buildEventTimeline(eventCount, getPointAt, { fillGaps = true } = {}) {
+  const points = [];
+  const labelInfo = [];
+  let started = false;
+
+  for (let idx = 1; idx <= eventCount; idx += 1) {
+    const point = getPointAt(idx, started);
+    if (point === null) {
+      if (!started) continue;
+      if (fillGaps) {
+        points.push(0);
+        labelInfo.push(`E${idx}`);
+      }
+      continue;
+    }
+    if (point === undefined) continue;
+
+    started = true;
+    points.push(point);
+    labelInfo.push(`E${idx}`);
+  }
+
+  return started
+    ? { points, labelInfo, noRelation: false }
+    : emptyTimeline({ noRelation: true });
 }
 
 function buildRelationTimelineFromChapterCache(bookId, id1, id2, chapterNum, eventNum) {
   const chapterPayload = getCachedChapterEvents(bookId, chapterNum);
   if (!chapterPayload?.baseSnapshot) return null;
 
-  const points = [];
-  const labelInfo = [];
-  let started = false;
-
-  for (let idx = 1; idx <= eventNum; idx += 1) {
-    const edge = findRelationInElements(
-      reconstructChapterGraphState(chapterPayload, idx)?.elements,
-      id1,
-      id2
-    );
-    if (!started) {
-      if (!edge) continue;
-      started = true;
-    }
-    points.push(edge ? relationPointFromElement(edge) : 0);
-    labelInfo.push(`E${idx}`);
-  }
-
-  return started ? { points, labelInfo, noRelation: false } : emptyNoRelation();
+  return buildEventTimeline(eventNum, (idx, started) => {
+    const edge = findEdgeInReconstructedChapter(chapterPayload, idx, id1, id2);
+    if (!edge) return started ? null : undefined;
+    return relationPointFromElement(edge);
+  }, { fillGaps: true });
 }
 
-function collectRelationEventsFromChapterCache(chapterPayload, id1, id2, lastEventIdx, lastOnly) {
+async function collectRelationEventsViaApi(fetchEventData, chapter, lastEventIdx, id1, id2, lastOnly) {
+  if (!(lastEventIdx > 0)) return [];
+
   const relationEvents = [];
+  const indices = lastOnly
+    ? Array.from({ length: lastEventIdx }, (_, i) => lastEventIdx - i)
+    : Array.from({ length: lastEventIdx }, (_, i) => i + 1);
 
-  if (lastOnly) {
-    for (let idx = lastEventIdx; idx >= 1; idx -= 1) {
-      const edge = findRelationInElements(
-        reconstructChapterGraphState(chapterPayload, idx)?.elements,
-        id1,
-        id2
-      );
-      if (edge) {
-        relationEvents.push({ idx, positivity: relationPointFromElement(edge) });
-        break;
-      }
-    }
-    return relationEvents;
-  }
-
-  for (let idx = 1; idx <= lastEventIdx; idx += 1) {
-    const edge = findRelationInElements(
-      reconstructChapterGraphState(chapterPayload, idx)?.elements,
-      id1,
-      id2
-    );
-    if (edge) {
-      relationEvents.push({ idx, positivity: relationPointFromElement(edge) });
+  for (const idx of indices) {
+    try {
+      const event = relationEventFromApiResult(await fetchEventData(chapter, idx), id1, id2, idx);
+      if (!event) continue;
+      relationEvents.push(event);
+      if (lastOnly) break;
+    } catch {
+      /* skip event */
     }
   }
   return relationEvents;
@@ -857,36 +704,6 @@ async function resolveChapterLastEventIdx(bookId, chapter, fetchEventData) {
   if (Number.isFinite(cachedMax) && cachedMax >= 1) return cachedMax;
 
   return probeLastEventIdxByApi(fetchEventData, chapter);
-}
-
-async function collectRelationEventsViaApi(fetchEventData, chapter, lastEventIdx, id1, id2, lastOnly) {
-  const relationEvents = [];
-  if (!(lastEventIdx > 0)) return relationEvents;
-
-  if (lastOnly) {
-    for (let idx = lastEventIdx; idx >= 1; idx -= 1) {
-      try {
-        const event = relationEventFromApiResult(await fetchEventData(chapter, idx), id1, id2, idx);
-        if (event) {
-          relationEvents.push(event);
-          break;
-        }
-      } catch {
-        // continue probing earlier events
-      }
-    }
-    return relationEvents;
-  }
-
-  for (let idx = 1; idx <= lastEventIdx; idx += 1) {
-    try {
-      const event = relationEventFromApiResult(await fetchEventData(chapter, idx), id1, id2, idx);
-      if (event) relationEvents.push(event);
-    } catch {
-      // skip event
-    }
-  }
-  return relationEvents;
 }
 
 async function fetchRelationTimelineCumulativeUncached(bookId, id1, id2, selectedChapter) {
@@ -988,31 +805,40 @@ async function fetchRelationTimelineCumulativeUncached(bookId, id1, id2, selecte
   }
 }
 
-export async function fetchRelationTimelineCumulative(bookId, id1, id2, selectedChapter) {
-  if (!bookId || selectedChapter < 1) return emptyNoRelation();
-
-  const cacheKey = getRelationTimelineCacheKey(bookId, selectedChapter, id1, id2);
-  const cached = getCachedRelationTimeline(cacheKey);
+async function fetchCachedTimeline(cacheKey, inflightPrefix, loadCached, fetchUncached) {
+  const cached = loadCached();
   if (cached) return withNoRelation(cached);
 
-  return withTimelineInflight(`cum:${cacheKey}`, async () => {
-    const again = getCachedRelationTimeline(cacheKey);
+  return withTimelineInflight(`${inflightPrefix}:${cacheKey}`, async () => {
+    const again = loadCached();
     if (again) return withNoRelation(again);
 
     try {
-      const result = await fetchRelationTimelineCumulativeUncached(bookId, id1, id2, selectedChapter);
+      const result = await fetchUncached();
       if (Array.isArray(result?.points) && result.points.length > 0) {
         setCachedRelationTimeline(cacheKey, result);
       }
       return withNoRelation(result);
     } catch {
-      return emptyNoRelation();
+      return emptyTimeline({ noRelation: true });
     }
   });
 }
 
+export async function fetchRelationTimelineCumulative(bookId, id1, id2, selectedChapter) {
+  if (!bookId || selectedChapter < 1) return emptyTimeline({ noRelation: true });
+
+  const cacheKey = getRelationTimelineCacheKey(bookId, selectedChapter, id1, id2);
+  return fetchCachedTimeline(
+    cacheKey,
+    'cum',
+    () => getCachedRelationTimeline(cacheKey),
+    () => fetchRelationTimelineCumulativeUncached(bookId, id1, id2, selectedChapter)
+  );
+}
+
 export async function fetchRelationTimelineViewer(bookId, id1, id2, chapterNum, eventNum) {
-  if (!bookId || chapterNum < 1 || eventNum < 1) return emptyNoRelation();
+  if (!bookId || chapterNum < 1 || eventNum < 1) return emptyTimeline({ noRelation: true });
 
   const cachedTimeline = buildRelationTimelineFromChapterCache(bookId, id1, id2, chapterNum, eventNum);
   if (cachedTimeline) return cachedTimeline;
@@ -1026,11 +852,8 @@ export async function fetchRelationTimelineViewer(bookId, id1, id2, chapterNum, 
       const deltasBundle = await ensureBookRelationshipDeltas(bookId, { chapterIndex: chapterNum });
       const chapterEventIdOrder = resolveChapterEventIdOrder(bookId, chapterNum);
       const cachedEvents = new Map();
-      const points = [];
-      const labelInfo = [];
-      let started = false;
 
-      for (let idx = 1; idx <= eventNum; idx += 1) {
+      const timeline = buildEventTimeline(eventNum, (idx, started) => {
         try {
           const fineData = buildGraphResponseFromDeltas(
             bookId,
@@ -1041,30 +864,21 @@ export async function fetchRelationTimelineViewer(bookId, id1, id2, chapterNum, 
             cachedEvents.get(idx - 1) ?? null
           );
           cachedEvents.set(idx, fineData);
-
-          const fineResult = pickSuccessfulResult(fineData);
-          const relation = fineResult?.relations
-            ? findRelationInResult(fineResult.relations, id1, id2)
-            : null;
-
-          if (!started) {
-            if (!relation) continue;
-            started = true;
-          }
-
-          points.push(relation?.positivity || 0);
-          labelInfo.push(`E${idx}`);
+          const relation = findRelationInResult(
+            asArray(pickSuccessfulResult(fineData)?.relations),
+            id1,
+            id2
+          );
+          if (!relation) return started ? null : undefined;
+          return relation.positivity || 0;
         } catch {
-          if (started) {
-            points.push(0);
-            labelInfo.push(`E${idx}`);
-          }
+          return started ? null : undefined;
         }
-      }
+      }, { fillGaps: true });
 
-      return started ? withNoRelation({ points, labelInfo }) : emptyNoRelation();
+      return timeline.noRelation ? emptyTimeline({ noRelation: true }) : withNoRelation(timeline);
     } catch {
-      return emptyNoRelation();
+      return emptyTimeline({ noRelation: true });
     }
   });
 }

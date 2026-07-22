@@ -4,7 +4,7 @@ import CytoscapeGraphUnified from './CytoscapeGraphUnified';
 import UnifiedNodeInfo from './tooltip/UnifiedNodeInfo';
 import UnifiedEdgeTooltip from './tooltip/UnifiedEdgeTooltip';
 import { graphStyles, COLORS, ANIMATION_VALUES } from '../../utils/styles/styles.js';
-import { GRAPH_LAYOUT_CONSTANTS, resolveChapterSidebarWidth } from '../../utils/graph/graphUtils.js';
+import { GRAPH_LAYOUT_CONSTANTS, resolveChapterSidebarWidth } from '../../utils/graph/graphCore.js';
 
 const {
   TOP_BAR_HEIGHT,

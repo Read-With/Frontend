@@ -9,7 +9,7 @@ import {
   useMemo,
 } from 'react';
 import { flushSync } from 'react-dom';
-import { defaultSettings, errorUtils } from '../../../utils/common/errorUtils';
+import { errorUtils } from '../../../utils/common/urlUtils';
 import {
   absoluteOffsetFromReadingProgressPercent,
   locatorFromBookAbsoluteOffset,
@@ -17,13 +17,10 @@ import {
 } from '../../../utils/common/cache/manifestCache';
 import {
   toReadingLocatorKey,
-} from '../../../utils/viewer/viewerEventProgressUtils';
-import {
-  loadCachedXhtmlContent,
-  XHTML_CACHE_INVALIDATED_EVENT,
-} from '../../../utils/common/cache/cacheManager';
+  defaultSettings,
+} from '../../../utils/viewer/viewerSession';
 import { resolveServerBookIdOrFallback } from '../../../hooks/common/hooksShared';
-import { resolveViewerBookKey } from '../../../utils/viewer/viewerCoreStateUtils';
+import { resolveViewerBookKey } from '../../../utils/viewer/viewerCore';
 import {
   collectBlockEntries,
   computeLineBoundsFromRuler,
@@ -33,7 +30,9 @@ import {
   parseXhtmlBody,
   resolvePageIndexFromLocator,
   resolveViewportLocatorEmit,
-} from '../../../utils/viewer/xhtmlViewerLocatorUtils';
+  loadCachedXhtmlContent,
+  XHTML_CACHE_INVALIDATED_EVENT,
+} from '../../../utils/viewer/viewerLocator';
 
 const XhtmlViewer = forwardRef(
   (

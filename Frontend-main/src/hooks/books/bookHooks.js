@@ -3,16 +3,15 @@
 import { useState, useEffect, useCallback, useMemo, useReducer } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { getBook, getBooks, toggleBookFavorite } from '../../utils/api/booksApi';
-import { getBookManifest } from '../../utils/api/api';
+import { getBook, getBooks, toggleBookFavorite, getBookManifest } from '../../utils/api/booksApi';
 import { normalizeTitle, normalizeAuthor } from '../../utils/common/valueUtils';
-import { errorUtils } from '../../utils/common/errorUtils';
-import { prefetchManifest, PROGRESS_CACHE_UPDATED_EVENT } from '../../utils/common/cache/manifestCache';
+import { errorUtils, userViewerPath } from '../../utils/common/urlUtils';
+import { prefetchManifest } from '../../utils/common/cache/manifestCache';
+import { PROGRESS_CACHE_UPDATED_EVENT } from '../../utils/common/cache/progressCache';
 import { readBooksCache, writeBooksCache } from '../../utils/common/cache/cacheManager';
 import { resolveLibraryReadingProgressPercent } from '../../utils/library/libraryUtils';
 import { getStoredAccessToken } from '../../utils/security/authTokenStorage';
 import { ensureSessionAccessToken } from '../../utils/api/authApi';
-import { userViewerPath } from '../../utils/common/urlUtils';
 
 export const BOOKS_QUERY_KEY = ['books', 'server'];
 

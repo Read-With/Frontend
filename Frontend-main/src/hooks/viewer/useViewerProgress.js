@@ -1,69 +1,51 @@
-/** 뷰어 실시간 진도: resume·TopBar·locatorKey·캐시 동기화 */
+/** 뷰어 진도: resume·TopBar·locator + 자동 저장 */
 
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
-import { getBookProgress } from '../../utils/api/api';
+import { getBookProgress, saveProgress, saveProgressKeepalive } from '../../utils/api/booksApi';
+import { canResolveProgressMetrics } from '../../utils/common/cache/manifestCache';
 import {
   getProgressFromCache,
   PROGRESS_CACHE_UPDATED_EVENT,
-  canResolveProgressMetrics,
-} from '../../utils/common/cache/manifestCache';
+  removeProgressFromCache,
+  setProgressToCache,
+  getCachedReaderProgress,
+  setCachedReaderProgress,
+} from '../../utils/common/cache/progressCache';
 import { viewerResumeAnchorKey, clampPercent } from '../../utils/common/valueUtils';
-import { errorUtils } from '../../utils/common/errorUtils';
+import { errorUtils } from '../../utils/common/urlUtils';
 import {
   delay,
   waitForPaint,
   waitForViewerMethod,
-} from '../../utils/viewer/viewerCoreStateUtils';
-import {
-  progressRowToTopBar,
   resolveMetricsFromLocator,
   resolveMetricsFromReadingLocatorKey,
   shouldApplyCacheSnapshot,
   snapshotFromProgressRow,
   toReadingLocatorKey,
-} from '../../utils/viewer/viewerEventProgressUtils';
+  VIEWER_RESUME_TIMING,
+  FORCE_RESUME_SNAPSHOT,
+  normalizeProgressBookId,
+  mergeProgressTopBar,
+  resolveCachedResumeAnchor,
+  isViewerResumeBlocking,
+  buildProgressPayload,
+  buildSaveLocationPayload,
+  resolveReadingLocators,
+} from '../../utils/viewer/viewerSession';
+import { useAsyncRequestGuard, useLatestRef } from '../common/hooksShared';
 
-const VIEWER_RESUME_POLL_MS = 100;
-const VIEWER_RESUME_MAX_ATTEMPTS = 150;
-const VIEWER_RESUME_TIMEOUT_MS = VIEWER_RESUME_POLL_MS * VIEWER_RESUME_MAX_ATTEMPTS;
-const VIEWER_RESUME_PERCENT_FALLBACK_ATTEMPTS = 30;
-const FORCE_RESUME_SNAPSHOT = { force: true, updateResumeAnchor: true };
+const {
+  POLL_MS: VIEWER_RESUME_POLL_MS,
+  MAX_ATTEMPTS: VIEWER_RESUME_MAX_ATTEMPTS,
+  TIMEOUT_MS: VIEWER_RESUME_TIMEOUT_MS,
+  PERCENT_FALLBACK_ATTEMPTS: VIEWER_RESUME_PERCENT_FALLBACK_ATTEMPTS,
+} = VIEWER_RESUME_TIMING;
 
-function syncRefAndState(ref, setState, value) {
+/** ref와 state를 동시에 갱신 */
+function applyRefState(ref, setState, value) {
   ref.current = value;
   setState(value);
-}
-
-function normalizeProgressBookId(bookKey) {
-  const numeric = Number(bookKey);
-  if (!bookKey || !Number.isFinite(numeric) || numeric <= 0) return null;
-  return String(numeric);
-}
-
-function mergeProgressTopBar(prev, bookKey, { readingProgressPercent, chapterProgress }) {
-  const base =
-    prev != null && typeof prev === 'object'
-      ? prev
-      : progressRowToTopBar(null, bookKey);
-  const nextPct = readingProgressPercent ?? base.readingProgressPercent;
-  const resolvedCp = chapterProgress ?? base.chapterProgress;
-  if (base.readingProgressPercent === nextPct && base.chapterProgress === resolvedCp) {
-    return prev;
-  }
-  return {
-    ...base,
-    ...(nextPct != null ? { readingProgressPercent: nextPct } : {}),
-    ...(resolvedCp != null ? { chapterProgress: resolvedCp } : {}),
-  };
-}
-
-function resolveCachedResumeAnchor(bookId) {
-  const cached = getProgressFromCache(bookId);
-  return snapshotFromProgressRow(cached, bookId).anchor;
-}
-
-function isResumeBlocking(resumePendingRef, preferredResumeRef) {
-  return Boolean(resumePendingRef.current || preferredResumeRef.current);
+  return value;
 }
 
 export function useViewerProgress({
@@ -89,50 +71,43 @@ export function useViewerProgress({
   const serverResumeAppliedKeyRef = useRef(null);
   const reloadKeyBumpedForBookRef = useRef(null);
   const isViewerPageReadyRef = useRef(false);
-  /** 진도 fetch·resume 적용 전에는 맨 앞 line 이벤트로 ready/저장하지 않음 */
   const resumePendingRef = useRef(false);
   const [isResumePending, setIsResumePendingState] = useState(false);
   const manifestLocatorSyncedRef = useRef(false);
-  const resumeRunIdRef = useRef(0);
-  const progressFetchGenerationRef = useRef(0);
   const preferredResumeRef = useRef(null);
-  const progressRef = useRef(progress);
-
-  useEffect(() => {
-    progressRef.current = progress;
-  }, [progress]);
+  const progressRef = useLatestRef(progress);
+  const { nextRequestId: nextResumeRunId, isStale: isResumeRunStale, invalidate: invalidateResumeRun } =
+    useAsyncRequestGuard();
+  const { nextRequestId: nextProgressFetchId, isStale: isProgressFetchStale, invalidate: invalidateProgressFetch } =
+    useAsyncRequestGuard();
 
   const setResumePending = useCallback((value) => {
-    const next = Boolean(value);
-    resumePendingRef.current = next;
-    setIsResumePendingState(next);
-  }, []);
-
-  const clearResumePolling = useCallback(() => {
-    resumeRunIdRef.current += 1;
+    applyRefState(resumePendingRef, setIsResumePendingState, Boolean(value));
   }, []);
 
   const setViewerPageNotReady = useCallback(() => {
-    isViewerPageReadyRef.current = false;
-    setIsViewerPageReady(false);
+    applyRefState(isViewerPageReadyRef, setIsViewerPageReady, false);
   }, []);
 
   const applyReadingLocatorKey = useCallback((nextKey) => {
-    syncRefAndState(readingLocatorKeyRef, setReadingLocatorKey, typeof nextKey === 'string' ? nextKey : '');
+    applyRefState(
+      readingLocatorKeyRef,
+      setReadingLocatorKey,
+      typeof nextKey === 'string' ? nextKey : '',
+    );
   }, []);
 
   const applyLiveChapterProgress = useCallback((nextChapterProgress) => {
-    syncRefAndState(liveChapterProgressRef, setLiveChapterProgress, nextChapterProgress ?? null);
+    applyRefState(liveChapterProgressRef, setLiveChapterProgress, nextChapterProgress ?? null);
   }, []);
 
   const markReady = useCallback(() => {
     setResumePending(false);
     if (!isViewerPageReadyRef.current) {
-      isViewerPageReadyRef.current = true;
-      setIsViewerPageReady(true);
+      applyRefState(isViewerPageReadyRef, setIsViewerPageReady, true);
     }
-    clearResumePolling();
-  }, [clearResumePolling, setResumePending]);
+    invalidateResumeRun();
+  }, [invalidateResumeRun, setResumePending]);
 
   const clearPreferredResume = useCallback(() => {
     if (!preferredResumeRef.current) return;
@@ -140,10 +115,8 @@ export function useViewerProgress({
     onPreferredResumeApplied?.();
   }, [onPreferredResumeApplied]);
 
-  /** resume 성공(appliedKey) 또는 타임아웃(timeoutKey) 후 ready 전환.
-   * 타임아웃 시 moveToProgress 폴백이 끝날 때까지 pending/suppress를 유지한다. */
   const finishResume = useCallback(async (options = {}) => {
-    if (options.runId != null && options.runId !== resumeRunIdRef.current) return;
+    if (options.runId != null && isResumeRunStale(options.runId)) return;
 
     if (options.appliedKey != null) {
       serverResumeAppliedKeyRef.current = options.appliedKey;
@@ -156,13 +129,13 @@ export function useViewerProgress({
         const ready = await waitForViewerMethod(
           viewerRef,
           'moveToProgress',
-          VIEWER_RESUME_TIMEOUT_MS
+          VIEWER_RESUME_TIMEOUT_MS,
         );
-        if (options.runId != null && options.runId !== resumeRunIdRef.current) return;
+        if (options.runId != null && isResumeRunStale(options.runId)) return;
         if (ready) {
           try {
             for (let attempt = 0; attempt < VIEWER_RESUME_PERCENT_FALLBACK_ATTEMPTS; attempt += 1) {
-              if (options.runId != null && options.runId !== resumeRunIdRef.current) return;
+              if (options.runId != null && isResumeRunStale(options.runId)) return;
               const moved = viewerRef.current?.moveToProgress?.(pct);
               await waitForPaint();
               if (moved) break;
@@ -171,22 +144,21 @@ export function useViewerProgress({
           } catch (error) {
             errorUtils.logWarning(
               '[useViewerProgress] resume 타임아웃 percent 폴백 실패',
-              error?.message ?? '알 수 없는 오류'
+              error?.message ?? '알 수 없는 오류',
             );
           }
         }
       }
     }
 
-    if (options.runId != null && options.runId !== resumeRunIdRef.current) return;
+    if (options.runId != null && isResumeRunStale(options.runId)) return;
     clearPreferredResume();
     markReady();
-  }, [clearPreferredResume, markReady, viewerRef]);
+  }, [clearPreferredResume, isResumeRunStale, markReady, progressRef, viewerRef]);
 
   const markViewerPageReady = useCallback(() => {
     if (isViewerPageReadyRef.current) return;
-    // resume/북마크 점프 대기 중이면 맨 앞 line change로 ready 처리하지 않음
-    if (isResumeBlocking(resumePendingRef, preferredResumeRef)) return;
+    if (isViewerResumeBlocking(resumePendingRef.current, preferredResumeRef.current)) return;
     markReady();
   }, [markReady]);
 
@@ -206,12 +178,12 @@ export function useViewerProgress({
 
   const progressMetricsReady = useMemo(
     () => Boolean(bookKey && manifestLoaded && canResolveProgressMetrics(bookKey)),
-    [bookKey, manifestLoaded]
+    [bookKey, manifestLoaded],
   );
 
   const normalizedBookId = useMemo(
     () => normalizeProgressBookId(bookKey),
-    [bookKey]
+    [bookKey],
   );
 
   const applyLiveMetrics = useCallback((metrics) => {
@@ -230,7 +202,7 @@ export function useViewerProgress({
       !shouldApplyCacheSnapshot(
         snapshot,
         readingLocatorKeyRef.current,
-        isViewerPageReadyRef.current
+        isViewerPageReadyRef.current,
       )
     ) {
       return;
@@ -273,12 +245,11 @@ export function useViewerProgress({
     applyReadingLocatorKey('');
     applyLiveChapterProgress(null);
     manifestLocatorSyncedRef.current = false;
-    clearResumePolling();
+    invalidateResumeRun();
     setResumePending(Boolean(normalizedBookId) || Boolean(bookKey && awaitingBookId));
 
     if (!normalizedBookId) {
       setServerResumeAnchor(preferredResumeRef.current);
-      // 서버 bookId 매칭 중이면 pending 유지. 끝나면 preferred 앵커만 남김
       if (!(bookKey && awaitingBookId)) {
         setResumePending(Boolean(preferredResumeRef.current));
       }
@@ -292,11 +263,11 @@ export function useViewerProgress({
       setReloadKey((k) => k + 1);
     }
 
-    const fetchGeneration = ++progressFetchGenerationRef.current;
+    const fetchGeneration = nextProgressFetchId();
     syncProgressFromCache(normalizedBookId, FORCE_RESUME_SNAPSHOT);
 
     const isStale = (cancelled) =>
-      cancelled || fetchGeneration !== progressFetchGenerationRef.current;
+      cancelled || isProgressFetchStale(fetchGeneration);
 
     const releasePendingIfNoAnchor = () => {
       const anchor =
@@ -311,7 +282,7 @@ export function useViewerProgress({
     };
 
     let cancelled = false;
-    (async () => {
+    void (async () => {
       try {
         const res = await getBookProgress(normalizedBookId, { skipCache: true });
         if (isStale(cancelled)) return;
@@ -334,14 +305,17 @@ export function useViewerProgress({
 
     return () => {
       cancelled = true;
-      progressFetchGenerationRef.current += 1;
+      invalidateProgressFetch();
     };
   }, [
     bookKey,
     normalizedBookId,
     awaitingBookId,
     setReloadKey,
-    clearResumePolling,
+    invalidateResumeRun,
+    invalidateProgressFetch,
+    nextProgressFetchId,
+    isProgressFetchStale,
     applyReadingLocatorKey,
     applyLiveChapterProgress,
     syncProgressFromCache,
@@ -365,23 +339,22 @@ export function useViewerProgress({
     if (!key) return undefined;
     if (serverResumeAppliedKeyRef.current === key) return undefined;
 
-    const runId = ++resumeRunIdRef.current;
+    const runId = nextResumeRunId();
 
     const pollResume = async () => {
-      // XhtmlViewer pendingDisplay + layout effect와 같이, 메서드 준비 후 폴링
       const methodReady = await waitForViewerMethod(
         viewerRef,
         'displayAt',
-        VIEWER_RESUME_TIMEOUT_MS
+        VIEWER_RESUME_TIMEOUT_MS,
       );
-      if (runId !== resumeRunIdRef.current) return;
+      if (isResumeRunStale(runId)) return;
       if (!methodReady) {
         await finishResume({ timeoutKey: key, runId });
         return;
       }
 
       for (let attempt = 0; attempt < VIEWER_RESUME_MAX_ATTEMPTS; attempt += 1) {
-        if (runId !== resumeRunIdRef.current) return;
+        if (isResumeRunStale(runId)) return;
         if (serverResumeAppliedKeyRef.current === key) return;
 
         try {
@@ -393,14 +366,14 @@ export function useViewerProgress({
         } catch (error) {
           errorUtils.logWarning(
             '[useViewerProgress] resume displayAt 실패',
-            error?.message ?? '알 수 없는 오류'
+            error?.message ?? '알 수 없는 오류',
           );
         }
 
         await delay(VIEWER_RESUME_POLL_MS);
       }
 
-      if (runId === resumeRunIdRef.current) {
+      if (!isResumeRunStale(runId)) {
         await finishResume({ timeoutKey: key, runId });
       }
     };
@@ -408,9 +381,17 @@ export function useViewerProgress({
     void pollResume();
 
     return () => {
-      resumeRunIdRef.current += 1;
+      invalidateResumeRun();
     };
-  }, [serverResumeAnchor, reloadKey, viewerRef, finishResume]);
+  }, [
+    serverResumeAnchor,
+    reloadKey,
+    viewerRef,
+    finishResume,
+    nextResumeRunId,
+    isResumeRunStale,
+    invalidateResumeRun,
+  ]);
 
   useEffect(() => {
     if (!bookKey) return;
@@ -427,7 +408,7 @@ export function useViewerProgress({
       mergeProgressTopBar(prev, bookKey, {
         readingProgressPercent: pct,
         chapterProgress: nextCp,
-      })
+      }),
     );
   }, [bookKey, progress, progressMetricsReady, readingLocatorKey, liveChapterProgress]);
 
@@ -439,24 +420,23 @@ export function useViewerProgress({
     applyLiveMetrics(
       resolveMetricsFromReadingLocatorKey(bookKey, readingLocatorKey, {
         metricsReady: true,
-      })
+      }),
     );
   }, [bookKey, progressMetricsReady, readingLocatorKey, applyLiveMetrics]);
 
   const applyReadingLocator = useCallback(
     (lineLocator, lineEnd) => {
-      // resume 대기 중이면 맨 앞 viewport locator로 진도를 덮지 않음
-      if (isResumeBlocking(resumePendingRef, preferredResumeRef)) return;
+      if (isViewerResumeBlocking(resumePendingRef.current, preferredResumeRef.current)) return;
       if (lineLocator) {
         applyReadingLocatorKey(toReadingLocatorKey(lineLocator, lineEnd));
       }
       applyLiveMetrics(
         resolveMetricsFromLocator(bookKey, lineLocator, {
           metricsReady: progressMetricsReady,
-        })
+        }),
       );
     },
-    [bookKey, progressMetricsReady, applyLiveMetrics, applyReadingLocatorKey]
+    [bookKey, progressMetricsReady, applyLiveMetrics, applyReadingLocatorKey],
   );
 
   return {
@@ -470,4 +450,266 @@ export function useViewerProgress({
     isResumePending,
     markViewerPageReady,
   };
+}
+
+/* ─── 진도 자동 저장 (from useProgressAutoSave) ─── */
+
+const AUTO_SAVE_DELAY_MS = 2000;
+const LOG_PREFIX = '[useProgressAutoSave]';
+
+function payloadFingerprint(payload) {
+  return payload ? JSON.stringify(payload) : null;
+}
+
+function flushResult(extra = {}) {
+  return { isSuccess: true, ...extra };
+}
+
+function settle(resolve, result) {
+  resolve?.(result);
+  return result;
+}
+
+function logWarn(message, detail) {
+  errorUtils.logWarning(`${LOG_PREFIX} ${message}`, detail);
+}
+
+/** pagehide / beforeunload / visibility hidden 공통 구독 */
+function subscribePageExit(onExit) {
+  const onVisibility = () => {
+    if (document.visibilityState === 'hidden') onExit();
+  };
+  window.addEventListener('pagehide', onExit);
+  window.addEventListener('beforeunload', onExit);
+  document.addEventListener('visibilitychange', onVisibility);
+  return () => {
+    window.removeEventListener('pagehide', onExit);
+    window.removeEventListener('beforeunload', onExit);
+    document.removeEventListener('visibilitychange', onVisibility);
+  };
+}
+
+export function useProgressAutoSave({
+  bookId,
+  currentEvent,
+  readingLocatorKey = '',
+  getCurrentLocator,
+  metricsReady = true,
+  /** resume 완료 전(맨 앞 오탐) 저장 방지 */
+  canPersist = true,
+}) {
+  const [cachedLocation, setCachedLocation] = useState(null);
+
+  useEffect(() => {
+    if (!bookId) {
+      setCachedLocation(null);
+      return;
+    }
+    try {
+      setCachedLocation(getCachedReaderProgress(bookId));
+    } catch (error) {
+      logWarn('캐시된 위치 정보를 불러오는데 실패했습니다', error.message);
+      setCachedLocation(null);
+    }
+  }, [bookId]);
+
+  const saveLocation = useCallback((progressData) => {
+    if (!bookId) return null;
+    try {
+      const stored = setCachedReaderProgress(bookId, progressData);
+      if (stored) setCachedLocation(stored);
+      return stored;
+    } catch (error) {
+      logWarn('캐시된 위치 정보를 저장하는데 실패했습니다', error.message);
+      return null;
+    }
+  }, [bookId]);
+
+  const timeoutRef = useRef(null);
+  const lastPayloadRef = useRef(null);
+  const latestPayloadRef = useRef(null);
+  const latestLocationPayloadRef = useRef(null);
+  const initialSavedRef = useRef(false);
+  const pagehideFlushedRef = useRef(false);
+  const prevMetricsReadyRef = useRef(metricsReady);
+  const prevBookIdRef = useRef(null);
+  const flushChainRef = useRef(Promise.resolve());
+  const liveRef = useRef({});
+
+  const refreshLatestPayload = useCallback(() => {
+    const { bookId: id, getCurrentLocator: getLocator, currentEvent: event, metricsReady: ready } =
+      liveRef.current;
+    if (!id) return null;
+
+    const { startLocator, endLocator } = resolveReadingLocators(getLocator, event);
+    if (!startLocator) return null;
+
+    const metrics = resolveMetricsFromLocator(id, startLocator, { metricsReady: ready });
+    const payload = buildProgressPayload(id, startLocator, endLocator, event, metrics);
+    if (!payload) return null;
+
+    latestPayloadRef.current = payload;
+    latestLocationPayloadRef.current = buildSaveLocationPayload(
+      id,
+      startLocator,
+      endLocator,
+      event,
+      metrics
+    );
+    return payload;
+  }, []);
+
+  const resetAutoSaveState = useCallback(() => {
+    lastPayloadRef.current = null;
+    latestPayloadRef.current = null;
+    latestLocationPayloadRef.current = null;
+    initialSavedRef.current = false;
+    pagehideFlushedRef.current = false;
+    flushChainRef.current = Promise.resolve();
+  }, []);
+
+  const applyLocalCaches = useCallback((payload, locationPayload) => {
+    if (locationPayload) liveRef.current.saveLocation?.(locationPayload);
+    setProgressToCache(payload);
+  }, []);
+
+  const runFlushOnce = useCallback(async (resolve) => {
+    const payload = latestPayloadRef.current;
+    const id = liveRef.current.bookId;
+    if (!payload) return settle(resolve, flushResult({ skipped: true }));
+
+    const payloadKey = payloadFingerprint(payload);
+    if (lastPayloadRef.current === payloadKey) {
+      return settle(resolve, flushResult({ deduped: true }));
+    }
+
+    const prevCached = id ? getProgressFromCache(id) : null;
+    const locationPayload = latestLocationPayloadRef.current;
+
+    try {
+      setProgressToCache(payload);
+      const res = await saveProgress(payload);
+      if (!res?.isSuccess) {
+        throw new Error(res?.message || '진도 저장 응답 실패');
+      }
+
+      if (locationPayload) liveRef.current.saveLocation?.(locationPayload);
+      lastPayloadRef.current = payloadKey;
+
+      const latestKey = payloadFingerprint(latestPayloadRef.current);
+      if (latestKey && latestKey !== payloadKey) {
+        queueMicrotask(() => liveRef.current.runFlush?.());
+      }
+
+      return settle(resolve, res);
+    } catch (err) {
+      if (id) {
+        if (prevCached) setProgressToCache(prevCached);
+        else removeProgressFromCache(id);
+      }
+      logWarn('서버 저장 실패', err?.message ?? (typeof err === 'string' ? err : ''));
+      return settle(resolve, { isSuccess: false, message: err?.message });
+    }
+  }, []);
+
+  const runFlush = useCallback((resolve) => {
+    flushChainRef.current = flushChainRef.current
+      .catch(() => {})
+      .then(() => runFlushOnce(resolve));
+  }, [runFlushOnce]);
+
+  liveRef.current = {
+    getCurrentLocator,
+    saveLocation,
+    currentEvent,
+    bookId,
+    metricsReady,
+    canPersist,
+    refreshLatestPayload,
+    runFlush,
+  };
+
+  const flushProgressAsync = useCallback(() => {
+    if (!liveRef.current.canPersist) {
+      return Promise.resolve(flushResult({ skipped: true }));
+    }
+    refreshLatestPayload();
+    return new Promise((resolve) => runFlush(resolve));
+  }, [refreshLatestPayload, runFlush]);
+
+  useEffect(() => {
+    const bookChanged = prevBookIdRef.current !== bookId;
+    if (!bookId || bookChanged) {
+      prevBookIdRef.current = bookId || null;
+      prevMetricsReadyRef.current = metricsReady;
+      resetAutoSaveState();
+      if (!bookId) return undefined;
+    }
+
+    if (!canPersist) return undefined;
+
+    const metricsJustBecameReady = metricsReady && !prevMetricsReadyRef.current;
+    prevMetricsReadyRef.current = metricsReady;
+
+    refreshLatestPayload();
+    if (!latestPayloadRef.current) return undefined;
+
+    if (!initialSavedRef.current || metricsJustBecameReady) {
+      initialSavedRef.current = true;
+      runFlush();
+    }
+
+    if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    timeoutRef.current = setTimeout(() => runFlush(), AUTO_SAVE_DELAY_MS);
+
+    return () => {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+        timeoutRef.current = null;
+      }
+    };
+  }, [
+    bookId,
+    currentEvent,
+    readingLocatorKey,
+    metricsReady,
+    canPersist,
+    refreshLatestPayload,
+    runFlush,
+    resetAutoSaveState,
+  ]);
+
+  useEffect(() => {
+    const handlePageHide = () => {
+      if (pagehideFlushedRef.current || !liveRef.current.canPersist) return;
+      refreshLatestPayload();
+      const payload = latestPayloadRef.current;
+      if (!payload) return;
+
+      pagehideFlushedRef.current = true;
+      applyLocalCaches(payload, latestLocationPayloadRef.current);
+      const ok = saveProgressKeepalive(payload);
+      if (ok) {
+        lastPayloadRef.current = payloadFingerprint(payload);
+      } else {
+        logWarn('keepalive 저장 요청 생성 실패', String(liveRef.current.bookId ?? ''));
+      }
+    };
+
+    const unsubscribe = subscribePageExit(handlePageHide);
+    return () => {
+      unsubscribe();
+      pagehideFlushedRef.current = false;
+    };
+  }, [refreshLatestPayload, applyLocalCaches]);
+
+  useEffect(() => {
+    return () => {
+      if (!liveRef.current.canPersist) return;
+      liveRef.current.refreshLatestPayload?.();
+      liveRef.current.runFlush?.();
+    };
+  }, []);
+
+  return { flushProgressAsync, cachedLocation };
 }

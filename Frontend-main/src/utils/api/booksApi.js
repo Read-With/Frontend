@@ -1,9 +1,34 @@
-/** v2 books·북마크 API */
+/** v2 books·북마크·manifest·progress API */
 
-import { authenticatedRequest, makeSilentError, isForbiddenError, isNotFoundError } from './authApi';
-import { toOneBasedChapterIndexOrNull, toPositiveNumberOrNull } from '../common/valueUtils';
-import { sanitizeAssetUrl } from '../common/urlUtils';
-import { normalizeStartEndLocatorsForServer } from '../common/cache/manifestCache';
+import {
+  authenticatedRequest,
+  makeSilentError,
+  isForbiddenError,
+  isNotFoundError,
+  SOFT_FAIL_403_404,
+  requireBookId,
+  pickResponseResult,
+  toUnifiedApiResponse,
+} from './authApi';
+import {
+  toOneBasedChapterIndexOrNull,
+  toPositiveNumberOrNull,
+  progressPayloadFromData,
+  resolveProgressLocator,
+  locatorsEqual,
+} from '../common/valueUtils';
+import { sanitizeAssetUrl, getApiBaseUrl } from '../common/urlUtils';
+import {
+  normalizeStartEndLocatorsForServer,
+  withNormalizedProgressLocators,
+  setProgressToCache,
+  removeProgressFromCache,
+  getProgressFromCache,
+  ensureProgressRowLocator,
+} from '../common/cache/progressCache';
+import { setManifestData, getManifestFromCache } from '../common/cache/manifestCache';
+import { normalizeReadingProgressPercent } from '../viewer/viewerSession';
+import { getStoredAccessToken } from '../security/authTokenStorage';
 
 const DEFAULT_BOOKMARK_COLOR = '#f4f7ff';
 
@@ -158,23 +183,36 @@ export function normalizeChapterPovSummariesResult(raw) {
   };
 }
 
+const chapterPovSummariesInflight = new Map();
+
 export const getChapterPovSummaries = async (bookId, chapterIdx) => {
-  try {
-    const normalizedBookId = toPositiveNumberOrNull(bookId);
-    const normalizedChapterIdx = toOneBasedChapterIndexOrNull(chapterIdx);
-    if (!normalizedBookId) {
-      throw new Error('bookId는 1 이상의 정수여야 합니다.');
-    }
-    if (!normalizedChapterIdx) {
-      throw new Error('chapterIdx는 1 이상의 정수여야 합니다.');
-    }
-    return await authenticatedRequest(
-      `/v2/books/${normalizedBookId}/chapters/${normalizedChapterIdx}/pov-summaries`
-    );
-  } catch (error) {
+  const normalizedBookId = toPositiveNumberOrNull(bookId);
+  const normalizedChapterIdx = toOneBasedChapterIndexOrNull(chapterIdx);
+  if (!normalizedBookId) {
+    throw new Error('bookId는 1 이상의 정수여야 합니다.');
+  }
+  if (!normalizedChapterIdx) {
+    throw new Error('chapterIdx는 1 이상의 정수여야 합니다.');
+  }
+
+  const key = `${normalizedBookId}:${normalizedChapterIdx}`;
+  const existing = chapterPovSummariesInflight.get(key);
+  if (existing) return existing;
+
+  const pending = authenticatedRequest(
+    `/v2/books/${normalizedBookId}/chapters/${normalizedChapterIdx}/pov-summaries`
+  ).catch((error) => {
     console.error('챕터 시점 요약 조회 실패:', error);
     throw error;
-  }
+  });
+
+  chapterPovSummariesInflight.set(key, pending);
+  pending.finally(() => {
+    if (chapterPovSummariesInflight.get(key) === pending) {
+      chapterPovSummariesInflight.delete(key);
+    }
+  });
+  return pending;
 };
 
 const normalizeBookmarkDto = (b) => {
@@ -187,7 +225,7 @@ const normalizeBookmarkDto = (b) => {
 
 const BOOKMARK_SORT = new Set(['time_desc', 'time_asc']);
 
-export const getBookmarks = async (bookId, sort = 'time_desc') => {
+const getBookmarks = async (bookId, sort = 'time_desc') => {
   const normalizedBookId = toPositiveNumberOrNull(bookId);
   if (normalizedBookId == null) {
     throw new Error('유효한 bookId는 필수입니다.');
@@ -296,6 +334,219 @@ export const deleteBookmark = async (bookmarkId) => {
     });
   } catch (error) {
     console.error('북마크 삭제 실패:', error);
+    throw error;
+  }
+};
+
+// ─── progress ──────────────────────────────────────────────────────────────
+
+const PROGRESS_FORBIDDEN = makeSilentError('FORBIDDEN', '해당 책에 접근할 권한이 없습니다');
+const PROGRESS_NOT_FOUND = makeSilentError('NOT_FOUND', '진도 정보를 찾을 수 없습니다');
+
+const handleProgressApiError = (error, logContext) => {
+  if (isForbiddenError(error)) return PROGRESS_FORBIDDEN;
+  if (isNotFoundError(error)) return PROGRESS_NOT_FOUND;
+  if (logContext) console.error(logContext, error);
+  throw error;
+};
+
+/** softFail 응답의 FORBIDDEN/NOT_FOUND → silent error (해당 없으면 null) */
+const mapProgressSoftFailCode = (response, { includeNotFound = true } = {}) => {
+  if (response?.code === 'FORBIDDEN') return PROGRESS_FORBIDDEN;
+  if (includeNotFound && response?.code === 'NOT_FOUND') return PROGRESS_NOT_FOUND;
+  return null;
+};
+
+const buildProgressSavePayload = (progressData) =>
+  progressPayloadFromData(withNormalizedProgressLocators(progressData));
+
+const mergeReadingProgressPercent = (cacheRow, progressData, serverResult, bookId) => {
+  const pctFromReq = normalizeReadingProgressPercent(progressData, { bookId });
+  const pctFromRes = normalizeReadingProgressPercent(serverResult ?? {}, { bookId });
+  if (pctFromReq != null || pctFromRes != null) {
+    cacheRow.readingProgressPercent = pctFromReq ?? pctFromRes;
+  }
+  return cacheRow;
+};
+
+export const saveProgress = async (progressData) => {
+  try {
+    const payload = buildProgressSavePayload(progressData);
+    if (!payload) {
+      throw new Error('bookId와 읽기 위치(startLocator/locator)는 필수입니다.');
+    }
+    const response = await authenticatedRequest('/v2/progress', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+      softFailStatuses: SOFT_FAIL_403_404,
+    });
+    const softFail = mapProgressSoftFailCode(response, { includeNotFound: false });
+    if (softFail) return softFail;
+    if (!response?.isSuccess) {
+      const error = new Error(response?.message || '독서 진도 저장 실패');
+      error.status = response?.status;
+      throw error;
+    }
+    const serverResult =
+      response?.result && typeof response.result === 'object' ? response.result : null;
+    const cacheRow = serverResult
+      ? { ...serverResult, bookId: progressData.bookId ?? serverResult.bookId }
+      : { ...progressData, ...payload };
+    const bookId = progressData.bookId ?? serverResult?.bookId;
+    mergeReadingProgressPercent(cacheRow, progressData, serverResult, bookId);
+    setProgressToCache(cacheRow);
+    return toUnifiedApiResponse(
+      { ...response, result: response?.result ?? cacheRow },
+      { defaultMessage: '독서 진도를 저장했습니다.' }
+    );
+  } catch (error) {
+    if (isForbiddenError(error)) return PROGRESS_FORBIDDEN;
+    console.error('독서 진도 저장 실패:', error);
+    throw error;
+  }
+};
+
+export const saveProgressKeepalive = (progressData) => {
+  try {
+    const payload = buildProgressSavePayload(progressData);
+    if (!payload) return false;
+    const token = getStoredAccessToken();
+
+    fetch(`${getApiBaseUrl()}/api/v2/progress`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify(payload),
+      keepalive: true,
+    }).catch(() => void 0);
+
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+export const getBookProgress = async (bookId, options = {}) => {
+  if (!bookId) return makeSilentError('INVALID_INPUT', 'bookId는 필수 매개변수입니다.');
+
+  if (options?.skipCache !== true) {
+    const cachedProgress = getProgressFromCache(bookId);
+    if (cachedProgress) {
+      return toUnifiedApiResponse({
+        isSuccess: true,
+        code: 'CACHE_HIT',
+        message: '진도 정보를 로컬 캐시에서 가져왔습니다',
+        result: cachedProgress,
+        fromCache: true,
+      });
+    }
+  }
+
+  try {
+    const response = await authenticatedRequest(`/v2/progress/${bookId}`, {
+      softFailStatuses: SOFT_FAIL_403_404,
+    });
+    const softFail = mapProgressSoftFailCode(response);
+    if (softFail) return softFail;
+    if (response?.isSuccess && response.result) {
+      const base = { ...response.result };
+      const prev = getProgressFromCache(bookId);
+      const newLoc = resolveProgressLocator(ensureProgressRowLocator(String(bookId), base));
+      const prevLoc = resolveProgressLocator(prev ?? {});
+      const sameLoc = newLoc && prevLoc && locatorsEqual(newLoc, prevLoc);
+      const pct =
+        normalizeReadingProgressPercent(base, { bookId }) ??
+        (sameLoc ? normalizeReadingProgressPercent(prev ?? {}, { bookId }) : null);
+      const row = pct != null ? { ...base, readingProgressPercent: pct } : base;
+      setProgressToCache(row);
+      const hydrated = getProgressFromCache(bookId);
+      return toUnifiedApiResponse(
+        { ...response, result: hydrated ?? row },
+        { defaultMessage: '진도 정보를 조회했습니다.' }
+      );
+    }
+    return toUnifiedApiResponse(response, { defaultMessage: '진도 정보를 조회했습니다.' });
+  } catch (error) {
+    return handleProgressApiError(error);
+  }
+};
+
+export const deleteBookProgress = async (bookId) => {
+  try {
+    requireBookId(bookId);
+    const response = await authenticatedRequest(`/v2/progress/${bookId}`, {
+      method: 'DELETE',
+      softFailStatuses: SOFT_FAIL_403_404,
+    });
+    const softFail = mapProgressSoftFailCode(response);
+    if (softFail) return softFail;
+    if (response?.isSuccess) removeProgressFromCache(bookId);
+    return toUnifiedApiResponse(response, {
+      defaultMessage: '독서 진도를 삭제했습니다.',
+      defaultResult: null,
+    });
+  } catch (error) {
+    return handleProgressApiError(error, '독서 진도 삭제 실패:');
+  }
+};
+
+// ─── manifest ──────────────────────────────────────────────────────────────
+
+export const getBookManifest = async (bookId, { forceRefresh = false } = {}) => {
+  const numericBookId = Number(bookId);
+  if (!Number.isFinite(numericBookId) || numericBookId < 1) {
+    return makeSilentError('INVALID_INPUT', 'bookId는 1 이상의 정수여야 합니다.');
+  }
+
+  try {
+    if (!forceRefresh) {
+      const cached = getManifestFromCache(numericBookId);
+      if (cached) {
+        return toUnifiedApiResponse({
+          isSuccess: true,
+          code: 'CACHE_HIT',
+          message: 'Manifest loaded from cache',
+          result: cached,
+          fromCache: true,
+        });
+      }
+    }
+
+    const response = await authenticatedRequest(`/v2/books/${numericBookId}/manifest`, {
+      softFailStatuses: SOFT_FAIL_403_404,
+    });
+    if (response?.code === 'NOT_FOUND') {
+      return makeSilentError(
+        'NOT_FOUND',
+        '도서를 찾을 수 없거나 아직 노출 가능한 상태가 아닙니다.'
+      );
+    }
+    if (response?.code === 'FORBIDDEN') {
+      return makeSilentError('FORBIDDEN', '접근 권한이 없습니다');
+    }
+
+    const result = pickResponseResult(response);
+    if (response?.isSuccess && result) {
+      const normalized = setManifestData(numericBookId, result);
+      return toUnifiedApiResponse(
+        { ...response, result: normalized ?? result },
+        { defaultMessage: 'Manifest loaded successfully' }
+      );
+    }
+    return toUnifiedApiResponse(response, { defaultMessage: 'Manifest loaded successfully' });
+  } catch (error) {
+    if (error.status === 400 || String(error?.message ?? '').includes('400')) {
+      return makeSilentError('BAD_REQUEST', '잘못된 요청입니다.');
+    }
+    if (isNotFoundError(error)) {
+      return makeSilentError(
+        'NOT_FOUND',
+        '도서를 찾을 수 없거나 아직 노출 가능한 상태가 아닙니다.'
+      );
+    }
+    console.error('Manifest 조회 실패:', error);
     throw error;
   }
 };

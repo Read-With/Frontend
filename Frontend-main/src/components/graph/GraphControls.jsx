@@ -2,8 +2,8 @@ import { useCallback, useState } from "react";
 import PropTypes from "prop-types";
 import { useClickOutside } from "../../hooks/ui/tooltipHooks";
 import { graphControlsStyles, topBarStyles, COLORS, ANIMATION_VALUES } from "../../utils/styles/styles.js";
-import { findExactSuggestionMatch } from "../../utils/graph/searchUtils.js";
-import { GRAPH_CHARACTER_FILTER_STAGE_OPTIONS, resolveChapterSidebarWidth } from "../../utils/graph/graphUtils.js";
+import { findExactSuggestionMatch } from "../../utils/graph/graphCy.js";
+import { GRAPH_CHARACTER_FILTER_STAGE_OPTIONS, resolveChapterSidebarWidth } from "../../utils/graph/graphCore.js";
 
 export function EdgeLabelToggle({ visible, onToggle }) {
   return (

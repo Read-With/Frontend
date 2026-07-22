@@ -1,16 +1,34 @@
 /** hooks 공통: bookId · latest ref · localStorage · error · manifest */
 
 import { useRef, useState, useEffect, useCallback } from 'react';
-import { getBookManifest } from '../../utils/api/api';
+import { getBookManifest } from '../../utils/api/booksApi';
 import { getManifestFromCache } from '../../utils/common/cache/manifestCache';
 import { toPositiveNumberOrNull } from '../../utils/common/valueUtils';
-import { errorUtils } from '../../utils/common/errorUtils';
-import { resolveServerBookId } from '../../utils/viewer/viewerCoreStateUtils';
+import { errorUtils } from '../../utils/common/urlUtils';
+import { resolveServerBookId } from '../../utils/viewer/viewerCore';
 
 export function useLatestRef(value) {
   const ref = useRef(value);
   ref.current = value;
   return ref;
+}
+
+/** 비동기 effect race 방지용 request id */
+export function useAsyncRequestGuard() {
+  const requestIdRef = useRef(0);
+
+  const nextRequestId = useCallback(() => {
+    requestIdRef.current += 1;
+    return requestIdRef.current;
+  }, []);
+
+  const isStale = useCallback((id) => id !== requestIdRef.current, []);
+
+  const invalidate = useCallback(() => {
+    requestIdRef.current += 1;
+  }, []);
+
+  return { nextRequestId, isStale, invalidate, requestIdRef };
 }
 
 export function useErrorHandler(context = '알 수 없는 컨텍스트') {
@@ -166,38 +184,57 @@ export async function ensureBookManifest(bookId) {
   }
 }
 
+function getManifestLoadState(bookId) {
+  if (!bookId) {
+    return { loaded: true, manifest: null, error: null };
+  }
+  const cached = getManifestFromCache(bookId);
+  return {
+    loaded: Boolean(cached),
+    manifest: cached ?? null,
+    error: null,
+  };
+}
+
 /**
  * 뷰어/그래프용 manifest 준비 게이트.
- * fail-open: 로드 실패해도 true로 두어 이후 metrics·fine graph가 막히지 않게 함.
+ * fail-open: 로드 실패해도 loaded=true로 두어 이후 metrics·fine graph가 막히지 않게 함.
  */
 export function useManifestLoaded(bookId) {
-  const [manifestLoaded, setManifestLoaded] = useState(
-    () => !bookId || Boolean(getManifestFromCache(bookId))
-  );
+  const [state, setState] = useState(() => getManifestLoadState(bookId));
 
   useEffect(() => {
     if (!bookId) {
-      setManifestLoaded(true);
+      setState({ loaded: true, manifest: null, error: null });
       return undefined;
     }
 
-    if (getManifestFromCache(bookId)) {
-      setManifestLoaded(true);
+    const cached = getManifestFromCache(bookId);
+    if (cached) {
+      setState({ loaded: true, manifest: cached, error: null });
       return undefined;
     }
 
     let cancelled = false;
-    setManifestLoaded(false);
+    setState({ loaded: false, manifest: null, error: null });
 
     void ensureBookManifest(bookId).then((outcome) => {
       if (cancelled) return;
+
+      const manifest = outcome.manifest ?? getManifestFromCache(bookId);
+      let error = null;
       if (!outcome.ok && !outcome.skipped) {
-        errorUtils.logWarning(
-          '[useManifestLoaded] manifest 로드 실패',
-          outcome.error?.message ?? outcome.response?.message ?? '알 수 없는 오류'
-        );
+        const message =
+          outcome.error?.message ?? outcome.response?.message ?? '알 수 없는 오류';
+        errorUtils.logWarning('[useManifestLoaded] manifest 로드 실패', message);
+        error =
+          outcome.error ??
+          Object.assign(new Error('Manifest 로드 실패'), {
+            status: outcome.response?.code || null,
+          });
       }
-      setManifestLoaded(true);
+
+      setState({ loaded: true, manifest: manifest ?? null, error });
     });
 
     return () => {
@@ -205,5 +242,5 @@ export function useManifestLoaded(bookId) {
     };
   }, [bookId]);
 
-  return manifestLoaded;
+  return state;
 }

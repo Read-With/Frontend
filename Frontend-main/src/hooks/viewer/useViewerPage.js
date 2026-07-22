@@ -4,23 +4,20 @@ import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { useServerBookMatching } from '../books/bookHooks';
-import { useViewerProgress } from './useViewerProgress';
-import { useViewerGraphState, useViewerGraphPipeline } from './useViewerGraphPipeline';
-import { useProgressAutoSave } from './useProgressAutoSave';
+import { useViewerProgress, useProgressAutoSave } from './useViewerProgress';
+import { useViewerGraphState } from './useViewerGraphState';
+import { useViewerGraphPipeline } from './useViewerGraphPipeline';
 import { useManifestLoaded, resolveServerBookIdOrFallback } from '../common/hooksShared';
+import { bookUtils, resolveViewerBookKey } from '../../utils/viewer/viewerCore';
 import {
   loadSettings,
   normalizeSettings,
   saveSettings,
   SETTINGS_STORAGE_KEY,
-} from '../../utils/common/errorUtils';
-import {
-  bookUtils,
   waitForViewerMethod,
   runViewerPaging,
   restoreViewerPosition,
-  resolveViewerBookKey,
-} from '../../utils/viewer/viewerCoreStateUtils';
+} from '../../utils/viewer/viewerSession';
 import { toViewerResumeAnchor, resolveChapterIndex } from '../../utils/common/valueUtils';
 import { useBookmarks } from '../bookmarks/bookmarkHooks';
 import {
@@ -31,15 +28,23 @@ import {
 } from '../../utils/common/urlUtils';
 
 const EVENT_TRANSITION_FALLBACK_MS = 50;
-
-function idleTransition() {
-  return { type: null, inProgress: false };
-}
+const IDLE_TRANSITION = { type: null, inProgress: false };
+const SETTINGS_SAVE_ERROR_MESSAGE = '설정 저장 중 오류가 발생했습니다.';
 
 function resetTransitionState(setTransitionState) {
   setTransitionState((prev) => (
-    prev.type == null && !prev.inProgress ? prev : idleTransition()
+    prev.type == null && !prev.inProgress ? prev : IDLE_TRANSITION
   ));
+}
+
+function reportSettingsSaveFailure(result, fallbackMessage) {
+  if (result.success) return true;
+  toast.error(result.message || fallbackMessage);
+  return false;
+}
+
+function resolveResumeChapter(resumeAnchor) {
+  return resolveChapterIndex(resumeAnchor?.startLocator ?? resumeAnchor?.start);
 }
 
 /** URL: `/user/viewer/:id/c/:chapter/p/:page` 동기화 */
@@ -50,14 +55,17 @@ function useViewerUrlParams(options = {}) {
   const location = useLocation();
 
   const parsedPath = useMemo(() => parseViewerReaderSplat(splat), [splat]);
-  const initialPosition = resolveViewerReadingPosition(parsedPath);
+  const readingPosition = useMemo(
+    () => resolveViewerReadingPosition(parsedPath),
+    [parsedPath]
+  );
 
-  const [currentPage, setCurrentPage] = useState(initialPosition.page);
-  const [currentChapter, setCurrentChapter] = useState(initialPosition.chapter);
+  const [currentPage, setCurrentPage] = useState(readingPosition.page);
+  const [currentChapter, setCurrentChapter] = useState(readingPosition.chapter);
 
   const internalNavigationRef = useRef(false);
   const initializedBookRef = useRef(null);
-  const positionRef = useRef(initialPosition);
+  const positionRef = useRef(readingPosition);
 
   useEffect(() => {
     positionRef.current = { chapter: currentChapter, page: currentPage };
@@ -67,12 +75,10 @@ function useViewerUrlParams(options = {}) {
   useEffect(() => {
     if (!filename) return;
 
-    const next = resolveViewerReadingPosition(parsedPath);
-
     if (initializedBookRef.current !== filename) {
       initializedBookRef.current = filename;
-      setCurrentChapter(next.chapter);
-      setCurrentPage(next.page);
+      setCurrentChapter(readingPosition.chapter);
+      setCurrentPage(readingPosition.page);
       return;
     }
 
@@ -82,9 +88,9 @@ function useViewerUrlParams(options = {}) {
     }
 
     const { chapter, page } = positionRef.current;
-    if (next.chapter !== chapter) setCurrentChapter(next.chapter);
-    if (next.page !== page) setCurrentPage(next.page);
-  }, [filename, parsedPath]);
+    if (readingPosition.chapter !== chapter) setCurrentChapter(readingPosition.chapter);
+    if (readingPosition.page !== page) setCurrentPage(readingPosition.page);
+  }, [filename, readingPosition]);
 
   const targetReadingPath = useMemo(() => {
     if (!filename) return null;
@@ -109,7 +115,7 @@ function useViewerUrlParams(options = {}) {
   ]);
 
   return {
-    filename,
+    bookId: filename,
     currentPage,
     setCurrentPage,
     currentChapter,
@@ -119,7 +125,7 @@ function useViewerUrlParams(options = {}) {
 
 /** 챕터/이벤트 전환 상태 */
 function useViewerTransition({ currentEvent, currentChapter, isDataReady }) {
-  const [transitionState, setTransitionState] = useState(idleTransition);
+  const [transitionState, setTransitionState] = useState(IDLE_TRANSITION);
   const prevEventRef = useRef(null);
   const prevChapterRef = useRef(null);
 
@@ -137,10 +143,7 @@ function useViewerTransition({ currentEvent, currentChapter, isDataReady }) {
       (prev.eventNum !== currentEvent.eventNum || prev.chapter !== currentEvent.chapter)
     ) {
       setTransitionState({ type: 'event', inProgress: true });
-      timeoutId = setTimeout(
-        () => resetTransitionState(setTransitionState),
-        EVENT_TRANSITION_FALLBACK_MS
-      );
+      timeoutId = setTimeout(resetTransition, EVENT_TRANSITION_FALLBACK_MS);
     }
 
     if (currentEvent) prevEventRef.current = currentEvent;
@@ -148,7 +151,7 @@ function useViewerTransition({ currentEvent, currentChapter, isDataReady }) {
     return () => {
       if (timeoutId) clearTimeout(timeoutId);
     };
-  }, [currentEvent]);
+  }, [currentEvent, resetTransition]);
 
   useEffect(() => {
     if (prevChapterRef.current !== null && prevChapterRef.current !== currentChapter) {
@@ -159,9 +162,9 @@ function useViewerTransition({ currentEvent, currentChapter, isDataReady }) {
 
   useEffect(() => {
     if (isDataReady && transitionState.type === 'event' && transitionState.inProgress) {
-      resetTransitionState(setTransitionState);
+      resetTransition();
     }
-  }, [isDataReady, transitionState.type, transitionState.inProgress]);
+  }, [isDataReady, transitionState.type, transitionState.inProgress, resetTransition]);
 
   return { transitionState, resetTransition };
 }
@@ -209,7 +212,7 @@ export function useViewerPage() {
   const [urlSyncEnabled, setUrlSyncEnabled] = useState(false);
 
   const {
-    filename: bookId,
+    bookId,
     currentPage,
     setCurrentPage,
     currentChapter,
@@ -285,7 +288,7 @@ export function useViewerPage() {
     () => resolveServerBookIdOrFallback(book, bookId),
     [book, bookId]
   );
-  const manifestLoaded = useManifestLoaded(manifestServerBookId);
+  const { loaded: manifestLoaded } = useManifestLoaded(manifestServerBookId);
 
   const preferredResumeAnchor = useMemo(
     () => toViewerResumeAnchor(location.state?.resumeAnchor),
@@ -327,17 +330,15 @@ export function useViewerPage() {
     ),
   });
 
-  const effectiveResumeAnchor = preferredResumeAnchor ?? serverResumeAnchor;
+  const resumeAnchor = preferredResumeAnchor ?? serverResumeAnchor;
 
   // resume 완료 전 URL 챕터를 앵커 기준으로 시드 (urlSync 켜질 때 c/1로 튕기지 않도록)
   useEffect(() => {
     if (isViewerPageReady) return;
-    const chapter = resolveChapterIndex(
-      effectiveResumeAnchor?.startLocator ?? effectiveResumeAnchor?.start
-    );
+    const chapter = resolveResumeChapter(resumeAnchor);
     if (!(Number.isFinite(chapter) && chapter > 0)) return;
     setCurrentChapter((prev) => (prev === chapter ? prev : chapter));
-  }, [effectiveResumeAnchor, isViewerPageReady, setCurrentChapter]);
+  }, [resumeAnchor, isViewerPageReady, setCurrentChapter]);
 
   useEffect(() => {
     setUrlSyncEnabled(isViewerPageReady);
@@ -395,26 +396,22 @@ export function useViewerPage() {
 
   const handleApplySettings = useCallback(
     (newSettings) => {
-      const next = normalizeSettings(newSettings);
-      const graphChanged = next.showGraph !== settings.showGraph;
-      const result = setSettings(next);
-      if (!result.success) {
-        toast.error(result.message);
-        return;
-      }
+      let graphChanged = false;
+      const result = setSettings((prev) => {
+        const next = typeof newSettings === 'function' ? newSettings(prev) : newSettings;
+        graphChanged = Boolean(next?.showGraph) !== Boolean(prev.showGraph);
+        return next;
+      });
+      if (!reportSettingsSaveFailure(result, SETTINGS_SAVE_ERROR_MESSAGE)) return;
       if (graphChanged) setReloadKey((k) => k + 1);
       toast.success('설정이 적용되었습니다');
     },
-    [settings.showGraph, setSettings]
+    [setSettings]
   );
 
   const toggleGraph = useCallback(async () => {
-    const newShowGraph = !settings.showGraph;
-    const result = setSettings((prev) => ({ ...prev, showGraph: newShowGraph }));
-    if (!result.success) {
-      toast.error(result.message || '설정 저장 중 오류가 발생했습니다.');
-      return;
-    }
+    const result = setSettings((prev) => ({ ...prev, showGraph: !prev.showGraph }));
+    if (!reportSettingsSaveFailure(result, SETTINGS_SAVE_ERROR_MESSAGE)) return;
 
     try {
       const ready = await waitForViewerMethod(viewerRef, 'refreshLayout');
@@ -423,7 +420,7 @@ export function useViewerPage() {
     } catch {
       toast.error('화면 모드 전환 중 오류가 발생했습니다.');
     }
-  }, [settings.showGraph, setSettings, progress]);
+  }, [setSettings, progress]);
 
   const handleSliderChange = useCallback(async (value) => {
     setProgress(value);
@@ -485,7 +482,6 @@ export function useViewerPage() {
     reloadKey,
     showSettingsModal,
     setShowSettingsModal,
-    setProgress,
     setCurrentPage,
     setTotalPages,
     setCurrentChapter,
@@ -512,7 +508,7 @@ export function useViewerPage() {
     searchActions,
     setProgressTopBar,
     readingLocatorKey,
-    serverResumeAnchor: effectiveResumeAnchor,
+    serverResumeAnchor: resumeAnchor,
     applyReadingLocator,
     markViewerPageReady,
     isViewerPageReady,

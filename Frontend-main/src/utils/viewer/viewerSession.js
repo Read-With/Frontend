@@ -1,5 +1,8 @@
-/** 뷰어 이벤트 매칭·manifest·진도·TopBar·저장 payload */
+/** 뷰어 세션: 이벤트 매칭·진도·TopBar·저장 payload·런타임(UI/ref)·뷰어 설정 */
 
+import { toast } from 'react-toastify';
+import { errorUtils } from '../common/urlUtils';
+import { storageUtils } from '../common/cache/cacheManager';
 import {
   toLocator,
   progressResultToViewerAnchor,
@@ -18,7 +21,82 @@ import {
   resolveProgressMetricsFromLocator,
   readingProgressPercentFromLocator,
 } from '../common/cache/manifestCache';
-import { eventUtils, resolveServerBookId } from './viewerCoreStateUtils';
+import { getProgressFromCache } from '../common/cache/progressCache';
+import { eventUtils, resolveServerBookId } from './viewerCore';
+
+export const VIEWER_MODE_OPTIONS = [
+  { showGraph: true, icon: 'view_sidebar', label: '단일 뷰어 & 그래프' },
+  { showGraph: false, icon: 'article', label: '단일 뷰어' },
+];
+
+/** UI 미노출 필드 포함. XhtmlViewer 본문 기본값으로 사용·저장 */
+export const defaultSettings = {
+  fontSize: 100,
+  lineHeight: 1.5,
+  margin: 20,
+  fontFamily: 'Noto Serif KR',
+  showGraph: true,
+};
+
+export const SETTINGS_STORAGE_KEY = 'xhtml_viewer_settings';
+
+const SETTINGS_KEYS = Object.keys(defaultSettings);
+
+function toFiniteOr(value, fallback) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : fallback;
+}
+
+export function normalizeSettings(settings = {}) {
+  const merged = { ...defaultSettings, ...settings };
+  return {
+    fontSize: toFiniteOr(merged.fontSize, defaultSettings.fontSize),
+    lineHeight: toFiniteOr(merged.lineHeight, defaultSettings.lineHeight),
+    margin: toFiniteOr(merged.margin, defaultSettings.margin),
+    fontFamily:
+      typeof merged.fontFamily === 'string' && merged.fontFamily.trim()
+        ? merged.fontFamily
+        : defaultSettings.fontFamily,
+    showGraph: Boolean(merged.showGraph),
+  };
+}
+
+function needsSettingsPersist(raw, normalized) {
+  if (!raw || typeof raw !== 'object' || 'pageMode' in raw) return true;
+  return SETTINGS_KEYS.some((key) => raw[key] !== normalized[key]);
+}
+
+export function findViewerModeOption(showGraph) {
+  return (
+    VIEWER_MODE_OPTIONS.find((opt) => opt.showGraph === Boolean(showGraph)) ??
+    VIEWER_MODE_OPTIONS[1]
+  );
+}
+
+export function loadSettings() {
+  try {
+    const raw = storageUtils.getJson(SETTINGS_STORAGE_KEY, defaultSettings);
+    const loaded = normalizeSettings(raw);
+    if (needsSettingsPersist(raw, loaded)) {
+      storageUtils.setJson(SETTINGS_STORAGE_KEY, loaded);
+    }
+    return loaded;
+  } catch (error) {
+    return errorUtils.handleError('loadSettings', error, defaultSettings, {
+      settings: storageUtils.get(SETTINGS_STORAGE_KEY),
+    });
+  }
+}
+
+export function saveSettings(settings) {
+  try {
+    storageUtils.setJson(SETTINGS_STORAGE_KEY, normalizeSettings(settings));
+    return { success: true };
+  } catch (error) {
+    errorUtils.logError('saveSettings', error, { settings });
+    return { success: false, message: '설정 저장 중 오류가 발생했습니다.' };
+  }
+}
 
 function progressPercentFromData(data, options, pickValue) {
   if (!data || typeof data !== 'object') return null;
@@ -400,6 +478,46 @@ export function shouldApplyCacheSnapshot(snapshot, liveLocatorKey, isViewerPageR
   return cacheKey === liveLocatorKey;
 }
 
+export const VIEWER_RESUME_TIMING = {
+  POLL_MS: 100,
+  MAX_ATTEMPTS: 150,
+  PERCENT_FALLBACK_ATTEMPTS: 30,
+  TIMEOUT_MS: 100 * 150,
+};
+
+export const FORCE_RESUME_SNAPSHOT = { force: true, updateResumeAnchor: true };
+
+export function normalizeProgressBookId(bookKey) {
+  const id = toPositiveNumberOrNull(bookKey);
+  return id != null ? String(id) : null;
+}
+
+export function mergeProgressTopBar(prev, bookKey, { readingProgressPercent, chapterProgress }) {
+  const base =
+    prev != null && typeof prev === 'object'
+      ? prev
+      : progressRowToTopBar(null, bookKey);
+  const nextPct = readingProgressPercent ?? base.readingProgressPercent;
+  const resolvedCp = chapterProgress ?? base.chapterProgress;
+  if (base.readingProgressPercent === nextPct && base.chapterProgress === resolvedCp) {
+    return prev;
+  }
+  return {
+    ...base,
+    ...(nextPct != null ? { readingProgressPercent: nextPct } : {}),
+    ...(resolvedCp != null ? { chapterProgress: resolvedCp } : {}),
+  };
+}
+
+export function resolveCachedResumeAnchor(bookId) {
+  const cached = getProgressFromCache(bookId);
+  return snapshotFromProgressRow(cached, bookId).anchor;
+}
+
+export function isViewerResumeBlocking(resumePending, preferredResume) {
+  return Boolean(resumePending || preferredResume);
+}
+
 export function resolveReadingLocators(getCurrentLocator, currentEvent) {
   const fromViewer = getCurrentLocator?.();
   if (fromViewer) {
@@ -458,4 +576,121 @@ export function buildSaveLocationPayload(bookId, startLocator, endLocator, curre
     chapterProgress: base.resolvedMetrics?.chapterProgress ?? null,
     source: 'runtime',
   };
+}
+
+
+export function saveViewerMode(mode) {
+  try {
+    if (!mode || typeof mode !== 'string') return;
+    localStorage.setItem('viewer_mode', mode);
+  } catch {
+    return;
+  }
+}
+
+function loadViewerMode() {
+  try {
+    return localStorage.getItem('viewer_mode');
+  } catch {
+    return null;
+  }
+}
+
+/** showGraph는 settings SSOT. viewer_mode는 전체화면(graph) 여부만 복원. */
+export function resolveInitialGraphFullScreen(showGraph = loadSettings().showGraph) {
+  return Boolean(showGraph) && loadViewerMode() === 'graph';
+}
+
+export function resolvePersistedViewerMode(graphFullScreen, showGraph) {
+  if (graphFullScreen) return 'graph';
+  if (showGraph) return 'split';
+  return 'viewer';
+}
+
+export function deriveGraphPhase({ isReloading, isEventGraphLoading, isGraphLoading }) {
+  if (isReloading) return 'reloading';
+  if (isEventGraphLoading) return 'event';
+  if (isGraphLoading) return 'loading';
+  return 'idle';
+}
+
+export function isHardNavigationReload() {
+  if (!performance?.getEntriesByType) return false;
+  const [entry] = performance.getEntriesByType('navigation');
+  return entry?.type === 'reload';
+}
+
+export function buildViewerActionError(message, details, retry) {
+  return { message, details, retry };
+}
+
+export function delay(ms) {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
+
+export function waitForPaint() {
+  return new Promise((resolve) => {
+    requestAnimationFrame(() => requestAnimationFrame(resolve));
+  });
+}
+
+export function waitForViewerMethod(viewerRef, methodName, timeoutMs = 3000) {
+  if (viewerRef.current?.[methodName]) return Promise.resolve(true);
+  return new Promise((resolve) => {
+    const deadline = Date.now() + timeoutMs;
+    const id = setInterval(() => {
+      if (viewerRef.current?.[methodName]) {
+        clearInterval(id);
+        resolve(true);
+      } else if (Date.now() >= deadline) {
+        clearInterval(id);
+        resolve(false);
+      }
+    }, 100);
+  });
+}
+
+export function runViewerPaging(viewerRef, direction) {
+  const ref = viewerRef.current;
+  if (!ref) {
+    toast.error('뷰어가 아직 준비되지 않았습니다. 잠시 후 다시 시도해주세요.');
+    return;
+  }
+  try {
+    if (direction === 'prev') ref.prevPage();
+    else ref.nextPage();
+  } catch {
+    toast.error(
+      direction === 'prev'
+        ? '이전 페이지로 이동할 수 없습니다.'
+        : '다음 페이지로 이동할 수 없습니다.'
+    );
+  }
+}
+
+export async function restoreViewerPosition(viewerRef, progress) {
+  const { startLocator: start, endLocator: end } = anchorToLocators(
+    viewerRef.current?.getCurrentLocator?.()
+  );
+  viewerRef.current?.refreshLayout?.();
+  await waitForPaint();
+
+  if (start && viewerRef.current?.displayAt) {
+    const moved = viewerRef.current.displayAt({
+      startLocator: start,
+      endLocator: end ?? start,
+    });
+    if (moved) {
+      await waitForPaint();
+      return;
+    }
+  }
+
+  const pct = Number(progress);
+  if (Number.isFinite(pct) && pct >= 0) {
+    await viewerRef.current?.moveToProgress?.(pct);
+  }
+  await waitForPaint();
 }

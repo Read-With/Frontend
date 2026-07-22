@@ -9,7 +9,7 @@ import {
   isBookmarkAxisReady,
   clientSortToApiSort,
 } from '../../utils/bookmarks/bookmarkUtils';
-import { resolveReadingLocators } from '../../utils/viewer/viewerEventProgressUtils';
+import { resolveReadingLocators } from '../../utils/viewer/viewerSession';
 
 const friendlyError = (err, fallback) => {
   if (!err) return fallback;

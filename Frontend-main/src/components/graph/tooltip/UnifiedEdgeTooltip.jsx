@@ -7,9 +7,9 @@ import { getRelationStyle, tooltipStyles } from "../../../utils/styles/relationS
 import { clampPositivity } from "../../../utils/styles/graphStyles";
 import { COLORS, ANIMATION_VALUES, mergeRefs } from "../../../utils/styles/styles";
 import { toFiniteNumber, toPositiveNumberOrNull } from "../../../utils/common/valueUtils";
-import { processRelationTags, cleanupRelationUtils } from "../../../utils/graph/graphUtils";
-import { resolveEventOrdinalForDisplay } from "../../../utils/viewer/viewerEventProgressUtils";
-import { isLongEdgeTimeline, annotateSignificantEdgePoints, getSparseEdgeTickValues, formatEdgeTimelineDisplayLabel } from "../../../utils/graph/graphData";
+import { processRelationTags, cleanupRelationUtils } from "../../../utils/graph/graphCore";
+import { resolveEventOrdinalForDisplay } from "../../../utils/viewer/viewerSession";
+import { isLongEdgeTimeline, annotateSignificantEdgePoints, getSparseEdgeTickValues, formatEdgeTimelineDisplayLabel } from "../../../utils/graph/graphCy";
 import './tooltip.css';
 
 function extractNumericLabel(label) {

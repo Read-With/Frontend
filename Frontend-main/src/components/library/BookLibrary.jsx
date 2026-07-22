@@ -5,7 +5,7 @@ import { Heart, BookOpen, Network, MoreVertical, Info, Clock, FileText, Trash2, 
 import BookDetailModal from './BookDetailModal';
 import AuthenticatedImage from './AuthenticatedImage';
 import './BookLibrary.css';
-import { ensureGraphBookCache } from '../../utils/common/cache/chapterEventCache';
+import { ensureGraphBookCache } from '../../utils/graph/graphFetch';
 import { USER_VIEWER_PREFIX, USER_GRAPH_PREFIX } from '../../utils/common/urlUtils';
 import { formatLibraryRelativeDate } from '../../utils/library/libraryUtils';
 

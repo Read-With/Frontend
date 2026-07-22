@@ -7,10 +7,10 @@ import {
   extractApiBookId,
   undirectedPairKey,
   isGraphNodeElement,
-} from "../../../utils/graph/graphUtils.js";
-import { getEventDataByIndex } from "../../../utils/graph/graphData.js";
+} from "../../../utils/graph/graphCore";
+import { getEventDataByIndex } from "../../../utils/graph/graphFetch.js";
 import { useTooltipPosition, useClickOutside } from "../../../hooks/ui/tooltipHooks";
-import { getUnifiedEventInfoForTooltip } from "../../../utils/viewer/viewerEventProgressUtils";
+import { getUnifiedEventInfoForTooltip } from "../../../utils/viewer/viewerSession";
 import { toNumberOrNull } from "../../../utils/common/valueUtils.js";
 import { USER_GRAPH_PREFIX } from "../../../utils/common/urlUtils";
 import {

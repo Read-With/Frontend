@@ -27,6 +27,42 @@ export const isNotFoundError = (error) =>
   String(error?.message ?? '').includes('404') ||
   String(error?.message ?? '').includes('찾을 수 없습니다');
 
+export const SOFT_FAIL_403_404 = [403, 404];
+
+export const requireBookId = (bookId) => {
+  if (!bookId) throw new Error('bookId는 필수 매개변수입니다.');
+};
+
+const hasOwnKeys = (obj) =>
+  !!obj && typeof obj === 'object' && !Array.isArray(obj) && Object.keys(obj).length > 0;
+
+export const pickResponseResult = (response) => {
+  if (!response || typeof response !== 'object') return null;
+
+  const candidates = [response.result, response.data, response.payload];
+  const rich = candidates.find((c) => hasOwnKeys(c));
+  if (rich) return rich;
+
+  const scalar = candidates.find((c) => c != null);
+  if (scalar != null) return scalar;
+
+  return Array.isArray(response.deltas) ? response : null;
+};
+
+export const toUnifiedApiResponse = (
+  response,
+  { defaultCode = 'SUCCESS', defaultMessage = '', defaultResult = null } = {}
+) => {
+  const safe = response && typeof response === 'object' ? response : {};
+  return {
+    ...safe,
+    isSuccess: typeof safe.isSuccess === 'boolean' ? safe.isSuccess : true,
+    code: safe.code ?? defaultCode,
+    message: safe.message ?? defaultMessage,
+    result: safe.result ?? defaultResult,
+  };
+};
+
 const JSON_ACCEPT_HEADERS = {
   'Content-Type': 'application/json',
   Accept: 'application/json',

@@ -1,4 +1,4 @@
-﻿import { useRef, useEffect, useCallback, useMemo, useState } from 'react';
+import { useRef, useEffect, useCallback, useMemo, useState } from 'react';
 import { toast } from 'react-toastify';
 import ViewerLayout from './ViewerLayout';
 import XhtmlViewer from './xhtml/XhtmlViewer';
@@ -10,9 +10,9 @@ import {
   resolveViewerLineEvent,
   parseReadingLocatorKey,
   patchTopBarFromLineEvent,
-} from '../../utils/viewer/viewerEventProgressUtils';
+} from '../../utils/viewer/viewerSession';
 import { isSameBookmarkPosition, normalizeBookmarkLocators } from '../../utils/bookmarks/bookmarkUtils';
-import { errorUtils } from '../../utils/common/errorUtils';
+import { errorUtils } from '../../utils/common/urlUtils';
 import GraphSplitArea from './GraphSplitArea';
 import '../../pages/BookmarksPage.css';
 

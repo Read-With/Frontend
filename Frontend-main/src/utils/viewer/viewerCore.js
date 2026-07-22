@@ -1,12 +1,8 @@
-/** 뷰어 코어 유틸 (book·mode·cache key·event 필드·전환·async·페이지 네비·챕터 제목) */
+/** 뷰어 도메인 primitive: eventUtils, book/cache 키, 챕터 라벨 */
 
-import { toast } from 'react-toastify';
-import {
-  loadSettings,
-} from '../common/errorUtils';
-import { resolveChapterIndex, toPositiveNumberFromId, toPositiveNumberOrNull, anchorToLocators } from '../common/valueUtils';
+import { resolveChapterIndex, toPositiveNumberFromId, toPositiveNumberOrNull } from '../common/valueUtils';
 
-/** graphUtils.isGraphEdgeElement와 동일 — graphUtils import 순환 방지용 로컬 판별 */
+/** graphCore.isGraphEdgeElement와 동일 — graph ↔ viewer 순환 import 방지 */
 const isGraphEdgeElement = (element) =>
   Boolean(element?.data && element.data.source !== undefined && element.data.target !== undefined);
 
@@ -195,101 +191,11 @@ export function resolveViewerBookKey(book, routeBookId = null, { trimRoute = tru
   return trimRoute ? str.trim() : str;
 }
 
-export function saveViewerMode(mode) {
-  try {
-    if (!mode || typeof mode !== 'string') return;
-    localStorage.setItem('viewer_mode', mode);
-  } catch {
-    return;
-  }
-}
-
-function loadViewerMode() {
-  try {
-    return localStorage.getItem('viewer_mode');
-  } catch {
-    return null;
-  }
-}
-
-/** showGraph는 settings SSOT. viewer_mode는 전체화면(graph) 여부만 복원. */
-export function resolveInitialGraphFullScreen(showGraph = loadSettings().showGraph) {
-  return Boolean(showGraph) && loadViewerMode() === 'graph';
-}
-
-export function buildViewerActionError(message, details, retry) {
-  return { message, details, retry };
-}
-
-export function delay(ms) {
-  return new Promise((resolve) => {
-    setTimeout(resolve, ms);
-  });
-}
-
-export function waitForPaint() {
-  return new Promise((resolve) => {
-    requestAnimationFrame(() => requestAnimationFrame(resolve));
-  });
-}
-
-export function waitForViewerMethod(viewerRef, methodName, timeoutMs = 3000) {
-  if (viewerRef.current?.[methodName]) return Promise.resolve(true);
-  return new Promise((resolve) => {
-    const deadline = Date.now() + timeoutMs;
-    const id = setInterval(() => {
-      if (viewerRef.current?.[methodName]) {
-        clearInterval(id);
-        resolve(true);
-      } else if (Date.now() >= deadline) {
-        clearInterval(id);
-        resolve(false);
-      }
-    }, 100);
-  });
-}
-
-export function runViewerPaging(viewerRef, direction) {
-  const ref = viewerRef.current;
-  if (!ref) {
-    toast.error('뷰어가 아직 준비되지 않았습니다. 잠시 후 다시 시도해주세요.');
-    return;
-  }
-  try {
-    if (direction === 'prev') ref.prevPage();
-    else ref.nextPage();
-  } catch {
-    toast.error(
-      direction === 'prev'
-        ? '이전 페이지로 이동할 수 없습니다.'
-        : '다음 페이지로 이동할 수 없습니다.'
-    );
-  }
-}
-
-export async function restoreViewerPosition(viewerRef, progress) {
-  const { startLocator: start, endLocator: end } = anchorToLocators(
-    viewerRef.current?.getCurrentLocator?.()
-  );
-  viewerRef.current?.refreshLayout?.();
-  await waitForPaint();
-
-  if (start && viewerRef.current?.displayAt) {
-    const moved = viewerRef.current.displayAt({
-      startLocator: start,
-      endLocator: end ?? start,
-    });
-    if (moved) {
-      await waitForPaint();
-      return;
-    }
-  }
-
-  const pct = Number(progress);
-  if (Number.isFinite(pct) && pct >= 0) {
-    await viewerRef.current?.moveToProgress?.(pct);
-  }
-  await waitForPaint();
+export function deriveGraphPhase({ isReloading, isEventGraphLoading, isGraphLoading }) {
+  if (isReloading) return 'reloading';
+  if (isEventGraphLoading) return 'event';
+  if (isGraphLoading) return 'loading';
+  return 'idle';
 }
 
 export const cacheKeyUtils = {
