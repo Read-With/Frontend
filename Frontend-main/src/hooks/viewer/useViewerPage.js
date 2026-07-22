@@ -161,7 +161,11 @@ function useViewerTransition({ currentEvent, currentChapter, isDataReady }) {
   }, [currentChapter]);
 
   useEffect(() => {
-    if (isDataReady && transitionState.type === 'event' && transitionState.inProgress) {
+    if (
+      isDataReady &&
+      transitionState.inProgress &&
+      (transitionState.type === 'event' || transitionState.type === 'chapter')
+    ) {
       resetTransition();
     }
   }, [isDataReady, transitionState.type, transitionState.inProgress, resetTransition]);

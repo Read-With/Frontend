@@ -1,7 +1,55 @@
 /** 툴팁: 외부 클릭 감지·드래그 위치·활성 툴팁 상태 */
 
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { constrainToGraphCanvas } from '../../utils/graph/graphCy';
+import { constrainToGraphCanvas, constrainToWindow, zoomGraphByFactor } from '../../utils/graph/graphCy';
+import { GRAPH_ZOOM } from '../../utils/graph/graphCore';
+
+function constrainTooltipPosition(bounds, x, y, width, height) {
+  if (bounds === 'window') {
+    return constrainToWindow(x, y, width, height);
+  }
+  return constrainToGraphCanvas(x, y, width, height);
+}
+
+/** 툴팁용 +/- : 해당 elementId 기준 그래프 줌 */
+export function TooltipGraphZoomControls({ cyRef, elementId }) {
+  const handleZoom = useCallback((e, factor) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const cy = cyRef?.current;
+    if (!cy || elementId == null || elementId === '') return;
+    zoomGraphByFactor(cy, factor, { elementId });
+  }, [cyRef, elementId]);
+
+  if (!cyRef || elementId == null || elementId === '') return null;
+
+  return (
+    <div
+      className="tooltip-graph-zoom-controls"
+      onClick={(e) => e.stopPropagation()}
+      onMouseDown={(e) => e.stopPropagation()}
+    >
+      <button
+        type="button"
+        className="graph-zoom-btn"
+        onClick={(e) => handleZoom(e, GRAPH_ZOOM.STEP)}
+        aria-label="선택 요소 확대"
+        title="확대"
+      >
+        +
+      </button>
+      <button
+        type="button"
+        className="graph-zoom-btn"
+        onClick={(e) => handleZoom(e, 1 / GRAPH_ZOOM.STEP)}
+        aria-label="선택 요소 축소"
+        title="축소"
+      >
+        −
+      </button>
+    </div>
+  );
+}
 
 const TOOLTIP_CLEAR_DELAY_MS = 150;
 const TOOLTIP_ERROR_CHECK_DELAY_MS = 220;
@@ -158,8 +206,15 @@ export function useTooltipState({
   };
 }
 
+/**
+ * @param {number} initialX
+ * @param {number} initialY
+ * @param {{ enabled?: boolean, bounds?: 'canvas' | 'window' }} [options]
+ *   bounds: 'canvas'(기본) 그래프 영역 / 'window' 뷰포트(뷰어 툴팁용)
+ */
 export function useTooltipPosition(initialX, initialY, options = {}) {
   const enabled = options.enabled !== false;
+  const bounds = options.bounds === 'window' ? 'window' : 'canvas';
   const [position, setPosition] = useState({ x: 200, y: 200 });
   const [showContent, setShowContent] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
@@ -205,13 +260,15 @@ export function useTooltipPosition(initialX, initialY, options = {}) {
       const tooltipRect = tooltipRef.current.getBoundingClientRect();
       const newX = e.clientX - dragOffsetRef.current.x;
       const newY = e.clientY - dragOffsetRef.current.y;
-      const constrained = constrainToGraphCanvas(
-        newX,
-        newY,
-        tooltipRect.width,
-        tooltipRect.height
+      setPosition(
+        constrainTooltipPosition(
+          bounds,
+          newX,
+          newY,
+          tooltipRect.width,
+          tooltipRect.height,
+        ),
       );
-      setPosition(constrained);
       setHasDragged(true);
     };
 
@@ -236,7 +293,7 @@ export function useTooltipPosition(initialX, initialY, options = {}) {
       window.removeEventListener('mouseup', handleMouseUp);
       document.body.style.userSelect = '';
     };
-  }, [enabled, isDragging]);
+  }, [enabled, isDragging, bounds]);
 
   useEffect(() => {
     if (!enabled) return;
@@ -248,15 +305,17 @@ export function useTooltipPosition(initialX, initialY, options = {}) {
       !hasDragged
     ) {
       const tooltipRect = tooltipRef.current.getBoundingClientRect();
-      const constrained = constrainToGraphCanvas(
-        initialX,
-        initialY,
-        tooltipRect.width,
-        tooltipRect.height
+      setPosition(
+        constrainTooltipPosition(
+          bounds,
+          initialX,
+          initialY,
+          tooltipRect.width,
+          tooltipRect.height,
+        ),
       );
-      setPosition(constrained);
     }
-  }, [enabled, initialX, initialY, isDragging, hasDragged]);
+  }, [enabled, initialX, initialY, isDragging, hasDragged, bounds]);
 
   if (!enabled) {
     return {

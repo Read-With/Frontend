@@ -9,7 +9,7 @@ import {
   isGraphNodeElement,
 } from "../../../utils/graph/graphCore";
 import { getEventDataByIndex } from "../../../utils/graph/graphFetch.js";
-import { useTooltipPosition, useClickOutside } from "../../../hooks/ui/tooltipHooks";
+import { useTooltipPosition, useClickOutside, TooltipGraphZoomControls } from "../../../hooks/ui/tooltipHooks";
 import { getUnifiedEventInfoForTooltip } from "../../../utils/viewer/viewerSession";
 import { toNumberOrNull } from "../../../utils/common/valueUtils.js";
 import { USER_GRAPH_PREFIX } from "../../../utils/common/urlUtils";
@@ -474,6 +474,7 @@ function UnifiedNodeInfo({
   apiBookGraphData = null,
   onSelectRelatedNode = null,
   onOpenChapterSidebar = null,
+  cyRef = null,
 }) {
   const { filename: urlFilename } = useParams();
   const isSidebar = displayMode === 'sidebar';
@@ -523,7 +524,7 @@ function UnifiedNodeInfo({
   }, [node?.id]);
 
   const { position, showContent, isDragging, tooltipRef, handleMouseDown } = useTooltipPosition(
-    x, y, { enabled: !isSidebar }
+    x, y, { enabled: !isSidebar, bounds: 'window' }
   );
 
   const clickOutsideRef = useClickOutside(
@@ -556,35 +557,35 @@ function UnifiedNodeInfo({
     [node, chapterNum, povSummaries],
   );
 
-  const radarChartData = useMemo(
-    () =>
-      buildRadarChartData({
-        node,
-        chapterNum,
-        apiBookGraphData,
-        elements,
-        folderKey,
-        eventNum: eventInfo.eventNum,
-      }),
-    [node, chapterNum, folderKey, elements, apiBookGraphData, eventInfo],
-  );
+  const radarChartData = useMemo(() => {
+    if (!isSidebar) return [];
+    return buildRadarChartData({
+      node,
+      chapterNum,
+      apiBookGraphData,
+      elements,
+      folderKey,
+      eventNum: eventInfo.eventNum,
+    });
+  }, [isSidebar, node, chapterNum, folderKey, elements, apiBookGraphData, eventInfo]);
 
   const connectionKind = useMemo(() => {
+    if (!isSidebar) return 'no_connections';
     const n = radarChartData.length;
     if (n === 0) return 'no_connections';
     if (n <= 2) return 'few_connections';
     return 'sufficient_connections';
-  }, [radarChartData]);
+  }, [isSidebar, radarChartData]);
 
-  const recommendedNodes = useMemo(
-    () => buildRecommendedNodes({
+  const recommendedNodes = useMemo(() => {
+    if (!isSidebar) return [];
+    return buildRecommendedNodes({
       elements,
       apiBookGraphData,
       excludeId: node?.id,
       limit: 3,
-    }),
-    [elements, apiBookGraphData, node?.id],
-  );
+    });
+  }, [isSidebar, elements, apiBookGraphData, node?.id]);
 
   const isWarning = summaryStage === SUMMARY.WARNING;
   const isContent = summaryStage === SUMMARY.CONTENT;
@@ -598,15 +599,11 @@ function UnifiedNodeInfo({
     handleMouseDown,
   };
 
-  const analysisModal = isModalOpen ? (
+  const analysisModal = isSidebar && isModalOpen ? (
     <RelationAnalysisModal
       node={node}
       chapterNum={chapterNum}
-      chapterScopeLabel={
-        isSidebar
-          ? (chapterNum != null ? `챕터 1–${chapterNum} 누적` : null)
-          : (chapterNum != null ? `챕터 ${chapterNum}` : null)
-      }
+      chapterScopeLabel={chapterNum != null ? `챕터 1–${chapterNum} 누적` : null}
       radarChartData={radarChartData}
       connectionKind={connectionKind}
       recommendedNodes={recommendedNodes}
@@ -714,26 +711,20 @@ function UnifiedNodeInfo({
 
   if (!isSidebar) {
     return (
-      <>
-        <NodeTooltipShell
-          {...floatingShell}
-          containerStyle={unifiedNodeTooltipStyles.tooltipContainer}
-          transition={unifiedNodeAnimations.tooltipComplexTransition(isDragging)}
-        >
-          <div className="tooltip-content business-card">
-            <TooltipCloseButton onClose={onClose} />
-            {nodeHeaderAndDescription}
-            <RelationAnalysisCta
-              node={node}
-              connectionCount={radarChartData.length}
-              onOpen={openModal}
-              buttonRef={analysisBtnRef}
-              compact
-            />
-          </div>
-        </NodeTooltipShell>
-        {analysisModal}
-      </>
+      <NodeTooltipShell
+        {...floatingShell}
+        containerStyle={unifiedNodeTooltipStyles.tooltipContainer}
+        transition={unifiedNodeAnimations.tooltipComplexTransition(isDragging)}
+      >
+        <div className="tooltip-content business-card">
+          <TooltipCloseButton onClose={onClose} />
+          <TooltipGraphZoomControls
+            cyRef={cyRef}
+            elementId={node?.id ?? data?.id}
+          />
+          {nodeHeaderAndDescription}
+        </div>
+      </NodeTooltipShell>
     );
   }
 

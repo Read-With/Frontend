@@ -32,18 +32,19 @@ import {
 } from '../../hooks/graph/useGraphCy.js';
 import { eventUtils } from "../../utils/viewer/viewerCore";
 
-function GraphZoomControls({ cy }) {
+function GraphZoomControls({ cy, elementId = null, className = 'graph-zoom-controls' }) {
   const handleZoom = useCallback((e, factor) => {
     e.stopPropagation();
-    zoomGraphByFactor(cy, factor);
-  }, [cy]);
+    zoomGraphByFactor(cy, factor, elementId != null ? { elementId } : undefined);
+  }, [cy, elementId]);
 
   if (!cy) return null;
 
   return (
     <div
-      className="graph-zoom-controls"
+      className={className}
       onClick={(e) => e.stopPropagation()}
+      onMouseDown={(e) => e.stopPropagation()}
     >
       <button
         type="button"
@@ -69,7 +70,11 @@ function GraphZoomControls({ cy }) {
 
 GraphZoomControls.propTypes = {
   cy: PropTypes.object,
+  elementId: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
+  className: PropTypes.string,
 };
+
+export { GraphZoomControls };
 
 const EMPTY_ELEMENTS_UPDATE = {
   nodesToAdd: [],

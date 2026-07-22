@@ -39,8 +39,12 @@ function rectOverlapArea(a, b) {
   return (right - left) * (bottom - top);
 }
 
-function constrainToWindow(x, y, elementWidth, elementHeight) {
+/** fixed 좌표를 브라우저 viewport 안으로 클램프 */
+export function constrainToWindow(x, y, elementWidth, elementHeight) {
   if (typeof window === 'undefined') return { x: 0, y: 0 };
+  if (typeof x !== 'number' || typeof y !== 'number') {
+    return { x: 0, y: 0 };
+  }
   const maxX = Math.max(0, window.innerWidth - elementWidth);
   const maxY = Math.max(0, window.innerHeight - elementHeight);
   return {
@@ -309,16 +313,55 @@ export function fitGraphToNodes(cy, opts = {}) {
   }
 }
 
-/** 뷰포트 중심 기준 비율 줌 */
-export function zoomGraphByFactor(cy, factor) {
+/** 뷰포트 또는 요소 기준 비율 줌
+ * @param {object} cy
+ * @param {number} factor
+ * @param {{ elementId?: string|number|null, renderedPosition?: { x: number, y: number } }} [options]
+ */
+export function zoomGraphByFactor(cy, factor, options = {}) {
   if (!cy || cy.destroyed?.()) return false;
   try {
     const current = cy.zoom();
     const next = Math.min(cy.maxZoom(), Math.max(cy.minZoom(), current * factor));
     if (next === current) return false;
+
+    let renderedPosition = options.renderedPosition ?? null;
+    if (!renderedPosition && options.elementId != null && options.elementId !== '') {
+      const el = cy.getElementById(String(options.elementId));
+      if (el?.length) {
+        if (typeof el.isEdge === 'function' && el.isEdge()) {
+          try {
+            const mid = typeof el.midpoint === 'function' ? el.midpoint() : null;
+            if (mid && Number.isFinite(mid.x) && Number.isFinite(mid.y)) {
+              renderedPosition = mid;
+            }
+          } catch {
+            /* fall through */
+          }
+          if (!renderedPosition) {
+            const bb = el.renderedBoundingBox?.({ includeLabels: false });
+            if (bb && Number.isFinite(bb.x1) && Number.isFinite(bb.x2)) {
+              renderedPosition = {
+                x: (bb.x1 + bb.x2) / 2,
+                y: (bb.y1 + bb.y2) / 2,
+              };
+            }
+          }
+        } else {
+          const pos = el.renderedPosition?.();
+          if (pos && Number.isFinite(pos.x) && Number.isFinite(pos.y)) {
+            renderedPosition = pos;
+          }
+        }
+      }
+    }
+
     cy.zoom({
       level: next,
-      renderedPosition: { x: cy.width() / 2, y: cy.height() / 2 },
+      renderedPosition: renderedPosition ?? {
+        x: cy.width() / 2,
+        y: cy.height() / 2,
+      },
     });
     return true;
   } catch {

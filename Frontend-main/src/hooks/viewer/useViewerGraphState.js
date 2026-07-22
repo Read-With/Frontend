@@ -85,9 +85,15 @@ export function useViewerGraphState({
     resetGraphPipelineState();
   }, [resetGraphPipelineState]);
 
+  // 책 변경만 hard reset. 챕터 전환은 이전 그래프를 유지(stale-while-revalidate)
   useEffect(() => {
     resetGraphPipelineState();
-  }, [currentChapter, bookKey, resetGraphPipelineState]);
+  }, [bookKey, resetGraphPipelineState]);
+
+  // 챕터 전환: 빈 화면/로딩 강제 대신 ready만 내려 파이프라인이 교체
+  useEffect(() => {
+    setIsDataReady(false);
+  }, [currentChapter]);
 
   useEffect(() => {
     if (!isHardNavigationReload()) return undefined;
@@ -156,4 +162,3 @@ export function useViewerGraphState({
     searchActions,
   };
 }
-

@@ -188,6 +188,7 @@ const GraphContainer = memo(function GraphContainer({
             currentEvent={currentEvent}
             prevValidEvent={prevValidEvent}
             onSelectRelatedNode={handleSelectRelatedNode}
+            cyRef={cyRef}
           />
         )}
         {activeTooltip?.type === 'edge' && (
@@ -205,6 +206,7 @@ const GraphContainer = memo(function GraphContainer({
             bookId={bookId}
             sourceEndpoint={activeTooltip.sourceEndpoint}
             targetEndpoint={activeTooltip.targetEndpoint}
+            cyRef={cyRef}
           />
         )}
       </div>

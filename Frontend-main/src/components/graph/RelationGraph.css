@@ -103,6 +103,22 @@
   background: #f1f5f9;
 }
 
+.tooltip-graph-zoom-controls {
+  position: absolute;
+  top: 0.85rem;
+  right: 2.75rem;
+  z-index: 10;
+  display: flex;
+  gap: 4px;
+}
+
+.tooltip-graph-zoom-controls .graph-zoom-btn {
+  width: 28px;
+  height: 28px;
+  font-size: 16px;
+  border-radius: 7px;
+}
+
 /* Edge / Node floating tooltip chrome */
 .edge-tooltip-container,
 .graph-node-tooltip {

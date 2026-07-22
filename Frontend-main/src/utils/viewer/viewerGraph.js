@@ -60,6 +60,8 @@ export function resolveGraphCallContext({ book, currentChapter, currentEvent }) 
 
 export const VIEWER_GRAPH_PIPELINE = {
   PREFETCH_AHEAD_EVENTS: 2,
+  /** 다음 챕터 진입 시 바로 쓸 수 있도록 최소 이벤트 수 */
+  PREFETCH_NEXT_CHAPTER_EVENTS: 3,
   HARD_RELOAD_SETTLE_MS: 1000,
   DISCOVERY_WAIT_MS: 30000,
   DISCOVERY_POLL_MS: 16,
@@ -67,6 +69,13 @@ export const VIEWER_GRAPH_PIPELINE = {
 
 export function getCachedChapterMaxEventIdx(bookId, chapter) {
   return Number(getCachedChapterEvents(bookId, chapter)?.maxEventIdx) || 0;
+}
+
+/** 캐시에 throughEventIdx까지 쓸 수 있는 데이터가 있는지 */
+export function hasCachedChapterThrough(bookId, chapter, throughEventIdx = 1) {
+  const through = Number(throughEventIdx);
+  const need = Number.isFinite(through) && through >= 1 ? through : 1;
+  return getCachedChapterMaxEventIdx(bookId, chapter) >= need;
 }
 
 export function buildChapterCharacterSearchData(events, currentChapter) {
