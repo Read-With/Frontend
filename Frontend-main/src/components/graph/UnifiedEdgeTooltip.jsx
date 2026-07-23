@@ -1,7 +1,7 @@
 import { memo, useState, useEffect, useMemo } from "react";
 import {ResponsiveContainer, LineChart, CartesianGrid, ReferenceLine, Tooltip as RechartsTooltip, Line, XAxis, YAxis,} from "recharts";
 import { useParams } from "react-router-dom";
-import { useTooltipPosition, useClickOutside, TooltipGraphZoomControls } from "../../hooks/ui/tooltipHooks";
+import { useTooltipPosition, useClickOutside } from "../../hooks/ui/tooltipHooks";
 import { useRelationData } from "../../hooks/graph/useApiGraphData";
 import { getRelationStyle, tooltipStyles } from "../../utils/styles/relationStyles";
 import { clampPositivity } from "../../utils/styles/graphStyles";
@@ -72,7 +72,6 @@ function UnifiedEdgeTooltip({
   bookId = null,
   sourceEndpoint = null,
   targetEndpoint = null,
-  cyRef = null,
 }) {
   const { filename } = useParams();
   const isSidebar = variant === 'graphPage';
@@ -613,12 +612,6 @@ function UnifiedEdgeTooltip({
   const tooltipInner = (
     <>
       {closeButton}
-      {isViewer ? (
-        <TooltipGraphZoomControls
-          cyRef={cyRef}
-          elementId={data?.id}
-        />
-      ) : null}
       <div
         className={`edge-tooltip-content edge-tooltip-themed${isSidebar ? ' edge-tooltip-content--sidebar' : ''}`}
         style={themeStyle}
@@ -679,7 +672,6 @@ export default memo(UnifiedEdgeTooltip, (prevProps, nextProps) => {
     prevProps.variant === nextProps.variant &&
     prevProps.bookId === nextProps.bookId &&
     prevProps.sourceEndpoint === nextProps.sourceEndpoint &&
-    prevProps.targetEndpoint === nextProps.targetEndpoint &&
-    prevProps.cyRef === nextProps.cyRef
+    prevProps.targetEndpoint === nextProps.targetEndpoint
   );
 });

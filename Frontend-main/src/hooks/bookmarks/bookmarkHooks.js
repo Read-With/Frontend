@@ -1,14 +1,15 @@
 /** 북마크 CRUD·뷰어 추가·정렬 */
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { toast } from 'react-toastify';
 import { createBookmark, updateBookmark, deleteBookmark, loadBookmarks as loadBookmarksFromApi } from '../../utils/api/booksApi';
 import {
   createBookmarkData,
   isSameBookmarkPosition,
-  isBookmarkAxisReady,
+  waitForBookmarkAxisReady,
   clientSortToApiSort,
 } from '../../utils/bookmarks/bookmarkUtils';
+import { toPositiveNumberOrNull } from '../../utils/common/valueUtils';
 import { resolveReadingLocators } from '../../utils/viewer/viewerSession';
 
 const friendlyError = (err, fallback) => {
@@ -25,6 +26,7 @@ const friendlyError = (err, fallback) => {
 
 export const useBookmarks = (bookId, options = {}) => {
   const { viewerRef = null, setFailCount = null, sortOrder = 'recent' } = options;
+  const apiBookId = useMemo(() => toPositiveNumberOrNull(bookId), [bookId]);
   const apiSort = clientSortToApiSort(sortOrder);
 
   const [bookmarks, setBookmarks] = useState([]);
@@ -66,22 +68,22 @@ export const useBookmarks = (bookId, options = {}) => {
   }, []);
 
   const fetchBookmarks = useCallback(async () => {
-    if (!bookId) {
+    if (apiBookId == null) {
       setBookmarks([]);
-      setLoadError(null);
+      setLoadError(bookId ? '유효한 책 ID가 없어 북마크를 불러올 수 없습니다.' : null);
       return;
     }
     setLoading(true);
     setLoadError(null);
     try {
-      setBookmarks(await loadBookmarksFromApi(bookId, apiSort));
+      setBookmarks(await loadBookmarksFromApi(apiBookId, apiSort));
     } catch (err) {
       setBookmarks([]);
       setLoadError(friendlyError(err, '북마크 목록을 불러오지 못했습니다.'));
     } finally {
       setLoading(false);
     }
-  }, [bookId, apiSort]);
+  }, [apiBookId, apiSort, bookId]);
 
   const addBookmark = useCallback(
     (bookmarkData) =>
@@ -154,7 +156,7 @@ export const useBookmarks = (bookId, options = {}) => {
       return { success: false };
     }
 
-    if (bookId == null || bookId === '') {
+    if (apiBookId == null) {
       toast.error('책 정보가 없어 북마크를 추가할 수 없습니다.');
       return { success: false };
     }
@@ -162,7 +164,6 @@ export const useBookmarks = (bookId, options = {}) => {
     let rawStart = null;
     let rawEnd = null;
     try {
-      // 진도 자동저장과 동일: getCurrentLocator → resolveReadingLocators
       const pair = resolveReadingLocators(
         () => viewerRef.current?.getCurrentLocator?.(),
         null
@@ -179,14 +180,15 @@ export const useBookmarks = (bookId, options = {}) => {
       return { success: false };
     }
 
-    if (!isBookmarkAxisReady(bookId, rawStart)) {
+    const axisReady = await waitForBookmarkAxisReady(apiBookId, rawStart);
+    if (!axisReady) {
       toast.error('책 위치 정보가 아직 준비되지 않았어요. 잠시 후 다시 시도해 주세요.');
       return { success: false };
     }
 
     setFailCount?.(0);
 
-    const bookmarkData = createBookmarkData(bookId, rawStart, rawEnd);
+    const bookmarkData = createBookmarkData(apiBookId, rawStart, rawEnd);
     if (!bookmarkData.startLocator) {
       toast.error('페이지 정보를 읽을 수 없습니다. 다시 불러옵니다...');
       bumpFail();
@@ -204,22 +206,40 @@ export const useBookmarks = (bookId, options = {}) => {
     }
 
     return addBookmark(bookmarkData);
-  }, [bookId, viewerRef, setFailCount, addBookmark]);
+  }, [apiBookId, viewerRef, setFailCount, addBookmark]);
 
   useEffect(() => {
-    if (!bookId) {
+    if (apiBookId == null) {
       setBookmarks([]);
-      setLoadError(null);
+      setLoadError(bookId ? '유효한 책 ID가 없어 북마크를 불러올 수 없습니다.' : null);
       return;
     }
     fetchBookmarks();
-  }, [bookId, fetchBookmarks]);
+  }, [apiBookId, bookId, fetchBookmarks]);
+
+  // 목록↔뷰어 전환·bfcache·탭 복귀 시 재동기화 (마운트 시 pageshow는 제외)
+  useEffect(() => {
+    if (apiBookId == null) return undefined;
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') fetchBookmarks();
+    };
+    const onPageShow = (event) => {
+      if (event.persisted) fetchBookmarks();
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+    window.addEventListener('pageshow', onPageShow);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibility);
+      window.removeEventListener('pageshow', onPageShow);
+    };
+  }, [apiBookId, fetchBookmarks]);
 
   return {
     bookmarks,
     loading,
     loadError,
     isMutating,
+    apiBookId,
     fetchBookmarks,
     removeBookmark,
     patchBookmark,

@@ -19,6 +19,7 @@ import {
 } from '../../utils/viewer/viewerSession';
 import { toViewerResumeAnchor, resolveChapterIndex } from '../../utils/common/valueUtils';
 import { useBookmarks } from '../bookmarks/bookmarkHooks';
+import { resolveBookmarkApiBookId } from '../../utils/bookmarks/bookmarkUtils';
 import {
   parseViewerReaderSplat,
   resolveViewerReadingPosition,
@@ -377,12 +378,17 @@ export function useViewerPage() {
     canPersist: isViewerPageReady,
   });
 
+  const bookmarkBookId = useMemo(
+    () => resolveBookmarkApiBookId(book, bookKey || bookId),
+    [book, bookKey, bookId]
+  );
+
   const {
     bookmarks,
     handleAddBookmark,
     removeBookmark,
     isMutating: isBookmarkMutating,
-  } = useBookmarks(bookKey, { viewerRef, setFailCount });
+  } = useBookmarks(bookmarkBookId, { viewerRef, setFailCount });
 
   useEffect(() => {
     if (failCount >= 2) {
@@ -437,7 +443,13 @@ export function useViewerPage() {
   }, []);
 
   const onToggleBookmarkList = useCallback(() => {
-    navigate(userViewerBookmarksPath(bookKey || bookId), {
+    const apiId = resolveBookmarkApiBookId(book, bookKey || bookId);
+    const path = userViewerBookmarksPath(apiId);
+    if (!path) {
+      toast.error('책 정보가 없어 북마크 목록을 열 수 없습니다.');
+      return;
+    }
+    navigate(path, {
       state: { ...(location.state || {}), book },
     });
   }, [navigate, bookKey, bookId, location.state, book]);

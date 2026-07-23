@@ -67,8 +67,10 @@ const BookmarksPage = () => {
 
   useEffect(() => {
     if (apiBookId == null || !cleanFilename) return;
+    const path = userViewerBookmarksPath(apiBookId);
+    if (!path) return;
     if (String(cleanFilename) === String(apiBookId)) return;
-    navigate(userViewerBookmarksPath(apiBookId), {
+    navigate(path, {
       replace: true,
       state: location.state,
     });
@@ -111,9 +113,18 @@ const BookmarksPage = () => {
 
   const goViewer = useCallback(
     (path, stateExtra = {}) => {
-      navigate(path || viewerPath, { state: { ...(location.state || {}), ...stateExtra } });
+      const bookFromState = location.state?.book;
+      const bookFallback =
+        apiBookId != null ? { id: apiBookId, _bookId: apiBookId } : null;
+      navigate(path || viewerPath, {
+        state: {
+          ...(location.state || {}),
+          book: bookFromState || bookFallback,
+          ...stateExtra,
+        },
+      });
     },
-    [navigate, viewerPath, location.state]
+    [navigate, viewerPath, location.state, apiBookId]
   );
 
   const handleOpenBookmark = useCallback(

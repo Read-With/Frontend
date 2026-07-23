@@ -69,6 +69,7 @@ const AppContent = () => {
         <Route element={<ProtectedRoute />}>
           <Route path="/admin" element={<AdminPage />} />
           <Route path="/mypage" element={<MyPage />} />
+          <Route path="/user/viewer/bookmarks" element={<Navigate to="/mypage" replace />} />
           <Route path="/user/viewer/:filename/bookmarks" element={<BookmarksPage />} />
           <Route path="/user/viewer/:filename/*" element={<ViewerPage />} />
           <Route path="/user/graph/:filename" element={<RelationGraphWrapper />} />

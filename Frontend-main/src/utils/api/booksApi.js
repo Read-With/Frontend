@@ -29,8 +29,10 @@ import {
 import { setManifestData, getManifestFromCache } from '../common/cache/manifestCache';
 import { normalizeReadingProgressPercent } from '../viewer/viewerSession';
 import { getStoredAccessToken } from '../security/authTokenStorage';
-
-const DEFAULT_BOOKMARK_COLOR = '#f4f7ff';
+import {
+  DEFAULT_BOOKMARK_COLOR,
+  BOOKMARK_UPDATABLE_FIELDS,
+} from '../bookmarks/bookmarkUtils';
 
 const BOOK_LIST_SORT_VALUES = new Set(['updatedAt', 'title']);
 
@@ -256,8 +258,10 @@ export const loadBookmarks = async (bookId, sort = 'time_desc') => {
 
 const buildPatchBody = (updateData) => {
   const body = {};
-  if (updateData?.color !== undefined) body.color = updateData.color;
-  if (updateData?.memo !== undefined) body.memo = updateData.memo;
+  if (!updateData || typeof updateData !== 'object') return body;
+  for (const key of BOOKMARK_UPDATABLE_FIELDS) {
+    if (updateData[key] !== undefined) body[key] = updateData[key];
+  }
   return body;
 };
 
@@ -307,7 +311,7 @@ export const updateBookmark = async (bookmarkId, updateData) => {
   }
   const body = buildPatchBody(updateData);
   if (Object.keys(body).length === 0) {
-    throw new Error('수정할 color 또는 memo가 필요합니다.');
+    throw new Error(`수정할 ${BOOKMARK_UPDATABLE_FIELDS.join(' 또는 ')}가 필요합니다.`);
   }
   try {
     const data = await authenticatedRequest(`/v2/bookmarks/${bookmarkId}`, {

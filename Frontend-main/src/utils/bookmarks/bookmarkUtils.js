@@ -12,8 +12,14 @@ import { normalizeStartEndLocatorsForServer } from '../common/cache/progressCach
 export const clientSortToApiSort = (sortOrder) =>
   sortOrder === 'oldest' ? 'time_asc' : 'time_desc';
 
-export const resolveBookmarkApiBookId = (book, routeBookId = null) =>
-  toPositiveNumberOrNull(resolveViewerBookKey(book, routeBookId));
+/** PATCH /v2/bookmarks/:id 허용 필드 (위치 변경은 API 미지원) */
+export const BOOKMARK_UPDATABLE_FIELDS = Object.freeze(['color', 'memo']);
+
+export const resolveBookmarkApiBookId = (book, routeBookId = null) => {
+  const fromKey = toPositiveNumberOrNull(resolveViewerBookKey(book, routeBookId));
+  if (fromKey != null) return fromKey;
+  return toPositiveNumberOrNull(routeBookId) ?? toPositiveNumberOrNull(book?.id);
+};
 
 /** 뷰어 locator → 서버 paragraphStarts 축 (비교·생성 공통) */
 export const normalizeBookmarkLocators = (bookId, startLocator, endLocator = null) =>
@@ -29,9 +35,25 @@ export const bookmarkToResumeAnchor = (bookmark) =>
 /** 북마크 추가 전: 해당 챕터 paragraphStarts가 있어야 서버 offset 검증을 통과함 */
 export const isBookmarkAxisReady = (bookId, locator) => {
   const loc = toLocator(locator);
-  if (!loc || bookId == null || bookId === '') return false;
-  const chapter = getChapterData(bookId, loc.chapterIndex);
+  const id = toPositiveNumberOrNull(bookId) ?? bookId;
+  if (!loc || id == null || id === '') return false;
+  const chapter = getChapterData(id, loc.chapterIndex);
   return Array.isArray(chapter?.paragraphStarts) && chapter.paragraphStarts.length > 0;
+};
+
+/** 매니페스트 축이 늦게 뜨는 경우 짧게 대기 */
+export const waitForBookmarkAxisReady = async (
+  bookId,
+  locator,
+  { timeoutMs = 2000, intervalMs = 100 } = {}
+) => {
+  if (isBookmarkAxisReady(bookId, locator)) return true;
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, intervalMs));
+    if (isBookmarkAxisReady(bookId, locator)) return true;
+  }
+  return isBookmarkAxisReady(bookId, locator);
 };
 
 const isBookmarkRange = (bookmark, startLoc, endLoc) =>
@@ -156,7 +178,7 @@ export const bookmarkBorders = {
   highlight: '#5C6F5C',
 };
 
-const DEFAULT_BOOKMARK_COLOR = bookmarkColors.normal;
+export const DEFAULT_BOOKMARK_COLOR = bookmarkColors.normal;
 
 export const colorOptions = [
   { key: 'normal', label: '기본', color: bookmarkColors.normal, border: bookmarkBorders.normal },
@@ -164,8 +186,18 @@ export const colorOptions = [
   { key: 'highlight', label: '강조', color: bookmarkColors.highlight, border: bookmarkBorders.highlight },
 ];
 
-export const getColorKey = (color) =>
-  colorOptions.find((option) => option.color === color)?.key ?? 'normal';
+export const normalizeBookmarkColor = (color) => {
+  if (typeof color !== 'string') return DEFAULT_BOOKMARK_COLOR;
+  const trimmed = color.trim().toLowerCase();
+  return trimmed || DEFAULT_BOOKMARK_COLOR;
+};
+
+export const getColorKey = (color) => {
+  const normalized = normalizeBookmarkColor(color);
+  return (
+    colorOptions.find((option) => option.color.toLowerCase() === normalized)?.key ?? 'normal'
+  );
+};
 
 export const createBookmarkData = (bookId, startLocator, endLocator = null) => {
   const { startLocator: start, endLocator: end } = normalizeBookmarkLocators(

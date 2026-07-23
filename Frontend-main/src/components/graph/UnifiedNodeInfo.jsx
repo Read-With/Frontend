@@ -9,7 +9,7 @@ import {
   isGraphNodeElement,
 } from "../../utils/graph/graphCore";
 import { getEventDataByIndex } from "../../utils/graph/graphFetch.js";
-import { useTooltipPosition, useClickOutside, TooltipGraphZoomControls } from "../../hooks/ui/tooltipHooks";
+import { useTooltipPosition, useClickOutside } from "../../hooks/ui/tooltipHooks";
 import { getUnifiedEventInfoForTooltip } from "../../utils/viewer/viewerSession";
 import { toNumberOrNull } from "../../utils/common/valueUtils.js";
 import { USER_GRAPH_PREFIX } from "../../utils/common/urlUtils";
@@ -1010,7 +1010,6 @@ function UnifiedNodeInfo({
   apiBookGraphData = null,
   onSelectRelatedNode = null,
   onOpenChapterSidebar = null,
-  cyRef = null,
 }) {
   const { filename: urlFilename } = useParams();
   const isSidebar = displayMode === 'sidebar';
@@ -1254,10 +1253,6 @@ function UnifiedNodeInfo({
       >
         <div className="tooltip-content business-card">
           <TooltipCloseButton onClose={onClose} />
-          <TooltipGraphZoomControls
-            cyRef={cyRef}
-            elementId={node?.id ?? data?.id}
-          />
           {nodeHeaderAndDescription}
         </div>
       </NodeTooltipShell>

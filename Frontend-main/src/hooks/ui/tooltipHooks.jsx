@@ -1,54 +1,13 @@
 /** 툴팁: 외부 클릭 감지·드래그 위치·활성 툴팁 상태 */
 
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { constrainToGraphCanvas, constrainToWindow, zoomGraphByFactor } from '../../utils/graph/graphCy';
-import { GRAPH_ZOOM } from '../../utils/graph/graphCore';
+import { constrainToGraphCanvas, constrainToWindow } from '../../utils/graph/graphCy';
 
 function constrainTooltipPosition(bounds, x, y, width, height) {
   if (bounds === 'window') {
     return constrainToWindow(x, y, width, height);
   }
   return constrainToGraphCanvas(x, y, width, height);
-}
-
-/** 툴팁용 +/- : 해당 elementId 기준 그래프 줌 */
-export function TooltipGraphZoomControls({ cyRef, elementId }) {
-  const handleZoom = useCallback((e, factor) => {
-    e.preventDefault();
-    e.stopPropagation();
-    const cy = cyRef?.current;
-    if (!cy || elementId == null || elementId === '') return;
-    zoomGraphByFactor(cy, factor, { elementId });
-  }, [cyRef, elementId]);
-
-  if (!cyRef || elementId == null || elementId === '') return null;
-
-  return (
-    <div
-      className="tooltip-graph-zoom-controls"
-      onClick={(e) => e.stopPropagation()}
-      onMouseDown={(e) => e.stopPropagation()}
-    >
-      <button
-        type="button"
-        className="graph-zoom-btn"
-        onClick={(e) => handleZoom(e, GRAPH_ZOOM.STEP)}
-        aria-label="선택 요소 확대"
-        title="확대"
-      >
-        +
-      </button>
-      <button
-        type="button"
-        className="graph-zoom-btn"
-        onClick={(e) => handleZoom(e, 1 / GRAPH_ZOOM.STEP)}
-        aria-label="선택 요소 축소"
-        title="축소"
-      >
-        −
-      </button>
-    </div>
-  );
 }
 
 const TOOLTIP_CLEAR_DELAY_MS = 150;

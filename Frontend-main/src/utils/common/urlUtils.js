@@ -519,10 +519,13 @@ export function userViewerReadingPath(bookId, chapter, page) {
   return `${base}/c/${normalizedChapter}/p/${normalizedPage}`;
 }
 
+/** 숫자 bookId일 때만 유효 경로. 아니면 null (잘못된 /user/viewer/bookmarks 방지) */
 export function userViewerBookmarksPath(bookId) {
   const id = sanitizeViewerBookId(bookId);
-  if (!id) return `${USER_VIEWER_PREFIX}/bookmarks`;
-  return `${USER_VIEWER_PREFIX}/${id}/bookmarks`;
+  if (!id) return null;
+  const numeric = Number(id);
+  if (!Number.isFinite(numeric) || numeric <= 0) return null;
+  return `${USER_VIEWER_PREFIX}/${Math.trunc(numeric)}/bookmarks`;
 }
 
 export function userGraphPath(bookId) {

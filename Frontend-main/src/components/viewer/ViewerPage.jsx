@@ -147,17 +147,26 @@ const ViewerPage = () => {
   const graphClearRef = useRef(null);
 
   useEffect(() => {
-    const onMouseMove = (event) => {
-      const nearTop = event.clientY <= TOOLBAR_REVEAL_ZONE_PX;
+    const updateFromClientY = (clientY) => {
+      const nearTop = clientY <= TOOLBAR_REVEAL_ZONE_PX;
       const nearBottom =
-        event.clientY >= window.innerHeight - TOOLBAR_REVEAL_ZONE_PX;
+        clientY >= window.innerHeight - TOOLBAR_REVEAL_ZONE_PX;
       const next = nearTop || nearBottom;
       if (showToolbarRef.current !== next) {
         setShowToolbar(next);
       }
     };
+    const onMouseMove = (event) => updateFromClientY(event.clientY);
+    const onTouchStart = (event) => {
+      const touch = event.touches?.[0];
+      if (touch) updateFromClientY(touch.clientY);
+    };
     window.addEventListener('mousemove', onMouseMove);
-    return () => window.removeEventListener('mousemove', onMouseMove);
+    window.addEventListener('touchstart', onTouchStart, { passive: true });
+    return () => {
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('touchstart', onTouchStart);
+    };
   }, [setShowToolbar]);
 
   const dismissDeleteConfirm = useCallback(() => {

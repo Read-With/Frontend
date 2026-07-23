@@ -1,11 +1,12 @@
 import { useState, useEffect, useCallback, memo } from 'react';
 import PropTypes from 'prop-types';
 import { useNavigate } from 'react-router-dom';
-import { Heart, BookOpen, Network, MoreVertical, Info, Clock, FileText, Trash2, X } from 'lucide-react';
+import { Heart, BookOpen, Network, MoreVertical, Info, Clock, FileText, Trash2, X, Bookmark } from 'lucide-react';
+import { toast } from 'react-toastify';
 import BookDetailModal, { AuthenticatedImage } from './BookDetailModal';
 import './BookLibrary.css';
 import { ensureGraphBookCache } from '../../utils/graph/graphFetch';
-import { USER_VIEWER_PREFIX, USER_GRAPH_PREFIX } from '../../utils/common/urlUtils';
+import { USER_VIEWER_PREFIX, USER_GRAPH_PREFIX, userViewerBookmarksPath } from '../../utils/common/urlUtils';
 import {
   formatLibraryRelativeDate,
   attachLibraryModalChrome,
@@ -116,7 +117,7 @@ DeleteConfirmModal.propTypes = {
   onConfirm: PropTypes.func.isRequired,
 };
 
-const BookCard = memo(({ book, onToggleFavorite, onOpenBook, onBookDetailClick, onShowDeleteModal, viewMode = 'grid', openingMode = null }) => {
+const BookCard = memo(({ book, onToggleFavorite, onOpenBook, onOpenBookmarks, onBookDetailClick, onShowDeleteModal, viewMode = 'grid', openingMode = null }) => {
   const [imageError, setImageError] = useState(false);
   const [showContextMenu, setShowContextMenu] = useState(false);
   const [optimisticFavorite, setOptimisticFavorite] = useState(null);
@@ -133,6 +134,11 @@ const BookCard = memo(({ book, onToggleFavorite, onOpenBook, onBookDetailClick, 
   const handleGraphClick = (e) => {
     e.stopPropagation();
     onOpenBook?.(book, 'graph');
+  };
+
+  const handleBookmarksClick = (e) => {
+    e.stopPropagation();
+    onOpenBookmarks?.(book);
   };
 
   useEffect(() => {
@@ -291,6 +297,15 @@ const BookCard = memo(({ book, onToggleFavorite, onOpenBook, onBookDetailClick, 
           <Network size={16} className="book-action-icon" />
           {isOpeningGraph ? '준비중' : '관계도'}
         </button>
+        <button
+          className="book-action-btn book-action-secondary"
+          onClick={handleBookmarksClick}
+          title="북마크 목록"
+          disabled={isOpening}
+        >
+          <Bookmark size={16} className="book-action-icon" />
+          북마크
+        </button>
       </div>
 
       {/* 컨텍스트 메뉴 */}
@@ -311,6 +326,13 @@ const BookCard = memo(({ book, onToggleFavorite, onOpenBook, onBookDetailClick, 
             >
               <Info size={18} className="book-context-icon" />
               상세 정보
+            </button>
+            <button
+              className="book-context-item"
+              onClick={handleBookmarksClick}
+            >
+              <Bookmark size={18} className="book-context-icon" />
+              북마크
             </button>
             <button
               className="book-context-item book-context-item-danger"
@@ -343,6 +365,7 @@ BookCard.propTypes = {
   book: bookShape.isRequired,
   onToggleFavorite: PropTypes.func,
   onOpenBook: PropTypes.func,
+  onOpenBookmarks: PropTypes.func,
   onBookDetailClick: PropTypes.func,
   onShowDeleteModal: PropTypes.func,
   viewMode: PropTypes.oneOf(['grid', 'list']),
@@ -407,6 +430,21 @@ const BookLibrary = memo(({ books, onToggleFavorite, onBookDelete, viewMode = 'g
     [navigate, openingTarget]
   );
 
+  const handleOpenBookmarks = useCallback(
+    (book) => {
+      const bookId = getNumericBookId(book);
+      const path = userViewerBookmarksPath(bookId);
+      if (!path) {
+        toast.error('책 정보가 없어 북마크 목록을 열 수 없습니다.');
+        return;
+      }
+      navigate(path, {
+        state: { book, fromLibrary: true, from: { pathname: '/mypage' } },
+      });
+    },
+    [navigate]
+  );
+
   const handleBookDetailClick = useCallback((book) => {
     setSelectedBook(book);
     setShowDetailModal(true);
@@ -465,6 +503,7 @@ const BookLibrary = memo(({ books, onToggleFavorite, onBookDelete, viewMode = 'g
           book={book}
           onToggleFavorite={onToggleFavorite}
           onOpenBook={handleOpenBook}
+          onOpenBookmarks={handleOpenBookmarks}
           onBookDetailClick={handleBookDetailClick}
           onShowDeleteModal={handleShowDeleteModal}
           viewMode={viewMode}
