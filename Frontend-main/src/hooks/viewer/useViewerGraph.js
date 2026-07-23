@@ -208,7 +208,6 @@ function useRetryToken() {
 }
 
 function usePipelineRefs() {
-  const setElementsRef = useRef(null);
   const applyTokenRef = useRef(0);
   const hasVisibleElementsRef = useRef(false);
   const chapterSyncStatusRef = useRef(new Map());
@@ -220,7 +219,6 @@ function usePipelineRefs() {
 
   return useMemo(
     () => ({
-      setElementsRef,
       applyTokenRef,
       hasVisibleElementsRef,
       chapterSyncStatusRef,
@@ -235,20 +233,17 @@ function usePipelineRefs() {
 }
 
 function useGraphElementApply({ setElements, setEvents, setGraphIsDataEmpty, refs }) {
-  useEffect(() => {
-    refs.setElementsRef.current = setElements;
-  }, [setElements, refs]);
-
   const setVisibleElements = useCallback((nextElements) => {
+    // useState setter는 안정적이라 ref indirection 불필요
     const visibleElements = commitVisibleGraphElements(
-      (els) => { refs.setElementsRef.current(els); },
+      setElements,
       nextElements,
       { applyTokenRef: refs.applyTokenRef },
     );
     refs.hasVisibleElementsRef.current = visibleElements.length > 0;
     setGraphIsDataEmpty?.(visibleElements.length === 0);
     return visibleElements;
-  }, [setGraphIsDataEmpty, refs]);
+  }, [setElements, setGraphIsDataEmpty, refs]);
 
   /** React elements는 GraphState가 리셋. in-flight apply만 무효화 */
   const invalidateVisibleGraphApply = useCallback(() => {
