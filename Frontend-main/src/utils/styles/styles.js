@@ -110,9 +110,9 @@ const createConditionalTransition = (condition, normalTransition, disabledTransi
 // 반응형 사이드바 너비
 const getResponsiveSidebarWidth = (isOpen, isMobile = false) => {
   if (isMobile) {
-    return isOpen ? '280px' : '60px';
+    return isOpen ? '280px' : '56px';
   }
-  return isOpen ? '240px' : '60px';
+  return isOpen ? '280px' : '56px';
 };
 
 // 사이드바 공통 스타일

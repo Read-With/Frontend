@@ -4,17 +4,15 @@ import { useNavigate, useParams, useLocation } from "react-router-dom";
 
 import { GraphTopBar } from "./GraphControls";
 import GraphCanvas from "./GraphCanvas";
+import ChapterSidebar from "./ChapterSidebar";
 import "./RelationGraph.css";
 
 import { createGraphStylesheet, getEdgeStyle } from "../../utils/styles/graphStyles";
-import { COLORS, createAdvancedButtonHandlers, sidebarStyles, ANIMATION_VALUES } from "../../utils/styles/styles.js";
+import { COLORS, createAdvancedButtonHandlers } from "../../utils/styles/styles.js";
 import {
   GRAPH_LAYOUT_CONSTANTS,
   resolveChapterSidebarWidth,
-  resolveChapterDisplayTitle,
-  buildChapterSidebarItems,
   calculateLastEventForChapter,
-  isGraphNodeElement,
 } from '../../utils/graph/graphCore';
 import {
   isGraphDragEndEvent,
@@ -26,6 +24,7 @@ import {
   useGraphSearch,
   useGraphState,
   useGraphElementPipeline,
+  useIsNarrowViewport,
 } from '../../hooks/graph/useGraphViewState';
 import { useApiGraphData, useChapterPovSummaries } from '../../hooks/graph/useApiGraphData';
 import { resolveServerBookIdOrFallback, useLocalStorageNumber } from '../../hooks/common/hooksShared';
@@ -102,101 +101,9 @@ const backButtonContainerStyle = {
   pointerEvents: 'auto',
 };
 
-const chapterLabelTextStyle = {
-  flex: 1,
-  minWidth: 0,
-  overflow: 'hidden',
-  textOverflow: 'ellipsis',
-  whiteSpace: 'nowrap',
-};
-
 const graphBackButtonHandlers = createAdvancedButtonHandlers('default');
 const GRAPH_PAGE_EDGE_STYLE = getEdgeStyle('graph');
 const GRAPH_TRANSFORM_DEPS = { createCharacterMaps, buildNodeWeights, convertRelationsToElements };
-
-function ChapterSidebar({
-  isSidebarOpen,
-  onToggleSidebar,
-  chapterList,
-  currentChapter,
-  onChapterSelect,
-  manifestBookId = null,
-  bookTitle = '',
-  manifestHint = null,
-}) {
-  const { OPEN_WIDTH: sidebarOpenW, CLOSED_WIDTH: sidebarClosedW } = GRAPH_LAYOUT_CONSTANTS.SIDEBAR;
-
-  const chapterItems = useMemo(
-    () => buildChapterSidebarItems(chapterList, manifestBookId, bookTitle, manifestHint),
-    [chapterList, manifestBookId, bookTitle, manifestHint],
-  );
-
-  const toggleLabel = isSidebarOpen ? '사이드바 접기' : '사이드바 펼치기';
-
-  return (
-    <div
-      data-testid="chapter-sidebar"
-      style={{
-        ...sidebarStyles.container(isSidebarOpen, ANIMATION_VALUES),
-        width: isSidebarOpen ? `${sidebarOpenW}px` : `${sidebarClosedW}px`,
-        position: 'fixed',
-        top: 0,
-        left: 0,
-        height: '100vh',
-        marginTop: 0,
-      }}
-    >
-      <div style={sidebarStyles.header}>
-        <button
-          onClick={onToggleSidebar}
-          style={sidebarStyles.toggleButton()}
-          title={toggleLabel}
-          aria-label={toggleLabel}
-          aria-expanded={isSidebarOpen}
-        >
-          <span className="material-symbols-outlined">
-            {isSidebarOpen ? 'chevron_left' : 'menu'}
-          </span>
-        </button>
-        <span style={sidebarStyles.title(isSidebarOpen, ANIMATION_VALUES)}>챕터 선택</span>
-      </div>
-
-      <div style={sidebarStyles.chapterList}>
-        {chapterItems.map(({ chapter, label, tooltip }) => {
-          const selected = currentChapter === chapter;
-          return (
-            <button
-              key={chapter}
-              onClick={() => onChapterSelect(chapter)}
-              style={sidebarStyles.chapterButton(selected, isSidebarOpen, ANIMATION_VALUES)}
-              title={tooltip}
-              aria-label={`${label} 선택`}
-              aria-pressed={selected}
-            >
-              <span style={sidebarStyles.chapterNumber(selected, ANIMATION_VALUES)}>
-                {chapter}
-              </span>
-              <span style={{ ...sidebarStyles.chapterText(isSidebarOpen, ANIMATION_VALUES), ...chapterLabelTextStyle }}>
-                {label}
-              </span>
-            </button>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-ChapterSidebar.propTypes = {
-  isSidebarOpen: PropTypes.bool.isRequired,
-  onToggleSidebar: PropTypes.func.isRequired,
-  chapterList: PropTypes.arrayOf(PropTypes.number).isRequired,
-  currentChapter: PropTypes.number.isRequired,
-  onChapterSelect: PropTypes.func.isRequired,
-  manifestBookId: PropTypes.number,
-  bookTitle: PropTypes.string,
-  manifestHint: PropTypes.object,
-};
 
 function ErrorToast({ error, onClose, duration = 5000 }) {
   useEffect(() => {
@@ -268,11 +175,19 @@ function RelationGraphWrapper() {
   const prevChapterNum = useRef(currentChapter);
   const prevEventNum = useRef();
   const profileApplyTokenRef = useRef(0);
+  const pendingChapterChangeRef = useRef(null);
   const locationRef = useRef({ state: location.state, pathname: location.pathname });
 
   useEffect(() => {
     locationRef.current = { state: location.state, pathname: location.pathname };
   }, [location.state, location.pathname]);
+
+  useEffect(() => () => {
+    if (pendingChapterChangeRef.current) {
+      window.clearTimeout(pendingChapterChangeRef.current);
+      pendingChapterChangeRef.current = null;
+    }
+  }, []);
 
   useEffect(() => {
     if (!Number.isFinite(requestedChapterFromViewer) || requestedChapterFromViewer < 1) return;
@@ -297,12 +212,16 @@ function RelationGraphWrapper() {
     filterStage,
     setActiveTooltip,
     toggleSidebar,
+    setSidebarOpen,
     toggleEdgeLabel,
     startClosing,
     cancelClosing,
     closeSidebar,
     setFilterStage,
   } = useGraphState();
+
+  const isNarrow = useIsNarrowViewport();
+  const sidebarLayoutWidth = resolveChapterSidebarWidth(isSidebarOpen, { isNarrow });
 
   const {
     manifest: { data: manifestData, ready: manifestReady },
@@ -345,18 +264,6 @@ function RelationGraphWrapper() {
   const bookTitle = useMemo(
     () => String(manifestData?.book?.title ?? '').trim(),
     [manifestData?.book?.title],
-  );
-
-  const currentChapterTitle = useMemo(
-    () => resolveChapterDisplayTitle(serverBookId, currentChapter, bookTitle, manifestData),
-    [serverBookId, currentChapter, bookTitle, manifestData],
-  );
-
-  const userReadingChapterTitle = useMemo(
-    () => (userCurrentChapter == null
-      ? ''
-      : resolveChapterDisplayTitle(serverBookId, userCurrentChapter, bookTitle, manifestData)),
-    [serverBookId, userCurrentChapter, bookTitle, manifestData],
   );
 
   useEffect(() => {
@@ -433,7 +340,7 @@ function RelationGraphWrapper() {
     if (!cy) return;
 
     const { TOP_BAR_HEIGHT, TOOLTIP_SIDEBAR_WIDTH, FOCUS_PAN_MS } = GRAPH_LAYOUT_CONSTANTS;
-    const chapterSidebarWidth = resolveChapterSidebarWidth(isSidebarOpen);
+    const chapterSidebarWidth = sidebarLayoutWidth;
     const availableGraphWidth = window.innerWidth - chapterSidebarWidth - TOOLTIP_SIDEBAR_WIDTH;
     const availableGraphHeight = window.innerHeight - TOP_BAR_HEIGHT;
 
@@ -444,7 +351,7 @@ function RelationGraphWrapper() {
         y: TOP_BAR_HEIGHT + (availableGraphHeight / 2) - availableGraphHeight * 0.06,
       },
     });
-  }, [isSidebarOpen]);
+  }, [sidebarLayoutWidth]);
 
   const onClearTooltip = useCallback(() => {
     closeSidebar();
@@ -489,16 +396,12 @@ function RelationGraphWrapper() {
     prevEventNum.current = currentEvent;
   }, [currentChapter, currentEvent, searchState.isSearchActive, clearSearch, clearGraphSelection]);
 
-  const { filteredMainCharacters, finalElements } = useGraphElementPipeline({
+  const { finalElements } = useGraphElementPipeline({
     elements,
     filterStage,
     isSearchActive: searchState.isSearchActive,
     filteredElements: searchState.filteredElements,
   });
-
-  const countSource = filterStage > 0 ? filteredMainCharacters : elements;
-  const nodeCount = useMemo(() => countSource.filter(isGraphNodeElement).length, [countSource]);
-  const relationCount = useMemo(() => eventUtils.filterEdges(countSource).length, [countSource]);
 
   const stylesheet = useMemo(
     () => createGraphStylesheet(GRAPH_PAGE_EDGE_STYLE, edgeLabelVisible),
@@ -507,17 +410,48 @@ function RelationGraphWrapper() {
 
   const handleChapterSelect = useCallback((chapter) => {
     if (chapter === currentChapter) return;
-    clearGraphSelection({ fitViewport: false });
-    setCurrentChapter(chapter);
 
-    const lastEventNum = calculateLastEventForChapter({
-      manifestChapters: manifestData?.chapters,
-      manifestBookId: serverBookId,
-      chapter,
-    });
-    const normalized = Number(lastEventNum);
-    setCurrentEvent(Number.isFinite(normalized) && normalized >= 1 ? normalized : 1);
-  }, [currentChapter, setCurrentChapter, manifestData?.chapters, serverBookId, clearGraphSelection]);
+    if (pendingChapterChangeRef.current) {
+      window.clearTimeout(pendingChapterChangeRef.current);
+      pendingChapterChangeRef.current = null;
+    }
+
+    const applyChapter = () => {
+      pendingChapterChangeRef.current = null;
+      setCurrentChapter(chapter);
+
+      const lastEventNum = calculateLastEventForChapter({
+        manifestChapters: manifestData?.chapters,
+        manifestBookId: serverBookId,
+        chapter,
+      });
+      const normalized = Number(lastEventNum);
+      setCurrentEvent(Number.isFinite(normalized) && normalized >= 1 ? normalized : 1);
+    };
+
+    // 선택(노드/간선·툴팁)이 있으면 먼저 해제한 뒤 챕터 전환
+    const hadTooltip = Boolean(activeTooltip);
+    clearGraphSelection({ fitViewport: false });
+
+    if (hadTooltip) {
+      startClosing();
+      pendingChapterChangeRef.current = window.setTimeout(
+        applyChapter,
+        GRAPH_LAYOUT_CONSTANTS.ANIMATION_MS
+      );
+      return;
+    }
+
+    applyChapter();
+  }, [
+    activeTooltip,
+    currentChapter,
+    setCurrentChapter,
+    manifestData?.chapters,
+    serverBookId,
+    clearGraphSelection,
+    startClosing,
+  ]);
 
   const handleSelectRelatedNode = useCallback((idOrName) => {
     cancelClosing();
@@ -525,8 +459,8 @@ function RelationGraphWrapper() {
   }, [cancelClosing]);
 
   const handleOpenChapterSidebar = useCallback(() => {
-    if (!isSidebarOpen) toggleSidebar();
-  }, [isSidebarOpen, toggleSidebar]);
+    if (!isSidebarOpen) setSidebarOpen(true);
+  }, [isSidebarOpen, setSidebarOpen]);
 
   const handleCanvasClick = useCallback((e) => {
     if (e.target !== e.currentTarget) return;
@@ -539,6 +473,13 @@ function RelationGraphWrapper() {
     () => Array.from({ length: apiMaxChapter }, (_, i) => i + 1),
     [apiMaxChapter],
   );
+
+  useEffect(() => {
+    const id = window.setTimeout(() => {
+      window.dispatchEvent(new Event('resize'));
+    }, 320);
+    return () => window.clearTimeout(id);
+  }, [sidebarLayoutWidth]);
 
   const isApiGraphEmpty = !isGraphLoading && !hasGraphPayload(apiBookGraphData);
 
@@ -557,6 +498,7 @@ function RelationGraphWrapper() {
 
       <GraphTopBar
         isSidebarOpen={isSidebarOpen}
+        sidebarLayoutWidth={sidebarLayoutWidth}
         searchState={searchState}
         searchActions={topBarSearchActions}
         edgeLabelVisible={edgeLabelVisible}
@@ -581,20 +523,21 @@ function RelationGraphWrapper() {
       <ChapterSidebar
         isSidebarOpen={isSidebarOpen}
         onToggleSidebar={toggleSidebar}
+        onCloseSidebar={() => setSidebarOpen(false)}
         chapterList={chapterList}
         currentChapter={currentChapter}
         onChapterSelect={handleChapterSelect}
         manifestBookId={serverBookId ?? null}
         bookTitle={bookTitle}
         manifestHint={manifestData}
+        userCurrentChapter={userCurrentChapter}
       />
 
       <GraphCanvas
         isSidebarOpen={isSidebarOpen}
+        sidebarLayoutWidth={sidebarLayoutWidth}
         activeTooltip={activeTooltip}
         cyRef={cyRef}
-        currentChapterTitle={currentChapterTitle}
-        userReadingChapterTitle={userReadingChapterTitle}
         eventNum={Math.max(currentEvent, 1)}
         filename={filename}
         elements={elements}
@@ -606,10 +549,6 @@ function RelationGraphWrapper() {
         hasShownGraphOnce={hasShownGraphOnce}
         onCanvasClick={handleCanvasClick}
         currentChapter={currentChapter}
-        userCurrentChapter={userCurrentChapter}
-        nodeCount={nodeCount}
-        relationCount={relationCount}
-        filterStage={filterStage}
         sidebarControl={{
           isSidebarClosing,
           onCloseSidebar: closeSidebar,

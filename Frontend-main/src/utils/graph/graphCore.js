@@ -105,7 +105,7 @@ export const calculateLastEventForChapter = ({
 };
 
 export const GRAPH_LAYOUT_CONSTANTS = {
-  SIDEBAR: { OPEN_WIDTH: 360, CLOSED_WIDTH: 60 },
+  SIDEBAR: { OPEN_WIDTH: 280, CLOSED_WIDTH: 56 },
   TOP_BAR_HEIGHT: 54,
   /** GraphCanvas 툴팁 사이드바 실제 너비와 동일해야 센터링이 맞음 */
   TOOLTIP_SIDEBAR_WIDTH: 480,
@@ -122,8 +122,10 @@ export const GRAPH_ZOOM = {
   STEP: 1.25,
   MIN: 0.2,
   MAX: 2.4,
-  /** cy.fit 여백 — 작을수록 캔버스를 더 채움 */
-  FIT_PADDING: 36,
+  /** cy.fit 여백 — 줌·범례 버튼 등 가장자리 여유 */
+  FIT_PADDING: 56,
+  /** 초기/영역 맞춤 등장 애니메이션(ms) */
+  FIT_DURATION_MS: 420,
 };
 
 /** 표시 순서: 주요 → 주변 → 전체 (value는 filterMainCharacters와 동일) */
@@ -133,7 +135,9 @@ export const GRAPH_CHARACTER_FILTER_STAGE_OPTIONS = [
   { value: 0, label: '전체', title: '모든 인물' },
 ];
 
-export function resolveChapterSidebarWidth(isSidebarOpen) {
+export function resolveChapterSidebarWidth(isSidebarOpen, { isNarrow = false } = {}) {
+  // 좁은 화면은 오버레이 드로어 — 레이아웃 offset 없음
+  if (isNarrow) return 0;
   const { OPEN_WIDTH, CLOSED_WIDTH } = GRAPH_LAYOUT_CONSTANTS.SIDEBAR;
   return isSidebarOpen ? OPEN_WIDTH : CLOSED_WIDTH;
 }
@@ -263,11 +267,38 @@ function stripSharedListPrefix(labels, bookTitle) {
   });
 }
 
+function stripChapterOrdinalPrefix(label, chapter) {
+  const text = String(label || '').trim();
+  if (!text || !Number.isFinite(chapter) || chapter < 1) return text;
+  const n = String(chapter);
+  const patterns = [
+    new RegExp(`^제\\s*${n}\\s*장\\s*[:.\\-–—]?\\s*`, 'i'),
+    new RegExp(`^챕터\\s*${n}\\s*[:.\\-–—]?\\s*`, 'i'),
+    new RegExp(`^chapter\\s*${n}\\s*[:.\\-–—]?\\s*`, 'i'),
+    new RegExp(`^${n}\\s*[.\\-–—:]\\s+`, 'i'),
+  ];
+  let out = text;
+  for (const re of patterns) {
+    const next = out.replace(re, '').trim();
+    if (next) out = next;
+  }
+  return out || text;
+}
+
 /** 챕터 사이드바 목록용 라벨/툴팁 */
 export function buildChapterSidebarItems(chapterList, manifestBookId, bookTitle, manifestHint) {
   const rows = chapterList.map((chapter) => {
     const { raw } = getChapterTitleParts(manifestBookId, chapter, bookTitle, manifestHint);
     const idxStr = Number.isFinite(chapter) && chapter >= 1 ? String(chapter) : '—';
+    const chData =
+      manifestBookId != null && Number.isFinite(chapter) && chapter >= 1
+        ? getChapterData(manifestBookId, chapter, manifestHint ?? undefined)
+        : null;
+    const events = Array.isArray(chData?.events) ? chData.events : null;
+    // manifest에 events가 있을 때만 판정. 없으면 unknown(표시만, dim 안 함)
+    const hasGraph = events == null ? null : events.length > 0;
+    const eventCount = events == null ? null : events.length;
+
     if (!raw) {
       return {
         chapter,
@@ -275,20 +306,27 @@ export function buildChapterSidebarItems(chapterList, manifestBookId, bookTitle,
         tooltip: manifestBookId == null || !Number.isFinite(chapter) || chapter < 1
           ? idxStr
           : `챕터 ${idxStr}`,
+        hasGraph,
+        eventCount,
       };
     }
     return {
       chapter,
       label: cleanChapterListLabel(raw, bookTitle) || fallbackChapterLabel(chapter),
       tooltip: `챕터 ${idxStr} — ${raw}`,
+      hasGraph,
+      eventCount,
     };
   });
 
   const stripped = stripSharedListPrefix(rows.map((row) => row.label), bookTitle);
-  return rows.map((row, index) => ({
-    ...row,
-    label: stripped[index] || fallbackChapterLabel(row.chapter),
-  }));
+  return rows.map((row, index) => {
+    const base = stripped[index] || fallbackChapterLabel(row.chapter);
+    return {
+      ...row,
+      label: stripChapterOrdinalPrefix(base, row.chapter) || base,
+    };
+  });
 }
 
 /* ─── 관계 정규화 · 태그 · 레이더 ─── */

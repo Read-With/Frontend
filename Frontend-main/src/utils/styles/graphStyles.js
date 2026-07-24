@@ -217,9 +217,17 @@ export const createGraphStylesheet = (edgeStyle, edgeLabelVisible, maxEdgeLabelL
     selector: 'node.cytoscape-node-appear',
     style: {
       'border-color': COLORS.successGreen,
-      'border-width': 16,
+      'border-width': 10,
       'border-opacity': 1,
-      'transition-property': 'border-width, border-color, border-opacity',
+      'transition-property': 'border-width, border-color, border-opacity, opacity',
+      'transition-duration': DURATION.SLOW,
+    },
+  },
+  {
+    selector: 'edge.cytoscape-edge-appear',
+    style: {
+      opacity: 0.35,
+      'transition-property': 'opacity, width',
       'transition-duration': DURATION.SLOW,
     },
   },

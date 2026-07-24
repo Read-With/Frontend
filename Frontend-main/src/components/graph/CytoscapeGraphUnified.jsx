@@ -124,6 +124,7 @@ const CytoscapeGraphUnified = ({
   const prevRefitKeyRef = useRef(resolvedRefitKey);
   const [isInitialLoad, setIsInitialLoad] = useState(true);
   const addedNodeIdsRef = useRef(new Set());
+  const addedEdgeIdsRef = useRef(new Set());
 
   const cy = useCyInstance(externalCyRef, cyReady);
 
@@ -172,31 +173,70 @@ const CytoscapeGraphUnified = ({
 
   const triggerRippleForAddedNodes = useCallback(() => {
     if (!cy) return;
-    if (!showRippleEffect) {
-      addedNodeIdsRef.current = new Set();
-      return;
-    }
-    if (isResetFromSearch) {
-      addedNodeIdsRef.current = new Set();
-      return;
-    }
-
     const recentlyAddedIds = addedNodeIdsRef.current;
-    if (!recentlyAddedIds || recentlyAddedIds.size === 0) {
+    const recentlyAddedEdgeIds = addedEdgeIdsRef.current;
+    addedNodeIdsRef.current = new Set();
+    addedEdgeIdsRef.current = new Set();
+
+    if (!showRippleEffect || isResetFromSearch) {
       return;
     }
 
-    recentlyAddedIds.forEach(nodeId => {
+    const appearMs = GRAPH_ZOOM.FIT_DURATION_MS;
+
+    recentlyAddedIds.forEach((nodeId) => {
       const cyNode = cy.getElementById(nodeId);
-      if (cyNode && cyNode.length > 0) {
-        const position = cyNode.renderedPosition();
-        if (position && typeof position.x === 'number' && typeof position.y === 'number') {
-          createRippleEffect(containerRef.current, position.x, position.y);
-        }
+      if (!cyNode || cyNode.length === 0) return;
+
+      try {
+        cyNode.addClass("cytoscape-node-appear");
+        cyNode.style("opacity", 0.2);
+        cyNode.animate({
+          style: { opacity: 1 },
+          duration: appearMs,
+          easing: "ease-out",
+          complete: () => {
+            try {
+              cyNode.removeClass("cytoscape-node-appear");
+              cyNode.removeStyle("opacity");
+            } catch {
+              /* ignore */
+            }
+          },
+        });
+      } catch {
+        /* ignore */
+      }
+
+      const position = cyNode.renderedPosition();
+      if (position && typeof position.x === "number" && typeof position.y === "number") {
+        createRippleEffect(containerRef.current, position.x, position.y);
       }
     });
 
-    addedNodeIdsRef.current = new Set();
+    recentlyAddedEdgeIds.forEach((edgeId) => {
+      const cyEdge = cy.getElementById(edgeId);
+      if (!cyEdge || cyEdge.length === 0) return;
+      try {
+        cyEdge.addClass("cytoscape-edge-appear");
+        cyEdge.style("opacity", 0.15);
+        cyEdge.animate({
+          style: { opacity: 1 },
+          duration: appearMs,
+          easing: "ease-out",
+          complete: () => {
+            try {
+              cyEdge.removeClass("cytoscape-edge-appear");
+              cyEdge.removeStyle("opacity");
+            } catch {
+              /* ignore */
+            }
+          },
+        });
+      } catch {
+        /* ignore */
+      }
+    });
   }, [cy, isResetFromSearch, showRippleEffect]);
 
   const reapplySearchFade = useCallback(() => {
@@ -496,6 +536,12 @@ const CytoscapeGraphUnified = ({
           .filter((id) => id != null && id !== "")
           .map(String)
       );
+      addedEdgeIdsRef.current = new Set(
+        edgesToAdd
+          .map((e) => e?.data?.id)
+          .filter((id) => id != null && id !== "")
+          .map(String)
+      );
 
       const newIds = [
         ...nodesToAdd.map((n) => n?.data?.id),
@@ -603,27 +649,54 @@ const CytoscapeGraphUnified = ({
   }, [cy, isSearchActive, filteredElementIdsStr, reapplySelectionHighlight]);
 
   useEffect(() => {
-    let resizeTimeoutId = 0;
+    if (!cy || !containerRef.current) return undefined;
 
-    const handleResize = () => {
-      if (!cy) return;
+    let resizeTimeoutId = 0;
+    let lastW = 0;
+    let lastH = 0;
+
+    const handleSize = () => {
+      if (!cy || cy.destroyed?.()) return;
 
       safeCyOperation(() => {
         cy.resize();
         if (resizeTimeoutId) window.clearTimeout(resizeTimeoutId);
         resizeTimeoutId = window.setTimeout(() => {
           resizeTimeoutId = 0;
-          if (!isGraphContainerSizeReady(containerRef.current)) return;
+          const el = containerRef.current;
+          if (!isGraphContainerSizeReady(el)) {
+            lastW = 0;
+            lastH = 0;
+            return;
+          }
+
+          const w = el.clientWidth;
+          const h = el.clientHeight;
+          const wasEmpty = lastW <= 0 || lastH <= 0;
+          const grewSignificantly =
+            lastW > 0 &&
+            lastH > 0 &&
+            (Math.abs(w - lastW) / lastW > 0.12 || Math.abs(h - lastH) / lastH > 0.12);
+          lastW = w;
+          lastH = h;
+
           safeCyOperation(() => {
-            ensureElementsInBounds(cy, containerRef.current);
+            ensureElementsInBounds(cy, el);
+            if ((wasEmpty || grewSignificantly) && cy.nodes().length > 0) {
+              fitGraphToNodes(cy, { duration: GRAPH_ZOOM.FIT_DURATION_MS });
+            }
           });
-        }, 100);
+        }, 120);
       });
     };
 
-    window.addEventListener("resize", handleResize);
+    const observer = new ResizeObserver(handleSize);
+    observer.observe(containerRef.current);
+    window.addEventListener("resize", handleSize);
+
     return () => {
-      window.removeEventListener("resize", handleResize);
+      observer.disconnect();
+      window.removeEventListener("resize", handleSize);
       if (resizeTimeoutId) window.clearTimeout(resizeTimeoutId);
     };
   }, [cy, safeCyOperation]);

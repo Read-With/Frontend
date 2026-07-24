@@ -12,6 +12,24 @@ import { filterMainCharacters } from '../../utils/graph/graphModel';
 import { sortElementsByDataId } from '../../utils/graph/graphCore';
 import { useLatestRef } from '../common/hooksShared';
 
+const NARROW_VIEWPORT_MQ = '(max-width: 767px)';
+
+export function useIsNarrowViewport() {
+  const [isNarrow, setIsNarrow] = useState(() =>
+    typeof window !== 'undefined' ? window.matchMedia(NARROW_VIEWPORT_MQ).matches : false
+  );
+
+  useEffect(() => {
+    const mq = window.matchMedia(NARROW_VIEWPORT_MQ);
+    const onChange = () => setIsNarrow(mq.matches);
+    onChange();
+    mq.addEventListener('change', onChange);
+    return () => mq.removeEventListener('change', onChange);
+  }, []);
+
+  return isNarrow;
+}
+
 /** edgeLabel / filterStage — graph 페이지·viewer 공유 */
 export function useGraphDisplayToggles() {
   const [edgeLabelVisible, setEdgeLabelVisible] = useState(true);
@@ -31,7 +49,18 @@ export function useGraphDisplayToggles() {
 }
 
 export function useGraphState() {
-  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(() => {
+    if (typeof window === 'undefined') return true;
+    const narrow = window.matchMedia('(max-width: 767px)').matches;
+    try {
+      const raw = localStorage.getItem('graph-chapter-sidebar-open');
+      if (raw === '0') return false;
+      if (raw === '1') return true;
+    } catch {
+      /* ignore */
+    }
+    return !narrow;
+  });
   const [activeTooltip, setActiveTooltip] = useState(null);
   const [isSidebarClosing, setIsSidebarClosing] = useState(false);
   const {
@@ -41,9 +70,26 @@ export function useGraphState() {
     toggleEdgeLabel,
   } = useGraphDisplayToggles();
 
-  const toggleSidebar = useCallback(() => {
-    setIsSidebarOpen((prev) => !prev);
+  const persistSidebarOpen = useCallback((next) => {
+    try {
+      localStorage.setItem('graph-chapter-sidebar-open', next ? '1' : '0');
+    } catch {
+      /* ignore */
+    }
   }, []);
+
+  const toggleSidebar = useCallback(() => {
+    setIsSidebarOpen((prev) => {
+      const next = !prev;
+      persistSidebarOpen(next);
+      return next;
+    });
+  }, [persistSidebarOpen]);
+
+  const setSidebarOpen = useCallback((open) => {
+    setIsSidebarOpen(Boolean(open));
+    persistSidebarOpen(Boolean(open));
+  }, [persistSidebarOpen]);
 
   const startClosing = useCallback(() => {
     setIsSidebarClosing(true);
@@ -67,6 +113,7 @@ export function useGraphState() {
     setActiveTooltip,
     setFilterStage,
     toggleSidebar,
+    setSidebarOpen,
     toggleEdgeLabel,
     startClosing,
     cancelClosing,

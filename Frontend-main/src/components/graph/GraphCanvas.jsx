@@ -74,11 +74,6 @@ const canvasAreaStyle = {
   position: 'relative',
 };
 
-function chapterLabel(n, title) {
-  const trimmed = String(title ?? '').trim();
-  return trimmed || `Chapter ${n}`;
-}
-
 function clearTimeoutRef(timeoutRef) {
   if (timeoutRef.current) {
     clearTimeout(timeoutRef.current);
@@ -89,89 +84,6 @@ function clearTimeoutRef(timeoutRef) {
 function GraphLoadingOverlay() {
   return <div style={loadingOverlayStyle}>그래프 업데이트 중...</div>;
 }
-
-const GraphInfoBar = memo(function GraphInfoBar({
-  currentChapter,
-  currentChapterTitle = '',
-  userCurrentChapter,
-  userReadingChapterTitle = '',
-  nodeCount,
-  relationCount,
-  filterStage,
-}) {
-  const chapterRangeLabel = `Chapter 1 ~ ${chapterLabel(currentChapter, currentChapterTitle)} 누적`;
-  const readingLabel = chapterLabel(userCurrentChapter, userReadingChapterTitle);
-  const filterSuffix = filterStage > 0 ? ' (필터링됨)' : '';
-
-  return (
-    <div
-      role="region"
-      aria-label="그래프 정보"
-      style={{
-        background: COLORS.background,
-        borderBottom: `1px solid ${COLORS.border}`,
-        padding: '12px 20px',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
-      }}
-    >
-      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-        <h2 style={{ margin: 0, fontSize: '16px', fontWeight: '600', color: COLORS.textPrimary }}>
-          거시 그래프
-        </h2>
-        <div style={{
-          background: COLORS.backgroundLight,
-          padding: '4px 12px',
-          borderRadius: '16px',
-          fontSize: '12px',
-          color: COLORS.textSecondary,
-          fontWeight: '500',
-        }}>
-          {chapterRangeLabel}
-        </div>
-        {userCurrentChapter != null && (
-          <div
-            style={{
-              background: COLORS.primary + '20',
-              padding: '4px 12px',
-              borderRadius: '16px',
-              fontSize: '11px',
-              color: COLORS.primary,
-              fontWeight: '600',
-            }}
-            title={`챕터 ${userCurrentChapter}`}
-          >
-            독서 진행: {readingLabel}
-          </div>
-        )}
-      </div>
-      <div style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: '8px',
-        fontSize: '12px',
-        color: COLORS.textSecondary,
-        fontWeight: '500',
-      }}>
-        <span>{nodeCount}명{filterSuffix}</span>
-        <span>•</span>
-        <span>{relationCount}관계{filterSuffix}</span>
-      </div>
-    </div>
-  );
-});
-
-GraphInfoBar.propTypes = {
-  currentChapter: PropTypes.number.isRequired,
-  currentChapterTitle: PropTypes.string,
-  userCurrentChapter: PropTypes.number,
-  userReadingChapterTitle: PropTypes.string,
-  nodeCount: PropTypes.number.isRequired,
-  relationCount: PropTypes.number.isRequired,
-  filterStage: PropTypes.number.isRequired,
-};
 
 function GraphSidebar({
   activeTooltip,
@@ -288,10 +200,9 @@ function GraphSidebar({
 
 function GraphCanvas({
   isSidebarOpen,
+  sidebarLayoutWidth,
   activeTooltip,
   cyRef,
-  currentChapterTitle = '',
-  userReadingChapterTitle = '',
   eventNum,
   filename,
   elements,
@@ -303,10 +214,6 @@ function GraphCanvas({
   hasShownGraphOnce,
   onCanvasClick,
   currentChapter,
-  userCurrentChapter,
-  nodeCount,
-  relationCount,
-  filterStage,
   sidebarControl,
   searchState,
   cytoscapeConfig,
@@ -332,20 +239,14 @@ function GraphCanvas({
     <div
       style={{
         ...canvasShellStyle,
-        left: `${resolveChapterSidebarWidth(isSidebarOpen)}px`,
+        left: `${
+          sidebarLayoutWidth != null
+            ? sidebarLayoutWidth
+            : resolveChapterSidebarWidth(isSidebarOpen)
+        }px`,
       }}
     >
       <div style={pageContainerStyle}>
-        <GraphInfoBar
-          currentChapter={currentChapter}
-          currentChapterTitle={currentChapterTitle}
-          userCurrentChapter={userCurrentChapter}
-          userReadingChapterTitle={userReadingChapterTitle}
-          nodeCount={nodeCount}
-          relationCount={relationCount}
-          filterStage={filterStage}
-        />
-
         <div style={pageInnerStyle}>
           {showSidebar && (
             <GraphSidebar
@@ -403,10 +304,9 @@ function GraphCanvas({
 
 GraphCanvas.propTypes = {
   isSidebarOpen: PropTypes.bool.isRequired,
+  sidebarLayoutWidth: PropTypes.number,
   activeTooltip: PropTypes.object,
   cyRef: PropTypes.object.isRequired,
-  currentChapterTitle: PropTypes.string,
-  userReadingChapterTitle: PropTypes.string,
   eventNum: PropTypes.number.isRequired,
   filename: PropTypes.string.isRequired,
   elements: PropTypes.array.isRequired,
@@ -418,10 +318,6 @@ GraphCanvas.propTypes = {
   hasShownGraphOnce: PropTypes.bool.isRequired,
   onCanvasClick: PropTypes.func.isRequired,
   currentChapter: PropTypes.number.isRequired,
-  userCurrentChapter: PropTypes.number,
-  nodeCount: PropTypes.number.isRequired,
-  relationCount: PropTypes.number.isRequired,
-  filterStage: PropTypes.number.isRequired,
   sidebarControl: PropTypes.object.isRequired,
   searchState: PropTypes.object.isRequired,
   cytoscapeConfig: PropTypes.object.isRequired,

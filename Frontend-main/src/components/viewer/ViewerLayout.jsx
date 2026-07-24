@@ -216,12 +216,12 @@ function ViewerToolbar({
   const closeMobileMenu = useCallback(() => setShowMobileMenu(false), []);
   const toggleMobileMenu = useCallback(() => setShowMobileMenu((v) => !v), []);
 
+  /** 메뉴는 햄버거로만 닫힘. 항목 클릭 시 바로 닫지 않아 연속 조작 가능 */
   const runMobileAction = useCallback(
     (action) => () => {
-      closeMobileMenu();
       action?.();
     },
-    [closeMobileMenu]
+    []
   );
 
   const graphToggleStyleMobile = useMemo(
@@ -300,11 +300,13 @@ function ViewerToolbar({
           </div>
           <ToolbarButton
             onClick={toggleMobileMenu}
-            title="메뉴"
+            title={showMobileMenu ? '메뉴 닫기' : '메뉴 열기'}
             ariaLabel={showMobileMenu ? '메뉴 닫기' : '메뉴 열기'}
             className="p-2 rounded-lg transition-colors"
           >
-            <span className="material-symbols-outlined">menu</span>
+            <span className="material-symbols-outlined" aria-hidden>
+              {showMobileMenu ? 'close' : 'menu'}
+            </span>
           </ToolbarButton>
         </div>
       ) : (
@@ -451,7 +453,11 @@ function ViewerToolbar({
       )}
 
       {showMobileMenu && (
-        <div className="absolute top-full left-0 right-0 bg-white border-t border-gray-200 shadow-lg z-50">
+        <div
+          className="absolute top-full left-0 right-0 bg-white border-t border-gray-200 shadow-lg z-50"
+          role="menu"
+          aria-label="뷰어 메뉴"
+        >
           <div className="p-4 grid grid-cols-2 gap-3">
             <ToolbarButton
               onClick={runMobileAction(onAddBookmark)}
@@ -464,7 +470,10 @@ function ViewerToolbar({
               <span className="text-sm font-semibold">북마크</span>
             </ToolbarButton>
             <ToolbarButton
-              onClick={runMobileAction(onToggleBookmarkList)}
+              onClick={runMobileAction(() => {
+                closeMobileMenu();
+                onToggleBookmarkList?.();
+              })}
               title="북마크 목록 보기"
               className={mobileMenuClass}
             >
@@ -472,7 +481,10 @@ function ViewerToolbar({
               <span className="text-sm font-semibold">북마크 목록</span>
             </ToolbarButton>
             <ToolbarButton
-              onClick={runMobileAction(handleGraphClick)}
+              onClick={runMobileAction(() => {
+                closeMobileMenu();
+                handleGraphClick();
+              })}
               title="인물 관계도 페이지로 이동"
               className={mobileMenuClass}
             >
@@ -494,7 +506,10 @@ function ViewerToolbar({
               <span className="text-sm font-semibold">화면 모드</span>
             </ToolbarButton>
             <ToolbarButton
-              onClick={runMobileAction(onOpenSettings)}
+              onClick={runMobileAction(() => {
+                closeMobileMenu();
+                onOpenSettings?.();
+              })}
               title="뷰어 설정 열기"
               className={mobileMenuClass}
             >
@@ -503,7 +518,10 @@ function ViewerToolbar({
             </ToolbarButton>
             <button
               type="button"
-              onClick={runMobileAction(onExitToMypage)}
+              onClick={runMobileAction(() => {
+                closeMobileMenu();
+                onExitToMypage?.();
+              })}
               className="flex items-center justify-center gap-2 p-3 bg-red-50 text-red-700 rounded-lg hover:bg-red-100 transition-colors"
               title="마이페이지로 돌아가기"
               aria-label="닫기"

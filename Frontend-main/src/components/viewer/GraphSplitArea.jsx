@@ -14,6 +14,7 @@ import {
   shouldIgnoreViewerOutsideClick,
   useGraphTooltipSelection,
 } from '../../hooks/graph/useGraphCy';
+import { useClickOutside } from '../../hooks/ui/tooltipHooks';
 import { resolveEventOrdinalForDisplay } from '../../utils/viewer/viewerSession';
 import { hasGraphPanelLocationHint, resolveChapterIndex, toPositiveNumberOrNull, resolvePositiveBookId } from '../../utils/common/valueUtils';
 import {
@@ -24,11 +25,10 @@ import {
 import { userGraphPath } from '../../utils/common/urlUtils';
 import '../graph/RelationGraph.css';
 import GraphControls, {
-  GraphControlsMoreMenu,
+  EdgeLabelToggle,
+  CharacterFilterSegmented,
 } from '../graph/GraphControls';
 import { getChapterData, getManifestFromCache } from '../../utils/common/cache/manifestCache';
-
-const LEGEND_HINT_KEY = 'viewer-graph-legend-hint-dismissed';
 
 const iconShellClass = {
   loading: 'bg-[var(--rg-brand-tint)] text-[var(--rg-brand)]',
@@ -85,33 +85,46 @@ function ChapterEventInfo({
   );
 }
 
-function GraphCanvasLegend({ showHint, onDismissHint }) {
+function GraphCanvasLegend() {
+  const [open, setOpen] = useState(false);
+  const rootRef = useClickOutside(() => setOpen(false), open);
+  const panelId = 'graph-canvas-legend-panel';
+
   return (
-    <aside className="graph-canvas-legend" aria-label="그래프 범례">
-      {showHint ? (
-        <div className="graph-canvas-legend-hint">
-          <p>선 색은 관계의 호의도, 원 크기는 인물 중요도입니다.</p>
-          <button type="button" className="graph-canvas-legend-hint-dismiss" onClick={onDismissHint}>
-            확인
-          </button>
-        </div>
+    <div className="graph-canvas-legend-wrap" ref={rootRef}>
+      {open ? (
+        <aside id={panelId} className="graph-canvas-legend" aria-label="그래프 범례">
+          <div className="graph-canvas-legend-row">
+            <span className="graph-canvas-legend-swatch" aria-hidden />
+            <span>비호의적 ↔ 호의적</span>
+          </div>
+          <div className="graph-canvas-legend-row">
+            <span className="graph-canvas-legend-size" aria-hidden>
+              <span className="graph-canvas-legend-dot graph-canvas-legend-dot--lg" />
+              <span className="graph-canvas-legend-dot graph-canvas-legend-dot--sm" />
+            </span>
+            <span>크기 = 중요도</span>
+          </div>
+          <div className="graph-canvas-legend-row">
+            <span className="graph-canvas-legend-main" aria-hidden />
+            <span>주요 인물</span>
+          </div>
+        </aside>
       ) : null}
-      <div className="graph-canvas-legend-row">
-        <span className="graph-canvas-legend-swatch" aria-hidden />
-        <span>비호의적 ↔ 호의적</span>
-      </div>
-      <div className="graph-canvas-legend-row">
-        <span className="graph-canvas-legend-size" aria-hidden>
-          <span className="graph-canvas-legend-dot graph-canvas-legend-dot--lg" />
-          <span className="graph-canvas-legend-dot graph-canvas-legend-dot--sm" />
+      <button
+        type="button"
+        className="graph-canvas-legend-btn"
+        aria-label={open ? '범례 닫기' : '범례 보기'}
+        title={open ? '범례 닫기' : '범례 보기'}
+        aria-expanded={open}
+        aria-controls={open ? panelId : undefined}
+        onClick={() => setOpen((v) => !v)}
+      >
+        <span className="material-symbols-outlined" aria-hidden>
+          search
         </span>
-        <span>크기 = 중요도</span>
-      </div>
-      <div className="graph-canvas-legend-row">
-        <span className="graph-canvas-legend-main" aria-hidden />
-        <span>주요 인물</span>
-      </div>
-    </aside>
+      </button>
+    </div>
   );
 }
 
@@ -213,6 +226,18 @@ const GraphSplitTopBar = memo(function GraphSplitTopBar({
           </span>
         </button>
 
+        <ChapterEventInfo
+          bookId={bookId}
+          progressTopBar={progressTopBar}
+          currentEvent={currentEvent}
+          prevValidEvent={prevValidEvent}
+          resolvedServerChapter={chapterMeta.resolvedServerChapter}
+          chapterDisplayLabel={chapterMeta.chapterDisplayLabel}
+          chapterTitleTooltip={chapterMeta.chapterTitleTooltip}
+        />
+      </div>
+
+      <div className="graph-split-topbar-actions">
         <GraphControls
           onSearchSubmit={onSearchSubmit}
           onGenerateSuggestions={onGenerateSuggestions}
@@ -226,25 +251,11 @@ const GraphSplitTopBar = memo(function GraphSplitTopBar({
           onSelectedIndexChange={onSelectedIndexChange}
           onKeyDown={handleKeyDown}
         />
-
-        <ChapterEventInfo
-          bookId={bookId}
-          progressTopBar={progressTopBar}
-          currentEvent={currentEvent}
-          prevValidEvent={prevValidEvent}
-          resolvedServerChapter={chapterMeta.resolvedServerChapter}
-          chapterDisplayLabel={chapterMeta.chapterDisplayLabel}
-          chapterTitleTooltip={chapterMeta.chapterTitleTooltip}
+        <EdgeLabelToggle
+          visible={edgeLabelVisible}
+          onToggle={() => setEdgeLabelVisible(!edgeLabelVisible)}
         />
-      </div>
-
-      <div className="graph-split-topbar-actions">
-        <GraphControlsMoreMenu
-          edgeLabelVisible={edgeLabelVisible}
-          onToggleEdgeLabel={() => setEdgeLabelVisible(!edgeLabelVisible)}
-          filterStage={filterStage}
-          onFilterChange={setFilterStage}
-        />
+        <CharacterFilterSegmented value={filterStage} onChange={setFilterStage} />
       </div>
     </div>
   );
@@ -356,23 +367,6 @@ const GraphContainer = memo(function GraphContainer({
     [currentChapter, eventNum]
   );
 
-  const [showLegendHint, setShowLegendHint] = useState(() => {
-    try {
-      return localStorage.getItem(LEGEND_HINT_KEY) !== '1';
-    } catch {
-      return true;
-    }
-  });
-
-  const dismissLegendHint = useCallback(() => {
-    setShowLegendHint(false);
-    try {
-      localStorage.setItem(LEGEND_HINT_KEY, '1');
-    } catch {
-      /* ignore */
-    }
-  }, []);
-
   const dismissTooltip = useCallback(() => {
     onClearTooltip?.();
   }, [onClearTooltip]);
@@ -434,7 +428,6 @@ const GraphContainer = memo(function GraphContainer({
             currentEvent={currentEvent}
             prevValidEvent={prevValidEvent}
             onSelectRelatedNode={handleSelectRelatedNode}
-            showGraphPageLink
           />
         )}
         {activeTooltip?.type === 'edge' && (
@@ -478,7 +471,7 @@ const GraphContainer = memo(function GraphContainer({
           graphSelectNodeRef={graphSelectNodeRef}
           showRippleEffect
         />
-        <GraphCanvasLegend showHint={showLegendHint} onDismissHint={dismissLegendHint} />
+        <GraphCanvasLegend />
       </div>
     </div>
   );

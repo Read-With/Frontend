@@ -17,6 +17,7 @@ import {
 } from '../../utils/graph/graphCy';
 import { detectAndResolveOverlap } from '../../utils/graph/graphModel';
 import { PRESET_LAYOUT } from '../../utils/styles/graphStyles';
+import { GRAPH_ZOOM } from '../../utils/graph/graphCore.js';
 import { useLatestRef } from '../common/hooksShared';
 
 function toCyId(value) {
@@ -274,7 +275,7 @@ export function useGraphLayout({
         detectAndResolveOverlap(cyInstance);
       }
       if (shouldFitOnInitialLoad) {
-        fitGraphToNodes(cyInstance);
+        fitGraphToNodes(cyInstance, { duration: GRAPH_ZOOM.FIT_DURATION_MS });
       }
       syncReciprocalPairJunctionOffsets(cyInstance);
     },

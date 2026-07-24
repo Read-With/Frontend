@@ -335,6 +335,7 @@ export default GraphControls;
 
 export function GraphTopBar({
   isSidebarOpen,
+  sidebarLayoutWidth,
   searchState,
   searchActions,
   edgeLabelVisible,
@@ -352,7 +353,10 @@ export function GraphTopBar({
     onSelectedIndexChange,
   } = searchActions;
 
-  const sidebarLeft = resolveChapterSidebarWidth(isSidebarOpen);
+  const sidebarLeft =
+    sidebarLayoutWidth != null
+      ? sidebarLayoutWidth
+      : resolveChapterSidebarWidth(isSidebarOpen);
   const isCompact = useMatchMedia(GRAPH_TOPBAR_COMPACT_MQ);
 
   return (
@@ -401,6 +405,7 @@ export function GraphTopBar({
 
 GraphTopBar.propTypes = {
   isSidebarOpen: PropTypes.bool.isRequired,
+  sidebarLayoutWidth: PropTypes.number,
   searchState: PropTypes.shape({
     searchTerm: PropTypes.string.isRequired,
     isSearchActive: PropTypes.bool.isRequired,
