@@ -29,9 +29,14 @@ import {
   ResponsiveContainer,
 } from 'recharts';
 import { getPositivityColor, getPositivityLabel } from '../../utils/styles/relationStyles.js';
+import { GRAPH_COLORS } from '../../utils/styles/graphStyles.js';
 
 
 const NAME_LABEL_MAX = 6;
+const RADAR_BRAND = GRAPH_COLORS.primary;
+const RADAR_GRID = 'rgba(92, 111, 92, 0.22)';
+const RADAR_AXIS_TICK = '#6f7f6f';
+const RADAR_FILL = 'rgba(92, 111, 92, 0.14)';
 
 function positivityDisplay(positivity) {
   return {
@@ -94,7 +99,7 @@ const RadarDot = memo(function RadarDot({
 
   const { color } = positivityDisplay(fullData.positivity);
   const isActive = activeName === payload.name;
-  const radius = isActive ? 8 : 5;
+  const radius = isActive ? 7 : 4.5;
 
   const activate = (e) => {
     e.stopPropagation();
@@ -102,7 +107,7 @@ const RadarDot = memo(function RadarDot({
   };
 
   return (
-    <g>
+    <g className={`relation-radar-dot${isActive ? ' is-active' : ''}`}>
       <circle
         cx={cx}
         cy={cy}
@@ -122,13 +127,25 @@ const RadarDot = memo(function RadarDot({
           }
         }}
       />
+      {isActive ? (
+        <circle
+          cx={cx}
+          cy={cy}
+          r={radius + 4}
+          fill="none"
+          stroke={RADAR_BRAND}
+          strokeWidth={1.5}
+          strokeOpacity={0.55}
+          style={{ pointerEvents: 'none' }}
+        />
+      ) : null}
       <circle
         cx={cx}
         cy={cy}
         r={radius}
         fill={color}
-        stroke={isActive ? '#fff' : 'none'}
-        strokeWidth={isActive ? 2 : 0}
+        stroke={isActive ? '#fff' : 'rgba(255,255,255,0.85)'}
+        strokeWidth={isActive ? 2 : 1}
         style={{ pointerEvents: 'none' }}
       />
     </g>
@@ -242,16 +259,6 @@ function RelationAnalysisModalImpl({
   const activeItem = activeName ? dataMap.get(activeName) : null;
   const connectionCount = radarChartData.length;
 
-  const avgPositivity = useMemo(() => {
-    if (!radarChartData.length) return 0;
-    return radarChartData.reduce((sum, item) => sum + (item.positivity || 0), 0) / radarChartData.length;
-  }, [radarChartData]);
-
-  const radarStroke = useMemo(() => {
-    const { color } = positivityDisplay(avgPositivity);
-    return color;
-  }, [avgPositivity]);
-
   const switchTargets = radarChartData;
   const activeIndex = switchTargets.findIndex((item) => item.name === activeName);
   switchTargetsRef.current = switchTargets;
@@ -349,14 +356,14 @@ function RelationAnalysisModalImpl({
     const point = dataMap.get(payload.value);
     const color = point?.positivity !== undefined
       ? positivityDisplay(point.positivity).color
-      : COLORS.textPrimary;
+      : RADAR_AXIS_TICK;
     const active = activeName === payload.value;
     const dx = tickX - cx;
     const dy = tickY - cy;
     const distance = Math.sqrt(dx * dx + dy * dy) || 1;
     const raw = payload.value || '';
     const label = truncateLabel(raw);
-    const scale = (distance + Math.max(36, 22 + (label.length * 2))) / distance;
+    const scale = (distance + Math.max(34, 20 + (label.length * 1.8))) / distance;
 
     return (
       <text
@@ -364,9 +371,10 @@ function RelationAnalysisModalImpl({
         y={cy + dy * scale}
         textAnchor="middle"
         dominantBaseline="middle"
-        fill={active ? color : COLORS.textPrimary}
-        fontSize={active ? 15 : 13}
-        fontWeight={active ? 700 : 600}
+        fill={active ? color : RADAR_AXIS_TICK}
+        fontSize={active ? 14 : 12}
+        fontWeight={active ? 700 : 500}
+        letterSpacing={active ? '0.01em' : '0'}
         style={{ cursor: point ? 'pointer' : 'default' }}
         onClick={() => point && activateItem(point)}
       >
@@ -376,30 +384,47 @@ function RelationAnalysisModalImpl({
     );
   };
 
+  const formatRadarRadiusTick = (value) => {
+    if (value === 0) return '−1';
+    if (value === 50) return '0';
+    if (value === 100) return '+1';
+    return '';
+  };
+
   const chartPanel = connectionKind === 'sufficient_connections' ? (
     <div className="relation-modal-chart" role="img" aria-label={`${node?.displayName} 관계 레이더 차트`}>
       <ResponsiveContainer width="100%" height="100%">
         <RadarChart
           data={radarChartData}
-          margin={{ top: 48, right: 48, bottom: 48, left: 48 }}
+          margin={{ top: 52, right: 52, bottom: 52, left: 52 }}
           style={{ outline: 'none' }}
         >
-          <PolarGrid stroke={COLORS.border} />
+          <PolarGrid
+            gridType="polygon"
+            stroke={RADAR_GRID}
+            strokeWidth={1}
+            radialLines
+          />
           <PolarAngleAxis dataKey="name" tick={renderPolarAngleAxis} />
           <PolarRadiusAxis
             angle={90}
             domain={[0, 100]}
-            tick={{ fontSize: 12, fill: COLORS.textSecondary, fontWeight: 600 }}
-            tickCount={5}
-            tickFormatter={(v) => (((v / 100) * 2) - 1).toFixed(1)}
+            tickCount={3}
+            axisLine={false}
+            tick={{
+              fontSize: 11,
+              fill: RADAR_AXIS_TICK,
+              fontWeight: 600,
+            }}
+            tickFormatter={formatRadarRadiusTick}
           />
           <Radar
             name={node?.displayName}
             dataKey="normalizedValue"
-            stroke={radarStroke}
-            fill={radarStroke}
-            fillOpacity={0.18}
-            strokeWidth={2}
+            stroke={RADAR_BRAND}
+            fill={RADAR_FILL}
+            fillOpacity={1}
+            strokeWidth={2.25}
             dot={(dotProps) => {
               const { key, ...rest } = dotProps;
               return (
@@ -739,16 +764,18 @@ function buildRadarChartData({
   try {
     if (apiBookGraphData?.relations && apiBookGraphData?.characters) {
       const { relations, characters } = apiBookGraphData;
-      const nameToIdMap = {};
       const bookElements = characters.map((char) => {
-        const charName = char.common_name || char.name;
-        nameToIdMap[charName] = char.id;
-        return { data: { id: String(char.id), label: charName, common_name: charName } };
+        const charName = char.common_name || char.name || '';
+        return {
+          data: {
+            id: String(char.id),
+            label: charName || `인물 ${char.id}`,
+            common_name: charName || `인물 ${char.id}`,
+          },
+        };
       });
 
-      const targetNodeId = typeof node.id === 'string'
-        ? (nameToIdMap[node.label || node.common_name] ?? node.id)
-        : node.id;
+      const targetNodeId = node.id;
 
       return extractRadarChartData(
         targetNodeId,

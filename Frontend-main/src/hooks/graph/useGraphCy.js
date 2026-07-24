@@ -244,9 +244,10 @@ function scheduleRippleWhenPositionsPainted(cy, triggerRippleForAddedNodes) {
 
 /**
  * elementsUpdateRef 소비 후 분기:
- * 1) hasChanges          → layout(+scoped) → styles → rAF(complete: bounds/overlap/fit/junction + ripple)
- * 2) dataChanged only    → sizes refresh
- * 3) stylesheet|initial  → sizes refresh; initial이면 complete(fit+junction 포함)
+ * 1) hasChanges          → layout(+scoped) → styles → rAF(complete: bounds/overlap[신규만]/fit/junction + ripple)
+ * 2) pendingViewportFit  → 챕터·이벤트 전환 후 elements가 바뀌면 fit (추가 없는 교체·삭제만 포함)
+ * 3) dataChanged only    → sizes refresh
+ * 4) stylesheet|initial  → sizes refresh; initial이면 complete(fit+junction 포함)
  */
 export function useGraphLayout({
   cy,
@@ -260,19 +261,29 @@ export function useGraphLayout({
   isInitialLoad,
   setIsInitialLoad,
   containerRef,
+  pendingViewportFitRef = null,
+  elementsApplyGen = 0,
 }) {
   const prevStylesheetRef = useRef(stylesheet);
 
   const handleLayoutComplete = useCallback(
     (cyInstance, shouldFitOnInitialLoad, options = {}) => {
-      const { skipOverlap = false, skipEnsureBounds = false } = options;
+      const {
+        skipOverlap = false,
+        skipEnsureBounds = false,
+        movableIds = null,
+      } = options;
       if (!cyInstance) return;
 
       if (!skipEnsureBounds && isGraphContainerSizeReady(containerRef.current)) {
         ensureElementsInBounds(cyInstance, containerRef.current);
       }
       if (!skipOverlap) {
-        detectAndResolveOverlap(cyInstance);
+        detectAndResolveOverlap(
+          cyInstance,
+          40,
+          movableIds ? { movableIds } : {},
+        );
       }
       if (shouldFitOnInitialLoad) {
         fitGraphToNodes(cyInstance, { duration: GRAPH_ZOOM.FIT_DURATION_MS });
@@ -306,10 +317,22 @@ export function useGraphLayout({
     const stylesheetChanged = prevStylesheetRef.current !== stylesheet;
     prevStylesheetRef.current = stylesheet;
 
+    const pendingFit = pendingViewportFitRef?.current ?? null;
+    const pendingFitReady = Boolean(
+      pendingFit &&
+        pendingFit.applyGenWhenArmed !== undefined &&
+        pendingFit.applyGenWhenArmed !== elementsApplyGen,
+    );
+    const shouldFitViewport = Boolean(isInitialLoad || pendingFitReady);
+
+    const clearPendingFit = () => {
+      if (pendingViewportFitRef) pendingViewportFitRef.current = null;
+    };
+
     const edgesOnlyIncremental =
       hasChanges && nodesToAdd.length === 0 && edgesToAdd.length > 0;
     const styleOnlyIncremental =
-      hasChanges && !isInitialLoad && !stylesheetChanged;
+      hasChanges && !isInitialLoad && !stylesheetChanged && !pendingFitReady;
     const hasDataOnlyVisualChange = !hasChanges && dataChangedIds.length > 0;
 
     const refreshStyles = ({
@@ -332,6 +355,7 @@ export function useGraphLayout({
     };
 
     const finishInitialLoad = () => {
+      clearPendingFit();
       if (isInitialLoad) setIsInitialLoad(false);
     };
 
@@ -363,11 +387,22 @@ export function useGraphLayout({
         edgesOnlyIncremental || incrementalLayoutScope;
 
       requestAnimationFrame(() => {
-        handleLayoutComplete(cy, isInitialLoad, {
-          skipOverlap: preserveUnchangedPositions,
+        handleLayoutComplete(cy, shouldFitViewport, {
+          // 엣지만 추가: 겹침 해소 스킵 / 노드 추가: 신규 노드만 밀어내기
+          skipOverlap: edgesOnlyIncremental,
+          movableIds:
+            !shouldFitViewport &&
+            incrementalLayoutScope &&
+            nodesToAdd.length > 0
+              ? nodesToAdd
+                  .map((n) => n?.data?.id)
+                  .filter((id) => id != null && id !== '')
+                  .map(String)
+              : null,
           skipEnsureBounds:
-            preserveUnchangedPositions ||
-            (styleOnlyIncremental && !incrementalLayoutScope),
+            !shouldFitViewport &&
+            (preserveUnchangedPositions ||
+              (styleOnlyIncremental && !incrementalLayoutScope)),
         });
         if (nodesToAdd.length > 0 || edgesToAdd.length > 0) {
           cancelRipple();
@@ -378,15 +413,23 @@ export function useGraphLayout({
         }
         finishInitialLoad();
       });
+    } else if (pendingFitReady) {
+      refreshStyles({ forceSizes: true });
+      requestAnimationFrame(() => {
+        handleLayoutComplete(cy, true);
+        finishInitialLoad();
+      });
     } else if (hasDataOnlyVisualChange) {
       refreshStyles({ forceSizes: true });
-      finishInitialLoad();
+      // pending fit 대기 중이면 isInitialLoad/pending 유지
+      if (!pendingFit) finishInitialLoad();
     } else if (stylesheetChanged || isInitialLoad) {
       refreshStyles({ forceSizes: true });
-      if (isInitialLoad) {
+      // 챕터 전환 직후(pending fit, elements 미갱신): fit·완료를 미룸
+      if (isInitialLoad && !pendingFit) {
         handleLayoutComplete(cy, true);
+        finishInitialLoad();
       }
-      finishInitialLoad();
     }
 
     return () => {
@@ -403,6 +446,8 @@ export function useGraphLayout({
     triggerRippleForAddedNodes,
     isInitialLoad,
     setIsInitialLoad,
+    pendingViewportFitRef,
+    elementsApplyGen,
   ]);
 }
 

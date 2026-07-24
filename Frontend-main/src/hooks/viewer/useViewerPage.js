@@ -246,6 +246,8 @@ export function useViewerPage() {
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [showToolbar, setShowToolbar] = useState(false);
   const [progress, setProgress] = useState(null);
+  const progressRef = useRef(progress);
+  progressRef.current = progress;
   const [settings, setSettings] = usePersistedViewerSettings();
 
   const book = useMemo(
@@ -418,18 +420,27 @@ export function useViewerPage() {
     [setSettings]
   );
 
+  /** 분할/전체화면/탭·그래프 토글 등 레이아웃 전환 후 본문 진도 위치 복원 */
+  const restoreAfterViewerLayoutChange = useCallback(async () => {
+    try {
+      const ready = await waitForViewerMethod(viewerRef, 'refreshLayout');
+      if (!ready) return false;
+      await restoreViewerPosition(viewerRef, progressRef.current);
+      return true;
+    } catch {
+      return false;
+    }
+  }, []);
+
   const toggleGraph = useCallback(async () => {
     const result = setSettings((prev) => ({ ...prev, showGraph: !prev.showGraph }));
     if (!reportSettingsSaveFailure(result, SETTINGS_SAVE_ERROR_MESSAGE)) return;
 
-    try {
-      const ready = await waitForViewerMethod(viewerRef, 'refreshLayout');
-      if (!ready) return;
-      await restoreViewerPosition(viewerRef, progress);
-    } catch {
+    const restored = await restoreAfterViewerLayoutChange();
+    if (!restored) {
       toast.error('화면 모드 전환 중 오류가 발생했습니다.');
     }
-  }, [setSettings, progress]);
+  }, [setSettings, restoreAfterViewerLayoutChange]);
 
   const handleSliderChange = useCallback(async (value) => {
     setProgress(value);
@@ -515,6 +526,7 @@ export function useViewerPage() {
     onToggleBookmarkList,
     handleSliderChange,
     toggleGraph,
+    restoreAfterViewerLayoutChange,
     exitToMypage,
     graphStateWithProgress,
     graphActions,

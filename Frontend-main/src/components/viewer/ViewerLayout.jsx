@@ -558,6 +558,7 @@ function ViewerLayout({
   isFromLibrary = false,
   previousPage = null,
   onExitToMypage,
+  onViewerLayoutSettled,
 }) {
   const splitRowRef = useRef(null);
   const [splitPercent, setSplitPercent] = useState(readStoredSplitPercent);
@@ -567,6 +568,9 @@ function ViewerLayout({
   const [mobilePane, setMobilePane] = useState('reader');
   const [isSplitDragging, setIsSplitDragging] = useState(false);
   const prevShowGraphRef = useRef(showGraph);
+  const skipInitialLayoutSettleRef = useRef(true);
+  const onViewerLayoutSettledRef = useRef(onViewerLayoutSettled);
+  onViewerLayoutSettledRef.current = onViewerLayoutSettled;
 
   useEffect(() => {
     const mq = window.matchMedia(NARROW_MQ);
@@ -589,12 +593,31 @@ function ViewerLayout({
     }
   }, [showGraph]);
 
+  const useMobileTabs = isNarrow && showGraph && !graphFullScreen;
+  const showReaderPane = !useMobileTabs || mobilePane === 'reader';
+  const showGraphPane = showGraph && (!useMobileTabs || mobilePane === 'graph');
+
   useEffect(() => {
+    if (skipInitialLayoutSettleRef.current) {
+      skipInitialLayoutSettleRef.current = false;
+      return undefined;
+    }
+    const readerVisible = Boolean(showReaderPane && !graphFullScreen);
     const id = window.setTimeout(() => {
       window.dispatchEvent(new Event('resize'));
+      if (readerVisible) {
+        onViewerLayoutSettledRef.current?.();
+      }
     }, 300);
     return () => window.clearTimeout(id);
-  }, [showGraph, graphFullScreen, splitPercent, mobilePane, isNarrow]);
+  }, [
+    showGraph,
+    graphFullScreen,
+    splitPercent,
+    mobilePane,
+    isNarrow,
+    showReaderPane,
+  ]);
 
   useEffect(() => {
     try {
@@ -666,10 +689,6 @@ function ViewerLayout({
     }),
     [graphFullScreen]
   );
-
-  const useMobileTabs = isNarrow && showGraph && !graphFullScreen;
-  const showReaderPane = !useMobileTabs || mobilePane === 'reader';
-  const showGraphPane = showGraph && (!useMobileTabs || mobilePane === 'graph');
 
   const readerPaneStyle = useMemo(() => {
     if (graphFullScreen) {

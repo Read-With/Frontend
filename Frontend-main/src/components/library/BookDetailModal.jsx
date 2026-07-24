@@ -20,7 +20,7 @@ import {
 } from '../../utils/library/libraryUtils';
 import {
   resolveServerBookId,
-  stripRedundantBookTitlePrefix,
+  resolveChapterTitleMeta,
 } from '../../utils/viewer/viewerCore';
 import {
   USER_VIEWER_PREFIX,
@@ -121,13 +121,8 @@ function mergeBookWithManifest(book, manifestData) {
 }
 
 function formatChapterRowMeta(chapter, bookTitle, index, currentChapterIndex) {
-  const rawTitle = String(chapter.title ?? '').trim();
+  const meta = resolveChapterTitleMeta(chapter, bookTitle);
   const idxNum = Number(chapter.idx);
-  const idxStr = Number.isFinite(idxNum) && idxNum >= 1 ? String(idxNum) : '?';
-  const normalizedTitle = rawTitle
-    ? stripRedundantBookTitlePrefix(rawTitle, bookTitle)
-    : '';
-  const chapterLine = normalizedTitle || rawTitle || `챕터 ${idxStr}`;
   const chapterKey =
     chapter.id ??
     chapter.href ??
@@ -137,12 +132,13 @@ function formatChapterRowMeta(chapter, bookTitle, index, currentChapterIndex) {
     Number.isFinite(idxNum) &&
     idxNum === currentChapterIndex;
   return {
-    rawTitle,
+    rawTitle: meta.raw,
     idxNum,
-    chapterLine,
+    chapterLine: meta.display,
     chapterKey,
     isCurrent,
     displayNum: Number.isFinite(idxNum) ? idxNum : '?',
+    status: meta.status,
   };
 }
 

@@ -17,6 +17,7 @@ import {
 } from '../utils/bookmarks/bookmarkUtils';
 import { userViewerPath, userViewerBookmarksPath, userViewerReadingPath } from '../utils/common/urlUtils';
 import { resolveChapterIndex } from '../utils/common/valueUtils';
+import { formatFallbackChapterLabel } from '../utils/viewer/viewerCore';
 import './BookmarksPage.css';
 
 const sameId = (a, b) => String(a) === String(b);
@@ -100,6 +101,7 @@ const BookmarksPage = () => {
             bookmark.textSnippet,
             bookmark.chapterTitle,
             chapter != null ? `챕터 ${chapter}` : '',
+            chapter != null ? formatFallbackChapterLabel(chapter) : '',
           ]
             .filter(Boolean)
             .join(' ')

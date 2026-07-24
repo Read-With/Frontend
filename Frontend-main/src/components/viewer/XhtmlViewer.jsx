@@ -96,8 +96,12 @@ const XhtmlViewer = forwardRef(
       return { offsetY, visibleHeight };
     }, []);
 
-    const totalPages = Math.max(1, pageHeight ? Math.ceil(contentHeight / pageHeight) : 1);
-    const safePageIndex = Math.min(Math.max(0, currentPageIndex), Math.max(0, totalPages - 1));
+    const layoutReady = typeof pageHeight === 'number' && pageHeight > 0;
+    const totalPages = Math.max(1, layoutReady ? Math.ceil(contentHeight / pageHeight) : 1);
+    // 레이아웃 붕괴(전체화면 그래프 등) 시 페이지 인덱스를 0으로 클램프하지 않음
+    const safePageIndex = layoutReady
+      ? Math.min(Math.max(0, currentPageIndex), Math.max(0, totalPages - 1))
+      : currentPageIndex;
     const currentPage = safePageIndex + 1;
 
     const currentSnap = useMemo(
@@ -158,8 +162,9 @@ const XhtmlViewer = forwardRef(
 
     useEffect(() => {
       if (currentPageIndex === safePageIndex) return;
+      if (!layoutReady) return;
       setCurrentPageIndex(safePageIndex);
-    }, [currentPageIndex, safePageIndex]);
+    }, [currentPageIndex, safePageIndex, layoutReady]);
 
     const emitLocator = useCallback(
       (loc) => {
@@ -250,6 +255,7 @@ const XhtmlViewer = forwardRef(
     }, [xhtmlContent, contentHeight, settings?.fontSize, settings?.lineHeight, settings?.fontFamily, contentPadding.padding, recomputeLineBounds]);
 
     useEffect(() => {
+      if (!layoutReady) return;
       const prev = lastReportedPagingRef.current;
       if (prev.totalPages !== totalPages) {
         onTotalPagesChange?.(totalPages);
@@ -261,12 +267,14 @@ const XhtmlViewer = forwardRef(
     }, [
       totalPages,
       currentPage,
+      layoutReady,
       onTotalPagesChange,
       onCurrentPageChange,
     ]);
 
     useEffect(() => {
       if (!xhtmlContent || !contentRef.current || !viewportRef.current) return;
+      if (!layoutReady) return;
 
       const result = resolveViewportLocatorEmit({
         blockEntries: collectBlockEntries(contentRef.current),
@@ -288,6 +296,7 @@ const XhtmlViewer = forwardRef(
       safePageIndex,
       totalPages,
       emitLocator,
+      layoutReady,
       pageHeight,
       currentSnap.offsetY,
       currentSnap.visibleHeight,
@@ -296,9 +305,9 @@ const XhtmlViewer = forwardRef(
     ]);
 
     const resolvePageHeight = useCallback(() => {
-      if (typeof pageHeight === 'number' && pageHeight > 0) return pageHeight;
+      if (layoutReady) return pageHeight;
       return containerRef.current?.clientHeight ?? 0;
-    }, [pageHeight]);
+    }, [layoutReady, pageHeight]);
 
     const goPageByDelta = useCallback((delta) => {
       if (!delta) return;

@@ -23,6 +23,7 @@ import {
   useAsyncRequestGuard,
 } from '../common/hooksShared';
 import { cacheKeyUtils } from '../../utils/viewer/viewerCore';
+import { enrichGraphPayload } from '../../utils/graph/graphCore';
 
 const ERROR_DISPLAY_DURATION = 5000;
 
@@ -124,7 +125,7 @@ export function useApiGraphData(serverBookId, currentChapter) {
         onSuccess: (data) => {
           if (isStale(requestId)) return;
           setApiError(null);
-          setApiBookGraphData(data);
+          setApiBookGraphData(enrichGraphPayload(data, targetBookId));
           loadedGraphKeyRef.current = graphKey;
           if (data.userCurrentChapter !== undefined) {
             setUserCurrentChapter(data.userCurrentChapter);

@@ -5,7 +5,7 @@ import UnifiedNodeInfo from './UnifiedNodeInfo';
 import UnifiedEdgeTooltip from './UnifiedEdgeTooltip';
 import { graphStyles } from '../../utils/styles/graphStyles.js';
 import { COLORS, ANIMATION_VALUES } from '../../utils/styles/styles.js';
-import { GRAPH_LAYOUT_CONSTANTS, resolveChapterSidebarWidth } from '../../utils/graph/graphCore.js';
+import { GRAPH_LAYOUT_CONSTANTS, resolveChapterSidebarWidth, buildGraphViewportRefitKey } from '../../utils/graph/graphCore.js';
 
 const {
   TOP_BAR_HEIGHT,
@@ -293,6 +293,7 @@ function GraphCanvas({
               isResetFromSearch={isResetFromSearch}
               isDataRefreshing={isLoading}
               currentChapter={currentChapter}
+              viewportRefitKey={buildGraphViewportRefitKey(currentChapter, eventNum)}
               showRippleEffect
             />
           </div>

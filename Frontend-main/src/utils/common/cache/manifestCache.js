@@ -70,6 +70,18 @@ const normalizeChapter = (chapter) => {
   if (idx == null || idx < 1) return null;
 
   const title = typeof chapter.title === 'string' ? chapter.title : '';
+  const navTitle =
+    typeof chapter.navTitle === 'string'
+      ? chapter.navTitle
+      : typeof chapter.navLabel === 'string'
+        ? chapter.navLabel
+        : '';
+  const tocTitle =
+    typeof chapter.tocTitle === 'string'
+      ? chapter.tocTitle
+      : typeof chapter.tocLabel === 'string'
+        ? chapter.tocLabel
+        : '';
   const paragraphStarts = parseManifestJsonNumberArray(chapter.paragraphStartsJson);
   const paragraphLengths = parseManifestJsonNumberArray(chapter.paragraphLengthsJson);
   const paragraphCount = toNumberOrNull(chapter.paragraphCount) ?? 0;
@@ -91,6 +103,10 @@ const normalizeChapter = (chapter) => {
     chapterIndex: idx,
     title,
     chapterTitle: title,
+    navTitle,
+    tocTitle,
+    label: typeof chapter.label === 'string' ? chapter.label : '',
+    name: typeof chapter.name === 'string' ? chapter.name : '',
     spineHref: chapter.spineHref != null ? String(chapter.spineHref) : '',
     paragraphCount,
     paragraphStartsJson: typeof chapter.paragraphStartsJson === 'string' ? chapter.paragraphStartsJson : '',

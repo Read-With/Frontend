@@ -13,6 +13,7 @@ import {
   pickResponseResult,
   toUnifiedApiResponse,
 } from './authApi';
+import { pickCharacterDisplayName, rememberCharacterDisplayName } from '../graph/graphCore';
 
 const asArray = (value) => (Array.isArray(value) ? value : []);
 
@@ -220,10 +221,8 @@ const finalizeAccumulateStateToGraphResult = (
     .sort((a, b) => a - b)
     .map((id) => {
       const meta = manifestChars.get(id);
-      const commonName =
-        (typeof meta?.name === 'string' && meta.name) ||
-        (typeof meta?.common_name === 'string' && meta.common_name) ||
-        '';
+      const commonName = pickCharacterDisplayName(meta) || '';
+      if (commonName) rememberCharacterDisplayName(bookId, id, commonName);
       const w = state.weightMap.get(id);
       return {
         id,

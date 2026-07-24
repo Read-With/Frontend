@@ -302,6 +302,7 @@ function RelationGraphWrapper() {
         currentEvent,
         GRAPH_TRANSFORM_DEPS,
         extractNodeWeightsFromElements(previousEventState?.elements),
+        { bookId: serverBookId },
       ).elements;
     } catch {
       return [];

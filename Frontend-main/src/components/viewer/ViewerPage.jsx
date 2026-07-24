@@ -96,6 +96,7 @@ const ViewerPage = () => {
     onToggleBookmarkList,
     handleSliderChange,
     toggleGraph,
+    restoreAfterViewerLayoutChange,
     exitToMypage,
     graphStateWithProgress,
     graphActions,
@@ -347,6 +348,7 @@ const ViewerPage = () => {
         previousPage={previousPage}
         onExitToMypage={handleExitToMypage}
         rightSideContent={rightSideContent}
+        onViewerLayoutSettled={restoreAfterViewerLayoutChange}
       >
         <XhtmlViewer
           key={reloadKey}

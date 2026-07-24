@@ -25,7 +25,6 @@ export const GRAPH_COLORS = {
   nodeBorder: '#5C6F5C', // --rg-brand
   nodeText: '#2f3b2f', // --rg-text-brand
   edgeText: '#3d4f3d',
-  successGreen: '#22c55e',
   highlightBlue: '#5C6F5C', // --rg-brand
 };
 
@@ -211,16 +210,6 @@ export const createGraphStylesheet = (edgeStyle, edgeLabelVisible, maxEdgeLabelL
     selector: 'edge.highlighted[?reciprocalPair]',
     style: {
       'curve-style': 'bezier',
-    },
-  },
-  {
-    selector: 'node.cytoscape-node-appear',
-    style: {
-      'border-color': COLORS.successGreen,
-      'border-width': 10,
-      'border-opacity': 1,
-      'transition-property': 'border-width, border-color, border-opacity, opacity',
-      'transition-duration': DURATION.SLOW,
     },
   },
   {

@@ -123,6 +123,11 @@ const CytoscapeGraphUnified = ({
         : "";
   const prevRefitKeyRef = useRef(resolvedRefitKey);
   const [isInitialLoad, setIsInitialLoad] = useState(true);
+  /** 챕터/이벤트 키 변경 후, 다음 elements 적용 시에만 fit */
+  const pendingViewportFitRef = useRef(null);
+  const [elementsApplyGen, setElementsApplyGen] = useState(0);
+  const elementsApplyGenRef = useRef(0);
+  elementsApplyGenRef.current = elementsApplyGen;
   const addedNodeIdsRef = useRef(new Set());
   const addedEdgeIdsRef = useRef(new Set());
 
@@ -189,7 +194,6 @@ const CytoscapeGraphUnified = ({
       if (!cyNode || cyNode.length === 0) return;
 
       try {
-        cyNode.addClass("cytoscape-node-appear");
         cyNode.style("opacity", 0.2);
         cyNode.animate({
           style: { opacity: 1 },
@@ -197,7 +201,6 @@ const CytoscapeGraphUnified = ({
           easing: "ease-out",
           complete: () => {
             try {
-              cyNode.removeClass("cytoscape-node-appear");
               cyNode.removeStyle("opacity");
             } catch {
               /* ignore */
@@ -276,20 +279,29 @@ const CytoscapeGraphUnified = ({
     };
   }, [graphSelectNodeRef, selectNodeByIdOrName]);
 
-  // viewport/챕터 키가 바뀌면 초기 fit·추적 상태만 리셋. ripple용 addedNodeIds는 elements update의 nodesToAdd가 설정
+  // viewport/챕터 키가 바뀌면 fit을 예약. 새 elements 적용 후에만 실제 fit (조기 소비 방지)
   useEffect(() => {
-    if (!cy || isEmpty(elements)) return;
+    if (!cy) return;
 
     if (
-      !skipViewportRefit &&
-      resolvedRefitKey !== "" &&
-      resolvedRefitKey !== prevRefitKeyRef.current
+      skipViewportRefit ||
+      resolvedRefitKey === "" ||
+      resolvedRefitKey === prevRefitKeyRef.current
     ) {
-      setIsInitialLoad(true);
-      resetGraphTrackingState();
-      prevRefitKeyRef.current = resolvedRefitKey;
+      return;
     }
-  }, [elements, resolvedRefitKey, skipViewportRefit, cy]);
+
+    setIsInitialLoad(true);
+    pendingViewportFitRef.current = {
+      applyGenWhenArmed: elementsApplyGenRef.current,
+    };
+    resetGraphTrackingState();
+    prevRefitKeyRef.current = resolvedRefitKey;
+  }, [
+    cy,
+    resolvedRefitKey,
+    skipViewportRefit,
+  ]);
 
   useEffect(() => {
     if (!containerRef.current) {
@@ -588,6 +600,7 @@ const CytoscapeGraphUnified = ({
     });
 
     lastElementsGraphFingerprintRef.current = graphFp;
+    setElementsApplyGen((g) => g + 1);
     setIsGraphVisible(true);
   }, [elementsGraphFingerprint, elementsLength, isDataRefreshing, cy]);
 
@@ -603,6 +616,8 @@ const CytoscapeGraphUnified = ({
     isInitialLoad,
     setIsInitialLoad,
     containerRef,
+    pendingViewportFitRef,
+    elementsApplyGen,
   });
 
   useEffect(() => {

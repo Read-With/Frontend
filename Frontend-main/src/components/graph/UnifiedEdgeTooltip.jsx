@@ -1,16 +1,15 @@
-import { memo, useState, useEffect, useMemo, useCallback } from "react";
+import { memo, useState, useEffect, useMemo } from "react";
 import {ResponsiveContainer, LineChart, CartesianGrid, ReferenceLine, Tooltip as RechartsTooltip, Line, XAxis, YAxis,} from "recharts";
-import { useNavigate, useParams } from "react-router-dom";
+import { useParams } from "react-router-dom";
 import { useTooltipPosition, useClickOutside } from "../../hooks/ui/tooltipHooks";
 import { useRelationData } from "../../hooks/graph/useApiGraphData";
 import { getRelationStyle, tooltipStyles } from "../../utils/styles/relationStyles";
 import { clampPositivity } from "../../utils/styles/graphStyles";
 import { COLORS, ANIMATION_VALUES, mergeRefs } from "../../utils/styles/styles";
-import { toFiniteNumber, toPositiveNumberOrNull, resolvePositiveBookId } from "../../utils/common/valueUtils";
+import { toFiniteNumber, toPositiveNumberOrNull } from "../../utils/common/valueUtils";
 import { processRelationTags, cleanupRelationUtils } from "../../utils/graph/graphCore";
 import { resolveEventOrdinalForDisplay } from "../../utils/viewer/viewerSession";
 import { isLongEdgeTimeline, annotateSignificantEdgePoints, getSparseEdgeTickValues, formatEdgeTimelineDisplayLabel } from "../../utils/graph/graphCy";
-import { userGraphPath } from "../../utils/common/urlUtils";
 import './RelationGraph.css';
 
 const NO_RELATION_MESSAGE = '이 위치에서는 표시할 관계가 없습니다.';
@@ -73,20 +72,11 @@ function UnifiedEdgeTooltip({
   bookId = null,
   sourceEndpoint = null,
   targetEndpoint = null,
-  showGraphPageLink = false,
 }) {
   const { filename } = useParams();
-  const navigate = useNavigate();
   const isSidebar = variant === 'graphPage';
   const isViewer = variant === 'viewer';
 
-  const openGraphPage = useCallback(() => {
-    const id = resolvePositiveBookId(bookId, filename);
-    if (id == null) return;
-    navigate(userGraphPath(id), {
-      state: { selectedChapter: Number(chapterNum) || 1 },
-    });
-  }, [bookId, chapterNum, filename, navigate]);
   const {
     position,
     showContent,
@@ -633,16 +623,6 @@ function UnifiedEdgeTooltip({
         <div className={`edge-tooltip-panel${isSidebar ? ' edge-tooltip-panel--sidebar' : ''}`}>
           {panelBody}
         </div>
-        {showGraphPageLink && isViewer ? (
-          <button
-            type="button"
-            className="graph-page-deep-link"
-            onClick={openGraphPage}
-          >
-            <span className="material-symbols-outlined" aria-hidden>account_tree</span>
-            인물 관계도에서 자세히
-          </button>
-        ) : null}
       </div>
     </>
   );

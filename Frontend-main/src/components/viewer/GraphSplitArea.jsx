@@ -21,8 +21,10 @@ import {
   eventUtils,
   formatChapterOrderAndName,
   stripRedundantBookTitlePrefix,
+  resolveChapterTitleMeta,
 } from '../../utils/viewer/viewerCore';
 import { userGraphPath } from '../../utils/common/urlUtils';
+import { buildGraphViewportRefitKey } from '../../utils/graph/graphCore.js';
 import '../graph/RelationGraph.css';
 import GraphControls, {
   EdgeLabelToggle,
@@ -197,13 +199,18 @@ const GraphSplitTopBar = memo(function GraphSplitTopBar({
         ? byCurrent
         : getChapterData(bookId, resolvedServerChapter);
 
-    const rawTitle = String(ch?.title ?? '').trim();
-    const displayName = rawTitle ? stripRedundantBookTitlePrefix(rawTitle, stripBookTitle) : '';
+    const meta = resolveChapterTitleMeta(ch, stripBookTitle, resolvedServerChapter);
+    const displayName =
+      meta.status === 'ok'
+        ? stripRedundantBookTitlePrefix(meta.raw, stripBookTitle) || meta.display
+        : meta.status === 'collapsed'
+          ? meta.display
+          : '';
 
     return {
       resolvedServerChapter,
       chapterDisplayLabel: formatChapterOrderAndName(resolvedServerChapter, displayName),
-      chapterTitleTooltip: rawTitle || undefined,
+      chapterTitleTooltip: meta.raw || meta.tooltip || undefined,
     };
   }, [bookId, currentChapter, stripBookTitle]);
 
@@ -363,7 +370,7 @@ const GraphContainer = memo(function GraphContainer({
   const selectedElementRef = useRef(null);
   const graphSelectNodeRef = useRef(null);
   const viewportRefitKey = useMemo(
-    () => `${currentChapter ?? ''}:${eventNum ?? ''}`,
+    () => buildGraphViewportRefitKey(currentChapter, eventNum),
     [currentChapter, eventNum]
   );
 
@@ -445,7 +452,6 @@ const GraphContainer = memo(function GraphContainer({
             bookId={bookId}
             sourceEndpoint={activeTooltip.sourceEndpoint}
             targetEndpoint={activeTooltip.targetEndpoint}
-            showGraphPageLink
           />
         )}
       </div>

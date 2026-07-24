@@ -11,6 +11,10 @@ import {
   getChapterEventFallbackData,
   getCachedChapterEvents,
 } from '../graph/graphModel';
+import {
+  enrichGraphCharacters,
+  applyDisplayNamesToElements,
+} from '../graph/graphCore';
 import { resolveGraphElementsProfileImages } from '../common/urlUtils';
 import { resolveChapterIndex, toPositiveInt, toPositiveNumberOrNull } from '../common/valueUtils';
 import { cacheKeyUtils, eventUtils } from './viewerCore';
@@ -149,17 +153,20 @@ export function convertGraphSourceToElements(
   chapter,
   eventIdx,
   deps = DEFAULT_GRAPH_TRANSFORM_DEPS,
-  previousNodeWeights = null
+  previousNodeWeights = null,
+  options = null
 ) {
   const eventMeta = source?.event ?? source?.eventMeta ?? fallbackEventMeta(chapter, eventIdx);
-  const characters = asArray(source?.characters);
+  const bookId = options?.bookId ?? source?.bookId ?? null;
+  const characters = enrichGraphCharacters(asArray(source?.characters), { bookId });
   const relations = asArray(source?.relations);
   const normalizedEvent = graphDataTransformUtils.normalizeApiEvent(eventMeta);
   const elements = graphDataTransformUtils.convertToElements(
     { characters, relations, event: eventMeta },
     normalizedEvent,
     deps,
-    previousNodeWeights
+    previousNodeWeights,
+    { bookId }
   );
   return { elements, normalizedEvent, eventMeta, characters, relations };
 }
@@ -196,22 +203,29 @@ export function resolveCumulativeGraphForDisplay(
   const resolved =
     cachedElements.length > 0
       ? {
-          elements: cachedElements,
+          elements: applyDisplayNamesToElements(cachedElements, {
+            bookId,
+            characters,
+          }),
           eventMeta: cached.eventMeta ?? null,
-          characters,
+          characters: enrichGraphCharacters(characters, { bookId }),
           relations: [],
           normalizedEvent: null,
         }
-      : convertGraphSourceToElements(cached, chapter, eventIdx, deps);
+      : convertGraphSourceToElements(cached, chapter, eventIdx, deps, null, { bookId });
 
   const fallback = getChapterEventFallbackData(bookId, chapter, eventIdx);
+  const resolvedCharacters = resolved.characters.length
+    ? resolved.characters
+    : enrichGraphCharacters(fallback?.characters ?? [], { bookId });
 
   return {
-    elements: resolved.elements,
+    elements: applyDisplayNamesToElements(resolved.elements, {
+      bookId,
+      characters: resolvedCharacters,
+    }),
     eventMeta: resolved.eventMeta ?? fallback?.event ?? null,
-    characters: resolved.characters.length
-      ? resolved.characters
-      : (fallback?.characters ?? []),
+    characters: resolvedCharacters,
     relations: fallback?.relations ?? resolved.relations,
     normalizedEvent: resolved.normalizedEvent ?? null,
   };
@@ -236,8 +250,9 @@ export const graphDataTransformUtils = {
     };
   },
 
-  convertToElements: (resultData, normalizedEvent, deps, previousNodeWeights = null) => {
-    const chars = asArray(resultData.characters);
+  convertToElements: (resultData, normalizedEvent, deps, previousNodeWeights = null, options = null) => {
+    const bookId = options?.bookId ?? resultData?.bookId ?? null;
+    const chars = enrichGraphCharacters(asArray(resultData.characters), { bookId });
     const rels = processRelations(asArray(resultData.relations));
     if (chars.length === 0 && rels.length === 0) return [];
 
@@ -256,6 +271,7 @@ export const graphDataTransformUtils = {
       eventData: normalizedEvent,
       idToProfileImage,
       charactersOrphanMerge: chars.length > 0 ? chars : null,
+      bookId,
     });
   },
 

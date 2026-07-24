@@ -10,6 +10,13 @@ import {
   uniqueStrings,
   normalizeRelation,
   relationEventMetaPassthrough,
+  pickCharacterDisplayName,
+  lookupRememberedCharacterDisplayName,
+  buildManifestCharacterNameLookup,
+  rememberCharacterDisplayName,
+  isUsableCharacterDisplayName,
+  enrichGraphCharacters,
+  extractCharacterId,
 } from './graphCore';
 import { eventUtils, cacheKeyUtils } from '../viewer/viewerCore';
 import { toPositiveInt } from '../common/valueUtils';
@@ -23,7 +30,6 @@ import {
   getChapterData,
   getManifestFromCache,
   calculateMaxChapterFromChapters,
-  findManifestEventInChapter,
   getLastManifestEventInChapter,
   listBookManifestEventIds,
 } from '../common/cache/manifestCache';
@@ -79,10 +85,8 @@ export function createCharacterMaps(characters) {
       const id = extractCharacterId(char);
       if (!id) return;
 
-      idToName[id] =
-        char.common_name ||
-        char.name ||
-        (Array.isArray(char.names) ? char.names[0] : id);
+      const displayName = pickCharacterDisplayName(char);
+      idToName[id] = displayName;
       idToDesc[id] = char.description || char.profileText || '';
       idToDescKo[id] = char.personalityText || '';
       idToMain[id] = !!char.isMainCharacter;
@@ -147,19 +151,6 @@ function validateAndNormalizeProfileImageUrl(profileImage) {
 
   console.warn(`[이미지 검증] 유효하지 않은 이미지 URL 형식: ${trimmed}`);
   return null;
-}
-
-function normalizeCharacterId(id) {
-  if (id === undefined || id === null) return null;
-  const numId = Number(id);
-  if (!Number.isFinite(numId)) return null;
-  return String(Math.trunc(numId));
-}
-
-export function extractCharacterId(character) {
-  if (!character || typeof character !== 'object') return null;
-  const candidate = character.id ?? null;
-  return normalizeCharacterId(candidate);
 }
 
 export function isValidNodeWeight(weight) {
@@ -509,6 +500,7 @@ function deepEqual(obj1, obj2, depth = 0) {
  * @param {Object|null} [params.eventData]
  * @param {Object|null} [params.idToProfileImage]
  * @param {Array|null} [params.charactersOrphanMerge]
+ * @param {string|number|null} [params.bookId]
  * @returns {Array}
  */
 export function convertRelationsToElements({
@@ -522,6 +514,7 @@ export function convertRelationsToElements({
   eventData = null,
   idToProfileImage = null,
   charactersOrphanMerge = null,
+  bookId = null,
 } = {}) {
   if (!Array.isArray(relations)) {
     return [];
@@ -560,11 +553,23 @@ export function convertRelationsToElements({
     });
   }
 
+  const manifestLookup = bookId != null ? buildManifestCharacterNameLookup(bookId) : null;
   const resolvedIdToName = { ...idToName };
   for (const strId of nodeSet) {
     const v = resolvedIdToName[strId];
-    if (v == null || String(v).trim() === '') {
-      resolvedIdToName[strId] = strId;
+    if (isUsableCharacterDisplayName(v, strId)) {
+      rememberCharacterDisplayName(bookId, strId, v);
+      continue;
+    }
+    const resolved =
+      manifestLookup?.get(strId) ||
+      lookupRememberedCharacterDisplayName(bookId, strId) ||
+      '';
+    if (resolved) {
+      resolvedIdToName[strId] = resolved;
+      rememberCharacterDisplayName(bookId, strId, resolved);
+    } else {
+      resolvedIdToName[strId] = `인물 ${strId}`;
     }
   }
 
@@ -866,9 +871,12 @@ export function filterMainCharacters(elements, filterStage) {
  * 노드 겹침 감지 및 자동 조정
  * @param {Object} cy - Cytoscape 인스턴스
  * @param {number} nodeSize - 노드 크기
+ * @param {Object} [options]
+ * @param {Iterable<string>|null} [options.movableIds] - 지정 시 해당 노드만 이동(기존 노드 위치 유지)
+ * @param {number} [options.maxIterations] - 밀어내기 반복 횟수
  * @returns {boolean} 겹침이 있었는지 여부
  */
-export function detectAndResolveOverlap(cy, nodeSize = 40) {
+export function detectAndResolveOverlap(cy, nodeSize = 40, options = {}) {
   if (!cy) {
     return false;
   }
@@ -876,10 +884,23 @@ export function detectAndResolveOverlap(cy, nodeSize = 40) {
   if (typeof nodeSize !== 'number' || nodeSize <= 0) {
     nodeSize = 40;
   }
-  
+
+  const movableIdSet = options.movableIds
+    ? new Set([...options.movableIds].map(String).filter((id) => id !== ''))
+    : null;
+  if (movableIdSet && movableIdSet.size === 0) {
+    return false;
+  }
+
   const nodes = cy.nodes();
   const NODE_SIZE = nodeSize;
   const MIN_DISTANCE = NODE_SIZE * 1.0;
+  const maxIterations =
+    typeof options.maxIterations === 'number' && options.maxIterations > 0
+      ? options.maxIterations
+      : movableIdSet
+        ? 8
+        : 1;
   let hasOverlap = false;
   
   // 성능 최적화: 노드가 많을 때는 겹침 감지를 건너뜀
@@ -891,37 +912,67 @@ export function detectAndResolveOverlap(cy, nodeSize = 40) {
   // 위치 캐싱으로 성능 개선
   const nodePositions = nodes.map(node => ({
     node,
+    id: String(node.id()),
     pos: node.position()
   }));
 
-  for (let i = 0; i < nodePositions.length; i++) {
-    for (let j = i + 1; j < nodePositions.length; j++) {
-      const { node: node1, pos: pos1 } = nodePositions[i];
-      const { node: node2, pos: pos2 } = nodePositions[j];
-      
-      const dx = pos1.x - pos2.x;
-      const dy = pos1.y - pos2.y;
-      const distanceSquared = dx * dx + dy * dy; // 제곱근 계산 생략으로 성능 개선
-      
-      if (distanceSquared < MIN_DISTANCE * MIN_DISTANCE) {
+  for (let iter = 0; iter < maxIterations; iter++) {
+    let movedThisPass = false;
+
+    for (let i = 0; i < nodePositions.length; i++) {
+      for (let j = i + 1; j < nodePositions.length; j++) {
+        const { node: node1, id: id1, pos: pos1 } = nodePositions[i];
+        const { node: node2, id: id2, pos: pos2 } = nodePositions[j];
+
+        const node1Movable = !movableIdSet || movableIdSet.has(id1);
+        const node2Movable = !movableIdSet || movableIdSet.has(id2);
+        if (!node1Movable && !node2Movable) continue;
+
+        const dx = pos1.x - pos2.x;
+        const dy = pos1.y - pos2.y;
+        const distanceSquared = dx * dx + dy * dy;
+
+        if (distanceSquared >= MIN_DISTANCE * MIN_DISTANCE) continue;
+
         hasOverlap = true;
+        movedThisPass = true;
         const distance = Math.sqrt(distanceSquared);
-        const angle = Math.atan2(dy, dx);
+        const angle =
+          distance < 1e-6
+            ? (i + j) * 0.7
+            : Math.atan2(dy, dx);
         const pushDistance = MIN_DISTANCE - distance + 20;
-        
-        const newX1 = pos1.x + Math.cos(angle) * pushDistance * 0.5;
-        const newY1 = pos1.y + Math.sin(angle) * pushDistance * 0.5;
-        const newX2 = pos2.x - Math.cos(angle) * pushDistance * 0.5;
-        const newY2 = pos2.y - Math.sin(angle) * pushDistance * 0.5;
-        
-        node1.position({ x: newX1, y: newY1 });
-        node2.position({ x: newX2, y: newY2 });
-        
-        // 위치 캐시 업데이트
-        nodePositions[i].pos = { x: newX1, y: newY1 };
-        nodePositions[j].pos = { x: newX2, y: newY2 };
+        const cos = Math.cos(angle);
+        const sin = Math.sin(angle);
+
+        if (node1Movable && node2Movable) {
+          const half = pushDistance * 0.5;
+          const newPos1 = { x: pos1.x + cos * half, y: pos1.y + sin * half };
+          const newPos2 = { x: pos2.x - cos * half, y: pos2.y - sin * half };
+          node1.position(newPos1);
+          node2.position(newPos2);
+          nodePositions[i].pos = newPos1;
+          nodePositions[j].pos = newPos2;
+        } else if (node1Movable) {
+          // 신규 노드만: 기존 노드에서 멀어지는 방향으로 전부 이동
+          const newPos1 = {
+            x: pos2.x + cos * (MIN_DISTANCE + 20),
+            y: pos2.y + sin * (MIN_DISTANCE + 20),
+          };
+          node1.position(newPos1);
+          nodePositions[i].pos = newPos1;
+        } else {
+          const newPos2 = {
+            x: pos1.x - cos * (MIN_DISTANCE + 20),
+            y: pos1.y - sin * (MIN_DISTANCE + 20),
+          };
+          node2.position(newPos2);
+          nodePositions[j].pos = newPos2;
+        }
       }
     }
+
+    if (!movedThisPass) break;
   }
   
   return hasOverlap;
@@ -1044,7 +1095,10 @@ const buildChapterCachePayload = (
   sortedEvents.forEach((event, index) => {
     // API는 이벤트별 누적 스냅샷을 주므로 이어 붙이지 않고 해당 시점 값을 그대로 사용
     const relations = Array.isArray(event?.relations) ? event.relations : [];
-    const snapshotCharacters = Array.isArray(event?.characters) ? event.characters : [];
+    const snapshotCharacters = enrichGraphCharacters(
+      Array.isArray(event?.characters) ? event.characters : [],
+      { bookId }
+    );
     const nodeWeights = buildNodeWeights(snapshotCharacters);
     const { idToName, idToDesc, idToDescKo, idToMain, idToNames, idToProfileImage } =
       createCharacterMaps(snapshotCharacters);
@@ -1062,6 +1116,7 @@ const buildChapterCachePayload = (
         eventData: event?.event ?? null,
         idToProfileImage,
         charactersOrphanMerge: snapshotCharacters.length > 0 ? snapshotCharacters : null,
+        bookId,
       });
     } catch (error) {
       console.error('convertRelationsToElements 실패:', error);
