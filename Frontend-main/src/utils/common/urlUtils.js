@@ -537,7 +537,13 @@ export function userGraphPath(bookId) {
 const blobUrlCache = new Map();
 const inFlightRequests = new Map();
 const failedFetchUrls = new Map();
-const FAILED_FETCH_TTL_MS = 60_000;
+/** 최종 실패 후 짧은 쿨다운만 (데이터는 존재한다고 가정 — 일시적 fetch 실패 대비) */
+const FAILED_FETCH_TTL_MS = 5_000;
+const ASSET_FETCH_MAX_ATTEMPTS = 3;
+const ASSET_FETCH_RETRY_BASE_MS = 400;
+const GRAPH_IMAGE_DEFERRED_RETRY_MS = 1_500;
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 const isFailedRecently = (fetchUrl) => {
   const failedAt = failedFetchUrls.get(fetchUrl);
@@ -556,6 +562,12 @@ const markFetchFailed = (fetchUrl) => {
 const clearFetchFailed = (fetchUrl) => {
   if (fetchUrl) failedFetchUrls.delete(fetchUrl);
 };
+
+const isRetryableAssetStatus = (status) =>
+  status === 404 || status === 408 || status === 429 || status >= 500;
+
+const stillNeedsProtectedImageResolve = (image) =>
+  !!image && isProtectedPublicAsset(image) && !String(image).startsWith('blob:');
 
 function extractBookIdFromPublicAssetUrl(url) {
   const s = sanitizeAssetUrl(url);
@@ -582,7 +594,7 @@ const buildCoverRefreshSource = (sanitized) => {
   };
 };
 
-const fetchProtectedBlobUrl = async (sourceUrl) => {
+const fetchProtectedBlobUrl = async (sourceUrl, { force = false } = {}) => {
   const sanitized = sanitizeAssetUrl(sourceUrl);
   if (!sanitized) return null;
 
@@ -597,9 +609,10 @@ const fetchProtectedBlobUrl = async (sourceUrl) => {
     return blobUrlCache.get(fetchUrl);
   }
 
-  if (isFailedRecently(fetchUrl)) {
+  if (!force && isFailedRecently(fetchUrl)) {
     return null;
   }
+  if (force) clearFetchFailed(fetchUrl);
 
   if (inFlightRequests.has(fetchUrl)) {
     return inFlightRequests.get(fetchUrl);
@@ -608,19 +621,29 @@ const fetchProtectedBlobUrl = async (sourceUrl) => {
   const request = (async () => {
     try {
       const { authenticatedFetch } = await import('../api/authApi');
-      const res = await authenticatedFetch(fetchUrl);
-      if (!res.ok) {
-        if (res.status === 404) {
-          markFetchFailed(fetchUrl);
+
+      for (let attempt = 1; attempt <= ASSET_FETCH_MAX_ATTEMPTS; attempt++) {
+        try {
+          const res = await authenticatedFetch(fetchUrl);
+          if (res.ok) {
+            const blob = await res.blob();
+            const blobUrl = URL.createObjectURL(blob);
+            blobUrlCache.set(fetchUrl, blobUrl);
+            clearFetchFailed(fetchUrl);
+            return blobUrl;
+          }
+
+          if (!isRetryableAssetStatus(res.status) || attempt === ASSET_FETCH_MAX_ATTEMPTS) {
+            break;
+          }
+        } catch {
+          if (attempt === ASSET_FETCH_MAX_ATTEMPTS) break;
         }
-        return null;
+
+        await sleep(ASSET_FETCH_RETRY_BASE_MS * attempt);
       }
-      const blob = await res.blob();
-      const blobUrl = URL.createObjectURL(blob);
-      blobUrlCache.set(fetchUrl, blobUrl);
-      clearFetchFailed(fetchUrl);
-      return blobUrl;
-    } catch {
+
+      markFetchFailed(fetchUrl);
       return null;
     } finally {
       inFlightRequests.delete(fetchUrl);
@@ -635,16 +658,17 @@ export async function fetchAuthenticatedAssetBlobUrl(sourceUrl, options = {}) {
   const sanitized = sanitizeAssetUrl(sourceUrl);
   if (!sanitized) return null;
 
-  const result = await fetchProtectedBlobUrl(sourceUrl);
+  const { force = false, refreshSource } = options;
+  const result = await fetchProtectedBlobUrl(sourceUrl, { force });
   if (result) return result;
 
-  const refreshSource = options.refreshSource ?? buildCoverRefreshSource(sanitized);
-  if (typeof refreshSource !== 'function') {
+  const refresh = refreshSource ?? buildCoverRefreshSource(sanitized);
+  if (typeof refresh !== 'function') {
     return null;
   }
 
   try {
-    const refreshed = await refreshSource();
+    const refreshed = await refresh();
     if (typeof refreshed !== 'string' || !refreshed.trim()) {
       return null;
     }
@@ -658,27 +682,34 @@ export async function fetchAuthenticatedAssetBlobUrl(sourceUrl, options = {}) {
     }
 
     if (nextSanitized === sanitized) {
-      return fetchProtectedBlobUrl(sourceUrl);
+      return fetchProtectedBlobUrl(sourceUrl, { force: true });
     }
-    return fetchProtectedBlobUrl(refreshed);
+    return fetchProtectedBlobUrl(refreshed, { force: true });
   } catch {
     return null;
   }
 }
 
-export async function resolveGraphElementsProfileImages(elements) {
-  if (!Array.isArray(elements) || elements.length === 0) return elements;
-
-  return Promise.all(
-    elements.map(async (el) => {
-      const image = el?.data?.image;
-      if (!image || !isProtectedPublicAsset(image)) return el;
-      const blobUrl = await fetchAuthenticatedAssetBlobUrl(image);
-      if (!blobUrl) return el;
-      return { ...el, data: { ...el.data, image: blobUrl } };
-    })
-  );
+async function resolveOneGraphProfileImage(el, { force = false } = {}) {
+  const image = el?.data?.image;
+  if (!stillNeedsProtectedImageResolve(image)) return el;
+  const blobUrl = await fetchAuthenticatedAssetBlobUrl(image, { force });
+  if (!blobUrl || blobUrl === image) return el;
+  return { ...el, data: { ...el.data, image: blobUrl } };
 }
+
+export function graphElementsHaveUnresolvedProfileImages(elements) {
+  if (!Array.isArray(elements) || elements.length === 0) return false;
+  return elements.some((el) => stillNeedsProtectedImageResolve(el?.data?.image));
+}
+
+export async function resolveGraphElementsProfileImages(elements, options = {}) {
+  if (!Array.isArray(elements) || elements.length === 0) return elements;
+  const { force = false } = options;
+  return Promise.all(elements.map((el) => resolveOneGraphProfileImage(el, { force })));
+}
+
+export { GRAPH_IMAGE_DEFERRED_RETRY_MS };
 
 /* ─── 공통 에러 로깅·handleError 래퍼 (from errorUtils) ─── */
 

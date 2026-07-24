@@ -196,51 +196,108 @@ async function authorizedFetch(url, options = {}, retryCount = 0) {
   return response;
 }
 
+const API_REQUEST_MAX_ATTEMPTS = 3;
+const API_REQUEST_RETRY_BASE_MS = 400;
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const isNetworkFetchError = (error) => {
+  if (!error || error.status === 401) return false;
+  if (error.name === 'TypeError') return true;
+  return /failed to fetch|networkerror|load failed|network request failed/i.test(
+    String(error.message || '')
+  );
+};
+
+/** 일시적 API 실패 — 403/404는 softFail, 401은 토큰 갱신 경로로 둔다 */
+const isRetryableApiStatus = (status, method = 'GET') => {
+  if (status === 408 || status === 429) return true;
+  if (status === 502 || status === 503 || status === 504) return true;
+  const m = String(method || 'GET').toUpperCase();
+  // 500은 GET만 (쓰기 중복 방지)
+  if (status === 500 && (m === 'GET' || m === 'HEAD')) return true;
+  return false;
+};
+
+const toHttpError = async (response) => {
+  let data;
+  try {
+    data = await response.json();
+  } catch {
+    const error = new Error('응답을 파싱할 수 없습니다');
+    error.status = response.status;
+    return error;
+  }
+  const error = new Error(data.message || `API 요청 실패: ${response.status}`);
+  error.status = response.status;
+  return error;
+};
+
+const softFailFromStatus = (status) => {
+  if (status === 404) return makeSilentError('NOT_FOUND', '데이터를 찾을 수 없습니다');
+  if (status === 403) return makeSilentError('FORBIDDEN', '접근 권한이 없습니다');
+  return makeSilentError('ERROR', `API 요청 실패: ${status}`);
+};
+
 /**
  * @param {string} endpoint `/v2/...` 형태 (`/api` prefix는 내부에서 붙임)
  * @param {object} [options]
  * @param {number[]} [options.softFailStatuses] throw 대신 makeSilentError를 반환할 HTTP 상태
+ * @param {number} [options.maxAttempts] 일시 실패 재시도 횟수 (기본 3)
+ * @param {boolean} [options.retry] false면 재시도 안 함
  */
 export const authenticatedRequest = async (endpoint, options = {}) => {
-  const { softFailStatuses = [], ...requestOptions } = options;
+  const {
+    softFailStatuses = [],
+    maxAttempts = API_REQUEST_MAX_ATTEMPTS,
+    retry = true,
+    ...requestOptions
+  } = options;
   const isFormData = requestOptions.body instanceof FormData;
-  const response = await authorizedFetch(`${getApiBaseUrl()}/api${endpoint}`, {
-    ...requestOptions,
-    skipJsonContentType: isFormData,
-    acceptHeader: 'application/json',
-  });
+  const method = String(requestOptions.method || 'GET').toUpperCase();
+  const attempts = retry === false ? 1 : Math.max(1, Number(maxAttempts) || API_REQUEST_MAX_ATTEMPTS);
+  const url = `${getApiBaseUrl()}/api${endpoint}`;
 
-  if (!response.ok) {
+  let lastError = null;
+
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    let response;
+    try {
+      response = await authorizedFetch(url, {
+        ...requestOptions,
+        skipJsonContentType: isFormData,
+        acceptHeader: 'application/json',
+      });
+    } catch (error) {
+      if (error?.status === 401) throw error;
+      lastError = error;
+      if (!isNetworkFetchError(error) || attempt >= attempts) throw error;
+      await sleep(API_REQUEST_RETRY_BASE_MS * attempt);
+      continue;
+    }
+
+    if (response.ok) {
+      return response.json();
+    }
+
     if (response.status === 401) {
       clearAuthData();
       throw createAuthExpiredError();
     }
 
     if (softFailStatuses.includes(response.status)) {
-      if (response.status === 404) {
-        return makeSilentError('NOT_FOUND', '데이터를 찾을 수 없습니다');
-      }
-      if (response.status === 403) {
-        return makeSilentError('FORBIDDEN', '접근 권한이 없습니다');
-      }
-      return makeSilentError('ERROR', `API 요청 실패: ${response.status}`);
+      return softFailFromStatus(response.status);
     }
 
-    let data;
-    try {
-      data = await response.json();
-    } catch {
-      const error = new Error('응답을 파싱할 수 없습니다');
-      error.status = response.status;
-      throw error;
+    if (isRetryableApiStatus(response.status, method) && attempt < attempts) {
+      await sleep(API_REQUEST_RETRY_BASE_MS * attempt);
+      continue;
     }
 
-    const error = new Error(data.message || `API 요청 실패: ${response.status}`);
-    error.status = response.status;
-    throw error;
+    throw await toHttpError(response);
   }
 
-  return response.json();
+  throw lastError || new Error('API 요청 실패');
 };
 
 export const refreshToken = async (options = {}) => {

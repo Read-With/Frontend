@@ -42,6 +42,55 @@
 }
 
 /* ============================================================
+   Shared interaction (focus ring / chrome hover)
+   ============================================================ */
+.graph-zoom-btn:focus-visible,
+.graph-node-tooltip .tooltip-close-btn:focus-visible,
+.edge-tooltip-container .tooltip-close-btn:focus-visible,
+.graph-sidebar-panel .tooltip-close-btn:focus-visible,
+.edge-tooltip-tab:focus-visible,
+.edge-tooltip-retry-btn:focus-visible,
+.relation-modal-nav-btn:focus-visible,
+.relation-modal-list-item:focus-visible,
+.modal-close-btn:focus-visible,
+.tooltip-action-btn:focus-visible,
+.graph-fullscreen-btn:focus-visible,
+.graph-canvas-legend-btn:focus-visible,
+.graph-topbar-more-btn:focus-visible,
+.edge-label-switch:focus-visible,
+.character-filter-option:focus-visible,
+.graph-search-input:focus-visible,
+.graph-search-submit:focus-visible,
+.graph-chapter-rail-fab:focus-visible,
+.graph-chapter-rail-toggle:focus-visible {
+  outline: 0.125rem solid var(--rg-brand);
+  outline-offset: 0.125rem;
+}
+
+.summary-toggle-btn:focus-visible,
+.relation-analysis-btn:focus-visible,
+.graph-chapter-rail-item:focus-visible {
+  outline: 0.125rem solid var(--rg-brand);
+  outline-offset: -0.125rem;
+}
+
+.graph-fullscreen-btn:hover,
+.graph-canvas-legend-btn:hover,
+.graph-canvas-legend-btn[aria-expanded='true'],
+.graph-topbar-more-btn:hover,
+.graph-topbar-more-btn[aria-expanded='true'] {
+  background: var(--rg-brand-tint-soft);
+  border-color: var(--rg-border-strong);
+}
+
+.summary-toggle-btn:hover,
+.relation-analysis-btn:hover,
+.relation-modal-nav-btn:hover,
+.relation-modal-action-btn--secondary:hover {
+  background: var(--rg-brand-tint);
+}
+
+/* ============================================================
    Graph canvas area
    ============================================================ */
 .graph-canvas-area {
@@ -148,11 +197,6 @@
   background: #f1f5f9;
 }
 
-.graph-zoom-btn:focus-visible {
-  outline: 0.125rem solid var(--rg-brand);
-  outline-offset: 0.125rem;
-}
-
 /* ============================================================
    Edge / Node floating tooltip chrome (shared)
    ============================================================ */
@@ -215,13 +259,6 @@
 .graph-sidebar-panel .tooltip-close-btn:hover {
   background: rgba(92, 111, 92, 0.1);
   color: var(--rg-brand);
-}
-
-.graph-node-tooltip .tooltip-close-btn:focus-visible,
-.edge-tooltip-container .tooltip-close-btn:focus-visible,
-.graph-sidebar-panel .tooltip-close-btn:focus-visible {
-  outline: 0.125rem solid var(--rg-brand);
-  outline-offset: 0.125rem;
 }
 
 .tooltip-close-btn--offset {
@@ -366,11 +403,6 @@
 .edge-tooltip-tab.active {
   color: var(--rg-text);
   font-weight: 600;
-}
-
-.edge-tooltip-tab:focus-visible {
-  outline: 0.125rem solid var(--rg-brand);
-  outline-offset: 0.125rem;
 }
 
 .edge-tooltip-tab-indicator {
@@ -552,11 +584,6 @@
 .edge-tooltip-retry-btn:hover {
   background: var(--rg-brand);
   color: #fff;
-}
-
-.edge-tooltip-retry-btn:focus-visible {
-  outline: 0.125rem solid var(--rg-brand);
-  outline-offset: 0.125rem;
 }
 
 @keyframes edgeTooltipShimmer {
@@ -851,24 +878,14 @@
   margin: 0;
 }
 
-.summary-toggle-btn:hover,
-.relation-analysis-btn:hover {
-  background: var(--rg-brand-tint);
-}
-
-.summary-toggle-btn:focus-visible,
-.relation-analysis-btn:focus-visible {
-  outline: 0.125rem solid var(--rg-brand);
-  outline-offset: -0.125rem;
-}
-
 /* 사이드바: 노드/엣지 타이포 확대 */
 .graph-sidebar-panel .node-tooltip-name {
   font-size: 1.25rem;
   font-weight: 700;
 }
 
-.graph-sidebar-panel .node-tooltip-aliases .relation-tag {
+.graph-sidebar-panel .node-tooltip-aliases .relation-tag,
+.edge-tooltip-content--sidebar .relation-tag {
   font-size: 0.875rem;
   font-weight: 600;
   padding: 0.3125rem 0.6875rem;
@@ -926,12 +943,6 @@
   margin-top: 1.75rem;
   padding-top: 1.75rem;
   border-top: 0.0625rem solid var(--rg-border);
-}
-
-.edge-tooltip-content--sidebar .relation-tag {
-  font-size: 0.875rem;
-  font-weight: 600;
-  padding: 0.3125rem 0.6875rem;
 }
 
 .edge-tooltip-content--sidebar .relation-tags {
@@ -1095,15 +1106,6 @@
   cursor: pointer;
 }
 
-.relation-modal-nav-btn:hover {
-  background: var(--rg-brand-tint);
-}
-
-.relation-modal-nav-btn:focus-visible {
-  outline: 0.125rem solid var(--rg-brand);
-  outline-offset: 0.125rem;
-}
-
 .relation-modal-legend {
   display: flex;
   align-items: center;
@@ -1149,10 +1151,6 @@
   display: flex;
   gap: 1rem;
   align-items: stretch;
-}
-
-.relation-modal-body.has-chart {
-  flex-direction: row;
 }
 
 .relation-modal-chart {
@@ -1225,11 +1223,6 @@
   background: var(--rg-brand-tint-soft);
 }
 
-.relation-modal-list-item:focus-visible {
-  outline: 0.125rem solid var(--rg-brand);
-  outline-offset: 0.125rem;
-}
-
 .relation-modal-list-item .tooltip-relation-tags {
   grid-column: 1 / -1;
 }
@@ -1290,10 +1283,6 @@
   border: 0.0625rem solid var(--rg-brand);
 }
 
-.relation-modal-action-btn--secondary:hover {
-  background: var(--rg-brand-tint);
-}
-
 .modal-close-btn {
   background: none;
   border: none;
@@ -1313,11 +1302,6 @@
 .modal-close-btn:hover {
   background: #f3f4f6;
   color: #374151;
-}
-
-.modal-close-btn:focus-visible {
-  outline: 0.125rem solid var(--rg-brand);
-  outline-offset: 0.125rem;
 }
 
 @keyframes fadeIn {
@@ -1514,11 +1498,6 @@
   border-color: var(--rg-text-subtle);
 }
 
-.tooltip-action-btn:focus-visible {
-  outline: 0.125rem solid var(--rg-brand);
-  outline-offset: 0.125rem;
-}
-
 .tooltip-relation-tags {
   display: flex;
   flex-wrap: wrap;
@@ -1536,11 +1515,7 @@
   font-weight: 600;
 }
 
-.tooltip-name-with-dot {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-}
+.tooltip-name-with-dot,
 
 .tooltip-name-dot {
   width: var(--dot-size, 0.875rem);
@@ -1676,10 +1651,6 @@
   height: auto;
 }
 
-.tooltip-summary-section--collapsed {
-  height: 3.75rem;
-}
-
 .tooltip-summary-chevron {
   font-size: 1.25rem;
   transform: rotate(0deg);
@@ -1735,9 +1706,7 @@
 
 .tooltip-spoiler-title.is-fading,
 .tooltip-spoiler-text.is-fading,
-.tooltip-spoiler-actions.is-fading {
-  animation: fadeIn 0.4s ease-in-out;
-}
+.tooltip-spoiler-actions.is-fading,
 
 .tooltip-summary-content {
   margin-top: 1rem;
@@ -1894,7 +1863,7 @@
 }
 
 /* ============================================================
-   Viewer split: legend, status, search, deep-link, chrome
+   Viewer split: legend, status, search, chrome
    ============================================================ */
 .graph-fullscreen-btn {
   height: 1.75rem;
@@ -1917,16 +1886,6 @@
 
 .graph-fullscreen-btn .material-symbols-outlined {
   font-size: 1.125rem;
-}
-
-.graph-fullscreen-btn:hover {
-  background: var(--rg-brand-tint-soft);
-  border-color: var(--rg-border-strong);
-}
-
-.graph-fullscreen-btn:focus-visible {
-  outline: 0.125rem solid var(--rg-brand);
-  outline-offset: 0.125rem;
 }
 
 .graph-canvas-legend-wrap {
@@ -1961,17 +1920,6 @@
 
 .graph-canvas-legend-btn .material-symbols-outlined {
   font-size: 1.125rem;
-}
-
-.graph-canvas-legend-btn:hover,
-.graph-canvas-legend-btn[aria-expanded='true'] {
-  background: var(--rg-brand-tint-soft);
-  border-color: var(--rg-border-strong);
-}
-
-.graph-canvas-legend-btn:focus-visible {
-  outline: 0.125rem solid var(--rg-brand);
-  outline-offset: 0.125rem;
 }
 
 .graph-canvas-legend {
@@ -2255,17 +2203,6 @@
   font-size: 1.125rem;
 }
 
-.graph-topbar-more-btn:hover,
-.graph-topbar-more-btn[aria-expanded='true'] {
-  background: var(--rg-brand-tint-soft);
-  border-color: var(--rg-border-strong);
-}
-
-.graph-topbar-more-btn:focus-visible {
-  outline: 0.125rem solid var(--rg-brand);
-  outline-offset: 0.125rem;
-}
-
 .graph-topbar-more-panel {
   position: absolute;
   top: calc(100% + 0.375rem);
@@ -2349,12 +2286,6 @@
   left: 1rem;
 }
 
-.edge-label-switch:focus-visible,
-.character-filter-option:focus-visible {
-  outline: 0.125rem solid var(--rg-brand);
-  outline-offset: 0.125rem;
-}
-
 .character-filter {
   display: inline-flex;
   align-items: center;
@@ -2427,11 +2358,6 @@
   box-shadow: 0 0 0 0.125rem rgba(92, 111, 92, 0.12);
 }
 
-.graph-search-input:focus-visible {
-  outline: 0.125rem solid var(--rg-brand);
-  outline-offset: 0.125rem;
-}
-
 .graph-search-submit {
   display: flex;
   align-items: center;
@@ -2456,11 +2382,6 @@
   background: var(--rg-surface-indigo);
   transform: translateY(-1px);
   box-shadow: 0 0.125rem 0.5rem rgba(0, 0, 0, 0.12);
-}
-
-.graph-search-submit:focus-visible {
-  outline: 0.125rem solid var(--rg-brand);
-  outline-offset: 0.125rem;
 }
 
 .graph-search-toast {
@@ -2642,11 +2563,6 @@
   font-size: 1.25rem;
 }
 
-.graph-chapter-rail-fab:focus-visible {
-  outline: 0.125rem solid var(--rg-brand);
-  outline-offset: 0.125rem;
-}
-
 .graph-chapter-rail {
   position: fixed;
   top: 0;
@@ -2706,11 +2622,6 @@
   font-size: 1.25rem;
 }
 
-.graph-chapter-rail-toggle:focus-visible {
-  outline: 0.125rem solid var(--rg-brand);
-  outline-offset: 0.125rem;
-}
-
 .graph-chapter-rail-heading {
   min-width: 0;
   display: flex;
@@ -2766,10 +2677,7 @@
   padding-right: 0.25rem;
 }
 
-.graph-chapter-rail-item:hover {
-  background: var(--rg-brand-tint-soft);
-}
-
+.graph-chapter-rail-item:hover,
 .graph-chapter-rail-item.is-focused {
   background: var(--rg-brand-tint-soft);
 }
@@ -2783,11 +2691,6 @@
 
 .graph-chapter-rail-item.is-empty {
   opacity: 0.55;
-}
-
-.graph-chapter-rail-item:focus-visible {
-  outline: 0.125rem solid var(--rg-brand);
-  outline-offset: -0.125rem;
 }
 
 .graph-chapter-rail-num {
@@ -2855,13 +2758,6 @@
   opacity: 0.8;
 }
 
-.graph-chapter-rail-flags {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.25rem;
-  flex-shrink: 0;
-}
-
 .graph-chapter-rail-dot {
   width: 0.375rem;
   height: 0.375rem;
@@ -2874,15 +2770,4 @@
   position: absolute;
   top: 0.35rem;
   right: 0.35rem;
-}
-
-.graph-chapter-rail-badge {
-  font-size: 0.625rem;
-  font-weight: 700;
-  letter-spacing: 0.02em;
-  color: var(--rg-text-muted);
-  border: 0.0625rem solid var(--rg-border-muted);
-  border-radius: var(--rg-radius-sm);
-  padding: 0.0625rem 0.25rem;
-  line-height: 1.2;
 }

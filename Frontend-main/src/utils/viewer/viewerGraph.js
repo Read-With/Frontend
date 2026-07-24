@@ -15,7 +15,11 @@ import {
   enrichGraphCharacters,
   applyDisplayNamesToElements,
 } from '../graph/graphCore';
-import { resolveGraphElementsProfileImages } from '../common/urlUtils';
+import {
+  resolveGraphElementsProfileImages,
+  graphElementsHaveUnresolvedProfileImages,
+  GRAPH_IMAGE_DEFERRED_RETRY_MS,
+} from '../common/urlUtils';
 import { resolveChapterIndex, toPositiveInt, toPositiveNumberOrNull } from '../common/valueUtils';
 import { cacheKeyUtils, eventUtils } from './viewerCore';
 import { resolveServerEventMatch } from './viewerSession';
@@ -35,10 +39,25 @@ export function commitVisibleGraphElements(setElements, nextElements, { applyTok
   const visibleElements = Array.isArray(nextElements) ? nextElements : [];
   setElements(visibleElements);
   const token = applyTokenRef ? ++applyTokenRef.current : null;
-  void resolveGraphElementsProfileImages(visibleElements).then((resolved) => {
-    if (applyTokenRef && token !== applyTokenRef.current) return;
+
+  const applyIfCurrent = (resolved) => {
+    if (applyTokenRef && token !== applyTokenRef.current) return false;
     setElements(resolved);
+    return true;
+  };
+
+  void resolveGraphElementsProfileImages(visibleElements).then((resolved) => {
+    if (!applyIfCurrent(resolved)) return;
+    if (!graphElementsHaveUnresolvedProfileImages(resolved)) return;
+
+    setTimeout(() => {
+      if (applyTokenRef && token !== applyTokenRef.current) return;
+      void resolveGraphElementsProfileImages(resolved, { force: true }).then((retried) => {
+        applyIfCurrent(retried);
+      });
+    }, GRAPH_IMAGE_DEFERRED_RETRY_MS);
   });
+
   return visibleElements;
 }
 
