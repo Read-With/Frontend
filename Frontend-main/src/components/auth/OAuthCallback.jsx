@@ -290,7 +290,7 @@ const OAuthCallback = () => {
         </ol>
 
         {loadingPhase >= LOADING_PHASES.length - 1 ? (
-          <p className="oauth-callback-hint is-visible">
+          <p className="oauth-callback-hint">
             첫 로그인이거나 서버가 깨어나는 중이면 10~20초 정도 걸릴 수 있어요.
           </p>
         ) : null}

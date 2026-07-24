@@ -1,20 +1,37 @@
 .landing-page {
+  --landing-bg: #f5f1e6;
+  --landing-brand: #3e4f2f;
+  --landing-brand-mid: #586544;
+  --landing-brand-border: #2d5016;
+  --landing-fg: #fefefe;
+  --landing-text: #3e4f2f;
+  --landing-lead: #3d4a52;
+  --landing-desc: #5a6470;
+  --landing-logo: #586544;
+  --landing-spine: 0.5rem;
+  --landing-gutter: 1.25rem;
+  --landing-radius: 0.25rem;
+  --landing-focus: #586544;
+
   min-height: 100vh;
+  min-height: 100dvh;
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 3rem 1.5rem;
+  padding:
+    max(3rem, env(safe-area-inset-top, 0px))
+    max(1.5rem, env(safe-area-inset-right, 0px))
+    max(3rem, env(safe-area-inset-bottom, 0px))
+    max(1.5rem, env(safe-area-inset-left, 0px));
   box-sizing: border-box;
-  background: #F5F1E6;
+  background: var(--landing-bg);
 }
 
 .landing-content {
   width: 100%;
   max-width: 48.75rem;
   margin: 0 auto;
-  --landing-spine: 0.5rem;
-  --landing-gutter: 2rem;
-  border-left: var(--landing-spine) solid #3E4F2F;
+  border-left: var(--landing-spine) solid var(--landing-brand);
   padding-left: var(--landing-gutter);
 }
 
@@ -22,7 +39,7 @@
   margin: 0 0 2.5rem;
   font-size: 0.8125rem;
   font-weight: 500;
-  color: #586544;
+  color: var(--landing-logo);
   letter-spacing: 0.12em;
   text-transform: uppercase;
 }
@@ -31,10 +48,10 @@
   margin: 0 0 2.25rem;
   font-size: clamp(1.05rem, 3.8vw, 1.75rem);
   font-weight: 600;
-  color: #3E4F2F;
+  color: var(--landing-text);
   line-height: 1.55;
   letter-spacing: 0.02em;
-  white-space: nowrap;
+  word-break: keep-all;
 }
 
 .landing-body {
@@ -54,8 +71,7 @@
   font-weight: 400;
   line-height: 1.85;
   letter-spacing: 0.02em;
-  color: #3d4a52;
-  white-space: nowrap;
+  color: var(--landing-lead);
 }
 
 .landing-desc {
@@ -63,7 +79,7 @@
   font-weight: 400;
   line-height: 1.75;
   letter-spacing: 0.04em;
-  color: #5a6470;
+  color: var(--landing-desc);
 }
 
 .landing-desc-line {
@@ -88,10 +104,10 @@
   font-size: 0.9375rem;
   font-weight: 600;
   letter-spacing: 0.02em;
-  color: #FEFEFE;
-  background: #3E4F2F;
-  border: 0.0625rem solid #2D5016;
-  border-radius: 0.25rem;
+  color: var(--landing-fg);
+  background: var(--landing-brand);
+  border: 0.0625rem solid var(--landing-brand-border);
+  border-radius: var(--landing-radius);
   box-shadow:
     0 0.0625rem 0.125rem rgba(62, 79, 47, 0.1),
     0 0.125rem 0.375rem rgba(62, 79, 47, 0.08);
@@ -101,12 +117,11 @@
     border-color 0.2s ease,
     box-shadow 0.2s ease,
     transform 0.2s ease;
-  white-space: nowrap;
 }
 
 .landing-login-btn:hover:not(:disabled) {
-  background: #586544;
-  border-color: #3E4F2F;
+  background: var(--landing-brand-mid);
+  border-color: var(--landing-brand);
   box-shadow:
     0 0.125rem 0.25rem rgba(62, 79, 47, 0.12),
     0 0.375rem 1rem rgba(62, 79, 47, 0.14);
@@ -120,12 +135,8 @@
     0 0.125rem 0.25rem rgba(62, 79, 47, 0.08);
 }
 
-.landing-login-btn:focus {
-  outline: none;
-}
-
 .landing-login-btn:focus-visible {
-  outline: 0.125rem solid #586544;
+  outline: 0.125rem solid var(--landing-focus);
   outline-offset: 0.1875rem;
 }
 
@@ -142,7 +153,7 @@
   justify-content: center;
   width: 1.375rem;
   height: 1.375rem;
-  background: #FEFEFE;
+  background: var(--landing-fg);
   border-radius: 50%;
   flex-shrink: 0;
 }
@@ -157,7 +168,7 @@
   width: 1.125rem;
   height: 1.125rem;
   border: 0.125rem solid rgba(255, 255, 255, 0.35);
-  border-top-color: #FEFEFE;
+  border-top-color: var(--landing-fg);
   border-radius: 50%;
   flex-shrink: 0;
   animation: landing-login-spin 0.7s linear infinite;
@@ -171,7 +182,12 @@
 
 @media (min-width: 40rem) {
   .landing-page {
-    padding: 4rem 2.5rem;
+    --landing-gutter: 2rem;
+    padding:
+      max(4rem, env(safe-area-inset-top, 0px))
+      max(2.5rem, env(safe-area-inset-right, 0px))
+      max(4rem, env(safe-area-inset-bottom, 0px))
+      max(2.5rem, env(safe-area-inset-left, 0px));
   }
 
   .landing-logo {
@@ -206,5 +222,25 @@
     margin-top: 2.25rem;
     padding: 0.8125rem 1.75rem;
     font-size: 1rem;
+  }
+}
+
+@media (max-width: 24.99rem) {
+  .landing-page {
+    --landing-spine: 0.375rem;
+    --landing-gutter: 1rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .landing-login-btn,
+  .landing-login-spinner {
+    animation: none;
+    transition: none;
+  }
+
+  .landing-login-btn:hover:not(:disabled),
+  .landing-login-btn:active:not(:disabled) {
+    transform: none;
   }
 }

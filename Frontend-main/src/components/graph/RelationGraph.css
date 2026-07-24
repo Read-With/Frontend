@@ -1,4 +1,45 @@
-/* 그래프 캔버스 영역 */
+/* ============================================================
+   Design tokens
+   (No single DOM ancestor wraps every consumer of this file —
+   the sidebar, tooltips and modal can render as siblings of
+   .graph-canvas-area — so tokens live on :root to cascade
+   reliably everywhere they're used.)
+   ============================================================ */
+:root {
+  --rg-brand: #5C6F5C;
+  --rg-brand-dark: #4A5A4A;
+  --rg-brand-tint: #E8F5E8;
+  --rg-brand-tint-soft: #F4FAF4;
+
+  --rg-surface: #ffffff;
+  --rg-surface-slate: #f8fafc;
+  --rg-surface-indigo: #f8f9fc;
+  --rg-surface-gray: #f8f9fa;
+
+  --rg-border: #e5e7eb;
+  --rg-border-soft: #e3e6ef;
+
+  --rg-text: #1f2937;
+  --rg-text-muted: #6b7280;
+  --rg-text-subtle: #6c757d;
+  --rg-text-faint: #64748b;
+
+  --rg-danger: #ef4444;
+  --rg-danger-strong: #dc2626;
+
+  --rg-radius-sm: 0.375rem;
+  --rg-radius-md: 0.5rem;
+  --rg-radius-lg: 0.75rem;
+  --rg-radius-pill: 62.4375rem;
+
+  --rg-shadow-sm: 0 0.0625rem 0.25rem rgba(15, 23, 42, 0.08);
+  --rg-shadow-md: 0 0.5rem 1.5rem rgba(0, 0, 0, 0.15), 0 0.25rem 0.75rem rgba(0, 0, 0, 0.1);
+  --rg-shadow-lg: 0 1.25rem 3.75rem rgba(0, 0, 0, 0.3);
+}
+
+/* ============================================================
+   Graph canvas area
+   ============================================================ */
 .graph-canvas-area {
   transition: all 0.02s ease-out;
   position: relative;
@@ -14,9 +55,9 @@
   max-width: 100% !important;
   max-height: 100% !important;
   margin: 0 auto;
-  padding: 0 !important;
-  border: none !important;
-  background: transparent !important;
+  padding: 0;
+  border: none;
+  background: transparent;
   flex: 1;
 }
 
@@ -45,9 +86,9 @@
   transform: translate(-50%, -50%);
   background: rgba(255, 255, 255, 0.95);
   padding: 1.25rem 1.875rem;
-  border-radius: 0.75rem;
+  border-radius: var(--rg-radius-lg);
   box-shadow: 0 0.25rem 1.25rem rgba(0, 0, 0, 0.1);
-  border: 0.0625rem solid #e3e6ef;
+  border: 0.0625rem solid var(--rg-border-soft);
   z-index: 1000;
   text-align: center;
   max-width: 18.75rem;
@@ -56,7 +97,7 @@
 .graph-no-results-title {
   font-size: 1.125rem;
   font-weight: 600;
-  color: #64748b;
+  color: var(--rg-text-faint);
   margin-bottom: 0.5rem;
 }
 
@@ -79,15 +120,15 @@
   width: 2rem;
   height: 2rem;
   padding: 0;
-  border: 0.0625rem solid #e3e6ef;
-  border-radius: 0.5rem;
+  border: 0.0625rem solid var(--rg-border-soft);
+  border-radius: var(--rg-radius-md);
   background: rgba(255, 255, 255, 0.95);
   color: #334155;
   font-size: 1.125rem;
   font-weight: 600;
   line-height: 1;
   cursor: pointer;
-  box-shadow: 0 0.0625rem 0.25rem rgba(15, 23, 42, 0.08);
+  box-shadow: var(--rg-shadow-sm);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -95,7 +136,7 @@
 }
 
 .graph-zoom-btn:hover {
-  background: #f8fafc;
+  background: var(--rg-surface-slate);
   border-color: #cbd5e1;
 }
 
@@ -103,33 +144,32 @@
   background: #f1f5f9;
 }
 
-/* Edge / Node floating tooltip chrome */
+.graph-zoom-btn:focus-visible {
+  outline: 0.125rem solid var(--rg-brand);
+  outline-offset: 0.125rem;
+}
+
+/* ============================================================
+   Edge / Node floating tooltip chrome (shared)
+   ============================================================ */
+/* client 좌표(left/top) 기준 — relative면 패널 밖으로 밀려 안 보임 */
 .edge-tooltip-container,
 .graph-node-tooltip {
+  position: fixed;
+  z-index: 99999;
   width: 26.25rem;
   max-width: 26.25rem;
   height: auto;
   max-height: 26.25rem;
-  background: #ffffff;
+  background: var(--rg-surface);
   border-radius: 0.9375rem;
-  box-shadow: 0 0.5rem 1.5rem rgba(0, 0, 0, 0.15), 0 0.25rem 0.75rem rgba(0, 0, 0, 0.1);
-  border: 0.0625rem solid #e5e7eb;
+  box-shadow: var(--rg-shadow-md);
+  border: 0.0625rem solid var(--rg-border);
   overflow: hidden;
   pointer-events: auto;
   cursor: grab;
   display: flex;
   flex-direction: column;
-}
-
-.edge-tooltip-container {
-  /* client 좌표(left/top) 기준 — relative면 패널 밖으로 밀려 안 보임 */
-  position: fixed;
-  z-index: 99999;
-}
-
-.graph-node-tooltip {
-  position: fixed;
-  z-index: 99999;
 }
 
 .edge-tooltip-container:active,
@@ -139,11 +179,56 @@
 
 .graph-node-tooltip[style*="cursor: grabbing"],
 .edge-tooltip-container[style*="cursor: grabbing"] {
-  box-shadow: 0 0.5rem 1.5rem rgba(0, 0, 0, 0.15);
+  box-shadow: var(--rg-shadow-md);
   transform: scale(1.02);
   transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
 
+.graph-node-tooltip .tooltip-close-btn,
+.edge-tooltip-container .tooltip-close-btn,
+.graph-sidebar-panel .tooltip-close-btn {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  background: transparent;
+  border: none;
+  border-radius: var(--rg-radius-sm);
+  width: 1.5rem;
+  height: 1.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 1.125rem;
+  color: var(--rg-text-muted);
+  transition: all 0.2s ease;
+  z-index: 10;
+  padding: 0;
+}
+
+.graph-node-tooltip .tooltip-close-btn:hover,
+.edge-tooltip-container .tooltip-close-btn:hover,
+.graph-sidebar-panel .tooltip-close-btn:hover {
+  background: rgba(92, 111, 92, 0.1);
+  color: var(--rg-brand);
+}
+
+.graph-node-tooltip .tooltip-close-btn:focus-visible,
+.edge-tooltip-container .tooltip-close-btn:focus-visible,
+.graph-sidebar-panel .tooltip-close-btn:focus-visible {
+  outline: 0.125rem solid var(--rg-brand);
+  outline-offset: 0.125rem;
+}
+
+.tooltip-close-btn--offset {
+  top: 1.125rem !important;
+  right: 1.125rem !important;
+  font-size: 1.375rem !important;
+}
+
+/* ============================================================
+   Edge tooltip
+   ============================================================ */
 .edge-tooltip-content {
   display: flex;
   flex-direction: column;
@@ -153,7 +238,7 @@
 
 .edge-tooltip-header {
   padding: 1.125rem 1.25rem 0.75rem;
-  background: #ffffff;
+  background: var(--rg-surface);
   flex-shrink: 0;
 }
 
@@ -178,20 +263,20 @@
   height: 1.75rem;
   border-radius: 50%;
   object-fit: cover;
-  background: #e5e7eb;
+  background: var(--rg-border);
   flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 0.6875rem;
   font-weight: 600;
-  color: #6b7280;
+  color: var(--rg-text-muted);
 }
 
 .edge-tooltip-endpoint-name {
   font-size: 1rem;
   font-weight: 700;
-  color: #1f2937;
+  color: var(--rg-text);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -199,7 +284,7 @@
 
 .edge-tooltip-endpoint-arrow {
   flex-shrink: 0;
-  color: #6b7280;
+  color: var(--rg-text-muted);
   font-size: 0.9375rem;
   font-weight: 600;
 }
@@ -214,7 +299,7 @@
 .edge-chart-title {
   font-size: 0.9375rem;
   font-weight: 700;
-  color: #1f2937;
+  color: var(--rg-text);
   text-align: center;
   letter-spacing: -0.01em;
 }
@@ -238,7 +323,7 @@
   margin: 0;
   font-size: 0.8125rem;
   font-weight: 600;
-  color: #64748b;
+  color: var(--rg-text-faint);
 }
 
 .edge-chart-empty-value {
@@ -251,7 +336,7 @@
   display: flex;
   position: relative;
   gap: 0;
-  border-bottom: 0.0625rem solid #e5e7eb;
+  border-bottom: 0.0625rem solid var(--rg-border);
   margin: 0 1.25rem;
   flex-shrink: 0;
 }
@@ -275,8 +360,13 @@
 }
 
 .edge-tooltip-tab.active {
-  color: #1f2937;
+  color: var(--rg-text);
   font-weight: 600;
+}
+
+.edge-tooltip-tab:focus-visible {
+  outline: 0.125rem solid var(--rg-brand);
+  outline-offset: 0.125rem;
 }
 
 .edge-tooltip-tab-indicator {
@@ -285,7 +375,7 @@
   bottom: -0.0625rem;
   width: 50%;
   height: 0.125rem;
-  background: #1f2937;
+  background: var(--rg-text);
   border-radius: 0.0625rem;
   transform: translateX(0);
   transition: transform 0.28s cubic-bezier(0.4, 0, 0.2, 1);
@@ -328,7 +418,7 @@
   width: 100%;
   height: 0.5rem;
   border-radius: 0.25rem;
-  background: #e5e7eb;
+  background: var(--rg-border);
   overflow: hidden;
   margin-top: 0.375rem;
 }
@@ -378,7 +468,7 @@
 
 .relation-tag {
   padding: 0.25rem 0.625rem;
-  border-radius: 0.375rem;
+  border-radius: var(--rg-radius-sm);
   font-size: 0.75rem;
   font-weight: 500;
   background: #eef1f6;
@@ -405,12 +495,13 @@
   flex-direction: column;
   gap: 0.5rem;
   padding: 0.5rem 0;
+  width: 100%;
 }
 
 .edge-tooltip-skeleton-line {
   height: 0.625rem;
   border-radius: 0.25rem;
-  background: linear-gradient(90deg, #f3f4f6 25%, #e5e7eb 50%, #f3f4f6 75%);
+  background: linear-gradient(90deg, #f3f4f6 25%, var(--rg-border) 50%, #f3f4f6 75%);
   background-size: 200% 100%;
   animation: edgeTooltipShimmer 1.2s ease-in-out infinite;
 }
@@ -427,44 +518,46 @@
   gap: 0.625rem;
   padding: 1.75rem 1rem;
   text-align: center;
-  color: #64748b;
+  color: var(--rg-text-faint);
   font-size: 0.8125rem;
   line-height: 1.5;
   word-break: keep-all;
 }
 
+.edge-tooltip-status--muted {
+  color: var(--rg-text-faint);
+}
+
+.edge-tooltip-status--error {
+  color: var(--rg-danger);
+}
+
+.edge-tooltip-retry-btn {
+  margin-top: 0.5rem;
+  font-size: 0.75rem;
+  padding: 0.375rem 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+  border-radius: var(--rg-radius-md);
+  background: var(--rg-surface);
+  color: var(--rg-brand);
+  border: 0.0938rem solid var(--rg-brand);
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.edge-tooltip-retry-btn:hover {
+  background: var(--rg-brand);
+  color: #fff;
+}
+
+.edge-tooltip-retry-btn:focus-visible {
+  outline: 0.125rem solid var(--rg-brand);
+  outline-offset: 0.125rem;
+}
+
 @keyframes edgeTooltipShimmer {
   0% { background-position: 200% 0; }
   100% { background-position: -200% 0; }
-}
-
-.graph-node-tooltip .tooltip-close-btn,
-.edge-tooltip-container .tooltip-close-btn,
-.graph-sidebar-panel .tooltip-close-btn {
-  position: absolute;
-  top: 1rem;
-  right: 1rem;
-  background: transparent;
-  border: none;
-  border-radius: 0.25rem;
-  width: 1.5rem;
-  height: 1.5rem;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  font-size: 1.125rem;
-  color: #6b7280;
-  transition: all 0.2s ease;
-  z-index: 10;
-  padding: 0;
-}
-
-.graph-node-tooltip .tooltip-close-btn:hover,
-.edge-tooltip-container .tooltip-close-btn:hover,
-.graph-sidebar-panel .tooltip-close-btn:hover {
-  background: rgba(92, 111, 92, 0.1);
-  color: #5C6F5C;
 }
 
 .quote-box {
@@ -476,6 +569,34 @@
   border-radius: 0.25rem;
 }
 
+.edge-tooltip-floating {
+  position: fixed;
+  z-index: 99999;
+}
+
+/* ── UnifiedEdgeTooltip theming ── */
+.edge-tooltip-themed {
+  --rel-color: var(--rg-text-faint);
+}
+
+.edge-tooltip-themed .weight-label,
+.edge-tooltip-themed .weight-value,
+.edge-tooltip-themed .edge-chart-empty-value {
+  color: var(--rel-color);
+}
+
+.edge-tooltip-themed .positivity-fill {
+  background: var(--rel-color);
+  width: var(--pos-width, 0%);
+}
+
+.edge-tooltip-themed .quote-box {
+  border-left-color: var(--rel-color);
+}
+
+/* ============================================================
+   Ripple click effect
+   ============================================================ */
 .ripple-effect {
   position: absolute;
   width: 6.25rem;
@@ -492,7 +613,7 @@
   width: 0;
   height: 0;
   border-radius: 50%;
-  background-color: #5C6F5C;
+  background-color: var(--rg-brand);
   transform: translate(-50%, -50%);
   opacity: 0.6;
   animation: ripple 0.5s ease-out;
@@ -515,14 +636,16 @@
   }
 }
 
-/* 그래프 사이드바 */
+/* ============================================================
+   Graph sidebar
+   ============================================================ */
 .graph-sidebar-panel {
   position: relative;
   width: 100%;
   height: 100%;
   display: flex;
   flex-direction: column;
-  background: #ffffff;
+  background: var(--rg-surface);
   overflow: hidden;
   font-family: var(--font-family-primary);
 }
@@ -545,7 +668,7 @@
 .sidebar-section {
   background: transparent;
   border: none;
-  border-top: 0.0625rem solid #e5e7eb;
+  border-top: 0.0625rem solid var(--rg-border);
   border-radius: 0;
   box-shadow: none;
   padding: 1rem 1.25rem;
@@ -566,6 +689,7 @@
   max-height: none;
 }
 
+/* Shared thin scrollbar (sidebar body + edge tooltip panels) */
 .edge-tooltip-body::-webkit-scrollbar,
 .graph-sidebar-body::-webkit-scrollbar,
 .edge-tooltip-panel--sidebar::-webkit-scrollbar {
@@ -575,7 +699,7 @@
 .edge-tooltip-body::-webkit-scrollbar-track,
 .graph-sidebar-body::-webkit-scrollbar-track,
 .edge-tooltip-panel--sidebar::-webkit-scrollbar-track {
-  background: #f8f9fa;
+  background: var(--rg-surface-gray);
   border-radius: 0.1875rem;
 }
 
@@ -592,7 +716,9 @@
   background: #9ca3af;
 }
 
-/* Node tooltip */
+/* ============================================================
+   Node tooltip (business card)
+   ============================================================ */
 .tooltip-content.business-card {
   position: relative;
   width: 100%;
@@ -609,7 +735,7 @@
   align-items: center;
   gap: 0.75rem;
   padding: 1.125rem 2.75rem 0.875rem 1.25rem;
-  background: #ffffff;
+  background: var(--rg-surface);
   flex-shrink: 0;
 }
 
@@ -667,7 +793,7 @@
 .node-tooltip-name {
   font-weight: 700;
   font-size: 0.9375rem;
-  color: #1f2937;
+  color: var(--rg-text);
   letter-spacing: -0.01em;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -675,7 +801,64 @@
   max-width: 100%;
 }
 
-/* 사이드바: 노드/엣지 타이포 */
+.node-tooltip-badge {
+  background: var(--rg-brand);
+  color: #fff;
+  border-radius: var(--rg-radius-pill);
+  font-size: 0.6875rem;
+  padding: 0.125rem 0.5rem;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.node-tooltip-aliases {
+  display: flex;
+  gap: 0.375rem;
+  flex-wrap: wrap;
+}
+
+.business-card-description {
+  color: #374151;
+  font-size: 0.8125rem;
+  margin: 0;
+  padding: 1rem 1.25rem 1.25rem;
+  text-align: left;
+  line-height: 1.6;
+  font-weight: 400;
+  word-break: keep-all;
+  overflow-y: auto;
+  flex: 1;
+  border-top: 0.0625rem solid var(--rg-border);
+  max-height: 17.5rem;
+}
+
+.summary-toggle-btn,
+.relation-analysis-btn {
+  width: 100%;
+  padding: 0.25rem 0.5rem;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  transition: background 0.2s ease;
+  box-sizing: border-box;
+  margin: 0;
+}
+
+.summary-toggle-btn:hover,
+.relation-analysis-btn:hover {
+  background: var(--rg-brand-tint);
+}
+
+.summary-toggle-btn:focus-visible,
+.relation-analysis-btn:focus-visible {
+  outline: 0.125rem solid var(--rg-brand);
+  outline-offset: -0.125rem;
+}
+
+/* 사이드바: 노드/엣지 타이포 확대 */
 .graph-sidebar-panel .node-tooltip-name {
   font-size: 1.25rem;
   font-weight: 700;
@@ -738,7 +921,7 @@
 .edge-tooltip-content--sidebar .edge-chart-panel {
   margin-top: 1.75rem;
   padding-top: 1.75rem;
-  border-top: 0.0625rem solid #e5e7eb;
+  border-top: 0.0625rem solid var(--rg-border);
 }
 
 .edge-tooltip-content--sidebar .relation-tag {
@@ -803,57 +986,9 @@
   font-size: 0.875rem;
 }
 
-.node-tooltip-badge {
-  background: #5C6F5C;
-  color: #fff;
-  border-radius: 62.4375rem;
-  font-size: 0.6875rem;
-  padding: 0.125rem 0.5rem;
-  font-weight: 600;
-  flex-shrink: 0;
-}
-
-.node-tooltip-aliases {
-  display: flex;
-  gap: 0.375rem;
-  flex-wrap: wrap;
-}
-
-.business-card-description {
-  color: #374151;
-  font-size: 0.8125rem;
-  margin: 0;
-  padding: 1rem 1.25rem 1.25rem;
-  text-align: left;
-  line-height: 1.6;
-  font-weight: 400;
-  word-break: keep-all;
-  overflow-y: auto;
-  flex: 1;
-  border-top: 0.0625rem solid #e5e7eb;
-  max-height: 17.5rem;
-}
-
-.summary-toggle-btn,
-.relation-analysis-btn {
-  width: 100%;
-  padding: 0.25rem 0.5rem;
-  background: transparent;
-  border: none;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  transition: background 0.2s ease;
-  box-sizing: border-box;
-  margin: 0;
-}
-
-.summary-toggle-btn:hover,
-.relation-analysis-btn:hover {
-  background: #E8F5E8;
-}
-
+/* ============================================================
+   Relation modal
+   ============================================================ */
 .modal-overlay {
   position: fixed;
   inset: 0;
@@ -866,7 +1001,7 @@
 }
 
 .modal-container {
-  background: #ffffff;
+  background: var(--rg-surface);
   border-radius: 1rem;
   padding: 1.5rem 1.75rem;
   max-width: 94vw;
@@ -874,7 +1009,7 @@
   width: 68.75rem;
   height: 48.75rem;
   position: relative;
-  box-shadow: 0 1.25rem 3.75rem rgba(0, 0, 0, 0.3);
+  box-shadow: var(--rg-shadow-lg);
   display: flex;
   flex-direction: column;
 }
@@ -886,7 +1021,7 @@
   gap: 1rem;
   margin-bottom: 0.75rem;
   padding-bottom: 0.85rem;
-  border-bottom: 0.125rem solid #e5e7eb;
+  border-bottom: 0.125rem solid var(--rg-border);
 }
 
 .relation-modal-header-main {
@@ -898,9 +1033,9 @@
 
 .relation-modal-avatar {
   flex-shrink: 0;
-  border-radius: 62.4375rem;
+  border-radius: var(--rg-radius-pill);
   overflow: hidden;
-  background: #e5e7eb;
+  background: var(--rg-border);
 }
 
 .relation-modal-avatar img {
@@ -925,7 +1060,7 @@
   display: inline-flex;
   align-items: center;
   padding: 0.15rem 0.55rem;
-  border-radius: 62.4375rem;
+  border-radius: var(--rg-radius-pill);
   background: #f3f4f6;
   color: #4b5563;
   font-size: 0.75rem;
@@ -947,17 +1082,22 @@
 .relation-modal-nav-btn {
   width: 2rem;
   height: 2rem;
-  border: 0.0625rem solid #e5e7eb;
+  border: 0.0625rem solid var(--rg-border);
   border-radius: 0.4rem;
   background: #fff;
-  color: #5C6F5C;
+  color: var(--rg-brand);
   font-size: 1.25rem;
   line-height: 1;
   cursor: pointer;
 }
 
 .relation-modal-nav-btn:hover {
-  background: #E8F5E8;
+  background: var(--rg-brand-tint);
+}
+
+.relation-modal-nav-btn:focus-visible {
+  outline: 0.125rem solid var(--rg-brand);
+  outline-offset: 0.125rem;
 }
 
 .relation-modal-legend {
@@ -966,7 +1106,7 @@
   gap: 0.75rem;
   margin-bottom: 0.75rem;
   font-size: 0.8rem;
-  color: #6b7280;
+  color: var(--rg-text-muted);
   font-weight: 600;
 }
 
@@ -981,8 +1121,8 @@
 .relation-modal-legend-gradient {
   flex: 1;
   height: 0.5rem;
-  border-radius: 62.4375rem;
-  background: linear-gradient(90deg, #dc2626 0%, #e5e7eb 50%, #16a34a 100%);
+  border-radius: var(--rg-radius-pill);
+  background: linear-gradient(90deg, var(--rg-danger-strong) 0%, var(--rg-border) 50%, #16a34a 100%);
 }
 
 .relation-modal-body {
@@ -999,8 +1139,8 @@
   flex: 1.2;
   min-width: 0;
   min-height: 22.5rem;
-  border: 0.0625rem solid #e5e7eb;
-  border-radius: 0.75rem;
+  border: 0.0625rem solid var(--rg-border);
+  border-radius: var(--rg-radius-lg);
   background: #fafbfc;
 }
 
@@ -1018,14 +1158,14 @@
 .relation-modal-side-title {
   font-size: 0.95rem;
   font-weight: 700;
-  color: #5C6F5C;
+  color: var(--rg-brand);
 }
 
 .relation-modal-side-hint {
   margin: 0;
   font-size: 0.8rem;
   line-height: 1.45;
-  color: #6b7280;
+  color: var(--rg-text-muted);
   word-break: keep-all;
 }
 
@@ -1049,7 +1189,7 @@
   grid-template-rows: auto auto;
   gap: 0.35rem 0.5rem;
   padding: 0.7rem 0.8rem;
-  border: 0.0625rem solid #e5e7eb;
+  border: 0.0625rem solid var(--rg-border);
   border-radius: 0.55rem;
   background: #fff;
   cursor: pointer;
@@ -1058,8 +1198,13 @@
 
 .relation-modal-list-item:hover,
 .relation-modal-list-item.is-active {
-  border-color: #5C6F5C;
-  background: #F4FAF4;
+  border-color: var(--rg-brand);
+  background: var(--rg-brand-tint-soft);
+}
+
+.relation-modal-list-item:focus-visible {
+  outline: 0.125rem solid var(--rg-brand);
+  outline-offset: 0.125rem;
 }
 
 .relation-modal-list-item .tooltip-relation-tags {
@@ -1069,22 +1214,22 @@
 .relation-modal-list-empty {
   padding: 1rem;
   text-align: center;
-  color: #6b7280;
+  color: var(--rg-text-muted);
   font-size: 0.85rem;
 }
 
 .relation-modal-detail {
-  border: 0.0625rem solid #e5e7eb;
+  border: 0.0625rem solid var(--rg-border);
   border-radius: 0.55rem;
   padding: 0.75rem;
-  background: #f8fafc;
+  background: var(--rg-surface-slate);
   display: flex;
   flex-direction: column;
   gap: 0.45rem;
 }
 
 .relation-modal-detail--empty {
-  color: #6b7280;
+  color: var(--rg-text-muted);
   font-size: 0.85rem;
   line-height: 1.4;
   word-break: keep-all;
@@ -1100,7 +1245,7 @@
   border: none;
   border-radius: 0.45rem;
   padding: 0.45rem 0.75rem;
-  background: #5C6F5C;
+  background: var(--rg-brand);
   color: #fff;
   font-size: 0.8rem;
   font-weight: 600;
@@ -1108,27 +1253,32 @@
 }
 
 .relation-modal-action-btn:hover {
-  background: #4A5A4A;
+  background: var(--rg-brand-dark);
+}
+
+.relation-modal-action-btn:focus-visible {
+  outline: 0.125rem solid var(--rg-brand-dark);
+  outline-offset: 0.125rem;
 }
 
 .relation-modal-action-btn--secondary {
   background: #fff;
-  color: #5C6F5C;
-  border: 0.0625rem solid #5C6F5C;
+  color: var(--rg-brand);
+  border: 0.0625rem solid var(--rg-brand);
 }
 
 .relation-modal-action-btn--secondary:hover {
-  background: #E8F5E8;
+  background: var(--rg-brand-tint);
 }
 
 .modal-close-btn {
   background: none;
   border: none;
   font-size: 1.5rem;
-  color: #6b7280;
+  color: var(--rg-text-muted);
   cursor: pointer;
   padding: 0.5rem;
-  border-radius: 0.375rem;
+  border-radius: var(--rg-radius-sm);
   transition: all 0.2s ease;
   width: 2rem;
   height: 2rem;
@@ -1140,6 +1290,11 @@
 .modal-close-btn:hover {
   background: #f3f4f6;
   color: #374151;
+}
+
+.modal-close-btn:focus-visible {
+  outline: 0.125rem solid var(--rg-brand);
+  outline-offset: 0.125rem;
 }
 
 @keyframes fadeIn {
@@ -1199,6 +1354,9 @@
   }
 }
 
+/* ============================================================
+   Graph error toast
+   ============================================================ */
 @keyframes graphErrorToastSlideIn {
   from {
     transform: translateX(100%);
@@ -1212,13 +1370,13 @@
 
 .graph-error-toast {
   position: fixed;
-  top: 5rem;
-  right: 1.5rem;
+  top: max(5rem, calc(env(safe-area-inset-top, 0px) + 1.5rem));
+  right: max(1.5rem, env(safe-area-inset-right, 0px));
   z-index: 10003;
-  background: rgba(220, 38, 38, 0.95);
+  background: color-mix(in srgb, var(--rg-danger-strong) 95%, transparent);
   color: #fff;
   padding: 0.75rem 1rem;
-  border-radius: 0.5rem;
+  border-radius: var(--rg-radius-md);
   box-shadow: 0 0.25rem 0.75rem rgba(0, 0, 0, 0.15);
   min-width: 18.75rem;
   max-width: 31.25rem;
@@ -1266,13 +1424,20 @@
   opacity: 1;
 }
 
+.graph-error-toast__close:focus-visible {
+  outline: 0.125rem solid #fff;
+  outline-offset: 0.125rem;
+  opacity: 1;
+}
+
 .graph-error-toast__close .material-symbols-outlined {
   font-size: 1.125rem;
 }
 
-/* ---- tooltip styles (was tooltip/tooltip.css) ---- */
-
-/* UnifiedNodeInfo tooltip / sidebar — static styles extracted from inline */
+/* ============================================================
+   UnifiedNodeInfo tooltip / sidebar
+   (was tooltip/tooltip.css — static styles extracted from inline)
+   ============================================================ */
 
 .tooltip-centered-status {
   display: flex;
@@ -1282,7 +1447,7 @@
   height: 100%;
   padding: 2.5rem 1rem;
   text-align: center;
-  color: var(--status-color, #6c757d);
+  color: var(--status-color, var(--rg-text-subtle));
 }
 
 .tooltip-centered-status--compact {
@@ -1291,25 +1456,9 @@
   padding: 2.5rem 1.5rem;
 }
 
-.tooltip-connection-panel {
-  padding: 1rem;
-  padding-top: 2rem;
-  background: #f8f9fc;
-  border-radius: 0.75rem;
-  border: 0.0625rem solid #e5e7eb;
-  width: 100%;
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: flex-start;
-  text-align: center;
-  overflow-y: auto;
-}
-
 .tooltip-action-btn {
   padding: 0.625rem 1.25rem;
-  border-radius: 0.5rem;
+  border-radius: var(--rg-radius-md);
   font-size: 0.875rem;
   font-weight: 600;
   cursor: pointer;
@@ -1318,14 +1467,14 @@
 
 .tooltip-action-btn--primary {
   min-width: 9rem;
-  background: #5C6F5C;
+  background: var(--rg-brand);
   color: #fff;
   border: none;
   box-shadow: 0 0.125rem 0.375rem rgba(92, 111, 92, 0.3);
 }
 
 .tooltip-action-btn--primary:hover {
-  background: #4A5A4A;
+  background: var(--rg-brand-dark);
   transform: translateY(-0.125rem);
   box-shadow: 0 0.375rem 0.75rem rgba(92, 111, 92, 0.4);
 }
@@ -1333,13 +1482,18 @@
 .tooltip-action-btn--secondary {
   min-width: 6rem;
   background: #fff;
-  color: #6c757d;
-  border: 0.0625rem solid #e5e7eb;
+  color: var(--rg-text-subtle);
+  border: 0.0625rem solid var(--rg-border);
 }
 
 .tooltip-action-btn--secondary:hover {
-  background: #f8f9fc;
-  border-color: #6c757d;
+  background: var(--rg-surface-indigo);
+  border-color: var(--rg-text-subtle);
+}
+
+.tooltip-action-btn:focus-visible {
+  outline: 0.125rem solid var(--rg-brand);
+  outline-offset: 0.125rem;
 }
 
 .tooltip-relation-tags {
@@ -1349,28 +1503,14 @@
   grid-column: 1 / -1;
 }
 
-.tooltip-relation-tags--compact {
-  gap: 0.375rem;
-  grid-column: auto;
-}
-
 .tooltip-relation-tag {
-  background: #f8f9fc;
-  color: #5C6F5C;
+  background: var(--rg-surface-indigo);
+  color: var(--rg-brand);
   padding: 0.25rem 0.5rem;
-  border-radius: 0.5rem;
+  border-radius: var(--rg-radius-md);
   font-size: 0.8rem;
-  border: 0.0625rem solid #e5e7eb;
+  border: 0.0625rem solid var(--rg-border);
   font-weight: 600;
-}
-
-.tooltip-relation-tag--compact {
-  padding: 0.25rem 0.5rem;
-  border-radius: 0.375rem;
-  font-size: 0.7rem;
-  font-weight: 500;
-  text-transform: uppercase;
-  letter-spacing: 0.0187rem;
 }
 
 .tooltip-name-with-dot {
@@ -1388,7 +1528,7 @@
 }
 
 .tooltip-name-label {
-  color: #5C6F5C;
+  color: var(--rg-brand);
   font-weight: 700;
   font-size: var(--name-font-size, 1.1rem);
 }
@@ -1399,160 +1539,27 @@
   gap: 1rem;
 }
 
-.tooltip-positivity-chip--card {
-  justify-content: space-between;
-  gap: 0;
-  padding: 0.75rem 1rem;
-  background: linear-gradient(
-    135deg,
-    color-mix(in srgb, var(--pos-color) 8%, transparent) 0%,
-    color-mix(in srgb, var(--pos-color) 3%, transparent) 100%
-  );
-  border-radius: 0.625rem;
-  border: 0.0625rem solid color-mix(in srgb, var(--pos-color) 19%, transparent);
-  margin-bottom: 0.75rem;
-}
-
-.tooltip-positivity-chip:not(.tooltip-positivity-chip--card) .tooltip-positivity-label {
+.tooltip-positivity-label {
   color: var(--pos-color);
   font-weight: 700;
   padding: 0.5rem 0.75rem;
   background: color-mix(in srgb, var(--pos-color) 12.5%, transparent);
-  border-radius: 0.5rem;
+  border-radius: var(--rg-radius-md);
   font-size: 0.9rem;
 }
 
-.tooltip-positivity-chip--card .tooltip-positivity-label {
-  font-size: 0.8rem;
-  color: var(--pos-color);
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.0313rem;
-}
-
-.tooltip-positivity-chip:not(.tooltip-positivity-chip--card) .tooltip-positivity-percent {
+.tooltip-positivity-percent {
   font-size: 1.1rem;
-  color: #6c757d;
+  color: var(--rg-text-subtle);
   font-weight: 700;
   padding: 0.5rem 0.75rem;
-  background: #f8f9fc;
-  border-radius: 0.5rem;
-}
-
-.tooltip-positivity-chip--card .tooltip-positivity-percent {
-  display: flex;
-  align-items: center;
-  gap: 0.25rem;
-  color: var(--pos-color);
-}
-
-.tooltip-positivity-chip--card .tooltip-positivity-percent-value {
-  font-weight: 800;
-  font-size: 1.5rem;
-  line-height: 1;
-}
-
-.tooltip-positivity-chip--card .tooltip-positivity-percent-unit {
-  font-weight: 700;
-  font-size: 1rem;
-  line-height: 1;
-}
-
-.tooltip-few-list {
-  background: #fff;
-  border-radius: 0.75rem;
-  border: 0.0625rem solid #e3e6ef;
-  padding: 0.5rem;
-  width: 100%;
-  max-width: 31.25rem;
-}
-
-.tooltip-few-list-title {
-  font-size: 1.2rem;
-  font-weight: 700;
-  margin-bottom: 1rem;
-  color: #5C6F5C;
-  text-align: center;
-}
-
-.tooltip-few-list-items {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-}
-
-.tooltip-few-list-card {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  grid-template-rows: auto auto;
-  gap: 0.75rem;
-  padding: 1rem;
-  background: #ffffff;
-  border-radius: 0.5rem;
-  border: 0.0625rem solid #e3e6ef;
-  font-size: 1rem;
-  box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.05);
-}
-
-.tooltip-few-list-hint {
-  margin-top: 0.75rem;
-  padding: 0.75rem;
-  background: #f8f9fc;
-  border-radius: 0.5rem;
-  border: 0.0625rem solid #e5e7eb;
-  text-align: center;
-  font-size: 0.9rem;
-  color: #5C6F5C;
-  font-weight: 600;
-  line-height: 1.4;
-  word-break: keep-all;
-}
-
-.tooltip-hover-popup {
-  position: fixed;
-  z-index: 10000;
-  pointer-events: auto;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
-  border-radius: 0.75rem;
-  padding: 1rem;
-  box-shadow: 0 0.625rem 1.5625rem rgba(0, 0, 0, 0.1), 0 0.25rem 0.625rem rgba(0, 0, 0, 0.05);
-  border: 0.0625rem solid color-mix(in srgb, var(--pos-color) 12.5%, transparent);
-  backdrop-filter: blur(0.625rem);
-  min-width: 15.625rem;
-  max-width: 21.875rem;
-}
-
-.tooltip-hover-popup-title {
-  margin-bottom: 0.75rem;
-}
-
-.tooltip-hover-popup-tags {
-  margin-top: 0.5rem;
-  padding-top: 0.75rem;
-  border-top: 0.0625rem solid color-mix(in srgb, #e3e6ef 25%, transparent);
-}
-
-.tooltip-hover-popup-tags-label {
-  font-size: 0.8rem;
-  color: #6c757d;
-  margin-bottom: 0.5rem;
-  font-weight: 600;
-  display: flex;
-  align-items: center;
-  gap: 0.375rem;
-}
-
-.tooltip-hover-popup-tags-dot {
-  width: 0.25rem;
-  height: 0.25rem;
-  border-radius: 50%;
-  background: #6c757d;
+  background: var(--rg-surface-indigo);
+  border-radius: var(--rg-radius-md);
 }
 
 .tooltip-error-block {
   text-align: center;
-  color: #ef4444;
+  color: var(--rg-danger);
 }
 
 .tooltip-error-title {
@@ -1567,37 +1574,42 @@
 .tooltip-error-close-btn {
   margin-top: 1rem;
   padding: 0.5rem 1rem;
-  background: #ef4444;
+  background: var(--rg-danger);
   color: white;
   border: none;
-  border-radius: 0.5rem;
+  border-radius: var(--rg-radius-md);
   cursor: pointer;
   font-size: 0.875rem;
   font-weight: 500;
+}
+
+.tooltip-error-close-btn:focus-visible {
+  outline: 0.125rem solid var(--rg-text);
+  outline-offset: 0.125rem;
 }
 
 .tooltip-not-appeared-avatar {
   width: 5rem;
   height: 5rem;
   border-radius: 50%;
-  background: #f8f9fc;
+  background: var(--rg-surface-indigo);
   display: flex;
   align-items: center;
   justify-content: center;
   margin-bottom: 1.25rem;
-  border: 0.125rem solid #e5e7eb;
+  border: 0.125rem solid var(--rg-border);
 }
 
 .tooltip-not-appeared-title {
   font-size: 1.25rem;
   font-weight: 700;
-  color: #5C6F5C;
+  color: var(--rg-brand);
   margin-bottom: 0.5rem;
 }
 
 .tooltip-not-appeared-msg {
   font-size: 1rem;
-  color: #6c757d;
+  color: var(--rg-text-subtle);
   line-height: 1.5;
   margin-bottom: 0;
   word-break: keep-all;
@@ -1605,27 +1617,16 @@
 
 .tooltip-not-appeared-hint {
   font-size: 0.875rem;
-  color: #6c757d;
+  color: var(--rg-text-subtle);
   line-height: 1.4;
   margin-top: 0.5rem;
-  word-break: keep-all;
-}
-
-.tooltip-empty-connections {
-  padding: 1rem;
-  background: #fff;
-  border-radius: 0.5rem;
-  border: 0.0625rem solid #e5e7eb;
-  font-size: 0.8rem;
-  color: #6c757d;
-  line-height: 1.4;
   word-break: keep-all;
 }
 
 .tooltip-section-title {
   font-size: 1rem;
   font-weight: 700;
-  color: #5C6F5C;
+  color: var(--rg-brand);
   margin: 0.25rem 0;
   letter-spacing: -0.025em;
   line-height: 1.2;
@@ -1661,7 +1662,7 @@
   transform: rotate(0deg);
   transition: transform 0.3s ease;
   display: inline-block;
-  color: #5C6F5C;
+  color: var(--rg-brand);
   flex-shrink: 0;
   margin-left: 0.5rem;
   line-height: 1;
@@ -1684,7 +1685,7 @@
 .tooltip-spoiler-title {
   font-size: 1.25rem;
   font-weight: 700;
-  color: #5C6F5C;
+  color: var(--rg-brand);
   margin: 0 0 0.75rem 0;
   letter-spacing: -0.025em;
   width: 100%;
@@ -1693,7 +1694,7 @@
 .tooltip-spoiler-text {
   font-size: 0.9375rem;
   line-height: 1.7;
-  color: #5C6F5C;
+  color: var(--rg-brand);
   letter-spacing: -0.01em;
   white-space: pre-wrap;
   margin: 0 0 1rem 0;
@@ -1721,7 +1722,7 @@
 }
 
 .tooltip-summary-quote {
-  border-left: 0.25rem solid #5C6F5C;
+  border-left: 0.25rem solid var(--rg-brand);
   padding-left: 1.25rem;
 }
 
@@ -1729,12 +1730,12 @@
   margin: 0;
   font-size: 0.95rem;
   line-height: 2;
-  color: #5C6F5C;
+  color: var(--rg-brand);
   letter-spacing: -0.01em;
   white-space: pre-wrap;
   word-break: keep-all;
   background: rgba(247, 250, 252, 0.8);
-  border-radius: 0.5rem;
+  border-radius: var(--rg-radius-md);
 }
 
 .tooltip-summary-text.is-animated {
@@ -1753,26 +1754,18 @@
 
 .tooltip-analysis-desc {
   font-size: 0.8rem;
-  color: #6c757d;
+  color: var(--rg-text-subtle);
   margin: 0;
   line-height: 1.4;
   word-break: keep-all;
-}
-
-.tooltip-analysis-plus {
-  font-size: 1.25rem;
-  display: inline-block;
-  color: #5C6F5C;
-  flex-shrink: 0;
-  margin-left: 1rem;
 }
 
 .tooltip-analysis-cta-label {
   flex-shrink: 0;
   margin-left: 0.75rem;
   padding: 0.35rem 0.75rem;
-  border-radius: 0.5rem;
-  background: #5C6F5C;
+  border-radius: var(--rg-radius-md);
+  background: var(--rg-brand);
   color: #fff;
   font-size: 0.8rem;
   font-weight: 600;
@@ -1784,9 +1777,9 @@
   align-items: center;
   margin-left: 0.5rem;
   padding: 0.1rem 0.45rem;
-  border-radius: 62.4375rem;
-  background: #E8F5E8;
-  color: #5C6F5C;
+  border-radius: var(--rg-radius-pill);
+  background: var(--rg-brand-tint);
+  color: var(--rg-brand);
   font-size: 0.7rem;
   font-weight: 700;
   vertical-align: middle;
@@ -1794,7 +1787,7 @@
 
 .tooltip-analysis-section--compact {
   margin-top: 0.75rem;
-  border-top: 0.0625rem solid #e5e7eb;
+  border-top: 0.0625rem solid var(--rg-border);
   padding-top: 0.5rem;
 }
 
@@ -1802,7 +1795,7 @@
   margin: 0;
   font-size: 1.35rem;
   font-weight: 700;
-  color: #5C6F5C;
+  color: var(--rg-brand);
   word-break: keep-all;
 }
 
@@ -1816,7 +1809,7 @@
 }
 
 .tooltip-desc-empty {
-  color: #6c757d;
+  color: var(--rg-text-subtle);
 }
 
 .tooltip-collapsible {
@@ -1840,64 +1833,39 @@
   height: auto;
 }
 
-.tooltip-close-btn--offset {
-  top: 1.125rem !important;
-  right: 1.125rem !important;
-  font-size: 1.375rem !important;
-}
+/* ============================================================
+   Accessibility: reduced motion
+   ============================================================ */
+@media (prefers-reduced-motion: reduce) {
+  .edge-tooltip-panel-swap,
+  .edge-tooltip-skeleton-line,
+  .graph-node-tooltip[style*="cursor: grabbing"],
+  .edge-tooltip-container[style*="cursor: grabbing"],
+  .ripple-effect::before,
+  .graph-error-toast,
+  .tooltip-summary-section,
+  .tooltip-summary-chevron,
+  .tooltip-collapsible,
+  .tooltip-spoiler-title.is-fading,
+  .tooltip-spoiler-text.is-fading,
+  .tooltip-spoiler-actions.is-fading,
+  .tooltip-summary-text.is-animated,
+  .positivity-fill,
+  .edge-tooltip-tab,
+  .edge-tooltip-tab-indicator,
+  .relation-modal-list-item,
+  .modal-close-btn,
+  .graph-zoom-btn,
+  .graph-error-toast__close,
+  .tooltip-action-btn,
+  .tooltip-action-btn--primary:hover,
+  .summary-toggle-btn,
+  .relation-analysis-btn {
+    animation: none !important;
+    transition: none !important;
+  }
 
-/* ── UnifiedEdgeTooltip ── */
-
-.edge-tooltip-themed {
-  --rel-color: #64748b;
-}
-
-.edge-tooltip-themed .weight-label,
-.edge-tooltip-themed .weight-value,
-.edge-tooltip-themed .edge-chart-empty-value {
-  color: var(--rel-color);
-}
-
-.edge-tooltip-themed .positivity-fill {
-  background: var(--rel-color);
-  width: var(--pos-width, 0%);
-}
-
-.edge-tooltip-themed .quote-box {
-  border-left-color: var(--rel-color);
-}
-
-.edge-tooltip-skeleton {
-  width: 100%;
-}
-
-.edge-tooltip-status--muted {
-  color: #64748b;
-}
-
-.edge-tooltip-status--error {
-  color: #ef4444;
-}
-
-.edge-tooltip-retry-btn {
-  margin-top: 0.5rem;
-  font-size: 0.75rem;
-  padding: 0.375rem 0.75rem;
-  font-weight: 600;
-  cursor: pointer;
-  border-radius: 0.5rem;
-  background: #fff;
-  color: #5C6F5C;
-  border: 0.0938rem solid #5C6F5C;
-  transition: background 0.15s ease, color 0.15s ease;
-}
-
-.edge-tooltip-retry-btn:hover {
-  background: #5C6F5C;
-  color: #fff;
-}
-
-.edge-tooltip-floating {
-  position: fixed;
-  z-index: 99999;
+  .tooltip-action-btn--primary:hover {
+    transform: none;
+  }
 }

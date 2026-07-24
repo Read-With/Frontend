@@ -1,22 +1,44 @@
-/* Noto Serif KR + Latin companion Noto Serif */
-@import url('https://fonts.googleapis.com/css2?family=Noto+Serif:ital,wght@0,400;0,500;0,600;0,700&family=Noto+Serif+KR:wght@400;500;600;700&display=swap');
-
 /* Tailwind 베이스 세팅 */
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* 전역 CSS 변수 정의 */
+/* 전역 디자인 토큰 */
 :root {
   --font-family-primary: 'Noto Serif KR', 'Noto Serif', Georgia, 'Times New Roman', serif;
   --font-family-english: 'Noto Serif', 'Noto Serif KR', Georgia, 'Times New Roman', serif;
   --font-family-mono: source-code-pro, Menlo, Monaco, Consolas, 'Courier New', monospace;
+
+  --brand-accent: #5c6f5c;
+  --brand-text: #2f3b2f;
+  --brand-text-muted: #3d4f3d;
+
+  --toast-z: 10050;
+  --toast-width: min(26.25rem, calc(100vw - 2rem));
+  --toast-radius: 0.75rem;
+  --toast-border: #d7e0d7;
+  --toast-bg: #fff;
+  --toast-fg: var(--brand-text);
+  --toast-shadow: 0 0.25rem 1.25rem rgba(0, 0, 0, 0.12);
+  --toast-success-border: var(--brand-accent);
+  --toast-success-bg: #f3f7f3;
+  --toast-success-fg: var(--brand-text-muted);
+  --toast-error-border: #c45c5c;
+  --toast-error-bg: #fdf5f5;
+  --toast-error-fg: #5c3030;
+  --toast-info-border: var(--brand-accent);
+  --toast-info-bg: #f7faf7;
+  --toast-info-fg: var(--brand-text-muted);
+  --toast-warning-border: #c49a5c;
+  --toast-warning-bg: #fdf8f0;
+  --toast-warning-fg: #5c4a30;
+  --toast-focus: var(--brand-accent);
 }
 
 html, body {
   margin: 0;
   padding: 0;
-  overflow-anchor: none;  /* 스크롤 위치 자동 이동 방지 */
+  overflow-anchor: none;
   font-family: var(--font-family-primary);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -26,21 +48,19 @@ code {
   font-family: var(--font-family-mono);
 }
 
-/* 영어 텍스트 */
 :lang(en) {
   font-family: var(--font-family-english);
 }
 
-/* Material Symbols 기본 스타일 */
+/* Material Symbols — 로드 전 숨김, 크기는 부모/호출부 font-size 유지 */
 .material-symbols-outlined {
   font-variation-settings:
-  'FILL' 0,
-  'wght' 400,
-  'GRAD' 0,
-  'opsz' 24;
+    'FILL' 0,
+    'wght' 400,
+    'GRAD' 0,
+    'opsz' 24;
   line-height: 1;
   vertical-align: middle;
-  font-display: block;
   font-family: 'Material Symbols Outlined', sans-serif;
   display: inline-flex;
   align-items: center;
@@ -49,22 +69,30 @@ code {
   min-width: 1em;
   height: 1em;
   overflow: hidden;
-  font-size: 0;
+  font-size: 1em;
   opacity: 0;
-  transition: opacity 0.2s ease, font-size 0.2s ease;
+  transition: opacity 0.2s ease;
 }
 
-/* 폰트 로드 완료 시 표시 */
 html.fonts-loaded .material-symbols-outlined {
-  font-size: 1.5rem;
   opacity: 1;
 }
 
-/* react-toastify — ViewerSettings 등 브랜드(#5C6F5C)에 맞춤 */
+@media (prefers-reduced-motion: reduce) {
+  .material-symbols-outlined {
+    transition: none;
+  }
+}
+
+/* react-toastify — 브랜드 토큰 */
 .Toastify__toast-container {
-  z-index: 10050;
-  width: min(26.25rem, calc(100vw - 2rem));
-  padding: 0 1rem 1.25rem;
+  z-index: var(--toast-z);
+  width: var(--toast-width);
+  padding:
+    0
+    max(1rem, env(safe-area-inset-right, 0px))
+    max(1.25rem, env(safe-area-inset-bottom, 0px))
+    max(1rem, env(safe-area-inset-left, 0px));
 }
 
 .Toastify__toast {
@@ -72,11 +100,11 @@ html.fonts-loaded .material-symbols-outlined {
   font-size: 0.9rem;
   font-weight: 500;
   line-height: 1.45;
-  color: #2f3b2f;
-  background: #fff;
-  border: 0.0625rem solid #d7e0d7;
-  border-radius: 0.75rem;
-  box-shadow: 0 0.25rem 1.25rem rgba(0, 0, 0, 0.12);
+  color: var(--toast-fg);
+  background: var(--toast-bg);
+  border: 0.0625rem solid var(--toast-border);
+  border-radius: var(--toast-radius);
+  box-shadow: var(--toast-shadow);
   min-height: 3rem;
   padding: 0.75rem 0.875rem;
   margin-bottom: 0.625rem;
@@ -94,41 +122,58 @@ html.fonts-loaded .material-symbols-outlined {
 }
 
 .Toastify__close-button {
-  color: #5c6f5c;
+  color: var(--brand-accent);
   opacity: 0.55;
   align-self: center;
+  border-radius: 0.25rem;
 }
 
 .Toastify__close-button:hover {
   opacity: 1;
 }
 
+.Toastify__close-button:focus-visible {
+  opacity: 1;
+  outline: 0.125rem solid var(--toast-focus);
+  outline-offset: 0.125rem;
+}
+
 .Toastify__toast--success {
-  border-color: #5c6f5c;
-  background: #f3f7f3;
-  color: #3d4f3d;
+  border-color: var(--toast-success-border);
+  background: var(--toast-success-bg);
+  color: var(--toast-success-fg);
 }
 
 .Toastify__toast--success .Toastify__toast-icon svg {
-  fill: #5c6f5c;
+  fill: var(--toast-success-border);
 }
 
 .Toastify__toast--error {
-  border-color: #c45c5c;
-  background: #fdf5f5;
-  color: #5c3030;
+  border-color: var(--toast-error-border);
+  background: var(--toast-error-bg);
+  color: var(--toast-error-fg);
 }
 
 .Toastify__toast--error .Toastify__toast-icon svg {
-  fill: #c45c5c;
+  fill: var(--toast-error-border);
 }
 
 .Toastify__toast--info {
-  border-color: #5c6f5c;
-  background: #f7faf7;
-  color: #3d4f3d;
+  border-color: var(--toast-info-border);
+  background: var(--toast-info-bg);
+  color: var(--toast-info-fg);
 }
 
 .Toastify__toast--info .Toastify__toast-icon svg {
-  fill: #5c6f5c;
+  fill: var(--toast-info-border);
+}
+
+.Toastify__toast--warning {
+  border-color: var(--toast-warning-border);
+  background: var(--toast-warning-bg);
+  color: var(--toast-warning-fg);
+}
+
+.Toastify__toast--warning .Toastify__toast-icon svg {
+  fill: var(--toast-warning-border);
 }

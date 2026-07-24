@@ -1,24 +1,41 @@
 /* ViewerSettings modal */
 
 .viewer-settings-overlay {
+  --vs-surface: #fff;
+  --vs-accent: #5c6f5c;
+  --vs-accent-dark: #4a5a4a;
+  --vs-accent-hover: #f0fdf4;
+  --vs-radius: 0.75rem;
+  --vs-radius-sm: 0.5rem;
+  --vs-focus: rgba(92, 111, 92, 0.45);
+  --vs-overlay: rgba(0, 0, 0, 0.5);
+  --vs-shadow: 0 0.25rem 1.25rem rgba(0, 0, 0, 0.15);
+
   position: fixed;
   inset: 0;
-  background-color: rgba(0, 0, 0, 0.5);
+  padding:
+    max(0.75rem, env(safe-area-inset-top, 0px))
+    max(0.75rem, env(safe-area-inset-right, 0px))
+    max(0.75rem, env(safe-area-inset-bottom, 0px))
+    max(0.75rem, env(safe-area-inset-left, 0px));
+  background-color: var(--vs-overlay);
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: 9999;
+  box-sizing: border-box;
 }
 
 .viewer-settings-dialog {
-  background-color: #fff;
-  border-radius: 0.75rem;
+  background-color: var(--vs-surface);
+  border-radius: var(--vs-radius);
   padding: 1.5rem;
   width: 90%;
   max-width: 31.25rem;
-  max-height: 80vh;
+  max-height: min(80vh, 100%);
   overflow-y: auto;
-  box-shadow: 0 0.25rem 1.25rem rgba(0, 0, 0, 0.15);
+  box-shadow: var(--vs-shadow);
+  box-sizing: border-box;
 }
 
 .viewer-settings-header {
@@ -28,11 +45,15 @@
   margin-bottom: 1.25rem;
 }
 
-.viewer-settings-title {
+.viewer-settings-title,
+.viewer-settings-section-title {
   margin: 0;
-  font-size: 1.5rem;
   font-weight: bold;
-  color: #5c6f5c;
+  color: var(--vs-accent);
+}
+
+.viewer-settings-title {
+  font-size: 1.5rem;
 }
 
 .viewer-settings-section {
@@ -42,8 +63,6 @@
 .viewer-settings-section-title {
   margin: 0 0 0.75rem;
   font-size: 1.1rem;
-  font-weight: bold;
-  color: #5c6f5c;
   display: flex;
   align-items: center;
   gap: 0.5rem;
@@ -56,7 +75,7 @@
 }
 
 .viewer-settings-mode-btn {
-  border: 0.0625rem solid #5c6f5c;
+  border: 0.0625rem solid var(--vs-accent);
   display: flex;
   align-items: center;
   gap: 0.5rem;
@@ -64,26 +83,26 @@
   text-align: left;
   width: 100%;
   justify-content: flex-start;
-  border-radius: 0.5rem;
+  border-radius: var(--vs-radius-sm);
   cursor: pointer;
   transition: background-color 0.2s ease, color 0.2s ease;
-  background-color: #fff;
-  color: #5c6f5c;
+  background-color: var(--vs-surface);
+  color: var(--vs-accent);
   font-weight: normal;
 }
 
 .viewer-settings-mode-btn:hover {
-  background-color: #f0fdf4;
+  background-color: var(--vs-accent-hover);
 }
 
 .viewer-settings-mode-btn.is-selected {
-  background-color: #5c6f5c;
-  color: #fff;
+  background-color: var(--vs-accent);
+  color: var(--vs-surface);
   font-weight: bold;
 }
 
 .viewer-settings-mode-btn.is-selected:hover {
-  background-color: #4a5a4a;
+  background-color: var(--vs-accent-dark);
 }
 
 .viewer-settings-step-row {
@@ -118,10 +137,10 @@
 .viewer-settings-step-btn,
 .viewer-settings-outline-btn,
 .viewer-settings-close-btn {
-  background-color: #fff;
-  color: #5c6f5c;
-  border: 0.0625rem solid #5c6f5c;
-  border-radius: 0.5rem;
+  background-color: var(--vs-surface);
+  color: var(--vs-accent);
+  border: 0.0625rem solid var(--vs-accent);
+  border-radius: var(--vs-radius-sm);
   cursor: pointer;
   transition: background-color 0.2s ease;
 }
@@ -129,7 +148,7 @@
 .viewer-settings-step-btn:hover,
 .viewer-settings-outline-btn:hover,
 .viewer-settings-close-btn:hover {
-  background-color: #f0fdf4;
+  background-color: var(--vs-accent-hover);
 }
 
 .viewer-settings-step-btn {
@@ -149,18 +168,27 @@
 }
 
 .viewer-settings-apply-btn {
-  background-color: #5c6f5c;
-  color: #fff;
+  background-color: var(--vs-accent);
+  color: var(--vs-surface);
   border: none;
   padding: 0.625rem 1.25rem;
-  border-radius: 0.5rem;
+  border-radius: var(--vs-radius-sm);
   cursor: pointer;
   font-weight: bold;
   transition: background-color 0.2s ease;
 }
 
 .viewer-settings-apply-btn:hover {
-  background-color: #4a5a4a;
+  background-color: var(--vs-accent-dark);
+}
+
+.viewer-settings-mode-btn:focus-visible,
+.viewer-settings-step-btn:focus-visible,
+.viewer-settings-outline-btn:focus-visible,
+.viewer-settings-close-btn:focus-visible,
+.viewer-settings-apply-btn:focus-visible {
+  outline: 0.125rem solid var(--vs-focus);
+  outline-offset: 0.125rem;
 }
 
 .viewer-settings-actions {
@@ -168,4 +196,14 @@
   justify-content: flex-end;
   gap: 0.75rem;
   margin-top: 1.5rem;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .viewer-settings-mode-btn,
+  .viewer-settings-step-btn,
+  .viewer-settings-outline-btn,
+  .viewer-settings-close-btn,
+  .viewer-settings-apply-btn {
+    transition: none;
+  }
 }
