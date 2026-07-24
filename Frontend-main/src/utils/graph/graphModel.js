@@ -1734,14 +1734,8 @@ const discoverChapterEvents = async (
 
     if (!apiEvents.length) {
       console.warn(`⚠️ 챕터 ${chapterIdx}: relationship-deltas에서 이벤트를 찾을 수 없음`);
-      const emptyPayload = buildChapterCachePayload(
-        bookId,
-        chapterIdx,
-        [],
-        CHAPTER_GRAPH_CACHE_SOURCE.EMPTY
-      );
-      setCachedChapterEvents(bookId, chapterIdx, emptyPayload);
-      return emptyPayload;
+      // EMPTY를 캐시에 쓰지 않음 — "빈 성공" 고착 방지 (재요청 가능)
+      return null;
     }
 
     const payload = buildChapterCachePayload(
@@ -1778,6 +1772,7 @@ const hasUsableChapterCache = (bookId, chapterIdx) => {
   const cached = getCachedChapterEvents(bookId, chapterIdx);
   if (!cached) return false;
   if (cached.source === CHAPTER_GRAPH_CACHE_SOURCE.INVALID) return false;
+  if (cached.source === CHAPTER_GRAPH_CACHE_SOURCE.EMPTY) return false;
   if (cached.source === 'manifest-only') return false;
   return true;
 };
@@ -1847,6 +1842,12 @@ export async function ensureChapterEventsDiscovered(
 export const getChapterEventFallbackData = (bookId, chapterIdx, eventIdx) => {
   const chapterCache = getCachedChapterEvents(bookId, chapterIdx);
   if (!chapterCache) return null;
+  if (
+    chapterCache.source === CHAPTER_GRAPH_CACHE_SOURCE.EMPTY ||
+    chapterCache.source === CHAPTER_GRAPH_CACHE_SOURCE.INVALID
+  ) {
+    return null;
+  }
 
   const reconstructed = reconstructChapterGraphState(chapterCache, eventIdx);
   if (reconstructed) {

@@ -541,7 +541,7 @@ const failedFetchUrls = new Map();
 const FAILED_FETCH_TTL_MS = 5_000;
 const ASSET_FETCH_MAX_ATTEMPTS = 3;
 const ASSET_FETCH_RETRY_BASE_MS = 400;
-const GRAPH_IMAGE_DEFERRED_RETRY_MS = 1_500;
+export const GRAPH_IMAGE_DEFERRED_RETRY_MS = 1_500;
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -708,8 +708,6 @@ export async function resolveGraphElementsProfileImages(elements, options = {}) 
   const { force = false } = options;
   return Promise.all(elements.map((el) => resolveOneGraphProfileImage(el, { force })));
 }
-
-export { GRAPH_IMAGE_DEFERRED_RETRY_MS };
 
 /* ─── 공통 에러 로깅·handleError 래퍼 (from errorUtils) ─── */
 

@@ -182,22 +182,41 @@ const GraphSplitTopBar = memo(function GraphSplitTopBar({
   }, [book?.title, bookId]);
 
   const chapterMeta = useMemo(() => {
-    const fallbackChapter = Number(currentChapter) || 1;
+    const rawChapter = Number(currentChapter);
+    const hasValidChapter = Number.isFinite(rawChapter) && rawChapter >= 1;
+    const displayChapter = hasValidChapter ? rawChapter : null;
+
     if (bookId == null) {
       return {
-        resolvedServerChapter: fallbackChapter,
-        chapterDisplayLabel: formatChapterOrderAndName(fallbackChapter, ''),
+        resolvedServerChapter: displayChapter,
+        chapterResolved: false,
+        chapterDisplayLabel: displayChapter
+          ? formatChapterOrderAndName(displayChapter, '')
+          : '챕터 ?',
         chapterTitleTooltip: undefined,
       };
     }
 
     const byCurrent = getChapterData(bookId, currentChapter);
     const resolvedFromData = byCurrent ? resolveChapterIndex(byCurrent) : null;
-    const resolvedServerChapter = resolvedFromData ?? fallbackChapter;
+    // manifest에 없으면 fallback 1로 API/표시를 속이지 않음
+    const resolvedServerChapter = resolvedFromData ?? (hasValidChapter ? rawChapter : null);
+    const chapterResolved = resolvedFromData != null || (hasValidChapter && Boolean(byCurrent));
     const ch =
       byCurrent && (resolvedFromData == null || resolvedFromData === Number(currentChapter))
         ? byCurrent
-        : getChapterData(bookId, resolvedServerChapter);
+        : resolvedServerChapter != null
+          ? getChapterData(bookId, resolvedServerChapter)
+          : null;
+
+    if (resolvedServerChapter == null) {
+      return {
+        resolvedServerChapter: null,
+        chapterResolved: false,
+        chapterDisplayLabel: '챕터 ?',
+        chapterTitleTooltip: undefined,
+      };
+    }
 
     const meta = resolveChapterTitleMeta(ch, stripBookTitle, resolvedServerChapter);
     const displayName =
@@ -209,6 +228,7 @@ const GraphSplitTopBar = memo(function GraphSplitTopBar({
 
     return {
       resolvedServerChapter,
+      chapterResolved,
       chapterDisplayLabel: formatChapterOrderAndName(resolvedServerChapter, displayName),
       chapterTitleTooltip: meta.raw || meta.tooltip || undefined,
     };

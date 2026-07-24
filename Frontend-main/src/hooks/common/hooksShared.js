@@ -186,37 +186,42 @@ export async function ensureBookManifest(bookId) {
 
 function getManifestLoadState(bookId) {
   if (!bookId) {
-    return { loaded: true, manifest: null, error: null };
+    return { loaded: true, ready: true, manifest: null, error: null, skipped: true };
   }
   const cached = getManifestFromCache(bookId);
   return {
     loaded: Boolean(cached),
+    ready: Boolean(cached),
     manifest: cached ?? null,
     error: null,
+    skipped: false,
   };
 }
 
 /**
  * 뷰어/그래프용 manifest 준비 게이트.
- * fail-open: 로드 실패해도 loaded=true로 두어 이후 metrics·fine graph가 막히지 않게 함.
+ * - loaded: 로드 시도 완료 (또는 캐시 히트)
+ * - ready: 사용 가능한 manifest 있음 (또는 bookId 스킵)
+ * 그래프 등 manifest 필수 경로는 ready를 사용하고,
+ * 뷰어 읽기 진행은 loaded로 fail-open 유지 가능.
  */
 export function useManifestLoaded(bookId) {
   const [state, setState] = useState(() => getManifestLoadState(bookId));
 
   useEffect(() => {
     if (!bookId) {
-      setState({ loaded: true, manifest: null, error: null });
+      setState({ loaded: true, ready: true, manifest: null, error: null, skipped: true });
       return undefined;
     }
 
     const cached = getManifestFromCache(bookId);
     if (cached) {
-      setState({ loaded: true, manifest: cached, error: null });
+      setState({ loaded: true, ready: true, manifest: cached, error: null, skipped: false });
       return undefined;
     }
 
     let cancelled = false;
-    setState({ loaded: false, manifest: null, error: null });
+    setState({ loaded: false, ready: false, manifest: null, error: null, skipped: false });
 
     void ensureBookManifest(bookId).then((outcome) => {
       if (cancelled) return;
@@ -234,7 +239,14 @@ export function useManifestLoaded(bookId) {
           });
       }
 
-      setState({ loaded: true, manifest: manifest ?? null, error });
+      const hasManifest = Boolean(manifest);
+      setState({
+        loaded: true,
+        ready: hasManifest || Boolean(outcome.skipped),
+        manifest: manifest ?? null,
+        error: hasManifest ? null : error,
+        skipped: Boolean(outcome.skipped),
+      });
     });
 
     return () => {

@@ -15,6 +15,65 @@ import {
 } from './authApi';
 import { pickCharacterDisplayName, rememberCharacterDisplayName } from '../graph/graphCore';
 
+/** API/캐시 로드 결과 계약 — error·empty·fallback 구분 */
+export const FETCH_STATUS = Object.freeze({
+  OK: 'ok',
+  EMPTY: 'empty',
+  FALLBACK: 'fallback',
+  ERROR: 'error',
+});
+
+export const GRAPH_LOAD_SOURCE = Object.freeze({
+  SESSION: 'session',
+  LOCAL_STORAGE: 'localStorage',
+  CHAPTER_EVENTS: 'chapterEvents',
+  API: 'api',
+  FALLBACK: 'fallback',
+  ERROR: 'error',
+  NONE: 'none',
+});
+
+export function createFetchOutcome({
+  data = null,
+  status = FETCH_STATUS.OK,
+  source = null,
+  error = null,
+  incomplete = false,
+  failedIds = null,
+  mergedFrom = null,
+} = {}) {
+  return {
+    data,
+    status,
+    source,
+    error,
+    incomplete: Boolean(incomplete),
+    failedIds: Array.isArray(failedIds) ? failedIds : null,
+    mergedFrom: Array.isArray(mergedFrom) ? mergedFrom : null,
+  };
+}
+
+export function isFetchOk(outcome) {
+  return outcome?.status === FETCH_STATUS.OK || outcome?.status === FETCH_STATUS.EMPTY;
+}
+
+export function isFetchFallback(outcome) {
+  return outcome?.status === FETCH_STATUS.FALLBACK;
+}
+
+export function isFetchError(outcome) {
+  return outcome?.status === FETCH_STATUS.ERROR;
+}
+
+/** source → FETCH_STATUS 매핑 (그래프 로더용) */
+export function statusFromGraphSource(source) {
+  if (source === GRAPH_LOAD_SOURCE.FALLBACK) return FETCH_STATUS.FALLBACK;
+  if (source === GRAPH_LOAD_SOURCE.ERROR || source === GRAPH_LOAD_SOURCE.NONE) {
+    return FETCH_STATUS.ERROR;
+  }
+  return FETCH_STATUS.OK;
+}
+
 const asArray = (value) => (Array.isArray(value) ? value : []);
 
 const handleApiError = (error, context) => {
@@ -83,12 +142,24 @@ const normalizeAccumulatedGraphResult = (payload) => {
   };
 };
 
-const createRelationshipDeltasResponse = (isSuccess, code, message, result) => ({
-  isSuccess,
-  code,
-  message,
-  result: normalizeAccumulatedGraphResult(result),
-});
+const createRelationshipDeltasResponse = (isSuccess, code, message, result, status = null) => {
+  const normalized = normalizeAccumulatedGraphResult(result);
+  const hasPayload =
+    normalized.characters.length > 0 || normalized.relations.length > 0 || Boolean(normalized.eventId);
+  let resolvedStatus = status;
+  if (!resolvedStatus) {
+    if (!isSuccess) resolvedStatus = FETCH_STATUS.ERROR;
+    else if (!hasPayload) resolvedStatus = FETCH_STATUS.EMPTY;
+    else resolvedStatus = FETCH_STATUS.OK;
+  }
+  return {
+    isSuccess,
+    code,
+    message,
+    status: resolvedStatus,
+    result: normalized,
+  };
+};
 
 const resolveManifestCharacterMeta = (bookId) => {
   const byId = new Map();
@@ -381,8 +452,15 @@ const toGraphApiResponse = ({ response, result, empty }) => {
       ? '관계 델타를 찾을 수 없습니다.'
       : response?.message || '관계 델타 조회에 실패했습니다.'
     : '관계 델타를 성공적으로 조회했습니다.';
+  // 실패 시 empty 껍데기는 채우되 status=error로 성공·빈 데이터와 구분
   return toUnifiedApiResponse(
-    createRelationshipDeltasResponse(!failed, code, message, failed ? empty : result || empty)
+    createRelationshipDeltasResponse(
+      !failed,
+      code,
+      message,
+      failed ? empty : result || empty,
+      failed ? FETCH_STATUS.ERROR : null
+    )
   );
 };
 

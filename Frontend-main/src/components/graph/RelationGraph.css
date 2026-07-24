@@ -345,6 +345,21 @@
   letter-spacing: -0.01em;
 }
 
+.edge-chart-incomplete-hint {
+  margin: 0.35rem 0 0;
+  font-size: 0.75rem;
+  color: var(--rg-text-muted);
+  text-align: center;
+}
+
+.edge-chart-incomplete-hint .edge-tooltip-retry-btn {
+  margin-top: 0;
+  margin-left: 0.25rem;
+  padding: 0.15rem 0.5rem;
+  font-size: 0.6875rem;
+  vertical-align: baseline;
+}
+
 .edge-chart-plot {
   width: 100%;
 }
@@ -1015,6 +1030,51 @@
   padding: 2rem;
 }
 
+/* 그래프 단독 페이지: 챕터 레일 오른쪽·상단바 아래에 여백을 두고 배치 */
+.modal-overlay.relation-modal-overlay--graph-page {
+  inset: auto;
+  top: var(--relation-modal-top, 4.75rem);
+  left: var(--relation-modal-left, 18.5rem);
+  right: var(--relation-modal-inset, 1rem);
+  bottom: var(--relation-modal-inset, 1rem);
+  padding: 0;
+  align-items: stretch;
+  justify-content: stretch;
+  background: rgba(15, 23, 42, 0.45);
+  transition: left 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.modal-overlay.relation-modal-overlay--graph-page .modal-container {
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  max-height: none;
+  border-radius: 0.875rem;
+}
+
+.modal-overlay.relation-modal-overlay--graph-page.is-compact {
+  align-items: center;
+  justify-content: center;
+  padding: var(--relation-modal-inset, 1rem);
+}
+
+.modal-overlay.relation-modal-overlay--graph-page.is-compact .relation-modal-container--compact {
+  width: min(28rem, 100%);
+  height: auto;
+  max-height: 100%;
+  max-width: min(28rem, 100%);
+}
+
+.modal-overlay.relation-modal-overlay--graph-page.is-compact .relation-modal-container--compact.is-pair {
+  width: min(42rem, 100%);
+  max-width: min(42rem, 100%);
+}
+
+.modal-overlay.relation-modal-overlay--graph-page.is-compact .relation-modal-container--compact.is-single {
+  width: min(26rem, 100%);
+  max-width: min(26rem, 100%);
+}
+
 .modal-container {
   background: var(--rg-surface);
   border-radius: 1rem;
@@ -1061,25 +1121,33 @@
 }
 
 .relation-modal-header-copy {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 0.5rem;
   min-width: 0;
 }
 
-.relation-modal-meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.4rem;
-  margin-top: 0.4rem;
+.relation-modal-header-copy .tooltip-modal-title {
+  margin: 0;
+  flex-shrink: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .relation-modal-chip {
   display: inline-flex;
   align-items: center;
+  flex-shrink: 0;
   padding: 0.15rem 0.55rem;
   border-radius: var(--rg-radius-pill);
   background: var(--rg-brand-tint-soft);
   color: var(--rg-text-brand);
   font-size: 0.75rem;
   font-weight: 600;
+  white-space: nowrap;
 }
 
 .relation-modal-header-actions {
@@ -1234,27 +1302,138 @@
   font-size: 0.85rem;
 }
 
-.relation-modal-detail {
-  border: 0.0625rem solid var(--rg-border);
-  border-radius: 0.55rem;
-  padding: 0.75rem;
-  background: var(--rg-surface-slate);
-  display: flex;
-  flex-direction: column;
-  gap: 0.45rem;
-}
-
-.relation-modal-detail--empty {
-  color: var(--rg-text-muted);
-  font-size: 0.85rem;
-  line-height: 1.4;
-  word-break: keep-all;
-}
-
 .relation-modal-cta-row {
   display: flex;
   flex-wrap: wrap;
   gap: 0.4rem;
+  margin-top: 0.75rem;
+  flex-shrink: 0;
+}
+
+.relation-modal-body.is-card-view,
+.relation-modal-body.is-empty-view {
+  flex: 1;
+  min-height: 0;
+  flex-direction: column;
+}
+
+.relation-modal-side--solo {
+  max-width: none;
+  min-width: 0;
+  flex: 1;
+}
+
+.relation-few-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  flex: 1;
+  min-height: 0;
+}
+
+.relation-card-grid {
+  display: grid;
+  gap: 0.75rem;
+  flex: 1;
+  min-height: 0;
+  align-content: start;
+}
+
+.relation-card-grid.is-single {
+  grid-template-columns: 1fr;
+}
+
+.relation-card-grid.is-pair {
+  grid-template-columns: 1fr 1fr;
+}
+
+.relation-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  text-align: left;
+  padding: 1rem 1.05rem;
+  border: 0.0625rem solid var(--rg-border);
+  border-radius: 0.75rem;
+  background:
+    linear-gradient(165deg, #ffffff 0%, var(--rg-surface-slate, #f8fafc) 100%);
+  cursor: pointer;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+}
+
+.relation-card:hover {
+  border-color: rgba(92, 111, 92, 0.45);
+}
+
+.relation-card.is-active {
+  border-color: var(--rg-brand);
+  background: var(--rg-brand-tint-soft);
+  box-shadow: 0 0 0 0.125rem rgba(92, 111, 92, 0.18);
+}
+
+.relation-card-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.65rem;
+}
+
+.relation-card-pair-hint {
+  margin: 0;
+  font-size: 0.75rem;
+  line-height: 1.35;
+  color: var(--rg-text-muted);
+  word-break: keep-all;
+}
+
+.relation-positivity-scale {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.relation-positivity-scale-track {
+  position: relative;
+  height: 0.5rem;
+  border-radius: var(--rg-radius-pill);
+  background: linear-gradient(
+    90deg,
+    var(--rg-danger-strong) 0%,
+    #c5c9c5 48%,
+    #c5c9c5 52%,
+    #3d8f5a 100%
+  );
+  box-shadow: inset 0 0 0 0.0625rem rgba(92, 111, 92, 0.08);
+}
+
+.relation-positivity-scale-zero {
+  position: absolute;
+  top: -0.15rem;
+  bottom: -0.15rem;
+  left: 50%;
+  width: 0.0625rem;
+  transform: translateX(-50%);
+  background: rgba(55, 65, 81, 0.35);
+}
+
+.relation-positivity-scale-marker {
+  position: absolute;
+  top: 50%;
+  width: 0.75rem;
+  height: 0.75rem;
+  border-radius: 50%;
+  border: 0.125rem solid #fff;
+  box-shadow: 0 0.0625rem 0.25rem rgba(15, 23, 42, 0.28);
+  transform: translate(-50%, -50%);
+}
+
+.relation-positivity-scale-labels {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  color: var(--rg-text-muted);
+  letter-spacing: 0.01em;
 }
 
 .relation-modal-action-btn {
@@ -1329,6 +1508,10 @@
   .relation-modal-chart {
     min-height: 15rem;
   }
+
+  .relation-card-grid.is-pair {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (max-width: 48rem) {
@@ -1341,6 +1524,28 @@
     width: 95vw;
     height: 88vh;
     padding: 1rem;
+  }
+
+  .modal-overlay.relation-modal-overlay--graph-page {
+    top: var(--relation-modal-top, 4.75rem);
+    left: var(--relation-modal-inset, 0.75rem);
+    right: var(--relation-modal-inset, 0.75rem);
+    bottom: var(--relation-modal-inset, 0.75rem);
+  }
+
+  .modal-overlay.relation-modal-overlay--graph-page .modal-container {
+    width: 100%;
+    height: 100%;
+    padding: 1rem;
+  }
+
+  .modal-overlay.relation-modal-overlay--graph-page.is-compact .relation-modal-container--compact,
+  .modal-overlay.relation-modal-overlay--graph-page.is-compact .relation-modal-container--compact.is-pair,
+  .modal-overlay.relation-modal-overlay--graph-page.is-compact .relation-modal-container--compact.is-single {
+    width: 100%;
+    max-width: 100%;
+    height: auto;
+    max-height: 100%;
   }
 
   .relation-modal-body.has-chart {
@@ -1357,6 +1562,12 @@
   .modal-container {
     width: 98vw;
     height: 90vh;
+    padding: 0.75rem;
+  }
+
+  .modal-overlay.relation-modal-overlay--graph-page .modal-container {
+    width: 100%;
+    height: 100%;
     padding: 0.75rem;
   }
 }
@@ -1391,6 +1602,10 @@
   align-items: flex-start;
   gap: 0.75rem;
   animation: graphErrorToastSlideIn 0.3s ease-out;
+}
+
+.graph-error-toast--info {
+  background: color-mix(in srgb, var(--rg-brand) 92%, transparent);
 }
 
 .graph-error-toast__icon {

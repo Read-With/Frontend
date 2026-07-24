@@ -96,10 +96,12 @@ function GraphSidebar({
   onClearGraph,
   isSidebarClosing = false,
   povSummaries = null,
+  povError = null,
+  onRetryPov = null,
   apiBookGraphData = null,
   bookId = null,
   onSelectRelatedNode = null,
-  onOpenChapterSidebar = null,
+  chapterRailWidth = null,
 }) {
   const [isClosing, setIsClosing] = useState(false);
   const [isVisible, setIsVisible] = useState(false);
@@ -171,9 +173,11 @@ function GraphSidebar({
         elements={elements}
         filename={filename}
         povSummaries={povSummaries}
+        povError={povError}
+        onRetryPov={onRetryPov}
         apiBookGraphData={apiBookGraphData}
         onSelectRelatedNode={onSelectRelatedNode}
-        onOpenChapterSidebar={onOpenChapterSidebar}
+        chapterRailWidth={chapterRailWidth}
       />
     );
   } else if (activeTooltip) {
@@ -208,6 +212,8 @@ function GraphCanvas({
   elements,
   renderElements,
   povSummaries,
+  povError = null,
+  onRetryPov = null,
   apiBookGraphData,
   bookId,
   isLoading,
@@ -221,7 +227,6 @@ function GraphCanvas({
   graphClearRef,
   graphSelectNodeRef = null,
   onSelectRelatedNode = null,
-  onOpenChapterSidebar = null,
 }) {
   const { isSidebarClosing, onCloseSidebar, onStartClosing, onClearGraph } = sidebarControl;
   const { isSearchActive, filteredElements, searchTerm, fitNodeIds, isResetFromSearch } = searchState;
@@ -260,10 +265,16 @@ function GraphCanvas({
               filename={filename}
               elements={elements}
               povSummaries={povSummaries}
+              povError={povError}
+              onRetryPov={onRetryPov}
               apiBookGraphData={apiBookGraphData}
               bookId={bookId}
               onSelectRelatedNode={onSelectRelatedNode}
-              onOpenChapterSidebar={onOpenChapterSidebar}
+              chapterRailWidth={
+                sidebarLayoutWidth != null
+                  ? sidebarLayoutWidth
+                  : resolveChapterSidebarWidth(isSidebarOpen)
+              }
             />
           )}
 
@@ -313,6 +324,8 @@ GraphCanvas.propTypes = {
   elements: PropTypes.array.isRequired,
   renderElements: PropTypes.array.isRequired,
   povSummaries: PropTypes.any,
+  povError: PropTypes.string,
+  onRetryPov: PropTypes.func,
   apiBookGraphData: PropTypes.object,
   bookId: PropTypes.number,
   isLoading: PropTypes.bool.isRequired,
@@ -326,7 +339,6 @@ GraphCanvas.propTypes = {
   graphClearRef: PropTypes.object,
   graphSelectNodeRef: PropTypes.object,
   onSelectRelatedNode: PropTypes.func,
-  onOpenChapterSidebar: PropTypes.func,
 };
 
 export default memo(GraphCanvas);

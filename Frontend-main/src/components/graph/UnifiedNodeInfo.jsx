@@ -7,6 +7,7 @@ import {
   extractApiBookId,
   undirectedPairKey,
   isGraphNodeElement,
+  GRAPH_LAYOUT_CONSTANTS,
 } from "../../utils/graph/graphCore";
 import { getEventDataByIndex } from "../../utils/graph/graphFetch.js";
 import { useTooltipPosition, useClickOutside } from "../../hooks/ui/tooltipHooks";
@@ -188,30 +189,106 @@ function RelationList({
   );
 }
 
-function SelectedDetail({ item, onFocusOnGraph, canFocusGraph }) {
-  if (!item) {
-    return (
-      <div className="relation-modal-detail relation-modal-detail--empty">
-        차트 점이나 목록에서 인물을 선택하면 관계 상세를 볼 수 있습니다.
-      </div>
-    );
-  }
+/** −1~+1 긍정성 미니 스케일 (연결 적을 때 레이더 대체) */
+function PositivityScaleBar({ positivity }) {
+  const value = Number.isFinite(Number(positivity)) ? Number(positivity) : 0;
+  const clamped = Math.max(-1, Math.min(1, value));
+  const pct = ((clamped + 1) / 2) * 100;
+  const { color, label } = positivityDisplay(clamped);
 
   return (
-    <div className="relation-modal-detail">
-      <NameWithDot name={item.name} positivity={item.positivity} fontSize="1.15rem" />
-      <PositivityChip positivity={item.positivity} />
-      <RelationTagsRow tags={item.relationTags} />
-      {canFocusGraph && (
-        <button
-          type="button"
-          className="relation-modal-action-btn"
-          onClick={() => onFocusOnGraph(item)}
-        >
-          그래프에서 이 인물 보기
-        </button>
-      )}
+    <div
+      className="relation-positivity-scale"
+      role="img"
+      aria-label={`긍정성 ${label} (${clamped.toFixed(2)})`}
+    >
+      <div className="relation-positivity-scale-track">
+        <span className="relation-positivity-scale-zero" />
+        <span
+          className="relation-positivity-scale-marker"
+          style={{ left: `${pct}%`, background: color }}
+        />
+      </div>
+      <div className="relation-positivity-scale-labels" aria-hidden>
+        <span>−1</span>
+        <span>0</span>
+        <span>+1</span>
+      </div>
     </div>
+  );
+}
+
+function RelationCard({ item, active, onSelect, sourceName }) {
+  if (!item) return null;
+
+  return (
+    <button
+      type="button"
+      className={`relation-card${active ? ' is-active' : ''}`}
+      aria-pressed={active}
+      onClick={() => onSelect(item)}
+    >
+      <div className="relation-card-top">
+        <NameWithDot name={item.name} positivity={item.positivity} fontSize="1.05rem" />
+        <PositivityChip positivity={item.positivity} />
+      </div>
+      {sourceName ? (
+        <p className="relation-card-pair-hint">
+          {sourceName} ↔ {item.name}
+        </p>
+      ) : null}
+      <PositivityScaleBar positivity={item.positivity} />
+      <RelationTagsRow tags={item.relationTags} />
+    </button>
+  );
+}
+
+function FewConnectionsPanel({
+  items,
+  activeName,
+  onSelect,
+  sourceName,
+  connectionKind,
+}) {
+  const isPair = connectionKind === 'pair_connections';
+  return (
+    <div className="relation-few-panel">
+      <div className="relation-modal-side-title">
+        {isPair ? '연결된 인물 비교' : '연결된 인물'}
+      </div>
+      <p className="relation-modal-side-hint">
+        {isPair
+          ? '연결이 적어 관계 카드로 나란히 비교합니다. '
+          : '연결이 적어 관계 카드로 표시합니다. '}
+        챕터를 바꾸면 연결이 늘어날 수 있습니다.
+      </p>
+      <div
+        className={`relation-card-grid${isPair ? ' is-pair' : ' is-single'}`}
+        role="listbox"
+        aria-label="연결된 인물 카드"
+      >
+        {items.map((item) => (
+          <RelationCard
+            key={item.id || item.name}
+            item={item}
+            active={activeName === item.name}
+            onSelect={onSelect}
+            sourceName={sourceName}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function PersonSilhouette({ size = 48, circleFill = '#e5e7eb', bodyFill = '#bdbdbd' }) {
+  const cx = size / 2;
+  return (
+    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} fill="none" aria-hidden>
+      <circle cx={cx} cy={cx} r={cx} fill={circleFill} />
+      <ellipse cx={cx} cy={size * 0.375} rx={size * 0.21} ry={size * 0.21} fill={bodyFill} />
+      <ellipse cx={cx} cy={size * 0.79} rx={size * 0.29} ry={size * 0.17} fill={bodyFill} />
+    </svg>
   );
 }
 
@@ -222,11 +299,7 @@ function PersonAvatar({ node, size = 40 }) {
       {hasImage ? (
         <img src={node.image} alt="" crossOrigin="anonymous" />
       ) : (
-        <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} fill="none" aria-hidden>
-          <circle cx={size / 2} cy={size / 2} r={size / 2} fill="#e5e7eb" />
-          <ellipse cx={size / 2} cy={size * 0.375} rx={size * 0.21} ry={size * 0.21} fill="#bdbdbd" />
-          <ellipse cx={size / 2} cy={size * 0.79} rx={size * 0.29} ry={size * 0.17} fill="#bdbdbd" />
-        </svg>
+        <PersonSilhouette size={size} />
       )}
     </div>
   );
@@ -241,14 +314,25 @@ function RelationAnalysisModalImpl({
   recommendedNodes = [],
   onClose,
   onSelectRelatedNode,
-  onOpenChapterSidebar,
   returnFocusRef,
+  chapterRailWidth = GRAPH_LAYOUT_CONSTANTS.SIDEBAR.OPEN_WIDTH,
 }) {
   const dialogRef = useRef(null);
   const closeBtnRef = useRef(null);
   const activeNameRef = useRef(null);
   const switchTargetsRef = useRef(radarChartData);
   const [activeName, setActiveName] = useState(null);
+
+  const overlayStyle = useMemo(() => {
+    const inset = GRAPH_LAYOUT_CONSTANTS.ANALYSIS_MODAL_INSET;
+    const top = GRAPH_LAYOUT_CONSTANTS.TOP_BAR_HEIGHT + inset;
+    const left = Math.max(0, Number(chapterRailWidth) || 0) + inset;
+    return {
+      '--relation-modal-top': `${top}px`,
+      '--relation-modal-left': `${left}px`,
+      '--relation-modal-inset': `${inset}px`,
+    };
+  }, [chapterRailWidth]);
 
   const dataMap = useMemo(() => {
     const map = new Map();
@@ -333,12 +417,6 @@ function RelationAnalysisModalImpl({
     if (!item?.name) return;
     setActiveName(item.name);
   }, []);
-
-  const focusOnGraph = useCallback((item) => {
-    if (!item || !onSelectRelatedNode) return;
-    const ok = onSelectRelatedNode(item.id || item.name, { keepAnalysisOpen: false });
-    if (ok !== false) onClose();
-  }, [onSelectRelatedNode, onClose]);
 
   const switchToRelated = useCallback((item) => {
     if (!item || !onSelectRelatedNode) return;
@@ -444,71 +522,88 @@ function RelationAnalysisModalImpl({
     </div>
   ) : null;
 
-  const listPanel = (
-    <div className="relation-modal-side">
-      <div className="relation-modal-side-title">
-        {connectionKind === 'no_connections' ? '추천 인물' : '연결된 인물'}
-      </div>
-      {connectionKind === 'few_connections' && (
-        <p className="relation-modal-side-hint">
-          연결이 적어 레이더보다 목록으로 보는 편이 더 정확합니다.
-        </p>
-      )}
-      {connectionKind === 'no_connections' && (
+  const isCardView =
+    connectionKind === 'single_connection' || connectionKind === 'pair_connections';
+  const isCompactModal = isCardView || connectionKind === 'no_connections';
+
+  let bodyPanel = null;
+  if (isCardView) {
+    bodyPanel = (
+      <FewConnectionsPanel
+        items={radarChartData}
+        activeName={activeName}
+        onSelect={activateItem}
+        sourceName={node?.displayName}
+        connectionKind={connectionKind}
+      />
+    );
+  } else if (connectionKind === 'no_connections') {
+    bodyPanel = (
+      <div className="relation-modal-side relation-modal-side--solo">
+        <div className="relation-modal-side-title">추천 인물</div>
         <p className="relation-modal-side-hint">
           이 챕터 범위에서 연결된 인물이 없습니다. 다른 챕터를 보거나 아래 추천 인물을 확인해 보세요.
         </p>
-      )}
-      <RelationList
-        items={connectionKind === 'no_connections' ? recommendedNodes : radarChartData}
-        activeName={activeName}
-        onSelect={(item) => {
-          if (connectionKind === 'no_connections') {
-            switchToRelated(item);
-            return;
-          }
-          activateItem(item);
-        }}
-        emptyMessage={connectionKind === 'no_connections' ? '추천할 인물이 없습니다.' : null}
-      />
-      <SelectedDetail
-        item={connectionKind === 'no_connections' ? null : activeItem}
-        onFocusOnGraph={focusOnGraph}
-        canFocusGraph={!!onSelectRelatedNode && connectionKind !== 'no_connections'}
-      />
-      <div className="relation-modal-cta-row">
-        {onOpenChapterSidebar && (
-          <button
-            type="button"
-            className="relation-modal-action-btn relation-modal-action-btn--secondary"
-            onClick={() => {
-              onOpenChapterSidebar();
-              onClose();
-            }}
-          >
-            챕터 선택 열기
-          </button>
-        )}
-        {activeItem && onSelectRelatedNode && connectionKind !== 'no_connections' && (
-          <button
-            type="button"
-            className="relation-modal-action-btn relation-modal-action-btn--secondary"
-            onClick={() => switchToRelated(activeItem)}
-          >
-            이 인물로 분석 전환
-          </button>
-        )}
+        <RelationList
+          items={recommendedNodes}
+          activeName={activeName}
+          onSelect={switchToRelated}
+          emptyMessage="추천할 인물이 없습니다."
+        />
       </div>
+    );
+  } else {
+    bodyPanel = (
+      <div className="relation-modal-side">
+        <div className="relation-modal-side-title">연결된 인물</div>
+        <RelationList
+          items={radarChartData}
+          activeName={activeName}
+          onSelect={activateItem}
+        />
+      </div>
+    );
+  }
+
+  const ctaRow = activeItem && onSelectRelatedNode && connectionKind !== 'no_connections' ? (
+    <div className="relation-modal-cta-row">
+      <button
+        type="button"
+        className="relation-modal-action-btn relation-modal-action-btn--secondary"
+        onClick={() => switchToRelated(activeItem)}
+      >
+        이 인물로 분석 전환
+      </button>
     </div>
-  );
+  ) : null;
 
   const titleId = 'relation-analysis-modal-title';
+  const bodyClassName = [
+    'tooltip-modal-body',
+    'relation-modal-body',
+    connectionKind === 'sufficient_connections' ? 'has-chart' : '',
+    isCardView ? 'is-card-view' : '',
+    connectionKind === 'no_connections' ? 'is-empty-view' : '',
+  ].filter(Boolean).join(' ');
+
+  const containerClassName = [
+    'modal-container',
+    'relation-modal-container',
+    isCompactModal ? 'relation-modal-container--compact' : '',
+    connectionKind === 'pair_connections' ? 'is-pair' : '',
+    connectionKind === 'single_connection' ? 'is-single' : '',
+  ].filter(Boolean).join(' ');
 
   return (
-    <div className="modal-overlay" onClick={onClose} role="presentation">
+    <div
+      className={`modal-overlay relation-modal-overlay--graph-page${isCompactModal ? ' is-compact' : ''}`}
+      style={overlayStyle}
+      onClick={onClose}
+      role="presentation"
+    >
       <div
         ref={dialogRef}
-        className="modal-container relation-modal-container"
+        className={containerClassName}
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
@@ -521,14 +616,12 @@ function RelationAnalysisModalImpl({
               <h2 id={titleId} className="tooltip-modal-title">
                 {node?.displayName || '인물'} 관계 분석
               </h2>
-              <div className="relation-modal-meta">
-                {(chapterScopeLabel || chapterNum != null) && (
-                  <span className="relation-modal-chip">
-                    {chapterScopeLabel || `챕터 ${chapterNum}`}
-                  </span>
-                )}
-                <span className="relation-modal-chip">연결 {connectionCount}명</span>
-              </div>
+              {(chapterScopeLabel || chapterNum != null) && (
+                <span className="relation-modal-chip">
+                  {chapterScopeLabel || `챕터 ${chapterNum}`}
+                </span>
+              )}
+              <span className="relation-modal-chip">연결 {connectionCount}명</span>
             </div>
           </div>
           <div className="relation-modal-header-actions">
@@ -564,19 +657,22 @@ function RelationAnalysisModalImpl({
           </div>
         </div>
 
-        <div className="relation-modal-legend" aria-hidden="false">
-          <span className="relation-modal-legend-label">긍정성</span>
-          <div className="relation-modal-legend-bar">
-            <span>부정 (−1)</span>
-            <span className="relation-modal-legend-gradient" />
-            <span>긍정 (+1)</span>
+        {connectionKind === 'sufficient_connections' ? (
+          <div className="relation-modal-legend" aria-hidden="false">
+            <span className="relation-modal-legend-label">긍정성</span>
+            <div className="relation-modal-legend-bar">
+              <span>부정 (−1)</span>
+              <span className="relation-modal-legend-gradient" />
+              <span>긍정 (+1)</span>
+            </div>
           </div>
-        </div>
+        ) : null}
 
-        <div className={`tooltip-modal-body relation-modal-body${connectionKind === 'sufficient_connections' ? ' has-chart' : ''}`}>
+        <div className={bodyClassName}>
           {chartPanel}
-          {listPanel}
+          {bodyPanel}
         </div>
+        {ctaRow}
       </div>
     </div>
   );
@@ -731,8 +827,15 @@ function checkNodeAppearance({ isSidebar, data, node, chapterNum, folderKey, eve
   }
 }
 
-function resolvePovSummary(node, chapterNum, povSummaries) {
-  if (!node) return "인물에 대한 요약 정보가 없습니다.";
+function resolvePovSummary(node, chapterNum, povSummaries, povError = null) {
+  if (!node) return { text: '인물에 대한 요약 정보가 없습니다.', isError: false };
+
+  if (povError) {
+    return {
+      text: typeof povError === 'string' ? povError : '관점 요약을 불러오지 못했습니다.',
+      isError: true,
+    };
+  }
 
   const list = povSummaries?.povSummaries;
   if (Array.isArray(list) && list.length > 0) {
@@ -745,10 +848,13 @@ function resolvePovSummary(node, chapterNum, povSummaries) {
         .filter((n) => typeof n === 'string' && n.trim() !== '');
       match = list.find((s) => names.some((n) => n === s.characterName));
     }
-    if (match?.summaryText) return match.summaryText;
+    if (match?.summaryText) return { text: match.summaryText, isError: false };
   }
 
-  return `${node.displayName}에 대한 ${chapterNum || 1}장 관점 요약이 아직 준비되지 않았습니다.`;
+  return {
+    text: `${node.displayName}에 대한 ${chapterNum || 1}장 관점 요약이 아직 준비되지 않았습니다.`,
+    isError: false,
+  };
 }
 
 function buildRadarChartData({
@@ -873,17 +979,6 @@ function buildRecommendedNodes({ elements, apiBookGraphData, excludeId, limit = 
 function handleProfileImageError(e) {
   e.target.style.display = "none";
   if (e.target.nextSibling) e.target.nextSibling.style.display = "block";
-}
-
-function PersonSilhouette({ size = 48, circleFill = "#e5e7eb", bodyFill = "#bdbdbd" }) {
-  const cx = size / 2;
-  return (
-    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} fill="none">
-      <circle cx={cx} cy={cx} r={cx} fill={circleFill} />
-      <ellipse cx={cx} cy={size * 0.375} rx={size * 0.21} ry={size * 0.21} fill={bodyFill} />
-      <ellipse cx={cx} cy={size * 0.79} rx={size * 0.29} ry={size * 0.17} fill={bodyFill} />
-    </svg>
-  );
 }
 
 function TooltipCloseButton({ onClose, ariaLabel, className }) {
@@ -1032,9 +1127,11 @@ function UnifiedNodeInfo({
   currentEvent = null,
   prevValidEvent = null,
   povSummaries = null,
+  povError = null,
+  onRetryPov = null,
   apiBookGraphData = null,
   onSelectRelatedNode = null,
-  onOpenChapterSidebar = null,
+  chapterRailWidth = null,
 }) {
   const { filename: urlFilename } = useParams();
   const isSidebar = displayMode === 'sidebar';
@@ -1112,10 +1209,12 @@ function UnifiedNodeInfo({
     setError(result.error);
   }, [data, node, chapterNum, eventInfo, folderKey, elements, isSidebar]);
 
-  const summaryText = useMemo(
-    () => resolvePovSummary(node, chapterNum, povSummaries),
-    [node, chapterNum, povSummaries],
+  const summaryResult = useMemo(
+    () => resolvePovSummary(node, chapterNum, povSummaries, povError),
+    [node, chapterNum, povSummaries, povError],
   );
+  const summaryText = summaryResult.text;
+  const summaryIsError = summaryResult.isError;
 
   const radarChartData = useMemo(() => {
     if (!isSidebar) return [];
@@ -1133,19 +1232,20 @@ function UnifiedNodeInfo({
     if (!isSidebar) return 'no_connections';
     const n = radarChartData.length;
     if (n === 0) return 'no_connections';
-    if (n <= 2) return 'few_connections';
+    if (n === 1) return 'single_connection';
+    if (n === 2) return 'pair_connections';
     return 'sufficient_connections';
   }, [isSidebar, radarChartData]);
 
   const recommendedNodes = useMemo(() => {
-    if (!isSidebar) return [];
+    if (!isSidebar || connectionKind !== 'no_connections') return [];
     return buildRecommendedNodes({
       elements,
       apiBookGraphData,
       excludeId: node?.id,
       limit: 3,
     });
-  }, [isSidebar, elements, apiBookGraphData, node?.id]);
+  }, [isSidebar, connectionKind, elements, apiBookGraphData, node?.id]);
 
   const isWarning = summaryStage === SUMMARY.WARNING;
   const isContent = summaryStage === SUMMARY.CONTENT;
@@ -1169,8 +1269,10 @@ function UnifiedNodeInfo({
       recommendedNodes={recommendedNodes}
       onClose={closeModal}
       onSelectRelatedNode={onSelectRelatedNode ? handleSelectRelatedNode : null}
-      onOpenChapterSidebar={onOpenChapterSidebar}
       returnFocusRef={analysisBtnRef}
+      chapterRailWidth={
+        chapterRailWidth ?? GRAPH_LAYOUT_CONSTANTS.SIDEBAR.OPEN_WIDTH
+      }
     />
   ) : null;
 
@@ -1358,9 +1460,23 @@ function UnifiedNodeInfo({
           >
             <div className="tooltip-summary-content">
               <div className="tooltip-summary-quote">
-                <p className={`tooltip-summary-text${isContent ? ' is-animated' : ''}`}>
+                <p
+                  className={`tooltip-summary-text${isContent ? ' is-animated' : ''}${
+                    summaryIsError ? ' tooltip-summary-text--error' : ''
+                  }`}
+                >
                   {summaryText}
                 </p>
+                {summaryIsError && typeof onRetryPov === 'function' && (
+                  <button
+                    type="button"
+                    className="tooltip-action-btn tooltip-action-btn--secondary"
+                    onClick={onRetryPov}
+                    style={{ marginTop: 8 }}
+                  >
+                    다시 시도
+                  </button>
+                )}
               </div>
             </div>
           </div>

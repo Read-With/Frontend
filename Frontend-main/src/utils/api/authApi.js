@@ -258,8 +258,6 @@ export const authenticatedRequest = async (endpoint, options = {}) => {
   const attempts = retry === false ? 1 : Math.max(1, Number(maxAttempts) || API_REQUEST_MAX_ATTEMPTS);
   const url = `${getApiBaseUrl()}/api${endpoint}`;
 
-  let lastError = null;
-
   for (let attempt = 1; attempt <= attempts; attempt++) {
     let response;
     try {
@@ -270,7 +268,6 @@ export const authenticatedRequest = async (endpoint, options = {}) => {
       });
     } catch (error) {
       if (error?.status === 401) throw error;
-      lastError = error;
       if (!isNetworkFetchError(error) || attempt >= attempts) throw error;
       await sleep(API_REQUEST_RETRY_BASE_MS * attempt);
       continue;
@@ -297,7 +294,7 @@ export const authenticatedRequest = async (endpoint, options = {}) => {
     throw await toHttpError(response);
   }
 
-  throw lastError || new Error('API 요청 실패');
+  throw new Error('API 요청 실패');
 };
 
 export const refreshToken = async (options = {}) => {

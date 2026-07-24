@@ -129,6 +129,7 @@ function UnifiedEdgeTooltip({
     loading,
     noRelation,
     error: relationError,
+    incomplete: relationIncomplete,
     fetchData,
   } = useRelationData(relationDataMode, id1, id2, chapterNum, displayEventNum, numericBookId);
 
@@ -582,6 +583,14 @@ function UnifiedEdgeTooltip({
     return (
       <div className="edge-chart-panel">
         <div className="edge-chart-title">{chartTitle}</div>
+        {relationIncomplete && (
+          <p className="edge-chart-incomplete-hint">
+            일부 이벤트를 불러오지 못했습니다.{' '}
+            <button type="button" onClick={fetchData} className="edge-tooltip-retry-btn">
+              다시 시도
+            </button>
+          </p>
+        )}
         {relationTimelineChart(chartHeight)}
       </div>
     );

@@ -12,7 +12,13 @@ import {
   enforceCacheSizeLimit,
 } from '../common/cache/cacheManager';
 import { eventUtils, cacheKeyUtils, MACRO_GRAPH_STORAGE_KEY_RE } from '../viewer/viewerCore';
-import { accumulateDeltasToGraphResult, resolveChapterEventIdOrder } from '../api/graphApi';
+import {
+  accumulateDeltasToGraphResult,
+  resolveChapterEventIdOrder,
+  FETCH_STATUS,
+  GRAPH_LOAD_SOURCE,
+  statusFromGraphSource,
+} from '../api/graphApi';
 import {
   findManifestEventInChapter,
   resolveLastEventIdxForChapter,
@@ -35,6 +41,8 @@ export {
   ensureGraphBookCache,
   clearBookRelationshipDeltas,
 } from './graphModel';
+
+export { FETCH_STATUS, GRAPH_LOAD_SOURCE } from '../api/graphApi';
 
 const asArray = (value) => (Array.isArray(value) ? value : []);
 
@@ -308,34 +316,48 @@ export const hasMacroGraphStorageCache = (bookId, chapter) => {
   return hasGraphPayload(checkLocalStorageCache(cacheKey));
 };
 
-const handleLoaderSuccess = (data, onSuccess, cacheKey) => {
+const handleLoaderSuccess = (data, onSuccess, cacheKey, source = GRAPH_LOAD_SOURCE.API) => {
   if (cacheKey && hasGraphPayload(data)) {
     saveToLocalStorageCache(cacheKey, data);
     const m = MACRO_GRAPH_STORAGE_KEY_RE.exec(cacheKey);
     if (m) saveMacroToSessionCache(m[1], m[2], data);
   }
-  onSuccess?.(data);
+  const meta = { source, status: statusFromGraphSource(source) };
+  onSuccess?.(data, meta);
+  return { data, source, status: meta.status };
 };
 
 const handleLoaderFallback = (bookId, chapter, eventIdx, onSuccess, logMessage) => {
   const fallbackData = getChapterEventFallbackData(bookId, chapter, eventIdx) ?? null;
   if (!fallbackData) return null;
-  errorUtils.logInfo('GraphDataLoader', logMessage, { bookId, chapter, eventIdx, source: 'fallback' });
-  onSuccess?.(fallbackData);
-  return { data: fallbackData, source: 'fallback' };
+  errorUtils.logInfo('GraphDataLoader', logMessage, {
+    bookId,
+    chapter,
+    eventIdx,
+    source: GRAPH_LOAD_SOURCE.FALLBACK,
+  });
+  const meta = {
+    source: GRAPH_LOAD_SOURCE.FALLBACK,
+    status: FETCH_STATUS.FALLBACK,
+  };
+  onSuccess?.(fallbackData, meta);
+  return { data: fallbackData, source: GRAPH_LOAD_SOURCE.FALLBACK, status: FETCH_STATUS.FALLBACK };
 };
 
 const tryLoaderFallback = (bookId, chapter, eventIdx, onSuccess, onError, logMessage, error) => {
   const fallbackResult = handleLoaderFallback(bookId, chapter, eventIdx, onSuccess, logMessage);
   if (fallbackResult) return fallbackResult;
   onError?.(error);
-  return { data: null, source: error ? 'error' : 'none' };
+  return {
+    data: null,
+    source: error ? GRAPH_LOAD_SOURCE.ERROR : GRAPH_LOAD_SOURCE.NONE,
+    status: FETCH_STATUS.ERROR,
+  };
 };
 
 const processApiResponse = (response, cacheKey, onSuccess, bookId, chapter, eventIdx, onError) => {
   if (response?.isSuccess && response?.result) {
-    handleLoaderSuccess(response.result, onSuccess, cacheKey);
-    return { data: response.result, source: 'api' };
+    return handleLoaderSuccess(response.result, onSuccess, cacheKey, GRAPH_LOAD_SOURCE.API);
   }
 
   const apiError = new Error(response?.message || 'API 응답이 실패했습니다');
@@ -345,7 +367,7 @@ const processApiResponse = (response, cacheKey, onSuccess, bookId, chapter, even
   const fallbackResult = handleLoaderFallback(bookId, chapter, eventIdx, onSuccess, '폴백 데이터 사용');
   if (fallbackResult) return fallbackResult;
   onError?.(apiError);
-  return { data: null, source: 'none' };
+  return { data: null, source: GRAPH_LOAD_SOURCE.NONE, status: FETCH_STATUS.ERROR };
 };
 
 export const prefetchMacroGraphToCache = async (bookId, chapter, apiCall) => {
@@ -379,23 +401,35 @@ export const loadGraphDataWithCache = async ({
   if (macroMatch) {
     const sessionData = getMacroFromSessionCache(macroMatch[1], macroMatch[2]);
     if (hasGraphPayload(sessionData)) {
-      onSuccess?.(sessionData);
-      return { data: sessionData, source: 'session' };
+      const meta = {
+        source: GRAPH_LOAD_SOURCE.SESSION,
+        status: FETCH_STATUS.OK,
+      };
+      onSuccess?.(sessionData, meta);
+      return { data: sessionData, ...meta };
     }
   }
 
   const localStorageData = checkLocalStorageCache(cacheKey);
   if (hasGraphPayload(localStorageData)) {
     if (macroMatch) saveMacroToSessionCache(macroMatch[1], macroMatch[2], localStorageData);
-    onSuccess?.(localStorageData);
-    return { data: localStorageData, source: 'localStorage' };
+    const meta = {
+      source: GRAPH_LOAD_SOURCE.LOCAL_STORAGE,
+      status: FETCH_STATUS.OK,
+    };
+    onSuccess?.(localStorageData, meta);
+    return { data: localStorageData, ...meta };
   }
 
   if (eventIdx !== undefined && eventIdx !== null) {
     const chapterEventsData = checkChapterEventsCache(bookId, chapter, eventIdx);
     if (chapterEventsData) {
-      handleLoaderSuccess(chapterEventsData, onSuccess, cacheKey);
-      return { data: chapterEventsData, source: 'chapterEvents' };
+      return handleLoaderSuccess(
+        chapterEventsData,
+        onSuccess,
+        cacheKey,
+        GRAPH_LOAD_SOURCE.CHAPTER_EVENTS
+      );
     }
   }
 
@@ -508,11 +542,21 @@ export function relationPointFromElement(edgeElement) {
 export function withNoRelation(result, fallbackNoRelation = true) {
   const safeResult = result ?? { points: [], labelInfo: [] };
   const points = Array.isArray(safeResult.points) ? safeResult.points : [];
+  const status = safeResult.status ?? (points.length === 0 ? FETCH_STATUS.EMPTY : FETCH_STATUS.OK);
+  // 네트워크/로드 에러는 noRelation으로 취급하지 않음
+  const noRelation =
+    status === FETCH_STATUS.ERROR
+      ? false
+      : (safeResult.noRelation ?? (points.length === 0 ? fallbackNoRelation : false));
   return {
     ...safeResult,
     points,
     labelInfo: Array.isArray(safeResult.labelInfo) ? safeResult.labelInfo : [],
-    noRelation: safeResult.noRelation ?? (points.length === 0 ? fallbackNoRelation : false),
+    noRelation,
+    status,
+    incomplete: Boolean(safeResult.incomplete),
+    failedIds: Array.isArray(safeResult.failedIds) ? safeResult.failedIds : null,
+    error: safeResult.error ?? null,
   };
 }
 
@@ -533,10 +577,25 @@ export function padSingleEvent(points, labels) {
 const PROBE_EVENT_HARD_MAX = 512;
 const timelineInflight = new Map();
 
-function emptyTimeline({ noRelation = false } = {}) {
-  return noRelation
-    ? { points: [], labelInfo: [], noRelation: true }
-    : { points: [], labelInfo: [] };
+function emptyTimeline({ noRelation = false, status = null, error = null, incomplete = false, failedIds = null } = {}) {
+  const resolvedStatus =
+    status ??
+    (error ? FETCH_STATUS.ERROR : noRelation ? FETCH_STATUS.EMPTY : FETCH_STATUS.OK);
+  return {
+    points: [],
+    labelInfo: [],
+    noRelation: resolvedStatus === FETCH_STATUS.ERROR ? false : noRelation,
+    status: resolvedStatus,
+    error: error ?? null,
+    incomplete: Boolean(incomplete),
+    failedIds: Array.isArray(failedIds) ? failedIds : null,
+  };
+}
+
+function timelineError(message, cause = null) {
+  const err = cause instanceof Error ? cause : new Error(message);
+  if (!(cause instanceof Error) && cause) err.cause = cause;
+  return emptyTimeline({ status: FETCH_STATUS.ERROR, error: err, noRelation: false });
 }
 
 function withTimelineInflight(cacheKey, run) {
@@ -621,8 +680,8 @@ function buildEventTimeline(eventCount, getPointAt, { fillGaps = true } = {}) {
   }
 
   return started
-    ? { points, labelInfo, noRelation: false }
-    : emptyTimeline({ noRelation: true });
+    ? { points, labelInfo, noRelation: false, status: FETCH_STATUS.OK }
+    : emptyTimeline({ noRelation: true, status: FETCH_STATUS.EMPTY });
 }
 
 function buildRelationTimelineFromChapterCache(bookId, id1, id2, chapterNum, eventNum) {
@@ -637,9 +696,12 @@ function buildRelationTimelineFromChapterCache(bookId, id1, id2, chapterNum, eve
 }
 
 async function collectRelationEventsViaApi(fetchEventData, chapter, lastEventIdx, id1, id2, lastOnly) {
-  if (!(lastEventIdx > 0)) return [];
+  if (!(lastEventIdx > 0)) {
+    return { events: [], incomplete: false, failedIds: [] };
+  }
 
   const relationEvents = [];
+  const failedIds = [];
   const indices = lastOnly
     ? Array.from({ length: lastEventIdx }, (_, i) => lastEventIdx - i)
     : Array.from({ length: lastEventIdx }, (_, i) => i + 1);
@@ -651,10 +713,14 @@ async function collectRelationEventsViaApi(fetchEventData, chapter, lastEventIdx
       relationEvents.push(event);
       if (lastOnly) break;
     } catch {
-      /* skip event */
+      failedIds.push(`${chapter}:${idx}`);
     }
   }
-  return relationEvents;
+  return {
+    events: relationEvents,
+    incomplete: failedIds.length > 0,
+    failedIds,
+  };
 }
 
 async function probeLastEventIdxByApi(fetchEventData, chapter) {
@@ -707,8 +773,9 @@ async function resolveChapterLastEventIdx(bookId, chapter, fetchEventData) {
 }
 
 async function fetchRelationTimelineCumulativeUncached(bookId, id1, id2, selectedChapter) {
-  if (!bookId || selectedChapter < 1) return emptyTimeline();
-
+  if (!bookId || selectedChapter < 1) {
+    return emptyTimeline({ noRelation: true, status: FETCH_STATUS.EMPTY });
+  }
   try {
     const eventCache = new Map();
     const chapterRelationCache = new Map();
@@ -751,6 +818,8 @@ async function fetchRelationTimelineCumulativeUncached(bookId, id1, id2, selecte
 
       const chapterPayload = getCachedChapterEvents(bookId, chapter);
       let relationEvents;
+      let incomplete = false;
+      let failedIds = [];
 
       if (chapterPayload?.baseSnapshot) {
         const cachedMax = Number(chapterPayload.maxEventIdx);
@@ -765,7 +834,7 @@ async function fetchRelationTimelineCumulativeUncached(bookId, id1, id2, selecte
             : [];
       } else {
         const lastEventIdx = await resolveChapterLastEventIdx(bookId, chapter, fetchEventData);
-        relationEvents = await collectRelationEventsViaApi(
+        const collected = await collectRelationEventsViaApi(
           fetchEventData,
           chapter,
           lastEventIdx,
@@ -773,18 +842,27 @@ async function fetchRelationTimelineCumulativeUncached(bookId, id1, id2, selecte
           id2,
           lastOnly
         );
+        relationEvents = collected.events;
+        incomplete = collected.incomplete;
+        failedIds = collected.failedIds;
       }
 
-      chapterRelationCache.set(cacheKey, relationEvents);
-      return relationEvents;
+      const packed = { events: relationEvents, incomplete, failedIds };
+      chapterRelationCache.set(cacheKey, packed);
+      return packed;
     };
 
     const points = [];
     const labelInfo = [];
+    const allFailedIds = [];
+    let incomplete = false;
 
     for (let chapter = 1; chapter <= selectedChapter; chapter += 1) {
       const lastOnly = chapter < selectedChapter;
-      const relationEvents = await getRelationEventsForChapter(chapter, lastOnly);
+      const { events: relationEvents, incomplete: chapterIncomplete, failedIds } =
+        await getRelationEventsForChapter(chapter, lastOnly);
+      if (chapterIncomplete) incomplete = true;
+      if (failedIds?.length) allFailedIds.push(...failedIds);
       if (!relationEvents.length) continue;
 
       if (lastOnly) {
@@ -799,9 +877,25 @@ async function fetchRelationTimelineCumulativeUncached(bookId, id1, id2, selecte
       }
     }
 
-    return { points, labelInfo };
-  } catch {
-    return emptyTimeline();
+    if (!points.length) {
+      return emptyTimeline({
+        noRelation: true,
+        status: FETCH_STATUS.EMPTY,
+        incomplete,
+        failedIds: allFailedIds,
+      });
+    }
+
+    return {
+      points,
+      labelInfo,
+      noRelation: false,
+      status: FETCH_STATUS.OK,
+      incomplete,
+      failedIds: allFailedIds.length ? allFailedIds : null,
+    };
+  } catch (error) {
+    return timelineError('누적 관계 타임라인 로드 실패', error);
   }
 }
 
@@ -815,18 +909,23 @@ async function fetchCachedTimeline(cacheKey, inflightPrefix, loadCached, fetchUn
 
     try {
       const result = await fetchUncached();
+      if (result?.status === FETCH_STATUS.ERROR) {
+        return withNoRelation(result, false);
+      }
       if (Array.isArray(result?.points) && result.points.length > 0) {
         setCachedRelationTimeline(cacheKey, result);
       }
       return withNoRelation(result);
-    } catch {
-      return emptyTimeline({ noRelation: true });
+    } catch (error) {
+      return timelineError('관계 타임라인 로드 실패', error);
     }
   });
 }
 
 export async function fetchRelationTimelineCumulative(bookId, id1, id2, selectedChapter) {
-  if (!bookId || selectedChapter < 1) return emptyTimeline({ noRelation: true });
+  if (!bookId || selectedChapter < 1) {
+    return emptyTimeline({ noRelation: true, status: FETCH_STATUS.EMPTY });
+  }
 
   const cacheKey = getRelationTimelineCacheKey(bookId, selectedChapter, id1, id2);
   return fetchCachedTimeline(
@@ -838,20 +937,23 @@ export async function fetchRelationTimelineCumulative(bookId, id1, id2, selected
 }
 
 export async function fetchRelationTimelineViewer(bookId, id1, id2, chapterNum, eventNum) {
-  if (!bookId || chapterNum < 1 || eventNum < 1) return emptyTimeline({ noRelation: true });
+  if (!bookId || chapterNum < 1 || eventNum < 1) {
+    return emptyTimeline({ noRelation: true, status: FETCH_STATUS.EMPTY });
+  }
 
   const cachedTimeline = buildRelationTimelineFromChapterCache(bookId, id1, id2, chapterNum, eventNum);
-  if (cachedTimeline) return cachedTimeline;
+  if (cachedTimeline) return withNoRelation(cachedTimeline);
 
   const inflightKey = `view:${bookId}:${chapterNum}:${eventNum}:${id1}:${id2}`;
   return withTimelineInflight(inflightKey, async () => {
     const again = buildRelationTimelineFromChapterCache(bookId, id1, id2, chapterNum, eventNum);
-    if (again) return again;
+    if (again) return withNoRelation(again);
 
     try {
       const deltasBundle = await ensureBookRelationshipDeltas(bookId, { chapterIndex: chapterNum });
       const chapterEventIdOrder = resolveChapterEventIdOrder(bookId, chapterNum);
       const cachedEvents = new Map();
+      const failedIds = [];
 
       const timeline = buildEventTimeline(eventNum, (idx, started) => {
         try {
@@ -872,13 +974,28 @@ export async function fetchRelationTimelineViewer(bookId, id1, id2, chapterNum, 
           if (!relation) return started ? null : undefined;
           return relation.positivity || 0;
         } catch {
+          failedIds.push(`${chapterNum}:${idx}`);
           return started ? null : undefined;
         }
       }, { fillGaps: true });
 
-      return timeline.noRelation ? emptyTimeline({ noRelation: true }) : withNoRelation(timeline);
-    } catch {
-      return emptyTimeline({ noRelation: true });
+      const incomplete = failedIds.length > 0;
+      if (timeline.noRelation) {
+        return emptyTimeline({
+          noRelation: true,
+          status: FETCH_STATUS.EMPTY,
+          incomplete,
+          failedIds,
+        });
+      }
+      return withNoRelation({
+        ...timeline,
+        incomplete,
+        failedIds: incomplete ? failedIds : null,
+        status: FETCH_STATUS.OK,
+      });
+    } catch (error) {
+      return timelineError('뷰어 관계 타임라인 로드 실패', error);
     }
   });
 }

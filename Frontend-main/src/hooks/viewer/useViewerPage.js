@@ -294,7 +294,7 @@ export function useViewerPage() {
     () => resolveServerBookIdOrFallback(book, bookId),
     [book, bookId]
   );
-  const { loaded: manifestLoaded } = useManifestLoaded(manifestServerBookId);
+  const { loaded: manifestLoaded, ready: manifestReady } = useManifestLoaded(manifestServerBookId);
 
   const preferredResumeAnchor = useMemo(
     () => toViewerResumeAnchor(location.state?.resumeAnchor),
@@ -361,7 +361,7 @@ export function useViewerPage() {
     currentChapter,
     currentEvent,
     setIsDataEmpty: graphActions.setIsDataEmpty,
-    manifestLoaded,
+    manifestLoaded: manifestReady,
     isViewerPageReady,
     resetTransition,
     setElements,

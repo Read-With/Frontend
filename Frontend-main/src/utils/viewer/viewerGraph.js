@@ -234,9 +234,24 @@ export function resolveCumulativeGraphForDisplay(
       : convertGraphSourceToElements(cached, chapter, eventIdx, deps, null, { bookId });
 
   const fallback = getChapterEventFallbackData(bookId, chapter, eventIdx);
-  const resolvedCharacters = resolved.characters.length
-    ? resolved.characters
-    : enrichGraphCharacters(fallback?.characters ?? [], { bookId });
+  const mergedFrom = [];
+
+  let resolvedCharacters = resolved.characters;
+  if (resolvedCharacters.length) {
+    mergedFrom.push('cache');
+  } else if (fallback?.characters?.length) {
+    resolvedCharacters = enrichGraphCharacters(fallback.characters, { bookId });
+    mergedFrom.push('fallback');
+  }
+
+  // relations: 단일 소스 우선 — resolved에 있으면 그것만, 없을 때만 fallback
+  let relations = asArray(resolved.relations);
+  if (relations.length) {
+    if (!mergedFrom.includes('cache')) mergedFrom.push('cache');
+  } else if (fallback?.relations?.length) {
+    relations = fallback.relations;
+    if (!mergedFrom.includes('fallback')) mergedFrom.push('fallback');
+  }
 
   return {
     elements: applyDisplayNamesToElements(resolved.elements, {
@@ -245,8 +260,9 @@ export function resolveCumulativeGraphForDisplay(
     }),
     eventMeta: resolved.eventMeta ?? fallback?.event ?? null,
     characters: resolvedCharacters,
-    relations: fallback?.relations ?? resolved.relations,
+    relations,
     normalizedEvent: resolved.normalizedEvent ?? null,
+    mergedFrom,
   };
 }
 

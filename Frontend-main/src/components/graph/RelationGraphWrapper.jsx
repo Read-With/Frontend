@@ -105,7 +105,7 @@ const graphBackButtonHandlers = createAdvancedButtonHandlers('default');
 const GRAPH_PAGE_EDGE_STYLE = getEdgeStyle('graph');
 const GRAPH_TRANSFORM_DEPS = { createCharacterMaps, buildNodeWeights, convertRelationsToElements };
 
-function ErrorToast({ error, onClose, duration = 5000 }) {
+function ErrorToast({ error, onClose, duration = 5000, variant = 'error' }) {
   useEffect(() => {
     if (!error || duration <= 0) return undefined;
     const timer = setTimeout(onClose, duration);
@@ -114,20 +114,32 @@ function ErrorToast({ error, onClose, duration = 5000 }) {
 
   if (!error) return null;
 
+  const isInfo = variant === 'info';
+  const message =
+    typeof error === 'string'
+      ? error
+      : errorUtils.getUserFriendlyMessage(error);
+
   return (
-    <div className="graph-error-toast" role="alert" aria-live="assertive">
-      <span className="material-symbols-outlined graph-error-toast__icon">error</span>
+    <div
+      className={`graph-error-toast${isInfo ? ' graph-error-toast--info' : ''}`}
+      role="alert"
+      aria-live="assertive"
+    >
+      <span className="material-symbols-outlined graph-error-toast__icon">
+        {isInfo ? 'info' : 'error'}
+      </span>
       <div className="graph-error-toast__body">
-        <div className="graph-error-toast__title">오류 발생</div>
-        <div className="graph-error-toast__message">
-          {errorUtils.getUserFriendlyMessage(error)}
+        <div className="graph-error-toast__title">
+          {isInfo ? '캐시 데이터' : '오류 발생'}
         </div>
+        <div className="graph-error-toast__message">{message}</div>
       </div>
       <button
         type="button"
         className="graph-error-toast__close"
         onClick={onClose}
-        aria-label="오류 메시지 닫기"
+        aria-label="메시지 닫기"
       >
         <span className="material-symbols-outlined">close</span>
       </button>
@@ -143,6 +155,7 @@ ErrorToast.propTypes = {
   ]),
   onClose: PropTypes.func.isRequired,
   duration: PropTypes.number,
+  variant: PropTypes.oneOf(['error', 'info']),
 };
 
 function RelationGraphWrapper() {
@@ -232,10 +245,17 @@ function RelationGraphWrapper() {
       isLoading: isGraphLoading,
     },
     error: apiError,
+    fallbackNotice,
     clearError: clearApiError,
+    clearFallbackNotice,
+    retryGraph,
   } = useApiGraphData(serverBookId, currentChapter);
 
-  const { povSummaries } = useChapterPovSummaries(serverBookId, currentChapter);
+  const {
+    povSummaries,
+    error: povError,
+    retry: retryPov,
+  } = useChapterPovSummaries(serverBookId, currentChapter);
 
   const handleBackToViewer = useCallback(() => {
     const { state, pathname } = locationRef.current;
@@ -459,10 +479,6 @@ function RelationGraphWrapper() {
     return graphSelectNodeRef.current?.(idOrName) ?? false;
   }, [cancelClosing]);
 
-  const handleOpenChapterSidebar = useCallback(() => {
-    if (!isSidebarOpen) setSidebarOpen(true);
-  }, [isSidebarOpen, setSidebarOpen]);
-
   const handleCanvasClick = useCallback((e) => {
     if (e.target !== e.currentTarget) return;
     e.stopPropagation();
@@ -491,9 +507,33 @@ function RelationGraphWrapper() {
   return (
     <div style={pageRootStyle}>
       {apiError && <ErrorToast error={apiError} onClose={clearApiError} />}
+      {fallbackNotice && (
+        <ErrorToast
+          error={fallbackNotice.message}
+          onClose={clearFallbackNotice}
+          duration={8000}
+          variant="info"
+        />
+      )}
       {isApiGraphEmpty && (
         <div style={emptyGraphBannerStyle}>
           선택한 챕터에 표시할 그래프 데이터가 없습니다.
+          {typeof retryGraph === 'function' && (
+            <button
+              type="button"
+              onClick={() => void retryGraph()}
+              style={{
+                marginLeft: 12,
+                textDecoration: 'underline',
+                background: 'none',
+                border: 'none',
+                color: 'inherit',
+                cursor: 'pointer',
+              }}
+            >
+              다시 시도
+            </button>
+          )}
         </div>
       )}
 
@@ -544,6 +584,8 @@ function RelationGraphWrapper() {
         elements={elements}
         renderElements={finalElements}
         povSummaries={povSummaries}
+        povError={povError}
+        onRetryPov={retryPov}
         apiBookGraphData={apiBookGraphData}
         bookId={serverBookId}
         isLoading={isGraphLoading}
@@ -573,7 +615,6 @@ function RelationGraphWrapper() {
         graphClearRef={graphClearRef}
         graphSelectNodeRef={graphSelectNodeRef}
         onSelectRelatedNode={handleSelectRelatedNode}
-        onOpenChapterSidebar={handleOpenChapterSidebar}
       />
     </div>
   );

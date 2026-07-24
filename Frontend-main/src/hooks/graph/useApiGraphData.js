@@ -14,6 +14,8 @@ import {
   padSingleEvent,
   fetchRelationTimelineCumulative,
   fetchRelationTimelineViewer,
+  FETCH_STATUS,
+  GRAPH_LOAD_SOURCE,
 } from '../../utils/graph/graphFetch';
 import { getMaxChapter } from '../../utils/common/cache/manifestCache';
 import { toPositiveNumberOrNull, toPositiveInt } from '../../utils/common/valueUtils';
@@ -26,14 +28,17 @@ import { cacheKeyUtils } from '../../utils/viewer/viewerCore';
 import { enrichGraphPayload } from '../../utils/graph/graphCore';
 
 const ERROR_DISPLAY_DURATION = 5000;
+const FALLBACK_NOTICE_DURATION = 8000;
 
 export function useApiGraphData(serverBookId, currentChapter) {
   const {
-    loaded: manifestReady,
+    loaded: manifestLoaded,
+    ready: manifestReady,
     manifest: manifestData,
     error: manifestLoadError,
   } = useManifestLoaded(serverBookId);
   const [apiBookGraphData, setApiBookGraphData] = useState(null);
+  const [fallbackNotice, setFallbackNotice] = useState(null);
   const [userCurrentChapter, setUserCurrentChapter] = useState(null);
   const [isGraphLoading, setIsGraphLoading] = useState(false);
   const { handleError } = useErrorHandler('API Graph Data');
@@ -42,16 +47,18 @@ export function useApiGraphData(serverBookId, currentChapter) {
   const prevBookIdRef = useRef(undefined);
   const loadedGraphKeyRef = useRef(null);
 
+  // manifest 없을 때 fallback:1로 잘못된 챕터 API를 치지 않음
   const apiMaxChapter = useMemo(
-    () => getMaxChapter(serverBookId, manifestData, { fallback: 1 }),
+    () => getMaxChapter(serverBookId, manifestData, { fallback: 0 }),
     [serverBookId, manifestData]
   );
 
   const clearError = useCallback(() => setApiError(null), []);
+  const clearFallbackNotice = useCallback(() => setFallbackNotice(null), []);
 
   useEffect(() => {
-    if (!serverBookId || !manifestReady) return;
-    if (manifestLoadError) {
+    if (!serverBookId || !manifestLoaded) return;
+    if (manifestLoadError && !manifestReady) {
       setApiError(
         handleError(manifestLoadError, 'Manifest 로드 중 오류', {
           metadata: { bookId: serverBookId },
@@ -62,9 +69,15 @@ export function useApiGraphData(serverBookId, currentChapter) {
     if (manifestData) {
       setApiError(null);
     }
-  }, [serverBookId, manifestReady, manifestLoadError, manifestData, handleError]);
+  }, [
+    serverBookId,
+    manifestLoaded,
+    manifestReady,
+    manifestLoadError,
+    manifestData,
+    handleError,
+  ]);
 
-  // book 전환 → 전체 리셋 / chapter 전환 → 세션 캐시 없으면 그래프만 비움
   useEffect(() => {
     const bookChanged = prevBookIdRef.current !== serverBookId;
     prevBookIdRef.current = serverBookId;
@@ -72,6 +85,7 @@ export function useApiGraphData(serverBookId, currentChapter) {
     if (bookChanged) {
       setApiBookGraphData(null);
       setUserCurrentChapter(null);
+      setFallbackNotice(null);
       loadedGraphKeyRef.current = null;
       return;
     }
@@ -85,7 +99,11 @@ export function useApiGraphData(serverBookId, currentChapter) {
 
   const loadMacroGraphData = useCallback(async () => {
     const chapter = toPositiveInt(currentChapter);
-    if (!serverBookId || !manifestReady || chapter == null) {
+    if (!serverBookId || !manifestReady || chapter == null || apiMaxChapter < 1) {
+      setIsGraphLoading(false);
+      return;
+    }
+    if (chapter > apiMaxChapter) {
       setIsGraphLoading(false);
       return;
     }
@@ -104,6 +122,7 @@ export function useApiGraphData(serverBookId, currentChapter) {
       if (isStale(requestId)) return;
       loadedGraphKeyRef.current = null;
       setApiBookGraphData(null);
+      setFallbackNotice(null);
       setApiError(handleError(error, message, { metadata }));
     };
 
@@ -122,11 +141,21 @@ export function useApiGraphData(serverBookId, currentChapter) {
         eventIdx: null,
         cacheKey: cacheKeyUtils.macroGraphStorage(targetBookId, chapter),
         apiCall: () => getBookScopeRelationshipGraph(targetBookId, chapter),
-        onSuccess: (data) => {
+        onSuccess: (data, meta = {}) => {
           if (isStale(requestId)) return;
           setApiError(null);
           setApiBookGraphData(enrichGraphPayload(data, targetBookId));
           loadedGraphKeyRef.current = graphKey;
+          const source = meta.source ?? GRAPH_LOAD_SOURCE.API;
+          const status = meta.status ?? FETCH_STATUS.OK;
+          if (status === FETCH_STATUS.FALLBACK || source === GRAPH_LOAD_SOURCE.FALLBACK) {
+            setFallbackNotice({
+              message: '캐시된 그래프 데이터를 표시합니다. 최신 정보가 아닐 수 있습니다.',
+              timestamp: Date.now(),
+            });
+          } else {
+            setFallbackNotice(null);
+          }
           if (data.userCurrentChapter !== undefined) {
             setUserCurrentChapter(data.userCurrentChapter);
           }
@@ -144,7 +173,15 @@ export function useApiGraphData(serverBookId, currentChapter) {
       if (loadingKickTimer != null) globalThis.clearTimeout(loadingKickTimer);
       if (!isStale(requestId)) setIsGraphLoading(false);
     }
-  }, [serverBookId, currentChapter, manifestReady, handleError, nextRequestId, isStale]);
+  }, [
+    serverBookId,
+    currentChapter,
+    manifestReady,
+    apiMaxChapter,
+    handleError,
+    nextRequestId,
+    isStale,
+  ]);
 
   useEffect(() => {
     loadMacroGraphData();
@@ -170,9 +207,16 @@ export function useApiGraphData(serverBookId, currentChapter) {
     return () => clearTimeout(timeout);
   }, [apiError, clearError]);
 
+  useEffect(() => {
+    if (!fallbackNotice?.timestamp) return undefined;
+    const timeout = setTimeout(clearFallbackNotice, FALLBACK_NOTICE_DURATION);
+    return () => clearTimeout(timeout);
+  }, [fallbackNotice, clearFallbackNotice]);
+
   return {
     manifest: {
       data: manifestData,
+      loaded: manifestLoaded,
       ready: manifestReady,
     },
     graph: {
@@ -182,48 +226,60 @@ export function useApiGraphData(serverBookId, currentChapter) {
       isLoading: isGraphLoading,
     },
     error: apiError,
+    fallbackNotice,
     clearError,
+    clearFallbackNotice,
+    retryGraph: loadMacroGraphData,
   };
 }
 
 export function useChapterPovSummaries(bookId, chapterIdx) {
   const [povSummaries, setPovSummaries] = useState(null);
+  const [error, setError] = useState(null);
   const { nextRequestId, isStale, invalidate } = useAsyncRequestGuard();
 
-  useEffect(() => {
+  const fetchSummaries = useCallback(async () => {
     const bid = toPositiveNumberOrNull(bookId);
     const ch = toPositiveInt(chapterIdx);
     if (bid == null || ch == null) {
       setPovSummaries(null);
-      return undefined;
+      setError(null);
+      return;
     }
 
     const requestId = nextRequestId();
+    setError(null);
 
-    const fetchSummaries = async () => {
-      try {
-        const response = await getChapterPovSummaries(bid, ch);
-        if (isStale(requestId)) return;
+    try {
+      const response = await getChapterPovSummaries(bid, ch);
+      if (isStale(requestId)) return;
 
-        if (response.isSuccess) {
-          setPovSummaries(normalizeChapterPovSummariesResult(response.result));
-        } else {
-          setPovSummaries(null);
-        }
-      } catch {
-        if (isStale(requestId)) return;
+      if (response.isSuccess) {
+        setPovSummaries(normalizeChapterPovSummariesResult(response.result));
+        setError(null);
+      } else {
         setPovSummaries(null);
+        setError(response.message || 'POV 요약을 불러오지 못했습니다.');
       }
-    };
+    } catch (err) {
+      if (isStale(requestId)) return;
+      setPovSummaries(null);
+      setError(err?.message || 'POV 요약을 불러오는 중 오류가 발생했습니다.');
+    }
+  }, [bookId, chapterIdx, nextRequestId, isStale]);
 
+  useEffect(() => {
     void fetchSummaries();
-
     return () => {
       invalidate();
     };
-  }, [bookId, chapterIdx, nextRequestId, isStale, invalidate]);
+  }, [fetchSummaries, invalidate]);
 
-  return { povSummaries };
+  const retry = useCallback(() => {
+    void fetchSummaries();
+  }, [fetchSummaries]);
+
+  return { povSummaries, error, retry };
 }
 
 function buildRelationFetchKey(mode, bookId, id1, id2, chapterNum, eventNum) {
@@ -236,11 +292,23 @@ export function useRelationData(mode, id1, id2, chapterNum, eventNum, bookId = n
   const [loading, setLoading] = useState(false);
   const [noRelation, setNoRelation] = useState(false);
   const [error, setError] = useState(null);
+  const [incomplete, setIncomplete] = useState(false);
   const { nextRequestId, isStale, invalidate } = useAsyncRequestGuard();
   const lastSuccessKeyRef = useRef('');
 
   const numericBookId = useMemo(() => toPositiveNumberOrNull(bookId), [bookId]);
   const numericChapter = useMemo(() => toPositiveInt(chapterNum), [chapterNum]);
+
+  const resetError = useCallback((message, { bumpRequest = true } = {}) => {
+    if (bumpRequest) invalidate();
+    lastSuccessKeyRef.current = '';
+    setTimeline([]);
+    setLabels([]);
+    setNoRelation(false);
+    setIncomplete(false);
+    setError(message);
+    setLoading(false);
+  }, [invalidate]);
 
   const resetEmpty = useCallback((message, { bumpRequest = true } = {}) => {
     if (bumpRequest) invalidate();
@@ -248,7 +316,8 @@ export function useRelationData(mode, id1, id2, chapterNum, eventNum, bookId = n
     setTimeline([]);
     setLabels([]);
     setNoRelation(true);
-    setError(message);
+    setIncomplete(false);
+    setError(message || null);
     setLoading(false);
   }, [invalidate]);
 
@@ -277,6 +346,7 @@ export function useRelationData(mode, id1, id2, chapterNum, eventNum, bookId = n
     const requestId = nextRequestId();
     setLoading(true);
     setError(null);
+    setIncomplete(false);
 
     try {
       const result =
@@ -292,20 +362,42 @@ export function useRelationData(mode, id1, id2, chapterNum, eventNum, bookId = n
 
       if (isStale(requestId)) return;
 
+      if (result?.status === FETCH_STATUS.ERROR) {
+        resetError(
+          result.error?.message || '관계 데이터를 불러오는 중 오류가 발생했습니다.',
+          { bumpRequest: false }
+        );
+        return;
+      }
+
       const { points, labelInfo, noRelation: resultNoRelation } = result;
       const { points: paddedPoints, labels: paddedLabels } = padSingleEvent(points, labelInfo);
+      const emptyPoints = paddedPoints.filter((value) => value !== null).length === 0;
 
       setTimeline(paddedPoints);
       setLabels(paddedLabels);
-      setNoRelation(resultNoRelation || paddedPoints.filter((value) => value !== null).length === 0);
+      setNoRelation(Boolean(resultNoRelation) || emptyPoints);
+      setIncomplete(Boolean(result.incomplete));
+      setError(null);
       lastSuccessKeyRef.current = fetchKey;
     } catch {
       if (isStale(requestId)) return;
-      resetEmpty('관계 데이터를 불러오는 중 오류가 발생했습니다.', { bumpRequest: false });
+      resetError('관계 데이터를 불러오는 중 오류가 발생했습니다.', { bumpRequest: false });
     } finally {
       if (!isStale(requestId)) setLoading(false);
     }
-  }, [numericBookId, id1, id2, numericChapter, eventNum, mode, resetEmpty, nextRequestId, isStale]);
+  }, [
+    numericBookId,
+    id1,
+    id2,
+    numericChapter,
+    eventNum,
+    mode,
+    resetEmpty,
+    resetError,
+    nextRequestId,
+    isStale,
+  ]);
 
   useEffect(() => {
     void fetchData();
@@ -323,8 +415,9 @@ export function useRelationData(mode, id1, id2, chapterNum, eventNum, bookId = n
       loading,
       noRelation,
       error,
+      incomplete,
       fetchData: retryFetch,
     }),
-    [timeline, labels, loading, noRelation, error, retryFetch]
+    [timeline, labels, loading, noRelation, error, incomplete, retryFetch]
   );
 }

@@ -113,7 +113,10 @@ export const calculateLastEventForChapter = ({
 
 export const GRAPH_LAYOUT_CONSTANTS = {
   SIDEBAR: { OPEN_WIDTH: 280, CLOSED_WIDTH: 56 },
-  TOP_BAR_HEIGHT: 54,
+  /** .graph-page-topbar height (3.75rem)와 동일 */
+  TOP_BAR_HEIGHT: 60,
+  /** 관계 분석(레이더) 모달 — 챕터 레일·상단바로부터의 여백 */
+  ANALYSIS_MODAL_INSET: 16,
   /** GraphCanvas 툴팁 사이드바 실제 너비와 동일해야 센터링이 맞음 */
   TOOLTIP_SIDEBAR_WIDTH: 480,
   /** 우측 툴팁 사이드바 slide in/out */
