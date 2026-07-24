@@ -11,22 +11,22 @@ export const STYLE_DURATION = {
   SLOW: '0.4s',
 };
 
-/** 그래프·UI 공유 팔레트 (+ Cytoscape 전용 키) */
+/** 그래프·UI 공유 팔레트 — :root --rg-* 토큰과 동기화 (Cytoscape는 CSS var 미지원) */
 export const GRAPH_COLORS = {
-  backgroundLighter: '#f8fafc',
-  backgroundLight: '#f8f9fc',
-  border: '#e5e7eb',
-  borderLight: '#e3e6ef',
-  textPrimary: '#5C6F5C',
-  textSecondary: '#6c757d',
-  primary: '#5C6F5C',
-  white: '#ffffff',
-  nodeBackground: '#eee',
-  nodeBorder: '#5B7BA0',
-  nodeText: '#444',
-  edgeText: '#42506b',
+  backgroundLighter: '#f8fafc', // --rg-surface-slate
+  backgroundLight: '#f8f9fc', // --rg-surface-indigo
+  border: '#e5e7eb', // --rg-border
+  borderLight: '#e3e6ef', // --rg-border-soft
+  textPrimary: '#5C6F5C', // --rg-brand
+  textSecondary: '#6c757d', // --rg-text-subtle
+  primary: '#5C6F5C', // --rg-brand
+  white: '#ffffff', // --rg-surface
+  nodeBackground: '#f3f5f3',
+  nodeBorder: '#5C6F5C', // --rg-brand
+  nodeText: '#2f3b2f', // --rg-text-brand
+  edgeText: '#3d4f3d',
   successGreen: '#22c55e',
-  highlightBlue: '#5C6F5C',
+  highlightBlue: '#5C6F5C', // --rg-brand
 };
 
 const COLORS = GRAPH_COLORS;
@@ -65,27 +65,15 @@ const baseNodeGraphStyle = {
   'text-outline-width': 2,
 };
 
-const graphControlActionButtonStyle = {
-  background: COLORS.white,
-  color: COLORS.textPrimary,
-  border: `1px solid ${COLORS.border}`,
-  boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
-  '&:hover': {
-    background: COLORS.backgroundLight,
-    transform: 'translateY(-1px)',
-    boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
-  },
-};
-
 export const PRESET_LAYOUT = Object.freeze({
   name: 'preset',
   fit: false,
   animate: false,
 });
 
-/** @param {'graph'|'viewer'|'default'} [context='default'] graph 페이지는 라벨 fontSize 12 */
+/** @param {'graph'|'viewer'|'default'} [context='default'] viewer는 분할 밀도용 얇은 간선 */
 export const getEdgeStyle = (context = 'default') => ({
-  width: 5,
+  width: context === 'viewer' ? 3.5 : 5,
   fontSize: context === 'graph' ? 12 : 10,
 });
 
@@ -283,54 +271,5 @@ export const graphStyles = {
     display: 'flex',
     flexDirection: 'column',
     minHeight: 0,
-  },
-};
-
-export const graphControlsStyles = {
-  input: {
-    width: '220px',
-    minWidth: '220px',
-    maxWidth: '220px',
-    border: `1px solid ${COLORS.border}`,
-    borderRadius: '8px',
-    fontSize: '15px',
-    color: COLORS.textPrimary,
-    background: COLORS.backgroundLight,
-    transition: `all ${DURATION.FAST}`,
-    outline: 'none',
-    height: '36px',
-    padding: '0 12px',
-    fontWeight: '500',
-  },
-  button: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: '8px',
-    border: 'none',
-    borderRadius: '8px',
-    fontSize: '14px',
-    fontWeight: '600',
-    cursor: 'pointer',
-    transition: `all ${DURATION.FAST}`,
-    width: '88px',
-    height: '36px',
-    padding: '0 12px',
-    flexShrink: 0,
-  },
-  searchButton: graphControlActionButtonStyle,
-  resetButton: graphControlActionButtonStyle,
-  form: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '8px',
-    flexWrap: 'wrap',
-  },
-  container: {
-    position: 'relative',
-    display: 'inline-block',
-    width: 'auto',
-    minWidth: '200px',
-    zIndex: 1000,
   },
 };

@@ -654,7 +654,10 @@ const CytoscapeGraphUnified = ({
         className="graph-cy-container"
       />
       {noResultsMessage && (
-        <div className="graph-no-results">
+        <div className="graph-no-results" role="status">
+          <div className="graph-no-results-icon" aria-hidden>
+            <span className="material-symbols-outlined">person_search</span>
+          </div>
           <div className="graph-no-results-title">
             {noResultsMessage.title}
           </div>

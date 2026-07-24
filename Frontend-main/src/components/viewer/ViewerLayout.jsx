@@ -1,16 +1,20 @@
-import { useState, useEffect, useMemo, useCallback, memo } from 'react';
+import { useState, useEffect, useMemo, useCallback, memo, useRef } from 'react';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import { findViewerModeOption } from '../../utils/viewer/viewerSession';
 import { userViewerPath, userGraphPath } from '../../utils/common/urlUtils';
 import './ViewerToolbar.css';
 
 const PROGRESS_BAR_COLOR = '#5C6F5C';
-const PROGRESS_BAR_BG = '#e7eaf7';
+const PROGRESS_BAR_BG = '#e8f0e8';
+const SPLIT_STORAGE_KEY = 'viewer-graph-split-percent';
+const SPLIT_MIN = 32;
+const SPLIT_MAX = 68;
+const NARROW_MQ = '(max-width: 767px)';
 
 const TOOLBAR_BTN = {
   backgroundColor: 'white',
-  color: '#1B5E20',
-  border: '1px solid #388E3C',
+  color: '#5C6F5C',
+  border: '1px solid #e2e8f0',
 };
 
 const mobileMenuClass = 'flex items-center justify-center gap-2 p-3 rounded-lg transition-colors';
@@ -24,12 +28,14 @@ const flexLabelCenter = {
   width: '100%',
 };
 
-function onBtnOver(e) {
-  e.currentTarget.style.backgroundColor = '#e8f5e8';
-}
-
-function onBtnOut(e) {
-  e.currentTarget.style.backgroundColor = 'white';
+function readStoredSplitPercent() {
+  try {
+    const n = Number(localStorage.getItem(SPLIT_STORAGE_KEY));
+    if (Number.isFinite(n) && n >= SPLIT_MIN && n <= SPLIT_MAX) return n;
+  } catch {
+    /* ignore */
+  }
+  return 50;
 }
 
 function ToolbarButton({
@@ -48,8 +54,6 @@ function ToolbarButton({
       style={style ? { ...TOOLBAR_BTN, ...style } : TOOLBAR_BTN}
       title={title}
       aria-label={ariaLabel || title}
-      onMouseOver={onBtnOver}
-      onMouseOut={onBtnOut}
     >
       {children}
     </button>
@@ -97,12 +101,12 @@ const ViewerProgressBar = memo(function ViewerProgressBar({
         backdropFilter: 'blur(8px)',
         background: 'rgba(255,255,255,0.92)',
         borderRadius: 16,
-        boxShadow: '0 2px 16px rgba(79,109,222,0.10)',
+        boxShadow: '0 2px 16px rgba(92,111,92,0.10)',
         margin: '0.5rem 0 0.5rem 1rem',
         maxWidth: 700,
       }}
     >
-      <span style={{ fontWeight: 700, color: '#22336b', fontSize: '1.08rem', minWidth: 70 }}>
+      <span style={{ fontWeight: 700, color: '#2f3b2f', fontSize: '1.08rem', minWidth: 70 }}>
         {currentPage} / {totalPages}
       </span>
       <input
@@ -118,7 +122,7 @@ const ViewerProgressBar = memo(function ViewerProgressBar({
           height: 6,
           borderRadius: 8,
           background: PROGRESS_BAR_BG,
-          boxShadow: '0 1px 6px rgba(79,109,222,0.07)',
+          boxShadow: '0 1px 6px rgba(92,111,92,0.07)',
           outline: 'none',
           appearance: 'none',
           opacity: progressMetricsReady ? 1 : 0.55,
@@ -222,10 +226,10 @@ function ViewerToolbar({
 
   const graphToggleStyleMobile = useMemo(
     () => ({
-      border: showGraph ? '2px solid #388E3C' : TOOLBAR_BTN.border,
+      border: showGraph ? '2px solid #5C6F5C' : TOOLBAR_BTN.border,
       boxShadow: showGraph
-        ? '0 4px 12px rgba(56, 142, 60, 0.2)'
-        : '0 2px 4px rgba(56, 142, 60, 0.1)',
+        ? '0 4px 12px rgba(92, 111, 92, 0.2)'
+        : '0 2px 4px rgba(92, 111, 92, 0.1)',
       transform: showGraph ? 'scale(1.05)' : 'scale(1)',
     }),
     [showGraph]
@@ -235,7 +239,7 @@ function ViewerToolbar({
     () => ({
       width: '9rem',
       marginRight: '0.5rem',
-      border: showGraph ? '2px solid #388E3C' : TOOLBAR_BTN.border,
+      border: showGraph ? '2px solid #5C6F5C' : TOOLBAR_BTN.border,
     }),
     [showGraph]
   );
@@ -245,17 +249,17 @@ function ViewerToolbar({
       padding: '0.5rem 1rem',
       marginLeft: '1rem',
       borderRadius: '1rem',
-      backgroundColor: showGraph ? '#E8F5E8' : '#F1F8E9',
-      color: '#1B5E20',
+      backgroundColor: showGraph ? '#E8F5E8' : '#F4FAF4',
+      color: '#5C6F5C',
       fontWeight: '600',
       fontSize: '0.9rem',
       display: 'flex',
       alignItems: 'center',
       gap: '0.5em',
-      border: showGraph ? '2px solid #388E3C' : '1px solid #388E3C',
+      border: showGraph ? '2px solid #5C6F5C' : '1px solid #5C6F5C',
       boxShadow: showGraph
-        ? '0 2px 8px rgba(56, 142, 60, 0.15)'
-        : '0 1px 3px rgba(56, 142, 60, 0.1)',
+        ? '0 2px 8px rgba(92, 111, 92, 0.15)'
+        : '0 1px 3px rgba(92, 111, 92, 0.1)',
       transition: 'all 0.2s ease',
     }),
     [showGraph]
@@ -269,7 +273,7 @@ function ViewerToolbar({
       style={{
         backgroundColor: 'white',
         backdropFilter: 'blur(4px)',
-        borderBottom: '1.5px solid #e7eaf7',
+        borderBottom: '1.5px solid #e2e8f0',
         padding: isMobile ? '0.5rem' : '0.4rem 0.7rem',
       }}
     >
@@ -537,12 +541,102 @@ function ViewerLayout({
   previousPage = null,
   onExitToMypage,
 }) {
+  const splitRowRef = useRef(null);
+  const [splitPercent, setSplitPercent] = useState(readStoredSplitPercent);
+  const [isNarrow, setIsNarrow] = useState(
+    () => typeof window !== 'undefined' && window.matchMedia(NARROW_MQ).matches
+  );
+  const [mobilePane, setMobilePane] = useState('reader');
+  const [isSplitDragging, setIsSplitDragging] = useState(false);
+  const prevShowGraphRef = useRef(showGraph);
+
+  useEffect(() => {
+    const mq = window.matchMedia(NARROW_MQ);
+    const onChange = () => setIsNarrow(mq.matches);
+    onChange();
+    mq.addEventListener('change', onChange);
+    return () => mq.removeEventListener('change', onChange);
+  }, []);
+
+  // 그래프 off → 탭 리셋. 처음 켤 때만 그래프 탭으로 이동하고, 이후에는 사용자 선택 유지.
+  useEffect(() => {
+    const wasShown = prevShowGraphRef.current;
+    prevShowGraphRef.current = showGraph;
+    if (!showGraph) {
+      setMobilePane('reader');
+      return;
+    }
+    if (!wasShown && showGraph) {
+      setMobilePane('graph');
+    }
+  }, [showGraph]);
+
   useEffect(() => {
     const id = window.setTimeout(() => {
       window.dispatchEvent(new Event('resize'));
     }, 300);
     return () => window.clearTimeout(id);
-  }, [showGraph, graphFullScreen]);
+  }, [showGraph, graphFullScreen, splitPercent, mobilePane, isNarrow]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(SPLIT_STORAGE_KEY, String(splitPercent));
+    } catch {
+      /* ignore */
+    }
+  }, [splitPercent]);
+
+  const onDividerPointerDown = useCallback((event) => {
+    if (event.button != null && event.button !== 0) return;
+    event.preventDefault();
+    const row = splitRowRef.current;
+    const target = event.currentTarget;
+    if (!row || !target) return;
+
+    const pointerId = event.pointerId;
+    setIsSplitDragging(true);
+    document.body.classList.add('viewer-split-dragging');
+
+    try {
+      target.setPointerCapture(pointerId);
+    } catch {
+      /* ignore */
+    }
+
+    const updateFromClientX = (clientX) => {
+      const rect = row.getBoundingClientRect();
+      if (rect.width <= 0) return;
+      const next = ((clientX - rect.left) / rect.width) * 100;
+      setSplitPercent(Math.min(SPLIT_MAX, Math.max(SPLIT_MIN, next)));
+    };
+
+    updateFromClientX(event.clientX);
+
+    const onMove = (e) => {
+      if (e.pointerId !== pointerId) return;
+      updateFromClientX(e.clientX);
+    };
+
+    const onEnd = (e) => {
+      if (e.pointerId !== pointerId) return;
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onEnd);
+      window.removeEventListener('pointercancel', onEnd);
+      try {
+        if (target.hasPointerCapture?.(pointerId)) {
+          target.releasePointerCapture(pointerId);
+        }
+      } catch {
+        /* ignore */
+      }
+      document.body.classList.remove('viewer-split-dragging');
+      setIsSplitDragging(false);
+    };
+
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onEnd);
+    window.addEventListener('pointercancel', onEnd);
+  }, []);
 
   const chromeHiddenStyle = useMemo(
     () => ({
@@ -555,25 +649,54 @@ function ViewerLayout({
     [graphFullScreen]
   );
 
+  const useMobileTabs = isNarrow && showGraph && !graphFullScreen;
+  const showReaderPane = !useMobileTabs || mobilePane === 'reader';
+  const showGraphPane = showGraph && (!useMobileTabs || mobilePane === 'graph');
+
   const readerPaneStyle = useMemo(() => {
     if (graphFullScreen) {
-      return { width: '0%', display: 'none', minWidth: '0px', borderRight: 'none' };
+      return { width: '0%', display: 'none', minWidth: '0px', borderRight: 'none', flex: '0 0 0' };
+    }
+    if (useMobileTabs) {
+      return {
+        width: '100%',
+        display: showReaderPane ? 'block' : 'none',
+        minWidth: 0,
+        flex: '1 1 auto',
+        borderRight: 'none',
+      };
     }
     if (showGraph) {
-      return { width: '50%', borderRight: '1px solid #e2e8f0', display: 'block', minWidth: 'auto' };
+      return {
+        width: `${splitPercent}%`,
+        flex: `0 0 ${splitPercent}%`,
+        borderRight: 'none',
+        display: 'block',
+        minWidth: 0,
+      };
     }
-    return { width: '100%', borderRight: 'none', display: 'block', minWidth: 'auto' };
-  }, [showGraph, graphFullScreen]);
+    return { width: '100%', borderRight: 'none', display: 'block', minWidth: 'auto', flex: '1 1 auto' };
+  }, [showGraph, graphFullScreen, splitPercent, useMobileTabs, showReaderPane]);
 
-  const graphPaneStyle = useMemo(
-    () => ({
-      width: graphFullScreen ? '100%' : '50%',
+  const graphPaneStyle = useMemo(() => {
+    if (useMobileTabs) {
+      return {
+        width: '100%',
+        display: showGraphPane ? 'block' : 'none',
+        position: 'relative',
+        boxShadow: 'none',
+        minWidth: 0,
+        flex: '1 1 auto',
+      };
+    }
+    return {
+      width: graphFullScreen ? '100%' : `${100 - splitPercent}%`,
+      flex: graphFullScreen ? '1 1 auto' : `0 0 ${100 - splitPercent}%`,
       position: 'relative',
-      boxShadow: graphFullScreen ? 'none' : '-2px 0 10px rgba(0, 0, 0, 0.05)',
-      minWidth: graphFullScreen ? '100%' : '50%',
-    }),
-    [graphFullScreen]
-  );
+      boxShadow: graphFullScreen ? 'none' : '-1px 0 0 var(--rg-border-soft, #e3e6ef)',
+      minWidth: 0,
+    };
+  }, [graphFullScreen, splitPercent, useMobileTabs, showGraphPane]);
 
   return (
     <div className="flex flex-col h-screen overflow-hidden">
@@ -595,7 +718,34 @@ function ViewerLayout({
         />
       </div>
 
-      <div className="flex-1 overflow-hidden flex" style={{ backgroundColor: '#fdfdfd' }}>
+      {useMobileTabs ? (
+        <div className="viewer-mobile-pane-tabs" role="tablist" aria-label="본문과 그래프 전환">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={mobilePane === 'reader'}
+            className={`viewer-mobile-pane-tab${mobilePane === 'reader' ? ' is-active' : ''}`}
+            onClick={() => setMobilePane('reader')}
+          >
+            본문
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={mobilePane === 'graph'}
+            className={`viewer-mobile-pane-tab${mobilePane === 'graph' ? ' is-active' : ''}`}
+            onClick={() => setMobilePane('graph')}
+          >
+            그래프
+          </button>
+        </div>
+      ) : null}
+
+      <div
+        ref={splitRowRef}
+        className={`flex-1 overflow-hidden flex${isSplitDragging ? ' is-split-dragging' : ''}`}
+        style={{ backgroundColor: '#fdfdfd' }}
+      >
         <div
           className="h-full overflow-hidden relative"
           style={readerPaneStyle}
@@ -604,15 +754,44 @@ function ViewerLayout({
           {children}
         </div>
 
-        {showGraph && (
+        {showGraph && !graphFullScreen && !useMobileTabs ? (
+          <div
+            className="viewer-split-divider"
+            role="separator"
+            aria-orientation="vertical"
+            aria-label="본문과 그래프 영역 크기 조절"
+            aria-valuemin={SPLIT_MIN}
+            aria-valuemax={SPLIT_MAX}
+            aria-valuenow={Math.round(splitPercent)}
+            tabIndex={0}
+            onPointerDown={onDividerPointerDown}
+            onKeyDown={(e) => {
+              if (e.key === 'ArrowLeft') {
+                e.preventDefault();
+                setSplitPercent((p) => Math.max(SPLIT_MIN, p - 2));
+              } else if (e.key === 'ArrowRight') {
+                e.preventDefault();
+                setSplitPercent((p) => Math.min(SPLIT_MAX, p + 2));
+              }
+            }}
+          >
+            <span className="viewer-split-divider-grip" aria-hidden />
+          </div>
+        ) : null}
+
+        {showGraph ? (
           <div
             className="h-full overflow-hidden bg-white"
-            style={graphPaneStyle}
+            style={{
+              ...graphPaneStyle,
+              display: showGraphPane ? (graphPaneStyle.display ?? 'block') : 'none',
+            }}
             data-graph-fullscreen={graphFullScreen}
+            hidden={!showGraphPane}
           >
             {rightSideContent}
           </div>
-        )}
+        ) : null}
       </div>
 
       <div style={{ ...chromeHiddenStyle, height: graphFullScreen ? '80px' : 'auto' }}>

@@ -1,5 +1,5 @@
 import { memo, useState, useEffect, useCallback, useMemo, useRef } from "react";
-import { useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import {
   processRelations,
   processRelationTags,
@@ -11,11 +11,10 @@ import {
 import { getEventDataByIndex } from "../../utils/graph/graphFetch.js";
 import { useTooltipPosition, useClickOutside } from "../../hooks/ui/tooltipHooks";
 import { getUnifiedEventInfoForTooltip } from "../../utils/viewer/viewerSession";
-import { toNumberOrNull } from "../../utils/common/valueUtils.js";
-import { USER_GRAPH_PREFIX } from "../../utils/common/urlUtils";
+import { toNumberOrNull, resolvePositiveBookId } from "../../utils/common/valueUtils.js";
+import { USER_GRAPH_PREFIX, userGraphPath } from "../../utils/common/urlUtils";
 import {
   COLORS,
-  createButtonStyle,
   mergeRefs,
   unifiedNodeTooltipStyles,
   unifiedNodeAnimations,
@@ -860,14 +859,13 @@ function PersonSilhouette({ size = 48, circleFill = "#e5e7eb", bodyFill = "#bdbd
   );
 }
 
-function TooltipCloseButton({ onClose, ariaLabel, className, style: extraStyle }) {
+function TooltipCloseButton({ onClose, ariaLabel, className }) {
   return (
     <button
       type="button"
       onClick={onClose}
       aria-label={ariaLabel}
       className={['tooltip-close-btn', className].filter(Boolean).join(' ')}
-      style={{ ...createButtonStyle('tooltipClose'), ...extraStyle }}
     >
       &times;
     </button>
@@ -1010,12 +1008,22 @@ function UnifiedNodeInfo({
   apiBookGraphData = null,
   onSelectRelatedNode = null,
   onOpenChapterSidebar = null,
+  showGraphPageLink = false,
 }) {
   const { filename: urlFilename } = useParams();
+  const navigate = useNavigate();
   const isSidebar = displayMode === 'sidebar';
   const apiBookId = extractApiBookId(filename || urlFilename);
   const folderKey = apiBookId ? `api:${apiBookId}` : null;
   const node = useMemo(() => buildProcessedNode(data), [data]);
+
+  const openGraphPage = useCallback(() => {
+    const id = resolvePositiveBookId(apiBookId, urlFilename);
+    if (id == null) return;
+    navigate(userGraphPath(id), {
+      state: { selectedChapter: Number(chapterNum) || 1 },
+    });
+  }, [apiBookId, chapterNum, navigate, urlFilename]);
 
   const [appeared, setAppeared] = useState(false);
   const [error, setError] = useState(null);
@@ -1254,6 +1262,16 @@ function UnifiedNodeInfo({
         <div className="tooltip-content business-card">
           <TooltipCloseButton onClose={onClose} />
           {nodeHeaderAndDescription}
+          {showGraphPageLink ? (
+            <button
+              type="button"
+              className="graph-page-deep-link"
+              onClick={openGraphPage}
+            >
+              <span className="material-symbols-outlined" aria-hidden>account_tree</span>
+              인물 관계도에서 자세히
+            </button>
+          ) : null}
         </div>
       </NodeTooltipShell>
     );

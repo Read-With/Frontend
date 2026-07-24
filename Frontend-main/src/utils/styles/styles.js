@@ -38,7 +38,6 @@ const COLORS = {
   background: '#fff',
   error: '#ef4444',
   darkText: GRAPH_COLORS.primary,
-  tooltipClose: '#bfc8e2',
   lightGray: '#f9fafb',
   lightGrayBorder: '#d1d5db',
 };
@@ -52,18 +51,6 @@ const FOCUS_STYLE = {
     outline: `2px solid ${COLORS.primary}`,
     outlineOffset: '2px',
   },
-};
-
-const EDGE_BUTTON_SHARED = {
-  borderRadius: '0.5rem',
-  padding: '0.5rem 1.375rem',
-  fontWeight: 600,
-  fontSize: '0.9375rem',
-  cursor: 'pointer',
-  boxShadow: `0 0.125rem 0.5rem ${COLORS.primary}20`,
-  transition: `background ${ANIMATION_VALUES.DURATION.FAST}, color ${ANIMATION_VALUES.DURATION.FAST}, box-shadow ${ANIMATION_VALUES.DURATION.FAST}, transform 0.13s`,
-  margin: '0 auto',
-  display: 'inline-block',
 };
 
 // 통일된 버튼 스타일 (xhtml-toolbar-btn 기준)
@@ -87,35 +74,16 @@ export const createButtonStyle = (variant = 'default') => {
     ...FOCUS_STYLE,
   };
 
-  const variants = {
-    default: {
+  if (variant === 'default') {
+    return {
+      ...baseStyle,
       background: COLORS.white,
       color: COLORS.darkText,
       border: `1px solid ${COLORS.border}`,
-    },
-    tooltipClose: {
-      background: 'none',
-      border: 'none',
-      fontSize: '18px',
-      color: COLORS.tooltipClose,
-      position: 'absolute',
-      top: '14px',
-      right: '14px',
-      zIndex: 2,
-      width: '24px',
-      height: '24px',
-      padding: '0',
-      borderRadius: '4px',
-    },
-    secondaryEdge: {
-      ...EDGE_BUTTON_SHARED,
-      background: COLORS.white,
-      color: COLORS.primary,
-      border: `1.5px solid ${COLORS.primary}`,
-    },
-  };
+    };
+  }
 
-  return { ...baseStyle, ...variants[variant] };
+  return baseStyle;
 };
 
 /**
@@ -130,16 +98,6 @@ const ADVANCED_BUTTON_HANDLERS = {
     onMouseLeave: (e) => {
       e.target.style.background = COLORS.white;
       e.target.style.borderColor = COLORS.border;
-    },
-  },
-  tooltipClose: {
-    onMouseEnter: (e) => {
-      e.target.style.color = COLORS.primary;
-      e.target.style.backgroundColor = 'rgba(92, 111, 92, 0.1)';
-    },
-    onMouseLeave: (e) => {
-      e.target.style.color = COLORS.tooltipClose;
-      e.target.style.backgroundColor = 'transparent';
     },
   },
 };
@@ -247,45 +205,13 @@ export const sidebarStyles = {
   chapterText: (isOpen, animationValues) => createSlideAnimation(isOpen, animationValues),
 };
 
-export const topBarStyles = {
-  container: {
-    width: '100%',
-    background: COLORS.background,
-    boxShadow: '0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.04)',
-    zIndex: 1000,
-    display: 'flex',
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 12,
-    paddingLeft: 16,
-    paddingRight: 16,
-    height: 60,
-    flexWrap: 'nowrap',
-    overflow: 'visible',
-  },
-  leftSection: {
-    display: 'flex',
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: '2rem',
-    flex: 1,
-    minWidth: 0,
-    overflow: 'visible',
-    flexWrap: 'nowrap',
-  },
-};
-
-// 그래프 관련 스타일은 graphStyles.js에서 import
-export { graphStyles, graphControlsStyles } from './graphStyles';
-
 export { COLORS };
 
 const FIXED_TOOLTIP_BASE = {
   position: 'fixed',
   zIndex: 99999,
-  width: 420,
-  maxWidth: 420,
+  width: 'min(26.25rem, calc(100vw - 1.5rem))',
+  maxWidth: 'min(26.25rem, 92%)',
   background: COLORS.background,
   pointerEvents: 'auto',
 };

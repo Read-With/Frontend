@@ -306,6 +306,7 @@ const ViewerPage = () => {
         apiError={graphApiError}
         cachedLocation={cachedLocation}
         resumeAnchor={serverResumeAnchor}
+        onToggleGraph={toggleGraph}
       />
     );
   }, [
@@ -320,6 +321,7 @@ const ViewerPage = () => {
     graphApiError,
     cachedLocation,
     serverResumeAnchor,
+    toggleGraph,
   ]);
 
   return (

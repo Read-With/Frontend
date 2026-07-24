@@ -3,7 +3,8 @@ import PropTypes from 'prop-types';
 import CytoscapeGraphUnified from './CytoscapeGraphUnified';
 import UnifiedNodeInfo from './UnifiedNodeInfo';
 import UnifiedEdgeTooltip from './UnifiedEdgeTooltip';
-import { graphStyles, COLORS, ANIMATION_VALUES } from '../../utils/styles/styles.js';
+import { graphStyles } from '../../utils/styles/graphStyles.js';
+import { COLORS, ANIMATION_VALUES } from '../../utils/styles/styles.js';
 import { GRAPH_LAYOUT_CONSTANTS, resolveChapterSidebarWidth } from '../../utils/graph/graphCore.js';
 
 const {
