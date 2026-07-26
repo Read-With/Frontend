@@ -15,7 +15,6 @@ import {
   fetchRelationTimelineCumulative,
   fetchRelationTimelineViewer,
   FETCH_STATUS,
-  GRAPH_LOAD_SOURCE,
 } from '../../utils/graph/graphFetch';
 import { getMaxChapter } from '../../utils/common/cache/manifestCache';
 import { toPositiveNumberOrNull, toPositiveInt } from '../../utils/common/valueUtils';
@@ -146,9 +145,8 @@ export function useApiGraphData(serverBookId, currentChapter) {
           setApiError(null);
           setApiBookGraphData(enrichGraphPayload(data, targetBookId));
           loadedGraphKeyRef.current = graphKey;
-          const source = meta.source ?? GRAPH_LOAD_SOURCE.API;
           const status = meta.status ?? FETCH_STATUS.OK;
-          if (status === FETCH_STATUS.FALLBACK || source === GRAPH_LOAD_SOURCE.FALLBACK) {
+          if (status === FETCH_STATUS.FALLBACK) {
             setFallbackNotice({
               message: '캐시된 그래프 데이터를 표시합니다. 최신 정보가 아닐 수 있습니다.',
               timestamp: Date.now(),

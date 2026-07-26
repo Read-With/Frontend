@@ -327,6 +327,8 @@ function RelationAnalysisModalImpl({
   onSelectRelatedNode,
   returnFocusRef,
   chapterRailWidth = GRAPH_LAYOUT_CONSTANTS.SIDEBAR.OPEN_WIDTH,
+  /** 슬라이드바(툴팁 패널)가 열려 있을 때 오른쪽 예약 너비 */
+  reserveRight = 0,
 }) {
   const dialogRef = useRef(null);
   const closeBtnRef = useRef(null);
@@ -336,18 +338,16 @@ function RelationAnalysisModalImpl({
 
   const overlayStyle = useMemo(() => {
     const inset = GRAPH_LAYOUT_CONSTANTS.ANALYSIS_MODAL_INSET;
-    const slideWidth = GRAPH_LAYOUT_CONSTANTS.TOOLTIP_SIDEBAR_WIDTH;
-    // 돌아가기 버튼 행 아래부터, 슬라이드바 왼쪽 영역을 가득 채움
-    const top = Math.max(GRAPH_LAYOUT_CONSTANTS.TOP_BAR_HEIGHT, 56);
+    const top = GRAPH_LAYOUT_CONSTANTS.PAGE_CHROME_OFFSET;
     const left = Math.max(0, Number(chapterRailWidth) || 0) + inset;
-    const right = slideWidth + inset;
+    const right = Math.max(0, Number(reserveRight) || 0) + inset;
     return {
       '--relation-modal-top': `${top}px`,
       '--relation-modal-left': `${left}px`,
       '--relation-modal-right': `${right}px`,
       '--relation-modal-inset': `${inset}px`,
     };
-  }, [chapterRailWidth]);
+  }, [chapterRailWidth, reserveRight]);
 
   const dataMap = useMemo(() => {
     const map = new Map();
@@ -1010,7 +1010,7 @@ function TooltipCloseButton({ onClose, ariaLabel, className }) {
   );
 }
 
-function ActionButton({ variant = 'secondary', onClick, children, ariaLabel, title, minWidth }) {
+function ActionButton({ variant = 'secondary', onClick, children, ariaLabel, title }) {
   const isPrimary = variant === 'primary';
   return (
     <button
@@ -1019,7 +1019,6 @@ function ActionButton({ variant = 'secondary', onClick, children, ariaLabel, tit
       aria-label={ariaLabel}
       title={title}
       className={`tooltip-action-btn tooltip-action-btn--${isPrimary ? 'primary' : 'secondary'}`}
-      style={minWidth ? { minWidth } : undefined}
     >
       {children}
     </button>
@@ -1101,11 +1100,10 @@ function RelationAnalysisCta({
   connectionCount,
   onOpen,
   buttonRef,
-  compact = false,
 }) {
   return (
     <div
-      className={`sidebar-section tooltip-analysis-section${compact ? ' tooltip-analysis-section--compact' : ''}`}
+      className="sidebar-section tooltip-analysis-section"
       role="region"
       aria-label="관계 분석"
     >
@@ -1295,6 +1293,7 @@ function UnifiedNodeInfo({
       chapterRailWidth={
         chapterRailWidth ?? GRAPH_LAYOUT_CONSTANTS.SIDEBAR.OPEN_WIDTH
       }
+      reserveRight={GRAPH_LAYOUT_CONSTANTS.TOOLTIP_SIDEBAR_WIDTH}
     />
   ) : null;
 

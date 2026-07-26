@@ -29,7 +29,6 @@ export const GRAPH_COLORS = {
 };
 
 const COLORS = GRAPH_COLORS;
-const DURATION = STYLE_DURATION;
 
 const NODE_SIZE_MIN = 30;
 const NODE_SIZE_MAX = 80;
@@ -210,14 +209,6 @@ export const createGraphStylesheet = (edgeStyle, edgeLabelVisible, maxEdgeLabelL
     selector: 'edge.highlighted[?reciprocalPair]',
     style: {
       'curve-style': 'bezier',
-    },
-  },
-  {
-    selector: 'edge.cytoscape-edge-appear',
-    style: {
-      opacity: 0.35,
-      'transition-property': 'opacity, width',
-      'transition-duration': DURATION.SLOW,
     },
   },
   {

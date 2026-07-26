@@ -10,6 +10,7 @@ import { createGraphStylesheet, getEdgeStyle } from "../../utils/styles/graphSty
 import { COLORS, createAdvancedButtonHandlers } from "../../utils/styles/styles.js";
 import {
   GRAPH_LAYOUT_CONSTANTS,
+  GRAPH_ZOOM,
   resolveChapterSidebarWidth,
   calculateLastEventForChapter,
 } from '../../utils/graph/graphCore';
@@ -341,7 +342,7 @@ function RelationGraphWrapper() {
 
   const onClearTooltip = useCallback(() => {
     closeSidebar();
-    fitGraphToNodes(cyRef.current, { duration: 500 });
+    fitGraphToNodes(cyRef.current, { duration: GRAPH_ZOOM.FIT_DURATION_MS });
   }, [closeSidebar]);
 
   const dismissTooltip = useCallback(() => {
@@ -470,7 +471,7 @@ function RelationGraphWrapper() {
   }, [isGraphLoading]);
 
   return (
-    <div className="graph-standalone-page" style={pageRootStyle}>
+    <div style={pageRootStyle}>
       {apiError && <ErrorToast error={apiError} onClose={clearApiError} />}
       {fallbackNotice && (
         <ErrorToast
@@ -501,19 +502,6 @@ function RelationGraphWrapper() {
           )}
         </div>
       )}
-
-      <button
-        type="button"
-        className="graph-page-back"
-        onClick={handleBackToViewer}
-        aria-label="뷰어로 돌아가기"
-        {...graphBackButtonHandlers}
-      >
-        <span className="material-symbols-outlined" aria-hidden>
-          arrow_back
-        </span>
-        돌아가기
-      </button>
 
       <ChapterSidebar
         isSidebarOpen={isSidebarOpen}
@@ -557,8 +545,21 @@ function RelationGraphWrapper() {
           filteredElements: searchState.filteredElements,
           searchTerm: searchState.searchTerm,
           fitNodeIds: searchState.fitNodeIds,
-          isResetFromSearch: searchState.isResetFromSearch,
         }}
+        pageChromeStart={(
+          <button
+            type="button"
+            className="graph-page-back"
+            onClick={handleBackToViewer}
+            aria-label="뷰어로 돌아가기"
+            {...graphBackButtonHandlers}
+          >
+            <span className="material-symbols-outlined" aria-hidden>
+              arrow_back
+            </span>
+            돌아가기
+          </button>
+        )}
         floatingControls={{
           searchState,
           searchActions: floatingSearchActions,

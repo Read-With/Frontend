@@ -137,7 +137,7 @@ export function useGraphInteractions({
   const clearSelection = useCallback((options = {}) => {
     const fitViewport = options?.fitViewport !== false;
     clearHighlightAndSelectionRef();
-    if (fitViewport) fitGraphToNodes(cyRef?.current, { duration: 500 });
+    if (fitViewport) fitGraphToNodes(cyRef?.current, { duration: GRAPH_ZOOM.FIT_DURATION_MS });
   }, [cyRef, clearHighlightAndSelectionRef]);
 
   const selectNodeByIdOrName = useCallback((idOrName) => {
@@ -201,50 +201,9 @@ function runPresetLayout(cy, eles) {
   }
 }
 
-function scheduleRippleWhenPositionsPainted(cy, triggerRippleForAddedNodes) {
-  let done = false;
-  let fallbackId = 0;
-
-  const clearFallback = () => {
-    if (!fallbackId) return;
-    window.clearTimeout(fallbackId);
-    fallbackId = 0;
-  };
-
-  const run = () => {
-    if (done) return;
-    done = true;
-    clearFallback();
-    try {
-      triggerRippleForAddedNodes();
-    } catch {
-      /* ignore */
-    }
-  };
-
-  const cancel = () => {
-    done = true;
-    clearFallback();
-  };
-
-  fallbackId = window.setTimeout(run, 180);
-
-  try {
-    cy.one('render', () => {
-      if (done) return;
-      requestAnimationFrame(run);
-    });
-    cy.resize();
-  } catch {
-    requestAnimationFrame(run);
-  }
-
-  return cancel;
-}
-
 /**
  * elementsUpdateRef 소비 후 분기:
- * 1) hasChanges          → layout(+scoped) → styles → rAF(complete: bounds/overlap[신규만]/fit/junction + ripple)
+ * 1) hasChanges          → layout(+scoped) → styles → rAF(complete: bounds/overlap[신규만]/fit/junction)
  * 2) pendingViewportFit  → 챕터·이벤트 전환 후 elements가 바뀌면 fit (추가 없는 교체·삭제만 포함)
  * 3) dataChanged only    → sizes refresh
  * 4) stylesheet|initial  → sizes refresh; initial이면 complete(fit+junction 포함)
@@ -257,7 +216,6 @@ export function useGraphLayout({
   elementsUpdateRef,
   updateStylesheet,
   applyNodeSizes,
-  triggerRippleForAddedNodes,
   isInitialLoad,
   setIsInitialLoad,
   containerRef,
@@ -296,7 +254,6 @@ export function useGraphLayout({
   useEffect(() => {
     if (!cy || !elementsLength) return;
 
-    let cancelRipple = () => {};
 
     const {
       nodesToAdd = [],
@@ -404,13 +361,6 @@ export function useGraphLayout({
             (preserveUnchangedPositions ||
               (styleOnlyIncremental && !incrementalLayoutScope)),
         });
-        if (nodesToAdd.length > 0 || edgesToAdd.length > 0) {
-          cancelRipple();
-          cancelRipple = scheduleRippleWhenPositionsPainted(
-            cy,
-            triggerRippleForAddedNodes,
-          );
-        }
         finishInitialLoad();
       });
     } else if (pendingFitReady) {
@@ -432,9 +382,7 @@ export function useGraphLayout({
       }
     }
 
-    return () => {
-      cancelRipple();
-    };
+    return undefined;
   }, [
     cy,
     elementsFingerprint,
@@ -443,7 +391,6 @@ export function useGraphLayout({
     updateStylesheet,
     applyNodeSizes,
     handleLayoutComplete,
-    triggerRippleForAddedNodes,
     isInitialLoad,
     setIsInitialLoad,
     pendingViewportFitRef,

@@ -11,7 +11,6 @@ import {
   toFiniteNumber,
 } from '../common/valueUtils';
 import {
-  stripRedundantBookTitlePrefix,
   formatFallbackChapterLabel,
   resolveChapterTitleMeta,
   stripSharedListPrefix,
@@ -113,8 +112,8 @@ export const calculateLastEventForChapter = ({
 
 export const GRAPH_LAYOUT_CONSTANTS = {
   SIDEBAR: { OPEN_WIDTH: 280, CLOSED_WIDTH: 56 },
-  /** 분석 모달 등 상단 inset 기준 (단독 그래프 상단바 제거 후에도 유지) */
-  TOP_BAR_HEIGHT: 60,
+  /** 단독 그래프 우상단 크롬(돌아가기·도구·줌) 아래 모달 시작 여백 */
+  PAGE_CHROME_OFFSET: 56,
   /** 관계 분석(레이더) 모달 — 챕터 레일·상단바로부터의 여백 */
   ANALYSIS_MODAL_INSET: 16,
   /** GraphCanvas 툴팁 사이드바 실제 너비와 동일해야 센터링이 맞음 */
@@ -134,8 +133,8 @@ export const GRAPH_ZOOM = {
   MAX: 2.4,
   /** cy.fit 여백 — 줌·범례 버튼 등 가장자리 여유 */
   FIT_PADDING: 56,
-  /** 초기/영역 맞춤 등장 애니메이션(ms) */
-  FIT_DURATION_MS: 420,
+  /** 초기/영역 맞춤 — 짧게 유지해 등장감 완화 */
+  FIT_DURATION_MS: 140,
 };
 
 /** 표시 순서: 주요 → 주변 → 전체 (value는 filterMainCharacters와 동일) */
@@ -153,27 +152,6 @@ export function resolveChapterSidebarWidth(isSidebarOpen, { isNarrow = false } =
 }
 
 /* ─── 챕터 사이드바 라벨 ─── */
-
-/** 챕터 표시용 제목. status: ok | collapsed | missing */
-function getChapterTitleParts(manifestBookId, chapterNum, bookTitle, manifestHint) {
-  const n = Number(chapterNum);
-  const fallback = formatFallbackChapterLabel(n);
-  if (manifestBookId == null || !Number.isFinite(n) || n < 1) {
-    return { display: fallback };
-  }
-  const ch = getChapterData(manifestBookId, n, manifestHint ?? undefined);
-  const meta = resolveChapterTitleMeta(ch, bookTitle, n);
-  let display = meta.display;
-  if (meta.raw && meta.status === 'ok') {
-    const stripped = stripRedundantBookTitlePrefix(meta.raw, bookTitle).trim();
-    display = stripped || meta.raw;
-  }
-  return { display };
-}
-
-export function resolveChapterDisplayTitle(manifestBookId, chapterNum, bookTitle, manifestHint) {
-  return getChapterTitleParts(manifestBookId, chapterNum, bookTitle, manifestHint).display;
-}
 
 /** 챕터 사이드바 목록용 항목 */
 export function buildChapterSidebarItems(chapterList, manifestBookId, bookTitle, manifestHint) {

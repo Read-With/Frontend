@@ -279,11 +279,9 @@ const BookmarksPage = () => {
             </div>
             {memoEntries.length > 0 && !isExpanded ? (
               <p className="bm-memo-preview">
-                <span className="material-symbols-outlined bm-memo-preview-icon">
-                  sticky_note_2
-                </span>
+                <span className="bm-memo-preview-label">메모</span>
                 <span className="bm-memo-preview-text">{memoPreview}</span>
-                {memoExtra > 0 ? <span className="bm-memo-extra">+{memoExtra}</span> : null}
+                {memoExtra > 0 ? <span className="bm-memo-extra">외 {memoExtra}</span> : null}
               </p>
             ) : null}
           </div>
@@ -298,7 +296,7 @@ const BookmarksPage = () => {
               toggleExpanded(bookmark.id);
             }}
           >
-            <span className="material-symbols-outlined">more_horiz</span>
+            {isExpanded ? '접기' : '편집'}
           </button>
         </div>
 
@@ -457,7 +455,6 @@ const BookmarksPage = () => {
                 disabled={isMutating}
                 onClick={() => setDeleteConfirmId(bookmark.id)}
               >
-                <span className="material-symbols-outlined">delete</span>
                 삭제
               </button>
             </div>
@@ -516,8 +513,11 @@ const BookmarksPage = () => {
     <div className="bm-page">
       <header className="bm-header">
         <div className="bm-header-left">
-          <h1 className="bm-title">북마크</h1>
-          <span className="bm-count">{(bookmarks ?? []).length}</span>
+          <div className="bm-header-copy">
+            <h1 className="bm-title">북마크</h1>
+            <p className="bm-subtitle">표시해 둔 구절을 챕터별로 모아 둡니다</p>
+          </div>
+          <span className="bm-count">{(bookmarks ?? []).length}개</span>
         </div>
 
         <div className="bm-header-right">
@@ -572,7 +572,7 @@ const BookmarksPage = () => {
               <header className="bm-chapter-head">
                 <h2 className="bm-chapter-label">{group.label}</h2>
                 {group.title ? <span className="bm-chapter-title">{group.title}</span> : null}
-                <span className="bm-chapter-count">{group.items.length}</span>
+                <span className="bm-chapter-count">{group.items.length}개</span>
               </header>
               <div className="bm-chapter-rows">{group.items.map((bookmark) => renderBookmark(bookmark))}</div>
             </section>

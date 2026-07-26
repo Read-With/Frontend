@@ -6,10 +6,7 @@ import UnifiedNodeInfo from '../graph/UnifiedNodeInfo';
 import UnifiedEdgeTooltip from '../graph/UnifiedEdgeTooltip';
 import { useGraphElementPipeline } from '../../hooks/graph/useGraphViewState';
 import { getEdgeStyle, createGraphStylesheet, graphStyles } from '../../utils/styles/graphStyles';
-import {
-  centerSelectionOnElementId,
-  getFloatingTooltipReserveRight,
-} from '../../utils/graph/graphCy';
+import { centerSelectionOnElementId } from '../../utils/graph/graphCy';
 import {
   shouldIgnoreViewerOutsideClick,
   useGraphTooltipSelection,
@@ -61,7 +58,10 @@ function ChapterEventInfo({
   if (eventNum > 0) {
     return (
       <div className="graph-topbar-meta">
-        <span className="graph-topbar-meta-chapter" title={chapterTitleTooltip}>
+        <span
+          className="graph-topbar-meta-chapter"
+          title={chapterTitleTooltip || chapterDisplayLabel}
+        >
           {chapterDisplayLabel}
         </span>
         <span className="graph-topbar-meta-event">Event {eventNum}</span>
@@ -75,7 +75,10 @@ function ChapterEventInfo({
 
   return (
     <div className="graph-topbar-meta">
-      <span className="graph-topbar-meta-chapter" title={chapterTitleTooltip}>
+      <span
+        className="graph-topbar-meta-chapter"
+        title={chapterTitleTooltip || chapterDisplayLabel}
+      >
         {chapterDisplayLabel}
       </span>
       <span className="graph-topbar-meta-event">Event ?</span>
@@ -172,6 +175,7 @@ const GraphSplitTopBar = memo(function GraphSplitTopBar({
 
   return (
     <div className="graph-split-topbar">
+      <div className="graph-split-topbar-balance" aria-hidden />
       <div className="graph-split-topbar-center">
         <ChapterEventInfo
           bookId={bookId}
@@ -186,7 +190,6 @@ const GraphSplitTopBar = memo(function GraphSplitTopBar({
 
       <div className="graph-split-topbar-tools">
         <GraphFloatingControls
-          placement="toolbar"
           searchState={searchState}
           searchActions={searchActions}
           edgeLabelVisible={edgeLabelVisible}
@@ -196,7 +199,7 @@ const GraphSplitTopBar = memo(function GraphSplitTopBar({
           showLegend
         />
         <span className="graph-split-topbar-sep" aria-hidden />
-        <GraphZoomControls cy={cy} className="graph-zoom-controls is-toolbar" />
+        <GraphZoomControls cy={cy} className="graph-zoom-controls is-embedded" />
         <button
           type="button"
           className="graph-fullscreen-btn"
@@ -302,7 +305,6 @@ const GraphContainer = memo(function GraphContainer({
   isSearchActive = false,
   filteredElements = [],
   fitNodeIds = [],
-  isResetFromSearch = false,
   bookId = null,
   cyRef: externalCyRef = null,
   onCyReady = null,
@@ -331,10 +333,11 @@ const GraphContainer = memo(function GraphContainer({
     const cy = cyRef.current;
     if (!cy) return;
 
+    // 분할화면은 패널이 좁아 툴팁 전체 폭을 비우면 줌이 과도하게 줄어듦 — 약간 겹침 허용
     centerSelectionOnElementId(cy, elementId, {
       duration: 400,
-      reserveRight: getFloatingTooltipReserveRight(),
-      padding: 28,
+      reserveRight: 48,
+      padding: 24,
     });
   }, []);
 
@@ -409,7 +412,6 @@ const GraphContainer = memo(function GraphContainer({
           searchTerm={searchTerm}
           isSearchActive={isSearchActive}
           filteredElements={filteredElements}
-          isResetFromSearch={isResetFromSearch}
           currentChapter={currentChapter}
           viewportRefitKey={viewportRefitKey}
           skipViewportRefit={isEventTransition}
@@ -419,7 +421,6 @@ const GraphContainer = memo(function GraphContainer({
           selectedElementRef={selectedElementRef}
           graphClearRef={graphClearRef}
           graphSelectNodeRef={graphSelectNodeRef}
-          showRippleEffect
           showZoomControls={showZoomControls}
           onCyReady={onCyReady}
         />
@@ -448,7 +449,6 @@ const GraphSplitArea = memo(function GraphSplitArea({
     searchTerm: searchTermValue = '',
     isSearchActive: isSearchActiveValue = false,
     filteredElements: filteredElementsValue = [],
-    isResetFromSearch: isResetFromSearchValue = false,
     fitNodeIds: searchFitNodeIds = [],
   } = searchState;
 
@@ -629,7 +629,6 @@ const GraphSplitArea = memo(function GraphSplitArea({
               isSearchActive={isSearchActiveValue}
               filteredElements={filteredElementsValue}
               fitNodeIds={searchFitNodeIds}
-              isResetFromSearch={isResetFromSearchValue}
               prevValidEvent={prevValidEvent ?? null}
               activeTooltip={activeTooltip}
               onClearTooltip={onClearTooltip}

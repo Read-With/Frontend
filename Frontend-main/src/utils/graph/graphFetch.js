@@ -477,7 +477,7 @@ export function buildGraphResponseFromDeltas(
   const eventId = toTrimmedStringOrNull(
     eventUtils.resolveEventId(structure) ?? structure?.eventId
   );
-  const isSuccess = deltasBundle.isSuccess !== false;
+  const isSuccess = deltasBundle?.isSuccess !== false;
   const makeResponse = (result) => ({ isSuccess, code: 'SUCCESS', result });
 
   if (!eventId) {

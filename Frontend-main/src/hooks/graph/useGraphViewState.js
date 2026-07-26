@@ -6,7 +6,6 @@ import {
   extractFitNodeIds,
   normalizeGraphSearchTerm,
   resolveGraphSearchFilter,
-  SEARCH_RESET_SUPPRESS_MS,
 } from '../../utils/graph/graphCy.js';
 import { filterMainCharacters } from '../../utils/graph/graphModel';
 import { sortElementsByDataId } from '../../utils/graph/graphCore';
@@ -149,7 +148,6 @@ export function useGraphSearch(elements, currentChapterData = null) {
   const [searchTerm, setSearchTerm] = useState('');
   const [filteredElements, setFilteredElements] = useState([]);
   const [isSearchActive, setIsSearchActive] = useState(false);
-  const [isResetFromSearch, setIsResetFromSearch] = useState(false);
   const [suggestions, setSuggestions] = useState([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(-1);
@@ -191,7 +189,6 @@ export function useGraphSearch(elements, currentChapterData = null) {
     skipFilterEffectRef.current = true;
     setSearchTerm(term);
     setIsSearchActive(!!trimmed);
-    setIsResetFromSearch(false);
     setShowSuggestions(false);
     setSelectedIndex(-1);
 
@@ -210,7 +207,6 @@ export function useGraphSearch(elements, currentChapterData = null) {
     setSuggestions([]);
     setShowSuggestions(false);
     setSelectedIndex(-1);
-    setIsResetFromSearch(true);
   }, []);
 
   useEffect(() => {
@@ -233,14 +229,6 @@ export function useGraphSearch(elements, currentChapterData = null) {
 
     setShowSuggestions(true);
   }, [searchTerm, elements, chapterDataRef]);
-
-  useEffect(() => {
-    if (!isResetFromSearch) return undefined;
-    const timer = setTimeout(() => {
-      setIsResetFromSearch(false);
-    }, SEARCH_RESET_SUPPRESS_MS);
-    return () => clearTimeout(timer);
-  }, [isResetFromSearch]);
 
   const handleKeyDown = useCallback((e) => {
     if (e.key === 'Escape') {
@@ -302,7 +290,6 @@ export function useGraphSearch(elements, currentChapterData = null) {
       suggestions,
       showSuggestions,
       selectedIndex,
-      isResetFromSearch,
     },
     searchActions,
   };

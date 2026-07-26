@@ -198,42 +198,6 @@ function placeTooltipInCanvasAwayFromFocus({
   );
 }
 
-export const createRippleEffect = (container, x, y, duration = 500) => {
-  if (!container) return () => {};
-  if (typeof x !== 'number' || typeof y !== 'number') return () => {};
-
-  const ripple = document.createElement('div');
-  ripple.className = 'ripple-effect';
-  ripple.style.position = 'absolute';
-  ripple.style.left = `${x - 50}px`;
-  ripple.style.top = `${y - 50}px`;
-  ripple.style.pointerEvents = 'none';
-  ripple.style.zIndex = '1000';
-  
-  container.appendChild(ripple);
-
-  let timeoutId = null;
-  let isCleanedUp = false;
-
-  const cleanup = () => {
-    if (isCleanedUp) return;
-    isCleanedUp = true;
-    
-    if (timeoutId) {
-      clearTimeout(timeoutId);
-      timeoutId = null;
-    }
-    
-    if (ripple.parentNode) {
-      ripple.parentNode.removeChild(ripple);
-    }
-  };
-
-  timeoutId = setTimeout(cleanup, duration);
-  
-  return cleanup;
-};
-
 export const ensureElementsInBounds = (cy, container, maxNodes = 1000) => {
   if (!cy || !container) return;
   
@@ -313,52 +277,17 @@ export function fitGraphToNodes(cy, opts = {}) {
   }
 }
 
-/** 뷰포트 또는 요소 기준 비율 줌
- * @param {object} cy
- * @param {number} factor
- * @param {{ elementId?: string|number|null, renderedPosition?: { x: number, y: number } }} [options]
- */
-export function zoomGraphByFactor(cy, factor, options = {}) {
+/** 뷰포트 중심 기준 비율 줌 */
+export function zoomGraphByFactor(cy, factor) {
   if (!cy || cy.destroyed?.()) return false;
   try {
     const current = cy.zoom();
     const next = Math.min(cy.maxZoom(), Math.max(cy.minZoom(), current * factor));
     if (next === current) return false;
 
-    let renderedPosition = options.renderedPosition ?? null;
-    if (!renderedPosition && options.elementId != null && options.elementId !== '') {
-      const el = cy.getElementById(String(options.elementId));
-      if (el?.length) {
-        if (typeof el.isEdge === 'function' && el.isEdge()) {
-          try {
-            const mid = typeof el.midpoint === 'function' ? el.midpoint() : null;
-            if (mid && Number.isFinite(mid.x) && Number.isFinite(mid.y)) {
-              renderedPosition = mid;
-            }
-          } catch {
-            /* fall through */
-          }
-          if (!renderedPosition) {
-            const bb = el.renderedBoundingBox?.({ includeLabels: false });
-            if (bb && Number.isFinite(bb.x1) && Number.isFinite(bb.x2)) {
-              renderedPosition = {
-                x: (bb.x1 + bb.x2) / 2,
-                y: (bb.y1 + bb.y2) / 2,
-              };
-            }
-          }
-        } else {
-          const pos = el.renderedPosition?.();
-          if (pos && Number.isFinite(pos.x) && Number.isFinite(pos.y)) {
-            renderedPosition = pos;
-          }
-        }
-      }
-    }
-
     cy.zoom({
       level: next,
-      renderedPosition: renderedPosition ?? {
+      renderedPosition: {
         x: cy.width() / 2,
         y: cy.height() / 2,
       },
@@ -530,10 +459,6 @@ export function centerSelectionOnElementId(cy, elementId, animateOptions = {}) {
   }
 }
 
-/** 뷰어 플로팅 툴팁용 우측 예약 폭 */
-export function getFloatingTooltipReserveRight(estimate = FLOATING_TOOLTIP_ESTIMATE) {
-  return (estimate?.width ?? FLOATING_TOOLTIP_ESTIMATE.width) + TOOLTIP_FOCUS_GAP * 2;
-}
 
 export const isGraphContainerSizeReady = (container) => {
   if (!container) return false;
@@ -926,10 +851,8 @@ export function calculateSpiralPlacement(newNodes, placedPositions, containerWid
 
 
 
-export const MIN_GRAPH_SEARCH_LENGTH = 2;
+const MIN_GRAPH_SEARCH_LENGTH = 2;
 
-/** CytoscapeGraphUnified: 검색 clear 직후 ripple 억제 구간과 맞춤 */
-export const SEARCH_RESET_SUPPRESS_MS = 500;
 
 export function normalizeGraphSearchTerm(term) {
   const trimmed = typeof term === 'string' ? term.trim() : '';
@@ -1084,7 +1007,7 @@ export function findExactSuggestionMatch(suggestions, trimmedTerm) {
  * @param {Object} [currentChapterData=null] - 현재 챕터 데이터
  * @returns {Array} 필터링된 요소 배열
  */
-export function filterGraphElements(elements, searchTerm, currentChapterData = null) {
+function filterGraphElements(elements, searchTerm, currentChapterData = null) {
   if (!Array.isArray(elements)) {
     console.warn('filterGraphElements: 유효하지 않은 elements 배열입니다', { 
       elements, 

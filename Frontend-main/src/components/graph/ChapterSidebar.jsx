@@ -4,11 +4,13 @@ import { buildChapterSidebarItems } from '../../utils/graph/graphCore.js';
 import { useIsNarrowViewport } from '../../hooks/graph/useGraphViewState.js';
 import './RelationGraph.css';
 
-function buildChapterRowMeta({ selected, reading, noGraph }) {
+const META_READING = '본문 읽는 중';
+const META_NO_GRAPH = '관계 데이터 없음';
+
+function buildChapterRowMeta({ reading, noGraph }) {
   const parts = [];
-  if (selected) parts.push('그래프 보는 중');
-  else if (reading) parts.push('본문 읽는 중');
-  if (noGraph) parts.push('관계 데이터 없음');
+  if (reading) parts.push(META_READING);
+  if (noGraph) parts.push(META_NO_GRAPH);
   return parts.join(' · ');
 }
 
@@ -113,8 +115,10 @@ export default function ChapterSidebar({
   const railClass = [
     'graph-chapter-rail',
     isSidebarOpen ? 'is-open' : 'is-collapsed',
-    isNarrow ? 'is-narrow' : 'is-wide',
-  ].join(' ');
+    isNarrow ? 'is-narrow' : '',
+  ]
+    .filter(Boolean)
+    .join(' ');
 
   return (
     <>
@@ -161,14 +165,7 @@ export default function ChapterSidebar({
             </span>
           </button>
           {isSidebarOpen ? (
-            <div className="graph-chapter-rail-heading">
-              <span className="graph-chapter-rail-title">챕터</span>
-              {bookTitle ? (
-                <span className="graph-chapter-rail-book" title={bookTitle}>
-                  {bookTitle}
-                </span>
-              ) : null}
-            </div>
+            <span className="graph-chapter-rail-title">챕터</span>
           ) : null}
         </div>
 
@@ -185,18 +182,11 @@ export default function ChapterSidebar({
             const reading = userCurrentChapter != null && item.chapter === userCurrentChapter;
             const noGraph = item.hasGraph === false;
             const focused = focusIndex === index;
+            const showReading = reading && !selected;
             const meta = buildChapterRowMeta({
-              selected,
-              reading,
+              reading: showReading,
               noGraph,
             });
-            const statusHint = [
-              selected ? '그래프 보는 중' : null,
-              !selected && reading ? '본문 읽는 중' : null,
-              noGraph ? '관계 데이터 없음' : null,
-            ]
-              .filter(Boolean)
-              .join(', ');
 
             return (
               <button
@@ -208,13 +198,12 @@ export default function ChapterSidebar({
                 className={[
                   'graph-chapter-rail-item',
                   selected ? 'is-selected' : '',
-                  reading ? 'is-reading' : '',
                   noGraph ? 'is-empty' : '',
                   focused ? 'is-focused' : '',
                 ]
                   .filter(Boolean)
                   .join(' ')}
-                aria-label={`${item.label}${statusHint ? `, ${statusHint}` : ''} 선택`}
+                aria-label={`${item.label}${meta ? `, ${meta}` : ''} 선택`}
                 aria-selected={selected}
                 aria-current={selected ? 'page' : undefined}
                 onClick={() => selectChapter(item.chapter)}
@@ -228,8 +217,8 @@ export default function ChapterSidebar({
                     <span className="graph-chapter-rail-label">{item.label}</span>
                     {meta ? (
                       <span className="graph-chapter-rail-meta">
-                        {reading && !selected ? (
-                          <span className="graph-chapter-rail-dot is-reading" aria-hidden />
+                        {showReading ? (
+                          <span className="graph-chapter-rail-dot" aria-hidden />
                         ) : null}
                         {meta}
                       </span>
@@ -237,7 +226,7 @@ export default function ChapterSidebar({
                   </span>
                 ) : (
                   reading ? (
-                    <span className="graph-chapter-rail-dot is-reading is-rail" title="본문 읽는 중" />
+                    <span className="graph-chapter-rail-dot is-rail" title={META_READING} />
                   ) : null
                 )}
               </button>

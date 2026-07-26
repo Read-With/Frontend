@@ -33,38 +33,6 @@ export const GRAPH_LOAD_SOURCE = Object.freeze({
   NONE: 'none',
 });
 
-export function createFetchOutcome({
-  data = null,
-  status = FETCH_STATUS.OK,
-  source = null,
-  error = null,
-  incomplete = false,
-  failedIds = null,
-  mergedFrom = null,
-} = {}) {
-  return {
-    data,
-    status,
-    source,
-    error,
-    incomplete: Boolean(incomplete),
-    failedIds: Array.isArray(failedIds) ? failedIds : null,
-    mergedFrom: Array.isArray(mergedFrom) ? mergedFrom : null,
-  };
-}
-
-export function isFetchOk(outcome) {
-  return outcome?.status === FETCH_STATUS.OK || outcome?.status === FETCH_STATUS.EMPTY;
-}
-
-export function isFetchFallback(outcome) {
-  return outcome?.status === FETCH_STATUS.FALLBACK;
-}
-
-export function isFetchError(outcome) {
-  return outcome?.status === FETCH_STATUS.ERROR;
-}
-
 /** source → FETCH_STATUS 매핑 (그래프 로더용) */
 export function statusFromGraphSource(source) {
   if (source === GRAPH_LOAD_SOURCE.FALLBACK) return FETCH_STATUS.FALLBACK;
@@ -444,21 +412,30 @@ const requestRelationshipDeltas = async (
   return { response, result: pickResponseResult(response) };
 };
 
+/** 챕터에 델타 없음(404) — 누적 실패가 아니라 빈 커버리지 */
+const isDeltasSoftEmpty = (response) => response?.code === 'NOT_FOUND';
+
+const graphResultHasPayload = (payload) =>
+  !!payload &&
+  (asArray(payload.characters).length > 0 || asArray(payload.relations).length > 0);
+
 const toGraphApiResponse = ({ response, result, empty }) => {
-  const failed = !response || response.isSuccess === false;
-  const code = failed ? response?.code || 'ERROR' : 'SUCCESS';
+  const resolved = result || empty;
+  const hasPayload = graphResultHasPayload(resolved);
+  // soft-empty는 fetch 단계에서 success로 정규화됨. 여기선 누적 payload로 부분 실패 보정.
+  const failed = (!response || response.isSuccess === false) && !hasPayload;
+  const code = failed ? response?.code || 'ERROR' : hasPayload ? 'SUCCESS' : 'NOT_FOUND';
   const message = failed
-    ? code === 'NOT_FOUND'
-      ? '관계 델타를 찾을 수 없습니다.'
-      : response?.message || '관계 델타 조회에 실패했습니다.'
-    : '관계 델타를 성공적으로 조회했습니다.';
-  // 실패 시 empty 껍데기는 채우되 status=error로 성공·빈 데이터와 구분
+    ? response?.message || '관계 델타 조회에 실패했습니다.'
+    : hasPayload
+      ? '관계 델타를 성공적으로 조회했습니다.'
+      : '관계 델타를 찾을 수 없습니다.';
   return toUnifiedApiResponse(
     createRelationshipDeltasResponse(
       !failed,
       code,
       message,
-      failed ? empty : result || empty,
+      failed ? empty : resolved,
       failed ? FETCH_STATUS.ERROR : null
     )
   );
@@ -493,11 +470,21 @@ export const fetchRelationshipDeltasList = async (
     toEventId,
   });
 
+  const softEmpty = isDeltasSoftEmpty(response);
+  const deltas = asArray(result?.deltas);
   return {
-    response,
+    // 404를 success 응답으로 정규화해 하위 캐시/로더가 실패로 오인하지 않게 함
+    response: softEmpty
+      ? {
+          isSuccess: true,
+          code: 'SUCCESS',
+          message: '관계 델타가 없습니다.',
+          result: result ?? { deltas: [] },
+        }
+      : response,
     bookId: result?.bookId ?? bookId,
-    deltas: asArray(result?.deltas),
-    isSuccess: response?.isSuccess !== false,
+    deltas,
+    isSuccess: response?.isSuccess !== false || softEmpty,
   };
 };
 
@@ -537,13 +524,6 @@ export const getBookScopeRelationshipGraph = async (bookId, uptoChapter = null) 
       empty,
     });
   } catch (error) {
-    if (error.status === 404) {
-      return toGraphApiResponse({
-        response: { isSuccess: false, code: 'NOT_FOUND' },
-        result: null,
-        empty,
-      });
-    }
     handleApiError(error, '관계 델타 조회 실패');
   }
 };

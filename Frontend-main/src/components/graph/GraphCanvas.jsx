@@ -1,6 +1,6 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import PropTypes from 'prop-types';
-import CytoscapeGraphUnified from './CytoscapeGraphUnified';
+import CytoscapeGraphUnified, { GraphZoomControls } from './CytoscapeGraphUnified';
 import UnifiedNodeInfo from './UnifiedNodeInfo';
 import UnifiedEdgeTooltip from './UnifiedEdgeTooltip';
 import { GraphFloatingControls } from './GraphControls';
@@ -223,6 +223,7 @@ function GraphCanvas({
   sidebarControl,
   searchState,
   floatingControls = null,
+  pageChromeStart = null,
   cytoscapeConfig,
   tooltipHandlers,
   graphClearRef,
@@ -230,7 +231,7 @@ function GraphCanvas({
   onSelectRelatedNode = null,
 }) {
   const { isSidebarClosing, onCloseSidebar, onStartClosing, onClearGraph } = sidebarControl;
-  const { isSearchActive, filteredElements, searchTerm, fitNodeIds, isResetFromSearch } = searchState;
+  const { isSearchActive, filteredElements, searchTerm, fitNodeIds } = searchState;
   const { stylesheet } = cytoscapeConfig;
   const {
     onShowNodeTooltip,
@@ -239,7 +240,9 @@ function GraphCanvas({
     selectedElementRef,
   } = tooltipHandlers;
 
+  const [chromeCy, setChromeCy] = useState(null);
   const showSidebar = !!(activeTooltip || isSidebarClosing);
+  const usePageChrome = !!(pageChromeStart || floatingControls);
 
   return (
     <div
@@ -302,23 +305,29 @@ function GraphCanvas({
               selectedElementRef={selectedElementRef}
               graphClearRef={graphClearRef}
               graphSelectNodeRef={graphSelectNodeRef}
-              isResetFromSearch={isResetFromSearch}
               isDataRefreshing={isLoading}
               currentChapter={currentChapter}
               viewportRefitKey={buildGraphViewportRefitKey(currentChapter, eventNum)}
-              showRippleEffect
+              showZoomControls={!usePageChrome}
+              onCyReady={usePageChrome ? setChromeCy : null}
             />
 
-            {floatingControls ? (
-              <GraphFloatingControls
-                searchState={floatingControls.searchState}
-                searchActions={floatingControls.searchActions}
-                edgeLabelVisible={floatingControls.edgeLabelVisible}
-                onToggleEdgeLabel={floatingControls.onToggleEdgeLabel}
-                filterStage={floatingControls.filterStage}
-                onFilterChange={floatingControls.onFilterChange}
-                showLegend
-              />
+            {usePageChrome ? (
+              <div className="graph-page-chrome" aria-label="그래프 페이지 도구">
+                {floatingControls ? (
+                  <GraphFloatingControls
+                    searchState={floatingControls.searchState}
+                    searchActions={floatingControls.searchActions}
+                    edgeLabelVisible={floatingControls.edgeLabelVisible}
+                    onToggleEdgeLabel={floatingControls.onToggleEdgeLabel}
+                    filterStage={floatingControls.filterStage}
+                    onFilterChange={floatingControls.onFilterChange}
+                    showLegend
+                  />
+                ) : null}
+                <GraphZoomControls cy={chromeCy} className="graph-zoom-controls is-embedded" />
+                {pageChromeStart}
+              </div>
             ) : null}
           </div>
         </div>
@@ -355,6 +364,7 @@ GraphCanvas.propTypes = {
     filterStage: PropTypes.number.isRequired,
     onFilterChange: PropTypes.func.isRequired,
   }),
+  pageChromeStart: PropTypes.node,
   cytoscapeConfig: PropTypes.object.isRequired,
   tooltipHandlers: PropTypes.object.isRequired,
   graphClearRef: PropTypes.object,

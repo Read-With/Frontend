@@ -11,7 +11,6 @@ import {
   applySearchFadeEffect,
   shouldShowNoSearchResults,
   getNoSearchResultsMessage,
-  createRippleEffect,
   ensureElementsInBounds,
   isGraphContainerSizeReady,
   syncReciprocalPairJunctionOffsets,
@@ -32,11 +31,11 @@ import {
 } from '../../hooks/graph/useGraphCy.js';
 import { eventUtils } from "../../utils/viewer/viewerCore";
 
-function GraphZoomControls({ cy, elementId = null, className = 'graph-zoom-controls' }) {
+function GraphZoomControls({ cy, className = 'graph-zoom-controls' }) {
   const handleZoom = useCallback((e, factor) => {
     e.stopPropagation();
-    zoomGraphByFactor(cy, factor, elementId != null ? { elementId } : undefined);
-  }, [cy, elementId]);
+    zoomGraphByFactor(cy, factor);
+  }, [cy]);
 
   if (!cy) return null;
 
@@ -70,7 +69,6 @@ function GraphZoomControls({ cy, elementId = null, className = 'graph-zoom-contr
 
 GraphZoomControls.propTypes = {
   cy: PropTypes.object,
-  elementId: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
   className: PropTypes.string,
 };
 
@@ -94,14 +92,12 @@ const CytoscapeGraphUnified = ({
   searchTerm = "",
   isSearchActive = false,
   filteredElements = [],
-  isResetFromSearch = false,
   onShowNodeTooltip,
   onShowEdgeTooltip,
   onClearTooltip,
   selectedElementRef,
   graphClearRef = null,
   graphSelectNodeRef = null,
-  showRippleEffect = false,
   isDataRefreshing = false,
   currentChapter,
   /** 변경 시 fit 재실행. 없으면 currentChapter만 사용 */
@@ -130,9 +126,6 @@ const CytoscapeGraphUnified = ({
   const [elementsApplyGen, setElementsApplyGen] = useState(0);
   const elementsApplyGenRef = useRef(0);
   elementsApplyGenRef.current = elementsApplyGen;
-  const addedNodeIdsRef = useRef(new Set());
-  const addedEdgeIdsRef = useRef(new Set());
-
   const cy = useCyInstance(externalCyRef, cyReady);
 
   useEffect(() => {
@@ -168,7 +161,6 @@ const CytoscapeGraphUnified = ({
   }, []);
 
   const resetGraphTrackingState = () => {
-    addedNodeIdsRef.current = new Set();
     elementsVisualSigRef.current = new Map();
     lastElementsGraphFingerprintRef.current = "";
     prevStructureFingerprintRef.current = "";
@@ -187,72 +179,6 @@ const CytoscapeGraphUnified = ({
   const applyNodeSizes = useCallback((cy, nodes, scale = 1) => {
     applyNormalizedNodeSizes(cy, { scaledNodes: nodes, scale });
   }, []);
-
-  const triggerRippleForAddedNodes = useCallback(() => {
-    if (!cy) return;
-    const recentlyAddedIds = addedNodeIdsRef.current;
-    const recentlyAddedEdgeIds = addedEdgeIdsRef.current;
-    addedNodeIdsRef.current = new Set();
-    addedEdgeIdsRef.current = new Set();
-
-    if (!showRippleEffect || isResetFromSearch) {
-      return;
-    }
-
-    const appearMs = GRAPH_ZOOM.FIT_DURATION_MS;
-
-    recentlyAddedIds.forEach((nodeId) => {
-      const cyNode = cy.getElementById(nodeId);
-      if (!cyNode || cyNode.length === 0) return;
-
-      try {
-        cyNode.style("opacity", 0.2);
-        cyNode.animate({
-          style: { opacity: 1 },
-          duration: appearMs,
-          easing: "ease-out",
-          complete: () => {
-            try {
-              cyNode.removeStyle("opacity");
-            } catch {
-              /* ignore */
-            }
-          },
-        });
-      } catch {
-        /* ignore */
-      }
-
-      const position = cyNode.renderedPosition();
-      if (position && typeof position.x === "number" && typeof position.y === "number") {
-        createRippleEffect(containerRef.current, position.x, position.y);
-      }
-    });
-
-    recentlyAddedEdgeIds.forEach((edgeId) => {
-      const cyEdge = cy.getElementById(edgeId);
-      if (!cyEdge || cyEdge.length === 0) return;
-      try {
-        cyEdge.addClass("cytoscape-edge-appear");
-        cyEdge.style("opacity", 0.15);
-        cyEdge.animate({
-          style: { opacity: 1 },
-          duration: appearMs,
-          easing: "ease-out",
-          complete: () => {
-            try {
-              cyEdge.removeClass("cytoscape-edge-appear");
-              cyEdge.removeStyle("opacity");
-            } catch {
-              /* ignore */
-            }
-          },
-        });
-      } catch {
-        /* ignore */
-      }
-    });
-  }, [cy, isResetFromSearch, showRippleEffect]);
 
   const reapplySearchFade = useCallback(() => {
     if (!cy || !isSearchActive) return;
@@ -553,20 +479,6 @@ const CytoscapeGraphUnified = ({
         cy.add(edgesToAdd);
       }
 
-      // cy에 실제로 추가된 노드만 ripple 대상으로 (props diff와 이중 추적하지 않음)
-      addedNodeIdsRef.current = new Set(
-        nodesToAdd
-          .map((n) => n?.data?.id)
-          .filter((id) => id != null && id !== "")
-          .map(String)
-      );
-      addedEdgeIdsRef.current = new Set(
-        edgesToAdd
-          .map((e) => e?.data?.id)
-          .filter((id) => id != null && id !== "")
-          .map(String)
-      );
-
       const newIds = [
         ...nodesToAdd.map((n) => n?.data?.id),
         ...edgesToAdd.map((e) => e?.data?.id),
@@ -624,7 +536,6 @@ const CytoscapeGraphUnified = ({
     elementsUpdateRef,
     updateStylesheet,
     applyNodeSizes,
-    triggerRippleForAddedNodes,
     isInitialLoad,
     setIsInitialLoad,
     containerRef,
@@ -640,7 +551,7 @@ const CytoscapeGraphUnified = ({
         const fitIdSet = new Set(fitNodeIds.map(String));
         const nodes = cy.nodes().filter((n) => fitIdSet.has(n.id()));
         if (nodes.length > 0) {
-          fitGraphToNodes(cy, { eles: nodes });
+          fitGraphToNodes(cy, { eles: nodes, duration: GRAPH_ZOOM.FIT_DURATION_MS });
           const prevHl = cy.nodes(".search-highlight");
           if (prevHl.length > 0) prevHl.removeClass("search-highlight");
           nodes.addClass("search-highlight");
@@ -796,7 +707,6 @@ CytoscapeGraphUnified.propTypes = {
   searchTerm: PropTypes.string,
   isSearchActive: PropTypes.bool,
   filteredElements: PropTypes.arrayOf(elementShape),
-  isResetFromSearch: PropTypes.bool,
   onShowNodeTooltip: PropTypes.func,
   onShowEdgeTooltip: PropTypes.func,
   onClearTooltip: PropTypes.func,
@@ -815,7 +725,6 @@ CytoscapeGraphUnified.propTypes = {
   graphSelectNodeRef: PropTypes.shape({
     current: PropTypes.func,
   }),
-  showRippleEffect: PropTypes.bool,
   isDataRefreshing: PropTypes.bool,
   currentChapter: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
   viewportRefitKey: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),

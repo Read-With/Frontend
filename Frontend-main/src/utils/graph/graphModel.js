@@ -1944,14 +1944,18 @@ const buildCacheEntry = (
   bookId,
   deltas,
   { toEventId = null, coveredThroughChapter = null, response = null, isSuccess = true } = {}
-) => ({
-  bookId,
-  deltas: Array.isArray(deltas) ? deltas : [],
-  toEventId: toTrimmedStringOrNull(toEventId),
-  coveredThroughChapter: toChapterIndexOrNull(coveredThroughChapter),
-  response,
-  isSuccess: isSuccess !== false,
-});
+) => {
+  const list = Array.isArray(deltas) ? deltas : [];
+  return {
+    bookId,
+    deltas: list,
+    toEventId: toTrimmedStringOrNull(toEventId),
+    coveredThroughChapter: toChapterIndexOrNull(coveredThroughChapter),
+    response,
+    // deltas가 있으면 마지막 챕터 soft/hard fail로 전체를 실패 처리하지 않음
+    isSuccess: isSuccess !== false || list.length > 0,
+  };
+};
 
 const fetchAndStoreByChapter = async (key, uptoChapter) => {
   const fetchRelationshipDeltasList = await loadFetchRelationshipDeltasList();
@@ -1966,14 +1970,16 @@ const fetchAndStoreByChapter = async (key, uptoChapter) => {
 
     const fetched = await fetchRelationshipDeltasList(key, { chapterIndex: ch });
     const chapterLastId = resolveManifestEventId(getLastManifestEventInChapter(key, ch));
+    const chapterOk = fetched.isSuccess !== false;
+
     current = buildCacheEntry(
       fetched.bookId ?? key,
       mergeDeltasByEventId(current?.deltas, fetched.deltas),
       {
         toEventId: chapterLastId || current?.toEventId || null,
         coveredThroughChapter: ch,
-        response: fetched.response,
-        isSuccess: fetched.isSuccess,
+        response: chapterOk ? fetched.response : (current?.response ?? fetched.response),
+        isSuccess: chapterOk && (current == null || current.isSuccess !== false),
       }
     );
     bookDeltasCache.set(key, current);
