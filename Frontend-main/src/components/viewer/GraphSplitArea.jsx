@@ -1,4 +1,4 @@
-import { useMemo, useState, useRef, memo, useCallback } from 'react';
+import { useMemo, useRef, memo, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { AlertCircle, Inbox, Loader2 } from 'lucide-react';
 import CytoscapeGraphUnified from '../graph/CytoscapeGraphUnified';
@@ -8,13 +8,12 @@ import { useGraphElementPipeline } from '../../hooks/graph/useGraphViewState';
 import { getEdgeStyle, createGraphStylesheet, graphStyles } from '../../utils/styles/graphStyles';
 import {
   centerSelectionOnElementId,
-  getEdgeFocusPanTarget,
+  getFloatingTooltipPanTarget,
 } from '../../utils/graph/graphCy';
 import {
   shouldIgnoreViewerOutsideClick,
   useGraphTooltipSelection,
 } from '../../hooks/graph/useGraphCy';
-import { useClickOutside } from '../../hooks/ui/tooltipHooks';
 import { resolveEventOrdinalForDisplay } from '../../utils/viewer/viewerSession';
 import { hasGraphPanelLocationHint, resolveChapterIndex, toPositiveNumberOrNull, resolvePositiveBookId } from '../../utils/common/valueUtils';
 import {
@@ -26,10 +25,7 @@ import {
 import { userGraphPath } from '../../utils/common/urlUtils';
 import { buildGraphViewportRefitKey } from '../../utils/graph/graphCore.js';
 import '../graph/RelationGraph.css';
-import GraphControls, {
-  EdgeLabelToggle,
-  CharacterFilterSegmented,
-} from '../graph/GraphControls';
+import { GraphFloatingControls } from '../graph/GraphControls';
 import { getChapterData, getManifestFromCache } from '../../utils/common/cache/manifestCache';
 
 const iconShellClass = {
@@ -87,55 +83,10 @@ function ChapterEventInfo({
   );
 }
 
-function GraphCanvasLegend() {
-  const [open, setOpen] = useState(false);
-  const rootRef = useClickOutside(() => setOpen(false), open);
-  const panelId = 'graph-canvas-legend-panel';
-
-  return (
-    <div className="graph-canvas-legend-wrap" ref={rootRef}>
-      {open ? (
-        <aside id={panelId} className="graph-canvas-legend" aria-label="그래프 범례">
-          <div className="graph-canvas-legend-row">
-            <span className="graph-canvas-legend-swatch" aria-hidden />
-            <span>비호의적 ↔ 호의적</span>
-          </div>
-          <div className="graph-canvas-legend-row">
-            <span className="graph-canvas-legend-size" aria-hidden>
-              <span className="graph-canvas-legend-dot graph-canvas-legend-dot--lg" />
-              <span className="graph-canvas-legend-dot graph-canvas-legend-dot--sm" />
-            </span>
-            <span>크기 = 중요도</span>
-          </div>
-          <div className="graph-canvas-legend-row">
-            <span className="graph-canvas-legend-main" aria-hidden />
-            <span>주요 인물</span>
-          </div>
-        </aside>
-      ) : null}
-      <button
-        type="button"
-        className="graph-canvas-legend-btn"
-        aria-label={open ? '범례 닫기' : '범례 보기'}
-        title={open ? '범례 닫기' : '범례 보기'}
-        aria-expanded={open}
-        aria-controls={open ? panelId : undefined}
-        onClick={() => setOpen((v) => !v)}
-      >
-        <span className="material-symbols-outlined" aria-hidden>
-          search
-        </span>
-      </button>
-    </div>
-  );
-}
-
 const GraphSplitTopBar = memo(function GraphSplitTopBar({
   graphState,
   graphActions,
   viewerState,
-  searchState,
-  searchActions,
 }) {
   const { book } = viewerState;
 
@@ -144,33 +95,10 @@ const GraphSplitTopBar = memo(function GraphSplitTopBar({
     currentEvent,
     prevValidEvent,
     graphFullScreen,
-    edgeLabelVisible,
     progressTopBar,
   } = graphState;
 
-  const {
-    setGraphFullScreen,
-    setEdgeLabelVisible,
-    filterStage,
-    setFilterStage,
-  } = graphActions;
-
-  const {
-    searchTerm,
-    isSearchActive,
-    suggestions = [],
-    showSuggestions = false,
-    selectedIndex = -1,
-  } = searchState;
-
-  const {
-    onSearchSubmit,
-    clearSearch,
-    closeSuggestions,
-    onGenerateSuggestions,
-    handleKeyDown,
-    onSelectedIndexChange,
-  } = searchActions;
+  const { setGraphFullScreen } = graphActions;
 
   const bookId = useMemo(() => toPositiveNumberOrNull(book?.id), [book?.id]);
 
@@ -262,27 +190,6 @@ const GraphSplitTopBar = memo(function GraphSplitTopBar({
           chapterDisplayLabel={chapterMeta.chapterDisplayLabel}
           chapterTitleTooltip={chapterMeta.chapterTitleTooltip}
         />
-      </div>
-
-      <div className="graph-split-topbar-actions">
-        <GraphControls
-          onSearchSubmit={onSearchSubmit}
-          onGenerateSuggestions={onGenerateSuggestions}
-          searchTerm={searchTerm}
-          isSearchActive={isSearchActive}
-          onClearSearch={clearSearch}
-          onCloseSuggestions={closeSuggestions}
-          suggestions={suggestions}
-          showSuggestions={showSuggestions}
-          selectedIndex={selectedIndex}
-          onSelectedIndexChange={onSelectedIndexChange}
-          onKeyDown={handleKeyDown}
-        />
-        <EdgeLabelToggle
-          visible={edgeLabelVisible}
-          onToggle={() => setEdgeLabelVisible(!edgeLabelVisible)}
-        />
-        <CharacterFilterSegmented value={filterStage} onChange={setFilterStage} />
       </div>
     </div>
   );
@@ -402,15 +309,9 @@ const GraphContainer = memo(function GraphContainer({
     const cy = cyRef.current;
     if (!cy) return;
 
-    const element = cy.getElementById(String(elementId));
-    const isEdge =
-      element?.length > 0 &&
-      typeof element.isEdge === 'function' &&
-      element.isEdge();
-
     centerSelectionOnElementId(cy, elementId, {
       duration: 400,
-      ...(isEdge ? { panTarget: getEdgeFocusPanTarget(cy) } : {}),
+      panTarget: getFloatingTooltipPanTarget(cy),
     });
   }, []);
 
@@ -497,7 +398,6 @@ const GraphContainer = memo(function GraphContainer({
           graphSelectNodeRef={graphSelectNodeRef}
           showRippleEffect
         />
-        <GraphCanvasLegend />
       </div>
     </div>
   );
@@ -603,8 +503,6 @@ const GraphSplitArea = memo(function GraphSplitArea({
         graphState={graphState}
         graphActions={graphActions}
         viewerState={{ book }}
-        searchState={searchState}
-        searchActions={searchActions}
       />
 
       <div style={{ ...graphStyles.graphPageInner, minWidth: 0, position: 'relative' }}>
@@ -677,6 +575,30 @@ const GraphSplitArea = memo(function GraphSplitArea({
               graphClearRef={graphClearRef}
               isEventTransition={isEventTransition}
               bookId={book?.id ?? bookKey}
+            />
+            <GraphFloatingControls
+              searchState={{
+                searchTerm: searchTermValue,
+                isSearchActive: isSearchActiveValue,
+                suggestions: searchState.suggestions ?? [],
+                showSuggestions: searchState.showSuggestions ?? false,
+                selectedIndex: searchState.selectedIndex ?? -1,
+              }}
+              searchActions={{
+                onSearchSubmit: searchActions?.onSearchSubmit,
+                onClearSearch: searchActions?.clearSearch,
+                onGenerateSuggestions: searchActions?.onGenerateSuggestions,
+                onKeyDown: searchActions?.handleKeyDown,
+                onCloseSuggestions: searchActions?.closeSuggestions,
+                onSelectedIndexChange: searchActions?.onSelectedIndexChange,
+              }}
+              edgeLabelVisible={edgeLabelVisible}
+              onToggleEdgeLabel={() =>
+                graphActions.setEdgeLabelVisible((v) => !v)
+              }
+              filterStage={filterStage}
+              onFilterChange={graphActions.setFilterStage}
+              showLegend
             />
             {showRefreshOverlay ? (
               <div

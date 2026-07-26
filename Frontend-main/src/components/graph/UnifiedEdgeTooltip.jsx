@@ -77,6 +77,12 @@ function UnifiedEdgeTooltip({
   const isSidebar = variant === 'graphPage';
   const isViewer = variant === 'viewer';
 
+  const avoidPoint = useMemo(() => {
+    const c = data?.edgeCenter;
+    if (c && Number.isFinite(c.x) && Number.isFinite(c.y)) return c;
+    return null;
+  }, [data?.edgeCenter]);
+
   const {
     position,
     showContent,
@@ -85,7 +91,8 @@ function UnifiedEdgeTooltip({
     handleMouseDown,
   } = useTooltipPosition(x, y, {
     enabled: !isSidebar,
-    bounds: isViewer ? 'window' : 'canvas',
+    bounds: 'canvas',
+    avoidPoint,
   });
 
   const clickOutsideRef = useClickOutside(

@@ -168,12 +168,22 @@ export function useTooltipState({
 /**
  * @param {number} initialX
  * @param {number} initialY
- * @param {{ enabled?: boolean, bounds?: 'canvas' | 'window' }} [options]
+ * @param {{
+ *   enabled?: boolean,
+ *   bounds?: 'canvas' | 'window',
+ *   avoidPoint?: { x: number, y: number } | null,
+ *   avoidPad?: number,
+ * }} [options]
  *   bounds: 'canvas'(기본) 그래프 영역 / 'window' 뷰포트(뷰어 툴팁용)
+ *   avoidPoint: 클릭/선택 focus를 가리지 않도록 실측 후 재배치
  */
 export function useTooltipPosition(initialX, initialY, options = {}) {
   const enabled = options.enabled !== false;
   const bounds = options.bounds === 'window' ? 'window' : 'canvas';
+  const avoidPoint = options.avoidPoint ?? null;
+  const avoidPad = Number.isFinite(options.avoidPad) ? options.avoidPad : 48;
+  const avoidX = avoidPoint && Number.isFinite(avoidPoint.x) ? avoidPoint.x : null;
+  const avoidY = avoidPoint && Number.isFinite(avoidPoint.y) ? avoidPoint.y : null;
   const [position, setPosition] = useState({ x: 200, y: 200 });
   const [showContent, setShowContent] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
@@ -257,24 +267,76 @@ export function useTooltipPosition(initialX, initialY, options = {}) {
   useEffect(() => {
     if (!enabled) return;
     if (
-      initialX !== undefined &&
-      initialY !== undefined &&
-      tooltipRef.current &&
-      !isDragging &&
-      !hasDragged
+      initialX === undefined ||
+      initialY === undefined ||
+      !tooltipRef.current ||
+      isDragging ||
+      hasDragged
     ) {
-      const tooltipRect = tooltipRef.current.getBoundingClientRect();
-      setPosition(
-        constrainTooltipPosition(
-          bounds,
-          initialX,
-          initialY,
-          tooltipRect.width,
-          tooltipRect.height,
-        ),
-      );
+      return;
     }
-  }, [enabled, initialX, initialY, isDragging, hasDragged, bounds]);
+
+    const tooltipRect = tooltipRef.current.getBoundingClientRect();
+    const width = tooltipRect.width || 1;
+    const height = tooltipRect.height || 1;
+    let next = constrainTooltipPosition(bounds, initialX, initialY, width, height);
+
+    if (avoidX != null && avoidY != null) {
+      const tip = {
+        left: next.x,
+        top: next.y,
+        right: next.x + width,
+        bottom: next.y + height,
+      };
+      const overlaps =
+        avoidX >= tip.left - avoidPad &&
+        avoidX <= tip.right + avoidPad &&
+        avoidY >= tip.top - avoidPad &&
+        avoidY <= tip.bottom + avoidPad;
+
+      if (overlaps) {
+        const gap = avoidPad;
+        const candidates = [
+          { x: avoidX + gap, y: avoidY - height / 2 },
+          { x: avoidX - gap - width, y: avoidY - height / 2 },
+          { x: avoidX - width / 2, y: avoidY + gap },
+          { x: avoidX - width / 2, y: avoidY - gap - height },
+          { x: avoidX + gap, y: avoidY + gap },
+          { x: avoidX - gap - width, y: avoidY - gap - height },
+        ];
+        let best = next;
+        let bestDist = Infinity;
+        for (const c of candidates) {
+          const p = constrainTooltipPosition(bounds, c.x, c.y, width, height);
+          const covers =
+            avoidX >= p.x - 4 &&
+            avoidX <= p.x + width + 4 &&
+            avoidY >= p.y - 4 &&
+            avoidY <= p.y + height + 4;
+          if (covers) continue;
+          const dist =
+            Math.abs(p.x + width / 2 - avoidX) + Math.abs(p.y + height / 2 - avoidY);
+          if (dist < bestDist) {
+            bestDist = dist;
+            best = p;
+          }
+        }
+        next = best;
+      }
+    }
+
+    setPosition(next);
+  }, [
+    enabled,
+    initialX,
+    initialY,
+    isDragging,
+    hasDragged,
+    bounds,
+    avoidX,
+    avoidY,
+    avoidPad,
+  ]);
 
   if (!enabled) {
     return {

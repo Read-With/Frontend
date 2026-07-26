@@ -89,7 +89,7 @@ export function useGraphInteractions({
     if (!cy) return;
     const onShowTooltipRef = kind === 'node' ? onShowNodeTooltipRef : onShowEdgeTooltipRef;
     const center = calculateGraphTooltipPosition(cy, element, null, 0);
-    const anchor = resolveGraphTooltipAnchor(cy, kind, element, evt);
+    const anchor = resolveGraphTooltipAnchor(cy, kind, element);
     onShowTooltipRef.current?.(
       buildTapShowArgs(kind, element, evt, center, anchor.x, anchor.y),
     );

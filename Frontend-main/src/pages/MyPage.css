@@ -583,7 +583,7 @@
 
 .books-grid.grid-view {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 2rem;
 }
 
@@ -758,6 +758,10 @@
     width: 100%;
     max-width: 100%;
   }
+
+  .books-grid.grid-view {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 @media (max-width: 48rem) {
@@ -832,6 +836,11 @@
   .empty-welcome {
     padding: 0.75rem 0.75rem 1rem;
     min-height: 0;
+  }
+
+  .books-grid.grid-view {
+    grid-template-columns: 1fr;
+    gap: 1.5rem;
   }
 
   .empty-welcome-content {

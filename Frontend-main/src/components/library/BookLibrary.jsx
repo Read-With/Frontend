@@ -227,8 +227,8 @@ const BookCard = memo(({ book, onToggleFavorite, onOpenBook, onOpenBookmarks, on
           {renderBookImage()}
         </div>
 
-        {/* 독서 진행률 */}
-        {book.progress > 0 && (
+        {/* 독서 진행률 — 그리드 뷰에서만 표지 위 표시 */}
+        {viewMode !== 'list' && book.progress > 0 && (
           <div className="book-progress-container">
             <div className="progress-label">
               <span>독서 진행률</span>
@@ -255,6 +255,12 @@ const BookCard = memo(({ book, onToggleFavorite, onOpenBook, onOpenBookmarks, on
         
         {/* 메타 정보 */}
         <div className="book-meta">
+          {viewMode === 'list' && typeof book.progress === 'number' && book.progress > 0 && (
+            <span className="book-meta-item book-progress-meta" title={`독서 진행률 ${book.progress}%`}>
+              {book.progress}% 읽음
+            </span>
+          )}
+
           {book.updatedAt && (
             <span className="book-meta-item">
               <Clock size={14} />

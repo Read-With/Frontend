@@ -132,10 +132,85 @@ function getBookmarkPositionSortKey(bookmark, bookId = null) {
 
 export const sortBookmarks = (bookmarks, sortOrder, bookId = null) => {
   if (!bookmarks?.length) return [];
-  if (sortOrder !== 'position') return bookmarks;
-  return [...bookmarks].sort((a, b) =>
-    getBookmarkPositionSortKey(a, bookId).localeCompare(getBookmarkPositionSortKey(b, bookId))
-  );
+  if (sortOrder === 'position') {
+    return [...bookmarks].sort((a, b) =>
+      getBookmarkPositionSortKey(a, bookId).localeCompare(getBookmarkPositionSortKey(b, bookId))
+    );
+  }
+  const getCreatedTs = (bookmark) => {
+    const raw = bookmark?.createdAt || bookmark?.created_at;
+    const t = raw ? Date.parse(raw) : NaN;
+    return Number.isFinite(t) ? t : 0;
+  };
+  if (sortOrder === 'oldest') {
+    return [...bookmarks].sort((a, b) => getCreatedTs(a) - getCreatedTs(b));
+  }
+  if (sortOrder === 'recent') {
+    return [...bookmarks].sort((a, b) => getCreatedTs(b) - getCreatedTs(a));
+  }
+  return bookmarks;
+};
+
+const getBookmarkChapterIndex = (bookmark) => {
+  const loc = toLocator(bookmark?.startLocator);
+  return loc?.chapterIndex ?? null;
+};
+
+/**
+ * 챕터별 그룹. position → 챕터 오름차순·그룹 내 위치순.
+ * recent/oldest → 그룹을 챕터 내 최신/최오래된 시각 기준 정렬, 그룹 내 시간순.
+ */
+export const groupBookmarksByChapter = (bookmarks, sortOrder = 'recent', bookId = null) => {
+  if (!bookmarks?.length) return [];
+
+  const sorted = sortBookmarks(bookmarks, sortOrder, bookId);
+  const map = new Map();
+
+  for (const bookmark of sorted) {
+    const chapterIndex = getBookmarkChapterIndex(bookmark);
+    const key = chapterIndex == null ? 'unknown' : String(chapterIndex);
+    let group = map.get(key);
+    if (!group) {
+      group = {
+        key,
+        chapterIndex,
+        title: bookmark.chapterTitle || null,
+        label: chapterIndex == null ? '위치 미상' : `${chapterIndex}챕터`,
+        items: [],
+      };
+      map.set(key, group);
+    } else if (!group.title && bookmark.chapterTitle) {
+      group.title = bookmark.chapterTitle;
+    }
+    group.items.push(bookmark);
+  }
+
+  const groups = [...map.values()];
+  const getCreatedTs = (bookmark) => {
+    const raw = bookmark?.createdAt || bookmark?.created_at;
+    const t = raw ? Date.parse(raw) : NaN;
+    return Number.isFinite(t) ? t : 0;
+  };
+
+  if (sortOrder === 'position') {
+    groups.sort((a, b) => {
+      if (a.chapterIndex == null) return 1;
+      if (b.chapterIndex == null) return -1;
+      return a.chapterIndex - b.chapterIndex;
+    });
+  } else {
+    const groupTs = (group) => {
+      const times = group.items.map(getCreatedTs);
+      return sortOrder === 'oldest' ? Math.min(...times) : Math.max(...times);
+    };
+    groups.sort((a, b) => {
+      const ta = groupTs(a);
+      const tb = groupTs(b);
+      return sortOrder === 'oldest' ? ta - tb : tb - ta;
+    });
+  }
+
+  return groups;
 };
 
 const RELATIVE_DAYS_THRESHOLD = 7;

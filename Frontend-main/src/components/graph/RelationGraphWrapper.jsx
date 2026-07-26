@@ -2,7 +2,6 @@ import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import PropTypes from "prop-types";
 import { useNavigate, useParams, useLocation } from "react-router-dom";
 
-import { GraphTopBar } from "./GraphControls";
 import GraphCanvas from "./GraphCanvas";
 import ChapterSidebar from "./ChapterSidebar";
 import "./RelationGraph.css";
@@ -343,7 +342,7 @@ function RelationGraphWrapper() {
   const { searchState, searchActions } = useGraphSearch(elements, currentChapterData);
   const { clearSearch } = searchActions;
 
-  const topBarSearchActions = useMemo(() => ({
+  const floatingSearchActions = useMemo(() => ({
     onSearchSubmit: searchActions.onSearchSubmit,
     onClearSearch: searchActions.clearSearch,
     onGenerateSuggestions: searchActions.onGenerateSuggestions,
@@ -360,16 +359,16 @@ function RelationGraphWrapper() {
     const cy = cyRef.current;
     if (!cy) return;
 
-    const { TOP_BAR_HEIGHT, TOOLTIP_SIDEBAR_WIDTH, FOCUS_PAN_MS } = GRAPH_LAYOUT_CONSTANTS;
+    const { TOOLTIP_SIDEBAR_WIDTH, FOCUS_PAN_MS } = GRAPH_LAYOUT_CONSTANTS;
     const chapterSidebarWidth = sidebarLayoutWidth;
     const availableGraphWidth = window.innerWidth - chapterSidebarWidth - TOOLTIP_SIDEBAR_WIDTH;
-    const availableGraphHeight = window.innerHeight - TOP_BAR_HEIGHT;
+    const availableGraphHeight = window.innerHeight;
 
     centerSelectionOnElementId(cy, elementId, {
       duration: FOCUS_PAN_MS,
       panTarget: {
         x: chapterSidebarWidth + (availableGraphWidth / 2) - availableGraphWidth * 0.14,
-        y: TOP_BAR_HEIGHT + (availableGraphHeight / 2) - availableGraphHeight * 0.06,
+        y: availableGraphHeight / 2 - availableGraphHeight * 0.06,
       },
     });
   }, [sidebarLayoutWidth]);
@@ -537,17 +536,6 @@ function RelationGraphWrapper() {
         </div>
       )}
 
-      <GraphTopBar
-        isSidebarOpen={isSidebarOpen}
-        sidebarLayoutWidth={sidebarLayoutWidth}
-        searchState={searchState}
-        searchActions={topBarSearchActions}
-        edgeLabelVisible={edgeLabelVisible}
-        onToggleEdgeLabel={toggleEdgeLabel}
-        filterStage={filterStage}
-        onFilterChange={setFilterStage}
-      />
-
       <div style={backButtonContainerStyle}>
         <button
           type="button"
@@ -604,6 +592,14 @@ function RelationGraphWrapper() {
           searchTerm: searchState.searchTerm,
           fitNodeIds: searchState.fitNodeIds,
           isResetFromSearch: searchState.isResetFromSearch,
+        }}
+        floatingControls={{
+          searchState,
+          searchActions: floatingSearchActions,
+          edgeLabelVisible,
+          onToggleEdgeLabel: toggleEdgeLabel,
+          filterStage,
+          onFilterChange: setFilterStage,
         }}
         cytoscapeConfig={{ stylesheet }}
         tooltipHandlers={{

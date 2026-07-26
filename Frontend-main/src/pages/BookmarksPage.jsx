@@ -3,17 +3,15 @@ import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { useBookmarks } from '../hooks/bookmarks/bookmarkHooks';
 import {
-  bookmarkColors,
   bookmarkBorders,
   colorOptions,
   getColorKey,
   formatRelativeTime,
-  formatAbsoluteTime,
   parseBookmarkLocation,
   formatBookmarkLocatorDetail,
   bookmarkToResumeAnchor,
   resolveBookmarkApiBookId,
-  sortBookmarks,
+  groupBookmarksByChapter,
 } from '../utils/bookmarks/bookmarkUtils';
 import { userViewerPath, userViewerBookmarksPath, userViewerReadingPath } from '../utils/common/urlUtils';
 import { resolveChapterIndex } from '../utils/common/valueUtils';
@@ -25,7 +23,7 @@ const sameId = (a, b) => String(a) === String(b);
 const getHighlightSnippet = (bookmark) => {
   const text = bookmark?.highlightText || bookmark?.textSnippet;
   if (!text) return '';
-  return text.length > 120 ? `${text.slice(0, 117)}…` : text;
+  return text.length > 180 ? `${text.slice(0, 177)}…` : text;
 };
 
 const parseMemoEntries = (memo) =>
@@ -60,10 +58,19 @@ const BookmarksPage = () => {
   const [composerText, setComposerText] = useState('');
   const [editingMemo, setEditingMemo] = useState(EMPTY_EDIT);
   const [deleteConfirmId, setDeleteConfirmId] = useState(null);
+  const [expandedId, setExpandedId] = useState(null);
 
   const closeComposer = () => {
     setComposerId(null);
     setComposerText('');
+  };
+
+  const collapseRow = (bookmarkId) => {
+    if (expandedId != null && sameId(expandedId, bookmarkId)) setExpandedId(null);
+    if (composerId != null && sameId(composerId, bookmarkId)) closeComposer();
+    if (editingMemo.bookmarkId != null && sameId(editingMemo.bookmarkId, bookmarkId)) {
+      setEditingMemo(EMPTY_EDIT);
+    }
   };
 
   useEffect(() => {
@@ -87,29 +94,32 @@ const BookmarksPage = () => {
     patchBookmark,
   } = useBookmarks(apiBookId, { sortOrder });
 
-  const displayedBookmarks = useMemo(() => {
+  const filteredBookmarks = useMemo(() => {
     const term = searchTerm.trim().toLowerCase();
-    const list = !term
-      ? bookmarks || []
-      : (bookmarks || []).filter((bookmark) => {
-          const chapter = resolveChapterIndex(bookmark.startLocator);
-          const haystack = [
-            parseBookmarkLocation(bookmark, apiBookId),
-            formatBookmarkLocatorDetail(bookmark, apiBookId),
-            bookmark.memo,
-            bookmark.highlightText,
-            bookmark.textSnippet,
-            bookmark.chapterTitle,
-            chapter != null ? `챕터 ${chapter}` : '',
-            chapter != null ? formatFallbackChapterLabel(chapter) : '',
-          ]
-            .filter(Boolean)
-            .join(' ')
-            .toLowerCase();
-          return haystack.includes(term);
-        });
-    return sortBookmarks(list, sortOrder, apiBookId);
-  }, [bookmarks, searchTerm, sortOrder, apiBookId]);
+    if (!term) return bookmarks || [];
+    return (bookmarks || []).filter((bookmark) => {
+      const chapter = resolveChapterIndex(bookmark.startLocator);
+      const haystack = [
+        parseBookmarkLocation(bookmark, apiBookId),
+        formatBookmarkLocatorDetail(bookmark, apiBookId),
+        bookmark.memo,
+        bookmark.highlightText,
+        bookmark.textSnippet,
+        bookmark.chapterTitle,
+        chapter != null ? `챕터 ${chapter}` : '',
+        chapter != null ? formatFallbackChapterLabel(chapter) : '',
+      ]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase();
+      return haystack.includes(term);
+    });
+  }, [bookmarks, searchTerm, apiBookId]);
+
+  const chapterGroups = useMemo(
+    () => groupBookmarksByChapter(filteredBookmarks, sortOrder, apiBookId),
+    [filteredBookmarks, sortOrder, apiBookId]
+  );
 
   const isFilteredView = searchTerm.trim().length > 0;
 
@@ -147,10 +157,7 @@ const BookmarksPage = () => {
   );
 
   const clearMemoUiForBookmark = (bookmarkId) => {
-    if (composerId != null && sameId(composerId, bookmarkId)) closeComposer();
-    if (editingMemo.bookmarkId != null && sameId(editingMemo.bookmarkId, bookmarkId)) {
-      setEditingMemo(EMPTY_EDIT);
-    }
+    collapseRow(bookmarkId);
   };
 
   const updateMemoEntries = useCallback(
@@ -214,245 +221,249 @@ const BookmarksPage = () => {
     }
   };
 
-  const stopCard = (e) => e.stopPropagation();
+  const stopRow = (e) => e.stopPropagation();
+
+  const toggleExpanded = (bookmarkId) => {
+    setExpandedId((prev) => (prev != null && sameId(prev, bookmarkId) ? null : bookmarkId));
+    setEditingMemo(EMPTY_EDIT);
+    closeComposer();
+  };
 
   const renderBookmark = (bookmark) => {
     if (!bookmark) return null;
     const colorKey = getColorKey(bookmark.color);
     const highlight = getHighlightSnippet(bookmark);
     const memoEntries = parseMemoEntries(bookmark.memo);
+    const isExpanded = expandedId != null && sameId(expandedId, bookmark.id);
     const isComposerOpen = composerId != null && sameId(composerId, bookmark.id);
     const isEditingBookmark =
       editingMemo.bookmarkId != null && sameId(editingMemo.bookmarkId, bookmark.id);
-    const locatorLine = formatBookmarkLocatorDetail(bookmark, apiBookId);
     const created = bookmark.createdAt || bookmark.created_at;
+    const locationLabel = parseBookmarkLocation(bookmark, apiBookId);
+    const memoPreview = memoEntries[0] || '';
+    const memoExtra = memoEntries.length > 1 ? memoEntries.length - 1 : 0;
 
     return (
-      <div
+      <article
         key={bookmark.id}
-        className="bm-card"
-        role="button"
-        tabIndex={0}
+        className={`bm-row${isExpanded ? ' is-expanded' : ''}`}
         style={{
-          '--bm-bg': bookmarkColors[colorKey],
-          '--bm-border': bookmarkBorders[colorKey],
-        }}
-        onClick={() => handleOpenBookmark(bookmark)}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter' || e.key === ' ') {
-            e.preventDefault();
-            handleOpenBookmark(bookmark);
-          }
+          '--bm-accent-bar': bookmarkBorders[colorKey],
         }}
       >
-        <div className="bm-card-top">
-          <div className="bm-card-loc">
-            <div className="bm-card-loc-main">
-              <span className="material-symbols-outlined bm-icon">auto_stories</span>
-              <span className="bm-loc-title">{parseBookmarkLocation(bookmark, apiBookId)}</span>
+        <div
+          className="bm-row-main"
+          role="button"
+          tabIndex={0}
+          onClick={() => handleOpenBookmark(bookmark)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              handleOpenBookmark(bookmark);
+            }
+          }}
+        >
+          <span className="bm-row-accent" aria-hidden="true" />
+          <div className="bm-row-body">
+            <p className={`bm-quote${highlight ? '' : ' is-empty'}`}>
+              {highlight || '표시할 구절 없음'}
+            </p>
+            <div className="bm-row-meta">
+              {locationLabel ? <span className="bm-meta-loc">{locationLabel}</span> : null}
+              {locationLabel && created ? <span className="bm-meta-dot">·</span> : null}
+              {created ? (
+                <time className="bm-meta-time" dateTime={created}>
+                  {formatRelativeTime(created)}
+                </time>
+              ) : null}
             </div>
-            {locatorLine ? <span className="bm-loc-detail">{locatorLine}</span> : null}
+            {memoEntries.length > 0 && !isExpanded ? (
+              <p className="bm-memo-preview">
+                <span className="material-symbols-outlined bm-memo-preview-icon">
+                  sticky_note_2
+                </span>
+                <span className="bm-memo-preview-text">{memoPreview}</span>
+                {memoExtra > 0 ? <span className="bm-memo-extra">+{memoExtra}</span> : null}
+              </p>
+            ) : null}
           </div>
-          <div className="bm-card-time">
-            <span className="bm-time-rel">{formatRelativeTime(created)}</span>
-            <span className="bm-time-dot">•</span>
-            <span className="bm-time-abs">{formatAbsoluteTime(created)}</span>
-          </div>
-        </div>
-
-        {highlight && (
-          <div className="bm-highlight">
-            <span className="bm-highlight-label">하이라이트</span>
-            {highlight}
-          </div>
-        )}
-
-        <div className="bm-memo-block">
-          <div className="bm-memo-row">
-            <span className="material-symbols-outlined bm-icon-muted">sticky_note_2</span>
-            <div className="bm-memo-list">
-              {memoEntries.length > 0 ? (
-                memoEntries.map((entry, entryIndex) => {
-                  const isEditingEntry =
-                    isEditingBookmark && editingMemo.entryIndex === entryIndex;
-                  return (
-                    <div key={`${bookmark.id}-memo-${entryIndex}`} className="bm-memo-entry">
-                      {isEditingEntry ? (
-                        <>
-                          <input
-                            className="bm-input"
-                            value={editingMemo.text}
-                            onClick={stopCard}
-                            onChange={(e) =>
-                              setEditingMemo((prev) => ({ ...prev, text: e.target.value }))
-                            }
-                            onKeyDown={(e) => {
-                              e.stopPropagation();
-                              if (e.key === 'Enter') {
-                                e.preventDefault();
-                                handleEditMemoSave();
-                              }
-                            }}
-                            autoFocus
-                            disabled={isMutating}
-                            placeholder="비우면 메모가 삭제됩니다"
-                          />
-                          <button
-                            type="button"
-                            className="bm-btn bm-btn-primary"
-                            disabled={isMutating}
-                            onClick={(e) => {
-                              stopCard(e);
-                              handleEditMemoSave();
-                            }}
-                          >
-                            저장
-                          </button>
-                          <button
-                            type="button"
-                            className="bm-btn bm-btn-ghost"
-                            disabled={isMutating}
-                            onClick={(e) => {
-                              stopCard(e);
-                              setEditingMemo(EMPTY_EDIT);
-                            }}
-                          >
-                            취소
-                          </button>
-                        </>
-                      ) : (
-                        <>
-                          <span className="bm-memo-text">{entry}</span>
-                          <button
-                            type="button"
-                            className="bm-btn-text"
-                            disabled={isMutating}
-                            onClick={(e) => {
-                              stopCard(e);
-                              closeComposer();
-                              setEditingMemo({
-                                bookmarkId: bookmark.id,
-                                entryIndex,
-                                text: entry,
-                              });
-                            }}
-                          >
-                            수정
-                          </button>
-                          <button
-                            type="button"
-                            className="bm-btn-text bm-btn-text-danger"
-                            disabled={isMutating}
-                            onClick={(e) => {
-                              stopCard(e);
-                              handleDeleteMemoEntry(bookmark.id, entryIndex);
-                            }}
-                          >
-                            삭제
-                          </button>
-                        </>
-                      )}
-                    </div>
-                  );
-                })
-              ) : (
-                <span className="bm-memo-empty">메모가 비어 있습니다.</span>
-              )}
-            </div>
-          </div>
-
-          {isComposerOpen ? (
-            <div className="bm-memo-composer">
-              <input
-                className="bm-input"
-                value={composerText}
-                onClick={stopCard}
-                onChange={(e) => setComposerText(e.target.value)}
-                onKeyDown={(e) => {
-                  e.stopPropagation();
-                  if (e.key === 'Enter') {
-                    e.preventDefault();
-                    handleAddMemo(bookmark.id);
-                  }
-                }}
-                placeholder="메모를 입력하세요"
-                disabled={isMutating}
-              />
-              <button
-                type="button"
-                className="bm-btn bm-btn-primary"
-                disabled={isMutating}
-                onClick={(e) => {
-                  stopCard(e);
-                  handleAddMemo(bookmark.id);
-                }}
-              >
-                추가
-              </button>
-              <button
-                type="button"
-                className="bm-btn bm-btn-ghost"
-                disabled={isMutating}
-                onClick={(e) => {
-                  stopCard(e);
-                  closeComposer();
-                }}
-              >
-                닫기
-              </button>
-            </div>
-          ) : (
-            <button
-              type="button"
-              className="bm-btn-pill"
-              disabled={isMutating}
-              onClick={(e) => {
-                stopCard(e);
-                setEditingMemo(EMPTY_EDIT);
-                setComposerId(bookmark.id);
-                setComposerText('');
-              }}
-            >
-              메모 추가
-            </button>
-          )}
-        </div>
-
-        <div className="bm-card-footer">
-          <div className="bm-color-row">
-            {colorOptions.map((option) => (
-              <button
-                key={option.key}
-                type="button"
-                className={`bm-color-swatch${colorKey === option.key ? ' is-active' : ''}`}
-                title={option.label}
-                disabled={isMutating}
-                style={{
-                  '--bm-swatch-bg': option.color,
-                  '--bm-swatch-border': option.border,
-                }}
-                onClick={(e) => {
-                  stopCard(e);
-                  if (!isMutating) patchBookmark(bookmark.id, { color: option.color });
-                }}
-              />
-            ))}
-          </div>
-
           <button
             type="button"
-            className="bm-btn-danger"
+            className="bm-row-more"
+            aria-label={isExpanded ? '도구 닫기' : '도구 열기'}
+            aria-expanded={isExpanded}
             disabled={isMutating}
             onClick={(e) => {
-              stopCard(e);
-              setDeleteConfirmId(bookmark.id);
+              stopRow(e);
+              toggleExpanded(bookmark.id);
             }}
           >
-            <span className="material-symbols-outlined">delete</span>
-            삭제
+            <span className="material-symbols-outlined">more_horiz</span>
           </button>
         </div>
-      </div>
+
+        {isExpanded ? (
+          <div className="bm-row-panel" onClick={stopRow} onKeyDown={stopRow}>
+            <div className="bm-memo-block">
+              <div className="bm-memo-list">
+                {memoEntries.length > 0 ? (
+                  memoEntries.map((entry, entryIndex) => {
+                    const isEditingEntry =
+                      isEditingBookmark && editingMemo.entryIndex === entryIndex;
+                    return (
+                      <div key={`${bookmark.id}-memo-${entryIndex}`} className="bm-memo-entry">
+                        {isEditingEntry ? (
+                          <>
+                            <input
+                              className="bm-input"
+                              value={editingMemo.text}
+                              onChange={(e) =>
+                                setEditingMemo((prev) => ({ ...prev, text: e.target.value }))
+                              }
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                  e.preventDefault();
+                                  handleEditMemoSave();
+                                }
+                              }}
+                              autoFocus
+                              disabled={isMutating}
+                              placeholder="비우면 메모가 삭제됩니다"
+                            />
+                            <button
+                              type="button"
+                              className="bm-btn bm-btn-primary"
+                              disabled={isMutating}
+                              onClick={handleEditMemoSave}
+                            >
+                              저장
+                            </button>
+                            <button
+                              type="button"
+                              className="bm-btn bm-btn-ghost"
+                              disabled={isMutating}
+                              onClick={() => setEditingMemo(EMPTY_EDIT)}
+                            >
+                              취소
+                            </button>
+                          </>
+                        ) : (
+                          <>
+                            <span className="bm-memo-text">{entry}</span>
+                            <button
+                              type="button"
+                              className="bm-btn-text"
+                              disabled={isMutating}
+                              onClick={() => {
+                                closeComposer();
+                                setEditingMemo({
+                                  bookmarkId: bookmark.id,
+                                  entryIndex,
+                                  text: entry,
+                                });
+                              }}
+                            >
+                              수정
+                            </button>
+                            <button
+                              type="button"
+                              className="bm-btn-text bm-btn-text-danger"
+                              disabled={isMutating}
+                              onClick={() => handleDeleteMemoEntry(bookmark.id, entryIndex)}
+                            >
+                              삭제
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    );
+                  })
+                ) : (
+                  <span className="bm-memo-empty">메모가 비어 있습니다.</span>
+                )}
+              </div>
+
+              {isComposerOpen ? (
+                <div className="bm-memo-composer">
+                  <input
+                    className="bm-input"
+                    value={composerText}
+                    onChange={(e) => setComposerText(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        handleAddMemo(bookmark.id);
+                      }
+                    }}
+                    placeholder="메모를 입력하세요"
+                    disabled={isMutating}
+                  />
+                  <button
+                    type="button"
+                    className="bm-btn bm-btn-primary"
+                    disabled={isMutating}
+                    onClick={() => handleAddMemo(bookmark.id)}
+                  >
+                    추가
+                  </button>
+                  <button
+                    type="button"
+                    className="bm-btn bm-btn-ghost"
+                    disabled={isMutating}
+                    onClick={closeComposer}
+                  >
+                    닫기
+                  </button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  className="bm-btn-text bm-btn-memo-add"
+                  disabled={isMutating}
+                  onClick={() => {
+                    setEditingMemo(EMPTY_EDIT);
+                    setComposerId(bookmark.id);
+                    setComposerText('');
+                  }}
+                >
+                  메모 추가
+                </button>
+              )}
+            </div>
+
+            <div className="bm-row-footer">
+              <div className="bm-color-row" role="group" aria-label="북마크 색상">
+                {colorOptions.map((option) => (
+                  <button
+                    key={option.key}
+                    type="button"
+                    className={`bm-color-swatch${colorKey === option.key ? ' is-active' : ''}`}
+                    title={option.label}
+                    disabled={isMutating}
+                    style={{
+                      '--bm-swatch-bg': option.color,
+                      '--bm-swatch-border': option.border,
+                    }}
+                    onClick={() => {
+                      if (!isMutating) patchBookmark(bookmark.id, { color: option.color });
+                    }}
+                  />
+                ))}
+              </div>
+
+              <button
+                type="button"
+                className="bm-btn-danger"
+                disabled={isMutating}
+                onClick={() => setDeleteConfirmId(bookmark.id)}
+              >
+                <span className="material-symbols-outlined">delete</span>
+                삭제
+              </button>
+            </div>
+          </div>
+        ) : null}
+      </article>
     );
   };
 
@@ -503,16 +514,19 @@ const BookmarksPage = () => {
 
   return (
     <div className="bm-page">
-      <div className="bm-header">
+      <header className="bm-header">
         <div className="bm-header-left">
           <h1 className="bm-title">북마크</h1>
-          <span className="bm-count">{(bookmarks ?? []).length}개</span>
+          <span className="bm-count">{(bookmarks ?? []).length}</span>
         </div>
 
         <div className="bm-header-right">
           <div className="bm-sort">
-            <span className="bm-sort-label">정렬:</span>
+            <label className="bm-sort-label" htmlFor="bm-sort-select">
+              정렬
+            </label>
             <select
+              id="bm-sort-select"
               className="bm-sort-select"
               value={sortOrder}
               onChange={(e) => setSortOrder(e.target.value)}
@@ -529,7 +543,7 @@ const BookmarksPage = () => {
             뷰어로 돌아가기
           </button>
         </div>
-      </div>
+      </header>
 
       <div className="bm-search-row">
         <input
@@ -542,13 +556,28 @@ const BookmarksPage = () => {
         />
       </div>
 
-      {displayedBookmarks.length === 0 ? (
-        <div className="bm-empty bm-panel">
-          <p>{isFilteredView ? '조건에 맞는 북마크가 없습니다.' : '저장된 북마크가 없습니다.'}</p>
-          <p>{isFilteredView ? '검색어를 바꿔보세요.' : '책을 읽으면서 북마크를 추가해보세요!'}</p>
+      {chapterGroups.length === 0 ? (
+        <div className="bm-empty">
+          <p className="bm-empty-title">
+            {isFilteredView ? '조건에 맞는 북마크가 없습니다.' : '저장된 북마크가 없습니다.'}
+          </p>
+          <p className="bm-empty-desc">
+            {isFilteredView ? '검색어를 바꿔보세요.' : '책을 읽으면서 북마크를 추가해보세요.'}
+          </p>
         </div>
       ) : (
-        <div className="bm-list">{displayedBookmarks.map((bookmark) => renderBookmark(bookmark))}</div>
+        <div className="bm-chapters">
+          {chapterGroups.map((group) => (
+            <section key={group.key} className="bm-chapter">
+              <header className="bm-chapter-head">
+                <h2 className="bm-chapter-label">{group.label}</h2>
+                {group.title ? <span className="bm-chapter-title">{group.title}</span> : null}
+                <span className="bm-chapter-count">{group.items.length}</span>
+              </header>
+              <div className="bm-chapter-rows">{group.items.map((bookmark) => renderBookmark(bookmark))}</div>
+            </section>
+          ))}
+        </div>
       )}
 
       {deleteConfirmId && (
@@ -558,7 +587,7 @@ const BookmarksPage = () => {
             role="dialog"
             aria-modal="true"
             aria-labelledby="bookmark-delete-title"
-            onClick={stopCard}
+            onClick={stopRow}
           >
             <p id="bookmark-delete-title" className="bm-confirm-title">
               정말 삭제하시겠습니까?

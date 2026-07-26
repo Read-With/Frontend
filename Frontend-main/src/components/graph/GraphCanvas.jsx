@@ -3,21 +3,21 @@ import PropTypes from 'prop-types';
 import CytoscapeGraphUnified from './CytoscapeGraphUnified';
 import UnifiedNodeInfo from './UnifiedNodeInfo';
 import UnifiedEdgeTooltip from './UnifiedEdgeTooltip';
+import { GraphFloatingControls } from './GraphControls';
 import { graphStyles } from '../../utils/styles/graphStyles.js';
 import { COLORS, ANIMATION_VALUES } from '../../utils/styles/styles.js';
 import { GRAPH_LAYOUT_CONSTANTS, resolveChapterSidebarWidth, buildGraphViewportRefitKey } from '../../utils/graph/graphCore.js';
 
 const {
-  TOP_BAR_HEIGHT,
   TOOLTIP_SIDEBAR_WIDTH: SIDEBAR_WIDTH,
   ANIMATION_MS: ANIMATION_DURATION,
 } = GRAPH_LAYOUT_CONSTANTS;
 
 const sidebarBaseStyle = {
   position: 'fixed',
-  top: `${TOP_BAR_HEIGHT}px`,
+  top: 0,
   width: `${SIDEBAR_WIDTH}px`,
-  height: `calc(100vh - ${TOP_BAR_HEIGHT}px)`,
+  height: '100vh',
   background: '#fff',
   borderRadius: '0px',
   boxShadow: '2px 0 8px rgba(0,0,0,0.06)',
@@ -222,6 +222,7 @@ function GraphCanvas({
   currentChapter,
   sidebarControl,
   searchState,
+  floatingControls = null,
   cytoscapeConfig,
   tooltipHandlers,
   graphClearRef,
@@ -307,6 +308,18 @@ function GraphCanvas({
               viewportRefitKey={buildGraphViewportRefitKey(currentChapter, eventNum)}
               showRippleEffect
             />
+
+            {floatingControls ? (
+              <GraphFloatingControls
+                searchState={floatingControls.searchState}
+                searchActions={floatingControls.searchActions}
+                edgeLabelVisible={floatingControls.edgeLabelVisible}
+                onToggleEdgeLabel={floatingControls.onToggleEdgeLabel}
+                filterStage={floatingControls.filterStage}
+                onFilterChange={floatingControls.onFilterChange}
+                showLegend
+              />
+            ) : null}
           </div>
         </div>
       </div>
@@ -334,6 +347,14 @@ GraphCanvas.propTypes = {
   currentChapter: PropTypes.number.isRequired,
   sidebarControl: PropTypes.object.isRequired,
   searchState: PropTypes.object.isRequired,
+  floatingControls: PropTypes.shape({
+    searchState: PropTypes.object.isRequired,
+    searchActions: PropTypes.object.isRequired,
+    edgeLabelVisible: PropTypes.bool.isRequired,
+    onToggleEdgeLabel: PropTypes.func.isRequired,
+    filterStage: PropTypes.number.isRequired,
+    onFilterChange: PropTypes.func.isRequired,
+  }),
   cytoscapeConfig: PropTypes.object.isRequired,
   tooltipHandlers: PropTypes.object.isRequired,
   graphClearRef: PropTypes.object,

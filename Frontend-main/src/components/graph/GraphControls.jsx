@@ -1,28 +1,10 @@
-import { useCallback, useEffect, useId, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import PropTypes from "prop-types";
 import { useClickOutside } from "../../hooks/ui/tooltipHooks";
-import { ANIMATION_VALUES } from "../../utils/styles/styles.js";
 import { findExactSuggestionMatch } from "../../utils/graph/graphCy.js";
-import { GRAPH_CHARACTER_FILTER_STAGE_OPTIONS, resolveChapterSidebarWidth } from "../../utils/graph/graphCore.js";
+import { GRAPH_CHARACTER_FILTER_STAGE_OPTIONS } from "../../utils/graph/graphCore.js";
 import "./RelationGraph.css";
-
-const GRAPH_TOPBAR_COMPACT_MQ = "(max-width: 56rem)";
-
-function useMatchMedia(query) {
-  const [matches, setMatches] = useState(() =>
-    typeof window !== "undefined" ? window.matchMedia(query).matches : false
-  );
-
-  useEffect(() => {
-    const mq = window.matchMedia(query);
-    const onChange = () => setMatches(mq.matches);
-    onChange();
-    mq.addEventListener("change", onChange);
-    return () => mq.removeEventListener("change", onChange);
-  }, [query]);
-
-  return matches;
-}
 
 export function EdgeLabelToggle({ visible, onToggle }) {
   const labelId = useId();
@@ -80,55 +62,61 @@ CharacterFilterSegmented.propTypes = {
   onChange: PropTypes.func.isRequired,
 };
 
-/** 2차 액션(라벨·필터) overflow 메뉴 */
-export function GraphControlsMoreMenu({
-  edgeLabelVisible,
-  onToggleEdgeLabel,
-  filterStage,
-  onFilterChange,
-}) {
+function GraphCanvasLegend() {
   const [open, setOpen] = useState(false);
-  const menuRef = useClickOutside(() => setOpen(false), open);
+  const rootRef = useClickOutside(() => setOpen(false), open);
+  const panelId = "graph-canvas-legend-panel";
 
   return (
-    <div className="graph-topbar-more" ref={menuRef}>
+    <div className="graph-floating-legend" ref={rootRef}>
+      {open ? (
+        <aside id={panelId} className="graph-canvas-legend" aria-label="그래프 범례">
+          <div className="graph-canvas-legend-row">
+            <span className="graph-canvas-legend-swatch" aria-hidden />
+            <span>비호의적 ↔ 호의적</span>
+          </div>
+          <div className="graph-canvas-legend-row">
+            <span className="graph-canvas-legend-size" aria-hidden>
+              <span className="graph-canvas-legend-dot graph-canvas-legend-dot--lg" />
+              <span className="graph-canvas-legend-dot graph-canvas-legend-dot--sm" />
+            </span>
+            <span>크기 = 중요도</span>
+          </div>
+          <div className="graph-canvas-legend-row">
+            <span className="graph-canvas-legend-main" aria-hidden />
+            <span>주요 인물</span>
+          </div>
+        </aside>
+      ) : null}
       <button
         type="button"
-        className="graph-topbar-more-btn"
-        aria-label="그래프 표시 옵션"
-        title="그래프 표시 옵션"
-        aria-haspopup="menu"
+        className="graph-floating-btn"
+        aria-label={open ? "범례 닫기" : "범례 보기"}
+        title={open ? "범례 닫기" : "범례 보기"}
         aria-expanded={open}
+        aria-controls={open ? panelId : undefined}
         onClick={() => setOpen((v) => !v)}
       >
         <span className="material-symbols-outlined" aria-hidden>
-          more_vert
+          info
         </span>
       </button>
-      {open ? (
-        <div className="graph-topbar-more-panel" role="menu" aria-label="그래프 표시 옵션">
-          <div className="graph-topbar-more-section" role="none">
-            <span className="graph-topbar-more-label">간선</span>
-            <EdgeLabelToggle visible={edgeLabelVisible} onToggle={onToggleEdgeLabel} />
-          </div>
-          <div className="graph-topbar-more-section" role="none">
-            <span className="graph-topbar-more-label">인물 필터</span>
-            <CharacterFilterSegmented value={filterStage} onChange={onFilterChange} />
-          </div>
-        </div>
-      ) : null}
     </div>
   );
 }
 
-GraphControlsMoreMenu.propTypes = {
-  edgeLabelVisible: PropTypes.bool.isRequired,
-  onToggleEdgeLabel: PropTypes.func.isRequired,
-  filterStage: PropTypes.number.isRequired,
-  onFilterChange: PropTypes.func.isRequired,
-};
+function useModKeyLabel() {
+  const [mod, setMod] = useState("Ctrl");
+  useEffect(() => {
+    const isMac = /Mac|iPhone|iPad|iPod/i.test(navigator.platform || navigator.userAgent);
+    setMod(isMac ? "⌘" : "Ctrl");
+  }, []);
+  return mod;
+}
 
-function GraphControls({
+export function GraphSearchPalette({
+  open,
+  onClose,
   searchTerm = "",
   onSearchSubmit,
   onClearSearch,
@@ -141,17 +129,40 @@ function GraphControls({
   onCloseSuggestions,
   isSearchActive = false,
 }) {
+  const inputRef = useRef(null);
   const [showToast, setShowToast] = useState(false);
   const [toastMessage, setToastMessage] = useState("");
   const trimmedTerm = (searchTerm || "").trim();
-  const canShowDropdown = showSuggestions && trimmedTerm.length >= 2;
+  const canShowResults = open && trimmedTerm.length >= 2;
+  const modKey = useModKeyLabel();
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const id = window.requestAnimationFrame(() => {
+      inputRef.current?.focus();
+      inputRef.current?.select();
+    });
+    return () => window.cancelAnimationFrame(id);
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const onKey = (e) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        e.stopPropagation();
+        onCloseSuggestions?.();
+        onClose();
+      }
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, [open, onClose, onCloseSuggestions]);
 
   const showToastMessage = useCallback((message) => {
     setToastMessage(message);
     setShowToast(true);
-    setTimeout(() => {
-      setShowToast(false);
-    }, 3000);
+    window.setTimeout(() => setShowToast(false), 3000);
   }, []);
 
   const trySubmitSearch = useCallback(() => {
@@ -160,10 +171,11 @@ function GraphControls({
     const exactMatch = findExactSuggestionMatch(suggestions, trimmedTerm);
     if (exactMatch) {
       onSearchSubmit(trimmedTerm);
+      onClose();
     } else if (suggestions.length > 0) {
-      showToastMessage("여러 후보가 있습니다. 드롭다운에서 선택해주세요.");
+      showToastMessage("여러 후보가 있습니다. 목록에서 선택해주세요.");
     }
-  }, [trimmedTerm, onSearchSubmit, suggestions, showToastMessage]);
+  }, [trimmedTerm, onSearchSubmit, suggestions, showToastMessage, onClose]);
 
   const handleInputChange = useCallback(
     (e) => {
@@ -181,169 +193,180 @@ function GraphControls({
         onKeyDown(e, (selectedTerm) => {
           if (selectedTerm) {
             onSearchSubmit(selectedTerm);
+            onClose();
           }
         });
       }
     },
-    [trySubmitSearch, onSearchSubmit, onKeyDown]
+    [trySubmitSearch, onSearchSubmit, onKeyDown, onClose]
   );
-
-  const dropdownRef = useClickOutside(() => {
-    onCloseSuggestions();
-  }, canShowDropdown);
 
   const handleSelectSuggestion = useCallback(
     (suggestion) => {
-      if (suggestion) {
-        const displayName = suggestion.label || suggestion.common_name || "Unknown";
-        onSearchSubmit(displayName);
-      }
+      if (!suggestion) return;
+      const displayName = suggestion.label || suggestion.common_name || "Unknown";
+      onSearchSubmit(displayName);
+      onClose();
     },
-    [onSearchSubmit]
+    [onSearchSubmit, onClose]
   );
 
-  const handleFormSubmit = useCallback(
-    (e) => {
-      e.preventDefault();
-      trySubmitSearch();
-    },
-    [trySubmitSearch]
-  );
+  const handleClear = useCallback(() => {
+    onClearSearch();
+    onClose();
+  }, [onClearSearch, onClose]);
 
-  const handleSearchButtonClick = useCallback(
-    (e) => {
-      e.preventDefault();
-      trySubmitSearch();
-    },
-    [trySubmitSearch]
-  );
+  if (!open || typeof document === "undefined") return null;
 
-  const handleResetButtonClick = useCallback(
-    (e) => {
-      e.preventDefault();
-      onClearSearch();
-    },
-    [onClearSearch]
-  );
+  return createPortal(
+    <div className="graph-search-palette" role="dialog" aria-modal="true" aria-label="인물 검색">
+      <button
+        type="button"
+        className="graph-search-palette-scrim"
+        aria-label="검색 닫기"
+        onClick={() => {
+          onCloseSuggestions?.();
+          onClose();
+        }}
+      />
+      <div className="graph-search-palette-panel">
+        {showToast ? <div className="graph-search-toast is-palette">{toastMessage}</div> : null}
 
-  return (
-    <div ref={dropdownRef} className="graph-search-shell">
-      {showToast ? <div className="graph-search-toast">{toastMessage}</div> : null}
-
-      <form className="graph-search-form" onSubmit={handleFormSubmit}>
-        <input
-          className="graph-search-input"
-          type="text"
-          placeholder="인물 검색"
-          aria-label="인물 검색"
-          aria-autocomplete="list"
-          aria-expanded={canShowDropdown}
-          value={searchTerm || ""}
-          onChange={handleInputChange}
-          onKeyDown={handleKeyDown}
-          onFocus={() => {
-            if (trimmedTerm.length >= 2) {
-              onGenerateSuggestions(searchTerm);
-            }
+        <form
+          className="graph-search-palette-form"
+          onSubmit={(e) => {
+            e.preventDefault();
+            trySubmitSearch();
           }}
-        />
-        <button
-          type="submit"
-          className="graph-search-submit"
-          onClick={isSearchActive ? handleResetButtonClick : handleSearchButtonClick}
         >
+          <span className="material-symbols-outlined graph-search-palette-icon" aria-hidden>
+            search
+          </span>
+          <input
+            ref={inputRef}
+            className="graph-search-palette-input"
+            type="text"
+            placeholder="인물 검색"
+            aria-label="인물 검색"
+            aria-autocomplete="list"
+            aria-expanded={canShowResults && showSuggestions}
+            value={searchTerm || ""}
+            onChange={handleInputChange}
+            onKeyDown={handleKeyDown}
+          />
           {isSearchActive ? (
-            <>
-              <span className="material-symbols-outlined" style={{ fontSize: "12px" }}>
-                undo
-              </span>
+            <button type="button" className="graph-search-palette-clear" onClick={handleClear}>
               초기화
-            </>
-          ) : (
-            <>
-              <span className="material-symbols-outlined" style={{ fontSize: "12px" }}>
-                search
-              </span>
-              검색
-            </>
-          )}
-        </button>
-      </form>
+            </button>
+          ) : null}
+          <kbd className="graph-search-palette-kbd">{modKey}+K</kbd>
+        </form>
 
-      {canShowDropdown ? (
-        <div className="graph-search-dropdown" role="listbox" aria-label="인물 검색 결과">
-          {suggestions && suggestions.length > 0 ? (
-            <>
-              <div className="graph-search-dropdown-header">
-                <div className="graph-search-dropdown-header-title">
-                  검색 결과 ({suggestions.length})
-                </div>
-              </div>
-
-              {suggestions.map((suggestion, index) => {
-                const hasDetail = Boolean(suggestion.description || suggestion.names?.length);
-                return (
-                  <div
-                    key={suggestion.id || index}
-                    role="option"
-                    aria-selected={index === selectedIndex}
-                    className={`graph-search-option${index === selectedIndex ? " is-active" : ""}`}
-                    onClick={() => handleSelectSuggestion(suggestion)}
-                    onMouseEnter={() => onSelectedIndexChange?.(index)}
-                    onMouseLeave={() => onSelectedIndexChange?.(-1)}
-                  >
-                    <div
-                      className={`graph-search-option-name${hasDetail ? " has-detail" : ""}`}
-                    >
-                      {suggestion.label || suggestion.common_name || "Unknown"}
-                    </div>
-
-                    {suggestion.description ? (
-                      <div className="graph-search-option-desc">{suggestion.description}</div>
-                    ) : null}
-
-                    {suggestion.names && suggestion.names.length > 0 ? (
-                      <div>
-                        <div className="graph-search-option-alias-rule" />
-                        <div className="graph-search-option-alias-label">별칭</div>
-                        <div className="graph-search-option-alias-text">
-                          {suggestion.names.slice(0, 3).join(", ")}
-                          {suggestion.names.length > 3 ? "..." : ""}
-                        </div>
-                      </div>
-                    ) : null}
+        {canShowResults && showSuggestions ? (
+          <div className="graph-search-palette-results" role="listbox" aria-label="인물 검색 결과">
+            {suggestions && suggestions.length > 0 ? (
+              <>
+                <div className="graph-search-dropdown-header">
+                  <div className="graph-search-dropdown-header-title">
+                    검색 결과 ({suggestions.length})
                   </div>
-                );
-              })}
-            </>
-          ) : (
-            <div className="graph-search-empty">
-              <span className="material-symbols-outlined graph-search-empty-icon" aria-hidden>
-                search_off
-              </span>
-              <div className="graph-search-empty-title">검색 결과 없음</div>
-              <div className="graph-search-empty-desc">다른 검색어를 시도해보세요</div>
-            </div>
-          )}
-        </div>
-      ) : null}
-    </div>
+                </div>
+                {suggestions.map((suggestion, index) => {
+                  const hasDetail = Boolean(suggestion.description || suggestion.names?.length);
+                  return (
+                    <div
+                      key={suggestion.id || index}
+                      role="option"
+                      aria-selected={index === selectedIndex}
+                      className={`graph-search-option${index === selectedIndex ? " is-active" : ""}`}
+                      onClick={() => handleSelectSuggestion(suggestion)}
+                      onMouseEnter={() => onSelectedIndexChange?.(index)}
+                      onMouseLeave={() => onSelectedIndexChange?.(-1)}
+                    >
+                      <div
+                        className={`graph-search-option-name${hasDetail ? " has-detail" : ""}`}
+                      >
+                        {suggestion.label || suggestion.common_name || "Unknown"}
+                      </div>
+                      {suggestion.description ? (
+                        <div className="graph-search-option-desc">{suggestion.description}</div>
+                      ) : null}
+                      {suggestion.names && suggestion.names.length > 0 ? (
+                        <div>
+                          <div className="graph-search-option-alias-rule" />
+                          <div className="graph-search-option-alias-label">별칭</div>
+                          <div className="graph-search-option-alias-text">
+                            {suggestion.names.slice(0, 3).join(", ")}
+                            {suggestion.names.length > 3 ? "..." : ""}
+                          </div>
+                        </div>
+                      ) : null}
+                    </div>
+                  );
+                })}
+              </>
+            ) : (
+              <div className="graph-search-empty">
+                <span className="material-symbols-outlined graph-search-empty-icon" aria-hidden>
+                  search_off
+                </span>
+                <div className="graph-search-empty-title">검색 결과 없음</div>
+                <div className="graph-search-empty-desc">다른 검색어를 시도해보세요</div>
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="graph-search-palette-hint">
+            이름 2글자 이상 입력 · Esc로 닫기
+          </div>
+        )}
+      </div>
+    </div>,
+    document.body
   );
 }
 
-export default GraphControls;
+GraphSearchPalette.propTypes = {
+  open: PropTypes.bool.isRequired,
+  onClose: PropTypes.func.isRequired,
+  searchTerm: PropTypes.string,
+  onSearchSubmit: PropTypes.func.isRequired,
+  onClearSearch: PropTypes.func.isRequired,
+  onGenerateSuggestions: PropTypes.func.isRequired,
+  suggestions: PropTypes.arrayOf(PropTypes.any),
+  showSuggestions: PropTypes.bool,
+  selectedIndex: PropTypes.number,
+  onSelectedIndexChange: PropTypes.func,
+  onKeyDown: PropTypes.func,
+  onCloseSuggestions: PropTypes.func,
+  isSearchActive: PropTypes.bool,
+};
 
-export function GraphTopBar({
-  isSidebarOpen,
-  sidebarLayoutWidth,
+/**
+ * 캔버스 코너 플로팅 도크: 검색 팔레트 · 필터 · 간선 라벨 · (선택) 범례
+ */
+export function GraphFloatingControls({
   searchState,
   searchActions,
   edgeLabelVisible,
   onToggleEdgeLabel,
   filterStage,
   onFilterChange,
+  showLegend = true,
 }) {
-  const { searchTerm, isSearchActive, suggestions, showSuggestions, selectedIndex } = searchState;
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  const [optionsOpen, setOptionsOpen] = useState(false);
+  const optionsRef = useClickOutside(() => setOptionsOpen(false), optionsOpen);
+  const modKey = useModKeyLabel();
+
+  const {
+    searchTerm,
+    isSearchActive,
+    suggestions = [],
+    showSuggestions = false,
+    selectedIndex = -1,
+  } = searchState;
+
   const {
     onSearchSubmit,
     onClearSearch,
@@ -353,76 +376,129 @@ export function GraphTopBar({
     onSelectedIndexChange,
   } = searchActions;
 
-  const sidebarLeft =
-    sidebarLayoutWidth != null
-      ? sidebarLayoutWidth
-      : resolveChapterSidebarWidth(isSidebarOpen);
-  const isCompact = useMatchMedia(GRAPH_TOPBAR_COMPACT_MQ);
+  const openPalette = useCallback(() => {
+    setOptionsOpen(false);
+    setPaletteOpen(true);
+  }, []);
+
+  const closePalette = useCallback(() => {
+    setPaletteOpen(false);
+    onCloseSuggestions?.();
+  }, [onCloseSuggestions]);
+
+  useEffect(() => {
+    const onKey = (e) => {
+      if (!(e.metaKey || e.ctrlKey) || e.key.toLowerCase() !== "k") return;
+      const tag = e.target?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || e.target?.isContentEditable) {
+        if (!paletteOpen) return;
+      }
+      e.preventDefault();
+      setPaletteOpen((v) => !v);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [paletteOpen]);
+
+  const filterLabel =
+    GRAPH_CHARACTER_FILTER_STAGE_OPTIONS.find((o) => o.value === filterStage)?.label ?? "필터";
 
   return (
-    <div
-      className="graph-page-topbar"
-      style={{
-        position: "fixed",
-        top: 0,
-        left: `${sidebarLeft}px`,
-        right: 0,
-        transition: `left ${ANIMATION_VALUES.DURATION.SLOW} ${ANIMATION_VALUES.EASE_OUT}`,
-      }}
-    >
-      <div className="graph-page-topbar-left">
-        <GraphControls
-          searchTerm={searchTerm}
-          onSearchSubmit={onSearchSubmit}
-          onClearSearch={onClearSearch}
-          onGenerateSuggestions={onGenerateSuggestions}
-          suggestions={suggestions}
-          showSuggestions={showSuggestions}
-          selectedIndex={selectedIndex}
-          onSelectedIndexChange={onSelectedIndexChange}
-          onKeyDown={onKeyDown}
-          onCloseSuggestions={onCloseSuggestions}
-          isSearchActive={isSearchActive}
-        />
+    <>
+      <div
+        className="graph-floating-dock"
+        aria-label="그래프 도구"
+        onClick={(e) => e.stopPropagation()}
+        onMouseDown={(e) => e.stopPropagation()}
+      >
+        <button
+          type="button"
+          className={`graph-floating-btn${isSearchActive ? " is-active" : ""}`}
+          aria-label={isSearchActive ? `인물 검색 (활성: ${searchTerm})` : "인물 검색"}
+          title={`인물 검색 (${modKey}+K)`}
+          aria-haspopup="dialog"
+          aria-expanded={paletteOpen}
+          onClick={openPalette}
+        >
+          <span className="material-symbols-outlined" aria-hidden>
+            search
+          </span>
+        </button>
 
-        {isCompact ? (
-          <GraphControlsMoreMenu
-            edgeLabelVisible={edgeLabelVisible}
-            onToggleEdgeLabel={onToggleEdgeLabel}
-            filterStage={filterStage}
-            onFilterChange={onFilterChange}
-          />
-        ) : (
-          <div className="graph-page-topbar-secondary">
-            <EdgeLabelToggle visible={edgeLabelVisible} onToggle={onToggleEdgeLabel} />
-            <CharacterFilterSegmented value={filterStage} onChange={onFilterChange} />
-          </div>
-        )}
+        <div className="graph-floating-options" ref={optionsRef}>
+          {optionsOpen ? (
+            <div className="graph-floating-options-panel" role="menu" aria-label="표시 옵션">
+              <div className="graph-topbar-more-section" role="none">
+                <span className="graph-topbar-more-label">간선</span>
+                <EdgeLabelToggle
+                  visible={edgeLabelVisible}
+                  onToggle={() => {
+                    onToggleEdgeLabel();
+                  }}
+                />
+              </div>
+              <div className="graph-topbar-more-section" role="none">
+                <span className="graph-topbar-more-label">인물 필터</span>
+                <CharacterFilterSegmented value={filterStage} onChange={onFilterChange} />
+              </div>
+            </div>
+          ) : null}
+          <button
+            type="button"
+            className={`graph-floating-btn${filterStage !== 0 || !edgeLabelVisible ? " is-active" : ""}`}
+            aria-label="그래프 표시 옵션"
+            title={`표시 옵션 · 필터 ${filterLabel}`}
+            aria-haspopup="menu"
+            aria-expanded={optionsOpen}
+            onClick={() => setOptionsOpen((v) => !v)}
+          >
+            <span className="material-symbols-outlined" aria-hidden>
+              tune
+            </span>
+          </button>
+        </div>
+
+        {showLegend ? <GraphCanvasLegend /> : null}
       </div>
-    </div>
+
+      <GraphSearchPalette
+        open={paletteOpen}
+        onClose={closePalette}
+        searchTerm={searchTerm}
+        onSearchSubmit={onSearchSubmit}
+        onClearSearch={onClearSearch}
+        onGenerateSuggestions={onGenerateSuggestions}
+        suggestions={suggestions}
+        showSuggestions={showSuggestions}
+        selectedIndex={selectedIndex}
+        onSelectedIndexChange={onSelectedIndexChange}
+        onKeyDown={onKeyDown}
+        onCloseSuggestions={onCloseSuggestions}
+        isSearchActive={isSearchActive}
+      />
+    </>
   );
 }
 
-GraphTopBar.propTypes = {
-  isSidebarOpen: PropTypes.bool.isRequired,
-  sidebarLayoutWidth: PropTypes.number,
+GraphFloatingControls.propTypes = {
   searchState: PropTypes.shape({
-    searchTerm: PropTypes.string.isRequired,
-    isSearchActive: PropTypes.bool.isRequired,
-    suggestions: PropTypes.arrayOf(PropTypes.any).isRequired,
-    showSuggestions: PropTypes.bool.isRequired,
-    selectedIndex: PropTypes.number.isRequired,
+    searchTerm: PropTypes.string,
+    isSearchActive: PropTypes.bool,
+    suggestions: PropTypes.arrayOf(PropTypes.any),
+    showSuggestions: PropTypes.bool,
+    selectedIndex: PropTypes.number,
   }).isRequired,
   searchActions: PropTypes.shape({
     onSearchSubmit: PropTypes.func.isRequired,
     onClearSearch: PropTypes.func.isRequired,
     onGenerateSuggestions: PropTypes.func.isRequired,
-    onKeyDown: PropTypes.func.isRequired,
-    onCloseSuggestions: PropTypes.func.isRequired,
+    onKeyDown: PropTypes.func,
+    onCloseSuggestions: PropTypes.func,
     onSelectedIndexChange: PropTypes.func,
   }).isRequired,
   edgeLabelVisible: PropTypes.bool.isRequired,
   onToggleEdgeLabel: PropTypes.func.isRequired,
   filterStage: PropTypes.number.isRequired,
   onFilterChange: PropTypes.func.isRequired,
+  showLegend: PropTypes.bool,
 };

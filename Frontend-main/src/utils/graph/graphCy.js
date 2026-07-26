@@ -25,10 +25,12 @@ const parseJsonSafely = (value) => {
 
 /* ─── 툴팁 좌표 · 캔버스 배치 ─── */
 
-/** 플로팅 간선 툴팁 추정 크기 (.edge-tooltip-container) */
-const EDGE_TOOLTIP_ESTIMATE = { width: 420, height: 360 };
+/** 플로팅 툴팁 추정 크기 (.graph-node-tooltip / .edge-tooltip-container ≈ 26.25rem) */
+const FLOATING_TOOLTIP_ESTIMATE = { width: 420, height: 400 };
+const EDGE_TOOLTIP_ESTIMATE = FLOATING_TOOLTIP_ESTIMATE;
+const NODE_TOOLTIP_ESTIMATE = FLOATING_TOOLTIP_ESTIMATE;
 const TOOLTIP_CANVAS_PAD = 8;
-const TOOLTIP_FOCUS_GAP = 16;
+const TOOLTIP_FOCUS_GAP = 20;
 
 function rectOverlapArea(a, b) {
   const left = Math.max(a.left, b.left);
@@ -132,11 +134,11 @@ export function constrainToGraphCanvas(
  * focus(간선+노드)를 최대한 가리지 않으면서 캔버스 안에 툴팁 배치.
  * 반환값은 position:fixed 용 client 좌표.
  */
-function placeTooltipInCanvasAwayFromFocus({
+export function placeTooltipInCanvasAwayFromFocus({
   cy,
   focusEles,
-  width = EDGE_TOOLTIP_ESTIMATE.width,
-  height = EDGE_TOOLTIP_ESTIMATE.height,
+  width = FLOATING_TOOLTIP_ESTIMATE.width,
+  height = FLOATING_TOOLTIP_ESTIMATE.height,
   gap = TOOLTIP_FOCUS_GAP,
 } = {}) {
   const canvas = getCyClientRect(cy);
@@ -475,20 +477,26 @@ export function centerSelectionOnElementId(cy, elementId, animateOptions = {}) {
 }
 
 /**
- * 간선 focus를 플로팅 툴팁 반대쪽(왼쪽 가용 영역) 중심에 두는 cy 컨테이너 좌표.
+ * 플로팅 툴팁이 오른쪽에 오도록, focus를 왼쪽 가용 영역 중심에 두는 cy 컨테이너 좌표.
+ * (노드·간선 공통)
  */
-export function getEdgeFocusPanTarget(cy) {
+export function getFloatingTooltipPanTarget(cy, estimate = FLOATING_TOOLTIP_ESTIMATE) {
   const w = typeof cy?.width === 'function' ? cy.width() : 0;
   const h = typeof cy?.height === 'function' ? cy.height() : 0;
   if (!(w > 0) || !(h > 0)) {
     return { x: 0, y: 0 };
   }
-  const reservedRight = EDGE_TOOLTIP_ESTIMATE.width + TOOLTIP_FOCUS_GAP * 2;
+  const reservedRight = (estimate?.width ?? FLOATING_TOOLTIP_ESTIMATE.width) + TOOLTIP_FOCUS_GAP * 2;
   const usableW = Math.max(w - reservedRight, w * 0.4);
   return {
     x: usableW / 2,
     y: h / 2,
   };
+}
+
+/** @deprecated getFloatingTooltipPanTarget 사용 */
+export function getEdgeFocusPanTarget(cy) {
+  return getFloatingTooltipPanTarget(cy, EDGE_TOOLTIP_ESTIMATE);
 }
 
 export const isGraphContainerSizeReady = (container) => {
@@ -825,15 +833,16 @@ export function buildTapShowArgs(kind, element, evt, center, mouseX, mouseY) {
   return { edge: element, evt, edgeCenter: center, mouseX, mouseY };
 }
 
-/** 노드: 클릭/렌더 좌표 + bbox offset. 엣지: focus 집합 기준 캔버스 내 배치. */
-export function resolveGraphTooltipAnchor(cy, kind, element, evt) {
-  if (kind === 'edge') {
-    const focus = getSelectionFocusElements(cy, element);
-    return placeTooltipInCanvasAwayFromFocus({ cy, focusEles: focus });
-  }
-  const bbox = element.renderedBoundingBox?.();
-  const offsetX = (bbox?.w ?? 50) + 200;
-  return calculateGraphTooltipPosition(cy, element, evt, offsetX);
+/** 노드·간선: focus 집합을 가리지 않도록 캔버스 내 배치 */
+export function resolveGraphTooltipAnchor(cy, kind, element) {
+  const focus = getSelectionFocusElements(cy, element);
+  const estimate = kind === 'edge' ? EDGE_TOOLTIP_ESTIMATE : NODE_TOOLTIP_ESTIMATE;
+  return placeTooltipInCanvasAwayFromFocus({
+    cy,
+    focusEles: focus,
+    width: estimate.width,
+    height: estimate.height,
+  });
 }
 
 /* ─── 신규 노드 배치 · 레이아웃 상수 ─── */

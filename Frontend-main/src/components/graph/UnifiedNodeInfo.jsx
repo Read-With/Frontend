@@ -1180,8 +1180,14 @@ function UnifiedNodeInfo({
     }
   }, [node?.id]);
 
+  const avoidPoint = useMemo(() => {
+    const c = data?.nodeCenter;
+    if (c && Number.isFinite(c.x) && Number.isFinite(c.y)) return c;
+    return null;
+  }, [data?.nodeCenter]);
+
   const { position, showContent, isDragging, tooltipRef, handleMouseDown } = useTooltipPosition(
-    x, y, { enabled: !isSidebar, bounds: 'window' }
+    x, y, { enabled: !isSidebar, bounds: 'canvas', avoidPoint }
   );
 
   const clickOutsideRef = useClickOutside(
