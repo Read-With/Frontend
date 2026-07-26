@@ -6,7 +6,7 @@ import { findExactSuggestionMatch } from "../../utils/graph/graphCy.js";
 import { GRAPH_CHARACTER_FILTER_STAGE_OPTIONS } from "../../utils/graph/graphCore.js";
 import "./RelationGraph.css";
 
-export function EdgeLabelToggle({ visible, onToggle }) {
+function EdgeLabelToggle({ visible, onToggle }) {
   const labelId = useId();
   return (
     <div className="edge-label-toggle">
@@ -34,7 +34,7 @@ EdgeLabelToggle.propTypes = {
 };
 
 /** 인물 필터: 주요 | 주변 | 전체 */
-export function CharacterFilterSegmented({ value, onChange }) {
+function CharacterFilterSegmented({ value, onChange }) {
   return (
     <div role="radiogroup" aria-label="인물 필터" className="character-filter">
       {GRAPH_CHARACTER_FILTER_STAGE_OPTIONS.map((opt) => {
@@ -62,48 +62,141 @@ CharacterFilterSegmented.propTypes = {
   onChange: PropTypes.func.isRequired,
 };
 
-function GraphCanvasLegend() {
-  const [open, setOpen] = useState(false);
-  const rootRef = useClickOutside(() => setOpen(false), open);
-  const panelId = "graph-canvas-legend-panel";
+const LEGEND_HINT_SESSION_KEY = "rw-graph-legend-hint-seen";
+
+function readLegendHintSeen() {
+  try {
+    return sessionStorage.getItem(LEGEND_HINT_SESSION_KEY) === "1";
+  } catch {
+    return true;
+  }
+}
+
+function markLegendHintSeen() {
+  try {
+    sessionStorage.setItem(LEGEND_HINT_SESSION_KEY, "1");
+  } catch {
+    /* ignore */
+  }
+}
+
+function GraphLegendPanel({ id, className = "" }) {
+  return (
+    <aside id={id} className={`graph-canvas-legend ${className}`.trim()} aria-label="그래프 범례">
+      <p className="graph-canvas-legend-title">범례</p>
+      <div className="graph-canvas-legend-row graph-canvas-legend-row--tone">
+        <div className="graph-canvas-legend-tone" aria-hidden>
+          <span className="graph-canvas-legend-tone-end">비호의</span>
+          <span className="graph-canvas-legend-swatch" />
+          <span className="graph-canvas-legend-tone-end">호의</span>
+        </div>
+        <span className="graph-canvas-legend-caption">관계 색</span>
+      </div>
+      <div className="graph-canvas-legend-row">
+        <span className="graph-canvas-legend-size" aria-hidden>
+          <span className="graph-canvas-legend-dot graph-canvas-legend-dot--lg" />
+          <span className="graph-canvas-legend-dot graph-canvas-legend-dot--sm" />
+        </span>
+        <span>크기 = 중요도</span>
+      </div>
+      <div className="graph-canvas-legend-row">
+        <span className="graph-canvas-legend-main" aria-hidden>
+          <span className="graph-canvas-legend-main-ring" />
+        </span>
+        <span>주요 인물</span>
+      </div>
+    </aside>
+  );
+}
+
+GraphLegendPanel.propTypes = {
+  id: PropTypes.string,
+  className: PropTypes.string,
+};
+
+/**
+ * @param {"toolbar"|"dock"} variant
+ * toolbar: 상단 토글 + 세션 1회 자동 오픈/힌트
+ * dock: 단독 화면 좌하단 고정 미니 범례 (접기 가능)
+ */
+function GraphCanvasLegend({ variant = "toolbar" }) {
+  const isDock = variant === "dock";
+  const [hintSeen, setHintSeen] = useState(readLegendHintSeen);
+  const [open, setOpen] = useState(() => (isDock ? true : !readLegendHintSeen()));
+  const rootRef = useClickOutside(() => {
+    if (!isDock) {
+      setOpen(false);
+      markLegendHintSeen();
+      setHintSeen(true);
+    }
+  }, open && !isDock);
+  const panelId = isDock ? "graph-canvas-legend-dock" : "graph-canvas-legend-panel";
+
+  useEffect(() => {
+    if (isDock || hintSeen || !open) return undefined;
+    const timer = window.setTimeout(() => {
+      markLegendHintSeen();
+      setHintSeen(true);
+      setOpen(false);
+    }, 4200);
+    return () => window.clearTimeout(timer);
+  }, [hintSeen, open, isDock]);
+
+  const toggle = () => {
+    setOpen((v) => {
+      const next = !v;
+      markLegendHintSeen();
+      setHintSeen(true);
+      return next;
+    });
+  };
+
+  if (isDock) {
+    return (
+      <div className={`graph-legend-dock ${open ? "is-open" : "is-collapsed"}`} ref={rootRef}>
+        {open ? <GraphLegendPanel id={panelId} className="is-dock" /> : null}
+        <button
+          type="button"
+          className={`graph-floating-btn graph-legend-dock-toggle ${!hintSeen ? "has-hint" : ""}`}
+          aria-label={open ? "범례 접기" : "범례 보기"}
+          title="범례"
+          aria-expanded={open}
+          aria-controls={panelId}
+          onClick={toggle}
+        >
+          <span className="material-symbols-outlined" aria-hidden>
+            legend_toggle
+          </span>
+          {!hintSeen ? <span className="graph-legend-hint-dot" aria-hidden /> : null}
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="graph-floating-legend" ref={rootRef}>
-      {open ? (
-        <aside id={panelId} className="graph-canvas-legend" aria-label="그래프 범례">
-          <div className="graph-canvas-legend-row">
-            <span className="graph-canvas-legend-swatch" aria-hidden />
-            <span>비호의적 ↔ 호의적</span>
-          </div>
-          <div className="graph-canvas-legend-row">
-            <span className="graph-canvas-legend-size" aria-hidden>
-              <span className="graph-canvas-legend-dot graph-canvas-legend-dot--lg" />
-              <span className="graph-canvas-legend-dot graph-canvas-legend-dot--sm" />
-            </span>
-            <span>크기 = 중요도</span>
-          </div>
-          <div className="graph-canvas-legend-row">
-            <span className="graph-canvas-legend-main" aria-hidden />
-            <span>주요 인물</span>
-          </div>
-        </aside>
-      ) : null}
       <button
         type="button"
-        className="graph-floating-btn"
+        className={`graph-floating-btn ${!hintSeen ? "has-hint" : ""}`}
         aria-label={open ? "범례 닫기" : "범례 보기"}
-        title={open ? "범례 닫기" : "범례 보기"}
+        title="범례"
         aria-expanded={open}
         aria-controls={open ? panelId : undefined}
-        onClick={() => setOpen((v) => !v)}
+        onClick={toggle}
       >
         <span className="material-symbols-outlined" aria-hidden>
-          info
+          legend_toggle
         </span>
+        {!hintSeen ? <span className="graph-legend-hint-dot" aria-hidden /> : null}
       </button>
+      {open ? <GraphLegendPanel id={panelId} /> : null}
     </div>
   );
 }
+
+GraphCanvasLegend.propTypes = {
+  variant: PropTypes.oneOf(["toolbar", "dock"]),
+};
 
 function useModKeyLabel() {
   const [mod, setMod] = useState("Ctrl");
@@ -353,11 +446,13 @@ export function GraphFloatingControls({
   filterStage,
   onFilterChange,
   showLegend = true,
+  placement = "dock",
 }) {
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [optionsOpen, setOptionsOpen] = useState(false);
   const optionsRef = useClickOutside(() => setOptionsOpen(false), optionsOpen);
   const modKey = useModKeyLabel();
+  const isToolbar = placement === "toolbar";
 
   const {
     searchTerm,
@@ -406,7 +501,7 @@ export function GraphFloatingControls({
   return (
     <>
       <div
-        className="graph-floating-dock"
+        className={`graph-floating-dock${isToolbar ? " is-toolbar" : ""}`}
         aria-label="그래프 도구"
         onClick={(e) => e.stopPropagation()}
         onMouseDown={(e) => e.stopPropagation()}
@@ -426,6 +521,19 @@ export function GraphFloatingControls({
         </button>
 
         <div className="graph-floating-options" ref={optionsRef}>
+          <button
+            type="button"
+            className={`graph-floating-btn${filterStage !== 0 || !edgeLabelVisible ? " is-active" : ""}`}
+            aria-label="그래프 표시 옵션"
+            title={`표시 옵션 · 필터 ${filterLabel}`}
+            aria-haspopup="menu"
+            aria-expanded={optionsOpen}
+            onClick={() => setOptionsOpen((v) => !v)}
+          >
+            <span className="material-symbols-outlined" aria-hidden>
+              tune
+            </span>
+          </button>
           {optionsOpen ? (
             <div className="graph-floating-options-panel" role="menu" aria-label="표시 옵션">
               <div className="graph-topbar-more-section" role="none">
@@ -443,23 +551,12 @@ export function GraphFloatingControls({
               </div>
             </div>
           ) : null}
-          <button
-            type="button"
-            className={`graph-floating-btn${filterStage !== 0 || !edgeLabelVisible ? " is-active" : ""}`}
-            aria-label="그래프 표시 옵션"
-            title={`표시 옵션 · 필터 ${filterLabel}`}
-            aria-haspopup="menu"
-            aria-expanded={optionsOpen}
-            onClick={() => setOptionsOpen((v) => !v)}
-          >
-            <span className="material-symbols-outlined" aria-hidden>
-              tune
-            </span>
-          </button>
         </div>
 
-        {showLegend ? <GraphCanvasLegend /> : null}
+        {showLegend && isToolbar ? <GraphCanvasLegend variant="toolbar" /> : null}
       </div>
+
+      {showLegend && !isToolbar ? <GraphCanvasLegend variant="dock" /> : null}
 
       <GraphSearchPalette
         open={paletteOpen}
@@ -501,4 +598,5 @@ GraphFloatingControls.propTypes = {
   filterStage: PropTypes.number.isRequired,
   onFilterChange: PropTypes.func.isRequired,
   showLegend: PropTypes.bool,
+  placement: PropTypes.oneOf(["dock", "toolbar"]),
 };

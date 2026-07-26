@@ -79,7 +79,7 @@ function NameWithDot({ name, positivity, fontSize = '1rem' }) {
   return (
     <div
       className="tooltip-name-with-dot"
-      style={{ '--dot-color': color, '--dot-size': '10px', '--name-font-size': fontSize }}
+      style={{ '--dot-color': color, '--dot-size': '0.7rem', '--name-font-size': fontSize }}
     >
       <div className="tooltip-name-dot" />
       <span className="tooltip-name-label">{name}</span>
@@ -114,7 +114,7 @@ const RadarDot = memo(function RadarDot({
         cy={cy}
         r={Math.max(16, radius * 3)}
         fill="transparent"
-        style={{ cursor: 'pointer', pointerEvents: 'all' }}
+        style={{ cursor: 'pointer', pointerEvents: 'all', outline: 'none' }}
         onMouseEnter={activate}
         onClick={activate}
         onFocus={activate}
@@ -169,6 +169,7 @@ function RelationList({
     <ul className="relation-modal-list" role="listbox" aria-label="연결된 인물 목록">
       {items.map((item) => {
         const active = activeName === item.name;
+        const { color, label, percent } = positivityDisplay(item.positivity);
         return (
           <li key={item.id || item.name}>
             <button
@@ -176,10 +177,20 @@ function RelationList({
               role="option"
               aria-selected={active}
               className={`relation-modal-list-item${active ? ' is-active' : ''}`}
+              style={{ '--item-pos-color': color }}
               onClick={() => onSelect(item)}
             >
-              <NameWithDot name={item.name} positivity={item.positivity} />
-              <PositivityChip positivity={item.positivity} />
+              <div className="relation-modal-list-item-head">
+                <NameWithDot name={item.name} positivity={item.positivity} fontSize="1.15rem" />
+                <div
+                  className="relation-modal-list-pos"
+                  style={{ '--pos-color': color }}
+                  aria-label={`긍정성 ${label} ${percent}%`}
+                >
+                  <span className="relation-modal-list-pos-label">{label}</span>
+                  <span className="relation-modal-list-pos-value">{percent}%</span>
+                </div>
+              </div>
               <RelationTagsRow tags={item.relationTags} />
             </button>
           </li>
@@ -210,9 +221,9 @@ function PositivityScaleBar({ positivity }) {
         />
       </div>
       <div className="relation-positivity-scale-labels" aria-hidden>
-        <span>−1</span>
-        <span>0</span>
-        <span>+1</span>
+        <span>−100%</span>
+        <span>0%</span>
+        <span>+100%</span>
       </div>
     </div>
   );
@@ -325,11 +336,15 @@ function RelationAnalysisModalImpl({
 
   const overlayStyle = useMemo(() => {
     const inset = GRAPH_LAYOUT_CONSTANTS.ANALYSIS_MODAL_INSET;
-    const top = GRAPH_LAYOUT_CONSTANTS.TOP_BAR_HEIGHT + inset;
+    const slideWidth = GRAPH_LAYOUT_CONSTANTS.TOOLTIP_SIDEBAR_WIDTH;
+    // 돌아가기 버튼 행 아래부터, 슬라이드바 왼쪽 영역을 가득 채움
+    const top = Math.max(GRAPH_LAYOUT_CONSTANTS.TOP_BAR_HEIGHT, 56);
     const left = Math.max(0, Number(chapterRailWidth) || 0) + inset;
+    const right = slideWidth + inset;
     return {
       '--relation-modal-top': `${top}px`,
       '--relation-modal-left': `${left}px`,
+      '--relation-modal-right': `${right}px`,
       '--relation-modal-inset': `${inset}px`,
     };
   }, [chapterRailWidth]);
@@ -463,9 +478,9 @@ function RelationAnalysisModalImpl({
   };
 
   const formatRadarRadiusTick = (value) => {
-    if (value === 0) return '−1';
-    if (value === 50) return '0';
-    if (value === 100) return '+1';
+    if (value === 0) return '−100%';
+    if (value === 50) return '0%';
+    if (value === 100) return '+100%';
     return '';
   };
 
@@ -592,6 +607,7 @@ function RelationAnalysisModalImpl({
     isCompactModal ? 'relation-modal-container--compact' : '',
     connectionKind === 'pair_connections' ? 'is-pair' : '',
     connectionKind === 'single_connection' ? 'is-single' : '',
+    connectionKind === 'no_connections' ? 'is-empty' : '',
   ].filter(Boolean).join(' ');
 
   return (
@@ -661,9 +677,9 @@ function RelationAnalysisModalImpl({
           <div className="relation-modal-legend" aria-hidden="false">
             <span className="relation-modal-legend-label">긍정성</span>
             <div className="relation-modal-legend-bar">
-              <span>부정 (−1)</span>
+              <span>부정 (−100%)</span>
               <span className="relation-modal-legend-gradient" />
-              <span>긍정 (+1)</span>
+              <span>긍정 (+100%)</span>
             </div>
           </div>
         ) : null}

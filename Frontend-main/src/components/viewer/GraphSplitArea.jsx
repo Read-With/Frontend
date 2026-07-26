@@ -1,14 +1,14 @@
-import { useMemo, useRef, memo, useCallback } from 'react';
+import { useMemo, useRef, useState, memo, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { AlertCircle, Inbox, Loader2 } from 'lucide-react';
-import CytoscapeGraphUnified from '../graph/CytoscapeGraphUnified';
+import CytoscapeGraphUnified, { GraphZoomControls } from '../graph/CytoscapeGraphUnified';
 import UnifiedNodeInfo from '../graph/UnifiedNodeInfo';
 import UnifiedEdgeTooltip from '../graph/UnifiedEdgeTooltip';
 import { useGraphElementPipeline } from '../../hooks/graph/useGraphViewState';
 import { getEdgeStyle, createGraphStylesheet, graphStyles } from '../../utils/styles/graphStyles';
 import {
   centerSelectionOnElementId,
-  getFloatingTooltipPanTarget,
+  getFloatingTooltipReserveRight,
 } from '../../utils/graph/graphCy';
 import {
   shouldIgnoreViewerOutsideClick,
@@ -87,6 +87,9 @@ const GraphSplitTopBar = memo(function GraphSplitTopBar({
   graphState,
   graphActions,
   viewerState,
+  searchState,
+  searchActions,
+  cy,
 }) {
   const { book } = viewerState;
 
@@ -96,9 +99,10 @@ const GraphSplitTopBar = memo(function GraphSplitTopBar({
     prevValidEvent,
     graphFullScreen,
     progressTopBar,
+    edgeLabelVisible,
   } = graphState;
 
-  const { setGraphFullScreen } = graphActions;
+  const { setGraphFullScreen, setEdgeLabelVisible, filterStage, setFilterStage } = graphActions;
 
   const bookId = useMemo(() => toPositiveNumberOrNull(book?.id), [book?.id]);
 
@@ -168,7 +172,31 @@ const GraphSplitTopBar = memo(function GraphSplitTopBar({
 
   return (
     <div className="graph-split-topbar">
-      <div className="graph-split-topbar-primary">
+      <div className="graph-split-topbar-center">
+        <ChapterEventInfo
+          bookId={bookId}
+          progressTopBar={progressTopBar}
+          currentEvent={currentEvent}
+          prevValidEvent={prevValidEvent}
+          resolvedServerChapter={chapterMeta.resolvedServerChapter}
+          chapterDisplayLabel={chapterMeta.chapterDisplayLabel}
+          chapterTitleTooltip={chapterMeta.chapterTitleTooltip}
+        />
+      </div>
+
+      <div className="graph-split-topbar-tools">
+        <GraphFloatingControls
+          placement="toolbar"
+          searchState={searchState}
+          searchActions={searchActions}
+          edgeLabelVisible={edgeLabelVisible}
+          onToggleEdgeLabel={() => setEdgeLabelVisible((v) => !v)}
+          filterStage={filterStage}
+          onFilterChange={setFilterStage}
+          showLegend
+        />
+        <span className="graph-split-topbar-sep" aria-hidden />
+        <GraphZoomControls cy={cy} className="graph-zoom-controls is-toolbar" />
         <button
           type="button"
           className="graph-fullscreen-btn"
@@ -180,16 +208,6 @@ const GraphSplitTopBar = memo(function GraphSplitTopBar({
             {graphFullScreen ? 'close_fullscreen' : 'fullscreen'}
           </span>
         </button>
-
-        <ChapterEventInfo
-          bookId={bookId}
-          progressTopBar={progressTopBar}
-          currentEvent={currentEvent}
-          prevValidEvent={prevValidEvent}
-          resolvedServerChapter={chapterMeta.resolvedServerChapter}
-          chapterDisplayLabel={chapterMeta.chapterDisplayLabel}
-          chapterTitleTooltip={chapterMeta.chapterTitleTooltip}
-        />
       </div>
     </div>
   );
@@ -286,6 +304,9 @@ const GraphContainer = memo(function GraphContainer({
   fitNodeIds = [],
   isResetFromSearch = false,
   bookId = null,
+  cyRef: externalCyRef = null,
+  onCyReady = null,
+  showZoomControls = false,
 }) {
   const eventNum = resolveEventOrdinalForDisplay({
     currentEvent,
@@ -293,7 +314,8 @@ const GraphContainer = memo(function GraphContainer({
     progressTopBar: null,
     fallback: 0,
   });
-  const cyRef = useRef(null);
+  const localCyRef = useRef(null);
+  const cyRef = externalCyRef ?? localCyRef;
   const selectedElementRef = useRef(null);
   const graphSelectNodeRef = useRef(null);
   const viewportRefitKey = useMemo(
@@ -311,7 +333,8 @@ const GraphContainer = memo(function GraphContainer({
 
     centerSelectionOnElementId(cy, elementId, {
       duration: 400,
-      panTarget: getFloatingTooltipPanTarget(cy),
+      reserveRight: getFloatingTooltipReserveRight(),
+      padding: 28,
     });
   }, []);
 
@@ -397,6 +420,8 @@ const GraphContainer = memo(function GraphContainer({
           graphClearRef={graphClearRef}
           graphSelectNodeRef={graphSelectNodeRef}
           showRippleEffect
+          showZoomControls={showZoomControls}
+          onCyReady={onCyReady}
         />
       </div>
     </div>
@@ -436,6 +461,40 @@ const GraphSplitArea = memo(function GraphSplitArea({
     edgeLabelVisible,
   } = graphState;
   const { filterStage } = graphActions;
+  const cyRef = useRef(null);
+  const [cyInstance, setCyInstance] = useState(null);
+  const handleCyReady = useCallback((cy) => {
+    setCyInstance(cy);
+  }, []);
+
+  const topBarSearchState = useMemo(
+    () => ({
+      searchTerm: searchTermValue,
+      isSearchActive: isSearchActiveValue,
+      suggestions: searchState.suggestions ?? [],
+      showSuggestions: searchState.showSuggestions ?? false,
+      selectedIndex: searchState.selectedIndex ?? -1,
+    }),
+    [
+      searchTermValue,
+      isSearchActiveValue,
+      searchState.suggestions,
+      searchState.showSuggestions,
+      searchState.selectedIndex,
+    ]
+  );
+
+  const topBarSearchActions = useMemo(
+    () => ({
+      onSearchSubmit: searchActions?.onSearchSubmit,
+      onClearSearch: searchActions?.clearSearch,
+      onGenerateSuggestions: searchActions?.onGenerateSuggestions,
+      onKeyDown: searchActions?.handleKeyDown,
+      onCloseSuggestions: searchActions?.closeSuggestions,
+      onSelectedIndexChange: searchActions?.onSelectedIndexChange,
+    }),
+    [searchActions]
+  );
 
   const hasResolvedEvent = eventUtils.resolveEventNum(currentEvent) > 0;
   const hasLocationHint =
@@ -503,6 +562,9 @@ const GraphSplitArea = memo(function GraphSplitArea({
         graphState={graphState}
         graphActions={graphActions}
         viewerState={{ book }}
+        searchState={topBarSearchState}
+        searchActions={topBarSearchActions}
+        cy={cyInstance}
       />
 
       <div style={{ ...graphStyles.graphPageInner, minWidth: 0, position: 'relative' }}>
@@ -575,30 +637,9 @@ const GraphSplitArea = memo(function GraphSplitArea({
               graphClearRef={graphClearRef}
               isEventTransition={isEventTransition}
               bookId={book?.id ?? bookKey}
-            />
-            <GraphFloatingControls
-              searchState={{
-                searchTerm: searchTermValue,
-                isSearchActive: isSearchActiveValue,
-                suggestions: searchState.suggestions ?? [],
-                showSuggestions: searchState.showSuggestions ?? false,
-                selectedIndex: searchState.selectedIndex ?? -1,
-              }}
-              searchActions={{
-                onSearchSubmit: searchActions?.onSearchSubmit,
-                onClearSearch: searchActions?.clearSearch,
-                onGenerateSuggestions: searchActions?.onGenerateSuggestions,
-                onKeyDown: searchActions?.handleKeyDown,
-                onCloseSuggestions: searchActions?.closeSuggestions,
-                onSelectedIndexChange: searchActions?.onSelectedIndexChange,
-              }}
-              edgeLabelVisible={edgeLabelVisible}
-              onToggleEdgeLabel={() =>
-                graphActions.setEdgeLabelVisible((v) => !v)
-              }
-              filterStage={filterStage}
-              onFilterChange={graphActions.setFilterStage}
-              showLegend
+              cyRef={cyRef}
+              onCyReady={handleCyReady}
+              showZoomControls={false}
             />
             {showRefreshOverlay ? (
               <div

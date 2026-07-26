@@ -108,6 +108,8 @@ const CytoscapeGraphUnified = ({
   viewportRefitKey,
   /** true면 viewportRefitKey 변경으로 fit하지 않음 (이벤트 전환 중 등) */
   skipViewportRefit = false,
+  showZoomControls = true,
+  onCyReady = null,
 }) => {
   const containerRef = useRef(null);
   const [isGraphVisible, setIsGraphVisible] = useState(false);
@@ -132,6 +134,16 @@ const CytoscapeGraphUnified = ({
   const addedEdgeIdsRef = useRef(new Set());
 
   const cy = useCyInstance(externalCyRef, cyReady);
+
+  useEffect(() => {
+    if (!onCyReady) return undefined;
+    if (cyReady && cy) {
+      onCyReady(cy);
+      return () => onCyReady(null);
+    }
+    onCyReady(null);
+    return undefined;
+  }, [cy, cyReady, onCyReady]);
 
   const elementsGraphFingerprint = useMemo(
     () => (isEmpty(elements) ? "" : buildElementsGraphFingerprint(elements)),
@@ -754,7 +766,7 @@ const CytoscapeGraphUnified = ({
           </div>
         </div>
       )}
-      <GraphZoomControls cy={cy} />
+      <GraphZoomControls cy={showZoomControls ? cy : null} />
     </div>
   );
 };
@@ -808,6 +820,8 @@ CytoscapeGraphUnified.propTypes = {
   currentChapter: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
   viewportRefitKey: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
   skipViewportRefit: PropTypes.bool,
+  showZoomControls: PropTypes.bool,
+  onCyReady: PropTypes.func,
 };
 
 export default CytoscapeGraphUnified;

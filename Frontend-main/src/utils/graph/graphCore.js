@@ -113,7 +113,7 @@ export const calculateLastEventForChapter = ({
 
 export const GRAPH_LAYOUT_CONSTANTS = {
   SIDEBAR: { OPEN_WIDTH: 280, CLOSED_WIDTH: 56 },
-  /** .graph-page-topbar height (3.75rem)와 동일 */
+  /** 분석 모달 등 상단 inset 기준 (단독 그래프 상단바 제거 후에도 유지) */
   TOP_BAR_HEIGHT: 60,
   /** 관계 분석(레이더) 모달 — 챕터 레일·상단바로부터의 여백 */
   ANALYSIS_MODAL_INSET: 16,

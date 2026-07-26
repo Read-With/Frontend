@@ -72,34 +72,6 @@ const emptyGraphBannerStyle = {
   fontWeight: 600,
 };
 
-const backButtonStyle = {
-  height: 32,
-  padding: '0 12px',
-  borderRadius: 8,
-  border: `1px solid ${COLORS.border}`,
-  background: 'rgba(255, 255, 255, 0.9)',
-  color: COLORS.textPrimary,
-  fontSize: 12,
-  fontWeight: 500,
-  cursor: 'pointer',
-  transition: 'all 0.2s ease',
-  outline: 'none',
-  display: 'flex',
-  alignItems: 'center',
-  gap: 6,
-  boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
-  backdropFilter: 'blur(8px)',
-  justifyContent: 'center',
-};
-
-const backButtonContainerStyle = {
-  position: 'fixed',
-  top: '12px',
-  right: '24px',
-  zIndex: 10002,
-  pointerEvents: 'auto',
-};
-
 const graphBackButtonHandlers = createAdvancedButtonHandlers('default');
 const GRAPH_PAGE_EDGE_STYLE = getEdgeStyle('graph');
 const GRAPH_TRANSFORM_DEPS = { createCharacterMaps, buildNodeWeights, convertRelationsToElements };
@@ -359,19 +331,13 @@ function RelationGraphWrapper() {
     const cy = cyRef.current;
     if (!cy) return;
 
-    const { TOOLTIP_SIDEBAR_WIDTH, FOCUS_PAN_MS } = GRAPH_LAYOUT_CONSTANTS;
-    const chapterSidebarWidth = sidebarLayoutWidth;
-    const availableGraphWidth = window.innerWidth - chapterSidebarWidth - TOOLTIP_SIDEBAR_WIDTH;
-    const availableGraphHeight = window.innerHeight;
-
+    const { FOCUS_PAN_MS, TOOLTIP_SIDEBAR_WIDTH } = GRAPH_LAYOUT_CONSTANTS;
     centerSelectionOnElementId(cy, elementId, {
       duration: FOCUS_PAN_MS,
-      panTarget: {
-        x: chapterSidebarWidth + (availableGraphWidth / 2) - availableGraphWidth * 0.14,
-        y: availableGraphHeight / 2 - availableGraphHeight * 0.06,
-      },
+      reserveRight: TOOLTIP_SIDEBAR_WIDTH,
+      padding: 40,
     });
-  }, [sidebarLayoutWidth]);
+  }, []);
 
   const onClearTooltip = useCallback(() => {
     closeSidebar();
@@ -504,7 +470,7 @@ function RelationGraphWrapper() {
   }, [isGraphLoading]);
 
   return (
-    <div style={pageRootStyle}>
+    <div className="graph-standalone-page" style={pageRootStyle}>
       {apiError && <ErrorToast error={apiError} onClose={clearApiError} />}
       {fallbackNotice && (
         <ErrorToast
@@ -536,18 +502,18 @@ function RelationGraphWrapper() {
         </div>
       )}
 
-      <div style={backButtonContainerStyle}>
-        <button
-          type="button"
-          onClick={handleBackToViewer}
-          style={backButtonStyle}
-          aria-label="뷰어로 돌아가기"
-          {...graphBackButtonHandlers}
-        >
-          <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>close</span>
-          돌아가기
-        </button>
-      </div>
+      <button
+        type="button"
+        className="graph-page-back"
+        onClick={handleBackToViewer}
+        aria-label="뷰어로 돌아가기"
+        {...graphBackButtonHandlers}
+      >
+        <span className="material-symbols-outlined" aria-hidden>
+          arrow_back
+        </span>
+        돌아가기
+      </button>
 
       <ChapterSidebar
         isSidebarOpen={isSidebarOpen}

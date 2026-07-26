@@ -1,12 +1,11 @@
 import { useState, useEffect, useCallback, memo } from 'react';
 import PropTypes from 'prop-types';
 import { useNavigate } from 'react-router-dom';
-import { Heart, BookOpen, Network, MoreVertical, Info, Clock, FileText, Trash2, X, Bookmark } from 'lucide-react';
-import { toast } from 'react-toastify';
+import { Heart, BookOpen, Network, MoreVertical, Info, Clock, Trash2, X } from 'lucide-react';
 import BookDetailModal, { AuthenticatedImage } from './BookDetailModal';
 import './BookLibrary.css';
 import { ensureGraphBookCache } from '../../utils/graph/graphFetch';
-import { USER_VIEWER_PREFIX, USER_GRAPH_PREFIX, userViewerBookmarksPath } from '../../utils/common/urlUtils';
+import { USER_VIEWER_PREFIX, USER_GRAPH_PREFIX } from '../../utils/common/urlUtils';
 import {
   formatLibraryRelativeDate,
   attachLibraryModalChrome,
@@ -117,7 +116,7 @@ DeleteConfirmModal.propTypes = {
   onConfirm: PropTypes.func.isRequired,
 };
 
-const BookCard = memo(({ book, onToggleFavorite, onOpenBook, onOpenBookmarks, onBookDetailClick, onShowDeleteModal, viewMode = 'grid', openingMode = null }) => {
+const BookCard = memo(({ book, onToggleFavorite, onOpenBook, onBookDetailClick, onShowDeleteModal, viewMode = 'grid', openingMode = null }) => {
   const [imageError, setImageError] = useState(false);
   const [showContextMenu, setShowContextMenu] = useState(false);
   const [optimisticFavorite, setOptimisticFavorite] = useState(null);
@@ -134,11 +133,6 @@ const BookCard = memo(({ book, onToggleFavorite, onOpenBook, onOpenBookmarks, on
   const handleGraphClick = (e) => {
     e.stopPropagation();
     onOpenBook?.(book, 'graph');
-  };
-
-  const handleBookmarksClick = (e) => {
-    e.stopPropagation();
-    onOpenBookmarks?.(book);
   };
 
   useEffect(() => {
@@ -207,7 +201,7 @@ const BookCard = memo(({ book, onToggleFavorite, onOpenBook, onOpenBookmarks, on
       onMouseLeave={() => setShowContextMenu(false)}
       onClick={handleCardClick}
     >
-      {/* 즐겨찾기 버튼 - 왼쪽 상단 */}
+      {/* 즐겨찾기 */}
       <button
         className={`book-favorite-btn ${displayFavorite ? 'favorited' : ''}`}
         onClick={handleFavoriteClick}
@@ -221,13 +215,11 @@ const BookCard = memo(({ book, onToggleFavorite, onOpenBook, onOpenBookmarks, on
         />
       </button>
 
-      {/* 카드 헤더 - 이미지 영역 */}
       <div className="book-card-header">
         <div className="book-image-container">
           {renderBookImage()}
         </div>
 
-        {/* 독서 진행률 — 그리드 뷰에서만 표지 위 표시 */}
         {viewMode !== 'list' && book.progress > 0 && (
           <div className="book-progress-container">
             <div className="progress-label">
@@ -244,7 +236,6 @@ const BookCard = memo(({ book, onToggleFavorite, onOpenBook, onOpenBookmarks, on
         )}
       </div>
 
-      {/* 카드 바디 - 정보 영역 */}
       <div className="book-card-body">
         <h3 className="book-title" title={book.title}>
           {book.title}
@@ -253,9 +244,8 @@ const BookCard = memo(({ book, onToggleFavorite, onOpenBook, onOpenBookmarks, on
           {book.author}
         </p>
         
-        {/* 메타 정보 */}
         <div className="book-meta">
-          {viewMode === 'list' && typeof book.progress === 'number' && book.progress > 0 && (
+          {viewMode === 'list' && book.progress > 0 && (
             <span className="book-meta-item book-progress-meta" title={`독서 진행률 ${book.progress}%`}>
               {book.progress}% 읽음
             </span>
@@ -267,23 +257,9 @@ const BookCard = memo(({ book, onToggleFavorite, onOpenBook, onOpenBookmarks, on
               {formatLibraryRelativeDate(book.updatedAt)}
             </span>
           )}
-          
-          {book.format && (
-            <span className="book-meta-item book-format">
-              <FileText size={14} />
-              {book.format.toUpperCase()}
-            </span>
-          )}
-          
-          {book.pages && (
-            <span className="book-meta-item">
-              📄 {book.pages}페이지
-            </span>
-          )}
         </div>
       </div>
 
-      {/* 카드 액션 버튼 */}
       <div className="book-card-actions">
         <button 
           className="book-action-btn book-action-primary"
@@ -303,18 +279,8 @@ const BookCard = memo(({ book, onToggleFavorite, onOpenBook, onOpenBookmarks, on
           <Network size={16} className="book-action-icon" />
           {isOpeningGraph ? '준비중' : '관계도'}
         </button>
-        <button
-          className="book-action-btn book-action-secondary"
-          onClick={handleBookmarksClick}
-          title="북마크 목록"
-          disabled={isOpening}
-        >
-          <Bookmark size={16} className="book-action-icon" />
-          북마크
-        </button>
       </div>
 
-      {/* 컨텍스트 메뉴 */}
       <div className="book-context-menu">
         <button
           className="book-context-trigger"
@@ -334,13 +300,6 @@ const BookCard = memo(({ book, onToggleFavorite, onOpenBook, onOpenBookmarks, on
               상세 정보
             </button>
             <button
-              className="book-context-item"
-              onClick={handleBookmarksClick}
-            >
-              <Bookmark size={18} className="book-context-icon" />
-              북마크
-            </button>
-            <button
               className="book-context-item book-context-item-danger"
               onClick={handleDeleteClick}
             >
@@ -356,7 +315,6 @@ const BookCard = memo(({ book, onToggleFavorite, onOpenBook, onOpenBookmarks, on
 
 BookCard.displayName = 'BookCard';
 
-// 공통 book shape 정의 (서버 책만 표시)
 const bookShape = PropTypes.shape({
   id: PropTypes.oneOfType([PropTypes.number, PropTypes.string]).isRequired,
   title: PropTypes.string.isRequired,
@@ -371,7 +329,6 @@ BookCard.propTypes = {
   book: bookShape.isRequired,
   onToggleFavorite: PropTypes.func,
   onOpenBook: PropTypes.func,
-  onOpenBookmarks: PropTypes.func,
   onBookDetailClick: PropTypes.func,
   onShowDeleteModal: PropTypes.func,
   viewMode: PropTypes.oneOf(['grid', 'list']),
@@ -436,21 +393,6 @@ const BookLibrary = memo(({ books, onToggleFavorite, onBookDelete, viewMode = 'g
     [navigate, openingTarget]
   );
 
-  const handleOpenBookmarks = useCallback(
-    (book) => {
-      const bookId = getNumericBookId(book);
-      const path = userViewerBookmarksPath(bookId);
-      if (!path) {
-        toast.error('책 정보가 없어 북마크 목록을 열 수 없습니다.');
-        return;
-      }
-      navigate(path, {
-        state: { book, fromLibrary: true, from: { pathname: '/mypage' } },
-      });
-    },
-    [navigate]
-  );
-
   const handleBookDetailClick = useCallback((book) => {
     setSelectedBook(book);
     setShowDetailModal(true);
@@ -509,7 +451,6 @@ const BookLibrary = memo(({ books, onToggleFavorite, onBookDelete, viewMode = 'g
           book={book}
           onToggleFavorite={onToggleFavorite}
           onOpenBook={handleOpenBook}
-          onOpenBookmarks={handleOpenBookmarks}
           onBookDetailClick={handleBookDetailClick}
           onShowDeleteModal={handleShowDeleteModal}
           viewMode={viewMode}

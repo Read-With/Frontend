@@ -27,8 +27,6 @@ const parseJsonSafely = (value) => {
 
 /** 플로팅 툴팁 추정 크기 (.graph-node-tooltip / .edge-tooltip-container ≈ 26.25rem) */
 const FLOATING_TOOLTIP_ESTIMATE = { width: 420, height: 400 };
-const EDGE_TOOLTIP_ESTIMATE = FLOATING_TOOLTIP_ESTIMATE;
-const NODE_TOOLTIP_ESTIMATE = FLOATING_TOOLTIP_ESTIMATE;
 const TOOLTIP_CANVAS_PAD = 8;
 const TOOLTIP_FOCUS_GAP = 20;
 
@@ -134,7 +132,7 @@ export function constrainToGraphCanvas(
  * focus(간선+노드)를 최대한 가리지 않으면서 캔버스 안에 툴팁 배치.
  * 반환값은 position:fixed 용 client 좌표.
  */
-export function placeTooltipInCanvasAwayFromFocus({
+function placeTooltipInCanvasAwayFromFocus({
   cy,
   focusEles,
   width = FLOATING_TOOLTIP_ESTIMATE.width,
@@ -422,25 +420,58 @@ function getFocusElementsModelCenter(focusEles) {
 }
 
 /**
- * focus 묶음을 뷰포트 가운데로 이동.
- * @param {{ duration?: number, panTarget?: { x: number, y: number } }} [options]
- * panTarget이 있으면 그 화면 좌표로 모델 중심을 맞춤(사이드바 보정용). 없으면 cy.center 사용.
+ * focus 묶음이 가용 뷰포트 안에 모두 들어오도록 pan(+필요 시 zoom out).
+ * @param {{
+ *   duration?: number,
+ *   padding?: number,
+ *   reserveRight?: number,
+ *   reserveLeft?: number,
+ *   reserveTop?: number,
+ *   reserveBottom?: number,
+ * }} [options]
  */
 function animateCenterOnFocusElements(cy, focusEles, options = {}) {
   if (!cy || !focusEles?.length) return false;
   const duration = options.duration ?? 500;
-  const panTarget = options.panTarget;
 
   try {
     cy.stop();
-    if (panTarget && Number.isFinite(panTarget.x) && Number.isFinite(panTarget.y)) {
+
+    const padding = Number.isFinite(options.padding) ? options.padding : 28;
+    const reserveRight = Math.max(0, Number(options.reserveRight) || 0);
+    const reserveLeft = Math.max(0, Number(options.reserveLeft) || 0);
+    const reserveTop = Math.max(0, Number(options.reserveTop) || 0);
+    const reserveBottom = Math.max(0, Number(options.reserveBottom) || 0);
+
+    const viewW = typeof cy.width === 'function' ? cy.width() : 0;
+    const viewH = typeof cy.height === 'function' ? cy.height() : 0;
+    if (!(viewW > 0) || !(viewH > 0)) return false;
+
+    const usable = {
+      x1: padding + reserveLeft,
+      y1: padding + reserveTop,
+      x2: viewW - padding - reserveRight,
+      y2: viewH - padding - reserveBottom,
+    };
+    const usableW = Math.max(usable.x2 - usable.x1, 1);
+    const usableH = Math.max(usable.y2 - usable.y1, 1);
+    const targetCx = (usable.x1 + usable.x2) / 2;
+    const targetCy = (usable.y1 + usable.y2) / 2;
+
+    let bb;
+    try {
+      bb = focusEles.boundingBox({ includeLabels: true, includeOverlays: false });
+    } catch {
+      bb = null;
+    }
+    if (!bb || !Number.isFinite(bb.x1) || !Number.isFinite(bb.x2)) {
       const center = getFocusElementsModelCenter(focusEles);
       if (!center) return false;
       const zoom = cy.zoom();
       cy.animate({
         pan: {
-          x: panTarget.x - center.x * zoom,
-          y: panTarget.y - center.y * zoom,
+          x: targetCx - center.x * zoom,
+          y: targetCy - center.y * zoom,
         },
         duration,
         easing: 'ease-in-out',
@@ -448,8 +479,31 @@ function animateCenterOnFocusElements(cy, focusEles, options = {}) {
       return true;
     }
 
+    const modelW = Math.max(bb.w, bb.x2 - bb.x1, 1);
+    const modelH = Math.max(bb.h, bb.y2 - bb.y1, 1);
+    const center = {
+      x: (bb.x1 + bb.x2) / 2,
+      y: (bb.y1 + bb.y2) / 2,
+    };
+
+    const currentZoom = cy.zoom();
+    const minZoom = typeof cy.minZoom === 'function' ? cy.minZoom() : GRAPH_ZOOM.MIN;
+    const maxZoom = typeof cy.maxZoom === 'function' ? cy.maxZoom() : GRAPH_ZOOM.MAX;
+    const renderedW = modelW * currentZoom;
+    const renderedH = modelH * currentZoom;
+
+    let nextZoom = currentZoom;
+    if (renderedW > usableW || renderedH > usableH) {
+      const fitZoom = Math.min(usableW / modelW, usableH / modelH);
+      nextZoom = Math.min(Math.max(fitZoom, minZoom), maxZoom);
+    }
+
     cy.animate({
-      center: { eles: focusEles },
+      zoom: nextZoom,
+      pan: {
+        x: targetCx - center.x * nextZoom,
+        y: targetCy - center.y * nextZoom,
+      },
       duration,
       easing: 'ease-in-out',
     });
@@ -476,27 +530,9 @@ export function centerSelectionOnElementId(cy, elementId, animateOptions = {}) {
   }
 }
 
-/**
- * 플로팅 툴팁이 오른쪽에 오도록, focus를 왼쪽 가용 영역 중심에 두는 cy 컨테이너 좌표.
- * (노드·간선 공통)
- */
-export function getFloatingTooltipPanTarget(cy, estimate = FLOATING_TOOLTIP_ESTIMATE) {
-  const w = typeof cy?.width === 'function' ? cy.width() : 0;
-  const h = typeof cy?.height === 'function' ? cy.height() : 0;
-  if (!(w > 0) || !(h > 0)) {
-    return { x: 0, y: 0 };
-  }
-  const reservedRight = (estimate?.width ?? FLOATING_TOOLTIP_ESTIMATE.width) + TOOLTIP_FOCUS_GAP * 2;
-  const usableW = Math.max(w - reservedRight, w * 0.4);
-  return {
-    x: usableW / 2,
-    y: h / 2,
-  };
-}
-
-/** @deprecated getFloatingTooltipPanTarget 사용 */
-export function getEdgeFocusPanTarget(cy) {
-  return getFloatingTooltipPanTarget(cy, EDGE_TOOLTIP_ESTIMATE);
+/** 뷰어 플로팅 툴팁용 우측 예약 폭 */
+export function getFloatingTooltipReserveRight(estimate = FLOATING_TOOLTIP_ESTIMATE) {
+  return (estimate?.width ?? FLOATING_TOOLTIP_ESTIMATE.width) + TOOLTIP_FOCUS_GAP * 2;
 }
 
 export const isGraphContainerSizeReady = (container) => {
@@ -798,16 +834,9 @@ export function applySelectionHighlight(cy, element) {
   applySelectionFade(cy, focus.nodes(), focus.edges());
 }
 
-export function calculateGraphTooltipPosition(cy, element, evt, offset = 0) {
+export function calculateGraphTooltipPosition(cy, element) {
   try {
     if (!cy) return { x: 0, y: 0 };
-
-    if (evt?.originalEvent) {
-      return {
-        x: evt.originalEvent.clientX + offset,
-        y: evt.originalEvent.clientY,
-      };
-    }
 
     const basePos = isCyNode(element)
       ? element.renderedPosition()
@@ -818,7 +847,7 @@ export function calculateGraphTooltipPosition(cy, element, evt, offset = 0) {
     const left = rect?.left ?? 0;
     const top = rect?.top ?? 0;
     return {
-      x: left + basePos.x + offset,
+      x: left + basePos.x,
       y: top + basePos.y,
     };
   } catch {
@@ -834,14 +863,13 @@ export function buildTapShowArgs(kind, element, evt, center, mouseX, mouseY) {
 }
 
 /** 노드·간선: focus 집합을 가리지 않도록 캔버스 내 배치 */
-export function resolveGraphTooltipAnchor(cy, kind, element) {
+export function resolveGraphTooltipAnchor(cy, element) {
   const focus = getSelectionFocusElements(cy, element);
-  const estimate = kind === 'edge' ? EDGE_TOOLTIP_ESTIMATE : NODE_TOOLTIP_ESTIMATE;
   return placeTooltipInCanvasAwayFromFocus({
     cy,
     focusEles: focus,
-    width: estimate.width,
-    height: estimate.height,
+    width: FLOATING_TOOLTIP_ESTIMATE.width,
+    height: FLOATING_TOOLTIP_ESTIMATE.height,
   });
 }
 
