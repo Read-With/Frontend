@@ -8,7 +8,6 @@ import {
   aggregateCharactersFromEvents,
   convertRelationsToElements,
   getGraphEventState,
-  getChapterEventFallbackData,
   getCachedChapterEvents,
 } from '../graph/graphModel';
 import {
@@ -21,7 +20,7 @@ import {
   GRAPH_IMAGE_DEFERRED_RETRY_MS,
 } from '../common/urlUtils';
 import { resolveChapterIndex, toPositiveInt, toPositiveNumberOrNull } from '../common/valueUtils';
-import { cacheKeyUtils, eventUtils } from './viewerCore';
+import { cacheKeyUtils, eventUtils, ELEMENTS_TO_RELATIONS_OPTS } from './viewerCore';
 import { resolveServerEventMatch } from './viewerSession';
 
 export const DEFAULT_GRAPH_TRANSFORM_DEPS = {
@@ -207,7 +206,7 @@ export function getCachedGraphSnapshot(bookId, chapter, eventIdx, getGraphEventS
   return cached;
 }
 
-/** event 1~eventIdx 누적 그래프 (표시용) */
+/** event 1~eventIdx 누적 그래프 (표시용) — 단일 캐시 소스만 사용 */
 export function resolveCumulativeGraphForDisplay(
   bookId,
   chapter,
@@ -219,51 +218,22 @@ export function resolveCumulativeGraphForDisplay(
 
   const cachedElements = asArray(cached.elements);
   const characters = asArray(cached.characters);
-  const resolved =
-    cachedElements.length > 0
-      ? {
-          elements: applyDisplayNamesToElements(cachedElements, {
-            bookId,
-            characters,
-          }),
-          eventMeta: cached.eventMeta ?? null,
-          characters: enrichGraphCharacters(characters, { bookId }),
-          relations: [],
-          normalizedEvent: null,
-        }
-      : convertGraphSourceToElements(cached, chapter, eventIdx, deps, null, { bookId });
 
-  const fallback = getChapterEventFallbackData(bookId, chapter, eventIdx);
-  const mergedFrom = [];
-
-  let resolvedCharacters = resolved.characters;
-  if (resolvedCharacters.length) {
-    mergedFrom.push('cache');
-  } else if (fallback?.characters?.length) {
-    resolvedCharacters = enrichGraphCharacters(fallback.characters, { bookId });
-    mergedFrom.push('fallback');
+  if (cachedElements.length > 0) {
+    const enrichedCharacters = enrichGraphCharacters(characters, { bookId });
+    return {
+      elements: applyDisplayNamesToElements(cachedElements, {
+        bookId,
+        characters: enrichedCharacters,
+      }),
+      eventMeta: cached.eventMeta ?? null,
+      characters: enrichedCharacters,
+      relations: eventUtils.convertElementsToRelations(cachedElements, ELEMENTS_TO_RELATIONS_OPTS),
+      normalizedEvent: null,
+    };
   }
 
-  // relations: 단일 소스 우선 — resolved에 있으면 그것만, 없을 때만 fallback
-  let relations = asArray(resolved.relations);
-  if (relations.length) {
-    if (!mergedFrom.includes('cache')) mergedFrom.push('cache');
-  } else if (fallback?.relations?.length) {
-    relations = fallback.relations;
-    if (!mergedFrom.includes('fallback')) mergedFrom.push('fallback');
-  }
-
-  return {
-    elements: applyDisplayNamesToElements(resolved.elements, {
-      bookId,
-      characters: resolvedCharacters,
-    }),
-    eventMeta: resolved.eventMeta ?? fallback?.event ?? null,
-    characters: resolvedCharacters,
-    relations,
-    normalizedEvent: resolved.normalizedEvent ?? null,
-    mergedFrom,
-  };
+  return convertGraphSourceToElements(cached, chapter, eventIdx, deps, null, { bookId });
 }
 
 export const graphDataTransformUtils = {

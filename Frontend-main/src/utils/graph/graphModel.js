@@ -1838,48 +1838,6 @@ export async function ensureChapterEventsDiscovered(
   return { success: false, reason: 'cache_missing' };
 }
 
-/** 캐시된 fine 집계 행만 반환 (네트워크 없음) */
-export const getChapterEventFallbackData = (bookId, chapterIdx, eventIdx) => {
-  const chapterCache = getCachedChapterEvents(bookId, chapterIdx);
-  if (!chapterCache) return null;
-  if (
-    chapterCache.source === CHAPTER_GRAPH_CACHE_SOURCE.EMPTY ||
-    chapterCache.source === CHAPTER_GRAPH_CACHE_SOURCE.INVALID
-  ) {
-    return null;
-  }
-
-  const reconstructed = reconstructChapterGraphState(chapterCache, eventIdx);
-  if (reconstructed) {
-    const characters = reconstructed.characters || [];
-    const elements = reconstructed.elements || [];
-    if (characters.length || elements.length) {
-      const relations = eventUtils.convertElementsToRelations(elements, {
-        includeLabel: true,
-        includeCount: false,
-        positivityDefault: null,
-      });
-      return {
-        characters,
-        relations,
-        event: reconstructed.eventMeta || null,
-      };
-    }
-  }
-
-  const rawEvents = Array.isArray(chapterCache.rawEvents) ? chapterCache.rawEvents : [];
-  const fallbackEvent = eventUtils.findEventInCache(rawEvents, eventIdx);
-  if (fallbackEvent && (fallbackEvent.characters?.length || fallbackEvent.relations?.length)) {
-    return {
-      characters: Array.isArray(fallbackEvent.characters) ? fallbackEvent.characters : [],
-      relations: Array.isArray(fallbackEvent.relations) ? fallbackEvent.relations : [],
-      event: fallbackEvent.event || null,
-    };
-  }
-
-  return null;
-};
-
 const bookDeltasCache = new Map();
 const bookDeltasInflight = new Map();
 

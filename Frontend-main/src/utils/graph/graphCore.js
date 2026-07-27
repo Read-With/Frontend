@@ -112,8 +112,8 @@ export const calculateLastEventForChapter = ({
 
 export const GRAPH_LAYOUT_CONSTANTS = {
   SIDEBAR: { OPEN_WIDTH: 280, CLOSED_WIDTH: 56 },
-  /** 단독 그래프 우상단 크롬(돌아가기·도구·줌) 아래 모달 시작 여백 */
-  PAGE_CHROME_OFFSET: 56,
+  /** .graph-page-topbar(2.75rem) + 여백 — 관계 분석 모달 top 기준 */
+  PAGE_CHROME_OFFSET: 60,
   /** 관계 분석(레이더) 모달 — 챕터 레일·상단바로부터의 여백 */
   ANALYSIS_MODAL_INSET: 16,
   /** GraphCanvas 툴팁 사이드바 실제 너비와 동일해야 센터링이 맞음 */

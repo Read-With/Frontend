@@ -178,25 +178,9 @@
   box-shadow: none;
 }
 
-/* 단독 페이지: 도구 · 줌 · 돌아가기 (우상단, 돌아가기가 맨 오른쪽) */
-.graph-page-chrome {
-  position: absolute;
-  top: 0.75rem;
-  right: 0.75rem;
-  z-index: 100050;
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  gap: 0.375rem;
-  pointer-events: none;
-}
-
-.graph-page-chrome > * {
-  pointer-events: auto;
-}
-
-.graph-page-chrome .graph-floating-legend .graph-canvas-legend,
-.graph-page-chrome .graph-floating-options-panel {
+/* 단독 페이지: 상단바 도구 · 줌 · 돌아가기 (오른쪽, 돌아가기가 맨 오른쪽) */
+.graph-page-topbar .graph-floating-legend .graph-canvas-legend,
+.graph-page-topbar .graph-floating-options-panel {
   top: calc(100% + 0.375rem);
   bottom: auto;
   z-index: 100060;
@@ -204,11 +188,11 @@
 
 .graph-page-back {
   position: static;
-  height: 2rem;
-  padding: 0 0.75rem;
-  border-radius: var(--rg-radius-md);
-  border: 0.0625rem solid var(--rg-border-soft);
-  background: rgba(255, 255, 255, 0.95);
+  height: 1.75rem;
+  padding: 0 0.625rem;
+  border-radius: var(--rg-radius-sm);
+  border: 0.09375rem solid var(--rg-border-soft);
+  background: var(--rg-surface);
   color: var(--rg-text);
   font-size: 0.75rem;
   font-weight: 600;
@@ -217,14 +201,13 @@
   align-items: center;
   gap: 0.35rem;
   box-shadow: var(--rg-shadow-sm);
-  backdrop-filter: blur(8px);
   flex-shrink: 0;
   transition: background 0.15s ease, border-color 0.15s ease;
 }
 
 .graph-page-back:hover {
-  background: var(--rg-surface-slate);
-  border-color: var(--rg-border);
+  background: var(--rg-brand-tint-soft);
+  border-color: var(--rg-border-strong);
 }
 
 .graph-page-back .material-symbols-outlined {
@@ -234,14 +217,8 @@
 }
 
 @media (max-width: 720px) {
-  .graph-page-chrome {
-    flex-wrap: wrap;
-    justify-content: flex-end;
-    max-width: calc(100% - 1rem);
-  }
-
-  .graph-page-chrome .graph-floating-legend .graph-canvas-legend,
-  .graph-page-chrome .graph-floating-options-panel {
+  .graph-page-topbar .graph-floating-legend .graph-canvas-legend,
+  .graph-page-topbar .graph-floating-options-panel {
     top: auto;
     bottom: calc(100% + 0.375rem);
   }
@@ -1805,10 +1782,6 @@
   animation: graphErrorToastSlideIn 0.3s ease-out;
 }
 
-.graph-error-toast--info {
-  background: color-mix(in srgb, var(--rg-brand) 92%, transparent);
-}
-
 .graph-error-toast__icon {
   font-size: 1.25rem;
   flex-shrink: 0;
@@ -2715,19 +2688,21 @@
 }
 
 /* ============================================================
-   Split topbar + controls (token-driven)
+   Panel topbar + controls (split · standalone, token-driven)
    ============================================================ */
-.graph-split-topbar {
+.graph-split-topbar,
+.graph-page-topbar {
+  /* ResizeObserver가 실제 도구 너비로 갱신. 초기값은 안전 여유 */
+  --graph-split-tools-reserve: 14rem;
   min-height: 2.75rem;
   height: 2.75rem;
   flex-shrink: 0;
   position: relative;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, auto) minmax(0, 1fr);
+  display: flex;
   align-items: center;
+  justify-content: flex-end;
   width: 100%;
   padding: 0.375rem 0.75rem;
-  column-gap: 0.75rem;
   border-bottom: 0.0625rem solid var(--rg-border-soft);
   background: var(--rg-surface);
   /* 드롭다운(범례·옵션)이 잘리지 않도록 — 한 줄은 제목 ellipsis로 유지 */
@@ -2735,44 +2710,46 @@
   z-index: 20;
 }
 
-.graph-split-topbar-balance {
-  grid-column: 1;
-  min-width: 0;
-  pointer-events: none;
+.graph-page-topbar {
+  z-index: 100050;
+  --graph-split-tools-reserve: 16rem; /* 돌아가기 버튼 포함 */
 }
 
-.graph-split-topbar-center {
-  grid-column: 2;
-  position: static;
-  left: auto;
-  transform: none;
+.graph-split-topbar-center,
+.graph-page-topbar-center {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
   display: flex;
   align-items: center;
   justify-content: center;
   min-width: 0;
-  max-width: min(28rem, 46vw);
+  /* 좌우 대칭 여유 = 도구 너비*2 → 정중앙 유지하면서 오른쪽 도구와 겹침 방지 */
+  max-width: min(28rem, max(0px, calc(100% - (2 * var(--graph-split-tools-reserve)) - 1rem)));
   z-index: 1;
+  overflow: hidden;
   pointer-events: none;
 }
 
-.graph-split-topbar-center > * {
+.graph-split-topbar-center > *,
+.graph-page-topbar-center > * {
   pointer-events: auto;
   max-width: 100%;
 }
 
-.graph-split-topbar-tools {
-  grid-column: 3;
+.graph-split-topbar-tools,
+.graph-page-topbar-tools {
   position: relative;
   z-index: 2;
   display: flex;
   flex-direction: row;
   align-items: center;
   justify-content: flex-end;
-  justify-self: end;
   gap: 0.375rem;
   flex: 0 0 auto;
-  margin-left: 0;
-  min-width: 0;
+  min-width: max-content;
+  background: var(--rg-surface);
 }
 
 .graph-split-topbar-sep {

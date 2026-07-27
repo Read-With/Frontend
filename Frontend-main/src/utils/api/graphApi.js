@@ -15,34 +15,20 @@ import {
 } from './authApi';
 import { pickCharacterDisplayName, rememberCharacterDisplayName } from '../graph/graphCore';
 
-/** API/캐시 로드 결과 계약 — error·empty·fallback 구분 */
+/** API/캐시 로드 결과 계약 — error·empty 구분 */
 export const FETCH_STATUS = Object.freeze({
   OK: 'ok',
   EMPTY: 'empty',
-  FALLBACK: 'fallback',
   ERROR: 'error',
 });
-
-export const GRAPH_LOAD_SOURCE = Object.freeze({
-  SESSION: 'session',
-  LOCAL_STORAGE: 'localStorage',
-  CHAPTER_EVENTS: 'chapterEvents',
-  API: 'api',
-  FALLBACK: 'fallback',
-  ERROR: 'error',
-  NONE: 'none',
-});
-
-/** source → FETCH_STATUS 매핑 (그래프 로더용) */
-export function statusFromGraphSource(source) {
-  if (source === GRAPH_LOAD_SOURCE.FALLBACK) return FETCH_STATUS.FALLBACK;
-  if (source === GRAPH_LOAD_SOURCE.ERROR || source === GRAPH_LOAD_SOURCE.NONE) {
-    return FETCH_STATUS.ERROR;
-  }
-  return FETCH_STATUS.OK;
-}
 
 const asArray = (value) => (Array.isArray(value) ? value : []);
+
+/** characters 또는 relations가 하나라도 있으면 true */
+export const hasGraphPayload = (data) => {
+  if (!data || typeof data !== 'object') return false;
+  return asArray(data.characters).length > 0 || asArray(data.relations).length > 0;
+};
 
 const handleApiError = (error, context) => {
   const statusMessages = {
@@ -415,13 +401,9 @@ const requestRelationshipDeltas = async (
 /** 챕터에 델타 없음(404) — 누적 실패가 아니라 빈 커버리지 */
 const isDeltasSoftEmpty = (response) => response?.code === 'NOT_FOUND';
 
-const graphResultHasPayload = (payload) =>
-  !!payload &&
-  (asArray(payload.characters).length > 0 || asArray(payload.relations).length > 0);
-
 const toGraphApiResponse = ({ response, result, empty }) => {
   const resolved = result || empty;
-  const hasPayload = graphResultHasPayload(resolved);
+  const hasPayload = hasGraphPayload(resolved);
   // soft-empty는 fetch 단계에서 success로 정규화됨. 여기선 누적 payload로 부분 실패 보정.
   const failed = (!response || response.isSuccess === false) && !hasPayload;
   const code = failed ? response?.code || 'ERROR' : hasPayload ? 'SUCCESS' : 'NOT_FOUND';

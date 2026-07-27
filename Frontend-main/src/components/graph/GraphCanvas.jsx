@@ -220,6 +220,8 @@ function GraphCanvas({
   hasShownGraphOnce,
   onCanvasClick,
   currentChapter,
+  chapterDisplayLabel = null,
+  chapterTitleTooltip = null,
   sidebarControl,
   searchState,
   floatingControls = null,
@@ -241,8 +243,35 @@ function GraphCanvas({
   } = tooltipHandlers;
 
   const [chromeCy, setChromeCy] = useState(null);
+  const topbarRef = useRef(null);
+  const toolsRef = useRef(null);
   const showSidebar = !!(activeTooltip || isSidebarClosing);
   const usePageChrome = !!(pageChromeStart || floatingControls);
+
+  const metaChapterLabel = chapterDisplayLabel || `챕터 ${currentChapter}`;
+  const metaEventLabel = Number.isFinite(Number(eventNum)) && Number(eventNum) > 0
+    ? `Event ${eventNum}`
+    : 'Event ?';
+
+  useEffect(() => {
+    if (!usePageChrome) return undefined;
+    const topbar = topbarRef.current;
+    const tools = toolsRef.current;
+    if (!topbar || !tools) return undefined;
+
+    const applyReserve = () => {
+      const width = Math.ceil(tools.getBoundingClientRect().width);
+      topbar.style.setProperty(
+        '--graph-split-tools-reserve',
+        `${Math.max(width, 1)}px`,
+      );
+    };
+
+    applyReserve();
+    const ro = new ResizeObserver(applyReserve);
+    ro.observe(tools);
+    return () => ro.disconnect();
+  }, [usePageChrome]);
 
   return (
     <div
@@ -256,6 +285,38 @@ function GraphCanvas({
       }}
     >
       <div style={pageContainerStyle}>
+        {usePageChrome ? (
+          <div className="graph-page-topbar" ref={topbarRef}>
+            <div className="graph-page-topbar-center">
+              <div className="graph-topbar-meta">
+                <span
+                  className="graph-topbar-meta-chapter"
+                  title={chapterTitleTooltip || metaChapterLabel}
+                >
+                  {metaChapterLabel}
+                </span>
+                <span className="graph-topbar-meta-event">{metaEventLabel}</span>
+              </div>
+            </div>
+            <div className="graph-page-topbar-tools" ref={toolsRef}>
+              {floatingControls ? (
+                <GraphFloatingControls
+                  searchState={floatingControls.searchState}
+                  searchActions={floatingControls.searchActions}
+                  edgeLabelVisible={floatingControls.edgeLabelVisible}
+                  onToggleEdgeLabel={floatingControls.onToggleEdgeLabel}
+                  filterStage={floatingControls.filterStage}
+                  onFilterChange={floatingControls.onFilterChange}
+                  showLegend
+                />
+              ) : null}
+              <span className="graph-split-topbar-sep" aria-hidden />
+              <GraphZoomControls cy={chromeCy} className="graph-zoom-controls is-embedded" />
+              {pageChromeStart}
+            </div>
+          </div>
+        ) : null}
+
         <div style={pageInnerStyle}>
           {showSidebar && (
             <GraphSidebar
@@ -311,24 +372,6 @@ function GraphCanvas({
               showZoomControls={!usePageChrome}
               onCyReady={usePageChrome ? setChromeCy : null}
             />
-
-            {usePageChrome ? (
-              <div className="graph-page-chrome" aria-label="그래프 페이지 도구">
-                {floatingControls ? (
-                  <GraphFloatingControls
-                    searchState={floatingControls.searchState}
-                    searchActions={floatingControls.searchActions}
-                    edgeLabelVisible={floatingControls.edgeLabelVisible}
-                    onToggleEdgeLabel={floatingControls.onToggleEdgeLabel}
-                    filterStage={floatingControls.filterStage}
-                    onFilterChange={floatingControls.onFilterChange}
-                    showLegend
-                  />
-                ) : null}
-                <GraphZoomControls cy={chromeCy} className="graph-zoom-controls is-embedded" />
-                {pageChromeStart}
-              </div>
-            ) : null}
           </div>
         </div>
       </div>
@@ -354,6 +397,8 @@ GraphCanvas.propTypes = {
   hasShownGraphOnce: PropTypes.bool.isRequired,
   onCanvasClick: PropTypes.func.isRequired,
   currentChapter: PropTypes.number.isRequired,
+  chapterDisplayLabel: PropTypes.string,
+  chapterTitleTooltip: PropTypes.string,
   sidebarControl: PropTypes.object.isRequired,
   searchState: PropTypes.object.isRequired,
   floatingControls: PropTypes.shape({

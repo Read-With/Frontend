@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState, memo, useCallback } from 'react';
+import { useMemo, useRef, useState, memo, useCallback, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { AlertCircle, Inbox, Loader2 } from 'lucide-react';
 import CytoscapeGraphUnified, { GraphZoomControls } from '../graph/CytoscapeGraphUnified';
@@ -173,9 +173,31 @@ const GraphSplitTopBar = memo(function GraphSplitTopBar({
     ? '분할 화면으로 전환'
     : '그래프 전체화면으로 전환';
 
+  const topbarRef = useRef(null);
+  const toolsRef = useRef(null);
+
+  // 오른쪽 도구 실제 너비만큼 중앙 메타 max-width 확보 → 절대 겹침 방지
+  useEffect(() => {
+    const topbar = topbarRef.current;
+    const tools = toolsRef.current;
+    if (!topbar || !tools) return undefined;
+
+    const applyReserve = () => {
+      const width = Math.ceil(tools.getBoundingClientRect().width);
+      topbar.style.setProperty(
+        '--graph-split-tools-reserve',
+        `${Math.max(width, 1)}px`,
+      );
+    };
+
+    applyReserve();
+    const ro = new ResizeObserver(applyReserve);
+    ro.observe(tools);
+    return () => ro.disconnect();
+  }, []);
+
   return (
-    <div className="graph-split-topbar">
-      <div className="graph-split-topbar-balance" aria-hidden />
+    <div className="graph-split-topbar" ref={topbarRef}>
       <div className="graph-split-topbar-center">
         <ChapterEventInfo
           bookId={bookId}
@@ -188,7 +210,7 @@ const GraphSplitTopBar = memo(function GraphSplitTopBar({
         />
       </div>
 
-      <div className="graph-split-topbar-tools">
+      <div className="graph-split-topbar-tools" ref={toolsRef}>
         <GraphFloatingControls
           searchState={searchState}
           searchActions={searchActions}

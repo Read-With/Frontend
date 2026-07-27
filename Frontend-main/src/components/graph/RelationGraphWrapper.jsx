@@ -17,7 +17,6 @@ import {
 import {
   isGraphDragEndEvent,
   fitGraphToNodes,
-  centerSelectionOnElementId,
 } from '../../utils/graph/graphCy';
 import { errorUtils, userViewerPath } from '../../utils/common/urlUtils';
 import {
@@ -35,7 +34,7 @@ import {
   convertRelationsToElements,
   getGraphEventState,
 } from '../../utils/graph/graphModel';
-import { eventUtils } from '../../utils/viewer/viewerCore';
+import { eventUtils, formatChapterOrderAndName, stripRedundantBookTitlePrefix, resolveChapterTitleMeta } from '../../utils/viewer/viewerCore';
 import { hasGraphPayload } from '../../utils/graph/graphFetch';
 import {
   convertGraphSourceToElements,
@@ -77,7 +76,7 @@ const graphBackButtonHandlers = createAdvancedButtonHandlers('default');
 const GRAPH_PAGE_EDGE_STYLE = getEdgeStyle('graph');
 const GRAPH_TRANSFORM_DEPS = { createCharacterMaps, buildNodeWeights, convertRelationsToElements };
 
-function ErrorToast({ error, onClose, duration = 5000, variant = 'error' }) {
+function ErrorToast({ error, onClose, duration = 5000 }) {
   useEffect(() => {
     if (!error || duration <= 0) return undefined;
     const timer = setTimeout(onClose, duration);
@@ -86,25 +85,16 @@ function ErrorToast({ error, onClose, duration = 5000, variant = 'error' }) {
 
   if (!error) return null;
 
-  const isInfo = variant === 'info';
   const message =
     typeof error === 'string'
       ? error
       : errorUtils.getUserFriendlyMessage(error);
 
   return (
-    <div
-      className={`graph-error-toast${isInfo ? ' graph-error-toast--info' : ''}`}
-      role="alert"
-      aria-live="assertive"
-    >
-      <span className="material-symbols-outlined graph-error-toast__icon">
-        {isInfo ? 'info' : 'error'}
-      </span>
+    <div className="graph-error-toast" role="alert" aria-live="assertive">
+      <span className="material-symbols-outlined graph-error-toast__icon">error</span>
       <div className="graph-error-toast__body">
-        <div className="graph-error-toast__title">
-          {isInfo ? '캐시 데이터' : '오류 발생'}
-        </div>
+        <div className="graph-error-toast__title">오류 발생</div>
         <div className="graph-error-toast__message">{message}</div>
       </div>
       <button
@@ -127,7 +117,6 @@ ErrorToast.propTypes = {
   ]),
   onClose: PropTypes.func.isRequired,
   duration: PropTypes.number,
-  variant: PropTypes.oneOf(['error', 'info']),
 };
 
 function RelationGraphWrapper() {
@@ -217,9 +206,7 @@ function RelationGraphWrapper() {
       isLoading: isGraphLoading,
     },
     error: apiError,
-    fallbackNotice,
     clearError: clearApiError,
-    clearFallbackNotice,
     retryGraph,
   } = useApiGraphData(serverBookId, currentChapter);
 
@@ -257,6 +244,25 @@ function RelationGraphWrapper() {
     () => String(manifestData?.book?.title ?? '').trim(),
     [manifestData?.book?.title],
   );
+
+  const chapterMeta = useMemo(() => {
+    const ch =
+      serverBookId != null ? getChapterData(serverBookId, currentChapter) : null;
+    if (!Number.isFinite(Number(currentChapter)) || Number(currentChapter) < 1) {
+      return { chapterDisplayLabel: '챕터 ?', chapterTitleTooltip: undefined };
+    }
+    const meta = resolveChapterTitleMeta(ch, bookTitle, currentChapter);
+    const displayName =
+      meta.status === 'ok'
+        ? stripRedundantBookTitlePrefix(meta.raw, bookTitle) || meta.display
+        : meta.status === 'collapsed'
+          ? meta.display
+          : '';
+    return {
+      chapterDisplayLabel: formatChapterOrderAndName(currentChapter, displayName),
+      chapterTitleTooltip: meta.raw || meta.tooltip || undefined,
+    };
+  }, [serverBookId, currentChapter, bookTitle, manifestData]);
 
   useEffect(() => {
     if (!manifestReady) return;
@@ -328,15 +334,10 @@ function RelationGraphWrapper() {
     graphClearRef.current?.(options);
   }, []);
 
-  const centerSelection = useCallback((elementId) => {
-    const cy = cyRef.current;
-    if (!cy) return;
-
-    const { FOCUS_PAN_MS, TOOLTIP_SIDEBAR_WIDTH } = GRAPH_LAYOUT_CONSTANTS;
-    centerSelectionOnElementId(cy, elementId, {
-      duration: FOCUS_PAN_MS,
-      reserveRight: TOOLTIP_SIDEBAR_WIDTH,
-      padding: 40,
+  // 사이드바는 오버레이이므로 우측 예약 없이 전체 그래프를 캔버스에 유지 (겹침 허용)
+  const centerSelection = useCallback(() => {
+    fitGraphToNodes(cyRef.current, {
+      duration: GRAPH_LAYOUT_CONSTANTS.FOCUS_PAN_MS,
     });
   }, []);
 
@@ -473,21 +474,18 @@ function RelationGraphWrapper() {
   return (
     <div style={pageRootStyle}>
       {apiError && <ErrorToast error={apiError} onClose={clearApiError} />}
-      {fallbackNotice && (
-        <ErrorToast
-          error={fallbackNotice.message}
-          onClose={clearFallbackNotice}
-          duration={8000}
-          variant="info"
-        />
-      )}
-      {isApiGraphEmpty && (
+      {(isApiGraphEmpty || apiError) && (
         <div style={emptyGraphBannerStyle}>
-          선택한 챕터에 표시할 그래프 데이터가 없습니다.
+          {apiError
+            ? '그래프를 불러오지 못했습니다.'
+            : '선택한 챕터에 표시할 그래프 데이터가 없습니다.'}
           {typeof retryGraph === 'function' && (
             <button
               type="button"
-              onClick={() => void retryGraph()}
+              onClick={() => {
+                clearApiError();
+                void retryGraph();
+              }}
               style={{
                 marginLeft: 12,
                 textDecoration: 'underline',
@@ -534,6 +532,8 @@ function RelationGraphWrapper() {
         hasShownGraphOnce={hasShownGraphOnce}
         onCanvasClick={handleCanvasClick}
         currentChapter={currentChapter}
+        chapterDisplayLabel={chapterMeta.chapterDisplayLabel}
+        chapterTitleTooltip={chapterMeta.chapterTitleTooltip}
         sidebarControl={{
           isSidebarClosing,
           onCloseSidebar: closeSidebar,

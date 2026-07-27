@@ -26,9 +26,6 @@ import {
 import { cacheKeyUtils } from '../../utils/viewer/viewerCore';
 import { enrichGraphPayload } from '../../utils/graph/graphCore';
 
-const ERROR_DISPLAY_DURATION = 5000;
-const FALLBACK_NOTICE_DURATION = 8000;
-
 export function useApiGraphData(serverBookId, currentChapter) {
   const {
     loaded: manifestLoaded,
@@ -37,7 +34,6 @@ export function useApiGraphData(serverBookId, currentChapter) {
     error: manifestLoadError,
   } = useManifestLoaded(serverBookId);
   const [apiBookGraphData, setApiBookGraphData] = useState(null);
-  const [fallbackNotice, setFallbackNotice] = useState(null);
   const [userCurrentChapter, setUserCurrentChapter] = useState(null);
   const [isGraphLoading, setIsGraphLoading] = useState(false);
   const { handleError } = useErrorHandler('API Graph Data');
@@ -53,7 +49,6 @@ export function useApiGraphData(serverBookId, currentChapter) {
   );
 
   const clearError = useCallback(() => setApiError(null), []);
-  const clearFallbackNotice = useCallback(() => setFallbackNotice(null), []);
 
   useEffect(() => {
     if (!serverBookId || !manifestLoaded) return;
@@ -84,7 +79,6 @@ export function useApiGraphData(serverBookId, currentChapter) {
     if (bookChanged) {
       setApiBookGraphData(null);
       setUserCurrentChapter(null);
-      setFallbackNotice(null);
       loadedGraphKeyRef.current = null;
       return;
     }
@@ -121,7 +115,6 @@ export function useApiGraphData(serverBookId, currentChapter) {
       if (isStale(requestId)) return;
       loadedGraphKeyRef.current = null;
       setApiBookGraphData(null);
-      setFallbackNotice(null);
       setApiError(handleError(error, message, { metadata }));
     };
 
@@ -137,23 +130,13 @@ export function useApiGraphData(serverBookId, currentChapter) {
       await loadGraphDataWithCache({
         bookId: targetBookId,
         chapter,
-        eventIdx: null,
         cacheKey: cacheKeyUtils.macroGraphStorage(targetBookId, chapter),
         apiCall: () => getBookScopeRelationshipGraph(targetBookId, chapter),
-        onSuccess: (data, meta = {}) => {
+        onSuccess: (data) => {
           if (isStale(requestId)) return;
           setApiError(null);
           setApiBookGraphData(enrichGraphPayload(data, targetBookId));
           loadedGraphKeyRef.current = graphKey;
-          const status = meta.status ?? FETCH_STATUS.OK;
-          if (status === FETCH_STATUS.FALLBACK) {
-            setFallbackNotice({
-              message: '캐시된 그래프 데이터를 표시합니다. 최신 정보가 아닐 수 있습니다.',
-              timestamp: Date.now(),
-            });
-          } else {
-            setFallbackNotice(null);
-          }
           if (data.userCurrentChapter !== undefined) {
             setUserCurrentChapter(data.userCurrentChapter);
           }
@@ -199,18 +182,6 @@ export function useApiGraphData(serverBookId, currentChapter) {
     );
   }, [serverBookId, currentChapter, apiBookGraphData, apiMaxChapter]);
 
-  useEffect(() => {
-    if (!apiError?.timestamp) return undefined;
-    const timeout = setTimeout(clearError, ERROR_DISPLAY_DURATION);
-    return () => clearTimeout(timeout);
-  }, [apiError, clearError]);
-
-  useEffect(() => {
-    if (!fallbackNotice?.timestamp) return undefined;
-    const timeout = setTimeout(clearFallbackNotice, FALLBACK_NOTICE_DURATION);
-    return () => clearTimeout(timeout);
-  }, [fallbackNotice, clearFallbackNotice]);
-
   return {
     manifest: {
       data: manifestData,
@@ -224,9 +195,7 @@ export function useApiGraphData(serverBookId, currentChapter) {
       isLoading: isGraphLoading,
     },
     error: apiError,
-    fallbackNotice,
     clearError,
-    clearFallbackNotice,
     retryGraph: loadMacroGraphData,
   };
 }

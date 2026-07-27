@@ -6,6 +6,13 @@ import { resolveChapterIndex, toPositiveNumberFromId, toPositiveNumberOrNull } f
 const isGraphEdgeElement = (element) =>
   Boolean(element?.data && element.data.source !== undefined && element.data.target !== undefined);
 
+/** elements → relations 변환 시 공통 옵션 (표시용) */
+export const ELEMENTS_TO_RELATIONS_OPTS = {
+  includeLabel: true,
+  includeCount: false,
+  positivityDefault: null,
+};
+
 function nonEmptyId(value) {
   if (value === undefined || value === null) return null;
   const s = String(value).trim();

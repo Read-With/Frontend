@@ -11,13 +11,12 @@ import {
   setCacheItem,
   enforceCacheSizeLimit,
 } from '../common/cache/cacheManager';
-import { eventUtils, cacheKeyUtils, MACRO_GRAPH_STORAGE_KEY_RE } from '../viewer/viewerCore';
+import { eventUtils, cacheKeyUtils, MACRO_GRAPH_STORAGE_KEY_RE, ELEMENTS_TO_RELATIONS_OPTS } from '../viewer/viewerCore';
 import {
   accumulateDeltasToGraphResult,
   resolveChapterEventIdOrder,
   FETCH_STATUS,
-  GRAPH_LOAD_SOURCE,
-  statusFromGraphSource,
+  hasGraphPayload,
 } from '../api/graphApi';
 import {
   findManifestEventInChapter,
@@ -28,29 +27,20 @@ import { pickGraphApiResult } from '../viewer/viewerGraph';
 
 import {
   getCachedChapterEvents,
-  getChapterEventFallbackData,
   reconstructChapterGraphState,
   ensureBookRelationshipDeltas,
 } from './graphModel';
 
 export {
-  getCachedChapterEvents,
-  ensureBookRelationshipDeltas,
   prefetchChapterEvents,
   ensureChapterEventsDiscovered,
   ensureGraphBookCache,
   clearBookRelationshipDeltas,
 } from './graphModel';
 
-export { FETCH_STATUS, GRAPH_LOAD_SOURCE } from '../api/graphApi';
+export { FETCH_STATUS, hasGraphPayload } from '../api/graphApi';
 
 const asArray = (value) => (Array.isArray(value) ? value : []);
-
-const ELEMENTS_TO_RELATIONS_OPTS = {
-  includeLabel: true,
-  includeCount: false,
-  positivityDefault: null,
-};
 
 const graphPayloadFromReconstructed = (reconstructed) => ({
   characters: asArray(reconstructed?.characters),
@@ -279,34 +269,6 @@ const saveToLocalStorageCache = (cacheKey, data) => {
   saveToStorage(cacheKey, { ...data, _savedAt: Date.now() }, 'localStorage');
 };
 
-const checkChapterEventsCache = (bookId, chapter, eventIdx) => {
-  const chapterCache = getCachedChapterEvents(bookId, chapter);
-  if (!chapterCache) return null;
-
-  const reconstructed = reconstructChapterGraphState(chapterCache, eventIdx);
-  if (reconstructed) {
-    const payload = graphPayloadFromReconstructed(reconstructed);
-    if (hasGraphPayload(payload)) {
-      return { ...payload, event: reconstructed.eventMeta || null };
-    }
-  }
-
-  const targetEvent = eventUtils.findEventInCache(asArray(chapterCache.rawEvents), eventIdx);
-  if (!hasGraphPayload(targetEvent)) return null;
-
-  return {
-    characters: asArray(targetEvent.characters),
-    relations: asArray(targetEvent.relations),
-    event: targetEvent.event || null,
-  };
-};
-
-/** characters 또는 relations가 하나라도 있으면 true (fine/macro 공용) */
-export const hasGraphPayload = (data) => {
-  if (!data || typeof data !== 'object') return false;
-  return asArray(data.characters).length > 0 || asArray(data.relations).length > 0;
-};
-
 export const hasMacroGraphStorageCache = (bookId, chapter) => {
   const normalizedBookId = toPositiveInt(bookId);
   const normalizedChapter = toPositiveInt(chapter);
@@ -316,58 +278,26 @@ export const hasMacroGraphStorageCache = (bookId, chapter) => {
   return hasGraphPayload(checkLocalStorageCache(cacheKey));
 };
 
-const handleLoaderSuccess = (data, onSuccess, cacheKey, source = GRAPH_LOAD_SOURCE.API) => {
+const handleLoaderSuccess = (data, onSuccess, cacheKey) => {
   if (cacheKey && hasGraphPayload(data)) {
     saveToLocalStorageCache(cacheKey, data);
     const m = MACRO_GRAPH_STORAGE_KEY_RE.exec(cacheKey);
     if (m) saveMacroToSessionCache(m[1], m[2], data);
   }
-  const meta = { source, status: statusFromGraphSource(source) };
-  onSuccess?.(data, meta);
-  return { data, source, status: meta.status };
+  onSuccess?.(data);
+  return data;
 };
 
-const handleLoaderFallback = (bookId, chapter, eventIdx, onSuccess, logMessage) => {
-  const fallbackData = getChapterEventFallbackData(bookId, chapter, eventIdx) ?? null;
-  if (!fallbackData) return null;
-  errorUtils.logInfo('GraphDataLoader', logMessage, {
-    bookId,
-    chapter,
-    eventIdx,
-    source: GRAPH_LOAD_SOURCE.FALLBACK,
-  });
-  const meta = {
-    source: GRAPH_LOAD_SOURCE.FALLBACK,
-    status: FETCH_STATUS.FALLBACK,
-  };
-  onSuccess?.(fallbackData, meta);
-  return { data: fallbackData, source: GRAPH_LOAD_SOURCE.FALLBACK, status: FETCH_STATUS.FALLBACK };
-};
-
-const tryLoaderFallback = (bookId, chapter, eventIdx, onSuccess, onError, logMessage, error) => {
-  const fallbackResult = handleLoaderFallback(bookId, chapter, eventIdx, onSuccess, logMessage);
-  if (fallbackResult) return fallbackResult;
-  onError?.(error);
-  return {
-    data: null,
-    source: error ? GRAPH_LOAD_SOURCE.ERROR : GRAPH_LOAD_SOURCE.NONE,
-    status: FETCH_STATUS.ERROR,
-  };
-};
-
-const processApiResponse = (response, cacheKey, onSuccess, bookId, chapter, eventIdx, onError) => {
+const processApiResponse = (response, cacheKey, onSuccess, bookId, chapter, onError) => {
   if (response?.isSuccess && response?.result) {
-    return handleLoaderSuccess(response.result, onSuccess, cacheKey, GRAPH_LOAD_SOURCE.API);
+    return handleLoaderSuccess(response.result, onSuccess, cacheKey);
   }
 
   const apiError = new Error(response?.message || 'API 응답이 실패했습니다');
   apiError.status = response?.code || null;
-  errorUtils.logWarning('GraphDataLoader', 'API 응답 실패', { bookId, chapter, eventIdx, response });
-
-  const fallbackResult = handleLoaderFallback(bookId, chapter, eventIdx, onSuccess, '폴백 데이터 사용');
-  if (fallbackResult) return fallbackResult;
+  errorUtils.logWarning('GraphDataLoader', 'API 응답 실패', { bookId, chapter, response });
   onError?.(apiError);
-  return { data: null, source: GRAPH_LOAD_SOURCE.NONE, status: FETCH_STATUS.ERROR };
+  return null;
 };
 
 export const prefetchMacroGraphToCache = async (bookId, chapter, apiCall) => {
@@ -388,10 +318,10 @@ export const prefetchMacroGraphToCache = async (bookId, chapter, apiCall) => {
   }
 };
 
+/** book-scope(macro) 그래프: session → localStorage → API */
 export const loadGraphDataWithCache = async ({
   bookId,
   chapter,
-  eventIdx,
   cacheKey,
   apiCall,
   onSuccess,
@@ -401,53 +331,26 @@ export const loadGraphDataWithCache = async ({
   if (macroMatch) {
     const sessionData = getMacroFromSessionCache(macroMatch[1], macroMatch[2]);
     if (hasGraphPayload(sessionData)) {
-      const meta = {
-        source: GRAPH_LOAD_SOURCE.SESSION,
-        status: FETCH_STATUS.OK,
-      };
-      onSuccess?.(sessionData, meta);
-      return { data: sessionData, ...meta };
+      onSuccess?.(sessionData);
+      return sessionData;
     }
   }
 
   const localStorageData = checkLocalStorageCache(cacheKey);
   if (hasGraphPayload(localStorageData)) {
     if (macroMatch) saveMacroToSessionCache(macroMatch[1], macroMatch[2], localStorageData);
-    const meta = {
-      source: GRAPH_LOAD_SOURCE.LOCAL_STORAGE,
-      status: FETCH_STATUS.OK,
-    };
-    onSuccess?.(localStorageData, meta);
-    return { data: localStorageData, ...meta };
-  }
-
-  if (eventIdx !== undefined && eventIdx !== null) {
-    const chapterEventsData = checkChapterEventsCache(bookId, chapter, eventIdx);
-    if (chapterEventsData) {
-      return handleLoaderSuccess(
-        chapterEventsData,
-        onSuccess,
-        cacheKey,
-        GRAPH_LOAD_SOURCE.CHAPTER_EVENTS
-      );
-    }
+    onSuccess?.(localStorageData);
+    return localStorageData;
   }
 
   try {
     const response = await getOrCreateInflightRequest(cacheKey, apiCall);
-    return processApiResponse(response, cacheKey, onSuccess, bookId, chapter, eventIdx, onError);
+    return processApiResponse(response, cacheKey, onSuccess, bookId, chapter, onError);
   } catch (error) {
     if (cacheKey) inflightRequests.delete(cacheKey);
-    errorUtils.logError('GraphDataLoader', error, { bookId, chapter, eventIdx, cacheKey });
-    return tryLoaderFallback(
-      bookId,
-      chapter,
-      eventIdx,
-      onSuccess,
-      onError,
-      '에러 후 폴백 데이터 사용',
-      error
-    );
+    errorUtils.logError('GraphDataLoader', error, { bookId, chapter, cacheKey });
+    onError?.(error);
+    return null;
   }
 };
 
@@ -465,7 +368,7 @@ registerCache('relationTimelineCache', relationTimelineCache, {
   storageType: 'sessionStorage',
 });
 
-export function buildGraphResponseFromDeltas(
+function buildGraphResponseFromDeltas(
   bookId,
   chapter,
   eventIdx,
@@ -501,15 +404,15 @@ export function buildGraphResponseFromDeltas(
   );
 }
 
-export function getRelationTimelineCacheKey(bookId, chapterNum, id1, id2) {
+function getRelationTimelineCacheKey(bookId, chapterNum, id1, id2) {
   return `${CACHE_PREFIX}${bookId}-${chapterNum}-${id1}-${id2}`;
 }
 
-export function getCachedRelationTimeline(cacheKey) {
+function getCachedRelationTimeline(cacheKey) {
   return getCacheItem('relationTimelineCache', cacheKey)?.result ?? null;
 }
 
-export function setCachedRelationTimeline(cacheKey, result) {
+function setCachedRelationTimeline(cacheKey, result) {
   setCacheItem('relationTimelineCache', cacheKey, {
     result,
     timestamp: Date.now(),
@@ -517,13 +420,13 @@ export function setCachedRelationTimeline(cacheKey, result) {
   enforceCacheSizeLimit('relationTimelineCache');
 }
 
-export function findRelationInResult(relations, id1, id2) {
+function findRelationInResult(relations, id1, id2) {
   const list = asArray(relations);
   if (!list.length) return null;
   return list.find((rel) => isSamePair(rel, id1, id2)) ?? null;
 }
 
-export function findRelationInElements(elements, id1, id2) {
+function findRelationInElements(elements, id1, id2) {
   if (!Array.isArray(elements)) return null;
   return (
     elements.find((element) => {
@@ -533,13 +436,13 @@ export function findRelationInElements(elements, id1, id2) {
   );
 }
 
-export function relationPointFromElement(edgeElement) {
+function relationPointFromElement(edgeElement) {
   const raw = edgeElement?.data?.positivity;
   const numeric = Number(raw);
   return Number.isFinite(numeric) ? clampPositivity(numeric) : 0;
 }
 
-export function withNoRelation(result, fallbackNoRelation = true) {
+function withNoRelation(result, fallbackNoRelation = true) {
   const safeResult = result ?? { points: [], labelInfo: [] };
   const points = Array.isArray(safeResult.points) ? safeResult.points : [];
   const status = safeResult.status ?? (points.length === 0 ? FETCH_STATUS.EMPTY : FETCH_STATUS.OK);
