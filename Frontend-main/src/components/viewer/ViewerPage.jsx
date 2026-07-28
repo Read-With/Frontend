@@ -107,14 +107,14 @@ const ViewerPage = () => {
     isFromLibrary,
     setProgressTopBar,
     readingLocatorKey,
-    serverResumeAnchor,
+    serverResumeAnchor: resumeAnchor,
     applyReadingLocator,
     markViewerPageReady,
     isViewerPageReady,
     isResumePending,
     cachedLocation,
     transitionState,
-    graphApiError,
+    graphApiError: apiError,
     flushProgressAsync,
   } = useViewerPage();
 
@@ -137,7 +137,7 @@ const ViewerPage = () => {
   } = viewerState;
 
   const suppressViewport =
-    !isViewerPageReady && (isResumePending || Boolean(serverResumeAnchor));
+    !isViewerPageReady && (isResumePending || Boolean(resumeAnchor));
 
   const readingChapterRef = useRef(currentChapter);
   readingChapterRef.current = currentChapter;
@@ -201,8 +201,8 @@ const ViewerPage = () => {
 
   const {
     activeTooltip,
-    handleClearTooltip,
-    handleSetActiveTooltip,
+    handleClearTooltip: onClearTooltip,
+    handleSetActiveTooltip: onSetActiveTooltip,
   } = useTooltipState({
     onError: onTooltipError,
     graphClearRef,
@@ -238,11 +238,11 @@ const ViewerPage = () => {
         bookKey,
       });
 
-      const { startLocator: lineLocator, endLocator: lineEnd } = anchorToLocators(
+      const { startLocator, endLocator } = anchorToLocators(
         receivedEvent?.anchor ?? nextEvent?.anchor
       );
 
-      const locatorChapter = resolveChapterIndex(lineLocator);
+      const locatorChapter = resolveChapterIndex(startLocator);
       const resolvedChapter =
         nextChapter ??
         (Number.isFinite(locatorChapter) && locatorChapter > 0 ? locatorChapter : null);
@@ -252,8 +252,8 @@ const ViewerPage = () => {
       }
 
       setCurrentEvent(nextEvent);
-      applyReadingLocator(lineLocator, lineEnd);
-      setProgressTopBar((prev) => patchTopBarFromLineEvent(prev, nextEvent, lineLocator));
+      applyReadingLocator(startLocator, endLocator);
+      setProgressTopBar((prev) => patchTopBarFromLineEvent(prev, nextEvent, startLocator));
     },
     [
       book,
@@ -286,11 +286,11 @@ const ViewerPage = () => {
   const tooltipProps = useMemo(
     () => ({
       activeTooltip,
-      onClearTooltip: handleClearTooltip,
-      onSetActiveTooltip: handleSetActiveTooltip,
+      onClearTooltip,
+      onSetActiveTooltip,
       graphClearRef,
     }),
-    [activeTooltip, handleClearTooltip, handleSetActiveTooltip]
+    [activeTooltip, onClearTooltip, onSetActiveTooltip]
   );
 
   const rightSideContent = useMemo(() => {
@@ -304,9 +304,9 @@ const ViewerPage = () => {
         searchActions={searchActions}
         tooltipProps={tooltipProps}
         transitionState={transitionState}
-        apiError={graphApiError}
+        apiError={apiError}
         cachedLocation={cachedLocation}
-        resumeAnchor={serverResumeAnchor}
+        resumeAnchor={resumeAnchor}
         onToggleGraph={toggleGraph}
       />
     );
@@ -319,16 +319,16 @@ const ViewerPage = () => {
     searchActions,
     tooltipProps,
     transitionState,
-    graphApiError,
+    apiError,
     cachedLocation,
-    serverResumeAnchor,
+    resumeAnchor,
     toggleGraph,
   ]);
 
   return (
     <div className="h-screen">
       <ViewerLayout
-        showControls={showToolbar}
+        showToolbar={showToolbar}
         currentChapter={currentChapter}
         progress={progress}
         progressMetricsReady={progressMetricsReady}
@@ -359,17 +359,17 @@ const ViewerPage = () => {
           onTotalPagesChange={setTotalPages}
           settings={settings}
           onCurrentLineChange={handleCurrentLineChange}
-          bookId={bookKey}
+          bookKey={bookKey}
           suppressViewport={suppressViewport}
           suppressMessage={
-            serverResumeAnchor ? '읽던 위치로 이동 중...' : '로딩 중...'
+            resumeAnchor ? '읽던 위치로 이동 중...' : '로딩 중...'
           }
         />
         <ViewerSettings
           isOpen={showSettingsModal}
           onClose={closeSettings}
           onApplySettings={handleApplySettings}
-          currentSettings={settings}
+          settings={settings}
         />
       </ViewerLayout>
 

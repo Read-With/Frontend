@@ -126,11 +126,10 @@ function RelationGraphWrapper() {
   const book = location.state?.book;
 
   const bookId = toPositiveNumberOrNull(filename);
-  const requestedChapterFromViewer = Number(location.state?.selectedChapter);
-  const chapterFromViewer =
-    Number.isFinite(requestedChapterFromViewer) && requestedChapterFromViewer >= 1
-      ? requestedChapterFromViewer
-      : null;
+  let chapterFromViewer = Number(location.state?.selectedChapter);
+  if (!Number.isFinite(chapterFromViewer) || chapterFromViewer < 1) {
+    chapterFromViewer = null;
+  }
 
   const [currentChapter, setCurrentChapter] = useLocalStorageNumber(
     `lastGraphChapter_${filename}`,
@@ -164,14 +163,14 @@ function RelationGraphWrapper() {
   }, []);
 
   useEffect(() => {
-    if (!Number.isFinite(requestedChapterFromViewer) || requestedChapterFromViewer < 1) return;
-    if (appliedRequestedChapterRef.current === requestedChapterFromViewer) return;
-    if (requestedChapterFromViewer !== currentChapter) {
-      setCurrentChapter(requestedChapterFromViewer);
+    if (chapterFromViewer == null) return;
+    if (appliedRequestedChapterRef.current === chapterFromViewer) return;
+    if (chapterFromViewer !== currentChapter) {
+      setCurrentChapter(chapterFromViewer);
       setCurrentEvent(1);
     }
-    appliedRequestedChapterRef.current = requestedChapterFromViewer;
-  }, [requestedChapterFromViewer, currentChapter, setCurrentChapter]);
+    appliedRequestedChapterRef.current = chapterFromViewer;
+  }, [chapterFromViewer, currentChapter, setCurrentChapter]);
 
   const serverBookId = useMemo(
     () => resolveServerBookIdOrFallback(book, bookId),
@@ -223,12 +222,10 @@ function RelationGraphWrapper() {
       from: state?.from ? { ...state.from, search: '' } : { pathname, search: '' },
     };
 
-    const baseBook = book || state?.book;
-    const sid = toPositiveNumberOrNull(serverBookId);
-    if (baseBook || sid) {
+    if (book || serverBookId) {
       nextState.book = {
-        ...(baseBook || {}),
-        ...(sid ? { id: sid, _bookId: sid } : {}),
+        ...(book || {}),
+        ...(serverBookId ? { id: serverBookId, _bookId: serverBookId } : {}),
       };
     }
 
@@ -465,7 +462,7 @@ function RelationGraphWrapper() {
     return () => window.clearTimeout(id);
   }, [sidebarLayoutWidth]);
 
-  const isApiGraphEmpty = !isGraphLoading && !hasGraphPayload(apiBookGraphData);
+  const isApiGraphEmpty = !isGraphLoading && !graphApiPayload;
 
   useEffect(() => {
     if (!isGraphLoading) setHasShownGraphOnce(true);

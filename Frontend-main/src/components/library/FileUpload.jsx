@@ -12,7 +12,7 @@ import {
 } from '../../utils/library/libraryUtils';
 import { normalizeTitle, normalizeAuthor } from '../../utils/common/valueUtils';
 import { BOOKS_QUERY_KEY, findCanonicalBook } from '../../hooks/books/bookHooks';
-import './BookDetailModal.css';
+import './LibraryModalChrome.css';
 import './FileUpload.css';
 
 const EMPTY_METADATA = { title: '', author: '', language: 'ko' };

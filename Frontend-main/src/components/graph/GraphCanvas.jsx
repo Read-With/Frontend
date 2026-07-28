@@ -168,7 +168,7 @@ function GraphSidebar({
         displayMode="sidebar"
         data={activeTooltip}
         onClose={handleClose}
-        chapterNum={currentChapter}
+        currentChapter={currentChapter}
         eventNum={eventNum}
         elements={elements}
         filename={filename}
@@ -185,7 +185,7 @@ function GraphSidebar({
       <UnifiedEdgeTooltip
         data={activeTooltip.data}
         onClose={handleClose}
-        chapterNum={currentChapter}
+        currentChapter={currentChapter}
         eventNum={eventNum}
         variant="graphPage"
         bookId={bookId}
@@ -248,7 +248,10 @@ function GraphCanvas({
   const showSidebar = !!(activeTooltip || isSidebarClosing);
   const usePageChrome = !!(pageChromeStart || floatingControls);
 
-  const metaChapterLabel = chapterDisplayLabel || `챕터 ${currentChapter}`;
+  const chapterRailWidth = sidebarLayoutWidth != null
+    ? sidebarLayoutWidth
+    : resolveChapterSidebarWidth(isSidebarOpen);
+  const chapterLabel = chapterDisplayLabel || `챕터 ${currentChapter}`;
   const metaEventLabel = Number.isFinite(Number(eventNum)) && Number(eventNum) > 0
     ? `Event ${eventNum}`
     : 'Event ?';
@@ -277,11 +280,7 @@ function GraphCanvas({
     <div
       style={{
         ...canvasShellStyle,
-        left: `${
-          sidebarLayoutWidth != null
-            ? sidebarLayoutWidth
-            : resolveChapterSidebarWidth(isSidebarOpen)
-        }px`,
+        left: `${chapterRailWidth}px`,
       }}
     >
       <div style={pageContainerStyle}>
@@ -291,9 +290,9 @@ function GraphCanvas({
               <div className="graph-topbar-meta">
                 <span
                   className="graph-topbar-meta-chapter"
-                  title={chapterTitleTooltip || metaChapterLabel}
+                  title={chapterTitleTooltip || chapterLabel}
                 >
-                  {metaChapterLabel}
+                  {chapterLabel}
                 </span>
                 <span className="graph-topbar-meta-event">{metaEventLabel}</span>
               </div>
@@ -335,11 +334,7 @@ function GraphCanvas({
               apiBookGraphData={apiBookGraphData}
               bookId={bookId}
               onSelectRelatedNode={onSelectRelatedNode}
-              chapterRailWidth={
-                sidebarLayoutWidth != null
-                  ? sidebarLayoutWidth
-                  : resolveChapterSidebarWidth(isSidebarOpen)
-              }
+              chapterRailWidth={chapterRailWidth}
             />
           )}
 

@@ -9,20 +9,20 @@ import './ViewerSettings.css';
 const FOCUSABLE_SELECTOR =
   'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
-const ViewerSettings = ({ isOpen, onClose, onApplySettings, currentSettings }) => {
+const ViewerSettings = ({ isOpen, onClose, onApplySettings, settings }) => {
   const titleId = useId();
   const dialogRef = useRef(null);
   const previouslyFocusedRef = useRef(null);
 
   const [draft, setDraft] = useState(() =>
-    normalizeSettings(currentSettings || defaultSettings)
+    normalizeSettings(settings || defaultSettings)
   );
 
   useEffect(() => {
     if (isOpen) {
-      setDraft(normalizeSettings(currentSettings || defaultSettings));
+      setDraft(normalizeSettings(settings || defaultSettings));
     }
-  }, [isOpen, currentSettings]);
+  }, [isOpen, settings]);
 
   const handleChange = useCallback((key, value) => {
     setDraft((prev) => ({ ...prev, [key]: value }));
@@ -69,15 +69,15 @@ const ViewerSettings = ({ isOpen, onClose, onApplySettings, currentSettings }) =
       }
       if (e.key !== 'Tab') return;
 
-      const nodes = getFocusable();
-      if (nodes.length === 0) {
+      const focusable = getFocusable();
+      if (focusable.length === 0) {
         e.preventDefault();
         dialog.focus();
         return;
       }
 
-      const first = nodes[0];
-      const last = nodes[nodes.length - 1];
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
       if (e.shiftKey && document.activeElement === first) {
         e.preventDefault();
         last.focus();
@@ -148,9 +148,7 @@ const ViewerSettings = ({ isOpen, onClose, onApplySettings, currentSettings }) =
                   role="radio"
                   aria-checked={sel}
                   className={`viewer-settings-mode-btn${sel ? ' is-selected' : ''}`}
-                  onClick={() => {
-                    setDraft((prev) => ({ ...prev, showGraph: opt.showGraph }));
-                  }}
+                  onClick={() => handleChange('showGraph', opt.showGraph)}
                 >
                   {sel && (
                     <span className="material-symbols-outlined" aria-hidden="true">

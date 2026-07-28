@@ -75,7 +75,7 @@ function IconLabel({ icon, label, center = false, boldIcon = false }) {
 }
 
 const ViewerProgressBar = memo(function ViewerProgressBar({
-  showControls,
+  showToolbar,
   progress = null,
   onSliderChange,
   currentPage = 1,
@@ -95,7 +95,7 @@ const ViewerProgressBar = memo(function ViewerProgressBar({
   return (
     <div
       className={`w-full z-20 px-6 py-2 flex justify-between items-center shadow-md transition-opacity duration-300 ${
-        showControls ? 'opacity-100' : 'opacity-0 pointer-events-none'
+        showToolbar ? 'opacity-100' : 'opacity-0 pointer-events-none'
       }`}
       style={{
         backdropFilter: 'blur(8px)',
@@ -148,7 +148,7 @@ const ViewerProgressBar = memo(function ViewerProgressBar({
 });
 
 function ViewerToolbar({
-  showControls,
+  showToolbar,
   currentChapter = 1,
   onPrev,
   onNext,
@@ -268,7 +268,7 @@ function ViewerToolbar({
   return (
     <div
       className={`w-full z-20 relative transition-all duration-300 ${
-        showControls ? 'opacity-100' : 'opacity-0 pointer-events-none'
+        showToolbar ? 'opacity-100' : 'opacity-0 pointer-events-none'
       }`}
       style={{
         backgroundColor: 'white',
@@ -541,7 +541,7 @@ function ViewerLayout({
   currentChapter,
   progress,
   progressMetricsReady = true,
-  showControls,
+  showToolbar,
   onPrev,
   onNext,
   isBookmarked = false,
@@ -739,7 +739,7 @@ function ViewerLayout({
     <div className="flex flex-col h-screen overflow-hidden">
       <div style={{ ...chromeHiddenStyle, height: graphFullScreen ? '60px' : 'auto' }}>
         <ViewerToolbar
-          showControls={showControls}
+          showToolbar={showToolbar}
           currentChapter={currentChapter}
           onPrev={onPrev}
           onNext={onNext}
@@ -833,7 +833,7 @@ function ViewerLayout({
 
       <div style={{ ...chromeHiddenStyle, height: graphFullScreen ? '80px' : 'auto' }}>
         <ViewerProgressBar
-          showControls={showControls}
+          showToolbar={showToolbar}
           progress={progress}
           onSliderChange={onSliderChange}
           currentPage={currentPage}

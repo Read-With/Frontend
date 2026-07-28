@@ -6,10 +6,7 @@ import { getBookManifest, getBookProgress, deleteBookProgress } from '../../util
 import { resolveProgressLocator } from '../../utils/common/valueUtils';
 import { BOOKS_QUERY_KEY } from '../../hooks/books/bookHooks';
 import { getManifestFromCache } from '../../utils/common/cache/manifestCache';
-import {
-  getProgressFromCache,
-  PROGRESS_CACHE_UPDATED_EVENT,
-} from '../../utils/common/cache/progressCache';
+import { getProgressFromCache, PROGRESS_CACHE_UPDATED_EVENT,} from '../../utils/common/cache/progressCache';
 import {
   resolveLibraryReadingProgressPercent,
   formatLibraryRelativeDate,
@@ -109,7 +106,7 @@ function mergeBookWithManifest(book, manifestData) {
     ...book,
     ...bookInfo,
     chapters: normalizedManifest.chapters || manifestData.result.chapters || [],
-    characters: normalizedManifest.characters || manifestData.result.characters || [],
+    characters: normalizedManifest.charaacters || manifestData.result.characters || [],
     progressMetadata: normalizedManifest.progressMetadata || manifestData.result.progressMetadata || {},
     ...(normalizedManifest.readerArtifacts || manifestData.result.readerArtifacts
       ? {
@@ -236,7 +233,6 @@ const BookDetailModal = memo(({ book, isOpen, onClose, onDelete, viewMode = 'gri
   );
 
   const serverBookId = resolveServerBookId(book);
-  const bookIdStr = serverBookId != null ? String(serverBookId) : null;
 
   const progressLocator = useMemo(() => {
     const cached = serverBookId != null ? getProgressFromCache(serverBookId) : null;
@@ -254,8 +250,6 @@ const BookDetailModal = memo(({ book, isOpen, onClose, onDelete, viewMode = 'gri
   const libraryUpdatedAtIso = toLibraryIsoDateOrNull(book?.updatedAt);
 
   const fetchProgressInfo = useCallback(async () => {
-    const serverBookId = resolveServerBookId(book);
-    
     if (!serverBookId) {
       setProgressInfo(null);
       return;
@@ -275,11 +269,9 @@ const BookDetailModal = memo(({ book, isOpen, onClose, onDelete, viewMode = 'gri
       }
       setProgressInfo(null);
     }
-  }, [book]);
+  }, [serverBookId]);
 
   const fetchBookDetails = useCallback(async () => {
-    const serverBookId = resolveServerBookId(book);
-    
     if (!serverBookId) {
       setBookDetails(book);
       return;
@@ -307,7 +299,7 @@ const BookDetailModal = memo(({ book, isOpen, onClose, onDelete, viewMode = 'gri
     } finally {
       setLoading(false);
     }
-  }, [book]);
+  }, [book, serverBookId]);
 
   useEffect(() => {
     if (isOpen && book) {
@@ -317,15 +309,15 @@ const BookDetailModal = memo(({ book, isOpen, onClose, onDelete, viewMode = 'gri
   }, [isOpen, book, fetchBookDetails, fetchProgressInfo]);
 
   useEffect(() => {
-    if (!isOpen || !bookIdStr) return undefined;
+    if (!isOpen || serverBookId == null) return undefined;
     const onUpd = (e) => {
-      if (String(e.detail?.bookId) === bookIdStr) {
+      if (String(e.detail?.bookId) === String(serverBookId)) {
         setProgressCacheTick((t) => t + 1);
       }
     };
     window.addEventListener(PROGRESS_CACHE_UPDATED_EVENT, onUpd);
     return () => window.removeEventListener(PROGRESS_CACHE_UPDATED_EVENT, onUpd);
-  }, [isOpen, bookIdStr]);
+  }, [isOpen, serverBookId]);
 
   useEffect(() => {
     if (isOpen && book) {
@@ -425,8 +417,6 @@ const BookDetailModal = memo(({ book, isOpen, onClose, onDelete, viewMode = 'gri
   });
 
   const handleDeleteProgress = useCallback(async () => {
-    const serverBookId = resolveServerBookId(book);
-    
     if (!serverBookId || !progressInfo) {
       return;
     }
@@ -444,7 +434,7 @@ const BookDetailModal = memo(({ book, isOpen, onClose, onDelete, viewMode = 'gri
     } catch {
       // ??? onError?? ??
     }
-  }, [book, progressInfo, deleteProgressMutation]);
+  }, [serverBookId, progressInfo, deleteProgressMutation]);
 
   const handleConfirmDeleteBook = useCallback(async () => {
     if (!book || !book.id) {
@@ -499,7 +489,6 @@ const BookDetailModal = memo(({ book, isOpen, onClose, onDelete, viewMode = 'gri
   const chapterStripBookTitle = String(bookDetails?.title ?? book?.title ?? '').trim();
   const displayAuthor = bookDetails?.author || book?.author || '저자 정보 없음';
   const coverInitial = (displayTitle || '?').trim().slice(0, 1) || '?';
-  const currentChapterIndex = progressLocator?.chapterIndex;
   const isListView = viewMode === 'list';
   const hasProgress = readPercent > 0 || !!progressInfo;
 
@@ -752,7 +741,7 @@ const BookDetailModal = memo(({ book, isOpen, onClose, onDelete, viewMode = 'gri
                           chapter,
                           chapterStripBookTitle,
                           index,
-                          currentChapterIndex,
+                          progressLocator?.chapterIndex,
                         );
                         return (
                           <li

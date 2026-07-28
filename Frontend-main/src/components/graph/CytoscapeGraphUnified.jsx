@@ -386,10 +386,9 @@ const CytoscapeGraphUnified = ({
       return;
     }
 
-    const graphFp = elementsGraphFingerprint;
     if (
-      graphFp &&
-      graphFp === lastElementsGraphFingerprintRef.current &&
+      elementsGraphFingerprint &&
+      elementsGraphFingerprint === lastElementsGraphFingerprintRef.current &&
       cy.elements().length > 0
     ) {
       elementsUpdateRef.current = { ...EMPTY_ELEMENTS_UPDATE };
@@ -523,7 +522,7 @@ const CytoscapeGraphUnified = ({
       // junction sync는 useGraphLayout handleLayoutComplete에서 1회만
     });
 
-    lastElementsGraphFingerprintRef.current = graphFp;
+    lastElementsGraphFingerprintRef.current = elementsGraphFingerprint;
     setElementsApplyGen((g) => g + 1);
     setIsGraphVisible(true);
   }, [elementsGraphFingerprint, elementsLength, isDataRefreshing, cy]);
@@ -652,8 +651,7 @@ const CytoscapeGraphUnified = ({
     boxSizing: "border-box",
   }), [isGraphVisible]);
 
-  const shouldShowNoResults = shouldShowNoSearchResults(isSearchActive, searchTerm, fitNodeIds);
-  const noResultsMessage = shouldShowNoResults
+  const noResultsMessage = shouldShowNoSearchResults(isSearchActive, searchTerm, fitNodeIds)
     ? getNoSearchResultsMessage(searchTerm)
     : null;
 

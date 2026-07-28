@@ -38,7 +38,7 @@ const XhtmlViewer = forwardRef(
   (
     {
       book,
-      bookId,
+      bookKey,
       onCurrentPageChange,
       onTotalPagesChange,
       onCurrentLineChange,
@@ -67,16 +67,16 @@ const XhtmlViewer = forwardRef(
     const lastEmittedViewportLocatorJsonRef = useRef(null);
     const prevBidRef = useRef(null);
     const lineBoundsRef = useRef([]);
-    const [lineBoundsVersion, setLineBoundsReady] = useState(0);
+    const [lineBoundsVersion, setLineBoundsVersion] = useState(0);
     const lastReportedPagingRef = useRef({
       totalPages: null,
       currentPage: null,
     });
 
-    const getSnappedOffsetAndHeight = useCallback((pageIdx, pH) => {
-      const targetY = pageIdx * pH;
+    const getSnappedOffsetAndHeight = useCallback((pageIdx, pageHeightPx) => {
+      const targetY = pageIdx * pageHeightPx;
       const lines = lineBoundsRef.current;
-      if (!lines.length) return { offsetY: Math.max(0, targetY), visibleHeight: pH };
+      if (!lines.length) return { offsetY: Math.max(0, targetY), visibleHeight: pageHeightPx };
       let offsetY = 0;
       for (let i = lines.length - 1; i >= 0; i--) {
         if (lines[i].top <= targetY) {
@@ -84,7 +84,7 @@ const XhtmlViewer = forwardRef(
           break;
         }
       }
-      const endY = offsetY + pH;
+      const endY = offsetY + pageHeightPx;
       let visibleEnd = endY;
       for (let j = lines.length - 1; j >= 0; j--) {
         if (lines[j].bottom <= endY) {
@@ -92,7 +92,7 @@ const XhtmlViewer = forwardRef(
           break;
         }
       }
-      const visibleHeight = Math.min(pH, Math.max(0, visibleEnd - offsetY)) || pH;
+      const visibleHeight = Math.min(pageHeightPx, Math.max(0, visibleEnd - offsetY)) || pageHeightPx;
       return { offsetY, visibleHeight };
     }, []);
 
@@ -119,7 +119,7 @@ const XhtmlViewer = forwardRef(
       [currentSnap.offsetY]
     );
 
-    const bid = useMemo(() => resolveViewerBookKey(book, bookId), [book, bookId]);
+    const bid = useMemo(() => resolveViewerBookKey(book, bookKey), [book, bookKey]);
 
     const manifest = useMemo(() => {
       const cacheId = resolveServerBookIdOrFallback(book, bid);
@@ -136,7 +136,7 @@ const XhtmlViewer = forwardRef(
       const ruler = rulerRef.current;
       if (!ruler) return;
       lineBoundsRef.current = computeLineBoundsFromRuler(ruler);
-      setLineBoundsReady((v) => v + 1);
+      setLineBoundsVersion((v) => v + 1);
     }, []);
 
     const refreshContentHeight = useCallback(() => {
@@ -330,8 +330,8 @@ const XhtmlViewer = forwardRef(
       const ruler = rulerRef.current;
       if (!ruler) return false;
 
-      const ph = resolvePageHeight();
-      if (!(ph > 0)) return false;
+      const pageHeightPx = resolvePageHeight();
+      if (!(pageHeightPx > 0)) return false;
 
       const locator = normalizeLocatorTarget(target);
       if (!locator) return false;
@@ -341,7 +341,7 @@ const XhtmlViewer = forwardRef(
         ruler,
         manifest,
         totalPages,
-        pageHeightPx: ph,
+        pageHeightPx,
       });
       if (pageIdx == null) return false;
 

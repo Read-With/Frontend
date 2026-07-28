@@ -80,6 +80,10 @@ function markLegendHintSeen() {
   }
 }
 
+function getSuggestionDisplayName(suggestion) {
+  return suggestion?.label || suggestion?.common_name || "Unknown";
+}
+
 function GraphLegendPanel({ id }) {
   return (
     <aside id={id} className="graph-canvas-legend" aria-label="그래프 범례">
@@ -176,7 +180,6 @@ function GraphSearchPalette({
   isSearchActive = false,
 }) {
   const inputRef = useRef(null);
-  const [showToast, setShowToast] = useState(false);
   const [toastMessage, setToastMessage] = useState("");
   const trimmedTerm = (searchTerm || "").trim();
   const canShowResults = open && trimmedTerm.length >= 2;
@@ -207,8 +210,7 @@ function GraphSearchPalette({
 
   const showToastMessage = useCallback((message) => {
     setToastMessage(message);
-    setShowToast(true);
-    window.setTimeout(() => setShowToast(false), 3000);
+    window.setTimeout(() => setToastMessage(""), 3000);
   }, []);
 
   const trySubmitSearch = useCallback(() => {
@@ -250,8 +252,7 @@ function GraphSearchPalette({
   const handleSelectSuggestion = useCallback(
     (suggestion) => {
       if (!suggestion) return;
-      const displayName = suggestion.label || suggestion.common_name || "Unknown";
-      onSearchSubmit(displayName);
+      onSearchSubmit(getSuggestionDisplayName(suggestion));
       onClose();
     },
     [onSearchSubmit, onClose]
@@ -276,7 +277,7 @@ function GraphSearchPalette({
         }}
       />
       <div className="graph-search-palette-panel">
-        {showToast ? <div className="graph-search-toast is-palette">{toastMessage}</div> : null}
+        {toastMessage ? <div className="graph-search-toast is-palette">{toastMessage}</div> : null}
 
         <form
           className="graph-search-palette-form"
@@ -332,7 +333,7 @@ function GraphSearchPalette({
                       <div
                         className={`graph-search-option-name${hasDetail ? " has-detail" : ""}`}
                       >
-                        {suggestion.label || suggestion.common_name || "Unknown"}
+                        {getSuggestionDisplayName(suggestion)}
                       </div>
                       {suggestion.description ? (
                         <div className="graph-search-option-desc">{suggestion.description}</div>

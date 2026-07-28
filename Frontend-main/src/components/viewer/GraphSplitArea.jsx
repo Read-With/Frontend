@@ -135,10 +135,10 @@ const GraphSplitTopBar = memo(function GraphSplitTopBar({
     const byCurrent = getChapterData(bookId, currentChapter);
     const resolvedFromData = byCurrent ? resolveChapterIndex(byCurrent) : null;
     // manifest에 없으면 fallback 1로 API/표시를 속이지 않음
-    const resolvedServerChapter = resolvedFromData ?? (hasValidChapter ? rawChapter : null);
+    const resolvedServerChapter = resolvedFromData ?? displayChapter;
     const chapterResolved = resolvedFromData != null || (hasValidChapter && Boolean(byCurrent));
     const ch =
-      byCurrent && (resolvedFromData == null || resolvedFromData === Number(currentChapter))
+      byCurrent && (resolvedFromData == null || resolvedFromData === rawChapter)
         ? byCurrent
         : resolvedServerChapter != null
           ? getChapterData(bookId, resolvedServerChapter)
@@ -240,9 +240,8 @@ const GraphSplitTopBar = memo(function GraphSplitTopBar({
 
 function GraphNoticePanel({ variant, title, description, icon, actions }) {
   const shell = iconShellClass[variant] ?? iconShellClass.loading;
-  const isLoading = variant === 'loading';
 
-  if (isLoading) {
+  if (variant === 'loading') {
     return (
       <div className="graph-panel-status graph-panel-status--loading" role="status" aria-live="polite">
         <div className={`graph-panel-status-icon ${shell}`} aria-hidden>
@@ -285,8 +284,8 @@ function normalizeGraphApiError(raw) {
   return raw;
 }
 
-function getLoadingNotice(isEventGraphBusy, isLocationDetermined, transitionType) {
-  if (isEventGraphBusy) {
+function getLoadingNotice(isGraphRefreshing, isLocationDetermined, transitionType) {
+  if (isGraphRefreshing) {
     return {
       title: '이벤트 반영 중',
       description: '읽기 위치에 맞는 이벤트와 관계 그래프를 확정하는 중입니다.',
@@ -397,7 +396,7 @@ const GraphContainer = memo(function GraphContainer({
             x={activeTooltip.x}
             y={activeTooltip.y}
             onClose={dismissTooltip}
-            chapterNum={currentChapter}
+            currentChapter={currentChapter}
             eventNum={eventNum}
             filename={filename}
             elements={elements}
@@ -414,10 +413,8 @@ const GraphContainer = memo(function GraphContainer({
             y={activeTooltip.y}
             onClose={dismissTooltip}
             variant="viewer"
-            chapterNum={currentChapter}
+            currentChapter={currentChapter}
             eventNum={eventNum}
-            currentEvent={currentEvent}
-            prevValidEvent={prevValidEvent}
             bookId={bookId}
             sourceEndpoint={activeTooltip.sourceEndpoint}
             targetEndpoint={activeTooltip.targetEndpoint}
@@ -468,10 +465,10 @@ const GraphSplitArea = memo(function GraphSplitArea({
   const { filename: routeFilename } = useParams();
   const { activeTooltip, onClearTooltip, onSetActiveTooltip, graphClearRef } = tooltipProps;
   const {
-    searchTerm: searchTermValue = '',
-    isSearchActive: isSearchActiveValue = false,
-    filteredElements: filteredElementsValue = [],
-    fitNodeIds: searchFitNodeIds = [],
+    searchTerm = '',
+    isSearchActive = false,
+    filteredElements = [],
+    fitNodeIds = [],
   } = searchState;
 
   const { graphPhase, isDataReady, isDataEmpty, book, bookKey, routeBookId } = viewerState;
@@ -491,15 +488,15 @@ const GraphSplitArea = memo(function GraphSplitArea({
 
   const topBarSearchState = useMemo(
     () => ({
-      searchTerm: searchTermValue,
-      isSearchActive: isSearchActiveValue,
+      searchTerm,
+      isSearchActive,
       suggestions: searchState.suggestions ?? [],
       showSuggestions: searchState.showSuggestions ?? false,
       selectedIndex: searchState.selectedIndex ?? -1,
     }),
     [
-      searchTermValue,
-      isSearchActiveValue,
+      searchTerm,
+      isSearchActive,
       searchState.suggestions,
       searchState.showSuggestions,
       searchState.selectedIndex,
@@ -532,16 +529,15 @@ const GraphSplitArea = memo(function GraphSplitArea({
   const { finalElements } = useGraphElementPipeline({
     elements,
     filterStage,
-    isSearchActive: isSearchActiveValue,
-    filteredElements: filteredElementsValue,
+    isSearchActive,
+    filteredElements,
   });
 
   const hasElements = Array.isArray(elements) && elements.length > 0;
-  const isEventGraphBusy = graphPhase === 'event';
   const isGraphIdle = graphPhase === 'idle';
   const isEventTransition =
     transitionState.type === 'event' && transitionState.inProgress;
-  const isGraphRefreshing = isEventGraphBusy || isEventTransition;
+  const isGraphRefreshing = graphPhase === 'event' || isEventTransition;
 
   const isDataLoadCompleteAndEmpty =
     isGraphIdle && isDataEmpty && !hasElements && !hasResolvedEvent;
@@ -562,7 +558,7 @@ const GraphSplitArea = memo(function GraphSplitArea({
   const showRefreshOverlay = hasElements && isGraphRefreshing;
 
   const loadingNotice = getLoadingNotice(
-    isEventGraphBusy || isEventTransition,
+    isGraphRefreshing,
     isLocationDetermined,
     transitionState.type
   );
@@ -647,10 +643,10 @@ const GraphSplitArea = memo(function GraphSplitArea({
               edgeLabelVisible={edgeLabelVisible}
               filename={routeBookId ?? bookKey ?? ''}
               elements={finalElements}
-              searchTerm={searchTermValue}
-              isSearchActive={isSearchActiveValue}
-              filteredElements={filteredElementsValue}
-              fitNodeIds={searchFitNodeIds}
+              searchTerm={searchTerm}
+              isSearchActive={isSearchActive}
+              filteredElements={filteredElements}
+              fitNodeIds={fitNodeIds}
               prevValidEvent={prevValidEvent ?? null}
               activeTooltip={activeTooltip}
               onClearTooltip={onClearTooltip}
