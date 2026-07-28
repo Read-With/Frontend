@@ -1,6 +1,6 @@
 /** 라이브러리: 진행률·날짜 표시, EPUB 업로드 검증·메타 추출 */
 
-import { getProgressFromCache } from '../common/cache/manifestCache';
+import { getProgressFromCache } from '../common/cache/progressCache';
 import { clampPercent } from '../common/valueUtils';
 
 /** 마이페이지 BookCard·useBooks — locator 기반 캐시 진도만 사용 */
@@ -25,6 +25,70 @@ export function formatLibraryRelativeDate(updatedAt) {
   if (diffDays === 2) return '어제';
   if (diffDays <= 7) return `${diffDays - 1}일 전`;
   return date.toLocaleDateString('ko-KR', { month: 'short', day: 'numeric' });
+}
+
+/** Escape 리스너 + body scroll lock. cleanup 함수 반환. */
+export function attachLibraryModalChrome({
+  onClose,
+  isBlocked = () => false,
+  onEscape,
+} = {}) {
+  const handleEscape = (e) => {
+    if (e.key !== 'Escape' || isBlocked()) return;
+    if (onEscape) onEscape(e);
+    else onClose?.();
+  };
+  document.addEventListener('keydown', handleEscape);
+  document.body.style.overflow = 'hidden';
+  return () => {
+    document.removeEventListener('keydown', handleEscape);
+    document.body.style.overflow = 'unset';
+  };
+}
+
+export function dedupeAndSortCharacters(raw) {
+  if (!raw?.length) {
+    return { unique: [], sortedMain: [], sortedOther: [] };
+  }
+  const seen = new Set();
+  const unique = raw.filter((character) => {
+    if (seen.has(character.id)) return false;
+    seen.add(character.id);
+    return true;
+  });
+  const main = unique.filter((c) => c.isMainCharacter);
+  const other = unique.filter((c) => !c.isMainCharacter);
+  const byName = (a, b) => String(a.name ?? '').localeCompare(String(b.name ?? ''), 'ko');
+  return {
+    unique,
+    sortedMain: [...main].sort(byName),
+    sortedOther: [...other].sort(byName),
+  };
+}
+
+export function toLibraryIsoDateOrNull(updatedAt) {
+  if (!updatedAt) return null;
+  const d = new Date(updatedAt);
+  return Number.isNaN(d.getTime()) ? null : d.toISOString();
+}
+
+export function libraryPanelBodyClass(isOpen) {
+  return isOpen
+    ? 'book-detail-panel-body book-detail-panel-body--open'
+    : 'book-detail-panel-body book-detail-panel-body--closed';
+}
+
+export function makeOpeningTargetKey(bookId, mode) {
+  if (bookId == null || !mode) return null;
+  return `${bookId}:${mode}`;
+}
+
+export function getOpeningMode(openingTarget, bookId) {
+  if (!openingTarget || bookId == null) return null;
+  const id = Number(bookId);
+  if (openingTarget === makeOpeningTargetKey(id, 'viewer')) return 'viewer';
+  if (openingTarget === makeOpeningTargetKey(id, 'graph')) return 'graph';
+  return null;
 }
 
 const DC_NS = 'http://purl.org/dc/elements/1.1/';

@@ -9,20 +9,18 @@ import {
   useMemo,
 } from 'react';
 import { flushSync } from 'react-dom';
-import { defaultSettings, errorUtils } from '../../../utils/common/errorUtils';
+import { errorUtils } from '../../utils/common/urlUtils';
 import {
   absoluteOffsetFromReadingProgressPercent,
   locatorFromBookAbsoluteOffset,
   getManifestFromCache,
-} from '../../../utils/common/cache/manifestCache';
+} from '../../utils/common/cache/manifestCache';
 import {
   toReadingLocatorKey,
-} from '../../../utils/viewer/viewerEventProgressUtils';
-import {
-  loadCachedXhtmlContent,
-  XHTML_CACHE_INVALIDATED_EVENT,
-} from '../../../utils/common/cache/cacheManager';
-import { resolveViewerBookKey, resolveServerBookIdOrFallback } from '../../../hooks/common/hooksShared';
+  defaultSettings,
+} from '../../utils/viewer/viewerSession';
+import { resolveServerBookIdOrFallback } from '../../hooks/common/hooksShared';
+import { resolveViewerBookKey } from '../../utils/viewer/viewerCore';
 import {
   collectBlockEntries,
   computeLineBoundsFromRuler,
@@ -32,13 +30,15 @@ import {
   parseXhtmlBody,
   resolvePageIndexFromLocator,
   resolveViewportLocatorEmit,
-} from '../../../utils/viewer/xhtmlViewerLocatorUtils';
+  loadCachedXhtmlContent,
+  XHTML_CACHE_INVALIDATED_EVENT,
+} from '../../utils/viewer/viewerLocator';
 
 const XhtmlViewer = forwardRef(
   (
     {
       book,
-      bookId,
+      bookKey,
       onCurrentPageChange,
       onTotalPagesChange,
       onCurrentLineChange,
@@ -67,16 +67,16 @@ const XhtmlViewer = forwardRef(
     const lastEmittedViewportLocatorJsonRef = useRef(null);
     const prevBidRef = useRef(null);
     const lineBoundsRef = useRef([]);
-    const [lineBoundsVersion, setLineBoundsReady] = useState(0);
+    const [lineBoundsVersion, setLineBoundsVersion] = useState(0);
     const lastReportedPagingRef = useRef({
       totalPages: null,
       currentPage: null,
     });
 
-    const getSnappedOffsetAndHeight = useCallback((pageIdx, pH) => {
-      const targetY = pageIdx * pH;
+    const getSnappedOffsetAndHeight = useCallback((pageIdx, pageHeightPx) => {
+      const targetY = pageIdx * pageHeightPx;
       const lines = lineBoundsRef.current;
-      if (!lines.length) return { offsetY: Math.max(0, targetY), visibleHeight: pH };
+      if (!lines.length) return { offsetY: Math.max(0, targetY), visibleHeight: pageHeightPx };
       let offsetY = 0;
       for (let i = lines.length - 1; i >= 0; i--) {
         if (lines[i].top <= targetY) {
@@ -84,7 +84,7 @@ const XhtmlViewer = forwardRef(
           break;
         }
       }
-      const endY = offsetY + pH;
+      const endY = offsetY + pageHeightPx;
       let visibleEnd = endY;
       for (let j = lines.length - 1; j >= 0; j--) {
         if (lines[j].bottom <= endY) {
@@ -92,12 +92,16 @@ const XhtmlViewer = forwardRef(
           break;
         }
       }
-      const visibleHeight = Math.min(pH, Math.max(0, visibleEnd - offsetY)) || pH;
+      const visibleHeight = Math.min(pageHeightPx, Math.max(0, visibleEnd - offsetY)) || pageHeightPx;
       return { offsetY, visibleHeight };
     }, []);
 
-    const totalPages = Math.max(1, pageHeight ? Math.ceil(contentHeight / pageHeight) : 1);
-    const safePageIndex = Math.min(Math.max(0, currentPageIndex), Math.max(0, totalPages - 1));
+    const layoutReady = typeof pageHeight === 'number' && pageHeight > 0;
+    const totalPages = Math.max(1, layoutReady ? Math.ceil(contentHeight / pageHeight) : 1);
+    // 레이아웃 붕괴(전체화면 그래프 등) 시 페이지 인덱스를 0으로 클램프하지 않음
+    const safePageIndex = layoutReady
+      ? Math.min(Math.max(0, currentPageIndex), Math.max(0, totalPages - 1))
+      : currentPageIndex;
     const currentPage = safePageIndex + 1;
 
     const currentSnap = useMemo(
@@ -115,7 +119,7 @@ const XhtmlViewer = forwardRef(
       [currentSnap.offsetY]
     );
 
-    const bid = useMemo(() => resolveViewerBookKey(book, bookId), [book, bookId]);
+    const bid = useMemo(() => resolveViewerBookKey(book, bookKey), [book, bookKey]);
 
     const manifest = useMemo(() => {
       const cacheId = resolveServerBookIdOrFallback(book, bid);
@@ -132,7 +136,7 @@ const XhtmlViewer = forwardRef(
       const ruler = rulerRef.current;
       if (!ruler) return;
       lineBoundsRef.current = computeLineBoundsFromRuler(ruler);
-      setLineBoundsReady((v) => v + 1);
+      setLineBoundsVersion((v) => v + 1);
     }, []);
 
     const refreshContentHeight = useCallback(() => {
@@ -158,8 +162,9 @@ const XhtmlViewer = forwardRef(
 
     useEffect(() => {
       if (currentPageIndex === safePageIndex) return;
+      if (!layoutReady) return;
       setCurrentPageIndex(safePageIndex);
-    }, [currentPageIndex, safePageIndex]);
+    }, [currentPageIndex, safePageIndex, layoutReady]);
 
     const emitLocator = useCallback(
       (loc) => {
@@ -250,6 +255,7 @@ const XhtmlViewer = forwardRef(
     }, [xhtmlContent, contentHeight, settings?.fontSize, settings?.lineHeight, settings?.fontFamily, contentPadding.padding, recomputeLineBounds]);
 
     useEffect(() => {
+      if (!layoutReady) return;
       const prev = lastReportedPagingRef.current;
       if (prev.totalPages !== totalPages) {
         onTotalPagesChange?.(totalPages);
@@ -261,12 +267,14 @@ const XhtmlViewer = forwardRef(
     }, [
       totalPages,
       currentPage,
+      layoutReady,
       onTotalPagesChange,
       onCurrentPageChange,
     ]);
 
     useEffect(() => {
       if (!xhtmlContent || !contentRef.current || !viewportRef.current) return;
+      if (!layoutReady) return;
 
       const result = resolveViewportLocatorEmit({
         blockEntries: collectBlockEntries(contentRef.current),
@@ -288,6 +296,7 @@ const XhtmlViewer = forwardRef(
       safePageIndex,
       totalPages,
       emitLocator,
+      layoutReady,
       pageHeight,
       currentSnap.offsetY,
       currentSnap.visibleHeight,
@@ -296,9 +305,9 @@ const XhtmlViewer = forwardRef(
     ]);
 
     const resolvePageHeight = useCallback(() => {
-      if (typeof pageHeight === 'number' && pageHeight > 0) return pageHeight;
+      if (layoutReady) return pageHeight;
       return containerRef.current?.clientHeight ?? 0;
-    }, [pageHeight]);
+    }, [layoutReady, pageHeight]);
 
     const goPageByDelta = useCallback((delta) => {
       if (!delta) return;
@@ -321,8 +330,8 @@ const XhtmlViewer = forwardRef(
       const ruler = rulerRef.current;
       if (!ruler) return false;
 
-      const ph = resolvePageHeight();
-      if (!(ph > 0)) return false;
+      const pageHeightPx = resolvePageHeight();
+      if (!(pageHeightPx > 0)) return false;
 
       const locator = normalizeLocatorTarget(target);
       if (!locator) return false;
@@ -332,7 +341,7 @@ const XhtmlViewer = forwardRef(
         ruler,
         manifest,
         totalPages,
-        pageHeightPx: ph,
+        pageHeightPx,
       });
       if (pageIdx == null) return false;
 

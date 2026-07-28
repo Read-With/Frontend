@@ -2,50 +2,49 @@ import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import PropTypes from "prop-types";
 import { useNavigate, useParams, useLocation } from "react-router-dom";
 
-import { GraphTopBar } from "./GraphControls";
 import GraphCanvas from "./GraphCanvas";
+import ChapterSidebar from "./ChapterSidebar";
 import "./RelationGraph.css";
 
 import { createGraphStylesheet, getEdgeStyle } from "../../utils/styles/graphStyles";
-import { COLORS, createAdvancedButtonHandlers, sidebarStyles, ANIMATION_VALUES } from "../../utils/styles/styles.js";
+import { COLORS } from "../../utils/styles/styles.js";
 import {
   GRAPH_LAYOUT_CONSTANTS,
+  GRAPH_ZOOM,
   resolveChapterSidebarWidth,
-  resolveChapterDisplayTitle,
-  buildChapterSidebarItems,
-} from '../../utils/graph/graphUtils';
-import { errorUtils } from '../../utils/common/errorUtils';
+  calculateLastEventForChapter,
+} from '../../utils/graph/graphCore';
+import {
+  isGraphDragEndEvent,
+  fitGraphToNodes,
+} from '../../utils/graph/graphCy';
+import { errorUtils, userViewerPath } from '../../utils/common/urlUtils';
 import {
   useGraphSearch,
   useGraphState,
   useGraphElementPipeline,
-} from '../../hooks/graph/useGraphViewHooks';
-import { useApiGraphData } from '../../hooks/graph/useApiGraphData';
-import { useLocalStorageNumber } from '../../hooks/common/useLocalStorage.js';
-import { resolveServerBookIdOrFallback } from '../../hooks/common/hooksShared';
-import { convertRelationsToElements } from '../../utils/graph/graphDataUtils';
-import { createCharacterMaps, buildNodeWeights, extractNodeWeightsFromElements } from '../../utils/graph/characterUtils';
-import { getGraphEventState } from '../../utils/common/cache/chapterEventCache';
+  useIsNarrowViewport,
+} from '../../hooks/graph/useGraphViewState';
+import { useApiGraphData, useChapterPovSummaries } from '../../hooks/graph/useApiGraphData';
+import { resolveServerBookIdOrFallback, useLocalStorageNumber } from '../../hooks/common/hooksShared';
 import {
-  calculateLastEventForChapter,
-  isGraphNodeElement,
-  fitGraphToNodes,
-  centerSelectionOnElementId,
-} from '../../utils/graph/graphUtils';
-import { eventUtils } from '../../utils/viewer/viewerCoreStateUtils';
-import { hasGraphPayload } from '../../utils/graph/graphData';
+  createCharacterMaps,
+  buildNodeWeights,
+  extractNodeWeightsFromElements,
+  convertRelationsToElements,
+  getGraphEventState,
+} from '../../utils/graph/graphModel';
+import { eventUtils, formatChapterOrderAndName, stripRedundantBookTitlePrefix, resolveChapterTitleMeta } from '../../utils/viewer/viewerCore';
+import { hasGraphPayload } from '../../utils/graph/graphFetch';
 import {
   convertGraphSourceToElements,
   commitVisibleGraphElements,
-} from '../../utils/viewer/viewerGraphUtils';
-import { userViewerPath } from '../../utils/common/urlUtils';
+} from '../../utils/viewer/viewerGraph';
 import { toPositiveNumberOrNull } from '../../utils/common/valueUtils';
 import {
-  isGraphDragEndEvent,
   shouldIgnoreGraphPageOutsideClick,
   useGraphTooltipSelection,
-} from '../../hooks/graph/useGraphOutsideDismiss';
-import { useChapterPovSummaries } from '../../hooks/graph/useChapterPovSummaries';
+} from '../../hooks/graph/useGraphCy';
 import {
   getChapterData,
   findManifestEventInChapter,
@@ -65,7 +64,7 @@ const emptyGraphBannerStyle = {
   transform: 'translate(-50%, -50%)',
   zIndex: 10003,
   background: 'rgba(255,255,255,0.96)',
-  border: '1px solid #e5e7eb',
+  border: `1px solid ${COLORS.border}`,
   borderRadius: 10,
   padding: '8px 12px',
   color: '#374151',
@@ -73,129 +72,8 @@ const emptyGraphBannerStyle = {
   fontWeight: 600,
 };
 
-const backButtonStyle = {
-  height: 32,
-  padding: '0 12px',
-  borderRadius: 8,
-  border: `1px solid ${COLORS.border}`,
-  background: 'rgba(255, 255, 255, 0.9)',
-  color: COLORS.textPrimary,
-  fontSize: 12,
-  fontWeight: 500,
-  cursor: 'pointer',
-  transition: 'all 0.2s ease',
-  outline: 'none',
-  display: 'flex',
-  alignItems: 'center',
-  gap: 6,
-  boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
-  backdropFilter: 'blur(8px)',
-  justifyContent: 'center',
-};
-
-const backButtonContainerStyle = {
-  position: 'fixed',
-  top: '12px',
-  right: '24px',
-  zIndex: 10002,
-  pointerEvents: 'auto',
-};
-
-const chapterLabelTextStyle = {
-  flex: 1,
-  minWidth: 0,
-  overflow: 'hidden',
-  textOverflow: 'ellipsis',
-  whiteSpace: 'nowrap',
-};
-
-const graphBackButtonHandlers = createAdvancedButtonHandlers('default');
 const GRAPH_PAGE_EDGE_STYLE = getEdgeStyle('graph');
 const GRAPH_TRANSFORM_DEPS = { createCharacterMaps, buildNodeWeights, convertRelationsToElements };
-
-function ChapterSidebar({
-  isSidebarOpen,
-  onToggleSidebar,
-  chapterList,
-  currentChapter,
-  onChapterSelect,
-  manifestBookId = null,
-  bookTitle = '',
-  manifestHint = null,
-}) {
-  const { OPEN_WIDTH: sidebarOpenW, CLOSED_WIDTH: sidebarClosedW } = GRAPH_LAYOUT_CONSTANTS.SIDEBAR;
-
-  const chapterItems = useMemo(
-    () => buildChapterSidebarItems(chapterList, manifestBookId, bookTitle, manifestHint),
-    [chapterList, manifestBookId, bookTitle, manifestHint],
-  );
-
-  const toggleLabel = isSidebarOpen ? '사이드바 접기' : '사이드바 펼치기';
-
-  return (
-    <div
-      data-testid="chapter-sidebar"
-      style={{
-        ...sidebarStyles.container(isSidebarOpen, ANIMATION_VALUES),
-        width: isSidebarOpen ? `${sidebarOpenW}px` : `${sidebarClosedW}px`,
-        position: 'fixed',
-        top: 0,
-        left: 0,
-        height: '100vh',
-        marginTop: 0,
-      }}
-    >
-      <div style={sidebarStyles.header}>
-        <button
-          onClick={onToggleSidebar}
-          style={sidebarStyles.toggleButton()}
-          title={toggleLabel}
-          aria-label={toggleLabel}
-          aria-expanded={isSidebarOpen}
-        >
-          <span className="material-symbols-outlined">
-            {isSidebarOpen ? 'chevron_left' : 'menu'}
-          </span>
-        </button>
-        <span style={sidebarStyles.title(isSidebarOpen, ANIMATION_VALUES)}>챕터 선택</span>
-      </div>
-
-      <div style={sidebarStyles.chapterList}>
-        {chapterItems.map(({ chapter, label, tooltip }) => {
-          const selected = currentChapter === chapter;
-          return (
-            <button
-              key={chapter}
-              onClick={() => onChapterSelect(chapter)}
-              style={sidebarStyles.chapterButton(selected, isSidebarOpen, ANIMATION_VALUES)}
-              title={tooltip}
-              aria-label={`${label} 선택`}
-              aria-pressed={selected}
-            >
-              <span style={sidebarStyles.chapterNumber(selected, ANIMATION_VALUES)}>
-                {chapter}
-              </span>
-              <span style={{ ...sidebarStyles.chapterText(isSidebarOpen, ANIMATION_VALUES), ...chapterLabelTextStyle }}>
-                {label}
-              </span>
-            </button>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-ChapterSidebar.propTypes = {
-  isSidebarOpen: PropTypes.bool.isRequired,
-  onToggleSidebar: PropTypes.func.isRequired,
-  chapterList: PropTypes.arrayOf(PropTypes.number).isRequired,
-  currentChapter: PropTypes.number.isRequired,
-  onChapterSelect: PropTypes.func.isRequired,
-  manifestBookId: PropTypes.number,
-  bookTitle: PropTypes.string,
-  manifestHint: PropTypes.object,
-};
 
 function ErrorToast({ error, onClose, duration = 5000 }) {
   useEffect(() => {
@@ -206,20 +84,23 @@ function ErrorToast({ error, onClose, duration = 5000 }) {
 
   if (!error) return null;
 
+  const message =
+    typeof error === 'string'
+      ? error
+      : errorUtils.getUserFriendlyMessage(error);
+
   return (
     <div className="graph-error-toast" role="alert" aria-live="assertive">
       <span className="material-symbols-outlined graph-error-toast__icon">error</span>
       <div className="graph-error-toast__body">
         <div className="graph-error-toast__title">오류 발생</div>
-        <div className="graph-error-toast__message">
-          {errorUtils.getUserFriendlyMessage(error)}
-        </div>
+        <div className="graph-error-toast__message">{message}</div>
       </div>
       <button
         type="button"
         className="graph-error-toast__close"
         onClick={onClose}
-        aria-label="오류 메시지 닫기"
+        aria-label="메시지 닫기"
       >
         <span className="material-symbols-outlined">close</span>
       </button>
@@ -244,11 +125,10 @@ function RelationGraphWrapper() {
   const book = location.state?.book;
 
   const bookId = toPositiveNumberOrNull(filename);
-  const requestedChapterFromViewer = Number(location.state?.selectedChapter);
-  const chapterFromViewer =
-    Number.isFinite(requestedChapterFromViewer) && requestedChapterFromViewer >= 1
-      ? requestedChapterFromViewer
-      : null;
+  let chapterFromViewer = Number(location.state?.selectedChapter);
+  if (!Number.isFinite(chapterFromViewer) || chapterFromViewer < 1) {
+    chapterFromViewer = null;
+  }
 
   const [currentChapter, setCurrentChapter] = useLocalStorageNumber(
     `lastGraphChapter_${filename}`,
@@ -262,25 +142,34 @@ function RelationGraphWrapper() {
   const appliedRequestedChapterRef = useRef(null);
   const cyRef = useRef(null);
   const graphClearRef = useRef(null);
+  const graphSelectNodeRef = useRef(null);
   const selectedElementRef = useRef(null);
   const prevChapterNum = useRef(currentChapter);
   const prevEventNum = useRef();
   const profileApplyTokenRef = useRef(0);
+  const pendingChapterChangeRef = useRef(null);
   const locationRef = useRef({ state: location.state, pathname: location.pathname });
 
   useEffect(() => {
     locationRef.current = { state: location.state, pathname: location.pathname };
   }, [location.state, location.pathname]);
 
+  useEffect(() => () => {
+    if (pendingChapterChangeRef.current) {
+      window.clearTimeout(pendingChapterChangeRef.current);
+      pendingChapterChangeRef.current = null;
+    }
+  }, []);
+
   useEffect(() => {
-    if (!Number.isFinite(requestedChapterFromViewer) || requestedChapterFromViewer < 1) return;
-    if (appliedRequestedChapterRef.current === requestedChapterFromViewer) return;
-    if (requestedChapterFromViewer !== currentChapter) {
-      setCurrentChapter(requestedChapterFromViewer);
+    if (chapterFromViewer == null) return;
+    if (appliedRequestedChapterRef.current === chapterFromViewer) return;
+    if (chapterFromViewer !== currentChapter) {
+      setCurrentChapter(chapterFromViewer);
       setCurrentEvent(1);
     }
-    appliedRequestedChapterRef.current = requestedChapterFromViewer;
-  }, [requestedChapterFromViewer, currentChapter, setCurrentChapter]);
+    appliedRequestedChapterRef.current = chapterFromViewer;
+  }, [chapterFromViewer, currentChapter, setCurrentChapter]);
 
   const serverBookId = useMemo(
     () => resolveServerBookIdOrFallback(book, bookId),
@@ -295,12 +184,16 @@ function RelationGraphWrapper() {
     filterStage,
     setActiveTooltip,
     toggleSidebar,
+    setSidebarOpen,
     toggleEdgeLabel,
     startClosing,
     cancelClosing,
     closeSidebar,
     setFilterStage,
   } = useGraphState();
+
+  const isNarrow = useIsNarrowViewport();
+  const sidebarLayoutWidth = resolveChapterSidebarWidth(isSidebarOpen, { isNarrow });
 
   const {
     manifest: { data: manifestData, ready: manifestReady },
@@ -312,9 +205,14 @@ function RelationGraphWrapper() {
     },
     error: apiError,
     clearError: clearApiError,
+    retryGraph,
   } = useApiGraphData(serverBookId, currentChapter);
 
-  const { povSummaries } = useChapterPovSummaries(serverBookId, currentChapter);
+  const {
+    povSummaries,
+    error: povError,
+    retry: retryPov,
+  } = useChapterPovSummaries(serverBookId, currentChapter);
 
   const handleBackToViewer = useCallback(() => {
     const { state, pathname } = locationRef.current;
@@ -323,12 +221,10 @@ function RelationGraphWrapper() {
       from: state?.from ? { ...state.from, search: '' } : { pathname, search: '' },
     };
 
-    const baseBook = book || state?.book;
-    const sid = toPositiveNumberOrNull(serverBookId);
-    if (baseBook || sid) {
+    if (book || serverBookId) {
       nextState.book = {
-        ...(baseBook || {}),
-        ...(sid ? { id: sid, _bookId: sid } : {}),
+        ...(book || {}),
+        ...(serverBookId ? { id: serverBookId, _bookId: serverBookId } : {}),
       };
     }
 
@@ -345,17 +241,24 @@ function RelationGraphWrapper() {
     [manifestData?.book?.title],
   );
 
-  const currentChapterTitle = useMemo(
-    () => resolveChapterDisplayTitle(serverBookId, currentChapter, bookTitle, manifestData),
-    [serverBookId, currentChapter, bookTitle, manifestData],
-  );
-
-  const userReadingChapterTitle = useMemo(
-    () => (userCurrentChapter == null
-      ? ''
-      : resolveChapterDisplayTitle(serverBookId, userCurrentChapter, bookTitle, manifestData)),
-    [serverBookId, userCurrentChapter, bookTitle, manifestData],
-  );
+  const chapterMeta = useMemo(() => {
+    const ch =
+      serverBookId != null ? getChapterData(serverBookId, currentChapter) : null;
+    if (!Number.isFinite(Number(currentChapter)) || Number(currentChapter) < 1) {
+      return { chapterDisplayLabel: '챕터 ?', chapterTitleTooltip: undefined };
+    }
+    const meta = resolveChapterTitleMeta(ch, bookTitle, currentChapter);
+    const displayName =
+      meta.status === 'ok'
+        ? stripRedundantBookTitlePrefix(meta.raw, bookTitle) || meta.display
+        : meta.status === 'collapsed'
+          ? meta.display
+          : '';
+    return {
+      chapterDisplayLabel: formatChapterOrderAndName(currentChapter, displayName),
+      chapterTitleTooltip: meta.raw || meta.tooltip || undefined,
+    };
+  }, [serverBookId, currentChapter, bookTitle, manifestData]);
 
   useEffect(() => {
     if (!manifestReady) return;
@@ -393,6 +296,7 @@ function RelationGraphWrapper() {
         currentEvent,
         GRAPH_TRANSFORM_DEPS,
         extractNodeWeightsFromElements(previousEventState?.elements),
+        { bookId: serverBookId },
       ).elements;
     } catch {
       return [];
@@ -413,7 +317,7 @@ function RelationGraphWrapper() {
   const { searchState, searchActions } = useGraphSearch(elements, currentChapterData);
   const { clearSearch } = searchActions;
 
-  const topBarSearchActions = useMemo(() => ({
+  const floatingSearchActions = useMemo(() => ({
     onSearchSubmit: searchActions.onSearchSubmit,
     onClearSearch: searchActions.clearSearch,
     onGenerateSuggestions: searchActions.onGenerateSuggestions,
@@ -426,27 +330,16 @@ function RelationGraphWrapper() {
     graphClearRef.current?.(options);
   }, []);
 
-  const centerSelection = useCallback((elementId) => {
-    const cy = cyRef.current;
-    if (!cy) return;
-
-    const { TOP_BAR_HEIGHT, TOOLTIP_SIDEBAR_WIDTH, FOCUS_PAN_MS } = GRAPH_LAYOUT_CONSTANTS;
-    const chapterSidebarWidth = resolveChapterSidebarWidth(isSidebarOpen);
-    const availableGraphWidth = window.innerWidth - chapterSidebarWidth - TOOLTIP_SIDEBAR_WIDTH;
-    const availableGraphHeight = window.innerHeight - TOP_BAR_HEIGHT;
-
-    centerSelectionOnElementId(cy, elementId, {
-      duration: FOCUS_PAN_MS,
-      panTarget: {
-        x: chapterSidebarWidth + (availableGraphWidth / 2) - availableGraphWidth * 0.14,
-        y: TOP_BAR_HEIGHT + (availableGraphHeight / 2) - availableGraphHeight * 0.06,
-      },
+  // 사이드바는 오버레이이므로 우측 예약 없이 전체 그래프를 캔버스에 유지 (겹침 허용)
+  const centerSelection = useCallback(() => {
+    fitGraphToNodes(cyRef.current, {
+      duration: GRAPH_LAYOUT_CONSTANTS.FOCUS_PAN_MS,
     });
-  }, [isSidebarOpen]);
+  }, []);
 
   const onClearTooltip = useCallback(() => {
     closeSidebar();
-    fitGraphToNodes(cyRef.current, { duration: 500 });
+    fitGraphToNodes(cyRef.current, { duration: GRAPH_ZOOM.FIT_DURATION_MS });
   }, [closeSidebar]);
 
   const dismissTooltip = useCallback(() => {
@@ -487,16 +380,12 @@ function RelationGraphWrapper() {
     prevEventNum.current = currentEvent;
   }, [currentChapter, currentEvent, searchState.isSearchActive, clearSearch, clearGraphSelection]);
 
-  const { filteredMainCharacters, finalElements } = useGraphElementPipeline({
+  const { finalElements } = useGraphElementPipeline({
     elements,
     filterStage,
     isSearchActive: searchState.isSearchActive,
     filteredElements: searchState.filteredElements,
   });
-
-  const countSource = filterStage > 0 ? filteredMainCharacters : elements;
-  const nodeCount = useMemo(() => countSource.filter(isGraphNodeElement).length, [countSource]);
-  const relationCount = useMemo(() => eventUtils.filterEdges(countSource).length, [countSource]);
 
   const stylesheet = useMemo(
     () => createGraphStylesheet(GRAPH_PAGE_EDGE_STYLE, edgeLabelVisible),
@@ -505,17 +394,53 @@ function RelationGraphWrapper() {
 
   const handleChapterSelect = useCallback((chapter) => {
     if (chapter === currentChapter) return;
-    clearGraphSelection({ fitViewport: false });
-    setCurrentChapter(chapter);
 
-    const lastEventNum = calculateLastEventForChapter({
-      manifestChapters: manifestData?.chapters,
-      manifestBookId: serverBookId,
-      chapter,
-    });
-    const normalized = Number(lastEventNum);
-    setCurrentEvent(Number.isFinite(normalized) && normalized >= 1 ? normalized : 1);
-  }, [currentChapter, setCurrentChapter, manifestData?.chapters, serverBookId, clearGraphSelection]);
+    if (pendingChapterChangeRef.current) {
+      window.clearTimeout(pendingChapterChangeRef.current);
+      pendingChapterChangeRef.current = null;
+    }
+
+    const applyChapter = () => {
+      pendingChapterChangeRef.current = null;
+      setCurrentChapter(chapter);
+
+      const lastEventNum = calculateLastEventForChapter({
+        manifestChapters: manifestData?.chapters,
+        manifestBookId: serverBookId,
+        chapter,
+      });
+      const normalized = Number(lastEventNum);
+      setCurrentEvent(Number.isFinite(normalized) && normalized >= 1 ? normalized : 1);
+    };
+
+    // 선택(노드/간선·툴팁)이 있으면 먼저 해제한 뒤 챕터 전환
+    const hadTooltip = Boolean(activeTooltip);
+    clearGraphSelection({ fitViewport: false });
+
+    if (hadTooltip) {
+      startClosing();
+      pendingChapterChangeRef.current = window.setTimeout(
+        applyChapter,
+        GRAPH_LAYOUT_CONSTANTS.ANIMATION_MS
+      );
+      return;
+    }
+
+    applyChapter();
+  }, [
+    activeTooltip,
+    currentChapter,
+    setCurrentChapter,
+    manifestData?.chapters,
+    serverBookId,
+    clearGraphSelection,
+    startClosing,
+  ]);
+
+  const handleSelectRelatedNode = useCallback((idOrName) => {
+    cancelClosing();
+    return graphSelectNodeRef.current?.(idOrName) ?? false;
+  }, [cancelClosing]);
 
   const handleCanvasClick = useCallback((e) => {
     if (e.target !== e.currentTarget) return;
@@ -529,7 +454,14 @@ function RelationGraphWrapper() {
     [apiMaxChapter],
   );
 
-  const isApiGraphEmpty = !isGraphLoading && !hasGraphPayload(apiBookGraphData);
+  useEffect(() => {
+    const id = window.setTimeout(() => {
+      window.dispatchEvent(new Event('resize'));
+    }, 320);
+    return () => window.clearTimeout(id);
+  }, [sidebarLayoutWidth]);
+
+  const isApiGraphEmpty = !isGraphLoading && !graphApiPayload;
 
   useEffect(() => {
     if (!isGraphLoading) setHasShownGraphOnce(true);
@@ -538,67 +470,66 @@ function RelationGraphWrapper() {
   return (
     <div style={pageRootStyle}>
       {apiError && <ErrorToast error={apiError} onClose={clearApiError} />}
-      {isApiGraphEmpty && (
+      {(isApiGraphEmpty || apiError) && (
         <div style={emptyGraphBannerStyle}>
-          선택한 챕터에 표시할 그래프 데이터가 없습니다.
+          {apiError
+            ? '그래프를 불러오지 못했습니다.'
+            : '선택한 챕터에 표시할 그래프 데이터가 없습니다.'}
+          {typeof retryGraph === 'function' && (
+            <button
+              type="button"
+              onClick={() => {
+                clearApiError();
+                void retryGraph();
+              }}
+              style={{
+                marginLeft: 12,
+                textDecoration: 'underline',
+                background: 'none',
+                border: 'none',
+                color: 'inherit',
+                cursor: 'pointer',
+              }}
+            >
+              다시 시도
+            </button>
+          )}
         </div>
       )}
-
-      <GraphTopBar
-        isSidebarOpen={isSidebarOpen}
-        searchState={searchState}
-        searchActions={topBarSearchActions}
-        edgeLabelVisible={edgeLabelVisible}
-        onToggleEdgeLabel={toggleEdgeLabel}
-        filterStage={filterStage}
-        onFilterChange={setFilterStage}
-      />
-
-      <div style={backButtonContainerStyle}>
-        <button
-          type="button"
-          onClick={handleBackToViewer}
-          style={backButtonStyle}
-          aria-label="뷰어로 돌아가기"
-          {...graphBackButtonHandlers}
-        >
-          <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>close</span>
-          돌아가기
-        </button>
-      </div>
 
       <ChapterSidebar
         isSidebarOpen={isSidebarOpen}
         onToggleSidebar={toggleSidebar}
+        onCloseSidebar={() => setSidebarOpen(false)}
         chapterList={chapterList}
         currentChapter={currentChapter}
         onChapterSelect={handleChapterSelect}
         manifestBookId={serverBookId ?? null}
         bookTitle={bookTitle}
         manifestHint={manifestData}
+        userCurrentChapter={userCurrentChapter}
       />
 
       <GraphCanvas
         isSidebarOpen={isSidebarOpen}
+        sidebarLayoutWidth={sidebarLayoutWidth}
         activeTooltip={activeTooltip}
         cyRef={cyRef}
-        currentChapterTitle={currentChapterTitle}
-        userReadingChapterTitle={userReadingChapterTitle}
         eventNum={Math.max(currentEvent, 1)}
         filename={filename}
         elements={elements}
         renderElements={finalElements}
         povSummaries={povSummaries}
+        povError={povError}
+        onRetryPov={retryPov}
         apiBookGraphData={apiBookGraphData}
         bookId={serverBookId}
         isLoading={isGraphLoading}
         hasShownGraphOnce={hasShownGraphOnce}
         onCanvasClick={handleCanvasClick}
         currentChapter={currentChapter}
-        userCurrentChapter={userCurrentChapter}
-        nodeCount={nodeCount}
-        relationCount={relationCount}
-        filterStage={filterStage}
+        chapterDisplayLabel={chapterMeta.chapterDisplayLabel}
+        chapterTitleTooltip={chapterMeta.chapterTitleTooltip}
         sidebarControl={{
           isSidebarClosing,
           onCloseSidebar: closeSidebar,
@@ -610,7 +541,27 @@ function RelationGraphWrapper() {
           filteredElements: searchState.filteredElements,
           searchTerm: searchState.searchTerm,
           fitNodeIds: searchState.fitNodeIds,
-          isResetFromSearch: searchState.isResetFromSearch,
+        }}
+        pageChromeStart={(
+          <button
+            type="button"
+            className="graph-page-back"
+            onClick={handleBackToViewer}
+            aria-label="뷰어로 돌아가기"
+          >
+            <span className="material-symbols-outlined" aria-hidden>
+              arrow_back
+            </span>
+            돌아가기
+          </button>
+        )}
+        floatingControls={{
+          searchState,
+          searchActions: floatingSearchActions,
+          edgeLabelVisible,
+          onToggleEdgeLabel: toggleEdgeLabel,
+          filterStage,
+          onFilterChange: setFilterStage,
         }}
         cytoscapeConfig={{ stylesheet }}
         tooltipHandlers={{
@@ -620,6 +571,8 @@ function RelationGraphWrapper() {
           selectedElementRef,
         }}
         graphClearRef={graphClearRef}
+        graphSelectNodeRef={graphSelectNodeRef}
+        onSelectRelatedNode={handleSelectRelatedNode}
       />
     </div>
   );

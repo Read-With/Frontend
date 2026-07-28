@@ -62,6 +62,22 @@ export const toPositiveNumberFromId = (value) => {
   return lastDigits ? toPositiveNumberOrNull(lastDigits[1]) : null;
 };
 
+/** 뷰어/그래프 라우트용 bookId — 후보 중 양의 정수만 채택 */
+export const resolvePositiveBookId = (...candidates) => {
+  for (const candidate of candidates) {
+    if (candidate == null || candidate === '') continue;
+    const text = String(candidate).trim();
+    const apiMatch = text.match(/^api:(\d+)$/i);
+    if (apiMatch) {
+      const fromApi = toPositiveNumberOrNull(apiMatch[1]);
+      if (fromApi) return fromApi;
+    }
+    const id = toPositiveNumberFromId(candidate);
+    if (id) return id;
+  }
+  return null;
+};
+
 export const isPositiveFiniteNumber = (value) => {
   const num = toNumberOrNull(value);
   return num !== null && num > 0;

@@ -1,8 +1,8 @@
-﻿import { useRef, useEffect, useCallback, useMemo, useState } from 'react';
+import { useRef, useEffect, useCallback, useMemo, useState } from 'react';
 import { toast } from 'react-toastify';
 import ViewerLayout from './ViewerLayout';
-import XhtmlViewer from './xhtml/XhtmlViewer';
-import ViewerSettings from './ui/ViewerSettings';
+import XhtmlViewer from './XhtmlViewer';
+import ViewerSettings from './ViewerSettings';
 import { useViewerPage } from '../../hooks/viewer/useViewerPage';
 import { useTooltipState } from '../../hooks/ui/tooltipHooks';
 import { anchorToLocators, resolveChapterIndex } from '../../utils/common/valueUtils';
@@ -10,9 +10,9 @@ import {
   resolveViewerLineEvent,
   parseReadingLocatorKey,
   patchTopBarFromLineEvent,
-} from '../../utils/viewer/viewerEventProgressUtils';
+} from '../../utils/viewer/viewerSession';
 import { isSameBookmarkPosition, normalizeBookmarkLocators } from '../../utils/bookmarks/bookmarkUtils';
-import { errorUtils } from '../../utils/common/errorUtils';
+import { errorUtils } from '../../utils/common/urlUtils';
 import GraphSplitArea from './GraphSplitArea';
 import '../../pages/BookmarksPage.css';
 
@@ -96,6 +96,7 @@ const ViewerPage = () => {
     onToggleBookmarkList,
     handleSliderChange,
     toggleGraph,
+    restoreAfterViewerLayoutChange,
     exitToMypage,
     graphStateWithProgress,
     graphActions,
@@ -106,14 +107,14 @@ const ViewerPage = () => {
     isFromLibrary,
     setProgressTopBar,
     readingLocatorKey,
-    serverResumeAnchor,
+    serverResumeAnchor: resumeAnchor,
     applyReadingLocator,
     markViewerPageReady,
     isViewerPageReady,
     isResumePending,
     cachedLocation,
     transitionState,
-    graphApiError,
+    graphApiError: apiError,
     flushProgressAsync,
   } = useViewerPage();
 
@@ -136,7 +137,7 @@ const ViewerPage = () => {
   } = viewerState;
 
   const suppressViewport =
-    !isViewerPageReady && (isResumePending || Boolean(serverResumeAnchor));
+    !isViewerPageReady && (isResumePending || Boolean(resumeAnchor));
 
   const readingChapterRef = useRef(currentChapter);
   readingChapterRef.current = currentChapter;
@@ -147,17 +148,26 @@ const ViewerPage = () => {
   const graphClearRef = useRef(null);
 
   useEffect(() => {
-    const onMouseMove = (event) => {
-      const nearTop = event.clientY <= TOOLBAR_REVEAL_ZONE_PX;
+    const updateFromClientY = (clientY) => {
+      const nearTop = clientY <= TOOLBAR_REVEAL_ZONE_PX;
       const nearBottom =
-        event.clientY >= window.innerHeight - TOOLBAR_REVEAL_ZONE_PX;
+        clientY >= window.innerHeight - TOOLBAR_REVEAL_ZONE_PX;
       const next = nearTop || nearBottom;
       if (showToolbarRef.current !== next) {
         setShowToolbar(next);
       }
     };
+    const onMouseMove = (event) => updateFromClientY(event.clientY);
+    const onTouchStart = (event) => {
+      const touch = event.touches?.[0];
+      if (touch) updateFromClientY(touch.clientY);
+    };
     window.addEventListener('mousemove', onMouseMove);
-    return () => window.removeEventListener('mousemove', onMouseMove);
+    window.addEventListener('touchstart', onTouchStart, { passive: true });
+    return () => {
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('touchstart', onTouchStart);
+    };
   }, [setShowToolbar]);
 
   const dismissDeleteConfirm = useCallback(() => {
@@ -191,8 +201,8 @@ const ViewerPage = () => {
 
   const {
     activeTooltip,
-    handleClearTooltip,
-    handleSetActiveTooltip,
+    handleClearTooltip: onClearTooltip,
+    handleSetActiveTooltip: onSetActiveTooltip,
   } = useTooltipState({
     onError: onTooltipError,
     graphClearRef,
@@ -228,11 +238,11 @@ const ViewerPage = () => {
         bookKey,
       });
 
-      const { startLocator: lineLocator, endLocator: lineEnd } = anchorToLocators(
+      const { startLocator, endLocator } = anchorToLocators(
         receivedEvent?.anchor ?? nextEvent?.anchor
       );
 
-      const locatorChapter = resolveChapterIndex(lineLocator);
+      const locatorChapter = resolveChapterIndex(startLocator);
       const resolvedChapter =
         nextChapter ??
         (Number.isFinite(locatorChapter) && locatorChapter > 0 ? locatorChapter : null);
@@ -242,8 +252,8 @@ const ViewerPage = () => {
       }
 
       setCurrentEvent(nextEvent);
-      applyReadingLocator(lineLocator, lineEnd);
-      setProgressTopBar((prev) => patchTopBarFromLineEvent(prev, nextEvent, lineLocator));
+      applyReadingLocator(startLocator, endLocator);
+      setProgressTopBar((prev) => patchTopBarFromLineEvent(prev, nextEvent, startLocator));
     },
     [
       book,
@@ -276,11 +286,11 @@ const ViewerPage = () => {
   const tooltipProps = useMemo(
     () => ({
       activeTooltip,
-      onClearTooltip: handleClearTooltip,
-      onSetActiveTooltip: handleSetActiveTooltip,
+      onClearTooltip,
+      onSetActiveTooltip,
       graphClearRef,
     }),
-    [activeTooltip, handleClearTooltip, handleSetActiveTooltip]
+    [activeTooltip, onClearTooltip, onSetActiveTooltip]
   );
 
   const rightSideContent = useMemo(() => {
@@ -294,9 +304,10 @@ const ViewerPage = () => {
         searchActions={searchActions}
         tooltipProps={tooltipProps}
         transitionState={transitionState}
-        apiError={graphApiError}
+        apiError={apiError}
         cachedLocation={cachedLocation}
-        resumeAnchor={serverResumeAnchor}
+        resumeAnchor={resumeAnchor}
+        onToggleGraph={toggleGraph}
       />
     );
   }, [
@@ -308,15 +319,16 @@ const ViewerPage = () => {
     searchActions,
     tooltipProps,
     transitionState,
-    graphApiError,
+    apiError,
     cachedLocation,
-    serverResumeAnchor,
+    resumeAnchor,
+    toggleGraph,
   ]);
 
   return (
     <div className="h-screen">
       <ViewerLayout
-        showControls={showToolbar}
+        showToolbar={showToolbar}
         currentChapter={currentChapter}
         progress={progress}
         progressMetricsReady={progressMetricsReady}
@@ -336,6 +348,7 @@ const ViewerPage = () => {
         previousPage={previousPage}
         onExitToMypage={handleExitToMypage}
         rightSideContent={rightSideContent}
+        onViewerLayoutSettled={restoreAfterViewerLayoutChange}
       >
         <XhtmlViewer
           key={reloadKey}
@@ -346,17 +359,17 @@ const ViewerPage = () => {
           onTotalPagesChange={setTotalPages}
           settings={settings}
           onCurrentLineChange={handleCurrentLineChange}
-          bookId={bookKey}
+          bookKey={bookKey}
           suppressViewport={suppressViewport}
           suppressMessage={
-            serverResumeAnchor ? '읽던 위치로 이동 중...' : '로딩 중...'
+            resumeAnchor ? '읽던 위치로 이동 중...' : '로딩 중...'
           }
         />
         <ViewerSettings
           isOpen={showSettingsModal}
           onClose={closeSettings}
           onApplySettings={handleApplySettings}
-          currentSettings={settings}
+          settings={settings}
         />
       </ViewerLayout>
 

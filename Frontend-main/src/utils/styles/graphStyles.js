@@ -1,36 +1,53 @@
 /** Cytoscape 스타일시트·레이아웃·노드 크기 유틸 */
 
-import { isValidNodeWeight } from '../graph/characterUtils.js';
+import { isValidNodeWeight } from '../graph/graphModel.js';
 
 // styles.js가 이 모듈을 re-export하므로 styles.js를 import하지 않는다.
 // DURATION/공유 팔레트는 여기서 export하고 styles.js가 확장한다.
 
 export const STYLE_DURATION = {
-  FAST: '0.18s',
   NORMAL: '0.3s',
   SLOW: '0.4s',
 };
 
-/** 그래프·UI 공유 팔레트 (+ Cytoscape 전용 키) */
+/** --rg-* / --brand-* 와 동일 hex (Cytoscape는 CSS var 미지원) */
+const RG = {
+  brand: '#5C6F5C', // --rg-brand / --brand-accent
+  brandTint: '#E8F5E8', // --rg-brand-tint
+  brandTintSoft: '#F4FAF4', // --rg-brand-tint-soft
+  surface: '#ffffff', // --rg-surface
+  surfaceSlate: '#f8fafc', // --rg-surface-slate
+  surfaceIndigo: '#f8f9fc', // --rg-surface-indigo
+  border: '#e5e7eb', // --rg-border
+  borderSoft: '#e3e6ef', // --rg-border-soft
+  borderMuted: '#e2e8f0', // --rg-border-muted / --vt-border
+  textSubtle: '#6c757d', // --rg-text-subtle
+  textBrand: '#2f3b2f', // --rg-text-brand / --brand-text
+  textMutedBrand: '#3d4f3d', // --brand-text-muted
+  danger: '#ef4444', // --rg-danger
+  progressTrack: '#e8f0e8', // --rg-progress-track / --vt-track
+};
+
+/** 그래프·UI 공유 팔레트 — RelationGraph.css :root 와 동기화 */
 export const GRAPH_COLORS = {
-  backgroundLighter: '#f8fafc',
-  backgroundLight: '#f8f9fc',
-  border: '#e5e7eb',
-  borderLight: '#e3e6ef',
-  textPrimary: '#5C6F5C',
-  textSecondary: '#6c757d',
-  primary: '#5C6F5C',
-  white: '#ffffff',
-  nodeBackground: '#eee',
-  nodeBorder: '#5B7BA0',
-  nodeText: '#444',
-  edgeText: '#42506b',
-  successGreen: '#22c55e',
-  highlightBlue: '#5C6F5C',
+  backgroundLighter: RG.surfaceSlate,
+  backgroundLight: RG.surfaceIndigo,
+  border: RG.border,
+  borderLight: RG.borderSoft,
+  borderMuted: RG.borderMuted,
+  primary: RG.brand,
+  primaryLight: RG.brandTint,
+  primaryTintSoft: RG.brandTintSoft,
+  textSecondary: RG.textSubtle,
+  white: RG.surface,
+  nodeBackground: '#f3f5f3',
+  nodeText: RG.textBrand,
+  edgeText: RG.textMutedBrand,
+  progressTrack: RG.progressTrack,
+  danger: RG.danger,
 };
 
 const COLORS = GRAPH_COLORS;
-const DURATION = STYLE_DURATION;
 
 const NODE_SIZE_MIN = 30;
 const NODE_SIZE_MAX = 80;
@@ -48,7 +65,7 @@ const EDGE_TEXT_STYLE = {
 const baseNodeGraphStyle = {
   'background-color': COLORS.nodeBackground,
   'border-width': (ele) => (ele.data('isMainCharacter') ? 2 : 1),
-  'border-color': COLORS.nodeBorder,
+  'border-color': COLORS.primary,
   'border-opacity': 1,
   width: NODE_SIZE_MIN,
   height: NODE_SIZE_MIN,
@@ -65,27 +82,15 @@ const baseNodeGraphStyle = {
   'text-outline-width': 2,
 };
 
-const graphControlActionButtonStyle = {
-  background: COLORS.white,
-  color: COLORS.textPrimary,
-  border: `1px solid ${COLORS.border}`,
-  boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
-  '&:hover': {
-    background: COLORS.backgroundLight,
-    transform: 'translateY(-1px)',
-    boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
-  },
-};
-
 export const PRESET_LAYOUT = Object.freeze({
   name: 'preset',
   fit: false,
   animate: false,
 });
 
-/** @param {'graph'|'viewer'|'default'} [context='default'] graph 페이지는 라벨 fontSize 12 */
+/** @param {'graph'|'viewer'|'default'} [context='default'] viewer는 분할 밀도용 얇은 간선 */
 export const getEdgeStyle = (context = 'default') => ({
-  width: 5,
+  width: context === 'viewer' ? 3.5 : 5,
   fontSize: context === 'graph' ? 12 : 10,
 });
 
@@ -153,12 +158,9 @@ export function applyNormalizedNodeSizes(cy, { scaledNodes = null, scale = 1 } =
   });
 }
 
-function formatEdgeLabel(ele, edgeLabelVisible, maxEdgeLabelLength) {
+function formatEdgeLabel(ele, edgeLabelVisible) {
   const label = ele.data('label') || '';
   if (!edgeLabelVisible) return '';
-  if (maxEdgeLabelLength && label.length > maxEdgeLabelLength) {
-    return `${label.slice(0, maxEdgeLabelLength)}...`;
-  }
   return label;
 }
 
@@ -166,7 +168,7 @@ function edgePositivityColor(ele) {
   return getRelationColor(ele.data('positivity'));
 }
 
-export const createGraphStylesheet = (edgeStyle, edgeLabelVisible, maxEdgeLabelLength = null) => [
+export const createGraphStylesheet = (edgeStyle, edgeLabelVisible) => [
   { selector: 'node', style: baseNodeGraphStyle },
   {
     selector: 'node[image]',
@@ -182,7 +184,7 @@ export const createGraphStylesheet = (edgeStyle, edgeLabelVisible, maxEdgeLabelL
       width: edgeStyle.width,
       'line-color': edgePositivityColor,
       'curve-style': 'bezier',
-      label: (ele) => formatEdgeLabel(ele, edgeLabelVisible, maxEdgeLabelLength),
+      label: (ele) => formatEdgeLabel(ele, edgeLabelVisible),
       'font-size': edgeStyle.fontSize,
       'text-rotation': 'autorotate',
       ...EDGE_TEXT_STYLE,
@@ -226,19 +228,9 @@ export const createGraphStylesheet = (edgeStyle, edgeLabelVisible, maxEdgeLabelL
     },
   },
   {
-    selector: 'node.cytoscape-node-appear',
-    style: {
-      'border-color': COLORS.successGreen,
-      'border-width': 16,
-      'border-opacity': 1,
-      'transition-property': 'border-width, border-color, border-opacity',
-      'transition-duration': DURATION.SLOW,
-    },
-  },
-  {
     selector: 'node.highlighted',
     style: {
-      'border-color': COLORS.highlightBlue,
+      'border-color': COLORS.primary,
       'border-width': 4,
       'border-opacity': 1,
       'border-style': 'solid',
@@ -254,6 +246,7 @@ export const createGraphStylesheet = (edgeStyle, edgeLabelVisible, maxEdgeLabelL
   },
 ];
 
+/** DOM 셸 — `.graph-canvas-area` 크기는 CSS가 담당 */
 export const graphStyles = {
   container: { width: '100%', height: '100%', position: 'relative' },
   tooltipContainer: {
@@ -265,7 +258,6 @@ export const graphStyles = {
     pointerEvents: 'none',
     zIndex: 9998,
   },
-  graphArea: { position: 'relative', width: '100%', height: '100%' },
   graphPageContainer: {
     width: '100%',
     height: '100vh',
@@ -283,54 +275,5 @@ export const graphStyles = {
     display: 'flex',
     flexDirection: 'column',
     minHeight: 0,
-  },
-};
-
-export const graphControlsStyles = {
-  input: {
-    width: '220px',
-    minWidth: '220px',
-    maxWidth: '220px',
-    border: `1px solid ${COLORS.border}`,
-    borderRadius: '8px',
-    fontSize: '15px',
-    color: COLORS.textPrimary,
-    background: COLORS.backgroundLight,
-    transition: `all ${DURATION.FAST}`,
-    outline: 'none',
-    height: '36px',
-    padding: '0 12px',
-    fontWeight: '500',
-  },
-  button: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: '8px',
-    border: 'none',
-    borderRadius: '8px',
-    fontSize: '14px',
-    fontWeight: '600',
-    cursor: 'pointer',
-    transition: `all ${DURATION.FAST}`,
-    width: '88px',
-    height: '36px',
-    padding: '0 12px',
-    flexShrink: 0,
-  },
-  searchButton: graphControlActionButtonStyle,
-  resetButton: graphControlActionButtonStyle,
-  form: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '8px',
-    flexWrap: 'wrap',
-  },
-  container: {
-    position: 'relative',
-    display: 'inline-block',
-    width: 'auto',
-    minWidth: '200px',
-    zIndex: 1000,
   },
 };

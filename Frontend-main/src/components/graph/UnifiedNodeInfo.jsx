@@ -1,18 +1,32 @@
-import { memo, useState, useEffect, useCallback, useMemo } from "react";
+import { memo, useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useParams } from "react-router-dom";
-import { processRelations, processRelationTags, extractRadarChartData, extractApiBookId, undirectedPairKey } from "../../../utils/graph/graphUtils.js";
-import { getPositivityColor, getPositivityLabel } from "../../../utils/styles/relationStyles.js";
-import { getEventDataByIndex } from "../../../utils/graph/graphData.js";
-import { useTooltipPosition, useClickOutside } from "../../../hooks/ui/tooltipHooks";
-import { getUnifiedEventInfoForTooltip } from "../../../utils/viewer/viewerEventProgressUtils";
-import { toNumberOrNull } from "../../../utils/common/valueUtils.js";
-import { USER_GRAPH_PREFIX } from "../../../utils/common/urlUtils";
-import { COLORS, createButtonStyle, mergeRefs, unifiedNodeTooltipStyles, unifiedNodeAnimations } from "../../../utils/styles/styles.js";
-import { Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, ResponsiveContainer } from 'recharts';
-import './tooltip.css';
+import {
+  processRelations,
+  processRelationTags,
+  extractRadarChartData,
+  extractApiBookId,
+  undirectedPairKey,
+  isGraphNodeElement,
+  GRAPH_LAYOUT_CONSTANTS,
+} from "../../utils/graph/graphCore";
+import { getEventDataByIndex } from "../../utils/graph/graphFetch.js";
+import { useTooltipPosition, useClickOutside } from "../../hooks/ui/tooltipHooks";
+import { getUnifiedEventInfoForTooltip } from "../../utils/viewer/viewerSession";
+import { toNumberOrNull } from "../../utils/common/valueUtils.js";
+import { USER_GRAPH_PREFIX } from "../../utils/common/urlUtils";
+import {
+  COLORS,
+  mergeRefs,
+  unifiedNodeAnimations,
+} from "../../utils/styles/styles.js";
+import './RelationGraph.css';
+import RelationAnalysisModal from './RelationAnalysisModal';
 
 const Z_INDEX_TOOLTIP = 99999;
 const SUMMARY = { COLLAPSED: 'collapsed', WARNING: 'warning', CONTENT: 'content' };
+
+/** 뷰어처럼 key remount 되어도 분석 모달을 유지하기 위한 플래그 */
+let pendingKeepAnalysisOpen = false;
 
 function normalizeToString(value) {
   if (value == null) return "";
@@ -105,27 +119,18 @@ function collectUndirectedRelations(rawRelations, targetNodeId = null) {
   return Array.from(relationMap.values());
 }
 
-function positivityDisplay(positivity) {
-  return {
-    color: getPositivityColor(positivity),
-    label: getPositivityLabel(positivity || 0),
-    percent: Math.round((positivity || 0) * 100),
-  };
-}
-
-/** viewer tooltip: 현재 이벤트에 노드 등장 여부 */
-function checkNodeAppearance({ isSidebar, data, node, chapterNum, folderKey, eventNum, elements }) {
+function checkNodeAppearance({ isSidebar, data, node, currentChapter, folderKey, eventNum, elements }) {
   const isGraphOnlyPage =
     typeof window !== 'undefined' && window.location.pathname.includes(`${USER_GRAPH_PREFIX}/`);
   if (isSidebar || isGraphOnlyPage) {
     return { appeared: true, error: null };
   }
-  if (!data || !chapterNum || chapterNum <= 0) {
+  if (!data || !currentChapter || currentChapter <= 0) {
     return { appeared: false, error: null };
   }
 
   try {
-    const json = getEventDataByIndex(folderKey, chapterNum, eventNum);
+    const json = getEventDataByIndex(folderKey, currentChapter, eventNum);
     const idCtx = buildIdentityContext({
       id: node?.id ?? data?.id ?? data?.data?.id,
       common_name:
@@ -164,8 +169,15 @@ function checkNodeAppearance({ isSidebar, data, node, chapterNum, folderKey, eve
   }
 }
 
-function resolvePovSummary(node, chapterNum, povSummaries) {
-  if (!node) return "인물에 대한 요약 정보가 없습니다.";
+function resolvePovSummary(node, currentChapter, povSummaries, povError = null) {
+  if (!node) return { text: '인물에 대한 요약 정보가 없습니다.', isError: false };
+
+  if (povError) {
+    return {
+      text: typeof povError === 'string' ? povError : '관점 요약을 불러오지 못했습니다.',
+      isError: true,
+    };
+  }
 
   const list = povSummaries?.povSummaries;
   if (Array.isArray(list) && list.length > 0) {
@@ -178,36 +190,40 @@ function resolvePovSummary(node, chapterNum, povSummaries) {
         .filter((n) => typeof n === 'string' && n.trim() !== '');
       match = list.find((s) => names.some((n) => n === s.characterName));
     }
-    if (match?.summaryText) return match.summaryText;
+    if (match?.summaryText) return { text: match.summaryText, isError: false };
   }
 
-  return `${node.displayName}에 대한 ${chapterNum || 1}장 관점 요약이 아직 준비되지 않았습니다.`;
+  return {
+    text: `${node.displayName}에 대한 ${currentChapter || 1}장 관점 요약이 아직 준비되지 않았습니다.`,
+    isError: false,
+  };
 }
 
 function buildRadarChartData({
   node,
-  chapterNum,
-  isSidebar,
+  currentChapter,
   apiBookGraphData,
   elements,
   folderKey,
   eventNum,
 }) {
-  if (!node?.id || !chapterNum || !isSidebar) return [];
+  if (!node?.id || !currentChapter) return [];
 
   try {
     if (apiBookGraphData?.relations && apiBookGraphData?.characters) {
       const { relations, characters } = apiBookGraphData;
-      const nameToIdMap = {};
       const bookElements = characters.map((char) => {
-        const charName = char.common_name || char.name;
-        nameToIdMap[charName] = char.id;
-        return { data: { id: String(char.id), label: charName, common_name: charName } };
+        const charName = char.common_name || char.name || '';
+        return {
+          data: {
+            id: String(char.id),
+            label: charName || `인물 ${char.id}`,
+            common_name: charName || `인물 ${char.id}`,
+          },
+        };
       });
 
-      const targetNodeId = typeof node.id === 'string'
-        ? (nameToIdMap[node.label || node.common_name] ?? node.id)
-        : node.id;
+      const targetNodeId = node.id;
 
       return extractRadarChartData(
         targetNodeId,
@@ -219,7 +235,28 @@ function buildRadarChartData({
 
     if (!elements?.length) return [];
 
-    const json = getEventDataByIndex(folderKey, chapterNum, eventNum);
+    const edgeRels = elements
+      .filter((el) => el?.data?.source && el?.data?.target)
+      .map((el) => ({
+        id1: el.data.source,
+        id2: el.data.target,
+        relation: el.data.relation || ['관계'],
+        count: el.data.count || el.data.strength || 1,
+        positivity: el.data.positivity || 0,
+      }));
+
+    if (edgeRels.length > 0) {
+      const nodeElements = elements.filter((el) => isGraphNodeElement(el));
+      return extractRadarChartData(
+        node.id,
+        collectUndirectedRelations(edgeRels, node.id),
+        nodeElements,
+        8,
+      );
+    }
+
+    if (!folderKey) return [];
+    const json = getEventDataByIndex(folderKey, currentChapter, eventNum);
     if (!json?.relations) return [];
 
     const relations = collectUndirectedRelations(json.relations);
@@ -233,46 +270,80 @@ function buildRadarChartData({
   }
 }
 
+function buildRecommendedNodes({ elements, apiBookGraphData, excludeId, limit = 3 }) {
+  const exclude = excludeId != null ? String(excludeId) : null;
+  const degree = new Map();
+
+  const bump = (id) => {
+    const key = String(id);
+    if (exclude && key === exclude) return;
+    degree.set(key, (degree.get(key) || 0) + 1);
+  };
+
+  if (apiBookGraphData?.relations?.length) {
+    apiBookGraphData.relations.forEach((rel) => {
+      bump(rel.id1 ?? rel.source);
+      bump(rel.id2 ?? rel.target);
+    });
+  } else if (Array.isArray(elements)) {
+    elements.forEach((el) => {
+      if (!el?.data?.source || !el?.data?.target) return;
+      bump(el.data.source);
+      bump(el.data.target);
+    });
+  }
+
+  const nameById = new Map();
+  if (apiBookGraphData?.characters?.length) {
+    apiBookGraphData.characters.forEach((char) => {
+      nameById.set(String(char.id), char.common_name || char.name || `인물 ${char.id}`);
+    });
+  }
+  if (Array.isArray(elements)) {
+    elements.forEach((el) => {
+      if (!isGraphNodeElement(el)) return;
+      const id = String(el.data.id);
+      nameById.set(id, el.data.common_name || el.data.label || nameById.get(id) || `인물 ${id}`);
+    });
+  }
+
+  return [...degree.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, limit)
+    .map(([id, count]) => ({
+      id,
+      name: nameById.get(id) || `인물 ${id}`,
+      positivity: 0,
+      relationTags: [`연결 ${count}`],
+    }));
+}
+
 function handleProfileImageError(e) {
   e.target.style.display = "none";
   if (e.target.nextSibling) e.target.nextSibling.style.display = "block";
 }
 
-function PersonSilhouette({ size = 48, circleFill = "#e5e7eb", bodyFill = "#bdbdbd" }) {
-  const cx = size / 2;
-  return (
-    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} fill="none">
-      <circle cx={cx} cy={cx} r={cx} fill={circleFill} />
-      <ellipse cx={cx} cy={size * 0.375} rx={size * 0.21} ry={size * 0.21} fill={bodyFill} />
-      <ellipse cx={cx} cy={size * 0.79} rx={size * 0.29} ry={size * 0.17} fill={bodyFill} />
-    </svg>
-  );
-}
-
-function TooltipCloseButton({ onClose, ariaLabel, className, style: extraStyle }) {
+function TooltipCloseButton({ onClose, ariaLabel, className }) {
   return (
     <button
       type="button"
       onClick={onClose}
       aria-label={ariaLabel}
       className={['tooltip-close-btn', className].filter(Boolean).join(' ')}
-      style={{ ...createButtonStyle('tooltipClose'), ...extraStyle }}
     >
       &times;
     </button>
   );
 }
 
-function ActionButton({ variant = 'secondary', onClick, children, ariaLabel, title, minWidth }) {
-  const isPrimary = variant === 'primary';
+function ActionButton({ variant = 'secondary', onClick, children, ariaLabel, title }) {
   return (
     <button
       type="button"
       onClick={onClick}
       aria-label={ariaLabel}
       title={title}
-      className={`tooltip-action-btn tooltip-action-btn--${isPrimary ? 'primary' : 'secondary'}`}
-      style={minWidth ? { minWidth } : undefined}
+      className={`tooltip-action-btn tooltip-action-btn--${variant === 'primary' ? 'primary' : 'secondary'}`}
     >
       {children}
     </button>
@@ -283,9 +354,8 @@ function NodeTooltipShell({
   children,
   shellRef,
   className = "graph-node-tooltip",
-  containerStyle,
   position,
-  zIndex,
+  zIndex = Z_INDEX_TOOLTIP,
   showContent,
   isDragging,
   handleMouseDown,
@@ -297,7 +367,6 @@ function NodeTooltipShell({
       ref={shellRef}
       className={className}
       style={{
-        ...containerStyle,
         left: position.x,
         top: position.y,
         zIndex,
@@ -328,63 +397,6 @@ function CenteredStatus({ children, color = COLORS.textSecondary, fullHeight = t
   );
 }
 
-function ConnectionStatusPanel({ children }) {
-  return <div className="tooltip-connection-panel">{children}</div>;
-}
-
-function RelationTagsRow({ tags, compact = false }) {
-  if (!tags?.length) return null;
-  return (
-    <div className={`tooltip-relation-tags${compact ? ' tooltip-relation-tags--compact' : ''}`}>
-      {tags.map((tag, i) => (
-        <span
-          key={i}
-          className={`tooltip-relation-tag${compact ? ' tooltip-relation-tag--compact' : ''}`}
-        >
-          {tag}
-        </span>
-      ))}
-    </div>
-  );
-}
-
-function NameWithDot({ name, positivity, dotSize = 14, fontSize = '1.1rem' }) {
-  const { color } = positivityDisplay(positivity);
-  return (
-    <div
-      className="tooltip-name-with-dot"
-      style={{ '--dot-color': color, '--dot-size': `${dotSize}px`, '--name-font-size': fontSize }}
-    >
-      <div className="tooltip-name-dot" />
-      <span className="tooltip-name-label">{name}</span>
-    </div>
-  );
-}
-
-function PositivityChip({ positivity, layout = 'row' }) {
-  const { color, label, percent } = positivityDisplay(positivity);
-  const style = { '--pos-color': color };
-
-  if (layout === 'card') {
-    return (
-      <div className="tooltip-positivity-chip tooltip-positivity-chip--card" style={style}>
-        <span className="tooltip-positivity-label">{label}</span>
-        <div className="tooltip-positivity-percent">
-          <span className="tooltip-positivity-percent-value">{percent}</span>
-          <span className="tooltip-positivity-percent-unit">%</span>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="tooltip-positivity-chip" style={style}>
-      <span className="tooltip-positivity-label">{label}</span>
-      <div className="tooltip-positivity-percent">{percent}%</div>
-    </div>
-  );
-}
-
 function NodeProfileAvatar({ node }) {
   const hasImage = !!node?.hasImage;
   return (
@@ -406,115 +418,35 @@ function NodeProfileAvatar({ node }) {
   );
 }
 
-const UnifiedNodeRadarDot = memo(function UnifiedNodeRadarDot({
-  cx,
-  cy,
-  payload,
-  dataMap,
-  hoveredName,
-  onDotMouseEnter,
-  onDotMouseLeave,
+function RelationAnalysisCta({
+  node,
+  connectionCount,
+  onOpen,
+  buttonRef,
 }) {
-  const fullData =
-    payload?.name != null ? (dataMap.get(payload.name) || payload) : null;
-  const dotName = fullData?.name ?? payload?.name;
-
-  const handleMouseEnterDot = useCallback(
-    (e) => {
-      if (!dotName) return;
-      e.stopPropagation();
-      onDotMouseEnter(dotName, e);
-    },
-    [dotName, onDotMouseEnter]
-  );
-
-  const handleMouseLeaveDot = useCallback(
-    (e) => {
-      e.stopPropagation();
-      onDotMouseLeave();
-    },
-    [onDotMouseLeave]
-  );
-
-  if (!payload || cx == null || cy == null || !fullData) return null;
-
-  const { color } = positivityDisplay(fullData.positivity);
-  const isHovered = hoveredName === payload.name;
-  const radius = isHovered ? 8 : 5;
-
-  return (
-    <g>
-      <circle
-        cx={cx}
-        cy={cy}
-        r={Math.max(15, radius * 3)}
-        fill="transparent"
-        style={{ cursor: "pointer", pointerEvents: "all", zIndex: 10 }}
-        onMouseEnter={handleMouseEnterDot}
-        onMouseLeave={handleMouseLeaveDot}
-      />
-      <circle
-        cx={cx}
-        cy={cy}
-        r={radius}
-        fill={color}
-        stroke={isHovered ? "#fff" : "none"}
-        strokeWidth={isHovered ? 2 : 0}
-        style={{ transition: "all 0.2s ease", pointerEvents: "none" }}
-      />
-    </g>
-  );
-});
-
-function FewConnectionsList({ radarChartData }) {
-  return (
-    <div className="tooltip-few-list">
-      <div className="tooltip-few-list-title">연결된 인물</div>
-
-      <div className="tooltip-few-list-items">
-        {radarChartData.map((item, index) => (
-          <div key={index} className="tooltip-few-list-card">
-            <NameWithDot name={item.name} positivity={item.positivity} />
-            <PositivityChip positivity={item.positivity} />
-            <RelationTagsRow tags={item.relationTags} />
-          </div>
-        ))}
-      </div>
-
-      <div className="tooltip-few-list-hint">
-        <div>현재 연결된 인물이 적어 그리드 차트로 표시하기 어려운 상황입니다.</div>
-        <div>더 풍부한 관계 분석을 위해 다른 챕터나 이벤트를 확인해보시기 바랍니다.</div>
-      </div>
-    </div>
-  );
-}
-
-function HoveredRelationPopup({ item, x, y, onClose }) {
-  const { color } = positivityDisplay(item.positivity);
-
   return (
     <div
-      className="tooltip-hover-popup"
-      style={{
-        left: `${Math.min(x + 15, window.innerWidth - 350)}px`,
-        top: `${Math.max(y - 15, 10)}px`,
-        '--pos-color': color,
-      }}
-      onMouseLeave={onClose}
+      className="sidebar-section tooltip-analysis-section"
+      role="region"
+      aria-label="관계 분석"
     >
-      <div className="tooltip-hover-popup-title">
-        <NameWithDot name={item.name} positivity={item.positivity} dotSize={8} />
-      </div>
-      <PositivityChip positivity={item.positivity} layout="card" />
-      {item.relationTags?.length > 0 && (
-        <div className="tooltip-hover-popup-tags">
-          <div className="tooltip-hover-popup-tags-label">
-            <div className="tooltip-hover-popup-tags-dot" />
-            관계 태그
-          </div>
-          <RelationTagsRow tags={item.relationTags} compact />
+      <button
+        ref={buttonRef}
+        type="button"
+        onClick={onOpen}
+        className="relation-analysis-btn"
+      >
+        <div className="tooltip-analysis-copy">
+          <h4 className="tooltip-section-title">
+            인물 관계 분석
+            <span className="tooltip-analysis-badge">관계 {connectionCount}</span>
+          </h4>
+          <p className="tooltip-analysis-desc">
+            {node?.displayName}와 연결된 인물과의 관계를 시각화합니다
+          </p>
         </div>
-      )}
+        <span className="tooltip-analysis-cta-label">분석 보기</span>
+      </button>
     </div>
   );
 }
@@ -525,14 +457,18 @@ function UnifiedNodeInfo({
   x,
   y,
   onClose,
-  chapterNum,
+  currentChapter,
   eventNum,
   elements = [],
   filename,
   currentEvent = null,
   prevValidEvent = null,
   povSummaries = null,
+  povError = null,
+  onRetryPov = null,
   apiBookGraphData = null,
+  onSelectRelatedNode = null,
+  chapterRailWidth = null,
 }) {
   const { filename: urlFilename } = useParams();
   const isSidebar = displayMode === 'sidebar';
@@ -543,42 +479,57 @@ function UnifiedNodeInfo({
   const [appeared, setAppeared] = useState(false);
   const [error, setError] = useState(null);
   const [summaryStage, setSummaryStage] = useState(SUMMARY.COLLAPSED);
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [hover, setHover] = useState(null);
+  const [isModalOpen, setIsModalOpen] = useState(() => {
+    if (pendingKeepAnalysisOpen) {
+      pendingKeepAnalysisOpen = false;
+      return true;
+    }
+    return false;
+  });
+  const keepModalOpenRef = useRef(false);
+  const analysisBtnRef = useRef(null);
 
-  const clearHover = useCallback(() => setHover(null), []);
+  const openModal = useCallback(() => setIsModalOpen(true), []);
   const closeModal = useCallback(() => {
+    pendingKeepAnalysisOpen = false;
     setIsModalOpen(false);
-    clearHover();
-  }, [clearHover]);
-  const onRadarHoverEnter = useCallback((name, event) => {
-    setHover({ name, x: event.clientX, y: event.clientY });
   }, []);
 
-  useEffect(() => {
-    if (!isModalOpen) return undefined;
-    const onKeyDown = (e) => { if (e.key === 'Escape') closeModal(); };
-    document.addEventListener('keydown', onKeyDown);
-    document.body.style.overflow = 'hidden';
-    return () => {
-      document.removeEventListener('keydown', onKeyDown);
-      document.body.style.overflow = 'unset';
-    };
-  }, [isModalOpen, closeModal]);
+  const handleSelectRelatedNode = useCallback((idOrName, options = {}) => {
+    if (!onSelectRelatedNode) return false;
+    if (options.keepAnalysisOpen) {
+      keepModalOpenRef.current = true;
+      pendingKeepAnalysisOpen = true;
+    } else {
+      pendingKeepAnalysisOpen = false;
+      keepModalOpenRef.current = false;
+    }
+    return onSelectRelatedNode(idOrName, options);
+  }, [onSelectRelatedNode]);
 
   useEffect(() => {
     setSummaryStage(SUMMARY.COLLAPSED);
-    setIsModalOpen(false);
-    clearHover();
-  }, [node?.id, clearHover]);
+    if (keepModalOpenRef.current) {
+      keepModalOpenRef.current = false;
+      setIsModalOpen(true);
+    } else {
+      setIsModalOpen(false);
+    }
+  }, [node?.id]);
+
+  const avoidPoint = useMemo(() => {
+    const c = data?.nodeCenter;
+    if (c && Number.isFinite(c.x) && Number.isFinite(c.y)) return c;
+    return null;
+  }, [data?.nodeCenter]);
 
   const { position, showContent, isDragging, tooltipRef, handleMouseDown } = useTooltipPosition(
-    x, y, { enabled: !isSidebar }
+    x, y, { enabled: !isSidebar, bounds: 'canvas', avoidPoint }
   );
 
   const clickOutsideRef = useClickOutside(
     () => { if (onClose) onClose(); },
-    !isSidebar && showContent,
+    !isSidebar && showContent && !isModalOpen,
     true
   );
 
@@ -592,48 +543,51 @@ function UnifiedNodeInfo({
       isSidebar,
       data,
       node,
-      chapterNum,
+      currentChapter,
       folderKey,
       eventNum: eventInfo.eventNum,
       elements,
     });
     setAppeared(result.appeared);
     setError(result.error);
-  }, [data, node, chapterNum, eventInfo, folderKey, elements, isSidebar]);
+  }, [data, node, currentChapter, eventInfo, folderKey, elements, isSidebar]);
 
-  const summaryText = useMemo(
-    () => resolvePovSummary(node, chapterNum, povSummaries),
-    [node, chapterNum, povSummaries],
+  const { text: summaryText, isError: summaryIsError } = useMemo(
+    () => resolvePovSummary(node, currentChapter, povSummaries, povError),
+    [node, currentChapter, povSummaries, povError],
   );
 
-  const radarChartData = useMemo(
-    () =>
-      buildRadarChartData({
-        node,
-        chapterNum,
-        isSidebar,
-        apiBookGraphData,
-        elements,
-        folderKey,
-        eventNum: eventInfo.eventNum,
-      }),
-    [node, chapterNum, isSidebar, folderKey, elements, apiBookGraphData, eventInfo],
-  );
+  const radarChartData = useMemo(() => {
+    if (!isSidebar) return [];
+    return buildRadarChartData({
+      node,
+      currentChapter,
+      apiBookGraphData,
+      elements,
+      folderKey,
+      eventNum: eventInfo.eventNum,
+    });
+  }, [isSidebar, node, currentChapter, folderKey, elements, apiBookGraphData, eventInfo]);
 
   const connectionKind = useMemo(() => {
+    if (!isSidebar) return 'no_connections';
     const n = radarChartData.length;
     if (n === 0) return 'no_connections';
-    if (n <= 2) return 'few_connections';
+    if (n === 1) return 'single_connection';
+    if (n === 2) return 'pair_connections';
     return 'sufficient_connections';
-  }, [radarChartData]);
+  }, [isSidebar, radarChartData]);
 
-  const dataMap = useMemo(() => {
-    const map = new Map();
-    radarChartData.forEach((item) => map.set(item.name, item));
-    return map;
-  }, [radarChartData]);
+  const recommendedNodes = useMemo(() => {
+    if (!isSidebar || connectionKind !== 'no_connections') return [];
+    return buildRecommendedNodes({
+      elements,
+      apiBookGraphData,
+      excludeId: node?.id,
+      limit: 3,
+    });
+  }, [isSidebar, connectionKind, elements, apiBookGraphData, node?.id]);
 
-  const hoveredItem = hover ? dataMap.get(hover.name) : null;
   const isWarning = summaryStage === SUMMARY.WARNING;
   const isContent = summaryStage === SUMMARY.CONTENT;
 
@@ -646,94 +600,23 @@ function UnifiedNodeInfo({
     handleMouseDown,
   };
 
-  const renderPolarAngleAxis = ({ payload, x: tickX, y: tickY, cx, cy }) => {
-    const point = dataMap.get(payload.value);
-    const color = point?.positivity !== undefined
-      ? positivityDisplay(point.positivity).color
-      : COLORS.textPrimary;
-    const active = hover?.name === payload.value;
-    const dx = tickX - cx;
-    const dy = tickY - cy;
-    const distance = Math.sqrt(dx * dx + dy * dy) || 1;
-    const scale = (distance + Math.max(40, 25 + ((payload.value?.length || 0) * 2))) / distance;
-
-    return (
-      <text
-        x={cx + dx * scale}
-        y={cy + dy * scale}
-        textAnchor="middle"
-        dominantBaseline="middle"
-        fill={active ? color : COLORS.textPrimary}
-        fontSize={active ? 18 : 16}
-        fontWeight={active ? 700 : 600}
-        style={{ transition: 'all 0.2s ease' }}
-      >
-        {payload.value}
-      </text>
-    );
-  };
-
-  const renderModalRadarBody = () => {
-    if (connectionKind === 'sufficient_connections') {
-      return (
-        <ResponsiveContainer width="100%" height="100%">
-          <RadarChart
-            data={radarChartData}
-            margin={{ top: 60, right: 60, bottom: 60, left: 60 }}
-            style={{ outline: 'none' }}
-          >
-            <style>{`
-              svg:focus, svg *:focus { outline: none !important; }
-              * { animation: none !important; transition: none !important; }
-            `}</style>
-            <PolarGrid stroke={COLORS.border} />
-            <PolarAngleAxis dataKey="name" tick={renderPolarAngleAxis} />
-            <PolarRadiusAxis
-              angle={90}
-              domain={[0, 100]}
-              tick={{ fontSize: 14, fill: COLORS.textSecondary, fontWeight: 600 }}
-              tickCount={5}
-              tickFormatter={(v) => (((v / 100) * 2) - 1).toFixed(1)}
-            />
-            <Radar
-              name={node?.displayName}
-              dataKey="normalizedValue"
-              stroke="#9ca3af"
-              fill="#e5e7eb"
-              fillOpacity={0.2}
-              strokeWidth={2}
-              dot={(dotProps) => {
-                const { key, ...rest } = dotProps;
-                return (
-                  <UnifiedNodeRadarDot
-                    key={key}
-                    {...rest}
-                    dataMap={dataMap}
-                    hoveredName={hover?.name}
-                    onDotMouseEnter={onRadarHoverEnter}
-                    onDotMouseLeave={clearHover}
-                  />
-                );
-              }}
-              isAnimationActive={false}
-            />
-          </RadarChart>
-        </ResponsiveContainer>
-      );
-    }
-
-    return (
-      <ConnectionStatusPanel>
-        {connectionKind === 'few_connections' && radarChartData.length > 0 ? (
-          <FewConnectionsList radarChartData={radarChartData} />
-        ) : (
-          <div className="tooltip-empty-connections">
-            다른 인물을 선택하거나 다른 챕터를 확인해보세요.
-          </div>
-        )}
-      </ConnectionStatusPanel>
-    );
-  };
+  const analysisModal = isSidebar && isModalOpen ? (
+    <RelationAnalysisModal
+      node={node}
+      currentChapter={currentChapter}
+      chapterScopeLabel={currentChapter != null ? `챕터 1–${currentChapter} 누적` : null}
+      radarChartData={radarChartData}
+      connectionKind={connectionKind}
+      recommendedNodes={recommendedNodes}
+      onClose={closeModal}
+      onSelectRelatedNode={onSelectRelatedNode ? handleSelectRelatedNode : null}
+      returnFocusRef={analysisBtnRef}
+      chapterRailWidth={
+        chapterRailWidth ?? GRAPH_LAYOUT_CONSTANTS.SIDEBAR.OPEN_WIDTH
+      }
+      reserveRight={GRAPH_LAYOUT_CONSTANTS.TOOLTIP_SIDEBAR_WIDTH}
+    />
+  ) : null;
 
   if (error) {
     const errorContent = (
@@ -751,7 +634,6 @@ function UnifiedNodeInfo({
         <NodeTooltipShell
           shellRef={tooltipRef}
           className="graph-node-tooltip error"
-          containerStyle={unifiedNodeTooltipStyles.errorContainer}
           position={position}
           zIndex={Z_INDEX_TOOLTIP}
         >
@@ -765,15 +647,15 @@ function UnifiedNodeInfo({
 
   if (!appeared) {
     const eventHint = eventInfo.name
-      ? `챕터 ${chapterNum} 이벤트 "${eventInfo.name}"에서는 등장하지 않습니다`
+      ? `챕터 ${currentChapter} 이벤트 "${eventInfo.name}"에서는 등장하지 않습니다`
       : eventInfo.eventNum
-        ? `챕터 ${chapterNum} 이벤트 ${eventInfo.eventNum}에서는 등장하지 않습니다`
-        : `챕터 ${chapterNum}에서는 등장하지 않습니다`;
+        ? `챕터 ${currentChapter} 이벤트 ${eventInfo.eventNum}에서는 등장하지 않습니다`
+        : `챕터 ${currentChapter}에서는 등장하지 않습니다`;
 
     return (
       <NodeTooltipShell
         {...floatingShell}
-        containerStyle={unifiedNodeTooltipStyles.notAppearedContainer}
+        className="graph-node-tooltip is-not-appeared"
         transition={unifiedNodeAnimations.tooltipSimpleTransition(isDragging)}
         closeButton={(
           <TooltipCloseButton
@@ -834,7 +716,6 @@ function UnifiedNodeInfo({
     return (
       <NodeTooltipShell
         {...floatingShell}
-        containerStyle={unifiedNodeTooltipStyles.tooltipContainer}
         transition={unifiedNodeAnimations.tooltipComplexTransition(isDragging)}
       >
         <div className="tooltip-content business-card">
@@ -919,59 +800,37 @@ function UnifiedNodeInfo({
           >
             <div className="tooltip-summary-content">
               <div className="tooltip-summary-quote">
-                <p className={`tooltip-summary-text${isContent ? ' is-animated' : ''}`}>
+                <p
+                  className={`tooltip-summary-text${isContent ? ' is-animated' : ''}${
+                    summaryIsError ? ' tooltip-summary-text--error' : ''
+                  }`}
+                >
                   {summaryText}
                 </p>
+                {summaryIsError && typeof onRetryPov === 'function' && (
+                  <button
+                    type="button"
+                    className="tooltip-action-btn tooltip-action-btn--secondary"
+                    onClick={onRetryPov}
+                    style={{ marginTop: 8 }}
+                  >
+                    다시 시도
+                  </button>
+                )}
               </div>
             </div>
           </div>
         </div>
 
-        <div
-          className="sidebar-section tooltip-analysis-section"
-          role="region"
-          aria-label="관계 분석"
-        >
-          <button
-            type="button"
-            onClick={() => setIsModalOpen(true)}
-            className="relation-analysis-btn"
-          >
-            <div className="tooltip-analysis-copy">
-              <h4 className="tooltip-section-title">인물 관계 분석</h4>
-              <p className="tooltip-analysis-desc">
-                {node?.displayName}와 연결된 인물들과의 관계를 시각화합니다
-              </p>
-            </div>
-            <span className="tooltip-analysis-plus">+</span>
-          </button>
-        </div>
+        <RelationAnalysisCta
+          node={node}
+          connectionCount={radarChartData.length}
+          onOpen={openModal}
+          buttonRef={analysisBtnRef}
+        />
       </div>
 
-      {isModalOpen && (
-        <div className="modal-overlay" onClick={closeModal}>
-          <div className="modal-container" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <h2 className="tooltip-modal-title">관계도 - 확대화면</h2>
-              <button type="button" onClick={closeModal} className="modal-close-btn">
-                ×
-              </button>
-            </div>
-
-            <div className="tooltip-modal-body">
-              {renderModalRadarBody()}
-              {hoveredItem && (
-                <HoveredRelationPopup
-                  item={hoveredItem}
-                  x={hover.x}
-                  y={hover.y}
-                  onClose={clearHover}
-                />
-              )}
-            </div>
-          </div>
-        </div>
-      )}
+      {analysisModal}
     </div>
   );
 }

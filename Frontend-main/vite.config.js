@@ -25,6 +25,15 @@ export default defineConfig(({ mode }) => {
           return html.replace('<meta charset="UTF-8" />', `<meta charset="UTF-8" />${meta}`);
         },
       },
+      // Vercel: vite build 성공 후에도 Node 핸들이 남아 Building에 멈추는 경우 방지
+      // https://vercel.com/kb/guide/fixing-deployments-that-hang-after-the-build-step-succeeds
+      {
+        name: 'force-exit-after-build',
+        apply: 'build',
+        closeBundle() {
+          setTimeout(() => process.exit(0), 0);
+        },
+      },
     ],
     define: {
       'import.meta.env.VITE_GOOGLE_CLIENT_ID': JSON.stringify(clientId),

@@ -1,16 +1,17 @@
 import { memo, useState, useEffect, useMemo } from "react";
 import {ResponsiveContainer, LineChart, CartesianGrid, ReferenceLine, Tooltip as RechartsTooltip, Line, XAxis, YAxis,} from "recharts";
 import { useParams } from "react-router-dom";
-import { useTooltipPosition, useClickOutside } from "../../../hooks/ui/tooltipHooks";
-import { useRelationData } from "../../../hooks/graph/useRelationData";
-import { getRelationStyle, tooltipStyles } from "../../../utils/styles/relationStyles";
-import { clampPositivity } from "../../../utils/styles/graphStyles";
-import { COLORS, ANIMATION_VALUES, mergeRefs } from "../../../utils/styles/styles";
-import { toFiniteNumber, toPositiveNumberOrNull } from "../../../utils/common/valueUtils";
-import { processRelationTags, cleanupRelationUtils } from "../../../utils/graph/graphUtils";
-import { resolveEventOrdinalForDisplay } from "../../../utils/viewer/viewerEventProgressUtils";
-import { isLongEdgeTimeline, annotateSignificantEdgePoints, getSparseEdgeTickValues, formatEdgeTimelineDisplayLabel } from "../../../utils/graph/graphData";
-import './tooltip.css';
+import { useTooltipPosition, useClickOutside } from "../../hooks/ui/tooltipHooks";
+import { useRelationData } from "../../hooks/graph/useApiGraphData";
+import { getRelationStyle } from "../../utils/styles/relationStyles";
+import { clampPositivity } from "../../utils/styles/graphStyles";
+import { COLORS, ANIMATION_VALUES, mergeRefs } from "../../utils/styles/styles";
+import { toFiniteNumber, toPositiveNumberOrNull } from "../../utils/common/valueUtils";
+import { processRelationTags, cleanupRelationUtils } from "../../utils/graph/graphCore";
+import { isLongEdgeTimeline, annotateSignificantEdgePoints, getSparseEdgeTickValues, formatEdgeTimelineDisplayLabel } from "../../utils/graph/graphCy";
+import './RelationGraph.css';
+
+const NO_RELATION_MESSAGE = '이 위치에서는 표시할 관계가 없습니다.';
 
 function extractNumericLabel(label) {
   if (typeof label === 'number' && Number.isFinite(label)) {
@@ -32,10 +33,10 @@ function isChapterLabel(label) {
   return typeof label === 'string' && /^Ch\d+/i.test(label.trim());
 }
 
-function isPairCurrentEvent(pair, currentEventIdx) {
+function isPairCurrentEvent(pair, eventIdx) {
   if (!pair || pair.isChapterAggregate) return false;
-  if (!Number.isFinite(currentEventIdx) || currentEventIdx <= 0) return false;
-  return Number.isFinite(pair.numericLabel) && pair.numericLabel === currentEventIdx;
+  if (!Number.isFinite(eventIdx) || eventIdx <= 0) return false;
+  return Number.isFinite(pair.numericLabel) && pair.numericLabel === eventIdx;
 }
 
 function EndpointAvatar({ endpoint }) {
@@ -63,10 +64,8 @@ function UnifiedEdgeTooltip({
   y,
   onClose,
   variant = 'graphPage',
-  chapterNum = 1,
+  currentChapter = 1,
   eventNum = 1,
-  currentEvent = null,
-  prevValidEvent = null,
   bookId = null,
   sourceEndpoint = null,
   targetEndpoint = null,
@@ -75,13 +74,23 @@ function UnifiedEdgeTooltip({
   const isSidebar = variant === 'graphPage';
   const isViewer = variant === 'viewer';
 
+  const avoidPoint = useMemo(() => {
+    const c = data?.edgeCenter;
+    if (c && Number.isFinite(c.x) && Number.isFinite(c.y)) return c;
+    return null;
+  }, [data?.edgeCenter]);
+
   const {
     position,
     showContent,
     isDragging,
     tooltipRef,
     handleMouseDown,
-  } = useTooltipPosition(x, y, { enabled: !isSidebar });
+  } = useTooltipPosition(x, y, {
+    enabled: !isSidebar,
+    bounds: 'canvas',
+    avoidPoint,
+  });
 
   const clickOutsideRef = useClickOutside(
     () => {
@@ -100,16 +109,7 @@ function UnifiedEdgeTooltip({
   const id1 = toFiniteNumber(data.source);
   const id2 = toFiniteNumber(data.target);
 
-  const displayEventNum = useMemo(
-    () =>
-      resolveEventOrdinalForDisplay({
-        currentEvent,
-        prevValidEvent,
-        progressTopBar: null,
-        fallback: eventNum,
-      }),
-    [currentEvent, prevValidEvent, eventNum],
-  );
+  const displayEventNum = toPositiveNumberOrNull(eventNum) ?? 0;
 
   const relationDataMode = isViewer ? 'viewer' : 'cumulative';
 
@@ -124,16 +124,14 @@ function UnifiedEdgeTooltip({
     loading,
     noRelation,
     error: relationError,
+    incomplete: relationIncomplete,
     fetchData,
-  } = useRelationData(relationDataMode, id1, id2, chapterNum, displayEventNum, numericBookId);
+  } = useRelationData(relationDataMode, id1, id2, currentChapter, displayEventNum, numericBookId);
 
-  const { graphBarPositivity, chartTimelineFallbackValue } = useMemo(() => {
+  const edgePositivity = useMemo(() => {
     const n = Number(data?.positivity);
-    if (!Number.isFinite(n)) {
-      return { graphBarPositivity: 0, chartTimelineFallbackValue: null };
-    }
-    const clamped = clampPositivity(n);
-    return { graphBarPositivity: clamped, chartTimelineFallbackValue: clamped };
+    if (!Number.isFinite(n)) return null;
+    return clampPositivity(n);
   }, [data?.positivity]);
 
   const relationLabels = processRelationTags(data.relation, data.label);
@@ -148,15 +146,13 @@ function UnifiedEdgeTooltip({
     };
   }, []);
 
-  const currentEventIdx = Number(displayEventNum);
-
   const effectiveEventColumns = useMemo(() => {
     if (!isViewer) return Number.POSITIVE_INFINITY;
-    if (Number.isFinite(currentEventIdx) && currentEventIdx > 0) {
-      return currentEventIdx;
+    if (Number.isFinite(displayEventNum) && displayEventNum > 0) {
+      return displayEventNum;
     }
     return Number.POSITIVE_INFINITY;
-  }, [isViewer, currentEventIdx]);
+  }, [isViewer, displayEventNum]);
 
   const { rechartsLineData, hasChartData } = useMemo(() => {
     const pairs = [];
@@ -209,9 +205,9 @@ function UnifiedEdgeTooltip({
       }
     }
 
-    if (pairs.length === 0 && chartTimelineFallbackValue !== null) {
+    if (pairs.length === 0 && edgePositivity !== null) {
       pairs.push({
-        value: chartTimelineFallbackValue,
+        value: edgePositivity,
         label: `event ${displayEventNum || 1}`,
         numericLabel: displayEventNum || 1,
         isChapterAggregate: false,
@@ -220,16 +216,16 @@ function UnifiedEdgeTooltip({
 
     let active = pairs.length > 0;
     if (active && isViewer) {
-      if (!Number.isFinite(currentEventIdx) || currentEventIdx <= 0) {
+      if (!Number.isFinite(displayEventNum) || displayEventNum <= 0) {
         active = pairs.length > 0;
-      } else if (pairs.some((pair) => isPairCurrentEvent(pair, currentEventIdx))) {
+      } else if (pairs.some((pair) => isPairCurrentEvent(pair, displayEventNum))) {
         active = true;
       } else {
         active = pairs.some(
           (pair) =>
             !pair.isChapterAggregate &&
             Number.isFinite(pair.numericLabel) &&
-            pair.numericLabel <= currentEventIdx,
+            pair.numericLabel <= displayEventNum,
         );
       }
     }
@@ -247,7 +243,7 @@ function UnifiedEdgeTooltip({
         label: formatEdgeTimelineDisplayLabel(pair.label, pair.numericLabel, i),
         numericLabel: pair.numericLabel,
         isChapter,
-        isCurrent: isPairCurrentEvent(pair, currentEventIdx),
+        isCurrent: isPairCurrentEvent(pair, displayEventNum),
         isSignificant: !!pair.isSignificant,
       };
     });
@@ -256,19 +252,17 @@ function UnifiedEdgeTooltip({
   }, [
     timeline,
     labels,
-    chartTimelineFallbackValue,
+    edgePositivity,
     displayEventNum,
     isViewer,
     effectiveEventColumns,
-    currentEventIdx,
   ]);
 
   const effectiveNoRelation = noRelation && !hasCurrentEdgeRelationData && !hasChartData;
-  const shouldShowRelationError = !!relationError && !hasChartData;
 
-  const positivityPercentage = Math.round(graphBarPositivity * 100);
+  const positivityPercentage = Math.round((edgePositivity ?? 0) * 100);
   const positivityBarWidth = Math.min(100, Math.abs(positivityPercentage));
-  const relationStyle = getRelationStyle(graphBarPositivity);
+  const relationStyle = getRelationStyle(edgePositivity ?? 0);
 
   const explanationParts = useMemo(() => {
     if (typeof data?.explanation !== 'string' || !data.explanation) {
@@ -351,7 +345,7 @@ function UnifiedEdgeTooltip({
               ticks={sparseTicks}
               tickFormatter={(v) => visibleXLabelMap[Math.round(v)] ?? ''}
               tick={{ fontSize: isSidebar ? (longTimeline ? 12 : 13) : (longTimeline ? 10 : 11), fill: '#9ca3af' }}
-              axisLine={{ stroke: '#e5e7eb' }}
+              axisLine={{ stroke: COLORS.border }}
               tickLine={false}
               interval={0}
             />
@@ -524,8 +518,8 @@ function UnifiedEdgeTooltip({
   );
 
   const chartTitle = isViewer
-    ? `Chapter ${chapterNum} 관계 변화`
-    : `Chapter ${chapterNum}까지의 누적 관계 변화`;
+    ? `Chapter ${currentChapter} 관계 변화`
+    : `Chapter ${currentChapter}까지의 누적 관계 변화`;
 
   const renderInfoPanel = () => {
     if (isViewer && effectiveNoRelation) {
@@ -557,7 +551,7 @@ function UnifiedEdgeTooltip({
     if (loading) {
       return renderSkeleton('데이터를 불러오는 중...');
     }
-    if (shouldShowRelationError) {
+    if (relationError && !hasChartData) {
       return renderStatusMessage('데이터를 불러올 수 없습니다', {
         error: true,
         action: (
@@ -577,6 +571,14 @@ function UnifiedEdgeTooltip({
     return (
       <div className="edge-chart-panel">
         <div className="edge-chart-title">{chartTitle}</div>
+        {relationIncomplete && (
+          <p className="edge-chart-incomplete-hint">
+            일부 이벤트를 불러오지 못했습니다.{' '}
+            <button type="button" onClick={fetchData} className="edge-tooltip-retry-btn">
+              다시 시도
+            </button>
+          </p>
+        )}
         {relationTimelineChart(chartHeight)}
       </div>
     );
@@ -641,7 +643,6 @@ function UnifiedEdgeTooltip({
       ref={mergeRefs(tooltipRef, clickOutsideRef)}
       className="edge-tooltip-container edge-tooltip-floating"
       style={{
-        ...tooltipStyles.container,
         left: position.x,
         top: position.y,
         opacity: showContent ? 1 : 0,
@@ -660,9 +661,7 @@ export default memo(UnifiedEdgeTooltip, (prevProps, nextProps) => {
     prevProps.data === nextProps.data &&
     prevProps.x === nextProps.x &&
     prevProps.y === nextProps.y &&
-    prevProps.currentEvent === nextProps.currentEvent &&
-    prevProps.prevValidEvent === nextProps.prevValidEvent &&
-    prevProps.chapterNum === nextProps.chapterNum &&
+    prevProps.currentChapter === nextProps.currentChapter &&
     prevProps.eventNum === nextProps.eventNum &&
     prevProps.variant === nextProps.variant &&
     prevProps.bookId === nextProps.bookId &&

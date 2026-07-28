@@ -1,65 +1,33 @@
-/** manifest · progress · relationship-deltas API */
+/** relationship-deltas API · accumulate 헬퍼 */
 
 import {
-  setManifestData,
   getManifestFromCache,
   getChapterData,
   getLastManifestEventInChapter,
-  withNormalizedProgressLocators,
-  setProgressToCache,
-  removeProgressFromCache,
-  getProgressFromCache,
-  ensureProgressRowLocator,
 } from '../common/cache/manifestCache';
-import { normalizeReadingProgressPercent } from '../viewer/viewerEventProgressUtils';
-import { progressPayloadFromData, resolveProgressLocator, locatorsEqual, toNumberOrNull, toTrimmedStringOrNull } from '../common/valueUtils';
-import { getApiBaseUrl } from '../common/urlUtils';
-import { getStoredAccessToken } from '../security/authTokenStorage';
+import { toNumberOrNull, toTrimmedStringOrNull } from '../common/valueUtils';
 import {
   authenticatedRequest,
-  makeSilentError,
-  isForbiddenError,
-  isNotFoundError,
+  SOFT_FAIL_403_404,
+  requireBookId,
+  pickResponseResult,
+  toUnifiedApiResponse,
 } from './authApi';
+import { pickCharacterDisplayName, rememberCharacterDisplayName } from '../graph/graphCore';
 
-// ─── shared ───────────────────────────────────────────────────────────────
-
-const SOFT_FAIL_403_404 = [403, 404];
+/** API/캐시 로드 결과 계약 — error·empty 구분 */
+export const FETCH_STATUS = Object.freeze({
+  OK: 'ok',
+  EMPTY: 'empty',
+  ERROR: 'error',
+});
 
 const asArray = (value) => (Array.isArray(value) ? value : []);
 
-const requireBookId = (bookId) => {
-  if (!bookId) throw new Error('bookId는 필수 매개변수입니다.');
-};
-
-const hasOwnKeys = (obj) =>
-  !!obj && typeof obj === 'object' && !Array.isArray(obj) && Object.keys(obj).length > 0;
-
-const pickResponseResult = (response) => {
-  if (!response || typeof response !== 'object') return null;
-
-  const candidates = [response.result, response.data, response.payload];
-  const rich = candidates.find((c) => hasOwnKeys(c));
-  if (rich) return rich;
-
-  const scalar = candidates.find((c) => c != null);
-  if (scalar != null) return scalar;
-
-  return Array.isArray(response.deltas) ? response : null;
-};
-
-const toUnifiedApiResponse = (
-  response,
-  { defaultCode = 'SUCCESS', defaultMessage = '', defaultResult = null } = {}
-) => {
-  const safe = response && typeof response === 'object' ? response : {};
-  return {
-    ...safe,
-    isSuccess: typeof safe.isSuccess === 'boolean' ? safe.isSuccess : true,
-    code: safe.code ?? defaultCode,
-    message: safe.message ?? defaultMessage,
-    result: safe.result ?? defaultResult,
-  };
+/** characters 또는 relations가 하나라도 있으면 true */
+export const hasGraphPayload = (data) => {
+  if (!data || typeof data !== 'object') return false;
+  return asArray(data.characters).length > 0 || asArray(data.relations).length > 0;
 };
 
 const handleApiError = (error, context) => {
@@ -128,12 +96,24 @@ const normalizeAccumulatedGraphResult = (payload) => {
   };
 };
 
-const createRelationshipDeltasResponse = (isSuccess, code, message, result) => ({
-  isSuccess,
-  code,
-  message,
-  result: normalizeAccumulatedGraphResult(result),
-});
+const createRelationshipDeltasResponse = (isSuccess, code, message, result, status = null) => {
+  const normalized = normalizeAccumulatedGraphResult(result);
+  const hasPayload =
+    normalized.characters.length > 0 || normalized.relations.length > 0 || Boolean(normalized.eventId);
+  let resolvedStatus = status;
+  if (!resolvedStatus) {
+    if (!isSuccess) resolvedStatus = FETCH_STATUS.ERROR;
+    else if (!hasPayload) resolvedStatus = FETCH_STATUS.EMPTY;
+    else resolvedStatus = FETCH_STATUS.OK;
+  }
+  return {
+    isSuccess,
+    code,
+    message,
+    status: resolvedStatus,
+    result: normalized,
+  };
+};
 
 const resolveManifestCharacterMeta = (bookId) => {
   const byId = new Map();
@@ -266,10 +246,8 @@ const finalizeAccumulateStateToGraphResult = (
     .sort((a, b) => a - b)
     .map((id) => {
       const meta = manifestChars.get(id);
-      const commonName =
-        (typeof meta?.name === 'string' && meta.name) ||
-        (typeof meta?.common_name === 'string' && meta.common_name) ||
-        '';
+      const commonName = pickCharacterDisplayName(meta) || '';
+      if (commonName) rememberCharacterDisplayName(bookId, id, commonName);
       const w = state.weightMap.get(id);
       return {
         id,
@@ -420,16 +398,28 @@ const requestRelationshipDeltas = async (
   return { response, result: pickResponseResult(response) };
 };
 
+/** 챕터에 델타 없음(404) — 누적 실패가 아니라 빈 커버리지 */
+const isDeltasSoftEmpty = (response) => response?.code === 'NOT_FOUND';
+
 const toGraphApiResponse = ({ response, result, empty }) => {
-  const failed = !response || response.isSuccess === false;
-  const code = failed ? response?.code || 'ERROR' : 'SUCCESS';
+  const resolved = result || empty;
+  const hasPayload = hasGraphPayload(resolved);
+  // soft-empty는 fetch 단계에서 success로 정규화됨. 여기선 누적 payload로 부분 실패 보정.
+  const failed = (!response || response.isSuccess === false) && !hasPayload;
+  const code = failed ? response?.code || 'ERROR' : hasPayload ? 'SUCCESS' : 'NOT_FOUND';
   const message = failed
-    ? code === 'NOT_FOUND'
-      ? '관계 델타를 찾을 수 없습니다.'
-      : response?.message || '관계 델타 조회에 실패했습니다.'
-    : '관계 델타를 성공적으로 조회했습니다.';
+    ? response?.message || '관계 델타 조회에 실패했습니다.'
+    : hasPayload
+      ? '관계 델타를 성공적으로 조회했습니다.'
+      : '관계 델타를 찾을 수 없습니다.';
   return toUnifiedApiResponse(
-    createRelationshipDeltasResponse(!failed, code, message, failed ? empty : result || empty)
+    createRelationshipDeltasResponse(
+      !failed,
+      code,
+      message,
+      failed ? empty : resolved,
+      failed ? FETCH_STATUS.ERROR : null
+    )
   );
 };
 
@@ -462,11 +452,21 @@ export const fetchRelationshipDeltasList = async (
     toEventId,
   });
 
+  const softEmpty = isDeltasSoftEmpty(response);
+  const deltas = asArray(result?.deltas);
   return {
-    response,
+    // 404를 success 응답으로 정규화해 하위 캐시/로더가 실패로 오인하지 않게 함
+    response: softEmpty
+      ? {
+          isSuccess: true,
+          code: 'SUCCESS',
+          message: '관계 델타가 없습니다.',
+          result: result ?? { deltas: [] },
+        }
+      : response,
     bookId: result?.bookId ?? bookId,
-    deltas: asArray(result?.deltas),
-    isSuccess: response?.isSuccess !== false,
+    deltas,
+    isSuccess: response?.isSuccess !== false || softEmpty,
   };
 };
 
@@ -491,7 +491,7 @@ export const getBookScopeRelationshipGraph = async (bookId, uptoChapter = null) 
 
   try {
     const { ensureBookRelationshipDeltas } = await import(
-      '../common/cache/chapterEventCache'
+      '../graph/graphModel'
     );
     const fetched = await ensureBookRelationshipDeltas(bookId, {
       chapterIndex,
@@ -506,226 +506,6 @@ export const getBookScopeRelationshipGraph = async (bookId, uptoChapter = null) 
       empty,
     });
   } catch (error) {
-    if (error.status === 404) {
-      return toGraphApiResponse({
-        response: { isSuccess: false, code: 'NOT_FOUND' },
-        result: null,
-        empty,
-      });
-    }
     handleApiError(error, '관계 델타 조회 실패');
-  }
-};
-
-// ─── progress ──────────────────────────────────────────────────────────────
-
-const PROGRESS_FORBIDDEN = makeSilentError('FORBIDDEN', '해당 책에 접근할 권한이 없습니다');
-const PROGRESS_NOT_FOUND = makeSilentError('NOT_FOUND', '진도 정보를 찾을 수 없습니다');
-
-const handleProgressApiError = (error, logContext) => {
-  if (isForbiddenError(error)) return PROGRESS_FORBIDDEN;
-  if (isNotFoundError(error)) return PROGRESS_NOT_FOUND;
-  if (logContext) console.error(logContext, error);
-  throw error;
-};
-
-/** softFail 응답의 FORBIDDEN/NOT_FOUND → silent error (해당 없으면 null) */
-const mapProgressSoftFailCode = (response, { includeNotFound = true } = {}) => {
-  if (response?.code === 'FORBIDDEN') return PROGRESS_FORBIDDEN;
-  if (includeNotFound && response?.code === 'NOT_FOUND') return PROGRESS_NOT_FOUND;
-  return null;
-};
-
-const buildProgressSavePayload = (progressData) =>
-  progressPayloadFromData(withNormalizedProgressLocators(progressData));
-
-const mergeReadingProgressPercent = (cacheRow, progressData, serverResult, bookId) => {
-  const pctFromReq = normalizeReadingProgressPercent(progressData, { bookId });
-  const pctFromRes = normalizeReadingProgressPercent(serverResult ?? {}, { bookId });
-  if (pctFromReq != null || pctFromRes != null) {
-    cacheRow.readingProgressPercent = pctFromReq ?? pctFromRes;
-  }
-  return cacheRow;
-};
-
-export const saveProgress = async (progressData) => {
-  try {
-    const payload = buildProgressSavePayload(progressData);
-    if (!payload) {
-      throw new Error('bookId와 읽기 위치(startLocator/locator)는 필수입니다.');
-    }
-    const response = await authenticatedRequest('/v2/progress', {
-      method: 'POST',
-      body: JSON.stringify(payload),
-      softFailStatuses: SOFT_FAIL_403_404,
-    });
-    const softFail = mapProgressSoftFailCode(response, { includeNotFound: false });
-    if (softFail) return softFail;
-    if (!response?.isSuccess) {
-      const error = new Error(response?.message || '독서 진도 저장 실패');
-      error.status = response?.status;
-      throw error;
-    }
-    const serverResult =
-      response?.result && typeof response.result === 'object' ? response.result : null;
-    const cacheRow = serverResult
-      ? { ...serverResult, bookId: progressData.bookId ?? serverResult.bookId }
-      : { ...progressData, ...payload };
-    const bookId = progressData.bookId ?? serverResult?.bookId;
-    mergeReadingProgressPercent(cacheRow, progressData, serverResult, bookId);
-    setProgressToCache(cacheRow);
-    return toUnifiedApiResponse(
-      { ...response, result: response?.result ?? cacheRow },
-      { defaultMessage: '독서 진도를 저장했습니다.' }
-    );
-  } catch (error) {
-    if (isForbiddenError(error)) return PROGRESS_FORBIDDEN;
-    console.error('독서 진도 저장 실패:', error);
-    throw error;
-  }
-};
-
-export const saveProgressKeepalive = (progressData) => {
-  try {
-    const payload = buildProgressSavePayload(progressData);
-    if (!payload) return false;
-    const token = getStoredAccessToken();
-
-    fetch(`${getApiBaseUrl()}/api/v2/progress`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      },
-      body: JSON.stringify(payload),
-      keepalive: true,
-    }).catch(() => void 0);
-
-    return true;
-  } catch {
-    return false;
-  }
-};
-
-export const getBookProgress = async (bookId, options = {}) => {
-  if (!bookId) return makeSilentError('INVALID_INPUT', 'bookId는 필수 매개변수입니다.');
-
-  if (options?.skipCache !== true) {
-    const cachedProgress = getProgressFromCache(bookId);
-    if (cachedProgress) {
-      return toUnifiedApiResponse({
-        isSuccess: true,
-        code: 'CACHE_HIT',
-        message: '진도 정보를 로컬 캐시에서 가져왔습니다',
-        result: cachedProgress,
-        fromCache: true,
-      });
-    }
-  }
-
-  try {
-    const response = await authenticatedRequest(`/v2/progress/${bookId}`, {
-      softFailStatuses: SOFT_FAIL_403_404,
-    });
-    const softFail = mapProgressSoftFailCode(response);
-    if (softFail) return softFail;
-    if (response?.isSuccess && response.result) {
-      const base = { ...response.result };
-      const prev = getProgressFromCache(bookId);
-      const newLoc = resolveProgressLocator(ensureProgressRowLocator(String(bookId), base));
-      const prevLoc = resolveProgressLocator(prev ?? {});
-      const sameLoc = newLoc && prevLoc && locatorsEqual(newLoc, prevLoc);
-      const pct =
-        normalizeReadingProgressPercent(base, { bookId }) ??
-        (sameLoc ? normalizeReadingProgressPercent(prev ?? {}, { bookId }) : null);
-      const row = pct != null ? { ...base, readingProgressPercent: pct } : base;
-      setProgressToCache(row);
-      const hydrated = getProgressFromCache(bookId);
-      return toUnifiedApiResponse(
-        { ...response, result: hydrated ?? row },
-        { defaultMessage: '진도 정보를 조회했습니다.' }
-      );
-    }
-    return toUnifiedApiResponse(response, { defaultMessage: '진도 정보를 조회했습니다.' });
-  } catch (error) {
-    return handleProgressApiError(error);
-  }
-};
-
-export const deleteBookProgress = async (bookId) => {
-  try {
-    requireBookId(bookId);
-    const response = await authenticatedRequest(`/v2/progress/${bookId}`, {
-      method: 'DELETE',
-      softFailStatuses: SOFT_FAIL_403_404,
-    });
-    const softFail = mapProgressSoftFailCode(response);
-    if (softFail) return softFail;
-    if (response?.isSuccess) removeProgressFromCache(bookId);
-    return toUnifiedApiResponse(response, {
-      defaultMessage: '독서 진도를 삭제했습니다.',
-      defaultResult: null,
-    });
-  } catch (error) {
-    return handleProgressApiError(error, '독서 진도 삭제 실패:');
-  }
-};
-
-// ─── manifest ──────────────────────────────────────────────────────────────
-
-export const getBookManifest = async (bookId, { forceRefresh = false } = {}) => {
-  const numericBookId = Number(bookId);
-  if (!Number.isFinite(numericBookId) || numericBookId < 1) {
-    return makeSilentError('INVALID_INPUT', 'bookId는 1 이상의 정수여야 합니다.');
-  }
-
-  try {
-    if (!forceRefresh) {
-      const cached = getManifestFromCache(numericBookId);
-      if (cached) {
-        return toUnifiedApiResponse({
-          isSuccess: true,
-          code: 'CACHE_HIT',
-          message: 'Manifest loaded from cache',
-          result: cached,
-          fromCache: true,
-        });
-      }
-    }
-
-    const response = await authenticatedRequest(`/v2/books/${numericBookId}/manifest`, {
-      softFailStatuses: SOFT_FAIL_403_404,
-    });
-    if (response?.code === 'NOT_FOUND') {
-      return makeSilentError(
-        'NOT_FOUND',
-        '도서를 찾을 수 없거나 아직 노출 가능한 상태가 아닙니다.'
-      );
-    }
-    if (response?.code === 'FORBIDDEN') {
-      return makeSilentError('FORBIDDEN', '접근 권한이 없습니다');
-    }
-
-    const result = pickResponseResult(response);
-    if (response?.isSuccess && result) {
-      const normalized = setManifestData(numericBookId, result);
-      return toUnifiedApiResponse(
-        { ...response, result: normalized ?? result },
-        { defaultMessage: 'Manifest loaded successfully' }
-      );
-    }
-    return toUnifiedApiResponse(response, { defaultMessage: 'Manifest loaded successfully' });
-  } catch (error) {
-    if (error.status === 400 || String(error?.message ?? '').includes('400')) {
-      return makeSilentError('BAD_REQUEST', '잘못된 요청입니다.');
-    }
-    if (isNotFoundError(error)) {
-      return makeSilentError(
-        'NOT_FOUND',
-        '도서를 찾을 수 없거나 아직 노출 가능한 상태가 아닙니다.'
-      );
-    }
-    console.error('Manifest 조회 실패:', error);
-    throw error;
   }
 };

@@ -1,16 +1,27 @@
-/** 뷰어 그래프 유틸: API/캐시 조회·변환·타깃 계산 */
+/** 뷰어 그래프 파이프라인: API/캐시 조회·변환·타깃 계산 */
 
-import { processRelations } from '../graph/graphUtils';
-import { buildNodeWeights, createCharacterMaps, toNodeWeightsOrNull } from '../graph/characterUtils';
-import { convertRelationsToElements } from '../graph/graphDataUtils';
-import { resolveGraphElementsProfileImages } from '../common/assetUrlFetch';
+import { processRelations } from '../graph/graphCore';
 import {
+  buildNodeWeights,
+  createCharacterMaps,
+  toNodeWeightsOrNull,
+  aggregateCharactersFromEvents,
+  convertRelationsToElements,
   getGraphEventState,
-  getChapterEventFallbackData,
-} from '../common/cache/chapterEventCache';
-import { resolveChapterIndex, toPositiveInt } from '../common/valueUtils';
-import { cacheKeyUtils, eventUtils } from './viewerCoreStateUtils';
-import { resolveServerEventMatch } from './viewerEventProgressUtils';
+  getCachedChapterEvents,
+} from '../graph/graphModel';
+import {
+  enrichGraphCharacters,
+  applyDisplayNamesToElements,
+} from '../graph/graphCore';
+import {
+  resolveGraphElementsProfileImages,
+  graphElementsHaveUnresolvedProfileImages,
+  GRAPH_IMAGE_DEFERRED_RETRY_MS,
+} from '../common/urlUtils';
+import { resolveChapterIndex, toPositiveInt, toPositiveNumberOrNull } from '../common/valueUtils';
+import { cacheKeyUtils, eventUtils, ELEMENTS_TO_RELATIONS_OPTS } from './viewerCore';
+import { resolveServerEventMatch } from './viewerSession';
 
 export const DEFAULT_GRAPH_TRANSFORM_DEPS = {
   createCharacterMaps,
@@ -27,10 +38,25 @@ export function commitVisibleGraphElements(setElements, nextElements, { applyTok
   const visibleElements = Array.isArray(nextElements) ? nextElements : [];
   setElements(visibleElements);
   const token = applyTokenRef ? ++applyTokenRef.current : null;
-  void resolveGraphElementsProfileImages(visibleElements).then((resolved) => {
-    if (applyTokenRef && token !== applyTokenRef.current) return;
+
+  const applyIfCurrent = (resolved) => {
+    if (applyTokenRef && token !== applyTokenRef.current) return false;
     setElements(resolved);
+    return true;
+  };
+
+  void resolveGraphElementsProfileImages(visibleElements).then((resolved) => {
+    if (!applyIfCurrent(resolved)) return;
+    if (!graphElementsHaveUnresolvedProfileImages(resolved)) return;
+
+    setTimeout(() => {
+      if (applyTokenRef && token !== applyTokenRef.current) return;
+      void resolveGraphElementsProfileImages(resolved, { force: true }).then((retried) => {
+        applyIfCurrent(retried);
+      });
+    }, GRAPH_IMAGE_DEFERRED_RETRY_MS);
   });
+
   return visibleElements;
 }
 
@@ -54,6 +80,81 @@ export function resolveGraphCallContext({ book, currentChapter, currentEvent }) 
   };
 }
 
+export const VIEWER_GRAPH_PIPELINE = {
+  PREFETCH_AHEAD_EVENTS: 2,
+  /** 다음 챕터 진입 시 바로 쓸 수 있도록 최소 이벤트 수 */
+  PREFETCH_NEXT_CHAPTER_EVENTS: 3,
+  HARD_RELOAD_SETTLE_MS: 1000,
+  DISCOVERY_WAIT_MS: 30000,
+  DISCOVERY_POLL_MS: 16,
+};
+
+export function getCachedChapterMaxEventIdx(bookId, chapter) {
+  return Number(getCachedChapterEvents(bookId, chapter)?.maxEventIdx) || 0;
+}
+
+/** 캐시에 throughEventIdx까지 쓸 수 있는 데이터가 있는지 */
+export function hasCachedChapterThrough(bookId, chapter, throughEventIdx = 1) {
+  const through = Number(throughEventIdx);
+  const need = Number.isFinite(through) && through >= 1 ? through : 1;
+  return getCachedChapterMaxEventIdx(bookId, chapter) >= need;
+}
+
+export function buildChapterCharacterSearchData(events, currentChapter) {
+  if (!currentChapter || !Array.isArray(events) || events.length === 0) {
+    return { characters: [] };
+  }
+  const chapterEvents = events.filter(
+    (evt) => Number(eventUtils.resolveChapterIdx(evt)) === Number(currentChapter),
+  );
+  return { characters: Array.from(aggregateCharactersFromEvents(chapterEvents).values()) };
+}
+
+export function toCommitGraphArgs(chapter, eventIdx, source) {
+  return {
+    graphChapter: chapter,
+    apiEventIdx: eventIdx,
+    elements: source.elements,
+    eventMeta: source.eventMeta,
+    normalizedEvent: source.normalizedEvent ?? undefined,
+    characters: source.characters,
+    relations: source.relations,
+  };
+}
+
+export async function awaitPendingChapterDiscovery(pending) {
+  if (!pending) return false;
+  try {
+    await pending;
+  } catch {
+    /* discovery 쪽에서 에러 상태 기록 */
+  }
+  return true;
+}
+
+/** 캐시 max 또는 discovery status로 through 커버리지 판정 */
+export function resolveChapterDiscoveryCoverage(refs, bookId, chapter, eventIdx) {
+  if (getCachedChapterMaxEventIdx(bookId, chapter) >= eventIdx) {
+    return { ready: true };
+  }
+  const status = refs.chapterEventDiscoveryRef.current.get(
+    cacheKeyUtils.createChapterKey(bookId, chapter),
+  );
+  if (typeof status === 'number' && status >= eventIdx) return { ready: true };
+  if (status === 'missing') return { ready: false, reason: 'missing' };
+  return null;
+}
+
+export function clearViewerGraphPipelineMaps(refs) {
+  refs.chapterSyncStatusRef.current.clear();
+  refs.chapterEventDiscoveryRef.current.clear();
+  refs.chapterDiscoveryPromiseRef.current.clear();
+}
+
+export function resolvePipelineBookId(book) {
+  return toPositiveNumberOrNull(book?.id);
+}
+
 export function fallbackEventMeta(chapter, eventIdx) {
   return {
     chapterIdx: chapter,
@@ -70,17 +171,20 @@ export function convertGraphSourceToElements(
   chapter,
   eventIdx,
   deps = DEFAULT_GRAPH_TRANSFORM_DEPS,
-  previousNodeWeights = null
+  previousNodeWeights = null,
+  options = null
 ) {
   const eventMeta = source?.event ?? source?.eventMeta ?? fallbackEventMeta(chapter, eventIdx);
-  const characters = asArray(source?.characters);
+  const bookId = options?.bookId ?? source?.bookId ?? null;
+  const characters = enrichGraphCharacters(asArray(source?.characters), { bookId });
   const relations = asArray(source?.relations);
   const normalizedEvent = graphDataTransformUtils.normalizeApiEvent(eventMeta);
   const elements = graphDataTransformUtils.convertToElements(
     { characters, relations, event: eventMeta },
     normalizedEvent,
     deps,
-    previousNodeWeights
+    previousNodeWeights,
+    { bookId }
   );
   return { elements, normalizedEvent, eventMeta, characters, relations };
 }
@@ -102,7 +206,7 @@ export function getCachedGraphSnapshot(bookId, chapter, eventIdx, getGraphEventS
   return cached;
 }
 
-/** event 1~eventIdx 누적 그래프 (표시용) */
+/** event 1~eventIdx 누적 그래프 (표시용) — 단일 캐시 소스만 사용 */
 export function resolveCumulativeGraphForDisplay(
   bookId,
   chapter,
@@ -114,28 +218,22 @@ export function resolveCumulativeGraphForDisplay(
 
   const cachedElements = asArray(cached.elements);
   const characters = asArray(cached.characters);
-  const resolved =
-    cachedElements.length > 0
-      ? {
-          elements: cachedElements,
-          eventMeta: cached.eventMeta ?? null,
-          characters,
-          relations: [],
-          normalizedEvent: null,
-        }
-      : convertGraphSourceToElements(cached, chapter, eventIdx, deps);
 
-  const fallback = getChapterEventFallbackData(bookId, chapter, eventIdx);
+  if (cachedElements.length > 0) {
+    const enrichedCharacters = enrichGraphCharacters(characters, { bookId });
+    return {
+      elements: applyDisplayNamesToElements(cachedElements, {
+        bookId,
+        characters: enrichedCharacters,
+      }),
+      eventMeta: cached.eventMeta ?? null,
+      characters: enrichedCharacters,
+      relations: eventUtils.convertElementsToRelations(cachedElements, ELEMENTS_TO_RELATIONS_OPTS),
+      normalizedEvent: null,
+    };
+  }
 
-  return {
-    elements: resolved.elements,
-    eventMeta: resolved.eventMeta ?? fallback?.event ?? null,
-    characters: resolved.characters.length
-      ? resolved.characters
-      : (fallback?.characters ?? []),
-    relations: fallback?.relations ?? resolved.relations,
-    normalizedEvent: resolved.normalizedEvent ?? null,
-  };
+  return convertGraphSourceToElements(cached, chapter, eventIdx, deps, null, { bookId });
 }
 
 export const graphDataTransformUtils = {
@@ -157,8 +255,9 @@ export const graphDataTransformUtils = {
     };
   },
 
-  convertToElements: (resultData, normalizedEvent, deps, previousNodeWeights = null) => {
-    const chars = asArray(resultData.characters);
+  convertToElements: (resultData, normalizedEvent, deps, previousNodeWeights = null, options = null) => {
+    const bookId = options?.bookId ?? resultData?.bookId ?? null;
+    const chars = enrichGraphCharacters(asArray(resultData.characters), { bookId });
     const rels = processRelations(asArray(resultData.relations));
     if (chars.length === 0 && rels.length === 0) return [];
 
@@ -177,6 +276,7 @@ export const graphDataTransformUtils = {
       eventData: normalizedEvent,
       idToProfileImage,
       charactersOrphanMerge: chars.length > 0 ? chars : null,
+      bookId,
     });
   },
 
@@ -186,8 +286,8 @@ export const graphDataTransformUtils = {
     const originalEventIdx = normalizedEvent
       ? eventUtils.resolveEventNum(normalizedEvent)
       : apiEventIdx;
-    const relations = resultData.relations || [];
-    const characters = resultData.characters || [];
+    const relations = asArray(resultData.relations);
+    const characters = asArray(resultData.characters);
 
     const withEventFields = (base, rawId) => ({
       ...base,
