@@ -273,7 +273,7 @@ function FewConnectionsPanel({
   );
 }
 
-function PersonSilhouette({ size = 48, circleFill = GRAPH_COLORS.border, bodyFill = '#bdbdbd' }) {
+export function PersonSilhouette({ size = 48, circleFill = GRAPH_COLORS.border, bodyFill = '#bdbdbd' }) {
   const cx = size / 2;
   return (
     <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} fill="none" aria-hidden>
