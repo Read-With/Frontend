@@ -3,7 +3,7 @@ import {ResponsiveContainer, LineChart, CartesianGrid, ReferenceLine, Tooltip as
 import { useParams } from "react-router-dom";
 import { useTooltipPosition, useClickOutside } from "../../hooks/ui/tooltipHooks";
 import { useRelationData } from "../../hooks/graph/useApiGraphData";
-import { getRelationStyle, tooltipStyles } from "../../utils/styles/relationStyles";
+import { getRelationStyle } from "../../utils/styles/relationStyles";
 import { clampPositivity } from "../../utils/styles/graphStyles";
 import { COLORS, ANIMATION_VALUES, mergeRefs } from "../../utils/styles/styles";
 import { toFiniteNumber, toPositiveNumberOrNull } from "../../utils/common/valueUtils";
@@ -345,7 +345,7 @@ function UnifiedEdgeTooltip({
               ticks={sparseTicks}
               tickFormatter={(v) => visibleXLabelMap[Math.round(v)] ?? ''}
               tick={{ fontSize: isSidebar ? (longTimeline ? 12 : 13) : (longTimeline ? 10 : 11), fill: '#9ca3af' }}
-              axisLine={{ stroke: '#e5e7eb' }}
+              axisLine={{ stroke: COLORS.border }}
               tickLine={false}
               interval={0}
             />
@@ -643,7 +643,6 @@ function UnifiedEdgeTooltip({
       ref={mergeRefs(tooltipRef, clickOutsideRef)}
       className="edge-tooltip-container edge-tooltip-floating"
       style={{
-        ...tooltipStyles.container,
         left: position.x,
         top: position.y,
         opacity: showContent ? 1 : 0,

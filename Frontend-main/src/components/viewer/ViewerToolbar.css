@@ -2,13 +2,13 @@
 
 .xhtml-toolbar-btn,
 .progressbar-slider {
-  --vt-surface: #ffffff;
+  --vt-surface: var(--rg-surface, #ffffff);
   --vt-surface-hover: #f9fafb;
-  --vt-border: #e2e8f0;
+  --vt-border: var(--rg-border-muted, #e2e8f0);
   --vt-border-hover: #d1d5db;
   --vt-text: #374151;
-  --vt-accent: #5c6f5c;
-  --vt-track: #e8f0e8;
+  --vt-accent: var(--rg-brand, #5c6f5c);
+  --vt-track: var(--rg-progress-track, #e8f0e8);
   --vt-focus: rgba(92, 111, 92, 0.45);
   --vt-focus-ring: rgba(92, 111, 92, 0.28);
   --vt-radius: 0.5rem;
@@ -177,18 +177,18 @@ body.viewer-split-dragging * {
   display: flex;
   gap: 0.25rem;
   padding: 0.35rem 0.75rem;
-  background: #fff;
-  border-bottom: 0.0625rem solid #e2e8f0;
+  background: var(--rg-surface, #fff);
+  border-bottom: 0.0625rem solid var(--rg-border-muted, #e2e8f0);
   flex-shrink: 0;
 }
 
 .viewer-mobile-pane-tab {
   flex: 1;
   height: 2rem;
-  border: 0.0625rem solid #e2e8f0;
+  border: 0.0625rem solid var(--rg-border-muted, #e2e8f0);
   border-radius: 0.5rem;
   background: #f8faf8;
-  color: #5c6f5c;
+  color: var(--rg-brand, #5c6f5c);
   font-size: 0.8125rem;
   font-weight: 650;
   cursor: pointer;

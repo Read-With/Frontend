@@ -2,19 +2,19 @@ import { useState, useEffect, useMemo, useCallback, memo, useRef } from 'react';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import { findViewerModeOption } from '../../utils/viewer/viewerSession';
 import { userViewerPath, userGraphPath } from '../../utils/common/urlUtils';
+import { COLORS } from '../../utils/styles/styles.js';
 import './ViewerToolbar.css';
 
-const PROGRESS_BAR_COLOR = '#5C6F5C';
-const PROGRESS_BAR_BG = '#e8f0e8';
+const PROGRESS_BAR_BG = COLORS.progressTrack;
 const SPLIT_STORAGE_KEY = 'viewer-graph-split-percent';
 const SPLIT_MIN = 32;
 const SPLIT_MAX = 68;
 const NARROW_MQ = '(max-width: 767px)';
 
 const TOOLBAR_BTN = {
-  backgroundColor: 'white',
-  color: '#5C6F5C',
-  border: '1px solid #e2e8f0',
+  backgroundColor: COLORS.white,
+  color: COLORS.primary,
+  border: `1px solid ${COLORS.borderMuted}`,
 };
 
 const mobileMenuClass = 'flex items-center justify-center gap-2 p-3 rounded-lg transition-colors';
@@ -106,7 +106,7 @@ const ViewerProgressBar = memo(function ViewerProgressBar({
         maxWidth: 700,
       }}
     >
-      <span style={{ fontWeight: 700, color: '#2f3b2f', fontSize: '1.08rem', minWidth: 70 }}>
+      <span style={{ fontWeight: 700, color: COLORS.nodeText, fontSize: '1.08rem', minWidth: 70 }}>
         {currentPage} / {totalPages}
       </span>
       <input
@@ -118,7 +118,7 @@ const ViewerProgressBar = memo(function ViewerProgressBar({
         disabled={!progressMetricsReady}
         style={{
           width: '60%',
-          accentColor: PROGRESS_BAR_COLOR,
+          accentColor: COLORS.primary,
           height: 6,
           borderRadius: 8,
           background: PROGRESS_BAR_BG,
@@ -135,7 +135,7 @@ const ViewerProgressBar = memo(function ViewerProgressBar({
       <span
         style={{
           fontWeight: 700,
-          color: PROGRESS_BAR_COLOR,
+          color: COLORS.primary,
           fontSize: '1.08rem',
           minWidth: 60,
           textAlign: 'right',
@@ -226,7 +226,7 @@ function ViewerToolbar({
 
   const graphToggleStyleMobile = useMemo(
     () => ({
-      border: showGraph ? '2px solid #5C6F5C' : TOOLBAR_BTN.border,
+      border: showGraph ? `2px solid ${COLORS.primary}` : TOOLBAR_BTN.border,
       boxShadow: showGraph
         ? '0 4px 12px rgba(92, 111, 92, 0.2)'
         : '0 2px 4px rgba(92, 111, 92, 0.1)',
@@ -239,7 +239,7 @@ function ViewerToolbar({
     () => ({
       width: '9rem',
       marginRight: '0.5rem',
-      border: showGraph ? '2px solid #5C6F5C' : TOOLBAR_BTN.border,
+      border: showGraph ? `2px solid ${COLORS.primary}` : TOOLBAR_BTN.border,
     }),
     [showGraph]
   );
@@ -249,14 +249,14 @@ function ViewerToolbar({
       padding: '0.5rem 1rem',
       marginLeft: '1rem',
       borderRadius: '1rem',
-      backgroundColor: showGraph ? '#E8F5E8' : '#F4FAF4',
-      color: '#5C6F5C',
+      backgroundColor: showGraph ? COLORS.primaryLight : COLORS.primaryTintSoft,
+      color: COLORS.primary,
       fontWeight: '600',
       fontSize: '0.9rem',
       display: 'flex',
       alignItems: 'center',
       gap: '0.5em',
-      border: showGraph ? '2px solid #5C6F5C' : '1px solid #5C6F5C',
+      border: showGraph ? `2px solid ${COLORS.primary}` : `1px solid ${COLORS.primary}`,
       boxShadow: showGraph
         ? '0 2px 8px rgba(92, 111, 92, 0.15)'
         : '0 1px 3px rgba(92, 111, 92, 0.1)',
@@ -273,7 +273,7 @@ function ViewerToolbar({
       style={{
         backgroundColor: 'white',
         backdropFilter: 'blur(4px)',
-        borderBottom: '1.5px solid #e2e8f0',
+        borderBottom: `1.5px solid ${COLORS.borderMuted}`,
         padding: isMobile ? '0.5rem' : '0.4rem 0.7rem',
       }}
     >
@@ -730,7 +730,7 @@ function ViewerLayout({
       width: graphFullScreen ? '100%' : `${100 - splitPercent}%`,
       flex: graphFullScreen ? '1 1 auto' : `0 0 ${100 - splitPercent}%`,
       position: 'relative',
-      boxShadow: graphFullScreen ? 'none' : '-1px 0 0 var(--rg-border-soft, #e3e6ef)',
+      boxShadow: graphFullScreen ? 'none' : `-1px 0 0 ${COLORS.borderLight}`,
       minWidth: 0,
     };
   }, [graphFullScreen, splitPercent, useMobileTabs, showGraphPane]);

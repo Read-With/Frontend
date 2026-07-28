@@ -18,13 +18,13 @@ const sidebarBaseStyle = {
   top: 0,
   width: `${SIDEBAR_WIDTH}px`,
   height: '100vh',
-  background: '#fff',
+  background: COLORS.white,
   borderRadius: '0px',
   boxShadow: '2px 0 8px rgba(0,0,0,0.06)',
-  borderRight: '1px solid #e5e7eb',
+  borderRight: `1px solid ${COLORS.border}`,
   zIndex: 99999,
   overflow: 'hidden',
-  transition: `right ${ANIMATION_DURATION}ms cubic-bezier(0.4, 0, 0.2, 1)`,
+  transition: `right ${ANIMATION_DURATION}ms ${ANIMATION_VALUES.EASE_OUT}`,
 };
 
 const loadingOverlayStyle = {
@@ -54,24 +54,14 @@ const canvasShellStyle = {
 
 const pageContainerStyle = {
   ...graphStyles.graphPageContainer,
-  display: 'flex',
-  flexDirection: 'column',
   height: '100%',
 };
 
-const pageInnerStyle = {
-  ...graphStyles.graphPageInner,
-  flex: 1,
-  display: 'flex',
-  flexDirection: 'column',
-  position: 'relative',
-};
+const pageInnerStyle = graphStyles.graphPageInner;
 
 const canvasAreaStyle = {
-  ...graphStyles.graphArea,
   flex: 1,
   minHeight: 0,
-  position: 'relative',
 };
 
 function clearTimeoutRef(timeoutRef) {

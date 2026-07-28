@@ -7,7 +7,7 @@ import ChapterSidebar from "./ChapterSidebar";
 import "./RelationGraph.css";
 
 import { createGraphStylesheet, getEdgeStyle } from "../../utils/styles/graphStyles";
-import { COLORS, createAdvancedButtonHandlers } from "../../utils/styles/styles.js";
+import { COLORS } from "../../utils/styles/styles.js";
 import {
   GRAPH_LAYOUT_CONSTANTS,
   GRAPH_ZOOM,
@@ -64,7 +64,7 @@ const emptyGraphBannerStyle = {
   transform: 'translate(-50%, -50%)',
   zIndex: 10003,
   background: 'rgba(255,255,255,0.96)',
-  border: '1px solid #e5e7eb',
+  border: `1px solid ${COLORS.border}`,
   borderRadius: 10,
   padding: '8px 12px',
   color: '#374151',
@@ -72,7 +72,6 @@ const emptyGraphBannerStyle = {
   fontWeight: 600,
 };
 
-const graphBackButtonHandlers = createAdvancedButtonHandlers('default');
 const GRAPH_PAGE_EDGE_STYLE = getEdgeStyle('graph');
 const GRAPH_TRANSFORM_DEPS = { createCharacterMaps, buildNodeWeights, convertRelationsToElements };
 
@@ -549,7 +548,6 @@ function RelationGraphWrapper() {
             className="graph-page-back"
             onClick={handleBackToViewer}
             aria-label="뷰어로 돌아가기"
-            {...graphBackButtonHandlers}
           >
             <span className="material-symbols-outlined" aria-hidden>
               arrow_back

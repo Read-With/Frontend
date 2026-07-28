@@ -17,7 +17,6 @@ import { USER_GRAPH_PREFIX } from "../../utils/common/urlUtils";
 import {
   COLORS,
   mergeRefs,
-  unifiedNodeTooltipStyles,
   unifiedNodeAnimations,
 } from "../../utils/styles/styles.js";
 import './RelationGraph.css';
@@ -355,9 +354,8 @@ function NodeTooltipShell({
   children,
   shellRef,
   className = "graph-node-tooltip",
-  containerStyle,
   position,
-  zIndex,
+  zIndex = Z_INDEX_TOOLTIP,
   showContent,
   isDragging,
   handleMouseDown,
@@ -369,7 +367,6 @@ function NodeTooltipShell({
       ref={shellRef}
       className={className}
       style={{
-        ...containerStyle,
         left: position.x,
         top: position.y,
         zIndex,
@@ -637,7 +634,6 @@ function UnifiedNodeInfo({
         <NodeTooltipShell
           shellRef={tooltipRef}
           className="graph-node-tooltip error"
-          containerStyle={unifiedNodeTooltipStyles.errorContainer}
           position={position}
           zIndex={Z_INDEX_TOOLTIP}
         >
@@ -659,7 +655,7 @@ function UnifiedNodeInfo({
     return (
       <NodeTooltipShell
         {...floatingShell}
-        containerStyle={unifiedNodeTooltipStyles.notAppearedContainer}
+        className="graph-node-tooltip is-not-appeared"
         transition={unifiedNodeAnimations.tooltipSimpleTransition(isDragging)}
         closeButton={(
           <TooltipCloseButton
@@ -720,7 +716,6 @@ function UnifiedNodeInfo({
     return (
       <NodeTooltipShell
         {...floatingShell}
-        containerStyle={unifiedNodeTooltipStyles.tooltipContainer}
         transition={unifiedNodeAnimations.tooltipComplexTransition(isDragging)}
       >
         <div className="tooltip-content business-card">

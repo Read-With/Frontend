@@ -8,6 +8,7 @@ import HomePage from './pages/HomePage';
 import OAuthCallback from './components/auth/OAuthCallback';
 import useAuth, { AuthProvider } from './hooks/auth/useAuth';
 import { prefetchBooks } from './hooks/books/bookHooks';
+import { COLORS } from './utils/styles/styles.js';
 
 const AdminPage = lazy(() => import('./pages/AdminPage'));
 const MyPage = lazy(() => import('./pages/MyPage'));
@@ -45,7 +46,7 @@ const ProtectedRoute = () => {
       <div className="flex min-h-screen items-center justify-center">
         <div
           className="h-10 w-10 animate-spin rounded-full border-4 border-gray-200"
-          style={{ borderTopColor: '#5C6F5C' }}
+          style={{ borderTopColor: COLORS.primary }}
           aria-label="로딩 중"
         />
       </div>

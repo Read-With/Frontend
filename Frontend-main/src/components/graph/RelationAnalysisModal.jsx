@@ -10,21 +10,21 @@ import {
   PolarRadiusAxis,
   ResponsiveContainer,
 } from 'recharts';
-import { getPositivityColor, getPositivityLabel } from '../../utils/styles/relationStyles.js';
+import { getRelationStyle } from '../../utils/styles/relationStyles.js';
 import { GRAPH_COLORS } from '../../utils/styles/graphStyles.js';
 import './RelationGraph.css';
 
 const NAME_LABEL_MAX = 6;
-const RADAR_BRAND = GRAPH_COLORS.primary;
 const RADAR_GRID = 'rgba(92, 111, 92, 0.22)';
 const RADAR_AXIS_TICK = '#6f7f6f';
 const RADAR_FILL = 'rgba(92, 111, 92, 0.14)';
 
 function positivityDisplay(positivity) {
+  const { color, text } = getRelationStyle(positivity);
   return {
-    color: getPositivityColor(positivity),
-    label: getPositivityLabel(positivity || 0),
-    percent: Math.round((positivity || 0) * 100),
+    color,
+    label: text,
+    percent: Math.round((Number(positivity) || 0) * 100),
   };
 }
 
@@ -115,7 +115,7 @@ const RadarDot = memo(function RadarDot({
           cy={cy}
           r={radius + 4}
           fill="none"
-          stroke={RADAR_BRAND}
+          stroke={GRAPH_COLORS.primary}
           strokeWidth={1.5}
           strokeOpacity={0.55}
           style={{ pointerEvents: 'none' }}
@@ -273,7 +273,7 @@ function FewConnectionsPanel({
   );
 }
 
-function PersonSilhouette({ size = 48, circleFill = '#e5e7eb', bodyFill = '#bdbdbd' }) {
+function PersonSilhouette({ size = 48, circleFill = GRAPH_COLORS.border, bodyFill = '#bdbdbd' }) {
   const cx = size / 2;
   return (
     <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} fill="none" aria-hidden>
@@ -493,7 +493,7 @@ function RelationAnalysisModalImpl({
           <Radar
             name={node?.displayName}
             dataKey="normalizedValue"
-            stroke={RADAR_BRAND}
+            stroke={GRAPH_COLORS.primary}
             fill={RADAR_FILL}
             fillOpacity={1}
             strokeWidth={2.25}

@@ -30,6 +30,9 @@
   --rg-danger: #ef4444;
   --rg-danger-strong: #dc2626;
 
+  /* viewer progress track (ViewerToolbar --vt-track) */
+  --rg-progress-track: #e8f0e8;
+
   --rg-radius-sm: 0.375rem;
   --rg-radius-md: 0.5rem;
   --rg-radius-lg: 0.75rem;
@@ -1356,6 +1359,15 @@
   cursor: grab;
   display: flex;
   flex-direction: column;
+}
+
+.graph-node-tooltip.error {
+  min-height: 9.375rem;
+  border-color: color-mix(in srgb, var(--rg-danger) 25%, transparent);
+}
+
+.graph-node-tooltip.is-not-appeared {
+  min-height: 9.375rem;
 }
 
 .edge-tooltip-container:active,

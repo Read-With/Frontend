@@ -21,7 +21,12 @@ function resolvePositivityLabel(value) {
   return match?.text ?? '매우 부정적';
 }
 
+/** @returns {{ color: string, text: string }} */
 export function getRelationStyle(positivity) {
+  if (positivity === undefined || positivity === null || Number.isNaN(positivity)) {
+    return { color: getRelationColor(0), text: '정보 없음' };
+  }
+
   const value = clampPositivity(positivity);
   const key = Math.round(value * 100) / 100;
 
@@ -36,25 +41,6 @@ export function getRelationStyle(positivity) {
   styleCache.set(key, result);
   return result;
 }
-
-export function getPositivityColor(positivity) {
-  return getRelationStyle(positivity).color;
-}
-
-export function getPositivityLabel(positivity) {
-  if (positivity === undefined || positivity === null || Number.isNaN(positivity)) {
-    return '정보 없음';
-  }
-  return getRelationStyle(positivity).text;
-}
-
-/** 플로팅 위치만 — 카드 chrome은 CSS(.edge-tooltip-container) */
-export const tooltipStyles = {
-  container: {
-    position: 'fixed',
-    zIndex: 99999,
-  },
-};
 
 export function clearStyleCache() {
   styleCache.clear();

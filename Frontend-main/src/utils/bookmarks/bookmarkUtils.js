@@ -8,6 +8,7 @@ import {
   resolveProgressMetricsFromLocator,
 } from '../common/cache/manifestCache';
 import { normalizeStartEndLocatorsForServer } from '../common/cache/progressCache';
+import { COLORS } from '../styles/styles.js';
 
 export const clientSortToApiSort = (sortOrder) =>
   sortOrder === 'oldest' ? 'time_asc' : 'time_desc';
@@ -250,7 +251,7 @@ export const bookmarkColors = {
 export const bookmarkBorders = {
   normal: '#e7eaf7',
   important: '#ffd600',
-  highlight: '#5C6F5C',
+  highlight: COLORS.primary,
 };
 
 export const DEFAULT_BOOKMARK_COLOR = bookmarkColors.normal;

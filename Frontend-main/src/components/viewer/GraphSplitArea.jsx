@@ -422,7 +422,7 @@ const GraphContainer = memo(function GraphContainer({
         )}
       </div>
 
-      <div className="graph-canvas-area" style={graphStyles.graphArea}>
+      <div className="graph-canvas-area">
         <CytoscapeGraphUnified
           elements={elements}
           stylesheet={stylesheet}
@@ -585,7 +585,7 @@ const GraphSplitArea = memo(function GraphSplitArea({
         cy={cyInstance}
       />
 
-      <div style={{ ...graphStyles.graphPageInner, minWidth: 0, position: 'relative' }}>
+      <div style={{ ...graphStyles.graphPageInner, minWidth: 0 }}>
         {shouldShowLoading ? (
           <GraphNoticePanel
             variant="loading"
@@ -630,11 +630,9 @@ const GraphSplitArea = memo(function GraphSplitArea({
           <div
             className="graph-canvas-area"
             style={{
-              ...graphStyles.graphArea,
               flex: 1,
               minHeight: 0,
               minWidth: 0,
-              position: 'relative',
             }}
           >
             <GraphContainer
