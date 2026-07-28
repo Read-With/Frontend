@@ -20,7 +20,7 @@ import {
   unifiedNodeAnimations,
 } from "../../utils/styles/styles.js";
 import './RelationGraph.css';
-import RelationAnalysisModal from './RelationAnalysisModal';
+import RelationAnalysisModal, { PersonSilhouette } from './RelationAnalysisModal';
 
 const Z_INDEX_TOOLTIP = 99999;
 const SUMMARY = { COLLAPSED: 'collapsed', WARNING: 'warning', CONTENT: 'content' };
