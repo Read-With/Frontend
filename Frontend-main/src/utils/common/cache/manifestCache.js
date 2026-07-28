@@ -1,15 +1,14 @@
 import { normalizeManifestBook } from '../../api/booksApi';
-import { sanitizeAssetUrl } from '../urlUtils';
+import { sanitizeAssetUrl, errorUtils } from '../urlUtils';
 import {
   resolveChapterIndex,
   toNumberOrNull,
   toOneBasedChapterIndexOrNull,
   toPositiveInt,
   clampPercent,
+  toLocator,
 } from '../valueUtils';
-import { toLocator, locatorsEqual, resolveProgressLocator } from '../locatorUtils';
-import { eventUtils } from '../../viewer/viewerCoreStateUtils';
-import { invalidateCachedXhtml } from '../../viewer/xhtmlLoadCache.js';
+import { eventUtils } from '../../viewer/viewerCore';
 import {
   registerCache,
   getCacheItem,
@@ -71,6 +70,18 @@ const normalizeChapter = (chapter) => {
   if (idx == null || idx < 1) return null;
 
   const title = typeof chapter.title === 'string' ? chapter.title : '';
+  const navTitle =
+    typeof chapter.navTitle === 'string'
+      ? chapter.navTitle
+      : typeof chapter.navLabel === 'string'
+        ? chapter.navLabel
+        : '';
+  const tocTitle =
+    typeof chapter.tocTitle === 'string'
+      ? chapter.tocTitle
+      : typeof chapter.tocLabel === 'string'
+        ? chapter.tocLabel
+        : '';
   const paragraphStarts = parseManifestJsonNumberArray(chapter.paragraphStartsJson);
   const paragraphLengths = parseManifestJsonNumberArray(chapter.paragraphLengthsJson);
   const paragraphCount = toNumberOrNull(chapter.paragraphCount) ?? 0;
@@ -92,6 +103,10 @@ const normalizeChapter = (chapter) => {
     chapterIndex: idx,
     title,
     chapterTitle: title,
+    navTitle,
+    tocTitle,
+    label: typeof chapter.label === 'string' ? chapter.label : '',
+    name: typeof chapter.name === 'string' ? chapter.name : '',
     spineHref: chapter.spineHref != null ? String(chapter.spineHref) : '',
     paragraphCount,
     paragraphStartsJson: typeof chapter.paragraphStartsJson === 'string' ? chapter.paragraphStartsJson : '',
@@ -373,10 +388,10 @@ const pickManifestEventForChapterLocalOffset = (events, local) => {
 };
 
 /**
- * GET /api/v2/books/{bookId}/relationship-graph locator 호출에서 blockIndex 불일치(400)를 피하기 위해
+ * 이벤트 시작 locator 해석 (progress/뷰어용). 그래프 API는 relationship-deltas(eventId)를 사용.
  * 매니페스트 이벤트 구간(startTxtOffset/endTxtOffset)으로 locator에 대응하는 eventIdx를 계산한다.
  */
-export const resolveFineGraphLocatorToEventParams = (
+export const resolveLocatorToEventParams = (
   bookId,
   atLocator,
   eventIdxFallback = 1,
@@ -420,25 +435,6 @@ export const resolveFineGraphLocatorToEventParams = (
     atLocator: loc,
     resolved: true,
   };
-};
-
-export const resolveFineGraphEventToLocator = (
-  bookId,
-  chapterIdx,
-  eventIdx,
-  manifestOverride = undefined
-) => {
-  const chapterData = getChapterData(bookId, chapterIdx, manifestOverride);
-  if (!chapterData) return null;
-  const idx = toNumberOrNull(eventIdx);
-  const events = Array.isArray(chapterData.events) ? chapterData.events : [];
-  const manifestEvent =
-    idx != null ? events.find((ev) => manifestEventIndex(ev) === idx) ?? null : null;
-  const startTxtOffset = toNumberOrNull(manifestEvent?.startTxtOffset);
-  if (startTxtOffset != null && startTxtOffset >= 0) {
-    return chapterLocalOffsetToLocator(chapterData, startTxtOffset);
-  }
-  return chapterLocalOffsetToLocator(chapterData, 0);
 };
 
 /**
@@ -656,11 +652,10 @@ export const invalidateManifest = (bookId) => {
   removeCacheItem('manifestCache', key);
   const cacheKey = getManifestCacheKey(bookId);
   removeFromStorage(cacheKey, 'localStorage');
-  try {
-    invalidateCachedXhtml(bookId);
-  } catch {
-    /* ignore */
-  }
+  // viewerLocator imports manifestCache — dynamic import로 순환 방지
+  void import('../../viewer/viewerLocator')
+    .then((m) => m.invalidateCachedXhtml(bookId))
+    .catch(() => {});
 };
 
 export const prefetchManifest = async (bookId, fetcher) => {
@@ -730,61 +725,6 @@ export const getChapterData = (bookId, chapterIdx, manifestOverride = undefined)
   return getChapterDataFromManifest(manifest, chapterIdx);
 };
 
-/** POST progress — 서버 blockIndex 검증에 맞게 paragraphStarts 축으로 재매핑 */
-export const normalizeLocatorForServerProgress = (bookId, locator, manifestOverride = undefined) => {
-  const loc = toLocator(locator);
-  if (!loc) return null;
-  const chapter = getChapterData(bookId, loc.chapterIndex, manifestOverride);
-  if (!chapter) return loc;
-  const starts = Array.isArray(chapter.paragraphStarts) ? chapter.paragraphStarts : [];
-  if (starts.length === 0) return loc;
-  const local = chapterLocalCodePointFromLocator(chapter, loc);
-  const out = chapterLocalOffsetToLocator(chapter, local);
-  return out ?? loc;
-};
-
-/** start/end locator 서버 축 정규화 (진도·북마크 공용). 동일하면 endLocator=null */
-export const normalizeStartEndLocatorsForServer = (
-  bookId,
-  startLocator,
-  endLocator = null,
-  manifestOverride = undefined
-) => {
-  const start =
-    normalizeLocatorForServerProgress(bookId, startLocator, manifestOverride) ??
-    toLocator(startLocator);
-  if (!start) return { startLocator: null, endLocator: null };
-
-  const endRaw = toLocator(endLocator) ?? start;
-  const end =
-    normalizeLocatorForServerProgress(bookId, endRaw, manifestOverride) ?? endRaw;
-
-  return {
-    startLocator: start,
-    endLocator: locatorsEqual(start, end) ? null : end,
-  };
-};
-
-/** progress 저장/캐시용 — end가 없으면 start로 채움 */
-export const withNormalizedProgressLocators = (progressData, manifestOverride = undefined) => {
-  if (!progressData?.bookId) return progressData;
-  const bookId = String(progressData.bookId);
-  const locator = resolveProgressLocator(progressData);
-  if (!locator) return progressData;
-  const { startLocator, endLocator } = normalizeStartEndLocatorsForServer(
-    bookId,
-    locator,
-    progressData.endLocator ?? progressData.end ?? null,
-    manifestOverride
-  );
-  if (!startLocator) return progressData;
-  return {
-    ...progressData,
-    startLocator,
-    locator: startLocator,
-    endLocator: endLocator ?? startLocator,
-  };
-};
 
 const manifestEventIndex = (event) => {
   const idx = eventUtils.resolveEventNum(event);
@@ -827,10 +767,75 @@ export const getLastManifestEventInChapter = (
   }, null);
 };
 
+/** 챕터 manifest events 중 가장 첫(최소 인덱스) 이벤트 */
+export const getFirstManifestEventInChapter = (
+  bookId,
+  chapterIdx,
+  manifestOverride = undefined
+) => {
+  const chapterData = getChapterData(bookId, chapterIdx, manifestOverride);
+  const events = Array.isArray(chapterData?.events) ? chapterData.events : [];
+  return events.reduce((first, event) => {
+    const num = manifestEventIndex(event);
+    if (!num) return first;
+    const firstNum = first ? manifestEventIndex(first) : Infinity;
+    return num < firstNum ? event : first;
+  }, null);
+};
+
+/** 책 전체 기준 첫 이벤트 (가장 작은 chapterIdx의 첫 이벤트) */
+export const getFirstManifestEventInBook = (bookId, manifestOverride = undefined) => {
+  const manifest = manifestOverride ?? (bookId ? getManifestFromCache(bookId) : null);
+  const chapters = sortByChapterIdx(manifest?.chapters);
+  for (const chapter of chapters) {
+    const idx = toNumberOrNull(chapter?.idx);
+    if (idx == null || idx < 1) continue;
+    const first = getFirstManifestEventInChapter(bookId, idx, manifest);
+    if (first) return first;
+  }
+  return null;
+};
+
+/** 책 전체 기준 마지막 이벤트 (가장 큰 chapterIdx의 마지막 이벤트) */
+export const getLastManifestEventInBook = (bookId, manifestOverride = undefined) => {
+  const manifest = manifestOverride ?? (bookId ? getManifestFromCache(bookId) : null);
+  const chapters = sortByChapterIdx(manifest?.chapters);
+  for (let i = chapters.length - 1; i >= 0; i -= 1) {
+    const idx = toNumberOrNull(chapters[i]?.idx);
+    if (idx == null || idx < 1) continue;
+    const last = getLastManifestEventInChapter(bookId, idx, manifest);
+    if (last) return last;
+  }
+  return null;
+};
+
+/** 책 전체 eventId를 챕터·이벤트 순으로 */
+export const listBookManifestEventIds = (bookId, manifestOverride = undefined) => {
+  const manifest = manifestOverride ?? (bookId ? getManifestFromCache(bookId) : null);
+  const chapters = sortByChapterIdx(manifest?.chapters);
+  const ids = [];
+  for (const chapter of chapters) {
+    const chapterIdx = toNumberOrNull(chapter?.idx);
+    if (chapterIdx == null || chapterIdx < 1) continue;
+    const chapterData = getChapterData(bookId, chapterIdx, manifest);
+    const events = Array.isArray(chapterData?.events) ? chapterData.events : [];
+    const ordered = [...events].sort((a, b) => {
+      const na = eventUtils.resolveEventNum(a) || 0;
+      const nb = eventUtils.resolveEventNum(b) || 0;
+      return na - nb;
+    });
+    for (const ev of ordered) {
+      const id = eventUtils.resolveEventId(ev);
+      if (typeof id === 'string' && id.trim()) ids.push(id.trim());
+    }
+  }
+  return ids;
+};
+
 /**
- * v2 manifest 챕터의 이벤트 인덱스 상한(힌트). 그래프 본문은 GET /api/v2/books/{bookId}/relationship-graph.
+ * v2 manifest 챕터의 이벤트 인덱스 상한(힌트). 그래프 본문은 relationship-deltas.
  */
-export const getLastFineGraphEventIdxFromChapterData = (chapterData) => {
+export const getLastEventIdxFromChapterData = (chapterData) => {
   if (!chapterData || typeof chapterData !== 'object') return null;
   if (!Array.isArray(chapterData.events) || chapterData.events.length === 0) {
     return 1;
@@ -844,12 +849,12 @@ export const getLastFineGraphEventIdxFromChapterData = (chapterData) => {
 };
 
 /**
- * 매니페스트 기준 마지막 이벤트 인덱스( fine API 호출 시 eventIdx 상한 힌트로 사용 ).
+ * 매니페스트 기준 마지막 이벤트 인덱스 (챕터 그래프 eventIdx 상한 힌트).
  */
-export const resolveLastEventIdxForFineGraph = (bookId, chapterIdx, manifestOverride = undefined) => {
+export const resolveLastEventIdxForChapter = (bookId, chapterIdx, manifestOverride = undefined) => {
   const chapterData = getChapterData(bookId, chapterIdx, manifestOverride);
   if (!chapterData) return null;
-  return getLastFineGraphEventIdxFromChapterData(chapterData);
+  return getLastEventIdxFromChapterData(chapterData);
 };
 
 export const getMaxChapter = (bookId, manifest = null, { fallback = 0 } = {}) => {

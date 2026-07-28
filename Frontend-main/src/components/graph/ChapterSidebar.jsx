@@ -1,134 +1,252 @@
-import { useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import PropTypes from 'prop-types';
-import { sidebarStyles, ANIMATION_VALUES } from '../../utils/styles/styles.js';
-import { GRAPH_LAYOUT_CONSTANTS, getChapterTitleParts } from './graphShared';
-import { getManifestFromCache } from '../../utils/common/cache/manifestCache';
+import { buildChapterSidebarItems } from '../../utils/graph/graphCore.js';
+import { useIsNarrowViewport } from '../../hooks/graph/useGraphViewState.js';
+import './RelationGraph.css';
 
-function manifestBookTitle(manifestBookId, manifestHint) {
-  if (manifestHint && typeof manifestHint === 'object') {
-    const t = String(manifestHint?.book?.title ?? manifestHint?.title ?? '').trim();
-    if (t) return t;
-  }
-  if (manifestBookId == null) return '';
-  const m = getManifestFromCache(manifestBookId);
-  return String(m?.book?.title ?? m?.title ?? '').trim();
+const META_READING = '본문 읽는 중';
+const META_NO_GRAPH = '관계 데이터 없음';
+
+function buildChapterRowMeta({ reading, noGraph }) {
+  const parts = [];
+  if (reading) parts.push(META_READING);
+  if (noGraph) parts.push(META_NO_GRAPH);
+  return parts.join(' · ');
 }
 
-function rowChapterLabels(manifestBookId, idx, bookTitle, manifestHint) {
-  const idxStr = Number.isFinite(idx) && idx >= 1 ? String(idx) : '—';
-  const { raw, display } = getChapterTitleParts(manifestBookId, idx, bookTitle, manifestHint);
-  if (!display) {
-    return {
-      display: `제${idxStr}장`,
-      tooltip: manifestBookId == null || !Number.isFinite(idx) || idx < 1 ? idxStr : `챕터 ${idxStr}`,
-    };
-  }
-  return {
-    display,
-    tooltip: `챕터 ${idxStr} — ${raw}`,
-  };
-}
-
-function ChapterSidebar({
+/**
+ * 그래프 단독 페이지 왼쪽 챕터 레일/드로어
+ */
+export default function ChapterSidebar({
   isSidebarOpen,
   onToggleSidebar,
+  onCloseSidebar,
   chapterList,
   currentChapter,
   onChapterSelect,
   manifestBookId = null,
+  bookTitle = '',
   manifestHint = null,
+  userCurrentChapter = null,
 }) {
-  const bookTitle = useMemo(
-    () => manifestBookTitle(manifestBookId, manifestHint),
-    [manifestBookId, manifestHint],
-  );
-  const { OPEN_WIDTH: sidebarOpenW, CLOSED_WIDTH: sidebarClosedW } = GRAPH_LAYOUT_CONSTANTS.SIDEBAR;
+  const isNarrow = useIsNarrowViewport();
+  const listRef = useRef(null);
+  const selectedRef = useRef(null);
+  const [focusIndex, setFocusIndex] = useState(-1);
 
   const chapterItems = useMemo(
-    () => chapterList.map((chapter) => {
-      const { display: label, tooltip } = rowChapterLabels(
-        manifestBookId,
-        chapter,
-        bookTitle,
-        manifestHint,
-      );
-      return { chapter, label, tooltip };
-    }),
-    [chapterList, manifestBookId, bookTitle, manifestHint],
+    () => buildChapterSidebarItems(chapterList, manifestBookId, bookTitle, manifestHint),
+    [chapterList, manifestBookId, bookTitle, manifestHint]
   );
 
-  return (
-    <div
-      data-testid="chapter-sidebar"
-      style={{
-        ...sidebarStyles.container(isSidebarOpen, ANIMATION_VALUES),
-        width: isSidebarOpen ? `${sidebarOpenW}px` : `${sidebarClosedW}px`,
-        position: 'fixed',
-        top: 0,
-        left: 0,
-        height: '100vh',
-        marginTop: 0,
-      }}
-    >
-      <div style={sidebarStyles.header}>
-        <button
-          onClick={onToggleSidebar}
-          style={sidebarStyles.toggleButton(ANIMATION_VALUES)}
-          title={isSidebarOpen ? '사이드바 접기' : '사이드바 펼치기'}
-          aria-label={isSidebarOpen ? '사이드바 접기' : '사이드바 펼치기'}
-          aria-expanded={isSidebarOpen}
-        >
-          {isSidebarOpen ? (
-            <span className="material-symbols-outlined">chevron_left</span>
-          ) : (
-            <span className="material-symbols-outlined">menu</span>
-          )}
-        </button>
-        <span style={sidebarStyles.title(isSidebarOpen, ANIMATION_VALUES)}>챕터 선택</span>
-      </div>
+  useEffect(() => {
+    if (!isSidebarOpen) return;
+    const el = selectedRef.current;
+    if (!el) return;
+    const id = window.requestAnimationFrame(() => {
+      el.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    });
+    return () => window.cancelAnimationFrame(id);
+  }, [currentChapter, isSidebarOpen, chapterItems]);
 
-      <div style={sidebarStyles.chapterList}>
-        {chapterItems.map(({ chapter, label, tooltip }) => {
-          return (
-            <button
-              key={chapter}
-              onClick={() => onChapterSelect(chapter)}
-              style={sidebarStyles.chapterButton(currentChapter === chapter, isSidebarOpen, ANIMATION_VALUES)}
-              title={tooltip}
-              aria-label={`${label} 선택`}
-              aria-pressed={currentChapter === chapter}
-            >
-              <span style={sidebarStyles.chapterNumber(currentChapter === chapter, ANIMATION_VALUES)}>
-                {chapter}
-              </span>
-              <span
-                style={{
-                  ...sidebarStyles.chapterText(isSidebarOpen, ANIMATION_VALUES),
-                  flex: 1,
-                  minWidth: 0,
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  whiteSpace: 'nowrap',
-                }}
+  useEffect(() => {
+    setFocusIndex(-1);
+  }, [isSidebarOpen]);
+
+  const selectChapter = useCallback(
+    (chapter) => {
+      onChapterSelect?.(chapter);
+      if (isNarrow) onCloseSidebar?.();
+    },
+    [isNarrow, onChapterSelect, onCloseSidebar]
+  );
+
+  const onListKeyDown = useCallback(
+    (event) => {
+      if (!chapterItems.length) return;
+      const max = chapterItems.length - 1;
+
+      if (event.key === 'ArrowDown') {
+        event.preventDefault();
+        setFocusIndex((i) => (i < 0 ? 0 : Math.min(max, i + 1)));
+        return;
+      }
+      if (event.key === 'ArrowUp') {
+        event.preventDefault();
+        setFocusIndex((i) => (i < 0 ? max : Math.max(0, i - 1)));
+        return;
+      }
+      if (event.key === 'Home') {
+        event.preventDefault();
+        setFocusIndex(0);
+        return;
+      }
+      if (event.key === 'End') {
+        event.preventDefault();
+        setFocusIndex(max);
+        return;
+      }
+      if (event.key === 'Enter' || event.key === ' ') {
+        const idx =
+          focusIndex >= 0
+            ? focusIndex
+            : chapterItems.findIndex((it) => it.chapter === currentChapter);
+        const item = chapterItems[idx];
+        if (!item) return;
+        event.preventDefault();
+        selectChapter(item.chapter);
+        return;
+      }
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        if (isSidebarOpen) onToggleSidebar?.();
+      }
+    },
+    [chapterItems, focusIndex, currentChapter, selectChapter, isSidebarOpen, onToggleSidebar]
+  );
+
+  useEffect(() => {
+    if (focusIndex < 0 || !listRef.current) return;
+    const option = listRef.current.querySelector(`[data-focus-index="${focusIndex}"]`);
+    option?.scrollIntoView({ block: 'nearest' });
+  }, [focusIndex]);
+
+  const toggleLabel = isSidebarOpen ? '챕터 목록 접기' : '챕터 목록 펼치기';
+  const railClass = [
+    'graph-chapter-rail',
+    isSidebarOpen ? 'is-open' : 'is-collapsed',
+    isNarrow ? 'is-narrow' : '',
+  ]
+    .filter(Boolean)
+    .join(' ');
+
+  return (
+    <>
+      {isNarrow && isSidebarOpen ? (
+        <button
+          type="button"
+          className="graph-chapter-rail-scrim"
+          aria-label="챕터 목록 닫기"
+          onClick={() => onCloseSidebar?.() ?? onToggleSidebar?.()}
+        />
+      ) : null}
+
+      {isNarrow && !isSidebarOpen ? (
+        <button
+          type="button"
+          className="graph-chapter-rail-fab"
+          onClick={onToggleSidebar}
+          title={toggleLabel}
+          aria-label={toggleLabel}
+          aria-expanded={false}
+        >
+          <span className="material-symbols-outlined" aria-hidden>
+            menu_book
+          </span>
+        </button>
+      ) : null}
+
+      <aside
+        data-testid="chapter-sidebar"
+        className={railClass}
+        aria-label="챕터 목록"
+      >
+        <div className="graph-chapter-rail-header">
+          <button
+            type="button"
+            className="graph-chapter-rail-toggle"
+            onClick={onToggleSidebar}
+            title={toggleLabel}
+            aria-label={toggleLabel}
+            aria-expanded={isSidebarOpen}
+          >
+            <span className="material-symbols-outlined" aria-hidden>
+              {isSidebarOpen ? 'chevron_left' : 'chevron_right'}
+            </span>
+          </button>
+          {isSidebarOpen ? (
+            <span className="graph-chapter-rail-title">챕터</span>
+          ) : null}
+        </div>
+
+        <div
+          ref={listRef}
+          className="graph-chapter-rail-list"
+          role="listbox"
+          aria-label="챕터 목록"
+          tabIndex={0}
+          onKeyDown={onListKeyDown}
+        >
+          {chapterItems.map((item, index) => {
+            const selected = item.chapter === currentChapter;
+            const reading = userCurrentChapter != null && item.chapter === userCurrentChapter;
+            const noGraph = item.hasGraph === false;
+            const focused = focusIndex === index;
+            const showReading = reading && !selected;
+            const meta = buildChapterRowMeta({
+              reading: showReading,
+              noGraph,
+            });
+
+            return (
+              <button
+                key={item.chapter}
+                type="button"
+                role="option"
+                data-focus-index={index}
+                ref={selected ? selectedRef : undefined}
+                className={[
+                  'graph-chapter-rail-item',
+                  selected ? 'is-selected' : '',
+                  noGraph ? 'is-empty' : '',
+                  focused ? 'is-focused' : '',
+                ]
+                  .filter(Boolean)
+                  .join(' ')}
+                aria-label={`${item.label}${meta ? `, ${meta}` : ''} 선택`}
+                aria-selected={selected}
+                aria-current={selected ? 'page' : undefined}
+                onClick={() => selectChapter(item.chapter)}
+                onMouseEnter={() => setFocusIndex(index)}
               >
-                {label}
-              </span>
-            </button>
-          );
-        })}
-      </div>
-    </div>
+                <span className="graph-chapter-rail-num" aria-hidden>
+                  {item.chapter}
+                </span>
+                {isSidebarOpen ? (
+                  <span className="graph-chapter-rail-copy">
+                    <span className="graph-chapter-rail-label">{item.label}</span>
+                    {meta ? (
+                      <span className="graph-chapter-rail-meta">
+                        {showReading ? (
+                          <span className="graph-chapter-rail-dot" aria-hidden />
+                        ) : null}
+                        {meta}
+                      </span>
+                    ) : null}
+                  </span>
+                ) : (
+                  reading ? (
+                    <span className="graph-chapter-rail-dot is-rail" title={META_READING} />
+                  ) : null
+                )}
+              </button>
+            );
+          })}
+        </div>
+      </aside>
+    </>
   );
 }
 
 ChapterSidebar.propTypes = {
   isSidebarOpen: PropTypes.bool.isRequired,
   onToggleSidebar: PropTypes.func.isRequired,
+  onCloseSidebar: PropTypes.func,
   chapterList: PropTypes.arrayOf(PropTypes.number).isRequired,
   currentChapter: PropTypes.number.isRequired,
   onChapterSelect: PropTypes.func.isRequired,
   manifestBookId: PropTypes.number,
+  bookTitle: PropTypes.string,
   manifestHint: PropTypes.object,
+  userCurrentChapter: PropTypes.number,
 };
-
-export default ChapterSidebar;

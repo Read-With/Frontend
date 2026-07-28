@@ -13,31 +13,72 @@ const KEY_GOOGLE_USER = 'google_user';
 let memoryAccessToken = null;
 let legacyAccessMigrated = false;
 
+function lsGet(key) {
+  try {
+    return localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function lsSet(key, value) {
+  try {
+    if (value == null || value === '') localStorage.removeItem(key);
+    else localStorage.setItem(key, value);
+  } catch {
+    /* ignore */
+  }
+}
+
+function lsRemove(...keys) {
+  try {
+    keys.forEach((key) => localStorage.removeItem(key));
+  } catch {
+    /* ignore */
+  }
+}
+
+function ssGet(key) {
+  try {
+    return sessionStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function ssSet(key, value) {
+  try {
+    sessionStorage.setItem(key, value);
+  } catch {
+    /* ignore */
+  }
+}
+
+function ssRemove(...keys) {
+  try {
+    keys.forEach((key) => sessionStorage.removeItem(key));
+  } catch {
+    /* ignore */
+  }
+}
+
 function migrateLegacyAccessFromLocalStorage() {
   if (legacyAccessMigrated) return;
   legacyAccessMigrated = true;
-  try {
-    const fromLs = localStorage.getItem(KEY_ACCESS);
-    if (fromLs) {
-      memoryAccessToken = fromLs;
-      localStorage.removeItem(KEY_ACCESS);
-    }
-  } catch {
-    /* ignore */
+  const fromLs = lsGet(KEY_ACCESS);
+  if (fromLs) {
+    memoryAccessToken = fromLs;
+    lsRemove(KEY_ACCESS);
   }
 }
 
 export function getStoredAccessToken() {
   migrateLegacyAccessFromLocalStorage();
   if (memoryAccessToken) return memoryAccessToken;
-  try {
-    const fromSs = sessionStorage.getItem(KEY_SESSION_ACCESS);
-    if (fromSs) {
-      memoryAccessToken = fromSs;
-      return fromSs;
-    }
-  } catch {
-    /* ignore */
+  const fromSs = ssGet(KEY_SESSION_ACCESS);
+  if (fromSs) {
+    memoryAccessToken = fromSs;
+    return fromSs;
   }
   return null;
 }
@@ -46,72 +87,37 @@ export function setStoredAccessToken(token) {
   migrateLegacyAccessFromLocalStorage();
   if (token == null || token === '') {
     memoryAccessToken = null;
-    try {
-      localStorage.removeItem(KEY_ACCESS);
-      sessionStorage.removeItem(KEY_SESSION_ACCESS);
-    } catch {
-      /* ignore */
-    }
+    lsRemove(KEY_ACCESS);
+    ssRemove(KEY_SESSION_ACCESS);
     return;
   }
   memoryAccessToken = token;
-  try {
-    localStorage.removeItem(KEY_ACCESS);
-    sessionStorage.setItem(KEY_SESSION_ACCESS, token);
-  } catch {
-    /* ignore */
-  }
+  lsRemove(KEY_ACCESS);
+  ssSet(KEY_SESSION_ACCESS, token);
 }
 
 export function getStoredRefreshToken() {
-  try {
-    return localStorage.getItem(KEY_REFRESH);
-  } catch {
-    return null;
-  }
+  return lsGet(KEY_REFRESH);
 }
 
 export function setStoredRefreshToken(token) {
-  try {
-    if (token == null || token === '') {
-      localStorage.removeItem(KEY_REFRESH);
-      return;
-    }
-    localStorage.setItem(KEY_REFRESH, token);
-  } catch {
-    /* ignore */
-  }
+  lsSet(KEY_REFRESH, token);
 }
 
 export function getStoredGoogleUserJson() {
-  try {
-    return localStorage.getItem(KEY_GOOGLE_USER);
-  } catch {
-    return null;
-  }
+  return lsGet(KEY_GOOGLE_USER);
 }
 
 export function setStoredGoogleUserJson(jsonString) {
-  try {
-    if (jsonString == null || jsonString === '') {
-      localStorage.removeItem(KEY_GOOGLE_USER);
-      return;
-    }
-    localStorage.setItem(KEY_GOOGLE_USER, jsonString);
-  } catch {
-    /* ignore */
-  }
+  lsSet(KEY_GOOGLE_USER, jsonString);
 }
 
 export function removeStoredGoogleUser() {
-  try {
-    localStorage.removeItem(KEY_GOOGLE_USER);
-  } catch {
-    /* ignore */
-  }
+  lsRemove(KEY_GOOGLE_USER);
 }
 
-export function clearAuthTokenStorage() {
+/** authApi·urlUtils 순환 없이 로그아웃/세션 초기화 */
+export function clearAuthData() {
   memoryAccessToken = null;
   legacyAccessMigrated = false;
   clearBooksCache();
@@ -124,6 +130,3 @@ export function clearAuthTokenStorage() {
     console.error('localStorage 접근 실패');
   }
 }
-
-/** clearAuthTokenStorage 별칭 — authApi 등에서 urlUtils 순환 없이 사용 */
-export const clearAuthData = clearAuthTokenStorage;

@@ -638,6 +638,7 @@ const AdminPage = () => {
 
   const [selectedBook, setSelectedBook] = useState(null);
   const [characters, setCharacters] = useState([]);
+  const [charactersError, setCharactersError] = useState(null);
   const [isViewingCharacters, setIsViewingCharacters] = useState(false);
   const [zoomedImage, setZoomedImage] = useState(null);
   const [selectedLogPayload, setSelectedLogPayload] = useState(null);
@@ -751,6 +752,7 @@ const AdminPage = () => {
     setIsViewingCharacters(false);
     setSelectedBook(null);
     setCharacters([]);
+    setCharactersError(null);
     setStatusFilter("ALL");
   };
 
@@ -893,11 +895,20 @@ const AdminPage = () => {
     const bookIdAtStart = book.id;
     try {
       const result = await apiClient.get(`/books/${bookIdAtStart}/characters`);
-      if (!result.data?.isSuccess) return;
+      if (!result.data?.isSuccess) {
+        if (selectedBookRef.current?.id === bookIdAtStart) {
+          setCharactersError(extractErrorMessage(result.data) || "인물 목록을 새로고침하지 못했습니다.");
+        }
+        return;
+      }
       if (selectedBookRef.current?.id !== bookIdAtStart) return;
       setCharacters(toArray(result.data.result));
+      setCharactersError(null);
     } catch (err) {
       console.error(err);
+      if (selectedBookRef.current?.id === bookIdAtStart) {
+        setCharactersError(err?.message || "인물 목록을 새로고침하지 못했습니다.");
+      }
     }
   }, []);
 
@@ -1034,19 +1045,27 @@ const AdminPage = () => {
   const getBookCharacters = (book) => {
     const requestId = ++charsRequestRef.current;
     setSelectedBook(book);
-setBookId(String(book.id));
-setStatusFilter("ALL");
-getImageGenerationStatus(book.id);
+    setBookId(String(book.id));
+    setStatusFilter("ALL");
+    setCharactersError(null);
+    getImageGenerationStatus(book.id);
 
-handleApiCall(`chars-${book.id}`, () => apiClient.get(`/books/${book.id}/characters`), {
-  shouldApply: () => requestId === charsRequestRef.current,
-  updateState: (data) => {
-    setCharacters(toArray(data));
-    setIsViewingCharacters(true);
-  },
-  showResultPanel: false,
-  notifySuccess: false,
-});
+    handleApiCall(`chars-${book.id}`, () => apiClient.get(`/books/${book.id}/characters`), {
+      shouldApply: () => requestId === charsRequestRef.current,
+      updateState: (data) => {
+        setCharacters(toArray(data));
+        setCharactersError(null);
+        setIsViewingCharacters(true);
+      },
+      showResultPanel: false,
+      notifySuccess: false,
+    }).then((data) => {
+      if (requestId !== charsRequestRef.current) return;
+      if (data == null) {
+        setCharactersError("인물 목록을 불러오지 못했습니다.");
+        setIsViewingCharacters(true);
+      }
+    });
   };
 
   const selectBookForParams = (book) => {
@@ -1883,7 +1902,11 @@ handleApiCall(`chars-${book.id}`, () => apiClient.get(`/books/${book.id}/charact
             <tbody className="divide-y divide-gray-100">
               {filteredCharacters.length === 0 ? (
                 <TableMessageRow colSpan={4}>
-                  {characters.length === 0 ? "인물 데이터가 없습니다." : "해당 상태의 인물이 없습니다."}
+                  {charactersError
+                    ? charactersError
+                    : characters.length === 0
+                      ? "인물 데이터가 없습니다."
+                      : "해당 상태의 인물이 없습니다."}
                 </TableMessageRow>
               ) : (
                 filteredCharacters.map((char) => {

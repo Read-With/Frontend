@@ -2,23 +2,214 @@ import { useState, useEffect, useMemo, useCallback, useRef, memo } from 'react';
 import PropTypes from 'prop-types';
 import { useNavigate } from 'react-router-dom';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { getBookManifest, getBookProgress, deleteBookProgress } from '../../utils/api/api';
-import { resolveProgressLocator } from '../../utils/common/locatorUtils';
+import { getBookManifest, getBookProgress, deleteBookProgress } from '../../utils/api/booksApi';
+import { resolveProgressLocator } from '../../utils/common/valueUtils';
 import { BOOKS_QUERY_KEY } from '../../hooks/books/bookHooks';
 import { getManifestFromCache } from '../../utils/common/cache/manifestCache';
-import { getProgressFromCache, PROGRESS_CACHE_UPDATED_EVENT } from '../../utils/common/cache/progressCache';
+import { getProgressFromCache, PROGRESS_CACHE_UPDATED_EVENT,} from '../../utils/common/cache/progressCache';
 import {
   resolveLibraryReadingProgressPercent,
   formatLibraryRelativeDate,
+  attachLibraryModalChrome,
+  dedupeAndSortCharacters,
+  toLibraryIsoDateOrNull,
+  libraryPanelBodyClass,
 } from '../../utils/library/libraryUtils';
 import {
-  stripRedundantBookTitlePrefix,
-} from '../../utils/viewer/chapterTitleDisplay';
-import AuthenticatedImage from './AuthenticatedImage';
-import { resolveServerBookId } from '../../utils/viewer/viewerCoreStateUtils';
-import { USER_VIEWER_PREFIX, USER_GRAPH_PREFIX } from '../../utils/navigation/viewerPaths';
+  resolveServerBookId,
+  resolveChapterTitleMeta,
+} from '../../utils/viewer/viewerCore';
+import {
+  USER_VIEWER_PREFIX,
+  USER_GRAPH_PREFIX,
+  fetchAuthenticatedAssetBlobUrl,
+  isProtectedPublicAsset,
+  sanitizeAssetUrl,
+} from '../../utils/common/urlUtils';
 import { toast } from 'react-toastify';
 import './BookDetailModal.css';
+
+async function resolveDisplaySrc(src) {
+  const sanitized = sanitizeAssetUrl(src);
+  if (!sanitized) return { displaySrc: null, failed: true };
+  if (!isProtectedPublicAsset(sanitized)) {
+    return { displaySrc: sanitized, failed: false };
+  }
+  const blobUrl = await fetchAuthenticatedAssetBlobUrl(sanitized);
+  if (blobUrl) return { displaySrc: blobUrl, failed: false };
+  return { displaySrc: null, failed: true };
+}
+
+export function AuthenticatedImage({
+  src,
+  alt = '',
+  className,
+  onError,
+  onLoad,
+  ...rest
+}) {
+  const [displaySrc, setDisplaySrc] = useState(null);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    setFailed(false);
+    setDisplaySrc(null);
+
+    resolveDisplaySrc(src).then(({ displaySrc: nextSrc, failed: nextFailed }) => {
+      if (cancelled) return;
+      if (nextFailed) {
+        setFailed(true);
+        return;
+      }
+      setDisplaySrc(nextSrc);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [src]);
+
+  useEffect(() => {
+    if (failed && onError) onError();
+  }, [failed, onError]);
+
+  if (failed || !displaySrc) {
+    return null;
+  }
+
+  return (
+    <img
+      src={displaySrc}
+      alt={alt}
+      className={className}
+      onError={onError}
+      onLoad={onLoad}
+      {...rest}
+    />
+  );
+}
+
+AuthenticatedImage.propTypes = {
+  src: PropTypes.string,
+  alt: PropTypes.string,
+  className: PropTypes.string,
+  onError: PropTypes.func,
+  onLoad: PropTypes.func,
+};
+
+function mergeBookWithManifest(book, manifestData) {
+  const serverBookId = resolveServerBookId(book);
+  const normalizedManifest = getManifestFromCache(serverBookId) || manifestData.result;
+  const bookInfo = normalizedManifest.book || manifestData.result.book || {};
+  return {
+    ...book,
+    ...bookInfo,
+    chapters: normalizedManifest.chapters || manifestData.result.chapters || [],
+    characters: normalizedManifest.charaacters || manifestData.result.characters || [],
+    progressMetadata: normalizedManifest.progressMetadata || manifestData.result.progressMetadata || {},
+    ...(normalizedManifest.readerArtifacts || manifestData.result.readerArtifacts
+      ? {
+          readerArtifacts:
+            normalizedManifest.readerArtifacts || manifestData.result.readerArtifacts,
+        }
+      : {}),
+  };
+}
+
+function formatChapterRowMeta(chapter, bookTitle, index, currentChapterIndex) {
+  const meta = resolveChapterTitleMeta(chapter, bookTitle);
+  const idxNum = Number(chapter.idx);
+  const chapterKey =
+    chapter.id ??
+    chapter.href ??
+    (Number.isFinite(idxNum) ? `ch-${idxNum}` : `ch-row-${index}`);
+  const isCurrent =
+    currentChapterIndex != null &&
+    Number.isFinite(idxNum) &&
+    idxNum === currentChapterIndex;
+  return {
+    rawTitle: meta.raw,
+    idxNum,
+    chapterLine: meta.display,
+    chapterKey,
+    isCurrent,
+    displayNum: Number.isFinite(idxNum) ? idxNum : '?',
+    status: meta.status,
+  };
+}
+
+function CollapsiblePanelHeader({
+  titleId,
+  title,
+  countLabel,
+  isOpen,
+  onToggle,
+  controlsId,
+  toggleOpenLabel,
+  toggleClosedLabel,
+}) {
+  return (
+    <div className="book-detail-panel-head">
+      <h3 className="book-detail-panel-title" id={titleId}>
+        {title}
+      </h3>
+      <div className="book-detail-panel-head-actions">
+        <span className="book-detail-panel-count">{countLabel}</span>
+        <button
+          type="button"
+          className="book-detail-panel-toggle"
+          onClick={onToggle}
+          aria-expanded={isOpen}
+          aria-controls={controlsId}
+          aria-labelledby={titleId}
+        >
+          <span className="book-detail-panel-toggle-sr">
+            {isOpen ? toggleOpenLabel : toggleClosedLabel}
+          </span>
+          <span className="book-detail-panel-chevron" aria-hidden="true" />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function CharacterRow({ character, isMain = false }) {
+  return (
+    <li
+      className={
+        isMain
+          ? 'book-detail-character-item main-character'
+          : 'book-detail-character-item'
+      }
+    >
+      <div className="book-detail-character-main">
+        {character.profileImage ? (
+          <AuthenticatedImage
+            className="book-detail-character-avatar"
+            src={character.profileImage}
+            alt=""
+          />
+        ) : (
+          <span
+            className="book-detail-character-avatar book-detail-character-avatar--placeholder"
+            aria-hidden
+          >
+            {(character.name || '?').slice(0, 1)}
+          </span>
+        )}
+        <span className="character-name" title={character.name || undefined}>
+          {character.name}
+        </span>
+      </div>
+      {isMain ? (
+        <span className="character-badge" aria-label="주요 인물">
+          주연
+        </span>
+      ) : null}
+    </li>
+  );
+}
 
 const BookDetailModal = memo(({ book, isOpen, onClose, onDelete, viewMode = 'grid' }) => {
   const navigate = useNavigate();
@@ -36,29 +227,12 @@ const BookDetailModal = memo(({ book, isOpen, onClose, onDelete, viewMode = 'gri
   const closeButtonRef = useRef(null);
   const lastFocusRef = useRef(null);
 
-  const characterLists = useMemo(() => {
-    const raw = bookDetails?.characters;
-    if (!raw?.length) {
-      return { unique: [], sortedMain: [], sortedOther: [] };
-    }
-    const seen = new Set();
-    const unique = raw.filter((character) => {
-      if (seen.has(character.id)) return false;
-      seen.add(character.id);
-      return true;
-    });
-    const main = unique.filter((c) => c.isMainCharacter);
-    const other = unique.filter((c) => !c.isMainCharacter);
-    const byName = (a, b) => String(a.name ?? '').localeCompare(String(b.name ?? ''), 'ko');
-    return {
-      unique,
-      sortedMain: [...main].sort(byName),
-      sortedOther: [...other].sort(byName),
-    };
-  }, [bookDetails?.characters]);
+  const characterLists = useMemo(
+    () => dedupeAndSortCharacters(bookDetails?.characters),
+    [bookDetails?.characters]
+  );
 
   const serverBookId = resolveServerBookId(book);
-  const bookIdStr = serverBookId != null ? String(serverBookId) : null;
 
   const progressLocator = useMemo(() => {
     const cached = serverBookId != null ? getProgressFromCache(serverBookId) : null;
@@ -73,15 +247,9 @@ const BookDetailModal = memo(({ book, isOpen, onClose, onDelete, viewMode = 'gri
   const libraryRelativeUpdated = book?.updatedAt
     ? formatLibraryRelativeDate(book.updatedAt)
     : '';
-  const libraryUpdatedAtIso = (() => {
-    if (!book?.updatedAt) return null;
-    const d = new Date(book.updatedAt);
-    return Number.isNaN(d.getTime()) ? null : d.toISOString();
-  })();
+  const libraryUpdatedAtIso = toLibraryIsoDateOrNull(book?.updatedAt);
 
   const fetchProgressInfo = useCallback(async () => {
-    const serverBookId = resolveServerBookId(book);
-    
     if (!serverBookId) {
       setProgressInfo(null);
       return;
@@ -101,11 +269,9 @@ const BookDetailModal = memo(({ book, isOpen, onClose, onDelete, viewMode = 'gri
       }
       setProgressInfo(null);
     }
-  }, [book]);
+  }, [serverBookId]);
 
   const fetchBookDetails = useCallback(async () => {
-    const serverBookId = resolveServerBookId(book);
-    
     if (!serverBookId) {
       setBookDetails(book);
       return;
@@ -119,24 +285,7 @@ const BookDetailModal = memo(({ book, isOpen, onClose, onDelete, viewMode = 'gri
       const manifestData = await getBookManifest(serverBookId);
       
       if (manifestData && manifestData.isSuccess && manifestData.result) {
-        // 정규화된 manifest 데이터 가져오기 (캐시에서 가져오면 정규화됨)
-        const normalizedManifest = getManifestFromCache(serverBookId) || manifestData.result;
-        
-        // API 응답 구조에 맞게 데이터 처리
-        const bookInfo = normalizedManifest.book || manifestData.result.book || {};
-        setBookDetails({
-          ...book,
-          ...bookInfo,
-          chapters: normalizedManifest.chapters || manifestData.result.chapters || [],
-          characters: normalizedManifest.characters || manifestData.result.characters || [],
-          progressMetadata: normalizedManifest.progressMetadata || manifestData.result.progressMetadata || {},
-          ...(normalizedManifest.readerArtifacts || manifestData.result.readerArtifacts
-            ? {
-                readerArtifacts:
-                  normalizedManifest.readerArtifacts || manifestData.result.readerArtifacts,
-              }
-            : {}),
-        });
+        setBookDetails(mergeBookWithManifest(book, manifestData));
       } else {
         console.warn('API 응답이 성공하지 않았습니다:', manifestData);
         setBookDetails(book);
@@ -150,7 +299,7 @@ const BookDetailModal = memo(({ book, isOpen, onClose, onDelete, viewMode = 'gri
     } finally {
       setLoading(false);
     }
-  }, [book]);
+  }, [book, serverBookId]);
 
   useEffect(() => {
     if (isOpen && book) {
@@ -160,15 +309,15 @@ const BookDetailModal = memo(({ book, isOpen, onClose, onDelete, viewMode = 'gri
   }, [isOpen, book, fetchBookDetails, fetchProgressInfo]);
 
   useEffect(() => {
-    if (!isOpen || !bookIdStr) return undefined;
+    if (!isOpen || serverBookId == null) return undefined;
     const onUpd = (e) => {
-      if (String(e.detail?.bookId) === bookIdStr) {
+      if (String(e.detail?.bookId) === String(serverBookId)) {
         setProgressCacheTick((t) => t + 1);
       }
     };
     window.addEventListener(PROGRESS_CACHE_UPDATED_EVENT, onUpd);
     return () => window.removeEventListener(PROGRESS_CACHE_UPDATED_EVENT, onUpd);
-  }, [isOpen, bookIdStr]);
+  }, [isOpen, serverBookId]);
 
   useEffect(() => {
     if (isOpen && book) {
@@ -243,22 +392,22 @@ const BookDetailModal = memo(({ book, isOpen, onClose, onDelete, viewMode = 'gri
     fetchProgressInfo();
   }, [fetchBookDetails, fetchProgressInfo]);
 
-  // 진도 삭제 - useMutation + 낙관적 업데이트
+  // ?? ?? - useMutation + ??? ????
   const deleteProgressMutation = useMutation({
     mutationFn: (bookId) => deleteBookProgress(bookId),
     onMutate: async () => {
-      // 낙관적 업데이트 - 즉시 UI 반영
+      // ??? ???? - ?? UI ??
       const previousProgress = progressInfo;
       setProgressInfo(null);
       return { previousProgress };
     },
     onSuccess: () => {
       toast.success('독서 진도가 삭제되었습니다');
-      // 책 목록 무효화 (진도율 업데이트)
+      // ? ?? ??? (??? ????)
       queryClient.invalidateQueries({ queryKey: BOOKS_QUERY_KEY });
     },
     onError: (err, variables, context) => {
-      // 롤백
+      // ??
       if (context?.previousProgress) {
         setProgressInfo(context.previousProgress);
       }
@@ -268,8 +417,6 @@ const BookDetailModal = memo(({ book, isOpen, onClose, onDelete, viewMode = 'gri
   });
 
   const handleDeleteProgress = useCallback(async () => {
-    const serverBookId = resolveServerBookId(book);
-    
     if (!serverBookId || !progressInfo) {
       return;
     }
@@ -285,9 +432,9 @@ const BookDetailModal = memo(({ book, isOpen, onClose, onDelete, viewMode = 'gri
     try {
       await deleteProgressMutation.mutateAsync(serverBookId);
     } catch {
-      // 에러는 onError에서 처리
+      // ??? onError?? ??
     }
-  }, [book, progressInfo, deleteProgressMutation]);
+  }, [serverBookId, progressInfo, deleteProgressMutation]);
 
   const handleConfirmDeleteBook = useCallback(async () => {
     if (!book || !book.id) {
@@ -310,27 +457,29 @@ const BookDetailModal = memo(({ book, isOpen, onClose, onDelete, viewMode = 'gri
   }, [book, onDelete, onClose]);
 
 
+  const toggleCharactersPanel = useCallback(() => {
+    setCharactersPanelOpen((o) => !o);
+  }, []);
+
+  const toggleChaptersPanel = useCallback(() => {
+    setChaptersPanelOpen((o) => !o);
+  }, []);
+
+  const toggleShowMoreCharacters = useCallback(() => {
+    setShowMoreCharacters((v) => !v);
+  }, []);
+
   useEffect(() => {
-    const handleEscape = (e) => {
-      if (e.key !== 'Escape' || !isOpen) {
-        return;
-      }
-      if (bookDeleteConfirm) {
-        setBookDeleteConfirm(false);
-        return;
-      }
-      onClose();
-    };
-
-    if (isOpen) {
-      document.addEventListener('keydown', handleEscape);
-      document.body.style.overflow = 'hidden';
-    }
-
-    return () => {
-      document.removeEventListener('keydown', handleEscape);
-      document.body.style.overflow = 'unset';
-    };
+    if (!isOpen) return undefined;
+    return attachLibraryModalChrome({
+      onEscape: () => {
+        if (bookDeleteConfirm) {
+          setBookDeleteConfirm(false);
+          return;
+        }
+        onClose();
+      },
+    });
   }, [isOpen, onClose, bookDeleteConfirm]);
 
   if (!isOpen) return null;
@@ -340,7 +489,6 @@ const BookDetailModal = memo(({ book, isOpen, onClose, onDelete, viewMode = 'gri
   const chapterStripBookTitle = String(bookDetails?.title ?? book?.title ?? '').trim();
   const displayAuthor = bookDetails?.author || book?.author || '저자 정보 없음';
   const coverInitial = (displayTitle || '?').trim().slice(0, 1) || '?';
-  const currentChapterIndex = progressLocator?.chapterIndex;
   const isListView = viewMode === 'list';
   const hasProgress = readPercent > 0 || !!progressInfo;
 
@@ -471,8 +619,7 @@ const BookDetailModal = memo(({ book, isOpen, onClose, onDelete, viewMode = 'gri
       aria-describedby="book-detail-modal-desc"
     >
       <p id="book-detail-modal-desc" className="book-detail-modal-desc">
-        책 표지와 제목, 독서 진도, 등장 인물과 목차를 확인할 수 있습니다.
-      </p>
+        책 표지와 제목, 독서 진도, 등장 인물과 목차를 확인할 수 있습니다.</p>
       <div
         className={`book-detail-content${isListView ? ' book-detail-content--list' : ''}`}
         onClick={(e) => e.stopPropagation()}
@@ -506,34 +653,19 @@ const BookDetailModal = memo(({ book, isOpen, onClose, onDelete, viewMode = 'gri
 
               {characterLists.unique.length > 0 && (
                 <div className="book-detail-panel">
-                  <div className="book-detail-panel-head">
-                    <h3 className="book-detail-panel-title" id="book-detail-characters-heading">
-                      등장 인물
-                    </h3>
-                    <div className="book-detail-panel-head-actions">
-                      <span className="book-detail-panel-count">{characterLists.unique.length}명</span>
-                      <button
-                        type="button"
-                        className="book-detail-panel-toggle"
-                        onClick={() => setCharactersPanelOpen((o) => !o)}
-                        aria-expanded={charactersPanelOpen}
-                        aria-controls="book-detail-characters-region"
-                        aria-labelledby="book-detail-characters-heading"
-                      >
-                        <span className="book-detail-panel-toggle-sr">
-                          {charactersPanelOpen ? '등장 인물 접기' : '등장 인물 펼치기'}
-                        </span>
-                        <span className="book-detail-panel-chevron" aria-hidden="true" />
-                      </button>
-                    </div>
-                  </div>
+                  <CollapsiblePanelHeader
+                    titleId="book-detail-characters-heading"
+                    title="등장 인물"
+                    countLabel={`${characterLists.unique.length}명`}
+                    isOpen={charactersPanelOpen}
+                    onToggle={toggleCharactersPanel}
+                    controlsId="book-detail-characters-region"
+                    toggleOpenLabel="등장 인물 접기"
+                    toggleClosedLabel="등장 인물 펼치기"
+                  />
                   <div
                     id="book-detail-characters-region"
-                    className={
-                      charactersPanelOpen
-                        ? 'book-detail-panel-body book-detail-panel-body--open'
-                        : 'book-detail-panel-body book-detail-panel-body--closed'
-                    }
+                    className={libraryPanelBodyClass(charactersPanelOpen)}
                     role="region"
                     aria-labelledby="book-detail-characters-heading"
                     aria-hidden={!charactersPanelOpen}
@@ -541,33 +673,11 @@ const BookDetailModal = memo(({ book, isOpen, onClose, onDelete, viewMode = 'gri
                     {characterLists.sortedMain.length > 0 && (
                       <ul className="book-detail-characters-list">
                         {characterLists.sortedMain.map((character) => (
-                          <li
+                          <CharacterRow
                             key={character.id ?? character.name}
-                            className="book-detail-character-item main-character"
-                          >
-                            <div className="book-detail-character-main">
-                              {character.profileImage ? (
-                                <AuthenticatedImage
-                                  className="book-detail-character-avatar"
-                                  src={character.profileImage}
-                                  alt=""
-                                />
-                              ) : (
-                                <span
-                                  className="book-detail-character-avatar book-detail-character-avatar--placeholder"
-                                  aria-hidden
-                                >
-                                  {(character.name || '?').slice(0, 1)}
-                                </span>
-                              )}
-                              <span className="character-name" title={character.name || undefined}>
-                                {character.name}
-                              </span>
-                            </div>
-                            <span className="character-badge" aria-label="주요 인물">
-                              주연
-                            </span>
-                          </li>
+                            character={character}
+                            isMain
+                          />
                         ))}
                       </ul>
                     )}
@@ -577,37 +687,17 @@ const BookDetailModal = memo(({ book, isOpen, onClose, onDelete, viewMode = 'gri
                         {showMoreCharacters && (
                           <ul className="book-detail-characters-list book-detail-characters-list--secondary">
                             {characterLists.sortedOther.map((character) => (
-                              <li
+                              <CharacterRow
                                 key={character.id ?? character.name}
-                                className="book-detail-character-item"
-                              >
-                                <div className="book-detail-character-main">
-                                  {character.profileImage ? (
-                                    <AuthenticatedImage
-                                      className="book-detail-character-avatar"
-                                      src={character.profileImage}
-                                      alt=""
-                                    />
-                                  ) : (
-                                    <span
-                                      className="book-detail-character-avatar book-detail-character-avatar--placeholder"
-                                      aria-hidden
-                                    >
-                                      {(character.name || '?').slice(0, 1)}
-                                    </span>
-                                  )}
-                                  <span className="character-name" title={character.name || undefined}>
-                                    {character.name}
-                                  </span>
-                                </div>
-                              </li>
+                                character={character}
+                              />
                             ))}
                           </ul>
                         )}
                         <button
                           type="button"
                           className="book-detail-more-btn"
-                          onClick={() => setShowMoreCharacters(!showMoreCharacters)}
+                          onClick={toggleShowMoreCharacters}
                           aria-expanded={showMoreCharacters}
                         >
                           {showMoreCharacters
@@ -622,56 +712,37 @@ const BookDetailModal = memo(({ book, isOpen, onClose, onDelete, viewMode = 'gri
 
               {bookDetails.chapters && bookDetails.chapters.length > 0 && (
                 <div className="book-detail-panel">
-                  <div className="book-detail-panel-head">
-                    <h3 className="book-detail-panel-title" id="book-detail-chapters-heading">
-                      목차
-                    </h3>
-                    <div className="book-detail-panel-head-actions">
-                      <span className="book-detail-panel-count">{bookDetails.chapters.length}챕터</span>
-                      <button
-                        type="button"
-                        className="book-detail-panel-toggle"
-                        onClick={() => setChaptersPanelOpen((o) => !o)}
-                        aria-expanded={chaptersPanelOpen}
-                        aria-controls="book-detail-chapters-region"
-                        aria-labelledby="book-detail-chapters-heading"
-                      >
-                        <span className="book-detail-panel-toggle-sr">
-                          {chaptersPanelOpen ? '목차 접기' : '목차 펼치기'}
-                        </span>
-                        <span className="book-detail-panel-chevron" aria-hidden="true" />
-                      </button>
-                    </div>
-                  </div>
+                  <CollapsiblePanelHeader
+                    titleId="book-detail-chapters-heading"
+                    title="목차"
+                    countLabel={`${bookDetails.chapters.length}챕터`}
+                    isOpen={chaptersPanelOpen}
+                    onToggle={toggleChaptersPanel}
+                    controlsId="book-detail-chapters-region"
+                    toggleOpenLabel="목차 접기"
+                    toggleClosedLabel="목차 펼치기"
+                  />
                   <div
                     id="book-detail-chapters-region"
-                    className={
-                      chaptersPanelOpen
-                        ? 'book-detail-panel-body book-detail-panel-body--open'
-                        : 'book-detail-panel-body book-detail-panel-body--closed'
-                    }
+                    className={libraryPanelBodyClass(chaptersPanelOpen)}
                     role="region"
                     aria-labelledby="book-detail-chapters-heading"
                     aria-hidden={!chaptersPanelOpen}
                   >
                     <ol className="book-detail-chapters-list">
                       {bookDetails.chapters.map((chapter, index) => {
-                        const rawTitle = String(chapter.title ?? '').trim();
-                        const idxNum = Number(chapter.idx);
-                        const idxStr =
-                          Number.isFinite(idxNum) && idxNum >= 1 ? String(idxNum) : '—';
-                        const normalizedTitle = rawTitle
-                          ? stripRedundantBookTitlePrefix(rawTitle, chapterStripBookTitle)
-                          : '';
-                        const chapterLine = normalizedTitle || rawTitle || `챕터 ${idxStr}`;
-                        const chapterKey =
-                          chapter.id ??
-                          chapter.href ??
-                          (Number.isFinite(idxNum) ? `ch-${idxNum}` : `ch-row-${index}`);
-                        const isCurrent =
-                          currentChapterIndex != null &&
-                          Number.isFinite(idxNum) &&
-                          idxNum === currentChapterIndex;
+                        const {
+                          rawTitle,
+                          chapterLine,
+                          chapterKey,
+                          isCurrent,
+                          displayNum,
+                        } = formatChapterRowMeta(
+                          chapter,
+                          chapterStripBookTitle,
+                          index,
+                          progressLocator?.chapterIndex,
+                        );
                         return (
                           <li
                             key={chapterKey}
@@ -682,7 +753,7 @@ const BookDetailModal = memo(({ book, isOpen, onClose, onDelete, viewMode = 'gri
                             }
                           >
                             <span className="book-detail-chapter-num">
-                              {Number.isFinite(idxNum) ? idxNum : '—'}
+                              {displayNum}
                             </span>
                             <span
                               className="book-detail-chapter-title"
@@ -718,8 +789,7 @@ const BookDetailModal = memo(({ book, isOpen, onClose, onDelete, viewMode = 'gri
           {bookDeleteConfirm ? (
             <div className="book-detail-delete-confirm" role="group" aria-label="서재에서 책 삭제 확인">
               <p className="book-detail-delete-confirm-text">
-                서재에서 이 책을 삭제할까요? 이 작업은 되돌릴 수 없습니다.
-              </p>
+                서재에서 이 책을 삭제할까요? 이 작업은 되돌릴 수 없습니다.</p>
               <div className="book-detail-delete-confirm-actions">
                 <button
                   type="button"

@@ -1,17 +1,19 @@
-import { lazy, Suspense } from 'react';
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { lazy, Suspense, useEffect } from 'react';
+import { BrowserRouter as Router, Routes, Route, Navigate, Outlet } from 'react-router-dom';
+import { useQueryClient } from '@tanstack/react-query';
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import { RecoilRoot } from 'recoil';
 import HomePage from './pages/HomePage';
-import ProtectedRoute from './components/auth/ProtectedRoute';
 import OAuthCallback from './components/auth/OAuthCallback';
-import { AuthProvider } from './hooks/auth/useAuth';
+import useAuth, { AuthProvider } from './hooks/auth/useAuth';
+import { prefetchBooks } from './hooks/books/bookHooks';
+import { COLORS } from './utils/styles/styles.js';
 
 const AdminPage = lazy(() => import('./pages/AdminPage'));
 const MyPage = lazy(() => import('./pages/MyPage'));
 const ViewerPage = lazy(() => import('./components/viewer/ViewerPage'));
-const BookmarksPage = lazy(() => import('./components/viewer/bookmark/BookmarksPage'));
+const BookmarksPage = lazy(() => import('./pages/BookmarksPage'));
 const RelationGraphWrapper = lazy(() => import('./components/graph/RelationGraphWrapper'));
 
 const routeFallback = (
@@ -29,6 +31,35 @@ const routeFallback = (
   </div>
 );
 
+const ProtectedRoute = () => {
+  const { isAuthenticated, isLoading } = useAuth();
+  const queryClient = useQueryClient();
+  const ready = !isLoading && isAuthenticated();
+
+  useEffect(() => {
+    if (!ready) return;
+    void prefetchBooks(queryClient);
+  }, [ready, queryClient]);
+
+  if (isLoading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center">
+        <div
+          className="h-10 w-10 animate-spin rounded-full border-4 border-gray-200"
+          style={{ borderTopColor: COLORS.primary }}
+          aria-label="로딩 중"
+        />
+      </div>
+    );
+  }
+
+  if (!ready) {
+    return <Navigate to="/" replace />;
+  }
+
+  return <Outlet />;
+};
+
 const AppContent = () => {
   return (
     <Suspense fallback={routeFallback}>
@@ -39,6 +70,7 @@ const AppContent = () => {
         <Route element={<ProtectedRoute />}>
           <Route path="/admin" element={<AdminPage />} />
           <Route path="/mypage" element={<MyPage />} />
+          <Route path="/user/viewer/bookmarks" element={<Navigate to="/mypage" replace />} />
           <Route path="/user/viewer/:filename/bookmarks" element={<BookmarksPage />} />
           <Route path="/user/viewer/:filename/*" element={<ViewerPage />} />
           <Route path="/user/graph/:filename" element={<RelationGraphWrapper />} />

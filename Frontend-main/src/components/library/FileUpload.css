@@ -1,30 +1,48 @@
 /* FileUpload — BookDetailModal 셸 + 서재 epub-dropzone 재사용, 폼만 고유 스타일 */
 
-.file-upload-content {
-  --fu-radius: 12px;
-  --fu-border: 1px solid rgba(0, 0, 0, 0.06);
+.file-upload-content,
+.epub-dropzone {
+  --fu-page: #fefcf8;
   --fu-surface: #fff;
+  --fu-surface-disabled: #f3f4f0;
   --fu-muted: #9aa396;
   --fu-accent: #5c6f5c;
+  --fu-accent-dark: #4f614f;
+  --fu-accent-light: #7a8a7a;
   --fu-accent-soft: rgba(92, 111, 92, 0.14);
+  --fu-accent-border: rgba(92, 111, 92, 0.28);
   --fu-text: #3e4f2f;
+  --fu-text-mid: #586544;
+  --fu-text-soft: #717b59;
+  --fu-dash: #b3b6a0;
+  --fu-radius: 0.75rem;
+  --fu-radius-lg: 1.25rem;
+  --fu-border: 0.0625rem solid rgba(0, 0, 0, 0.06);
+  --fu-focus: rgba(92, 111, 92, 0.45);
+  --fu-gradient-icon: linear-gradient(135deg, var(--fu-accent), var(--fu-accent-light));
+}
 
+.file-upload-content {
   position: relative;
   width: 100%;
-  max-width: 560px;
-  max-height: min(88vh, 720px);
+  max-width: 35rem;
+  max-height: min(88vh, 45rem);
   overflow: auto;
-  background: #fefcf8;
+  background: var(--fu-page);
   border: var(--fu-border);
-  border-radius: 20px;
+  border-radius: var(--fu-radius-lg);
   box-shadow:
-    0 4px 24px rgba(0, 0, 0, 0.06),
-    0 24px 64px rgba(46, 58, 46, 0.12);
-  padding: 28px 24px 24px;
+    0 0.25rem 1.5rem rgba(0, 0, 0, 0.06),
+    0 1.5rem 4rem rgba(46, 58, 46, 0.12);
+  padding:
+    max(1.75rem, env(safe-area-inset-top, 0px))
+    max(1.5rem, env(safe-area-inset-right, 0px))
+    max(1.5rem, env(safe-area-inset-bottom, 0px))
+    max(1.5rem, env(safe-area-inset-left, 0px));
 }
 
 .file-upload-title {
-  margin: 0 36px 20px 0;
+  margin: 0 2.25rem 1.25rem 0;
   font-size: 1.35rem;
   font-weight: 700;
   color: var(--fu-text);
@@ -36,11 +54,11 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 4px;
-  min-height: 220px;
-  padding: 24px;
-  border: 2px dashed #b3b6a0;
-  border-radius: 20px;
+  gap: 0.25rem;
+  min-height: 13.75rem;
+  padding: 1.5rem;
+  border: 0.125rem dashed var(--fu-dash);
+  border-radius: var(--fu-radius-lg);
   background: rgba(255, 255, 255, 0.5);
   cursor: pointer;
   text-align: center;
@@ -52,44 +70,46 @@
 
 .epub-dropzone:hover,
 .epub-dropzone.is-active {
-  border-color: #3e4f2f;
+  border-color: var(--fu-text);
   background: rgba(62, 79, 47, 0.04);
-  box-shadow: 0 8px 24px rgba(62, 79, 47, 0.1);
+  box-shadow: 0 0.5rem 1.5rem rgba(62, 79, 47, 0.1);
+}
+
+.epub-dropzone:focus-visible {
+  outline: 0.125rem solid var(--fu-focus);
+  outline-offset: 0.1875rem;
 }
 
 .epub-dropzone-icon {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 48px;
-  height: 48px;
-  margin-bottom: 2px;
+  width: 3rem;
+  height: 3rem;
+  margin-bottom: 0.125rem;
   border-radius: 50%;
-  background: linear-gradient(135deg, #5c6f5c, #7a8a7a);
+  background: var(--fu-gradient-icon);
   color: #fff;
 }
 
 .epub-dropzone strong {
   font-size: 1.05rem;
   font-weight: 700;
-  color: #3e4f2f;
+  color: var(--fu-text);
 }
 
 .epub-dropzone span {
   font-size: 0.9rem;
-  color: #586544;
-  max-width: none;
+  color: var(--fu-text-mid);
+  max-width: 100%;
   line-height: 1.45;
-}
-
-.file-upload-content .epub-dropzone span {
-  white-space: nowrap;
+  word-break: keep-all;
 }
 
 .epub-dropzone small {
-  margin-top: 2px;
+  margin-top: 0.125rem;
   font-size: 0.75rem;
-  color: #717b59;
+  color: var(--fu-text-soft);
 }
 
 .file-upload-file-input {
@@ -97,8 +117,8 @@
 }
 
 .file-upload-file-card {
-  margin-bottom: 20px;
-  padding: 14px 16px;
+  margin-bottom: 1.25rem;
+  padding: 0.875rem 1rem;
   border-radius: var(--fu-radius);
   border: var(--fu-border);
   background: var(--fu-surface);
@@ -108,7 +128,7 @@
   font-size: 0.75rem;
   font-weight: 600;
   color: var(--fu-muted);
-  margin-bottom: 4px;
+  margin-bottom: 0.25rem;
 }
 
 .file-upload-file-name {
@@ -121,8 +141,8 @@
 .file-upload-extracting {
   display: flex;
   align-items: center;
-  gap: 6px;
-  margin-top: 10px;
+  gap: 0.375rem;
+  margin-top: 0.625rem;
   font-size: 0.8125rem;
   font-weight: 500;
   color: var(--fu-accent);
@@ -131,12 +151,12 @@
 .file-upload-fields {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 0.875rem;
 }
 
 .file-upload-field label {
   display: block;
-  margin-bottom: 6px;
+  margin-bottom: 0.375rem;
   font-size: 0.8125rem;
   font-weight: 600;
   color: var(--fu-text);
@@ -146,35 +166,37 @@
 .file-upload-field select {
   width: 100%;
   box-sizing: border-box;
-  min-height: 44px;
-  padding: 10px 12px;
+  min-height: 2.75rem;
+  padding: 0.625rem 0.75rem;
   font: inherit;
   font-size: 0.9375rem;
   color: var(--fu-text);
   background: var(--fu-surface);
-  border: 1px solid rgba(92, 111, 92, 0.28);
+  border: 0.0625rem solid var(--fu-accent-border);
   border-radius: var(--fu-radius);
-  transition: border-color 0.2s ease, background 0.2s ease;
+  transition: border-color 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
 }
 
 .file-upload-field input:focus,
-.file-upload-field select:focus {
+.file-upload-field select:focus,
+.file-upload-field input:focus-visible,
+.file-upload-field select:focus-visible {
   outline: none;
   border-color: var(--fu-accent);
-  box-shadow: 0 0 0 3px var(--fu-accent-soft);
+  box-shadow: 0 0 0 0.1875rem var(--fu-accent-soft);
 }
 
 .file-upload-field input:disabled,
 .file-upload-field select:disabled {
-  background: #f3f4f0;
+  background: var(--fu-surface-disabled);
   color: var(--fu-muted);
   cursor: not-allowed;
 }
 
 .file-upload-actions {
   display: flex;
-  gap: 10px;
-  margin-top: 22px;
+  gap: 0.625rem;
+  margin-top: 1.375rem;
 }
 
 .file-upload-actions .book-detail-secondary-btn,
@@ -188,30 +210,35 @@
 
 .file-upload-actions--select .book-detail-secondary-btn {
   flex: 0 1 auto;
-  min-width: 120px;
+  min-width: 7.5rem;
 }
 
 .file-upload-btn-primary {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
-  min-height: 44px;
-  padding: 12px 18px;
+  gap: 0.375rem;
+  min-height: 2.75rem;
+  padding: 0.75rem 1.125rem;
   font: inherit;
   font-size: 0.9375rem;
   font-weight: 700;
   color: #fff;
   background: var(--fu-accent);
-  border: 1px solid var(--fu-accent);
+  border: 0.0625rem solid var(--fu-accent);
   border-radius: var(--fu-radius);
   cursor: pointer;
   transition: background 0.2s ease, border-color 0.2s ease, opacity 0.2s ease;
 }
 
 .file-upload-btn-primary:hover:not(:disabled) {
-  background: #4f614f;
-  border-color: #4f614f;
+  background: var(--fu-accent-dark);
+  border-color: var(--fu-accent-dark);
+}
+
+.file-upload-btn-primary:focus-visible {
+  outline: 0.125rem solid var(--fu-focus);
+  outline-offset: 0.1875rem;
 }
 
 .file-upload-btn-primary:disabled,
@@ -221,18 +248,27 @@
   cursor: not-allowed;
 }
 
-@media (max-width: 520px) {
+@media (max-width: 32.5rem) {
   .file-upload-content {
     max-width: none;
-    border-radius: 20px 20px 0 0;
-    padding: 24px 18px 20px;
+    border-radius: var(--fu-radius-lg) var(--fu-radius-lg) 0 0;
+    padding:
+      max(1.5rem, env(safe-area-inset-top, 0px))
+      max(1.125rem, env(safe-area-inset-right, 0px))
+      max(1.25rem, env(safe-area-inset-bottom, 0px))
+      max(1.125rem, env(safe-area-inset-left, 0px));
   }
 
   .epub-dropzone {
-    min-height: 180px;
+    min-height: 11.25rem;
   }
+}
 
-  .file-upload-content .epub-dropzone span {
-    white-space: normal;
+@media (prefers-reduced-motion: reduce) {
+  .epub-dropzone,
+  .file-upload-field input,
+  .file-upload-field select,
+  .file-upload-btn-primary {
+    transition: none;
   }
 }

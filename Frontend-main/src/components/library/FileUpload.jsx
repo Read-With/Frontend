@@ -8,6 +8,7 @@ import {
   epubUploadBasename,
   EPUB_FILE_CONSTRAINTS,
   validateEpubFile,
+  attachLibraryModalChrome,
 } from '../../utils/library/libraryUtils';
 import { normalizeTitle, normalizeAuthor } from '../../utils/common/valueUtils';
 import { BOOKS_QUERY_KEY, findCanonicalBook } from '../../hooks/books/bookHooks';
@@ -16,11 +17,21 @@ import './FileUpload.css';
 
 const EMPTY_METADATA = { title: '', author: '', language: 'ko' };
 const MAX_MB = Math.round(EPUB_FILE_CONSTRAINTS.MAX_SIZE / (1024 * 1024));
+const METADATA_EXTRACT_TIMEOUT_MS = 10000;
 
 const METADATA_FIELDS = [
   { key: 'title', label: '제목 *', id: 'file-upload-title-input', placeholder: '책 제목을 입력하세요' },
   { key: 'author', label: '저자 *', id: 'file-upload-author-input', placeholder: '저자명을 입력하세요' },
 ];
+
+function withMetadataTimeout(promise, ms = METADATA_EXTRACT_TIMEOUT_MS) {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('Metadata extraction timeout')), ms)
+    ),
+  ]);
+}
 
 const FileUpload = ({ onUploadSuccess, onClose }) => {
   const queryClient = useQueryClient();
@@ -34,27 +45,16 @@ const FileUpload = ({ onUploadSuccess, onClose }) => {
   const uploadingRef = useRef(false);
 
   useEffect(() => {
-    const handleEscape = (e) => {
-      if (e.key !== 'Escape' || uploadingRef.current) return;
-      onClose();
-    };
-    document.addEventListener('keydown', handleEscape);
-    document.body.style.overflow = 'hidden';
-    return () => {
-      document.removeEventListener('keydown', handleEscape);
-      document.body.style.overflow = 'unset';
-    };
+    return attachLibraryModalChrome({
+      onClose,
+      isBlocked: () => uploadingRef.current,
+    });
   }, [onClose]);
 
   const extractEpubMetadata = async (file) => {
     try {
       setExtractingMetadata(true);
-      return await Promise.race([
-        extractEpubFileMetadata(file),
-        new Promise((_, reject) =>
-          setTimeout(() => reject(new Error('Metadata extraction timeout')), 10000)
-        ),
-      ]);
+      return await withMetadataTimeout(extractEpubFileMetadata(file));
     } catch {
       return {
         title: epubUploadBasename(file.name),
@@ -158,6 +158,26 @@ const FileUpload = ({ onUploadSuccess, onClose }) => {
   };
 
   const openFilePicker = () => inputRef.current?.click();
+
+  const handleOverlayClick = (e) => {
+    if (!uploadingRef.current && e.target === e.currentTarget) onClose();
+  };
+
+  const handleDropzoneKeyDown = (e) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      openFilePicker();
+    }
+  };
+
+  const handleFileInputChange = (e) => {
+    if (e.target.files?.length) handleFiles(e.target.files);
+  };
+
+  const updateMetadataField = (key) => (e) => {
+    setMetadata((prev) => ({ ...prev, [key]: e.target.value }));
+  };
+
   const canSubmit =
     Boolean(metadata.title && metadata.author) && !extractingMetadata && !uploading;
   const extractingPlaceholder = extractingMetadata ? '메타데이터 추출 중...' : undefined;
@@ -165,9 +185,7 @@ const FileUpload = ({ onUploadSuccess, onClose }) => {
   return (
     <div
       className="book-detail-modal"
-      onClick={(e) => {
-        if (!uploadingRef.current && e.target === e.currentTarget) onClose();
-      }}
+      onClick={handleOverlayClick}
       role="dialog"
       aria-modal="true"
       aria-labelledby="file-upload-title"
@@ -203,12 +221,7 @@ const FileUpload = ({ onUploadSuccess, onClose }) => {
               onClick={openFilePicker}
               role="button"
               tabIndex={0}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' || e.key === ' ') {
-                  e.preventDefault();
-                  openFilePicker();
-                }
-              }}
+              onKeyDown={handleDropzoneKeyDown}
             >
               <div className="epub-dropzone-icon" aria-hidden>
                 <Upload size={22} strokeWidth={1.75} />
@@ -223,9 +236,7 @@ const FileUpload = ({ onUploadSuccess, onClose }) => {
               type="file"
               accept={EPUB_FILE_CONSTRAINTS.ACCEPT_ATTRIBUTE}
               className="file-upload-file-input"
-              onChange={(e) => {
-                if (e.target.files?.length) handleFiles(e.target.files);
-              }}
+              onChange={handleFileInputChange}
             />
 
             <div className="file-upload-actions file-upload-actions--select">
@@ -255,7 +266,7 @@ const FileUpload = ({ onUploadSuccess, onClose }) => {
                     id={id}
                     type="text"
                     value={metadata[key]}
-                    onChange={(e) => setMetadata((prev) => ({ ...prev, [key]: e.target.value }))}
+                    onChange={updateMetadataField(key)}
                     disabled={extractingMetadata}
                     placeholder={extractingPlaceholder || placeholder}
                   />
@@ -267,7 +278,7 @@ const FileUpload = ({ onUploadSuccess, onClose }) => {
                 <select
                   id="file-upload-language-input"
                   value={metadata.language}
-                  onChange={(e) => setMetadata((prev) => ({ ...prev, language: e.target.value }))}
+                  onChange={updateMetadataField('language')}
                   disabled={extractingMetadata || uploading}
                 >
                   <option value="ko">한국어</option>

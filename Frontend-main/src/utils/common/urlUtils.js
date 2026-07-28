@@ -1,8 +1,8 @@
-/** 환경 URL·OAuth·공개 자산 URL 정규화·fetch */
+/** 환경 URL·OAuth·공개 자산·에러 로깅·뷰어/그래프 경로 */
 
 import { clearAuthData } from '../security/authTokenStorage';
 import { createAndStoreGoogleOAuthState, secureLog } from '../security/oauthSecurity';
-import { trimTrailingSlash } from './valueUtils';
+import { trimTrailingSlash, toOneBasedChapterIndexOrNull } from './valueUtils';
 
 export const DEFAULT_API_BASE_URL = 'https://readwith-be.onrender.com';
 export const DEFAULT_CDN_BASE_URL = 'https://cdn.readwith.cloud';
@@ -42,13 +42,13 @@ export const getGoogleOAuthRedirectUri = () => {
     return `${trimTrailingSlash(origin)}${path}`;
   };
 
-  if (typeof window !== 'undefined' && window.location?.origin) {
-    return buildCallbackUri(window.location.origin);
-  }
-
   const explicit = envString('VITE_GOOGLE_REDIRECT_URI');
   if (explicit) {
     return explicit;
+  }
+
+  if (typeof window !== 'undefined' && window.location?.origin) {
+    return buildCallbackUri(window.location.origin);
   }
 
   const appOrigin = envString('VITE_APP_ORIGIN');
@@ -469,3 +469,324 @@ export function getOAuthErrorTip(error) {
   }
   return '네트워크 연결과 Google OAuth 설정을 확인한 뒤 다시 시도해 주세요.';
 }
+
+/** 뷰어·그래프 경로: 쿼리 없음. 읽기 위치는 `/user/viewer/:id/c/:chapter/p/:page` */
+
+export const USER_VIEWER_PREFIX = '/user/viewer';
+export const USER_GRAPH_PREFIX = '/user/graph';
+
+const DEFAULT_VIEWER_READING_POSITION = Object.freeze({ chapter: 1, page: 1 });
+const READER_SPLAT_RE = /^c\/(\d+)\/p\/(\d+)$/;
+
+function sanitizeViewerBookId(bookId) {
+  return bookId != null ? String(bookId).replace(/^\/+/, '').trim() : '';
+}
+
+function prefixedBookPath(prefix, bookId) {
+  const id = sanitizeViewerBookId(bookId);
+  return id ? `${prefix}/${id}` : prefix;
+}
+
+export function parseViewerReaderSplat(splat) {
+  if (splat == null || splat === '') return null;
+  const normalizedSplat = String(splat).replace(/^\/+|\/+$/g, '');
+  if (!normalizedSplat) return null;
+  const match = normalizedSplat.match(READER_SPLAT_RE);
+  if (!match) return null;
+  const chapter = toOneBasedChapterIndexOrNull(match[1]);
+  const page = toOneBasedChapterIndexOrNull(match[2]);
+  if (!chapter || !page) return null;
+  return { chapter, page };
+}
+
+/** splat 파싱 결과 → 챕터/페이지. 없거나 불완전하면 기본 위치 */
+export function resolveViewerReadingPosition(parsedPath) {
+  return {
+    chapter: parsedPath?.chapter ?? DEFAULT_VIEWER_READING_POSITION.chapter,
+    page: parsedPath?.page ?? DEFAULT_VIEWER_READING_POSITION.page,
+  };
+}
+
+export function userViewerPath(bookId) {
+  return prefixedBookPath(USER_VIEWER_PREFIX, bookId);
+}
+
+export function userViewerReadingPath(bookId, chapter, page) {
+  const base = userViewerPath(bookId);
+  const normalizedChapter = toOneBasedChapterIndexOrNull(chapter);
+  const normalizedPage = toOneBasedChapterIndexOrNull(page);
+  if (!normalizedChapter || !normalizedPage) return base;
+  return `${base}/c/${normalizedChapter}/p/${normalizedPage}`;
+}
+
+/** 숫자 bookId일 때만 유효 경로. 아니면 null (잘못된 /user/viewer/bookmarks 방지) */
+export function userViewerBookmarksPath(bookId) {
+  const id = sanitizeViewerBookId(bookId);
+  if (!id) return null;
+  const numeric = Number(id);
+  if (!Number.isFinite(numeric) || numeric <= 0) return null;
+  return `${USER_VIEWER_PREFIX}/${Math.trunc(numeric)}/bookmarks`;
+}
+
+export function userGraphPath(bookId) {
+  return prefixedBookPath(USER_GRAPH_PREFIX, bookId);
+}
+
+/* ─── 인증 필요 공개 자산 blob URL (authApi/booksApi 순환 방지를 위해 동적 import) ─── */
+
+const blobUrlCache = new Map();
+const inFlightRequests = new Map();
+const failedFetchUrls = new Map();
+/** 최종 실패 후 짧은 쿨다운만 (데이터는 존재한다고 가정 — 일시적 fetch 실패 대비) */
+const FAILED_FETCH_TTL_MS = 5_000;
+const ASSET_FETCH_MAX_ATTEMPTS = 3;
+const ASSET_FETCH_RETRY_BASE_MS = 400;
+export const GRAPH_IMAGE_DEFERRED_RETRY_MS = 1_500;
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const isFailedRecently = (fetchUrl) => {
+  const failedAt = failedFetchUrls.get(fetchUrl);
+  if (!failedAt) return false;
+  if (Date.now() - failedAt > FAILED_FETCH_TTL_MS) {
+    failedFetchUrls.delete(fetchUrl);
+    return false;
+  }
+  return true;
+};
+
+const markFetchFailed = (fetchUrl) => {
+  failedFetchUrls.set(fetchUrl, Date.now());
+};
+
+const clearFetchFailed = (fetchUrl) => {
+  if (fetchUrl) failedFetchUrls.delete(fetchUrl);
+};
+
+const isRetryableAssetStatus = (status) =>
+  status === 404 || status === 408 || status === 429 || status >= 500;
+
+const stillNeedsProtectedImageResolve = (image) =>
+  !!image && isProtectedPublicAsset(image) && !String(image).startsWith('blob:');
+
+function extractBookIdFromPublicAssetUrl(url) {
+  const s = sanitizeAssetUrl(url);
+  if (!s) return null;
+  const match = s.match(/\/books\/(\d+)\//);
+  if (!match) return null;
+  const id = Number(match[1]);
+  return Number.isFinite(id) && id > 0 ? id : null;
+}
+
+function isPublicCoverAssetPath(url) {
+  const s = sanitizeAssetUrl(url);
+  return !!s && /\/covers\//.test(s);
+}
+
+const buildCoverRefreshSource = (sanitized) => {
+  if (!isPublicCoverAssetPath(sanitized)) return null;
+  const bookId = extractBookIdFromPublicAssetUrl(sanitized);
+  if (!bookId) return null;
+  return async () => {
+    const { getBook } = await import('../api/booksApi');
+    const res = await getBook(bookId);
+    return res?.isSuccess ? res.result?.coverImgUrl : null;
+  };
+};
+
+const fetchProtectedBlobUrl = async (sourceUrl, { force = false } = {}) => {
+  const sanitized = sanitizeAssetUrl(sourceUrl);
+  if (!sanitized) return null;
+
+  if (!isProtectedPublicAsset(sanitized)) {
+    return sanitized;
+  }
+
+  const fetchUrl = resolveApiArtifactUrl(sanitized);
+  if (!fetchUrl) return null;
+
+  if (blobUrlCache.has(fetchUrl)) {
+    return blobUrlCache.get(fetchUrl);
+  }
+
+  if (!force && isFailedRecently(fetchUrl)) {
+    return null;
+  }
+  if (force) clearFetchFailed(fetchUrl);
+
+  if (inFlightRequests.has(fetchUrl)) {
+    return inFlightRequests.get(fetchUrl);
+  }
+
+  const request = (async () => {
+    try {
+      const { authenticatedFetch } = await import('../api/authApi');
+
+      for (let attempt = 1; attempt <= ASSET_FETCH_MAX_ATTEMPTS; attempt++) {
+        try {
+          const res = await authenticatedFetch(fetchUrl);
+          if (res.ok) {
+            const blob = await res.blob();
+            const blobUrl = URL.createObjectURL(blob);
+            blobUrlCache.set(fetchUrl, blobUrl);
+            clearFetchFailed(fetchUrl);
+            return blobUrl;
+          }
+
+          if (!isRetryableAssetStatus(res.status) || attempt === ASSET_FETCH_MAX_ATTEMPTS) {
+            break;
+          }
+        } catch {
+          if (attempt === ASSET_FETCH_MAX_ATTEMPTS) break;
+        }
+
+        await sleep(ASSET_FETCH_RETRY_BASE_MS * attempt);
+      }
+
+      markFetchFailed(fetchUrl);
+      return null;
+    } finally {
+      inFlightRequests.delete(fetchUrl);
+    }
+  })();
+
+  inFlightRequests.set(fetchUrl, request);
+  return request;
+};
+
+export async function fetchAuthenticatedAssetBlobUrl(sourceUrl, options = {}) {
+  const sanitized = sanitizeAssetUrl(sourceUrl);
+  if (!sanitized) return null;
+
+  const { force = false, refreshSource } = options;
+  const result = await fetchProtectedBlobUrl(sourceUrl, { force });
+  if (result) return result;
+
+  const refresh = refreshSource ?? buildCoverRefreshSource(sanitized);
+  if (typeof refresh !== 'function') {
+    return null;
+  }
+
+  try {
+    const refreshed = await refresh();
+    if (typeof refreshed !== 'string' || !refreshed.trim()) {
+      return null;
+    }
+
+    const prevFetchUrl = resolveApiArtifactUrl(sanitized);
+    const nextSanitized = sanitizeAssetUrl(refreshed);
+    const nextFetchUrl = resolveApiArtifactUrl(nextSanitized);
+    clearFetchFailed(prevFetchUrl);
+    if (nextFetchUrl !== prevFetchUrl) {
+      clearFetchFailed(nextFetchUrl);
+    }
+
+    if (nextSanitized === sanitized) {
+      return fetchProtectedBlobUrl(sourceUrl, { force: true });
+    }
+    return fetchProtectedBlobUrl(refreshed, { force: true });
+  } catch {
+    return null;
+  }
+}
+
+async function resolveOneGraphProfileImage(el, { force = false } = {}) {
+  const image = el?.data?.image;
+  if (!stillNeedsProtectedImageResolve(image)) return el;
+  const blobUrl = await fetchAuthenticatedAssetBlobUrl(image, { force });
+  if (!blobUrl || blobUrl === image) return el;
+  return { ...el, data: { ...el.data, image: blobUrl } };
+}
+
+export function graphElementsHaveUnresolvedProfileImages(elements) {
+  if (!Array.isArray(elements) || elements.length === 0) return false;
+  return elements.some((el) => stillNeedsProtectedImageResolve(el?.data?.image));
+}
+
+export async function resolveGraphElementsProfileImages(elements, options = {}) {
+  if (!Array.isArray(elements) || elements.length === 0) return elements;
+  const { force = false } = options;
+  return Promise.all(elements.map((el) => resolveOneGraphProfileImage(el, { force })));
+}
+
+/* ─── 공통 에러 로깅·handleError 래퍼 (from errorUtils) ─── */
+
+const getErrorDetails = (error) => {
+  return {
+    message: error?.message || error?.toString() || '알 수 없는 오류',
+    status: error?.status || error?.statusCode || null,
+    code: error?.code || null,
+    stack: error?.stack || null,
+    name: error?.name || 'Error',
+  };
+};
+
+export const errorUtils = {
+  logError: (context, error, additionalData = {}) => {
+    const errorDetails = getErrorDetails(error);
+    console.error(`❌ [${context}] 에러 발생:`, {
+      ...errorDetails,
+      ...additionalData,
+      timestamp: new Date().toISOString(),
+    });
+  },
+
+  logWarning: (context, message, additionalData = {}) => {
+    console.warn(`⚠️ [${context}] 경고:`, {
+      message,
+      ...additionalData,
+      timestamp: new Date().toISOString(),
+    });
+  },
+
+  logInfo: (context, message, additionalData = {}) => {
+    if (import.meta.env.DEV) {
+      console.info(`ℹ️ [${context}] 정보:`, {
+        message,
+        ...additionalData,
+        timestamp: new Date().toISOString(),
+      });
+    }
+  },
+
+  handleError: (context, error, fallbackValue = null, additionalData = {}) => {
+    errorUtils.logError(context, error, additionalData);
+    return fallbackValue;
+  },
+
+  isNetworkError: (error) => {
+    return (
+      error?.message?.includes('Failed to fetch') ||
+      error?.message?.includes('NetworkError') ||
+      error?.name === 'TypeError' ||
+      error?.code === 'NETWORK_ERROR'
+    );
+  },
+
+  getUserFriendlyMessage: (error) => {
+    const status = error?.status || error?.statusCode;
+    const statusMessages = {
+      400: '잘못된 요청입니다',
+      401: '인증이 필요합니다. 다시 로그인해주세요',
+      403: '접근 권한이 없습니다',
+      404: '요청한 데이터를 찾을 수 없습니다',
+      500: '서버 오류가 발생했습니다',
+      502: '서버 연결 오류가 발생했습니다',
+      503: '서비스를 일시적으로 사용할 수 없습니다',
+    };
+
+    if (status && statusMessages[status]) {
+      return statusMessages[status];
+    }
+
+    if (errorUtils.isNetworkError(error)) {
+      return '네트워크 연결을 확인해주세요';
+    }
+
+    if (error?.message && !error.message.includes('Error:')) {
+      return error.message;
+    }
+
+    return '오류가 발생했습니다. 잠시 후 다시 시도해주세요';
+  },
+};

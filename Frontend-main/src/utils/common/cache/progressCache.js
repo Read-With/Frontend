@@ -1,28 +1,128 @@
+/** progress/reader 캐시 + 서버 locator 정규화 */
+
+import { errorUtils } from '../urlUtils';
+import {
+  resolveChapterIndex,
+  clampPercent,
+  toStringOrNull,
+  toTrimmedStringOrNull,
+  toLocator,
+  locatorsEqual,
+  resolveProgressLocator,
+  progressPayloadFromData,
+  progressResultToViewerAnchor,
+} from '../valueUtils';
 import {
   registerCache,
   getCacheItem,
   setCacheItem,
   removeCacheItem,
-  loadTtlStorage,
   removeFromStorage,
+  loadTtlStorage,
   PROGRESS_CACHE_KEY,
   PROGRESS_CACHE_TTL_MS,
   READER_PROGRESS_CACHE_PREFIX,
   READER_PROGRESS_MAX_AGE_MS,
 } from './cacheManager';
 import {
+  getChapterData,
+  locatorFromChapterLocalOffset,
+  chapterLocalOffsetFromLocator,
   locatorFromBookAbsoluteOffset,
-  normalizeStartEndLocatorsForServer,
+  readingProgressPercentFromLocator,
   resolveProgressMetricsFromLocator,
 } from './manifestCache';
-import { progressPayloadFromData, progressResultToViewerAnchor, resolveProgressLocator, toLocator } from '../locatorUtils';
-import {
-  normalizeReadingProgressPercent,
-  normalizeChapterProgressPercent,
-  resolveProgressEventName,
-} from '../../viewer/viewerEventProgressUtils';
-import { clampPercent, resolveChapterIndex, toStringOrNull, toTrimmedStringOrNull } from '../valueUtils';
-import { errorUtils } from '../errorUtils';
+
+/** POST progress — 서버 blockIndex 검증에 맞게 paragraphStarts 축으로 재매핑 */
+export const normalizeLocatorForServerProgress = (bookId, locator, manifestOverride = undefined) => {
+  const loc = toLocator(locator);
+  if (!loc) return null;
+  const chapter = getChapterData(bookId, loc.chapterIndex, manifestOverride);
+  if (!chapter) return loc;
+  const starts = Array.isArray(chapter.paragraphStarts) ? chapter.paragraphStarts : [];
+  if (starts.length === 0) return loc;
+  const local = chapterLocalOffsetFromLocator(chapter, loc);
+  const out = locatorFromChapterLocalOffset(chapter, local);
+  return out ?? loc;
+};
+
+/** start/end locator 서버 축 정규화 (진도·북마크 공용). 동일하면 endLocator=null */
+export const normalizeStartEndLocatorsForServer = (
+  bookId,
+  startLocator,
+  endLocator = null,
+  manifestOverride = undefined
+) => {
+  const start =
+    normalizeLocatorForServerProgress(bookId, startLocator, manifestOverride) ??
+    toLocator(startLocator);
+  if (!start) return { startLocator: null, endLocator: null };
+
+  const endRaw = toLocator(endLocator) ?? start;
+  const end =
+    normalizeLocatorForServerProgress(bookId, endRaw, manifestOverride) ?? endRaw;
+
+  return {
+    startLocator: start,
+    endLocator: locatorsEqual(start, end) ? null : end,
+  };
+};
+
+/** progress 저장/캐시용 — end가 없으면 start로 채움 */
+export const withNormalizedProgressLocators = (progressData, manifestOverride = undefined) => {
+  if (!progressData?.bookId) return progressData;
+  const bookId = String(progressData.bookId);
+  const locator = resolveProgressLocator(progressData);
+  if (!locator) return progressData;
+  const { startLocator, endLocator } = normalizeStartEndLocatorsForServer(
+    bookId,
+    locator,
+    progressData.endLocator ?? progressData.end ?? null,
+    manifestOverride
+  );
+  if (!startLocator) return progressData;
+  return {
+    ...progressData,
+    startLocator,
+    locator: startLocator,
+    endLocator: endLocator ?? startLocator,
+  };
+};
+
+
+const progressPercentFromData = (data, options, pickValue) => {
+  if (!data || typeof data !== 'object') return null;
+  const bookId = options.bookId ?? data.bookId;
+  const locator = resolveProgressLocator(data);
+  if (bookId == null || !locator) return null;
+  const value = pickValue(bookId, locator);
+  return value != null ? clampPercent(value) : null;
+};
+
+const normalizeReadingProgressPercent = (data, options = {}) =>
+  progressPercentFromData(data, options, (bookId, locator) =>
+    readingProgressPercentFromLocator(bookId, locator)
+  );
+
+const normalizeChapterProgressPercent = (data, options = {}) =>
+  progressPercentFromData(data, options, (bookId, locator) => {
+    const metrics = resolveProgressMetricsFromLocator(bookId, locator);
+    return metrics?.chapterProgress ?? null;
+  });
+
+const resolveProgressEventName = (source) => {
+  if (!source || typeof source !== 'object') return '';
+  const name =
+    source.eventName ??
+    source.eventTitle ??
+    source.eventLabel ??
+    source.name ??
+    source.event_name ??
+    source.event?.name ??
+    source.event?.title ??
+    source.title;
+  return typeof name === 'string' ? name.trim() : '';
+};
 
 export const PROGRESS_CACHE_UPDATED_EVENT = 'readwith:progress-cache-updated';
 
@@ -381,3 +481,4 @@ export const setCachedReaderProgress = (bookKey, payload) => {
     return null;
   }
 };
+
