@@ -1,7 +1,6 @@
 /** book-scope 그래프 API·manifest·관계 타임라인 (RelationGraph 전용) */
 
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { getBookScopeRelationshipGraph } from '../../utils/api/graphApi.js';
 import {
   loadGraphDataWithCache,
   hasMacroGraphStorageCache,
@@ -10,8 +9,8 @@ import {
   padSingleEvent,
   fetchRelationTimelineCumulative,
   fetchRelationTimelineViewer,
-  FETCH_STATUS,
 } from '../../utils/graph/graphFetch';
+import { getBookScopeRelationshipGraph, FETCH_STATUS } from '../../utils/api/graphApi.js';
 import { getMaxChapter } from '../../utils/common/cache/manifestCache';
 import { toPositiveNumberOrNull, toPositiveInt } from '../../utils/common/valueUtils';
 import {
@@ -271,6 +270,10 @@ export function useRelationData(mode, id1, id2, chapterNum, eventNum, bookId = n
     setError(null);
     setIncomplete(false);
     setUsedProbe(false);
+    // 다른 간선/이벤트 전환 시 이전 차트 잔상 제거
+    setTimeline([]);
+    setLabels([]);
+    setNoRelation(false);
 
     try {
       const result =

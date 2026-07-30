@@ -1,4 +1,4 @@
-import { useMemo, useRef, memo, useCallback, useEffect } from 'react';
+import { useMemo, useRef, memo, useCallback, useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { AlertCircle, Inbox, Loader2 } from 'lucide-react';
 import CytoscapeGraphUnified from '../graph/CytoscapeGraphUnified';
@@ -12,6 +12,7 @@ import {
   useGraphTooltipSelection,
 } from '../../hooks/graph/useGraphCy';
 import { resolveEventOrdinalForDisplay } from '../../utils/viewer/viewerSession';
+import { resolveGraphCallContext } from '../../utils/viewer/viewerGraph';
 import { hasGraphPanelLocationHint, resolveChapterIndex, toPositiveNumberOrNull, resolvePositiveBookId } from '../../utils/common/valueUtils';
 import {
   eventUtils,
@@ -471,7 +472,7 @@ const GraphSplitArea = memo(function GraphSplitArea({
     fitNodeIds = [],
   } = searchState;
 
-  const { graphPhase, isDataReady, isDataEmpty, book, bookKey, routeBookId } = viewerState;
+  const { graphPhase, isDataReady, isDataEmpty, appliedGraphKey, book, bookKey, routeBookId } = viewerState;
   const {
     elements,
     currentEvent,
@@ -512,6 +513,16 @@ const GraphSplitArea = memo(function GraphSplitArea({
   );
 
   const hasResolvedEvent = eventUtils.resolveEventNum(currentEvent) > 0;
+  const targetGraphKey = useMemo(() => {
+    if (!hasResolvedEvent) return null;
+    const ctx = resolveGraphCallContext({ book, currentChapter, currentEvent });
+    return ctx?.eventIdx >= 1 ? ctx.callKey : null;
+  }, [book, currentChapter, currentEvent, hasResolvedEvent]);
+  const graphMatchesTarget =
+    Boolean(targetGraphKey) &&
+    Boolean(appliedGraphKey) &&
+    appliedGraphKey === targetGraphKey;
+
   const hasLocationHint =
     hasGraphPanelLocationHint(cachedLocation, { requireEventNum: true }) ||
     hasGraphPanelLocationHint(resumeAnchor);
@@ -530,8 +541,8 @@ const GraphSplitArea = memo(function GraphSplitArea({
   });
 
   const hasElements = Array.isArray(elements) && elements.length > 0;
-  // 확정 이벤트 + 데이터 ready 이후에만 그래프 노출 (이전 이벤트 stale 금지)
-  const canShowGraph = isDataReady && hasResolvedEvent && hasElements;
+  // 확정 이벤트 + 타깃 callKey 일치 시에만 노출 (이전 이벤트 stale 금지)
+  const canShowGraph = isDataReady && hasResolvedEvent && hasElements && graphMatchesTarget;
   const isGraphIdle = graphPhase === 'idle';
   const isEventTransition =
     transitionState.type === 'event' && transitionState.inProgress;
@@ -542,7 +553,36 @@ const GraphSplitArea = memo(function GraphSplitArea({
     isDataReady &&
     isDataEmpty &&
     !hasElements &&
-    hasResolvedEvent;
+    hasResolvedEvent &&
+    graphMatchesTarget;
+
+  // hidden 동안에는 이전에 표시 중이던 이벤트 메타를 유지 (새 이벤트+옛 elements 혼선 방지)
+  const [mountedEvent, setMountedEvent] = useState(currentEvent);
+  const [mountedChapter, setMountedChapter] = useState(currentChapter);
+  const [mountedPrevValidEvent, setMountedPrevValidEvent] = useState(prevValidEvent);
+  useEffect(() => {
+    if (!canShowGraph) return;
+    setMountedEvent(currentEvent);
+    setMountedChapter(currentChapter);
+    setMountedPrevValidEvent(prevValidEvent);
+  }, [canShowGraph, currentEvent, currentChapter, prevValidEvent]);
+
+  const graphEventForCanvas = canShowGraph ? currentEvent : mountedEvent;
+  const graphChapterForCanvas = canShowGraph ? currentChapter : mountedChapter;
+  const graphPrevValidForCanvas = canShowGraph ? prevValidEvent : mountedPrevValidEvent;
+
+  const fillOverlayStyle = (background, zIndex) =>
+    hasElements
+      ? {
+          position: 'absolute',
+          inset: 0,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          background,
+          zIndex,
+        }
+      : { flex: 1, minHeight: 0, display: 'flex' };
 
   const resolvedApiError = normalizeGraphApiError(apiError);
 
@@ -554,7 +594,7 @@ const GraphSplitArea = memo(function GraphSplitArea({
   const showRefreshOverlay = canShowGraph && isGraphRefreshing;
 
   const loadingNotice = getLoadingNotice(
-    isGraphRefreshing || !isDataReady || !hasResolvedEvent,
+    isGraphRefreshing || !isDataReady || !hasResolvedEvent || !graphMatchesTarget,
     isLocationDetermined,
     transitionState.type
   );
@@ -580,15 +620,8 @@ const GraphSplitArea = memo(function GraphSplitArea({
         searchActions={topBarSearchActions}
       />
 
-      <div style={{ ...graphStyles.graphPageInner, minWidth: 0 }}>
-        {shouldShowLoading ? (
-          <GraphNoticePanel
-            variant="loading"
-            title={loadingNotice.title}
-            description={loadingNotice.description}
-            icon={<Loader2 className="h-5 w-5 animate-spin" strokeWidth={2} aria-hidden />}
-          />
-        ) : isDataLoadCompleteAndEmpty ? (
+      <div style={{ ...graphStyles.graphPageInner, minWidth: 0, position: 'relative' }}>
+        {isDataLoadCompleteAndEmpty ? (
           <GraphNoticePanel
             variant="empty"
             title="아직 이벤트가 없습니다"
@@ -607,63 +640,86 @@ const GraphSplitArea = memo(function GraphSplitArea({
               </div>
             }
           />
-        ) : resolvedApiError ? (
-          <GraphNoticePanel
-            variant="error"
-            title={resolvedApiError.message || '문제가 발생했습니다'}
-            description={resolvedApiError.details || '잠시 후 다시 시도해 주세요.'}
-            icon={<AlertCircle className="h-6 w-6" strokeWidth={2} aria-hidden />}
-            actions={
-              resolvedApiError.retry ? (
-                <button type="button" className={primaryBtnClass} onClick={resolvedApiError.retry}>
-                  다시 시도
-                </button>
-              ) : null
-            }
-          />
         ) : (
-          <div
-            className="graph-canvas-area"
-            style={{
-              flex: 1,
-              minHeight: 0,
-              minWidth: 0,
-            }}
-          >
-            <GraphContainer
-              currentEvent={currentEvent}
-              currentChapter={currentChapter}
-              edgeLabelVisible={edgeLabelVisible}
-              filename={routeBookId ?? bookKey ?? ''}
-              elements={finalElements}
-              searchTerm={searchTerm}
-              isSearchActive={isSearchActive}
-              filteredElements={filteredElements}
-              fitNodeIds={fitNodeIds}
-              prevValidEvent={prevValidEvent ?? null}
-              activeTooltip={activeTooltip}
-              onClearTooltip={onClearTooltip}
-              onSetActiveTooltip={onSetActiveTooltip}
-              graphClearRef={graphClearRef}
-              isEventTransition={isEventTransition}
-              bookId={book?.id ?? bookKey}
-              cyRef={cyRef}
-              showZoomControls
-            />
-            {showRefreshOverlay ? (
+          <>
+            {/* elements가 있으면 remount 없이 hidden으로 유지 */}
+            {hasElements ? (
               <div
-                className="absolute inset-0 z-20 flex items-center justify-center bg-[var(--rg-surface-slate)]/80"
-                role="status"
-                aria-live="polite"
-                aria-label="그래프 전환 중"
+                className="graph-canvas-area"
+                style={{
+                  flex: 1,
+                  minHeight: 0,
+                  minWidth: 0,
+                  visibility: canShowGraph ? 'visible' : 'hidden',
+                  pointerEvents: canShowGraph ? 'auto' : 'none',
+                }}
+                aria-hidden={!canShowGraph}
               >
-                <div className="flex items-center gap-2 rounded-lg bg-white px-4 py-2 text-sm font-medium text-[var(--rg-text)] shadow-sm border border-[var(--rg-border-soft)]">
-                  <Loader2 className="h-4 w-4 animate-spin text-[var(--rg-brand)]" strokeWidth={2} aria-hidden />
-                  <span>이벤트 반영 중</span>
-                </div>
+                <GraphContainer
+                  currentEvent={graphEventForCanvas}
+                  currentChapter={graphChapterForCanvas}
+                  edgeLabelVisible={edgeLabelVisible}
+                  filename={routeBookId ?? bookKey ?? ''}
+                  elements={finalElements}
+                  searchTerm={searchTerm}
+                  isSearchActive={isSearchActive}
+                  filteredElements={filteredElements}
+                  fitNodeIds={fitNodeIds}
+                  prevValidEvent={graphPrevValidForCanvas ?? null}
+                  activeTooltip={activeTooltip}
+                  onClearTooltip={onClearTooltip}
+                  onSetActiveTooltip={onSetActiveTooltip}
+                  graphClearRef={graphClearRef}
+                  isEventTransition={isEventTransition || !canShowGraph}
+                  bookId={book?.id ?? bookKey}
+                  cyRef={cyRef}
+                  showZoomControls
+                />
+                {showRefreshOverlay ? (
+                  <div
+                    className="absolute inset-0 z-20 flex items-center justify-center bg-[var(--rg-surface-slate)]/80"
+                    role="status"
+                    aria-live="polite"
+                    aria-label="그래프 전환 중"
+                  >
+                    <div className="flex items-center gap-2 rounded-lg bg-white px-4 py-2 text-sm font-medium text-[var(--rg-text)] shadow-sm border border-[var(--rg-border-soft)]">
+                      <Loader2 className="h-4 w-4 animate-spin text-[var(--rg-brand)]" strokeWidth={2} aria-hidden />
+                      <span>이벤트 반영 중</span>
+                    </div>
+                  </div>
+                ) : null}
               </div>
             ) : null}
-          </div>
+
+            {shouldShowLoading ? (
+              <div style={fillOverlayStyle('rgba(255,255,255,0.72)', 2)}>
+                <GraphNoticePanel
+                  variant="loading"
+                  title={loadingNotice.title}
+                  description={loadingNotice.description}
+                  icon={<Loader2 className="h-5 w-5 animate-spin" strokeWidth={2} aria-hidden />}
+                />
+              </div>
+            ) : null}
+
+            {resolvedApiError ? (
+              <div style={fillOverlayStyle('rgba(255,255,255,0.88)', 3)}>
+                <GraphNoticePanel
+                  variant="error"
+                  title={resolvedApiError.message || '문제가 발생했습니다'}
+                  description={resolvedApiError.details || '잠시 후 다시 시도해 주세요.'}
+                  icon={<AlertCircle className="h-6 w-6" strokeWidth={2} aria-hidden />}
+                  actions={
+                    resolvedApiError.retry ? (
+                      <button type="button" className={primaryBtnClass} onClick={resolvedApiError.retry}>
+                        다시 시도
+                      </button>
+                    ) : null
+                  }
+                />
+              </div>
+            ) : null}
+          </>
         )}
       </div>
     </div>

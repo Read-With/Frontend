@@ -9,16 +9,22 @@ const BOOKS_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 
 export const GRAPH_BOOK_CACHE_PREFIX = 'graph_cache_';
 export const CHAPTER_EVENT_CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+/** 챕터 이벤트 localStorage 키 — v2: convert 단일 진입점 이후 elements 스키마 */
+export const CHAPTER_EVENT_CACHE_PREFIX = 'chapter_events_v2_';
 
 export const READER_PROGRESS_CACHE_PREFIX = 'reader_progress_';
 export const READER_PROGRESS_MAX_AGE_MS = 3 * 24 * 60 * 60 * 1000;
 
 export const CHAPTER_GRAPH_CACHE_SOURCE = Object.freeze({
   API: 'api',
-  EMPTY: 'empty',
   INVALID: 'invalid',
-  RUNTIME: 'runtime',
 });
+
+/** 과거에 write됐던 source — 재사용하지 않고 rediscover */
+export const isUnusableChapterGraphCacheSource = (source) =>
+  source === CHAPTER_GRAPH_CACHE_SOURCE.INVALID ||
+  source === 'empty' ||
+  source === 'manifest-only';
 
 const cacheRegistry = new Map();
 
@@ -320,7 +326,7 @@ function setupCleanupTimer(name, cacheInfo) {
   }
 }
 
-export function clearCache(name) {
+function clearCache(name) {
   try {
     const cacheInfo = cacheRegistry.get(name);
     if (!cacheInfo) return;

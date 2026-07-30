@@ -28,18 +28,13 @@ import {
 import { useApiGraphData, useChapterPovSummaries } from '../../hooks/graph/useApiGraphData';
 import { resolveServerBookIdOrFallback, useLocalStorageNumber } from '../../hooks/common/hooksShared';
 import {
-  createCharacterMaps,
-  buildNodeWeights,
-  extractNodeWeightsFromElements,
-  convertRelationsToElements,
-  getGraphEventState,
-} from '../../utils/graph/graphModel';
-import { eventUtils, formatChapterOrderAndName, stripRedundantBookTitlePrefix, resolveChapterTitleMeta } from '../../utils/viewer/viewerCore';
-import { hasGraphPayload } from '../../utils/graph/graphFetch';
-import {
   convertGraphSourceToElements,
   commitVisibleGraphElements,
+  DEFAULT_GRAPH_TRANSFORM_DEPS,
 } from '../../utils/viewer/viewerGraph';
+import { extractNodeWeightsFromElements, getGraphEventState } from '../../utils/graph/graphModel';
+import { eventUtils, formatChapterOrderAndName, stripRedundantBookTitlePrefix, resolveChapterTitleMeta } from '../../utils/viewer/viewerCore';
+import { hasGraphPayload } from '../../utils/api/graphApi';
 import { toPositiveNumberOrNull } from '../../utils/common/valueUtils';
 import {
   shouldIgnoreGraphPageOutsideClick,
@@ -73,7 +68,6 @@ const emptyGraphBannerStyle = {
 };
 
 const GRAPH_PAGE_EDGE_STYLE = getEdgeStyle('graph');
-const GRAPH_TRANSFORM_DEPS = { createCharacterMaps, buildNodeWeights, convertRelationsToElements };
 
 function ErrorToast({ error, onClose, duration = 5000 }) {
   useEffect(() => {
@@ -305,7 +299,7 @@ function RelationGraphWrapper() {
         graphApiPayload,
         currentChapter,
         currentEvent,
-        GRAPH_TRANSFORM_DEPS,
+        DEFAULT_GRAPH_TRANSFORM_DEPS,
         extractNodeWeightsFromElements(previousEventState?.elements),
         { bookId: serverBookId },
       ).elements;

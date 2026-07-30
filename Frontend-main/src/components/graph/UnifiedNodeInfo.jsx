@@ -2,14 +2,15 @@ import { memo, useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useParams } from "react-router-dom";
 import {
   processRelations,
-  processRelationTags,
+  normalizeRelationArray,
   extractRadarChartData,
   extractApiBookId,
   undirectedPairKey,
   isGraphNodeElement,
   GRAPH_LAYOUT_CONSTANTS,
 } from "../../utils/graph/graphCore";
-import { getEventDataByIndex, hasGraphPayload } from "../../utils/graph/graphFetch.js";
+import { getEventDataByIndex } from "../../utils/graph/graphFetch.js";
+import { hasGraphPayload } from "../../utils/api/graphApi.js";
 import { useTooltipPosition, useClickOutside } from "../../hooks/ui/tooltipHooks";
 import { getUnifiedEventInfoForTooltip } from "../../utils/viewer/viewerSession";
 import { toNumberOrNull } from "../../utils/common/valueUtils.js";
@@ -23,14 +24,24 @@ import {
 import './RelationGraph.css';
 import RelationAnalysisModal, { PersonSilhouette } from './RelationAnalysisModal';
 
-const RADAR_EMPTY = Object.freeze({ items: [], status: 'empty' });
+/** 뷰 전용 — FETCH_STATUS.EMPTY('empty')와 구분 */
+const UI_VIEW_STATUS = Object.freeze({
+  NO_DATA: 'no-data',
+  OK: 'ok',
+  ERROR: 'error',
+  LOADING: 'loading',
+  READY: 'ready',
+  PENDING: 'pending',
+});
+
+const RADAR_EMPTY = Object.freeze({ items: [], status: UI_VIEW_STATUS.NO_DATA });
 const radarOk = (items) => ({
   items,
-  status: items.length > 0 ? 'ok' : 'empty',
+  status: items.length > 0 ? UI_VIEW_STATUS.OK : UI_VIEW_STATUS.NO_DATA,
 });
 const radarError = (message) => ({
   items: [],
-  status: 'error',
+  status: UI_VIEW_STATUS.ERROR,
   error: message || '관계 분석 데이터를 만들지 못했습니다.',
 });
 
@@ -98,7 +109,7 @@ function buildProcessedNode(data) {
   const description = String(raw.personalityText || raw.description || '').trim();
   return {
     ...raw,
-    names: processRelationTags(raw.names || [], raw.common_name),
+    names: normalizeRelationArray(raw.names || [], raw.common_name),
     displayName: raw.common_name || raw.label || "Unknown",
     hasImage: !!raw.image,
     isMainCharacter: !!raw.isMainCharacter,
@@ -223,7 +234,7 @@ function checkNodeAppearance({ isSidebar, data, node, currentChapter, folderKey,
 }
 
 /**
- * @returns {{ text: string, status: 'empty'|'loading'|'error'|'ready'|'pending' }}
+ * @returns {{ text: string, status: 'no-data'|'loading'|'error'|'ready'|'pending' }}
  */
 function resolvePovSummary(
   node,
@@ -233,17 +244,17 @@ function resolvePovSummary(
   { isLoading = false, povCached = null } = {},
 ) {
   if (!node) {
-    return { text: '인물에 대한 요약 정보가 없습니다.', status: 'empty' };
+    return { text: '인물에 대한 요약 정보가 없습니다.', status: UI_VIEW_STATUS.NO_DATA };
   }
 
   if (isLoading) {
-    return { text: '시점 요약을 불러오는 중…', status: 'loading' };
+    return { text: '시점 요약을 불러오는 중…', status: UI_VIEW_STATUS.LOADING };
   }
 
   if (povError) {
     return {
       text: typeof povError === 'string' ? povError : '관점 요약을 불러오지 못했습니다.',
-      status: 'error',
+      status: UI_VIEW_STATUS.ERROR,
     };
   }
 
@@ -259,7 +270,7 @@ function resolvePovSummary(
     }
     const summaryText = typeof match?.summaryText === 'string' ? match.summaryText.trim() : '';
     if (summaryText) {
-      return { text: summaryText, status: 'ready' };
+      return { text: summaryText, status: UI_VIEW_STATUS.READY };
     }
   }
 
@@ -267,13 +278,13 @@ function resolvePovSummary(
   if (povCached === false) {
     return {
       text: `${node.displayName}의 챕터 ${chapterLabel} 시점 요약이 아직 생성·캐시되지 않았습니다.`,
-      status: 'pending',
+      status: UI_VIEW_STATUS.PENDING,
     };
   }
 
   return {
     text: `${node.displayName}에 대한 챕터 ${chapterLabel} 시점 요약이 아직 준비되지 않았습니다.`,
-    status: 'pending',
+    status: UI_VIEW_STATUS.PENDING,
   };
 }
 
@@ -603,9 +614,9 @@ function UnifiedNodeInfo({
       }),
     [node, currentChapter, povSummaries, povError, povIsLoading, povCached],
   );
-  const summaryIsError = summaryStatus === 'error';
-  const summaryIsLoading = summaryStatus === 'loading';
-  const summaryIsPending = summaryStatus === 'pending';
+  const summaryIsError = summaryStatus === UI_VIEW_STATUS.ERROR;
+  const summaryIsLoading = summaryStatus === UI_VIEW_STATUS.LOADING;
+  const summaryIsPending = summaryStatus === UI_VIEW_STATUS.PENDING;
   const chapterSummaryTitle =
     currentChapter != null && Number(currentChapter) >= 1
       ? `챕터 ${currentChapter} 시점 요약`
@@ -637,11 +648,11 @@ function UnifiedNodeInfo({
   }, [isSidebar, node, currentChapter, folderKey, elements, apiBookGraphData, eventInfo]);
 
   const radarChartData = radarResult.items;
-  const radarLoadError = radarResult.status === 'error' ? radarResult.error : null;
+  const radarLoadError = radarResult.status === UI_VIEW_STATUS.ERROR ? radarResult.error : null;
 
   const connectionKind = useMemo(() => {
     if (!isSidebar) return 'no_connections';
-    if (radarResult.status === 'error') return 'load_error';
+    if (radarResult.status === UI_VIEW_STATUS.ERROR) return 'load_error';
     const n = radarChartData.length;
     if (n === 0) return 'no_connections';
     if (n === 1) return 'single_connection';

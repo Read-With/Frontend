@@ -1,5 +1,5 @@
 /** 챕터·이벤트 스냅샷, 매크로 그래프 캐시 로더, relation timeline fetch */
-import { toNumberOrNull, toPositiveInt, toTrimmedStringOrNull } from '../common/valueUtils';
+import { toNumberOrNull, toPositiveInt, toTrimmedStringOrNull, asArray } from '../common/valueUtils';
 import { errorUtils } from '../common/urlUtils';
 import { extractApiBookId, isSamePair, isGraphEdgeElement } from './graphCore';
 import {
@@ -10,6 +10,7 @@ import {
   getCacheItem,
   setCacheItem,
   enforceCacheSizeLimit,
+  isUnusableChapterGraphCacheSource,
 } from '../common/cache/cacheManager';
 import { eventUtils, cacheKeyUtils, MACRO_GRAPH_STORAGE_KEY_RE, ELEMENTS_TO_RELATIONS_OPTS } from '../viewer/viewerCore';
 import {
@@ -30,17 +31,6 @@ import {
   reconstructChapterGraphState,
   ensureBookRelationshipDeltas,
 } from './graphModel';
-
-export {
-  prefetchChapterEvents,
-  ensureChapterEventsDiscovered,
-  ensureGraphBookCache,
-  clearBookRelationshipDeltas,
-} from './graphModel';
-
-export { FETCH_STATUS, hasGraphPayload } from '../api/graphApi';
-
-const asArray = (value) => (Array.isArray(value) ? value : []);
 
 const graphPayloadFromReconstructed = (reconstructed) => ({
   characters: asArray(reconstructed?.characters),
@@ -161,7 +151,9 @@ function getEventsForChapter(chapter, folderKey) {
   if (!bookId || !chapter || chapter < 1) return [];
 
   const snapshot = getCachedChapterEvents(bookId, chapter);
-  if (!snapshot?.events?.length || snapshot.source === 'manifest-only') return [];
+  if (!snapshot?.events?.length || isUnusableChapterGraphCacheSource(snapshot.source)) {
+    return [];
+  }
 
   return buildEventsFromChapterCache(snapshot, chapter);
 }
@@ -227,20 +219,22 @@ export function applyChapterEventsFromCache(
 const GRAPH_CACHE_TTL_MS = 6 * 60 * 60 * 1000; // 6h — stale 매크로 고착 완화
 const macroSessionCache = new Map();
 const inflightRequests = new Map();
+const timelineInflight = new Map();
 
-function getOrCreateInflightRequest(cacheKey, apiCall) {
-  if (!cacheKey) return apiCall();
-  let requestPromise = inflightRequests.get(cacheKey);
-  if (!requestPromise) {
-    requestPromise = Promise.resolve().then(() => apiCall());
-    inflightRequests.set(cacheKey, requestPromise);
-    requestPromise.finally(() => {
-      if (inflightRequests.get(cacheKey) === requestPromise) {
-        inflightRequests.delete(cacheKey);
+function withInflight(map, cacheKey, run) {
+  if (!cacheKey) return Promise.resolve().then(run);
+  const existing = map.get(cacheKey);
+  if (existing) return existing;
+
+  const pending = Promise.resolve()
+    .then(run)
+    .finally(() => {
+      if (map.get(cacheKey) === pending) {
+        map.delete(cacheKey);
       }
     });
-  }
-  return requestPromise;
+  map.set(cacheKey, pending);
+  return pending;
 }
 
 const isValidChapterRef = (bookId, chapter) =>
@@ -308,7 +302,7 @@ export const prefetchMacroGraphToCache = async (bookId, chapter, apiCall) => {
   const cacheKey = cacheKeyUtils.macroGraphStorage(normalizedBookId, normalizedChapter);
   if (hasGraphPayload(checkLocalStorageCache(cacheKey))) return;
   try {
-    const response = await getOrCreateInflightRequest(cacheKey, apiCall);
+    const response = await withInflight(inflightRequests, cacheKey, apiCall);
     if (response?.isSuccess && response?.result && hasGraphPayload(response.result)) {
       saveToLocalStorageCache(cacheKey, response.result);
       saveMacroToSessionCache(normalizedBookId, normalizedChapter, response.result);
@@ -344,7 +338,7 @@ export const loadGraphDataWithCache = async ({
   }
 
   try {
-    const response = await getOrCreateInflightRequest(cacheKey, apiCall);
+    const response = await withInflight(inflightRequests, cacheKey, apiCall);
     return processApiResponse(response, cacheKey, onSuccess, bookId, chapter, onError);
   } catch (error) {
     if (cacheKey) inflightRequests.delete(cacheKey);
@@ -436,10 +430,6 @@ function findRelationInElements(elements, id1, id2) {
   );
 }
 
-function relationPointFromElement(edgeElement) {
-  return finitePositivityOrZero(edgeElement?.data?.positivity);
-}
-
 function withNoRelation(result, fallbackNoRelation = true) {
   const safeResult = result ?? { points: [], labelInfo: [] };
   const points = Array.isArray(safeResult.points) ? safeResult.points : [];
@@ -477,7 +467,6 @@ export function padSingleEvent(points, labels) {
 /** relation timeline fetch (캐시·deltas·API probe) */
 
 const PROBE_EVENT_HARD_MAX = 512;
-const timelineInflight = new Map();
 
 function emptyTimeline({
   noRelation = false,
@@ -508,21 +497,6 @@ function timelineError(message, cause = null) {
   return emptyTimeline({ status: FETCH_STATUS.ERROR, error: err, noRelation: false });
 }
 
-function withTimelineInflight(cacheKey, run) {
-  const existing = timelineInflight.get(cacheKey);
-  if (existing) return existing;
-
-  const pending = Promise.resolve()
-    .then(run)
-    .finally(() => {
-      if (timelineInflight.get(cacheKey) === pending) {
-        timelineInflight.delete(cacheKey);
-      }
-    });
-  timelineInflight.set(cacheKey, pending);
-  return pending;
-}
-
 function pickSuccessfulResult(data) {
   if (!data?.isSuccess) return null;
   const result = pickGraphApiResult(data);
@@ -533,15 +507,29 @@ function relationEventFromApiResult(fineData, id1, id2, idx) {
   const fineResult = pickSuccessfulResult(fineData);
   const relation = findRelationInResult(asArray(fineResult?.relations), id1, id2);
   if (!relation) return null;
-  return { idx, positivity: finitePositivityOrZero(relation.positivity) };
+  const positivity = readEdgePositivityValue(relation);
+  if (positivity == null) return null;
+  return { idx, positivity };
 }
 
 function findEdgeInReconstructedChapter(chapterPayload, eventIdx, id1, id2) {
+  const maxIdx = Number(chapterPayload?.maxEventIdx);
+  // 캐시에 없는 이벤트는 마지막 스냅샷을 반복하지 않음 (잘못된 평탄 차트 방지)
+  if (Number.isFinite(maxIdx) && maxIdx >= 1 && Number(eventIdx) > maxIdx) {
+    return null;
+  }
   return findRelationInElements(
     reconstructChapterGraphState(chapterPayload, eventIdx)?.elements,
     id1,
     id2
   );
+}
+
+function readEdgePositivityValue(edgeOrRelation) {
+  const raw = edgeOrRelation?.data?.positivity ?? edgeOrRelation?.positivity;
+  if (raw == null || raw === '') return null;
+  const n = Number(raw);
+  return Number.isFinite(n) ? finitePositivityOrZero(n) : null;
 }
 
 function collectIndexedRelationEvents(lastEventIdx, lastOnly, getEdgeAt) {
@@ -553,7 +541,9 @@ function collectIndexedRelationEvents(lastEventIdx, lastOnly, getEdgeAt) {
   for (const idx of indices) {
     const edge = getEdgeAt(idx);
     if (!edge) continue;
-    relationEvents.push({ idx, positivity: relationPointFromElement(edge) });
+    const positivity = readEdgePositivityValue(edge);
+    if (positivity == null) continue;
+    relationEvents.push({ idx, positivity });
     if (lastOnly) break;
   }
   return relationEvents;
@@ -602,7 +592,9 @@ function buildRelationTimelineFromChapterCache(bookId, id1, id2, chapterNum, eve
   return buildEventTimeline(eventNum, (idx, started) => {
     const edge = findEdgeInReconstructedChapter(chapterPayload, idx, id1, id2);
     if (!edge) return started ? null : undefined;
-    return relationPointFromElement(edge);
+    const positivity = readEdgePositivityValue(edge);
+    if (positivity == null) return started ? null : undefined;
+    return positivity;
   }, { fillGaps: true });
 }
 
@@ -833,7 +825,7 @@ async function fetchCachedTimeline(cacheKey, inflightPrefix, loadCached, fetchUn
   const cached = loadCached();
   if (cached) return withNoRelation(cached);
 
-  return withTimelineInflight(`${inflightPrefix}:${cacheKey}`, async () => {
+  return withInflight(timelineInflight, `${inflightPrefix}:${cacheKey}`, async () => {
     const again = loadCached();
     if (again) return withNoRelation(again);
 
@@ -875,7 +867,7 @@ export async function fetchRelationTimelineViewer(bookId, id1, id2, chapterNum, 
   if (cachedTimeline) return withNoRelation(cachedTimeline);
 
   const inflightKey = `view:${bookId}:${chapterNum}:${eventNum}:${id1}:${id2}`;
-  return withTimelineInflight(inflightKey, async () => {
+  return withInflight(timelineInflight, inflightKey, async () => {
     const again = buildRelationTimelineFromChapterCache(bookId, id1, id2, chapterNum, eventNum);
     if (again) return withNoRelation(again);
 
@@ -914,7 +906,9 @@ export async function fetchRelationTimelineViewer(bookId, id1, id2, chapterNum, 
             id2
           );
           if (!relation) return started ? null : undefined;
-          return finitePositivityOrZero(relation.positivity);
+          const positivity = readEdgePositivityValue(relation);
+          if (positivity == null) return started ? null : undefined;
+          return positivity;
         } catch {
           failedIds.push(`${chapterNum}:${idx}`);
           return started ? null : undefined;

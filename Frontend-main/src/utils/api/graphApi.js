@@ -5,7 +5,7 @@ import {
   getChapterData,
   getLastManifestEventInChapter,
 } from '../common/cache/manifestCache';
-import { toNumberOrNull, toTrimmedStringOrNull } from '../common/valueUtils';
+import { toNumberOrNull, toTrimmedStringOrNull, asArray } from '../common/valueUtils';
 import {
   authenticatedRequest,
   SOFT_FAIL_403_404,
@@ -13,17 +13,23 @@ import {
   pickResponseResult,
   toUnifiedApiResponse,
 } from './authApi';
-import { pickCharacterDisplayName, rememberCharacterDisplayName } from '../graph/graphCore';
+import {
+  pickCharacterDisplayName,
+  rememberCharacterDisplayName,
+  resolveManifestEventId,
+  uniqueStrings,
+  appendRelationLabelHistory,
+  directedEdgeElementId,
+} from '../graph/graphCore';
 import { finitePositivityOrZero } from '../styles/graphStyles';
 
-/** API/캐시 로드 결과 계약 — error·empty 구분 */
+/** API/캐시 로드 결과 계약 — UI 뷰 상태(no-data 등)와 분리 */
 export const FETCH_STATUS = Object.freeze({
   OK: 'ok',
+  /** 요청 성공·payload 없음 (관계 없음 등). UI 'no-data'와 다름 */
   EMPTY: 'empty',
   ERROR: 'error',
 });
-
-const asArray = (value) => (Array.isArray(value) ? value : []);
 
 /** characters 또는 relations가 하나라도 있으면 true */
 export const hasGraphPayload = (data) => {
@@ -47,8 +53,6 @@ const handleApiError = (error, context) => {
     `${context}: ${statusMessage} (${statusCode}) - ${error.message || '알 수 없는 오류'}`
   );
 };
-
-const resolveManifestEventId = (ev) => toTrimmedStringOrNull(ev?.eventId ?? ev?.id);
 
 const readFiniteNumber = (value, fallback = null) => {
   const n = typeof value === 'number' ? value : Number(value);
@@ -154,46 +158,6 @@ export const sortDeltasForAccumulate = (deltas, chapterEventIdOrder = null) => {
   return [...list].sort((a, b) => compareDeltasForAccumulate(a, b, orderIndex));
 };
 
-const mergeRelationLabels = (prevLabels, nextLabels) => {
-  const merged = [];
-  const seen = new Set();
-  for (const label of [...asArray(prevLabels), ...asArray(nextLabels)]) {
-    const key = String(label ?? '').trim();
-    if (!key || seen.has(key)) continue;
-    seen.add(key);
-    merged.push(label);
-  }
-  return merged;
-};
-
-/** 라벨별 최초 추가·마지막 변경 이벤트/긍정도 추적 */
-const mergeLabelHistory = (prevHistory, labels, eventId, positivity) => {
-  const next = { ...(prevHistory && typeof prevHistory === 'object' ? prevHistory : {}) };
-  const pos = Number.isFinite(Number(positivity)) ? Number(positivity) : 0;
-  for (const raw of asArray(labels)) {
-    const text = String(raw ?? '').trim();
-    if (!text) continue;
-    const existing = next[text];
-    if (!existing) {
-      next[text] = {
-        text,
-        firstEventId: eventId,
-        lastEventId: eventId,
-        firstPositivity: pos,
-        lastPositivity: pos,
-      };
-      continue;
-    }
-    next[text] = {
-      ...existing,
-      text: existing.text || text,
-      lastEventId: eventId ?? existing.lastEventId,
-      lastPositivity: pos,
-    };
-  }
-  return next;
-};
-
 const createEmptyDeltaAccumulateState = () => ({
   relationMap: new Map(),
   weightMap: new Map(),
@@ -233,7 +197,7 @@ const applyDeltasToAccumulateState = (state, deltas) => {
 
       state.characterIds.add(id1);
       state.characterIds.add(id2);
-      const key = `${id1}->${id2}`;
+      const key = directedEdgeElementId(id1, id2);
       const prev = state.relationMap.get(key);
       const labels = asArray(item.labels);
       const evidence =
@@ -250,9 +214,9 @@ const applyDeltasToAccumulateState = (state, deltas) => {
         id2,
         positivity,
         count: (prev?.count ?? 0) + evidence,
-        relation: mergeRelationLabels(prev?.relation, labels),
+        relation: uniqueStrings([...asArray(prev?.relation), ...labels], { caseInsensitive: true }),
         latestLabels: labels,
-        labelHistory: mergeLabelHistory(prev?.labelHistory, labels, deltaEventId, positivity),
+        labelHistory: appendRelationLabelHistory(prev?.labelHistory, labels, deltaEventId, positivity),
         latestReason: typeof item.reason === 'string' ? item.reason : prev?.latestReason ?? '',
         latestEventId: deltaEventId ?? prev?.latestEventId ?? null,
       });

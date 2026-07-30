@@ -1357,10 +1357,7 @@
 .graph-node-tooltip {
   position: fixed;
   z-index: 99999;
-  width: min(26.25rem, calc(100vw - 1.5rem));
-  max-width: min(26.25rem, 92%);
   height: auto;
-  max-height: min(26.25rem, 70vh);
   background: var(--rg-surface);
   border-radius: 0.9375rem;
   box-shadow: var(--rg-shadow-md);
@@ -1370,6 +1367,18 @@
   cursor: grab;
   display: flex;
   flex-direction: column;
+}
+
+.graph-node-tooltip {
+  width: min(26.25rem, calc(100vw - 1.5rem));
+  max-width: min(26.25rem, 92%);
+  max-height: min(26.25rem, 70vh);
+}
+
+.edge-tooltip-container {
+  width: min(32rem, calc(100vw - 1.5rem));
+  max-width: min(32rem, 94%);
+  max-height: min(34rem, 80vh);
 }
 
 .graph-node-tooltip.error {
@@ -1435,7 +1444,7 @@
   display: flex;
   flex-direction: column;
   width: 100%;
-  max-height: 26.25rem;
+  max-height: 34rem;
 }
 
 .edge-tooltip-header {
@@ -1668,7 +1677,7 @@
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  max-height: 10rem;
+  max-height: 14rem;
 }
 
 .relation-tags {
@@ -1797,11 +1806,6 @@
   padding: 0.625rem 0.75rem;
   margin-bottom: 0.5rem;
   border-radius: 0.25rem;
-}
-
-.edge-tooltip-floating {
-  position: fixed;
-  z-index: 99999;
 }
 
 /* ── UnifiedEdgeTooltip theming ── */
@@ -2619,12 +2623,6 @@
   flex: 1;
   min-height: 0;
   flex-direction: column;
-}
-
-.relation-modal-side--solo {
-  max-width: none;
-  min-width: 0;
-  flex: 1;
 }
 
 .relation-modal-empty-message {

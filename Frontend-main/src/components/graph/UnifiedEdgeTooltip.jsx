@@ -3,11 +3,11 @@ import {ResponsiveContainer, LineChart, CartesianGrid, ReferenceLine, Tooltip as
 import { useParams } from "react-router-dom";
 import { useTooltipPosition, useClickOutside } from "../../hooks/ui/tooltipHooks";
 import { useRelationData } from "../../hooks/graph/useApiGraphData";
-import { getRelationStyle } from "../../utils/styles/relationStyles";
+import { getRelationStyle, clearStyleCache } from "../../utils/styles/relationStyles";
 import { clampPositivity, getRelationColor } from "../../utils/styles/graphStyles";
 import { COLORS, ANIMATION_VALUES, mergeRefs } from "../../utils/styles/styles";
 import { toFiniteNumber, toPositiveNumberOrNull } from "../../utils/common/valueUtils";
-import { cleanupRelationUtils, buildRelationTagDisplayItems } from "../../utils/graph/graphCore";
+import { buildRelationTagDisplayItems } from "../../utils/graph/graphCore";
 import { isLongEdgeTimeline, annotateSignificantEdgePoints, getSparseEdgeTickValues, formatEdgeTimelineDisplayLabel } from "../../utils/graph/graphCy";
 import './RelationGraph.css';
 
@@ -37,6 +37,32 @@ function isPairCurrentEvent(pair, eventIdx) {
   if (!pair || pair.isChapterAggregate) return false;
   if (!Number.isFinite(eventIdx) || eventIdx <= 0) return false;
   return Number.isFinite(pair.numericLabel) && pair.numericLabel === eventIdx;
+}
+
+/** 클릭한 간선의 현재 긍정도를 타임라인의 현재 이벤트 점에 맞춤 (gap/미존재 점은 만들지 않음) */
+function alignPairsWithEdgePositivity(pairs, edgePositivity, displayEventNum) {
+  if (edgePositivity == null || !Number.isFinite(displayEventNum) || displayEventNum <= 0) {
+    return pairs;
+  }
+
+  const currentIdx = pairs.findIndex(
+    (pair) =>
+      !pair.isChapterAggregate &&
+      Number.isFinite(pair.numericLabel) &&
+      pair.numericLabel === displayEventNum
+  );
+  if (currentIdx < 0) return pairs;
+
+  const current = pairs[currentIdx];
+  // 관계 공백(gap)은 이력 그대로 유지 — 간선 값으로 채우지 않음
+  if (current.isGap || typeof current.value !== 'number') return pairs;
+
+  const next = pairs.map((pair) => ({ ...pair }));
+  next[currentIdx] = {
+    ...next[currentIdx],
+    value: edgePositivity,
+  };
+  return next;
 }
 
 function EndpointAvatar({ endpoint }) {
@@ -163,7 +189,7 @@ function UnifiedEdgeTooltip({
 
   useEffect(() => {
     return () => {
-      cleanupRelationUtils();
+      clearStyleCache();
     };
   }, []);
 
@@ -254,20 +280,19 @@ function UnifiedEdgeTooltip({
     if (pairs.length === 0 && edgePositivity !== null) {
       pairs.push({
         value: edgePositivity,
-        label: `event ${displayEventNum || 1}`,
+        label: `E${displayEventNum || 1}`,
         numericLabel: displayEventNum || 1,
         isChapterAggregate: false,
       });
     }
 
-    let active = pairs.some((pair) => typeof pair.value === 'number');
-    if (active && isViewer) {
-      if (!Number.isFinite(displayEventNum) || displayEventNum <= 0) {
-        active = pairs.some((pair) => typeof pair.value === 'number');
-      } else if (pairs.some((pair) => isPairCurrentEvent(pair, displayEventNum))) {
-        active = true;
-      } else {
-        active = pairs.some(
+    const alignedPairs = alignPairsWithEdgePositivity(pairs, edgePositivity, displayEventNum);
+
+    let active = alignedPairs.some((pair) => typeof pair.value === 'number');
+    if (active && isViewer && Number.isFinite(displayEventNum) && displayEventNum > 0) {
+      const hasCurrent = alignedPairs.some((pair) => isPairCurrentEvent(pair, displayEventNum));
+      if (!hasCurrent) {
+        active = alignedPairs.some(
           (pair) =>
             !pair.isChapterAggregate &&
             Number.isFinite(pair.numericLabel) &&
@@ -281,7 +306,7 @@ function UnifiedEdgeTooltip({
       return { rechartsLineData: [], hasChartData: false, numericPointCount: 0 };
     }
 
-    const annotated = annotateSignificantEdgePoints(pairs);
+    const annotated = annotateSignificantEdgePoints(alignedPairs);
     const lineData = annotated.map((pair, i) => {
       const isChapter = pair.isChapterAggregate || isChapterLabel(pair.label);
       return {
@@ -401,15 +426,24 @@ function UnifiedEdgeTooltip({
               domain={[xAxisBounds.min, xAxisBounds.max]}
               ticks={sparseTicks}
               tickFormatter={(v) => visibleXLabelMap[Math.round(v)] ?? ''}
-              tick={{ fontSize: isSidebar ? (longTimeline ? 12 : 13) : (longTimeline ? 10 : 11), fill: '#9ca3af' }}
+              tick={{
+                fontSize: isSidebar ? (longTimeline ? 12 : 13) : (longTimeline ? 10 : 11),
+                fill: '#6b7280',
+                fontWeight: 700,
+              }}
               axisLine={{ stroke: COLORS.border }}
               tickLine={false}
               interval={0}
             />
             <YAxis
               domain={[-1, 1]}
-              width={isSidebar ? 32 : 28}
-              tick={{ fontSize: isSidebar ? 12 : 10, fill: '#9ca3af' }}
+              width={isSidebar ? 44 : 40}
+              tick={{
+                fontSize: isSidebar ? 12 : 11,
+                fill: '#6b7280',
+                fontWeight: 700,
+              }}
+              tickFormatter={(v) => `${Math.round(Number(v) * 100)}%`}
               axisLine={false}
               tickLine={false}
               ticks={[-1, 0, 1]}
@@ -598,7 +632,9 @@ function UnifiedEdgeTooltip({
               <span
                 key={`${item.text}-${index}`}
                 className={`relation-tag relation-tag--${item.tone}`}
-                style={{ '--tag-color': getRelationColor(item.positivity) }}
+                style={{
+                  '--tag-color': getRelationColor(item.positivity),
+                }}
                 title={
                   item.tone === 'added'
                     ? '이 위치에서 처음 추가된 관계'
@@ -686,7 +722,7 @@ function UnifiedEdgeTooltip({
     </>
   ) : (
     <div key={viewMode} className="edge-tooltip-panel-swap">
-      {viewMode === 'info' ? renderInfoPanel() : renderChartPanel(200)}
+      {viewMode === 'info' ? renderInfoPanel() : renderChartPanel(280)}
     </div>
   );
 
@@ -725,7 +761,7 @@ function UnifiedEdgeTooltip({
   return (
     <div
       ref={mergeRefs(tooltipRef, clickOutsideRef)}
-      className="edge-tooltip-container edge-tooltip-floating"
+      className="edge-tooltip-container"
       style={{
         left: position.x,
         top: position.y,

@@ -16,6 +16,8 @@ export const toTrimmedStringOrNull = (value) => {
 
 export const toStringOrNull = (value) => (value == null ? null : String(value));
 
+export const asArray = (value) => (Array.isArray(value) ? value : []);
+
 /** 책 제목 비교용 정규화 (대소문자·공백·특수문자 제거) */
 export const normalizeTitle = (title) => {
   if (!title) return '';

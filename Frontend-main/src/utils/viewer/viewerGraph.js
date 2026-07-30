@@ -1,14 +1,14 @@
 /** 뷰어 그래프 파이프라인: API/캐시 조회·변환·타깃 계산 */
 
-import { processRelations } from '../graph/graphCore';
 import {
   buildNodeWeights,
   createCharacterMaps,
-  toNodeWeightsOrNull,
   aggregateCharactersFromEvents,
   convertRelationsToElements,
+  buildElementsFromGraphPayload,
   getGraphEventState,
   getCachedChapterEvents,
+  hasUsableChapterCacheThrough,
 } from '../graph/graphModel';
 import {
   enrichGraphCharacters,
@@ -19,7 +19,7 @@ import {
   graphElementsHaveUnresolvedProfileImages,
   GRAPH_IMAGE_DEFERRED_RETRY_MS,
 } from '../common/urlUtils';
-import { resolveChapterIndex, toPositiveInt, toPositiveNumberOrNull } from '../common/valueUtils';
+import { resolveChapterIndex, toPositiveInt, toPositiveNumberOrNull, asArray } from '../common/valueUtils';
 import { cacheKeyUtils, eventUtils, ELEMENTS_TO_RELATIONS_OPTS } from './viewerCore';
 import { resolveServerEventMatch } from './viewerSession';
 
@@ -28,10 +28,6 @@ export const DEFAULT_GRAPH_TRANSFORM_DEPS = {
   buildNodeWeights,
   convertRelationsToElements,
 };
-
-function asArray(value) {
-  return Array.isArray(value) ? value : [];
-}
 
 /** elements 설정 + 프로필 이미지 비동기 resolve (stale guard 지원) */
 export function commitVisibleGraphElements(setElements, nextElements, { applyTokenRef } = {}) {
@@ -93,11 +89,11 @@ export function getCachedChapterMaxEventIdx(bookId, chapter) {
   return Number(getCachedChapterEvents(bookId, chapter)?.maxEventIdx) || 0;
 }
 
-/** 캐시에 throughEventIdx까지 쓸 수 있는 데이터가 있는지 */
+/** 캐시에 throughEventIdx까지 쓸 수 있는 데이터가 있는지 (INVALID source 제외) */
 export function hasCachedChapterThrough(bookId, chapter, throughEventIdx = 1) {
   const through = Number(throughEventIdx);
   const need = Number.isFinite(through) && through >= 1 ? through : 1;
-  return getCachedChapterMaxEventIdx(bookId, chapter) >= need;
+  return hasUsableChapterCacheThrough(bookId, chapter, need);
 }
 
 export function buildChapterCharacterSearchData(events, currentChapter) {
@@ -196,7 +192,7 @@ export function pickGraphApiResult(response) {
 }
 
 /** graph event state 캐시 스냅샷 (표시 가능한 payload만) */
-export function getCachedGraphSnapshot(bookId, chapter, eventIdx, getGraphEventStateFn) {
+function getCachedGraphSnapshot(bookId, chapter, eventIdx, getGraphEventStateFn) {
   if (!bookId || !chapter || eventIdx < 1) return null;
   const cached = getGraphEventStateFn(bookId, chapter, eventIdx);
   if (!cached || typeof cached !== 'object') return null;
@@ -257,27 +253,15 @@ export const graphDataTransformUtils = {
 
   convertToElements: (resultData, normalizedEvent, deps, previousNodeWeights = null, options = null) => {
     const bookId = options?.bookId ?? resultData?.bookId ?? null;
-    const chars = enrichGraphCharacters(asArray(resultData.characters), { bookId });
-    const rels = processRelations(asArray(resultData.relations));
-    if (chars.length === 0 && rels.length === 0) return [];
-
-    const { idToName, idToDesc, idToDescKo, idToMain, idToNames, idToProfileImage } =
-      deps.createCharacterMaps(chars);
-    const nodeWeights = deps.buildNodeWeights(chars, previousNodeWeights);
-
-    return deps.convertRelationsToElements({
-      relations: rels,
-      idToName,
-      idToDesc,
-      idToDescKo,
-      idToMain,
-      idToNames,
-      nodeWeights: toNodeWeightsOrNull(nodeWeights),
+    const { elements } = buildElementsFromGraphPayload({
+      characters: resultData?.characters,
+      relations: resultData?.relations,
       eventData: normalizedEvent,
-      idToProfileImage,
-      charactersOrphanMerge: chars.length > 0 ? chars : null,
+      previousNodeWeights,
       bookId,
+      deps,
     });
+    return elements;
   },
 
   createNextEventData: (normalizedEvent, currentChapter, apiEventIdx, resultData) => {
