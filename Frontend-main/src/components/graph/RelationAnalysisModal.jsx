@@ -303,7 +303,7 @@ function RelationAnalysisModalImpl({
   chapterScopeLabel = null,
   radarChartData = [],
   connectionKind,
-  recommendedNodes = [],
+  loadError = null,
   onClose,
   onSelectRelatedNode,
   returnFocusRef,
@@ -518,10 +518,19 @@ function RelationAnalysisModalImpl({
 
   const isCardView =
     connectionKind === 'single_connection' || connectionKind === 'pair_connections';
-  const isCompactModal = isCardView || connectionKind === 'no_connections';
+  const isCompactModal =
+    isCardView || connectionKind === 'no_connections' || connectionKind === 'load_error';
 
   let bodyPanel = null;
-  if (isCardView) {
+  if (connectionKind === 'load_error') {
+    bodyPanel = (
+      <div className="relation-modal-empty-message is-error" role="alert">
+        <p>
+          {loadError || '관계 분석 데이터를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.'}
+        </p>
+      </div>
+    );
+  } else if (isCardView) {
     bodyPanel = (
       <FewConnectionsPanel
         items={radarChartData}
@@ -533,17 +542,10 @@ function RelationAnalysisModalImpl({
     );
   } else if (connectionKind === 'no_connections') {
     bodyPanel = (
-      <div className="relation-modal-side relation-modal-side--solo">
-        <div className="relation-modal-side-title">추천 인물</div>
-        <p className="relation-modal-side-hint">
-          이 챕터 범위에서 연결된 인물이 없습니다. 다른 챕터를 보거나 아래 추천 인물을 확인해 보세요.
+      <div className="relation-modal-empty-message" role="status">
+        <p>
+          이 챕터 범위에서 연결된 인물이 없습니다. 다른 챕터를 선택해 보세요.
         </p>
-        <RelationList
-          items={recommendedNodes}
-          activeName={activeName}
-          onSelect={switchToRelated}
-          emptyMessage="추천할 인물이 없습니다."
-        />
       </div>
     );
   } else {
@@ -559,7 +561,7 @@ function RelationAnalysisModalImpl({
     );
   }
 
-  const ctaRow = activeItem && onSelectRelatedNode && connectionKind !== 'no_connections' ? (
+  const ctaRow = activeItem && onSelectRelatedNode && connectionKind !== 'no_connections' && connectionKind !== 'load_error' ? (
     <div className="relation-modal-cta-row">
       <button
         type="button"
@@ -577,7 +579,7 @@ function RelationAnalysisModalImpl({
     'relation-modal-body',
     connectionKind === 'sufficient_connections' ? 'has-chart' : '',
     isCardView ? 'is-card-view' : '',
-    connectionKind === 'no_connections' ? 'is-empty-view' : '',
+    connectionKind === 'no_connections' || connectionKind === 'load_error' ? 'is-empty-view' : '',
   ].filter(Boolean).join(' ');
 
   const containerClassName = [
@@ -586,7 +588,7 @@ function RelationAnalysisModalImpl({
     isCompactModal ? 'relation-modal-container--compact' : '',
     connectionKind === 'pair_connections' ? 'is-pair' : '',
     connectionKind === 'single_connection' ? 'is-single' : '',
-    connectionKind === 'no_connections' ? 'is-empty' : '',
+    connectionKind === 'no_connections' || connectionKind === 'load_error' ? 'is-empty' : '',
   ].filter(Boolean).join(' ');
 
   return (
@@ -616,7 +618,11 @@ function RelationAnalysisModalImpl({
                   {chapterScopeLabel || `챕터 ${currentChapter}`}
                 </span>
               )}
-              <span className="relation-modal-chip">연결 {radarChartData.length}명</span>
+              {connectionKind === 'load_error' ? (
+                <span className="relation-modal-chip relation-modal-chip--error">로드 실패</span>
+              ) : (
+                <span className="relation-modal-chip">연결 {radarChartData.length}명</span>
+              )}
             </div>
           </div>
           <div className="relation-modal-header-actions">

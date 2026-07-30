@@ -224,7 +224,7 @@ export function applyChapterEventsFromCache(
 
 // --- 매크로 그래프 세션·localStorage 캐시 ---
 
-const GRAPH_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+const GRAPH_CACHE_TTL_MS = 6 * 60 * 60 * 1000; // 6h — stale 매크로 고착 완화
 const macroSessionCache = new Map();
 const inflightRequests = new Map();
 
@@ -460,6 +460,7 @@ function withNoRelation(result, fallbackNoRelation = true) {
     incomplete: Boolean(safeResult.incomplete),
     failedIds: Array.isArray(safeResult.failedIds) ? safeResult.failedIds : null,
     error: safeResult.error ?? null,
+    usedProbe: Boolean(safeResult.usedProbe),
   };
 }
 
@@ -480,7 +481,14 @@ export function padSingleEvent(points, labels) {
 const PROBE_EVENT_HARD_MAX = 512;
 const timelineInflight = new Map();
 
-function emptyTimeline({ noRelation = false, status = null, error = null, incomplete = false, failedIds = null } = {}) {
+function emptyTimeline({
+  noRelation = false,
+  status = null,
+  error = null,
+  incomplete = false,
+  failedIds = null,
+  usedProbe = false,
+} = {}) {
   const resolvedStatus =
     status ??
     (error ? FETCH_STATUS.ERROR : noRelation ? FETCH_STATUS.EMPTY : FETCH_STATUS.OK);
@@ -492,6 +500,7 @@ function emptyTimeline({ noRelation = false, status = null, error = null, incomp
     error: error ?? null,
     incomplete: Boolean(incomplete),
     failedIds: Array.isArray(failedIds) ? failedIds : null,
+    usedProbe: Boolean(usedProbe),
   };
 }
 
@@ -667,12 +676,17 @@ async function probeLastEventIdxByApi(fetchEventData, chapter) {
 
 async function resolveChapterLastEventIdx(bookId, chapter, fetchEventData) {
   const fromManifest = resolveLastEventIdxForChapter(bookId, chapter);
-  if (Number.isFinite(fromManifest) && fromManifest >= 1) return fromManifest;
+  if (Number.isFinite(fromManifest) && fromManifest >= 1) {
+    return { lastEventIdx: fromManifest, usedProbe: false };
+  }
 
   const cachedMax = Number(getCachedChapterEvents(bookId, chapter)?.maxEventIdx);
-  if (Number.isFinite(cachedMax) && cachedMax >= 1) return cachedMax;
+  if (Number.isFinite(cachedMax) && cachedMax >= 1) {
+    return { lastEventIdx: cachedMax, usedProbe: false };
+  }
 
-  return probeLastEventIdxByApi(fetchEventData, chapter);
+  const probed = await probeLastEventIdxByApi(fetchEventData, chapter);
+  return { lastEventIdx: probed, usedProbe: true };
 }
 
 async function fetchRelationTimelineCumulativeUncached(bookId, id1, id2, selectedChapter) {
@@ -723,24 +737,30 @@ async function fetchRelationTimelineCumulativeUncached(bookId, id1, id2, selecte
       let relationEvents;
       let incomplete = false;
       let failedIds = [];
+      let usedProbe = false;
 
       if (chapterPayload?.baseSnapshot) {
         const cachedMax = Number(chapterPayload.maxEventIdx);
-        const lastEventIdx =
-          Number.isFinite(cachedMax) && cachedMax >= 1
-            ? cachedMax
-            : await resolveChapterLastEventIdx(bookId, chapter, fetchEventData);
+        let lastEventIdx;
+        if (Number.isFinite(cachedMax) && cachedMax >= 1) {
+          lastEventIdx = cachedMax;
+        } else {
+          const resolved = await resolveChapterLastEventIdx(bookId, chapter, fetchEventData);
+          lastEventIdx = resolved.lastEventIdx;
+          usedProbe = resolved.usedProbe;
+        }
 
         relationEvents =
           lastEventIdx > 0
             ? collectRelationEventsFromChapterCache(chapterPayload, id1, id2, lastEventIdx, lastOnly)
             : [];
       } else {
-        const lastEventIdx = await resolveChapterLastEventIdx(bookId, chapter, fetchEventData);
+        const resolved = await resolveChapterLastEventIdx(bookId, chapter, fetchEventData);
+        usedProbe = resolved.usedProbe;
         const collected = await collectRelationEventsViaApi(
           fetchEventData,
           chapter,
-          lastEventIdx,
+          resolved.lastEventIdx,
           id1,
           id2,
           lastOnly
@@ -750,7 +770,7 @@ async function fetchRelationTimelineCumulativeUncached(bookId, id1, id2, selecte
         failedIds = collected.failedIds;
       }
 
-      const packed = { events: relationEvents, incomplete, failedIds };
+      const packed = { events: relationEvents, incomplete, failedIds, usedProbe };
       chapterRelationCache.set(cacheKey, packed);
       return packed;
     };
@@ -759,12 +779,18 @@ async function fetchRelationTimelineCumulativeUncached(bookId, id1, id2, selecte
     const labelInfo = [];
     const allFailedIds = [];
     let incomplete = false;
+    let usedProbe = false;
 
     for (let chapter = 1; chapter <= selectedChapter; chapter += 1) {
       const lastOnly = chapter < selectedChapter;
-      const { events: relationEvents, incomplete: chapterIncomplete, failedIds } =
-        await getRelationEventsForChapter(chapter, lastOnly);
+      const {
+        events: relationEvents,
+        incomplete: chapterIncomplete,
+        failedIds,
+        usedProbe: chapterUsedProbe,
+      } = await getRelationEventsForChapter(chapter, lastOnly);
       if (chapterIncomplete) incomplete = true;
+      if (chapterUsedProbe) usedProbe = true;
       if (failedIds?.length) allFailedIds.push(...failedIds);
       if (!relationEvents.length) continue;
 
@@ -786,6 +812,7 @@ async function fetchRelationTimelineCumulativeUncached(bookId, id1, id2, selecte
         status: FETCH_STATUS.EMPTY,
         incomplete,
         failedIds: allFailedIds,
+        usedProbe,
       });
     }
 
@@ -796,6 +823,7 @@ async function fetchRelationTimelineCumulativeUncached(bookId, id1, id2, selecte
       status: FETCH_STATUS.OK,
       incomplete,
       failedIds: allFailedIds.length ? allFailedIds : null,
+      usedProbe,
     };
   } catch (error) {
     return timelineError('누적 관계 타임라인 로드 실패', error);

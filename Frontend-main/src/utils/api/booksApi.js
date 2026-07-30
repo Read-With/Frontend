@@ -5,6 +5,8 @@ import {
   makeSilentError,
   isForbiddenError,
   isNotFoundError,
+  isTokenValid,
+  mapSoftFailResponse,
   SOFT_FAIL_403_404,
   requireBookId,
   pickResponseResult,
@@ -97,7 +99,16 @@ const buildBooksQueryString = (params = {}) => {
 
 export const getBooks = async (params = {}) => {
   const queryString = buildBooksQueryString(params);
-  const data = await authenticatedRequest(`/v2/books${queryString ? `?${queryString}` : ''}`);
+  const data = await authenticatedRequest(`/v2/books${queryString ? `?${queryString}` : ''}`, {
+    softFailStatuses: SOFT_FAIL_403_404,
+  });
+  const softEmpty = mapSoftFailResponse(data, {
+    mode: 'empty',
+    emptyResult: [],
+    forbiddenMessage: '책 목록에 접근할 권한이 없습니다.',
+    notFoundMessage: '책 목록을 찾을 수 없습니다.',
+  });
+  if (softEmpty) return softEmpty;
   if (data?.isSuccess && Array.isArray(data.result)) {
     data.result = data.result.map(normalizeV2Book);
   }
@@ -111,7 +122,15 @@ export const getBook = async (bookId) => {
   }
 
   try {
-    const data = await authenticatedRequest(`/v2/books/${normalizedBookId}`);
+    const data = await authenticatedRequest(`/v2/books/${normalizedBookId}`, {
+      softFailStatuses: SOFT_FAIL_403_404,
+    });
+    const softFail = mapSoftFailResponse(data, {
+      mode: 'error',
+      forbiddenMessage: '접근 권한이 없습니다',
+      notFoundMessage: '도서를 찾을 수 없거나 아직 노출 가능한 상태가 아닙니다.',
+    });
+    if (softFail) return softFail;
     if (data?.isSuccess && data.result) {
       data.result = normalizeV2Book(data.result);
     }
@@ -202,7 +221,8 @@ export const getChapterPovSummaries = async (bookId, chapterIdx) => {
   if (existing) return existing;
 
   const pending = authenticatedRequest(
-    `/v2/books/${normalizedBookId}/chapters/${normalizedChapterIdx}/pov-summaries`
+    `/v2/books/${normalizedBookId}/chapters/${normalizedChapterIdx}/pov-summaries`,
+    { softFailStatuses: SOFT_FAIL_403_404 }
   ).catch((error) => {
     console.error('챕터 시점 요약 조회 실패:', error);
     throw error;
@@ -237,7 +257,16 @@ const getBookmarks = async (bookId, sort = 'time_desc') => {
     queryParams.append('bookId', String(normalizedBookId));
     const sortParam = BOOKMARK_SORT.has(sort) ? sort : 'time_desc';
     queryParams.append('sort', sortParam);
-    const data = await authenticatedRequest(`/v2/bookmarks?${queryParams.toString()}`);
+    const data = await authenticatedRequest(`/v2/bookmarks?${queryParams.toString()}`, {
+      softFailStatuses: SOFT_FAIL_403_404,
+    });
+    const softEmpty = mapSoftFailResponse(data, {
+      mode: 'empty',
+      emptyResult: [],
+      forbiddenMessage: '북마크에 접근할 권한이 없습니다.',
+      notFoundMessage: '북마크를 찾을 수 없습니다.',
+    });
+    if (softEmpty) return softEmpty;
     if (data?.isSuccess && Array.isArray(data.result)) {
       data.result = data.result.map(normalizeBookmarkDto);
     }
@@ -354,12 +383,14 @@ const handleProgressApiError = (error, logContext) => {
   throw error;
 };
 
-/** softFail 응답의 FORBIDDEN/NOT_FOUND → silent error (해당 없으면 null) */
-const mapProgressSoftFailCode = (response, { includeNotFound = true } = {}) => {
-  if (response?.code === 'FORBIDDEN') return PROGRESS_FORBIDDEN;
-  if (includeNotFound && response?.code === 'NOT_FOUND') return PROGRESS_NOT_FOUND;
-  return null;
-};
+/** softFail 응답 → progress silent error (해당 없으면 null) */
+const mapProgressSoftFailCode = (response, { includeNotFound = true } = {}) =>
+  mapSoftFailResponse(response, {
+    mode: 'error',
+    includeNotFound,
+    forbiddenMessage: PROGRESS_FORBIDDEN.message,
+    notFoundMessage: PROGRESS_NOT_FOUND.message,
+  });
 
 const buildProgressSavePayload = (progressData) =>
   progressPayloadFromData(withNormalizedProgressLocators(progressData));
@@ -388,7 +419,8 @@ export const saveProgress = async (progressData) => {
     if (softFail) return softFail;
     if (!response?.isSuccess) {
       const error = new Error(response?.message || '독서 진도 저장 실패');
-      error.status = response?.status;
+      if (response?.code === 'NOT_FOUND') error.status = 404;
+      if (response?.code === 'FORBIDDEN') error.status = 403;
       throw error;
     }
     const serverResult =
@@ -415,12 +447,14 @@ export const saveProgressKeepalive = (progressData) => {
     const payload = buildProgressSavePayload(progressData);
     if (!payload) return false;
     const token = getStoredAccessToken();
+    // pagehide에서는 refresh를 await할 수 없음 — 유효 토큰일 때만 전송
+    if (!token || !isTokenValid(token)) return false;
 
     fetch(`${getApiBaseUrl()}/api/v2/progress`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        Authorization: `Bearer ${token}`,
       },
       body: JSON.stringify(payload),
       keepalive: true,
@@ -432,21 +466,16 @@ export const saveProgressKeepalive = (progressData) => {
   }
 };
 
+/**
+ * 진도 조회. 기본은 서버 우선. API 레이어에서 네트워크 실패 시 로컬 캐시로 폴백.
+ * @param {{ skipCache?: boolean }} [options]
+ * - skipCache: true면 이 함수 안의 캐시 폴백을 쓰지 않음.
+ *   (호출 훅이 별도로 캐시 복구할 수는 있음)
+ */
 export const getBookProgress = async (bookId, options = {}) => {
   if (!bookId) return makeSilentError('INVALID_INPUT', 'bookId는 필수 매개변수입니다.');
 
-  if (options?.skipCache !== true) {
-    const cachedProgress = getProgressFromCache(bookId);
-    if (cachedProgress) {
-      return toUnifiedApiResponse({
-        isSuccess: true,
-        code: 'CACHE_HIT',
-        message: '진도 정보를 로컬 캐시에서 가져왔습니다',
-        result: cachedProgress,
-        fromCache: true,
-      });
-    }
-  }
+  const skipCache = options?.skipCache === true;
 
   try {
     const response = await authenticatedRequest(`/v2/progress/${bookId}`, {
@@ -473,6 +502,18 @@ export const getBookProgress = async (bookId, options = {}) => {
     }
     return toUnifiedApiResponse(response, { defaultMessage: '진도 정보를 조회했습니다.' });
   } catch (error) {
+    if (!skipCache) {
+      const cachedProgress = getProgressFromCache(bookId);
+      if (cachedProgress) {
+        return toUnifiedApiResponse({
+          isSuccess: true,
+          code: 'CACHE_FALLBACK',
+          message: '서버 진도 조회 실패로 로컬 캐시를 사용합니다',
+          result: cachedProgress,
+          fromCache: true,
+        });
+      }
+    }
     return handleProgressApiError(error);
   }
 };
@@ -521,15 +562,12 @@ export const getBookManifest = async (bookId, { forceRefresh = false } = {}) => 
     const response = await authenticatedRequest(`/v2/books/${numericBookId}/manifest`, {
       softFailStatuses: SOFT_FAIL_403_404,
     });
-    if (response?.code === 'NOT_FOUND') {
-      return makeSilentError(
-        'NOT_FOUND',
-        '도서를 찾을 수 없거나 아직 노출 가능한 상태가 아닙니다.'
-      );
-    }
-    if (response?.code === 'FORBIDDEN') {
-      return makeSilentError('FORBIDDEN', '접근 권한이 없습니다');
-    }
+    const softFail = mapSoftFailResponse(response, {
+      mode: 'error',
+      forbiddenMessage: '접근 권한이 없습니다',
+      notFoundMessage: '도서를 찾을 수 없거나 아직 노출 가능한 상태가 아닙니다.',
+    });
+    if (softFail) return softFail;
 
     const result = pickResponseResult(response);
     if (response?.isSuccess && result) {
@@ -541,7 +579,7 @@ export const getBookManifest = async (bookId, { forceRefresh = false } = {}) => 
     }
     return toUnifiedApiResponse(response, { defaultMessage: 'Manifest loaded successfully' });
   } catch (error) {
-    if (error.status === 400 || String(error?.message ?? '').includes('400')) {
+    if (Number(error?.status) === 400) {
       return makeSilentError('BAD_REQUEST', '잘못된 요청입니다.');
     }
     if (isNotFoundError(error)) {

@@ -87,6 +87,8 @@ function GraphSidebar({
   isSidebarClosing = false,
   povSummaries = null,
   povError = null,
+  povIsLoading = false,
+  povCached = null,
   onRetryPov = null,
   apiBookGraphData = null,
   bookId = null,
@@ -164,6 +166,8 @@ function GraphSidebar({
         filename={filename}
         povSummaries={povSummaries}
         povError={povError}
+        povIsLoading={povIsLoading}
+        povCached={povCached}
         onRetryPov={onRetryPov}
         apiBookGraphData={apiBookGraphData}
         onSelectRelatedNode={onSelectRelatedNode}
@@ -203,6 +207,8 @@ function GraphCanvas({
   renderElements,
   povSummaries,
   povError = null,
+  povIsLoading = false,
+  povCached = null,
   onRetryPov = null,
   apiBookGraphData,
   bookId,
@@ -320,6 +326,8 @@ function GraphCanvas({
               elements={elements}
               povSummaries={povSummaries}
               povError={povError}
+              povIsLoading={povIsLoading}
+              povCached={povCached}
               onRetryPov={onRetryPov}
               apiBookGraphData={apiBookGraphData}
               bookId={bookId}
@@ -375,6 +383,8 @@ GraphCanvas.propTypes = {
   renderElements: PropTypes.array.isRequired,
   povSummaries: PropTypes.any,
   povError: PropTypes.string,
+  povIsLoading: PropTypes.bool,
+  povCached: PropTypes.bool,
   onRetryPov: PropTypes.func,
   apiBookGraphData: PropTypes.object,
   bookId: PropTypes.number,

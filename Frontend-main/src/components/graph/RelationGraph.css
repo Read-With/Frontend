@@ -2344,6 +2344,11 @@
   white-space: nowrap;
 }
 
+.relation-modal-chip--error {
+  background: color-mix(in srgb, var(--rg-danger, #b42318) 12%, transparent);
+  color: var(--rg-danger, #b42318);
+}
+
 .relation-modal-header-actions {
   display: flex;
   align-items: center;
@@ -2586,6 +2591,28 @@
   max-width: none;
   min-width: 0;
   flex: 1;
+}
+
+.relation-modal-empty-message {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem 1.25rem;
+  text-align: center;
+}
+
+.relation-modal-empty-message p {
+  margin: 0;
+  max-width: 18rem;
+  font-size: 0.9375rem;
+  line-height: 1.55;
+  color: var(--rg-text-muted);
+  font-weight: 500;
+}
+
+.relation-modal-empty-message.is-error p {
+  color: var(--rg-danger, #b42318);
 }
 
 .relation-few-panel {
@@ -3132,6 +3159,44 @@
 
 .tooltip-summary-text.is-animated {
   animation: fadeIn 0.4s ease-in-out;
+}
+
+.tooltip-summary-text--error {
+  color: #b42318;
+  background: rgba(254, 242, 242, 0.9);
+}
+
+.tooltip-summary-text--pending {
+  color: var(--rg-text-subtle);
+  background: rgba(247, 250, 252, 0.55);
+  font-style: italic;
+}
+
+.tooltip-summary-text--loading {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--rg-text-subtle);
+}
+
+.tooltip-summary-spinner {
+  width: 0.85rem;
+  height: 0.85rem;
+  border: 2px solid rgba(148, 163, 184, 0.35);
+  border-top-color: var(--rg-brand);
+  border-radius: 50%;
+  flex-shrink: 0;
+  animation: tooltip-summary-spin 0.7s linear infinite;
+}
+
+@keyframes tooltip-summary-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.tooltip-summary-quote .tooltip-action-btn {
+  margin-top: 8px;
 }
 
 .tooltip-analysis-section {

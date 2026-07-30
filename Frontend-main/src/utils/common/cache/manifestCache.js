@@ -834,18 +834,19 @@ export const listBookManifestEventIds = (bookId, manifestOverride = undefined) =
 
 /**
  * v2 manifest 챕터의 이벤트 인덱스 상한(힌트). 그래프 본문은 relationship-deltas.
+ * events가 없으면 null — 가짜 1로 probe/누적을 막지 않음.
  */
 export const getLastEventIdxFromChapterData = (chapterData) => {
   if (!chapterData || typeof chapterData !== 'object') return null;
   if (!Array.isArray(chapterData.events) || chapterData.events.length === 0) {
-    return 1;
+    return null;
   }
   let maxIdx = -Infinity;
   for (const ev of chapterData.events) {
     const num = manifestEventIndex(ev);
     if (num != null) maxIdx = Math.max(maxIdx, num);
   }
-  return Number.isFinite(maxIdx) && maxIdx >= 1 ? maxIdx : 1;
+  return Number.isFinite(maxIdx) && maxIdx >= 1 ? maxIdx : null;
 };
 
 /**

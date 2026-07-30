@@ -14,8 +14,12 @@ import { resolveReadingLocators } from '../../utils/viewer/viewerSession';
 
 const friendlyError = (err, fallback) => {
   if (!err) return fallback;
-  if (err.status === 404 || err.statusCode === 404) {
+  const status = Number(err.status ?? err.statusCode);
+  if (status === 404) {
     return '북마크 기능이 아직 준비되지 않았거나 연결 경로를 찾을 수 없습니다. 잠시 후 다시 시도해 주세요.';
+  }
+  if (status === 403) {
+    return '북마크에 접근할 권한이 없습니다.';
   }
   const msg = (err.message || '').toLowerCase();
   if (msg.includes('failed to fetch') || msg.includes('network')) {
