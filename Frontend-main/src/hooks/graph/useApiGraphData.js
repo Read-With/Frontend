@@ -228,27 +228,31 @@ export function useRelationData(mode, id1, id2, chapterNum, eventNum, bookId = n
     setLoading(false);
   }, [invalidate]);
 
-  const resetEmpty = useCallback((message, { bumpRequest = true } = {}) => {
-    if (bumpRequest) invalidate();
-    lastSuccessKeyRef.current = '';
-    setTimeline([]);
-    setLabels([]);
-    setNoRelation(true);
-    setIncomplete(false);
-    setUsedProbe(false);
-    setError(message || null);
-    setLoading(false);
-  }, [invalidate]);
-
   const fetchData = useCallback(async (options = {}) => {
     const force = options?.force === true;
 
     if (!numericBookId || !id1 || !id2 || numericChapter == null) {
-      resetEmpty('관계 타임라인을 불러올 수 없습니다.');
+      resetError('관계 타임라인을 불러올 수 없습니다.');
       return;
     }
 
-    const normalizedEvent = toPositiveInt(eventNum, 1);
+    // 뷰어: 이벤트 미확정이면 E1로 보정하지 않음
+    const normalizedEvent =
+      mode === 'viewer' ? toPositiveInt(eventNum) : toPositiveInt(eventNum, 1);
+
+    if (mode === 'viewer' && normalizedEvent == null) {
+      if (force) invalidate();
+      lastSuccessKeyRef.current = '';
+      setTimeline([]);
+      setLabels([]);
+      setNoRelation(false);
+      setIncomplete(false);
+      setUsedProbe(false);
+      setError(null);
+      setLoading(false);
+      return;
+    }
+
     const fetchKey = buildRelationFetchKey(
       mode,
       numericBookId,
@@ -292,7 +296,7 @@ export function useRelationData(mode, id1, id2, chapterNum, eventNum, bookId = n
 
       const { points, labelInfo, noRelation: resultNoRelation } = result;
       const { points: paddedPoints, labels: paddedLabels } = padSingleEvent(points, labelInfo);
-      const emptyPoints = paddedPoints.filter((value) => value !== null).length === 0;
+      const emptyPoints = paddedPoints.filter((value) => typeof value === 'number').length === 0;
 
       setTimeline(paddedPoints);
       setLabels(paddedLabels);
@@ -314,10 +318,10 @@ export function useRelationData(mode, id1, id2, chapterNum, eventNum, bookId = n
     numericChapter,
     eventNum,
     mode,
-    resetEmpty,
     resetError,
     nextRequestId,
     isStale,
+    invalidate,
   ]);
 
   useEffect(() => {

@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useEffect } from 'react';
+import { useState, useMemo, useCallback, useEffect, useLayoutEffect, useRef } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { useBookmarks } from '../hooks/bookmarks/bookmarkHooks';
@@ -59,6 +59,8 @@ const BookmarksPage = () => {
   const [editingMemo, setEditingMemo] = useState(EMPTY_EDIT);
   const [deleteConfirmId, setDeleteConfirmId] = useState(null);
   const [expandedId, setExpandedId] = useState(null);
+  const pageRef = useRef(null);
+  const toolbarRef = useRef(null);
 
   const closeComposer = () => {
     setComposerId(null);
@@ -156,10 +158,6 @@ const BookmarksPage = () => {
     [apiBookId, goViewer, viewerPath]
   );
 
-  const clearMemoUiForBookmark = (bookmarkId) => {
-    collapseRow(bookmarkId);
-  };
-
   const updateMemoEntries = useCallback(
     async (bookmarkId, updater) => {
       if (isMutating) return { success: false };
@@ -172,7 +170,7 @@ const BookmarksPage = () => {
 
   const handleDeleteBookmark = async (bookmarkId) => {
     if (isMutating) return;
-    clearMemoUiForBookmark(bookmarkId);
+    collapseRow(bookmarkId);
     await removeBookmark(bookmarkId);
     setDeleteConfirmId(null);
   };
@@ -185,6 +183,32 @@ const BookmarksPage = () => {
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
   }, [deleteConfirmId]);
+
+  useLayoutEffect(() => {
+    const page = pageRef.current;
+    const toolbar = toolbarRef.current;
+    if (!page || !toolbar) return undefined;
+
+    const syncToolbarHeight = () => {
+      const next = `${Math.ceil(toolbar.getBoundingClientRect().height)}px`;
+      if (page.style.getPropertyValue('--bm-toolbar-height') !== next) {
+        page.style.setProperty('--bm-toolbar-height', next);
+      }
+    };
+
+    syncToolbarHeight();
+
+    const observer = new ResizeObserver(syncToolbarHeight);
+    observer.observe(toolbar);
+    window.addEventListener('resize', syncToolbarHeight);
+    window.addEventListener('orientationchange', syncToolbarHeight);
+
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('resize', syncToolbarHeight);
+      window.removeEventListener('orientationchange', syncToolbarHeight);
+    };
+  }, [loading, loadError, apiBookId]);
 
   const handleAddMemo = async (bookmarkId) => {
     const text = composerText.trim();
@@ -228,6 +252,15 @@ const BookmarksPage = () => {
     setEditingMemo(EMPTY_EDIT);
     closeComposer();
   };
+
+  const scrollToChapter = useCallback((chapterKey) => {
+    const el = document.getElementById(`bm-chapter-${chapterKey}`);
+    if (!el) return;
+    const reduceMotion =
+      typeof window !== 'undefined' &&
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    el.scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'start' });
+  }, []);
 
   const renderBookmark = (bookmark) => {
     if (!bookmark) return null;
@@ -466,16 +499,18 @@ const BookmarksPage = () => {
 
   if (apiBookId == null) {
     return (
-      <div className="bm-page">
-        <div className="bm-panel">
-          <p className="bm-panel-title">유효한 책 정보를 찾을 수 없습니다</p>
-          <p className="bm-panel-desc">
-            북마크는 숫자 bookId가 필요합니다. 서재에서 책을 다시 열어 주세요.
-          </p>
-          <div className="bm-panel-actions">
-            <button type="button" className="bm-btn bm-btn-primary" onClick={() => navigate('/mypage')}>
-              서재로 이동
-            </button>
+      <div className="bm-page" ref={pageRef}>
+        <div className="bm-shell bm-shell--narrow">
+          <div className="bm-panel">
+            <p className="bm-panel-title">유효한 책 정보를 찾을 수 없습니다</p>
+            <p className="bm-panel-desc">
+              북마크는 숫자 bookId가 필요합니다. 서재에서 책을 다시 열어 주세요.
+            </p>
+            <div className="bm-panel-actions">
+              <button type="button" className="bm-btn bm-btn-primary" onClick={() => navigate('/mypage')}>
+                서재로 이동
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -484,25 +519,29 @@ const BookmarksPage = () => {
 
   if (loading) {
     return (
-      <div className="bm-page">
-        <div className="bm-status">북마크를 불러오는 중...</div>
+      <div className="bm-page" ref={pageRef}>
+        <div className="bm-shell bm-shell--narrow">
+          <div className="bm-status">북마크를 불러오는 중...</div>
+        </div>
       </div>
     );
   }
 
   if (loadError) {
     return (
-      <div className="bm-page">
-        <div className="bm-panel">
-          <p className="bm-panel-title">북마크를 불러오지 못했습니다</p>
-          <p className="bm-panel-desc">{loadError}</p>
-          <div className="bm-panel-actions">
-            <button type="button" className="bm-btn bm-btn-primary" onClick={() => fetchBookmarks()}>
-              다시 시도
-            </button>
-            <button type="button" className="bm-btn bm-btn-ghost" onClick={() => goViewer()}>
-              뷰어로 돌아가기
-            </button>
+      <div className="bm-page" ref={pageRef}>
+        <div className="bm-shell bm-shell--narrow">
+          <div className="bm-panel">
+            <p className="bm-panel-title">북마크를 불러오지 못했습니다</p>
+            <p className="bm-panel-desc">{loadError}</p>
+            <div className="bm-panel-actions">
+              <button type="button" className="bm-btn bm-btn-primary" onClick={() => fetchBookmarks()}>
+                다시 시도
+              </button>
+              <button type="button" className="bm-btn bm-btn-ghost" onClick={() => goViewer()}>
+                뷰어로 돌아가기
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -510,77 +549,108 @@ const BookmarksPage = () => {
   }
 
   return (
-    <div className="bm-page">
-      <header className="bm-header">
-        <div className="bm-header-left">
-          <div className="bm-header-copy">
-            <h1 className="bm-title">북마크</h1>
-            <p className="bm-subtitle">표시해 둔 구절을 챕터별로 모아 둡니다</p>
+    <div className="bm-page" ref={pageRef}>
+      <div className={`bm-shell${chapterGroups.length > 0 ? '' : ' bm-shell--narrow'}`}>
+        <header className="bm-header">
+          <div className="bm-header-left">
+            <div className="bm-header-copy">
+              <h1 className="bm-title">북마크</h1>
+              <p className="bm-subtitle">표시해 둔 구절을 챕터별로 모아 둡니다</p>
+            </div>
+            <span className="bm-count">{(bookmarks ?? []).length}개</span>
           </div>
-          <span className="bm-count">{(bookmarks ?? []).length}개</span>
+        </header>
+
+        <div className="bm-toolbar" ref={toolbarRef}>
+          <input
+            className="bm-search-input"
+            type="search"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            placeholder="메모·위치 검색"
+            aria-label="북마크 검색"
+          />
+          <div className="bm-toolbar-actions">
+            <div className="bm-sort">
+              <label className="bm-sort-label" htmlFor="bm-sort-select">
+                정렬
+              </label>
+              <select
+                id="bm-sort-select"
+                className="bm-sort-select"
+                value={sortOrder}
+                onChange={(e) => setSortOrder(e.target.value)}
+                aria-label="북마크 정렬"
+                disabled={isMutating}
+              >
+                <option value="recent">최신순</option>
+                <option value="oldest">오래된순</option>
+                <option value="position">위치순</option>
+              </select>
+            </div>
+            <button type="button" className="bm-btn-back" onClick={() => goViewer()}>
+              뷰어로 돌아가기
+            </button>
+          </div>
         </div>
 
-        <div className="bm-header-right">
-          <div className="bm-sort">
-            <label className="bm-sort-label" htmlFor="bm-sort-select">
-              정렬
-            </label>
-            <select
-              id="bm-sort-select"
-              className="bm-sort-select"
-              value={sortOrder}
-              onChange={(e) => setSortOrder(e.target.value)}
-              aria-label="북마크 정렬"
-              disabled={isMutating}
-            >
-              <option value="recent">최신순</option>
-              <option value="oldest">오래된순</option>
-              <option value="position">위치순</option>
-            </select>
+        {chapterGroups.length === 0 ? (
+          <div className="bm-empty">
+            <p className="bm-empty-title">
+              {isFilteredView ? '조건에 맞는 북마크가 없습니다.' : '저장된 북마크가 없습니다.'}
+            </p>
+            <p className="bm-empty-desc">
+              {isFilteredView ? '검색어를 바꿔보세요.' : '책을 읽으면서 북마크를 추가해보세요.'}
+            </p>
           </div>
+        ) : (
+          <div className="bm-body">
+            <nav className="bm-toc" aria-label="챕터로 이동">
+              <p className="bm-toc-heading">챕터</p>
+              <ul className="bm-toc-list">
+                {chapterGroups.map((group) => (
+                  <li key={group.key}>
+                    <button
+                      type="button"
+                      className="bm-toc-item"
+                      onClick={() => scrollToChapter(group.key)}
+                    >
+                      <span className="bm-toc-label">{group.label}</span>
+                      {group.title ? (
+                        <span className="bm-toc-title">{group.title}</span>
+                      ) : null}
+                      <span className="bm-toc-count">{group.items.length}</span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </nav>
 
-          <button type="button" className="bm-btn-back" onClick={() => goViewer()}>
-            뷰어로 돌아가기
-          </button>
-        </div>
-      </header>
-
-      <div className="bm-search-row">
-        <input
-          className="bm-search-input"
-          type="search"
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-          placeholder="메모·위치 검색"
-          aria-label="북마크 검색"
-        />
+            <div className="bm-content">
+              <div className="bm-chapters">
+                {chapterGroups.map((group) => (
+                  <section
+                    key={group.key}
+                    id={`bm-chapter-${group.key}`}
+                    className="bm-chapter"
+                  >
+                    <header className="bm-chapter-head">
+                      <h2 className="bm-chapter-label">{group.label}</h2>
+                      {group.title ? <span className="bm-chapter-title">{group.title}</span> : null}
+                      <span className="bm-chapter-count">{group.items.length}개</span>
+                    </header>
+                    <div className="bm-chapter-rows">
+                      {group.items.map((bookmark) => renderBookmark(bookmark))}
+                    </div>
+                  </section>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
-      {chapterGroups.length === 0 ? (
-        <div className="bm-empty">
-          <p className="bm-empty-title">
-            {isFilteredView ? '조건에 맞는 북마크가 없습니다.' : '저장된 북마크가 없습니다.'}
-          </p>
-          <p className="bm-empty-desc">
-            {isFilteredView ? '검색어를 바꿔보세요.' : '책을 읽으면서 북마크를 추가해보세요.'}
-          </p>
-        </div>
-      ) : (
-        <div className="bm-chapters">
-          {chapterGroups.map((group) => (
-            <section key={group.key} className="bm-chapter">
-              <header className="bm-chapter-head">
-                <h2 className="bm-chapter-label">{group.label}</h2>
-                {group.title ? <span className="bm-chapter-title">{group.title}</span> : null}
-                <span className="bm-chapter-count">{group.items.length}개</span>
-              </header>
-              <div className="bm-chapter-rows">{group.items.map((bookmark) => renderBookmark(bookmark))}</div>
-            </section>
-          ))}
-        </div>
-      )}
-
-      {deleteConfirmId && (
+      {deleteConfirmId != null ? (
         <div className="bm-confirm-overlay" role="presentation" onClick={() => setDeleteConfirmId(null)}>
           <div
             className="bm-confirm-dialog"
@@ -603,7 +673,7 @@ const BookmarksPage = () => {
               </button>
               <button
                 type="button"
-                className="bm-btn bm-btn-danger"
+                className="bm-btn-danger"
                 onClick={() => handleDeleteBookmark(deleteConfirmId)}
                 disabled={isMutating}
               >
@@ -612,7 +682,7 @@ const BookmarksPage = () => {
             </div>
           </div>
         </div>
-      )}
+      ) : null}
     </div>
   );
 };

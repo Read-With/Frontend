@@ -135,7 +135,10 @@ export function eventMatchesChapter(event, chapter) {
   if (!event || typeof event !== 'object') return false;
   const eventChapter = Number(eventUtils.resolveChapterIdx(event));
   const currentChapter = Number(chapter);
-  return !Number.isFinite(eventChapter) || eventChapter === currentChapter;
+  if (!Number.isFinite(currentChapter)) return true;
+  // 챕터가 지정됐으면 event.chapterIdx 없는 progressTopBar 등으로 이전 eventNum이 새지 않게 막음
+  if (!Number.isFinite(eventChapter)) return false;
+  return eventChapter === currentChapter;
 }
 
 function pickReadingEventForChapter(currentEvent, prevValidEvent, currentChapter) {
@@ -165,8 +168,13 @@ export function resolveEventOrdinalForDisplay({
   return toPositiveNumberOrNull(fallback) ?? 0;
 }
 
-export function getUnifiedEventInfoForTooltip({ currentEvent, prevValidEvent, eventNum }) {
-  const eventToShow = currentEvent || prevValidEvent;
+export function getUnifiedEventInfoForTooltip({
+  currentEvent,
+  prevValidEvent,
+  eventNum,
+  currentChapter = null,
+}) {
+  const eventToShow = pickReadingEventForChapter(currentEvent, prevValidEvent, currentChapter);
   if (!eventToShow) return { eventNum: eventNum || 0 };
   return {
     eventNum: eventUtils.resolveEventNum(eventToShow),

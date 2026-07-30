@@ -1,7 +1,6 @@
 /** 뷰어 그래프: UI 상태·검색·mode persist + 챕터 이벤트 discovery·캐시 로드 */
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { getGraphEventState } from '../../utils/graph/graphModel';
 import {
   applyChapterEventsFromCache,
   ensureChapterEventsDiscovered,
@@ -22,7 +21,6 @@ import {
   buildChapterCharacterSearchData,
   commitVisibleGraphElements,
   fallbackEventMeta,
-  getCachedGraphSnapshot,
   graphDataTransformUtils,
   resolveCumulativeGraphForDisplay,
   resolveGraphCallContext,
@@ -84,6 +82,16 @@ export function useViewerGraphState({
     if (!showGraph && graphFullScreen) setGraphFullScreen(false);
   }, [showGraph, graphFullScreen]);
 
+  const clearDisplayedGraph = useCallback(({ loading = true } = {}) => {
+    setElements([]);
+    setIsDataEmpty(true);
+    setIsDataReady(false);
+    if (loading) {
+      setIsGraphLoading(true);
+      setEventGraphLoading(true);
+    }
+  }, []);
+
   useEffect(() => {
     if (!currentEvent) return;
     if (eventMatchesChapter(currentEvent, currentChapter)) {
@@ -92,15 +100,13 @@ export function useViewerGraphState({
     }
     setCurrentEvent(null);
     setPrevValidEvent(null);
-  }, [currentChapter, currentEvent]);
+    clearDisplayedGraph({ loading: true });
+  }, [currentChapter, currentEvent, clearDisplayedGraph]);
 
   const resetGraphPipelineState = useCallback(() => {
     setEvents([]);
-    setElements([]);
-    setIsDataEmpty(true);
-    setIsDataReady(false);
-    setIsGraphLoading(true);
-  }, []);
+    clearDisplayedGraph({ loading: true });
+  }, [clearDisplayedGraph]);
 
   const resetGraphTransientState = useCallback(() => {
     setCurrentEvent(null);
@@ -108,15 +114,22 @@ export function useViewerGraphState({
     resetGraphPipelineState();
   }, [resetGraphPipelineState]);
 
-  // 책 변경만 hard reset. 챕터 전환은 이전 그래프를 유지(stale-while-revalidate)
+  // 책 변경 hard reset
   useEffect(() => {
     resetGraphPipelineState();
   }, [bookKey, resetGraphPipelineState]);
 
-  // 챕터 전환: 빈 화면/로딩 강제 대신 ready만 내려 파이프라인이 교체
+  // 챕터·이벤트 타깃이 바뀌면 이전 그래프를 즉시 숨김 (같은 챕터 이벤트 전환 포함)
+  const displayEventNum = eventUtils.resolveEventNum(currentEvent, null);
+  const graphTargetKey = `${currentChapter ?? ''}:${displayEventNum >= 1 ? displayEventNum : 0}`;
+  const prevGraphTargetKeyRef = useRef(null);
   useEffect(() => {
-    setIsDataReady(false);
-  }, [currentChapter]);
+    if (prevGraphTargetKeyRef.current === graphTargetKey) return;
+    const hadPrevious = prevGraphTargetKeyRef.current != null;
+    prevGraphTargetKeyRef.current = graphTargetKey;
+    if (!hadPrevious) return;
+    clearDisplayedGraph({ loading: true });
+  }, [graphTargetKey, clearDisplayedGraph]);
 
   useEffect(() => {
     if (!isHardNavigationReload()) return undefined;
@@ -195,7 +208,9 @@ const {
 } = VIEWER_GRAPH_PIPELINE;
 
 function logPipelineError(message, error) {
-  errorUtils.logError(`${LOG_PREFIX} ${message}`, error);
+  if (import.meta.env.DEV) {
+    errorUtils.logError(`${LOG_PREFIX} ${message}`, error?.message || error);
+  }
 }
 
 /** 재시도 시 effect를 다시 돌리기 위한 토큰 */
@@ -215,7 +230,7 @@ function usePipelineRefs() {
   const chapterDiscoveryPromiseRef = useRef(new Map());
   const activeCallKeyRef = useRef(null);
   const cacheAppliedCallKeyRef = useRef(null);
-  const graphScopeRef = useRef({ bookId: null, chapter: null });
+  const graphScopeRef = useRef({ bookId: null, chapter: null, eventIdx: 0 });
 
   return useMemo(
     () => ({
@@ -335,13 +350,10 @@ function useGraphCacheApply({
     }
   }, []);
 
-  const markPendingLoad = useCallback((bookId, chapter, eventIdx) => {
-    if (getCachedGraphSnapshot(bookId, chapter, eventIdx, getGraphEventState)) return;
-    // 이전 챕터 그래프가 보이면 빈 로딩 화면으로 바꾸지 않음
-    if (refs.hasVisibleElementsRef.current) return;
+  const markPendingLoad = useCallback((_bookId, _chapter, _eventIdx) => {
     setIsDataReady(false);
     setEventGraphLoading(true);
-  }, [setIsDataReady, setEventGraphLoading, refs]);
+  }, [setIsDataReady, setEventGraphLoading]);
 
   const tryApplyCache = useCallback((bookId, chapter, eventIdx, callKey) => {
     if (refs.cacheAppliedCallKeyRef.current === callKey) return true;
@@ -397,7 +409,9 @@ function useGraphChapterDiscovery({
   useEffect(() => {
     const bookId = resolvePipelineBookId(book);
     if (!bookId || !currentChapter || currentChapter < 1) return;
-    const throughEventIdx = eventUtils.resolveEventNum(currentEvent, null) || 1;
+    const throughEventIdx = eventUtils.resolveEventNum(currentEvent, null);
+    // 확정된 이벤트까지만 캐시 동기화 — 미확정 시 event 1로 가장하지 않음
+    if (!(throughEventIdx >= 1)) return;
     syncEventsFromCache(currentChapter, { throughEventIdx });
   }, [book, currentChapter, currentEvent, syncEventsFromCache]);
 
@@ -405,9 +419,12 @@ function useGraphChapterDiscovery({
     const bookId = resolvePipelineBookId(book);
     if (!isViewerPageReady || !bookId || !currentChapter) return undefined;
 
-    // 이벤트 미확정이어도 챕터 1이벤트부터 준비 (페이지 전환 직후 null gap 제거)
-    const throughEventIdx = eventUtils.resolveEventNum(currentEvent, null) || 1;
-    if (!throughEventIdx || throughEventIdx < 1) return undefined;
+    // 현재 읽기 이벤트가 확정된 뒤에만 discovery → 잘못된 이벤트 스냅샷 방지
+    const throughEventIdx = eventUtils.resolveEventNum(currentEvent, null);
+    if (!(throughEventIdx >= 1)) {
+      setIsGraphLoading(true);
+      return undefined;
+    }
 
     const runId = nextRequestId();
     const discoveryKey = cacheKeyUtils.createChapterKey(bookId, currentChapter);
@@ -587,6 +604,7 @@ function useGraphFineLoad({
 
   const failFineLoad = useCallback((error) => {
     clearActiveGraphKeys();
+    setVisibleElements([]);
     finishFineLoading(
       true,
       false,
@@ -596,7 +614,7 @@ function useGraphFineLoad({
         triggerGraphRetry,
       ),
     );
-  }, [clearActiveGraphKeys, finishFineLoading, triggerGraphRetry]);
+  }, [clearActiveGraphKeys, finishFineLoading, setVisibleElements, triggerGraphRetry]);
 
   const waitForDiscovery = useCallback(async (bookId, chapter, eventIdx) => {
     const discoveryKey = cacheKeyUtils.createChapterKey(bookId, chapter);
@@ -621,48 +639,68 @@ function useGraphFineLoad({
   useEffect(() => {
     const bookId = pipelineBookId;
     const chapter = currentChapter ?? null;
+    const eventIdx = eventUtils.resolveEventNum(currentEvent, null);
+    const eventKey = eventIdx >= 1 ? eventIdx : 0;
     const prev = refs.graphScopeRef.current;
     const bookChanged = prev.bookId !== bookId;
     const chapterChanged = prev.chapter !== chapter;
+    const eventChanged = prev.eventIdx !== eventKey;
 
-    if (!bookChanged && !chapterChanged) return;
+    if (!bookChanged && !chapterChanged && !eventChanged) return;
 
     if (bookChanged && prev.bookId != null) {
       clearBookRelationshipDeltas(prev.bookId);
     }
 
-    refs.graphScopeRef.current = { bookId, chapter };
-    clearViewerGraphPipelineMaps(refs);
-    setApiError(null);
+    refs.graphScopeRef.current = { bookId, chapter, eventIdx: eventKey };
+    if (bookChanged || chapterChanged) {
+      clearViewerGraphPipelineMaps(refs);
+      setApiError(null);
+    }
     clearActiveGraphKeys();
     // elements/isDataEmpty 리셋은 useViewerGraphState 소유. in-flight apply만 무효화
-    if (bookChanged) invalidateVisibleGraphApply();
+    if (bookChanged || chapterChanged || eventChanged) invalidateVisibleGraphApply();
   }, [
     pipelineBookId,
     currentChapter,
+    currentEvent,
     clearActiveGraphKeys,
     invalidateVisibleGraphApply,
     refs,
   ]);
+
+  const holdUntilEventResolved = useCallback(() => {
+    clearActiveGraphKeys();
+    setIsDataReady(false);
+    setEventGraphLoading(true);
+  }, [clearActiveGraphKeys, setIsDataReady, setEventGraphLoading]);
 
   useLayoutEffect(() => {
     if (!manifestLoaded) return;
 
     const ctx = resolveCallContext();
     if (!ctx?.bookId || !ctx.chapter) return;
-    const eventIdx = ctx.eventIdx >= 1 ? ctx.eventIdx : 1;
-    const callKey =
-      ctx.eventIdx >= 1
-        ? ctx.callKey
-        : cacheKeyUtils.createEventKey(ctx.bookId, ctx.chapter, eventIdx);
+
+    if (!(ctx.eventIdx >= 1)) {
+      holdUntilEventResolved();
+      return;
+    }
+
+    const callKey = ctx.callKey;
     if (callKey === refs.activeCallKeyRef.current) return;
 
-    if (ensureCacheOrPending(ctx.bookId, ctx.chapter, eventIdx, callKey, {
+    if (ensureCacheOrPending(ctx.bookId, ctx.chapter, ctx.eventIdx, callKey, {
       finalizeOnCache: true,
     })) {
       refs.activeCallKeyRef.current = callKey;
     }
-  }, [ensureCacheOrPending, manifestLoaded, resolveCallContext, refs]);
+  }, [
+    ensureCacheOrPending,
+    holdUntilEventResolved,
+    manifestLoaded,
+    resolveCallContext,
+    refs,
+  ]);
 
   const canFineLoad = manifestLoaded && isViewerPageReady;
 
@@ -674,12 +712,12 @@ function useGraphFineLoad({
     const ctx = resolveCallContext();
     if (!ctx?.bookId || !ctx.chapter) return undefined;
 
-    const { bookId, chapter } = ctx;
-    const eventIdx = ctx.eventIdx >= 1 ? ctx.eventIdx : 1;
-    const callKey =
-      ctx.eventIdx >= 1
-        ? ctx.callKey
-        : cacheKeyUtils.createEventKey(bookId, chapter, eventIdx);
+    if (!(ctx.eventIdx >= 1)) {
+      holdUntilEventResolved();
+      return undefined;
+    }
+
+    const { bookId, chapter, eventIdx, callKey } = ctx;
 
     if (refs.activeCallKeyRef.current === callKey) return undefined;
 
@@ -715,10 +753,7 @@ function useGraphFineLoad({
           return;
         }
 
-        // 캐시 미스는 있으나 이전 그래프가 있으면 비우지 않음
-        if (!refs.hasVisibleElementsRef.current) {
-          setVisibleElements([]);
-        }
+        setVisibleElements([]);
         finishFineLoading(true, false);
       } catch (error) {
         if (!isCurrent()) return;
@@ -736,6 +771,7 @@ function useGraphFineLoad({
     ensureCacheOrPending,
     failFineLoad,
     finishFineLoading,
+    holdUntilEventResolved,
     resolveCallContext,
     retryGeneration,
     setVisibleElements,

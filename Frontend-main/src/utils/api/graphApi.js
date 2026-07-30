@@ -14,6 +14,7 @@ import {
   toUnifiedApiResponse,
 } from './authApi';
 import { pickCharacterDisplayName, rememberCharacterDisplayName } from '../graph/graphCore';
+import { finitePositivityOrZero } from '../styles/graphStyles';
 
 /** API/캐시 로드 결과 계약 — error·empty 구분 */
 export const FETCH_STATUS = Object.freeze({
@@ -165,6 +166,34 @@ const mergeRelationLabels = (prevLabels, nextLabels) => {
   return merged;
 };
 
+/** 라벨별 최초 추가·마지막 변경 이벤트/긍정도 추적 */
+const mergeLabelHistory = (prevHistory, labels, eventId, positivity) => {
+  const next = { ...(prevHistory && typeof prevHistory === 'object' ? prevHistory : {}) };
+  const pos = Number.isFinite(Number(positivity)) ? Number(positivity) : 0;
+  for (const raw of asArray(labels)) {
+    const text = String(raw ?? '').trim();
+    if (!text) continue;
+    const existing = next[text];
+    if (!existing) {
+      next[text] = {
+        text,
+        firstEventId: eventId,
+        lastEventId: eventId,
+        firstPositivity: pos,
+        lastPositivity: pos,
+      };
+      continue;
+    }
+    next[text] = {
+      ...existing,
+      text: existing.text || text,
+      lastEventId: eventId ?? existing.lastEventId,
+      lastPositivity: pos,
+    };
+  }
+  return next;
+};
+
 const createEmptyDeltaAccumulateState = () => ({
   relationMap: new Map(),
   weightMap: new Map(),
@@ -211,7 +240,10 @@ const applyDeltasToAccumulateState = (state, deltas) => {
         typeof item.evidenceCount === 'number' && Number.isFinite(item.evidenceCount)
           ? item.evidenceCount
           : 1;
-      const positivity = readFiniteNumber(item.positivity, prev?.positivity || 0);
+      const positivity = readFiniteNumber(
+        item.positivity,
+        finitePositivityOrZero(prev?.positivity)
+      );
 
       state.relationMap.set(key, {
         id1,
@@ -220,6 +252,7 @@ const applyDeltasToAccumulateState = (state, deltas) => {
         count: (prev?.count ?? 0) + evidence,
         relation: mergeRelationLabels(prev?.relation, labels),
         latestLabels: labels,
+        labelHistory: mergeLabelHistory(prev?.labelHistory, labels, deltaEventId, positivity),
         latestReason: typeof item.reason === 'string' ? item.reason : prev?.latestReason ?? '',
         latestEventId: deltaEventId ?? prev?.latestEventId ?? null,
       });
