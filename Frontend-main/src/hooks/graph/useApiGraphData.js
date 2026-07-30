@@ -1,11 +1,7 @@
-/** book-scope 그래프 API·manifest·POV·관계 타임라인 (RelationGraph 전용) */
+/** book-scope 그래프 API·manifest·관계 타임라인 (RelationGraph 전용) */
 
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { getBookScopeRelationshipGraph } from '../../utils/api/graphApi.js';
-import {
-  getChapterPovSummaries,
-  normalizeChapterPovSummariesResult,
-} from '../../utils/api/booksApi';
 import {
   loadGraphDataWithCache,
   hasMacroGraphStorageCache,
@@ -25,6 +21,8 @@ import {
 } from '../common/hooksShared';
 import { cacheKeyUtils } from '../../utils/viewer/viewerCore';
 import { enrichGraphPayload } from '../../utils/graph/graphCore';
+
+export { useChapterPovSummaries } from './useChapterPovSummaries';
 
 export function useApiGraphData(serverBookId, currentChapter) {
   const {
@@ -200,55 +198,6 @@ export function useApiGraphData(serverBookId, currentChapter) {
   };
 }
 
-export function useChapterPovSummaries(bookId, chapterIdx) {
-  const [povSummaries, setPovSummaries] = useState(null);
-  const [error, setError] = useState(null);
-  const { nextRequestId, isStale, invalidate } = useAsyncRequestGuard();
-
-  const fetchSummaries = useCallback(async () => {
-    const bid = toPositiveNumberOrNull(bookId);
-    const ch = toPositiveInt(chapterIdx);
-    if (bid == null || ch == null) {
-      setPovSummaries(null);
-      setError(null);
-      return;
-    }
-
-    const requestId = nextRequestId();
-    setError(null);
-
-    try {
-      const response = await getChapterPovSummaries(bid, ch);
-      if (isStale(requestId)) return;
-
-      if (response.isSuccess) {
-        setPovSummaries(normalizeChapterPovSummariesResult(response.result));
-        setError(null);
-      } else {
-        setPovSummaries(null);
-        setError(response.message || 'POV 요약을 불러오지 못했습니다.');
-      }
-    } catch (err) {
-      if (isStale(requestId)) return;
-      setPovSummaries(null);
-      setError(err?.message || 'POV 요약을 불러오는 중 오류가 발생했습니다.');
-    }
-  }, [bookId, chapterIdx, nextRequestId, isStale]);
-
-  useEffect(() => {
-    void fetchSummaries();
-    return () => {
-      invalidate();
-    };
-  }, [fetchSummaries, invalidate]);
-
-  const retry = useCallback(() => {
-    void fetchSummaries();
-  }, [fetchSummaries]);
-
-  return { povSummaries, error, retry };
-}
-
 function buildRelationFetchKey(mode, bookId, id1, id2, chapterNum, eventNum) {
   return `${mode}:${bookId}:${id1}:${id2}:${chapterNum}:${eventNum ?? ''}`;
 }
@@ -260,6 +209,7 @@ export function useRelationData(mode, id1, id2, chapterNum, eventNum, bookId = n
   const [noRelation, setNoRelation] = useState(false);
   const [error, setError] = useState(null);
   const [incomplete, setIncomplete] = useState(false);
+  const [usedProbe, setUsedProbe] = useState(false);
   const { nextRequestId, isStale, invalidate } = useAsyncRequestGuard();
   const lastSuccessKeyRef = useRef('');
 
@@ -273,6 +223,7 @@ export function useRelationData(mode, id1, id2, chapterNum, eventNum, bookId = n
     setLabels([]);
     setNoRelation(false);
     setIncomplete(false);
+    setUsedProbe(false);
     setError(message);
     setLoading(false);
   }, [invalidate]);
@@ -284,6 +235,7 @@ export function useRelationData(mode, id1, id2, chapterNum, eventNum, bookId = n
     setLabels([]);
     setNoRelation(true);
     setIncomplete(false);
+    setUsedProbe(false);
     setError(message || null);
     setLoading(false);
   }, [invalidate]);
@@ -314,6 +266,7 @@ export function useRelationData(mode, id1, id2, chapterNum, eventNum, bookId = n
     setLoading(true);
     setError(null);
     setIncomplete(false);
+    setUsedProbe(false);
 
     try {
       const result =
@@ -345,6 +298,7 @@ export function useRelationData(mode, id1, id2, chapterNum, eventNum, bookId = n
       setLabels(paddedLabels);
       setNoRelation(Boolean(resultNoRelation) || emptyPoints);
       setIncomplete(Boolean(result.incomplete));
+      setUsedProbe(Boolean(result.usedProbe));
       setError(null);
       lastSuccessKeyRef.current = fetchKey;
     } catch {
@@ -383,8 +337,9 @@ export function useRelationData(mode, id1, id2, chapterNum, eventNum, bookId = n
       noRelation,
       error,
       incomplete,
+      usedProbe,
       fetchData: retryFetch,
     }),
-    [timeline, labels, loading, noRelation, error, incomplete, retryFetch]
+    [timeline, labels, loading, noRelation, error, incomplete, usedProbe, retryFetch]
   );
 }

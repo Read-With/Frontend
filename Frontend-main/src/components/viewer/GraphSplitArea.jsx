@@ -24,6 +24,7 @@ import { buildGraphViewportRefitKey } from '../../utils/graph/graphCore.js';
 import '../graph/RelationGraph.css';
 import { GraphFloatingControls } from '../graph/GraphControls';
 import { getChapterData, getManifestFromCache } from '../../utils/common/cache/manifestCache';
+import { useChapterPovSummaries } from '../../hooks/graph/useChapterPovSummaries';
 
 const iconShellClass = {
   loading: 'bg-[var(--rg-brand-tint)] text-[var(--rg-brand)]',
@@ -346,6 +347,20 @@ const GraphContainer = memo(function GraphContainer({
     [currentChapter, eventNum]
   );
 
+  const {
+    povSummaries,
+    error: povError,
+    isLoading: povIsLoading,
+    retry: retryPov,
+  } = useChapterPovSummaries(bookId, currentChapter);
+
+  const povCached = useMemo(() => {
+    if (bookId == null || currentChapter == null) return null;
+    const ch = getChapterData(bookId, currentChapter);
+    if (!ch) return null;
+    return Boolean(ch.povSummariesCached);
+  }, [bookId, currentChapter]);
+
   const dismissTooltip = useCallback(() => {
     onClearTooltip?.();
   }, [onClearTooltip]);
@@ -403,6 +418,11 @@ const GraphContainer = memo(function GraphContainer({
             currentEvent={currentEvent}
             prevValidEvent={prevValidEvent}
             onSelectRelatedNode={handleSelectRelatedNode}
+            povSummaries={povSummaries}
+            povError={povError}
+            povIsLoading={povIsLoading}
+            povCached={povCached}
+            onRetryPov={retryPov}
           />
         )}
         {activeTooltip?.type === 'edge' && (

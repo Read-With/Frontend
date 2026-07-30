@@ -125,6 +125,7 @@ function UnifiedEdgeTooltip({
     noRelation,
     error: relationError,
     incomplete: relationIncomplete,
+    usedProbe: relationUsedProbe,
     fetchData,
   } = useRelationData(relationDataMode, id1, id2, currentChapter, displayEventNum, numericBookId);
 
@@ -571,9 +572,14 @@ function UnifiedEdgeTooltip({
     return (
       <div className="edge-chart-panel">
         <div className="edge-chart-title">{chartTitle}</div>
-        {relationIncomplete && (
+        {(relationIncomplete || relationUsedProbe) && (
           <p className="edge-chart-incomplete-hint">
-            일부 이벤트를 불러오지 못했습니다.{' '}
+            {relationIncomplete
+              ? `일부 이벤트를 불러오지 못했습니다.${
+                  relationUsedProbe ? ' 이벤트 범위는 추정값입니다.' : ''
+                }`
+              : '챕터 구조 정보가 없어 이벤트 범위를 추정했습니다. 결과가 부정확할 수 있습니다.'}
+            {' '}
             <button type="button" onClick={fetchData} className="edge-tooltip-retry-btn">
               다시 시도
             </button>

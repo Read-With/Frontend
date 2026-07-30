@@ -80,7 +80,7 @@ export function normalizeRelationArray(relation, label = '') {
   return uniqueStrings(values);
 }
 
-/** 챕터 마지막 이벤트 인덱스 (manifest 힌트, UI·범위용) */
+/** 챕터 마지막 이벤트 인덱스 (manifest 힌트, UI·범위용). 없으면 null — 가짜 1 금지 */
 export const calculateLastEventForChapter = ({
   manifestChapters,
   manifestBookId,
@@ -97,17 +97,16 @@ export const calculateLastEventForChapter = ({
     }
   }
 
-  if (!manifestChapters?.length) return 1;
+  if (!manifestChapters?.length) return null;
 
   const chapterNum = Number(chapter);
   const chapterInfo = manifestChapters.find(
     (ch) => ch && typeof ch === 'object' && Number(ch.idx) === chapterNum
   );
 
-  if (!chapterInfo) return 1;
+  if (!chapterInfo) return null;
 
-  const resolved = getLastEventIdxFromChapterData(chapterInfo);
-  return resolved != null && resolved >= 1 ? resolved : 1;
+  return getLastEventIdxFromChapterData(chapterInfo);
 };
 
 export const GRAPH_LAYOUT_CONSTANTS = {

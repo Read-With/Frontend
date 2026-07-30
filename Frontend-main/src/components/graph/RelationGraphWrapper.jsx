@@ -211,8 +211,16 @@ function RelationGraphWrapper() {
   const {
     povSummaries,
     error: povError,
+    isLoading: povIsLoading,
     retry: retryPov,
   } = useChapterPovSummaries(serverBookId, currentChapter);
+
+  const povCached = useMemo(() => {
+    if (serverBookId == null || currentChapter == null) return null;
+    const ch = getChapterData(serverBookId, currentChapter, manifestData);
+    if (!ch) return null;
+    return Boolean(ch.povSummariesCached);
+  }, [serverBookId, currentChapter, manifestData]);
 
   const handleBackToViewer = useCallback(() => {
     const { state, pathname } = locationRef.current;
@@ -273,8 +281,11 @@ function RelationGraphWrapper() {
     if (!Number.isFinite(ch) || ch < 1) return;
     if (findManifestEventInChapter(serverBookId, ch, { eventIdx: currentEvent }, manifestData)) return;
 
-    const firstEv = getChapterData(serverBookId, ch, manifestData)?.events?.[0];
-    const next = eventUtils.resolveEventNum(firstEv) || 1;
+    const events = getChapterData(serverBookId, ch, manifestData)?.events;
+    if (!Array.isArray(events) || events.length === 0) return;
+
+    const firstEv = events[0];
+    const next = eventUtils.resolveEventNum(firstEv);
     if (!(next > 0) || next === currentEvent) return;
     if (findManifestEventInChapter(serverBookId, ch, { eventIdx: next }, manifestData)) {
       setCurrentEvent(next);
@@ -410,7 +421,14 @@ function RelationGraphWrapper() {
         chapter,
       });
       const normalized = Number(lastEventNum);
-      setCurrentEvent(Number.isFinite(normalized) && normalized >= 1 ? normalized : 1);
+      if (Number.isFinite(normalized) && normalized >= 1) {
+        setCurrentEvent(normalized);
+        return;
+      }
+      // 빈 챕터: 가짜 lastEvent=1로 속이지 않음. 첫 실제 이벤트만 사용.
+      const firstEv = getChapterData(serverBookId, chapter, manifestData)?.events?.[0];
+      const firstNum = eventUtils.resolveEventNum(firstEv);
+      if (firstNum > 0) setCurrentEvent(firstNum);
     };
 
     // 선택(노드/간선·툴팁)이 있으면 먼저 해제한 뒤 챕터 전환
@@ -521,6 +539,8 @@ function RelationGraphWrapper() {
         renderElements={finalElements}
         povSummaries={povSummaries}
         povError={povError}
+        povIsLoading={povIsLoading}
+        povCached={povCached}
         onRetryPov={retryPov}
         apiBookGraphData={apiBookGraphData}
         bookId={serverBookId}
