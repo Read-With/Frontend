@@ -244,7 +244,7 @@ function resolvePovSummary(
   { isLoading = false, povCached = null } = {},
 ) {
   if (!node) {
-    return { text: '인물에 대한 요약 정보가 없습니다.', status: UI_VIEW_STATUS.NO_DATA };
+    return { text: '해당 챕터에서는 해당 캐릭터의 등장 비중이 낮아 별도의 분석 내용이 제공되지 않습니다.', status: UI_VIEW_STATUS.NO_DATA };
   }
 
   if (isLoading) {

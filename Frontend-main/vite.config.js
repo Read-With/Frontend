@@ -50,7 +50,7 @@ export default defineConfig(({ mode }) => {
             'react-vendor': ['react', 'react-dom', 'react-router-dom'],
             query: ['@tanstack/react-query'],
             charts: ['recharts'],
-            graph: ['cytoscape', 'cytoscape-cose-bilkent', 'react-cytoscapejs'],
+            graph: ['cytoscape', 'cytoscape-cose-bilkent'],
           },
         },
       },
