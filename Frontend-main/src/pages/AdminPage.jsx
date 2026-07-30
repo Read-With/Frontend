@@ -1191,27 +1191,49 @@ const AdminPage = () => {
     setConfirmDialog({ title, confirmLabel, message, danger, run });
   };
 
-  const handleRegenerate = (char) => {
-    const name = char.commonName || char.name;
-    openConfirm({
-      title: "이미지 재생성",
-      confirmLabel: "재생성",
-      message: `인물 [${name}]의 이미지를 재생성할까요?`,
-      run: async () => {
-        const data = await handleApiCall(
-          `regen-${char.id}`,
-          () => apiClient.post(`/characters/${char.id}/regenerate-image`),
-          {
-            showResultPanel: false,
-            successMessage: `인물 [${name}] 재생성 요청이 접수되었습니다.`,
-          },
-        );
-        if (data != null) {
-          setConfirmDialog(null);
-          if (selectedBook) await refreshCharactersSilent(selectedBook);
+  const handleRegenerate = async (char) => {
+    if (!selectedBook) return;
+
+    const confirmed = window.confirm(
+        `캐릭터 [${char.commonName || char.name}]의 이미지를 재생성하시겠습니까?`
+    );
+
+    if (!confirmed) return;
+    setLoading(true);
+    setError(null);
+    setResponse(null);
+
+    try {
+      const result = await apiClient.post(
+        `/image-generation/books/${selectedBook.id}/characters/${char.id}/regenerate`
+      );
+
+      if (result.data?.isSuccess) {
+        // 이미지 생성 상태 갱신
+        setImageGenerationStatus(result.data.result);
+
+        // 캐릭터 목록도 새 이미지 상태로 갱신
+        if (result.data.result?.characters) {
+        setCharacters(result.data.result.characters);
         }
-      },
-    });
+
+        alert(
+          `캐릭터 [${char.commonName || char.name}] 이미지 재생성이 요청되었습니다.`
+        );
+
+      } else {
+        setError(result.data);
+      }
+    } catch (err) {
+      console.error(err);
+      setError(
+        err.response?.data ?? {
+          message: err.message ?? "이미지 재생성에 실패했습니다.",
+        }
+      );
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleRegenerateFailed = () => {
