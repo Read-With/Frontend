@@ -1,6 +1,8 @@
 /** Cytoscape 뷰포트·인터랙션·검색·타임라인 차트 UX */
 
-import { PRESET_LAYOUT } from '../styles/graphStyles.js';
+import cytoscape from 'cytoscape';
+import coseBilkent from 'cytoscape-cose-bilkent';
+import { PRESET_LAYOUT, COSE_BILKENT_LAYOUT } from '../styles/graphStyles.js';
 import {
   undirectedPairKey,
   GRAPH_ZOOM,
@@ -10,7 +12,43 @@ import {
   isGraphNodeElement,
   normalizeElementId,
 } from './graphCore';
-import { expandConnectedSubgraph } from './graphModel';
+import { expandConnectedSubgraph, OVERLAP_RESOLVE } from './graphModel';
+
+let coseBilkentRegistered = false;
+function ensureCoseBilkentRegistered() {
+  if (coseBilkentRegistered) return;
+  cytoscape.use(coseBilkent);
+  coseBilkentRegistered = true;
+}
+
+/** preset 레이아웃 (eles 지정 시 해당 컬렉션만) */
+export function runPresetLayout(cy, eles) {
+  if (!cy) return;
+  if (eles?.length > 0) {
+    try {
+      cy.layout({ ...PRESET_LAYOUT, eles }).run();
+      return;
+    } catch {
+      /* fall through */
+    }
+  }
+  try {
+    cy.layout({ ...PRESET_LAYOUT }).run();
+  } catch {
+    /* ignore */
+  }
+}
+
+/** 최초/전체 재배치용 cose-bilkent (실패 시 preset) */
+export function runCoseBilkentLayout(cy) {
+  if (!cy) return;
+  ensureCoseBilkentRegistered();
+  try {
+    cy.layout({ ...COSE_BILKENT_LAYOUT }).run();
+  } catch {
+    runPresetLayout(cy);
+  }
+}
 
 const parseJsonSafely = (value) => {
   if (typeof value !== 'string') {
@@ -236,7 +274,7 @@ export const ensureElementsInBounds = (cy, container, maxNodes = 1000) => {
 
   // 조정이 필요한 경우 좌표만 재적용 (fit 하면 사용자 휠 줌이 풀림)
   if (needsAdjustment) {
-    cy.layout({ ...PRESET_LAYOUT }).run();
+    runPresetLayout(cy);
   }
 };
 
@@ -517,6 +555,8 @@ export function openTooltipFromTap(tapPayload, type) {
     }
 
     const relation = normalizeRelationArray(parseJsonSafely(base.data?.relation));
+    const latestLabels = normalizeRelationArray(parseJsonSafely(base.data?.latestLabels));
+    const labelHistory = parseJsonSafely(base.data?.labelHistory);
     return {
       ...base,
       sourceEndpoint: tooltipEndpointInfo(element.source()),
@@ -525,8 +565,17 @@ export function openTooltipFromTap(tapPayload, type) {
       data: {
         ...base.data,
         relation,
-        label: base.data?.label || relation[0] || '',
-        positivity: base.data?.positivity ?? 0,
+        latestLabels,
+        labelHistory:
+          labelHistory && typeof labelHistory === 'object' && !Array.isArray(labelHistory)
+            ? labelHistory
+            : {},
+        label: base.data?.label || relation[relation.length - 1] || '',
+        // positivity는 서버/그래프 값만 유지 — 없으면 null (0과 '없음' 구분)
+        positivity:
+          base.data?.positivity == null || base.data?.positivity === ''
+            ? null
+            : base.data.positivity,
         count: base.data?.count ?? 1,
       },
     };
@@ -801,44 +850,53 @@ export function resolveGraphTooltipAnchor(cy, element) {
 /* ─── 신규 노드 배치 · 레이아웃 상수 ─── */
 
 const PLACEMENT_PADDING = 80;
-const PLACEMENT_MIN_DIST_SQ = (40 * 3.2) * (40 * 3.2);
+/** 황금각 스파이럴 — 다수 노드 동시 배치 시 각도 충돌이 적음 */
+const PLACEMENT_GOLDEN_ANGLE = Math.PI * (3 - Math.sqrt(5));
+const PLACEMENT_BASE_NODE_RADIUS = OVERLAP_RESOLVE.FALLBACK_NODE_SIZE;
 
-/** 신규 노드 스파이럴 배치 */
+/** 신규 노드 스파이럴 배치 (이웃 기반 배치 없음 — 중심 기준 빈 자리 탐색) */
 export function calculateSpiralPlacement(newNodes, placedPositions, containerWidth, containerHeight) {
   if (!newNodes?.length) return newNodes;
 
+  const batch = newNodes.length;
+  const minDist = PLACEMENT_BASE_NODE_RADIUS * (batch > 6 ? 3.6 : 3.2);
+  const minDistSq = minDist * minDist;
+  const radiusStep = Math.max(2.5, Math.min(6, 1.8 + batch * 0.15));
   const maxRadius = Math.min(containerWidth, containerHeight) / 2 - PLACEMENT_PADDING;
   const updatedPositions = [...placedPositions];
   const halfW = containerWidth / 2 - PLACEMENT_PADDING;
   const halfH = containerHeight / 2 - PLACEMENT_PADDING;
+  const maxAttempts = Math.min(400, 160 + batch * 20);
 
-  newNodes.forEach((node) => {
+  newNodes.forEach((node, index) => {
     let found = false;
-    let x;
-    let y;
+    let x = 0;
+    let y = 0;
     let attempts = 0;
-    const maxAttempts = 200;
+    // 배치 시작 위상만 어긋나게 해 동시 등장 노드끼리 같은 궤적을 덜 밟게 함
+    const phase = index * PLACEMENT_GOLDEN_ANGLE;
 
     while (!found && attempts < maxAttempts) {
-      const angle = (attempts * 0.5) % (2 * Math.PI);
-      const radius = Math.min(50 + attempts * 2, maxRadius);
-      const candidate = { x: Math.cos(angle) * radius, y: Math.sin(angle) * radius };
-      x = candidate.x;
-      y = candidate.y;
+      const angle = phase + attempts * PLACEMENT_GOLDEN_ANGLE;
+      const radius = Math.min(48 + attempts * radiusStep, maxRadius);
+      x = Math.cos(angle) * radius;
+      y = Math.sin(angle) * radius;
 
       if (Math.abs(x) < halfW && Math.abs(y) < halfH) {
         found = updatedPositions.every((pos) => {
           const dx = x - pos.x;
           const dy = y - pos.y;
-          return dx * dx + dy * dy > PLACEMENT_MIN_DIST_SQ;
+          return dx * dx + dy * dy > minDistSq;
         });
       }
       attempts += 1;
     }
 
     if (!found) {
-      x = (Math.random() - 0.5) * 100;
-      y = (Math.random() - 0.5) * 100;
+      const fallbackAngle = phase + batch;
+      const fallbackR = Math.min(80 + index * minDist * 0.35, maxRadius);
+      x = Math.cos(fallbackAngle) * fallbackR;
+      y = Math.sin(fallbackAngle) * fallbackR;
     }
 
     node.position = { x, y };

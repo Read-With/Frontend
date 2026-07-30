@@ -17,6 +17,7 @@ import {
 import {
   isGraphDragEndEvent,
   fitGraphToNodes,
+  centerSelectionOnElementId,
 } from '../../utils/graph/graphCy';
 import { errorUtils, userViewerPath } from '../../utils/common/urlUtils';
 import {
@@ -28,18 +29,13 @@ import {
 import { useApiGraphData, useChapterPovSummaries } from '../../hooks/graph/useApiGraphData';
 import { resolveServerBookIdOrFallback, useLocalStorageNumber } from '../../hooks/common/hooksShared';
 import {
-  createCharacterMaps,
-  buildNodeWeights,
-  extractNodeWeightsFromElements,
-  convertRelationsToElements,
-  getGraphEventState,
-} from '../../utils/graph/graphModel';
-import { eventUtils, formatChapterOrderAndName, stripRedundantBookTitlePrefix, resolveChapterTitleMeta } from '../../utils/viewer/viewerCore';
-import { hasGraphPayload } from '../../utils/graph/graphFetch';
-import {
   convertGraphSourceToElements,
   commitVisibleGraphElements,
+  DEFAULT_GRAPH_TRANSFORM_DEPS,
 } from '../../utils/viewer/viewerGraph';
+import { extractNodeWeightsFromElements, getGraphEventState } from '../../utils/graph/graphModel';
+import { eventUtils, formatChapterOrderAndName, stripRedundantBookTitlePrefix, resolveChapterTitleMeta } from '../../utils/viewer/viewerCore';
+import { hasGraphPayload } from '../../utils/api/graphApi';
 import { toPositiveNumberOrNull } from '../../utils/common/valueUtils';
 import {
   shouldIgnoreGraphPageOutsideClick,
@@ -73,7 +69,6 @@ const emptyGraphBannerStyle = {
 };
 
 const GRAPH_PAGE_EDGE_STYLE = getEdgeStyle('graph');
-const GRAPH_TRANSFORM_DEPS = { createCharacterMaps, buildNodeWeights, convertRelationsToElements };
 
 function ErrorToast({ error, onClose, duration = 5000 }) {
   useEffect(() => {
@@ -211,8 +206,16 @@ function RelationGraphWrapper() {
   const {
     povSummaries,
     error: povError,
+    isLoading: povIsLoading,
     retry: retryPov,
   } = useChapterPovSummaries(serverBookId, currentChapter);
+
+  const povCached = useMemo(() => {
+    if (serverBookId == null || currentChapter == null) return null;
+    const ch = getChapterData(serverBookId, currentChapter, manifestData);
+    if (!ch) return null;
+    return Boolean(ch.povSummariesCached);
+  }, [serverBookId, currentChapter, manifestData]);
 
   const handleBackToViewer = useCallback(() => {
     const { state, pathname } = locationRef.current;
@@ -273,8 +276,11 @@ function RelationGraphWrapper() {
     if (!Number.isFinite(ch) || ch < 1) return;
     if (findManifestEventInChapter(serverBookId, ch, { eventIdx: currentEvent }, manifestData)) return;
 
-    const firstEv = getChapterData(serverBookId, ch, manifestData)?.events?.[0];
-    const next = eventUtils.resolveEventNum(firstEv) || 1;
+    const events = getChapterData(serverBookId, ch, manifestData)?.events;
+    if (!Array.isArray(events) || events.length === 0) return;
+
+    const firstEv = events[0];
+    const next = eventUtils.resolveEventNum(firstEv);
     if (!(next > 0) || next === currentEvent) return;
     if (findManifestEventInChapter(serverBookId, ch, { eventIdx: next }, manifestData)) {
       setCurrentEvent(next);
@@ -294,7 +300,7 @@ function RelationGraphWrapper() {
         graphApiPayload,
         currentChapter,
         currentEvent,
-        GRAPH_TRANSFORM_DEPS,
+        DEFAULT_GRAPH_TRANSFORM_DEPS,
         extractNodeWeightsFromElements(previousEventState?.elements),
         { bookId: serverBookId },
       ).elements;
@@ -330,12 +336,22 @@ function RelationGraphWrapper() {
     graphClearRef.current?.(options);
   }, []);
 
-  // 사이드바는 오버레이이므로 우측 예약 없이 전체 그래프를 캔버스에 유지 (겹침 허용)
-  const centerSelection = useCallback(() => {
-    fitGraphToNodes(cyRef.current, {
+  // 좌(챕터 레일)는 캔버스 offset으로 이미 제외. 우(정보 슬라이드바)는 오버레이라 예약.
+  const centerSelection = useCallback((elementId) => {
+    const cy = cyRef.current;
+    if (!cy || elementId == null || elementId === '') return;
+
+    const reserveLeft = isNarrow && isSidebarOpen
+      ? GRAPH_LAYOUT_CONSTANTS.SIDEBAR.OPEN_WIDTH
+      : 0;
+
+    centerSelectionOnElementId(cy, elementId, {
       duration: GRAPH_LAYOUT_CONSTANTS.FOCUS_PAN_MS,
+      reserveRight: GRAPH_LAYOUT_CONSTANTS.TOOLTIP_SIDEBAR_WIDTH,
+      reserveLeft,
+      padding: 40,
     });
-  }, []);
+  }, [isNarrow, isSidebarOpen]);
 
   const onClearTooltip = useCallback(() => {
     closeSidebar();
@@ -410,7 +426,14 @@ function RelationGraphWrapper() {
         chapter,
       });
       const normalized = Number(lastEventNum);
-      setCurrentEvent(Number.isFinite(normalized) && normalized >= 1 ? normalized : 1);
+      if (Number.isFinite(normalized) && normalized >= 1) {
+        setCurrentEvent(normalized);
+        return;
+      }
+      // 빈 챕터: 가짜 lastEvent=1로 속이지 않음. 첫 실제 이벤트만 사용.
+      const firstEv = getChapterData(serverBookId, chapter, manifestData)?.events?.[0];
+      const firstNum = eventUtils.resolveEventNum(firstEv);
+      if (firstNum > 0) setCurrentEvent(firstNum);
     };
 
     // 선택(노드/간선·툴팁)이 있으면 먼저 해제한 뒤 챕터 전환
@@ -521,6 +544,8 @@ function RelationGraphWrapper() {
         renderElements={finalElements}
         povSummaries={povSummaries}
         povError={povError}
+        povIsLoading={povIsLoading}
+        povCached={povCached}
         onRetryPov={retryPov}
         apiBookGraphData={apiBookGraphData}
         bookId={serverBookId}

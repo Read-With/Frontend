@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import axios from "axios";
 import { getApiBaseUrl } from "../utils/common/urlUtils";
+import { getStoredAccessToken } from "../utils/security/authTokenStorage";
+import { ensureSessionAccessToken } from "../utils/api/authApi";
 import "./AdminPage.css";
 
 const API_BASE_URL = `${getApiBaseUrl()}/api/v2/admin`;
@@ -11,8 +13,13 @@ const apiClient = axios.create({
   headers: { "Content-Type": "application/json" },
 });
 
-apiClient.interceptors.request.use((config) => {
-  const token = localStorage.getItem("accessToken");
+apiClient.interceptors.request.use(async (config) => {
+  try {
+    await ensureSessionAccessToken();
+  } catch {
+    /* refresh 실패 시 아래 토큰 없이 요청 → 401 */
+  }
+  const token = getStoredAccessToken();
   if (token) config.headers.Authorization = `Bearer ${token}`;
   if (typeof FormData !== "undefined" && config.data instanceof FormData) {
     if (config.headers && typeof config.headers.delete === "function") {

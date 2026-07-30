@@ -279,6 +279,7 @@ export function useViewerPage() {
     setIsDataReady,
     setIsGraphLoading,
     setEventGraphLoading,
+    setAppliedGraphKey,
     graphState,
     graphActions,
     graphViewerState,
@@ -369,6 +370,7 @@ export function useViewerPage() {
     setIsGraphLoading,
     setEventGraphLoading,
     setIsDataReady,
+    setAppliedGraphKey,
   });
 
   const { cachedLocation, flushProgressAsync } = useProgressAutoSave({

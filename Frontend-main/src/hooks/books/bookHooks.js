@@ -90,6 +90,12 @@ async function fetchBooksQuery() {
   }
 
   const response = await getBooks({});
+  if (response?.softEmpty) {
+    return {
+      books: [],
+      needsAuth: response.code === 'FORBIDDEN',
+    };
+  }
   if (!response?.isSuccess) {
     throw new Error(response?.message || '책 정보를 불러올 수 없습니다.');
   }

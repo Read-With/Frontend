@@ -18,14 +18,10 @@ export const makeSilentError = (code, message) => ({
 });
 
 export const isForbiddenError = (error) =>
-  error?.status === 403 ||
-  String(error?.message ?? '').includes('403') ||
-  String(error?.message ?? '').includes('권한');
+  Number(error?.status) === 403 || Number(error?.statusCode) === 403;
 
 export const isNotFoundError = (error) =>
-  error?.status === 404 ||
-  String(error?.message ?? '').includes('404') ||
-  String(error?.message ?? '').includes('찾을 수 없습니다');
+  Number(error?.status) === 404 || Number(error?.statusCode) === 404;
 
 export const SOFT_FAIL_403_404 = [403, 404];
 
@@ -61,6 +57,40 @@ export const toUnifiedApiResponse = (
     message: safe.message ?? defaultMessage,
     result: safe.result ?? defaultResult,
   };
+};
+
+/**
+ * softFailStatuses 응답(FORBIDDEN/NOT_FOUND) 정규화.
+ * @param {'empty'|'error'} [options.mode]
+ *   - empty: 목록·조회 미생성 → isSuccess true + emptyResult (softEmpty)
+ *   - error: silent fail (isSuccess false)
+ * @returns {object|null} 해당 코드가 아니면 null
+ */
+export const mapSoftFailResponse = (
+  response,
+  {
+    mode = 'error',
+    emptyResult = null,
+    includeNotFound = true,
+    forbiddenMessage = '접근 권한이 없습니다',
+    notFoundMessage = '데이터를 찾을 수 없습니다',
+  } = {}
+) => {
+  const code = response?.code;
+  if (code !== 'FORBIDDEN' && !(includeNotFound && code === 'NOT_FOUND')) {
+    return null;
+  }
+  const message = code === 'FORBIDDEN' ? forbiddenMessage : notFoundMessage;
+  if (mode === 'empty') {
+    return toUnifiedApiResponse({
+      isSuccess: true,
+      code,
+      message,
+      result: emptyResult,
+      softEmpty: true,
+    });
+  }
+  return makeSilentError(code, message);
 };
 
 const JSON_ACCEPT_HEADERS = {

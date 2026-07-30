@@ -433,7 +433,7 @@
   position: absolute;
   top: calc(100% + 0.375rem);
   right: 0;
-  z-index: 20;
+  z-index: 30;
   min-width: 14rem;
   max-width: min(20rem, 92vw);
   padding: 0.75rem;
@@ -812,6 +812,17 @@
   /* 드롭다운(범례·옵션)이 잘리지 않도록 — 한 줄은 제목 ellipsis로 유지 */
   overflow: visible;
   z-index: 20;
+}
+
+.graph-split-topbar {
+  justify-content: space-between;
+  /* floating zoom(z-index:20)보다 위 — 범례/옵션 드롭다운이 줌 버튼에 가려지지 않게 */
+  z-index: 30;
+}
+
+.graph-split-topbar > .graph-fullscreen-btn {
+  position: relative;
+  z-index: 2;
 }
 
 .graph-page-topbar {
@@ -1346,10 +1357,7 @@
 .graph-node-tooltip {
   position: fixed;
   z-index: 99999;
-  width: min(26.25rem, calc(100vw - 1.5rem));
-  max-width: min(26.25rem, 92%);
   height: auto;
-  max-height: min(26.25rem, 70vh);
   background: var(--rg-surface);
   border-radius: 0.9375rem;
   box-shadow: var(--rg-shadow-md);
@@ -1359,6 +1367,21 @@
   cursor: grab;
   display: flex;
   flex-direction: column;
+}
+
+.graph-node-tooltip {
+  width: min(26.25rem, calc(100vw - 1.5rem));
+  max-width: min(26.25rem, 92%);
+  max-height: min(26.25rem, 70vh);
+  overflow-x: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.edge-tooltip-container {
+  width: min(32rem, calc(100vw - 1.5rem));
+  max-width: min(32rem, 94%);
+  max-height: min(34rem, 80vh);
 }
 
 .graph-node-tooltip.error {
@@ -1424,7 +1447,7 @@
   display: flex;
   flex-direction: column;
   width: 100%;
-  max-height: 26.25rem;
+  max-height: 34rem;
 }
 
 .edge-tooltip-header {
@@ -1657,7 +1680,7 @@
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  max-height: 10rem;
+  max-height: 14rem;
 }
 
 .relation-tags {
@@ -1676,6 +1699,29 @@
   color: #42506b;
   display: inline-block;
   line-height: 1.2;
+  border: 1px solid transparent;
+  --tag-color: #6b7c93;
+}
+
+.relation-tag--prior {
+  background: color-mix(in srgb, var(--tag-color) 14%, #eef1f6);
+  color: #5b6578;
+  border-color: color-mix(in srgb, var(--tag-color) 32%, #d5dae3);
+}
+
+.relation-tag--added {
+  background: color-mix(in srgb, var(--tag-color) 22%, white);
+  color: color-mix(in srgb, var(--tag-color) 72%, #111827);
+  border-color: var(--tag-color);
+  font-weight: 600;
+}
+
+.relation-tag--changed {
+  background: color-mix(in srgb, var(--tag-color) 34%, white);
+  color: color-mix(in srgb, var(--tag-color) 78%, #111827);
+  border-color: var(--tag-color);
+  box-shadow: inset 3px 0 0 var(--tag-color);
+  font-weight: 600;
 }
 
 .relation-explanation p,
@@ -1765,11 +1811,6 @@
   border-radius: 0.25rem;
 }
 
-.edge-tooltip-floating {
-  position: fixed;
-  z-index: 99999;
-}
-
 /* ── UnifiedEdgeTooltip theming ── */
 .edge-tooltip-themed {
   --rel-color: var(--rg-text-faint);
@@ -1794,6 +1835,13 @@
 /* ============================================================
    Graph sidebar
    ============================================================ */
+
+/* 그래프와 맞닿는 왼쪽 세로 구분 */
+.graph-page-sidebar {
+  border-left: 0.0625rem solid var(--rg-border-strong);
+  box-shadow: -0.25rem 0 0.75rem rgba(15, 23, 42, 0.08);
+}
+
 .graph-sidebar-panel {
   position: relative;
   width: 100%;
@@ -1890,11 +1938,11 @@
   position: relative;
   width: 100%;
   height: auto;
-  max-height: 26.25rem;
+  max-height: none;
   display: flex;
   flex-direction: column;
   padding: 0;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .node-tooltip-header {
@@ -2344,6 +2392,11 @@
   white-space: nowrap;
 }
 
+.relation-modal-chip--error {
+  background: color-mix(in srgb, var(--rg-danger, #b42318) 12%, transparent);
+  color: var(--rg-danger, #b42318);
+}
+
 .relation-modal-header-actions {
   display: flex;
   align-items: center;
@@ -2582,10 +2635,26 @@
   flex-direction: column;
 }
 
-.relation-modal-side--solo {
-  max-width: none;
-  min-width: 0;
+.relation-modal-empty-message {
   flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem 1.25rem;
+  text-align: center;
+}
+
+.relation-modal-empty-message p {
+  margin: 0;
+  max-width: 18rem;
+  font-size: 0.9375rem;
+  line-height: 1.55;
+  color: var(--rg-text-muted);
+  font-weight: 500;
+}
+
+.relation-modal-empty-message.is-error p {
+  color: var(--rg-danger, #b42318);
 }
 
 .relation-few-panel {
@@ -3031,6 +3100,7 @@
 .summary-toggle-btn .tooltip-section-title {
   text-align: left;
   flex: 1;
+  min-width: 0;
 }
 
 .tooltip-summary-section {
@@ -3038,6 +3108,7 @@
   position: relative;
   min-height: 4.375rem;
   height: 3.75rem;
+  flex-shrink: 0;
   transition: height 0.4s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
@@ -3047,6 +3118,7 @@
 
 .tooltip-summary-section--content {
   height: auto;
+  overflow: visible;
 }
 
 .tooltip-summary-chevron {
@@ -3120,11 +3192,13 @@
 
 .tooltip-summary-text {
   margin: 0;
+  padding: 0.75rem 1rem;
   font-size: 0.95rem;
   line-height: 2;
   color: var(--rg-brand);
   letter-spacing: -0.01em;
   white-space: pre-wrap;
+  overflow-wrap: anywhere;
   word-break: keep-all;
   background: rgba(247, 250, 252, 0.8);
   border-radius: var(--rg-radius-md);
@@ -3132,6 +3206,44 @@
 
 .tooltip-summary-text.is-animated {
   animation: fadeIn 0.4s ease-in-out;
+}
+
+.tooltip-summary-text--error {
+  color: #b42318;
+  background: rgba(254, 242, 242, 0.9);
+}
+
+.tooltip-summary-text--pending {
+  color: var(--rg-text-subtle);
+  background: rgba(247, 250, 252, 0.55);
+  font-style: italic;
+}
+
+.tooltip-summary-text--loading {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--rg-text-subtle);
+}
+
+.tooltip-summary-spinner {
+  width: 0.85rem;
+  height: 0.85rem;
+  border: 2px solid rgba(148, 163, 184, 0.35);
+  border-top-color: var(--rg-brand);
+  border-radius: 50%;
+  flex-shrink: 0;
+  animation: tooltip-summary-spin 0.7s linear infinite;
+}
+
+@keyframes tooltip-summary-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.tooltip-summary-quote .tooltip-action-btn {
+  margin-top: 8px;
 }
 
 .tooltip-analysis-section {

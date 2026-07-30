@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { getBookProgress, saveProgress, saveProgressKeepalive } from '../../utils/api/booksApi';
+import { ensureSessionAccessToken } from '../../utils/api/authApi';
 import { canResolveProgressMetrics } from '../../utils/common/cache/manifestCache';
 import {
   getProgressFromCache,
@@ -471,13 +472,16 @@ function settle(resolve, result) {
 }
 
 function logWarn(message, detail) {
+  if (!import.meta.env.DEV) return;
   errorUtils.logWarning(`${LOG_PREFIX} ${message}`, detail);
 }
 
 /** pagehide / beforeunload / visibility hidden 공통 구독 */
-function subscribePageExit(onExit) {
+function subscribePageExit(onExit, { onHidden } = {}) {
   const onVisibility = () => {
-    if (document.visibilityState === 'hidden') onExit();
+    if (document.visibilityState !== 'hidden') return;
+    onHidden?.();
+    onExit();
   };
   window.addEventListener('pagehide', onExit);
   window.addEventListener('beforeunload', onExit);
@@ -696,7 +700,11 @@ export function useProgressAutoSave({
       }
     };
 
-    const unsubscribe = subscribePageExit(handlePageHide);
+    const unsubscribe = subscribePageExit(handlePageHide, {
+      onHidden: () => {
+        void ensureSessionAccessToken();
+      },
+    });
     return () => {
       unsubscribe();
       pagehideFlushedRef.current = false;

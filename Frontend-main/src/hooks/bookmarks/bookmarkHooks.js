@@ -14,8 +14,12 @@ import { resolveReadingLocators } from '../../utils/viewer/viewerSession';
 
 const friendlyError = (err, fallback) => {
   if (!err) return fallback;
-  if (err.status === 404 || err.statusCode === 404) {
+  const status = Number(err.status ?? err.statusCode);
+  if (status === 404) {
     return '북마크 기능이 아직 준비되지 않았거나 연결 경로를 찾을 수 없습니다. 잠시 후 다시 시도해 주세요.';
+  }
+  if (status === 403) {
+    return '북마크에 접근할 권한이 없습니다.';
   }
   const msg = (err.message || '').toLowerCase();
   if (msg.includes('failed to fetch') || msg.includes('network')) {
@@ -55,7 +59,10 @@ export const useBookmarks = (bookId, options = {}) => {
         return { success: false, message: msg };
       }
       const result = onSuccess(response);
-      toast.success(messages.success);
+      toast.success(messages.success, {
+        autoClose: messages.autoClose ?? 2800,
+        className: messages.toastClassName,
+      });
       return result;
     } catch (err) {
       const msg = friendlyError(err, messages.error);
@@ -137,6 +144,8 @@ export const useBookmarks = (bookId, options = {}) => {
           success: '북마크가 삭제되었습니다',
           fail: '북마크 삭제에 실패했습니다.',
           error: '북마크 삭제 중 오류가 발생했습니다.',
+          autoClose: 3200,
+          toastClassName: 'bm-toast-delete',
         }
       ),
     [runMutation]

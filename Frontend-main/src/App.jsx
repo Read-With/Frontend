@@ -3,7 +3,6 @@ import { BrowserRouter as Router, Routes, Route, Navigate, Outlet } from 'react-
 import { useQueryClient } from '@tanstack/react-query';
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
-import { RecoilRoot } from 'recoil';
 import HomePage from './pages/HomePage';
 import OAuthCallback from './components/auth/OAuthCallback';
 import useAuth, { AuthProvider } from './hooks/auth/useAuth';
@@ -82,24 +81,22 @@ const AppContent = () => {
 
 const App = () => {
   return (
-    <RecoilRoot>
-      <Router>
-        <AuthProvider>
-          <AppContent />
-          <ToastContainer
-            position="bottom-center"
-            autoClose={2200}
-            hideProgressBar
-            newestOnTop
-            closeOnClick
-            pauseOnHover
-            draggable={false}
-            theme="light"
-            limit={3}
-          />
-        </AuthProvider>
-      </Router>
-    </RecoilRoot>
+    <Router>
+      <AuthProvider>
+        <AppContent />
+        <ToastContainer
+          position="bottom-center"
+          autoClose={2200}
+          hideProgressBar
+          newestOnTop
+          closeOnClick
+          pauseOnHover
+          draggable={false}
+          theme="light"
+          limit={3}
+        />
+      </AuthProvider>
+    </Router>
   );
 };
 

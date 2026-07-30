@@ -2,7 +2,7 @@ import { memo, useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useParams } from "react-router-dom";
 import {
   processRelations,
-  processRelationTags,
+  normalizeRelationArray,
   extractRadarChartData,
   extractApiBookId,
   undirectedPairKey,
@@ -10,10 +10,12 @@ import {
   GRAPH_LAYOUT_CONSTANTS,
 } from "../../utils/graph/graphCore";
 import { getEventDataByIndex } from "../../utils/graph/graphFetch.js";
+import { hasGraphPayload } from "../../utils/api/graphApi.js";
 import { useTooltipPosition, useClickOutside } from "../../hooks/ui/tooltipHooks";
 import { getUnifiedEventInfoForTooltip } from "../../utils/viewer/viewerSession";
 import { toNumberOrNull } from "../../utils/common/valueUtils.js";
 import { USER_GRAPH_PREFIX } from "../../utils/common/urlUtils";
+import { finitePositivityOrZero } from "../../utils/styles/graphStyles";
 import {
   COLORS,
   mergeRefs,
@@ -22,11 +24,73 @@ import {
 import './RelationGraph.css';
 import RelationAnalysisModal, { PersonSilhouette } from './RelationAnalysisModal';
 
+/** 뷰 전용 — FETCH_STATUS.EMPTY('empty')와 구분 */
+const UI_VIEW_STATUS = Object.freeze({
+  NO_DATA: 'no-data',
+  OK: 'ok',
+  ERROR: 'error',
+  LOADING: 'loading',
+  READY: 'ready',
+  PENDING: 'pending',
+});
+
+const RADAR_EMPTY = Object.freeze({ items: [], status: UI_VIEW_STATUS.NO_DATA });
+const radarOk = (items) => ({
+  items,
+  status: items.length > 0 ? UI_VIEW_STATUS.OK : UI_VIEW_STATUS.NO_DATA,
+});
+const radarError = (message) => ({
+  items: [],
+  status: UI_VIEW_STATUS.ERROR,
+  error: message || '관계 분석 데이터를 만들지 못했습니다.',
+});
+
 const Z_INDEX_TOOLTIP = 99999;
 const SUMMARY = { COLLAPSED: 'collapsed', WARNING: 'warning', CONTENT: 'content' };
+const POV_SPOILER_SESSION_KEY = 'readwith:pov-spoiler-unlocked';
 
 /** 뷰어처럼 key remount 되어도 분석 모달을 유지하기 위한 플래그 */
 let pendingKeepAnalysisOpen = false;
+
+function readPovSpoilerUnlocked() {
+  try {
+    return sessionStorage.getItem(POV_SPOILER_SESSION_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+function unlockPovSpoilerSession() {
+  try {
+    sessionStorage.setItem(POV_SPOILER_SESSION_KEY, '1');
+  } catch {
+    /* ignore */
+  }
+}
+
+function normalizeMatchName(value) {
+  return String(value ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, ' ');
+}
+
+function collectNodeMatchNames(node) {
+  const names = [];
+  const push = (v) => {
+    if (typeof v !== 'string') return;
+    const n = normalizeMatchName(v);
+    if (n) names.push(n);
+  };
+  push(node?.common_name);
+  push(node?.label);
+  push(node?.displayName);
+  push(node?.name);
+  if (Array.isArray(node?.names)) {
+    node.names.forEach(push);
+  }
+  return [...new Set(names)];
+}
 
 function normalizeToString(value) {
   if (value == null) return "";
@@ -42,10 +106,11 @@ function buildProcessedNode(data) {
     : (data?.data || { id: data?.id, label: data?.label });
   if (!raw) return null;
 
+  // personalityText만 표시 (profileText/프롬프트 폴백 금지)
   const description = String(raw.personalityText || raw.description || '').trim();
   return {
     ...raw,
-    names: processRelationTags(raw.names || [], raw.common_name),
+    names: normalizeRelationArray(raw.names || [], raw.common_name),
     displayName: raw.common_name || raw.label || "Unknown",
     hasImage: !!raw.image,
     isMainCharacter: !!raw.isMainCharacter,
@@ -112,7 +177,7 @@ function collectUndirectedRelations(rawRelations, targetNodeId = null) {
       id2,
       relation: rel.relation || ['관계'],
       count: rel.count || rel.strength || 1,
-      positivity: rel.positivity || 0,
+      positivity: finitePositivityOrZero(rel.positivity),
     });
   });
 
@@ -169,13 +234,28 @@ function checkNodeAppearance({ isSidebar, data, node, currentChapter, folderKey,
   }
 }
 
-function resolvePovSummary(node, currentChapter, povSummaries, povError = null) {
-  if (!node) return { text: '인물에 대한 요약 정보가 없습니다.', isError: false };
+/**
+ * @returns {{ text: string, status: 'no-data'|'loading'|'error'|'ready'|'pending' }}
+ */
+function resolvePovSummary(
+  node,
+  currentChapter,
+  povSummaries,
+  povError = null,
+  { isLoading = false, povCached = null } = {},
+) {
+  if (!node) {
+    return { text: '해당 챕터에서는 해당 캐릭터의 등장 비중이 낮아 별도의 분석 내용이 제공되지 않습니다.', status: UI_VIEW_STATUS.NO_DATA };
+  }
+
+  if (isLoading) {
+    return { text: '시점 요약을 불러오는 중…', status: UI_VIEW_STATUS.LOADING };
+  }
 
   if (povError) {
     return {
       text: typeof povError === 'string' ? povError : '관점 요약을 불러오지 못했습니다.',
-      isError: true,
+      status: UI_VIEW_STATUS.ERROR,
     };
   }
 
@@ -186,16 +266,26 @@ function resolvePovSummary(node, currentChapter, povSummaries, povError = null) 
       ? list.find((s) => Number(s.characterId) === nodeId)
       : null;
     if (!match) {
-      const names = [node.common_name, node.label, node.displayName]
-        .filter((n) => typeof n === 'string' && n.trim() !== '');
-      match = list.find((s) => names.some((n) => n === s.characterName));
+      const names = collectNodeMatchNames(node);
+      match = list.find((s) => names.includes(normalizeMatchName(s.characterName)));
     }
-    if (match?.summaryText) return { text: match.summaryText, isError: false };
+    const summaryText = typeof match?.summaryText === 'string' ? match.summaryText.trim() : '';
+    if (summaryText) {
+      return { text: summaryText, status: UI_VIEW_STATUS.READY };
+    }
+  }
+
+  const chapterLabel = currentChapter || 1;
+  if (povCached === false) {
+    return {
+      text: `${node.displayName}의 챕터 ${chapterLabel} 시점 요약이 아직 생성·캐시되지 않았습니다.`,
+      status: UI_VIEW_STATUS.PENDING,
+    };
   }
 
   return {
-    text: `${node.displayName}에 대한 ${currentChapter || 1}장 관점 요약이 아직 준비되지 않았습니다.`,
-    isError: false,
+    text: `${node.displayName}에 대한 챕터 ${chapterLabel} 시점 요약이 아직 준비되지 않았습니다.`,
+    status: UI_VIEW_STATUS.PENDING,
   };
 }
 
@@ -207,10 +297,11 @@ function buildRadarChartData({
   folderKey,
   eventNum,
 }) {
-  if (!node?.id || !currentChapter) return [];
+  if (!node?.id || !currentChapter) return RADAR_EMPTY;
 
   try {
-    if (apiBookGraphData?.relations && apiBookGraphData?.characters) {
+    // 빈 []도 truthy이므로 hasGraphPayload로 실제 데이터가 있을 때만 API 소스 사용
+    if (hasGraphPayload(apiBookGraphData)) {
       const { relations, characters } = apiBookGraphData;
       const bookElements = characters.map((char) => {
         const charName = char.common_name || char.name || '';
@@ -224,16 +315,17 @@ function buildRadarChartData({
       });
 
       const targetNodeId = node.id;
-
-      return extractRadarChartData(
-        targetNodeId,
-        collectUndirectedRelations(relations, targetNodeId),
-        bookElements,
-        8,
+      return radarOk(
+        extractRadarChartData(
+          targetNodeId,
+          collectUndirectedRelations(relations, targetNodeId),
+          bookElements,
+          8,
+        ),
       );
     }
 
-    if (!elements?.length) return [];
+    if (!elements?.length) return RADAR_EMPTY;
 
     const edgeRels = elements
       .filter((el) => el?.data?.source && el?.data?.target)
@@ -242,80 +334,34 @@ function buildRadarChartData({
         id2: el.data.target,
         relation: el.data.relation || ['관계'],
         count: el.data.count || el.data.strength || 1,
-        positivity: el.data.positivity || 0,
+        positivity: finitePositivityOrZero(el.data.positivity),
       }));
 
     if (edgeRels.length > 0) {
       const nodeElements = elements.filter((el) => isGraphNodeElement(el));
-      return extractRadarChartData(
-        node.id,
-        collectUndirectedRelations(edgeRels, node.id),
-        nodeElements,
-        8,
+      return radarOk(
+        extractRadarChartData(
+          node.id,
+          collectUndirectedRelations(edgeRels, node.id),
+          nodeElements,
+          8,
+        ),
       );
     }
 
-    if (!folderKey) return [];
+    if (!folderKey) return RADAR_EMPTY;
     const json = getEventDataByIndex(folderKey, currentChapter, eventNum);
-    if (!json?.relations) return [];
+    if (!json?.relations) return RADAR_EMPTY;
 
     const relations = collectUndirectedRelations(json.relations);
     const ids = new Set(relations.flatMap((rel) => [String(rel.id1), String(rel.id2)]));
     const filtered = elements.filter(
       (el) => !el.data.source && ids.has(String(el.data.id)),
     );
-    return extractRadarChartData(node.id, relations, filtered, 8);
-  } catch {
-    return [];
+    return radarOk(extractRadarChartData(node.id, relations, filtered, 8));
+  } catch (err) {
+    return radarError(err?.message);
   }
-}
-
-function buildRecommendedNodes({ elements, apiBookGraphData, excludeId, limit = 3 }) {
-  const exclude = excludeId != null ? String(excludeId) : null;
-  const degree = new Map();
-
-  const bump = (id) => {
-    const key = String(id);
-    if (exclude && key === exclude) return;
-    degree.set(key, (degree.get(key) || 0) + 1);
-  };
-
-  if (apiBookGraphData?.relations?.length) {
-    apiBookGraphData.relations.forEach((rel) => {
-      bump(rel.id1 ?? rel.source);
-      bump(rel.id2 ?? rel.target);
-    });
-  } else if (Array.isArray(elements)) {
-    elements.forEach((el) => {
-      if (!el?.data?.source || !el?.data?.target) return;
-      bump(el.data.source);
-      bump(el.data.target);
-    });
-  }
-
-  const nameById = new Map();
-  if (apiBookGraphData?.characters?.length) {
-    apiBookGraphData.characters.forEach((char) => {
-      nameById.set(String(char.id), char.common_name || char.name || `인물 ${char.id}`);
-    });
-  }
-  if (Array.isArray(elements)) {
-    elements.forEach((el) => {
-      if (!isGraphNodeElement(el)) return;
-      const id = String(el.data.id);
-      nameById.set(id, el.data.common_name || el.data.label || nameById.get(id) || `인물 ${id}`);
-    });
-  }
-
-  return [...degree.entries()]
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, limit)
-    .map(([id, count]) => ({
-      id,
-      name: nameById.get(id) || `인물 ${id}`,
-      positivity: 0,
-      relationTags: [`연결 ${count}`],
-    }));
 }
 
 function handleProfileImageError(e) {
@@ -465,7 +511,10 @@ function UnifiedNodeInfo({
   prevValidEvent = null,
   povSummaries = null,
   povError = null,
+  povIsLoading = false,
+  povCached = null,
   onRetryPov = null,
+  showPovSummary = true,
   apiBookGraphData = null,
   onSelectRelatedNode = null,
   chapterRailWidth = null,
@@ -478,6 +527,7 @@ function UnifiedNodeInfo({
 
   const [appeared, setAppeared] = useState(false);
   const [error, setError] = useState(null);
+  const [spoilerUnlocked, setSpoilerUnlocked] = useState(readPovSpoilerUnlocked);
   const [summaryStage, setSummaryStage] = useState(SUMMARY.COLLAPSED);
   const [isModalOpen, setIsModalOpen] = useState(() => {
     if (pendingKeepAnalysisOpen) {
@@ -534,8 +584,13 @@ function UnifiedNodeInfo({
   );
 
   const eventInfo = useMemo(
-    () => getUnifiedEventInfoForTooltip({ currentEvent, prevValidEvent, eventNum }),
-    [currentEvent, prevValidEvent, eventNum],
+    () => getUnifiedEventInfoForTooltip({
+      currentEvent,
+      prevValidEvent,
+      eventNum,
+      currentChapter,
+    }),
+    [currentEvent, prevValidEvent, eventNum, currentChapter],
   );
 
   useEffect(() => {
@@ -552,13 +607,37 @@ function UnifiedNodeInfo({
     setError(result.error);
   }, [data, node, currentChapter, eventInfo, folderKey, elements, isSidebar]);
 
-  const { text: summaryText, isError: summaryIsError } = useMemo(
-    () => resolvePovSummary(node, currentChapter, povSummaries, povError),
-    [node, currentChapter, povSummaries, povError],
+  const { text: summaryText, status: summaryStatus } = useMemo(
+    () =>
+      resolvePovSummary(node, currentChapter, povSummaries, povError, {
+        isLoading: povIsLoading,
+        povCached,
+      }),
+    [node, currentChapter, povSummaries, povError, povIsLoading, povCached],
   );
+  const summaryIsError = summaryStatus === UI_VIEW_STATUS.ERROR;
+  const summaryIsLoading = summaryStatus === UI_VIEW_STATUS.LOADING;
+  const summaryIsPending = summaryStatus === UI_VIEW_STATUS.PENDING;
+  const chapterSummaryTitle =
+    currentChapter != null && Number(currentChapter) >= 1
+      ? `챕터 ${currentChapter} 시점 요약`
+      : '해당 인물 시점의 요약';
 
-  const radarChartData = useMemo(() => {
-    if (!isSidebar) return [];
+  const openSummarySection = useCallback(() => {
+    setSummaryStage((s) => {
+      if (s !== SUMMARY.COLLAPSED) return SUMMARY.COLLAPSED;
+      return spoilerUnlocked ? SUMMARY.CONTENT : SUMMARY.WARNING;
+    });
+  }, [spoilerUnlocked]);
+
+  const confirmSpoiler = useCallback(() => {
+    unlockPovSpoilerSession();
+    setSpoilerUnlocked(true);
+    setSummaryStage(SUMMARY.CONTENT);
+  }, []);
+
+  const radarResult = useMemo(() => {
+    if (!isSidebar) return RADAR_EMPTY;
     return buildRadarChartData({
       node,
       currentChapter,
@@ -569,27 +648,114 @@ function UnifiedNodeInfo({
     });
   }, [isSidebar, node, currentChapter, folderKey, elements, apiBookGraphData, eventInfo]);
 
+  const radarChartData = radarResult.items;
+  const radarLoadError = radarResult.status === UI_VIEW_STATUS.ERROR ? radarResult.error : null;
+
   const connectionKind = useMemo(() => {
     if (!isSidebar) return 'no_connections';
+    if (radarResult.status === UI_VIEW_STATUS.ERROR) return 'load_error';
     const n = radarChartData.length;
     if (n === 0) return 'no_connections';
     if (n === 1) return 'single_connection';
     if (n === 2) return 'pair_connections';
     return 'sufficient_connections';
-  }, [isSidebar, radarChartData]);
-
-  const recommendedNodes = useMemo(() => {
-    if (!isSidebar || connectionKind !== 'no_connections') return [];
-    return buildRecommendedNodes({
-      elements,
-      apiBookGraphData,
-      excludeId: node?.id,
-      limit: 3,
-    });
-  }, [isSidebar, connectionKind, elements, apiBookGraphData, node?.id]);
+  }, [isSidebar, radarResult.status, radarChartData]);
 
   const isWarning = summaryStage === SUMMARY.WARNING;
   const isContent = summaryStage === SUMMARY.CONTENT;
+
+  const povSummarySection = (
+    <div
+      className={`sidebar-section tooltip-summary-section tooltip-summary-section--${
+        isWarning ? 'warning' : isContent ? 'content' : 'collapsed'
+      }`}
+      role="region"
+      aria-label="인물 시점 요약"
+    >
+      <button
+        type="button"
+        onClick={openSummarySection}
+        className="summary-toggle-btn"
+      >
+        <h4 className="tooltip-section-title">{chapterSummaryTitle}</h4>
+        <span
+          className={`tooltip-summary-chevron${
+            summaryStage !== SUMMARY.COLLAPSED ? ' tooltip-summary-chevron--open' : ''
+          }`}
+        >
+          ▼
+        </span>
+      </button>
+
+      <div
+        className={`tooltip-collapsible tooltip-collapsible--warning${
+          isWarning ? ' is-open' : ''
+        }`}
+      >
+        <div className="tooltip-spoiler-body">
+          <h3 className={`tooltip-spoiler-title${isWarning ? ' is-fading' : ''}`}>
+            스포일러 포함
+          </h3>
+          <p className={`tooltip-spoiler-text${isWarning ? ' is-fading' : ''}`}>
+            스토리의 중요한 내용을 담고 있습니다.
+            <br />
+            내용을 확인하시겠습니까?
+          </p>
+          <div className={`tooltip-spoiler-actions${isWarning ? ' is-fading' : ''}`}>
+            <ActionButton
+              onClick={() => setSummaryStage(SUMMARY.COLLAPSED)}
+              ariaLabel="접기"
+              title="접기"
+            >
+              취소
+            </ActionButton>
+            <ActionButton
+              variant="primary"
+              onClick={confirmSpoiler}
+              ariaLabel="스포일러 내용 확인하기"
+            >
+              확인하고 보기
+            </ActionButton>
+          </div>
+        </div>
+      </div>
+
+      <div
+        className={`tooltip-collapsible tooltip-collapsible--content${
+          isContent ? ' is-open' : ''
+        }`}
+        aria-hidden={!isContent}
+      >
+        <div className="tooltip-summary-content">
+          <div className="tooltip-summary-quote">
+            {summaryIsLoading ? (
+              <p className="tooltip-summary-text tooltip-summary-text--loading" aria-live="polite">
+                <span className="tooltip-summary-spinner" aria-hidden />
+                {summaryText}
+              </p>
+            ) : (
+              <p
+                className={`tooltip-summary-text${isContent ? ' is-animated' : ''}${
+                  summaryIsError ? ' tooltip-summary-text--error' : ''
+                }${summaryIsPending ? ' tooltip-summary-text--pending' : ''}`}
+              >
+                {summaryText}
+              </p>
+            )}
+            {summaryIsError && typeof onRetryPov === 'function' && (
+              <button
+                type="button"
+                className="tooltip-action-btn tooltip-action-btn--secondary"
+                onClick={onRetryPov}
+              >
+                다시 시도
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 
   const floatingShell = {
     shellRef: mergeRefs(tooltipRef, clickOutsideRef),
@@ -607,7 +773,7 @@ function UnifiedNodeInfo({
       chapterScopeLabel={currentChapter != null ? `챕터 1–${currentChapter} 누적` : null}
       radarChartData={radarChartData}
       connectionKind={connectionKind}
-      recommendedNodes={recommendedNodes}
+      loadError={radarLoadError}
       onClose={closeModal}
       onSelectRelatedNode={onSelectRelatedNode ? handleSelectRelatedNode : null}
       returnFocusRef={analysisBtnRef}
@@ -721,6 +887,7 @@ function UnifiedNodeInfo({
         <div className="tooltip-content business-card">
           <TooltipCloseButton onClose={onClose} />
           {nodeHeaderAndDescription}
+          {showPovSummary ? povSummarySection : null}
         </div>
       </NodeTooltipShell>
     );
@@ -733,94 +900,7 @@ function UnifiedNodeInfo({
       <div className="graph-sidebar-body">
         {nodeHeaderAndDescription}
 
-        <div
-          className={`sidebar-section tooltip-summary-section tooltip-summary-section--${
-            isWarning ? 'warning' : isContent ? 'content' : 'collapsed'
-          }`}
-          role="region"
-          aria-label="인물 시점 요약"
-        >
-          <button
-            type="button"
-            onClick={() =>
-              setSummaryStage((s) =>
-                s === SUMMARY.COLLAPSED ? SUMMARY.WARNING : SUMMARY.COLLAPSED
-              )
-            }
-            className="summary-toggle-btn"
-          >
-            <h4 className="tooltip-section-title">해당 인물 시점의 요약</h4>
-            <span
-              className={`tooltip-summary-chevron${
-                summaryStage !== SUMMARY.COLLAPSED ? ' tooltip-summary-chevron--open' : ''
-              }`}
-            >
-              ▼
-            </span>
-          </button>
-
-          <div
-            className={`tooltip-collapsible tooltip-collapsible--warning${
-              isWarning ? ' is-open' : ''
-            }`}
-          >
-            <div className="tooltip-spoiler-body">
-              <h3 className={`tooltip-spoiler-title${isWarning ? ' is-fading' : ''}`}>
-                스포일러 포함
-              </h3>
-              <p className={`tooltip-spoiler-text${isWarning ? ' is-fading' : ''}`}>
-                스토리의 중요한 내용을 담고 있습니다.
-                <br />
-                내용을 확인하시겠습니까?
-              </p>
-              <div className={`tooltip-spoiler-actions${isWarning ? ' is-fading' : ''}`}>
-                <ActionButton
-                  onClick={() => setSummaryStage(SUMMARY.COLLAPSED)}
-                  ariaLabel="접기"
-                  title="접기"
-                >
-                  취소
-                </ActionButton>
-                <ActionButton
-                  variant="primary"
-                  onClick={() => setSummaryStage(SUMMARY.CONTENT)}
-                  ariaLabel="스포일러 내용 확인하기"
-                >
-                  확인하고 보기
-                </ActionButton>
-              </div>
-            </div>
-          </div>
-
-          <div
-            className={`tooltip-collapsible tooltip-collapsible--content${
-              isContent ? ' is-open' : ''
-            }`}
-            aria-hidden={!isContent}
-          >
-            <div className="tooltip-summary-content">
-              <div className="tooltip-summary-quote">
-                <p
-                  className={`tooltip-summary-text${isContent ? ' is-animated' : ''}${
-                    summaryIsError ? ' tooltip-summary-text--error' : ''
-                  }`}
-                >
-                  {summaryText}
-                </p>
-                {summaryIsError && typeof onRetryPov === 'function' && (
-                  <button
-                    type="button"
-                    className="tooltip-action-btn tooltip-action-btn--secondary"
-                    onClick={onRetryPov}
-                    style={{ marginTop: 8 }}
-                  >
-                    다시 시도
-                  </button>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
+        {showPovSummary ? povSummarySection : null}
 
         <RelationAnalysisCta
           node={node}

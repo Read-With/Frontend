@@ -8,20 +8,24 @@ import {
 } from '../common/cache/manifestCache.js';
 import {
   toPositiveNumberOrNull,
+  toPositiveNumberFromId,
   toFiniteNumber,
+  toTrimmedStringOrNull,
+  asArray,
 } from '../common/valueUtils';
 import {
   formatFallbackChapterLabel,
   resolveChapterTitleMeta,
   stripSharedListPrefix,
   stripChapterOrdinalPrefix,
+  eventUtils,
 } from '../viewer/viewerCore.js';
-import { registerCache, recordCacheAccess, enforceCacheSizeLimit } from '../common/cache/cacheManager';
-import { clearStyleCache } from '../styles/relationStyles';
 
 /* ─── 요소 ID · 타입 판별 ─── */
 
 const API_PREFIX = 'api:';
+
+export const directedEdgeElementId = (fromId, toId) => `${String(fromId)}->${String(toId)}`;
 
 export const extractApiBookId = (folderKeyOrFilename) => {
   if (!folderKeyOrFilename) return null;
@@ -80,7 +84,231 @@ export function normalizeRelationArray(relation, label = '') {
   return uniqueStrings(values);
 }
 
-/** 챕터 마지막 이벤트 인덱스 (manifest 힌트, UI·범위용) */
+/** 배열에서 가장 최근에 추가된(마지막) 라벨 문구 */
+export function pickLastRelationLabel(labels) {
+  if (!Array.isArray(labels) || labels.length === 0) return '';
+  for (let i = labels.length - 1; i >= 0; i -= 1) {
+    const text = String(labels[i] ?? '').trim();
+    if (text) return text;
+  }
+  return '';
+}
+
+/** 라벨 history 조회/머지용 정규 키 (대소문자 무시) */
+function labelHistoryLookupKey(text) {
+  return String(text ?? '').trim().toLowerCase();
+}
+
+/** eventId·ordinal에서 상대 순서 힌트 (작을수록 이른 등장) */
+function labelEventOrderHint(eventId, ordinal) {
+  // Number(null) === 0 이므로 null ordinal은 무시
+  if (ordinal != null && Number.isFinite(Number(ordinal))) return Number(ordinal);
+  return toPositiveNumberFromId(eventId);
+}
+
+function pickEarlierLabelFirst(a, b) {
+  const ordA = labelEventOrderHint(a?.firstEventId, a?.firstEventOrdinal);
+  const ordB = labelEventOrderHint(b?.firstEventId, b?.firstEventOrdinal);
+  if (ordA != null && ordB != null) return ordA <= ordB ? a : b;
+  if (ordA != null) return a;
+  if (ordB != null) return b;
+  if (a?.firstPositivity != null) return a;
+  return b;
+}
+
+function pickLaterLabelLast(a, b) {
+  const ordA = labelEventOrderHint(a?.lastEventId, a?.lastEventOrdinal);
+  const ordB = labelEventOrderHint(b?.lastEventId, b?.lastEventOrdinal);
+  if (ordA != null && ordB != null) return ordA >= ordB ? a : b;
+  if (ordB != null) return b;
+  if (ordA != null) return a;
+  if (b?.lastPositivity != null) return b;
+  return a;
+}
+
+function normalizeLabelHistoryMeta(text, meta) {
+  const ordinalFirst =
+    meta?.firstEventOrdinal != null
+      ? Number(meta.firstEventOrdinal)
+      : labelEventOrderHint(meta?.firstEventId, null);
+  const ordinalLast =
+    meta?.lastEventOrdinal != null
+      ? Number(meta.lastEventOrdinal)
+      : labelEventOrderHint(meta?.lastEventId, null);
+  return {
+    text: meta?.text || text,
+    firstEventId: meta?.firstEventId ?? null,
+    lastEventId: meta?.lastEventId ?? null,
+    firstPositivity: meta?.firstPositivity != null ? Number(meta.firstPositivity) : null,
+    lastPositivity: meta?.lastPositivity != null ? Number(meta.lastPositivity) : null,
+    firstEventOrdinal: Number.isFinite(ordinalFirst) ? ordinalFirst : null,
+    lastEventOrdinal: Number.isFinite(ordinalLast) ? ordinalLast : null,
+  };
+}
+
+/** 양방향·중복 키를 대소문자 무시로 합치고, 더 이른 first / 더 늦은 last 유지 */
+export function mergeRelationLabelHistory(a, b) {
+  const byKey = new Map();
+
+  const ingest = (history) => {
+    for (const [text, meta] of Object.entries(history && typeof history === 'object' ? history : {})) {
+      if (!text || !meta || typeof meta !== 'object') continue;
+      const key = labelHistoryLookupKey(text);
+      const normalized = normalizeLabelHistoryMeta(text, meta);
+      const prev = byKey.get(key);
+      if (!prev) {
+        byKey.set(key, normalized);
+        continue;
+      }
+      const firstSrc = pickEarlierLabelFirst(prev, normalized);
+      const lastSrc = pickLaterLabelLast(prev, normalized);
+      byKey.set(key, {
+        text: prev.text || normalized.text || text,
+        firstEventId: firstSrc.firstEventId ?? null,
+        lastEventId: lastSrc.lastEventId ?? null,
+        firstPositivity:
+          firstSrc.firstPositivity != null ? firstSrc.firstPositivity : lastSrc.firstPositivity,
+        lastPositivity:
+          lastSrc.lastPositivity != null ? lastSrc.lastPositivity : firstSrc.lastPositivity,
+        firstEventOrdinal: firstSrc.firstEventOrdinal ?? null,
+        lastEventOrdinal: lastSrc.lastEventOrdinal ?? null,
+      });
+    }
+  };
+
+  ingest(a);
+  ingest(b);
+
+  const out = {};
+  for (const meta of byKey.values()) {
+    out[meta.text] = meta;
+  }
+  return out;
+}
+
+/**
+ * deltas accumulate용: 현재 이벤트 라벨을 history에 증분 반영
+ * apply 순서 기준 — last*는 항상 현재 이벤트로 덮음 (ordinal 비교 없음)
+ */
+export function appendRelationLabelHistory(prevHistory, labels, eventId, positivity) {
+  const next = { ...(prevHistory && typeof prevHistory === 'object' ? prevHistory : {}) };
+  const pos = Number.isFinite(Number(positivity)) ? Number(positivity) : 0;
+  const ordinal = toPositiveNumberFromId(eventId);
+
+  const findExistingKey = (text) => {
+    if (Object.prototype.hasOwnProperty.call(next, text)) return text;
+    const lower = text.toLowerCase();
+    return Object.keys(next).find((k) => k.toLowerCase() === lower) ?? null;
+  };
+
+  for (const raw of asArray(labels)) {
+    const text = String(raw ?? '').trim();
+    if (!text) continue;
+    const existingKey = findExistingKey(text);
+    if (!existingKey) {
+      next[text] = {
+        text,
+        firstEventId: eventId,
+        lastEventId: eventId,
+        firstPositivity: pos,
+        lastPositivity: pos,
+        firstEventOrdinal: ordinal,
+        lastEventOrdinal: ordinal,
+      };
+      continue;
+    }
+    const existing = next[existingKey];
+    next[existingKey] = {
+      ...existing,
+      text: existing.text || text,
+      lastEventId: eventId ?? existing.lastEventId,
+      lastPositivity: pos,
+      lastEventOrdinal: ordinal ?? existing.lastEventOrdinal ?? null,
+    };
+  }
+  return next;
+}
+
+function indexLabelHistoryByLower(history) {
+  const map = new Map();
+  if (!history || typeof history !== 'object') return map;
+  for (const [text, meta] of Object.entries(history)) {
+    if (!meta || typeof meta !== 'object') continue;
+    const key = labelHistoryLookupKey(text);
+    if (!map.has(key)) map.set(key, meta);
+  }
+  return map;
+}
+
+/**
+ * 툴팁용 관계 태그 + 시점(tone) + 긍정도 색
+ * tone: added(현재 이벤트에서 최초 추가) | changed(이전에도 있고 현재에 재등장/갱신) | prior(과거)
+ * 색: 라벨별 첫 등장 시점 positivity로 고정 (이후 간선 긍정도 변화와 무관)
+ */
+export function buildRelationTagDisplayItems({
+  relation,
+  label,
+  labelHistory = null,
+  latestLabels = null,
+  currentEventId = null,
+  fallbackPositivity = null,
+} = {}) {
+  const tags = normalizeRelationArray(relation, label);
+  const history = labelHistory && typeof labelHistory === 'object' ? labelHistory : {};
+  const historyByLower = indexLabelHistoryByLower(history);
+  const latestSet = new Set(
+    normalizeRelationArray(latestLabels).map((t) => t.toLowerCase())
+  );
+  const currentId = currentEventId != null ? String(currentEventId) : null;
+  const fallback =
+    fallbackPositivity == null || fallbackPositivity === ''
+      ? null
+      : Number(fallbackPositivity);
+
+  return tags.map((text, index) => {
+    const meta = history[text] ?? historyByLower.get(labelHistoryLookupKey(text)) ?? null;
+    const inLatest = latestSet.has(text.toLowerCase());
+    let tone = 'prior';
+    if (meta && currentId) {
+      const firstId = meta.firstEventId != null ? String(meta.firstEventId) : null;
+      const lastId = meta.lastEventId != null ? String(meta.lastEventId) : null;
+      if (lastId === currentId) {
+        tone = firstId === currentId ? 'added' : 'changed';
+      }
+    } else if (!meta && inLatest) {
+      // history 없는 옛 캐시: 이번 델타 라벨이면 현재 간선값이 첫등장에 가깝다고 본다
+      tone = index === tags.length - 1 ? 'changed' : 'added';
+    }
+
+    // 라벨별 첫 등장 색 고정. history 없거나 first만 비면:
+    // - 이번 추가(added) → 현재 간선 positivity (첫등장 ≈ 현재)
+    // - 그 외 → lastPositivity → 간선 fallback
+    let positivityRaw = meta?.firstPositivity;
+    if (positivityRaw == null) {
+      if (!meta && tone === 'added') {
+        positivityRaw = fallback;
+      } else {
+        positivityRaw = meta?.lastPositivity ?? fallback;
+      }
+    }
+    const positivity =
+      positivityRaw == null || Number.isNaN(Number(positivityRaw))
+        ? 0
+        : Number(positivityRaw);
+
+    return {
+      text,
+      tone,
+      positivity,
+      firstEventId: meta?.firstEventId ?? null,
+      lastEventId: meta?.lastEventId ?? null,
+      firstPositivity: meta?.firstPositivity ?? null,
+      lastPositivity: meta?.lastPositivity ?? null,
+    };
+  });
+}
+
+/** 챕터 마지막 이벤트 인덱스 (manifest 힌트, UI·범위용). 없으면 null — 가짜 1 금지 */
 export const calculateLastEventForChapter = ({
   manifestChapters,
   manifestBookId,
@@ -97,17 +325,16 @@ export const calculateLastEventForChapter = ({
     }
   }
 
-  if (!manifestChapters?.length) return 1;
+  if (!manifestChapters?.length) return null;
 
   const chapterNum = Number(chapter);
   const chapterInfo = manifestChapters.find(
     (ch) => ch && typeof ch === 'object' && Number(ch.idx) === chapterNum
   );
 
-  if (!chapterInfo) return 1;
+  if (!chapterInfo) return null;
 
-  const resolved = getLastEventIdxFromChapterData(chapterInfo);
-  return resolved != null && resolved >= 1 ? resolved : 1;
+  return getLastEventIdxFromChapterData(chapterInfo);
 };
 
 export const GRAPH_LAYOUT_CONSTANTS = {
@@ -210,15 +437,29 @@ export function normalizeRelation(raw) {
     const positivity = raw.positivity;
     const weight = raw.weight ?? 1;
     const count = raw.count;
-    const relationSource =
-      (Array.isArray(raw.relation) && raw.relation.length > 0 && raw.relation) ||
-      (Array.isArray(raw.latestLabels) && raw.latestLabels.length > 0 && raw.latestLabels) ||
-      raw.relation;
-    const relationArray = normalizeRelationArray(relationSource);
+    const relationArray = normalizeRelationArray(raw.relation);
+    const latestArray = normalizeRelationArray(raw.latestLabels);
+    const tags = relationArray.length > 0 ? relationArray : latestArray;
+    // 겉 라벨: 이번 델타 latestLabels 마지막 → 누적 relation 마지막 → raw.label
+    const label =
+      pickLastRelationLabel(latestArray) ||
+      pickLastRelationLabel(tags) ||
+      (typeof raw.label === 'string' ? raw.label.trim() : '') ||
+      '';
 
-    const label = relationArray[0] || (typeof raw.label === 'string' ? raw.label : '');
-
-    return { id1, id2, positivity, weight, count, relation: relationArray, label };
+    return {
+      id1,
+      id2,
+      positivity,
+      weight,
+      count,
+      relation: tags,
+      latestLabels: latestArray,
+      labelHistory:
+        raw.labelHistory && typeof raw.labelHistory === 'object' ? raw.labelHistory : {},
+      latestEventId: raw.latestEventId ?? null,
+      label,
+    };
   } catch {
     return null;
   }
@@ -273,6 +514,11 @@ export function relationEventMetaPassthrough(raw) {
   };
 }
 
+/** manifest / structure / delta 이벤트에서 eventId 추출 */
+export function resolveManifestEventId(ev) {
+  return toTrimmedStringOrNull(eventUtils.resolveEventId(ev) ?? ev?.eventId ?? ev?.id);
+}
+
 export function processRelations(relations) {
   if (!Array.isArray(relations) || relations.length === 0) {
     return [];
@@ -289,49 +535,14 @@ export function processRelations(relations) {
         relation: r.relation,
         weight: r.weight,
         count: r.count,
+        latestLabels: r.latestLabels,
+        labelHistory: r.labelHistory,
+        latestEventId: r.latestEventId,
+        label: r.label,
         ...relationEventMetaPassthrough(raw),
       }));
   } catch {
     return [];
-  }
-}
-
-const relationCache = new Map();
-registerCache('relationCache', relationCache, { maxSize: 1000, ttl: 600000 }); // 10분 TTL
-
-/** 관계 태그 정규화 (캐시) */
-export function processRelationTags(relation, label) {
-  try {
-    if (relation === undefined && label === undefined) {
-      return [];
-    }
-
-    const relationStr = Array.isArray(relation) ? relation.join('|') : String(relation || '');
-    const labelStr = String(label || '');
-    const cacheKey = `${relationStr}::${labelStr}`;
-
-    recordCacheAccess('relationCache');
-
-    if (relationCache.has(cacheKey)) {
-      return relationCache.get(cacheKey);
-    }
-
-    const result = normalizeRelationArray(relation, label);
-    relationCache.set(cacheKey, result);
-    enforceCacheSizeLimit('relationCache');
-    return result;
-  } catch {
-    return [];
-  }
-}
-
-/** 관계·스타일 캐시 일괄 정리 (툴팁 닫을 때) */
-export function cleanupRelationUtils() {
-  try {
-    relationCache.clear();
-    clearStyleCache();
-  } catch {
-    /* ignore */
   }
 }
 
@@ -377,11 +588,7 @@ export const extractRadarChartData = (nodeId, relations, elements, maxDisplay = 
 
 /* ─── 인물 표시 이름 (from graphCharacterNames) ─── */
 
-function asArray(value) {
-  return Array.isArray(value) ? value : [];
-}
-
-export function normalizeCharacterId(value) {
+function normalizeCharacterId(value) {
   if (value == null || value === '') return null;
   const numId = Number(value);
   if (!Number.isFinite(numId)) return null;
@@ -443,7 +650,7 @@ export function rememberCharacterDisplayName(bookId, characterId, displayName) {
   map.set(id, String(displayName).trim());
 }
 
-export function rememberCharacterDisplayNames(bookId, characters) {
+function rememberCharacterDisplayNames(bookId, characters) {
   asArray(characters).forEach((char) => {
     const id = extractCharacterId(char);
     const name = pickCharacterDisplayName(char);
@@ -470,7 +677,7 @@ export function buildManifestCharacterNameLookup(bookId) {
 }
 
 /** payload·manifest·세션 메모리를 합쳐 ID→이름 룩업 생성 */
-export function buildCharacterDisplayNameLookup(bookId, characters = null) {
+function buildCharacterDisplayNameLookup(bookId, characters = null) {
   const lookup = buildManifestCharacterNameLookup(bookId);
   const memory = getMemoryMap(bookId);
   if (memory) {
@@ -486,7 +693,7 @@ export function buildCharacterDisplayNameLookup(bookId, characters = null) {
   return lookup;
 }
 
-export function resolveCharacterDisplayName(characterOrId, { bookId, lookup = null } = {}) {
+function resolveCharacterDisplayName(characterOrId, { bookId, lookup = null } = {}) {
   const id =
     characterOrId != null && typeof characterOrId === 'object'
       ? extractCharacterId(characterOrId)

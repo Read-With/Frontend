@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { Heart, BookOpen, Network, MoreVertical, Info, Clock, Trash2, X } from 'lucide-react';
 import BookDetailModal, { AuthenticatedImage } from './BookDetailModal';
 import './BookLibrary.css';
-import { ensureGraphBookCache } from '../../utils/graph/graphFetch';
+import { ensureGraphBookCache } from '../../utils/graph/graphModel';
 import { USER_VIEWER_PREFIX, USER_GRAPH_PREFIX } from '../../utils/common/urlUtils';
 import {
   formatLibraryRelativeDate,
