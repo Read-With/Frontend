@@ -3,6 +3,7 @@ import PropTypes from "prop-types";
 import cytoscape from "cytoscape";
 import {
   detectAndResolveOverlap,
+  OVERLAP_RESOLVE,
   buildElementsGraphFingerprint,
   buildElementsStructureFingerprint,
   visualElementSignature,
@@ -294,7 +295,10 @@ const CytoscapeGraphUnified = ({
       if (overlapTimeoutId) window.clearTimeout(overlapTimeoutId);
       overlapTimeoutId = window.setTimeout(() => {
         overlapTimeoutId = 0;
-        detectAndResolveOverlap(cyInstance);
+        detectAndResolveOverlap(cyInstance, OVERLAP_RESOLVE.FALLBACK_NODE_SIZE, {
+          maxIterations: OVERLAP_RESOLVE.MAX_ITERATIONS_LIGHT,
+          padding: OVERLAP_RESOLVE.PADDING,
+        });
         syncReciprocalPairJunctionOffsets(cyInstance, { immediate: true });
       }, 50);
     };
@@ -471,7 +475,10 @@ const CytoscapeGraphUnified = ({
       const containerWidth = containerRef.current?.clientWidth || 800;
       const containerHeight = containerRef.current?.clientHeight || 600;
       if (nodesToAdd.length > 0) {
-        calculateSpiralPlacement(nodesToAdd, placedPositions, containerWidth, containerHeight);
+        // 기존 그래프에 붙일 때만 스파이럴. 최초(빈 그래프)는 buildVisibleNodes 좌표를 cose 시드로 유지
+        if (hadExistingGraph) {
+          calculateSpiralPlacement(nodesToAdd, placedPositions, containerWidth, containerHeight);
+        }
         cy.add(nodesToAdd);
       }
       if (edgesToAdd.length > 0) {

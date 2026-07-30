@@ -14,14 +14,31 @@ import {
   openTooltipFromTap,
   resolveGraphTooltipAnchor,
   syncReciprocalPairJunctionOffsets,
+  runPresetLayout,
+  runCoseBilkentLayout,
 } from '../../utils/graph/graphCy';
-import { detectAndResolveOverlap } from '../../utils/graph/graphModel';
-import { PRESET_LAYOUT } from '../../utils/styles/graphStyles';
+import { detectAndResolveOverlap, OVERLAP_RESOLVE } from '../../utils/graph/graphModel';
 import { GRAPH_ZOOM } from '../../utils/graph/graphCore.js';
 import { useLatestRef } from '../common/hooksShared';
 
 function toCyId(value) {
   return String(value);
+}
+
+function elementDataIds(elements) {
+  return (Array.isArray(elements) ? elements : [])
+    .map((el) => el?.data?.id)
+    .filter((id) => id != null && id !== '')
+    .map(String);
+}
+
+function collectCyElementsByIds(cy, ids) {
+  let coll = cy.collection();
+  ids.forEach((id) => {
+    const el = cy.getElementById(toCyId(id));
+    if (el.length > 0) coll = coll.union(el);
+  });
+  return coll;
 }
 
 /**
@@ -185,25 +202,9 @@ export function useCyInstance(cyRef, isReady = true) {
   }, [cyRef, isReady]);
 }
 
-function runPresetLayout(cy, eles) {
-  if (eles?.length > 0) {
-    try {
-      cy.layout({ ...PRESET_LAYOUT, eles }).run();
-      return;
-    } catch {
-      /* fall through to full preset */
-    }
-  }
-  try {
-    cy.layout({ ...PRESET_LAYOUT }).run();
-  } catch {
-    /* ignore */
-  }
-}
-
 /**
  * elementsUpdateRef 소비 후 분기:
- * 1) hasChanges          → layout(+scoped) → styles → rAF(complete: bounds/overlap[신규만]/fit/junction)
+ * 1) hasChanges          → layout(incremental preset | cose) → styles → rAF(complete: bounds/overlap/fit/junction)
  * 2) pendingViewportFit  → 챕터·이벤트 전환 후 elements가 바뀌면 fit (추가 없는 교체·삭제만 포함)
  * 3) dataChanged only    → sizes refresh
  * 4) stylesheet|initial  → sizes refresh; initial이면 complete(fit+junction 포함)
@@ -237,11 +238,11 @@ export function useGraphLayout({
         ensureElementsInBounds(cyInstance, containerRef.current);
       }
       if (!skipOverlap) {
-        detectAndResolveOverlap(
-          cyInstance,
-          40,
-          movableIds ? { movableIds } : {},
-        );
+        detectAndResolveOverlap(cyInstance, OVERLAP_RESOLVE.FALLBACK_NODE_SIZE, {
+          ...(movableIds ? { movableIds } : {}),
+          maxIterations: OVERLAP_RESOLVE.MAX_ITERATIONS,
+          padding: OVERLAP_RESOLVE.PADDING,
+        });
       }
       if (shouldFitOnInitialLoad) {
         fitGraphToNodes(cyInstance, { duration: GRAPH_ZOOM.FIT_DURATION_MS });
@@ -288,9 +289,8 @@ export function useGraphLayout({
 
     const edgesOnlyIncremental =
       hasChanges && nodesToAdd.length === 0 && edgesToAdd.length > 0;
-    const styleOnlyIncremental =
-      hasChanges && !isInitialLoad && !stylesheetChanged && !pendingFitReady;
     const hasDataOnlyVisualChange = !hasChanges && dataChangedIds.length > 0;
+    const addedNodeIds = elementDataIds(nodesToAdd);
 
     const refreshStyles = ({
       forceSheet = false,
@@ -317,49 +317,30 @@ export function useGraphLayout({
     };
 
     if (hasChanges) {
-      if (!edgesOnlyIncremental) {
-        if (incrementalLayoutScope && nodesToAdd.length > 0) {
-          let newColl = cy.collection();
-          nodesToAdd.forEach((n) => {
-            const id = n?.data?.id;
-            if (id == null || id === '') return;
-            const el = cy.getElementById(toCyId(id));
-            if (el.length > 0) newColl = newColl.union(el);
-          });
-          runPresetLayout(cy, newColl);
-        } else {
-          runPresetLayout(cy);
-        }
-      }
+      const useIncrementalPreset =
+        incrementalLayoutScope &&
+        addedNodeIds.length > 0 &&
+        !shouldFitViewport;
 
-      if (!styleOnlyIncremental) {
+      if (edgesOnlyIncremental) {
+        if (stylesheet) applyNodeSizes(cy);
+      } else if (useIncrementalPreset) {
+        runPresetLayout(cy, collectCyElementsByIds(cy, addedNodeIds));
+        refreshStyles({
+          forceSheet: stylesheetChanged,
+          forceSizes: true,
+          lightUpdate: !stylesheetChanged,
+        });
+      } else {
         refreshStyles({ forceSheet: true, forceSizes: true });
-      } else if (!edgesOnlyIncremental) {
-        refreshStyles({ forceSizes: true, lightUpdate: true });
-      } else if (stylesheet) {
-        applyNodeSizes(cy);
+        runCoseBilkentLayout(cy);
       }
-
-      const preserveUnchangedPositions =
-        edgesOnlyIncremental || incrementalLayoutScope;
 
       requestAnimationFrame(() => {
         handleLayoutComplete(cy, shouldFitViewport, {
-          // 엣지만 추가: 겹침 해소 스킵 / 노드 추가: 신규 노드만 밀어내기
           skipOverlap: edgesOnlyIncremental,
-          movableIds:
-            !shouldFitViewport &&
-            incrementalLayoutScope &&
-            nodesToAdd.length > 0
-              ? nodesToAdd
-                  .map((n) => n?.data?.id)
-                  .filter((id) => id != null && id !== '')
-                  .map(String)
-              : null,
-          skipEnsureBounds:
-            !shouldFitViewport &&
-            (preserveUnchangedPositions ||
-              (styleOnlyIncremental && !incrementalLayoutScope)),
+          movableIds: useIncrementalPreset ? addedNodeIds : null,
+          skipEnsureBounds: !shouldFitViewport && (edgesOnlyIncremental || useIncrementalPreset),
         });
         finishInitialLoad();
       });

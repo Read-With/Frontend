@@ -1095,22 +1095,50 @@ export function filterMainCharacters(elements, filterStage) {
   return elements;
 }
 
+function readNodeRadius(node, fallbackSize = 40) {
+  try {
+    const w = typeof node.outerWidth === 'function' ? node.outerWidth() : 0;
+    const h = typeof node.outerHeight === 'function' ? node.outerHeight() : 0;
+    if (Number.isFinite(w) && Number.isFinite(h) && w > 0 && h > 0) {
+      return Math.max(w, h) / 2;
+    }
+  } catch {
+    /* ignore */
+  }
+  const size = typeof fallbackSize === 'number' && fallbackSize > 0 ? fallbackSize : 40;
+  return size / 2;
+}
+
+/** detectAndResolveOverlap / 호출부 공용 기본값 */
+export const OVERLAP_RESOLVE = Object.freeze({
+  FALLBACK_NODE_SIZE: 40,
+  PADDING: 16,
+  MAX_ITERATIONS: 12,
+  MAX_ITERATIONS_LIGHT: 8,
+  MAX_NODES: 150,
+});
+
 /**
  * 노드 겹침 감지 및 자동 조정
  * @param {Object} cy - Cytoscape 인스턴스
- * @param {number} nodeSize - 노드 크기
+ * @param {number} [nodeSize=OVERLAP_RESOLVE.FALLBACK_NODE_SIZE] - 크기 읽기 실패 시 fallback (지름)
  * @param {Object} [options]
  * @param {Iterable<string>|null} [options.movableIds] - 지정 시 해당 노드만 이동(기존 노드 위치 유지)
  * @param {number} [options.maxIterations] - 밀어내기 반복 횟수
+ * @param {number} [options.padding] - 반경 합에 더하는 여유 간격
  * @returns {boolean} 겹침이 있었는지 여부
  */
-export function detectAndResolveOverlap(cy, nodeSize = 40, options = {}) {
+export function detectAndResolveOverlap(
+  cy,
+  nodeSize = OVERLAP_RESOLVE.FALLBACK_NODE_SIZE,
+  options = {},
+) {
   if (!cy) {
     return false;
   }
-  
+
   if (typeof nodeSize !== 'number' || nodeSize <= 0) {
-    nodeSize = 40;
+    nodeSize = OVERLAP_RESOLVE.FALLBACK_NODE_SIZE;
   }
 
   const movableIdSet = options.movableIds
@@ -1121,27 +1149,27 @@ export function detectAndResolveOverlap(cy, nodeSize = 40, options = {}) {
   }
 
   const nodes = cy.nodes();
-  const NODE_SIZE = nodeSize;
-  const MIN_DISTANCE = NODE_SIZE * 1.0;
+  const padding =
+    typeof options.padding === 'number' && options.padding >= 0
+      ? options.padding
+      : OVERLAP_RESOLVE.PADDING;
   const maxIterations =
     typeof options.maxIterations === 'number' && options.maxIterations > 0
       ? options.maxIterations
       : movableIdSet
-        ? 8
-        : 1;
+        ? OVERLAP_RESOLVE.MAX_ITERATIONS
+        : OVERLAP_RESOLVE.MAX_ITERATIONS_LIGHT;
   let hasOverlap = false;
-  
-  // 성능 최적화: 노드가 많을 때는 겹침 감지를 건너뜀
-  const MAX_NODES_FOR_OVERLAP_DETECTION = 100;
-  if (nodes.length > MAX_NODES_FOR_OVERLAP_DETECTION) {
+
+  if (nodes.length > OVERLAP_RESOLVE.MAX_NODES) {
     return false;
   }
 
-  // 위치 캐싱으로 성능 개선
-  const nodePositions = nodes.map(node => ({
+  const nodePositions = nodes.map((node) => ({
     node,
     id: String(node.id()),
-    pos: node.position()
+    pos: node.position(),
+    radius: readNodeRadius(node, nodeSize),
   }));
 
   for (let iter = 0; iter < maxIterations; iter++) {
@@ -1149,18 +1177,19 @@ export function detectAndResolveOverlap(cy, nodeSize = 40, options = {}) {
 
     for (let i = 0; i < nodePositions.length; i++) {
       for (let j = i + 1; j < nodePositions.length; j++) {
-        const { node: node1, id: id1, pos: pos1 } = nodePositions[i];
-        const { node: node2, id: id2, pos: pos2 } = nodePositions[j];
+        const { node: node1, id: id1, pos: pos1, radius: r1 } = nodePositions[i];
+        const { node: node2, id: id2, pos: pos2, radius: r2 } = nodePositions[j];
 
         const node1Movable = !movableIdSet || movableIdSet.has(id1);
         const node2Movable = !movableIdSet || movableIdSet.has(id2);
         if (!node1Movable && !node2Movable) continue;
 
+        const minDistance = r1 + r2 + padding;
         const dx = pos1.x - pos2.x;
         const dy = pos1.y - pos2.y;
         const distanceSquared = dx * dx + dy * dy;
 
-        if (distanceSquared >= MIN_DISTANCE * MIN_DISTANCE) continue;
+        if (distanceSquared >= minDistance * minDistance) continue;
 
         hasOverlap = true;
         movedThisPass = true;
@@ -1169,7 +1198,7 @@ export function detectAndResolveOverlap(cy, nodeSize = 40, options = {}) {
           distance < 1e-6
             ? (i + j) * 0.7
             : Math.atan2(dy, dx);
-        const pushDistance = MIN_DISTANCE - distance + 20;
+        const pushDistance = minDistance - distance + 8;
         const cos = Math.cos(angle);
         const sin = Math.sin(angle);
 
@@ -1182,17 +1211,16 @@ export function detectAndResolveOverlap(cy, nodeSize = 40, options = {}) {
           nodePositions[i].pos = newPos1;
           nodePositions[j].pos = newPos2;
         } else if (node1Movable) {
-          // 신규 노드만: 기존 노드에서 멀어지는 방향으로 전부 이동
           const newPos1 = {
-            x: pos2.x + cos * (MIN_DISTANCE + 20),
-            y: pos2.y + sin * (MIN_DISTANCE + 20),
+            x: pos2.x + cos * minDistance,
+            y: pos2.y + sin * minDistance,
           };
           node1.position(newPos1);
           nodePositions[i].pos = newPos1;
         } else {
           const newPos2 = {
-            x: pos1.x - cos * (MIN_DISTANCE + 20),
-            y: pos1.y - sin * (MIN_DISTANCE + 20),
+            x: pos1.x - cos * minDistance,
+            y: pos1.y - sin * minDistance,
           };
           node2.position(newPos2);
           nodePositions[j].pos = newPos2;
@@ -1202,7 +1230,7 @@ export function detectAndResolveOverlap(cy, nodeSize = 40, options = {}) {
 
     if (!movedThisPass) break;
   }
-  
+
   return hasOverlap;
 }
 

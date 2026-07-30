@@ -88,6 +88,23 @@ export const PRESET_LAYOUT = Object.freeze({
   animate: false,
 });
 
+/** 최초 로딩·전체 재배치용. animate:false로 동기 완료 */
+export const COSE_BILKENT_LAYOUT = Object.freeze({
+  name: 'cose-bilkent',
+  fit: false,
+  animate: false,
+  randomize: false,
+  nodeRepulsion: 4500,
+  idealEdgeLength: 100,
+  edgeElasticity: 0.45,
+  nestingFactor: 0.1,
+  gravity: 0.25,
+  numIter: 2500,
+  tile: true,
+  tilingPaddingVertical: 20,
+  tilingPaddingHorizontal: 20,
+});
+
 /** @param {'graph'|'viewer'|'default'} [context='default'] viewer는 분할 밀도용 얇은 간선 */
 export const getEdgeStyle = (context = 'default') => ({
   width: context === 'viewer' ? 3.5 : 5,
