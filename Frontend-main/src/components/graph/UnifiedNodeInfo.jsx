@@ -106,6 +106,7 @@ function buildProcessedNode(data) {
     : (data?.data || { id: data?.id, label: data?.label });
   if (!raw) return null;
 
+  // personalityText만 표시 (profileText/프롬프트 폴백 금지)
   const description = String(raw.personalityText || raw.description || '').trim();
   return {
     ...raw,

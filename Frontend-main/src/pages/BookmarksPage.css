@@ -11,9 +11,10 @@
   --bm-surface: #ffffff;
   --bm-accent: var(--mp-brand-mid, #586544);
   --bm-accent-deep: var(--mp-brand, #3e4f2f);
-  --bm-danger: #a84848;
+  --bm-danger: #b91c1c;
+  --bm-danger-hover: #991b1b;
   --bm-focus: rgba(62, 79, 47, 0.4);
-  --bm-overlay: rgba(32, 38, 28, 0.32);
+  --bm-overlay: rgba(0, 0, 0, 0.5);
   --bm-touch: 2.75rem;
   --bm-sticky-bg: var(--bm-paper);
   --bm-sticky-bg-blur: rgba(250, 249, 246, 0.92);
@@ -61,7 +62,18 @@
 
 /* .bm-shell--narrow: 와이드(≥64rem) 2열 확장에서 제외하는 마커 클래스 */
 
-.bm-status,
+.bm-page--center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.bm-status {
+  text-align: center;
+  margin: 0;
+  color: var(--bm-ink-soft);
+}
+
 .bm-panel,
 .bm-empty {
   text-align: left;
@@ -819,50 +831,120 @@
 
 .bm-btn-text-danger:focus-visible,
 .bm-btn-danger:focus-visible {
-  outline-color: rgba(168, 72, 72, 0.45);
+  outline-color: rgba(185, 28, 28, 0.45);
 }
 
 /* —— 삭제 확인 —— */
+
+@keyframes bm-overlay-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes bm-dialog-in {
+  from {
+    opacity: 0;
+    transform: translateY(0.6rem);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
 
 .bm-confirm-overlay {
   position: fixed;
   inset: 0;
   padding:
-    var(--bm-safe-top)
-    var(--bm-safe-right)
-    var(--bm-safe-bottom)
-    var(--bm-safe-left);
-  background: var(--bm-overlay);
+    var(--bm-safe-top, env(safe-area-inset-top, 0px))
+    var(--bm-safe-right, env(safe-area-inset-right, 0px))
+    var(--bm-safe-bottom, env(safe-area-inset-bottom, 0px))
+    var(--bm-safe-left, env(safe-area-inset-left, 0px));
+  background: var(--bm-overlay, rgba(0, 0, 0, 0.5));
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: 9999;
   box-sizing: border-box;
+  animation: bm-overlay-in 0.18s ease;
 }
 
 .bm-confirm-dialog {
-  background: var(--bm-surface);
-  border-radius: 0.2rem;
-  border: 0.0625rem solid var(--bm-rule);
-  padding: 1.5rem 1.35rem;
+  background: var(--bm-surface, #ffffff);
+  border-radius: 0.35rem;
+  border: 0.0625rem solid rgba(42, 51, 38, 0.18);
+  padding: 1.65rem 1.5rem 1.4rem;
   max-width: 22rem;
-  width: calc(100% - 2rem);
-  box-shadow: 0 1rem 2.5rem rgba(32, 38, 28, 0.12);
+  width: calc(100% - 2.5rem);
+  box-shadow: 0 0.625rem 2.5rem rgba(0, 0, 0, 0.15);
+  text-align: center;
+  animation: bm-dialog-in 0.2s ease;
 }
 
 .bm-confirm-title {
-  margin: 0 0 1.35rem;
-  font-size: 1.05rem;
-  line-height: 1.5;
-  color: var(--bm-ink);
-  font-weight: 500;
+  margin: 0 0 0.55rem;
+  font-size: 1.15rem;
+  line-height: 1.45;
+  color: var(--bm-ink, #2a3326);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+.bm-confirm-desc {
+  margin: 0 0 1.45rem;
+  font-size: 0.88rem;
+  line-height: 1.55;
+  color: var(--bm-ink-faint, #6e7768);
 }
 
 .bm-confirm-actions {
   display: flex;
-  gap: 0.75rem;
-  justify-content: flex-end;
+  gap: 0.65rem;
+  justify-content: center;
   flex-wrap: wrap;
+}
+
+.bm-btn-confirm-delete {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: var(--bm-touch, 2.75rem);
+  min-width: 5.75rem;
+  padding: 0.4rem 1.15rem;
+  border-radius: 0.2rem;
+  border: none;
+  background: var(--bm-danger, #b91c1c);
+  color: #fff;
+  font-size: 0.88rem;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+  text-decoration: none;
+}
+
+.bm-btn-confirm-delete:hover:not(:disabled) {
+  background: var(--bm-danger-hover, #991b1b);
+}
+
+.bm-btn-confirm-delete:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.bm-btn-confirm-delete:focus-visible {
+  outline: 0.125rem solid rgba(185, 28, 28, 0.45);
+  outline-offset: 0.15rem;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bm-confirm-overlay,
+  .bm-confirm-dialog {
+    animation: none;
+  }
 }
 
 @keyframes bm-chapter-in {

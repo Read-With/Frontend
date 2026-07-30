@@ -301,7 +301,10 @@ function RelationAnalysisModalImpl({
   onSelectRelatedNode,
   returnFocusRef,
   chapterRailWidth = GRAPH_LAYOUT_CONSTANTS.SIDEBAR.OPEN_WIDTH,
-  /** 슬라이드바(툴팁 패널)가 열려 있을 때 오른쪽 예약 너비 */
+  /**
+   * 슬라이드바(툴팁 패널)가 열려 있을 때 오른쪽 예약 너비.
+   * 연결이 충분해 레이더를 쓸 때는 0으로 두어 슬라이드바 영역까지 펼침.
+   */
   reserveRight = 0,
 }) {
   const dialogRef = useRef(null);
@@ -314,14 +317,19 @@ function RelationAnalysisModalImpl({
     const inset = GRAPH_LAYOUT_CONSTANTS.ANALYSIS_MODAL_INSET;
     const top = GRAPH_LAYOUT_CONSTANTS.PAGE_CHROME_OFFSET;
     const left = Math.max(0, Number(chapterRailWidth) || 0) + inset;
-    const right = Math.max(0, Number(reserveRight) || 0) + inset;
+    // sufficient_connections: 노드 슬라이드바까지 덮어 레이더 영역을 최대화
+    const rightPad =
+      connectionKind === 'sufficient_connections'
+        ? 0
+        : Math.max(0, Number(reserveRight) || 0);
+    const right = rightPad + inset;
     return {
       '--relation-modal-top': `${top}px`,
       '--relation-modal-left': `${left}px`,
       '--relation-modal-right': `${right}px`,
       '--relation-modal-inset': `${inset}px`,
     };
-  }, [chapterRailWidth, reserveRight]);
+  }, [chapterRailWidth, reserveRight, connectionKind]);
 
   const dataMap = useMemo(() => {
     const map = new Map();

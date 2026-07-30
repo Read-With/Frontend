@@ -46,10 +46,14 @@ function BookmarkDeleteConfirm({
         role="dialog"
         aria-modal="true"
         aria-labelledby="viewer-bookmark-delete-title"
+        aria-describedby="viewer-bookmark-delete-desc"
         onClick={(e) => e.stopPropagation()}
       >
         <p id="viewer-bookmark-delete-title" className="bm-confirm-title">
-          현재 위치의 북마크를 삭제하시겠습니까?
+          북마크를 삭제할까요?
+        </p>
+        <p id="viewer-bookmark-delete-desc" className="bm-confirm-desc">
+          현재 위치에 표시된 북마크가 제거됩니다.
         </p>
         <div className="bm-confirm-actions">
           <button
@@ -62,11 +66,12 @@ function BookmarkDeleteConfirm({
           </button>
           <button
             type="button"
-            className="bm-btn bm-btn-danger"
+            className="bm-btn bm-btn-confirm-delete"
             onClick={onConfirm}
             disabled={busy}
+            autoFocus
           >
-            삭제
+            {busy ? '삭제 중…' : '삭제'}
           </button>
         </div>
       </div>

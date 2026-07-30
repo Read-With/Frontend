@@ -17,6 +17,7 @@ import {
 import {
   isGraphDragEndEvent,
   fitGraphToNodes,
+  centerSelectionOnElementId,
 } from '../../utils/graph/graphCy';
 import { errorUtils, userViewerPath } from '../../utils/common/urlUtils';
 import {
@@ -335,12 +336,22 @@ function RelationGraphWrapper() {
     graphClearRef.current?.(options);
   }, []);
 
-  // 사이드바는 오버레이이므로 우측 예약 없이 전체 그래프를 캔버스에 유지 (겹침 허용)
-  const centerSelection = useCallback(() => {
-    fitGraphToNodes(cyRef.current, {
+  // 좌(챕터 레일)는 캔버스 offset으로 이미 제외. 우(정보 슬라이드바)는 오버레이라 예약.
+  const centerSelection = useCallback((elementId) => {
+    const cy = cyRef.current;
+    if (!cy || elementId == null || elementId === '') return;
+
+    const reserveLeft = isNarrow && isSidebarOpen
+      ? GRAPH_LAYOUT_CONSTANTS.SIDEBAR.OPEN_WIDTH
+      : 0;
+
+    centerSelectionOnElementId(cy, elementId, {
       duration: GRAPH_LAYOUT_CONSTANTS.FOCUS_PAN_MS,
+      reserveRight: GRAPH_LAYOUT_CONSTANTS.TOOLTIP_SIDEBAR_WIDTH,
+      reserveLeft,
+      padding: 40,
     });
-  }, []);
+  }, [isNarrow, isSidebarOpen]);
 
   const onClearTooltip = useCallback(() => {
     closeSidebar();

@@ -50,7 +50,7 @@
 }
 
 .oauth-callback-body {
-  max-width: 26.25rem;
+  max-width: min(100%, 36rem);
 }
 
 .oauth-callback-icon-wrap {
@@ -105,7 +105,8 @@
   margin: 0;
   font-weight: 400;
   letter-spacing: 0.02em;
-  word-break: keep-all;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .oauth-callback-detail,
@@ -115,16 +116,20 @@
   color: var(--oauth-fg-muted);
 }
 
-.oauth-callback-error-message {
-  white-space: pre-line;
-}
-
 .oauth-callback-error-tip {
   margin-top: 1rem;
   font-size: clamp(0.85rem, 2.2vw, 1rem);
   line-height: 1.75;
   letter-spacing: 0.03em;
   color: var(--oauth-fg-soft);
+}
+
+/* 온점으로 끝나는 문장 = 한 줄 (문장 중간 줄바꿈 금지) */
+.oauth-callback-sentence {
+  display: block;
+  width: max-content;
+  max-width: none;
+  white-space: nowrap;
 }
 
 .oauth-callback-steps {
@@ -166,7 +171,8 @@
   background: var(--oauth-surface);
   border-radius: var(--oauth-radius);
   border: 0.0625rem solid var(--oauth-surface-border);
-  word-break: keep-all;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
   animation: oauth-callback-fade-in 0.4s ease;
 }
 

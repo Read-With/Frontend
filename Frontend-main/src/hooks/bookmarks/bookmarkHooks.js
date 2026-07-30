@@ -59,7 +59,10 @@ export const useBookmarks = (bookId, options = {}) => {
         return { success: false, message: msg };
       }
       const result = onSuccess(response);
-      toast.success(messages.success);
+      toast.success(messages.success, {
+        autoClose: messages.autoClose ?? 2800,
+        className: messages.toastClassName,
+      });
       return result;
     } catch (err) {
       const msg = friendlyError(err, messages.error);
@@ -141,6 +144,8 @@ export const useBookmarks = (bookId, options = {}) => {
           success: '북마크가 삭제되었습니다',
           fail: '북마크 삭제에 실패했습니다.',
           error: '북마크 삭제 중 오류가 발생했습니다.',
+          autoClose: 3200,
+          toastClassName: 'bm-toast-delete',
         }
       ),
     [runMutation]

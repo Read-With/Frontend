@@ -20,8 +20,6 @@ const sidebarBaseStyle = {
   height: '100vh',
   background: COLORS.white,
   borderRadius: '0px',
-  boxShadow: '2px 0 8px rgba(0,0,0,0.06)',
-  borderRight: `1px solid ${COLORS.border}`,
   zIndex: 99999,
   overflow: 'hidden',
   transition: `right ${ANIMATION_DURATION}ms ${ANIMATION_VALUES.EASE_OUT}`,
@@ -190,7 +188,11 @@ function GraphSidebar({
   }
 
   return (
-    <div style={sidebarStyle} data-testid="graph-sidebar">
+    <div
+      className="graph-page-sidebar"
+      style={sidebarStyle}
+      data-testid="graph-sidebar"
+    >
       {tooltipContent}
     </div>
   );

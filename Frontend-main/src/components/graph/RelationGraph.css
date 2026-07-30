@@ -1373,6 +1373,9 @@
   width: min(26.25rem, calc(100vw - 1.5rem));
   max-width: min(26.25rem, 92%);
   max-height: min(26.25rem, 70vh);
+  overflow-x: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .edge-tooltip-container {
@@ -1832,6 +1835,13 @@
 /* ============================================================
    Graph sidebar
    ============================================================ */
+
+/* 그래프와 맞닿는 왼쪽 세로 구분 */
+.graph-page-sidebar {
+  border-left: 0.0625rem solid var(--rg-border-strong);
+  box-shadow: -0.25rem 0 0.75rem rgba(15, 23, 42, 0.08);
+}
+
 .graph-sidebar-panel {
   position: relative;
   width: 100%;
@@ -1928,11 +1938,11 @@
   position: relative;
   width: 100%;
   height: auto;
-  max-height: 26.25rem;
+  max-height: none;
   display: flex;
   flex-direction: column;
   padding: 0;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .node-tooltip-header {
@@ -3090,6 +3100,7 @@
 .summary-toggle-btn .tooltip-section-title {
   text-align: left;
   flex: 1;
+  min-width: 0;
 }
 
 .tooltip-summary-section {
@@ -3097,6 +3108,7 @@
   position: relative;
   min-height: 4.375rem;
   height: 3.75rem;
+  flex-shrink: 0;
   transition: height 0.4s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
@@ -3106,6 +3118,7 @@
 
 .tooltip-summary-section--content {
   height: auto;
+  overflow: visible;
 }
 
 .tooltip-summary-chevron {
@@ -3179,11 +3192,13 @@
 
 .tooltip-summary-text {
   margin: 0;
+  padding: 0.75rem 1rem;
   font-size: 0.95rem;
   line-height: 2;
   color: var(--rg-brand);
   letter-spacing: -0.01em;
   white-space: pre-wrap;
+  overflow-wrap: anywhere;
   word-break: keep-all;
   background: rgba(247, 250, 252, 0.8);
   border-radius: var(--rg-radius-md);

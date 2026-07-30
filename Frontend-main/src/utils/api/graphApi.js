@@ -253,7 +253,12 @@ const finalizeAccumulateStateToGraphResult = (
         common_name: commonName,
         name: commonName,
         names: asArray(meta?.names),
-        description: typeof meta?.profileText === 'string' ? meta.profileText : '',
+        // 인물 소개는 personalityText (profileText는 이미지 프롬프트 등 별도 용도)
+        personalityText:
+          typeof meta?.personalityText === 'string' ? meta.personalityText : '',
+        profileText: typeof meta?.profileText === 'string' ? meta.profileText : '',
+        description:
+          typeof meta?.personalityText === 'string' ? meta.personalityText : '',
         profileImage: typeof meta?.profileImage === 'string' ? meta.profileImage : '',
         isMainCharacter: Boolean(meta?.isMainCharacter),
       };

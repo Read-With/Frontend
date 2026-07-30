@@ -519,9 +519,11 @@ const BookmarksPage = () => {
 
   if (loading) {
     return (
-      <div className="bm-page" ref={pageRef}>
+      <div className="bm-page bm-page--center" ref={pageRef}>
         <div className="bm-shell bm-shell--narrow">
-          <div className="bm-status">북마크를 불러오는 중...</div>
+          <div className="bm-status" role="status" aria-live="polite">
+            북마크를 불러오는 중...
+          </div>
         </div>
       </div>
     );
@@ -657,10 +659,14 @@ const BookmarksPage = () => {
             role="dialog"
             aria-modal="true"
             aria-labelledby="bookmark-delete-title"
+            aria-describedby="bookmark-delete-desc"
             onClick={stopRow}
           >
             <p id="bookmark-delete-title" className="bm-confirm-title">
-              정말 삭제하시겠습니까?
+              북마크를 삭제할까요?
+            </p>
+            <p id="bookmark-delete-desc" className="bm-confirm-desc">
+              메모가 있다면 함께 삭제되며, 되돌릴 수 없습니다.
             </p>
             <div className="bm-confirm-actions">
               <button
@@ -673,11 +679,12 @@ const BookmarksPage = () => {
               </button>
               <button
                 type="button"
-                className="bm-btn-danger"
+                className="bm-btn bm-btn-confirm-delete"
                 onClick={() => handleDeleteBookmark(deleteConfirmId)}
                 disabled={isMutating}
+                autoFocus
               >
-                삭제
+                {isMutating ? '삭제 중…' : '삭제'}
               </button>
             </div>
           </div>

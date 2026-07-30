@@ -144,6 +144,16 @@ html.fonts-loaded .material-symbols-outlined {
   color: var(--toast-success-fg);
 }
 
+/* 북마크 삭제 등 — 하단 중앙에서 더 잘 보이게 */
+.Toastify__toast.bm-toast-delete {
+  border-width: 0.1rem;
+  border-color: var(--brand-accent);
+  background: #eef4ee;
+  color: var(--brand-text);
+  font-weight: 600;
+  box-shadow: 0 0.35rem 1.5rem rgba(47, 59, 47, 0.18);
+}
+
 .Toastify__toast--success .Toastify__toast-icon svg {
   fill: var(--toast-success-border);
 }

@@ -40,6 +40,45 @@ const PROCESSED_CODE_KEY = 'oauth_processed_code';
 /** StrictMode 리마운트에서도 같은 code 교환을 공유 */
 const oauthExchangeByCode = new Map();
 
+/** 온점(.) 기준으로 문장 분리 — 문장 중간 줄바꿈 없이 문장 단위로만 나눔 */
+function splitIntoSentences(text) {
+  const normalized = String(text || '')
+    .replace(/\r\n|\r|\n/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!normalized) return [];
+
+  const sentences = [];
+  let buffer = '';
+  for (let i = 0; i < normalized.length; i += 1) {
+    buffer += normalized[i];
+    if (normalized[i] === '.' && (i === normalized.length - 1 || /\s/.test(normalized[i + 1]))) {
+      const sentence = buffer.trim();
+      if (sentence) sentences.push(sentence);
+      buffer = '';
+      while (i + 1 < normalized.length && /\s/.test(normalized[i + 1])) i += 1;
+    }
+  }
+  const rest = buffer.trim();
+  if (rest) sentences.push(rest);
+  return sentences;
+}
+
+function SentenceLines({ text, className }) {
+  const sentences = splitIntoSentences(text);
+  if (sentences.length === 0) return null;
+
+  return (
+    <p className={className}>
+      {sentences.map((sentence, index) => (
+        <span key={`${index}-${sentence}`} className="oauth-callback-sentence">
+          {sentence}
+        </span>
+      ))}
+    </p>
+  );
+}
+
 function splitOAuthErrorDisplay(error) {
   const cleaned = String(error || '')
     .replace(/^로그인 실패:\s*/i, '')
@@ -57,8 +96,10 @@ function splitOAuthErrorDisplay(error) {
     };
   }
 
-  const summary = (cleaned || '알 수 없는 오류가 발생했습니다.').replace(/\.\s+/g, '.\n');
-  return { summary, detail: null };
+  return {
+    summary: cleaned || '알 수 없는 오류가 발생했습니다.',
+    detail: null,
+  };
 }
 
 function clearOAuthAttemptArtifacts() {
@@ -272,7 +313,7 @@ const OAuthCallback = () => {
         </div>
 
         <h1 className="oauth-callback-title">{title}</h1>
-        <p className="oauth-callback-detail">{detail}</p>
+        <SentenceLines className="oauth-callback-detail" text={detail} />
 
         <ol className="oauth-callback-steps" aria-hidden="true">
           {LOADING_PHASES.map((_, index) => (
@@ -290,9 +331,10 @@ const OAuthCallback = () => {
         </ol>
 
         {loadingPhase >= LOADING_PHASES.length - 1 ? (
-          <p className="oauth-callback-hint">
-            첫 로그인이거나 서버가 깨어나는 중이면 10~20초 정도 걸릴 수 있어요.
-          </p>
+          <SentenceLines
+            className="oauth-callback-hint"
+            text="첫 로그인이거나 서버가 깨어나는 중이면 10~20초 정도 걸릴 수 있어요."
+          />
         ) : null}
       </OAuthCallbackShell>
     );
@@ -308,8 +350,8 @@ const OAuthCallback = () => {
           <span className="oauth-callback-error-icon-mark">!</span>
         </div>
         <h1 className="oauth-callback-error-title">로그인에 실패했어요</h1>
-        <p className="oauth-callback-error-message">{summary}</p>
-        {errorTip ? <p className="oauth-callback-error-tip">{errorTip}</p> : null}
+        <SentenceLines className="oauth-callback-error-message" text={summary} />
+        {errorTip ? <SentenceLines className="oauth-callback-error-tip" text={errorTip} /> : null}
         {detail ? (
           <details className="oauth-callback-error-details">
             <summary>자세한 내용 보기</summary>

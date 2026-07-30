@@ -113,8 +113,14 @@ export function createCharacterMaps(characters) {
 
       const displayName = pickCharacterDisplayName(char);
       idToName[id] = displayName;
-      idToDesc[id] = char.description || char.profileText || '';
-      idToDescKo[id] = char.personalityText || '';
+      // 소개: personalityText 우선. profileText는 이미지/캐릭터 프롬프트라 제외
+      const personalityText =
+        typeof char.personalityText === 'string' ? char.personalityText.trim() : '';
+      const legacyDescription =
+        typeof char.description === 'string' ? char.description.trim() : '';
+      const bio = personalityText || legacyDescription;
+      idToDesc[id] = bio;
+      idToDescKo[id] = bio;
       idToMain[id] = !!char.isMainCharacter;
       idToNames[id] = char.names || [];
 
