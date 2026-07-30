@@ -472,6 +472,7 @@ function settle(resolve, result) {
 }
 
 function logWarn(message, detail) {
+  if (!import.meta.env.DEV) return;
   errorUtils.logWarning(`${LOG_PREFIX} ${message}`, detail);
 }
 

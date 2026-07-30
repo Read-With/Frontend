@@ -2,14 +2,7 @@ import { memo, useState, useEffect, useCallback, useMemo, useRef } from "react";
 import {
   GRAPH_LAYOUT_CONSTANTS,
 } from "../../utils/graph/graphCore";
-import {
-  Radar,
-  RadarChart,
-  PolarGrid,
-  PolarAngleAxis,
-  PolarRadiusAxis,
-  ResponsiveContainer,
-} from 'recharts';
+import {Radar,RadarChart,PolarGrid,PolarAngleAxis,PolarRadiusAxis,ResponsiveContainer,} from 'recharts';
 import { getRelationStyle } from '../../utils/styles/relationStyles.js';
 import { GRAPH_COLORS } from '../../utils/styles/graphStyles.js';
 import './RelationGraph.css';

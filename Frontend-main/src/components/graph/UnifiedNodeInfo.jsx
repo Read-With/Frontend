@@ -14,6 +14,7 @@ import { useTooltipPosition, useClickOutside } from "../../hooks/ui/tooltipHooks
 import { getUnifiedEventInfoForTooltip } from "../../utils/viewer/viewerSession";
 import { toNumberOrNull } from "../../utils/common/valueUtils.js";
 import { USER_GRAPH_PREFIX } from "../../utils/common/urlUtils";
+import { finitePositivityOrZero } from "../../utils/styles/graphStyles";
 import {
   COLORS,
   mergeRefs,
@@ -164,7 +165,7 @@ function collectUndirectedRelations(rawRelations, targetNodeId = null) {
       id2,
       relation: rel.relation || ['관계'],
       count: rel.count || rel.strength || 1,
-      positivity: rel.positivity || 0,
+      positivity: finitePositivityOrZero(rel.positivity),
     });
   });
 
@@ -321,7 +322,7 @@ function buildRadarChartData({
         id2: el.data.target,
         relation: el.data.relation || ['관계'],
         count: el.data.count || el.data.strength || 1,
-        positivity: el.data.positivity || 0,
+        positivity: finitePositivityOrZero(el.data.positivity),
       }));
 
     if (edgeRels.length > 0) {
@@ -501,6 +502,7 @@ function UnifiedNodeInfo({
   povIsLoading = false,
   povCached = null,
   onRetryPov = null,
+  showPovSummary = true,
   apiBookGraphData = null,
   onSelectRelatedNode = null,
   chapterRailWidth = null,
@@ -570,8 +572,13 @@ function UnifiedNodeInfo({
   );
 
   const eventInfo = useMemo(
-    () => getUnifiedEventInfoForTooltip({ currentEvent, prevValidEvent, eventNum }),
-    [currentEvent, prevValidEvent, eventNum],
+    () => getUnifiedEventInfoForTooltip({
+      currentEvent,
+      prevValidEvent,
+      eventNum,
+      currentChapter,
+    }),
+    [currentEvent, prevValidEvent, eventNum, currentChapter],
   );
 
   useEffect(() => {
@@ -868,7 +875,7 @@ function UnifiedNodeInfo({
         <div className="tooltip-content business-card">
           <TooltipCloseButton onClose={onClose} />
           {nodeHeaderAndDescription}
-          {povSummarySection}
+          {showPovSummary ? povSummarySection : null}
         </div>
       </NodeTooltipShell>
     );
@@ -881,7 +888,7 @@ function UnifiedNodeInfo({
       <div className="graph-sidebar-body">
         {nodeHeaderAndDescription}
 
-        {povSummarySection}
+        {showPovSummary ? povSummarySection : null}
 
         <RelationAnalysisCta
           node={node}

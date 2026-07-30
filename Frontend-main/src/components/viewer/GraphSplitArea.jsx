@@ -1,7 +1,7 @@
-import { useMemo, useRef, useState, memo, useCallback, useEffect } from 'react';
+import { useMemo, useRef, memo, useCallback, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { AlertCircle, Inbox, Loader2 } from 'lucide-react';
-import CytoscapeGraphUnified, { GraphZoomControls } from '../graph/CytoscapeGraphUnified';
+import CytoscapeGraphUnified from '../graph/CytoscapeGraphUnified';
 import UnifiedNodeInfo from '../graph/UnifiedNodeInfo';
 import UnifiedEdgeTooltip from '../graph/UnifiedEdgeTooltip';
 import { useGraphElementPipeline } from '../../hooks/graph/useGraphViewState';
@@ -24,7 +24,6 @@ import { buildGraphViewportRefitKey } from '../../utils/graph/graphCore.js';
 import '../graph/RelationGraph.css';
 import { GraphFloatingControls } from '../graph/GraphControls';
 import { getChapterData, getManifestFromCache } from '../../utils/common/cache/manifestCache';
-import { useChapterPovSummaries } from '../../hooks/graph/useChapterPovSummaries';
 
 const iconShellClass = {
   loading: 'bg-[var(--rg-brand-tint)] text-[var(--rg-brand)]',
@@ -93,7 +92,6 @@ const GraphSplitTopBar = memo(function GraphSplitTopBar({
   viewerState,
   searchState,
   searchActions,
-  cy,
 }) {
   const { book } = viewerState;
 
@@ -199,6 +197,18 @@ const GraphSplitTopBar = memo(function GraphSplitTopBar({
 
   return (
     <div className="graph-split-topbar" ref={topbarRef}>
+      <button
+        type="button"
+        className="graph-fullscreen-btn"
+        aria-label={fullscreenLabel}
+        title={fullscreenLabel}
+        onClick={() => setGraphFullScreen(!graphFullScreen)}
+      >
+        <span className="material-symbols-outlined" aria-hidden>
+          {graphFullScreen ? 'close_fullscreen' : 'fullscreen'}
+        </span>
+      </button>
+
       <div className="graph-split-topbar-center">
         <ChapterEventInfo
           bookId={bookId}
@@ -221,19 +231,6 @@ const GraphSplitTopBar = memo(function GraphSplitTopBar({
           onFilterChange={setFilterStage}
           showLegend
         />
-        <span className="graph-split-topbar-sep" aria-hidden />
-        <GraphZoomControls cy={cy} className="graph-zoom-controls is-embedded" />
-        <button
-          type="button"
-          className="graph-fullscreen-btn"
-          aria-label={fullscreenLabel}
-          title={fullscreenLabel}
-          onClick={() => setGraphFullScreen(!graphFullScreen)}
-        >
-          <span className="material-symbols-outlined" aria-hidden>
-            {graphFullScreen ? 'close_fullscreen' : 'fullscreen'}
-          </span>
-        </button>
       </div>
     </div>
   );
@@ -289,7 +286,7 @@ function getLoadingNotice(isGraphRefreshing, isLocationDetermined, transitionTyp
   if (isGraphRefreshing) {
     return {
       title: '이벤트 반영 중',
-      description: '읽기 위치에 맞는 이벤트와 관계 그래프를 확정하는 중입니다.',
+      description: '현재 위치의 이벤트를 확정한 뒤 해당 그래프만 불러옵니다.',
     };
   }
   if (!isLocationDetermined) {
@@ -301,7 +298,7 @@ function getLoadingNotice(isGraphRefreshing, isLocationDetermined, transitionTyp
   if (transitionType === 'chapter') {
     return {
       title: '챕터 전환 중',
-      description: '새 챕터의 이벤트를 준비하고 있습니다.',
+      description: '새 챕터의 이벤트를 계산한 뒤 맞는 그래프만 표시합니다.',
     };
   }
   return {
@@ -335,6 +332,7 @@ const GraphContainer = memo(function GraphContainer({
   const eventNum = resolveEventOrdinalForDisplay({
     currentEvent,
     prevValidEvent,
+    currentChapter,
     progressTopBar: null,
     fallback: 0,
   });
@@ -346,20 +344,6 @@ const GraphContainer = memo(function GraphContainer({
     () => buildGraphViewportRefitKey(currentChapter, eventNum),
     [currentChapter, eventNum]
   );
-
-  const {
-    povSummaries,
-    error: povError,
-    isLoading: povIsLoading,
-    retry: retryPov,
-  } = useChapterPovSummaries(bookId, currentChapter);
-
-  const povCached = useMemo(() => {
-    if (bookId == null || currentChapter == null) return null;
-    const ch = getChapterData(bookId, currentChapter);
-    if (!ch) return null;
-    return Boolean(ch.povSummariesCached);
-  }, [bookId, currentChapter]);
 
   const dismissTooltip = useCallback(() => {
     onClearTooltip?.();
@@ -418,11 +402,7 @@ const GraphContainer = memo(function GraphContainer({
             currentEvent={currentEvent}
             prevValidEvent={prevValidEvent}
             onSelectRelatedNode={handleSelectRelatedNode}
-            povSummaries={povSummaries}
-            povError={povError}
-            povIsLoading={povIsLoading}
-            povCached={povCached}
-            onRetryPov={retryPov}
+            showPovSummary={false}
           />
         )}
         {activeTooltip?.type === 'edge' && (
@@ -501,10 +481,6 @@ const GraphSplitArea = memo(function GraphSplitArea({
   } = graphState;
   const { filterStage } = graphActions;
   const cyRef = useRef(null);
-  const [cyInstance, setCyInstance] = useState(null);
-  const handleCyReady = useCallback((cy) => {
-    setCyInstance(cy);
-  }, []);
 
   const topBarSearchState = useMemo(
     () => ({
@@ -554,31 +530,31 @@ const GraphSplitArea = memo(function GraphSplitArea({
   });
 
   const hasElements = Array.isArray(elements) && elements.length > 0;
+  // 확정 이벤트 + 데이터 ready 이후에만 그래프 노출 (이전 이벤트 stale 금지)
+  const canShowGraph = isDataReady && hasResolvedEvent && hasElements;
   const isGraphIdle = graphPhase === 'idle';
   const isEventTransition =
     transitionState.type === 'event' && transitionState.inProgress;
   const isGraphRefreshing = graphPhase === 'event' || isEventTransition;
 
   const isDataLoadCompleteAndEmpty =
-    isGraphIdle && isDataEmpty && !hasElements && !hasResolvedEvent;
+    isGraphIdle &&
+    isDataReady &&
+    isDataEmpty &&
+    !hasElements &&
+    hasResolvedEvent;
 
   const resolvedApiError = normalizeGraphApiError(apiError);
 
-  // 요소 없음: 부트스트랩 대기(위치/데이터/갱신) → 단일 로딩 패널
   const shouldShowLoading =
-    !hasElements &&
+    !canShowGraph &&
     !isDataLoadCompleteAndEmpty &&
-    !resolvedApiError &&
-    (!isLocationDetermined ||
-      !isGraphIdle ||
-      (!isDataReady && !hasResolvedEvent) ||
-      isGraphRefreshing);
+    !resolvedApiError;
 
-  // 요소 있음: 캔버스 유지 + 갱신 중 오버레이만
-  const showRefreshOverlay = hasElements && isGraphRefreshing;
+  const showRefreshOverlay = canShowGraph && isGraphRefreshing;
 
   const loadingNotice = getLoadingNotice(
-    isGraphRefreshing,
+    isGraphRefreshing || !isDataReady || !hasResolvedEvent,
     isLocationDetermined,
     transitionState.type
   );
@@ -602,7 +578,6 @@ const GraphSplitArea = memo(function GraphSplitArea({
         viewerState={{ book }}
         searchState={topBarSearchState}
         searchActions={topBarSearchActions}
-        cy={cyInstance}
       />
 
       <div style={{ ...graphStyles.graphPageInner, minWidth: 0 }}>
@@ -673,8 +648,7 @@ const GraphSplitArea = memo(function GraphSplitArea({
               isEventTransition={isEventTransition}
               bookId={book?.id ?? bookKey}
               cyRef={cyRef}
-              onCyReady={handleCyReady}
-              showZoomControls={false}
+              showZoomControls
             />
             {showRefreshOverlay ? (
               <div

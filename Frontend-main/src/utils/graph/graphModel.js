@@ -9,6 +9,8 @@ import {
   undirectedPairKey,
   uniqueStrings,
   normalizeRelation,
+  pickLastRelationLabel,
+  mergeRelationLabelHistory,
   relationEventMetaPassthrough,
   pickCharacterDisplayName,
   lookupRememberedCharacterDisplayName,
@@ -96,8 +98,8 @@ export function createCharacterMaps(characters) {
         const validatedUrl = validateAndNormalizeProfileImageUrl(char.profileImage);
         if (validatedUrl) {
           idToProfileImage[id] = validatedUrl;
-        } else {
-          console.warn(`[이미지 검증 실패] 캐릭터 ID: ${id}, 원본 profileImage:`, char.profileImage);
+        } else if (import.meta.env.DEV) {
+          console.debug(`[이미지 검증 실패] 캐릭터 ID: ${id}`);
         }
       } else {
         missingProfileImage += 1;
@@ -130,7 +132,9 @@ function validateAndNormalizeProfileImageUrl(profileImage) {
       new URL(trimmed);
       return trimmed;
     } catch {
-      console.warn(`[이미지 검증] 유효하지 않은 절대 URL: ${trimmed}`);
+      if (import.meta.env.DEV) {
+        console.debug(`[이미지 검증] 유효하지 않은 절대 URL`);
+      }
       return null;
     }
   }
@@ -140,7 +144,9 @@ function validateAndNormalizeProfileImageUrl(profileImage) {
       const resolved = new URL(trimmed, 'https://placeholder.local');
       return resolved.origin + resolved.pathname + resolved.search + resolved.hash;
     } catch {
-      console.warn(`[이미지 검증] 유효하지 않은 프로토콜 상대 URL: ${trimmed}`);
+      if (import.meta.env.DEV) {
+        console.debug(`[이미지 검증] 유효하지 않은 프로토콜 상대 URL`);
+      }
       return null;
     }
   }
@@ -149,7 +155,9 @@ function validateAndNormalizeProfileImageUrl(profileImage) {
     return resolveApiArtifactUrl(trimmed) || trimmed;
   }
 
-  console.warn(`[이미지 검증] 유효하지 않은 이미지 URL 형식: ${trimmed}`);
+  if (import.meta.env.DEV) {
+    console.debug(`[이미지 검증] 유효하지 않은 이미지 URL 형식`);
+  }
   return null;
 }
 
@@ -297,9 +305,8 @@ const directedEdgeElementId = (fromId, toId) => `${String(fromId)}->${String(toI
 function mergeEdgeLabels(a, b) {
   const t1 = String(a ?? '').trim();
   const t2 = String(b ?? '').trim();
-  if (!t2 || t2 === t1) return t1;
-  if (!t1) return t2;
-  return `${t1} / ${t2}`;
+  // 양방향 합칠 때도 한쪽(최근) 라벨만 겉에 표시
+  return t2 || t1;
 }
 
 function mergePositivity(a, b) {
@@ -380,6 +387,12 @@ function finalizeDirectedEdges(edgeMap) {
           bidirectional: true,
           relation: uniqueStrings([...r0, ...r1]),
           label: mergeEdgeLabels(e0.data.label, e1.data.label),
+          latestLabels: uniqueStrings([
+            ...(Array.isArray(e0.data.latestLabels) ? e0.data.latestLabels : []),
+            ...(Array.isArray(e1.data.latestLabels) ? e1.data.latestLabels : []),
+          ]),
+          labelHistory: mergeRelationLabelHistory(e0.data.labelHistory, e1.data.labelHistory),
+          snapshotEventId: e0.data.snapshotEventId ?? e1.data.snapshotEventId ?? null,
         };
         if (Number.isFinite(Number(pos))) {
           baseData.positivity = pos;
@@ -436,15 +449,29 @@ function isRelationVisibleAtEvent(rel, eventData) {
   return true;
 }
 
-/**
- * 이벤트 텍스트에서 첫 번째 단어를 추출하는 함수
- * @param {string} text - 이벤트 텍스트
- * @returns {string} 첫 번째 단어 (문자, 숫자, 하이픈만 포함)
- */
-function getFirstWordFromEventText(text) {
-  if (!text || typeof text !== 'string') return '';
-  const firstWord = text.trim().split(/\s+/)[0]?.replace(/[^a-zA-Z0-9가-힣-]/g, '') ?? '';
-  return firstWord || '';
+function resolveEdgeDisplayLabel(r) {
+  const fromNorm = String(r?.label ?? '').trim();
+  if (fromNorm) return fromNorm;
+  return (
+    pickLastRelationLabel(r?.latestLabels) ||
+    pickLastRelationLabel(r?.relation) ||
+    ''
+  );
+}
+
+function relationEventOrdinal(rel) {
+  const meta = relationEventMetaPassthrough(rel);
+  const candidates = [
+    eventUtils.resolveEventOrdinal(rel),
+    eventUtils.resolveEventOrdinal(meta),
+    rel?.event_id,
+    rel?.event?.event_id,
+  ];
+  for (const candidate of candidates) {
+    const n = toPositiveIntOrNaN(candidate);
+    if (Number.isFinite(n)) return n;
+  }
+  return 0;
 }
 
 const validateElements = (elements) => elements?.filter(e => e && normalizeElementId(e)) || [];
@@ -678,19 +705,35 @@ export function convertRelationsToElements({
       positivityByEdge.set(edgeKey, info);
     }
 
-    let relationLabel = '';
-    if (eventData?.text) {
-      relationLabel = getFirstWordFromEventText(eventData.text);
-    }
-    if (!relationLabel) {
-      relationLabel = r.label || r.relation[0] || '';
-    }
+    let relationLabel = resolveEdgeDisplayLabel(r);
+    const relEv = relationEventOrdinal(rel);
+    const snapshotEventId =
+      eventData?.eventId ??
+      eventData?.id ??
+      r.latestEventId ??
+      null;
 
     if (edgeMap.has(edgeKey)) {
       const existingEdge = edgeMap.get(edgeKey);
       existingEdge.data.relation = uniqueStrings([...existingEdge.data.relation, ...r.relation]);
-      if (relationLabel) {
+      existingEdge.data.latestLabels = uniqueStrings([
+        ...(Array.isArray(existingEdge.data.latestLabels) ? existingEdge.data.latestLabels : []),
+        ...(Array.isArray(r.latestLabels) ? r.latestLabels : []),
+      ]);
+      existingEdge.data.labelHistory = mergeRelationLabelHistory(
+        existingEdge.data.labelHistory,
+        r.labelHistory
+      );
+      if (snapshotEventId != null) {
+        existingEdge.data.snapshotEventId = snapshotEventId;
+      }
+      const prevEv = existingEdge.data._labelEventIdx ?? -1;
+      if (relationLabel && relEv >= prevEv) {
         existingEdge.data.label = relationLabel;
+        existingEdge.data._labelEventIdx = relEv;
+      } else if (!existingEdge.data.label && relationLabel) {
+        existingEdge.data.label = relationLabel;
+        existingEdge.data._labelEventIdx = relEv;
       }
     } else {
       edgeMap.set(edgeKey, {
@@ -699,13 +742,21 @@ export function convertRelationsToElements({
           source: id1,
           target: id2,
           relation: [...r.relation],
+          latestLabels: Array.isArray(r.latestLabels) ? [...r.latestLabels] : [],
+          labelHistory: r.labelHistory && typeof r.labelHistory === 'object' ? { ...r.labelHistory } : {},
+          snapshotEventId,
           label: relationLabel,
+          _labelEventIdx: relEv,
         },
       });
     }
   });
 
   for (const el of edgeMap.values()) {
+    delete el.data._labelEventIdx;
+    if (!el.data.label) {
+      el.data.label = pickLastRelationLabel(el.data.relation);
+    }
     const info = positivityByEdge.get(el.data.id);
     if (!info) continue;
     const chosen = info.hasFromCurrent ? info.lastFromCurrent : info.lastFinite;
@@ -1660,7 +1711,9 @@ const discoverChapterEvents = async (
           chapterIndex: chapterIdx,
         });
       } catch (error) {
-        console.warn(`⚠️ 챕터 ${chapterIdx} relationship-deltas 조회 실패:`, error);
+        if (import.meta.env.DEV) {
+          console.debug(`챕터 ${chapterIdx} relationship-deltas 조회 실패`, error?.message || error);
+        }
         return;
       }
 
@@ -1729,11 +1782,15 @@ const discoverChapterEvents = async (
         );
       }
     } catch (error) {
-      console.warn(`⚠️ 챕터 ${chapterIdx} relationship-deltas(챕터) 조회 실패:`, error);
+      if (import.meta.env.DEV) {
+        console.debug(`챕터 ${chapterIdx} relationship-deltas(챕터) 조회 실패`, error?.message || error);
+      }
     }
 
     if (!apiEvents.length) {
-      console.warn(`⚠️ 챕터 ${chapterIdx}: relationship-deltas에서 이벤트를 찾을 수 없음`);
+      if (import.meta.env.DEV) {
+        console.debug(`챕터 ${chapterIdx}: relationship-deltas 이벤트 없음`);
+      }
       // EMPTY를 캐시에 쓰지 않음 — "빈 성공" 고착 방지 (재요청 가능)
       return null;
     }
@@ -1910,8 +1967,8 @@ const buildCacheEntry = (
     toEventId: toTrimmedStringOrNull(toEventId),
     coveredThroughChapter: toChapterIndexOrNull(coveredThroughChapter),
     response,
-    // deltas가 있으면 마지막 챕터 soft/hard fail로 전체를 실패 처리하지 않음
-    isSuccess: isSuccess !== false || list.length > 0,
+    // soft/hard fail은 성공으로 덮지 않음 — 호출측에서 ERROR와 빈 데이터를 구분
+    isSuccess: isSuccess !== false,
   };
 };
 
@@ -1930,14 +1987,24 @@ const fetchAndStoreByChapter = async (key, uptoChapter) => {
     const chapterLastId = resolveManifestEventId(getLastManifestEventInChapter(key, ch));
     const chapterOk = fetched.isSuccess !== false;
 
+    // hard/soft fail을 빈 성공·커버리지로 캐시하지 않음 (재시도 가능, noRelation과 구분)
+    if (!chapterOk) {
+      const err = new Error(
+        fetched.response?.message || '관계 델타 조회에 실패했습니다.'
+      );
+      err.code = fetched.response?.code || 'ERROR';
+      err.response = fetched.response;
+      throw err;
+    }
+
     current = buildCacheEntry(
       fetched.bookId ?? key,
       mergeDeltasByEventId(current?.deltas, fetched.deltas),
       {
         toEventId: chapterLastId || current?.toEventId || null,
         coveredThroughChapter: ch,
-        response: chapterOk ? fetched.response : (current?.response ?? fetched.response),
-        isSuccess: chapterOk && (current == null || current.isSuccess !== false),
+        response: fetched.response,
+        isSuccess: true,
       }
     );
     bookDeltasCache.set(key, current);

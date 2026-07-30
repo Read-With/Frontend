@@ -4,10 +4,10 @@ import { useParams } from "react-router-dom";
 import { useTooltipPosition, useClickOutside } from "../../hooks/ui/tooltipHooks";
 import { useRelationData } from "../../hooks/graph/useApiGraphData";
 import { getRelationStyle } from "../../utils/styles/relationStyles";
-import { clampPositivity } from "../../utils/styles/graphStyles";
+import { clampPositivity, getRelationColor } from "../../utils/styles/graphStyles";
 import { COLORS, ANIMATION_VALUES, mergeRefs } from "../../utils/styles/styles";
 import { toFiniteNumber, toPositiveNumberOrNull } from "../../utils/common/valueUtils";
-import { processRelationTags, cleanupRelationUtils } from "../../utils/graph/graphCore";
+import { cleanupRelationUtils, buildRelationTagDisplayItems } from "../../utils/graph/graphCore";
 import { isLongEdgeTimeline, annotateSignificantEdgePoints, getSparseEdgeTickValues, formatEdgeTimelineDisplayLabel } from "../../utils/graph/graphCy";
 import './RelationGraph.css';
 
@@ -130,15 +130,35 @@ function UnifiedEdgeTooltip({
   } = useRelationData(relationDataMode, id1, id2, currentChapter, displayEventNum, numericBookId);
 
   const edgePositivity = useMemo(() => {
-    const n = Number(data?.positivity);
+    if (data?.positivity == null || data?.positivity === '') return null;
+    const n = Number(data.positivity);
     if (!Number.isFinite(n)) return null;
     return clampPositivity(n);
   }, [data?.positivity]);
 
-  const relationLabels = processRelationTags(data.relation, data.label);
+  const relationTagItems = useMemo(
+    () =>
+      buildRelationTagDisplayItems({
+        relation: data?.relation,
+        label: data?.label,
+        labelHistory: data?.labelHistory,
+        latestLabels: data?.latestLabels,
+        currentEventId: data?.snapshotEventId ?? data?.latestEventId ?? null,
+        fallbackPositivity: edgePositivity,
+      }),
+    [
+      data?.relation,
+      data?.label,
+      data?.labelHistory,
+      data?.latestLabels,
+      data?.snapshotEventId,
+      data?.latestEventId,
+      edgePositivity,
+    ]
+  );
   const hasCurrentEdgeRelationData =
-    relationLabels.length > 0 ||
-    Number.isFinite(Number(data?.positivity)) ||
+    relationTagItems.length > 0 ||
+    edgePositivity != null ||
     (typeof data?.explanation === 'string' && data.explanation.trim().length > 0);
 
   useEffect(() => {
@@ -155,23 +175,52 @@ function UnifiedEdgeTooltip({
     return Number.POSITIVE_INFINITY;
   }, [isViewer, displayEventNum]);
 
-  const { rechartsLineData, hasChartData } = useMemo(() => {
-    const pairs = [];
-    const timelineHasNumeric = Array.isArray(timeline)
-      && timeline.some((value) => typeof value === 'number' && !Number.isNaN(value));
+  const { rechartsLineData, hasChartData, numericPointCount } = useMemo(() => {
+    // 로드 실패 시 간선 positivity로 단점 합성하지 않음
+    if (relationError) {
+      return { rechartsLineData: [], hasChartData: false, numericPointCount: 0 };
+    }
 
-    if (timelineHasNumeric && Array.isArray(labels) && labels.length > 0) {
+    const pairs = [];
+    const timelineHasValues = Array.isArray(timeline)
+      && timeline.some((value) => value === null || (typeof value === 'number' && !Number.isNaN(value)));
+
+    if (timelineHasValues && Array.isArray(labels) && labels.length > 0) {
       const length = Math.min(labels.length, timeline.length);
 
       for (let i = 0; i < length; i++) {
         const label = labels[i];
         const value = timeline[i];
+        const isChapter = isChapterLabel(label);
+        const numericLabel = extractNumericLabel(label);
+
+        if (
+          isViewer &&
+          Number.isFinite(effectiveEventColumns) &&
+          Number.isFinite(numericLabel) &&
+          numericLabel > effectiveEventColumns
+        ) {
+          continue;
+        }
+
+        // 관계 공백(null) — 축은 유지하고 선은 끊음
+        if (value === null) {
+          if (!Number.isFinite(numericLabel) && !isChapter) continue;
+          pairs.push({
+            value: null,
+            label,
+            numericLabel: Number.isFinite(numericLabel) ? numericLabel : null,
+            isChapterAggregate: false,
+            isGap: true,
+          });
+          continue;
+        }
+
         if (typeof value !== 'number' || Number.isNaN(value)) {
           continue;
         }
 
         const normalizedValue = clampPositivity(value);
-        const isChapter = isChapterLabel(label);
 
         if (
           isChapter &&
@@ -188,12 +237,7 @@ function UnifiedEdgeTooltip({
           continue;
         }
 
-        const numericLabel = extractNumericLabel(label);
         if (!Number.isFinite(numericLabel)) {
-          continue;
-        }
-
-        if (isViewer && Number.isFinite(effectiveEventColumns) && numericLabel > effectiveEventColumns) {
           continue;
         }
 
@@ -206,6 +250,7 @@ function UnifiedEdgeTooltip({
       }
     }
 
+    // 타임라인 없고 로드 에러가 아닐 때만 현재 간선 positivity로 단점 보조
     if (pairs.length === 0 && edgePositivity !== null) {
       pairs.push({
         value: edgePositivity,
@@ -215,10 +260,10 @@ function UnifiedEdgeTooltip({
       });
     }
 
-    let active = pairs.length > 0;
+    let active = pairs.some((pair) => typeof pair.value === 'number');
     if (active && isViewer) {
       if (!Number.isFinite(displayEventNum) || displayEventNum <= 0) {
-        active = pairs.length > 0;
+        active = pairs.some((pair) => typeof pair.value === 'number');
       } else if (pairs.some((pair) => isPairCurrentEvent(pair, displayEventNum))) {
         active = true;
       } else {
@@ -226,13 +271,14 @@ function UnifiedEdgeTooltip({
           (pair) =>
             !pair.isChapterAggregate &&
             Number.isFinite(pair.numericLabel) &&
-            pair.numericLabel <= displayEventNum,
+            pair.numericLabel <= displayEventNum &&
+            typeof pair.value === 'number',
         );
       }
     }
 
     if (!active) {
-      return { rechartsLineData: [], hasChartData: false };
+      return { rechartsLineData: [], hasChartData: false, numericPointCount: 0 };
     }
 
     const annotated = annotateSignificantEdgePoints(pairs);
@@ -240,16 +286,22 @@ function UnifiedEdgeTooltip({
       const isChapter = pair.isChapterAggregate || isChapterLabel(pair.label);
       return {
         x: i + 1,
-        y: pair.value,
+        y: typeof pair.value === 'number' ? pair.value : null,
         label: formatEdgeTimelineDisplayLabel(pair.label, pair.numericLabel, i),
         numericLabel: pair.numericLabel,
         isChapter,
         isCurrent: isPairCurrentEvent(pair, displayEventNum),
         isSignificant: !!pair.isSignificant,
+        isGap: !!pair.isGap,
       };
     });
 
-    return { rechartsLineData: lineData, hasChartData: lineData.length > 0 };
+    const numericPointCount = lineData.filter((d) => typeof d.y === 'number').length;
+    return {
+      rechartsLineData: lineData,
+      hasChartData: numericPointCount > 0,
+      numericPointCount,
+    };
   }, [
     timeline,
     labels,
@@ -257,13 +309,16 @@ function UnifiedEdgeTooltip({
     displayEventNum,
     isViewer,
     effectiveEventColumns,
+    relationError,
   ]);
 
-  const effectiveNoRelation = noRelation && !hasCurrentEdgeRelationData && !hasChartData;
+  const effectiveNoRelation = noRelation && !hasCurrentEdgeRelationData && !hasChartData && !relationError;
 
-  const positivityPercentage = Math.round((edgePositivity ?? 0) * 100);
-  const positivityBarWidth = Math.min(100, Math.abs(positivityPercentage));
-  const relationStyle = getRelationStyle(edgePositivity ?? 0);
+  const positivityPercentage =
+    edgePositivity != null ? Math.round(edgePositivity * 100) : null;
+  const positivityBarWidth =
+    positivityPercentage != null ? Math.min(100, Math.abs(positivityPercentage)) : 0;
+  const relationStyle = getRelationStyle(edgePositivity);
 
   const explanationParts = useMemo(() => {
     if (typeof data?.explanation !== 'string' || !data.explanation) {
@@ -315,15 +370,16 @@ function UnifiedEdgeTooltip({
   };
 
   const relationTimelineChart = (heightPx) => {
-    if (rechartsLineData.length === 0) {
+    if (numericPointCount === 0) {
       return null;
     }
-    if (rechartsLineData.length === 1) {
+    if (numericPointCount === 1) {
+      const only = rechartsLineData.find((d) => typeof d.y === 'number');
       return (
         <div className="edge-chart-empty">
           <p className="edge-chart-empty-title">아직 누적 변화가 없습니다</p>
           <p className="edge-chart-empty-value">
-            현재 {Math.round(rechartsLineData[0].y * 100)}%
+            현재 {Math.round((only?.y ?? 0) * 100)}%
           </p>
         </div>
       );
@@ -360,6 +416,9 @@ function UnifiedEdgeTooltip({
             />
             <RechartsTooltip
               formatter={(value, _name, item) => {
+                if (value == null || typeof value !== 'number') {
+                  return ['관계 없음', '긍정도'];
+                }
                 const pct = `${Math.round(Number(value) * 100)}%`;
                 const idx = item?.payload?.x;
                 const prev =
@@ -390,7 +449,7 @@ function UnifiedEdgeTooltip({
               strokeWidth={longTimeline ? 1.5 : 2}
               dot={(dotProps) => {
                 const { cx, cy, payload, index } = dotProps;
-                if (cx == null || cy == null) return null;
+                if (cx == null || cy == null || payload?.y == null) return null;
                 const isCurrent = payload?.isCurrent;
                 const show =
                   showDenseDots || isCurrent || payload?.isSignificant || payload?.isChapter;
@@ -419,7 +478,7 @@ function UnifiedEdgeTooltip({
                 );
               }}
               activeDot={{ r: 5, fill: relationStyle.color }}
-              connectNulls
+              connectNulls={false}
               isAnimationActive={false}
             />
           </LineChart>
@@ -477,11 +536,15 @@ function UnifiedEdgeTooltip({
     <div className="relation-weight">
       <div className="weight-header">
         <span className="weight-label">{relationStyle.text}</span>
-        <span className="weight-value">{`${positivityPercentage}%`}</span>
+        <span className="weight-value">
+          {positivityPercentage != null ? `${positivityPercentage}%` : '—'}
+        </span>
       </div>
-      <div className="positivity-track">
-        <div className="positivity-fill" />
-      </div>
+      {positivityPercentage != null && (
+        <div className="positivity-track">
+          <div className="positivity-fill" />
+        </div>
+      )}
     </div>
   );
 
@@ -529,11 +592,22 @@ function UnifiedEdgeTooltip({
 
     return (
       <>
-        {relationLabels.length > 0 && (
+        {relationTagItems.length > 0 && (
           <div className="relation-tags">
-            {relationLabels.map((relation, index) => (
-              <span key={index} className="relation-tag">
-                {relation}
+            {relationTagItems.map((item, index) => (
+              <span
+                key={`${item.text}-${index}`}
+                className={`relation-tag relation-tag--${item.tone}`}
+                style={{ '--tag-color': getRelationColor(item.positivity) }}
+                title={
+                  item.tone === 'added'
+                    ? '이 위치에서 처음 추가된 관계'
+                    : item.tone === 'changed'
+                      ? '이 위치에서 갱신된 관계'
+                      : '이전에 추가된 관계'
+                }
+              >
+                {item.text}
               </span>
             ))}
           </div>
@@ -552,7 +626,11 @@ function UnifiedEdgeTooltip({
     if (loading) {
       return renderSkeleton('데이터를 불러오는 중...');
     }
-    if (relationError && !hasChartData) {
+    if (isViewer && displayEventNum <= 0) {
+      return renderStatusMessage('이벤트 정보가 없어 관계 변화를 표시할 수 없습니다.');
+    }
+    // 로드 실패는 단점 합성보다 항상 우선
+    if (relationError) {
       return renderStatusMessage('데이터를 불러올 수 없습니다', {
         error: true,
         action: (
@@ -566,7 +644,7 @@ function UnifiedEdgeTooltip({
         ),
       });
     }
-    if (isViewer && effectiveNoRelation) {
+    if (!hasChartData) {
       return renderStatusMessage(NO_RELATION_MESSAGE);
     }
     return (

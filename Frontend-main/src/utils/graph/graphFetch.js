@@ -22,7 +22,7 @@ import {
   findManifestEventInChapter,
   resolveLastEventIdxForChapter,
 } from '../common/cache/manifestCache';
-import { clampPositivity } from '../styles/graphStyles';
+import { finitePositivityOrZero } from '../styles/graphStyles';
 import { pickGraphApiResult } from '../viewer/viewerGraph';
 
 import {
@@ -437,9 +437,7 @@ function findRelationInElements(elements, id1, id2) {
 }
 
 function relationPointFromElement(edgeElement) {
-  const raw = edgeElement?.data?.positivity;
-  const numeric = Number(raw);
-  return Number.isFinite(numeric) ? clampPositivity(numeric) : 0;
+  return finitePositivityOrZero(edgeElement?.data?.positivity);
 }
 
 function withNoRelation(result, fallbackNoRelation = true) {
@@ -535,7 +533,7 @@ function relationEventFromApiResult(fineData, id1, id2, idx) {
   const fineResult = pickSuccessfulResult(fineData);
   const relation = findRelationInResult(asArray(fineResult?.relations), id1, id2);
   if (!relation) return null;
-  return { idx, positivity: relation.positivity || 0 };
+  return { idx, positivity: finitePositivityOrZero(relation.positivity) };
 }
 
 function findEdgeInReconstructedChapter(chapterPayload, eventIdx, id1, id2) {
@@ -579,7 +577,8 @@ function buildEventTimeline(eventCount, getPointAt, { fillGaps = true } = {}) {
     if (point === null) {
       if (!started) continue;
       if (fillGaps) {
-        points.push(0);
+        // 관계 공백은 0%(중립)이 아니라 null — 차트에서 선이 끊김
+        points.push(null);
         labelInfo.push(`E${idx}`);
       }
       continue;
@@ -796,11 +795,11 @@ async function fetchRelationTimelineCumulativeUncached(bookId, id1, id2, selecte
 
       if (lastOnly) {
         const lastEvent = relationEvents[relationEvents.length - 1];
-        points.push(lastEvent.positivity || 0);
+        points.push(finitePositivityOrZero(lastEvent.positivity));
         labelInfo.push(`Ch${chapter}`);
       } else {
         for (const event of relationEvents) {
-          points.push(event.positivity || 0);
+          points.push(finitePositivityOrZero(event.positivity));
           labelInfo.push(`E${event.idx}`);
         }
       }
@@ -882,6 +881,12 @@ export async function fetchRelationTimelineViewer(bookId, id1, id2, chapterNum, 
 
     try {
       const deltasBundle = await ensureBookRelationshipDeltas(bookId, { chapterIndex: chapterNum });
+      if (deltasBundle?.isSuccess === false) {
+        return timelineError(
+          deltasBundle?.response?.message || '관계 델타를 불러오지 못했습니다.'
+        );
+      }
+
       const chapterEventIdOrder = resolveChapterEventIdOrder(bookId, chapterNum);
       const cachedEvents = new Map();
       const failedIds = [];
@@ -897,13 +902,19 @@ export async function fetchRelationTimelineViewer(bookId, id1, id2, chapterNum, 
             cachedEvents.get(idx - 1) ?? null
           );
           cachedEvents.set(idx, fineData);
+
+          if (fineData?.isSuccess === false) {
+            failedIds.push(`${chapterNum}:${idx}`);
+            return started ? null : undefined;
+          }
+
           const relation = findRelationInResult(
             asArray(pickSuccessfulResult(fineData)?.relations),
             id1,
             id2
           );
           if (!relation) return started ? null : undefined;
-          return relation.positivity || 0;
+          return finitePositivityOrZero(relation.positivity);
         } catch {
           failedIds.push(`${chapterNum}:${idx}`);
           return started ? null : undefined;
@@ -912,6 +923,10 @@ export async function fetchRelationTimelineViewer(bookId, id1, id2, chapterNum, 
 
       const incomplete = failedIds.length > 0;
       if (timeline.noRelation) {
+        // 전부 이벤트 구성 실패면 '없음'이 아니라 로드 실패
+        if (incomplete && failedIds.length >= eventNum) {
+          return timelineError('관계 타임라인을 구성하지 못했습니다.');
+        }
         return emptyTimeline({
           noRelation: true,
           status: FETCH_STATUS.EMPTY,

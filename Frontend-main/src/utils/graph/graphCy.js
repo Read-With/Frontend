@@ -517,6 +517,8 @@ export function openTooltipFromTap(tapPayload, type) {
     }
 
     const relation = normalizeRelationArray(parseJsonSafely(base.data?.relation));
+    const latestLabels = normalizeRelationArray(parseJsonSafely(base.data?.latestLabels));
+    const labelHistory = parseJsonSafely(base.data?.labelHistory);
     return {
       ...base,
       sourceEndpoint: tooltipEndpointInfo(element.source()),
@@ -525,8 +527,17 @@ export function openTooltipFromTap(tapPayload, type) {
       data: {
         ...base.data,
         relation,
-        label: base.data?.label || relation[0] || '',
-        positivity: base.data?.positivity ?? 0,
+        latestLabels,
+        labelHistory:
+          labelHistory && typeof labelHistory === 'object' && !Array.isArray(labelHistory)
+            ? labelHistory
+            : {},
+        label: base.data?.label || relation[relation.length - 1] || '',
+        // positivity는 서버/그래프 값만 유지 — 없으면 null (0과 '없음' 구분)
+        positivity:
+          base.data?.positivity == null || base.data?.positivity === ''
+            ? null
+            : base.data.positivity,
         count: base.data?.count ?? 1,
       },
     };

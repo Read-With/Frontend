@@ -80,6 +80,93 @@ export function normalizeRelationArray(relation, label = '') {
   return uniqueStrings(values);
 }
 
+/** 배열에서 가장 최근에 추가된(마지막) 라벨 문구 */
+export function pickLastRelationLabel(labels) {
+  if (!Array.isArray(labels) || labels.length === 0) return '';
+  for (let i = labels.length - 1; i >= 0; i -= 1) {
+    const text = String(labels[i] ?? '').trim();
+    if (text) return text;
+  }
+  return '';
+}
+
+export function mergeRelationLabelHistory(a, b) {
+  const out = { ...(a && typeof a === 'object' ? a : {}) };
+  for (const [text, meta] of Object.entries(b && typeof b === 'object' ? b : {})) {
+    if (!text || !meta || typeof meta !== 'object') continue;
+    const prev = out[text];
+    if (!prev) {
+      out[text] = { ...meta, text: meta.text || text };
+      continue;
+    }
+    out[text] = {
+      text: prev.text || meta.text || text,
+      firstEventId: prev.firstEventId ?? meta.firstEventId ?? null,
+      lastEventId: meta.lastEventId ?? prev.lastEventId ?? null,
+      firstPositivity:
+        prev.firstPositivity != null ? prev.firstPositivity : meta.firstPositivity,
+      lastPositivity:
+        meta.lastPositivity != null ? meta.lastPositivity : prev.lastPositivity,
+    };
+  }
+  return out;
+}
+
+/**
+ * 툴팁용 관계 태그 + 시점(tone) + 긍정도 색
+ * tone: added(현재 이벤트에서 최초 추가) | changed(이전에도 있고 현재에 재등장/갱신) | prior(과거)
+ */
+export function buildRelationTagDisplayItems({
+  relation,
+  label,
+  labelHistory = null,
+  latestLabels = null,
+  currentEventId = null,
+  fallbackPositivity = null,
+} = {}) {
+  const tags = normalizeRelationArray(relation, label);
+  const history = labelHistory && typeof labelHistory === 'object' ? labelHistory : {};
+  const latestSet = new Set(
+    normalizeRelationArray(latestLabels).map((t) => t.toLowerCase())
+  );
+  const currentId = currentEventId != null ? String(currentEventId) : null;
+  const fallback =
+    fallbackPositivity == null || fallbackPositivity === ''
+      ? null
+      : Number(fallbackPositivity);
+
+  return tags.map((text, index) => {
+    const meta = history[text];
+    let tone = 'prior';
+    if (meta && currentId) {
+      const firstId = meta.firstEventId != null ? String(meta.firstEventId) : null;
+      const lastId = meta.lastEventId != null ? String(meta.lastEventId) : null;
+      if (lastId === currentId) {
+        tone = firstId === currentId ? 'added' : 'changed';
+      }
+    } else if (!meta && latestSet.has(text.toLowerCase())) {
+      tone = index === tags.length - 1 ? 'changed' : 'added';
+    }
+
+    const positivityRaw =
+      meta?.lastPositivity ?? meta?.firstPositivity ?? fallback;
+    const positivity =
+      positivityRaw == null || Number.isNaN(Number(positivityRaw))
+        ? 0
+        : Number(positivityRaw);
+
+    return {
+      text,
+      tone,
+      positivity,
+      firstEventId: meta?.firstEventId ?? null,
+      lastEventId: meta?.lastEventId ?? null,
+      firstPositivity: meta?.firstPositivity ?? null,
+      lastPositivity: meta?.lastPositivity ?? null,
+    };
+  });
+}
+
 /** 챕터 마지막 이벤트 인덱스 (manifest 힌트, UI·범위용). 없으면 null — 가짜 1 금지 */
 export const calculateLastEventForChapter = ({
   manifestChapters,
@@ -209,15 +296,29 @@ export function normalizeRelation(raw) {
     const positivity = raw.positivity;
     const weight = raw.weight ?? 1;
     const count = raw.count;
-    const relationSource =
-      (Array.isArray(raw.relation) && raw.relation.length > 0 && raw.relation) ||
-      (Array.isArray(raw.latestLabels) && raw.latestLabels.length > 0 && raw.latestLabels) ||
-      raw.relation;
-    const relationArray = normalizeRelationArray(relationSource);
+    const relationArray = normalizeRelationArray(raw.relation);
+    const latestArray = normalizeRelationArray(raw.latestLabels);
+    const tags = relationArray.length > 0 ? relationArray : latestArray;
+    // 겉 라벨: 이번 델타 latestLabels 마지막 → 누적 relation 마지막 → raw.label
+    const label =
+      pickLastRelationLabel(latestArray) ||
+      pickLastRelationLabel(tags) ||
+      (typeof raw.label === 'string' ? raw.label.trim() : '') ||
+      '';
 
-    const label = relationArray[0] || (typeof raw.label === 'string' ? raw.label : '');
-
-    return { id1, id2, positivity, weight, count, relation: relationArray, label };
+    return {
+      id1,
+      id2,
+      positivity,
+      weight,
+      count,
+      relation: tags,
+      latestLabels: latestArray,
+      labelHistory:
+        raw.labelHistory && typeof raw.labelHistory === 'object' ? raw.labelHistory : {},
+      latestEventId: raw.latestEventId ?? null,
+      label,
+    };
   } catch {
     return null;
   }

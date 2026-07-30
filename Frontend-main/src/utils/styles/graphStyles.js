@@ -99,6 +99,9 @@ export function clampPositivity(positivity) {
   return Number.isFinite(value) ? Math.max(-1, Math.min(1, value)) : 0;
 }
 
+/** 관계 존재 구간의 긍정도. 없/비정상이면 0. UI에서 null(정보 없음)과 구분할 때는 쓰지 말 것. */
+export const finitePositivityOrZero = clampPositivity;
+
 export const getRelationColor = (positivity) => {
   const value = clampPositivity(positivity);
   const normalized = (value + 1) / 2;
